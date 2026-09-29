@@ -100,7 +100,7 @@ packages/
   mcp        MCP 서버
 
 system-themes/
-  admin      저장소 테마 system-admin — 캔버스가 소스로 싣고, 저장소 빌드가 `.wbtheme` 로 낸다
+  admin      저장소 테마 system-admin — 저장소 빌드가 `.wbtheme` 로 내고 api 가 기동 때 넣는다(새 프로젝트가 서는 판)
 ```
 
 ### 3.2 핵심 원칙
@@ -341,13 +341,14 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 
 **지금 서 있는 것:**
 
-- **캔버스는 same-origin iframe 안에서 SDK 뷰로 그리고, 저장소 테마 `system-admin` 하나를 싣는다**(`system-themes/admin`). 프로젝트가 고정한 테마를 캔버스가 싣는 것 · 테마를 고르고 토큰을 고치는 화면은 아직 없다 — 아래의 REST 가 그 바탕이다.
+- **캔버스는 same-origin iframe 안에서 프로젝트가 고정한 `id@버전` 의 번들과 토큰으로 그린다.** 번들(`theme.js`)은 에디터가 세션마다 하나 두는 숨은 적재 iframe 에 `<script>` 로 싣고 판마다 한 번만 싣는다. 캔버스 머리의 시트는 SDK 기본 뷰 CSS → 그 판의 `theme.css`(`<link>`) → 토큰 CSS 변수 차례다. 다른 사람이 테마 · 토큰을 저장하면 열린 캔버스가 `theme-changed` 로 새로고침 없이 따라가고(토큰만이면 변수만, 판이 바뀌면 번들을 다시 싣는다), 끊긴 동안 놓친 저장은 셸이 프로젝트를 다시 읽을 때의 `themeRev` 로 따라잡는다. 번들을 못 받으면(오류 · 등록 없음 · 10 초) SDK 기본 뷰로 그리고 셸 머리에 한 줄로 알리며 «다시 불러오기» 를 둔다.
+- **프로젝트 설정 페이지**(`/projects/:projectId/settings` — §9)가 테마를 고르고(확인 창에 토큰 이어짐 · 버려짐 · 기본값 수와 페이지별 없는 variant 수) 토큰을 고친다(manifest 선언에서 짓는 폼 + 갤러리 미리보기). 인스턴스 관리자는 **테마 관리** 화면(`/admin/themes`)에서 패키지를 올리고 판을 숨기고 스타터 템플릿을 받는다 — 프로젝트 목록 머리의 링크는 관리자에게만 있다.
 - **서버는 테마 패키지를 받고 프로젝트가 그중 하나에 고정된다.** 인스턴스 관리자(§10)가 `.wbtheme` 를 올리고(`POST /api/admin/theme-packages` — 본문은 zip 바이트, 서버는 코드를 실행하지 않고 `readWbtheme` · manifest · SDK 범위 · `system-` 접두어 · 같은 `id@version` 을 본다) 버전을 숨기고 되살린다. 올린 패키지는 불변이고 지우는 길이 없다. 로그인한 사람은 목록 · manifest · 패키지 안의 파일을 읽는다(숨긴 버전은 목록에서 관리자에게만 보이고 파일은 누구에게나 나간다 — 고정한 프로젝트가 그려져야 한다). 한 테마의 «최신» 은 숨기지 않은 버전 가운데 semver 가 가장 큰 것이다.
 - **시스템 테마는 api 가 기동할 때 넣는다** — 저장소 빌드가 낸 `system-themes/*/dist/*.wbtheme` 가운데 DB 에 없는 `id@version` 만. 같은 `id@version` 인데 내용(sha256)이 다르면 기동을 멈춘다(판을 올려야 한다). 테마가 비어 있는 프로젝트는 그 자리에서 `system-admin` 최신판으로 채워지고, 새 프로젝트도 그 판으로 선다.
 - **프로젝트의 테마 바인딩은 owner 가 바꾼다**(`PUT /api/projects/:projectId/theme` — `theme_rev` 낙관적 동시성, 숨긴 버전은 지금 고정한 판의 토큰만 고칠 때만). 토큰은 대상 manifest 로 검증하고 기본값과 같은 값을 뺀 뒤 저장한다(값 200 글자 · 전체 16 KB 상한). 저장은 프로젝트 룸에 `theme-changed` 를 방송한다. 바꾸기 전의 영향(이어지는 · 버려지는 · 기본값으로 서는 토큰 수, 새 테마에 없는 variant 를 쓰는 노드 수)은 `GET …/theme/impact` 가 계산한다. lint 의 테마 규칙이 «현재 테마에 없는 variant» 를 본다(§12.4).
 - **변형은 manifest 가 선언한다** — `components[type].variants` · `defaultVariant` · `hideProps`. 노드의 `variant`가 선언 밖이면 렌더러가 `defaultVariant`로 그린다(페이지 데이터는 바꾸지 않는다). 속성 패널의 변형 칸과 감출 속성도 이 선언을 읽는다.
 - **내보내기(HTML 번들 · PPTX 화면)는 테마 없이 SDK 기본 뷰와 그 CSS로 그린다**(§11.3).
-- **테마는 저장소 밖에서 짜서 `.wbtheme` 한 파일로 빌드한다.** 스타터 템플릿(`wb-theme pack-template` 이 짓는 zip — SDK · kit tarball 과 코딩 에이전트용 `SKILL.md` 동봉)을 풀고 `wb-theme dev` 로 갤러리를 보며 짜고, `wb-theme build` 가 manifest 를 검증해 `dist/<id>-<version>.wbtheme` 를 낸다. `.wbtheme` 는 zip 이고 `manifest.json` · `theme.js`(IIFE — `react` · `react/jsx-runtime` · `@wirebound/theme-sdk` 를 번들에 넣지 않고 호스트가 세운 `__wirebound_runtime__` 에서 읽는다) · `theme.css` · `assets/**` 만 든다. 읽기(`readWbtheme`)는 크기 · 항목 수 · 경로 · 허용 목록 · 링크를 풀기 전에 본다. `system-admin` 도 `pnpm build` 가 `.wbtheme` 로 낸다. 만든 `.wbtheme` 는 관리자가 올린다(아래) — 캔버스는 아직 `system-admin` 을 소스로 싣는다.
+- **테마는 저장소 밖에서 짜서 `.wbtheme` 한 파일로 빌드한다.** 스타터 템플릿(`wb-theme pack-template` 이 짓는 zip — SDK · kit tarball 과 코딩 에이전트용 `SKILL.md` 동봉)을 풀고 `wb-theme dev` 로 갤러리를 보며 짜고, `wb-theme build` 가 manifest 를 검증해 `dist/<id>-<version>.wbtheme` 를 낸다. `.wbtheme` 는 zip 이고 `manifest.json` · `theme.js`(IIFE — `react` · `react/jsx-runtime` · `@wirebound/theme-sdk` 를 번들에 넣지 않고 호스트가 세운 `__wirebound_runtime__` 에서 읽는다) · `theme.css` · `assets/**` 만 든다. 읽기(`readWbtheme`)는 크기 · 항목 수 · 경로 · 허용 목록 · 링크를 풀기 전에 본다. `system-admin` 도 `pnpm build` 가 `.wbtheme` 로 낸다. 만든 `.wbtheme` 는 관리자가 올린다(위 «테마 관리»).
 
 ### 6.1 노드 속성
 
@@ -546,6 +547,10 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 | 뷰 모드 | **페이지 설명** / 코멘트 / 상호작용 |
 
 속성 탭은 컴포넌트 정의의 `editor` 명세에서 자동 생성된다(5.1 참조). **페이지 설명은 뷰 모드의 «페이지 설명» 탭에서 읽고 고친다** — editor 이상에게는 편집기, viewer 에게는 읽기 전용이다. 편집 모드의 속성 탭에 두지 않는다: 설명은 페이지 메타라 에디터 스토어가 들지 않고(페이지 문서는 한 번만 읽는다), 그 탭이 따로 읽고 쓴다.
+
+**머리 — 이동과 프로젝트 전체의 도구.** 왼쪽은 «프로젝트 목록으로 돌아가기» 와 프로젝트 이름, 오른쪽은 되돌리기(편집 모드) · 모드 · 뷰포트 · 줌, 스냅샷 · 내보내기 · **설정**(프로젝트 설정 페이지로 가는 링크 — 모든 역할), 계정 묶음이다. 통지(편집 실패 · 경고 · 남의 변경 · 테마를 못 실음)는 머리 아래 줄로 내려온다.
+
+**셸 밖의 화면.** 로그인 · 프로젝트 목록(만들기 · 삭제 · 줄마다 «설정» 링크 — 이름 · 슬러그 · 설명은 목록에서 고치지 않는다) · 프로젝트 설정(«일반» — 이름 · 슬러그 · 설명, «테마» — 고르기 · 토큰 편집. owner 가 아니면 읽기로만 선다) · 내 API 토큰 · 테마 관리(인스턴스 관리자). 셸 밖 화면으로 가면 에디터 셸이 내려간다.
 
 **번호 마커** — 코멘트를 달면 다음 번호가 자동 부여된다. 수동 변경이 가능하고, "문서 순서대로 재번호" 버튼으로 일괄 정리한다. 번호는 노드 `id`에 묶여 있어 노드를 옮겨도 코멘트가 따라간다.
 

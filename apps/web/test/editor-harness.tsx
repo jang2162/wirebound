@@ -25,11 +25,13 @@ import { useLocation } from 'react-router'
 import { CURRENT_DOCUMENT_VERSION, type PageDocument, type WbNode } from '@wirebound/schema'
 import { App } from '../src/app'
 import { ApiError, type ApiClient } from '../src/api/client'
-import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../src/api/types'
+import type { PageDetail, ProjectView, SessionUser, TreeMenuNode } from '../src/api/types'
 import type { RealtimeSetup } from '../src/realtime/context'
 import type { TabChannel } from '../src/session/tab-channel'
 import type { DraftStore } from '../src/panels/draft-store'
+import type { ThemeBundleLoader } from '../src/theme/bundle-loader'
 import { fakeApi, renderWithProviders } from './helpers'
+import { adminThemeView } from './theme-loader'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -54,12 +56,13 @@ export const OTHER_PAGE_ROUTE = `${PROJECT_ROUTE}/pages/${OTHER_PAGE_ID}`
  */
 export const HEAD_SEQ = 7
 
-const PROJECT: ProjectDetail = {
+const PROJECT: ProjectView = {
   id: PROJECT_ID,
   name: PROJECT_NAME,
   slug: 'admin-console',
   description: '내부 운영 도구',
   role: 'owner',
+  themeRev: 0,
 }
 
 /** 페이지 둘. 두 번째는 "다른 페이지로 옮기면 …" 케이스가 쓴다. */
@@ -146,6 +149,8 @@ export interface EditorOptions {
   tabChannel?: TabChannel
   /** 초안의 사본. 생략하면 초안은 메모리에만 산다(`helpers.tsx`의 그 필드). */
   draftStore?: DraftStore
+  /** 테마 번들 로더. 생략하면 `system-admin@0.1.0` 만 아는 시험용 로더다(`helpers.tsx`의 그 필드). */
+  bundleLoader?: ThemeBundleLoader
 }
 
 /** 셸을 렌더하기만 한다. 성공 대역을 기다리는 것은 호출자 몫이다. */
@@ -176,12 +181,15 @@ export function renderEditor(options: EditorOptions = {}): void {
         // 스텁하지 않으면 `notStubbed`가 던지고, 그 예외는 복원 쪽 `catch`가 삼켜서
         // **아무 일도 안 일어난 것과 구별되지 않는다.**
         listMyRevisions: async () => [],
+        // 셸이 프로젝트의 테마 바인딩을 읽는다 — 새 프로젝트가 서는 판(`system-admin@0.1.0`) 그대로다.
+        getProjectTheme: async () => adminThemeView(),
         ...options.apiOverrides,
       }),
       route: options.route ?? PAGE_ROUTE,
       ...(options.realtime === undefined ? {} : { realtime: options.realtime }),
       ...(options.tabChannel === undefined ? {} : { tabChannel: options.tabChannel }),
       ...(options.draftStore === undefined ? {} : { draftStore: options.draftStore }),
+      ...(options.bundleLoader === undefined ? {} : { bundleLoader: options.bundleLoader }),
     },
   )
 }

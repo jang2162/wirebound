@@ -6,10 +6,12 @@
 import type { ReactElement } from 'react'
 import { Outlet, Route, Routes } from 'react-router'
 import { WriteLedgerProvider } from './panels/write-ledger'
+import { AdminThemesRoute } from './routes/admin-themes'
 import { EditorShellRoute } from './routes/editor'
 import { LoginRoute } from './routes/login'
 import { ProjectListRoute } from './routes/project-list'
 import { RedirectWhenAuthenticated, RequireAuth } from './routes/require-auth'
+import { SettingsRoute } from './routes/settings'
 import { TokensRoute } from './routes/tokens'
 import { SessionProvider } from './session/session-context'
 
@@ -30,7 +32,7 @@ export function App(): ReactElement {
     // 옮기려는 사람은 그 배치가 Provider를 재마운트시키는지부터 재라.
     <SessionProvider>
       {/* **나가 있는 쓰기의 장부도 라우트 표 바깥이다** — 에디터 셸이 내려가도(프로젝트 목록 ·
-          테마 편집기) 쓰기는 산다. 잠금이 셸과 함께 사라지면 앞 쓰기가 나가 있는 채 둘째가 나가고,
+          설정 페이지) 쓰기는 산다. 잠금이 셸과 함께 사라지면 앞 쓰기가 나가 있는 채 둘째가 나가고,
           늦게 온 앞 쓰기가 뒤 쓰기를 덮는다(`panels/write-ledger.tsx`의 머리말). **세션 안이다** —
           세션이 끝나면(로그아웃 · 401) 장부가 그 세션의 쓰기를 끊는다(그 머리말의 «세션을 넘지 않는다»). */}
       <WriteLedgerProvider>
@@ -56,11 +58,15 @@ export function App(): ReactElement {
             <Route path="/" element={<ProjectListRoute />} />
             {/* **내 API 토큰은 계정의 것이라 프로젝트 밖 라우트다** — 근거는 `routes/tokens.tsx` 머리말. */}
             <Route path="/tokens" element={<TokensRoute />} />
+            {/* **테마 관리는 인스턴스의 것이라 프로젝트 밖 라우트다**(`routes/admin-themes.tsx` 머리말). */}
+            <Route path="/admin/themes" element={<AdminThemesRoute />} />
             {/* 두 주소가 같은 셸이다. 페이지를 연 것은 셸 안의 캔버스가 달라지는 일이지
                 다른 화면이 아니므로, 라우터가 컴포넌트를 다시 마운트하지 않고 편집 상태가
                 그대로 이어진다. */}
             <Route path="/projects/:projectId" element={<EditorShellRoute />} />
             <Route path="/projects/:projectId/pages/:pageId" element={<EditorShellRoute />} />
+            {/* **설정은 셸 밖 라우트다** — 근거는 `routes/settings.tsx` 머리말. */}
+            <Route path="/projects/:projectId/settings" element={<SettingsRoute />} />
             {/* **스냅샷에는 주소가 없다** — 셸 밖 라우트가 아니라 **셸 머리의 팝오버**다
                 (`shell/snapshots-panel.tsx` 머리말의 표가 라우트로 둘 근거 둘과 그것이 서지 않는 까닭을 짝지어 적고 있다).
                 요지: 설계서 「설계서 화면 구조」는 머리에 무엇이 오는지 말하지 않고, 스냅샷 목록은 링크로 건네는

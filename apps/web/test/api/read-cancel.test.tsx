@@ -10,12 +10,12 @@ import { cleanup, fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { App } from '../../src/app'
 import type { ReadOptions } from '../../src/api/client'
-import type { ProjectDetail } from '../../src/api/types'
+import type { ProjectView } from '../../src/api/types'
 import { PROJECT_ID, PROJECT_NAME, openPage, pageDoc } from '../editor-harness'
 import { fakeApi, renderWithProviders } from '../helpers'
 
 const DOC = pageDoc({ id: 'n-root', type: 'Page', children: [] })
-const PROJECT: ProjectDetail = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin', description: null, role: 'owner' }
+const PROJECT: ProjectView = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin', description: null, role: 'owner', themeRev: 0 }
 
 async function leaveEditor(): Promise<void> {
   fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))

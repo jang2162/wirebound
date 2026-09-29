@@ -15,8 +15,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
-import type { ProjectDetail, SessionUser } from '../../src/api/types'
+import type { ProjectView, SessionUser } from '../../src/api/types'
 import type { EditorStore } from '../../src/store/editor-store'
+import { ThemeBundleProvider } from '../../src/theme/bundle-context'
+import { staticBundleLoader } from '../theme-loader'
 import {
   currentPath,
   expiringSession,
@@ -90,13 +92,14 @@ const SERVER_MESSAGE = '설계서 저장소가 응답하지 않습니다 [T7-SHE
  */
 const UNKNOWN_FAILURE = '프로젝트를 불러오지 못했습니다'
 
-function project(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
+function project(overrides: Partial<ProjectView> = {}): ProjectView {
   return {
     id: 'p-1',
     name: PROJECT_NAME,
     slug: 'admin-console',
     description: '내부 운영 도구',
     role: 'owner',
+    themeRev: 0,
     ...overrides,
   }
 }
@@ -460,8 +463,8 @@ function GoTo(props: { to: string }): ReactElement {
 describe('프로젝트 전환', () => {
   it('다른 프로젝트로 옮기면 앞 프로젝트의 이름과 편집 상태가 남지 않는다', async () => {
     // p-2의 응답을 붙잡아 둔다. 전환 직후의 빈틈이 이 테스트가 보려는 자리다.
-    let deliver: (project: ProjectDetail) => void = () => {}
-    const pending = new Promise<ProjectDetail>((resolve) => {
+    let deliver: (project: ProjectView) => void = () => {}
+    const pending = new Promise<ProjectView>((resolve) => {
       deliver = resolve
     })
 
@@ -473,10 +476,12 @@ describe('프로젝트 전환', () => {
             id === 'p-1' ? Promise.resolve(project({ id, name: '일번 설계서' })) : pending,
         })}
       >
-        <MemoryRouter initialEntries={['/projects/p-1']}>
-          <App />
-          <GoTo to="/projects/p-2" />
-        </MemoryRouter>
+        <ThemeBundleProvider loader={staticBundleLoader()}>
+          <MemoryRouter initialEntries={['/projects/p-1']}>
+            <App />
+            <GoTo to="/projects/p-2" />
+          </MemoryRouter>
+        </ThemeBundleProvider>
       </ApiProvider>,
     )
 

@@ -18,7 +18,9 @@ import type { PatchOp } from '@wirebound/schema'
 import { ApiProvider } from '../../src/api/context'
 import type { MenuNode, PageDetail, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
+import { ThemeBundleProvider } from '../../src/theme/bundle-context'
 import { fakeApi } from '../helpers'
+import { adminThemeView, staticBundleLoader } from '../theme-loader'
 import '../../src/catalog-setup'
 
 function tree(): TreeMenuNode[] {
@@ -88,17 +90,21 @@ function boot() {
           slug: 's',
           description: null,
           role: 'owner' as const,
+          themeRev: 0,
         }),
         getTree: async () => tree(),
         getPage: async () => page(),
         listMyRevisions: async () => [],
+        getProjectTheme: async () => adminThemeView(),
         updateMenu,
         patchOps,
       })}
     >
-      <MemoryRouter initialEntries={['/projects/p-1/pages/pg-list']}>
-        <App />
-      </MemoryRouter>
+      <ThemeBundleProvider loader={staticBundleLoader()}>
+        <MemoryRouter initialEntries={['/projects/p-1/pages/pg-list']}>
+          <App />
+        </MemoryRouter>
+      </ThemeBundleProvider>
     </ApiProvider>,
   )
   return { updateMenu, patchOps }

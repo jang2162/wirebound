@@ -19,12 +19,20 @@ import type {
   PatchResult,
   Preset,
   ProjectDetail,
+  ProjectThemeView,
+  ProjectView,
   RevisionInverse,
   SessionUser,
   RestoreResult,
   SnapshotSummary,
+  ThemeImpact,
+  ThemePackageSummary,
+  ThemePackageUploaded,
+  ThemePackageVersion,
+  ThemeRef,
   TreeMenuNode,
 } from './types'
+import type { ThemeManifest } from '@wirebound/theme-sdk'
 
 /**
  * 쓰기 하나에 얹는 선택. **`signal`** — 끊을지·언제 끊을지는 부르는 쪽이 정한다
@@ -83,8 +91,11 @@ export interface ApiClient {
   revokeMyToken(tokenId: string): Promise<void>
   /** 내 토큰 전부를 폐기하고 지운 수를 낸다. */
   revokeAllMyTokens(): Promise<{ revoked: number }>
-  /** `cancel`은 셸을 떠나면 끊는다(`routes/editor.tsx`의 첫 조회 · `reread`). */
-  getProject(projectId: string, options?: ReadOptions): Promise<ProjectDetail>
+  /**
+   * `cancel`은 셸을 떠나면 끊는다(`routes/editor.tsx`의 첫 조회 · `reread`). 응답의 `themeRev` 는 셸의 다시 읽기가 테마를 따라잡는 데
+   * 쓴다(`ProjectView`).
+   */
+  getProject(projectId: string, options?: ReadOptions): Promise<ProjectView>
   /**
    * 프로젝트를 만든다. **부른 사람이 owner가 된다**(서버가 같은 트랜잭션에서
    * `project_members`에 넣는다 — `repos/projects.ts`).
@@ -512,6 +523,31 @@ export interface ApiClient {
    * **시간 제한은 없고 `cancel`은 듣는다** — `getExportPreview`와 같다.
    */
   downloadExport(projectId: string, format: ExportFormat, options?: Pick<ReadOptions, 'cancel'>): Promise<Blob>
+  /** 프로젝트가 고정한 테마 · 토큰 · manifest(viewer 이상). 에디터 셸과 설정 페이지가 부른다. */
+  getProjectTheme(projectId: string, options?: ReadOptions): Promise<ProjectThemeView>
+  /**
+   * 테마 · 판 · 토큰을 저장한다(owner). `rev` 가 서버 값과 다르면 409 이고 서버의 지금 값이 `ApiError.current` 에 실린다. 숨긴 판으로
+   * 새로 바꾸면 422 `hidden-version`, 토큰 값이 규격 밖이면 422 에 `issues[].path` 가 `tokens.<키>` 다.
+   */
+  putProjectTheme(
+    projectId: string,
+    body: { themeId: string; version: string; tokens: Record<string, string | number>; rev: number },
+  ): Promise<ProjectThemeView>
+  /** 그 판으로 바꾸면 무엇이 달라지나 — 확인 창의 수(viewer 이상). */
+  getThemeImpact(projectId: string, ref: ThemeRef, options?: ReadOptions): Promise<ThemeImpact>
+  /** 올라온 테마 패키지 목록(로그인한 사람). 숨긴 판은 관리자에게만 실린다. */
+  listThemePackages(options?: ReadOptions): Promise<ThemePackageSummary[]>
+  /** 판 하나의 manifest 전문 — 숨긴 판도 낸다. */
+  getThemeManifest(ref: ThemeRef, options?: ReadOptions): Promise<ThemeManifest>
+  /**
+   * `.wbtheme`(zip) 바이트를 그대로 올린다(인스턴스 관리자). 본문은 JSON 이 아니다 — `content-type: application/zip` 에 파일 그대로
+   * (spec 「업로드 검증」 — multipart 를 쓰지 않는다). 검증 실패 422 의 `issues[]` 에 `manifestCode` 가 실릴 수 있다.
+   */
+  uploadThemePackage(file: Blob): Promise<ThemePackageUploaded>
+  /** 판을 숨기거나 되살린다(인스턴스 관리자). */
+  setThemePackageHidden(ref: ThemeRef, hidden: boolean): Promise<ThemePackageVersion>
+  /** 스타터 템플릿 zip 을 받아 온다(인스턴스 관리자) — `downloadExport` 와 같은 꼴(받은 것의 형식을 본다 · 시간 제한 없음). */
+  downloadThemeTemplate(options?: Pick<ReadOptions, 'cancel'>): Promise<Blob>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */
@@ -540,6 +576,8 @@ export interface ApiErrorIssue {
   nodeId?: string | null
   /** 그 칸의 지금 값 — 페이지 메타 충돌(`api/page-meta.ts`)에만 실린다. */
   current?: string | null
+  /** 테마 업로드의 `manifest` 이슈가 든 원래 코드(`validateManifest` 의 코드 — api README 「테마 패키지와 프로젝트 테마」). */
+  manifestCode?: string
 }
 
 /**
@@ -564,13 +602,26 @@ export class ApiError extends Error {
    * api 만 짓는다(`realtime/edit-channel.ts`의 `deliver`).
    */
   readonly enveloped: boolean
+  /**
+   * 봉투 옆에 실려 온 **서버의 지금 값** — 테마 저장(`PUT …/theme`)의 409 가 싣는다(`ProjectThemeView` 모양). 모양은 그 값을 읽는
+   * 화면이 본다(`settings/theme-section.tsx`). 없으면 `undefined` 다.
+   */
+  readonly current: unknown
 
-  constructor(status: number, code: ApiErrorCode, message: string, issues?: ApiErrorIssue[], enveloped = false) {
+  constructor(
+    status: number,
+    code: ApiErrorCode,
+    message: string,
+    issues?: ApiErrorIssue[],
+    enveloped = false,
+    current?: unknown,
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.issues = issues ?? []
     this.enveloped = enveloped
+    this.current = current
   }
 }

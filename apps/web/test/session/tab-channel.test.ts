@@ -116,4 +116,13 @@ describe('readNews', () => {
       user: ALICE,
     })
   })
+
+  it('관리자 표시를 옮긴다 — 다른 탭의 로그인으로 들어온 탭도 목록 머리에 «테마 관리» 를 세운다', () => {
+    expect(readNews({ kind: 'signed-in', user: { ...ALICE, isInstanceAdmin: true } })).toEqual({
+      kind: 'signed-in',
+      user: { ...ALICE, isInstanceAdmin: true },
+    })
+    // 불리언이 아니면 싣지 않는다 — 없는 것은 «관리자 아님» 이다.
+    expect(readNews({ kind: 'signed-in', user: { ...ALICE, isInstanceAdmin: 'yes' } })).toEqual({ kind: 'signed-in', user: ALICE })
+  })
 })

@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { samePageMeta } from '@wirebound/schema'
 import type { ApiClient, ReadOptions, WriteOptions } from '../../src/api/client'
 import { ApiError } from '../../src/api/client'
-import type { Comment, CommentCreated, PageDetail, ProjectDetail, ProjectRole, SessionUser } from '../../src/api/types'
+import type { Comment, CommentCreated, PageDetail, ProjectView, ProjectRole, SessionUser } from '../../src/api/types'
 import { WRITE_DEADLINE_MS } from '../../src/panels/write-ledger'
 import { createConnectionIdHolder, type ConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import {
@@ -46,12 +46,13 @@ const MY_ID = 'u-1'
 /** 다시 읽기로 판정했더니 서버 값이 같을 때(`page-description.tsx`의 `MATCHED`). */
 const MATCHED = '응답이 없어 서버를 다시 읽었더니 서버의 설명이 이 글과 같습니다'
 
-const PROJECT: ProjectDetail = {
+const PROJECT: ProjectView = {
   id: PROJECT_ID,
   name: PROJECT_NAME,
   slug: 'admin-console',
   description: null,
   role: 'owner',
+  themeRev: 0,
 }
 
 afterEach(() => {

@@ -281,145 +281,26 @@ describe('프로젝트 만들기', () => {
   })
 })
 
-describe('프로젝트 수정', () => {
-  const owned = project({ id: 'p-own', name: '내 프로젝트', slug: 'mine', description: '설명' })
-  const asEditor = project({ id: 'p-ed', name: '편집자 프로젝트', slug: 'ed', role: 'editor' })
-  const asViewer = project({ id: 'p-vw', name: '뷰어 프로젝트', slug: 'vw', role: 'viewer' })
-
-  it('owner인 항목에만 수정 버튼이 있다', async () => {
-    // `PATCH`가 owner 전용이고 그보다 낮은 멤버는 **403**이다(서버 실측).
-    // 눌러 봐야 403인 버튼을 활성으로 두지 않는다.
-    renderCrud({ lists: [[owned, asEditor, asViewer]] })
+/**
+ * **목록 줄에는 «수정» 이 없다** — 이름 · 슬러그 · 설명은 설정 페이지에서 고친다(`routes/settings.tsx` · `test/routes/settings.test.tsx`).
+ * 줄의 «설정» 링크는 모든 멤버에게 있다.
+ */
+describe('프로젝트 고치기는 설정 페이지다', () => {
+  it('어느 역할에도 수정 버튼이 없고 설정 링크가 있다', async () => {
+    const rows = [
+      project({ id: 'p-own', name: '내 프로젝트' }),
+      project({ id: 'p-ed', name: '편집자 프로젝트', role: 'editor' }),
+      project({ id: 'p-vw', name: '뷰어 프로젝트', role: 'viewer' }),
+    ]
+    const h = renderCrud({ lists: [rows] })
     await screen.findByText('내 프로젝트')
-
-    expect(screen.getByRole('button', { name: '내 프로젝트 수정' })).toBeDefined()
-    expect(screen.queryByRole('button', { name: '편집자 프로젝트 수정' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '뷰어 프로젝트 수정' })).toBeNull()
-  })
-
-  it('누르면 폼이 지금 값으로 채워져 열린다', async () => {
-    renderCrud({ lists: [[owned]] })
-    await screen.findByText('내 프로젝트')
-    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
-
-    expect((field('이름') as HTMLInputElement).value).toBe('내 프로젝트')
-    expect((field('슬러그') as HTMLInputElement).value).toBe('mine')
-    expect((field('설명') as HTMLInputElement).value).toBe('설명')
-  })
-
-  it('설명이 null이면 빈 칸으로 열린다', async () => {
-    // 서버의 "설명 없음"은 `null`이고 폼의 그것은 빈 문자열이다 — 그 변환이 어긋나면
-    // 화면에 `null`이라는 글자가 뜬다.
-    renderCrud({ lists: [[project({ id: 'p-own', name: '내 프로젝트', description: null })]] })
-    await screen.findByText('내 프로젝트')
-    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
-
-    expect((field('설명') as HTMLInputElement).value).toBe('')
-  })
-
-  it('제출하면 세 필드를 함께 보낸다', async () => {
-    // **전체 갱신이다.** 바꾸지 않은 필드도 함께 보낸다 — 근거는 아래
-    // `사용자가 지운 설명을 …` 케이스가 지킨다.
-    const h = renderCrud({ lists: [[owned]] })
-    await screen.findByText('내 프로젝트')
-    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
-
-    type('이름', '바뀐 이름')
-    fireEvent.click(screen.getByRole('button', { name: '저장' }))
-
-    await waitFor(() => expect(h.updateProject).toHaveBeenCalledTimes(1))
-    expect(h.updateProject.mock.calls[0]?.[0]).toBe('p-own')
-    expect(h.updateProject.mock.calls[0]?.[1]).toEqual({
-      name: '바뀐 이름',
-      slug: 'mine',
-      description: '설명',
-    })
-  })
-
-  it('사용자가 지운 설명은 빈 문자열이 아니라 없는 키로 나간다', async () => {
-    // **전체 갱신으로 정한 근거이자 그 한계다.** 설명을 지우면 `description`이 `undefined`가
-    // 되고 `declaredOnly`가 그 키를 뺀다 — 즉 **"설명을 바꾸지 않는다"가 되어 옛 설명이
-    // 서버에 남는다.** 지우는 뜻이라면 `null`을 보내야 한다.
-    //
-    // **이 단계는 지우기를 만들지 않는다.** 폼이 "비움"과 "지움"을 가르지 못하기 때문이고,
-    // 가르려면 필드에 그 뜻을 담는 장치(예: 지움 체크박스)가 필요한데 그것은 새 화면 규칙이다.
-    // **그 한계를 케이스로 고정해 둔다** — 지우기를 만들 때 여기가 먼저 죽는다.
-    const h = renderCrud({ lists: [[owned]] })
-    await screen.findByText('내 프로젝트')
-    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
-
-    type('설명', '')
-    fireEvent.click(screen.getByRole('button', { name: '저장' }))
-
-    await waitFor(() => expect(h.updateProject).toHaveBeenCalledTimes(1))
-    expect((h.updateProject.mock.calls[0]?.[1] as Record<string, unknown>)['description']).toBeUndefined()
-  })
-
-  it('성공하면 목록을 다시 받고 폼이 닫힌다', async () => {
-    const h = renderCrud({
-      lists: [[owned], [project({ id: 'p-own', name: '바뀐 이름', slug: 'mine' })]],
-    })
-    await screen.findByText('내 프로젝트')
-    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
-
-    type('이름', '바뀐 이름')
-    fireEvent.click(screen.getByRole('button', { name: '저장' }))
-
-    await waitFor(() => expect(h.listProjects).toHaveBeenCalledTimes(2))
-    // **수정은 목록에 남는다** — 만들기와 달리 이동이 없다.
-    await screen.findByText('바뀐 이름')
-    expect(screen.queryByLabelText('이름')).toBeNull()
-  })
-
-  it('중복 슬러그 409의 문장이 남고 폼이 열려 있다', async () => {
-    // **서버 실측: `PATCH`의 중복도 409이고 문장이 `POST`와 같다.**
-    // 폼을 닫지 않는 것이 요점이다 — 닫으면 사용자가 고칠 자리를 잃는다.
-    const h = renderCrud({
-      lists: [[owned]],
-      updateProject: async () => {
-        throw new ApiError(409, 'conflict', DUPLICATE_SLUG)
-      },
-    })
-    await screen.findByText('내 프로젝트')
-    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
-
-    type('슬러그', 'taken')
-    fireEvent.click(screen.getByRole('button', { name: '저장' }))
-
-    await screen.findByText(DUPLICATE_SLUG)
-    expect(h.listProjects).toHaveBeenCalledTimes(1)
-    expect(screen.getByLabelText('슬러그')).toBeDefined()
-  })
-
-  it('Esc로 닫힌다', async () => {
-    const h = renderCrud({ lists: [[owned]] })
-    await screen.findByText('내 프로젝트')
-    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
-
-    fireEvent.keyDown(field('이름'), { key: 'Escape' })
-
-    await waitFor(() => expect(screen.queryByLabelText('이름')).toBeNull())
+    for (const row of rows) {
+      expect(screen.queryByRole('button', { name: `${row.name} 수정` })).toBeNull()
+      expect(screen.getByRole('link', { name: `${row.name} 설정` }).getAttribute('href')).toBe(`/projects/${row.id}/settings`)
+    }
     expect(h.updateProject).not.toHaveBeenCalled()
   })
-
-  it('빈 본문이 만들어지는 경로가 없다', async () => {
-    // 서버는 빈 갱신 본문에 400을 낸다. 폼은 이름·슬러그가 비면 보내지 않고,
-    // 셋을 함께 보내므로 남는 키가 0이 되는 경로가 없다. **`updateProject`가 받은 본문에
-    // 이름·슬러그가 늘 있다**는 것이 그 사실이다.
-    const h = renderCrud({ lists: [[owned]] })
-    await screen.findByText('내 프로젝트')
-    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
-
-    type('설명', '')
-    fireEvent.click(screen.getByRole('button', { name: '저장' }))
-
-    await waitFor(() => expect(h.updateProject).toHaveBeenCalledTimes(1))
-    const body = h.updateProject.mock.calls[0]?.[1] as Record<string, unknown>
-    expect(body['name']).toBe('내 프로젝트')
-    expect(body['slug']).toBe('mine')
-  })
 })
-
 describe('프로젝트 삭제', () => {
   const owned = project({ id: 'p-own', name: '내 프로젝트', slug: 'mine' })
   const other = project({ id: 'p-two', name: '둘째 프로젝트', slug: 'two' })
@@ -589,29 +470,29 @@ describe('프로젝트 삭제', () => {
 })
 
 describe('통합 — 한 화면에서 이어서', () => {
-  it('만들기 → 수정 → 삭제를 이어서 하고 각 단계 뒤 목록이 새 상태를 보인다', async () => {
-    // **만들기는 이동으로 끝나므로** 이 케이스는 수정 → 삭제를 잇고, 만들기는 이동을
-    // 확인하는 것으로 대신한다 — 목록이 언마운트되어 그 자리에서 이어 갈 수 없다.
+  it('삭제 뒤 목록이 새 상태를 보인다 — 다른 곳에서 바뀐 이름으로 확인한다', async () => {
+    // **만들기는 이동으로 끝나고 고치기는 설정 페이지라** 이 화면에서 잇는 조작은 삭제다. 첫 목록 뒤 이름이 바뀐 판(설정
+    // 페이지 · 다른 탭)을 두 번째 목록이 싣고, 삭제는 그 새 이름으로 확인해야 한다.
     const first = project({ id: 'p-a', name: '첫째', slug: 'a' })
     const renamed = project({ id: 'p-a', name: '고친 이름', slug: 'a2' })
-    const h = renderCrud({ lists: [[first], [renamed], []] })
+    const other = project({ id: 'p-b', name: '둘째', slug: 'b' })
+    const h = renderCrud({ lists: [[first, other], [renamed], []] })
     await screen.findByText('첫째')
 
-    // 수정
-    fireEvent.click(screen.getByRole('button', { name: '첫째 수정' }))
-    type('이름', '고친 이름')
-    type('슬러그', 'a2')
-    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    // 둘째를 지우면 목록을 다시 받는다 — 고친 이름이 선다.
+    fireEvent.click(screen.getByRole('button', { name: '둘째 삭제' }))
+    type('삭제하려면 프로젝트 이름을 입력하세요', '둘째')
+    fireEvent.click(screen.getByRole('button', { name: '삭제 확정' }))
     await screen.findByText('고친 이름')
     expect(h.listProjects).toHaveBeenCalledTimes(2)
 
-    // 삭제 — 방금 고친 이름으로 확인해야 한다(목록이 새 상태를 보인다는 뜻이다)
+    // 삭제 — 새 이름으로 확인해야 한다(목록이 새 상태를 보인다는 뜻이다)
     fireEvent.click(screen.getByRole('button', { name: '고친 이름 삭제' }))
     type('삭제하려면 프로젝트 이름을 입력하세요', '고친 이름')
     fireEvent.click(screen.getByRole('button', { name: '삭제 확정' }))
 
     await screen.findByText('참여 중인 프로젝트가 없습니다')
-    expect(h.deleteProject).toHaveBeenCalledTimes(1)
+    expect(h.deleteProject).toHaveBeenCalledTimes(2)
     expect(h.listProjects).toHaveBeenCalledTimes(3)
   })
 
@@ -628,12 +509,11 @@ describe('통합 — 한 화면에서 이어서', () => {
 
     for (const row of rows) {
       const open = row.role === 'owner'
-      expect(screen.queryByRole('button', { name: `${row.name} 수정` }) !== null).toBe(open)
       expect(screen.queryByRole('button', { name: `${row.name} 삭제` }) !== null).toBe(open)
     }
-    // 링크는 역할과 무관하게 셋 다 있다 — 읽기는 viewer도 된다. 목록 안에서 센다 — 머리의 계정 묶음에도 링크가 있다
-    // («API 토큰» — `session/session-menu.tsx`).
-    expect(within(screen.getByRole('list')).getAllByRole('link')).toHaveLength(3)
+    // 링크는 역할과 무관하게 줄마다 둘(이름 · 설정)이다 — 읽기는 viewer도 된다. 목록 안에서 센다 — 머리의 계정 묶음에도 링크가
+    // 있다(«API 토큰» — `session/session-menu.tsx`).
+    expect(within(screen.getByRole('list')).getAllByRole('link')).toHaveLength(6)
   })
 
   it('조회 실패와 조작 실패가 각자 자리에 나온다', async () => {
@@ -675,7 +555,7 @@ describe('통합 — 한 화면에서 이어서', () => {
       screen.queryAllByRole('textbox').length +
       screen.queryAllByRole('link').length
 
-    // 닫힌 상태: 링크 1 + 새 프로젝트·수정·삭제 3 + **계정 묶음 2(«API 토큰» 링크 · 로그아웃)** = 6.
+    // 닫힌 상태: 링크 2(이름 · 설정) + 새 프로젝트·삭제 2 + **계정 묶음 2(«API 토큰» 링크 · 로그아웃)** = 6.
     // 계정 묶음은 이 화면에서도 앱에서 나가는 길이다(`session/session-menu.tsx`,
     // `test/routes/shell-nav.test.tsx`). 이 케이스가 재는 것은 *"열면 늘고 닫으면
     // 되돌아온다"*이고, 바탕 수는 이 화면의 정지점을 셀 뿐이다.

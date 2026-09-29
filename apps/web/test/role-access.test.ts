@@ -72,6 +72,10 @@ describe('역할을 읽는 자리', () => {
       // 생성이 editor 게이트다). **판정은 팝오버가 자기가 한다:** 셸이 역할을 내려보내지
       // 않고 팝오버가 자기 `getProject`로 받는다.
       '../src/shell/snapshots-panel.tsx',
+      // 설정 페이지의 «일반» 절이 칸을 열지(`rename`)를 안다 — 역할은 설정 라우트의 `getProject` 에서 온다.
+      '../src/settings/general-section.tsx',
+      // «테마» 절이 고르개를 열지(`chooseTheme`)를 안다.
+      '../src/settings/theme-section.tsx',
     ].sort())
   })
 

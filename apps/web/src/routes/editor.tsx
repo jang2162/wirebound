@@ -27,7 +27,7 @@ import { Link, useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
-import type { PageDetail, ProjectDetail } from '../api/types'
+import type { PageDetail, ProjectView } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CanvasDocumentProvider } from '../canvas/canvas-document'
 import { CommentPanel } from '../panels/comment-panel'
@@ -49,6 +49,8 @@ import { ExportPanel } from '../shell/export-panel'
 import { SnapshotsPanel } from '../shell/snapshots-panel'
 import { projectAbilities } from '../projects/project-actions'
 import { SessionMenu } from '../session/session-menu'
+import { ProjectThemeProvider, useProjectTheme } from '../theme/project-theme'
+import { ThemeAlert } from '../theme/theme-alert'
 import {
   EditorStore,
   VIEWPORT_PRESETS,
@@ -326,7 +328,7 @@ const PANEL_BODIES: Record<
  */
 type LoadState =
   | { status: 'loading' }
-  | { status: 'ready'; project: ProjectDetail }
+  | { status: 'ready'; project: ProjectView }
   | { status: 'failed'; failure: Failure }
 
 /**
@@ -486,12 +488,15 @@ export function EditorShellRoute(): ReactElement {
     <EditorStoreProvider store={store}>
       {/* 캔버스 iframe 의 문서를 머리의 팝오버가 아는 통로 — 캔버스와 머리의 공통 조상이 셸이라 셸째 감싼다. */}
       <CanvasDocumentProvider>
-        <EditorShell
-          project={state.project}
-          roleKnown={roleKnown}
-          pageId={params.pageId}
-          onMembership={onMembership}
-        />
+        {/* **프로젝트가 고정한 테마**(`theme/project-theme.tsx`) — 캔버스 · 속성 패널 · 패턴 고르개가 읽고, 셸이 프레임 · 다시 읽기로 따라잡게 한다. */}
+        <ProjectThemeProvider projectId={state.project.id}>
+          <EditorShell
+            project={state.project}
+            roleKnown={roleKnown}
+            pageId={params.pageId}
+            onMembership={onMembership}
+          />
+        </ProjectThemeProvider>
       </CanvasDocumentProvider>
     </EditorStoreProvider>
   )
@@ -499,7 +504,7 @@ export function EditorShellRoute(): ReactElement {
 
 /** 세 패널과 상단 도구. 스토어는 컨텍스트에서 꺼낸다. */
 function EditorShell(props: {
-  project: ProjectDetail
+  project: ProjectView
   /** 역할을 아는가 — 모르면 아무것도 못 하는 쪽으로 선다(`EditorShellRoute`의 `reread`). */
   roleKnown: boolean
   pageId: string | undefined
@@ -522,7 +527,7 @@ function EditorShell(props: {
    *
    * | 자리 | viewer 에게 | 왜 |
    * |---|---|---|
-   * | **동작 입구** — 메뉴 편집 툴바 · 빈 트리의 «최상위 메뉴» · 페이지 JSON · 구조 편집 툴바(프리셋 · 패턴 포함) · 되돌리기 · 코멘트 폼 · 코멘트의 «수정» · «삭제» · 트리 두 곳의 단축키 | **숨긴다**(DOM 에서 뺀다) | 역할은 기다려서 풀리는 것이 아니다 — 켜질 길이 없는 회색 단추는 소음이다(스냅샷 복원 · 테마 파생 단추 · «페이지 설명»과 같은 판단). 뷰 모드가 편집 도구를 빼는 방식과도 같아서 viewer 의 편집 모드 좌측은 뷰 모드의 좌측과 같다 |
+   * | **동작 입구** — 메뉴 편집 툴바 · 빈 트리의 «최상위 메뉴» · 페이지 JSON · 구조 편집 툴바(프리셋 · 패턴 포함) · 되돌리기 · 코멘트 폼 · 코멘트의 «수정» · «삭제» · 트리 두 곳의 단축키 | **숨긴다**(DOM 에서 뺀다) | 역할은 기다려서 풀리는 것이 아니다 — 켜질 길이 없는 회색 단추는 소음이다(스냅샷 복원 · 설정의 테마 고르개 · «페이지 설명»과 같은 판단). 뷰 모드가 편집 도구를 빼는 방식과도 같아서 viewer 의 편집 모드 좌측은 뷰 모드의 좌측과 같다 |
    * | **값을 보이는 칸** — 속성 패널 · 상호작용 패널의 위젯 | **끄고 이유 한 줄**(`panels/property-panel.tsx`의 `VIEWER_NOTICE`) | 그 칸이 곧 값의 표시다 — 숨기면 viewer 가 읽을 것을 잃는다. 그리고 두 패널에는 «꺼진 이유» 관례가 이미 있다(남의 잠금 — `lockedNotice`). |
    * | **잠금** — 노드를 고르는 것 | **잡지 않는다**(`useNodeLock`) | 고르기는 읽기다(속성 · 코멘트를 보려고 고른다). 서버는 viewer 의 `lock`을 조용히 버리지만(`MIN_ROLE_FOR_FRAME`) 보내는 것 자체가 쓰기 프레임이다 |
    *
@@ -580,6 +585,7 @@ function EditorShell(props: {
    * | 메뉴 · 페이지 목록 · 제목 | 좌측 트리(`MenuTree`의 `reloadToken`) |
    * | 열린 페이지의 문서 | 캔버스(`CanvasFrame`의 복원 재조회) — 구조 트리 · 속성 패널은 스토어에서 읽는다 |
    * | 코멘트 · 페이지 설명 | 우측 본문 — **탭을 다녀온 것처럼 다시 세운다**(`RightPanel`의 `key`) |
+   * | 테마 바인딩 | `theme-changed` 프레임(복원도 보낸다 — `theme/project-theme.tsx` 의 `applyFrame`) · 놓치면 다시 읽기의 `themeRev`(`catchUp`) — 이 신호를 안 탄다 |
    *
    * **자리를 하나 빠뜨리면 탭을 다녀오거나 새로고침해야 맞는다** — 되돌렸다는 알림 아래 옛 코멘트 목록이 조용히 남는다
    * (Chrome: 스냅샷의 코멘트를 지운 뒤 복원하면 서버 1 · 탭 0). 복원이 바꾸는 것이 늘면 이 표에 줄을 더한다.
@@ -641,12 +647,20 @@ function EditorShell(props: {
    * 사람은 스스로 수렴하지 않는다**. 다시 붙은 것 자체를 신호로 삼으면 그
    * 사람의 화면도 맞춰진다.
    */
+  const theme = useProjectTheme()
   useRealtime(
     props.project.id,
     useCallback(() => setResyncToken((token) => token + 1), []),
     // **역할은 룸에 들 때마다 다시 읽는다**(`MembershipCause` — 끊긴 동안의 `membership-changed`도 사라졌다).
     props.onMembership,
+    theme.applyFrame,
   )
+  /**
+   * **테마를 따라잡는다** — 라우트의 다시 읽기(룸에 듦 · 다시 붙음 · 멤버십 신호)가 받은 `themeRev` 가 쥔 바인딩보다 새것이면 다시 읽는다.
+   * 끊긴 동안 놓친 `theme-changed` 는 이 길로만 닿는다(프레임은 다시 오지 않는다).
+   */
+  const { catchUp } = theme
+  useEffect(() => catchUp(props.project.themeRev), [catchUp, props.project])
 
   /**
    * **고른 노드를 서버에 알린다**(설계서 「소프트 잠금」 — 선택이 곧 잠금이다). `pageId`는 주소에서 푼 값이다:
@@ -763,6 +777,12 @@ function EditorShell(props: {
             것이고 서버도 viewer에게 연다(「권한 모델」). 감추면 설계서를 **읽으라고** 부른
             사람이 그것을 가져갈 수 없다. */}
         <ExportPanel projectId={props.project.id} />
+        {/* **프로젝트 설정**(`routes/settings.tsx` — 이름 · 슬러그 · 설명 · 테마). 스냅샷 · 내보내기 옆에 두는 것은 셋 다 *"이 프로젝트
+            전체를 다루는 것"*이라 축이 같기 때문이다. **역할로 감추지 않는다** — viewer 도 지금 테마 · 토큰을 읽기로 본다(칸이 읽기 전용이다).
+            팝오버가 아니라 링크인 것은 절이 둘이고 미리보기가 들어 셸 머리에 뜨는 상자로는 좁기 때문이다. */}
+        <Link className="wb-shell-settings-entry" to={`/projects/${props.project.id}/settings`}>
+          설정
+        </Link>
         {/* **계정은 줄의 끝이다**(`session/session-menu.tsx`). 앞의 도구들이 전부
             *"이 설계서로 무엇을 하는가"*인 것과 달리 이것은 **앱 전체**에 걸린다 — 왼쪽의
             이동·정체성 묶음에 붙이지 않은 것도 그래서다: 그쪽은 *"이 설계서에서 나가는
@@ -788,6 +808,8 @@ function EditorShell(props: {
             `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
             근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
         <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.own === undefined ? SIGNALLED_RESTORE_LEAD : OWN_RESTORE_LEAD[stale.own])} />
+        {/* **테마를 못 실었다**(`theme/theme-alert.tsx`) — 캔버스는 기본 뷰로 그리고 있다. */}
+        <ThemeAlert />
         {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
         {roleNotice !== null && (
           <p className="wb-shell-remote-alert" role="status">
@@ -1166,6 +1188,7 @@ function CanvasFrame(props: {
   const store = useEditorStoreInstance()
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
   const zoom = useEditorStore(store, (s) => s.zoom)
+  const themeStatus = useProjectTheme().status
   const [state, setState] = useState<PageLoadState>({ status: 'empty' })
   /**
    * **실패한 캔버스의 «다시 시도»가 올리는 수** — 페이지를 여는 이펙트가 이 값에 매여 다시 돈다(여는 길 그대로: 비우고 · 읽고 · 되돌리기
@@ -1561,9 +1584,10 @@ function CanvasFrame(props: {
             </button>
           </>
         ))}
-      {state.status === 'ready' && (
-        <Canvas projectId={projectId} pageId={pageId} />
-      )}
+      {/* 테마를 싣는 동안은 문서를 안 그린다 — 기본 뷰로 한 번 그렸다가 테마로 갈아 끼우면 캔버스가 한 번 튄다. 번들의 한도가
+          이 기다림을 끝낸다(`theme/bundle-loader.ts` 의 `BUNDLE_DEADLINE_MS`). */}
+      {state.status === 'ready' &&
+        (themeStatus === 'loading' ? <p role="status">테마를 불러오는 중…</p> : <Canvas projectId={projectId} pageId={pageId} />)}
     </div>
   )
 }

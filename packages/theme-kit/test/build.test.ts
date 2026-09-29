@@ -57,6 +57,15 @@ describe('buildTheme', () => {
     expect(js.length).toBeLessThan(20_000)
   }, 60_000)
 
+  it('NODE_ENV 가 production 이 아닌 셸에서 지어도 운영 JSX 다 — 운영 호스트의 React 에서 뷰가 안 던진다', async () => {
+    // 판 카나리아 — vitest 는 `NODE_ENV=test` 로 돈다. vite 는 이미 선 NODE_ENV 를 안 덮어 이 판이 개발 빌드로 간다.
+    expect(process.env.NODE_ENV).not.toBe('production')
+    const { file } = await buildTheme({ root: copyFixture() })
+    const js = readWbtheme(new Uint8Array(readFileSync(file))).files!.themeJs
+    // 개발 JSX(`jsxDEV`)는 개발 React 의 내부(`getOwner`)를 불러 운영 호스트에서 «e.getOwner is not a function» 으로 던진다.
+    expect({ jsxDEV: js.includes('jsxDEV'), runtime: js.includes('.jsxRuntime') }).toEqual({ jsxDEV: false, runtime: true })
+  }, 60_000)
+
   it('manifest 가 틀리면 이유를 항목별로 던지고 파일을 만들지 않는다', async () => {
     const root = copyFixture()
     writeFileSync(join(root, 'theme.config.ts'), readFileSync(join(root, 'theme.config.ts'), 'utf8').replace("version: '1.0.0'", "version: '1.0'"))

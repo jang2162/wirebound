@@ -93,6 +93,7 @@
    파랑 `#2f6fed`의 4.55:1보다 오히려 높다. **어둡게 조정하지 않은 근거가 이 실측이다.** */
 .wb-shell,
 .wb-shell-project-list,
+.wb-shell-settings,
 .wb-shell-login {
   --wb-shell-line: #dfe3e8;
   --wb-shell-chrome: #f6f7f9;
@@ -853,6 +854,15 @@
 .wb-shell-canvas-iframe {
   display: block;
   border: 0;
+}
+
+/* 테마 번들을 싣는 숨은 iframe(`theme/bundle-loader.ts` 머리말 «적재 realm»). 문서를 그리지 않는다 — 크기 0 · 감춤으로 자리를 안 잡는다. */
+.wb-shell-bundle-realm {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 0;
+  visibility: hidden;
 }
 
 /* 선택 아웃라인. 문서 노드 위에 겹쳐 그리되 **노드를 건드리지 않는다**(머리말의 «문서 옆에 그리는 셸의 장치는 여기 규칙을 그대로 따른다»).
@@ -1860,14 +1870,14 @@
 
 /* 이 화면의 버튼 셋 — **무게로 가른다.**
 
-   `.wb-shell-project-action` **하나가 만들기·취소·수정·삭제를 다 걸면** 실측으로
+   `.wb-shell-project-action` **하나가 만들기·취소·저장·삭제를 다 걸면** 실측으로
    넷 다 배경 흰색·글자 먹색이라 **주 동작과 취소가 구분되지 않고**, 규칙도
    갈린다 — 목록의 `새 프로젝트`(`-create`)와 로그인의 `-submit`은 강조색을
    받는데 폼의 `만들기`/`저장`만 못 받는다. 그래서 셋으로 나눈다.
 
    | 클래스 | 무엇 | 꼴 |
    |---|---|---|
-   | `-action` | 되돌릴 수 있는 것 — `수정` · `취소` · `삭제 취소` · 목록의 `삭제`(확인을 연다) | 흰 바탕 |
+   | `-action` | 되돌릴 수 있는 것 — `취소` · `삭제 취소` · 목록의 `삭제`(확인을 연다) | 흰 바탕 |
    | `-submit` | 그 폼의 주 동작 — `만들기` · `저장` | 강조색. `-create`·`-login-submit`과 같다 |
    | `-danger` | 되돌릴 수 없는 것 — `삭제 확정` | 붉은색(`#b42318`, 이 파일이 이미 쓰는 경고색) |
 
@@ -2218,6 +2228,15 @@
   margin: 0;
   font-size: 13px;
   color: #2a4a7a;
+}
+
+/* 테마를 못 실었다는 한 줄(`theme/theme-alert.tsx`). 남의 변경 통지(`.wb-shell-remote-alert`)와 같은 줄 자리 · 같은 `role`이고, 색은
+   경고(`.wb-shell-edit-warnings`)와 같다 — 화면이 테마 대신 기본 모양으로 서 있다. 끝의 단추는 `.wb-shell-remote-reload`다. */
+.wb-shell-theme-alert {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+  color: #7a4a00;
 }
 
 /* 남의 복원을 다시 읽는 단추. 문장 끝에 붙어 서므로 테두리 버튼이 아니라 글자다 —
@@ -2791,4 +2810,330 @@
   order: 2;
   margin-left: auto;
   margin-top: 18px;
+}
+
+/* 목록 줄의 «설정»(`routes/project-list.tsx`) — 모든 멤버에게 있는 링크다. 줄의 단추들과 같은 높이 · 모서리로 서되, 링크라 밑줄을
+   지우고 강조색 글자로 가른다(계정 묶음의 «API 토큰» 링크와 같은 꼴). */
+.wb-shell-project-settings {
+  flex: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font-size: 13px;
+  color: var(--wb-shell-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* 에디터 머리의 «설정»(`routes/editor.tsx`) — 스냅샷 · 내보내기 토글과 같은 글자 꼴이다. 링크라 밑줄만 지운다. */
+.wb-shell-settings-entry {
+  font-size: 13px;
+  color: var(--wb-shell-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* ── 프로젝트 설정(`routes/settings.tsx`) ─────────────────────────────────────────────────
+   화면 루트다(팔레트 블록의 루트 목록). 목록 화면보다 넓다 — «테마» 절의 미리보기(갤러리 iframe)가 폼 옆에 선다. 머리 · 알림 ·
+   단추는 프로젝트 목록의 것을 그대로 쓴다(`-project-head` · `-project-list-title` · `-project-submit` · `-project-alert` ·
+   `-project-notice`). 여기 있는 것은 이 화면에만 있는 칸이다. */
+.wb-shell-settings {
+  color-scheme: light;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-settings-nav {
+  display: flex;
+  gap: 16px;
+  margin: 0 0 16px;
+}
+
+/* 절 하나 — «일반» · «테마». 위아래로 쌓고 선으로 가른다(탭이 없다). */
+.wb-shell-settings-section {
+  border-top: 1px solid var(--wb-shell-line);
+  padding: 16px 0 24px;
+}
+
+.wb-shell-settings-section-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.wb-shell-settings-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 480px;
+}
+
+.wb-shell-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.wb-shell-settings-label {
+  font-size: 13px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-settings-input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+}
+
+/* 읽기 전용 칸(owner 가 아니다) — 고칠 수 없다는 것이 바탕으로 보이게 한다. */
+.wb-shell-settings-input:read-only {
+  background: var(--wb-shell-chrome);
+}
+
+/* 칸 하나의 사유(슬러그 409 · 토큰 값의 사유) — 그 칸 바로 밑이다. 색은 이 파일의 오류 문장 색이다. */
+.wb-shell-settings-field-alert {
+  margin: 0;
+  font-size: 12px;
+  color: #b42318;
+}
+
+/* «테마» 절의 지금 값 — `이름 id@버전` 과 «새 버전» 표시. */
+.wb-shell-settings-current {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.wb-shell-settings-newer {
+  font-size: 12px;
+  color: var(--wb-shell-accent);
+}
+
+/* 테마 · 판 고르개 — 칸 둘을 가로로 두고 확인은 그 밑 줄 전부를 쓴다. */
+.wb-shell-settings-chooser {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  max-width: 640px;
+  margin: 0 0 16px;
+}
+
+/* 고르개 칸 하나 — `.wb-shell-settings-field` 와 같은 세로 꼴이되 폭을 칸만큼만 쓴다. */
+.wb-shell-settings-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+}
+
+/* 바꾸기 확인 — 모달이 아니라 고르개 밑에 여는 상자다(`projects/delete-confirm.tsx` 의 꼴). */
+.wb-shell-settings-confirm {
+  flex-basis: 100%;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 12px;
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-settings-confirm-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.wb-shell-settings-confirm-line {
+  margin: 0 0 8px;
+}
+
+.wb-shell-settings-confirm-list {
+  margin: 0 0 8px;
+  padding-left: 16px;
+  font-size: 13px;
+}
+
+.wb-shell-settings-confirm-item {
+  margin: 0;
+}
+
+.wb-shell-settings-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 토큰 편집기(`settings/token-editor.tsx`) — 폼과 미리보기를 가로로 둔다. 좁은 창(< 960px)에서는 미리보기가 폼 밑으로 내려간다. */
+.wb-shell-settings-tokens {
+  display: grid;
+  grid-template-columns: minmax(280px, 400px) 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 959px) {
+  .wb-shell-settings-tokens {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wb-shell-settings-token-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wb-shell-settings-subtitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 토큰 무리 하나(manifest 의 `tokens.groups` — 없으면 «기타»). `<fieldset>` 의 기본 테두리 · 여백을 지운다. */
+.wb-shell-settings-token-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--wb-shell-line);
+  padding: 8px 0 0;
+}
+
+.wb-shell-settings-legend {
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-settings-token {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 칸의 컨트롤들(글 칸 · 색 고르기 · 단위 · «기본값으로») — 한 줄에 선다. */
+.wb-shell-settings-token-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-shell-settings-color {
+  flex: none;
+  width: 32px;
+  height: 28px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 0;
+  background: #fff;
+}
+
+.wb-shell-settings-unit {
+  flex: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 4px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-settings-token-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 409 — 서버 값과 내 값을 나란히 보이는 표. */
+.wb-shell-settings-conflict {
+  margin: 0 0 8px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+/* 미리보기 상자(`settings/theme-preview.tsx`) — 갤러리 iframe 을 감싼다. **문서를 감싸는 상자라 상속 속성을 걸지 않는다**
+   (`test/shell-css-guard.ts` 의 `WRAPPERS`) — iframe 이 상속을 끊지만 규칙은 캔버스 상자와 같게 둔다. 좁은 창에서는 스크롤한다. */
+.wb-shell-settings-preview {
+  min-width: 0;
+  overflow: auto;
+  padding: 12px;
+  background: var(--wb-shell-chrome);
+}
+
+/* 목록 머리의 «테마 관리»(`routes/project-list.tsx` — 인스턴스 관리자에게만). 계정 묶음의 «API 토큰» 링크와 같은 꼴이다. */
+.wb-shell-project-admin {
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff;
+  color: var(--wb-shell-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* ── 테마 관리(`routes/admin-themes.tsx`) ──────────────────────────────────────────────────
+   화면 루트는 `.wb-shell-project-list`(팔레트 · 폭 · 글꼴)이고 줄 · 단추는 목록 · «내 API 토큰» 의 것을 그대로 쓴다. 여기 있는 것은
+   이 화면에만 있는 칸이다. */
+.wb-shell-admin-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+.wb-shell-admin-upload {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.wb-shell-admin-file {
+  font: inherit;
+  font-size: 13px;
+}
+
+/* 업로드를 거절한 까닭 — 줄마다 `경로 — 문장 (manifest 코드)`. 색은 이 파일의 오류 문장 색이다. */
+.wb-shell-admin-issues {
+  margin: 12px 0 0;
+  padding-left: 16px;
+  font-size: 13px;
+  color: #b42318;
+}
+
+.wb-shell-admin-issue {
+  margin: 0;
+  word-break: break-word;
+}
+
+.wb-shell-admin-theme {
+  margin: 16px 0 0;
+}
+
+.wb-shell-admin-theme-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* 숨긴 판의 표시. 단추(«되살림»)가 같은 뜻을 말하지만 줄을 훑는 눈에 먼저 걸리게 둔다. */
+.wb-shell-admin-hidden {
+  flex: none;
+  border-radius: 4px;
+  padding: 0 6px;
+  background: var(--wb-shell-chrome);
+  font-size: 12px;
+  color: var(--wb-shell-muted);
 }

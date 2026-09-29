@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { setInstanceAdmin } from '../src/repos/users'
 import { signup, withApi } from './helpers'
 
 /** 이 파일이 쓰는 계정. 이메일에 대문자를 섞어 두는 것은 정규화가 실제로 도는지 함께 보기 위해서다. */
@@ -47,7 +48,22 @@ describe('POST /api/auth/login', () => {
       expect(res.statusCode).toBe(200)
       expect(res.json().email).toBe('signup@example.com')
       expect(res.cookies.find((c) => c.name === 'wb_session')?.value).toBeTruthy()
-      expect(Object.keys(res.json()).sort()).toEqual(['email', 'id', 'name'])
+      // `isInstanceAdmin` 을 로그인 응답에도 싣는다 — 로그인 직후 목록 머리의 관리자 링크가 `/me` 를 다시 부르지 않고 선다.
+      expect(Object.keys(res.json()).sort()).toEqual(['email', 'id', 'isInstanceAdmin', 'name'])
+      expect(res.json().isInstanceAdmin).toBe(false)
+    })
+  })
+
+  it('인스턴스 관리자면 로그인 응답의 isInstanceAdmin 이 true 다', async () => {
+    await withApi(async (ctx) => {
+      await signup(ctx, 계정)
+      await setInstanceAdmin(ctx.db, 'signup@example.com', true)
+      const res = await ctx.app.inject({
+        method: 'POST', url: '/api/auth/login',
+        payload: { email: 'signup@example.com', password: 'password1234' },
+      })
+      expect(res.statusCode).toBe(200)
+      expect(res.json().isInstanceAdmin).toBe(true)
     })
   })
 
@@ -85,7 +101,7 @@ describe('POST /api/auth/login', () => {
         method: 'POST', url: '/api/auth/login',
         payload: { email: 'signup@example.com', password: 'password1234' },
       })
-      expect(Object.keys(res.json()).sort()).toEqual(['email', 'id', 'name'])
+      expect(Object.keys(res.json()).sort()).toEqual(['email', 'id', 'isInstanceAdmin', 'name'])
       expect(res.body).not.toContain('password')
       expect(res.body).not.toContain('scrypt')
     })
@@ -142,7 +158,7 @@ describe('GET /api/auth/me', () => {
       const res = await ctx.app.inject({ method: 'GET', url: '/api/auth/me', cookies: cookie })
       expect(res.statusCode).toBe(200)
       expect(res.json().email).toBe('signup@example.com')
-      // `isInstanceAdmin` 은 `/me` 에만 싣는다 — 관리자 링크를 그릴지 화면이 이 응답으로 정한다(값은 `admin-command.test.ts`).
+      // 관리자 링크를 그릴지 화면이 이 응답(과 로그인 응답)으로 정한다(값은 `admin-command.test.ts`).
       expect(Object.keys(res.json()).sort()).toEqual(['email', 'id', 'isInstanceAdmin', 'name'])
     })
   })

@@ -72,9 +72,10 @@ export function readNews(data: unknown): SessionNews | null {
   if (kind !== 'signed-in') return null
   const user = (data as { user?: unknown }).user
   if (typeof user !== 'object' || user === null) return null
-  const { id, email, name } = user as Record<string, unknown>
+  const { id, email, name, isInstanceAdmin } = user as Record<string, unknown>
   if (typeof id !== 'string' || typeof email !== 'string' || typeof name !== 'string') return null
-  return { kind, user: { id, email, name } }
+  // 관리자 표시도 옮긴다 — 빠지면 다른 탭의 로그인으로 들어온 탭이 목록 머리의 «테마 관리» 를 안 세운다. 불리언이 아니면 안 싣는다.
+  return { kind, user: { id, email, name, ...(typeof isInstanceAdmin === 'boolean' ? { isInstanceAdmin } : {}) } }
 }
 
 /**

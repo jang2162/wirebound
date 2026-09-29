@@ -11,7 +11,7 @@
   "dependencies": {
     "@wirebound/renderer": "workspace:*",
     "@wirebound/schema": "workspace:*",
-    "@wirebound/system-theme-admin": "workspace:*",
+    "@wirebound/theme-gallery": "workspace:*",
     "@wirebound/theme-sdk": "workspace:*",
     "@wirebound/themes": "workspace:*",
     "react": "^19.0.0",
@@ -27,7 +27,9 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "@wirebound/exporter": "workspace:*",
+    "@wirebound/system-theme-admin": "workspace:*",
     "@wirebound/test-support": "workspace:*",
+    "@wirebound/theme-kit": "workspace:*",
     "pg": "^8.13.0",
     "playwright-core": "^1.62.1",
     "vite": "^6.0.0"

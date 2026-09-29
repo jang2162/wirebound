@@ -198,11 +198,27 @@ async function clickClearOfPopover(node: Locator): Promise<void> {
   await node.click({ position: { x: 20, y: box.height / 2 } })
 }
 
-/** 문서 노드 — iframe 이 있으면 그 안에서, 없으면(iframe 이전 판) 호스트에서. 문서가 설 때까지 기다린 뒤 가른다. */
+/**
+ * 문서 노드 — iframe 안에 있으면 그 안에서, 호스트에 있으면(iframe 이전 판) 호스트에서. **노드가 선 쪽을 한 번의 읽기로 고른다** —
+ * «iframe 이 있나» 를 따로 다시 읽으면 페이지를 옮기는 사이(옛 iframe 이 내려가고 새것이 아직 없다) 0 을 읽어 호스트를 골라, 호스트에는
+ * 영영 안 서는 노드를 30s 기다렸다(«페이지를 옮겨 iframe 이 새로 서도» 의 흔들림 — 죽은 locator 가 `frameLocator` 없는 꼴이었다).
+ */
 async function docNode(page: Page, id: string): Promise<Locator> {
   const selector = `[data-wb-id="${id}"]`
-  await poll('캔버스 문서가 선다', async () => (await page.locator(IFRAME).count()) + (await page.locator(selector).count()), (n) => n > 0)
-  return (await page.locator(IFRAME).count()) > 0 ? page.frameLocator(IFRAME).locator(selector) : page.locator(selector)
+  const inFrame = page.frameLocator(IFRAME).locator(selector)
+  const inHost = page.locator(selector)
+  const where = await poll(
+    '캔버스 문서가 선다',
+    async () => {
+      try {
+        return (await inFrame.count()) > 0 ? 'frame' : (await inHost.count()) > 0 ? 'host' : null
+      } catch {
+        return null // 옛 · 새 iframe 이 잠깐 둘이면 `frameLocator` 가 엄격 모드로 던진다 — 다음 읽기에 가른다.
+      }
+    },
+    (found) => found !== null,
+  )
+  return where === 'frame' ? inFrame : inHost
 }
 
 /** 조건이 설 때까지(기본 3s) 읽고 **마지막 값을 돌려준다** — 서지 않아도 던지지 않아, 케이스가 타임아웃이 아니라 값으로 죽는다. */

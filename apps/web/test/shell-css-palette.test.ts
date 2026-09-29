@@ -152,7 +152,7 @@ const ROUTE_SOURCES = Object.entries(
  * 같다(팔레트를 상속으로 받는다). 이 검사가 지키는 것은 그러므로 *"화면이 검게 나오는가"*가
  * 아니라 **CSS와 이 목록이 갈리지 않는 것**이고, 아래 구분력 두 케이스가 그 양방향이다.
  */
-const SCREEN_ROOTS = ['wb-shell', 'wb-shell-login', 'wb-shell-project-list']
+const SCREEN_ROOTS = ['wb-shell', 'wb-shell-login', 'wb-shell-project-list', 'wb-shell-settings']
 
 /**
  * **팔레트를 안 받는 화면 루트.** 여기 있으려면 조건이 하나다 — **자기 규칙이

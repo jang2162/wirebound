@@ -118,9 +118,9 @@ importers:
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../../packages/schema
-      '@wirebound/system-theme-admin':
+      '@wirebound/theme-gallery':
         specifier: workspace:*
-        version: link:../../system-themes/admin
+        version: link:../../packages/theme-gallery
       '@wirebound/theme-sdk':
         specifier: workspace:*
         version: link:../../packages/theme-sdk
@@ -161,9 +161,15 @@ importers:
       '@wirebound/exporter':
         specifier: workspace:*
         version: link:../../packages/exporter
+      '@wirebound/system-theme-admin':
+        specifier: workspace:*
+        version: link:../../system-themes/admin
       '@wirebound/test-support':
         specifier: workspace:*
         version: link:../../packages/test-support
+      '@wirebound/theme-kit':
+        specifier: workspace:*
+        version: link:../../packages/theme-kit
       pg:
         specifier: ^8.13.0
         version: 8.22.0

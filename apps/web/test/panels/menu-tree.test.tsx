@@ -21,7 +21,7 @@ import type { ReactElement, ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
+import type { PageDetail, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import type { EditorStore } from '../../src/store/editor-store'
 import {
@@ -76,12 +76,13 @@ const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터
 /** 성공한 `getProject`에서만 화면에 나오는 문자열. 셸이 떴다는 증거로 쓴다. */
 const PROJECT_NAME = '관리자 콘솔 설계서'
 
-const PROJECT: ProjectDetail = {
+const PROJECT: ProjectView = {
   id: 'p-1',
   name: PROJECT_NAME,
   slug: 'admin-console',
   description: null,
   role: 'owner',
+  themeRev: 0,
 }
 
 /**

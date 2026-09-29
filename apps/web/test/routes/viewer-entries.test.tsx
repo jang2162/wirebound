@@ -15,15 +15,15 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
-import type { Comment, ProjectDetail } from '../../src/api/types'
+import type { Comment, ProjectView } from '../../src/api/types'
 import { VIEWER_NOTICE } from '../../src/panels/property-panel'
 import { openDraftStore } from '../../src/panels/draft-store'
 import { openPage, pageDoc, PROJECT_ID, PROJECT_NAME, type EditorOptions, canvasQuery } from '../editor-harness'
 import { fakeRealtime, type FakeRealtime } from '../fake-realtime'
 import '../../src/catalog-setup'
 
-const VIEWER: ProjectDetail = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role: 'viewer' }
-const EDITOR: ProjectDetail = { ...VIEWER, role: 'editor' }
+const VIEWER: ProjectView = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role: 'viewer', themeRev: 0 }
+const EDITOR: ProjectView = { ...VIEWER, role: 'editor' }
 
 const DOC: PageDocument = pageDoc({
   id: 'n-root',

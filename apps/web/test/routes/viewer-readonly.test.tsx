@@ -67,6 +67,7 @@ import { createLockChannel } from '../../src/realtime/lock-channel'
 import { DRAFT_KEY_PREFIX, openDraftStore, type DraftStore } from '../../src/panels/draft-store'
 import { clickAsBrowser } from '../click-as-browser'
 import { renderWithProviders } from '../helpers'
+import { adminThemeView } from '../theme-loader'
 import { canvasQuery } from '../editor-harness'
 
 const ME: SessionUser = { id: 'u-1', email: 'carol@example.com', name: '캐럴' }
@@ -143,7 +144,7 @@ function reads(role: ProjectRole): Record<string, unknown> {
   const project = `/api/projects/${PROJECT_ID}`
   return {
     '/api/auth/me': ME,
-    [project]: { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role },
+    [project]: { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role, themeRev: 0 },
     [`${project}/tree`]: { menu: TREE },
     [`${project}/pages/${PAGE_ID}`]: page(PAGE_ID),
     [`${project}/pages/${OTHER_PAGE_ID}`]: page(OTHER_PAGE_ID),
@@ -153,6 +154,8 @@ function reads(role: ProjectRole): Record<string, unknown> {
     [`${project}/pages/${OTHER_PAGE_ID}/comments`]: COMMENTS,
     [`${project}/presets`]: [],
     [`${project}/snapshots`]: SNAPSHOTS,
+    // 셸이 읽는 테마 바인딩 — 번들은 시험용 로더가 준다(`helpers.tsx`의 `bundleLoader`).
+    [`${project}/theme`]: adminThemeView(),
   }
 }
 

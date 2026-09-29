@@ -106,8 +106,8 @@ export type ServerFrame =
    */
   | { type: 'membership-changed'; projectId: string }
   /**
-   * **프로젝트의 테마 바인딩 · 토큰이 바뀌었다**(서버 `ws/protocol.ts`의 그 갈래). 지금은 읽기만 한다 — 받는 자리가 없다(`use-realtime.ts`
-   * 의 `default`). 캔버스가 프로젝트의 `id@버전` 을 싣게 되면 그 자리가 이 프레임으로 다시 싣거나 CSS 변수를 바꾼다.
+   * **프로젝트의 테마 바인딩 · 토큰이 바뀌었다**(서버 `ws/protocol.ts`의 그 갈래). 받는 자리는 셸의 프로젝트 테마다(`theme/project-theme.tsx`
+   * 의 `applyFrame` — 판이 같으면 토큰만 바꾸고, 다르면 다시 읽어 번들을 싣는다).
    */
   | {
       type: 'theme-changed'

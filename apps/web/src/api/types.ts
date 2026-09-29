@@ -10,6 +10,7 @@
  * 소유하는 단일 진실이므로 그 타입을 그대로 쓴다.
  */
 import type { PageDocument, PatchOp, ValidationIssue, WbNode } from '@wirebound/schema'
+import type { ThemeManifest } from '@wirebound/theme-sdk'
 
 /** 프로젝트 멤버의 역할. `owner` > `editor` > `viewer`(README "권한(역할)"). */
 export type ProjectRole = 'owner' | 'editor' | 'viewer'
@@ -19,6 +20,11 @@ export interface SessionUser {
   id: string
   email: string
   name: string
+  /**
+   * 인스턴스 관리자인가 — 프로젝트 목록 머리의 «테마 관리» 링크를 이 값으로 세운다(`routes/project-list.tsx`). 서버는 두 응답에 늘
+   * 싣는다. **선택 키로 두는 것은** 이 값을 안 든 가짜 사용자(테스트 픽스처)를 «관리자 아님» 으로 읽게 하려는 것이다 — 없으면 거짓이다.
+   */
+  isInstanceAdmin?: boolean
 }
 
 /**
@@ -80,6 +86,78 @@ export interface ProjectSummary {
  */
 export interface ProjectDetail extends ProjectSummary {
   role: ProjectRole
+}
+
+/**
+ * `GET /api/projects/:projectId` 의 응답 — 역할에 더해 **`themeRev`** 를 싣는다(다른 셋은 안 싣는다). `theme-changed` 방송을 놓친 탭이
+ * 다시 읽을 때 쥔 바인딩보다 새것인지 이 값으로 가른다(`theme/project-theme.tsx` 의 `catchUp`).
+ */
+export interface ProjectView extends ProjectDetail {
+  themeRev: number
+}
+
+/** 패키지 판 하나를 가리키는 이름 — 파일 경로 · 캐시 키가 이 둘이다. */
+export interface ThemeRef {
+  themeId: string
+  version: string
+}
+
+/**
+ * `GET · PUT /api/projects/:projectId/theme` 의 응답(409 의 `current` 도 같은 모양 — `ApiError.current`). `latest` 는 그 테마의 숨기지
+ * 않은 판 가운데 가장 높은 것이다(«새 버전» 표시).
+ *
+ * **바인딩 칸은 `null` 일 수 있다** — 시스템 테마를 시딩하기 전에 만든 프로젝트는 다음 기동까지 비어 있다(api README 「테마 패키지와
+ * 프로젝트 테마」 의 «바인딩»). 그때 `manifest` 도 `null` 이다.
+ */
+export interface ProjectThemeView {
+  themeId: string | null
+  version: string | null
+  /** 기본값과 다른 값만. */
+  tokens: Record<string, string | number>
+  rev: number
+  manifest: ThemeManifest | null
+  latest: string | null
+}
+
+/** `GET …/theme/impact` 의 응답 — 테마를 바꾸기 전 확인 창의 수(spec 「테마 바꾸기와 버전 올리기」). */
+export interface ThemeImpact {
+  tokens: { kept: number; dropped: number; defaulted: number }
+  /** 새 테마에 없는 variant 를 쓰는 노드 수 — 그런 노드가 있는 페이지만, 설계서 트리의 차례로. */
+  variants: { pageId: string; title: string; count: number }[]
+}
+
+/** 패키지 판 한 줄 — `GET /api/theme-packages` 의 `versions[]` 와 관리자 숨김(`PATCH`)의 응답이 같다. */
+export interface ThemePackageVersion {
+  themeId: string
+  version: string
+  name: string
+  preview: string | null
+  hidden: boolean
+  size: number
+  uploadedAt: string
+  /** `null` 이면 시스템 테마(기동이 넣었다). */
+  uploadedBy: { id: string; name: string } | null
+}
+
+/**
+ * `GET /api/theme-packages` 의 한 줄 — 테마 하나와 그 판들(semver 가 큰 것부터). **숨긴 판은 관리자에게만 실린다.** `latest` 는 숨기지
+ * 않은 판의 최대이고 다 숨었으면 `null` 이다.
+ */
+export interface ThemePackageSummary {
+  themeId: string
+  name: string
+  description: string | null
+  latest: string | null
+  versions: ThemePackageVersion[]
+}
+
+/** `POST /api/admin/theme-packages` 의 201 응답. */
+export interface ThemePackageUploaded {
+  themeId: string
+  version: string
+  name: string
+  sha256: string
+  size: number
 }
 
 /**

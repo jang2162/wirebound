@@ -32,10 +32,10 @@
  *
  *   어느 쪽이든 **검사가 보고 있어서 안전한 것이 아니다.**
  *
- *   **다른 부류가 있다:** 캔버스 iframe(`canvas/canvas-iframe.tsx`)이 그 문서의 head 에 `<style>` 둘을 붙인다
- *   (`canvas/canvas-theme.ts`의 `CANVAS_STYLES`). 그 시트는 **문서 노드를 겨냥하는 것이 일**이므로 격리 규칙이 금지하는
- *   대상이 아니다 — 그 규칙이 가른 선은 *"셸이 문서를 스타일하지 않는다"*이고, 저 시트의 내용은 셸이 아니라 SDK 기본 뷰
- *   CSS와 테마 CSS다. 다만 **이 검사는 그 시트를 읽지 않는다**는 사실은 위와 같다.
+ *   **다른 부류가 있다:** 캔버스 iframe(`canvas/canvas-iframe.tsx`)이 그 문서의 head 에 시트 셋을 붙인다
+ *   (`canvas/canvas.tsx`의 `canvasSheets` — SDK 기본 뷰 · 테마 `theme.css` 링크 · 토큰). 그 시트는 **문서 노드를 겨냥하는 것이 일**이므로
+ *   격리 규칙이 금지하는 대상이 아니다 — 그 규칙이 가른 선은 *"셸이 문서를 스타일하지 않는다"*이고, 저 시트의 내용은 셸이 아니라
+ *   SDK 기본 뷰 CSS · 테마 CSS · 토큰 변수다. 다만 **이 검사는 그 시트를 읽지 않는다**는 사실은 위와 같다.
  * - `WRAPPERS`에 없는 상자. 문서를 감싸는 상자가 새로 생기면 **사람이 여기 더해야** 한다.
  *   그 목록은 `canvas/canvas.tsx`·`routes/editor.tsx`가 무엇을 감싸는지에 매여 있고,
  *   검사가 스스로 알아낼 방법이 없다.
@@ -99,6 +99,7 @@ export interface Violation {
  * 2. `wb-shell-canvas` — 그 사슬 둘째
  * 3. `wb-shell-canvas-frame` — 셋째
  * 4. `wb-shell-canvas-surface` — 넷째. 여기 안에 페이지 문서가 들어온다
+ * 5. `wb-shell-settings-preview` — 설정 페이지의 갤러리 미리보기(`settings/theme-preview.tsx`). 문서(갤러리)가 iframe 째 들어온다
  *
  * > **문서를 감싸는 상자를 만드는 사람이 여기 한 줄을 더하는 것이 이 목록의 유일한 갱신
  * > 방법이다** — 목록에 없는 상자에 상속 속성을 걸면 **아무 케이스도 안 죽고**, 목록에 있으면
@@ -110,6 +111,7 @@ const WRAPPERS = new Set([
   'wb-shell-canvas',
   'wb-shell-canvas-frame',
   'wb-shell-canvas-surface',
+  'wb-shell-settings-preview',
 ])
 
 /**

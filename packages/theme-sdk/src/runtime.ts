@@ -22,30 +22,47 @@ export interface WbRuntime {
 }
 
 export interface RuntimeHandle {
-  /** `theme.js` 가 등록한 정의. 한 번 받으면 비운다 — 다음 적재가 앞 테마를 받지 않게. */
-  take(): ThemeDefinition | null
+  /**
+   * `theme.js` 가 등록한 정의. 한 번 받으면 비운다 — 다음 적재가 앞 테마를 받지 않게.
+   *
+   * `script` 를 주면 **그 스크립트가 도는 동안 들어온 등록만** 받는다 — 스크립트 밖의 등록(늦게 미룬 것 · 다른 스크립트의 것)은 버리고
+   * 경고한다. 안 주면 스크립트를 가리지 않는다(`new Function` 으로 부르는 판 — `currentScript` 가 없다).
+   */
+  take(script?: Element): ThemeDefinition | null
   uninstall(): void
 }
 
-/** 전역을 세운다. 호스트는 이것 → `theme.js` 를 `<script>` 로 싣기 → `take()` 차례로 부른다. */
+const STRAY = '테마 번들 스크립트 밖에서 온 등록을 버렸습니다'
+
+/**
+ * 전역을 세운다. 호스트는 이것 → `theme.js` 를 `<script>` 로 싣기 → 그 `load` 에서 `take(그 스크립트)` 차례로 부른다.
+ *
+ * **등록을 그 스크립트에 매단다** — `register` 가 불린 순간의 `target.document.currentScript` 를 함께 적는다. 칸이 하나뿐이라 매달지
+ * 않으면, 등록을 미룬(`setTimeout`) 번들의 정의가 칸에 남아 **다음 번들의 `load`** 가 제 것으로 받는다 — 등록하지 않는 번들이 앞 번들의
+ * 뷰로 «성공» 한다(A4 리뷰 2b).
+ */
 export function installRuntime(target: typeof globalThis = globalThis): RuntimeHandle {
-  let pending: ThemeDefinition | null = null
+  let pending: { def: ThemeDefinition; script: Element | null } | null = null
   const runtime: WbRuntime = {
     react: React,
     jsxRuntime: JsxRuntime,
     sdk: Sdk,
     sdkVersion: Sdk.SDK_VERSION,
     register(def) {
-      if (pending !== null) console.warn('테마가 두 번 등록됐습니다 — 뒤의 것을 씁니다')
-      pending = def
+      const script = (target as { document?: Document }).document?.currentScript ?? null
+      if (pending !== null) console.warn(pending.script === script ? '테마가 두 번 등록됐습니다 — 뒤의 것을 씁니다' : STRAY)
+      pending = { def, script }
     },
   }
   ;(target as unknown as Record<string, unknown>)[WB_RUNTIME_GLOBAL] = runtime
   return {
-    take() {
-      const def = pending
+    take(script) {
+      const held = pending
       pending = null
-      return def
+      if (held === null) return null
+      if (script === undefined || held.script === script) return held.def
+      console.warn(STRAY)
+      return null
     },
     uninstall() {
       delete (target as unknown as Record<string, unknown>)[WB_RUNTIME_GLOBAL]

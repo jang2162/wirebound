@@ -11,7 +11,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { describe, expect, it } from 'vitest'
 import { samePageMeta } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { PageDetail, ProjectDetail } from '../../src/api/types'
+import type { PageDetail, ProjectView } from '../../src/api/types'
 import { openDraftStore } from '../../src/panels/draft-store'
 import { openPage, pageDetail, pageDoc, PAGE_ID, PROJECT_ID, PROJECT_NAME, type EditorOptions } from '../editor-harness'
 import '../../src/catalog-setup'
@@ -269,12 +269,13 @@ describe('설명 — 되살린 초안은 제 바탕을 든다', () => {
 })
 
 describe('viewer 는 읽기 전용이다', () => {
-  const VIEWER_PROJECT: ProjectDetail = {
+  const VIEWER_PROJECT: ProjectView = {
     id: PROJECT_ID,
     name: PROJECT_NAME,
     slug: 'admin-console',
     description: null,
     role: 'viewer',
+    themeRev: 0,
   }
 
   /** 혼자 죽는 변조: 셸이 «페이지 설명»에 `canEdit`을 `true`로 내린다(역할 판정을 안 지난다). */

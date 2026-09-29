@@ -84,6 +84,12 @@ export interface ProjectAbilities {
    * 무엇이 숨고 무엇이 꺼지는지는 셸의 `canEdit` 주석이 갖는다. 서버의 403 은 방어로 그대로 선다.
    */
   editDesign: boolean
+  /**
+   * **프로젝트의 테마 · 판 · 토큰을 바꿀 수 있는가**(`PUT .../theme` — spec `2026-09-27-code-themes-design.md` 「권한」 — owner). 설정 페이지의
+   * «테마» 절이 고르개 · 토큰 편집기를 이것으로 연다 — 아니면 지금 값만 보인다. `rename` 과 같은 값이어도 필드를 따로 둔다 — 서버가
+   * 둘을 다른 라우트로 받는다(`rename` · `remove` 를 가르는 것과 같은 판단).
+   */
+  chooseTheme: boolean
 }
 
 /** 아무것도 못 하는 상태. 역할을 모르거나 계약 밖 값일 때의 답이다. */
@@ -93,6 +99,7 @@ const NOTHING: ProjectAbilities = {
   createSnapshot: false,
   restoreSnapshot: false,
   editDesign: false,
+  chooseTheme: false,
 }
 
 /**
@@ -116,13 +123,13 @@ const NOTHING: ProjectAbilities = {
  * `PATCH`·`DELETE`로 받는다. 지금 값이 같은 것은 **오늘의 관측**이지 하나로 합쳐도 된다는
  * 뜻이 아니다 — 합치면 한쪽만 열리는 역할이 생길 때 부르는 쪽을 전부 고쳐야 한다.
  *
- * **화면이 두 버튼을 따로 그린다** — `routes/project-list.tsx`의 `ProjectRow`가
- * `abilities.rename`·`abilities.remove`를 각각 본다.
+ * **두 화면이 따로 본다** — 설정 페이지의 «일반» 절(`settings/general-section.tsx`)이 `abilities.rename` 으로 칸을 열고,
+ * 목록 줄(`routes/project-list.tsx`의 `ProjectRow`)이 `abilities.remove` 로 삭제 단추를 그린다.
  *
  * **그 배선은 케이스가 지킨다.** 지금 서버에 한쪽만 열리는 역할이 없어 이 함수가 두 필드에
  * 늘 같은 값을 내는 것은 맞지만, **이 함수를 주입해 값을 갈라 놓으면 배선이 드러난다.**
- * `test/routes/project-abilities-wiring.test.tsx`가 `vi.mock`으로 그것을 한다 — 두 배선을
- * 맞바꾸거나 삭제 버튼이 `remove` 대신 `rename`을 보게 하면 그 파일의 케이스가 죽는다.
+ * `test/routes/project-abilities-wiring.test.tsx`가 `vi.mock`으로 그것을 한다 — 삭제 단추가 `remove` 대신 `rename`을 보거나
+ * 설정의 칸이 `rename` 대신 `remove`를 보게 하면 그 파일의 케이스가 죽는다.
  *
  * > **"못 만든다"는 문장은 다음 사람이 시도하지 않게 만든다.** 못 만든 것은 그 방법으로
  * > 못 만든 것이고, 여기서는 **판정을 주입하는 방법**이 있다.
@@ -138,6 +145,7 @@ export function projectAbilities(role: ProjectRole | undefined): ProjectAbilitie
       createSnapshot: true,
       restoreSnapshot: true,
       editDesign: true,
+      chooseTheme: true,
     }
   }
   // **editor가 여는 것은 스냅샷 생성과 설계서 본문이다**(「권한 모델」). `role !== 'owner'`면

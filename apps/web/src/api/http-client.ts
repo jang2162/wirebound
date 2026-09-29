@@ -26,12 +26,20 @@ import type {
   PatchResult,
   Preset,
   ProjectDetail,
+  ProjectThemeView,
+  ProjectView,
   RestoreResult,
   RevisionInverse,
   SessionUser,
   SnapshotSummary,
+  ThemeImpact,
+  ThemePackageSummary,
+  ThemePackageUploaded,
+  ThemePackageVersion,
+  ThemeRef,
   TreeMenuNode,
 } from './types'
+import type { ThemeManifest } from '@wirebound/theme-sdk'
 
 const API_PREFIX = '/api'
 
@@ -40,6 +48,9 @@ const UNREADABLE = '서버 응답을 이해할 수 없습니다'
 
 /** 내려받기 응답으로 받는 형식 — 서버의 `routes/export.ts`가 내는 둘(zip · pptx)이다(`downloadExport`). */
 const EXPORT_FILE_TYPES = ['application/zip', 'application/vnd.openxmlformats-officedocument.presentationml.presentation']
+
+/** 테마 업로드가 싣는 형식 — 서버의 업로드 파서가 받는 둘 가운데 하나(spec 「업로드 검증」). */
+const THEME_PACKAGE_TYPE = 'application/zip'
 
 /** 요청이 서버에 닿지도 못했을 때 쓰는 메시지. 사용자에게 그대로 보여도 되는 문장이어야 한다. */
 const UNREACHABLE = '서버에 연결하지 못했습니다'
@@ -97,13 +108,13 @@ const UNREACHABLE = '서버에 연결하지 못했습니다'
  * N=7 둘 다). **받은 신호(`signal` — 판정용 다시 읽기)와는 다른
  * 키다** — 그쪽은 부른 쪽이 시간을 재고, 이쪽은 시간을 여기서 잰다(두 시계가 한 요청을 다투지 않는다).
  *
- * **끊는 자리 — 조회 이펙트 전부**: 페이지 · 설명 · 코멘트 · 프리셋 · 테마 · 되돌리기 이력 + **셸의
+ * **끊는 자리 — 조회 이펙트 전부**: 페이지 · 설명 · 코멘트 · 프리셋 · 테마(`theme/project-theme.tsx` · 설정 페이지) · 되돌리기 이력 + **셸의
  * 프로젝트**(`routes/editor.tsx` — 첫 조회 · 역할 다시 읽기) · **트리**(`tree/use-tree-commands.tsx` — 마운트 · 복원 신호 · 조작 뒤)
  * · **세션 확인**(`session/session-context.tsx`의 `me`) · **편집 수습의 페이지**(`edit/use-edit-commit.tsx` — «떠남»은 스토어가 그
  * 페이지를 더는 열고 있지 않은 것). 끊지 않으면(Chrome · 조회를 4s 붙잡고 1s 에 목록으로) 프로젝트 · 트리 조회가 4.1s 에
  * 200 으로 끝나고, 끊으면 떠나는 순간 `ERR_ABORTED`다. **안 끊는 것**: 이름 변경 뒤의 트리 다시 받기(장부가 **지금 떠 있는**
- * 트리에 배달한다 — 낸 트리가 떠나도 받을 트리가 있을 수 있다) · 스냅샷 패널 · 테마 편집기의 `getProject`(뒤 둘은 끊을
- * 이유가 없어서가 아니라 `cancel`을 싣지 않은 자리다).
+ * 트리에 배달한다 — 낸 트리가 떠나도 받을 트리가 있을 수 있다) · 스냅샷 패널의 `getProject`(끊을 이유가 없어서가 아니라
+ * `cancel`을 싣지 않은 자리다).
  *
  * **남는 성질 둘 — 재서 적고 고치지 않는다:**
  *
@@ -202,6 +213,15 @@ function isApiErrorCode(value: unknown): value is ApiErrorCode {
  * 같은 자리에서 죽기 때문이다.
  */
 type Shape = (value: unknown) => boolean
+
+/** 요청 하나에 얹는 선택 — 쓰기 · 읽기의 신호에 더해 이 파일 안에서만 쓰는 셋. */
+type SendOptions = (WriteOptions | ReadOptions) & {
+  readonly cache?: RequestCache
+  /** `false`면 일반 읽기여도 시간 제한을 안 건다(`READ_DEADLINE_MS`의 «안 거는 읽기»). */
+  readonly deadline?: false
+  /** 복원의 id(`RESTORE_ID_HEADER`) — 받는 것은 `restoreSnapshot` 하나다. */
+  readonly restoreId?: string
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -636,7 +656,71 @@ const SHAPES = {
   presetList: (value) => isArrayOf(value, isPreset),
   restoreResult: isRestoreResult,
   exportPreview: isExportPreview,
+  /**
+   * `GET /api/projects/:projectId` — 목록 · 생성 · 갱신과 같은 칸에 **`themeRev`** 가 붙는다. 셸의 다시 읽기가 그 수로 테마를 따라잡을지
+   * 가른다 — 수가 아니면 `>` 비교가 늘 거짓이 되어 놓친 저장을 영영 못 따라잡는다.
+   */
+  projectView: (value) => isProjectDetail(value) && typeof (value as Record<string, unknown>)['themeRev'] === 'number',
+  /**
+   * 프로젝트의 테마 바인딩. **`manifest.tokens.items` 까지 본다** — 토큰 편집기 · 캔버스가 그 레코드를 순회한다. `rev` 는 다음 저장의
+   * `rev` 가 되고 프레임 견주기의 기준이라 수여야 한다.
+   */
+  projectTheme: isProjectThemeView,
+  /** 확인 창의 수. 셋과 페이지 줄의 배열 — 화면이 그대로 전개한다. */
+  themeImpact: (value) =>
+    isRecord(value) &&
+    isRecord(value['tokens']) &&
+    ['kept', 'dropped', 'defaulted'].every((key) => typeof (value['tokens'] as Record<string, unknown>)[key] === 'number') &&
+    Array.isArray(value['variants']),
+  /** 테마 목록. **`themeId` · 판의 `version` 은 빈 문자열까지 막는다** — `<option>` 의 값이고 manifest · 파일 주소가 된다. */
+  themePackageList: (value) => isArrayOf(value, isThemePackageSummary),
+  /** manifest 전문 — 고른 판으로 토큰을 이을 때 `tokens.items` 를 순회한다. */
+  themeManifest: isThemeManifest,
+  /** 업로드 결과 — 화면이 «id@판 을 올렸습니다» 로 그린다. */
+  themeUploaded: (value) => isRecord(value) && typeof value['themeId'] === 'string' && typeof value['version'] === 'string',
+  /** 숨김 · 되살림의 결과 — 줄의 단추가 `hidden` 으로 갈린다. */
+  themePackageVersion: isThemePackageVersion,
 } satisfies Record<string, Shape>
+
+function isThemeManifest(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    isRecord(value['tokens']) &&
+    isRecord((value['tokens'] as Record<string, unknown>)['items'])
+  )
+}
+
+function isProjectThemeView(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['rev'] === 'number' &&
+    isRecord(value['tokens']) &&
+    (typeof value['themeId'] === 'string' || value['themeId'] === null) &&
+    (typeof value['version'] === 'string' || value['version'] === null) &&
+    (value['manifest'] === null || isThemeManifest(value['manifest'])) &&
+    (typeof value['latest'] === 'string' || value['latest'] === null)
+  )
+}
+
+function isThemePackageVersion(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['themeId'] === 'string' &&
+    typeof value['version'] === 'string' &&
+    value['version'] !== '' &&
+    typeof value['hidden'] === 'boolean'
+  )
+}
+
+function isThemePackageSummary(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['themeId'] === 'string' &&
+    value['themeId'] !== '' &&
+    isArrayOf(value['versions'], isThemePackageVersion)
+  )
+}
 
 /**
  * 코멘트 하나의 모양. 목록·생성·수정 셋이 같은 것을 쓴다 — 서버의 `toResponse` 하나가
@@ -753,7 +837,8 @@ async function toApiError(response: Response): Promise<ApiError> {
   const message = typeof envelope['message'] === 'string' ? envelope['message'] : UNREADABLE
   const code = isApiErrorCode(envelope['code']) ? envelope['code'] : 'internal'
 
-  return new ApiError(response.status, code, message, readIssues(envelope), true)
+  // 봉투 옆의 `current` — 테마 저장의 409 가 서버의 지금 값을 싣는다(`ApiError.current`).
+  return new ApiError(response.status, code, message, readIssues(envelope), true, (body as { current?: unknown }).current)
 }
 
 /**
@@ -982,6 +1067,12 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['createPreset']>[1],
     true
   >,
+  // 테마 저장. 서버의 `ThemeBody` 가 `z.strictObject` 라 선언되지 않은 키는 그 자체로 400 이고, **`manifest` · `latest` 가 그 자리다** —
+  // GET 응답(`ProjectThemeView`)을 고쳐 되보내는 실수가 실제로 있을 법하다.
+  putProjectTheme: { themeId: true, version: true, tokens: true, rev: true } satisfies Record<
+    keyof Parameters<ApiClient['putProjectTheme']>[1],
+    true
+  >,
 }
 
 /**
@@ -1053,13 +1144,24 @@ export function createHttpClient(
     method: string,
     path: string,
     body?: unknown,
-    options?: (WriteOptions | ReadOptions) & {
-      readonly cache?: RequestCache
-      /** `false`면 일반 읽기여도 시간 제한을 안 건다(`READ_DEADLINE_MS`의 «안 거는 읽기»). */
-      readonly deadline?: false
-      /** 복원의 id(`RESTORE_ID_HEADER`) — 받는 것은 `restoreSnapshot` 하나다. */
-      readonly restoreId?: string
-    },
+    options?: SendOptions,
+  ): Promise<Response> {
+    return transmit(method, path, body === undefined ? undefined : { body: JSON.stringify(body), type: 'application/json' }, options)
+  }
+
+  /**
+   * **JSON 이 아닌 본문을 보낸다** — 테마 업로드가 zip 바이트를 그대로 싣는다(spec 「업로드 검증」). `send` 는 본문을 늘 JSON 으로
+   * 굳히므로 그 길을 안 넓히고 따로 둔다 — 머리 · 쿠키 · 실패 번역은 같은 `transmit` 를 지난다.
+   */
+  async function sendBody(method: string, path: string, body: Blob, contentType: string): Promise<Response> {
+    return transmit(method, path, { body, type: contentType })
+  }
+
+  async function transmit(
+    method: string,
+    path: string,
+    payload: { readonly body: BodyInit; readonly type: string } | undefined,
+    options?: SendOptions,
   ): Promise<Response> {
     // **없으면 키를 만들지 않는다.** `undefined`를 실은 헤더가 통과하는 것은 우연이고,
     // 빈 문자열은 서버가 *"연결 id를 줬다"*로 읽는다(`broadcastOrigin`이 길이를 본다).
@@ -1069,7 +1171,7 @@ export function createHttpClient(
     // **이 탭이 아는 사용자** — 모르면 키를 만들지 않는다(위 `connection`과 같은 이유). 보내는 순간의 값이다.
     const known = knownUser?.get()
     const headers: Record<string, string> = {
-      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...(payload === undefined ? {} : { 'content-type': payload.type }),
       ...(connection === undefined ? {} : { [CONNECTION_ID_HEADER]: connection }),
       ...(known === undefined ? {} : { [KNOWN_USER_HEADER]: known }),
       ...(options?.restoreId === undefined ? {} : { [RESTORE_ID_HEADER]: options.restoreId }),
@@ -1084,7 +1186,7 @@ export function createHttpClient(
       // **헤더가 하나도 없으면 키를 만들지 않는다** — 기존 케이스가 `init` 객체를 그대로
       // 단언하므로(위 `credentials` 주석), 빈 `headers`를 늘 붙이면 그것들이 죽는다.
       ...(Object.keys(headers).length === 0 ? {} : { headers }),
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(payload === undefined ? {} : { body: payload.body }),
       // **끊을 신호도 받았을 때만 키를 만든다** — 위 `headers`와 같은 이유다. 끊기면 `fetch`가
       // 거절하고 아래 `catch`가 연결 실패로 옮긴다. **끊은 쪽은 그것이 자기 신호인 줄 안다**
       // (`panels/write-ledger.tsx`) — 여기서 따로 가르지 않는다.
@@ -1131,10 +1233,13 @@ export function createHttpClient(
     path: string,
     shape: Shape,
     body?: unknown,
-    options?: Parameters<typeof send>[3],
+    options?: SendOptions,
   ): Promise<T> {
-    const response = await send(method, path, body, options)
+    return shaped<T>(await send(method, path, body, options), shape)
+  }
 
+  /** 받은 응답의 본문을 읽고 모양을 본다 — `request` 와 JSON 아닌 본문을 보낸 요청(`sendBody`)이 같이 쓴다. */
+  async function shaped<T>(response: Response, shape: Shape): Promise<T> {
     // 204에는 본문이 없다. 파싱하면 실패하므로 아예 읽지 않는다.
     if (response.status === 204) return undefined as T
 
@@ -1166,6 +1271,9 @@ export function createHttpClient(
   const commentsPath = (projectId: string, pageId: string): string =>
     `${pagePath(projectId, pageId)}/comments`
 
+  const packagePath = (ref: ThemeRef): string =>
+    `/theme-packages/${encodeURIComponent(ref.themeId)}/${encodeURIComponent(ref.version)}`
+
   return {
     login: (email, password) =>
       request<SessionUser>('POST', '/auth/login', SHAPES.sessionUser, { email, password }),
@@ -1176,7 +1284,7 @@ export function createHttpClient(
     revokeMyToken: (tokenId) => request<void>('DELETE', `/auth/tokens/${encodeURIComponent(tokenId)}`, SHAPES.noBody),
     revokeAllMyTokens: () => request<{ revoked: number }>('DELETE', '/auth/tokens', SHAPES.revokedCount),
     getProject: (projectId, options) =>
-      request<ProjectDetail>('GET', projectPath(projectId), SHAPES.projectDetail, undefined, options),
+      request<ProjectView>('GET', projectPath(projectId), SHAPES.projectView, undefined, options),
     // 아래 셋이 프로젝트 CRUD다. **생성 응답은 `ProjectDetail`이다** — `role`까지
     // 실려 온다(`api/types.ts`의 실측 표). 그래서 `SHAPES.projectDetail`을 그대로 지나는데,
     // 그 근거는 "모양이 같다"가 아니라 **`createProject`의 하중 `id`가 그 검사가 이미 보는
@@ -1427,5 +1535,50 @@ export function createHttpClient(
         undefined,
         options,
       ),
+    getProjectTheme: (projectId, options) =>
+      request<ProjectThemeView>('GET', `${projectPath(projectId)}/theme`, SHAPES.projectTheme, undefined, options),
+    putProjectTheme: (projectId, body) =>
+      request<ProjectThemeView>(
+        'PUT',
+        `${projectPath(projectId)}/theme`,
+        SHAPES.projectTheme,
+        declaredOnly(body, BODY_KEYS.putProjectTheme),
+      ),
+    getThemeImpact: (projectId, ref, options) =>
+      request<ThemeImpact>(
+        'GET',
+        `${projectPath(projectId)}/theme/impact?themeId=${encodeURIComponent(ref.themeId)}&version=${encodeURIComponent(ref.version)}`,
+        SHAPES.themeImpact,
+        undefined,
+        options,
+      ),
+    listThemePackages: (options) =>
+      request<ThemePackageSummary[]>('GET', '/theme-packages', SHAPES.themePackageList, undefined, options),
+    getThemeManifest: (ref, options) =>
+      request<ThemeManifest>('GET', `${packagePath(ref)}/manifest`, SHAPES.themeManifest, undefined, options),
+    uploadThemePackage: async (file) =>
+      shaped<ThemePackageUploaded>(await sendBody('POST', '/admin/theme-packages', file, THEME_PACKAGE_TYPE), SHAPES.themeUploaded),
+    setThemePackageHidden: (ref, hidden) =>
+      request<ThemePackageVersion>(
+        'PATCH',
+        `/admin/theme-packages/${encodeURIComponent(ref.themeId)}/${encodeURIComponent(ref.version)}`,
+        SHAPES.themePackageVersion,
+        { hidden },
+      ),
+    // `downloadExport` 와 같은 꼴 — 시간 제한을 안 걸고 받은 것의 형식을 본다(개발 프록시가 빠지면 `index.html` 이 200 으로 온다).
+    downloadThemeTemplate: async (options) => {
+      const response = await send('GET', '/admin/theme-template.zip', undefined, {
+        ...(options?.cancel === undefined ? {} : { cancel: options.cancel }),
+        deadline: false,
+      })
+      const type = (response.headers.get('content-type') ?? '').toLowerCase()
+      if (!type.startsWith(THEME_PACKAGE_TYPE)) throw new ApiError(response.status, 'internal', UNREADABLE)
+      try {
+        return await response.blob()
+      } catch {
+        if (options?.cancel?.aborted === true) throw new ApiError(NO_RESPONSE, 'internal', ABANDONED)
+        throw new ApiError(response.status, 'internal', UNREADABLE)
+      }
+    },
   }
 }

@@ -78,6 +78,8 @@ describe('공개 표면이 계약이다', () => {
     'readWbtheme', 'packWbtheme', 'WBTHEME_LIMITS',
     // 토큰 → CSS 변수 · 푼 값. 갤러리 · 캔버스 · 내보내기가 같은 함수로 짓는다.
     'tokensCss', 'tokenValues', 'tokenVar',
+    // 테마를 바꿀 때 토큰 잇기. 설정 화면의 본문과 api 의 impact 수가 같은 함수를 부른다.
+    'migrateTokens',
   ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {

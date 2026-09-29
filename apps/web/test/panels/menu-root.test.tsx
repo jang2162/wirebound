@@ -30,18 +30,19 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { MenuNode, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
+import type { MenuNode, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import { fakeApi, renderWithProviders } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 const PROJECT_NAME = '설계서'
-const PROJECT: ProjectDetail = {
+const PROJECT: ProjectView = {
   id: 'p-1',
   name: PROJECT_NAME,
   slug: 'proj',
   description: null,
   role: 'owner',
+  themeRev: 0,
 }
 
 /** 만들어진 루트 메뉴의 응답. **`parentId`가 `null`인 것이 루트라는 뜻이다.** */

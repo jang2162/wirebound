@@ -20,7 +20,7 @@ import type {
   Comment,
   PageDetail,
   PageImported,
-  ProjectDetail,
+  ProjectView,
   SessionUser,
   TreeMenuNode,
 } from '../../src/api/types'
@@ -28,7 +28,7 @@ import { App } from '../../src/app'
 import { fakeApi, renderWithProviders } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
-const PROJECT: ProjectDetail = { id: 'p-1', name: '설계서', slug: 'proj', description: null, role: 'owner' }
+const PROJECT: ProjectView = { id: 'p-1', name: '설계서', slug: 'proj', description: null, role: 'owner', themeRev: 0 }
 
 function tree(): TreeMenuNode[] {
   return [

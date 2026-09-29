@@ -16,6 +16,9 @@ import { RealtimeProvider, type RealtimeSetup } from '../src/realtime/context'
 import type { SessionUser } from '../src/api/types'
 import { TabChannelProvider, type SessionNews, type TabChannel } from '../src/session/tab-channel'
 import { DraftStoreProvider, type DraftStore } from '../src/panels/draft-store'
+import { ThemeBundleProvider } from '../src/theme/bundle-context'
+import type { ThemeBundleLoader } from '../src/theme/bundle-loader'
+import { staticBundleLoader } from './theme-loader'
 
 /**
  * 스텁되지 않은 메서드 자리에 놓는 함수. **`undefined`를 돌려주지 않고 던진다.**
@@ -70,6 +73,14 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     restoreSnapshot: notStubbed('restoreSnapshot'),
     getExportPreview: notStubbed('getExportPreview'),
     downloadExport: notStubbed('downloadExport'),
+    getProjectTheme: notStubbed('getProjectTheme'),
+    putProjectTheme: notStubbed('putProjectTheme'),
+    getThemeImpact: notStubbed('getThemeImpact'),
+    listThemePackages: notStubbed('listThemePackages'),
+    getThemeManifest: notStubbed('getThemeManifest'),
+    uploadThemePackage: notStubbed('uploadThemePackage'),
+    setThemePackageHidden: notStubbed('setThemePackageHidden'),
+    downloadThemeTemplate: notStubbed('downloadThemeTemplate'),
     ...overrides,
   }
 }
@@ -142,6 +153,11 @@ export interface RenderOptions {
    * 앞 케이스의 초안이 뒤 케이스에 되살아난다. 사본을 재는 테스트만 준다(`test/panels/draft-store.test.tsx`).
    */
   draftStore?: DraftStore
+  /**
+   * 테마 번들 로더. **생략하면 `system-admin@0.1.0` 만 아는 시험용 로더다**(`test/theme-loader.ts`) — jsdom 은 `<script src>` 를 실행하지
+   * 않으므로 앱의 스크립트 로더를 쓸 수 없다. 적재를 재는 테스트만 준다.
+   */
+  bundleLoader?: ThemeBundleLoader
 }
 
 /**
@@ -206,7 +222,9 @@ export function renderWithProviders(ui: ReactElement, options: RenderOptions = {
     options.realtime === undefined ? tabbed : <RealtimeProvider setup={options.realtime}>{tabbed}</RealtimeProvider>
   render(
     <ApiProvider client={options.client ?? fakeApi()}>
-      {options.knownUser === undefined ? live : <KnownUserProvider holder={options.knownUser}>{live}</KnownUserProvider>}
+      <ThemeBundleProvider loader={options.bundleLoader ?? staticBundleLoader()}>
+        {options.knownUser === undefined ? live : <KnownUserProvider holder={options.knownUser}>{live}</KnownUserProvider>}
+      </ThemeBundleProvider>
     </ApiProvider>,
   )
 }

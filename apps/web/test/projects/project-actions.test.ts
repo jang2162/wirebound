@@ -50,6 +50,7 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
     createSnapshot: true,
     restoreSnapshot: true,
     editDesign: true,
+    chooseTheme: true,
   },
   // **editor는 스냅샷을 만들 수 있다.** 설계서 「권한 모델」이 스냅샷 **생성**을 editor에게
   // 열었기 때문이다 — 스냅샷은 아무것도 바꾸지 않는다.
@@ -64,6 +65,7 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
     // 설계서 본문 전부(메뉴 · 페이지 · 노드 · 코멘트 · 잠금). 서버의 `projectGuard('editor')`와
     // 같은 선이다 — 제목 · 설명만으로 좁히면 서버가 허락하는 편집을 화면이 막는다.
     editDesign: true,
+    chooseTheme: false,
   },
   viewer: {
     rename: false,
@@ -71,6 +73,7 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
     createSnapshot: false,
     restoreSnapshot: false,
     editDesign: false,
+    chooseTheme: false,
   },
 }
 
@@ -80,6 +83,7 @@ const NOTHING: ProjectAbilities = {
   createSnapshot: false,
   restoreSnapshot: false,
   editDesign: false,
+  chooseTheme: false,
 }
 
 describe('projectAbilities', () => {
@@ -108,6 +112,7 @@ describe('projectAbilities', () => {
       createSnapshot: true,
       restoreSnapshot: true,
       editDesign: true,
+      chooseTheme: true,
     })
   })
 
@@ -148,6 +153,7 @@ describe('projectAbilities', () => {
       createSnapshot: true,
       restoreSnapshot: true,
       editDesign: true,
+      chooseTheme: true,
     })
 
     // **스냅샷 생성은 둘이 열린다**(owner·editor — 설계서 「권한 모델」). 위 `opened`가
@@ -162,5 +168,8 @@ describe('projectAbilities', () => {
 
     // **설계서 본문은 둘이 연다**(owner · editor). viewer 에게 열리면 「권한 모델」의 *"조회 전용"* 이 바뀐 것이다.
     expect(Object.values(EXPECTED).filter((a) => a.editDesign)).toHaveLength(2)
+
+    // **테마를 바꾸는 것은 하나만 연다**(owner — spec 「권한」). editor 에게 열리면 설정 페이지의 고르개가 editor 에게 서고 서버는 403 이다.
+    expect(Object.values(EXPECTED).filter((a) => a.chooseTheme)).toHaveLength(1)
   })
 })

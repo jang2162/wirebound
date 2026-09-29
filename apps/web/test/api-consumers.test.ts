@@ -48,6 +48,8 @@ const METHODS = [
   'listSnapshots', 'createSnapshot', 'restoreSnapshot',
   'listPresets', 'createPreset',
   'getExportPreview', 'downloadExport',
+  'getProjectTheme', 'putProjectTheme', 'getThemeImpact',
+  'listThemePackages', 'getThemeManifest', 'uploadThemePackage', 'setThemePackageHidden', 'downloadThemeTemplate',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -94,11 +96,13 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   listMyTokens: ['../src/routes/tokens.tsx'],
   revokeMyToken: ['../src/routes/tokens.tsx'],
   revokeAllMyTokens: ['../src/routes/tokens.tsx'],
-  // **소비자가 둘이고 읽는 것이 다르다.** 셸은 `name`·`id`를 그리려고 부르고, 스냅샷 화면은 **`role`** 때문에
-  // 부른다 — 「권한 모델」이 생성을 editor에게 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다).
-  getProject: ['../src/routes/editor.tsx', '../src/shell/snapshots-panel.tsx'],
+  // **소비자가 셋이고 읽는 것이 다르다.** 셸은 `name`·`id`·`themeRev`(테마 따라잡기)를 그리려고 부르고, 스냅샷 화면은 **`role`**
+  // 때문에 부른다 — 「권한 모델」이 생성을 editor에게 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다). 설정 페이지는
+  // 이름 · 슬러그 · 설명(«일반» 의 지금 값)과 `role`(칸을 열지)을 읽는다.
+  getProject: ['../src/routes/editor.tsx', '../src/shell/snapshots-panel.tsx', '../src/routes/settings.tsx'],
   createProject: ['../src/projects/use-project-commands.tsx'],
-  updateProject: ['../src/projects/use-project-commands.tsx'],
+  // 설정 페이지의 «일반» 절 하나다 — 목록 줄의 인라인 수정은 없다(`routes/project-list.tsx` 머리말).
+  updateProject: ['../src/settings/general-section.tsx'],
   deleteProject: ['../src/projects/use-project-commands.tsx'],
   getTree: ['../src/tree/use-tree-commands.tsx'],
   createMenu: ['../src/tree/use-tree-commands.tsx'],
@@ -183,6 +187,21 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 그 다음에 앵커가 zip을 받는다.
   getExportPreview: ['../src/shell/export-panel.tsx'],
   downloadExport: ['../src/shell/export-panel.tsx'],
+  // 테마 여덟. 부르는 화면이 서면 여기에 적는다(`api/http-client.ts`의 shape 주석이 이 표를 근거로 삼는다).
+  // 에디터 셸의 프로젝트 테마가 바인딩 · manifest · 토큰을 읽는다 — 캔버스 · 속성 패널 · 패턴 고르개는 그 값을 받는다.
+  // 설정 페이지의 «테마» 절이 지금 바인딩을 읽는다(고르개 · 토큰 편집기가 그 값에서 시작한다).
+  getProjectTheme: ['../src/theme/project-theme.tsx', '../src/settings/theme-section.tsx'],
+  // 둘이 저장한다 — 고르개는 판을 바꾸며(잇는 토큰과 함께), 토큰 편집기는 같은 판으로 토큰만. 둘 다 절이 쥔 `rev` 로 보낸다.
+  putProjectTheme: ['../src/settings/theme-chooser.tsx', '../src/settings/token-editor.tsx'],
+  // 고르개의 목록 · 확인 창(바꾸면 무엇이 달라지나 · 잇는 토큰을 셀 새 manifest).
+  getThemeImpact: ['../src/settings/theme-chooser.tsx'],
+  // 고르개의 목록(숨긴 판은 관리자에게만 «숨김» 으로) · 관리자 화면의 판 목록.
+  listThemePackages: ['../src/settings/theme-chooser.tsx', '../src/routes/admin-themes.tsx'],
+  getThemeManifest: ['../src/settings/theme-chooser.tsx'],
+  // 관리자 셋 — 관리자 화면 하나에서만 불린다(`routes/admin-themes.tsx`).
+  uploadThemePackage: ['../src/routes/admin-themes.tsx'],
+  setThemePackageHidden: ['../src/routes/admin-themes.tsx'],
+  downloadThemeTemplate: ['../src/routes/admin-themes.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {
