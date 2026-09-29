@@ -23,7 +23,7 @@
  *   미룬 등록(`setTimeout`)은 제 `load` 를 놓치고 칸에 남는데, 다음 번들의 `load` 가 그것을 버린다 — 등록하지 않는 번들이 앞 번들의 뷰로
  *   «성공» 하지 않게.
  */
-import type { ThemeDefinition } from '@wirebound/theme-sdk'
+import type { ThemeDefinition, ThemeManifest } from '@wirebound/theme-sdk'
 import { installRuntime, type RuntimeHandle } from '@wirebound/theme-sdk/runtime'
 import type { ThemeRef } from '../api/types'
 
@@ -46,6 +46,24 @@ export function themeFileUrl(ref: ThemeRef, file: string): string {
 
 export function refKey(ref: ThemeRef): string {
   return `${ref.themeId}@${ref.version}`
+}
+
+/**
+ * **번들 정의에 서버 manifest 를 끼운다** — 뷰는 번들, 선언(variant · 토큰 · 패턴)은 서버 한 벌. 캔버스의 렌더러는 정의의 manifest 로
+ * variant 를 풀고 속성 패널 · 패턴 고르개는 서버 manifest(`GET …/theme`)를 읽으므로, 번들이 다른 manifest 를 실으면 패널이 고른 variant 를
+ * 캔버스가 말없이 기본으로 그린다(A4 리뷰 2c). 업로드는 `theme.js` 를 실행하지 않아 둘을 못 견준다 — 싣는 쪽이 한 벌로 맞춘다.
+ *
+ * `components` 만 다르면 알림 없이 서버 것을 쓴다. `id` · 판이 다르면 다른 테마의 번들이다 — 실패로 바꿔 기본 뷰로 그리고 알린다.
+ * 번들을 쓰는 자리(에디터 공급자 `theme/project-theme.tsx` · 설정 미리보기 `settings/theme-preview.tsx`)가 둘 다 이것을 거친다.
+ */
+export function withServerManifest(result: BundleResult, manifest: ThemeManifest): BundleResult {
+  if (result.status !== 'ok') return result
+  const bundled = result.definition.manifest
+  if (bundled?.id !== manifest.id || bundled.version !== manifest.version) {
+    const got = bundled === undefined ? '없음' : `${String(bundled.id)}@${String(bundled.version)}`
+    return { status: 'failed', reason: `테마 번들이 다른 테마를 등록했습니다(${manifest.id}@${manifest.version} — 번들은 ${got})` }
+  }
+  return { status: 'ok', definition: { ...result.definition, manifest } }
 }
 
 export function createScriptBundleLoader(host: Document = document, deadlineMs: number = BUNDLE_DEADLINE_MS): ThemeBundleLoader {

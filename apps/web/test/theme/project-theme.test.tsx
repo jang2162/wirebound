@@ -16,6 +16,7 @@ import {
   OTHER_PAGE_ID,
   openPage,
   PAGE_ID,
+  pageDoc,
   PROJECT_ID,
   PROJECT_NAME,
   renderEditor,
@@ -200,5 +201,40 @@ describe('에디터의 프로젝트 테마', () => {
     expect(sheets()).toEqual(['style:base', 'link:theme=/api/theme-packages/system-admin/0.1.0/files/theme.css', 'style:tokens'])
     expect(tokenCss()).toContain('--wb-semantic-primary: #ff0000;')
     expect(loader.calls).toEqual(['system-admin@0.1.0'])
+  })
+
+  it('번들이 다른 테마를 등록했으면 번들 실패와 같은 알림 · 기본 뷰 — 시트도 싣지 않는다', async () => {
+    const loader = staticBundleLoader({ 'system-admin@0.1.0': themed('acme', 'acme') })
+    await openPage(DOC, { bundleLoader: loader, apiOverrides: { getProjectTheme: async () => adminThemeView() } })
+    await waitForNode('t1')
+    // 판이 섰다 — 알림이 섰거나 테마 뷰로 그렸다. 그 뒤 두 값을 함께 읽는다.
+    const read = () => ({ alert: document.querySelector('.wb-shell-theme-alert')?.textContent ?? null, marker: themeMarker() })
+    await waitFor(() => expect(read().alert !== null || read().marker !== null).toBe(true))
+    expect(read()).toEqual({
+      alert: expect.stringContaining(`테마 번들이 다른 테마를 등록했습니다(system-admin@0.1.0 — 번들은 acme@${ADMIN_V0.manifest.version})`),
+      marker: null,
+    })
+    expect(sheets()).toEqual(['style:base', 'style:tokens'])
+  })
+
+  it('번들의 manifest 가 components 만 다르면 알림 없이 서버 manifest 로 variant 를 푼다 — 뷰는 번들 것', async () => {
+    const button = ADMIN_V0.manifest.components!['Button']!
+    // 서버 manifest 에만 `huge` — 번들(ADMIN)은 ADMIN_V0 의 manifest 를 실었다.
+    const server = { ...ADMIN_V0.manifest, components: { ...ADMIN_V0.manifest.components, Button: { ...button, variants: [...button.variants, { id: 'huge', label: '아주 큼' }] } } }
+    const doc = pageDoc({
+      id: 'root',
+      type: 'Page',
+      children: [
+        { id: 't1', type: 'Text', props: { content: '안녕' } },
+        { id: 'b1', type: 'Button', props: { label: '저장' }, variant: 'huge' },
+      ],
+    })
+    await openPage(doc, {
+      bundleLoader: staticBundleLoader({ 'system-admin@0.1.0': ADMIN }),
+      apiOverrides: { getProjectTheme: async () => ({ ...adminThemeView(), manifest: server }) },
+    })
+    await waitFor(() => expect(themeMarker()).toBe('admin'))
+    expect(canvasDocument().querySelector('[data-wb-id="b1"]')?.getAttribute('data-wb-variant')).toBe('huge')
+    expect(screen.queryByText(/테마를 불러오지 못해/)).toBeNull()
   })
 })

@@ -16,6 +16,8 @@
  *
  * **뒤로 가지 않는다** — 받은 답(프레임 · 다시 읽기)의 `rev` 가 쥔 것보다 작으면 버린다. 다시 읽기는 차례(`turn`)로 늦게 낸 것의 답만 받는다.
  *
+ * **정의의 manifest 는 서버 것이다** — 번들이 실은 manifest 는 버린다(`withServerManifest` — 다른 테마를 등록했으면 `bundle-failed`).
+ *
  * **번들이 실패해도 그린다** — `bundle-failed` 는 정의 대신 `{ manifest, views: {} }`(렌더러가 노드마다 SDK 기본 뷰로 떨어진다)이고 manifest 의
  * variant · 패턴 칸은 그대로 선다. 테마를 읽지 못했으면(`failed`) 앞에 쥔 것이 있으면 그것을, 없으면 테마 없음(`NO_THEME`)으로 그린다. 둘 다
  * 셸 머리에 한 줄로 알린다(`theme/theme-alert.tsx`).
@@ -27,6 +29,7 @@ import { toFailure } from '../api/failure'
 import type { ProjectThemeView, ThemeRef } from '../api/types'
 import type { ServerFrame } from '../realtime/protocol'
 import { useThemeBundleLoader } from './bundle-context'
+import { withServerManifest } from './bundle-loader'
 
 export type ThemeChangedFrame = Extract<ServerFrame, { type: 'theme-changed' }>
 
@@ -119,7 +122,7 @@ export function ProjectThemeProvider(props: { projectId: string; children: React
       reading.current = false
       commit({ ...held, manifest, tokens: view.tokens, rev: view.rev })
     } else {
-      const result = await loader.load(ref)
+      const result = withServerManifest(await loader.load(ref), manifest)
       if (!alive.current || turn.current !== mine) return
       reading.current = false
       // 싣는 동안 프레임이 더 새 `rev` 를 실었으면(같은 판의 토큰) 그 토큰을 잇는다 — 이 답은 그보다 옛것이다.

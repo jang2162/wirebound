@@ -14,7 +14,7 @@ import type { ThemeRef } from '../api/types'
 import { canvasSheets } from '../canvas/canvas'
 import { CanvasIframe } from '../canvas/canvas-iframe'
 import { useThemeBundleLoader } from '../theme/bundle-context'
-import { refKey } from '../theme/bundle-loader'
+import { refKey, withServerManifest } from '../theme/bundle-loader'
 // 갤러리는 카탈로그를 순회한다 — 레지스트리가 비면 칸이 하나도 안 선다.
 import '../catalog-setup'
 
@@ -35,8 +35,9 @@ export function ThemePreview(props: {
 
   useEffect(() => {
     let alive = true
-    void loader.load(props.themeRef).then((result) => {
+    void loader.load(props.themeRef).then((loaded) => {
       if (!alive) return
+      const result = withServerManifest(loaded, props.manifest)
       setBundle(
         result.status === 'ok'
           ? { key, definition: result.definition, bundled: true, failure: null }

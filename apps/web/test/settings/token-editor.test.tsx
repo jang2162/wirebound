@@ -252,4 +252,14 @@ describe('토큰 편집기 — 미리보기', () => {
     expect(api.putProjectTheme).not.toHaveBeenCalled()
     expect(vi.mocked(api.getProjectTheme).mock.calls.length).toBe(reads)
   })
+
+  it('미리보기 갤러리는 서버 manifest 의 variant 로 칸을 짓는다 — 번들이 실은 manifest 가 아니라', async () => {
+    // 서버에만 Button `huge` — 번들(시험용 로더의 ADMIN_V0)은 제 manifest 에 없는 variant 다.
+    const server: ThemeManifest = { ...MANIFEST, components: { Button: { variants: [{ id: 'huge', label: '아주 큼' }], defaultVariant: 'huge' } } }
+    renderEditor('owner', { getProjectTheme: vi.fn(async () => ({ ...view(), manifest: server })) })
+    await ready()
+    await waitFor(() => expect(preview().querySelectorAll('[data-wb-gallery-item^="Button/"]').length).toBeGreaterThan(0))
+    const buttons = new Set([...preview().querySelectorAll('[data-wb-gallery-item^="Button/"]')].map((el) => el.getAttribute('data-wb-gallery-item')!.split('/')[1]))
+    expect([...buttons]).toEqual(['huge'])
+  })
 })

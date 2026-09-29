@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import { WB_RUNTIME_GLOBAL, type WbRuntime } from '@wirebound/theme-sdk/runtime'
-import { BUNDLE_DEADLINE_MS, createScriptBundleLoader, themeFileUrl } from '../../src/theme/bundle-loader'
+import { BUNDLE_DEADLINE_MS, createScriptBundleLoader, themeFileUrl, withServerManifest } from '../../src/theme/bundle-loader'
 
 const REF = { themeId: 'system-admin', version: '0.1.0' }
 const OTHER = { themeId: 'acme', version: '1.0.0' }
@@ -170,5 +170,32 @@ describe('createScriptBundleLoader', () => {
 describe('themeFileUrl', () => {
   it('판의 파일 주소 — 이름을 인코딩한다', () => {
     expect(themeFileUrl({ themeId: 'a b', version: '1.0.0+x' }, 'theme.css')).toBe('/api/theme-packages/a%20b/1.0.0%2Bx/files/theme.css')
+  })
+})
+
+describe('withServerManifest', () => {
+  const server = definition('acme').manifest
+  const views = { Text: () => null } as unknown as ThemeDefinition['views']
+
+  it('components 만 다르면 서버 manifest 를 끼운다 — 뷰는 번들 것', () => {
+    const bundled = { manifest: { ...server, components: { Card: { variants: [{ id: 'plain', label: '보통' }], defaultVariant: 'plain' } } }, views } as ThemeDefinition
+    const result = withServerManifest({ status: 'ok', definition: bundled }, server)
+    expect(result).toEqual({ status: 'ok', definition: { manifest: server, views } })
+    expect(result.status === 'ok' && result.definition.manifest).toBe(server)
+  })
+
+  it.each([
+    ['id 가', { ...server, id: 'other' }, 'other@1.0.0'],
+    ['판이', { ...server, version: '2.0.0' }, 'acme@2.0.0'],
+  ])('%s 다르면 실패 — 다른 테마의 번들이다', (_what, manifest, got) => {
+    expect(withServerManifest({ status: 'ok', definition: { manifest, views } as ThemeDefinition }, server)).toEqual({
+      status: 'failed',
+      reason: `테마 번들이 다른 테마를 등록했습니다(acme@1.0.0 — 번들은 ${got})`,
+    })
+  })
+
+  it('실패는 그대로 넘긴다', () => {
+    const failed = { status: 'failed', reason: '테마 번들을 받지 못했습니다(acme@1.0.0)' } as const
+    expect(withServerManifest(failed, server)).toBe(failed)
   })
 })
