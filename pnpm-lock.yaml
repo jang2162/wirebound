@@ -170,6 +170,9 @@ importers:
       '@wirebound/theme-kit':
         specifier: workspace:*
         version: link:../../packages/theme-kit
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       pg:
         specifier: ^8.13.0
         version: 8.22.0
