@@ -33,8 +33,19 @@
  * # 바깥으로 나가는 요청을 막는다
  *
  * 번들에는 관리자가 올린 테마 코드 · CSS 가 실린다 — 그것이 가리키는 바깥 주소(`@font-face` · `url()` · 스크립트의 `fetch`)를 서버가
- * 가져오면 그 코드를 적은 쪽이 고른 주소로 **서버가 요청을 보내는 자리**가 된다. 그래서 가짜 origin 밖의 요청을 전부 끊는다 —
- * `data:`는 네트워크를 안 타므로 그대로 산다.
+ * 가져오면 그 코드를 적은 쪽이 고른 주소로 **서버가 요청을 보내는 자리**가 된다. 그래서 가짜 origin 밖으로 나가는 길을 전부 막는다 —
+ * `data:`는 네트워크를 안 타므로 그대로 산다. 막는 것이 셋이다:
+ *
+ * | 무엇 | 막는 길 | 못 보는 길 |
+ * |---|---|---|
+ * | 요청 가로채기(`newRenderContext` 의 `context.route`) | 문서 · 전용 워커의 fetch · 하위 자원 — 가짜 origin 은 여기서 선다 | WebSocket · WebRTC(STUN · TURN) · WebTransport · **공유 워커의 요청 전부**(fetch · EventSource 까지) |
+ * | **브라우저 겹**(`NO_EGRESS_ARGS` — 띄울 때의 인자) | 브라우저의 모든 연결 — 문서 · 워커 가리지 않는다 | 잰 판에서는 없다 |
+ * | 페이지 겹(`NO_SOCKETS_INIT` — 초기화 스크립트) | 문서마다 소켓을 여는 생성자를 지운다(about:blank · blob · srcdoc · data iframe · 창까지) | 워커(전용 · 공유) — 초기화 스크립트가 안 돈다 |
+ *
+ * **브라우저 겹이 주이고 페이지 겹은 보조다** — 잰 판(`build-test/screen-sandbox-review.test.ts` 의 격자: 채널 × 문서 · 창 · 워커 ·
+ * IP 리터럴 · 이름)에서 브라우저 겹만으로 소켓이 0 이고, 페이지 겹만으로는 워커의 소켓이 남는다. 페이지 겹을 두는 까닭은 브라우저 겹이
+ * Chromium 의 인자 해석에 기대기 때문이다(판이 바뀌어 인자 하나가 조용히 무시되면 문서의 채널은 여전히 막힌다). 두 겹이 문서에서
+ * 겹치므로 그 격자는 한 겹을 걷은 판도 따로 돌린다 — 겹마다, 브라우저 겹의 인자마다 혼자 죽는 판이 있다.
  *
  * **대가:** 원격 웹폰트를 든 시트는 대체 글꼴로 그려진다 — 번들이 오프라인에서도 같게 보이려면 테마가 글꼴을 패키지에 싣는다
  * (spec 「스킬」 의 금지 사항).
@@ -106,6 +117,41 @@ export const LEAVE_SIGNALS_TO_SERVER = { handleSIGINT: false, handleSIGTERM: fal
  * 닿지 않는다. 이 origin 의 요청은 받은 파일에서 내주고, 그 밖은 끊는다(`newRenderContext`).
  */
 export const SCREEN_ORIGIN = 'https://export.wirebound.invalid'
+
+/**
+ * **브라우저 겹 — 브라우저의 모든 연결을 막다른 곳으로 보낸다**(머리말 「바깥으로 나가는 요청을 막는다」). 요청 가로채기가 못 보는
+ * 채널(WebSocket · WebRTC · WebTransport · 공유 워커)도 브라우저의 네트워크 층은 지난다. 가짜 origin 은 가로채기가 응답을 지어 네트워크에
+ * 안 닿으므로 그대로 선다.
+ *
+ * | 인자 | 하는 일 · 잰 값(격자 — 겹 없이 소켓 37 곳) |
+ * |---|---|
+ * | `--proxy-server` | 모든 연결을 풀리지 않는 이름(`.invalid`)의 프록시로 — 닫힌 포트를 고르지 않는다(그 포트에 누가 들으면 그것이 프록시가 된다). 프록시가 실패해도 곧장 나가지 않는다. 이것만이면 WebRTC 의 UDP(STUN · TURN) 12 곳이 남는다 |
+ * | `--proxy-bypass-list=<-loopback>` | 루프백도 프록시로 — Chromium 은 루프백을 늘 곧장 보낸다(api · DB 가 도는 그 기계다). playwright 의 `proxy` 옵션을 안 쓰는 까닭: 환경 변수 하나(`PLAYWRIGHT_DISABLE_FORCED_CHROMIUM_PROXIED_LOOPBACK`)가 이 규칙을 걷는다 |
+ * | `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` | WebRTC 가 프록시 밖 UDP 를 안 쓴다 — 프록시를 거친 TCP 만 남고 그것은 막다른 곳이다. `--webrtc-ip-handling-policy` 는 이 헤드리스 셸에서 아무것도 안 막았다(프록시와 함께여도 UDP 12 곳이 그대로) |
+ * | `--host-resolver-rules=MAP * ~NOTFOUND` | 이름 풀이를 전부 실패로 — 테마 코드가 고른 이름으로 DNS 질의가 나가지 않는다(NetLog 의 이름 풀이 0). IP 리터럴(v4 · v6)도 이 규칙에 걸려 연결이 안 선다 — 그래서 이것만이어도 WebRTC 의 IP 리터럴 UDP 6 곳만 남는다 |
+ *
+ * `--disable-quic` 은 싣지 않았다 — 이것만 준 판에서 WebTransport(QUIC)가 그대로 나갔고, 위 넷에 더해도 바뀌는 것이 없었다. 다시 재는 법:
+ * `build-test/screen-sandbox-review.test.ts` 의 격자 — 판의 `strip` 에 걷을 인자를 두거나 `chromium.launch` 감싸개가 더하는 인자에 바꿔 볼
+ * 인자를 넣어 돌리면 열린 칸이 나온다.
+ */
+export const NO_EGRESS_ARGS = [
+  '--proxy-server=http://no-egress.wirebound.invalid:9',
+  '--proxy-bypass-list=<-loopback>',
+  '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+  '--host-resolver-rules=MAP * ~NOTFOUND',
+] as const
+
+/**
+ * **페이지 겹 — 문서마다 소켓을 여는 생성자를 지운다**(보조 — 머리말 「바깥으로 나가는 요청을 막는다」). 목업을 그리는 데는 셋 다 쓸 일이
+ * 없다(번들 런타임 · 시스템 테마 · kit 템플릿에 쓰는 자리 0). 다시 정의하지 못하게 `configurable: false` 로 둔다. 초기화 스크립트라
+ * 문서가 서자마자 — 테마 코드보다 먼저 — 돌고, 새로 서는 iframe · 창의 문서에서도 돈다. **워커에서는 안 돈다** — 거기는 브라우저 겹이
+ * 막는다. 글자로 넘기는 까닭은 `KOREAN_GLYPH_PROBE`와 같다.
+ */
+export const NO_SOCKETS_INIT = `(() => {
+  for (const name of ['WebSocket', 'WebTransport', 'RTCPeerConnection', 'webkitRTCPeerConnection', 'EventSource']) {
+    Object.defineProperty(globalThis, name, { value: undefined, writable: false, configurable: false, enumerable: false })
+  }
+})()`
 
 /** 화면 모드로 여는 해시 — 번들 런타임이 셸을 숨긴다(`@wirebound/exporter` 의 `SCREEN_HASH`). */
 const SCREEN_HASH = '#wb-screen'
@@ -222,6 +268,7 @@ export function chromiumScreenRenderer(options?: ChromiumScreenRendererOptions):
       try {
         browser = await chromium.launch({
           ...LEAVE_SIGNALS_TO_SERVER,
+          args: [...NO_EGRESS_ARGS],
           ...(options?.executablePath === undefined ? {} : { executablePath: options.executablePath }),
         })
       } catch (error) {
@@ -315,6 +362,8 @@ async function renderOne(
     context = await newRenderContext(browser, timeoutMs, files)
     // 첫 그림 전에 움직임을 끈다(`FREEZE_MOTION`) — 테마 시트가 늦게 와도 전이가 시작도 안 한다.
     await context.addInitScript({ content: FREEZE_MOTION_INIT })
+    // 테마 코드보다 먼저 소켓을 여는 생성자를 지운다(`NO_SOCKETS_INIT` — 보조 겹).
+    await context.addInitScript({ content: NO_SOCKETS_INIT })
     const page = await context.newPage()
     await page.goto(`${SCREEN_ORIGIN}/${encodePath(request.path)}${SCREEN_HASH}`, { waitUntil: 'commit', timeout: left() })
     if (!(await waitReady(page, left()))) return failure(notReady(timeoutMs))
@@ -510,9 +559,11 @@ const LATE = Symbol('late')
  * **`page.evaluate` 는 한도를 안 받는다** — 컨텍스트의 기본 한도(`setDefaultTimeout`)도, 옵션도 없다. 그래서 `evaluate` 는 전부 이것으로
  * 감싼다 — 그리기의 다른 단계에는 한도가 있다(`shutdown.ts` 「한도가 있는 까닭」). 한도를 넘으면 `LATE`.
  *
- * 렌더러가 부르는 playwright 호출마다 한도를 받는지 잰 값(기본 한도 1s · 끝나지 않게 만든 페이지): `evaluate` 만 영영 기다렸다(6s 가드에
- * 걸림). `goto` · `setContent` · `waitForSelector` 는 기본 한도에 던지고(렌더러는 그래도 `left()` 를 옵션으로 준다), `screenshot` 은
- * `document.fonts.ready` 를 덮어도 곧 돌아오고, `newContext` · `newPage` · `addInitScript` · `close` 는 페이지 코드가 붙잡을 자리가 없다.
+ * 렌더러가 부르는 playwright 호출마다 한도를 받는지 잰 값: `evaluate` 만 영영 기다렸다. `goto` · `setContent` · `waitForSelector` 는 기본
+ * 한도에 던지고(렌더러는 그래도 `left()` 를 옵션으로 준다), `screenshot` 은 `document.fonts.ready` 를 덮어도 곧 돌아오고, `newContext` ·
+ * `newPage` · `addInitScript` · `close` 는 페이지 코드가 붙잡을 자리가 없다. 다시 재는 법: 기본 한도 1s 인 컨텍스트에서 그 호출을 붙잡는
+ * 페이지(끝나지 않는 Promise · 답하지 않는 응답 · 덮은 `getAttribute`)를 세우고 6s 안에 돌아오는지 본다. `evaluate` 의 두 자리는
+ * `build-test/screen-sandbox-review.test.ts` 가 잠근다.
  *
  * 한도를 넘긴 `evaluate` 는 브라우저 안에서 계속 돈다 — 부른 쪽이 컨텍스트를 닫을 때 끊긴다(그때 던지는 것을 여기서 받는다).
  */
