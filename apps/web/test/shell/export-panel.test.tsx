@@ -51,6 +51,7 @@ const 깨끗한: HtmlExportPreview = {
   brokenLinks: [],
   errors: [],
   themeId: 't-1',
+  themeWarning: null,
   fileName: 'wirebound-export-admin-console.zip',
 }
 
@@ -74,6 +75,7 @@ const 어긋난: HtmlExportPreview = {
     },
   ],
   themeId: null,
+  themeWarning: null,
   fileName: 'wirebound-export-admin-console.zip',
 }
 
@@ -283,6 +285,16 @@ describe('내보내기 화면', () => {
     expect(within(panel).queryByRole('region', { name: '그리지 못한 노드' })).toBeNull()
     expect(within(panel).queryByRole('region', { name: '겹친 페이지 경로' })).toBeNull()
     expect(within(panel).queryByRole('region', { name: '이어지지 않는 링크' })).toBeNull()
+    expect(within(panel).queryByRole('region', { name: '테마 경고' })).toBeNull()
+  })
+
+  /** 서버가 프로젝트 테마의 패키지를 못 읽으면 기본 뷰로 내보낸다 — 그 한 줄을 내려받기 전에 말한다. */
+  it('테마를 못 싣는 까닭을 한 줄로 말한다', async () => {
+    const 까닭 = '테마 패키지를 읽지 못해 기본 뷰로 내보냅니다(acme@1.0.0): zip 을 읽지 못했습니다'
+    const panel = await open(api({ ...깨끗한, themeId: null, themeWarning: 까닭 }))
+    const 구역 = await within(panel).findByRole('region', { name: '테마 경고' })
+    expect(within(구역).getByText(까닭)).toBeTruthy()
+    경고가링크보다앞(panel, ['테마 경고'])
   })
 
   describe('어긋난 것을 미리 말한다', () => {

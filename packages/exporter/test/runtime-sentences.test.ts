@@ -3,12 +3,13 @@
  * **문장과 동작이 같은 규칙을 가리키는가.**
  *
  * 우측 상호작용 탭의 문장은 `schema`의 `listInteractionSentences`가 만들고, 눌렀을 때
- * 일어나는 것은 `runtime/plan.ts`가 미리 계산한다. **둘이 갈리면 설계서가 거짓말을 한다** —
- * 탭에는 적혀 있는데 눌러도 안 되거나, 눌리는데 탭에 없다.
+ * 일어나는 것은 번들 런타임이 브라우저에서 돌린다(`browser/mount.tsx` — 렌더러의 상호작용 런타임). **둘이 갈리면 설계서가
+ * 거짓말을 한다** — 탭에는 적혀 있는데 눌러도 안 되거나, 눌리는데 탭에 없다.
  *
  * 그리고 **검증기와 런타임의 문장을 갈래마다 잰다** — 여덟 갈래 중 여섯은 글자까지 같고
- * 둘은 런타임에만 있다. 아래 표가 그 여덟을 하나씩 짚는다.
+ * 둘은 런타임에만 있다. 아래 표가 그 여덟을 하나씩 짚는다. 런타임의 문장은 **마운트해 눌러 상태 줄에서** 읽는다.
  */
+import { NO_THEME, renderDocument, type InteractionEvent } from '@wirebound/renderer'
 import {
   installCatalog,
   listInteractionSentences,
@@ -18,13 +19,17 @@ import {
   type PageDocument,
   type WbNode,
 } from '@wirebound/schema'
+import { act } from 'react'
+import { flushSync } from 'react-dom'
+import { createRoot } from 'react-dom/client'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { EMPTY_RULE, mountExportDocument } from '../src/browser/mount'
 import { exportBundle } from '../src/bundle/index'
 import { nodesOnly } from '../src/nodes'
-import { buildRuntimePlan } from '../src/runtime/plan'
 
 beforeAll(() => {
   installCatalog()
+  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 function documentWith(interactions: Interaction[]): PageDocument {
@@ -42,9 +47,62 @@ function documentWith(interactions: Interaction[]): PageDocument {
   }
 }
 
+/** 번들 런타임으로 그리고 `n_btn` 을 눌러 상태 줄이 말한 것. */
 function planMessages(page: PageDocument): string[] {
-  const { plan } = buildRuntimePlan({ page, hrefs: new Map(), baseErrors: [] })
-  return plan.events.flatMap((event) => event.issues.map((issue) => issue.message))
+  const canvas = document.createElement('div')
+  const status = document.createElement('div')
+  document.body.append(canvas, status)
+  let mount: ReturnType<typeof mountExportDocument> | null = null
+  act(() => {
+    mount = mountExportDocument(canvas, { document: page, theme: NO_THEME, tokens: {}, window, hrefs: {}, markers: [], status })
+  })
+  act(() => {
+    canvas.querySelector('[data-wb-id="n_btn"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+  const lines = [...status.querySelectorAll('.wb-export-status-line')].map((line) => line.textContent ?? '')
+  act(() => mount!.unmount())
+  canvas.remove()
+  status.remove()
+  return lines
+}
+
+/**
+ * 눌리는 규칙 — 렌더러가 그린 문서의 **모든 노드에 DOM 이벤트 셋을 쏘아** 반응한 규칙의 자리(`<노드>#<규칙 인덱스>`). 번들 런타임이
+ * 부르는 것과 같은 `renderDocument` 의 상호작용이다.
+ */
+function firedRules(page: PageDocument): string[] {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const events: InteractionEvent[] = []
+  const root = createRoot(host)
+  act(() => {
+    flushSync(() => root.render(renderDocument(page, { theme: NO_THEME, interaction: { overlay: {}, onEvent: (event) => events.push(event) } })))
+  })
+  for (const element of [...host.querySelectorAll('[data-wb-id]')]) {
+    for (const kind of ['click', 'change', 'submit']) {
+      // 버블링해야 React 의 뿌리 리스너가 받는다 — 부모의 규칙이 함께 돌아도 모으는 것이 집합이라 두 번 세지 않는다.
+      act(() => {
+        element.dispatchEvent(new Event(kind, { bubbles: true, cancelable: true }))
+      })
+    }
+  }
+  act(() => root.unmount())
+  host.remove()
+  const nodes = new Map<string, WbNode>()
+  const visit = (node: unknown): void => {
+    if (node === null || typeof node !== 'object') return
+    const value = node as WbNode
+    if (typeof value.id === 'string') nodes.set(value.id, value)
+    for (const child of Array.isArray(value.children) ? value.children : []) visit(child)
+  }
+  visit(page.root)
+  const out = new Set<string>()
+  for (const event of events) {
+    for (const [index, interaction] of (nodes.get(event.nodeId)?.interactions ?? []).entries()) {
+      if (interaction?.on === event.trigger) out.add(`${event.nodeId}#${index}`)
+    }
+  }
+  return [...out].sort()
 }
 
 function validatorMessages(page: PageDocument): string[] {
@@ -108,31 +166,33 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
     { on: 'submit', actions: [{ type: 'navigate', target: 'page:어디' }] },
   ]
 
-  it('규칙의 자리가 문장과 정확히 같다 — 트리거 4종 전부', () => {
+  /**
+   * **`change` 규칙은 문장만 있고 눌리지 않는다 — 캔버스와 같다.** 렌더러의 `onChange` 는 React 가 입력 요소(`input` · `select` ·
+   * `textarea`)에서만 내는데 기본 뷰가 그런 요소를 그리지 않는다(`apps/web/test/canvas/interaction-runtime.test.tsx` «change는
+   * 닿지 않는다»). 번들 런타임은 캔버스와 같은 렌더러라 같은 판이다. 그 규칙을 뺀 셋이 문장과 같은 집합이다.
+   */
+  it('규칙의 자리가 문장과 정확히 같다 — change 는 문장만 있다', () => {
     const page = documentWith(RULES)
-    const { plan } = buildRuntimePlan({ page, hrefs: new Map(), baseErrors: [] })
-    const pressed = plan.events
-      .flatMap((event) => event.rules.map((index) => `${event.nodeId}#${index}`))
-      .sort()
+    const pressed = firedRules(page)
     const written = listInteractionSentences(page)
       .map((sentence) => `${sentence.nodeId}#${sentence.index}`)
       .sort()
-    expect(pressed).toEqual(written)
+    expect(pressed).toEqual(written.filter((rule) => rule !== 'n_btn#2'))
     // **하나짜리로 재지 않는다** — 규칙 하나면 집합이 섞여도 안 죽는다.
     expect(written.length).toBe(RULES.length)
+    expect(RULES[2]?.on).toBe('change')
   })
 
-  /** 번들 안에서도 같은지 본다. 탭이 그린 노드와 계획이 든 노드가 같아야 한다. */
-  it('번들의 상호작용 탭과 계획이 같은 노드를 가리킨다', () => {
-    const bundle = exportBundle({ pages: [{ title: '한 장', document: documentWith(RULES) }] })
-    const html = bundle.files.find((file) => file.path === 'pages/한-장.html')!.content
+  /** 번들 안에서도 같은지 본다. 탭이 그린 노드와 눌리는 규칙의 노드가 같아야 한다. */
+  it('번들의 상호작용 탭과 눌리는 규칙이 같은 노드를 가리킨다', () => {
+    const page = documentWith(RULES)
+    const bundle = exportBundle({ pages: [{ title: '한 장', document: page }], runtimeJs: '/* runtime */' })
+    const html = bundle.files.find((file) => file.path === 'pages/한-장.html')!.content as string
     const parsed = new DOMParser().parseFromString(html, 'text/html')
     const written = [
       ...parsed.querySelectorAll('#wb-export-panel-interactions [data-wb-interaction-for]'),
     ].map((line) => line.getAttribute('data-wb-interaction-for'))
-    const data = parsed.getElementById('wb-export-runtime-data')
-    const plan = JSON.parse(data?.textContent ?? '{}') as { events: { nodeId: string }[] }
-    expect([...new Set(plan.events.map((event) => event.nodeId))]).toEqual([...new Set(written)])
+    expect([...new Set(firedRules(page).map((rule) => rule.split('#')[0]))]).toEqual([...new Set(written)])
     expect(written.length).toBeGreaterThan(1)
   })
 
@@ -149,14 +209,12 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
       ...page,
       root: { ...page.root, children: [...(page.root.children ?? []), null as unknown as never] },
     }
-    const { plan } = buildRuntimePlan({ page: broken, hrefs: new Map(), baseErrors: [] })
-    const pressed = plan.events
-      .flatMap((event) => event.rules.map((index) => `${event.nodeId}#${index}`))
-      .sort()
+    const pressed = firedRules(broken)
     const written = listInteractionSentences({ ...broken, root: nodesOnly(broken.root)! })
       .map((sentence) => `${sentence.nodeId}#${sentence.index}`)
       .sort()
-    expect(pressed).toEqual(written)
+    // `change` 규칙(#2)은 위 케이스의 까닭으로 눌리지 않는다.
+    expect(pressed).toEqual(written.filter((rule) => rule !== 'n_btn#2'))
     expect(written.length).toBe(RULES.length)
   })
 
@@ -167,16 +225,14 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
       ...page,
       root: { ...page.root, children: [...(page.root.children ?? []), null as unknown as never] },
     }
-    const bundle = exportBundle({ pages: [{ title: '깨짐', document: broken }] })
-    const html = bundle.files.find((file) => file.path === 'pages/깨짐.html')!.content
+    const bundle = exportBundle({ pages: [{ title: '깨짐', document: broken }], runtimeJs: '/* runtime */' })
+    const html = bundle.files.find((file) => file.path === 'pages/깨짐.html')!.content as string
     const parsed = new DOMParser().parseFromString(html, 'text/html')
     const written = [
       ...parsed.querySelectorAll('#wb-export-panel-interactions [data-wb-interaction-for]'),
     ].map((line) => line.getAttribute('data-wb-interaction-for'))
-    const data = parsed.getElementById('wb-export-runtime-data')
-    const plan = JSON.parse(data?.textContent ?? '{}') as { events: { nodeId: string }[] }
     expect(written).toHaveLength(RULES.length)
-    expect([...new Set(plan.events.map((event) => event.nodeId))]).toEqual([...new Set(written)])
+    expect([...new Set(firedRules(broken).map((rule) => rule.split('#')[0]))]).toEqual([...new Set(written)])
     // 그 노드는 여전히 errors가 이름을 든다 — 조용히 넘기는 것이 아니다.
     expect(bundle.errors.map((item) => item.error.message)).toEqual(['노드가 객체가 아닙니다: null'])
   })
@@ -186,7 +242,7 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
    *
    * 위 케이스가 막는 것은 *"탭은 없다고 하는데 버튼은 눌린다"*다. 그 **반대**는 남는다:
    * `id`가 문자열이 아닌 노드의 규칙과 트리거 4종 **밖**의 규칙은 탭에 문장이 뜨는데 계획에
-   * 없다.
+   * 없다 — 런타임이 그 규칙을 못 돌린다.
    *
    * ## 판정 — 그대로 두고, 범위를 여기에 못박는다
    *
@@ -197,8 +253,7 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
    *    갈린다"*가 아니다 — 위 케이스와 갈리는 지점이 여기다.
    * 3. **탭에서 문장을 빼지 않는다.** 설계서는 **작성자가 적은 규칙**을 보여야 하고, 못
    *    도는 규칙일수록 보여야 고칠 수 있다.
-   * 4. **계획에 넣지도 않는다.** 넣으면 런타임이 *"돌릴 수 있다"*고 말하는 것이 되는데,
-   *    붙일 DOM 이벤트도 붙일 노드도 없다.
+   * 4. **런타임이 돌리지도 않는다.** 붙일 DOM 이벤트도 붙일 노드도 없다 — 번들 런타임은 캔버스와 같은 렌더러다.
    *
    * **그래서 남는 것은 문장 하나다: 탭과 계획의 집합 같음은 *"저장을 지날 수 있는 문서"*에 대한
    * 것이다.** 이 케이스가 그 범위를 든다 — 범위가 조용히 넓어지면 여기가 죽는다.
@@ -252,17 +307,16 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
       expect(validatePage(page).map((issue) => issue.code)).toContain('bad-document')
     })
 
-    it.each(OUT_OF_DOMAIN)('%s — 탭에는 문장이 있고 계획에는 없다', (_name, page) => {
-      const { plan } = buildRuntimePlan({ page, hrefs: new Map(), baseErrors: [] })
-      expect(plan.events).toEqual([])
+    it.each(OUT_OF_DOMAIN)('%s — 탭에는 문장이 있고 눌리는 규칙은 없다', (_name, page) => {
+      expect(firedRules(page)).toEqual([])
       const tree = nodesOnly(page.root)!
       expect(listInteractionSentences({ ...page, root: tree })).toHaveLength(1)
     })
 
     /** **화면에 `null`이 나가지 않는다.** 속성 값이 없으면 React가 속성 자체를 안 낸다. */
     it.each(OUT_OF_DOMAIN)('%s — 탭 줄이 null을 글자로 내보내지 않는다', (_name, page) => {
-      const bundle = exportBundle({ pages: [{ title: '범위 밖', document: page }] })
-      const html = bundle.files.find((file) => file.path === 'pages/범위-밖.html')!.content
+      const bundle = exportBundle({ pages: [{ title: '범위 밖', document: page }], runtimeJs: '/* runtime */' })
+      const html = bundle.files.find((file) => file.path === 'pages/범위-밖.html')!.content as string
       expect(html).not.toContain('data-wb-interaction-for="null"')
       expect(html).not.toContain('data-wb-interaction-for="undefined"')
     })
@@ -275,9 +329,8 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
    */
   it('액션이 없는 규칙은 그 사실을 말한다', () => {
     const page = documentWith([{ on: 'click', actions: [] }])
-    const { plan } = buildRuntimePlan({ page, hrefs: new Map(), baseErrors: [] })
-    expect(plan.events).toHaveLength(1)
-    expect(plan.events[0]).toMatchObject({ writes: [], issues: [], requests: [], rules: [0] })
+    expect(firedRules(page)).toEqual(['n_btn#0'])
+    expect(planMessages(page)).toEqual([EMPTY_RULE])
     expect(listInteractionSentences(page)[0]?.text).toContain('아무 일도 일어나지 않습니다')
   })
 })

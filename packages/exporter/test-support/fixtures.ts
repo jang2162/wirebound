@@ -106,7 +106,7 @@ export function broadFixture(): PageDocument {
  * `error`를 낸다(케이스가 그 문장을 값으로 든다).
  *
  * 그래도 견주는 이유: 렌더 경로는 검증을 지나지 않으므로 이 노드를 그리고, **레이아웃을
- * 번들에 넣게 되면**(지금 `exportPage`는 페이지 문서만 받는다) 이것이 첫 손님이 된다.
+ * 번들에 넣게 되면**(지금 번들은 페이지 문서만 받는다 — `BundlePage.document`) 이것이 첫 손님이 된다.
  */
 export function slotFixture(): PageDocument {
   nextId = 900

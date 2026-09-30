@@ -11,7 +11,7 @@ import type { PageDocument } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config'
 import { EXPORT_RENDER_LIMIT } from '../src/services/export-worker'
-import type { ScreenBatch, ScreenRenderer, ScreenRequest } from '../src/services/screen-render'
+import type { ScreenBatch, ScreenJob, ScreenRenderer } from '../src/services/screen-render'
 import { createMenuNode, createPage, createProject, signup, testConfig, withApi, type TestContext } from './helpers'
 
 const BASE = {
@@ -48,7 +48,7 @@ class OverlapRenderer implements ScreenRenderer {
   calls = 0
   private wake: (() => void)[] = []
 
-  async render(requests: readonly ScreenRequest[]): Promise<ScreenBatch> {
+  async render(job: ScreenJob): Promise<ScreenBatch> {
     this.calls += 1
     this.active += 1
     this.maxActive = Math.max(this.maxActive, this.active)
@@ -61,7 +61,7 @@ class OverlapRenderer implements ScreenRenderer {
       })
     })
     this.active -= 1
-    return { results: requests.map(() => ({ ok: false, reason: '가짜' })), fontWarning: null }
+    return { results: job.pages.map(() => ({ ok: false, reason: '가짜' })), fontWarning: null }
   }
 }
 

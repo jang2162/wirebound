@@ -12,19 +12,23 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./browser": "./src/browser/index.ts",
+    "./runtime.js": "./dist/runtime.js",
     "./test-support": "./test-support/index.ts"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && vite build -c vite.runtime.config.ts",
+    "build:runtime": "vite build -c vite.runtime.config.ts",
     "build:watch": "tsdown --watch"
   },
   "dependencies": {
     "@wirebound/renderer": "workspace:*",
     "@wirebound/schema": "workspace:*",
     "@wirebound/theme-sdk": "workspace:*",
+    "@wirebound/themes": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -33,6 +37,7 @@
     "@types/react-dom": "^19.0.0",
     "fflate": "^0.8.3",
     "@wirebound/test-support": "workspace:*",
-    "tsdown": "^0.22.14"
+    "tsdown": "^0.22.14",
+    "vite": "^6.0.0"
   }
 }

@@ -72,7 +72,7 @@ const PAGES = [
   { title: '문서 · 소개', document: BROKEN, comments: [] },
 ]
 
-const bundle = exportBundle({ pages: PAGES as BundlePage[] })
+const bundle = exportBundle({ pages: PAGES as BundlePage[], runtimeJs: '/* runtime */' })
 const pptx = exportPptx({ pages: PAGES as PptxPage[] })
 
 /** 번들에서 그 페이지의 HTML. `index.html`은 첫 페이지의 사본이라 `pages/…`를 쓴다. */

@@ -7,7 +7,7 @@
  *
  * 테마 CSS는 설계서 「노드 속성」의 여섯 `data-wb-*` 어휘로만 적히고, 셸은 자기
  * 클래스(`.wb-export-*`)로만 적는다. **두 어휘가 겹치지 않는 것이 셸이 문서에 못 닿는다는
- * 뜻이다.** 한 파일에 섞으면 *"구조 기본 CSS → 테마"*라는 순서 계약(`page.tsx`의 `pageCss`)에
+ * 뜻이다.** 한 파일에 섞으면 *"기본 뷰 CSS → 테마"*라는 순서 계약(`bundle/shell.tsx` 의 `shellHead` 가 거는 순서)에
  * 셸이 끼어들고, 그 순서가 곧 *"테마가 이긴다"*이다.
  *
  * 문서에는 셸이 **링크 둘**을 이 순서로 건다: 셸 → 테마. 셸이 먼저이므로 같은 특이도에서
@@ -185,6 +185,40 @@ body {
 
 .wb-export-status-line {
   margin: 0;
+}
+
+/* -------------------------------------------------------------- 화면 모드 */
+
+/* \`#wb-screen\`으로 연 판(PPTX 의 그리는 자가 찍는다) — 런타임이 \`<html>\`에 \`wb-export-screen\`을 단다. 셸을 숨기고 목업만 남기며
+   문서 폭이 뷰포트 그대로다 — 캔버스가 문서를 프리셋 폭 그대로 담는 것과 같다. 상속되는 속성은 걸지 않는다. */
+.wb-export-screen .wb-export {
+  display: block;
+  height: auto;
+  background: none;
+}
+
+.wb-export-screen .wb-export-nav,
+.wb-export-screen .wb-export-panel,
+.wb-export-screen .wb-export-status {
+  display: none;
+}
+
+.wb-export-screen .wb-export-mockup {
+  padding: 0;
+  overflow: visible;
+}
+
+.wb-export-screen .wb-export-canvas {
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* 스크립트가 꺼진 브라우저에서만 서는 줄 — 목업은 \`runtime.js\`가 그린다. */
+.wb-export-noscript {
+  margin: 0;
+  color: #5b6270;
 }
 
 /* -------------------------------------------------------------- 우: 탭 */

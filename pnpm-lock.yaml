@@ -170,6 +170,9 @@ importers:
       '@wirebound/theme-kit':
         specifier: workspace:*
         version: link:../../packages/theme-kit
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       pg:
         specifier: ^8.13.0
         version: 8.22.0
@@ -213,6 +216,9 @@ importers:
       '@wirebound/theme-sdk':
         specifier: workspace:*
         version: link:../theme-sdk
+      '@wirebound/themes':
+        specifier: workspace:*
+        version: link:../themes
       react:
         specifier: ^19.0.0
         version: 19.2.8
@@ -235,6 +241,9 @@ importers:
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(tsx@4.23.5)(typescript@5.9.3)
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@26.1.2)(tsx@4.23.5)
 
   packages/mcp:
     dependencies:

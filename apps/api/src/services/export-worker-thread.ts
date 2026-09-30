@@ -9,7 +9,7 @@ import { ensureCatalog } from '../schema-setup'
 import { EmptyProjectError, UnsupportedDocumentError, type ExportRows } from './export-source'
 import { runExportJob } from './export-job'
 import type { ExportJobFailure, ExportJobSpec, FromWorker, ToWorker } from './export-worker-protocol'
-import type { ScreenBatch, ScreenRequest, ScreenResult } from './screen-render'
+import type { ScreenBatch, ScreenJob, ScreenResult } from './screen-render'
 
 const port = parentPort
 if (port === null) throw new Error('export-worker-thread 는 워커 스레드로만 띄운다(export-worker.ts)')
@@ -19,19 +19,24 @@ if (port === null) throw new Error('export-worker-thread 는 워커 스레드로
 ensureCatalog()
 
 let spec: ExportJobSpec | null = null
-let rows: ExportRows = { menu: [], pages: [], comments: [] }
+let rows: ExportRows = emptyRows()
 /** 메인에 그려 달라고 보낸 뒤 답을 모으는 자리. */
 let pendingScreens: { results: ScreenResult[]; resolve(batch: ScreenBatch): void; reject(error: unknown): void } | null = null
+
+function emptyRows(): ExportRows {
+  return { menu: [], pages: [], comments: [], theme: null, themeWarning: null }
+}
 
 function send(message: FromWorker, transfer: ArrayBuffer[] = []): void {
   port!.postMessage(message, transfer)
 }
 
-/** 그려 달라는 요청 — 한 장씩 보내고 `render`로 닫는다(메인의 루프가 큰 메시지 하나를 복제하느라 멈추지 않게). */
-function render(requests: readonly ScreenRequest[]): Promise<ScreenBatch> {
+/** 그려 달라는 요청 — 번들 파일 하나씩 · 찍을 페이지 하나씩 보내고 `render`로 닫는다(메인의 루프가 큰 메시지 하나를 복제하느라 멈추지 않게). */
+function render(job: ScreenJob): Promise<ScreenBatch> {
   return new Promise((resolve, reject) => {
     pendingScreens = { results: [], resolve, reject }
-    for (const request of requests) send({ t: 'screen-request', request })
+    for (const [path, content] of job.files) send({ t: 'screen-file', path, content })
+    for (const page of job.pages) send({ t: 'screen-page', page })
     send({ t: 'render' })
   })
 }
@@ -59,19 +64,23 @@ port.on('message', (message: ToWorker) => {
   switch (message.t) {
     case 'job':
       spec = message.spec
-      rows = { menu: [], pages: [], comments: [] }
+      rows = emptyRows()
       send({ t: 'accepted' })
       return
     case 'rows':
       if (message.part === 'menu') rows.menu.push(...message.items)
       else if (message.part === 'pages') rows.pages.push(...message.items)
-      else rows.comments.push(...message.items)
+      else if (message.part === 'comments') rows.comments.push(...message.items)
+      else {
+        rows.theme = message.theme
+        rows.themeWarning = message.warning
+      }
       return
     case 'run': {
       const job = spec!
       const input = rows
       spec = null
-      rows = { menu: [], pages: [], comments: [] }
+      rows = emptyRows()
       void run(job, input)
       return
     }

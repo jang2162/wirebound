@@ -19,14 +19,19 @@
  *    왕복하면 그 사이에 다른 페이지의 코멘트가 바뀌어 **한 시점에 존재한 적 없는 조합**이
  *    산출물에 담긴다.
  *
- * **테마는 읽지 않는다** — 번들도 PPTX 화면도 테마 없이 SDK 기본 뷰로 그린다(`export-pptx.ts`의 「테마를 읽지 않는다」).
+ * 4. `findProjectTheme` · `readThemePackageFiles` — 프로젝트가 고정한 `테마@판` 의 패키지 바이트와 저장한 토큰. **바이트로 읽기만 하고
+ *    `theme.js` 를 실행하지 않는다** — 번들에 실어 브라우저가 돌린다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md`
+ *    「내보내기와 PPTX」 의 «테마 코드는 브라우저에서만 돈다»). 번들과 PPTX 화면이 같은 테마로 그린다.
  */
-import type { BundleComment } from '@wirebound/exporter'
+import type { BundleComment, BundleTheme } from '@wirebound/exporter'
 import { migrateDocument, targetedPages, type PageDocument, type TargetedPage } from '@wirebound/schema'
+import { readWbtheme } from '@wirebound/themes'
 import type { DbHandle } from '../db/tx'
 import { listProjectComments, type CommentRecord } from '../repos/comments'
 import { listMenuRows } from '../repos/menu'
 import { listPages, type PageRecord } from '../repos/pages'
+import { findProjectTheme } from '../repos/projects'
+import { findThemePackage, readThemePackageFiles } from '../repos/theme-packages'
 import type { MenuRow } from './menu-tree'
 
 /** 페이지가 하나도 없는 프로젝트. 호출자가 409로 매핑한다. */
@@ -74,6 +79,13 @@ export interface ExportRows {
   /** `listPages` 그대로 — 문서는 **마이그레이션 전**이다. */
   pages: PageRecord[]
   comments: CommentRecord[]
+  /**
+   * 프로젝트 테마 — 패키지 파일(바이트에서 푼 그대로)과 서버 manifest · 저장한 토큰. 바인딩이 없거나 패키지를 못 읽었으면 `null` 이고
+   * 번들은 기본 뷰로 그린다. 자산은 워커 경계를 넘도록 배열이다(`[패키지 안 경로, 바이트]`).
+   */
+  theme: BundleTheme | null
+  /** 바인딩은 있는데 패키지를 못 읽은 까닭 — 미리보기가 한 줄로 말한다. 정상이면 `null`. */
+  themeWarning: string | null
 }
 
 /**
@@ -85,7 +97,39 @@ export async function readExportRows(db: DbHandle, projectId: string): Promise<E
   const menu = await listMenuRows(db, projectId)
   const pages = await listPages(db, projectId)
   if (pages.length === 0) throw new EmptyProjectError()
-  return { menu, pages, comments: await listProjectComments(db, projectId) }
+  const comments = await listProjectComments(db, projectId)
+  return { menu, pages, comments, ...(await readExportTheme(db, projectId)) }
+}
+
+/**
+ * 프로젝트 테마(머리말의 넷째 단계). 바인딩과 토큰은 프로젝트 행 하나에서 함께 읽는다 — 판과 토큰이 한 시점의 것이다. 패키지는
+ * 지워지지 않고 행이 바뀌지 않으므로(spec 「저장」) 그 판의 manifest · 바이트는 바인딩을 읽은 뒤에 읽어도 같다.
+ *
+ * 패키지를 못 읽는 것은 업로드 검증을 지난 행이라 일어나지 않아야 하지만, 일어나면 **내보내기를 멈추지 않는다** — 기본 뷰로 내보내고
+ * 까닭을 미리보기에 한 줄로 낸다(`themeWarning`).
+ */
+async function readExportTheme(db: DbHandle, projectId: string): Promise<Pick<ExportRows, 'theme' | 'themeWarning'>> {
+  const binding = await findProjectTheme(db, projectId)
+  if (binding === null || binding.themeId === null || binding.version === null) return { theme: null, themeWarning: null }
+  const name = `${binding.themeId}@${binding.version}`
+  const row = await findThemePackage(db, binding.themeId, binding.version)
+  const bytes = row === null ? null : await readThemePackageFiles(db, binding.themeId, binding.version)
+  if (row === null || bytes === null) return { theme: null, themeWarning: `테마 패키지를 찾지 못해 기본 뷰로 내보냅니다(${name})` }
+  const read = readWbtheme(bytes)
+  if (read.files === null) {
+    return { theme: null, themeWarning: `테마 패키지를 읽지 못해 기본 뷰로 내보냅니다(${name}): ${read.issues[0]?.message ?? '까닭 없음'}` }
+  }
+  return {
+    theme: {
+      ref: { themeId: binding.themeId, version: binding.version },
+      manifest: row.manifest,
+      tokens: binding.tokens,
+      themeJs: read.files.themeJs,
+      themeCss: read.files.themeCss,
+      assets: [...read.files.assets.entries()],
+    },
+    themeWarning: null,
+  }
 }
 
 /**

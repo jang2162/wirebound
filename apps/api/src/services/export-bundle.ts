@@ -11,9 +11,9 @@
  *
  * 1. `readExportRows` → `assembleExportSource` — 메뉴·페이지·문서·코멘트·설명. **PPTX와 공유한다.**
  *    `export-source.ts`의 머리말이 수집 순서와 근거를 든다.
- * 2. `exportBundle` — 파일과 `errors`. **테마를 넘기지 않는다** — api 는 테마 코드를 싣지 않아(spec
- *    `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「내보내기와 PPTX」) 번들은 SDK 기본 뷰와 그 CSS 로 그린
- *    와이어프레임이다. 프로젝트 테마는 내보내기가 브라우저 렌더로 옮길 때 싣는다.
+ * 2. `exportBundle` — 파일과 `errors`. 프로젝트 테마의 패키지 파일 · 토큰을 **글자와 바이트로** 넘긴다 — 번들의 페이지가 브라우저에서
+ *    그 테마로 그린다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「내보내기와 PPTX」). api 는 테마 코드를 실행하지
+ *    않는다(`test/export-theme.test.ts` 가 `export-*` 소스를 센다).
  * 3. 못 이은 링크를 센다.
  *
  * # 출처는 라이브 프로젝트다
@@ -35,6 +35,7 @@ import {
   type BundleFile,
   type BundleNodeError,
   type BundlePage,
+  type ExportedBundle,
 } from '@wirebound/exporter'
 import {
   duplicateTargets,
@@ -44,7 +45,8 @@ import {
   type TargetedPage,
 } from '@wirebound/schema'
 import type { DbHandle } from '../db/tx'
-import { assembleExportSource, readExportRows, type ExportRows } from './export-source'
+import { readExportRuntime } from './export-runtime'
+import { assembleExportSource, readExportRows, type ExportRows, type ExportSource } from './export-source'
 
 /**
  * **도메인 에러 둘을 `export-source`가 소유한다.** 두 내보내기가 같은 수집을
@@ -91,8 +93,10 @@ export interface ProjectBundle {
   /** 둘 이상의 페이지가 든 타겟. 그 타겟을 겨눈 링크는 어디에도 안 생긴다. */
   duplicateTargets: string[]
   brokenLinks: BrokenLink[]
-  /** 이 번들이 실은 테마. 늘 `null` 이다 — 번들은 테마 없이 SDK 기본 뷰로 그린다(머리말의 둘째 단계). */
-  themeId: null
+  /** 이 번들이 실은 테마(`"id@판"`). 바인딩이 없거나 패키지를 못 읽었으면 `null` — 기본 뷰로 그린다. */
+  themeId: string | null
+  /** 바인딩은 있는데 패키지를 못 읽은 까닭(`ExportRows.themeWarning`). */
+  themeWarning: string | null
 }
 
 /**
@@ -109,7 +113,30 @@ export async function exportProjectBundle(db: DbHandle, projectId: string): Prom
 
 /** 읽은 행으로 번들을 조립한다. **DB 를 모른다** — 워커에서도 같은 스레드에서도 이 함수 하나다. */
 export function buildProjectBundle(rows: ExportRows): ProjectBundle {
-  const { ordered, documentById, commentsById, descriptionById } = assembleExportSource(rows)
+  const source = assembleExportSource(rows)
+  const { ordered, documentById } = source
+  const { files, errors } = projectBundle(rows, source)
+
+  return {
+    files,
+    errors,
+    // **`bundleTitle`이다.** 맨 제목을 내면 화면의 페이지 목록이 `목록`·`목록`으로 보인다 —
+    // 번들의 좌측 트리가 조상을 붙여 피하는 것과 같은 결함이고, 여기는 `errors[].title`(늘 번들 이름)과
+    // 같은 응답이라 두 벌이 되기까지 한다.
+    pages: ordered.map((page) => ({ id: page.id, title: page.bundleTitle, target: page.target })),
+    duplicateTargets: duplicateTargets(ordered),
+    brokenLinks: brokenLinks(ordered, documentById),
+    themeId: rows.theme === null ? null : `${rows.theme.ref.themeId}@${rows.theme.ref.version}`,
+    themeWarning: rows.themeWarning,
+  }
+}
+
+/**
+ * 조립한 수집 → **번들 그 자체**. HTML 번들과 PPTX 화면이 이 함수 하나를 지난다 — PPTX 의 그리는 자가 이 번들의 페이지를
+ * 그대로 연다(`export-pptx.ts`). 두 벌을 두면 화면에 찍힌 것과 내려받은 번들이 갈린다.
+ */
+export function projectBundle(rows: ExportRows, source: ExportSource): ExportedBundle {
+  const { ordered, documentById, commentsById, descriptionById } = source
 
   const bundlePages: BundlePage[] = ordered.map((page) => ({
     /**
@@ -125,19 +152,7 @@ export function buildProjectBundle(rows: ExportRows): ProjectBundle {
     target: page.target,
   }))
 
-  const { files, errors } = exportBundle({ pages: bundlePages })
-
-  return {
-    files,
-    errors,
-    // **`bundleTitle`이다.** 맨 제목을 내면 화면의 페이지 목록이 `목록`·`목록`으로 보인다 —
-    // 번들의 좌측 트리가 조상을 붙여 피하는 것과 같은 결함이고, 여기는 `errors[].title`(늘 번들 이름)과
-    // 같은 응답이라 두 벌이 되기까지 한다.
-    pages: ordered.map((page) => ({ id: page.id, title: page.bundleTitle, target: page.target })),
-    duplicateTargets: duplicateTargets(ordered),
-    brokenLinks: brokenLinks(ordered, documentById),
-    themeId: null,
-  }
+  return exportBundle({ pages: bundlePages, runtimeJs: readExportRuntime(), theme: rows.theme })
 }
 
 /**

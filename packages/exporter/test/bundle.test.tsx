@@ -5,20 +5,21 @@
  * `DOMParser`로 파서를 지나게 한다 — **글자로만 재면 브라우저가 그것을 무엇으로 읽는지는
  * 안 재진다.** `parity.test.tsx`가 같은 이유로 같은 길을 쓴다.
  *
- * 여기서 **안 재는 것**: 캔버스와의 견주기(`bundle-parity.test.tsx`) · 계산된 스타일
+ * 여기서 **안 재는 것**: 목업(브라우저가 그린다 — `runtime-bundle.test.ts` · `bundle-parity.test.tsx`) · 계산된 스타일
  * (시트를 안 건다) · 중복 비용(`bundle-size.test.ts`).
  */
 import { installCatalog, type PageDocument } from '@wirebound/schema'
 import { defaultViewsCss } from '@wirebound/theme-sdk'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { exportBundle } from '../src/bundle/index'
-import { markedTheme } from '../test-support/fixtures'
+import type { ExportPageData } from '../src/page-data'
 
 beforeAll(() => {
   installCatalog()
 })
 
-const THEME_CSS = '[data-wb-component="Button"] { color: red }'
+/** 런타임 글자 자리 — 번들은 받은 글자를 그대로 싣는다(런타임 자체는 `build-test/runtime-dist.test.ts`). */
+const RUNTIME = '/* runtime */'
 
 const LIST_PAGE: PageDocument = {
   version: 1,
@@ -65,8 +66,7 @@ function twoPages() {
       },
       { title: '회원 상세', document: DETAIL_PAGE },
     ],
-    theme: markedTheme(),
-    themeCss: THEME_CSS,
+    runtimeJs: RUNTIME,
   })
 }
 
@@ -77,14 +77,15 @@ function parse(html: string): Document {
 function fileAt(bundle: ReturnType<typeof exportBundle>, path: string): string {
   const found = bundle.files.find((file) => file.path === path)
   if (found === undefined) throw new Error(`번들에 없는 경로: ${path}`)
+  if (typeof found.content !== 'string') throw new Error(`글자가 아닌 파일: ${path}`)
   return found.content
 }
 
-/** 번들의 페이지에서 문서 뿌리. 셸의 상자들은 `data-wb-id`를 달지 않는다. */
-function documentRoot(html: string): Element {
-  const root = parse(html).querySelector('[data-wb-id]')
-  if (root === null) throw new Error('페이지에 문서가 없습니다')
-  return root
+/** 페이지에 실린 JSON(`<script id="wb-export-page">`). */
+function pageData(html: string): ExportPageData {
+  const node = parse(html).getElementById('wb-export-page')
+  if (node === null) throw new Error('페이지 JSON 이 없습니다')
+  return JSON.parse(node.textContent ?? '') as ExportPageData
 }
 
 describe('exportBundle — 파일 트리', () => {
@@ -94,9 +95,17 @@ describe('exportBundle — 파일 트리', () => {
       'pages/회원-목록.html',
       'pages/회원-상세.html',
       'assets/shell.css',
-      'assets/theme.css',
+      'assets/views.css',
       'assets/runtime.js',
     ])
+  })
+
+  it('pagePaths 가 페이지 순서의 번들 안 경로다', () => {
+    expect(twoPages().pagePaths).toEqual(['pages/회원-목록.html', 'pages/회원-상세.html'])
+  })
+
+  it('받은 런타임 글자를 그대로 싣는다', () => {
+    expect(fileAt(twoPages(), 'assets/runtime.js')).toBe(RUNTIME)
   })
 
   it('파일 시스템을 부르지 않고 값으로 낸다', () => {
@@ -109,32 +118,26 @@ describe('exportBundle — 파일 트리', () => {
 
   /** 빈 번들은 받는 사람이 **푼 뒤에야** 비었다는 것을 안다. */
   it('페이지가 없으면 던진다 — 빈 번들을 내지 않는다', () => {
-    expect(() => exportBundle({ pages: [] })).toThrow('번들에 실을 페이지가 없습니다')
+    expect(() => exportBundle({ pages: [], runtimeJs: RUNTIME })).toThrow('번들에 실을 페이지가 없습니다')
   })
 })
 
 describe('exportBundle — CSS', () => {
-  it('테마 시트가 기본 뷰 CSS 뒤에 테마 CSS 를 싣는 한 장이다', () => {
-    expect(fileAt(twoPages(), 'assets/theme.css')).toBe(`${defaultViewsCss()}${THEME_CSS}`)
+  it('기본 뷰 시트가 SDK 기본 뷰 CSS 그대로다', () => {
+    expect(fileAt(twoPages(), 'assets/views.css')).toBe(defaultViewsCss())
   })
 
-  it('테마 CSS 가 없으면 기본 뷰 CSS 그대로다', () => {
-    const bundle = exportBundle({ pages: [{ title: 'ㄱ', document: DETAIL_PAGE }] })
-    expect(fileAt(bundle, 'assets/theme.css')).toBe(defaultViewsCss())
-  })
-
-  /** 셸 CSS가 테마 CSS에 섞이면 *"기본 뷰 → 테마"* 순서에 셸이 끼어든다. */
-  it('셸 CSS가 테마 시트에 섞이지 않는다', () => {
-    expect(fileAt(twoPages(), 'assets/theme.css')).not.toContain('wb-export')
+  /** 셸 CSS가 문서 시트에 섞이면 *"기본 뷰 → 테마 → 토큰"* 차례에 셸이 끼어든다. */
+  it('셸 CSS가 기본 뷰 시트에 섞이지 않는다', () => {
+    expect(fileAt(twoPages(), 'assets/views.css')).not.toContain('wb-export')
     expect(fileAt(twoPages(), 'assets/shell.css')).not.toContain('data-wb-')
   })
 })
 
 describe('exportBundle — <head>', () => {
   /**
-   * **`exportPage`의 `<head>`에는 `style`·`script`·`link`가 0개다**(`page.test.ts`). 번들은
-   * 셸이 시트를 걸므로 여기서는 *"정확히 이 둘이다"*를 센다 — **개수까지 센다.** 0을 세지 않고
-   * *"link가 있다"*만 재면 시트가 하나 더 새어도 안 죽는다.
+   * 테마가 없는 번들의 머리는 *"정확히 이 둘이다"*(셸 · 기본 뷰)를 센다 — **개수까지 센다.** *"link가 있다"*만 재면 시트가 하나
+   * 더 새어도 안 죽는다. 테마가 있는 판은 `export-theme` 쪽(api)과 `bundle-theme.test.ts` 가 센다.
    */
   it.each(['index.html', 'pages/회원-목록.html'])('%s의 head에 스타일시트 링크 둘뿐이다', (path) => {
     const head = parse(fileAt(twoPages(), path)).head
@@ -146,19 +149,19 @@ describe('exportBundle — <head>', () => {
     expect(head.querySelectorAll('script')).toHaveLength(0)
   })
 
-  /** **셸이 먼저, 테마가 나중이다** — 그 순서가 곧 *"테마가 이긴다"*이다. */
-  it('시트 순서가 셸 → 테마다', () => {
+  /** **셸이 먼저, 문서 시트가 나중이다** — 문서 시트끼리의 차례는 캔버스와 같다(기본 뷰 → 테마 → 토큰). */
+  it('시트 순서가 셸 → 기본 뷰다', () => {
     const bundle = twoPages()
     expect(
       [...parse(fileAt(bundle, 'index.html')).head.querySelectorAll('link')].map((link) =>
         link.getAttribute('href'),
       ),
-    ).toEqual(['assets/shell.css', 'assets/theme.css'])
+    ).toEqual(['assets/shell.css', 'assets/views.css'])
     expect(
       [...parse(fileAt(bundle, 'pages/회원-목록.html')).head.querySelectorAll('link')].map((link) =>
         link.getAttribute('href'),
       ),
-    ).toEqual(['../assets/shell.css', '../assets/theme.css'])
+    ).toEqual(['../assets/shell.css', '../assets/views.css'])
   })
 
   it('제목이 페이지 제목이다', () => {
@@ -166,15 +169,12 @@ describe('exportBundle — <head>', () => {
   })
 
   /**
-   * **명제는 *"스크립트가 없다"*가 아니라 *"정확히 이 둘을 낸다"*다** — 런타임이 붙어도
-   * 명제를 지우지 않고 좁혀 센다(위 `<head>` 케이스와 같다).
-   *
-   * **개수와 정체를 함께 센다.** *"스크립트가 있다"*만 재면 셋째가 새어도 안 죽는다.
-   * 하나는 **실행되지 않는 데이터**(`application/json`)이고 하나는 **자산을 가리키는
-   * 고전 스크립트**다 — `type="module"`이면 `file://`에서 통째로 죽는다.
+   * **개수 · 정체 · 차례를 함께 센다.** *"스크립트가 있다"*만 재면 넷째가 새어도 안 죽는다. 데이터는 **실행되지 않고**
+   * (`application/json`), 런타임은 **자산을 가리키는 고전 스크립트**이며(`type="module"`이면 `file://`에서 통째로 죽는다),
+   * 끝의 인라인이 `boot()` 를 부른다. `defer` 가 없어야 차례대로 돈다 — 테마 번들이 런타임의 전역을 읽는다.
    */
   it.each(['index.html', 'pages/회원-목록.html', 'pages/회원-상세.html'])(
-    '%s가 스크립트를 정확히 둘 낸다 — 데이터 하나와 runtime.js 하나',
+    '%s가 스크립트를 정확히 셋 낸다 — 데이터 · runtime.js · boot',
     (path) => {
       const scripts = [...parse(fileAt(twoPages(), path)).querySelectorAll('script')]
       expect(
@@ -182,11 +182,13 @@ describe('exportBundle — <head>', () => {
           script.getAttribute('type'),
           script.getAttribute('id'),
           script.getAttribute('src'),
-          script.hasAttribute('defer'),
+          script.hasAttribute('defer') || script.hasAttribute('async'),
+          script.hasAttribute('src') ? null : (script.textContent ?? '').slice(0, 30),
         ]),
       ).toEqual([
-        ['application/json', 'wb-export-runtime-data', null, false],
-        [null, null, path === 'index.html' ? 'assets/runtime.js' : '../assets/runtime.js', true],
+        ['application/json', 'wb-export-page', null, false, (scripts[0]?.textContent ?? '').slice(0, 30)],
+        [null, null, path === 'index.html' ? 'assets/runtime.js' : '../assets/runtime.js', false, null],
+        [null, null, null, false, '__wirebound_export__.boot()'],
       ])
     },
   )
@@ -201,43 +203,89 @@ describe('exportBundle — <head>', () => {
   /** 데이터가 스크립트를 끊지 않는다 — `scriptJson`이 든 규칙이다. */
   it('데이터가 <를 이스케이프해 실린다', () => {
     const bundle = exportBundle({
-      pages: [{ title: '주입', document: LIST_PAGE, comments: [] }],
+      pages: [{ title: '</script><img src=x>', document: LIST_PAGE, comments: [] }],
+      runtimeJs: RUNTIME,
     })
-    const html = fileAt(bundle, 'pages/주입.html')
-    const data = parse(html).getElementById('wb-export-runtime-data')
+    const html = fileAt(bundle, bundle.pagePaths[0]!)
+    const data = parse(html).getElementById('wb-export-page')
     expect(data?.textContent).not.toContain('<')
-    expect(() => JSON.parse(data?.textContent ?? '')).not.toThrow()
+    expect(pageData(html).title).toBe('</script><img src=x>')
+    // 카나리아 — 데이터가 스크립트를 끊었으면 이 요소가 선다.
+    expect(parse(html).querySelectorAll('img')).toHaveLength(0)
   })
 })
 
-describe('exportBundle — 셸이 문서를 감싼다', () => {
-  /**
-   * **`exportPage`는 문서 뿌리를 아무것도 감싸지 않고, 번들은 감싼다.** 그래서 명제를
-   * 지우지 않고 **정확히 무엇이 감싸는지**로 센다 — 그러지 않으면 그 축이 사라진다.
-   */
-  it.each(['index.html', 'pages/회원-목록.html'])('%s에서 감싸개가 정확히 셋이다', (path) => {
-    const root = documentRoot(fileAt(twoPages(), path))
-    const chain: string[] = []
-    for (let node = root.parentElement; node !== null; node = node.parentElement) {
-      chain.push(node.tagName.toLowerCase() + (node.className === '' ? '' : `.${node.className}`))
-    }
-    expect(chain).toEqual([
-      'div.wb-export-canvas',
-      'main.wb-export-mockup',
-      'div.wb-export',
-      'body',
-      'html',
-    ])
+describe('exportBundle — 페이지 JSON', () => {
+  it('문서 · 제목 · 타겟 · 테마 없음 · 마커를 싣는다', () => {
+    const data = pageData(fileAt(twoPages(), 'pages/회원-목록.html'))
+    expect(data).toEqual({
+      document: LIST_PAGE,
+      title: '회원 목록',
+      target: null,
+      themeRef: null,
+      manifest: null,
+      tokens: {},
+      hrefs: {},
+      // 코멘트 탭의 줄과 같은 출처 — 번호가 있는 줄만(고아 마커 ① 포함).
+      markers: [
+        { nodeId: 'n_000000000002', marker: '1' },
+        { nodeId: 'n_000000000003', marker: '2' },
+      ],
+    })
   })
 
-  /** 셸의 어휘가 문서 **안으로** 들어오면 견주기가 깨진다. 여기가 먼저 이름으로 말한다. */
-  it('문서 뿌리 아래에 셸의 어휘가 없다', () => {
-    const root = documentRoot(fileAt(twoPages(), 'pages/회원-목록.html'))
-    expect(root.querySelectorAll('[class*="wb-export"]')).toHaveLength(0)
-    const attributes = [...root.querySelectorAll('*')].flatMap((element) =>
-      [...element.attributes].map((attribute) => attribute.name),
-    )
-    expect(attributes.filter((name) => name.startsWith('data-wb-marker'))).toEqual([])
+  /**
+   * **이 문서가 겨누는 타겟만 싣고, 자리마다 다른 상대 경로다.** 하나면 링크 · 둘 이상이면 `null` · 없으면 키가 없다 — 런타임이
+   * 셋을 다른 말로 가른다(`runtime-bundle.test.ts` «못 한 것을 조용히 넘기지 않는다»).
+   */
+  it('hrefs 가 겨누는 타겟만 · 이 파일에서 본 경로로 싣는다', () => {
+    const go = (target: string) => ({ on: 'click' as const, actions: [{ type: 'navigate' as const, target }] })
+    const from: PageDocument = {
+      version: 1,
+      root: {
+        id: 'n_a',
+        type: 'Page',
+        children: [
+          { id: 'n_1', type: 'Button', props: { label: '하나' }, interactions: [go('page:상세')] },
+          { id: 'n_2', type: 'Button', props: { label: '둘' }, interactions: [go('page:겹침')] },
+          { id: 'n_3', type: 'Button', props: { label: '없음' }, interactions: [go('page:없음')] },
+        ],
+      },
+    }
+    const bundle = exportBundle({
+      pages: [
+        { title: '목록', document: from, target: 'page:목록' },
+        { title: '상세', document: DETAIL_PAGE, target: 'page:상세' },
+        { title: '겹침 가', document: DETAIL_PAGE, target: 'page:겹침' },
+        { title: '겹침 나', document: DETAIL_PAGE, target: 'page:겹침' },
+      ],
+      runtimeJs: RUNTIME,
+    })
+    const expected = (prefix: string) => ({ 'page:상세': `${prefix}%EC%83%81%EC%84%B8.html`, 'page:겹침': null })
+    expect(pageData(fileAt(bundle, 'index.html')).hrefs).toEqual(expected('pages/'))
+    expect(pageData(fileAt(bundle, 'pages/목록.html')).hrefs).toEqual(expected(''))
+    expect(pageData(fileAt(bundle, 'pages/목록.html')).target).toBe('page:목록')
+  })
+})
+
+describe('exportBundle — 목업 자리는 비어 있다', () => {
+  /** **목업은 브라우저가 그린다** — 여기서 문서 노드가 하나라도 서면 서버가 목업을 그린 것이다(spec 「내보내기와 PPTX」). */
+  it.each(['index.html', 'pages/회원-목록.html', 'pages/회원-상세.html'])('%s에 문서 노드가 없다', (path) => {
+    expect(parse(fileAt(twoPages(), path)).querySelectorAll('[data-wb-id]')).toHaveLength(0)
+  })
+
+  /** 목업 자리가 셸의 어느 상자 안에 서는지 — 런타임이 채우고 마커의 기준이 되는 자리다. */
+  it('목업 자리가 셸 안에 비어 있고 스크립트가 없을 때의 한 줄이 곁에 있다', () => {
+    const page = parse(fileAt(twoPages(), 'pages/회원-목록.html'))
+    const canvas = page.querySelector('.wb-export-canvas')!
+    expect(canvas.childNodes).toHaveLength(0)
+    const chain: string[] = []
+    for (let node = canvas.parentElement; node !== null; node = node.parentElement) {
+      chain.push(node.tagName.toLowerCase() + (node.className === '' ? '' : `.${node.className}`))
+    }
+    expect(chain).toEqual(['main.wb-export-mockup', 'div.wb-export', 'body', 'html'])
+    // DOMParser 는 스크립트가 꺼진 문서라 noscript 안을 마크업으로 읽는다.
+    expect(page.querySelector('main.wb-export-mockup noscript')?.textContent).toBe('이 설계서의 화면은 자바스크립트로 그립니다')
   })
 })
 
@@ -245,22 +293,21 @@ describe('exportBundle — 좌측 트리', () => {
   it('index.html이 첫 페이지를 같은 셸에 담는다 — 리디렉트가 아니다', () => {
     const index = fileAt(twoPages(), 'index.html')
     expect(index).not.toContain('http-equiv')
-    expect(documentRoot(index).getAttribute('data-wb-id')).toBe('n_000000000001')
+    expect(pageData(index).document.root.id).toBe('n_000000000001')
   })
 
   /**
-   * **페이지 파일마다 그 페이지가 그려져 있다.** 뿌리를 자리마다 안 보면 셸에 넘기는
-   * 트리를 `rendered[index]`에서 `rendered[0]`으로 바꿔도 아무것도 안 죽는다.
+   * **페이지 파일마다 그 페이지의 문서가 실려 있다.** 자리마다 안 보면 싣는 문서를 `pages[index]`에서 `pages[0]`으로 바꿔도
+   * 아무것도 안 죽는다.
    *
    * **세는 단위를 HTML 파일 전부로 못박는다** — 자리마다 어느 문서의 뿌리인지를 한 목록으로
-   * 견주므로 파일이 빠지거나 늘어도, 자리가 섞여도 죽는다. 그림 전체를 견주는 것은
-   * `bundle-parity.test.tsx`가 한다.
+   * 견주므로 파일이 빠지거나 늘어도, 자리가 섞여도 죽는다.
    */
-  it('HTML 파일마다 그 페이지의 문서 뿌리가 있다', () => {
+  it('HTML 파일마다 그 페이지의 문서가 실린다', () => {
     expect(
       twoPages()
         .files.filter((file) => file.path.endsWith('.html'))
-        .map((file) => [file.path, documentRoot(file.content).getAttribute('data-wb-id')]),
+        .map((file) => [file.path, pageData(file.content as string).document.root.id]),
     ).toEqual([
       ['index.html', 'n_000000000001'],
       ['pages/회원-목록.html', 'n_000000000001'],
@@ -392,6 +439,7 @@ describe('exportBundle — 코멘트 탭', () => {
           ],
         },
       ],
+      runtimeJs: RUNTIME,
     })
     const line = [
       ...parse(fileAt(bundle, 'pages/회원-목록.html')).querySelectorAll(
@@ -447,6 +495,7 @@ describe('exportBundle — errors를 삼키지 않는다', () => {
         { title: '멀쩡', document: DETAIL_PAGE },
         { title: '깨진 문서', document: BROKEN },
       ],
+      runtimeJs: RUNTIME,
     })
     expect(bundle.errors).toEqual([
       {
@@ -461,9 +510,9 @@ describe('exportBundle — errors를 삼키지 않는다', () => {
     ])
   })
 
-  /** `index.html`이 첫 페이지를 다시 담지만 **그리는 것은 한 번이다.** */
+  /** `index.html`이 첫 페이지를 다시 담지만 **세는 것은 한 번이다.** */
   it('index.html이 담은 페이지의 오류를 두 번 세지 않는다', () => {
-    const bundle = exportBundle({ pages: [{ title: '깨진 문서', document: BROKEN }] })
+    const bundle = exportBundle({ pages: [{ title: '깨진 문서', document: BROKEN }], runtimeJs: RUNTIME })
     expect(bundle.errors).toHaveLength(1)
   })
 
@@ -472,7 +521,7 @@ describe('exportBundle — errors를 삼키지 않는다', () => {
   })
 
   /**
-   * **그릴 수 있는 문서면 번들이 나온다.** 노드가 아닌 자식은 렌더 경로가 폴백으로 그리고
+   * **그릴 수 있는 문서면 번들이 나온다.** 노드가 아닌 자식은 렌더러가 폴백으로 그리고
    * `errors`로 이름 붙이는데, 문장화(`listInteractionSentences` → `walkNodes`)는 노드가
    * 객체라고 믿고 거기서 던진다. 그것 때문에 **그린 페이지가 통째로 사라지면**
    * *"errors를 삼키지 않는다"*가 지키려던 것이 반대로 뒤집힌다.
@@ -486,7 +535,7 @@ describe('exportBundle — errors를 삼키지 않는다', () => {
         children: [null as unknown as never, { id: 'n_000000000032', type: 'Text' }],
       },
     }
-    const bundle = exportBundle({ pages: [{ title: '노드 아님', document: withNull }] })
+    const bundle = exportBundle({ pages: [{ title: '노드 아님', document: withNull }], runtimeJs: RUNTIME })
     expect(bundle.errors.map((item) => item.error.message)).toEqual([
       '노드가 객체가 아닙니다: null',
     ])

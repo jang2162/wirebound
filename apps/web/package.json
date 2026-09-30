@@ -30,6 +30,7 @@
     "@wirebound/system-theme-admin": "workspace:*",
     "@wirebound/test-support": "workspace:*",
     "@wirebound/theme-kit": "workspace:*",
+    "fflate": "^0.8.3",
     "pg": "^8.13.0",
     "playwright-core": "^1.62.1",
     "vite": "^6.0.0"

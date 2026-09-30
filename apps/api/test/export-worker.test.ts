@@ -35,7 +35,7 @@ import {
 } from '../src/services/export-worker'
 import type { ExportJobSpec } from '../src/services/export-worker-protocol'
 import { bundleRootDirectory, zipBundle, zipParts } from '../src/services/export-zip'
-import type { ScreenBatch, ScreenRenderer, ScreenRequest } from '../src/services/screen-render'
+import type { ScreenBatch, ScreenJob, ScreenRenderer } from '../src/services/screen-render'
 import {
   addMember,
   createMenuNode,
@@ -63,6 +63,8 @@ function syntheticRows(pages: number, nodes: number): ExportRows {
   return {
     menu: [{ id: 'm', parent_id: null, title: '메뉴', sort_order: 0 }],
     comments: [],
+    theme: null,
+    themeWarning: null,
     pages: Array.from({ length: pages }, (_, p) => ({
       id: `p${p}`,
       projectId: 'x',
@@ -156,16 +158,16 @@ async function 채울사람들(ctx: TestContext, projectId: string): Promise<{ w
 
 /** 페이지마다 **다른 크기**를 답하는 가짜 그리는 자 — 그림이 엉뚱한 페이지에 붙으면 슬라이드가 갈린다. */
 class SizedRenderer implements ScreenRenderer {
-  readonly seen: ScreenRequest[][] = []
-  last(): ScreenRequest[] {
+  readonly seen: ScreenJob[] = []
+  last(): ScreenJob {
     const found = this.seen[this.seen.length - 1]
     if (!found) throw new Error('그리는 자가 한 번도 안 불렸습니다')
     return found
   }
-  async render(requests: readonly ScreenRequest[]): Promise<ScreenBatch> {
-    this.seen.push([...requests])
+  async render(job: ScreenJob): Promise<ScreenBatch> {
+    this.seen.push(job)
     return {
-      results: requests.map((_, index) => ({ ok: true as const, bytes: PNG_1X1, width: 1000 + index * 100, height: 700 + index * 50 })),
+      results: job.pages.map((_, index) => ({ ok: true as const, bytes: PNG_1X1, width: 1000 + index * 100, height: 700 + index * 50 })),
       fontWarning: '글꼴 경고 — 워커를 건너 와야 한다',
     }
   }
@@ -183,14 +185,14 @@ describe('워커가 낸 것은 같은 스레드에서 낸 것과 같다', () => 
       const got = entries(new Uint8Array(res.rawPayload))
       const want = entries(referenceZip)
       expect(got.map(([name]) => name)).toEqual(want.map(([name]) => name))
-      // **`assets/runtime.js` 하나만 갈린다 — 이 하네스에서만.** 그 파일은 함수 하나의 `toString()`이라(`packages/exporter`의
-      // `RUNTIME_JS`) 글자가 **변환기가 낸 그대로**다. vitest 는 메인을 vite 로, 워커를 tsx 로 변환하므로 두 글자가 다르다.
-      // 운영은 두 스레드가 같은 `dist` 파일을 싣는다(`export-worker.ts`의 «워커가 싣는 코드는 메인과 같다»). 나머지는 바이트로 같다.
-      expect(differingEntries(got, want)).toEqual([`${bundleRootDirectory(fixture.slug)}/assets/runtime.js`])
-      // 카나리아 — 견준 것에 기본 뷰 CSS · 그려진 노드 · 코멘트가 실제로 들어 있다(없으면 둘이 우연히 같다).
-      const theme = got.find(([name]) => name.endsWith('assets/theme.css'))!
-      expect(strFromU8(theme[1])).toContain('--wb-node-grid-columns')
-      expect(got.map(([, bytes]) => strFromU8(bytes)).join('\n')).toContain('data-wb-component="Button"')
+      // **전 엔트리가 바이트로 같다.** `assets/runtime.js` 는 빌드 산출물(`@wirebound/exporter/runtime.js`)을 두 스레드가 각자 같은 파일에서
+      // 읽는다(`services/export-runtime.ts`) — 변환기가 글자를 짓지 않는다.
+      expect(differingEntries(got, want)).toEqual([])
+      // 카나리아 — 견준 것에 기본 뷰 CSS · 런타임 · 문서 · 코멘트가 실제로 들어 있다(없으면 둘이 우연히 같다).
+      const views = got.find(([name]) => name.endsWith('assets/views.css'))!
+      expect(strFromU8(views[1])).toContain('--wb-node-grid-columns')
+      expect(got.find(([name]) => name.endsWith('assets/runtime.js'))![1].length).toBeGreaterThan(100_000)
+      expect(got.map(([, bytes]) => strFromU8(bytes)).join('\n')).toContain('"type":"Button"')
       expect(got.map(([, bytes]) => strFromU8(bytes)).join('\n')).toContain('목록 코멘트 둘')
 
       const preview = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: fixture.cookie })
@@ -219,9 +221,12 @@ describe('워커가 낸 것은 같은 스레드에서 낸 것과 같다', () => 
         const want = entries(zipParts(reference.parts))
         expect(got.map(([name]) => name)).toEqual(want.map(([name]) => name))
         expect(differingEntries(got, want)).toEqual([])
-        // 그리라고 넘긴 HTML · 시트가 같다 — 기본 뷰 CSS 가 든 시트여야 견준 것이 뜻이 있다.
+        // 그리라고 넘긴 번들(파일 전부 · 찍을 페이지)이 같다 — 기본 뷰 CSS · 런타임 · 테마가 든 번들이어야 견준 것이 뜻이 있다.
         expect(viaRoute.last()).toEqual(inThread.last())
-        expect(inThread.last()[0]!.css).toContain('--wb-node-grid-columns')
+        expect(String(inThread.last().files.get('assets/views.css'))).toContain('--wb-node-grid-columns')
+        expect(inThread.last().files.has('assets/theme/theme.js')).toBe(true)
+        expect(inThread.last().pages.map((page) => page.title)).toEqual(reference.pages.map((page) => page.title))
+        expect(inThread.last().pages.every((page) => inThread.last().files.has(page.path))).toBe(true)
 
         const preview = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`, cookies: fixture.cookie })
         const body = preview.json()
@@ -246,7 +251,7 @@ describe('풀', () => {
   })
 
   it('워커로 도는 동안 메인의 루프가 서지 않는다 — 같은 스레드에서 돈 시간보다 한참 짧게만 선다', async () => {
-    const rows = syntheticRows(8, 7000)
+    const rows = syntheticRows(16, 7000)
     // 워커를 먼저 띄워 둔다 — 띄우는 동안 메인이 도는 모듈 적재는 이 케이스가 재는 것이 아니다.
     await pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP)
 
@@ -272,7 +277,8 @@ describe('풀', () => {
     }
 
     // 같은 스레드에서 돈 시간 전체가 한 번의 멈춤이다(`runExportJob`의 몸통은 동기다). 워커로 돌면 메인은 행을 한 장씩
-    // 복제하는 동안만 선다. 잰 값(이 케이스 · 15코어): 같은 스레드 0.44–0.53s · 워커 중 최장 6–15ms.
+    // 복제하는 동안만 선다. 잰 값(이 케이스 · 15코어 · 목업을 번들이 아니라 브라우저가 그리는 판 — 입력이 16 장인 까닭): 같은 스레드
+    // 0.54–0.59s · 워커 중 최장 6–7ms. 다시 재는 법: 두 값을 찍어 이 케이스만 돌린다(`-t '메인의 루프가 서지 않는다'`).
     expect(inThreadMs).toBeGreaterThan(300)
     expect(longestGap).toBeLessThan(inThreadMs / 4)
   }, 60_000)
@@ -394,13 +400,13 @@ class HeldRenderer {
   active = 0
   maxActive = 0
   private readonly releases: (() => void)[] = []
-  readonly render = async (requests: readonly ScreenRequest[]): Promise<ScreenBatch> => {
+  readonly render = async (job: ScreenJob): Promise<ScreenBatch> => {
     this.started++
     this.active++
     this.maxActive = Math.max(this.maxActive, this.active)
     await new Promise<void>((resolve) => this.releases.push(resolve))
     this.active--
-    return { results: requests.map(() => ({ ok: true as const, bytes: PNG_1X1, width: 1, height: 1 })), fontWarning: null }
+    return { results: job.pages.map(() => ({ ok: true as const, bytes: PNG_1X1, width: 1, height: 1 })), fontWarning: null }
   }
   /** 그리는 중인 것 하나를 끝낸다(먼저 시작한 것부터). */
   releaseOne(): void {

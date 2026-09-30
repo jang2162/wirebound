@@ -326,7 +326,7 @@ function handlersFor(root: WbNode, node: WbNode, options: RenderOptions): WbHand
       // 그래서 회귀가 이 줄을 지키지 못한다(`test/interaction-runtime.test.tsx`의
       // `submit 규칙은 기본 동작을 막는다`가 **`defaultPrevented`만** 본다).
       if (dom === 'onSubmit') event.preventDefault()
-      fire(root, node, dom, options)
+      fire(root, node, dom, options, (event as { nativeEvent?: object }).nativeEvent)
     }
   }
   return handlers
@@ -340,10 +340,14 @@ function handlersFor(root: WbNode, node: WbNode, options: RenderOptions): WbHand
  *
  * **결과를 합칠 때 겹layer를 이어 붙인다** — 앞 트리거가 만든 겹layer 위에서 뒤 트리거가
  * 돌아야 순서(`runInteraction`의 머리말 「순서」)가 한 벌로 남는다.
+ *
+ * **같은 DOM 이벤트가 버블링으로 지나는 핸들러끼리도 잇는다**(`native` — React 가 버블링 내내 같은 네이티브 이벤트를 넘긴다). 안쪽
+ * 노드의 핸들러가 낸 겹layer를 호스트가 상태에 실어 다시 그리기 전에 바깥 노드의 핸들러가 돈다 — 렌더 때 받은 겹layer에서 출발하면
+ * 안쪽의 쓰기를 모른 채 제 결과를 내고, 호스트가 그것을 마지막으로 실어 안쪽 쓰기가 사라진다(`test/interaction-bubble.test.tsx`).
  */
-function fire(root: WbNode, node: WbNode, dom: keyof WbHandlers, options: RenderOptions): void {
+function fire(root: WbNode, node: WbNode, dom: keyof WbHandlers, options: RenderOptions, native: object | undefined): void {
   const onEvent = options.interaction?.onEvent
-  let overlay = options.interaction?.overlay
+  let overlay = (native === undefined ? undefined : GESTURE_OVERLAY.get(native)) ?? options.interaction?.overlay
   for (const trigger of TRIGGERS_OF[dom] ?? []) {
     const result = runInteraction(root, node.id, trigger, overlay)
     overlay = result.overlay
@@ -352,7 +356,11 @@ function fire(root: WbNode, node: WbNode, dom: keyof WbHandlers, options: Render
     if (result.matched === 0) continue
     onEvent?.({ ...result, nodeId: node.id, trigger })
   }
+  if (native !== undefined && overlay !== undefined) GESTURE_OVERLAY.set(native, overlay)
 }
+
+/** 네이티브 이벤트 → 그 이벤트 안에서 마지막으로 낸 겹layer(`fire`의 머리말). 이벤트가 버려지면 함께 사라진다. */
+const GESTURE_OVERLAY = new WeakMap<object, InteractionOverlay>()
 
 /** 핸들러가 없을 때. **참조를 고정한다** — 매번 `{}`를 만들면 `attrs`가 렌더마다 새 것이 된다. */
 const NO_HANDLERS: WbHandlers = Object.freeze({})

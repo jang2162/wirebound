@@ -86,7 +86,7 @@
  *
  * | 작은 것을 넣은 때 | 칸이 하나일 때 | 칸이 둘일 때 | 같은 스레드일 때 |
  * |---|---|---|---|
- * | 1.5s — 큰 둘이 아직 CPU 몫(`exportPage` × 72)을 도는 중 | 7.4s(큰 둘이 끝날 때 같이 끝남) | 1.4–1.7s(큰 둘이 그리기로 넘어가 칸을 내놓을 때까지) | 2.0s(루프 멈춤) |
+ * | 1.5s — 큰 둘이 아직 CPU 몫(72 장을 짓는 것)을 도는 중 | 7.4s(큰 둘이 끝날 때 같이 끝남) | 1.4–1.7s(큰 둘이 그리기로 넘어가 칸을 내놓을 때까지) | 2.0s(루프 멈춤) |
  * | 4.5s — 큰 둘이 그리는 중 | 4.9–5.1s | 54–665ms(첫 번은 셋째 워커를 띄우는 비용) | — |
  *
  * # 줄은 길이로 묶는다
@@ -168,9 +168,10 @@
  * 워커만 낡은 `dist`를 도는 일이 없다. 운영 판(api 스크립트 · 같은 프로젝트를 같은 스레드와 워커로 내보냄)에서 html · pptx
  * 의 엔트리가 이름 · 순서 · 바이트까지 같았다.
  *
- * **vitest 에서는 변환기가 다르다** — 메인은 vite 가, 워커는 tsx 가 소스를 옮긴다. 함수의 `toString()`으로 만드는
- * `assets/runtime.js`만 그 하네스에서 글자가 갈린다(`test/export-worker.test.ts`가 그 하나만 갈리는 것을 잰다). tsx 는 tsconfig
- * 의 `include`에 든 파일에만 `jsx`를 걸어서 워커에 `apps/api/export-worker.tsconfig.json`을 준다(그 파일의 머리말).
+ * **vitest 에서는 변환기가 다르다** — 메인은 vite 가, 워커는 tsx 가 소스를 옮긴다. 산출물의 글자는 변환기가 짓지 않으므로 갈리지
+ * 않는다 — `assets/runtime.js` 도 빌드 산출물을 두 스레드가 각자 같은 파일에서 읽는다(`export-runtime.ts` · `test/export-worker.test.ts`
+ * 가 전 엔트리를 바이트로 견준다). tsx 는 tsconfig 의 `include`에 든 파일에만 `jsx`를 걸어서 워커에
+ * `apps/api/export-worker.tsconfig.json`을 준다(그 파일의 머리말).
  *
  * **워커는 모듈을 나눠 갖지 않는다** — 메인이 채운 레지스트리(컴포넌트 카탈로그)도 워커에서는 비어서 뜬다. 채우는 자리는
  * `export-worker-thread.ts`의 첫머리다.
@@ -189,7 +190,7 @@ import type {
   PptxJobResult,
   ToWorker,
 } from './export-worker-protocol'
-import { errorLine, type ScreenBatch, type ScreenRequest } from './screen-render'
+import { errorLine, type ScreenBatch, type ScreenJob, type ScreenPage } from './screen-render'
 
 /** CPU 칸 수 — 머리말의 표. 코어가 하나뿐인 기계에서는 하나다. */
 export const EXPORT_WORKER_LIMIT = Math.max(1, Math.min(2, availableParallelism() - 1))
@@ -264,7 +265,7 @@ export interface ExportRunOptions {
   /** 끊기면 일을 버린다 — 머리말의 표. */
   signal?: AbortSignal
   /** pptx 의 화면을 그리는 자. 워커가 부르면 메인에서 돈다(브라우저를 메인이 쥔다). */
-  render?: (requests: readonly ScreenRequest[]) => Promise<ScreenBatch>
+  render?: (job: ScreenJob) => Promise<ScreenBatch>
   /** 먼저 잡아 둔 자리(`admit`). 없으면 여기서 잡는다 — 넘치면 `ExportBusyError`. 일이 끝나면 풀이 내놓는다. */
   admission?: ExportAdmission
 }
@@ -635,7 +636,8 @@ export class ExportWorkerPool {
     // 이 일이 끝났다(답 · 실패 · 끊김 · 죽음) — 칸을 기다리던 그리기 뒤처리도 이것으로 멈춘다.
     const ended = new AbortController()
     return new Promise<ExportJobResult>((resolve, reject) => {
-      const requests: ScreenRequest[] = []
+      const files = new Map<string, string | Uint8Array>()
+      const pages: ScreenPage[] = []
       /** 워커가 이 일을 받았다고 답했다 — 그 전의 죽음은 쉬는 동안의 죽음이다(머리말 «쉬는 동안 죽은 워커»). */
       let accepted = false
       /** 워커가 이미 그려 달라고 했다 — 그리기는 일마다 한 번이다(`renderFor`). */
@@ -669,8 +671,11 @@ export class ExportWorkerPool {
           case 'accepted':
             accepted = true
             return
-          case 'screen-request':
-            requests.push(message.request)
+          case 'screen-file':
+            files.set(message.path, message.content)
+            return
+          case 'screen-page':
+            pages.push(message.page)
             return
           case 'render':
             // **둘째 부탁은 받지 않는다** — 칸은 한 번 그릴 몫만 얻어 두었다(`run`). 받으면 그리기 칸을 하나 더 얻고, 이미
@@ -683,7 +688,7 @@ export class ExportWorkerPool {
               return
             }
             asked = true
-            void this.renderFor(worker, job, requests.splice(0), options?.render, ended.signal)
+            void this.renderFor(worker, job, { files, pages }, options?.render, ended.signal)
             return
           case 'done':
             finish(() => resolve(message.result))
@@ -724,6 +729,9 @@ export class ExportWorkerPool {
       if (done()) return
       post({ t: 'rows', part: 'comments', items: rows.comments.slice(at, at + COMMENTS_PER_MESSAGE) })
     }
+    await yieldToLoop()
+    if (done()) return
+    post({ t: 'rows', part: 'theme', theme: rows.theme, warning: rows.themeWarning })
     if (done()) return
     post({ t: 'run' })
   }
@@ -741,7 +749,7 @@ export class ExportWorkerPool {
   private async renderFor(
     worker: Worker,
     job: Job,
-    requests: ScreenRequest[],
+    screenJob: ScreenJob,
     render: ExportRunOptions['render'],
     ended: AbortSignal,
   ): Promise<void> {
@@ -761,7 +769,7 @@ export class ExportWorkerPool {
     let batch: ScreenBatch | null = null
     let failure: unknown = null
     try {
-      batch = await render(requests)
+      batch = await render(screenJob)
     } catch (error) {
       failure = error
     } finally {

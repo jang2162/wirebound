@@ -267,6 +267,13 @@ function HtmlSummary(props: { preview: HtmlExportPreview; projectId: string }): 
       <p className="wb-shell-export-count">페이지 {preview.pages.length}장을 내보냅니다</p>
 
       {/* **경고가 먼저다.** 내려받기 링크 아래 두면 사람이 누르고 나서 본다. */}
+      {/* 테마를 못 실으면 번들 전체가 기본 뷰다 — 그것이 나머지 경고보다 크다. */}
+      {preview.themeWarning !== null && (
+        <section className="wb-shell-export-warning" aria-label="테마 경고">
+          <h3 className="wb-shell-export-heading">프로젝트 테마를 싣지 못했습니다</h3>
+          <p>{preview.themeWarning}</p>
+        </section>
+      )}
       {preview.errors.length > 0 && (
         <section className="wb-shell-export-warning" aria-label="그리지 못한 노드">
           <h3 className="wb-shell-export-heading">그리지 못한 노드가 있습니다</h3>

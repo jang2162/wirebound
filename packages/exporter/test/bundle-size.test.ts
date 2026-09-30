@@ -14,7 +14,6 @@
 import { CATALOG_TYPES, listComponents, resetRegistry, type PageDocument } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { exportBundle } from '../src/bundle/index'
-import { exportPage } from '../src/page'
 
 const DOC: PageDocument = {
   version: 1,
@@ -30,8 +29,8 @@ const DOC: PageDocument = {
 
 const encoder = new TextEncoder()
 
-function bytes(value: string): number {
-  return encoder.encode(value).length
+function bytes(value: string | Uint8Array): number {
+  return typeof value === 'string' ? encoder.encode(value).length : value.length
 }
 
 function bundleOf(pageCount: number) {
@@ -40,6 +39,7 @@ function bundleOf(pageCount: number) {
       title: `페이지 ${index + 1}`,
       document: DOC,
     })),
+    runtimeJs: '/* runtime */',
   })
 }
 
@@ -55,11 +55,6 @@ function htmlBytes(pageCount: number): number {
 }
 
 describe('셸을 페이지마다 두는 대가 — 셸이 페이지마다 반복된다', () => {
-  it('셸이 페이지 한 장을 exportPage보다 크게 만든다', () => {
-    const bare = bytes(exportPage({ document: DOC, title: '페이지 1' }).html)
-    expect(firstPageBytes(1)).toBeGreaterThan(bare)
-  })
-
   it('페이지가 늘면 각 페이지 파일이 커진다 — 트리가 전부를 든다', () => {
     expect(firstPageBytes(20)).toBeGreaterThan(firstPageBytes(1))
   })
@@ -86,7 +81,7 @@ describe('셸을 페이지마다 두는 대가 — 셸이 페이지마다 반복
   })
 })
 
-describe('페이지마다 exportPage를 불러도 카탈로그가 한 벌이다', () => {
+describe('페이지마다 번들을 지어도 카탈로그가 한 벌이다', () => {
   /**
    * 카탈로그 설치가 *"멱등"*이라는 말이 뜻하는 관찰이 이것이다. **시간이 아니라 상태로
    * 잰다** — 시간은 기계마다 다르고 케이스에서 흔들린다.

@@ -8,19 +8,17 @@
  * 인자: `<신호> <실행 파일 경로|->`.
  */
 import { chromiumScreenRenderer } from '../src/services/screen-render-chromium'
+import { jobOf, raw } from './screen-jobs'
 
 const [signal, executablePath] = process.argv.slice(2) as [NodeJS.Signals, string]
 process.on(signal, () => {})
 
 const exitListeners = process.listenerCount('exit')
 const renderer = chromiumScreenRenderer(executablePath === '-' ? {} : { executablePath })
-const requests = Array.from({ length: 40 }, (_unused, index) => ({
-  title: `${index}`,
-  html: `<!doctype html><html lang="ko"><body><h1>페이지 ${index}</h1></body></html>`,
-  // 빈 글자면 `addStyleTag`가 거절한다.
-  css: 'h1 { color: black; }',
-}))
-const pending = renderer.render(requests)
+const entries = Array.from({ length: 40 }, (_unused, index) =>
+  raw(`${index}`, `<!doctype html><html lang="ko"><body><h1>페이지 ${index}</h1></body></html>`, 'h1 { color: black; }'),
+)
+const pending = renderer.render(jobOf(...entries))
 
 const launched = setInterval(() => {
   if (process.listenerCount('exit') <= exitListeners) return

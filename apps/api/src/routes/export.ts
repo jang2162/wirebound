@@ -29,8 +29,8 @@
  *
  * `duplicateTargets`·`brokenLinks`·`errors`·`themeId`는 **HTML 번들의 성질이다.** PPTX는
  * 페이지 사이 링크를 만들지 않고(설계서 「명시적으로 제외한 것 (YAGNI)」이 도형 변환을 뺐으므로 슬라이드는
- * 글자와 이미지뿐이다) 번들의 테마 칸(`themeId`)도 안 쓴다. **그 넷을 pptx 응답에 그대로 실으면 값이 있는데 그
- * 값이 아무것도 안 가리킨다.**
+ * 글자와 이미지뿐이다) 테마는 화면 이미지 안에 이미 그려져 나간다 — 테마를 못 쓴 장은 `screenFailures` 가 까닭과 함께
+ * 든다. **그 넷을 pptx 응답에 그대로 실으면 값이 있는데 그 값이 아무것도 안 가리킨다.**
  *
  * 대신 pptx는 **셋**을 낸다:
  *
@@ -196,7 +196,7 @@ function buildPptxOrFail(
       return workers.runPptx(
         rows,
         { kind: 'pptx', screens: renderer !== undefined, zip },
-        { signal, admission, ...(renderer === undefined ? {} : { render: (requests) => renderer.render(requests) }) },
+        { signal, admission, ...(renderer === undefined ? {} : { render: (job) => renderer.render(job) }) },
       )
     }),
   )
@@ -347,7 +347,10 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer; render
         // `errors[].error`는 `NodeRenderError`다 — 그대로 싣는다. 화면이 `title`로
         // 어느 페이지인지 말한다(경로는 잘리거나 순번이 붙어 제목과 다를 수 있다).
         errors: bundle.errors,
+        /** 번들이 실은 테마(`"id@판"`) — 바인딩이 없거나 패키지를 못 읽었으면 `null`(기본 뷰). */
         themeId: bundle.themeId,
+        /** 바인딩은 있는데 패키지를 못 읽은 까닭. 정상이면 `null`. */
+        themeWarning: bundle.themeWarning,
         /** 내려받을 때 붙을 이름. **화면이 이것을 지어내지 않는다** — 두 벌이면 갈린다. */
         fileName: bundleFileName(await projectSlug(app, projectId)),
       }

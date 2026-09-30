@@ -1,7 +1,7 @@
 import * as React from 'react'
 import * as JsxRuntime from 'react/jsx-runtime'
 import * as Sdk from './index'
-import type { ThemeDefinition } from './types'
+import type { ThemeDefinition, ThemeManifest } from './types'
 
 /**
  * 호스트가 세우고 `theme.js`(IIFE)가 읽는 전역의 이름. `wb-theme build` 가 `react` · `react/jsx-runtime` ·
@@ -68,4 +68,23 @@ export function installRuntime(target: typeof globalThis = globalThis): RuntimeH
       delete (target as unknown as Record<string, unknown>)[WB_RUNTIME_GLOBAL]
     },
   }
+}
+
+/**
+ * **번들 정의에 서버 manifest 를 끼운다** — 뷰는 번들, 선언(variant · 토큰 · 패턴)은 서버 한 벌(spec 「캔버스 iframe」 의 «정의의
+ * manifest 는 서버 것이다»). 업로드는 `theme.js` 를 실행하지 않아 번들 안 manifest 를 못 견주므로 싣는 쪽이 바꿔 끼운다.
+ *
+ * `components` 만 다르면 서버 것을 쓴다. `id` · 판이 다르면 다른 테마의 번들이다 — 까닭을 낸다. 에디터(`apps/web` 의 번들 로더)와
+ * 내보낸 번들의 런타임(`packages/exporter/src/browser/boot.tsx`)이 이 함수 하나를 부른다.
+ */
+export function adoptManifest(
+  definition: ThemeDefinition,
+  manifest: ThemeManifest,
+): { ok: true; definition: ThemeDefinition } | { ok: false; reason: string } {
+  const bundled = definition.manifest as ThemeManifest | undefined
+  if (bundled?.id !== manifest.id || bundled.version !== manifest.version) {
+    const got = bundled === undefined ? '없음' : `${String(bundled.id)}@${String(bundled.version)}`
+    return { ok: false, reason: `테마 번들이 다른 테마를 등록했습니다(${manifest.id}@${manifest.version} — 번들은 ${got})` }
+  }
+  return { ok: true, definition: { ...definition, manifest } }
 }

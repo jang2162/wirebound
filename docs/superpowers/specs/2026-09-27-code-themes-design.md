@@ -221,7 +221,7 @@ theme_packages(theme_id text, version text, name text, description text,
 `POST /api/admin/theme-packages`(관리자 세션만). **본문은 `.wbtheme` zip 바이트 그대로다**(`Content-Type: application/zip` 또는 `application/octet-stream`) — multipart 를 쓰지 않는다. 서버에 새 런타임 의존이 안 들고, 화면은 `fetch(url, { body: file })` 로 보낸다. 다른 형식은 415, 10 MB 를 넘으면 413 이다. 코드는 실행하지 않는다. 실패는 항목별 사유 목록(`issues[].code`)과 함께 422 로 답한다.
 
 1. zip 크기 · 풀린 크기 · 항목 수 상한.
-2. 항목 경로 — 절대 경로 · `..` · 심볼릭 링크 거부. 허용 목록: `manifest.json` · `theme.js` · `theme.css` · `assets/**`(`png` · `jpg` · `jpeg` · `gif` · `webp` · `svg` · `woff` · `woff2` · `ttf` · `otf`).
+2. 항목 경로 — 절대 경로 · `..` · 심볼릭 링크 거부. 대소문자 · 유니코드 정규화(NFC)만 다른 두 파일도 거부한다 — 대소문자를 무시하는 파일시스템에 풀면 한 파일이 된다. 허용 목록: `manifest.json` · `theme.js` · `theme.css` · `assets/**`(`png` · `jpg` · `jpeg` · `gif` · `webp` · `svg` · `woff` · `woff2` · `ttf` · `otf`).
 3. `manifest.json` 이 manifest zod 규격을 통과한다(「manifest」의 표) — 코드 `manifest`, 원래 코드는 `manifestCode`.
 4. 호스트 SDK 판이 `sdk` 범위 안이다 — 밖이면 `sdk-incompatible`.
 5. `id` 가 `system-` 으로 시작하지 않는다 — 시작하면 `reserved-id`.
@@ -324,94 +324,30 @@ payload 에 테마 내용 대신 `{ themeId, version, tokens }` 를 얼린다. �
 ### HTML 번들 — 브라우저 렌더
 
 ```
-wirebound-export/
-  index.html              트리 네비 + 뷰어 셸
-  pages/<이름>.html        페이지 스키마 JSON + 스크립트 태그
+<root>/
+  index.html                 첫 페이지의 사본
+  pages/<이름>.html           셸(트리 네비 · 설명 · 코멘트 · 상호작용 목록) + 빈 목업 자리 + 페이지 JSON + 스크립트
   assets/
-    runtime.js            react · react-dom · theme-sdk · renderer · 상호작용 런타임 (일반 스크립트)
-    theme/theme.js        업로드된 패키지의 파일 그대로
-    theme/theme.css
-    theme/assets/**
-    tokens.css            프로젝트 토큰 값 → CSS 변수
+    shell.css                뷰어 셸의 CSS
+    views.css                SDK 기본 뷰 CSS(`defaultViewsCss()`)
+    runtime.js               내보내기 런타임 — react · react-dom · 카탈로그 · renderer · theme-sdk 런타임 (일반 스크립트)
+    theme/theme.js           업로드된 패키지의 파일 그대로
+    theme/theme.css          (패키지에 있으면)
+    theme/assets/**          패키지 자산 그대로
+    tokens.css               서버 manifest + 프로젝트 토큰 값 → CSS 변수(`tokensCss`)
 ```
 
-- 페이지는 `runtime.js` → `theme.js` 차례로 싣고 스키마를 그린다. 트리 네비 · 코멘트 · 상호작용은 지금과 같다.
-- JS 가 꺼진 브라우저에서는 목업이 보이지 않는다. 설계서 뷰어라 받아들인다.
-- `file://` 로 열어도 돈다(모든 스크립트가 일반 스크립트).
+- 페이지 머리의 시트 차례는 `shell.css` → `views.css` → `theme/theme.css` → `tokens.css` 다 — 문서 시트의 차례가 캔버스 iframe 과 같다(기본 뷰 → 테마 → 토큰). 패키지에 `theme.css` 가 없으면 그 link 를 싣지 않는다.
+- 몸 끝의 스크립트 차례: 페이지 JSON(`<script type="application/json" id="wb-export-page">` — 문서 · 제목 · 대상 · 서버 manifest · 토큰 · `themeRef` · 대상 → 상대 경로 표 · 마커) → `runtime.js` → `theme/theme.js`(`id="wb-export-theme"`) → 인라인 `__wirebound_export__.boot()`. 전부 일반 스크립트이고 `defer` 가 없다 — 차례대로 돈다.
+- 런타임이 테마 번들의 등록을 받아 서버 manifest 를 끼우고(`adoptManifest` — 캔버스와 같은 함수) 목업을 `renderDocument` 로 그린다. 상호작용은 캔버스 미리보기와 같은 renderer 런타임이고, 코멘트 마커는 renderer 의 `markerPoint` 로 놓는다.
+- 번들이 등록하지 않았거나 다른 판을 등록했거나 테마 뷰가 던지면 기본 뷰로 그리고 상태 줄에 까닭을 적으며 `<html data-wb-failed="<까닭>">` 를 세운다 — 등록을 못 쓴 판은 테마 시트도 걷는다. 테마 바인딩이 없거나 패키지를 못 읽은 프로젝트는 `assets/theme/**` · `tokens.css` 없이 기본 뷰로 나가고 미리보기가 경고 한 줄을 낸다.
+- 런타임은 첫 커밋 → 테마 시트의 적재(실패도) → `document.fonts.ready` → 한 프레임 뒤 `<html data-wb-ready>` 를 세운다.
+- JS 가 꺼진 브라우저에서는 목업이 보이지 않는다(`<noscript>` 한 줄). 설계서 뷰어라 받아들인다.
+- `file://` 로 열어도 돈다(모든 스크립트가 일반 스크립트 · 상대 경로 · 패키지 글꼴은 `theme.css` 기준 상대 경로).
 
 ### PPTX
 
-Chromium 워커가 HTML 번들의 페이지와 같은 문서를 연다. SDK 는 첫 렌더와 `document.fonts.ready` 가 끝나면 `<html data-wb-ready>` 를 세운다. 워커는 그것을 기다린 뒤 지금의 한도(동시 브라우저 수 · 한 장의 넓이 · 글꼴 대기 · 장 수)로 잰다. 테마 코드가 던졌거나 한도 안에 준비되지 않은 장은 그리지 않고 이유를 적는다. 번호 마커 좌표는 `renderer` 의 좌표 함수로 얻는다.
-
----
-
-## 작성자 도구
-
-### 템플릿 zip
-
-```
-wirebound-theme-starter/
-  package.json            @wirebound/theme-sdk · @wirebound/theme-kit 을 동봉 tarball 경로(file:)로 참조
-  vendor/*.tgz            SDK · kit tarball
-  theme.config.ts         manifest 선언(id · name · version · tokens · components · patterns)
-  src/index.tsx           defineTheme({ views })
-  src/views/*.tsx         컴포넌트별 뷰 (기본 뷰를 복사한 출발점)
-  src/theme.css
-  assets/
-  SKILL.md                코딩 에이전트용 작성 지침
-```
-
-npm 공개 뒤에는 `package.json` 의 두 의존을 버전 범위로 바꾸는 것만으로 옮겨 간다.
-
-### `wb-theme dev`
-
-로컬 갤러리. 카탈로그의 모든 컴포넌트 × variant 를 샘플 노드로 늘어놓고, 토큰 패널(manifest 에서 자동 생성) · 뷰포트 프리셋 · 포커스 · 마커 오버레이 표시를 갖춘다. 뷰와 CSS 는 HMR 로 반영한다. 갤러리 화면은 사이트의 토큰 편집 옆 갤러리와 같은 컴포넌트(`theme-kit` 이 내보낸다)다.
-
-### `wb-theme build`
-
-1. `theme.config.ts` → `manifest.json`, `themes` 의 manifest 검증을 로컬에서 먼저 돌린다(업로드 검증과 같은 함수).
-2. `src/index.tsx` → `theme.js`(IIFE, 공유 런타임 import 를 전역 읽기로 바꿔 씀).
-3. CSS · assets 복사.
-4. `dist/<id>-<version>.wbtheme`.
-
-### 스킬
-
-`SKILL.md` — 뷰 계약(`<Root>` 필수 · `<Focus>` · marker), 토큰 선언 규칙, variant 선언, 금지 사항(공유 런타임 모듈을 번들에 넣지 않는다 · `theme.js` 에서 네트워크로 다른 스크립트를 싣지 않는다 — 내보낸 번들이 오프라인에서 깨진다), dev · build 절차.
-
----
-
-## 걷어 낼 것
-
-- `themes` 테이블, `layouts.theme_id`, 테마 CRUD · JSON 라우트
-- 렌더러의 구조 구현체 레지스트리와 structure-css (구조 구현체의 마크업은 SDK 기본 뷰와 시스템 테마 뷰의 출발점으로 옮긴다)
-- 카탈로그의 `structures` · `parts` · `variants`, `editor` 의 `visibleWhen: { structure }`
-- 테마 JSON 에디터 · 토큰 화면 · 기존 테마 갤러리 · 테마 JSON 가져오기/내보내기 (`apps/web/src/routes/theme-editor.tsx` · `apps/web/src/routes/tokens.tsx` 와 딸린 것)
-- 캔버스 상단의 테마 드롭다운
-- 정본 설계서의 스타일 프로퍼티 화이트리스트와 `data-wb-part` 계약
-
-운영 데이터가 없으므로 마이그레이션은 파괴적이다. `down` 은 테이블 모양만 되살리고 데이터는 되살리지 않는다.
-
----
-
-## 시스템 테마 이전
-
-- `system-admin` · `system-saas-marketing` · `system-portal` · `system-commerce` · `system-docs` 다섯을 `theme-kit` 으로 쓴다.
-- 지금의 구조 구현체와 각 테마 JSON 의 스킨이 출발점이다. 지금 테마가 고르던 structure 는 그 테마의 variant 가 된다.
-- 지금의 토큰 3단(palette → semantic → scale)은 각 테마가 선언하는 토큰으로 옮긴다. 기획자가 만질 손잡이만 드러낸다.
-- SDK 기본 뷰는 테마와 무관한 중립 와이어프레임이다. 테마가 뷰를 빠뜨려도 화면이 비지 않게 하는 안전망이다.
-
----
-
-## 테스트
-
-| 층 | 재는 것 |
-|---|---|
-| `themes` | manifest 규격(표의 규칙 하나마다 거부 케이스), 토큰 참조 순환 · 없는 키 · 타입 다른 참조, zip 안전성(`..` · 절대 경로 · 링크 · 크기 · 항목 수 · 허용 목록) |
-| `theme-sdk` · `renderer` | `<Root>` 누락(개발 모드는 던짐 · 운영 모드는 기본 뷰), `<Focus>` 둘, 카탈로그의 모든 컴포넌트에 기본 뷰가 있음, 모르는 variant → `defaultVariant`, 포커스 · 마커 좌표(placement 여섯 × offset) |
-| api | 비관리자 업로드 403 · 비로그인 401, `system-` 접두어 거부, `id@version` 중복 409, 숨김(목록에서 빠짐 · 파일은 내줌), 관리자 권한을 바꾸는 라우트가 없음, 테마 변경 owner 만 · `theme_rev` 409, impact 계산, 스냅샷 동결 · 복원(숨긴 버전 포함), `theme-changed` 방송, 시스템 테마 시딩의 멱등 · `sha256` 불일치 거부 |
-| build-test | 스타터 템플릿을 `wb-theme build` 한 파일이 업로드 검증을 통과(끝에서 끝까지), 시스템 테마 5종 빌드 · 시딩 |
-| 실브라우저(`apps/web/build-test`) | iframe 캔버스 렌더, 프리셋 375 에서 테마의 `@media` 가 걸림, `button { … }` 을 가진 테마가 에디터 버튼의 계산 스타일을 안 바꿈, 마커 위치, 캔버스 클릭 선택, 토큰 즉시 미리보기, `theme-changed` 수신 뒤 다시 그림 |
-| 내보내기 | `file://` 로 연 번들이 Chromium 에서 `data-wb-ready` 까지 감, 코드 테마로 찍은 PPTX, 던지는 테마의 장은 이유와 함께 빠짐 |
+Chromium 이 **HTML 번들의 페이지를 그대로** 연다 — 번들 파일을 메모리에서 가짜 origin(`https://export.wirebound.invalid`)으로 내주고(`route.fulfill` — 번들에 없는 경로는 404), 그 밖의 요청은 전부 끊는다. 가로채기가 못 보는 소켓(WebSocket · WebRTC · WebTransport · 공유 워커의 요청)은 브라우저를 모든 연결이 막다른 프록시로 가고 이름 풀이가 실패하게 띄워 막고(주), 문서마다 소켓 생성자를 지운다(보조). 페이지는 `#wb-screen` 으로 열어 셸을 숨기고 목업만 남긴다(화면 모드). 움직임 끄기는 문서가 서기 전에 건다(초기화 스크립트). 워커는 내보내기 런타임이 세우는 `<html data-wb-ready>` 를 **한 장의 한도 안에서** 기다린 뒤 지금의 한도(동시 브라우저 수 · 한 장의 넓이 · 장 수)로 잰다 — 테마 적재 · 글꼴 · 첫 렌더가 그 한도에 든다. `data-wb-failed` 가 선 장 · 한도 안에 준비되지 않은 장은 그리지 않고 까닭을 적는다. 번호 마커는 번들 런타임이 renderer 의 좌표 함수로 놓은 그대로 찍힌다.
 
 ---
 
@@ -428,7 +364,7 @@ npm 공개 뒤에는 `package.json` 의 두 의존을 버전 범위로 바꾸는
 | **A5** | HTML 번들 · PPTX | 내보내기가 코드 테마로 돈다 |
 | **A6** | 시스템 테마 5종 완성, 정본 설계서 갱신 | 시스템 테마 다섯이 기본 설치된다 |
 
-**A1 부터 A4 가 끝날 때까지는 테마를 고를 수 없다** — 모든 프로젝트가 저장소 테마 하나로 그려지고, 옛 JSON 테마로 짠 외형은 사라진다. 운영 데이터가 없어 받아들인다. A1 이 옛 테마 엔진을 한꺼번에 걷는 까닭은, 카탈로그에서 structure 를 걷는 순간 옛 엔진이 설 자리가 없어 두 체계를 함께 돌릴 수 없기 때문이다. A1 ~ A4 동안 내보내기(HTML · PPTX)는 SDK 기본 뷰와 `defaultViewsCss()` 로 그린다 — 프로젝트 테마를 싣는 것은 A5 다.
+**A1 부터 A4 가 끝날 때까지는 테마를 고를 수 없다** — 모든 프로젝트가 저장소 테마 하나로 그려지고, 옛 JSON 테마로 짠 외형은 사라진다. 운영 데이터가 없어 받아들인다. A1 이 옛 테마 엔진을 한꺼번에 걷는 까닭은, 카탈로그에서 structure 를 걷는 순간 옛 엔진이 설 자리가 없어 두 체계를 함께 돌릴 수 없기 때문이다.
 
 설정 페이지는 `/projects/:projectId/settings` 의 셸 밖 라우트다 — «일반»(이름 · 슬러그 · 설명 — 바뀐 키만 보낸다) 과 «테마»(고르기 · 확인 ·
 토큰 편집 + 갤러리 미리보기) 두 절을 위아래로 둔다. 에디터 머리의 «설정» 과 프로젝트 목록 줄의 «설정» 이 여기로 온다(목록 줄에는 인라인

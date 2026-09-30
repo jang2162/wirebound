@@ -21,8 +21,9 @@ COPY . .
 # (`apps/api/src/services/export-worker.ts` 의 `tsxEsmLoader`) — 빌드된 JS 로 돌리는 길이 없다.
 RUN pnpm install --frozen-lockfile
 # `pnpm build` 가 시스템 테마 산출물(`system-themes/*/dist/*.wbtheme`)을 낸다 — api 가 기동 때 그것을 DB 에 넣고, 없으면 뜨지 않는다
-# (`apps/api/src/services/system-themes.ts`). `build:template` 은 관리자가 내려받는 스타터 템플릿 zip 이다(`packages/theme-kit/dist/`).
-# 둘 다 `/app` 을 통째로 옮기는 아래 `api` 단계에 실린다.
+# (`apps/api/src/services/system-themes.ts`). 내보내기 런타임(`packages/exporter/dist/runtime.js`)도 낸다 — api 가 기동 때 읽어 쥐고,
+# 없으면 뜨지 않는다(`apps/api/src/services/export-runtime.ts`). `build:template` 은 관리자가 내려받는 스타터 템플릿 zip 이다
+# (`packages/theme-kit/dist/`). 셋 다 `/app` 을 통째로 옮기는 아래 `api` 단계에 실린다.
 RUN pnpm build && pnpm build:template && pnpm --filter @wirebound/web build
 
 # ---------------------------------------------------------------------------------------------------------------------

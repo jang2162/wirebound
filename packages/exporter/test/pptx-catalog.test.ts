@@ -1,7 +1,7 @@
 /**
  * **카탈로그를 안 설치하면 문장이 조용히 나빠진다** — `exportPptx`가 그것을 부르는지 잰다.
  *
- * `exportPage`는 `renderPageTree`를 지나며 설치되지만 **PPTX는 그리지 않는다.** 그래서
+ * 번들은 구조 판정(`bundle/index.ts` 의 `structuralErrors`)을 지나며 설치되지만 **PPTX는 그리지 않는다.** 그래서
  * 이 자리를 물려받지 못하고, 안 부르면 상호작용 문장의 **prop 이름이 영문 그대로** 나온다.
  * `packages/cli`의 `read/catalog.ts`가 `pageView`에 대해 같은 값을 재서 같은 말을 적었다.
  *
