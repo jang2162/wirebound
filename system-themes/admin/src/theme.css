@@ -27,7 +27,7 @@
   --wb-radius-sm: 4px;
   --wb-radius-md: 6px;
   --wb-radius-lg: 10px;
-  --wb-shadow-md: 0 4px 12px rgba(15,23,42,.10);
+  --wb-shadow-md: 0 4px 12px rgba(15,23,42,.1);
   --wb-font-body: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --wb-typography-body-fontSize: 14px;
   --wb-space-unit: 4px;
@@ -642,9 +642,14 @@
   height: 1px;
   width: 100%;
 }
+/*
+ * 높이가 정해지지 않은 부모 안에서 `100%` 는 0 이 된다 — 한 줄 높이를 바닥으로 둔다. 가로 흐름(`Flex`) 안에서는 늘어나 줄에 맞는다. 좌우 여백은
+ * 두지 않는다 — 곁의 간격은 `Flex` 의 `gap` 이 준다.
+ */
 [data-wb-component="Divider"][data-wb-variant="vertical"] {
+  align-self: stretch;
   width: 1px;
-  min-height: 100%;
+  min-height: 1.5em;
 }
 [data-wb-component="Placeholder"][data-wb-structure="default"] {
   background: var(--wb-semantic-canvas);

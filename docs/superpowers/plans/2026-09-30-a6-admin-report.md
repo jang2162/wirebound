@@ -86,21 +86,23 @@ CSS 케이스는 `theme.css` 를 글자로 찾지 않고 jsdom 의 CSSOM 으로 
 - **1280(새 판)**: 표가 테두리 · 행 선 · 줄무늬 · 왼쪽 정렬 머리로 서고 `compact` 가 눈에 띄게 촘촘하다 · `featured` 는 위 주색 선과 주색 머리 · 선택 가능 목록에 체크 칸(선택 행은 채운 상자) · 빈 목록은 «데이터가 없습니다». 탭은 고른 `나` 에 주색 밑줄. 조회 폼은 필드 둘 + `조회`(주) · `초기화`(보조)가 한 줄. 등록 폼은 라벨 왼쪽 칸 · 필수 `*` · 단추가 입력 칸 줄. 상세(`KeyValue` 2열)는 `이름 | 홍 | 나이 | 3` 격자. 카드 10px 모서리 · 1px 테두리, `featured` 는 주색 테두리 + 그림자. 단추 4px 모서리 채운 주색. 서체는 산세리프. 섹션은 폭을 안 가두고 옅은 회색 바탕.
 - **첫 판에서 보고 고친 것**: ① 등록 폼의 필드 라벨마다 제목의 밑줄(자손 셀렉터) → 직계로 ② 390 에서 조회 폼 입력칸이 단추와 한 줄을 나눠 좁음 → 640 이하에서 필드 묶음 `flex-basis: 100%`.
 - **390**: 표 세 칸이 넘치지 않고 · 조회 폼은 필드가 한 줄씩 · 단추가 아래 · 등록 폼 라벨이 위로 · 상세는 쌍마다 한 줄 · 가로 넘침 0(`report.json`).
-- 그대로 둔 것: `Divider` 세로는 높이가 정해지지 않은 부모에서 0 높이(옛 스킨 `min-height: 100%` 그대로 — `Flex` 가로 안에서는 선다). `Section` `hero` 는 640 이하에서 기본과 같은 여백(옛 `responsive.sm` 이 그랬다).
+- 그대로 둔 것: `Section` `hero` 는 640 이하에서 기본과 같은 여백(옛 `responsive.sm` 이 그랬다).
+- `Divider` 세로 — 아래 «코디네이터가 넘긴 것» 2.
 
 ## 커밋
 
 | 커밋 | 내용 |
 |---|---|
-| `1401bcdb` | manifest(토큰 16 · 이름 · 설명 · 판 `1.0.0`) · `theme.css` · 뷰 `List` · `KeyValue` · 케이스 두 파일 · `package.json` 판 · `checksums.json` 에 `system-admin@1.0.0`(`b584102a…`) 줄 더함 |
-| (이 보고서와 한 커밋) | 이 보고서 |
+| `1401bcdb` | manifest(토큰 16 · 이름 · 설명 · 판 `1.0.0`) · `theme.css` · 뷰 `List` · `KeyValue` · 케이스 두 파일 · `package.json` 판 · `checksums.json` 에 `system-admin@1.0.0` 줄 더함(그때 `b584102a…`) |
+| `4e845ec8` | 이 보고서 첫 판 |
+| («코디네이터가 넘긴 것» 커밋) | build-test 단언 · `shadow.md` 기본값 글자 · 세로 `Divider` · 케이스 하나 · `1.0.0` 체크섬 줄을 새 산출물로(`9a34736b…` — 이 브랜치에서 더한 줄이라 아직 배포 전) · 이 보고서 |
 
 한 커밋으로 묶은 까닭: 소스를 한 바이트라도 바꾸면 산출물 sha256 이 바뀌어, 판 · 체크섬 줄을 따로 두면 사이 커밋마다 체크섬 케이스가 빨강이다.
 sha256 은 두 번 빌드해 같았다(`pnpm --filter @wirebound/system-theme-admin build` → `shasum -a 256 system-themes/admin/dist/*.wbtheme`).
 
 ## 케이스 · 변조
 
-케이스: `system-themes/admin/test/admin.test.ts` 15 · `test/views.test.tsx` 9(둘 다 jsdom) · `build-test/wbtheme.test.ts` 3(더한 것 없음 — 이미 `checkTheme` 오류 0 · 안 쓰는 토큰 0 · 선언 밖 variant 0 을 잰다).
+케이스: `system-themes/admin/test/admin.test.ts` 16 · `test/views.test.tsx` 9(둘 다 jsdom) · `build-test/wbtheme.test.ts` 4(`checkTheme` 오류 0 · 안 쓰는 토큰 0 · 선언 밖 variant 0 에 더해 «빌드 CSS 에 토큰마다 기본값» — 아래 «코디네이터가 넘긴 것» 1). 아래 «먼저 빨강» · 변조 27 은 첫 커밋의 24 케이스에 대한 것이고, 뒤에 더한 둘은 «코디네이터가 넘긴 것» 에 적는다.
 
 **먼저 빨강** — 두 파일을 고치기 전 소스(HEAD 의 `manifest.ts` · `theme.css` · `index.ts` · `theme.tsx` 를 끼움 → 실행 → 백업에서 복원 · `cmp` 같음)에 물림: **24 가운데 9 실패 · 15 통과.** 실패 9 는 값으로 죽었다(판 `'0.1.0'` · `List/featured` 규칙 없음 · `--wb-space-4: 16px` · 고른 탭 규칙 `undefined` · 체크 칸 · 빈 줄 · 막대 · `columns` 행 · 뷰 목록 `DEFAULT_VIEWS`). 통과 15 는 v0 도 가진 성질을 잠그는 것이다(토큰 칸 · `:root` 기본값 · variant id · `!important` · var 정의 · 맨 이름 · fluid · margin auto · Text 스케일 · 기본 뷰와 같은 DOM 둘 · 마커 둘 · 카탈로그 이름 · `default` 규칙 없음).
 
@@ -153,14 +155,44 @@ jsdom 값과 실브라우저 값: 위 케이스는 전부 jsdom(DOM · CSSOM —
 | `pnpm test --maxWorkers=25%` | 370 파일 · **6282 통과 · 1 건너뜀 · 실패 4** · 548.5s. 실패 4 는 전부 **5s 타임아웃** — `apps/web/test/role-access.test.ts` 1 · `apps/web/test/lock/one-verdict.test.ts` 3(소스를 훑는 케이스, admin 과 무관). 그때 부하 평균 125(다섯 트랙 동시). 두 파일만 다시 돌리면 **14 통과 · 실패 0**. 건너뜀 1 은 `log-destination` «Linux `/dev/full`»(macOS) |
 | `pnpm test:browser` | 24 파일 · **89 통과 · 건너뜀 0 · 실패 0** · 341.3s — `canvas-iframe`(«늦게 온 테마 시트» — 단추 `transition` 카나리아) · `theme-canvas` · `theme-settings` · `theme-admin` · `theme-review` 포함. 이 워크트리 Postgres(5447) |
 
+**«코디네이터가 넘긴 것» 을 고친 뒤 다시 돈 것**(마지막 트리):
+
+| 명령 | 결과 |
+|---|---|
+| `pnpm typecheck` | 종료 0 |
+| `pnpm --filter @wirebound/system-theme-admin check` | 갤러리 칸 53 · 오류 없음 |
+| `shots` 두 폭 | `report.json` 문제 0 (1280 페이지 10852px) |
+| `pnpm vitest run system-themes/admin` | 3 파일(unit 2 · build 1) · **29 통과 · 건너뜀 0 · 실패 0** |
+| `pnpm vitest run --project build system-themes/admin` | 1 파일 · **4 통과 · 건너뜀 0 · 실패 0** |
+| api 두 파일 | 2 파일 · **15 통과 · 건너뜀 0 · 실패 0**(체크섬 표의 `9a34736b…` 와 global-setup 빌드가 같음) |
+| `pnpm test --maxWorkers=25%` | 370 파일 · **6287 통과 · 1 건너뜀 · 실패 0** · 287.4s(건너뜀은 `log-destination` «Linux `/dev/full`») |
+| `pnpm vitest run --project build` `canvas-iframe` · `theme-canvas` · `theme-settings` · `theme-admin` · `theme-review` | 5 파일 · **22 통과 · 건너뜀 0 · 실패 0** — `pnpm test:browser` 전량(24 파일)은 첫 커밋 트리에서 돌았고, 뒤의 고침은 admin CSS 의 `Divider` · 그림자 글자뿐이라 admin CSS 에 기대는 다섯만 다시 돌았다 |
+
 ## 테마 밖에서 필요했던 것
 
 고친 테마 밖 파일 0(이 보고서 빼고). 코디네이터가 판정할 것:
 
 1. **레이아웃 성질을 잠그는 실브라우저 케이스가 없다.** «등록 폼 라벨이 입력칸 왼쪽» · «조회 폼이 한 줄» · «390 에서 넘침 0» 은 스크린숏으로만 봤다. `system-themes/admin` 은 playwright-core 에 기대지 않고(새 의존 금지), kit 의 `takeShots` 는 넘침 · 오류만 보고 요소 좌표를 안 낸다. 테마 build-test 가 요소 좌표를 잴 수 있으려면 kit 에 «갤러리 칸을 실 Chromium 에 그려 좌표 조회를 돌려주는» 도구가 필요하다(뼈대 트랙 몫).
 2. **SDK 기본 뷰가 안 읽는 props 가 둘 더 있다** — `Section` `compact`(`--wb-section-paddingYCompact` 같은 자리가 옛 테마에도 있었으나 닿지 않았다) · `SearchForm` `collapsed`. admin 은 옛 모습(둘 다 효과 없음)을 지켜 뷰를 안 냈다. 다섯 테마가 모두 같은 빈칸을 가지면 기본 뷰가 읽게 하는 것이 맞다(SDK 몫).
-3. `Divider` `vertical` 은 높이가 정해지지 않은 부모에서 0 높이다(옛 스킨 `min-height: 100%` 그대로). 갤러리 칸에서는 안 보인다 — 고치려면 갤러리 표본을 가로 `Flex` 안에 두거나 기본 CSS 가 높이를 준다.
-4. 지침: 없음.
+3. 지침: 없음.
+
+## 코디네이터가 넘긴 것 (`q-a6-admin.md`)
+
+### 1. build-test 의 CSS 단언이 빈 글자와 견줬다(saas-marketing 트랙이 찾음)
+
+- **재현(값):** `build-test/wbtheme.test.ts` 의 첫 케이스에 값을 찍는 줄을 임시로 넣고(백업 → 실행 → `cmp` 복원) `pnpm vitest run --project build system-themes/admin/build-test/wbtheme.test.ts` → `{"cssLength":0,"needleLength":0,"themeCssLength":19429}`. build 프로젝트에서 `ADMIN_V0_CSS`(`theme.css?raw`)가 빈 글자라 `toContain('')` — 늘 참이었다(루트 `vitest.config.ts` 의 `css.include` 는 unit 프로젝트에만 있다 — 고치지 않았다).
+- **고친 것:** 그 단언을 걷고 케이스 «빌드 CSS 에 토큰마다 --wb-<키>: <기본값>; 이 있다» 를 세웠다 — 견주는 쪽은 manifest(`MANIFEST.tokens.items`), 카나리아는 빌드 CSS 길이 > 0 · 토큰 수 > 0. `ADMIN_V0_CSS` 가져오기를 뗐다.
+- **새 케이스가 처음부터 빨강이었다 — 값 `['shadow.md']`.** 빌드가 CSS 를 줄이며 `rgba(15,23,42,.10)` 을 `rgba(15,23,42,.1)` 로 바꿔 manifest 기본값과 빌드 CSS 의 글자가 갈렸다(같은 값). manifest · `theme.css` 의 기본값을 줄인 꼴 `.1` 로 맞춰 셋이 같은 글자다 → 초록. 이 차이는 옛 단언으로는 영영 안 보였다.
+
+### 2. `Divider` 세로가 0 높이(portal 트랙이 찾음)
+
+- **재현:** 첫 스크린숏(1280 · 390 모두)에서 «Divider — 세로» 칸이 비어 있었다(위 «스크린숏» 첫 판에 적은 것). 높이가 정해지지 않은 부모에서 `min-height: 100%` 가 0 이다.
+- **고친 것:** portal 과 같은 꼴 — `align-self: stretch` · `width: 1px` · `min-height: 1.5em`(한 줄 높이를 바닥으로, 가로 `Flex` 안에서는 늘어남). 좌우 여백은 안 둔다(`Flex` 의 `gap` 이 준다). 다시 찍은 1280 스크린숏에서 1px × 한 줄 높이 선이 보인다(`report.json` 문제 0, 1280 페이지 10852px).
+- **케이스:** `admin.test.ts` «세로 Divider 의 최소 높이는 백분율이 아니다». 변조 — `min-height: 100%` 로 되돌림 → 그 케이스만 죽음(`expected '100%' not to match /%/`) → 백업 복원 · `cmp` 같음.
+
+### 뒤따른 판
+
+소스가 바뀌어 `1.0.0` 산출물이 바뀌었다 — 두 번 빌드한 sha256 이 같고(`9a34736b…`) 그 값으로 `system-admin@1.0.0` 줄을 고쳤다(`0.1.0` 줄은 그대로). 이 줄은 이 브랜치에서 더한 것이라 배포된 판이 아니다.
 
 ## 띄운 것
 

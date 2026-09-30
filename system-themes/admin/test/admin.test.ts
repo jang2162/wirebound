@@ -170,6 +170,15 @@ describe('system-admin CSS', () => {
     for (const [name, value] of spaces) expect(value.replace(/\s+/g, ' '), name).toBe(`calc(var(--wb-space-unit) * ${name.slice('--wb-space-'.length)})`)
   })
 
+  /** 세로 구분선은 높이가 정해지지 않은 부모 안에서도 보인다 — `min-height` 를 백분율로 두면 그 부모에서 0 이 된다. */
+  it('세로 Divider 의 최소 높이는 백분율이 아니다', () => {
+    const vertical = rules().filter((rule) => rule.selector === '[data-wb-component="Divider"][data-wb-variant="vertical"]')
+    expect(vertical).toHaveLength(1)
+    const minHeight = vertical[0]!.style.getPropertyValue('min-height').trim()
+    expect(minHeight).not.toBe('')
+    expect(minHeight).not.toMatch(/%/)
+  })
+
   /** `Text` 의 variant 는 `role` prop 에서 온다(카탈로그의 `variantFrom`) — 역할마다 타이포 스케일의 제 칸을 건다. */
   it('Text 의 역할마다 제 타이포 스케일을 건다', () => {
     const roles = ['display', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'body', 'caption']

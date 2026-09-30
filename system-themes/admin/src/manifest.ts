@@ -32,7 +32,7 @@ export const MANIFEST: ThemeManifest = {
       'radius.sm': { type: 'length', label: '모서리(작게) — 입력칸 · 단추', group: 'shape', default: '4px' },
       'radius.md': { type: 'length', label: '모서리(중간) — 폼 · 그림', group: 'shape', default: '6px' },
       'radius.lg': { type: 'length', label: '모서리(크게) — 카드', group: 'shape', default: '10px' },
-      'shadow.md': { type: 'shadow', label: '그림자(강조 카드)', group: 'shape', default: '0 4px 12px rgba(15,23,42,.10)' },
+      'shadow.md': { type: 'shadow', label: '그림자(강조 카드)', group: 'shape', default: '0 4px 12px rgba(15,23,42,.1)' },
       'font.body': {
         type: 'font',
         label: '서체',
