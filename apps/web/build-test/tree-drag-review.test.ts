@@ -702,8 +702,13 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
    * 두 사람이 같은 부모를 번갈아 끈다. 메뉴 트리는 남의 변경을 실시간으로 받지 않아(항목 2 «남이 그 페이지를 지우면») 둘째 사람은 옛
    * 차례에서 자리를 셈한다 — 보내는 값은 «옮긴 뒤 차례»(`tree-drop.ts`)라 서버의 지금 차례에 그 번호로 들어간다. 적는 값: 둘째의
    * 뜻(«나1 을 나2 뒤로»)이 서버에서 서는지 · 둘째 화면이 결과를 받는지.
+   *
+   * **`it.fails` 다 — 이월이다**(C2 리뷰 발견 4 · 원래 있던 길 · `docs/superpowers/plans/2026-09-30-c2-fix-report.md` 의 이월 — C4 가
+   * `2026-09-30-c-report.md` 장부로 옮긴다). 단언은 옳은 값(둘째의 뜻이 선다)이고, 지금은 그 값으로 죽는다 — 대응 트랙에서 잰 실패 값:
+   * `second` · `bobSeesAfter` 가 `[나3, 나1, 나2]`(뜻은 `[나3, 나2, 나1]`). 고치면 이 케이스가 빨강으로 알린다 — 그때 `it` 으로 되돌린다.
+   * ⚠️ `it.fails` 는 판 만들기의 실패(폴 시간 초과 등)도 초록으로 받는다 — 값으로 죽는지는 `it` 으로 바꿔 한 번 본다.
    */
-  it('(결함 · 원래 있던 길) 두 사람이 같은 부모를 번갈아 끌면 둘째의 뜻이 서버에 서지 않는다', async () => {
+  it.fails('(이월 · 결함) 두 사람이 같은 부모를 번갈아 끌면 둘째의 뜻이 서버에 서지 않는다', async () => {
     const { projectId, P, ids } = await menuFixture('two-clients', 'editor')
     const aliceTab = await openEditor(P)
     const bobTab = await openEditor(P, 'bob')
