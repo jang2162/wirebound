@@ -3065,6 +3065,30 @@
   font-size: 13px;
 }
 
+/* 묻는 단추(`settings/members-section.tsx` 의 `AskButton`) — «<이름> 제외» 와 `취소` 를 한 칸에 겹쳐 폭을 넓은 쪽으로 둔다. 묻는 동안
+   글자만 `취소` 로 바뀌고 상자는 그대로라 줄이 다시 접히지 않는다 — 접히면 줄 밑의 확정이 묻던 자리로 올라온다. */
+.wb-shell-members-ask {
+  display: inline-grid;
+  justify-items: center;
+}
+
+.wb-shell-members-ask-label {
+  grid-area: 1 / 1;
+}
+
+.wb-shell-members-ask-label[aria-hidden='true'] {
+  visibility: hidden;
+}
+
+/* 제외 확정 — 줄 밑 한 줄(폭 전부)의 오른끝. 첫 줄에 두면 남는 폭에 따라 확정이 묻던 단추 자리로 밀려 온다. **위 여백이 묻던 자리와의
+   거리를 정한다** — 단추 한 높이 이상(«내 API 토큰» 의 `-tokens-confirm` 과 같은 하한). 재는 자: `build-test/members-confirm.test.ts` 의 «거리». */
+.wb-shell-members-confirm {
+  display: flex;
+  flex: 1 1 100%;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
 /* 계정 설정 «내 정보» 의 값(이름 · 이메일) — 읽기만이라 칸이 아니라 글자다. 긴 이메일은 줄을 바꾼다. */
 .wb-shell-account-value {
   overflow-wrap: anywhere;

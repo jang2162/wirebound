@@ -9,9 +9,11 @@
  * - **나를 바꾸면 페이지가 역할을 다시 읽는다**(`onSelfChanged`) — 설정 페이지는 실시간 룸에 없어 권한 바뀜 통지를 못 받는다(에디터
  *   셸만 받는다 — `routes/editor.tsx`의 `roleNotice`). 다시 읽으면 owner 칸(이 절 · «일반» · «테마»)이 새 역할로 닫히고, 나를 뺐으면
  *   다음 조회가 404 라 페이지가 «찾을 수 없음»이 된다. **남이 나를 바꾼 것은 다시 읽기 전까지 모른다** — 서버가 막는다(403 · 404).
- * - **제외는 두 번 누른다** — 그 사람의 그 프로젝트 토큰까지 함께 지워진다(서버). 확정은 연타의 둘째 누름을 버린다(`detail > 1` —
- *   `account/tokens-section.tsx` 의 «더블클릭 한 번이 두 누름을 다 지나면 안 된다»와 같은 겹. 그 파일의 둘째 겹(확정이 묻던 자리에
- *   서지 않음)은 여기서 재지 않았다).
+ * - **제외는 두 번 누른다** — 그 사람의 그 프로젝트 토큰까지 함께 지워진다(서버). `account/tokens-section.tsx` 의 «더블클릭 한 번이
+ *   두 누름을 다 지나면 안 된다»와 같은 두 겹이다. ① 확정은 연타의 둘째 누름을 버린다(`detail > 1` — jsdom 이 잰다). ② 확정이 묻던
+ *   자리에 서지 않는다 — 따로 누른 두 번(각 `detail` 1)은 이 겹만 막는다. 묻던 단추는 그 자리에서 `취소`가 되고(`AskButton` — 폭이
+ *   안 바뀌어 줄이 다시 접히지 않는다), 확정은 줄 밑 한 줄의 오른끝에 단추 한 높이 이상 떨어져 선다(`shell.css` 의
+ *   `-members-confirm`). 재는 자: [Chrome] `build-test/members-confirm.test.ts`.
  *
  * 멤버 줄의 `member.role` 은 **그 멤버의** 역할(보이고 바꿀 값)이고 `member.userId === me` 는 «이 줄이 나인가»다 — 부르는 사람의
  * 권한 판정은 `projectAbilities(project.role)` 하나다. 두 글자 자(`test/role-access.test.ts` 의 `.role` · `test/lock/one-verdict.test.ts` 의
@@ -158,35 +160,53 @@ export function MembersSection(props: { project: ProjectView; onSelfChanged: () 
                 ) : (
                   <span className="wb-shell-members-role">{member.role}</span>
                 )}
-                {manage &&
-                  (confirming === userId ? (
-                    <>
-                      <button className="wb-shell-project-action" type="button" disabled={busy} onClick={() => setConfirming(null)}>
-                        취소
-                      </button>
-                      <button
-                        className="wb-shell-project-danger"
-                        type="button"
-                        disabled={busy}
-                        onClick={confirmClick(() => {
-                          setConfirming(null)
-                          void write(() => api.removeMember(project.id, userId), self)
-                        })}
-                      >
-                        {`${name} 제외 확정`}
-                      </button>
-                    </>
-                  ) : (
-                    <button className="wb-shell-project-action" type="button" disabled={busy} onClick={() => setConfirming(userId)}>
-                      {`${name} 제외`}
+                {manage && (
+                  <AskButton
+                    ask={`${name} 제외`}
+                    asking={confirming === userId}
+                    busy={busy}
+                    onToggle={() => setConfirming(confirming === userId ? null : userId)}
+                  />
+                )}
+                {manage && confirming === userId && (
+                  <span className="wb-shell-members-confirm">
+                    <button
+                      className="wb-shell-project-danger"
+                      type="button"
+                      disabled={busy}
+                      onClick={confirmClick(() => {
+                        setConfirming(null)
+                        void write(() => api.removeMember(project.id, userId), self)
+                      })}
+                    >
+                      {`${name} 제외 확정`}
                     </button>
-                  ))}
+                  </span>
+                )}
               </li>
             )
           })}
         </ul>
       )}
     </section>
+  )
+}
+
+/**
+ * 묻는 단추 — 묻는 동안은 같은 자리 · 같은 폭의 `취소`다. 두 글자를 한 칸에 겹쳐 두고(쓰지 않는 쪽은 `aria-hidden` · 안 보임) 폭을 둘 중
+ * 넓은 쪽으로 둔다 — 글자만 갈아 끼우면 좁은 `취소`로 줄이 다시 접혀 줄 밑의 확정이 묻던 자리로 올라온다(머리말 «제외는 두 번 누른다»).
+ */
+function AskButton(props: { ask: string; asking: boolean; busy: boolean; onToggle: () => void }): ReactElement {
+  const { ask, asking, busy, onToggle } = props
+  return (
+    <button className="wb-shell-project-action wb-shell-members-ask" type="button" disabled={busy} onClick={onToggle}>
+      <span className="wb-shell-members-ask-label" aria-hidden={asking}>
+        {ask}
+      </span>
+      <span className="wb-shell-members-ask-label" aria-hidden={!asking}>
+        취소
+      </span>
+    </button>
   )
 }
 

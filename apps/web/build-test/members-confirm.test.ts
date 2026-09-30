@@ -2,9 +2,10 @@
  * **설정 «멤버» 의 제외 확인은 연타 · 따로 누른 두 번에 지나가지 않는다** — 묻던 단추(«<이름> 제외»)의 왼끝 · 가운데 · 오른끝, 폭 360 ·
  * 390 · 1280, 이름 짧은 판 · 긴 판(C3 리뷰 — `docs/superpowers/plans/2026-09-30-c3-review.md`).
  *
- * 막는 겹은 지금 하나다(`settings/members-section.tsx` 머리말 «제외는 두 번 누른다»): 확정이 `detail > 1` 을 버린다 — jsdom 이 잰다
- * (`test/settings/members-section.test.tsx`). 따로 누른 두 번(각 `detail` 1)은 그 겹을 지나므로, 첫 누름 뒤 **묻던 자리에 무엇이 서는지**
- * 가 그 판을 가른다 — 좌표라 여기서만 잰다(`build-test/tokens-confirm.test.ts` 와 같은 자).
+ * 두 겹이 막는다(`settings/members-section.tsx` 머리말 «제외는 두 번 누른다»): 확정이 `detail > 1` 을 버리고 — jsdom 이 잰다
+ * (`test/settings/members-section.test.tsx`) —, 확정이 묻던 자리에 서지 않는다. 따로 누른 두 번(각 `detail` 1)은 첫 겹을 지나므로, 첫
+ * 누름 뒤 **묻던 자리에 무엇이 서는지**와 **확정이 그 자리에서 얼마나 떨어졌는지**가 그 판을 가른다 — 좌표라 여기서만 잰다
+ * (`build-test/tokens-confirm.test.ts` 와 같은 자).
  *
  * 제외가 정말 도는지는 판마다 카나리아로 본다 — 확인을 열고 따로 한 번 누른 확정은 뺀다. 그것이 0 이면 아래 0 은 빈 자다.
  */
@@ -86,6 +87,34 @@ describe.skipIf(!전제.ok)('멤버 제외 확인', () => {
 
   const settle = (page: Page) => page.waitForTimeout(400)
 
+  /**
+   * **확정은 묻던 자리에서 단추 한 높이 이상 떨어진다**(`shell.css` 의 `-members-confirm`). 겹치지만 않는 거리면 아래 판은 초록이어도
+   * 두 누름 사이 손이 조금만 내려가면 확정에 닿는다(`build-test/tokens-confirm.test.ts` 의 «거리» 와 같은 자).
+   */
+  it.each([360, 390, 1280])('폭 %i — 확정이 묻던 자리에서 단추 한 높이 이상 떨어져 선다(거리)', async (width) => {
+    const rows: string[] = []
+    const { page, load, close } = await tab(width)
+    try {
+      for (const [key, name] of Object.entries(NAMES)) {
+        await load(name)
+        const ask = page.getByRole('button', { name: `${name} 제외`, exact: true })
+        const asked = await ask.boundingBox()
+        if (asked === null) throw new Error(`${name} 제외 단추가 안 보인다`)
+        await ask.click()
+        const confirm = await page.getByRole('button', { name: `${name} 제외 확정`, exact: true }).boundingBox()
+        if (confirm === null) throw new Error(`${key} 확정이 안 보인다`)
+        const dx = Math.max(0, confirm.x - (asked.x + asked.width), asked.x - (confirm.x + confirm.width))
+        const dy = Math.max(0, confirm.y - (asked.y + asked.height), asked.y - (confirm.y + confirm.height))
+        rows.push(`${width} ${key}: 거리 ${Math.round(Math.hypot(dx, dy))} · 단추 높이 ${Math.round(asked.height)}`)
+        expect(Math.round(Math.hypot(dx, dy)), `${width} ${key} — 확정과 묻던 자리의 거리(단추 높이 ${Math.round(asked.height)})`).toBeGreaterThanOrEqual(asked.height - 0.5)
+      }
+    } finally {
+      await close()
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[멤버 확인 · 거리]\n${rows.join('\n')}`)
+  })
+
   /** 첫 누름 뒤 세 점에 무엇이 서는가 — 값으로 적는다(판정은 아래 케이스가 한다). */
   it.each([360, 390, 1280])('폭 %i — 첫 누름 뒤 묻던 자리의 세 점에 서는 것', async (width) => {
     const rows: string[] = []
@@ -96,10 +125,10 @@ describe.skipIf(!전제.ok)('멤버 제외 확인', () => {
           await load(name)
           const [x, y] = (await points(page, `${name} 제외`))[point]
           await page.getByRole('button', { name: `${name} 제외`, exact: true }).click()
-          await page.locator('.wb-shell-project-danger').first().waitFor()
+          await page.getByRole('button', { name: `${name} 제외 확정`, exact: true }).waitFor()
           const under = await page.evaluate(([px, py]) => {
             const el = document.elementFromPoint(px!, py!)
-            return el === null ? '없음' : (el.closest('button')?.textContent ?? el.tagName)
+            return el === null ? '없음' : (el.closest('button')?.innerText ?? el.tagName)
           }, [x, y])
           rows.push(`${width} ${key} ${point}: ${under}`)
         }
