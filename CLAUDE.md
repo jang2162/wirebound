@@ -18,7 +18,7 @@ packages/renderer   스키마 → React 렌더링 — 노드마다 «테마 뷰 
 packages/themes     manifest 검증 · 토큰 CSS · .wbtheme 읽기 · 쓰기 · 패턴 규격 · 전개 · 스냅샷 payload 규격 · 설계 lint
 packages/theme-gallery 카탈로그 × variant 표본 갤러리(kit dev 가 그린다)
 packages/theme-kit  테마 작성 도구 wb-theme — dev · build · 스타터 템플릿(pack-template)
-system-themes/*     저장소 테마(지금 system-admin 첫 판) — pnpm build 가 .wbtheme 로 낸다 · api 가 기동 때 시딩한다 · 판마다 sha256 을 checksums.json 에 적는다
+system-themes/*     저장소 테마(지금 system-admin 첫 판) — pnpm build 가 .wbtheme 로 낸다 · api 가 기동 때 시딩한다 · 판마다 sha256 을 `system-themes/<이름>/checksums.json` 에 적는다(테마마다 제 표)
 packages/exporter   HTML 정적 번들 (후속: PPTX)
 packages/cli        wireb
 packages/mcp        MCP 서버
@@ -27,7 +27,7 @@ apps/api            REST + WebSocket
 Dockerfile · deploy/ 운영 이미지 · 단일 서버 compose (README 「배포하려면」)
 ```
 
-의존 방향은 한 방향이다: `schema` ← `renderer` ← 나머지. `schema`는 zod 외의 런타임 의존을 갖지 않으며 브라우저와 Node 양쪽에서 동작해야 한다.
+의존 방향은 한 방향이다: `schema` ← `renderer` ← 나머지. `packages/test-support` 는 `system-themes/*` 패키지에 기대지 않는다 — `renderer` 의 케이스가 test-support 에 기대고 시스템 테마는 renderer 에 기대어, 고리가 되면 `pnpm build` 의 차례가 깨진다(테마가 kit 보다 먼저 빌드되어 `wb-theme` 을 못 찾는다). `schema`는 zod 외의 런타임 의존을 갖지 않으며 브라우저와 Node 양쪽에서 동작해야 한다.
 
 ## 명령
 
