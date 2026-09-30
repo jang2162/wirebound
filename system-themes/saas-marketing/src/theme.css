@@ -737,16 +737,14 @@
 
 /* ── 반응형 — 폭이 줄면 섹션 리듬 · 카드 열 · 큰 상자의 안쪽 여백을 줄인다. 노드가 나르는 열 수(`Grid` · `KeyValue`)는 건드리지
    않는다. 뒤에 와서 같은 특이도의 variant 규칙(히어로 여백)을 이긴다. ─────────────────────────────────────────────── */
-@media (max-width: 1024px) {
-  [data-wb-component="List"][data-wb-structure="cardGrid"] {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--wb-space-6);
-  }
-}
 @media (max-width: 768px) {
   [data-wb-component="Section"][data-wb-structure="splitBg"] {
     padding-top: var(--wb-space-12);
     padding-bottom: var(--wb-space-12);
+  }
+  [data-wb-component="List"][data-wb-structure="cardGrid"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--wb-space-6);
   }
 }
 @media (max-width: 640px) {
