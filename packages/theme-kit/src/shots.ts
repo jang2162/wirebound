@@ -26,10 +26,19 @@ export interface ShotWidthReport {
   /** `console.error` · 잡히지 않은 예외. */
   consoleErrors: string[]
   wbErrors: { item: string | null; message: string }[]
-  /** 창 폭을 넘는 요소 — 넘친 조상이 이미 든 것은 뺀다(뿌리만). 스크롤 · 잘림(`overflow-x` 가 `visible` 이 아닌) 조상 안에 갇힌 것도 뺀다. */
+  /**
+   * 창 폭을 넘는 요소 — 넘친 조상이 이미 든 것은 뺀다(뿌리만). 스크롤 · 잘림(`overflow-x` 가 `visible` 이 아닌) 조상 안에 갇힌 것도 뺀다.
+   * 그리고 **창이나 잘라 숨기는 조상 밖으로 나간 글자 노드**(`element` 가 `… "글자"` 꼴) — 끊을 자리 없는 낱말은 제 요소 상자 안에 선 채
+   * 글자만 넘치고, `overflow: hidden` 조상은 그 글자를 잘라 숨겨 요소 상자로는 안 보인다.
+   */
   overflow: ShotOverflow[]
   pageScrollWidth: number
   pageClientWidth: number
+  /**
+   * 갤러리 프레임의 `document.compatMode`. 번들 · PPTX 는 표준 모드(`CSS1Compat`)라 다른 모드면 이 판의 레이아웃이 그 판과 갈린다 — 그때
+   * `shotsProblems` 가 적는다.
+   */
+  compatMode: string
 }
 
 export interface ShotsReport {
@@ -130,11 +139,45 @@ function measure(): Omit<ShotWidthReport, 'width' | 'pngs' | 'pageHeight' | 'con
     if (el.parentElement !== null && overflowing.has(el.parentElement)) continue
     overflow.push({ item: itemOf(el), element: describe(el), left: Math.round(rect.left), right: Math.round(rect.right) })
   }
+  // 글자 노드 — 요소 상자는 안 넘치고 글자만 넘친다. 잘라 숨기는 조상(`hidden` · `clip`)은 그 글자를 지우므로 그 조상의 상자 밖도 넘침이다.
+  // 스크롤 조상(`auto` · `scroll`)은 닿을 수 있고 `text-overflow` 로 자른 것은 작성자가 고른 것이라 뺀다. 넘친 요소 뿌리 안의 글자는 이미 들었다.
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+  for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+    const parent = text.parentElement
+    const content = (text.textContent ?? '').trim()
+    if (parent === null || content === '') continue
+    let inside = false
+    for (let up: Element | null = parent; up !== null && !inside; up = up.parentElement) inside = overflowing.has(up)
+    if (inside) continue
+    const range = document.createRange()
+    range.selectNodeContents(text)
+    const rects = [...range.getClientRects()].filter((r) => r.width > 0 || r.height > 0)
+    if (rects.length === 0) continue
+    const left = Math.min(...rects.map((r) => r.left))
+    const right = Math.max(...rects.map((r) => r.right))
+    let low = 0
+    let high = vw
+    let reachable = false
+    for (let up: Element | null = parent; up !== null && up !== document.body && !reachable; up = up.parentElement) {
+      const style = getComputedStyle(up)
+      if (style.overflowX === 'visible') continue
+      if (style.overflowX === 'auto' || style.overflowX === 'scroll' || style.textOverflow !== 'clip') {
+        reachable = true
+        continue
+      }
+      const box = up.getBoundingClientRect()
+      low = Math.max(low, box.left)
+      high = Math.min(high, box.right)
+    }
+    if (reachable || (right <= high + 0.5 && left >= low - 0.5)) continue
+    overflow.push({ item: itemOf(parent), element: `${describe(parent)} "${content.slice(0, 24)}"`, left: Math.round(left), right: Math.round(right) })
+  }
   return {
     wbErrors: [...document.querySelectorAll('[data-wb-error]')].map((el) => ({ item: itemOf(el), message: el.getAttribute('data-wb-error') ?? '' })),
     overflow,
     pageScrollWidth: document.documentElement.scrollWidth,
     pageClientWidth: vw,
+    compatMode: document.compatMode,
   }
 }
 
@@ -208,6 +251,7 @@ export async function takeShots(opts: {
 export function shotsProblems(report: ShotsReport): string[] {
   const lines: string[] = []
   for (const w of report.widths) {
+    if (w.compatMode !== 'CSS1Compat') lines.push(`✗ ${w.width}px 문서 모드 ${w.compatMode} — 번들 · PPTX(표준 모드)와 레이아웃이 갈립니다`)
     for (const line of w.consoleErrors) lines.push(`✗ ${w.width}px 콘솔: ${line}`)
     for (const e of w.wbErrors) lines.push(`✗ ${w.width}px 폴백 ${e.item ?? '(칸 밖)'}: ${e.message}`)
     for (const o of w.overflow) lines.push(`✗ ${w.width}px 넘침 ${o.item ?? '(칸 밖)'}: ${o.element} (${o.left}–${o.right}px)`)

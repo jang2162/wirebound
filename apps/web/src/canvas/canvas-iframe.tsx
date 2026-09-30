@@ -66,8 +66,10 @@ export function CanvasIframe(props: {
     const doc = iframe?.contentDocument
     const win = iframe?.contentWindow
     if (!doc || !win) return
-    // about:blank 은 브라우저마다 빈 body 를 갖기도, 안 갖기도 한다.
-    if (doc.body === null) {
+    // about:blank 은 브라우저마다 빈 body 를 갖기도, 안 갖기도 한다. body 를 가진 판(Chromium)은 doctype 이 없어 quirks 모드
+    // (`BackCompat`)다 — 번들 · PPTX(표준 모드)와 레이아웃이 갈린다(quirks 의 `form` 아래 1em · 줄 높이 셈 · 백분율 높이). 그 판도
+    // 다시 써서 늘 표준 모드로 세운다(`build-test/theme-system-review.test.ts` 「캔버스 = 번들」).
+    if (doc.body === null || doc.compatMode !== 'CSS1Compat') {
       doc.open()
       doc.write('<!doctype html><html><head></head><body></body></html>')
       doc.close()

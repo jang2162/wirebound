@@ -54,7 +54,10 @@ describe('Card — 주의 상자', () => {
 
   /** 표시 자리가 왼쪽 위에 선다 — 마커를 거기 두면 주의 상자의 종류(색 표시)를 가린다. */
   it('주의 상자의 마커는 오른쪽 위다 · 보통 카드는 기본 자리다', () => {
-    expect(draw('Card', {}, 'default').getAttribute('data-wb-marker')).toBe('top-end')
+    const card = draw('Card', {}, 'default')
+    expect(card.getAttribute('data-wb-marker')).toBe('top-end')
+    // 전체 폭 카드에서 마커가 문서 안에 서게 들인다(`src/views/Card.tsx` 머리말).
+    expect(card.getAttribute('data-wb-marker-offset')).toBe('-16,0')
     cleanup()
     expect(draw('Card', {}, 'featured').getAttribute('data-wb-marker')).toBe('top-end')
     cleanup()

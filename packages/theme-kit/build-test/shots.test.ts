@@ -48,6 +48,7 @@ interface Report {
     overflow: { item: string | null; element: string; left: number; right: number }[]
     pageScrollWidth: number
     pageClientWidth: number
+    compatMode: string
   }[]
 }
 
@@ -88,6 +89,7 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
       expect(w.pageHeight).toBeGreaterThan(2000)
       expect(w.consoleErrors).toEqual([])
       expect(w.wbErrors).toEqual([])
+      expect(w.compatMode).toBe('CSS1Compat')
     }
     // 종료 코드는 넘침까지 센다 — 넘침이 없으면 0 이다.
     expect(status).toBe(report.widths.every((w) => w.overflow.length === 0) ? 0 : 1)
@@ -124,6 +126,30 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
     expect(w!.wbErrors.length).toBeGreaterThan(0)
     expect(w!.wbErrors.every((entry) => entry.item?.startsWith('Tabs/') && entry.message.includes('탭이 터졌다'))).toBe(true)
     expect(w!.consoleErrors.some((line) => line.includes('탭이 터졌다'))).toBe(true)
+  })
+
+  /**
+   * 끊을 자리 없는 낱말은 요소 상자를 안 넘기고 글자만 넘긴다 — 잘라 숨기는 조상이 있으면 문서 폭(`scrollWidth`)에도 안 뜬다. 갤러리의
+   * 긴 낱말 표본(`Text — 긴 낱말` · `KeyValue` 의 긴 값)을 SDK 기본 CSS 의 `overflow-wrap` 을 끈 채 뿌리를 잘라 숨기게 그린다.
+   */
+  it('잘려 숨는 글자도 넘침으로 적는다 — 글자 노드의 사각으로 잰다', () => {
+    const root = mkdtempSync(join(TMP, 'shots-longword-'))
+    cpSync(FIXTURE, root, { recursive: true })
+    appendFileSync(
+      join(root, 'src/theme.css'),
+      '\nbody [data-wb-component="Text"], body [data-wb-component="KeyValue"] { overflow-wrap: normal; }\nbody [data-wb-component="Page"] { overflow: hidden; }\n',
+    )
+    const dir = join(out, 'longword')
+    const { status, out: printed } = shots(root, ['--out', dir, '--widths', '390', '--browser', browser.path!])
+    expect(status, printed).toBe(1)
+    const [w] = (JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as Report).widths
+    // 문서 폭으로는 안 보인다 — 잘라 숨긴 뿌리 안이다.
+    expect(w!.pageScrollWidth).toBe(w!.pageClientWidth)
+    expect(w!.overflow.length, printed).toBeGreaterThan(0)
+    // 요소 상자는 하나도 안 넘친다 — 적힌 것은 전부 글자 노드다.
+    expect(w!.overflow.every((entry) => entry.element.includes(' "')), printed).toBe(true)
+    expect(w!.overflow.some((entry) => entry.item?.startsWith('Text/') && entry.element.includes('"문의 hong.gildong')), printed).toBe(true)
+    expect(w!.overflow.some((entry) => entry.item?.startsWith('KeyValue/') && entry.element.includes('"hong.gildong')), printed).toBe(true)
   })
 
   it('Chromium 을 못 띄우면 까닭과 고치는 법을 말하고 1 로 끝난다 — 아무것도 안 쓴다', () => {
