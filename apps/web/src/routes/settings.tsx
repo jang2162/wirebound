@@ -1,9 +1,9 @@
 /**
  * **프로젝트 설정** — `/projects/:projectId/settings`. 셸 밖 라우트다(`routes/tokens.tsx` 와 같은 자리): 설정은 캔버스 · 트리를 쓰지 않고,
- * 셸에 두면 편집 상태(스토어 · 잠금 · 룸)를 세운 채 폼 하나를 보게 된다. 에디터 머리의 «설정» 과 목록 줄의 «설정» 이 여기로 온다.
+ * 셸에 두면 편집 상태(스토어 · 잠금 · 룸)를 세운 채 폼 하나를 보게 된다. 에디터 머리의 «설정» 과 목록 줄의 «설정» 이 여기로 온다. 머리의 «에디터로 돌아가기» 가 그 프로젝트의 에디터로 간다.
  *
  * 절은 **«일반»**(이름 · 슬러그 · 설명 — `settings/general-section.tsx`) · **«테마»**(고르기 · 토큰 편집 · 미리보기 — `settings/theme-section.tsx`) ·
- * **«멤버»**(`settings/members-section.tsx`)를 위아래로 둔다. 화면 루트는 `.wb-shell-settings` 다 — 미리보기(갤러리 iframe)가 들어 목록 화면보다 넓다(`shell.css` 의 팔레트 블록).
+ * **«멤버»**(`settings/members-section.tsx`) · **«위험 구역»**(프로젝트 삭제 · owner 만 — `settings/danger-section.tsx`)을 위아래로 둔다. 화면 루트는 `.wb-shell-settings` 다 — 미리보기(갤러리 iframe)가 들어 목록 화면보다 넓다(`shell.css` 의 팔레트 블록).
  *
  * 역할은 `getProject` 의 응답에서 읽는다. owner 가 아니면 칸이 읽기 전용이다 — 판정은 절마다 `projectAbilities` 로 한다.
  */
@@ -14,6 +14,7 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { ProjectView } from '../api/types'
 import { SessionMenu } from '../session/session-menu'
 import { GeneralSection } from '../settings/general-section'
+import { DangerSection } from '../settings/danger-section'
 import { MembersSection } from '../settings/members-section'
 import { ThemeSection } from '../settings/theme-section'
 
@@ -59,7 +60,7 @@ export function SettingsRoute(): ReactElement {
       <p className="wb-shell-settings-nav">
         {state.status === 'ready' && (
           <Link className="wb-shell-tokens-back" to={`/projects/${state.project.id}`}>
-            편집기로
+            에디터로 돌아가기
           </Link>
         )}
         <Link className="wb-shell-tokens-back" to="/">
@@ -89,6 +90,7 @@ export function SettingsRoute(): ReactElement {
       {state.status === 'ready' && (
         <MembersSection key={`members-${state.project.id}`} project={state.project} onSelfChanged={() => setReread((n) => n + 1)} />
       )}
+      {state.status === 'ready' && <DangerSection key={`danger-${state.project.id}`} project={state.project} />}
     </main>
   )
 }

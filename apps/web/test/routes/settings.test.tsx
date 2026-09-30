@@ -43,10 +43,10 @@ function type(name: string, value: string): void {
 }
 
 describe('설정 페이지 — 뼈대', () => {
-  it('머리에 프로젝트 이름 · 편집기로 · 프로젝트 목록, «일반» 칸 셋이 지금 값이다', async () => {
+  it('머리에 프로젝트 이름 · 에디터로 돌아가기 · 프로젝트 목록, «일반» 칸 셋이 지금 값이다', async () => {
     renderSettings()
     await screen.findByRole('heading', { name: '관리자 콘솔 설정' })
-    expect(screen.getByRole('link', { name: '편집기로' }).getAttribute('href')).toBe('/projects/p-1')
+    expect(screen.getByRole('link', { name: '에디터로 돌아가기' }).getAttribute('href')).toBe('/projects/p-1')
     expect(screen.getByRole('link', { name: '프로젝트 목록' }).getAttribute('href')).toBe('/')
     expect(field('이름').value).toBe('관리자 콘솔')
     expect(field('슬러그').value).toBe('admin')

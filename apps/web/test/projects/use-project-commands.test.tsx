@@ -48,7 +48,6 @@ function Probe(): ReactElement {
           : 'none'}
       </span>
       <span data-testid="form">{commands.form === null ? 'closed' : 'open'}</span>
-      <span data-testid="confirm">{commands.confirmingDelete?.id ?? 'none'}</span>
       <span data-testid="names">
         {commands.state.status === 'ready' ? commands.state.projects.map((p) => p.name).join(',') : ''}
       </span>
@@ -127,8 +126,8 @@ describe('useProjectCommands — 뼈대', () => {
    * `요청이 나가 있는 동안 …`)는 버튼의 `disabled`를 재는데 그것은 `busy`(state)가 만든다 —
    * 실제로 막는 `inFlight`(ref)를 지워도 그 케이스는 살아남는다(실측: 화면 케이스는 하나도 안 죽는다).
    *
-   * **이 자리의 고장 방식:** 여는 조작 하나가 잠기지 않으면 `busy` 중에 삭제 확인이 걸리고,
-   * 잠금이 풀린 뒤 클릭 한 번에 지워진다.
+   * **이 자리의 고장 방식:** 여는 조작 하나가 잠기지 않으면 `busy` 중에 폼이 열리고, 그때 친 값은 요청도 못 나가고 조용히
+   * 사라진다(`use-project-commands.tsx` 의 `openCreate`).
    */
   it('같은 tick에 두 번 제출해도 요청은 한 번이다', async () => {
     // **같은 렌더의 `commands`를 붙잡고 두 번 부른다.** `busy`는 다음 렌더에야 `true`가
@@ -203,48 +202,5 @@ describe('useProjectCommands — 뼈대', () => {
       grab().openCreate()
     })
     expect(read('form')).toBe('open')
-  })
-
-  it('조작이 나가 있는 동안에는 삭제 확인도 열리지 않는다', async () => {
-    // **이 자리의 고장 방식:** 여는 조작 하나가 잠기지 않으면 `busy` 중에 확인이
-    // 걸리고, **잠금이 풀린 뒤 클릭 한 번에 지워진다.**
-    //
-    // **화면 케이스로는 못 잡는다** — 버튼의 `disabled`는 `busy`(state)가 만들므로 잠금(`ref`)을
-    // 지워도 살아남는다(실측: `askDelete`의 가드를 지워도 화면 케이스는 전부 통과한다).
-    let release = (): void => {}
-    const gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    mount(
-      fakeApi({
-        listProjects: async () => [project()],
-        createProject: async () => {
-          await gate
-          return project({ id: 'p-new' })
-        },
-      }),
-    )
-    await waitFor(() => expect(read('status')).toBe('ready'))
-
-    act(() => {
-      grab().openCreate()
-    })
-    act(() => {
-      grab().submitForm({ name: '가', slug: 'ga', description: '' })
-    })
-    await waitFor(() => expect(read('busy')).toBe('true'))
-
-    act(() => {
-      grab().askDelete(project())
-    })
-    expect(read('confirm')).toBe('none')
-
-    release()
-    await waitFor(() => expect(read('busy')).toBe('false'))
-    // 잠금이 풀리면 열린다 — **영구 차단이 아니라 잠금이다.**
-    act(() => {
-      grab().askDelete(project())
-    })
-    expect(read('confirm')).toBe('p-1')
   })
 })

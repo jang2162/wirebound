@@ -1,7 +1,7 @@
 /**
  * **판정과 화면의 배선만 본다.** `projectAbilities`를 가짜로 바꿔 `rename`·`remove`에
- * **서로 다른 값**을 주고, 두 화면이 그 둘을 각각 옳은 자리에 연결했는지 잰다 — `remove` 는 목록 줄의 삭제 단추, `rename` 은
- * 설정 페이지 «일반» 절의 칸 · 저장 단추다.
+ * **서로 다른 값**을 주고, 설정 페이지가 그 둘을 각각 옳은 자리에 연결했는지 잰다 — `remove` 는 «위험 구역» 절(프로젝트 삭제),
+ * `rename` 은 «일반» 절의 칸 · 저장 단추다. 목록 줄은 어느 값에도 삭제를 그리지 않는다.
  *
  * **왜 따로 있나.** 오늘 서버에는 한쪽만 열리는 역할이 없어서 `projectAbilities`는 두 필드에
  * 늘 같은 값을 낸다 — 그래서 `project-crud.test.tsx`의 케이스들로는 **두 배선을 맞바꿔도
@@ -50,6 +50,7 @@ async function renderSettings(next: { rename: boolean; remove: boolean }): Promi
       getProject: async () => PROJECT,
       getProjectTheme: async () => adminThemeView(),
       listThemePackages: async () => [],
+      listMembers: async () => [],
     }),
     route: '/projects/p-1/settings',
   })
@@ -67,44 +68,45 @@ function generalOpen(): boolean {
   return editable
 }
 
-describe('판정과 화면의 배선', () => {
-  it('rename만 열리면 목록에 삭제 버튼이 없다', async () => {
-    await renderList({ rename: true, remove: false })
-    expect(has('관리자 콘솔 삭제')).toBe(false)
-  })
+/** 설정 «위험 구역» 이 섰는가 — 절과 그 단추가 함께 있다. */
+function dangerOpen(): boolean {
+  const section = screen.queryByRole('region', { name: '위험 구역' })
+  expect(section !== null).toBe(has('프로젝트 삭제'))
+  return section !== null
+}
 
-  it('rename만 열리면 설정 «일반» 이 열린다', async () => {
+describe('판정과 화면의 배선', () => {
+  it('rename만 열리면 설정 «일반» 이 열리고 «위험 구역» 은 없다', async () => {
     await renderSettings({ rename: true, remove: false })
     expect(generalOpen()).toBe(true)
+    expect(dangerOpen()).toBe(false)
   })
 
-  it('remove만 열리면 목록에 삭제 버튼이 있다', async () => {
-    await renderList({ rename: false, remove: true })
-    expect(has('관리자 콘솔 삭제')).toBe(true)
-  })
-
-  it('remove만 열리면 설정 «일반» 은 읽기 전용이다', async () => {
+  it('remove만 열리면 설정 «일반» 은 읽기 전용이고 «위험 구역» 이 선다', async () => {
     await renderSettings({ rename: false, remove: true })
     expect(generalOpen()).toBe(false)
+    expect(await screen.findByRole('region', { name: '위험 구역' })).toBeDefined()
+    expect(dangerOpen()).toBe(true)
   })
 
-  it('둘 다 닫히면 삭제 버튼이 없다', async () => {
+  it('둘 다 닫히면 둘 다 없다', async () => {
     // 양성·음성 대조. 이것이 없으면 "늘 rename만 본다"는 구현도 위 둘 중 하나를 통과한다.
-    await renderList({ rename: false, remove: false })
-    expect(has('관리자 콘솔 삭제')).toBe(false)
-  })
-
-  it('둘 다 열리면 삭제 버튼이 있다', async () => {
-    await renderList({ rename: true, remove: true })
-    expect(has('관리자 콘솔 삭제')).toBe(true)
+    await renderSettings({ rename: false, remove: false })
+    expect(generalOpen()).toBe(false)
+    expect(dangerOpen()).toBe(false)
   })
 
   it('remove만 열렸을 때 삭제 확인까지 닿는다', async () => {
-    // 버튼이 있는 것과 그것이 삭제 경로를 여는 것은 다르다.
-    await renderList({ rename: false, remove: true })
-
-    fireEvent.click(screen.getByRole('button', { name: '관리자 콘솔 삭제' }))
-
+    // 절이 있는 것과 그것이 삭제 경로를 여는 것은 다르다.
+    await renderSettings({ rename: false, remove: true })
+    fireEvent.click(screen.getByRole('button', { name: '프로젝트 삭제' }))
     expect(screen.getByLabelText('삭제하려면 프로젝트 이름을 입력하세요')).toBeDefined()
   })
+
+  for (const next of [{ rename: true, remove: true }, { rename: false, remove: true }]) {
+    it(`목록 줄은 remove 가 열려도 삭제를 그리지 않는다 — ${JSON.stringify(next)}`, async () => {
+      await renderList(next)
+      expect(has('관리자 콘솔 삭제')).toBe(false)
+    })
+  }
 })

@@ -112,7 +112,8 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   createProject: ['../src/projects/use-project-commands.tsx'],
   // 설정 페이지의 «일반» 절 하나다 — 목록 줄의 인라인 수정은 없다(`routes/project-list.tsx` 머리말).
   updateProject: ['../src/settings/general-section.tsx'],
-  deleteProject: ['../src/projects/use-project-commands.tsx'],
+  // 설정 페이지의 «위험 구역» 하나다 — 목록 줄의 삭제는 없다(`routes/project-list.tsx` 머리말).
+  deleteProject: ['../src/settings/danger-section.tsx'],
   getTree: ['../src/tree/use-tree-commands.tsx'],
   createMenu: ['../src/tree/use-tree-commands.tsx'],
   updateMenu: ['../src/tree/use-tree-commands.tsx'],

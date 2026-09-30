@@ -1,19 +1,16 @@
 /**
  * 로그인 다음 화면. 내가 속한 프로젝트를 늘어놓고, 하나를 고르면 에디터로 들어간다.
- * **여기서 프로젝트를 만들고 지운다** — 이름 · 슬러그 · 설명을 고치는 것은 줄의 «설정» 이 여는 설정 페이지다(`routes/settings.tsx`).
+ * **여기서 프로젝트를 만든다** — 이름 · 슬러그 · 설명을 고치고 프로젝트를 지우는 것은 줄의 «설정» 이 여는 설정 페이지다
+ * (`routes/settings.tsx` — 삭제는 그 «위험 구역» 절).
  *
  * **조회·잠금·조작은 `projects/use-project-commands.tsx`가 갖는다.** 이 파일은 그 결과를
  * 그리기만 한다 — 판정이 컴포넌트 안에 흩어지면 케이스가 화면을 지나야만 재진다.
- *
- * **삭제 확인은 `projects/delete-confirm.tsx`의 `DeleteConfirm`이 그 항목 자리에 연다.**
  */
 import type { ReactElement } from 'react'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
-import { DeleteConfirm } from '../projects/delete-confirm'
-import { projectAbilities } from '../projects/project-actions'
 import { ProjectForm } from '../projects/project-form'
-import { useProjectCommands, type ProjectCommands } from '../projects/use-project-commands'
+import { useProjectCommands } from '../projects/use-project-commands'
 import { useSessionUser } from '../session/session-context'
 import { SessionNotices, useLogout } from '../session/session-menu'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
@@ -107,7 +104,7 @@ export function ProjectListRoute(): ReactElement {
         ) : (
           <ul className="wb-shell-project-items">
             {state.projects.map((project) => (
-              <ProjectRow key={project.id} project={project} commands={commands} />
+              <ProjectRow key={project.id} project={project} />
             ))}
           </ul>
         ))}
@@ -116,14 +113,10 @@ export function ProjectListRoute(): ReactElement {
 }
 
 /**
- * 목록의 한 줄. **역할 판정을 여기서 다시 하지 않는다** — `projectAbilities` 하나가 그것을
- * 갖는다. **`.role`은 `projectAbilities`의 인자 자리에서만 읽어야** 판정이 흩어지지 않는다
- * (`test/role-access.test.ts`가 센다).
+ * 목록의 한 줄 — 이름(에디터로) · 설명 · «설정». **역할로 가르는 것이 없다** — 줄마다 같은 둘이다(설정 페이지가 역할대로 열고 닫는다).
  */
-function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }): ReactElement {
-  const { project, commands } = props
-  const abilities = projectAbilities(project.role)
-  const confirming = commands.confirmingDelete?.id === project.id
+function ProjectRow(props: { project: ProjectDetail }): ReactElement {
+  const { project } = props
 
   return (
     <li className="wb-shell-project-item">
@@ -141,33 +134,6 @@ function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }
       <Link className="wb-shell-project-settings" to={`/projects/${project.id}/settings`} aria-label={`${project.name} 설정`}>
         설정
       </Link>
-
-      {/* **`owner`가 아니면 버튼 자체가 없다** — `editor`·`viewer`는 `DELETE`가 403이다(`projects/project-actions.ts` 머리말의
-          서버 응답 표). 비활성으로 두지 않고 아예 그리지 않는 것은, 이 화면에서 역할이 바뀌는 길이 없어 "지금은 못 하지만 곧 될
-          수도 있다"가 아니기 때문이다. */}
-      {abilities.remove && (
-        <button
-          className="wb-shell-project-action"
-          type="button"
-          disabled={commands.busy}
-          onClick={() => commands.askDelete(project)}
-        >
-          {`${project.name} 삭제`}
-        </button>
-      )}
-
-      {/* **`key`를 주지 않는다.** *"`key`가 있어야 다른 항목으로 옮길 때 친 이름이
-          사라진다"*는 거짓이다: 각 `DeleteConfirm`은 서로 다른 `<li>`(그쪽이 `key={project.id}`를
-          갖는다) 안에 있어, 항목을 옮기면 그 서브트리째 언마운트되고 친 이름도 사라진다.
-          여기 `key`를 주는 것은 **`<li>`의 `key`가 이미 하는 일을 한 겹 더 적는 것이다.** */}
-      {confirming && (
-        <DeleteConfirm
-          project={project}
-          busy={commands.busy}
-          onConfirm={() => commands.confirmDelete(project)}
-          onCancel={commands.cancelDelete}
-        />
-      )}
     </li>
   )
 }

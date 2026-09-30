@@ -1,5 +1,6 @@
 /**
- * 프로젝트 목록의 조회·잠금·조작을 묶는다. **화면이 부르는 유일한 관문이다.**
+ * 프로젝트 목록의 조회·잠금·조작(만들기)을 묶는다. **화면이 부르는 유일한 관문이다.** 삭제는 설정 페이지의 «위험 구역»이다
+ * (`settings/danger-section.tsx`).
  *
  * **`tree/use-tree-commands.tsx`와 같은 경로다:** 요청 하나 → 성공하면
  * 목록 재조회, 낙관 적용·undo 없음. 둘을 공유하지 않는 것은 보는 것이 다르기 때문이다 —
@@ -14,14 +15,14 @@
  *
  * ## 표면의 분류 — **여는 것도 잠근다**
  *
- * **여는 조작 하나가 잠기지 않으면** 사고가 난다: `busy` 중에 삭제 확인이 걸리고,
- * 잠금이 풀린 뒤 클릭 한 번에 지워진다. 그래서 표면을 셋으로 나눠 **어느 쪽인지 정해서 붙인다.**
+ * **여는 조작 하나가 잠기지 않으면** 사고가 난다: `busy` 중에 폼이 열리고, 그때 친 값은 요청도 못 나가고 조용히
+ * 사라진다(`openCreate`). 그래서 표면을 셋으로 나눠 **어느 쪽인지 정해서 붙인다.**
  *
  * | 갈래 | 무엇 | 잠금 |
  * |---|---|---|
- * | **요청** | `submitForm` · `confirmDelete` | `run`이 `inFlight`로 막는다 |
- * | **여는 것** | `openCreate` · `askDelete` | **각자 `inFlight`를 본다** |
- * | **닫는 것** | `closeForm` · `cancelDelete` | 막지 않는다 — 닫는 것은 잠금 중에도 안전하다 |
+ * | **요청** | `submitForm` | `run`이 `inFlight`로 막는다 |
+ * | **여는 것** | `openCreate` | **`inFlight`를 본다** |
+ * | **닫는 것** | `closeForm` | 막지 않는다 — 닫는 것은 잠금 중에도 안전하다 |
  *
  * **닫는 것을 잠그지 않는 근거:** 잠그면 요청이 나가 있는 동안 사용자가 폼을 못 닫는다.
  * 닫아도 나간 요청은 그대로 진행되고, 성공하면 재조회가 목록을 맞춘다.
@@ -83,11 +84,6 @@ export interface ProjectCommands {
   openCreate: () => void
   closeForm: () => void
   submitForm: (values: ProjectFormValues) => void
-  /** 삭제 확인이 열린 프로젝트. 닫혀 있으면 `null`. **하나뿐이다.** */
-  confirmingDelete: ProjectDetail | null
-  askDelete: (project: ProjectDetail) => void
-  cancelDelete: () => void
-  confirmDelete: (project: ProjectDetail) => void
 }
 
 export function useProjectCommands(): ProjectCommands {
@@ -114,12 +110,6 @@ export function useProjectCommands(): ProjectCommands {
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const [form, setForm] = useState<ProjectFormState | null>(null)
-  /**
-   * **확인은 하나뿐이다.** 배열이 아니라 값 하나인 것이 요점이다 — 둘이 동시에 열리면
-   * 사용자가 확인한 것과 지워지는 것이 달라진다. 다른 항목의 삭제를 시작하면 이 값이 그대로
-   * 대체되므로 앞의 확인이 저절로 닫힌다.
-   */
-  const [confirmingDelete, setConfirmingDelete] = useState<ProjectDetail | null>(null)
   /**
    * 만든 프로젝트의 id를 `run`의 `after`까지 나르는 자리.
    *
@@ -216,9 +206,6 @@ export function useProjectCommands(): ProjectCommands {
   function openCreate(): void {
     if (inFlight.current) return
     setFailure(null)
-    // **다른 조작을 시작하면 확인이 닫힌다.** 열어 둔 채로 폼을 쓰면 확인이 어느 항목에
-    // 붙어 있는지가 화면에서 흐려진다.
-    setConfirmingDelete(null)
     setForm({ kind: 'create' })
   }
 
@@ -269,47 +256,6 @@ export function useProjectCommands(): ProjectCommands {
     )
   }
 
-  /**
-   * 삭제 확인을 연다. **`openCreate`와 같은 잠금이다 — 머리말의 사고가 정확히 이 자리다:**
-   * 여는 조작 하나가 잠기지 않으면 `busy` 중에 확인이 걸리고, **잠금이 풀린 뒤 클릭 한 번에
-   * 지워진다.**
-   *
-   * **열려 있던 폼을 함께 닫는다.** 다른 항목의 확인은 이 값이 대체되며 닫히고, **친
-   * 이름도 함께 사라진다** — 확인이 그 항목의 `<li>` 안에 있어 항목을 옮기면 서브트리째
-   * 언마운트되기 때문이다.
-   */
-  function askDelete(project: ProjectDetail): void {
-    if (inFlight.current) return
-    setFailure(null)
-    setForm(null)
-    setConfirmingDelete(project)
-  }
-
-  /** 확인을 닫는다. `closeForm`과 같은 이유로 잠그지 않는다. */
-  function cancelDelete(): void {
-    setConfirmingDelete(null)
-  }
-
-  /**
-   * 삭제를 확정한다. **확인을 지나야만 닿는다** — 화면이 `confirmingDelete`일 때만 이 버튼을
-   * 그리고, 그 버튼은 이름이 정확히 일치할 때만 활성이다.
-   *
-   * **여기서 이름을 다시 대조하지 않는다.** 대조는 화면이 하고(입력값을 그쪽이 갖는다) 이
-   * 함수는 그 판정을 신뢰한다 — 훅이 입력값까지 들면 화면 상태가 두 곳에 생긴다.
-   * **그래서 훅 API로 이 함수를 직접 부르면 확인 없이 지워진다** — 화면이 그리는 경로에는
-   * 그 자리가 없다는 것을 적어 둔다.
-   */
-  function confirmDelete(project: ProjectDetail): void {
-    void run(
-      async () => {
-        await api.deleteProject(project.id)
-      },
-      () => {
-        setConfirmingDelete(null)
-      },
-    )
-  }
-
   return {
     state,
     busy,
@@ -318,9 +264,5 @@ export function useProjectCommands(): ProjectCommands {
     openCreate,
     closeForm,
     submitForm,
-    confirmingDelete,
-    askDelete,
-    cancelDelete,
-    confirmDelete,
   }
 }

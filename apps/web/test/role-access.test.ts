@@ -70,7 +70,6 @@ describe('역할을 읽는 자리', () => {
     // 자리: 새 화면이 역할을 보게 되면 여기가 죽는다.
     expect([...new Set(reads.map((r) => r.path))].sort()).toEqual([
       '../src/routes/editor.tsx',
-      '../src/routes/project-list.tsx',
       // 셸 머리의 스냅샷 팝오버가 *"저장 폼을 열어도 되는가"*를 알아야 한다(「권한 모델」 —
       // 생성이 editor 게이트다). **판정은 팝오버가 자기가 한다:** 셸이 역할을 내려보내지
       // 않고 팝오버가 자기 `getProject`로 받는다.
@@ -81,6 +80,8 @@ describe('역할을 읽는 자리', () => {
       '../src/settings/theme-section.tsx',
       // «멤버» 절이 초대 · 역할 바꾸기 · 제외를 열지(`manageMembers`)를 안다(멤버 줄의 `member.role` 은 위 예외).
       '../src/settings/members-section.tsx',
+      // «위험 구역» 이 절을 세울지(`remove`)를 안다 — 목록 줄의 삭제는 없어 목록 화면은 역할을 안 읽는다.
+      '../src/settings/danger-section.tsx',
     ].sort())
   })
 
