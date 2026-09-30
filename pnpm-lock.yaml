@@ -375,6 +375,9 @@ importers:
       jsdom:
         specifier: ^25.0.0
         version: 25.0.1
+      playwright-core:
+        specifier: ^1.62.1
+        version: 1.62.1
       vite:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@26.1.2)(tsx@4.23.5)
@@ -409,9 +412,6 @@ importers:
       '@wirebound/themes':
         specifier: workspace:*
         version: link:../themes
-      playwright-core:
-        specifier: ^1.62.1
-        version: 1.62.1
       react:
         specifier: ^19.0.0
         version: 19.2.8

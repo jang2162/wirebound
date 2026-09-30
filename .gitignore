@@ -13,3 +13,5 @@ dist/
 .env
 .env.*
 !.env.example
+# `wb-theme shots` 의 기본 출력(`--out` 을 안 주면 패키지 안 `shots/`).
+shots/
