@@ -1,27 +1,46 @@
 /*
- * system-admin 테마의 CSS. 옛 JSON 테마 `admin`을 컴파일한 결과를 옮긴 첫 판이고(원본을 볼 때:
- * `git show 34c6c9d0:packages/themes/src/system/admin.ts`),
- * 이제 이 파일이 소스다 — 생성기는 없다. 고칠 때는 이 파일을 고친다.
+ * system-admin 테마의 CSS — 관리자 화면. 좁은 여백 · 표 중심의 밀도 · 폭을 가두지 않는 칼럼 · 채운 주색 단추 · 흰 입력칸에 회색 테두리.
+ * 옛 JSON 테마 `admin` 의 토큰 · 스킨이 출발점이다(원본: `git show b2766e8c^:packages/themes/src/system/admin.ts` — 이웃 테마와
+ * «무엇이 다른가» 는 같은 판의 `portal.ts` 머리말이 admin 을 기준으로 적는다).
  *
- * `:root` 의 `--wb-semantic-*` · `--wb-radius-*` 는 manifest(`src/manifest.ts`)의 토큰이 덮는 자리다 — 토큰 키의 `.` 을 `-` 로
- * 바꾼 이름이다(`semantic.primary` → `--wb-semantic-primary`). 이름을 바꾸면 토큰 편집이 조용히 안 닿는다.
+ * 옛 admin 이 고른 구조 이름(`Tabs:underline` · `SearchForm:inline` · `EntryForm:labelLeft` · `List:table`)의 모양(밑줄 · 한 줄 · 라벨 왼쪽 ·
+ * 격자선)은 이 파일이 세운다 — 기본 뷰의 DOM 은 그 이름(`data-wb-structure`)만 갖고 모양을 그리지 않는다.
+ *
+ * `:root` 의 변수 가운데 manifest(`src/manifest.ts`) 토큰의 자리는 토큰 키의 `.` 을 `-` 로 바꾼 이름이다(`semantic.primary` →
+ * `--wb-semantic-primary`). 이름을 바꾸면 토큰 편집이 조용히 안 닿는다 — `test/admin.test.ts` 가 이름 · 기본값을 대조한다. 토큰 시트는 이
+ * 시트 뒤에 `:root` 로 선다(spec 「캔버스 iframe」) — 여기서 토큰 변수로 계산한 변수(`--wb-space-*`)도 편집한 값을 따른다.
+ *
+ * **`!important` 를 쓰지 않는다.** 캔버스의 «시트가 실릴 때까지 전이 멈춤» 은 `!important` 없는 이 테마로만 잰다
+ * (`apps/web/src/canvas/canvas-iframe.tsx` 의 `HOLD_CSS`).
  */
 :root {
-  --wb-palette-gray-50: #f8fafc;
-  --wb-palette-gray-100: #f1f5f9;
-  --wb-palette-gray-200: #e2e8f0;
-  --wb-palette-gray-400: #94a3b8;
-  --wb-palette-gray-600: #475569;
-  --wb-palette-gray-900: #0f172a;
-  --wb-palette-blue-50: #eff6ff;
-  --wb-palette-blue-500: #3b82f6;
-  --wb-palette-blue-600: #2563eb;
-  --wb-palette-red-500: #ef4444;
+  /* 토큰 — manifest 의 기본값과 같다. */
+  --wb-semantic-primary: #2563eb;
+  --wb-semantic-primarySoft: #eff6ff;
+  --wb-semantic-surface: #ffffff;
+  --wb-semantic-canvas: #f8fafc;
+  --wb-semantic-border: #e2e8f0;
+  --wb-semantic-borderStrong: #94a3b8;
+  --wb-semantic-text: #0f172a;
+  --wb-semantic-textMuted: #475569;
+  --wb-semantic-danger: #ef4444;
   --wb-radius-sm: 4px;
   --wb-radius-md: 6px;
   --wb-radius-lg: 10px;
-  --wb-shadow-sm: 0 1px 2px rgba(15,23,42,.06);
-  --wb-shadow-md: 0 4px 12px rgba(15,23,42,.10);
+  --wb-shadow-md: 0 4px 12px rgba(15,23,42,.1);
+  --wb-font-body: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --wb-typography-body-fontSize: 14px;
+  --wb-space-unit: 4px;
+
+  /* 상수. 간격은 전부 `space.unit` 의 배수라 한 값으로 밀도가 바뀐다. */
+  --wb-space-1: calc(var(--wb-space-unit) * 1);
+  --wb-space-2: calc(var(--wb-space-unit) * 2);
+  --wb-space-3: calc(var(--wb-space-unit) * 3);
+  --wb-space-4: calc(var(--wb-space-unit) * 4);
+  --wb-space-5: calc(var(--wb-space-unit) * 5);
+  --wb-space-6: calc(var(--wb-space-unit) * 6);
+  --wb-space-8: calc(var(--wb-space-unit) * 8);
+  --wb-space-16: calc(var(--wb-space-unit) * 16);
   --wb-motion-base: 150ms;
   --wb-typography-display-fontSize: 32px;
   --wb-typography-display-lineHeight: 1.2;
@@ -44,57 +63,44 @@
   --wb-typography-h6-fontSize: 13px;
   --wb-typography-h6-lineHeight: 1.5;
   --wb-typography-h6-fontWeight: 600;
-  --wb-typography-body-fontSize: 14px;
   --wb-typography-body-lineHeight: 1.6;
   --wb-typography-body-fontWeight: 400;
   --wb-typography-caption-fontSize: 12px;
   --wb-typography-caption-lineHeight: 1.5;
   --wb-typography-caption-fontWeight: 400;
-  --wb-space-1: 4px;
-  --wb-space-2: 8px;
-  --wb-space-3: 12px;
-  --wb-space-4: 16px;
-  --wb-space-5: 20px;
-  --wb-space-6: 24px;
-  --wb-space-7: 28px;
-  --wb-space-8: 32px;
-  --wb-space-9: 36px;
-  --wb-space-10: 40px;
-  --wb-space-11: 44px;
-  --wb-space-12: 48px;
-  --wb-space-13: 52px;
-  --wb-space-14: 56px;
-  --wb-space-15: 60px;
-  --wb-space-16: 64px;
-  --wb-space-17: 68px;
-  --wb-space-18: 72px;
-  --wb-space-19: 76px;
-  --wb-space-20: 80px;
-  --wb-space-21: 84px;
-  --wb-space-22: 88px;
-  --wb-space-23: 92px;
-  --wb-space-24: 96px;
-  --wb-semantic-primary: #2563eb;
-  --wb-semantic-primarySoft: #eff6ff;
-  --wb-semantic-surface: #ffffff;
-  --wb-semantic-canvas: #f8fafc;
-  --wb-semantic-border: #e2e8f0;
-  --wb-semantic-borderStrong: #94a3b8;
-  --wb-semantic-text: #0f172a;
-  --wb-semantic-textMuted: #475569;
-  --wb-semantic-danger: #ef4444;
+  /*
+   * 관리자 화면은 칼럼 폭을 가두지 않는다(fluid) — 표 · 폼이 화면 폭을 다 쓴다. `100%` 가 아니라 `none` 이다: `100%` 는 «부모 폭까지» 라는
+   * 제한이라 `inner` 의 `width` · `box-sizing` 이 바뀌면 좌우 여백과 겹쳐 뜻이 달라진다.
+   */
   --wb-container-maxWidth: none;
-  --wb-container-gutter: var(--wb-space-6);
-  --wb-grid-columns: 12;
   --wb-grid-gap: var(--wb-space-5);
-  --wb-section-paddingY: var(--wb-space-8);
-  --wb-section-paddingYCompact: var(--wb-space-4);
+  /* SDK 기본 뷰의 트리 들여쓰기 한 단계(`TREE_INDENT_VAR`). */
+  --wb-tree-indent: var(--wb-space-5);
+  /* 등록 폼의 라벨 칸 폭. */
+  --wb-form-labelWidth: 8rem;
 }
+
+/* 서체는 노드마다 건다 — 캔버스 iframe · 내보낸 번들의 문서에는 서체가 없어 브라우저 기본(명조)으로 그려지고, `button` 은 서체를 안 물려받는다. */
+[data-wb-component] {
+  font-family: var(--wb-font-body);
+}
+[data-wb-component="Page"][data-wb-structure="default"] {
+  color: var(--wb-semantic-text);
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
+}
+
+/* ── 골격 ─────────────────────────────────────────────────────────────── */
+
 [data-wb-component="Section"][data-wb-structure="contained"] {
   background: var(--wb-semantic-canvas);
   padding-top: var(--wb-space-8);
   padding-bottom: var(--wb-space-8);
 }
+/*
+ * `margin` 의 `auto` 가 가둔 칼럼을 가운데 둔다. 이 테마는 폭을 안 가둬 0 으로 계산되지만 둔다 — `--wb-container-maxWidth` 를 유한한 폭으로
+ * 바꾸는 사람이 가운데 정렬을 그대로 얻는다(`test/admin.test.ts` 가 `max-width` 를 거는 규칙마다 요구한다).
+ */
 [data-wb-component="Section"] [data-wb-part="inner"] {
   max-width: var(--wb-container-maxWidth);
   margin-left: auto;
@@ -124,6 +130,9 @@
   border-color: var(--wb-semantic-border);
   padding: var(--wb-space-5);
 }
+[data-wb-component="Card"] [data-wb-part="header"] {
+  margin-bottom: var(--wb-space-3);
+}
 [data-wb-component="Card"] [data-wb-part="title"] {
   font-size: var(--wb-typography-h3-fontSize);
   line-height: var(--wb-typography-h3-lineHeight);
@@ -143,24 +152,41 @@
   box-shadow: var(--wb-shadow-md);
   border-color: var(--wb-semantic-primary);
 }
+
+/* 밑줄 탭 — 목록 아래 가는 선, 고른 탭은 주색 굵은 밑줄이 그 선을 덮는다(`margin-bottom: -1px`). */
 [data-wb-component="Tabs"] [data-wb-part="list"] {
+  display: flex;
   gap: var(--wb-space-4);
-  border-color: var(--wb-semantic-border);
+  border-bottom: 1px solid var(--wb-semantic-border);
 }
 [data-wb-component="Tabs"] [data-wb-part="tab"] {
   padding-top: var(--wb-space-2);
   padding-bottom: var(--wb-space-2);
+  padding-left: var(--wb-space-1);
+  padding-right: var(--wb-space-1);
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
   color: var(--wb-semantic-textMuted);
   font-size: var(--wb-typography-h5-fontSize);
   line-height: var(--wb-typography-h5-lineHeight);
   font-weight: var(--wb-typography-h5-fontWeight);
 }
+[data-wb-component="Tabs"] [data-wb-part="tab"][aria-selected="true"] {
+  color: var(--wb-semantic-primary);
+  border-bottom-color: var(--wb-semantic-primary);
+}
 [data-wb-component="Tabs"] [data-wb-part="panel"] {
   padding-top: var(--wb-space-4);
   padding-bottom: var(--wb-space-4);
 }
+
+/* ── 데이터 ───────────────────────────────────────────────────────────── */
+
+/* 표 — 바깥 테두리 · 행마다 아래 실선 · 왼쪽 정렬 머리. 뷰는 `src/views/List.tsx`. */
 [data-wb-component="List"][data-wb-structure="table"] {
   width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--wb-semantic-border);
   background: var(--wb-semantic-surface);
   color: var(--wb-semantic-text);
   font-size: var(--wb-typography-body-fontSize);
@@ -179,7 +205,9 @@
   padding-right: var(--wb-space-3);
   padding-top: var(--wb-space-2);
   padding-bottom: var(--wb-space-2);
-  border-color: var(--wb-semantic-border);
+  border-bottom: 1px solid var(--wb-semantic-border);
+  text-align: left;
+  font-weight: inherit;
 }
 [data-wb-component="List"] [data-wb-part="rowAlt"] {
   background: var(--wb-semantic-canvas);
@@ -189,6 +217,39 @@
   padding-bottom: var(--wb-space-3);
   text-align: center;
   color: var(--wb-semantic-textMuted);
+  word-spacing: var(--wb-space-2);
+}
+[data-wb-component="List"] [data-wb-cell="check"] {
+  width: 1px;
+}
+[data-wb-component="List"] [data-wb-part="checkbox"] {
+  display: inline-block;
+  vertical-align: middle;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--wb-semantic-borderStrong);
+  border-radius: var(--wb-radius-sm);
+  background: var(--wb-semantic-surface);
+}
+[data-wb-component="List"] [data-wb-part="empty"] {
+  padding-top: var(--wb-space-8);
+  padding-bottom: var(--wb-space-8);
+  text-align: center;
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="List"] [data-wb-part="skeleton"] {
+  display: block;
+  height: 0.75em;
+  border-radius: var(--wb-radius-sm);
+  background: var(--wb-semantic-border);
+}
+[data-wb-component="List"][data-wb-variant="featured"] {
+  border-top: 2px solid var(--wb-semantic-primary);
+}
+[data-wb-component="List"][data-wb-variant="featured"] [data-wb-part="header"] {
+  background: var(--wb-semantic-primarySoft);
+  color: var(--wb-semantic-primary);
 }
 [data-wb-component="List"][data-wb-variant="compact"] [data-wb-part="cell"] {
   padding-top: var(--wb-space-1);
@@ -197,67 +258,156 @@
 [data-wb-component="List"][data-wb-state~="selected"] [data-wb-part="row"] {
   background: var(--wb-semantic-primarySoft);
 }
+[data-wb-component="List"][data-wb-state~="selected"] [data-wb-part="row"] [data-wb-part="checkbox"] {
+  background: var(--wb-semantic-primary);
+  border-color: var(--wb-semantic-primary);
+}
 [data-wb-component="List"][data-wb-state~="disabled"] {
   opacity: 0.5;
 }
+
+/* 트리 — 글머리표 없이 들여쓰기만. 들여쓰기(`padding-left`)는 SDK 기본 CSS 가 단계 × `--wb-tree-indent` 로 건다 — 여기서 `padding` 을 통째로 쓰면 그것을 덮는다. */
 [data-wb-component="Tree"][data-wb-structure="indent"] {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   color: var(--wb-semantic-text);
   font-size: var(--wb-typography-body-fontSize);
   line-height: var(--wb-typography-body-lineHeight);
   font-weight: var(--wb-typography-body-fontWeight);
 }
 [data-wb-component="Tree"] [data-wb-part="node"] {
+  display: flex;
+  align-items: center;
+  gap: var(--wb-space-1);
   padding-top: var(--wb-space-1);
   padding-bottom: var(--wb-space-1);
+  padding-right: var(--wb-space-2);
+  border-radius: var(--wb-radius-sm);
 }
 [data-wb-component="Tree"] [data-wb-part="toggle"] {
   color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-caption-fontSize);
 }
 [data-wb-component="Tree"][data-wb-state~="selected"] [data-wb-part="node"] {
   background: var(--wb-semantic-primarySoft);
 }
+[data-wb-component="Tree"][data-wb-state~="disabled"] {
+  opacity: 0.5;
+}
+
+/* 상세 — 키 칸에 옅은 바탕을 깐 격자 표. 뷰는 `src/views/KeyValue.tsx`(`columns` 쌍씩 한 행). */
 [data-wb-component="KeyValue"][data-wb-structure="table"] {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--wb-semantic-surface);
   font-size: var(--wb-typography-body-fontSize);
   line-height: var(--wb-typography-body-lineHeight);
   font-weight: var(--wb-typography-body-fontWeight);
   color: var(--wb-semantic-text);
 }
 [data-wb-component="KeyValue"] [data-wb-part="key"] {
+  width: var(--wb-form-labelWidth);
+  background: var(--wb-semantic-canvas);
   color: var(--wb-semantic-textMuted);
-  padding-top: var(--wb-space-2);
-  padding-bottom: var(--wb-space-2);
+  font-weight: var(--wb-typography-h6-fontWeight);
+  padding: var(--wb-space-2) var(--wb-space-3);
+  border: 1px solid var(--wb-semantic-border);
   text-align: left;
 }
-[data-wb-component="KeyValue"] [data-wb-part="value"] {
-  padding-top: var(--wb-space-2);
-  padding-bottom: var(--wb-space-2);
+[data-wb-component="KeyValue"] [data-wb-part="value"],
+[data-wb-component="KeyValue"] [data-wb-part="filler"] {
+  padding: var(--wb-space-2) var(--wb-space-3);
+  border: 1px solid var(--wb-semantic-border);
 }
+
+/* ── 입력 ─────────────────────────────────────────────────────────────── */
+
+/* 조회 폼은 한 줄 — 필드가 옆으로 서고 넘치면 접히며, 단추는 줄 끝에 필드 아래 선에 맞춘다. */
 [data-wb-component="SearchForm"][data-wb-structure="inline"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--wb-space-3) var(--wb-space-4);
   background: var(--wb-semantic-surface);
   padding: var(--wb-space-4);
+  border: 1px solid var(--wb-semantic-border);
   border-radius: var(--wb-radius-md);
 }
-[data-wb-component="SearchForm"] [data-wb-part="fields"] {
+[data-wb-component="SearchForm"] > [data-wb-part="fields"] {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
   gap: var(--wb-space-4);
 }
-[data-wb-component="SearchForm"] [data-wb-part="actions"] {
+[data-wb-component="SearchForm"] > [data-wb-part="fields"] > [data-wb-component] {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+[data-wb-component="SearchForm"] > [data-wb-part="actions"] {
+  display: flex;
   gap: var(--wb-space-2);
 }
+
+/*
+ * 등록 폼 — 제목 아래 선, 필드마다 라벨이 왼쪽 칸에 선다. 좁은 폭에서는 라벨이 위로 간다(아래 `@media`).
+ * 폼의 조각은 직계(`>`)로 잡는다 — 안의 `Field` 도 `label` 조각을 가져 자손으로 잡으면 필드 라벨마다 제목의 밑줄이 선다.
+ */
 [data-wb-component="EntryForm"][data-wb-structure="labelLeft"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wb-space-4);
   background: var(--wb-semantic-surface);
   padding: var(--wb-space-5);
+  border: 1px solid var(--wb-semantic-border);
   border-radius: var(--wb-radius-md);
 }
-[data-wb-component="EntryForm"] [data-wb-part="label"] {
-  color: var(--wb-semantic-textMuted);
+[data-wb-component="EntryForm"] > [data-wb-part="label"] {
+  padding-bottom: var(--wb-space-3);
+  border-bottom: 1px solid var(--wb-semantic-border);
+  color: var(--wb-semantic-text);
   font-size: var(--wb-typography-h5-fontSize);
   line-height: var(--wb-typography-h5-lineHeight);
   font-weight: var(--wb-typography-h5-fontWeight);
 }
-[data-wb-component="EntryForm"] [data-wb-part="actions"] {
-  gap: var(--wb-space-2);
+[data-wb-component="EntryForm"] > [data-wb-part="row"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wb-space-3);
 }
+[data-wb-component="EntryForm"] > [data-wb-part="actions"] {
+  display: flex;
+  gap: var(--wb-space-2);
+  padding-left: calc(var(--wb-form-labelWidth) + var(--wb-space-4));
+}
+
+/* 폼이 스스로 그리는 단추 자리(`조회` · `초기화` · `저장` · `취소`) — 첫째가 주 단추, 나머지는 보조. `Button` 과 같은 크기다. */
+[data-wb-component="SearchForm"] > [data-wb-part="actions"] > span,
+[data-wb-component="EntryForm"] > [data-wb-part="actions"] > span {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--wb-space-2) var(--wb-space-4);
+  border: 1px solid var(--wb-semantic-border);
+  border-radius: var(--wb-radius-sm);
+  background: var(--wb-semantic-surface);
+  color: var(--wb-semantic-text);
+  font-size: var(--wb-typography-h6-fontSize);
+  line-height: var(--wb-typography-h6-lineHeight);
+  font-weight: var(--wb-typography-h6-fontWeight);
+  white-space: nowrap;
+}
+[data-wb-component="SearchForm"] > [data-wb-part="actions"] > span:first-child,
+[data-wb-component="EntryForm"] > [data-wb-part="actions"] > span:first-child {
+  background: var(--wb-semantic-primary);
+  border-color: var(--wb-semantic-primary);
+  color: var(--wb-semantic-surface);
+}
+
+/* 입력칸 — 흰 바탕 · 회색 테두리 · 작은 모서리. 입력 종류는 루트의 `data-wb-variant`(`control` prop)로 온다. */
 [data-wb-component="Field"][data-wb-structure="outlined"] {
+  display: flex;
+  flex-direction: column;
   gap: var(--wb-space-1);
 }
 [data-wb-component="Field"] [data-wb-part="label"] {
@@ -266,17 +416,26 @@
   font-weight: var(--wb-typography-h6-fontWeight);
   color: var(--wb-semantic-textMuted);
 }
+[data-wb-component="Field"][data-wb-state~="required"] [data-wb-part="label"]::after {
+  content: " *";
+  color: var(--wb-semantic-danger);
+}
 [data-wb-component="Field"] [data-wb-part="control"] {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: calc(var(--wb-space-unit) * 8.5);
   border-width: 1px;
   border-style: solid;
   border-color: var(--wb-semantic-border);
   border-radius: var(--wb-radius-sm);
   padding-left: var(--wb-space-3);
   padding-right: var(--wb-space-3);
-  padding-top: var(--wb-space-2);
-  padding-bottom: var(--wb-space-2);
+  padding-top: var(--wb-space-1);
+  padding-bottom: var(--wb-space-1);
   background: var(--wb-semantic-surface);
   color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-body-fontSize);
 }
 [data-wb-component="Field"] [data-wb-part="help"] {
   font-size: var(--wb-typography-caption-fontSize);
@@ -284,14 +443,35 @@
   font-weight: var(--wb-typography-caption-fontWeight);
   color: var(--wb-semantic-textMuted);
 }
+[data-wb-component="Field"][data-wb-variant="select"] [data-wb-part="control"]::after {
+  content: "▾";
+  margin-left: auto;
+  padding-left: var(--wb-space-2);
+}
 [data-wb-component="Field"][data-wb-variant="textarea"] [data-wb-part="control"] {
   min-height: 72px;
+  align-items: flex-start;
+  padding-top: var(--wb-space-2);
 }
-[data-wb-component="Field"][data-wb-variant="checkbox"] [data-wb-part="control"] {
+/* 체크 · 라디오는 상자가 라벨 앞에 선다 — 안내 문구 자리는 비운다(글자가 16px 상자를 밀어낸다). */
+[data-wb-component="Field"][data-wb-variant="checkbox"],
+[data-wb-component="Field"][data-wb-variant="radio"] {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--wb-space-2);
+}
+[data-wb-component="Field"][data-wb-variant="checkbox"] [data-wb-part="control"],
+[data-wb-component="Field"][data-wb-variant="radio"] [data-wb-part="control"] {
+  flex: none;
   width: 16px;
   min-height: 16px;
-  padding-left: 0;
-  padding-right: 0;
+  height: 16px;
+  padding: 0;
+  font-size: 0;
+}
+[data-wb-component="Field"][data-wb-variant="radio"] [data-wb-part="control"] {
+  border-radius: 50%;
 }
 [data-wb-component="Field"][data-wb-state~="invalid"] [data-wb-part="control"] {
   border-color: var(--wb-semantic-danger);
@@ -299,7 +479,40 @@
 [data-wb-component="Field"][data-wb-state~="disabled"] {
   opacity: 0.5;
 }
+[data-wb-component="Field"][data-wb-state~="disabled"] [data-wb-part="control"] {
+  background: var(--wb-semantic-canvas);
+}
+/* 등록 폼 안의 필드 — 라벨 칸 · 입력 칸 두 칸. 위 `Field` 규칙과 특이도가 같아 뒤에 둔다. */
+[data-wb-component="EntryForm"] [data-wb-component="Field"] {
+  display: grid;
+  grid-template-columns: var(--wb-form-labelWidth) minmax(0, 1fr);
+  column-gap: var(--wb-space-4);
+  align-items: center;
+}
+[data-wb-component="EntryForm"] [data-wb-component="Field"][data-wb-variant="textarea"] {
+  align-items: start;
+}
+[data-wb-component="EntryForm"] [data-wb-component="Field"][data-wb-variant="textarea"] [data-wb-part="label"] {
+  padding-top: var(--wb-space-2);
+}
+[data-wb-component="EntryForm"] [data-wb-component="Field"] [data-wb-part="help"] {
+  grid-column: 2;
+}
+[data-wb-component="EntryForm"] [data-wb-component="Field"][data-wb-variant="checkbox"] [data-wb-part="control"],
+[data-wb-component="EntryForm"] [data-wb-component="Field"][data-wb-variant="radio"] [data-wb-part="control"] {
+  justify-self: start;
+}
+
+/* ── 액션 ─────────────────────────────────────────────────────────────── */
+
+/*
+ * `transition` 은 모든 속성을 옮긴다(`padding` 포함). 캔버스의 «늦게 온 테마 시트» 실브라우저 판이 이 단추의 전이로 멈춤을 잰다
+ * (`apps/web/build-test/canvas-iframe.test.ts`) — 속성을 좁히면 그 판의 카나리아가 안 선다.
+ */
 [data-wb-component="Button"][data-wb-structure="solid"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--wb-semantic-primary);
   color: var(--wb-semantic-surface);
   border-radius: var(--wb-radius-sm);
@@ -346,6 +559,10 @@
   opacity: 0.5;
   text-decoration: none;
 }
+
+/* ── 문서 ─────────────────────────────────────────────────────────────── */
+
+/* 타이포 스케일 — `Text` 의 variant 는 `role` prop 에서 온다(카탈로그의 `variantFrom`). */
 [data-wb-component="Text"][data-wb-structure="default"] {
   color: var(--wb-semantic-text);
   font-size: var(--wb-typography-body-fontSize);
@@ -398,8 +615,12 @@
   font-weight: var(--wb-typography-caption-fontWeight);
   color: var(--wb-semantic-textMuted);
 }
+[data-wb-component="Media"][data-wb-structure="image"] {
+  margin: 0;
+}
 [data-wb-component="Media"] [data-wb-part="frame"] {
   background: var(--wb-semantic-canvas);
+  border: 1px solid var(--wb-semantic-border);
   border-radius: var(--wb-radius-md);
   object-fit: cover;
 }
@@ -415,14 +636,20 @@
   border-width: 0;
   border-color: var(--wb-semantic-border);
   background: var(--wb-semantic-border);
+  margin: 0;
 }
 [data-wb-component="Divider"][data-wb-variant="horizontal"] {
   height: 1px;
   width: 100%;
 }
+/*
+ * 높이가 정해지지 않은 부모 안에서 `100%` 는 0 이 된다 — 한 줄 높이를 바닥으로 둔다. 가로 흐름(`Flex`) 안에서는 늘어나 줄에 맞는다. 좌우 여백은
+ * 두지 않는다 — 곁의 간격은 `Flex` 의 `gap` 이 준다.
+ */
 [data-wb-component="Divider"][data-wb-variant="vertical"] {
+  align-self: stretch;
   width: 1px;
-  min-height: 100%;
+  min-height: 1.5em;
 }
 [data-wb-component="Placeholder"][data-wb-structure="default"] {
   background: var(--wb-semantic-canvas);
@@ -435,10 +662,44 @@
   line-height: var(--wb-typography-caption-lineHeight);
   font-weight: var(--wb-typography-caption-fontWeight);
   display: grid;
+  place-items: center;
 }
+
+/* ── 좁은 폭 ──────────────────────────────────────────────────────────── */
+
 @media (max-width: 640px) {
   [data-wb-component="Section"][data-wb-structure="contained"] {
     padding-top: var(--wb-space-4);
     padding-bottom: var(--wb-space-4);
+  }
+  /* 조회 폼의 단추가 필드 아래 줄로 간다 — 한 줄을 나누면 390 폭에서 입력칸이 단추 폭만큼 좁아진다. */
+  [data-wb-component="SearchForm"] > [data-wb-part="fields"] {
+    flex-basis: 100%;
+  }
+  /* 등록 폼의 라벨이 입력칸 위로 간다 — 라벨 칸 8rem 이 390 폭 입력칸을 반으로 줄인다. */
+  [data-wb-component="EntryForm"] [data-wb-component="Field"] {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--wb-space-1);
+  }
+  [data-wb-component="EntryForm"] [data-wb-component="Field"] [data-wb-part="help"] {
+    grid-column: 1;
+  }
+  [data-wb-component="EntryForm"] > [data-wb-part="actions"] {
+    padding-left: 0;
+  }
+  /* 상세 표는 쌍을 한 줄씩 쌓는다 — 칸이 넷(쌍 둘)이면 390 폭에서 값 칸이 글자 몇 자 폭이 된다. */
+  [data-wb-component="KeyValue"][data-wb-structure="table"],
+  [data-wb-component="KeyValue"][data-wb-structure="table"] > tbody {
+    display: block;
+  }
+  [data-wb-component="KeyValue"] [data-wb-part="row"] {
+    display: grid;
+    grid-template-columns: minmax(0, 7rem) minmax(0, 1fr);
+  }
+  [data-wb-component="KeyValue"] [data-wb-part="key"] {
+    width: auto;
+  }
+  [data-wb-component="KeyValue"] [data-wb-part="filler"] {
+    display: none;
   }
 }
