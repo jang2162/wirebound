@@ -126,10 +126,13 @@
      마우스로 잡을 수 없다. 이 수는 `SIDE_RESERVED_WIDTH`가 함께 알고 있고
      `test/shell/sidebar-layout.test.ts`가 둘을 대조한다. */
   grid-template-columns: auto 6px minmax(0, 1fr) 300px;
-  grid-template-rows: auto minmax(0, 1fr);
+  /* **셋째 줄이 하단 바다**(`shell/shell-footer.tsx`) — 캔버스 칸 아래, 좌 · 우 사이드바 사이. 높이가 `auto`라 통지가 늘면 바가 자라고
+     캔버스 줄(`minmax(0, 1fr)`)이 그만큼 준다. 캔버스와 바 사이에 칸을 끼울 때는 줄 하나와 영역 이름 하나를 더한다. */
+  grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
     'head head head head'
-    'side side-resizer canvas panel';
+    'side side-resizer canvas panel'
+    'side side-resizer footer panel';
   gap: var(--wb-shell-gap);
   background: var(--wb-shell-line);
 }
@@ -234,12 +237,51 @@
   min-width: 0;
 }
 
-/* 머리의 가운데 — 되돌리기 · 도구(모드 …). 줄을 바꿀 수 있다 — 근거는 `.wb-shell-header`의 `max-width`. */
+/* 머리의 가운데 — 되돌리기 · 모드. 줄을 바꿀 수 있다 — 근거는 `.wb-shell-header`의 `max-width`. */
 .wb-shell-head-tools {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
+  font-size: 13px;
+}
+
+/* ── 하단 바(`shell/shell-footer.tsx`) ─────────────────────────────────────────────────
+   캔버스 칸 아래 한 줄. 셸이 그리는 조각이라 글꼴 · 스킴을 여기 건다(머리와 같은 값 — 문서를 감싸지 않으므로 상속 속성을 걸어도 된다). */
+.wb-shell-footer {
+  grid-area: footer;
+  color-scheme: light;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px 16px;
+  min-width: 0;
+  padding: 6px 12px;
+  background: var(--wb-shell-chrome);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: var(--wb-shell-ink);
+}
+
+/* 통지 줄. 통지마다 제 줄을 쓴다(`.wb-shell-edit-alert` 들의 `flex-basis: 100%`) — 여럿이면 위로 자란다. `min-width: 0`이 없으면 긴 문장이
+   도구를 오른쪽 밖으로 민다. */
+.wb-shell-footer-notices {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+/* 뷰포트 · 줌. 줄어들지 않고, 칸이 좁으면 안에서 줄을 바꾼다. */
+.wb-shell-footer-tools {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 16px;
 }
 
 /* 로고 — 프로젝트 목록으로 가는 링크(`shell/brand-link.tsx`). 아이콘과 «wirebound»가 한 줄이다.
@@ -275,15 +317,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.wb-shell-tools {
-  display: flex;
-  /* 좁은 창에서는 모드 · 뷰포트 · 줌 묶음이 줄을 바꾼다. 근거는 `.wb-shell-header`의 `max-width`. */
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  font-size: 13px;
 }
 
 .wb-shell-modes {

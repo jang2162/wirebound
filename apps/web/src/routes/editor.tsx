@@ -44,6 +44,7 @@ import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
 import { ShellDialog } from '../shell/shell-dialog'
+import { ShellFooter } from '../shell/shell-footer'
 import { ShellResizer } from '../shell/shell-resizer'
 import { useSidebarLayout } from '../shell/sidebar-layout'
 import { useNodeLock } from '../realtime/use-node-lock'
@@ -564,7 +565,7 @@ function EditorShell(props: {
 
   /**
    * **캔버스 칸을 손에 쥐는 자리.** `화면 맞춤`이 누른 순간의 폭을 재려면 그 상자가 필요한데,
-   * 버튼은 머리에 있고 상자는 가운데 칸이라 서로 안 보인다.
+   * 버튼은 하단 바에 있고 상자는 가운데 칸이라 서로 안 보인다.
    *
    * **`document.querySelector('.wb-shell-canvas')`로 찾지 않는다.** 그러면 클래스 이름이
    * 배선이 되어, 이름을 바꾸는 날 아무것도 실패하지 않은 채 버튼만 조용히 죽는다.
@@ -750,7 +751,8 @@ function EditorShell(props: {
           <BrandLink />
           <h1 className="wb-shell-title">{props.project.name}</h1>
         </div>
-        {/* **가운데 — 설계서를 다루는 도구.** 되돌리기 · 다시 실행과 모드(편집/뷰)다.
+        {/* **가운데 — 설계서를 다루는 도구.** 되돌리기 · 다시 실행과 모드(편집/뷰)다. 캔버스를 다루는 도구(뷰포트 · 줌)는 캔버스 곁 —
+            하단 바(`ShellFooter`)에 있다.
 
             **되돌리기·다시 실행은 편집 모드에만 있다**.
             「설계서 화면 구조」가 뷰 모드에서 구조 트리를 접고 속성 탭을 페이지 설명으로 바꾸는 것과 같은
@@ -769,7 +771,7 @@ function EditorShell(props: {
             **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
         <div className="wb-shell-head-tools">
           {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
-          <ShellTools canvasRef={canvasRef} frameRef={frameRef} />
+          <ModeTools />
         </div>
         {/* **오른쪽 끝의 `…`** — 이 프로젝트 전체 · 계정을 다루는 일(spec 「`…` 메뉴」). **역할로 감추지 않는다** — 항목 다섯이 모든 역할에게
             선다: 스냅샷 목록 · 내보내기 · 설정(읽기 전용 칸)은 viewer 도 본다(설계서 「권한 모델」 — 막는 것은 그 안의 생성 · 복원이고 그 판정은
@@ -801,28 +803,6 @@ function EditorShell(props: {
         <ShellDialog open={dialog === 'export'} title="프로젝트 내보내기" onClose={() => setDialog(null)}>
           <ExportBody projectId={props.project.id} />
         </ShellDialog>
-        {/* 편집 실패 통지는 **한 자리**다. 조회 실패처럼 화면마다 나누지 않는 것은,
-            어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
-            받고 보내지 못한 편집을 잃는다. 셸 상단에 두면 어느 패널을 보고 있어도
-            눈에 들어온다. */}
-        <EditAlert />
-        {/* **경고는 실패가 아니다**. 실패 통지 바로 옆에 두되 `role`이 다르다 —
-            근거는 `shell/edit-warnings.tsx`의 머리말에 있다. */}
-        <EditWarnings />
-        {/* **남의 변경 때문에 화면이 낡았다는 통지**. `EditAlert`와 자리는 같고
-            `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
-            근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
-        <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.own === undefined ? SIGNALLED_RESTORE_LEAD : OWN_RESTORE_LEAD[stale.own])} />
-        {/* **테마를 못 실었다**(`theme/theme-alert.tsx`) — 캔버스는 기본 뷰로 그리고 있다. */}
-        <ThemeAlert />
-        {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
-        {roleNotice !== null && (
-          <p className="wb-shell-remote-alert" role="status">
-            {roleNotice}
-          </p>
-        )}
-        {/* **세션 전환 · 로그아웃 실패**(`session/session-menu.tsx`의 `SessionNotices`). */}
-        <SessionNotices failure={logoutFailure} className="wb-shell-session-alert" />
       </header>
 
       <nav
@@ -937,6 +917,37 @@ function EditorShell(props: {
         />
       </main>
 
+      {/* **하단 바**(`shell/shell-footer.tsx`) — 왼쪽은 통지 줄, 오른쪽은 캔버스 도구. 통지가 여럿이면 바가 위로 자라고 캔버스가 준다. */}
+      <ShellFooter
+        notices={
+          <>
+            {/* 편집 실패 통지는 **한 자리**다. 조회 실패처럼 화면마다 나누지 않는 것은,
+                어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
+                받고 보내지 못한 편집을 잃는다. 하단 바는 어느 패널을 보고 있어도 캔버스
+                바로 아래라 눈에 들어온다. */}
+            <EditAlert />
+            {/* **경고는 실패가 아니다**. 실패 통지 바로 옆에 두되 `role`이 다르다 —
+                근거는 `shell/edit-warnings.tsx`의 머리말에 있다. */}
+            <EditWarnings />
+            {/* **남의 변경 때문에 화면이 낡았다는 통지**. `EditAlert`와 자리는 같고
+                `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
+                근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
+            <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.own === undefined ? SIGNALLED_RESTORE_LEAD : OWN_RESTORE_LEAD[stale.own])} />
+            {/* **테마를 못 실었다**(`theme/theme-alert.tsx`) — 캔버스는 기본 뷰로 그리고 있다. */}
+            <ThemeAlert />
+            {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
+            {roleNotice !== null && (
+              <p className="wb-shell-remote-alert" role="status">
+                {roleNotice}
+              </p>
+            )}
+            {/* **세션 전환 · 로그아웃 실패**(`session/session-menu.tsx`의 `SessionNotices`). */}
+            <SessionNotices failure={logoutFailure} className="wb-shell-session-alert" />
+          </>
+        }
+        tools={<CanvasTools canvasRef={canvasRef} frameRef={frameRef} />}
+      />
+
       <aside className="wb-shell-panel" aria-label="우측 패널">
         {/* **본문 넷이 같은 `canEdit`을 받는다** — 속성 · 상호작용은 끄고, 코멘트 폼 · 설명 편집기는 숨긴다. */}
         <RightPanel projectId={props.project.id} pageId={props.pageId} canEdit={canEdit} restoredToken={restoredToken} />
@@ -971,7 +982,7 @@ function EditorShell(props: {
  * 둔 것과 같은 근거다.
  *
  * **`role="tab"`·`aria-selected`·`role="tabpanel"`을 다는 것이 계약이다.** 보조 기술이
- * "탭 중 하나"를 알아야 나머지 탭이 있다는 것을 알린다 — `ShellTools`의 모드 토글이
+ * "탭 중 하나"를 알아야 나머지 탭이 있다는 것을 알린다 — `ModeTools`의 모드 토글이
  * 눌리지 않은 쪽에도 `aria-pressed`를 다는 것과 같은 이유다.
  */
 function RightPanel(props: {
@@ -1599,41 +1610,48 @@ function CanvasFrame(props: {
   )
 }
 
-/** 모드 토글·뷰포트 프리셋·줌. 셋 다 스토어를 읽고 쓴다. */
-function ShellTools(props: {
+/** 모드 토글 — 머리의 가운데. 스토어를 읽고 쓴다. */
+function ModeTools(): ReactElement {
+  const store = useEditorStoreInstance()
+  const mode = useEditorStore(store, (s) => s.mode)
+
+  return (
+    /* 두 상태 중 하나를 고르는 자리라 `aria-pressed`를 둘 다에 단다. 눌린 쪽만
+       표시하면 보조 기술은 나머지 버튼이 토글인지 알 수 없다. */
+    <div className="wb-shell-modes" role="group" aria-label="모드">
+      <button
+        type="button"
+        className="wb-shell-mode"
+        aria-pressed={mode === 'edit'}
+        onClick={() => store.setMode('edit')}
+      >
+        편집 모드
+      </button>
+      <button
+        type="button"
+        className="wb-shell-mode"
+        aria-pressed={mode === 'view'}
+        onClick={() => store.setMode('view')}
+      >
+        뷰 모드
+      </button>
+    </div>
+  )
+}
+
+/** 뷰포트 프리셋 · 줌 — 하단 바의 오른쪽. 둘 다 스토어를 읽고 쓴다. */
+function CanvasTools(props: {
   /** 캔버스 칸. `화면 맞춤`이 이것의 폭을 잰다(위 `fitZoom`). */
   canvasRef: RefObject<HTMLElement | null>
   /** 캔버스 프레임. 같은 계산이 이것의 가운데 정렬 여백을 읽는다. */
   frameRef: RefObject<HTMLDivElement | null>
 }): ReactElement {
   const store = useEditorStoreInstance()
-  const mode = useEditorStore(store, (s) => s.mode)
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
   const zoom = useEditorStore(store, (s) => s.zoom)
 
   return (
-    <div className="wb-shell-tools">
-      {/* 두 상태 중 하나를 고르는 자리라 `aria-pressed`를 둘 다에 단다. 눌린 쪽만
-          표시하면 보조 기술은 나머지 버튼이 토글인지 알 수 없다. */}
-      <div className="wb-shell-modes" role="group" aria-label="모드">
-        <button
-          type="button"
-          className="wb-shell-mode"
-          aria-pressed={mode === 'edit'}
-          onClick={() => store.setMode('edit')}
-        >
-          편집 모드
-        </button>
-        <button
-          type="button"
-          className="wb-shell-mode"
-          aria-pressed={mode === 'view'}
-          onClick={() => store.setMode('view')}
-        >
-          뷰 모드
-        </button>
-      </div>
-
+    <>
       <label className="wb-shell-field">
         뷰포트 폭
         <select
@@ -1694,6 +1712,6 @@ function ShellTools(props: {
           화면 맞춤
         </button>
       </div>
-    </div>
+    </>
   )
 }

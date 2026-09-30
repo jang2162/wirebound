@@ -773,7 +773,7 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
  * | 변조 — 그 자리의 누르는 이벤트에 `preventDefault()` | 혼자 죽는 것 |
  * |---|---|
  * | 우측 패널의 탭 버튼(`routes/editor.tsx`의 `RightPanel`) | *"다른 탭을 누르면 …"* |
- * | 모드 토글의 «뷰 모드» 버튼(`ShellTools`) | *"모드를 바꾸면 …"* |
+ * | 모드 토글의 «뷰 모드» 버튼(`ModeTools`) | *"모드를 바꾸면 …"* |
  * | 구조 트리의 줄 버튼(`panels/structure-tree.tsx`) | *"트리로 다른 노드를 누르면 …"* |
  * | 캔버스의 표면(`canvas/canvas.tsx`) | *"캔버스로 다른 노드를 누르면 …"* |
  * | 메뉴 트리의 페이지 링크(`panels/menu-tree.tsx`) | *"메뉴로 다른 페이지를 누르면 …"* |

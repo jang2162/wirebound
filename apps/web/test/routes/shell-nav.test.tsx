@@ -56,6 +56,11 @@ function header(): HTMLElement {
   return found
 }
 
+/** 셸의 하단 바 — 통지 줄이 여기 선다(`src/shell/shell-footer.tsx`). */
+function footer(): HTMLElement {
+  return screen.getByRole('contentinfo', { name: '하단 바' })
+}
+
 /**
  * 페이지를 연 셸. `logout`은 케이스가 주고, 나머지는 하네스 기본값이다.
  *
@@ -131,7 +136,7 @@ describe('머리에서 로그아웃한다', () => {
     expect(currentPath()).toBe('/login')
   })
 
-  it('실패하면 이유를 그 자리에 내고 셸에 남는다', async () => {
+  it('실패하면 이유를 하단 바에 내고 셸에 남는다', async () => {
     // **끊지 않는 것이 판정이다.** 서버가 세션을 안 지웠는데 화면만 끊으면 *"로그아웃
     // 했다"*가 거짓이 된다 — 쿠키는 살아 있어 다른 탭이 그대로 들어간다.
     await openShell(async () => {
@@ -140,7 +145,7 @@ describe('머리에서 로그아웃한다', () => {
 
     chooseFromShellMenu('로그아웃')
 
-    expect((await within(header()).findByRole('alert')).textContent).toBe(SERVER_MESSAGE)
+    expect((await within(footer()).findByRole('alert')).textContent).toBe(SERVER_MESSAGE)
     expect(currentPath()).toBe(PAGE_ROUTE)
     // 셸이 살아 있어야 사용자가 하던 일을 이어 갈 수 있다.
     expect(screen.getByRole('heading', { name: PROJECT_NAME })).toBeTruthy()
@@ -155,7 +160,7 @@ describe('머리에서 로그아웃한다', () => {
       throw new ApiError(500, 'internal', SERVER_MESSAGE)
     })
     chooseFromShellMenu('로그아웃')
-    await within(header()).findByRole('alert')
+    await within(footer()).findByRole('alert')
 
     fireEvent.click(within(header()).getByRole('button', { name: SHELL_MENU }))
     const item = within(header()).getByRole('menuitem', { name: '로그아웃' })
