@@ -346,7 +346,7 @@ function watch(page: Page, fx: Fixture): { lines: string[] } {
 async function stable(page: Page): Promise<{ canvas: string; notices: string[] }> {
   const read = async () => ({
     canvas: (await canvasText(page)).replace(/\s+/g, ' '),
-    notices: await page.locator('.wb-shell-header [role=status], .wb-shell-header [role=alert]').allTextContents(),
+    notices: await page.locator('.wb-shell-footer [role=status], .wb-shell-footer [role=alert]').allTextContents(),
   })
   let last = await read()
   let since = Date.now()

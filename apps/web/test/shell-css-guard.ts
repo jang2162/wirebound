@@ -97,9 +97,10 @@ export interface Violation {
  *
  * 1. `wb-shell` — 에디터 셸의 루트(`shell.css` 머리말 «상속되는 속성은 문서를 감싸는 상자에 걸지 않는다»의 사슬 첫 칸)
  * 2. `wb-shell-canvas` — 그 사슬 둘째
- * 3. `wb-shell-canvas-frame` — 셋째
- * 4. `wb-shell-canvas-surface` — 넷째. 여기 안에 페이지 문서가 들어온다
- * 5. `wb-shell-settings-preview` — 설정 페이지의 갤러리 미리보기(`settings/theme-preview.tsx`). 문서(갤러리)가 iframe 째 들어온다
+ * 3. `wb-shell-canvas-stage` — 셋째. 보이는 폭(프리셋 × 줌)의 무대(`routes/editor.tsx`의 `CanvasFrame`)
+ * 4. `wb-shell-canvas-frame` — 넷째
+ * 5. `wb-shell-canvas-surface` — 다섯째. 여기 안에 페이지 문서가 들어온다
+ * 6. `wb-shell-settings-preview` — 설정 페이지의 갤러리 미리보기(`settings/theme-preview.tsx`). 문서(갤러리)가 iframe 째 들어온다
  *
  * > **문서를 감싸는 상자를 만드는 사람이 여기 한 줄을 더하는 것이 이 목록의 유일한 갱신
  * > 방법이다** — 목록에 없는 상자에 상속 속성을 걸면 **아무 케이스도 안 죽고**, 목록에 있으면
@@ -109,6 +110,7 @@ export interface Violation {
 const WRAPPERS = new Set([
   'wb-shell',
   'wb-shell-canvas',
+  'wb-shell-canvas-stage',
   'wb-shell-canvas-frame',
   'wb-shell-canvas-surface',
   'wb-shell-settings-preview',

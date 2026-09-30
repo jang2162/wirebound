@@ -395,29 +395,24 @@ describe('화면 맞춤', () => {
   })
 
   /**
-   * **가운데 정렬한 만큼은 확대가 쓸 수 없다.** 프레임이 칸보다 좁으면 `margin: 0 auto`가
-   * 그것을 가운데 세우는데, `transform-origin`이 좌상단이라 확대는 **그 자리에서 오른쪽으로만**
-   * 자란다 — 왼쪽 여백은 남고 오른쪽으로 그만큼 넘친다.
-   *
-   * **브라우저에서 잰 값이다**(창 1100 · 프리셋 375 · 쓸 수 있는 폭 486): 여백을 안 빼면
-   * 130%가 나오고 프레임 오른쪽이 칸 밖으로 **31px** 나간다. 여백(55.5px)을 빼면
-   * (486−55.5)/375 = 115%이고 오른쪽 끝이 칸의 끝과 정확히 같다.
-   *
-   * 여기서는 같은 형태를 값만 바꿔 심는다: 852 − 100 = 752를 375로 나눈 **2.005**가
-   * `MAX_ZOOM`(2) 밖이라 스토어가 자른다 — 그래서 100이 아니라 **200**을 심어
-   * 자르지 않는 값(1.738…)이 나오게 한다.
+   * **가운데 정렬은 보이는 폭으로 한다 — 그래서 뺄 여백이 없다**(`routes/editor.tsx`의 `fitZoom` 머리말). 프레임은 보이는 폭(프리셋 × 줌)의
+   * 무대 안에 있고 무대가 칸 가운데에 선다 — 맞춘 뒤 무대의 폭이 쓸 수 있는 폭과 같다. 프레임에 여백을 심어도 계산에 안 들어간다(프레임에
+   * 가운데 정렬을 걸던 판은 그 여백을 읽어 뺐는데, Chrome 은 그 여백을 `0px`로 줘 좁은 프리셋에서 오른쪽이 넘쳤다 — 실브라우저 판은
+   * `build-test/editor-shell-layout.test.ts` «화면 맞춤»).
    */
-  it('가운데 정렬한 만큼을 뺀다 — 확대는 오른쪽으로만 자란다', async () => {
+  it('맞춘 뒤 무대의 폭이 쓸 수 있는 폭이다 — 가운데 정렬은 보이는 폭으로 한다', async () => {
     await openShell()
     measurable(900)
     canvasFrame().style.marginLeft = '200px'
 
-    fireEvent.change(screen.getByLabelText('뷰포트 폭'), { target: { value: '375' } })
+    fireEvent.change(screen.getByLabelText('뷰포트 폭'), { target: { value: '768' } })
     fireEvent.click(screen.getByRole('button', { name: '화면 맞춤' }))
 
-    // (900 − 48 − 200) / 375. **여백을 안 뺐다면 852/375 = 2.272이고 스토어가 2로 자른다.**
-    expect(shellStore().getState().zoom).toBeCloseTo(652 / 375, 10)
-    expect(shellStore().getState().zoom).not.toBe(2)
+    // (900 − 48) / 768. 심은 여백을 뺐다면 (852 − 200) / 768 이다.
+    expect(shellStore().getState().zoom).toBe(852 / 768)
+    const stage = canvasFrame().parentElement
+    expect(stage?.classList.contains('wb-shell-canvas-stage')).toBe(true)
+    expect(stage?.style.width).toBe('852px')
   })
 
   /**

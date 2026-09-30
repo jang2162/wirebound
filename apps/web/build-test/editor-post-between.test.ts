@@ -240,7 +240,8 @@ describe.skipIf(!전제.ok)('편집 둘 사이의 코멘트 게시', () => {
         await page.waitForTimeout(150)
         // 409 앞에 누른다 — 로그아웃 한도(누른 뒤 3s)가 번호 기다림 한도(409 뒤 3s)보다 먼저 끝난다.
         lines.push(`${at()} 로그아웃 누름`)
-        await page.getByRole('button', { name: '로그아웃' }).click()
+        await page.getByRole('button', { name: '더 보기' }).click()
+        await page.getByRole('menuitem', { name: '로그아웃' }).click()
         await page.waitForTimeout(1_000)
       } finally {
         await hold.release()

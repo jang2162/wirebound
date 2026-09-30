@@ -64,6 +64,11 @@ export interface ShellResizerProps {
   onGrab: () => number
   /** `onGrab()`이 준 값에 델타를 더한 값(px). */
   onMove: (px: number) => void
+  /**
+   * **값이 느는 쪽이 왼쪽(· 위)이다.** 우측 패널의 손잡이가 그렇다 — 왼쪽으로 끌면 패널이 넓어진다. 드래그의 델타와 화살표 한 칸의 부호가 함께
+   * 뒤집힌다(`ArrowLeft`가 넓힌다 — 분리선을 왼쪽으로 옮기는 키다). 없으면 오른쪽(· 아래)이 는다.
+   */
+  reversed?: boolean
   /** `Home`·`End`. */
   onEdge: (edge: 'min' | 'max') => void
   /** 두 번 누르기·`Enter`. */
@@ -77,6 +82,7 @@ function axisOf(orientation: ShellResizerProps['orientation'], event: { clientX:
 
 export function ShellResizer(props: ShellResizerProps): ReactElement {
   const { orientation, onGrab, onMove, onEdge, onReset } = props
+  const sign = props.reversed === true ? -1 : 1
 
   const handlePointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>): void => {
@@ -91,7 +97,7 @@ export function ShellResizer(props: ShellResizerProps): ReactElement {
       const from = onGrab()
 
       const move = (moved: globalThis.PointerEvent): void => {
-        onMove(from + axisOf(orientation, moved) - start)
+        onMove(from + sign * (axisOf(orientation, moved) - start))
       }
       const stop = (): void => {
         window.removeEventListener('pointermove', move)
@@ -105,7 +111,7 @@ export function ShellResizer(props: ShellResizerProps): ReactElement {
       window.addEventListener('pointerup', stop)
       window.addEventListener('pointercancel', stop)
     },
-    [orientation, onGrab, onMove],
+    [orientation, sign, onGrab, onMove],
   )
 
   const handleKeyDown = useCallback(
@@ -115,7 +121,7 @@ export function ShellResizer(props: ShellResizerProps): ReactElement {
 
       if (event.key === back || event.key === forth) {
         event.preventDefault()
-        onMove(onGrab() + (event.key === back ? -RESIZE_STEP : RESIZE_STEP))
+        onMove(onGrab() + sign * (event.key === back ? -RESIZE_STEP : RESIZE_STEP))
         return
       }
       if (event.key === 'Home' || event.key === 'End') {
@@ -128,7 +134,7 @@ export function ShellResizer(props: ShellResizerProps): ReactElement {
         onReset()
       }
     },
-    [orientation, onGrab, onMove, onEdge, onReset],
+    [orientation, sign, onGrab, onMove, onEdge, onReset],
   )
 
   return (

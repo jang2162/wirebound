@@ -15,9 +15,9 @@
      자식으로 물려 내려가므로 1·2·3을 보는 검사가 잡지 못하는 누수다. 글꼴·글자색·
      `color-scheme`은 셸이 실제로 그리는 조각(머리·좌측·우측·안내 화면)에만 각각 건다.
 
-     **감싸는 상자는 넷이다** — `.wb-shell`, `.wb-shell-canvas`, `.wb-shell-canvas-frame`,
+     **감싸는 상자는 다섯이다** — `.wb-shell`, `.wb-shell-canvas`, `.wb-shell-canvas-stage`, `.wb-shell-canvas-frame`,
      `.wb-shell-canvas-surface`. **프레임 안에 설계서 문서가 들어오므로**(`canvas/canvas.tsx`)
-     넷 모두가 검사 대상이다.
+     다섯 모두가 검사 대상이다.
 
      **예외 — 커스텀 프로퍼티.** 아래 `.wb-shell`이 선언하는 `--wb-shell-*` 일곱 개도
      상속 속성이라 프레임 안까지 내려간다. 그래도 두는 것은 `wb-shell-` 접두어가
@@ -122,17 +122,17 @@
      (`test/shell-css-guard.ts` 머리말의 ㉠·㉡). `width`는 상속되지 않으므로 그 성질이
      그대로 참이고, 기본값 264px이 CSS와 TS 두 벌로 적히지도 않는다.
 
-     **둘째 트랙 6px이 손잡이다.** 1px 여백 사이에 놓여 총 8px 홈이 된다 — 1px 선만으로는
-     마우스로 잡을 수 없다. 이 수는 `SIDE_RESERVED_WIDTH`가 함께 알고 있고
-     `test/shell/sidebar-layout.test.ts`가 둘을 대조한다. */
-  grid-template-columns: auto 6px minmax(0, 1fr) 300px;
+     **둘째 · 넷째 트랙 6px이 손잡이다**(좌측 폭 · 우측 폭). 1px 여백 사이에 놓여 총 8px 홈이 된다 — 1px 선만으로는
+     마우스로 잡을 수 없다. **다섯째 트랙(우측 패널)도 `auto`다** — 폭은 `.wb-shell-panel`의 인라인 `width`(좌측과 같은 장치). 손잡이 둘과
+     여백 넷은 `HANDLES_WIDTH`가 함께 알고 있고 `test/shell/sidebar-layout.test.ts`가 둘을 대조한다. */
+  grid-template-columns: auto 6px minmax(0, 1fr) 6px auto;
   /* **셋째 줄이 하단 바다**(`shell/shell-footer.tsx`) — 캔버스 칸 아래, 좌 · 우 사이드바 사이. 높이가 `auto`라 통지가 늘면 바가 자라고
      캔버스 줄(`minmax(0, 1fr)`)이 그만큼 준다. 캔버스와 바 사이에 칸을 끼울 때는 줄 하나와 영역 이름 하나를 더한다. */
   grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
-    'head head head head'
-    'side side-resizer canvas panel'
-    'side side-resizer footer panel';
+    'head head head head head'
+    'side side-resizer canvas panel-resizer panel'
+    'side side-resizer footer panel-resizer panel';
   gap: var(--wb-shell-gap);
   background: var(--wb-shell-line);
 }
@@ -146,19 +146,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  /* 편집 실패 통지가 셋째 조각으로 들어온다. 감싸지 않으면 `space-between`이 셋을
-     펼쳐 도구가 가운데로 밀린다 — 통지가 뜰 때만 그러므로 눈에 띄는 흔들림이 된다. */
+  /* 좁은 창에서 세 조각(왼쪽 · 가운데 · `…`)이 줄을 바꾼다 — 한 줄에 드는 폭은 `.wb-shell-head-tools`의 표. 통지는 머리가 아니라
+     하단 바에 선다(`shell/shell-footer.tsx`). */
   flex-wrap: wrap;
   gap: 24px;
   padding: 10px 16px;
-  /* **머리는 창보다 넓어지지 않는다.** 머리는 그리드의 네 칸에 걸치는데, 좁은 창에서는 그리드가 좌측 · 우측의 고정 폭만큼
-     창보다 넓다 — 머리가 그 폭까지 펼쳐지면 줄을 바꿀 자리를 창 밖에서 찾아 오른쪽 도구들이 잘린다. `.wb-shell`이
-     `position: fixed`라 문서가 넓어지지 않아 가로 스크롤로도 못 본다(Chrome 390: 되돌리기 · 확대 · 화면 맞춤 · 내보내기가
-     493 까지 · 단추 글자가 «편집 모/드» · «축/소»로 접힘). 상한을 창 폭에 두면 `flex-wrap`이 창 안에서 줄을 바꾼다. 안에서
-     줄을 바꿔야 하는 묶음은 둘이다 — 도구(`.wb-shell-tools` — 모드 · 뷰포트 · 줌이 한 줄이면 390 에서 477px)와 세션
-     (`.wb-shell-session` — 이름이 길면 넘친다: 한글 30자 이름에서 떼면 넘침 셋). 묶음이 줄을 바꾸면 단추는 줄어들지 않아
-     글자가 안 접힌다 — 단추마다 `nowrap`을 걸어 봤고 390 · 480 에서 아무것도 안 바뀌었다. 이력은 자식이
-     다 줄어들거나 짧아 걸 것이 없다(`test/shell-css-picker.test.ts`의 `ONE_LINE`).
+  /* **머리는 창보다 넓어지지 않는다.** 머리는 그리드의 모든 칸에 걸치는데, 좁은 창에서는 그리드가 좌측 · 우측의 폭만큼
+     창보다 넓다 — 머리가 그 폭까지 펼쳐지면 줄을 바꿀 자리를 창 밖에서 찾아 오른쪽 조각이 잘린다. `.wb-shell`이
+     `position: fixed`라 문서가 넓어지지 않아 가로 스크롤로도 못 본다. 상한을 창 폭에 두면 `flex-wrap`이 창 안에서 줄을 바꾼다. 안에서
+     줄을 바꾸는 묶음은 가운데 무리(`.wb-shell-head-tools`)다 — 묶음이 줄을 바꾸면 단추는 줄어들지 않아 글자가 안 접힌다. 이력은 자식이
+     다 줄어들거나 짧아 걸 것이 없다(`test/shell-css-picker.test.ts`의 `ONE_LINE`). 셸 밖 화면의 계정 묶음(`.wb-shell-session`)도 같은
+     장치로 줄을 바꾼다(이름이 길면 넘친다).
      몸통(좌측 · 캔버스 · 우측)이 좁은 창에서 넘치는 것은 이 줄의 일이 아니다. */
   max-width: 100vw;
   box-sizing: border-box;
@@ -237,7 +235,21 @@
   min-width: 0;
 }
 
-/* 머리의 가운데 — 되돌리기 · 모드. 줄을 바꿀 수 있다 — 근거는 `.wb-shell-header`의 `max-width`. */
+/* 머리의 가운데 — 되돌리기 · 모드. 줄을 바꿀 수 있다 — 근거는 `.wb-shell-header`의 `max-width`.
+
+   ## 머리가 한 줄에 들어가는 폭 — 재서 적는다. 추정이 아니다
+
+   머리는 세 조각이다 — 왼쪽(로고 · 이름), 가운데(되돌리기 · 모드), 오른쪽 끝(`…`). 창 폭을 이분 탐색해 머리 높이가 넓은 창(2400)의
+   높이와 같은 가장 좁은 창 폭을 찾은 값(Chrome 헤드리스 · 프로젝트 이름 «관리자 콘솔 설계서»):
+
+   | 모드 | 한 줄에 드는 최소 창 폭 | 그보다 좁으면 |
+   |---|---|---|
+   | 편집 (되돌리기 묶음이 있다) | 620px | 머리가 48 → 96px, `…` 가 둘째 줄 왼쪽 끝으로 내려간다 |
+   | 뷰 (되돌리기가 없다) | 470px | 〃 |
+
+   **다시 재는 길:** `pnpm test:browser` 의 `apps/web/build-test/editor-shell-layout.test.ts` «머리는 창 1024 에서 한 줄이다» 가 같은 탐색을
+   돌려 `[머리 한 줄 최소 창 폭]` 로그로 낸다(단언은 1024 이하인지만 — 글꼴이 기계마다 달라 수는 로그의 값이다). 이름이 길면 왼쪽 조각의
+   제목이 줄임표로 줄어 줄 수가 먼저 늘지 않는다(`.wb-shell-title`의 `text-overflow`). */
 .wb-shell-head-tools {
   display: flex;
   flex-wrap: wrap;
@@ -274,9 +286,12 @@
   gap: 4px 12px;
 }
 
-/* 뷰포트 · 줌. 줄어들지 않고, 칸이 좁으면 안에서 줄을 바꾼다. */
+/* 뷰포트 · 줌. 칸이 좁으면 **줄어들며 안에서 줄을 바꾼다**. `flex: none`이면 최대 내용 폭(뷰포트 고르개 + 줌 넷)으로 서서 캔버스 칸이
+   최소(320)일 때 우측 패널 밑으로 들어가 «화면 맞춤»을 누를 수 없었다(Chrome · 창 1440 · 좌측 최대 — 단추 가운데의 `elementFromPoint`가
+   `.wb-shell-panel`). */
 .wb-shell-footer-tools {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -403,57 +418,9 @@
   color: var(--wb-shell-muted);
 }
 
-/* 계정 묶음. 머리 줄의 **끝**이다 — 근거는 `session/session-menu.tsx` 머리말에 있다.
-   `margin-left: auto`를 걸지 않는다: 머리가 이미 `space-between`이라 마지막 조각이 오른쪽
-   끝에 선다.
-
-   ## 머리가 한 줄에 들어가는 폭 — 재서 적는다. 추정이 아니다
-
-   **아래 수는 전부 크롬에서 이분 탐색으로 잰 값이다**(셸의 실제 DOM에 이 파일을 그대로
-   씌우고, 상자 폭을 600~2400 사이에서 갈라 가며 머리 높이가 49px인 최소 폭을 찾는다).
-   `-270px` 쪽은 **두 조각(`.wb-shell-back`·`.wb-shell-session`)을 DOM에서 빼고**
-   같은 탐색을 다시 돌린 값이다 — 조각 폭을 더해 어림한 것이 아니다.
-
-   | 모드 | 두 조각을 뺀 폭 | 지금 | 증가분 | 그보다 좁으면 |
-   |---|---|---|---|---|
-   | 편집 (되돌리기 묶음이 있다) | 1147px | **1417px** | +270 | 머리가 49 → 100px, 조각이 둘째 줄로 내려간다 |
-   | 뷰 (되돌리기가 없다) | 989px | **1259px** | +270 | 〃 |
-
-   **증가분을 조각 폭을 손으로 더해 어림하면 틀린다** — (링크 ~120 + lead gap 10 + 묶음 105
-   + 머리 gap 24) = 259px로 실제보다 11px 작다. **어림한 수를 실측처럼 적어 두면 다음 사람이
-   그것을 근거로 계산한다.** 두 모드의 증가분이 **똑같이 270**인 것이 이 수의 검산이다: 뺀
-   것은 모드와 무관한 두 조각뿐이므로 편집·뷰가 같은 값만큼 늘어야 한다.
-
-   ## 둘째 줄이 어떻게 생겼는가 — 구간마다 다르다
-
-   | 폭(편집) | 폭(뷰) | 둘째 줄 |
-   |---|---|---|
-   | 1417+ | 1259+ | 없다 (한 줄) |
-   | 1288~1416 | 1130~1258 | **계정 묶음 혼자, 왼쪽 끝에** |
-   | 그 아래 | 그 아래 | 내보내기·스냅샷·테마가 차례로 합류하고, 계정 묶음은 `space-between`을 따라 오른쪽 끝으로 간다 |
-
-   (독립으로 다시 재면 위 구간의 아래 끝이 편집 1278·뷰 1120으로 잡히기도 한다. 위 끝
-   1416·1258과 현상은 양쪽이 같고 아래 끝만 10px 갈린다 — 어느 쪽이든 *"혼자 서는 구간이
-   있다"*는 결론은 같아 더 좁히지 않는다.)
-
-   ## 그래서 무엇을 안 하나
-
-   **줄바꿈을 막으려고 조각을 줄이지 않는다.** `flex-wrap: wrap`은 이 머리가 원래 갖고 있던
-   장치이고(위 `.wb-shell-header`의 주석 — 편집 실패 통지가 그 줄을 쓴다), 넘치는 것을
-   가로 스크롤이나 잘림으로 두는 것보다 낫다. 문안을 줄여 버는 것은 55px(`프로젝트 목록으로
-   돌아가기` → `프로젝트 목록`)뿐이라 1366~1417 구간만 덮는다.
-
-   **내려간 묶음이 왼쪽에 서는 것은 `space-between`의 성질이다**(둘째 줄에 조각이 하나뿐이면
-   flex-start). 오른쪽에 세우려면 이 규칙에 `margin-left: auto` 한 줄이면 되는데, 그러면
-   **한 줄로 들어갈 때의 배치까지 바뀐다** — 앞 여섯 조각이 왼쪽으로 뭉치고 남는 공간이
-   전부 이 여백으로 간다(실측: 1600px에서 `.wb-shell-tools`가 x=510 → 449로 밀린다).
-   한 줄일 때의 배치는 이 규칙 하나로 바꿀 것이 아니므로 건드리지 않는다.
-
-   **여기를 줄여서 될 일이 아니다 — 머리 전체의 그룹핑에서 풀 일이다.** 두 조각이 270px을
-   더하는 것은 맞지만, 둘을 빼도 여덟 묶음이 한 줄에 서 있고 1147px 아래에서는 이미
-   두 줄이다. 이 묶음을 깎으면 임계가 조금 내려갈 뿐 **줄이 하나라는 전제는 그대로**라
-   다음 조각이 들어올 때 같은 자리로 돌아온다. 고칠 자리는 *"머리에 무엇을 몇 묶음으로
-   두는가"*이고 그것은 별도의 일이다 — **이 규칙만 만지작거리지 마라.** */
+/* 계정 묶음 — **셸 밖 화면**(설정 · 토큰 · 테마 관리)의 머리 줄 끝(`session/session-menu.tsx`의 `SessionMenu`). 에디터 · 프로젝트 목록
+   머리는 이 묶음 대신 `…`(`shell/action-menu.tsx`)를 둔다. `margin-left: auto`를 걸지 않는다: 머리가 이미 `space-between`이라 마지막
+   조각이 오른쪽 끝에 선다. */
 .wb-shell-session {
   display: inline-flex;
   /* 이름 · 링크 · 로그아웃이 좁은 창에서 줄을 바꾼다 — 이 묶음에 새 조각이 들어와도 같다. 근거는 `.wb-shell-header`의
@@ -559,6 +526,15 @@
   touch-action: none;
 }
 
+/* 캔버스와 우측 패널 사이의 손잡이. 좌측 손잡이와 같은 값이고 자리만 다르다 — 규칙을 합치지 않는 것은 격자 자리(`grid-area`)가 갈리기
+   때문이다(머리말의 규칙이 막는 것은 결합자이지 같은 값의 규칙 둘이 아니다). */
+.wb-shell-panel-resizer {
+  grid-area: panel-resizer;
+  background: var(--wb-shell-chrome);
+  cursor: col-resize;
+  touch-action: none;
+}
+
 /* 좌측 두 영역 사이의 손잡이. 세로 손잡이와 같은 값이고 축만 다르다 — 규칙을 합치지
    않는 것은 `.wb-shell-zoom-fit`이 `.wb-shell-zoom-step`과 합치지 않는 것과 같은
    근거다(한쪽의 생김새를 바꿀 때 다른 쪽이 끌려가면 안 된다).
@@ -588,6 +564,7 @@
 
 /* 마우스가 올라왔을 때. 6px 회색 홈이 강조색으로 차서 **잡을 수 있는 자리**라고 말한다. */
 .wb-shell-side-resizer:hover,
+.wb-shell-panel-resizer:hover,
 .wb-shell-region-resizer:hover {
   background: var(--wb-shell-accent);
 }
@@ -598,6 +575,7 @@
    넣으면(`outline-offset` 음수) 남는 것이 2px라 보이지 않는다. `outline`은 자리를 차지하지
    않으므로 옆 상자가 밀리지도 않는다. */
 .wb-shell-side-resizer:focus-visible,
+.wb-shell-panel-resizer:focus-visible,
 .wb-shell-region-resizer:focus-visible {
   background: var(--wb-shell-accent);
   outline: 2px solid var(--wb-shell-ink);
@@ -885,12 +863,18 @@
   background: #eef0f3;
 }
 
+/* 무대 — 보이는 폭(프리셋 × 줌)의 상자(`routes/editor.tsx`의 `CanvasFrame` · `fitZoom` 머리말 «가운데 정렬은 보이는 폭으로 한다»).
+   가운데 정렬은 여기서 한다. 캔버스 칸의 흐름 속 자식이 이 상자라 칸의 가로 넘침이 **보이는 폭**으로 선다 — 안의 프레임은 `transform`이
+   걸려 변환 뒤 상자로만 넘침에 든다(Chrome: 이 상자에 `overflow-x: clip`을 더하든 빼든 넘침이 같았다 — 자르는 장치가 따로 필요 없다). */
+.wb-shell-canvas-stage {
+  margin: 0 auto;
+}
+
 .wb-shell-canvas-frame {
   /* 폭은 프리셋이 정하고 줌은 그 위의 배율이다. 좌상단 기준으로 키워야 확대해도
-     프레임의 시작점이 제자리에 있다. */
+     프레임의 시작점이 무대의 시작점에 있다. */
   transform-origin: top left;
   min-height: 320px;
-  margin: 0 auto;
   background: #fff;
   box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
 }
@@ -1178,6 +1162,10 @@
 
 .wb-shell-panel {
   grid-area: panel;
+  /* 폭은 인라인 `width`다(`shell/sidebar-layout.ts` — 좌측과 같은 장치). 격자 트랙이 `auto`라 그 값을 그대로 받는다. **`border-box`다** —
+     아래 좌우 여백(24)이 폭 밖에 붙으면 트랙이 인라인 폭 + 24 가 되어 캔버스 몫이 그만큼 준다(Chrome · 창 1440: 두 폭 최대에서 캔버스
+     296 < `CANVAS_MIN_WIDTH`). 좌측(`.wb-shell-side`)은 여백이 없어 같은 일이 없다. */
+  box-sizing: border-box;
   color-scheme: light;
   min-width: 0;
   overflow: auto;

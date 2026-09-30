@@ -47,7 +47,8 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
       await box.fill('친 채 나간 글')
       const hold = await stack.holdRow('pages', fx.first)
       // 실클릭 — blur 가 편집을 낸다. 행에 줄 서야 판이 선다.
-      await page.getByRole('button', { name: '로그아웃' }).click()
+      await page.getByRole('button', { name: '더 보기' }).click()
+      await page.getByRole('menuitem', { name: '로그아웃' }).click()
       await hold.waitForWaiters(1)
       await new Promise((resolve) => setTimeout(resolve, 300))
       await hold.release()
@@ -83,7 +84,8 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
       await box.evaluate((element) => (element as HTMLElement).blur())
       await canvasFrame(page).locator('body', { hasText: 'E2 쌓인 글' }).waitFor()
 
-      await page.getByRole('button', { name: '로그아웃' }).click()
+      await page.getByRole('button', { name: '더 보기' }).click()
+      await page.getByRole('menuitem', { name: '로그아웃' }).click()
       await new Promise((resolve) => setTimeout(resolve, 300))
       await hold.release()
       await page.waitForURL('**/login**', { timeout: 10_000 })
@@ -118,7 +120,8 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
         await canvasFrame(page).locator('body', { hasText: '쌓인 글' }).waitFor()
 
         const clicked = Date.now()
-        await page.getByRole('button', { name: '로그아웃' }).click()
+        await page.getByRole('button', { name: '더 보기' }).click()
+        await page.getByRole('menuitem', { name: '로그아웃' }).click()
         const reached = await page.waitForURL('**/login**', { timeout: 8_000 }).then(
           () => true,
           () => false,
@@ -163,7 +166,8 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
         await box.fill('붙잡힌 글')
         await box.evaluate((element) => (element as HTMLElement).blur())
         await hold.waitForWaiters(1)
-        await page.getByRole('button', { name: '로그아웃' }).click()
+        await page.getByRole('button', { name: '더 보기' }).click()
+        await page.getByRole('menuitem', { name: '로그아웃' }).click()
         await page.waitForURL('**/login**', { timeout: 8_000 })
       } finally {
         await hold.release()

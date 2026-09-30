@@ -101,7 +101,7 @@ describe.skipIf(!전제.ok)('페이지를 옮긴 뒤의 편집', () => {
         async () => [await server(P1), await server(P2)] as const,
         ([one, two]) => one.head + two.head >= 5,
       )
-      const notices = await page.locator('.wb-shell-header [role=status], .wb-shell-header [role=alert]').allTextContents()
+      const notices = await page.locator('.wb-shell-footer [role=status], .wb-shell-footer [role=alert]').allTextContents()
       // eslint-disable-next-line no-console
       console.log(`[페이지 이동] ${frames.join(' · ')} · 서버 ${JSON.stringify(after)}`)
       expect({ 서버: after, 통지: notices, 순서: frames }).toEqual({
