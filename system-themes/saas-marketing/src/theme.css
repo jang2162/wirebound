@@ -1,1 +1,782 @@
-/* system-saas-marketing 의 테마 시트. 토큰 변수(`var(--wb-…)`)로 적고 `:root` 에 기본값을 둔다. */
+/*
+ * system-saas-marketing 테마의 CSS. 옛 JSON 테마 `saas-marketing` 의 토큰 · 골격 · 스킨을 옮겼다(원본:
+ * `git show b2766e8c^:packages/themes/src/system/saas-marketing.ts` — 컴포넌트마다 무엇을 왜 골랐는지는 그 파일의 주석).
+ * 이 파일이 소스다 — 생성기는 없다.
+ *
+ * `:root` 의 변수 가운데 manifest(`src/manifest.ts`)가 토큰으로 선언한 것은 토큰 편집이 덮는 자리다 — 토큰 키의 `.` 을 `-` 로 바꾼
+ * 이름이다(`semantic.primary` → `--wb-semantic-primary`). 이름을 바꾸면 토큰 편집이 조용히 안 닿는다. 나머지는 상수다.
+ *
+ * **조각 셀렉터는 자식 결합자(`>`)로 뷰의 DOM 을 따라 내려간다.** 자손 결합자로 쓰면 조각 이름이 같은 중첩 컴포넌트까지 칠한다 —
+ * `EntryForm` 의 제목(`label` 조각)이 안의 `Field` 라벨을 제목 크기로 키운다(`test/saas-marketing.test.ts` «조각 스킨이 중첩
+ * 컴포넌트로 새지 않는다»). 뷰의 DOM 을 바꾸면 여기 사슬도 함께 고친다.
+ *
+ * variant 없는 노드는 그 컴포넌트의 `defaultVariant` 로 그려진다 — `default` 를 겨냥한 규칙은 두지 않는다(바탕 규칙이 그 모습이다).
+ */
+
+/* 서체 — 네트워크를 쓰지 않는다(`local()`). 그 이름의 로컬 서체가 없으면 토큰의 뒷줄(`system-ui` 이하)이 그려진다. 가변 서체를
+   `src` 맨 앞에 둔 것은 정적 400 서체가 700 자리를 받아 굵기가 말없이 사라지는 것을 피하려는 것이다. */
+@font-face {
+  font-family: "Wirebound Marketing Display";
+  src: local("Inter Variable"), local("InterVariable"), local("Inter"), local("Helvetica Neue"), local("Arial");
+  font-weight: 700;
+}
+@font-face {
+  font-family: "Wirebound Marketing Display";
+  src: local("Inter Variable"), local("InterVariable"), local("Inter"), local("Helvetica Neue"), local("Arial");
+  font-weight: 800;
+}
+@font-face {
+  font-family: "Wirebound Marketing Sans";
+  src: local("Inter Variable"), local("InterVariable"), local("Inter"), local("Helvetica Neue"), local("Arial");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "Wirebound Marketing Sans";
+  src: local("Inter Variable"), local("InterVariable"), local("Inter"), local("Helvetica Neue"), local("Arial");
+  font-weight: 600;
+}
+
+:root {
+  /* 토큰 */
+  --wb-semantic-primary: #5b3df5;
+  --wb-semantic-primarySoft: #f0edff;
+  --wb-semantic-accentSoft: #e4f8f5;
+  --wb-semantic-surface: #ffffff;
+  --wb-semantic-canvas: #f5f5fc;
+  --wb-semantic-border: #e7e7f1;
+  --wb-semantic-borderStrong: #9d9db6;
+  --wb-semantic-text: #0b0b14;
+  --wb-semantic-textMuted: #5c5c78;
+  --wb-semantic-textInverse: #ffffff;
+  --wb-semantic-danger: #e5484d;
+  --wb-typography-family-display: "Wirebound Marketing Display", "Wirebound Marketing Sans", system-ui, sans-serif;
+  --wb-typography-family-sans: "Wirebound Marketing Sans", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --wb-typography-display-fontSize: 64px;
+  --wb-typography-h1-fontSize: 48px;
+  --wb-typography-body-fontSize: 18px;
+  --wb-radius-sm: 8px;
+  --wb-radius-md: 14px;
+  --wb-radius-lg: 24px;
+  --wb-container-maxWidth: 1200px;
+  --wb-section-paddingY: 80px;
+
+  /* 상수 — 여백 눈금은 `system-admin` 과 같은 4px 다. 넓은 여백은 눈금을 키워서가 아니라 큰 눈금을 써서 만든다(눈금을 8px 로 올리면
+     버튼 안쪽처럼 촘촘해야 할 자리를 못 적는다). */
+  --wb-space-1: 4px;
+  --wb-space-2: 8px;
+  --wb-space-3: 12px;
+  --wb-space-4: 16px;
+  --wb-space-5: 20px;
+  --wb-space-6: 24px;
+  --wb-space-8: 32px;
+  --wb-space-10: 40px;
+  --wb-space-12: 48px;
+  --wb-space-24: 96px;
+  --wb-radius-full: 999px;
+  /* 두 겹 — 가까운 윤곽선 대용과 멀리 퍼지는 부드러운 그림자. 흰 바탕 위에 카드가 떠 보이는 것 자체가 이 테마의 인상이다. */
+  --wb-shadow-sm: 0 1px 2px rgba(11,11,20,.04), 0 8px 24px rgba(11,11,20,.06);
+  --wb-shadow-md: 0 2px 4px rgba(11,11,20,.04), 0 18px 48px rgba(11,11,20,.10);
+  --wb-shadow-lg: 0 4px 8px rgba(11,11,20,.05), 0 32px 80px rgba(11,11,20,.16);
+  --wb-motion-fast: 120ms;
+  --wb-motion-base: 220ms;
+  --wb-motion-easing: cubic-bezier(.4,0,.2,1);
+  --wb-typography-display-lineHeight: 1.04;
+  --wb-typography-display-fontWeight: 800;
+  --wb-typography-display-letterSpacing: -0.03em;
+  --wb-typography-h1-lineHeight: 1.1;
+  --wb-typography-h1-fontWeight: 800;
+  --wb-typography-h1-letterSpacing: -0.02em;
+  --wb-typography-h2-fontSize: 36px;
+  --wb-typography-h2-lineHeight: 1.16;
+  --wb-typography-h2-fontWeight: 700;
+  --wb-typography-h2-letterSpacing: -0.015em;
+  --wb-typography-h3-fontSize: 26px;
+  --wb-typography-h3-lineHeight: 1.28;
+  --wb-typography-h3-fontWeight: 700;
+  --wb-typography-h4-fontSize: 20px;
+  --wb-typography-h4-lineHeight: 1.36;
+  --wb-typography-h4-fontWeight: 600;
+  --wb-typography-h5-fontSize: 17px;
+  --wb-typography-h5-lineHeight: 1.45;
+  --wb-typography-h5-fontWeight: 600;
+  --wb-typography-h6-fontSize: 14px;
+  --wb-typography-h6-lineHeight: 1.5;
+  --wb-typography-h6-fontWeight: 600;
+  --wb-typography-h6-letterSpacing: 0.04em;
+  --wb-typography-body-lineHeight: 1.7;
+  --wb-typography-body-fontWeight: 400;
+  --wb-typography-caption-fontSize: 14px;
+  --wb-typography-caption-lineHeight: 1.6;
+  --wb-typography-caption-fontWeight: 400;
+  --wb-section-paddingYCompact: var(--wb-space-10);
+  --wb-tree-indent: var(--wb-space-6);
+}
+
+/* ── 골격 ─────────────────────────────────────────────────────────────── */
+
+/* 서체 · 글자색을 문서의 뿌리에 건다 — 상속되므로 한 줄이 아래 전부에 닿는다. 안 걸면 스킨이 가리키지 않는 글자가 브라우저 기본
+   서체로 남는다. */
+[data-wb-component="Page"] {
+  background: var(--wb-semantic-surface);
+  color: var(--wb-semantic-text);
+  font-family: var(--wb-typography-family-sans);
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
+  font-weight: var(--wb-typography-body-fontWeight);
+}
+
+/* 전체 폭 배경(`band` 의 워시) + 가운데 모인 내용(`inner`). */
+[data-wb-component="Section"][data-wb-structure="splitBg"] {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--wb-semantic-surface);
+  padding-top: var(--wb-section-paddingY);
+  padding-bottom: var(--wb-section-paddingY);
+}
+[data-wb-component="Section"][data-wb-structure="splitBg"] > [data-wb-part="band"] {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, var(--wb-semantic-canvas) 0%, var(--wb-semantic-surface) 55%, var(--wb-semantic-surface) 100%);
+  z-index: 0;
+}
+/* 폭을 가두는 자리는 가운데 둔다 — `max-width` 만 걸면 뷰포트가 그보다 넓을 때 칼럼이 왼쪽에 붙고 아무 검증도 안 죽는다
+   (`test/saas-marketing.test.ts` «Section 의 inner 는 가둔 칼럼을 가운데 둔다»). */
+[data-wb-component="Section"][data-wb-structure="splitBg"] > [data-wb-part="inner"] {
+  position: relative;
+  z-index: 1;
+  max-width: var(--wb-container-maxWidth);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--wb-space-6);
+  padding-right: var(--wb-space-6);
+}
+[data-wb-component="Section"][data-wb-variant="hero"] {
+  padding-top: var(--wb-space-24);
+  padding-bottom: var(--wb-space-24);
+}
+[data-wb-component="Section"][data-wb-variant="hero"] > [data-wb-part="band"] {
+  background: linear-gradient(160deg, var(--wb-semantic-primarySoft) 0%, var(--wb-semantic-accentSoft) 60%, var(--wb-semantic-surface) 100%);
+}
+[data-wb-component="Section"][data-wb-variant="muted"] {
+  background: var(--wb-semantic-canvas);
+}
+[data-wb-component="Section"][data-wb-variant="muted"] > [data-wb-part="band"] {
+  background: var(--wb-semantic-canvas);
+}
+/* `compact` prop — 좁은 여백. 반응형 규칙보다 구체적이라 어느 폭에서나 이긴다. */
+[data-wb-component="Section"][data-wb-structure="splitBg"].wbsm-section-compact {
+  padding-top: var(--wb-section-paddingYCompact);
+  padding-bottom: var(--wb-section-paddingYCompact);
+}
+
+/* 방향 · 정렬 · 열 수는 노드의 것이다(기본 CSS 가 노드 변수로 싣는다) — 테마는 간격만 정한다. */
+[data-wb-component="Flex"] {
+  gap: var(--wb-space-6);
+}
+[data-wb-component="Grid"] {
+  gap: var(--wb-space-8);
+}
+
+/* 떠 있는 카드(옛 구조 `elevated` — 기본 구조와 DOM 이 같아 그림자 · 여백 · 굴림이 전부다). */
+[data-wb-component="Card"] {
+  background: var(--wb-semantic-surface);
+  border-radius: var(--wb-radius-lg);
+  padding: var(--wb-space-8);
+  box-shadow: var(--wb-shadow-md);
+  border: 1px solid var(--wb-semantic-border);
+  transition: box-shadow var(--wb-motion-base) var(--wb-motion-easing), border-color var(--wb-motion-base) var(--wb-motion-easing);
+}
+[data-wb-component="Card"] > [data-wb-part="header"] {
+  margin-bottom: var(--wb-space-3);
+}
+[data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="title"] {
+  font-family: var(--wb-typography-family-display);
+  font-size: var(--wb-typography-h3-fontSize);
+  line-height: var(--wb-typography-h3-lineHeight);
+  font-weight: var(--wb-typography-h3-fontWeight);
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="subtitle"] {
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Card"] > [data-wb-part="body"] {
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Card"][data-wb-variant="featured"] {
+  box-shadow: var(--wb-shadow-lg);
+  border-color: var(--wb-semantic-primary);
+}
+
+/* 알약 탭 — 요금제 월/연 전환처럼 선택지가 둘셋인 토글. 고른 탭은 흰 알약이 떠 있다. */
+[data-wb-component="Tabs"] > [data-wb-part="list"] {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--wb-space-1);
+}
+[data-wb-component="Tabs"] > [data-wb-part="list"] > [data-wb-part="tab"] {
+  padding: var(--wb-space-2) var(--wb-space-5);
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-h5-fontSize);
+  line-height: var(--wb-typography-h5-lineHeight);
+  font-weight: var(--wb-typography-h5-fontWeight);
+  transition: background-color var(--wb-motion-fast) var(--wb-motion-easing), color var(--wb-motion-fast) var(--wb-motion-easing);
+}
+[data-wb-component="Tabs"] > [data-wb-part="panel"] {
+  padding-top: var(--wb-space-10);
+  padding-bottom: var(--wb-space-10);
+}
+[data-wb-component="Tabs"][data-wb-variant="pill"] > [data-wb-part="list"] {
+  background: var(--wb-semantic-canvas);
+  border-radius: var(--wb-radius-full);
+  padding: var(--wb-space-1);
+}
+[data-wb-component="Tabs"][data-wb-variant="pill"] > [data-wb-part="list"] > [data-wb-part="tab"] {
+  border-radius: var(--wb-radius-full);
+}
+[data-wb-component="Tabs"][data-wb-variant="pill"] > [data-wb-part="list"] > [data-wb-part="tab"][aria-selected="true"] {
+  background: var(--wb-semantic-surface);
+  color: var(--wb-semantic-text);
+  box-shadow: var(--wb-shadow-sm);
+}
+[data-wb-component="Tabs"][data-wb-variant="underline"] > [data-wb-part="list"] {
+  display: flex;
+  gap: var(--wb-space-6);
+  border-bottom: 1px solid var(--wb-semantic-border);
+}
+[data-wb-component="Tabs"][data-wb-variant="underline"] > [data-wb-part="list"] > [data-wb-part="tab"] {
+  padding-left: 0;
+  padding-right: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+[data-wb-component="Tabs"][data-wb-variant="underline"] > [data-wb-part="list"] > [data-wb-part="tab"][aria-selected="true"] {
+  color: var(--wb-semantic-primary);
+  border-bottom-color: var(--wb-semantic-primary);
+}
+
+/* ── 데이터 ───────────────────────────────────────────────────────────── */
+
+/* 카드 그리드(`cards` · `featured` · `compact`). 열 수는 이 테마가 정한다 — 카드는 노드의 `columns` 를 안 그린다. */
+[data-wb-component="List"][data-wb-structure="cardGrid"] {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--wb-space-8);
+}
+[data-wb-component="List"][data-wb-structure="cardGrid"] > [data-wb-part="item"] {
+  background: var(--wb-semantic-surface);
+  border-radius: var(--wb-radius-lg);
+  box-shadow: var(--wb-shadow-sm);
+  padding: var(--wb-space-6);
+  border: 1px solid var(--wb-semantic-border);
+  transition: box-shadow var(--wb-motion-base) var(--wb-motion-easing), border-color var(--wb-motion-base) var(--wb-motion-easing);
+}
+[data-wb-component="List"][data-wb-structure="cardGrid"] > [data-wb-part="item"] > [data-wb-part="media"] {
+  aspect-ratio: 16 / 9;
+  border-radius: var(--wb-radius-md);
+  background: var(--wb-semantic-canvas);
+  margin-bottom: var(--wb-space-4);
+}
+[data-wb-component="List"][data-wb-structure="cardGrid"] > [data-wb-part="item"] > [data-wb-part="title"] {
+  font-size: var(--wb-typography-h4-fontSize);
+  line-height: var(--wb-typography-h4-lineHeight);
+  font-weight: var(--wb-typography-h4-fontWeight);
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="List"][data-wb-structure="cardGrid"] > [data-wb-part="item"] > [data-wb-part="meta"] {
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="List"][data-wb-structure="cardGrid"] > [data-wb-part="pagination"] {
+  grid-column: 1 / -1;
+  padding-top: var(--wb-space-6);
+  padding-bottom: var(--wb-space-6);
+  text-align: center;
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="List"][data-wb-variant="featured"] > [data-wb-part="item"] {
+  box-shadow: var(--wb-shadow-lg);
+  border-color: var(--wb-semantic-primary);
+}
+[data-wb-component="List"][data-wb-variant="compact"] {
+  gap: var(--wb-space-4);
+}
+[data-wb-component="List"][data-wb-variant="compact"] > [data-wb-part="item"] {
+  padding: var(--wb-space-4);
+}
+[data-wb-component="List"][data-wb-state~="selected"] > [data-wb-part="item"] {
+  border: 2px solid var(--wb-semantic-primary);
+}
+[data-wb-component="List"][data-wb-state~="empty"] > [data-wb-part="item"] {
+  background: var(--wb-semantic-canvas);
+  box-shadow: none;
+}
+[data-wb-component="List"][data-wb-state~="loading"] {
+  opacity: 0.6;
+}
+[data-wb-component="List"][data-wb-state~="disabled"] {
+  opacity: 0.45;
+}
+
+/* 표(`table` variant — 기본 뷰의 DOM). 비교표 · 요금표 자리라 줄을 넉넉히 띄운다. */
+[data-wb-component="List"][data-wb-structure="table"] {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--wb-semantic-surface);
+}
+[data-wb-component="List"][data-wb-structure="table"] > [data-wb-part="header"] {
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-h6-fontSize);
+  line-height: var(--wb-typography-h6-lineHeight);
+  font-weight: var(--wb-typography-h6-fontWeight);
+  letter-spacing: var(--wb-typography-h6-letterSpacing);
+  text-transform: uppercase;
+}
+[data-wb-component="List"][data-wb-structure="table"] > * > tr > [data-wb-part="cell"] {
+  padding: var(--wb-space-4) var(--wb-space-5);
+  border-bottom: 1px solid var(--wb-semantic-border);
+  text-align: left;
+}
+[data-wb-component="List"][data-wb-structure="table"] > tbody > [data-wb-part="rowAlt"] {
+  background: var(--wb-semantic-canvas);
+}
+[data-wb-component="List"][data-wb-structure="table"] > tfoot > tr > [data-wb-part="pagination"] {
+  padding-top: var(--wb-space-6);
+  text-align: center;
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="List"][data-wb-structure="table"][data-wb-state~="selected"] > tbody > tr {
+  background: var(--wb-semantic-primarySoft);
+}
+
+/* 아코디언(`accordion`) — FAQ. 첫째 단계 항목마다 줄로 가른다. */
+[data-wb-component="Tree"] {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="Tree"][data-wb-structure="accordion"] > [data-wb-part="node"] {
+  padding-top: var(--wb-space-4);
+  padding-bottom: var(--wb-space-4);
+  border-bottom: 1px solid var(--wb-semantic-border);
+}
+[data-wb-component="Tree"][data-wb-structure="accordion"] > [data-wb-part="node"] > [data-wb-part="label"] {
+  font-size: var(--wb-typography-h4-fontSize);
+  line-height: var(--wb-typography-h4-lineHeight);
+  font-weight: var(--wb-typography-h4-fontWeight);
+}
+[data-wb-component="Tree"][data-wb-structure="accordion"] [data-wb-part="toggle"] {
+  color: var(--wb-semantic-primary);
+  margin-right: var(--wb-space-2);
+}
+[data-wb-component="Tree"][data-wb-structure="accordion"] [data-wb-part="panel"] {
+  list-style: none;
+  margin: 0;
+  padding: var(--wb-space-2) 0 0 var(--wb-space-6);
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Tree"][data-wb-structure="indent"] > [data-wb-part="node"] {
+  padding-top: var(--wb-space-2);
+  padding-bottom: var(--wb-space-2);
+}
+[data-wb-component="Tree"][data-wb-structure="indent"] > [data-wb-part="node"] > [data-wb-part="toggle"] {
+  color: var(--wb-semantic-textMuted);
+  margin-right: var(--wb-space-2);
+}
+[data-wb-component="Tree"][data-wb-state~="selected"] [data-wb-part="label"] {
+  color: var(--wb-semantic-primary);
+}
+[data-wb-component="Tree"][data-wb-state~="disabled"] {
+  opacity: 0.45;
+}
+
+/* 지표 타일(`tiles`). 열 수는 노드의 `columns` 다 — 뷰가 변수로 나른다. */
+[data-wb-component="KeyValue"][data-wb-structure="cardGrid"] {
+  display: grid;
+  grid-template-columns: repeat(var(--wb-node-keyvalue-columns, 1), minmax(0, 1fr));
+  gap: var(--wb-space-6);
+}
+[data-wb-component="KeyValue"][data-wb-structure="cardGrid"] > [data-wb-part="row"] {
+  background: var(--wb-semantic-canvas);
+  border-radius: var(--wb-radius-lg);
+  padding: var(--wb-space-8);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+[data-wb-component="KeyValue"][data-wb-structure="cardGrid"] > [data-wb-part="row"] > [data-wb-part="key"] {
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-h6-fontSize);
+  line-height: var(--wb-typography-h6-lineHeight);
+  font-weight: var(--wb-typography-h6-fontWeight);
+  letter-spacing: var(--wb-typography-h6-letterSpacing);
+  text-transform: uppercase;
+}
+[data-wb-component="KeyValue"][data-wb-structure="cardGrid"] > [data-wb-part="row"] > [data-wb-part="value"] {
+  font-family: var(--wb-typography-family-display);
+  font-size: var(--wb-typography-h2-fontSize);
+  line-height: var(--wb-typography-h2-lineHeight);
+  font-weight: var(--wb-typography-h2-fontWeight);
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="KeyValue"][data-wb-structure="table"] {
+  width: 100%;
+  border-collapse: collapse;
+}
+[data-wb-component="KeyValue"][data-wb-structure="table"] > tbody > [data-wb-part="row"] > * {
+  padding: var(--wb-space-3) var(--wb-space-4);
+  border-bottom: 1px solid var(--wb-semantic-border);
+  text-align: left;
+}
+[data-wb-component="KeyValue"][data-wb-structure="table"] > tbody > [data-wb-part="row"] > [data-wb-part="key"] {
+  color: var(--wb-semantic-textMuted);
+  font-weight: var(--wb-typography-h6-fontWeight);
+}
+
+/* ── 입력 ─────────────────────────────────────────────────────────────── */
+
+/* 히어로의 한 줄짜리 검색 바 — 알약 모양으로 떠 있고 첫 동작이 채워진 버튼이다. */
+[data-wb-component="SearchForm"] {
+  display: flex;
+  align-items: center;
+  gap: var(--wb-space-3);
+  background: var(--wb-semantic-surface);
+  /* 양 끝을 더 띄운다 — 필드 라벨 · 마지막 동작이 알약의 둥근 끝에 붙지 않게. */
+  padding: var(--wb-space-3) var(--wb-space-5) var(--wb-space-3) var(--wb-space-8);
+  border-radius: var(--wb-radius-full);
+  border: 1px solid var(--wb-semantic-border);
+  box-shadow: var(--wb-shadow-sm);
+}
+[data-wb-component="SearchForm"] > [data-wb-part="fields"] {
+  display: flex;
+  align-items: center;
+  gap: var(--wb-space-3);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+[data-wb-component="SearchForm"] > [data-wb-part="fields"] > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+[data-wb-component="SearchForm"] > [data-wb-part="actions"] {
+  display: flex;
+  align-items: center;
+  gap: var(--wb-space-2);
+  flex: none;
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-h5-fontSize);
+  line-height: var(--wb-typography-h5-lineHeight);
+  font-weight: var(--wb-typography-h5-fontWeight);
+}
+[data-wb-component="SearchForm"] > [data-wb-part="actions"] > :first-child,
+[data-wb-component="EntryForm"] > [data-wb-part="actions"] > :first-child {
+  background: var(--wb-semantic-primary);
+  color: var(--wb-semantic-textInverse);
+  border-radius: var(--wb-radius-full);
+  padding: var(--wb-space-3) var(--wb-space-6);
+}
+
+/* 문의 · 데모 신청 폼 — 라벨이 컨트롤 위에 서서 한 열로 흐른다(옛 구조 `labelTop`). */
+[data-wb-component="EntryForm"] {
+  display: grid;
+  gap: var(--wb-space-6);
+  background: var(--wb-semantic-surface);
+  padding: var(--wb-space-10);
+  border-radius: var(--wb-radius-lg);
+  box-shadow: var(--wb-shadow-md);
+  border: 1px solid var(--wb-semantic-border);
+}
+[data-wb-component="EntryForm"] > [data-wb-part="label"] {
+  font-family: var(--wb-typography-family-display);
+  font-size: var(--wb-typography-h2-fontSize);
+  line-height: var(--wb-typography-h2-lineHeight);
+  font-weight: var(--wb-typography-h2-fontWeight);
+  letter-spacing: var(--wb-typography-h2-letterSpacing);
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="EntryForm"] > [data-wb-part="row"] {
+  display: grid;
+  gap: var(--wb-space-5);
+}
+[data-wb-component="EntryForm"] > [data-wb-part="actions"] {
+  display: flex;
+  align-items: center;
+  gap: var(--wb-space-3);
+  color: var(--wb-semantic-textMuted);
+  font-weight: var(--wb-typography-h5-fontWeight);
+}
+
+/* 채워진 상자(옛 구조 `filled`) — 테두리 없이 바탕색을 준다. */
+[data-wb-component="Field"] {
+  display: grid;
+  gap: var(--wb-space-2);
+}
+[data-wb-component="Field"] > [data-wb-part="label"] {
+  font-family: var(--wb-typography-family-sans);
+  font-size: var(--wb-typography-h6-fontSize);
+  line-height: var(--wb-typography-h6-lineHeight);
+  font-weight: var(--wb-typography-h6-fontWeight);
+  letter-spacing: var(--wb-typography-h6-letterSpacing);
+  text-transform: uppercase;
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Field"] > [data-wb-part="control"] {
+  background: var(--wb-semantic-canvas);
+  border: 0 solid var(--wb-semantic-canvas);
+  border-radius: var(--wb-radius-md);
+  padding: var(--wb-space-4) var(--wb-space-5);
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
+  overflow-wrap: anywhere;
+  transition: background-color var(--wb-motion-fast) var(--wb-motion-easing);
+}
+[data-wb-component="Field"] > [data-wb-part="help"] {
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Field"][data-wb-variant="textarea"] > [data-wb-part="control"] {
+  min-height: 120px;
+}
+[data-wb-component="Field"][data-wb-variant="checkbox"] > [data-wb-part="control"],
+[data-wb-component="Field"][data-wb-variant="radio"] > [data-wb-part="control"] {
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  /* 채운 상자만으로는 흰 면 위에서 20px 칸이 안 보인다 — 이 둘만 테두리를 준다. */
+  border-width: 1px;
+  border-color: var(--wb-semantic-borderStrong);
+  border-radius: var(--wb-radius-sm);
+  overflow: hidden;
+  color: transparent;
+}
+[data-wb-component="Field"][data-wb-variant="radio"] > [data-wb-part="control"] {
+  border-radius: var(--wb-radius-full);
+}
+[data-wb-component="Field"][data-wb-state~="required"] > [data-wb-part="label"] {
+  color: var(--wb-semantic-primary);
+}
+[data-wb-component="Field"][data-wb-state~="invalid"] > [data-wb-part="control"] {
+  background: var(--wb-semantic-surface);
+  border-width: 2px;
+  border-color: var(--wb-semantic-danger);
+}
+[data-wb-component="Field"][data-wb-state~="disabled"] {
+  opacity: 0.45;
+}
+
+/* ── 액션 ─────────────────────────────────────────────────────────────── */
+
+/* 아웃라인 알약(옛 구조 `outline`) — 랜딩 페이지의 버튼은 대개 보조 행동이고 주 CTA 하나만 채운다(`primary`). */
+[data-wb-component="Button"] {
+  background: var(--wb-semantic-surface);
+  color: var(--wb-semantic-text);
+  border: 1px solid var(--wb-semantic-borderStrong);
+  border-radius: var(--wb-radius-full);
+  padding: var(--wb-space-3) var(--wb-space-6);
+  font-family: var(--wb-typography-family-sans);
+  font-size: var(--wb-typography-h5-fontSize);
+  line-height: var(--wb-typography-h5-lineHeight);
+  font-weight: var(--wb-typography-h5-fontWeight);
+  transition: background-color var(--wb-motion-base) var(--wb-motion-easing), border-color var(--wb-motion-base) var(--wb-motion-easing), box-shadow var(--wb-motion-base) var(--wb-motion-easing);
+}
+[data-wb-component="Button"][data-wb-variant="primary"] {
+  background: var(--wb-semantic-primary);
+  color: var(--wb-semantic-textInverse);
+  border-color: var(--wb-semantic-primary);
+  box-shadow: var(--wb-shadow-sm);
+}
+[data-wb-component="Button"][data-wb-variant="secondary"] {
+  color: var(--wb-semantic-primary);
+  border-color: var(--wb-semantic-primary);
+}
+[data-wb-component="Button"][data-wb-variant="danger"] {
+  background: var(--wb-semantic-danger);
+  color: var(--wb-semantic-textInverse);
+  border-color: var(--wb-semantic-danger);
+}
+[data-wb-component="Button"][data-wb-variant="ghost"] {
+  color: var(--wb-semantic-textMuted);
+  border-color: var(--wb-semantic-surface);
+}
+[data-wb-component="Button"][data-wb-state~="disabled"] {
+  opacity: 0.45;
+}
+[data-wb-component="Button"][data-wb-state~="loading"] {
+  opacity: 0.7;
+}
+[data-wb-component="Link"] {
+  color: var(--wb-semantic-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+[data-wb-component="Link"][data-wb-variant="muted"] {
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Link"][data-wb-state~="disabled"] {
+  opacity: 0.45;
+}
+
+/* ── 문서 ─────────────────────────────────────────────────────────────── */
+
+/* 큰 제목(`display` · `h1` · `h2`)에만 제목 서체를 건다 — 나머지는 본문 서체를 상속한다. */
+[data-wb-component="Text"] {
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="Text"][data-wb-variant="display"] {
+  font-family: var(--wb-typography-family-display);
+  font-size: var(--wb-typography-display-fontSize);
+  line-height: var(--wb-typography-display-lineHeight);
+  font-weight: var(--wb-typography-display-fontWeight);
+  letter-spacing: var(--wb-typography-display-letterSpacing);
+}
+[data-wb-component="Text"][data-wb-variant="h1"] {
+  font-family: var(--wb-typography-family-display);
+  font-size: var(--wb-typography-h1-fontSize);
+  line-height: var(--wb-typography-h1-lineHeight);
+  font-weight: var(--wb-typography-h1-fontWeight);
+  letter-spacing: var(--wb-typography-h1-letterSpacing);
+}
+[data-wb-component="Text"][data-wb-variant="h2"] {
+  font-family: var(--wb-typography-family-display);
+  font-size: var(--wb-typography-h2-fontSize);
+  line-height: var(--wb-typography-h2-lineHeight);
+  font-weight: var(--wb-typography-h2-fontWeight);
+  letter-spacing: var(--wb-typography-h2-letterSpacing);
+}
+[data-wb-component="Text"][data-wb-variant="h3"] {
+  font-size: var(--wb-typography-h3-fontSize);
+  line-height: var(--wb-typography-h3-lineHeight);
+  font-weight: var(--wb-typography-h3-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="h4"] {
+  font-size: var(--wb-typography-h4-fontSize);
+  line-height: var(--wb-typography-h4-lineHeight);
+  font-weight: var(--wb-typography-h4-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="h5"] {
+  font-size: var(--wb-typography-h5-fontSize);
+  line-height: var(--wb-typography-h5-lineHeight);
+  font-weight: var(--wb-typography-h5-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="h6"] {
+  font-size: var(--wb-typography-h6-fontSize);
+  line-height: var(--wb-typography-h6-lineHeight);
+  font-weight: var(--wb-typography-h6-fontWeight);
+  letter-spacing: var(--wb-typography-h6-letterSpacing);
+  text-transform: uppercase;
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Text"][data-wb-variant="body"] {
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
+  font-weight: var(--wb-typography-body-fontWeight);
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Text"][data-wb-variant="caption"] {
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+  font-weight: var(--wb-typography-caption-fontWeight);
+  color: var(--wb-semantic-textMuted);
+}
+
+/* 틀의 비율은 노드의 것이다 — SDK 기본 CSS 가 `frame` 의 `aspect-ratio` 를 노드 변수로 잡는다. 여기서 비율을 적지 않는다. */
+[data-wb-component="Media"] {
+  margin: 0;
+}
+[data-wb-component="Media"] > [data-wb-part="frame"] {
+  background: var(--wb-semantic-canvas);
+  border-radius: var(--wb-radius-lg);
+  border: 1px solid var(--wb-semantic-border);
+}
+[data-wb-component="Media"][data-wb-structure="illustration"] > [data-wb-part="frame"] {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, var(--wb-semantic-primarySoft) 0%, var(--wb-semantic-canvas) 100%);
+}
+[data-wb-component="Media"] > [data-wb-part="frame"] > [data-wb-part="glyph"] {
+  color: var(--wb-semantic-primary);
+  font-size: 32px;
+}
+[data-wb-component="Media"] > [data-wb-part="caption"] {
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+  color: var(--wb-semantic-textMuted);
+  margin-top: var(--wb-space-3);
+  text-align: center;
+}
+[data-wb-component="Divider"] {
+  border: 0;
+  background: var(--wb-semantic-border);
+  margin: var(--wb-space-10) 0;
+}
+[data-wb-component="Divider"][data-wb-variant="horizontal"] {
+  height: 1px;
+  width: 100%;
+}
+[data-wb-component="Divider"][data-wb-variant="vertical"] {
+  width: 1px;
+  min-height: 100%;
+  margin: 0 var(--wb-space-10);
+}
+/* 점선 상자 대신 부드러운 채움 — 실제 사이트에 가깝게 보이는 쪽. 높이는 노드의 것이다(기본 CSS 의 노드 변수). */
+[data-wb-component="Placeholder"] {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  background: var(--wb-semantic-canvas);
+  border-radius: var(--wb-radius-lg);
+  border: 1px solid var(--wb-semantic-border);
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+}
+
+/* ── 반응형 — 폭이 줄면 섹션 리듬 · 카드 열 · 큰 상자의 안쪽 여백을 줄인다. 노드가 나르는 열 수(`Grid` · `KeyValue`)는 건드리지
+   않는다. 뒤에 와서 같은 특이도의 variant 규칙(히어로 여백)을 이긴다. ─────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  [data-wb-component="Section"][data-wb-structure="splitBg"] {
+    padding-top: var(--wb-space-12);
+    padding-bottom: var(--wb-space-12);
+  }
+  [data-wb-component="List"][data-wb-structure="cardGrid"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--wb-space-6);
+  }
+}
+@media (max-width: 640px) {
+  [data-wb-component="Section"][data-wb-structure="splitBg"] {
+    padding-top: var(--wb-space-10);
+    padding-bottom: var(--wb-space-10);
+  }
+  [data-wb-component="Section"][data-wb-structure="splitBg"] > [data-wb-part="inner"] {
+    padding-left: var(--wb-space-4);
+    padding-right: var(--wb-space-4);
+  }
+  [data-wb-component="List"][data-wb-structure="cardGrid"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-wb-component="Card"],
+  [data-wb-component="EntryForm"] {
+    padding: var(--wb-space-6);
+  }
+  [data-wb-component="KeyValue"][data-wb-structure="cardGrid"] > [data-wb-part="row"] {
+    padding: var(--wb-space-5);
+  }
+  [data-wb-component="SearchForm"] {
+    flex-direction: column;
+    align-items: stretch;
+    border-radius: var(--wb-radius-lg);
+    padding: var(--wb-space-4);
+  }
+  [data-wb-component="SearchForm"] > [data-wb-part="fields"] {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  [data-wb-component="Text"][data-wb-variant="display"] {
+    font-size: var(--wb-typography-h1-fontSize);
+  }
+}

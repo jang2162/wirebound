@@ -36,6 +36,10 @@ describe('system-saas-marketing .wbtheme', () => {
     expect(built).toEqual([NAME])
     expect(issues).toEqual([])
     expect(files!.manifest.id).toBe('system-saas-marketing')
+    // 빌드는 CSS 를 줄여 싣는다(글자로는 소스와 못 견준다) — 토큰의 기본값은 `:root` 에 그대로 실려야 토큰 편집이 닿는 자리가 선다.
+    const items = Object.entries(MANIFEST.tokens.items)
+    expect(items.length).toBeGreaterThan(0)
+    for (const [key, decl] of items) expect(files!.themeCss).toContain(`--wb-${key.replaceAll('.', '-')}: ${decl.default};`)
   })
 
   it('갤러리 칸 전부가 오류 없이 그려진다(jsdom)', () => {
