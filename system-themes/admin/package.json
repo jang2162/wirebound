@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./manifest": "./src/manifest.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && wb-theme build --entry src/theme.tsx"
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && wb-theme build --entry src/theme.tsx",
+    "check": "wb-theme check --entry src/theme.tsx"
   },
   "dependencies": {
     "@wirebound/theme-sdk": "workspace:*"

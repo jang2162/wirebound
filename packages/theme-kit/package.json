@@ -5,7 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": { "wb-theme": "./bin/wb-theme.js" },
+  "bin": {
+    "wb-theme": "./bin/wb-theme.js"
+  },
   "exports": {
     ".": {
       "development": "./src/index.ts",
@@ -16,10 +18,18 @@
   },
   "publishConfig": {
     "exports": {
-      ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "default": "./dist/index.js" }
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "default": "./dist/index.js"
+      }
     }
   },
-  "files": ["bin", "dist", "template"],
+  "files": [
+    "bin",
+    "dist",
+    "template"
+  ],
   "scripts": {
     "build": "tsdown && vite build -c vite.client.config.ts",
     "build:watch": "tsdown --watch"
@@ -28,6 +38,7 @@
     "@vitejs/plugin-react": "^4.3.0",
     "esbuild": "^0.25.0",
     "fflate": "^0.8.3",
+    "jsdom": "^25.0.0",
     "vite": "^6.0.0",
     "zod": "^4.0.0"
   },
@@ -37,6 +48,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/jsdom": "^21.1.7",
     "@types/node": "^26.1.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

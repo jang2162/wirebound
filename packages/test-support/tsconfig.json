@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": ".", "outDir": ".tsbuild", "composite": true, "types": [] },
+  "compilerOptions": { "rootDir": ".", "outDir": ".tsbuild", "composite": true, "types": ["node"] },
   "include": ["src", "test"],
-  // `src/system-admin.ts` 가 system-admin 의 manifest 를 읽는다 — 그 타입(`ThemeManifest`)은 SDK 의 빌드된 선언으로 본다.
-  "references": [{ "path": "../theme-sdk" }]
+  // `src/system-admin.ts` 가 `.wbtheme` 를 읽는다(`readWbtheme`) — 빌드된 선언으로 본다.
+  "references": [{ "path": "../themes" }]
 }
