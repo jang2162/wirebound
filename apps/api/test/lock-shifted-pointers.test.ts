@@ -150,7 +150,8 @@ async function viaSocket(fx: Board, ops: PatchOp[]): Promise<number> {
     await new Promise((resolve) => setTimeout(resolve, 20))
   }
   const answer = answered()!
-  return answer.type === 'patch-ack' ? 200 : answer.status
+  if (answer.type === 'patch-error') return answer.status
+  return 200
 }
 
 /** 앞쪽 형제를 뒤쪽의 잠긴 노드 안으로(`move`의 `path`는 뺀 뒤 좌표 — 뺀 뒤 `n_b`는 `/root/children/0`). */
