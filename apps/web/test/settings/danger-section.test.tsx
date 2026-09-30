@@ -144,3 +144,29 @@ describe('위험 구역 — 삭제', () => {
     expect(h.listProjects).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * **이름 꼴의 판**(C3 리뷰 — `docs/superpowers/plans/2026-09-30-c3-review.md`). 확인은 글자 그대로 견준다(`settings/delete-confirm.tsx`
+ * 머리말 «입력을 `trim`하지 않는다»). 대소문자가 다르면 안 열린다. **서버가 이름을 NFC 로 펴지 않아** 조합형(NFD)으로 붙여 만든 이름은
+ * 완성형으로 쳐서는 안 열린다 — 안전 쪽 실패(지울 수 없음)이고 붙여 넣으면 열린다. 지금 동작을 값으로 적는다.
+ */
+describe('위험 구역 — 이름 꼴(대소문자 · NFC)', () => {
+  it('대소문자가 다르면 확정이 안 열린다', async () => {
+    renderSettings({ name: 'Admin Console' })
+    await openDanger()
+    type('admin console')
+    expect(confirmButton().disabled).toBe(true)
+    type('Admin Console')
+    expect(confirmButton().disabled).toBe(false)
+  })
+
+  it('조합형(NFD)으로 저장된 이름은 완성형(NFC)으로 쳐서는 안 열리고, 같은 조합형이면 열린다', async () => {
+    const nfd = '관리자 콘솔'.normalize('NFD')
+    renderSettings({ name: nfd })
+    await openDanger()
+    type('관리자 콘솔'.normalize('NFC'))
+    expect(confirmButton().disabled).toBe(true)
+    type(nfd)
+    expect(confirmButton().disabled).toBe(false)
+  })
+})
