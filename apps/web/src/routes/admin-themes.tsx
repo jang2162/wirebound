@@ -20,7 +20,7 @@ import type { ThemePackageSummary, ThemePackageVersion } from '../api/types'
 import { saveBlob } from '../files/file-io'
 import { useSessionUser } from '../session/session-context'
 import { SessionMenu } from '../session/session-menu'
-import { formatWhen } from './tokens'
+import { formatWhen } from '../account/tokens-section'
 
 const ADMIN_ONLY = '인스턴스 관리자만 볼 수 있습니다'
 const LOAD_FAILURE = '테마 목록을 불러오지 못했습니다'

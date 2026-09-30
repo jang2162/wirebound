@@ -92,6 +92,12 @@ export interface ApiClient {
   /** 내 토큰 전부를 폐기하고 지운 수를 낸다. */
   revokeAllMyTokens(): Promise<{ revoked: number }>
   /**
+   * 로그인한 사람의 비밀번호를 바꾼다(`account/password-section.tsx`). 성공하면 이 세션만 남고 다른 세션은 끝난다. **지금 비밀번호가
+   * 틀리면 401 `unauthenticated` + 이슈 코드 `wrong-password`** — 세션은 그대로라 받는 쪽이 «세션 끝»(`api/failure.tsx`의
+   * `toFailure`)과 가른다(`WRONG_PASSWORD`). 한도에 닿으면 429 `rate-limited`(서버 README «로그인 시도 제한»).
+   */
+  changePassword(currentPassword: string, newPassword: string): Promise<void>
+  /**
    * `cancel`은 셸을 떠나면 끊는다(`routes/editor.tsx`의 첫 조회 · `reread`). 응답의 `themeRev` 는 셸의 다시 읽기가 테마를 따라잡는 데
    * 쓴다(`ProjectView`).
    */
@@ -567,6 +573,9 @@ export type ApiErrorCode =
   /** 로그인 시도 제한(429). 화면은 서버 문장을 그대로 그린다(`routes/login.tsx`). */
   | 'rate-limited'
   | 'internal'
+
+/** 비밀번호 바꾸기에서 지금 비밀번호가 틀렸을 때의 이슈 코드(서버 `routes/auth.ts`의 `WRONG_PASSWORD` — 같은 글자여야 한다). */
+export const WRONG_PASSWORD = 'wrong-password'
 
 /** 실패 응답에 실려 오는 개별 이슈. `code`·`nodeId`는 카탈로그 검증 실패에만 채워진다. */
 export interface ApiErrorIssue {

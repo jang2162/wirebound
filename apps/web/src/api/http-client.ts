@@ -1283,6 +1283,8 @@ export function createHttpClient(
     listMyTokens: () => request<MyApiToken[]>('GET', '/auth/tokens', SHAPES.myTokens),
     revokeMyToken: (tokenId) => request<void>('DELETE', `/auth/tokens/${encodeURIComponent(tokenId)}`, SHAPES.noBody),
     revokeAllMyTokens: () => request<{ revoked: number }>('DELETE', '/auth/tokens', SHAPES.revokedCount),
+    changePassword: (currentPassword, newPassword) =>
+      request<void>('POST', '/auth/password', SHAPES.noBody, { currentPassword, newPassword }),
     getProject: (projectId, options) =>
       request<ProjectView>('GET', projectPath(projectId), SHAPES.projectView, undefined, options),
     // 아래 셋이 프로젝트 CRUD다. **생성 응답은 `ProjectDetail`이다** — `role`까지

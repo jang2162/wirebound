@@ -3039,6 +3039,11 @@
   color: #b42318;
 }
 
+/* 계정 설정 «내 정보» 의 값(이름 · 이메일) — 읽기만이라 칸이 아니라 글자다. 긴 이메일은 줄을 바꾼다. */
+.wb-shell-account-value {
+  overflow-wrap: anywhere;
+}
+
 /* «테마» 절의 지금 값 — `이름 id@버전` 과 «새 버전» 표시. */
 .wb-shell-settings-current {
   display: flex;

@@ -4,15 +4,15 @@
  * 읽을 수 있다.
  */
 import type { ReactElement } from 'react'
-import { Outlet, Route, Routes } from 'react-router'
+import { Navigate, Outlet, Route, Routes } from 'react-router'
 import { WriteLedgerProvider } from './panels/write-ledger'
+import { AccountRoute } from './routes/account'
 import { AdminThemesRoute } from './routes/admin-themes'
 import { EditorShellRoute } from './routes/editor'
 import { LoginRoute } from './routes/login'
 import { ProjectListRoute } from './routes/project-list'
 import { RedirectWhenAuthenticated, RequireAuth } from './routes/require-auth'
 import { SettingsRoute } from './routes/settings'
-import { TokensRoute } from './routes/tokens'
 import { SessionProvider } from './session/session-context'
 
 export function App(): ReactElement {
@@ -56,8 +56,10 @@ export function App(): ReactElement {
             }
           >
             <Route path="/" element={<ProjectListRoute />} />
-            {/* **내 API 토큰은 계정의 것이라 프로젝트 밖 라우트다** — 근거는 `routes/tokens.tsx` 머리말. */}
-            <Route path="/tokens" element={<TokensRoute />} />
+            {/* **계정 설정은 사람의 것이라 프로젝트 밖 라우트다** — 근거는 `routes/account.tsx` 머리말. 옛 주소 `/tokens`(API 토큰)는
+                그 페이지의 한 절이 되어 넘겨 준다 — 받아 둔 링크 · 계정 묶음의 «API 토큰» 링크가 그리로 간다. */}
+            <Route path="/account" element={<AccountRoute />} />
+            <Route path="/tokens" element={<Navigate to="/account" replace />} />
             {/* **테마 관리는 인스턴스의 것이라 프로젝트 밖 라우트다**(`routes/admin-themes.tsx` 머리말). */}
             <Route path="/admin/themes" element={<AdminThemesRoute />} />
             {/* 두 주소가 같은 셸이다. 페이지를 연 것은 셸 안의 캔버스가 달라지는 일이지

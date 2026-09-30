@@ -41,6 +41,7 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     listMyTokens: notStubbed('listMyTokens'),
     revokeMyToken: notStubbed('revokeMyToken'),
     revokeAllMyTokens: notStubbed('revokeAllMyTokens'),
+    changePassword: notStubbed('changePassword'),
     getProject: notStubbed('getProject'),
     createProject: notStubbed('createProject'),
     updateProject: notStubbed('updateProject'),

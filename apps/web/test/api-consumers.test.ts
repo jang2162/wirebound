@@ -39,7 +39,7 @@ const SOURCES = import.meta.glob('../src/**/*.{ts,tsx}', {
 const METHODS = [
   'login', 'logout', 'me',
   'listProjects', 'getProject', 'createProject', 'updateProject', 'deleteProject',
-  'listMyTokens', 'revokeMyToken', 'revokeAllMyTokens',
+  'listMyTokens', 'revokeMyToken', 'revokeAllMyTokens', 'changePassword',
   'getTree',
   'createMenu', 'updateMenu', 'deleteMenu',
   'createPage', 'updatePage', 'deletePage', 'getPage', 'importPage',
@@ -92,10 +92,12 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   logout: ['../src/session/session-menu.tsx'],
   me: ['../src/session/session-context.tsx'],
   listProjects: ['../src/projects/use-project-commands.tsx'],
-  // 계정의 API 토큰 화면 하나다. 목록은 줄의 글자와 폐기 주소(`id`)를 읽는다(`SHAPES.myTokens`).
-  listMyTokens: ['../src/routes/tokens.tsx'],
-  revokeMyToken: ['../src/routes/tokens.tsx'],
-  revokeAllMyTokens: ['../src/routes/tokens.tsx'],
+  // 계정 설정의 API 토큰 절 하나다. 목록은 줄의 글자와 폐기 주소(`id`)를 읽는다(`SHAPES.myTokens`).
+  listMyTokens: ['../src/account/tokens-section.tsx'],
+  revokeMyToken: ['../src/account/tokens-section.tsx'],
+  revokeAllMyTokens: ['../src/account/tokens-section.tsx'],
+  // 계정 설정의 비밀번호 절 하나다. 204 라 읽는 본문이 없다(`SHAPES.noBody`).
+  changePassword: ['../src/account/password-section.tsx'],
   // **소비자가 셋이고 읽는 것이 다르다.** 셸은 `name`·`id`·`themeRev`(테마 따라잡기)를 그리려고 부르고, 스냅샷 화면은 **`role`**
   // 때문에 부른다 — 「권한 모델」이 생성을 editor에게 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다). 설정 페이지는
   // 이름 · 슬러그 · 설명(«일반» 의 지금 값)과 `role`(칸을 열지)을 읽는다.
