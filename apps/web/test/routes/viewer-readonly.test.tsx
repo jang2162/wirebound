@@ -40,7 +40,7 @@
  *   않는다). 새 칸을 달면 `fillDraftsAsEditor`에 그 칸을 채우는 한 걸음을 더하라.
  * - **끌기 · 포인터 제스처**: 손잡이(`ShellResizer`)는 폭만 바꾸고 저장소는 브라우저다. 뷰 모드 캔버스의 시연 제스처는
  *   문서를 안 바꾼다. 둘 다 누르기만 하고 끌지는 않는다.
- * - **에디터 밖으로 나가는 길**: «프로젝트 목록으로 돌아가기»는 따라가지 않는다
+ * - **에디터 밖으로 나가는 길**: 로고(«프로젝트 목록») · `…` 의 설정 링크는 따라가지 않는다
  *   (제 판정이 있다 — `projectAbilities`의 `rename`). 내려받기 버튼은 누른다 — `GET`이라 쓰기가 아니다. **로그아웃**(`POST /auth/logout`)은 누르지 않는다 —
  *   세션 쓰기지 설계서 쓰기가 아니고, 누르면 훑기가 끝난다.
  * - **고르는 상태는 다섯뿐**: 선택 없음 · 루트 · 자식 · 손자 · 메뉴(아래 `SELECTIONS`) × 두 모드. 그 밖의 노드 종류가
@@ -424,6 +424,17 @@ function tier(el: Element): number {
   return 0
 }
 
+/**
+ * **대화 상자의 «닫기»는 누르지 않는다**(`shell/shell-dialog.tsx`). 상자가 열린 걸음에 상자 안 컨트롤이 함께 나타나고, 같은 걸음이면 문서
+ * 순서로 고르므로 머리의 «닫기»가 몸체보다 먼저 눌려 그 안(스냅샷 폼 · 복원)에 한 번도 못 닿는다. 상자는 키 훑기의 Escape 가 닫는다.
+ *
+ * **`…` 는 한 번만 열린다** — 같은 열쇠라 다시 안 누른다. 처음 고른 쓰기 항목(«스냅샷»)이 메뉴를 닫으면 뒤 항목(«프로젝트 내보내기»)은 안
+ * 눌린다. 내보내기 몸체의 컨트롤은 형식 고르기 · 내려받기(`GET`)뿐이라 쓰기 입구가 아니다 — 그 상자는 이 자의 사각이다.
+ */
+function closesDialog(el: Element): boolean {
+  return el.closest('dialog') !== null && el.classList.contains('wb-shell-dialog-close')
+}
+
 /** 모드는 바깥 고리(`sweepEditor`)가 정한다 — 훑기가 모드를 바꾸면 그 판의 나머지가 다른 모드를 훑는다. */
 function switchesMode(el: Element): boolean {
   return el.closest('[role="group"][aria-label="모드"]') !== null
@@ -442,7 +453,7 @@ async function sweepControls(): Promise<number> {
   for (let step = 0; step < 800; step += 1) {
     let pick: { el: Element; key: string; at: number } | undefined
     for (const el of Array.from(document.body.querySelectorAll(REACHABLE))) {
-      if (leaves(el) || switchesMode(el)) continue
+      if (leaves(el) || switchesMode(el) || closesDialog(el)) continue
       const key = keyOf(el)
       if (!appeared.has(key)) appeared.set(key, step)
       if (isOff(el) || seen.has(key)) continue

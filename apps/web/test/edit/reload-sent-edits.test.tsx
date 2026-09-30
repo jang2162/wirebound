@@ -31,6 +31,7 @@ import {
   OTHER_PAGE_TITLE,
   PAGE_ID,
   PROJECT_ID,
+  chooseFromShellMenu,
   openPage,
   pageDetail,
   pageDoc,
@@ -1087,7 +1088,7 @@ describe('입구마다 — 창 안의 revision 이 옛 답 뒤에 남는다', ()
     /** 스냅샷 팝오버에서 되돌린다 — 복원 재조회(`restoredToken`)가 붙잡힌 채 선다. */
     async function restoring() {
       const view = await mount({ api: { listSnapshots: async () => [SNAPSHOT], restoreSnapshot: async () => RESTORE_RESULT } })
-      fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+      chooseFromShellMenu('스냅샷')
       await screen.findByText('v1')
       fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
       fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))

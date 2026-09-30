@@ -1238,7 +1238,7 @@ describe('이름 변경 — 시간 제한 · «모름» · 떠나 있는 동안'
     const server = treeServer()
     await renameMenuHeld(server, '회원', false)
 
-    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
     await screen.findByRole('link', { name: PROJECT_NAME })
     await server.fail(0, new ApiError(500, 'internal', SERVER_ERROR, [], true))
     fireEvent.click(screen.getByRole('link', { name: PROJECT_NAME }))
@@ -1258,7 +1258,7 @@ describe('이름 변경 — 시간 제한 · «모름» · 떠나 있는 동안'
     const server = treeServer()
     await renameMenuHeld(server, '회원', false)
 
-    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
     fireEvent.click(await screen.findByRole('link', { name: PROJECT_NAME }))
     await screen.findByText('회원관리')
     fireEvent.click(menuButton('회원관리'))
@@ -1384,7 +1384,7 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
       return element!
     }
     const before = treeRegion()
-    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
     fireEvent.click(await until(() => screen.queryByRole('link', { name: PROJECT_NAME })))
     await until(() => (screen.queryByRole('region', { name: '메뉴·페이지 트리' }) === null ? null : within(treeRegion()).queryByText(/회원관리|밥의 메뉴/)))
     // 셸째 새로 섰다 — 앞의 트리 영역은 문서에 없다.
@@ -1558,7 +1558,7 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
   it('목록에 가 있는 동안 판정이 «바뀌지 않았습니다»로 끝나면 돌아온 트리가 «이 화면을 떠나 있는 동안 …»으로 말한다', async () => {
     const server = server2()
     await renameHeld(server, '회원', true)
-    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
     for (let i = 0; i < 50 && screen.queryByRole('link', { name: PROJECT_NAME }) === null; i += 1) await advance(0)
     expect(screen.queryByRole('region', { name: '메뉴·페이지 트리' })).toBeNull()
 
@@ -1588,7 +1588,7 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
           releaseMount = () => resolve(before)
         }),
     )
-    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
     fireEvent.click(await screen.findByRole('link', { name: PROJECT_NAME }))
     await waitFor(() => expect(screen.queryByRole('region', { name: '메뉴·페이지 트리' })).not.toBeNull())
 

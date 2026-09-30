@@ -8,7 +8,7 @@ import type { PageDocument } from '@wirebound/schema'
 import { ApiError } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
 import { logoutLossNotice } from '../../src/routes/editor'
-import { openPage, pageDetail, pageDoc, canvasQuery } from '../editor-harness'
+import { canvasQuery, chooseFromShellMenu, openPage, pageDetail, pageDoc } from '../editor-harness'
 import { tabHub, unauthenticatedError, type TabHub } from '../helpers'
 
 const pair = (): PageDocument =>
@@ -49,7 +49,7 @@ describe('로그아웃하며 두고 간 편집', () => {
     await editWaiting({ answer: new Promise<never>(() => {}) })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
-      fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+      chooseFromShellMenu('로그아웃')
       await act(async () => {
         vi.advanceTimersByTime(3_000)
       })
@@ -72,7 +72,7 @@ describe('로그아웃하며 두고 간 편집', () => {
   it('답을 받고 나가면 로그인 화면이 아무 말도 안 한다', async () => {
     await editWaiting({ answer: 'now' })
 
-    fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+    chooseFromShellMenu('로그아웃')
     await screen.findByLabelText('이메일')
 
     expect(statusText()).toBe('')
@@ -134,7 +134,7 @@ async function editRefusedLater(options: { recoverHangs: boolean; posting?: bool
 async function logoutThrough(then: () => Promise<void>, beforeRefuse: number): Promise<string> {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   try {
-    fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+    chooseFromShellMenu('로그아웃')
     await act(async () => {
       vi.advanceTimersByTime(beforeRefuse)
     })
@@ -214,7 +214,7 @@ describe('로그아웃을 기다리는 동안 버린 편집', () => {
       })
       // 판 카나리아 — 누를 때 아직 수습 전이다(번호를 기다린다).
       expect(view.loads()).toBe(1)
-      fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+      chooseFromShellMenu('로그아웃')
       await act(async () => {
         vi.advanceTimersByTime(2_000)
       })
@@ -251,7 +251,7 @@ describe('로그아웃을 기다리는 동안 다른 탭에서 사람이 바뀌�
     await act(async () => {})
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
-      fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+      chooseFromShellMenu('로그아웃')
       await act(async () => {
         vi.advanceTimersByTime(1_000)
       })

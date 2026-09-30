@@ -1,6 +1,6 @@
 /**
- * **내려받기 화면**(HTML 번들 · PPTX 형식 토글). `<App />`을 라우트째 렌더한다
- * (`../editor-harness`).
+ * **내려받기 화면**(HTML 번들 · PPTX 형식 토글) — 머리의 `…` 의 «프로젝트 내보내기»가 여는 대화 상자 안이다. `<App />`을 라우트째
+ * 렌더한다(`../editor-harness`).
  *
  * ## 무엇을 재는가
  *
@@ -33,7 +33,7 @@ import type {
   HtmlExportPreview,
   PptxExportPreview,
 } from '../../src/api/types'
-import { PROJECT_ID, openPage, pageDoc } from '../editor-harness'
+import { PROJECT_ID, chooseFromShellMenu, openPage, pageDoc } from '../editor-harness'
 import { currentPath, expiringSession } from '../helpers'
 
 /**
@@ -169,7 +169,7 @@ function 붙잡는(붙잡을형식: ExportFormat, 늦은답: () => ExportPreview
 
 async function open(overrides: Partial<ApiClient>): Promise<HTMLElement> {
   await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }), { apiOverrides: overrides })
-  fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
+  chooseFromShellMenu('프로젝트 내보내기')
   return screen.findByRole('group', { name: '내보내기' })
 }
 
@@ -369,8 +369,8 @@ describe('내보내기 화면', () => {
     })
     await waitFor(() => expect(calls).toBe(1))
 
-    fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
-    fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }))
+    chooseFromShellMenu('프로젝트 내보내기')
     await waitFor(() => expect(calls).toBe(2))
   })
 
@@ -445,8 +445,8 @@ describe('내보내기 화면', () => {
 
       // 닫고 다시 연다.
       fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
-      fireEvent.keyDown(document, { key: 'Escape' })
-      fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
+      fireEvent.keyDown(screen.getByRole('dialog', { name: '프로젝트 내보내기' }), { key: 'Escape' })
+      chooseFromShellMenu('프로젝트 내보내기')
 
       const 다시 = await screen.findByRole('group', { name: '내보내기' })
       await within(다시).findByRole('region', { name: '페이지 경로' })
@@ -700,22 +700,22 @@ describe('내보내기 화면', () => {
       return { overrides: { ...api(깨끗한), getExportPreview }, 받은 }
     }
 
-    it('토글로 닫으면 부르던 조회를 끊는다', async () => {
+    it('닫기 단추로 닫으면 부르던 조회를 끊는다', async () => {
       const 가짜 = 매달린()
       await open(가짜.overrides)
       await waitFor(() => expect(가짜.받은).toHaveLength(1))
       expect(가짜.받은[0]!.cancel?.aborted).toBe(false)
 
-      fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
+      fireEvent.click(screen.getByRole('button', { name: '닫기' }))
       expect(가짜.받은[0]!.cancel?.aborted).toBe(true)
     })
 
-    it('Escape 로 닫아도 끊는다 — 닫는 길이 공용 장치여도', async () => {
+    it('Escape 로 닫아도 끊는다 — 닫는 길이 대화 상자여도', async () => {
       const 가짜 = 매달린()
       await open(가짜.overrides)
       await waitFor(() => expect(가짜.받은).toHaveLength(1))
 
-      fireEvent.keyDown(document, { key: 'Escape' })
+      fireEvent.keyDown(screen.getByRole('dialog', { name: '프로젝트 내보내기' }), { key: 'Escape' })
       expect(screen.queryByRole('group', { name: '내보내기' })).toBeNull()
       expect(가짜.받은[0]!.cancel?.aborted).toBe(true)
     })
@@ -862,7 +862,7 @@ describe('내보내기 화면', () => {
       fireEvent.click(await within(panel).findByRole('button', { name: /내려받기$/ }))
       await within(panel).findByRole('button', { name: '받기 취소' })
 
-      fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
+      fireEvent.click(screen.getByRole('button', { name: '닫기' }))
 
       expect(screen.queryByRole('group', { name: '내보내기' })).toBeNull()
       expect(가짜.신호.map((signal) => signal.aborted)).toEqual([false])
@@ -870,27 +870,26 @@ describe('내보내기 화면', () => {
   })
 
   /**
-   * **닫는 장치가 실제로 이 화면에 붙어 있는가.** 장치 자체(왜 `mousedown`인지·토글이 두 번
-   * 처리되지 않는지·리스너가 남지 않는지)는 `popover-dismiss.test.tsx`가 재고, 여기서는
-   * **배선**만 본다 — 훅이 있어도 ref를 안 걸면 아무것도 실패하지 않은 채 안 닫힌다.
+   * **닫는 장치가 실제로 이 화면에 붙어 있는가.** 장치 자체(Escape · 닫기 단추 · 바깥 누름으로는 안 닫힘)는 `shell-dialog.test.tsx`가
+   * 재고, 여기서는 **배선**만 본다 — 몸체가 대화 상자 밖에 그려지면 아무것도 실패하지 않은 채 안 닫힌다.
    */
-  describe('닫기 (공용 장치의 배선)', () => {
-    it('바깥을 누르면 닫힌다', async () => {
+  describe('닫기 (대화 상자의 배선)', () => {
+    /** **바깥 누름으로는 닫지 않는다**(`src/shell/shell-dialog.tsx` 머리말) — 스냅샷 폼과 같은 상자라 규칙이 하나다. */
+    it('바깥을 눌러도 닫히지 않는다', async () => {
       const panel = await open(api(깨끗한))
       await within(panel).findByText('페이지 2장을 내보냅니다')
 
       // 셸 머리 밖의 아무 자리 — 캔버스를 쓴다.
       fireEvent.mouseDown(screen.getByRole('main', { name: '캔버스' }))
 
-      expect(screen.queryByRole('group', { name: '내보내기' })).toBeNull()
-      expect(screen.getByRole('button', { name: '내보내기' }).getAttribute('aria-expanded')).toBe('false')
+      expect(screen.getByRole('group', { name: '내보내기' })).toBeTruthy()
     })
 
     it('Escape로 닫힌다', async () => {
       const panel = await open(api(깨끗한))
       await within(panel).findByText('페이지 2장을 내보냅니다')
 
-      fireEvent.keyDown(document, { key: 'Escape' })
+      fireEvent.keyDown(screen.getByRole('dialog', { name: '프로젝트 내보내기' }), { key: 'Escape' })
 
       expect(screen.queryByRole('group', { name: '내보내기' })).toBeNull()
     })

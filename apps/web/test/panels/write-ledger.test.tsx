@@ -24,6 +24,7 @@ import { createConnectionIdHolder, type ConnectionIdHolder, type RealtimeSetup }
 import {
   HEAD_SEQ,
   OTHER_PAGE_TITLE,
+  chooseFromShellMenu,
   openPage,
   pageDetail,
   pageDoc,
@@ -93,11 +94,11 @@ async function toCommentTab(): Promise<void> {
 }
 
 /**
- * **에디터를 떠났다 온다** — 사용자가 하듯: «프로젝트 목록으로 돌아가기» → 목록에서 그 프로젝트 →
+ * **에디터를 떠났다 온다** — 사용자가 하듯: «프로젝트 목록»(로고) → 목록에서 그 프로젝트 →
  * 메뉴 트리에서 그 페이지. 셸이 통째로 내려갔다 새로 선다(provider 도, 스토어도).
  */
 async function leaveEditorAndReturn(): Promise<void> {
-  fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+  fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
   fireEvent.click(await screen.findByRole('link', { name: PROJECT_NAME }))
   const tree = await screen.findByRole('region', { name: '메뉴·페이지 트리' })
   fireEvent.click(await within(tree).findByRole('link', { name: PAGE_TITLE }))
@@ -106,7 +107,7 @@ async function leaveEditorAndReturn(): Promise<void> {
 
 /** 목록까지만 간다 — 에디터 **밖**에 머문다. */
 async function leaveEditor(): Promise<void> {
-  fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+  fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
   await screen.findByRole('link', { name: PROJECT_NAME })
 }
 
@@ -504,9 +505,9 @@ const accounts: Partial<ApiClient> = {
   logout: async () => undefined,
 }
 
-/** 셸 머리의 «로그아웃» → 로그인 화면. */
+/** 셸 머리 `…` 의 «로그아웃» → 로그인 화면. */
 async function logout(): Promise<void> {
-  fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+  chooseFromShellMenu('로그아웃')
   await screen.findByLabelText('이메일')
 }
 
@@ -1611,7 +1612,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
     await waitFor(() => expect(server.sent).toHaveLength(1))
 
     expired = true
-    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
     await screen.findByLabelText('이메일')
 
     await login(ALICE)

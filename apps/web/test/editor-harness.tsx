@@ -205,6 +205,18 @@ export async function openPage(doc: PageDocument, options: EditorOptions = {}): 
   await waitForNode(doc.root.id)
 }
 
+/** 에디터 머리 · 목록 머리의 `…` 단추 이름(`src/shell/action-menu.tsx`의 `label`). */
+export const SHELL_MENU = '더 보기'
+
+/**
+ * **머리의 `…` 에서 항목 하나를 고른다** — 스냅샷 · 내보내기(대화 상자를 연다) · 로그아웃 · 설정 링크. 눌러서 열고 항목을 누른다 — 사용자가
+ * 하는 길 그대로다(키보드 길은 `test/shell/action-menu.test.tsx`가 잰다).
+ */
+export function chooseFromShellMenu(name: string): void {
+  fireEvent.click(screen.getByRole('button', { name: SHELL_MENU }))
+  fireEvent.click(screen.getByRole('menuitem', { name }))
+}
+
 /**
  * 캔버스 문서가 그려지는 iframe 의 문서(`canvas/canvas-iframe.tsx`). 문서 노드는 호스트 문서에 없고 여기 있다 —
  * 선택 외곽선 · 마커 · 배너처럼 셸이 그리는 것은 호스트 문서 그대로다. iframe 이 아직 없으면 던진다.

@@ -10,7 +10,7 @@
  *
  * ## 여기서 재는 것과 재지 않는 것
  *
- * **화면을 지나 잰다.** `SessionMenu`를 떼어 내 렌더하면 케이스가 짧아지지만, 그러면
+ * **화면을 지나 잰다.** `useLogout`을 떼어 내 부르면 케이스가 짧아지지만, 그러면
  * *"머리에 실제로 달려 있는가"*가 빠진다 — 지키는 고장이 정확히 그것이므로(기능이 없는
  * 것이 아니라 **부르는 자리가 없는 것**) 배선을 지나지 않는 케이스는 이 고장을 잡지
  * 못한다. `<App />`을 라우트째 렌더하는 것도 같은 이유다
@@ -26,7 +26,7 @@ import { ApiError } from '../../src/api/client'
 import type { PatchResult, SessionUser } from '../../src/api/types'
 import { App } from '../../src/app'
 import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
-import { HEAD_SEQ, PAGE_ROUTE, PROJECT_NAME, openPage, pageDoc } from '../editor-harness'
+import { HEAD_SEQ, PAGE_ROUTE, PROJECT_NAME, SHELL_MENU, chooseFromShellMenu, openPage, pageDoc } from '../editor-harness'
 
 const DOC = pageDoc({ id: 'n-root', type: 'Page', children: [] })
 /** «아래로»를 낼 수 있는 문서 — 로그아웃 앞의 기다림을 재는 케이스가 편집 하나를 띄운다. */
@@ -73,7 +73,7 @@ describe('머리에서 프로젝트 목록으로 돌아간다', () => {
   it('제목 옆에 목록으로 가는 링크가 있다', async () => {
     await openShell(async () => {})
 
-    const back = within(header()).getByRole('link', { name: '프로젝트 목록으로 돌아가기' })
+    const back = within(header()).getByRole('link', { name: '프로젝트 목록' })
     // **`href`까지 본다.** 링크라는 것만으로는 어디로 가는지 모른다 — 주소가 있는 이동이라는
     // 것이 이 자리를 `<button>`이 아니라 `<Link>`로 만든 근거이므로 그 주소가 계약이다.
     expect(back.getAttribute('href')).toBe('/')
@@ -82,7 +82,7 @@ describe('머리에서 프로젝트 목록으로 돌아간다', () => {
   it('눌러서 실제로 목록에 닿는다', async () => {
     await openShell(async () => {})
 
-    fireEvent.click(within(header()).getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    fireEvent.click(within(header()).getByRole('link', { name: '프로젝트 목록' }))
 
     expect(currentPath()).toBe('/')
     // 주소만 보면 목록이 그려지지 않는 판도 통과한다.
@@ -101,9 +101,10 @@ describe('머리에서 프로젝트 목록으로 돌아간다', () => {
 })
 
 describe('머리에서 로그아웃한다', () => {
-  it('지금 로그인한 사람을 보인다', async () => {
+  it('지금 로그인한 사람을 보인다 — `…` 의 머리', async () => {
     await openShell(async () => {})
 
+    fireEvent.click(within(header()).getByRole('button', { name: SHELL_MENU }))
     expect(within(header()).getByText(USER.name)).toBeTruthy()
   })
 
@@ -113,7 +114,7 @@ describe('머리에서 로그아웃한다', () => {
       calls += 1
     })
 
-    fireEvent.click(within(header()).getByRole('button', { name: '로그아웃' }))
+    chooseFromShellMenu('로그아웃')
 
     await waitFor(() => expect(currentPath()).toBe('/login'))
     expect(calls).toBe(1)
@@ -124,7 +125,7 @@ describe('머리에서 로그아웃한다', () => {
     // `authenticated`로 남아 `RedirectWhenAuthenticated`가 곧장 `/`로 되튕긴다.
     await openShell(async () => {})
 
-    fireEvent.click(within(header()).getByRole('button', { name: '로그아웃' }))
+    chooseFromShellMenu('로그아웃')
 
     expect(await screen.findByRole('button', { name: '로그인' })).toBeTruthy()
     expect(currentPath()).toBe('/login')
@@ -137,7 +138,7 @@ describe('머리에서 로그아웃한다', () => {
       throw new ApiError(500, 'internal', SERVER_MESSAGE)
     })
 
-    fireEvent.click(within(header()).getByRole('button', { name: '로그아웃' }))
+    chooseFromShellMenu('로그아웃')
 
     expect((await within(header()).findByRole('alert')).textContent).toBe(SERVER_MESSAGE)
     expect(currentPath()).toBe(PAGE_ROUTE)
@@ -153,14 +154,37 @@ describe('머리에서 로그아웃한다', () => {
       calls += 1
       throw new ApiError(500, 'internal', SERVER_MESSAGE)
     })
-    fireEvent.click(within(header()).getByRole('button', { name: '로그아웃' }))
+    chooseFromShellMenu('로그아웃')
     await within(header()).findByRole('alert')
 
-    const button = within(header()).getByRole('button', { name: '로그아웃' })
-    expect(button.hasAttribute('disabled')).toBe(false)
-    fireEvent.click(button)
+    fireEvent.click(within(header()).getByRole('button', { name: SHELL_MENU }))
+    const item = within(header()).getByRole('menuitem', { name: '로그아웃' })
+    expect(item.getAttribute('aria-disabled')).toBeNull()
+    fireEvent.click(item)
 
     await waitFor(() => expect(calls).toBe(2))
+  })
+
+  /**
+   * **도는 동안은 다시 못 누른다** — 두 번 나갈 이유가 없다(로그인 폼과 같은 관례). 막는 겹이 둘이다 — 메뉴 항목을 끄는 것(`aria-disabled`)과
+   * `useLogout`의 `busy` 가드. 이 케이스는 앞 겹을 잰다(항목이 꺼져 있다) — 뒤 겹만 떼면 앞 겹이 막아 초록이다.
+   */
+  it('도는 동안 «로그아웃»은 꺼져 있고 눌러도 한 번만 나간다', async () => {
+    let calls = 0
+    await openShell(() => {
+      calls += 1
+      return new Promise<void>(() => {})
+    })
+
+    chooseFromShellMenu('로그아웃')
+    await waitFor(() => expect(calls).toBe(1))
+    fireEvent.click(within(header()).getByRole('button', { name: SHELL_MENU }))
+    const item = within(header()).getByRole('menuitem', { name: '로그아웃' })
+    expect(item.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(item)
+    await act(async () => {})
+
+    expect(calls).toBe(1)
   })
 
   /**
@@ -187,7 +211,7 @@ describe('머리에서 로그아웃한다', () => {
     fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
     await act(async () => {})
 
-    fireEvent.click(within(header()).getByRole('button', { name: '로그아웃' }))
+    chooseFromShellMenu('로그아웃')
     await act(async () => {})
     expect(order).toEqual(['patch'])
 
@@ -205,7 +229,7 @@ describe('머리에서 로그아웃한다', () => {
       throw unauthenticatedError()
     })
 
-    fireEvent.click(within(header()).getByRole('button', { name: '로그아웃' }))
+    chooseFromShellMenu('로그아웃')
 
     await waitFor(() => expect(currentPath()).toBe('/login'))
     // 실패 문장을 내지 않는다 — 셸은 이미 사라졌고 로그인 화면에 오류가 따라붙지도 않는다.

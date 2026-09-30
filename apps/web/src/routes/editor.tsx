@@ -23,7 +23,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
@@ -38,17 +38,21 @@ import { PanelDraftsProvider } from '../panels/panel-drafts'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
 import { leftUnsentNotice, restoredRevisions, useEditCommit } from '../edit/use-edit-commit'
+import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
+import { BrandLink } from '../shell/brand-link'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
+import { ShellDialog } from '../shell/shell-dialog'
 import { ShellResizer } from '../shell/shell-resizer'
 import { useSidebarLayout } from '../shell/sidebar-layout'
 import { useNodeLock } from '../realtime/use-node-lock'
 import { useRealtime, type MembershipCause } from '../realtime/use-realtime'
-import { ExportPanel } from '../shell/export-panel'
-import { SnapshotsPanel } from '../shell/snapshots-panel'
+import { ExportBody } from '../shell/export-panel'
+import { SnapshotsBody } from '../shell/snapshots-panel'
 import { projectAbilities } from '../projects/project-actions'
-import { SessionMenu } from '../session/session-menu'
+import { SessionNotices, useLogout } from '../session/session-menu'
+import { useSessionUser } from '../session/session-context'
 import { ProjectThemeProvider, useProjectTheme } from '../theme/project-theme'
 import { ThemeAlert } from '../theme/theme-alert'
 import {
@@ -212,7 +216,7 @@ export function logoutLossNotice(sent: number, unsent: number, refused = 0): str
 
 /**
  * **보낸 편집의 답(ack · 거절)을 기다린다** — 전송이 쉬면(`editStatus === 'idle'`) 풀린다. 한도(`SENT_EDIT_WAIT_MS`)나 `signal`로도
- * 풀린다. 판을 다시 싣는 두 이펙트와 로그아웃(`SessionMenu`의 `settle`)이 부른다.
+ * 풀린다. 판을 다시 싣는 두 이펙트와 로그아웃(`useLogout`의 `settle`)이 부른다.
  *
  * ## 왜 기다리나 — 판을 다시 싣는 단추는 그 클릭이 낸 편집과 겨룬다
  *
@@ -486,7 +490,7 @@ export function EditorShellRoute(): ReactElement {
 
   return (
     <EditorStoreProvider store={store}>
-      {/* 캔버스 iframe 의 문서를 머리의 팝오버가 아는 통로 — 캔버스와 머리의 공통 조상이 셸이라 셸째 감싼다. */}
+      {/* 캔버스 iframe 의 문서를 머리의 `…` 메뉴가 아는 통로(바깥 누름 닫기) — 캔버스와 머리의 공통 조상이 셸이라 셸째 감싼다. */}
       <CanvasDocumentProvider>
         {/* **프로젝트가 고정한 테마**(`theme/project-theme.tsx`) — 캔버스 · 속성 패널 · 패턴 고르개가 읽고, 셸이 프레임 · 다시 읽기로 따라잡게 한다. */}
         <ProjectThemeProvider projectId={state.project.id}>
@@ -590,7 +594,7 @@ function EditorShell(props: {
    * **자리를 하나 빠뜨리면 탭을 다녀오거나 새로고침해야 맞는다** — 되돌렸다는 알림 아래 옛 코멘트 목록이 조용히 남는다
    * (Chrome: 스냅샷의 코멘트를 지운 뒤 복원하면 서버 1 · 탭 0). 복원이 바꾸는 것이 늘면 이 표에 줄을 더한다.
    *
-   * **이 신호가 필요한 까닭:** 복원은 에디터 **위에** 뜨는 팝오버에서 일어나므로 셸이 다시
+   * **이 신호가 필요한 까닭:** 복원은 에디터 **위에** 뜨는 대화 상자에서 일어나므로 셸이 다시
    * 마운트되지 않는다 — 셸 밖 라우트에서 **돌아오는 길**이 있으면 저절로 다시 읽히겠지만
    * 그 길이 없다.
    *
@@ -607,7 +611,7 @@ function EditorShell(props: {
   const [restoredToken, setRestoredToken] = useState(0)
   /**
    * **이 셸이 선 `reset` 세대**(`EditorStore.resetGeneration`). 셸 안에서 다른 프로젝트로 가면(뒤로 · 앞으로) 라우트는 스토어를 그대로 두고 이
-   * 셸을 내린 뒤 새 셸을 세운다 — 복원 팝오버는 내려간 셸의 콜백을 쥔 채 답을 받는다. 그 콜백이 스토어에 쓰면 산 셸의 판을 바꾼다: 답이
+   * 셸을 내린 뒤 새 셸을 세운다 — 복원을 보낸 몸체는 내려간 셸의 콜백을 쥔 채 답을 받는다. 그 콜백이 스토어에 쓰면 산 셸의 판을 바꾼다: 답이
    * 돌아온 셸의 복원 신호를 넘기고(다시 읽기는 내려간 셸에서 돌아 아무것도 안 한다), 다시 읽기 시작 표시가 다음 프로젝트의 복원 배너를 메뉴 ·
    * 테마를 다시 읽기 전에 풀게 하고, 답 잃음이 무관한 프로젝트에 «복원됐는지 모릅니다»를 세운다(Chrome:
    * `apps/web/build-test/editor-restore-signal-order.test.ts` «다른 프로젝트로 갔다 돌아옴» · «그 답이 거기 옴» · «그 답을 거기서 잃음»).
@@ -619,7 +623,7 @@ function EditorShell(props: {
   /** 그 신호를 누가 올렸나 — 다시 읽으며 잃은 것을 말할 때의 앞머리다(`CanvasFrame`의 `applyServerPage`). 신호와 함께 바뀐다. */
   const [restoredLead, setRestoredLead] = useState(RESTORED_LEAD)
   /**
-   * **복원 뒤 다시 읽기의 입구 하나** — 내가 복원했을 때(스냅샷 팝오버)와 남의 복원을 배너의 단추로 다시 읽을 때가 함께 탄다. 한
+   * **복원 뒤 다시 읽기의 입구 하나** — 내가 복원했을 때(스냅샷 대화 상자)와 남의 복원을 배너의 단추로 다시 읽을 때가 함께 탄다. 한
    * 자리에서 올려야 한쪽 입구가 다시 읽을 자리를 빠뜨리지 않는다(`restoredToken` 표).
    *
    * **다시 읽기가 시작된 것을 스토어에 먼저 적는다**(`EditorStore.beginRestoreReread`) — 복원 배너는 이 다시 읽기의 판만 풀고, 그 사이 온 복원
@@ -689,7 +693,7 @@ function EditorShell(props: {
   const split = mode === 'edit'
 
   /**
-   * 로그아웃 앞의 기다림 — 아래 `SessionMenu` 자리의 주석. 끊는 신호는 없다: 누른 뒤 화면을 옮겨도 로그아웃은 나간다. 기다림 뒤에 큐에 남은
+   * 로그아웃 앞의 기다림 — 아래 `useLogout` 자리의 주석. 끊는 신호는 없다: 누른 뒤 화면을 옮겨도 로그아웃은 나간다. 기다림 뒤에 큐에 남은
    * 편집과 **기다리는 동안 버린 편집**을 세어 로그인 화면에 남길 한 줄을 돌려준다(`logoutLossNotice`).
    *
    * **버린 것도 센다**(`EditorStore.discardTally`) — 기다리는 동안 편집 실패 수습이 큐를 비우면(`failEdits`) 그 통지는 판을 다시 읽은 뒤에
@@ -709,29 +713,46 @@ function EditorShell(props: {
     return logoutLossNotice(sentHere + since('unknown'), pending.length - sentHere + since('unsent'), since('refused'))
   }, [store])
 
+  /**
+   * **로그아웃**(`session/session-menu.tsx`의 `useLogout`) — `…` 의 끝 항목이 부른다. **보낸 편집의 답을 받은 뒤에 나간다**(`settleEdits` ·
+   * `editsAnswered`) — 칸에 친 채 누르면 그 클릭이 blur 로 낸 편집과 로그아웃이 다른 연결로 겨룬다. 로그아웃이 먼저 세션을 지우면 편집은
+   * 커밋 순간의 재확인에서 거절되고 셸째 내려가 말할 자리도 없다(Chrome: 친 채 누른 3판 가운데 1판이 401 · 행 잠금에 줄 선 편집과 그 뒤에
+   * 쌓인 편집은 둘 다 잃음). **막지는 않는다** — 한도가 지나면 그대로 나간다. 로그아웃은 권한을 줄이는 쓰기라, 막으면 누르고 떠난 사람의
+   * 세션이 남는다. 한도 뒤에 잃는 편집은 셸째 내려가므로 로그인 화면이 말한다(`logoutLossNotice` · `useSignOutNotice`).
+   */
+  const { logout, busy: loggingOut, failure: logoutFailure } = useLogout(settleEdits)
+  const sessionUser = useSessionUser()
+  /** 열린 대화 상자 — 스냅샷 · 내보내기. 한 번에 하나다(모달이다). */
+  const [dialog, setDialog] = useState<'snapshots' | 'export' | null>(null)
+  /** `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. */
+  const menuItems: ActionMenuItem[] = [
+    { key: 'account', label: '계정 설정', to: '/account' },
+    { key: 'settings', label: '프로젝트 설정', to: `/projects/${props.project.id}/settings` },
+    { key: 'snapshots', label: '스냅샷', onSelect: () => setDialog('snapshots') },
+    { key: 'export', label: '프로젝트 내보내기', onSelect: () => setDialog('export') },
+    // 요청이 도는 동안 끈다 — 두 번 눌러 두 번 나갈 이유가 없다(로그인 폼과 같은 관례).
+    { key: 'logout', label: '로그아웃', onSelect: logout, disabled: loggingOut },
+  ]
+
   return (
     <div className="wb-shell">
       <header className="wb-shell-header">
-        {/* **머리의 왼쪽은 *"어디에 있고 어디로 나가는가"*다.** 오른쪽 도구들과 갈리는 축이
+        {/* **머리의 왼쪽은 *"어디에 있고 어디로 나가는가"*다.** 가운데 도구들 · 오른쪽 끝의 `…` 와 갈리는 축이
             이것이라, 둘을 한 묶음으로 싸서 `space-between`이 사이를 벌리지 못하게 한다.
 
-            **나가는 길을 여기 둔다.** 제목은 `<h1>` 글자라 접근성 트리에서도 `heading`이고,
-            이것이 없으면 프로젝트 목록으로 가는 길이 화면에 **없다** — 브라우저 뒤로
-            가기나 주소를 손으로 고치는 것뿐이다. */}
-        <div className="wb-shell-lead">
-          {/* **제목 자체를 링크로 만들지 않는다.** 링크의 글자는 **갈 곳**을 말해야 하는데
-              제목은 *"지금 여기"*를 말한다 — `관리자 콘솔 설계서`를 눌렀더니 프로젝트
-              **목록**으로 가는 것은 그 계약을 어긴다. 옆에 따로 두면 글자가 곧 목적지다.
+            **나가는 길을 여기 둔다** — 로고가 프로젝트 목록으로 가는 링크다(`shell/brand-link.tsx` — 접근 이름 «프로젝트 목록»).
+            이것이 없으면 목록으로 가는 길이 화면에 **없다** — 브라우저 뒤로 가기나 주소를 손으로 고치는 것뿐이다.
 
-              `<button>`이 아니라 `<Link>`인 것은 **주소가 있는 이동**이기 때문이다 — 새 탭으로
-              열거나 주소를 공유할 수 있어야 한다(`routes/project-list.tsx`의 `ProjectRow`와
-              `panels/menu-tree.tsx`의 `PageLink`가 같은 근거로 링크다). */}
-          <Link className="wb-shell-back" to="/">
-            프로젝트 목록으로 돌아가기
-          </Link>
+            **제목 자체를 링크로 만들지 않는다.** 링크의 글자는 **갈 곳**을 말해야 하는데
+            제목은 *"지금 여기"*를 말한다 — `관리자 콘솔 설계서`를 눌렀더니 프로젝트
+            **목록**으로 가는 것은 그 계약을 어긴다. 제목은 `<h1>` 글자라 접근성 트리에서도 `heading`이다. */}
+        <div className="wb-shell-lead">
+          <BrandLink />
           <h1 className="wb-shell-title">{props.project.name}</h1>
         </div>
-        {/* **되돌리기·다시 실행은 편집 모드에만 있다**.
+        {/* **가운데 — 설계서를 다루는 도구.** 되돌리기 · 다시 실행과 모드(편집/뷰)다.
+
+            **되돌리기·다시 실행은 편집 모드에만 있다**.
             「설계서 화면 구조」가 뷰 모드에서 구조 트리를 접고 속성 탭을 페이지 설명으로 바꾸는 것과 같은
             선이다 — **편집 도구는 편집 모드에 있다.**
 
@@ -743,59 +764,43 @@ function EditorShell(props: {
 
             **겹layer를 함께 되돌리는 쪽을 고르지 않는다:** 되돌릴 대상이 문서가 아니라
             시연 상태라 *"어디까지"*가 정의되지 않는다(undo 한 칸이 겹layer 몇 칸인가).
-            **원인을 없애는 쪽이 정의가 필요 없다.** */}
-        {/* **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
-        {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
-        <ShellTools canvasRef={canvasRef} frameRef={frameRef} />
-        {/* **스냅샷 팝오버**(셸 밖 별도 라우트가 아니라 팝오버인 근거는
-            `shell/snapshots-panel.tsx` 머리말의 표에 있다). 내보내기 옆에 두는 것은 둘 다
-            *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
+            **원인을 없애는 쪽이 정의가 필요 없다.**
 
-            **역할로 감추지 않는다** — 목록은 viewer도 본다(설계서 「권한 모델」 — 막는 것은 생성 하나이고,
-            그 판정은 팝오버 안이 한다). 감추면 viewer가 *"이 프로젝트에 어떤 기록이
-            있는지"*조차 못 본다. */}
-        <SnapshotsPanel
-          projectId={props.project.id}
-          onRestoreSent={store.beginOwnRestore}
-          onRestored={(clientRestoreId, safetySnapshotId) => {
-            // 답의 안전망 스냅샷 id 를 먼저 적는다 — 되돌아오는 내 복원의 신호를 알아보고, 미뤄 둔 신호를 가른다(`EditorStore.ownRestoreAnswered`).
-            // 내려간 셸의 답이면 둘 다 스토어에 안 쓴다(`shellGeneration`).
-            if (shellLive()) store.ownRestoreAnswered(clientRestoreId, safetySnapshotId)
-            reloadAfterRestore(RESTORED_LEAD)
-          }}
-          onRestoreRefused={(clientRestoreId) => {
-            if (shellLive()) store.ownRestoreRefused(clientRestoreId)
-          }}
-          onRestoreUnanswered={(clientRestoreId) => {
-            if (shellLive()) store.markRestoreUnanswered(clientRestoreId)
-          }}
-        />
-        {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 스냅샷 링크 옆에 두는 것은 둘 다
-            *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
+            **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
+        <div className="wb-shell-head-tools">
+          {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
+          <ShellTools canvasRef={canvasRef} frameRef={frameRef} />
+        </div>
+        {/* **오른쪽 끝의 `…`** — 이 프로젝트 전체 · 계정을 다루는 일(spec 「`…` 메뉴」). **역할로 감추지 않는다** — 항목 다섯이 모든 역할에게
+            선다: 스냅샷 목록 · 내보내기 · 설정(읽기 전용 칸)은 viewer 도 본다(설계서 「권한 모델」 — 막는 것은 그 안의 생성 · 복원이고 그 판정은
+            몸체가 한다). */}
+        <ActionMenu label="더 보기" heading={sessionUser?.name} items={menuItems} />
+        {/* **스냅샷 · 내보내기는 에디터 위의 대화 상자다**(`shell/shell-dialog.tsx`). 셸이 그리므로 셸이 내려가면 함께 내려간다.
 
-            **역할로 감추지 않는다** — 번들은 viewer가 화면에서 볼 수 있는 것을 파일로 받는
-            것이고 서버도 viewer에게 연다(「권한 모델」). 감추면 설계서를 **읽으라고** 부른
-            사람이 그것을 가져갈 수 없다. */}
-        <ExportPanel projectId={props.project.id} />
-        {/* **프로젝트 설정**(`routes/settings.tsx` — 이름 · 슬러그 · 설명 · 테마). 스냅샷 · 내보내기 옆에 두는 것은 셋 다 *"이 프로젝트
-            전체를 다루는 것"*이라 축이 같기 때문이다. **역할로 감추지 않는다** — viewer 도 지금 테마 · 토큰을 읽기로 본다(칸이 읽기 전용이다).
-            팝오버가 아니라 링크인 것은 절이 둘이고 미리보기가 들어 셸 머리에 뜨는 상자로는 좁기 때문이다. */}
-        <Link className="wb-shell-settings-entry" to={`/projects/${props.project.id}/settings`}>
-          설정
-        </Link>
-        {/* **계정은 줄의 끝이다**(`session/session-menu.tsx`). 앞의 도구들이 전부
-            *"이 설계서로 무엇을 하는가"*인 것과 달리 이것은 **앱 전체**에 걸린다 — 왼쪽의
-            이동·정체성 묶음에 붙이지 않은 것도 그래서다: 그쪽은 *"이 설계서에서 나가는
-            길"*이고 이쪽은 *"앱에서 나가는 길"*이다.
-
-            **`projectId`를 받지 않는다.** 세션은 프로젝트에 매이지 않으므로 이 컴포넌트를
-            셸 밖(프로젝트 목록 등)에 그대로 옮겨 놓을 수 있다. */}
-        {/* **보낸 편집의 답을 받은 뒤에 로그아웃한다**(`editsAnswered`) — 칸에 친 채 누르면 그 클릭이 blur 로 낸 편집과 로그아웃이 다른
-            연결로 겨룬다. 로그아웃이 먼저 세션을 지우면 편집은 커밋 순간의 재확인에서 거절되고 셸째 내려가 말할 자리도 없다(Chrome:
-            친 채 누른 3판 가운데 1판이 401 · 행 잠금에 줄 선 편집과 그 뒤에 쌓인 편집은 둘 다 잃음). **막지는 않는다** — 한도가 지나면
-            그대로 나간다. 로그아웃은 권한을 줄이는 쓰기라, 막으면 누르고 떠난 사람의 세션이 남는다. 한도 뒤에 잃는 편집은 셸째
-            내려가므로 로그인 화면이 말한다(`logoutLossNotice` · `useSignOutNotice`). */}
-        <SessionMenu settle={settleEdits} />
+            스냅샷 몸체에는 셸의 복원 콜백 넷을 그대로 준다 — 복원을 보낸 뒤 상자를 닫아도 답은 셸이 받는다(몸체가 보낸 순간 쥔 콜백).
+            `onRestored` 가 답의 안전망 스냅샷 id 를 먼저 적는다 — 되돌아오는 내 복원의 신호를 알아보고, 미뤄 둔 신호를 가른다
+            (`EditorStore.ownRestoreAnswered`). 내려간 셸의 답이면 스토어에 안 쓴다(`shellGeneration`). */}
+        <ShellDialog open={dialog === 'snapshots'} title="스냅샷" onClose={() => setDialog(null)}>
+          <SnapshotsBody
+            projectId={props.project.id}
+            onRestoreSent={store.beginOwnRestore}
+            onRestored={(clientRestoreId, safetySnapshotId) => {
+              if (shellLive()) store.ownRestoreAnswered(clientRestoreId, safetySnapshotId)
+              reloadAfterRestore(RESTORED_LEAD)
+            }}
+            onRestoreRefused={(clientRestoreId) => {
+              if (shellLive()) store.ownRestoreRefused(clientRestoreId)
+            }}
+            onRestoreUnanswered={(clientRestoreId) => {
+              if (shellLive()) store.markRestoreUnanswered(clientRestoreId)
+            }}
+          />
+        </ShellDialog>
+        {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 번들은 viewer가 화면에서 볼 수 있는 것을 파일로 받는
+            것이고 서버도 viewer에게 연다(「권한 모델」). */}
+        <ShellDialog open={dialog === 'export'} title="프로젝트 내보내기" onClose={() => setDialog(null)}>
+          <ExportBody projectId={props.project.id} />
+        </ShellDialog>
         {/* 편집 실패 통지는 **한 자리**다. 조회 실패처럼 화면마다 나누지 않는 것은,
             어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
             받고 보내지 못한 편집을 잃는다. 셸 상단에 두면 어느 패널을 보고 있어도
@@ -816,6 +821,8 @@ function EditorShell(props: {
             {roleNotice}
           </p>
         )}
+        {/* **세션 전환 · 로그아웃 실패**(`session/session-menu.tsx`의 `SessionNotices`). */}
+        <SessionNotices failure={logoutFailure} className="wb-shell-session-alert" />
       </header>
 
       <nav

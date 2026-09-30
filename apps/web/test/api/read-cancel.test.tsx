@@ -18,7 +18,7 @@ const DOC = pageDoc({ id: 'n-root', type: 'Page', children: [] })
 const PROJECT: ProjectView = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin', description: null, role: 'owner', themeRev: 0 }
 
 async function leaveEditor(): Promise<void> {
-  fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+  fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
   await screen.findByRole('link', { name: PROJECT_NAME })
 }
 

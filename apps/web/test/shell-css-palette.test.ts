@@ -147,8 +147,8 @@ const ROUTE_SOURCES = Object.entries(
  * **여기 더하기 전에 물어라: 그 화면이 정말 셸 밖인가.** 셸 안이라면 `.wb-shell`이 이미
  * 물려주므로 더할 필요가 없고, 더하면 같은 값을 두 번 선언하는 자리가 된다.
  *
- * **스냅샷 팝오버(`wb-shell-snapshots`)는 여기 없다** — 셸 머리에 뜨므로 위 물음의 답이
- * *"셸 안이다"*다(`src/shell/snapshots-panel.tsx` 머리말). 목록에 넣어도 빼도 화면은
+ * **대화 상자(`wb-shell-dialog` — 스냅샷 · 내보내기)는 여기 없다** — 셸이 그리므로 위 물음의 답이
+ * *"셸 안이다"*다(`src/shell/shell-dialog.tsx` 머리말). 목록에 넣어도 빼도 화면은
  * 같다(팔레트를 상속으로 받는다). 이 검사가 지키는 것은 그러므로 *"화면이 검게 나오는가"*가
  * 아니라 **CSS와 이 목록이 갈리지 않는 것**이고, 아래 구분력 두 케이스가 그 양방향이다.
  */
@@ -160,7 +160,7 @@ const SCREEN_ROOTS = ['wb-shell', 'wb-shell-login', 'wb-shell-project-list', 'wb
  *
  * `wb-shell-notice`가 유일하다. 셸에 이르지 못한 화면(조회 중·조회 실패)이고, 색을
  * `#1d2530` 리터럴로 갖는다. 라우트 **하나**가 이것을 쓴다(`editor.tsx`).
- * 스냅샷 팝오버는 셸이 이미 떠 있는 위의 작은 상자라 이 자리를 쓰지 않는다.
+ * 스냅샷 · 내보내기 대화 상자는 셸이 이미 떠 있는 위의 상자라 이 자리를 쓰지 않는다.
  */
 const PALETTE_FREE_ROOTS = ['wb-shell-notice']
 
