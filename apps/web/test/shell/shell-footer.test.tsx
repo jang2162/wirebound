@@ -17,6 +17,7 @@ import type { PatchResult, ProjectRole, ProjectView } from '../../src/api/types'
 import { PROJECT_ID, PROJECT_NAME, openPage, pageDoc } from '../editor-harness'
 import { fakeRealtime } from '../fake-realtime'
 import { adminThemeView, staticBundleLoader } from '../theme-loader'
+import { treeTool } from '../panels/tree-row'
 
 const PAIR: PageDocument = pageDoc({
   id: 'n-root',
@@ -50,7 +51,7 @@ function notices(box: HTMLElement): string[] {
 async function moveDown(): Promise<void> {
   const tree = screen.getByRole('region', { name: '구조 트리' })
   fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
-  fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
+  fireEvent.click(treeTool(tree, '아래로'))
   await act(async () => {})
 }
 

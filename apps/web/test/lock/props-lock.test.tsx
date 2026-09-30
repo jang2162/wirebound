@@ -3,7 +3,7 @@
  *
  * # 패널이 잠금을 안 보면 무엇이 깨지나
  *
- * 구조 툴바와 되돌리기가 잠금을 무는 것만으로는 **우측 패널이 그 둘을 다 비켜 간다.** 패널이
+ * 구조 트리의 줄 행동과 되돌리기가 잠금을 무는 것만으로는 **우측 패널이 그 둘을 다 비켜 간다.** 패널이
  * 잠금을 안 보는 판에서 잰 고장 방식이 아래다(진짜 api·진짜 WS 잠금은 서버 쪽에서, 화면은 이
  * 파일의 하네스로):
  *
@@ -19,7 +19,7 @@
  *
  * 잠금을 무는 규칙은 *"그 조작의 단위에 맞춘다"*이고, 되돌리기가 ops를 단위로 삼는 것은
  * **그 조작에 선택이 없기 때문**이다. 이 패널은 반대다 — 존재 자체가 *"고른 노드의
- * 속성"*이라 구조 툴바가 쓰는 값(`store.lockedBy`)을 그대로 쓴다. 근거와 서버 실측 표는
+ * 속성"*이라 구조 트리가 쓰는 값(`store.lockedBy`)을 그대로 쓴다. 근거와 서버 실측 표는
  * `src/panels/property-panel.tsx`의 `lock` 선언이 갖는다 — **여기 두 벌로 적지 않는다.**
  *
  * 요지 하나만: **한 갈래에서 서버보다 엄격하다**(잠긴 노드의 **조상**을 골라 둔 판 —
@@ -315,7 +315,7 @@ function select(type: string): void {
   fireEvent.click(within(structureRegion()).getByRole('button', { name: type }))
 }
 
-/** 구조 툴바 아래 상태줄의 글자. */
+/** 구조 트리 아래 상태줄의 글자. */
 function statusLine(): string {
   return structureRegion().querySelector('.wb-shell-structure-status')?.textContent ?? ''
 }

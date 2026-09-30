@@ -19,9 +19,9 @@
  *
  * **대조가 입구 하나를 따로 증언하지 못하는 곳**(칸이 없거나 둘이 서로를 덮는다):
  *
- * - **구조 툴바 ↔ 구조 단축키** — 둘 다 `patch structure`를 낸다. 한쪽만 꺼도 칸이 산다. 가르지 않는다 —
+ * - **구조 줄 행동 ↔ 구조 단축키** — 둘 다 `patch structure`를 낸다. 한쪽만 꺼도 칸이 산다. 가르지 않는다 —
  *   viewer 에게 **단축키** 축은 이 파일의 viewer 케이스가 소유하고(단축키 가드를 지운 변조가 여기서만 죽는다),
- *   **툴바**는 `viewer-entries.test.tsx`의 «구조 트리»가 소유한다(툴바가 없다).
+ *   **줄 행동**은 `viewer-entries.test.tsx`의 «구조 트리»가 소유한다(줄 행동째 없다).
  * - **메뉴 트리 단축키** — editor 대조가 한 번도 안 닿는다. 아래 «키»의 대표 고르기 때문이다.
  * - **페이지 이름 변경 · 페이지 추가** — editor 훑기가 **못 닿는다**(칸이 없다). 둘 다 줄 행동이 여는 «이름» 칸인데 그 칸은
  *   하나가 용도만 바꿔 서서(`menu-tree.tsx`의 `RowPanel` · `TreeInput`) 아래 `keyOf`로는 한 칸이다 — 처음 연 용도만
@@ -428,8 +428,10 @@ function tier(el: Element): number {
  * **대화 상자의 «닫기»는 누르지 않는다**(`shell/shell-dialog.tsx`). 상자가 열린 걸음에 상자 안 컨트롤이 함께 나타나고, 같은 걸음이면 문서
  * 순서로 고르므로 머리의 «닫기»가 몸체보다 먼저 눌려 그 안(스냅샷 폼 · 복원)에 한 번도 못 닿는다. 상자는 키 훑기의 Escape 가 닫는다.
  *
- * **`…` 는 한 번만 열린다** — 같은 열쇠라 다시 안 누른다. 처음 고른 쓰기 항목(«스냅샷»)이 메뉴를 닫으면 뒤 항목(«프로젝트 내보내기»)은 안
- * 눌린다. 내보내기 몸체의 컨트롤은 형식 고르기 · 내려받기(`GET`)뿐이라 쓰기 입구가 아니다 — 그 상자는 이 자의 사각이다.
+ * **행동 메뉴(머리의 `…` · 트리 제목 줄의 뿌리 `+`)는 항목이 다 눌릴 때까지 다시 연다**(`sweepControls`) — 항목 하나를 고르면 목록이
+ * 닫혀, 한 번만 열면 뒤 항목(뿌리 `+`의 «프리셋» · `…`의 «프로젝트 내보내기»)에 영영 못 닿는다. **트리 줄의 `+` · `…`는 한 번씩만
+ * 연다** — 그 단추가 여는 순간 줄을 골라 선택을 옮기기 때문이다(`sweepControls`의 주석). 그래서 한 줄의 `…` 뒤 항목은 이 훑기의
+ * 사각이다 — 그 명령(위로 · 삭제 …)은 같은 줄의 다른 판 · 단축키가 닿고, 입구 칸(`REACH`)은 요청의 모양으로 센다.
  */
 function closesDialog(el: Element): boolean {
   return el.closest('dialog') !== null && el.classList.contains('wb-shell-dialog-close')
@@ -449,6 +451,9 @@ function switchesMode(el: Element): boolean {
 async function sweepControls(): Promise<number> {
   const seen = new Set<string>()
   const appeared = new Map<string, number>()
+  /** 행동 메뉴 단추(`aria-haspopup="menu"`)마다 연 목록의 항목 열쇠 — 안 누른 항목이 남았으면 그 단추를 다시 누른다. */
+  const menuItems = new Map<string, string[]>()
+  const exhausted = (key: string): boolean => (menuItems.get(key) ?? []).every((item) => seen.has(item))
   let pressed = 0
   for (let step = 0; step < 800; step += 1) {
     let pick: { el: Element; key: string; at: number } | undefined
@@ -456,7 +461,16 @@ async function sweepControls(): Promise<number> {
       if (leaves(el) || switchesMode(el) || closesDialog(el)) continue
       const key = keyOf(el)
       if (!appeared.has(key)) appeared.set(key, step)
-      if (isOff(el) || seen.has(key)) continue
+      // **메뉴 단추는 항목이 다 눌릴 때까지 다시 연다** — 항목 하나를 고르면 목록이 닫혀, 한 번만 열면 뒤 항목(뿌리 `+`의 «프리셋» ·
+      // `…`의 «프로젝트 내보내기»)에 영영 못 닿는다. 열린 동안은 다시 누르지 않는다(누르면 닫힌다). **트리 줄의 `+` · `…`는 빼고** —
+      // 그 단추는 열 때 그 줄을 골라 선택을 옮기므로, 다시 열수록 뒤 입구(메뉴를 고른 채 서는 «페이지 가져오기»)가 선택을 잃는다.
+      // 줄 행동의 명령은 한 번씩 열린 판과 단축키가 닿는다.
+      const reopen =
+        el.getAttribute('aria-haspopup') === 'menu' &&
+        el.getAttribute('aria-expanded') !== 'true' &&
+        el.closest('.wb-shell-tree-row-actions') === null &&
+        !exhausted(key)
+      if (isOff(el) || (seen.has(key) && !reopen)) continue
       const at = appeared.get(key) ?? step
       const better =
         pick === undefined ||
@@ -468,6 +482,14 @@ async function sweepControls(): Promise<number> {
     seen.add(pick.key)
     pressed += 1
     await activate(pick.el)
+    if (pick.el.getAttribute('aria-haspopup') === 'menu') {
+      const list = document.getElementById(pick.el.getAttribute('aria-controls') ?? '')
+      // 누를 수 있는 항목만 센다 — 끈 항목 · 에디터 밖으로 나가는 항목은 훑기가 안 누르므로 세면 단추가 끝없이 다시 열린다.
+      if (list !== null) {
+        const items = Array.from(list.querySelectorAll(REACHABLE)).filter((item) => !isOff(item) && !leaves(item))
+        menuItems.set(pick.key, items.map(keyOf))
+      }
+    }
   }
   throw new Error('훑기가 800 걸음 안에 끝나지 않았다 — 누를 때마다 새 열쇠가 생기는 컨트롤이 있다')
 }
@@ -535,7 +557,7 @@ async function sweepKeys(): Promise<void> {
   }
 }
 
-/** 훑기 전에 세우는 선택 — 선택마다 서는 입구가 다르다(속성 위젯 · 코멘트 폼 · 구조 툴바 · 메뉴 트리의 고른 줄). */
+/** 훑기 전에 세우는 선택 — 선택마다 서는 입구가 다르다(속성 위젯 · 코멘트 폼 · 구조 트리의 고른 줄 · 메뉴 트리의 고른 줄). */
 const SELECTIONS: { name: string; pick: () => void }[] = [
   { name: '선택 없음', pick: () => {} },
   { name: '루트', pick: () => clickNode('n-root') },

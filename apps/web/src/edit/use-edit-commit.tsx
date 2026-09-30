@@ -271,8 +271,8 @@ function skippedHead(skipped: number): string {
  * 상태줄(`panels/toolbar-status.ts`)이 «왜 회색인가»를 말하는 자리이고 잠금이 그 사다리
  * 맨 위에 있다. **되돌리기는 그 사다리에 안 올린다** — 그 줄이 답하는
  * 물음이 *"지금 **고른 것**이 무엇이라서 그런가"*인데 되돌리기는 **선택과 무관**하고, 자리도
- * 구조 툴바가 아니라 셸 헤더의 `편집 이력` 묶음이다(`routes/editor.tsx`의 `UndoTools`).
- * 그 줄에 얹으면 사다리가 자기 것이 아닌 물음에 답하게 되고, 구조 툴바를 안 보고 있는
+ * 구조 트리가 아니라 셸 헤더의 `편집 이력` 묶음이다(`routes/editor.tsx`의 `UndoTools`).
+ * 그 줄에 얹으면 사다리가 자기 것이 아닌 물음에 답하게 되고, 구조 트리를 안 보고 있는
  * 사용자에게는 어차피 안 보인다.
  */
 function lockedNotice(userName: string, skipped: number): string {
@@ -798,7 +798,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   }, [step, store])
 
   /**
-   * 편집 하나를 큐에 넣고 전송을 밟는다. **`commitProp`과 구조 편집(구조 툴바)이
+   * 편집 하나를 큐에 넣고 전송을 밟는다. **`commitProp`과 구조 편집(구조 트리의 명령)이
    * 공유하는 유일한 통로다** — 둘이 각자 `applyEdit` + `pump`를 쓰면 그 사이에 끼는
    * 규칙(열린 페이지 대조·통지 치우기)이 두 벌이 되고, 한쪽만 고쳐지는 날이 온다.
    */

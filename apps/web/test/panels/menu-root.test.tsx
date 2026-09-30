@@ -4,9 +4,9 @@
  * # 왜 따로 버튼이 있어야 하나
  *
  * 새 프로젝트는 메뉴 노드가 **0개**로 만들어진다(`apps/api/src/repos/projects.ts`의
- * `insertProject`는 프로젝트·멤버·기본 레이아웃만 만든다). 그런데 메뉴 툴바의 아홉은
+ * `insertProject`는 프로젝트·멤버·기본 레이아웃만 만든다). 그런데 메뉴 줄 행동의 항목들은
  * **전부 선택에 매여 있다** — `tree/tree-actions.ts`의 `treeAbilities`가 `selection === null`
- * 이면 `NOTHING`을 낸다. 빈 트리에는 고를 것이 없으므로 툴바만으로는 첫 메뉴를 만들 수 없고,
+ * 이면 `NOTHING`을 낸다. 빈 트리에는 고를 것이 없으므로 줄 행동만으로는 첫 메뉴를 만들 수 없고,
  * 페이지는 `menuNodeId`가 필수라 페이지도 만들 수 없다.
  *
  * **서버는 이미 받는다 — 막히는 것은 화면뿐이다.** `apps/api/src/routes/menu.ts`는

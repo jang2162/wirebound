@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../src/api/client'
 import type { PageDetail } from '../../src/api/types'
 import { HEAD_SEQ, PAGE_ID, openPage, pageDetail, pageDoc, canvasQuery } from '../editor-harness'
+import { treeTool } from './tree-row'
 
 const DIVERGED = /번호를 화면에 반영하지 못했습니다/
 
@@ -56,7 +57,7 @@ async function divergeThenReload(reloaded: PageDetail): Promise<void> {
 
   const tree = screen.getByRole('region', { name: '구조 트리' })
   fireEvent.click(within(tree).getAllByRole('button', { name: 'Text' })[1]!)
-  fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
+  fireEvent.click(treeTool(tree, '아래로'))
   await waitFor(() => expect(getPage).toHaveBeenCalledTimes(2))
   await act(async () => {})
 }

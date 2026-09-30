@@ -106,6 +106,7 @@ import {
   canvasQuery,
 } from '../editor-harness'
 import '../../src/catalog-setup'
+import { treeTool } from '../panels/tree-row'
 
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
 
@@ -316,11 +317,8 @@ function typeAndCommit(value: string): void {
   fireEvent.blur(input)
 }
 
-function toolButton(name: string): HTMLButtonElement {
-  return within(within(structureRegion()).getByRole('group', { name: '구조 편집' })).getByRole<HTMLButtonElement>(
-    'button',
-    { name },
-  )
+function toolButton(name: string): HTMLElement {
+  return treeTool(structureRegion(), name)
 }
 
 function alertText(): string | null {

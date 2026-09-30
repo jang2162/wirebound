@@ -1,9 +1,9 @@
 /**
  * 메뉴 트리의 조회·선택·조작을 한 곳에 모은 훅. **화면이 부르는 유일한 관문이다.**
  *
- * 조회가 컴포넌트 안에 있으면 툴바가 그것을 부를 길이 없다 — 조작이 끝나면 트리를 다시
+ * 조회가 컴포넌트 안에 있으면 줄 행동이 그것을 부를 길이 없다 — 조작이 끝나면 트리를 다시
  * 받아야 하는데, 재조회 함수가 `MenuTree`의 `useEffect` 안에 갇혀 있기 때문이다.
- * `useStructureCommands` / `StructureToolbar`의 분리와 같은 모양이다.
+ * `useStructureCommands` / 구조 트리 줄 행동의 분리와 같은 모양이다.
  *
  * **낙관 적용을 하지 않는다.** 요청 하나가 성공하면 트리를 통째로 다시 받는다. 이 파일의
  * 형태를 정하는 근거는 둘이다 — 서버가 `sortOrder`를 재번호하고,
@@ -951,7 +951,7 @@ export function useTreeCommands(props: {
    * 삭제를 실행한다(두 번 누르기의 두 번째 클릭).
    *
    * **지우기 전에 자리를 먼저 읽는다** — 지운 뒤에는 그 노드가 트리에 없어 `treeSpot`이
-   * `null`이고 부모를 알 길이 없다. `StructureToolbar`의 `removeSelected`가 같은 형태다.
+   * `null`이고 부모를 알 길이 없다. `useStructureCommands`의 `removeSelected`가 같은 형태다.
    *
    * **메뉴를 지우면 선택이 부모로 간다.** 지운 것을 계속 가리키면 툴바가 사라진 항목에
    * 작동하는 상태가 되고, `treeAbilities`가 전부 `false`를 내므로 사용자는 아무것도 못 하는

@@ -23,16 +23,18 @@
  * 읽을 때마다 같은 «못 한다»를 한 번 더 말할 뿐이다.
  */
 import type { ReactElement } from 'react'
+import type { StructureAbilities } from '../edit/structure-actions'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
 import type { TreeAbilities } from '../tree/tree-actions'
 import type { TreeCommands } from '../tree/use-tree-commands'
+import type { StructureCommands } from './structure-toolbar'
 import { menuStatus } from './toolbar-status'
 
-/** 줄 행동 한 벌 — `+`(없으면 안 그린다)와 `…`. `name` 은 그 줄의 이름이다(접근 이름이 줄마다 갈리게). */
+/** 줄 행동 한 벌 — `+` · `…`(없으면 안 그린다). `name` 은 그 줄의 이름이다(접근 이름이 줄마다 갈리게). */
 export function TreeRowActions(props: {
   name: string
   add?: readonly ActionMenuItem[]
-  more: readonly ActionMenuItem[]
+  more?: readonly ActionMenuItem[]
   /** 열 때 — 그 줄을 고른다(머리말). */
   onOpen: () => void
 }): ReactElement {
@@ -41,7 +43,9 @@ export function TreeRowActions(props: {
       {props.add !== undefined && (
         <ActionMenu label={`${props.name} 추가`} glyph="+" items={props.add} onOpen={props.onOpen} compact />
       )}
-      <ActionMenu label={`${props.name} 더 보기`} items={props.more} onOpen={props.onOpen} compact />
+      {props.more !== undefined && (
+        <ActionMenu label={`${props.name} 더 보기`} items={props.more} onOpen={props.onOpen} compact />
+      )}
     </span>
   )
 }
@@ -124,6 +128,73 @@ export function menuRowItems(
       item('indent', '들여쓰기', commands.indent),
       item('outdent', '내어쓰기', commands.outdent),
       remove,
+    ],
+  }
+}
+
+/**
+ * 구조 트리 항목이 꺼졌을 때의 설명 — `MENU_WHY_DISABLED`와 같은 규칙(조건을 그대로 옮긴다 · 대표 이유는 상태줄이 말한다).
+ */
+const STRUCTURE_WHY_DISABLED: Record<keyof StructureAbilities, string> = {
+  // **조건 둘을 다 말한다.** `acceptsChildren`은 카탈로그의 `many` 여부만이 아니라
+  // 문서의 `children`이 배열인지도 본다 — 앞엣것만 적으면 `Card`인데 꺼진 자리에서
+  // 사용자가 이유를 알 수 없다.
+  addInside: '자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다',
+  addAfter: '루트가 아닌 노드를 고르세요',
+  remove: '루트가 아닌 노드를 고르세요',
+  moveUp: '앞에 형제가 있는 노드를 고르세요',
+  moveDown: '뒤에 형제가 있는 노드를 고르세요',
+  indent: '앞 형제가 자식을 담을 수 있어야 합니다',
+  outdent: '부모가 루트가 아니어야 합니다',
+}
+
+/**
+ * 구조 트리 줄의 `+` · `…` 항목(spec 「트리」 표 — `+` 안에 추가 · 아래 추가, `…` 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제).
+ *
+ * **`+`에 «패턴 넣기»를 함께 둔다** — 패턴은 고른 줄을 자리로 삼는 추가라(`edit/pattern-insert.ts`) 그 줄의 `+`가 제자리다. 잠금으로만
+ * 꺼진다(`patternLocked` — 판정이 없는 조작이라 `title`도 없다). **뿌리 줄도 같은 항목을 끈 채 둔다** — 뿌리가 못 하는 것(아래 추가 ·
+ * 삭제 · 순서 · 계층)은 **종류가 아니라 자리** 때문이라, 끈 항목의 이유(«루트가 아닌 노드를 고르세요»)가 할 말이 있다(머리말의 «뺀다»는
+ * 종류가 결코 못 하는 항목 — 페이지의 계층 · 메뉴의 옮기기 — 에만 쓴다).
+ *
+ * `statusId`는 `menuRowItems`와 같다 — 할 말이 있으면 판정에 매인 항목이 상태줄을 설명으로 든다. 패턴은 들지 않는다 — 선택이 없어도
+ * 되는 조작이라 *"트리에서 노드를 고르면 편집할 수 있습니다"*를 그 설명으로 붙이면 없는 전제조건을 만든다
+ * (`test/panels/toolbar-status-reach.test.tsx` 머리말 «고른 길»).
+ */
+export function structureRowItems(
+  commands: StructureCommands,
+  statusId: string,
+): { add: ActionMenuItem[]; more: ActionMenuItem[] } {
+  const describedBy = commands.status === '' ? undefined : statusId
+  const item = (key: keyof StructureAbilities, label: string, onSelect: () => void, danger = false): ActionMenuItem => {
+    const allowed = commands.abilities[key]
+    return {
+      key,
+      label,
+      onSelect,
+      disabled: !allowed,
+      title: allowed ? undefined : STRUCTURE_WHY_DISABLED[key],
+      describedBy,
+      danger,
+    }
+  }
+  const add = [
+    item('addInside', '안에 추가', () => commands.openAdd('inside')),
+    item('addAfter', '아래 추가', () => commands.openAdd('after')),
+    {
+      key: 'pattern',
+      label: '패턴 넣기',
+      onSelect: () => commands.openAdd('pattern'),
+      disabled: commands.patternLocked,
+    },
+  ]
+  return {
+    add,
+    more: [
+      item('moveUp', '위로', commands.moveUp),
+      item('moveDown', '아래로', commands.moveDown),
+      item('indent', '들여쓰기', commands.indent),
+      item('outdent', '내어쓰기', commands.outdent),
+      item('remove', '삭제', commands.remove, true),
     ],
   }
 }

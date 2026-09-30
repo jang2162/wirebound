@@ -136,8 +136,8 @@ describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다 �
     expect(within(tree).getByRole('button', { name: '회원관리' }).getAttribute('aria-pressed')).toBe('true')
   })
 
-  /** 혼자 죽는 변조: 구조 트리가 툴바를 `editable`과 무관하게 그린다. */
-  it('구조 트리 — 노드는 고를 수 있고 «구조 편집» 툴바가 없다(숨김)', async () => {
+  /** 혼자 죽는 변조: 구조 트리가 줄 행동을 `editable`과 무관하게 그린다. */
+  it('구조 트리 — 노드는 고를 수 있고 줄 행동(`+` · `…` · 뿌리 `+`)이 없다(숨김)', async () => {
     await openAsViewer(how)
     const structure = screen.getByRole('region', { name: '구조 트리' })
 
@@ -145,8 +145,8 @@ describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다 �
     expect((card as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(card)
     expect(card.getAttribute('aria-current')).toBe('true')
-    expect(within(structure).queryByRole('group', { name: '구조 편집' })).toBeNull()
-    expect(within(structure).queryByRole('button', { name: '프리셋' })).toBeNull()
+    expect(structure.querySelectorAll('.wb-shell-tree-row-actions')).toHaveLength(0)
+    expect(within(structure).queryByRole('button', { name: '구조 트리에 추가' })).toBeNull()
   })
 
   /** 혼자 죽는 변조: 속성 패널의 `blocked`가 역할을 안 본다(잠금만 본다). */

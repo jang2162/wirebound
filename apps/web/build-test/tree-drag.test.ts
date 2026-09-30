@@ -13,6 +13,11 @@
  * | Escape | 요청이 나간다 |
  * | 끄는 중 캔버스 위를 지나 돌아와 놓음 | 캔버스 iframe 위의 움직임이 호스트에 안 와(캡처 없음) 마지막 줄의 표시가 남는다 · 돌아와 놓은 요청이 안 나간다 |
  * | 캔버스 위에서 놓음 | 캔버스 iframe 위의 `pointerup`이 호스트에 안 와 끌기가 붙은 채 남는다 · 요청이 나간다 |
+ * | 구조: 노드를 다른 컨테이너 안으로 · 되돌리기 | 서버 문서에서 그 컨테이너의 마지막 자식이 아니다 · 되돌리기 뒤 원래 자리가 아니다 |
+ * | 구조: 남이 잡은 노드 | 잠긴 줄에 `+` · `…`가 선다 · 잠긴 줄이 들린다 · 잠긴 노드 안에 놓을 자리가 선다(옮기기 전 좌표) · 편집이 나간다 |
+ * | 구조: 자식을 안 받는 노드 위 | «안» 표시가 선다 · 놓으면 그 노드의 자식이 된다 |
+ *
+ * 구조 편집은 WS 프레임(`patch`)으로 나가므로 HTTP 가 아니라 보낸 프레임을 센다(`openEditor`의 `patches`).
  */
 import type { Page, Request } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -96,19 +101,29 @@ describe.skipIf(!전제.ok)('트리 끌어 놓기 · 줄 행동 — 실브라우
     return [...items].sort((a, b) => a.sortOrder - b.sortOrder).map((item) => item.title)
   }
 
-  async function openEditor(P: string): Promise<{ page: Page; close: () => Promise<void>; writes: string[] }> {
-    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+  async function openEditor(
+    P: string,
+    user: 'alice' | 'bob' = 'alice',
+  ): Promise<{ page: Page; close: () => Promise<void>; writes: string[]; patches: string[] }> {
+    const { context, page } = await stack.openTab(stack.users[user], { viewport: { width: 1440, height: 900 } })
     const writes: string[] = []
+    const patches: string[] = []
     page.on('request', (request: Request) => {
       if (request.method() !== 'GET' && /\/api\/projects\/[^/]+\/(menu|pages)\//.test(request.url())) {
         writes.push(`${request.method()} ${new URL(request.url()).pathname}`)
       }
     })
+    page.on('websocket', (socket) => {
+      socket.on('framesent', (frame) => {
+        const text = typeof frame.payload === 'string' ? frame.payload : frame.payload.toString()
+        if (text.includes('"type":"patch"')) patches.push(text)
+      })
+    })
     await page.goto(P)
     await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
     // 줄 상자는 `visibility: hidden`이다(보이는 것은 줄 단추 · 고른 줄) — 붙었는지만 기다린다.
     await page.locator('[data-tree-row]').first().waitFor({ state: 'attached' })
-    return { page, close: () => context.close(), writes }
+    return { page, close: () => context.close(), writes, patches }
   }
 
   /** 메뉴 트리의 줄 상자 — 줄의 id 로. */
@@ -271,6 +286,149 @@ describe.skipIf(!전제.ok)('트리 끌어 놓기 · 줄 행동 — 실브라우
         lifted: await page.locator('.wb-shell-tree-row-dragging').count(),
         writes,
       }).toEqual({ afterRelease: 0, hint: 0, lifted: 0, writes: [] })
+    } finally {
+      await close()
+    }
+  })
+  /**
+   * 구조 판 — 메뉴 하나 · 페이지 하나에 문서:
+   * ```
+   * Page
+   * ├ Text    n_text0000001
+   * ├ Card    n_card0000001
+   * │ └ Text  n_intx0000001
+   * └ Divider n_divi0000001
+   * ```
+   * `bob`을 editor 로 넣는다(잠금 케이스의 둘째 사람).
+   */
+  async function structureFixture(slug: string): Promise<{ P: string }> {
+    const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
+    const project = (await call('POST', '/projects', { name: 'C2 구조', slug: `${slug}-${Date.now().toString(36)}` })).body
+    const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
+    const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '가1' })).body.id
+    const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
+    if (member.status >= 300) throw new Error(`member ${member.status}`)
+    const P = `/projects/${project.id}/pages/${pageId}`
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: [
+        { op: 'add', path: '/root/children/0', value: { id: 'n_text0000001', type: 'Text', props: { content: '글' } } },
+        {
+          op: 'add',
+          path: '/root/children/1',
+          value: { id: 'n_card0000001', type: 'Card', children: [{ id: 'n_intx0000001', type: 'Text', props: { content: '안' } }] },
+        },
+        { op: 'add', path: '/root/children/2', value: { id: 'n_divi0000001', type: 'Divider' } },
+      ],
+    })
+    if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
+    return { P }
+  }
+
+  /** 서버 문서의 모양 — 타입(자식) 차례. */
+  async function serverShape(P: string): Promise<unknown> {
+    const shape = (node: { type: string; children?: unknown[] }): unknown =>
+      Array.isArray(node.children) && node.children.length > 0
+        ? { [node.type]: node.children.map((child) => shape(child as never)) }
+        : node.type
+    return shape((await stack.request(alice, 'GET', P)).body.schema.root)
+  }
+
+  const ORIGINAL = { Page: ['Text', { Card: ['Text'] }, 'Divider'] }
+
+  function nodeRow(page: Page, id: string) {
+    return page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"]`)
+  }
+
+  async function nodeSpot(page: Page, id: string, zone: 'top' | 'middle' | 'bottom'): Promise<{ x: number; y: number }> {
+    const box = (await nodeRow(page, id).boundingBox())!
+    const y = zone === 'top' ? box.y + 3 : zone === 'middle' ? box.y + box.height / 2 : box.y + box.height - 3
+    return { x: box.x + 30, y }
+  }
+
+  async function grabNode(page: Page, id: string): Promise<void> {
+    const at = await nodeSpot(page, id, 'middle')
+    await page.mouse.move(at.x, at.y)
+    await page.mouse.down()
+    await page.mouse.move(at.x + 2, at.y + 8, { steps: 3 })
+  }
+
+  it('구조: 노드를 다른 컨테이너 안으로 끌어 놓으면 서버 문서에서 그 마지막 자식이고, 되돌리기로 원래 자리다', async () => {
+    const { P } = await structureFixture('node-into')
+    const { page, close, patches } = await openEditor(P)
+    try {
+      await grabNode(page, 'n_divi0000001')
+      await dropAt(page, await nodeSpot(page, 'n_card0000001', 'middle'))
+      const moved = await poll('서버 문서', () => serverShape(P), (shape) => JSON.stringify(shape) !== JSON.stringify(ORIGINAL))
+
+      await page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' }).click()
+      const undone = await poll('서버 문서', () => serverShape(P), (shape) => JSON.stringify(shape) === JSON.stringify(ORIGINAL))
+
+      expect({ moved, undone, sent: patches.length }).toEqual({
+        moved: { Page: ['Text', { Card: ['Text', 'Divider'] }] },
+        undone: ORIGINAL,
+        sent: 2,
+      })
+    } finally {
+      await close()
+    }
+  })
+
+  it('구조: 남이 잡은 노드는 행동이 없고 들리지 않으며, 그 안에 놓을 자리도 서지 않는다', async () => {
+    const { P } = await structureFixture('node-locked')
+    const bobTab = await openEditor(P, 'bob')
+    const { page, close, patches } = await openEditor(P)
+    try {
+      // bob 이 Card 를 고른다 — 그 노드의 잠금.
+      await bobTab.page.locator('.wb-shell-region[aria-label="구조 트리"]').getByRole('button', { name: 'Card', exact: true }).click()
+      await page.locator('.wb-shell-structure-lock').waitFor()
+
+      const actions = await nodeRow(page, 'n_card0000001').locator('.wb-shell-tree-row-actions').count()
+      // 잠긴 Card 를 끌어 본다.
+      await grabNode(page, 'n_card0000001')
+      const cardLifted = await page.locator('.wb-shell-tree-row-dragging').count()
+      await page.mouse.up()
+      // 앞의 Text 를 Card 안(가운데 띠)으로 — 뺀 뒤 좌표로는 잠긴 자리가 아니어도 옮기기 전 좌표로 막힌다(`structure-drop.ts`).
+      // **이 판은 서버가 막지 않는다** — 그 검사를 뗀 판에서 편집이 나가 서버가 커밋했다(잠긴 Card 안에 Text). 화면의 판정이 유일한 문이다.
+      await grabNode(page, 'n_text0000001')
+      const inside = await nodeSpot(page, 'n_card0000001', 'middle')
+      await page.mouse.move(inside.x, inside.y, { steps: 6 })
+      const textLifted = await page.locator('.wb-shell-tree-row-dragging').count()
+      const hint = await page.locator('.wb-shell-drop-indicator').count()
+      await page.mouse.up()
+      await page.waitForTimeout(500)
+
+      expect({ actions, cardLifted, textLifted, hint, sent: patches.length, shape: await serverShape(P) }).toEqual({
+        actions: 0,
+        cardLifted: 0,
+        textLifted: 1,
+        hint: 0,
+        sent: 0,
+        shape: ORIGINAL,
+      })
+    } finally {
+      await close()
+      await bobTab.close()
+    }
+  })
+
+  it('구조: 자식을 안 받는 노드 위에서는 «안» 표시가 없고, 놓으면 그 형제가 된다', async () => {
+    const { P } = await structureFixture('node-leaf')
+    const { page, close } = await openEditor(P)
+    try {
+      await grabNode(page, 'n_text0000001')
+      const middle = await nodeSpot(page, 'n_divi0000001', 'middle')
+      await page.mouse.move(middle.x, middle.y + 1, { steps: 6 })
+      // 기다리지 않고 읽는다 — 표시가 없으면 `[]`가 값이다(기다리면 없는 판이 시간 초과로만 죽는다).
+      const placements = await page
+        .locator('.wb-shell-drop-indicator')
+        .evaluateAll((els) => els.map((el) => el.getAttribute('data-placement')))
+      await page.mouse.up()
+      // 표시를 먼저 단언한다 — 놓을 자리가 없는 판은 요청이 안 나가 아래 폴이 시간 초과로만 죽는다.
+      expect(placements).toEqual(['after'])
+
+      const shape = await poll('서버 문서', () => serverShape(P), (next) => JSON.stringify(next) !== JSON.stringify(ORIGINAL))
+      expect(shape).toEqual({ Page: [{ Card: ['Text'] }, 'Divider', 'Text'] })
     } finally {
       await close()
     }

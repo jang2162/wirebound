@@ -215,7 +215,7 @@ function findVisit(document: PageDocument, nodeId: string): SafeVisit | null {
  * 다른 자리가 아니다. 그 자리가 `null`이면 `nodeType`이 던진다(실측 — 순회만 `walkSafely`로 두고
  * 여기서 `isNodeLike`를 빼면 `Cannot read properties of null (reading 'type')`이 여기서 난다).
  */
-function acceptsChildren(node: unknown): boolean {
+export function acceptsChildren(node: unknown): boolean {
   if (!isNodeLike(node)) return false
 
   const type = nodeType(node)

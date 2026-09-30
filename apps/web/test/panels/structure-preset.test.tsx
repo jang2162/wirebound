@@ -14,6 +14,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { Comment, PageDetail, PatchResult, Preset } from '../../src/api/types'
 import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
+import { treeTool } from './tree-row'
 
 /**
  * ```
@@ -177,11 +178,8 @@ function structureRegion(): HTMLElement {
   return screen.getByRole('region', { name: '구조 트리' })
 }
 
-function toolButton(name: string): HTMLButtonElement {
-  return within(within(structureRegion()).getByRole('group', { name: '구조 편집' })).getByRole(
-    'button',
-    { name },
-  )
+function toolButton(name: string): HTMLElement {
+  return treeTool(structureRegion(), name)
 }
 
 function pickerButton(name: string): HTMLButtonElement {
@@ -194,7 +192,10 @@ function pickerButton(name: string): HTMLButtonElement {
  * (`region`에 쏘면 고르개가 열리지 않는다).
  */
 function keyTarget(): HTMLElement {
-  return within(structureRegion()).getByRole('group', { name: '구조 편집' })
+  // 단축키 상자(`panels/structure-tree.tsx`의 `onKeyDown` 상자) 안의 요소 — 옛 툴바 자리에는 이제 트리 줄 목록이 선다.
+  const list = structureRegion().querySelector<HTMLElement>('.wb-shell-structure')
+  if (list === null) throw new Error('구조 트리 목록이 없다')
+  return list
 }
 
 function alertText(): string | null {

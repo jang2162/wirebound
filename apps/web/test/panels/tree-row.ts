@@ -66,10 +66,26 @@ export function rowNamed(region: HTMLElement, title: string): HTMLElement {
 /** 줄 아래에 서는 단추 — 삭제 확인(«정말 삭제합니까?»). 줄 행동이 아니라 트리 영역의 단추다. */
 const PANEL_BUTTONS = new Set(['정말 삭제합니까?'])
 
+/** 제목 줄의 뿌리 `+`에만 있는 항목 — 페이지 통째에 더하는 것. */
+const ROOT_ITEMS = new Set(['프리셋', '페이지에 추가', '최상위 메뉴 추가'])
+
+/** 영역 제목 줄의 뿌리 `+`에서 항목 하나 — 닫혀 있으면 연다. */
+export function rootAction(region: HTMLElement, name: string): HTMLElement {
+  const toggle = region.querySelector<HTMLButtonElement>('.wb-shell-region-actions [aria-haspopup="menu"]')
+  if (toggle === null) throw new Error('제목 줄에 뿌리 `+`가 없다')
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
+  const list = document.getElementById(toggle.getAttribute('aria-controls') ?? '')
+  if (list === null) throw new Error('열었는데 목록이 없다')
+  return within(list).getByRole('menuitem', { name })
+}
+
 /**
- * 옛 툴바의 `tool(name)` 자리 — 줄 아래 단추면 그 단추, 아니면 고른 줄의 행동 항목.
+ * 옛 툴바의 `tool(name)` 자리 — 줄 아래 단추면 그 단추, 뿌리 `+`의 항목이면 그것, 아니면 고른 줄의 행동 항목. **고른 줄이 없는데
+ * «패턴 넣기»를 물으면 뿌리 `+`의 것이다** — 옛 툴바의 «패턴 넣기»가 선택 없이 뿌리 끝에 꽂던 그 조작이다.
  */
 export function treeTool(region: HTMLElement, name: string): HTMLElement {
   if (PANEL_BUTTONS.has(name)) return within(region).getByRole('button', { name })
+  if (ROOT_ITEMS.has(name)) return rootAction(region, name)
+  if (name === '패턴 넣기' && region.querySelector('.wb-shell-tree-row-picked') === null) return rootAction(region, name)
   return rowAction(region, name)
 }

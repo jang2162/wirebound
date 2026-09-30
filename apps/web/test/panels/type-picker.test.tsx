@@ -22,6 +22,7 @@ import type { PageDetail, PatchResult } from '../../src/api/types'
 import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import { createNode } from '../../src/edit/create-node'
 import '../../src/catalog-setup'
+import { isOff, treeTool } from './tree-row'
 
 /**
  * ```
@@ -86,11 +87,8 @@ function structureRegion(): HTMLElement {
   return screen.getByRole('region', { name: '구조 트리' })
 }
 
-function toolButton(name: string): HTMLButtonElement {
-  return within(within(structureRegion()).getByRole('group', { name: '구조 편집' })).getByRole(
-    'button',
-    { name },
-  )
+function toolButton(name: string): HTMLElement {
+  return treeTool(structureRegion(), name)
 }
 
 function select(type: string): void {
@@ -453,7 +451,7 @@ describe('타입 목록과 노드 추가', () => {
     select('Text')
 
     expect(within(structureRegion()).queryByRole('group', { name: '타입 고르기' })).toBeNull()
-    expect(toolButton('안에 추가').disabled).toBe(true)
+    expect(isOff(toolButton('안에 추가'))).toBe(true)
     // 목록이 없으니 나갈 편집도 없다 — 위 머리말의 `add …/children`이 여기서 사라진다.
     expect(srv.calls).toHaveLength(0)
 
@@ -466,7 +464,7 @@ describe('타입 목록과 노드 추가', () => {
     await openPage(doc(), { apiOverrides: server().api })
     select('Text')
 
-    expect(toolButton('안에 추가').disabled).toBe(true)
+    expect(isOff(toolButton('안에 추가'))).toBe(true)
     expect(toolButton('안에 추가').title).toBe(
       '자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다',
     )
@@ -477,8 +475,8 @@ describe('타입 목록과 노드 추가', () => {
     await openPage(doc(), { apiOverrides: server().api })
     select('Page')
 
-    expect(toolButton('아래 추가').disabled).toBe(true)
-    expect(toolButton('안에 추가').disabled).toBe(false)
+    expect(isOff(toolButton('아래 추가'))).toBe(true)
+    expect(isOff(toolButton('안에 추가'))).toBe(false)
   })
 
   it('undo하면 추가한 노드가 사라진다', async () => {
@@ -498,14 +496,16 @@ describe('타입 목록과 노드 추가', () => {
     expect(srv.calls[1]?.ops).toEqual([{ op: 'remove', path: '/root/children/1/children/1' }])
   })
 
-  it('고른 것이 없으면 추가 버튼이 둘 다 비활성이다', async () => {
+  it('고른 것이 없으면 추가 항목에 닿는 줄이 없다 — 뿌리 `+`의 «페이지에 추가»만 선다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
     // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
     // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
     // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
     deselect()
 
-    expect(toolButton('안에 추가').disabled).toBe(true)
-    expect(toolButton('아래 추가').disabled).toBe(true)
+    // 판정(`structureAbilities`)이 선택 없음에 `NOTHING`을 내는 것은 그대로다 — 줄 행동은 고른 줄의 것이라 그 상태에서는 없고,
+    // 페이지에 더하는 길은 뿌리 `+`가 뿌리를 골라 연다(`panels/structure-tree.tsx`).
+    expect(structureRegion().querySelectorAll('.wb-shell-tree-row-picked')).toHaveLength(0)
+    expect(isOff(toolButton('페이지에 추가'))).toBe(false)
   })
 })

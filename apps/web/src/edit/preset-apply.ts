@@ -2,7 +2,7 @@
  * 프리셋을 페이지에 놓는 편집을 만드는 곳.
  *
  * **순수 함수이고 React·DOM·`fetch`를 모른다** — `./ops.ts`·`./pattern-insert.ts`와 같은
- * 층이다. **던지지 않는다**: 부르는 자리가 구조 툴바이고 거기는 오류 경계 밖이라 던지면
+ * 층이다. **던지지 않는다**: 부르는 자리가 구조 트리의 명령(`panels/structure-toolbar.tsx`)이고 거기는 오류 경계 밖이라 던지면
  * 셸 전체가 흰 화면이 된다(`panels/structure-toolbar.tsx` 머리말).
  *
  * ---

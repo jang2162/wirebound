@@ -2651,6 +2651,18 @@ export class EditorStore {
   }
 
   /**
+   * 그 **편집**이 부딪치는 남의 잠금 — 서버의 2차 방어가 그 편집에 대고 묻는 것과 같은 물음이다(`lockPointers(ops)` · `#startFrom`의 되돌리기와
+   * 같은 자리). 없으면 `null`. 구조 트리의 끌어 놓기가 놓을 자리마다 묻는다(`edit/structure-drop.ts`) — `lockedBy`(노드 하나를 **고르는**
+   * 판정)로 물으면 놓을 부모 아래 **아무** 노드에 잠금이 있어도 막혀(선택은 서브트리를 통째로 claim 한다) 남이 무엇 하나 잡은 페이지에서는
+   * 뿌리로 아무것도 못 옮긴다.
+   */
+  readonly editBlockedBy = (ops: readonly PatchOp[]): NodeLock | null => {
+    const { document, openPageId } = this.#state
+    if (document === null || openPageId === null) return null
+    return this.#lockConflict(openPageId, document, lockPointers(ops))
+  }
+
+  /**
    * 노드 **하나를 고르는** 자리의 잠금. `lockedBy`와 `#selectionFor`가 공유한다 —
    * 둘 다 *"이 노드를 고를 수 있나"*를 묻고, 그 물음이 포인터로 바뀌는 자리가 여기다.
    *

@@ -349,12 +349,12 @@ describe('통합', () => {
     fireEvent.click(menuButton('등급'))
     fireEvent.click(tool('위로'))
     await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
-    // 메뉴 툴바는 잠겼다.
+    // 메뉴 트리의 줄 행동은 잠겼다.
     expect(isOff(tool('아래로'))).toBe(true)
 
     // **그동안 구조 편집 쪽은 살아 있다** — 같은 화면의 다른 region이다.
     const structure = screen.getByRole('region', { name: '구조 트리' })
-    expect(within(structure).getByRole('group', { name: '구조 편집' })).toBeDefined()
+    expect(within(structure).getByRole('button', { name: 'Page 추가' })).toBeDefined()
 
     gate.release?.()
     await waitFor(() => expect(isOff(tool('아래로'))).toBe(false))

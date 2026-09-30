@@ -38,7 +38,7 @@ export function TreeInput(props: {
    * 포커스를 준다. **`autoFocus`가 아니라 `ref` + `useEffect`인 이유.**
    *
    * *"같은 입력이 용도만 바꿔 다시 열릴 때 `autoFocus`가 다시 걸리지 않는다"*는 **이 구현에서
-   * 성립하지 않는다** — `MenuToolbar`가 이 컴포넌트에 `key={editing.kind}`를 주므로 용도가
+   * 성립하지 않는다** — 메뉴 트리(`panels/menu-tree.tsx`의 `RowPanel`)가 이 컴포넌트에 `key={editing.kind}`를 주므로 용도가
    * 바뀌면 React가 **새 인스턴스를 마운트**한다. 마운트라면 `autoFocus`도 걸린다. jsdom에서도
    * `autoFocus`가 동작하므로 `autoFocus`로 바꿔도 이 저장소의 케이스는 죽지 않는다.
    *

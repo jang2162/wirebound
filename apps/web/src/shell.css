@@ -595,7 +595,7 @@
 }
 
 /* 메뉴 제목. **버튼이다** — 누르는 것이 "여는 것"이 아니라 "가리키는 것"이고
-   그 효과(툴바가 그 메뉴에 작동한다)가 실재한다. 버튼의 기본 꼴을 벗겨 트리의 한 줄로
+   그 효과(단축키 · 상태줄 · 줄 행동이 그 메뉴에 작동한다)가 실재한다. 버튼의 기본 꼴을 벗겨 트리의 한 줄로
    보이게 하되, 왼쪽 정렬과 전체 너비는 페이지 링크와 같은 눈금에 맞춘다. */
 .wb-shell-tree-menu {
   display: block;
@@ -642,11 +642,10 @@
 
 /* 메뉴 트리를 감싸는 상자(`panels/menu-tree.tsx`). **키 조작 하나를 받으려고 둔 껍데기라
    스스로 그리는 것이 없다** — 그 파일의 주석도 그렇게 적고 있다. 그래도 규칙을 두는 것은
-   이 상자가 지고 있는 역할이 하나 있기 때문이다: **아래 `.wb-shell-menu-toolbar`의
-   `position: sticky`가 이 상자를 담는 블록으로 삼는다.** 그 성질이 `<div>`의 기본값에만
-   얹혀 있으면, 여기에 `display: contents`를 걸어 "어차피 빈 상자"라고 치우는 순간 툴바가
-   조용히 다른 자리에 붙는다. 그래서 **기본값을 값으로 적어 둔다** — 이 한 줄이 하는 일은
-   그리는 것이 아니라 그 사실을 이 파일 안에 남기는 것이다. */
+   이 상자가 지고 있는 역할이 하나 있기 때문이다: **끌기의 겹(`.wb-shell-drop-indicator`)과 줄 아래 상자가 이 상자 안의 흐름에
+   선다.** `display: contents`를 걸어 "어차피 빈 상자"라고 치우면 단축키를 받는 요소가 상자를 잃는다(키 이벤트는 그대로 버블되지만
+   무엇을 감싸는지가 CSS 에서 사라진다). 그래서 **기본값을 값으로 적어 둔다** — 이 한 줄이 하는 일은 그리는 것이 아니라 그 사실을
+   이 파일 안에 남기는 것이다. */
 .wb-shell-tree-keys {
   display: block;
 }
@@ -661,8 +660,8 @@
 /* 빈 메뉴 트리의 빈 상태(`panels/menu-tree.tsx`). 문장 한 줄과 `최상위 메뉴` 버튼이
    세로로 선다.
 
-   **버튼은 자기 꼴을 이미 갖고 있다**(`.wb-shell-menu-tool` — 하는 일이 툴바의 `하위 메뉴`와
-   같은 부류라 같은 꼴을 쓴다). 그래서 이 상자가 주는 것은 **간격과 정렬 둘뿐**이다.
+   **버튼은 자기 꼴을 이미 갖고 있다**(`.wb-shell-menu-tool` — 메뉴 트리의 줄 아래 단추와 같은 꼴을 쓴다). 그래서 이 상자가 주는
+   것은 **간격과 정렬 둘뿐**이다.
 
    **`align-items: flex-start`가 없으면 버튼이 사이드바 너비만큼 늘어난다** — `stretch`가
    기본값이라 세로 flex에서 자식의 가로가 상자에 맞춰진다. */
@@ -693,6 +692,9 @@
 
 .wb-shell-structure-node {
   display: block;
+  visibility: visible;
+  flex: 1;
+  min-width: 0;
   width: 100%;
   appearance: none;
   border: 0;
@@ -714,8 +716,8 @@
   font-style: italic;
 }
 
-/* 남이 잠근 노드(설계서 「소프트 잠금」). 누를 수 없다는 것이 보여야 한다 — 왜인지는 옆의 배지가
-   말한다. `structure-tool:disabled`와 같은 자세다. */
+/* 남이 잠근 노드(설계서 「소프트 잠금」). 누를 수 없다는 것이 보여야 한다 — 왜인지는 아래의 배지가
+   말한다. `.wb-shell-menu-tool:disabled`와 같은 자세다. */
 .wb-shell-structure-node:disabled {
   color: var(--wb-shell-muted);
   cursor: not-allowed;
@@ -781,46 +783,10 @@
   color: var(--wb-shell-ink);
 }
 
-/* 구조 편집 툴바(`panels/structure-toolbar.tsx`). 트리 아래에 있고 상자가 스크롤되므로
-   바닥에 붙여 둔다 — 트리가 길어지면 조작 버튼이 화면 밖으로 밀려난다. 배경이 필요한 것도
-   그래서다: 붙어 있는 동안 아래로 지나가는 줄이 비쳐 보이면 안 된다. */
-.wb-shell-structure-toolbar {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--wb-shell-line);
-  background: #fff;
-}
-
-.wb-shell-structure-tool {
-  appearance: none;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  padding: 3px 8px;
-  background: #fff;
-  font: inherit;
-  font-size: 12px;
-  color: var(--wb-shell-ink);
-  cursor: pointer;
-}
-
-/* 할 수 없는 조작. 왜인지는 **아래 상태줄이 한 문장으로** 말하고, 그것이 말하지 않은
-   나머지가 버튼의 `title`에 남는다 — 회색만으로는 이유를 알 수 없다. */
-.wb-shell-structure-tool:disabled {
-  color: var(--wb-shell-muted);
-  cursor: not-allowed;
-}
-
-/* 도구모음 아래 상태줄(`panels/structure-toolbar.tsx` · `panels/toolbar-status.ts`).
-   근거는 `.wb-shell-menu-status`와 한 벌이다 — 자기 줄(`flex-basis`)과 빈 줄의 자리
-   (`min-height`) 둘. */
+/* 트리 아래 상태줄(`panels/structure-tree.tsx`의 `StructureStatusLine` · `panels/toolbar-status.ts`).
+   근거는 `.wb-shell-menu-status`와 한 벌이다 — 빈 줄의 자리(`min-height`). */
 .wb-shell-structure-status {
-  flex-basis: 100%;
-  margin: 0;
+  margin: 8px 0 0;
   min-height: 15px;
   color: var(--wb-shell-muted);
   font-size: 11px;
@@ -1139,7 +1105,7 @@
 
 /* 코멘트 탭의 버튼 여섯. **한 규칙에 묶는 것은 여섯이 같은 크기여야 하기 때문이다** —
    폼의 둘과 항목의 넷이 한 화면에 세로로 이어져 보인다. 값은 셸의 작은 버튼 형태 그대로다
-   (`.wb-shell-menu-tool`·`.wb-shell-structure-tool`이 같은 값을 쓴다). */
+   (`.wb-shell-menu-tool`이 같은 값을 쓴다). */
 .wb-shell-comment-submit,
 .wb-shell-comment-renumber,
 .wb-shell-comment-edit,
@@ -1334,7 +1300,7 @@
 /* 남이 그 노드를 잠갔을 때(`panels/property-panel.tsx`). **이 줄이 없으면 «꺼졌다»가 화면에
    안 보인다** — 위 규칙이 `background`와 `color`를 직접 놓으므로 브라우저가 disabled에 주는
    기본 회색이 덮인다(자리를 지키고 색만 죽이는 `.wb-shell-history-step:disabled`와 같은 값).
-   **왜 회색인지는 패널의 안내 줄과 구조 툴바의 상태줄이 이름과 함께 말한다.** */
+   **왜 회색인지는 패널의 안내 줄과 구조 트리의 상태줄이 이름과 함께 말한다.** */
 .wb-shell-control:disabled {
   background: var(--wb-shell-chrome);
   color: var(--wb-shell-muted);
@@ -1545,10 +1511,10 @@
 }
 
 /* 고르개 한 줄(`panels/type-picker.tsx`·`pattern-picker.tsx`·`preset-picker.tsx`).
-   툴바 안에서 줄을 통째로 차지한다 — 조작 버튼과 같은 줄에 두면 좁은 좌측 패널에서
+   고른 줄 아래 상자(`.wb-shell-tree-panel`) 안에서 줄을 통째로 차지한다 — 다른 것과 같은 줄에 두면 좁은 좌측 패널에서
    목록이 잘린다.
 
-   **`flex-wrap: wrap`은 툴바(`.wb-shell-structure-toolbar`)와 같은 이유다** — 담기는 자리가
+   **`flex-wrap: wrap`은 담는 상자(`.wb-shell-tree-panel`)와 같은 이유다** — 담기는 자리가
    240px(사이드바 264px − 좌우 여백 12px씩)뿐인데 안에 드는 것이 고르개마다 다르다.
    감싸지 않으면 넘치는 만큼이 **상자 밖으로 밀려난다**: 감싸는 `.wb-shell-region`이
    `overflow: auto`라 렌더는 되고 아무것도 실패하지 않는데, 오른쪽에 무언가 있다는 신호가
@@ -1791,7 +1757,7 @@
   overflow-wrap: anywhere;
 }
 
-/* 소속 메뉴 고르기(`panels/menu-picker.tsx`). 툴바가 `flex-wrap`이라 인라인 입력과
+/* 소속 메뉴 고르기(`panels/menu-picker.tsx`). 고른 줄 아래 상자가 `flex-wrap`이라 인라인 입력과
    같은 이유로 자기 줄을 쓴다 — 버튼 사이에 끼면 무엇을 고르는 중인지가 보이지 않는다.
 
    **`flex-wrap: wrap`은 지금 아무것도 바꾸지 않는다** — 재서 확인했다(264px 사이드바, 감싸기
@@ -2842,9 +2808,8 @@
   margin: 0;
 }
 
-/* 페이지 JSON 내보내기·가져오기(`panels/page-json-panel.tsx`). 메뉴 툴바 아래에
-   있고 상자가 스크롤되므로 툴바처럼 바닥에 붙이지는 않는다 — 붙이면 툴바와 이 패널이
-   둘 다 sticky가 되어 좁은 좌측에서 트리가 보일 자리가 거의 없어진다. */
+/* 페이지 JSON 내보내기·가져오기(`panels/page-json-panel.tsx`). 메뉴 트리 아래에
+   있고 상자가 스크롤되므로 바닥에 붙이지는 않는다 — 붙이면 좁은 좌측에서 트리가 보일 자리가 거의 없어진다. */
 .wb-shell-pagejson {
   display: flex;
   flex-direction: column;

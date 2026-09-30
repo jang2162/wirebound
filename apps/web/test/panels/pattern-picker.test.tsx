@@ -16,6 +16,7 @@ import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { deselect, openPage as openShell, pageDoc } from '../editor-harness'
 import { BROKEN_NOTICE, EMPTY_NOTICE, themePatterns } from '../../src/panels/pattern-picker'
 import { adminThemeView } from '../theme-loader'
+import { isOff, treeTool } from './tree-row'
 
 /**
  * 옛 시스템 테마 `portal` 이 선언하던 패턴 — 목록이 서는 판의 표본이다. 원본(`packages/themes` 의 시스템 테마)은 지워졌으므로
@@ -72,11 +73,8 @@ function structureRegion(): HTMLElement {
   return screen.getByRole('region', { name: '구조 트리' })
 }
 
-function toolButton(name: string): HTMLButtonElement {
-  return within(within(structureRegion()).getByRole('group', { name: '구조 편집' })).getByRole(
-    'button',
-    { name },
-  )
+function toolButton(name: string): HTMLElement {
+  return treeTool(structureRegion(), name)
 }
 
 async function openPicker(): Promise<void> {
@@ -110,7 +108,7 @@ describe('패턴 고르개 — 출처', () => {
 })
 
 describe('패턴 고르개 — 여는 자리', () => {
-  it('구조 툴바에 패턴 넣기 버튼이 있다', async () => {
+  it('구조 트리의 줄 `+`에 패턴 넣기 항목이 있다', async () => {
     await openPage(doc())
     expect(toolButton('패턴 넣기')).toBeTruthy()
   })
@@ -122,7 +120,7 @@ describe('패턴 고르개 — 여는 자리', () => {
     // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
     deselect()
 
-    expect(toolButton('패턴 넣기').disabled).toBe(false)
+    expect(isOff(toolButton('패턴 넣기'))).toBe(false)
   })
 
   it('닫혀 있을 때는 고르개가 DOM에 없다', async () => {
@@ -234,6 +232,6 @@ describe('패턴 고르개 — 목록이 없을 때', () => {
   it('패턴이 0개여도 버튼은 활성이다 — 눌러야 이유를 볼 수 있다', async () => {
     holder.patterns = undefined
     await openPage(doc())
-    expect(toolButton('패턴 넣기').disabled).toBe(false)
+    expect(isOff(toolButton('패턴 넣기'))).toBe(false)
   })
 })

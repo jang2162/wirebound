@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
 import { openPage, pageDetail, pageDoc, canvasQuery } from '../editor-harness'
+import { treeTool } from './tree-row'
 
 const pair = (): PageDocument =>
   pageDoc({
@@ -52,7 +53,7 @@ describe('판정에 머문 번호 쓰기', () => {
     try {
       const tree = screen.getByRole('region', { name: '구조 트리' })
       fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
-      fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
+      fireEvent.click(treeTool(tree, '아래로'))
       await act(async () => {})
       await act(async () => {})
 
