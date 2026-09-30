@@ -22,7 +22,7 @@ import {
 import { ApiError, type ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
 import { PropertyPanel, variantFieldOf } from '../../src/panels/property-panel'
-import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import { ADMIN_FIXTURE } from '../admin-theme'
 import { withProjectTheme } from '../theme-loader'
 import { EditorStore } from '../../src/store/editor-store'
 import { EditorStoreProvider } from '../../src/store/use-editor-store'
@@ -1365,7 +1365,7 @@ describe('속성 패널 — 변형', () => {
       const def = getComponent(type)
       if (def === undefined) continue
 
-      const field = variantFieldOf(def, ADMIN_V0.manifest)
+      const field = variantFieldOf(def, ADMIN_FIXTURE.manifest)
       if (field === null) continue
 
       for (const option of field.options) {
@@ -1401,7 +1401,7 @@ describe('속성 패널 — 변형', () => {
    * 선언 그대로인지 전수로 센다. 선언이 늘면 여기가 분모를 다시 센다.
    */
   it('manifest 전수 — 선언하고 variantFrom 이 없는 컴포넌트에만 컨트롤이 나오고 선택지가 선언 그대로다', () => {
-    const declared = ADMIN_V0.manifest.components ?? {}
+    const declared = ADMIN_FIXTURE.manifest.components ?? {}
     // 카나리아 — 분모가 비면 아래 루프가 조용히 통과한다.
     expect(Object.keys(declared)).toEqual(['Section', 'Card', 'List', 'Button', 'Link'])
 
@@ -1410,7 +1410,7 @@ describe('속성 패널 — 변형', () => {
       if (def === undefined) continue
       const decl = declared[type]
       const shouldOpen = decl !== undefined && def.variantFrom === undefined
-      const field = variantFieldOf(def, ADMIN_V0.manifest)
+      const field = variantFieldOf(def, ADMIN_FIXTURE.manifest)
       expect(field !== null, type).toBe(shouldOpen)
       if (decl !== undefined && field !== null) {
         expect(field.options, type).toEqual(decl.variants.map((v) => ({ id: v.id, label: v.label })))

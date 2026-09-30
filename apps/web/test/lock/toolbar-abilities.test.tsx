@@ -63,7 +63,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
-import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import { ADMIN_FIXTURE } from '../admin-theme'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { adminThemeView } from '../theme-loader'
 import type { RealtimeSocket } from '../../src/realtime/connection'
@@ -117,7 +117,7 @@ const patternTheme = { themeReads: 0 }
 const getProjectTheme: ApiClient['getProjectTheme'] = async () => {
   patternTheme.themeReads += 1
   const patterns = { 'hero.plain': { name: '민 히어로', schema: { type: 'Section' } } }
-  return { ...adminThemeView(), manifest: { ...ADMIN_V0.manifest, patterns } as ThemeManifest }
+  return { ...adminThemeView(), manifest: { ...ADMIN_FIXTURE.manifest, patterns } as ThemeManifest }
 }
 
 /** 하네스의 사용자 id. `editor-harness.tsx`의 `USER`와 같은 값이다. */

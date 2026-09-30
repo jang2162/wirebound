@@ -25,6 +25,7 @@ import {
   type TestContext,
 } from './helpers'
 import { builtSample, manifestOf, packed } from './theme-fixtures'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 const ZIP = { 'content-type': 'application/zip' }
 
@@ -226,7 +227,7 @@ describe('숨김', () => {
       const admin = await adminOf(ctx)
       const res = await ctx.app.inject({
         method: 'PATCH',
-        url: '/api/admin/theme-packages/system-admin/0.1.0',
+        url: `/api/admin/theme-packages/system-admin/${SYSTEM_ADMIN.version}`,
         cookies: admin.cookie,
         payload: { hidden: true },
       })

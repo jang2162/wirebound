@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest'
 import { insertThemePackage, readThemePackageFiles } from '../src/repos/theme-packages'
 import { createMenuNode, createPage, createProject, signup, withApi, type SignedUpUser, type TestContext } from './helpers'
 import { manifestOf, packed } from './theme-fixtures'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 interface Fixture {
   owner: SignedUpUser
@@ -86,19 +87,19 @@ describe('system-admin 에 고정한 프로젝트', () => {
       const fx = await fixture(ctx)
       const theme = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fx.projectId}/theme`, cookies: fx.owner.cookie })
       const view = theme.json() as { themeId: string; version: string; manifest: ThemeManifest }
-      expect([view.themeId, view.version]).toEqual(['system-admin', '0.1.0'])
+      expect([view.themeId, view.version]).toEqual(['system-admin', SYSTEM_ADMIN.version])
       // 색 토큰 하나를 기본값과 다르게 저장한다.
       const colorKey = Object.entries(view.manifest.tokens.items).find(([, decl]) => decl.type === 'color')![0]
-      await bind(ctx, fx, 'system-admin', '0.1.0', { [colorKey]: '#123456' })
+      await bind(ctx, fx, 'system-admin', SYSTEM_ADMIN.version, { [colorKey]: '#123456' })
 
       const zip = await zipOf(ctx, fx)
-      const pkg = readWbtheme((await readThemePackageFiles(ctx.db, 'system-admin', '0.1.0'))!).files!
+      const pkg = readWbtheme((await readThemePackageFiles(ctx.db, 'system-admin', SYSTEM_ADMIN.version))!).files!
       expect(strFromU8(zip.get('assets/theme/theme.js')!)).toBe(pkg.themeJs)
       expect(pkg.themeCss).not.toBeNull()
       expect(strFromU8(zip.get('assets/theme/theme.css')!)).toBe(pkg.themeCss)
       expect(strFromU8(zip.get('assets/tokens.css')!)).toBe(tokensCss(view.manifest, { [colorKey]: '#123456' }).css)
       expect(strFromU8(zip.get('assets/tokens.css')!)).toContain('#123456')
-      expect(pageData(zip)).toEqual({ ...pageData(zip), themeRef: { themeId: 'system-admin', version: '0.1.0' }, manifest: view.manifest, tokens: { [colorKey]: '#123456' } })
+      expect(pageData(zip)).toEqual({ ...pageData(zip), themeRef: { themeId: 'system-admin', version: SYSTEM_ADMIN.version }, manifest: view.manifest, tokens: { [colorKey]: '#123456' } })
       expect(sheets(zip)).toEqual(['../assets/shell.css', '../assets/views.css', '../assets/theme/theme.css', '../assets/tokens.css'])
     })
   })
@@ -106,7 +107,7 @@ describe('system-admin 에 고정한 프로젝트', () => {
   it('미리보기의 themeId 가 "id@판" 이고 경고가 없다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
-      expect(await preview(ctx, fx)).toMatchObject({ themeId: 'system-admin@0.1.0', themeWarning: null })
+      expect(await preview(ctx, fx)).toMatchObject({ themeId: `system-admin@${SYSTEM_ADMIN.version}`, themeWarning: null })
     })
   })
 })

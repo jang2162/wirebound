@@ -9,6 +9,7 @@ import { captureSnapshot } from '../src/services/snapshot-capture'
 import { SNAPSHOT_PAYLOAD_VERSION } from '@wirebound/themes'
 import { type GuardedRoute, guardMinOf, routeCensus } from './guarded-routes'
 import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 type Actor = ProjectRole | 'outsider' | 'anonymous'
 
@@ -259,14 +260,14 @@ const CASES: Case[] = [
     label: '테마 바인딩 저장',
     method: 'PUT',
     url: '/api/projects/:projectId/theme',
-    payload: { themeId: 'system-admin', version: '0.1.0', tokens: {}, rev: 0 },
+    payload: { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: {}, rev: 0 },
     allowed: ['owner'],
   },
   {
     label: '테마 바꾸기 영향',
     method: 'GET',
     url: '/api/projects/:projectId/theme/impact',
-    query: 'themeId=system-admin&version=0.1.0',
+    query: `themeId=system-admin&version=${SYSTEM_ADMIN.version}`,
     allowed: ['owner', 'editor', 'viewer'],
   },
   { label: '멤버 목록', method: 'GET', url: '/api/projects/:projectId/members', allowed: ['owner', 'editor', 'viewer'] },

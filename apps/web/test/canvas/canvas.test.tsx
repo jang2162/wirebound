@@ -70,7 +70,7 @@ beforeEach(() => {
 })
 
 /**
- * **테마 뷰를 갈아 끼운 판.** 캔버스가 그리는 테마(기본 하네스의 시험용 로더가 `system-admin@0.1.0` 에 주는 `ADMIN_V0` —
+ * **테마 뷰를 갈아 끼운 판.** 캔버스가 그리는 테마(기본 하네스의 시험용 로더가 `system-admin@0.1.0` 에 주는 `ADMIN_FIXTURE` —
  * `test/theme-loader.ts`)의 `List` 를 노드 id 로 가른다 —
  * `n-boom` 은 던지고, `n-focus` 는 `Focus` · `marker` 를 쓰는 뷰로 그린다. 나머지 `List` 는 기본 뷰 그대로라 이 파일의
  * 다른 케이스는 영향이 없다.
@@ -80,9 +80,9 @@ beforeEach(() => {
  */
 const { boom } = vi.hoisted(() => ({ boom: { calls: 0, message: '테마 뷰가 터졌습니다 [A1A-BOOM]' } }))
 
-vi.mock('@wirebound/system-theme-admin', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@wirebound/system-theme-admin')>()
-  const List = actual.ADMIN_V0.views.List
+vi.mock('../admin-theme', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../admin-theme')>()
+  const List = actual.ADMIN_FIXTURE.views.List
   if (List === undefined) throw new Error('캔버스 테마에 List 뷰가 없다')
   const BoomList = view((props) => {
     if (props.nodeId === 'n-boom') {
@@ -101,7 +101,7 @@ vi.mock('@wirebound/system-theme-admin', async (importOriginal) => {
     }
     return <List {...props} />
   })
-  return { ...actual, ADMIN_V0: { ...actual.ADMIN_V0, views: { ...actual.ADMIN_V0.views, List: BoomList } } }
+  return { ...actual, ADMIN_FIXTURE: { ...actual.ADMIN_FIXTURE, views: { ...actual.ADMIN_FIXTURE.views, List: BoomList } } }
 })
 
 function shellStore(): EditorStore {

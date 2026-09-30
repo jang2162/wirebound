@@ -1,0 +1,28 @@
+{
+  "name": "@wirebound/system-theme-commerce",
+  "version": "0.9.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./manifest": "./src/manifest.ts"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && wb-theme build --entry src/theme.tsx"
+  },
+  "dependencies": {
+    "@wirebound/theme-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@wirebound/renderer": "workspace:*",
+    "@wirebound/schema": "workspace:*",
+    "@wirebound/theme-kit": "workspace:*",
+    "@wirebound/themes": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

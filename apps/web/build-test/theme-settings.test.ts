@@ -5,9 +5,13 @@
  * 저장 전의 초안은 미리보기(갤러리 iframe)의 계산값만 바꾸고 bob 에게 가지 않는다.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 import type { Page } from 'playwright-core'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack } from './editor-stack'
 import { canvasVar, countThemeFiles, themeProject } from './theme-fixtures'
+
+/** system-admin 의 색 토큰 — 판 · 키 · 칸 이름을 글자로 적지 않는다(`apps/api/test/system-admin.ts`). */
+const COLOR = SYSTEM_ADMIN.color
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -50,30 +54,30 @@ describe.skipIf(!전제.ok)('설정 페이지의 토큰 편집', () => {
     try {
       await b.page.goto(`/projects/${project.id}/pages/${project.first}`)
       await canvasFrame(b.page).locator('body', { hasText: '원문' }).waitFor()
-      await poll('bob 테마 변수', () => canvasVar(b.page, '--wb-semantic-primary'), (value) => value === '#2563eb')
+      await poll('bob 테마 변수', () => canvasVar(b.page, COLOR.cssVar), (value) => value === COLOR.value)
       b.page.on('framenavigated', (frame) => {
         if (frame === b.page.mainFrame()) bobNavigations += 1
       })
 
       await a.page.goto(`/projects/${project.id}/settings`)
-      const primary = a.page.getByRole('group', { name: '토큰' }).getByLabel('주색', { exact: true })
+      const primary = a.page.getByRole('group', { name: '토큰' }).getByLabel(COLOR.label, { exact: true })
       await primary.waitFor()
-      await poll('미리보기가 선다', () => previewVar(a.page, '--wb-semantic-primary'), (value) => value === '#2563eb')
+      await poll('미리보기가 선다', () => previewVar(a.page, COLOR.cssVar), (value) => value === COLOR.value)
 
       await primary.fill('#ff5500')
-      await poll('미리보기가 초안을 따라간다', () => previewVar(a.page, '--wb-semantic-primary'), (value) => value === '#ff5500')
+      await poll('미리보기가 초안을 따라간다', () => previewVar(a.page, COLOR.cssVar), (value) => value === '#ff5500')
       // 초안은 bob 에게 가지 않는다.
       await b.page.waitForTimeout(300)
-      expect(await canvasVar(b.page, '--wb-semantic-primary')).toBe('#2563eb')
+      expect(await canvasVar(b.page, COLOR.cssVar)).toBe(COLOR.value)
 
       await a.page.getByRole('button', { name: '토큰 저장' }).click()
       await a.page.getByText('토큰을 저장했습니다').waitFor()
-      await poll('bob 의 캔버스가 새 값', () => canvasVar(b.page, '--wb-semantic-primary'), (value) => value === '#ff5500')
+      await poll('bob 의 캔버스가 새 값', () => canvasVar(b.page, COLOR.cssVar), (value) => value === '#ff5500')
       expect(bobNavigations).toBe(0)
       expect(bobFiles.js()).toBe(1)
 
       const saved = await project.call('GET', `/projects/${project.id}/theme`)
-      expect(saved.body.tokens).toEqual({ 'semantic.primary': '#ff5500' })
+      expect(saved.body.tokens).toEqual({ [COLOR.key]: '#ff5500' })
     } finally {
       await a.context.close()
       await b.context.close()
@@ -86,14 +90,14 @@ describe.skipIf(!전제.ok)('설정 페이지의 토큰 편집', () => {
     const { context, page } = await stack.openTab(stack.users.alice)
     try {
       await page.goto(`/projects/${project.id}/settings`)
-      const primary = page.getByRole('group', { name: '토큰' }).getByLabel('주색', { exact: true })
+      const primary = page.getByRole('group', { name: '토큰' }).getByLabel(COLOR.label, { exact: true })
       await primary.waitFor()
-      await poll('미리보기가 선다', () => previewVar(page, '--wb-semantic-primary'), (value) => value === '#2563eb')
+      await poll('미리보기가 선다', () => previewVar(page, COLOR.cssVar), (value) => value === COLOR.value)
       await primary.fill('#12')
-      await page.getByText('고칠 칸이 있습니다 — 주색').waitFor()
+      await page.getByText(`고칠 칸이 있습니다 — ${COLOR.label}`).waitFor()
       expect(await page.getByRole('button', { name: '토큰 저장' }).isDisabled()).toBe(true)
       await page.waitForTimeout(200)
-      expect(await previewVar(page, '--wb-semantic-primary')).toBe('#2563eb')
+      expect(await previewVar(page, COLOR.cssVar)).toBe(COLOR.value)
     } finally {
       await context.close()
     }

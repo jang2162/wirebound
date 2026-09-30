@@ -5,7 +5,7 @@
  * `:root` 를 이기는가)과 실제 스크립트 적재는 실브라우저 판(`build-test/theme-canvas.test.ts`)이 잰다.
  */
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
-import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import { ADMIN_FIXTURE } from '../admin-theme'
 import { DEFAULT_VIEWS, defineTheme, Root, view, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../src/api/client'
@@ -32,11 +32,11 @@ function themed(id: string, marker: string): ThemeDefinition {
       <span data-theme={marker}>{String(props.content ?? '')}</span>
     </Root>
   ))
-  return defineTheme({ manifest: { ...ADMIN_V0.manifest, id }, views: { ...DEFAULT_VIEWS, Text } })
+  return defineTheme({ manifest: { ...ADMIN_FIXTURE.manifest, id }, views: { ...DEFAULT_VIEWS, Text } })
 }
 
 const ADMIN = themed('system-admin', 'admin')
-const ACME_MANIFEST = { ...ADMIN_V0.manifest, id: 'acme', name: 'Acme', version: '1.0.0' }
+const ACME_MANIFEST = { ...ADMIN_FIXTURE.manifest, id: 'acme', name: 'Acme', version: '1.0.0' }
 const ACME = defineTheme({ manifest: ACME_MANIFEST, views: { ...themed('acme', 'acme').views } })
 const ACME_VIEW: ProjectThemeView = { themeId: 'acme', version: '1.0.0', tokens: {}, rev: 1, manifest: ACME_MANIFEST, latest: '1.0.0' }
 
@@ -211,16 +211,16 @@ describe('에디터의 프로젝트 테마', () => {
     const read = () => ({ alert: document.querySelector('.wb-shell-theme-alert')?.textContent ?? null, marker: themeMarker() })
     await waitFor(() => expect(read().alert !== null || read().marker !== null).toBe(true))
     expect(read()).toEqual({
-      alert: expect.stringContaining(`테마 번들이 다른 테마를 등록했습니다(system-admin@0.1.0 — 번들은 acme@${ADMIN_V0.manifest.version})`),
+      alert: expect.stringContaining(`테마 번들이 다른 테마를 등록했습니다(system-admin@0.1.0 — 번들은 acme@${ADMIN_FIXTURE.manifest.version})`),
       marker: null,
     })
     expect(sheets()).toEqual(['style:base', 'style:tokens'])
   })
 
   it('번들의 manifest 가 components 만 다르면 알림 없이 서버 manifest 로 variant 를 푼다 — 뷰는 번들 것', async () => {
-    const button = ADMIN_V0.manifest.components!['Button']!
-    // 서버 manifest 에만 `huge` — 번들(ADMIN)은 ADMIN_V0 의 manifest 를 실었다.
-    const server = { ...ADMIN_V0.manifest, components: { ...ADMIN_V0.manifest.components, Button: { ...button, variants: [...button.variants, { id: 'huge', label: '아주 큼' }] } } }
+    const button = ADMIN_FIXTURE.manifest.components!['Button']!
+    // 서버 manifest 에만 `huge` — 번들(ADMIN)은 ADMIN_FIXTURE 의 manifest 를 실었다.
+    const server = { ...ADMIN_FIXTURE.manifest, components: { ...ADMIN_FIXTURE.manifest.components, Button: { ...button, variants: [...button.variants, { id: 'huge', label: '아주 큼' }] } } }
     const doc = pageDoc({
       id: 'root',
       type: 'Page',

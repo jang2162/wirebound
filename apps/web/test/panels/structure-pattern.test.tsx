@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { applyOps, invertOps, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
-import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import { ADMIN_FIXTURE } from '../admin-theme'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import { adminThemeView } from '../theme-loader'
@@ -100,7 +100,7 @@ function server(options: { failPatch?: boolean } = {}): Server {
   // 셸의 테마 읽기 — 그 순간의 `holder.patterns` 를 실은 바인딩이다.
   const getProjectTheme: ApiClient['getProjectTheme'] = async () => {
     holder.themeReads += 1
-    return { ...adminThemeView(), manifest: { ...ADMIN_V0.manifest, patterns: holder.patterns } as ThemeManifest }
+    return { ...adminThemeView(), manifest: { ...ADMIN_FIXTURE.manifest, patterns: holder.patterns } as ThemeManifest }
   }
 
   return { calls, api: { patchOps, getPage, getProjectTheme } }

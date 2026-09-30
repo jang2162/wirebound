@@ -6,6 +6,7 @@
  * 따라감 · 놓친 프레임의 따라잡기 · 번들 실패의 기본 뷰와 «다시 불러오기» 다.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack } from './editor-stack'
 import { canvasSheets, canvasVar, countThemeFiles, makeAdmin, putTheme, sampleCard, sampleTheme, themeProject, uploadRaw } from './theme-fixtures'
 
@@ -15,8 +16,9 @@ if (!전제.ok) {
   console.log(`[에디터 실브라우저 판] 건너뛴다 — ${전제.reason}`)
 }
 
-/** system-admin `theme.css` 의 `:root` 가 적는 주색 기본값 — 토큰 시트가 이것을 이겨야 저장한 값이 선다. */
-const ADMIN_PRIMARY = '#2563eb'
+/** system-admin 의 색 토큰 — 토큰 시트가 그 기본값을 이겨야 저장한 값이 선다. 판 · 키는 글자로 적지 않는다(`apps/api/test/system-admin.ts`). */
+const COLOR = SYSTEM_ADMIN.color
+const ADMIN_PRIMARY = COLOR.value
 
 describe.skipIf(!전제.ok)('캔버스의 프로젝트 테마', () => {
   let stack: EditorStack
@@ -47,9 +49,9 @@ describe.skipIf(!전제.ok)('캔버스의 프로젝트 테마', () => {
       expect(await canvasSheets(page)).toEqual(['style:base', 'link:theme', 'style:tokens'])
       expect(files.js()).toBe(1)
       expect(files.css()).toBeGreaterThanOrEqual(1)
-      expect(files.lines[0]).toBe('system-admin/0.1.0/files/theme.js')
+      expect(files.lines[0]).toBe(`system-admin/${SYSTEM_ADMIN.version}/files/theme.js`)
       // 테마 시트가 실제로 먹었다 — theme.css 가 적는 변수가 캔버스에 선다.
-      await poll('테마 변수', () => canvasVar(page, '--wb-semantic-primary'), (value) => value === ADMIN_PRIMARY)
+      await poll('테마 변수', () => canvasVar(page, COLOR.cssVar), (value) => value === ADMIN_PRIMARY)
 
       await page.getByRole('link', { name: '둘째' }).click()
       await canvasFrame(page).locator('body', { hasText: '둘째 글' }).waitFor()
@@ -64,7 +66,7 @@ describe.skipIf(!전제.ok)('캔버스의 프로젝트 테마', () => {
   it('토큰 시트가 테마 시트 뒤라 theme.css 의 :root 기본값을 이긴다 — 계산값', async () => {
     const alice = await stack.login(stack.users.alice)
     const project = await themeProject(stack, alice)
-    await putTheme(project.call, project.id, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#123456' } })
+    await putTheme(project.call, project.id, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [COLOR.key]: '#123456' } })
     const { context, page } = await stack.openTab(stack.users.alice)
     try {
       await page.goto(`/projects/${project.id}/pages/${project.first}`)
@@ -72,9 +74,9 @@ describe.skipIf(!전제.ok)('캔버스의 프로젝트 테마', () => {
       await poll('테마 시트가 실린다', () => canvasSheets(page), (sheets) => sheets.includes('link:theme'))
       // link 가 실린 뒤에도(늦게 온 시트가 뒤에 겹쳐지지 않는다 — 차례는 요소의 차례다) 저장한 값이다.
       await page.waitForTimeout(500)
-      expect(await canvasVar(page, '--wb-semantic-primary')).toBe('#123456')
+      expect(await canvasVar(page, COLOR.cssVar)).toBe('#123456')
       // 토큰이 안 덮은 변수는 theme.css · 토큰 기본값 그대로다.
-      expect(await canvasVar(page, '--wb-semantic-danger')).toBe('#ef4444')
+      expect(await canvasVar(page, SYSTEM_ADMIN.otherColor.cssVar)).toBe(SYSTEM_ADMIN.otherColor.value)
     } finally {
       await context.close()
     }
@@ -89,13 +91,13 @@ describe.skipIf(!전제.ok)('캔버스의 프로젝트 테마', () => {
     try {
       await page.goto(`/projects/${project.id}/pages/${project.first}`)
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor()
-      await poll('테마 변수', () => canvasVar(page, '--wb-semantic-primary'), (value) => value === ADMIN_PRIMARY)
+      await poll('테마 변수', () => canvasVar(page, COLOR.cssVar), (value) => value === ADMIN_PRIMARY)
       page.on('framenavigated', (frame) => {
         if (frame === page.mainFrame()) navigations += 1
       })
 
-      await putTheme(project.call, project.id, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#00aa11' } })
-      await poll('밥의 캔버스가 새 값', () => canvasVar(page, '--wb-semantic-primary'), (value) => value === '#00aa11')
+      await putTheme(project.call, project.id, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [COLOR.key]: '#00aa11' } })
+      await poll('밥의 캔버스가 새 값', () => canvasVar(page, COLOR.cssVar), (value) => value === '#00aa11')
       expect(navigations).toBe(0)
       expect(files.js()).toBe(1)
     } finally {
@@ -119,13 +121,13 @@ describe.skipIf(!전제.ok)('캔버스의 프로젝트 테마', () => {
       await page.goto(`/projects/${project.id}/pages/${project.first}`)
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor()
       await poll('룸에 든다', async () => frames.slice(), (lines) => lines.includes('joined'))
-      await poll('테마 변수', () => canvasVar(page, '--wb-semantic-primary'), (value) => value === ADMIN_PRIMARY)
+      await poll('테마 변수', () => canvasVar(page, COLOR.cssVar), (value) => value === ADMIN_PRIMARY)
 
       // 끊고 곧바로 저장한다 — 첫 재연결(500ms 뒤)보다 먼저 방송이 나가 이 탭은 그 프레임을 못 받는다.
       expect(cut.reset(/\/ws[ ?]/)).toBeGreaterThanOrEqual(1)
-      await putTheme(project.call, project.id, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#abcdef' } })
+      await putTheme(project.call, project.id, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [COLOR.key]: '#abcdef' } })
       await poll('다시 룸에 든다', async () => frames.slice(), (lines) => lines.filter((line) => line === 'joined').length >= 2)
-      await poll('따라잡는다', () => canvasVar(page, '--wb-semantic-primary'), (value) => value === '#abcdef')
+      await poll('따라잡는다', () => canvasVar(page, COLOR.cssVar), (value) => value === '#abcdef')
       // 판이 섰는가 — 저장의 프레임은 이 탭에 안 왔다(왔으면 따라잡기가 아니라 프레임이 푼 것이다).
       expect(frames.filter((line) => line === 'theme-changed')).toEqual([])
     } finally {

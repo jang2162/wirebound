@@ -38,6 +38,7 @@ import {
   withApi,
   type TestContext,
 } from './helpers'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 /** 페이지 하나의 문서를 통째로 갈아 끼운다. `PUT .../schema`를 실제로 지난다. */
 async function putSchema(
@@ -734,7 +735,7 @@ describe('exportProjectBundle', () => {
       const viewsCss = bundle.files.find((file) => file.path === 'assets/views.css')
       expect(viewsCss?.content).toContain('--wb-node-grid-columns')
       expect(bundle.files.find((file) => file.path === 'assets/runtime.js')?.content).toBe(readExportRuntime())
-      expect(bundle.themeId).toBe('system-admin@0.1.0')
+      expect(bundle.themeId).toBe(`system-admin@${SYSTEM_ADMIN.version}`)
     })
   })
 })

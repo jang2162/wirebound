@@ -11,7 +11,7 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
-import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import { ADMIN_FIXTURE } from '../admin-theme'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { deselect, openPage as openShell, pageDoc } from '../editor-harness'
 import { BROKEN_NOTICE, EMPTY_NOTICE, themePatterns } from '../../src/panels/pattern-picker'
@@ -54,7 +54,7 @@ function openPage(document_: PageDocument): Promise<void> {
     apiOverrides: {
       getProjectTheme: async () => {
         holder.themeReads += 1
-        return { ...adminThemeView(), manifest: { ...ADMIN_V0.manifest, patterns: holder.patterns } as ThemeManifest }
+        return { ...adminThemeView(), manifest: { ...ADMIN_FIXTURE.manifest, patterns: holder.patterns } as ThemeManifest }
       },
     },
   })
@@ -97,13 +97,13 @@ describe('패턴 고르개 — 출처', () => {
   })
 
   it('manifest 의 패턴을 규격으로 읽어 목록을 낸다', () => {
-    const { entries, broken } = themePatterns({ ...ADMIN_V0.manifest, patterns: PORTAL_PATTERNS })
+    const { entries, broken } = themePatterns({ ...ADMIN_FIXTURE.manifest, patterns: PORTAL_PATTERNS })
     expect(entries.map(([key]) => key)).toEqual(['content.noticeBoard'])
     expect(broken).toBeNull()
   })
 
   it('규격을 통과하지 못하면 목록이 비고 그렇다고 말한다', () => {
-    const { entries, broken } = themePatterns({ ...ADMIN_V0.manifest, patterns: { 'hero.x': { name: '' } } })
+    const { entries, broken } = themePatterns({ ...ADMIN_FIXTURE.manifest, patterns: { 'hero.x': { name: '' } } })
     expect(entries).toEqual([])
     expect(broken).toBe(BROKEN_NOTICE)
   })

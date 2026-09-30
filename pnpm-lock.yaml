@@ -316,6 +316,12 @@ importers:
 
   packages/test-support:
     dependencies:
+      '@wirebound/system-theme-admin':
+        specifier: workspace:*
+        version: link:../../system-themes/admin
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../theme-sdk
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -453,6 +459,154 @@ importers:
         version: 0.22.14(tsx@4.23.5)(typescript@5.9.3)
 
   system-themes/admin:
+    dependencies:
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../../packages/theme-sdk
+    devDependencies:
+      '@testing-library/dom':
+        specifier: ^10.4.0
+        version: 10.4.1
+      '@testing-library/react':
+        specifier: ^16.1.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.4(@types/react@19.2.18)
+      '@wirebound/renderer':
+        specifier: workspace:*
+        version: link:../../packages/renderer
+      '@wirebound/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+      '@wirebound/theme-kit':
+        specifier: workspace:*
+        version: link:../../packages/theme-kit
+      '@wirebound/themes':
+        specifier: workspace:*
+        version: link:../../packages/themes
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.8(react@19.2.8)
+
+  system-themes/commerce:
+    dependencies:
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../../packages/theme-sdk
+    devDependencies:
+      '@testing-library/dom':
+        specifier: ^10.4.0
+        version: 10.4.1
+      '@testing-library/react':
+        specifier: ^16.1.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.4(@types/react@19.2.18)
+      '@wirebound/renderer':
+        specifier: workspace:*
+        version: link:../../packages/renderer
+      '@wirebound/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+      '@wirebound/theme-kit':
+        specifier: workspace:*
+        version: link:../../packages/theme-kit
+      '@wirebound/themes':
+        specifier: workspace:*
+        version: link:../../packages/themes
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.8(react@19.2.8)
+
+  system-themes/docs:
+    dependencies:
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../../packages/theme-sdk
+    devDependencies:
+      '@testing-library/dom':
+        specifier: ^10.4.0
+        version: 10.4.1
+      '@testing-library/react':
+        specifier: ^16.1.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.4(@types/react@19.2.18)
+      '@wirebound/renderer':
+        specifier: workspace:*
+        version: link:../../packages/renderer
+      '@wirebound/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+      '@wirebound/theme-kit':
+        specifier: workspace:*
+        version: link:../../packages/theme-kit
+      '@wirebound/themes':
+        specifier: workspace:*
+        version: link:../../packages/themes
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.8(react@19.2.8)
+
+  system-themes/portal:
+    dependencies:
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../../packages/theme-sdk
+    devDependencies:
+      '@testing-library/dom':
+        specifier: ^10.4.0
+        version: 10.4.1
+      '@testing-library/react':
+        specifier: ^16.1.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.4(@types/react@19.2.18)
+      '@wirebound/renderer':
+        specifier: workspace:*
+        version: link:../../packages/renderer
+      '@wirebound/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+      '@wirebound/theme-kit':
+        specifier: workspace:*
+        version: link:../../packages/theme-kit
+      '@wirebound/themes':
+        specifier: workspace:*
+        version: link:../../packages/themes
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.8(react@19.2.8)
+
+  system-themes/saas-marketing:
     dependencies:
       '@wirebound/theme-sdk':
         specifier: workspace:*
