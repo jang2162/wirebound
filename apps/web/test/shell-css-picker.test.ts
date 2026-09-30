@@ -144,10 +144,10 @@ const OWN_LINE: { child: string; container: string; where: string }[] = [
   },
   {
     // 소속 메뉴 고르개. **지금 자식에 `flex-basis: 100%`가 없어 안 터진다** — 그래서
-    // 아래 2번이 무는 것은 이 상자가 **자기** 줄을 받는 쪽이다(툴바가 감싸야 한다).
+    // 아래 2번이 무는 것은 이 상자가 **자기** 줄을 받는 쪽이다(고른 줄 아래 상자가 감싸야 한다).
     child: 'wb-shell-menu-picker',
-    container: 'wb-shell-menu-toolbar',
-    where: 'panels/menu-toolbar.tsx — `MenuPicker`가 메뉴 툴바 `<div>` 안이다',
+    container: 'wb-shell-tree-panel',
+    where: 'panels/menu-tree.tsx — `MenuPicker`가 고른 줄 아래 `RowPanel`의 `<div>` 안이다',
   },
   {
     // 도구모음 아래 상태줄. 버튼들과 같은 줄에 서면 *"왜 회색인가"*가 버튼 사이에 끼어
@@ -155,11 +155,6 @@ const OWN_LINE: { child: string; container: string; where: string }[] = [
     child: 'wb-shell-structure-status',
     container: 'wb-shell-structure-toolbar',
     where: 'panels/structure-toolbar.tsx — `<p className="wb-shell-structure-status">`가 툴바 `<div>` 안이다',
-  },
-  {
-    child: 'wb-shell-menu-status',
-    container: 'wb-shell-menu-toolbar',
-    where: 'panels/menu-toolbar.tsx — `<p className="wb-shell-menu-status">`가 툴바 `<div>` 안이다',
   },
 ]
 

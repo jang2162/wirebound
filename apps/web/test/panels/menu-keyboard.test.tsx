@@ -14,6 +14,7 @@ import type { MenuNode, PageDetail, ProjectView, SessionUser, TreeMenuNode } fro
 import { App } from '../../src/app'
 import { fakeApi, renderWithProviders } from '../helpers'
 import { stripComments } from '../store-access-guard'
+import { isOff, queryRowAction, treeTool } from './tree-row'
 
 /**
  * `menu-tree.tsx`의 원문. **`SHORTCUTS`를 값으로 import하지 않고 글자로 읽는 이유**는
@@ -109,10 +110,11 @@ function treeRegion(): HTMLElement {
   return screen.getByRole('region', { name: '메뉴·페이지 트리' })
 }
 function toolbar(): HTMLElement {
-  return within(treeRegion()).getByRole('group', { name: '메뉴 편집' })
+  // 옛 «메뉴 편집» 툴바 자리 — 줄 행동 · 줄 아래 입력이 트리 영역 안에 선다(`./tree-row.ts`).
+  return treeRegion()
 }
-function tool(name: string): HTMLButtonElement {
-  return within(toolbar()).getByRole('button', { name }) as HTMLButtonElement
+function tool(name: string): HTMLElement {
+  return treeTool(treeRegion(), name)
 }
 function menuButton(title: string): HTMLElement {
   return within(treeRegion()).getByRole('button', { name: title })
@@ -166,8 +168,8 @@ describe('메뉴 트리 단축키', () => {
 
     // `권한`은 첫 형제라 `위로`·`들여쓰기`가 비활성이다.
     fireEvent.click(menuButton('권한'))
-    expect(tool('위로').disabled).toBe(true)
-    expect(tool('들여쓰기').disabled).toBe(true)
+    expect(isOff(tool('위로'))).toBe(true)
+    expect(isOff(tool('들여쓰기'))).toBe(true)
 
     fireEvent.keyDown(keyTarget(), { key: 'ArrowUp', altKey: true })
     fireEvent.keyDown(keyTarget(), { key: 'ArrowRight', altKey: true, shiftKey: true })
@@ -348,14 +350,14 @@ describe('통합', () => {
     fireEvent.click(tool('위로'))
     await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
     // 메뉴 툴바는 잠겼다.
-    expect(tool('아래로').disabled).toBe(true)
+    expect(isOff(tool('아래로'))).toBe(true)
 
     // **그동안 구조 편집 쪽은 살아 있다** — 같은 화면의 다른 region이다.
     const structure = screen.getByRole('region', { name: '구조 트리' })
     expect(within(structure).getByRole('group', { name: '구조 편집' })).toBeDefined()
 
     gate.release?.()
-    await waitFor(() => expect(tool('아래로').disabled).toBe(false))
+    await waitFor(() => expect(isOff(tool('아래로'))).toBe(false))
   })
 })
 
@@ -406,7 +408,7 @@ describe('뷰 모드에서는 단축키가 듣지 않는다', () => {
   function toEdit(): void {
     fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
   }
-  /** 삭제 확인이 걸려 있는가. **툴바에서만 보이므로** 편집 모드에서만 물을 수 있다. */
+  /** 삭제 확인이 걸려 있는가. **고른 줄 아래에서만 보이므로** 편집 모드에서만 물을 수 있다. */
   function confirmArmed(): boolean {
     return within(toolbar()).queryByRole('button', { name: '정말 삭제합니까?' }) !== null
   }
@@ -445,7 +447,7 @@ describe('뷰 모드에서는 단축키가 듣지 않는다', () => {
     // 있으면 편집 모드로 돌아온 순간 사용자가 건 적 없는 `정말 삭제합니까?`가 떠 있다.
     toEdit()
     expect(confirmArmed()).toBe(false)
-    expect(within(toolbar()).getByRole('button', { name: '삭제' })).toBeDefined()
+    expect(tool('삭제')).toBeDefined()
   })
 
   it('표의 여섯을 다 덮는다 — 키가 늘면 여기서 먼저 죽는다', () => {

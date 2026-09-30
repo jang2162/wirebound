@@ -60,6 +60,10 @@ export interface ActionMenuItem {
   disabled?: boolean
   /** 되돌리기 어려운 일(삭제) — 색만 바뀐다. */
   danger?: boolean
+  /** 마우스가 머물 때의 설명 — 끈 항목이 왜 꺼졌는지(트리 줄의 `…`). */
+  title?: string
+  /** 항목의 설명이 되는 요소의 id(`aria-describedby`) — 트리 아래 상태줄. */
+  describedBy?: string
 }
 
 export function ActionMenu(props: {
@@ -70,6 +74,13 @@ export function ActionMenu(props: {
   heading?: string
   /** 단추의 글자. 기본은 `…`(트리 줄의 `+` 가 바꾼다). */
   glyph?: string
+  /**
+   * 열 때 부른다 — 항목을 그리기 전에. 트리 줄의 `+` · `…` 가 여기서 그 줄을 고른다(`panels/tree-row-actions.tsx` — 명령은 **고른 줄**에
+   * 대해 돌므로, 항목의 켜고 끔도 고른 뒤의 판정으로 그려져야 한다).
+   */
+  onOpen?: () => void
+  /** 조밀한 단추 — 트리 줄 곁에 선다(줄 높이를 안 늘린다). */
+  compact?: boolean
 }): ReactElement {
   const [open, setOpen] = useState(false)
   /** 열 때 포커스를 줄 항목 — `'first'` · `'last'`. 목록이 그려진 뒤 이펙트가 옮긴다. */
@@ -98,6 +109,7 @@ export function ActionMenu(props: {
   }, [open, entry])
 
   function openAt(at: 'first' | 'last'): void {
+    props.onOpen?.()
     setEntry(at)
     setOpen(true)
   }
@@ -156,7 +168,7 @@ export function ActionMenu(props: {
       <button
         type="button"
         ref={toggleRef}
-        className="wb-shell-action-menu-toggle"
+        className={props.compact === true ? 'wb-shell-action-menu-toggle wb-shell-action-menu-compact' : 'wb-shell-action-menu-toggle'}
         aria-label={props.label}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -198,6 +210,8 @@ export function ActionMenu(props: {
                     tabIndex={-1}
                     className={item.danger === true ? 'wb-shell-action-menu-item wb-shell-action-menu-danger' : 'wb-shell-action-menu-item'}
                     aria-disabled={item.disabled === true ? true : undefined}
+                    title={item.title}
+                    aria-describedby={item.describedBy}
                     onClick={() => {
                       if (item.disabled === true) return
                       choose(item)

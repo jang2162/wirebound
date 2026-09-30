@@ -33,6 +33,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { MenuNode, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import { fakeApi, renderWithProviders } from '../helpers'
+import { isOff, queryRowAction, treeTool } from './tree-row'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 const PROJECT_NAME = '설계서'
@@ -90,11 +91,12 @@ function treeRegion(): HTMLElement {
 }
 
 function toolbar(): HTMLElement {
-  return within(treeRegion()).getByRole('group', { name: '메뉴 편집' })
+  // 옛 «메뉴 편집» 툴바 자리 — 줄 행동 · 줄 아래 입력이 트리 영역 안에 선다(`./tree-row.ts`).
+  return treeRegion()
 }
 
-function tool(name: string): HTMLButtonElement {
-  return within(toolbar()).getByRole('button', { name }) as HTMLButtonElement
+function tool(name: string): HTMLElement {
+  return treeTool(treeRegion(), name)
 }
 
 /** 빈 상태 버튼. **툴바 밖이다** — 트리 자리에 선다. */
@@ -132,12 +134,11 @@ describe('빈 메뉴 트리 — 최상위 메뉴를 만드는 자리', () => {
    * **이 줄이 혼자 우는 판은 따로 있다** — 판정표를 그대로 두고 툴바가 빈 트리에서만
    * `하위 메뉴`나 `페이지 추가`를 켜는 판이다. 그 자리는 메뉴가 없는 트리라 위 셋이 닿지 않는다.
    */
-  it('빈 트리에 최상위 메뉴 버튼이 서고, 툴바의 하위 메뉴는 꺼져 있다', async () => {
+  it('빈 트리에 최상위 메뉴 버튼이 서고, 줄이 없어 줄 행동(하위 메뉴 · 페이지 추가)도 없다', async () => {
     await open()
 
     expect(queryRootButton()).not.toBeNull()
-    expect(tool('하위 메뉴').disabled).toBe(true)
-    expect(tool('페이지 추가').disabled).toBe(true)
+    expect(treeRegion().querySelectorAll('[data-tree-row]')).toHaveLength(0)
   })
 
   /**

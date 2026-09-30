@@ -243,3 +243,27 @@ function swallowNextClick(): void {
   window.addEventListener('click', swallow, true)
   setTimeout(() => window.removeEventListener('click', swallow, true), 0)
 }
+
+/**
+ * 상자 안에서 `selector` 에 맞는 요소 가운데 점을 품은 것 — `onOver` 가 포인터 밑 줄을 찾는 데 쓴다. 없으면 `null`.
+ *
+ * **`elementFromPoint` 를 쓰지 않는다** — 줄 사이 틈 · 줄 안의 다른 요소(행동 단추 · 배지)에서도 줄을 찾아야 하고, 상자로 재면 무엇이
+ * 위에 겹쳐 있든(표시 겹 · 떠 있는 메뉴) 같은 답이다. 차례는 문서 차례이고 먼저 맞은 것을 준다.
+ */
+export function elementAt(container: HTMLElement | null, selector: string, point: DragPoint): HTMLElement | null {
+  if (container === null) return null
+  for (const element of container.querySelectorAll<HTMLElement>(selector)) {
+    const box = element.getBoundingClientRect()
+    if (point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y < box.bottom) return element
+  }
+  return null
+}
+
+/** 가장 가까운 세로 스크롤 조상 — 끝 스크롤할 상자(`scrollContainer`). 없으면 `null`. */
+export function scrollParent(element: HTMLElement | null): HTMLElement | null {
+  for (let cursor = element?.parentElement ?? null; cursor !== null; cursor = cursor.parentElement) {
+    const overflow = getComputedStyle(cursor).overflowY
+    if (overflow === 'auto' || overflow === 'scroll') return cursor
+  }
+  return null
+}

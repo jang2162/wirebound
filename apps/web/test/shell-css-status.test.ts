@@ -92,9 +92,10 @@ describe('상태줄은 글자가 없어도 자리를 지킨다', () => {
 
   it('두 상태줄이 같은 값을 든다 — 한쪽만 고치면 화면 반쪽이 다르게 흔들린다', () => {
     // 클래스를 나눈 것은 **따로 고칠 수 있게** 하려는 것이지 지금 달라도 된다는 뜻이 아니다.
-    // 지금 둘은 같은 화면의 좌측에 위아래로 서 있다.
+    // 지금 둘은 같은 화면의 좌측에 위아래로 서 있다. `flex-basis`는 여기서 안 본다 — 그 값은 담는 상자와의 짝이고
+    // (`./shell-css-picker.test.ts`), 두 줄이 담기는 자리가 다르다(메뉴의 줄은 트리 아래에 홀로 선다).
     const [structure, menu] = STATUS_LINES
-    for (const property of ['min-height', 'line-height', 'font-size', 'flex-basis']) {
+    for (const property of ['min-height', 'line-height', 'font-size']) {
       expect([property, declared(structure, property)]).toEqual([property, declared(menu, property)])
     }
   })

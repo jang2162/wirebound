@@ -552,8 +552,24 @@
   outline: 2px solid var(--wb-shell-ink);
 }
 
+/* 영역의 제목 줄 — 제목과 행동 자리(트리의 뿌리 `+`, `routes/editor.tsx`의 `ShellRegion`). 아래 여백이 이 줄의 것이다. */
+.wb-shell-region-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+/* 제목 줄의 행동 자리. 비어 있으면(구조 트리의 뿌리 `+`가 아직 없는 판) 자리를 안 잡는다. */
+.wb-shell-region-actions {
+  display: flex;
+  flex: none;
+}
+
 .wb-shell-region-title {
-  margin: 0 0 8px;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -583,6 +599,9 @@
    보이게 하되, 왼쪽 정렬과 전체 너비는 페이지 링크와 같은 눈금에 맞춘다. */
 .wb-shell-tree-menu {
   display: block;
+  visibility: visible;
+  flex: 1;
+  min-width: 0;
   width: 100%;
   appearance: none;
   border: 0;
@@ -605,6 +624,9 @@
 
 .wb-shell-tree-page {
   display: block;
+  visibility: visible;
+  flex: 1;
+  min-width: 0;
   padding: 3px 4px;
   border-radius: 4px;
   color: var(--wb-shell-muted);
@@ -714,21 +736,7 @@
   color: #fff;
 }
 
-/* 메뉴 편집 툴바(`panels/menu-toolbar.tsx`). 구조 툴바와 같은 자리 규칙이라 값이
-   겹치지만 클래스를 나눠 둔다 — 두 트리가 한 화면에 있고 조작이 다르므로, 한쪽의 여백을
-   고칠 때 다른 쪽이 따라 움직이면 안 된다. */
-.wb-shell-menu-toolbar {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--wb-shell-line);
-  background: #fff;
-}
-
+/* 메뉴 트리의 단추 — 빈 상태의 «최상위 메뉴» · 줄 아래 삭제 확인 · 소속 메뉴 목록의 «취소». */
 .wb-shell-menu-tool {
   appearance: none;
   border: 1px solid var(--wb-shell-line);
@@ -741,34 +749,27 @@
   cursor: pointer;
 }
 
-/* 할 수 없는 조작. 왜인지는 **아래 상태줄이 한 문장으로** 말하고, 그것이 말하지 않은
-   나머지가 버튼의 `title`에 남는다 — 회색만으로는 이유를 알 수 없다. */
+/* 할 수 없는 조작(조작이 나가 있는 동안). */
 .wb-shell-menu-tool:disabled {
   color: var(--wb-shell-muted);
   cursor: not-allowed;
 }
 
-/* 도구모음 아래 상태줄(`panels/menu-toolbar.tsx` · `panels/toolbar-status.ts`). 구조 쪽과
-   값이 겹치지만 클래스를 나눠 둔다 — 위 툴바 규칙 둘이 나뉜 것과 같은 이유다.
+/* 트리 아래 상태줄(`panels/menu-tree.tsx`의 `MenuStatusLine` · `panels/toolbar-status.ts`). 구조 쪽과
+   값이 겹치지만 클래스를 나눠 둔다 — 두 트리가 한 화면에 있고 문장이 다르므로, 한쪽의 여백을
+   고칠 때 다른 쪽이 따라 움직이면 안 된다.
 
-   **`flex-basis: 100%`로 자기 줄을 받는다.** 툴바가 `flex-wrap: wrap`이라 성립한다 —
-   감싸기가 없는 상자에서 이 값은 자기 줄을 받는 것이 아니라 줄을 터뜨린다(고르개가 그렇게
-   사이드바 밖으로 나갔다: `test/shell-css-picker.test.ts`).
-
-   **글자가 없어도 자리를 지킨다**(`min-height`). 안 지키면 선택을 옮길 때마다 툴바 높이가
-   달라지고, 툴바가 `sticky`라 그 차이가 그대로 트리 높이의 출렁임이 된다. */
+   **글자가 없어도 자리를 지킨다**(`min-height`). 안 지키면 선택을 옮길 때마다 그 아래 페이지 JSON 상자가 위아래로 튄다. */
 .wb-shell-menu-status {
-  flex-basis: 100%;
-  margin: 0;
+  margin: 8px 0 0;
   min-height: 15px;
   color: var(--wb-shell-muted);
   font-size: 11px;
   line-height: 15px;
 }
 
-/* 인라인 입력(`panels/tree-input.tsx`). 툴바가 `flex-wrap`이라 버튼과 같은 줄에 서다가
-   좁아지면 다음 줄로 내려간다 — `flex-basis: 100%`로 **처음부터 자기 줄을 쓰게** 한다:
-   입력이 버튼 사이에 끼면 무엇을 치고 있는지가 보이지 않는다. */
+/* 인라인 입력(`panels/tree-input.tsx`). 줄 아래 상자(`.wb-shell-tree-panel` · 구조 트리의 고르개 자리)가 `flex-wrap`이라
+   `flex-basis: 100%`로 **자기 줄을 쓰게** 한다 — 입력이 단추 사이에 끼면 무엇을 치고 있는지가 보이지 않는다. */
 .wb-shell-tree-input {
   flex-basis: 100%;
   box-sizing: border-box;
@@ -824,6 +825,67 @@
   color: var(--wb-shell-muted);
   font-size: 11px;
   line-height: 15px;
+}
+
+/* ── 트리 줄 행동(`panels/tree-row-actions.tsx`) ─────────────────────────────────────── */
+
+/* 줄 하나 — 줄 단추(메뉴 · 페이지 · 노드)와 `+` · `…`가 한 줄에 선다. **줄 행동이 서는 조건 셋이 여기 걸린다**(아래 규칙) — 셸
+   CSS 는 결합자를 못 써서(머리말 3번) 줄이 자기 행동 상자를 겨냥할 수 없다. 그래서 **줄 자체를 `visibility: hidden`으로 두고, 줄
+   안에서 늘 보여야 하는 것(줄 단추 · 잠금 배지)이 스스로 `visible`을 켠다** — 행동 상자만 줄의 값을 상속받는다(`visibility`는 상속
+   속성이고 자식이 부모의 `hidden`을 되켤 수 있다). 커스텀 프로퍼티로 넘기지 않는 것은 `--wb-shell-*` 선언이 팔레트 루트로 세이기
+   때문이다(`test/shell-css-palette.test.ts` 1번).
+
+   **줄 안에 새 요소를 넣으면 그 규칙에 `visibility: visible`을 건다** — 안 걸면 그 요소가 행동처럼 숨는다. 줄 상자는 자식 목록
+   (`<ul>`)을 품지 않으므로 아래 줄로 새지 않는다. */
+.wb-shell-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  visibility: hidden;
+}
+
+/* 마우스가 올라옴(줄 단추 위 — 숨은 상자는 누름을 안 받으므로 보이는 자식을 지나 선다) · 줄 안에 포커스(줄 단추 · 열린 행동
+   메뉴) · 고른 줄. */
+.wb-shell-tree-row:hover,
+.wb-shell-tree-row:focus-within,
+.wb-shell-tree-row-picked {
+  visibility: visible;
+}
+
+/* 끄는 중인 줄 — 어느 줄을 들었는지. */
+.wb-shell-tree-row-dragging {
+  opacity: 0.5;
+}
+
+/* `+` · `…`. **줄의 `visibility`를 상속받는다**(위) — 안 보이는 동안 자리는 지켜 줄이 튀지 않고, 포커스를 못 받아 Tab 이 줄마다
+   두 번씩 서지 않는다(`panels/tree-row-actions.tsx` 머리말). */
+.wb-shell-tree-row-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+/* 트리 줄 곁의 조밀한 행동 단추(`ActionMenu`의 `compact`) — 줄 높이(13px 글자 + 위아래 3px)를 안 늘린다. */
+.wb-shell-action-menu-compact {
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* 고른 줄 아래 상자 — 이름 입력 · 소속 메뉴 목록 · 삭제 확인(`panels/menu-tree.tsx`의 `RowPanel`). */
+.wb-shell-tree-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 0 4px 4px;
+}
+
+/* 삭제 확인 — «정말 삭제합니까?» · «취소». */
+.wb-shell-tree-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 /* ── 트리 드래그(`drag/use-pointer-drag.ts` · `drag/drop-indicator.tsx`) ───────────────────────── */

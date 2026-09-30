@@ -23,10 +23,10 @@
  *   viewer 에게 **단축키** 축은 이 파일의 viewer 케이스가 소유하고(단축키 가드를 지운 변조가 여기서만 죽는다),
  *   **툴바**는 `viewer-entries.test.tsx`의 «구조 트리»가 소유한다(툴바가 없다).
  * - **메뉴 트리 단축키** — editor 대조가 한 번도 안 닿는다. 아래 «키»의 대표 고르기 때문이다.
- * - **페이지 이름 변경 · 페이지 추가** — editor 훑기가 **못 닿는다**(칸이 없다). 둘 다 메뉴 툴바의 «이름» 칸을 여는데 그 칸은
- *   하나가 용도만 바꿔 서서(`menu-toolbar.tsx`의 `TreeInput`) 아래 `keyOf`로는 한 칸이다 — 처음 연 용도(하위 메뉴 추가)만
- *   친다. 그리고 훑기는 문서 순서로 앞선 메뉴 단추를 툴바보다 먼저 눌러, **페이지를 고른 채** 툴바에 닿는 판이 없다.
- *   viewer 에게 그 둘이 없다는 것은 `viewer-entries.test.tsx`의 «메뉴 트리»(툴바째 없다)가 소유한다.
+ * - **페이지 이름 변경 · 페이지 추가** — editor 훑기가 **못 닿는다**(칸이 없다). 둘 다 줄 행동이 여는 «이름» 칸인데 그 칸은
+ *   하나가 용도만 바꿔 서서(`menu-tree.tsx`의 `RowPanel` · `TreeInput`) 아래 `keyOf`로는 한 칸이다 — 처음 연 용도만
+ *   친다(줄 행동으로 옮긴 뒤 어느 용도가 처음인지는 다시 재지 않았다 — 칸이 없는 것은 그대로다).
+ *   viewer 에게 그 둘이 없다는 것은 `viewer-entries.test.tsx`의 «메뉴 트리»(줄 행동째 없다)가 소유한다.
  *
  * ## 사각 — 이 자가 닿지 못하는 것
  *
@@ -535,7 +535,7 @@ async function sweepKeys(): Promise<void> {
   }
 }
 
-/** 훑기 전에 세우는 선택 — 선택마다 서는 입구가 다르다(속성 위젯 · 코멘트 폼 · 구조 툴바 · 메뉴 툴바). */
+/** 훑기 전에 세우는 선택 — 선택마다 서는 입구가 다르다(속성 위젯 · 코멘트 폼 · 구조 툴바 · 메뉴 트리의 고른 줄). */
 const SELECTIONS: { name: string; pick: () => void }[] = [
   { name: '선택 없음', pick: () => {} },
   { name: '루트', pick: () => clickNode('n-root') },
@@ -578,9 +578,9 @@ async function sweepEditor(role: ProjectRole, draftStore?: DraftStore, live = fa
   await opened(wire)
   if (live) {
     await toMode('편집 모드')
-    await screen.findByRole('group', { name: '메뉴 편집' })
+    await screen.findByRole('button', { name: '메뉴 트리에 추가' })
     ;(wire as unknown as { demote: () => void }).demote()
-    // 표지는 셸의 통지다 — 자리 하나(메뉴 툴바)를 표지로 삼으면 그 자리의 변조가 «내려가지 않았다»로 읽힌다(`viewer-entries`와 같다).
+    // 표지는 셸의 통지다 — 자리 하나(메뉴 트리의 뿌리 `+`)를 표지로 삼으면 그 자리의 변조가 «내려가지 않았다»로 읽힌다(`viewer-entries`와 같다).
     await waitFor(() =>
       expect(screen.queryAllByRole('status').some((el) => (el.textContent ?? '').startsWith('편집 권한이 없어져'))).toBe(true),
     )
@@ -613,7 +613,7 @@ afterEach(() => {
  */
 const REACH: { name: string; hit: (wire: Wire) => boolean }[] = [
   { name: '메뉴 트리(메뉴 CRUD · 순서)', hit: (w) => w.writes.some((r) => route(r)[0] === 'menu') },
-  // **한 경로(`PATCH pages/:id`)에 입구가 넷이다** — 이름 변경 · 설명 저장 · 순서 옮기기 · 메뉴 옮기기. 경로로 재면 메뉴 툴바의
+  // **한 경로(`PATCH pages/:id`)에 입구가 넷이다** — 이름 변경 · 설명 저장 · 순서 옮기기 · 메뉴 옮기기. 경로로 재면 메뉴 트리의
   // 순서 옮기기가 설명 저장 대신 칸을 채운다. 본문의 키로 가른다. **이름 변경(`title`)은 칸이 없다** — 이
   // 훑기가 못 닿는다(머리말 «사각»).
   { name: '페이지 설명 저장', hit: (w) => w.writes.some((r) => isPagePatch(r) && r.keys.includes('description')) },

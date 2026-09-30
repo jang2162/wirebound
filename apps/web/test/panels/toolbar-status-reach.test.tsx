@@ -73,7 +73,7 @@ import type { TreeMenuNode } from '../../src/api/types'
 import { structureAbilities } from '../../src/edit/structure-actions'
 import { treeAbilities, type TreeSelection } from '../../src/tree/tree-actions'
 import type { TreeCommands } from '../../src/tree/use-tree-commands'
-import { MenuToolbar } from '../../src/panels/menu-toolbar'
+import { MenuStatusLine } from '../../src/panels/menu-tree'
 import { StructureToolbar, type StructureCommands } from '../../src/panels/structure-toolbar'
 import { menuStatus, structureStatus } from '../../src/panels/toolbar-status'
 import '../../src/catalog-setup'
@@ -227,16 +227,18 @@ function menuToolbar(input: { selection: TreeSelection | null; busy?: boolean })
     openReparent: unused,
     reparentTo: unused,
     cancelReparent: unused,
+    dropTo: unused,
   }
-  const view = render(<MenuToolbar commands={commands} />)
-  const toolbar = view.container.querySelector<HTMLElement>('.wb-shell-menu-toolbar')
-  if (toolbar === null) throw new Error('메뉴 툴바가 없습니다')
-  return { toolbar, status }
+  // **메뉴 쪽은 상태줄만 렌더한다.** 툴바가 없다 — 조작은 줄의 `+` · `…`(`panels/tree-row-actions.tsx`)이고 그 항목은 탭 정지점이
+  // 아니다(행동 메뉴의 항목은 화살표로 옮긴다 — `shell/action-menu.tsx`). 그래서 탭으로 이 문장에 닿는 길은 **줄 자신** 하나고,
+  // 항목이 이 줄을 설명으로 드는 쪽은 앱째로 잰다(`./menu-crud.test.tsx` «메뉴 트리 — 상태줄»).
+  const view = render(<MenuStatusLine commands={commands} id="menu-status" />)
+  return { toolbar: view.container, status }
 }
 
 function statusLine(toolbar: HTMLElement): HTMLElement {
   const line = toolbar.querySelector<HTMLElement>('[class$="-status"]')
-  if (line === null) throw new Error('툴바에 상태줄이 없습니다')
+  if (line === null) throw new Error('상태줄이 없습니다')
   return line
 }
 
@@ -278,12 +280,15 @@ function firstStop(toolbar: HTMLElement): number {
  * | 구조 · 문서에 없다 | 2 | **-1** | `패턴 넣기`·`프리셋`을 지나 상태줄 |
  * | 구조 · 자식을 못 담는다 | 0 | 0 | `아래 추가` |
  * | 구조 · 형제가 없다 | 0 | 0 | `안에 추가` |
- * | 메뉴 · 보내는 중 | 0 | **-1** | **상태줄** — 아홉이 다 꺼져 다른 정지점이 없다 |
+ * | 메뉴 · 보내는 중 | 0 | **-1** | **상태줄** |
  * | 메뉴 · 안 골랐다 | 0 | **-1** | **상태줄** |
  * | 메뉴 · 트리에 없다 | 0 | **-1** | **상태줄** |
- * | 메뉴 · 페이지다 | 0 | 0 | `이름 변경` |
- * | 메뉴 · 하위가 있다 | 0 | 0 | `하위 메뉴` |
- * | 메뉴 · 형제가 없다 | 0 | 0 | `하위 메뉴` |
+ * | 메뉴 · 페이지다 | 0 | **-1** | **상태줄** |
+ * | 메뉴 · 하위가 있다 | 0 | **-1** | **상태줄** |
+ * | 메뉴 · 형제가 없다 | 0 | **-1** | **상태줄** |
+ *
+ * **메뉴 여섯은 상태줄만 렌더해 잰다**(`menuToolbar`의 주석) — 줄 행동의 항목은 탭 정지점이 아니라, 탭이 이 문장에 닿는 길은
+ * 상태줄 자신뿐이다. 그래서 메뉴 쪽 셋째 칸이 전부 `-1`이다.
  *
  * **`구조 · 남이 잠갔다`의 `0`은 상태줄이다 — 버튼이 아니다.** 잠금은 판정 일곱뿐 아니라
  * 판정 밖의 둘(`패턴 넣기`·`프리셋`)까지 끈다. 한쪽이 빠지면 값이 이렇게 갈린다:

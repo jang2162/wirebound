@@ -364,6 +364,16 @@ function findPage(nodes: TreeMenuNode[], pageId: string): PageVisit | null {
   return null
 }
 
+/**
+ * 메뉴 하나가 가진 자식 메뉴 · 페이지의 수. 메뉴가 트리에 없으면 `null`. 드래그가 «안에 놓기»의 자리(맨 뒤)를 세는 데 쓴다
+ * (`tree-drop.ts`). 순회를 이 파일에 두는 것은 머리말 «관문과 이 파일» — `byOrder` 한 곳으로 닫는다.
+ */
+export function menuChildCount(menu: TreeMenuNode[], menuId: string, kind: 'menu' | 'page'): number | null {
+  const visit = findMenu(menu, menuId, null)
+  if (visit === null) return null
+  return kind === 'menu' ? byOrder<TreeMenuNode>(visit.node.children).length : byOrder<TreePage>(visit.node.pages).length
+}
+
 /** 트리 전체의 메뉴 수. `reparent` 판정이 "옮길 곳이 있는가"를 이것으로 본다. */
 function countMenus(nodes: TreeMenuNode[]): number {
   return byOrder<TreeMenuNode>(nodes).reduce((total, node) => total + 1 + countMenus(node.children), 0)
