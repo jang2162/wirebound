@@ -188,6 +188,7 @@ export function authRoutes(config: ApiConfig, limiter: LoginLimiter) {
       // **사용자 행 → 자격 재확인 → 다른 세션 삭제 차례다.** 재확인(세션 행 `KEY SHARE`)이 먼저면 같은 사람의 두 세션이 함께 바꿀 때
       // «앞: 자기 세션 → 사용자 행 대기 · 뒤: 사용자 행 → 앞 세션 삭제 대기»로 고리가 선다. 사용자 행을 먼저 잡으면 둘이 거기서
       // 줄을 서고, 뒤는 앞이 지운 자기 세션을 재확인에서 보고 401 로 되돌아간다([api] `auth-password.test.ts` «두 세션이 겹쳐»).
+      // 같은 사람의 다른 세션이 낸 관리자 쓰기도 사용자 행을 먼저 잡는다(`auth/admin.ts` 의 `recheckInstanceAdmin` 머리말).
       const ended = await withTransaction(app.db, async (trx) => {
         if (!(await setPasswordHash(trx, user.id, passwordHash))) throw unauthenticated()
         await recheckCredential(trx, credential)
