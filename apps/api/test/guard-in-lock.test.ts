@@ -61,6 +61,7 @@ import {
   type SignedUpUser,
 } from './helpers'
 import { joinRoom, type WsProbe } from './ws-client'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 const db = getTestDb()
 
@@ -2430,8 +2431,8 @@ const PROJECT_PROBES: ProjectProbe[] = [
     fire: (ctx, fx) =>
       fireRest(ctx, fx, 'PUT', `/api/projects/${fx.projectId}/theme`, {
         themeId: 'system-admin',
-        version: '0.1.0',
-        tokens: { 'semantic.primary': '#123456' },
+        version: SYSTEM_ADMIN.version,
+        tokens: { [SYSTEM_ADMIN.color.key]: '#123456' },
         rev: 0,
       }),
     okStatus: 200,

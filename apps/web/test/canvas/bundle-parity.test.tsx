@@ -25,7 +25,7 @@
  *
  * # 테마
  *
- * 캔버스는 프로젝트가 고정한 판의 번들을 싣는다 — 기본 하네스는 `system-admin@0.1.0` 에 `ADMIN_V0` 를 준다(`test/theme-loader.ts`).
+ * 캔버스는 프로젝트가 고정한 판의 번들을 싣는다 — 기본 하네스는 `system-admin@0.1.0` 에 `ADMIN_FIXTURE` 를 준다(`test/theme-loader.ts`).
  * 번들에 **같은 테마 정의**를 넘겨 견준다 — 캔버스가 뷰 경로에 무엇을 더하거나 빼면 여기서 죽는다.
  */
 import { broadFixture, describeTree } from '@wirebound/exporter/test-support'
@@ -33,7 +33,7 @@ import { mountExportDocument } from '@wirebound/exporter/browser'
 import type { PageDocument } from '@wirebound/schema'
 import { act } from 'react'
 import { describe, expect, it } from 'vitest'
-import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import { ADMIN_FIXTURE } from '../admin-theme'
 import { canvasDocument, openPage } from '../editor-harness'
 
 /**
@@ -52,7 +52,7 @@ function bundleDocumentRoot(document_: PageDocument): Element {
   canvas.className = 'wb-export-canvas'
   document.body.appendChild(canvas)
   act(() => {
-    mountExportDocument(canvas, { document: document_, theme: ADMIN_V0, tokens: {}, window, hrefs: {}, markers: [], status: null })
+    mountExportDocument(canvas, { document: document_, theme: ADMIN_FIXTURE, tokens: {}, window, hrefs: {}, markers: [], status: null })
   })
   const root = canvas.firstElementChild
   if (root === null) throw new Error('번들에 문서가 없습니다')

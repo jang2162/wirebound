@@ -1,5 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": ".", "outDir": ".tsbuild", "composite": true, "types": [] },
-  "include": ["src", "test"]
+  "compilerOptions": { "rootDir": ".", "outDir": ".tsbuild", "composite": true, "types": ["node"] },
+  "include": ["src", "test"],
+  // `src/system-admin.ts` 가 `.wbtheme` 를 읽는다(`readWbtheme`) — 빌드된 선언으로 본다.
+  "references": [{ "path": "../themes" }]
 }

@@ -7,6 +7,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack } from './editor-stack'
 import { canvasSheets, countThemeFiles, makeAdmin, sampleCard, sampleTheme, themeProject } from './theme-fixtures'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -64,7 +65,7 @@ describe.skipIf(!전제.ok)('관리자 화면에서 올리고 설정에서 바�
 
       await poll('bob 의 캔버스가 샘플 카드로', () => sampleCard(b.page), (drawn) => drawn)
       expect(bobFiles.lines.filter((line) => line.endsWith('theme.js'))).toEqual([
-        'system-admin/0.1.0/files/theme.js',
+        `system-admin/${SYSTEM_ADMIN.version}/files/theme.js`,
         'sample/1.0.0/files/theme.js',
       ])
       expect(await canvasSheets(b.page)).toEqual(['style:base', 'link:theme', 'style:tokens'])

@@ -20,6 +20,7 @@ import {
   type TestContext,
 } from './helpers'
 import { manifestOf, packed } from './theme-fixtures'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 async function store(ctx: TestContext, bytes: Uint8Array, uploadedBy: string | null = null): Promise<void> {
   const { files, issues } = readWbtheme(bytes)
@@ -259,8 +260,8 @@ describe('GET …/files/* — 원시 경로', () => {
 describe('누가', () => {
   it.each([
     ['목록', '/api/theme-packages'],
-    ['manifest', '/api/theme-packages/system-admin/0.1.0/manifest'],
-    ['파일', '/api/theme-packages/system-admin/0.1.0/files/theme.js'],
+    ['manifest', `/api/theme-packages/system-admin/${SYSTEM_ADMIN.version}/manifest`],
+    ['파일', `/api/theme-packages/system-admin/${SYSTEM_ADMIN.version}/files/theme.js`],
   ])('%s — 비로그인 401 · 토큰 401 · 로그인 200', async (_label, url) => {
     await withApi(async (ctx) => {
       expect((await get(ctx, undefined, url)).statusCode).toBe(401)

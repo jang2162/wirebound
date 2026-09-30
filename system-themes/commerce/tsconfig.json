@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    // 타입검사만 한다 — `.wbtheme` 는 `wb-theme build` 가 짓고(`package.json` 의 `build`), 웹 · vitest 는 소스를 읽는다.
+    "noEmit": true,
+    "composite": true,
+    "outDir": ".tsbuild",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src", "test", "build-test", "theme.config.ts"],
+  "references": [
+    { "path": "../../packages/theme-sdk" },
+    { "path": "../../packages/schema" },
+    { "path": "../../packages/themes" },
+    { "path": "../../packages/renderer" }
+  ]
+}

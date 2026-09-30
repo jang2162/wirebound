@@ -19,6 +19,7 @@ import type { DbHandle } from '../src/db/tx'
 import { latestVisibleVersion, listThemePackages, setThemePackageHidden } from '../src/repos/theme-packages'
 import { backfillProjectThemes, seedSystemThemes } from '../src/services/system-themes'
 import { createProject, signup, TEST_DATABASE_URL, testConfig } from './helpers'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 const DATABASE = `wb_system_themes_${process.pid}_${Date.now()}`
 const url = (() => {
@@ -29,7 +30,11 @@ const url = (() => {
 
 /** 저장소의 시스템 테마 — `test/global-setup.ts` 가 이 실행에서 다시 빌드했다. */
 const REPO_SYSTEM_THEMES = testConfig().systemThemesDir
-const ADMIN_ARTIFACT = join(REPO_SYSTEM_THEMES, 'admin', 'dist', 'system-admin-0.1.0.wbtheme')
+const ADMIN_KEY = `${SYSTEM_ADMIN.id}@${SYSTEM_ADMIN.version}`
+const ADMIN_ARTIFACT = join(REPO_SYSTEM_THEMES, 'admin', 'dist', `${SYSTEM_ADMIN.id}-${SYSTEM_ADMIN.version}.wbtheme`)
+/** 저장소가 내는 시스템 테마 — 디렉터리 차례(시딩이 도는 차례)다. 판은 테마마다 제 디렉터리에서 올리므로 여기서는 id 만 적는다. */
+const REPO_THEME_IDS = ['system-admin', 'system-commerce', 'system-docs', 'system-portal', 'system-saas-marketing']
+const idOf = (key: string) => key.slice(0, key.lastIndexOf('@'))
 
 let admin: DbHandle
 let db: DbHandle
@@ -81,15 +86,18 @@ function writeArtifacts(dir: string, entries: { manifest: ThemeManifest; body?: 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 
 describe('seedSystemThemes', () => {
-  it('빈 표에 저장소의 system-admin 을 넣는다 — 올린 사람 없음 · sha256 이 산출물과 같다', async () => {
+  it('빈 표에 저장소의 시스템 테마 다섯을 넣는다 — system-admin 은 올린 사람 없음 · sha256 이 산출물과 같다', async () => {
     const outcome = await seedSystemThemes(db, REPO_SYSTEM_THEMES)
-    expect(outcome).toEqual({ inserted: ['system-admin@0.1.0'], kept: [] })
-    const rows = await db.selectFrom('theme_packages').selectAll().execute()
-    expect(rows).toHaveLength(1)
+    expect(outcome.inserted.map(idOf)).toEqual(REPO_THEME_IDS)
+    expect(outcome.inserted).toContain(ADMIN_KEY)
+    expect(outcome.kept).toEqual([])
+    const rows = await db.selectFrom('theme_packages').selectAll().orderBy('theme_id').execute()
+    expect(rows.map((row) => row.theme_id)).toEqual(REPO_THEME_IDS)
+    expect(rows.map((row) => row.uploaded_by)).toEqual(REPO_THEME_IDS.map(() => null))
     const row = rows[0]!
     expect({ themeId: row.theme_id, version: row.version, uploadedBy: row.uploaded_by, manifestId: row.manifest.id }).toEqual({
       themeId: 'system-admin',
-      version: '0.1.0',
+      version: SYSTEM_ADMIN.version,
       uploadedBy: null,
       manifestId: 'system-admin',
     })
@@ -100,9 +108,9 @@ describe('seedSystemThemes', () => {
   })
 
   it('두 번 시딩하면 넣지 않는다 — 멱등', async () => {
-    await seedSystemThemes(db, REPO_SYSTEM_THEMES)
-    expect(await seedSystemThemes(db, REPO_SYSTEM_THEMES)).toEqual({ inserted: [], kept: ['system-admin@0.1.0'] })
-    expect(await db.selectFrom('theme_packages').select('theme_id').execute()).toHaveLength(1)
+    const first = await seedSystemThemes(db, REPO_SYSTEM_THEMES)
+    expect(await seedSystemThemes(db, REPO_SYSTEM_THEMES)).toEqual({ inserted: [], kept: first.inserted })
+    expect(await db.selectFrom('theme_packages').select('theme_id').execute()).toHaveLength(REPO_THEME_IDS.length)
   })
 
   it('같은 id@version 인데 바이트가 바뀌면 던진다 — 문장에 id@version 이 있다', async () => {
@@ -184,10 +192,10 @@ describe('listThemePackages', () => {
 })
 
 describe('기동', () => {
-  it('buildApp 이 시딩하고 새 프로젝트가 system-admin 에 고정된다', async () => {
+  it('buildApp 이 다섯을 시딩하고 새 프로젝트가 system-admin 의 지금 판에 고정된다', async () => {
     const app = await buildApp({ db, config: { ...testConfig(), databaseUrl: url } })
     try {
-      expect((await db.selectFrom('theme_packages').select('theme_id').execute()).map((row) => row.theme_id)).toEqual(['system-admin'])
+      expect((await db.selectFrom('theme_packages').select('theme_id').orderBy('theme_id').execute()).map((row) => row.theme_id)).toEqual(REPO_THEME_IDS)
       const owner = await signup({ app, db })
       const project = await createProject({ app, db }, owner.cookie)
       const row = await db
@@ -195,7 +203,7 @@ describe('기동', () => {
         .select(['theme_id', 'theme_version', 'theme_tokens', 'theme_rev'])
         .where('id', '=', project.id)
         .executeTakeFirstOrThrow()
-      expect(row).toEqual({ theme_id: 'system-admin', theme_version: '0.1.0', theme_tokens: {}, theme_rev: 0 })
+      expect(row).toEqual({ theme_id: 'system-admin', theme_version: SYSTEM_ADMIN.version, theme_tokens: {}, theme_rev: 0 })
     } finally {
       await app.close()
     }
@@ -207,7 +215,7 @@ describe('기동', () => {
     const app = await buildApp({ db, config: testConfig() })
     await app.close()
     const row = await db.selectFrom('projects').select(['theme_id', 'theme_version']).where('id', '=', id).executeTakeFirstOrThrow()
-    expect(row).toEqual({ theme_id: 'system-admin', theme_version: '0.1.0' })
+    expect(row).toEqual({ theme_id: 'system-admin', theme_version: SYSTEM_ADMIN.version })
   })
 
   it('산출물 없는 SYSTEM_THEMES_DIR 로는 buildApp 이 던진다', async () => {

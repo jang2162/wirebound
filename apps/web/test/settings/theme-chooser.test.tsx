@@ -3,7 +3,7 @@
  * `token-editor.test.tsx` 가 잰다.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import { ADMIN_FIXTURE } from '../admin-theme'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { migrateTokens } from '@wirebound/themes'
 import { describe, expect, it, vi } from 'vitest'
@@ -19,7 +19,7 @@ const CURRENT: ProjectThemeView = {
   version: '0.1.0',
   tokens: { 'semantic.primary': '#ff0000', 'radius.sm': '2px', 'semantic.danger': '#aa0000' },
   rev: 4,
-  manifest: ADMIN_V0.manifest,
+  manifest: ADMIN_FIXTURE.manifest,
   latest: '0.2.0',
 }
 
@@ -170,7 +170,7 @@ describe('«테마» 절 — 바꾸기 확인', () => {
     const confirm = await chooseAcme(api)
     fireEvent.click(within(confirm).getByRole('button', { name: '바꾸기' }))
     await waitFor(() => expect(api.putProjectTheme).toHaveBeenCalledTimes(1))
-    const expected = migrateTokens(ADMIN_V0.manifest, ACME, CURRENT.tokens).tokens
+    const expected = migrateTokens(ADMIN_FIXTURE.manifest, ACME, CURRENT.tokens).tokens
     expect(expected).toEqual({ 'semantic.primary': '#ff0000' })
     expect(vi.mocked(api.putProjectTheme).mock.calls[0]).toEqual(['p-1', { themeId: 'acme', version: '1.0.0', tokens: expected, rev: 4 }])
     await waitFor(() => expect(within(section()).getByText('Acme acme@1.0.0')).toBeDefined())

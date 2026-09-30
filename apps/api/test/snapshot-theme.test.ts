@@ -14,6 +14,7 @@ import { captureSnapshot } from '../src/services/snapshot-capture'
 import { createProject, resetRealData, signup, withApi, withRealApi, type SignedUpUser, type TestContext } from './helpers'
 import { manifestOf, packed } from './theme-fixtures'
 import { joinRoom, type WsProbe } from './ws-client'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 const SAMPLE = manifestOf('sample', '1.0.0', {
   tokens: { items: { 'color.accent': { type: 'color', label: '강조', default: '#e11d48' } } },
@@ -87,12 +88,12 @@ describe('캡처', () => {
   it('판 3 이고 지금 바인딩을 싣는다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
-      await putTheme(ctx, fx, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#123456' } })
+      await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [SYSTEM_ADMIN.color.key]: '#123456' } })
       const outcome = await captureSnapshot(ctx.db, fx.projectId)
       if (outcome.kind !== 'captured') throw new Error(outcome.kind)
       expect(SNAPSHOT_PAYLOAD_VERSION).toBe(3)
       expect(outcome.payload.payloadVersion).toBe(3)
-      expect(outcome.payload.theme).toEqual({ themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#123456' } })
+      expect(outcome.payload.theme).toEqual({ themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [SYSTEM_ADMIN.color.key]: '#123456' } })
     })
   })
 
@@ -101,7 +102,7 @@ describe('캡처', () => {
       const fx = await fixture(ctx)
       const outcome = await captureSnapshot(ctx.db, fx.projectId, {
         afterPages: async () => {
-          await putTheme(ctx, fx, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#654321' } })
+          await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [SYSTEM_ADMIN.color.key]: '#654321' } })
         },
       })
       expect(outcome.kind).toBe('fingerprint-mismatch')
@@ -111,10 +112,10 @@ describe('캡처', () => {
   it('수집 도중 토큰 값만 바꿔도 불일치다 — 지문이 바인딩을 덮는다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
-      await putTheme(ctx, fx, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#111111' } })
+      await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [SYSTEM_ADMIN.color.key]: '#111111' } })
       const outcome = await captureSnapshot(ctx.db, fx.projectId, {
         afterPages: async () => {
-          await putTheme(ctx, fx, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#222222' } })
+          await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [SYSTEM_ADMIN.color.key]: '#222222' } })
         },
       })
       expect(outcome.kind).toBe('fingerprint-mismatch')
@@ -127,7 +128,7 @@ describe('복원 — 판 3', () => {
     await withApi(async (ctx) => {
       await store(ctx, SAMPLE)
       const fx = await fixture(ctx)
-      await putTheme(ctx, fx, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#123456' } })
+      await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [SYSTEM_ADMIN.color.key]: '#123456' } })
       const snapshotId = await snapshot(ctx, fx, '테마 전')
       await putTheme(ctx, fx, { themeId: 'sample', version: '1.0.0', tokens: { 'color.accent': '#000000' } })
       const before = await themeRev(ctx, fx)
@@ -136,8 +137,8 @@ describe('복원 — 판 3', () => {
       expect(res.statusCode, res.body).toBe(200)
       expect(await binding(ctx, fx)).toEqual({
         theme_id: 'system-admin',
-        theme_version: '0.1.0',
-        theme_tokens: { 'semantic.primary': '#123456' },
+        theme_version: SYSTEM_ADMIN.version,
+        theme_tokens: { [SYSTEM_ADMIN.color.key]: '#123456' },
         theme_rev: before + 1,
       })
     })
@@ -159,7 +160,7 @@ describe('복원 — 판 3', () => {
       const fx = await fixture(ctx)
       await putTheme(ctx, fx, { themeId: 'sample', version: '1.0.0', tokens: {} })
       const snapshotId = await snapshot(ctx, fx, '샘플')
-      await putTheme(ctx, fx, { themeId: 'system-admin', version: '0.1.0', tokens: {} })
+      await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: {} })
       await setThemePackageHidden(ctx.db, 'sample', '1.0.0', true)
 
       const res = await restore(ctx, fx, snapshotId)
@@ -178,7 +179,7 @@ describe('복원 — 판 3', () => {
 
       const res = await restore(ctx, fx, snapshotId)
       expect(res.statusCode, res.body).toBe(409)
-      expect(res.json().error.message).toBe('스냅샷의 테마 패키지가 이 서버에 없습니다: gone@0.1.0 — 복원하지 않았습니다')
+      expect(res.json().error.message).toBe(`스냅샷의 테마 패키지가 이 서버에 없습니다: gone@${SYSTEM_ADMIN.version} — 복원하지 않았습니다`)
       expect(await binding(ctx, fx)).toEqual(before)
       // 안전망 스냅샷도 안 남는다 — 첫 쓰기보다 앞에서 거절했다.
       expect(await ctx.db.selectFrom('snapshots').select('id').where('project_id', '=', fx.projectId).execute()).toHaveLength(
@@ -221,7 +222,7 @@ describe('복원 — 판 3 토큰이 그 판의 manifest 를 못 지나면', () 
           'no.such': 'x',
         },
       })
-      await putTheme(ctx, fx, { themeId: 'system-admin', version: '0.1.0', tokens: {} })
+      await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: {} })
 
       const outcome = await restoreSnapshot(ctx.db, { projectId: fx.projectId, snapshotId, actorId: fx.owner.user.id })
       if (outcome.kind !== 'restored') throw new Error(outcome.kind)
@@ -280,7 +281,7 @@ describe('복원 — 판 2(테마 없음)', () => {
       await putTheme(ctx, fx, { themeId: 'sample', version: '1.0.0', tokens: { 'color.accent': '#111111' } })
       const snapshotId = await snapshot(ctx, fx, '판 2 + theme')
       await sql`update snapshots set payload = payload || '{"payloadVersion": 2}'::jsonb where id = ${snapshotId}`.execute(ctx.db)
-      await putTheme(ctx, fx, { themeId: 'system-admin', version: '0.1.0', tokens: {} })
+      await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: {} })
       const before = await binding(ctx, fx)
 
       const res = await restore(ctx, fx, snapshotId)
@@ -326,7 +327,7 @@ describe('복원의 방송', () => {
         type: 'theme-changed',
         projectId: fx.projectId,
         themeId: 'system-admin',
-        version: '0.1.0',
+        version: SYSTEM_ADMIN.version,
         tokens: {},
         rev: rev + 1,
       })

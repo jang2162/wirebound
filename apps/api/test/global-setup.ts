@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
-import { rmSync } from 'node:fs'
+import { existsSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { buildTheme } from '@wirebound/theme-kit'
+import { buildTheme, CONFIG_FILE } from '@wirebound/theme-kit'
 import { DEFAULT_SYSTEM_THEMES_DIR } from '../src/config'
 import { createDb, createPool } from '../src/db/client'
 import { migrateToLatest, migrateToNone } from '../src/db/migrate'
@@ -14,13 +14,21 @@ import { missingDatabaseHint } from './missing-database-hint'
  * 앞에 남은 산출물을 믿으면 소스를 고친 뒤 옛 판으로 잰다(생성물이 gitignore 라 아무 경고가 없다). 빌드는 같은 입력이면 같은 바이트다.
  * **`dist` 를 먼저 비운다** — 패키지의 `build` 스크립트와 같다(`system-themes/admin/package.json`). 판을 올린 뒤 옛 판 이름의 산출물이
  * 남으면 시딩이 그것까지 읽는다(A3 리뷰 5b′ · 5c′).
+ *
+ * 테마는 `system-themes/<이름>/theme.config.ts` 가 있는 디렉터리 전부다 — 테마를 더해도 여기를 안 고친다. 차례로 짓는다(vite 빌드가 코어를
+ * 나눠 써 나란히 지어도 크게 안 준다).
  */
 async function buildSystemThemes(): Promise<void> {
+  const themes = readdirSync(DEFAULT_SYSTEM_THEMES_DIR)
+    .sort()
+    .filter((name) => existsSync(join(DEFAULT_SYSTEM_THEMES_DIR, name, CONFIG_FILE)))
   const started = Date.now()
-  const root = join(DEFAULT_SYSTEM_THEMES_DIR, 'admin')
-  rmSync(join(root, 'dist'), { recursive: true, force: true })
-  await buildTheme({ root, entry: 'src/theme.tsx' })
-  console.log(`[global-setup] system-admin 빌드 ${Date.now() - started}ms`)
+  for (const name of themes) {
+    const root = join(DEFAULT_SYSTEM_THEMES_DIR, name)
+    rmSync(join(root, 'dist'), { recursive: true, force: true })
+    await buildTheme({ root, entry: 'src/theme.tsx' })
+  }
+  console.log(`[global-setup] 시스템 테마 ${themes.length} 개 빌드 ${Date.now() - started}ms`)
 }
 
 /**

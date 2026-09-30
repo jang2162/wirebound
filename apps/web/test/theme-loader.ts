@@ -4,7 +4,7 @@
  * 실물을 잰다.
  */
 import { createElement, type ReactElement, type ReactNode } from 'react'
-import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import { ADMIN_FIXTURE } from './admin-theme'
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import type { ProjectThemeView } from '../src/api/types'
 import { refKey, type BundleResult, type ThemeBundleLoader, type ThemeRef } from '../src/theme/bundle-loader'
@@ -23,9 +23,9 @@ export interface StaticBundleLoader extends ThemeBundleLoader {
 }
 
 /** 기본 하네스의 판 — 새 프로젝트가 서는 `system-admin@0.1.0`. */
-export const ADMIN_REF: ThemeRef = { themeId: 'system-admin', version: ADMIN_V0.manifest.version }
+export const ADMIN_REF: ThemeRef = { themeId: 'system-admin', version: ADMIN_FIXTURE.manifest.version }
 
-export function staticBundleLoader(map: Record<string, StaticBundle> = { [refKey(ADMIN_REF)]: ADMIN_V0 }): StaticBundleLoader {
+export function staticBundleLoader(map: Record<string, StaticBundle> = { [refKey(ADMIN_REF)]: ADMIN_FIXTURE }): StaticBundleLoader {
   const bundles = new Map(Object.entries(map))
   const hanging = new Map<string, ((result: BundleResult) => void)[]>()
   const calls: string[] = []
@@ -55,7 +55,7 @@ export function staticBundleLoader(map: Record<string, StaticBundle> = { [refKey
 
 /** 기본 하네스가 `getProjectTheme` 으로 주는 바인딩 — 새 프로젝트가 서는 판 그대로다. */
 export function adminThemeView(tokens: Record<string, string | number> = {}, rev = 0): ProjectThemeView {
-  return { themeId: ADMIN_REF.themeId, version: ADMIN_REF.version, tokens, rev, manifest: ADMIN_V0.manifest, latest: ADMIN_REF.version }
+  return { themeId: ADMIN_REF.themeId, version: ADMIN_REF.version, tokens, rev, manifest: ADMIN_FIXTURE.manifest, latest: ADMIN_REF.version }
 }
 
 /**
@@ -63,7 +63,7 @@ export function adminThemeView(tokens: Record<string, string | number> = {}, rev
  * `getProjectTheme` · 로더를 쓴다(`editor-harness.tsx`).
  */
 export function withProjectTheme(
-  definition: ThemeDefinition = ADMIN_V0,
+  definition: ThemeDefinition = ADMIN_FIXTURE,
   tokens: Record<string, string | number> = {},
 ): (props: { children: ReactNode }) => ReactElement {
   const value: ProjectTheme = {

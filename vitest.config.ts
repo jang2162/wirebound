@@ -20,6 +20,10 @@ const shared = {
       '@wirebound/theme-gallery': src('./packages/theme-gallery/src/index.ts'),
       '@wirebound/theme-kit': src('./packages/theme-kit/src/index.ts'),
       '@wirebound/system-theme-admin': src('./system-themes/admin/src/index.ts'),
+      '@wirebound/system-theme-commerce': src('./system-themes/commerce/src/index.ts'),
+      '@wirebound/system-theme-docs': src('./system-themes/docs/src/index.ts'),
+      '@wirebound/system-theme-portal': src('./system-themes/portal/src/index.ts'),
+      '@wirebound/system-theme-saas-marketing': src('./system-themes/saas-marketing/src/index.ts'),
       '@wirebound/themes': src('./packages/themes/src/index.ts'),
       // **더 좁은 것을 먼저 둔다.** rollup의 alias는 `id === find || id.startsWith(find + '/')`로
       // 맞추고 **앞의 것이 이기므로**, 순서를 뒤집으면 `@wirebound/exporter/test-support`가
@@ -33,6 +37,7 @@ const shared = {
       '@wirebound/cli/test-support': src('./packages/cli/test-support/index.ts'),
       '@wirebound/cli/embed': src('./packages/cli/src/embed.ts'),
       '@wirebound/cli': src('./packages/cli/src/index.ts'),
+      '@wirebound/test-support/system-admin': src('./packages/test-support/src/system-admin.ts'),
       '@wirebound/test-support': src('./packages/test-support/src/index.ts'),
     },
   },

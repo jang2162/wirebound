@@ -23,8 +23,11 @@ export function galleryItems(theme: ThemeDefinition): GalleryItem[] {
   return items
 }
 
-/** 칸 하나의 문서 — 표본을 Page 뿌리 아래 둔다(표본이 Page 면 그대로). Slot 표본은 레이아웃 꼴이 된다. */
-function itemDocument(item: GalleryItem): AnyDocument {
+/**
+ * 칸 하나의 문서 — 표본을 Page 뿌리 아래 둔다(표본이 Page 면 그대로). Slot 표본은 레이아웃 꼴이 된다. 갤러리와 `wb-theme check`
+ * (`@wirebound/theme-kit` 의 `checkTheme`)가 같은 문서를 그리게 이 함수 하나를 쓴다.
+ */
+export function galleryItemDocument(item: GalleryItem): AnyDocument {
   const node: WbNode = item.variant === undefined ? item.sample.node : { ...item.sample.node, variant: item.variant }
   return { version: 1, root: node.type === 'Page' ? node : { id: 'gallery', type: 'Page', children: [node] } } as AnyDocument
 }
@@ -51,7 +54,7 @@ function GalleryEntry(props: { theme: ThemeDefinition; item: GalleryItem; showOv
         <strong>{itemTitle(props.theme, item)}</strong>
         <span>{item.sample.label}</span>
       </div>
-      <div ref={stage}>{renderDocument(itemDocument(item), { theme: props.theme })}</div>
+      <div ref={stage}>{renderDocument(galleryItemDocument(item), { theme: props.theme })}</div>
       {props.showOverlay && <GalleryOverlay stage={stage} nodeId={item.sample.node.id} />}
     </div>
   )

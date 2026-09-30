@@ -20,7 +20,12 @@ import {
   type SignedUpUser,
   type TestContext,
 } from './helpers'
+import { laterAdminVersion, SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 import { manifestOf, packed } from './theme-fixtures'
+
+/** 새 프로젝트가 고정하는 system-admin 의 판과 색 토큰 — 글자로 적지 않는다(`@wirebound/test-support/system-admin`). */
+const V = SYSTEM_ADMIN.version
+const C = SYSTEM_ADMIN.color.key
 import { joinRoom, type WsProbe } from './ws-client'
 
 async function store(ctx: TestContext, manifest: ThemeManifest): Promise<void> {
@@ -80,23 +85,23 @@ describe('GET …/theme', () => {
       const body = res.json()
       expect({ ...body, manifest: body.manifest.id }).toEqual({
         themeId: 'system-admin',
-        version: '0.1.0',
+        version: V,
         tokens: {},
         rev: 0,
         manifest: 'system-admin',
-        latest: '0.1.0',
+        latest: V,
       })
     })
   })
 
   it('latest 는 같은 테마의 숨기지 않은 최신판이다', async () => {
     await withApi(async (ctx) => {
-      await store(ctx, manifestOf('system-admin', '0.2.0'))
-      await store(ctx, manifestOf('system-admin', '0.3.0'))
-      await setThemePackageHidden(ctx.db, 'system-admin', '0.3.0', true)
+      await store(ctx, manifestOf('system-admin', laterAdminVersion(1)))
+      await store(ctx, manifestOf('system-admin', laterAdminVersion(2)))
+      await setThemePackageHidden(ctx.db, 'system-admin', laterAdminVersion(2), true)
       const fx = await fixture(ctx)
       // 새 프로젝트는 숨기지 않은 최신판에 고정된다.
-      expect((await getTheme(ctx, fx, fx.viewer)).json()).toMatchObject({ version: '0.2.0', latest: '0.2.0' })
+      expect((await getTheme(ctx, fx, fx.viewer)).json()).toMatchObject({ version: laterAdminVersion(1), latest: laterAdminVersion(1) })
     })
   })
 })
@@ -107,39 +112,39 @@ describe('PUT …/theme', () => {
       const fx = await fixture(ctx)
       const res = await put(ctx, fx, fx.owner, {
         themeId: 'system-admin',
-        version: '0.1.0',
-        tokens: { 'semantic.primary': '#123456', 'radius.md': '6px' },
+        version: V,
+        tokens: { [C]: '#123456', [SYSTEM_ADMIN.otherColor.key]: SYSTEM_ADMIN.otherColor.value },
         rev: 0,
       })
       expect(res.statusCode, res.body).toBe(200)
-      expect(res.json()).toMatchObject({ themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#123456' }, rev: 1 })
+      expect(res.json()).toMatchObject({ themeId: 'system-admin', version: V, tokens: { [C]: '#123456' }, rev: 1 })
       const row = await ctx.db.selectFrom('projects').select(['theme_tokens', 'theme_rev']).where('id', '=', fx.projectId).executeTakeFirstOrThrow()
-      expect(row).toEqual({ theme_tokens: { 'semantic.primary': '#123456' }, theme_rev: 1 })
+      expect(row).toEqual({ theme_tokens: { [C]: '#123456' }, theme_rev: 1 })
     })
   })
 
   it('옛 rev 는 409 이고 지금 값을 싣는다 — 같은 rev 를 두 번 보내면 둘째가 409', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
-      const body = { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#111111' }, rev: 0 }
+      const body = { themeId: 'system-admin', version: V, tokens: { [C]: '#111111' }, rev: 0 }
       expect((await put(ctx, fx, fx.owner, body)).statusCode).toBe(200)
-      const second = await put(ctx, fx, fx.owner, { ...body, tokens: { 'semantic.primary': '#222222' } })
+      const second = await put(ctx, fx, fx.owner, { ...body, tokens: { [C]: '#222222' } })
       expect(second.statusCode).toBe(409)
       const current = second.json().current
       expect({ rev: current.rev, tokens: current.tokens, manifest: current.manifest.id }).toEqual({
         rev: 1,
-        tokens: { 'semantic.primary': '#111111' },
+        tokens: { [C]: '#111111' },
         manifest: 'system-admin',
       })
       const row = await ctx.db.selectFrom('projects').select('theme_tokens').where('id', '=', fx.projectId).executeTakeFirstOrThrow()
-      expect(row.theme_tokens).toEqual({ 'semantic.primary': '#111111' })
+      expect(row.theme_tokens).toEqual({ [C]: '#111111' })
     })
   })
 
   it('editor · viewer 는 403', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
-      const body = { themeId: 'system-admin', version: '0.1.0', tokens: {}, rev: 0 }
+      const body = { themeId: 'system-admin', version: V, tokens: {}, rev: 0 }
       expect((await put(ctx, fx, fx.editor, body)).statusCode).toBe(403)
       expect((await put(ctx, fx, fx.viewer, body)).statusCode).toBe(403)
     })
@@ -149,7 +154,7 @@ describe('PUT …/theme', () => {
     await withApi(async (ctx) => {
       await store(ctx, SAMPLE)
       const fx = await fixture(ctx)
-      await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#111111' }, rev: 0 })
+      await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: V, tokens: { [C]: '#111111' }, rev: 0 })
       const moved = await put(ctx, fx, fx.owner, { themeId: 'sample', version: '1.0.0', tokens: { 'color.accent': '#00ff00' }, rev: 1 })
       expect(moved.statusCode, moved.body).toBe(200)
       expect(moved.json()).toMatchObject({ themeId: 'sample', version: '1.0.0', tokens: { 'color.accent': '#00ff00' }, rev: 2, latest: '1.0.0' })
@@ -161,7 +166,7 @@ describe('PUT …/theme', () => {
     await withApi(async (ctx) => {
       await store(ctx, SAMPLE)
       const fx = await fixture(ctx)
-      const res = await put(ctx, fx, fx.owner, { themeId: 'sample', version: '1.0.0', tokens: { 'semantic.primary': '#111111' }, rev: 0 })
+      const res = await put(ctx, fx, fx.owner, { themeId: 'sample', version: '1.0.0', tokens: { [C]: '#111111' }, rev: 0 })
       expect(res.statusCode).toBe(422)
     })
   })
@@ -204,10 +209,10 @@ describe('PUT …/theme', () => {
 
     it('같은 테마의 다른 숨긴 판으로 옮기는 것도 422', async () => {
       await withApi(async (ctx) => {
-        await store(ctx, manifestOf('system-admin', '0.2.0'))
-        await setThemePackageHidden(ctx.db, 'system-admin', '0.2.0', true)
+        await store(ctx, manifestOf('system-admin', laterAdminVersion(1)))
+        await setThemePackageHidden(ctx.db, 'system-admin', laterAdminVersion(1), true)
         const fx = await fixture(ctx)
-        const res = await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.2.0', tokens: {}, rev: 0 })
+        const res = await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: laterAdminVersion(1), tokens: {}, rev: 0 })
         expect(res.statusCode).toBe(422)
       })
     })
@@ -216,15 +221,15 @@ describe('PUT …/theme', () => {
   describe('토큰 검증 · 한도', () => {
     // 한 422 가 이유 여럿을 나른다 — 케이스마다 이유(코드)까지 본다.
     it.each([
-      ['CSS 를 깨는 값', { 'semantic.primary': 'red;}' }, 'token-default-type'],
+      ['CSS 를 깨는 값', { [C]: 'red;}' }, 'token-default-type'],
       ['선언에 없는 키', { 'nope.key': '#000000' }, 'unknown-token'],
       // 스냅샷 payload(`jsonb`)가 못 받는 글자 — 받으면 그 프로젝트의 스냅샷 · 복원이 막힌다(`project-theme-review.test.ts`).
-      ['NUL 이 든 값', { 'semantic.primary': 'red\u0000' }, 'token-value-char'],
-      ['짝 없는 서로게이트가 든 값', { 'semantic.primary': 'red\ud800' }, 'token-value-char'],
+      ['NUL 이 든 값', { [C]: 'red\u0000' }, 'token-value-char'],
+      ['짝 없는 서로게이트가 든 값', { [C]: 'red\ud800' }, 'token-value-char'],
     ])('%s → 422 %s · 저장 안 됨', async (_label, tokens, code) => {
       await withApi(async (ctx) => {
         const fx = await fixture(ctx)
-        const res = await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.1.0', tokens, rev: 0 })
+        const res = await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: V, tokens, rev: 0 })
         expect(res.statusCode, res.body).toBe(422)
         expect(res.json().error.issues.map((issue: { code: string }) => issue.code)).toEqual([code])
         expect((await getTheme(ctx, fx, fx.owner)).json()).toMatchObject({ tokens: {}, rev: 0 })
@@ -269,10 +274,10 @@ describe('PUT …/theme', () => {
     it('본문이 틀리면 400', async () => {
       await withApi(async (ctx) => {
         const fx = await fixture(ctx)
-        expect((await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.1.0', tokens: {} })).statusCode).toBe(400)
-        expect((await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.1.0', tokens: [], rev: 0 })).statusCode).toBe(400)
+        expect((await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: V, tokens: {} })).statusCode).toBe(400)
+        expect((await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: V, tokens: [], rev: 0 })).statusCode).toBe(400)
         // 값은 글자나 수다 — 그 밖은 본문 모양에서 끊는다.
-        const bool = await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': true }, rev: 0 })
+        const bool = await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: V, tokens: { [C]: true }, rev: 0 })
         expect(bool.statusCode).toBe(400)
       })
     })
@@ -283,7 +288,7 @@ describe('PUT …/theme', () => {
       const fx = await fixture(ctx)
       const project = () => ctx.app.inject({ method: 'GET', url: `/api/projects/${fx.projectId}`, cookies: fx.viewer.cookie })
       expect((await project()).json().themeRev).toBe(0)
-      await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#111111' }, rev: 0 })
+      await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: V, tokens: { [C]: '#111111' }, rev: 0 })
       expect((await project()).json().themeRev).toBe(1)
     })
   })
@@ -301,16 +306,16 @@ describe('두 owner 의 동시 저장', () => {
       const other = await signup(ctx)
       await addMember(ctx, fx.projectId, other.user.id, 'owner')
       const hold = ctx.proxy.holdQuery('update "projects"')
-      const pendingA = put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#aaaaaa' }, rev: 0 })
+      const pendingA = put(ctx, fx, fx.owner, { themeId: 'system-admin', version: V, tokens: { [C]: '#aaaaaa' }, rev: 0 })
       await hold.held
-      const b = await put(ctx, fx, other, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#bbbbbb' }, rev: 0 })
+      const b = await put(ctx, fx, other, { themeId: 'system-admin', version: V, tokens: { [C]: '#bbbbbb' }, rev: 0 })
       expect(b.statusCode, b.body).toBe(200)
       hold.release()
       const a = await pendingA
       expect(a.statusCode, a.body).toBe(409)
-      expect(a.json().current).toMatchObject({ tokens: { 'semantic.primary': '#bbbbbb' }, rev: 1 })
+      expect(a.json().current).toMatchObject({ tokens: { [C]: '#bbbbbb' }, rev: 1 })
       const row = await ctx.db.selectFrom('projects').select(['theme_tokens', 'theme_rev']).where('id', '=', fx.projectId).executeTakeFirstOrThrow()
-      expect(row).toEqual({ theme_tokens: { 'semantic.primary': '#bbbbbb' }, theme_rev: 1 })
+      expect(row).toEqual({ theme_tokens: { [C]: '#bbbbbb' }, theme_rev: 1 })
     })
   })
 })
@@ -331,8 +336,8 @@ describe('방송 — theme-changed', () => {
       opened.push(viewer, ownerOther)
       const res = await put(ctx, fx, fx.owner, {
         themeId: 'system-admin',
-        version: '0.1.0',
-        tokens: { 'semantic.primary': '#123456' },
+        version: V,
+        tokens: { [C]: '#123456' },
         rev: 0,
       })
       expect(res.statusCode).toBe(200)
@@ -342,8 +347,8 @@ describe('방송 — theme-changed', () => {
           type: 'theme-changed',
           projectId: fx.projectId,
           themeId: 'system-admin',
-          version: '0.1.0',
-          tokens: { 'semantic.primary': '#123456' },
+          version: V,
+          tokens: { [C]: '#123456' },
           rev: 1,
           actor: { type: 'user', label: fx.owner.user.name },
         })
@@ -356,7 +361,7 @@ describe('방송 — theme-changed', () => {
       const fx = await fixture(ctx)
       const viewer = await joinRoom(ctx.port, fx.projectId, fx.viewer.cookie.wb_session)
       opened.push(viewer)
-      expect((await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.1.0', tokens: {}, rev: 7 })).statusCode).toBe(409)
+      expect((await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: V, tokens: {}, rev: 7 })).statusCode).toBe(409)
       // 조용한 창을 지난 뒤 받은 것 전부를 본다 — `quiet()` 의 반환은 창 안의 것뿐이라 답보다 먼저 닿은 프레임을 못 본다.
       await viewer.quiet()
       expect(viewer.received.filter((frame) => frame.type === 'theme-changed')).toEqual([])
@@ -420,8 +425,8 @@ describe('GET …/theme/impact', () => {
         manifestOf('next', '1.0.0', {
           tokens: {
             items: {
-              'semantic.primary': { type: 'color', label: '주색', default: '#000000' },
-              'semantic.surface': { type: 'length', label: '타입이 다름', default: '1px' },
+              [C]: { type: 'color', label: '주색', default: '#000000' },
+              [SYSTEM_ADMIN.otherColor.key]: { type: 'length', label: '타입이 다름', default: '1px' },
               'fresh.one': { type: 'color', label: '새것', default: '#ffffff' },
             },
           },
@@ -430,12 +435,12 @@ describe('GET …/theme/impact', () => {
       const fx = await fixture(ctx)
       await put(ctx, fx, fx.owner, {
         themeId: 'system-admin',
-        version: '0.1.0',
-        tokens: { 'semantic.primary': '#111111', 'semantic.surface': '#222222', 'semantic.text': '#333333' },
+        version: V,
+        tokens: { [C]: '#111111', [SYSTEM_ADMIN.otherColor.key]: '#222222', [SYSTEM_ADMIN.thirdColor.key]: '#333333' },
         rev: 0,
       })
       const res = await impact(ctx, fx, fx.viewer, 'next', '1.0.0')
-      // 이어짐: primary(같은 키 · 같은 타입). 버려짐: surface(타입이 다름) · text(없음). 기본값: 새 테마의 나머지 둘.
+      // 이어짐: 첫째 색(같은 키 · 같은 타입). 버려짐: 둘째 색(타입이 다름) · 셋째 색(없음). 기본값: 새 테마의 나머지 둘.
       expect(res.json().tokens).toEqual({ kept: 1, dropped: 2, defaulted: 2 })
     })
   })
