@@ -38,6 +38,16 @@ describe('system-commerce .wbtheme', () => {
     expect(files!.manifest.id).toBe('system-commerce')
   })
 
+  /** 빌드는 `theme.css` 를 줄여 싣는다 — 줄이면서 `:root` 의 기본값을 바꾸면(`#ffffff` → `#fff` 등) 토큰 폼의 기본값과 화면이 갈린다. */
+  it('산출물 theme.css 가 토큰마다 manifest 의 기본값을 :root 에 싣는다', () => {
+    const css = files!.themeCss ?? ''
+    const missing = Object.entries(MANIFEST.tokens.items)
+      .map(([key, decl]) => `--wb-${key.replaceAll('.', '-')}: ${decl.default};`)
+      .filter((line) => !css.includes(line))
+    expect(Object.keys(MANIFEST.tokens.items).length).toBeGreaterThan(0)
+    expect(missing).toEqual([])
+  })
+
   it('갤러리 칸 전부가 오류 없이 그려진다(jsdom)', () => {
     expect(report.items).toBeGreaterThan(0)
     expect(report.errors).toEqual([])
