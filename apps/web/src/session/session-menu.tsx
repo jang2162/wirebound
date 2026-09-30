@@ -1,6 +1,7 @@
 /**
- * **앱에서 나가는 길**(누구로 들어와 있는지 + 로그아웃). 흐름은 `useLogout` 하나이고 그리는 자리는 둘이다 — 에디터 · 프로젝트 목록 머리의 `…`
- * (`shell/action-menu.tsx` — 메뉴 머리에 이름, 끝 항목이 로그아웃)와 셸 밖 화면(설정 · 토큰 · 테마 관리)의 계정 묶음(`SessionMenu`).
+ * **앱에서 나가는 길**(누구로 들어와 있는지 + 로그아웃). 흐름은 `useLogout` 하나이고 그리는 자리는 둘이다 — 에디터 머리의 `…`(`routes/editor.tsx`)와
+ * 셸 밖 화면(프로젝트 목록 · 설정 · 계정 · 테마 관리) 머리의 `…`(`shell/page-head.tsx`). 둘 다 `shell/action-menu.tsx` 다 — 메뉴 머리에 이름,
+ * 끝 항목이 로그아웃.
  *
  * ## 왜 있는가
  *
@@ -39,10 +40,9 @@
  * 판정 자체는 `api/failure.tsx`가 갖는다 — 여기서 `code`를 다시 읽지 않는다.
  */
 import { useState, type ReactElement } from 'react'
-import { Link } from 'react-router'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
-import { useSessionEpochNow, useSessionSwitched, useSessionUser, useSignOut } from './session-context'
+import { useSessionEpochNow, useSessionSwitched, useSignOut } from './session-context'
 
 /** 서버가 이유를 주지 않은 실패(네트워크 단절 등)에 쓸 문장. */
 const UNKNOWN_FAILURE = '로그아웃하지 못했습니다'
@@ -53,11 +53,11 @@ const UNKNOWN_FAILURE = '로그아웃하지 못했습니다'
 export const SWITCHED_NOTICE = '다른 사람으로 로그인됐습니다 — 이 탭은 이제 머리의 사람의 화면입니다'
 
 /**
- * **로그아웃 흐름** — 에디터 · 프로젝트 목록 머리의 `…`(`shell/action-menu.tsx`)와 셸 밖 화면의 계정 묶음(`SessionMenu`)이 함께 쓴다. 판정은 이
+ * **로그아웃 흐름** — 에디터 머리의 `…`와 셸 밖 화면 머리의 `…`(`shell/page-head.tsx`)가 함께 쓴다. 판정은 이
  * 파일 머리말 «실패했을 때 — 상태를 끊지 않는다»가 갖는다. 돌려주는 `failure`는 부르는 화면이 통지 자리에 그린다(`SessionNotices`).
  *
  * @param settle **로그아웃 요청을 내기 전에 기다릴 것** — 에디터 셸이 보낸 편집의 답을 기다리게 넘긴다(`routes/editor.tsx`의 `editsAnswered`).
- *   한도가 있어야 한다 — 로그아웃은 권한을 줄이는 쓰기라 막히면 안 된다. 셸 밖(프로젝트 목록 · 토큰)은 넘기지 않는다. **기다림 뒤에도 잃는
+ *   한도가 있어야 한다 — 로그아웃은 권한을 줄이는 쓰기라 막히면 안 된다. 셸 밖 화면(`shell/page-head.tsx`)은 넘기지 않는다. **기다림 뒤에도 잃는
  *   것이 있으면 그 한 줄을 돌려준다** — 로그아웃이 성공하면 로그인 화면이 그린다(`useSignOutNotice`). 없으면 `null`이다.
  */
 export function useLogout(settle?: () => Promise<string | null>): {
@@ -134,36 +134,6 @@ export function SessionNotices(props: { failure: string | null; className: strin
           {props.failure}
         </p>
       )}
-    </>
-  )
-}
-
-/**
- * **셸 밖 화면의 계정 묶음**(이름 · API 토큰 · 로그아웃) — 설정 · 토큰 · 테마 관리의 머리. 에디터와 프로젝트 목록은 이 묶음 대신 머리의 `…`
- * 가 같은 흐름(`useLogout`)을 쓴다.
- */
-export function SessionMenu(props: {
-  /** `useLogout`의 같은 이름. */
-  settle?: () => Promise<string | null>
-}): ReactElement {
-  const user = useSessionUser()
-  const { logout, busy, failure } = useLogout(props.settle)
-
-  return (
-    /* **묶음과 통지가 형제다** — 통지를 묶음 **안**에 넣으면 머리의 그 줄이 두 줄로 두꺼워진다.
-       밖에 두면 `.wb-shell-session-alert`의 `flex-basis: 100%`가 머리의 `flex-wrap`을 타고
-       아랫줄로 내려간다 — `.wb-shell-edit-alert`와 같은 자리이고 같은 장치다. */
-    <>
-      <div className="wb-shell-session">
-        {user !== null && <span className="wb-shell-session-user">{user.name}</span>}
-        {/* 이 계정의 API 토큰 — 거두는 화면이 여기서 열린다(`routes/tokens.tsx`). */}
-        <Link className="wb-shell-session-tokens" to="/tokens">API 토큰</Link>
-        {/* 요청이 도는 동안 잠근다 — 두 번 눌러 두 번 나갈 이유가 없다(로그인 폼과 같은 관례). */}
-        <button type="button" className="wb-shell-session-logout" disabled={busy} onClick={logout}>
-          로그아웃
-        </button>
-      </div>
-      <SessionNotices failure={failure} className="wb-shell-session-alert" />
     </>
   )
 }

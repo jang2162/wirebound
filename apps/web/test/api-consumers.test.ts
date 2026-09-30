@@ -85,7 +85,7 @@ function consumers(): Map<string, string[]> {
  */
 const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   login: ['../src/routes/login.tsx'],
-  // 셸 머리의 계정 묶음이 그 자리다(`session/session-menu.tsx`).
+  // 로그아웃 흐름 `useLogout` 이 그 자리다(`session/session-menu.tsx`) — 에디터 · 셸 밖 화면 머리의 `…` 가 함께 쓴다.
   //
   // **부르는 자리가 하나인 것이 요점이다.** 세션을 끊는 길이 둘이 되면 한쪽만
   // `invalidate()`를 부르는 판이 생기고, 그러면 쿠키는 지워졌는데 화면은 로그인한 줄

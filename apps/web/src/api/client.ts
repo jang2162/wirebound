@@ -85,7 +85,7 @@ export interface ApiClient {
   /** 호출자가 속한 프로젝트 목록. 각 항목에 호출자의 `role`이 실려 온다. */
   listProjects(): Promise<ProjectDetail[]>
   /**
-   * **로그인한 사람의 API 토큰 전부** — 멤버가 아닌 프로젝트의 것도 든다(`routes/tokens.tsx`). 세션으로만 부른다(서버가
+   * **로그인한 사람의 API 토큰 전부** — 멤버가 아닌 프로젝트의 것도 든다(`account/tokens-section.tsx`). 세션으로만 부른다(서버가
    * 토큰 요청에 401).
    */
   listMyTokens(): Promise<MyApiToken[]>

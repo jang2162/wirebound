@@ -1,6 +1,6 @@
 /**
- * **프로젝트 설정** — `/projects/:projectId/settings`. 셸 밖 라우트다(`routes/tokens.tsx` 와 같은 자리): 설정은 캔버스 · 트리를 쓰지 않고,
- * 셸에 두면 편집 상태(스토어 · 잠금 · 룸)를 세운 채 폼 하나를 보게 된다. 에디터 머리의 «설정» 과 목록 줄의 «설정» 이 여기로 온다. 머리의 «에디터로 돌아가기» 가 그 프로젝트의 에디터로 간다.
+ * **프로젝트 설정** — `/projects/:projectId/settings`. 셸 밖 라우트다(`routes/account.tsx` 와 같은 자리): 설정은 캔버스 · 트리를 쓰지 않고,
+ * 셸에 두면 편집 상태(스토어 · 잠금 · 룸)를 세운 채 폼 하나를 보게 된다. 에디터 `…` 의 «프로젝트 설정» 과 목록 줄의 «설정» 이 여기로 온다. 머리의 로고가 프로젝트 목록으로, 그 아래 «에디터로 돌아가기» 가 그 프로젝트의 에디터로 간다.
  *
  * 절은 **«일반»**(이름 · 슬러그 · 설명 — `settings/general-section.tsx`) · **«테마»**(고르기 · 토큰 편집 · 미리보기 — `settings/theme-section.tsx`) ·
  * **«멤버»**(`settings/members-section.tsx`) · **«위험 구역»**(프로젝트 삭제 · owner 만 — `settings/danger-section.tsx`)을 위아래로 둔다. 화면 루트는 `.wb-shell-settings` 다 — 미리보기(갤러리 iframe)가 들어 목록 화면보다 넓다(`shell.css` 의 팔레트 블록).
@@ -12,11 +12,11 @@ import { Link, useParams } from 'react-router'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { ProjectView } from '../api/types'
-import { SessionMenu } from '../session/session-menu'
 import { GeneralSection } from '../settings/general-section'
 import { DangerSection } from '../settings/danger-section'
 import { MembersSection } from '../settings/members-section'
 import { ThemeSection } from '../settings/theme-section'
+import { PageHead } from '../shell/page-head'
 
 const LOAD_FAILURE = '프로젝트를 불러오지 못했습니다'
 
@@ -53,20 +53,15 @@ export function SettingsRoute(): ReactElement {
 
   return (
     <main className="wb-shell-settings">
-      <div className="wb-shell-project-head">
-        <h1 className="wb-shell-project-list-title">{state.status === 'ready' ? `${state.project.name} 설정` : '프로젝트 설정'}</h1>
-        <SessionMenu />
-      </div>
-      <p className="wb-shell-settings-nav">
-        {state.status === 'ready' && (
+      {/* 머리 — 로고(프로젝트 목록으로) · 제목 · `…`(`shell/page-head.tsx`). 그 아래 «에디터로 돌아가기» 는 프로젝트를 받은 뒤에 선다 — 갈 주소가 그 응답의 것이다. */}
+      <PageHead title={state.status === 'ready' ? `${state.project.name} 설정` : '프로젝트 설정'} brand />
+      {state.status === 'ready' && (
+        <p className="wb-shell-settings-nav">
           <Link className="wb-shell-tokens-back" to={`/projects/${state.project.id}`}>
             에디터로 돌아가기
           </Link>
-        )}
-        <Link className="wb-shell-tokens-back" to="/">
-          프로젝트 목록
-        </Link>
-      </p>
+        </p>
+      )}
 
       {state.status === 'loading' && (
         <p className="wb-shell-project-notice" role="status">

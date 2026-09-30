@@ -54,17 +54,17 @@ function server(initial: MyApiToken[], overrides: Partial<ApiClient> = {}) {
 }
 
 describe('API 토큰 절', () => {
-  /** 계정 묶음은 셸 밖 화면(테마 관리 · 설정 · 계정 설정)의 머리다 — 프로젝트 목록 머리는 `…` 로 바뀌었다(`routes/project-list.tsx`). */
-  it('계정 묶음의 «API 토큰» 링크가 계정 설정으로 가고 그 안에 토큰 절이 선다', async () => {
+  /** 옛 계정 묶음의 «API 토큰» 링크는 없다 — 셸 밖 화면 머리의 `…`(`shell/page-head.tsx`)가 «계정 설정»으로 가고 토큰은 그 한 절이다. */
+  it('머리 `…` 의 «계정 설정»이 계정 설정으로 가고 그 안에 토큰 절이 선다', async () => {
     const { client, calls } = server([token()], {
       me: async () => ({ ...USER, isInstanceAdmin: true }),
       listThemePackages: async () => [],
     })
     renderWithProviders(<App />, { client, route: '/admin/themes' })
 
-    const link = await screen.findByRole('link', { name: 'API 토큰' })
+    fireEvent.click(await screen.findByRole('button', { name: '더 보기' }))
     expect(currentPath()).toBe('/admin/themes')
-    fireEvent.click(link)
+    fireEvent.click(screen.getByRole('menuitem', { name: '계정 설정' }))
     await screen.findByRole('heading', { name: 'API 토큰' })
     expect(currentPath()).toBe('/account')
     await screen.findByText('CI')

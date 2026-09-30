@@ -57,7 +57,7 @@ export function App(): ReactElement {
           >
             <Route path="/" element={<ProjectListRoute />} />
             {/* **계정 설정은 사람의 것이라 프로젝트 밖 라우트다** — 근거는 `routes/account.tsx` 머리말. 옛 주소 `/tokens`(API 토큰)는
-                그 페이지의 한 절이 되어 넘겨 준다 — 받아 둔 링크 · 계정 묶음의 «API 토큰» 링크가 그리로 간다. */}
+                그 페이지의 한 절이 되어 넘겨 준다 — 받아 둔 링크가 그리로 간다. */}
             <Route path="/account" element={<AccountRoute />} />
             <Route path="/tokens" element={<Navigate to="/account" replace />} />
             {/* **테마 관리는 인스턴스의 것이라 프로젝트 밖 라우트다**(`routes/admin-themes.tsx` 머리말). */}

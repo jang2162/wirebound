@@ -6,24 +6,16 @@
  * `.wb-shell-settings` 다 — 절 · 칸의 꼴을 함께 쓴다.
  */
 import { useId, type ReactElement } from 'react'
-import { Link } from 'react-router'
 import { PasswordSection } from '../account/password-section'
 import { TokensSection } from '../account/tokens-section'
 import { useSessionUser } from '../session/session-context'
-import { SessionMenu } from '../session/session-menu'
+import { PageHead } from '../shell/page-head'
 
 export function AccountRoute(): ReactElement {
   return (
     <main className="wb-shell-settings">
-      <div className="wb-shell-project-head">
-        <h1 className="wb-shell-project-list-title">계정 설정</h1>
-        <SessionMenu />
-      </div>
-      <p className="wb-shell-settings-nav">
-        <Link className="wb-shell-tokens-back" to="/">
-          프로젝트 목록
-        </Link>
-      </p>
+      {/* 머리 — 로고(프로젝트 목록으로) · 제목 · `…`(`shell/page-head.tsx`). */}
+      <PageHead title="계정 설정" brand />
       <ProfileSection />
       <PasswordSection />
       <TokensSection />

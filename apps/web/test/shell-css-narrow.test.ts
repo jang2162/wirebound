@@ -8,7 +8,6 @@
  *
  * - **넘침 0 · 줄 수를 못 낸다.** jsdom에는 레이아웃이 없다. 그 값은 Chrome 에서 잰다 — 창 390 · 480 · 767 에서 머리의 모든 요소가
  *   `0 ≤ left` · `right ≤ 창 폭`인가, 머리 안 글자 노드 하나가 줄을 두 번 이상 쓰는가(`Range.getClientRects`의 서로 다른 `top`).
- * - **세션 묶음에 새로 든 조각**(«API 토큰» 링크)이 줄 바꿈에 함께 드는 것은 Chrome 측정의 값이다(그 링크를 흉내 내 넣고 쟀다).
  * - **어느 묶음이 머리에 있는지는 안 본다.** 묶음이 새로 생기면 여기 한 줄을 더한다 — 빠뜨린 묶음은 Chrome 측정에서만 보인다.
  */
 import { afterEach, describe, expect, it } from 'vitest'
@@ -18,14 +17,14 @@ import '../src/shell.css'
  * 머리 · 하단 바 안에서 줄을 바꾸는 묶음. 이력은 없다 — 자식이 다 줄어들거나 짧다(`src/shell.css`의
  * `.wb-shell-header` 주석 · `shell-css-picker.test.ts`의 `ONE_LINE`). 에디터 머리의 가운데 무리(`wb-shell-head-tools` — 되돌리기 ·
  * 모드), 하단 바 자신(좁으면 도구가 통지 아래 줄로 간다 — `src/shell.css`의 `.wb-shell-footer`)과 그 두 무리(통지 · 뷰포트 · 줌), 셸 밖
- * 화면의 계정 묶음(`wb-shell-session`)이 든다.
+ * 화면 머리의 왼쪽 무리(`wb-shell-page-lead` — 로고 · 제목 · `shell/page-head.tsx`)가 든다.
  */
 const WRAPPING_GROUPS = [
   'wb-shell-head-tools',
   'wb-shell-footer',
   'wb-shell-footer-notices',
   'wb-shell-footer-tools',
-  'wb-shell-session',
+  'wb-shell-page-lead',
 ] as const
 
 function styleOf(className: string): CSSStyleDeclaration {

@@ -155,8 +155,8 @@
      창보다 넓다 — 머리가 그 폭까지 펼쳐지면 줄을 바꿀 자리를 창 밖에서 찾아 오른쪽 조각이 잘린다. `.wb-shell`이
      `position: fixed`라 문서가 넓어지지 않아 가로 스크롤로도 못 본다. 상한을 창 폭에 두면 `flex-wrap`이 창 안에서 줄을 바꾼다. 안에서
      줄을 바꾸는 묶음은 가운데 무리(`.wb-shell-head-tools`)다 — 묶음이 줄을 바꾸면 단추는 줄어들지 않아 글자가 안 접힌다. 이력은 자식이
-     다 줄어들거나 짧아 걸 것이 없다(`test/shell-css-picker.test.ts`의 `ONE_LINE`). 셸 밖 화면의 계정 묶음(`.wb-shell-session`)도 같은
-     장치로 줄을 바꾼다(이름이 길면 넘친다).
+     다 줄어들거나 짧아 걸 것이 없다(`test/shell-css-picker.test.ts`의 `ONE_LINE`). 셸 밖 화면 머리의 왼쪽 무리(`.wb-shell-page-lead`)도
+     안에서 줄을 바꾼다(제목이 길면 로고 아래로 내려간다).
      몸통(좌측 · 캔버스 · 우측)이 좁은 창에서 넘치는 것은 이 줄의 일이 아니다. */
   max-width: 100vw;
   box-sizing: border-box;
@@ -429,49 +429,9 @@
   color: var(--wb-shell-muted);
 }
 
-/* 계정 묶음 — **셸 밖 화면**(설정 · 토큰 · 테마 관리)의 머리 줄 끝(`session/session-menu.tsx`의 `SessionMenu`). 에디터 · 프로젝트 목록
-   머리는 이 묶음 대신 `…`(`shell/action-menu.tsx`)를 둔다. `margin-left: auto`를 걸지 않는다: 머리가 이미 `space-between`이라 마지막
-   조각이 오른쪽 끝에 선다. */
-.wb-shell-session {
-  display: inline-flex;
-  /* 이름 · 링크 · 로그아웃이 좁은 창에서 줄을 바꾼다 — 이 묶음에 새 조각이 들어와도 같다. 근거는 `.wb-shell-header`의
-     `max-width`. */
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-
-/* 지금 로그인한 사람. 이름이지 조작이 아니므로 흐린 색이다 — `.wb-shell-zoom-value`·
-   `.wb-shell-field`가 같은 자리에서 같은 값을 쓴다. */
-.wb-shell-session-user {
-  color: var(--wb-shell-muted);
-  white-space: nowrap;
-}
-
-/* 로그아웃. **머리의 다른 버튼(`.wb-shell-zoom-step`·`.wb-shell-history-step`)과 같은 값이다** —
-   같은 줄에 나란히 서므로 테두리 굵기·모서리가 어긋나면 그 줄이 두 벌로 보인다. */
-.wb-shell-session-logout {
-  appearance: none;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 6px;
-  padding: 4px 8px;
-  background: #fff;
-  font: inherit;
-  color: var(--wb-shell-ink);
-  cursor: pointer;
-}
-
-/* 요청이 도는 동안. `.wb-shell-history-step:disabled`와 같은 값이다 — 자리를 지키고 색만 죽인다. */
-.wb-shell-session-logout:disabled {
-  background: var(--wb-shell-chrome);
-  color: var(--wb-shell-muted);
-  cursor: default;
-}
-
-/* 로그아웃 실패 문장. **`.wb-shell-edit-alert`와 같은 장치다** — `flex-basis: 100%`가 머리의
-   `flex-wrap`을 타고 아랫줄로 내려보낸다. 색을 주지 않는 것도 그쪽과 같은 근거다(이 셸의
-   `role="alert"` 자리들이 다 색이 없고, 손대려면 그것을 함께 봐야 한다). */
+/* 세션 통지(전환 · 로그아웃 실패) — 에디터 하단 바의 통지 무리에 선다(`routes/editor.tsx`의 `SessionNotices`). 셸 밖 화면은 이 클래스가
+   아니라 `.wb-shell-project-alert`로 머리 아래에 선다(`shell/page-head.tsx`). 값은 `.wb-shell-edit-alert`와 같다 — 색을 주지 않는
+   것도 그쪽과 같은 근거다(이 셸의 `role="alert"` 자리들이 다 색이 없고, 손대려면 그것을 함께 봐야 한다). */
 .wb-shell-session-alert {
   flex-basis: 100%;
   margin: 0;
@@ -1842,14 +1802,25 @@
   color: var(--wb-shell-ink);
 }
 
-/* 목록 화면의 머리 줄 — 제목과 `…`(`shell/action-menu.tsx`). **셸 머리와 같은 모양이다**: `space-between`이
-   둘을 양 끝에 세운다. 세션 통지(전환 · 로그아웃 실패)는 머리 **아래** 형제로 선다(`.wb-shell-project-alert`). */
+/* 셸 밖 화면의 머리 줄(`shell/page-head.tsx`) — 왼쪽(로고 · 제목)과 `…`(`shell/action-menu.tsx`). **셸 머리와 같은 모양이다**:
+   `space-between`이 둘을 양 끝에 세운다. 세션 통지(전환 · 로그아웃 실패)는 머리 **아래** 형제로 선다(`.wb-shell-project-alert`). */
 .wb-shell-project-head {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
+}
+
+/* 머리의 왼쪽 — 로고(`shell/brand-link.tsx`)와 제목. 프로젝트 목록은 로고가 없어 제목만 선다(이 무리 없이). **`baseline`이다** — 제목의
+   아래 여백(`.wb-shell-project-list-title`)이 있어 `center`면 로고가 그 여백의 반만큼 내려간다. 좁은 창에서 긴 제목은 로고 아래 줄로
+   간다(`flex-wrap` — `test/shell-css-narrow.test.ts`). `min-width: 0`은 머리의 `…`가 창 밖으로 밀리지 않게 한다. */
+.wb-shell-page-lead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  min-width: 0;
 }
 
 .wb-shell-project-list-title {
@@ -2871,26 +2842,10 @@
   font-size: 11px;
 }
 
-/* ── 내 API 토큰(`routes/tokens.tsx`) ──────────────────────────────────────────────────────
+/* ── 내 API 토큰(`account/tokens-section.tsx`) ──────────────────────────────────────────────────────
    화면 루트는 `.wb-shell-project-list`를 함께 달아 팔레트 · 폭 · 글꼴을 받고, 목록 · 단추는 프로젝트 목록의 것을 그대로
-   쓴다(`-project-items` · `-project-item` · `-project-action` · `-project-danger`) — 같은 계정 묶음에서 가는 두 화면이 한
+   쓴다(`-project-items` · `-project-item` · `-project-action` · `-project-danger`) — 셸 밖 화면이 한
    어휘다. 여기 있는 것은 이 화면에만 있는 칸이다. */
-
-/* 계정 묶음의 링크. **로그아웃 단추와 나란히 서므로 같은 높이 · 모서리다** — 링크라 밑줄을 지우고 강조색 글자로 가른다.
-   좁은 폭에서 어떻게 접히는지는 셸 머리의 접는 규칙이 정한다. */
-.wb-shell-session-tokens {
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 6px;
-  padding: 4px 8px;
-  background: #fff;
-  color: var(--wb-shell-accent);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.wb-shell-tokens-lead {
-  margin: 0 0 8px;
-}
 
 .wb-shell-tokens-back {
   color: var(--wb-shell-accent);
@@ -2904,7 +2859,7 @@
 }
 
 /* 전부 폐기 — 목록 위. 확인이 열리면 **세로로 쌓는다** — `전부 폐기` 자리에 `취소`가 서고 확정은 그 밑이다. 가로로 세우면
-   왼쪽 정렬이라 먼저 그린 단추가 `전부 폐기` 자리를 덮는다(`routes/tokens.tsx` 머리말 «더블클릭 한 번이 두 누름을 다 지나면
+   왼쪽 정렬이라 먼저 그린 단추가 `전부 폐기` 자리를 덮는다(`account/tokens-section.tsx` 머리말 «더블클릭 한 번이 두 누름을 다 지나면
    안 된다»). */
 .wb-shell-tokens-bulk {
   display: flex;
@@ -2940,7 +2895,7 @@
 }
 
 /* 줄 하나의 확정 — 만든 때 줄(`order: 1` · 폭 전부) **밑으로** 보내 오른쪽 끝에 세운다. 첫 줄에 두면 남는 폭에 따라 확정이
-   `폐기` 자리로 밀려 온다(`routes/tokens.tsx` 머리말 «더블클릭 한 번이 두 누름을 다 지나면 안 된다»).
+   `폐기` 자리로 밀려 온다(`account/tokens-section.tsx` 머리말 «더블클릭 한 번이 두 누름을 다 지나면 안 된다»).
    **위 여백이 묻던 자리와의 거리를 정한다.** 좁은 폭에서 긴 이름의 `폐기`는 둘째 줄로 접혀 있다가, 누르면 그 줄에 만든 때 줄이
    서고 확정은 바로 밑이다 — 여백 없이는 둘 사이가 줄 간격뿐이고 `align-items: baseline` 이라 글꼴 따라 그보다 좁다([Chrome] 폭
    360–414 에서 6px). 위의 전부 폐기와 같은 하한(단추 한 높이 이상)을 준다. 재는 자: `build-test/tokens-confirm.test.ts` 의 «거리». */
@@ -2951,7 +2906,7 @@
 }
 
 /* 목록 줄의 «설정»(`routes/project-list.tsx`) — 모든 멤버에게 있는 링크다. 줄의 단추들과 같은 높이 · 모서리로 서되, 링크라 밑줄을
-   지우고 강조색 글자로 가른다(계정 묶음의 «API 토큰» 링크와 같은 꼴). */
+   지우고 강조색 글자로 가른다. */
 .wb-shell-project-settings {
   flex: none;
   border: 1px solid var(--wb-shell-line);
