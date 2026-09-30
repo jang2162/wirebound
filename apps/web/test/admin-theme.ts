@@ -3,7 +3,7 @@
  *
  * 실 system-admin(`@wirebound/system-theme-admin`)을 쓰지 않는 까닭: jsdom 판은 서버에 안 닿아 실 테마를 따라갈 까닭이 없고, system-admin 은
  * 제 디렉터리 안에서 판 · 토큰 · variant · 뷰를 고친다 — 그때마다 웹 케이스의 기대(variant 칸 · 기본 뷰 DOM)가 흔들린다. 뷰는 SDK 기본 뷰다.
- * 서버 시딩을 따라가야 하는 실브라우저 판(`build-test`)은 `apps/api/test/system-admin.ts` 가 실 manifest 에서 읽는다.
+ * 서버 시딩을 따라가야 하는 실브라우저 판(`build-test`)은 `@wirebound/test-support/system-admin` 이 시딩하는 산출물의 manifest 에서 읽는다.
  */
 import { DEFAULT_VIEWS, defineTheme, type ThemeManifest } from '@wirebound/theme-sdk'
 

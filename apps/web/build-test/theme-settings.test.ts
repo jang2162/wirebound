@@ -10,7 +10,7 @@ import type { Page } from 'playwright-core'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack } from './editor-stack'
 import { canvasVar, countThemeFiles, themeProject } from './theme-fixtures'
 
-/** system-admin 의 색 토큰 — 판 · 키 · 칸 이름을 글자로 적지 않는다(`apps/api/test/system-admin.ts`). */
+/** system-admin 의 색 토큰 — 판 · 키 · 칸 이름을 글자로 적지 않는다(`@wirebound/test-support/system-admin`). */
 const COLOR = SYSTEM_ADMIN.color
 
 const 전제 = await editorStackPrerequisite()

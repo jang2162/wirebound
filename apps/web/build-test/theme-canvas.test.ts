@@ -16,7 +16,7 @@ if (!전제.ok) {
   console.log(`[에디터 실브라우저 판] 건너뛴다 — ${전제.reason}`)
 }
 
-/** system-admin 의 색 토큰 — 토큰 시트가 그 기본값을 이겨야 저장한 값이 선다. 판 · 키는 글자로 적지 않는다(`apps/api/test/system-admin.ts`). */
+/** system-admin 의 색 토큰 — 토큰 시트가 그 기본값을 이겨야 저장한 값이 선다. 판 · 키는 글자로 적지 않는다(`@wirebound/test-support/system-admin`). */
 const COLOR = SYSTEM_ADMIN.color
 const ADMIN_PRIMARY = COLOR.value
 

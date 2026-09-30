@@ -23,7 +23,7 @@ import {
 import { laterAdminVersion, SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 import { manifestOf, packed } from './theme-fixtures'
 
-/** 새 프로젝트가 고정하는 system-admin 의 판과 색 토큰 — 글자로 적지 않는다(`test/system-admin.ts`). */
+/** 새 프로젝트가 고정하는 system-admin 의 판과 색 토큰 — 글자로 적지 않는다(`@wirebound/test-support/system-admin`). */
 const V = SYSTEM_ADMIN.version
 const C = SYSTEM_ADMIN.color.key
 import { joinRoom, type WsProbe } from './ws-client'
