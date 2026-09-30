@@ -97,6 +97,13 @@ pnpm vitest run <경로>    # 단일 파일 테스트
   - **건너뛴(skipped) 수도 적는다.** «없으면 건너뛰는» 자는 건너뛸 전제를 **실물로** 정한다 — 경로가 있는지가 아니라 띄워 보고(`apps/api/build-test/screen-chromium.test.ts` 의 `browserLaunches`). 경로로 정하면 문서대로 세운 기계에서 대부분을 건너뛴 채 통과로 끝난다.
   - **셸은 zsh 다.** 따옴표 없는 `$VAR` 는 공백에서 안 쪼개져 테스트 경로 여럿이 한 경로로 읽히고 아무것도 안 돈다 — 배열(`"${T[@]}"`)을 쓴다. `=` 로 시작하는 낱말은 명령 경로로 바뀌어 `echo =====` 가 명령 줄 전체를 죽인다 — 따옴표로 싼다. `${v:+-e X=$v}` 처럼 조건부로 인자 둘을 만드는 확장도 한 낱말이다 — docker 가 `-e " X=…"` 로 읽고 스모크가 대부분을 건너뛴 채 «통과»로 끝났다. `local -a args=(); [[ -n $v ]] && args=(-e "X=$v")` 로 배열을 만든다. 명령 여럿을 변수 하나에 담아 부르지 않는다(`P='docker … psql'; $P -c …` → `command not found`) — 함수로 만든다. 그 줄의 `;` 뒤 명령은 앞이 안 돌아도 돈다(재려던 조작은 안 되고 뒤의 `migrate:down` 만 돌았다). 변조 결과가 «0 사망»이면 실행 수부터 본다.
 
+### build 프로젝트에서는 `*.css?raw` 가 빈 글자다
+
+루트 `vitest.config.ts` 의 `css.include` 는 unit 프로젝트에만 있어 `--project build` 에서 `theme.css?raw` 는 빈 글자로 읽힌다.
+
+- **Why:** 빈 글자와 견주는 단언(`toContain(css.slice(0, 200))`)은 `toContain('')` 이 되어 늘 참이다 — system-admin build-test 가 그렇게 아무것도 안 쟀다.
+- **How to apply:** build-test 에서 소스 CSS 가 필요하면 `readFileSync` 로 읽고 `length > 0` 카나리아를 함께 둔다. 빌드된 `theme.css` 는 줄인 글자라 소스와 글자로 견주지 않는다 — 토큰 기본값(`--wb-<키>: <값>;`)처럼 뜻이 같은 조각으로 잰다.
+
 ### `apps/*`·`packages/*` 바로 밑에 `tsconfig*.json` 을 새로 두지 않는다
 
 루트 `pnpm typecheck` 는 `tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json` 이다 — **그 글롭에 걸리는 파일은 전부 빌드된다.**
