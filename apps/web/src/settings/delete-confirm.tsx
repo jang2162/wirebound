@@ -20,6 +20,10 @@
  * `'  앞뒤 공백  '`으로 만들면 그대로 돌아온다). 즉 **공백만 다른 두 프로젝트가 함께 있을 수
  * 있고**, 입력을 다듬으면 `'가 '`와 `'가'` 중 어느 것을 확인한 것인지 갈리지 않는다. 확인의
  * 하중이 *"어느 것을 지우는지 안다"*이므로 정확히 일치로 둔다.
+ *
+ * **다만 두 쪽을 NFC 로 편 뒤 견준다.** 서버는 이름을 NFC 로도 펴지 않아 조합형(NFD)으로 붙여 만든 이름은 완성형 자판 입력과
+ * 글자가 다르다 — 글자 그대로 견주면 보이는 이름을 그대로 쳐도 영영 안 열린다. NFC 로 펴도 보이는 글자가 같은 두 이름만 같아지고,
+ * 지우는 대상은 이름이 아니라 이 프로젝트의 id 라 다른 프로젝트를 지우지 않는다. 대소문자 · 공백은 보이는 글자가 달라 그대로 가른다.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import type { ProjectDetail } from '../api/types'
@@ -64,13 +68,13 @@ export function DeleteConfirm(props: {
           onChange={(event) => setTyped(event.target.value)}
         />
       </label>
-      {/* **정확히 일치할 때만 활성이다.** 여기서 `trim`하지 않는 근거는 머리말에 있다. */}
+      {/* **정확히 일치할 때만 활성이다**(NFC 로 편 뒤). 여기서 `trim`하지 않는 근거 · NFC 로 펴는 근거는 머리말에 있다. */}
       {/* **되돌릴 수 없는 유일한 버튼이라 이것만 붉다.** 목록의 `삭제`는 이 확인을 열 뿐이라
           흰 바탕을 쓴다 — 되돌릴 수 있는 것에 붉은색을 쓰면 진짜 붉은색의 뜻이 닳는다. */}
       <button
         className="wb-shell-project-danger"
         type="button"
-        disabled={props.busy || typed !== props.project.name}
+        disabled={props.busy || typed.normalize('NFC') !== props.project.name.normalize('NFC')}
         onClick={props.onConfirm}
       >
         삭제 확정
