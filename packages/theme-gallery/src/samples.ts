@@ -9,6 +9,12 @@ export interface GallerySample {
 const child = (id: string, content = `자식 ${id}`): WbNode => ({ id, type: 'Text', props: { content } })
 
 /**
+ * 끊을 자리가 없는 긴 낱말 — 관리자 화면의 이메일 · 주소는 흔히 이 꼴이다. 하이픈을 넣지 않는다 — 브라우저는 하이픈 뒤에서 줄을 바꿔
+ * (`example-` 까지가 390 폭 본문에 들어간다) 넘침을 못 보인다.
+ */
+const LONG_WORD = 'hong.gildong.very.long.account@examplecompany.co.kr'
+
+/**
  * 카탈로그 컴포넌트마다 표본 노드. 갤러리가 manifest 가 선언한 variant 마다 한 번씩 그린다(`galleryItems`).
  *
  * **`variant` 를 적지 않는다** — 갤러리가 선언된 variant 를 붙인다. `variantFrom` 컴포넌트(`Text` · `Field` · `Divider`)는
@@ -44,7 +50,10 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   ],
   Tree: [{ label: 'Tree — 두 단계', node: { id: 'tree', type: 'Tree', props: { items: ['뿌리', '가지', '잎'], depth: 2 } } }],
   KeyValue: [
-    { label: 'KeyValue — 쌍 둘 · 2열', node: { id: 'kv', type: 'KeyValue', props: { pairs: [{ key: '이름', value: '홍' }, { key: '나이', value: '3' }], columns: 2 } } },
+    {
+      label: 'KeyValue — 쌍 셋 · 2열 · 긴 값',
+      node: { id: 'kv', type: 'KeyValue', props: { pairs: [{ key: '이름', value: '홍' }, { key: '나이', value: '3' }, { key: '이메일', value: LONG_WORD }], columns: 2 } },
+    },
   ],
   SearchForm: [
     {
@@ -92,6 +101,8 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     { label: 'Text — h2', node: { id: 'text', type: 'Text', props: { content: '제목 글', role: 'h2' } } },
     { label: 'Text — body', node: { id: 'text2', type: 'Text', props: { content: '본문 글입니다.', role: 'body' } } },
     { label: 'Text — caption', node: { id: 'text3', type: 'Text', props: { content: '덧붙임', role: 'caption' } } },
+    // 끊을 자리 없는 낱말 — 좁은 폭(`wb-theme shots` 의 390)에서 글자가 칸 밖으로 나가거나 잘려 숨는지를 이 칸이 보인다.
+    { label: 'Text — 긴 낱말', node: { id: 'text6', type: 'Text', props: { content: `문의 ${LONG_WORD}`, role: 'body' } } },
   ],
   Media: [
     { label: 'Media — 캡션 · 4/3', node: { id: 'media', type: 'Media', props: { kind: 'video', caption: '설명', ratio: '4/3' } } },
