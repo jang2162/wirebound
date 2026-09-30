@@ -141,3 +141,12 @@ export async function destroySession(db: DbHandle, token: string): Promise<void>
 export async function destroyUserSessions(db: DbHandle, userId: string): Promise<void> {
   await db.deleteFrom('sessions').where('user_id', '=', userId).execute()
 }
+
+/**
+ * 한 사용자의 세션을 `keep` 하나만 남기고 지운다(비밀번호 바꾸기 — 바꾼 세션만 남는다). 지운 행의 id 를 낸다 — 부르는 쪽이 그
+ * 세션들의 WS 연결을 닫는다(`ws/notify.ts` 의 `closeSessionConnections`).
+ */
+export async function destroyOtherSessions(db: DbHandle, userId: string, keep: string): Promise<string[]> {
+  const rows = await db.deleteFrom('sessions').where('user_id', '=', userId).where('id', '<>', keep).returning('id').execute()
+  return rows.map((row) => row.id)
+}

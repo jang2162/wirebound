@@ -100,6 +100,15 @@ export async function insertUser(
 }
 
 /**
+ * 그 사용자의 비밀번호 해시를 바꾼다(`POST /api/auth/password`). 그 행이 없으면 `false`. `UPDATE` 는 사용자 행을 잡는다 — 같은
+ * 사람의 비밀번호 바꾸기 둘이 여기서 줄을 선다(차례의 까닭은 `routes/auth.ts` 의 `/password`).
+ */
+export async function setPasswordHash(db: DbHandle, userId: string, passwordHash: string): Promise<boolean> {
+  const updated = await db.updateTable('users').set({ password_hash: passwordHash }).where('id', '=', userId).returning('id').executeTakeFirst()
+  return updated !== undefined
+}
+
+/**
  * 주어진 id 중 **실제로 있는 것**만 낸다(복원이 부른다).
  *
  * 복원은 payload의 코멘트를 되살릴 때 `author_id`를 그대로 쓰는데, 그 컬럼이

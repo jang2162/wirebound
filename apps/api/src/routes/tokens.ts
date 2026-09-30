@@ -71,9 +71,10 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
+import { requireSessionUser as requireSession } from '../auth/session-only'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction } from '../db/tx'
-import { badRequest, forbidden, notFound, unauthenticated } from '../errors'
+import { badRequest, notFound } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import {
   deleteAllUserTokens,
@@ -207,21 +208,8 @@ export function myTokenRoutes() {
 }
 
 /**
- * 이 요청이 **세션으로** 인증됐는지 확인하고 그 사용자를 낸다. 토큰이면 403이다.
- *
- * 근거는 이 파일 머리말의 *"이 셋은 세션으로만 부를 수 있다"*에 있다. 여섯이(«내 토큰» 셋 포함) 같은 문장을
- * 쓰도록 함수 하나로 둔다 — 갈리면 한 라우트만 열려 있는 상태가 조용히 생긴다.
+ * 토큰 관리 여섯(«내 토큰» 셋 포함)이 같은 문장으로 거절하게 한 자리에 둔다 — 판정은 `auth/session-only.ts`.
  */
-function requireSessionUser(request: {
-  currentUser: { id: string; email: string; name: string } | null
-  authKind: 'session' | 'token' | null
-}): { id: string; email: string; name: string } {
-  const currentUser = request.currentUser
-  if (!currentUser) {
-    throw unauthenticated()
-  }
-  if (request.authKind !== 'session') {
-    throw forbidden('API 토큰으로는 토큰을 관리할 수 없습니다. 로그인 후 다시 시도하세요')
-  }
-  return currentUser
+function requireSessionUser(request: Parameters<typeof requireSession>[0]) {
+  return requireSession(request, 'API 토큰으로는 토큰을 관리할 수 없습니다. 로그인 후 다시 시도하세요')
 }

@@ -2593,6 +2593,8 @@ describe('프로젝트 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로
 const NOT_LOCKED: Record<string, string> = {
   'POST /api/auth/login': '프로젝트 밖 — 세션 행만 쓴다',
   'POST /api/auth/logout': '프로젝트 밖 — 세션 행만 지운다',
+  'POST /api/auth/password':
+    '프로젝트 밖 — 사용자 행의 `password_hash` 를 고치고(`NO KEY UPDATE` — FK 의 `KEY SHARE` 와 안 부딪힌다) 같은 사람의 다른 세션 행을 지운다. 페이지 · 복원 · 트리 · 프로젝트 삭제(CASCADE) 뒤에서 안 선다. 같은 사람의 다른 세션이 낸 쓰기가 재확인(`KEY SHARE`)부터 커밋까지 그 세션 행을 쥔 동안은 선다 — 그 쓰기의 커밋까지다',
   'POST /api/projects': '새 프로젝트 — 남이 쥘 수 있는 행이 아직 없다',
   'PATCH /api/projects/:projectId/members/:userId':
     '멤버 행 — FK 열을 안 바꾸는 UPDATE 는 프로젝트 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404)',

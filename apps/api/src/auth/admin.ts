@@ -3,7 +3,7 @@
  *
  * 관리자는 프로젝트 역할과 별개다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「인스턴스 관리자」). 그래서
  * `projectGuard` 를 안 쓰고, 판정을 **가드 앞 훅이 아니라 핸들러 첫 줄**에 둔다 — 이 저장소는 `requireAuth` 뒤에 붙는 훅을
- * 허용 목록으로만 받는다(`test/pre-guard-hook-census.test.ts`). `routes/tokens.ts` 의 `requireSessionUser` 와 같은 꼴이다.
+ * 허용 목록으로만 받는다(`test/pre-guard-hook-census.test.ts`). `auth/session-only.ts` 의 `requireSessionUser` 와 같은 꼴이다.
  *
  * **판정은 요청마다 DB 에서 읽는다** — 세션에 얼려 두면 `admin revoke`(`db/admin.ts`)가 그 세션이 끝날 때까지 안 먹는다.
  */
