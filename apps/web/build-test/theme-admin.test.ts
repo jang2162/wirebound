@@ -43,7 +43,7 @@ describe.skipIf(!전제.ok)('관리자 화면에서 올리고 설정에서 바�
     try {
       // 관리자 항목은 목록 머리의 `…` 에 — 관리자에게만.
       await a.page.goto('/')
-      await a.page.getByRole('button', { name: '더 보기' }).click()
+      await a.page.getByRole('button', { name: '더 보기', exact: true }).click()
       await a.page.getByRole('menuitem', { name: '테마 관리' }).click()
       await a.page.getByRole('heading', { name: '테마 관리' }).waitFor()
       await a.page.getByLabel('테마 패키지 올리기').setInputFiles({ name: 'sample-1.0.0.wbtheme', mimeType: '', buffer: Buffer.from(bytes) })

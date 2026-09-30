@@ -245,7 +245,7 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
 })
 
 async function openDialog(page: Page, item: string): Promise<void> {
-  await page.getByRole('button', { name: '더 보기' }).click()
+  await page.getByRole('button', { name: '더 보기', exact: true }).click()
   await page.getByRole('menuitem', { name: item }).click()
   await page.locator('dialog[open]').waitFor()
 }
