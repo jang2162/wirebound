@@ -14,6 +14,8 @@ import type {
   MarkerChange,
   MenuNode,
   MyApiToken,
+  ProjectMember,
+  ProjectRole,
   PageDetail,
   PageImported,
   PatchResult,
@@ -97,6 +99,14 @@ export interface ApiClient {
    * `toFailure`)과 가른다(`WRONG_PASSWORD`). 한도에 닿으면 429 `rate-limited`(서버 README «로그인 시도 제한»).
    */
   changePassword(currentPassword: string, newPassword: string): Promise<void>
+  /** 프로젝트 멤버 목록 — 초대한 차례(viewer 부터 부른다). 설정 페이지의 멤버 절(`settings/members-section.tsx`)이 부른다. */
+  listMembers(projectId: string, options?: ReadOptions): Promise<ProjectMember[]>
+  /** 이미 계정이 있는 사람을 초대한다(owner). 없는 계정 404 · 이미 멤버 409 — 문장은 서버 봉투다. */
+  addMember(projectId: string, email: string, role: ProjectRole): Promise<ProjectMember>
+  /** 멤버의 역할을 바꾼다(owner). 마지막 owner 의 강등은 409 · 이미 빠진 멤버는 404. */
+  updateMemberRole(projectId: string, userId: string, role: ProjectRole): Promise<ProjectMember>
+  /** 멤버를 뺀다(owner). 그 사람의 그 프로젝트 토큰도 함께 지워진다(서버). 마지막 owner 는 409 · 이미 빠졌으면 404. */
+  removeMember(projectId: string, userId: string): Promise<void>
   /**
    * `cancel`은 셸을 떠나면 끊는다(`routes/editor.tsx`의 첫 조회 · `reread`). 응답의 `themeRev` 는 셸의 다시 읽기가 테마를 따라잡는 데
    * 쓴다(`ProjectView`).

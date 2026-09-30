@@ -90,6 +90,11 @@ export interface ProjectAbilities {
    * 둘을 다른 라우트로 받는다(`rename` · `remove` 를 가르는 것과 같은 판단).
    */
   chooseTheme: boolean
+  /**
+   * **멤버를 초대하고 역할을 바꾸고 뺄 수 있는가**(`POST · PATCH · DELETE .../members` — owner). 목록은 viewer 도 본다(`GET`). 설정 페이지의
+   * «멤버» 절이 폼 · 고르개 · 제외를 이것으로 연다. `rename` 과 값이 같아도 따로 둔다 — 서버가 다른 라우트로 받는다.
+   */
+  manageMembers: boolean
 }
 
 /** 아무것도 못 하는 상태. 역할을 모르거나 계약 밖 값일 때의 답이다. */
@@ -100,6 +105,7 @@ const NOTHING: ProjectAbilities = {
   restoreSnapshot: false,
   editDesign: false,
   chooseTheme: false,
+  manageMembers: false,
 }
 
 /**
@@ -146,6 +152,7 @@ export function projectAbilities(role: ProjectRole | undefined): ProjectAbilitie
       restoreSnapshot: true,
       editDesign: true,
       chooseTheme: true,
+      manageMembers: true,
     }
   }
   // **editor가 여는 것은 스냅샷 생성과 설계서 본문이다**(「권한 모델」). `role !== 'owner'`면

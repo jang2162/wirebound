@@ -40,6 +40,7 @@ const METHODS = [
   'login', 'logout', 'me',
   'listProjects', 'getProject', 'createProject', 'updateProject', 'deleteProject',
   'listMyTokens', 'revokeMyToken', 'revokeAllMyTokens', 'changePassword',
+  'listMembers', 'addMember', 'updateMemberRole', 'removeMember',
   'getTree',
   'createMenu', 'updateMenu', 'deleteMenu',
   'createPage', 'updatePage', 'deletePage', 'getPage', 'importPage',
@@ -98,6 +99,12 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   revokeAllMyTokens: ['../src/account/tokens-section.tsx'],
   // 계정 설정의 비밀번호 절 하나다. 204 라 읽는 본문이 없다(`SHAPES.noBody`).
   changePassword: ['../src/account/password-section.tsx'],
+  // 설정 페이지의 «멤버» 절 하나다. 줄의 글자 · 역할 고르개의 값 · 주소(`userId`)를 읽는다(`SHAPES.members` · `SHAPES.member`) —
+  // 초대 · 역할 바꾸기의 응답은 읽지 않는다(성공하면 목록을 다시 받는다).
+  listMembers: ['../src/settings/members-section.tsx'],
+  addMember: ['../src/settings/members-section.tsx'],
+  updateMemberRole: ['../src/settings/members-section.tsx'],
+  removeMember: ['../src/settings/members-section.tsx'],
   // **소비자가 셋이고 읽는 것이 다르다.** 셸은 `name`·`id`·`themeRev`(테마 따라잡기)를 그리려고 부르고, 스냅샷 화면은 **`role`**
   // 때문에 부른다 — 「권한 모델」이 생성을 editor에게 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다). 설정 페이지는
   // 이름 · 슬러그 · 설명(«일반» 의 지금 값)과 `role`(칸을 열지)을 읽는다.

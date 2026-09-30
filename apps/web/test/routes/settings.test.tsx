@@ -27,6 +27,7 @@ function renderSettings(overrides: Partial<ApiClient> = {}): void {
       getProject: async () => project(),
       getProjectTheme: async () => adminThemeView(),
       listThemePackages: async () => [],
+      listMembers: async () => [],
       ...overrides,
     }),
     route: '/projects/p-1/settings',

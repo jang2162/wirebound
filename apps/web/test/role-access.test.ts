@@ -61,8 +61,11 @@ describe('역할을 읽는 자리', () => {
   it('.role을 읽는 코드는 전부 판정 함수의 호출부다', () => {
     const reads = roleReads()
 
-    // 하중: 판정 함수를 지나지 않는 읽기가 하나도 없다.
-    expect(reads.filter((r) => !r.line.includes('projectAbilities('))).toEqual([])
+    // 하중: 판정 함수를 지나지 않는 읽기가 하나도 없다 — **판정한 예외 하나**: 설정 페이지 «멤버» 절이 **그 멤버의** 역할
+    // (`member.role` — 줄에 보이고 고르개에 싣는 값)을 읽는다. 부르는 사람의 권한이 아니라 표의 값이다. 예외는 그 파일의
+    // `member.role` 글자뿐이다 — 같은 파일의 다른 `.role` 읽기는 여전히 여기서 죽는다.
+    const memberRow = (r: { path: string; line: string }) => r.path === '../src/settings/members-section.tsx' && /\bmember\.role\b/.test(r.line)
+    expect(reads.filter((r) => !r.line.includes('projectAbilities(') && !memberRow(r))).toEqual([])
 
     // 자리: 새 화면이 역할을 보게 되면 여기가 죽는다.
     expect([...new Set(reads.map((r) => r.path))].sort()).toEqual([
@@ -76,6 +79,8 @@ describe('역할을 읽는 자리', () => {
       '../src/settings/general-section.tsx',
       // «테마» 절이 고르개를 열지(`chooseTheme`)를 안다.
       '../src/settings/theme-section.tsx',
+      // «멤버» 절이 초대 · 역할 바꾸기 · 제외를 열지(`manageMembers`)를 안다(멤버 줄의 `member.role` 은 위 예외).
+      '../src/settings/members-section.tsx',
     ].sort())
   })
 

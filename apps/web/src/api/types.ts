@@ -28,6 +28,18 @@ export interface SessionUser {
 }
 
 /**
+ * 프로젝트 멤버 한 줄(`GET · POST · PATCH /api/projects/:projectId/members` — 서버 README 「엔드포인트」). `role` 은 **그 멤버의** 역할이다 —
+ * 화면이 보이고 바꿀 값이지 부르는 사람의 권한 판정이 아니다(판정은 `projects/project-actions.ts` 의 `projectAbilities`).
+ */
+export interface ProjectMember {
+  userId: string
+  email: string
+  name: string
+  role: ProjectRole
+  invitedAt: string
+}
+
+/**
  * `GET /api/auth/tokens`의 한 줄 — **로그인한 사람의 토큰 전부**(프로젝트를 가로지른다). 원문은 없다.
  * `projectName`은 지금 그 프로젝트의 멤버일 때만 있다 — 멤버가 아니면 `null`이고 `member`가 `false`다(서버
  * `routes/tokens.ts`의 «내 토큰은 프로젝트를 가로지른다»). `lastUsedAt`은 한 번도 안 쓴 토큰이면 `null`이다.

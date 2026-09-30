@@ -51,6 +51,8 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
     restoreSnapshot: true,
     editDesign: true,
     chooseTheme: true,
+    // 멤버 초대 · 역할 바꾸기 · 제외는 owner 만이다(목록은 viewer 도 본다 — 판정이 필요 없다).
+    manageMembers: true,
   },
   // **editor는 스냅샷을 만들 수 있다.** 설계서 「권한 모델」이 스냅샷 **생성**을 editor에게
   // 열었기 때문이다 — 스냅샷은 아무것도 바꾸지 않는다.
@@ -66,6 +68,7 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
     // 같은 선이다 — 제목 · 설명만으로 좁히면 서버가 허락하는 편집을 화면이 막는다.
     editDesign: true,
     chooseTheme: false,
+    manageMembers: false,
   },
   viewer: {
     rename: false,
@@ -74,6 +77,7 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
     restoreSnapshot: false,
     editDesign: false,
     chooseTheme: false,
+    manageMembers: false,
   },
 }
 
@@ -84,6 +88,7 @@ const NOTHING: ProjectAbilities = {
   restoreSnapshot: false,
   editDesign: false,
   chooseTheme: false,
+  manageMembers: false,
 }
 
 describe('projectAbilities', () => {
@@ -113,6 +118,7 @@ describe('projectAbilities', () => {
       restoreSnapshot: true,
       editDesign: true,
       chooseTheme: true,
+      manageMembers: true,
     })
   })
 
@@ -154,6 +160,7 @@ describe('projectAbilities', () => {
       restoreSnapshot: true,
       editDesign: true,
       chooseTheme: true,
+      manageMembers: true,
     })
 
     // **스냅샷 생성은 둘이 열린다**(owner·editor — 설계서 「권한 모델」). 위 `opened`가
