@@ -17,17 +17,11 @@
  * `moveNodeOps` 머리말). 메뉴 트리의 판정(`tree/tree-drop.ts`)과 같은 뜻이라 같은 부모 안에서 뒤로 옮기면 자기 몫을 하나 당긴다.
  *
  * **남이 잡은 자리면 `null`이다** — 놓았을 때 낼 편집(`moveNodeOps`)을 지어 그 편집이 부딪치는 잠금을 묻는다(`blockedBy` — 스토어의
- * `editBlockedBy`). 편집으로 묻는 것이 요점이다: 서버가 2차 방어로 묻는 것이 바로 그 편집의 포인터이고(`@wirebound/schema`의
- * `lockPointers`), 노드 **고르기**의 판정(`lockedBy`)으로 물으면 놓을 부모 아래 아무 노드의 잠금에도 막힌다. 끄는 노드가 잠긴 자리
- * 안에 있으면 뽑는 포인터(`move`의 `from`)가 부딪쳐 어디에도 못 놓는다.
- *
- * **옮기기 전 좌표의 꽂는 자리도 함께 묻는다.** `move`의 `path`는 `from`을 뺀 **뒤**의 경로인데 잠금의 경로는 문서의 **지금** 경로로
- * 잰다(`findLockConflict`). 앞쪽 노드를 뒤쪽 형제의 서브트리로 옮기면 둘이 한 칸 어긋나 — `/root/children/1/…`에 선 잠긴 노드 안으로
- * 꽂는 `path`가 `/root/children/0/…`이 된다 — 편집의 포인터만 물으면 잠긴 노드 안으로 놓는 것이 지나간다. 그래서 같은 자리를 지금
- * 문서의 좌표(`부모의 지금 경로/children/끼울 자리`)로 한 번 더 묻는다. **편집의 포인터로 묻는 것도 뺄 수 없다** — 반대 방향의
- * 어긋남이 있다: 앞쪽 노드를 잠긴 노드 **뒤** 형제 앞으로 옮기면 뺀 뒤 좌표가 잠긴 노드의 지금 경로와 같아지고, 서버는 편집의 포인터를
- * 지금 문서의 잠금과 견주므로(2차 방어) 423 을 낸다. 두 물음이 각각 막는 판이 다르다. 줄 행동의 위로 · 들여쓰기 · 내어쓰기는 뽑는
- * 자리가 꽂는 부모보다 앞에 서지 않아 이 어긋남이 안 난다 — 끌어 놓기가 처음 여는 길이다.
+ * `editBlockedBy`). 편집으로 묻는 것이 요점이다: 서버가 2차 방어로 묻는 것이 바로 그 편집이고(`@wirebound/schema`의
+ * `lockConflictOfOps`), 노드 **고르기**의 판정(`lockedBy`)으로 물으면 놓을 부모 아래 아무 노드의 잠금에도 막힌다. 끄는 노드가 잠긴 자리
+ * 안에 있으면 뽑는 자리(`move`의 `from`)가 부딪쳐 어디에도 못 놓는다. **물음은 하나다** — `move`의 `path`는 `from`을 뺀 **뒤**의
+ * 좌표인데, 그 판정이 연산마다 좌표를 맞춰 잠긴 자리를 따라가므로(앞쪽 노드를 뒤쪽 형제의 잠긴 서브트리로 옮기는 판 · 잠긴 노드
+ * **뒤** 형제 앞으로 옮기는 판 둘 다) 옮기기 전 좌표로 다시 물을 일이 없다.
  *
  * **제자리면 `null`이다** — 보낼 편집이 없다.
  */
@@ -77,9 +71,6 @@ export function structureDropTarget(
 
   const ops = moveNodeOps(document, draggedId, parentId, index)
   if (ops === null || blockedBy(ops) !== null) return null
-  // 옮기기 전 좌표의 꽂는 자리(머리말 «옮기기 전 좌표의 …»).
-  const parentPath = zone === 'inside' ? over.path : over.path.slice(0, over.path.lastIndexOf('/children/'))
-  if (blockedBy([{ op: 'move', from: dragged.path, path: `${parentPath}/children/${insertAt}` }]) !== null) return null
   return { parentId, index, placement: zone }
 }
 

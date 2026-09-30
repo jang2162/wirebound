@@ -29,7 +29,7 @@
  *
  * # 서버 대역이 진짜 판정을 든다
  *
- * `patchOps`가 `findLockConflict`를 **직접** 부른다 — `apps/api`의 `lock/check.ts`가 부르는
+ * `patchOps`가 `lockConflictOfOps`를 **직접** 부른다 — `apps/api`의 `lock/check.ts`가 부르는
  * 그 함수다(`undo-locks.test.tsx`·`toolbar-abilities.test.tsx`와 같은 형태이고 같은 이유다).
  * 손으로 적은 200/423으로 대신하면 *"화면이 막아서 안 나갔다"*와 *"서버가 받아서 통과했다"*가
  * 같은 값으로 보인다.
@@ -77,9 +77,8 @@
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import {
-  findLockConflict,
   listComponents,
-  lockPointers,
+  lockConflictOfOps,
   type EditorControl,
   type PageDocument,
   type PatchOp,
@@ -234,10 +233,10 @@ async function board(): Promise<Board> {
   const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
     calls.push({ ops: body.ops })
     // **서버의 2차 방어를 그대로 돈다**(`apps/api/src/lock/check.ts`와 같은 인자).
-    const conflict = findLockConflict({
-      root: held.root,
+    const conflict = lockConflictOfOps({
+      document: held,
       locks: live.filter((entry) => entry.pageId === PAGE_ID),
-      pointers: lockPointers(body.ops),
+      ops: body.ops,
       viewerUserId: ME,
     })
     if (conflict !== null) {

@@ -11,7 +11,8 @@
  * 소스에서 센다)가 잰다.
  */
 import { describe, expect, it } from 'vitest'
-import { findLockConflict, lockPointers, locksAgainst, type NodeLock } from '../src/lock'
+import { findLockConflict, lockConflictOfOps, locksAgainst, type NodeLock } from '../src/lock'
+import type { PatchOp } from '../src/patch/types'
 import { findNodePath } from '../src/tree'
 import type { WbNode } from '../src/node'
 
@@ -150,36 +151,39 @@ describe('선택도 같은 함수로 묻는다 — 1차 방어와 2차 방어가
   })
 })
 
-describe('lockPointers — ops가 건드리는 자리 전부', () => {
-  it('경로 하나짜리 연산은 그 경로다', () => {
-    expect(
-      lockPointers([
-        { op: 'add', path: '/root/children/-', value: null },
-        { op: 'remove', path: '/root/children/0' },
-        { op: 'replace', path: '/root/children/1/props/x', value: 1 },
-      ]),
-    ).toEqual(['/root/children/-', '/root/children/0', '/root/children/1/props/x'])
+/** 편집이 부딪치는 잠금 — 서버의 2차 방어와 화면의 편집 물음이 부르는 그것(`lockConflictOfOps`). */
+function editConflict(ops: PatchOp[], locks: readonly NodeLock[] = [BORA]): NodeLock | null {
+  return lockConflictOfOps({ document: { root }, locks, ops, viewerUserId: ME })
+}
+
+describe('lockConflictOfOps — 편집이 건드리는 자리 전부', () => {
+  it('경로 하나짜리 연산은 그 경로로 잰다', () => {
+    expect(editConflict([{ op: 'replace', path: '/root/children/1/props', value: {} }])).toEqual(BORA)
+    expect(editConflict([{ op: 'remove', path: '/root/children/1/children/0' }])).toEqual(BORA)
+    expect(editConflict([{ op: 'add', path: '/root/children/1/children/-', value: { id: 'n_x', type: 'Text', props: {} } }])).toEqual(BORA)
+    expect(editConflict([{ op: 'replace', path: '/root/children/0/props', value: {} }])).toBeNull()
   })
 
-  it('`move`는 둘을 낸다 — 뽑는 자리도 꽂는 자리도 남의 잠금 안일 수 있다', () => {
-    expect(lockPointers([{ op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/children/-' }])).toEqual([
-      '/root/children/1/children/0',
-      '/root/children/0/children/-',
-    ])
-  })
-
-  it('뽑는 자리만 잠금 안이어도 충돌이다', () => {
-    const ops = lockPointers([{ op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/children/-' }])
-    expect(conflict(ops)).toEqual(BORA)
+  it('`move`는 둘을 잰다 — 뽑는 자리만 잠금 안이어도 충돌이다', () => {
+    expect(editConflict([{ op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/children/-' }])).toEqual(BORA)
   })
 
   it('꽂는 자리만 잠금 안이어도 충돌이다', () => {
-    const ops = lockPointers([{ op: 'move', from: '/root/children/0/children/0', path: '/root/children/1/children/-' }])
-    expect(conflict(ops)).toEqual(BORA)
+    expect(editConflict([{ op: 'move', from: '/root/children/0/children/0', path: '/root/children/1/children/-' }])).toEqual(BORA)
   })
 
-  it('빈 ops는 아무 자리도 안 낸다', () => {
-    expect(lockPointers([])).toEqual([])
+  it('빈 ops · 남의 잠금이 없으면 아무것도 막지 않는다', () => {
+    expect(editConflict([])).toBeNull()
+    expect(editConflict([{ op: 'remove', path: '/root/children/1' }], [{ ...BORA, userId: ME }])).toBeNull()
+  })
+
+  it('입력 문서를 바꾸지 않는다', () => {
+    const before = JSON.stringify(root)
+    editConflict([
+      { op: 'remove', path: '/root/children/0' },
+      { op: 'move', from: '/root/children/1', path: '/root/children/0/children/-' },
+    ])
+    expect(JSON.stringify(root)).toBe(before)
   })
 })
 
@@ -217,11 +221,9 @@ describe('1차 방어가 통과시킨 것을 2차 방어가 뒤집지 않는다'
   function canEditInside(nodeId: string): boolean {
     const path = findNodePath(root, nodeId)
     if (path === undefined) return false
-    const pointers = lockPointers([
-      { op: 'add', path: `${path}/children/-`, value: null },
-      { op: 'replace', path: `${path}/props/title`, value: 'x' },
-    ])
-    return findLockConflict({ root, locks: CROWD, pointers, viewerUserId: ME }) === null
+    // 모든 노드가 가진 키라 적용이 실패하지 않는다 — 적용이 실패하는 연산은 판정하지 않는다(`lockConflictOfOps`의 «판정하지 않는 것»).
+    const ops: PatchOp[] = [{ op: 'replace', path: `${path}/type`, value: 'Section' }]
+    return lockConflictOfOps({ document: { root }, locks: CROWD, ops, viewerUserId: ME }) === null
   }
 
   it('표가 두 갈래를 다 태운다 — 한쪽으로 쏠리면 아래가 공허해진다', () => {

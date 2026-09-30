@@ -3,7 +3,7 @@
  * 받고 `Text` · `Divider`는 안 받는다.
  */
 import { describe, expect, it } from 'vitest'
-import { applyOps, findLockConflict, lockPointers, type NodeLock, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { applyOps, lockConflictOfOps, type NodeLock, type PageDocument, type PatchOp } from '@wirebound/schema'
 import '../../src/catalog-setup'
 import { moveNodeOps } from '../../src/edit/ops'
 import { structureDropTarget } from '../../src/edit/structure-drop'
@@ -124,13 +124,13 @@ describe('못 놓는 자리', () => {
 })
 
 describe('남이 잡은 자리 — 낼 편집이 부딪치는 잠금', () => {
-  /** 남(보라)이 `nodeId`를 잡은 판 — 스토어의 `editBlockedBy`와 같은 판정(`findLockConflict` · `lockPointers`)을 지금 문서에 묻는다. */
+  /** 남(보라)이 `nodeId`를 잡은 판 — 스토어의 `editBlockedBy`와 같은 판정(`lockConflictOfOps`)을 지금 문서에 묻는다. */
   function lockOn(nodeId: string): (ops: readonly PatchOp[]) => NodeLock | null {
     return (ops) =>
-      findLockConflict({
-        root: doc().root,
+      lockConflictOfOps({
+        document: doc(),
         locks: [{ nodeId, userId: 'u-bora', userName: '보라' }],
-        pointers: lockPointers(ops),
+        ops,
         viewerUserId: 'u-me',
       })
   }
@@ -141,19 +141,19 @@ describe('남이 잡은 자리 — 낼 편집이 부딪치는 잠금', () => {
     // 잠긴 노드의 자식을 끈다 — 뽑는 자리가 부딪친다.
     expect(structureDropTarget(doc(), 'n-deep', 'n-a', 'after', blocked)).toBeNull()
     // 잠긴 노드 안으로 넣는다 — 꽂는 자리가 부딪친다. **앞쪽 노드(n-a)를 뒤쪽 형제의 서브트리로** 옮기는 판이라 편집의 `path`는
-    // 뺀 뒤 좌표(`/root/children/0/…`)다 — 옮기기 전 좌표로도 물어야 막힌다(`structure-drop.ts` 머리말).
+    // 뺀 뒤 좌표(`/root/children/0/…`)다 — 판정이 연산마다 좌표를 맞춰 막는다(`lockConflictOfOps`).
     expect(structureDropTarget(doc(), 'n-a', 'n-inner', 'inside', blocked)).toBeNull()
-    // 뒤쪽 노드(n-c)를 넣는 판 — 두 좌표가 같아 편집의 포인터만으로도 막힌다.
+    // 뒤쪽 노드(n-c)를 넣는 판 — 두 좌표가 같다.
     expect(structureDropTarget(doc(), 'n-c', 'n-inner', 'inside', blocked)).toBeNull()
   })
 
-  it('편집의 포인터가 잠긴 자리의 지금 경로에 닿으면 null — 서버의 2차 방어가 읽는 그대로다', () => {
+  it('잠긴 노드 **뒤** 형제 앞으로 옮기는 것은 선다 — 뺀 뒤 좌표가 잠긴 노드의 지금 경로와 같아도 잠긴 서브트리를 안 건드린다', () => {
     // n-box(= /root/children/1)가 잠겼다. n-a 를 n-c 앞으로 → 옮긴 뒤 [box a c] 이고 편집의 `path`는 뺀 뒤 좌표 `/root/children/1`
-    // 이다. 서버는 그 포인터를 **지금 문서**의 잠금 경로와 견주므로(`lockPointers` · `findLockConflict`) n-box 와 겹쳐 423 을 낸다 —
-    // 옮기기 전 좌표(`/root/children/2`)만 물으면 지나가 놓은 뒤 거절된다.
+    // 이다. 옛 판정은 그 포인터를 **지금 문서**의 잠금 경로와 견줘 423 을 냈고 화면도 그에 맞춰 이 자리를 안 받았다(C2 리뷰 발견 1 의
+    // «막힌다» 쪽 · `docs/superpowers/plans/2026-09-30-c2-fix-report.md`).
     const blocked = lockOn('n-box')
-    expect(structureDropTarget(doc(), 'n-a', 'n-c', 'before', blocked)).toBeNull()
-    expect(blocked(moveNodeOps(doc(), 'n-a', 'n-root', 1)!)).not.toBeNull()
+    expect(blocked(moveNodeOps(doc(), 'n-a', 'n-root', 1)!)).toBeNull()
+    expect(structureDropTarget(doc(), 'n-a', 'n-c', 'before', blocked)).toEqual({ parentId: 'n-root', index: 1, placement: 'before' })
   })
 
   it('편집이 부딪치지 않으면 선다 — 잠긴 노드의 옆 부모에 넣는 것은 된다', () => {

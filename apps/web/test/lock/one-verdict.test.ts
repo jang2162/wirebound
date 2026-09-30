@@ -43,10 +43,16 @@ function filesMatching(root: string, pattern: RegExp): string[] {
   )
 }
 
-/** 판정을 부르는 자리. 선언은 세지 않는다. */
+/** 판정을 부르는 자리 — 노드 하나를 고르는 판정. 선언은 세지 않는다. */
 const CALLS_VERDICT = /\bfindLockConflict\s*\(/
 /** 판정을 **선언**하는 자리. */
 const DECLARES_VERDICT = /export\s+function\s+findLockConflict\s*\(/
+/**
+ * **편집**의 판정을 부르는 자리 — `lockConflictOfOps`는 연산마다 좌표를 맞춰 잠긴 자리를 따라간다(`packages/schema/src/lock.ts`). 편집을
+ * 포인터로 바꿔 `findLockConflict`에 넣는 옛 길(`lockPointers`)은 앞 연산이 민 좌표를 편집 전 경로와 견줘 뚫렸다(C2 리뷰 발견 1).
+ */
+const CALLS_OPS_VERDICT = /\blockConflictOfOps\s*\(/
+const DECLARES_OPS_VERDICT = /export\s+function\s+lockConflictOfOps\s*\(/
 /** 잠금 소유자를 비교하는 자리 — 이것이 흩어지면 *"잠금 소유자는 사람이다"*가 자리 수만큼 다시 판정된다. */
 const COMPARES_OWNER = /\buserId\s*[!=]==/
 /**
@@ -83,6 +89,24 @@ describe('판정은 한 벌이다', () => {
     // 사람이 본다.
     expect(filesMatching(API_SRC, CALLS_VERDICT)).toEqual(['lock/check.ts'])
     expect(filesMatching(WEB_SRC, CALLS_VERDICT)).toEqual(['store/editor-store.ts'])
+  })
+
+  it('편집의 판정도 선언은 `packages/schema`에 하나이고 **양쪽이** 그것을 부른다', () => {
+    // 서버: `lock/check.ts`의 `lockConflictError`(REST `PATCH …/ops` · WS `patch` · MCP · `PUT …/schema`). 화면: 스토어의 `#editConflict`
+    // (끌어 놓기의 `editBlockedBy` · 되돌리기의 `#startFrom`). 화면이 편집을 다른 판정으로 물으면 화면이 받는 자리를 서버가 거절하거나
+    // 그 반대다 — 리뷰 발견 1 의 거짓 거절(«앞 노드를 잠긴 노드 뒤로»)이 화면에 그대로 옮겨져 있었다.
+    expect(filesMatching(SCHEMA_SRC, DECLARES_OPS_VERDICT)).toEqual(['lock.ts'])
+    expect(filesMatching(API_SRC, DECLARES_OPS_VERDICT)).toEqual([])
+    expect(filesMatching(WEB_SRC, DECLARES_OPS_VERDICT)).toEqual([])
+    expect(filesMatching(API_SRC, CALLS_OPS_VERDICT)).toEqual(['lock/check.ts'])
+    expect(filesMatching(WEB_SRC, CALLS_OPS_VERDICT)).toEqual(['store/editor-store.ts'])
+  })
+
+  it('편집을 포인터로 바꿔 넣는 옛 길이 앱에 없다', () => {
+    // `lockPointers`는 걷었다. 되살려 `findLockConflict`에 편집의 포인터를 넣으면 좌표가 다시 어긋난다.
+    expect(filesMatching(SCHEMA_SRC, /\blockPointers\b/)).toEqual([])
+    expect(filesMatching(API_SRC, /\blockPointers\b/)).toEqual([])
+    expect(filesMatching(WEB_SRC, /\blockPointers\b/)).toEqual([])
   })
 
   it('소유자 비교가 `packages/schema` 밖에 없다', () => {
@@ -168,6 +192,7 @@ describe('판정은 한 벌이다', () => {
     // 위 넷이 전부 `[]`를 기대하는 형태이므로, 정규식이 아무것도 안 맞아도 통과할 수 있다.
     // 실제로 맞는 것이 있다는 것을 여기서 본다.
     expect(filesMatching(SCHEMA_SRC, CALLS_VERDICT).length).toBeGreaterThan(0)
+    expect(filesMatching(SCHEMA_SRC, CALLS_OPS_VERDICT).length).toBeGreaterThan(0)
     expect(filesMatching(WEB_SRC, /\bfindNodePath\s*\(/).length).toBeGreaterThan(0)
   })
 

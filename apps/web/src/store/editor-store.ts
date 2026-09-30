@@ -18,7 +18,7 @@ import {
   applyOps,
   findLockConflict,
   findNodePath,
-  lockPointers,
+  lockConflictOfOps,
   type NodeLock,
   type PageDocument,
   type PatchOp,
@@ -2276,7 +2276,7 @@ export class EditorStore {
       // **문서는 되돌아간 채 남고 요청은 나가지 않으며 잠금이 풀린 뒤 다시 눌러도 그 항목은
       // 이미 없다.** 되돌아갔다가 재조회로 복귀하는 깜빡임은 그보다 나은 판이다.
       const blocked =
-        openPageId === null ? null : this.#lockConflict(openPageId, document, lockPointers(ops))
+        openPageId === null ? null : this.#editConflict(openPageId, document, ops)
       if (blocked !== null) {
         // **건너뛴 것만 버리고 막힌 것은 남긴다.** `stack`은 이미 건너뛴 만큼 좁혀져 있고
         // 그 맨 위가 막힌 항목이다 — 잠금이 풀리면 다음 누름이 바로 그것을 집는다.
@@ -2651,7 +2651,7 @@ export class EditorStore {
   }
 
   /**
-   * 그 **편집**이 부딪치는 남의 잠금 — 서버의 2차 방어가 그 편집에 대고 묻는 것과 같은 물음이다(`lockPointers(ops)` · `#startFrom`의 되돌리기와
+   * 그 **편집**이 부딪치는 남의 잠금 — 서버의 2차 방어가 그 편집에 대고 묻는 것과 같은 물음이다(`#editConflict` · `#startFrom`의 되돌리기와
    * 같은 자리). 없으면 `null`. 구조 트리의 끌어 놓기가 놓을 자리마다 묻는다(`edit/structure-drop.ts`) — `lockedBy`(노드 하나를 **고르는**
    * 판정)로 물으면 놓을 부모 아래 **아무** 노드에 잠금이 있어도 막혀(선택은 서브트리를 통째로 claim 한다) 남이 무엇 하나 잡은 페이지에서는
    * 뿌리로 아무것도 못 옮긴다.
@@ -2659,7 +2659,7 @@ export class EditorStore {
   readonly editBlockedBy = (ops: readonly PatchOp[]): NodeLock | null => {
     const { document, openPageId } = this.#state
     if (document === null || openPageId === null) return null
-    return this.#lockConflict(openPageId, document, lockPointers(ops))
+    return this.#editConflict(openPageId, document, ops)
   }
 
   /**
@@ -2689,12 +2689,13 @@ export class EditorStore {
    * 같은 함수에 **다른 자리**를 넣는 형태이고(`lock.ts`의
    * `LockConflictInput.pointers` 주석), 화면 안에서도 그 자리가 둘이다:
    *
-   * | 묻는 것 | 넣는 포인터 | 부르는 쪽 |
-   * |---|---|---|
-   * | 이 노드를 고를 수 있나 | `findNodePath(root, nodeId)` 하나 | `lockedBy` |
-   * | 이 되돌리기를 낼 수 있나 | `lockPointers(inverse)` 전부 | `#startFrom` |
+   * | 묻는 것 | 넣는 것 | 판정 | 부르는 쪽 |
+   * |---|---|---|---|
+   * | 이 노드를 고를 수 있나 | `findNodePath(root, nodeId)` 하나 | `findLockConflict`(여기) | `lockedBy` |
+   * | 이 편집 · 되돌리기를 낼 수 있나 | 편집(`ops` · `inverse`) 그대로 | `lockConflictOfOps`(`#editConflict`) | `editBlockedBy` · `#startFrom` |
    *
-   * **`findLockConflict`를 부르는 자리는 `apps/web` 전체에 여기 하나다**
+   * **편집은 포인터로 바꿔 여기 넣지 않는다** — 편집의 포인터는 앞 연산을 적용한 뒤 문서의 좌표라 지금 문서의 잠금 경로와 어긋난다
+   * (`@wirebound/schema`의 `lockConflictOfOps` 머리말). **두 판정을 부르는 자리는 `apps/web` 전체에 각각 하나다**
    * (`test/lock/one-verdict.test.ts`가 소스에서 센다). 둘째 갈래가 생겼다고 호출을 하나 더
    * 두면 그 순간 판정이 두 벌이 된다.
    *
@@ -2710,6 +2711,23 @@ export class EditorStore {
       locks: locks.filter((lock) => lock.pageId === pageId),
       pointers,
       // 누구인지 모르면 어느 잠금과도 같지 않은 값이 되어 **전부 남의 것**이 된다.
+      viewerUserId: viewerUserId ?? '',
+    })
+  }
+
+  /**
+   * **편집**이 부딪치는 남의 잠금 — 판정은 `@wirebound/schema`의 `lockConflictOfOps`이고 서버의 2차 방어(`apps/api`의 `lock/check.ts`)가
+   * 부르는 바로 그 함수다. 연산마다 그 연산이 선 문서의 좌표로 잠긴 자리를 따라간다. **`lockConflictOfOps`를 부르는 자리는 `apps/web`
+   * 전체에 여기 하나다**(`test/lock/one-verdict.test.ts`). 잠금 목록을 페이지로 좁히는 것 · 모르는 사람을 `''`로 두는 것은
+   * `#lockConflict`와 같다.
+   */
+  #editConflict(pageId: string, document: PageDocument, ops: readonly PatchOp[]): NodeLock | null {
+    const { locks, viewerUserId } = this.#state
+    if (locks.length === 0) return null
+    return lockConflictOfOps({
+      document,
+      locks: locks.filter((lock) => lock.pageId === pageId),
+      ops,
       viewerUserId: viewerUserId ?? '',
     })
   }

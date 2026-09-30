@@ -26,8 +26,9 @@
  * 지나간다.
  */
 import type { WbNode } from './node'
-import { parsePointer } from './patch/pointer'
-import type { PatchOp } from './patch/types'
+import { addAt, applyOpInPlace, removeAt } from './patch/apply'
+import { getByPointer, parsePointer, readMember } from './patch/pointer'
+import { PatchError, type PatchOp } from './patch/types'
 import { findNodePath } from './tree'
 
 /**
@@ -48,9 +49,9 @@ export interface LockConflictInput {
   root: WbNode
   locks: readonly NodeLock[]
   /**
-   * 문서 루트(`{version, root}`) 기준 JSON Pointer들. **편집이면 `lockPointers(ops)`이고
-   * 선택이면 `findNodePath(root, nodeId)` 하나다** — 두 방어가 같은 함수에 다른 자리를
-   * 넣는다 — 판정이 한 벌이어야 하는 이유는 파일 머리말.
+   * 문서 루트(`{version, root}`) 기준 JSON Pointer들 — **`root`의 좌표다.** 노드 하나를 고르는 판정(`findNodePath(root, nodeId)`
+   * 하나)이 이것을 넣는다. **편집(`ops`)은 여기 넣지 않는다** — 편집의 포인터는 앞 연산을 적용한 뒤 문서의 좌표라 `root`의 좌표와
+   * 어긋난다. 편집은 `lockConflictOfOps`가 연산마다 좌표를 맞춰 이 함수와 같은 겹침으로 잰다.
    */
   pointers: readonly string[]
   /** 이 사람의 잠금은 부딪치지 않는다(소유자는 사람이다 — `NodeLock.userId`). */
@@ -94,19 +95,144 @@ export function locksAgainst(locks: readonly NodeLock[], viewerUserId: string): 
   return locks.filter((lock) => lock.userId !== viewerUserId)
 }
 
+export interface OpsLockConflictInput {
+  /** 편집 **전** 문서(`{version, root}`) — `ops`의 첫 연산이 선 문서다. 바꾸지 않는다. */
+  document: { readonly root: WbNode }
+  locks: readonly NodeLock[]
+  ops: readonly PatchOp[]
+  /** 이 사람의 잠금은 부딪치지 않는다(`locksAgainst`). */
+  viewerUserId: string
+}
+
 /**
- * `ops`가 건드리는 자리 전부.
+ * 그 **편집**이 부딪치는 첫 잠금. 없으면 `null`이다 — 서버의 2차 방어(`apps/api`의 `lock/check.ts`)와 화면이 편집을 묻는 자리(`apps/web`의
+ * `store/editor-store.ts` — 끌어 놓기 · 되돌리기)가 **이 함수 하나**를 부른다.
  *
- * **`move`는 둘을 낸다.** 뽑는 자리(`from`)와 꽂는 자리(`path`)가 서로 다른 서브트리일 수
- * 있고, 어느 쪽이든 남의 잠금 안이면 그 편집은 남의 것을 건드린다.
+ * # 좌표는 연산마다 다르다
+ *
+ * RFC 6902 의 포인터는 **앞 연산을 적용한 뒤 문서**의 좌표이고, `move`의 `path`는 `from`을 **뺀 뒤** 문서의 좌표다(`patch/apply.ts`의
+ * `move`). 잠긴 노드의 경로는 편집 **전** 문서에서 찾으므로, 편집의 포인터를 그대로 견주면 앞쪽 형제를 빼거나 넣은 묶음에서 한 칸
+ * 어긋난다 — 잠긴 서브트리를 건드리는 편집이 안 겹치는 포인터로 지나가고, 안 건드리는 편집이 겹치는 포인터로 막힌다
+ * (`test/lock-shifted-pointers.test.ts`). **그래서 잠긴 노드의 자리를 연산마다 따라간다:**
+ *
+ * 1. 편집 전 문서에서 잠긴 노드마다 경로를 찾는다(가리키는 노드가 없는 잠금은 아무것도 막지 못한다 — `findLockConflict`와 같다).
+ * 2. 연산마다 그 연산이 선 문서에서 포인터를 **적용과 같은 규칙으로** 읽는다(`canonicalAt`) — `move`는 `from`을 그 문서에서,
+ *    `path`를 `from`을 뺀 문서에서. 잠긴 자리와 겹치면(한쪽이 다른 쪽의 조상이거나 같다 — `findLockConflict`와 같은 `overlaps`) 그 잠금을 낸다.
+ * 3. 연산을 사본에 적용하고, 배열에 넣거나 뺀 자리보다 뒤에 선 잠긴 자리의 번호를 한 칸 민다(`shiftAfterRemove` · `shiftAfterAdd`).
+ *
+ * **노드 id 로 다시 찾지 않고 자리를 따라가는 것이 요점이다.** id 로 찾으면 앞 연산이 다른 노드의 `id`를 잠긴 노드의 id 로 바꾼
+ * 묶음(`replace …/id` 뒤 `remove` 잠긴 노드)에서 잠금이 그 가짜를 가리켜 진짜를 지우는 연산이 지나간다. 자리를 따라가면 잠긴 노드를
+ * 옮기거나 지우는 연산은 그 자리 자체와 겹친다.
+ *
+ * **포인터를 적용과 같은 규칙으로 읽는 것도 요점이다.** 배열의 번호는 `Number(token)`으로 읽혀(`patch/pointer.ts`의 `readMember` ·
+ * `patch/apply.ts`의 `arrayIndex`) `/root/children/01`도 `/root/children/1`을 고친다. 글자로 견주면 그 편집이 잠긴 자리를 지난다.
+ *
+ * # 판정하지 않는 것
+ *
+ * **적용이 실패하는 연산에 닿으면 `null`이다**(없는 경로 · 범위 밖 번호 · 읽을 수 없는 포인터 · 뿌리 자체) — 그 앞의 연산이 부딪친
+ * 잠금이 없을 때다. 그 편집은 파이프라인이 `patch-failed`로 거절하므로(`applyOps`가 같은 규칙으로 던진다) 잠금 충돌로 덮지 않는다
+ * — 사용자가 **겪지 않은 실패**를 듣는다. 그 연산 자체가 잠긴 자리와 겹치면 적용 전에 낸다.
+ *
+ * **던지지 않는다.** 화면은 검증 전 문서로 묻는다(`children` 안의 `null` — `apps/web`의 `edit/safe-walk.ts`) — 잠긴 노드를 못 찾으면
+ * `null`이다.
  */
-export function lockPointers(ops: readonly PatchOp[]): string[] {
-  const pointers: string[] = []
-  for (const op of ops) {
-    if (op.op === 'move') pointers.push(op.from)
-    pointers.push(op.path)
+export function lockConflictOfOps(input: OpsLockConflictInput): NodeLock | null {
+  const against = locksAgainst(input.locks, input.viewerUserId)
+  if (against.length === 0 || input.ops.length === 0) return null
+
+  const held: { lock: NodeLock; at: string[] }[] = []
+  try {
+    for (const lock of against) {
+      const path = findNodePath(input.document.root, lock.nodeId)
+      if (path !== undefined) held.push({ lock, at: parsePointer(path) })
+    }
+  } catch {
+    return null
   }
-  return pointers
+  if (held.length === 0) return null
+
+  const hit = (at: Canonical): NodeLock | null => held.find((entry) => overlaps(entry.at, at.tokens))?.lock ?? null
+  const doc: unknown = structuredClone(input.document)
+  for (const op of input.ops) {
+    try {
+      if (op.op === 'move') {
+        const from = canonicalAt(doc, op.from, false)
+        const fromHit = hit(from)
+        if (fromHit !== null) return fromHit
+        if (getByPointer(doc, op.from) === undefined) throw new PatchError(`옮길 값을 찾을 수 없습니다: ${op.from}`, op.from)
+        const moved = removeAt(doc, op.from)
+        shiftAfterRemove(held, from)
+        const to = canonicalAt(doc, op.path, true)
+        const toHit = hit(to)
+        if (toHit !== null) return toHit
+        addAt(doc, op.path, moved)
+        shiftAfterAdd(held, to)
+        continue
+      }
+      const at = canonicalAt(doc, op.path, op.op === 'add')
+      const atHit = hit(at)
+      if (atHit !== null) return atHit
+      applyOpInPlace(doc, op)
+      if (op.op === 'remove') shiftAfterRemove(held, at)
+      if (op.op === 'add') shiftAfterAdd(held, at)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+/** 포인터를 그 문서에서 **적용이 읽는 대로** 읽은 것 — 배열 번호는 `String(Number(token))`, 넣는 자리의 `-`는 배열 길이. */
+interface Canonical {
+  tokens: string[]
+  /** 마지막 토큰이 배열 안의 번호인가 — 넣고 빼면 뒤 형제의 번호가 밀린다. */
+  inArray: boolean
+}
+
+/**
+ * `patch/apply.ts`의 `resolveSlot` · `arrayIndex`와 같은 길로 읽는다. **읽지 못한 토큰은 그대로 둔다** — 그 연산은 적용에서 던지므로
+ * (`lockConflictOfOps`의 «판정하지 않는 것») 여기서는 겹침만 잰다.
+ */
+function canonicalAt(doc: unknown, pointer: string, inserting: boolean): Canonical {
+  const tokens = parsePointer(pointer)
+  const out: string[] = []
+  let container: unknown = doc
+  let inArray = false
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i]!
+    const last = i === tokens.length - 1
+    inArray = Array.isArray(container)
+    let canonical = token
+    if (Array.isArray(container)) {
+      if (last && inserting && token === '-') canonical = String(container.length)
+      else if (Number.isInteger(Number(token))) canonical = String(Number(token))
+    }
+    out.push(canonical)
+    if (!last) container = container === null || container === undefined ? undefined : readMember(container, token)
+  }
+  return { tokens: out, inArray }
+}
+
+/** 배열에서 `at`을 뺐다 — 같은 배열에서 그 뒤에 선 잠긴 자리를 한 칸 당긴다. 겹친 자리는 여기 오기 전에 부딪쳤다. */
+function shiftAfterRemove(held: { at: string[] }[], at: Canonical): void {
+  shiftSiblings(held, at, -1)
+}
+
+/** 배열의 `at`에 넣었다 — 같은 배열에서 그 자리 이후에 선 잠긴 자리를 한 칸 민다. */
+function shiftAfterAdd(held: { at: string[] }[], at: Canonical): void {
+  shiftSiblings(held, at, 1)
+}
+
+function shiftSiblings(held: { at: string[] }[], at: Canonical, by: 1 | -1): void {
+  if (!at.inArray || at.tokens.length === 0) return
+  const depth = at.tokens.length - 1
+  const index = Number(at.tokens[depth])
+  for (const entry of held) {
+    if (entry.at.length <= depth) continue
+    if (!overlaps(entry.at.slice(0, depth), at.tokens.slice(0, depth))) continue
+    const mine = Number(entry.at[depth])
+    if (by === -1 ? mine > index : mine >= index) entry.at[depth] = String(mine + by)
+  }
 }
 
 /**

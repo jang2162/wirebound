@@ -14,7 +14,7 @@
  * 툴바는 «고른 노드»가 단위라 서버(«편집이 건드리는 포인터»)보다 **엄격할 수밖에** 없고,
  * 그 대가를 받아들여 «전부 끈다»를 고른다(`edit/structure-actions.ts`의 표).
  * **되돌리기에는 선택이 없다.** 단위가 `inverse` **ops**이고 그것이 곧 서버가 재는 것이라,
- * 화면은 `findLockConflict`에 **서버와 같은 입력**을 넣을 수 있다 — **누를 때 서 있던 잠금에
+ * 화면은 `lockConflictOfOps`에 **서버와 같은 입력**을 넣을 수 있다 — **누를 때 서 있던 잠금에
  * 대해** 과차단도 과소차단도 0이다.
  *
  * 진짜 api·진짜 WS 잠금으로 잰 값이 아래다(`inverse`는 서버가 준 그대로 되보냈다).
@@ -53,7 +53,7 @@
  *
  * # 서버 대역이 진짜 판정을 든다
  *
- * `patchOps`가 `findLockConflict`를 **직접** 부른다 — `apps/api`의 `lock/check.ts`가 부르는
+ * `patchOps`가 `lockConflictOfOps`를 **직접** 부른다 — `apps/api`의 `lock/check.ts`가 부르는
  * 그 함수다(`toolbar-abilities.test.tsx`와 같은 형태이고 같은 이유다). 손으로 적은 200/423
  * 으로 대신하면 *"화면이 막아서 안 나갔다"*와 *"서버가 받아서 통과했다"*가 같은 값으로 보인다.
  * 화면의 막기를 빼면 이 대역이 **실제로** 423을 낸다.
@@ -84,7 +84,7 @@
  * 뒤엣것이 *"그 갈래는 서버가 200을 낼 것까지 막는다"*의 실증이다.
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { applyOps as applyOpsNow, findLockConflict, lockPointers, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { applyOps as applyOpsNow, lockConflictOfOps, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
@@ -203,10 +203,10 @@ async function board(): Promise<Board> {
   const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
     calls.push({ ops: body.ops })
     // **서버의 2차 방어를 그대로 돈다**(`apps/api/src/lock/check.ts`와 같은 인자).
-    const conflict = findLockConflict({
-      root: held.root,
+    const conflict = lockConflictOfOps({
+      document: held,
       locks: live.filter((entry) => entry.pageId === PAGE_ID),
-      pointers: lockPointers(body.ops),
+      ops: body.ops,
       viewerUserId: ME,
     })
     if (conflict !== null) {
@@ -564,5 +564,42 @@ describe('왜 안 되는지 말한다', () => {
     )
     // **건너뛴 것은 버리고 막힌 것은 남긴다.** 둘이 같은 값이면 이 줄이 죽는다.
     expect(stacks(view).undo).toBe(1)
+  })
+})
+
+/**
+ * **되돌리기의 `inverse`도 연산의 좌표로 묻는다**(C2 리뷰 발견 1 · `docs/superpowers/plans/2026-09-30-c2-fix-report.md`). `move`의 역은
+ * `move`이고 그 `path`는 `from`을 뺀 **뒤**의 좌표다 — 편집 전 문서의 잠금 경로와 글자로 견주면 잠긴 노드를 안 건드리는 되돌리기가 막힌다.
+ * 화면(`#startFrom` · `editBlockedBy`)과 서버 대역이 같은 `lockConflictOfOps`를 부르므로 둘이 같은 답을 낸다.
+ */
+describe('좌표가 밀린 편집 — 화면과 서버가 같은 판정을 든다', () => {
+  it('Divider 를 위로 옮긴 것을 되돌린다 — 뒤로 간 잠긴 Card 를 안 건드리므로 나가고 서버가 받는다', async () => {
+    const view = await board()
+    select('Divider')
+    fireEvent.click(toolButton('위로'))
+    await waitFor(() => expect(view.calls).toHaveLength(1))
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+    // 옮긴 뒤 `[Text, Divider, Card]` — 서버의 `inverse`는 `move /root/children/1 → /root/children/2`이고, 그 `path`는 Divider 를 뺀 뒤
+    // `[Text, Card]`의 끝이다. 잠긴 Card 의 지금 경로(`/root/children/2`)와 글자는 같지만 Card 를 안 건드린다.
+    expect(view.calls[0]!.ops).toEqual([{ op: 'move', from: '/root/children/2', path: '/root/children/1' }])
+
+    view.lock([foreign('n-box')])
+    fireEvent.click(undoButton())
+    await settle()
+
+    expect({ calls: view.calls.length, status: view.status }).toEqual({ calls: 2, status: [200, 200] })
+    expect(view.calls[1]!.ops).toEqual([{ op: 'move', from: '/root/children/1', path: '/root/children/2' }])
+  })
+
+  it('스토어의 `editBlockedBy`도 옮기기의 뺀 뒤 좌표로 판정한다 — 끌어 놓기가 묻는 자리', async () => {
+    const view = await board()
+    view.lock([foreign('n-box')])
+
+    // 앞의 Text 를 잠긴 Card **뒤**로 — `path`(`/root/children/1`)가 Card 의 지금 경로와 같아도 Card 를 안 건드린다.
+    expect(view.store.editBlockedBy([{ op: 'move', from: '/root/children/0', path: '/root/children/1' }])).toBeNull()
+    // 앞의 Text 를 잠긴 Card **안**으로 — 뺀 뒤 Card 는 `/root/children/0`이다.
+    expect(view.store.editBlockedBy([{ op: 'move', from: '/root/children/0', path: '/root/children/0/children/-' }])).toMatchObject({
+      nodeId: 'n-box',
+    })
   })
 })

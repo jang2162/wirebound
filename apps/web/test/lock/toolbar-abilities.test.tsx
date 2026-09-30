@@ -10,7 +10,7 @@
  * 그때 `structureAbilities`가 잠금을 **아예 보지 않으면** 도구가 살아 있다.
  *
  * **그 상태에서 켜진 버튼을 실제로 눌러 잰 값이 `edit/structure-actions.ts`의 머리말 표다.**
- * 요지: 서버의 2차 방어(`findLockConflict`)는 **편집이 건드리는 자리만** 보므로 형제를
+ * 요지: 서버의 2차 방어(`lockConflictOfOps`)는 **편집이 건드리는 자리만** 보므로 형제를
  * 더하는 편집은 통과시키고, 잠긴 서브트리를 건드리는 편집은 423으로 거절한다. 거절되면
  * 화면은 낙관적 적용을 붙였다가 재조회로 되돌리고 큐를 통째로 버린다.
  *
@@ -43,7 +43,7 @@
  *
  * # 서버 대역이 진짜 판정을 든다
  *
- * `patchOps`가 `findLockConflict`를 **직접** 부른다 — `apps/api`의 `lock/check.ts`가 부르는
+ * `patchOps`가 `lockConflictOfOps`를 **직접** 부른다 — `apps/api`의 `lock/check.ts`가 부르는
  * 그 함수다. 손으로 적은 200/423으로 대신하면 *"화면이 막아서 안 나갔다"*와 *"서버가
  * 받아서 통과했다"*가 같은 값으로 보인다. 화면의 막기를 빼면 이 대역이 **실제로** 423을
  * 내고 알림이 뜬다.
@@ -55,8 +55,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import {
   BUILTIN_PRESETS,
-  findLockConflict,
-  lockPointers,
+  lockConflictOfOps,
   type PageDocument,
   type PatchOp,
 } from '@wirebound/schema'
@@ -201,10 +200,10 @@ async function board(): Promise<Board> {
   const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
     calls.push({ ops: body.ops })
     // **서버의 2차 방어를 그대로 돈다**(`apps/api/src/lock/check.ts`와 같은 인자).
-    const conflict = findLockConflict({
-      root: held.root,
+    const conflict = lockConflictOfOps({
+      document: held,
       locks: live.filter((entry) => entry.pageId === PAGE_ID),
-      pointers: lockPointers(body.ops),
+      ops: body.ops,
       viewerUserId: ME,
     })
     if (conflict !== null) {
