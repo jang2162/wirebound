@@ -259,11 +259,16 @@
 }
 
 /* ── 하단 바(`shell/shell-footer.tsx`) ─────────────────────────────────────────────────
-   캔버스 칸 아래 한 줄. 셸이 그리는 조각이라 글꼴 · 스킴을 여기 건다(머리와 같은 값 — 문서를 감싸지 않으므로 상속 속성을 걸어도 된다). */
+   캔버스 칸 아래 한 줄. 셸이 그리는 조각이라 글꼴 · 스킴을 여기 건다(머리와 같은 값 — 문서를 감싸지 않으므로 상속 속성을 걸어도 된다).
+
+   **칸이 좁으면 도구가 통지 아래 줄로 내려간다**(`flex-wrap` · 통지 무리의 기본 폭 320). 접지 않으면 도구(뷰포트 · 줌 — 341px)가 제 폭을
+   지키고 통지가 남은 폭만 받는다 — 창 1024 · 사이드바 기본에서 캔버스 칸 444 에 통지 칸이 63px 이라 한 줄이 한두 낱말이고, 통지 셋이면
+   바가 452px 로 자라 캔버스가 198px 다(Chrome — `apps/web/build-test/editor-shell-modal.test.ts` «창 1024 에서 통지 셋»). */
 .wb-shell-footer {
   grid-area: footer;
   color-scheme: light;
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 6px 16px;
@@ -276,9 +281,10 @@
 }
 
 /* 통지 줄. 통지마다 제 줄을 쓴다(`.wb-shell-edit-alert` 들의 `flex-basis: 100%`) — 여럿이면 위로 자란다. `min-width: 0`이 없으면 긴 문장이
-   도구를 오른쪽 밖으로 민다. */
+   도구를 오른쪽 밖으로 민다. 기본 폭 320 은 한 줄이 읽을 만한 폭이다 — 그만큼 안 남으면 바가 접혀 도구가 아래 줄로 간다(`.wb-shell-footer`).
+   통지가 없으면 걷는다 — 빈 무리가 320 을 쥐면 좁은 칸에서 도구가 빈 첫 줄 아래로 내려간다. */
 .wb-shell-footer-notices {
-  flex: 1 1 0;
+  flex: 1 1 320px;
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
@@ -286,12 +292,17 @@
   gap: 4px 12px;
 }
 
+.wb-shell-footer-notices:empty {
+  display: none;
+}
+
 /* 뷰포트 · 줌. 칸이 좁으면 **줄어들며 안에서 줄을 바꾼다**. `flex: none`이면 최대 내용 폭(뷰포트 고르개 + 줌 넷)으로 서서 캔버스 칸이
    최소(320)일 때 우측 패널 밑으로 들어가 «화면 맞춤»을 누를 수 없었다(Chrome · 창 1440 · 좌측 최대 — 단추 가운데의 `elementFromPoint`가
-   `.wb-shell-panel`). */
+   `.wb-shell-panel`). `margin-left: auto`는 바가 접혀 도구가 제 줄에 혼자 설 때도 오른쪽 끝에 두게 한다(`space-between`은 혼자인 줄을 왼쪽에 둔다). */
 .wb-shell-footer-tools {
   flex: 0 1 auto;
   min-width: 0;
+  margin-left: auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

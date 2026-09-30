@@ -8,7 +8,8 @@
  * | 모달이 열린 동안 캔버스 | 상자가 비모달로 선다 — 캔버스 iframe 의 노드를 누르면 선택이 바뀐다 · 키가 편집을 낸다 |
  * | 조합 중 Escape | 조합 구간을 안 든다 — Chrome 이 조합 중의 Escape 에도 `cancel` 을 내 상자가 닫히고 친 글이 사라진다 |
  * | 복원을 보내고 곧바로 닫음 | 상자가 내려가면 복원 답을 셸이 못 받는다 — 서버는 되돌렸는데 캔버스가 옛 글이다 |
- * | 창 1024 의 통지 셋 | 하단 바의 도구가 제 폭을 지키고 통지 칸이 남은 폭만 받는다 — 통지 한 줄이 몇 글자라 바가 위로 자라 캔버스가 준다 |
+ * | 창 1024 의 통지 셋 | 하단 바의 도구가 제 폭을 지키고 통지 칸이 남은 폭만 받는다 — 통지 한 줄이 몇 글자라 바가 위로 자라 캔버스가 준다 · 접힌 도구가 왼쪽에 선다 |
+ * | 창 1024 의 통지 없음 | 빈 통지 무리가 기본 폭을 쥔다 — 도구가 빈 첫 줄 아래로 내려가 바가 한 줄보다 높다 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -149,9 +150,11 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
   })
 
   /**
-   * 창 1024 · 사이드바 기본에서 통지 셋(테마 못 실음 · 남의 복원 · 권한 바뀜 — 모두 실제로 세운다)이 선다. 캔버스 칸의 폭은 444 인데 하단 바
-   * 도구(뷰포트 · 줌 — 341)가 제 폭을 지키고 통지 칸은 남은 63 만 받아 한 줄이 한두 낱말이다 → 바가 452 로 자라 캔버스가 198 이 된다(main 은
-   * 같은 통지가 전체 폭 머리에 서 캔버스 481). 성질로 단언한다: 통지 한 줄의 폭 · 캔버스 몫(`CANVAS_MIN_WIDTH`와 같은 320) · 바가 창 안 · 도구가 눌림.
+   * 창 1024 · 사이드바 기본에서 통지 셋(테마 못 실음 · 남의 복원 · 권한 바뀜 — 모두 실제로 세운다)이 선다. 캔버스 칸의 폭은 444 다 — 바가
+   * 안 접히면 하단 바 도구(뷰포트 · 줌 — 341)가 제 폭을 지키고 통지 칸은 남은 63 만 받아 한 줄이 한두 낱말이고, 바가 452 로 자라 캔버스가
+   * 198 이 된다(main 은 같은 통지가 전체 폭 머리에 서 캔버스 481). 바가 접히면 통지가 칸 폭을 다 쓰고 도구가 아래 줄 오른쪽 끝에 선다
+   * (`src/shell.css`의 `.wb-shell-footer`). 성질로 단언한다: 통지 한 줄의 폭 · 캔버스 몫(`CANVAS_MIN_WIDTH`와 같은 320) · 바가 창 안 · 도구가
+   * 눌림 · 도구의 오른끝이 바의 안쪽 여백(12)에 닿음.
    */
   it('창 1024 에서 통지 셋이 서도 통지 칸이 읽을 폭이고, 캔버스가 320 이상 남고, 바가 창 안이다', async () => {
     const { P, projectId } = await fixture(stack, alice, 'footer-narrow', 3)
@@ -190,6 +193,7 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
           canvas: Math.round(document.querySelector('.wb-shell-canvas')!.getBoundingClientRect().height),
           barInWindow: bar.bottom <= innerHeight,
           tools: [...document.querySelectorAll('.wb-shell-footer-tools select, .wb-shell-footer-tools button')].map(hitOk),
+          toolsRightGap: Math.round(bar.right - document.querySelector('.wb-shell-footer-tools')!.getBoundingClientRect().right),
         }
       })
       // eslint-disable-next-line no-console
@@ -201,7 +205,39 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
         캔버스: seen.canvas >= 320,
         바_창_안: seen.barInWindow,
         도구: seen.tools,
-      }).toEqual({ 통지_폭: true, 캔버스: true, 바_창_안: true, 도구: [true, true, true, true] })
+        도구_오른끝: seen.toolsRightGap,
+      }).toEqual({ 통지_폭: true, 캔버스: true, 바_창_안: true, 도구: [true, true, true, true], 도구_오른끝: 12 })
+    } finally {
+      await context.close()
+    }
+  })
+
+  /**
+   * 창 1024 · 통지 없음. 통지 무리의 기본 폭(320)은 통지가 있을 때의 것이다 — 빈 무리가 그 폭을 쥐면 캔버스 칸 444 에서 320 + 간격 + 도구 341 이
+   * 안 들어가 바가 접히고, 도구가 높이 0 인 빈 첫 줄 아래(줄 간격 6)로 내려간다. 바의 높이가 도구 한 줄 + 안쪽 여백(위아래 6)인지로 잰다.
+   * 판 카나리아: 통지가 0 이다.
+   */
+  it('창 1024 에서 통지가 없으면 하단 바는 도구 한 줄이다', async () => {
+    const { P } = await fixture(stack, alice, 'footer-empty', 1)
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1024, height: 700 } })
+    try {
+      await page.goto(P)
+      await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
+      const seen = await page.evaluate(() => {
+        const bar = document.querySelector('.wb-shell-footer')!.getBoundingClientRect()
+        const tools = document.querySelector('.wb-shell-footer-tools')!.getBoundingClientRect()
+        return {
+          count: document.querySelectorAll('.wb-shell-footer-notices > [role]').length,
+          bar: Math.round(bar.height),
+          tools: Math.round(tools.height),
+          toolsRightGap: Math.round(bar.right - tools.right),
+        }
+      })
+      // eslint-disable-next-line no-console
+      console.log(`[창 1024 통지 없음] ${JSON.stringify(seen)}`)
+
+      expect(seen.count).toBe(0)
+      expect({ 바_높이: seen.bar - seen.tools, 도구_오른끝: seen.toolsRightGap }).toEqual({ 바_높이: 12, 도구_오른끝: 12 })
     } finally {
       await context.close()
     }
