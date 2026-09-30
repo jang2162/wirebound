@@ -1,9 +1,8 @@
 /**
  * **편집의 포인터는 그 연산 직전 문서의 좌표다 — 잠금의 경로는 편집 전 문서의 좌표다**(C2 리뷰 · `docs/superpowers/plans/2026-09-30-c2-review.md` 발견 1).
  *
- * 리뷰가 빨강으로 커밋했고 `lockConflictOfOps`로 고쳤다(`docs/superpowers/plans/2026-09-30-c2-fix-report.md`). 아래는 옛 판정의 뿌리다 —
- * 옛 판정(`lockPointers(ops)` + `findLockConflict`)은 연산마다 적힌 포인터를 그대로 싣고 그것을 **편집 전 문서**에서 찾은 잠금 경로와 견줬다.
- * 그런데 RFC 6902 의 포인터는 **앞 연산을 적용한 뒤 문서**의 좌표이고, `move`의 `path`는 `from`을 **뺀 뒤** 문서의 좌표다
+ * 판정은 `lockConflictOfOps`다. **연산마다 적힌 포인터를 그대로 모아 편집 전 문서의 잠금 경로와 견주면 어긋난다** —
+ * RFC 6902 의 포인터는 **앞 연산을 적용한 뒤 문서**의 좌표이고, `move`의 `path`는 `from`을 **뺀 뒤** 문서의 좌표다
  * (`../src/patch/apply.ts`의 `move` — `addAt(doc, op.path, removeAt(doc, op.from))`). 앞쪽 형제를 빼거나 더하면 뒤쪽 좌표가 한 칸
  * 밀려, 잠긴 서브트리를 건드리는 편집이 안 겹치는 포인터로 지나가고(아래 «지나간다») 안 건드리는 편집이 겹치는 포인터로 막힌다
  * (아래 «막힌다»).

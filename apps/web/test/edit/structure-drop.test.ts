@@ -149,8 +149,8 @@ describe('남이 잡은 자리 — 낼 편집이 부딪치는 잠금', () => {
 
   it('잠긴 노드 **뒤** 형제 앞으로 옮기는 것은 선다 — 뺀 뒤 좌표가 잠긴 노드의 지금 경로와 같아도 잠긴 서브트리를 안 건드린다', () => {
     // n-box(= /root/children/1)가 잠겼다. n-a 를 n-c 앞으로 → 옮긴 뒤 [box a c] 이고 편집의 `path`는 뺀 뒤 좌표 `/root/children/1`
-    // 이다. 옛 판정은 그 포인터를 **지금 문서**의 잠금 경로와 견줘 423 을 냈고 화면도 그에 맞춰 이 자리를 안 받았다(C2 리뷰 발견 1 의
-    // «막힌다» 쪽 · `docs/superpowers/plans/2026-09-30-c2-fix-report.md`).
+    // 이다. 그 포인터를 **편집 전 문서**의 잠금 경로와 글자로 견주면 n-box 와 겹쳐 막힌다 — 판정이 연산마다 좌표를 맞추므로 선다
+    // (C2 리뷰 발견 1 의 «막힌다» 쪽).
     const blocked = lockOn('n-box')
     expect(blocked(moveNodeOps(doc(), 'n-a', 'n-root', 1)!)).toBeNull()
     expect(structureDropTarget(doc(), 'n-a', 'n-c', 'before', blocked)).toEqual({ parentId: 'n-root', index: 1, placement: 'before' })

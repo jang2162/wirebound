@@ -1,9 +1,8 @@
 /**
  * ⚠️ 이 파일은 테스트 DB에 **실제로 커밋한다.** `helpers.ts`의 `withRealApi`를 쓴다.
  *
- * 서버의 2차 방어가 좌표가 밀린 편집을 잘못 판정하던 결함(C2 리뷰 · `docs/superpowers/plans/2026-09-30-c2-review.md` 발견 1)을 값으로
- * 잠근다 — 리뷰가 빨강으로 커밋했고 `lockConflictOfOps`로 고쳤다(`docs/superpowers/plans/2026-09-30-c2-fix-report.md`). 판정의 뿌리와 순수 판은
- * `packages/schema/test/lock-shifted-pointers.test.ts`.
+ * 서버의 2차 방어가 **앞 연산이 민 좌표**의 편집을 바로 판정하는지 입구마다 잰다(C2 리뷰 · `docs/superpowers/plans/2026-09-30-c2-review.md`
+ * 발견 1 의 판). 판정은 `@wirebound/schema`의 `lockConflictOfOps`이고 그 뿌리와 순수 판은 `packages/schema/test/lock-shifted-pointers.test.ts`.
  *
  * ---
  *
@@ -192,8 +191,8 @@ describe('남의 잠긴 서브트리를 밀린 좌표로 건드리는 편집 —
 })
 
 describe('배열 번호를 글자로 달리 쓴 편집 — 적용이 읽는 대로 잰다(C2 리뷰 대응 · 원래 있던 길)', () => {
-  // 적용은 배열 번호를 `Number(token)`으로 읽어(`packages/schema/src/patch/pointer.ts`의 `readMember`) `01`이 `1`을 지운다. 옛 판정은
-  // 글자로 견줘 `01`이 `1`과 안 겹쳤다(200 · `n_b` 없음).
+  // 적용은 배열 번호를 `Number(token)`으로 읽어(`packages/schema/src/patch/pointer.ts`의 `readMember`) `01`이 `1`을 지운다. 판정이
+  // 포인터를 글자로 견주면 `01`이 `1`과 안 겹쳐 200 이 나고 `n_b`가 사라진다.
   it('MCP(토큰) — `remove /root/children/01`은 잠긴 `n_b`를 지우는 편집이다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
