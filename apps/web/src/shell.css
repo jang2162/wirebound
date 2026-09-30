@@ -1831,10 +1831,8 @@
   color: var(--wb-shell-ink);
 }
 
-/* 목록 화면의 머리 줄 — 제목과 계정 묶음. **셸 머리와 같은 모양이다**: `space-between`이
-   둘을 양 끝에 세우고 `flex-wrap`이 로그아웃 실패 문장(`.wb-shell-session-alert`,
-   `flex-basis: 100%`)을 아랫줄로 내려보낸다. 그 장치가 두 화면에서 같아야 같은 컴포넌트가
-   두 자리에서 같은 모양으로 앉는다. */
+/* 목록 화면의 머리 줄 — 제목과 `…`(`shell/action-menu.tsx`). **셸 머리와 같은 모양이다**: `space-between`이
+   둘을 양 끝에 세운다. 세션 통지(전환 · 로그아웃 실패)는 머리 **아래** 형제로 선다(`.wb-shell-project-alert`). */
 .wb-shell-project-head {
   display: flex;
   flex-wrap: wrap;
@@ -3190,17 +3188,6 @@
   overflow: auto;
   padding: 12px;
   background: var(--wb-shell-chrome);
-}
-
-/* 목록 머리의 «테마 관리»(`routes/project-list.tsx` — 인스턴스 관리자에게만). 계정 묶음의 «API 토큰» 링크와 같은 꼴이다. */
-.wb-shell-project-admin {
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 6px;
-  padding: 4px 8px;
-  background: #fff;
-  color: var(--wb-shell-accent);
-  text-decoration: none;
-  white-space: nowrap;
 }
 
 /* ── 테마 관리(`routes/admin-themes.tsx`) ──────────────────────────────────────────────────

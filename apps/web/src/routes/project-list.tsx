@@ -15,7 +15,8 @@ import { projectAbilities } from '../projects/project-actions'
 import { ProjectForm } from '../projects/project-form'
 import { useProjectCommands, type ProjectCommands } from '../projects/use-project-commands'
 import { useSessionUser } from '../session/session-context'
-import { SessionMenu } from '../session/session-menu'
+import { SessionNotices, useLogout } from '../session/session-menu'
+import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
 import type { ProjectDetail } from '../api/types'
 
 /** 조회가 성공했는데 결과가 비어 있을 때의 안내. */
@@ -24,8 +25,17 @@ const EMPTY_NOTICE = '참여 중인 프로젝트가 없습니다'
 export function ProjectListRoute(): ReactElement {
   const commands = useProjectCommands()
   const { state } = commands
+  const user = useSessionUser()
   // 인스턴스 관리자에게만 «테마 관리»(spec 「관리자 화면」). 값은 세션 사용자의 것 — 로그인 응답 · `/me` 가 싣는다.
-  const admin = useSessionUser()?.isInstanceAdmin === true
+  const admin = user?.isInstanceAdmin === true
+  // 로그아웃 흐름은 에디터 `…` 와 같다(`session/session-menu.tsx`의 `useLogout`) — 기다릴 편집이 없는 화면이라 `settle`을 안 넘긴다.
+  const { logout, busy: loggingOut, failure: logoutFailure } = useLogout()
+  /** 목록 머리 `…` 의 항목 — spec 「화면 사이의 길」. «테마 관리»는 인스턴스 관리자에게만 선다(빼지 끄지 않는다 — 역할처럼 기다려서 풀리는 것이 아니다). */
+  const menuItems: ActionMenuItem[] = [
+    { key: 'account', label: '계정 설정', to: '/account' },
+    ...(admin ? [{ key: 'themes', label: '테마 관리', to: '/admin/themes' }] : []),
+    { key: 'logout', label: '로그아웃', onSelect: logout, disabled: loggingOut },
+  ]
 
   // 세션이 끊겼으면 목록 대신 로그인이다. 화면 **전체**를 대신하는 것이라 아래 JSX보다
   // 앞에 둔다 — 아래 JSX 안에 `<SignedOut />`을 끼우면 실패한 커밋에 목록 **틀**이 함께
@@ -38,22 +48,18 @@ export function ProjectListRoute(): ReactElement {
     // 셸 밖의 라우트지만 스타일은 `src/shell.css` 한 파일에 있고 `wb-shell-` 접두어를
     // `test/shell-css.test.ts`가 기계로 지킨다.
     <main className="wb-shell-project-list">
-      {/* **여기에도 앱에서 나가는 길이 있어야 한다.** 셸 머리에만 두면 프로젝트를 하나
-          열지 않고는 로그아웃할 수 없다.
+      {/* **여기에도 앱에서 나가는 길이 있어야 한다.** 에디터 머리에만 두면 프로젝트를 하나
+          열지 않고는 로그아웃할 수 없다. 머리 오른쪽 끝의 `…` 가 계정 설정 · (관리자) 테마 관리 · 로그아웃을 든다 — 에디터 `…` 와 같은
+          부품(`shell/action-menu.tsx`) · 같은 로그아웃 흐름이다.
 
-          **`SessionMenu`는 셸 전용이 아니다** — `projectId`를 받지 않고 세션 컨텍스트만
-          본다(`session/session-menu.tsx`). 이 화면이 팔레트 루트 넷 중 하나라
-          (`shell.css`의 팔레트 블록에 `.wb-shell-project-list`가 있다) 그 안의
+          이 화면이 팔레트 루트 가운데 하나라(`shell.css`의 팔레트 블록에 `.wb-shell-project-list`가 있다) 그 안의
           `var(--wb-shell-*)`도 여기서 정의돼 있다 — 없으면 조용히 검게 나온다. */}
       <div className="wb-shell-project-head">
         <h1 className="wb-shell-project-list-title">프로젝트</h1>
-        {admin && (
-          <Link className="wb-shell-project-admin" to="/admin/themes">
-            테마 관리
-          </Link>
-        )}
-        <SessionMenu />
+        <ActionMenu label="더 보기" heading={user?.name} items={menuItems} />
       </div>
+      {/* **세션 전환 · 로그아웃 실패**(`SessionNotices`) — 머리 아래 한 줄. */}
+      <SessionNotices failure={logoutFailure} className="wb-shell-project-alert" />
 
       {/* **여는 버튼도 잠근다.** 실제로 막는 것은 훅의 `inFlight`이고, 이 `disabled`는
           그것을 화면에 보이게 한다 — 여는 쪽 하나라도 빠지면 그 버튼은 눌리는 것처럼 보이는데
