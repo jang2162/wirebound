@@ -834,15 +834,16 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
    * 무엇이 서는지를 폭 셋에서 적고, 그 자리를 **실브라우저 더블클릭** · **따로 두 번**으로 눌러 한 몸짓에 지워지지 않는지 잰다
    * (`CLAUDE.md` «jsdom 은 좌표 · 상속 계산도 없다»).
    */
-  /** 삭제 두 번 누르기의 판 — 폭 셋 × 몸짓 둘. 아래 두 케이스가 같은 표를 다른 성질로 읽는다. */
+  /** 삭제 두 번 누르기의 판 — 폭 셋 × 누르는 자리 셋(왼끝 · 가운데 · 오른끝) × 몸짓 둘. 아래 두 케이스가 같은 표를 다른 성질로 읽는다. */
   let deleteTable: Promise<Record<string, { deleted: boolean; confirm: number; importOpen: number; downloads: number; under: unknown }>> | undefined
   function measureDeletes() {
     deleteTable ??= (async () => {
       const widths = [1440, 1024, 800]
       const table: Record<string, { deleted: boolean; confirm: number; importOpen: number; downloads: number; under: unknown }> = {}
       for (const width of widths) {
+        for (const at of ['left', 'middle', 'right'] as const) {
         for (const gesture of ['dblclick', 'twice'] as const) {
-          const { projectId, P, ids } = await menuFixture(`del-${width}-${gesture}`)
+          const { projectId, P, ids } = await menuFixture(`del-${width}-${at}-${gesture}`)
           const tab = await openEditor(P, 'alice', { width, height: 900 })
           let downloads = 0
           tab.page.on('download', () => (downloads += 1))
@@ -858,12 +859,13 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
               middle: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
               right: { x: box.x + box.width - 3, y: box.y + box.height / 2 },
             }
+            const pressAt = points[at]
             if (gesture === 'dblclick') {
-              await page.mouse.dblclick(points.middle.x, points.middle.y)
+              await page.mouse.dblclick(pressAt.x, pressAt.y)
             } else {
-              await page.mouse.click(points.middle.x, points.middle.y)
+              await page.mouse.click(pressAt.x, pressAt.y)
               await page.waitForTimeout(350)
-              await page.mouse.click(points.middle.x, points.middle.y)
+              await page.mouse.click(pressAt.x, pressAt.y)
             }
             await page.waitForTimeout(500)
             const under = await page.evaluate((pts) => {
@@ -875,7 +877,7 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
               return out
             }, points)
             const tree = await serverTree(projectId)
-            table[`${width}/${gesture}`] = {
+            table[`${width}/${at}/${gesture}`] = {
               deleted: !titles(find(tree, '나')!.pages).includes('나2'),
               confirm: await page.getByRole('button', { name: '정말 삭제합니까?' }).count(),
               importOpen: await page.locator('[role="group"][aria-label="페이지 JSON 가져오기"]').count(),
@@ -885,6 +887,7 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
           } finally {
             await tab.close()
           }
+        }
         }
       }
       // eslint-disable-next-line no-console
@@ -897,15 +900,16 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
   it('삭제 두 번 누르기 — 더블클릭 · 따로 두 번이 한 몸짓에 지우지 않는다(폭 셋 · 왼끝 · 가운데 · 오른끝)', async () => {
     const table = await measureDeletes()
     expect(Object.values(table).map((v) => ({ deleted: v.deleted, confirm: v.confirm }))).toEqual(
-      Array.from({ length: 6 }, () => ({ deleted: false, confirm: 1 })),
+      Array.from({ length: 18 }, () => ({ deleted: false, confirm: 1 })),
     )
   })
 
   /**
    * 첫 누름이 행동 메뉴를 닫으면 «삭제» 항목 자리 밑에 페이지 JSON 칸의 단추(«페이지 JSON 가져오기» · «페이지 내보내기»)가 드러나고,
-   * 더블클릭 · 연달아 누름의 둘째 누름이 그것을 누른다 — 1440 · 1024 는 가져오기 칸이 열리고 800 은 내보내기가 받아진다.
+   * 더블클릭 · 연달아 누름의 둘째 누름이 그것을 눌렀다(리뷰 발견 3 — 1440 · 1024 는 가져오기 칸이 열리고 800 은 내보내기가 받아졌다).
+   * 이제 행동 메뉴가 포인터로 고른 뒤 한 더블클릭 간격 동안 오는 클릭 하나를 삼킨다(`shell/action-menu.tsx` «포인터로 고른 뒤 …»).
    */
-  it('(결함) 삭제 항목의 둘째 누름이 그 밑 단추(페이지 JSON 가져오기 · 내보내기)를 누르지 않는다', async () => {
+  it('삭제 항목의 둘째 누름이 그 밑 단추(페이지 JSON 가져오기 · 내보내기)를 누르지 않는다', async () => {
     const table = await measureDeletes()
     expect(Object.fromEntries(Object.entries(table).map(([k, v]) => [k, { importOpen: v.importOpen, downloads: v.downloads }]))).toEqual(
       Object.fromEntries(Object.keys(table).map((k) => [k, { importOpen: 0, downloads: 0 }])),

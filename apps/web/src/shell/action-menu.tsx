@@ -31,6 +31,20 @@
  * **고르면 먼저 닫고 돌려준 뒤 부른다.** 고른 항목이 대화 상자를 열면(`ShellDialog`) 그 상자는 연 순간의 포커스를 «연 요소»로 쥔다 —
  * 순서를 바꾸면 사라진 항목을 쥐어 닫힐 때 돌아갈 곳이 없다.
  *
+ * ## 포인터로 고른 뒤 한 더블클릭 간격 동안 오는 클릭 하나를 삼킨다
+ *
+ * 고르면 목록이 곧바로 닫혀 그 자리 밑의 요소가 드러난다. 더블클릭 · 연달아 두 번 누름의 **둘째 누름**이 그 요소로 간다 — 트리 줄의
+ * `…` 는 트리 칸 아래쪽의 페이지 JSON 칸 위에 떠, «삭제»를 두 번 누르면 가져오기 칸이 열리거나(1440 · 1024) 내보내기가 받아졌다
+ * (800 — C2 리뷰 발견 3 · `build-test/tree-drag-review.test.ts`). 그래서 **포인터로** 고른 항목이면(`click` 의 `detail` ≥ 1) 그 뒤
+ * `DOUBLE_CLICK_MS` 안에 **같은 자리**(`DOUBLE_CLICK_SLOP` 안)에 오는 `click` 하나를 붙잡는 단계에서 막는다 — 호스트 문서와 캔버스
+ * iframe 의 문서 둘 다(목록이 캔버스 위에 떠 있을 수 있다 — 그 문서의 좌표는 iframe 상자만큼 옮겨 견준다). 끌기 장치의
+ * `swallowNextClick`(`drag/use-pointer-drag.ts`)과 같은 꼴이다.
+ *
+ * **같은 자리만 본다** — 더블클릭 · 연타의 둘째 누름은 첫 누름 자리에 온다. 고른 항목이 연 대화 상자 · 확인 단추를 곧바로 **다른 자리에서**
+ * 누르는 것은 뜻한 누름이라 막지 않는다(자리를 안 보고 시간만 보면 복원 확인처럼 빠르게 이어 누르는 판을 먹었다 — 실브라우저 13 판이
+ * 30s 시간 초과로 죽었다). **키보드로 고르면 삼키지 않는다** — 아래 «Enter · Space 를 직접 받는다»의 `click()` 은 `detail` 0 이고, 그 뒤의
+ * 진짜 클릭을 먹을 까닭이 없다.
+ *
  * ## Enter · Space 를 직접 받는다
  *
  * 항목이 `<button>` · `<a>` 라 브라우저도 Enter(· 단추의 Space)에 클릭을 낸다. 그대로 두면 `<a>` 의 Space 는 스크롤이 된다. 그래서
@@ -43,10 +57,16 @@
  * (머리가 접혀 단추가 왼쪽으로 가도 목록이 창 밖으로 안 나간다). **그 훅의 계약대로 단추까지 감싸는 상자에 건다.** Escape 는 그 훅도 받지만
  * 포커스를 돌려주려고 목록의 키 처리가 먼저 받는다 — 둘이 함께 닫아도 한 번 닫힌 상태에 한 번 더 닫는 것이라 결과가 같다.
  */
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { Link } from 'react-router'
+import { useCanvasDocument } from '../canvas/canvas-document'
 import { usePopoverDismiss } from './use-popover-dismiss'
 import { usePopoverSide } from './use-popover-side'
+
+/** 포인터로 고른 뒤 둘째 누름으로 보고 삼키는 시간(ms) — 흔한 OS 의 더블클릭 간격(머리말 «포인터로 고른 뒤 …»). */
+export const DOUBLE_CLICK_MS = 500
+/** 둘째 누름으로 보는 거리(px) — 첫 누름 자리에서 이만큼 안이면 같은 자리다(손 떨림). */
+export const DOUBLE_CLICK_SLOP = 8
 
 export interface ActionMenuItem {
   /** 목록 안에서 갈리는 이름 — React `key`다. */
@@ -88,6 +108,7 @@ export function ActionMenu(props: {
   const toggleRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const listId = useId()
+  const canvasDocument = useCanvasDocument()
 
   /**
    * **닫는다 — 포커스가 메뉴 안에 있었으면 단추로 돌려준다**(머리말). 목록이 아직 DOM 에 있는 동안 물어야 한다 — 닫은 뒤에는 포커스를 쥔 항목이
@@ -157,8 +178,17 @@ export function ActionMenu(props: {
     }
   }
 
+  /**
+   * 포인터로 골랐으면 뒤따를 둘째 누름을 삼킨다(머리말 «포인터로 고른 뒤 …»). `detail` 0 은 키보드(`click()`)다.
+   */
+  function guardFollowingClick(event: MouseEvent): void {
+    if (event.detail < 1) return
+    swallowFollowingClick(canvasDocument === null ? [window] : [window, canvasDocument], { x: event.clientX, y: event.clientY })
+  }
+
   /** 항목을 골랐다 — 먼저 닫고 돌려준 뒤 부른다(머리말 «고르면 먼저 닫고 …»). */
-  function choose(item: ActionMenuItem): void {
+  function choose(item: ActionMenuItem, event: MouseEvent): void {
+    guardFollowingClick(event)
     close()
     item.onSelect?.()
   }
@@ -199,7 +229,10 @@ export function ActionMenu(props: {
                     tabIndex={-1}
                     className="wb-shell-action-menu-item"
                     to={item.to}
-                    onClick={() => close()}
+                    onClick={(event) => {
+                      guardFollowingClick(event)
+                      close()
+                    }}
                   >
                     {item.label}
                   </Link>
@@ -212,9 +245,9 @@ export function ActionMenu(props: {
                     aria-disabled={item.disabled === true ? true : undefined}
                     title={item.title}
                     aria-describedby={item.describedBy}
-                    onClick={() => {
+                    onClick={(event) => {
                       if (item.disabled === true) return
-                      choose(item)
+                      choose(item, event)
                     }}
                   >
                     {item.label}
@@ -227,6 +260,30 @@ export function ActionMenu(props: {
       )}
     </div>
   )
+}
+
+/**
+ * `targets` 에서 다음 `DOUBLE_CLICK_MS` 안에 `at`(호스트 창 좌표)에서 `DOUBLE_CLICK_SLOP` 안에 오는 `click` 하나를 붙잡는 단계에서 막는다
+ * — 하나를 막으면 모두에서 걷는다. 시간이 지나면 걷는다(다음 진짜 클릭은 산다). 다른 자리의 클릭은 막지도 걷지도 않는다.
+ */
+function swallowFollowingClick(targets: readonly EventTarget[], at: { x: number; y: number }): void {
+  const swallow = (raw: Event): void => {
+    const event = raw as globalThis.MouseEvent
+    // 캔버스 iframe 문서의 좌표는 iframe 안의 것이다 — 그 상자만큼 옮겨 호스트 좌표로 견준다.
+    const frame = event.view?.frameElement?.getBoundingClientRect()
+    const x = event.clientX + (frame?.left ?? 0)
+    const y = event.clientY + (frame?.top ?? 0)
+    if (Math.hypot(x - at.x, y - at.y) > DOUBLE_CLICK_SLOP) return
+    event.preventDefault()
+    event.stopPropagation()
+    release()
+  }
+  const release = (): void => {
+    clearTimeout(timer)
+    for (const target of targets) target.removeEventListener('click', swallow, true)
+  }
+  for (const target of targets) target.addEventListener('click', swallow, true)
+  const timer = setTimeout(release, DOUBLE_CLICK_MS)
 }
 
 /** 목록 안의 켠 항목 — 화살표가 설 자리. 차례는 DOM 차례다. */

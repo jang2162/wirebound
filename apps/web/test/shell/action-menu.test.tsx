@@ -14,7 +14,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter, useLocation } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
-import { ActionMenu, type ActionMenuItem } from '../../src/shell/action-menu'
+import { ActionMenu, DOUBLE_CLICK_MS, DOUBLE_CLICK_SLOP, type ActionMenuItem } from '../../src/shell/action-menu'
 
 function Where(): ReactElement {
   return <span data-testid="where">{useLocation().pathname}</span>
@@ -195,5 +195,78 @@ describe('머리', () => {
     host()
     fireEvent.click(toggle())
     expect(menu().previousElementSibling).toBeNull()
+  })
+})
+
+/**
+ * **포인터로 고른 뒤 한 더블클릭 간격 동안 오는 클릭 하나를 삼킨다**(`action-menu.tsx` 머리말 · C2 리뷰 발견 3). jsdom 은 좌표가 없어
+ * «닫힌 자리 밑의 요소»를 못 세운다 — 여기서는 삼키는 시간 · 하나만 · 키보드는 안 삼킴을 재고, 실브라우저의 폭 · 자리 판은
+ * `build-test/tree-drag-review.test.ts` «삭제 항목의 둘째 누름 …»이 잰다.
+ */
+describe('고른 뒤의 둘째 누름', () => {
+  function hostWithOutside(): { onSelect: ReturnType<typeof vi.fn>; outside: ReturnType<typeof vi.fn> } {
+    const onSelect = vi.fn()
+    const outside = vi.fn()
+    render(
+      <MemoryRouter initialEntries={['/here']}>
+        <ActionMenu label="더 보기" items={items(onSelect)} />
+        <button type="button" onClick={outside}>
+          밑
+        </button>
+      </MemoryRouter>,
+    )
+    return { onSelect, outside }
+  }
+
+  it('포인터로 고르면(`detail` 1) 같은 자리에 곧이어 온 클릭 하나는 밑의 요소에 안 닿는다 — 그다음 클릭은 닿는다', () => {
+    vi.useFakeTimers()
+    try {
+      const { onSelect, outside } = hostWithOutside()
+      fireEvent.click(toggle())
+      fireEvent.click(screen.getByRole('menuitem', { name: '가' }), { detail: 1, clientX: 40, clientY: 60 })
+      // 더블클릭의 둘째 누름 — 첫 누름 자리에서 손 떨림만큼.
+      fireEvent.click(screen.getByRole('button', { name: '밑' }), { detail: 2, clientX: 43, clientY: 64 })
+      expect({ select: onSelect.mock.calls, outside: outside.mock.calls.length }).toEqual({ select: [['a']], outside: 0 })
+
+      fireEvent.click(screen.getByRole('button', { name: '밑' }), { detail: 1 })
+      expect(outside).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('다른 자리의 클릭은 곧이어 와도 삼키지 않는다 — 고른 항목이 연 확인 · 대화 상자를 곧바로 누르는 판', () => {
+    vi.useFakeTimers()
+    try {
+      const { outside } = hostWithOutside()
+      fireEvent.click(toggle())
+      fireEvent.click(screen.getByRole('menuitem', { name: '가' }), { detail: 1, clientX: 40, clientY: 60 })
+      fireEvent.click(screen.getByRole('button', { name: '밑' }), { detail: 1, clientX: 40, clientY: 60 + DOUBLE_CLICK_SLOP + 1 })
+      expect(outside).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('더블클릭 간격이 지나면 삼키지 않는다', () => {
+    vi.useFakeTimers()
+    try {
+      const { outside } = hostWithOutside()
+      fireEvent.click(toggle())
+      fireEvent.click(screen.getByRole('menuitem', { name: '가' }), { detail: 1 })
+      vi.advanceTimersByTime(DOUBLE_CLICK_MS)
+      fireEvent.click(screen.getByRole('button', { name: '밑' }), { detail: 1 })
+      expect(outside).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('키보드로 고르면(Enter — `detail` 0) 삼키지 않는다', () => {
+    const { onSelect, outside } = hostWithOutside()
+    fireEvent.click(toggle())
+    key('Enter')
+    fireEvent.click(screen.getByRole('button', { name: '밑' }), { detail: 1 })
+    expect({ select: onSelect.mock.calls, outside: outside.mock.calls.length }).toEqual({ select: [['a']], outside: 1 })
   })
 })
