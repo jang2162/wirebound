@@ -104,6 +104,8 @@ export const ListView = view(({ props, variant, states, children }) => {
   이름만 적는다.
 - **`Text` · `Field` · `Divider` 에는 variants 를 선언할 수 없다** — 이 셋은 변형이 prop(`role` · `control` · `direction`)에서
   오고 그 값이 `data-wb-variant` 가 된다.
+- **세로 `Divider`(`[data-wb-variant='vertical']`)에 백분율 높이(`min-height: 100%`)를 걸지 않는다** — 높이가 정해지지 않은
+  부모에서 0 이 되어 선이 안 보인다. 한 줄 높이(`1.5em`)를 바닥으로 두고 `align-self: stretch`.
 
 ## 패턴
 
