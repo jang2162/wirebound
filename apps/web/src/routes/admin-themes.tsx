@@ -1,8 +1,8 @@
 /**
  * **테마 관리** — `/admin/themes`(spec `2026-09-27-code-themes-design.md` 「관리자 화면」). 인스턴스 관리자가 테마 패키지를 올리고 판을
- * 숨기거나 되살리고 스타터 템플릿을 받는다. 프로젝트 목록 머리의 «테마 관리» 링크(관리자에게만)로 온다.
+ * 숨기거나 되살리고 스타터 템플릿을 받는다. 셸 밖 화면 머리 `…` 의 «테마 관리»(관리자에게만 — `shell/page-head.tsx`)로 온다.
  *
- * 꼴은 «내 API 토큰»(`routes/tokens.tsx`)을 따른다 — 셸 밖 라우트 · 목록 화면의 팔레트 루트와 목록 꼴.
+ * 꼴은 «내 API 토큰»(`account/tokens-section.tsx`)을 따른다 — 셸 밖 라우트 · 목록 화면의 팔레트 루트와 목록 꼴.
  *
  * - **관리자가 아니면 조회하지 않고 한 줄로 말한다.** 판정은 세션 사용자의 `isInstanceAdmin`(`/me` · 로그인 응답 — 요청마다 DB 에서
  *   읽은 값)이다. 권한의 진실은 서버다 — 동작(업로드 · 숨김 · 템플릿)이 403 이면(그 사이 강등) 같은 문장으로 선다.
@@ -11,7 +11,6 @@
  * - **숨김 · 되살림은 확인이 없다** — 되돌릴 수 있다. 숨긴 판은 새로 고를 수 없고 이미 고정한 프로젝트는 그대로 쓴다.
  */
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
-import { Link } from 'react-router'
 import { WBTHEME_LIMITS } from '@wirebound/themes'
 import { ApiError, type ApiErrorIssue } from '../api/client'
 import { useApi } from '../api/context'
@@ -19,8 +18,8 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { ThemePackageSummary, ThemePackageVersion } from '../api/types'
 import { saveBlob } from '../files/file-io'
 import { useSessionUser } from '../session/session-context'
-import { SessionMenu } from '../session/session-menu'
-import { formatWhen } from './tokens'
+import { formatWhen } from '../account/tokens-section'
+import { PageHead } from '../shell/page-head'
 
 const ADMIN_ONLY = '인스턴스 관리자만 볼 수 있습니다'
 const LOAD_FAILURE = '테마 목록을 불러오지 못했습니다'
@@ -146,15 +145,8 @@ export function AdminThemesRoute(): ReactElement {
 
   return (
     <main className="wb-shell-project-list">
-      <div className="wb-shell-project-head">
-        <h1 className="wb-shell-project-list-title">테마 관리</h1>
-        <SessionMenu />
-      </div>
-      <p className="wb-shell-tokens-lead">
-        <Link className="wb-shell-tokens-back" to="/">
-          프로젝트 목록
-        </Link>
-      </p>
+      {/* 머리 — 로고(프로젝트 목록으로) · 제목 · `…`(`shell/page-head.tsx`). */}
+      <PageHead title="테마 관리" brand />
 
       {!admin || forbidden ? (
         <p className="wb-shell-project-alert" role="alert">

@@ -259,6 +259,11 @@ const ENDPOINTS: Array<{
   { client: 'listMyTokens', url: '/api/auth/tokens', method: 'GET', body: [{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }], call: (c) => c.listMyTokens() },
   { client: 'revokeMyToken', url: '/api/auth/tokens/t1', method: 'DELETE', body: null, call: (c) => c.revokeMyToken('t1') },
   { client: 'revokeAllMyTokens', url: '/api/auth/tokens', method: 'DELETE', body: { revoked: 2 }, call: (c) => c.revokeAllMyTokens() },
+  { client: 'changePassword', url: '/api/auth/password', method: 'POST', body: null, call: (c) => c.changePassword('password1234', 'newpassword5678') },
+  { client: 'listMembers', url: '/api/projects/p1/members', method: 'GET', body: [{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }], call: (c) => c.listMembers('p1') },
+  { client: 'addMember', url: '/api/projects/p1/members', method: 'POST', body: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, call: (c) => c.addMember('p1', 'b@b.c', 'editor') },
+  { client: 'updateMemberRole', url: '/api/projects/p1/members/u2', method: 'PATCH', body: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, call: (c) => c.updateMemberRole('p1', 'u2', 'viewer') },
+  { client: 'removeMember', url: '/api/projects/p1/members/u2', method: 'DELETE', body: null, call: (c) => c.removeMember('p1', 'u2') },
   { client: 'getProject', url: '/api/projects/p1', method: 'GET', body: projectView, call: (c) => c.getProject('p1') },
   { client: 'getTree', url: '/api/projects/p1/tree', method: 'GET', body: { menu: [] }, call: (c) => c.getTree('p1') },
   { client: 'getPage', url: '/api/projects/p1/pages/pg1', method: 'GET', body: page, call: (c) => c.getPage('p1', 'pg1') },
@@ -547,6 +552,9 @@ const SHAPE_CASES: Array<{
   // 폐기 주소가 되는 `id`는 빈 문자열까지 막는다 — 그 밖의 칸은 모양만 본다.
   { shape: 'myTokens', broken: [{ ...{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }, id: '' }], ok: [{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }], call: (c) => c.listMyTokens() },
   { shape: 'revokedCount', broken: { revoked: '2' }, ok: { revoked: 2 }, call: (c) => c.revokeAllMyTokens() },
+  // 역할 바꾸기 · 제외의 주소가 되는 `userId` 는 빈 문자열까지 막는다.
+  { shape: 'members', broken: [{ ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, userId: '' }], ok: [{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }], call: (c) => c.listMembers('p1') },
+  { shape: 'member', broken: { ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, name: null }, ok: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, call: (c) => c.addMember('p1', 'b@b.c', 'editor') },
   { shape: 'treeEnvelope', broken: { menu: null }, ok: { menu: [treeNode] }, call: (c) => c.getTree('p1') },
   {
     shape: 'menuNode',
@@ -888,6 +896,17 @@ describe('createHttpClient', () => {
     expect(stub.calls[0]?.init?.method).toBe('POST')
     expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ email: 'a@b.c', password: 'pw1234!' })
     expect(result).toEqual(user)
+  })
+
+  it('changePassword는 지금 · 새 비밀번호를 서버의 키 이름으로 POST한다', async () => {
+    const stub = stubFetch(new Response(null, { status: 204 }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.changePassword('password1234', 'newpassword5678')
+
+    expect(stub.calls[0]?.url).toBe('/api/auth/password')
+    expect(stub.calls[0]?.init?.method).toBe('POST')
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ currentPassword: 'password1234', newPassword: 'newpassword5678' })
   })
 
   it('getTree는 봉투를 벗겨 배열을 돌려준다', async () => {

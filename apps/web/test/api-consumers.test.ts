@@ -39,7 +39,8 @@ const SOURCES = import.meta.glob('../src/**/*.{ts,tsx}', {
 const METHODS = [
   'login', 'logout', 'me',
   'listProjects', 'getProject', 'createProject', 'updateProject', 'deleteProject',
-  'listMyTokens', 'revokeMyToken', 'revokeAllMyTokens',
+  'listMyTokens', 'revokeMyToken', 'revokeAllMyTokens', 'changePassword',
+  'listMembers', 'addMember', 'updateMemberRole', 'removeMember',
   'getTree',
   'createMenu', 'updateMenu', 'deleteMenu',
   'createPage', 'updatePage', 'deletePage', 'getPage', 'importPage',
@@ -84,7 +85,7 @@ function consumers(): Map<string, string[]> {
  */
 const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   login: ['../src/routes/login.tsx'],
-  // 셸 머리의 계정 묶음이 그 자리다(`session/session-menu.tsx`).
+  // 로그아웃 흐름 `useLogout` 이 그 자리다(`session/session-menu.tsx`) — 에디터 · 셸 밖 화면 머리의 `…` 가 함께 쓴다.
   //
   // **부르는 자리가 하나인 것이 요점이다.** 세션을 끊는 길이 둘이 되면 한쪽만
   // `invalidate()`를 부르는 판이 생기고, 그러면 쿠키는 지워졌는데 화면은 로그인한 줄
@@ -92,10 +93,18 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   logout: ['../src/session/session-menu.tsx'],
   me: ['../src/session/session-context.tsx'],
   listProjects: ['../src/projects/use-project-commands.tsx'],
-  // 계정의 API 토큰 화면 하나다. 목록은 줄의 글자와 폐기 주소(`id`)를 읽는다(`SHAPES.myTokens`).
-  listMyTokens: ['../src/routes/tokens.tsx'],
-  revokeMyToken: ['../src/routes/tokens.tsx'],
-  revokeAllMyTokens: ['../src/routes/tokens.tsx'],
+  // 계정 설정의 API 토큰 절 하나다. 목록은 줄의 글자와 폐기 주소(`id`)를 읽는다(`SHAPES.myTokens`).
+  listMyTokens: ['../src/account/tokens-section.tsx'],
+  revokeMyToken: ['../src/account/tokens-section.tsx'],
+  revokeAllMyTokens: ['../src/account/tokens-section.tsx'],
+  // 계정 설정의 비밀번호 절 하나다. 204 라 읽는 본문이 없다(`SHAPES.noBody`).
+  changePassword: ['../src/account/password-section.tsx'],
+  // 설정 페이지의 «멤버» 절 하나다. 줄의 글자 · 역할 고르개의 값 · 주소(`userId`)를 읽는다(`SHAPES.members` · `SHAPES.member`) —
+  // 초대 · 역할 바꾸기의 응답은 읽지 않는다(성공하면 목록을 다시 받는다).
+  listMembers: ['../src/settings/members-section.tsx'],
+  addMember: ['../src/settings/members-section.tsx'],
+  updateMemberRole: ['../src/settings/members-section.tsx'],
+  removeMember: ['../src/settings/members-section.tsx'],
   // **소비자가 셋이고 읽는 것이 다르다.** 셸은 `name`·`id`·`themeRev`(테마 따라잡기)를 그리려고 부르고, 스냅샷 화면은 **`role`**
   // 때문에 부른다 — 「권한 모델」이 생성을 editor에게 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다). 설정 페이지는
   // 이름 · 슬러그 · 설명(«일반» 의 지금 값)과 `role`(칸을 열지)을 읽는다.
@@ -103,7 +112,8 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   createProject: ['../src/projects/use-project-commands.tsx'],
   // 설정 페이지의 «일반» 절 하나다 — 목록 줄의 인라인 수정은 없다(`routes/project-list.tsx` 머리말).
   updateProject: ['../src/settings/general-section.tsx'],
-  deleteProject: ['../src/projects/use-project-commands.tsx'],
+  // 설정 페이지의 «위험 구역» 하나다 — 목록 줄의 삭제는 없다(`routes/project-list.tsx` 머리말).
+  deleteProject: ['../src/settings/danger-section.tsx'],
   getTree: ['../src/tree/use-tree-commands.tsx'],
   createMenu: ['../src/tree/use-tree-commands.tsx'],
   updateMenu: ['../src/tree/use-tree-commands.tsx'],

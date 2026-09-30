@@ -14,6 +14,8 @@ import type {
   MarkerChange,
   MenuNode,
   MyApiToken,
+  ProjectMember,
+  ProjectRole,
   PageDetail,
   PageImported,
   PatchResult,
@@ -83,7 +85,7 @@ export interface ApiClient {
   /** 호출자가 속한 프로젝트 목록. 각 항목에 호출자의 `role`이 실려 온다. */
   listProjects(): Promise<ProjectDetail[]>
   /**
-   * **로그인한 사람의 API 토큰 전부** — 멤버가 아닌 프로젝트의 것도 든다(`routes/tokens.tsx`). 세션으로만 부른다(서버가
+   * **로그인한 사람의 API 토큰 전부** — 멤버가 아닌 프로젝트의 것도 든다(`account/tokens-section.tsx`). 세션으로만 부른다(서버가
    * 토큰 요청에 401).
    */
   listMyTokens(): Promise<MyApiToken[]>
@@ -91,6 +93,20 @@ export interface ApiClient {
   revokeMyToken(tokenId: string): Promise<void>
   /** 내 토큰 전부를 폐기하고 지운 수를 낸다. */
   revokeAllMyTokens(): Promise<{ revoked: number }>
+  /**
+   * 로그인한 사람의 비밀번호를 바꾼다(`account/password-section.tsx`). 성공하면 이 세션만 남고 다른 세션은 끝난다. **지금 비밀번호가
+   * 틀리면 401 `unauthenticated` + 이슈 코드 `wrong-password`** — 세션은 그대로라 받는 쪽이 «세션 끝»(`api/failure.tsx`의
+   * `toFailure`)과 가른다(`WRONG_PASSWORD`). 한도에 닿으면 429 `rate-limited`(서버 README «로그인 시도 제한»).
+   */
+  changePassword(currentPassword: string, newPassword: string): Promise<void>
+  /** 프로젝트 멤버 목록 — 초대한 차례(viewer 부터 부른다). 설정 페이지의 멤버 절(`settings/members-section.tsx`)이 부른다. */
+  listMembers(projectId: string, options?: ReadOptions): Promise<ProjectMember[]>
+  /** 이미 계정이 있는 사람을 초대한다(owner). 없는 계정 404 · 이미 멤버 409 — 문장은 서버 봉투다. */
+  addMember(projectId: string, email: string, role: ProjectRole): Promise<ProjectMember>
+  /** 멤버의 역할을 바꾼다(owner). 마지막 owner 의 강등은 409 · 이미 빠진 멤버는 404. */
+  updateMemberRole(projectId: string, userId: string, role: ProjectRole): Promise<ProjectMember>
+  /** 멤버를 뺀다(owner). 그 사람의 그 프로젝트 토큰도 함께 지워진다(서버). 마지막 owner 는 409 · 이미 빠졌으면 404. */
+  removeMember(projectId: string, userId: string): Promise<void>
   /**
    * `cancel`은 셸을 떠나면 끊는다(`routes/editor.tsx`의 첫 조회 · `reread`). 응답의 `themeRev` 는 셸의 다시 읽기가 테마를 따라잡는 데
    * 쓴다(`ProjectView`).
@@ -567,6 +583,9 @@ export type ApiErrorCode =
   /** 로그인 시도 제한(429). 화면은 서버 문장을 그대로 그린다(`routes/login.tsx`). */
   | 'rate-limited'
   | 'internal'
+
+/** 비밀번호 바꾸기에서 지금 비밀번호가 틀렸을 때의 이슈 코드(서버 `routes/auth.ts`의 `WRONG_PASSWORD` — 같은 글자여야 한다). */
+export const WRONG_PASSWORD = 'wrong-password'
 
 /** 실패 응답에 실려 오는 개별 이슈. `code`·`nodeId`는 카탈로그 검증 실패에만 채워진다. */
 export interface ApiErrorIssue {

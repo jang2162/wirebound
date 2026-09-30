@@ -238,12 +238,12 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 |---|---|---|
 | `bad-request` | 400 | 요청 형식이 잘못됨(zod 검증 실패, 스키마 봉투 위반 등) |
 | `bad-request` | **413** · **415** | 413 — 본문이 상한을 넘었다(«요청 본문이 너무 큽니다» — 앱 기본 1 MiB · 테마 업로드 10 MB). 415 — 그 라우트가 안 받는 `Content-Type`(테마 업로드는 `application/zip` · `application/octet-stream` 만 받는다) |
-| `unauthenticated` | 401 | 로그인이 필요함(세션 쿠키 없음/만료) |
+| `unauthenticated` | 401 | 로그인이 필요함(세션 쿠키 없음/만료). **예외 하나 — 이슈 코드 `wrong-password`**(`POST /api/auth/password`의 지금 비밀번호가 틀렸다): 세션은 그대로다. 받는 쪽은 이 코드로 «세션 끝»과 가른다 |
 | `forbidden` | 403 | 로그인은 했지만 이 작업에 필요한 역할이 아님 |
 | `not-found` | 404 | 대상이 없음, **또는 프로젝트 멤버가 아님**(설계서 「권한 모델」 — 비멤버에게 프로젝트 존재 여부를 숨긴다) |
 | `conflict` | 409 | 유니크 제약 위반, 마지막 owner 제거 시도, 자식이 있는 메뉴 삭제 시도, **스냅샷 태그 중복**, **스냅샷 수집 중 프로젝트 변경**, **복원의 다섯 갈래**(지문 불일치·안전망 태그 중복·레이아웃 불일치·코멘트 작성자 없음·테마 패키지 없음), **같은 테마 패키지 판 재업로드**, **테마 바인딩의 `rev` 불일치**(본문에 `current` — 아래 «테마 패키지와 프로젝트 테마») 등 |
 | `locked` | **423** | **다른 사용자가 편집 중인 노드**(설계서 「소프트 잠금」)를 건드렸다. `message`가 누가 잡고 있는지 말한다. **`conflict`(409)와 갈라 둔 것이 계약이다** — 아래 *"소프트 잠금"* 참고 |
-| `rate-limited` | **429** + `Retry-After` | **로그인 시도가 너무 많다**(`POST /api/auth/login`만). 비밀번호를 견주지 않았다 — 옳은 비밀번호도 이 답이다. `Retry-After`(초) 뒤에 풀린다 — 서버에 손이 닿는 사람이 명령으로 먼저 풀 수 있다. 규칙은 아래 «로그인 시도 제한» |
+| `rate-limited` | **429** + `Retry-After` | **로그인 시도가 너무 많다**(`POST /api/auth/login` · `POST /api/auth/password` — 둘이 같은 기록에 센다). 비밀번호를 견주지 않았다 — 옳은 비밀번호도 이 답이다. `Retry-After`(초) 뒤에 풀린다 — 서버에 손이 닿는 사람이 명령으로 먼저 풀 수 있다. 규칙은 아래 «로그인 시도 제한» |
 | `validation-failed` | 422 | 봉투는 유효하지만 카탈로그 규칙(컴포넌트 타입·props·variant 등)을 위반함. `issues`에 `ValidationIssue[]`. **테마 패키지 · 바인딩의 거절도 이 줄이다** — `issues[].code` 가 까닭을 가른다(아래 «테마 패키지와 프로젝트 테마») |
 | `internal` | 500 | 예상하지 못한 서버 오류. **그 요청은 커밋 전이다**(웹의 코멘트 게시가 그렇게 읽는다). COMMIT 답을 잃은 쓰기가 **커밋 안 된 것을 확인한** 판도 이 줄이다 — «…요청이 반영되지 않았습니다 — 다시 시도하세요»(아래 «COMMIT 답을 잃은 편집») |
 | `internal` | **503** | **DB 가 답하지 않았다** — 연결이 끊겼거나 닿지 못했거나, **COMMIT 에 서버의 답이 아닌 거절이 왔다**. **그 요청이 반영됐는지 모른다**(COMMIT 의 답만 잃었을 수 있다). 500 과 갈라 둔 것이 계약이다 — 경계는 `src/db/connection-loss.ts`, 번역은 `src/http/error-handler.ts`. **문장은 메서드로 갈린다** — 쓰는 요청은 «…요청이 반영됐는지 알 수 없습니다», GET · HEAD · OPTIONS 는 «…불러오지 못했습니다 — 잠시 뒤 다시 시도하세요»(읽기는 «반영»을 말하지 않는다). WS `patch`의 `patch-error`도 같은 판에 같은 `status` · 쓰기 문장이다(`http/error-handler.ts`의 `dbUnreachableFailure`). 가르는 값은 숫자다 — 문장은 사람에게만 간다. **편집(`PATCH .../ops` · WS `patch`)은 COMMIT 답을 잃으면 먼저 확인한다** — 아래 "편집 파이프라인"의 «COMMIT 답을 잃은 편집» |
@@ -292,6 +292,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 |---|---|---|---|---|
 | `/api/auth/login` | POST | (없음, 공개) | `{ email, password }` | 200 `{ id, email, name, isInstanceAdmin }`(`/me` 와 같은 모양 — 로그인 직후 화면이 관리자 링크를 세운다), 세션 쿠키 설정. 틀리면 401(없는 계정과 같은 답). 시도가 한도를 넘으면 429 + `Retry-After`(아래 «로그인 시도 제한») |
 | `/api/auth/logout` | POST | 로그인만 | — | 204. **그 세션의 WS 연결을 곧바로 닫고(4403) 그 연결의 잠금을 놓는다** — 같은 사람의 다른 로그인 · 남의 연결은 그대로다 |
+| `/api/auth/password` | POST | 로그인만(세션) | `{ currentPassword, newPassword }` | 204. **이 세션만 남기고 그 사람의 다른 세션을 지우고 그 세션들의 WS 를 곧바로 닫는다(4403)** — API 토큰은 그대로다. 새 비밀번호는 시딩 · 재설정 명령과 같은 규칙(8–200자 · NFC — 밖이면 400). 지금 비밀번호가 틀리면 401 + 이슈 `wrong-password`(세션은 그대로). 견주는 시도는 로그인과 같은 한도에 센다 — 넘으면 옳은 비밀번호도 429 + `Retry-After`(아래 «로그인 시도 제한»). 커밋 직전에 세션을 다시 본다(그 사이 로그아웃했으면 401 · 아무것도 안 바뀜). 토큰으로 부르면 401 |
 | `/api/auth/me` | GET | 로그인만 | — | 200 `{ id, email, name, isInstanceAdmin }` — `isInstanceAdmin` 은 요청마다 DB 에서 읽는다(위 «인스턴스 관리자») |
 | `/api/auth/tokens` | GET | 로그인만(세션) | — | 200 `{ id, name, createdAt, lastUsedAt, projectId, projectName, member }[]` — **로그인한 사람의 토큰 전부**(프로젝트를 가리지 않는다), 오래된 것 먼저. 멤버가 아닌 프로젝트의 줄은 `projectName: null` · `member: false`. 아래 "API 토큰". 토큰으로 부르면 401 |
 | `/api/auth/tokens/:tokenId` | DELETE | 로그인만(세션) | — | 204 — 어느 프로젝트의 것이든. 남의 토큰·없는 id는 404. 토큰으로 부르면 401 |
@@ -543,7 +544,7 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 
 ### 로그인 시도 제한
 
-`POST /api/auth/login`은 창(15분) 안의 시도를 **계정(정규화한 이메일)** 과 **주소**로 센다 — 계정 10 번 · 주소 30 번에 닿으면 그 키로
+`POST /api/auth/login` · `POST /api/auth/password`(지금 비밀번호를 견주는 시도)는 한 기록에 창(15분) 안의 시도를 **계정(정규화한 이메일 — 비밀번호 바꾸기는 로그인한 사람의 이메일)** 과 **주소**로 센다 — 계정 10 번 · 주소 30 번에 닿으면 그 키로
 오는 로그인은 창이 지날 때까지 **429 `rate-limited` + `Retry-After`** 다(DB 도 scrypt 도 안 거친다). 한도 · 창은
 `src/auth/login-limit.ts`의 `LOGIN_LIMIT`, 고른 까닭(두 키 · 견주기 전에 셈 · 막힌 동안 옳은 비밀번호도 거절 · 메모리)은 그 파일의
 머리말이 소유한다.

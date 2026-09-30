@@ -1,22 +1,17 @@
 /**
  * 로그인 다음 화면. 내가 속한 프로젝트를 늘어놓고, 하나를 고르면 에디터로 들어간다.
- * **여기서 프로젝트를 만들고 지운다** — 이름 · 슬러그 · 설명을 고치는 것은 줄의 «설정» 이 여는 설정 페이지다(`routes/settings.tsx`).
+ * **여기서 프로젝트를 만든다** — 이름 · 슬러그 · 설명을 고치고 프로젝트를 지우는 것은 줄의 «설정» 이 여는 설정 페이지다
+ * (`routes/settings.tsx` — 삭제는 그 «위험 구역» 절).
  *
  * **조회·잠금·조작은 `projects/use-project-commands.tsx`가 갖는다.** 이 파일은 그 결과를
  * 그리기만 한다 — 판정이 컴포넌트 안에 흩어지면 케이스가 화면을 지나야만 재진다.
- *
- * **삭제 확인은 `projects/delete-confirm.tsx`의 `DeleteConfirm`이 그 항목 자리에 연다.**
  */
 import type { ReactElement } from 'react'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
-import { DeleteConfirm } from '../projects/delete-confirm'
-import { projectAbilities } from '../projects/project-actions'
 import { ProjectForm } from '../projects/project-form'
-import { useProjectCommands, type ProjectCommands } from '../projects/use-project-commands'
-import { useSessionUser } from '../session/session-context'
-import { SessionNotices, useLogout } from '../session/session-menu'
-import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
+import { useProjectCommands } from '../projects/use-project-commands'
+import { PageHead } from '../shell/page-head'
 import type { ProjectDetail } from '../api/types'
 
 /** 조회가 성공했는데 결과가 비어 있을 때의 안내. */
@@ -25,17 +20,6 @@ const EMPTY_NOTICE = '참여 중인 프로젝트가 없습니다'
 export function ProjectListRoute(): ReactElement {
   const commands = useProjectCommands()
   const { state } = commands
-  const user = useSessionUser()
-  // 인스턴스 관리자에게만 «테마 관리»(spec 「관리자 화면」). 값은 세션 사용자의 것 — 로그인 응답 · `/me` 가 싣는다.
-  const admin = user?.isInstanceAdmin === true
-  // 로그아웃 흐름은 에디터 `…` 와 같다(`session/session-menu.tsx`의 `useLogout`) — 기다릴 편집이 없는 화면이라 `settle`을 안 넘긴다.
-  const { logout, busy: loggingOut, failure: logoutFailure } = useLogout()
-  /** 목록 머리 `…` 의 항목 — spec 「화면 사이의 길」. «테마 관리»는 인스턴스 관리자에게만 선다(빼지 끄지 않는다 — 역할처럼 기다려서 풀리는 것이 아니다). */
-  const menuItems: ActionMenuItem[] = [
-    { key: 'account', label: '계정 설정', to: '/account' },
-    ...(admin ? [{ key: 'themes', label: '테마 관리', to: '/admin/themes' }] : []),
-    { key: 'logout', label: '로그아웃', onSelect: logout, disabled: loggingOut },
-  ]
 
   // 세션이 끊겼으면 목록 대신 로그인이다. 화면 **전체**를 대신하는 것이라 아래 JSX보다
   // 앞에 둔다 — 아래 JSX 안에 `<SignedOut />`을 끼우면 실패한 커밋에 목록 **틀**이 함께
@@ -49,17 +33,12 @@ export function ProjectListRoute(): ReactElement {
     // `test/shell-css.test.ts`가 기계로 지킨다.
     <main className="wb-shell-project-list">
       {/* **여기에도 앱에서 나가는 길이 있어야 한다.** 에디터 머리에만 두면 프로젝트를 하나
-          열지 않고는 로그아웃할 수 없다. 머리 오른쪽 끝의 `…` 가 계정 설정 · (관리자) 테마 관리 · 로그아웃을 든다 — 에디터 `…` 와 같은
-          부품(`shell/action-menu.tsx`) · 같은 로그아웃 흐름이다.
+          열지 않고는 로그아웃할 수 없다. 머리 오른쪽 끝의 `…` 가 계정 설정 · (관리자) 테마 관리 · 로그아웃을 든다 — 셸 밖 화면이 함께 쓰는
+          머리(`shell/page-head.tsx`)다. 로고는 없다 — 로고가 가는 곳이 이 화면이다. 세션 통지(전환 · 로그아웃 실패)는 그 머리 아래 한 줄이다.
 
           이 화면이 팔레트 루트 가운데 하나라(`shell.css`의 팔레트 블록에 `.wb-shell-project-list`가 있다) 그 안의
           `var(--wb-shell-*)`도 여기서 정의돼 있다 — 없으면 조용히 검게 나온다. */}
-      <div className="wb-shell-project-head">
-        <h1 className="wb-shell-project-list-title">프로젝트</h1>
-        <ActionMenu label="더 보기" heading={user?.name} items={menuItems} />
-      </div>
-      {/* **세션 전환 · 로그아웃 실패**(`SessionNotices`) — 머리 아래 한 줄. */}
-      <SessionNotices failure={logoutFailure} className="wb-shell-project-alert" />
+      <PageHead title="프로젝트" brand={false} />
 
       {/* **여는 버튼도 잠근다.** 실제로 막는 것은 훅의 `inFlight`이고, 이 `disabled`는
           그것을 화면에 보이게 한다 — 여는 쪽 하나라도 빠지면 그 버튼은 눌리는 것처럼 보이는데
@@ -107,7 +86,7 @@ export function ProjectListRoute(): ReactElement {
         ) : (
           <ul className="wb-shell-project-items">
             {state.projects.map((project) => (
-              <ProjectRow key={project.id} project={project} commands={commands} />
+              <ProjectRow key={project.id} project={project} />
             ))}
           </ul>
         ))}
@@ -116,14 +95,10 @@ export function ProjectListRoute(): ReactElement {
 }
 
 /**
- * 목록의 한 줄. **역할 판정을 여기서 다시 하지 않는다** — `projectAbilities` 하나가 그것을
- * 갖는다. **`.role`은 `projectAbilities`의 인자 자리에서만 읽어야** 판정이 흩어지지 않는다
- * (`test/role-access.test.ts`가 센다).
+ * 목록의 한 줄 — 이름(에디터로) · 설명 · «설정». **역할로 가르는 것이 없다** — 줄마다 같은 둘이다(설정 페이지가 역할대로 열고 닫는다).
  */
-function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }): ReactElement {
-  const { project, commands } = props
-  const abilities = projectAbilities(project.role)
-  const confirming = commands.confirmingDelete?.id === project.id
+function ProjectRow(props: { project: ProjectDetail }): ReactElement {
+  const { project } = props
 
   return (
     <li className="wb-shell-project-item">
@@ -141,33 +116,6 @@ function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }
       <Link className="wb-shell-project-settings" to={`/projects/${project.id}/settings`} aria-label={`${project.name} 설정`}>
         설정
       </Link>
-
-      {/* **`owner`가 아니면 버튼 자체가 없다** — `editor`·`viewer`는 `DELETE`가 403이다(`projects/project-actions.ts` 머리말의
-          서버 응답 표). 비활성으로 두지 않고 아예 그리지 않는 것은, 이 화면에서 역할이 바뀌는 길이 없어 "지금은 못 하지만 곧 될
-          수도 있다"가 아니기 때문이다. */}
-      {abilities.remove && (
-        <button
-          className="wb-shell-project-action"
-          type="button"
-          disabled={commands.busy}
-          onClick={() => commands.askDelete(project)}
-        >
-          {`${project.name} 삭제`}
-        </button>
-      )}
-
-      {/* **`key`를 주지 않는다.** *"`key`가 있어야 다른 항목으로 옮길 때 친 이름이
-          사라진다"*는 거짓이다: 각 `DeleteConfirm`은 서로 다른 `<li>`(그쪽이 `key={project.id}`를
-          갖는다) 안에 있어, 항목을 옮기면 그 서브트리째 언마운트되고 친 이름도 사라진다.
-          여기 `key`를 주는 것은 **`<li>`의 `key`가 이미 하는 일을 한 겹 더 적는 것이다.** */}
-      {confirming && (
-        <DeleteConfirm
-          project={project}
-          busy={commands.busy}
-          onConfirm={() => commands.confirmDelete(project)}
-          onCancel={commands.cancelDelete}
-        />
-      )}
     </li>
   )
 }

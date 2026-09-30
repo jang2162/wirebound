@@ -102,8 +102,8 @@ export function badRequest(message: string, issues?: ApiErrorIssue[]): ApiError 
   return new ApiError('bad-request', message, issues)
 }
 
-export function unauthenticated(message = '로그인이 필요합니다'): ApiError {
-  return new ApiError('unauthenticated', message)
+export function unauthenticated(message = '로그인이 필요합니다', issues?: ApiErrorIssue[]): ApiError {
+  return new ApiError('unauthenticated', message, issues)
 }
 
 export function forbidden(message = '권한이 없습니다'): ApiError {

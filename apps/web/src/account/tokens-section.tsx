@@ -1,14 +1,13 @@
 /**
- * **내 API 토큰** — 로그인한 사람이 만든 토큰(`wireb login`) 전부를 보고 거둔다. 계정 묶음(`session/session-menu.tsx`)의
- * 링크로 온다.
+ * **내 API 토큰** — 로그인한 사람이 만든 토큰(`wireb login`) 전부를 보고 거둔다. 계정 설정(`routes/account.tsx`)의 한 절이다.
  *
- * ## 왜 셸 밖 라우트인가
+ * ## 왜 계정의 절인가
  *
  * 토큰은 프로젝트마다 발급되지만 **거두는 사람이 보는 단위는 계정이다** — 옛 비밀번호가 새었으면 그 사람의 토큰 전부를
  * 거둬야 하고, 거기에는 **멤버가 아닌 프로젝트의 토큰**도 든다(그 프로젝트의 목록은 서버가 404 로 숨긴다 — 서버
- * `routes/tokens.ts`의 «내 토큰은 프로젝트를 가로지른다»). 한 프로젝트의 셸 머리 팝오버(`shell/snapshots-panel.tsx`)에
- * 두면 그 줄들이 들어갈 자리가 없다. 그래서 프로젝트 목록과 나란한 라우트이고, 그 화면의 팔레트 루트와 목록 꼴을 함께
- * 쓴다(`.wb-shell-project-list` — `shell.css`의 팔레트 블록).
+ * `routes/tokens.ts`의 «내 토큰은 프로젝트를 가로지른다»). 한 프로젝트의 화면에 두면 그 줄들이 들어갈 자리가 없다. 비밀번호를
+ * 바꿔도 토큰은 안 거둬지므로(서버 `POST /api/auth/password`) 거두는 길이 비밀번호 절 곁에 있다. 목록 꼴(`.wb-shell-project-*`)은
+ * 프로젝트 목록과 함께 쓴다.
  *
  * ## 폐기는 두 번 누른다
  *
@@ -29,7 +28,7 @@
  * [Chrome] 두 폭(390 · 1280)에서 첫 누름 뒤 그 단추의 왼끝 · 가운데 · 오른끝에 확정이 없고, `dblclick`과 따로 누른 두 번
  * (80 · 250 · 500ms)이 DELETE 0 건이다. 두 겹은 각각 혼자 `dblclick`을 막는다 — 가드를 떼도 0, 배치를 확정이 먼저인 가로
  * 줄로 되돌려도 0(그때 따로 누른 두 번은 1). 다시 재는 법: 독립 헤드리스 Chrome 으로 `/tokens`를 열어 `elementFromPoint` ·
- * `mouse.dblclick` · `mouse.click` 두 번. jsdom 은 좌표가 없어 배치를 못 잰다 — `test/routes/tokens.test.tsx`는 `detail`만 잰다.
+ * `mouse.dblclick` · `mouse.click` 두 번. jsdom 은 좌표가 없어 배치를 못 잰다 — `test/routes/tokens.test.tsx`는 `detail`만 잰다(Chrome 판은 `build-test/tokens-confirm.test.ts`).
  *
  * **전부 폐기의 확정은 수를 말하지 않는다** — 받아 둔 목록의 수는 누르는 순간 서버의 «전부»와 다를 수 있다(그 사이 다른 탭 ·
  * `wireb login`이 발급한 것). 실제로 거둔 수는 서버의 `revoked`로 알림이 말한다.
@@ -42,13 +41,11 @@
  * **하나 폐기의 404 는 성공으로 친다** — 그 토큰이 이미 없다는 뜻이고(다른 탭의 폐기 · 멤버 제거 · 프로젝트 삭제), 폐기가
  * 이루려던 상태가 참이다. 로그아웃의 «세션이 이미 없다»(`session/session-menu.tsx`)와 같은 자리다.
  */
-import { useCallback, useEffect, useState, type MouseEvent, type ReactElement } from 'react'
-import { Link } from 'react-router'
+import { useCallback, useEffect, useId, useState, type MouseEvent, type ReactElement } from 'react'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { MyApiToken } from '../api/types'
-import { SessionMenu } from '../session/session-menu'
 
 const LOAD_FAILURE = '토큰 목록을 불러오지 못했습니다'
 const REVOKE_FAILURE = '토큰을 폐기하지 못했습니다'
@@ -75,8 +72,9 @@ type ListState = { status: 'loading' } | { status: 'failed'; failure: Failure } 
 /** 열린 확인 — 줄 하나(`id`) 또는 전부. */
 type Confirming = { kind: 'one'; id: string } | { kind: 'all' } | null
 
-export function TokensRoute(): ReactElement {
+export function TokensSection(): ReactElement {
   const api = useApi()
+  const heading = useId()
   const [state, setState] = useState<ListState>({ status: 'loading' })
   const [confirming, setConfirming] = useState<Confirming>(null)
   const [busy, setBusy] = useState(false)
@@ -129,16 +127,10 @@ export function TokensRoute(): ReactElement {
   const tokens = state.status === 'ready' ? state.tokens : []
 
   return (
-    <main className="wb-shell-project-list">
-      <div className="wb-shell-project-head">
-        <h1 className="wb-shell-project-list-title">API 토큰</h1>
-        <SessionMenu />
-      </div>
-      <p className="wb-shell-tokens-lead">
-        <Link className="wb-shell-tokens-back" to="/">
-          프로젝트 목록
-        </Link>
-      </p>
+    <section className="wb-shell-settings-section" aria-labelledby={heading}>
+      <h2 className="wb-shell-settings-section-title" id={heading}>
+        API 토큰
+      </h2>
       <p className="wb-shell-tokens-note">
         이 계정으로 만든 토큰(<code>wireb login</code>) 전부입니다 — 멤버에서 빠진 프로젝트의 것도 보입니다. 비밀번호가 새었으면
         전부 폐기하세요. 폐기한 토큰을 쓰던 CLI · 에이전트는 곧바로 로그인이 풀립니다.
@@ -207,7 +199,7 @@ export function TokensRoute(): ReactElement {
             ))}
           </ul>
         ))}
-    </main>
+    </section>
   )
 }
 

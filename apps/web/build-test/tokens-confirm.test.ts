@@ -1,7 +1,7 @@
 /**
  * **«API 토큰»의 폐기 확인은 연타 · 따로 누른 두 번에 지나가지 않는다** — 묻던 단추의 왼끝 · 가운데 · 오른끝, 폭 390 · 1280.
  *
- * 두 겹이 막는다(`routes/tokens.tsx` 머리말 «폐기는 두 번 누른다»): 확정이 `detail > 1` 을 버리고, 확정이 묻던 단추 자리에 서지
+ * 두 겹이 막는다(`account/tokens-section.tsx` 머리말 «폐기는 두 번 누른다»): 확정이 `detail > 1` 을 버리고, 확정이 묻던 단추 자리에 서지
  * 않는다. 첫 겹은 jsdom 이 잰다(`test/routes/tokens.test.tsx`). **둘째 겹은 좌표라 여기서만 잰다** — 따로 누른 두 번(각 `detail`
  * 1)은 첫 겹을 지나므로 이 겹만 막는다. 가운데 한 점만 재면 «그 자리에 취소가 선다»여도 가장자리 · 긴 이름에서 확정이 선다.
  *
@@ -55,7 +55,8 @@ describe.skipIf(!전제.ok)('토큰 폐기 확인', () => {
 
   const count = async () => Number((await stack.query<{ n: string }>('select count(*) as n from api_tokens where user_id = $1', [userId]))[0]!.n)
 
-  /** 폭 하나의 탭 — 로그인은 한 번이다. `load` 가 토큰을 줄 둘로 되돌리고 `/tokens` 를 다시 싣는다. DELETE 요청을 센다. */
+  /** 폭 하나의 탭 — 로그인은 한 번이다. `load` 가 토큰을 줄 둘로 되돌리고 `/account` 를 다시 싣는다. DELETE 요청을 센다.
+   * 토큰 절은 계정 설정의 맨 아래 절이라 절 머리를 창 위로 올린다 — 좌표로 누르는 판이 창 밖을 누르지 않게. */
   async function tab(width: number): Promise<{ page: Page; load(): Promise<string[]>; close(): Promise<void> }> {
     const { context, page } = await stack.openTab(stack.users.bob, { viewport: { width, height: 900 } })
     let deletes: string[] = []
@@ -70,8 +71,9 @@ describe.skipIf(!전제.ok)('토큰 폐기 확인', () => {
           const made = await stack.request(bob, 'POST', `/projects/${projectId}/tokens`, { name })
           if (made.status !== 201) throw new Error(`픽스처 token ${made.status}`)
         }
-        await page.goto('/tokens')
+        await page.goto('/account')
         await page.getByRole('button', { name: `${ROWS[0]} 폐기`, exact: true }).waitFor()
+        await page.getByRole('region', { name: 'API 토큰' }).evaluate((section) => section.scrollIntoView({ block: 'start' }))
         deletes = []
         return deletes
       },

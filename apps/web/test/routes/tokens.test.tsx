@@ -1,5 +1,5 @@
 /**
- * «API 토큰» 화면(`src/routes/tokens.tsx`) — jsdom. 목 · 가짜 api 는 **불린 수를 값으로** 단언한다(`CLAUDE.md`
+ * «API 토큰» 절(`src/account/tokens-section.tsx` — 계정 설정 `/account` 의 한 절) — jsdom. 목 · 가짜 api 는 **불린 수를 값으로** 단언한다(`CLAUDE.md`
  * «목 · 계측은 불린 수를 값으로 확인하고»). 실브라우저 값은 이 트랙의 보고에 따로 있다.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -53,20 +53,20 @@ function server(initial: MyApiToken[], overrides: Partial<ApiClient> = {}) {
   return { client, calls }
 }
 
-describe('API 토큰 화면', () => {
-  /** 계정 묶음은 셸 밖 화면(테마 관리 · 설정 · 이 화면)의 머리다 — 프로젝트 목록 머리는 `…` 로 바뀌었다(`routes/project-list.tsx`). */
-  it('계정 묶음의 «API 토큰» 링크가 이 화면으로 간다', async () => {
+describe('API 토큰 절', () => {
+  /** 옛 계정 묶음의 «API 토큰» 링크는 없다 — 셸 밖 화면 머리의 `…`(`shell/page-head.tsx`)가 «계정 설정»으로 가고 토큰은 그 한 절이다. */
+  it('머리 `…` 의 «계정 설정»이 계정 설정으로 가고 그 안에 토큰 절이 선다', async () => {
     const { client, calls } = server([token()], {
       me: async () => ({ ...USER, isInstanceAdmin: true }),
       listThemePackages: async () => [],
     })
     renderWithProviders(<App />, { client, route: '/admin/themes' })
 
-    const link = await screen.findByRole('link', { name: 'API 토큰' })
+    fireEvent.click(await screen.findByRole('button', { name: '더 보기' }))
     expect(currentPath()).toBe('/admin/themes')
-    fireEvent.click(link)
+    fireEvent.click(screen.getByRole('menuitem', { name: '계정 설정' }))
     await screen.findByRole('heading', { name: 'API 토큰' })
-    expect(currentPath()).toBe('/tokens')
+    expect(currentPath()).toBe('/account')
     await screen.findByText('CI')
     expect(calls.list).toBe(1)
   })
@@ -76,7 +76,7 @@ describe('API 토큰 화면', () => {
       token(),
       token({ id: 't-2', name: '떠난 곳', projectId: 'p-9', projectName: null, member: false, lastUsedAt: '2026-09-02T00:00:00.000Z' }),
     ])
-    renderWithProviders(<App />, { client, route: '/tokens' })
+    renderWithProviders(<App />, { client, route: '/account' })
 
     const rows = await screen.findAllByRole('listitem')
     expect(rows).toHaveLength(2)
@@ -88,7 +88,7 @@ describe('API 토큰 화면', () => {
 
   it('하나 폐기 — 첫 누름은 확인만 열고, 확정하면 그 id 로 한 번 부른 뒤 목록을 다시 받는다', async () => {
     const { client, calls } = server([token(), token({ id: 't-2', name: '노트북' })])
-    renderWithProviders(<App />, { client, route: '/tokens' })
+    renderWithProviders(<App />, { client, route: '/account' })
 
     fireEvent.click(await screen.findByRole('button', { name: 'CI 폐기' }))
     expect(calls.revoke).toEqual([])
@@ -107,7 +107,7 @@ describe('API 토큰 화면', () => {
         throw new ApiError(404, 'not-found', '토큰을 찾을 수 없습니다', [], true)
       },
     })
-    renderWithProviders(<App />, { client, route: '/tokens' })
+    renderWithProviders(<App />, { client, route: '/account' })
 
     fireEvent.click(await screen.findByRole('button', { name: 'CI 폐기' }))
     fireEvent.click(screen.getByRole('button', { name: 'CI 폐기 확정' }))
@@ -119,7 +119,7 @@ describe('API 토큰 화면', () => {
 
   it('전부 폐기 — 확인 뒤 한 번 부르고 거둔 수를 말한다 · 목록이 빈다', async () => {
     const { client, calls } = server([token(), token({ id: 't-2', name: '노트북' }), token({ id: 't-3', name: '떠난 곳', member: false, projectName: null })])
-    renderWithProviders(<App />, { client, route: '/tokens' })
+    renderWithProviders(<App />, { client, route: '/account' })
 
     fireEvent.click(await screen.findByRole('button', { name: '전부 폐기' }))
     expect(calls.revokeAll).toBe(0)
@@ -140,7 +140,7 @@ describe('API 토큰 화면', () => {
         return { revoked: 3 }
       },
     })
-    renderWithProviders(<App />, { client, route: '/tokens' })
+    renderWithProviders(<App />, { client, route: '/account' })
 
     fireEvent.click(await screen.findByRole('button', { name: '전부 폐기' }))
     expect(screen.getByRole('button', { name: '토큰 전부 폐기 확정' }).textContent).not.toMatch(/\d/)
@@ -152,7 +152,7 @@ describe('API 토큰 화면', () => {
 
   it('확정은 연타의 둘째 누름(`detail > 1`)을 버린다 — 전부 폐기 · 줄 하나 폐기 둘 다 · 키보드(`detail` 0)는 지난다', async () => {
     const { client, calls } = server([token(), token({ id: 't-2', name: '노트북' })])
-    renderWithProviders(<App />, { client, route: '/tokens' })
+    renderWithProviders(<App />, { client, route: '/account' })
 
     fireEvent.click(await screen.findByRole('button', { name: '전부 폐기' }), { detail: 1 })
     fireEvent.click(screen.getByRole('button', { name: '토큰 전부 폐기 확정' }), { detail: 2 })
@@ -180,7 +180,7 @@ describe('API 토큰 화면', () => {
         throw new ApiError(500, 'internal', '토큰 저장소가 응답하지 않습니다 [TK-9]', [], true)
       },
     })
-    renderWithProviders(<App />, { client, route: '/tokens' })
+    renderWithProviders(<App />, { client, route: '/account' })
 
     fireEvent.click(await screen.findByRole('button', { name: '전부 폐기' }))
     fireEvent.click(screen.getByRole('button', { name: '토큰 전부 폐기 확정' }))
@@ -196,7 +196,7 @@ describe('API 토큰 화면', () => {
         throw unauthenticatedError()
       },
     })
-    renderWithProviders(<App />, { client, route: '/tokens' })
+    renderWithProviders(<App />, { client, route: '/account' })
 
     await waitFor(() => expect(currentPath()).toBe('/login'))
   })

@@ -21,6 +21,7 @@ import type {
   MarkerChange,
   MenuNode,
   MyApiToken,
+  ProjectMember,
   PageDetail,
   PageImported,
   PatchResult,
@@ -349,6 +350,18 @@ function isPageDetail(value: unknown): boolean {
   )
 }
 
+/** 멤버 한 줄. `userId` 는 역할 바꾸기 · 제외의 주소가 되므로 빈 문자열까지 막는다(`isMyApiToken` 의 `id` 와 같은 판단). */
+function isProjectMember(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['userId'] === 'string' &&
+    value['userId'] !== '' &&
+    typeof value['email'] === 'string' &&
+    typeof value['name'] === 'string' &&
+    typeof value['role'] === 'string'
+  )
+}
+
 function isMyApiToken(value: unknown): boolean {
   return (
     isRecord(value) &&
@@ -416,11 +429,14 @@ const SHAPES = {
   /** 본문을 읽지 않는 요청. 204에서는 아래 조기 반환에 걸려 이 검사에 닿지 않는다. */
   noBody: () => true,
   /**
-   * «내 토큰» 목록(`routes/tokens.tsx`). **`id`는 폐기 주소가 되므로 빈 문자열까지 막는다**(아래 `pageDetail`의 «주소가 되는
+   * «내 토큰» 목록(`account/tokens-section.tsx`). **`id`는 폐기 주소가 되므로 빈 문자열까지 막는다**(아래 `pageDetail`의 «주소가 되는
    * 값»과 같은 판단). 나머지는 줄의 글자로 그려지는 값이라 모양만 본다 — 객체가 React 자식으로 닿으면 목록이 통째로 빈다.
    */
   myTokens: (value) => isArrayOf(value, isMyApiToken),
   revokedCount: (value) => isRecord(value) && typeof value['revoked'] === 'number',
+  /** 설정 페이지의 멤버 절(`settings/members-section.tsx`) — 줄의 글자 · 역할 고르개의 값 · 주소(`userId`)를 읽는다. */
+  members: (value) => isArrayOf(value, isProjectMember),
+  member: isProjectMember,
   sessionUser: (value) => isRecord(value) && typeof value['id'] === 'string',
   projectDetail: isProjectDetail,
   projectList: (value) => isArrayOf(value, isProjectDetail),
@@ -1283,6 +1299,16 @@ export function createHttpClient(
     listMyTokens: () => request<MyApiToken[]>('GET', '/auth/tokens', SHAPES.myTokens),
     revokeMyToken: (tokenId) => request<void>('DELETE', `/auth/tokens/${encodeURIComponent(tokenId)}`, SHAPES.noBody),
     revokeAllMyTokens: () => request<{ revoked: number }>('DELETE', '/auth/tokens', SHAPES.revokedCount),
+    changePassword: (currentPassword, newPassword) =>
+      request<void>('POST', '/auth/password', SHAPES.noBody, { currentPassword, newPassword }),
+    listMembers: (projectId, options) =>
+      request<ProjectMember[]>('GET', `${projectPath(projectId)}/members`, SHAPES.members, undefined, options),
+    addMember: (projectId, email, role) =>
+      request<ProjectMember>('POST', `${projectPath(projectId)}/members`, SHAPES.member, { email, role }),
+    updateMemberRole: (projectId, userId, role) =>
+      request<ProjectMember>('PATCH', `${projectPath(projectId)}/members/${encodeURIComponent(userId)}`, SHAPES.member, { role }),
+    removeMember: (projectId, userId) =>
+      request<void>('DELETE', `${projectPath(projectId)}/members/${encodeURIComponent(userId)}`, SHAPES.noBody),
     getProject: (projectId, options) =>
       request<ProjectView>('GET', projectPath(projectId), SHAPES.projectView, undefined, options),
     // 아래 셋이 프로젝트 CRUD다. **생성 응답은 `ProjectDetail`이다** — `role`까지
