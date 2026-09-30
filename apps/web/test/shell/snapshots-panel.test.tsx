@@ -1,5 +1,5 @@
 /**
- * 스냅샷 팝오버.
+ * 스냅샷 대화 상자(`src/shell/snapshots-panel.tsx`의 `SnapshotsBody` — 머리의 `…` 가 연다).
  *
  * **이 파일의 요점은 실패의 화면판이다.** *"실패했다고 말하는데 조작은 일어났다"*는 여러
  * 형태로 나는 부류이고, 아래 `저장이 실패했을 때 화면에 남는 것` 블록이 그 화면판을 셋으로
@@ -7,20 +7,20 @@
  *
  * ---
  *
- * # 진입은 버튼 클릭이다
+ * # 진입은 `…` 의 «스냅샷»이다
  *
- * 스냅샷은 셸 머리의 팝오버다(`src/shell/snapshots-panel.tsx` 머리말이 그 근거를 적고 있다).
- * 모든 케이스가 **셸을 열고 `스냅샷` 버튼을 눌러** 시작한다 — `../editor-harness`의
+ * 스냅샷은 에디터 위의 대화 상자다(`src/shell/snapshots-panel.tsx` 머리말이 그 근거를 적고 있다).
+ * 모든 케이스가 **셸을 열고 `…` 에서 `스냅샷`을 골라** 시작한다(`../editor-harness`의 `chooseFromShellMenu`) —
  * `openPage()`가 그 셸을 성공 대역까지 열어 준다.
  *
  * 셸 위에 떠서 갈리는 자리 둘:
  *
  * | 무엇 | 어떻게 |
  * |---|---|
- * | 조회 실패 두 갈래 | **`listSnapshots`가 던진다** — 셸이 `getProject`를 함께 쓰므로, 그것이 던지면 셸 자체가 안 뜬다(재려는 것은 팝오버의 조회다) |
- * | 버튼 훑기 | **팝오버 안만** 훑는다 — 셸 머리에 `되돌리기`(undo)가 있어 문서 전체를 훑으면 그것이 함께 걸린다 |
+ * | 조회 실패 두 갈래 | **`listSnapshots`가 던진다** — 셸이 `getProject`를 함께 쓰므로, 그것이 던지면 셸 자체가 안 뜬다(재려는 것은 상자의 조회다) |
+ * | 버튼 훑기 | **상자 안만** 훑는다 — 셸 머리에 `되돌리기`(undo)가 있어 문서 전체를 훑으면 그것이 함께 걸린다 |
  *
- * **팝오버가 열려야 조회가 시작된다**(`ExportPanel`과 같은 판단) — 셸이 뜨는 것만으로
+ * **상자가 열려야 조회가 시작된다**(내보내기와 같은 판단) — 셸이 뜨는 것만으로
  * 스냅샷을 부르지 않는다. 아래 `누르기 전에는 아무것도 안 부른다`가 그 자리다.
  */
 import { describe, expect, it, vi } from 'vitest'
@@ -44,6 +44,7 @@ import {
   PROJECT_NAME,
   PROJECT_ROUTE,
   canvasRootId,
+  chooseFromShellMenu,
   nodeElement,
   openPage,
   pageDetail,
@@ -65,18 +66,18 @@ function project(role: ProjectRole): ProjectView {
 }
 
 /**
- * 셸을 열고 `스냅샷` 버튼을 누른다. **가짜는 하네스 것 위에 덮는 조각만 준다** —
+ * 셸을 열고 `…` 에서 `스냅샷`을 고른다. **가짜는 하네스 것 위에 덮는 조각만 준다** —
  * `fakeApi`를 통째로 만들어 넘기면 스텁 안 된 메서드가 `notStubbed`가 되어 셸의 트리와
- * 캔버스가 함께 죽는다(그러면 단언이 *"팝오버가 무엇을 말하는가"*가 아니라 *"오류가
+ * 캔버스가 함께 죽는다(그러면 단언이 *"상자가 무엇을 말하는가"*가 아니라 *"오류가
  * 떴는가"*를 보게 된다 — `editor-shell.test.tsx` 머리말의 그 사고다).
  */
 async function openPanel(overrides: Partial<ApiClient>): Promise<void> {
   await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }), { apiOverrides: overrides })
-  fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+  chooseFromShellMenu('스냅샷')
 }
 
 /**
- * 팝오버 상자. **단언을 여기로 좁히는 케이스가 있다** — 셸 머리에 `되돌리기`(undo)가 있어
+ * 상자 안의 몸체. **단언을 여기로 좁히는 케이스가 있다** — 셸 머리에 `되돌리기`(undo)가 있어
  * 문서 전체에서 버튼을 훑으면 그것이 함께 걸린다.
  */
 function panel(): HTMLElement {
@@ -164,10 +165,10 @@ describe('목록', () => {
 
     expect(await screen.findByText('v1')).toBeTruthy()
     expect(screen.getByText('첫 릴리스 직전')).toBeTruthy()
-    // **팝오버 안에서 찾는다.** 셸 머리의 계정 묶음이 *지금 로그인한 사람*의 이름을
-    // 그리는데(`session/session-menu.tsx`) 이 케이스에서는 그것이 스냅샷을 만든 사람과
+    // **상자 안에서 찾는다.** `…` 메뉴 머리가 *지금 로그인한 사람*의 이름을
+    // 그리는데(메뉴가 열려 있을 때 — `routes/editor.tsx`) 이 케이스에서는 그것이 스냅샷을 만든 사람과
     // 같은 값이다 — 화면 전체에서 찾으면 둘이 잡혀 `getByText`가 던진다. 여기서 재려는
-    // 것은 **목록의 한 줄이 만든 사람을 그리는가**이므로 범위가 팝오버인 편이 맞다.
+    // 것은 **목록의 한 줄이 만든 사람을 그리는가**이므로 범위가 상자인 편이 맞다.
     expect(within(panel()).getByText('홍길동')).toBeTruthy()
     expect(screen.getByText('2026-08-12T09:00:00.000Z')).toBeTruthy()
     // **자릿수 구분만 하고 단위를 바꾸지 않는다** — KB로 접으면 작은 스냅샷이 전부 `0KB`가
@@ -208,7 +209,7 @@ describe('목록', () => {
       // **`queryAllByRole`이다** — viewer에게는 저장 폼도 없어 버튼이 **0개**이고,
       // `getAllByRole`은 0개에서 던진다(그러면 이 케이스가 재려는 것과 무관하게 죽는다).
       //
-      // **팝오버 안만 훑는다.** 문서 전체를 훑으면 셸 머리의 `되돌리기`(undo)가 아래
+      // **상자 안만 훑는다.** 문서 전체를 훑으면 셸 머리의 `되돌리기`(undo)가 아래
       // 패턴에 걸려, 역할과 무관하게 늘 실패한다 — 재려는 것은 *"이 줄에 복원 버튼이
       // 서는가"*이지 화면 어딘가에 그 낱말이 있는가가 아니다.
       const labels = within(panel())
@@ -226,7 +227,7 @@ describe('목록', () => {
    * 태그 혼자 첫 줄에 남고 나머지가 셋째 줄로 밀린다.
    *
    * **CSS 쪽 짝은 `snapshots-layout.test.ts`가 잡는다** — 거기 머리말에 이 화면이 520px
-   * 팝오버에서 무너지는 실측이 있다. 둘이 함께 있어야 이 레이아웃이 선다.
+   * 좁은 상자에서 무너지는 실측이 있다. 둘이 함께 있어야 이 레이아웃이 선다.
    */
   it('설명이 줄의 마지막 칸이다 — 자기 줄을 쓰려면 맨 뒤여야 한다', async () => {
     const client = panelApi({
@@ -859,12 +860,12 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
 })
 
 /**
- * # 팝오버 조회가 실패했을 때
+ * # 상자의 조회가 실패했을 때
  *
  * **던지는 것은 `listSnapshots`다 — `getProject`가 아니다.** 셸이 같은 `getProject`로
  * 프로젝트를 받으므로, 그것이 던지면 **셸 자체가 안 뜬다** — 그러면 이 두 케이스가 재는
- * 것이 *"팝오버가 조회 실패를 어떻게 그리는가"*가 아니라 *"셸이 안 떴다"*가 된다.
- * 팝오버는 둘을 `Promise.all`로 함께 받으므로 어느 쪽이 던져도 같은 갈래를 지난다.
+ * 것이 *"상자가 조회 실패를 어떻게 그리는가"*가 아니라 *"셸이 안 떴다"*가 된다.
+ * 상자는 둘을 `Promise.all`로 함께 받으므로 어느 쪽이 던져도 같은 갈래를 지난다.
  */
 describe('조회 실패', () => {
   it('세션이 끊겼으면 로그인으로 보낸다', async () => {
@@ -905,13 +906,13 @@ describe('조회 실패', () => {
 })
 
 /**
- * # 팝오버로서의 동작 — 여는 것과 닫는 것
+ * # 대화 상자로서의 동작 — 여는 것과 닫는 것
  *
- * 닫는 장치 자체(왜 `mousedown`인지·토글이 두 번 처리되지 않는지·리스너가 남지 않는지)는
- * `popover-dismiss.test.tsx`가 잰다. 여기서는 **이 화면에 붙어 있는가**와, 이 화면에만
+ * 닫는 장치 자체(Escape · 닫기 단추 · 바깥 누름으로는 안 닫힘 · 포커스 돌려줌)는
+ * `shell-dialog.test.tsx`가 잰다. 여기서는 **이 화면에 붙어 있는가**와, 이 화면에만
  * 있는 결과(**확인 단계가 함께 풀린다**)를 본다.
  */
-describe('팝오버', () => {
+describe('대화 상자', () => {
   it('누르기 전에는 아무것도 안 부른다', async () => {
     let calls = 0
     await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }), {
@@ -924,10 +925,10 @@ describe('팝오버', () => {
       },
     })
 
-    // 셸이 뜨는 것만으로는 부르지 않는다 — 팝오버는 열려야 조회한다.
+    // 셸이 뜨는 것만으로는 부르지 않는다 — 상자는 열려야 조회한다.
     expect(calls).toBe(0)
 
-    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    chooseFromShellMenu('스냅샷')
     await waitFor(() => expect(calls).toBe(1))
   })
 
@@ -936,26 +937,27 @@ describe('팝오버', () => {
     await openPanel(panelApi({ getProject: async () => project('owner'), listSnapshots }))
     await screen.findByText('v1')
 
-    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
-    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }))
+    chooseFromShellMenu('스냅샷')
 
     await waitFor(() => expect(listSnapshots).toHaveBeenCalledTimes(2))
   })
 
-  it('바깥을 누르면 닫힌다', async () => {
+  /** **바깥 누름으로는 닫지 않는다** — 폼에 친 태그 · 설명을 잘못 누른 한 번에 잃지 않게(`src/shell/shell-dialog.tsx` 머리말). */
+  it('바깥을 눌러도 닫히지 않는다', async () => {
     await openPanel(panelApi({ getProject: async () => project('owner'), listSnapshots: async () => [snapshot()] }))
     await screen.findByText('v1')
 
     fireEvent.mouseDown(screen.getByRole('main', { name: '캔버스' }))
 
-    expect(screen.queryByRole('group', { name: '스냅샷' })).toBeNull()
+    expect(screen.getByRole('group', { name: '스냅샷' })).toBeTruthy()
   })
 
   it('Escape로 닫힌다', async () => {
     await openPanel(panelApi({ getProject: async () => project('owner'), listSnapshots: async () => [snapshot()] }))
     await screen.findByText('v1')
 
-    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.keyDown(screen.getByRole('dialog', { name: '스냅샷' }), { key: 'Escape' })
 
     expect(screen.queryByRole('group', { name: '스냅샷' })).toBeNull()
   })
@@ -977,8 +979,8 @@ describe('팝오버', () => {
     fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
     expect(screen.getByRole('button', { name: '되돌린다' })).toBeTruthy()
 
-    fireEvent.mouseDown(screen.getByRole('main', { name: '캔버스' }))
-    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }))
+    chooseFromShellMenu('스냅샷')
     await screen.findByText('v1')
 
     // 확인이 풀렸다. 남아 있으면 사용자가 **잊은 확인 위에서** `되돌린다`를 누르게 된다.
@@ -989,9 +991,9 @@ describe('팝오버', () => {
 })
 
 /**
- * # 복원 뒤 재동기화 — **팝오버라서 지는 몫이다**
+ * # 복원 뒤 재동기화 — **에디터 위에 떠서 지는 몫이다**
  *
- * 팝오버는 에디터 **위에** 뜨므로 되돌린 뒤 셸이 통째로 다시 마운트돼 자연히 다시 읽히는
+ * 대화 상자는 에디터 **위에** 뜨므로 되돌린 뒤 셸이 통째로 다시 마운트돼 자연히 다시 읽히는
  * 길이 없다 — 안 알리면 **되돌렸는데 캔버스는 옛 문서를 그대로 보인다.**
  *
  * **문서만으로 부족하다.** 복원은 페이지를 지우고 만들므로 **트리도 바뀌고**, 지금 보고
@@ -1016,7 +1018,7 @@ describe('복원 뒤 재동기화', () => {
     }
   }
 
-  /** 셸을 열고 팝오버를 연 뒤 확인까지 간다. 남은 것은 `되돌린다` 한 번이다. */
+  /** 셸을 열고 스냅샷 상자를 연 뒤 확인까지 간다. 남은 것은 `되돌린다` 한 번이다. */
   async function openConfirm(overrides: Partial<ApiClient>): Promise<void> {
     await openPage(pageDoc(옛뿌리), {
       apiOverrides: {
@@ -1026,7 +1028,7 @@ describe('복원 뒤 재동기화', () => {
         ...overrides,
       },
     })
-    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    chooseFromShellMenu('스냅샷')
     await screen.findByText('v1')
     fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
   }
@@ -1135,7 +1137,7 @@ describe('복원 뒤 재동기화', () => {
     })
     await screen.findByRole('heading', { name: PROJECT_NAME })
 
-    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    chooseFromShellMenu('스냅샷')
     await screen.findByText('v1')
     fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
     fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
@@ -1184,7 +1186,7 @@ describe('복원 뒤 재동기화', () => {
     })
     fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
     await waitFor(() => expect(lists).toBe(1))
-    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    chooseFromShellMenu('스냅샷')
     await screen.findByText('v1')
     fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
 
@@ -1215,7 +1217,7 @@ describe('복원 뒤 재동기화', () => {
     fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
     const box = (await screen.findByRole('textbox', { name: '페이지 설명' })) as HTMLTextAreaElement
     expect(box.value).toBe('')
-    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    chooseFromShellMenu('스냅샷')
     await screen.findByText('v1')
     fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
 
@@ -1236,7 +1238,7 @@ describe('복원 뒤 재동기화', () => {
         getPage,
       },
     })
-    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    chooseFromShellMenu('스냅샷')
     await screen.findByText('v1')
     expect(calls()).toBe(1)
 

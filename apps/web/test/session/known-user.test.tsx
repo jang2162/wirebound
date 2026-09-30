@@ -2,7 +2,7 @@
  * **이 탭이 아는 사용자**(`src/api/known-user.tsx`). 웹은 요청마다 탭이 아는 사람의 id 를 싣고(REST 머리 · WS 쿼리),
  * 서버가 쿠키의 사람과 다르다고 409 `session-user-changed`로 답하면 `me`로 쿠키의 사람을 다시 알아내 그 사람이 된다.
  */
-import { act, screen } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError } from '../../src/api/client'
@@ -108,10 +108,19 @@ describe('세션 — 쿠키의 사람이 다르다는 답을 받으면 다시 �
     return { holder, me }
   }
 
+  /** 목록 머리가 보이는 사람 — 이름은 `…` 의 머리에 선다(`shell/action-menu.tsx`). 열어 읽고 닫는다. */
+  async function shownUser(): Promise<string> {
+    await screen.findByRole('link', { name: PROJECT.name })
+    fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
+    const name = document.querySelector('.wb-shell-action-menu-heading')?.textContent ?? ''
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    return name
+  }
+
   /** 혼자 죽는 변조: 세션이 holder 에 적지 않는다(`session-context.tsx`의 레이아웃 이펙트). */
   it('세션이 알게 된 사람을 싣는 자리에 적는다', async () => {
     const { holder } = mount([ALICE])
-    await screen.findByText('앨리스')
+    expect(await shownUser()).toBe('앨리스')
     expect(holder.get()).toBe(ALICE.id)
   })
 
@@ -123,12 +132,13 @@ describe('세션 — 쿠키의 사람이 다르다는 답을 받으면 다시 �
    */
   it('다른 사람이면 그 사람이 되고 목록에서 그렇다고 말한다 — 묻는 것은 한 번이다', async () => {
     const { holder, me } = mount([ALICE, BOB])
-    await screen.findByText('앨리스')
+    expect(await shownUser()).toBe('앨리스')
     await act(async () => {
       holder.changed()
       holder.changed()
     })
-    await screen.findByText('밥')
+    await waitFor(() => expect(screen.queryByRole('status')?.textContent).toBe(SWITCHED_NOTICE))
+    expect(await shownUser()).toBe('밥')
     expect(screen.getByRole('status').textContent).toBe(SWITCHED_NOTICE)
     expect(holder.get()).toBe(BOB.id)
     expect(currentPath()).toBe('/')

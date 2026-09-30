@@ -282,7 +282,7 @@ async function landedOrSkipped(stack: EditorStack, fx: Fixture, page: Page, head
     '되돌리기가 서버에 닿거나 건너뛴다',
     async () => ({
       ...(await server(stack, fx.alice, fx.P)),
-      notices: await page.locator('.wb-shell-header [role=status], .wb-shell-header [role=alert]').allTextContents(),
+      notices: await page.locator('.wb-shell-footer [role=status], .wb-shell-footer [role=alert]').allTextContents(),
     }),
     (value) => value.head === head || value.notices.some((notice) => notice.includes('건너뛰었습니다')),
   )
@@ -340,7 +340,7 @@ async function server(stack: EditorStack, session: Session, path: string): Promi
 async function stable(page: Page): Promise<{ canvas: string; notices: string[] }> {
   const read = async () => ({
     canvas: (await canvasText(page)).replace(/\s+/g, ' ').trim(),
-    notices: await page.locator('.wb-shell-header [role=status], .wb-shell-header [role=alert]').allTextContents(),
+    notices: await page.locator('.wb-shell-footer [role=status], .wb-shell-footer [role=alert]').allTextContents(),
   })
   let last = await read()
   let since = Date.now()

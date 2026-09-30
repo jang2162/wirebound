@@ -23,7 +23,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
@@ -38,17 +38,22 @@ import { PanelDraftsProvider } from '../panels/panel-drafts'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
 import { leftUnsentNotice, restoredRevisions, useEditCommit } from '../edit/use-edit-commit'
+import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
+import { BrandLink } from '../shell/brand-link'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
+import { ShellDialog } from '../shell/shell-dialog'
+import { ShellFooter } from '../shell/shell-footer'
 import { ShellResizer } from '../shell/shell-resizer'
 import { useSidebarLayout } from '../shell/sidebar-layout'
 import { useNodeLock } from '../realtime/use-node-lock'
 import { useRealtime, type MembershipCause } from '../realtime/use-realtime'
-import { ExportPanel } from '../shell/export-panel'
-import { SnapshotsPanel } from '../shell/snapshots-panel'
+import { ExportBody } from '../shell/export-panel'
+import { SnapshotsBody } from '../shell/snapshots-panel'
 import { projectAbilities } from '../projects/project-actions'
-import { SessionMenu } from '../session/session-menu'
+import { SessionNotices, useLogout } from '../session/session-menu'
+import { useSessionUser } from '../session/session-context'
 import { ProjectThemeProvider, useProjectTheme } from '../theme/project-theme'
 import { ThemeAlert } from '../theme/theme-alert'
 import {
@@ -103,26 +108,23 @@ const ZOOM_STEP = 0.25
  * 양쪽 48px이 들어 있다. 안 빼면 그만큼 넓게 잡아 프레임의 오른쪽이 잘린다.
  *
  * **`gap`은 뺄 것이 없다.** 여백은 `.wb-shell`의 그리드 `gap`(1px)이 칸 **사이**에 두는
- * 것이라 칸의 폭에 이미 반영돼 있고, 캔버스 안에는 프레임 하나뿐이라 `gap`이 없다.
+ * 것이라 칸의 폭에 이미 반영돼 있고, 캔버스 안에는 무대 하나뿐이라 `gap`이 없다.
  *
- * ## 가운데 정렬한 만큼을 마저 뺀다 — 브라우저에서 잰 값이다
+ * ## 가운데 정렬은 보이는 폭으로 한다 — 그래서 뺄 여백이 없다
  *
- * 프레임이 칸보다 **좁으면** `margin: 0 auto`가 그것을 가운데 세운다. 그런데
- * `transform-origin`이 좌상단이라 확대는 **그 자리에서 오른쪽으로만** 자란다 — 왼쪽 여백은
- * 그대로 있고 오른쪽으로 그만큼 넘친다.
+ * 프레임은 **무대**(`.wb-shell-canvas-stage` — `CanvasFrame`) 안에 있고, 무대의 폭이 **보이는 폭**(프리셋 × 줌)이다. 무대가 `margin: 0 auto`로
+ * 칸 가운데에 서므로, 맞춘 배율에서는 무대 폭이 곧 쓸 수 있는 폭이라 여백이 0 이다 — 쓸 수 있는 폭 ÷ 프리셋이 그대로 답이다.
  *
- * 실측(창 1100 · 뷰포트 프리셋 375 · 쓸 수 있는 폭 486): 여백을 안 빼면 486/375 =
- * **130%**가 나오고, 프레임의 오른쪽이 칸 밖으로 **31px** 나간다(오른쪽으로 조금 밀어야
- * 보인다). 여백(`margin-left` 55.5px)을 빼면 (486−55.5)/375 = **115%**이고 오른쪽 끝이
- * 칸의 끝과 **정확히 같다**.
+ * **프레임에 가운데 정렬을 걸면 두 가지가 틀린다**(Chrome, 창 1440 · 1280 × 좌측 기본 · 최대 × 프리셋 여섯 — 24칸 전부 가로 넘침):
  *
- * **여백은 재서 쓴다 — 계산하지 않는다.** 크롬은 `margin: 0 auto`의 계산값으로 **실제 쓰인
- * 값**을 준다(실측: 프리셋 375에서 `55.5px`, 칸보다 넓은 프리셋 셋에서는 전부 `0px`). 그래서
- * 좁은 프리셋에서만 저절로 걸리고, `shell.css`가 가운데 정렬을 그만두는 날 이 계산이 따라온다.
+ * - **줌이 1 보다 작으면 변환 전 폭이 넘침으로 잡힌다.** `transform`은 레이아웃을 안 바꿔, 칸의 `scrollWidth`가 프리셋 + 안쪽 여백 48 이다
+ *   (창 1440 · 프리셋 1920: 보이는 오른끝 843 < 칸 867 인데 `scrollWidth` 1968). 보이는 것은 다 들어갔는데 가로 막대가 선다.
+ * - **좁은 프리셋의 가운데 정렬 여백을 못 읽는다.** 확대는 좌상단에서 오른쪽으로만 자라 여백만큼 넘치는데, 그 여백을 `getComputedStyle`의
+ *   `marginLeft`가 `0px`로 준다(쓰인 값은 222px — 프리셋 375: 오른끝 996 > 칸 867).
  *
- * **줌이 이 값을 흔들지 않는다.** 여백은 **레이아웃 폭**(`viewportWidth`)으로 정해지고
- * `transform`은 레이아웃을 안 바꾼다 — 그래서 두 번 눌러도 같은 값이다(위 `clientWidth`
- * 문단과 같은 성질).
+ * 무대는 캔버스 칸의 흐름 속 자식이라 칸의 넘침이 무대 폭(보이는 폭)으로 서고, 안의 프레임은 `transform`이 걸려 변환 뒤 상자로만
+ * 넘침에 든다 — 변환 전 폭이 넘침으로 잡히던 것은 프레임이 칸의 흐름 속 자식이던 탓이다. 재는 판은 `build-test/editor-shell-layout.test.ts`의
+ * «화면 맞춤»이다.
  *
  * ## 못 재는 경우가 있다
  *
@@ -132,16 +134,12 @@ const ZOOM_STEP = 0.25
  * 사실이므로 여기서 `null`로 갈라 부르는 쪽이 아무것도 안 하게 한다. **클램프를 여기서
  * 흉내 내는 것이 아니다** — 계산한 배율은 그대로 넘긴다(한계는 스토어 하나가 안다).
  */
-function fitZoom(canvas: HTMLElement, frame: HTMLElement, viewportWidth: number): number | null {
+function fitZoom(canvas: HTMLElement, viewportWidth: number): number | null {
   const style = getComputedStyle(canvas)
   const usable =
     canvas.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-  // 가운데 정렬한 만큼은 확대가 쓸 수 없다(위 문단). 못 읽으면 0으로 둔다 — 그 값이 없다는
-  // 것은 가운데 정렬이 없다는 뜻이거나 레이아웃이 없다는 뜻이고, 뒤쪽은 아래 가드가 잡는다.
-  const inset = parseFloat(getComputedStyle(frame).marginLeft)
-  const room = usable - (Number.isFinite(inset) ? inset : 0)
-  if (!Number.isFinite(room) || room <= 0) return null
-  return room / viewportWidth
+  if (!Number.isFinite(usable) || usable <= 0) return null
+  return usable / viewportWidth
 }
 
 /**
@@ -212,7 +210,7 @@ export function logoutLossNotice(sent: number, unsent: number, refused = 0): str
 
 /**
  * **보낸 편집의 답(ack · 거절)을 기다린다** — 전송이 쉬면(`editStatus === 'idle'`) 풀린다. 한도(`SENT_EDIT_WAIT_MS`)나 `signal`로도
- * 풀린다. 판을 다시 싣는 두 이펙트와 로그아웃(`SessionMenu`의 `settle`)이 부른다.
+ * 풀린다. 판을 다시 싣는 두 이펙트와 로그아웃(`useLogout`의 `settle`)이 부른다.
  *
  * ## 왜 기다리나 — 판을 다시 싣는 단추는 그 클릭이 낸 편집과 겨룬다
  *
@@ -486,7 +484,7 @@ export function EditorShellRoute(): ReactElement {
 
   return (
     <EditorStoreProvider store={store}>
-      {/* 캔버스 iframe 의 문서를 머리의 팝오버가 아는 통로 — 캔버스와 머리의 공통 조상이 셸이라 셸째 감싼다. */}
+      {/* 캔버스 iframe 의 문서를 머리의 `…` 메뉴가 아는 통로(바깥 누름 닫기) — 캔버스와 머리의 공통 조상이 셸이라 셸째 감싼다. */}
       <CanvasDocumentProvider>
         {/* **프로젝트가 고정한 테마**(`theme/project-theme.tsx`) — 캔버스 · 속성 패널 · 패턴 고르개가 읽고, 셸이 프레임 · 다시 읽기로 따라잡게 한다. */}
         <ProjectThemeProvider projectId={state.project.id}>
@@ -560,21 +558,13 @@ function EditorShell(props: {
 
   /**
    * **캔버스 칸을 손에 쥐는 자리.** `화면 맞춤`이 누른 순간의 폭을 재려면 그 상자가 필요한데,
-   * 버튼은 머리에 있고 상자는 가운데 칸이라 서로 안 보인다.
+   * 버튼은 하단 바에 있고 상자는 가운데 칸이라 서로 안 보인다.
    *
    * **`document.querySelector('.wb-shell-canvas')`로 찾지 않는다.** 그러면 클래스 이름이
    * 배선이 되어, 이름을 바꾸는 날 아무것도 실패하지 않은 채 버튼만 조용히 죽는다.
    * ref는 그 연결을 타입으로 들고 있다.
    */
   const canvasRef = useRef<HTMLElement>(null)
-  /**
-   * 캔버스 **프레임**. `화면 맞춤`이 그 가운데 정렬 여백을 읽는다(위 `fitZoom`).
-   *
-   * **`canvas.querySelector('.wb-shell-canvas-frame')`로 찾지 않는다** — 클래스 이름이
-   * 배선이 되면 이름을 바꾸는 날 아무것도 실패하지 않은 채 좁은 프리셋에서만 조용히
-   * 어긋난다(`canvasRef`와 같은 근거).
-   */
-  const frameRef = useRef<HTMLDivElement>(null)
 
   /**
    * **내가 스냅샷을 복원했다는 신호.** 값에는 뜻이 없고 오를 때마다 **복원이 바꾸는 것을 떠 있는 자리가 전부**
@@ -590,7 +580,7 @@ function EditorShell(props: {
    * **자리를 하나 빠뜨리면 탭을 다녀오거나 새로고침해야 맞는다** — 되돌렸다는 알림 아래 옛 코멘트 목록이 조용히 남는다
    * (Chrome: 스냅샷의 코멘트를 지운 뒤 복원하면 서버 1 · 탭 0). 복원이 바꾸는 것이 늘면 이 표에 줄을 더한다.
    *
-   * **이 신호가 필요한 까닭:** 복원은 에디터 **위에** 뜨는 팝오버에서 일어나므로 셸이 다시
+   * **이 신호가 필요한 까닭:** 복원은 에디터 **위에** 뜨는 대화 상자에서 일어나므로 셸이 다시
    * 마운트되지 않는다 — 셸 밖 라우트에서 **돌아오는 길**이 있으면 저절로 다시 읽히겠지만
    * 그 길이 없다.
    *
@@ -607,7 +597,7 @@ function EditorShell(props: {
   const [restoredToken, setRestoredToken] = useState(0)
   /**
    * **이 셸이 선 `reset` 세대**(`EditorStore.resetGeneration`). 셸 안에서 다른 프로젝트로 가면(뒤로 · 앞으로) 라우트는 스토어를 그대로 두고 이
-   * 셸을 내린 뒤 새 셸을 세운다 — 복원 팝오버는 내려간 셸의 콜백을 쥔 채 답을 받는다. 그 콜백이 스토어에 쓰면 산 셸의 판을 바꾼다: 답이
+   * 셸을 내린 뒤 새 셸을 세운다 — 복원을 보낸 몸체는 내려간 셸의 콜백을 쥔 채 답을 받는다. 그 콜백이 스토어에 쓰면 산 셸의 판을 바꾼다: 답이
    * 돌아온 셸의 복원 신호를 넘기고(다시 읽기는 내려간 셸에서 돌아 아무것도 안 한다), 다시 읽기 시작 표시가 다음 프로젝트의 복원 배너를 메뉴 ·
    * 테마를 다시 읽기 전에 풀게 하고, 답 잃음이 무관한 프로젝트에 «복원됐는지 모릅니다»를 세운다(Chrome:
    * `apps/web/build-test/editor-restore-signal-order.test.ts` «다른 프로젝트로 갔다 돌아옴» · «그 답이 거기 옴» · «그 답을 거기서 잃음»).
@@ -619,7 +609,7 @@ function EditorShell(props: {
   /** 그 신호를 누가 올렸나 — 다시 읽으며 잃은 것을 말할 때의 앞머리다(`CanvasFrame`의 `applyServerPage`). 신호와 함께 바뀐다. */
   const [restoredLead, setRestoredLead] = useState(RESTORED_LEAD)
   /**
-   * **복원 뒤 다시 읽기의 입구 하나** — 내가 복원했을 때(스냅샷 팝오버)와 남의 복원을 배너의 단추로 다시 읽을 때가 함께 탄다. 한
+   * **복원 뒤 다시 읽기의 입구 하나** — 내가 복원했을 때(스냅샷 대화 상자)와 남의 복원을 배너의 단추로 다시 읽을 때가 함께 탄다. 한
    * 자리에서 올려야 한쪽 입구가 다시 읽을 자리를 빠뜨리지 않는다(`restoredToken` 표).
    *
    * **다시 읽기가 시작된 것을 스토어에 먼저 적는다**(`EditorStore.beginRestoreReread`) — 복원 배너는 이 다시 읽기의 판만 풀고, 그 사이 온 복원
@@ -689,7 +679,7 @@ function EditorShell(props: {
   const split = mode === 'edit'
 
   /**
-   * 로그아웃 앞의 기다림 — 아래 `SessionMenu` 자리의 주석. 끊는 신호는 없다: 누른 뒤 화면을 옮겨도 로그아웃은 나간다. 기다림 뒤에 큐에 남은
+   * 로그아웃 앞의 기다림 — 아래 `useLogout` 자리의 주석. 끊는 신호는 없다: 누른 뒤 화면을 옮겨도 로그아웃은 나간다. 기다림 뒤에 큐에 남은
    * 편집과 **기다리는 동안 버린 편집**을 세어 로그인 화면에 남길 한 줄을 돌려준다(`logoutLossNotice`).
    *
    * **버린 것도 센다**(`EditorStore.discardTally`) — 기다리는 동안 편집 실패 수습이 큐를 비우면(`failEdits`) 그 통지는 판을 다시 읽은 뒤에
@@ -709,29 +699,47 @@ function EditorShell(props: {
     return logoutLossNotice(sentHere + since('unknown'), pending.length - sentHere + since('unsent'), since('refused'))
   }, [store])
 
+  /**
+   * **로그아웃**(`session/session-menu.tsx`의 `useLogout`) — `…` 의 끝 항목이 부른다. **보낸 편집의 답을 받은 뒤에 나간다**(`settleEdits` ·
+   * `editsAnswered`) — 칸에 친 채 누르면 그 클릭이 blur 로 낸 편집과 로그아웃이 다른 연결로 겨룬다. 로그아웃이 먼저 세션을 지우면 편집은
+   * 커밋 순간의 재확인에서 거절되고 셸째 내려가 말할 자리도 없다(Chrome: 친 채 누른 3판 가운데 1판이 401 · 행 잠금에 줄 선 편집과 그 뒤에
+   * 쌓인 편집은 둘 다 잃음). **막지는 않는다** — 한도가 지나면 그대로 나간다. 로그아웃은 권한을 줄이는 쓰기라, 막으면 누르고 떠난 사람의
+   * 세션이 남는다. 한도 뒤에 잃는 편집은 셸째 내려가므로 로그인 화면이 말한다(`logoutLossNotice` · `useSignOutNotice`).
+   */
+  const { logout, busy: loggingOut, failure: logoutFailure } = useLogout(settleEdits)
+  const sessionUser = useSessionUser()
+  /** 열린 대화 상자 — 스냅샷 · 내보내기. 한 번에 하나다(모달이다). */
+  const [dialog, setDialog] = useState<'snapshots' | 'export' | null>(null)
+  /** `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. */
+  const menuItems: ActionMenuItem[] = [
+    { key: 'account', label: '계정 설정', to: '/account' },
+    { key: 'settings', label: '프로젝트 설정', to: `/projects/${props.project.id}/settings` },
+    { key: 'snapshots', label: '스냅샷', onSelect: () => setDialog('snapshots') },
+    { key: 'export', label: '프로젝트 내보내기', onSelect: () => setDialog('export') },
+    // 요청이 도는 동안 끈다 — 두 번 눌러 두 번 나갈 이유가 없다(로그인 폼과 같은 관례).
+    { key: 'logout', label: '로그아웃', onSelect: logout, disabled: loggingOut },
+  ]
+
   return (
     <div className="wb-shell">
       <header className="wb-shell-header">
-        {/* **머리의 왼쪽은 *"어디에 있고 어디로 나가는가"*다.** 오른쪽 도구들과 갈리는 축이
+        {/* **머리의 왼쪽은 *"어디에 있고 어디로 나가는가"*다.** 가운데 도구들 · 오른쪽 끝의 `…` 와 갈리는 축이
             이것이라, 둘을 한 묶음으로 싸서 `space-between`이 사이를 벌리지 못하게 한다.
 
-            **나가는 길을 여기 둔다.** 제목은 `<h1>` 글자라 접근성 트리에서도 `heading`이고,
-            이것이 없으면 프로젝트 목록으로 가는 길이 화면에 **없다** — 브라우저 뒤로
-            가기나 주소를 손으로 고치는 것뿐이다. */}
-        <div className="wb-shell-lead">
-          {/* **제목 자체를 링크로 만들지 않는다.** 링크의 글자는 **갈 곳**을 말해야 하는데
-              제목은 *"지금 여기"*를 말한다 — `관리자 콘솔 설계서`를 눌렀더니 프로젝트
-              **목록**으로 가는 것은 그 계약을 어긴다. 옆에 따로 두면 글자가 곧 목적지다.
+            **나가는 길을 여기 둔다** — 로고가 프로젝트 목록으로 가는 링크다(`shell/brand-link.tsx` — 접근 이름 «프로젝트 목록»).
+            이것이 없으면 목록으로 가는 길이 화면에 **없다** — 브라우저 뒤로 가기나 주소를 손으로 고치는 것뿐이다.
 
-              `<button>`이 아니라 `<Link>`인 것은 **주소가 있는 이동**이기 때문이다 — 새 탭으로
-              열거나 주소를 공유할 수 있어야 한다(`routes/project-list.tsx`의 `ProjectRow`와
-              `panels/menu-tree.tsx`의 `PageLink`가 같은 근거로 링크다). */}
-          <Link className="wb-shell-back" to="/">
-            프로젝트 목록으로 돌아가기
-          </Link>
+            **제목 자체를 링크로 만들지 않는다.** 링크의 글자는 **갈 곳**을 말해야 하는데
+            제목은 *"지금 여기"*를 말한다 — `관리자 콘솔 설계서`를 눌렀더니 프로젝트
+            **목록**으로 가는 것은 그 계약을 어긴다. 제목은 `<h1>` 글자라 접근성 트리에서도 `heading`이다. */}
+        <div className="wb-shell-lead">
+          <BrandLink />
           <h1 className="wb-shell-title">{props.project.name}</h1>
         </div>
-        {/* **되돌리기·다시 실행은 편집 모드에만 있다**.
+        {/* **가운데 — 설계서를 다루는 도구.** 되돌리기 · 다시 실행과 모드(편집/뷰)다. 캔버스를 다루는 도구(뷰포트 · 줌)는 캔버스 곁 —
+            하단 바(`ShellFooter`)에 있다.
+
+            **되돌리기·다시 실행은 편집 모드에만 있다**.
             「설계서 화면 구조」가 뷰 모드에서 구조 트리를 접고 속성 탭을 페이지 설명으로 바꾸는 것과 같은
             선이다 — **편집 도구는 편집 모드에 있다.**
 
@@ -743,79 +751,43 @@ function EditorShell(props: {
 
             **겹layer를 함께 되돌리는 쪽을 고르지 않는다:** 되돌릴 대상이 문서가 아니라
             시연 상태라 *"어디까지"*가 정의되지 않는다(undo 한 칸이 겹layer 몇 칸인가).
-            **원인을 없애는 쪽이 정의가 필요 없다.** */}
-        {/* **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
-        {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
-        <ShellTools canvasRef={canvasRef} frameRef={frameRef} />
-        {/* **스냅샷 팝오버**(셸 밖 별도 라우트가 아니라 팝오버인 근거는
-            `shell/snapshots-panel.tsx` 머리말의 표에 있다). 내보내기 옆에 두는 것은 둘 다
-            *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
+            **원인을 없애는 쪽이 정의가 필요 없다.**
 
-            **역할로 감추지 않는다** — 목록은 viewer도 본다(설계서 「권한 모델」 — 막는 것은 생성 하나이고,
-            그 판정은 팝오버 안이 한다). 감추면 viewer가 *"이 프로젝트에 어떤 기록이
-            있는지"*조차 못 본다. */}
-        <SnapshotsPanel
-          projectId={props.project.id}
-          onRestoreSent={store.beginOwnRestore}
-          onRestored={(clientRestoreId, safetySnapshotId) => {
-            // 답의 안전망 스냅샷 id 를 먼저 적는다 — 되돌아오는 내 복원의 신호를 알아보고, 미뤄 둔 신호를 가른다(`EditorStore.ownRestoreAnswered`).
-            // 내려간 셸의 답이면 둘 다 스토어에 안 쓴다(`shellGeneration`).
-            if (shellLive()) store.ownRestoreAnswered(clientRestoreId, safetySnapshotId)
-            reloadAfterRestore(RESTORED_LEAD)
-          }}
-          onRestoreRefused={(clientRestoreId) => {
-            if (shellLive()) store.ownRestoreRefused(clientRestoreId)
-          }}
-          onRestoreUnanswered={(clientRestoreId) => {
-            if (shellLive()) store.markRestoreUnanswered(clientRestoreId)
-          }}
-        />
-        {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 스냅샷 링크 옆에 두는 것은 둘 다
-            *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
+            **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
+        <div className="wb-shell-head-tools">
+          {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
+          <ModeTools />
+        </div>
+        {/* **오른쪽 끝의 `…`** — 이 프로젝트 전체 · 계정을 다루는 일(spec 「`…` 메뉴」). **역할로 감추지 않는다** — 항목 다섯이 모든 역할에게
+            선다: 스냅샷 목록 · 내보내기 · 설정(읽기 전용 칸)은 viewer 도 본다(설계서 「권한 모델」 — 막는 것은 그 안의 생성 · 복원이고 그 판정은
+            몸체가 한다). */}
+        <ActionMenu label="더 보기" heading={sessionUser?.name} items={menuItems} />
+        {/* **스냅샷 · 내보내기는 에디터 위의 대화 상자다**(`shell/shell-dialog.tsx`). 셸이 그리므로 셸이 내려가면 함께 내려간다.
 
-            **역할로 감추지 않는다** — 번들은 viewer가 화면에서 볼 수 있는 것을 파일로 받는
-            것이고 서버도 viewer에게 연다(「권한 모델」). 감추면 설계서를 **읽으라고** 부른
-            사람이 그것을 가져갈 수 없다. */}
-        <ExportPanel projectId={props.project.id} />
-        {/* **프로젝트 설정**(`routes/settings.tsx` — 이름 · 슬러그 · 설명 · 테마). 스냅샷 · 내보내기 옆에 두는 것은 셋 다 *"이 프로젝트
-            전체를 다루는 것"*이라 축이 같기 때문이다. **역할로 감추지 않는다** — viewer 도 지금 테마 · 토큰을 읽기로 본다(칸이 읽기 전용이다).
-            팝오버가 아니라 링크인 것은 절이 둘이고 미리보기가 들어 셸 머리에 뜨는 상자로는 좁기 때문이다. */}
-        <Link className="wb-shell-settings-entry" to={`/projects/${props.project.id}/settings`}>
-          설정
-        </Link>
-        {/* **계정은 줄의 끝이다**(`session/session-menu.tsx`). 앞의 도구들이 전부
-            *"이 설계서로 무엇을 하는가"*인 것과 달리 이것은 **앱 전체**에 걸린다 — 왼쪽의
-            이동·정체성 묶음에 붙이지 않은 것도 그래서다: 그쪽은 *"이 설계서에서 나가는
-            길"*이고 이쪽은 *"앱에서 나가는 길"*이다.
-
-            **`projectId`를 받지 않는다.** 세션은 프로젝트에 매이지 않으므로 이 컴포넌트를
-            셸 밖(프로젝트 목록 등)에 그대로 옮겨 놓을 수 있다. */}
-        {/* **보낸 편집의 답을 받은 뒤에 로그아웃한다**(`editsAnswered`) — 칸에 친 채 누르면 그 클릭이 blur 로 낸 편집과 로그아웃이 다른
-            연결로 겨룬다. 로그아웃이 먼저 세션을 지우면 편집은 커밋 순간의 재확인에서 거절되고 셸째 내려가 말할 자리도 없다(Chrome:
-            친 채 누른 3판 가운데 1판이 401 · 행 잠금에 줄 선 편집과 그 뒤에 쌓인 편집은 둘 다 잃음). **막지는 않는다** — 한도가 지나면
-            그대로 나간다. 로그아웃은 권한을 줄이는 쓰기라, 막으면 누르고 떠난 사람의 세션이 남는다. 한도 뒤에 잃는 편집은 셸째
-            내려가므로 로그인 화면이 말한다(`logoutLossNotice` · `useSignOutNotice`). */}
-        <SessionMenu settle={settleEdits} />
-        {/* 편집 실패 통지는 **한 자리**다. 조회 실패처럼 화면마다 나누지 않는 것은,
-            어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
-            받고 보내지 못한 편집을 잃는다. 셸 상단에 두면 어느 패널을 보고 있어도
-            눈에 들어온다. */}
-        <EditAlert />
-        {/* **경고는 실패가 아니다**. 실패 통지 바로 옆에 두되 `role`이 다르다 —
-            근거는 `shell/edit-warnings.tsx`의 머리말에 있다. */}
-        <EditWarnings />
-        {/* **남의 변경 때문에 화면이 낡았다는 통지**. `EditAlert`와 자리는 같고
-            `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
-            근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
-        <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.own === undefined ? SIGNALLED_RESTORE_LEAD : OWN_RESTORE_LEAD[stale.own])} />
-        {/* **테마를 못 실었다**(`theme/theme-alert.tsx`) — 캔버스는 기본 뷰로 그리고 있다. */}
-        <ThemeAlert />
-        {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
-        {roleNotice !== null && (
-          <p className="wb-shell-remote-alert" role="status">
-            {roleNotice}
-          </p>
-        )}
+            스냅샷 몸체에는 셸의 복원 콜백 넷을 그대로 준다 — 복원을 보낸 뒤 상자를 닫아도 답은 셸이 받는다(몸체가 보낸 순간 쥔 콜백).
+            `onRestored` 가 답의 안전망 스냅샷 id 를 먼저 적는다 — 되돌아오는 내 복원의 신호를 알아보고, 미뤄 둔 신호를 가른다
+            (`EditorStore.ownRestoreAnswered`). 내려간 셸의 답이면 스토어에 안 쓴다(`shellGeneration`). */}
+        <ShellDialog open={dialog === 'snapshots'} title="스냅샷" onClose={() => setDialog(null)}>
+          <SnapshotsBody
+            projectId={props.project.id}
+            onRestoreSent={store.beginOwnRestore}
+            onRestored={(clientRestoreId, safetySnapshotId) => {
+              if (shellLive()) store.ownRestoreAnswered(clientRestoreId, safetySnapshotId)
+              reloadAfterRestore(RESTORED_LEAD)
+            }}
+            onRestoreRefused={(clientRestoreId) => {
+              if (shellLive()) store.ownRestoreRefused(clientRestoreId)
+            }}
+            onRestoreUnanswered={(clientRestoreId) => {
+              if (shellLive()) store.markRestoreUnanswered(clientRestoreId)
+            }}
+          />
+        </ShellDialog>
+        {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 번들은 viewer가 화면에서 볼 수 있는 것을 파일로 받는
+            것이고 서버도 viewer에게 연다(「권한 모델」). */}
+        <ShellDialog open={dialog === 'export'} title="프로젝트 내보내기" onClose={() => setDialog(null)}>
+          <ExportBody projectId={props.project.id} />
+        </ShellDialog>
       </header>
 
       <nav
@@ -926,11 +898,58 @@ function EditorShell(props: {
           resyncToken={resyncToken}
           restoredToken={restoredToken}
           restoredLead={restoredLead}
-          frameRef={frameRef}
         />
       </main>
 
-      <aside className="wb-shell-panel" aria-label="우측 패널">
+      {/* **하단 바**(`shell/shell-footer.tsx`) — 왼쪽은 통지 줄, 오른쪽은 캔버스 도구. 통지가 여럿이면 바가 위로 자라고 캔버스가 준다. */}
+      <ShellFooter
+        notices={
+          <>
+            {/* 편집 실패 통지는 **한 자리**다. 조회 실패처럼 화면마다 나누지 않는 것은,
+                어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
+                받고 보내지 못한 편집을 잃는다. 하단 바는 어느 패널을 보고 있어도 캔버스
+                바로 아래라 눈에 들어온다. */}
+            <EditAlert />
+            {/* **경고는 실패가 아니다**. 실패 통지 바로 옆에 두되 `role`이 다르다 —
+                근거는 `shell/edit-warnings.tsx`의 머리말에 있다. */}
+            <EditWarnings />
+            {/* **남의 변경 때문에 화면이 낡았다는 통지**. `EditAlert`와 자리는 같고
+                `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
+                근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
+            <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.own === undefined ? SIGNALLED_RESTORE_LEAD : OWN_RESTORE_LEAD[stale.own])} />
+            {/* **테마를 못 실었다**(`theme/theme-alert.tsx`) — 캔버스는 기본 뷰로 그리고 있다. */}
+            <ThemeAlert />
+            {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
+            {roleNotice !== null && (
+              <p className="wb-shell-remote-alert" role="status">
+                {roleNotice}
+              </p>
+            )}
+            {/* **세션 전환 · 로그아웃 실패**(`session/session-menu.tsx`의 `SessionNotices`). */}
+            <SessionNotices failure={logoutFailure} className="wb-shell-session-alert" />
+          </>
+        }
+        tools={<CanvasTools canvasRef={canvasRef} />}
+      />
+
+      {/* **캔버스와 우측 패널 사이의 손잡이**(`shell/sidebar-layout.ts` «두 폭은 한 예산을 나눠 쓴다»). 좌측 손잡이와 같은 부품이고 방향만
+          반대다 — 왼쪽으로 끌면 패널이 넓어진다(`reversed`). */}
+      <ShellResizer
+        orientation="vertical"
+        className="wb-shell-panel-resizer"
+        label="우측 패널 폭"
+        reversed
+        value={layout.panelWidth}
+        min={layout.panelWidthMin}
+        max={layout.panelWidthMax}
+        valueText={`${Math.round(layout.panelWidth)}px`}
+        onGrab={layout.grabPanelWidth}
+        onMove={layout.setPanelWidth}
+        onEdge={(edge) => layout.setPanelWidth(edge === 'min' ? layout.panelWidthMin : layout.panelWidthMax)}
+        onReset={layout.resetPanelWidth}
+      />
+
+      <aside className="wb-shell-panel" aria-label="우측 패널" style={{ width: `${layout.panelWidth}px` }}>
         {/* **본문 넷이 같은 `canEdit`을 받는다** — 속성 · 상호작용은 끄고, 코멘트 폼 · 설명 편집기는 숨긴다. */}
         <RightPanel projectId={props.project.id} pageId={props.pageId} canEdit={canEdit} restoredToken={restoredToken} />
       </aside>
@@ -964,7 +983,7 @@ function EditorShell(props: {
  * 둔 것과 같은 근거다.
  *
  * **`role="tab"`·`aria-selected`·`role="tabpanel"`을 다는 것이 계약이다.** 보조 기술이
- * "탭 중 하나"를 알아야 나머지 탭이 있다는 것을 알린다 — `ShellTools`의 모드 토글이
+ * "탭 중 하나"를 알아야 나머지 탭이 있다는 것을 알린다 — `ModeTools`의 모드 토글이
  * 눌리지 않은 쪽에도 `aria-pressed`를 다는 것과 같은 이유다.
  */
 function RightPanel(props: {
@@ -1181,8 +1200,6 @@ function CanvasFrame(props: {
   restoredToken: number
   /** 그 재조회가 잃은 것을 말할 때의 앞머리(셸의 `restoredLead`). */
   restoredLead: string
-  /** 셸이 `화면 맞춤`에서 이 프레임의 여백을 읽는다(`fitZoom`). 그리는 데는 쓰지 않는다. */
-  frameRef: RefObject<HTMLDivElement | null>
 }): ReactElement {
   const api = useApi()
   const store = useEditorStoreInstance()
@@ -1561,8 +1578,10 @@ function CanvasFrame(props: {
   }, [api, projectId, pageId, store, applyServerPage, tellLost, restoredToken, restoredLead])
 
   return (
+    /* **무대 — 보이는 폭(프리셋 × 줌)짜리 상자.** 가운데 정렬과 칸의 가로 넘침이 이 폭으로 선다(`fitZoom` 머리말 «가운데 정렬은 보이는
+       폭으로 한다»). 세로는 프레임의 변환 전 높이 그대로다 — 줌이 1 보다 작으면 아래에 빈 스크롤이 남는다(이 상자가 고치지 않는 것). */
+    <div className="wb-shell-canvas-stage" style={{ width: `${viewportWidth * zoom}px` }}>
     <div
-      ref={props.frameRef}
       className="wb-shell-canvas-frame"
       // 폭은 프리셋 그대로, 줌은 그 위의 배율이다. 폭에 줌을 곱해 넣으면 "1280 폭에서
       // 어떻게 보이는가"라는 뷰포트 프리셋의 뜻이 깨진다.
@@ -1589,44 +1608,50 @@ function CanvasFrame(props: {
       {state.status === 'ready' &&
         (themeStatus === 'loading' ? <p role="status">테마를 불러오는 중…</p> : <Canvas projectId={projectId} pageId={pageId} />)}
     </div>
+    </div>
   )
 }
 
-/** 모드 토글·뷰포트 프리셋·줌. 셋 다 스토어를 읽고 쓴다. */
-function ShellTools(props: {
-  /** 캔버스 칸. `화면 맞춤`이 이것의 폭을 잰다(위 `fitZoom`). */
-  canvasRef: RefObject<HTMLElement | null>
-  /** 캔버스 프레임. 같은 계산이 이것의 가운데 정렬 여백을 읽는다. */
-  frameRef: RefObject<HTMLDivElement | null>
-}): ReactElement {
+/** 모드 토글 — 머리의 가운데. 스토어를 읽고 쓴다. */
+function ModeTools(): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
+
+  return (
+    /* 두 상태 중 하나를 고르는 자리라 `aria-pressed`를 둘 다에 단다. 눌린 쪽만
+       표시하면 보조 기술은 나머지 버튼이 토글인지 알 수 없다. */
+    <div className="wb-shell-modes" role="group" aria-label="모드">
+      <button
+        type="button"
+        className="wb-shell-mode"
+        aria-pressed={mode === 'edit'}
+        onClick={() => store.setMode('edit')}
+      >
+        편집 모드
+      </button>
+      <button
+        type="button"
+        className="wb-shell-mode"
+        aria-pressed={mode === 'view'}
+        onClick={() => store.setMode('view')}
+      >
+        뷰 모드
+      </button>
+    </div>
+  )
+}
+
+/** 뷰포트 프리셋 · 줌 — 하단 바의 오른쪽. 둘 다 스토어를 읽고 쓴다. */
+function CanvasTools(props: {
+  /** 캔버스 칸. `화면 맞춤`이 이것의 폭을 잰다(위 `fitZoom`). */
+  canvasRef: RefObject<HTMLElement | null>
+}): ReactElement {
+  const store = useEditorStoreInstance()
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
   const zoom = useEditorStore(store, (s) => s.zoom)
 
   return (
-    <div className="wb-shell-tools">
-      {/* 두 상태 중 하나를 고르는 자리라 `aria-pressed`를 둘 다에 단다. 눌린 쪽만
-          표시하면 보조 기술은 나머지 버튼이 토글인지 알 수 없다. */}
-      <div className="wb-shell-modes" role="group" aria-label="모드">
-        <button
-          type="button"
-          className="wb-shell-mode"
-          aria-pressed={mode === 'edit'}
-          onClick={() => store.setMode('edit')}
-        >
-          편집 모드
-        </button>
-        <button
-          type="button"
-          className="wb-shell-mode"
-          aria-pressed={mode === 'view'}
-          onClick={() => store.setMode('view')}
-        >
-          뷰 모드
-        </button>
-      </div>
-
+    <>
       <label className="wb-shell-field">
         뷰포트 폭
         <select
@@ -1677,9 +1702,8 @@ function ShellTools(props: {
           className="wb-shell-zoom-fit"
           onClick={() => {
             const canvas = props.canvasRef.current
-            const frame = props.frameRef.current
-            if (canvas === null || frame === null) return
-            const next = fitZoom(canvas, frame, viewportWidth)
+            if (canvas === null) return
+            const next = fitZoom(canvas, viewportWidth)
             if (next === null) return
             store.setZoom(next)
           }}
@@ -1687,6 +1711,6 @@ function ShellTools(props: {
           화면 맞춤
         </button>
       </div>
-    </div>
+    </>
   )
 }

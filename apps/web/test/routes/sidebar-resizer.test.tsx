@@ -35,9 +35,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { StrictMode, type ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  PANEL_WIDTH_DEFAULT,
+  PANEL_WIDTH_MIN,
   REGION_MIN_HEIGHT,
   SIDE_WIDTH_DEFAULT,
   STORAGE_KEY,
+  panelWidthMax,
   sideWidthMax,
   useSidebarLayout,
 } from '../../src/shell/sidebar-layout'
@@ -59,6 +62,11 @@ function toEdit(): void {
 /** 좌측 상자. `aria-label`로 찾는 것은 셸이 붙인 이름이 그것이기 때문이다. */
 function sidebar(): HTMLElement {
   return screen.getByRole('navigation', { name: '메뉴와 구조' })
+}
+
+/** 우측 패널. 폭은 인라인 `width`다. */
+function panel(): HTMLElement {
+  return screen.getByRole('complementary', { name: '우측 패널' })
 }
 
 function menuRegion(): HTMLElement {
@@ -135,10 +143,11 @@ beforeEach(() => localStorage.clear())
 afterEach(() => localStorage.clear())
 
 describe('셸이 손잡이를 낸다', () => {
-  it('편집 모드에는 둘이다 — 폭 하나, 두 영역 사이 하나', async () => {
+  it('편집 모드에는 셋이다 — 좌측 폭, 두 영역 사이, 우측 폭', async () => {
     await openPage(DOC)
     expect(screen.getByRole('separator', { name: '사이드바 폭' })).toBeTruthy()
     expect(screen.getByRole('separator', { name: '좌측 두 영역의 세로 배분' })).toBeTruthy()
+    expect(screen.getByRole('separator', { name: '우측 패널 폭' })).toBeTruthy()
   })
 
   it('뷰 모드에는 폭 하나뿐이다 — 나눌 상자가 하나면 나눌 것이 없다', async () => {
@@ -168,7 +177,7 @@ describe('폭을 어디에 싣는가', () => {
     // 넓은 화면의 폭이 영구히 깎인다(브라우저에서 1440→900→1440으로 왕복해 확인했다).
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ sideWidth: 1200 }))
     await openPage(DOC)
-    expect(sidebar().style.width).toBe(`${sideWidthMax(window.innerWidth)}px`)
+    expect(sidebar().style.width).toBe(`${sideWidthMax(window.innerWidth, PANEL_WIDTH_DEFAULT)}px`)
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({ sideWidth: 1200 })
   })
 
@@ -231,7 +240,7 @@ describe('사람이 정한 값이 남는다', () => {
     fireEvent.pointerMove(window, { clientX: 9000, clientY: 400 })
     fireEvent.pointerUp(window)
 
-    const max = sideWidthMax(window.innerWidth)
+    const max = sideWidthMax(window.innerWidth, PANEL_WIDTH_DEFAULT)
     await waitFor(() => expect(sidebar().style.width).toBe(`${max}px`))
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({ sideWidth: max })
   })
@@ -261,6 +270,59 @@ describe('사람이 정한 값이 남는다', () => {
       </StrictMode>,
     )
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+})
+
+/**
+ * **우측 폭**(`src/shell/sidebar-layout.ts` «두 폭은 한 예산을 나눠 쓴다»). 손잡이는 좌측과 같은 부품이고 **방향이 반대다** — 왼쪽으로 끌면 · `ArrowLeft`
+ * 가 넓힌다(`ShellResizer`의 `reversed`). jsdom 의 창은 1024 다 — 좌측 기본 264 에서 우측의 최대는 1024 − 16 − 320 − 264 = 424.
+ */
+describe('우측 폭', () => {
+  it('기본은 300 이고 우측 패널의 인라인 `width`다', async () => {
+    await openPage(DOC)
+    expect(panel().style.width).toBe(`${PANEL_WIDTH_DEFAULT}px`)
+    const handle = screen.getByRole('separator', { name: '우측 패널 폭' })
+    expect(handle.getAttribute('aria-valuemin')).toBe(String(PANEL_WIDTH_MIN))
+    expect(handle.getAttribute('aria-valuemax')).toBe(String(panelWidthMax(window.innerWidth, SIDE_WIDTH_DEFAULT)))
+  })
+
+  it('왼쪽으로 끌면 넓어진다 — 화면과 저장소에 함께 간다', async () => {
+    await openPage(DOC)
+    const handle = screen.getByRole('separator', { name: '우측 패널 폭' })
+    fireEvent.pointerDown(handle, { button: 0, clientX: 700, clientY: 400 })
+    fireEvent.pointerMove(window, { clientX: 640, clientY: 400 })
+    fireEvent.pointerUp(window)
+
+    await waitFor(() => expect(panel().style.width).toBe(`${PANEL_WIDTH_DEFAULT + 60}px`))
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({ panelWidth: PANEL_WIDTH_DEFAULT + 60 })
+  })
+
+  it('`ArrowLeft`가 한 칸 넓히고 `ArrowRight`가 한 칸 좁힌다 — 최소 아래로는 안 간다', async () => {
+    await openPage(DOC)
+    const handle = screen.getByRole('separator', { name: '우측 패널 폭' })
+    fireEvent.keyDown(handle, { key: 'ArrowLeft' })
+    await waitFor(() => expect(panel().style.width).toBe(`${PANEL_WIDTH_DEFAULT + 16}px`))
+    fireEvent.keyDown(handle, { key: 'ArrowRight' })
+    fireEvent.keyDown(handle, { key: 'ArrowRight' })
+    await waitFor(() => expect(panel().style.width).toBe(`${PANEL_WIDTH_MIN}px`))
+  })
+
+  it('`End`는 최대 · 두 번 누르면 기본값', async () => {
+    await openPage(DOC)
+    const handle = screen.getByRole('separator', { name: '우측 패널 폭' })
+    fireEvent.keyDown(handle, { key: 'End' })
+    await waitFor(() => expect(panel().style.width).toBe(`${panelWidthMax(window.innerWidth, SIDE_WIDTH_DEFAULT)}px`))
+    fireEvent.doubleClick(handle)
+    await waitFor(() => expect(panel().style.width).toBe(`${PANEL_WIDTH_DEFAULT}px`))
+  })
+
+  /** 우측을 넓힌 채 좌측을 끝까지 민다 — 좌측의 최대가 우측의 **지금 폭**을 뺀다(옛 «우측 300» 가정이면 캔버스 몫이 준다). */
+  it('우측을 넓히면 좌측의 최대가 그만큼 준다', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ panelWidth: 380 }))
+    await openPage(DOC)
+    fireEvent.keyDown(screen.getByRole('separator', { name: '사이드바 폭' }), { key: 'End' })
+    await waitFor(() => expect(sidebar().style.width).toBe(`${sideWidthMax(window.innerWidth, 380)}px`))
+    expect(panel().style.width).toBe('380px')
   })
 })
 

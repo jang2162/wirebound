@@ -555,12 +555,12 @@ describe('통합 — 한 화면에서 이어서', () => {
       screen.queryAllByRole('textbox').length +
       screen.queryAllByRole('link').length
 
-    // 닫힌 상태: 링크 2(이름 · 설정) + 새 프로젝트·삭제 2 + **계정 묶음 2(«API 토큰» 링크 · 로그아웃)** = 6.
-    // 계정 묶음은 이 화면에서도 앱에서 나가는 길이다(`session/session-menu.tsx`,
+    // 닫힌 상태: 링크 2(이름 · 설정) + 새 프로젝트·삭제 2 + **머리의 `…` 1**(계정 설정 · 로그아웃이 그 뒤다) = 5.
+    // `…` 는 이 화면에서도 앱에서 나가는 길이다(`shell/action-menu.tsx`,
     // `test/routes/shell-nav.test.tsx`). 이 케이스가 재는 것은 *"열면 늘고 닫으면
     // 되돌아온다"*이고, 바탕 수는 이 화면의 정지점을 셀 뿐이다.
     const closed = stops()
-    expect(closed).toBe(6)
+    expect(closed).toBe(5)
 
     fireEvent.click(screen.getByRole('button', { name: '새 프로젝트' }))
     // 폼: 입력 3 + 만들기·취소 2

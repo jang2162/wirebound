@@ -1,27 +1,27 @@
 /**
- * 스냅샷 팝오버. **에디터 셸 머리에 산다** — 내보내기 팝오버 옆이고 닫는 장치도 같다
- * (`shell/use-popover-dismiss.ts`).
+ * 스냅샷 목록 · 저장 · 복원. **에디터 위의 대화 상자 안에 산다** — 머리의 `…` 에서 연다(`routes/editor.tsx` · `shell/shell-dialog.tsx`).
  *
  * ---
  *
- * # 별도 라우트가 아니라 머리의 팝오버다 — 별도 라우트의 근거 둘이 서지 않는다
+ * # 별도 라우트가 아니라 에디터 위의 대화 상자다 — 별도 라우트의 근거 둘이 서지 않는다
  *
  * 이 화면을 `/projects/:projectId/snapshots`라는 **셸 밖 별도 라우트**로 둘 근거는 둘이고,
  * 둘 다 서지 않는다.
  *
  * | 별도 라우트의 근거 | 지금 | 왜 |
  * |---|---|---|
- * | *"설계서 「설계서 화면 구조」의 3분할에 이 화면이 들어갈 자리가 없다"* | **자리는 3분할이 아니라 머리다** | 「설계서 화면 구조」는 좌·중·우 셋을 그리고 **머리에 무엇이 오는지는 말하지 않는다.** 머리에는 내보내기 · 모드/줌 도구가 산다 — *"이 프로젝트 전체를 다루는 것"*이고 스냅샷도 그 축이다 |
+ * | *"설계서 「설계서 화면 구조」의 3분할에 이 화면이 들어갈 자리가 없다"* | **자리는 3분할 위다** | 스냅샷은 *"이 프로젝트 전체를 다루는 것"*이라 한 칸에 매이지 않는다 — 머리의 `…` 가 여는 대화 상자다(내보내기와 같은 축) |
  * | *"주소가 있어야 공유·새로고침이 된다"* | **공유할 것이 없다** | 스냅샷 목록은 사람에게 링크로 건네는 화면이 아니다(설계서 한 장이 아니라 이 프로젝트의 기록이다). 그리고 그 주소는 **셸을 떠나야** 열린다 — 되돌린 뒤 설계서로 돌아오는 왕복이 조작마다 붙는다 |
  *
- * **결정한 것은 사용자다.** 두 갈래(주소를 남기고 팝오버를 더한다 / 주소를 없애고
- * 팝오버만 둔다) 중 뒤쪽이다 — 주소를 남기면 같은 화면이 두 자리에 살고, 그 둘이
+ * **결정한 것은 사용자다.** 두 갈래(주소를 남기고 에디터 위 상자를 더한다 / 주소를 없애고
+ * 상자만 둔다) 중 뒤쪽이다 — 주소를 남기면 같은 화면이 두 자리에 살고, 그 둘이
  * 갈리는 날 어느 쪽이 맞는지 알 수 없다.
  *
- * **팝오버라서 생기는 몫이 하나 있다 — 복원 뒤 재동기화다.** 별도 라우트면
- * 되돌리고 설계서로 **돌아오는 길**에 셸이 자연히 다시 읽힌다. 팝오버는 에디터 **위에**
+ * **에디터 위에 떠서 생기는 몫이 하나 있다 — 복원 뒤 재동기화다.** 별도 라우트면
+ * 되돌리고 설계서로 **돌아오는 길**에 셸이 자연히 다시 읽힌다. 대화 상자는 에디터 **위에**
  * 뜨므로 그 길이 없고, 그래서 복원이 성공하면 `onRestored`로 셸에 알린다
- * (`routes/editor.tsx`의 `restoredToken`이 받는다).
+ * (`routes/editor.tsx`의 `restoredToken`이 받는다). **콜백은 셸의 것이다** — 복원을 보낸 뒤 상자를 닫아 이 몸체가 내려가도 답은 보낸
+ * 순간 쥔 콜백으로 셸에 닿는다(내려간 셸의 답은 셸이 `shellGeneration`으로 거른다).
  *
  * ---
  *
@@ -112,13 +112,11 @@
  * > 이미 되돌아간 상태 위에 안전망 스냅샷이 하나 더 쌓이고, **스냅샷은 지울 수 없다**(「스냅샷」).
  * > 같은 `onSaved`·`reloadFailure` 경로를 타므로 분기를 새로 만들지 않는다.
  */
-import { useEffect, useState, type FormEvent, type ReactElement, type RefObject } from 'react'
+import { useEffect, useState, type FormEvent, type ReactElement } from 'react'
 import { useApi } from '../api/context'
 import { SignedOut, refusedBeforeCommit, toFailure, type Failure } from '../api/failure'
 import type { ProjectDetail, RestoreResult, SnapshotSummary } from '../api/types'
 import { projectAbilities } from '../projects/project-actions'
-import { usePopoverDismiss } from './use-popover-dismiss'
-import { usePopoverSide, type PopoverPlacement } from './use-popover-side'
 
 /** 조회가 이유 없이 실패했을 때. 셸·테마 화면과 다른 문장이다 — 무엇을 못 불러왔는지가 다르다. */
 const UNKNOWN_FAILURE = '스냅샷을 불러오지 못했습니다'
@@ -128,8 +126,11 @@ const FAILURE_TITLE = '스냅샷을 열지 못했습니다'
 const SAVE_FAILURE = '스냅샷을 저장하지 못했습니다'
 /** 복원이 이유 없이 실패했을 때. **저장과 다른 문장이다** — 무엇이 실패했는지가 다르다. */
 const RESTORE_FAILURE = '복원하지 못했습니다'
-/** 복원의 답을 잃었을 때 서버 문장 뒤에 붙인다(`runRestore`) — 복원됐을 수 있다. */
-const RESTORE_UNANSWERED = '복원됐는지 알 수 없습니다. 화면 위 «다시 불러오기»로 지금 상태를 확인하세요.'
+/**
+ * 복원의 답을 잃었을 때 서버 문장 뒤에 붙인다(`runRestore`) — 복원됐을 수 있다. **상자를 닫으라고 말한다** — 대화 상자는 모달이라 열린 동안
+ * 하단 바(셸이 세운 «다시 불러오기» 배너)가 `inert`다(`shell/shell-dialog.tsx`).
+ */
+const RESTORE_UNANSWERED = '복원됐는지 알 수 없습니다. 이 상자를 닫고 하단 바의 «다시 불러오기»로 지금 상태를 확인하세요.'
 /**
  * **저장은 됐는데 목록만 못 받았을 때의 앞머리.** 이 문장이 없으면 화면이 *"실패"*만
  * 말하고, 사용자는 같은 태그로 다시 시도해 **409**를 받는다 — 그리고 스냅샷은 지울 수
@@ -163,17 +164,10 @@ type Notice =
   | { kind: 'restored'; tag: string; result: RestoreResult }
 
 /**
- * 셸 머리의 토글과 그 아래 팝오버.
- *
- * **본문은 열려 있는 동안만 마운트된다.** 그래서 열 때마다 목록을 다시 받고(`ExportPanel`과
- * 같은 판단 — 이 화면이 말하는 것은 전부 *"지금 무엇이 있는가"*다), **닫으면 확인 단계·폼·
- * 알림이 함께 초기화된다.**
- *
- * **복원 확인 중에 바깥을 눌러도 특례를 두지 않는다.** 그냥 닫히고 확인이 풀린다 — 예외를
- * 두면 *"언제 닫히는가"*가 화면마다 달라지고, 그 규칙을 사용자가 외워야 한다. 확인은
- * 되돌릴 수 없는 조작을 막는 장치인데 **닫히는 쪽이 안전한 방향**이기도 하다.
+ * 조회와 그 실패를 든다. **대화 상자가 열려 있는 동안만 산다 — 마운트가 곧 조회다.** 그래서 열 때마다 목록을 다시 받고(이 화면이 말하는
+ * 것은 전부 *"지금 무엇이 있는가"*다), **닫으면 확인 단계 · 폼 · 알림이 함께 초기화된다.**
  */
-export function SnapshotsPanel(props: {
+export function SnapshotsBody(props: {
   projectId: string
   /**
    * **복원을 보낸다** — 그 요청에 실은 복원 id(`x-wb-restore-id`)를 넘긴다(`EditorStore.beginOwnRestore`). 셸이 답이 오기 전에 온 그 id 의
@@ -192,48 +186,6 @@ export function SnapshotsPanel(props: {
    * 커밋 전에 거절된 실패는 여기가 아니라 위 `onRestoreRefused`다 — 복원이 안 됐다.
    */
   onRestoreUnanswered: (clientRestoreId: string) => void
-}): ReactElement {
-  const [open, setOpen] = useState(false)
-  /** **토글까지 감싸는 상자에 건다** — 그 배치가 훅의 계약이다(`use-popover-dismiss.ts`). */
-  const rootRef = usePopoverDismiss(open, () => setOpen(false))
-  /** 머리가 접혀 상자가 화면 밖으로 나가면 붙일 쪽을 바꾸거나 끌어온다(`use-popover-side.ts`). */
-  const { placement, bodyRef } = usePopoverSide(rootRef, open)
-
-  return (
-    <div className="wb-shell-snapshots" ref={rootRef}>
-      <button
-        type="button"
-        className="wb-shell-snapshots-toggle"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        스냅샷
-      </button>
-      {open && (
-        <SnapshotsBody
-          projectId={props.projectId}
-          onRestoreSent={props.onRestoreSent}
-          onRestored={props.onRestored}
-          onRestoreRefused={props.onRestoreRefused}
-          onRestoreUnanswered={props.onRestoreUnanswered}
-          placement={placement}
-          bodyRef={bodyRef}
-        />
-      )}
-    </div>
-  )
-}
-
-/** 조회와 그 실패를 든다. 열려 있는 동안만 산다 — 마운트가 곧 조회다(위 머리말). */
-function SnapshotsBody(props: {
-  projectId: string
-  onRestoreSent: (clientRestoreId: string) => void
-  onRestored: (clientRestoreId: string, safetySnapshotId: string) => void
-  onRestoreRefused: (clientRestoreId: string) => void
-  onRestoreUnanswered: (clientRestoreId: string) => void
-  /** 붙일 자리와 잴 상자 — 토글을 감싼 쪽이 고른다(`use-popover-side.ts`). */
-  placement: PopoverPlacement
-  bodyRef: RefObject<HTMLDivElement | null>
 }): ReactElement {
   const { projectId } = props
   const api = useApi()
@@ -289,22 +241,13 @@ function SnapshotsBody(props: {
 
   /**
    * **`.wb-shell-notice`를 쓰지 않는다.** 그것은 셸에 이르지 못한 **화면 전체**의 자리이고
-   * (조회 중·조회 실패), 여기는 셸이 이미 떠 있는 위의 작은 상자다. 셋을 한 상자 안에서
-   * 갈아 끼우는 것이 `ExportPanel`과 같은 모양이다.
+   * (조회 중·조회 실패), 여기는 셸이 이미 떠 있는 위의 상자다. 셋을 한 상자 안에서
+   * 갈아 끼우는 것이 내보내기 몸체(`ExportBody`)와 같은 모양이다.
    *
-   * **`<main>`도 `<h1>`도 아니다.** 별도 라우트였을 때는 이것이 그 화면의 랜드마크였지만,
-   * 팝오버 안에서는 문서에 랜드마크가 둘이 되고 제목이 셸의 프로젝트 이름과 경쟁한다.
-   * 이름은 토글 버튼의 글자가 나른다.
+   * **`<main>`도 `<h1>`도 아니다.** 문서에 랜드마크가 둘이 되고 제목이 셸의 프로젝트 이름과 경쟁한다. 제목은 대화 상자의 `<h2>`가 나른다.
    */
   return (
-    <div
-      className="wb-shell-snapshots-body"
-      role="group"
-      aria-label="스냅샷"
-      ref={props.bodyRef}
-      data-side={props.placement.side}
-      style={props.placement.style}
-    >
+    <div className="wb-shell-snapshots-body" role="group" aria-label="스냅샷">
       {state.status === 'loading' && <p role="status">불러오는 중…</p>}
       {state.status === 'failed' &&
         // 세션이 끊겼으면 오류가 아니라 로그인이다(`api/failure.tsx`). 셸·테마 화면과 같은 판정이다.
@@ -363,13 +306,13 @@ function SnapshotsScreen(props: {
   /** 저장은 됐는데 목록만 못 받았을 때의 서버 문장. 없으면 `null`. */
   reloadFailure: string | null
   onSaved: () => void
-  /** 복원을 보낸다(`SnapshotsPanel`의 같은 이름). */
+  /** 복원을 보낸다(`SnapshotsBody`의 같은 이름). */
   onRestoreSent: (clientRestoreId: string) => void
   /** 복원이 성공했다. **`onSaved`와 갈라 둔다** — 아래 `runRestore`의 주석. */
   onRestored: (clientRestoreId: string, safetySnapshotId: string) => void
-  /** 커밋 전에 거절됐다(`SnapshotsPanel`의 같은 이름). */
+  /** 커밋 전에 거절됐다(`SnapshotsBody`의 같은 이름). */
   onRestoreRefused: (clientRestoreId: string) => void
-  /** 복원의 답을 잃었다(`SnapshotsPanel`의 같은 이름). */
+  /** 복원의 답을 잃었다(`SnapshotsBody`의 같은 이름). */
   onRestoreUnanswered: (clientRestoreId: string) => void
 }): ReactElement {
   const api = useApi()
@@ -400,8 +343,8 @@ function SnapshotsScreen(props: {
       // **성공했을 때만** 목록을 다시 받는다. 프로젝트가 바뀌었고 안전망 스냅샷이 하나 생겼다.
       props.onSaved()
       /**
-       * **셸에도 알린다 — 팝오버라서 지는 몫이다**(머리말). 별도 라우트면 되돌리고
-       * 설계서로 돌아오는 길에 셸이 자연히 다시 읽히지만, 팝오버는 에디터 **위에** 뜨므로
+       * **셸에도 알린다 — 에디터 위에 떠서 지는 몫이다**(머리말). 별도 라우트면 되돌리고
+       * 설계서로 돌아오는 길에 셸이 자연히 다시 읽히지만, 대화 상자는 에디터 **위에** 뜨므로
        * 그 길이 없다. 안 알리면 **되돌렸는데 캔버스는 옛 문서를 그대로 보인다.**
        *
        * **`onSaved`에 얹지 않는다.** 저장은 이 목록만 바꾸고 복원은 **프로젝트 전체**를
@@ -462,8 +405,8 @@ function SnapshotsScreen(props: {
       <section className="wb-shell-snapshots-form" aria-label="스냅샷 저장">
         {abilities.createSnapshot ? (
           /* **`<form>`·`<input>`·제출 버튼에 클래스가 붙어 있다.** `shell.css` 머리말의 규칙이 요소 선택자와 자손
-             선택자를 막으므로 클래스가 없으면 이 셋의 폭을 정할 길이 아예 없다 — 520px
-             팝오버에서 셋이 한 줄로 눌려 `태그` 입력과 `설명` 라벨이 붙는다. */
+             선택자를 막으므로 클래스가 없으면 이 셋의 폭을 정할 길이 아예 없다 — 좁은
+             상자에서 셋이 한 줄로 눌려 `태그` 입력과 `설명` 라벨이 붙는다. */
           <form className="wb-shell-snapshots-fields" onSubmit={(event) => void save(event)}>
             <label className="wb-shell-snapshots-field">
               <span>태그</span>

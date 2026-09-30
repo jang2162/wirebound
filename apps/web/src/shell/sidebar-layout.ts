@@ -1,5 +1,5 @@
 /**
- * 좌측 사이드바의 **폭**과 그 안 두 영역의 **세로 배분**. 값과 한계와 보존이 여기 한
+ * 좌측 사이드바의 **폭**과 그 안 두 영역의 **세로 배분**, 그리고 우측 패널의 **폭**. 값과 한계와 보존이 여기 한
  * 자리에 있고, 손잡이 자체는 `shell/shell-resizer.tsx`, 배선은 `routes/editor.tsx`다.
  *
  * # 왜 이 파일이 있는가 — 잰 값
@@ -11,11 +11,20 @@
  *
  * # 다섯 가지 판단
  *
- * ## 손잡이는 둘이다 — 폭 하나, 두 영역 사이 하나
+ * ## 손잡이는 셋이다 — 좌측 폭, 두 영역 사이, 우측 폭
  *
- * 하나만 두면 나머지 한쪽이 고쳐지지 않는다. 위 실측의 고장이 **둘**이기 때문이다:
+ * 좌측에 하나만 두면 나머지 한쪽이 고쳐지지 않는다. 위 실측의 고장이 **둘**이기 때문이다:
  * 폭이 좁은 것과 배분이 내용과 무관한 것은 서로 다른 원인이고 한쪽을 고쳐도 다른 쪽이
- * 남는다. **우측 패널(300px)은 고정이다** — 손잡이가 없다.
+ * 남는다. **우측 패널도 폭을 사람이 정한다**(기본 · 최소 300px — `PANEL_WIDTH_DEFAULT`) — 속성 · 상호작용 칸이 좁을 때 넓힐 길이다.
+ *
+ * ## 두 폭은 한 예산을 나눠 쓴다
+ *
+ * 좌측 · 우측의 최대는 **서로를 본다** — 창 폭에서 손잡이 둘 · 칸 사이 여백(`HANDLES_WIDTH`)과 캔버스 몫(`CANVAS_MIN_WIDTH`)을 떼고 남은
+ * 것을 둘이 나눈다(`sideWidthMax` · `panelWidthMax`). 한쪽을 넓힐 때 다른 쪽의 **지금 폭**을 뺀다 — 한쪽을 고정값(옛 «우측 300»)으로
+ * 가정하면 우측을 넓힌 채 좌측을 최대로 밀 때 캔버스가 0 이 된다.
+ *
+ * **창이 좁아지면 둘을 차례로 조인다 — 우측 먼저 최소까지, 그다음 좌측**(`fitWidths`). 좌측은 트리라 폭이 곧 읽을 줄의 길이이고, 우측
+ * 패널은 최소(300)에서도 칸이 선다. 조이는 것은 **그리는 값**이다 — 저장값은 그대로 두고 창이 다시 넓어지면 돌아온다(아래 «클램프가 두 번»).
  *
  * ## `localStorage`에 기억한다
  *
@@ -61,7 +70,7 @@
  * 되돌릴 수 있다. 막으려는 사고는 *"내용이 잘린다"*가 아니라 *"손잡이를 되잡을 수 없다"*이고
  * 그쪽에는 200px이 충분하다. **1px은 여유가 아니라 우연이다 — 그렇게 읽지 마라.**
  *
- * **최대는 창에서 계산한다**(`sideWidthMax`). 고정값을 두면 좁은 창에서 캔버스가 0이 되고
+ * **최대는 창에서 계산한다**(`sideWidthMax` · `panelWidthMax`). 고정값을 두면 좁은 창에서 캔버스가 0이 되고
  * 격자가 통째로 넘친다 — 실측: 1440 창에서 사이드바를 1200px로 두면 캔버스 트랙이 0px가
  * 되고 셸의 `scrollWidth`가 1502로 벌어진다. 그래서 **캔버스에 남겨 둘 몫**(`CANVAS_MIN_WIDTH`)
  * 을 먼저 떼고 나머지를 준다.
@@ -130,11 +139,17 @@ export const SIDE_WIDTH_MIN = 200
 export const CANVAS_MIN_WIDTH = 320
 
 /**
- * 사이드바가 가져갈 수 없는 가로(px) — 우측 패널 300 + 손잡이 6 + 칸 사이 여백 3(1px × 3).
+ * 두 폭 말고 격자가 가로로 쓰는 고정 몫(px) — 손잡이 둘(6 × 2) + 칸 사이 여백 넷(1px × 4 — 칸 다섯 사이).
  * **`shell.css`의 `.wb-shell` 격자와 짝이다**(`test/shell/sidebar-layout.test.ts`가 그 짝을
  * CSS 원문과 대조한다 — 한쪽만 고치면 최대가 틀린 값이 된다).
  */
-export const SIDE_RESERVED_WIDTH = 300 + 6 + 3
+export const HANDLES_WIDTH = 6 * 2 + 1 * 4
+
+/** 우측 패널 기본 폭(px) — 격자의 넷째 칸이 고정이던 때의 값 그대로다. 좌측과 같이 `.wb-shell-panel`의 인라인 `width`로 붙는다. */
+export const PANEL_WIDTH_DEFAULT = 300
+
+/** 우측 패널 최소 폭(px). 속성 패널의 라벨(96px)과 칸이 한 줄에 서는 폭이 기본값이라 그 아래로 줄이지 않는다. */
+export const PANEL_WIDTH_MIN = 300
 
 /** 두 영역의 기본 배분. 0.5는 `flex: 1` 둘이 내는 반반과 같다. */
 export const REGION_RATIO_DEFAULT = 0.5
@@ -176,30 +191,63 @@ export const RESIZE_STEP = 16
 /** 보존 키. **설계서마다가 아니라 사람마다 하나다**(머리말 「`localStorage`에 기억한다」). */
 export const STORAGE_KEY = 'wirebound.editor.sidebar'
 
-/** 보존되는 값. 둘 다 없을 수 있다 — 한쪽이 깨져도 다른 쪽은 산다. */
+/** 보존되는 값. 다 없을 수 있다 — 한쪽이 깨져도 다른 쪽은 산다. `panelWidth`가 없는 옛 저장값은 우측 기본값으로 읽는다. */
 export interface StoredLayout {
   sideWidth?: number
   regionRatio?: number
+  panelWidth?: number
 }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
+/** 두 폭이 나눠 쓰는 가로(px) — 창에서 고정 몫과 캔버스 몫을 뗀 것. */
+function widthBudget(shellWidth: number): number {
+  return shellWidth - HANDLES_WIDTH - CANVAS_MIN_WIDTH
+}
+
 /**
- * 지금 창에서 사이드바가 가질 수 있는 최대 폭(px).
+ * 지금 창 · 지금 우측 폭에서 사이드바가 가질 수 있는 최대 폭(px).
  *
  * **최소보다 작아지지 않는다.** 창이 아주 좁으면 계산이 최소 아래로 내려가는데, 그때
  * `clampSideWidth`의 `min`과 `max`가 뒤집히면 결과가 튄다. 좁은 창에서는 최소를 지키고
  * 격자가 넘치게 두는 편이 낫다 — 그 상황에서 사이드바를 더 줄여도 캔버스는 여전히 못 쓴다.
  */
-export function sideWidthMax(shellWidth: number): number {
-  return Math.max(SIDE_WIDTH_MIN, shellWidth - SIDE_RESERVED_WIDTH - CANVAS_MIN_WIDTH)
+export function sideWidthMax(shellWidth: number, panelWidth: number): number {
+  return Math.max(SIDE_WIDTH_MIN, widthBudget(shellWidth) - panelWidth)
 }
 
-/** 화면에 실제로 쓸 사이드바 폭. 창이 좁아지면 저장된 값은 그대로 두고 이 값만 줄어든다. */
-export function clampSideWidth(width: number, shellWidth: number): number {
-  return clamp(width, SIDE_WIDTH_MIN, sideWidthMax(shellWidth))
+/** 지금 창 · 지금 좌측 폭에서 우측 패널이 가질 수 있는 최대 폭(px). 최소보다 작아지지 않는다(`sideWidthMax`와 같은 까닭). */
+export function panelWidthMax(shellWidth: number, sideWidth: number): number {
+  return Math.max(PANEL_WIDTH_MIN, widthBudget(shellWidth) - sideWidth)
+}
+
+/** 사이드바 폭을 우측의 지금 폭에 맞춰 자른다. 손잡이가 싣는 값이다. */
+export function clampSideWidth(width: number, shellWidth: number, panelWidth: number): number {
+  return clamp(width, SIDE_WIDTH_MIN, sideWidthMax(shellWidth, panelWidth))
+}
+
+/** 우측 폭을 좌측의 지금 폭에 맞춰 자른다. 손잡이가 싣는 값이다. */
+export function clampPanelWidth(width: number, shellWidth: number, sideWidth: number): number {
+  return clamp(width, PANEL_WIDTH_MIN, panelWidthMax(shellWidth, sideWidth))
+}
+
+/**
+ * **화면에 쓸 두 폭** — 저장값을 지금 창에 맞춰 조인다(머리말 «두 폭은 한 예산을 나눠 쓴다»). 넘치면 **우측을 먼저** 최소까지, 그래도 넘치면
+ * 좌측을 최소까지 줄인다. 둘 다 최소인데도 넘치는 창(아주 좁은 창)은 격자가 넘치게 둔다 — `sideWidthMax`의 머리말.
+ */
+export function fitWidths(side: number, panel: number, shellWidth: number): { side: number; panel: number } {
+  let fittedSide = Math.max(SIDE_WIDTH_MIN, side)
+  let fittedPanel = Math.max(PANEL_WIDTH_MIN, panel)
+  let over = fittedSide + fittedPanel - widthBudget(shellWidth)
+  if (over > 0) {
+    const cut = Math.min(over, fittedPanel - PANEL_WIDTH_MIN)
+    fittedPanel -= cut
+    over -= cut
+  }
+  if (over > 0) fittedSide -= Math.min(over, fittedSide - SIDE_WIDTH_MIN)
+  return { side: fittedSide, panel: fittedPanel }
 }
 
 /**
@@ -310,9 +358,11 @@ export function readLayout(storage: Storage | null): StoredLayout {
   const record = parsed as Record<string, unknown>
   const sideWidth = usableNumber(record.sideWidth)
   const regionRatio = usableNumber(record.regionRatio)
+  const panelWidth = usableNumber(record.panelWidth)
   return {
     ...(sideWidth === undefined ? {} : { sideWidth }),
     ...(regionRatio === undefined ? {} : { regionRatio }),
+    ...(panelWidth === undefined ? {} : { panelWidth }),
   }
 }
 
@@ -351,6 +401,13 @@ export interface SidebarLayout {
   /** 비율을 그대로 싣는다. `Home`·`End`가 쓴다 — 양 끝은 픽셀을 거칠 이유가 없다. */
   setRegionRatio: (ratio: number) => void
   resetRegionRatio: () => void
+  /** 화면에 쓸 우측 폭(px). **클램프를 지난 값**이다(`fitWidths`). */
+  panelWidth: number
+  panelWidthMin: number
+  panelWidthMax: number
+  grabPanelWidth: () => number
+  setPanelWidth: (width: number) => void
+  resetPanelWidth: () => void
 }
 
 /**
@@ -458,7 +515,11 @@ export function useSidebarLayout(): SidebarLayout {
     writeLayout(storageRef.current, stored)
   }, [stored])
 
-  const sideWidth = clampSideWidth(stored.sideWidth ?? SIDE_WIDTH_DEFAULT, shellWidth)
+  const { side: sideWidth, panel: panelWidth } = fitWidths(
+    stored.sideWidth ?? SIDE_WIDTH_DEFAULT,
+    stored.panelWidth ?? PANEL_WIDTH_DEFAULT,
+    shellWidth,
+  )
   const regionRatio = clampRegionRatio(stored.regionRatio ?? REGION_RATIO_DEFAULT, metrics.shared)
 
   return {
@@ -466,11 +527,19 @@ export function useSidebarLayout(): SidebarLayout {
     regionResizerRef,
     sideWidth,
     sideWidthMin: SIDE_WIDTH_MIN,
-    sideWidthMax: sideWidthMax(shellWidth),
+    sideWidthMax: sideWidthMax(shellWidth, panelWidth),
     grabSideWidth: () => sideWidth,
+    // 싣는 자리의 클램프는 **상대의 화면 폭**을 뺀다 — 저장값이 아니다. 조여진 상대를 기준으로 잘라야 손잡이가 화면에 보인 끝에서 멈춘다.
     setSideWidth: (width) =>
-      setStored((prev) => ({ ...prev, sideWidth: clampSideWidth(width, shellWidth) })),
+      setStored((prev) => ({ ...prev, sideWidth: clampSideWidth(width, shellWidth, panelWidth) })),
     resetSideWidth: () => setStored((prev) => ({ ...prev, sideWidth: SIDE_WIDTH_DEFAULT })),
+    panelWidth,
+    panelWidthMin: PANEL_WIDTH_MIN,
+    panelWidthMax: panelWidthMax(shellWidth, sideWidth),
+    grabPanelWidth: () => panelWidth,
+    setPanelWidth: (width) =>
+      setStored((prev) => ({ ...prev, panelWidth: clampPanelWidth(width, shellWidth, sideWidth) })),
+    resetPanelWidth: () => setStored((prev) => ({ ...prev, panelWidth: PANEL_WIDTH_DEFAULT })),
     regionRatio,
     regionRatioMin: regionRatioMin(metrics.shared),
     regionGrow: regionGrow(regionRatio, metrics),

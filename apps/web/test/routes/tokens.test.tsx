@@ -54,12 +54,16 @@ function server(initial: MyApiToken[], overrides: Partial<ApiClient> = {}) {
 }
 
 describe('API 토큰 화면', () => {
+  /** 계정 묶음은 셸 밖 화면(테마 관리 · 설정 · 이 화면)의 머리다 — 프로젝트 목록 머리는 `…` 로 바뀌었다(`routes/project-list.tsx`). */
   it('계정 묶음의 «API 토큰» 링크가 이 화면으로 간다', async () => {
-    const { client, calls } = server([token()])
-    renderWithProviders(<App />, { client, route: '/' })
+    const { client, calls } = server([token()], {
+      me: async () => ({ ...USER, isInstanceAdmin: true }),
+      listThemePackages: async () => [],
+    })
+    renderWithProviders(<App />, { client, route: '/admin/themes' })
 
     const link = await screen.findByRole('link', { name: 'API 토큰' })
-    expect(currentPath()).toBe('/')
+    expect(currentPath()).toBe('/admin/themes')
     fireEvent.click(link)
     await screen.findByRole('heading', { name: 'API 토큰' })
     expect(currentPath()).toBe('/tokens')

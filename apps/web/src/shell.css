@@ -15,9 +15,9 @@
      자식으로 물려 내려가므로 1·2·3을 보는 검사가 잡지 못하는 누수다. 글꼴·글자색·
      `color-scheme`은 셸이 실제로 그리는 조각(머리·좌측·우측·안내 화면)에만 각각 건다.
 
-     **감싸는 상자는 넷이다** — `.wb-shell`, `.wb-shell-canvas`, `.wb-shell-canvas-frame`,
+     **감싸는 상자는 다섯이다** — `.wb-shell`, `.wb-shell-canvas`, `.wb-shell-canvas-stage`, `.wb-shell-canvas-frame`,
      `.wb-shell-canvas-surface`. **프레임 안에 설계서 문서가 들어오므로**(`canvas/canvas.tsx`)
-     넷 모두가 검사 대상이다.
+     다섯 모두가 검사 대상이다.
 
      **예외 — 커스텀 프로퍼티.** 아래 `.wb-shell`이 선언하는 `--wb-shell-*` 일곱 개도
      상속 속성이라 프레임 안까지 내려간다. 그래도 두는 것은 `wb-shell-` 접두어가
@@ -64,9 +64,9 @@
 /* 셸의 팔레트. **화면 루트 셋이 공유한다** — 에디터 셸(설계서 「설계서 화면 구조」), 프로젝트 목록,
    로그인. 뒤의 둘은 셸 안이 아니라 별도 라우트라 `.wb-shell` 아래에 있지 않다. 값을 두 벌 적으면 한쪽만 고쳐지는 자리가 되므로 선언을 여기 하나로 둔다.
 
-   **`.wb-shell-snapshots`는 목록에 없다.** 스냅샷은 셸 밖 라우트가 아니라
-   셸 머리의 팝오버라(`shell/snapshots-panel.tsx` 머리말) 그 상자는 `.wb-shell`
-   **안**이다. 안쪽에 두면 팔레트가 이미 상속되므로, 목록에 남겨 두는 것은 같은 값을 두 번
+   **대화 상자(`.wb-shell-dialog` — 스냅샷 · 내보내기)는 목록에 없다.** 셸 밖 라우트가 아니라
+   셸이 그리는 모달이라(`shell/shell-dialog.tsx` 머리말) 그 요소는 `.wb-shell`
+   **안**이다(top layer 에 떠도 DOM 부모에게서 상속받는다). 목록에 남겨 두는 것은 같은 값을 두 번
    선언하는 자리가 된다 — 이 블록이 막으려는 바로 그것이다.
 
    반대편(빼면 무엇이 깨지는가)도 재 봤다: 빼지 않고 두어도 화면은 같다. 그래서 이 줄은
@@ -122,14 +122,17 @@
      (`test/shell-css-guard.ts` 머리말의 ㉠·㉡). `width`는 상속되지 않으므로 그 성질이
      그대로 참이고, 기본값 264px이 CSS와 TS 두 벌로 적히지도 않는다.
 
-     **둘째 트랙 6px이 손잡이다.** 1px 여백 사이에 놓여 총 8px 홈이 된다 — 1px 선만으로는
-     마우스로 잡을 수 없다. 이 수는 `SIDE_RESERVED_WIDTH`가 함께 알고 있고
-     `test/shell/sidebar-layout.test.ts`가 둘을 대조한다. */
-  grid-template-columns: auto 6px minmax(0, 1fr) 300px;
-  grid-template-rows: auto minmax(0, 1fr);
+     **둘째 · 넷째 트랙 6px이 손잡이다**(좌측 폭 · 우측 폭). 1px 여백 사이에 놓여 총 8px 홈이 된다 — 1px 선만으로는
+     마우스로 잡을 수 없다. **다섯째 트랙(우측 패널)도 `auto`다** — 폭은 `.wb-shell-panel`의 인라인 `width`(좌측과 같은 장치). 손잡이 둘과
+     여백 넷은 `HANDLES_WIDTH`가 함께 알고 있고 `test/shell/sidebar-layout.test.ts`가 둘을 대조한다. */
+  grid-template-columns: auto 6px minmax(0, 1fr) 6px auto;
+  /* **셋째 줄이 하단 바다**(`shell/shell-footer.tsx`) — 캔버스 칸 아래, 좌 · 우 사이드바 사이. 높이가 `auto`라 통지가 늘면 바가 자라고
+     캔버스 줄(`minmax(0, 1fr)`)이 그만큼 준다. 캔버스와 바 사이에 칸을 끼울 때는 줄 하나와 영역 이름 하나를 더한다. */
+  grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
-    'head head head head'
-    'side side-resizer canvas panel';
+    'head head head head head'
+    'side side-resizer canvas panel-resizer panel'
+    'side side-resizer footer panel-resizer panel';
   gap: var(--wb-shell-gap);
   background: var(--wb-shell-line);
 }
@@ -143,19 +146,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  /* 편집 실패 통지가 셋째 조각으로 들어온다. 감싸지 않으면 `space-between`이 셋을
-     펼쳐 도구가 가운데로 밀린다 — 통지가 뜰 때만 그러므로 눈에 띄는 흔들림이 된다. */
+  /* 좁은 창에서 세 조각(왼쪽 · 가운데 · `…`)이 줄을 바꾼다 — 한 줄에 드는 폭은 `.wb-shell-head-tools`의 표. 통지는 머리가 아니라
+     하단 바에 선다(`shell/shell-footer.tsx`). */
   flex-wrap: wrap;
   gap: 24px;
   padding: 10px 16px;
-  /* **머리는 창보다 넓어지지 않는다.** 머리는 그리드의 네 칸에 걸치는데, 좁은 창에서는 그리드가 좌측 · 우측의 고정 폭만큼
-     창보다 넓다 — 머리가 그 폭까지 펼쳐지면 줄을 바꿀 자리를 창 밖에서 찾아 오른쪽 도구들이 잘린다. `.wb-shell`이
-     `position: fixed`라 문서가 넓어지지 않아 가로 스크롤로도 못 본다(Chrome 390: 되돌리기 · 확대 · 화면 맞춤 · 내보내기가
-     493 까지 · 단추 글자가 «편집 모/드» · «축/소»로 접힘). 상한을 창 폭에 두면 `flex-wrap`이 창 안에서 줄을 바꾼다. 안에서
-     줄을 바꿔야 하는 묶음은 둘이다 — 도구(`.wb-shell-tools` — 모드 · 뷰포트 · 줌이 한 줄이면 390 에서 477px)와 세션
-     (`.wb-shell-session` — 이름이 길면 넘친다: 한글 30자 이름에서 떼면 넘침 셋). 묶음이 줄을 바꾸면 단추는 줄어들지 않아
-     글자가 안 접힌다 — 단추마다 `nowrap`을 걸어 봤고 390 · 480 에서 아무것도 안 바뀌었다. 이력은 자식이
-     다 줄어들거나 짧아 걸 것이 없다(`test/shell-css-picker.test.ts`의 `ONE_LINE`).
+  /* **머리는 창보다 넓어지지 않는다.** 머리는 그리드의 모든 칸에 걸치는데, 좁은 창에서는 그리드가 좌측 · 우측의 폭만큼
+     창보다 넓다 — 머리가 그 폭까지 펼쳐지면 줄을 바꿀 자리를 창 밖에서 찾아 오른쪽 조각이 잘린다. `.wb-shell`이
+     `position: fixed`라 문서가 넓어지지 않아 가로 스크롤로도 못 본다. 상한을 창 폭에 두면 `flex-wrap`이 창 안에서 줄을 바꾼다. 안에서
+     줄을 바꾸는 묶음은 가운데 무리(`.wb-shell-head-tools`)다 — 묶음이 줄을 바꾸면 단추는 줄어들지 않아 글자가 안 접힌다. 이력은 자식이
+     다 줄어들거나 짧아 걸 것이 없다(`test/shell-css-picker.test.ts`의 `ONE_LINE`). 셸 밖 화면의 계정 묶음(`.wb-shell-session`)도 같은
+     장치로 줄을 바꾼다(이름이 길면 넘친다).
      몸통(좌측 · 캔버스 · 우측)이 좁은 창에서 넘치는 것은 이 줄의 일이 아니다. */
   max-width: 100vw;
   box-sizing: border-box;
@@ -229,20 +230,109 @@
    기본 `min-width: auto`는 내용보다 작아지지 않아 줄임표 대신 묶음이 넘친다. */
 .wb-shell-lead {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 14px;
   min-width: 0;
 }
 
-/* 프로젝트 목록으로 돌아가는 링크.
+/* 머리의 가운데 — 되돌리기 · 모드. 줄을 바꿀 수 있다 — 근거는 `.wb-shell-header`의 `max-width`.
 
-   `nowrap`인 것은 이 글자가 접히면 머리의 줄 높이가 흔들리기 때문이다 — 줄어들 것은 제목
-   쪽이고, 그쪽이 줄임표를 갖고 있다. */
-.wb-shell-back {
-  flex: none;
-  font-size: 12px;
+   ## 머리가 한 줄에 들어가는 폭 — 재서 적는다. 추정이 아니다
+
+   머리는 세 조각이다 — 왼쪽(로고 · 이름), 가운데(되돌리기 · 모드), 오른쪽 끝(`…`). 창 폭을 이분 탐색해 머리 높이가 넓은 창(2400)의
+   높이와 같은 가장 좁은 창 폭을 찾은 값(Chrome 헤드리스 · 프로젝트 이름 «관리자 콘솔 설계서»):
+
+   | 모드 | 한 줄에 드는 최소 창 폭 | 그보다 좁으면 |
+   |---|---|---|
+   | 편집 (되돌리기 묶음이 있다) | 620px | 머리가 48 → 96px, `…` 가 둘째 줄 왼쪽 끝으로 내려간다 |
+   | 뷰 (되돌리기가 없다) | 470px | 〃 |
+
+   **다시 재는 길:** `pnpm test:browser` 의 `apps/web/build-test/editor-shell-layout.test.ts` «머리는 창 1024 에서 한 줄이다» 가 같은 탐색을
+   돌려 `[머리 한 줄 최소 창 폭]` 로그로 낸다(단언은 1024 이하인지만 — 글꼴이 기계마다 달라 수는 로그의 값이다). 이름이 길면 왼쪽 조각의
+   제목이 줄임표로 줄어 줄 수가 먼저 늘지 않는다(`.wb-shell-title`의 `text-overflow`). */
+.wb-shell-head-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  font-size: 13px;
+}
+
+/* ── 하단 바(`shell/shell-footer.tsx`) ─────────────────────────────────────────────────
+   캔버스 칸 아래 한 줄. 셸이 그리는 조각이라 글꼴 · 스킴을 여기 건다(머리와 같은 값 — 문서를 감싸지 않으므로 상속 속성을 걸어도 된다).
+
+   **칸이 좁으면 도구가 통지 아래 줄로 내려간다**(`flex-wrap` · 통지 무리의 기본 폭 320). 접지 않으면 도구(뷰포트 · 줌 — 341px)가 제 폭을
+   지키고 통지가 남은 폭만 받는다 — 창 1024 · 사이드바 기본에서 캔버스 칸 444 에 통지 칸이 63px 이라 한 줄이 한두 낱말이고, 통지 셋이면
+   바가 452px 로 자라 캔버스가 198px 다(Chrome — `apps/web/build-test/editor-shell-modal.test.ts` «창 1024 에서 통지 셋»). */
+.wb-shell-footer {
+  grid-area: footer;
+  color-scheme: light;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px 16px;
+  min-width: 0;
+  padding: 6px 12px;
+  background: var(--wb-shell-chrome);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 13px;
   color: var(--wb-shell-ink);
+}
+
+/* 통지 줄. 통지마다 제 줄을 쓴다(`.wb-shell-edit-alert` 들의 `flex-basis: 100%`) — 여럿이면 위로 자란다. `min-width: 0`이 없으면 긴 문장이
+   도구를 오른쪽 밖으로 민다. 기본 폭 320 은 한 줄이 읽을 만한 폭이다 — 그만큼 안 남으면 바가 접혀 도구가 아래 줄로 간다(`.wb-shell-footer`).
+   통지가 없으면 걷는다 — 빈 무리가 320 을 쥐면 좁은 칸에서 도구가 빈 첫 줄 아래로 내려간다. */
+.wb-shell-footer-notices {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.wb-shell-footer-notices:empty {
+  display: none;
+}
+
+/* 뷰포트 · 줌. 칸이 좁으면 **줄어들며 안에서 줄을 바꾼다**. `flex: none`이면 최대 내용 폭(뷰포트 고르개 + 줌 넷)으로 서서 캔버스 칸이
+   최소(320)일 때 우측 패널 밑으로 들어가 «화면 맞춤»을 누를 수 없었다(Chrome · 창 1440 · 좌측 최대 — 단추 가운데의 `elementFromPoint`가
+   `.wb-shell-panel`). `margin-left: auto`는 바가 접혀 도구가 제 줄에 혼자 설 때도 오른쪽 끝에 두게 한다(`space-between`은 혼자인 줄을 왼쪽에 둔다). */
+.wb-shell-footer-tools {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 16px;
+}
+
+/* 로고 — 프로젝트 목록으로 가는 링크(`shell/brand-link.tsx`). 아이콘과 «wirebound»가 한 줄이다.
+
+   `nowrap` · `flex: none`인 것은 이 글자가 접히면 머리의 줄 높이가 흔들리기 때문이다 — 줄어들 것은 제목
+   쪽이고, 그쪽이 줄임표를 갖고 있다. */
+.wb-shell-brand {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--wb-shell-ink);
+  text-decoration: none;
   white-space: nowrap;
+}
+
+.wb-shell-brand-mark {
+  flex: none;
+  color: var(--wb-shell-accent);
+}
+
+.wb-shell-brand-name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .wb-shell-title {
@@ -253,15 +343,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.wb-shell-tools {
-  display: flex;
-  /* 좁은 창에서는 모드 · 뷰포트 · 줌 묶음이 줄을 바꾼다. 근거는 `.wb-shell-header`의 `max-width`. */
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  font-size: 13px;
 }
 
 .wb-shell-modes {
@@ -348,57 +429,9 @@
   color: var(--wb-shell-muted);
 }
 
-/* 계정 묶음. 머리 줄의 **끝**이다 — 근거는 `session/session-menu.tsx` 머리말에 있다.
-   `margin-left: auto`를 걸지 않는다: 머리가 이미 `space-between`이라 마지막 조각이 오른쪽
-   끝에 선다.
-
-   ## 머리가 한 줄에 들어가는 폭 — 재서 적는다. 추정이 아니다
-
-   **아래 수는 전부 크롬에서 이분 탐색으로 잰 값이다**(셸의 실제 DOM에 이 파일을 그대로
-   씌우고, 상자 폭을 600~2400 사이에서 갈라 가며 머리 높이가 49px인 최소 폭을 찾는다).
-   `-270px` 쪽은 **두 조각(`.wb-shell-back`·`.wb-shell-session`)을 DOM에서 빼고**
-   같은 탐색을 다시 돌린 값이다 — 조각 폭을 더해 어림한 것이 아니다.
-
-   | 모드 | 두 조각을 뺀 폭 | 지금 | 증가분 | 그보다 좁으면 |
-   |---|---|---|---|---|
-   | 편집 (되돌리기 묶음이 있다) | 1147px | **1417px** | +270 | 머리가 49 → 100px, 조각이 둘째 줄로 내려간다 |
-   | 뷰 (되돌리기가 없다) | 989px | **1259px** | +270 | 〃 |
-
-   **증가분을 조각 폭을 손으로 더해 어림하면 틀린다** — (링크 ~120 + lead gap 10 + 묶음 105
-   + 머리 gap 24) = 259px로 실제보다 11px 작다. **어림한 수를 실측처럼 적어 두면 다음 사람이
-   그것을 근거로 계산한다.** 두 모드의 증가분이 **똑같이 270**인 것이 이 수의 검산이다: 뺀
-   것은 모드와 무관한 두 조각뿐이므로 편집·뷰가 같은 값만큼 늘어야 한다.
-
-   ## 둘째 줄이 어떻게 생겼는가 — 구간마다 다르다
-
-   | 폭(편집) | 폭(뷰) | 둘째 줄 |
-   |---|---|---|
-   | 1417+ | 1259+ | 없다 (한 줄) |
-   | 1288~1416 | 1130~1258 | **계정 묶음 혼자, 왼쪽 끝에** |
-   | 그 아래 | 그 아래 | 내보내기·스냅샷·테마가 차례로 합류하고, 계정 묶음은 `space-between`을 따라 오른쪽 끝으로 간다 |
-
-   (독립으로 다시 재면 위 구간의 아래 끝이 편집 1278·뷰 1120으로 잡히기도 한다. 위 끝
-   1416·1258과 현상은 양쪽이 같고 아래 끝만 10px 갈린다 — 어느 쪽이든 *"혼자 서는 구간이
-   있다"*는 결론은 같아 더 좁히지 않는다.)
-
-   ## 그래서 무엇을 안 하나
-
-   **줄바꿈을 막으려고 조각을 줄이지 않는다.** `flex-wrap: wrap`은 이 머리가 원래 갖고 있던
-   장치이고(위 `.wb-shell-header`의 주석 — 편집 실패 통지가 그 줄을 쓴다), 넘치는 것을
-   가로 스크롤이나 잘림으로 두는 것보다 낫다. 문안을 줄여 버는 것은 55px(`프로젝트 목록으로
-   돌아가기` → `프로젝트 목록`)뿐이라 1366~1417 구간만 덮는다.
-
-   **내려간 묶음이 왼쪽에 서는 것은 `space-between`의 성질이다**(둘째 줄에 조각이 하나뿐이면
-   flex-start). 오른쪽에 세우려면 이 규칙에 `margin-left: auto` 한 줄이면 되는데, 그러면
-   **한 줄로 들어갈 때의 배치까지 바뀐다** — 앞 여섯 조각이 왼쪽으로 뭉치고 남는 공간이
-   전부 이 여백으로 간다(실측: 1600px에서 `.wb-shell-tools`가 x=510 → 449로 밀린다).
-   한 줄일 때의 배치는 이 규칙 하나로 바꿀 것이 아니므로 건드리지 않는다.
-
-   **여기를 줄여서 될 일이 아니다 — 머리 전체의 그룹핑에서 풀 일이다.** 두 조각이 270px을
-   더하는 것은 맞지만, 둘을 빼도 여덟 묶음이 한 줄에 서 있고 1147px 아래에서는 이미
-   두 줄이다. 이 묶음을 깎으면 임계가 조금 내려갈 뿐 **줄이 하나라는 전제는 그대로**라
-   다음 조각이 들어올 때 같은 자리로 돌아온다. 고칠 자리는 *"머리에 무엇을 몇 묶음으로
-   두는가"*이고 그것은 별도의 일이다 — **이 규칙만 만지작거리지 마라.** */
+/* 계정 묶음 — **셸 밖 화면**(설정 · 토큰 · 테마 관리)의 머리 줄 끝(`session/session-menu.tsx`의 `SessionMenu`). 에디터 · 프로젝트 목록
+   머리는 이 묶음 대신 `…`(`shell/action-menu.tsx`)를 둔다. `margin-left: auto`를 걸지 않는다: 머리가 이미 `space-between`이라 마지막
+   조각이 오른쪽 끝에 선다. */
 .wb-shell-session {
   display: inline-flex;
   /* 이름 · 링크 · 로그아웃이 좁은 창에서 줄을 바꾼다 — 이 묶음에 새 조각이 들어와도 같다. 근거는 `.wb-shell-header`의
@@ -504,6 +537,15 @@
   touch-action: none;
 }
 
+/* 캔버스와 우측 패널 사이의 손잡이. 좌측 손잡이와 같은 값이고 자리만 다르다 — 규칙을 합치지 않는 것은 격자 자리(`grid-area`)가 갈리기
+   때문이다(머리말의 규칙이 막는 것은 결합자이지 같은 값의 규칙 둘이 아니다). */
+.wb-shell-panel-resizer {
+  grid-area: panel-resizer;
+  background: var(--wb-shell-chrome);
+  cursor: col-resize;
+  touch-action: none;
+}
+
 /* 좌측 두 영역 사이의 손잡이. 세로 손잡이와 같은 값이고 축만 다르다 — 규칙을 합치지
    않는 것은 `.wb-shell-zoom-fit`이 `.wb-shell-zoom-step`과 합치지 않는 것과 같은
    근거다(한쪽의 생김새를 바꿀 때 다른 쪽이 끌려가면 안 된다).
@@ -533,6 +575,7 @@
 
 /* 마우스가 올라왔을 때. 6px 회색 홈이 강조색으로 차서 **잡을 수 있는 자리**라고 말한다. */
 .wb-shell-side-resizer:hover,
+.wb-shell-panel-resizer:hover,
 .wb-shell-region-resizer:hover {
   background: var(--wb-shell-accent);
 }
@@ -543,6 +586,7 @@
    넣으면(`outline-offset` 음수) 남는 것이 2px라 보이지 않는다. `outline`은 자리를 차지하지
    않으므로 옆 상자가 밀리지도 않는다. */
 .wb-shell-side-resizer:focus-visible,
+.wb-shell-panel-resizer:focus-visible,
 .wb-shell-region-resizer:focus-visible {
   background: var(--wb-shell-accent);
   outline: 2px solid var(--wb-shell-ink);
@@ -830,12 +874,18 @@
   background: #eef0f3;
 }
 
+/* 무대 — 보이는 폭(프리셋 × 줌)의 상자(`routes/editor.tsx`의 `CanvasFrame` · `fitZoom` 머리말 «가운데 정렬은 보이는 폭으로 한다»).
+   가운데 정렬은 여기서 한다. 캔버스 칸의 흐름 속 자식이 이 상자라 칸의 가로 넘침이 **보이는 폭**으로 선다 — 안의 프레임은 `transform`이
+   걸려 변환 뒤 상자로만 넘침에 든다(Chrome: 이 상자에 `overflow-x: clip`을 더하든 빼든 넘침이 같았다 — 자르는 장치가 따로 필요 없다). */
+.wb-shell-canvas-stage {
+  margin: 0 auto;
+}
+
 .wb-shell-canvas-frame {
   /* 폭은 프리셋이 정하고 줌은 그 위의 배율이다. 좌상단 기준으로 키워야 확대해도
-     프레임의 시작점이 제자리에 있다. */
+     프레임의 시작점이 무대의 시작점에 있다. */
   transform-origin: top left;
   min-height: 320px;
-  margin: 0 auto;
   background: #fff;
   box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
 }
@@ -1123,6 +1173,10 @@
 
 .wb-shell-panel {
   grid-area: panel;
+  /* 폭은 인라인 `width`다(`shell/sidebar-layout.ts` — 좌측과 같은 장치). 격자 트랙이 `auto`라 그 값을 그대로 받는다. **`border-box`다** —
+     아래 좌우 여백(24)이 폭 밖에 붙으면 트랙이 인라인 폭 + 24 가 되어 캔버스 몫이 그만큼 준다(Chrome · 창 1440: 두 폭 최대에서 캔버스
+     296 < `CANVAS_MIN_WIDTH`). 좌측(`.wb-shell-side`)은 여백이 없어 같은 일이 없다. */
+  box-sizing: border-box;
   color-scheme: light;
   min-width: 0;
   overflow: auto;
@@ -1788,10 +1842,8 @@
   color: var(--wb-shell-ink);
 }
 
-/* 목록 화면의 머리 줄 — 제목과 계정 묶음. **셸 머리와 같은 모양이다**: `space-between`이
-   둘을 양 끝에 세우고 `flex-wrap`이 로그아웃 실패 문장(`.wb-shell-session-alert`,
-   `flex-basis: 100%`)을 아랫줄로 내려보낸다. 그 장치가 두 화면에서 같아야 같은 컴포넌트가
-   두 자리에서 같은 모양으로 앉는다. */
+/* 목록 화면의 머리 줄 — 제목과 `…`(`shell/action-menu.tsx`). **셸 머리와 같은 모양이다**: `space-between`이
+   둘을 양 끝에 세운다. 세션 통지(전환 · 로그아웃 실패)는 머리 **아래** 형제로 선다(`.wb-shell-project-alert`). */
 .wb-shell-project-head {
   display: flex;
   flex-wrap: wrap;
@@ -2251,50 +2303,173 @@
   text-decoration: underline;
 }
 
-/* 내보내기(설계서 「HTML 정적 번들」). 셸 머리의 토글과 그 아래 떠서 보이는 요약이다.
-   **떠 있는 상자로 두는 것이 요점이다** — 머리에 그대로 펼치면 목록이 길어질수록
-   셸의 세 칸이 아래로 밀린다. */
-.wb-shell-export {
+/* ── 행동 메뉴(`shell/action-menu.tsx`) ─────────────────────────────────────────────────
+   에디터 머리 · 목록 머리의 `…` 와 트리 줄의 `+` · `…`. 단추까지 감싸는 상자가 떠 있는 목록의 기준이다(`position: relative` —
+   `use-popover-dismiss.ts` · `use-popover-side.ts`의 계약). 팔레트 · 글꼴은 그 자리의 조각(머리 · 좌측)이 세워 내려온다. */
+.wb-shell-action-menu {
   position: relative;
+  display: inline-flex;
 }
 
-.wb-shell-export-toggle {
-  font-size: 13px;
-  color: var(--wb-shell-accent);
-  background: none;
-  border: none;
+/* `…` 단추. 머리의 다른 단추(`.wb-shell-history-step`)와 같은 값이다 — 같은 줄에 나란히 선다. */
+.wb-shell-action-menu-toggle {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 2px 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--wb-shell-ink);
   cursor: pointer;
-  padding: 0;
 }
 
-.wb-shell-export-body {
+.wb-shell-action-menu-toggle[aria-expanded='true'] {
+  border-color: var(--wb-shell-accent);
+}
+
+/* 떠 있는 목록. 오른쪽 끝에 붙어 왼쪽으로 펴고, 화면 밖으로 나가면
+   `data-side`로 왼쪽 끝에 붙는다(`use-popover-side.ts`의 표). */
+.wb-shell-action-menu-body {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 6px);
   right: 0;
-  z-index: 20;
-  width: 380px;
-  /* **화면보다 넓어지지 않는다** — 좁은 화면에서 `width`가 화면을 넘으면 끌어오기(`shell/use-popover-side.ts`)가 왼쪽 끝을
-     0 에 둬도 오른쪽이 잘린다(Chrome — 390 폭에서 24px). 50px = 좌우 `padding` · `border` 합 34px(`width`는 내용 폭이다) +
-     화면과 띄우는 16px — 테두리까지 화면 − 16 이다. `100vw`는 세로 스크롤 막대를 포함하지만 셸 문서는 스크롤되지 않고, 막대가
-     있어도 그 폭(16 이하)을 이 16 이 받는다. 스냅샷 상자도 같은 값이다. */
-  max-width: calc(100vw - 50px);
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 16px;
+  z-index: 30;
+  min-width: 180px;
+  max-width: calc(100vw - 32px);
+  padding: 4px 0;
   background: #fff;
   border: 1px solid var(--wb-shell-line);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
   font-size: 13px;
   text-align: left;
+  color: var(--wb-shell-ink);
 }
 
-/* **오른쪽 끝에 붙인 채 화면 밖으로 나가면 왼쪽 끝에 붙는다**(`shell/use-popover-side.ts`가 열 때 재서 고른다 — 그
-   파일 머리말의 표). 그쪽도 넘치면 훅이 인라인 `left`로 화면 안에 끌어온다 — 이 규칙의 `left: 0`을 덮는다. 스냅샷
-   상자도 같은 규칙이다. */
-.wb-shell-export-body[data-side='start'] {
+.wb-shell-action-menu-body[data-side='start'] {
   right: auto;
   left: 0;
+}
+
+/* 머리 — 로그인한 사람. 항목이 아니므로 흐린 색이고, 목록과 선으로 가른다. */
+.wb-shell-action-menu-heading {
+  margin: 0 0 4px;
+  padding: 6px 12px 8px;
+  border-bottom: 1px solid var(--wb-shell-line);
+  color: var(--wb-shell-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-shell-action-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wb-shell-action-menu-entry {
+  display: block;
+}
+
+/* 항목 — 단추와 링크가 같은 모양이다(무엇이 이동이고 무엇이 동작인지는 역할이 아니라 글자가 말한다). */
+.wb-shell-action-menu-item {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  appearance: none;
+  border: 0;
+  padding: 6px 12px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+.wb-shell-action-menu-item:hover,
+.wb-shell-action-menu-item:focus-visible {
+  background: var(--wb-shell-chrome);
+  outline: none;
+}
+
+/* 끈 항목 — 목록에 남되 흐리다(`action-menu.tsx` 머리말 «끈 항목은 …»). */
+.wb-shell-action-menu-item[aria-disabled='true'] {
+  color: var(--wb-shell-muted);
+  cursor: default;
+}
+
+/* 되돌리기 어려운 일(삭제). 붉은색은 이 파일에서 되돌릴 수 없는 것 · 오류 문장의 몫이다(`.wb-shell-project-danger`). */
+.wb-shell-action-menu-danger {
+  color: #b42318;
+}
+
+/* ── 대화 상자(`shell/shell-dialog.tsx`) ─────────────────────────────────────────────────
+   앱의 모달 하나 — 스냅샷 · 내보내기가 이 안에 선다. `showModal`로 top layer 에 뜨므로 머리의 흐름에 안 든다. 글꼴 · 스킴을 여기서 다시
+   건다 — 요소는 머리 안이지만 안의 몸체가 셸이 그리는 조각이라 머리에 기대지 않는다(머리가 바뀌어도 상자의 글자가 안 바뀐다).
+
+   **이 상자는 문서를 감싸지 않는다** — `test/shell-css-guard.ts`의 `WRAPPERS`에 없다. */
+.wb-shell-dialog {
+  color-scheme: light;
+  box-sizing: border-box;
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  padding: 0;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 20%);
+  background: #fff;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-dialog::backdrop {
+  background: rgb(15 23 42 / 35%);
+}
+
+/* 제목과 닫기 단추 — 몸체가 스크롤돼도 위에 남는다. */
+.wb-shell-dialog-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--wb-shell-line);
+  background: #fff;
+}
+
+.wb-shell-dialog-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.wb-shell-dialog-close {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+/* 내보내기(설계서 「HTML 정적 번들」) — `…` 의 «프로젝트 내보내기»가 여는 대화 상자 안의 요약이다(`shell/shell-dialog.tsx`). 자리 · 폭 ·
+   스크롤은 대화 상자가 갖고, 이 몸체는 안쪽 여백만 잡는다. */
+.wb-shell-export-body {
+  padding: 16px;
+  font-size: 13px;
+  text-align: left;
 }
 
 /* 형식 토글. **셸 머리의 `모드`(편집/뷰)와 같은 장치다** — `role="group"` 안의
@@ -2302,7 +2477,7 @@
 
    **그런데 `.wb-shell-modes`와 규칙을 합치지 않는다.** `.wb-shell-zoom-fit`이
    `.wb-shell-zoom-step`에 대해 한 판단과 같다: 값이 같아도 하는 일이 다르고(한쪽은 셸 머리에
-   상시로 서고 이쪽은 팝오버 안에 산다), 한쪽의 생김새를 바꿀 때 다른 쪽이 끌려오면 안 된다.
+   상시로 서고 이쪽은 대화 상자 안에 산다), 한쪽의 생김새를 바꿀 때 다른 쪽이 끌려오면 안 된다.
    (머리말의 규칙이 막는 것은 결합자이지 같은 값의 규칙 둘이 아니다.) */
 .wb-shell-export-formats {
   display: inline-flex;
@@ -2400,59 +2575,22 @@
   cursor: pointer;
 }
 
-/* ── 스냅샷 팝오버 ────────────────────────────────────────────────────
-   **셸 머리의 팝오버다.** 자리·크기
-   규칙은 바로 위 내보내기와 같다 — 두 팝오버가 나란히 있는데 생김새가 다르면 사용자가
-   같은 장치로 읽지 못한다.
+/* ── 스냅샷(`shell/snapshots-panel.tsx`) ────────────────────────────────────────────────────
+   **`…` 의 «스냅샷»이 여는 대화 상자 안이다.** 자리 · 폭 · 스크롤은 대화 상자(`.wb-shell-dialog`)가 갖는다.
 
    **팔레트를 여기 선언하지 않는다.** 이 상자가 `.wb-shell` 안이라 이미 상속받는다
    (위 팔레트 블록의 근거 절). 같은 이유로 `font-family`·`color-scheme`도 안 건다 —
-   셸의 머리(`.wb-shell-header`)가 그 둘을 이미 세워 이 안까지 내려온다.
+   대화 상자(`.wb-shell-dialog`)가 그 둘을 세워 이 안까지 내려온다.
 
    **이 상자는 문서를 감싸지 않는다** — `test/shell-css-guard.ts`의 `WRAPPERS`에 없다
    (렌더러가 그리는 문서 노드가 이 안에 들어오지 않는다). */
-.wb-shell-snapshots {
-  position: relative;
-}
-
-/* 토글. **내보내기 토글과 같은 값이다** — 머리에 나란히 선 둘이라 같아야 한다. */
-.wb-shell-snapshots-toggle {
-  font-size: 13px;
-  color: var(--wb-shell-accent);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-
-/* 떠 있는 상자. 내보내기 본문과 **자리 규칙이 같고 폭만 넓다** — 목록이 태그·설명·
-   만든 사람·시각·바이트·버튼 여섯 칸이라 380px에서는 줄마다 접힌다. */
 .wb-shell-snapshots-body {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 20;
-  width: 520px;
-  /* 화면보다 넓어지지 않는다 — `.wb-shell-export-body`의 `max-width`와 같은 값 · 같은 까닭이다(390 폭에서 164px 잘렸다). */
-  max-width: calc(100vw - 50px);
-  max-height: 60vh;
-  overflow-y: auto;
   padding: 16px;
-  background: #fff;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
   display: flex;
   flex-direction: column;
   gap: 16px;
   font-size: 13px;
   text-align: left;
-}
-
-/* 붙일 쪽 — `.wb-shell-export-body[data-side='start']`와 같은 규칙이다. */
-.wb-shell-snapshots-body[data-side='start'] {
-  right: auto;
-  left: 0;
 }
 
 /* 목록을 통째로 못 받았을 때의 앞머리. **저장 실패(`-error`)와 색이 같고 굵기가 다르다** —
@@ -2473,7 +2611,7 @@
 
 /* 저장 폼의 세 조각(태그·설명·제출). **감싸는 `<form>`에 클래스가 필요하다** — 머리말의 규칙이 요소
    선택자를 막으므로 `<form>`은 이름 없이는 겨냥할 수 없고, 이름이 없으면 그 상자는
-   그냥 블록이라 안의 셋이 인라인으로 흘러 **520px 팝오버에서 한 줄로 눌린다**(`태그`
+   그냥 블록이라 안의 셋이 인라인으로 흘러 **좁은 상자에서 한 줄로 눌린다**(`태그`
    입력과 `설명` 라벨이 붙어 보인다). */
 .wb-shell-snapshots-fields {
   display: flex;
@@ -2556,10 +2694,10 @@
   list-style: none;
 }
 
-/* 줄 하나. **칸이 여섯이고 520px 팝오버 안이라 반드시 접힌다**(태그·만든 사람·시각·크기·
-   버튼·설명). `nowrap` 한 줄이면 팝오버에서 설명이
+/* 줄 하나. **칸이 여섯이고 대화 상자(560px) 안이라 반드시 접힌다**(태그·만든 사람·시각·크기·
+   버튼·설명). `nowrap` 한 줄이면 상자에서 설명이
    **11.3px 폭 · 1194px 높이**로 짜부라지고(한 글자씩 세로로 흐른다) — 실측이고, 그때
-   `이 상태로 되돌리기` 버튼도 팝오버 밖으로 30px쯤 나가 글자가 잘린다.
+   `이 상태로 되돌리기` 버튼도 상자 밖으로 나가 글자가 잘린다.
 
    **`flex-wrap: wrap`만으로는 부족하다.** 아래 `-desc`가 자기 줄을 통째로 쓰고,
    `-confirm`도 그렇다. 셋이 함께 있어야 접힌다. */
@@ -2826,14 +2964,6 @@
   white-space: nowrap;
 }
 
-/* 에디터 머리의 «설정»(`routes/editor.tsx`) — 스냅샷 · 내보내기 토글과 같은 글자 꼴이다. 링크라 밑줄만 지운다. */
-.wb-shell-settings-entry {
-  font-size: 13px;
-  color: var(--wb-shell-accent);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
 /* ── 프로젝트 설정(`routes/settings.tsx`) ─────────────────────────────────────────────────
    화면 루트다(팔레트 블록의 루트 목록). 목록 화면보다 넓다 — «테마» 절의 미리보기(갤러리 iframe)가 폼 옆에 선다. 머리 · 알림 ·
    단추는 프로젝트 목록의 것을 그대로 쓴다(`-project-head` · `-project-list-title` · `-project-submit` · `-project-alert` ·
@@ -3069,17 +3199,6 @@
   overflow: auto;
   padding: 12px;
   background: var(--wb-shell-chrome);
-}
-
-/* 목록 머리의 «테마 관리»(`routes/project-list.tsx` — 인스턴스 관리자에게만). 계정 묶음의 «API 토큰» 링크와 같은 꼴이다. */
-.wb-shell-project-admin {
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 6px;
-  padding: 4px 8px;
-  background: #fff;
-  color: var(--wb-shell-accent);
-  text-decoration: none;
-  white-space: nowrap;
 }
 
 /* ── 테마 관리(`routes/admin-themes.tsx`) ──────────────────────────────────────────────────

@@ -1,12 +1,12 @@
 /**
- * **셸 머리의 팝오버를 어느 쪽에 붙이나**(`src/shell/use-popover-side.ts`).
+ * **셸 머리의 떠 있는 목록을 어느 쪽에 붙이나**(`src/shell/use-popover-side.ts`) — 머리의 `…` 메뉴(`src/shell/action-menu.tsx`)가 쓴다.
  *
  * jsdom 에는 레이아웃이 없어 상자와 화면 폭이 모두 0 이다 — 그래서 **잰 치수를 심는다**: `getBoundingClientRect`를 클래스
  * 이름으로 갈라 돌려주고(토글을 감싼 상자의 양 끝 · 떠 있는 상자의 폭) 화면 폭(`documentElement.clientWidth`)을 심는다.
  * 실브라우저 값(Chrome · 높이 900)은 그 파일 머리말이 든다.
  *
- * 두 팝오버를 **실물로** 연다 — 판정은 훅 하나지만 상자에 `ref`와 `data-side`를 싣는 것은 패널마다다. 한쪽이 빠뜨리면
- * 그 패널만 옛 자리에 선다.
+ * 에디터 머리의 `…` 를 **실물로** 연다 — 판정은 훅 하나지만 상자에 `ref`와 `data-side`를 싣는 것은 부품이다. 빠뜨리면
+ * 목록이 옛 자리에 선다.
  */
 import { act, fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -31,10 +31,7 @@ afterEach(() => {
   Reflect.deleteProperty(document.documentElement, 'clientWidth')
 })
 
-const PANELS = [
-  { toggle: '내보내기', root: 'wb-shell-export', body: 'wb-shell-export-body', width: 380 },
-  { toggle: '스냅샷', root: 'wb-shell-snapshots', body: 'wb-shell-snapshots-body', width: 520 },
-] as const
+const PANELS = [{ toggle: '더 보기', root: 'wb-shell-action-menu', body: 'wb-shell-action-menu-body', width: 200 }] as const
 
 function body(className: string): HTMLElement {
   const found = document.querySelector<HTMLElement>(`.${className}`)
@@ -62,25 +59,24 @@ describe.each(PANELS)('$toggle 상자', (panel) => {
   })
 
   /**
-   * **두 쪽 다 넘치면 화면 안으로 끌어온다** — 상자에 `left`를 싣는다(패널마다 상자에 `style`을 싣는 것까지 잰다 — 판정은
-   * 아래 `placePopover` 표가 잰다). 화면 600 · 토글 300..360: 내보내기(380)는 오른쪽 끝에 붙이면 −20, 왼쪽 끝에 붙이면
-   * 680 까지 — 끌어와 220..600. 스냅샷(520)은 80..600.
+   * **두 쪽 다 넘치면 화면 안으로 끌어온다** — 상자에 `left`를 싣는다(부품이 상자에 `style`을 싣는 것까지 잰다 — 판정은
+   * 아래 `placePopover` 표가 잰다). 화면 450 · 단추 150..190: 목록(200)은 오른쪽 끝에 붙이면 −10, 왼쪽 끝에 붙이면
+   * 350 까지 — 넘치지 않으니 끌어오지 않는다. 화면 330 이면 둘 다 넘쳐 130..330 으로 끌어온다.
    */
   it('두 쪽 다 넘치면 화면 안으로 끌어온다', async () => {
-    stubRects({ [panel.root]: { left: 300, right: 360 }, [panel.body]: { width: panel.width } }, 600)
+    stubRects({ [panel.root]: { left: 150, right: 190 }, [panel.body]: { width: panel.width } }, 330)
     await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }))
 
     fireEvent.click(screen.getByRole('button', { name: panel.toggle }))
 
     expect(body(panel.body).dataset.side).toBe('start')
-    expect(body(panel.body).style.left).toBe(`${600 - panel.width - 300}px`)
+    expect(body(panel.body).style.left).toBe(`${330 - panel.width - 150}px`)
   })
 })
 
 /**
  * **붙일 자리의 판정**(`use-popover-side.ts` 머리말의 표) — 잰 값만 받는 함수라 표를 줄마다 잰다. 값은 실브라우저에서 잰
- * 폭 표의 것이다(내보내기 상자 414 · 스냅샷 554 — 테두리 포함). **«600 내보내기» 줄은 늘 위 패널의 «두 쪽 다 넘치면 화면
- * 안으로 끌어온다»와 함께 죽는다** — 끌어오는 값의 축은 그 케이스가 갖고, 이 줄은 실브라우저에서 잰 판을 그대로 옮긴 것이다.
+ * 폭 표의 것이다(폭 414 · 554 의 떠 있는 상자 — 테두리 포함). 함수는 상자가 무엇인지 모른다 — 줄 이름은 그 값을 잰 상자의 이름이다.
  */
 describe('placePopover', () => {
   it.each([
@@ -111,10 +107,10 @@ async function nextFrame(): Promise<void> {
 describe('열린 채 다시 고른다', () => {
   it('창 폭 그대로 토글이 옮겨 가면 — 머리가 다시 접혀 오른쪽 끝으로 간다', async () => {
     const anchor = { left: 16, right: 76 }
-    stubRects({ 'wb-shell-export': anchor, 'wb-shell-export-body': { width: 380 } }, 1280)
+    stubRects({ 'wb-shell-action-menu': anchor, 'wb-shell-action-menu-body': { width: 200 } }, 1280)
     await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }))
-    fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
-    expect(body('wb-shell-export-body').dataset.side).toBe('start')
+    fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
+    expect(body('wb-shell-action-menu-body').dataset.side).toBe('start')
     // 한 프레임을 먼저 흘린다 — 여는 때 한 번 · 첫 프레임 한 번만 재는 판을 가른다.
     await nextFrame()
 
@@ -122,39 +118,39 @@ describe('열린 채 다시 고른다', () => {
     anchor.right = 1154
     await nextFrame()
 
-    expect(body('wb-shell-export-body').dataset.side).toBe('end')
+    expect(body('wb-shell-action-menu-body').dataset.side).toBe('end')
   })
 
-  /** 토글은 그대로이고 화면만 좁아진다 — 왼쪽 끝에 붙인 상자(300..680)가 600 화면을 넘어 끌어온다(220..600). */
+  /** 단추는 그대로이고 화면만 좁아진다 — 왼쪽 끝에 붙인 상자(150..350)가 330 화면을 넘어 끌어온다(130..330). */
   it('토글 그대로 창 폭이 바뀌면', async () => {
     let viewport = 1440
-    stubRects({ 'wb-shell-export': { left: 300, right: 360 }, 'wb-shell-export-body': { width: 380 } })
+    stubRects({ 'wb-shell-action-menu': { left: 150, right: 190 }, 'wb-shell-action-menu-body': { width: 200 } })
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, get: () => viewport })
     await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }))
-    fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
-    expect(body('wb-shell-export-body').dataset.side).toBe('start')
-    expect(body('wb-shell-export-body').style.left).toBe('')
+    fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
+    expect(body('wb-shell-action-menu-body').dataset.side).toBe('start')
+    expect(body('wb-shell-action-menu-body').style.left).toBe('')
     await nextFrame()
 
-    viewport = 600
+    viewport = 330
     await nextFrame()
 
-    expect(body('wb-shell-export-body').style.left).toBe('-80px')
+    expect(body('wb-shell-action-menu-body').style.left).toBe('-20px')
   })
 
   /** **닫으면 재기를 멈춘다** — 닫힌 채 프레임마다 앵커를 읽지 않는다(`use-popover-dismiss.ts`와 같은 판단). */
   it('닫으면 더 재지 않는다', async () => {
-    stubRects({ 'wb-shell-export': { left: 16, right: 76 }, 'wb-shell-export-body': { width: 380 } }, 1280)
+    stubRects({ 'wb-shell-action-menu': { left: 16, right: 76 }, 'wb-shell-action-menu-body': { width: 200 } }, 1280)
     await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }))
-    const toggle = screen.getByRole('button', { name: '내보내기' })
+    const toggle = screen.getByRole('button', { name: '더 보기' })
     fireEvent.click(toggle)
     await nextFrame()
     fireEvent.click(toggle)
-    expect(document.querySelector('.wb-shell-export-body')).toBeNull()
+    expect(document.querySelector('.wb-shell-action-menu-body')).toBeNull()
 
     const reads = vi.mocked(Element.prototype.getBoundingClientRect)
     const anchorReads = (): number =>
-      reads.mock.contexts.filter((element) => (element as Element).classList.contains('wb-shell-export')).length
+      reads.mock.contexts.filter((element) => (element as Element).classList.contains('wb-shell-action-menu')).length
     const before = anchorReads()
     await nextFrame()
     await nextFrame()
@@ -189,10 +185,10 @@ describe.each(PANELS)('$body 의 붙일 쪽 규칙', (panel) => {
   })
 
   /**
-   * **화면보다 넓어지지 않는다** — 넓으면 끌어와도 오른쪽이 잘린다(Chrome — 390 폭에서 내보내기 24px · 스냅샷 164px, 480 스냅샷
-   * 74px. 이 값을 건 뒤 0). 폭이 화면에 맞춰 줄어드는 것은 jsdom 이 못 잰다 — 규칙이 걸리는 것만 잰다.
+   * **화면보다 넓어지지 않는다** — 넓으면 끌어와도 오른쪽이 잘린다. 폭이 화면에 맞춰 줄어드는 것은 jsdom 이 못 잰다 — 규칙이 걸리는
+   * 것만 잰다.
    */
-  it('화면 폭에 맞춰 줄어든다 — 테두리까지 화면 − 16', () => {
-    expect(styleOf(null).maxWidth).toBe('calc(100vw - 50px)')
+  it('화면 폭에 맞춰 줄어든다', () => {
+    expect(styleOf(null).maxWidth).toBe('calc(100vw - 32px)')
   })
 })

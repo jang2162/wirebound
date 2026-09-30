@@ -1,11 +1,9 @@
 /**
- * **셸 머리의 팝오버가 닫히는 방식**(`src/shell/use-popover-dismiss.ts`).
+ * **셸의 떠 있는 목록이 닫히는 방식**(`src/shell/use-popover-dismiss.ts`).
  *
  * 이 파일만 `<App />`을 안 쓰고 **최소 숙주**를 세운다. 재는 것이 화면 하나의 동작이
- * 아니라 **두 팝오버가 공유하는 장치**이기 때문이다 — 내보내기·스냅샷 어느 쪽으로 재도
- * 그 화면의 조회·권한이 함께 딸려 와, 무엇이 이 장치를 지키는 케이스인지 흐려진다.
- * 두 화면에 **붙어 있다**는 것은 각자의 파일이 잰다(`export-panel.test.tsx`·
- * `snapshots-panel.test.tsx`).
+ * 아니라 **행동 메뉴가 쓰는 장치**이기 때문이다 — 메뉴로 재면 그 부품의 포커스 · 키 처리가 함께 딸려 와, 무엇이 이 장치를 지키는
+ * 케이스인지 흐려진다. 메뉴에 **붙어 있다**는 것은 `action-menu.test.tsx`가 잰다.
  *
  * ## 전역 리스너는 조용히 회귀한다
  *
@@ -19,8 +17,8 @@ import { CanvasDocumentProvider, usePublishCanvasDocument } from '../../src/canv
 import { usePopoverDismiss } from '../../src/shell/use-popover-dismiss'
 
 /**
- * 두 팝오버와 **같은 모양의** 최소 숙주. 요점은 **토글 버튼이 ref 상자 안에 있다**는
- * 것이다 — 실물 둘(`.wb-shell-export`·`.wb-shell-snapshots`)이 그 배치이고, 토글이
+ * 행동 메뉴와 **같은 모양의** 최소 숙주. 요점은 **토글 버튼이 ref 상자 안에 있다**는
+ * 것이다 — 실물(`.wb-shell-action-menu`)이 그 배치이고, 토글이
  * 두 번 처리되지 않는 근거가 그 배치 자체다.
  */
 function Host(): ReactElement {
@@ -145,8 +143,8 @@ describe('팝오버 닫기', () => {
   })
 
   /**
-   * **열려 있지 않으면 리스너를 걸지 않는다.** 셸 머리에 팝오버가 둘이므로, 닫힌 채로도
-   * 거는 구현은 설계서를 여는 것만으로 `mousedown` 리스너를 둘 얹는다.
+   * **열려 있지 않으면 리스너를 걸지 않는다.** 메뉴가 머리 · 트리 줄마다 있으므로, 닫힌 채로도
+   * 거는 구현은 설계서를 여는 것만으로 `mousedown` 리스너를 여럿 얹는다.
    */
   it('닫혀 있는 동안에는 리스너를 걸지 않는다', () => {
     const add = vi.spyOn(document, 'addEventListener')

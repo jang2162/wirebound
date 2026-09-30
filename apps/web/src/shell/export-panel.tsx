@@ -1,6 +1,6 @@
 /**
  * **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」 · PPTX).
- * 에디터 셸 머리에 산다.
+ * 에디터 위의 대화 상자 안에 산다 — 머리의 `…` 에서 «프로젝트 내보내기»로 연다(`routes/editor.tsx` · `shell/shell-dialog.tsx`).
  *
  * ## 조용히 성공하면 안 된다
  *
@@ -16,8 +16,8 @@
  * ## 형식은 토글이고, 한 번에 하나만 부른다
  *
  * 상자의 맨 위에 `HTML 번들`·`PPTX` 버튼 둘이 있고, 고른 쪽의 미리보기만 부른다.
- * **둘을 동시에 부르지 않는 이유는 이 조회가 싸지 않기 때문이다** — 위 *"열 때 미리 부르지
- * 않는다"*와 **같은 근거**다. `getExportPreview`는 번들을 실제로 만들어 보고, pptx는 거기에
+ * **둘을 동시에 부르지 않는 이유는 이 조회가 싸지 않기 때문이다** — 아래 *"열 때마다 다시 본다"*가
+ * 치르는 값을 두 배로 만들지 않는다. `getExportPreview`는 번들을 실제로 만들어 보고, pptx는 거기에
  * 더해 **페이지를 한 장씩 그린다**(미리보기와 내려받기가 같은 판정을 쓴다).
  * 여는 순간 둘을 다 부르면 아무도 안 볼 형식의 값을 매번 치른다.
  *
@@ -26,7 +26,7 @@
  *
  * **토글의 장치는 셸 머리의 `모드`(편집/뷰)와 같다** — `role="group"` 안의 버튼 둘에
  * `aria-pressed`를 **둘 다** 단다. 눌린 쪽만 표시하면 보조 기술은 나머지 버튼이 토글인지
- * 알 수 없다(`routes/editor.tsx`의 `ShellTools`가 같은 이유로 그렇게 한다). 새 어휘를
+ * 알 수 없다(`routes/editor.tsx`의 `ModeTools`가 같은 이유로 그렇게 한다). 새 어휘를
  * 만들지 않는다.
  *
  * ## 형식을 바꾸면 앞 형식의 결과가 남지 않는다
@@ -41,9 +41,9 @@
  *
  * **앞 요청은 끊는다.** 표는 늦은 답을 **화면에서** 버릴 뿐 요청은 그대로 둔다 — 서버는 연결이 닫힐 때까지 그
  * 내보내기를 끝까지 돌고(pptx 는 페이지를 한 장씩 그린다), 그동안 이 사람의 다음 미리보기가 그 뒤에 선다(`apps/api`의
- * `services/export-worker.ts` «칸이 둘이다»). 그래서 새로 부를 때 · 닫을 때 · 화면이 내려갈 때 앞 요청을 끊는다
+ * `services/export-worker.ts` «칸이 둘이다»). 그래서 새로 부를 때 · 대화 상자를 닫거나 화면이 내려갈 때(몸체가 내려간다) 앞 요청을 끊는다
  * (`api/client.ts`의 `ReadOptions` «`cancel`»). 새로 불러 끊은 요청의 거절은 표가 버리고, 닫아 끊은 요청의 거절은
- * 닫힌 상자에 떨어졌다가 다시 열 때의 `loading`이 덮는다.
+ * 내려간 몸체에 떨어져 버려진다.
  *
  * **늦게 온 실패도 같은 표로 버린다** — `catch` 쪽의 표 검사가 `try` 쪽과 한 쌍이지 사족이
  * 아니다. 버리지 않으면 새 형식이 이미 그려진 자리를 **앞 형식의 오류 문장**이 덮는다:
@@ -81,12 +81,11 @@
  * 형식마다 다른 것을 말한다»가 응답에서 막은 바로 그 부류다. 대신 *"어느 페이지가
  * 실리는가"*는 제목 목록으로 말한다 — «조용히 성공하면 안 된다»의 첫 몫은 형식과 무관하다.
  *
- * ## 닫는 방식은 공용이다
+ * ## 열 때마다 다시 본다
  *
- * 바깥 클릭·`Escape`로 닫는 장치는 `shell/use-popover-dismiss.ts`가 갖는다 — 스냅샷
- * 팝오버와 같은 것을 쓴다. **두 벌로 두지 않는 이유는 그 부류가 조용히 갈리기
- * 때문이다:** 한쪽만 `Escape`를 안 듣거나 한쪽만 리스너를 안 걷어도 화면에는 아무것도
- * 안 보인다.
+ * 몸체는 대화 상자가 열려 있는 동안만 산다 — **마운트가 곧 조회다**(`DEFAULT_FORMAT`). 그 사이 페이지를 고쳤을 수 있고, 이 화면이 말하는 것은
+ * 전부 *"지금 내보내면 무엇이 나오는가"*다 — 낡은 답을 보이면 «조용히 성공하면 안 된다»가 뒤집힌다. 닫는 방식(Escape · 닫기 단추)은
+ * 대화 상자(`shell/shell-dialog.tsx`)가 갖는다.
  *
  * ## 새 런타임 의존이 없다
  *
@@ -102,8 +101,6 @@ import type {
   PptxExportPreview,
 } from '../api/types'
 import { saveBlob } from '../files/file-io'
-import { usePopoverDismiss } from './use-popover-dismiss'
-import { usePopoverSide } from './use-popover-side'
 
 /** 조회 상태. 성공과 실패를 판별 유니온으로 가른다(`routes/editor.tsx`와 같은 이유). */
 type PreviewState =
@@ -121,9 +118,8 @@ const DOWNLOAD_FAILURE = '파일을 내려받지 못했습니다'
 /** 열 때의 형식. **기억하지 않는다** — 위 머리말의 근거. */
 const DEFAULT_FORMAT: ExportFormat = 'html'
 
-export function ExportPanel(props: { projectId: string }): ReactElement {
+export function ExportBody(props: { projectId: string }): ReactElement {
   const api = useApi()
-  const [open, setOpen] = useState(false)
   /** **고른** 형식. 토글의 눌림이 이것을 따른다 — 부르는 동안에도 무엇을 고른 상태인지 보인다. */
   const [format, setFormat] = useState<ExportFormat>(DEFAULT_FORMAT)
   const [state, setState] = useState<PreviewState>({ status: 'idle' })
@@ -139,22 +135,6 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
     inflight.current?.abort()
     inflight.current = null
   }
-
-  function close(): void {
-    abandon()
-    setOpen(false)
-  }
-
-  // 화면이 내려가면(프로젝트를 떠남) 부르던 조회도 끊는다.
-  useEffect(() => abandon, [])
-
-  /**
-   * **토글까지 감싸는 상자에 건다.** 그래야 토글 위의 `mousedown`이 *"바깥"*이 아니고,
-   * 닫는 일을 토글의 `onClick` 하나가 한다(그 훅의 머리말).
-   */
-  const rootRef = usePopoverDismiss(open, close)
-  /** 머리가 접혀 상자가 화면 밖으로 나가면 붙일 쪽을 바꾸거나 끌어온다(`use-popover-side.ts`). */
-  const { placement, bodyRef } = usePopoverSide(rootRef, open)
 
   async function load(next: ExportFormat): Promise<void> {
     const ticket = (latest.current += 1)
@@ -174,6 +154,17 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
     }
   }
 
+  // **열 때마다 다시 본다**(위 머리말) — 마운트가 곧 조회다. 닫히면(몸체가 내려가면) 부르던 조회를 끊는다. 내려간 뒤의 답은 표가 버린다 —
+  // `StrictMode`의 두 번째 마운트가 첫 조회를 끊고 다시 부르는 것도 같은 길이다.
+  useEffect(() => {
+    void load(DEFAULT_FORMAT)
+    return () => {
+      latest.current += 1
+      abandon()
+    }
+    // 한 번 연 상자의 프로젝트는 바뀌지 않는다 — 셸이 프로젝트를 옮기면 셸째(상자째) 다시 선다.
+  }, [])
+
   /**
    * **이미 고른 형식을 다시 눌러도 다시 부르지 않는다** — 이 조회는 번들을 실제로 만들어
    * 보는 요청이라 비싸고, 같은 것을 누르는 것은 *"다시 보자"*가 아니라 잘못 누른 것이다.
@@ -185,75 +176,42 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
   }
 
   return (
-    <div className="wb-shell-export" ref={rootRef}>
-      <button
-        type="button"
-        className="wb-shell-export-toggle"
-        aria-expanded={open}
-        onClick={() => {
-          if (open) {
-            close()
-            return
-          }
-          setOpen(true)
-          // **열 때마다 다시 본다.** 그 사이 페이지를 고쳤을 수 있고, 이 화면이 말하는 것은
-          // 전부 *"지금 내보내면 무엇이 나오는가"*다 — 낡은 답을 보이면 머리말 «조용히 성공하면 안 된다»가 뒤집힌다.
-          void load(DEFAULT_FORMAT)
-        }}
-      >
-        내보내기
-      </button>
-
-      {open && (
-        <div
-          className="wb-shell-export-body"
-          role="group"
-          aria-label="내보내기"
-          ref={bodyRef}
-          data-side={placement.side}
-          style={placement.style}
+    <div className="wb-shell-export-body" role="group" aria-label="내보내기">
+      {/* **맨 위다.** 아래의 모든 문장이 이 고름에 매여 있으므로, 읽기 전에 무엇을 읽는
+          중인지 알아야 한다. 눌림은 **고른 것**을 따른다 — 응답을 기다리는 동안에도
+          고름은 이미 정해져 있다. */}
+      <div className="wb-shell-export-formats" role="group" aria-label="내보내기 형식">
+        <button
+          type="button"
+          className="wb-shell-export-format"
+          aria-pressed={format === 'html'}
+          onClick={() => choose('html')}
         >
-          {/* **맨 위다.** 아래의 모든 문장이 이 고름에 매여 있으므로, 읽기 전에 무엇을 읽는
-              중인지 알아야 한다. 눌림은 **고른 것**을 따른다 — 응답을 기다리는 동안에도
-              고름은 이미 정해져 있다. */}
-          <div className="wb-shell-export-formats" role="group" aria-label="내보내기 형식">
-            <button
-              type="button"
-              className="wb-shell-export-format"
-              aria-pressed={format === 'html'}
-              onClick={() => choose('html')}
-            >
-              HTML 번들
-            </button>
-            <button
-              type="button"
-              className="wb-shell-export-format"
-              aria-pressed={format === 'pptx'}
-              onClick={() => choose('pptx')}
-            >
-              PPTX
-            </button>
-          </div>
+          HTML 번들
+        </button>
+        <button
+          type="button"
+          className="wb-shell-export-format"
+          aria-pressed={format === 'pptx'}
+          onClick={() => choose('pptx')}
+        >
+          PPTX
+        </button>
+      </div>
 
-          {state.status === 'loading' && <p role="status">내보낼 것을 확인하는 중…</p>}
-          {/* 세션이 끊겼으면 문장이 아니라 로그인이다(`api/failure.tsx` 머리말) — 이
-              화면만 다르게 굴면 사용자는 *"내보내기가 고장 났다"*로 읽는다. */}
-          {state.status === 'failed' &&
-            (state.failure.kind === 'signed-out' ? (
-              <SignedOut />
-            ) : (
-              <p role="alert">{state.failure.message}</p>
-            ))}
-          {/* **`preview.format`으로 가른다 — 고른 형식이 아니라.** 그려지는 값과 그 값이
-              나온 응답이 같은 것이어야 한다. */}
-          {state.status === 'ready' &&
-            (state.preview.format === 'pptx' ? (
-              <PptxSummary preview={state.preview} projectId={props.projectId} />
-            ) : (
-              <HtmlSummary preview={state.preview} projectId={props.projectId} />
-            ))}
-        </div>
-      )}
+      {state.status === 'loading' && <p role="status">내보낼 것을 확인하는 중…</p>}
+      {/* 세션이 끊겼으면 문장이 아니라 로그인이다(`api/failure.tsx` 머리말) — 이
+          화면만 다르게 굴면 사용자는 *"내보내기가 고장 났다"*로 읽는다. */}
+      {state.status === 'failed' &&
+        (state.failure.kind === 'signed-out' ? <SignedOut /> : <p role="alert">{state.failure.message}</p>)}
+      {/* **`preview.format`으로 가른다 — 고른 형식이 아니라.** 그려지는 값과 그 값이
+          나온 응답이 같은 것이어야 한다. */}
+      {state.status === 'ready' &&
+        (state.preview.format === 'pptx' ? (
+          <PptxSummary preview={state.preview} projectId={props.projectId} />
+        ) : (
+          <HtmlSummary preview={state.preview} projectId={props.projectId} />
+        ))}
     </div>
   )
 }

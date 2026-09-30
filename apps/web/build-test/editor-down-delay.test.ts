@@ -139,7 +139,7 @@ function watch(page: Page): { lines: string[] } {
 async function stable(page: Page): Promise<{ markers: string[]; notices: string[] }> {
   const read = async () => ({
     markers: await page.locator('.wb-shell-canvas-frame .wb-shell-marker').allTextContents(),
-    notices: await page.locator('.wb-shell-header [role=status], .wb-shell-header [role=alert]').allTextContents(),
+    notices: await page.locator('.wb-shell-footer [role=status], .wb-shell-footer [role=alert]').allTextContents(),
   })
   let last = await read()
   let since = Date.now()

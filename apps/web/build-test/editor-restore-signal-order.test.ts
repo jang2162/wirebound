@@ -2,7 +2,7 @@
  * **내 복원의 신호와 답이 어떤 차례로 와도 화면이 서버와 같거나 배너가 그렇다고 말한다**(`EditorStore.markRestored`).
  *
  * 복원의 방송은 낸 연결도 빼지 않는다(서버 `ws/notify.ts`의 `notifyRestored`) — 답을 잃은 탭에게는 그 신호만이 서버가 복원했다는 것을 알린다.
- * 그래서 내 복원의 신호가 늘 이 탭에 오고, 탭은 답을 받은 복원을 안전망 스냅샷 id 로 알아보고 넘긴다. 입구는 스냅샷 팝오버 하나다(MCP · CLI 에는
+ * 그래서 내 복원의 신호가 늘 이 탭에 오고, 탭은 답을 받은 복원을 안전망 스냅샷 id 로 알아보고 넘긴다. 입구는 스냅샷 대화 상자 하나다(MCP · CLI 에는
  * 복원이 없다). 칸은 넷이다:
  *
  * | | 신호가 답보다 먼저 | 신호가 답(다시 읽기)보다 늦게 |
@@ -121,7 +121,7 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
    * 아직 처리 중일 수 있다는 뜻이라, 다시 읽은 **뒤에** 커밋되면 그 신호만이 화면이 낡았다는 것을 안다. 연결을 빼던 판에서는 서버 `원문` ·
    * 캔버스 «바뀐 글» · 배너 없음 · `WS← restored` 없음이었다.
    *
-   * 열린 팝오버가 배너 단추를 덮는 겹침은 이 케이스의 축이 아니다 — 닫고 잰다.
+   * 열린 대화 상자(모달 — 뒤 화면이 inert)가 배너 단추를 막는 것은 이 케이스의 축이 아니다 — 닫고 잰다.
    */
   it('답을 잃음 · 다시 읽기보다 늦게 커밋 — 배너가 다시 서고, 그 단추가 화면을 서버 판으로 맞춘다', async () => {
     const alice = await stack.login(stack.users.alice)
@@ -148,9 +148,9 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       await restore(page)
       await poll('답을 잃은 배너가 선다', async () => banner(page), (shown) => shown, 10_000)
 
-      // 사람이 배너의 단추로 다시 읽는다 — 서버는 아직 복원 전이다(행을 쥐었다). 복원을 보낸 팝오버를 먼저 닫는다(머리말).
+      // 사람이 배너의 단추로 다시 읽는다 — 서버는 아직 복원 전이다(행을 쥐었다). 복원을 보낸 대화 상자를 먼저 닫는다(머리말).
       await page.keyboard.press('Escape')
-      await poll('스냅샷 팝오버가 닫힌다', async () => page.locator('.wb-shell-snapshots-body').count(), (count) => count === 0, 5_000)
+      await poll('스냅샷 대화 상자가 닫힌다', async () => page.locator('.wb-shell-snapshots-body').count(), (count) => count === 0, 5_000)
       await page.locator('.wb-shell-remote-alert').getByRole('button', { name: '다시 불러오기' }).click()
       await poll('배너가 걷힌다', async () => banner(page), (shown) => !shown, 10_000)
       await page.waitForTimeout(500)
@@ -186,7 +186,7 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
 
   /**
    * **셸이 내려갔다 다시 서도 내 복원이 조용히 넘겨지지 않는다**(`EditorStore.reset` · `routes/editor.tsx`의 `shellGeneration`). 셸 안에서
-   * 다른 프로젝트로 가면 라우트는 스토어를 그대로 두고 셸만 내렸다 다시 세운다 — 복원 팝오버는 내려간 셸의 콜백을 쥔 채 답을 받는다.
+   * 다른 프로젝트로 가면 라우트는 스토어를 그대로 두고 셸만 내렸다 다시 세운다 — 복원을 보낸 몸체는 내려간 셸의 콜백을 쥔 채 답을 받는다.
    * 그 콜백이 산 스토어에 «내 것»을 적으면, 돌아온 셸에 온 그 복원의 신호가 넘겨지는데 다시 읽기는 내려간 셸에서 돌아(아무것도 안 함)
    * 서버 `원문` · 캔버스 «바뀐 글» · 배너 없음이었다. 두 차례 다 그랬다 — 신호가 먼저면 미뤄 둔 신호를 죽은 셸의 답이 넘겼고, 답이 먼저면
    * 죽은 셸의 답이 적은 안전망 id 가 뒤의 신호를 넘겼다. 이제 돌아온 셸에는 그 복원이 남의 복원으로 선다(문장은 반만 맞고 단추는 맞다).
@@ -385,7 +385,8 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       await canvasFrame(page).locator('body', { hasText: '셋째 글' }).waitFor()
       await joinedAtLeast(events, 1)
       await countBanners(page)
-      await page.getByRole('button', { name: '스냅샷' }).click()
+      await page.getByRole('button', { name: '더 보기' }).click()
+      await page.getByRole('menuitem', { name: '스냅샷' }).click()
       await page.locator('li.wb-shell-snapshots-row', { hasText: 'v1' }).getByRole('button', { name: '이 상태로 되돌리기' }).click()
       await page.getByRole('button', { name: '되돌린다' }).click()
       await poll('앨리스 복원이 서버에서 끝남', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('답 붙잡음')), 15_000)
@@ -576,7 +577,8 @@ function last(lines: string[], tail: string): number {
 }
 
 async function restore(page: Page): Promise<void> {
-  await page.getByRole('button', { name: '스냅샷' }).click()
+  await page.getByRole('button', { name: '더 보기' }).click()
+  await page.getByRole('menuitem', { name: '스냅샷' }).click()
   await page.getByRole('button', { name: '이 상태로 되돌리기' }).click()
   await page.getByRole('button', { name: '되돌린다' }).click()
 }

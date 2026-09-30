@@ -11,7 +11,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectDetail, ProjectRole, ProjectView, SessionUser } from '../../src/api/types'
 import { currentPath, fakeApi, renderWithProviders } from '../helpers'
 import { adminThemeView } from '../theme-loader'
-import { docWithText, openPage, PROJECT_ID, PROJECT_NAME } from '../editor-harness'
+import { docWithText, openPage, PROJECT_ID, PROJECT_NAME, SHELL_MENU } from '../editor-harness'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -151,9 +151,10 @@ describe('설정 페이지 — «일반»', () => {
 })
 
 describe('설정으로 가는 길', () => {
-  it.each(['owner', 'editor', 'viewer'] as const)('에디터 머리에 «설정» 링크가 있다 — %s', async (role) => {
+  it.each(['owner', 'editor', 'viewer'] as const)('에디터 머리의 `…` 에 «프로젝트 설정» 링크가 있다 — %s', async (role) => {
     await openPage(docWithText('t1', '안'), { apiOverrides: { getProject: async () => project(role, { id: PROJECT_ID, name: PROJECT_NAME }) } })
-    const link = screen.getByRole('link', { name: '설정' })
+    fireEvent.click(screen.getByRole('button', { name: SHELL_MENU }))
+    const link = screen.getByRole('menuitem', { name: '프로젝트 설정' })
     expect(link.getAttribute('href')).toBe(`/projects/${PROJECT_ID}/settings`)
   })
 

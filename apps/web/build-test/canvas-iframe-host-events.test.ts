@@ -1,15 +1,15 @@
 /**
  * **캔버스 문서가 iframe 에 들어간 뒤에도 셸의 호스트 리스너가 캔버스 위의 조작을 받는가**(`src/canvas/canvas-iframe.tsx`).
  * iframe 안의 `mousedown` · `keydown` · `pointermove` · `pointerup` 은 호스트 `document` · `window` 로 올라가지 않는다 — 문서가
- * 호스트에 그려지던 판(portal 이전)에서는 올라갔다. 호스트에 리스너를 거는 자리는 `src/shell/use-popover-dismiss.ts`(팝오버 둘 —
- * 내보내기 · 스냅샷)와 `src/shell/shell-resizer.tsx`(손잡이 둘 — 사이드바 폭 · 좌측 배분, 캔버스 위를 지나는 것은 폭 손잡이)다.
+ * 호스트에 그려지던 판(portal 이전)에서는 올라갔다. 호스트에 리스너를 거는 자리는 `src/shell/use-popover-dismiss.ts`(머리의 `…` 메뉴 —
+ * `src/shell/action-menu.tsx`)와 `src/shell/shell-resizer.tsx`(손잡이 셋 — 좌측 폭 · 좌측 배분 · 우측 폭, 캔버스 위를 지나는 것은 폭 손잡이)다.
  *
  * 문서 노드는 iframe 이 있으면 그 안에서, 없으면 호스트에서 찾는다 — 같은 파일을 iframe 이전 판에 끼워 «원래는 됐다» 를 잰다.
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 팝오버를 연 채 캔버스를 누르면 닫힌다 | 캔버스의 `mousedown` 이 호스트 `document` 에 안 닿는다 |
- * | 초점이 캔버스 안에 있어도 Escape 가 팝오버를 닫는다 | 캔버스의 `keydown` 이 호스트 `document` 에 안 닿는다 |
+ * | `…` 메뉴를 연 채 캔버스를 누르면 닫힌다 | 캔버스의 `mousedown` 이 호스트 `document` 에 안 닿는다 |
+ * | 초점이 캔버스 안에 있어도 Escape 가 `…` 메뉴를 닫는다 | 캔버스의 `keydown` 이 호스트 `document` 에 안 닿는다 |
  * | 폭 손잡이를 캔버스 위로 끌어도 따라오고, 캔버스 위에서 놓으면 끝난다 | 캔버스 위의 `pointermove` · `pointerup` 이 호스트 `window` 에 안 닿는다 |
  * | 빈 자리 클릭 — 편집은 선택을 풀고 뷰는 알림만 걷는다 | iframe 의 `body` · `html` 을 누른 클릭이 캔버스에 안 닿는다(`onBackgroundClick`) |
  */
@@ -44,11 +44,9 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
     expect(after).toEqual({ processes: 0, listeningPorts: [], databases: 0 })
   })
 
-  for (const [name, toggle, body] of [
-    ['내보내기', '.wb-shell-export-toggle', '.wb-shell-export-body'],
-    ['스냅샷', '.wb-shell-snapshots-toggle', '.wb-shell-snapshots-body'],
-  ] as const) {
-    it(`${name} 팝오버를 연 채 캔버스의 노드를 누르면 닫힌다`, async () => {
+  // 머리의 떠 있는 목록은 `…` 메뉴 하나다 — 스냅샷 · 내보내기는 대화 상자라 바깥 누름으로 닫지 않는다(`src/shell/shell-dialog.tsx`).
+  for (const [name, toggle, body] of [['`…` 메뉴', '.wb-shell-action-menu-toggle', '.wb-shell-action-menu-body']] as const) {
+    it(`${name}를 연 채 캔버스의 노드를 누르면 닫힌다`, async () => {
       const P = await fixture(stack, alice, `pop-click-${toggle.length}`)
       await withTab(stack, async (page) => {
         await page.goto(P)
@@ -61,7 +59,7 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
       })
     })
 
-    it(`${name} 팝오버 — 초점이 캔버스 안의 요소에 있어도 Escape 가 닫는다`, async () => {
+    it(`${name} — 초점이 캔버스 안의 요소에 있어도 Escape 가 닫는다`, async () => {
       const P = await fixture(stack, alice, `pop-esc-${toggle.length}`)
       await withTab(stack, async (page) => {
         await page.goto(P)
@@ -80,18 +78,18 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
   }
 
   /**
-   * **iframe 이 갈려도 새 문서에서 닫힌다.** 페이지를 옮기면 캔버스가 내려갔다 올라와 iframe 이 새로 선다. 팝오버를 연 채 옮기면
+   * **iframe 이 갈려도 새 문서에서 닫힌다.** 페이지를 옮기면 캔버스가 내려갔다 올라와 iframe 이 새로 선다. `…` 메뉴를 연 채 옮기면
    * 옛 iframe 문서에 건 리스너는 쓸모가 없고 새 문서에 걸려야 한다 — 문서를 한 번만 읽어 두는 구현은 여기서 죽는다.
    * 판 카나리아: 연 뒤 iframe 에 표시를 달고, 옮긴 뒤 그 표시가 없는(새로 선) iframe 인지 본다.
    */
-  it('팝오버를 연 채 페이지를 옮겨 iframe 이 새로 서도, 캔버스를 누르면 닫힌다', async () => {
+  it('`…` 메뉴를 연 채 페이지를 옮겨 iframe 이 새로 서도, 캔버스를 누르면 닫힌다', async () => {
     const { P1, secondTitle } = await twoPages(stack, alice, 'pop-swap')
     await withTab(stack, async (page) => {
       await page.goto(P1)
       await page.getByRole('link', { name: secondTitle }).click()
       await (await docNode(page, 'n_second00001')).waitFor()
-      await page.click('.wb-shell-export-toggle')
-      const opened = await page.locator('.wb-shell-export-body').count()
+      await page.click('.wb-shell-action-menu-toggle')
+      const opened = await page.locator('.wb-shell-action-menu-body').count()
       await page.locator(IFRAME).evaluate((el) => el.setAttribute('data-probe-old', ''))
       await page.goBack()
       await (await docNode(page, 'n_text0000002')).waitFor()
@@ -99,9 +97,9 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
         async () => ({ iframes: await page.locator(IFRAME).count(), old: await page.locator(`${IFRAME}[data-probe-old]`).count() }),
         (value) => value.iframes === 1 && value.old === 0,
       )
-      const stillOpen = await page.locator('.wb-shell-export-body').count()
+      const stillOpen = await page.locator('.wb-shell-action-menu-body').count()
       await clickClearOfPopover(await docNode(page, 'n_text0000002'))
-      const closed = await settle(() => page.locator('.wb-shell-export-body').count(), (count) => count === 0)
+      const closed = await settle(() => page.locator('.wb-shell-action-menu-body').count(), (count) => count === 0)
       expect({ opened, swapped, stillOpen, afterCanvasClick: closed }).toEqual({
         opened: 1,
         swapped: { iframes: 1, old: 0 },
@@ -187,10 +185,8 @@ async function withTab(stack: EditorStack, run: (page: Page) => Promise<void>): 
 }
 
 /**
- * **팝오버가 안 덮는 자리를 누른다** — 노드의 왼끝에서 20px. 팝오버 둘은 머리 오른쪽에 붙어 아래로 자라고(`.wb-shell-export-body` ·
- * `.wb-shell-snapshots-body` 의 `right: 0`), 내보내기 상자는 미리보기가 도착하면 키가 는다(1440 폭: 아래끝 158 → 248px). 노드의
- * 가운데(y 172)를 누르면 미리보기가 누름보다 먼저 온 판에서 누름이 상자 안 `li` 에 떨어져 «안쪽을 눌렀다»로 안 닫힌다 — 재려던
- * 리스너와 무관하게 빨갛다(미리보기가 열고 ~160ms 에 도착해 누름과 겨뤘다).
+ * **떠 있는 목록이 안 덮는 자리를 누른다** — 노드의 왼끝에서 20px. `…` 메뉴는 머리 오른쪽에 붙어 아래로 자란다(`.wb-shell-action-menu-body`의
+ * `right: 0`). 노드의 가운데를 누르면 누름이 목록 안에 떨어져 «안쪽을 눌렀다»로 안 닫힐 수 있다 — 재려던 리스너와 무관하게 빨갛다.
  */
 async function clickClearOfPopover(node: Locator): Promise<void> {
   const box = await node.boundingBox()

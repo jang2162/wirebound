@@ -25,6 +25,7 @@ import {
   OTHER_PAGE_TITLE,
   PAGE_ID,
   PROJECT_ID,
+  chooseFromShellMenu,
   openPage,
   pageDetail,
   pageDoc,
@@ -217,7 +218,7 @@ describe('남의 복원 배너 — 다시 읽기를 시작한 뒤 온 신호', (
 
 describe('내 복원 — 연결 id 없이 나가 내 신호가 되돌아온 판', () => {
   async function restoreMine(view: Awaited<ReturnType<typeof mount>>): Promise<void> {
-    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    chooseFromShellMenu('스냅샷')
     await screen.findByText('v1')
     fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
     fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
@@ -266,6 +267,35 @@ describe('내 복원 — 연결 id 없이 나가 내 신호가 되돌아온 판'
     expect(banner()).toMatch(RESTORED_BANNER)
   })
 
+  /**
+   * **복원을 보낸 뒤 대화 상자를 닫는다** — 몸체가 내려가도 답은 보낸 순간 쥔 셸의 콜백으로 닿는다(`routes/editor.tsx`의 스냅샷 대화 상자
+   * 자리). 닿지 않으면 다시 읽기가 안 나가고(`held` 0), 안전망 id 를 안 적으면 되돌아온 내 신호에 남의 복원 배너가 선다.
+   */
+  it('대화 상자를 닫은 뒤 온 답도 셸이 받는다 — 다시 읽고, 되돌아온 내 신호를 알아본다', async () => {
+    let answer!: (result: RestoreResult) => void
+    const view = await mount({
+      api: { ...snapshotApi, restoreSnapshot: () => new Promise<RestoreResult>((resolve) => (answer = resolve)) },
+    })
+    chooseFromShellMenu('스냅샷')
+    await screen.findByText('v1')
+    fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    await act(async () => {
+      answer(restoreResult('s-mine'))
+    })
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.push(restoredFrame('s-mine'))
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(PAGE_ID, pair('n-after')))
+    })
+    await waitForNode('n-after')
+
+    expect(banner()).not.toMatch(RESTORED_BANNER)
+  })
+
   it('안전망 스냅샷 id 를 안 싣는 신호면 배너가 선다 — 내 복원인지 모른다', async () => {
     const view = await mount({ api: snapshotApi })
     await restoreMine(view)
@@ -306,7 +336,7 @@ describe('내 복원 — 답을 잃은 판', () => {
   }
 
   async function pressRestore(): Promise<void> {
-    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    chooseFromShellMenu('스냅샷')
     await screen.findByText('v1')
     fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
     fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))

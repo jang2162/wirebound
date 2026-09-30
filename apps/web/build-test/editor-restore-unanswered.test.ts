@@ -77,7 +77,8 @@ describe.skipIf(!전제.ok)('답을 잃은 내 복원', () => {
       await page.goto(P)
       await canvasFrame(page).locator('body', { hasText: '바뀐 글' }).waitFor()
       await poll('소켓이 룸에 든다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← joined')))
-      await page.getByRole('button', { name: '스냅샷' }).click()
+      await page.getByRole('button', { name: '더 보기' }).click()
+      await page.getByRole('menuitem', { name: '스냅샷' }).click()
       await page.getByRole('button', { name: '이 상태로 되돌리기' }).click()
       await page.getByRole('button', { name: '되돌린다' }).click()
       await poll('복원이 서버에 닿는다', async () => events.slice(), (lines) => lines.some((line) => line.includes('복원 서버 답')), 10_000)
@@ -98,6 +99,9 @@ describe.skipIf(!전제.ok)('답을 잃은 내 복원', () => {
       expect(statuses.some((text) => text.includes('스냅샷이 복원됐습니다'))).toBe(true)
       expect(statuses.filter((text) => /다른 사람|알 수 없/.test(text))).toEqual([])
 
+      // 복원을 보낸 대화 상자를 닫는다 — 모달이 열린 동안 하단 바는 `inert`라 배너의 단추가 안 눌린다(상자의 문장이 그렇게 말한다).
+      await page.keyboard.press('Escape')
+      await poll('스냅샷 대화 상자가 닫힌다', async () => page.getByRole('dialog').count(), (count) => count === 0, 5_000)
       await page.locator('.wb-shell-remote-alert').getByRole('button', { name: '다시 불러오기' }).click()
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor({ timeout: 10_000 })
       expect({ 캔버스: await canvas(), 배너: await banner() }).toEqual({ 캔버스: expect.stringContaining('원문') as unknown as string, 배너: false })
