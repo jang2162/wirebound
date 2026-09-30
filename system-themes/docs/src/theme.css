@@ -713,11 +713,13 @@
 
 /* ── 좁은 폭 ─────────────────────────────────────────────────────────────
  * 문서 사이트가 실제로 갈리는 지점은 «좌측 내비가 접히는 폭» 하나다(900px). 그 아래 640px 에서 주의 상자의 표시와 글이 위아래로 선다.
+ * 좁은 폭의 영역 여백은 토큰에서 줄인다(기본값 40px → 24px) — 상수로 두면 이 폭 아래(설정 페이지의 미리보기 640 폭 포함)에서 토큰 칸을 바꿔도
+ * 아무것도 안 바뀐다.
  */
 @media (max-width: 900px) {
   [data-wb-component="Section"] {
-    padding-top: var(--wb-space-6);
-    padding-bottom: var(--wb-space-6);
+    padding-top: calc(var(--wb-section-paddingY) * 0.6);
+    padding-bottom: calc(var(--wb-section-paddingY) * 0.6);
   }
   [data-wb-component="Section"] [data-wb-part="inner"] {
     padding-left: var(--wb-space-4);
