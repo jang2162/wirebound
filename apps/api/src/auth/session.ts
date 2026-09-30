@@ -57,6 +57,50 @@ export async function createSession(db: DbHandle, userId: string, ttlHours: numb
 }
 
 /**
+ * **로그인의 세션 — 견준 해시가 아직 그 사람의 해시일 때만 만든다.** 0 행이면(그새 비밀번호가 바뀌었다) `null` 이고 아무것도 안 넣는다.
+ *
+ * 로그인은 트랜잭션 밖에서 해시를 읽어 견준다(scrypt — 그동안 행을 안 쥔다). 그 사이 비밀번호 바꾸기 · 재설정이 커밋되면 그 쓰기의
+ * 세션 `DELETE` 는 커밋 순간 있던 행만 지우므로, 옛 비밀번호로 견준 로그인이 뒤에 넣은 세션이 «다른 기기는 끊었다» 뒤에 산다([api]
+ * `auth-password-review.test.ts` «옛 비밀번호로 견준 로그인»). 그래서 삽입과 해시 확인을 한 문장(`INSERT … SELECT … FOR SHARE`)으로 한다.
+ *
+ * **`FOR SHARE` 다(`KEY SHARE` 가 아니다).** 바꾸기 · 재설정의 `UPDATE`(`FOR NO KEY UPDATE`)와 부딪혀야 한다 — `KEY SHARE` 면 커밋 안 된
+ * `UPDATE` 를 지나 옛 해시를 읽고 넣어, 그 쓰기가 세션 `DELETE` 를 마친 뒤 · 커밋 앞에 이 삽입이 커밋되면 남는다. `FOR SHARE` 는 그
+ * 커밋을 기다린 뒤 바뀐 행으로 조건을 다시 보고 0 행이 된다. 이 문장이 먼저 잡으면 그 `UPDATE` 가 이 커밋을 기다리고, 그 뒤의 `DELETE`
+ * 가 이 세션을 본다. 잠그는 것은 사용자 행 하나이고 기존 세션 행은 안 잡는다 — 고리가 설 짝이 없다.
+ */
+export async function createLoginSession(
+  db: DbHandle,
+  userId: string,
+  comparedHash: string,
+  ttlHours: number,
+): Promise<CreatedSession | null> {
+  const token = randomTokenValue()
+  const expiresAt = new Date(Date.now() + ttlHours * 3600_000)
+
+  const inserted = await withTransaction(db, (trx) =>
+    trx
+      .insertInto('sessions')
+      .columns(['id', 'user_id', 'expires_at'])
+      .expression((eb) =>
+        eb
+          .selectFrom('users')
+          .select([
+            sql<string>`${hashSessionToken(token)}::text`.as('id'),
+            'users.id as user_id',
+            sql<Date>`${expiresAt}::timestamptz`.as('expires_at'),
+          ])
+          .where('users.id', '=', userId)
+          .where('users.password_hash', '=', comparedHash)
+          .forShare(),
+      )
+      .returning('id')
+      .executeTakeFirst(),
+  )
+
+  return inserted === undefined ? null : { token, expiresAt }
+}
+
+/**
  * 토큰으로 세션을 찾아 그 사용자를 돌려준다. 없거나 만료됐으면 `null`이다.
  *
  * 만료 판정은 `expires_at > now()`로 **SQL에** 넣는다 — JS에서 가져온 뒤 비교하면

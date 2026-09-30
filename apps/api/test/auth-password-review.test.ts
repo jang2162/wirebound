@@ -83,6 +83,22 @@ async function waitQueued(holder: number, fragment: string, withinMs = 5_000): P
   throw new Error(`'${fragment}' 이 ${holder} 뒤에 ${withinMs}ms 안에 줄 서지 않았다 — 판이 안 섰다`)
 }
 
+/** `write` 가 끝나거나 `holder` 뒤에 줄 설 때까지 — 어느 쪽이었는지. */
+async function settledOrQueued(write: Promise<unknown>, holder: number, withinMs = 5_000): Promise<'settled' | 'queued'> {
+  let settled = false
+  void write.then(
+    () => (settled = true),
+    () => (settled = true),
+  )
+  const until = Date.now() + withinMs
+  while (Date.now() < until) {
+    if (settled) return 'settled'
+    if ((await queueBehind(holder)).length > 0) return 'queued'
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  throw new Error(`${withinMs}ms 안에 끝나지도 줄 서지도 않았다 — 판이 안 섰다`)
+}
+
 /** 끝난 뒤 같은 사람의 세션 수 · 비밀번호가 바뀌었는가. */
 async function sessionCount(userId: string): Promise<number> {
   const row = await db.selectFrom('sessions').select((eb) => eb.fn.countAll<string>().as('n')).where('user_id', '=', userId).executeTakeFirstOrThrow()
@@ -121,22 +137,6 @@ describe('비밀번호 바꾸기 · 재설정 × 다른 세션의 관리자 쓰�
     if (kind === 'hide') expect((await upload(ctx, alice.cookie, 'hideme')).statusCode).toBe(201)
     const second = await anotherSession(ctx, alice)
     return { alice, second }
-  }
-
-  /** `write` 가 끝나거나 `holder` 뒤에 줄 설 때까지 — 어느 쪽이었는지. */
-  async function settledOrQueued(write: Promise<unknown>, holder: number, withinMs = 5_000): Promise<'settled' | 'queued'> {
-    let settled = false
-    void write.then(
-      () => (settled = true),
-      () => (settled = true),
-    )
-    const until = Date.now() + withinMs
-    while (Date.now() < until) {
-      if (settled) return 'settled'
-      if ((await queueBehind(holder)).length > 0) return 'queued'
-      await new Promise((resolve) => setTimeout(resolve, 20))
-    }
-    throw new Error(`${withinMs}ms 안에 끝나지도 줄 서지도 않았다 — 판이 안 섰다`)
   }
 
   const CASES: [AdminWriteKind, UserRowWriter][] = [
@@ -291,27 +291,111 @@ describe('비밀번호 바꾸기 × 다른 사람 · FK — 안 기다린다', (
 })
 
 /**
- * **옛 비밀번호로 막 로그인한 세션이 바꾸기 뒤에 남는가.** 로그인은 비밀번호를 견준 뒤(트랜잭션 밖) 세션 행을 넣는다. 그 사이에
- * 바꾸기가 커밋되면 바꾸기의 `DELETE` 는 아직 없는 행을 못 지우고, 로그인은 옛 비밀번호로 견준 결과로 세션을 낸다.
+ * **옛 비밀번호로 견준 로그인이 바꾸기 뒤에 남는가.** 로그인은 비밀번호를 견준 뒤(트랜잭션 밖) 세션 행을 넣는다. 세션 삽입이 «견준 해시가
+ * 아직 그 해시일 때만»(`src/auth/session.ts` 의 `createLoginSession` — `INSERT … SELECT … FOR SHARE`)이면 그 사이 커밋된 바꾸기 ·
+ * 재설정 뒤의 로그인은 0 행으로 401 이다. 판은 셋이다 — 바꾸기가 커밋된 뒤에 삽입이 도는 판, 바꾸기가 세션 `DELETE` 를 마치고 커밋
+ * 앞에 선 동안 삽입이 도는 판(`FOR SHARE` 가 그 커밋을 기다려야 닫힌다 — `KEY SHARE` 면 지나 넣고 먼저 커밋해 남는다), 재설정 명령.
  */
 describe('비밀번호 바꾸기 × 옛 비밀번호 로그인', () => {
   beforeEach(resetRealData)
   afterEach(resetRealData)
 
-  it('옛 비밀번호로 견준 로그인이 세션 삽입 앞에 선 사이 바꾸기가 커밋되면 — 그 로그인은 세션을 못 낸다', async () => {
+  const LOGIN_INSERT = 'insert into "sessions"'
+
+  function lateLoginOf(ctx: TestContext, who: SignedUpUser, password: string, remoteAddress = '10.0.8.8') {
+    return ctx.app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: who.user.email, password }, remoteAddress })
+  }
+
+  async function sessionOf(ctx: TestContext, res: { cookies: { name: string; value: string }[] }): Promise<number | null> {
+    const cookie = res.cookies.find((c) => c.name === 'wb_session')?.value
+    return cookie === undefined ? null : (await ctx.app.inject({ method: 'GET', url: '/api/auth/me', cookies: authCookie(cookie) })).statusCode
+  }
+
+  /** 붙잡힌 백엔드 가운데 `fragment` 를 마지막으로 돈 것 — 로그인도 제 트랜잭션을 열고 쉬므로 하나를 골라낸다. */
+  async function idleBackendAfter(fragment: string): Promise<number> {
+    const rows = await sql<{ pid: number; query: string }>`
+      select pid, query from pg_stat_activity
+      where datname = current_database() and pid <> pg_backend_pid() and state = 'idle in transaction'
+    `.execute(db)
+    const matched = rows.rows.filter((row) => row.query.includes(fragment))
+    if (matched.length !== 1) throw new Error(`'${fragment}' 뒤에 쉬는 백엔드가 하나가 아니다: ${matched.length}`)
+    return matched[0]!.pid
+  }
+
+  it('옛 비밀번호로 견준 로그인이 세션 삽입 앞에 선 사이 바꾸기가 커밋되면 — 그 로그인은 틀린 비밀번호와 같은 401 이고 세션을 못 낸다', async () => {
     await withProxiedRealApi(async (ctx) => {
       const alice = await signup(ctx)
-      const hold = ctx.proxy.holdQuery('insert into "sessions"')
-      const lateLogin = ctx.app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: alice.user.email, password: alice.password }, remoteAddress: '10.0.8.8' })
+      const wrong = await lateLoginOf(ctx, alice, '틀린비밀번호1234', '10.0.7.7')
+      const hold = ctx.proxy.holdQuery(LOGIN_INSERT)
+      const lateLogin = lateLoginOf(ctx, alice, alice.password)
       await hold.held
       const pw = await changePassword(ctx, alice.cookie, alice.password)
       expect(pw.statusCode, pw.body).toBe(204)
       hold.release()
       const res = await lateLogin
-      const cookie = res.cookies.find((c) => c.name === 'wb_session')?.value
-      const me = cookie === undefined ? null : await ctx.app.inject({ method: 'GET', url: '/api/auth/me', cookies: authCookie(cookie) })
-      console.log('[toctou] late login', res.statusCode, '| its /me', me?.statusCode, '| sessions', await sessionCount(alice.user.id))
-      expect(me?.statusCode ?? 401, '옛 비밀번호로 낸 세션이 바꾸기 뒤에 산다').toBe(401)
+      const me = await sessionOf(ctx, res)
+      console.log('[toctou] late login', res.statusCode, '| its /me', me, '| sessions', await sessionCount(alice.user.id))
+      expect(me ?? 401, '옛 비밀번호로 낸 세션이 바꾸기 뒤에 산다').toBe(401)
+      expect(res.statusCode, res.body).toBe(401)
+      expect(res.body).toBe(wrong.body)
+      expect(await sessionCount(alice.user.id)).toBe(1)
+    })
+  })
+
+  it('바꾸기가 세션을 지우고 커밋 앞에 선 동안 옛 비밀번호 로그인의 삽입이 돌면 — 그 커밋을 기다리고 401', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const alice = await signup(ctx)
+      const insertHold = ctx.proxy.holdQuery(LOGIN_INSERT)
+      const lateLogin = lateLoginOf(ctx, alice, alice.password)
+      await insertHold.held
+      const commitHold = ctx.proxy.holdQuery('commit')
+      const passwordChange = changePassword(ctx, alice.cookie, alice.password)
+      await commitHold.held
+      const changer = await idleBackendAfter('delete from "sessions"')
+      insertHold.release()
+      const waited = await settledOrQueued(lateLogin, changer)
+      commitHold.release()
+      const [pw, res] = await Promise.all([passwordChange, lateLogin])
+      const me = await sessionOf(ctx, res)
+      console.log('[toctou-window] late login', res.statusCode, '| waited', waited, '| its /me', me, '| sessions', await sessionCount(alice.user.id))
+      expect(pw.statusCode, pw.body).toBe(204)
+      expect(me ?? 401, '옛 비밀번호로 낸 세션이 바꾸기 뒤에 산다').toBe(401)
+      expect(res.statusCode, res.body).toBe(401)
+      expect(waited).toBe('queued')
+      expect(await sessionCount(alice.user.id)).toBe(1)
+    })
+  })
+
+  it('재설정 명령도 — 삽입 앞에 선 옛 비밀번호 로그인은 401 이고 세션이 하나도 안 남는다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const alice = await signup(ctx)
+      const hold = ctx.proxy.holdQuery(LOGIN_INSERT)
+      const lateLogin = lateLoginOf(ctx, alice, alice.password)
+      await hold.held
+      expect((await resetPassword(db, alice.user.email, NEW_PASSWORD, testConfig().passwordScryptN)).kind).toBe('updated')
+      hold.release()
+      const res = await lateLogin
+      expect(await sessionOf(ctx, res) ?? 401).toBe(401)
+      expect(res.statusCode, res.body).toBe(401)
+      expect(await sessionCount(alice.user.id)).toBe(0)
+    })
+  })
+
+  /** **한도 — 이 판은 실패로 남는다.** 한도 − 1 번 틀린 뒤 이 판이 오면 한도가 차서 새 비밀번호의 로그인도 429 다. 성공으로 세면 200. */
+  it('견준 뒤 해시가 바뀐 로그인은 한도에 실패로 센다 — 한도 − 1 번 틀린 뒤 그 판이면 새 비밀번호도 429', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const alice = await signup(ctx)
+      for (let i = 0; i < LOGIN_LIMIT.perAccount - 1; i++) {
+        expect((await lateLoginOf(ctx, alice, '틀린비밀번호1234', `10.3.0.${i + 1}`)).statusCode).toBe(401)
+      }
+      const hold = ctx.proxy.holdQuery(LOGIN_INSERT)
+      const lateLogin = lateLoginOf(ctx, alice, alice.password, '10.3.1.1')
+      await hold.held
+      expect((await resetPassword(db, alice.user.email, NEW_PASSWORD, testConfig().passwordScryptN)).kind).toBe('updated')
+      hold.release()
+      expect((await lateLogin).statusCode).toBe(401)
+      const res = await lateLoginOf(ctx, alice, NEW_PASSWORD, '10.3.2.1')
+      expect(res.statusCode, res.body).toBe(429)
     })
   })
 })

@@ -16,7 +16,7 @@ import { DEFAULT_SCRYPT_PARAMS, hashPassword, verifyPassword } from '../auth/pas
 import { sessionCookieOptions } from '../auth/plugin'
 import { requestAddressKey, type LoginLimiter } from '../auth/login-limit'
 import { recheckCredential, requestCredential } from '../auth/roles'
-import { createSession, destroyOtherSessions, destroySession, hashSessionToken } from '../auth/session'
+import { createLoginSession, destroyOtherSessions, destroySession, hashSessionToken } from '../auth/session'
 import { requireSessionUser } from '../auth/session-only'
 import type { ApiConfig } from '../config'
 import { rateLimited, unauthenticated } from '../errors'
@@ -86,6 +86,10 @@ export function authRoutes(config: ApiConfig, limiter: LoginLimiter) {
      * 플러그인 등록 시(서버 기동 시) 딱 한 번만 계산해 둔다 — 요청마다 새로
      * 만들 필요가 없다(내용은 절대 실사용 비밀번호와 일치하지 않으면 그만이고,
      * 매 요청 같은 값과 비교해도 안전에 영향이 없다).
+     *
+     * 견준 뒤 그 해시가 바뀐 판(아래 `createLoginSession` 이 0 행)도 같은 401 · 같은 문장이다. 그 판은 성공과 같은 길(관리자 표시
+     * 읽기 · 삽입 문장)을 더 돌아 틀린 비밀번호보다 질의 둘만큼 늦다 — 그 차이가 말하는 것은 «견줄 때는 맞았다»뿐이라 200 이 말할
+     * 것 이상을 새지 않는다(없는 계정과 있는 계정은 그 전에 갈리지 않는다).
      */
     const dummyHash = await hashPassword('타이밍-방어-전용-더미-비밀번호', scryptParams(config))
 
@@ -119,7 +123,6 @@ export function authRoutes(config: ApiConfig, limiter: LoginLimiter) {
       if (!ok) {
         throw unauthenticated(LOGIN_FAILURE_MESSAGE)
       }
-      admission.succeeded()
 
       // 로그인은 새 세션을 만들 뿐, 그 계정의 다른 세션에는 손대지 않는다 — 한
       // 계정이 동시에 여러 기기·탭에서 로그인해 있을 수 있다(설계서 「권한 모델」,
@@ -127,8 +130,23 @@ export function authRoutes(config: ApiConfig, limiter: LoginLimiter) {
       // 재설정 명령(`db/reset-password.ts` — 전부)이다.
       // `/me` 와 같은 모양이다 — 로그인 직후 화면이 목록 머리의 관리자 링크를 `/me` 를 다시 부르지 않고 세운다. 세션을 만들기 전에
       // 읽는다 — 이 읽기가 실패한 500 이 쿠키를 싣고 나가지 않게.
-      const admin = await isInstanceAdmin(app.db, found.id)
-      const { token, expiresAt } = await createSession(app.db, found.id, config.sessionTtlHours)
+      //
+      // **세션은 견준 해시가 아직 그 사람의 해시일 때만 선다**(`auth/session.ts` 의 `createLoginSession`) — 견주는 사이 비밀번호 바꾸기 ·
+      // 재설정이 커밋됐으면 옛 비밀번호로 낸 세션이 그 쓰기의 «다른 세션을 끝낸다» 뒤에 남는다. 그 판은 틀린 비밀번호와 같은 401 ·
+      // 같은 문장이고 **한도에는 실패로 남긴다** — 낸 비밀번호가 세션을 낼 때 이미 그 사람의 것이 아니다. 성공으로 세면(자리를 걷으면)
+      // 옛 비밀번호를 쥔 쪽이 바꾸기와 겹쳐 되풀이하는 시도가 한도에 안 걸린다.
+      let admin: boolean
+      let session: Awaited<ReturnType<typeof createLoginSession>>
+      try {
+        admin = await isInstanceAdmin(app.db, found.id)
+        session = await createLoginSession(app.db, found.id, found.passwordHash, config.sessionTtlHours)
+      } catch (error) {
+        admission.abandoned()
+        throw error
+      }
+      if (session === null) throw unauthenticated(LOGIN_FAILURE_MESSAGE)
+      admission.succeeded()
+      const { token, expiresAt } = session
       reply.setCookie(config.sessionCookieName, token, sessionCookieOptions(config, expiresAt))
       return { id: found.id, email: found.email, name: found.name, isInstanceAdmin: admin }
     })
