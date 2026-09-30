@@ -234,6 +234,45 @@ describe('취소', () => {
     expect(onDrop).not.toHaveBeenCalled()
   })
 
+  // **다른 포인터의 이벤트는 모른 척한다**(C2 리뷰 발견 2 — 마우스로 끄는 중 터치 한 번이 끌기를 그 자리에 놓았다). 실브라우저 판은
+  // `build-test/tree-drag-review.test.ts` «둘째 포인터의 뗌» · «터치로 한 번».
+  it('다른 포인터의 pointermove 는 자리를 안 바꾼다', () => {
+    render(<Harness onDrop={vi.fn()} />)
+
+    press('가', 10, 10)
+    moveTo(10, 30)
+    fireEvent.pointerMove(window, { clientX: 10, clientY: 100, pointerId: 2 })
+
+    // 시작한 포인터는 «앞»(y 30) 위에 있다 — 다른 포인터가 «안»(y 100)으로 가도 표시는 그대로다.
+    expect(indicator()?.getAttribute('data-placement')).toBe('before')
+  })
+
+  it('다른 포인터의 pointerup 은 끌기를 놓지 않는다 — 시작한 포인터가 떼야 놓는다', () => {
+    const onDrop = vi.fn()
+    render(<Harness onDrop={onDrop} />)
+
+    press('가', 10, 10)
+    moveTo(10, 100)
+    fireEvent.pointerUp(window, { clientX: 10, clientY: 30, pointerId: 2 })
+
+    expect({ drops: onDrop.mock.calls.length, dragging: screen.getByTestId('dragging').textContent }).toEqual({ drops: 0, dragging: '가' })
+    release(10, 100)
+    expect(onDrop.mock.calls).toEqual([['가', '안']])
+  })
+
+  it('다른 포인터의 pointercancel 은 끌기를 취소하지 않는다', () => {
+    const onDrop = vi.fn()
+    render(<Harness onDrop={onDrop} />)
+
+    press('가', 10, 10)
+    moveTo(10, 100)
+    fireEvent.pointerCancel(window, { pointerId: 2 })
+
+    expect(screen.getByTestId('dragging').textContent).toBe('가')
+    release(10, 100)
+    expect(onDrop.mock.calls).toEqual([['가', '안']])
+  })
+
   it('끌기 전의 Escape 는 건드리지 않는다 — 끌기가 없으면 리스너도 없다', () => {
     const add = vi.spyOn(window, 'addEventListener')
     render(<Harness onDrop={vi.fn()} />)

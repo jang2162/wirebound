@@ -29,6 +29,12 @@
  * 끌기가 선 누름이 끝나면 다음 한 틱 동안 오는 `click` 을 붙잡는 단계(capture)에서 막는다. 틱이 지나면 걷는다 — 다음 진짜 클릭은 산다.
  * 취소한 끌기도 같다(그 누름은 이미 클릭이 아니다).
  *
+ * ## 시작한 포인터만 듣는다
+ *
+ * 창에서 듣는 `pointermove` · `pointerup` · `pointercancel` 은 **모든** 포인터의 것이다 — 마우스로 끄는 중 터치 화면을 한 번 치면 그
+ * 손가락의 `pointerup` 이 창에 와 끌기를 그 자리에 놓는다(`build-test/tree-drag-review.test.ts`). 그래서 누른 포인터의 `pointerId` 가
+ * 아닌 이벤트는 셋 다 모른 척한다. 다른 포인터의 누름은 새 끌기를 세우지도 않는다(`bind` 의 «이미 누른 것이 있으면 돌아간다»).
+ *
  * ## 링크의 기본 끌기를 막는다
  *
  * `<a>` · 그림은 누른 채 움직이면 브라우저의 기본 DnD 가 선다 — 그러면 `pointercancel` 이 와 이 끌기가 취소된다. `bind` 가 주는
@@ -162,7 +168,11 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
 
         const ask = (at: DragPoint): DropHint<D> | null => latest.current.options.onOver(source, at)
 
+        // 이 누름의 포인터가 아닌 이벤트는 모른 척한다(머리말 «시작한 포인터만 듣는다»).
+        const mine = (raw: Event): boolean => (raw as PointerEvent).pointerId === current.pointerId
+
         const move = (raw: Event): void => {
+          if (!mine(raw)) return
           const moved = raw as PointerEvent
           const at = { x: moved.clientX, y: moved.clientY }
           current.last = at
@@ -178,6 +188,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         }
 
         const up = (raw: Event): void => {
+          if (!mine(raw)) return
           const released = raw as PointerEvent
           if (!current.started) {
             finish()
@@ -214,7 +225,9 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         listen(window, 'pointermove', move)
         listen(window, 'pointerup', up)
         // 포인터를 잃은 것(창 밖 · 기기 분리 · 기본 DnD)도 끝이다 — 안 걷으면 다음 클릭이 끌기처럼 보인다.
-        listen(window, 'pointercancel', () => finish())
+        listen(window, 'pointercancel', (raw) => {
+          if (mine(raw)) finish()
+        })
         listen(window, 'keydown', key)
         const canvas = latest.current.canvasDocument
         if (canvas !== null) listen(canvas, 'keydown', key)
