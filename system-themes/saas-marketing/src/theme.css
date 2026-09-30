@@ -717,9 +717,11 @@
   height: 1px;
   width: 100%;
 }
+/* 높이가 정해지지 않은 부모 안에서 `100%` 는 0 이 된다 — 한 줄 높이를 바닥으로 둔다. 가로 흐름(`Flex`) 안에서는 늘어나 줄에 맞는다. */
 [data-wb-component="Divider"][data-wb-variant="vertical"] {
+  align-self: stretch;
   width: 1px;
-  min-height: 100%;
+  min-height: 1.5em;
   margin: 0 var(--wb-space-10);
 }
 /* 점선 상자 대신 부드러운 채움 — 실제 사이트에 가깝게 보이는 쪽. 높이는 노드의 것이다(기본 CSS 의 노드 변수). */
