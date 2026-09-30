@@ -826,6 +826,31 @@
   line-height: 15px;
 }
 
+/* ── 트리 드래그(`drag/use-pointer-drag.ts` · `drag/drop-indicator.tsx`) ───────────────────────── */
+
+/* 놓을 자리 표시. 창 좌표의 겹이다 — `fixed`인 까닭과 조상에 `transform`을 걸면 안 되는 까닭은 `drop-indicator.tsx` 머리말.
+   **`pointer-events: none`이 하중이다** — 겹이 누름을 받으면 포인터 밑의 줄이 가려 놓을 자리가 안 잡힌다. 다른 떠 있는 상자(행동 메뉴)
+   보다 위다. */
+.wb-shell-drop-indicator {
+  position: fixed;
+  z-index: 40;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* 형제로 놓기 — 줄의 위 · 아래 가장자리에 걸친 가는 선. 두께의 가운데가 가장자리다(`margin-top`). */
+.wb-shell-drop-line {
+  height: 2px;
+  margin-top: -1px;
+  background: var(--wb-shell-accent);
+}
+
+/* 자식으로 놓기 — 줄 강조. 줄의 글자를 가리지 않게 테두리만 그린다. */
+.wb-shell-drop-inside {
+  border: 2px solid var(--wb-shell-accent);
+  border-radius: 4px;
+}
+
 .wb-shell-canvas {
   grid-area: canvas;
   min-width: 0;
