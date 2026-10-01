@@ -18,7 +18,7 @@
  * ## 카드 — 누르면 넣고, 끌면 놓는다
  *
  * - **누름 · Enter**(단추의 `click`): 고른 노드에 따라 자리를 골라(`./palette-add.ts`) 지금 편집 전송 길(`useEditCommit` 의 `commitOps`)로
- *   넣고 넣은 노드를 고른다. 못 넣으면 판 머리에 이유 한 줄을 세운다(다음 누름이 걷는다).
+ *   넣고 넣은 노드를 고른다. 누른 채의 키 반복(`event.repeat`)은 넣지 않는다. 못 넣으면 판 머리에 이유 한 줄을 세운다(다음 누름이 걷는다).
  * - **끌기**: 끌기 장치(`drag/use-pointer-drag.ts`)에 `{ kind: 'new', type }` 을 묶고 놓을 자리 · 표시 · 놓기는 경로 층
  *   (`drag/use-placement.ts`)에 맡긴다 — 캔버스 손잡이와 같은 길이다. 끄는 동안 포인터 곁에 카드 이름표가 따라온다. 끈 뒤의 `click` 은 끌기
  *   장치가 삼켜 «누름» 으로 새지 않는다.
@@ -237,6 +237,11 @@ function PaletteCards(props: {
   }
 
   const moveCard = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
+    // 누른 채의 키 반복은 넣지 않는다 — 단추는 반복 keydown 마다 `click` 을 내어 한 번 누름이 넣기 여럿이 된다(첫 누름만 넣는다).
+    if (event.repeat && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault()
+      return
+    }
     const next = rovingStep(event.key, index, props.types.length)
     if (next === null) return
     event.preventDefault()
