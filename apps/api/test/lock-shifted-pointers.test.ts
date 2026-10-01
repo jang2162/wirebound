@@ -211,3 +211,73 @@ describe('남의 잠긴 서브트리를 안 건드리는 옮기기 — 받아야
     })
   }, 30_000)
 })
+
+/**
+ * C2 좁은 반증(`docs/superpowers/plans/2026-09-30-c2-review-2.md`) — 새 판정이 적용과 갈리는 입력이 서버에서 무엇이 되는가.
+ * 순수 판의 전수(무작위 묶음 · 객체 정체성 오라클)는 `packages/schema/test/lock-ops-identity.test.ts`.
+ */
+describe('좁은 반증 — 번호 꼴 · 실패하는 묶음 · op 종류가 서버에서 무엇이 되는가', () => {
+  it('WS `patch` — `remove /root/children/+1`(적용은 `Number`로 1)은 잠긴 `n_b`를 지우는 편집이라 423 이다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const status = await viaSocket(fx, [{ op: 'remove', path: '/root/children/+1' }])
+      expect({ status, b: await childrenOfB(fx.page.id) }).toEqual({ status: 423, b: ['n_b1', 'n_b2'] })
+    })
+  }, 30_000)
+
+  it('REST — 실패하는 연산(없는 번호) 뒤에 잠긴 `n_b`를 지우는 묶음은 잠금이 아니라 적용 실패로 거절되고 아무것도 안 바뀐다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const before = await headSeq(fx.page.id)
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/ops`,
+        cookies: fx.dahye.cookie,
+        payload: {
+          baseSeq: before,
+          ops: [
+            { op: 'remove', path: '/root/children/9' },
+            { op: 'remove', path: '/root/children/1' },
+          ],
+        },
+      })
+      // 409 는 `patch-failed`다(`src/http/edit-outcome.ts`) — `stale`도 409 라 문장으로 가른다.
+      expect({
+        status: res.statusCode,
+        failed: (res.json() as { error: { message: string } }).error.message.startsWith('편집을 적용할 수 없습니다'),
+        b: await childrenOfB(fx.page.id),
+        seq: await headSeq(fx.page.id),
+      }).toEqual({ status: 409, failed: true, b: ['n_b1', 'n_b2'], seq: before })
+    })
+  }, 30_000)
+
+  it('REST — 잠긴 `n_b`를 지운 뒤 실패하는 연산이 오는 묶음은 423 이다(실패 앞에서 부딪쳤다)', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const status = await viaSession(ctx, fx, [
+        { op: 'remove', path: '/root/children/1' },
+        { op: 'remove', path: '/root/children/9' },
+      ])
+      expect({ status, b: await childrenOfB(fx.page.id) }).toEqual({ status: 423, b: ['n_b1', 'n_b2'] })
+    })
+  }, 30_000)
+
+  it('REST — 잠긴 `n_b` 자신을 앞으로 옮기기는 423 이다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const status = await viaSession(ctx, fx, [{ op: 'move', from: '/root/children/1', path: '/root/children/0' }])
+      expect({ status, b: await childrenOfB(fx.page.id) }).toEqual({ status: 423, b: ['n_b1', 'n_b2'] })
+    })
+  }, 30_000)
+
+  it.each([
+    ['copy', { op: 'copy', from: '/root/children/1', path: '/root/children/0' }],
+    ['test', { op: 'test', path: '/root/children/1/id', value: 'n_b' }],
+  ])('MCP(토큰) — RFC 6902 의 `%s`은 판정에 닿기 전에 400 이다', async (_name, op) => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const status = await viaAgent(ctx, fx, [op as never])
+      expect({ status, b: await childrenOfB(fx.page.id) }).toEqual({ status: 400, b: ['n_b1', 'n_b2'] })
+    })
+  }, 30_000)
+})
