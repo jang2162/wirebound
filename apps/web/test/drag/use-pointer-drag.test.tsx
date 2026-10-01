@@ -432,18 +432,22 @@ describe('놓는 답은 보인 답이다', () => {
     render(<Same onDrop={onDrop} />)
     press('가', 10, 10)
     moveTo(10, 30)
+    // 표시 요소는 다시 그릴 때 같은 요소가 쓰인다 — 그 자리에서 값으로 쥔다.
+    const read = () => {
+      const el = indicator()
+      return el === null ? null : { top: el.style.top, placement: el.dataset['placement'] }
+    }
     world = 'grown'
     act(() => refreshNow())
-    const grown = indicator()
+    const grown = read()
     world = 'shifted'
     act(() => refreshNow())
-    const shifted = indicator()
+    const shifted = read()
     release(10, 30)
     press('가', 10, 10)
     moveTo(10, 30)
-    expect({ grownTop: grown?.style.top, grownPlacement: grown?.dataset['placement'], shifted, sent: onDrop.mock.calls.length }).toEqual({
-      grownTop: `${MOVED.top}px`,
-      grownPlacement: 'before',
+    expect({ grown, shifted, sent: onDrop.mock.calls.length }).toEqual({
+      grown: { top: `${MOVED.top}px`, placement: 'before' },
       shifted: null,
       sent: 0,
     })
