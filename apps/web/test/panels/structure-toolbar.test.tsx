@@ -23,6 +23,7 @@ import {
   structureTypes,
 } from '../editor-harness'
 import '../../src/catalog-setup'
+import { isOff, queryRowAction, treeTool } from './tree-row'
 
 /**
  * 타입이 전부 다른 문서. **이름으로 노드를 고를 수 있어야** 순서가 바뀐 뒤에도 같은
@@ -111,11 +112,12 @@ function structureRegion(): HTMLElement {
 }
 
 function toolbar(): HTMLElement {
-  return within(structureRegion()).getByRole('group', { name: '구조 편집' })
+  // 옛 «구조 편집» 툴바 자리 — 줄 행동 · 고르개 · 상태줄이 트리 영역 안에 선다(`../panels/tree-row.ts`).
+  return structureRegion()
 }
 
-function toolButton(name: string): HTMLButtonElement {
-  return within(toolbar()).getByRole<HTMLButtonElement>('button', { name })
+function toolButton(name: string): HTMLElement {
+  return treeTool(toolbar(), name)
 }
 
 /** 트리에서 노드 하나를 고른다. 줄 이름이 타입이므로 문서의 타입이 전부 달라야 한다. */
@@ -155,16 +157,17 @@ function isNestedIn(childType: string, parentType: string): boolean {
 }
 
 describe('구조 툴바 — 삭제와 순서 이동', () => {
-  it('노드를 고르지 않으면 버튼이 전부 비활성이다', async () => {
+  it('노드를 고르지 않으면 고른 줄이 없다 — 줄 행동은 줄마다 그 줄을 고르며 연다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
     // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
     // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
     // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
     deselect()
 
-    for (const name of BUTTONS) {
-      expect(toolButton(name).disabled, name).toBe(true)
-    }
+    // 판정 일곱이 전부 꺼지는 상태(`structureAbilities`의 `NOTHING`) — 줄 행동으로는 그 상태의 항목에 닿지 않는다. 그 판정이 서는
+    // 입구는 단축키이고(`./structure-keyboard.test.tsx`), 이유는 상태줄이 말한다(아래 «선택을 풀면 …»).
+    expect(structureRegion().querySelectorAll('.wb-shell-tree-row-picked')).toHaveLength(0)
+    expect(BUTTONS).toHaveLength(7)
   })
 
   it('비활성인 버튼이 왜 비활성인지 말한다', async () => {
@@ -236,7 +239,7 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
     await openPage(doc(), { apiOverrides: server().api })
     select('Page')
 
-    expect(toolButton('삭제').disabled).toBe(true)
+    expect(isOff(toolButton('삭제'))).toBe(true)
     expect(toolButton('삭제').title).toBe('루트가 아닌 노드를 고르세요')
   })
 
@@ -269,8 +272,8 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
     await openPage(doc(), { apiOverrides: server().api })
     select('Text')
 
-    expect(toolButton('위로').disabled).toBe(true)
-    expect(toolButton('아래로').disabled).toBe(false)
+    expect(isOff(toolButton('위로'))).toBe(true)
+    expect(isOff(toolButton('아래로'))).toBe(false)
   })
 
   it('아래로 옮기면 형제 순서가 바뀐다', async () => {
@@ -303,8 +306,8 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
     await openPage(doc(), { apiOverrides: server().api })
     select('Divider')
 
-    expect(toolButton('아래로').disabled).toBe(true)
-    expect(toolButton('위로').disabled).toBe(false)
+    expect(isOff(toolButton('아래로'))).toBe(true)
+    expect(isOff(toolButton('위로'))).toBe(false)
   })
 
   it('옮겨도 선택이 그 노드에 남는다', async () => {
@@ -520,7 +523,7 @@ describe('구조 툴바 — 들여쓰기와 내어쓰기', () => {
     await openPage(nestDoc(), { apiOverrides: nestServer().api })
     select('Text')
 
-    expect(toolButton('들여쓰기').disabled).toBe(true)
+    expect(isOff(toolButton('들여쓰기'))).toBe(true)
     expect(toolButton('들여쓰기').title).toBe('앞 형제가 자식을 담을 수 있어야 합니다')
   })
 
@@ -530,7 +533,7 @@ describe('구조 툴바 — 들여쓰기와 내어쓰기', () => {
     await openPage(nestDoc(), { apiOverrides: nestServer().api })
     select('Card')
 
-    expect(toolButton('들여쓰기').disabled).toBe(true)
+    expect(isOff(toolButton('들여쓰기'))).toBe(true)
   })
 
   it('내어쓰면 부모의 다음 형제가 된다', async () => {
@@ -562,7 +565,7 @@ describe('구조 툴바 — 들여쓰기와 내어쓰기', () => {
     await openPage(nestDoc(), { apiOverrides: nestServer().api })
     select('Divider')
 
-    expect(toolButton('내어쓰기').disabled).toBe(true)
+    expect(isOff(toolButton('내어쓰기'))).toBe(true)
     expect(toolButton('내어쓰기').title).toBe('부모가 루트가 아니어야 합니다')
   })
 
@@ -635,7 +638,7 @@ describe('구조 툴바 — 들여쓰기와 내어쓰기', () => {
  */
 function statusLine(): HTMLElement {
   const line = toolbar().querySelector<HTMLElement>('.wb-shell-structure-status')
-  if (line === null) throw new Error('구조 툴바에 상태줄이 없습니다')
+  if (line === null) throw new Error('구조 트리에 상태줄이 없습니다')
   return line
 }
 
@@ -659,13 +662,14 @@ describe('구조 툴바 — 상태줄', () => {
     // *"활성 버튼이 있을 때 그 버튼이 문장을 든다"*까지다.
     await openPage(doc(), { apiOverrides: server().api })
 
-    const reachable = within(toolbar()).getByRole<HTMLButtonElement>('button', {
+    toolButton('안에 추가')
+    const reachable = screen.getByRole('menuitem', {
       name: '안에 추가',
       description: '루트라 삭제·순서·계층을 바꿀 수 없습니다',
     })
 
-    // 대조 둘. **활성이어야** 탭이 닿고, 설명은 상태줄 **그 요소**에서 와야 한다.
-    expect(reachable.disabled).toBe(false)
+    // 대조 둘. **켜져 있어야** 화살표가 닿고, 설명은 상태줄 **그 요소**에서 와야 한다.
+    expect(isOff(reachable)).toBe(false)
     expect(reachable.getAttribute('aria-describedby')).toBe(statusLine().id)
   })
 
@@ -689,7 +693,7 @@ describe('구조 툴바 — 상태줄', () => {
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')
 
-    expect(toolButton('안에 추가').disabled).toBe(false)
+    expect(isOff(toolButton('안에 추가'))).toBe(false)
     expect(statusLine().textContent).toBe('')
     // **빈 요소를 가리키지 않는다** — 설명이 비어 있는 것이 아니라 관계만 남는다.
     expect(toolButton('삭제').getAttribute('aria-describedby')).toBeNull()
@@ -726,30 +730,21 @@ describe('구조 툴바 — 상태줄', () => {
   })
 
   it('**선택을 풀면 그 문장에 닿는 길이 상태줄 자신뿐이다** — 앱째로 잰다', async () => {
-    // **활성 버튼의 설명만으로는 닿지 않는 자리다.** 선택이 없으면 판정 일곱이 전부 꺼지고,
-    // 탭이 서는 것은 판정 밖의 `패턴 넣기`·`프리셋` 둘뿐인데 **그 둘에는 이 설명을 걸지
-    // 않는다**(선택이 없어도 되는 조작이라 없는 전제조건을 만든다). 그래서 상태줄 자신이
-    // 탭 정지점이 아니면 이 상태에서 키보드가 문장에 **영영 못 닿는다.**
+    // **켠 항목의 설명만으로는 닿지 않는 자리다.** 선택이 없으면 고른 줄이 없어 판정에 매인 항목에 닿을 길이 없고, 남는
+    // 뿌리 `+`의 `패턴 넣기`·`프리셋`에는 **이 설명을 걸지 않는다**(선택이 없어도 되는 조작이라 없는 전제조건을 만든다).
+    // 그래서 상태줄 자신이 탭 정지점이 아니면 이 상태에서 키보드가 문장에 **영영 못 닿는다.**
     //
-    // 열두 상태의 표는 `./toolbar-status-reach.test.tsx`가 갖는다(툴바만 떼어 렌더한다).
+    // 열두 상태의 표는 `./toolbar-status-reach.test.tsx`가 갖는다(상태줄만 떼어 렌더한다).
     // **여기서 재는 것은 그 상태가 진짜 앱에서 나온다는 쪽이다.**
     await openPage(doc(), { apiOverrides: server().api })
     deselect()
 
     const line = statusLine()
-    const stops = [
-      ...toolbar().querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    ]
-    // 앞의 둘은 판정 밖의 버튼이고 설명이 없다 — 문장을 든 정지점은 상태줄 하나다.
-    expect(stops.map((el) => el.textContent)).toEqual([
-      '패턴 넣기',
-      '프리셋',
-      '트리에서 노드를 고르면 편집할 수 있습니다',
-    ])
-    expect(stops.filter((el) => el === line || el.getAttribute('aria-describedby') === line.id))
-      .toEqual([line])
+    expect(line.textContent).toBe('트리에서 노드를 고르면 편집할 수 있습니다')
+    expect(line.tabIndex).toBe(0)
+    // 뿌리 `+`의 둘은 설명이 없다 — 문장을 든 것은 상태줄 하나다.
+    expect(toolButton('패턴 넣기').getAttribute('aria-describedby')).toBeNull()
+    expect(toolButton('프리셋').getAttribute('aria-describedby')).toBeNull()
   })
 
   it('**알림 자리를 쓰지 않는다** — `role="alert"`도 `aria-live`도 아니다', async () => {

@@ -37,6 +37,7 @@ import {
   pageDoc,
   structureTypes,
 } from '../editor-harness'
+import { treeTool } from '../panels/tree-row'
 
 class FakeSocket implements RealtimeSocket {
   onopen: (() => void) | null = null
@@ -160,7 +161,7 @@ async function mount(options: { immediate?: (pageId: string) => PageDetail | und
   const moveDown = async (): Promise<SentPatch> => {
     const tree = screen.getByRole('region', { name: '구조 트리' })
     fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
-    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
+    fireEvent.click(treeTool(tree, '아래로'))
     await act(async () => {})
     const sent = patches()
     return sent[sent.length - 1]!
@@ -282,7 +283,7 @@ describe('판째 버린 나간 편집', () => {
     // 다음 편집(Text 를 위로)은 그 번호 위에서 나간다.
     const tree = screen.getByRole('region', { name: '구조 트리' })
     fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
-    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '위로' }))
+    fireEvent.click(treeTool(tree, '위로'))
     await act(async () => {})
     expect(view.patches()).toHaveLength(2)
     expect(view.patches()[1]?.baseSeq).toBe(HEAD_SEQ + 1)
@@ -369,7 +370,7 @@ describe('떠나며 버린 편집의 수', () => {
     const sent = await view.moveDown()
     const tree = screen.getByRole('region', { name: '구조 트리' })
     fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
-    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '위로' }))
+    fireEvent.click(treeTool(tree, '위로'))
     await act(async () => {})
     expect(view.patches()).toHaveLength(1)
     fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
@@ -629,7 +630,7 @@ describe('편집 실패 수습보다 뒤에 시작한 조회가 먼저 실으면
     // 새 판 위에서 편집한다(Divider 를 아래로) — 루프는 수습에 쥐여 있어 아직 안 나간다.
     const tree = screen.getByRole('region', { name: '구조 트리' })
     fireEvent.click(within(tree).getByRole('button', { name: 'Divider' }))
-    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
+    fireEvent.click(treeTool(tree, '아래로'))
     await act(async () => {})
     expect(view.patches()).toHaveLength(1)
 
@@ -655,7 +656,7 @@ describe('다시 읽기가 실패하면', () => {
     // 읽는 동안 낸 편집 둘 — 머리는 나갔고 뒤는 줄 섰다.
     await view.moveDown()
     const tree = screen.getByRole('region', { name: '구조 트리' })
-    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '위로' }))
+    fireEvent.click(treeTool(tree, '위로'))
     await act(async () => {})
 
     await act(async () => {
@@ -808,7 +809,7 @@ describe('다시 읽는 창 안에 온 revision', () => {
     // 읽는 동안 낸 편집(Text 를 위로) — 나가서 ack 된다.
     const tree = screen.getByRole('region', { name: '구조 트리' })
     fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
-    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '위로' }))
+    fireEvent.click(treeTool(tree, '위로'))
     await act(async () => {})
     view.ack(view.patches()[1]!, HEAD_SEQ + 2)
     await act(async () => {})

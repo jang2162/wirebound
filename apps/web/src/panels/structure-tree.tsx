@@ -6,21 +6,30 @@
  * 같은 것을 가리킨다 — 각자 상태를 들면 "캔버스에서 고른 노드"와 "트리에서 고른 노드"가
  * 서로 다른 것이 되고, 그 어긋남은 속성 패널이 어느 쪽을 믿어야 할지의 문제로 번진다.
  *
- * 고르는 것 위에 **구조 편집이 얹혀 있다** — 트리 아래의 툴바가 그것이다.
- * 툴바는 자기 판정과 편집을 스스로 하고(`panels/structure-toolbar.tsx`), 트리는 여전히
- * 고르는 일만 한다. 추가와 드래그 이동(「설계서 화면 구조」)은 아직 없다.
+ * 고르는 것 위에 **구조 편집이 얹혀 있다** — 줄의 `+` · `…`(`panels/tree-row-actions.tsx`) · 제목 줄의 뿌리 `+` · 끌어 놓기
+ * (`drag/use-pointer-drag.ts` · 자리 판정 `edit/structure-drop.ts`) · 단축키. 넷 다 `useStructureCommands`(`panels/structure-toolbar.tsx`)
+ * 의 명령을 부르고, 판정과 편집은 그쪽이 한다.
  */
-import type { KeyboardEvent, ReactElement } from 'react'
+import { useId, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { NodeLock, WbNode } from '@wirebound/schema'
+import { DropIndicator } from '../drag/drop-indicator'
+import { elementAt, scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
+import { findNodeSafely } from '../edit/safe-walk'
+import { acceptsChildren, structureAbilities } from '../edit/structure-actions'
+import { structureDropTarget, type StructureDrop } from '../edit/structure-drop'
+import { ActionMenu } from '../shell/action-menu'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
+import { dropZone } from '../tree/tree-drop'
 import { nodeTypeLabel } from './node-shape'
 import { isTypingSurface } from './typing-surface'
-import { StructureToolbar, useStructureCommands, type StructureCommands } from './structure-toolbar'
+import { StructurePicker, useStructureCommands, type StructureCommands } from './structure-toolbar'
+import { structureRowItems, TreeRowActions } from './tree-row-actions'
 
 /**
- * 키보드 단축키. **툴바 버튼과 같은 함수를 부른다** — `run`이 `StructureCommands`에서
- * 꺼내 쓰고, `ability`가 버튼의 `disabled`와 같은 판정을 지난다.
+ * 키보드 단축키. **줄 행동의 항목과 같은 함수를 부른다** — `run`이 `StructureCommands`에서
+ * 꺼내 쓰고, `blocked`가 항목의 끔과 같은 판정을 지난다.
  *
  * **무엇을 골랐고 왜인가.**
  *
@@ -55,8 +64,8 @@ import { StructureToolbar, useStructureCommands, type StructureCommands } from '
 const SHORTCUTS: {
   match: (event: KeyboardEvent) => boolean
   /**
-   * 이 조작이 지금 막혔는가. **버튼의 `disabled`와 같은 값을 지나야 한다** — 키
-   * 이벤트는 `disabled`를 지나지 않으므로, 여기서 안 보면 회색인 조작이 단축키로만
+   * 이 조작이 지금 막혔는가. **항목의 끔과 같은 값을 지나야 한다** — 키
+   * 이벤트는 끈 항목을 지나지 않으므로, 여기서 안 보면 회색인 조작이 단축키로만
    * 실행된다.
    *
    * **불린을 내는 함수인 것이 요점이다.** `ability: keyof StructureAbilities | null`처럼
@@ -128,12 +137,14 @@ export function StructureTree(props: {
   projectId: string
   pageId: string | undefined
   /**
-   * **구조를 고칠 수 있는가** — 셸이 `projectAbilities(role).editDesign`을 넘긴다. `false`면 **툴바와 단축키가
-   * 함께 간다** — 메뉴 트리의 `editable`과 같은 이유로 둘을 가르지 않는다(툴바만 빼면 `Delete`·`Alt+↑`가 남는다).
+   * **구조를 고칠 수 있는가** — 셸이 `projectAbilities(role).editDesign`을 넘긴다. `false`면 **줄 행동 · 뿌리 `+` · 끌어 놓기와 단축키가
+   * 함께 간다** — 메뉴 트리의 `editable`과 같은 이유로 가르지 않는다(줄 행동만 빼면 `Delete`·`Alt+↑`가 남는다).
    * **트리 자체는 남는다** — 노드를 고르는 것은 읽기다(속성 · 코멘트를 보려고 고른다). 고른 노드를 잠그지 않는 것은
    * 셸의 `useNodeLock`이 같은 값으로 한다. 이 컴포넌트는 역할을 모른다.
    */
   editable: boolean
+  /** 트리 제목 줄의 행동 자리 — 뿌리 `+`를 거기 그린다(메뉴 트리의 `headSlot`과 같은 까닭). 없으면 안 그린다. */
+  headSlot?: HTMLElement | null
 }): ReactElement {
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다(`use-editor-store.tsx`의 주석 — `(s) => s`는 테스트 전용이다).
@@ -147,19 +158,19 @@ export function StructureTree(props: {
   // **선택이 잠금을 거는가**(스토어의 `selectionClaims`). 값을 안 쓴다 — 바뀌면 다시 그리려고 구독한다.
   // 줄의 `disabled`는 `store.selectionBlockedBy`가 정하고, 그 판정이 이 값을 본다.
   useEditorStore(store, (s) => s.selectionClaims)
-  // **조작을 여기서 한 번만 만든다.** 툴바에 내려 주고 아래 키 핸들러도 같은 것을 쓴다 —
+  // **조작을 여기서 한 번만 만든다.** 줄 행동에 내려 주고 아래 키 핸들러도 같은 것을 쓴다 —
   // 그것이 위 `SHORTCUTS`가 요구하는 "같은 함수"다.
   const commands = useStructureCommands({
     projectId: props.projectId,
     pageId: props.pageId,
-    // **고른 노드의 잠금도 여기서 내려 준다.** 그 값이 하는 일이 둘이다 — 툴바의 판정을
-    // 끄고(`structureAbilities`의 셋째 인자), 툴바 아래 상태줄이 *"○○님이 편집 중"*을
+    // **고른 노드의 잠금도 여기서 내려 준다.** 그 값이 하는 일이 둘이다 — 줄 행동의 판정을
+    // 끄고(`structureAbilities`의 셋째 인자), 트리 아래 상태줄이 *"○○님이 편집 중"*을
     // 그것으로 말한다. 목록을 손에 쥐는 자리는 화면에 하나여야 하고(그 규칙과 근거는
     // `test/lock/one-verdict.test.ts`), 그 하나가 바로 위의 구독이다.
     //
     // **아래 키 핸들러가 같은 값을 지나는 것이 요점이다.** 단축키는 `commands.abilities`를
-    // 보므로, 판정이 훅에서 꺼지면 단축키도 함께 꺼진다 — 판정을 이 컴포넌트에서 `disabled`로
-    // 겹치면 그렇게 되지 않는다(툴바와 단축키를 한 묶음으로 두는 이유가 그것이다).
+    // 보므로, 판정이 훅에서 꺼지면 단축키도 함께 꺼진다 — 판정을 이 컴포넌트에서 끔으로
+    // 겹치면 그렇게 되지 않는다(줄 행동과 단축키를 한 묶음으로 두는 이유가 그것이다).
     //
     // **줄에 붙는 배지로는 안 닫히는 자리가 있다.** 배지는 잠금이 가리키는 노드에만
     // 붙는데(아래 `StructureNode`), 막히는 것은 그 **서브트리 전체**다 — 자동 선택된
@@ -175,6 +186,38 @@ export function StructureTree(props: {
     // 루트가 노드가 아닌 문서(검증 전에는 가능하다)에서는 물을 id가 없으므로 `null`이다 —
     // 그때는 `structureAbilities`도 아무것도 못 찾아 일곱이 이미 꺼져 있다.
     pageLock: typeof doc?.root?.id === 'string' ? lockOf(doc.root.id) : null,
+  })
+  const statusId = useId()
+  /**
+   * 프리셋 이름칸에 친 글자. **고르개가 아니라 여기서 든다** — 고르개는 잠금이 걸리는 동안 DOM에서 빠지지만 트리는 그대로 있다.
+   * 왜 이 하나만 가르는지는 `visiblePicker`의 머리말 «두 축»이 갖는다.
+   */
+  const [presetName, setPresetName] = useState('')
+  /** 줄을 찾는 상자 — 끄는 동안 포인터 밑 줄(`[data-tree-row]`)을 여기서 찾는다. */
+  const treeRef = useRef<HTMLUListElement>(null)
+  /**
+   * **끌어 놓기.** 포인터 밑 줄과 띠를 `structureDropTarget`에 물어 놓을 자리를 받고, 놓으면 `dropTo`가 `moveNodeOps`로 낸다. 남이 잡은
+   * 자리는 판정이 스토어의 `editBlockedBy`(서버의 2차 방어와 같은 물음)로 거른다 — `edit/structure-drop.ts` 머리말.
+   */
+  const drag = usePointerDrag<string, StructureDrop>({
+    onOver: (source, point) => {
+      if (doc === null) return null
+      const row = elementAt(treeRef.current, '[data-tree-row]', point)
+      const overId = row?.dataset['treeId']
+      if (row === null || overId === undefined || overId === '') return null
+      const box = row.getBoundingClientRect()
+      const over = findNodeSafely(doc.root, overId)
+      const zone = dropZone(point.y - box.top, box.height, acceptsChildren(over))
+      const target = structureDropTarget(doc, source, overId, zone, store.editBlockedBy)
+      if (target === null) return null
+      return {
+        value: target,
+        rect: { left: box.left, top: box.top, width: box.width, height: box.height },
+        placement: target.placement,
+      }
+    },
+    onDrop: (source, target) => commands.dropTo(source, target),
+    scrollContainer: () => scrollParent(treeRef.current),
   })
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
@@ -213,13 +256,34 @@ export function StructureTree(props: {
     return <p className="wb-shell-tree-notice">열린 페이지가 없습니다</p>
   }
 
+  const rootId = typeof doc.root?.id === 'string' ? doc.root.id : null
+  /**
+   * **고르개가 설 줄** — 고른 줄, 고른 것이 없거나 문서에 없으면 뿌리 줄. 패턴 · 프리셋은 고른 것 없이도 열리므로(뿌리 `+`) 붙을 줄이
+   * 있어야 한다 — 페이지 통째의 조작이라 뿌리 줄 아래다.
+   */
+  const anchorId =
+    selectedNodeId !== null && findNodeSafely(doc.root, selectedNodeId) !== undefined ? selectedNodeId : rootId
+  /** 뿌리의 판정 — 뿌리 `+`의 «페이지에 추가»가 뿌리를 골라 «안에 추가»를 열므로 그 판정을 먼저 본다(잠기면 뿌리를 못 고른다). */
+  const rootAbilities = structureAbilities(doc, rootId, rootId === null ? null : lockOf(rootId))
+  const picker = props.editable ? (
+    <StructurePicker
+      commands={commands}
+      projectId={props.projectId}
+      pageId={props.pageId}
+      // **문서를 여기서 이미 읽었으므로 그대로 내려 준다.** `children`이 배열이 아닌 문서에서는 `null`이다 —
+      // 그때 저장할 것이 없고, 고르개의 저장 버튼이 비활성이 된다.
+      currentNodes={Array.isArray(doc.root?.children) ? doc.root.children : null}
+      presetName={presetName}
+      onPresetNameChange={setPresetName}
+    />
+  ) : null
+
   return (
     // **키 핸들러가 이 상자에 붙는다 — 전역이 아니다.** 속성 패널에서 타이핑하는
     // 키는 다른 서브트리에서 나므로 여기로 버블되지 않는다. 스타일이 없는 상자라
-    // 클래스도 붙이지 않는다: `sticky`인 툴바는 스크롤 조상(`.wb-shell-region`)을 보므로
-    // 이 상자가 끼어도 그대로 바닥에 붙는다.
+    // 클래스도 붙이지 않는다.
     <div onKeyDown={handleKeyDown}>
-      <ul className="wb-shell-structure">
+      <ul className="wb-shell-structure" ref={treeRef}>
         <StructureNode
           node={doc.root}
           selectedNodeId={selectedNodeId}
@@ -227,25 +291,65 @@ export function StructureTree(props: {
           // 판정의 자리는 위 `lockOf` 선언이 갖는다 — 줄과 상태줄이 **같은 값**을 쓴다.
           lockOf={lockOf}
           blockedOf={store.selectionBlockedBy}
+          row={
+            props.editable
+              ? { commands, drag, statusId, rootId, anchorId, picker, select: store.selectNode }
+              : null
+          }
         />
       </ul>
-      {/* 툴바는 트리 **아래**다. 스크롤되는 상자 안이라 `sticky`로 바닥에
-          붙여 둔다 — 트리가 길어지면 조작 버튼이 화면 밖으로 밀려난다.
+      {props.editable && <DropIndicator hint={drag.hint} />}
+      {/* **상태줄** — 고른 것에 무엇을 못 하는지 · 누가 잡았는지를 한 문장으로(`panels/toolbar-status.ts`의 `structureStatus`). 줄 행동의
+          항목이 이 줄을 설명으로 들고(`aria-describedby`), 할 말이 있으면 이 줄 자체가 탭 정지점이다 — 남이 잡은 자리에서는 줄 행동이
+          없어 키보드로 이유에 닿는 자리가 이 줄뿐이다(`test/panels/toolbar-status-reach.test.tsx`).
 
-          **고칠 수 없으면 DOM 에서 뺀다**(`editable` — 셸의 `canEdit` 표 «동작 입구»). 프리셋 · 패턴 고르개도 툴바 안이라
-          함께 간다. */}
-      {props.editable && (
-        <StructureToolbar
-          commands={commands}
-          projectId={props.projectId}
-          pageId={props.pageId}
-          // **문서를 여기서 이미 읽었으므로 그대로 내려 준다.** 툴바가 다시 구독하면
-          // 같은 값을 두 번 읽는다. `children`이 배열이 아닌 문서에서는 `null`이다 —
-          // 그때 저장할 것이 없고, 고르개의 저장 버튼이 비활성이 된다.
-          currentNodes={Array.isArray(doc.root?.children) ? doc.root.children : null}
-        />
-      )}
+          **고칠 수 없으면 DOM 에서 뺀다**(`editable` — 셸의 `canEdit` 표 «동작 입구»). */}
+      {props.editable && <StructureStatusLine commands={commands} id={statusId} />}
+      {props.editable &&
+        props.headSlot !== undefined &&
+        props.headSlot !== null &&
+        createPortal(
+          // **뿌리 `+`** — 페이지 통째에 더하는 셋. «페이지에 추가»는 뿌리를 골라 «안에 추가»를 연다(spec 「툴바 대신 노드별 `+` · `…`」).
+          // 패턴은 고른 것을 풀고 연다 — 고른 것이 없으면 뿌리의 자식 끝에 꽂는다(`edit/pattern-insert.ts`).
+          <ActionMenu
+            label="구조 트리에 추가"
+            glyph="+"
+            compact
+            items={[
+              {
+                key: 'page',
+                label: '페이지에 추가',
+                disabled: !rootAbilities.addInside,
+                onSelect: () => {
+                  if (rootId === null) return
+                  store.selectNode(rootId)
+                  commands.openAdd('inside')
+                },
+              },
+              {
+                key: 'pattern',
+                label: '패턴 넣기',
+                disabled: typeof doc.root?.id !== 'string' || lockOf(doc.root.id) !== null,
+                onSelect: () => {
+                  store.selectNode(null)
+                  commands.openAdd('pattern')
+                },
+              },
+              { key: 'preset', label: '프리셋', disabled: commands.presetLocked, onSelect: () => commands.openAdd('preset') },
+            ]}
+          />,
+          props.headSlot,
+        )}
     </div>
+  )
+}
+
+/** 상태줄(`StructureTree`의 주석). 할 말이 없으면 글자 없이 자리만 지킨다(`shell.css`의 `min-height`). */
+export function StructureStatusLine(props: { commands: StructureCommands; id: string }): ReactElement {
+  return (
+    <p className="wb-shell-structure-status" id={props.id} tabIndex={props.commands.status === '' ? undefined : 0}>
+      {props.commands.status}
+    </p>
   )
 }
 
@@ -274,6 +378,17 @@ function isSelectable(node: WbNode): boolean {
   return typeof node.id === 'string' && node.id !== ''
 }
 
+/** 편집할 수 있는 판에서 줄마다 내려가는 것 — 명령 · 끌기 · 상태줄 id · 뿌리 · 고르개가 설 줄 · 고르개 · 고르기. */
+interface RowWiring {
+  commands: StructureCommands
+  drag: PointerDrag<string, StructureDrop>
+  statusId: string
+  rootId: string | null
+  anchorId: string | null
+  picker: ReactNode
+  select: (nodeId: string) => void
+}
+
 /** 노드 한 줄과 그 아래. 트리 자체가 재귀 구조라 컴포넌트도 재귀다. */
 function StructureNode(props: {
   node: WbNode
@@ -286,8 +401,10 @@ function StructureNode(props: {
    * 사람(viewer)뿐이다 — 그에게는 배지는 서고 줄은 눌린다.
    */
   blockedOf: (nodeId: string) => NodeLock | null
+  /** 편집할 수 있는 판의 줄 행동 · 끌기 배선. `null`이면 고르기만 한다(viewer · 뷰 모드). */
+  row: RowWiring | null
 }): ReactElement {
-  const { node } = props
+  const { node, row } = props
   // **모양 가드 둘.** 검증 전 문서에는 `children`이 배열이 아니거나 `type`이
   // 문자열이 아닌 노드가 들어올 수 있고, 둘 다 렌더 도중 던진다 — 앞은 `.map`이,
   // 뒤는 React가(`Objects are not valid as a React child`). 이쪽에는 캔버스와 달리 오류
@@ -299,6 +416,18 @@ function StructureNode(props: {
   // id가 없는 노드는 잠금과 짝지을 것이 없다 — 아래에서 고를 수도 없다.
   const lock = isSelectable(node) ? props.lockOf(node.id) : null
 
+  const picked = props.selectedNodeId === node.id
+  /**
+   * **남이 잡은 줄은 행동도 끌기도 없다 — 고른 줄은 빼고.** 줄 단추가 이미 꺼져 있다(`blockedOf`). 행동을 열면 그 줄을 먼저 고르는데
+   * (아래 `onOpen`) 고르기가 막히므로 목록이 **앞 선택의 판정 · 명령**으로 설 것이다. **이미 고른 줄은 다르다** — 고른 뒤에 남의 잠금이
+   * 도착한 판(선택은 그대로 남는다 — `edit/structure-actions.ts` 머리말)이고, 그때 목록은 그 줄의 판정(`selectedLock`이 전부 끈다)으로
+   * 서서 무엇이 왜 꺼졌는지 보인다. 끌기는 그 노드를 뽑는 편집이 잠금에 부딪치는 판이라(`lockOf` — 그 노드와 조상 · 자손의 잠금)
+   * 들리지도 않게 한다. 뿌리는 옮기지 않으므로 끌지 않는다.
+   */
+  const open = row !== null && isSelectable(node) && (picked || props.blockedOf(node.id) === null)
+  const draggable = open && row.rootId !== node.id && props.lockOf(node.id) === null
+  const lifted = row !== null && isSelectable(node) && row.drag.dragging === node.id
+
   return (
     <li>
       {/* **id가 없는 노드는 고를 수 없다.** 선택은 id 하나로 오가므로(스토어·캔버스·패널이
@@ -307,24 +436,46 @@ function StructureNode(props: {
           보여 준다: 캔버스에는 폴백으로 그려져 있는데 트리에서만 사라지면 무엇이 잘못됐는지
           더 알기 어렵다. */}
       {isSelectable(node) ? (
-        <button
-          type="button"
-          className="wb-shell-structure-node"
-          // 선택 표시는 `aria-current`가 갖고 색은 CSS가 가져간다 — 보조 기술이 읽는 것과
-          // 눈에 보이는 것이 같은 하나에서 갈라져 나와야 둘이 어긋나지 않는다(메뉴 트리의
-          // 페이지 링크와 같은 방식).
-          //
-          // `false`가 아니라 `undefined`인 것은 `aria-current="false"`가 DOM에 남기
-          // 때문이다 — 그러면 "표시가 붙은 줄"을 셀 수 없다.
-          aria-current={props.selectedNodeId === node.id ? true : undefined}
-          // **누를 수 없다는 것이 보여야 한다**(설계서 「소프트 잠금」의 *"선택이 차단된다"*). 막는 것 자체는
-          // `store.selectNode`가 하고(캔버스도 그 함수를 지난다) 여기 `disabled`는 **왜
-          // 안 되는지를 보이는 쪽**이다 — 같은 모양인데 반응만 없으면 고장으로 읽힌다.
-          disabled={props.blockedOf(node.id) !== null}
-          onClick={() => props.onSelect(node.id)}
+        // **줄 상자** — 줄 단추와 `+` · `…`가 한 줄에 서고, 끌기가 찾을 표지(`data-tree-row` · id)를 단다(메뉴 트리의 `TreeRow`와 같은
+        // 꼴 · 같은 CSS — 서는 조건은 `panels/tree-row-actions.tsx` 머리말).
+        <div
+          className={
+            'wb-shell-tree-row' + (picked ? ' wb-shell-tree-row-picked' : '') + (lifted ? ' wb-shell-tree-row-dragging' : '')
+          }
+          data-tree-row=""
+          data-tree-kind="node"
+          data-tree-id={node.id}
         >
-          {typeLabel}
-        </button>
+          <button
+            type="button"
+            className="wb-shell-structure-node"
+            // 선택 표시는 `aria-current`가 갖고 색은 CSS가 가져간다 — 보조 기술이 읽는 것과
+            // 눈에 보이는 것이 같은 하나에서 갈라져 나와야 둘이 어긋나지 않는다(메뉴 트리의
+            // 페이지 링크와 같은 방식).
+            //
+            // `false`가 아니라 `undefined`인 것은 `aria-current="false"`가 DOM에 남기
+            // 때문이다 — 그러면 "표시가 붙은 줄"을 셀 수 없다.
+            aria-current={props.selectedNodeId === node.id ? true : undefined}
+            // **누를 수 없다는 것이 보여야 한다**(설계서 「소프트 잠금」의 *"선택이 차단된다"*). 막는 것 자체는
+            // `store.selectNode`가 하고(캔버스도 그 함수를 지난다) 여기 `disabled`는 **왜
+            // 안 되는지를 보이는 쪽**이다 — 같은 모양인데 반응만 없으면 고장으로 읽힌다.
+            disabled={props.blockedOf(node.id) !== null}
+            onClick={() => props.onSelect(node.id)}
+            {...(draggable ? row.drag.bind(node.id) : {})}
+          >
+            {typeLabel}
+          </button>
+          {open && (
+            <TreeRowActions
+              name={typeLabel}
+              {...structureRowItems(row.commands, row.statusId)}
+              // 열면 그 줄을 먼저 고른다 — 이미 고른 줄이면 다시 고르지 않는다(열린 고르개가 닫히지 않게 — `openAdd`는 선택을 안 본다).
+              onOpen={() => {
+                if (!picked) row.select(node.id)
+              }}
+            />
+          )}
+        </div>
       ) : (
         <span className="wb-shell-structure-broken">{typeLabel}</span>
       )}
@@ -337,6 +488,9 @@ function StructureNode(props: {
       {lock !== null && lock.nodeId === node.id && (
         <span className="wb-shell-structure-lock">{lock.userName} 편집 중</span>
       )}
+
+      {/* **고르개는 그 줄 바로 아래다**(`StructureTree`의 `anchorId`). */}
+      {row !== null && isSelectable(node) && row.anchorId === node.id && row.picker}
 
       {children.length > 0 && (
         <ul className="wb-shell-structure-list">
@@ -354,6 +508,7 @@ function StructureNode(props: {
               onSelect={props.onSelect}
               lockOf={props.lockOf}
               blockedOf={props.blockedOf}
+              row={row}
             />
           ))}
         </ul>

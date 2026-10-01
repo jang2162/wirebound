@@ -37,6 +37,7 @@ import {
   pageDoc,
   waitForNode,
 } from '../editor-harness'
+import { treeTool } from '../panels/tree-row'
 
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
 
@@ -190,7 +191,7 @@ function foreign(nodeId: string, over: Partial<NodeLockView> = {}): NodeLockView
 }
 
 /**
- * 노드 줄이 들어 있는 목록. **region이 아니라 이것으로 좁힌다** — 툴바 버튼이 같은 region에
+ * 노드 줄이 들어 있는 목록. **region이 아니라 이것으로 좁힌다** — 줄 행동 · 뿌리 `+` 단추가 같은 region에
  * 살고, 캔버스에도 같은 이름의 요소가 있을 수 있다.
  */
 function structureList(): HTMLElement {
@@ -476,9 +477,9 @@ describe('하트비트 — 편집 중 갱신 (설계서 「소프트 잠금」)'
 
     // 구조 편집 하나 — 화면의 버튼으로 낸다. 어느 편집이든 전송 루프를 지나가면 하트비트가
     // 함께 나간다.
-    // 메뉴 트리에도 같은 이름의 버튼이 있으므로 구조 편집 툴바로 좁힌다.
+    // 메뉴 트리에도 같은 이름의 항목이 있으므로 구조 트리 영역으로 좁힌다.
     fireEvent.click(
-      within(screen.getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '위로' }),
+      treeTool(screen.getByRole('region', { name: '구조 트리' }), '위로'),
     )
     await act(async () => {})
 
@@ -553,7 +554,7 @@ describe('놓는다', () => {
 function statusLine(): HTMLElement {
   const region = screen.getByRole('region', { name: '구조 트리' })
   const line = region.querySelector<HTMLElement>('.wb-shell-structure-status')
-  if (line === null) throw new Error('구조 툴바에 상태줄이 없습니다')
+  if (line === null) throw new Error('구조 트리에 상태줄이 없습니다')
   return line
 }
 

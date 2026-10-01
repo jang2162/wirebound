@@ -31,6 +31,7 @@ import {
   renderWithProviders,
   unauthenticatedError,
 } from '../helpers'
+import { isOff, queryRowAction, treeTool } from './tree-row'
 
 /**
  * 셸이 만든 `EditorStore` 인스턴스를 손에 쥐는 장치. `test/routes/editor-shell.test.tsx`가
@@ -733,11 +734,12 @@ describe('메뉴·페이지 트리', () => {
 describe('메뉴 트리 선택', () => {
   /** 툴바. 트리 region 안에 있다. */
   function toolbar(): HTMLElement {
-    return within(treeRegion()).getByRole('group', { name: '메뉴 편집' })
+    // 옛 «메뉴 편집» 툴바 자리 — 줄 행동 · 줄 아래 입력이 트리 영역 안에 선다(`./tree-row.ts`).
+  return treeRegion()
   }
 
-  function tool(name: string): HTMLButtonElement {
-    return within(toolbar()).getByRole('button', { name }) as HTMLButtonElement
+  function tool(name: string): HTMLElement {
+    return treeTool(treeRegion(), name)
   }
 
   /** 지금 눌린 것으로 표시된 메뉴 제목. 표시가 하나뿐인지 보는 데 쓴다. */
@@ -764,24 +766,23 @@ describe('메뉴 트리 선택', () => {
     expect(pressedMenus()).toEqual(['회원관리'])
   })
 
-  it('아무것도 고르지 않으면 툴바가 전부 비활성이다', async () => {
-    // 선택이 `null`이면 판정이 전부 `false`다(`treeAbilities`의 계약).
+  it('아무것도 고르지 않으면 고른 줄이 없다', async () => {
+    // 선택이 `null`이면 판정이 전부 `false`다(`treeAbilities`의 계약). 줄 행동은 줄마다 그 줄을 고르며 열리므로(`panels/tree-row-actions.tsx`)
+    // «고른 것 없이 켜진 조작»은 줄 행동으로는 닿지 않는다 — 그 판정이 서는 입구는 단축키(`./menu-keyboard.test.tsx`)와 고른 줄이다.
     await openEditor()
 
-    for (const name of ['하위 메뉴', '페이지 추가', '이름 변경', '삭제']) {
-      expect(tool(name).disabled, name).toBe(true)
-    }
+    expect(treeRegion().querySelectorAll('.wb-shell-tree-row-picked')).toHaveLength(0)
   })
 
   it('열린 페이지가 선택으로 시작한다', async () => {
-    // **아무것도 누르지 않아도 툴바가 산다** — 주소가 선택을 말한다.
+    // **아무것도 누르지 않아도 줄 행동이 산다** — 주소가 선택을 말한다.
     await openEditor({}, '/projects/p-1/pages/pg-list')
 
-    expect(tool('이름 변경').disabled).toBe(false)
-    expect(tool('삭제').disabled).toBe(false)
-    // 페이지에는 하위를 만들 수 없다.
-    expect(tool('하위 메뉴').disabled).toBe(true)
-    expect(tool('페이지 추가').disabled).toBe(true)
+    expect(isOff(tool('이름 변경'))).toBe(false)
+    expect(isOff(tool('삭제'))).toBe(false)
+    // 페이지에는 하위를 만들 수 없다 — 페이지 줄에는 `+`가 없다.
+    expect(queryRowAction(treeRegion(), '하위 메뉴')).toBeNull()
+    expect(queryRowAction(treeRegion(), '페이지 추가')).toBeNull()
   })
 
   it('메뉴를 고르면 그 메뉴의 판정이 툴바에 걸린다', async () => {
@@ -789,18 +790,18 @@ describe('메뉴 트리 선택', () => {
 
     // `회원관리`는 페이지와 자식 메뉴를 둘 다 갖는다 — 서버가 409를 낼 자리라 비활성이다.
     fireEvent.click(menuButton('회원관리'))
-    expect(tool('하위 메뉴').disabled).toBe(false)
-    expect(tool('페이지 추가').disabled).toBe(false)
-    expect(tool('삭제').disabled).toBe(true)
+    expect(isOff(tool('하위 메뉴'))).toBe(false)
+    expect(isOff(tool('페이지 추가'))).toBe(false)
+    expect(isOff(tool('삭제'))).toBe(true)
 
     // `주문관리`는 둘 다 비었다 — 서버가 204를 내므로 열어 둔다.
     fireEvent.click(menuButton('주문관리'))
-    expect(tool('삭제').disabled).toBe(false)
+    expect(isOff(tool('삭제'))).toBe(false)
   })
 
   it('페이지를 누르면 메뉴 선택이 풀린다', async () => {
     // 주소가 그 페이지를 말하므로 `picked`를 `null`로 되돌린다. 되돌리지 않으면
-    // 주소는 페이지인데 툴바는 메뉴에 작동하는 상태가 남는다.
+    // 주소는 페이지인데 단축키는 메뉴에 작동하는 상태가 남는다.
     await openEditor()
 
     fireEvent.click(menuButton('회원관리'))
@@ -809,9 +810,9 @@ describe('메뉴 트리 선택', () => {
     fireEvent.click(within(treeRegion()).getByRole('link', { name: '회원 목록' }))
 
     await waitFor(() => expect(pressedMenus()).toEqual([]))
-    // 선택이 열린 페이지로 넘어갔다 — 페이지에는 하위를 못 만든다.
-    expect(tool('하위 메뉴').disabled).toBe(true)
-    expect(tool('이름 변경').disabled).toBe(false)
+    // 선택이 열린 페이지로 넘어갔다 — 페이지에는 하위를 못 만든다(`+`가 없다).
+    expect(queryRowAction(treeRegion(), '하위 메뉴')).toBeNull()
+    expect(isOff(tool('이름 변경'))).toBe(false)
   })
 
   it('주소가 바뀐 직후 동기적으로 읽어도 선택이 따라와 있다', async () => {
@@ -828,11 +829,11 @@ describe('메뉴 트리 선택', () => {
     await openEditor()
 
     fireEvent.click(menuButton('회원관리'))
-    expect(tool('하위 메뉴').disabled).toBe(false)
+    expect(isOff(tool('하위 메뉴'))).toBe(false)
 
     // 페이지 링크를 누르면 주소가 바뀐다. `waitFor` 없이 바로 읽는다.
     fireEvent.click(within(treeRegion()).getByRole('link', { name: '회원 목록' }))
 
-    expect(tool('하위 메뉴').disabled).toBe(true)
+    expect(queryRowAction(treeRegion(), '하위 메뉴')).toBeNull()
   })
 })

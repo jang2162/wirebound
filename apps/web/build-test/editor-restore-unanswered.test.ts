@@ -77,7 +77,7 @@ describe.skipIf(!전제.ok)('답을 잃은 내 복원', () => {
       await page.goto(P)
       await canvasFrame(page).locator('body', { hasText: '바뀐 글' }).waitFor()
       await poll('소켓이 룸에 든다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← joined')))
-      await page.getByRole('button', { name: '더 보기' }).click()
+      await page.getByRole('button', { name: '더 보기', exact: true }).click()
       await page.getByRole('menuitem', { name: '스냅샷' }).click()
       await page.getByRole('button', { name: '이 상태로 되돌리기' }).click()
       await page.getByRole('button', { name: '되돌린다' }).click()

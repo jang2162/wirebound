@@ -386,7 +386,7 @@ describe('메뉴 상태줄', () => {
   /**
    * **판정 문안을 붙이지 않는다.** 조작이 나가 있는 동안은 아홉이 전부 꺼지는데, 그때
    * *"메뉴를 고르세요"*가 뜨면 거짓말이다 — 곧 풀릴 상태이고 고른 것은 이미 있다.
-   * `menu-toolbar.tsx`의 `title`이 같은 이유로 `busy`를 안 보는 것과 한 짝이다.
+   * `panels/tree-row-actions.tsx`의 항목 `title`이 같은 이유로 `busy`를 안 보는 것과 한 짝이다.
    */
   it('busy면 보내는 중이라고 말한다 — 고른 것을 탓하지 않는다', () => {
     const status = menuStatusOf({ kind: 'menu', id: 'mn-1' }, true)

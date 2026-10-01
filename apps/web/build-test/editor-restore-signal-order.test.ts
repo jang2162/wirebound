@@ -385,7 +385,7 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       await canvasFrame(page).locator('body', { hasText: '셋째 글' }).waitFor()
       await joinedAtLeast(events, 1)
       await countBanners(page)
-      await page.getByRole('button', { name: '더 보기' }).click()
+      await page.getByRole('button', { name: '더 보기', exact: true }).click()
       await page.getByRole('menuitem', { name: '스냅샷' }).click()
       await page.locator('li.wb-shell-snapshots-row', { hasText: 'v1' }).getByRole('button', { name: '이 상태로 되돌리기' }).click()
       await page.getByRole('button', { name: '되돌린다' }).click()
@@ -577,7 +577,7 @@ function last(lines: string[], tail: string): number {
 }
 
 async function restore(page: Page): Promise<void> {
-  await page.getByRole('button', { name: '더 보기' }).click()
+  await page.getByRole('button', { name: '더 보기', exact: true }).click()
   await page.getByRole('menuitem', { name: '스냅샷' }).click()
   await page.getByRole('button', { name: '이 상태로 되돌리기' }).click()
   await page.getByRole('button', { name: '되돌린다' }).click()

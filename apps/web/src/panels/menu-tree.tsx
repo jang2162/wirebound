@@ -4,7 +4,7 @@
  *
  * 여기서 하는 일은 **트리를 그리고, 주소를 바꾸고, 무엇을 고를지 알리는 것까지다.**
  * 조회·재조회·선택 상태·조작은 전부 `tree/use-tree-commands.tsx`가 갖는다 — 조작이
- * 끝나면 트리를 다시 받아야 하는데, 조회가 이 컴포넌트 안에 있으면 툴바가 그것을 부를
+ * 끝나면 트리를 다시 받아야 하는데, 조회가 이 컴포넌트 안에 있으면 조작이 그것을 부를
  * 길이 없다. 페이지 문서를 받아 스토어에 싣는 것은 여전히 캔버스 쪽(`routes/editor.tsx`의
  * `CanvasFrame`)이다. 그렇게 가른 이유는 둘이다.
  *
@@ -16,23 +16,35 @@
  *
  * **열림과 선택은 다른 것이다**. 열림은 주소가 갖고(`pageId` — `<Link>` +
  * `aria-current="page"`), 선택은 트리 안 상태다(`aria-pressed`). 둘이 같은 값일 때가 많지만
- * 같은 것은 아니다 — 메뉴는 열 수 없고 고르기만 할 수 있다.
+ * 같은 것은 아니다 — 메뉴는 열 수 없고 고르기만 할 수 있다. 페이지도 줄의 `+` · `…`로 열지 않고 고를 수 있다
+ * (`panels/tree-row-actions.tsx` — 누르면 그 줄을 먼저 고른다).
+ *
+ * **조작의 입구는 셋이다** — 줄의 `+` · `…`(`panels/tree-row-actions.tsx`), 트리 제목 줄의 뿌리 `+`, 끌어 놓기(`drag/use-pointer-drag.ts`
+ * · 자리 판정 `tree/tree-drop.ts`). 셋 다 `useTreeCommands`의 명령을 부르고, 키보드 단축키도 같은 명령이다.
  */
-import type { KeyboardEvent, ReactElement } from 'react'
+import { useEffect, useId, useRef, type KeyboardEvent, type ReactElement } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
+import { DropIndicator } from '../drag/drop-indicator'
+import { elementAt, scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
+import { ActionMenu } from '../shell/action-menu'
 import { MetaConflict } from './meta-conflict'
 import { PendingNotice } from './pending-notice'
 import type { TreeMenuNode, TreePage } from '../api/types'
 import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
+import { dropZone, menuDropTarget, type MenuDrop } from '../tree/tree-drop'
 import { useTreeCommands, type TreeCommands } from '../tree/use-tree-commands'
-import { MenuToolbar } from './menu-toolbar'
+import { MenuPicker } from './menu-picker'
 import { PageJsonPanel } from './page-json-panel'
+import { menuStatus } from './toolbar-status'
+import { TreeInput } from './tree-input'
+import { menuRowItems, TreeRowActions } from './tree-row-actions'
 import { isTypingSurface } from './typing-surface'
 
 /**
- * 키보드 단축키. **툴바 버튼과 같은 함수를 부른다** — `run`이 `TreeCommands`에서
- * 꺼내 쓰고, `ability`가 버튼의 `disabled`와 같은 판정을 지난다.
+ * 키보드 단축키. **줄 행동(`+` · `…`)의 항목과 같은 함수를 부른다** — `run`이 `TreeCommands`에서
+ * 꺼내 쓰고, `ability`가 항목의 끔(`disabled`)과 같은 판정을 지난다.
  *
  * **표를 `structure-tree.tsx`와 따로 두는 것은 두 트리가 한 화면에 있고 조작이 다르기
  * 때문이다.** 키 자체는 같은 것을 골랐다 — 다만 **같은 키가 같은 방향을 뜻해야 한다**는 것이
@@ -107,16 +119,21 @@ export function MenuTree(props: {
    * 접히는가"*는 셸의 판단이라 그 표가 한 파일에 모여 있는 편이 읽힌다(구조 트리·되돌리기·
    * 우측 탭이 이미 거기서 갈린다).
    *
-   * **`false`면 셋이 함께 간다:** 툴바 · 페이지 JSON 패널 · 편집 단축키. 셋을 따로 가르지
-   * 않는 것은 **같은 조작에 닿는 세 입구**이기 때문이다 — 툴바만 감추면 `Delete`·`Alt+↑`가
+   * **`false`면 넷이 함께 간다:** 줄 행동(`+` · `…` · 뿌리 `+`) · 끌어 놓기 · 페이지 JSON 패널 · 편집 단축키. 넷을 따로 가르지
+   * 않는 것은 **같은 조작에 닿는 입구**이기 때문이다 — 줄 행동만 감추면 `Delete`·`Alt+↑`가
    * 그대로 남아 뷰 모드에서 메뉴가 지워진다.
    *
    * **viewer 에게는 편집 모드에서도 `false`다** — 셸이 역할까지 얹어 넘긴다. 이 컴포넌트는 역할을 모른다.
    * 페이지 이름 변경만 따로 닫는 둘째 칸을 두지 않는다 — 이 값이 그것까지 덮는다.
    */
   editable: boolean
+  /**
+   * 트리 제목 줄의 행동 자리(`routes/editor.tsx`의 `ShellRegion` — 제목 곁 빈 상자). 뿌리 `+`(«최상위 메뉴 추가»)를 거기 그린다
+   * (portal). **훅이 이 컴포넌트 안에 하나여야 해서**(아래) 셸이 명령을 받아 그리지 않고 자리만 넘긴다. 없으면 안 그린다.
+   */
+  headSlot?: HTMLElement | null
 }): ReactElement {
-  // **훅을 부르는 자리는 여기 하나다**(`busy` 잠금의 전제). 툴바는 결과를 prop으로 받는다 —
+  // **훅을 부르는 자리는 여기 하나다**(`busy` 잠금의 전제). 줄 행동은 결과를 prop으로 받는다 —
   // 두 번째 호출자가 생기면 `busy` 잠금이 각자 것이 된다.
   //
   // **`editable`이 false여도 훅은 그대로 돈다.** 트리를 조회하는 것이 이 훅이라 끄면
@@ -124,6 +141,37 @@ export function MenuTree(props: {
   // 훅이 꺼져서 닫히는 것이 아니다.
   const commands = useTreeCommands(props)
   const { state } = commands
+  const statusId = useId()
+  /** 줄을 찾는 상자 — 끄는 동안 포인터 밑 줄(`[data-tree-row]`)을 여기서 찾는다. */
+  const treeRef = useRef<HTMLUListElement>(null)
+
+  /**
+   * **끌어 놓기.** 포인터 밑 줄과 띠(`dropZone`)를 `menuDropTarget`에 물어 놓을 자리를 받고, 놓으면 `dropTo`가 보낸다. 판정 · 보내기가
+   * 줄 행동과 같은 명령 · 같은 서버 규칙을 쓴다(`tree/tree-drop.ts` 머리말).
+   */
+  const drag = usePointerDrag<TreeSelection, MenuDrop>({
+    onOver: (source, point) => {
+      if (state.status !== 'ready') return null
+      const row = elementAt(treeRef.current, '[data-tree-row]', point)
+      const over = row === null ? null : rowSelection(row)
+      if (row === null || over === null) return null
+      const box = row.getBoundingClientRect()
+      const target = menuDropTarget(
+        state.menu,
+        source,
+        over,
+        dropZone(point.y - box.top, box.height, over.kind === 'menu'),
+      )
+      if (target === null) return null
+      return {
+        value: target,
+        rect: { left: box.left, top: box.top, width: box.width, height: box.height },
+        placement: target.placement,
+      }
+    },
+    onDrop: (source, target) => commands.dropTo(source, target),
+    scrollContainer: () => scrollParent(treeRef.current),
+  })
 
   /**
    * 단축키를 받는다. **상자에 붙이지 전역이 아니다** — 다른 패널에서 타이핑하는 키는 다른
@@ -143,7 +191,7 @@ export function MenuTree(props: {
    * 살아남는다.
    */
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    // **뷰 모드에서는 단축키도 없다.** 툴바만 감추면 여기 아홉 조작이 키로 그대로 살아
+    // **뷰 모드에서는 단축키도 없다.** 줄 행동만 감추면 여기 아홉 조작이 키로 그대로 살아
     // 있어, 화면에 아무 단추도 없는 상태에서 `Delete`가 메뉴를 지운다 — `disabled`를
     // 지나지 않는다는 이 표의 성질(아래 `abilities` 검사 주석)이 여기서는 구멍이 된다.
     if (!props.editable) return
@@ -199,7 +247,7 @@ export function MenuTree(props: {
   }
 
   return (
-    // **키 핸들러가 이 상자에 붙는다.** 트리와 툴바를 함께 감싸므로 어느 쪽에 포커스가
+    // **키 핸들러가 이 상자에 붙는다.** 트리와 줄 행동을 함께 감싸므로 어느 쪽에 포커스가
     // 있어도 단축키가 닿는다. 스타일이 없는 상자라 클래스는 테스트가 집을 이름 하나뿐이다.
     <div className="wb-shell-tree-keys" onKeyDown={handleKeyDown}>
       {/* **조작 실패는 트리 안에 낸다.** `shell/edit-alert.tsx`와 섞지 않는 것은 그것이
@@ -225,7 +273,7 @@ export function MenuTree(props: {
         missedLead={commands.renameNotices.missedLead}
       />
       {/* **제목의 충돌**(페이지도 메뉴도) — «페이지 설명»과 같은 화면이다(`panels/meta-conflict.tsx`).
-          이름 변경이 편집 도구라 편집 모드에서만 선다(툴바와 같은 자리). */}
+          이름 변경이 편집 도구라 편집 모드에서만 선다(줄 행동과 같은 조건). */}
       {props.editable && commands.conflict !== null && (
         <MetaConflict
           what="제목"
@@ -236,7 +284,7 @@ export function MenuTree(props: {
           onDiscard={commands.discardTitle}
         />
       )}
-      <ul className="wb-shell-tree">
+      <ul className="wb-shell-tree" ref={treeRef}>
         {byOrder(state.menu).map((node) => (
           // 키는 노드 id다. 인덱스를 쓰면 정렬이 바뀔 때 React가 앞 노드의 상태를 다른
           // 노드에 재사용한다.
@@ -247,50 +295,36 @@ export function MenuTree(props: {
           //
           // **덮고 있는 것은 "트리 항목이 로컬 상태를 갖지 않는다"이다** — `MenuItem`·
           // `PageLink`에 `useState`·`useRef`가 없어 키가 어긋나도 재사용될
-          // 상태 자체가 없다. 선택은 훅이 id로 들고 있어 트리 밖이다.
+          // 상태 자체가 없다. 선택 · 줄 아래 입력은 훅이 id로 들고 있어 트리 밖이다(행동 메뉴의 열림은 `ActionMenu`
+          // 안의 상태지만 줄의 id 키 아래에 선다 — 이 키가 인덱스가 되면 그 열림이 옆 줄로 옮겨 갈 수 있다).
           //
           // 그러므로 인덱스 키가 실제로 깨지는 조건은 "트리를 다시 받는 것"이 아니라 **항목이
-          // 자기 상태를 갖는 것**이다(펼침/접힘, 인라인 편집을 줄 안으로 옮기는 것 따위).
-          // 그렇게 되면 이 주석이 아니라 케이스가 지켜야 한다.
+          // 자기 상태를 갖는 것**이다(펼침/접힘 따위). 그렇게 되면 이 주석이 아니라 케이스가 지켜야 한다.
           <MenuItem
             key={node.id}
             node={node}
             projectId={props.projectId}
             pageId={props.pageId}
             commands={commands}
+            drag={props.editable ? drag : null}
+            statusId={statusId}
           />
         ))}
       </ul>
-      {/* **빈 트리의 빈 상태 — 이 자리가 없으면 새 프로젝트가 막다른 길이다.**
+      {props.editable && <DropIndicator hint={drag.hint} />}
+      {/* **빈 트리의 빈 상태.** 새 프로젝트는 메뉴 노드가 0개로 만들어진다(`apps/api/src/repos/projects.ts`의
+          `insertProject`는 프로젝트·멤버·기본 레이아웃만 만든다). 줄이 없으니 줄 행동도 없다 — 첫 메뉴를 만드는 길은 제목 줄의
+          뿌리 `+`와 여기 단추다. **서버는 루트를 받는다**(`apps/api/src/routes/menu.ts`의 `parentId: z.uuid().nullable().optional()`).
 
-          새 프로젝트는 메뉴 노드가 0개로 만들어진다(`apps/api/src/repos/projects.ts`의
-          `insertProject`는 프로젝트·멤버·기본 레이아웃만 만든다). 그런데 툴바의 아홉은
-          **전부 선택에 매여 있고**(`tree/tree-actions.ts`: `selection === null`이면
-          `NOTHING`), 빈 트리에는 고를 것이 없다 — 첫 메뉴를 만들 수 없고 페이지는
-          `menuNodeId`가 필수라 페이지도 못 만든다. **서버는 루트를 받는다**
-          (`apps/api/src/routes/menu.ts`의 `parentId: z.uuid().nullable().optional()`):
-          막히는 것은 화면뿐이다.
-
-          **툴바에 「최상위 메뉴」를 상설하지 않고 빈 상태에 둔 이유는 둘이다.**
-
-          1. **막다른 길은 여기에만 있다.** 메뉴가 하나라도 있으면 형제 최상위 메뉴를 만드는 길이
-             이미 있다 — 아무 메뉴에 `하위 메뉴`를 만들고 `내어쓰기`(부모가 루트면 목적지가
-             `parentId: null`이다. `tree/tree-actions.ts`의 `menuOutdentTarget`)다. 빈
-             트리에만 그 길이 없다.
-          2. **툴바의 계약을 깨지 않는다.** `panels/menu-toolbar.tsx`의 아홉은 *"전부 판정에
-             매여 있다"*가 전제이고, `panels/toolbar-status.ts`의 *"메뉴나 페이지를 고르면
-             편집할 수 있습니다"*와 `test/panels/toolbar-status-reach.test.tsx`의 열두 상태가
-             그 위에 서 있다. **선택 없이 켜지는 버튼을 거기 하나 두면 그 셋이 함께 거짓이
-             된다** — 구조 툴바의 `패턴 넣기`·`프리셋`이 정확히 그 값을 치르고 있다(그쪽
-             파일의 머리말: *"없는 전제조건을 만든다"*).
+          **뿌리 `+`가 있는데도 단추를 두는 것은** 빈 상자가 다음 걸음을 제자리에서 말해야 하기 때문이다 — 제목 곁의 작은 `+`는
+          무엇을 하는 단추인지 열어 봐야 안다.
 
           **판정이 두 벌이 되지 않는다.** 여기서 보는 것은 `treeAbilities`가 답하는
           *"고른 것에 무엇을 할 수 있나"*가 아니라 **트리가 비었나**이고, 그 둘은 축이 다르다.
-          `busy`만 툴바와 같은 값을 본다(조작이 나가 있으면 입력을 열지 않는다).
+          `busy`만 줄 행동과 같은 값을 본다(조작이 나가 있으면 입력을 열지 않는다).
 
           **뷰 모드에서는 버튼이 없다.** 문장은 남는다 — 빈 상자가 왜 비었는지는 읽는 사람도
-          알아야 한다. 셋(툴바·페이지 JSON·단축키)을 `editable` 하나로 가르는 위 주석과 같은
-          자리다. */}
+          알아야 한다(`editable` 주석의 넷과 같은 자리). */}
       {state.menu.length === 0 && (
         <div className="wb-shell-tree-empty">
           <p className="wb-shell-tree-notice">메뉴가 없습니다.</p>
@@ -298,8 +332,6 @@ export function MenuTree(props: {
             <button
               type="button"
               className="wb-shell-menu-tool"
-              // **툴바 버튼과 같은 꼴을 쓴다.** 하는 일이 `하위 메뉴`와 같은 부류라 다르게
-              // 보일 이유가 없고, 바로 아래 툴바와 나란히 선다.
               disabled={commands.busy}
               onClick={() => commands.openInput('new-root-menu')}
             >
@@ -308,18 +340,39 @@ export function MenuTree(props: {
           )}
         </div>
       )}
-      {/* 툴바가 트리 **아래**인 것은 `StructureToolbar`와 같은 자리 규칙이다.
+      {/* **줄에 붙지 않는 입력** — 최상위 메뉴는 트리 끝에 붙으므로 그 입력도 트리 아래다. 고른 것이 트리에서 사라진 채 열린
+          입력(남이 지운 뒤 다시 받기 전의 창)도 붙을 줄이 없어 여기 선다. */}
+      {props.editable && <RowPanel commands={commands} at="bottom" />}
+      {/* **상태줄** — 고른 것에 무엇을 못 하는지 · 보내는 중인지를 한 문장으로(`panels/toolbar-status.ts`의 `menuStatus`). 줄의
+          `…` 항목이 꺼진 까닭은 항목의 `title`이 조건으로 말하고, 이 줄이 그것이 말하지 않은 «지금 무엇이라서»를 말한다.
 
-          **뷰 모드에서는 DOM에서 뺀다** — `hidden`이 아니다. 근거는 구조 트리를 그렇게 뺀
-          자리에 적혀 있고(`routes/editor.tsx`), *"테스트가 두 방식을 구분하지 못한다"*는
-          것까지 그쪽이 적고 있다. 이 자리가 뷰 모드에서 그대로 남으면 **`이름 변경`·
-          `옮기기`가 눌리는 상태**가 된다.
+          **할 말이 있으면 그 줄 자체가 탭 정지점이다** — 조작이 나가 있으면(`busy`) 줄 행동의 항목이 전부 꺼져 키보드로 이유에 닿을
+          자리가 이 줄뿐이다(`test/panels/toolbar-status-reach.test.tsx`). `role="alert"`도 `aria-live`도 걸지 않는다 — 선택을 옮길
+          때마다 읽히면 트리 탐색이 불가능해진다.
 
-          닫혀 있던 인라인 입력(`TreeInput`·`MenuPicker`)도 함께 사라진다 — 그 상태는 훅이
-          들고 있으므로 편집 모드로 돌아오면 열려 있던 그대로 되살아난다(구조 트리의 선택이
-          스토어에 남는 것과 같은 결). */}
-      {props.editable && <MenuToolbar commands={commands} />}
-      {/* **페이지 JSON은 툴바 아래다**. 같은 상자 안인 것이 요점이고, 그래서 위
+          **뷰 모드에서는 DOM에서 뺀다** — 편집 도구에 대한 문장이다. */}
+      {props.editable && <MenuStatusLine commands={commands} id={statusId} />}
+      {/* 뿌리 `+`. 제목 줄에 선다(`headSlot`). 고른 것에 매이지 않는 유일한 줄 행동이다 — 최상위 메뉴가 붙는 곳은 트리 자체다. */}
+      {props.editable &&
+        props.headSlot !== undefined &&
+        props.headSlot !== null &&
+        createPortal(
+          <ActionMenu
+            label="메뉴 트리에 추가"
+            glyph="+"
+            compact
+            items={[
+              {
+                key: 'new-root-menu',
+                label: '최상위 메뉴 추가',
+                disabled: commands.busy,
+                onSelect: () => commands.openInput('new-root-menu'),
+              },
+            ]}
+          />,
+          props.headSlot,
+        )}
+      {/* **페이지 JSON은 트리 아래다**. 같은 상자 안인 것이 요점이고, 그래서 위
           `handleKeyDown`이 `isTypingSurface`를 지난다.
 
           **뷰 모드에서는 `페이지 내보내기`까지 함께 간다 — 판정이고, 되돌리지 마라.**
@@ -327,7 +380,7 @@ export function MenuTree(props: {
           JSON으로 주고받는다"*라는 **저작·연동용 아티팩트**이고 내보내기와 가져오기 폼이 한
           덩어리이기 때문이다. 읽기라는 이유로 그 하나만 남기면 패널에 솔기가 하나 더 생기는데,
           그 대가로 얻는 것이 *"편집 모드로 한 번 돌아가면 되는 일"*뿐이다. **설계서를 읽는
-          사람의 내려받기는 셸 머리의 `내보내기`(설계서 「HTML 정적 번들」)가 두 모드 모두에서 낸다** — 그쪽은
+          사람의 내려받기는 셸 `…`의 «프로젝트 내보내기»(설계서 「HTML 정적 번들」)가 두 모드 모두에서 낸다** — 그쪽은
           역할로도 감추지 않는다(`shell/export-panel.tsx`). */}
       {props.editable && (
         <PageJsonPanel projectId={props.projectId} pageId={props.pageId} commands={commands} />
@@ -342,40 +395,52 @@ export function MenuTree(props: {
  *
  * **그 그리는 순서가 `tree-actions.ts`의 판정 근거이기도 하다** — 페이지의 앞 형제는 항상
  * 페이지이므로 페이지는 들여쓸 수 없다.
+ *
+ * `drag`가 `null`이면 편집할 수 없는 판이다 — 줄 행동도 끌기도 없다.
  */
 function MenuItem(props: {
   node: TreeMenuNode
   projectId: string
   pageId: string | undefined
   commands: TreeCommands
+  drag: PointerDrag<TreeSelection, MenuDrop> | null
+  statusId: string
 }): ReactElement {
-  const { node, projectId, pageId, commands } = props
+  const { node, projectId, pageId, commands, drag } = props
   const pages = byOrder(node.pages)
   const children = byOrder(node.children)
-  const picked = isPicked(commands.selection, { kind: 'menu', id: node.id })
+  const self: TreeSelection = { kind: 'menu', id: node.id }
+  const picked = isPicked(commands.selection, self)
 
   return (
     <li>
-      {/* **메뉴 제목은 누를 수 있다 — 누르는 것은 "여는 것"이 아니라 "가리키는 것"이다**.
-          메뉴에는 열 문서가 없지만(「설계서 화면 구조」의 트리에서 문서를 가진 것은 페이지뿐이다) 고르는
-          효과가 실재한다: 툴바가 그 메뉴에 작동하게 된다. *"누를 수 있게 보이는 것은 그
-          자체로 거짓말이다"*는 **누르는 것 = 여는 것**일 때만 서는 판단이다.
+      <TreeRow self={self} picked={picked} drag={drag}>
+        {/* **메뉴 제목은 누를 수 있다 — 누르는 것은 "여는 것"이 아니라 "가리키는 것"이다**.
+            메뉴에는 열 문서가 없지만(「설계서 화면 구조」의 트리에서 문서를 가진 것은 페이지뿐이다) 고르는
+            효과가 실재한다: 단축키 · 상태줄이 그 메뉴에 작동하게 된다. *"누를 수 있게 보이는 것은 그
+            자체로 거짓말이다"*는 **누르는 것 = 여는 것**일 때만 서는 판단이다.
 
-          `<Link>`가 아니라 `<button>`인 것은 갈 주소가 없기 때문이다. 선택 표시가
-          `aria-current`가 아니라 `aria-pressed`인 것도 같은 이유다 — `aria-current="page"`는
-          "지금 보고 있는 페이지"라는 뜻이라 열리지 않는 것에 붙이면 거짓이 된다.
+            `<Link>`가 아니라 `<button>`인 것은 갈 주소가 없기 때문이다. 선택 표시가
+            `aria-current`가 아니라 `aria-pressed`인 것도 같은 이유다 — `aria-current="page"`는
+            "지금 보고 있는 페이지"라는 뜻이라 열리지 않는 것에 붙이면 거짓이 된다.
 
-          **`false`를 지우지 않는다.** 페이지 링크의 `aria-current`는 `undefined`로 지우는데
-          (그래야 "표시가 붙은 줄"을 속성으로 셀 수 있다) 여기는 반대다: 토글 버튼은 눌리지
-          않은 상태도 말해야 보조 기술이 "누를 수 있는 것"으로 읽는다. */}
-      <button
-        type="button"
-        className="wb-shell-tree-menu"
-        aria-pressed={picked}
-        onClick={() => commands.select({ kind: 'menu', id: node.id })}
-      >
-        {node.title}
-      </button>
+            **`false`를 지우지 않는다.** 페이지 링크의 `aria-current`는 `undefined`로 지우는데
+            (그래야 "표시가 붙은 줄"을 속성으로 셀 수 있다) 여기는 반대다: 토글 버튼은 눌리지
+            않은 상태도 말해야 보조 기술이 "누를 수 있는 것"으로 읽는다. */}
+        <button
+          type="button"
+          className="wb-shell-tree-menu"
+          aria-pressed={picked}
+          onClick={() => commands.select(self)}
+          {...(drag === null ? {} : drag.bind(self))}
+        >
+          {node.title}
+        </button>
+        {drag !== null && (
+          <TreeRowActions name={node.title} {...menuRowItems(commands, 'menu', props.statusId)} onOpen={() => pick(commands, self)} />
+        )}
+      </TreeRow>
+      {drag !== null && picked && <RowPanel commands={commands} at="row" />}
 
       {(pages.length > 0 || children.length > 0) && (
         <ul className="wb-shell-tree-list">
@@ -383,7 +448,14 @@ function MenuItem(props: {
               주석에 있다. */}
           {pages.map((page) => (
             <li key={page.id}>
-              <PageLink page={page} projectId={projectId} pageId={pageId} commands={commands} />
+              <PageLink
+                page={page}
+                projectId={projectId}
+                pageId={pageId}
+                commands={commands}
+                drag={drag}
+                statusId={props.statusId}
+              />
             </li>
           ))}
           {children.map((child) => (
@@ -393,6 +465,8 @@ function MenuItem(props: {
               projectId={projectId}
               pageId={pageId}
               commands={commands}
+              drag={drag}
+              statusId={props.statusId}
             />
           ))}
         </ul>
@@ -411,26 +485,184 @@ function PageLink(props: {
   projectId: string
   pageId: string | undefined
   commands: TreeCommands
+  drag: PointerDrag<TreeSelection, MenuDrop> | null
+  statusId: string
 }): ReactElement {
+  const { commands, drag } = props
   const selected = props.page.id === props.pageId
+  const self: TreeSelection = { kind: 'page', id: props.page.id }
+  const picked = isPicked(commands.selection, self)
 
   return (
-    <Link
-      className="wb-shell-tree-page"
-      to={`/projects/${props.projectId}/pages/${props.page.id}`}
-      // 선택은 **주소에서 나온다.** 누른 것을 따로 기억하면 새로고침·뒤로 가기에서
-      // 표시와 실제로 열린 페이지가 어긋난다.
-      //
-      // `false`가 아니라 `undefined`인 것은 `aria-current="false"`가 DOM에 남기
-      // 때문이다 — 그러면 "표시가 붙은 줄"을 속성으로 셀 수 없다.
-      aria-current={selected ? 'page' : undefined}
-      // **메뉴 선택을 푼다**. 주소가 그 페이지를 말하므로 상태로 또 적지 않는다 —
-      // 풀지 않으면 주소는 페이지인데 툴바는 메뉴에 작동하는 상태가 남는다.
-      onClick={() => props.commands.select(null)}
-    >
-      {props.page.title}
-    </Link>
+    <>
+      <TreeRow self={self} picked={picked} drag={drag}>
+        <Link
+          className="wb-shell-tree-page"
+          to={`/projects/${props.projectId}/pages/${props.page.id}`}
+          // 선택은 **주소에서 나온다.** 누른 것을 따로 기억하면 새로고침·뒤로 가기에서
+          // 표시와 실제로 열린 페이지가 어긋난다.
+          //
+          // `false`가 아니라 `undefined`인 것은 `aria-current="false"`가 DOM에 남기
+          // 때문이다 — 그러면 "표시가 붙은 줄"을 속성으로 셀 수 없다.
+          aria-current={selected ? 'page' : undefined}
+          // **고른 것을 푼다**. 주소가 그 페이지를 말하므로 상태로 또 적지 않는다 —
+          // 풀지 않으면 주소는 페이지인데 단축키는 메뉴(또는 줄의 `…`로 고른 다른 페이지)에 작동하는 상태가 남는다.
+          onClick={() => commands.select(null)}
+          {...(drag === null ? {} : drag.bind(self))}
+        >
+          {props.page.title}
+        </Link>
+        {drag !== null && (
+          <TreeRowActions name={props.page.title} {...menuRowItems(commands, 'page', props.statusId)} onOpen={() => pick(commands, self)} />
+        )}
+      </TreeRow>
+      {drag !== null && picked && <RowPanel commands={commands} at="row" />}
+    </>
   )
+}
+
+/**
+ * 줄 하나의 상자 — 줄 단추 · 줄 행동을 한 줄에 세우고, 끌기가 찾을 표지(`data-tree-row` · 종류 · id)를 단다. **줄 행동이 서는 조건
+ * 셋(마우스 · 포커스 · 고른 줄)이 이 상자에 걸린다**(`shell.css` 의 `.wb-shell-tree-row` — `panels/tree-row-actions.tsx` 머리말 «서는
+ * 조건은 CSS 가 갖는다»). 끄는 중인 줄은 흐리게 한다.
+ */
+function TreeRow(props: {
+  self: TreeSelection
+  picked: boolean
+  drag: PointerDrag<TreeSelection, MenuDrop> | null
+  children: ReactElement | (ReactElement | false)[]
+}): ReactElement {
+  const dragging = props.drag?.dragging
+  const lifted = dragging !== undefined && dragging !== null && isPicked(dragging, props.self)
+  return (
+    <div
+      className={
+        'wb-shell-tree-row' + (props.picked ? ' wb-shell-tree-row-picked' : '') + (lifted ? ' wb-shell-tree-row-dragging' : '')
+      }
+      data-tree-row=""
+      data-tree-kind={props.self.kind}
+      data-tree-id={props.self.id}
+    >
+      {props.children}
+    </div>
+  )
+}
+
+/** 줄 상자의 표지를 선택으로 되읽는다. 표지가 깨졌으면 `null`. */
+function rowSelection(row: HTMLElement): TreeSelection | null {
+  const kind = row.dataset['treeKind']
+  const id = row.dataset['treeId']
+  if (id === undefined || id === '') return null
+  if (kind === 'menu' || kind === 'page') return { kind, id }
+  return null
+}
+
+/**
+ * 고른 줄 바로 아래에 서는 것 — 이름 입력 · 소속 메뉴 목록 · 삭제 확인(spec 「툴바 대신 노드별 `+` · `…`」 — «지금처럼 트리 영역
+ * 안에 선다, 자리만 줄 곁으로»). 셋 다 훅의 상태라 여는 것이 줄 행동이든 단축키든 같은 자리에 선다.
+ *
+ * **닫혀 있을 때는 DOM에 없다** — 남겨 두면 Tab 순서에 정지점이 그대로 남는다. 뷰 모드에서도 없다(부르는 쪽이 `editable`로 가른다) —
+ * 그 상태는 훅이 들고 있으므로 편집 모드로 돌아오면 열려 있던 그대로 되살아난다(구조 트리의 선택이 스토어에 남는 것과 같은 결).
+ */
+function RowPanel(props: { commands: TreeCommands; at: 'row' | 'bottom' }): ReactElement | null {
+  const { commands } = props
+  const anchored = anchoredToRow(commands)
+  /** 이 자리에 설 것인가 — 최상위 메뉴 입력은 트리 아래에만, 나머지는 고른 줄이 있으면 그 아래 · 없으면 트리 아래. */
+  const here = (rooted: boolean): boolean => (props.at === 'bottom' ? rooted || !anchored : !rooted && anchored)
+  const items = [
+    commands.reparenting !== null && here(false) && (
+      <MenuPicker
+        key="reparent"
+        options={commands.reparenting}
+        onPick={commands.reparentTo}
+        onCancel={commands.cancelReparent}
+      />
+    ),
+    commands.editing !== null && here(commands.editing.kind === 'new-root-menu') && (
+      <TreeInput
+        // **용도가 바뀌면 새 인스턴스를 마운트한다.** 같은 자리에 남겨 두면 앞 용도의
+        // 값이 남는다 — `key`가 그것을 갈라 준다.
+        key={commands.editing.kind}
+        label={INPUT_LABEL}
+        initial={commands.editing.initial}
+        onSubmit={commands.submitInput}
+        onCancel={commands.cancelInput}
+      />
+    ),
+    commands.confirmingRemove && here(false) && <RemoveConfirm key="remove" commands={commands} />,
+  ].filter((item) => item !== false)
+  if (items.length === 0) return null
+  return <div className="wb-shell-tree-panel">{items}</div>
+}
+
+/**
+ * 고른 것이 트리의 줄에 붙어 있나 — 고른 것이 있고 트리에 있다(`abilities.rename`이 그것만 본다). 아니면 줄 아래 것들이 트리 아래에
+ * 선다(`MenuTree`).
+ */
+function anchoredToRow(commands: TreeCommands): boolean {
+  return commands.selection !== null && commands.abilities.rename
+}
+
+/**
+ * 삭제 확인 — 두 번 누르기의 두 번째(키 하나로 사라지면 되돌릴 길이 없다). `…`의 «삭제»나 `Delete` 키가 걸고, 설 때 포커스를 받는다 —
+ * 그래서 확인하는 두 번째 누름이 첫 누름과 같은 손(Enter · 클릭)이고, Escape 가 그 자리에서 취소다.
+ *
+ * **Esc를 이 단추에서 받는다** — 전역 리스너를 두지 않는 것은 그것이 다른 패널의 Esc까지 가로채기 때문이다. 확인이 풀리는 나머지
+ * 조건(선택 변경 · 다른 조작 · «취소»)은 훅이 갖는다(`askRemove`의 짝).
+ */
+function RemoveConfirm(props: { commands: TreeCommands }): ReactElement {
+  const { commands } = props
+  const confirm = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    confirm.current?.focus()
+  }, [])
+  return (
+    <span className="wb-shell-tree-confirm">
+      <button
+        type="button"
+        ref={confirm}
+        className="wb-shell-menu-tool"
+        disabled={!commands.abilities.remove || commands.busy}
+        onClick={commands.confirmRemove}
+        onKeyDown={(event) => {
+          // `!==`로 쓴다 — 위 `SHORTCUTS`의 조합을 세는 자(`test/panels/menu-keyboard.test.tsx` «표의 여섯을 다 덮는다»)가 `event.key === '`를 닻으로 센다.
+          if (event.key !== 'Escape') return
+          event.preventDefault()
+          commands.cancelRemove()
+        }}
+      >
+        {REMOVE_CONFIRM_LABEL}
+      </button>
+      <button type="button" className="wb-shell-menu-tool" onClick={commands.cancelRemove}>
+        취소
+      </button>
+    </span>
+  )
+}
+
+/** 상태줄(`MenuTree`의 주석). 할 말이 없으면 글자 없이 자리만 지킨다(`shell.css`의 `min-height`). */
+export function MenuStatusLine(props: { commands: TreeCommands; id: string }): ReactElement {
+  const { commands } = props
+  const status = menuStatus({ selection: commands.selection, busy: commands.busy, abilities: commands.abilities })
+  return (
+    <p className="wb-shell-menu-status" id={props.id} tabIndex={status === '' ? undefined : 0}>
+      {status}
+    </p>
+  )
+}
+
+/** 인라인 입력의 라벨. 용도가 여럿이지만 입력은 하나다(`tree-input.tsx`). */
+const INPUT_LABEL = '이름'
+
+/** 삭제 확인 단추의 문안. */
+const REMOVE_CONFIRM_LABEL = '정말 삭제합니까?'
+
+/**
+ * 줄 행동을 열 때 그 줄을 고른다 — **이미 고른 줄이면 다시 고르지 않는다.** `select`는 열린 입력 · 삭제 확인 · 소속 목록을 함께
+ * 닫으므로(다른 것을 고르면 그것들이 어느 줄에 붙는지 사라진다), 같은 줄의 `…`를 다시 여는 것이 그 줄의 이름 입력을 닫으면 안 된다.
+ */
+function pick(commands: TreeCommands, self: TreeSelection): void {
+  if (!isPicked(commands.selection, self)) commands.select(self)
 }
 
 /** 두 선택이 같은 것을 가리키는가. `kind`가 갈라 주므로 메뉴와 페이지의 id가 같아도 섞이지 않는다. */

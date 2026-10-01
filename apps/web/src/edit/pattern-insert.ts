@@ -2,7 +2,7 @@
  * 전개된 패턴을 문서 어디에 꽂을지 정하고 `PatchOp`로 옮기는 곳.
  *
  * **순수 함수이고 React·DOM·`fetch`를 모른다** — `./ops.ts`·`./structure-actions.ts`와
- * 같은 층이다. **던지지 않는다**: 부르는 자리가 구조 툴바이고 거기는 오류 경계 밖이라
+ * 같은 층이다. **던지지 않는다**: 부르는 자리가 구조 트리의 명령(`panels/structure-toolbar.tsx`)이고 거기는 오류 경계 밖이라
  * 던지면 셸 전체가 흰 화면이 된다(`panels/structure-toolbar.tsx` 머리말).
  *
  * ---

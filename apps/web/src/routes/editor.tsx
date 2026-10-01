@@ -525,7 +525,7 @@ function EditorShell(props: {
    *
    * | 자리 | viewer 에게 | 왜 |
    * |---|---|---|
-   * | **동작 입구** — 메뉴 편집 툴바 · 빈 트리의 «최상위 메뉴» · 페이지 JSON · 구조 편집 툴바(프리셋 · 패턴 포함) · 되돌리기 · 코멘트 폼 · 코멘트의 «수정» · «삭제» · 트리 두 곳의 단축키 | **숨긴다**(DOM 에서 뺀다) | 역할은 기다려서 풀리는 것이 아니다 — 켜질 길이 없는 회색 단추는 소음이다(스냅샷 복원 · 설정의 테마 고르개 · «페이지 설명»과 같은 판단). 뷰 모드가 편집 도구를 빼는 방식과도 같아서 viewer 의 편집 모드 좌측은 뷰 모드의 좌측과 같다 |
+   * | **동작 입구** — 메뉴 트리의 줄 행동(`+` · `…` · 뿌리 `+`) · 끌어 놓기 · 빈 트리의 «최상위 메뉴» · 페이지 JSON · 구조 트리의 줄 행동(프리셋 · 패턴 포함) · 되돌리기 · 코멘트 폼 · 코멘트의 «수정» · «삭제» · 트리 두 곳의 단축키 | **숨긴다**(DOM 에서 뺀다) | 역할은 기다려서 풀리는 것이 아니다 — 켜질 길이 없는 회색 단추는 소음이다(스냅샷 복원 · 설정의 테마 고르개 · «페이지 설명»과 같은 판단). 뷰 모드가 편집 도구를 빼는 방식과도 같아서 viewer 의 편집 모드 좌측은 뷰 모드의 좌측과 같다 |
    * | **값을 보이는 칸** — 속성 패널 · 상호작용 패널의 위젯 | **끄고 이유 한 줄**(`panels/property-panel.tsx`의 `VIEWER_NOTICE`) | 그 칸이 곧 값의 표시다 — 숨기면 viewer 가 읽을 것을 잃는다. 그리고 두 패널에는 «꺼진 이유» 관례가 이미 있다(남의 잠금 — `lockedNotice`). |
    * | **잠금** — 노드를 고르는 것 | **잡지 않는다**(`useNodeLock`) | 고르기는 읽기다(속성 · 코멘트를 보려고 고른다). 서버는 viewer 의 `lock`을 조용히 버리지만(`MIN_ROLE_FOR_FRAME`) 보내는 것 자체가 쓰기 프레임이다 |
    *
@@ -710,6 +710,10 @@ function EditorShell(props: {
   const sessionUser = useSessionUser()
   /** 열린 대화 상자 — 스냅샷 · 내보내기. 한 번에 하나다(모달이다). */
   const [dialog, setDialog] = useState<'snapshots' | 'export' | null>(null)
+  /** 메뉴 트리 제목 줄의 행동 자리(`ShellRegion`의 `actionsRef`) — 트리가 뿌리 `+`를 거기 그린다. */
+  const [menuHead, setMenuHead] = useState<HTMLDivElement | null>(null)
+  /** 구조 트리 제목 줄의 행동 자리 — 같은 까닭. */
+  const [structureHead, setStructureHead] = useState<HTMLDivElement | null>(null)
   /** `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. */
   const menuItems: ActionMenuItem[] = [
     { key: 'account', label: '계정 설정', to: '/account' },
@@ -800,6 +804,7 @@ function EditorShell(props: {
           className="wb-shell-region"
           name="메뉴·페이지 트리"
           style={split ? { flexGrow: layout.regionGrow } : undefined}
+          actionsRef={setMenuHead}
         >
           {/* 트리에 주는 `projectId`는 **조회해 온 프로젝트의 id**다. 경로의 파라미터를
               다시 읽지 않는 것은, 트리가 만드는 주소가 지금 열려 있는 프로젝트를 가리켜야
@@ -823,6 +828,7 @@ function EditorShell(props: {
             pageId={props.pageId}
             reloadToken={restoredToken}
             editable={mode === 'edit' && canEdit}
+            headSlot={menuHead}
           />
         </ShellRegion>
         {/* 구조 트리는 편집 모드에서만 있다. 뷰 모드에서는 접혀 메뉴 트리가 좌측 전체를
@@ -865,11 +871,17 @@ function EditorShell(props: {
               className="wb-shell-region"
               name="구조 트리"
               style={{ flexGrow: 1 - layout.regionGrow }}
+              actionsRef={setStructureHead}
             >
               {/* `projectId`는 메뉴 트리와 같은 이유로 **조회해 온 프로젝트의 id**다.
                   구조 편집이 그것을 `PATCH /projects/:id/pages/:id/ops`의 경로로 쓴다. */}
-              {/* **트리는 viewer 도 본다**(읽기 — 노드를 골라 속성 · 코멘트를 본다). 툴바와 단축키만 `canEdit`으로 간다. */}
-              <StructureTree projectId={props.project.id} pageId={props.pageId} editable={canEdit} />
+              {/* **트리는 viewer 도 본다**(읽기 — 노드를 골라 속성 · 코멘트를 본다). 줄 행동 · 끌어 놓기와 단축키만 `canEdit`으로 간다. */}
+              <StructureTree
+                projectId={props.project.id}
+                pageId={props.pageId}
+                editable={canEdit}
+                headSlot={structureHead}
+              />
             </ShellRegion>
           </>
         )}
@@ -1100,11 +1112,19 @@ function ShellRegion(props: {
   name: string
   /** 세로 배분. **편집 모드에서만 온다** — 근거는 셸의 `split` 주석에 있다. */
   style?: CSSProperties
+  /**
+   * 제목 줄의 행동 자리를 받는다 — 트리의 뿌리 `+`가 portal 로 그리로 들어간다(`panels/menu-tree.tsx`의 `headSlot`). 명령을 셸이 아니라
+   * 트리가 들고 있어(훅이 트리 안에 하나) 셸은 자리만 만든다.
+   */
+  actionsRef?: (element: HTMLDivElement | null) => void
   children?: ReactNode
 }): ReactElement {
   return (
     <section className={props.className} aria-label={props.name} style={props.style}>
-      <h2 className="wb-shell-region-title">{props.name}</h2>
+      <div className="wb-shell-region-head">
+        <h2 className="wb-shell-region-title">{props.name}</h2>
+        {props.actionsRef !== undefined && <div className="wb-shell-region-actions" ref={props.actionsRef} />}
+      </div>
       {props.children}
     </section>
   )

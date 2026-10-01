@@ -13,8 +13,8 @@
  *
  * ## 구조 트리만 빼면 뷰 모드가 반만 뷰 모드다
  *
- * 셸이 뷰 모드에서 DOM에서 빼는 것이 **구조 트리 하나**뿐이면, 좌측의 **메뉴 편집
- * 툴바**(하위 메뉴·페이지 추가·이름 변경·삭제·위로·아래로·들여쓰기·내어쓰기·옮기기)와
+ * 셸이 뷰 모드에서 DOM에서 빼는 것이 **구조 트리 하나**뿐이면, 좌측의 **메뉴 트리 줄 행동**
+ * (줄의 `+` · `…` · 제목 줄의 뿌리 `+` — 하위 메뉴·페이지 추가·이름 변경·삭제·위로·아래로·들여쓰기·내어쓰기·옮기기)와
  * **페이지 JSON 패널**(내보내기 + 파일 고르개 + JSON 입력 + 가져오기)은 그대로 남아
  * **눌리는 상태**가 된다(브라우저에서 잰 고장 방식). 구조 트리를 접는 근거 — **편집 도구는
  * 편집 모드에 있다** — 는 그 둘에 똑같이 걸린다.
@@ -241,18 +241,17 @@ describe('설계서 「설계서 화면 구조」 — 좌측의 편집 도구도
     return screen.getByRole('region', { name: '메뉴·페이지 트리' })
   }
 
-  it('뷰 모드에서는 메뉴 편집 툴바가 없다', async () => {
+  it('뷰 모드에서는 메뉴 트리의 줄 행동이 없다', async () => {
     await openPage(DOC)
-    // 양성 대조: 편집 모드에는 있다. 이것이 없으면 툴바를 아예 안 그리는 구현도 통과한다.
-    expect(within(treeRegion()).getByRole('group', { name: '메뉴 편집' })).toBeTruthy()
+    // 양성 대조: 편집 모드에는 있다. 이것이 없으면 줄 행동을 아예 안 그리는 구현도 통과한다.
+    expect(within(treeRegion()).getByRole('button', { name: '회원관리 더 보기' })).toBeTruthy()
+    expect(within(treeRegion()).getByRole('button', { name: '메뉴 트리에 추가' })).toBeTruthy()
 
     toView()
 
-    expect(within(treeRegion()).queryByRole('group', { name: '메뉴 편집' })).toBeNull()
-    // **툴바 안의 조작 이름으로도 확인한다.** 상자만 지우고 버튼을 다른 데로 옮긴 판이
-    // 위 단언 하나로는 통과한다 — 브라우저에서 실제로 눌리는 것을 본 둘을 이름으로 못박는다.
-    expect(screen.queryByRole('button', { name: '이름 변경' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '옮기기' })).toBeNull()
+    // **줄마다 · 제목 줄까지 센다.** 한 줄의 행동만 지우고 다른 줄 · 뿌리 `+`를 남긴 판이 이름 하나로는 통과한다.
+    expect(treeRegion().querySelectorAll('.wb-shell-tree-row-actions')).toHaveLength(0)
+    expect(within(treeRegion()).queryByRole('button', { name: '메뉴 트리에 추가' })).toBeNull()
   })
 
   /** 가져오기 폼의 토글. **접힌 채로도 늘 있다**(`panels/page-json-panel.tsx`). */
@@ -304,7 +303,7 @@ describe('설계서 「설계서 화면 구조」 — 좌측의 편집 도구도
 
     toEdit()
 
-    expect(within(treeRegion()).getByRole('group', { name: '메뉴 편집' })).toBeTruthy()
+    expect(within(treeRegion()).getByRole('button', { name: '회원관리 더 보기' })).toBeTruthy()
     expect(within(treeRegion()).getByRole('region', { name: '페이지 JSON' })).toBeTruthy()
   })
 })

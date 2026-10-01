@@ -1,30 +1,28 @@
 /**
- * 구조 트리 하단의 조작 툴바.
+ * 구조 트리의 **조작 묶음**(`useStructureCommands`)과 **고르개 자리**(`StructurePicker`). 조작의 입구는 트리 줄의 `+` · `…`
+ * (`panels/tree-row-actions.tsx`) · 트리 제목 줄의 뿌리 `+` · 끌어 놓기 · 키보드 단축키(`panels/structure-tree.tsx`의 `SHORTCUTS`)다 —
+ * 전부 이 파일의 명령을 부른다. 파일 이름의 «툴바»는 그 입구들이 한 줄 툴바였던 자리의 이름이다.
  *
  * **조작이 두 부류다.**
  *
  * | 부류 | 무엇 | 판정 |
  * |---|---|---|
- * | 선택 노드 하나에 작동하는 것 | 추가·삭제·순서·계층 | `structureAbilities`가 정하고 `disabled`가 따라간다 |
- * | **선택이 없어도 되는 것** | `패턴 넣기` · `프리셋` | **판정이 없다** — 걸 `ability`가 없어 `ToolButton`이 아니다 |
+ * | 선택 노드 하나에 작동하는 것 | 추가·삭제·순서·계층 | `structureAbilities`가 정하고 항목의 끔이 따라간다 |
+ * | **선택이 없어도 되는 것** | `패턴 넣기` · `프리셋` | **판정이 없다** — 걸 `ability`가 없어 `patternLocked` · `presetLocked`만 본다 |
  *
  * 뒤 부류가 판정을 갖지 않는 까닭은 각각 — 패턴은 선택이 없으면 root의 자식 끝에 꽂고,
  * 프리셋은 페이지 통째라 자리를 아예 고르지 않는다. 단축키 쪽도 같은 성질을 지나므로
  * 그 표에서 둘은 `StructureAbilities`가 아니라 `patternLocked`·`presetLocked`를 본다
  * (`panels/structure-tree.tsx`의 `SHORTCUTS`).
  *
- * 각 줄에 버튼을 흩지 않는 이유: 좁은 좌측 패널에서 트리가 읽히지 않고, 툴바여야
- * 키보드 단축키와 짝이 맞는다.
- *
  * **판정은 여기 없다.** 무엇을 할 수 있는지는 `edit/structure-actions.ts`의
- * `structureAbilities`가 정하고, 이 파일은 그 결과로 `disabled`를 걸 뿐이다.
+ * `structureAbilities`가 정하고, 이 파일은 그 결과를 줄 행동에 넘길 뿐이다.
  * 판정이 컴포넌트 안으로 들어오면 케이스가 화면을 지나야만 재지고, 단축키가
  * 자기 조건을 따로 갖게 된다.
  *
- * **이 툴바 안에 고르개가 그려지고, 거기에는 타이핑하는 칸이 있다**(프리셋 이름).
- * 키 핸들러는 트리와 이 툴바를 **함께** 감싸는 상자에 붙어 있으므로, 거기서 난 키가
- * 구조 조작으로 새지 않게 하는 규칙이 그 상자에 있다 — `structure-tree.tsx`의
- * `fromTypingSurface`이고, 그것이 없으면 이름 칸의 `Backspace`가 노드를 지운다.
+ * **고르개에는 타이핑하는 칸이 있다**(프리셋 이름). 고르개는 트리 줄 아래 · 키 핸들러가 붙은 상자 안에 서므로, 거기서 난 키가
+ * 구조 조작으로 새지 않게 하는 규칙이 그 상자에 있다 — `structure-tree.tsx`의 `isTypingSurface`이고, 그것이 없으면 이름 칸의
+ * `Backspace`가 노드를 지운다.
  *
  * **이 파일은 오류 경계 밖이다** — 구조 트리와 같은 자리다(`panels/node-shape.ts`
  * 머리말). 던지면 셸 전체가 흰 화면이므로, 여기서 부르는 것들은 값으로 답해야 한다.
@@ -37,7 +35,7 @@
  * **완전하다고는 적지 않는다** — 잰 것은 그 반례 부류(배열 원소가 노드가 아닌 경우)와
  * 몇 가지 깨진 형태까지다.
  */
-import { useId, useState, type ReactElement } from 'react'
+import { useState, type ReactElement } from 'react'
 import type { NodeLock, WbNode } from '@wirebound/schema'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { useEditCommit } from '../edit/use-edit-commit'
@@ -47,6 +45,7 @@ import { patternInsert } from '../edit/pattern-insert'
 import { presetApply, presetFailureNotice } from '../edit/preset-apply'
 import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, structureAbilities, type StructureAbilities } from '../edit/structure-actions'
+import type { StructureDrop } from '../edit/structure-drop'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { PatternPicker } from './pattern-picker'
 import { PresetPicker } from './preset-picker'
@@ -54,43 +53,13 @@ import { TypePicker } from './type-picker'
 import { structureStatus } from './toolbar-status'
 
 /**
- * 버튼이 비활성일 때 붙는 설명.
+ * 줄 행동(`+` · `…`) · 끌어 놓기와 키보드 단축키가 **공유하는** 조작 묶음.
  *
- * **문안을 지어내지 않고 조건을 그대로 옮긴다.** 상태별로 다른 문장("루트라서" /
- * "고르지 않아서")을 만들지 않는 것은 그 갈래가 곧 판정의 두 번째 벌이 되기 때문이다 —
- * 판정은 `structureAbilities` 하나가 하고, 여기 있는 것은 "그 버튼이 활성이려면
- * 무엇이 필요한가"뿐이다.
- *
- * **`title`의 한계는 잰 것이다.** 비활성 버튼은 **탭 순서에서 빠지므로** 키보드
- * 사용자는 이 설명에 닿을 길이 없고(포커스가 안 가면 `title`도 `aria-describedby`도
- * 읽히지 않는다), 마우스는 1초 이상 머물러야 하며 터치에는 아예 뜨지 않는다.
- *
- * **그래서 이 표와 상태줄을 함께 둔다**(`./toolbar-status.ts`). 둘은 겹치는 것이
- * 아니라 결이 다르다 — 상태줄은 *"고른 것이 무엇이라서 그런가"*를 **대표 이유 하나**로
- * 말하고, 이 표는 *"그 버튼 하나가 활성이려면 무엇이 필요한가"*를 버튼마다 말한다.
- * 상태줄이 말하지 않은 나머지가 갈 곳은 여기뿐이다.
- */
-const WHY_DISABLED: Record<keyof StructureAbilities, string> = {
-  // **조건 둘을 다 말한다.** `acceptsChildren`은 카탈로그의 `many` 여부만이 아니라
-  // 문서의 `children`이 배열인지도 본다 — 앞엣것만 적으면 `Card`인데 비활성인 자리에서
-  // 사용자가 이유를 알 수 없다.
-  addInside: '자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다',
-  addAfter: '루트가 아닌 노드를 고르세요',
-  remove: '루트가 아닌 노드를 고르세요',
-  moveUp: '앞에 형제가 있는 노드를 고르세요',
-  moveDown: '뒤에 형제가 있는 노드를 고르세요',
-  indent: '앞 형제가 자식을 담을 수 있어야 합니다',
-  outdent: '부모가 루트가 아니어야 합니다',
-}
-
-/**
- * 툴바 버튼과 키보드 단축키가 **공유하는** 조작 묶음.
- *
- * **두 경로가 같은 함수를 부르는 것이 계약이다.** 각자 자기 구현을 가지면 한쪽만
+ * **입구들이 같은 함수를 부르는 것이 계약이다.** 각자 자기 구현을 가지면 한쪽만
  * 고쳐지는 자리가 생긴다 — `structure-keyboard.test.tsx`의 `단축키와 버튼이 같은 op을
  * 만든다`가 그것을 고정한다.
  *
- * 훅을 **한 번만** 부르는 것도 의도다. 트리가 불러 툴바에 내려 주므로 `useEditCommit`
+ * 훅을 **한 번만** 부르는 것도 의도다. 트리가 불러 줄 행동에 내려 주므로 `useEditCommit`
  * 인스턴스가 하나다 — 둘이어도 «in-flight는 항상 하나»는 지켜지지만(펌프 가드가 스토어에 있다) 같은 화면에서
  * 굳이 둘을 만들 이유가 없다.
  */
@@ -121,9 +90,9 @@ export interface StructureCommands {
    */
   presetLocked: boolean
   /**
-   * 도구모음 아래 상태줄에 설 한 문장. 할 말이 없으면 `''`다.
+   * 트리 아래 상태줄에 설 한 문장. 할 말이 없으면 `''`다.
    *
-   * **툴바가 아니라 여기서 만든다** — 문안이 `abilities` 말고도 **선택 자체의 성질**
+   * **줄 행동이 아니라 여기서 만든다** — 문안이 `abilities` 말고도 **선택 자체의 성질**
    * (잠금·루트)을 보는데, 그 둘은 스토어와 문서에서 나오고 그것을 이미 든 자리가 여기다.
    * 문안 자체는 `./toolbar-status.ts`가 갖는다(순수 함수 — 상태마다 무엇이 나오는지가
    * 화면을 지나지 않고 재진다).
@@ -157,6 +126,12 @@ export interface StructureCommands {
    */
   applyPreset: (nodes: WbNode[]) => void
   cancelAdd: () => void
+  /**
+   * **끌어 놓은 자리로 옮긴다**(`edit/structure-drop.ts`의 `structureDropTarget`이 준 자리). 선택이 아니라 끈 노드에 대해 돈다 —
+   * 끌기는 줄을 고르지 않는다(`drag/use-pointer-drag.ts` «끈 뒤의 클릭을 삼킨다»). 편집은 `moveNodeOps` 하나 — 위로 · 들여쓰기가
+   * 내는 것과 같은 종류다(spec 「드래그로 옮기기」 — 드래그만의 새 편집 종류를 만들지 않는다).
+   */
+  dropTo: (nodeId: string, target: StructureDrop) => void
 }
 
 /**
@@ -196,7 +171,7 @@ export type OpenPicker = 'inside' | 'after' | 'pattern' | 'preset'
  * 조건이 풀리면 **어느 고르개가 열려 있었는지**가 그대로 돌아온다(`adding`을 비우지
  * 않는 것이 그것이다). **그 안에서 고르던 것은 대부분 안 돌아온다** — 조건이 거짓인 동안
  * 컴포넌트가 DOM에서 빠지므로 그 `useState`가 함께 사라진다. **예외가 하나 있다:
- * 프리셋 이름칸의 글자는 `StructureToolbar`가 들어서 살아남는다**(아래 «두 축»).
+ * 프리셋 이름칸의 글자는 `StructureTree`가 들어서 살아남는다**(아래 «두 축»).
  *
  * **«잠깐 잠긴 사이에 사용자가 고르던 것을 잃지 않는다»고 적지 않는다 — 거짓이다.** 셋을 열어
  * 놓고 잠금을 오갔다 오게 해 재면(`test/lock/toolbar-abilities.test.tsx`가 이 표를 케이스로 든다):
@@ -207,14 +182,13 @@ export type OpenPicker = 'inside' | 'after' | 'pattern' | 'preset'
  * | 프리셋 | 이름칸에 `회원 목록 기본`을 쳤다 · `builtin:detail`을 골랐다 | **이름칸은 그대로 있다** · 고른 것은 **`builtin:search-list`**(첫 항목) |
  * | 패턴 | — | 잰 테마의 패턴이 하나뿐이라 갈리는 값이 안 나온다 |
  *
- * **이름칸을 툴바가 들지 않으면 표의 가운뎃줄이 *"이름칸이 빈다"*가 된다.** 사용자가 «친» 글자가
+ * **이름칸을 트리가 들지 않으면 표의 가운뎃줄이 *"이름칸이 빈다"*가 된다.** 사용자가 «친» 글자가
  * 사라지는 것이 셋 중 가장 나쁜 손실이다.
  *
  * # 두 축을 가른다 — **친 글자는 살리고, 고른 것은 되돌아간다**
  *
- * 1. **이름칸은 살린다.** 그 문자열 하나만 `StructureToolbar`가 들고 `PresetPicker`에
- *    내려 준다(고르개가 빠져 있는 동안에도 툴바는 그대로 마운트돼 있다 — 상태줄과 버튼
- *    아홉이 거기다).
+ * 1. **이름칸은 살린다.** 그 문자열 하나만 `StructureTree`가 들고 `PresetPicker`에
+ *    내려 준다(고르개가 빠져 있는 동안에도 트리는 그대로 마운트돼 있다).
  *
  *    **근거: 친 글자는 사용자 자신의 것이고 문서와 무관해 낡을 수가 없다.** 아래 «쓰지
  *    않는 근거»가 말하는 «낡는다»가 이 축에는 아예 성립하지 않는다. 그리고 **비용이 없다** —
@@ -607,6 +581,10 @@ export function useStructureCommands(props: {
     remove: removeSelected,
     moveUp: () => moveSelected(-1),
     moveDown: () => moveSelected(1),
+    dropTo: (nodeId, target) => {
+      if (document === null) return
+      commitOps(moveNodeOps(document, nodeId, target.parentId, target.index))
+    },
     indent: indentSelected,
     outdent: outdentSelected,
     openAdd: setAdding,
@@ -636,12 +614,16 @@ function brokenPattern(pattern: ThemePattern, key: string): string {
 const NO_SPOT_NOTICE = '고른 자리에는 패턴을 꽂을 수 없습니다. 다른 노드를 고르세요.'
 
 /**
- * 툴바. **판정도 조작도 갖지 않는다** — `useStructureCommands`가 준 것을 그릴 뿐이다.
+ * **고르개 자리** — 지금 그려도 되는 고르개(`visiblePicker`) 하나를 그린다. 트리가 고른 줄 바로 아래에 이것을 세운다
+ * (spec 「툴바 대신 노드별 `+` · `…`」 — 고르개가 그 줄 곁에 뜬다). 판정도 조작도 갖지 않는다.
+ *
+ * **닫혀 있을 때는 DOM에 없다** — 남겨 두면 Tab 순서에 정지점이 그대로 남는다. 프리셋 이름칸의 글자는 이 부품이 아니라 부르는 쪽
+ * (`StructureTree`)이 든다 — 이것은 잠금이 오가는 동안 DOM 에서 빠진다(`visiblePicker` 머리말 «두 축»).
  *
  * **`projectId`를 받는 것은 프리셋 고르개 때문이다.** 프리셋은 프로젝트에 살고(설계서 「페이지 프리셋」), 그 조회는
  * 고르개가 열렸을 때만 일어난다 — `PresetPicker`가 닫혀 있을 때 DOM에 없기 때문이다.
  */
-export function StructureToolbar(props: {
+export function StructurePicker(props: {
   commands: StructureCommands
   projectId: string
   /** 코멘트 수를 세는 대상. 프리셋 고르개가 쓴다. */
@@ -649,222 +631,31 @@ export function StructureToolbar(props: {
   /**
    * 지금 페이지의 root `children`. *"현재 페이지를 프리셋으로 저장"*이 담는 것이고,
    * **문서 봉투가 아니다**. 문서를 못 읽었으면 `null`이다.
-   *
-   * **툴바가 문서를 다시 읽지 않고 받는다** — 트리가 이미 스토어에서 읽어 그리고 있고,
-   * 여기서 또 읽으면 같은 값을 두 번 구독한다.
    */
   currentNodes: readonly WbNode[] | null
-}): ReactElement {
+  presetName: string
+  onPresetNameChange: (name: string) => void
+}): ReactElement | null {
   const { commands } = props
-  const { abilities } = commands
   /** 지금 그려도 되는 고르개. 열려 있어도 그 조작이 막혔으면 `null`이다. */
   const picker = visiblePicker(commands)
-  /**
-   * 프리셋 이름칸에 친 글자. **고르개가 아니라 여기서 든다** — 고르개는 잠금이 걸리는
-   * 동안 DOM에서 빠지지만 이 컴포넌트는 그대로 있다(상태줄과 버튼 아홉이 여기다).
-   * 왜 이 하나만 가르는지는 `visiblePicker`의 머리말이 갖는다.
-   */
-  const [presetName, setPresetName] = useState('')
-  /**
-   * 상태줄의 id. **`aria-describedby`가 그것을 가리킨다** — `useId`인 것은 이 툴바가 한
-   * 화면에 둘 이상 그려져도 id가 겹치지 않게 하기 위해서다(React가 렌더 트리마다 다른
-   * 값을 준다).
-   */
-  const statusId = useId()
-  /**
-   * **할 말이 없으면 가리키지 않는다.** 빈 요소를 가리키면 설명이 비어 있는 것이 아니라
-   * *"설명이 있다"*는 관계만 남고, 그것을 읽는 도구마다 다르게 다룬다.
-   */
-  const describedBy = commands.status === '' ? undefined : statusId
-  /**
-   * **할 말이 있으면 그 줄 자체가 탭 정지점이다.**
-   *
-   * 위 `describedBy`만으로는 **활성 버튼이 있을 때만** 키보드에 닿는다. 그런데 이 툴바에서
-   * 판정 버튼 일곱이 **전부** 꺼지는 자리가 있고(선택이 없다 · 고른 노드가 문서에 없다),
-   * 하필 그때가 할 말이 가장 많은 자리다 — 남는 정지점은 판정 밖의 `패턴 넣기`·`프리셋`
-   * 둘뿐인데 **그 둘에는 이 설명을 걸지 않는다**: 선택이 없어도 되는 조작이라
-   * *"트리에서 노드를 고르면 편집할 수 있습니다"*를 그 버튼의 설명으로 붙이면 **없는
-   * 전제조건을 만든다.**
-   *
-   * 그래서 줄 자체를 탭으로 받는다. **어느 버튼이 켜져 있는지를 보지 않는 규칙**이라 상태에
-   * 안 매이고 버튼이 늘거나 줄어도 낡지 않으며, 포커스가 닿으면 그 요소의 글이 곧 읽히므로
-   * `aria-describedby` 해석에도 기대지 않는다.
-   *
-   * **빈 줄은 정지점이 아니다** — 아무것도 읽히지 않는 정지점이 하나 늘 뿐이다. 빈 요소를
-   * 가리키지 않는 것과 같은 판단이라 조건도 같은 것 하나를 쓴다.
-   *
-   * 케이스는 `test/panels/toolbar-status-reach.test.tsx`가 열두 상태로 갖는다.
-   */
-  const statusTabIndex = commands.status === '' ? undefined : 0
-
+  if (picker === null) return null
   return (
-    <div className="wb-shell-structure-toolbar" role="group" aria-label="구조 편집">
-      <ToolButton
-        label="안에 추가"
-        ability="addInside"
-        abilities={abilities}
-        describedBy={describedBy}
-        onClick={() => commands.openAdd('inside')}
-      />
-      <ToolButton
-        label="아래 추가"
-        ability="addAfter"
-        abilities={abilities}
-        describedBy={describedBy}
-        onClick={() => commands.openAdd('after')}
-      />
-      <ToolButton
-        label="삭제"
-        ability="remove"
-        abilities={abilities}
-        describedBy={describedBy}
-        onClick={commands.remove}
-      />
-      <ToolButton
-        label="위로"
-        ability="moveUp"
-        abilities={abilities}
-        describedBy={describedBy}
-        onClick={commands.moveUp}
-      />
-      <ToolButton
-        label="아래로"
-        ability="moveDown"
-        abilities={abilities}
-        describedBy={describedBy}
-        onClick={commands.moveDown}
-      />
-      <ToolButton
-        label="들여쓰기"
-        ability="indent"
-        abilities={abilities}
-        describedBy={describedBy}
-        onClick={commands.indent}
-      />
-      <ToolButton
-        label="내어쓰기"
-        ability="outdent"
-        abilities={abilities}
-        describedBy={describedBy}
-        onClick={commands.outdent}
-      />
-      {/* **패턴은 `ToolButton`이 아니다.** 그 버튼은 `StructureAbilities`의 키 하나에
-          묶여 있는데(비활성 여부와 이유가 같은 곳에서 나온다), 패턴 넣기는 **선택이
-          없어도 할 수 있다**(선택이 없으면 root의 자식 끝). 그래서 걸 `ability`가
-          없다. 패턴이 0개인 테마에서도 활성이다 — *"없다"*를 보여 주는 것이
-          회색 버튼보다 낫다.
-
-          **그래도 잠금은 지난다.** *"판정이 없다"*가 *"아무것도 안 본다"*는 아니다 —
-          잠금을 안 보면 이 버튼이 잠긴 자리에 423을 낸다
-          (`commands.patternLocked`의 주석에 실측이 있다). */}
-      <button
-        type="button"
-        className="wb-shell-structure-tool"
-        disabled={commands.patternLocked}
-        onClick={() => commands.openAdd('pattern')}
-      >
-        패턴 넣기
-      </button>
-      {/* **프리셋도 `ToolButton`이 아니다 — 패턴과 같은 이유다.** 선택이 없어도 할 수
-          있고(페이지 통째라 자리를 고르지 않는다) 걸 `ability`가 없다. 그 성질이 단축키
-          쪽에도 그대로 걸린다(`structure-tree.tsx`의 `SHORTCUTS`).
-
-          **막히는 조건은 패턴과 다르다** — 이쪽은 페이지 통째라 잠금이 하나라도 있으면
-          부딪친다(`commands.presetLocked`). */}
-      <button
-        type="button"
-        className="wb-shell-structure-tool"
-        disabled={commands.presetLocked}
-        onClick={() => commands.openAdd('preset')}
-      >
-        프리셋
-      </button>
-      {/* **상태줄.** 버튼 **뒤**에 있는 것이 의도다 — 훑어 읽는 순서가 화면 순서와 같아야
-          하고(`role="group"` 안이라 보조 기술도 이 순서로 지난다), 눈으로는 이 줄이 방금
-          본 회색 버튼들의 이유로 읽힌다.
-
-          **`role="alert"`도 `aria-live`도 아니다.** 이 셸의 알림 자리는 `EditAlert` 하나이고
-          (`shell/edit-alert.tsx`), 실패가 아닌 것에 그 채널을 쓰면 그 하나뿐인 규칙이 흩어진다.
-          `aria-live`를 걸지 않은 것은 더 센 이유다 — **선택을 옮길 때마다 읽히면 트리 탐색이
-          불가능해진다.** 대신 위 버튼들이 `aria-describedby`로 이 줄을 가리킨다: 그러면
-          **포커스가 그 버튼에 닿을 때 한 번** 읽히고, 그 시점은 사용자가 그 조작을 하려는
-          바로 그때다.
-
-          **그리고 그 줄에 탭이 선다** — 판정 버튼 일곱이 전부 꺼지면 위의 `describedby`를
-          든 정지점이 하나도 없기 때문이다(`statusTabIndex`의 주석이 그 사연을 갖는다).
-
-          **글자가 없어도 요소는 남는다** — 자리를 지키는 것은 CSS의 `min-height`이고
-          (`shell.css`), 그러지 않으면 상태가 바뀔 때마다 툴바 높이가 달라져 트리가 튄다. */}
-      <p className="wb-shell-structure-status" id={statusId} tabIndex={statusTabIndex}>
-        {commands.status}
-      </p>
-      {/* 목록은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 노드에 붙는
-          작업인지가 보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이
-          그대로 남는다.
-
-          **`adding`이 아니라 `visiblePicker`를 본다** — 연 뒤에 조건이 바뀌는 창을 그
-          함수가 갖는다(왜 셋이 한 자리인지도 거기 있다). */}
-      {(picker === 'inside' || picker === 'after') && (
-        <TypePicker onPick={commands.pick} onCancel={commands.cancelAdd} />
-      )}
-      {picker === 'pattern' && (
-        <PatternPicker
-          onPick={commands.pickPattern}
-          onCancel={commands.cancelAdd}
-        />
-      )}
+    // 고르개는 자기 줄을 요구한다(`flex-basis: 100%` — `test/shell-css-picker.test.ts`) — 감싸는 flex 상자가 이것이다.
+    <div className="wb-shell-tree-panel">
+      {(picker === 'inside' || picker === 'after') && <TypePicker onPick={commands.pick} onCancel={commands.cancelAdd} />}
+      {picker === 'pattern' && <PatternPicker onPick={commands.pickPattern} onCancel={commands.cancelAdd} />}
       {picker === 'preset' && (
         <PresetPicker
           projectId={props.projectId}
           pageId={props.pageId}
           currentNodes={props.currentNodes}
-          name={presetName}
-          onNameChange={setPresetName}
+          name={props.presetName}
+          onNameChange={props.onPresetNameChange}
           onApply={commands.applyPreset}
           onCancel={commands.cancelAdd}
         />
       )}
     </div>
-  )
-}
-
-/**
- * 버튼 하나. **비활성 여부와 그 이유가 같은 하나(`ability`)에서 나온다** — 둘을 따로
- * 넘기면 어긋나는 자리가 생긴다(선택 표시가 `aria-current` 하나에서 갈라져 나오는 것과
- * 같은 방식).
- */
-function ToolButton(props: {
-  label: string
-  ability: keyof StructureAbilities
-  abilities: StructureAbilities
-  /**
-   * 상태줄의 id. **활성·비활성 가릴 것 없이 건다** — 비활성 버튼에 걸린 것은 포커스가
-   * 가지 않아 조용하고(탭 순서에서 빠진다), 마우스가 닿는 쪽은 `title`이다.
-   *
-   * **활성 버튼에 걸린 것이 "유일한 길"은 아니다.**
-   * 판정 일곱이 **전부** 꺼지는 자리가 있고(선택 없음 · 고른 노드가 문서에 없음) 그때는 이
-   * 길이 아예 끊긴다(실측: 열두 상태 중 다섯 —
-   * `test/panels/toolbar-status-reach.test.tsx`). 그 바닥은 상태줄 자신의 `tabIndex`가
-   * 받는다. 이쪽이 하는 일은 *"조작을 하려는 그 순간"*에 이유를 붙이는 것이다.
-   *
-   * 할 말이 없으면 `undefined`다 — 부르는 쪽이 정한다.
-   */
-  describedBy?: string
-  onClick: () => void
-}): ReactElement {
-  const enabled = props.abilities[props.ability]
-
-  return (
-    <button
-      type="button"
-      className="wb-shell-structure-tool"
-      disabled={!enabled}
-      // 활성일 때 설명을 남기지 않는다 — 버튼 이름과 겹쳐 읽힌다.
-      title={enabled ? '' : WHY_DISABLED[props.ability]}
-      aria-describedby={props.describedBy}
-      onClick={props.onClick}
-    >
-      {props.label}
-    </button>
   )
 }

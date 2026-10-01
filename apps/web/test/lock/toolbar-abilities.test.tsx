@@ -10,7 +10,7 @@
  * 그때 `structureAbilities`가 잠금을 **아예 보지 않으면** 도구가 살아 있다.
  *
  * **그 상태에서 켜진 버튼을 실제로 눌러 잰 값이 `edit/structure-actions.ts`의 머리말 표다.**
- * 요지: 서버의 2차 방어(`findLockConflict`)는 **편집이 건드리는 자리만** 보므로 형제를
+ * 요지: 서버의 2차 방어(`lockConflictOfOps`)는 **편집이 건드리는 자리만** 보므로 형제를
  * 더하는 편집은 통과시키고, 잠긴 서브트리를 건드리는 편집은 423으로 거절한다. 거절되면
  * 화면은 낙관적 적용을 붙였다가 재조회로 되돌리고 큐를 통째로 버린다.
  *
@@ -43,7 +43,7 @@
  *
  * # 서버 대역이 진짜 판정을 든다
  *
- * `patchOps`가 `findLockConflict`를 **직접** 부른다 — `apps/api`의 `lock/check.ts`가 부르는
+ * `patchOps`가 `lockConflictOfOps`를 **직접** 부른다 — `apps/api`의 `lock/check.ts`가 부르는
  * 그 함수다. 손으로 적은 200/423으로 대신하면 *"화면이 막아서 안 나갔다"*와 *"서버가
  * 받아서 통과했다"*가 같은 값으로 보인다. 화면의 막기를 빼면 이 대역이 **실제로** 423을
  * 내고 알림이 뜬다.
@@ -55,12 +55,11 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import {
   BUILTIN_PRESETS,
-  findLockConflict,
-  lockPointers,
+  lockConflictOfOps,
   type PageDocument,
   type PatchOp,
 } from '@wirebound/schema'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
 import { ADMIN_FIXTURE } from '../admin-theme'
@@ -82,6 +81,10 @@ import {
   pageDetail,
   pageDoc,
 } from '../editor-harness'
+import { isOff, treeTool } from '../panels/tree-row'
+import { installPointerEvents } from '../pointer-events'
+
+beforeAll(installPointerEvents)
 
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
 
@@ -197,10 +200,10 @@ async function board(): Promise<Board> {
   const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
     calls.push({ ops: body.ops })
     // **서버의 2차 방어를 그대로 돈다**(`apps/api/src/lock/check.ts`와 같은 인자).
-    const conflict = findLockConflict({
-      root: held.root,
+    const conflict = lockConflictOfOps({
+      document: held,
       locks: live.filter((entry) => entry.pageId === PAGE_ID),
-      pointers: lockPointers(body.ops),
+      ops: body.ops,
       viewerUserId: ME,
     })
     if (conflict !== null) {
@@ -284,19 +287,24 @@ function structureRegion(): HTMLElement {
 }
 
 function toolbar(): HTMLElement {
-  return within(structureRegion()).getByRole('group', { name: '구조 편집' })
+  // 옛 «구조 편집» 툴바 자리 — 줄 행동 · 고르개 · 상태줄이 트리 영역 안에 선다(`../panels/tree-row.ts`).
+  return structureRegion()
 }
 
 /** `structureAbilities`를 지나는 버튼 일곱. 늘어나면 아래 케이스가 새 버튼도 함께 본다. */
 const TOOLS = ['안에 추가', '아래 추가', '삭제', '위로', '아래로', '들여쓰기', '내어쓰기']
 
-function toolButton(name: string): HTMLButtonElement {
-  return within(toolbar()).getByRole<HTMLButtonElement>('button', { name })
+function toolButton(name: string): HTMLElement {
+  return treeTool(toolbar(), name)
 }
 
-/** 지금 켜져 있는 도구들. **판정 밖의 둘은 여기 없다** — 아래 `gates`가 그것을 본다. */
+/**
+ * 지금 켜져 있는 도구들. **판정 밖의 둘은 여기 없다** — 아래 `gates`가 그것을 본다. 고른 줄이 없으면 줄 행동이 없어 켜진 것도 없다
+ * (옛 툴바의 «일곱이 다 꺼졌다»와 같은 값 — 판정이 `NOTHING`이다).
+ */
 function live(): string[] {
-  return TOOLS.filter((name) => !toolButton(name).disabled)
+  if (structureRegion().querySelector('.wb-shell-tree-row-picked') === null) return []
+  return TOOLS.filter((name) => !isOff(toolButton(name)))
 }
 
 /**
@@ -305,8 +313,8 @@ function live(): string[] {
  */
 function gates(): { pattern: boolean; preset: boolean } {
   return {
-    pattern: !toolButton('패턴 넣기').disabled,
-    preset: !toolButton('프리셋').disabled,
+    pattern: !isOff(toolButton('패턴 넣기')),
+    preset: !isOff(toolButton('프리셋')),
   }
 }
 
@@ -669,7 +677,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
    *
    * *"잠깐 잠긴 사이에 사용자가 고르던 것을 잃지 않는다"*는 **그냥 두면 둘 다에 대해
    * 거짓이다** — 조건이 거짓인 동안 컴포넌트가 DOM에서 빠지므로 그 `useState`가 함께
-   * 사라진다. 아랫줄이 살아남는 것은 그 문자열 하나를 `StructureToolbar`가 들기 때문이다.
+   * 사라진다. 아랫줄이 살아남는 것은 그 문자열 하나를 `StructureTree`가 들기 때문이다.
    *
    * **근거는 `panels/structure-toolbar.tsx`의 `visiblePicker` 머리말이 갖는다** —
    * 두 축을 왜 갈랐는지가 거기 있다. 판단이 다시 바뀌면 이 두 케이스와 그 머리말을
@@ -706,7 +714,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
   /**
    * **친 글자는 살아남는다 — 위 케이스와 반대다.** 타입·프리셋 목록은 눈앞에 다시 있지만
    * 이름칸의 글자는 사용자가 **친** 것이라 다시 쳐 줄 사람이 없다. 그래서 그 문자열
-   * 하나만 `StructureToolbar`가 들고 `PresetPicker`에 내려 준다.
+   * 하나만 `StructureTree`가 들고 `PresetPicker`에 내려 준다.
    *
    * **함께 잰다: «살렸다»가 «목록을 DOM에 남겼다»가 아니라는 것.** 잠긴 동안 고르개는
    * 그대로 사라져야 하고(회색 버튼을 우회하는 길 — 위 «패턴 고르개» 케이스의 머리말), 서버로는
@@ -751,6 +759,54 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
   })
 
   /**
+   * **남이 잡은 줄은 줄 행동도 끌기도 없다**(`panels/structure-tree.tsx`의 `StructureNode` — `open`). 고르기가 막힌 줄의 `…`를 열면 그
+   * 줄을 못 골라 목록이 앞 선택의 명령으로 선다. 끌기는 그 노드를 뽑는 편집이 잠금에 부딪치는 판이다. 대조로 잠기지 않은 형제는 둘 다 있다.
+   */
+  it('남이 잡은 줄은 `+` · `…`가 없고 눌러 끌어도 들리지 않는다 — 잠기지 않은 형제는 있다', async () => {
+    const view = await board()
+    view.lock([foreign('n-box')])
+
+    const rowBox = (type: string): HTMLElement =>
+      within(structureRegion()).getByRole('button', { name: type }).closest<HTMLElement>('[data-tree-row]')!
+    expect(rowBox('Card').querySelector('.wb-shell-tree-row-actions')).toBeNull()
+    expect(rowBox('Text').querySelector('.wb-shell-tree-row-actions')).not.toBeNull()
+
+    const press = (type: string): boolean => {
+      const handle = rowBox(type).querySelector<HTMLElement>('.wb-shell-structure-node')!
+      fireEvent.pointerDown(handle, { button: 0, clientX: 10, clientY: 10, pointerId: 1 })
+      fireEvent.pointerMove(window, { clientX: 10, clientY: 40, pointerId: 1 })
+      const lifted = rowBox(type).classList.contains('wb-shell-tree-row-dragging')
+      fireEvent.pointerUp(window, { clientX: 10, clientY: 40, pointerId: 1 })
+      return lifted
+    }
+    expect(press('Card')).toBe(false)
+    expect(press('Text')).toBe(true)
+    expect(view.calls).toEqual([])
+  })
+
+  /**
+   * **고른 뒤 잠금이 온 줄** — 줄 행동은 남지만(그 줄의 판정이 전부 끈다 — `StructureNode`의 `open`) 끌기는 없다. 끌기를 막는 것이
+   * 고르기의 판정(`blockedOf`)만이면 이 판에서 들린다 — 뽑는 편집이 잠금에 부딪치는데도.
+   */
+  it('고른 뒤 그 자식이 잠기면 줄 행동은 남고(다 꺼짐) 끌기는 없다', async () => {
+    const view = await board()
+    select('Card')
+    view.lock([foreign('n-1')])
+
+    const card = within(structureRegion()).getByRole('button', { name: 'Card' }).closest<HTMLElement>('[data-tree-row]')!
+    expect(card.classList.contains('wb-shell-tree-row-picked')).toBe(true)
+    expect(card.querySelector('.wb-shell-tree-row-actions')).not.toBeNull()
+    expect(live()).toEqual([])
+
+    const handle = card.querySelector<HTMLElement>('.wb-shell-structure-node')!
+    fireEvent.pointerDown(handle, { button: 0, clientX: 10, clientY: 10, pointerId: 1 })
+    fireEvent.pointerMove(window, { clientX: 10, clientY: 40, pointerId: 1 })
+    const lifted = card.classList.contains('wb-shell-tree-row-dragging')
+    fireEvent.pointerUp(window, { clientX: 10, clientY: 40, pointerId: 1 })
+    expect(lifted).toBe(false)
+  })
+
+  /**
    * **막지 않으면 사용자가 보는 것이 이것이다.** `n-box`가 잠긴 채 `삭제`를 누르면 노드가
    * 화면에서 사라졌다가 재조회로 되돌아오고, 큐에 있던 편집이 함께 버려진다. 그 버튼이
    * 회색이면 클릭이 핸들러에 닿지 않는다.
@@ -760,7 +816,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
     select('Card')
     view.lock([foreign('n-box')])
 
-    fireEvent.click(within(toolbar()).getByRole('button', { name: '삭제' }))
+    fireEvent.click(treeTool(toolbar(), '삭제'))
     await settle()
 
     expect(view.calls).toEqual([])
@@ -788,8 +844,11 @@ describe('막다른 길이 아니다 — 구조 편집만 얼고 셸은 산다',
 
     expect(live()).toEqual([])
     expect(gates()).toEqual({ pattern: false, preset: false })
-    // 트리 줄도 전부 꺼진다 — 고를 수 있는 노드가 하나도 없다.
-    const rows = within(structureRegion()).getAllByRole<HTMLButtonElement>('button')
+    // 트리 줄도 전부 꺼진다 — 고를 수 있는 노드가 하나도 없다. 줄 행동 · 뿌리 `+`의 단추(행동 메뉴를 여는 것)는 줄이 아니다 —
+    // 그 안의 항목이 꺼진 것은 위 `live` · `gates`가 잰다.
+    const rows = within(structureRegion())
+      .getAllByRole<HTMLButtonElement>('button')
+      .filter((button) => button.getAttribute('aria-haspopup') !== 'menu')
     expect(rows.filter((button) => !button.disabled)).toEqual([])
     expect(statusLine()).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })

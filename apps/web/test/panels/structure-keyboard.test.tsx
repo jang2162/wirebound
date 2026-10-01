@@ -1,7 +1,7 @@
 /**
  * 구조 트리의 키보드 단축키.
  *
- * **단축키는 툴바 버튼과 같은 함수를 부른다** — 두 경로가 갈리면 한쪽만 고쳐지는 자리가
+ * **단축키는 줄 행동의 항목과 같은 함수를 부른다** — 두 경로가 갈리면 한쪽만 고쳐지는 자리가
  * 생긴다. `단축키와 버튼이 같은 op을 만든다`가 그것을 고정한다.
  *
  * **가장 무거운 케이스는 `속성 패널에서 타이핑 중에는 …`이다.** 전역 리스너의 함정이고,
@@ -14,6 +14,7 @@ import type { ApiClient, } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
 import { HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
+import { isOff, treeTool } from './tree-row'
 
 /**
  * ```
@@ -90,11 +91,8 @@ function select(type: string): void {
   fireEvent.click(row(type))
 }
 
-function toolButton(name: string): HTMLButtonElement {
-  return within(within(structureRegion()).getByRole('group', { name: '구조 편집' })).getByRole(
-    'button',
-    { name },
-  )
+function toolButton(name: string): HTMLElement {
+  return treeTool(structureRegion(), name)
 }
 
 /** 속성 패널의 컨트롤. Delete가 여기서는 노드를 지우면 안 된다. */
@@ -266,7 +264,7 @@ describe('구조 트리의 키보드 단축키', () => {
     const srv = server()
     await openPage(doc(), { apiOverrides: srv.api })
     select('Text')
-    expect(toolButton('위로').disabled).toBe(true)
+    expect(isOff(toolButton('위로'))).toBe(true)
 
     fireEvent.keyDown(row('Text'), { key: 'ArrowUp', altKey: true })
 
@@ -291,7 +289,7 @@ describe('구조 트리의 키보드 단축키', () => {
     // 앞 형제가 `Card`가 아니라… 확인: `n-c`의 앞은 `n-box`(Card)이므로 가능하다.
     // 앞 형제가 `none`인 자리는 `n-box`다(앞이 `n-a`, Text).
     select('Card')
-    expect(toolButton('들여쓰기').disabled).toBe(true)
+    expect(isOff(toolButton('들여쓰기'))).toBe(true)
 
     fireEvent.keyDown(row('Card'), { key: 'ArrowRight', altKey: true, shiftKey: true })
 

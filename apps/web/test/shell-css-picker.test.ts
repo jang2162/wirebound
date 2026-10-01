@@ -95,12 +95,9 @@ import { classDeclarations } from './shell-css-guard'
  * 이름에 `picker`가 든 것으로 넓히면 flex 상자가 다섯이 된다. 그중 셋은 아래
  * `ONE_LINE`이 받는다.
  *
- * **`status`가 함께 든 것은 같은 형태가 하나 더 있기 때문이다** — 툴바 아래 상태줄
- * (`panels/toolbar-status.ts`)이 `flex-basis: 100%`로 자기 줄을 받는다. 고르개와 **같은 두
- * 상자에 담기므로**(구조·메뉴 툴바) 이 파일의 1·2·4번이 그대로 그 짝을 본다 — 그쪽을 위해
- * 파서를 하나 더 두지 않는다. 상태줄 자신은 flex
- * 상자가 아니라 3·3-b번은 지나간다. **빈 줄이 자리를 지키는 쪽**(`min-height`)은 이 파일이
- * 아는 축이 아니라 `./shell-css-status.test.ts`가 갖는다.
+ * **`status`가 함께 든 것은 같은 형태가 설 수 있기 때문이다** — 트리 아래 상태줄(`panels/toolbar-status.ts`)은 지금 flex 상자
+ * 안에 서지 않아 `flex-basis`가 없지만, 어느 상자에 넣으며 자기 줄을 주면 고르개와 같은 짝이 생긴다 — 그때 이 파일의 1·2·4번이
+ * 그대로 그 짝을 본다. **빈 줄이 자리를 지키는 쪽**(`min-height`)은 이 파일이 아는 축이 아니라 `./shell-css-status.test.ts`가 갖는다.
  */
 const SCOPE = /picker|status/
 
@@ -111,10 +108,10 @@ const SCOPE = /picker|status/
  */
 const OWN_LINE: { child: string; container: string; where: string }[] = [
   {
-    // 고르개 자체. 툴바 안에서 줄을 통째로 차지한다 — 조작 버튼과 같은 줄에 두면 목록이 잘린다.
+    // 고르개 자체. 고른 줄 아래 상자 안에서 줄을 통째로 차지한다 — 다른 것과 같은 줄에 두면 목록이 잘린다.
     child: 'wb-shell-picker',
-    container: 'wb-shell-structure-toolbar',
-    where: 'panels/structure-toolbar.tsx — `TypePicker`·`PatternPicker`·`PresetPicker` 셋 다 툴바 `<div>` 안이다',
+    container: 'wb-shell-tree-panel',
+    where: 'panels/structure-toolbar.tsx의 `StructurePicker` — `TypePicker`·`PatternPicker`·`PresetPicker` 셋 다 그 `<div>` 안이다',
   },
   {
     // 고르개가 거는 말. **이 짝이 어긋나면 줄이 터진다**(머리말의 표).
@@ -124,9 +121,9 @@ const OWN_LINE: { child: string; container: string; where: string }[] = [
   },
   {
     // **같은 클래스인데 담기는 상자가 다른 자리.** 타입 고르개는 "고를 것이 없을 때"
-    // 상자 없이 `<p>` 하나만 반환하므로 그 `<p>`의 부모가 툴바다.
+    // 상자 없이 `<p>` 하나만 반환하므로 그 `<p>`의 부모가 고른 줄 아래 상자다.
     child: 'wb-shell-picker-notice',
-    container: 'wb-shell-structure-toolbar',
+    container: 'wb-shell-tree-panel',
     where: 'panels/type-picker.tsx — `groups.length === 0`이면 `<p>` 하나만 반환한다',
   },
   {
@@ -144,22 +141,10 @@ const OWN_LINE: { child: string; container: string; where: string }[] = [
   },
   {
     // 소속 메뉴 고르개. **지금 자식에 `flex-basis: 100%`가 없어 안 터진다** — 그래서
-    // 아래 2번이 무는 것은 이 상자가 **자기** 줄을 받는 쪽이다(툴바가 감싸야 한다).
+    // 아래 2번이 무는 것은 이 상자가 **자기** 줄을 받는 쪽이다(고른 줄 아래 상자가 감싸야 한다).
     child: 'wb-shell-menu-picker',
-    container: 'wb-shell-menu-toolbar',
-    where: 'panels/menu-toolbar.tsx — `MenuPicker`가 메뉴 툴바 `<div>` 안이다',
-  },
-  {
-    // 도구모음 아래 상태줄. 버튼들과 같은 줄에 서면 *"왜 회색인가"*가 버튼 사이에 끼어
-    // 읽히지 않는다 — 자기 줄을 받아야 한 문장으로 읽힌다.
-    child: 'wb-shell-structure-status',
-    container: 'wb-shell-structure-toolbar',
-    where: 'panels/structure-toolbar.tsx — `<p className="wb-shell-structure-status">`가 툴바 `<div>` 안이다',
-  },
-  {
-    child: 'wb-shell-menu-status',
-    container: 'wb-shell-menu-toolbar',
-    where: 'panels/menu-toolbar.tsx — `<p className="wb-shell-menu-status">`가 툴바 `<div>` 안이다',
+    container: 'wb-shell-tree-panel',
+    where: 'panels/menu-tree.tsx — `MenuPicker`가 고른 줄 아래 `RowPanel`의 `<div>` 안이다',
   },
 ]
 

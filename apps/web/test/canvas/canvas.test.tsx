@@ -40,6 +40,7 @@ import {
   type CommitObservation,
   canvasQuery,
 } from '../editor-harness'
+import { treeTool } from '../panels/tree-row'
 
 /**
  * 셸이 만든 `EditorStore`를 손에 쥐는 장치. **화면만 보는 단언으로는 "선택이 스토어에
@@ -362,7 +363,7 @@ describe('캔버스', () => {
       // 문서 순서: root 0 · t0 1 · t1 2 — 한 칸이 20px 이다.
       await waitFor(() => expect(selectionOutline()?.style.top).toBe('40px'))
 
-      fireEvent.click(within(screen.getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '위로' }))
+      fireEvent.click(treeTool(screen.getByRole('region', { name: '구조 트리' }), '위로'))
 
       await waitFor(() => expect(selectionOutline()?.style.top).toBe('20px'))
       expect(selectionOutline()?.getAttribute('data-wb-selected-id')).toBe('t1')

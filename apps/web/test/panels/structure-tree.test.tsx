@@ -75,9 +75,8 @@ function structureRegion(): HTMLElement {
 }
 
 /**
- * 노드 줄이 들어 있는 목록. **region이 아니라 이것으로 좁히는 것은 구조 툴바 때문이다** —
- * 조작 버튼이 트리와 같은 region 안에 산다. region 전체에서 버튼을 세면 그 버튼들이
- * 노드 줄로 섞인다.
+ * 노드 줄이 들어 있는 목록. **region이 아니라 이것으로 좁히는 것은 제목 줄의 뿌리 `+` 때문이다** —
+ * 그 단추가 트리와 같은 region 안에 산다. 목록 안의 줄 `+` · `…`는 `nodeRows`가 거른다.
  *
  * 문서가 없으면 목록 자체가 없다(`열린 페이지가 없습니다`). 그때는 `null`이고, 아래
  * 헬퍼들이 빈 결과를 낸다 — 던지면 "줄이 없다"를 재는 케이스가 그 자리에서 깨진다.
@@ -89,7 +88,12 @@ function structureList(): HTMLElement | null {
 /** 구조 트리의 노드 줄. 순서는 화면에 그려진 순서 그대로다. */
 function nodeRows(): HTMLElement[] {
   const list = structureList()
-  return list === null ? [] : within(list).queryAllByRole('button')
+  // 줄 단추만 — 줄의 `+` · `…`(행동 메뉴 단추)는 줄이 아니다.
+  return list === null
+    ? []
+    : within(list)
+        .queryAllByRole('button')
+        .filter((button) => button.getAttribute('aria-haspopup') !== 'menu')
 }
 
 /** 지금 구분 표시가 붙은 줄. `aria-current`가 표시의 단일 진실이다. */

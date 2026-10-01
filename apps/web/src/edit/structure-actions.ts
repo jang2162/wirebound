@@ -68,7 +68,7 @@ const NOTHING: StructureAbilities = {
  *
  * ## 왜 «전부»인가 — 서버는 그중 일부를 통과시킨다
  *
- * 진짜 `findLockConflict`를 서버 대역으로 놓고 잰 값이다. 문서는
+ * 서버의 편집 판정(`lockConflictOfOps` — 표의 편집은 전부 연산 하나다)을 서버 대역으로 놓고 잰 값이다. 문서는
  * `root > [a, box > [b1, b2], c]`이고 표의 «잠금»은 남의 것이다.
  *
  * | 고른 것 | 잠금 | 도구 | 나가는 포인터 | 서버 |
@@ -80,7 +80,7 @@ const NOTHING: StructureAbilities = {
  * | `box` | `box` | `안에 추가` | `/root/children/1/children/2` | 423 |
  * | `box` | `box` | `아래 추가` | `/root/children/2` | **통과** |
  *
- * 즉 **형제 자리를 건드리는 편집은 서버가 받는다** — `findLockConflict`는 편집이 실제로
+ * 즉 **형제 자리를 건드리는 편집은 서버가 받는다** — 서버의 판정은 편집이 실제로
  * 건드리는 자리만 보기 때문이다. 그런데도 전부 끄는 근거 둘:
  *
  * 1. **선택이 편집보다 엄격한 것은 대가로 받아들인 것이다**(`packages/schema/test/lock.test.ts`
@@ -215,7 +215,7 @@ function findVisit(document: PageDocument, nodeId: string): SafeVisit | null {
  * 다른 자리가 아니다. 그 자리가 `null`이면 `nodeType`이 던진다(실측 — 순회만 `walkSafely`로 두고
  * 여기서 `isNodeLike`를 빼면 `Cannot read properties of null (reading 'type')`이 여기서 난다).
  */
-function acceptsChildren(node: unknown): boolean {
+export function acceptsChildren(node: unknown): boolean {
   if (!isNodeLike(node)) return false
 
   const type = nodeType(node)

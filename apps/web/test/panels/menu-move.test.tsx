@@ -13,6 +13,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { MenuNode, PageDetail, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import { fakeApi, renderWithProviders } from '../helpers'
+import { isOff, queryRowAction, treeTool } from './tree-row'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 const PROJECT_NAME = '설계서'
@@ -111,10 +112,11 @@ function treeRegion(): HTMLElement {
   return screen.getByRole('region', { name: '메뉴·페이지 트리' })
 }
 function toolbar(): HTMLElement {
-  return within(treeRegion()).getByRole('group', { name: '메뉴 편집' })
+  // 옛 «메뉴 편집» 툴바 자리 — 줄 행동 · 줄 아래 입력이 트리 영역 안에 선다(`./tree-row.ts`).
+  return treeRegion()
 }
-function tool(name: string): HTMLButtonElement {
-  return within(toolbar()).getByRole('button', { name }) as HTMLButtonElement
+function tool(name: string): HTMLElement {
+  return treeTool(treeRegion(), name)
 }
 function menuButton(title: string): HTMLElement {
   return within(treeRegion()).getByRole('button', { name: title })
@@ -160,12 +162,12 @@ describe('위/아래 순서 이동', () => {
     await open()
 
     fireEvent.click(menuButton('권한'))
-    expect(tool('위로').disabled).toBe(true)
-    expect(tool('아래로').disabled).toBe(false)
+    expect(isOff(tool('위로'))).toBe(true)
+    expect(isOff(tool('아래로'))).toBe(false)
 
     fireEvent.click(menuButton('이력'))
-    expect(tool('위로').disabled).toBe(false)
-    expect(tool('아래로').disabled).toBe(true)
+    expect(isOff(tool('위로'))).toBe(false)
+    expect(isOff(tool('아래로'))).toBe(true)
   })
 
   it('선택은 그대로다', async () => {
@@ -242,7 +244,7 @@ describe('메뉴 들여쓰기·내어쓰기', () => {
 
     fireEvent.click(menuButton('권한'))
 
-    expect(tool('들여쓰기').disabled).toBe(true)
+    expect(isOff(tool('들여쓰기'))).toBe(true)
   })
 
   it('내어쓰기는 부모의 다음 형제가 된다', async () => {
@@ -265,7 +267,7 @@ describe('메뉴 들여쓰기·내어쓰기', () => {
 
     fireEvent.click(menuButton('주문관리'))
 
-    expect(tool('내어쓰기').disabled).toBe(true)
+    expect(isOff(tool('내어쓰기'))).toBe(true)
   })
 
   it('두 층 아래에서 내어쓰면 조부모의 자식이 된다', async () => {
@@ -303,8 +305,9 @@ describe('메뉴 들여쓰기·내어쓰기', () => {
     // 자식을 갖지 못한다.
     await open({}, '/projects/p-1/pages/pg-detail')
 
-    expect(tool('들여쓰기').disabled).toBe(true)
-    expect(tool('내어쓰기').disabled).toBe(true)
+    // 늘 못 하는 항목이라 페이지 줄의 `…`에서 뺐다(`panels/tree-row-actions.tsx` 머리말 «할 수 없는 항목은 끈다 — 늘 못 하는 항목은 뺀다»).
+    expect(queryRowAction(treeRegion(), '들여쓰기')).toBeNull()
+    expect(queryRowAction(treeRegion(), '내어쓰기')).toBeNull()
   })
 
   it('내어쓴 뒤 들여쓰면 제자리가 아니다', async () => {
@@ -391,7 +394,7 @@ describe('페이지의 소속 메뉴 고르기', () => {
   })
 
   it('닫혀 있을 때 목록이 DOM에 없다', async () => {
-    // 남기면 Tab 순서에 정지점이 그대로 남는다(`StructureToolbar`가 `TypePicker`에 쓴 것과
+    // 남기면 Tab 순서에 정지점이 그대로 남는다(`StructurePicker`가 `TypePicker`에 쓴 것과
     // 같은 근거). **`<select>`를 고른 근거도 이 수다** — 버튼 목록이면 정지점이 메뉴 수만큼
     // 늘고 그 수에 상한이 없다(`TypePicker`는 카탈로그가 정한 수로 고정이다).
     await open({}, '/projects/p-1/pages/pg-detail')
@@ -409,7 +412,8 @@ describe('페이지의 소속 메뉴 고르기', () => {
 
     fireEvent.click(menuButton('등급'))
 
-    expect(tool('옮기기').disabled).toBe(true)
+    // 메뉴에는 늘 못 하는 항목이라 `…`에서 뺐다(위 페이지의 들여쓰기와 같은 근거).
+    expect(queryRowAction(treeRegion(), '옮기기')).toBeNull()
   })
 
   it('메뉴가 하나뿐이면 비활성이다', async () => {
@@ -425,7 +429,7 @@ describe('페이지의 소속 메뉴 고르기', () => {
     ]
     await open({}, '/projects/p-1/pages/pg-list', single)
 
-    expect(tool('옮기기').disabled).toBe(true)
+    expect(isOff(tool('옮기기'))).toBe(true)
   })
 
   it('실패하면 이유가 남고 트리를 다시 받지 않는다', async () => {

@@ -53,14 +53,15 @@
  *
  * 서버는 `lock`을 거절하므로(`ws/lock.ts`의 머리말) 서버의 잠금 판정이 둘이다 — 편집(`lockConflictError`)과
  * 선택(`selectionVerdict`). **둘을 한 파일에 둔다:** 살아 있는 목록을 읽고(`liveIn`) 사람으로 좁히고(`locksAgainst`)
- * `findLockConflict`를 부르는 자리가 `apps/api`에 이 파일 하나라는 것을 `apps/web`의 `test/lock/one-verdict.test.ts`가 센다.
- * 넣는 포인터만 다르다 — 편집은 `lockPointers(ops)`, 선택은 `findNodePath(root, nodeId)` 하나(「소프트 잠금」).
+ * 판정 함수(`lockConflictOfOps` · `findLockConflict`)를 부르는 자리가 `apps/api`에 이 파일 하나라는 것을 `apps/web`의 `test/lock/one-verdict.test.ts`가 센다.
+ * 편집은 `lockConflictOfOps(ops)` — 연산마다 좌표를 맞춘다 — 이고, 선택은 `findLockConflict`에 `findNodePath(root, nodeId)` 하나다(「소프트 잠금」).
+ * 둘은 같은 겹침(한쪽이 다른 쪽의 조상)으로 잰다(`@wirebound/schema`의 `lock.ts`).
  */
 import {
   findLockConflict,
   findNodePath,
+  lockConflictOfOps,
   locksAgainst,
-  lockPointers,
   migrateDocument,
   type PatchOp,
   type WbNode,
@@ -107,20 +108,22 @@ export async function lockConflictError(app: FastifyInstance, trx: DbHandle, inp
   // 충돌로 덮으면 사용자가 **겪지 않은 실패**를 듣는다.
   if (page === null || page.headSeq !== input.baseSeq) return null
 
-  let root
+  let document
   try {
     // 파이프라인 2단계와 같은 기준으로 올린다 — 안 올리면 경로가 저장된 문서의 것이라
     // 클라이언트가 만든 `ops`의 경로와 어긋날 수 있다.
-    root = migrateDocument(page.schema).root
+    document = migrateDocument(page.schema)
   } catch {
     return null
   }
 
   // **목록은 문서를 읽은 뒤 다시 읽는다** — 행을 쥔 뒤라 그 사이 설 잠금은 없지만, 판정은 늘 지금 목록으로 한다. 판정 뒤는 동기로 `applyEdit`에 이어진다.
-  const conflict = findLockConflict({
-    root,
+  // **편집은 `lockConflictOfOps`로 묻는다** — 연산마다 그 연산이 선 문서의 좌표로 잠긴 자리를 따라간다(그 함수의 머리말 «좌표는
+  // 연산마다 다르다»). 적용이 실패하는 묶음은 판정하지 않는다 — 파이프라인이 `patch-failed`로 답한다(위 «여기서 판정하지 않는다»와 같은 자세).
+  const conflict = lockConflictOfOps({
+    document,
     locks: onPageOf(app, input),
-    pointers: lockPointers(input.ops),
+    ops: input.ops,
     viewerUserId: input.userId,
   })
   if (conflict === null) return null

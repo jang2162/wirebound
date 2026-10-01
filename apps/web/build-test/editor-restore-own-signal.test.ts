@@ -70,7 +70,7 @@ describe.skipIf(!전제.ok)('연결 id 없이 나간 내 복원', () => {
       await page.goto(P)
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor()
       await poll('소켓이 룸에 든다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← joined')))
-      await page.getByRole('button', { name: '더 보기' }).click()
+      await page.getByRole('button', { name: '더 보기', exact: true }).click()
       await page.getByRole('menuitem', { name: '스냅샷' }).click()
       await page.getByRole('button', { name: '이 상태로 되돌리기' }).click()
 

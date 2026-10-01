@@ -10,6 +10,7 @@ import type { PatchResult } from '../../src/api/types'
 import { logoutLossNotice } from '../../src/routes/editor'
 import { canvasQuery, chooseFromShellMenu, openPage, pageDetail, pageDoc } from '../editor-harness'
 import { tabHub, unauthenticatedError, type TabHub } from '../helpers'
+import { treeTool } from '../panels/tree-row'
 
 const pair = (): PageDocument =>
   pageDoc({
@@ -39,7 +40,7 @@ async function editWaiting(options: { answer: Promise<never> | 'now' }) {
   await openPage(pair(), { apiOverrides: { patchOps, logout: async () => {}, login, listProjects: async () => Promise.reject(unauthenticatedError()) } })
   const tree = screen.getByRole('region', { name: '구조 트리' })
   fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
-  fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
+  fireEvent.click(treeTool(tree, '아래로'))
   await act(async () => {})
   expect(patchOps).toHaveBeenCalledTimes(1)
 }
@@ -118,7 +119,7 @@ async function editRefusedLater(options: { recoverHangs: boolean; posting?: bool
   }
   const tree = screen.getByRole('region', { name: '구조 트리' })
   fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
-  fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
+  fireEvent.click(treeTool(tree, '아래로'))
   await act(async () => {})
   expect(patchOps).toHaveBeenCalledTimes(1)
   return {
@@ -247,7 +248,7 @@ describe('로그아웃을 기다리는 동안 다른 탭에서 사람이 바뀌�
     })
     const tree = screen.getByRole('region', { name: '구조 트리' })
     fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
-    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
+    fireEvent.click(treeTool(tree, '아래로'))
     await act(async () => {})
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {

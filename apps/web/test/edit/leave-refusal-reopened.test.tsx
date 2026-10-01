@@ -11,6 +11,7 @@ import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import { createEditChannel } from '../../src/realtime/edit-channel'
 import { OTHER_PAGE_TITLE, PAGE_ID, PROJECT_ID, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
+import { treeTool } from '../panels/tree-row'
 
 class FakeSocket implements RealtimeSocket {
   onopen: (() => void) | null = null
@@ -77,7 +78,7 @@ async function mount() {
   const tool = async (node: string, label: string): Promise<void> => {
     const tree = screen.getByRole('region', { name: '구조 트리' })
     fireEvent.click(within(tree).getByRole('button', { name: node }))
-    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: label }))
+    fireEvent.click(treeTool(tree, label))
     await act(async () => {})
   }
   const refuse = (patch: SentPatch): void =>

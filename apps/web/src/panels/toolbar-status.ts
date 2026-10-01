@@ -100,7 +100,7 @@ import type { StructureAbilities } from '../edit/structure-actions'
 import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
 
 /**
- * 구조 툴바의 상태줄 문안. 할 말이 없으면 `''`다.
+ * 구조 트리 아래 상태줄 문안. 할 말이 없으면 `''`다.
  *
  * `isRoot`를 인자로 받는 것은 위 머리말의 마지막 절이다 — 루트 판정을 여기서 다시 하면
  * 문서 순회가 한 벌 더 생기고, `structureAbilities`가 이미 지나간 그 판정과 갈릴 수 있다.
@@ -158,11 +158,11 @@ export function structureStatus(input: {
 }
 
 /**
- * 메뉴 툴바의 상태줄 문안. 할 말이 없으면 `''`다.
+ * 메뉴 트리 아래 상태줄 문안. 할 말이 없으면 `''`다.
  *
- * **`busy`가 맨 위이고 판정 문안을 붙이지 않는다.** 조작이 나가 있는 동안은 툴바 전체가
+ * **`busy`가 맨 위이고 판정 문안을 붙이지 않는다.** 조작이 나가 있는 동안은 줄 행동의 항목이 전부
  * 꺼지는데(`tree/use-tree-commands.tsx`의 조작 잠금), 그때 *"메뉴를 고르세요"*가 뜨면 거짓말이다 —
- * 곧 풀릴 상태이고 고른 것은 이미 있다. `menu-toolbar.tsx`의 `title`이 같은 이유로 `busy`를
+ * 곧 풀릴 상태이고 고른 것은 이미 있다. `panels/tree-row-actions.tsx`의 항목 `title`이 같은 이유로 `busy`를
  * 안 보는 것과 한 짝이다.
  */
 export function menuStatus(input: {

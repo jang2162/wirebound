@@ -16,6 +16,7 @@ import { ADMIN_FIXTURE } from '../admin-theme'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import { adminThemeView } from '../theme-loader'
+import { treeTool } from './tree-row'
 
 /** 옛 시스템 테마 `portal` 이 선언하던 패턴 — 원본은 지워졌으므로 이 파일이 값을 든다(`pattern-picker.test.tsx` 와 같은 값). */
 const PORTAL_PATTERNS = {
@@ -110,11 +111,8 @@ function structureRegion(): HTMLElement {
   return screen.getByRole('region', { name: '구조 트리' })
 }
 
-function toolButton(name: string): HTMLButtonElement {
-  return within(within(structureRegion()).getByRole('group', { name: '구조 편집' })).getByRole(
-    'button',
-    { name },
-  )
+function toolButton(name: string): HTMLElement {
+  return treeTool(structureRegion(), name)
 }
 
 function select(type: string): void {

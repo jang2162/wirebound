@@ -20,6 +20,7 @@ import { useTreeCommands, type TreeCommands } from '../../src/tree/use-tree-comm
 import type { MenuNode, PageDetail, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import { isOff, queryRowAction, treeTool } from './tree-row'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 const PROJECT_NAME = '설계서'
@@ -123,11 +124,12 @@ function treeRegion(): HTMLElement {
 }
 
 function toolbar(): HTMLElement {
-  return within(treeRegion()).getByRole('group', { name: '메뉴 편집' })
+  // 옛 «메뉴 편집» 툴바 자리 — 줄 행동 · 줄 아래 입력이 트리 영역 안에 선다(`./tree-row.ts`).
+  return treeRegion()
 }
 
-function tool(name: string): HTMLButtonElement {
-  return within(toolbar()).getByRole('button', { name }) as HTMLButtonElement
+function tool(name: string): HTMLElement {
+  return treeTool(treeRegion(), name)
 }
 
 function menuButton(title: string): HTMLElement {
@@ -262,22 +264,23 @@ describe('메뉴·페이지 만들기', () => {
     fireEvent.click(tool('하위 메뉴'))
     typeAndEnter('사용자')
 
-    await waitFor(() => expect(tool('하위 메뉴').disabled).toBe(true))
-    expect(tool('이름 변경').disabled).toBe(true)
-    expect(tool('삭제').disabled).toBe(true)
+    await waitFor(() => expect(isOff(tool('하위 메뉴'))).toBe(true))
+    expect(isOff(tool('이름 변경'))).toBe(true)
+    expect(isOff(tool('삭제'))).toBe(true)
 
     gate.release?.()
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
     // 끝나면 다시 살아난다 — 잠금이지 영구 비활성이 아니다.
-    await waitFor(() => expect(tool('하위 메뉴').disabled).toBe(false))
+    await waitFor(() => expect(isOff(tool('하위 메뉴'))).toBe(false))
   })
 
   it('페이지를 선택한 상태에서는 하위 메뉴·페이지 추가가 비활성이다', async () => {
     // 페이지는 컨테이너가 아니다.
     await open({}, '/projects/p-1/pages/pg-list')
 
-    expect(tool('하위 메뉴').disabled).toBe(true)
-    expect(tool('페이지 추가').disabled).toBe(true)
+    // 페이지 줄에는 `+`가 없다.
+    expect(queryRowAction(treeRegion(), '하위 메뉴')).toBeNull()
+    expect(queryRowAction(treeRegion(), '페이지 추가')).toBeNull()
   })
 })
 
@@ -567,7 +570,7 @@ describe('삭제', () => {
 
     fireEvent.click(menuButton('회원관리'))
 
-    expect(tool('삭제').disabled).toBe(true)
+    expect(isOff(tool('삭제'))).toBe(true)
   })
 })
 
@@ -755,7 +758,7 @@ describe('인라인 입력의 용도 전환', () => {
     // **그 갈림은 `fireEvent` 환경에서만 참이다.** blur를 손으로 심어 재니(실제 브라우저의
     // 클릭이 하는 일이다) 입력이 **먼저 언마운트되고**, 그 뒤 이름 변경을 열면 `key` 없이도
     // 값이 `'회원관리'`로 초기화된다 — 그 경로에서는 그 말이 맞다. **실제 브라우저에서
-    // 버튼 클릭이 포커스를 옮기는지는 재지 못했다**(`menu-toolbar.tsx`의 Esc 주석과 같은
+    // 버튼 클릭이 포커스를 옮기는지는 재지 못했다**(`menu-tree.tsx`의 `RemoveConfirm` Esc 주석과 같은
     // 한계다). 그래서 이 케이스가 지키는 것은 **"blur 없이 용도가 바뀌는 경로에서 값이 남지
     // 않는다"**까지이고, 그 경로를 만드는 것이 키보드 단축키다.
     await open()
@@ -771,20 +774,20 @@ describe('인라인 입력의 용도 전환', () => {
 })
 
 /**
- * **도구모음 아래 상태줄**(`src/panels/toolbar-status.ts`). 구조 툴바와 한 벌이고, 문안 표는
+ * **트리 아래 상태줄**(`src/panels/toolbar-status.ts`). 구조 트리와 한 벌이고, 문안 표는
  * `./toolbar-status.test.ts`가 갖는다.
  *
- * 여기서 재는 것은 **이 툴바에만 있는 축 둘**이다: ㉠ 선택의 **종류**(메뉴/페이지)가 문장을
- * 가른다, ㉡ **`busy`에는 판정 문안을 붙이지 않는다** — 아홉이 전부 꺼지는 유일한 상태인데
+ * 여기서 재는 것은 **메뉴 트리에만 있는 축 둘**이다: ㉠ 선택의 **종류**(메뉴/페이지)가 문장을
+ * 가른다, ㉡ **`busy`에는 판정 문안을 붙이지 않는다** — 줄 행동의 항목이 전부 꺼지는 유일한 상태인데
  * 그 이유가 판정이 아니다.
  */
 function menuStatusLine(): HTMLElement {
   const line = toolbar().querySelector<HTMLElement>('.wb-shell-menu-status')
-  if (line === null) throw new Error('메뉴 툴바에 상태줄이 없습니다')
+  if (line === null) throw new Error('메뉴 트리에 상태줄이 없습니다')
   return line
 }
 
-describe('메뉴 툴바 — 상태줄', () => {
+describe('메뉴 트리 — 상태줄', () => {
   it('아무것도 안 고른 채 열리면 고르라고 말한다', async () => {
     await open()
 
@@ -796,7 +799,7 @@ describe('메뉴 툴바 — 상태줄', () => {
 
     fireEvent.click(menuButton('회원관리'))
 
-    expect(tool('삭제').disabled).toBe(true)
+    expect(isOff(tool('삭제'))).toBe(true)
     expect(menuStatusLine().textContent).toBe('하위가 있는 메뉴라 삭제할 수 없습니다')
   })
 
@@ -813,19 +816,19 @@ describe('메뉴 툴바 — 상태줄', () => {
 
     fireEvent.click(menuButton('권한'))
 
-    expect(tool('위로').disabled).toBe(true)
-    expect(tool('아래로').disabled).toBe(true)
+    expect(isOff(tool('위로'))).toBe(true)
+    expect(isOff(tool('아래로'))).toBe(true)
     expect(menuStatusLine().textContent).toBe('형제가 없어 순서를 바꿀 수 없습니다')
   })
 
-  it('**`옮기기` 하나가 꺼진 메뉴에는 아무 말도 하지 않는다**', async () => {
-    // `주문관리`는 형제가 있고 비었다. 메뉴 선택에서 `옮기기`는 **언제나** 꺼지므로
-    // (`treeAbilities`), 그것까지 말하면 메뉴를 고를 때마다 같은 문장이 선다.
+  it('**`옮기기` 하나가 없는 메뉴에는 아무 말도 하지 않는다**', async () => {
+    // `주문관리`는 형제가 있고 비었다. 메뉴 선택에서 `옮기기`는 **언제나** 못 하므로
+    // (`treeAbilities`) 메뉴 줄의 `…`에 아예 없고, 그것까지 말하면 메뉴를 고를 때마다 같은 문장이 선다.
     await open()
 
     fireEvent.click(menuButton('주문관리'))
 
-    expect(tool('옮기기').disabled).toBe(true)
+    expect(queryRowAction(treeRegion(), '옮기기')).toBeNull()
     expect(menuStatusLine().textContent).toBe('')
     expect(tool('삭제').getAttribute('aria-describedby')).toBeNull()
   })
@@ -844,18 +847,18 @@ describe('메뉴 툴바 — 상태줄', () => {
     fireEvent.click(tool('정말 삭제합니까?'))
 
     await waitFor(() => expect(menuStatusLine().textContent).toBe('조작을 보내는 중입니다'))
-    expect(tool('이름 변경').disabled).toBe(true)
+    expect(isOff(tool('이름 변경'))).toBe(true)
 
     release()
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
   })
 
-  it('**보내는 중에는 그 줄이 이 툴바의 유일한 탭 정지점이다** — 앱째로 잰다', async () => {
-    // ***"활성 버튼에 걸린 `aria-describedby`가 키보드가 그 문장에 닿는 길"*만으로는 모자라는
-    // 자리다.** `busy`면 아홉이 **전부** 꺼져 활성 버튼이 하나도 없다 — 그때는
-    // `aria-describedby`를 아무리 잘 걸어도 아무 데도 안 닿는다. 그래서 줄 자체가 탭 정지점이 된다.
+  it('**보내는 중에는 그 줄이 탭 정지점이고, 꺼진 항목이 그 줄을 설명으로 든다** — 앱째로 잰다', async () => {
+    // ***"켠 항목에 걸린 `aria-describedby`가 키보드가 그 문장에 닿는 길"*만으로는 모자라는
+    // 자리다.** `busy`면 줄 행동의 항목이 **전부** 꺼져 화살표가 설 항목이 하나도 없다 — 그때는
+    // `aria-describedby`가 읽힐 포커스가 없다. 그래서 줄 자체가 탭 정지점이 된다.
     //
-    // 열두 상태의 표는 `./toolbar-status-reach.test.tsx`가 갖는다(툴바만 떼어 렌더한다).
+    // 열두 상태의 표는 `./toolbar-status-reach.test.tsx`가 갖는다(상태줄만 떼어 렌더한다).
     // **여기서 재는 것은 그 상태가 진짜 앱에서 나온다는 쪽이다** — 조작 하나를 실제로
     // 붙들어 `busy`를 만든다.
     let release = (): void => {}
@@ -869,25 +872,24 @@ describe('메뉴 툴바 — 상태줄', () => {
     fireEvent.click(tool('정말 삭제합니까?'))
     await waitFor(() => expect(menuStatusLine().textContent).toBe('조작을 보내는 중입니다'))
 
-    const stops = [
-      ...toolbar().querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    ]
-    expect(stops).toEqual([menuStatusLine()])
+    expect(menuStatusLine().tabIndex).toBe(0)
+    const item = tool('이름 변경')
+    expect(isOff(item)).toBe(true)
+    expect(item.getAttribute('aria-describedby')).toBe(menuStatusLine().id)
 
     release()
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
   })
 
-  it('활성 버튼이 그 문장을 자기 설명으로 든다 — 활성 버튼이 있을 때는 그쪽이 먼저다', async () => {
+  it('켠 항목이 그 문장을 자기 설명으로 든다 — 켠 항목이 있을 때는 그쪽이 먼저다', async () => {
     await open({}, '/projects/p-1/pages/pg-list')
 
-    const reachable = within(toolbar()).getByRole('button', {
+    tool('이름 변경')
+    const reachable = screen.getByRole('menuitem', {
       name: '이름 변경',
       description: '페이지라 하위 추가·계층 이동이 안 됩니다',
-    }) as HTMLButtonElement
-    expect(reachable.disabled).toBe(false)
+    })
+    expect(isOff(reachable)).toBe(false)
     expect(reachable.getAttribute('aria-describedby')).toBe(menuStatusLine().id)
   })
 
@@ -1148,14 +1150,14 @@ describe('이름 변경 — 시간 제한 · «모름» · 떠나 있는 동안'
     server.commit()
 
     await advance(WRITE_DEADLINE_MS - 1)
-    expect(tool('하위 메뉴').disabled).toBe(true)
+    expect(isOff(tool('하위 메뉴'))).toBe(true)
     expect(server.held[0]!.signal?.aborted).toBe(false)
 
     await advance(1)
     expect(server.held[0]!.signal?.aborted).toBe(true)
     vi.useRealTimers()
 
-    await waitFor(() => expect(tool('하위 메뉴').disabled).toBe(false))
+    await waitFor(() => expect(isOff(tool('하위 메뉴'))).toBe(false))
     expect(server.readSignals).toHaveLength(1)
     expect(menuButton('회원')).toBeTruthy()
     expect(alertText()).toBeNull()
@@ -1216,13 +1218,13 @@ describe('이름 변경 — 시간 제한 · «모름» · 떠나 있는 동안'
     await advance(WRITE_DEADLINE_MS)
     vi.useRealTimers()
     await waitFor(() => expect(alertText()).toBe('응답이 없고, 이름이 바뀌었는지 확인하지도 못했습니다'))
-    expect(tool('하위 메뉴').disabled).toBe(true)
+    expect(isOff(tool('하위 메뉴'))).toBe(true)
 
     server.failReads(false)
     server.commit()
     fireEvent.click(within(treeRegion()).getByRole('button', { name: '다시 확인' }))
 
-    await waitFor(() => expect(tool('하위 메뉴').disabled).toBe(false))
+    await waitFor(() => expect(isOff(tool('하위 메뉴'))).toBe(false))
     expect(alertText()).toBeNull()
   })
 
@@ -1262,11 +1264,11 @@ describe('이름 변경 — 시간 제한 · «모름» · 떠나 있는 동안'
     fireEvent.click(await screen.findByRole('link', { name: PROJECT_NAME }))
     await screen.findByText('회원관리')
     fireEvent.click(menuButton('회원관리'))
-    expect(tool('이름 변경').disabled).toBe(true)
+    expect(isOff(tool('이름 변경'))).toBe(true)
 
     server.commit()
     await server.respond()
-    await waitFor(() => expect(tool('이름 변경').disabled).toBe(false))
+    await waitFor(() => expect(isOff(tool('이름 변경'))).toBe(false))
     expect(alertText()).toBeNull()
   })
 

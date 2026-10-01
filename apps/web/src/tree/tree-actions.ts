@@ -1,6 +1,6 @@
 /**
  * 메뉴 트리 조작을 **하기 전에** 할 수 있는지 판정하는 곳. 화면은 이 결과로
- * 툴바 버튼을 비활성한다 — 눌러 봐야 실패할 버튼을 활성으로 두지 않는다.
+ * 줄 행동의 항목을 끈다 — 눌러 봐야 실패할 항목을 켜 두지 않는다.
  *
  * **순수 함수이고 React·DOM·`fetch`를 모른다.** 판정이 컴포넌트 안에 흩어지면 케이스가
  * 화면을 지나야만 재지고, 툴바와 키보드 단축키가 각자 자기 조건을 갖게 된다.
@@ -362,6 +362,16 @@ function findPage(nodes: TreeMenuNode[], pageId: string): PageVisit | null {
   }
 
   return null
+}
+
+/**
+ * 메뉴 하나가 가진 자식 메뉴 · 페이지의 수. 메뉴가 트리에 없으면 `null`. 드래그가 «안에 놓기»의 자리(맨 뒤)를 세는 데 쓴다
+ * (`tree-drop.ts`). 순회를 이 파일에 두는 것은 머리말 «관문과 이 파일» — `byOrder` 한 곳으로 닫는다.
+ */
+export function menuChildCount(menu: TreeMenuNode[], menuId: string, kind: 'menu' | 'page'): number | null {
+  const visit = findMenu(menu, menuId, null)
+  if (visit === null) return null
+  return kind === 'menu' ? byOrder<TreeMenuNode>(visit.node.children).length : byOrder<TreePage>(visit.node.pages).length
 }
 
 /** 트리 전체의 메뉴 수. `reparent` 판정이 "옮길 곳이 있는가"를 이것으로 본다. */

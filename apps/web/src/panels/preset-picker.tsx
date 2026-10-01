@@ -1,6 +1,6 @@
 /**
  * 페이지 프리셋을 고르고 지금 페이지를 프리셋으로 남기는 자리(설계서 「페이지 프리셋」).
- * 구조 툴바의 `프리셋`이 연다.
+ * 구조 트리 뿌리 `+`의 `프리셋`이 연다.
  *
  * **`PatternPicker` 옆에 둔다** — 둘 다 *"무엇을 넣을까"*를 고르는 자리이고, 새 패널을
  * 만들면 좁은 좌측에 목록이 하나 더 쌓인다. 고르개 상태가 툴바에 하나뿐인 것도 같은 이유다.
@@ -270,7 +270,7 @@ export function PresetPicker(props: {
           type="button"
           className="wb-shell-picker-action"
           // **이름이 비어 있으면 서버가 400이다**(1~60자). 보내 봐야 거절될 요청을 막는 것은
-          // 구조 툴바의 `disabled`와 같은 판단이다.
+          // 구조 트리 줄 행동의 끈 항목과 같은 판단이다.
           disabled={saving || props.currentNodes === null || name.trim() === ''}
           title={props.currentNodes === null ? NO_DOCUMENT : ''}
           onClick={() => void save()}

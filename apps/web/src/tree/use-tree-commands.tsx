@@ -1,9 +1,9 @@
 /**
  * 메뉴 트리의 조회·선택·조작을 한 곳에 모은 훅. **화면이 부르는 유일한 관문이다.**
  *
- * 조회가 컴포넌트 안에 있으면 툴바가 그것을 부를 길이 없다 — 조작이 끝나면 트리를 다시
+ * 조회가 컴포넌트 안에 있으면 줄 행동이 그것을 부를 길이 없다 — 조작이 끝나면 트리를 다시
  * 받아야 하는데, 재조회 함수가 `MenuTree`의 `useEffect` 안에 갇혀 있기 때문이다.
- * `useStructureCommands` / `StructureToolbar`의 분리와 같은 모양이다.
+ * `useStructureCommands` / 구조 트리 줄 행동의 분리와 같은 모양이다.
  *
  * **낙관 적용을 하지 않는다.** 요청 하나가 성공하면 트리를 통째로 다시 받는다. 이 파일의
  * 형태를 정하는 근거는 둘이다 — 서버가 `sortOrder`를 재번호하고,
@@ -39,6 +39,7 @@ import {
   type TreeAbilities,
   type TreeSelection,
 } from './tree-actions'
+import type { MenuDrop } from './tree-drop'
 
 /** 서버가 이유를 주지 않은 조회 실패에 쓸 문장. */
 const UNKNOWN_FAILURE = '메뉴를 불러오지 못했습니다'
@@ -131,7 +132,7 @@ export type TreeLoadState =
 export interface TreeCommands {
   state: TreeLoadState
   selection: TreeSelection | null
-  /** 메뉴를 고른다. `null`이면 "열린 페이지가 선택된 것"으로 되돌아간다(선택은 파생값이다 — `selection`). */
+  /** 메뉴 · 페이지를 고른다(페이지는 줄의 `+` · `…`가 고른다). `null`이면 "열린 페이지가 선택된 것"으로 되돌아간다(선택은 파생값이다 — `selection`). */
   select: (selection: TreeSelection | null) => void
   abilities: TreeAbilities
   /** 조작이 하나 나가 있는 동안 `true`. 툴바 전체가 비활성이다. */
@@ -189,6 +190,11 @@ export interface TreeCommands {
   openReparent: () => void
   reparentTo: (menuId: string) => void
   cancelReparent: () => void
+  /**
+   * **끌어 놓은 자리로 옮긴다**(`tree/tree-drop.ts` 의 `menuDropTarget` 이 준 자리). 선택이 아니라 끈 것에 대해 돈다 — 끌기는 줄을
+   * 고르지 않는다(누름이 클릭이 아니다 — `drag/use-pointer-drag.ts` 의 «끈 뒤의 클릭을 삼킨다»).
+   */
+  dropTo: (dragged: TreeSelection, target: MenuDrop) => void
 }
 
 /** 이름 변경이 만난 제목 충돌 — `TreeCommands.conflict`. **메뉴도 같다.** */
@@ -899,9 +905,8 @@ export function useTreeCommands(props: {
    * 옮기는 사람이 자리를 지목하지 않았으므로 맨 뒤가 맞다 — 지목하고 싶으면 옮긴 뒤
    * 위/아래로 옮기면 된다.
    *
-   * **선택을 옮기지 않는다.** 페이지 선택은 주소에서만 오고(선택이 파생값이라서) 이 조작은 주소를
-   * 건드리지 않으므로, 옮긴 뒤에도 같은 페이지가 열린 채 선택으로 남는다 — **`confirmRemove`의
-   * 페이지 갈래가 `wasOpen` 조건 없이 서는 전제가 이것이다.**
+   * **선택을 옮기지 않는다.** id 가 바뀌지 않으므로 선택이 저절로 따라간다 — 주소로 고른 페이지는 열린 채, 줄의 `…`로 고른
+   * 페이지는 고른 채 남는다.
    */
   function reparentTo(menuId: string): void {
     if (selection === null || selection.kind !== 'page') return
@@ -913,18 +918,48 @@ export function useTreeCommands(props: {
   }
 
   /**
+   * 끌어 놓은 자리로 옮긴다 — **지금 «위로 · 들여쓰기 · 옮기기»가 보내는 것과 같은 요청이다**(spec 「드래그로 옮기기」 — 드래그만의
+   * 새 편집 종류를 만들지 않는다). 잠금 · 다시 받기 · 실패 문장은 `run` 의 길이다.
+   *
+   * **부모가 같으면 `sortOrder` 하나만 싣는다** — `move` 와 같은 까닭(페이지에 `menuNodeId` 가 섞여 나가면 옮기지 않은 소속까지
+   * 덮는다). 부모가 바뀌면 둘을 함께 싣는다 — 부모만 주면 맨 뒤로 간다(`reparentTo` 머리말의 실측). 싣는 `sortOrder` 는 «옮긴 뒤 그
+   * 부모 안 차례»다 — 서버가 두 판에서 그 값을 같은 뜻으로 읽는다(`apps/api/test/tree-drop-order.test.ts`).
+   *
+   * **부모가 같은지는 보낼 때의 트리로 다시 본다** — 끄는 동안 트리를 다시 받았을 수 있다. 끈 것이 트리에서 사라졌으면 되돌아온다.
+   */
+  function dropTo(dragged: TreeSelection, target: MenuDrop): void {
+    if (menu === null) return
+    const spot = treeSpot(menu, dragged)
+    if (spot === null) return
+    const sortOrder = target.index
+    const reparent = spot.parentId !== target.parentId
+    void run(async () => {
+      if (dragged.kind === 'menu') {
+        await api.updateMenu(projectId, dragged.id, reparent ? { parentId: target.parentId, sortOrder } : { sortOrder })
+        return
+      }
+      // 페이지의 부모는 늘 메뉴다(`menuDropTarget` 이 `null` 부모를 페이지에 안 준다).
+      if (reparent && target.parentId !== null) {
+        await api.updatePage(projectId, dragged.id, { menuNodeId: target.parentId, sortOrder })
+        return
+      }
+      await api.updatePage(projectId, dragged.id, { sortOrder })
+    })
+  }
+
+  /**
    * 삭제를 실행한다(두 번 누르기의 두 번째 클릭).
    *
    * **지우기 전에 자리를 먼저 읽는다** — 지운 뒤에는 그 노드가 트리에 없어 `treeSpot`이
-   * `null`이고 부모를 알 길이 없다. `StructureToolbar`의 `removeSelected`가 같은 형태다.
+   * `null`이고 부모를 알 길이 없다. `useStructureCommands`의 `removeSelected`가 같은 형태다.
    *
    * **메뉴를 지우면 선택이 부모로 간다.** 지운 것을 계속 가리키면 툴바가 사라진 항목에
    * 작동하는 상태가 되고, `treeAbilities`가 전부 `false`를 내므로 사용자는 아무것도 못 하는
    * 채로 자기 위치를 잃는다. 루트 메뉴였으면 갈 부모가 없어 `null`이다.
    *
-   * **페이지를 지우면 프로젝트 루트로 `replace` 이동한다.** `replace`인 것은 뒤로
-   * 가기가 지워진 페이지로 돌아가면 404를 만나기 때문이다. **조건이 없는 이유는 아래
-   * `deletePage` 갈래의 주석에 있다** — 지울 수 있는 페이지가 곧 열려 있는 페이지다.
+   * **열려 있던 페이지를 지우면 프로젝트 루트로 `replace` 이동한다.** `replace`인 것은 뒤로
+   * 가기가 지워진 페이지로 돌아가면 404를 만나기 때문이다. 열려 있지 않은 페이지(줄의 `…`로 고른 것)를 지우면 주소를 두고
+   * 선택만 주소의 페이지로 돌린다 — 아래 `deletePage` 갈래의 주석.
    */
   function confirmRemove(): void {
     if (menu === null || selection === null) return
@@ -942,24 +977,16 @@ export function useTreeCommands(props: {
       return
     }
 
-    // **페이지를 지우면 언제나 프로젝트 루트로 간다** — 조건이 없는 것은 선택이 파생값이기
-    // 때문이다. 페이지 선택은 주소에서만 온다: `select`/`setPicked`를 부르는 자리를 전수로
-    // 세면 `{kind:'menu'}`와 `null` 둘뿐이고(`apps/web/src`에서 센다), 그래서
-    // `selection.kind === 'page'`이면 `picked === null`이고 곧 `selection.id === pageId`다.
-    //
-    // **`wasOpen = pageId === target` 가지("열지 않은 페이지를 지우면 주소를 건드리지
-    // 않는다")를 두지 않는다 — 그 조건은 거짓이 될 수 없다.** `wasOpen`을 항상 `true`로
-    // 고정해도 죽는 케이스가 없고, 페이지 선택을 만드는 경로가 없다(`move`는 선택을 그대로
-    // 두고, `reparentTo`는 소속만 바꾸고 주소를 두므로 선택이 파생으로 따라온다).
-    //
-    // 다시 필요해지는 조건은 명확하다 — **누군가 `select({kind:'page', …})`를
-    // 부르는 순간**이고, 그때 이 자리에 조건이 돌아와야 한다.
+    // **열려 있던 페이지를 지웠을 때만 프로젝트 루트로 간다.** 페이지 선택은 두 길로 온다 — 주소(열린 페이지 · `picked === null`)와
+    // 줄의 `+` · `…`(`panels/tree-row-actions.tsx` — 누르면 그 줄을 `select({kind:'page'})`로 고른다). 뒤 길로 고른 페이지는 열려 있지
+    // 않을 수 있고, 그것을 지우고 주소를 루트로 옮기면 **보고 있던 페이지가 닫힌다.** 그래서 지운 것이 주소의 페이지인지로 가른다.
     const target = selection.id
+    const wasOpen = pageId === target
     void run(
       () => api.deletePage(projectId, target),
       () => {
         setPicked(null)
-        navigate(`/projects/${projectId}`, { replace: true })
+        if (wasOpen) navigate(`/projects/${projectId}`, { replace: true })
       },
     )
   }
@@ -1015,6 +1042,7 @@ export function useTreeCommands(props: {
     },
     reparentTo,
     cancelReparent: () => setPickingMenu(false),
+    dropTo,
     importJson,
     imported,
   }

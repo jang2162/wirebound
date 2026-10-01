@@ -40,6 +40,7 @@ import {
   waitForNode,
   canvasQuery,
 } from '../editor-harness'
+import { treeTool } from '../panels/tree-row'
 
 class FakeSocket implements RealtimeSocket {
   onopen: (() => void) | null = null
@@ -523,10 +524,7 @@ describe('스스로 버린 소켓으로 답을 기다리던 편집', () => {
     })
 
   const tool = (name: string): HTMLElement =>
-    within(within(screen.getByRole('region', { name: '구조 트리' })).getByRole('group', { name: '구조 편집' })).getByRole(
-      'button',
-      { name },
-    )
+    treeTool(screen.getByRole('region', { name: '구조 트리' }), name)
 
   /**
    * 페이지를 열고 WS 로 편집 하나를 낸다 — 답(ack)은 안 온다(서버가 행 잠금에 쥔 판). `reload`가 재조회의 답이다.
