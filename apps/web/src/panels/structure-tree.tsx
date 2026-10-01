@@ -208,7 +208,7 @@ export function StructureTree(props: {
       const box = row.getBoundingClientRect()
       const over = findNodeSafely(doc.root, overId)
       const zone = dropZone(point.y - box.top, box.height, acceptsChildren(over))
-      const target = structureDropTarget(doc, source, overId, zone, store.editBlockedBy)
+      const target = structureDropTarget(doc, { kind: 'node', id: source }, overId, zone, store.editBlockedBy)
       if (target === null) return null
       return {
         value: target,
