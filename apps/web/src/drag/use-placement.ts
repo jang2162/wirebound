@@ -26,7 +26,8 @@
  * 밑으로 밀려 포인터 밑에는 다른 것이 와 있다. 표시는 옛 좌표에 남고, 뗀 좌표로 다시 물은 답은 그 다른 것의 자리다
  * (`build-test/canvas-drop-review.test.ts` «bob 이 위 노드의 글을 길게 고쳐»). 그래서 놓는 순간 끌기 장치가 다시 물은 답을 보인 답과
  * 견주고(`use-pointer-drag.ts` 머리말 «놓는 답은 보인 답이다»), 캔버스가 다시 잴 때(`canvas/canvas-drag-handle.tsx` 의 `layoutKey`)
- * 마지막 좌표로 다시 물어 다르면 표시를 걷는다. **«문서가 바뀌면 버린다» 로 막지 않는다** — 남이 아무 데나 고칠 때마다 끄는 사람의 놓기가
+ * 마지막 좌표로 다시 물어 다르면 표시를 걷는다 — 손잡이는 캔버스 안이라 그 값을 직접 받고, 캔버스의 형제인 컴포넌트 목록 카드는 이 층의
+ * 영역 칸으로 받는다(`useCanvasRemeasured` — 캔버스가 `useAnnounceCanvasRemeasure` 로 알린다). **«문서가 바뀌면 버린다» 로 막지 않는다** — 남이 아무 데나 고칠 때마다 끄는 사람의 놓기가
  * 버려지고, 문서 밖의 원인(늦은 글꼴 · 그림)은 못 막는다.
  *
  * **둘째 겹(다음 물음)이 있는 까닭:** 끌기 장치는 뗄 때 뗀 좌표로 `onOver` 를 **다시 묻고** 그 답으로 `onDrop` 을 부른다(`use-pointer-drag.ts`
@@ -110,17 +111,18 @@ interface Regions {
   canvas: () => CanvasRegion | null
 }
 
-/** 셸이 싣는 두 영역. 공급자 밖이면(최소 숙주 테스트) 둘 다 없다. */
+/** 셸이 싣는 두 영역과 캔버스가 다시 잴 때 부를 것. 공급자 밖이면(최소 숙주 테스트) 다 없다. */
 interface RegionSlots {
   tree: RefObject<HTMLElement | null> | null
   canvas: CanvasRegion | null
+  remeasured: Set<() => void>
 }
 
 const RegionsContext = createContext<RegionSlots | null>(null)
 
 /** 셸이 트리 · 캔버스를 함께 감싼다. 값은 바뀌어도 다시 그리지 않는 칸이다 — 읽는 것은 끄는 동안의 처리기다. */
 export function PlacementRegionsProvider(props: { children: ReactNode }): ReactElement {
-  const [slots] = useState<RegionSlots>(() => ({ tree: null, canvas: null }))
+  const [slots] = useState<RegionSlots>(() => ({ tree: null, canvas: null, remeasured: new Set() }))
   return createElement(RegionsContext.Provider, { value: slots }, props.children)
 }
 
@@ -147,6 +149,30 @@ export function usePublishCanvasRegion(frame: Window | null, zoom: number): void
       if (slots.canvas === region) slots.canvas = null
     }
   }, [slots, frame, zoom])
+}
+
+/**
+ * 캔버스가 다시 잴 때마다(`canvas/canvas.tsx` 의 `layoutKey`) 구독한 것을 부른다 — 머리말 «레이아웃만 밀리는 판». 캔버스 밖에서 끄는
+ * 쪽(컴포넌트 목록 카드)이 끌기 장치의 `refresh` 를 싣는다(`useCanvasRemeasured`).
+ */
+export function useAnnounceCanvasRemeasure(layoutKey: unknown): void {
+  const slots = useContext(RegionsContext)
+  useLayoutEffect(() => {
+    if (slots === null) return
+    for (const listener of [...slots.remeasured]) listener()
+  }, [slots, layoutKey])
+}
+
+/** 캔버스가 다시 잴 때 `listener` 를 부른다(`useAnnounceCanvasRemeasure`). */
+export function useCanvasRemeasured(listener: () => void): void {
+  const slots = useContext(RegionsContext)
+  useLayoutEffect(() => {
+    if (slots === null) return
+    slots.remeasured.add(listener)
+    return () => {
+      slots.remeasured.delete(listener)
+    }
+  }, [slots, listener])
 }
 
 const VERTICAL: Layout = { axis: 'y', reversed: false }

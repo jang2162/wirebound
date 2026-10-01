@@ -22,13 +22,14 @@
  *   걷고, 그 문장을 세운 판(페이지 · 고른 노드)이 바뀌어도 걷는다(판은 페이지를 옮겨도 셸과 함께 남아, 걷는 입구를 세지 않고 문장에
  *   판을 적어 둔다 — 한 번 어긋나면 비운다. 떠났다 돌아와도 다시 서지 않는다).
  * - **끌기**: 끌기 장치(`drag/use-pointer-drag.ts`)에 `{ kind: 'new', type }` 을 묶고 놓을 자리 · 표시 · 놓기는 경로 층
- *   (`drag/use-placement.ts`)에 맡긴다 — 캔버스 손잡이와 같은 길이다. 끄는 동안 포인터 곁에 카드 이름표가 따라온다. 끈 뒤의 `click` 은 끌기
+ *   (`drag/use-placement.ts`)에 맡긴다 — 캔버스 손잡이와 같은 길이다(캔버스가 다시 잴 때 마지막 좌표로 다시 묻는 것까지 —
+ *   `useCanvasRemeasured`). 끄는 동안 포인터 곁에 카드 이름표가 따라온다. 끈 뒤의 `click` 은 끌기
  *   장치가 삼켜 «누름» 으로 새지 않는다.
  */
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
 import { COMPONENT_GROUP_LABELS, type ComponentGroup } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
-import { usePlacementDrop, type PlacementDrop } from '../drag/use-placement'
+import { useCanvasRemeasured, usePlacementDrop, type PlacementDrop } from '../drag/use-placement'
 import { usePointerDrag, type DragPoint } from '../drag/use-pointer-drag'
 import { createNode } from '../edit/create-node'
 import { dropOps, type Placing } from '../edit/structure-drop'
@@ -189,6 +190,9 @@ function PaletteCards(props: {
     sameDrop: placement.sameDrop,
     scrollContainer: () => (last.current === null ? null : placement.scrollContainerAt(last.current)),
   })
+  // 끄는 사이 캔버스가 다시 재면(남의 편집이 노드를 밂) 마지막 좌표로 다시 묻는다 — 손잡이와 같은 길(`canvas/canvas-drag-handle.tsx`
+  // 머리말 «캔버스가 다시 잴 때»). 판은 캔버스의 형제라 그 값을 경로 층으로 받는다.
+  useCanvasRemeasured(drag.refresh)
   const hint = placement.live(drag.hint)
   const dragged = drag.dragging?.kind === 'new' ? props.types.find((type) => type.type === (drag.dragging as { type: string }).type) : undefined
 

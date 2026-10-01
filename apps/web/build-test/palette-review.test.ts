@@ -7,11 +7,11 @@
  * |---|---|
  * | 클릭 추가 — 고른 것마다 | 고른 것 없음 · 뿌리 · 컨테이너 · 잎에서 서버 문서가 계획 D6 의 자리가 아니다 · 넣은 노드가 안 골라진다 · 프레임이 하나가 아니다 |
  * | 클릭 추가 — 남의 잠금 | 뒤 형제를 bob 이 잡은 잎 · 부모를 잡으려 한 판에서 문장 · 프레임 · 서버 문서가 판정대로가 아니다 |
- * | 클릭 추가 — 뿌리 선택 + 남의 잠금(**빨강**) | 페이지를 연 그대로(뿌리 선택) bob 이 다른 노드를 고르면 서버가 받는 페이지 끝 넣기를 판이 거절한다 |
- * | 거절 문장 — 페이지 옮김(**빨강**) | 앞 페이지에서 선 거절 문장이 옮긴 페이지에 남는다 |
+ * | 클릭 추가 — 뿌리 선택 + 남의 잠금 | 페이지를 연 그대로(뿌리 선택) bob 이 다른 노드를 고르면 서버가 받는 페이지 끝 넣기를 판이 거절한다 |
+ * | 거절 문장 — 페이지 옮김 | 앞 페이지에서 선 거절 문장이 옮긴 페이지에 남는다 |
  * | 클릭 추가 — 자식을 안 받는 부모의 잎 | 검증 전 문서(SQL 로 부모 타입을 `Button` 으로)에서 편집이 나간다 · 문장이 `+` 의 «안에 추가» 설명이 아니다 |
  * | 빠른 두 번 누름 | 넣은 수 · 차례가 누른 수와 다르다(기록 — 두 번 누름은 넣기 둘) |
- * | Enter 누른 채(**빨강**) | 키 반복마다 넣는다 — 누른 채 한 번이 넣기 여럿이 된다 |
+ * | Enter 누른 채 | 키 반복마다 넣는다 — 누른 채 한 번이 넣기 여럿이 된다 |
  * | 누르는 사이 남이 지움 | bob 이 alice 의 고른 노드를 지우려 함 → 그 답 · 뒤의 누름이 엉뚱한 자리로 간다 |
  * | 축소판 좌표 | 판 폭 셋(창 1440 · 1024 · 800)과 카드 줄을 가운데 · 끝까지 민 판에서 표본이 창 밖이다 · 표본 중심과 창 중심이 1px 넘게 어긋난다 |
  * | 축소판 — 남이 테마를 바꿈 | bob 이 프로젝트 테마를 `system-portal` 로 바꾼 뒤에도 축소판 단추가 옛 테마 색이다 |
@@ -19,7 +19,8 @@
  * | 판 열고 접기 | 뷰 모드 · 실시간 viewer 강등에 판이 남는다 · 돌아오면 기억대로 안 선다 · 페이지를 옮기면 판이 닫히거나 표본이 빈다 |
  * | 창 700 · 최대 판 · 통지 다섯 | 셸이 세로로 넘친다 · 하단 바가 창 밖이다(값 — 캔버스 칸 높이를 적는다) |
  * | 판을 연 채 화면 맞춤 | 맞춤 줌이 판을 닫은 판과 다르다 |
- * | 카드 끌기 중 남의 편집 | bob 이 대상을 잡음 · 지움 · 위 글을 길게 고쳐 대상이 밀림(**빨강** — 표시가 옛 좌표에 남는다) · viewer 강등 — 표시가 남거나 보인 자리 밖으로 편집이 나간다 |
+ * | 카드 끌기 중 남의 편집 | bob 이 대상을 잡음 · 지움 · 위 글을 길게 고쳐 대상이 밀림(표시가 옛 좌표에 남는다) · viewer 강등 — 표시가 남거나 보인 자리 밖으로 편집이 나간다 |
+ * | 카드 끌기 — 안 미는 남의 편집(대조군) | 캔버스가 다시 잴 때 판의 끌기가 다시 묻지 않고 표시를 걷기만 한다 · 놓은 자리가 보인 자리가 아니다 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -337,9 +338,10 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
 
     /**
      * **페이지를 열면 뿌리가 골라진다**(`store/editor-store.ts` 의 `#selectionFor` — 남이 막지 않으면 뿌리). 그 채 bob 이 아무 노드(n_last)를
-     * 고르면 판의 클릭 추가가 거절된다 — `lockedBy(뿌리)` 가 자손의 잠금도 보기 때문이다(구현 보고 이월 6). 같은 편집(뿌리 끝에 넣기)을
-     * bob 의 잠금 아래 REST 로 보내면 서버는 받는다. 이 케이스는 «뿌리를 고른 채 남이 다른 노드를 잡아도 페이지 끝에 넣는다» 를 성질로
-     * 단언한다 — 고치기 전 소스에서 빨강이다(문장 «밥님이 편집 중이라 고를 수도 바꿀 수도 없습니다» · 프레임 0).
+     * 고르면 `lockedBy(뿌리)` 가 자손의 잠금도 보아 막음으로 센다. 같은 편집(뿌리 끝에 넣기)을 bob 의 잠금 아래 REST 로 보내면 서버는
+     * 받으므로, 판은 고른 노드의 잠금을 «그 뒤» 에 넣는 잎에만 먼저 보고 «안 끝» 은 편집 판정에 맡긴다(`palette/palette-add.ts` 머리말).
+     * 이 케이스는 «뿌리를 고른 채 남이 다른 노드를 잡아도 페이지 끝에 넣는다» 를 성질로 단언한다 — 앞선 잠금 검사를 모든 고른 노드에
+     * 걸면 빨강이다(문장 «밥님이 편집 중이라 고를 수도 바꿀 수도 없습니다» · 프레임 0).
      */
     it('페이지를 연 그대로(뿌리 선택) bob 이 다른 노드를 고르면 → 클릭 추가가 페이지 끝에 넣는다', async () => {
       const { P } = await seed('rv-click-root-lock', [BASIC])
@@ -372,8 +374,8 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
     })
 
     /**
-     * 거절 문장은 다음 누름만 걷는다(`palette/component-palette.tsx` 의 `notice`). 판은 페이지를 옮겨도 그대로 서 있으므로(셸과 함께 남는다)
-     * 앞 페이지에서 선 문장이 옮긴 페이지에 남는지 잰다 — «옮긴 페이지에 앞 페이지의 거절 문장이 없다» 를 성질로 단언한다.
+     * 판은 페이지를 옮겨도 그대로 서 있으므로(셸과 함께 남는다) 거절 문장은 그것을 세운 판(페이지 · 고른 노드)을 적어 두고 다르면 비운다
+     * (`palette/component-palette.tsx` 의 `notice`). «옮긴 페이지에 앞 페이지의 거절 문장이 없다» 를 성질로 단언한다 — 판을 안 보면 빨강이다.
      */
     it('거절 문장이 선 채 페이지를 옮기면 옮긴 페이지에 그 문장이 없다', async () => {
       const { P } = await seed('rv-notice-move', [BASIC, [{ id: 'n_text2', type: 'Text', props: { content: '둘째' } }]])
@@ -440,9 +442,8 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
     })
 
     /**
-     * **Enter 를 누른 채 두면 키 반복마다 넣는다**(리뷰 발견 — 무게 낮음). 카드는 `<button>` 이라 반복 keydown(`repeat: true`)마다 브라우저가
-     * `click` 을 내고, 판은 그것을 넣기로 받는다. 이 케이스는 «누른 채 한 번은 넣기 하나» 를 성질로 단언한다 — 고치기 전 소스에서 빨강이다
-     * (첫 keydown + 반복 다섯 → 넣기 여섯).
+     * 카드는 `<button>` 이라 반복 keydown(`repeat: true`)마다 브라우저가 `click` 을 낸다 — 판은 반복 Enter · Space 를 버린다(`palette/component-palette.tsx`
+     * 의 `moveCard`). 이 케이스는 «누른 채 한 번은 넣기 하나» 를 성질로 단언한다 — 그 거름을 떼면 빨강이다(첫 keydown + 반복 다섯 → 넣기 여섯).
      */
     it('Enter 를 누른 채 두면(첫 keydown + 반복 다섯) 넣기는 하나다', async () => {
       const { P } = await seed('rv-click-held', [BASIC])
@@ -808,8 +809,9 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
 
     /**
      * 표시 «n_last 앞» 을 세운 채 bob 이 위 글(n_text)을 길게 고쳐 n_last 가 밀린다. D1 의 손잡이 판(`./canvas-drop-review.test.ts` «bob 이 위
-     * 노드의 글을 길게 고쳐 …»)과 같은 성질 — 다시 잰 뒤 표시가 걷히고 놓은 자리가 보인 자리거나 편집 0 — 을 카드 출처로 단언한다. 판의
-     * 끌기는 캔버스가 다시 잴 때 다시 묻지 않아(구현 보고 이월 2) 고치기 전 소스에서 빨강이다(표시가 옛 y 에 남는다 · 놓으면 편집 0).
+     * 노드의 글을 길게 고쳐 …»)과 같은 성질 — 다시 잰 뒤 표시가 걷히고 놓은 자리가 보인 자리거나 편집 0 — 을 카드 출처로 단언한다. 판은
+     * 캔버스의 형제라 캔버스가 다시 잰 것을 경로 층으로 받아 끌기 장치의 `refresh` 를 부른다(`drag/use-placement.ts` 의 `useCanvasRemeasured`) —
+     * 그 구독을 떼면 빨강이다(표시가 옛 y 에 남는다 · 놓으면 편집 0). 표시를 걷기만 하는 판은 아래 대조군이 잡는다.
      */
     it('bob 이 위 글을 길게 고쳐 표시한 노드가 밀리면 표시가 걷히고 놓은 자리가 보인 자리거나 편집 0 이다', async () => {
       const { P } = await seed('rv-drag-shift', [BASIC])
@@ -834,6 +836,42 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         console.log(`[리뷰 카드 끌기 밀림] ${JSON.stringify({ armedHint, status, afterShift, lastNow, final })}`)
         expect({ armed: armedHint.map((h) => h.placement), status, afterShift }).toEqual({ armed: ['before'], status: 200, afterShift: [] })
         expect([ORIGINAL, { n_root: ['n_text', { n_card: ['n_intx'] }, 'n_empt', '+Divider', 'n_last'] }]).toContainEqual(final)
+      } finally {
+        await close()
+      }
+    })
+
+    /**
+     * 대조군 — 표시한 자리를 안 미는 남의 편집(위 글을 짧게 고침)에도 캔버스는 다시 잰다(`layoutKey` 의 `doc`). 판의 끌기가 그때 마지막
+     * 좌표로 **다시 묻고**(같은 자리면 그대로) 표시를 걷기만 하지 않는지 — 표시가 남고 놓으면 보인 자리(n_last 앞)에 선다. D1 의 손잡이
+     * 대조군(`./canvas-drop-review.test.ts` «bob 이 아래 다른 노드의 글을 고쳐도»)과 같은 성질이다.
+     */
+    it('bob 이 표시한 노드를 안 미는 편집을 하면 표시가 남고 놓으면 보인 자리에 선다', async () => {
+      const { P } = await seed('rv-drag-noshift', [BASIC])
+      const tab = await openEditor(P[0]!)
+      const { page, close } = tab
+      try {
+        await openPalette(page)
+        await only(page, 'Divider')
+        await grabCard(page, 'Divider')
+        const lastBox = await nodeBox(page, 'n_last')
+        await page.mouse.move(lastBox.x + lastBox.width * 0.3, lastBox.y + lastBox.height * 0.1, { steps: 8 })
+        const armed = (await indicators(page)).map((h) => h.placement)
+        const status = await bobOps(P[0]!, [{ op: 'replace', path: '/root/children/0/props/content', value: '글 고침' }])
+        await canvasFrame(page).locator('[data-wb-id="n_text"]', { hasText: '글 고침' }).waitFor()
+        await page.waitForTimeout(150)
+        const stillShown = (await indicators(page)).map((h) => h.placement)
+        const lastNow = Math.round((await nodeBox(page, 'n_last')).y)
+        await page.mouse.up()
+        const final = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(ORIGINAL), 3000).catch(() => shape(P[0]!))
+        // eslint-disable-next-line no-console
+        console.log(`[리뷰 카드 끌기 안 밀림] ${JSON.stringify({ armed, status, stillShown, lastBefore: Math.round(lastBox.y), lastNow, final })}`)
+        expect({ armed, status, stillShown, final }).toEqual({
+          armed: ['before'],
+          status: 200,
+          stillShown: ['before'],
+          final: { n_root: ['n_text', { n_card: ['n_intx'] }, 'n_empt', '+Divider', 'n_last'] },
+        })
       } finally {
         await close()
       }
