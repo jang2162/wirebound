@@ -47,7 +47,7 @@ import { findNodeSafely, walkSafely } from '../edit/safe-walk'
 import { nodeTypeLabel } from '../panels/node-shape'
 import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import { usePublishCanvasRegion } from '../drag/use-placement'
+import { useAnnounceCanvasRemeasure, usePublishCanvasRegion } from '../drag/use-placement'
 import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
@@ -408,6 +408,8 @@ export function Canvas(props: {
    * 묻는다(`./canvas-drag-handle.tsx` 머리말 «캔버스가 다시 잴 때») — 노드가 밀려도 표시가 옛 좌표에 남지 않게.
    */
   const layoutKey = useMemo(() => ({}), [doc, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  // 캔버스 밖에서 끄는 쪽(컴포넌트 목록 카드)도 같은 때 다시 묻는다(`drag/use-placement.ts` 의 `useCanvasRemeasured`).
+  useAnnounceCanvasRemeasure(layoutKey)
 
   if (doc === null) return null
 

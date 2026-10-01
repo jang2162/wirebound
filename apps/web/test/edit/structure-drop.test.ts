@@ -121,6 +121,26 @@ describe('못 놓는 자리', () => {
     expect(structureDropTarget(doc(), moving('n-c'), 'n-in1', 'after', free)).not.toBeNull()
   })
 
+  it('자식을 안 받는 부모의 자식 앞 · 뒤 → null — 형제 자리가 그 부모 «안» 이다(검증 전 문서)', () => {
+    const odd: PageDocument = {
+      version: 1,
+      root: {
+        id: 'n-root',
+        type: 'Page',
+        children: [
+          { id: 'n-x', type: 'Text' },
+          { id: 'n-btn', type: 'Button', children: [{ id: 'n-bt', type: 'Text' }] },
+        ],
+      },
+    }
+    for (const zone of ['before', 'after'] as const) {
+      expect(structureDropTarget(odd, moving('n-x'), 'n-bt', zone, free)).toBeNull()
+      expect(structureDropTarget(odd, adding('Divider'), 'n-bt', zone, free)).toBeNull()
+    }
+    // 그 단추 자신의 앞 · 뒤는 뿌리 안이라 된다.
+    expect(structureDropTarget(odd, adding('Divider'), 'n-btn', 'after', free)).toEqual({ parentId: 'n-root', index: 2, placement: 'after' })
+  })
+
   it('뿌리 앞 · 뒤 → null(뿌리는 형제가 없다) · 뿌리 안은 된다', () => {
     expect(structureDropTarget(doc(), moving('n-deep'), 'n-root', 'before', free)).toBeNull()
     expect(structureDropTarget(doc(), moving('n-deep'), 'n-root', 'after', free)).toBeNull()

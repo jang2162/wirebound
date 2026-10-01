@@ -45,6 +45,7 @@ import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
 import { ShellDialog } from '../shell/shell-dialog'
+import { ComponentPalette, PaletteToggle } from '../palette/component-palette'
 import { ShellFooter } from '../shell/shell-footer'
 import { ShellResizer } from '../shell/shell-resizer'
 import { useSidebarLayout } from '../shell/sidebar-layout'
@@ -681,6 +682,8 @@ function EditorShell(props: {
    * 절반이 빈칸이 된다. 설계서 「설계서 화면 구조」의 *"뷰 모드에서는 접혀 메뉴 트리가 전체를 쓴다"*가 그렇게 깨진다.
    */
   const split = mode === 'edit'
+  /** 하단 컴포넌트 판과 그 토글이 서는가 — 편집 입구라 다른 편집 도구와 같은 값(편집 모드 && `canEdit`)이다. */
+  const paletteEditable = mode === 'edit' && canEdit
 
   /**
    * 로그아웃 앞의 기다림 — 아래 `useLogout` 자리의 주석. 끊는 신호는 없다: 누른 뒤 화면을 옮겨도 로그아웃은 나간다. 기다림 뒤에 큐에 남은
@@ -918,6 +921,21 @@ function EditorShell(props: {
         />
       </main>
 
+      {/* **하단 컴포넌트 판**(`palette/component-palette.tsx`) — 캔버스와 하단 바 사이(그리드의 `palette` 줄). 편집 모드 · `canEdit` 일 때만
+          선다 — 뷰 모드 · viewer 면 판도 토글도 없고 기억한 열림은 그대로다(돌아오면 다시 열린다). */}
+      {paletteEditable && layout.paletteOpen && (
+        <ComponentPalette
+          projectId={props.project.id}
+          pageId={props.pageId}
+          height={layout.paletteHeight}
+          min={layout.paletteHeightMin}
+          max={layout.paletteHeightMax}
+          onGrab={layout.grabPaletteHeight}
+          onMove={layout.setPaletteHeight}
+          onReset={layout.resetPaletteHeight}
+        />
+      )}
+
       {/* **하단 바**(`shell/shell-footer.tsx`) — 왼쪽은 통지 줄, 오른쪽은 캔버스 도구. 통지가 여럿이면 바가 위로 자라고 캔버스가 준다. */}
       <ShellFooter
         notices={
@@ -946,7 +964,12 @@ function EditorShell(props: {
             <SessionNotices failure={logoutFailure} className="wb-shell-session-alert" />
           </>
         }
-        tools={<CanvasTools canvasRef={canvasRef} />}
+        tools={
+          <>
+            {paletteEditable && <PaletteToggle open={layout.paletteOpen} onToggle={layout.togglePalette} />}
+            <CanvasTools canvasRef={canvasRef} />
+          </>
+        }
       />
 
       {/* **캔버스와 우측 패널 사이의 손잡이**(`shell/sidebar-layout.ts` «두 폭은 한 예산을 나눠 쓴다»). 좌측 손잡이와 같은 부품이고 방향만

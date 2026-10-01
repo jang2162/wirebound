@@ -133,9 +133,10 @@ export function menuRowItems(
 }
 
 /**
- * 구조 트리 항목이 꺼졌을 때의 설명 — `MENU_WHY_DISABLED`와 같은 규칙(조건을 그대로 옮긴다 · 대표 이유는 상태줄이 말한다).
+ * 구조 트리 항목이 꺼졌을 때의 설명 — `MENU_WHY_DISABLED`와 같은 규칙(조건을 그대로 옮긴다 · 대표 이유는 상태줄이 말한다). 하단 판의 카드
+ * 클릭 추가가 «자식을 안 받는 자리» 에서 `addInside` 문장을 그대로 쓴다(`palette/palette-add.ts`).
  */
-const STRUCTURE_WHY_DISABLED: Record<keyof StructureAbilities, string> = {
+export const STRUCTURE_WHY_DISABLED: Record<keyof StructureAbilities, string> = {
   // **조건 둘을 다 말한다.** `acceptsChildren`은 카탈로그의 `many` 여부만이 아니라
   // 문서의 `children`이 배열인지도 본다 — 앞엣것만 적으면 `Card`인데 꺼진 자리에서
   // 사용자가 이유를 알 수 없다.

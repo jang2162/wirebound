@@ -56,6 +56,13 @@ export function CanvasIframe(props: {
    * React 가 그린 요소가 아니라서, 그것을 누른 클릭은 React 트리의 어느 핸들러에도 닿지 않는다(jsdom · 실브라우저 같다).
    */
   onBackgroundClick?: () => void
+  /**
+   * iframe 의 클래스 · 이름. 없으면 캔버스의 것(`wb-shell-canvas-iframe` · «캔버스 문서»)이다. **캔버스가 아닌 문서는 제 것을 준다** — 셸 ·
+   * 시험이 캔버스 iframe 을 그 클래스로 찾아(`build-test/editor-stack.ts` 의 `canvasFrame`), 같은 화면의 다른 iframe(하단 판의 축소판)이 그
+   * 클래스를 달면 둘이 잡힌다.
+   */
+  className?: string
+  title?: string
 }): ReactElement {
   const [iframe, setIframe] = useState<HTMLIFrameElement | null>(null)
   const [frame, setFrame] = useState<CanvasFrame | null>(null)
@@ -137,8 +144,8 @@ export function CanvasIframe(props: {
       {frame !== null && createPortal(props.children(frame), frame.document.body)}
       <iframe
         ref={setIframe}
-        className="wb-shell-canvas-iframe"
-        title="캔버스 문서"
+        className={props.className ?? 'wb-shell-canvas-iframe'}
+        title={props.title ?? '캔버스 문서'}
         style={{ width: `${props.width}px`, height: `${height}px` }}
       />
     </>
