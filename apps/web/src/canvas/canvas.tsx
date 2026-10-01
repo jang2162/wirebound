@@ -43,9 +43,13 @@ import { describePageTarget, type PageDocument } from '@wirebound/schema'
 import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
-import { walkSafely } from '../edit/safe-walk'
+import { findNodeSafely, walkSafely } from '../edit/safe-walk'
+import { nodeTypeLabel } from '../panels/node-shape'
+import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { usePublishCanvasRegion } from '../drag/use-placement'
 import { usePublishCanvasDocument } from './canvas-document'
+import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
 import { themeFileUrl } from '../theme/bundle-loader'
 import { useProjectTheme, type ProjectThemeState } from '../theme/project-theme'
@@ -158,6 +162,8 @@ function noticesOf(event: InteractionEvent): string[] {
 export function Canvas(props: {
   projectId: string
   pageId: string | undefined
+  /** 편집 모드 && `canEdit` — 셸의 그 값. 손잡이(`./canvas-drag-handle.tsx`)가 이것으로 선다. */
+  editable: boolean
 }): ReactElement | null {
   /**
    * **`renderComposed`를 쓰지 않는다.** *"기본 레이아웃이 `Page > Slot`이라 결과가
@@ -180,6 +186,8 @@ export function Canvas(props: {
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
   const mode = useEditorStore(store, (s) => s.mode)
+  // 손잡이는 남이 잡은 노드에 안 선다 — 판정은 스토어(`store/use-locked-by.ts`).
+  const lockOf = useLockedBy()
   const documentLoads = useEditorStore(store, (s) => s.documentLoads)
   const zoom = useEditorStore(store, (s) => s.zoom)
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
@@ -202,6 +210,8 @@ export function Canvas(props: {
   const bumpMeasure = useCallback(() => setMeasureTick((tick) => tick + 1), [])
   // 셸의 호스트 리스너(팝오버 닫기)가 캔버스 위의 조작을 받게 이 iframe 의 문서를 싣는다(`./canvas-document.tsx`).
   usePublishCanvasDocument(frame?.document ?? null)
+  // 끄는 포인터가 캔버스 칸 위인지 · 어느 노드 위인지를 경로 층이 이 창으로 잰다(`drag/use-placement.ts`).
+  usePublishCanvasRegion(frame?.window ?? null, zoom)
 
   /**
    * **상호작용 런타임의 상태**(설계서 「상호작용」의 「실행」 절). 문서가 아니라 **문서 옆**이다 —
@@ -393,7 +403,19 @@ export function Canvas(props: {
     // 이유다: 알림 줄이 문서를 아래로 민다. **빠뜨리면 마커가 옛 자리에 남는다.**
   }, [doc, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
+  /**
+   * **다시 잰 판** — 위 두 측정 이펙트와 같은 의존이 바뀔 때마다 새 값이다. 손잡이가 끄는 중이면 이 값이 바뀔 때 마지막 좌표로 다시
+   * 묻는다(`./canvas-drag-handle.tsx` 머리말 «캔버스가 다시 잴 때») — 노드가 밀려도 표시가 옛 좌표에 남지 않게.
+   */
+  const layoutKey = useMemo(() => ({}), [doc, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+
   if (doc === null) return null
+
+  /** 손잡이를 세울 노드 — 뿌리 · 남이 잡은 노드 · 문서에 없는 id 면 없다. */
+  const handleNode =
+    outlinedNodeId === null || outlinedNodeId === doc.root?.id || lockOf(outlinedNodeId) !== null
+      ? undefined
+      : findNodeSafely(doc.root, outlinedNodeId)
 
   return (
     <div
@@ -474,6 +496,21 @@ export function Canvas(props: {
           className="wb-shell-selection"
           data-wb-selected-id={outlinedNodeId}
           style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+        />
+      )}
+
+      {/* **손잡이**(`./canvas-drag-handle.tsx`) — 아웃라인 곁. 서는 조건: 편집할 수 있음(`editable` — 편집 모드 · `canEdit`) · 뿌리 아님 ·
+          남이 안 잡음(고른 뒤 잠금이 도착한 판). 뿌리는 옮기지 않는다(`edit/structure-drop.ts` 의 표). */}
+      {props.editable && outlinedNodeId !== null && box !== null && handleNode !== undefined && (
+        <CanvasDragHandle
+          key={outlinedNodeId}
+          projectId={props.projectId}
+          pageId={props.pageId}
+          nodeId={outlinedNodeId}
+          label={nodeTypeLabel(handleNode)}
+          box={box}
+          zoom={zoom}
+          layoutKey={layoutKey}
         />
       )}
 

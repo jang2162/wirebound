@@ -9,8 +9,22 @@
  * |---|---|
  * | 누름(주 버튼) | 아직 끌기가 아니다 — 누른 자리를 쥐고 기다린다 |
  * | 4px 넘게 움직임(`DRAG_THRESHOLD`) | 끌기가 선다 · 누른 요소가 포인터를 붙잡는다 · 이때부터 움직일 때마다 `onOver` |
- * | 뗌 | 뗀 좌표로 `onOver` 를 다시 물어 `null` 이 아니면 `onDrop` 한 번 |
+ * | 뗌 | 뗀 좌표로 `onOver` 를 다시 물어 `null` 이 아니면 `onDrop` 한 번 — `sameDrop` 을 주면 그 답이 보인 답일 때만(아래) |
  * | Escape · `pointercancel` | 취소 — 표시를 걷고 뒤의 뗌도 아무것도 안 한다 |
+ *
+ * ## 놓는 답은 보인 답이다(`sameDrop` · `refresh`)
+ *
+ * 뗀 좌표로 다시 묻는 것은 마지막 `pointermove` 와 뗌 사이에 포인터가 움직였을 수 있어서다. 그런데 포인터가 멈춰 있어도 그 밑의 것이
+ * 바뀐다 — 남의 편집이 줄을 밀거나(지움 · 넣음) 위 노드의 글을 늘려 레이아웃만 밀어도, 같은 좌표에 다시 물은 답은 **보인 표시와 다른
+ * 자리**다(옛 표시는 옛 좌표에 남아 있다). 그 답으로 놓으면 사람이 본 적 없는 자리로 간다(`build-test/canvas-drop-review.test.ts`).
+ *
+ * 그래서 부르는 쪽이 `sameDrop`(두 값이 같은 자리인가)을 주면 **뗀 좌표가 마지막으로 물은 좌표에서 문턱(`DRAG_THRESHOLD`) 안일 때**
+ * 다시 물은 답이 지금 보인 답과 같은 자리일 때만 놓는다 — 다르면(보인 답이 없던 판 포함) 편집 0 이다. 문턱 밖이면(뗌 앞의 움직임이 안
+ * 왔다) 다시 물은 답으로 놓는다 — `sameDrop` 이 없을 때와 같다. 보통의 끌기는 뗀 좌표가 마지막 `pointermove` 와 같아 다시 물은 답도 같다.
+ *
+ * 표시가 옛 좌표에 남지 않게 부르는 쪽은 그 밑이 바뀌었을 때(캔버스가 다시 잼) `refresh()` 를 부른다 — 마지막 좌표로 다시 물어 같은
+ * 자리면 새 상자로 고쳐 그리고, 다르면 표시를 걷는다(새 자리를 곧바로 내지 않는다 — 멈춘 포인터 밑에서 표시가 뛰어 바로 뗀 판이 안
+ * 본 자리로 가지 않게). 걷힌 뒤에는 움직이면 새 자리가 선다. 끝 스크롤의 다시 물음은 사람이 미는 몸짓이라 새 답을 그대로 그린다.
  *
  * ## 포인터 이벤트로 짓는다 — HTML5 DnD 가 아니다
  *
@@ -87,6 +101,8 @@ export interface PointerDragOptions<S, D> {
   onDrop: (source: S, value: D) => void
   /** 끝 스크롤할 상자. 없으면 안 민다. */
   scrollContainer?: () => HTMLElement | null
+  /** 두 값이 같은 자리인가 — 주면 놓는 답이 보인 답일 때만 놓는다(머리말 «놓는 답은 보인 답이다»). */
+  sameDrop?: (shown: D, landed: D) => boolean
 }
 
 export interface PointerDrag<S, D> {
@@ -99,16 +115,22 @@ export interface PointerDrag<S, D> {
   dragging: S | null
   /** 지금 놓을 자리. 없으면 `null`. */
   hint: DropHint<D> | null
+  /** 포인터 밑이 바뀌었다 — 마지막 좌표로 다시 물어 같은 자리면 다시 그리고 다르면 걷는다(머리말). 끌기가 아니면 아무것도 안 한다. */
+  refresh: () => void
 }
 
 /** 한 번의 누름 — 끌기가 섰는지와 걷을 것들. */
-interface Gesture<S> {
+interface Gesture<S, D> {
   source: S
   element: HTMLElement
   pointerId: number
   start: DragPoint
   last: DragPoint
   started: boolean
+  /** 지금 그린 표시 — 놓는 답과 견준다. */
+  shown: DropHint<D> | null
+  /** 마지막 좌표로 다시 묻는다(`refresh`). */
+  reask: () => void
   /** 걷기 — 리스너 · 타이머. */
   teardown: () => void
 }
@@ -116,7 +138,7 @@ interface Gesture<S> {
 export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): PointerDrag<S, D> {
   const [dragging, setDragging] = useState<S | null>(null)
   const [hint, setHint] = useState<DropHint<D> | null>(null)
-  const gesture = useRef<Gesture<S> | null>(null)
+  const gesture = useRef<Gesture<S, D> | null>(null)
   const canvasDocument = useCanvasDocument()
   // 마지막 콜백 · 캔버스 문서를 ref 로 든다 — 누른 동안 건 리스너가 그 렌더의 것을 붙잡지 않게.
   const latest = useRef({ options, canvasDocument })
@@ -149,13 +171,20 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
           listening.push({ target, type, listener })
         }
 
-        const current: Gesture<S> = {
+        const current: Gesture<S, D> = {
           source,
           element,
           pointerId: event.pointerId,
           start: point,
           last: point,
           started: false,
+          shown: null,
+          reask: () => {
+            const same = latest.current.options.sameDrop
+            const next = ask(current.last)
+            const kept = current.shown !== null && next !== null && (same === undefined || same(current.shown.value, next.value))
+            show(same === undefined || kept ? next : null)
+          },
           teardown: () => {
             for (const { target, type, listener } of listening) target.removeEventListener(type, listener)
             if (timer !== null) clearInterval(timer)
@@ -167,6 +196,10 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         gesture.current = current
 
         const ask = (at: DragPoint): DropHint<D> | null => latest.current.options.onOver(source, at)
+        const show = (next: DropHint<D> | null): void => {
+          current.shown = next
+          setHint(next)
+        }
 
         // 이 누름의 포인터가 아닌 이벤트는 모른 척한다(머리말 «시작한 포인터만 듣는다»).
         const mine = (raw: Event): boolean => (raw as PointerEvent).pointerId === current.pointerId
@@ -184,7 +217,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
             setDragging(() => source)
             timer = setInterval(edgeScroll, EDGE_TICK)
           }
-          setHint(ask(at))
+          show(ask(at))
         }
 
         const up = (raw: Event): void => {
@@ -195,9 +228,16 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
             return
           }
           // 뗀 좌표로 다시 묻는다 — 마지막 move 와 뗌 사이에 자리가 바뀔 수 있다.
-          const landed = ask({ x: released.clientX, y: released.clientY })
+          const at = { x: released.clientX, y: released.clientY }
+          const landed = ask(at)
+          const shown = current.shown
           finish()
-          if (landed !== null) latest.current.options.onDrop(source, landed.value)
+          if (landed === null) return
+          // 놓는 답은 보인 답이다 — 포인터가 거의 안 움직였는데 답이 다르면 그 밑이 바뀐 것이다(머리말).
+          const same = latest.current.options.sameDrop
+          const still = Math.hypot(at.x - current.last.x, at.y - current.last.y) <= DRAG_THRESHOLD
+          if (same !== undefined && still && (shown === null || !same(shown.value, landed.value))) return
+          latest.current.options.onDrop(source, landed.value)
         }
 
         const key = (raw: Event): void => {
@@ -219,7 +259,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
           if (delta === 0) return
           const before = box.scrollTop
           box.scrollTop = Math.max(0, before + delta)
-          if (box.scrollTop !== before) setHint(ask(current.last))
+          if (box.scrollTop !== before) show(ask(current.last))
         }
 
         listen(window, 'pointermove', move)
@@ -240,7 +280,12 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
     [finish],
   )
 
-  return { bind, dragging, hint }
+  const refresh = useCallback((): void => {
+    const current = gesture.current
+    if (current !== null && current.started) current.reask()
+  }, [])
+
+  return { bind, dragging, hint, refresh }
 }
 
 /**

@@ -1,6 +1,8 @@
 /**
- * 구조 트리의 **놓을 자리 판정** — 끄는 노드를 포인터 밑 노드의 어느 띠에 놓으면 어디로 가는가(spec 「드래그로 옮기기」). 끌기 장치
- * (`drag/use-pointer-drag.ts`)의 `onOver`가 부르고, 놓으면 `useStructureCommands`의 `dropTo`가 같은 자리로 `moveNodeOps`를 낸다.
+ * **놓을 자리 판정** — 끄는 것(옮길 노드 · 넣을 새 타입)을 포인터 밑 노드의 어느 띠에 놓으면 어디로 가는가(spec
+ * `docs/superpowers/specs/2026-10-01-component-drag-design.md` 「놓을 자리 판정」). 구조 트리 줄 · 캔버스 손잡이 · 컴포넌트 목록 카드가
+ * 끌기 장치(`drag/use-pointer-drag.ts`)의 `onOver`에서 같은 이 함수를 부른다 — 트리 줄은 `panels/structure-tree.tsx`, 나머지는 경로 층
+ * `drag/use-placement.ts`를 지난다. 놓으면 같은 자리로 `dropOps`가 편집을 짓는다.
  *
  * **순수 함수이고 던지지 않는다** — `./structure-actions.ts`와 같은 층 · 같은 계약이다(순회가 `walkSafely`를 지난다).
  *
@@ -13,21 +15,26 @@
  * | 끄는 노드 자신 · 그 자손 | 어느 띠든 | `null` |
  * | 끄는 노드가 뿌리 | — | `null` — 뿌리는 옮기지 않는다 |
  *
- * **돌려주는 `index`는 «옮긴 뒤 그 부모 안 차례»다** — `moveNodeOps`가 인덱스를 «값을 뺀 배열» 기준으로 읽기 때문이다(`./ops.ts`의
- * `moveNodeOps` 머리말). 메뉴 트리의 판정(`tree/tree-drop.ts`)과 같은 뜻이라 같은 부모 안에서 뒤로 옮기면 자기 몫을 하나 당긴다.
+ * **«안»이 묻는 것은 대상이다** — 새 타입이 무엇이든 대상이 자식을 받는지만 본다. 카탈로그에 «이 부모에는 이 타입만» 같은 규칙이 없다.
  *
- * **남이 잡은 자리면 `null`이다** — 놓았을 때 낼 편집(`moveNodeOps`)을 지어 그 편집이 부딪치는 잠금을 묻는다(`blockedBy` — 스토어의
- * `editBlockedBy`). 편집으로 묻는 것이 요점이다: 서버가 2차 방어로 묻는 것이 바로 그 편집이고(`@wirebound/schema`의
- * `lockConflictOfOps`), 노드 **고르기**의 판정(`lockedBy`)으로 물으면 놓을 부모 아래 아무 노드의 잠금에도 막힌다. 끄는 노드가 잠긴 자리
- * 안에 있으면 뽑는 자리(`move`의 `from`)가 부딪쳐 어디에도 못 놓는다. **물음은 하나다** — `move`의 `path`는 `from`을 뺀 **뒤**의
- * 좌표인데, 그 판정이 연산마다 좌표를 맞춰 잠긴 자리를 따라가므로(앞쪽 노드를 뒤쪽 형제의 잠긴 서브트리로 옮기는 판 · 잠긴 노드
- * **뒤** 형제 앞으로 옮기는 판 둘 다) 옮기기 전 좌표로 다시 물을 일이 없다.
+ * **돌려주는 `index`는 «옮긴 뒤 그 부모 안 차례»다** — `moveNodeOps`가 인덱스를 «값을 뺀 배열» 기준으로 읽기 때문이다(`./ops.ts`의
+ * `moveNodeOps` 머리말). 메뉴 트리의 판정(`tree/tree-drop.ts`)과 같은 뜻이라 같은 부모 안에서 뒤로 옮기면 자기 몫을 하나 당긴다. 새
+ * 타입은 문서에 아직 없어 당길 몫이 없고 «제자리»도 없다 — 끼울 자리가 곧 `insertNodeOps`의 인덱스다.
+ *
+ * **남이 잡은 자리면 `null`이다** — 놓았을 때 낼 편집(옮기기는 `moveNodeOps`, 넣기는 `insertNodeOps`)을 지어 그 편집이 부딪치는 잠금을
+ * 묻는다(`blockedBy` — 스토어의 `editBlockedBy`). 편집으로 묻는 것이 요점이다: 서버가 2차 방어로 묻는 것이 바로 그 편집이고
+ * (`@wirebound/schema`의 `lockConflictOfOps`), 노드 **고르기**의 판정(`lockedBy`)으로 물으면 놓을 부모 아래 아무 노드의 잠금에도
+ * 막힌다. 끄는 노드가 잠긴 자리 안에 있으면 뽑는 자리(`move`의 `from`)가 부딪쳐 어디에도 못 놓는다. **물음은 하나다** — `move`의
+ * `path`는 `from`을 뺀 **뒤**의 좌표인데, 그 판정이 연산마다 좌표를 맞춰 잠긴 자리를 따라가므로(앞쪽 노드를 뒤쪽 형제의 잠긴 서브트리로
+ * 옮기는 판 · 잠긴 노드 **뒤** 형제 앞으로 옮기는 판 둘 다) 옮기기 전 좌표로 다시 물을 일이 없다. 넣기의 물음에 싣는 노드는 판정용
+ * 표본(`PROBE_ID`)이다 — 잠금은 경로로 가르므로 id 가 답을 바꾸지 않는다. 놓을 때 보내는 노드는 부르는 쪽이 `createNode`로 짓는다.
  *
  * **제자리면 `null`이다** — 보낼 편집이 없다.
  */
 import type { NodeLock, PageDocument, PatchOp, WbNode } from '@wirebound/schema'
 import type { DropZone } from '../tree/tree-drop'
-import { moveNodeOps } from './ops'
+import { createNode } from './create-node'
+import { insertNodeOps, moveNodeOps } from './ops'
 import { walkSafely, type SafeVisit } from './safe-walk'
 import { acceptsChildren } from './structure-actions'
 
@@ -38,20 +45,22 @@ export interface StructureDrop {
   placement: DropZone
 }
 
+/** 끄는 것 — 옮길 노드(구조 트리 줄 · 캔버스 손잡이) 또는 넣을 새 타입(컴포넌트 목록 카드). */
+export type Placing = { kind: 'node'; id: string } | { kind: 'new'; type: string }
+
+/** 넣기 판정에 싣는 노드의 id — 보내지 않는다(머리말 «남이 잡은 자리면»). */
+const PROBE_ID = 'drop-probe'
+
 export function structureDropTarget(
   document: PageDocument,
-  draggedId: string,
+  placing: Placing,
   overId: string,
   zone: DropZone,
   blockedBy: (ops: readonly PatchOp[]) => NodeLock | null,
 ): StructureDrop | null {
-  if (draggedId === overId) return null
-  const dragged = findVisit(document, draggedId)
   const over = findVisit(document, overId)
-  if (dragged === null || over === null || dragged.parent === null) return null
-  if (contains(dragged.node, overId)) return null
+  if (over === null) return null
 
-  const fromParentId = dragged.parent.id
   let parentId: unknown
   let insertAt: number
   if (zone === 'inside') {
@@ -65,13 +74,65 @@ export function structureDropTarget(
   }
   if (typeof parentId !== 'string') return null
 
-  const sameParent = parentId === fromParentId
+  if (placing.kind === 'new') {
+    const probe = createNode(placing.type, () => PROBE_ID)
+    if (probe === null) return null
+    const ops = insertNodeOps(document, parentId, insertAt, probe)
+    if (ops === null || blockedBy(ops) !== null) return null
+    return { parentId, index: insertAt, placement: zone }
+  }
+
+  const draggedId = placing.id
+  if (draggedId === overId) return null
+  const dragged = findVisit(document, draggedId)
+  if (dragged === null || dragged.parent === null) return null
+  if (contains(dragged.node, overId)) return null
+
+  const sameParent = parentId === dragged.parent.id
   const index = sameParent && dragged.index < insertAt ? insertAt - 1 : insertAt
   if (sameParent && index === dragged.index) return null
 
   const ops = moveNodeOps(document, draggedId, parentId, index)
   if (ops === null || blockedBy(ops) !== null) return null
   return { parentId, index, placement: zone }
+}
+
+/**
+ * **페이지 끝** — 뿌리의 마지막 자식 자리. 캔버스에서 노드가 없는 바탕에 놓을 때와(`canvas/canvas-drop.ts`의 `pageEnd`) 카드를 고른
+ * 것 없이 눌렀을 때의 자리다. 뿌리 «안»과 같은 판정이다 — 뿌리가 잠겼으면 `null`, 뿌리의 마지막 자식을 옮기면 제자리라 `null`.
+ */
+export function pageEndTarget(
+  document: PageDocument,
+  placing: Placing,
+  blockedBy: (ops: readonly PatchOp[]) => NodeLock | null,
+): StructureDrop | null {
+  const rootId: unknown = document.root?.id
+  if (typeof rootId !== 'string') return null
+  return structureDropTarget(document, placing, rootId, 'inside', blockedBy)
+}
+
+/**
+ * **같은 자리인가** — 보인 자리와 다시 물은 자리를 견준다. 끌기 장치의 «놓는 답은 보인 답이다»(`drag/use-pointer-drag.ts` 의 `sameDrop`
+ * — 구조 트리 줄 끌기 · 캔버스 손잡이)와 경로 층의 보인 자리 다시 판정(`drag/use-placement.ts` 의 `holds`)이 같은 이 함수다.
+ *
+ * | 띠 | 같다 |
+ * |---|---|
+ * | 앞 · 뒤 | 부모 · 차례 · 띠가 다 같다 — 남의 편집이 보인 자리의 차례를 밀면 다른 자리다(보인 것과 다른 차례로 넣지 않는다) |
+ * | 안 | 부모 · 띠가 같다 — 보인 뜻이 «그 상자 안 끝» 이라 남이 그 자식을 넣거나 빼도 같은 자리다(차례는 놓을 때 지금 끝으로 다시 판정) |
+ */
+export function sameDrop(a: StructureDrop, b: StructureDrop): boolean {
+  if (a.parentId !== b.parentId || a.placement !== b.placement) return false
+  return a.placement === 'inside' || a.index === b.index
+}
+
+/**
+ * 판정이 준 자리(`drop`)로 낼 편집. 옮기기는 `moveNodeOps`, 넣기는 `insertNodeOps` 에 부르는 쪽이 지은 `node` 를 싣는다 — 그 id 가
+ * 보낸 뒤 고를 노드다. 새 타입인데 노드가 없거나 타입이 다르면 `null`이다(판정한 것과 다른 것을 넣지 않는다).
+ */
+export function dropOps(document: PageDocument, placing: Placing, drop: StructureDrop, node?: WbNode): PatchOp[] | null {
+  if (placing.kind === 'node') return moveNodeOps(document, placing.id, drop.parentId, drop.index)
+  if (node === undefined || node.type !== placing.type) return null
+  return insertNodeOps(document, drop.parentId, drop.index, node)
 }
 
 function findVisit(document: PageDocument, nodeId: string): SafeVisit | null {
