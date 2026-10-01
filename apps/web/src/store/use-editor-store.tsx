@@ -129,6 +129,16 @@ export function isPageOpen(store: EditorStore, pageId: string): boolean {
 }
 
 /**
+ * **그 페이지가 지금 열려 있으면 지금 문서 — 렌더 밖(이벤트 처리기)에서 읽는 관문.** 끌어 놓는 순간 판정을 다시 하는 경로 층
+ * (`drag/use-placement.ts`의 `onDrop`)이 쓴다 — 렌더의 문서는 끄는 사이 온 남의 편집 · 잠금보다 낡을 수 있다. 대조는 `isPageOpen`과
+ * 같고 이 파일에 두는 까닭도 같다.
+ */
+export function openDocumentNow(store: EditorStore, pageId: string): PageDocument | null {
+  const state = store.getState()
+  return state.openPageId === pageId ? state.document : null
+}
+
+/**
  * 문서만 필요할 때. `useOpenPage`의 얇은 껍질이다 — 대조는 그쪽 한 곳에 있다.
  *
  * 세 화면(캔버스·구조 트리·속성 패널)이 이것을 쓴다. 새로 읽는 자리가 문서만 필요하다면

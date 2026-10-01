@@ -30,6 +30,7 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { PageDetail, ProjectView } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CanvasDocumentProvider } from '../canvas/canvas-document'
+import { PlacementRegionsProvider } from '../drag/use-placement'
 import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
 import { InteractionPanel } from '../panels/interaction-panel'
@@ -488,12 +489,15 @@ export function EditorShellRoute(): ReactElement {
       <CanvasDocumentProvider>
         {/* **프로젝트가 고정한 테마**(`theme/project-theme.tsx`) — 캔버스 · 속성 패널 · 패턴 고르개가 읽고, 셸이 프레임 · 다시 읽기로 따라잡게 한다. */}
         <ProjectThemeProvider projectId={state.project.id}>
-          <EditorShell
-            project={state.project}
-            roleKnown={roleKnown}
-            pageId={params.pageId}
-            onMembership={onMembership}
-          />
+          {/* 끌기의 두 대상(구조 트리 · 캔버스)을 경로 층이 아는 통로(`drag/use-placement.ts`) — 둘의 공통 조상이 셸이다. */}
+          <PlacementRegionsProvider>
+            <EditorShell
+              project={state.project}
+              roleKnown={roleKnown}
+              pageId={params.pageId}
+              onMembership={onMembership}
+            />
+          </PlacementRegionsProvider>
         </ProjectThemeProvider>
       </CanvasDocumentProvider>
     </EditorStoreProvider>

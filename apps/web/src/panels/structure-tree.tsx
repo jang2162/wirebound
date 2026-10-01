@@ -14,15 +14,16 @@ import { useId, useRef, useState, type KeyboardEvent, type ReactElement, type Re
 import { createPortal } from 'react-dom'
 import type { NodeLock, WbNode } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
-import { elementAt, scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
+import { usePublishTreeRegion } from '../drag/use-placement'
+import { scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
 import { findNodeSafely } from '../edit/safe-walk'
-import { acceptsChildren, structureAbilities } from '../edit/structure-actions'
-import { structureDropTarget, type StructureDrop } from '../edit/structure-drop'
+import { structureAbilities } from '../edit/structure-actions'
+import type { StructureDrop } from '../edit/structure-drop'
 import { ActionMenu } from '../shell/action-menu'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
-import { dropZone } from '../tree/tree-drop'
 import { nodeTypeLabel } from './node-shape'
+import { structureTreeHint } from './structure-tree-hint'
 import { isTypingSurface } from './typing-surface'
 import { StructurePicker, useStructureCommands, type StructureCommands } from './structure-toolbar'
 import { structureRowItems, TreeRowActions } from './tree-row-actions'
@@ -195,27 +196,20 @@ export function StructureTree(props: {
   const [presetName, setPresetName] = useState('')
   /** 줄을 찾는 상자 — 끄는 동안 포인터 밑 줄(`[data-tree-row]`)을 여기서 찾는다. */
   const treeRef = useRef<HTMLUListElement>(null)
+  usePublishTreeRegion(treeRef)
   /**
-   * **끌어 놓기.** 포인터 밑 줄과 띠를 `structureDropTarget`에 물어 놓을 자리를 받고, 놓으면 `dropTo`가 `moveNodeOps`로 낸다. 남이 잡은
-   * 자리는 판정이 스토어의 `editBlockedBy`(서버의 2차 방어와 같은 물음)로 거른다 — `edit/structure-drop.ts` 머리말.
+   * **끌어 놓기.** 포인터 밑 줄과 띠로 놓을 자리를 받고(`./structure-tree-hint.ts` — 캔버스 손잡이 · 목록 카드가 트리 위를 지날 때도 같은
+   * 함수다), 놓으면 `dropTo`가 `moveNodeOps`로 낸다. 남이 잡은 자리는 판정이 스토어의 `editBlockedBy`(서버의 2차 방어와 같은 물음)로
+   * 거른다 — `edit/structure-drop.ts` 머리말.
+   *
+   * **줄 끌기는 경로 층(`drag/use-placement.ts`)을 지나지 않는다** — 그래서 트리 줄은 캔버스에 놓을 수 없다. 이 트리 영역은 경로 층에
+   * 싣는다(`usePublishTreeRegion`) — 다른 끌기가 트리 위를 지날 때 이 줄들로 판정한다.
    */
   const drag = usePointerDrag<string, StructureDrop>({
-    onOver: (source, point) => {
-      if (doc === null) return null
-      const row = elementAt(treeRef.current, '[data-tree-row]', point)
-      const overId = row?.dataset['treeId']
-      if (row === null || overId === undefined || overId === '') return null
-      const box = row.getBoundingClientRect()
-      const over = findNodeSafely(doc.root, overId)
-      const zone = dropZone(point.y - box.top, box.height, acceptsChildren(over))
-      const target = structureDropTarget(doc, { kind: 'node', id: source }, overId, zone, store.editBlockedBy)
-      if (target === null) return null
-      return {
-        value: target,
-        rect: { left: box.left, top: box.top, width: box.width, height: box.height },
-        placement: target.placement,
-      }
-    },
+    onOver: (source, point) =>
+      doc === null
+        ? null
+        : (structureTreeHint(treeRef.current, doc, { kind: 'node', id: source }, point, store.editBlockedBy)?.hint ?? null),
     onDrop: (source, target) => commands.dropTo(source, target),
     scrollContainer: () => scrollParent(treeRef.current),
   })

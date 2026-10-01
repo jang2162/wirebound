@@ -45,6 +45,7 @@ import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
 import { walkSafely } from '../edit/safe-walk'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { usePublishCanvasRegion } from '../drag/use-placement'
 import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
 import { themeFileUrl } from '../theme/bundle-loader'
@@ -202,6 +203,8 @@ export function Canvas(props: {
   const bumpMeasure = useCallback(() => setMeasureTick((tick) => tick + 1), [])
   // 셸의 호스트 리스너(팝오버 닫기)가 캔버스 위의 조작을 받게 이 iframe 의 문서를 싣는다(`./canvas-document.tsx`).
   usePublishCanvasDocument(frame?.document ?? null)
+  // 끄는 포인터가 캔버스 칸 위인지 · 어느 노드 위인지를 경로 층이 이 창으로 잰다(`drag/use-placement.ts`).
+  usePublishCanvasRegion(frame?.window ?? null, zoom)
 
   /**
    * **상호작용 런타임의 상태**(설계서 「상호작용」의 「실행」 절). 문서가 아니라 **문서 옆**이다 —
