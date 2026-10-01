@@ -5,7 +5,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 판을 열면 캔버스 칸이 준다 | 판 높이만큼 안 준다 · 최대에서 캔버스 칸이 `CANVAS_MIN_HEIGHT` 아래 · 셸이 세로로 넘친다 · 새로고침 뒤 열림 · 높이를 잃는다 |
- * | 축소판 — 카드마다 표본 | 어느 카드의 창 안에 그 타입의 `[data-wb-component]` 가 안 선다(빈 카드) · 카드 수가 둘 수 있는 타입 수와 다르다 |
+ * | 축소판 — 카드마다 표본 | 탭 다섯을 돌며 어느 카드의 창 안에 그 타입의 `[data-wb-component]` 가 안 선다(빈 카드) · 카드가 18 보다 적다 |
  * | 축소판 — 테마 표지 | `system-portal` 프로젝트에서 축소판 단추의 바탕이 그 테마 주색(`semantic.primary` 기본값)이 아니다 |
  * | 축소판 — 남이 토큰을 저장 | 저장 뒤에도 축소판 단추의 바탕이 옛 값이다 |
  * | 축소판 — 번들을 못 실음 | 축소판이 빈다(기본 뷰로 안 선다) |
@@ -70,6 +70,12 @@ function rgb(hex: string): string {
 async function openPalette(page: Page): Promise<void> {
   await page.getByRole('contentinfo', { name: '하단 바' }).getByRole('button', { name: '컴포넌트', exact: true }).click()
   await page.getByRole('region', { name: '컴포넌트 목록' }).waitFor()
+}
+
+/** 검색으로 그 타입의 카드만 세운다 — 탭은 한 갈래의 카드만 세운다(`Button` 은 액션 갈래). */
+async function showOnly(page: Page, type: string): Promise<void> {
+  await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill(type)
+  await page.locator(`[data-wb-palette-card="${type}"]`).waitFor()
 }
 
 /**
@@ -195,16 +201,25 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id="n_t0"]').waitFor()
       await openPalette(page)
-      const shown = await poll(
-        '표본이 선다',
-        async () => (await page.evaluate(CARD_THUMBS)) as Record<string, boolean> | null,
-        (value) => value !== null && Object.values(value).length > 0 && Object.values(value).every(Boolean),
-      ).catch(async () => (await page.evaluate(CARD_THUMBS)) as Record<string, boolean> | null)
-      const cards = await page.locator('[data-wb-palette-card]').count()
+      // 탭마다 그 갈래의 카드가 선다 — 다섯을 돌며 모은다.
+      const shown: Record<string, boolean> = {}
+      let cards = 0
+      const tabs = page.getByRole('tablist', { name: '갈래' }).getByRole('tab')
+      for (let i = 0; i < (await tabs.count()); i += 1) {
+        await tabs.nth(i).click()
+        const here = await poll(
+          '표본이 선다',
+          async () => (await page.evaluate(CARD_THUMBS)) as Record<string, boolean> | null,
+          (value) => value !== null && Object.values(value).length > 0 && Object.values(value).every(Boolean),
+        ).catch(async () => (await page.evaluate(CARD_THUMBS)) as Record<string, boolean> | null)
+        cards += await page.locator('[data-wb-palette-card]').count()
+        Object.assign(shown, here ?? {})
+      }
       // eslint-disable-next-line no-console
       console.log(`[축소판 표본] ${JSON.stringify(shown)}`)
-      expect(Object.keys(shown ?? {}).length).toBe(cards)
-      expect(Object.entries(shown ?? {}).filter(([, ok]) => !ok).map(([type]) => type)).toEqual([])
+      expect(cards).toBeGreaterThanOrEqual(18)
+      expect(Object.keys(shown).length).toBe(cards)
+      expect(Object.entries(shown).filter(([, ok]) => !ok).map(([type]) => type)).toEqual([])
     } finally {
       await context.close()
     }
@@ -220,6 +235,7 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       await page.goto(project.P)
       await canvasFrame(page).locator('[data-wb-id="n_t0"]').waitFor()
       await openPalette(page)
+      await showOnly(page, 'Button')
       const before = await poll('축소판 표지', async () => String(await page.evaluate(THUMB_BUTTON)), (value) => value === portalPrimary).catch(
         async () => String(await page.evaluate(THUMB_BUTTON)),
       )
@@ -269,9 +285,8 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id="n_t0"]').waitFor()
       await openPalette(page)
+      await showOnly(page, 'Button')
       await poll('단추 표본', async () => String(await page.evaluate(THUMB_BUTTON)), (value) => value !== '단추 없음')
-      await page.locator('[data-wb-palette-card="Button"]').scrollIntoViewIfNeeded()
-      await page.waitForTimeout(100)
       // iframe 문서가 받는 클릭 · 포커스를 센다.
       await page.evaluate(`(() => {
         const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe').contentDocument
