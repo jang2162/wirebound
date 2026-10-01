@@ -417,7 +417,7 @@ describe('놓는 답은 보인 답이다', () => {
     ])
   })
 
-  it('sameDrop 을 안 주면 앞 판 그대로 다시 물은 답으로 놓는다', () => {
+  it('sameDrop 을 안 주면 다시 물은 답으로 놓는다', () => {
     const onDrop = vi.fn()
     render(<Same onDrop={onDrop} same={false} />)
     press('가', 10, 10)
