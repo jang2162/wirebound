@@ -286,6 +286,31 @@ describe('놓는 순간 다시 판정한다', () => {
     expect(placement().live({ value, rect: HOST_RECT, placement: 'after' })).toBeNull()
   })
 
+  it('«안» 표시는 남이 그 상자에 자식을 넣어도 남는다 · 앞 · 뒤 표시는 차례가 밀리면 걷힌다', async () => {
+    const { value } = await armed()
+    regions.hit = { overId: 'n-box', zone: 'inside', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
+    const inside = over(adding, 520, 240)
+    if (inside === null) throw new Error('«안» 판정이 안 섰다')
+    act(() => {
+      shellStore().applyRemoteChange(PAGE_ID, {
+        seq: HEAD_SEQ + 1,
+        ops: [{ op: 'add', path: '/root/children/1/children/0', value: { id: 'n-bob', type: 'Text' } }],
+        warnings: [],
+      })
+    })
+    act(() => {
+      shellStore().applyRemoteChange(PAGE_ID, {
+        seq: HEAD_SEQ + 2,
+        ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n-bob2', type: 'Text' } }],
+        warnings: [],
+      })
+    })
+    expect({
+      inside: placement().live(inside) !== null,
+      after: placement().live({ value, rect: HOST_RECT, placement: 'after' }) !== null,
+    }).toEqual({ inside: true, after: false })
+  })
+
   it('끄는 사이 페이지가 바뀌었다 → 표시가 걷히고 놓아도 편집 0', async () => {
     const { sent, value, setPage } = await armed()
     act(() => setPage(OTHER_PAGE_ID))

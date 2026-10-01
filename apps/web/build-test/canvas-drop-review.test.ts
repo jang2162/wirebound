@@ -10,6 +10,7 @@
  * | 아래 다른 노드의 글 고침 · 내 앞 편집의 리베이스 | 남의 무관한 편집에 표시가 걷히거나 놓기가 버려진다(위 빨강을 «문서가 바뀌면 버린다» 로 닫는 고침이 여기서 죽는다) |
  * | 구조 트리 줄 끌기 — 보인 줄의 노드를 지움 · 줄이 밀림 | 보인 줄이 아닌 줄의 띠로 간다(C 의 원래 길 — 경로 층을 안 지난다) |
  * | 구조 트리 줄 끌기 — 보인 «안» 카드의 자식을 남이 지움 | 보인 자리(그 카드 끝)가 그대로인데 놓기가 버려진다 |
+ * | «안» 표시(그리드 빈 칸) · 남이 그 상자 첫 자리에 넣음 | 포인터 밑이 그대로 빈 칸인데 표시가 걷히거나 놓기가 버려진다 |
  * | 남의 잠금이 끄는 중 닿음 · 끄는 중 viewer 로 강등 | 손잡이 · 표시가 남는다 · 편집이 나간다 |
  * | 손잡이와 번호 마커가 겹친 자리 · 더블클릭 · 오른쪽 단추 | 겹친 자리 누름이 손잡이가 아닌 것에 간다 · 편집이 나간다 · 고른 노드가 풀린다 |
  *
@@ -583,6 +584,67 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
           await close()
         }
       })
+    })
+  })
+
+  /**
+   * **«안» 표시의 뜻은 «그 상자 안 끝»** — 남이 그 상자에 자식을 넣어도 같은 자리다(`src/edit/structure-drop.ts` 의 `sameDrop` 표 «안»). 옛
+   * 판은 보인 자리 다시 판정이 «안» 의 차례(자식 수)까지 견줘 표시가 걷히고 그대로 떼면 편집 0 이었다(리뷰 R3 — 거짓 취소).
+   *
+   * **못 재는 것 — 넣은 칸이 포인터 밑으로 밀려 오는 판.** 둘째 칸(넣은 뒤 n_g0 가 오는 칸)에 세우면 포인터 밑이 «n_g0 뒤» 로 바뀌어 캔버스가
+   * 다시 잴 때 표시가 걷히고 그대로 떼면 편집 0 이다(문서로는 같은 «그리드 끝» 이지만 보인 표시와 다른 자리라 놓지 않는다 — 6px 움직이면
+   * `after:x` 가 서고 그리드 끝으로 놓인다). 이월로 남긴다(`docs/superpowers/plans/2026-10-01-d1-fix-report.md` «R3»).
+   */
+  describe('«안» 표시 — 남이 그 상자에 넣어도', () => {
+    /** 3열 그리드에 칸 하나(n_g0) — 둘째 · 셋째 칸이 빈 자리다. */
+    const DOC: SeedNode[] = [
+      text('n_top', '위 글'),
+      { id: 'n_grid', type: 'Grid', props: { columns: 3 }, children: [text('n_g0', '칸 영')] },
+      text('n_t3', '옮길 글'),
+      text('n_end', '끝'),
+    ]
+
+    /**
+     * 그리드 `col` 번째 칸(0 부터) 가운데에 «안» 표시를 세운 뒤 bob 이 그리드 첫 자리에 넣는다. 줌 0.5 — 1440 창의 칸(860px)에 iframe
+     * (1280px)이 다 들어와야 셋째 칸이 칸 안이다.
+     */
+    async function armedInGrid(slug: string, col: number) {
+      const { P } = await fixture(slug, DOC)
+      const tab = await openTab(P)
+      const group = tab.page.getByRole('group', { name: '줌' })
+      for (let step = 0; step < 12; step += 1) {
+        const now = Number((await group.locator('.wb-shell-zoom-value').textContent())?.replace('%', '')) / 100
+        if (Math.abs(now - 0.5) < 0.01) break
+        await group.getByRole('button', { name: now < 0.5 ? '확대' : '축소', exact: true }).click()
+      }
+      await select(tab.page, 'n_t3')
+      await handle(tab.page).waitFor()
+      const grid = await nodeBox(tab.page, 'n_grid')
+      const g0 = await nodeBox(tab.page, 'n_g0')
+      const at = { x: grid.x + (grid.width * (col + 0.5)) / 3, y: g0.y + g0.height / 2 }
+      await grabTo(tab.page, at)
+      const armed = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
+      const status = await bobOps(P, [{ op: 'add', path: '/root/children/1/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+      await canvasFrame(tab.page).locator('[data-wb-id="n_bob"]').waitFor()
+      await tab.page.waitForTimeout(150)
+      const afterInsert = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
+      return { ...tab, P, at, armed, status, afterInsert }
+    }
+
+    it('넣은 뒤에도 포인터 밑이 빈 칸이면 표시가 남고 그대로 떼면 그 상자 끝이다', async () => {
+      const { page, close, P, armed, status, afterInsert } = await armedInGrid('inside-kept', 2)
+      try {
+        await page.mouse.up()
+        const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s).includes('n_t3"]'), 3000).catch(() => shape(P))
+        expect({ armed, status, afterInsert, final }).toEqual({
+          armed: ['inside:null'],
+          status: 200,
+          afterInsert: ['inside:null'],
+          final: { ROOT: ['n_top', { n_grid: ['n_bob', 'n_g0', 'n_t3'] }, 'n_end'] },
+        })
+      } finally {
+        await close()
+      }
     })
   })
 
