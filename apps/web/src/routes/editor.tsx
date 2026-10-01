@@ -925,6 +925,8 @@ function EditorShell(props: {
           선다 — 뷰 모드 · viewer 면 판도 토글도 없고 기억한 열림은 그대로다(돌아오면 다시 열린다). */}
       {paletteEditable && layout.paletteOpen && (
         <ComponentPalette
+          projectId={props.project.id}
+          pageId={props.pageId}
           height={layout.paletteHeight}
           min={layout.paletteHeightMin}
           max={layout.paletteHeightMax}

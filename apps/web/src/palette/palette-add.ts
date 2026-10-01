@@ -1,0 +1,85 @@
+/**
+ * **카드 클릭(Enter) 추가의 자리** — 고른 노드에 따라 새 노드를 어디에 넣는가(spec `docs/superpowers/specs/2026-10-01-component-drag-design.md`
+ * 「끌기와 클릭」 · 계획 D6). 자리의 판정은 끌어 놓기와 같은 함수다(`edit/structure-drop.ts` 의 `structureDropTarget` · `pageEndTarget`) —
+ * 클릭은 «어느 대상의 어느 띠» 를 고를 뿐이다.
+ *
+ * | 고른 것 | 대상 · 띠 |
+ * |---|---|
+ * | 없음 · 뿌리 | 페이지 끝(`pageEndTarget`) |
+ * | 자식을 받는 컴포넌트 | 그 노드 «안»(끝) |
+ * | 잎(자식을 안 받음) | 그 노드 «뒤»(같은 부모) |
+ *
+ * 고른 노드를 남이 잡았거나 판정이 `null` 이면 넣지 않고 이유 문장을 낸다. **문장은 새로 짓지 않는다** — 같은 판에서 화면이 이미 하는 말을 그대로 쓴다(두 벌이면
+ * 한쪽만 고쳐진다):
+ *
+ * | 판 | 문장 |
+ * |---|---|
+ * | 고른 노드를 남이 잡음(`lockedBy`) | 구조 트리 상태줄의 그 칸(`panels/toolbar-status.ts` 의 `lockedSelectionStatus`) |
+ * | 넣을 부모가 자식을 안 받음(검증 전 문서 — 잎의 부모가 자식을 안 받는 타입) | `+` 의 «안에 추가» 가 꺼졌을 때의 설명(`panels/tree-row-actions.tsx` 의 `STRUCTURE_WHY_DISABLED.addInside`) |
+ * | 지을 편집이 남의 잠금에 부딪힘(넣을 자리 바로 뒤 형제를 남이 잡음 · 뿌리를 남이 잡음) | 속성 패널의 잠금 문장(`panels/property-panel.tsx` 의 `lockedNotice`) |
+ * | 그 밖 — 고른 노드가 문서에 없음 | 상태줄의 그 칸(`NOT_IN_DOCUMENT_STATUS`) |
+ *
+ * **순수 함수이고 던지지 않는다**(`edit/structure-drop.ts` 와 같은 층).
+ */
+import type { NodeLock, PageDocument, PatchOp } from '@wirebound/schema'
+import { createNode } from '../edit/create-node'
+import { insertNodeOps } from '../edit/ops'
+import { findNodeSafely } from '../edit/safe-walk'
+import { acceptsChildren, nodeSpot } from '../edit/structure-actions'
+import { pageEndTarget, structureDropTarget, type Placing, type StructureDrop } from '../edit/structure-drop'
+import { lockedNotice } from '../panels/property-panel'
+import { lockedSelectionStatus, NOT_IN_DOCUMENT_STATUS } from '../panels/toolbar-status'
+import { STRUCTURE_WHY_DISABLED } from '../panels/tree-row-actions'
+
+export type PaletteAdd = { ok: true; target: StructureDrop } | { ok: false; reason: string }
+
+export function paletteAddTarget(input: {
+  document: PageDocument
+  selectedNodeId: string | null
+  type: string
+  /** 지을 편집이 부딪히는 남의 잠금(스토어의 `editBlockedBy`). */
+  blockedBy: (ops: readonly PatchOp[]) => NodeLock | null
+  /** 그 노드를 막는 남의 잠금(스토어의 `lockedBy`). */
+  lockedBy: (nodeId: string) => NodeLock | null
+}): PaletteAdd {
+  const { document, selectedNodeId: selected } = input
+  const placing: Placing = { kind: 'new', type: input.type }
+  const rootId: unknown = document.root?.id
+  const atEnd = selected === null || selected === rootId
+  const node = atEnd ? undefined : findNodeSafely(document.root, selected)
+  const inside = node !== undefined && acceptsChildren(node)
+
+  // 고른 노드를 남이 잡았으면 넣지 않는다 — 판정은 잠긴 노드 **뒤**에 넣기를 막지 않지만(서버도 받는다), `+` 가 그 판에 항목을 전부 끄는
+  // 것과 같이 간다(`edit/structure-actions.ts` 의 `structureAbilities` — 잠금이면 전부 거짓).
+  if (selected !== null) {
+    const lock = input.lockedBy(selected)
+    if (lock !== null) return { ok: false, reason: lockedSelectionStatus(lock.userName) }
+  }
+
+  const target = atEnd
+    ? pageEndTarget(document, placing, input.blockedBy)
+    : node === undefined
+      ? null
+      : structureDropTarget(document, placing, selected, inside ? 'inside' : 'after', input.blockedBy)
+  if (target !== null) return { ok: true, target }
+
+  // 왜 못 넣나 — 머리말의 표 차례대로(고른 노드의 잠금은 위에서 봤다).
+  const slot = atEnd ? (typeof rootId === 'string' ? { parentId: rootId, index: childCount(document.root) } : null) : node === undefined ? null : inside ? { parentId: selected, index: childCount(node) } : afterSlot(document, selected)
+  if (slot === null) return { ok: false, reason: NOT_IN_DOCUMENT_STATUS }
+  if (!acceptsChildren(findNodeSafely(document.root, slot.parentId))) return { ok: false, reason: STRUCTURE_WHY_DISABLED.addInside }
+  const probe = createNode(input.type, () => 'palette-probe')
+  const ops = probe === null ? null : insertNodeOps(document, slot.parentId, slot.index, probe)
+  const blocker = ops === null ? null : input.blockedBy(ops)
+  if (blocker !== null) return { ok: false, reason: lockedNotice(blocker.userName) }
+  return { ok: false, reason: NOT_IN_DOCUMENT_STATUS }
+}
+
+function childCount(node: unknown): number {
+  const children = (node as { children?: unknown } | null | undefined)?.children
+  return Array.isArray(children) ? children.length : 0
+}
+
+function afterSlot(document: PageDocument, nodeId: string): { parentId: string; index: number } | null {
+  const spot = nodeSpot(document, nodeId)
+  return spot === null ? null : { parentId: spot.parentId, index: spot.index + 1 }
+}

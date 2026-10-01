@@ -10,6 +10,7 @@
  * |---|---|---|
  * | 자식을 받는 컴포넌트(카탈로그 `children: 'many'` · `acceptsChildren`) | 안 | 그 노드의 마지막 자식 |
  * | 자식을 안 받는 컴포넌트 | 안 | `null` |
+ * | 부모가 자식을 안 받는 노드(검증 전 문서) | 앞 · 뒤 | `null` — 형제 자리는 그 부모 «안» 이다 |
  * | 뿌리 아닌 노드 | 앞 · 뒤 | 그 노드의 형제(그 앞 · 뒤) |
  * | 뿌리 | 앞 · 뒤 | `null` — 뿌리는 형제가 없다 |
  * | 끄는 노드 자신 · 그 자손 | 어느 띠든 | `null` |
@@ -69,6 +70,8 @@ export function structureDropTarget(
     insertAt = Array.isArray(over.node.children) ? over.node.children.length : 0
   } else {
     if (over.parent === null) return null
+    // 형제 자리는 부모 «안» 이다 — 부모가 자식을 안 받으면(검증 전 문서 · 카탈로그가 바뀐 옛 문서) 못 놓는다.
+    if (!acceptsChildren(over.parent)) return null
     parentId = over.parent.id
     insertAt = zone === 'before' ? over.index : over.index + 1
   }

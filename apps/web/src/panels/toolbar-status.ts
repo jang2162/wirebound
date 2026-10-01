@@ -138,9 +138,7 @@ export function structureStatus(input: {
   // 줄이 **회색 일곱 개의 유일한 이유**이고, *"고를 수 없다"*만 말하면 정작 사용자가 묻는
   // 것(*"왜 다 회색인가"*)에 답하지 않는다. **이유는 하나이므로 문장도 하나다** — 원인
   // (남이 편집 중)에 결과 둘을 잇는다.
-  if (input.lock !== null) {
-    return `${input.lock.userName}님이 편집 중이라 고를 수도 바꿀 수도 없습니다`
-  }
+  if (input.lock !== null) return lockedSelectionStatus(input.lock.userName)
   if (input.isRoot) return '루트라 삭제·순서·계층을 바꿀 수 없습니다'
   // 루트가 아닌데 전부 꺼졌으면 그 노드가 문서에 없다 — 남이 그 노드를 지운 뒤 재조회
   // 전까지의 상태다. 찾은 비루트 노드는 `addAfter`·`remove`가 언제나 참이기 때문이다.
@@ -148,7 +146,7 @@ export function structureStatus(input: {
   // **`NOTHING`을 내는 갈래가 둘이다**(잠금과 «문서에 없다»). 이 칸이 잠금을 삼키지
   // 않는 것은 위 칸이 먼저 답하기 때문이고, 그것이 사다리에서 잠금이 **위**여야 하는
   // 두 번째 근거다 — 순서를 뒤집으면 잠긴 자리가 *"고른 노드가 문서에 없습니다"*로 보인다.
-  if (!abilities.addAfter && !abilities.remove) return '고른 노드가 문서에 없습니다'
+  if (!abilities.addAfter && !abilities.remove) return NOT_IN_DOCUMENT_STATUS
   // **카탈로그 제약은 화면 어디에도 안 보인다**(사다리 규칙 1) — 형제 자리와 달리 트리를
   // 봐도 알 수 없으므로 위에 둔다.
   if (!abilities.addInside) return '자식을 담지 못하는 타입입니다'
@@ -156,6 +154,17 @@ export function structureStatus(input: {
 
   return ''
 }
+
+/**
+ * 고른 노드를 남이 잡았을 때의 문장 — 상태줄 사다리의 맨 위 칸(`structureStatus`). 하단 판의 카드 클릭 추가가 같은 판에서 같은 문장을
+ * 낸다(`palette/palette-add.ts`).
+ */
+export function lockedSelectionStatus(userName: string): string {
+  return `${userName}님이 편집 중이라 고를 수도 바꿀 수도 없습니다`
+}
+
+/** 고른 노드가 문서에 없을 때의 문장(`structureStatus` · `palette/palette-add.ts`). */
+export const NOT_IN_DOCUMENT_STATUS = '고른 노드가 문서에 없습니다'
 
 /**
  * 메뉴 트리 아래 상태줄 문안. 할 말이 없으면 `''`다.

@@ -347,6 +347,86 @@
   outline: 2px solid var(--wb-shell-ink);
 }
 
+/* 판의 머리 줄 — 갈래 탭 · 검색 칸 · 거절 문장. 캔버스 칸이 좁으면(최소 320) 안에서 줄을 바꾼다 — 판이 `overflow: hidden` 이라 넘치면
+   검색 칸이 잘린다. 줄이 늘면 카드 줄이 그만큼 준다. */
+.wb-shell-palette-head {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 12px 0;
+}
+
+.wb-shell-palette-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+/* 갈래 탭. 고른 탭은 강조색 밑줄 — 우측 패널 탭(`.wb-shell-tab`)과 같은 말투다. */
+.wb-shell-palette-tab {
+  appearance: none;
+  padding: 3px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  color: var(--wb-shell-muted);
+  cursor: pointer;
+}
+
+.wb-shell-palette-tab[aria-selected='true'] {
+  border-bottom-color: var(--wb-shell-accent);
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-palette-search {
+  width: 160px;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  background: #fff;
+}
+
+/* 거절 문장(카드 클릭 추가가 못 넣은 이유 — `palette/palette-add.ts`). 비면 자리를 안 쥔다. */
+.wb-shell-palette-notice {
+  flex: 1 1 200px;
+  min-width: 0;
+  margin: 0;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-palette-notice:empty {
+  display: none;
+}
+
+/* 검색에 맞는 카드가 없을 때. 카드 줄 안의 글 한 줄이다. */
+.wb-shell-palette-empty {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  align-self: center;
+  color: var(--wb-shell-muted);
+}
+
+/* 끄는 동안 포인터 곁의 카드 이름표. 창 좌표라 `position: fixed` 다(놓을 자리 표시와 같은 근거 — `drag/drop-indicator.tsx` 머리말). 누름을
+   받으면 그 밑의 대상이 판정에 안 잡힌다. */
+.wb-shell-palette-dragtag {
+  position: fixed;
+  z-index: 10;
+  padding: 2px 8px;
+  border: 1px solid var(--wb-shell-accent);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--wb-shell-ink);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* 카드 줄의 스크롤 상자 — 판의 남은 높이를 다 쓰고 넘치면 가로로 민다. */
 .wb-shell-palette-cards {
   flex: 1 1 auto;

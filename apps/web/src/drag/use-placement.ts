@@ -171,6 +171,11 @@ export interface Placement {
   live: (hint: DropHint<PlacementDrop> | null) => DropHint<PlacementDrop> | null
   /** 두 자리가 같은가 — 끌기 장치의 `sameDrop` 에 준다(머리말 «놓는 순간»). */
   sameDrop: (shown: PlacementDrop, landed: PlacementDrop) => boolean
+  /**
+   * 그 좌표에서 끝 스크롤할 상자 — 트리 영역 안이면 트리의 스크롤 상자, 아니면 캔버스 칸. 끌기 장치의 `scrollContainer` 는 좌표를 안 받으므로
+   * 부르는 쪽이 마지막 좌표를 들고 묻는다(컴포넌트 목록 카드 — 한 끌기가 두 대상 위를 지난다).
+   */
+  scrollContainerAt: (point: DragPoint) => HTMLElement | null
 }
 
 export function usePlacementDrop(input: {
@@ -289,5 +294,12 @@ export function usePlacementDrop(input: {
   const live = (hint: DropHint<PlacementDrop> | null): DropHint<PlacementDrop> | null =>
     hint !== null && sameStage(hint.value.stage, stageNow()) && holds(hint.value) ? hint : null
 
-  return { onOver, onDrop, live, sameDrop: (shown, landed) => sameDrop(shown.target, landed.target) }
+  const scrollContainerAt = (point: DragPoint): HTMLElement | null => {
+    const tree = regions.tree()
+    if (tree !== null && withinRegion(tree, point)) return scrollParent(tree)
+    const canvas = regions.canvas()
+    return canvas === null ? null : scrollParent(canvas.frame.frameElement as HTMLElement | null)
+  }
+
+  return { onOver, onDrop, live, sameDrop: (shown, landed) => sameDrop(shown.target, landed.target), scrollContainerAt }
 }

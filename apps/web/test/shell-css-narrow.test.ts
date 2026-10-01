@@ -17,7 +17,8 @@ import '../src/shell.css'
  * 머리 · 하단 바 안에서 줄을 바꾸는 묶음. 이력은 없다 — 자식이 다 줄어들거나 짧다(`src/shell.css`의
  * `.wb-shell-header` 주석 · `shell-css-picker.test.ts`의 `ONE_LINE`). 에디터 머리의 가운데 무리(`wb-shell-head-tools` — 되돌리기 ·
  * 모드), 하단 바 자신(좁으면 도구가 통지 아래 줄로 간다 — `src/shell.css`의 `.wb-shell-footer`)과 그 두 무리(통지 · 뷰포트 · 줌), 셸 밖
- * 화면 머리의 왼쪽 무리(`wb-shell-page-lead` — 로고 · 제목 · `shell/page-head.tsx`)가 든다.
+ * 화면 머리의 왼쪽 무리(`wb-shell-page-lead` — 로고 · 제목 · `shell/page-head.tsx`), 하단 컴포넌트 판의 머리 줄(`wb-shell-palette-head` —
+ * 갈래 탭 · 검색 · 거절 문장)이 든다.
  */
 const WRAPPING_GROUPS = [
   'wb-shell-head-tools',
@@ -25,6 +26,7 @@ const WRAPPING_GROUPS = [
   'wb-shell-footer-notices',
   'wb-shell-footer-tools',
   'wb-shell-page-lead',
+  'wb-shell-palette-head',
 ] as const
 
 function styleOf(className: string): CSSStyleDeclaration {

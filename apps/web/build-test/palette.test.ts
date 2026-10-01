@@ -10,6 +10,10 @@
  * | 축소판 — 남이 토큰을 저장 | 저장 뒤에도 축소판 단추의 바탕이 옛 값이다 |
  * | 축소판 — 번들을 못 실음 | 축소판이 빈다(기본 뷰로 안 선다) |
  * | 축소판 — `inert` | 축소판 단추 자리를 눌러 iframe 문서에 클릭이 닿는다 · Tab 이 iframe 안으로 들어간다 |
+ * | 카드 끌어 놓기 — 캔버스 · 트리 | 빈 카드 안 · 형제 앞 · 페이지 끝 · 구조 트리 줄에 놓은 자리가 서버 문서와 다르다 · 넣은 노드가 안 골라진다 · 이름표가 안 따라온다 · 되돌리기 넷 뒤 원래 문서가 아니다 |
+ * | 카드 — 못 놓는 자리 | 남이 잡은 카드 위 · 판 위에서 표시가 서거나 놓아 편집이 나간다 |
+ * | 카드 — 끄는 중 페이지 옮김 | 옮긴 뒤 표시가 남는다 · 새 페이지 위에 놓아 편집이 나간다(판은 셸과 함께 남아 끌기가 이어진다 — 경로 층의 판 검사가 막는다) |
+ * | 카드 — Enter · 끈 뒤 클릭 | Enter 로 안 넣는다 · 끌어 놓은 뒤의 `click` 이 한 번 더 넣는다 |
  *
  * **잘라 보이는 방법을 고른 값**(`src/palette/palette-thumbs.tsx` 머리말 «같은 좌표») — 두 판을 같은 판(창 1440×900 · 판 기본 높이 · 카드
  * 18 — 카탈로그의 둘 수 있는 타입 전부)에서 쟀다. A(깔개를 트랙 안에 — 트랙과 함께 스크롤): 누름 → 모든 표본이 창 안에 선 첫 프레임까지
@@ -302,5 +306,294 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
     } finally {
       await context.close()
     }
+  })
+
+  describe('카드 끌어 놓기 · 누름', () => {
+    interface SeedNode {
+      id: string
+      type: string
+      props?: Record<string, unknown>
+      children?: SeedNode[]
+    }
+
+    /**
+     * ```
+     * Page
+     * ├ Text    n_text  '글'
+     * ├ Card    n_card  '카드'
+     * │ └ Text  n_intx  '안'
+     * ├ Card    n_empt  '빈 카드'
+     * └ Text    n_last  '끝'
+     * ```
+     */
+    const BASIC: SeedNode[] = [
+      { id: 'n_text', type: 'Text', props: { content: '글' } },
+      { id: 'n_card', type: 'Card', props: { title: '카드' }, children: [{ id: 'n_intx', type: 'Text', props: { content: '안' } }] },
+      { id: 'n_empt', type: 'Card', props: { title: '빈 카드' } },
+      { id: 'n_last', type: 'Text', props: { content: '끝' } },
+    ]
+    const ORIGINAL = { n_root: ['n_text', { n_card: ['n_intx'] }, 'n_empt', 'n_last'] }
+    const KNOWN = new Set(['n_text', 'n_card', 'n_intx', 'n_empt', 'n_last', 'n_text2', 'n_empt2'])
+
+    /** 서버 문서의 모양 — 뿌리는 `n_root`, 픽스처에 없는 노드(넣은 것)는 `+타입`. */
+    async function shape(P: string): Promise<unknown> {
+      const walk = (node: { id: string; type: string; children?: unknown[] }, root: boolean): unknown => {
+        const name = root ? 'n_root' : KNOWN.has(node.id) ? node.id : `+${node.type}`
+        return Array.isArray(node.children) && node.children.length > 0 ? { [name]: node.children.map((child) => walk(child as never, false)) } : name
+      }
+      return walk((await stack.request(alice, 'GET', P)).body.schema.root, true)
+    }
+
+    async function seed(slug: string, pages: SeedNode[][]): Promise<{ P: string[]; projectId: string }> {
+      const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
+      const project = (await call('POST', '/projects', { name: 'D2 끌기', slug: `${slug}-${Date.now().toString(36)}` })).body
+      const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
+      const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
+      if (member.status >= 300) throw new Error(`member ${member.status}`)
+      const P: string[] = []
+      for (const [index, nodes] of pages.entries()) {
+        const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: `쪽${index + 1}` })).body.id
+        const path = `/projects/${project.id}/pages/${pageId}`
+        const seeded = await call('PATCH', `${path}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+        if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
+        P.push(path)
+      }
+      return { P, projectId: project.id }
+    }
+
+    async function openEditor(P: string, user: 'alice' | 'bob' = 'alice'): Promise<{ page: Page; close: () => Promise<void>; patches: string[] }> {
+      const { context, page } = await stack.openTab(stack.users[user], { viewport: { width: 1440, height: 900 } })
+      const patches: string[] = []
+      page.on('websocket', (socket) => {
+        socket.on('framesent', (frame) => {
+          const text = typeof frame.payload === 'string' ? frame.payload : frame.payload.toString()
+          if (text.includes('"type":"patch"')) patches.push(text)
+        })
+      })
+      await page.goto(P)
+      await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
+      return { page, close: () => context.close(), patches }
+    }
+
+    async function nodeBox(page: Page, id: string): Promise<{ x: number; y: number; width: number; height: number }> {
+      const box = await canvasFrame(page).locator(`[data-wb-id="${id}"]`).boundingBox()
+      if (box === null) throw new Error(`캔버스에 ${id} 상자가 없다`)
+      return box
+    }
+
+    async function spotIn(page: Page, id: string, fx: number, fy: number): Promise<{ x: number; y: number }> {
+      const box = await nodeBox(page, id)
+      return { x: box.x + box.width * fx, y: box.y + box.height * fy }
+    }
+
+    /** 검색으로 그 타입의 카드 하나만 세운다. */
+    async function only(page: Page, type: string): Promise<void> {
+      await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill(type)
+      await page.locator(`[data-wb-palette-card="${type}"]`).waitFor()
+    }
+
+    /** 카드를 쥐고 문턱(4px)을 넘긴다. */
+    async function grabCard(page: Page, type: string): Promise<void> {
+      const box = (await page.locator(`[data-wb-palette-card="${type}"]`).boundingBox())!
+      const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      await page.mouse.move(at.x, at.y)
+      await page.mouse.down()
+      await page.mouse.move(at.x + 3, at.y - 6, { steps: 3 })
+    }
+
+    async function moveTo(page: Page, at: { x: number; y: number }): Promise<void> {
+      await page.mouse.move(at.x, at.y, { steps: 8 })
+    }
+
+    async function indicators(page: Page): Promise<string[]> {
+      return page
+        .locator('.wb-shell-drop-indicator')
+        .evaluateAll((els) => els.map((el) => `${el.getAttribute('data-placement')}${el.getAttribute('data-axis') === null ? '' : `:${el.getAttribute('data-axis')}`}`))
+    }
+
+    function treeRow(page: Page, id: string) {
+      return page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"]`)
+    }
+
+    /** 지금 고른 노드(선택 외곽선의 id). */
+    async function selectedId(page: Page): Promise<string | null> {
+      return page.evaluate(() => document.querySelector('.wb-shell-selection')?.getAttribute('data-wb-selected-id') ?? null)
+    }
+
+    /** 서버 문서에서 `+타입` 으로 넣은 노드의 id 들. */
+    async function addedIds(P: string): Promise<string[]> {
+      const ids: string[] = []
+      const walk = (node: { id: string; children?: unknown[] }) => {
+        if (!KNOWN.has(node.id) && node.id !== root.id) ids.push(node.id)
+        for (const child of node.children ?? []) walk(child as never)
+      }
+      const root = (await stack.request(alice, 'GET', P)).body.schema.root
+      walk(root)
+      return ids
+    }
+
+    it('캔버스의 빈 카드 안 · 형제 앞 · 페이지 끝 · 구조 트리 줄로 끌어 놓으면 서버 문서가 그 자리이고, 되돌리기 넷으로 원래 문서다', async () => {
+      const { P } = await seed('pal-drag', [BASIC])
+      const { page, close, patches } = await openEditor(P[0]!)
+      try {
+        await openPalette(page)
+        await only(page, 'Divider')
+
+        await grabCard(page, 'Divider')
+        await moveTo(page, await spotIn(page, 'n_empt', 0.5, 0.5))
+        const intoHint = await indicators(page)
+        const tag = await page.locator('.wb-shell-palette-dragtag').textContent()
+        await page.mouse.up()
+        const into = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL))
+        const firstNew = (await addedIds(P[0]!))[0]
+        const selectedAfterDrop = await poll('넣은 노드를 고른다', () => selectedId(page), (id) => id === firstNew).catch(() => selectedId(page))
+
+        await grabCard(page, 'Divider')
+        await moveTo(page, await spotIn(page, 'n_intx', 0.5, 0.1))
+        const beforeHint = await indicators(page)
+        await page.mouse.up()
+        const before = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(into))
+
+        await grabCard(page, 'Divider')
+        const last = await nodeBox(page, 'n_last')
+        // 문서 아래의 바탕 — 캔버스 iframe 은 문서가 짧아도 최소 높이(320)라 마지막 노드 밑에 노드 없는 자리가 있다.
+        await moveTo(page, { x: last.x + 200, y: last.y + last.height + 12 })
+        const endHint = await indicators(page)
+        await page.mouse.up()
+        const atEnd = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(before))
+
+        await grabCard(page, 'Divider')
+        const row = (await treeRow(page, 'n_card').boundingBox())!
+        await moveTo(page, { x: row.x + 30, y: row.y + row.height / 2 })
+        const rowHint = await indicators(page)
+        await page.mouse.up()
+        const onRow = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(atEnd))
+
+        const undo = page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' })
+        for (let i = 0; i < 4; i += 1) await undo.click()
+        const undone = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) === JSON.stringify(ORIGINAL)).catch(() => shape(P[0]!))
+
+        expect({ intoHint, tag, into, selected: selectedAfterDrop === firstNew, beforeHint, before, endHint, atEnd, rowHint, onRow, undone, sent: patches.length }).toEqual({
+          intoHint: ['inside'],
+          tag: '구분선',
+          into: { n_root: ['n_text', { n_card: ['n_intx'] }, { n_empt: ['+Divider'] }, 'n_last'] },
+          selected: true,
+          beforeHint: ['before:y'],
+          before: { n_root: ['n_text', { n_card: ['+Divider', 'n_intx'] }, { n_empt: ['+Divider'] }, 'n_last'] },
+          endHint: ['inside'],
+          atEnd: { n_root: ['n_text', { n_card: ['+Divider', 'n_intx'] }, { n_empt: ['+Divider'] }, 'n_last', '+Divider'] },
+          rowHint: ['inside'],
+          onRow: { n_root: ['n_text', { n_card: ['+Divider', 'n_intx', '+Divider'] }, { n_empt: ['+Divider'] }, 'n_last', '+Divider'] },
+          undone: ORIGINAL,
+          sent: 8,
+        })
+      } finally {
+        await close()
+      }
+    })
+
+    it('못 놓는 자리 — 남이 잡은 카드 위 · 판 위 — 표시가 없고 놓아도 편집이 없다', async () => {
+      const { P } = await seed('pal-refuse', [BASIC])
+      const bob = await openEditor(P[0]!, 'bob')
+      const { page, close, patches } = await openEditor(P[0]!)
+      try {
+        const pickAt = await spotIn(bob.page, 'n_empt', 0.5, 0.5)
+        await bob.page.mouse.click(pickAt.x, pickAt.y)
+        await page.locator('.wb-shell-structure-lock').waitFor()
+        await openPalette(page)
+        await only(page, 'Divider')
+
+        await grabCard(page, 'Divider')
+        await moveTo(page, await spotIn(page, 'n_empt', 0.5, 0.5))
+        const overLocked = await indicators(page)
+        await page.mouse.up()
+        await page.waitForTimeout(400)
+
+        await grabCard(page, 'Divider')
+        const palette = (await page.getByRole('region', { name: '컴포넌트 목록' }).boundingBox())!
+        await moveTo(page, { x: palette.x + palette.width - 40, y: palette.y + palette.height / 2 })
+        const overPalette = await indicators(page)
+        await page.mouse.up()
+        await page.waitForTimeout(400)
+
+        expect({ overLocked, overPalette, sent: patches.length, shape: await shape(P[0]!) }).toEqual({
+          overLocked: [],
+          overPalette: [],
+          sent: 0,
+          shape: ORIGINAL,
+        })
+      } finally {
+        await close()
+        await bob.close()
+      }
+    })
+
+    it('끄는 중 페이지를 옮기면(뒤로 가기) 표시가 걷히고 새 페이지 위에 놓아도 편집이 없다', async () => {
+      const page2: SeedNode[] = [
+        { id: 'n_text2', type: 'Text', props: { content: '글' } },
+        { id: 'n_empt2', type: 'Card', props: { title: '빈 카드' } },
+      ]
+      const { P } = await seed('pal-page-move', [BASIC, page2])
+      const { page, close, patches } = await openEditor(P[0]!)
+      try {
+        await page.getByRole('link', { name: '쪽2' }).click()
+        await page.waitForURL((url) => url.pathname === P[1])
+        await canvasFrame(page).locator('[data-wb-id="n_empt2"]').waitFor()
+        await openPalette(page)
+        await only(page, 'Divider')
+        await grabCard(page, 'Divider')
+        await moveTo(page, await spotIn(page, 'n_empt2', 0.5, 0.5))
+        const armed = await indicators(page)
+        await page.evaluate(() => history.back())
+        await page.waitForURL((url) => url.pathname === P[0])
+        await canvasFrame(page).locator('[data-wb-id="n_empt"]').waitFor()
+        const afterMove = (await indicators(page)).length
+        await moveTo(page, await spotIn(page, 'n_empt', 0.5, 0.5))
+        const overNewPage = (await indicators(page)).length
+        await page.mouse.up()
+        await page.waitForTimeout(500)
+        expect({ armed, afterMove, overNewPage, sent: patches.length, first: await shape(P[0]!), second: await shape(P[1]!) }).toEqual({
+          armed: ['inside'],
+          afterMove: 0,
+          overNewPage: 0,
+          sent: 0,
+          first: ORIGINAL,
+          second: { n_root: ['n_text2', 'n_empt2'] },
+        })
+      } finally {
+        await close()
+      }
+    })
+
+    it('Enter 로 넣고 · 끌어 놓은 뒤의 클릭은 한 번 더 넣지 않는다', async () => {
+      const { P } = await seed('pal-enter', [BASIC])
+      const { page, close, patches } = await openEditor(P[0]!)
+      try {
+        await openPalette(page)
+        await only(page, 'Divider')
+        // 고른 것이 «끝» 글(잎) — 그 뒤에 넣는다.
+        const last = await spotIn(page, 'n_last', 0.5, 0.5)
+        await page.mouse.click(last.x, last.y)
+        await page.locator('[data-wb-palette-card="Divider"]').focus()
+        await page.keyboard.press('Enter')
+        const entered = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL))
+        const sentAfterEnter = patches.length
+
+        await grabCard(page, 'Divider')
+        await moveTo(page, await spotIn(page, 'n_empt', 0.5, 0.5))
+        await page.mouse.up()
+        const dropped = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(entered))
+        await page.waitForTimeout(500)
+        expect({ entered, sentAfterEnter, dropped, sent: patches.length, final: await shape(P[0]!) }).toEqual({
+          entered: { n_root: ['n_text', { n_card: ['n_intx'] }, 'n_empt', 'n_last', '+Divider'] },
+          sentAfterEnter: 1,
+          dropped: { n_root: ['n_text', { n_card: ['n_intx'] }, { n_empt: ['+Divider'] }, 'n_last', '+Divider'] },
+          sent: 2,
+          final: { n_root: ['n_text', { n_card: ['n_intx'] }, { n_empt: ['+Divider'] }, 'n_last', '+Divider'] },
+        })
+      } finally {
+        await close()
+      }
+    })
   })
 })
