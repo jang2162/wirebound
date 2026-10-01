@@ -106,7 +106,7 @@
 | `EDITOR_STACK_BUNDLE=build pnpm test:browser` | 0 | 189(파일 33) | 0 | 0 |
 
 - **`test:build` 첫 판의 실패는 내가 낸 오염이다.** 그 판이 시작한 직후(19:11:39 시작 · 19:11:50 ~ 55) jsdom 케이스를 고친 뒤 MU3 를 jsdom 만 다시 돌리느라 `src/drag/use-pointer-drag.ts` 를 바꿨다 되돌렸다 — 실브라우저 판이 도는 동안 `apps/web/src` 를 고친 것이다(`CLAUDE.md` «실브라우저 전량이 도는 동안 `apps/web/src` 를 고치지 않는다»). 죽은 것은 오라클 케이스 하나이고 실패 값은 단언이 아니라 `frame.evaluate: Frame was detached`(vite 가 바뀐 소스를 내줘 iframe 이 다시 섰다)다. 같은 커밋으로 아무것도 안 고치는 동안 다시 돌린 판이 둘째 줄이다 — 오라클은 실브라우저 두 판에서도 초록(26s).
-- `pnpm test` 는 `155be65d`(jsdom «refresh — …» 의 값 쥐기) 앞의 판에서 돌았다 — 그 파일만 `155be65d` 뒤에 다시 돌려 22 실행 · 실패 0. 나머지 게이트는 `155be65d` 위다(그 커밋은 `apps/web/test` 만 바꾼다).
+- `typecheck` · `build` · `test` 는 `5b6170c4` 에서 돌았다 — `155be65d`(jsdom «refresh — …» 의 값 쥐기 · `apps/web/test` 만 바꾼다)는 그 뒤라 그 파일만 다시 돌려 22 실행 · 실패 0. `test:build`(다시) · 실브라우저 두 판은 `155be65d` 위다. 이 보고의 커밋은 문서만 바꾼다.
 
 리뷰 빨강 셋: 위 실브라우저 두 판에서 초록(이름에서 «[빨강]» 을 걷은 «bob 이 위 노드의 글을 길게 …» · «구조 트리 줄 끌기» 둘).
 
