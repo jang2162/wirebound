@@ -18,7 +18,7 @@ import { usePublishTreeRegion } from '../drag/use-placement'
 import { scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
 import { findNodeSafely } from '../edit/safe-walk'
 import { structureAbilities } from '../edit/structure-actions'
-import type { StructureDrop } from '../edit/structure-drop'
+import { sameDrop, type StructureDrop } from '../edit/structure-drop'
 import { ActionMenu } from '../shell/action-menu'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
@@ -204,6 +204,11 @@ export function StructureTree(props: {
    *
    * **줄 끌기는 경로 층(`drag/use-placement.ts`)을 지나지 않는다** — 그래서 트리 줄은 캔버스에 놓을 수 없다. 이 트리 영역은 경로 층에
    * 싣는다(`usePublishTreeRegion`) — 다른 끌기가 트리 위를 지날 때 이 줄들로 판정한다.
+   *
+   * **놓는 답은 보인 답이다**(`sameDrop` — 캔버스 손잡이와 같은 판정 함수). 끄는 사이 남이 보인 줄의 노드를 지우거나 앞에 줄을 넣으면
+   * 멈춘 포인터 밑에 다른 줄이 와 있어, 끌기 장치가 뗀 좌표로 다시 물은 답이 보인 띠와 다른 자리다 — 그때는 놓지 않는다
+   * (`drag/use-pointer-drag.ts` 머리말 «놓는 답은 보인 답이다» · `build-test/canvas-drop-review.test.ts` «구조 트리 줄 끌기»). 표시는
+   * 옛 줄 상자에 남는다(캔버스의 `refresh` 를 트리에는 걸지 않았다).
    */
   const drag = usePointerDrag<string, StructureDrop>({
     onOver: (source, point) =>
@@ -211,6 +216,7 @@ export function StructureTree(props: {
         ? null
         : (structureTreeHint(treeRef.current, doc, { kind: 'node', id: source }, point, store.editBlockedBy)?.hint ?? null),
     onDrop: (source, target) => commands.dropTo(source, target),
+    sameDrop,
     scrollContainer: () => scrollParent(treeRef.current),
   })
 

@@ -8,7 +8,8 @@
  * | 무작위 끌기(오라클) | 뗀 순간의 표시를 **기하로** 노드에 대어 읽은 자리(부모 · 이웃)가 서버 문서와 다르다 · 표시가 포인터 밑 노드가 아니다 · 선이 포인터에서 먼 쪽 가장자리다 |
  * | 위 노드가 길어져 표시한 노드가 밀림 | 표시가 옛 좌표에 남는다 · 놓으면 보인 자리도 «편집 0» 도 아닌 자리로 간다 |
  * | 아래 다른 노드의 글 고침 · 내 앞 편집의 리베이스 | 남의 무관한 편집에 표시가 걷히거나 놓기가 버려진다(위 빨강을 «문서가 바뀌면 버린다» 로 닫는 고침이 여기서 죽는다) |
- * | [빨강] 구조 트리 줄 끌기 — 보인 줄의 노드를 지움 · 줄이 밀림 | 보인 줄이 아닌 줄의 띠로 간다(C 의 원래 길 — 경로 층을 안 지난다) |
+ * | 구조 트리 줄 끌기 — 보인 줄의 노드를 지움 · 줄이 밀림 | 보인 줄이 아닌 줄의 띠로 간다(C 의 원래 길 — 경로 층을 안 지난다) |
+ * | 구조 트리 줄 끌기 — 보인 «안» 카드의 자식을 남이 지움 | 보인 자리(그 카드 끝)가 그대로인데 놓기가 버려진다 |
  * | 남의 잠금이 끄는 중 닿음 · 끄는 중 viewer 로 강등 | 손잡이 · 표시가 남는다 · 편집이 나간다 |
  * | 손잡이와 번호 마커가 겹친 자리 · 더블클릭 · 오른쪽 단추 | 겹친 자리 누름이 손잡이가 아닌 것에 간다 · 편집이 나간다 · 고른 노드가 풀린다 |
  *
@@ -512,10 +513,12 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
     })
 
     /**
-     * **[빨강 — 원래 있던 길(C)]** 구조 트리 줄 끌기는 경로 층을 안 지난다(`src/drag/use-placement.ts` 머리말 «트리 줄 끌기를 이 층으로
-     * 옮기지 않는다»). 끌기 장치가 뗀 좌표로 다시 물어 그 좌표에 지금 있는 줄의 띠로 놓는다 — 표시는 옛 줄 상자에 남는다.
+     * **원래 있던 길(C)** — 구조 트리 줄 끌기는 경로 층을 안 지난다(`src/drag/use-placement.ts` 머리말 «트리 줄 끌기를 이 층으로 옮기지
+     * 않는다»). 옛 판은 끌기 장치가 뗀 좌표로 다시 물어 그 좌표에 지금 있는 줄의 띠로 놓았다(리뷰 R2). 지금은 다시 물은 답이 보인 답과
+     * 다르면 놓지 않는다(`src/panels/structure-tree.tsx` 의 `sameDrop`). 표시는 옛 줄 상자에 남는다 — 이 케이스는 표시를 안 잰다.
+     * «안» 카드에 세운 채 그 카드의 자식이 줄어도 그대로 그 카드 끝에 놓이는 판은 아래 «보인 «안» 카드의 자식을 남이 지워도».
      */
-    describe('[빨강] 구조 트리 줄 끌기', () => {
+    describe('구조 트리 줄 끌기', () => {
       async function armedOnRow(P: string, overId: string, fy: number) {
         const tab = await openTab(P)
         await select(tab.page, 'n_t3')
@@ -557,6 +560,25 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
             { ROOT: ['n_bob', 'n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_mid', 'n_empt', 'n_t0', 'n_t1', 'n_t2', 'n_t3', 'n_end'] },
             { ROOT: ['n_bob', 'n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_t3', 'n_mid', 'n_empt', 'n_t0', 'n_t1', 'n_t2', 'n_end'] },
           ]).toContainEqual(await shape(P))
+        } finally {
+          await close()
+        }
+      })
+
+      /** 리뷰 «3» 의 넷째 줄 — 보인 줄(카드)이 그 자리에 그대로면 다시 물은 답도 «그 카드 안» 이라 놓인다(놓기를 버리지 않는다). */
+      it('보인 «안» 카드의 자식을 남이 지워도 놓으면 그 카드 끝이다', async () => {
+        const { P } = await fixture('tree-inside-shrunk', DOC)
+        const { page, close, armed } = await armedOnRow(P, 'n_card', 0.5)
+        try {
+          const status = await bobOps(P, [{ op: 'remove', path: '/root/children/1/children/1' }])
+          await treeRow(page, 'n_k1').waitFor({ state: 'detached' })
+          await page.mouse.up()
+          const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s).includes('n_t3"]'), 3000).catch(() => shape(P))
+          expect({ armed, status, final }).toEqual({
+            armed: ['inside'],
+            status: 200,
+            final: { ROOT: ['n_top', { n_card: ['n_k0', 'n_t3'] }, 'n_mid', 'n_empt', 'n_t0', 'n_t1', 'n_t2', 'n_end'] },
+          })
         } finally {
           await close()
         }

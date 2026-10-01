@@ -113,11 +113,16 @@ export function pageEndTarget(
 
 /**
  * **같은 자리인가** — 보인 자리와 다시 물은 자리를 견준다. 끌기 장치의 «놓는 답은 보인 답이다»(`drag/use-pointer-drag.ts` 의 `sameDrop`
- * — 구조 트리 줄 끌기 · 캔버스 손잡이)와 경로 층의 보인 자리 다시 판정(`drag/use-placement.ts` 의 `holds`)이 같은 이 함수다. 부모 · 차례 ·
- * 띠가 다 같아야 같다 — 남의 편집이 보인 자리의 차례를 밀면 다른 자리다(보인 것과 다른 차례로 넣지 않는다).
+ * — 구조 트리 줄 끌기 · 캔버스 손잡이)와 경로 층의 보인 자리 다시 판정(`drag/use-placement.ts` 의 `holds`)이 같은 이 함수다.
+ *
+ * | 띠 | 같다 |
+ * |---|---|
+ * | 앞 · 뒤 | 부모 · 차례 · 띠가 다 같다 — 남의 편집이 보인 자리의 차례를 밀면 다른 자리다(보인 것과 다른 차례로 넣지 않는다) |
+ * | 안 | 부모 · 띠가 같다 — 보인 뜻이 «그 상자 안 끝» 이라 남이 그 자식을 넣거나 빼도 같은 자리다(차례는 놓을 때 지금 끝으로 다시 판정) |
  */
 export function sameDrop(a: StructureDrop, b: StructureDrop): boolean {
-  return a.parentId === b.parentId && a.index === b.index && a.placement === b.placement
+  if (a.parentId !== b.parentId || a.placement !== b.placement) return false
+  return a.placement === 'inside' || a.index === b.index
 }
 
 /**

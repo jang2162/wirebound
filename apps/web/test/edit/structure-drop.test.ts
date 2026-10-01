@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { applyOps, lockConflictOfOps, type NodeLock, type PageDocument, type PatchOp } from '@wirebound/schema'
 import '../../src/catalog-setup'
 import { insertNodeOps, moveNodeOps } from '../../src/edit/ops'
-import { dropOps, pageEndTarget, structureDropTarget, type Placing } from '../../src/edit/structure-drop'
+import { dropOps, pageEndTarget, sameDrop, structureDropTarget, type Placing } from '../../src/edit/structure-drop'
 
 /**
  * ```
@@ -255,5 +255,27 @@ describe('놓는 편집(`dropOps`)', () => {
   it('새 타입 · 노드의 타입이 다르면 null — 판정한 것과 다른 것을 넣지 않는다', () => {
     const target = structureDropTarget(doc(), adding('Text'), 'n-box', 'inside', free)!
     expect(dropOps(doc(), adding('Text'), target, { id: 'n-new', type: 'Card' })).toBeNull()
+  })
+})
+
+describe('같은 자리인가(`sameDrop`)', () => {
+  it('앞 · 뒤는 부모 · 차례 · 띠가 다 같아야 같다', () => {
+    const shown = { parentId: 'p', index: 2, placement: 'before' as const }
+    expect([
+      sameDrop(shown, { ...shown }),
+      sameDrop(shown, { ...shown, index: 3 }),
+      sameDrop(shown, { ...shown, parentId: 'q' }),
+      sameDrop(shown, { ...shown, placement: 'after' }),
+    ]).toEqual([true, false, false, false])
+  })
+
+  it('안은 부모 · 띠만 본다 — 남이 그 상자의 자식을 넣거나 빼도 «그 상자 안 끝» 이다', () => {
+    const shown = { parentId: 'p', index: 2, placement: 'inside' as const }
+    expect([
+      sameDrop(shown, { ...shown, index: 1 }),
+      sameDrop(shown, { ...shown, index: 3 }),
+      sameDrop(shown, { ...shown, parentId: 'q' }),
+      sameDrop(shown, { parentId: 'p', index: 2, placement: 'after' }),
+    ]).toEqual([true, true, false, false])
   })
 })
