@@ -9,7 +9,7 @@
  * 표본 노드의 그린 상자를 재서(`getBoundingClientRect`) 카드의 창(투명한 자리) 안에 들어가게 줄이고 옮긴다(`transform`) · 노드 상자 밖은
  * 자른다(`clip-path`). 카드는 iframe 위에 서고 창 자리만 투명하다.
  *
- * **고른 까닭(실브라우저로 잰 값):** `build-test/palette.test.ts` «축소판 — 잘라 보이는 방법» 의 머리말.
+ * **고른 까닭(실브라우저로 잰 값):** `build-test/palette.test.ts` 머리말 «잘라 보이는 방법을 고른 값».
  *
  * ## 무엇을 그리나
  *
