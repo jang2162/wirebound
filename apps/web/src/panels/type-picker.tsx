@@ -126,21 +126,22 @@ export function TypePicker(props: {
   )
 }
 
-interface PickableType {
+export interface PickableType {
   type: string
   label: string
   description: string
   many: boolean
 }
 
-interface PickableGroup {
+export interface PickableGroup {
   group: string
   label: string
   types: PickableType[]
 }
 
 /**
- * 페이지 문서에 둘 수 있는 타입을 갈래별로.
+ * 페이지 문서에 둘 수 있는 타입을 갈래별로. 하단 컴포넌트 판의 탭 · 카드(`palette/component-palette.tsx`)도 이 목록이다 — 고르개와 판이
+ * 다른 타입을 내면 «판에는 있는데 `+` 에는 없다» 가 된다.
  *
  * **`validatePage`를 실제로 돌려 거른다.** `createNode`가 만든 노드를 빈 페이지의 자식으로
  * 넣어 이슈가 없는 것만 남긴다 — 이름 목록을 손으로 두는 것보다 정확하고, 카탈로그가
@@ -150,7 +151,7 @@ interface PickableGroup {
  * 담으면 목록에 없는 갈래를 가진 타입이 **조용히 사라진다**. 반대로 하면 그 상태에서도
  * 항목이 남고(순서가 뒤로 갈 뿐), 사라지는 것보다 낫다.
  */
-function placeableGroups(): PickableGroup[] {
+export function placeableGroups(): PickableGroup[] {
   const buckets = new Map<string, PickableType[]>()
 
   for (const def of listComponents()) {
