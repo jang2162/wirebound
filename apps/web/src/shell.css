@@ -873,6 +873,13 @@
   background: var(--wb-shell-accent);
 }
 
+/* 형제로 놓기 — 부모가 가로로 늘어놓는 캔버스 노드의 왼 · 오른 가장자리에 걸친 세로 선(`drop-indicator.tsx` 의 `layout`). */
+.wb-shell-drop-line-x {
+  width: 2px;
+  margin-left: -1px;
+  background: var(--wb-shell-accent);
+}
+
 /* 자식으로 놓기 — 줄 강조. 줄의 글자를 가리지 않게 테두리만 그린다. */
 .wb-shell-drop-inside {
   border: 2px solid var(--wb-shell-accent);
@@ -937,6 +944,28 @@
   border-radius: 2px;
   /* 아래의 노드가 그대로 눌려야 한다. 이것이 없으면 선택한 노드를 다시 누를 수 없다. */
   pointer-events: none;
+}
+
+/* 캔버스 손잡이(`canvas/canvas-drag-handle.tsx`) — 선택 아웃라인 바깥 왼쪽 위의 «옮기기» 단추. 아웃라인과 같은 자리에 살고 문서 노드를
+   건드리지 않는다(머리말의 «문서 옆에 그리는 셸의 장치는 여기 규칙을 그대로 따른다»). 자리와 `scale(1 / zoom)`은 자바스크립트가 인라인
+   style로 넣는다 — 줌을 걷어 화면에서 늘 같은 크기다(그래서 기준점이 왼쪽 위다). **`pointer-events: auto`가 하중이다** — 아웃라인 ·
+   마커는 누름을 안 받지만 이 단추는 끌기를 받아야 한다. */
+.wb-shell-canvas-handle {
+  position: absolute;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--wb-shell-accent);
+  border-radius: 4px;
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-accent);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  transform-origin: top left;
+  cursor: grab;
+  pointer-events: auto;
 }
 
 /* 번호 마커(설계서 「설계서 화면 구조」). 선택 아웃라인과 **같은 자리에 산다** — 문서 노드 위에 겹쳐

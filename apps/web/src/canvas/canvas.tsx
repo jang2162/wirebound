@@ -43,10 +43,13 @@ import { describePageTarget, type PageDocument } from '@wirebound/schema'
 import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
-import { walkSafely } from '../edit/safe-walk'
+import { findNodeSafely, walkSafely } from '../edit/safe-walk'
+import { nodeTypeLabel } from '../panels/node-shape'
+import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { usePublishCanvasRegion } from '../drag/use-placement'
 import { usePublishCanvasDocument } from './canvas-document'
+import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
 import { themeFileUrl } from '../theme/bundle-loader'
 import { useProjectTheme, type ProjectThemeState } from '../theme/project-theme'
@@ -159,6 +162,8 @@ function noticesOf(event: InteractionEvent): string[] {
 export function Canvas(props: {
   projectId: string
   pageId: string | undefined
+  /** 편집 모드 && `canEdit` — 셸의 그 값. 손잡이(`./canvas-drag-handle.tsx`)가 이것으로 선다. */
+  editable: boolean
 }): ReactElement | null {
   /**
    * **`renderComposed`를 쓰지 않는다.** *"기본 레이아웃이 `Page > Slot`이라 결과가
@@ -181,6 +186,8 @@ export function Canvas(props: {
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
   const mode = useEditorStore(store, (s) => s.mode)
+  // 손잡이는 남이 잡은 노드에 안 선다 — 판정은 스토어(`store/use-locked-by.ts`).
+  const lockOf = useLockedBy()
   const documentLoads = useEditorStore(store, (s) => s.documentLoads)
   const zoom = useEditorStore(store, (s) => s.zoom)
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
@@ -398,6 +405,12 @@ export function Canvas(props: {
 
   if (doc === null) return null
 
+  /** 손잡이를 세울 노드 — 뿌리 · 남이 잡은 노드 · 문서에 없는 id 면 없다. */
+  const handleNode =
+    outlinedNodeId === null || outlinedNodeId === doc.root?.id || lockOf(outlinedNodeId) !== null
+      ? undefined
+      : findNodeSafely(doc.root, outlinedNodeId)
+
   return (
     <div
       className="wb-shell-canvas-surface"
@@ -477,6 +490,20 @@ export function Canvas(props: {
           className="wb-shell-selection"
           data-wb-selected-id={outlinedNodeId}
           style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+        />
+      )}
+
+      {/* **손잡이**(`./canvas-drag-handle.tsx`) — 아웃라인 곁. 서는 조건: 편집할 수 있음(`editable` — 편집 모드 · `canEdit`) · 뿌리 아님 ·
+          남이 안 잡음(고른 뒤 잠금이 도착한 판). 뿌리는 옮기지 않는다(`edit/structure-drop.ts` 의 표). */}
+      {props.editable && outlinedNodeId !== null && box !== null && handleNode !== undefined && (
+        <CanvasDragHandle
+          key={outlinedNodeId}
+          projectId={props.projectId}
+          pageId={props.pageId}
+          nodeId={outlinedNodeId}
+          label={nodeTypeLabel(handleNode)}
+          box={box}
+          zoom={zoom}
         />
       )}
 

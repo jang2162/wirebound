@@ -911,6 +911,7 @@ function EditorShell(props: {
         <CanvasFrame
           projectId={props.project.id}
           pageId={props.pageId}
+          editable={mode === 'edit' && canEdit}
           resyncToken={resyncToken}
           restoredToken={restoredToken}
           restoredLead={restoredLead}
@@ -1218,6 +1219,8 @@ type PageLoadState =
 function CanvasFrame(props: {
   projectId: string
   pageId: string | undefined
+  /** 편집 모드 && `canEdit` — 캔버스 손잡이가 이것으로 선다(`canvas/canvas-drag-handle.tsx`). */
+  editable: boolean
   /** 연결이 다시 붙었다는 신호. 오를 때마다 아래 재조회 이펙트가 돈다. */
   resyncToken: number
   /** 스냅샷이 복원됐다는 신호(내 복원 · 남의 복원을 배너의 단추로). 오를 때마다 아래 복원 재조회 이펙트가 돈다. */
@@ -1630,7 +1633,7 @@ function CanvasFrame(props: {
       {/* 테마를 싣는 동안은 문서를 안 그린다 — 기본 뷰로 한 번 그렸다가 테마로 갈아 끼우면 캔버스가 한 번 튄다. 번들의 한도가
           이 기다림을 끝낸다(`theme/bundle-loader.ts` 의 `BUNDLE_DEADLINE_MS`). */}
       {state.status === 'ready' &&
-        (themeStatus === 'loading' ? <p role="status">테마를 불러오는 중…</p> : <Canvas projectId={projectId} pageId={pageId} />)}
+        (themeStatus === 'loading' ? <p role="status">테마를 불러오는 중…</p> : <Canvas projectId={projectId} pageId={pageId} editable={props.editable} />)}
     </div>
     </div>
   )

@@ -260,6 +260,32 @@ describe('놓는 순간 다시 판정한다', () => {
     expect(sent).toEqual([])
   })
 
+  it('보인 대상이 지워지면 표시가 곧바로 걷히고, 포인터가 그 자리면 다음 물음(뗌)도 null — 그 밑에 다른 자리가 서도', async () => {
+    const { sent, value } = await armed()
+    act(() => {
+      shellStore().applyRemoteChange(PAGE_ID, { seq: HEAD_SEQ + 1, ops: [{ op: 'remove', path: '/root/children/0' }], warnings: [] })
+    })
+    expect(placement().live({ value, rect: HOST_RECT, placement: 'after' })).toBeNull()
+    // 지운 자리 밑에 이제 바탕(페이지 끝)이 있다 — 끌기 장치가 뗀 좌표로 다시 물어도 안 보인 자리를 내지 않는다.
+    regions.hit = { pageEnd: true, rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
+    expect(over(adding, 501, 221)).toBeNull()
+    // 문턱(4px) 안에서 한 번 더 움직여도 — 조금 움직였다 떼는 판 — 아무 자리도 안 낸다.
+    expect(over(adding, 503, 222)).toBeNull()
+    // 문턱 밖으로 나가면 지금 문서로 새 자리를 세운다.
+    expect(over(adding, 510, 230)).toMatchObject({ value: { over: 'page-end', target: { parentId: 'n-root', index: 1 } } })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(sent).toEqual([])
+  })
+
+  it('보인 자리의 부모를 남이 잡으면 표시가 곧바로 걷힌다 — 포인터가 멈춰 있어도', async () => {
+    const { value } = await armed()
+    expect(placement().live({ value, rect: HOST_RECT, placement: 'after' })).not.toBeNull()
+    act(() => {
+      shellStore().setLocks([{ pageId: PAGE_ID, nodeId: 'n-root', userId: 'u-bora', userName: '보라' }])
+    })
+    expect(placement().live({ value, rect: HOST_RECT, placement: 'after' })).toBeNull()
+  })
+
   it('끄는 사이 페이지가 바뀌었다 → 표시가 걷히고 놓아도 편집 0', async () => {
     const { sent, value, setPage } = await armed()
     act(() => setPage(OTHER_PAGE_ID))

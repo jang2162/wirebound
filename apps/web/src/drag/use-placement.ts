@@ -11,11 +11,24 @@
  *
  * 트리 줄 끌기(`panels/structure-tree.tsx`)는 이 층을 지나지 않는다 — 머리말 «트리 줄 끌기» 가 그 판단이다.
  *
- * ## 놓는 순간 판정을 다시 한다
+ * ## 보인 자리에만 놓는다 — 끄는 사이 그 자리가 바뀌면 버린다
  *
- * 끄는 사이 남이 대상을 지우거나 잡았거나 내 앞 편집이 거절돼 문서가 리베이스됐을 수 있다. `onDrop` 은 표시에 쓴 자리(`target`)를 믿지
- * 않고 **그 대상 · 띠로 지금 스토어 문서에 다시 묻는다**(`openDocumentNow` — 렌더의 문서는 이벤트보다 낡을 수 있다). 답이 `null` 이면
- * 편집 0 이고, 아니면 다시 한 답의 자리로 낸다. 서버도 423 으로 막지만 그 길은 «보냈다가 되돌림» 이라 화면이 한 번 튄다.
+ * 끄는 사이 남이 대상을 지우거나 잡았거나 내 앞 편집이 거절돼 문서가 리베이스됐을 수 있다. 막는 겹이 셋이다.
+ *
+ * | 겹 | 무엇 |
+ * |---|---|
+ * | 표시(`live`) | 보인 자리를 지금 문서로 다시 판정해 답이 달라졌으면 표시를 곧바로 걷는다 — 포인터가 멈춰 있어도 |
+ * | 다음 물음(`onOver`) | 앞 물음이 보인 자리가 달라졌고 포인터가 그 자리에서 문턱(`DRAG_THRESHOLD`) 안이면 `null` — 그 문턱 밖으로 나갈 때까지 |
+ * | 놓기(`onDrop`) | 놓는 자리의 대상 · 띠로 **지금 스토어 문서**에 다시 묻는다(`openDocumentNow`) — 답이 `null` 이면 편집 0 |
+ *
+ * **가운데 겹이 있는 까닭:** 끌기 장치는 뗄 때 뗀 좌표로 `onOver` 를 **다시 묻고** 그 답으로 `onDrop` 을 부른다(`use-pointer-drag.ts`
+ * «뗌»). 보인 대상이 지워지면 그 좌표 밑에는 다른 것(바탕 = 페이지 끝 · 아래 형제)이 와 있어, 다시 물은 답이 **안 보인 자리**를 낸다 —
+ * `onDrop` 의 다시 판정은 그 새 자리를 다시 물을 뿐이라 못 막는다(실브라우저: 빈 카드 위에서 bob 이 그 카드를 지우자 뗀 끌기가 노드를
+ * 페이지 끝으로 보냈다 — `build-test/canvas-drop.test.ts` «bob 이 그 카드를 지우면»). 그래서 앞 물음의 자리가 무너진 뒤 포인터가 거의 안
+ * 움직였으면 아무 자리도 내지 않는다. 그 자리에서 문턱 밖으로 움직이면 지금 문서로 새 자리를 세운다. 남의 다른
+ * 편집이 보인 자리의 차례를 밀어도(앞에 형제를 넣음) 같은 길로 버린다 — 보인 것과 다른 차례로 넣지 않는다.
+ *
+ * 서버도 잠금은 423 으로 막지만 그 길은 «보냈다가 되돌림» 이라 화면이 한 번 튀고, 지움 · 차례 밀림은 서버가 막지 않는다.
  *
  * ## 끄는 사이 판이 바뀌면 끌기를 버린다
  *
@@ -24,7 +37,7 @@
  * `onOver` 가 다른 판에서 불리면 `null`, `onDrop` 이 다른 판에서 불리면 편집 0 이다. 표시는 그리는 쪽이 `live(hint)` 로 거른다 — 포인터가
  * 멈춰 있으면 `onOver` 가 안 불려 장치의 표시가 옛 자리에 남는다.
  *
- * **판은 끄는 것(`Placing`) 객체로 단다.** 끌기 장치는 누른 순간의 `source` 를 그 끌기 내내 같은 객체로 넘긴다(`bind(source)` 의 닫힘).
+ * **판 · 앞 물음은 끄는 것(`Placing`) 객체로 단다.** 끌기 장치는 누른 순간의 `source` 를 그 끌기 내내 같은 객체로 넘긴다(`bind(source)` 의 닫힘).
  * 다음 끌기가 같은 객체를 받는 것은 그 사이 부르는 쪽이 다시 그려지지 않았을 때뿐이고, 판이 바뀌면 이 훅이 스토어 구독으로 다시
  * 그려져 부르는 쪽도 새 객체를 묶는다.
  *
@@ -52,8 +65,9 @@ import { dropOps, pageEndTarget, structureDropTarget, type Placing, type Structu
 import { useEditCommit } from '../edit/use-edit-commit'
 import { structureTreeHint } from '../panels/structure-tree-hint'
 import { openDocumentNow, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { useLockedBy } from '../store/use-locked-by'
 import type { DropZone } from '../tree/tree-drop'
-import { scrollParent, type DragPoint, type DropHint } from './use-pointer-drag'
+import { DRAG_THRESHOLD, scrollParent, type DragPoint, type DropHint } from './use-pointer-drag'
 
 /** 캔버스 칸 — 문서를 그리는 iframe 의 창과 지금 줌. */
 export interface CanvasRegion {
@@ -67,12 +81,20 @@ interface Stage {
   frame: Window | null
 }
 
-/** 놓을 자리 — 표시에 쓴 자리 · 놓는 순간 다시 물을 대상 · 표시의 축 · 끌기가 선 판. */
+/** 놓을 자리 — 무엇을 · 표시에 쓴 자리 · 다시 물을 대상 · 표시의 축 · 끌기가 선 판. */
 export interface PlacementDrop {
+  placing: Placing
   target: StructureDrop
   over: { overId: string; zone: DropZone } | 'page-end'
   layout: Layout
   stage: Stage
+}
+
+/** 한 끌기의 기억 — 선 판 · 앞 물음(좌표 · 그때 보인 자리) · 보인 자리가 무너진 좌표. */
+interface Gesture {
+  stage: Stage
+  last: { point: DragPoint; shown: PlacementDrop | null } | null
+  collapsedAt: DragPoint | null
 }
 
 interface Regions {
@@ -137,7 +159,7 @@ function rectOf(element: HTMLElement): Rect {
 export interface Placement {
   onOver: (placing: Placing, point: DragPoint) => DropHint<PlacementDrop> | null
   onDrop: (placing: Placing, drop: PlacementDrop) => void
-  /** 그 표시가 지금 판의 것이면 그대로, 아니면 `null` — 표시를 그리는 쪽이 거른다(머리말). */
+  /** 그 표시가 지금 판의 것이고 그 자리가 지금도 서면 그대로, 아니면 `null` — 표시를 그리는 쪽이 거른다(머리말). */
   live: (hint: DropHint<PlacementDrop> | null) => DropHint<PlacementDrop> | null
 }
 
@@ -158,7 +180,9 @@ export function usePlacementDrop(input: {
     canvas: () => slots?.canvas ?? null,
   }
   const hitAt = input.canvasHit ?? canvasHitAt
-  const [stages] = useState(() => new WeakMap<Placing, Stage>())
+  const [gestures] = useState(() => new WeakMap<Placing, Gesture>())
+  // 잠금이 바뀌면 다시 그린다 — 보인 자리의 판정(`live`)이 잠금을 본다. 판정은 스토어의 `editBlockedBy` 다.
+  useLockedBy()
 
   const stageNow = (): Stage => ({ pageId: input.pageId, frame: regions.canvas()?.frame ?? null })
   const sameStage = (a: Stage, b: Stage): boolean => a.pageId === b.pageId && a.frame === b.frame
@@ -169,11 +193,44 @@ export function usePlacementDrop(input: {
       ? pageEndTarget(doc, placing, store.editBlockedBy)
       : structureDropTarget(doc, placing, over.overId, over.zone, store.editBlockedBy)
 
+  /** 보인 자리가 지금 문서 · 잠금에서도 같은 답인가(머리말 «보인 자리에만 놓는다»). */
+  const holds = (shown: PlacementDrop): boolean => {
+    if (document === null) return false
+    const now = verdict(document, shown.placing, shown.over)
+    return (
+      now !== null &&
+      now.parentId === shown.target.parentId &&
+      now.index === shown.target.index &&
+      now.placement === shown.target.placement
+    )
+  }
+
   const onOver = (placing: Placing, point: DragPoint): DropHint<PlacementDrop> | null => {
     const now = stageNow()
-    const stage = stages.get(placing)
-    if (stage === undefined) stages.set(placing, now)
-    else if (!sameStage(stage, now)) return null
+    let gesture = gestures.get(placing)
+    if (gesture === undefined) {
+      gesture = { stage: now, last: null, collapsedAt: null }
+      gestures.set(placing, gesture)
+    }
+    if (!sameStage(gesture.stage, now)) return null
+    const near = (at: DragPoint): boolean => Math.hypot(point.x - at.x, point.y - at.y) <= DRAG_THRESHOLD
+    // 무너진 자리에서 문턱 밖으로 나가기 전에는 아무 자리도 내지 않는다 — 조금 움직였다 떼도(머리말 «가운데 겹»).
+    if (gesture.collapsedAt !== null) {
+      if (near(gesture.collapsedAt)) return null
+      gesture.collapsedAt = null
+    }
+    const last = gesture.last
+    if (last !== null && last.shown !== null && near(last.point) && !holds(last.shown)) {
+      gesture.collapsedAt = last.point
+      gesture.last = null
+      return null
+    }
+    const hint = placeAt(placing, point, now)
+    gesture.last = { point, shown: hint?.value ?? null }
+    return hint
+  }
+
+  const placeAt = (placing: Placing, point: DragPoint, now: Stage): DropHint<PlacementDrop> | null => {
     if (document === null) return null
 
     const tree = regions.tree()
@@ -182,7 +239,7 @@ export function usePlacementDrop(input: {
       if (hit === null) return null
       return {
         ...hit.hint,
-        value: { target: hit.hint.value, over: { overId: hit.overId, zone: hit.zone }, layout: VERTICAL, stage: now },
+        value: { placing, target: hit.hint.value, over: { overId: hit.overId, zone: hit.zone }, layout: VERTICAL, stage: now },
       }
     }
 
@@ -208,11 +265,11 @@ export function usePlacementDrop(input: {
     const over: PlacementDrop['over'] = 'pageEnd' in hit ? 'page-end' : { overId: hit.overId, zone: hit.zone }
     const target = verdict(document, placing, over)
     if (target === null) return null
-    return { value: { target, over, layout: hit.layout, stage: now }, rect: hit.rect, placement: target.placement }
+    return { value: { placing, target, over, layout: hit.layout, stage: now }, rect: hit.rect, placement: target.placement }
   }
 
   const onDrop = (placing: Placing, drop: PlacementDrop): void => {
-    stages.delete(placing)
+    gestures.delete(placing)
     if (input.pageId === undefined || !sameStage(drop.stage, stageNow())) return
     const doc = openDocumentNow(store, input.pageId)
     if (doc === null) return
@@ -225,7 +282,7 @@ export function usePlacementDrop(input: {
   }
 
   const live = (hint: DropHint<PlacementDrop> | null): DropHint<PlacementDrop> | null =>
-    hint !== null && sameStage(hint.value.stage, stageNow()) ? hint : null
+    hint !== null && sameStage(hint.value.stage, stageNow()) && holds(hint.value) ? hint : null
 
   return { onOver, onDrop, live }
 }
