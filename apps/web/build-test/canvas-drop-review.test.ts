@@ -6,7 +6,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 무작위 끌기(오라클) | 뗀 순간의 표시를 **기하로** 노드에 대어 읽은 자리(부모 · 이웃)가 서버 문서와 다르다 · 표시가 포인터 밑 노드가 아니다 · 선이 포인터에서 먼 쪽 가장자리다 |
- * | [빨강] 위 노드가 길어져 표시한 노드가 밀림 | 표시가 옛 좌표에 남고 놓으면 보인 자리도 «편집 0» 도 아닌 자리로 간다 |
+ * | 위 노드가 길어져 표시한 노드가 밀림 | 표시가 옛 좌표에 남는다 · 놓으면 보인 자리도 «편집 0» 도 아닌 자리로 간다 |
  * | 아래 다른 노드의 글 고침 · 내 앞 편집의 리베이스 | 남의 무관한 편집에 표시가 걷히거나 놓기가 버려진다(위 빨강을 «문서가 바뀌면 버린다» 로 닫는 고침이 여기서 죽는다) |
  * | [빨강] 구조 트리 줄 끌기 — 보인 줄의 노드를 지움 · 줄이 밀림 | 보인 줄이 아닌 줄의 띠로 간다(C 의 원래 길 — 경로 층을 안 지난다) |
  * | 남의 잠금이 끄는 중 닿음 · 끄는 중 viewer 로 강등 | 손잡이 · 표시가 남는다 · 편집이 나간다 |
@@ -426,21 +426,24 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
     }
 
     /**
-     * **[빨강 — 이 트랙이 연 길]** 표시는 «n_mid 앞» 인데 bob 이 위 노드의 글을 길게 고쳐(구조는 그대로) n_mid 가 112px 밀린다. 보인 자리의
-     * 판정(`live` 의 `holds`)은 부모 · 차례만 보아 그대로 «선다» — 표시가 옛 좌표에 남고, 떼면 끌기 장치가 뗀 좌표로 다시 물어 그 좌표에
-     * 지금 있는 카드 안으로 보낸다. 기대: 보인 자리(n_mid 앞)거나 편집 0.
+     * 표시는 «n_mid 앞» 인데 bob 이 위 노드의 글을 길게 고쳐(구조는 그대로) n_mid 가 112px 밀린다. 보인 자리의 판정(`live` 의 `holds`)은
+     * 구조로 보아 그대로 «선다» — 옛 판은 표시가 옛 좌표에 남고, 떼면 끌기 장치가 뗀 좌표로 다시 물어 그 좌표에 지금 있는 카드 안으로
+     * 보냈다(리뷰 R1). 기대: 캔버스가 다시 잰 뒤 표시가 걷히고(`src/drag/use-pointer-drag.ts` 머리말 «놓는 답은 보인 답이다» 의 `refresh`)
+     * 놓은 자리가 보인 자리(n_mid 앞)거나 편집 0.
      */
-    it('[빨강] bob 이 위 노드의 글을 길게 고쳐 표시한 노드가 밀리면 놓은 자리가 보인 자리거나 편집 0 이다', async () => {
+    it('bob 이 위 노드의 글을 길게 고쳐 표시한 노드가 밀리면 표시가 걷히고 놓은 자리가 보인 자리거나 편집 0 이다', async () => {
       const { P } = await fixture('taller-above', DOC)
       const { page, close, armed } = await armedBeforeMid(P)
       try {
         const midBefore = (await nodeBox(page, 'n_mid')).y
         const status = await bobOps(P, [{ op: 'replace', path: '/root/children/0/props/content', value: LONG }])
         await poll('alice 캔버스에서 n_mid 가 밀린다', async () => (await nodeBox(page, 'n_mid')).y, (y) => y > midBefore + 40)
+        await page.waitForTimeout(100)
+        const afterShift = (await indicators(page)).map((h) => `${h.placement}:${h.axis}@${Math.round(h.rect.y)}`)
         await page.mouse.up()
         await page.waitForTimeout(800)
         const final = await shape(P)
-        expect({ armed, status }).toEqual({ armed: ['before:y'], status: 200 })
+        expect({ armed, status, afterShift }).toEqual({ armed: ['before:y'], status: 200, afterShift: [] })
         expect([ORIGINAL, BEFORE_MID]).toContainEqual(final)
       } finally {
         await close()

@@ -14,6 +14,13 @@
  * `position: fixed` 인데 `transform` 이 걸린 조상 안에 두면 그 조상이 기준 상자가 되어 줌 · 스크롤만큼 밀린다(`drag/drop-indicator.tsx`
  * 머리말). 그래서 셸 뿌리(`.wb-shell` — 팔레트 변수가 사는 곳)로 portal 한다. 셸 밖(최소 숙주 테스트)이면 제자리에 그린다.
  *
+ * ## 캔버스가 다시 잴 때 마지막 좌표로 다시 묻는다
+ *
+ * 끄는 사이 남의 편집 · 늦은 글꼴 · 그림이 노드를 밀면 포인터 밑이 바뀐다 — 표시는 마지막 `pointermove` 때 잰 옛 좌표에 남는다. 캔버스는
+ * 그럴 때 외곽선 · 마커를 다시 재고(`./canvas.tsx` 의 측정 이펙트 — 문서 · 줌 · 폭 · 겹layer · iframe 크기 변화), 같은 의존으로 지은
+ * `layoutKey` 를 여기 내린다. 바뀌면 끌기 장치의 `refresh` 가 마지막 좌표로 다시 물어 같은 자리면 새 상자로, 다르면 표시를 걷는다
+ * (`drag/use-pointer-drag.ts` 머리말 «놓는 답은 보인 답이다» — 걷힌 채 떼면 편집 0).
+ *
  * ## 누름이 고르기로 새지 않는다
  *
  * 단추는 캔버스 표면 안이라 그 `click` 이 표면의 «누른 자리의 노드를 고른다»(`canvas.tsx` 의 `onClick`)로 올라간다 — 단추는 iframe
@@ -38,15 +45,22 @@ export function CanvasDragHandle(props: {
   /** 선택 외곽선의 자리 — 캔버스 표면 좌표(줌을 걷은 값). */
   box: { left: number; top: number }
   zoom: number
+  /** 캔버스가 다시 잴 때마다 바뀌는 값 — 끄는 중이면 마지막 좌표로 다시 묻는다(머리말 «다시 잴 때»). */
+  layoutKey: unknown
 }): ReactElement {
   const placement = usePlacementDrop({ projectId: props.projectId, pageId: props.pageId })
   const buttonRef = useRef<HTMLButtonElement>(null)
   const drag = usePointerDrag<Placing, PlacementDrop>({
     onOver: placement.onOver,
     onDrop: placement.onDrop,
+    sameDrop: placement.sameDrop,
     // 캔버스 칸의 위 · 아래 끝에 대면 칸이 민다.
     scrollContainer: () => scrollParent(buttonRef.current),
   })
+  const { refresh } = drag
+  useLayoutEffect(() => {
+    refresh()
+  }, [props.layoutKey, refresh])
   const [shell, setShell] = useState<Element | null>(null)
   useLayoutEffect(() => {
     setShell(buttonRef.current?.closest('.wb-shell') ?? null)

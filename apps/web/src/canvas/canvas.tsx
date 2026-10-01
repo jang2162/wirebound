@@ -403,6 +403,12 @@ export function Canvas(props: {
     // 이유다: 알림 줄이 문서를 아래로 민다. **빠뜨리면 마커가 옛 자리에 남는다.**
   }, [doc, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
+  /**
+   * **다시 잰 판** — 위 두 측정 이펙트와 같은 의존이 바뀔 때마다 새 값이다. 손잡이가 끄는 중이면 이 값이 바뀔 때 마지막 좌표로 다시
+   * 묻는다(`./canvas-drag-handle.tsx` 머리말 «캔버스가 다시 잴 때») — 노드가 밀려도 표시가 옛 좌표에 남지 않게.
+   */
+  const layoutKey = useMemo(() => ({}), [doc, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+
   if (doc === null) return null
 
   /** 손잡이를 세울 노드 — 뿌리 · 남이 잡은 노드 · 문서에 없는 id 면 없다. */
@@ -504,6 +510,7 @@ export function Canvas(props: {
           label={nodeTypeLabel(handleNode)}
           box={box}
           zoom={zoom}
+          layoutKey={layoutKey}
         />
       )}
 

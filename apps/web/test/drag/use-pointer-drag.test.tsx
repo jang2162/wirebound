@@ -352,3 +352,116 @@ describe('끝 스크롤', () => {
     expect(onOver).toHaveBeenLastCalledWith('가', { x: 10, y: 290 })
   })
 })
+
+/**
+ * **놓는 답은 보인 답이다**(머리말 «`sameDrop` · `refresh`») — 포인터가 멈춘 사이 그 밑이 바뀌는 판을 `world` 로 흉내 낸다. `world` 가
+ * 바뀌면 같은 좌표에 다시 물은 답이 달라진다(실브라우저 판은 `build-test/canvas-drop-review.test.ts` 가 갖는다).
+ */
+describe('놓는 답은 보인 답이다', () => {
+  const MOVED = { left: 0, top: 160, width: 120, height: 20 }
+  let world: 'before' | 'shifted' | 'grown' = 'before'
+  /** 바뀌기 전: y < 50 «앞», 바뀐 뒤(`shifted`): 같은 자리가 «안» · 커진 뒤(`grown`): 같은 «앞» 의 상자만 옮겨 감. */
+  function shifting(_source: string, point: { x: number; y: number }): DropHint<string> | null {
+    if (point.y >= 150) return null
+    if (world === 'shifted' && point.y < 50) return { value: '안', rect: RECT, placement: 'inside' }
+    if (point.y < 50) return { value: '앞', rect: world === 'grown' ? MOVED : RECT, placement: 'before' }
+    return { value: '안', rect: RECT, placement: 'inside' }
+  }
+
+  let refreshNow: () => void = () => {}
+  function Same(props: { onDrop: (source: string, value: string) => void; same?: boolean }): ReactElement {
+    const drag = usePointerDrag<string, string>({
+      onOver: shifting,
+      onDrop: props.onDrop,
+      ...(props.same === false ? {} : { sameDrop: (shown: string, landed: string) => shown === landed }),
+    })
+    refreshNow = drag.refresh
+    return (
+      <div>
+        <button type="button" {...drag.bind('가')}>
+          가
+        </button>
+        <DropIndicator hint={drag.hint} />
+      </div>
+    )
+  }
+
+  afterEach(() => {
+    world = 'before'
+  })
+
+  it('멈춘 포인터 밑이 바뀐 채 떼면 다시 물은 답이 보인 답과 달라 놓지 않는다', () => {
+    const onDrop = vi.fn()
+    render(<Same onDrop={onDrop} />)
+    press('가', 10, 10)
+    moveTo(10, 30)
+    expect(indicator()?.dataset['placement']).toBe('before')
+    world = 'shifted'
+    release(10, 30)
+    expect(onDrop.mock.calls).toEqual([])
+  })
+
+  it('같은 답이면 놓는다 · 문턱 밖에서 떼면 다시 물은 답으로 놓는다', () => {
+    const onDrop = vi.fn()
+    render(<Same onDrop={onDrop} />)
+    press('가', 10, 10)
+    moveTo(10, 30)
+    release(10, 31)
+    press('가', 10, 10)
+    moveTo(10, 30)
+    // 뗌 앞의 움직임이 안 온 판 — 6px 떨어진 자리의 답이 «안».
+    release(10, 60)
+    expect(onDrop.mock.calls).toEqual([
+      ['가', '앞'],
+      ['가', '안'],
+    ])
+  })
+
+  it('sameDrop 을 안 주면 앞 판 그대로 다시 물은 답으로 놓는다', () => {
+    const onDrop = vi.fn()
+    render(<Same onDrop={onDrop} same={false} />)
+    press('가', 10, 10)
+    moveTo(10, 30)
+    world = 'shifted'
+    release(10, 30)
+    expect(onDrop.mock.calls).toEqual([['가', '안']])
+  })
+
+  it('refresh — 같은 자리면 새 상자로 다시 그리고, 다르면 표시를 걷는다 · 걷힌 채 떼면 편집 0 · 움직이면 새 자리', () => {
+    const onDrop = vi.fn()
+    render(<Same onDrop={onDrop} />)
+    press('가', 10, 10)
+    moveTo(10, 30)
+    world = 'grown'
+    act(() => refreshNow())
+    const grown = indicator()
+    world = 'shifted'
+    act(() => refreshNow())
+    const shifted = indicator()
+    release(10, 30)
+    press('가', 10, 10)
+    moveTo(10, 30)
+    expect({ grownTop: grown?.style.top, grownPlacement: grown?.dataset['placement'], shifted, sent: onDrop.mock.calls.length }).toEqual({
+      grownTop: `${MOVED.top}px`,
+      grownPlacement: 'before',
+      shifted: null,
+      sent: 0,
+    })
+    // 다시 움직이면 지금 자리(«안»)가 서고, 떼면 그 자리다.
+    moveTo(10, 31)
+    expect(indicator()?.dataset['placement']).toBe('inside')
+    release(10, 31)
+    expect(onDrop.mock.calls).toEqual([['가', '안']])
+  })
+
+  it('끌기가 아니면 refresh 는 아무것도 안 한다', () => {
+    const onDrop = vi.fn()
+    render(<Same onDrop={onDrop} />)
+    act(() => refreshNow())
+    press('가', 10, 10)
+    act(() => refreshNow())
+    expect(indicator()).toBeNull()
+    release(10, 10)
+    expect(onDrop).not.toHaveBeenCalled()
+  })
+})

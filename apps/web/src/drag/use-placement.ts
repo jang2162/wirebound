@@ -13,15 +13,23 @@
  *
  * ## 보인 자리에만 놓는다 — 끄는 사이 그 자리가 바뀌면 버린다
  *
- * 끄는 사이 남이 대상을 지우거나 잡았거나 내 앞 편집이 거절돼 문서가 리베이스됐을 수 있다. 막는 겹이 셋이다.
+ * 끄는 사이 남이 대상을 지우거나 잡았거나 내 앞 편집이 거절돼 문서가 리베이스됐을 수 있다. 막는 겹이 넷이다.
  *
  * | 겹 | 무엇 |
  * |---|---|
  * | 표시(`live`) | 보인 자리를 지금 문서로 다시 판정해 답이 달라졌으면 표시를 곧바로 걷는다 — 포인터가 멈춰 있어도 |
  * | 다음 물음(`onOver`) | 앞 물음이 보인 자리가 달라졌고 포인터가 그 자리에서 문턱(`DRAG_THRESHOLD`) 안이면 `null` — 그 문턱 밖으로 나갈 때까지 |
+ * | 놓는 순간(끌기 장치의 `sameDrop`) | 뗀 좌표로 다시 물은 답이 보인 답과 다른 자리면 놓지 않는다 — 판정은 `sameDrop`(`edit/structure-drop.ts`) |
  * | 놓기(`onDrop`) | 놓는 자리의 대상 · 띠로 **지금 스토어 문서**에 다시 묻는다(`openDocumentNow`) — 답이 `null` 이면 편집 0 |
  *
- * **가운데 겹이 있는 까닭:** 끌기 장치는 뗄 때 뗀 좌표로 `onOver` 를 **다시 묻고** 그 답으로 `onDrop` 을 부른다(`use-pointer-drag.ts`
+ * **레이아웃만 밀리는 판은 앞 두 겹(`live` · 다음 물음)이 못 본다** — 남이 위 노드의 글을 늘리면(구조 그대로) 보인 자리를 다시 판정해도 «선다» 인데 그 노드는
+ * 밑으로 밀려 포인터 밑에는 다른 것이 와 있다. 표시는 옛 좌표에 남고, 뗀 좌표로 다시 물은 답은 그 다른 것의 자리다
+ * (`build-test/canvas-drop-review.test.ts` «bob 이 위 노드의 글을 길게 고쳐»). 그래서 놓는 순간 끌기 장치가 다시 물은 답을 보인 답과
+ * 견주고(`use-pointer-drag.ts` 머리말 «놓는 답은 보인 답이다»), 캔버스가 다시 잴 때(`canvas/canvas-drag-handle.tsx` 의 `layoutKey`)
+ * 마지막 좌표로 다시 물어 다르면 표시를 걷는다. **«문서가 바뀌면 버린다» 로 막지 않는다** — 남이 아무 데나 고칠 때마다 끄는 사람의 놓기가
+ * 버려지고, 문서 밖의 원인(늦은 글꼴 · 그림)은 못 막는다.
+ *
+ * **둘째 겹(다음 물음)이 있는 까닭:** 끌기 장치는 뗄 때 뗀 좌표로 `onOver` 를 **다시 묻고** 그 답으로 `onDrop` 을 부른다(`use-pointer-drag.ts`
  * «뗌»). 보인 대상이 지워지면 그 좌표 밑에는 다른 것(바탕 = 페이지 끝 · 아래 형제)이 와 있어, 다시 물은 답이 **안 보인 자리**를 낸다 —
  * `onDrop` 의 다시 판정은 그 새 자리를 다시 물을 뿐이라 못 막는다(실브라우저: 빈 카드 위에서 bob 이 그 카드를 지우자 뗀 끌기가 노드를
  * 페이지 끝으로 보냈다 — `build-test/canvas-drop.test.ts` «bob 이 그 카드를 지우면»). 그래서 앞 물음의 자리가 무너진 뒤 포인터가 거의 안
@@ -61,7 +69,7 @@ import { canvasHitAt, type CanvasHit, type HitNode, type Layout, type Point, typ
 import { createNode } from '../edit/create-node'
 import { findNodeSafely } from '../edit/safe-walk'
 import { acceptsChildren } from '../edit/structure-actions'
-import { dropOps, pageEndTarget, structureDropTarget, type Placing, type StructureDrop } from '../edit/structure-drop'
+import { dropOps, pageEndTarget, sameDrop, structureDropTarget, type Placing, type StructureDrop } from '../edit/structure-drop'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { structureTreeHint } from '../panels/structure-tree-hint'
 import { openDocumentNow, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -161,6 +169,8 @@ export interface Placement {
   onDrop: (placing: Placing, drop: PlacementDrop) => void
   /** 그 표시가 지금 판의 것이고 그 자리가 지금도 서면 그대로, 아니면 `null` — 표시를 그리는 쪽이 거른다(머리말). */
   live: (hint: DropHint<PlacementDrop> | null) => DropHint<PlacementDrop> | null
+  /** 두 자리가 같은가 — 끌기 장치의 `sameDrop` 에 준다(머리말 «놓는 순간»). */
+  sameDrop: (shown: PlacementDrop, landed: PlacementDrop) => boolean
 }
 
 export function usePlacementDrop(input: {
@@ -197,12 +207,7 @@ export function usePlacementDrop(input: {
   const holds = (shown: PlacementDrop): boolean => {
     if (document === null) return false
     const now = verdict(document, shown.placing, shown.over)
-    return (
-      now !== null &&
-      now.parentId === shown.target.parentId &&
-      now.index === shown.target.index &&
-      now.placement === shown.target.placement
-    )
+    return now !== null && sameDrop(now, shown.target)
   }
 
   const onOver = (placing: Placing, point: DragPoint): DropHint<PlacementDrop> | null => {
@@ -214,7 +219,7 @@ export function usePlacementDrop(input: {
     }
     if (!sameStage(gesture.stage, now)) return null
     const near = (at: DragPoint): boolean => Math.hypot(point.x - at.x, point.y - at.y) <= DRAG_THRESHOLD
-    // 무너진 자리에서 문턱 밖으로 나가기 전에는 아무 자리도 내지 않는다 — 조금 움직였다 떼도(머리말 «가운데 겹»).
+    // 무너진 자리에서 문턱 밖으로 나가기 전에는 아무 자리도 내지 않는다 — 조금 움직였다 떼도(머리말 «둘째 겹»).
     if (gesture.collapsedAt !== null) {
       if (near(gesture.collapsedAt)) return null
       gesture.collapsedAt = null
@@ -284,5 +289,5 @@ export function usePlacementDrop(input: {
   const live = (hint: DropHint<PlacementDrop> | null): DropHint<PlacementDrop> | null =>
     hint !== null && sameStage(hint.value.stage, stageNow()) && holds(hint.value) ? hint : null
 
-  return { onOver, onDrop, live }
+  return { onOver, onDrop, live, sameDrop: (shown, landed) => sameDrop(shown.target, landed.target) }
 }
