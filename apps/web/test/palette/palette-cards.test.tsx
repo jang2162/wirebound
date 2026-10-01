@@ -294,6 +294,22 @@ describe('카드 클릭 추가 — 계획 D6 의 표', () => {
     expect(notice()).toBe(STRUCTURE_WHY_DISABLED.addInside)
   })
 
+  it('거절 문장은 고른 노드가 바뀌면 걷히고, 앞 노드로 돌아와도 다시 서지 않는다', async () => {
+    const sent = await openWithPalette()
+    await select('n-text')
+    await act(async () => shellStore().setLocks([{ pageId: PAGE_ID, nodeId: 'n-text', userId: 'u-bora', userName: '보라' }]))
+    search('Divider')
+    await clickCard('Divider')
+    const refused = notice()
+    await select('n-box')
+    const moved = notice()
+    // 잠금은 그대로면 n-text 로 못 돌아온다(고르기 = 잠금) — 걷고 돌아와 판(id)이 같아져도 다시 서지 않는지 본다.
+    await act(async () => shellStore().setLocks([]))
+    await select('n-text')
+    const back = { selected: shellStore().getState().selectedNodeId, notice: notice() }
+    expect({ refused, moved, back, sent }).toEqual({ refused: lockedSelectionStatus('보라'), moved: '', back: { selected: 'n-text', notice: '' }, sent: [] })
+  })
+
   it('거절 문장은 다음 넣기가 걷는다', async () => {
     const sent = await openWithPalette()
     await select('n-text')
