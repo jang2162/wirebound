@@ -243,6 +243,35 @@ describe('카드 클릭 추가 — 계획 D6 의 표', () => {
     expect(notice()).toBe(lockedSelectionStatus('보라'))
   })
 
+  // 뿌리 · 컨테이너는 «안 끝» 이라 고른 노드의 잠금(`lockedBy` — 자손의 잠금도 센다)이 아니라 판정에 맡긴다(`palette-add.ts` 머리말).
+  it('뿌리를 고른 채 남이 자손을 잡았다 → 그래도 뿌리 끝', async () => {
+    const sent = await openWithPalette()
+    await select('n-root')
+    await act(async () => shellStore().setLocks([{ pageId: PAGE_ID, nodeId: 'n-in', userId: 'u-bora', userName: '보라' }]))
+    search('Divider')
+    await clickCard('Divider')
+    expect({ path: sent.length === 1 ? added(sent).path : null, notice: notice() }).toEqual({ path: '/root/children/2', notice: '' })
+  })
+
+  it('컨테이너를 고른 채 남이 그 안 노드를 잡았다 → 그래도 그 안 끝', async () => {
+    const sent = await openWithPalette()
+    await select('n-box')
+    await act(async () => shellStore().setLocks([{ pageId: PAGE_ID, nodeId: 'n-in', userId: 'u-bora', userName: '보라' }]))
+    search('Divider')
+    await clickCard('Divider')
+    expect({ path: sent.length === 1 ? added(sent).path : null, notice: notice() }).toEqual({ path: '/root/children/1/children/1', notice: '' })
+  })
+
+  it('고른 컨테이너를 남이 잡았다 → 넣지 않음 · 잠금 문장(판정이 막는다)', async () => {
+    const sent = await openWithPalette()
+    await select('n-box')
+    await act(async () => shellStore().setLocks([{ pageId: PAGE_ID, nodeId: 'n-box', userId: 'u-bora', userName: '보라' }]))
+    search('Divider')
+    await clickCard('Divider')
+    expect(sent).toEqual([])
+    expect(notice()).toBe(lockedNotice('보라'))
+  })
+
   it('판정 null — 넣을 자리(잎 바로 뒤)를 남이 잡았다 → 넣지 않음 · 잠금 문장', async () => {
     const sent = await openWithPalette()
     await select('n-text')
