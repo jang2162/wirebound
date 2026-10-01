@@ -18,6 +18,8 @@ import shellCss from '../../src/shell.css?raw'
 import {
   CANVAS_MIN_WIDTH,
   HANDLES_WIDTH,
+  PALETTE_HEIGHT_DEFAULT,
+  PALETTE_HEIGHT_MIN,
   PANEL_WIDTH_DEFAULT,
   PANEL_WIDTH_MIN,
   REGION_MIN_HEIGHT,
@@ -29,7 +31,9 @@ import {
   clampPanelWidth,
   clampRegionRatio,
   clampSideWidth,
+  fitPaletteHeight,
   fitWidths,
+  paletteHeightMax,
   panelWidthMax,
   readLayout,
   regionGrow,
@@ -341,9 +345,48 @@ describe('`shell.css`와의 짝', () => {
 
   it('격자의 행 이름과 손잡이의 `grid-area`가 맞는다', () => {
     expect(shellRule).toMatch(/'side side-resizer canvas panel-resizer panel'/)
+    expect(shellRule).toMatch(/'side side-resizer palette panel-resizer panel'/)
     expect(shellRule).toMatch(/'side side-resizer footer panel-resizer panel'/)
     expect(shellCss).toMatch(/\.wb-shell-side-resizer \{[^}]*grid-area: side-resizer;/)
     expect(shellCss).toMatch(/\.wb-shell-panel-resizer \{[^}]*grid-area: panel-resizer;/)
+  })
+})
+
+/**
+ * **하단 컴포넌트 판의 높이**(`src/shell/sidebar-layout.ts` 「하단 판의 높이」). 저장값은 사람이 고칠 수 있는 자리라 옛 판 · 깨진 값을
+ * 기본값으로 읽고, 창보다 큰 값은 지금 창에 맞춰 조인다(저장값은 그대로).
+ */
+describe('하단 판의 높이', () => {
+  it('저장값이 없으면 기본값이다', () => {
+    expect(fitPaletteHeight(undefined, 900)).toBe(PALETTE_HEIGHT_DEFAULT)
+  })
+
+  it('옛 저장값(키 없음 · 음수 · 문자열)은 기본값으로 읽는다', () => {
+    localStorage.clear()
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ sideWidth: 420 }))
+    expect(fitPaletteHeight(readLayout(localStorage).paletteHeight, 900)).toBe(PALETTE_HEIGHT_DEFAULT)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ paletteHeight: -40 }))
+    expect(fitPaletteHeight(readLayout(localStorage).paletteHeight, 900)).toBe(PALETTE_HEIGHT_DEFAULT)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ paletteHeight: '240px', paletteOpen: 'yes' }))
+    expect(readLayout(localStorage)).toEqual({})
+    expect(fitPaletteHeight(readLayout(localStorage).paletteHeight, 900)).toBe(PALETTE_HEIGHT_DEFAULT)
+  })
+
+  it('창보다 큰 값은 지금 창의 최대로 조인다 · 최소 아래는 최소다', () => {
+    expect(fitPaletteHeight(5000, 900)).toBe(paletteHeightMax(900))
+    expect(paletteHeightMax(900)).toBeLessThan(900)
+    expect(fitPaletteHeight(PALETTE_HEIGHT_MIN - 10, 900)).toBe(PALETTE_HEIGHT_MIN)
+  })
+
+  it('창이 아주 낮으면 최대가 최소로 주저앉는다 — 뒤집히지 않는다', () => {
+    expect(paletteHeightMax(200)).toBe(PALETTE_HEIGHT_MIN)
+    expect(fitPaletteHeight(PALETTE_HEIGHT_DEFAULT, 200)).toBe(PALETTE_HEIGHT_MIN)
+  })
+
+  it('열림 · 높이를 싣고 읽으면 그대로다', () => {
+    localStorage.clear()
+    writeLayout(localStorage, { paletteHeight: 260, paletteOpen: true })
+    expect(readLayout(localStorage)).toEqual({ paletteHeight: 260, paletteOpen: true })
   })
 })
 

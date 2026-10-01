@@ -185,6 +185,57 @@ export const REGION_RATIO_DEFAULT = 0.5
  */
 export const REGION_MIN_HEIGHT = 72
 
+/**
+ * # 하단 판의 높이
+ *
+ * 하단 컴포넌트 판(`palette/component-palette.tsx`)의 높이와 열림도 여기 함께 기억한다 — 같은 저장 키 · 같은 «필드마다 따로 버림» ·
+ * 같은 «싣는 자리 · 그리는 자리 두 번 조임» 이다. 따로 키를 두면 같은 장치가 두 벌이 된다. 판은 셸 그리드의 `palette` 줄(캔버스와 하단 바
+ * 사이)이고 캔버스 줄(`minmax(0, 1fr)`)이 그만큼 준다.
+ *
+ * **한계는 창 높이에서 계산한다**(`paletteHeightMax`) — 창에서 머리 · 하단 바의 몫(`PALETTE_CHROME_RESERVE`)과 캔버스 몫
+ * (`CANVAS_MIN_HEIGHT`)을 뗀다. 머리가 두 줄로 접히거나 통지가 하단 바를 키우면 그 몫이 더 커져 캔버스가 덜 남는다 — 그때도 캔버스 줄이
+ * 0 이 될 뿐 셸이 넘치지는 않는다(`minmax(0, 1fr)`). 잰 값과 다시 재는 법은 `PALETTE_HEIGHT_DEFAULT` 의 주석.
+ */
+
+/**
+ * 하단 판의 기본 높이(px) — 위쪽 손잡이 6 · 탭과 검색 줄 · 카드 줄(축소판 + 이름)이 다 보이는 높이.
+ *
+ * **잰 값**(Chrome · 창 폭 1440 · 사이드바 기본 · 통지 없음 · 머리 한 줄): 판을 열면 캔버스 칸이 판 높이만큼 준다(닫힌 판의 빈 줄도 칸
+ * 사이 여백 1 을 쥐어 열고 닫음이 여백을 안 바꾼다) — 창 900 에서 캔버스 칸 809 → 609 · 창 700 에서 609 → 409. 최대(창 900 에서 564 · 700
+ * 에서 364)에서 캔버스 칸은 245 다. 다시 재는 법:
+ * `pnpm test:browser` 의 `apps/web/build-test/palette.test.ts` «판을 열면 캔버스 칸이 판 높이만큼 준다» 가 `[하단 판 높이]` 로그로 낸다.
+ */
+export const PALETTE_HEIGHT_DEFAULT = 200
+
+/**
+ * 하단 판의 최소 높이(px). **근거는 카드 줄이 보이는 것이다** — 손잡이 · 탭 줄 · 카드 이름 줄과 축소판 한 줄(작게)이 서는 높이다. 그 아래로
+ * 줄이면 판이 탭 줄만 남아 «열렸는데 아무것도 없다» 로 보인다.
+ */
+export const PALETTE_HEIGHT_MIN = 140
+
+/** 판이 아무리 높아도 캔버스 칸에 남겨 두는 높이(px) — 캔버스 칸의 위 · 아래 여백(24 × 2)을 빼고 문서가 한 화면의 몇 줄은 보이는 선. */
+export const CANVAS_MIN_HEIGHT = 240
+
+/**
+ * 판의 최대를 계산할 때 창에서 떼는 머리 · 하단 바의 몫(px) — 머리 한 줄(48) · 하단 바 한 줄(40) · 칸 사이 여백 셋(1 × 3) = 91 을 올린
+ * 값이다(`PALETTE_HEIGHT_DEFAULT` 의 실브라우저 판이 같은 로그에 두 높이를 낸다).
+ */
+export const PALETTE_CHROME_RESERVE = 96
+
+/** 지금 창 높이에서 판이 가질 수 있는 최대(px). 최소보다 작아지지 않는다(`sideWidthMax` 와 같은 까닭). */
+export function paletteHeightMax(windowHeight: number): number {
+  return Math.max(PALETTE_HEIGHT_MIN, windowHeight - PALETTE_CHROME_RESERVE - CANVAS_MIN_HEIGHT)
+}
+
+/**
+ * **화면에 쓸 판 높이** — 저장값을 지금 창에 맞춰 조인다. 없거나 0 이하면(옛 판 · 손으로 고친 값) 기본값이다 — 최소로 읽으면 깨진 값이
+ * 사람이 고른 적 없는 가장 작은 판이 된다.
+ */
+export function fitPaletteHeight(stored: number | undefined, windowHeight: number): number {
+  const wanted = stored === undefined || !(stored > 0) ? PALETTE_HEIGHT_DEFAULT : stored
+  return clamp(wanted, PALETTE_HEIGHT_MIN, paletteHeightMax(windowHeight))
+}
+
 /** 화살표 한 칸(px). 드래그와 같은 단위다. */
 export const RESIZE_STEP = 16
 
@@ -196,6 +247,9 @@ export interface StoredLayout {
   sideWidth?: number
   regionRatio?: number
   panelWidth?: number
+  /** 하단 판의 높이(px)와 열림(머리말 «하단 판의 높이»). */
+  paletteHeight?: number
+  paletteOpen?: boolean
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -359,10 +413,14 @@ export function readLayout(storage: Storage | null): StoredLayout {
   const sideWidth = usableNumber(record.sideWidth)
   const regionRatio = usableNumber(record.regionRatio)
   const panelWidth = usableNumber(record.panelWidth)
+  const paletteHeight = usableNumber(record.paletteHeight)
+  const paletteOpen = typeof record.paletteOpen === 'boolean' ? record.paletteOpen : undefined
   return {
     ...(sideWidth === undefined ? {} : { sideWidth }),
     ...(regionRatio === undefined ? {} : { regionRatio }),
     ...(panelWidth === undefined ? {} : { panelWidth }),
+    ...(paletteHeight === undefined ? {} : { paletteHeight }),
+    ...(paletteOpen === undefined ? {} : { paletteOpen }),
   }
 }
 
@@ -408,6 +466,16 @@ export interface SidebarLayout {
   grabPanelWidth: () => number
   setPanelWidth: (width: number) => void
   resetPanelWidth: () => void
+  /** 하단 판이 열렸다고 기억하는가 — 서는지는 셸이 편집 권한과 함께 가른다(기억은 그대로 둔다). */
+  paletteOpen: boolean
+  togglePalette: () => void
+  /** 화면에 쓸 판 높이(px). **클램프를 지난 값**이다(`fitPaletteHeight`). */
+  paletteHeight: number
+  paletteHeightMin: number
+  paletteHeightMax: number
+  grabPaletteHeight: () => number
+  setPaletteHeight: (height: number) => void
+  resetPaletteHeight: () => void
 }
 
 /**
@@ -416,6 +484,11 @@ export interface SidebarLayout {
  */
 function windowWidth(): number {
   return typeof window === 'undefined' ? 0 : window.innerWidth
+}
+
+/** 창 높이 — 셸 높이와 같다(`windowWidth` 와 같은 까닭). */
+function windowHeight(): number {
+  return typeof window === 'undefined' ? 0 : window.innerHeight
 }
 
 /**
@@ -440,6 +513,7 @@ export function useSidebarLayout(): SidebarLayout {
   // 첫 렌더에 한 번만 읽는다. 뒤로는 이 상태가 진실이다.
   const [stored, setStored] = useState<StoredLayout>(() => readLayout(storageRef.current))
   const [shellWidth, setShellWidth] = useState(windowWidth)
+  const [shellHeight, setShellHeight] = useState(windowHeight)
   const [metrics, setMetrics] = useState<RegionMetrics>({ shared: 0, inset: 0 })
 
   /**
@@ -479,6 +553,7 @@ export function useSidebarLayout(): SidebarLayout {
   useLayoutEffect(() => {
     const sync = (): void => {
       setShellWidth(windowWidth())
+      setShellHeight(windowHeight())
       setMetrics(measure())
     }
     sync()
@@ -521,6 +596,7 @@ export function useSidebarLayout(): SidebarLayout {
     shellWidth,
   )
   const regionRatio = clampRegionRatio(stored.regionRatio ?? REGION_RATIO_DEFAULT, metrics.shared)
+  const paletteHeight = fitPaletteHeight(stored.paletteHeight, shellHeight)
 
   return {
     sideRef,
@@ -554,5 +630,14 @@ export function useSidebarLayout(): SidebarLayout {
     setRegionRatio: (ratio) =>
       setStored((prev) => ({ ...prev, regionRatio: clampRegionRatio(ratio, metrics.shared) })),
     resetRegionRatio: () => setStored((prev) => ({ ...prev, regionRatio: REGION_RATIO_DEFAULT })),
+    paletteOpen: stored.paletteOpen === true,
+    togglePalette: () => setStored((prev) => ({ ...prev, paletteOpen: prev.paletteOpen !== true })),
+    paletteHeight,
+    paletteHeightMin: PALETTE_HEIGHT_MIN,
+    paletteHeightMax: paletteHeightMax(shellHeight),
+    grabPaletteHeight: () => paletteHeight,
+    setPaletteHeight: (height) =>
+      setStored((prev) => ({ ...prev, paletteHeight: clamp(height, PALETTE_HEIGHT_MIN, paletteHeightMax(shellHeight)) })),
+    resetPaletteHeight: () => setStored((prev) => ({ ...prev, paletteHeight: PALETTE_HEIGHT_DEFAULT })),
   }
 }

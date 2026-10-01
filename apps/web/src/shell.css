@@ -126,12 +126,14 @@
      마우스로 잡을 수 없다. **다섯째 트랙(우측 패널)도 `auto`다** — 폭은 `.wb-shell-panel`의 인라인 `width`(좌측과 같은 장치). 손잡이 둘과
      여백 넷은 `HANDLES_WIDTH`가 함께 알고 있고 `test/shell/sidebar-layout.test.ts`가 둘을 대조한다. */
   grid-template-columns: auto 6px minmax(0, 1fr) 6px auto;
-  /* **셋째 줄이 하단 바다**(`shell/shell-footer.tsx`) — 캔버스 칸 아래, 좌 · 우 사이드바 사이. 높이가 `auto`라 통지가 늘면 바가 자라고
-     캔버스 줄(`minmax(0, 1fr)`)이 그만큼 준다. 캔버스와 바 사이에 칸을 끼울 때는 줄 하나와 영역 이름 하나를 더한다. */
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* **셋째 줄이 하단 컴포넌트 판, 넷째 줄이 하단 바다**(`palette/component-palette.tsx` · `shell/shell-footer.tsx`) — 캔버스 칸 아래, 좌 · 우
+     사이드바 사이. 둘 다 높이가 `auto`라 판을 열거나 통지가 늘면 캔버스 줄(`minmax(0, 1fr)`)이 그만큼 준다. 판의 높이는 판에 인라인으로
+     붙는다(`shell/sidebar-layout.ts` 머리말 «하단 판의 높이»). 판이 닫히면 그 줄은 빈 줄이라 높이 0 이고 여백 하나(1px)만 남는다. */
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   grid-template-areas:
     'head head head head head'
     'side side-resizer canvas panel-resizer panel'
+    'side side-resizer palette panel-resizer panel'
     'side side-resizer footer panel-resizer panel';
   gap: var(--wb-shell-gap);
   background: var(--wb-shell-line);
@@ -308,6 +310,58 @@
   align-items: center;
   justify-content: flex-end;
   gap: 6px 16px;
+}
+
+/* ── 하단 컴포넌트 판(`palette/component-palette.tsx`) ─────────────────────────────────────
+   캔버스와 하단 바 사이의 판. 셸이 그리는 조각이라 글꼴 · 스킴을 여기 건다(하단 바와 같은 값 — 문서를 감싸지 않는다). 높이는 인라인이다.
+   위쪽 손잡이 · 머리 줄 · 카드 줄이 세로로 선다 — `min-height: 0` 이 없으면 카드 줄이 판보다 커질 때 판이 넘친다. */
+.wb-shell-palette {
+  grid-area: palette;
+  color-scheme: light;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--wb-shell-chrome);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: var(--wb-shell-ink);
+}
+
+/* 판 위쪽의 손잡이 — 좌측 두 영역 사이의 손잡이와 같은 값이고 자리만 다르다(그 규칙 위의 «합치지 않는다»와 같은 근거). */
+.wb-shell-palette-resizer {
+  flex: none;
+  height: 6px;
+  background: var(--wb-shell-line);
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.wb-shell-palette-resizer:hover {
+  background: var(--wb-shell-accent);
+}
+
+.wb-shell-palette-resizer:focus-visible {
+  background: var(--wb-shell-accent);
+  outline: 2px solid var(--wb-shell-ink);
+}
+
+/* 하단 바의 «컴포넌트» 토글. 줌 단추와 같은 줄에 서므로 같은 테두리 · 모서리다(`.wb-shell-zoom-step` 위 주석). 열린 판은 강조색 테두리다. */
+.wb-shell-palette-toggle {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+.wb-shell-palette-toggle[aria-expanded='true'] {
+  border-color: var(--wb-shell-accent);
+  color: var(--wb-shell-accent);
 }
 
 /* 로고 — 프로젝트 목록으로 가는 링크(`shell/brand-link.tsx`). 아이콘과 «wirebound»가 한 줄이다.
