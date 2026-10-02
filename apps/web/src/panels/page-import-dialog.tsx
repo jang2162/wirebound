@@ -13,11 +13,11 @@
  *
  * # 키가 트리 단축키로 새지 않는다 — 상자는 단축키 상자 **밖**에 선다
  *
- * 메뉴 트리의 키 핸들러(`panels/menu-tree.tsx`의 `handleKeyDown`)는 수식 키 없는 `Delete` · `Backspace`를 **삭제 확인**으로 받는다. React 의
- * 키 이벤트는 top layer 에 뜬 모달에서도 **React 트리를 따라** 버블된다 — 상자를 그 핸들러가 붙은 상자 안에 그리면, 상자 안의 단추
- * («가져오기» · «JSON 직접 붙여 넣기»)에 포커스를 두고 친 `Delete`가 뒤에 고른 메뉴의 삭제 확인을 건다(입력 칸이면 `isTypingSurface`가
- * 거르지만 단추는 입력 칸이 아니다). 그래서 메뉴 트리가 상자를 단축키 상자의 **형제**로 그린다 — 거르는 장치가 아니라 자리가 막는다
- * (`test/panels/page-json.test.tsx` «상자의 키가 트리 단축키로 새지 않는다»).
+ * 메뉴 트리의 키 핸들러(`panels/menu-tree.tsx`의 `handleKeyDown`)는 수식 키 없는 `Delete` · `Backspace`를 **삭제 확인**으로 받고, 모달 안의
+ * 키도 React 트리를 따라 거기까지 버블된다(`shell/shell-dialog.tsx` 머리말 «상자 안의 키는 React 트리를 따라 버블된다»). 입력 칸이면
+ * `isTypingSurface`가 거르지만 상자의 단추(«가져오기» · «JSON 직접 붙여 넣기»)는 입력 칸이 아니다. 그래서 메뉴 트리가 상자를 단축키 상자의
+ * **형제**로 그린다 — 거르는 장치가 아니라 자리가 막는다(`test/panels/page-json.test.tsx` «상자의 키가 트리 단축키로 새지 않는다» ·
+ * `build-test/page-json-dialog.test.ts`).
  *
  * # 실패가 서는 자리
  *
