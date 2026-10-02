@@ -553,6 +553,39 @@ describe('파일 칸', () => {
     await waitFor(() => expect(within(dialog()).getByRole('status').textContent).toContain('가져온 목록'))
   })
 
+  /**
+   * **나중에 고른 파일만 싣는다.** 앞 파일의 읽기가 늦게 끝나면(큰 파일 · 느린 디스크) 그 글자가 나중 파일을 덮어, 화면은 나중 파일의
+   * 이름을 말하는데 앞 파일이 들어간다. 앞 파일의 `readAsText`를 붙잡아 두고 나중 파일이 읽힌 뒤에 푼다.
+   */
+  it('앞 파일의 읽기가 늦게 끝나도 나중에 고른 파일을 덮지 않는다', async () => {
+    await open()
+    openImport()
+    const held: (() => void)[] = []
+    const original = FileReader.prototype.readAsText
+    const spy = vi.spyOn(FileReader.prototype, 'readAsText').mockImplementation(function (this: FileReader, blob: Blob) {
+      if (blob instanceof File && blob.name === 'slow.json') held.push(() => original.call(this, blob))
+      else original.call(this, blob)
+    })
+    try {
+      const input = within(dialog()).getByLabelText('페이지 파일')
+      const slow = file({ page: { title: '앞 파일', description: null } })
+      const fast = file({ page: { title: '나중 파일', description: null } })
+      fireEvent.change(input, { target: { files: [jsonFile(JSON.stringify(slow), 'slow.json')] } })
+      fireEvent.change(input, { target: { files: [jsonFile(JSON.stringify(fast), 'fast.json')] } })
+      await waitFor(() => expect(within(dialog()).getByRole('status').textContent).toContain('나중 파일'))
+
+      expect(held).toHaveLength(1)
+      held[0]?.()
+      // 붙잡았던 앞 파일의 `onload`가 돈 뒤까지 기다린다 — 결과가 보이는 것이 콜백이 돈 것은 아니다(CLAUDE.md «이벤트로 풀리는 상태»).
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      expect(within(dialog()).getByRole('status').textContent).toContain('나중 파일')
+      expect(dialog().textContent).toContain('고른 파일: fast.json')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('파일이 아닌 것을 끌면 강조하지 않는다 — 음성 대조', async () => {
     await open()
     openImport()
