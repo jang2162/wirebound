@@ -18,6 +18,7 @@
  * | 축소판 — 입력 표본 `inert` | 입력 표본 자리를 눌러 iframe 이 포커스 · 클릭을 받는다 · 그 점의 맨 위가 그 카드가 아니다 |
  * | 판 열고 접기 | 뷰 모드 · 실시간 viewer 강등에 판이 남는다 · 돌아오면 기억대로 안 선다 · 페이지를 옮기면 판이 닫히거나 표본이 빈다 |
  * | 창 700 · 최대 판 · 통지 다섯 | 셸이 세로로 넘친다 · 하단 바가 창 밖이다 · 하단 바가 자라도 판이 안 줄어 캔버스 칸이 `CANVAS_MIN_HEIGHT` 아래다 · 통지를 걷어도 판이 안 돌아온다 |
+ * | 통지가 판을 조인 동안 손잡이 | 창 700 · 800 에서 키우는 몸짓(↑ · End · 위로 끌기)이 기억한 높이를 조인 값으로 누른다(통지를 걷어도 · 새로 고쳐도 조인 높이) · 줄이는 몸짓(↓ · 아래로 끌기)이 그린 높이에서 한 번에 안 움직이거나 그 높이를 안 기억한다 |
  * | 판을 연 채 화면 맞춤 | 맞춤 줌이 판을 닫은 판과 다르다 |
  * | 카드 끌기 중 남의 편집 | bob 이 대상을 잡음 · 지움 · 위 글을 길게 고쳐 대상이 밀림(표시가 옛 좌표에 남는다) · viewer 강등 — 표시가 남거나 보인 자리 밖으로 편집이 나간다 |
  * | 카드 끌기 — 안 미는 남의 편집(대조군) | 캔버스가 다시 잴 때 판의 끌기가 다시 묻지 않고 표시를 걷기만 한다 · 놓은 자리가 보인 자리가 아니다 |
@@ -745,6 +746,97 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       } finally {
         await close()
       }
+    })
+
+    /**
+     * 통지가 판을 조인 동안 손잡이를 만진다 — 키우는 몸짓(ArrowUp · End · 위로 끌기)은 그린 최대에 막혀 화면이 그대로이고 기억한 높이도
+     * 그대로여야 한다(통지가 걷히면 · 새로 고치면 앞 높이). 줄이는 몸짓(ArrowDown · 아래로 끌기)은 **그린 높이에서** 한 번에 움직이고 그
+     * 높이를 기억한다(`shell/sidebar-layout.ts` 의 `setPaletteHeight`). 창 700 은 조인 판이 최소에 붙어 줄임이 1px 이라 창 800 에서도 잰다.
+     */
+    it('통지가 판을 조인 동안 손잡이를 만져도 기억한 높이가 통지에 안 눌린다 — 줄이는 몸짓은 그린 높이에서 움직인다', async () => {
+      const { P } = await seed('rv-open-press', [BASIC])
+      const seen: Record<string, unknown> = {}
+      for (const height of [700, 800]) {
+        const { page, close } = await openEditor(P[0]!, 'alice', { width: 1440, height })
+        try {
+          await openPalette(page)
+          const handle = page.getByRole('separator', { name: '컴포넌트 목록 높이' })
+          const drawn = () => page.evaluate(() => Math.round(document.querySelector('.wb-shell-palette')!.getBoundingClientRect().height))
+          const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('wirebound.editor.sidebar') ?? '{}').paletteHeight as number | undefined)
+          const notices = async (on: boolean) => {
+            await page.evaluate((add) => {
+              const box = document.querySelector('.wb-shell-footer-notices')!
+              for (const p of box.querySelectorAll('.wb-test-notice')) p.remove()
+              for (let i = 0; add && i < 5; i += 1) {
+                const p = document.createElement('p')
+                p.className = 'wb-shell-remote-alert wb-test-notice'
+                p.setAttribute('role', 'status')
+                p.textContent = `통지 ${i + 1} — 남이 이 페이지를 바꿔 화면이 낡았습니다. 다시 불러오면 서버의 판으로 돌아갑니다.`
+                box.appendChild(p)
+              }
+            }, on)
+            await page.waitForTimeout(300)
+          }
+          const drag = async (dy: number) => {
+            const box = (await handle.boundingBox())!
+            await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+            await page.mouse.down()
+            await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + dy, { steps: 4 })
+            await page.mouse.up()
+          }
+          const gestures: Record<string, () => Promise<void>> = {
+            ArrowUp: () => handle.press('ArrowUp'),
+            End: () => handle.press('End'),
+            dragUp: () => drag(-40),
+            ArrowDown: () => handle.press('ArrowDown'),
+            dragDown: () => drag(30),
+          }
+          for (const [name, gesture] of Object.entries(gestures)) {
+            await notices(false)
+            await handle.press('End')
+            const max = { drawn: await drawn(), stored: await stored() }
+            await notices(true)
+            const squeezed = await drawn()
+            await gesture()
+            await page.waitForTimeout(150)
+            const touched = { drawn: await drawn(), stored: await stored() }
+            await notices(false)
+            seen[`${height} ${name}`] = { max, squeezed, touched, cleared: await drawn() }
+          }
+          await handle.press('End')
+          await notices(true)
+          await handle.press('ArrowUp')
+          await page.reload()
+          // 열림은 기억된다 — 토글을 다시 누르면 닫힌다.
+          await page.getByRole('region', { name: '컴포넌트 목록' }).waitFor()
+          await page.waitForTimeout(300)
+          seen[`${height} 새로 고침`] = { drawn: await drawn(), stored: await stored() }
+        } finally {
+          await close()
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[통지 중 손잡이] ${JSON.stringify(seen)}`)
+      const at = (key: string) => seen[key] as { max: { drawn: number; stored: number }; squeezed: number; touched: { drawn: number; stored: number }; cleared: number }
+      const verdict: Record<string, unknown> = {}
+      for (const height of [700, 800]) {
+        for (const name of ['ArrowUp', 'End', 'dragUp']) {
+          const v = at(`${height} ${name}`)
+          verdict[`${height} ${name}`] = { screen: v.touched.drawn === v.squeezed, stored: v.touched.stored === v.max.stored, cleared: v.cleared === v.max.drawn }
+        }
+        for (const [name, step] of [['ArrowDown', 16], ['dragDown', 30]] as const) {
+          const v = at(`${height} ${name}`)
+          const want = Math.max(220, v.squeezed - step)
+          verdict[`${height} ${name}`] = { screen: v.touched.drawn === want, stored: v.touched.stored === want, cleared: v.cleared === want }
+        }
+        const reloaded = seen[`${height} 새로 고침`] as { drawn: number }
+        verdict[`${height} 새로 고침`] = reloaded.drawn === at(`${height} ArrowUp`).max.drawn
+      }
+      const ok = { screen: true, stored: true, cleared: true }
+      expect(verdict).toEqual({
+        '700 ArrowUp': ok, '700 End': ok, '700 dragUp': ok, '700 ArrowDown': ok, '700 dragDown': ok, '700 새로 고침': true,
+        '800 ArrowUp': ok, '800 End': ok, '800 dragUp': ok, '800 ArrowDown': ok, '800 dragDown': ok, '800 새로 고침': true,
+      })
     })
 
     it('판을 연 채 화면 맞춤 — 줌이 판을 닫은 판과 같다', async () => {

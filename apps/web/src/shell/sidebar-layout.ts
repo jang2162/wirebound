@@ -191,7 +191,8 @@ export const REGION_MIN_HEIGHT = 72
  *
  * **한계는 캔버스와 판이 나눠 쓰는 세로에서 계산한다**(`paletteHeightMax`) — 사이드바 상자(캔버스 · 판 · 하단 바 세 줄에 걸친다)에서 하단 바와
  * 칸 사이 여백 둘을 뗀 잰 값(`paletteRoom`)에서 캔버스 몫(`CANVAS_MIN_HEIGHT`)을 뗀다. 통지가 하단 바를 키우거나 머리가 두 줄로 접히면 그
- * 세로가 줄어 최대도 준다 — 그리는 자리가 판을 그만큼 조여 캔버스 몫이 남는다(저장값은 그대로라 통지가 걷히면 판이 돌아온다). 하단 바는
+ * 세로가 줄어 최대도 준다 — 그리는 자리가 판을 그만큼 조여 캔버스 몫이 남는다(저장값은 그대로라 통지가 걷히면 판이 돌아온다 — 조인 동안
+ * 손잡이를 만져도 키우는 쪽은 저장값을 안 누른다: `storePaletteHeight`). 하단 바는
  * 셸이 다시 그리지 않아도 자라므로(통지는 제 부품이 그린다) `ResizeObserver` 로 다시 잰다. **재지 못하면**(레이아웃이 없는 jsdom · 첫 그림
  * 전) 창 높이에서 머리 · 하단 바 한 줄의 몫(`PALETTE_CHROME_RESERVE`)을 뗀 셈으로 간다. 하단 바가 창의 대부분을 먹는 판에서는 최대가
  * 최소로 주저앉아 캔버스 줄이 그 몫 아래로 준다 — 셸은 넘치지 않는다(`minmax(0, 1fr)`). 잰 값과 다시 재는 법은 `PALETTE_HEIGHT_DEFAULT` 의
@@ -245,6 +246,24 @@ export function paletteHeightMax(windowHeight: number, room = 0): number {
 export function fitPaletteHeight(stored: number | undefined, windowHeight: number, room = 0): number {
   const wanted = stored === undefined || !(stored > 0) ? PALETTE_HEIGHT_DEFAULT : stored
   return clamp(wanted, PALETTE_HEIGHT_MIN, paletteHeightMax(windowHeight, room))
+}
+
+/**
+ * **손잡이가 청한 높이를 저장할 값으로**(`max` 는 그린 최대 — 잰 세로로 셈한다). 최대 아래의 청은 그 값을 저장한다 — 손잡이는 그린 높이에서
+ * 출발하므로(`grabPaletteHeight`) 줄이는 몸짓이 화면을 한 번에 움직이고 그 높이가 기억된다. **최대에 닿은 청은 «지금 화면에서 가장 크게» 다** —
+ * 저장값이 그보다 크면(통지 · 줄인 창이 판을 잠깐 조인 판) 그대로 둔다. 조인 값을 저장하면 키우려고 만진 손잡이 하나가 기억을 눌러, 통지가
+ * 걷혀도 · 새로 고쳐도 판이 조인 높이로 남는다. 저장값은 사람이 고른 값이나
+ * 그때 그린 최대보다 커지지 않는다(`useSidebarLayout` 머리말 «싣는 자리»가 막는 «아무도 정한 적 없는 폭»이 안 생긴다).
+ *
+ * 저장을 창 높이로만 셈한 최대로 조이는 길은 고르지 않았다 — 그린 값에서 출발하면 키움 한 번이 조인 값 + 16 을 저장하고, 저장값에서 출발하면
+ * 줄임이 화면 밖의 값에서 줄어 화면이 안 움직인다. 어느 쪽이든 End(그린 최대를 청한다)는 조인 값을 저장한다
+ * (`apps/web/build-test/palette-review.test.ts` «통지가 판을 조인 동안 손잡이를 만져도»).
+ */
+export function storePaletteHeight(stored: number | undefined, requested: number, max: number): number {
+  const next = clamp(requested, PALETTE_HEIGHT_MIN, max)
+  if (next < max) return next
+  const kept = stored === undefined || !(stored > 0) ? PALETTE_HEIGHT_DEFAULT : stored
+  return Math.max(kept, next)
 }
 
 /** 화살표 한 칸(px). 드래그와 같은 단위다. */
@@ -674,7 +693,7 @@ export function useSidebarLayout(): SidebarLayout {
     paletteHeightMin: PALETTE_HEIGHT_MIN,
     paletteHeightMax: paletteMax,
     grabPaletteHeight: () => paletteHeight,
-    setPaletteHeight: (height) => setStored((prev) => ({ ...prev, paletteHeight: clamp(height, PALETTE_HEIGHT_MIN, paletteMax) })),
+    setPaletteHeight: (height) => setStored((prev) => ({ ...prev, paletteHeight: storePaletteHeight(prev.paletteHeight, height, paletteMax) })),
     resetPaletteHeight: () => setStored((prev) => ({ ...prev, paletteHeight: PALETTE_HEIGHT_DEFAULT })),
   }
 }
