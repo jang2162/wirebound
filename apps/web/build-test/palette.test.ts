@@ -5,7 +5,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 판을 열면 캔버스 칸이 준다 | 판 높이만큼 안 준다 · 최대에서 캔버스 칸이 `CANVAS_MIN_HEIGHT` 아래 · 셸이 세로로 넘친다 · 새로고침 뒤 열림 · 높이를 잃는다 |
- * | 축소판 — 카드마다 표본 | 탭 다섯을 돌며 어느 카드의 창 안에 그 타입의 `[data-wb-component]` 가 안 선다(빈 카드) · 카드가 18 보다 적다 |
+ * | 축소판 — 카드마다 표본 | 탭 다섯을 돌며 어느 카드의 창 안에 그 타입의 `[data-wb-component]` 가 안 선다(빈 카드) · 카드가 18 보다 적다 · 줄임 비의 가운데 값이 0.6 아래(축소판이 작아 안 읽힌다) |
  * | 축소판 — 테마 표지 | `system-portal` 프로젝트에서 축소판 단추의 바탕이 그 테마 주색(`semantic.primary` 기본값)이 아니다 |
  * | 축소판 — 남이 토큰을 저장 | 저장 뒤에도 축소판 단추의 바탕이 옛 값이다 |
  * | 축소판 — 번들을 못 실음 | 축소판이 빈다(기본 뷰로 안 선다) |
@@ -103,6 +103,18 @@ const CARD_THUMBS = `(() => {
   return out
 })()`
 
+/** 카드마다 축소판의 줄임 비(표본 겹의 `scale(…)`) — 표본이 카드 창에 들게 줄인 배율. */
+const THUMB_SCALES = `(() => {
+  const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe')?.contentDocument
+  const out = {}
+  for (const card of document.querySelectorAll('[data-wb-palette-card]')) {
+    const type = card.getAttribute('data-wb-palette-card')
+    const m = /scale\\(([0-9.]+)\\)/.exec(doc?.querySelector('[data-wb-palette-thumb="' + type + '"]')?.style.transform ?? '')
+    out[type] = m === null ? null : Math.round(Number(m[1]) * 100) / 100
+  }
+  return out
+})()`
+
 /** 축소판 단추(갤러리 표본 «Button — 보통»)의 계산 바탕색. */
 const THUMB_BUTTON = `(() => {
   const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe')?.contentDocument
@@ -165,12 +177,12 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       const tallest = await heights(page)
       await page.keyboard.press('Home')
       const lowest = await heights(page)
-      // 끌기 — 위로 40px 끌면 40px 커진다(`reversed`).
+      // 끌기 — 아래로 40px 끌면 40px 작아진다(`reversed` — 위로 끌면 커진다). 창 700 에서는 기본값이 최대에 가까워 키우는 쪽으로는 못 잰다.
       await page.keyboard.press('Enter')
       const box = (await handle.boundingBox())!
       await page.mouse.move(box.x + 200, box.y + 3)
       await page.mouse.down()
-      await page.mouse.move(box.x + 200, box.y + 3 - 40, { steps: 4 })
+      await page.mouse.move(box.x + 200, box.y + 3 + 40, { steps: 4 })
       await page.mouse.up()
       const dragged = await heights(page)
 
@@ -186,8 +198,8 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       expect(closed.canvas! - opened.canvas!).toBe(PALETTE_HEIGHT_DEFAULT)
       expect(tallest.canvas!).toBeGreaterThanOrEqual(CANVAS_MIN_HEIGHT)
       expect(lowest.palette).toBe(PALETTE_HEIGHT_MIN)
-      expect(dragged.palette).toBe(PALETTE_HEIGHT_DEFAULT + 40)
-      expect(reloaded.palette).toBe(PALETTE_HEIGHT_DEFAULT + 40)
+      expect(dragged.palette).toBe(PALETTE_HEIGHT_DEFAULT - 40)
+      expect(reloaded.palette).toBe(PALETTE_HEIGHT_DEFAULT - 40)
       for (const state of [closed, opened, tallest, lowest, dragged, reloaded]) expect(state.overflow).toBe(0)
     } finally {
       await context.close()
@@ -203,6 +215,7 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       await openPalette(page)
       // 탭마다 그 갈래의 카드가 선다 — 다섯을 돌며 모은다.
       const shown: Record<string, boolean> = {}
+      const scales: Record<string, number | null> = {}
       let cards = 0
       const tabs = page.getByRole('tablist', { name: '갈래' }).getByRole('tab')
       for (let i = 0; i < (await tabs.count()); i += 1) {
@@ -214,10 +227,16 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
         ).catch(async () => (await page.evaluate(CARD_THUMBS)) as Record<string, boolean> | null)
         cards += await page.locator('[data-wb-palette-card]').count()
         Object.assign(shown, here ?? {})
+        Object.assign(scales, (await page.evaluate(THUMB_SCALES)) as Record<string, number | null>)
       }
       // eslint-disable-next-line no-console
       console.log(`[축소판 표본] ${JSON.stringify(shown)}`)
+      // eslint-disable-next-line no-console
+      console.log(`[축소판 줄임 비] ${JSON.stringify(scales)}`)
       expect(cards).toBeGreaterThanOrEqual(18)
+      // 축소판이 읽힌다 — 판 기본 높이 · 창 1440×900 에서 표본 절반 넘게가 0.6 배 이상으로 선다(`PALETTE_HEIGHT_DEFAULT` 주석).
+      const sorted = Object.values(scales).filter((value): value is number => value !== null).sort((a, b) => a - b)
+      expect(sorted[Math.floor(sorted.length / 2)]).toBeGreaterThanOrEqual(0.6)
       expect(Object.keys(shown).length).toBe(cards)
       expect(Object.entries(shown).filter(([, ok]) => !ok).map(([type]) => type)).toEqual([])
     } finally {

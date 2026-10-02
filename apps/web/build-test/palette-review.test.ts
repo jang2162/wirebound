@@ -17,7 +17,7 @@
  * | 축소판 — 남이 테마를 바꿈 | bob 이 프로젝트 테마를 `system-portal` 로 바꾼 뒤에도 축소판 단추가 옛 테마 색이다 |
  * | 축소판 — 입력 표본 `inert` | 입력 표본 자리를 눌러 iframe 이 포커스 · 클릭을 받는다 · 그 점의 맨 위가 그 카드가 아니다 |
  * | 판 열고 접기 | 뷰 모드 · 실시간 viewer 강등에 판이 남는다 · 돌아오면 기억대로 안 선다 · 페이지를 옮기면 판이 닫히거나 표본이 빈다 |
- * | 창 700 · 최대 판 · 통지 다섯 | 셸이 세로로 넘친다 · 하단 바가 창 밖이다(값 — 캔버스 칸 높이를 적는다) |
+ * | 창 700 · 최대 판 · 통지 다섯 | 셸이 세로로 넘친다 · 하단 바가 창 밖이다 · 하단 바가 자라도 판이 안 줄어 캔버스 칸이 `CANVAS_MIN_HEIGHT` 아래다 · 통지를 걷어도 판이 안 돌아온다 |
  * | 판을 연 채 화면 맞춤 | 맞춤 줌이 판을 닫은 판과 다르다 |
  * | 카드 끌기 중 남의 편집 | bob 이 대상을 잡음 · 지움 · 위 글을 길게 고쳐 대상이 밀림(표시가 옛 좌표에 남는다) · viewer 강등 — 표시가 남거나 보인 자리 밖으로 편집이 나간다 |
  * | 카드 끌기 — 안 미는 남의 편집(대조군) | 캔버스가 다시 잴 때 판의 끌기가 다시 묻지 않고 표시를 걷기만 한다 · 놓은 자리가 보인 자리가 아니다 |
@@ -26,6 +26,7 @@ import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { GALLERY_SAMPLES } from '@wirebound/theme-gallery'
 import { placeableGroups } from '../src/panels/type-picker'
+import { CANVAS_MIN_HEIGHT } from '../src/shell/sidebar-layout'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
 import { putTheme } from './theme-fixtures'
 
@@ -693,15 +694,17 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
 
     /**
      * 창 700 · 판 최대 · 하단 바에 통지 다섯(실제 통지 꼴의 `<p role="status">` 를 통지 무리에 얹는다 — 통지 다섯을 실제로 세우는 판은 이
-     * 트랙 밖이다). 셸이 넘치지 않는지 · 하단 바가 창 안인지와 캔버스 칸 높이(값)를 적는다.
+     * 트랙 밖이다). 셸이 넘치지 않는지 · 하단 바가 창 안인지 · 하단 바가 자란 만큼 판이 줄어 캔버스 칸이 `CANVAS_MIN_HEIGHT` 를 지키는지를
+     * 잰다(판 최대는 잰 하단 바로 셈한다 — `shell/sidebar-layout.ts` 머리말 «하단 판의 높이»). 통지를 걷으면 판이 기억한 높이로 돌아온다.
      */
-    it('창 700 · 최대 판 · 통지 다섯 — 셸이 넘치지 않고 하단 바가 창 안이다(캔버스 칸 높이는 기록)', async () => {
+    it('창 700 · 최대 판 · 통지 다섯 — 셸이 넘치지 않고 하단 바가 창 안이며 판이 줄어 캔버스 칸이 최소를 지킨다', async () => {
       const { P } = await seed('rv-open-700', [BASIC])
       const { page, close } = await openEditor(P[0]!, 'alice', { width: 1440, height: 700 })
       try {
         await openPalette(page)
         await page.getByRole('separator', { name: '컴포넌트 목록 높이' }).focus()
         await page.keyboard.press('End')
+        const atMax = await page.evaluate(() => Math.round(document.querySelector('.wb-shell-palette')!.getBoundingClientRect().height))
         await page.evaluate(() => {
           const box = document.querySelector('.wb-shell-footer-notices')!
           for (let i = 0; i < 5; i += 1) {
@@ -726,9 +729,20 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
             notices: document.querySelectorAll('.wb-shell-footer-notices > [role]').length,
           }
         })
+        await page.evaluate(() => {
+          for (const p of document.querySelectorAll('.wb-shell-footer-notices > .wb-shell-remote-alert')) p.remove()
+        })
+        await page.waitForTimeout(300)
+        const cleared = await page.evaluate(() => Math.round(document.querySelector('.wb-shell-palette')!.getBoundingClientRect().height))
         // eslint-disable-next-line no-console
-        console.log(`[리뷰 창 700 최대 판 통지 다섯] ${JSON.stringify(seen)}`)
-        expect({ overflow: seen.overflow, footerInWindow: seen.footerInWindow, notices: seen.notices }).toEqual({ overflow: 0, footerInWindow: true, notices: 5 })
+        console.log(`[리뷰 창 700 최대 판 통지 다섯] ${JSON.stringify({ atMax, ...seen, cleared })}`)
+        expect({
+          overflow: seen.overflow,
+          footerInWindow: seen.footerInWindow,
+          notices: seen.notices,
+          canvasKept: seen.canvas >= CANVAS_MIN_HEIGHT,
+          cleared,
+        }).toEqual({ overflow: 0, footerInWindow: true, notices: 5, canvasKept: true, cleared: atMax })
       } finally {
         await close()
       }
