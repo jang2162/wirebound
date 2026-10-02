@@ -176,7 +176,9 @@ function PageImportBody(props: { commands: TreeCommands }): ReactElement {
           aria-expanded={pasteOpen}
           onClick={() => setPasteOpen((was) => !was)}
         >
-          {pasteOpen ? '▾' : '▸'} JSON 직접 붙여 넣기
+          {/* 펼침 표시는 글자가 아니다 — 이름은 «JSON 직접 붙여 넣기»이고 상태는 `aria-expanded`가 말한다. */}
+          <span aria-hidden="true">{pasteOpen ? '▾' : '▸'}</span>
+          JSON 직접 붙여 넣기
         </button>
         {pasteOpen && (
           <textarea
