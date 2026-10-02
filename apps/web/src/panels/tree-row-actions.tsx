@@ -22,6 +22,7 @@
  * 메뉴의 옮기기(소속 메뉴 고르기는 페이지의 것이다 — 메뉴의 부모는 끌어 놓기 · 들여쓰기 · 내어쓰기가 바꾼다). 늘 꺼진 항목은
  * 읽을 때마다 같은 «못 한다»를 한 번 더 말할 뿐이다.
  */
+import { FileDown, FileUp, type LucideIcon } from 'lucide-react'
 import type { ReactElement } from 'react'
 import type { StructureAbilities } from '../edit/structure-actions'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
@@ -70,25 +71,33 @@ const MENU_WHY_DISABLED: Record<keyof TreeAbilities, string> = {
 /**
  * 항목 하나 — **켜고 끔과 그 이유가 같은 판정 하나(`ability`)에서 나온다.** 조작이 나가 있는 동안(`busy`)은 다 꺼지되 이유를 안
  * 붙인다 — 곧 풀릴 상태에 «메뉴를 고르세요»가 뜨면 거짓말이다(그때 무엇을 하는지는 상태줄이 «보내는 중»으로 말한다).
+ *
+ * `key`는 판정과 따로 받는다 — 판정 하나에 항목이 둘일 수 있다(`addPage` — «페이지 추가» · «JSON 에서 가져오기…»).
  */
 function menuItem(
   commands: TreeCommands,
   describedBy: string | undefined,
-  key: keyof TreeAbilities,
-  label: string,
-  onSelect: () => void,
-  danger = false,
+  ability: keyof TreeAbilities,
+  entry: { key?: string; label: string; onSelect: () => void; danger?: boolean; icon?: LucideIcon },
 ): ActionMenuItem {
-  const allowed = commands.abilities[key]
+  const allowed = commands.abilities[ability]
   return {
-    key,
-    label,
-    onSelect,
+    key: entry.key ?? ability,
+    label: entry.label,
+    onSelect: entry.onSelect,
     disabled: !allowed || commands.busy,
-    title: allowed ? undefined : MENU_WHY_DISABLED[key],
+    title: allowed ? undefined : MENU_WHY_DISABLED[ability],
     describedBy,
-    danger,
+    danger: entry.danger ?? false,
+    icon: entry.icon,
   }
+}
+
+/** 페이지 줄 `…`의 «JSON 내보내기» — 그 줄의 페이지를 낸다(`panels/page-json-export.ts`). */
+export interface PageExportEntry {
+  run: () => void
+  /** 내보내기가 나가 있다(어느 줄의 것이든) — 한 번에 하나다. */
+  busy: boolean
 }
 
 /**
@@ -96,30 +105,46 @@ function menuItem(
  *
  * `statusId`는 트리 아래 상태줄의 id 다 — 할 말이 있으면 항목마다 그 줄을 설명으로 든다(`aria-describedby`). **포커스가 항목에 닿는
  * 그 순간**이 사용자가 그 조작을 하려는 때라 그때 한 번 읽힌다. 할 말이 없으면 가리키지 않는다(빈 설명을 읽히지 않게).
+ *
+ * **페이지 JSON 의 두 입구가 여기 있다**(설계서 「페이지 JSON」). 메뉴 `+`의 «JSON 에서 가져오기…»는 그 메뉴 밑에 새 페이지를 만드는
+ * 상자를 연다(`TreeCommands.openImport` — 판정은 «페이지 추가»와 같은 `addPage`다. 가져오기도 페이지를 만드는 것이다). 페이지 `…`의
+ * «JSON 내보내기»는 **그 줄의** 페이지를 파일로 낸다 — 읽기라 트리 판정 · 트리 조작의 잠금(`busy`)을 안 보고 제 내보내기만 기다린다.
+ * 둘 다 편집 모드에서만 있다 — 줄 행동이 편집 모드에서만 서므로(`menu-tree.tsx`의 `editable`).
  */
 export function menuRowItems(
   commands: TreeCommands,
   kind: 'menu' | 'page',
   statusId: string,
+  exportEntry?: PageExportEntry,
 ): { add?: ActionMenuItem[]; more: ActionMenuItem[] } {
   const describedBy =
     menuStatus({ selection: commands.selection, busy: commands.busy, abilities: commands.abilities }) === ''
       ? undefined
       : statusId
   const item = (key: keyof TreeAbilities, label: string, onSelect: () => void, danger = false): ActionMenuItem =>
-    menuItem(commands, describedBy, key, label, onSelect, danger)
+    menuItem(commands, describedBy, key, { label, onSelect, danger })
   const rename = item('rename', '이름 변경', () => commands.openInput('rename'))
   const up = item('moveUp', '위로', () => commands.move(-1))
   const down = item('moveDown', '아래로', () => commands.move(1))
   const remove = item('remove', '삭제', commands.askRemove, true)
 
   if (kind === 'page') {
-    return { more: [rename, item('reparent', '옮기기', commands.openReparent), up, down, remove] }
+    const exported: ActionMenuItem[] =
+      exportEntry === undefined
+        ? []
+        : [{ key: 'export-json', label: 'JSON 내보내기', icon: FileDown, onSelect: exportEntry.run, disabled: exportEntry.busy }]
+    return { more: [rename, item('reparent', '옮기기', commands.openReparent), up, down, ...exported, remove] }
   }
   return {
     add: [
       item('addMenu', '하위 메뉴', () => commands.openInput('new-menu')),
       item('addPage', '페이지 추가', () => commands.openInput('new-page')),
+      menuItem(commands, describedBy, 'addPage', {
+        key: 'import-json',
+        label: 'JSON 에서 가져오기…',
+        onSelect: commands.openImport,
+        icon: FileUp,
+      }),
     ],
     more: [
       rename,

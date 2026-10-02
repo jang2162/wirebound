@@ -156,7 +156,17 @@ export interface TreeCommands {
   /** 한 단계 밖으로 — 부모의 다음 형제가 된다. */
   outdent: () => void
   /**
-   * **파일 한 벌로 페이지를 만든다**(설계서 「페이지 JSON」). 고른 **메뉴** 밑에 붙는다.
+   * **페이지 가져오기 대화 상자의 대상** — 열려 있으면 연 순간의 메뉴(id · 제목), 닫혀 있으면 `null`(`panels/page-import-dialog.tsx`).
+   * 대상을 **연 순간의 id 로 쥔다** — 상자가 열린 동안 남이 그 메뉴를 지우면 트리의 선택 · 판정이 아니라 서버의 거절이 그것을 말한다
+   * (`importFailure`).
+   */
+  importing: ImportTarget | null
+  /** 고른 메뉴를 대상으로 상자를 연다 — 판정은 «페이지 추가»와 같은 `abilities.addPage`다. */
+  openImport: () => void
+  /** 상자를 닫는다 — 상자 안의 실패도 함께 걷힌다(읽은 사람이 닫은 것이다). 보내는 중에도 닫힌다(답은 아래 `importJson`의 자리 규칙). */
+  closeImport: () => void
+  /**
+   * **파일 한 벌로 페이지를 만든다**(설계서 「페이지 JSON」). 상자의 대상 **메뉴** 밑에 붙는다.
    *
    * **`submitInput('new-page')`와 같은 잠금·재조회·이동을 지난다** — 가져오기도 트리를
    * 바꾸는 조작이고, 여기에 자기 잠금을 따로 두면 트리 조작 하나가 나가 있는 동안 가져오기가
@@ -164,11 +174,10 @@ export interface TreeCommands {
    */
   importJson: (file: unknown, title?: string) => void
   /**
-   * 마지막 가져오기의 결과. **`failure`와 다른 축이다** — 성공했는데도 **말해야 하는
-   * 것**(고아가 된 코멘트 수 · 쓰지 않은 `layoutRef`)이 있기 때문이다. 다음 조작이
-   * 시작되면 `null`이 된다.
+   * **가져오기 실패의 자리 — 상자 안이다.** 보낸 상자가 아직 열려 있으면 실패가 여기 서고(상자를 닫지 않고 고른 파일 · 글자를 둔 채
+   * 이유를 보인다), 그 사이 상자를 닫았으면 트리의 `failure`로 간다 — 한 실패가 서는 자리는 언제나 하나다.
    */
-  imported: PageImported | null
+  importFailure: Failure | null
   /**
    * **페이지 제목의 충돌**(`api/page-meta.ts`). 이름 변경이 409 · `page-meta-changed`를 받았고 서버 값이
    * 내 제목도 아니면 선다 — 그 사람의 제목(`theirs`)과 내가 친 제목(`mine`)을 든다. 다음 조작 · 다른 선택에 풀린다.
@@ -197,6 +206,13 @@ export interface TreeCommands {
   dropTo: (dragged: TreeSelection, target: MenuDrop) => void
 }
 
+/** 가져오기 상자의 대상 메뉴 — `TreeCommands.importing`. */
+export interface ImportTarget {
+  menuId: string
+  /** 연 순간의 제목 — 상자의 제목이 말한다. 그 뒤 이름이 바뀌어도 상자는 연 그 메뉴를 말한다. */
+  title: string
+}
+
 /** 이름 변경이 만난 제목 충돌 — `TreeCommands.conflict`. **메뉴도 같다.** */
 export interface TitleConflict {
   /** 무엇의 제목인가 — 메뉴 · 페이지. */
@@ -214,6 +230,12 @@ export function useTreeCommands(props: {
   pageId: string | undefined
   /** 오를 때마다 트리를 다시 받는다. 지금 올리는 것은 스냅샷 복원 하나다(아래 이펙트). */
   reloadToken: number
+  /**
+   * **가져온 결과를 하단 바에 세운다**(`panels/page-json-notices.tsx` — 셸이 상태를 든다). 성공하면 결과를, 다음 가져오기를 보낼 때
+   * `null`을 준다. **`failure`와 다른 축이다** — 성공했는데도 말해야 하는 것(고아가 된 코멘트 수 · 쓰지 않은 `layoutRef`)이 있고, 그것을
+   * `failure`에 실으면 성공이 실패처럼 보인다. 없으면 결과를 말하지 않는다.
+   */
+  onImported?: (imported: PageImported | null) => void
 }): TreeCommands {
   const api = useApi()
   // **렌더 시점 판정이 아니라 명령형 이동(`useNavigate`)이다.** 렌더 시점 판정
@@ -263,12 +285,13 @@ export function useTreeCommands(props: {
   const [editing, setEditing] = useState<TreeEditing | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const [pickingMenu, setPickingMenu] = useState(false)
+  const [importing, setImporting] = useState<ImportTarget | null>(null)
   /**
-   * 마지막 가져오기의 결과. **`failure`와 다른 축이라 상태가 따로다** — 성공했는데도
-   * 말해야 하는 것이 있고(고아가 된 코멘트 · 쓰지 않은 `layoutRef`), 그것을 `failure`에
-   * 실으면 성공이 실패처럼 보인다.
+   * **열린 상자의 대상 — 렌더 밖에서 읽는 사본.** 가져오기의 답(`run` 뒤)이 «보낸 그 상자가 아직 열려 있나»를 물을 때 쓴다 — 닫았다
+   * 다시 연 상자는 다른 객체라 지난 상자의 실패가 새 상자에 서지 않는다.
    */
-  const [imported, setImported] = useState<PageImported | null>(null)
+  const importOpen = useRef<ImportTarget | null>(null)
+  const [importFailure, setImportFailure] = useState<Failure | null>(null)
 
   /**
    * **이름 변경의 장부 칸**(`RENAME_SLOT`). 장부는 에디터보다 오래 살므로(`panels/write-ledger.tsx`), 이름
@@ -461,7 +484,7 @@ export function useTreeCommands(props: {
    * `메뉴 트리 단축키 > busy인 동안 단축키가 걸리지 않는다`(화면을 지나는 케이스)다. 단축키는
    * 버튼의 `disabled`를 지나지 않으므로 `busy`가 서 있어도 핸들러에 닿는다.
    */
-  async function run(send: () => Promise<unknown>, after?: () => void): Promise<void> {
+  async function run(send: () => Promise<unknown>, after?: () => void, fail?: (failure: Failure) => void): Promise<void> {
     // **장부에 이름 변경이 나가 있어도 잠긴다**(에디터를 떠났다 와 새로 선 트리도).
     if (inFlight.current || renameLocked) return
     inFlight.current = true
@@ -479,7 +502,10 @@ export function useTreeCommands(props: {
       after?.()
     } catch (caught) {
       if (unmounted.current) return
-      setFailure(toFailure(caught, UNKNOWN_COMMAND_FAILURE))
+      const failure = toFailure(caught, UNKNOWN_COMMAND_FAILURE)
+      // **실패가 설 자리를 부른 쪽이 정할 수 있다**(`fail`) — 가져오기는 상자 안이다(`importJson`).
+      if (fail === undefined) setFailure(failure)
+      else fail(failure)
     } finally {
       // **잠금은 언마운트 여부와 무관하게 푼다.** `ref`는 렌더와 상관없는 값이라 여기서
       // 놓치면 그 인스턴스가 영구히 잠긴다. 표시(`setBusy`)만 마운트 여부를 본다.
@@ -724,6 +750,37 @@ export function useTreeCommands(props: {
   }
 
   /**
+   * **가져오기 상자를 연다**(`panels/page-import-dialog.tsx`). 고른 메뉴가 대상이다 — 메뉴 줄 `+`의 «JSON 에서 가져오기…»가 열면서
+   * 그 줄을 고른다(`panels/menu-tree.tsx`의 `pick`).
+   *
+   * **`abilities.addPage`를 지난다.** 가져오기는 **페이지를 만드는 것**이므로 판정이 `페이지 추가`와 같다. 판정을 여기서 새로 짜면
+   * 그 표가 두 벌이 된다(판정은 `treeAbilities` 한 곳이 한다). 판정은 **여는 순간에만** 본다 — 열린 뒤 남이 그 메뉴를 지워도 보내기를
+   * 막지 않고 서버의 거절을 상자 안에 보인다(`importFailure`). 막으면 단추가 까닭 없이 꺼진다.
+   *
+   * **«여는» 조작이라 같은 가드를 지난다**(`openInput` · `openReparent` · `askRemove`) — 조작이 나가 있으면 열지 않고, 열면서 앞 실패 ·
+   * 입력 · 확인을 걷는다(한 번에 하나만 진행한다).
+   */
+  function openImport(): void {
+    if (inFlight.current || renameLocked) return
+    if (selection === null || selection.kind !== 'menu' || !abilities.addPage || menu === null) return
+    const target: ImportTarget = { menuId: selection.id, title: findMenuTitle(menu, selection.id) ?? '' }
+    setFailure(null)
+    setConflict(null)
+    setEditing(null)
+    setConfirmingRemove(false)
+    setPickingMenu(false)
+    setImportFailure(null)
+    importOpen.current = target
+    setImporting(target)
+  }
+
+  function closeImport(): void {
+    importOpen.current = null
+    setImporting(null)
+    setImportFailure(null)
+  }
+
+  /**
    * **파일 한 벌로 페이지를 만든다**(「페이지 JSON」).
    *
    * **`submitInput`의 `new-page` 갈래와 같은 모양이다** — `run`을 지나므로 잠금·재조회·
@@ -731,19 +788,21 @@ export function useTreeCommands(props: {
    * 잠금을 가지면 트리 조작과 겹쳐 나가고, 재조회를 빠뜨리면 만든 페이지가 트리에
    * 안 보인다.
    *
-   * **`abilities.addPage`를 지난다.** 가져오기는 **페이지를 만드는 것**이므로 판정이
-   * `페이지 추가`와 같다 — 메뉴를 고르지 않았으면 할 수 없다. 판정을 여기서 새로 짜면
-   * 그 표가 두 벌이 된다(판정은 `treeAbilities` 한 곳이 한다).
+   * **대상은 상자를 연 순간의 메뉴다**(`importing`) — 지금의 선택이 아니다. 상자가 없으면 아무것도 안 한다.
+   *
+   * **실패의 자리는 하나다**(`importFailure`의 머리말) — 보낸 상자가 아직 열려 있으면 상자 안, 닫았으면 트리의 실패 줄.
+   * 성공하면 상자를 닫고 만든 페이지로 옮기며 결과를 하단 바의 통지로 남긴다(`onImported`).
    *
    * **봉투를 여기서 읽지 않는다.** 화면이 미리보기를 그리느라 이미 읽었고(`parsePageJson`),
    * 여기서 다시 읽으면 같은 판정이 두 자리가 된다. 서버도 같은 함수를 쓴다.
    */
   function importJson(file: unknown, title?: string): void {
-    if (selection === null || selection.kind !== 'menu') return
-    if (!abilities.addPage) return
-    const menuNodeId = selection.id
+    const target = importOpen.current
+    if (target === null) return
+    const menuNodeId = target.menuId
 
-    setImported(null)
+    props.onImported?.(null)
+    setImportFailure(null)
     let result: PageImported | null = null
     void run(
       async () => {
@@ -756,10 +815,15 @@ export function useTreeCommands(props: {
       },
       () => {
         if (result === null) return
-        setImported(result)
+        props.onImported?.(result)
+        if (importOpen.current === target) closeImport()
         // **만든 페이지로 이동한다** — `submitInput`의 `new-page`와 같다. 빈 문자열 id는
         // `SHAPES.pageImported`가 이미 막았다.
         navigate(`/projects/${projectId}/pages/${result.page.id}`)
+      },
+      (failure) => {
+        if (importOpen.current === target) setImportFailure(failure)
+        else setFailure(failure)
       },
     )
   }
@@ -1043,8 +1107,11 @@ export function useTreeCommands(props: {
     reparentTo,
     cancelReparent: () => setPickingMenu(false),
     dropTo,
+    importing,
+    openImport,
+    closeImport,
     importJson,
-    imported,
+    importFailure,
   }
 }
 

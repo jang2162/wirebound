@@ -22,7 +22,7 @@
  * **조작의 입구는 셋이다** — 줄의 `+` · `…`(`panels/tree-row-actions.tsx`), 트리 제목 줄의 뿌리 `+`, 끌어 놓기(`drag/use-pointer-drag.ts`
  * · 자리 판정 `tree/tree-drop.ts`). 셋 다 `useTreeCommands`의 명령을 부르고, 키보드 단축키도 같은 명령이다.
  */
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactElement } from 'react'
+import { useEffect, useId, useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
@@ -36,7 +36,9 @@ import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
 import { dropZone, menuDropTarget, type MenuDrop } from '../tree/tree-drop'
 import { useTreeCommands, type TreeCommands } from '../tree/use-tree-commands'
 import { MenuPicker } from './menu-picker'
-import { PageJsonPanel } from './page-json-panel'
+import { usePageJsonExport, type PageJsonExport } from './page-json-export'
+import type { PageJsonNotices } from './page-json-notices'
+import { PageImportDialog } from './page-import-dialog'
 import { menuStatus } from './toolbar-status'
 import { TreeInput } from './tree-input'
 import { menuRowItems, TreeRowActions } from './tree-row-actions'
@@ -119,9 +121,14 @@ export function MenuTree(props: {
    * 접히는가"*는 셸의 판단이라 그 표가 한 파일에 모여 있는 편이 읽힌다(구조 트리·되돌리기·
    * 우측 탭이 이미 거기서 갈린다).
    *
-   * **`false`면 넷이 함께 간다:** 줄 행동(`+` · `…` · 뿌리 `+`) · 끌어 놓기 · 페이지 JSON 패널 · 편집 단축키. 넷을 따로 가르지
-   * 않는 것은 **같은 조작에 닿는 입구**이기 때문이다 — 줄 행동만 감추면 `Delete`·`Alt+↑`가
+   * **`false`면 넷이 함께 간다:** 줄 행동(`+` · `…` · 뿌리 `+` — 페이지 JSON 의 가져오기 · 내보내기가 그 안이다) · 끌어 놓기 · 가져오기
+   * 대화 상자 · 편집 단축키. 넷을 따로 가르지 않는 것은 **같은 조작에 닿는 입구**이기 때문이다 — 줄 행동만 감추면 `Delete`·`Alt+↑`가
    * 그대로 남아 뷰 모드에서 메뉴가 지워진다.
+   *
+   * **뷰 모드에서는 «JSON 내보내기»까지 함께 간다 — 판정이고, 되돌리지 마라.** 그것 하나는 읽기 동작이 맞다. 그래도 남기지 않는 것은
+   * 그 입구가 줄 행동(편집 도구) 안에 있고, 페이지 JSON 의 축이 *"페이지를 JSON으로 주고받는다"*라는 **저작 · 연동용 아티팩트**이기
+   * 때문이다 — 내보내기 하나를 살리려고 뷰 모드에 줄 행동을 세우면 편집 도구의 자리가 뷰 모드에 생긴다. **설계서를 읽는 사람의 내려받기는
+   * 셸 `…`의 «프로젝트 내보내기»(설계서 「HTML 정적 번들」)가 두 모드 모두에서 낸다** — 그쪽은 역할로도 감추지 않는다(`shell/export-panel.tsx`).
    *
    * **viewer 에게는 편집 모드에서도 `false`다** — 셸이 역할까지 얹어 넘긴다. 이 컴포넌트는 역할을 모른다.
    * 페이지 이름 변경만 따로 닫는 둘째 칸을 두지 않는다 — 이 값이 그것까지 덮는다.
@@ -132,6 +139,11 @@ export function MenuTree(props: {
    * (portal). **훅이 이 컴포넌트 안에 하나여야 해서**(아래) 셸이 명령을 받아 그리지 않고 자리만 넘긴다. 없으면 안 그린다.
    */
   headSlot?: HTMLElement | null
+  /**
+   * 하단 바의 페이지 JSON 통지 — 가져온 결과 · 내보내기 실패(`panels/page-json-notices.tsx`). **셸이 들고 그린다** — 여기서는 채우기만 한다
+   * (그 파일의 머리말 «셸이 상태를 들고 트리가 채운다»). 없으면 결과 · 실패를 말하지 않는다.
+   */
+  notices?: PageJsonNotices
 }): ReactElement {
   // **훅을 부르는 자리는 여기 하나다**(`busy` 잠금의 전제). 줄 행동은 결과를 prop으로 받는다 —
   // 두 번째 호출자가 생기면 `busy` 잠금이 각자 것이 된다.
@@ -139,8 +151,27 @@ export function MenuTree(props: {
   // **`editable`이 false여도 훅은 그대로 돈다.** 트리를 조회하는 것이 이 훅이라 끄면
   // 뷰 모드에서 트리 자체가 사라진다. 조작은 부르는 자리가 없어져서 닫히는 것이지
   // 훅이 꺼져서 닫히는 것이 아니다.
-  const commands = useTreeCommands(props)
+  const commands = useTreeCommands({
+    projectId: props.projectId,
+    pageId: props.pageId,
+    reloadToken: props.reloadToken,
+    onImported: props.notices?.showImported,
+  })
   const { state } = commands
+  /** 페이지 줄 `…`의 «JSON 내보내기». 실패는 셸의 하단 바에 선다(`notices`). */
+  const exporter = usePageJsonExport(props.projectId, props.notices?.showExportFailure ?? ignoreFailure)
+  /**
+   * **편집할 수 없게 되면 가져오기 상자를 닫는다** — 역할이 내려가거나(viewer) 모드가 바뀌면 상자가 화면에서 빠지는데, 대상을 훅에 남겨
+   * 두면 다시 편집할 수 있게 된 순간 아무도 열지 않은 상자가 다시 선다. 모달이라 상자가 떠 있는 동안 모드 단추에는 못 닿고, 이 갈래는 셸이
+   * 권한을 바꿀 때(`ROLE_NOTICE`) 선다.
+   */
+  const closeImport = useRef(commands.closeImport)
+  useEffect(() => {
+    closeImport.current = commands.closeImport
+  })
+  useEffect(() => {
+    if (!props.editable) closeImport.current()
+  }, [props.editable])
   const statusId = useId()
   /** 줄을 찾는 상자 — 끄는 동안 포인터 밑 줄(`[data-tree-row]`)을 여기서 찾는다. */
   const treeRef = useRef<HTMLUListElement>(null)
@@ -200,9 +231,10 @@ export function MenuTree(props: {
      * **값을 넣거나 고르는 표면에서 난 키는 단축키를 찾기 전에 돌려보낸다**.
      *
      * 바로 아래 상태 가드(`editing`·`reparenting`)로는 부족하다 — 그것은 **인라인 입력**이
-     * 열려 있을 때만 참인데, 이 상자 안에는 그 둘이 아닌 입력 칸이 더 있다
-     * (`PageJsonPanel`의 파일·붙여 넣기·제목). 그 칸에서 친 `Backspace`가 여기까지 버블되면
-     * **글자가 안 지워지고 메뉴 삭제 확인이 걸린다** — 구조 트리에서도 같은 고장이 난다.
+     * 열려 있을 때만 참인데, 이 상자 안에 그 둘이 아닌 입력 칸이 서면(행동 메뉴 · 상태줄 곁의 새 칸) 그 칸에서 친 `Backspace`가 여기까지
+     * 버블되어 **글자가 안 지워지고 메뉴 삭제 확인이 걸린다** — 구조 트리에서도 같은 고장이 난다. 가져오기 대화 상자는 이 상자 **밖**에
+     * 선다(아래 반환 · `panels/page-import-dialog.tsx` 머리말 «키가 트리 단축키로 새지 않는다») — 단추에서 친 `Delete`는 이 가드로 못
+     * 거른다.
      *
      * **찾기 전에 거르는 순서가 규격이다.** 찾은 뒤에 거르면 `preventDefault`가 이미 걸려
      * 글자가 안 지워진다(그 순서를 뒤집는 변이가 죽는다).
@@ -226,11 +258,27 @@ export function MenuTree(props: {
     shortcut.run(commands)
   }
 
-  if (state.status === 'loading') {
+  /**
+   * **가져오기 대화 상자는 트리 상자 밖에 선다** — 조회 상태(불러오는 중 · 실패)와 무관하다(보낸 뒤 다시 받기가 실패해도 상자 안의 결말이
+   * 남아야 한다).
+   *
+   * **단축키 상자의 형제다 — 안에 넣지 마라.** 안이면 상자 안 단추에서 친 `Delete`가 React 트리를 따라 `handleKeyDown`에 닿아 고른 메뉴의
+   * 삭제 확인을 건다(`panels/page-import-dialog.tsx` 머리말 «키가 트리 단축키로 새지 않는다»).
+   */
+  function outside(tree: ReactNode): ReactElement {
     return (
+      <>
+        {tree}
+        {props.editable && <PageImportDialog commands={commands} />}
+      </>
+    )
+  }
+
+  if (state.status === 'loading') {
+    return outside(
       <p className="wb-shell-tree-notice" role="status">
         불러오는 중…
-      </p>
+      </p>,
     )
   }
 
@@ -239,14 +287,14 @@ export function MenuTree(props: {
     // 사용자는 셸 안에 갇힌다. 나머지 이유는 지금대로 서버 문장을 이 자리에 그린다.
     if (state.failure.kind === 'signed-out') return <SignedOut />
 
-    return (
+    return outside(
       <p className="wb-shell-tree-notice" role="alert">
         {state.failure.message}
-      </p>
+      </p>,
     )
   }
 
-  return (
+  return outside(
     // **키 핸들러가 이 상자에 붙는다.** 트리와 줄 행동을 함께 감싸므로 어느 쪽에 포커스가
     // 있어도 단축키가 닿는다. 스타일이 없는 상자라 클래스는 테스트가 집을 이름 하나뿐이다.
     <div className="wb-shell-tree-keys" onKeyDown={handleKeyDown}>
@@ -308,6 +356,7 @@ export function MenuTree(props: {
             commands={commands}
             drag={props.editable ? drag : null}
             statusId={statusId}
+            exporter={exporter}
           />
         ))}
       </ul>
@@ -372,22 +421,12 @@ export function MenuTree(props: {
           />,
           props.headSlot,
         )}
-      {/* **페이지 JSON은 트리 아래다**. 같은 상자 안인 것이 요점이고, 그래서 위
-          `handleKeyDown`이 `isTypingSurface`를 지난다.
-
-          **뷰 모드에서는 `페이지 내보내기`까지 함께 간다 — 판정이고, 되돌리지 마라.**
-          그것 하나는 읽기 동작이 맞다. 그래도 남기지 않는 이유는 이 상자의 축이 *"페이지를
-          JSON으로 주고받는다"*라는 **저작·연동용 아티팩트**이고 내보내기와 가져오기 폼이 한
-          덩어리이기 때문이다. 읽기라는 이유로 그 하나만 남기면 패널에 솔기가 하나 더 생기는데,
-          그 대가로 얻는 것이 *"편집 모드로 한 번 돌아가면 되는 일"*뿐이다. **설계서를 읽는
-          사람의 내려받기는 셸 `…`의 «프로젝트 내보내기»(설계서 「HTML 정적 번들」)가 두 모드 모두에서 낸다** — 그쪽은
-          역할로도 감추지 않는다(`shell/export-panel.tsx`). */}
-      {props.editable && (
-        <PageJsonPanel projectId={props.projectId} pageId={props.pageId} commands={commands} />
-      )}
-    </div>
+    </div>,
   )
 }
+
+/** 셸이 통지 자리를 안 넘겼을 때(`notices`) — 내보내기 실패를 말할 곳이 없다. */
+function ignoreFailure(): void {}
 
 /**
  * 메뉴 하나와 그 안의 것들. 자기 페이지를 먼저, 그다음 자식 메뉴를 품는다 — 둘은 각각
@@ -405,6 +444,7 @@ function MenuItem(props: {
   commands: TreeCommands
   drag: PointerDrag<TreeSelection, MenuDrop> | null
   statusId: string
+  exporter: PageJsonExport
 }): ReactElement {
   const { node, projectId, pageId, commands, drag } = props
   const pages = byOrder(node.pages)
@@ -455,6 +495,7 @@ function MenuItem(props: {
                 commands={commands}
                 drag={drag}
                 statusId={props.statusId}
+                exporter={props.exporter}
               />
             </li>
           ))}
@@ -467,6 +508,7 @@ function MenuItem(props: {
               commands={commands}
               drag={drag}
               statusId={props.statusId}
+              exporter={props.exporter}
             />
           ))}
         </ul>
@@ -487,8 +529,9 @@ function PageLink(props: {
   commands: TreeCommands
   drag: PointerDrag<TreeSelection, MenuDrop> | null
   statusId: string
+  exporter: PageJsonExport
 }): ReactElement {
-  const { commands, drag } = props
+  const { commands, drag, exporter } = props
   const selected = props.page.id === props.pageId
   const self: TreeSelection = { kind: 'page', id: props.page.id }
   const picked = isPicked(commands.selection, self)
@@ -513,7 +556,14 @@ function PageLink(props: {
           {props.page.title}
         </Link>
         {drag !== null && (
-          <TreeRowActions name={props.page.title} {...menuRowItems(commands, 'page', props.statusId)} onOpen={() => pick(commands, self)} />
+          <TreeRowActions
+            name={props.page.title}
+            {...menuRowItems(commands, 'page', props.statusId, {
+              run: () => exporter.run(props.page.id),
+              busy: exporter.exporting !== null,
+            })}
+            onOpen={() => pick(commands, self)}
+          />
         )}
       </TreeRow>
       {drag !== null && picked && <RowPanel commands={commands} at="row" />}

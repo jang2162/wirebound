@@ -33,6 +33,7 @@ import { CanvasDocumentProvider } from '../canvas/canvas-document'
 import { PlacementRegionsProvider } from '../drag/use-placement'
 import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
+import { PageJsonNoticeList, usePageJsonNotices } from '../panels/page-json-notices'
 import { InteractionPanel } from '../panels/interaction-panel'
 import { PageDescriptionPanel } from '../panels/page-description'
 import { PanelDraftsProvider } from '../panels/panel-drafts'
@@ -715,8 +716,13 @@ function EditorShell(props: {
    */
   const { logout, busy: loggingOut, failure: logoutFailure } = useLogout(settleEdits)
   const sessionUser = useSessionUser()
-  /** 열린 대화 상자 — 스냅샷 · 내보내기. 한 번에 하나다(모달이다). */
+  /**
+   * 열린 대화 상자 — 스냅샷 · 내보내기. 한 번에 하나다(모달이다). 셋째 상자인 페이지 가져오기는 메뉴 트리가 연다 — 보내기 · 잠금이 트리의
+   * 명령 훅에 있다(`panels/page-import-dialog.tsx` 머리말 «누가 여는가»).
+   */
   const [dialog, setDialog] = useState<'snapshots' | 'export' | null>(null)
+  /** 페이지 JSON 의 하단 바 통지 — 가져온 결과 · 내보내기 실패. 트리가 채우고 하단 바가 그린다(`panels/page-json-notices.tsx`). */
+  const pageJsonNotices = usePageJsonNotices()
   /** 메뉴 트리 제목 줄의 행동 자리(`ShellRegion`의 `actionsRef`) — 트리가 뿌리 `+`를 거기 그린다. */
   const [menuHead, setMenuHead] = useState<HTMLDivElement | null>(null)
   /** 구조 트리 제목 줄의 행동 자리 — 같은 까닭. */
@@ -820,14 +826,14 @@ function EditorShell(props: {
               반대다 — 문서만 다시 읽고 트리를 두면 목록이 존재하지 않는 페이지를 그린다.
               `resyncToken`은 여기 닿지 않는다(재연결은 이 페이지의 프레임만 잃는다). */}
           {/* **편집 도구를 낼지는 셸이 정한다**(「설계서 화면 구조」의 표가 여기 모여 있다 — 구조 트리·
-              되돌리기·우측 탭이 이미 이 파일에서 갈린다). 트리 안의 셋(메뉴 편집 툴바·
-              페이지 JSON 패널·편집 단축키)이 이 값 하나로 함께 갈린다 —
-              `panels/menu-tree.tsx`의 `editable` 주석이 왜 셋이 함께인지 적고 있다.
+              되돌리기·우측 탭이 이미 이 파일에서 갈린다). 트리 안의 넷(줄 행동 · 끌어 놓기 ·
+              페이지 가져오기 대화 상자 · 편집 단축키)이 이 값 하나로 함께 갈린다 —
+              `panels/menu-tree.tsx`의 `editable` 주석이 왜 넷이 함께인지 적고 있다.
 
               **이 값이 없으면 뷰 모드가 반만 뷰 모드다:** 구조 트리는 접히는데 좌측의 편집
               도구(`이름 변경`·`옮기기`)는 그대로 남아 눌린다.
 
-              **viewer 에게는 편집 모드에서도 `false`다**(`canEdit`). 셋이 이 값 하나로 함께 가므로 역할도 여기
+              **viewer 에게는 편집 모드에서도 `false`다**(`canEdit`). 넷이 이 값 하나로 함께 가므로 역할도 여기
               한 번만 얹는다. **페이지** 이름 변경만 따로 닫는 칸을 두지 않는다 — 이 값이 그것을 덮고,
               두 벌이면 한쪽만 고쳐지는 자리가 생긴다. */}
           <MenuTree
@@ -836,6 +842,7 @@ function EditorShell(props: {
             reloadToken={restoredToken}
             editable={mode === 'edit' && canEdit}
             headSlot={menuHead}
+            notices={pageJsonNotices}
           />
         </ShellRegion>
         {/* 구조 트리는 편집 모드에서만 있다. 뷰 모드에서는 접혀 메뉴 트리가 좌측 전체를
@@ -960,6 +967,9 @@ function EditorShell(props: {
                 {roleNotice}
               </p>
             )}
+            {/* **페이지 JSON — 가져온 결과 · 내보내기 실패**(`panels/page-json-notices.tsx`). 닫기를 누를 때까지 남는다(고아 코멘트는 되돌릴
+                수 없다 — 읽기 전에 사라지면 안 된다). */}
+            <PageJsonNoticeList notices={pageJsonNotices} />
             {/* **세션 전환 · 로그아웃 실패**(`session/session-menu.tsx`의 `SessionNotices`). */}
             <SessionNotices failure={logoutFailure} className="wb-shell-session-alert" />
           </>

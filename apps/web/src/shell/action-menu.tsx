@@ -55,9 +55,16 @@
  *
  * 닫기는 `use-popover-dismiss.ts`(캔버스 iframe 의 문서까지 듣는다 — 그 훅의 «캔버스 iframe 의 문서에도 건다»), 자리는 `use-popover-side.ts`
  * (머리가 접혀 단추가 왼쪽으로 가도 목록이 창 밖으로 안 나간다). **그 훅의 계약대로 단추까지 감싸는 상자에 건다.** Escape 는 그 훅도 받지만
- * 포커스를 돌려주려고 목록의 키 처리가 먼저 받는다 — 둘이 함께 닫아도 한 번 닫힌 상태에 한 번 더 닫는 것이라 결과가 같다.
+ * 포커스를 돌려주려고 목록의 키 처리가 먼저 받는다 — 둘이 함께 닫아도 한 번 닫힌 상태에 한 번 더 닫는 것이라 결과가 같다. *
+ * ## 항목의 아이콘 — `icon` 에 lucide 컴포넌트를 준다
+ *
+ * 항목의 `icon`은 **컴포넌트**(`LucideIcon` — `lucide-react`)이지 그린 요소가 아니다. 크기 · 선 굵기 · 색을 이 부품이 정해 목록 안의 아이콘이
+ * 한 모양이 된다 — 14px · 선 2 · 색은 글자색(`currentColor` — 끈 항목 · 위험 항목의 색을 그대로 받는다), 글자 앞 6px(`shell.css`의
+ * `.wb-shell-action-menu-icon`). 아이콘은 `aria-hidden`이고 **이름은 글자가 든다** — 아이콘만으로 뜻을 나르지 않는다. 아이콘이 없는 항목은
+ * 자리를 비워 두지 않는다(글자가 왼끝에서 시작한다).
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { useCanvasDocument } from '../canvas/canvas-document'
 import { usePopoverDismiss } from './use-popover-dismiss'
@@ -84,6 +91,8 @@ export interface ActionMenuItem {
   title?: string
   /** 항목의 설명이 되는 요소의 id(`aria-describedby`) — 트리 아래 상태줄. */
   describedBy?: string
+  /** 글자 앞의 아이콘 — lucide 컴포넌트(머리말 «항목의 아이콘»). */
+  icon?: LucideIcon
 }
 
 export function ActionMenu(props: {
@@ -234,7 +243,7 @@ export function ActionMenu(props: {
                       close()
                     }}
                   >
-                    {item.label}
+                    <ItemLabel item={item} />
                   </Link>
                 ) : (
                   <button
@@ -250,7 +259,7 @@ export function ActionMenu(props: {
                       choose(item, event)
                     }}
                   >
-                    {item.label}
+                    <ItemLabel item={item} />
                   </button>
                 )}
               </li>
@@ -259,6 +268,18 @@ export function ActionMenu(props: {
         </div>
       )}
     </div>
+  )
+}
+
+/** 항목의 글자 — 아이콘이 있으면 그 앞에 선다(머리말 «항목의 아이콘»). */
+function ItemLabel(props: { item: ActionMenuItem }): ReactElement {
+  const Icon = props.item.icon
+  if (Icon === undefined) return <>{props.item.label}</>
+  return (
+    <>
+      <Icon className="wb-shell-action-menu-icon" size={14} strokeWidth={2} aria-hidden="true" />
+      {props.item.label}
+    </>
   )
 }
 

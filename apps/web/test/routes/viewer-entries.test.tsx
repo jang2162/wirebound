@@ -120,14 +120,13 @@ describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다 �
    * 혼자 죽는 변조: 셸이 메뉴 트리에 `editable={mode === 'edit'}`를 넘긴다(역할을 안 얹는다). 마지막 줄(메뉴를 눌러 고른다 —
    * 읽기다)도 혼자 죽는 변조가 있다: 메뉴 트리가 `editable`이 아니면 `select`를 무동작으로 둔다(viewer 에게만 고르기가 꺼진다).
    */
-  it('메뉴 트리 — 편집 모드에서도 줄 행동(`+` · `…` · 뿌리 `+`) · «페이지 JSON»이 없다(숨김). 트리 · 페이지 링크 · 메뉴 고르기는 그대로다', async () => {
+  it('메뉴 트리 — 편집 모드에서도 줄 행동(`+` · `…` · 뿌리 `+` — 페이지 JSON 의 가져오기 · 내보내기가 그 안이다)이 없다(숨김). 트리 · 페이지 링크 · 메뉴 고르기는 그대로다', async () => {
     await openAsViewer(how)
     const tree = screen.getByRole('region', { name: '메뉴·페이지 트리' })
 
     expect(screen.getByRole('button', { name: '편집 모드' }).getAttribute('aria-pressed')).toBe('true')
     expect(tree.querySelectorAll('.wb-shell-tree-row-actions')).toHaveLength(0)
     expect(within(tree).queryByRole('button', { name: '메뉴 트리에 추가' })).toBeNull()
-    expect(within(tree).queryByRole('button', { name: /페이지 JSON/ })).toBeNull()
     // 읽기는 남는다 — 메뉴를 가리키고 페이지로 옮겨 간다.
     expect(within(tree).getByRole('button', { name: '회원관리' })).toBeTruthy()
     expect(within(tree).getByRole('link', { name: '회원 목록' })).toBeTruthy()

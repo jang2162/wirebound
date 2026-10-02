@@ -11,7 +11,7 @@
 import { fireEvent, within } from '@testing-library/react'
 
 /** `+` 에 드는 항목 — 나머지는 `…`에 있다. */
-const ADD_ITEMS = new Set(['하위 메뉴', '페이지 추가', '안에 추가', '아래 추가', '패턴 넣기', '프리셋'])
+const ADD_ITEMS = new Set(['하위 메뉴', '페이지 추가', 'JSON 에서 가져오기…', '안에 추가', '아래 추가', '패턴 넣기', '프리셋'])
 
 /** 그 영역의 고른 줄. 없으면 던진다 — 고른 것이 없으면 줄 행동도 없다. */
 export function pickedRow(region: HTMLElement): HTMLElement {
