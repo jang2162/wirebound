@@ -58,6 +58,7 @@ export interface Layout {
 export type CanvasHit =
   | { overId: string; zone: DropZone; rect: Rect; layout: Layout }
   | { pageEnd: true; rect: Rect; layout: Layout }
+  | { preview: true; rect: Rect; layout: Layout }
 
 /** 문서에서 읽는 노드의 사정 — 부르는 쪽이 스토어 문서로 답한다. 문서에 없는 id(합성의 유령 · 폴백)는 `null`. */
 export interface HitNode {
@@ -155,6 +156,10 @@ function siblingRects(parent: Element, self: Element, view: Window): Rect[] {
  *
  * 포인터 밑 요소에서 가장 가까운 `[data-wb-id]` 조상이 대상이다. `node(id)` 가 `null` 인 id(문서에 없는 — 폴백의 빈 id · 합성의 유령)는
  * 건너뛰고 위로 오른다. 그런 조상이 없거나 뿌리면 페이지 끝이다.
+ *
+ * **배치 미리보기 위면 `{ preview: true }` 다**(`isPreview` — `./canvas-preview.ts` 의 id 머리) — 미리보기는 문서의 노드가 아니라 그 위의
+ * 그림이라 대상도 · 그 부모의 «안» 도 아니다. 판정은 미리보기를 숨기고 재므로(`drag/use-placement.ts` 머리말 «판정은 미리보기를 뺀
+ * 배치로») 보통은 안 잡힌다 — 잡히면 부르는 쪽이 보인 자리를 그대로 둔다.
  */
 export function canvasHitAt(
   frame: Window,
@@ -162,6 +167,7 @@ export function canvasHitAt(
   hostPoint: Point,
   node: (id: string) => HitNode | null,
   clip: Rect | null,
+  isPreview: (id: string) => boolean = () => false,
 ): CanvasHit | null {
   const element = frame.frameElement
   if (element === null) return null
@@ -176,6 +182,7 @@ export function canvasHitAt(
   let found: { element: Element; id: string; info: HitNode } | null = null
   while (cursor !== null && doc.body.contains(cursor)) {
     const id = cursor.getAttribute('data-wb-id')
+    if (id !== null && isPreview(id)) return { preview: true, rect: frameToHost(plain(cursor.getBoundingClientRect()), frameRect, zoom), layout: VERTICAL }
     const info = id === null || id === '' ? null : node(id)
     if (id !== null && info !== null) {
       found = { element: cursor, id, info }

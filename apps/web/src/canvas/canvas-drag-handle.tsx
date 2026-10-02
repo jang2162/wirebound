@@ -10,13 +10,14 @@
  * ## 단추는 확대된 프레임 안, 표시는 밖
  *
  * 단추는 선택 외곽선 곁(캔버스 표면 — 프레임의 `scale(zoom)` 아래)에 서야 노드를 따라간다. 크기는 줌을 걷어 화면에서 늘 같게 둔다
- * (`scale(1 / zoom)` — 줌 0.5 에서 반으로 줄면 누를 자리가 없다). **표시(`DropIndicator`)는 프레임 밖에 그린다** — 그 겹은 창 좌표의
+ * (`scale(1 / zoom)` — 줌 0.5 에서 반으로 줄면 누를 자리가 없다). 캔버스 위의 자리는 배치 미리보기로 서고(`./canvas-preview.ts` — 보인
+ * 자리를 `usePublishPlacementPreview` 로 싣는다), 트리 위의 자리만 선 · 강조로 선다. **그 표시(`DropIndicator`)는 프레임 밖에 그린다** — 그 겹은 창 좌표의
  * `position: fixed` 인데 `transform` 이 걸린 조상 안에 두면 그 조상이 기준 상자가 되어 줌 · 스크롤만큼 밀린다(`drag/drop-indicator.tsx`
  * 머리말). 그래서 셸 뿌리(`.wb-shell` — 팔레트 변수가 사는 곳)로 portal 한다. 셸 밖(최소 숙주 테스트)이면 제자리에 그린다.
  *
  * ## 캔버스가 다시 잴 때 마지막 좌표로 다시 묻는다
  *
- * 끄는 사이 남의 편집 · 늦은 글꼴 · 그림이 노드를 밀면 포인터 밑이 바뀐다 — 표시는 마지막 `pointermove` 때 잰 옛 좌표에 남는다. 캔버스는
+ * 끄는 사이 남의 편집 · 늦은 글꼴 · 그림이 노드를 밀면 포인터 밑이 바뀐다 — 보인 자리는 마지막 `pointermove` 때 잰 옛 좌표의 것으로 남는다. 캔버스는
  * 그럴 때 외곽선 · 마커를 다시 재고(`./canvas.tsx` 의 측정 이펙트 — 문서 · 줌 · 폭 · 겹layer · iframe 크기 변화), 같은 의존으로 지은
  * `layoutKey` 를 여기 내린다. 바뀌면 끌기 장치의 `refresh` 가 마지막 좌표로 다시 물어 같은 자리면 새 상자로, 다르면 표시를 걷는다
  * (`drag/use-pointer-drag.ts` 머리말 «놓는 답은 보인 답이다» — 걷힌 채 떼면 편집 0).
@@ -29,7 +30,7 @@
 import { useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { DropIndicator } from '../drag/drop-indicator'
-import { usePlacementDrop, type PlacementDrop } from '../drag/use-placement'
+import { usePlacementDrop, usePublishPlacementPreview, type PlacementDrop } from '../drag/use-placement'
 import { scrollParent, usePointerDrag } from '../drag/use-pointer-drag'
 import type { Placing } from '../edit/structure-drop'
 
@@ -67,7 +68,9 @@ export function CanvasDragHandle(props: {
   }, [])
 
   const hint = placement.live(drag.hint)
-  const indicator = <DropIndicator hint={hint} layout={hint?.value.layout} />
+  // 보인 자리를 캔버스에 미리보기로 끼운다 — 캔버스 위의 선 · 강조는 미리보기가 대신한다(`drag/use-placement.ts` 머리말 «배치 미리보기»).
+  usePublishPlacementPreview(hint?.value ?? null)
+  const indicator = <DropIndicator hint={hint?.value.region === 'tree' ? hint : null} layout={hint?.value.layout} />
   const scale = 1 / props.zoom
 
   return (

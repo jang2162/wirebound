@@ -32,7 +32,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
 import { COMPONENT_GROUP_LABELS, type ComponentGroup } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
-import { useCanvasRemeasured, usePlacementDrop, type PlacementDrop } from '../drag/use-placement'
+import { useCanvasRemeasured, usePlacementDrop, usePublishPlacementPreview, type PlacementDrop } from '../drag/use-placement'
 import { usePointerDrag, type DragPoint } from '../drag/use-pointer-drag'
 import { createNode } from '../edit/create-node'
 import { dropOps, type Placing } from '../edit/structure-drop'
@@ -197,6 +197,9 @@ function PaletteCards(props: {
   // 머리말 «캔버스가 다시 잴 때»). 판은 캔버스의 형제라 그 값을 경로 층으로 받는다.
   useCanvasRemeasured(drag.refresh)
   const hint = placement.live(drag.hint)
+  // 보인 자리를 캔버스에 미리보기로 끼운다 — 캔버스 위의 선 · 강조는 미리보기가 대신하고, 트리 위면 트리의 선 · 강조도 그린다
+  // (`drag/use-placement.ts` 머리말 «배치 미리보기»).
+  usePublishPlacementPreview(hint?.value ?? null)
   const dragged = drag.dragging?.kind === 'new' ? props.types.find((type) => type.type === (drag.dragging as { type: string }).type) : undefined
 
   const trackRef = useRef<HTMLDivElement | null>(null)
@@ -300,7 +303,7 @@ function PaletteCards(props: {
           </div>
         ))}
       </div>
-      <DropIndicator hint={hint} layout={hint?.value.layout} />
+      <DropIndicator hint={hint?.value.region === 'tree' ? hint : null} layout={hint?.value.layout} />
       {dragged !== undefined && pointer !== null && (
         <div className="wb-shell-palette-dragtag" aria-hidden="true" style={{ left: pointer.x + 14, top: pointer.y + 14 }}>
           {dragged.label}

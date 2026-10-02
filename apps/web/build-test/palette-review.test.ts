@@ -27,7 +27,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { GALLERY_SAMPLES } from '@wirebound/theme-gallery'
 import { placeableGroups } from '../src/panels/type-picker'
 import { CANVAS_MIN_HEIGHT } from '../src/shell/sidebar-layout'
-import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
 import { putTheme } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
@@ -231,10 +231,9 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
     await page.mouse.move(at.x + 3, at.y - 6, { steps: 3 })
   }
 
+  /** 지금 보인 놓을 자리(`./editor-stack.ts` 의 `shownDrops` — 트리의 선 · 캔버스의 배치 미리보기). */
   async function indicators(page: Page): Promise<{ placement: string | null; y: number }[]> {
-    return page
-      .locator('.wb-shell-drop-indicator')
-      .evaluateAll((els) => els.map((el) => ({ placement: el.getAttribute('data-placement'), y: Math.round(el.getBoundingClientRect().y) })))
+    return (await shownDrops(page)).map((drop) => ({ placement: drop.placement, y: Math.round(drop.rect.y) }))
   }
 
   async function bobOps(P: string, ops: unknown[]): Promise<number> {

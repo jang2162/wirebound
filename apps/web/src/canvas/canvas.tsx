@@ -47,7 +47,8 @@ import { findNodeSafely, walkSafely } from '../edit/safe-walk'
 import { nodeTypeLabel } from '../panels/node-shape'
 import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import { useAnnounceCanvasRemeasure, usePublishCanvasRegion } from '../drag/use-placement'
+import { useAnnounceCanvasRemeasure, usePlacementPreview, usePublishCanvasRegion } from '../drag/use-placement'
+import { applyPreviewLook, previewDocument } from './canvas-preview'
 import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
@@ -212,6 +213,22 @@ export function Canvas(props: {
   usePublishCanvasDocument(frame?.document ?? null)
   // 끄는 포인터가 캔버스 칸 위인지 · 어느 노드 위인지를 경로 층이 이 창으로 잰다(`drag/use-placement.ts`).
   usePublishCanvasRegion(frame?.window ?? null, zoom)
+  /**
+   * **배치 미리보기**(`./canvas-preview.ts`) — 끄는 동안 보인 자리에 미리보기를 끼운 사본을 스토어 문서 대신 그린다. 편집 모드에서만
+   * 선다(끌기는 편집 모드에만 있다). 사본은 렌더마다 지금 문서로 다시 지어 남의 편집이 오면 새 문서 위에 다시 선다. 외곽선 · 마커 · 손잡이는
+   * 사본 위에서 다시 재 밀린 자리를 따르고, 미리보기가 걷히면 다시 재 제자리로 온다(아래 두 측정 이펙트의 의존 `rendered`).
+   */
+  const preview = usePlacementPreview()
+  const shownPreview = mode === 'edit' && doc !== null ? preview : null
+  const rendered = useMemo(
+    () => (doc === null || shownPreview === null ? doc : (previewDocument(doc, shownPreview) ?? doc)),
+    [doc, shownPreview],
+  )
+  // 그린 뒤 미리보기에 모양(반투명)을 얹는다 — 걷히거나 자리가 바뀌면 되돌린다.
+  useLayoutEffect(() => {
+    if (frame === null || shownPreview === null || rendered === doc) return
+    return applyPreviewLook(frame.document, shownPreview)
+  }, [frame, rendered, doc, shownPreview])
 
   /**
    * **상호작용 런타임의 상태**(설계서 「상호작용」의 「실행」 절). 문서가 아니라 **문서 옆**이다 —
@@ -352,7 +369,7 @@ export function Canvas(props: {
     // `live.overlay`의 참조가 그대로라 이 이펙트가 안 돌고, **아웃라인이 옛 자리에 남는다**.
     // **`frame`·`measureTick`도 자리를 바꾼다** — iframe 문서가 서야 잴 수 있고, 문서 밖의 것이 상자를 바꾸면
     // iframe 이 다시 잰다(위 `measureTick`).
-  }, [outlinedNodeId, doc, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [outlinedNodeId, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **번호 마커의 자리를 잰다**(「설계서 화면 구조」). 위 아웃라인 이펙트와 같은 장치이고
@@ -401,17 +418,19 @@ export function Canvas(props: {
     // 아웃라인 쪽과 같은 이유로 `live.overlay`가 있다 — 숨겨진 노드의 마커는 사라져야 한다
     // (`findNodeElement`가 `null`을 내므로 아래 루프가 건너뛴다). `live.notices`도 같은
     // 이유다: 알림 줄이 문서를 아래로 민다. **빠뜨리면 마커가 옛 자리에 남는다.**
-  }, [doc, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+    // `rendered` 는 배치 미리보기가 끼운 사본이다 — 미리보기가 노드를 밀거나 걷히면 다시 잰다(위 `preview` 주석).
+  }, [doc, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **다시 잰 판** — 위 두 측정 이펙트와 같은 의존이 바뀔 때마다 새 값이다. 손잡이가 끄는 중이면 이 값이 바뀔 때 마지막 좌표로 다시
    * 묻는다(`./canvas-drag-handle.tsx` 머리말 «캔버스가 다시 잴 때») — 노드가 밀려도 표시가 옛 좌표에 남지 않게.
    */
-  const layoutKey = useMemo(() => ({}), [doc, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  const layoutKey = useMemo(() => ({}), [rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
   // 캔버스 밖에서 끄는 쪽(컴포넌트 목록 카드)도 같은 때 다시 묻는다(`drag/use-placement.ts` 의 `useCanvasRemeasured`).
   useAnnounceCanvasRemeasure(layoutKey)
 
   if (doc === null) return null
+  const previewDrawn = shownPreview !== null && rendered !== doc
 
   /** 손잡이를 세울 노드 — 뿌리 · 남이 잡은 노드 · 문서에 없는 id 면 없다. */
   const handleNode =
@@ -423,6 +442,10 @@ export function Canvas(props: {
     <div
       className="wb-shell-canvas-surface"
       ref={surfaceRef}
+      // 지금 그린 배치 미리보기의 띠 · 축(`./canvas-preview.ts`) — 셸 쪽 요소에 비춘다(문서 노드에는 셸의 표지를 안 단다). 선택 외곽선의
+      // `data-wb-selected-id` 와 같은 꼴이고 실브라우저 판이 «보인 자리»를 이것으로 읽는다(`build-test/editor-stack.ts` 의 `shownDrops`).
+      data-wb-preview={previewDrawn ? shownPreview.target.placement : undefined}
+      data-wb-preview-axis={previewDrawn && shownPreview.target.placement !== 'inside' ? (shownPreview.axis ?? 'y') : undefined}
       // 노드마다 핸들러를 다는 대신 상자 하나에서 받는다. 렌더러가 만든 DOM에는 핸들러를
       // 끼워 넣을 자리가 없고(구조 구현체가 그리는 것은 평범한 태그다), 있더라도 노드
       // 수만큼 핸들러가 생긴다. 누른 자리에서 가장 가까운 노드를 찾는 일은
@@ -480,7 +503,7 @@ export function Canvas(props: {
         >
           {(f) => (
             <ThemeProvider value={{ tokens, window: f.window }}>
-              <CanvasDocument doc={doc} theme={definition} interaction={interaction} bannerHost={bannerHost} />
+              <CanvasDocument doc={rendered ?? doc} theme={definition} interaction={interaction} bannerHost={bannerHost} />
             </ThemeProvider>
           )}
         </CanvasIframe>

@@ -25,7 +25,7 @@
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { CANVAS_MIN_HEIGHT, PALETTE_HEIGHT_DEFAULT, PALETTE_HEIGHT_MIN } from '../src/shell/sidebar-layout'
-import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
 import { putTheme } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
@@ -440,10 +440,9 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       await page.mouse.move(at.x, at.y, { steps: 8 })
     }
 
+    /** 지금 보인 놓을 자리(`./editor-stack.ts` 의 `shownDrops` — 트리의 선 · 캔버스의 배치 미리보기) — `띠[:축]`. */
     async function indicators(page: Page): Promise<string[]> {
-      return page
-        .locator('.wb-shell-drop-indicator')
-        .evaluateAll((els) => els.map((el) => `${el.getAttribute('data-placement')}${el.getAttribute('data-axis') === null ? '' : `:${el.getAttribute('data-axis')}`}`))
+      return (await shownDrops(page)).map((drop) => `${drop.placement}${drop.axis === null ? '' : `:${drop.axis}`}`)
     }
 
     function treeRow(page: Page, id: string) {
@@ -517,7 +516,8 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
           before: { n_root: ['n_text', { n_card: ['+Divider', 'n_intx'] }, { n_empt: ['+Divider'] }, 'n_last'] },
           endHint: ['inside'],
           atEnd: { n_root: ['n_text', { n_card: ['+Divider', 'n_intx'] }, { n_empt: ['+Divider'] }, 'n_last', '+Divider'] },
-          rowHint: ['inside'],
+          // 트리 줄 위 — 트리의 강조와 캔버스의 미리보기.
+          rowHint: ['inside', 'inside'],
           onRow: { n_root: ['n_text', { n_card: ['+Divider', 'n_intx', '+Divider'] }, { n_empt: ['+Divider'] }, 'n_last', '+Divider'] },
           undone: ORIGINAL,
           sent: 8,

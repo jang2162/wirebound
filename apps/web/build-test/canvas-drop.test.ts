@@ -10,18 +10,19 @@
  * | 클릭만 | 편집이 나간다 · 고른 노드가 풀린다 |
  * | 끄는 중 남이 대상을 잡음 · 지움 | 포인터가 멈춘 채 표시가 남는다 · 조금 움직였다 놓으면 편집이 나간다(지운 자리 밑의 바탕 = 페이지 끝으로) |
  * | 시스템 테마 다섯의 가로 배치 | `Grid` 칸의 왼 · 오른쪽이 문서의 앞 · 뒤가 아니다 · 표시가 세로 선이 아니다 · 검색폼 필드 줄의 축이 표와 다르다 |
- * | 줌 0.5 · 1 · 1.5 · 스크롤한 칸 | 표시 상자가 포인터 밑 노드의 상자와 1px 넘게 어긋난다 |
+ * | 줌 0.5 · 1 · 1.5 · 스크롤한 칸 | 미리보기가 포인터 밑 노드의 자식 · 바로 뒤 형제로 안 서거나 그 노드 안 · 아래에 안 그려진다 |
  * | 끄는 중 페이지 옮김 | 표시가 남는다 · 놓으면 편집이 나간다 |
- * | 트리 영역을 지나 캔버스로 돌아옴 · 트리 줄 위에 놓음 | 트리 위에서 표시가 안 선다 · 돌아와 놓은 자리 · 트리 줄에 놓은 자리가 서버 문서와 다르다 |
+ * | 트리 영역을 지나 캔버스로 돌아옴 · 트리 줄 위에 놓음 | 트리 위에서 선이 안 서거나 캔버스에 같은 미리보기가 안 선다 · 돌아와 놓은 자리 · 트리 줄에 놓은 자리가 서버 문서와 다르다 |
  *
  * 구조 편집은 WS 프레임(`patch`)으로 나가므로 HTTP 가 아니라 보낸 프레임을 센다(`openEditor` 의 `patches`).
  *
- * **표시는 창 좌표의 겹이다**(`.wb-shell-drop-indicator` — `position: fixed`). 노드의 상자는 playwright 의 `boundingBox`(프레임 위치 ·
- * `transform` 이 든 주 창 좌표)로 읽어 견준다 — 두 길이 서로 다른 계산이다(앞은 `canvasHitAt` 의 `frameToHost`, 뒤는 브라우저).
+ * **보인 자리는 캔버스 위면 배치 미리보기, 트리 위면 선 · 강조다**(`./editor-stack.ts` 의 `shownDrops`). 미리보기의 띠 · 축은 캔버스 표면이
+ * 비추고(`data-wb-preview` · `data-wb-preview-axis`) 자리는 캔버스 문서에 끼운 미리보기 노드의 부모 · 이웃이다. 노드의 상자는 playwright 의
+ * `boundingBox`(프레임 위치 · `transform` 이 든 주 창 좌표)로 읽는다.
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session, type ShownDrop } from './editor-stack'
 import { putTheme } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
@@ -152,18 +153,9 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
     await page.mouse.move(at.x, at.y, { steps: 8 })
   }
 
-  /** 지금 선 표시 — 기다리지 않고 읽는다(없으면 `[]` 가 값이다). */
-  async function indicators(page: Page): Promise<{ placement: string | null; axis: string | null; rect: Box }[]> {
-    return page.locator('.wb-shell-drop-indicator').evaluateAll((els) =>
-      els.map((el) => {
-        const r = el.getBoundingClientRect()
-        return {
-          placement: el.getAttribute('data-placement'),
-          axis: el.getAttribute('data-axis'),
-          rect: { x: r.x, y: r.y, width: r.width, height: r.height },
-        }
-      }),
-    )
+  /** 지금 보인 놓을 자리 — 트리의 선 · 캔버스의 배치 미리보기(`./editor-stack.ts` 의 `shownDrops`). 없으면 `[]` 가 값이다. */
+  async function indicators(page: Page): Promise<ShownDrop[]> {
+    return shownDrops(page)
   }
 
   /**
@@ -251,24 +243,25 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
 
   describe('끄는 중 남이 대상을 바꾼다', () => {
     /** alice 가 n_text 를 쥐고 빈 카드 위에서 «안» 표시를 세운 판. */
-    async function armed(P: string): Promise<{ page: Page; close: () => Promise<void>; patches: string[]; armedHint: string[] }> {
+    // `here` 는 끌 때 쓴 점이다 — 놓을 자리가 서면 미리보기가 빈 카드를 키우므로 뒤에 다시 재면 다른 점이다(문턱 밖으로 «조금» 이 커진다).
+    async function armed(P: string): Promise<{ page: Page; close: () => Promise<void>; patches: string[]; armedHint: string[]; here: { x: number; y: number } }> {
       const tab = await openEditor(P)
       await pick(tab.page, 'n_text')
+      const here = await spotIn(tab.page, 'n_empt', 0.5, 0.5)
       await grab(tab.page)
-      await moveTo(tab.page, await spotIn(tab.page, 'n_empt', 0.5, 0.5))
+      await moveTo(tab.page, here)
       const armedHint = (await indicators(tab.page)).map((h) => `${h.placement}`)
-      return { ...tab, armedHint }
+      return { ...tab, armedHint, here }
     }
 
     it('bob 이 그 카드를 고르면(잠금) 표시가 곧바로 걷히고 조금 움직였다 놓아도 편집이 없다', async () => {
       const { P } = await fixture('locked', [BASIC])
       const bob = await openEditor(P[0]!, 'bob')
-      const { page, close, patches, armedHint } = await armed(P[0]!)
+      const { page, close, patches, armedHint, here } = await armed(P[0]!)
       try {
         await pick(bob.page, 'n_empt')
         await page.locator('.wb-shell-structure-lock').waitFor()
         const stillAfterLock = (await indicators(page)).length
-        const here = await spotIn(page, 'n_empt', 0.5, 0.5)
         await page.mouse.move(here.x + 1, here.y + 1)
         const afterLock = (await indicators(page)).length
         await page.mouse.up()
@@ -288,9 +281,8 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
 
     it('bob 이 그 카드를 지우면 표시가 곧바로 걷히고 조금 움직였다 놓아도 그 밑의 다른 자리로 안 간다', async () => {
       const { P } = await fixture('deleted', [BASIC])
-      const { page, close, patches, armedHint } = await armed(P[0]!)
+      const { page, close, patches, armedHint, here } = await armed(P[0]!)
       try {
-        const here = await spotIn(page, 'n_empt', 0.5, 0.5)
         const bob = await stack.login(stack.users.bob)
         const head = (await stack.request(bob, 'GET', P[0]!)).body.headSeq as number
         const removed = await stack.request(bob, 'PATCH', `${P[0]!}/ops`, { baseSeq: head, ops: [{ op: 'remove', path: '/root/children/2' }] })
@@ -358,8 +350,9 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
       try {
         const sheet = await canvasFrame(page).locator('head [data-wb-style="theme"]').count()
         await pick(page, 'n_move')
+        const g1 = await spotIn(page, 'n_g1', 0.92, 0.5)
         await grab(page)
-        await moveTo(page, await spotIn(page, 'n_g1', 0.92, 0.5))
+        await moveTo(page, g1)
         const afterG1 = (await indicators(page)).map((h) => `${h.placement}:${h.axis}`)
         await page.mouse.up()
         // 바뀔 때까지만 기다리고 자리는 아래에서 값으로 견준다 — 자리를 기다리면 틀린 자리가 시간 초과로만 죽는다.
@@ -367,10 +360,13 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
         const first = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(seeded))
 
         await pick(page, 'n_move')
+        // 목표점은 끌기 전에 잰다 — 끄는 동안의 미리보기가 노드를 밀어도 판정은 미리보기를 뺀 배치로 잰다(`src/drag/use-placement.ts`).
+        const f1 = await spotIn(page, 'n_f1', 0.08, 0.5)
+        const g3 = await spotIn(page, 'n_g3', 0.08, 0.5)
         await grab(page)
-        await moveTo(page, await spotIn(page, 'n_f1', 0.08, 0.5))
+        await moveTo(page, f1)
         const beforeF1 = (await indicators(page)).map((h) => `${h.placement}:${h.axis}`)
-        await moveTo(page, await spotIn(page, 'n_g3', 0.08, 0.5))
+        await moveTo(page, g3)
         const beforeG3 = (await indicators(page)).map((h) => `${h.placement}:${h.axis}`)
         await page.mouse.up()
         const second = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(first))
@@ -413,7 +409,7 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
     )
   }
 
-  it('줌 0.5 · 1 · 1.5 와 스크롤한 칸에서 표시 상자가 포인터 밑 노드의 상자와 1px 안에서 맞다', async () => {
+  it('줌 0.5 · 1 · 1.5 와 스크롤한 칸에서 미리보기가 포인터 밑 노드 곁에 선다', async () => {
     const texts: SeedNode[] = Array.from({ length: 24 }, (_, i) => ({
       id: `n_t${String(i).padStart(2, '0')}`,
       type: 'Text',
@@ -436,22 +432,22 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
         const t21 = await nodeBox(page, 'n_t21')
         await page.keyboard.press('Escape')
         await page.mouse.up()
-        const off = (a: number, b: number) => Math.abs(a - b) <= 1
+        const within = (r: Box, b: Box) => r.x >= b.x - 1 && r.y >= b.y - 1 && r.x + r.width <= b.x + b.width + 1 && r.y + r.height <= b.y + b.height + 1
         rows[String(zoom)] = {
           scrolled: scrollTop > 0,
-          inside: inside.length === 1 && inside[0]!.placement === 'inside'
-            ? [off(inside[0]!.rect.x, box.x), off(inside[0]!.rect.y, box.y), off(inside[0]!.rect.width, box.width), off(inside[0]!.rect.height, box.height)]
-            : inside,
-          // 선은 노드 아래 가장자리에 두께(2px)의 가운데를 맞춘다.
-          line: line.length === 1 && line[0]!.placement === 'after'
-            ? [off(line[0]!.rect.x, t21.x), off(line[0]!.rect.y + 1, t21.y + t21.height), off(line[0]!.rect.width, t21.width)]
-            : line,
+          // «안» — 미리보기가 그 상자의 자식으로 서고 그 상자 안에 그려진다.
+          inside: inside.map((h) => [h.kind, h.placement, h.parent, within(h.rect, box)]),
+          // «뒤» — 미리보기가 n_t21 바로 뒤 형제로 서고 n_t21 의 아래(같은 왼쪽 끝)에 그려진다.
+          line: line.map((h) => [h.kind, h.placement, h.prev, h.next, h.rect.y >= t21.y + t21.height - 1, Math.abs(h.rect.x - t21.x) <= 1]),
         }
       }
       await page.waitForTimeout(300)
       expect({ rows, sent: patches.length }).toEqual({
         rows: Object.fromEntries(
-          ['0.5', '1', '1.5'].map((zoom) => [zoom, { scrolled: true, inside: [true, true, true, true], line: [true, true, true] }]),
+          ['0.5', '1', '1.5'].map((zoom) => [
+            zoom,
+            { scrolled: true, inside: [['preview', 'inside', 'n_box', true]], line: [['preview', 'after', 'n_t21', 'n_t22', true, true]] },
+          ]),
         ),
         sent: 0,
       })
@@ -515,9 +511,10 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
       await grab(page)
       const card = (await treeRow(page, 'n_card').boundingBox())!
       await moveTo(page, { x: card.x + 30, y: card.y + card.height / 2 })
+      // 트리 위에서는 트리의 선 · 강조와 캔버스의 미리보기가 함께 선다(`src/drag/use-placement.ts` 머리말 «배치 미리보기»).
       const overTree = await indicators(page)
       await moveTo(page, await spotIn(page, 'n_empt', 0.5, 0.5))
-      const backOnCanvas = (await indicators(page)).map((h) => h.placement)
+      const backOnCanvas = (await indicators(page)).map((h) => `${h.kind}:${h.placement}`)
       await page.mouse.up()
       const viaTree = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(ORIGINAL))
 
@@ -525,23 +522,23 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
       await grab(page)
       const divider = (await treeRow(page, 'n_divi').boundingBox())!
       await moveTo(page, { x: divider.x + 30, y: divider.y + divider.height - 3 })
-      const onRow = (await indicators(page)).map((h) => `${h.placement}:${h.axis}`)
+      const onRow = (await indicators(page)).map((h) => `${h.kind}:${h.placement}:${h.axis}`)
       await page.mouse.up()
       const ontoRow = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(viaTree))
 
       expect({
-        overTree: overTree.map((h) => h.placement),
-        overTreeOnRow: overTree.length === 1 && Math.abs(overTree[0]!.rect.y - card.y) <= 1,
+        overTree: overTree.map((h) => `${h.kind}:${h.placement}`),
+        overTreeOnRow: Math.abs(overTree.find((h) => h.kind === 'line')!.rect.y - card.y) <= 1,
         backOnCanvas,
         viaTree,
         onRow,
         ontoRow,
       }).toEqual({
-        overTree: ['inside'],
+        overTree: ['line:inside', 'preview:inside'],
         overTreeOnRow: true,
-        backOnCanvas: ['inside'],
+        backOnCanvas: ['preview:inside'],
         viaTree: { n_root: [{ n_card: ['n_intx'] }, { n_empt: ['n_text'] }, 'n_divi'] },
-        onRow: ['after:y'],
+        onRow: ['line:after:y', 'preview:after:y'],
         ontoRow: { n_root: [{ n_card: ['n_intx'] }, 'n_empt', 'n_divi', 'n_text'] },
       })
     } finally {

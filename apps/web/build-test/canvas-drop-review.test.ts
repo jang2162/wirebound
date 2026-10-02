@@ -5,7 +5,7 @@
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 무작위 끌기(오라클) | 뗀 순간의 표시를 **기하로** 노드에 대어 읽은 자리(부모 · 이웃)가 서버 문서와 다르다 · 표시가 포인터 밑 노드가 아니다 · 선이 포인터에서 먼 쪽 가장자리다 |
+ * | 무작위 끌기(오라클) | 뗀 순간의 미리보기가 선 자리(캔버스 문서의 부모 · 앞뒤 이웃)가 서버 문서와 다르다 · 포인터가 미리보기에도 그 부모 · 이웃에도 없다 |
  * | 위 노드가 길어져 표시한 노드가 밀림 | 표시가 옛 좌표에 남는다 · 놓으면 보인 자리도 «편집 0» 도 아닌 자리로 간다 |
  * | 아래 다른 노드의 글 고침 · 내 앞 편집의 리베이스 | 남의 무관한 편집에 표시가 걷히거나 놓기가 버려진다(위 빨강을 «문서가 바뀌면 버린다» 로 닫는 고침이 여기서 죽는다) |
  * | 구조 트리 줄 끌기 — 보인 줄의 노드를 지움 · 줄이 밀림 | 보인 줄이 아닌 줄의 띠로 간다(C 의 원래 길 — 경로 층을 안 지난다) |
@@ -15,13 +15,13 @@
  * | 손잡이와 번호 마커가 겹친 자리 · 더블클릭 · 오른쪽 단추 | 겹친 자리 누름이 손잡이가 아닌 것에 간다 · 편집이 나간다 · 고른 노드가 풀린다 |
  *
  * **오라클은 구현의 환산을 안 쓴다** — 노드 상자는 iframe 요소의 그려진 배율(`getBoundingClientRect().width / offsetWidth`)로 주 창에
- * 옮기고(`canvasHitAt` 의 `frameToHost` · 스토어의 줌 값을 안 읽는다), 표시는 `.wb-shell-drop-indicator` 의 상자 · `data-placement` 만 읽는다.
- * 기대 자리는 «끈 노드가 그 노드의 바로 앞 · 바로 뒤 형제 · 그 노드의 마지막 자식» 이라는 이웃 관계로 서버 문서에서 본다 — 차례 셈을
- * 다시 짓지 않는다. 표시 상자에 맞는 노드가 여럿이면(맞닿은 형제의 경계) 하나라도 맞으면 맞다.
+ * 옮기고(`canvasHitAt` 의 `frameToHost` · 스토어의 줌 값을 안 읽는다), 보인 자리는 캔버스 문서에 끼운 배치 미리보기의 DOM 자리(부모 · 앞뒤
+ * 이웃 노드 — `./editor-stack.ts` 의 `shownDrops`)로 읽는다. 기대 자리는 «끈 노드의 부모 · 바로 앞 · 바로 뒤 형제가 미리보기의 그것» 이라는
+ * 이웃 관계로 서버 문서에서 본다 — 차례 셈을 다시 짓지 않는다.
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session, type ShownDrop } from './editor-stack'
 import { putTheme } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
@@ -48,12 +48,6 @@ interface Doc {
   type?: string
   children?: Doc[]
 }
-interface Indicator {
-  placement: string | null
-  axis: string | null
-  rect: Box
-}
-
 const text = (id: string, content: string): SeedNode => ({ id, type: 'Text', props: { content } })
 
 /** 시드를 준 의사 난수(mulberry32) — 같은 시드면 같은 끌기 차례다. */
@@ -144,13 +138,9 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
   const select = (page: Page, id: string) => treeRow(page, id).locator('button').first().click()
   const handle = (page: Page) => page.locator('.wb-shell-canvas-handle')
 
-  async function indicators(page: Page): Promise<Indicator[]> {
-    return page.locator('.wb-shell-drop-indicator').evaluateAll((els) =>
-      els.map((el) => {
-        const r = el.getBoundingClientRect()
-        return { placement: el.getAttribute('data-placement'), axis: el.getAttribute('data-axis'), rect: { x: r.x, y: r.y, width: r.width, height: r.height } }
-      }),
-    )
+  /** 지금 보인 놓을 자리(`./editor-stack.ts` 의 `shownDrops` — 트리의 선 · 캔버스의 배치 미리보기). */
+  async function indicators(page: Page): Promise<ShownDrop[]> {
+    return shownDrops(page)
   }
 
   async function nodeBox(page: Page, id: string): Promise<Box> {
@@ -246,37 +236,20 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
     }
     const ids = (root: Doc): string[] => [root.id, ...(root.children ?? []).flatMap(ids)]
 
-    /** 표시 → 그 표시가 가리키는 노드 · 관계(기하로만). */
-    function pointedAt(indicator: Indicator, boxes: Record<string, Box>, rootId: string): { id: string; rel: string; edge?: 'start' | 'end' }[] {
-      const near = (a: number, b: number) => Math.abs(a - b) <= 1.5
-      const out: { id: string; rel: string; edge?: 'start' | 'end' }[] = []
-      const { rect } = indicator
-      for (const [id, b] of Object.entries(boxes)) {
-        if (indicator.placement === 'inside') {
-          if (near(rect.x, b.x) && near(rect.y, b.y) && near(rect.width, b.width) && near(rect.height, b.height)) out.push({ id, rel: 'inside' })
-          continue
-        }
-        if (id === rootId || indicator.placement === null) continue
-        const x = indicator.axis === 'x'
-        if (x ? !near(rect.y, b.y) || !near(rect.height, b.height) : !near(rect.x, b.x) || !near(rect.width, b.width)) continue
-        const edge = x ? rect.x + rect.width / 2 : rect.y + rect.height / 2
-        const [lo, hi] = x ? [b.x, b.x + b.width] : [b.y, b.y + b.height]
-        if (near(edge, lo)) out.push({ id, rel: indicator.placement, edge: 'start' })
-        else if (near(edge, hi)) out.push({ id, rel: indicator.placement, edge: 'end' })
-      }
-      return out
-    }
-
-    function stands(root: Doc, moved: string, at: { id: string; rel: string }): boolean {
+    /**
+     * 미리보기 → 놓일 자리(부모 · 앞뒤 이웃)가 서버 문서에 선 자리와 같은가. 미리보기는 캔버스 문서에 실제로 끼운 노드라 그 자리를 DOM
+     * 의 부모 · 이웃으로 읽는다(차례 셈을 다시 짓지 않는다 — 옮기는 원본은 이웃에서 뺀다).
+     */
+    function lands(root: Doc, moved: string, drop: ShownDrop): boolean {
       const m = locate(root, moved)
-      if (m === null || m.parent === null) return false
-      if (at.rel === 'inside') return m.parent.id === at.id && m.index === (m.parent.children ?? []).length - 1
-      const o = locate(root, at.id)
-      if (o === null || o.parent === null || o.parent.id !== m.parent.id) return false
-      return at.rel === 'before' ? m.index === o.index - 1 : m.index === o.index + 1
+      if (m === null || m.parent === null || m.parent.id !== drop.parent) return false
+      const siblings = m.parent.children ?? []
+      const prevOk = drop.prev === null ? m.index === 0 : siblings[m.index - 1]?.id === drop.prev
+      const nextOk = drop.next === null ? m.index === siblings.length - 1 : siblings[m.index + 1]?.id === drop.next
+      return prevOk && nextOk
     }
 
-    it('다섯 테마 × 줌 셋 · 칸을 민 판 · 뒤집힌 가로 무리에서 뗀 순간의 표시가 가리킨 자리가 서버 문서의 자리다', async () => {
+    it('다섯 테마 × 줌 셋 · 칸을 민 판 · 뒤집힌 가로 무리에서 뗀 순간의 미리보기가 선 자리가 서버 문서의 자리다', async () => {
       const rand = seeded(7)
       const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!
       const wrong: unknown[] = []
@@ -348,31 +321,28 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
               const indicator = shown[0]!
               if (indicator.axis === 'x') count.x += 1
               if (indicator.placement === 'inside') count.inside += 1
-              const points = pointedAt(indicator, atRelease, before.id)
               const reversed = await frame.evaluate((id) => {
-                const parent = document.querySelector(`[data-wb-id="${id}"]`)?.parentElement
-                return parent !== null && parent !== undefined && getComputedStyle(parent).flexDirection.endsWith('-reverse')
-              }, points[0]?.id ?? '')
+                const el = [...document.querySelectorAll('[data-wb-id]')].find((e) => e.getAttribute('data-wb-id') === id)
+                return el !== undefined && getComputedStyle(el).flexDirection.endsWith('-reverse')
+              }, indicator.parent ?? '')
               if (reversed && indicator.placement !== 'inside') count.reversed += 1
+              // 포인터는 미리보기 위거나 그 곁(부모 · 앞뒤 이웃)에 있다 — 판정이 포인터 밑 노드 곁에 미리보기를 세운다(`src/drag/use-placement.ts`
+              // 머리말 «판정은 미리보기를 뺀 배치로»).
               const ptr = target
-              const fits = points.filter((p) => {
-                const b = atRelease[p.id]!
-                const inside = ptr.x >= b.x - 1 && ptr.x <= b.x + b.width + 1 && ptr.y >= b.y - 1 && ptr.y <= b.y + b.height + 1
-                if (p.edge === undefined) return inside || p.id === before.id
-                // 선은 포인터에 가까운 쪽 가장자리다.
-                const x = indicator.axis === 'x'
-                const [lo, hi] = x ? [Math.abs(ptr.x - b.x), Math.abs(ptr.x - b.x - b.width)] : [Math.abs(ptr.y - b.y), Math.abs(ptr.y - b.y - b.height)]
-                return inside && (p.edge === 'start' ? lo <= hi : hi <= lo)
-              })
+              const within = (b: Box | undefined) => b !== undefined && ptr.x >= b.x - 1 && ptr.x <= b.x + b.width + 1 && ptr.y >= b.y - 1 && ptr.y <= b.y + b.height + 1
+              const beside =
+                within(indicator.rect) ||
+                [indicator.parent, indicator.prev, indicator.next].some((id) => id !== null && within(atRelease[id])) ||
+                indicator.parent === before.id
               let after: Doc
               try {
                 after = await poll('서버 문서', () => serverRoot(P), (r) => JSON.stringify(r) !== JSON.stringify(before), 4000)
               } catch {
-                wrong.push({ theme, zoom, trial, moved, indicator, kind: '표시가 섰는데 편집이 없다' })
+                wrong.push({ theme, zoom, trial, moved, indicator, kind: '미리보기가 섰는데 편집이 없다' })
                 continue
               }
-              if (fits.length === 0 || !fits.some((p) => stands(after, moved, p))) {
-                wrong.push({ theme, zoom, trial, moved, target, indicator, points, fits, placed: locate(after, moved) && { parent: locate(after, moved)!.parent!.id, index: locate(after, moved)!.index } })
+              if (!beside || !lands(after, moved, indicator)) {
+                wrong.push({ theme, zoom, trial, moved, target, indicator, beside, placed: locate(after, moved) && { parent: locate(after, moved)!.parent!.id, index: locate(after, moved)!.index } })
               }
             }
           }
