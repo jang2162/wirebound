@@ -6,6 +6,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 가져오기 | 줄 `+`가 그 메뉴를 대상으로 상자를 열지 않는다 · 파일 칸이 고른 파일을 안 읽는다 · 상자 단추의 `Delete`가 뒤 트리의 삭제 확인을 건다 · 성공해도 상자가 남거나 새 페이지로 안 옮긴다 · 결과가 하단 바에 안 선다 |
+ * | 보내는 중 닫기 | 보내는 동안 «취소»가 켜져 있다 · Escape 가 상자를 못 닫는다 · 닫은 상자의 성공이 새 페이지로 옮긴다 · 결과가 하단 바에 안 선다 |
  * | 내보내기 | 받은 파일이 그 줄의 페이지가 아니다(열린 페이지를 낸다) · 내려받기가 안 난다 |
  */
 import { readFile } from 'node:fs/promises'
@@ -93,6 +94,76 @@ describe.skipIf(!전제.ok)('페이지 JSON — 가져오기 상자 · 내보내
         상자: 0,
         옮겨_간_곳: true,
         대상_메뉴의_페이지: ['디스크에서 온 목록'],
+        통지: true,
+      })
+    } finally {
+      await context.close()
+    }
+  })
+
+  /**
+   * 가져오기 요청을 늦춰(`page.route`) 보내는 동안의 상자를 본다 — «취소»는 꺼지고(보낸 요청은 못 멈춘다), Escape 는 상자를 닫는다(사람을
+   * 가두지 않는다). 닫은 상자의 답은 페이지를 만들되 사람을 옮기지 않고 하단 바에 결과만 남긴다. 판 카나리아: 요청이 실제로 늦춰진 동안
+   * 단추가 «가져오는 중…»이다(`보내는_중`).
+   */
+  it('보내는 중 «취소»는 꺼지고, Escape 로 닫은 상자의 성공은 새 페이지로 옮기지 않고 하단 바 통지만 남긴다', async () => {
+    const { projectId, P, ids } = await fixture('close')
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    try {
+      let release: (() => void) | undefined
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let requests = 0
+      await page.route('**/pages/import', async (route) => {
+        requests += 1
+        await held
+        await route.continue()
+      })
+      await page.goto(P)
+      await rowLabel(page, ids.target).waitFor()
+      await openImport(page, ids.target)
+      const dialog = page.getByRole('dialog', { name: '페이지 가져오기 — 가져올 곳 메뉴로', exact: true })
+      await dialog.waitFor()
+      await dialog.getByLabel('페이지 파일', { exact: true }).setInputFiles({
+        name: 'closed.wirebound-page.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(pageFile('닫은 상자의 목록')),
+      })
+      await poll('미리보기', () => dialog.getByRole('status').textContent(), (text) => (text ?? '').includes('닫은 상자의 목록'))
+      await dialog.getByRole('button', { name: '가져오기', exact: true }).click()
+      await poll('요청이 붙잡혔다', async () => requests, (n) => n === 1)
+
+      const 보내는_중 = await dialog.getByRole('button', { name: '가져오는 중…', exact: true }).count()
+      const 취소_꺼짐 = await dialog.getByRole('button', { name: '취소', exact: true }).isDisabled()
+      const 닫기_꺼짐 = await dialog.getByRole('button', { name: '닫기', exact: true }).isDisabled()
+      await page.keyboard.press('Escape')
+      const 닫힌_뒤_상자 = await page.locator('dialog[open]').count()
+
+      release?.()
+      const notice = await poll('하단 바 통지', () => page.locator('.wb-shell-footer-notices').innerText(), (text) => text.includes('가져왔습니다'))
+      // 트리가 다시 받혀 새 줄이 선 뒤에 주소를 본다 — 옮기는 일은 다시 받은 뒤에 돈다(`useTreeCommands`의 `run`).
+      const tree = (await stack.request(alice, 'GET', `/projects/${projectId}/tree`)).body.menu as { id: string; pages: { id: string; title: string }[] }[]
+      const made = tree.find((menu) => menu.id === ids.target)?.pages[0]
+      await rowLabel(page, made?.id ?? '').waitFor()
+
+      expect({
+        보내는_중,
+        취소_꺼짐,
+        닫기_꺼짐,
+        닫힌_뒤_상자,
+        요청: requests,
+        만든_페이지: made?.title,
+        주소: new URL(page.url()).pathname,
+        통지: notice.includes('가져왔습니다: 닫은 상자의 목록 — 코멘트 1개'),
+      }).toEqual({
+        보내는_중: 1,
+        취소_꺼짐: true,
+        닫기_꺼짐: false,
+        닫힌_뒤_상자: 0,
+        요청: 1,
+        만든_페이지: '닫은 상자의 목록',
+        주소: P,
         통지: true,
       })
     } finally {

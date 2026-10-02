@@ -688,6 +688,47 @@ describe('가져오기', () => {
   })
 
   /**
+   * **보낸 요청은 멈출 수 없다** — 보내는 동안 «취소»가 켜져 있으면 그 낱말이 거짓이 된다(누르면 상자만 닫히고 페이지는 생긴다). 머리
+   * «닫기»는 켜 둔다 — 답이 오래 걸릴 때 사람을 상자에 가두지 않는다.
+   */
+  it('보내는 동안 «취소»가 꺼지고 머리 «닫기»는 켜져 있다', async () => {
+    await open({ importPage: vi.fn(() => new Promise<PageImported>(() => {})) })
+    paste(JSON.stringify(file()))
+    fireEvent.click(importButton())
+
+    expect({
+      취소: (within(dialog()).getByRole('button', { name: '취소' }) as HTMLButtonElement).disabled,
+      닫기: (within(dialog()).getByRole('button', { name: '닫기' }) as HTMLButtonElement).disabled,
+    }).toEqual({ 취소: true, 닫기: false })
+  })
+
+  /**
+   * **닫은 상자의 성공은 사람을 옮기지 않는다** — 닫은 것은 «이 일에서 손을 뗀다»는 뜻이라, 답이 온 순간 다른 페이지로 데려가면 그동안
+   * 하던 일에서 끌려 나간다. 페이지는 생겼으므로 결과는 하단 바에 남는다(트리도 다시 받아 새 줄이 보인다).
+   */
+  it('보내는 중 머리 «닫기»로 닫으면, 성공해도 새 페이지로 옮기지 않고 하단 바의 결과만 남는다', async () => {
+    let answer: (() => void) | undefined
+    const api = await open({
+      importPage: vi.fn(
+        () =>
+          new Promise<PageImported>((resolve) => {
+            answer = () => resolve(imported())
+          }),
+      ),
+    })
+    paste(JSON.stringify(file()))
+    fireEvent.click(importButton())
+    fireEvent.click(within(dialog()).getByRole('button', { name: '닫기' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    answer?.()
+
+    await waitFor(() => expect(footer().textContent).toContain('가져왔습니다: 가져온 목록'))
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+    expect(screen.getByTestId('location-probe').textContent).toBe('/projects/p-1')
+  })
+
+  /**
    * **서버 거절은 상자 안에 선다** — 상자를 닫지 않고 고른 글자 · 제목을 그대로 둔다. 트리의 실패 줄에는 서지 않는다(한 실패의 자리는
    * 하나다 — `TreeCommands.importFailure`). 대상 메뉴를 남이 지운 판이 이것이다(서버만 안다 — `SERVER_ONLY`).
    */
@@ -738,7 +779,8 @@ describe('가져오기', () => {
     })
     paste(JSON.stringify(file()))
     fireEvent.click(importButton())
-    fireEvent.click(within(dialog()).getByRole('button', { name: '취소' }))
+    // 보내는 동안 «취소»는 꺼져 있다 — 닫는 길은 머리 «닫기»다(«보내는 동안 «취소»가 꺼지고 …»).
+    fireEvent.click(within(dialog()).getByRole('button', { name: '닫기' }))
 
     refuse?.()
 

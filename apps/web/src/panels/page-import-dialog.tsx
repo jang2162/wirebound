@@ -25,8 +25,13 @@
  * |---|---|
  * | 파일을 못 읽음 · 봉투 · 게이트(`previewPageJson`) | 미리보기 카드(빨강) — 가져오기 단추가 꺼진다 |
  * | 서버 거절(남이 메뉴를 지움 · NUL · 크기 · 권한) | 상자 바닥(`commands.importFailure`) — **상자를 닫지 않고** 고른 파일 · 글자 · 제목을 그대로 둔다 |
- * | 보낸 뒤 상자를 닫았으면 | 트리의 실패 줄(`commands.failure`) — 한 실패가 서는 자리는 하나다(`TreeCommands.importFailure`) |
+ * | 보낸 뒤 상자를 닫았으면 — 거절 | 트리의 실패 줄(`commands.failure`) — 한 실패가 서는 자리는 하나다(`TreeCommands.importFailure`) |
  * | 성공 | 상자를 닫고 새 페이지로 옮긴다. 결과는 하단 바의 통지(`panels/page-json-notices.tsx`) |
+ * | 보낸 뒤 상자를 닫았으면 — 성공 | 옮기지 않는다. 결과는 하단 바의 통지뿐이다(`TreeCommands.importJson`) |
+ *
+ * **보내는 동안 «취소»는 꺼진다** — 보낸 요청은 멈출 수 없으므로 «취소»라는 낱말이 거짓이 된다(누르면 상자만 닫히고 페이지는 생긴다).
+ * 머리 «닫기» · Escape 는 켜 둔다 — 답이 오래 걸릴 때 사람을 상자에 가두지 않는다. 그렇게 닫은 상자의 답이 위 표의 «보낸 뒤 상자를
+ * 닫았으면» 두 줄이다.
  *
  * **파일 읽기가 실패하면 대기 글자를 비운다.** 안 비우면 화면은 *"파일을 읽지 못했습니다"*라고 말하는데 앞서 읽힌 글자가 남아 있어,
  * 그 상태로 누르면 **고르지도 않은 앞 파일**이 들어간다. 나중에 고른 파일만 싣는다 — 앞 파일의 읽기가 늦게 끝나도 버린다(`readSeq`).
@@ -39,8 +44,10 @@
  * # 파일 칸 — OS 파일 끌어 놓기
  *
  * 브라우저의 HTML5 끌어 놓기다(`drop`의 `dataTransfer.files`) — 앱의 포인터 끌기 장치(`drag/use-pointer-drag.ts`)와 무관하다. **몸체 전체가
- * 받는다** — 칸을 조금 비켜 놓은 파일을 브라우저가 열면 에디터를 떠난다. 파일을 끌고 들어오면 칸이 강조된다. 키보드는 칸 안의 파일 입력
- * (`<label>` 이 감싼 `<input type="file">` — 눈에는 감추되 포커스는 받는다)이 받는다.
+ * 받는다** — 받지 않은 자리에 놓인 파일은 브라우저가 연다. Chrome 은 새 탭으로 열어 에디터 탭이 그대로이고, 브라우저에 따라 현재 탭을 그
+ * 파일로 옮겨 에디터를 떠난다(Firefox · Safari 는 재지 않았다). 몸체 밖(상자 머리 · 배경막)은 받지 않는다 — 그 자리에 놓은 파일도 같다.
+ * 파일을 끌고 들어오면 칸이 강조된다. 키보드는 칸 안의 파일 입력(`<label>` 이 감싼 `<input type="file">` — 눈에는 감추되 포커스는 받는다)이
+ * 받는다.
  */
 import { CircleCheck, CircleX, FileUp, TriangleAlert } from 'lucide-react'
 import { useRef, useState, type DragEvent, type FormEvent, type ReactElement } from 'react'
@@ -135,7 +142,7 @@ function PageImportBody(props: { commands: TreeCommands }): ReactElement {
       }}
       onDragOver={(event) => {
         if (!carriesFiles(event)) return
-        // 막지 않으면 브라우저가 `drop`을 안 내고 파일을 연다(에디터를 떠난다).
+        // 막지 않으면 브라우저가 `drop`을 안 내고 파일을 연다(머리말 «파일 칸» — 브라우저에 따라 에디터를 떠난다).
         event.preventDefault()
         event.dataTransfer.dropEffect = 'copy'
       }}
@@ -228,7 +235,9 @@ function PageImportBody(props: { commands: TreeCommands }): ReactElement {
         ))}
 
       <div className="wb-shell-pagejson-foot">
-        <button type="button" className="wb-shell-pagejson-cancel" onClick={commands.closeImport}>
+        {/* **보내는 동안 꺼진다** — 보낸 요청은 멈출 수 없어 «취소»라는 낱말이 거짓이 된다. 닫는 길은 머리 «닫기» · Escape 로 남는다
+            (머리말의 표 «보낸 뒤 상자를 닫았으면»). */}
+        <button type="button" className="wb-shell-pagejson-cancel" disabled={sending} onClick={commands.closeImport}>
           취소
         </button>
         <button type="submit" className="wb-shell-pagejson-submit" disabled={!ready || sending} aria-busy={sending}>

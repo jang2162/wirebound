@@ -163,7 +163,10 @@ export interface TreeCommands {
   importing: ImportTarget | null
   /** 고른 메뉴를 대상으로 상자를 연다 — 판정은 «페이지 추가»와 같은 `abilities.addPage`다. */
   openImport: () => void
-  /** 상자를 닫는다 — 상자 안의 실패도 함께 걷힌다(읽은 사람이 닫은 것이다). 보내는 중에도 닫힌다(답은 아래 `importJson`의 자리 규칙). */
+  /**
+   * 상자를 닫는다 — 상자 안의 실패도 함께 걷힌다(읽은 사람이 닫은 것이다). 보내는 중에도 닫힌다(머리 «닫기» · Escape — 답이 오래 걸릴 때
+   * 사람을 가두지 않는다). 보낸 요청은 멈추지 않는다 — 답은 아래 `importJson`의 자리 규칙을 따른다.
+   */
   closeImport: () => void
   /**
    * **파일 한 벌로 페이지를 만든다**(설계서 「페이지 JSON」). 상자의 대상 **메뉴** 밑에 붙는다.
@@ -791,7 +794,8 @@ export function useTreeCommands(props: {
    * **대상은 상자를 연 순간의 메뉴다**(`importing`) — 지금의 선택이 아니다. 상자가 없으면 아무것도 안 한다.
    *
    * **실패의 자리는 하나다**(`importFailure`의 머리말) — 보낸 상자가 아직 열려 있으면 상자 안, 닫았으면 트리의 실패 줄.
-   * 성공하면 상자를 닫고 만든 페이지로 옮기며 결과를 하단 바의 통지로 남긴다(`onImported`).
+   * 성공하면 결과를 하단 바의 통지로 남기고(`onImported`), 보낸 상자가 아직 열려 있으면 닫고 만든 페이지로 옮긴다. **닫은 상자의 성공은
+   * 옮기지 않는다** — 닫은 사람은 그 일에서 손을 뗐다. 답이 온 순간 다른 페이지로 데려가면 그동안 하던 일에서 끌려 나간다.
    *
    * **봉투를 여기서 읽지 않는다.** 화면이 미리보기를 그리느라 이미 읽었고(`parsePageJson`),
    * 여기서 다시 읽으면 같은 판정이 두 자리가 된다. 서버도 같은 함수를 쓴다.
@@ -816,7 +820,9 @@ export function useTreeCommands(props: {
       () => {
         if (result === null) return
         props.onImported?.(result)
-        if (importOpen.current === target) closeImport()
+        // **닫은 상자의 성공은 옮기지 않는다**(위 머리말) — 결과는 하단 바에 섰다.
+        if (importOpen.current !== target) return
+        closeImport()
         // **만든 페이지로 이동한다** — `submitInput`의 `new-page`와 같다. 빈 문자열 id는
         // `SHAPES.pageImported`가 이미 막았다.
         navigate(`/projects/${projectId}/pages/${result.page.id}`)
