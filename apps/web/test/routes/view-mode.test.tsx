@@ -15,7 +15,7 @@
  *
  * 셸이 뷰 모드에서 DOM에서 빼는 것이 **구조 트리 하나**뿐이면, 좌측의 **메뉴 트리 줄 행동**
  * (줄의 `+` · `…` · 제목 줄의 뿌리 `+` — 하위 메뉴·페이지 추가·이름 변경·삭제·위로·아래로·들여쓰기·내어쓰기·옮기기)와
- * **페이지 JSON 패널**(내보내기 + 파일 고르개 + JSON 입력 + 가져오기)은 그대로 남아
+ * **페이지 JSON 의 입구**(줄 `+`의 «JSON 에서 가져오기…» · 줄 `…`의 «JSON 내보내기» · 가져오기 대화 상자)는 그대로 남아
  * **눌리는 상태**가 된다(브라우저에서 잰 고장 방식). 구조 트리를 접는 근거 — **편집 도구는
  * 편집 모드에 있다** — 는 그 둘에 똑같이 걸린다.
  *
@@ -33,6 +33,7 @@ import {
   PROJECT_ROUTE,
   renderEditor,
 } from '../editor-harness'
+import { chooseRowAction, rowAction, rowNamed } from '../panels/tree-row'
 
 const DOC = pageDoc({
   id: 'n-root',
@@ -254,35 +255,28 @@ describe('설계서 「설계서 화면 구조」 — 좌측의 편집 도구도
     expect(within(treeRegion()).queryByRole('button', { name: '메뉴 트리에 추가' })).toBeNull()
   })
 
-  /** 가져오기 폼의 토글. **접힌 채로도 늘 있다**(`panels/page-json-panel.tsx`). */
-  function importToggle(): HTMLElement {
-    return screen.getByRole('button', { name: '페이지 JSON 가져오기' })
-  }
-
-  it('뷰 모드에서는 페이지 JSON 패널이 없다 — 펴 둔 가져오기 폼까지', async () => {
+  it('뷰 모드에서는 페이지 JSON 의 입구가 없다 — 열어 둔 가져오기 상자까지, 편집 모드로 돌아와도 상자가 되살아나지 않는다', async () => {
     await openPage(DOC)
-    expect(within(treeRegion()).getByRole('region', { name: '페이지 JSON' })).toBeTruthy()
-    // 편집 모드에서는 가져오기의 **토글**이 있다. 아래 부재 단언의 분모다.
-    expect(importToggle()).toBeTruthy()
-    // **폼을 펴 두고 모드를 바꾼다 — 이 한 걸음이 아래 실행 버튼 단언을 살린다.**
-    // 접힌 채로 재면 그 폼이 편집 모드에서도 DOM에 없어(기본이 접힘이다) 실행 버튼의 부재가
-    // **두 모드에 대해 똑같이 참**이 되고, 그 줄은 통과하면서 아무것도 재지 않는다 — 패널의
-    // 게이트(`panels/menu-tree.tsx`의 `props.editable &&`)를 죽이고 그 줄만 남기면 이 파일이
-    // 전부 통과한다. 펴 두면 같은 변조에서 그 줄 하나로도 죽는다.
-    if (importToggle().getAttribute('aria-expanded') === 'false') fireEvent.click(importToggle())
-    expect(screen.getByRole('button', { name: '페이지 가져오기' })).toBeTruthy()
+    // 편집 모드에서는 두 입구가 있다. 아래 부재 단언의 분모다.
+    expect(rowAction(treeRegion(), 'JSON 내보내기', rowNamed(treeRegion(), '회원 목록'))).toBeTruthy()
+    // **상자를 열어 두고 모드를 바꾼다 — 이 한 걸음이 아래 상자 단언을 살린다.** 닫힌 채로 재면 상자가 편집 모드에서도 DOM 에 없어 부재가
+    // 두 모드에 대해 똑같이 참이 된다. jsdom 의 모달은 `open` 속성이라 뒤 화면이 막히지 않아 모드 단추에 닿는다(실브라우저는 막힌다 —
+    // 그 판에서 상자를 닫는 것은 역할 바뀜이다 — `panels/menu-tree.tsx`의 `editable` 이펙트).
+    chooseRowAction(treeRegion(), 'JSON 에서 가져오기…', rowNamed(treeRegion(), '회원관리'))
+    expect(screen.getByRole('dialog', { name: '페이지 가져오기 — 회원관리 메뉴로' })).toBeTruthy()
 
     toView()
 
-    expect(within(treeRegion()).queryByRole('region', { name: '페이지 JSON' })).toBeNull()
-    // 가져오기는 명백히 편집이다. 상자만 지우고 폼을 남긴 판을 가른다 — **토글도, 펴 두었던
-    // 폼도 함께 간다**(모드를 오가면 패널이 통째로 마운트를 잃으므로 펼침도 접힘으로 돌아온다).
-    expect(screen.queryByRole('button', { name: '페이지 JSON 가져오기' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '페이지 가져오기' })).toBeNull()
-    // **`페이지 내보내기`도 함께 간다 — 판정이다.** 읽기 동작이지만 이 상자의 축은
-    // *"페이지를 JSON으로 주고받는다"*라는 저작 도구이고, 설계서를 **읽는** 사람의
-    // 내려받기는 셸 머리의 `내보내기`(설계서 「HTML 정적 번들」)가 두 모드 모두에서 낸다.
-    expect(screen.queryByRole('button', { name: '페이지 내보내기' })).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    // **«JSON 내보내기»도 함께 간다 — 판정이다.** 읽기 동작이지만 그 입구가 줄 행동(편집 도구) 안이고, 설계서를 **읽는** 사람의
+    // 내려받기는 셸 `…`의 «프로젝트 내보내기»(설계서 「HTML 정적 번들」)가 두 모드 모두에서 낸다.
+    expect(treeRegion().querySelectorAll('.wb-shell-tree-row-actions')).toHaveLength(0)
+    expect(screen.queryByRole('menuitem', { name: 'JSON 내보내기' })).toBeNull()
+
+    toEdit()
+
+    // **편집 모드로 돌아와도 상자가 다시 서지 않는다** — 대상을 훅에 남겨 두면 아무도 열지 않은 상자가 선다.
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('뷰 모드에서도 메뉴 트리 자체는 남는다', async () => {
@@ -296,7 +290,7 @@ describe('설계서 「설계서 화면 구조」 — 좌측의 편집 도구도
     expect(within(treeRegion()).getByRole('link', { name: '회원 목록' })).toBeTruthy()
   })
 
-  it('편집 모드로 돌아오면 둘 다 되살아난다', async () => {
+  it('편집 모드로 돌아오면 줄 행동과 페이지 JSON 의 입구가 되살아난다', async () => {
     // 한 방향만 보면 "뷰 모드를 한 번 지나면 영영 없다"는 구현도 위를 통과한다.
     await openPage(DOC)
     toView()
@@ -304,6 +298,6 @@ describe('설계서 「설계서 화면 구조」 — 좌측의 편집 도구도
     toEdit()
 
     expect(within(treeRegion()).getByRole('button', { name: '회원관리 더 보기' })).toBeTruthy()
-    expect(within(treeRegion()).getByRole('region', { name: '페이지 JSON' })).toBeTruthy()
+    expect(rowAction(treeRegion(), 'JSON 에서 가져오기…', rowNamed(treeRegion(), '회원관리'))).toBeTruthy()
   })
 })

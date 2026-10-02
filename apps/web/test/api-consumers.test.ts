@@ -126,7 +126,7 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   deletePage: ['../src/tree/use-tree-commands.tsx'],
   // 페이지 가져오기. **트리 훅 하나에서만 불린다** — 가져오기는 트리를 바꾸는
   // 조작이므로 `createPage`와 같은 잠금·재조회·이동을 지나야 하고, 그 셋이 그 훅에
-  // 있다. **화면(`panels/page-json-panel.tsx`)이 직접 부르기 시작하면 여기가 죽는다** —
+  // 있다. **화면(`panels/page-import-dialog.tsx`)이 직접 부르기 시작하면 여기가 죽는다** —
   // 그때는 그 셋이 두 벌이 된 것이다.
   importPage: ['../src/tree/use-tree-commands.tsx'],
   // **셋이고 서로 다른 것을 읽는다.** 셸(`routes/editor.tsx`)은 `schema`·`headSeq`를
@@ -141,7 +141,7 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
     '../src/routes/editor.tsx',
     '../src/edit/use-edit-commit.tsx',
     '../src/panels/page-description.tsx',
-    '../src/panels/page-json-panel.tsx',
+    '../src/panels/page-json-export.ts',
   ],
   patchOps: ['../src/edit/use-edit-commit.tsx'],
   listMyRevisions: ['../src/routes/editor.tsx'],
@@ -164,7 +164,7 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   listComments: [
     '../src/panels/comment-panel.tsx',
     '../src/panels/preset-picker.tsx',
-    '../src/panels/page-json-panel.tsx',
+    '../src/panels/page-json-export.ts',
   ],
   createComment: ['../src/panels/comment-panel.tsx'],
   updateComment: ['../src/panels/comment-panel.tsx'],

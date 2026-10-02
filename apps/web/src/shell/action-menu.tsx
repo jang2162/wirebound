@@ -34,8 +34,8 @@
  * ## 포인터로 고른 뒤 한 더블클릭 간격 동안 오는 클릭 하나를 삼킨다
  *
  * 고르면 목록이 곧바로 닫혀 그 자리 밑의 요소가 드러난다. 더블클릭 · 연달아 두 번 누름의 **둘째 누름**이 그 요소로 간다 — 트리 줄의
- * `…` 는 트리 칸 아래쪽의 페이지 JSON 칸 위에 떠, «삭제»를 두 번 누르면 가져오기 칸이 열리거나(1440 · 1024) 내보내기가 받아졌다
- * (800 — C2 리뷰 발견 3 · `build-test/tree-drag-review.test.ts`). 그래서 **포인터로** 고른 항목이면(`click` 의 `detail` ≥ 1) 그 뒤
+ * `…` 는 아래 줄들 위에 떠, «삭제»를 두 번 누르면 둘째 누름이 밑의 페이지 줄을 눌러 그 페이지로 옮겨 가고 삭제 확인이 풀린다
+ * (`build-test/tree-drag-review.test.ts` «삭제 항목의 둘째 누름 …»). 그래서 **포인터로** 고른 항목이면(`click` 의 `detail` ≥ 1) 그 뒤
  * `DOUBLE_CLICK_MS` 안에 **같은 자리**(`DOUBLE_CLICK_SLOP` 안)에 오는 `click` 하나를 붙잡는 단계에서 막는다 — 호스트 문서와 캔버스
  * iframe 의 문서 둘 다(목록이 캔버스 위에 떠 있을 수 있다 — 그 문서의 좌표는 iframe 상자만큼 옮겨 견준다). 끌기 장치의
  * `swallowNextClick`(`drag/use-pointer-drag.ts`)과 같은 꼴이다.
@@ -56,8 +56,16 @@
  * 닫기는 `use-popover-dismiss.ts`(캔버스 iframe 의 문서까지 듣는다 — 그 훅의 «캔버스 iframe 의 문서에도 건다»), 자리는 `use-popover-side.ts`
  * (머리가 접혀 단추가 왼쪽으로 가도 목록이 창 밖으로 안 나간다). **그 훅의 계약대로 단추까지 감싸는 상자에 건다.** Escape 는 그 훅도 받지만
  * 포커스를 돌려주려고 목록의 키 처리가 먼저 받는다 — 둘이 함께 닫아도 한 번 닫힌 상태에 한 번 더 닫는 것이라 결과가 같다.
+ *
+ * ## 항목의 아이콘 — `icon` 에 lucide 컴포넌트를 준다
+ *
+ * 항목의 `icon`은 **컴포넌트**(`LucideIcon` — `lucide-react`)이지 그린 요소가 아니다. 크기 · 선 굵기 · 색을 이 부품이 정해 목록 안의 아이콘이
+ * 한 모양이 된다 — 14px · 선 2 · 색은 글자색(`currentColor` — 끈 항목 · 위험 항목의 색을 그대로 받는다), 글자 앞 6px(`shell.css`의
+ * `.wb-shell-action-menu-icon`). 아이콘은 `aria-hidden`이고 **이름은 글자가 든다** — 아이콘만으로 뜻을 나르지 않는다. 아이콘이 없는 항목은
+ * 자리를 비워 두지 않는다(글자가 왼끝에서 시작한다).
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { useCanvasDocument } from '../canvas/canvas-document'
 import { usePopoverDismiss } from './use-popover-dismiss'
@@ -84,6 +92,8 @@ export interface ActionMenuItem {
   title?: string
   /** 항목의 설명이 되는 요소의 id(`aria-describedby`) — 트리 아래 상태줄. */
   describedBy?: string
+  /** 글자 앞의 아이콘 — lucide 컴포넌트(머리말 «항목의 아이콘»). */
+  icon?: LucideIcon
 }
 
 export function ActionMenu(props: {
@@ -234,7 +244,7 @@ export function ActionMenu(props: {
                       close()
                     }}
                   >
-                    {item.label}
+                    <ItemLabel item={item} />
                   </Link>
                 ) : (
                   <button
@@ -250,7 +260,7 @@ export function ActionMenu(props: {
                       choose(item, event)
                     }}
                   >
-                    {item.label}
+                    <ItemLabel item={item} />
                   </button>
                 )}
               </li>
@@ -259,6 +269,18 @@ export function ActionMenu(props: {
         </div>
       )}
     </div>
+  )
+}
+
+/** 항목의 글자 — 아이콘이 있으면 그 앞에 선다(머리말 «항목의 아이콘»). */
+function ItemLabel(props: { item: ActionMenuItem }): ReactElement {
+  const Icon = props.item.icon
+  if (Icon === undefined) return <>{props.item.label}</>
+  return (
+    <>
+      <Icon className="wb-shell-action-menu-icon" size={14} strokeWidth={2} aria-hidden="true" />
+      {props.item.label}
+    </>
   )
 }
 

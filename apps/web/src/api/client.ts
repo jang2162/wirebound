@@ -302,7 +302,7 @@ export interface ApiClient {
    *
    * `file`이 봉투 전체다. **화면이 보내기 전에 서버와 같은 게이트 셋을 지난다** —
    * 봉투(`readPageJson`) · 문서 버전(`migrateDocument`) · 카탈로그(`validatePage`)이고
-   * 셋 다 `@wirebound/schema`의 같은 함수다(`panels/page-json-panel.tsx`의
+   * 셋 다 `@wirebound/schema`의 같은 함수다(`panels/page-json-preview.ts`의
    * `previewPageJson`).
    *
    * **그래도 서버만 아는 것이 남는다** — 대상 메뉴가 아직 있는지 · NUL · 본문 크기 ·

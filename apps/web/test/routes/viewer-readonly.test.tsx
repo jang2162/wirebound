@@ -22,7 +22,8 @@
  * - **구조 줄 행동 ↔ 구조 단축키** — 둘 다 `patch structure`를 낸다. 한쪽만 꺼도 칸이 산다. 가르지 않는다 —
  *   viewer 에게 **단축키** 축은 이 파일의 viewer 케이스가 소유하고(단축키 가드를 지운 변조가 여기서만 죽는다),
  *   **줄 행동**은 `viewer-entries.test.tsx`의 «구조 트리»가 소유한다(줄 행동째 없다).
- * - **메뉴 트리 단축키** — editor 대조가 한 번도 안 닿는다. 아래 «키»의 대표 고르기 때문이다.
+ * - **메뉴 트리 단축키 ↔ 메뉴 줄 행동** — 둘 다 `menu` 경로로 쓴다. 한쪽만 꺼도 «메뉴 트리» 칸이 산다(editor 대조는 둘 다 닿는다 —
+ *   단축키 쪽은 `handleKeyDown`에 탐침을 심어 센다). viewer 에게 **단축키** 축은 이 파일의 viewer 케이스가 소유한다.
  * - **페이지 이름 변경 · 페이지 추가** — editor 훑기가 **못 닿는다**(칸이 없다). 둘 다 줄 행동이 여는 «이름» 칸인데 그 칸은
  *   하나가 용도만 바꿔 서서(`menu-tree.tsx`의 `RowPanel` · `TreeInput`) 아래 `keyOf`로는 한 칸이다 — 처음 연 용도만
  *   친다(줄 행동으로 옮긴 뒤 어느 용도가 처음인지는 다시 재지 않았다 — 칸이 없는 것은 그대로다).
@@ -48,10 +49,10 @@
  * - **키**: 아래 `KEYS` × `MODIFIERS` 만 보낸다. 그리고 한 `onKeyDown` 묶음마다 대표 대상 **하나와** 값을 치는 칸 하나에만
  *   보낸다 — 핸들러가 `event.target`의 **종류**만 본다는 전제다(`panels/typing-surface.ts`). 같은 묶음 안에서 대상의
  *   정체를 보는 핸들러가 생기면 이 전제가 깨진다. **대표는 문서 순서의 첫 원소라 DOM 구성에 따라 바뀐다** —
- *   editor 에게만 있는 페이지 JSON 패널이 메뉴 트리 묶음의 대표를 바꿔 editor 대조가 메뉴 트리 단축키에 한 번도 안 닿는다
- *   viewer 쪽은 오늘 닿는다(메뉴 트리 단축키 가드를 지우면 viewer 케이스가 죽는다). 그러나 viewer
- *   화면의 그 묶음 안에 원소가 하나 더 생기면(새 읽기 단추) viewer 의 키 축도 같은 식으로 **조용히** 빠질 수 있고, 대조는
- *   그것을 증명하지 못한다. 대표 고르기를 새로 짓지는 않는다 — 자를 한 판 더 짓는 거래다.
+ *   메뉴 트리 묶음 안에 입력 칸이 서면(그 칸은 `isTypingSurface`가 단축키 앞에서 돌려보낸다) 그 칸이 대표가 되어 그 묶음의 키 축이
+ *   **조용히** 빠진다. 가져오기 대화 상자가 그 묶음 **밖**에 서는 것(`panels/page-import-dialog.tsx` 머리말)도 그 축을 지킨다.
+ *   다시 재는 법: `menu-tree.tsx`의 `handleKeyDown`에서 `SHORTCUTS.find` 뒤에 `console.log` 탐침을 심고 editor 대조를 돌려 그 줄을 센다
+ *   (0 이면 대표가 바뀐 것이다). 대조는 그것을 증명하지 못한다 — 대표 고르기를 새로 짓지는 않는다(자를 한 판 더 짓는 거래다).
  * - **jsdom 값이다.** 포커스 · blur 순서는 실브라우저와 갈린다(CLAUDE.md) — 실브라우저 값은 이 파일이 갖지 않는다.
  */
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -428,13 +429,15 @@ function tier(el: Element): number {
  * **대화 상자의 «닫기»는 누르지 않는다**(`shell/shell-dialog.tsx`). 상자가 열린 걸음에 상자 안 컨트롤이 함께 나타나고, 같은 걸음이면 문서
  * 순서로 고르므로 머리의 «닫기»가 몸체보다 먼저 눌려 그 안(스냅샷 폼 · 복원)에 한 번도 못 닿는다. 상자는 키 훑기의 Escape 가 닫는다.
  *
- * **행동 메뉴(머리의 `…` · 트리 제목 줄의 뿌리 `+`)는 항목이 다 눌릴 때까지 다시 연다**(`sweepControls`) — 항목 하나를 고르면 목록이
- * 닫혀, 한 번만 열면 뒤 항목(뿌리 `+`의 «프리셋» · `…`의 «프로젝트 내보내기»)에 영영 못 닿는다. **트리 줄의 `+` · `…`는 한 번씩만
- * 연다** — 그 단추가 여는 순간 줄을 골라 선택을 옮기기 때문이다(`sweepControls`의 주석). 그래서 한 줄의 `…` 뒤 항목은 이 훑기의
- * 사각이다 — 그 명령(위로 · 삭제 …)은 같은 줄의 다른 판 · 단축키가 닿고, 입구 칸(`REACH`)은 요청의 모양으로 센다.
+ * **행동 메뉴(머리의 `…` · 트리 제목 줄의 뿌리 `+` · 메뉴 줄의 `+`)는 항목이 다 눌릴 때까지 다시 연다**(`sweepControls`) — 항목 하나를
+ * 고르면 목록이 닫혀, 한 번만 열면 뒤 항목(뿌리 `+`의 «프리셋» · `…`의 «프로젝트 내보내기» · 줄 `+`의 «JSON 에서 가져오기…»)에 영영 못
+ * 닿는다. **트리 줄의 `…`는 한 번씩만 연다** — 그 단추가 여는 순간 줄을 골라 선택을 옮기기 때문이다(`sweepControls`의 주석). 그래서 한 줄의
+ * `…` 뒤 항목은 이 훑기의 사각이다 — 그 명령(위로 · 삭제 …)은 같은 줄의 다른 판 · 단축키가 닿고, 입구 칸(`REACH`)은 요청의 모양으로 센다.
+ *
+ * **대화 상자의 «취소»도 누르지 않는다** — «닫기»와 같은 까닭이다(가져오기 상자의 «취소»는 «가져오기»보다 문서 순서가 앞이다).
  */
 function closesDialog(el: Element): boolean {
-  return el.closest('dialog') !== null && el.classList.contains('wb-shell-dialog-close')
+  return el.closest('dialog') !== null && (el.classList.contains('wb-shell-dialog-close') || el.classList.contains('wb-shell-pagejson-cancel'))
 }
 
 /** 모드는 바깥 고리(`sweepEditor`)가 정한다 — 훑기가 모드를 바꾸면 그 판의 나머지가 다른 모드를 훑는다. */
@@ -462,13 +465,15 @@ async function sweepControls(): Promise<number> {
       const key = keyOf(el)
       if (!appeared.has(key)) appeared.set(key, step)
       // **메뉴 단추는 항목이 다 눌릴 때까지 다시 연다** — 항목 하나를 고르면 목록이 닫혀, 한 번만 열면 뒤 항목(뿌리 `+`의 «프리셋» ·
-      // `…`의 «프로젝트 내보내기»)에 영영 못 닿는다. 열린 동안은 다시 누르지 않는다(누르면 닫힌다). **트리 줄의 `+` · `…`는 빼고** —
-      // 그 단추는 열 때 그 줄을 골라 선택을 옮기므로, 다시 열수록 뒤 입구(메뉴를 고른 채 서는 «페이지 가져오기»)가 선택을 잃는다.
-      // 줄 행동의 명령은 한 번씩 열린 판과 단축키가 닿는다.
+      // `…`의 «프로젝트 내보내기» · 메뉴 줄 `+`의 «JSON 에서 가져오기…»)에 영영 못 닿는다. 열린 동안은 다시 누르지 않는다(누르면 닫힌다).
+      // **트리 줄의 `…`는 빼고** — 그 단추도 열 때 그 줄을 골라 선택을 옮기고, 항목(위로 · 삭제 …)은 한 번씩 열린 판과 단축키가 닿는다.
+      // 메뉴 줄 `+`는 다시 연다 — 그 항목이 연 입구(이름 칸 · 가져오기 상자)는 그 줄을 대상으로 서므로 선택을 옮겨도 잃는 것이 없고,
+      // 셋째 항목(가져오기)이 다른 길로는 안 닿는다(`REACH`의 «페이지 가져오기»).
+      const rowMore = el.closest('.wb-shell-tree-row-actions') !== null && el.textContent !== '+'
       const reopen =
         el.getAttribute('aria-haspopup') === 'menu' &&
         el.getAttribute('aria-expanded') !== 'true' &&
-        el.closest('.wb-shell-tree-row-actions') === null &&
+        !rowMore &&
         !exhausted(key)
       if (isOff(el) || (seen.has(key) && !reopen)) continue
       const at = appeared.get(key) ?? step

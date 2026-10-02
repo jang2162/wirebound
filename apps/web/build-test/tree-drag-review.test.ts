@@ -835,18 +835,16 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
    * (`CLAUDE.md` «jsdom 은 좌표 · 상속 계산도 없다»).
    */
   /** 삭제 두 번 누르기의 판 — 폭 셋 × 누르는 자리 셋(왼끝 · 가운데 · 오른끝) × 몸짓 둘. 아래 두 케이스가 같은 표를 다른 성질로 읽는다. */
-  let deleteTable: Promise<Record<string, { deleted: boolean; confirm: number; importOpen: number; downloads: number; under: unknown }>> | undefined
+  let deleteTable: Promise<Record<string, { deleted: boolean; confirm: number; under: unknown }>> | undefined
   function measureDeletes() {
     deleteTable ??= (async () => {
       const widths = [1440, 1024, 800]
-      const table: Record<string, { deleted: boolean; confirm: number; importOpen: number; downloads: number; under: unknown }> = {}
+      const table: Record<string, { deleted: boolean; confirm: number; under: unknown }> = {}
       for (const width of widths) {
         for (const at of ['left', 'middle', 'right'] as const) {
         for (const gesture of ['dblclick', 'twice'] as const) {
           const { projectId, P, ids } = await menuFixture(`del-${width}-${at}-${gesture}`)
           const tab = await openEditor(P, 'alice', { width, height: 900 })
-          let downloads = 0
-          tab.page.on('download', () => (downloads += 1))
           try {
             const { page } = tab
             const over = await spot(page, ids['나2']!, 'middle')
@@ -880,8 +878,6 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
             table[`${width}/${at}/${gesture}`] = {
               deleted: !titles(find(tree, '나')!.pages).includes('나2'),
               confirm: await page.getByRole('button', { name: '정말 삭제합니까?' }).count(),
-              importOpen: await page.locator('[role="group"][aria-label="페이지 JSON 가져오기"]').count(),
-              downloads,
               under,
             }
           } finally {
@@ -905,15 +901,42 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
   })
 
   /**
-   * 첫 누름이 행동 메뉴를 닫으면 «삭제» 항목 자리 밑에 페이지 JSON 칸의 단추(«페이지 JSON 가져오기» · «페이지 내보내기»)가 드러나고,
-   * 막는 것이 없으면 더블클릭 · 연달아 누름의 둘째 누름이 그것을 누른다(리뷰 발견 3 — 가져오기 칸이 열리거나 내보내기가 받아진다).
-   * 행동 메뉴가 포인터로 고른 뒤 같은 자리의 둘째 누름 하나를 삼킨다(`shell/action-menu.tsx` «포인터로 고른 뒤 …»).
+   * 첫 누름이 행동 메뉴를 닫으면 «삭제» 항목 자리 밑의 요소가 드러나고, 막는 것이 없으면 더블클릭의 둘째 누름이 그것을 누른다 — 그 밑이
+   * 페이지 줄이면 그 페이지로 옮겨 가며 고른 것이 풀려 삭제 확인이 사라진다. 행동 메뉴가 포인터로 고른 뒤 같은 자리의 둘째 누름 하나를
+   * 삼킨다(`shell/action-menu.tsx` «포인터로 고른 뒤 …»). 위 표의 «나2»는 목록이 트리 끝 아래로 떠 밑에 누를 것이 없어 이 성질을 못 잰다 —
+   * 그래서 목록이 아래 줄들 위에 뜨는 «가1»의 `…`로 잰다. 판 카나리아: 누르기 전 «삭제» 가운데 밑(목록을 닫은 뒤의 `elementFromPoint`)이
+   * 트리의 줄이다.
    */
-  it('삭제 항목의 둘째 누름이 그 밑 단추(페이지 JSON 가져오기 · 내보내기)를 누르지 않는다', async () => {
-    const table = await measureDeletes()
-    expect(Object.fromEntries(Object.entries(table).map(([k, v]) => [k, { importOpen: v.importOpen, downloads: v.downloads }]))).toEqual(
-      Object.fromEntries(Object.keys(table).map((k) => [k, { importOpen: 0, downloads: 0 }])),
-    )
+  it('삭제 항목의 둘째 누름이 그 밑 줄을 누르지 않는다 — 목록이 아래 줄들 위에 뜨는 줄(값)', async () => {
+    const { P, ids } = await menuFixture('del-over-rows')
+    const tab = await openEditor(P)
+    try {
+      const { page } = tab
+      const over = await spot(page, ids['가1']!, 'middle')
+      await page.mouse.move(over.x, over.y)
+      await row(page, ids['가1']!).getByRole('button', { name: '가1 더 보기' }).click()
+      const item = page.getByRole('menuitem', { name: '삭제' })
+      const box = (await item.boundingBox())!
+      const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      // 목록을 잠깐 감춰 그 자리 밑을 읽는다 — 감춘 채 누르지 않는다.
+      const under = await page.evaluate(({ x, y }) => {
+        const list = document.querySelector<HTMLElement>('.wb-shell-action-menu-body')!
+        list.style.visibility = 'hidden'
+        const el = document.elementFromPoint(x, y)
+        list.style.visibility = ''
+        return el === null ? 'null' : el.closest('[data-tree-row]') === null ? el.tagName : 'row'
+      }, at)
+      const before = new URL(page.url()).pathname
+      await page.mouse.dblclick(at.x, at.y)
+      await page.waitForTimeout(500)
+      expect({
+        under,
+        path: new URL(page.url()).pathname === before,
+        confirm: await page.getByRole('button', { name: '정말 삭제합니까?' }).count(),
+      }).toEqual({ under: 'row', path: true, confirm: 1 })
+    } finally {
+      await tab.close()
+    }
   })
 
   it('삭제 두 번 누르기 — 키보드 Enter 두 번(값)', async () => {

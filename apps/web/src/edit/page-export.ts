@@ -2,8 +2,8 @@
  * 서버가 준 페이지·코멘트를 **설계서 「페이지 JSON」의 파일 한 벌**로 옮긴다.
  *
  * **순수 함수이고 React도 DOM도 `fetch`도 모른다** — `./ops.ts`·`./preset-apply.ts`와 같은
- * 층이다. 파일을 실제로 내려받는 것은 `../files/file-io.ts`, 화면은
- * `../panels/page-json-panel.tsx`다.
+ * 층이다. 파일을 실제로 내려받는 것은 `../files/file-io.ts`, 부르는 것은 페이지 줄 `…`의 «JSON 내보내기»
+ * (`../panels/page-json-export.ts`)다.
  *
  * ---
  *
