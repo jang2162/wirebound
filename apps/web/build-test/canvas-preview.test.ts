@@ -9,6 +9,7 @@
  * | 떨림 — 멈춤 · 1px 흔들기 | 포인터가 멈춰 있거나 1px 씩 흔들리는 동안 미리보기가 섰다 걷힌다(판정이 미리보기를 낀 배치로 재면 얇은 구분선을 카드 자식 앞에 보일 때 그렇다) |
  * | 손잡이로 옮기기 | 사본이 새 자리에 안 선다 · 원본이 안 흐려진다 · 사본이 원본 id 로 잡힌다(외곽선 · `data-wb-id` 조회) · 취소 뒤 원본의 흐림 · 외곽선 · 마커 자리가 돌아오지 않는다 |
  * | 남의 편집 | 끄는 중 bob 이 위에 노드를 넣으면 미리보기가 새 문서 위에 다시 서지 않는다(옛 문서 사본이 남는다) |
+ * | iframe 높이 | 미리보기가 키운 iframe 이 끌다 취소한 뒤 끌기 전 높이로 안 돌아온다 · 남이 노드를 지워도 내용 높이로 안 준다 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -83,19 +84,19 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
 
   const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
 
-  async function fixture(slug: string): Promise<string> {
+  async function fixture(slug: string, nodes: readonly SeedNode[] = BASIC): Promise<string> {
     const project = (await call('POST', '/projects', { name: 'D4 미리보기', slug: `${slug}-${Date.now().toString(36)}` })).body
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
     if (member.status >= 300) throw new Error(`member ${member.status}`)
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: BASIC.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return P
   }
 
-  async function openEditor(P: string): Promise<{ page: Page; close: () => Promise<void>; patches: string[] }> {
+  async function openEditor(P: string, ready = 'n_last'): Promise<{ page: Page; close: () => Promise<void>; patches: string[] }> {
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
     const patches: string[] = []
     page.on('websocket', (socket) => {
@@ -105,7 +106,7 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
       })
     })
     await page.goto(P)
-    await canvasFrame(page).locator('[data-wb-id="n_last"]').waitFor()
+    await canvasFrame(page).locator(`[data-wb-id="${ready}"]`).waitFor()
     return { page, close: () => context.close(), patches }
   }
 
@@ -282,6 +283,64 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
           markerPushed: true,
         },
         after: { copy: 0, original: { count: 1, opacity: '' }, outline: outlineBefore, marker: markerBefore },
+        sent: 0,
+      })
+    } finally {
+      await close()
+    }
+  })
+
+  /**
+   * 미리보기는 끄는 동안 문서를 키운다 — 놓거나 취소한 뒤 iframe 이 그 높이로 남으면 문서 끝에 빈 꼬리가 남고 캔버스 칸이 그만큼 더 스크롤된다.
+   * 남이 노드를 지워 문서가 준 판도 같은 측정이 줄인다(`src/canvas/canvas-iframe.tsx` 의 `contentHeight`).
+   */
+  it('iframe 은 끌기 뒤 끌기 전 높이로 — 끌다 취소하면 돌아오고, 남이 노드를 지우면 줄어든다', async () => {
+    const lines = (prefix: string) => Array.from({ length: 12 }, (_, i) => ({ id: `${prefix}${i}`, type: 'Text', props: { content: `${prefix} 글 ${i}` } }))
+    const P = await fixture('pv-shrink', [
+      { id: 'n_big', type: 'Card', props: { title: '큰 카드' }, children: lines('n_b') },
+      ...Array.from({ length: 4 }, (_, i) => ({ id: `n_z${i}`, type: 'Text', props: { content: `끝 글 ${i}` } })),
+      { id: 'n_big2', type: 'Card', props: { title: '둘째 큰 카드' }, children: lines('n_c') },
+    ])
+    const { page, close, patches } = await openEditor(P, 'n_big2')
+    try {
+      const heights = () => page.evaluate(() => {
+        const iframe = document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement
+        return { iframe: iframe.offsetHeight, content: Math.ceil(iframe.contentDocument!.documentElement.getBoundingClientRect().height) }
+      })
+      const settled = (until: (h: { iframe: number; content: number }) => boolean) => poll('iframe 높이', heights, until, 3000).catch(heights)
+      const before = await settled((h) => h.iframe === Math.max(320, h.content))
+      await page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="n_big"]').locator('button').first().click()
+      const handle = page.locator('.wb-shell-canvas-handle')
+      await handle.waitFor()
+      const target = await spotIn(page, 'n_z0', 0.5, 0.8)
+      const h = (await handle.boundingBox())!
+      await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(h.x + h.width / 2 + 3, h.y + h.height / 2 + 8, { steps: 3 })
+      await page.mouse.move(target.x, target.y, { steps: 6 })
+      const during = { drops: (await shownDrops(page)).map((d) => `${d.kind}:after ${d.prev}`), iframe: (await settled((now) => now.iframe > before.iframe)).iframe }
+      await page.keyboard.press('Escape')
+      await page.mouse.up()
+      const cancelled = await settled((now) => now.iframe === before.iframe)
+      // bob 은 고르지 않은 둘째 큰 카드를 지운다 — 앨리스가 고른 n_big 의 잠금에 안 닿는다.
+      const bob = await stack.login(stack.users.bob)
+      const head = (await stack.request(bob, 'GET', P)).body.headSeq as number
+      const removed = await stack.request(bob, 'PATCH', `${P}/ops`, { baseSeq: head, ops: [{ op: 'remove', path: '/root/children/5' }] })
+      await poll('둘째 큰 카드가 캔버스에서', async () => canvasFrame(page).locator('[data-wb-id="n_big2"]').count(), (n) => n === 0).catch(() => -1)
+      const after = await settled((now) => now.iframe === Math.max(320, now.content))
+      expect({
+        before: before.iframe,
+        during: { drops: during.drops, grew: during.iframe > before.iframe },
+        cancelled: cancelled.iframe,
+        removed: removed.status,
+        after: { iframe: after.iframe, shrank: after.content < before.content },
+        sent: patches.length,
+      }).toEqual({
+        before: Math.max(320, before.content),
+        during: { drops: ['preview:after n_z0'], grew: true },
+        cancelled: before.iframe,
+        removed: 200,
+        after: { iframe: Math.max(320, after.content), shrank: true },
         sent: 0,
       })
     } finally {
