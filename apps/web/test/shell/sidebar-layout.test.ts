@@ -18,6 +18,7 @@ import shellCss from '../../src/shell.css?raw'
 import {
   CANVAS_MIN_WIDTH,
   HANDLES_WIDTH,
+  CANVAS_MIN_HEIGHT,
   PALETTE_HEIGHT_DEFAULT,
   PALETTE_HEIGHT_MIN,
   PANEL_WIDTH_DEFAULT,
@@ -40,6 +41,7 @@ import {
   regionInset,
   regionRatioMin,
   sideWidthMax,
+  storePaletteHeight,
   writeLayout,
 } from '../../src/shell/sidebar-layout'
 
@@ -381,6 +383,25 @@ describe('하단 판의 높이', () => {
   it('창이 아주 낮으면 최대가 최소로 주저앉는다 — 뒤집히지 않는다', () => {
     expect(paletteHeightMax(200)).toBe(PALETTE_HEIGHT_MIN)
     expect(fitPaletteHeight(PALETTE_HEIGHT_DEFAULT, 200)).toBe(PALETTE_HEIGHT_MIN)
+  })
+
+  it('캔버스 · 판이 나눠 쓰는 세로를 재면 최대는 그것에서 캔버스 몫을 뗀다 — 못 재면(0) 창에서 셈한다', () => {
+    expect(paletteHeightMax(700, 520)).toBe(520 - CANVAS_MIN_HEIGHT)
+    expect(paletteHeightMax(700, 300)).toBe(PALETTE_HEIGHT_MIN)
+    expect(paletteHeightMax(700, 0)).toBe(paletteHeightMax(700))
+    expect(fitPaletteHeight(5000, 700, 520)).toBe(520 - CANVAS_MIN_HEIGHT)
+  })
+
+  it('손잡이의 청 — 최대 아래는 그 값을 · 최대에 닿으면 더 큰 저장값을 안 누른다', () => {
+    // 통지가 판을 221 로 조인 동안(저장 369): 줄임은 그린 값에서 · 키움 · End 는 기억을 둔다.
+    expect(storePaletteHeight(369, 205, 221)).toBe(PALETTE_HEIGHT_MIN)
+    expect(storePaletteHeight(369, 237, 221)).toBe(369)
+    expect(storePaletteHeight(369, 221, 221)).toBe(369)
+    // 저장값이 최대보다 작으면 최대를 · 없거나 깨졌으면 기본값을 기억으로 읽는다.
+    expect(storePaletteHeight(260, 400, 369)).toBe(369)
+    expect(storePaletteHeight(undefined, 237, 221)).toBe(PALETTE_HEIGHT_DEFAULT)
+    expect(storePaletteHeight(-5, 237, 221)).toBe(PALETTE_HEIGHT_DEFAULT)
+    expect(storePaletteHeight(369, 300, 369)).toBe(300)
   })
 
   it('열림 · 높이를 싣고 읽으면 그대로다', () => {

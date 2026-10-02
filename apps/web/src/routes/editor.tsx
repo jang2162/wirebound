@@ -945,6 +945,7 @@ function EditorShell(props: {
 
       {/* **하단 바**(`shell/shell-footer.tsx`) — 왼쪽은 통지 줄, 오른쪽은 캔버스 도구. 통지가 여럿이면 바가 위로 자라고 캔버스가 준다. */}
       <ShellFooter
+        ref={layout.footerRef}
         notices={
           <>
             {/* 편집 실패 통지는 **한 자리**다. 조회 실패처럼 화면마다 나누지 않는 것은,

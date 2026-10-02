@@ -1,7 +1,7 @@
 /**
- * **카드 클릭(Enter) 추가의 자리** — 고른 노드에 따라 새 노드를 어디에 넣는가(spec `docs/superpowers/specs/2026-10-01-component-drag-design.md`
- * 「끌기와 클릭」 · 계획 D6). 자리의 판정은 끌어 놓기와 같은 함수다(`edit/structure-drop.ts` 의 `structureDropTarget` · `pageEndTarget`) —
- * 클릭은 «어느 대상의 어느 띠» 를 고를 뿐이다.
+ * **카드 «넣기» 단추(Enter)로 넣는 자리** — 고른 노드에 따라 새 노드를 어디에 넣는가(spec `docs/superpowers/specs/2026-10-01-component-drag-design.md`
+ * 「끌기와 클릭」 · 계획 D6 — 카드 몸통의 누름은 넣지 않고 단추가 이 자리를 쓴다 · `./component-palette.tsx` 머리말 «카드»). 자리의 판정은
+ * 끌어 놓기와 같은 함수다(`edit/structure-drop.ts` 의 `structureDropTarget` · `pageEndTarget`) — 단추는 «어느 대상의 어느 띠» 를 고를 뿐이다.
  *
  * | 고른 것 | 대상 · 띠 |
  * |---|---|

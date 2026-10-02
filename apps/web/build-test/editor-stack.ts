@@ -924,3 +924,73 @@ export async function canvasText(page: Page): Promise<string> {
   if (frame === null || frame === undefined) return ''
   return frame.evaluate(() => document.body.innerText)
 }
+
+/** 지금 보인 놓을 자리 하나(`shownDrops`). */
+export interface ShownDrop {
+  /** 트리의 선 · 강조(`.wb-shell-drop-indicator`)인가, 캔버스의 배치 미리보기인가. */
+  kind: 'line' | 'preview'
+  placement: string | null
+  axis: string | null
+  /** 호스트 창 좌표 — 선이면 그 선 · 강조, 미리보기면 끼운 미리보기 노드의 상자. */
+  rect: { x: number; y: number; width: number; height: number }
+  /** 미리보기가 선 자리 — `부모 id@노드 차례`(미리보기 자신을 센 차례). 선이면 `null`. */
+  at: string | null
+  /** 미리보기의 부모 · 바로 앞 · 바로 뒤 노드 id(옮기는 원본 — 미리보기 id 의 머리를 뗀 id — 은 건너뛴다). 선이면 셋 다 `null`. */
+  parent: string | null
+  prev: string | null
+  next: string | null
+}
+
+/**
+ * **지금 보인 놓을 자리** — 끌기 중 사람이 보는 것. 트리 위의 자리는 선 · 강조(`.wb-shell-drop-indicator` — 겹의 창 좌표)로, 캔버스 위의
+ * 자리는 캔버스 문서에 끼운 배치 미리보기(`src/canvas/canvas-preview.ts` — 캔버스 표면의 `data-wb-preview` · `data-wb-preview-axis` 와
+ * 미리보기 노드)로 선다. 기다리지 않고 읽는다(없으면 `[]` 가 값이다).
+ */
+export async function shownDrops(page: Page): Promise<ShownDrop[]> {
+  return page.evaluate(() => {
+    const out: ShownDrop[] = []
+    for (const el of Array.from(document.querySelectorAll('.wb-shell-drop-indicator'))) {
+      const r = el.getBoundingClientRect()
+      out.push({
+        kind: 'line',
+        placement: el.getAttribute('data-placement'),
+        axis: el.getAttribute('data-axis'),
+        rect: { x: r.x, y: r.y, width: r.width, height: r.height },
+        at: null,
+        parent: null,
+        prev: null,
+        next: null,
+      })
+    }
+    const surface = document.querySelector('.wb-shell-canvas-surface')
+    const placement = surface?.getAttribute('data-wb-preview') ?? null
+    const iframe = document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement | null
+    const doc = iframe?.contentDocument ?? null
+    if (placement !== null && iframe !== null && doc !== null) {
+      const isPreview = (el: Element | null) => (el?.getAttribute('data-wb-id') ?? '').startsWith('wb:preview:')
+      const nodeOf = (el: Element | null): Element | null => el?.parentElement?.closest('[data-wb-id]') ?? null
+      const root = Array.from(doc.querySelectorAll('[data-wb-id]')).find((el) => isPreview(el) && !isPreview(nodeOf(el))) ?? null
+      if (root !== null) {
+        const parent = nodeOf(root)
+        const siblings = parent === null ? [] : Array.from(parent.querySelectorAll('[data-wb-id]')).filter((el) => nodeOf(el) === parent)
+        const f = iframe.getBoundingClientRect()
+        const r = root.getBoundingClientRect()
+        const zoom = f.width / iframe.offsetWidth
+        const original = (root.getAttribute('data-wb-id') ?? '').slice('wb:preview:'.length)
+        const others = siblings.filter((el) => el.getAttribute('data-wb-id') !== original)
+        const at = others.indexOf(root)
+        out.push({
+          kind: 'preview',
+          placement,
+          axis: surface?.getAttribute('data-wb-preview-axis') ?? null,
+          rect: { x: f.x + r.x * zoom, y: f.y + r.y * zoom, width: r.width * zoom, height: r.height * zoom },
+          at: `${parent?.getAttribute('data-wb-id') ?? '?'}@${siblings.indexOf(root)}`,
+          parent: parent?.getAttribute('data-wb-id') ?? null,
+          prev: others[at - 1]?.getAttribute('data-wb-id') ?? null,
+          next: others[at + 1]?.getAttribute('data-wb-id') ?? null,
+        })
+      }
+    }
+    return out
+  })
+}

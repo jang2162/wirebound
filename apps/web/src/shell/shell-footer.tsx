@@ -14,16 +14,18 @@
  * `<footer>`는 `<main>` · 구역 요소 안이 아니라 셸의 그리드 `div` 바로 아래라 접근성 트리에서 `contentinfo` 랜드마크다 — 이름(«하단 바»)을
  * 붙여 무엇의 바닥인지 말한다.
  */
-import type { ReactElement, ReactNode } from 'react'
+import type { ReactElement, ReactNode, Ref } from 'react'
 
 export function ShellFooter(props: {
   /** 통지들. 없으면 빈 줄이다 — 자리는 도구가 지킨다. */
   notices: ReactNode
   /** 캔버스 도구(뷰포트 · 줌). */
   tools: ReactNode
+  /** 하단 바 상자 — 셸이 판의 최대를 셀 때 잰다(`shell/sidebar-layout.ts` 머리말 «하단 판의 높이»). */
+  ref?: Ref<HTMLElement>
 }): ReactElement {
   return (
-    <footer className="wb-shell-footer" aria-label="하단 바">
+    <footer className="wb-shell-footer" aria-label="하단 바" ref={props.ref}>
       <div className="wb-shell-footer-notices">{props.notices}</div>
       <div className="wb-shell-footer-tools">{props.tools}</div>
     </footer>

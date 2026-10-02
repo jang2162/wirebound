@@ -5,7 +5,7 @@
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 클릭 추가 — 고른 것마다 | 고른 것 없음 · 뿌리 · 컨테이너 · 잎에서 서버 문서가 계획 D6 의 자리가 아니다 · 넣은 노드가 안 골라진다 · 프레임이 하나가 아니다 |
+ * | «넣기» 단추 — 고른 것마다 | 고른 것 없음 · 뿌리 · 컨테이너 · 잎에서 서버 문서가 계획 D6 의 자리가 아니다 · 넣은 노드가 안 골라진다 · 프레임이 하나가 아니다 |
  * | 클릭 추가 — 남의 잠금 | 뒤 형제를 bob 이 잡은 잎 · 부모를 잡으려 한 판에서 문장 · 프레임 · 서버 문서가 판정대로가 아니다 |
  * | 클릭 추가 — 뿌리 선택 + 남의 잠금 | 페이지를 연 그대로(뿌리 선택) bob 이 다른 노드를 고르면 서버가 받는 페이지 끝 넣기를 판이 거절한다 |
  * | 거절 문장 — 페이지 옮김 | 앞 페이지에서 선 거절 문장이 옮긴 페이지에 남는다 |
@@ -17,7 +17,8 @@
  * | 축소판 — 남이 테마를 바꿈 | bob 이 프로젝트 테마를 `system-portal` 로 바꾼 뒤에도 축소판 단추가 옛 테마 색이다 |
  * | 축소판 — 입력 표본 `inert` | 입력 표본 자리를 눌러 iframe 이 포커스 · 클릭을 받는다 · 그 점의 맨 위가 그 카드가 아니다 |
  * | 판 열고 접기 | 뷰 모드 · 실시간 viewer 강등에 판이 남는다 · 돌아오면 기억대로 안 선다 · 페이지를 옮기면 판이 닫히거나 표본이 빈다 |
- * | 창 700 · 최대 판 · 통지 다섯 | 셸이 세로로 넘친다 · 하단 바가 창 밖이다(값 — 캔버스 칸 높이를 적는다) |
+ * | 창 700 · 최대 판 · 통지 다섯 | 셸이 세로로 넘친다 · 하단 바가 창 밖이다 · 하단 바가 자라도 판이 안 줄어 캔버스 칸이 `CANVAS_MIN_HEIGHT` 아래다 · 통지를 걷어도 판이 안 돌아온다 |
+ * | 통지가 판을 조인 동안 손잡이 | 창 700 · 800 에서 키우는 몸짓(↑ · End · 위로 끌기)이 기억한 높이를 조인 값으로 누른다(통지를 걷어도 · 새로 고쳐도 조인 높이) · 줄이는 몸짓(↓ · 아래로 끌기)이 그린 높이에서 한 번에 안 움직이거나 그 높이를 안 기억한다 |
  * | 판을 연 채 화면 맞춤 | 맞춤 줌이 판을 닫은 판과 다르다 |
  * | 카드 끌기 중 남의 편집 | bob 이 대상을 잡음 · 지움 · 위 글을 길게 고쳐 대상이 밀림(표시가 옛 좌표에 남는다) · viewer 강등 — 표시가 남거나 보인 자리 밖으로 편집이 나간다 |
  * | 카드 끌기 — 안 미는 남의 편집(대조군) | 캔버스가 다시 잴 때 판의 끌기가 다시 묻지 않고 표시를 걷기만 한다 · 놓은 자리가 보인 자리가 아니다 |
@@ -26,7 +27,8 @@ import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { GALLERY_SAMPLES } from '@wirebound/theme-gallery'
 import { placeableGroups } from '../src/panels/type-picker'
-import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { CANVAS_MIN_HEIGHT } from '../src/shell/sidebar-layout'
+import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
 import { putTheme } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
@@ -230,10 +232,9 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
     await page.mouse.move(at.x + 3, at.y - 6, { steps: 3 })
   }
 
+  /** 지금 보인 놓을 자리(`./editor-stack.ts` 의 `shownDrops` — 트리의 선 · 캔버스의 배치 미리보기). */
   async function indicators(page: Page): Promise<{ placement: string | null; y: number }[]> {
-    return page
-      .locator('.wb-shell-drop-indicator')
-      .evaluateAll((els) => els.map((el) => ({ placement: el.getAttribute('data-placement'), y: Math.round(el.getBoundingClientRect().y) })))
+    return (await shownDrops(page)).map((drop) => ({ placement: drop.placement, y: Math.round(drop.rect.y) }))
   }
 
   async function bobOps(P: string, ops: unknown[]): Promise<number> {
@@ -241,10 +242,15 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
     return (await stack.request(bob, 'PATCH', `${P}/ops`, { baseSeq: head, ops })).status
   }
 
-  /** 한 판에서 고른 것을 세우고 «구분선» 카드를 눌러, 서버 문서 · 문장 · 고른 노드 · 프레임 수를 낸다. */
+  /** 그 카드의 «넣기» 단추(`palette/component-palette.tsx` 머리말 «카드 — 끌면 놓고, 단추로 넣는다»). */
+  function addButton(page: Page, label: string) {
+    return page.getByRole('button', { name: `${label} 넣기`, exact: true })
+  }
+
+  /** 한 판에서 고른 것을 세우고 «구분선» 카드의 «넣기» 단추를 눌러, 서버 문서 · 문장 · 고른 노드 · 프레임 수를 낸다. */
   async function clickAdd(page: Page, P: string, patches: string[]) {
     const sentBefore = patches.length
-    await page.locator('[data-wb-palette-card="Divider"]').click()
+    await addButton(page, '구분선').click()
     await page.waitForTimeout(600)
     const added = await addedIds(P)
     const selected = await selectedId(page)
@@ -430,7 +436,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         await openPalette(page)
         await only(page, 'Divider')
         await pick(page, 'n_text')
-        await page.locator('[data-wb-palette-card="Divider"]').dblclick()
+        await addButton(page, '구분선').dblclick()
         await page.waitForTimeout(800)
         const dbl = { shape: await shape(P[0]!), sent: patches.length }
         // eslint-disable-next-line no-console
@@ -442,7 +448,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
     })
 
     /**
-     * 카드는 `<button>` 이라 반복 keydown(`repeat: true`)마다 브라우저가 `click` 을 낸다 — 판은 반복 Enter · Space 를 버린다(`palette/component-palette.tsx`
+     * «넣기» 단추는 `<button>` 이라 반복 keydown(`repeat: true`)마다 브라우저가 `click` 을 낸다 — 판은 반복 Enter · Space 를 버린다(`palette/component-palette.tsx`
      * 의 `moveCard`). 이 케이스는 «누른 채 한 번은 넣기 하나» 를 성질로 단언한다 — 그 거름을 떼면 빨강이다(첫 keydown + 반복 다섯 → 넣기 여섯).
      */
     it('Enter 를 누른 채 두면(첫 keydown + 반복 다섯) 넣기는 하나다', async () => {
@@ -452,7 +458,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         await openPalette(page)
         await only(page, 'Divider')
         await pick(page, 'n_last')
-        await page.locator('[data-wb-palette-card="Divider"]').focus()
+        await addButton(page, '구분선').focus()
         // playwright 는 이미 누른 키의 down 을 `repeat: true` 로 낸다.
         for (let i = 0; i < 6; i += 1) {
           await page.keyboard.down('Enter')
@@ -588,7 +594,8 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       }
     })
 
-    it('입력(Field) 표본의 컨트롤 자리를 눌러도 iframe 이 클릭 · 포커스를 안 받고 그 카드가 받는다', async () => {
+    // 카드 몸통은 끌기 전용이라 그 누름은 아무것도 안 한다 — 넣지 않고(`sent` 0) 포커스도 안 옮긴다(`BODY`). 재는 것은 iframe 이 안 받는 것이다.
+    it('입력(Field) 표본의 컨트롤 자리를 눌러도 iframe 이 클릭 · 포커스를 안 받고 그 카드 몸통이 받는다(넣지 않음)', async () => {
       const { P } = await seed('rv-thumb-input', [BASIC])
       const { page, close, patches } = await openEditor(P[0]!)
       try {
@@ -618,7 +625,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         await page.waitForTimeout(500)
         const active = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('data-wb-palette-card') ?? document.activeElement?.tagName ?? null)
         const hits = await page.evaluate('window.__thumbHits')
-        expect({ top, hits, active, sent: patches.length, focusables }).toEqual({ top: 'Field', hits: { clicks: 0, focus: 0 }, active: 'Field', sent: 1, focusables: 0 })
+        expect({ top, hits, active, sent: patches.length, focusables }).toEqual({ top: 'Field', hits: { clicks: 0, focus: 0 }, active: 'BODY', sent: 0, focusables: 0 })
       } finally {
         await close()
       }
@@ -687,15 +694,17 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
 
     /**
      * 창 700 · 판 최대 · 하단 바에 통지 다섯(실제 통지 꼴의 `<p role="status">` 를 통지 무리에 얹는다 — 통지 다섯을 실제로 세우는 판은 이
-     * 트랙 밖이다). 셸이 넘치지 않는지 · 하단 바가 창 안인지와 캔버스 칸 높이(값)를 적는다.
+     * 트랙 밖이다). 셸이 넘치지 않는지 · 하단 바가 창 안인지 · 하단 바가 자란 만큼 판이 줄어 캔버스 칸이 `CANVAS_MIN_HEIGHT` 를 지키는지를
+     * 잰다(판 최대는 잰 하단 바로 셈한다 — `shell/sidebar-layout.ts` 머리말 «하단 판의 높이»). 통지를 걷으면 판이 기억한 높이로 돌아온다.
      */
-    it('창 700 · 최대 판 · 통지 다섯 — 셸이 넘치지 않고 하단 바가 창 안이다(캔버스 칸 높이는 기록)', async () => {
+    it('창 700 · 최대 판 · 통지 다섯 — 셸이 넘치지 않고 하단 바가 창 안이며 판이 줄어 캔버스 칸이 최소를 지킨다', async () => {
       const { P } = await seed('rv-open-700', [BASIC])
       const { page, close } = await openEditor(P[0]!, 'alice', { width: 1440, height: 700 })
       try {
         await openPalette(page)
         await page.getByRole('separator', { name: '컴포넌트 목록 높이' }).focus()
         await page.keyboard.press('End')
+        const atMax = await page.evaluate(() => Math.round(document.querySelector('.wb-shell-palette')!.getBoundingClientRect().height))
         await page.evaluate(() => {
           const box = document.querySelector('.wb-shell-footer-notices')!
           for (let i = 0; i < 5; i += 1) {
@@ -720,12 +729,114 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
             notices: document.querySelectorAll('.wb-shell-footer-notices > [role]').length,
           }
         })
+        await page.evaluate(() => {
+          for (const p of document.querySelectorAll('.wb-shell-footer-notices > .wb-shell-remote-alert')) p.remove()
+        })
+        await page.waitForTimeout(300)
+        const cleared = await page.evaluate(() => Math.round(document.querySelector('.wb-shell-palette')!.getBoundingClientRect().height))
         // eslint-disable-next-line no-console
-        console.log(`[리뷰 창 700 최대 판 통지 다섯] ${JSON.stringify(seen)}`)
-        expect({ overflow: seen.overflow, footerInWindow: seen.footerInWindow, notices: seen.notices }).toEqual({ overflow: 0, footerInWindow: true, notices: 5 })
+        console.log(`[리뷰 창 700 최대 판 통지 다섯] ${JSON.stringify({ atMax, ...seen, cleared })}`)
+        expect({
+          overflow: seen.overflow,
+          footerInWindow: seen.footerInWindow,
+          notices: seen.notices,
+          canvasKept: seen.canvas >= CANVAS_MIN_HEIGHT,
+          cleared,
+        }).toEqual({ overflow: 0, footerInWindow: true, notices: 5, canvasKept: true, cleared: atMax })
       } finally {
         await close()
       }
+    })
+
+    /**
+     * 통지가 판을 조인 동안 손잡이를 만진다 — 키우는 몸짓(ArrowUp · End · 위로 끌기)은 그린 최대에 막혀 화면이 그대로이고 기억한 높이도
+     * 그대로여야 한다(통지가 걷히면 · 새로 고치면 앞 높이). 줄이는 몸짓(ArrowDown · 아래로 끌기)은 **그린 높이에서** 한 번에 움직이고 그
+     * 높이를 기억한다(`shell/sidebar-layout.ts` 의 `setPaletteHeight`). 창 700 은 조인 판이 최소에 붙어 줄임이 1px 이라 창 800 에서도 잰다.
+     */
+    it('통지가 판을 조인 동안 손잡이를 만져도 기억한 높이가 통지에 안 눌린다 — 줄이는 몸짓은 그린 높이에서 움직인다', async () => {
+      const { P } = await seed('rv-open-press', [BASIC])
+      const seen: Record<string, unknown> = {}
+      for (const height of [700, 800]) {
+        const { page, close } = await openEditor(P[0]!, 'alice', { width: 1440, height })
+        try {
+          await openPalette(page)
+          const handle = page.getByRole('separator', { name: '컴포넌트 목록 높이' })
+          const drawn = () => page.evaluate(() => Math.round(document.querySelector('.wb-shell-palette')!.getBoundingClientRect().height))
+          const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('wirebound.editor.sidebar') ?? '{}').paletteHeight as number | undefined)
+          const notices = async (on: boolean) => {
+            await page.evaluate((add) => {
+              const box = document.querySelector('.wb-shell-footer-notices')!
+              for (const p of box.querySelectorAll('.wb-test-notice')) p.remove()
+              for (let i = 0; add && i < 5; i += 1) {
+                const p = document.createElement('p')
+                p.className = 'wb-shell-remote-alert wb-test-notice'
+                p.setAttribute('role', 'status')
+                p.textContent = `통지 ${i + 1} — 남이 이 페이지를 바꿔 화면이 낡았습니다. 다시 불러오면 서버의 판으로 돌아갑니다.`
+                box.appendChild(p)
+              }
+            }, on)
+            await page.waitForTimeout(300)
+          }
+          const drag = async (dy: number) => {
+            const box = (await handle.boundingBox())!
+            await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+            await page.mouse.down()
+            await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + dy, { steps: 4 })
+            await page.mouse.up()
+          }
+          const gestures: Record<string, () => Promise<void>> = {
+            ArrowUp: () => handle.press('ArrowUp'),
+            End: () => handle.press('End'),
+            dragUp: () => drag(-40),
+            ArrowDown: () => handle.press('ArrowDown'),
+            dragDown: () => drag(30),
+          }
+          for (const [name, gesture] of Object.entries(gestures)) {
+            await notices(false)
+            await handle.press('End')
+            const max = { drawn: await drawn(), stored: await stored() }
+            await notices(true)
+            const squeezed = await drawn()
+            await gesture()
+            await page.waitForTimeout(150)
+            const touched = { drawn: await drawn(), stored: await stored() }
+            await notices(false)
+            seen[`${height} ${name}`] = { max, squeezed, touched, cleared: await drawn() }
+          }
+          await handle.press('End')
+          await notices(true)
+          await handle.press('ArrowUp')
+          await page.reload()
+          // 열림은 기억된다 — 토글을 다시 누르면 닫힌다.
+          await page.getByRole('region', { name: '컴포넌트 목록' }).waitFor()
+          await page.waitForTimeout(300)
+          seen[`${height} 새로 고침`] = { drawn: await drawn(), stored: await stored() }
+        } finally {
+          await close()
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[통지 중 손잡이] ${JSON.stringify(seen)}`)
+      const at = (key: string) => seen[key] as { max: { drawn: number; stored: number }; squeezed: number; touched: { drawn: number; stored: number }; cleared: number }
+      const verdict: Record<string, unknown> = {}
+      for (const height of [700, 800]) {
+        for (const name of ['ArrowUp', 'End', 'dragUp']) {
+          const v = at(`${height} ${name}`)
+          verdict[`${height} ${name}`] = { screen: v.touched.drawn === v.squeezed, stored: v.touched.stored === v.max.stored, cleared: v.cleared === v.max.drawn }
+        }
+        for (const [name, step] of [['ArrowDown', 16], ['dragDown', 30]] as const) {
+          const v = at(`${height} ${name}`)
+          const want = Math.max(220, v.squeezed - step)
+          verdict[`${height} ${name}`] = { screen: v.touched.drawn === want, stored: v.touched.stored === want, cleared: v.cleared === want }
+        }
+        const reloaded = seen[`${height} 새로 고침`] as { drawn: number }
+        verdict[`${height} 새로 고침`] = reloaded.drawn === at(`${height} ArrowUp`).max.drawn
+      }
+      const ok = { screen: true, stored: true, cleared: true }
+      expect(verdict).toEqual({
+        '700 ArrowUp': ok, '700 End': ok, '700 dragUp': ok, '700 ArrowDown': ok, '700 dragDown': ok, '700 새로 고침': true,
+        '800 ArrowUp': ok, '800 End': ok, '800 dragUp': ok, '800 ArrowDown': ok, '800 dragDown': ok, '800 새로 고침': true,
+      })
     })
 
     it('판을 연 채 화면 맞춤 — 줌이 판을 닫은 판과 같다', async () => {

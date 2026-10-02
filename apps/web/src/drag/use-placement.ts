@@ -50,6 +50,27 @@
  * 다음 끌기가 같은 객체를 받는 것은 그 사이 부르는 쪽이 다시 그려지지 않았을 때뿐이고, 판이 바뀌면 이 훅이 스토어 구독으로 다시
  * 그려져 부르는 쪽도 새 객체를 묶는다.
  *
+ * ## 배치 미리보기 — 보인 자리를 캔버스에 끼워 보인다
+ *
+ * 끄는 쪽(목록 카드 · 손잡이)은 보인 자리(`live(hint)`)를 `usePublishPlacementPreview` 로 싣고, 캔버스가 `usePlacementPreview` 로 받아 그
+ * 자리에 미리보기를 끼운 문서를 그린다(`canvas/canvas-preview.ts`). 캔버스 위의 선 · 상자 강조는 미리보기가 대신한다 — 포인터가 트리 위면
+ * 트리의 선 · 강조를 그대로 그리고 캔버스에도 같은 미리보기가 선다(`PlacementDrop` 의 `region`).
+ *
+ * ## 판정은 미리보기를 뺀 배치로
+ *
+ * 미리보기를 끼우면 옆 노드가 밀려 포인터 밑이 바뀐다. 그 배치로 다시 물으면 자리가 옮고, 옮은 미리보기가 다시 배치를 바꾸는 떨림이
+ * 생긴다. 그래서 캔버스 판정(`canvasHitAt`)은 **미리보기를 숨긴 배치**로 잰다(`canvas/canvas-preview.ts` 의 `withoutPreview` — 숨김과 되돌림이
+ * 한 동기 구간이라 그려지는 판이 없다). 판정이 미리보기에 기대지 않으므로 미리보기가 판정을 되먹일 길이 없다 — 캔버스가 다시 잴 때의 다시
+ * 물음(`refresh`)도 떼는 순간의 다시 물음(`sameDrop`)도 미리보기를 끼우기 전과 같은 답을 내 «보인 자리 = 놓인 자리» 가 그대로 선다.
+ *
+ * 보이는 것과 판정이 어긋나지 않는 까닭: 미리보기는 늘 포인터 밑 노드 곁에 선다 — «N 뒤 · N 안» 이면 N 은 안 밀리고, «N 앞» 이면 미리보기가
+ * N 의 자리를 차지해 포인터가 미리보기 위에 선다. 어긋나는 것은 포인터 밑이 아닌 노드(미리보기 뒤로 밀린 것)뿐이다.
+ *
+ * **고르지 않은 후보 — 그려진 배치(미리보기 포함)로 판정하고 미리보기 위면 보인 자리를 둔다:** 미리보기의 상자가 비운 자리보다 작으면
+ * (얇은 구분선 · 형제 사이 여백) 포인터가 부모의 여백에 서서 다른 자리로 판정되고, 걷히면 배치가 돌아와 다시 서는 떨림이 난다(실브라우저 —
+ * 카드 자식 앞에 구분선을 보인 채 1px 씩 흔들면 미리보기가 여섯 번 섰다 걷혔고 그대로 떼면 편집 0. 미리보기를 뺀 배치는 0 — 잰 판과 값은
+ * `docs/superpowers/plans/2026-10-02-d4-report.md`).
+ *
  * ## 트리 줄 끌기를 이 층으로 옮기지 않는다
  *
  * 옮기면 트리 줄을 캔버스에도 놓을 수 있다. 옮기지 않은 까닭: 트리 줄 끌기의 판(제자리 · 자손 · 잠긴 줄 · 끈 뒤 클릭 삼킴 — C 의 실브라우저
@@ -62,11 +83,13 @@ import {
   useContext,
   useLayoutEffect,
   useState,
+  useSyncExternalStore,
   type ReactElement,
   type ReactNode,
   type RefObject,
 } from 'react'
 import { canvasHitAt, type CanvasHit, type HitNode, type Layout, type Point, type Rect } from '../canvas/canvas-drop'
+import { isPreviewId, withoutPreview, type PlacementPreview } from '../canvas/canvas-preview'
 import { createNode } from '../edit/create-node'
 import { findNodeSafely } from '../edit/safe-walk'
 import { acceptsChildren } from '../edit/structure-actions'
@@ -97,6 +120,8 @@ export interface PlacementDrop {
   over: { overId: string; zone: DropZone } | 'page-end'
   layout: Layout
   stage: Stage
+  /** 어느 대상 위에서 선 자리인가 — 트리면 트리의 선 · 강조를 그리고, 캔버스면 미리보기가 대신한다(머리말 «배치 미리보기»). */
+  region: 'tree' | 'canvas'
 }
 
 /** 한 끌기의 기억 — 선 판 · 앞 물음(좌표 · 그때 보인 자리) · 보인 자리가 무너진 좌표. */
@@ -116,13 +141,16 @@ interface RegionSlots {
   tree: RefObject<HTMLElement | null> | null
   canvas: CanvasRegion | null
   remeasured: Set<() => void>
+  /** 지금 끼워 보일 미리보기와 그것을 실은 쪽 · 받는 쪽(머리말 «배치 미리보기»). */
+  preview: { value: PlacementPreview; owner: object } | null
+  previewListeners: Set<() => void>
 }
 
 const RegionsContext = createContext<RegionSlots | null>(null)
 
 /** 셸이 트리 · 캔버스를 함께 감싼다. 값은 바뀌어도 다시 그리지 않는 칸이다 — 읽는 것은 끄는 동안의 처리기다. */
 export function PlacementRegionsProvider(props: { children: ReactNode }): ReactElement {
-  const [slots] = useState<RegionSlots>(() => ({ tree: null, canvas: null, remeasured: new Set() }))
+  const [slots] = useState<RegionSlots>(() => ({ tree: null, canvas: null, remeasured: new Set(), preview: null, previewListeners: new Set() }))
   return createElement(RegionsContext.Provider, { value: slots }, props.children)
 }
 
@@ -173,6 +201,63 @@ export function useCanvasRemeasured(listener: () => void): void {
       slots.remeasured.delete(listener)
     }
   }, [slots, listener])
+}
+
+/** 두 미리보기가 같은 판인가 — 같으면 다시 싣지 않는다(받는 캔버스가 다시 그리지 않게). */
+function samePreview(a: PlacementPreview, b: PlacementPreview): boolean {
+  const placing =
+    a.placing.kind === 'new' ? b.placing.kind === 'new' && a.placing.type === b.placing.type : b.placing.kind === 'node' && a.placing.id === b.placing.id
+  return (
+    placing &&
+    a.target.parentId === b.target.parentId &&
+    a.target.index === b.target.index &&
+    a.target.placement === b.target.placement &&
+    a.axis === b.axis
+  )
+}
+
+/**
+ * 끄는 쪽이 보인 자리를 미리보기로 싣는다 — `null` 이면 걷는다. 내려가면 제가 실은 것만 걷는다(다른 끄는 쪽이 실은 것은 두다).
+ */
+export function usePublishPlacementPreview(drop: PlacementDrop | null): void {
+  const slots = useContext(RegionsContext)
+  const [owner] = useState(() => ({}))
+  const value: PlacementPreview | null = drop === null ? null : { placing: drop.placing, target: drop.target, axis: drop.layout.axis }
+  useLayoutEffect(() => {
+    if (slots === null) return
+    const now = slots.preview
+    if (value === null) {
+      if (now === null || now.owner !== owner) return
+      slots.preview = null
+    } else {
+      if (now !== null && now.owner === owner && samePreview(now.value, value)) return
+      slots.preview = { value, owner }
+    }
+    for (const listener of [...slots.previewListeners]) listener()
+  })
+  useLayoutEffect(
+    () => () => {
+      if (slots === null || slots.preview?.owner !== owner) return
+      slots.preview = null
+      for (const listener of [...slots.previewListeners]) listener()
+    },
+    [slots, owner],
+  )
+}
+
+/** 지금 끼워 보일 미리보기(머리말 «배치 미리보기»). 없거나 공급자 밖이면 `null`. */
+export function usePlacementPreview(): PlacementPreview | null {
+  const slots = useContext(RegionsContext)
+  return useSyncExternalStore(
+    (listener) => {
+      if (slots === null) return () => {}
+      slots.previewListeners.add(listener)
+      return () => {
+        slots.previewListeners.delete(listener)
+      }
+    },
+    () => slots?.preview?.value ?? null,
+  )
 }
 
 const VERTICAL: Layout = { axis: 'y', reversed: false }
@@ -261,12 +346,20 @@ export function usePlacementDrop(input: {
       gesture.last = null
       return null
     }
-    const hint = placeAt(placing, point, now)
+    const hint = placeAt(placing, point, now, last?.shown ?? null)
     gesture.last = { point, shown: hint?.value ?? null }
     return hint
   }
 
-  const placeAt = (placing: Placing, point: DragPoint, now: Stage): DropHint<PlacementDrop> | null => {
+  /** 보인 자리를 그대로 낸다 — 지금 문서로 다시 판정해 서면(숨긴 미리보기가 잡힌 판 — 머리말 «판정은 미리보기를 뺀 배치로»). */
+  const keep = (shown: PlacementDrop | null, rect: Rect, now: Stage): DropHint<PlacementDrop> | null => {
+    if (shown === null || document === null || !sameStage(shown.stage, now)) return null
+    const target = verdict(document, shown.placing, shown.over)
+    if (target === null || !sameDrop(target, shown.target)) return null
+    return { value: { ...shown, target }, rect, placement: target.placement }
+  }
+
+  const placeAt = (placing: Placing, point: DragPoint, now: Stage, shown: PlacementDrop | null): DropHint<PlacementDrop> | null => {
     if (document === null) return null
 
     const tree = regions.tree()
@@ -275,14 +368,14 @@ export function usePlacementDrop(input: {
       if (hit === null) return null
       return {
         ...hit.hint,
-        value: { placing, target: hit.hint.value, over: { overId: hit.overId, zone: hit.zone }, layout: VERTICAL, stage: now },
+        value: { placing, target: hit.hint.value, over: { overId: hit.overId, zone: hit.zone }, layout: VERTICAL, stage: now, region: 'tree' },
       }
     }
 
     const canvas = regions.canvas()
     if (canvas === null) return null
     const clipElement = scrollParent(canvas.frame.frameElement as HTMLElement | null)
-    const hit: CanvasHit | null = hitAt(
+    const hit: CanvasHit | null = withoutPreview(canvas.frame.document as Document | undefined, () => hitAt(
       canvas.frame,
       canvas.zoom,
       point as Point,
@@ -296,12 +389,15 @@ export function usePlacementDrop(input: {
         }
       },
       clipElement === null ? null : rectOf(clipElement),
-    )
+      isPreviewId,
+    ))
     if (hit === null) return null
+    // 숨긴 미리보기는 안 잡힌다 — 그래도 잡히면(숨기기 전에 선 요소) 노드로 읽지 않고 보인 자리 그대로다.
+    if ('preview' in hit) return keep(shown, hit.rect, now)
     const over: PlacementDrop['over'] = 'pageEnd' in hit ? 'page-end' : { overId: hit.overId, zone: hit.zone }
     const target = verdict(document, placing, over)
     if (target === null) return null
-    return { value: { placing, target, over, layout: hit.layout, stage: now }, rect: hit.rect, placement: target.placement }
+    return { value: { placing, target, over, layout: hit.layout, stage: now, region: 'canvas' }, rect: hit.rect, placement: target.placement }
   }
 
   const onDrop = (placing: Placing, drop: PlacementDrop): void => {

@@ -190,8 +190,9 @@ describe('CanvasIframe', () => {
   it('내용이 자라면 iframe 이 따라 자란다', async () => {
     const { container } = render(<CanvasIframe styles={[]} width={1280}>{() => <div />}</CanvasIframe>)
     const doc = await waitFor(() => frameDoc(container))
-    // jsdom 은 레이아웃이 없어 scrollHeight 를 흉내 낸다 — 실브라우저 판은 `apps/web/build-test/canvas-iframe.test.ts`.
-    Object.defineProperty(doc.documentElement, 'scrollHeight', { configurable: true, value: 640 })
+    // jsdom 은 레이아웃이 없어 body 의 scrollHeight 를 흉내 낸다(상자 높이 · 위치는 0) — 실브라우저 판은 `apps/web/build-test/canvas-iframe.test.ts` ·
+    // 줄어드는 판은 `apps/web/build-test/canvas-preview.test.ts` 「iframe 은 끌기 뒤 끌기 전 높이로」.
+    Object.defineProperty(doc.body, 'scrollHeight', { configurable: true, value: 640 })
     await act(async () => { doc.defaultView!.dispatchEvent(new Event('wb-canvas-measure')) })
     expect(container.querySelector('iframe')!.style.height).toBe('640px')
   })

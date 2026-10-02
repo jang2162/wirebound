@@ -123,7 +123,7 @@ export function CanvasIframe(props: {
   useLayoutEffect(() => {
     if (frame === null) return
     const measure = () => {
-      setHeight(Math.max(MIN_HEIGHT, frame.document.documentElement.scrollHeight))
+      setHeight(Math.max(MIN_HEIGHT, contentHeight(frame)))
       onResize?.()
     }
     measure()
@@ -150,6 +150,21 @@ export function CanvasIframe(props: {
       />
     </>
   )
+}
+
+/**
+ * **문서 내용의 높이 — iframe 자신의 높이에 묶이지 않는 값으로 잰다.** 뿌리의 `scrollHeight` 는 뷰포트(= 지금 iframe 높이) 아래로 안 내려가
+ * 늘기만 하고 줄지 않는다 — 그것으로 재면 끌기의 미리보기가 문서를 한 번 키운 뒤 놓거나 취소해도 iframe 이 그 높이로 남아 문서 끝에 빈 꼬리가
+ * 서고, 남이 노드를 지워도 · 늦게 실린 테마 시트가 처음 그린 문서를 줄여도 안 준다.
+ *
+ * `html` 의 상자 높이는 내용(겹친 바깥 여백 포함)만큼이고, `body` 의 `scrollHeight` 는 상자 밖으로 넘친 자손까지 센다 — 둘의 큰 쪽이다. 테마가
+ * 뿌리 · `body` 에 뷰포트 단위 높이(`min-height: 100vh` 등)를 걸면 이 값도 iframe 높이에 묶여 다시 줄지 않는다 — 시스템 테마 다섯에는 그런 규칙이
+ * 없다(`build-test/canvas-preview.test.ts` 「iframe 은 끌기 뒤 끌기 전 높이로」).
+ */
+function contentHeight(frame: CanvasFrame): number {
+  const { document: doc, window: win } = frame
+  const top = doc.body.getBoundingClientRect().top + win.scrollY
+  return Math.ceil(Math.max(doc.documentElement.getBoundingClientRect().height, top + doc.body.scrollHeight))
 }
 
 /**
