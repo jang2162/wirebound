@@ -156,7 +156,7 @@ export function structureStatus(input: {
 }
 
 /**
- * 고른 노드를 남이 잡았을 때의 문장 — 상태줄 사다리의 맨 위 칸(`structureStatus`). 하단 판의 카드 클릭 추가가 같은 판에서 같은 문장을
+ * 고른 노드를 남이 잡았을 때의 문장 — 상태줄 사다리의 맨 위 칸(`structureStatus`). 하단 판 카드의 «넣기» 단추가 같은 판에서 같은 문장을
  * 낸다(`palette/palette-add.ts`).
  */
 export function lockedSelectionStatus(userName: string): string {

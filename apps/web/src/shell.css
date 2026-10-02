@@ -391,7 +391,7 @@
   background: #fff;
 }
 
-/* 거절 문장(카드 클릭 추가가 못 넣은 이유 — `palette/palette-add.ts`). 비면 자리를 안 쥔다. */
+/* 거절 문장(카드의 «넣기» 단추가 못 넣은 이유 — `palette/palette-add.ts`). 비면 자리를 안 쥔다. */
 .wb-shell-palette-notice {
   flex: 1 1 200px;
   min-width: 0;
