@@ -5,7 +5,7 @@
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 클릭 추가 — 고른 것마다 | 고른 것 없음 · 뿌리 · 컨테이너 · 잎에서 서버 문서가 계획 D6 의 자리가 아니다 · 넣은 노드가 안 골라진다 · 프레임이 하나가 아니다 |
+ * | «넣기» 단추 — 고른 것마다 | 고른 것 없음 · 뿌리 · 컨테이너 · 잎에서 서버 문서가 계획 D6 의 자리가 아니다 · 넣은 노드가 안 골라진다 · 프레임이 하나가 아니다 |
  * | 클릭 추가 — 남의 잠금 | 뒤 형제를 bob 이 잡은 잎 · 부모를 잡으려 한 판에서 문장 · 프레임 · 서버 문서가 판정대로가 아니다 |
  * | 클릭 추가 — 뿌리 선택 + 남의 잠금 | 페이지를 연 그대로(뿌리 선택) bob 이 다른 노드를 고르면 서버가 받는 페이지 끝 넣기를 판이 거절한다 |
  * | 거절 문장 — 페이지 옮김 | 앞 페이지에서 선 거절 문장이 옮긴 페이지에 남는다 |
@@ -241,10 +241,15 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
     return (await stack.request(bob, 'PATCH', `${P}/ops`, { baseSeq: head, ops })).status
   }
 
-  /** 한 판에서 고른 것을 세우고 «구분선» 카드를 눌러, 서버 문서 · 문장 · 고른 노드 · 프레임 수를 낸다. */
+  /** 그 카드의 «넣기» 단추(`palette/component-palette.tsx` 머리말 «카드 — 끌면 놓고, 단추로 넣는다»). */
+  function addButton(page: Page, label: string) {
+    return page.getByRole('button', { name: `${label} 넣기`, exact: true })
+  }
+
+  /** 한 판에서 고른 것을 세우고 «구분선» 카드의 «넣기» 단추를 눌러, 서버 문서 · 문장 · 고른 노드 · 프레임 수를 낸다. */
   async function clickAdd(page: Page, P: string, patches: string[]) {
     const sentBefore = patches.length
-    await page.locator('[data-wb-palette-card="Divider"]').click()
+    await addButton(page, '구분선').click()
     await page.waitForTimeout(600)
     const added = await addedIds(P)
     const selected = await selectedId(page)
@@ -430,7 +435,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         await openPalette(page)
         await only(page, 'Divider')
         await pick(page, 'n_text')
-        await page.locator('[data-wb-palette-card="Divider"]').dblclick()
+        await addButton(page, '구분선').dblclick()
         await page.waitForTimeout(800)
         const dbl = { shape: await shape(P[0]!), sent: patches.length }
         // eslint-disable-next-line no-console
@@ -442,7 +447,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
     })
 
     /**
-     * 카드는 `<button>` 이라 반복 keydown(`repeat: true`)마다 브라우저가 `click` 을 낸다 — 판은 반복 Enter · Space 를 버린다(`palette/component-palette.tsx`
+     * «넣기» 단추는 `<button>` 이라 반복 keydown(`repeat: true`)마다 브라우저가 `click` 을 낸다 — 판은 반복 Enter · Space 를 버린다(`palette/component-palette.tsx`
      * 의 `moveCard`). 이 케이스는 «누른 채 한 번은 넣기 하나» 를 성질로 단언한다 — 그 거름을 떼면 빨강이다(첫 keydown + 반복 다섯 → 넣기 여섯).
      */
     it('Enter 를 누른 채 두면(첫 keydown + 반복 다섯) 넣기는 하나다', async () => {
@@ -452,7 +457,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         await openPalette(page)
         await only(page, 'Divider')
         await pick(page, 'n_last')
-        await page.locator('[data-wb-palette-card="Divider"]').focus()
+        await addButton(page, '구분선').focus()
         // playwright 는 이미 누른 키의 down 을 `repeat: true` 로 낸다.
         for (let i = 0; i < 6; i += 1) {
           await page.keyboard.down('Enter')
@@ -588,7 +593,8 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       }
     })
 
-    it('입력(Field) 표본의 컨트롤 자리를 눌러도 iframe 이 클릭 · 포커스를 안 받고 그 카드가 받는다', async () => {
+    // 카드 몸통은 끌기 전용이라 그 누름은 아무것도 안 한다 — 넣지 않고(`sent` 0) 포커스도 안 옮긴다(`BODY`). 재는 것은 iframe 이 안 받는 것이다.
+    it('입력(Field) 표본의 컨트롤 자리를 눌러도 iframe 이 클릭 · 포커스를 안 받고 그 카드 몸통이 받는다(넣지 않음)', async () => {
       const { P } = await seed('rv-thumb-input', [BASIC])
       const { page, close, patches } = await openEditor(P[0]!)
       try {
@@ -618,7 +624,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         await page.waitForTimeout(500)
         const active = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('data-wb-palette-card') ?? document.activeElement?.tagName ?? null)
         const hits = await page.evaluate('window.__thumbHits')
-        expect({ top, hits, active, sent: patches.length, focusables }).toEqual({ top: 'Field', hits: { clicks: 0, focus: 0 }, active: 'Field', sent: 1, focusables: 0 })
+        expect({ top, hits, active, sent: patches.length, focusables }).toEqual({ top: 'Field', hits: { clicks: 0, focus: 0 }, active: 'BODY', sent: 0, focusables: 0 })
       } finally {
         await close()
       }

@@ -13,7 +13,7 @@
  * | 카드 끌어 놓기 — 캔버스 · 트리 | 빈 카드 안 · 형제 앞 · 페이지 끝 · 구조 트리 줄에 놓은 자리가 서버 문서와 다르다 · 넣은 노드가 안 골라진다 · 이름표가 안 따라온다 · 되돌리기 넷 뒤 원래 문서가 아니다 |
  * | 카드 — 못 놓는 자리 | 남이 잡은 카드 위 · 판 위에서 표시가 서거나 놓아 편집이 나간다 |
  * | 카드 — 끄는 중 페이지 옮김 | 옮긴 뒤 표시가 남는다 · 새 페이지 위에 놓아 편집이 나간다(판은 셸과 함께 남아 끌기가 이어진다 — 경로 층의 판 검사가 막는다) |
- * | 카드 — Enter · 끈 뒤 클릭 | Enter 로 안 넣는다 · 끌어 놓은 뒤의 `click` 이 한 번 더 넣는다 |
+ * | 카드 — 몸통 누름 · «넣기» Enter · 끈 뒤 클릭 | 몸통(창 · 이름 줄)을 누르기만 해도 넣는다 · «넣기» 단추의 Enter 로 안 넣는다 · 끌어 놓은 뒤의 `click` 이 한 번 더 넣는다 |
  *
  * **잘라 보이는 방법을 고른 값**(`src/palette/palette-thumbs.tsx` 머리말 «같은 좌표») — 두 판을 같은 판(창 1440×900 · 판 기본 높이 · 카드
  * 18 — 카탈로그의 둘 수 있는 타입 전부)에서 쟀다. A(깔개를 트랙 안에 — 트랙과 함께 스크롤): 누름 → 모든 표본이 창 안에 선 첫 프레임까지
@@ -314,10 +314,11 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       const visited: string[] = []
       for (let i = 0; i < 40; i += 1) {
         await page.keyboard.press('Tab')
-        visited.push(await page.evaluate(() => document.activeElement?.tagName ?? ''))
+        // 축소판 iframe 만 센다 — Tab 이 한 바퀴 돌면 캔버스 iframe 에 닿는다(그것은 포커스를 받는 자리다).
+        visited.push(await page.evaluate(() => (document.activeElement?.classList.contains('wb-shell-palette-thumbs-iframe') === true ? 'THUMBS' : document.activeElement?.tagName) ?? ''))
       }
       const hits = await page.evaluate('window.__thumbHits')
-      expect({ top, hits, iframeFocused: visited.includes('IFRAME') }).toEqual({ top: 'Button', hits: { clicks: 0, focus: 0 }, iframeFocused: false })
+      expect({ top, hits, iframeFocused: visited.includes('THUMBS') }).toEqual({ top: 'Button', hits: { clicks: 0, focus: 0 }, iframeFocused: false })
     } finally {
       await context.close()
     }
@@ -580,7 +581,7 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       }
     })
 
-    it('Enter 로 넣고 · 끌어 놓은 뒤의 클릭은 한 번 더 넣지 않는다', async () => {
+    it('몸통 누름은 안 넣고 · «넣기» 단추의 Enter 로 넣고 · 끌어 놓은 뒤의 클릭은 한 번 더 넣지 않는다', async () => {
       const { P } = await seed('pal-enter', [BASIC])
       const { page, close, patches } = await openEditor(P[0]!)
       try {
@@ -589,7 +590,13 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
         // 고른 것이 «끝» 글(잎) — 그 뒤에 넣는다.
         const last = await spotIn(page, 'n_last', 0.5, 0.5)
         await page.mouse.click(last.x, last.y)
-        await page.locator('[data-wb-palette-card="Divider"]').focus()
+        // 몸통(축소판 창 · 이름 줄)을 누르기만 하면 넣지 않는다 — 몸통은 끌기 전용이다.
+        const card = (await page.locator('[data-wb-palette-card="Divider"]').boundingBox())!
+        await page.mouse.click(card.x + card.width / 2, card.y + card.height / 2)
+        await page.mouse.click(card.x + card.width / 2, card.y + card.height - 6)
+        await page.waitForTimeout(500)
+        const sentAfterBody = patches.length
+        await page.getByRole('button', { name: '구분선 넣기', exact: true }).focus()
         await page.keyboard.press('Enter')
         const entered = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL))
         const sentAfterEnter = patches.length
@@ -599,7 +606,8 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
         await page.mouse.up()
         const dropped = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(entered))
         await page.waitForTimeout(500)
-        expect({ entered, sentAfterEnter, dropped, sent: patches.length, final: await shape(P[0]!) }).toEqual({
+        expect({ sentAfterBody, entered, sentAfterEnter, dropped, sent: patches.length, final: await shape(P[0]!) }).toEqual({
+          sentAfterBody: 0,
           entered: { n_root: ['n_text', { n_card: ['n_intx'] }, 'n_empt', 'n_last', '+Divider'] },
           sentAfterEnter: 1,
           dropped: { n_root: ['n_text', { n_card: ['n_intx'] }, { n_empt: ['+Divider'] }, 'n_last', '+Divider'] },

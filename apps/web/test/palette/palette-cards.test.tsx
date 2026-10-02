@@ -1,5 +1,6 @@
 /**
- * **하단 판의 카드**(`src/palette/component-palette.tsx`) — 갈래 탭 · 이름 검색 · 로빙 탭 인덱스 · 카드 클릭 추가(계획 D6 의 표).
+ * **하단 판의 카드**(`src/palette/component-palette.tsx`) — 갈래 탭 · 이름 검색 · 로빙 탭 인덱스 · 카드의 «넣기» 단추(계획 D6 의 표) · 카드 몸통을
+ * 눌러도 넣지 않음.
  *
  * 셸을 라우트째 띄워 판을 토글로 열고 그 스토어에 드라이버를 붙인다(`test/drag/use-placement.test.tsx` 의 관례). 끌어 놓기 · Enter 로 누름 ·
  * 축소판은 실브라우저 판(`build-test/palette.test.ts`).
@@ -109,9 +110,20 @@ async function select(nodeId: string | null): Promise<void> {
   await act(async () => shellStore().selectNode(nodeId))
 }
 
+/** 카드의 «넣기» 단추 — 접근 이름 `<한국어 이름> 넣기`(머리말 «카드 — 끌면 놓고, 단추로 넣는다»). */
+function addButton(type: string): HTMLElement {
+  return within(card(type)).getByRole('button', { name: `${getComponent(type)!.label} 넣기` })
+}
+
+/** 그 카드의 «넣기» 단추를 누른다. */
 async function clickCard(type: string): Promise<void> {
-  fireEvent.click(card(type))
+  fireEvent.click(addButton(type))
   await act(async () => {})
+}
+
+/** 카드마다 «넣기» 단추. */
+function addButtons(): HTMLElement[] {
+  return cards().map((element) => within(element).getByRole('button'))
 }
 
 beforeEach(() => localStorage.clear())
@@ -166,25 +178,29 @@ describe('이름 검색', () => {
 })
 
 describe('로빙 탭 인덱스', () => {
-  it('Tab 은 카드 줄에 한 번 — 화살표 · Home/End 가 카드 사이를 옮긴다', async () => {
+  it('Tab 은 카드 줄에 한 번(«넣기» 단추) — 화살표 · Home/End 가 카드 사이를 옮긴다', async () => {
     await openWithPalette()
-    const all = cards()
+    const all = addButtons()
     expect(all.length).toBeGreaterThan(2)
-    expect(all.filter((element) => element.tabIndex === 0)).toEqual([all[0]])
+    // 카드 몸통은 Tab 정지점이 아니다 — 줄 안에서 Tab 이 서는 것은 «넣기» 단추 하나다.
+    const stops = [...palette().querySelectorAll<HTMLElement>('.wb-shell-palette-track [tabindex], .wb-shell-palette-track button')].filter(
+      (element) => element.tabIndex === 0,
+    )
+    expect(stops).toEqual([all[0]])
 
     all[0]!.focus()
     fireEvent.keyDown(all[0]!, { key: 'ArrowRight' })
-    expect(document.activeElement).toBe(cards()[1])
-    expect(cards().filter((element) => element.tabIndex === 0)).toEqual([cards()[1]])
+    expect(document.activeElement).toBe(addButtons()[1])
+    expect(addButtons().filter((element) => element.tabIndex === 0)).toEqual([addButtons()[1]])
 
-    fireEvent.keyDown(cards()[1]!, { key: 'End' })
-    expect(document.activeElement).toBe(cards().at(-1))
-    fireEvent.keyDown(cards().at(-1)!, { key: 'ArrowRight' })
-    expect(document.activeElement).toBe(cards().at(-1))
-    fireEvent.keyDown(cards().at(-1)!, { key: 'Home' })
-    expect(document.activeElement).toBe(cards()[0])
-    fireEvent.keyDown(cards()[0]!, { key: 'ArrowLeft' })
-    expect(document.activeElement).toBe(cards()[0])
+    fireEvent.keyDown(addButtons()[1]!, { key: 'End' })
+    expect(document.activeElement).toBe(addButtons().at(-1))
+    fireEvent.keyDown(addButtons().at(-1)!, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(addButtons().at(-1))
+    fireEvent.keyDown(addButtons().at(-1)!, { key: 'Home' })
+    expect(document.activeElement).toBe(addButtons()[0])
+    fireEvent.keyDown(addButtons()[0]!, { key: 'ArrowLeft' })
+    expect(document.activeElement).toBe(addButtons()[0])
   })
 })
 
@@ -195,7 +211,29 @@ function added(sent: PatchOp[][]): { path: string; id: string; type: string } {
   return { path: op.path, id: op.value.id, type: op.value.type }
 }
 
-describe('카드 클릭 추가 — 계획 D6 의 표', () => {
+describe('카드 몸통은 끌기 전용이다', () => {
+  it('몸통을 누르기만 하면(끌기 문턱 안) 넣지 않고 거절 문장도 없다', async () => {
+    const sent = await openWithPalette()
+    await select('n-text')
+    search('Divider')
+    const body = card('Divider')
+    fireEvent.pointerDown(body, { button: 0, pointerId: 1, clientX: 10, clientY: 10 })
+    fireEvent.pointerUp(window, { button: 0, pointerId: 1, clientX: 11, clientY: 10 })
+    fireEvent.click(body)
+    fireEvent.click(body.querySelector('[data-wb-palette-window]')!)
+    fireEvent.click(body.querySelector('.wb-shell-palette-label')!)
+    await act(async () => {})
+    expect({ sent, notice: notice(), selected: shellStore().getState().selectedNodeId }).toEqual({ sent: [], notice: '', selected: 'n-text' })
+  })
+
+  it('«넣기» 단추는 카드마다 하나 — 이름이 «<한국어 이름> 넣기» 다', async () => {
+    await openWithPalette()
+    const names = cards().map((element) => within(element).getAllByRole('button').map((button) => button.getAttribute('aria-label')))
+    expect(names).toEqual(cardTypes().map((type) => [`${getComponent(type)!.label} 넣기`]))
+  })
+})
+
+describe('«넣기» 단추 — 계획 D6 의 표', () => {
   it('고른 것 없음 → 뿌리 끝 · 넣은 노드를 고른다', async () => {
     const sent = await openWithPalette()
     await select(null)

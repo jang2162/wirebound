@@ -12,19 +12,22 @@
  * 한국어 이름 차례). 탭이 갈래를 고르고, 검색어가 있으면 갈래를 가리지 않고 한국어 이름 · 영문 타입에 그 글이 든 카드만 선다(대소문자 무시 ·
  * 둘 다 NFC 로 맞춰 견준다 — 자모로 풀어 쓴 입력(NFD)도 같은 이름이다).
  *
- * **카드 줄은 Tab 정지점 하나다**(로빙 탭 인덱스) — 카드가 스물 가까이라 하나씩 Tab 을 먹으면 판을 지나는 데 스무 번이 든다. 화살표 ·
- * Home/End 가 카드 사이를 옮긴다. 탭 줄도 같다.
+ * **카드 줄은 Tab 정지점 하나다**(로빙 탭 인덱스) — 카드가 스물 가까이라 하나씩 Tab 을 먹으면 판을 지나는 데 스무 번이 든다. 정지점은
+ * 카드마다의 «넣기» 단추이고 화살표 · Home/End 가 카드 사이를 옮긴다. 탭 줄도 같다.
  *
- * ## 카드 — 누르면 넣고, 끌면 놓는다
+ * ## 카드 — 끌면 놓고, 단추로 넣는다
  *
- * - **누름 · Enter**(단추의 `click`): 고른 노드에 따라 자리를 골라(`./palette-add.ts`) 지금 편집 전송 길(`useEditCommit` 의 `commitOps`)로
- *   넣고 넣은 노드를 고른다. 누른 채의 키 반복(`event.repeat`)은 넣지 않는다. 못 넣으면 판 머리에 이유 한 줄을 세운다 — 다음 누름이
- *   걷고, 그 문장을 세운 판(페이지 · 고른 노드)이 바뀌어도 걷는다(판은 페이지를 옮겨도 셸과 함께 남아, 걷는 입구를 세지 않고 문장에
- *   판을 적어 둔다 — 한 번 어긋나면 비운다. 떠났다 돌아와도 다시 서지 않는다).
- * - **끌기**: 끌기 장치(`drag/use-pointer-drag.ts`)에 `{ kind: 'new', type }` 을 묶고 놓을 자리 · 표시 · 놓기는 경로 층
+ * - **몸통은 끌기 전용이다**: 끌기 장치(`drag/use-pointer-drag.ts`)에 `{ kind: 'new', type }` 을 묶고 놓을 자리 · 표시 · 놓기는 경로 층
  *   (`drag/use-placement.ts`)에 맡긴다 — 캔버스 손잡이와 같은 길이다(캔버스가 다시 잴 때 마지막 좌표로 다시 묻는 것까지 —
- *   `useCanvasRemeasured`). 끄는 동안 포인터 곁에 카드 이름표가 따라온다. 끈 뒤의 `click` 은 끌기
- *   장치가 삼켜 «누름» 으로 새지 않는다.
+ *   `useCanvasRemeasured`). 끄는 동안 포인터 곁에 카드 이름표가 따라온다. 몸통을 누르기만 하고 떼면(문턱 안) **아무것도 안 한다** —
+ *   넣지도 고르지도 않는다. 누름 한 번이 넣기면 끌려다 문턱을 못 넘은 손이 노드를 넣는다. 몸통은 단추가 아니다(포커스를 안 받는다).
+ * - **«넣기» 단추**(오른쪽 위 `＋` · 접근 이름 `<한국어 이름> 넣기`): 누름 · Enter 가 고른 노드에 따라 자리를 골라(`./palette-add.ts`) 지금
+ *   편집 전송 길(`useEditCommit` 의 `commitOps`)로 넣고 넣은 노드를 고른다. 누른 채의 키 반복(`event.repeat`)은 넣지 않는다. 못 넣으면 판
+ *   머리에 이유 한 줄을 세운다 — 다음 누름이 걷고, 그 문장을 세운 판(페이지 · 고른 노드)이 바뀌어도 걷는다(판은 페이지를 옮겨도 셸과
+ *   함께 남아, 걷는 입구를 세지 않고 문장에 판을 적어 둔다 — 한 번 어긋나면 비운다. 떠났다 돌아와도 다시 서지 않는다). 단추도 카드 안이라
+ *   그 자리에서 문턱 밖으로 끌면 끌기다 — 끈 뒤의 `click` 은 끌기 장치가 삼켜 넣기로 새지 않는다.
+ * - **이름은 «추가»가 아니라 «넣기»다** — 구조 트리 줄의 `+` 가 `<이름> 추가`(`panels/tree-row-actions.tsx`)라, playwright 의
+ *   `getByRole(…, { name })`(부분 일치)이 «버튼 추가» 하나로 두 단추를 함께 잡는다.
  */
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
 import { COMPONENT_GROUP_LABELS, type ComponentGroup } from '@wirebound/schema'
@@ -165,7 +168,7 @@ function PaletteBody(props: { projectId: string; pageId: string | undefined }): 
 }
 
 /**
- * 카드 줄 — 가로로 늘어서고 넘치면 가로 스크롤이다. 카드마다 축소판이 비쳐 보이는 창(투명한 자리)과 한국어 이름이 선다. 축소판 깔개
+ * 카드 줄 — 가로로 늘어서고 넘치면 가로 스크롤이다. 카드마다 축소판이 비쳐 보이는 창(투명한 자리) · 한국어 이름 · «넣기» 단추가 선다. 축소판 깔개
  * (`./palette-thumbs.tsx`)는 카드 줄(트랙) 뒤에 같은 크기로 깔리고, 여기서 잰 창 좌표로 표본을 옮긴다.
  */
 function PaletteCards(props: {
@@ -228,7 +231,7 @@ function PaletteCards(props: {
     return () => observer?.disconnect()
   }, [props.types])
 
-  /** 누름 · Enter — 고른 노드에 따라 넣는다(`./palette-add.ts`). */
+  /** «넣기» 단추의 누름 · Enter — 고른 노드에 따라 넣는다(`./palette-add.ts`). */
   const add = (type: string): void => {
     if (props.pageId === undefined) return
     const document = openDocumentNow(store, props.pageId)
@@ -270,25 +273,31 @@ function PaletteCards(props: {
         <PaletteThumbs slots={layout.slots} width={layout.width} height={layout.height} />
         {props.types.length === 0 && <p className="wb-shell-palette-empty">맞는 컴포넌트가 없습니다</p>}
         {props.types.map((type, index) => (
-          <button
+          <div
             key={type.type}
-            ref={(element) => {
-              cardRefs.current[index] = element
-            }}
-            type="button"
             className="wb-shell-palette-card"
             data-wb-palette-card={type.type}
             title={`${type.type} — ${type.description}`}
-            tabIndex={index === focusIndex ? 0 : -1}
-            onFocus={() => setActive(index)}
-            onKeyDown={(event) => moveCard(event, index)}
-            onClick={() => add(type.type)}
             // 새 객체를 렌더마다 묶는다 — 경로 층이 끌기의 판을 이 객체에 단다(`drag/use-placement.ts` 머리말 «판은 끄는 것 객체로»).
             {...drag.bind({ kind: 'new', type: type.type })}
           >
             <span className="wb-shell-palette-window" data-wb-palette-window={type.type} />
             <span className="wb-shell-palette-label">{type.label}</span>
-          </button>
+            <button
+              ref={(element) => {
+                cardRefs.current[index] = element
+              }}
+              type="button"
+              className="wb-shell-palette-add"
+              aria-label={`${type.label} 넣기`}
+              tabIndex={index === focusIndex ? 0 : -1}
+              onFocus={() => setActive(index)}
+              onKeyDown={(event) => moveCard(event, index)}
+              onClick={() => add(type.type)}
+            >
+              ＋
+            </button>
+          </div>
         ))}
       </div>
       <DropIndicator hint={hint} layout={hint?.value.layout} />
