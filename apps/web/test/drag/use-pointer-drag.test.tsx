@@ -336,6 +336,23 @@ describe('끝 스크롤', () => {
     expect(box.scrollTop).toBe(pushed)
   })
 
+  it('상자 밖은 끝 너머가 아니다 — 아래 · 위 · 옆에서는 안 민다', async () => {
+    vi.useFakeTimers()
+    render(<Harness onDrop={vi.fn()} scroll />)
+    const box = screen.getByTestId('box')
+    frame(box)
+    box.scrollTop = 400
+
+    press('가', 10, 100)
+    for (const [x, y] of [[10, 340], [10, -20], [260, 290], [260, 10]] as const) {
+      moveTo(x, y)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+      expect({ x, y, scrollTop: box.scrollTop }).toEqual({ x, y, scrollTop: 400 })
+    }
+  })
+
   it('밀고 나면 같은 좌표로 자리를 다시 묻는다 — 줄이 포인터 밑으로 지나간다', async () => {
     vi.useFakeTimers()
     const onOver = vi.fn(zones)

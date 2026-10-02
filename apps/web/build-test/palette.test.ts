@@ -12,6 +12,7 @@
  * | 축소판 — `inert` | 축소판 단추 자리를 눌러 iframe 문서에 클릭이 닿는다 · Tab 이 iframe 안으로 들어간다 |
  * | 카드 끌어 놓기 — 캔버스 · 트리 | 빈 카드 안 · 형제 앞 · 페이지 끝 · 구조 트리 줄에 놓은 자리가 서버 문서와 다르다 · 넣은 노드가 안 골라진다 · 이름표가 안 따라온다 · 되돌리기 넷 뒤 원래 문서가 아니다 |
  * | 카드 — 못 놓는 자리 | 남이 잡은 카드 위 · 판 위에서 표시가 서거나 놓아 편집이 나간다 |
+ * | 카드 — 판 위에서 머뭇거림 | 판에서 카드를 쥐고 1s 머뭇거리는 동안 캔버스 칸이 밀린다 · 칸 아래 끝 띠 안에서는 안 민다 |
  * | 카드 — 끄는 중 페이지 옮김 | 옮긴 뒤 표시가 남는다 · 새 페이지 위에 놓아 편집이 나간다(판은 셸과 함께 남아 끌기가 이어진다 — 경로 층의 판 검사가 막는다) |
  * | 카드 — 몸통 누름 · «넣기» Enter · 끈 뒤 클릭 | 몸통(창 · 이름 줄)을 누르기만 해도 넣는다 · «넣기» 단추의 Enter 로 안 넣는다 · 끌어 놓은 뒤의 `click` 이 한 번 더 넣는다 |
  *
@@ -560,6 +561,44 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       } finally {
         await close()
         await bob.close()
+      }
+    })
+
+    /**
+     * 끝 스크롤은 포인터가 그 칸 안의 끝 띠에 있을 때만 민다(`src/drag/use-pointer-drag.ts` 머리말 «끝 스크롤») — 칸 아래의 판 위는 «아래 끝
+     * 너머»가 아니다. 판에서 캔버스로 올라가는 길에 칸 아래 끝 띠를 지나며 미는 몫(장부 N6)은 `[판에서 캔버스로]` 로그로 낸다.
+     */
+    it('판 위에서 카드를 쥐고 머뭇거려도 캔버스 칸이 안 밀린다 — 칸 아래 끝 띠 안에서는 민다', async () => {
+      const long: SeedNode[] = [...BASIC, ...Array.from({ length: 30 }, (_, i) => ({ id: `n_more${i}`, type: 'Text', props: { content: `더 ${i}` } }))]
+      const { P } = await seed('pal-edge', [long])
+      const { page, close, patches } = await openEditor(P[0]!)
+      try {
+        await openPalette(page)
+        await only(page, 'Divider')
+        const pane = page.locator('.wb-shell-canvas')
+        const scrollTop = () => pane.evaluate((el) => Math.round(el.scrollTop))
+        const room = await pane.evaluate((el) => el.scrollHeight - el.clientHeight)
+        await grabCard(page, 'Divider')
+        await page.waitForTimeout(1000)
+        const overPalette = await scrollTop()
+        const box = (await pane.boundingBox())!
+        await moveTo(page, { x: box.x + box.width / 2, y: box.y + box.height / 2 })
+        const crossed = await scrollTop()
+        await moveTo(page, { x: box.x + box.width / 2, y: box.y + box.height - 10 })
+        await page.waitForTimeout(400)
+        const inBand = await scrollTop()
+        await page.keyboard.press('Escape')
+        await page.mouse.up()
+        // eslint-disable-next-line no-console
+        console.log(`[판에서 캔버스로] ${JSON.stringify({ room, overPalette, crossed, inBand })}`)
+        expect({ room: room > 200, overPalette, inBandPushed: inBand > crossed, sent: patches.length }).toEqual({
+          room: true,
+          overPalette: 0,
+          inBandPushed: true,
+          sent: 0,
+        })
+      } finally {
+        await close()
       }
     })
 

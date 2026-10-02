@@ -63,7 +63,9 @@
  * ## 끝 스크롤
  *
  * `scrollContainer` 를 주면 끄는 동안 포인터가 그 상자의 위 · 아래 끝 `EDGE_ZONE` 안에 있을 때 `EDGE_SPEED` 로 민다. 포인터가 멈춰
- * 있어도 이어서 민다(타이머) — 트리 끝에 대고 기다리는 것이 그 몸짓이다. 밀고 나면 같은 좌표로 `onOver` 를 다시 묻는다(줄이 포인터
+ * 있어도 이어서 민다(타이머) — 트리 끝에 대고 기다리는 것이 그 몸짓이다. **상자 밖은 끝 너머가 아니다** — 포인터가 상자 밖(위 · 아래 · 옆)이면
+ * 안 민다. 세로만 견주면 캔버스 칸 아래의 하단 판 전체가 «아래 끝 너머»로 읽혀, 판에서 카드를 쥐고 머뭇거리는 동안 칸이 끝까지 밀린다
+ * (`build-test/palette.test.ts` «판 위에서 카드를 쥐고 머뭇거려도»). 판에서 캔버스로 올라가는 길은 칸 아래 끝 띠를 지나는 동안만 민다. 밀고 나면 같은 좌표로 `onOver` 를 다시 묻는다(줄이 포인터
  * 밑으로 지나갔다). 틱은 `setInterval` 이다 — `requestAnimationFrame` 은 가려진 탭에서 멈추고 jsdom 에는 없다.
  */
 import { useCallback, useEffect, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react'
@@ -251,7 +253,9 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
           const box = latest.current.options.scrollContainer?.() ?? null
           if (box === null) return
           const frame = box.getBoundingClientRect()
-          const y = current.last.y
+          const { x, y } = current.last
+          // 상자 밖은 끝 너머가 아니다(머리말 «끝 스크롤»).
+          if (x < frame.left || x > frame.right || y < frame.top || y > frame.bottom) return
           const step = (EDGE_SPEED * EDGE_TICK) / 1000
           let delta = 0
           if (y < frame.top + EDGE_ZONE) delta = -step
