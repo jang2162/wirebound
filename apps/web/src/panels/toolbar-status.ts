@@ -107,6 +107,10 @@ import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
  */
 export function structureStatus(input: {
   selectedNodeId: string | null
+  /** 고른 노드 수(여러 노드 선택). 둘 이상이면 «여럿» 칸이 잠금 다음에 선다. 빠뜨리면 1 이다. */
+  count?: number
+  /** 고른 노드 가운데 남이 잡은 것 — 여럿일 때 기준 노드 밖의 잠금도 말한다. */
+  anyLock?: NodeLock | null
   /** 고른 것이 문서 루트인가. 호출자가 `document.root.id`와 id로 비교한다. */
   isRoot: boolean
   /** 고른 노드를 막는 **남의** 잠금(`store.lockedBy`). 없으면 `null`. */
@@ -139,6 +143,11 @@ export function structureStatus(input: {
   // 것(*"왜 다 회색인가"*)에 답하지 않는다. **이유는 하나이므로 문장도 하나다** — 원인
   // (남이 편집 중)에 결과 둘을 잇는다.
   if (input.lock !== null) return lockedSelectionStatus(input.lock.userName)
+  // **여럿을 고른 판** — 고른 것 가운데 남이 잡은 것이 있으면 그것이 «삭제»가 꺼진 이유다. 아니면 순서 · 계층이 꺼진 이유를 말한다.
+  if ((input.count ?? 1) > 1) {
+    if (input.anyLock !== null && input.anyLock !== undefined) return `${input.anyLock.userName}님이 편집 중인 노드가 있어 함께 지울 수 없습니다`
+    return `${input.count}개를 골랐습니다 — 순서 · 계층 옮기기는 하나를 골랐을 때만 됩니다`
+  }
   if (input.isRoot) return '루트라 삭제·순서·계층을 바꿀 수 없습니다'
   // 루트가 아닌데 전부 꺼졌으면 그 노드가 문서에 없다 — 남이 그 노드를 지운 뒤 재조회
   // 전까지의 상태다. 찾은 비루트 노드는 `addAfter`·`remove`가 언제나 참이기 때문이다.

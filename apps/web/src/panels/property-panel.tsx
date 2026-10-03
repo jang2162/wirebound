@@ -27,9 +27,13 @@
 import type { ReactElement } from 'react'
 import { NO_THEME, resolveVariant } from '@wirebound/renderer'
 import {
+  applyOps,
   getComponent,
   type ComponentDef,
   type EditorField,
+  type NodeLock,
+  type PageDocument,
+  type PatchOp,
   type WbNode,
 } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
@@ -40,13 +44,15 @@ import { useEditCommit } from '../edit/use-edit-commit'
 // 통째로 지운다. 실측: 그 문서에서 **노드를 고르는 순간** `.wb-shell`이 DOM에서 사라진다 —
 // 열기만 할 때는 여기까지 오지 않아 살아 있다.
 import { findNodeSafely } from '../edit/safe-walk'
+import { propOps, variantOps } from '../edit/ops'
+import { removeManyOps } from '../edit/paste-ops'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 import { ListControl } from './controls/list-control'
 import { SelectControl } from './controls/select-control'
 import { SwitchControl } from './controls/switch-control'
 import { VariantControl } from './controls/variant-control'
-import { TextControl } from './controls/text-control'
+import { MIXED_PLACEHOLDER, TextControl } from './controls/text-control'
 import { BROKEN_TYPE_LABEL, nodeType } from './node-shape'
 // 카탈로그가 없으면 모든 노드가 "알 수 없는 타입"이 된다. 설치는 import만으로 끝난다.
 import '../catalog-setup'
@@ -100,11 +106,12 @@ export function PropertyPanel(props: {
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 그린다.
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
   // 훅은 조건부로 부를 수 없으므로 페이지가 없어도 부른다. `pageId`가 없으면 `''`를 주는데,
   // 그 값은 어느 페이지 id와도 같지 않아 `useOpenPage('')`가 `null`을 내고 `commitProp`이
   // 그 자리에서 돌아온다 — 즉 페이지가 없을 때 편집이 나갈 길이 없다. (그 상태에서는 아래
   // `node === undefined` 분기가 먼저 걸려 위젯 자체가 그려지지 않는다.)
-  const { commitProp, commitVariant } = useEditCommit({
+  const { commitProp, commitVariant, commitOps } = useEditCommit({
     projectId: props.projectId,
     pageId: props.pageId ?? '',
   })
@@ -163,6 +170,30 @@ export function PropertyPanel(props: {
   // **고칠 수 없는 역할도 같은 값을 지난다** — 끄는 것과 커밋을 막는 것이 한 값이라 blur 커밋도 요청을 안 만든다.
   const blocked = lock !== null || !props.canEdit
   const notice = blockedNotice(props.canEdit, lock)
+
+  // **여럿을 고른 판은 일괄 편집이다**(`BulkProperties`). 하나 고른 판은 아래 그대로다.
+  if (doc !== null && selectedNodeIds.length > 1) {
+    return (
+      <BulkProperties
+        document={doc}
+        nodeIds={selectedNodeIds}
+        anchorId={selectedNodeId}
+        canEdit={props.canEdit}
+        lockOf={lockOf}
+        manifest={manifest}
+        commit={(ops) => {
+          // 보내기 전에 서버의 2차 방어와 같은 물음을 한 번 더 — 고른 뒤 도착한 남의 잠금(`editBlockedBy` — 묶음째).
+          const blocker = store.editBlockedBy(ops)
+          if (blocker !== null) {
+            store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
+            return false
+          }
+          return commitOps(ops)
+        }}
+        onRemoved={() => store.selectNode(null)}
+      />
+    )
+  }
 
   if (node === undefined) {
     return <p className="wb-shell-panel-notice">{NO_SELECTION}</p>
@@ -279,6 +310,162 @@ export function PropertyPanel(props: {
   )
 }
 
+/** 타입이 섞인 여럿을 골랐을 때의 안내(설계서 «여럿을 고른 판의 동작»). */
+export const MIXED_TYPES_NOTICE = '일괄 속성 편집은 같은 타입끼리만 됩니다'
+
+/**
+ * **여럿을 고른 판의 속성 패널**(설계서 「설계서 화면 구조」의 «여럿을 고른 판의 동작» — 일괄 속성).
+ *
+ * | 고른 것 | 그리는 것 |
+ * |---|---|
+ * | 같은 타입 | 기준 노드의 패널(같은 칸 · 같은 위젯). 칸마다 «모두 같은 값인가» — 같으면 그 값, 갈리면 «여러 값»(빈 칸 + 자리표 · 고르개의 «여러 값» 칸 · 켬/끔의 반쯤 켬). 목록 칸은 갈리면 고치지 않는다(«여러 값» 글자만) |
+ * | 타입이 섞였다 · 타입을 못 읽는 노드가 있다 | «N개 고름» · `MIXED_TYPES_NOTICE` · 고른 노드 삭제 단추 |
+ *
+ * **바꾼 칸만 모두에 쓴다** — 칸 하나의 커밋이 고른 노드마다 `propOps` · `variantOps`를 **앞 연산을 적용한 문서 위에서** 차례로 지어 묶음
+ * 하나로 보낸다(편집 하나 · 되돌리기 하나 · 남의 화면에 한 번에). 다른 칸은 노드마다 제 값 그대로다.
+ *
+ * **고른 것 가운데 하나라도 남이 잡았으면 위젯이 다 꺼진다**(하나 고른 판의 `blocked`와 같은 값 — 묶음째 423 을 받을 편집을 만들지 않는다).
+ * 위젯은 고른 목록이 바뀌면 새로 선다(`key` — 하나 고른 판의 `key={node.id}`와 같은 까닭: 앞 목록에 친 초안을 다른 목록에 커밋하지 않는다).
+ */
+function BulkProperties(props: {
+  document: PageDocument
+  nodeIds: readonly string[]
+  anchorId: string | null
+  canEdit: boolean
+  lockOf: (nodeId: string) => NodeLock | null
+  manifest: ThemeManifest
+  /** 묶음 하나를 보낸다 — 남의 잠금에 막히면 말하고 `false`. */
+  commit: (ops: PatchOp[]) => boolean
+  onRemoved: () => void
+}): ReactElement {
+  const { document } = props
+  const nodes = props.nodeIds
+    .map((id) => findNodeSafely(document.root, id))
+    .filter((node): node is WbNode => node !== undefined)
+  const lock = nodes.map((node) => props.lockOf(node.id)).find((found) => found !== null) ?? null
+  const blocked = lock !== null || !props.canEdit
+  const notice = blockedNotice(props.canEdit, lock)
+  const widgetKey = props.nodeIds.join(',')
+
+  /** 노드마다 지은 연산을 앞 연산을 적용한 문서 위에서 이어 묶는다. 지을 것이 없으면 안 보낸다. */
+  const commitEach = (build: (running: PageDocument, nodeId: string) => PatchOp[] | null): void => {
+    if (blocked) return
+    const ops: PatchOp[] = []
+    let running = document
+    for (const node of nodes) {
+      const step = build(running, node.id)
+      if (step === null || step.length === 0) continue
+      ops.push(...step)
+      running = applyOps(running, step)
+    }
+    if (ops.length > 0) props.commit(ops)
+  }
+
+  const types = new Set(nodes.map((node) => nodeType(node)))
+  const type = types.size === 1 ? [...types][0]! : null
+  const def = type === null ? undefined : getComponent(type)
+
+  if (type === null || def === undefined) {
+    const removeOps = removeManyOps(document, props.nodeIds)
+    return (
+      <>
+        <h2 className="wb-shell-panel-title">{props.nodeIds.length}개 고름</h2>
+        <p className="wb-shell-panel-notice">{type === null ? MIXED_TYPES_NOTICE : `카탈로그에 없는 컴포넌트입니다: ${type}`}</p>
+        {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
+        <button
+          type="button"
+          className="wb-shell-panel-action"
+          disabled={blocked || removeOps === null}
+          onClick={() => {
+            if (!blocked && removeOps !== null && props.commit(removeOps)) props.onRemoved()
+          }}
+        >
+          고른 노드 삭제
+        </button>
+      </>
+    )
+  }
+
+  const anchor = nodes.find((node) => node.id === props.anchorId) ?? nodes[nodes.length - 1]!
+  const fields = visibleFields(def, anchor, readProps(anchor), props.manifest)
+  const variantField = variantFieldOf(def, props.manifest)
+  /** 칸의 값 — 모두 같으면 그 값, 갈리면 `mixed`. JSON 값이라 글자로 견준다. */
+  const shared = (read: (node: WbNode) => unknown): { value: unknown; mixed: boolean } => {
+    const first = read(nodes[0]!)
+    const mixed = nodes.some((node) => JSON.stringify(read(node)) !== JSON.stringify(first))
+    return { value: mixed ? undefined : first, mixed }
+  }
+
+  return (
+    <>
+      <h2 className="wb-shell-panel-title">
+        {type} {nodes.length}개
+      </h2>
+      {fields.length === 0 && variantField === null ? (
+        <p className="wb-shell-panel-notice">이 컴포넌트에는 편집할 속성이 없습니다</p>
+      ) : (
+        <>
+          {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
+          <dl className="wb-shell-props">
+            {variantField !== null &&
+              (() => {
+                const { value, mixed } = shared((node) => node.variant)
+                return (
+                  <div className="wb-shell-prop" key={VARIANT_FIELD}>
+                    <dt className="wb-shell-prop-label">
+                      <label id={`${controlId(VARIANT_FIELD)}-label`} htmlFor={controlId(VARIANT_FIELD)}>
+                        {variantField.label}
+                      </label>
+                    </dt>
+                    <dd className="wb-shell-prop-value">
+                      <VariantControl
+                        key={widgetKey}
+                        options={variantField.options}
+                        value={value}
+                        mixed={mixed}
+                        id={controlId(VARIANT_FIELD)}
+                        disabled={blocked}
+                        onCommit={(variant) => commitEach((running, nodeId) => variantOps(running, nodeId, variant))}
+                      />
+                    </dd>
+                  </div>
+                )
+              })()}
+            {fields.map((field) => {
+              const { value, mixed } = shared((node) => readProp(node, field.prop))
+              const list = field.control === 'stringList' || field.control === 'pairList'
+              return (
+                <div className="wb-shell-prop" key={field.prop}>
+                  <dt className="wb-shell-prop-label">
+                    <label id={`${controlId(field.prop)}-label`} htmlFor={controlId(field.prop)}>
+                      {field.label}
+                    </label>
+                  </dt>
+                  <dd className="wb-shell-prop-value">
+                    {/* 목록 칸은 값이 갈리면 고치지 않는다 — 한 줄을 고친 목록을 모두에 쓰면 노드마다 다른 나머지 줄이 사라진다. */}
+                    {list && mixed ? (
+                      <>{MIXED_PLACEHOLDER}</>
+                    ) : (
+                      <PropControl
+                        key={widgetKey}
+                        field={field}
+                        value={value}
+                        mixed={mixed}
+                        disabled={blocked}
+                        onCommit={(next) => commitEach((running, nodeId) => propOps(running, nodeId, field.prop, next))}
+                      />
+                    )}
+                  </dd>
+                </div>
+              )
+            })}
+          </dl>
+        </>
+      )}
+    </>
+  )
+}
+
 /** 입력에 붙는 id. 필드는 한 패널 안에서 `prop`이 유일하므로 그것으로 충분하다. */
 function controlId(prop: string): string {
   return `wb-prop-${prop}`
@@ -381,16 +568,19 @@ function PropControl(props: {
   /** 남이 잠근 자리인가. **위젯 넷에 전부 내려간다** — 하나만 빠뜨려도 그 control만 살아난다. */
   disabled: boolean
   onCommit: (value: unknown) => void
+  /** 고른 노드들의 값이 갈린다(일괄 편집 — `BulkProperties`). 글 · 수 · 켬/끔 · 고르개가 «여러 값»을 보인다. */
+  mixed?: boolean
 }): ReactElement {
   const { field, value, disabled, onCommit } = props
   const id = controlId(field.prop)
+  const mixed = props.mixed === true
 
   if (field.control === 'text' || field.control === 'textarea' || field.control === 'number') {
-    return <TextControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} />
+    return <TextControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} mixed={mixed} />
   }
 
   if (field.control === 'switch') {
-    return <SwitchControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} />
+    return <SwitchControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} mixed={mixed} />
   }
 
   if (field.control === 'stringList' || field.control === 'pairList') {
@@ -401,7 +591,7 @@ function PropControl(props: {
   // 그 판정을 여기서 한 번 더 하는 것은, 그때 **아래 글자로 되돌아가야** 하기 때문이다 —
   // 위젯도 글자도 없으면 그 줄이 통째로 비어 사용자가 값을 볼 수 없다.
   if (field.control === 'select' && field.options !== undefined && field.options.length > 0) {
-    return <SelectControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} />
+    return <SelectControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} mixed={mixed} />
   }
 
   return <>{formatValue(value)}</>

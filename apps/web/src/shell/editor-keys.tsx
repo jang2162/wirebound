@@ -53,6 +53,7 @@ import { useEditorShortcuts } from '../edit/use-editor-shortcuts'
 import { lockedNotice } from '../panels/property-panel'
 import { useStructureCommands } from '../panels/structure-toolbar'
 import { lockedSelectionStatus, selectionCapNotice } from '../panels/toolbar-status'
+import { MULTI_WHY_DISABLED } from '../edit/structure-actions'
 import type { EditFailure } from '../store/editor-store'
 import { LOSS_RANK } from '../store/loss-notice'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -68,6 +69,7 @@ export function EditorKeys(props: {
   const store = useEditorStoreInstance()
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
   // 잠금은 구조 트리와 같은 한 자리(`store/use-locked-by.ts`)에서 받아 같은 명령 훅에 넘긴다 — 판정은 스토어가 한다.
   const lockOf = useLockedBy()
   const commands = useStructureCommands({
@@ -105,25 +107,37 @@ export function EditorKeys(props: {
       return false
     }
     if (!commitOps(edit.ops)) return false
+    // **넣은 노드 전부를 고른다**(설계서 «붙인 노드(들)가 고른 노드가 된다») — 기준 노드는 마지막 것이라 이어 붙이면 그 뒤에 차례로 선다.
     const last = edit.insertedIds[edit.insertedIds.length - 1]
-    if (last !== undefined) store.selectNode(last)
+    if (last !== undefined) store.selectMany(edit.insertedIds, 'replace', last)
     return true
   }
 
-  /** 고른 노드를 남이 잡았는가 — 루트는 빼고(루트 자리의 붙이기는 페이지 끝이라 판정 `editBlockedBy` 에 맡긴다 — `palette/palette-add.ts` 머리말). */
+  /** 고른 노드(여럿이면 그 가운데 하나라도)를 남이 잡았는가 — 루트는 빼고(루트 자리의 붙이기는 페이지 끝이라 판정 `editBlockedBy` 에 맡긴다 — `palette/palette-add.ts` 머리말). */
   const selectedLockedByOther = (): boolean => {
-    if (doc === null || selectedNodeId === null || selectedNodeId === doc.root?.id) return false
-    const lock = lockOf(selectedNodeId)
-    if (lock === null) return false
-    say(lockedSelectionStatus(lock.userName))
-    return true
+    if (doc === null) return false
+    for (const nodeId of selectedNodeIds) {
+      if (nodeId === doc.root?.id) continue
+      const lock = lockOf(nodeId)
+      if (lock === null) continue
+      say(lockedSelectionStatus(lock.userName))
+      return true
+    }
+    return false
   }
 
-  /** 고른 노드의 봉투. 고른 것이 없거나 루트면 `null` — 브라우저의 복사가 그대로다. */
+  /** 고른 노드들의 봉투 — 문서 차례(목록이 이미 그 차례다). 고른 것이 없거나 루트면 `null` — 브라우저의 복사가 그대로다. */
   const copySelected = (): string | null => {
-    if (doc === null || selectedNodeId === null || selectedNodeId === doc.root?.id) return null
-    const node = findNodeSafely(doc.root, selectedNodeId)
-    return node === undefined ? null : writeNodesEnvelope([node], doc.version)
+    if (doc === null || selectedNodeIds.length === 0 || selectedNodeIds.includes(doc.root?.id)) return null
+    const nodes = selectedNodeIds.map((id) => findNodeSafely(doc.root, id)).filter((node): node is WbNode => node !== undefined)
+    return nodes.length === 0 ? null : writeNodesEnvelope(nodes, doc.version)
+  }
+
+  /** 여럿을 고른 판에서 하나일 때만 되는 키(순서 · 계층 · 화살표 고르기)를 눌렀다 — 끈 채 이유를 말한다. */
+  const manyPicked = (): boolean => {
+    if (selectedNodeIds.length <= 1) return false
+    say(MULTI_KEY_NOTICE)
+    return true
   }
 
   /**
@@ -231,20 +245,25 @@ export function EditorKeys(props: {
         if (commands.abilities.remove) commands.remove('none')
         return
       case 'moveUp':
+        if (manyPicked()) return
         if (commands.abilities.moveUp) commands.moveUp()
         return
       case 'moveDown':
+        if (manyPicked()) return
         if (commands.abilities.moveDown) commands.moveDown()
         return
       case 'indent':
+        if (manyPicked()) return
         if (commands.abilities.indent) commands.indent()
         return
       case 'outdent':
+        if (manyPicked()) return
         if (commands.abilities.outdent) commands.outdent()
         return
+      // **고른 노드마다 제 바로 뒤에**(`duplicateOps`) — 여럿이면 묶음 하나 · 되돌리기 하나다.
       case 'duplicate':
-        if (doc === null || selectedNodeId === null || selectedLockedByOther()) return
-        commitInsert(duplicateOps(doc, [selectedNodeId]), history.commitOps)
+        if (doc === null || selectedNodeIds.length === 0 || selectedLockedByOther()) return
+        commitInsert(duplicateOps(doc, selectedNodeIds), history.commitOps)
         return
       case 'deselect':
         store.selectNode(null)
@@ -253,7 +272,7 @@ export function EditorKeys(props: {
       case 'selectNext':
       case 'selectParent':
       case 'selectFirstChild': {
-        if (doc === null) return
+        if (doc === null || manyPicked()) return
         const next = moveSelection(doc.root, selectedNodeId, command, (id) => store.selectionBlockedBy(id) !== null)
         if (next === null) return
         store.selectNode(next)
@@ -278,6 +297,9 @@ export function EditorKeys(props: {
 
   return <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} platform={platform} />
 }
+
+/** 여럿을 고른 판에서 순서 · 계층 · 화살표 고르기 키를 눌렀을 때의 하단 바 문장 — 줄 행동의 끈 이유(`MULTI_WHY_DISABLED`)를 잇는다. */
+export const MULTI_KEY_NOTICE = `여럿을 고른 판입니다 — 순서 · 계층 옮기기와 화살표로 고르기는 ${MULTI_WHY_DISABLED}`
 
 /**
  * **화살표로 옮긴 선택을 구조 트리 줄 · 캔버스 노드에서 보이게 굴린다.** 선택 이동 키는 `preventDefault` 가 걸려 칸을 굴리지 않으므로 이것이

@@ -25,7 +25,15 @@ export interface TextControlProps {
    */
   disabled: boolean
   onCommit: (value: string | number) => void
+  /**
+   * 고른 노드들의 값이 갈린다(속성 패널의 일괄 편집 — `../property-panel.tsx`의 `BulkProperties`). 빈 칸에 «여러 값» 자리표를 보이고,
+   * 아무것도 안 치고 떠나면 커밋하지 않는다(빈 초안이 원본과 같다).
+   */
+  mixed?: boolean
 }
+
+/** 값이 갈리는 칸의 자리표(일괄 편집). 고르개 · 켬/끔 칸도 같은 글자를 쓴다. */
+export const MIXED_PLACEHOLDER = '여러 값'
 
 /** 문서의 값을 입력창이 들 수 있는 문자열로. 없는 값은 빈 칸이다. */
 function toDraft(value: unknown): string {
@@ -89,6 +97,7 @@ export function TextControl(props: TextControlProps): ReactElement {
     id,
     disabled,
     className: 'wb-shell-control',
+    ...(props.mixed === true ? { placeholder: MIXED_PLACEHOLDER } : {}),
     value: draft,
     onChange: (event: { target: { value: string } }) => setDraft(event.target.value),
     onBlur: commit,

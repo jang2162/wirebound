@@ -1001,6 +1001,24 @@
   cursor: pointer;
 }
 
+/* 여럿을 고른 판의 속성 패널 단추 — 타입이 섞였을 때의 «고른 노드 삭제»(`panels/property-panel.tsx` 의 `BulkProperties`). */
+.wb-shell-panel-action {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+.wb-shell-panel-action:disabled {
+  color: var(--wb-shell-muted);
+  cursor: not-allowed;
+}
+
 /* 할 수 없는 조작(조작이 나가 있는 동안). */
 .wb-shell-menu-tool:disabled {
   color: var(--wb-shell-muted);

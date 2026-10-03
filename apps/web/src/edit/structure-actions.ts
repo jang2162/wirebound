@@ -157,6 +157,34 @@ export function structureAbilities(
 }
 
 /**
+ * **여럿을 고른 판의 판정**(설계서 「설계서 화면 구조」의 «여럿을 고른 판의 동작»). 하나 고른 판은 `structureAbilities` 그대로다.
+ *
+ * | 항목 | 여럿일 때 |
+ * |---|---|
+ * | 안에 추가 · 아래 추가 | 기준 노드의 판정 그대로(`anchorLock` — 기준 노드의 잠금) — 고르개는 기준 노드 곁에 선다 |
+ * | 삭제 | 고른 것 **전부**를 지울 수 있을 때 — 루트가 없고 문서에 다 있고(`removable`) 남이 잡은 것이 없을 때(`anyLock`) |
+ * | 위로 · 아래로 · 들여쓰기 · 내어쓰기 | **꺼진다** — 하나 골랐을 때만이다(그 이유는 `MULTI_WHY_DISABLED`) |
+ *
+ * 잠금은 판정하지 않고 받는다(위 `structureAbilities`와 같은 자세) — `anyLock`은 고른 노드마다 스토어의 `lockedBy`를 물은 결과다.
+ */
+export function selectionAbilities(
+  document: PageDocument | null,
+  nodeIds: readonly string[],
+  anchorId: string | null,
+  anchorLock: NodeLock | null,
+  anyLock: boolean,
+  removable: boolean,
+): StructureAbilities {
+  const anchor = structureAbilities(document, anchorId, anchorLock)
+  if (nodeIds.length <= 1) return anchor
+  return { ...anchor, remove: !anyLock && removable, moveUp: false, moveDown: false, indent: false, outdent: false }
+}
+
+/** 여럿을 고른 판에서 꺼지는 항목과 그 이유(`selectionAbilities`) — 줄 행동의 `title` · 단축키 통지가 같은 문장을 쓴다. */
+export const MULTI_WHY_DISABLED = '노드 하나를 골랐을 때만 됩니다'
+export const MULTI_DISABLED: ReadonlySet<keyof StructureAbilities> = new Set(['moveUp', 'moveDown', 'indent', 'outdent'])
+
+/**
  * 루트이거나 문서에 없으면 `null`.
  *
  * `parentId`가 문자열이 아니면 `null`인 것은, 이 값이 그대로 `moveNodeOps`·

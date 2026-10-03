@@ -6,6 +6,7 @@
  */
 import type { ReactElement } from 'react'
 import type { EditorField } from '@wirebound/schema'
+import { MIXED_PLACEHOLDER } from './text-control'
 
 export interface SelectControlProps {
   field: EditorField
@@ -14,6 +15,8 @@ export interface SelectControlProps {
   /** 남이 잠근 자리라 못 바꾸는가. `TextControlProps.disabled`와 같은 값이다. */
   disabled: boolean
   onCommit: (value: string) => void
+  /** 고른 노드들의 값이 갈린다(일괄 편집) — 빈 칸 대신 «여러 값»을 보인다. 그 칸을 다시 고르는 것은 커밋이 아니다. */
+  mixed?: boolean
 }
 
 /**
@@ -36,7 +39,7 @@ export function SelectControl(props: SelectControlProps): ReactElement | null {
   // 문서의 값이 선택지에 없으면 빈 칸으로 둔다. `<select>`는 값이 없는 상태를 표현할
   // 수단이 없어 첫 선택지가 골라진 것처럼 보이는데, 그러면 사용자가 건드리지도 않은
   // 값이 화면에 정답처럼 뜬다.
-  const current = typeof value === 'string' && options.includes(value) ? value : ''
+  const current = props.mixed !== true && typeof value === 'string' && options.includes(value) ? value : ''
 
   return (
     <select
@@ -44,9 +47,11 @@ export function SelectControl(props: SelectControlProps): ReactElement | null {
       disabled={disabled}
       className="wb-shell-control"
       value={current}
-      onChange={(event) => onCommit(event.target.value)}
+      onChange={(event) => {
+        if (event.target.value !== '') onCommit(event.target.value)
+      }}
     >
-      {current === '' && <option value="" />}
+      {current === '' && <option value="">{props.mixed === true ? MIXED_PLACEHOLDER : ''}</option>}
       {options.map((option) => (
         <option key={option} value={option}>
           {option}

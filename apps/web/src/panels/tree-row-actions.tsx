@@ -27,7 +27,7 @@
  */
 import { FileDown, FileUp, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type ReactElement } from 'react'
-import type { StructureAbilities } from '../edit/structure-actions'
+import { MULTI_DISABLED, MULTI_WHY_DISABLED, type StructureAbilities } from '../edit/structure-actions'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
 import type { TreeAbilities } from '../tree/tree-actions'
 import type { TreeCommands } from '../tree/use-tree-commands'
@@ -219,12 +219,14 @@ export function structureRowItems(
   const describedBy = commands.status === '' ? undefined : statusId
   const item = (key: keyof StructureAbilities, label: string, onSelect: () => void, danger = false): ActionMenuItem => {
     const allowed = commands.abilities[key]
+    // 여럿을 고른 판에서 꺼진 순서 · 계층은 «하나일 때만»이 이유다(`selectionAbilities`).
+    const why = commands.count > 1 && MULTI_DISABLED.has(key) ? MULTI_WHY_DISABLED : STRUCTURE_WHY_DISABLED[key]
     return {
       key,
       label,
       onSelect,
       disabled: !allowed,
-      title: allowed ? undefined : STRUCTURE_WHY_DISABLED[key],
+      title: allowed ? undefined : why,
       describedBy,
       danger,
     }
