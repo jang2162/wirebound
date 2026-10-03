@@ -7,10 +7,11 @@
  * 도는 때의 순서가 실행마다 갈려 셸 테스트(`editor-shell.test.tsx`)가 간헐적으로 실패한다.
  *
  * **타이핑 중에는 이 컴포넌트의 로컬 state만 바뀐다.** 그래서 노드가 바뀔 때 그 state를
- * 버릴 장치가 필요한데, 이 파일이 아니라 **부르는 쪽이 `key`로** 한다
- * (`../property-panel.tsx`). 거기에 그 선택의 근거와 잰 값이 있다.
+ * 앞 노드에 묶어 둘 장치가 필요한데, 이 파일이 아니라 **부르는 쪽이 `key`로** 한다
+ * (`../property-panel.tsx`). 거기에 그 선택의 근거와 잰 값이 있다. **`key`로 내려가는 위젯은 커밋하지 않은 초안을 `onLeave`로
+ * 넘긴다** — 칸을 떠나지 않은 채(blur 없이) 고른 것이 바뀐 판이다(`../property-panel.tsx`의 «떠나기 전에 고른 것이 바뀐 초안»).
  */
-import { useState, type ReactElement } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import type { EditorField } from '@wirebound/schema'
 
 export interface TextControlProps {
@@ -30,6 +31,11 @@ export interface TextControlProps {
    * 아무것도 안 치고 떠나면 커밋하지 않는다(빈 초안이 원본과 같다).
    */
   mixed?: boolean
+  /**
+   * **커밋하지 않은 초안을 든 채 위젯이 내려간다** — 칸을 떠나지 않았는데(blur · Enter 없이) 부르는 쪽이 `key`로 위젯을 갈아 끼웠다(고른
+   * 것이 바뀌었다). 값은 `onCommit`이 받았을 값이다(같은 규칙 — 안 바뀌었거나 수가 아니면 안 부른다).
+   */
+  onLeave?: (value: string | number) => void
 }
 
 /** 값이 갈리는 칸의 자리표(일괄 편집). 고르개 · 켬/끔 칸도 같은 글자를 쓴다. */
@@ -76,22 +82,38 @@ export function TextControl(props: TextControlProps): ReactElement {
   const isNumber = field.control === 'number'
   const isTextarea = field.control === 'textarea'
 
-  function commit(): void {
+  /** 커밋할 값 — 없으면 `null`. `commit`과 `onLeave`가 같은 규칙을 쓴다. */
+  function pending(): string | number | null {
     // **값이 안 바뀌었으면 커밋하지 않는다.** blur마다 revision이 나면 이력이 무의미해진다.
-    if (draft === original) return
+    if (draft === original) return null
 
     if (isNumber) {
       // `Number('')`은 `0`이고 `Number('abc')`는 `NaN`이다. 앞은 "지우기만 해도 0이 들어가는"
       // 형태이고 뒤는 서버가 422를 낼 값이라, 둘 다 보내지 않고 입력만 남긴다.
-      if (draft.trim() === '') return
+      if (draft.trim() === '') return null
       const parsed = Number(draft)
-      if (!Number.isFinite(parsed)) return
-      onCommit(parsed)
-      return
+      return Number.isFinite(parsed) ? parsed : null
     }
 
-    onCommit(draft)
+    return draft
   }
+
+  function commit(): void {
+    const value = pending()
+    if (value !== null) onCommit(value)
+  }
+
+  // **내려갈 때 커밋하지 않은 초안을 넘긴다**(`onLeave`). 마지막으로 그린 판의 초안 · 원본으로 판정한다 — 커밋이 나갔으면 낙관적 적용이
+  // 원본을 초안으로 맞춰(위 «문서 값이 밖에서 바뀌면») 넘길 것이 없다. **«`onCommit`을 불렀다»로 거르지 않는다** — 부르는 쪽이 막은 커밋이
+  // 있다(남의 잠금이 와 칸이 꺼지면 Chrome 이 blur 를 내고 그 커밋은 `blocked`가 버린다). 그 초안도 내려갈 때 넘겨야 남은 노드에 간다.
+  const leave = useRef<() => void>(() => {})
+  useLayoutEffect(() => {
+    leave.current = () => {
+      const value = pending()
+      if (value !== null) props.onLeave?.(value)
+    }
+  })
+  useEffect(() => () => leave.current(), [])
 
   const shared = {
     id,

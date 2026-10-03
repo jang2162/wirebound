@@ -306,6 +306,11 @@ export interface CommitOptions {
    * 잃음 조각이 섰으면(`EditorStore.tellLoss` — 수습 · 판을 다시 싣는 읽기) 그 편집이 치우지 않는다. 주지 않으면 앞 통지를 늘 치운다.
    */
   pressed?: EditFailure | null
+  /**
+   * **하단 바를 치우지 않는다** — 사람이 새로 누른 편집이 아니라 다른 일의 결과로 나가는 편집이 준다(고른 것이 바뀌어 내려가는 칸의 초안 —
+   * `panels/property-panel.tsx`의 «떠나기 전에 고른 것이 바뀐 초안»). 그 «다른 일»(일부 거절)이 방금 세운 통지가 그 자리에 남는다.
+   */
+  keepNotice?: boolean
 }
 
 export interface EditCommit {
@@ -832,7 +837,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
 
       // 앞 실패의 통지를 치운다. 남겨 두면 사용자가 방금 낸 편집도 실패했다고 읽는다. **누른 뒤 기다렸다가 내는 편집(`pressed`)은 그 사이
       // 선 잃음을 치우지 않는다** — 누른 때의 통지가 아니라 그 뒤에 온 잃음이다(`sayAfterWait`와 같은 규칙 · `CommitOptions`).
-      if (options.pressed === undefined || !lossArrivedSince(options.pressed)) store.setEditFailure(null)
+      if (options.keepNotice !== true && (options.pressed === undefined || !lossArrivedSince(options.pressed))) store.setEditFailure(null)
       void pump()
       return true
     },

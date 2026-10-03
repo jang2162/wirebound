@@ -8,6 +8,7 @@
  * | 늦은 목록 · 부분 거절 | bob 이 먼저 쥔 노드를 alice 가 사각형에 넣었다 — alice 는 bob 의 잠금 소식을 아직 못 받았다(WS 내림 지연). 서버가 그 노드만 거절하고 alice 의 선택에서 그것만 빠지며 하단 바 한 줄 |
  * | 일괄 속성 | 같은 타입 둘의 갈리는 칸을 바꾸면 서버 revision 하나 · bob 화면에 한 번에 · Cmd+Z 한 번에 통째로 |
  * | 일괄 삭제 | 셋을 지우면 revision 하나 · Cmd+Z 한 번에 통째로 |
+ * | 칸에 친 채 고른 것이 바뀐다 | 일부 거절 · 다른 탭의 지움 · 옮김이면 친 글이 앞 목록에 남은 노드로 · Cmd+클릭은 blur 가 앞 목록에 · 남은 노드가 없거나 타입이 바뀌었으면 하단 바 한 줄 |
  * | 사각형 | 줌 0.5 · 1.5 · 칸을 굴린 판 · 끝 스크롤 · 4px 안 뗌은 클릭 · Escape 는 걷기만 · 뗀 뒤의 클릭이 선택을 안 바꾼다 |
  */
 import type { Page } from 'playwright-core'
@@ -283,6 +284,180 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
     } finally {
       await a.close()
     }
+  })
+
+  /**
+   * **칸에 친 채 고른 것이 바뀐다**(`panels/property-panel.tsx`의 `useLeftoverCommit`). 사람이 칸을 떠나지 않았는데(blur 없이) 남의 일이
+   * 고른 것을 바꾸면 위젯이 내려가며 친 글을 **앞 목록 가운데 아직 문서에 있고 남이 안 쥔 노드**에 쓴다 — 그런 노드가 없으면 버리고 하단 바
+   * 한 줄. 남의 일은 일부 거절 · 같은 사람의 다른 탭(REST — 사람 단위 판정이라 내 잠금에 안 막힌다)의 지움 · 옮김이다. 사람의 Cmd+클릭은
+   * 누름이 먼저 blur 로 커밋한다(목록이 바뀌기 전에 — 앞 목록에 간다).
+   */
+  describe('칸에 친 채 고른 것이 바뀐다', () => {
+    /** 같은 사람의 다른 탭 — 서버의 머리 위에 묶음 하나(REST). */
+    async function otherTab(P: string, ops: unknown[]): Promise<void> {
+      const head = (await call('GET', P)).body.headSeq
+      const response = await call('PATCH', `${P}/ops`, { baseSeq: head, ops })
+      if (response.status >= 300) throw new Error(`다른 탭의 편집 ${response.status} ${JSON.stringify(response.body)}`)
+    }
+    const content = (page: Page) => page.getByLabel('내용', { exact: true })
+
+    /**
+     * bob 이 `n_t02` 를 먼저 쥔다. WS 내림이 늦은 alice 가 `n_t01 … n_t03` 을 사각형으로 고르고 곧바로 «내용» 칸에 친다(blur 없음). 거절이
+     * 닿아 `n_t02` 가 빠지면 친 글은 남은 둘에 간다 · 거절의 통지는 그대로다. 카나리아: 늦춘 덩어리 > 0 · 친 직후 칸 값 · 거절 프레임.
+     */
+    it('일부 거절 — 친 글이 남은 노드에 가고 거절의 한 줄은 남는다', async () => {
+      const P = await fixture('draft-denied', TEXTS(5))
+      const delay = await stack.startDownDelay(2500)
+      const a = await openTab(P, 'alice', delay.origin)
+      const b = await openTab(P, 'bob')
+      try {
+        await narrow(a.page)
+        await poll('alice 의 WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
+        await a.page.waitForTimeout(3000)
+        const before = await server(P)
+        await row(b.page, id(2)).click()
+        await b.page.waitForTimeout(300)
+        await marquee(a.page, await nodeBox(a.page, id(1)), await nodeBox(a.page, id(3)))
+        await content(a.page).fill('새 글')
+        const typed = await content(a.page).inputValue()
+        await poll('거절이 alice 에게 닿는다', async () => a.received.filter((kind) => kind === 'lock-denied').length, (n) => n >= 1, 10_000)
+        const after = await poll('친 글이 서버에 닿는다', () => server(P), (now) => now.headSeq > before.headSeq, 5000).catch(() => server(P))
+        expect({ delayed: delay.delayed() > 0, typed, children: after.children, revisions: after.headSeq - before.headSeq, alerts: await alerts(a.page) }).toEqual({
+          delayed: true,
+          typed: '새 글',
+          children: [`${id(0)}:줄 0`, `${id(1)}:새 글`, `${id(2)}:줄 2`, `${id(3)}:새 글`, `${id(4)}:줄 4`],
+          revisions: 1,
+          alerts: [`${stack.users.bob.name}님이 편집 중이라 고를 수 없습니다`],
+        })
+      } finally {
+        await a.close()
+        await b.close()
+        await delay.close()
+      }
+    })
+
+    it('같은 사람의 다른 탭이 고른 것 하나를 지운다 — 친 글이 남은 노드에 간다', async () => {
+      const P = await fixture('draft-removed', TEXTS(3))
+      const a = await openTab(P)
+      try {
+        await row(a.page, id(0)).click()
+        await row(a.page, id(1)).click({ modifiers: ['ControlOrMeta'] })
+        await content(a.page).fill('일괄 글')
+        const before = await server(P)
+        await otherTab(P, [{ op: 'remove', path: '/root/children/1' }])
+        await poll('고른 것이 하나로 준다', () => picked(a.page), (now) => now.all.length === 1)
+        const after = await poll('친 글이 서버에 닿는다', () => server(P), (now) => now.headSeq > before.headSeq + 1, 5000).catch(() => server(P))
+        expect({ children: after.children, revisions: after.headSeq - before.headSeq, alerts: await alerts(a.page) }).toEqual({
+          children: [`${id(0)}:일괄 글`, `${id(2)}:줄 2`],
+          // 지움 하나 + 친 글 하나.
+          revisions: 2,
+          alerts: [],
+        })
+      } finally {
+        await a.close()
+      }
+    })
+
+    it('같은 사람의 다른 탭이 고른 카드를 다른 고른 카드 안으로 옮긴다 — 친 글이 둘 다에 간다', async () => {
+      const card = (n: number) => ({ id: `n_c${n}`, type: 'Card', props: { title: `카드 ${n}` }, children: [] })
+      const P = await fixture('draft-moved', [card(0), card(1)])
+      const a = await openTab(P)
+      try {
+        await row(a.page, 'n_c0').click()
+        await row(a.page, 'n_c1').click({ modifiers: ['ControlOrMeta'] })
+        await a.page.getByLabel('제목', { exact: true }).fill('같은 제목')
+        const before = await server(P)
+        await otherTab(P, [{ op: 'move', from: '/root/children/1', path: '/root/children/0/children/-' }])
+        await poll('고른 것이 바깥 카드 하나로 준다', () => picked(a.page), (now) => now.all.length === 1)
+        const titles = async () => {
+          const body = (await call('GET', P)).body
+          const outer = body.schema.root.children[0]
+          return { headSeq: body.headSeq as number, titles: [outer.props.title, outer.children?.[0]?.props?.title] }
+        }
+        const after = await poll('친 글이 서버에 닿는다', titles, (now) => now.headSeq > before.headSeq + 1, 5000).catch(() => titles())
+        expect({ titles: after.titles, revisions: after.headSeq - before.headSeq, alerts: await alerts(a.page) }).toEqual({
+          titles: ['같은 제목', '같은 제목'],
+          revisions: 2,
+          alerts: [],
+        })
+      } finally {
+        await a.close()
+      }
+    })
+
+    /** 사람의 Cmd+클릭 — 누름(mousedown)이 칸의 포커스를 거둬 blur 가 **앞 목록에** 커밋한 뒤 목록이 바뀐다. 새로 든 노드에는 안 간다. */
+    it('Cmd+클릭으로 목록을 바꾸면 친 글은 앞 목록에 간다 — 새로 든 노드에는 안 간다', async () => {
+      const P = await fixture('draft-cmd-click', TEXTS(3))
+      const a = await openTab(P)
+      try {
+        await row(a.page, id(0)).click()
+        await row(a.page, id(1)).click({ modifiers: ['ControlOrMeta'] })
+        await content(a.page).fill('클릭 전 글')
+        const before = await server(P)
+        await row(a.page, id(2)).click({ modifiers: ['ControlOrMeta'] })
+        const after = await poll('친 글이 서버에 닿는다', () => server(P), (now) => now.headSeq > before.headSeq, 5000).catch(() => server(P))
+        await a.page.waitForTimeout(300)
+        const settled = await server(P)
+        expect({ picked: (await picked(a.page)).all, children: after.children, revisions: settled.headSeq - before.headSeq }).toEqual({
+          picked: [id(0), id(1), id(2)],
+          children: [`${id(0)}:클릭 전 글`, `${id(1)}:클릭 전 글`, `${id(2)}:줄 2`],
+          revisions: 1,
+        })
+      } finally {
+        await a.close()
+      }
+    })
+
+    /**
+     * 같은 id 의 노드가 다른 타입이 된다 — 같은 사람의 다른 탭이 문서를 통째로 갈아 끼워(`PUT …/schema`) 고른 글 노드를 같은 id 의 카드로
+     * 바꿨다. 고른 것은 그대로지만 «내용» 칸이 내려가고, 그 초안을 쓸 «글» 노드가 없다: 버리고 하단 바 한 줄(카드의 제목에 쓰지 않는다).
+     */
+    it('다른 탭이 고른 노드의 타입을 바꾸면 친 글을 버리고 하단 바 한 줄', async () => {
+      const P = await fixture('draft-retyped', TEXTS(2))
+      const a = await openTab(P)
+      try {
+        await row(a.page, id(0)).click()
+        await content(a.page).fill('타입 전 글')
+        const before = (await call('GET', P)).body
+        const retyped = structuredClone(before.schema)
+        retyped.root.children[0] = { id: id(0), type: 'Card', props: { title: '카드' }, children: [] }
+        const put = await call('PUT', `${P}/schema`, { schema: retyped })
+        if (put.status >= 300) throw new Error(`PUT ${put.status} ${JSON.stringify(put.body)}`)
+        await poll('제목 칸이 선다', () => a.page.getByLabel('제목', { exact: true }).count(), (n) => n === 1)
+        await a.page.waitForTimeout(500)
+        const after = (await call('GET', P)).body
+        expect({
+          picked: (await picked(a.page)).all,
+          first: after.schema.root.children[0].props,
+          revisions: after.headSeq - before.headSeq,
+          alerts: await alerts(a.page),
+        }).toEqual({ picked: [id(0)], first: { title: '카드' }, revisions: 1, alerts: ['바뀐 선택 때문에 친 값을 쓰지 않았습니다'] })
+      } finally {
+        await a.close()
+      }
+    })
+
+    /** 하나 고른 판 — 그 노드를 같은 사람의 다른 탭이 지우면 쓸 노드가 없다: 버리고 하단 바 한 줄. */
+    it('하나 고른 노드를 다른 탭이 지우면 친 글을 버리고 하단 바 한 줄', async () => {
+      const P = await fixture('draft-single-removed', TEXTS(2))
+      const a = await openTab(P)
+      try {
+        await row(a.page, id(0)).click()
+        await content(a.page).fill('하나 글')
+        const before = await server(P)
+        await otherTab(P, [{ op: 'remove', path: '/root/children/0' }])
+        await poll('고른 것이 빈다', () => picked(a.page), (now) => now.all.length === 0)
+        await a.page.waitForTimeout(500)
+        const after = await server(P)
+        expect({ children: after.children, revisions: after.headSeq - before.headSeq, alerts: await alerts(a.page) }).toEqual({
+          children: [`${id(1)}:줄 1`],
+          revisions: 1,
+          alerts: ['바뀐 선택 때문에 친 값을 쓰지 않았습니다'],
+        })
+      } finally {
+        await a.close()
+      }
+    })
   })
 
   /**

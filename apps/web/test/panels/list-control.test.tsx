@@ -270,6 +270,24 @@ describe('속성 패널 — 목록 컨트롤', () => {
     expect(node.textContent).toContain('성명')
   })
 
+  /**
+   * **칸을 떠나지 않은 채 고른 것이 바뀌면 고치던 칸의 초안이 앞 노드에 간다**(`ListControl`의 `onLeave` → `panels/property-panel.tsx`의
+   * `useLeftoverCommit`). `fireEvent.click`은 포커스를 안 옮겨 blur 없이 선택이 바뀐다 — 사람이 아니라 남의 일(일부 거절 · 다른 탭)이
+   * 고른 것을 바꾸는 길과 같은 꼴이다. 새 노드(`n-empty`)에는 안 간다. 혼자 죽는 변조: `ListControl`이 내려갈 때 초안을 안 넘긴다.
+   */
+  it('고치던 칸을 떠나지 않은 채 고른 것이 바뀌면 그 초안이 앞 노드에 간다', async () => {
+    const { calls, api } = editable()
+    await openPage(DOC, { apiOverrides: api })
+
+    selectAt('List', 0)
+    fireEvent.change(itemInputs('컬럼')[0]!, { target: { value: '성명' } })
+    selectAt('List', 1)
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/columns', value: ['성명', '이메일'] }])
+    expect(itemValues('컬럼')).toEqual([])
+  })
+
   it('다른 노드를 고르면 목록이 그 노드 값으로 바뀐다', async () => {
     await openPage(DOC)
 

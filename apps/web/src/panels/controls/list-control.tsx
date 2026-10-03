@@ -16,7 +16,7 @@
  * 화면이 된다 — `../property-panel.tsx`의 `stringify`가 같은 이유로 있다. 검증을 통과하지
  * 못한 문서가 스토어에 실리는 창(재조회 전)이 그 유입 지점이다.
  */
-import { useState, type ReactElement } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import type { EditorField } from '@wirebound/schema'
 
 /** `pairList`의 원소. 키와 값 둘 다 문자열이다. */
@@ -38,6 +38,11 @@ export interface ListControlProps {
    */
   disabled: boolean
   onCommit: (value: ListValue) => void
+  /**
+   * **고치던 칸의 초안을 든 채 위젯이 내려간다** — 칸을 떠나지 않았는데 부르는 쪽이 `key`로 위젯을 갈아 끼웠다(`./text-control.tsx`의
+   * `onLeave`와 같다). 값은 blur 가 냈을 목록이다.
+   */
+  onLeave?: (value: ListValue) => void
 }
 
 function isPairList(field: EditorField): boolean {
@@ -86,6 +91,27 @@ export function ListControl(props: ListControlProps): ReactElement {
     return items[index]?.[part] ?? ''
   }
 
+  /** 고치던 칸의 초안을 얹은 목록 — 초안이 없거나 안 바뀌었으면 `null`. `commitDraft`와 `onLeave`가 같은 규칙을 쓴다. */
+  function pendingList(): ListValue | null {
+    if (draft === null) return null
+    const current = items[draft.index]
+    if (current === undefined || current[draft.part] === draft.text) return null
+    return toValue(
+      items.map((item, index) => (index === draft.index ? { ...item, [draft.part]: draft.text } : item)),
+      pairs,
+    )
+  }
+
+  // **내려갈 때 고치던 칸의 초안을 넘긴다**(`onLeave`) — 마지막으로 그린 판의 초안 · 목록으로 판정한다.
+  const leave = useRef<() => void>(() => {})
+  useLayoutEffect(() => {
+    leave.current = () => {
+      const value = pendingList()
+      if (value !== null) props.onLeave?.(value)
+    }
+  })
+  useEffect(() => () => leave.current(), [])
+
   function commitDraft(): void {
     if (draft === null) return
     // **꺼진 동안 도착한 blur는 커밋도 버리기도 아니다.** 남이 이 노드를 잠그면 칸이
@@ -96,16 +122,10 @@ export function ListControl(props: ListControlProps): ReactElement {
     // `TextControl`은 커밋이 막혀도 초안을 들고 있으므로 이 갈림이 없다.
     // *"친 글자는 잠금이 오가도 남는다"*(`test/lock/props-lock.test.tsx`)를 두 위젯이 같게 지킨다.
     if (disabled) return
-    const current = items[draft.index]
-    setDraft(null)
-    if (current === undefined) return
     // 값이 안 바뀌었으면 커밋하지 않는다 — blur마다 revision이 나면 이력이 무의미해진다.
-    if (current[draft.part] === draft.text) return
-
-    const next = items.map((item, index) =>
-      index === draft.index ? { ...item, [draft.part]: draft.text } : item,
-    )
-    onCommit(toValue(next, pairs))
+    const next = pendingList()
+    setDraft(null)
+    if (next !== null) onCommit(next)
   }
 
   function addItem(): void {
