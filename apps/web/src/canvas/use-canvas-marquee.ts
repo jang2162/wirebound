@@ -11,8 +11,10 @@
  *   붙잡아(`setPointerCapture`) 그 문서 밖으로 나가도 움직임이 온다.
  * - **끝 스크롤은 끌어 놓기와 같은 셈**(`drag/use-pointer-drag.ts` 의 `edgeScrollStep`)이다 — 칸이 굴러도 누른 점은 문서 좌표로 붙잡혀 있고,
  *   지금 점은 틱마다 마지막 호스트 점을 그 순간의 iframe 자리로 옮긴다(`./canvas-marquee.ts` 머리말 «좌표 셋»). 휠로 굴려도 같다.
- * - **뗀 뒤의 클릭은 삼킨다** — 사각형이 선 누름의 클릭이 그 밑 노드 하나를 고르거나(캔버스 문서) 선택을 비우면(칸의 빈 자리 — 표면의
- *   `onClick`) 방금 고른 것이 사라진다(`swallowNextClick` — 누름이 난 창).
+ * - **캔버스 문서에서 선 사각형의 뗀 뒤 클릭은 삼킨다** — 그 클릭이 그 밑 노드 하나를 고르거나 선택을 비우면(표면의 `onClick` — 문서는
+ *   portal 이라 그 클릭이 표면으로 버블된다) 방금 고른 것이 사라진다(`swallowNextClick` — iframe 의 창). 칸의 빈 자리에서 선 사각형의
+ *   클릭은 삼키지 않는다 — 누른 요소(칸 · 판)가 포인터를 붙잡아 클릭이 그 요소에 나고, 그것은 표면의 바깥이라 선택을 안 바꾼다(Chrome:
+ *   칸 여백의 `elementFromPoint` 는 `main.wb-shell-canvas` 뿐이고 표면은 iframe 과 같은 상자다).
  * - **Escape 는 사각형을 걷는다** — 고르지 않고, 선택 해제도 아니다(capture 로 받아 막는다 — 단축키의 선택 해제는 막힌 키를 안 본다).
  * - **글자 고르기를 걷는다** — 사각형이 서면 그 누름이 만든 글자 선택을 지운다. 누를 때는 안 건드린다(포커스 · 캐럿은 E1 의 단축키 · 클립보드가 본다).
  */
@@ -184,7 +186,7 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
       at.lastHost = toHost(event, source)
       const picked = at.cancelled ? null : nodesInRect(currentRect(at), drawnNodes())
       end()
-      swallowNextClick(source === 'frame' ? win : window)
+      if (source === 'frame') swallowNextClick(win)
       if (picked !== null) latest.current.onPick(picked, event.shiftKey)
     }
 

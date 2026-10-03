@@ -189,7 +189,7 @@ export interface EditorState {
   headSeq: number
   /**
    * **기준 노드** — 마지막으로 고른 것. 하나 고른 판의 고른 노드이고, 여럿 고른 판에서는 Shift 범위 · 화살표 이동 · 붙일 자리 · 속성
-   * 패널의 기준이다(설계서 「설계서 화면 구조」의 «선택»). `selectedNodeIds` 안의 하나이거나, 그것이 비었으면 `null`이다.
+   * 패널의 기준이다(설계서 「설계서 화면 구조」의 «선택 — 고르는 법»). `selectedNodeIds` 안의 하나이거나, 그것이 비었으면 `null`이다.
    */
   selectedNodeId: string | null
   /**

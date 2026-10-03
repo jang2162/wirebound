@@ -1,5 +1,5 @@
 /**
- * **여러 노드 선택 — 실브라우저**(설계서 「설계서 화면 구조」의 «선택» · 「소프트 잠금」 · «편집 하나 = 되돌리기 하나»). 일회용 DB · api · vite ·
+ * **여러 노드 선택 — 실브라우저**(설계서 「설계서 화면 구조」의 «선택 — 고르는 법» · 「소프트 잠금」 · 「개인 undo/redo」의 «편집 하나 = 되돌리기 하나»). 일회용 DB · api · vite ·
  * Chrome(`editor-stack.ts`). 헤드리스 Chrome 의 `navigator.platform` 은 `MacIntel` 이라 명령 키는 Meta 다(`ControlOrMeta`).
  *
  * | 판 | 무엇을 재나 |
@@ -199,11 +199,24 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       const right = await picked(a.page)
       await poll('거절이 alice 에게 닿는다', async () => a.received.filter((kind) => kind === 'lock-denied').length, (n) => n >= 1, 10_000)
       await a.page.waitForTimeout(300)
-      expect({ delayed: delay.delayed() > 0, right: right.all, after: await picked(a.page), alerts: await alerts(a.page) }).toEqual({
+      // 서버가 나머지 둘은 쥐었다 — bob 화면(늦추지 않은 WS)에 alice 의 배지 둘이 선다. 화면 값만으로는 서버가 집합째 거절한 판과 안 갈린다.
+      const bobBadges = await poll(
+        'bob 화면에 alice 의 배지 둘',
+        () =>
+          b.page.evaluate(() =>
+            // 배지는 줄(`[data-tree-id]`)의 형제다 — 같은 `li` 안의 줄에서 id 를 읽는다.
+            [...document.querySelectorAll('.wb-shell-structure-lock')].map((badge) => badge.parentElement?.querySelector(':scope > [data-tree-id]')?.getAttribute('data-tree-id') ?? '').sort(),
+          ),
+        (ids) => ids.length >= 2,
+        5000,
+      ).catch((error: Error) => error.message)
+      expect({ delayed: delay.delayed() > 0, right: right.all, after: await picked(a.page), alerts: await alerts(a.page), bobBadges }).toEqual({
         delayed: true,
         right: [id(1), id(2), id(3)],
         after: { anchor: id(3), all: [id(1), id(3)] },
         alerts: [`${stack.users.bob.name}님이 편집 중이라 고를 수 없습니다`],
+        // bob 이 쥔 n_t02 는 bob 화면에 배지가 없다(제 잠금).
+        bobBadges: [id(1), id(3)],
       })
     } finally {
       await a.close()
@@ -335,6 +348,36 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         scrolled: true,
         firstHidden: true,
         first: id(0),
+      })
+    } finally {
+      await a.close()
+    }
+  })
+
+  /**
+   * **캔버스 문서 안에서 시작하는 사각형** — 카드 안쪽 여백에서 눌러 카드의 글 둘을 감싼다(카드는 안 든다 — 사각형이 카드 안이다). 누름 ·
+   * 뗌이 다 카드 요소라 뗀 뒤의 클릭이 카드에 나고, 그 클릭은 표면의 `onClick` 으로 버블돼 카드 하나를 고르려 한다 — 삼켜야 글 둘이 남는다.
+   * 카나리아: 누른 점의 `elementFromPoint` 가 iframe(문서 안)이다.
+   */
+  it('사각형 — 캔버스 문서 안에서 시작해도 서고 뗀 뒤의 클릭이 선택을 안 바꾼다', async () => {
+    const P = await fixture('marquee-inside', [{ id: 'n_card', type: 'Card', props: { title: '카드' }, children: [T(id(0), '안 0'), T(id(1), '안 1')] }])
+    const a = await openTab(P)
+    try {
+      await narrow(a.page)
+      const card = await nodeBox(a.page, 'n_card')
+      const first = await nodeBox(a.page, id(0))
+      const second = await nodeBox(a.page, id(1))
+      const press = { x: (card.x + first.x) / 2, y: first.y - 2 }
+      const inside = await a.page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName ?? null, press)
+      await a.page.mouse.move(press.x, press.y)
+      await a.page.mouse.down()
+      await a.page.mouse.move((second.x + second.width + card.x + card.width) / 2, second.y + second.height + 2, { steps: 10 })
+      await a.page.mouse.up()
+      await a.page.waitForTimeout(150)
+      expect({ inside, card: press.x > card.x && press.x < first.x, picked: (await picked(a.page)).all }).toEqual({
+        inside: 'IFRAME',
+        card: true,
+        picked: [id(0), id(1)],
       })
     } finally {
       await a.close()
