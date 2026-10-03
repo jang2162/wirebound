@@ -138,7 +138,7 @@ export interface SelectionCheckInput {
   projectId: string
   pageId: string
   /**
-   * 새로 잡으려는 노드들. **선택은 노드마다 그 서브트리를 통째로 claim 한다**(설계서 「소프트 잠금」) — 노드마다 포인터는 그 노드의
+   * 잡으려는 노드들 — 프레임의 집합 전부다(이미 쥔 것도 — `ws/lock.ts`의 «집합을 갈아 끼운다»). **선택은 노드마다 그 서브트리를 통째로 claim 한다**(설계서 「소프트 잠금」) — 노드마다 포인터는 그 노드의
    * 경로 하나다. 서로는 견주지 않는다(같은 사람이다). 빈 목록이면 아무것도 안 읽는다.
    */
   nodeIds: readonly string[]

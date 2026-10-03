@@ -5,9 +5,9 @@
  *
  * # 잠금 집합 (설계서 「소프트 잠금」 · 여러 노드 선택)
  *
- * 한 연결이 서브트리 여럿을 쥔다. `lock` 프레임의 `nodeIds`가 «이 연결의 잠금을 이 집합으로»다 — 서버는 페이지 행을 쥔 채 **새로 드는
- * 것만** 겹침을 묻고, 빠지는 것은 놓고, 남는 것은 만료만 미룬다(`ws/lock.ts`의 «집합을 갈아 끼운다»). 거절은 **거절된 노드만** 싣고
- * 나머지는 쥔다.
+ * 한 연결이 서브트리 여럿을 쥔다. `lock` 프레임의 `nodeIds`가 «이 연결의 잠금을 이 집합으로»다 — 서버는 페이지 행을 쥔 채 **집합
+ * 전부의** 겹침을 묻고(이미 쥔 것도 — 쥔 뒤 복원이 문서를 바꿨을 수 있다), 빠지는 것은 놓는다(`ws/lock.ts`의 «집합을 갈아 끼운다»).
+ * 거절은 **거절된 노드만** 싣고 나머지는 쥔다.
  *
  * 하나짜리 프레임(`nodeId`)의 수명 · 거절 · 줄은 `ws-lock.test.ts`가 잰다 — 하나짜리는 `[nodeId]`로 읽혀 같은 길을 지난다. 이 파일은
  * 집합이 더하는 축만 잰다.
@@ -128,6 +128,94 @@ async function until(label: string, ready: () => Promise<boolean> | boolean, tim
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
   throw new Error(`${label} — 시나리오가 성립하지 않았습니다`)
+}
+
+type TestDb = ReturnType<typeof getTestDb>
+
+/** 페이지 행을 테스트 트랜잭션이 `FOR UPDATE`로 쥔다 — 놓을 때까지(`comments-concurrency.test.ts`의 `withPageRowHeld`와 같은 꼴). */
+function holdPageRow(db: TestDb, pageId: string): Promise<{ pid: number; release: () => Promise<void> }> {
+  return new Promise((resolveHeld, rejectHeld) => {
+    let free = (): void => {}
+    const freed = new Promise<void>((resolve) => (free = resolve))
+    const done = db
+      .transaction()
+      .execute(async (trx) => {
+        const pid = (await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx)).rows[0]?.pid ?? 0
+        await sql`select 1 from pages where id = ${pageId} for update`.execute(trx)
+        resolveHeld({
+          pid,
+          release: async () => {
+            free()
+            await done
+          },
+        })
+        await freed
+      })
+      .catch(rejectHeld)
+  })
+}
+
+/** 쥔 백엔드 뒤에 사슬로 선 백엔드 수(`comments-concurrency.test.ts`의 `waitersBehind`와 같은 질의). */
+async function waitersBehind(db: TestDb, holder: number): Promise<number> {
+  const result = await sql<{ n: number }>`
+    with recursive chain(pid) as (
+      select a.pid from pg_stat_activity a where ${holder}::int = any(pg_blocking_pids(a.pid))
+      union
+      select a.pid from pg_stat_activity a join chain c on c.pid = any(pg_blocking_pids(a.pid))
+    )
+    select count(*)::int as n from chain
+  `.execute(db)
+  return result.rows[0]?.n ?? 0
+}
+
+/**
+ * `n_c`가 `n_a` 안에 있는 문서를 스냅샷으로 얼리고 판의 문서(`n_c`가 뿌리의 자식)로 되돌린다 — 그 스냅샷의 id. 복원하면 `n_a`와 `n_c`가
+ * 조상/자손이 된다(복원은 잠금을 안 본다 — 설계서 「소프트 잠금」의 «거치지 않는 입구»).
+ */
+async function snapshotWithCInsideA(ctx: RealApiContext, fx: Board): Promise<string> {
+  const pageUrl = `/api/projects/${fx.project.id}/pages/${fx.page.id}/schema`
+  const before = await getTestDb().selectFrom('pages').select('schema').where('id', '=', fx.page.id).executeTakeFirstOrThrow()
+  const flat = before.schema as { version: number; root: { children: Array<{ id: string; children?: unknown[] }> } }
+  const cInsideA = structuredClone(flat)
+  const [a, b, c] = cInsideA.root.children
+  cInsideA.root.children = [{ ...a!, children: [...(a!.children ?? []), c!] }, b!]
+  const put = async (schema: unknown): Promise<void> => {
+    const response = await ctx.app.inject({ method: 'PUT', url: pageUrl, cookies: fx.bora.cookie, payload: { schema } as never })
+    if (response.statusCode !== 200) throw new Error(`PUT 실패 (${response.statusCode}): ${response.body}`)
+  }
+  await put(cInsideA)
+  const snapshot = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${fx.project.id}/snapshots`,
+    cookies: fx.bora.cookie,
+    payload: { tag: 'c-inside-a' },
+  })
+  if (snapshot.statusCode !== 201) throw new Error(`스냅샷 실패 (${snapshot.statusCode}): ${snapshot.body}`)
+  await put(flat)
+  return (snapshot.json() as { id: string }).id
+}
+
+async function restore(ctx: RealApiContext, fx: Board, snapshotId: string): Promise<void> {
+  const response = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${fx.project.id}/snapshots/${snapshotId}/restore`,
+    cookies: fx.bora.cookie,
+  })
+  if (response.statusCode !== 200) throw new Error(`복원 실패 (${response.statusCode}): ${response.body}`)
+}
+
+/** 서로 다른 사람의 `n_a`와 `n_c` 잠금이 함께 섰는가 — 복원 뒤 문서에서 둘은 조상/자손이다. */
+const overlapping = (ctx: RealApiContext, fx: Board): boolean => {
+  const live = ctx.app.realtime.locks.liveIn(fx.project.id)
+  const a = live.find((lock) => lock.nodeId === 'n_a')
+  const c = live.find((lock) => lock.nodeId === 'n_c')
+  return a !== undefined && c !== undefined && a.userId !== c.userId
+}
+
+/** 거절이 오기를 `ms`까지 기다린다 — 안 와도 던지지 않는다(안 온 것은 단언이 값으로 잰다). */
+async function deniedWithin(probe: WsProbe, ms: number): Promise<void> {
+  const deadline = Date.now() + ms
+  while (Date.now() < deadline && denials(probe).length === 0) await new Promise((resolve) => setTimeout(resolve, 10))
 }
 
 describe('집합을 쥐고 갈아 끼운다', () => {
@@ -276,39 +364,96 @@ describe('하트비트', () => {
   }, 30_000)
 
   /**
-   * **남는 것은 다시 판정하지 않는다** — 하트비트는 목록도 문서도 안 읽는다. 같은 페이지에 남의 잠금이 있어도 그렇다(다시 판정하면
-   * 하트비트마다 머리 문서를 읽는다 — 200 개를 고른 화면이 몇 초마다). 판정은 목록을 읽어야 하므로(`liveIn`) 그 수를 센다. 혼자 죽는
-   * 변조: 집합 전부를 판정한다.
+   * **남는 것도 다시 판정한다** — 쥔 뒤 문서가 바뀌어 남의 잠금과 조상/자손이 됐으면 하트비트가 그것을 거절한다(`ws/lock.ts`의 «집합을
+   * 갈아 끼운다 — 프레임마다 집합 전부를 판정한다»). 문서를 잠금과 무관하게 갈아 끼우는 쓰기가 스냅샷 복원이다: 보라 `[n_a]` · 다혜
+   * `[n_c, n_b]`를 쥔 채 보라가 `n_c`가 `n_a` 안에 있던 스냅샷을 복원한다. **먼저 하트비트를 보낸 쪽이 겹친 노드를 거절받고**(그 판정이
+   * 남의 잠금을 본다) 뒤는 그것이 놓인 뒤라 그대로 선다 — 하나짜리 시절(main)의 «같은 자리를 다시 보내면 판정이 다시 돈다»와 같은
+   * 판정이다. 혼자 죽는 변조: 남는 것을 판정하지 않는다(겹친 둘이 다 남고 거절이 없다).
    */
-  it('남는 것은 다시 판정하지 않는다 — 하트비트는 잠금 목록을 안 읽는다', async () => {
+  it.each([
+    { first: 'dahye', denied: [['n_c']], held: ['보라:n_a', '다혜:n_b'] },
+    { first: 'bora', denied: [['n_a']], held: ['다혜:n_b', '다혜:n_c'] },
+  ] as const)('복원이 두 사람의 잠금을 조상/자손으로 만들면 먼저 하트비트를 보낸 쪽($first)이 겹친 노드를 거절받는다', async (row) => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
+      const snapshotId = await snapshotWithCInsideA(ctx, fx)
       const boraTab = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
       const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
-      dahyeTab.send(setFrame(fx.page.id, ['n_c']))
-      await locksWith(boraTab, 'n_c')
-      boraTab.send(setFrame(fx.page.id, ['n_a', 'n_b'], 1))
-      await locksUntil(dahyeTab, (list) => list.length === 3, '셋')
-      await dahyeTab.quiet()
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.onlooker.cookie.wb_session))
+      boraTab.send(setFrame(fx.page.id, ['n_a'], 1))
+      dahyeTab.send(setFrame(fx.page.id, ['n_c', 'n_b'], 1))
+      await locksUntil(watcher, (list) => list.length === 3, '셋')
 
-      const { locks } = ctx.app.realtime
-      const realLiveIn = locks.liveIn
-      let reads = 0
-      locks.liveIn = (projectId) => {
-        reads += 1
-        return realLiveIn(projectId)
-      }
+      await restore(ctx, fx, snapshotId)
+      // 카나리아 — 복원이 겹침을 만들었다(복원은 잠금을 안 본다).
+      expect(overlapping(ctx, fx)).toBe(true)
+
+      const [firstTab, secondTab] = row.first === 'dahye' ? [dahyeTab, boraTab] : [boraTab, dahyeTab]
+      const [firstSet, secondSet] = row.first === 'dahye' ? [['n_c', 'n_b'], ['n_a']] : [['n_a'], ['n_c', 'n_b']]
+      firstTab.send(setFrame(fx.page.id, firstSet, 2))
+      await deniedWithin(firstTab, 3_000)
+      secondTab.send(setFrame(fx.page.id, secondSet, 2))
+      await secondTab.quiet()
+
+      const names = { [fx.bora.user.name]: '보라', [fx.dahye.user.name]: '다혜' }
+      expect({
+        overlapping: overlapping(ctx, fx),
+        firstDenied: denials(firstTab).map((frame) => frame.nodeIds),
+        secondDenied: denials(secondTab).length,
+        held: held(ctx, fx.project.id)
+          .map((line) => {
+            const [name, node] = line.split(':')
+            return `${names[name!]}:${node}`
+          })
+          .sort(),
+      }).toEqual({ overlapping: false, firstDenied: row.denied, secondDenied: 0, held: [...row.held].sort() })
+    })
+  }, 30_000)
+})
+
+describe('하트비트의 경주', () => {
+  const db = getTestDb()
+
+  /**
+   * **겹친 두 잠금의 하트비트가 페이지 행에 함께 줄 선다** — 복원 뒤 둘이 같은 순간 하트비트를 보내도 하나만 거절된다(둘 다 남지도,
+   * 둘 다 잃지도 않는다). 페이지 행을 테스트 트랜잭션이 `FOR UPDATE`로 쥐고 두 `lock`이 그 행에 줄 선 것을 본 뒤에 놓는다(줄이 안 서면
+   * 던진다). 판정과 `hold`가 한 틱이라 먼저 판정된 쪽이 거절되고 뒤는 그 놓음을 본다. 혼자 죽는 변조: 남는 것을 판정하지 않는다(겹친
+   * 둘이 다 남는다).
+   */
+  it('겹친 두 잠금의 하트비트가 행에 함께 줄 서도 하나만 거절되고 겹침이 풀린다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const snapshotId = await snapshotWithCInsideA(ctx, fx)
+      const boraTab = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
+      const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.onlooker.cookie.wb_session))
+      boraTab.send(setFrame(fx.page.id, ['n_a'], 1))
+      dahyeTab.send(setFrame(fx.page.id, ['n_c', 'n_b'], 1))
+      await locksUntil(watcher, (list) => list.length === 3, '셋')
+      await restore(ctx, fx, snapshotId)
+      expect(overlapping(ctx, fx)).toBe(true)
+
+      const row = await holdPageRow(db, fx.page.id)
+      boraTab.send(setFrame(fx.page.id, ['n_a'], 2))
+      dahyeTab.send(setFrame(fx.page.id, ['n_c', 'n_b'], 2))
+      let lined: unknown
       try {
-        boraTab.send(setFrame(fx.page.id, ['n_a', 'n_b'], 2))
-        await dahyeTab.quiet()
-        // 카나리아 — 새로 드는 것이 있으면 읽는다(이 계측이 판정을 본다).
-        const heartbeatReads = reads
-        boraTab.send(setFrame(fx.page.id, ['n_a', 'n_b', 'n_a1'], 3))
-        await dahyeTab.quiet()
-        expect({ heartbeatReads, grew: reads > heartbeatReads }).toEqual({ heartbeatReads: 0, grew: true })
-      } finally {
-        locks.liveIn = realLiveIn
+        await until('두 하트비트가 페이지 행에 줄 선다', async () => (await waitersBehind(db, row.pid)) >= 2)
+      } catch (error) {
+        lined = error
       }
+      await row.release()
+      if (lined !== undefined) throw lined
+
+      await Promise.all([deniedWithin(boraTab, 3_000), deniedWithin(dahyeTab, 3_000)])
+      await watcher.quiet()
+      const boraDenied = denials(boraTab).map((frame) => frame.nodeIds)
+      const dahyeDenied = denials(dahyeTab).map((frame) => frame.nodeIds)
+      expect({
+        overlapping: overlapping(ctx, fx),
+        deniedSides: [boraDenied.length, dahyeDenied.length].sort(),
+        denied: boraDenied.length > 0 ? boraDenied : dahyeDenied,
+      }).toEqual({ overlapping: false, deniedSides: [0, 1], denied: boraDenied.length > 0 ? [['n_a']] : [['n_c']] })
     })
   }, 30_000)
 })
@@ -434,41 +579,6 @@ describe('규격', () => {
 describe('겹치는 집합의 경주', () => {
   const db = getTestDb()
 
-  function holdPageRow(pageId: string): Promise<{ pid: number; release: () => Promise<void> }> {
-    return new Promise((resolveHeld, rejectHeld) => {
-      let free = (): void => {}
-      const freed = new Promise<void>((resolve) => (free = resolve))
-      const done = db
-        .transaction()
-        .execute(async (trx) => {
-          const pid = (await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx)).rows[0]?.pid ?? 0
-          await sql`select 1 from pages where id = ${pageId} for update`.execute(trx)
-          resolveHeld({
-            pid,
-            release: async () => {
-              free()
-              await done
-            },
-          })
-          await freed
-        })
-        .catch(rejectHeld)
-    })
-  }
-
-  /** 쥔 백엔드 뒤에 사슬로 선 백엔드 수(`comments-concurrency.test.ts`의 `waitersBehind`와 같은 질의). */
-  async function waitersBehind(holder: number): Promise<number> {
-    const result = await sql<{ n: number }>`
-      with recursive chain(pid) as (
-        select a.pid from pg_stat_activity a where ${holder}::int = any(pg_blocking_pids(a.pid))
-        union
-        select a.pid from pg_stat_activity a join chain c on c.pid = any(pg_blocking_pids(a.pid))
-      )
-      select count(*)::int as n from chain
-    `.execute(db)
-    return result.rows[0]?.n ?? 0
-  }
-
   /**
    * 보라 `[n_a, n_b]` · 다혜 `[n_b1, n_c]` — `n_b`가 `n_b1`의 조상이라 겹친다. 이긴 쪽은 집합을 다 쥐고, 진 쪽은 겹친 노드 하나만
    * 거절되고 나머지를 쥔다. 겹친 잠금(서로 다른 사람의 두 잠금이 조상/자손)은 0 이다. 혼자 죽는 변조: 판정을 집합째로 묻고 `hold`를
@@ -480,13 +590,13 @@ describe('겹치는 집합의 경주', () => {
       const boraTab = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
       const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
       const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.onlooker.cookie.wb_session))
-      const row = await holdPageRow(fx.page.id)
+      const row = await holdPageRow(db, fx.page.id)
 
       boraTab.send(setFrame(fx.page.id, ['n_a', 'n_b'], 1))
       dahyeTab.send(setFrame(fx.page.id, ['n_b1', 'n_c'], 1))
       let lined: unknown
       try {
-        await until('두 `lock`이 페이지 행에 줄 선다', async () => (await waitersBehind(row.pid)) >= 2)
+        await until('두 `lock`이 페이지 행에 줄 선다', async () => (await waitersBehind(db, row.pid)) >= 2)
       } catch (error) {
         lined = error
       }
