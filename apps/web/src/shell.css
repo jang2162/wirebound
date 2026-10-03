@@ -2769,6 +2769,51 @@
   cursor: pointer;
 }
 
+/* 단축키 목록(`shell/shortcut-help.tsx`) — `?` 가 여는 대화 상자 안. 자리 · 폭 · 스크롤은 대화 상자가 갖고, 이 몸체는 표 둘을 잇는다.
+   표는 키 칸과 이름 칸 둘이다 — 키 칸은 줄바꿈하지 않고 이름 칸이 남는 폭을 받는다. */
+.wb-shell-shortcut-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.wb-shell-shortcut-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.wb-shell-shortcut-caption {
+  padding-bottom: 6px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-shortcut-keys {
+  width: 1%;
+  padding: 4px 16px 4px 0;
+  text-align: left;
+  font-weight: normal;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.wb-shell-shortcut-kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  background: var(--wb-shell-chrome);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.wb-shell-shortcut-label {
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}
+
 /* 내보내기(설계서 「HTML 정적 번들」) — `…` 의 «프로젝트 내보내기»가 여는 대화 상자 안의 요약이다(`shell/shell-dialog.tsx`). 자리 · 폭 ·
    스크롤은 대화 상자가 갖고, 이 몸체는 안쪽 여백만 잡는다. */
 .wb-shell-export-body {

@@ -45,6 +45,7 @@ import { BrandLink } from '../shell/brand-link'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
+import { EditorKeys } from '../shell/editor-keys'
 import { ShellDialog } from '../shell/shell-dialog'
 import { ComponentPalette, PaletteToggle } from '../palette/component-palette'
 import { ShellFooter } from '../shell/shell-footer'
@@ -805,6 +806,9 @@ function EditorShell(props: {
         <ShellDialog open={dialog === 'export'} title="프로젝트 내보내기" onClose={() => setDialog(null)}>
           <ExportBody projectId={props.project.id} />
         </ShellDialog>
+        {/* **에디터 단축키**(`shell/editor-keys.tsx`) — 호스트와 캔버스 문서에 리스너를 걸고, `?` 의 도움말 상자를 여기 그린다. 편집 명령은
+            편집 모드 && `canEdit` 일 때만, 고르기 · 선택 이동 · 도움말은 늘 선다. */}
+        <EditorKeys projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />
       </header>
 
       <nav

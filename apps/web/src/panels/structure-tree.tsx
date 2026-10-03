@@ -7,13 +7,15 @@
  * 서로 다른 것이 되고, 그 어긋남은 속성 패널이 어느 쪽을 믿어야 할지의 문제로 번진다.
  *
  * 고르는 것 위에 **구조 편집이 얹혀 있다** — 줄의 `+` · `…`(`panels/tree-row-actions.tsx`) · 제목 줄의 뿌리 `+` · 끌어 놓기
- * (`drag/use-pointer-drag.ts` · 자리 판정 `edit/structure-drop.ts`) · 단축키. 넷 다 `useStructureCommands`(`panels/structure-toolbar.tsx`)
- * 의 명령을 부르고, 판정과 편집은 그쪽이 한다.
+ * (`drag/use-pointer-drag.ts` · 자리 판정 `edit/structure-drop.ts`) · 고르개 단축키(`TREE_SHORTCUTS`). 넷 다 `useStructureCommands`
+ * (`panels/structure-toolbar.tsx`)의 명령을 부르고, 판정과 편집은 그쪽이 한다. 삭제 · 순서 · 계층의 키는 에디터 단축키
+ * (`shell/editor-keys.tsx`)가 같은 훅의 함수로 받는다.
  */
 import { useId, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { NodeLock, WbNode } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
+import type { ShortcutLine } from '../edit/editor-shortcuts'
 import { usePublishTreeRegion } from '../drag/use-placement'
 import { scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
 import { findNodeSafely } from '../edit/safe-walk'
@@ -29,40 +31,11 @@ import { StructurePicker, useStructureCommands, type StructureCommands } from '.
 import { structureRowItems, TreeRowActions } from './tree-row-actions'
 
 /**
- * 키보드 단축키. **줄 행동의 항목과 같은 함수를 부른다** — `run`이 `StructureCommands`에서
- * 꺼내 쓰고, `blocked`가 항목의 끔과 같은 판정을 지난다.
- *
- * **무엇을 골랐고 왜인가.**
- *
- * | 키 | 조작 | 근거 |
- * |---|---|---|
- * | `Delete`·`Backspace` | 삭제 | `Delete`가 삭제의 기본 키다. `Backspace`를 함께 받는 것은 **macOS 노트북 키보드에 forward delete 키가 없기 때문**이다 — 그 자리의 키가 내는 것이 `Backspace`다 |
- * | `Alt`+`↑`·`↓` | 순서 이동 | 화살표 방향이 곧 옮기는 방향이다 |
- * | `Alt`+`Shift`+`→`·`←` | **들여쓰기**·내어쓰기 | 아래 |
- *
- * **방향은 깊이를 따른다 — `→`가 들여쓰기다.** 들여쓰기는 깊이를 **늘리는** 것이고 LTR에서
- * 오른쪽이 그 방향이다. **메뉴 트리도 `→`가 들여쓰기다** — 한쪽만 방향을 바꾸면 한 화면의
- * 두 트리에서 같은 키가 반대 일을 한다(한 화면에서 양쪽 요청을 재면 드러난다).
- * `test/panels/tree-shortcuts.test.tsx`가 두 트리를 한 자리에서 대조한다 — **이 결함이 다시
- * 나는 길은 한쪽만 고치는 것이고**, 그 케이스가 그것을 막는다.
- *
- * **`Alt`+`←`·`→`를 쓰지 않은 것은 그것이 Windows·Linux의 Chrome·Firefox에서 브라우저
- * 뒤로/앞으로이기 때문이다.** `Shift`를 더한 조합에 브라우저·OS의 기본 바인딩이 있는지는
- * **재지 못했다** — jsdom에는 브라우저 히스토리도 OS 단축키도 없다. `preventDefault`가
- * `Alt`+`←`를 실제로 막는지도 같은 이유로 확인하지 못했다. **재지 못한 것을 근거로
- * 삼지 않으려고 덜 알려진 조합을 골랐고, 그 선택 자체가 잰 것이 아니다.**
- *
- * **들여쓰기 단축키가 있어야 판정 검사에 하중이 생긴다.** 순서 이동·삭제는 판정을
- * 지우고 실행해도 뒤에서 막히지만(`moveNodeOps`가 범위 밖에 `null`, `removeNodeOps`가
- * 루트에 `null`), **들여쓰기는 다르다** — `moveNodeOps`는 설계상 타입을 읽지 않으므로
- * 앞 형제가 자식을 담을 수 없어도 ops를 만들고, 그것이 `children-not-allowed` 문서가
- * 되어 서버로 나간다(실측). 그것을 막는 것은 `structureAbilities.indent` 하나뿐이다.
- *
- * **`Tab`은 빼앗지 않는다.** 들여쓰기 단축키로 쓰고 싶어지는 자리지만, 그러면 키보드
- * 사용자가 트리를 빠져나갈 수 없다(`test/panels/structure-keyboard.test.tsx`의
- * `Tab이 트리 안에서 들여쓰기를 하지 않는다`).
+ * **이 상자의 단축키** — 구조 트리의 고르개를 여는 둘(패턴 넣기 · 프리셋). 고르개는 이 트리의 명령 인스턴스(`useStructureCommands` 의
+ * `adding`)에 매여 있어 트리 상자 안에서 받는다. 삭제 · 순서 · 계층 · 선택 이동은 에디터 어디서나 먹는 표(`edit/editor-shortcuts.ts` 의
+ * `EDITOR_SHORTCUTS`)가 받는다 — 셸이 같은 명령 훅의 함수에 잇는다(`shell/editor-keys.tsx`).
  */
-const SHORTCUTS: {
+const TREE_SHORTCUTS: {
   match: (event: KeyboardEvent) => boolean
   /**
    * 이 조작이 지금 막혔는가. **항목의 끔과 같은 값을 지나야 한다** — 키
@@ -84,45 +57,21 @@ const SHORTCUTS: {
    */
   blocked: (commands: StructureCommands) => boolean
   run: (commands: StructureCommands) => void
+  /** 도움말 상자의 한 줄(`shell/shortcut-help.tsx`). */
+  line: ShortcutLine
 }[] = [
   {
-    match: (event) => event.key === 'Delete' || event.key === 'Backspace',
-    blocked: (commands) => !commands.abilities.remove,
-    run: (commands) => commands.remove(),
-  },
-  {
-    match: (event) => event.key === 'ArrowUp' && event.altKey,
-    blocked: (commands) => !commands.abilities.moveUp,
-    run: (commands) => commands.moveUp(),
-  },
-  {
-    match: (event) => event.key === 'ArrowDown' && event.altKey,
-    blocked: (commands) => !commands.abilities.moveDown,
-    run: (commands) => commands.moveDown(),
-  },
-  {
-    match: (event) => event.key === 'ArrowRight' && event.altKey && event.shiftKey,
-    blocked: (commands) => !commands.abilities.indent,
-    run: (commands) => commands.indent(),
-  },
-  {
-    match: (event) => event.key === 'ArrowLeft' && event.altKey && event.shiftKey,
-    blocked: (commands) => !commands.abilities.outdent,
-    run: (commands) => commands.outdent(),
-  },
-  {
     // **`code`를 본다 — `key`가 아니다.** macOS에서 `Alt`(Option)를 누른 채 글자 키를
-    // 치면 `event.key`가 그 조합의 **특수문자**가 된다(`Alt`+`P`는 `π`). 지금까지의
-    // 단축키가 전부 화살표·`Delete`라 그 축을 만난 적이 없었다. `code`는 물리 키를
+    // 치면 `event.key`가 그 조합의 **특수문자**가 된다(`Alt`+`P`는 `π`). `code`는 물리 키를
     // 가리키므로 그 변환을 지나지 않는다.
     //
     // **jsdom으로는 그 변환을 재현할 수 없다** — `key`도 `code`도 테스트가 직접 넣는
     // 값이다. 그래서 이것은 **잰 것이 아니라 플랫폼 동작을 근거로 고른 것**이고,
-    // `Alt`+`Shift` 조합에 브라우저·OS 기본 바인딩이 있는지도 위의 화살표 단축키와 같은
-    // 이유로 재지 못했다.
+    // `Alt`+`Shift` 조합에 브라우저·OS 기본 바인딩이 있는지도 재지 못했다.
     match: (event) => event.code === 'KeyI' && event.altKey && event.shiftKey,
     blocked: (commands) => commands.patternLocked,
     run: (commands) => commands.openAdd('pattern'),
+    line: { keys: (p) => (p === 'mac' ? '⌥⇧I' : 'Alt+Shift+I'), label: '패턴 넣기' },
   },
   {
     // **`I`(넣기)와 `P`(페이지 통째)로 갈랐다.** 둘 다 `P`로 시작하는 낱말이라
@@ -131,8 +80,12 @@ const SHORTCUTS: {
     match: (event) => event.code === 'KeyP' && event.altKey && event.shiftKey,
     blocked: (commands) => commands.presetLocked,
     run: (commands) => commands.openAdd('preset'),
+    line: { keys: (p) => (p === 'mac' ? '⌥⇧P' : 'Alt+Shift+P'), label: '프리셋' },
   },
 ]
+
+/** 도움말 상자가 그리는 이 상자의 줄 — 위 표에서 짓는다(글자를 두 벌 두지 않는다). */
+export const TREE_SHORTCUT_LINES: readonly ShortcutLine[] = TREE_SHORTCUTS.map((shortcut) => shortcut.line)
 
 export function StructureTree(props: {
   projectId: string
@@ -159,8 +112,7 @@ export function StructureTree(props: {
   // **선택이 잠금을 거는가**(스토어의 `selectionClaims`). 값을 안 쓴다 — 바뀌면 다시 그리려고 구독한다.
   // 줄의 `disabled`는 `store.selectionBlockedBy`가 정하고, 그 판정이 이 값을 본다.
   useEditorStore(store, (s) => s.selectionClaims)
-  // **조작을 여기서 한 번만 만든다.** 줄 행동에 내려 주고 아래 키 핸들러도 같은 것을 쓴다 —
-  // 그것이 위 `SHORTCUTS`가 요구하는 "같은 함수"다.
+  // **조작을 여기서 한 번만 만든다.** 줄 행동에 내려 주고 아래 고르개 단축키(`TREE_SHORTCUTS`)도 같은 것을 쓴다.
   const commands = useStructureCommands({
     projectId: props.projectId,
     pageId: props.pageId,
@@ -169,9 +121,9 @@ export function StructureTree(props: {
     // 그것으로 말한다. 목록을 손에 쥐는 자리는 화면에 하나여야 하고(그 규칙과 근거는
     // `test/lock/one-verdict.test.ts`), 그 하나가 바로 위의 구독이다.
     //
-    // **아래 키 핸들러가 같은 값을 지나는 것이 요점이다.** 단축키는 `commands.abilities`를
+    // **단축키가 같은 값을 지나는 것이 요점이다.** 에디터 단축키(`shell/editor-keys.tsx`)도 같은 훅의 `abilities`를
     // 보므로, 판정이 훅에서 꺼지면 단축키도 함께 꺼진다 — 판정을 이 컴포넌트에서 끔으로
-    // 겹치면 그렇게 되지 않는다(줄 행동과 단축키를 한 묶음으로 두는 이유가 그것이다).
+    // 겹치면 그렇게 되지 않는다.
     //
     // **줄에 붙는 배지로는 안 닫히는 자리가 있다.** 배지는 잠금이 가리키는 노드에만
     // 붙는데(아래 `StructureNode`), 막히는 것은 그 **서브트리 전체**다 — 자동 선택된
@@ -221,26 +173,18 @@ export function StructureTree(props: {
   })
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    // **고칠 수 없으면 단축키도 없다**(`editable`). 찾기 전에 돌아가므로 `preventDefault`도 안 걸린다 — 방향키 같은 키가
-    // 브라우저의 기본 동작(스크롤)을 그대로 갖는다.
+    // **고칠 수 없으면 단축키도 없다**(`editable`). 찾기 전에 돌아가므로 `preventDefault`도 안 걸린다.
     if (!props.editable) return
-    // **값을 넣거나 고르는 표면에서 난 키는 구조 조작이 아니다.** 판정과 실측은
-    // `./typing-surface.ts`에 있다(그 상자 밖의 패널도 같은 것을 쓸 수 있게 갈라 두었다).
-    // **단축키를 찾기 전에** 걸러야 `preventDefault`가 걸리지 않는다 — 걸리면 글자가
-    // 지워지지 않는다(그 순서를 뒤집는 변이가 죽는다).
+    // **값을 넣거나 고르는 표면에서 난 키는 구조 조작이 아니다**(`./typing-surface.ts`). **단축키를 찾기 전에** 걸러야
+    // `preventDefault`가 걸리지 않는다 — 걸리면 글자가 안 들어간다.
     if (isTypingSurface(event.target)) return
 
-    const shortcut = SHORTCUTS.find((candidate) => candidate.match(event))
+    const shortcut = TREE_SHORTCUTS.find((candidate) => candidate.match(event))
     if (shortcut === undefined) return
 
-    // **인식한 키만 막는다.** `Tab`은 위 목록에 없으므로 여기 오지 않고, 브라우저의
-    // 포커스 이동이 그대로 일어난다.
+    // **인식한 키만 막는다.** 막은 키는 에디터 단축키 리스너도 안 본다(`shortcutsBlocked` 의 `defaultPrevented`).
     event.preventDefault()
-    // **버튼과 같은 판정을 지난다.** 키 이벤트는 `disabled`를 지나지 않으므로
-    // 여기서 보지 않으면 비활성인 조작이 단축키로만 실행된다. **남이 잠근 자리도 이 줄이
-    // 막는다** — 잠금은 `useStructureCommands`가 넣으므로 여기서 따로 볼 것이 없고,
-    // 그것이 아홉 **전부**에 걸린다.
-    // (`test/lock/toolbar-abilities.test.tsx`가 단축키 쪽을 따로 잰다.)
+    // **버튼과 같은 판정을 지난다** — 키 이벤트는 `disabled`를 지나지 않는다. 남이 잠근 자리도 이 줄이 막는다.
     if (shortcut.blocked(commands)) return
 
     shortcut.run(commands)
@@ -279,9 +223,8 @@ export function StructureTree(props: {
   ) : null
 
   return (
-    // **키 핸들러가 이 상자에 붙는다 — 전역이 아니다.** 속성 패널에서 타이핑하는
-    // 키는 다른 서브트리에서 나므로 여기로 버블되지 않는다. 스타일이 없는 상자라
-    // 클래스도 붙이지 않는다.
+    // **고르개 단축키가 이 상자에 붙는다 — 전역이 아니다**(고르개가 이 트리의 상태라서 — `TREE_SHORTCUTS` 머리말). 스타일이 없는
+    // 상자라 클래스도 붙이지 않는다.
     <div onKeyDown={handleKeyDown}>
       <ul className="wb-shell-structure" ref={treeRef}>
         <StructureNode

@@ -36,6 +36,10 @@
  * ㉡ **폼 컨트롤이다** — 값을 타이핑하거나(`input`·`textarea`) 고른다(`select`).
  *    태그 이름이 아니라 **생성자로 본다**: `role`을 덧씌워도, 커스텀 요소가 그것을
  *    상속해도 같은 판정이 나온다.
+ *
+ * **생성자는 그 요소가 사는 창의 것을 쓴다.** 캔버스는 same-origin iframe 이라(`canvas/canvas-document.tsx`) 그 안의 `<input>` 은
+ * 호스트의 `HTMLInputElement` 의 인스턴스가 아니다 — 호스트 생성자로 보면 캔버스 안 입력에서 친 `?` · `Backspace` 가 단축키로 샌다
+ * (뷰 모드 캔버스는 테마의 입력을 그대로 받는다). 그래서 요소인지는 `nodeType` 으로, 생성자는 `ownerDocument.defaultView` 에서 읽는다.
  * ㉢ **ARIA가 편집 표면이라고 말한다**(`EDITABLE_ROLES`) — 아래 목록의 근거는 *"우리
  *    단축키와 같은 키를 그 역할이 이미 쓴다"*이다.
  * ㉣ **shadow root를 든 요소다** — 그 안에서 난 이벤트는 **호스트로 리타게팅되므로**
@@ -46,7 +50,6 @@
  * - **자기 키 처리를 하면서 편집 가능성도 role도 선언하지 않는 요소.** `tabindex`만 든
  *   `<div>`에 자체 `keydown`을 단 위젯이 그렇다 — 그런 위젯은 자기 이벤트를 멈추거나
  *   (`stopPropagation`) 위 넷 중 하나를 선언해야 한다.
- * - **다른 document의 요소**(`instanceof`가 거짓이 된다). 이 앱은 iframe을 그리지 않는다 — 그리게 되면 이 구멍이 열린다.
  * - **`mode: 'closed'`인 shadow root.** 그 호스트는 `shadowRoot`가 `null`이라 ㉣가 못
  *   본다(케이스가 그 한계를 값으로 고정한다). 리타게팅은 mode와 무관하게
  *   일어나므로 **구멍이 실재한다** — 다만 그것을 여는 방법이 없다. `attachShadow`를 다시
@@ -74,28 +77,32 @@ export const EDITABLE_ROLES: ReadonlySet<string> = new Set([
 ])
 
 export function isTypingSurface(target: EventTarget | null): boolean {
-  // 요소가 아니면(document·window·다른 realm의 노드) 판정할 것이 없다.
-  if (!(target instanceof HTMLElement)) return false
+  // 요소가 아니면(document·window·창 없는 문서의 노드) 판정할 것이 없다. 생성자는 그 요소의 창 것이다(위 ㉡).
+  const node = target as Node | null
+  if (node === null || typeof node !== 'object' || node.nodeType !== 1) return false
+  const view = node.ownerDocument?.defaultView
+  if (view === null || view === undefined || !(node instanceof view.HTMLElement)) return false
+  const element: HTMLElement = node
 
   // ㉠ 편집 가능하다. 속성과 프로퍼티를 **둘 다** 본다(위 머리말의 ㉠).
-  const editable = target.getAttribute('contenteditable')
+  const editable = element.getAttribute('contenteditable')
   if (editable !== null && editable !== 'false') return true
-  if (target.isContentEditable) return true
+  if (element.isContentEditable) return true
 
   // ㉡ 폼 컨트롤. **생성자로 본다** — 태그 이름 비교는 `role`을 덧씌우거나 커스텀 요소가
   // 상속하는 경우를 놓친다.
   if (
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement
+    element instanceof view.HTMLInputElement ||
+    element instanceof view.HTMLTextAreaElement ||
+    element instanceof view.HTMLSelectElement
   ) {
     return true
   }
 
   // ㉢ ARIA가 편집 표면이라고 말한다.
-  const role = target.getAttribute('role')
+  const role = element.getAttribute('role')
   if (role !== null && EDITABLE_ROLES.has(role)) return true
 
   // ㉣ 안을 볼 수 없다 — shadow root 안에서 난 이벤트는 호스트로 리타게팅된다.
-  return target.shadowRoot !== null
+  return element.shadowRoot !== null
 }
