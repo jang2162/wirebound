@@ -183,7 +183,7 @@ describe('에디터 단축키 — 셸', () => {
     expect(selectedType()).toBe('Page')
   })
 
-  it('Escape 가 선택을 푼다 — 열린 행동 메뉴가 있으면 메뉴만 닫는다', async () => {
+  it('Escape 가 선택을 푼다 — 포커스가 열린 행동 메뉴 안이면 메뉴만 닫는다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
     fireEvent.click(row('Card'))
     fireEvent.click(within(structureRegion()).getByRole('button', { name: 'Card 더 보기' }))

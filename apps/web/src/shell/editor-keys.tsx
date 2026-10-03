@@ -182,7 +182,7 @@ export function EditorKeys(props: {
     // 페이지 대상이 있으면 지금 프로젝트의 페이지 목록으로 가늠한다 — 이 화면에 목록을 든 곳이 메뉴 트리뿐이라(그 훅의 상태) 다시 읽는다.
     // **읽는 사이 떠났으면 붙이지 않고 말한다** — 페이지 id 가 아니라 판을 연 세대(`pageOpenEpoch`)로 가른다. id 로 가르면 떠났다 돌아온 판이
     // «안 떠났다»가 되어 돌아온 뒤의 선택 뒤에 붙었고, 떠나 머문 판은 말없이 사라졌다(Chrome · `build-test/editor-shortcuts-review.test.ts` «L4»).
-    // 큐의 세대(`queueEpoch`)로 가르면 같은 페이지를 다시 실은 판까지 «옮겨»로 버리고 그 거짓 문장이 수습의 통지를 덮었다(Chrome ·
+    // 큐를 갈아 낀 수(`EditorStore` 의 `#queueEpoch`)로 가르면 같은 페이지를 다시 실은 판까지 «옮겨»로 버리고 그 거짓 문장이 수습의 통지를 덮었다(Chrome ·
     // `build-test/editor-shortcuts-review-2.test.ts` «R4»).
     const opened = store.pageOpenEpoch()
     const pressed = store.getState().editFailure
