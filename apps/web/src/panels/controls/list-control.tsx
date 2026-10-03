@@ -18,6 +18,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import type { EditorField } from '@wirebound/schema'
+import { shellIcon } from '../../shell/icons'
 
 /** `pairList`의 원소. 키와 값 둘 다 문자열이다. */
 export interface Pair {
@@ -176,18 +177,22 @@ export function ListControl(props: ListControlProps): ReactElement {
           <li className="wb-shell-list-item" key={index}>
             {pairs && cell(index, 'key', `${field.label} ${index + 1}번째 키`)}
             {cell(index, 'value', `${field.label} ${index + 1}번째 ${pairs ? '값' : '항목'}`)}
+            {/* 아이콘만 남는 단추 — 이름 · `title` 은 아이콘을 얹기 전의 글 그대로(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»). */}
             <button
               type="button"
               className="wb-shell-list-remove"
+              aria-label={`${index + 1}번째 지우기`}
+              title={`${index + 1}번째 지우기`}
               disabled={disabled}
               onClick={() => removeItem(index)}
             >
-              {`${index + 1}번째 지우기`}
+              {shellIcon('remove', 14)}
             </button>
           </li>
         ))}
       </ul>
       <button type="button" className="wb-shell-list-add" disabled={disabled} onClick={addItem}>
+        {shellIcon('add', 14, 'wb-shell-icon-lead')}
         항목 추가
       </button>
     </div>

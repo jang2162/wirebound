@@ -20,10 +20,14 @@ export function pickedRow(region: HTMLElement): HTMLElement {
   return row
 }
 
-/** 줄의 `+` · `…` 단추. `+`가 없는 줄(페이지)에서 `+`를 물으면 `null`. */
+/**
+ * 줄의 `+` · `…` 단추. `+`가 없는 줄(페이지)에서 `+`를 물으면 `null`. 둘은 아이콘만이라 글자가 없다 — 접근 이름의 끝(«… 추가» ·
+ * «… 더 보기» — `src/panels/tree-row-actions.tsx` 의 `TreeRowActions`)으로 가른다.
+ */
 export function rowToggle(row: HTMLElement, which: '+' | '…'): HTMLButtonElement | null {
   const toggles = [...row.querySelectorAll<HTMLButtonElement>('[aria-haspopup="menu"]')]
-  return toggles.find((toggle) => toggle.textContent === which) ?? null
+  const suffix = which === '+' ? ' 추가' : ' 더 보기'
+  return toggles.find((toggle) => (toggle.getAttribute('aria-label') ?? '').endsWith(suffix)) ?? null
 }
 
 /**

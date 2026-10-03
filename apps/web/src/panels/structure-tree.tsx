@@ -23,6 +23,7 @@ import { visibleNodeOrder } from '../edit/selection-move'
 import { structureAbilities } from '../edit/structure-actions'
 import { sameDrop, type StructureDrop } from '../edit/structure-drop'
 import { ActionMenu } from '../shell/action-menu'
+import { ICONS } from '../shell/icons'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 import { nodeTypeLabel } from './node-shape'
@@ -278,12 +279,13 @@ export function StructureTree(props: {
           // 패턴은 고른 것을 풀고 연다 — 고른 것이 없으면 뿌리의 자식 끝에 꽂는다(`edit/pattern-insert.ts`).
           <ActionMenu
             label="구조 트리에 추가"
-            glyph="+"
+            icon={ICONS.add}
             compact
             items={[
               {
                 key: 'page',
                 label: '페이지에 추가',
+                icon: ICONS.addInside,
                 disabled: !rootAbilities.addInside,
                 onSelect: () => {
                   if (rootId === null) return
@@ -294,13 +296,14 @@ export function StructureTree(props: {
               {
                 key: 'pattern',
                 label: '패턴 넣기',
+                icon: ICONS.pattern,
                 disabled: typeof doc.root?.id !== 'string' || lockOf(doc.root.id) !== null,
                 onSelect: () => {
                   store.selectNode(null)
                   commands.openAdd('pattern')
                 },
               },
-              { key: 'preset', label: '프리셋', disabled: commands.presetLocked, onSelect: () => commands.openAdd('preset') },
+              { key: 'preset', label: '프리셋', icon: ICONS.preset, disabled: commands.presetLocked, onSelect: () => commands.openAdd('preset') },
             ]}
           />,
           props.headSlot,

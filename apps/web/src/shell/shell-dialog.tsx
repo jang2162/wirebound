@@ -35,6 +35,7 @@
  * «고르면 먼저 닫고 …») `…` 로 간다. 연 요소가 그 사이 사라졌으면(셸째 내려감) 돌려주지 않는다.
  */
 import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { shellIcon } from './icons'
 
 export function ShellDialog(props: {
   open: boolean
@@ -117,8 +118,9 @@ function OpenDialog(props: { title: string; onClose: () => void; children: React
         <h2 id={titleId} className="wb-shell-dialog-title">
           {props.title}
         </h2>
-        <button type="button" className="wb-shell-dialog-close" onClick={() => latest.current()}>
-          닫기
+        {/* 아이콘만 남는 단추 — 이름 · `title` 은 아이콘을 얹기 전의 글 그대로(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»). */}
+        <button type="button" className="wb-shell-dialog-close" aria-label="닫기" title="닫기" onClick={() => latest.current()}>
+          {shellIcon('close', 16)}
         </button>
       </div>
       {props.children}

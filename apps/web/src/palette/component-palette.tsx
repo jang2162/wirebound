@@ -39,6 +39,7 @@ import { dropOps, type Placing } from '../edit/structure-drop'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { placeableGroups, type PickableGroup, type PickableType } from '../panels/type-picker'
 import { ShellResizer } from '../shell/shell-resizer'
+import { shellIcon } from '../shell/icons'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
 import { paletteAddTarget } from './palette-add'
 import { PaletteThumbs, type ThumbSlot } from './palette-thumbs'
@@ -293,12 +294,13 @@ function PaletteCards(props: {
               type="button"
               className="wb-shell-palette-add"
               aria-label={`${type.label} 넣기`}
+              title={`${type.label} 넣기`}
               tabIndex={index === focusIndex ? 0 : -1}
               onFocus={() => setActive(index)}
               onKeyDown={(event) => moveCard(event, index)}
               onClick={() => add(type.type)}
             >
-              ＋
+              {shellIcon('add', 14)}
             </button>
           </div>
         ))}
@@ -323,6 +325,7 @@ export function PaletteToggle(props: { open: boolean; onToggle: () => void }): R
       aria-controls={PALETTE_ID}
       onClick={props.onToggle}
     >
+      {shellIcon('palette', 14, 'wb-shell-icon-lead')}
       컴포넌트
     </button>
   )

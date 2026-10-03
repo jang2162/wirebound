@@ -63,6 +63,7 @@ import {
 } from '@wirebound/schema'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { walkSafely } from '../edit/safe-walk'
+import { shellIcon } from '../shell/icons'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 // 우측 패널의 두 탭이 같은 이유로 같이 꺼진다 — 문장을 두 벌로 두지 않는다.
@@ -254,13 +255,16 @@ function NodeRules(props: {
             </select>
           </label>
 
+          {/* 아이콘만 남는 단추 — 이름 · `title` 은 아이콘을 얹기 전의 글 그대로(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»). */}
           <button
             type="button"
             className="wb-shell-interaction-remove"
+            aria-label={`규칙 ${index + 1} 삭제`}
+            title={`규칙 ${index + 1} 삭제`}
             disabled={disabled}
             onClick={() => onChange(interactions.filter((_, i) => i !== index))}
           >
-            규칙 {index + 1} 삭제
+            {shellIcon('remove', 14)}
           </button>
 
           {/* **문장이 여기 있는 것이 요점이다**(「자동 문장화」). 저작하는 사람이 자기가 만든 규칙이
@@ -301,6 +305,7 @@ function NodeRules(props: {
               })
             }
           >
+            {shellIcon('add', 14, 'wb-shell-icon-lead')}
             규칙 {index + 1}에 액션 추가
           </button>
         </fieldset>
@@ -312,6 +317,7 @@ function NodeRules(props: {
         disabled={disabled}
         onClick={() => onChange([...interactions, { on: 'click', actions: [] }])}
       >
+        {shellIcon('add', 14, 'wb-shell-icon-lead')}
         상호작용 추가
       </button>
     </section>
@@ -422,10 +428,12 @@ function ActionRow(props: {
       <button
         type="button"
         className="wb-shell-interaction-remove-action"
+        aria-label={`액션 ${ordinal} 삭제`}
+        title={`액션 ${ordinal} 삭제`}
         disabled={disabled}
         onClick={onRemove}
       >
-        액션 {ordinal} 삭제
+        {shellIcon('remove', 14)}
       </button>
     </div>
   )

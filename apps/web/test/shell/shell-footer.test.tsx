@@ -60,7 +60,7 @@ describe('캔버스 도구는 하단 바에 있다', () => {
     await openPage(PAIR)
     expect(within(footer()).getByRole('combobox', { name: '뷰포트 폭' })).toBeTruthy()
     const zoom = within(footer()).getByRole('group', { name: '줌' })
-    expect(within(zoom).getAllByRole('button').map((button) => button.textContent)).toEqual(['축소', '확대', '화면 맞춤'])
+    expect(within(zoom).getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual(['축소', '확대', '화면 맞춤'])
     expect(within(zoom).getByText('100%')).toBeTruthy()
 
     expect(within(header()).queryByRole('combobox', { name: '뷰포트 폭' })).toBeNull()

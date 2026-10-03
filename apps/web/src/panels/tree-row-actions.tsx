@@ -25,10 +25,11 @@
  * 메뉴의 옮기기(소속 메뉴 고르기는 페이지의 것이다 — 메뉴의 부모는 끌어 놓기 · 들여쓰기 · 내어쓰기가 바꾼다). 늘 꺼진 항목은
  * 읽을 때마다 같은 «못 한다»를 한 번 더 말할 뿐이다.
  */
-import { FileDown, FileUp, type LucideIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useEffect, useState, type ReactElement } from 'react'
 import { MULTI_DISABLED, MULTI_WHY_DISABLED, type StructureAbilities } from '../edit/structure-actions'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
+import { ICONS } from '../shell/icons'
 import type { TreeAbilities } from '../tree/tree-actions'
 import type { TreeCommands } from '../tree/use-tree-commands'
 import type { StructureCommands } from './structure-toolbar'
@@ -68,7 +69,7 @@ export function TreeRowActions(props: {
   return (
     <span className="wb-shell-tree-row-actions">
       {props.add !== undefined && (
-        <ActionMenu label={`${props.name} 추가`} glyph="+" items={props.add} onOpen={onOpen} openWhile={live} compact />
+        <ActionMenu label={`${props.name} 추가`} icon={ICONS.add} items={props.add} onOpen={onOpen} openWhile={live} compact />
       )}
       {props.more !== undefined && (
         <ActionMenu label={`${props.name} 더 보기`} items={props.more} onOpen={onOpen} openWhile={live} compact />
@@ -104,7 +105,7 @@ function menuItem(
   commands: TreeCommands,
   describedBy: string | undefined,
   ability: keyof TreeAbilities,
-  entry: { key?: string; label: string; onSelect: () => void; danger?: boolean; icon?: LucideIcon },
+  entry: { key?: string; label: string; onSelect: () => void; danger?: boolean; icon: LucideIcon },
 ): ActionMenuItem {
   const allowed = commands.abilities[ability]
   return {
@@ -147,37 +148,37 @@ export function menuRowItems(
     menuStatus({ selection: commands.selection, busy: commands.busy, abilities: commands.abilities }) === ''
       ? undefined
       : statusId
-  const item = (key: keyof TreeAbilities, label: string, onSelect: () => void, danger = false): ActionMenuItem =>
-    menuItem(commands, describedBy, key, { label, onSelect, danger })
-  const rename = item('rename', '이름 변경', () => commands.openInput('rename'))
-  const up = item('moveUp', '위로', () => commands.move(-1))
-  const down = item('moveDown', '아래로', () => commands.move(1))
-  const remove = item('remove', '삭제', commands.askRemove, true)
+  const item = (key: keyof TreeAbilities, label: string, icon: LucideIcon, onSelect: () => void, danger = false): ActionMenuItem =>
+    menuItem(commands, describedBy, key, { label, onSelect, danger, icon })
+  const rename = item('rename', '이름 변경', ICONS.rename, () => commands.openInput('rename'))
+  const up = item('moveUp', '위로', ICONS.moveUp, () => commands.move(-1))
+  const down = item('moveDown', '아래로', ICONS.moveDown, () => commands.move(1))
+  const remove = item('remove', '삭제', ICONS.remove, commands.askRemove, true)
 
   if (kind === 'page') {
     const exported: ActionMenuItem[] =
       exportEntry === undefined
         ? []
-        : [{ key: 'export-json', label: 'JSON 내보내기', icon: FileDown, onSelect: exportEntry.run, disabled: exportEntry.busy }]
-    return { more: [rename, item('reparent', '옮기기', commands.openReparent), up, down, ...exported, remove] }
+        : [{ key: 'export-json', label: 'JSON 내보내기', icon: ICONS.exportJson, onSelect: exportEntry.run, disabled: exportEntry.busy }]
+    return { more: [rename, item('reparent', '옮기기', ICONS.reparent, commands.openReparent), up, down, ...exported, remove] }
   }
   return {
     add: [
-      item('addMenu', '하위 메뉴', () => commands.openInput('new-menu')),
-      item('addPage', '페이지 추가', () => commands.openInput('new-page')),
+      item('addMenu', '하위 메뉴', ICONS.addMenu, () => commands.openInput('new-menu')),
+      item('addPage', '페이지 추가', ICONS.addPage, () => commands.openInput('new-page')),
       menuItem(commands, describedBy, 'addPage', {
         key: 'import-json',
         label: 'JSON 에서 가져오기…',
         onSelect: commands.openImport,
-        icon: FileUp,
+        icon: ICONS.importJson,
       }),
     ],
     more: [
       rename,
       up,
       down,
-      item('indent', '들여쓰기', commands.indent),
-      item('outdent', '내어쓰기', commands.outdent),
+      item('indent', '들여쓰기', ICONS.indent, commands.indent),
+      item('outdent', '내어쓰기', ICONS.outdent, commands.outdent),
       remove,
     ],
   }
@@ -217,7 +218,7 @@ export function structureRowItems(
   statusId: string,
 ): { add: ActionMenuItem[]; more: ActionMenuItem[] } {
   const describedBy = commands.status === '' ? undefined : statusId
-  const item = (key: keyof StructureAbilities, label: string, onSelect: () => void, danger = false): ActionMenuItem => {
+  const item = (key: keyof StructureAbilities, label: string, icon: LucideIcon, onSelect: () => void, danger = false): ActionMenuItem => {
     const allowed = commands.abilities[key]
     // 여럿을 고른 판에서 꺼진 순서 · 계층은 «하나일 때만»이 이유다(`selectionAbilities`).
     const why = commands.count > 1 && MULTI_DISABLED.has(key) ? MULTI_WHY_DISABLED : STRUCTURE_WHY_DISABLED[key]
@@ -229,14 +230,16 @@ export function structureRowItems(
       title: allowed ? undefined : why,
       describedBy,
       danger,
+      icon,
     }
   }
   const add = [
-    item('addInside', '안에 추가', () => commands.openAdd('inside')),
-    item('addAfter', '아래 추가', () => commands.openAdd('after')),
+    item('addInside', '안에 추가', ICONS.addInside, () => commands.openAdd('inside')),
+    item('addAfter', '아래 추가', ICONS.addAfter, () => commands.openAdd('after')),
     {
       key: 'pattern',
       label: '패턴 넣기',
+      icon: ICONS.pattern,
       onSelect: () => commands.openAdd('pattern'),
       disabled: commands.patternLocked,
     },
@@ -244,11 +247,11 @@ export function structureRowItems(
   return {
     add,
     more: [
-      item('moveUp', '위로', commands.moveUp),
-      item('moveDown', '아래로', commands.moveDown),
-      item('indent', '들여쓰기', commands.indent),
-      item('outdent', '내어쓰기', commands.outdent),
-      item('remove', '삭제', commands.remove, true),
+      item('moveUp', '위로', ICONS.moveUp, commands.moveUp),
+      item('moveDown', '아래로', ICONS.moveDown, commands.moveDown),
+      item('indent', '들여쓰기', ICONS.indent, commands.indent),
+      item('outdent', '내어쓰기', ICONS.outdent, commands.outdent),
+      item('remove', '삭제', ICONS.remove, commands.remove, true),
     ],
   }
 }

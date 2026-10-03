@@ -33,6 +33,7 @@ import { DropIndicator } from '../drag/drop-indicator'
 import { usePlacementDrop, usePublishPlacementPreview, type PlacementDrop } from '../drag/use-placement'
 import { scrollParent, usePointerDrag } from '../drag/use-pointer-drag'
 import type { Placing } from '../edit/structure-drop'
+import { shellIcon } from '../shell/icons'
 
 /** 외곽선 모서리에서 손잡이까지(화면 px) — 단추가 노드의 첫 글자를 가리지 않게 바깥 위 · 왼쪽에 선다. */
 const OUTSIDE = 22
@@ -80,6 +81,7 @@ export function CanvasDragHandle(props: {
         type="button"
         className="wb-shell-canvas-handle"
         aria-label={`${props.label} 옮기기`}
+        title={`${props.label} 옮기기`}
         style={{
           left: props.box.left - OUTSIDE * scale,
           top: props.box.top - OUTSIDE * scale,
@@ -89,7 +91,7 @@ export function CanvasDragHandle(props: {
         // 새 객체를 렌더마다 묶는다 — 경로 층이 끌기의 판을 이 객체에 단다(`drag/use-placement.ts` 머리말 «판은 끄는 것 객체로»).
         {...drag.bind({ kind: 'node', id: props.nodeId })}
       >
-        ⠿
+        {shellIcon('drag', 14)}
       </button>
       {shell === null ? indicator : createPortal(indicator, shell)}
     </>

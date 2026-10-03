@@ -74,17 +74,24 @@
  * 대해 돌아, 줄 id 를 실으려면 두 트리의 명령 묶음이 줄마다의 판정을 따로 지어야 한다. 닫으면 «열린 줄 메뉴 = 고른 줄»이 늘 참이라 그
  * 전부가 맞는다.
  *
- * ## 항목의 아이콘 — `icon` 에 lucide 컴포넌트를 준다
+ * ## 항목의 아이콘 — `icon` 에 셸 아이콘 표의 것을 준다
  *
- * 항목의 `icon`은 **컴포넌트**(`LucideIcon` — `lucide-react`)이지 그린 요소가 아니다. 크기 · 선 굵기 · 색을 이 부품이 정해 목록 안의 아이콘이
- * 한 모양이 된다 — 14px · 선 2 · 색은 글자색(`currentColor` — 끈 항목 · 위험 항목의 색을 그대로 받는다), 글자 앞 6px(`shell.css`의
- * `.wb-shell-action-menu-icon`). 아이콘은 `aria-hidden`이고 **이름은 글자가 든다** — 아이콘만으로 뜻을 나르지 않는다. 아이콘이 없는 항목은
- * 자리를 비워 두지 않는다(글자가 왼끝에서 시작한다).
+ * 항목의 `icon`은 **컴포넌트**(`LucideIcon`)이지 그린 요소가 아니고, 고르는 곳은 셸의 아이콘 표다(`shell/icons.ts` — 같은 동작은 어디서나
+ * 같은 아이콘). 크기 · 선 굵기 · 색을 이 부품이 정해 목록 안의 아이콘이 한 모양이 된다 — 14px · 선 2 · 색은 글자색(`currentColor` — 끈
+ * 항목 · 위험 항목의 색을 그대로 받는다), 글자 앞 6px(`shell.css`의 `.wb-shell-action-menu-icon`). 아이콘은 `aria-hidden`이고 **이름은
+ * 글자가 든다** — 아이콘만으로 뜻을 나르지 않는다. **모든 항목이 아이콘을 받는다** — 빠진 항목은 `test/shell/icon-census.test.tsx` 가
+ * 센다. 그래도 빠지면 자리를 비워 두지 않는다(글자가 왼끝에서 시작한다).
+ *
+ * ## 단추는 아이콘만이다 — 이름과 `title` 은 `label`
+ *
+ * 단추의 그림은 `icon`(기본 `…` — 표의 `more`, 트리 줄 · 뿌리의 `+` 는 `add`)이고 글자가 없다. 그래서 `label` 이 접근 이름(`aria-label`)과
+ * 마우스를 올렸을 때의 `title` 을 함께 든다.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { useCanvasDocument } from '../canvas/canvas-document'
+import { ICONS } from './icons'
 import { usePopoverDismiss } from './use-popover-dismiss'
 import { usePopoverSide } from './use-popover-side'
 
@@ -114,13 +121,13 @@ export interface ActionMenuItem {
 }
 
 export function ActionMenu(props: {
-  /** 단추의 접근 이름. 글자는 `…` 하나라 이름이 따로 있어야 한다. */
+  /** 단추의 접근 이름이자 `title` — 단추는 아이콘만이다(머리말 «단추는 아이콘만이다»). */
   label: string
   items: readonly ActionMenuItem[]
   /** 목록 위 머리(로그인한 사람의 이름). 없으면 안 그린다. */
   heading?: string
-  /** 단추의 글자. 기본은 `…`(트리 줄의 `+` 가 바꾼다). */
-  glyph?: string
+  /** 단추의 아이콘. 기본은 `…`(`ICONS.more` — 트리 줄 · 뿌리의 `+` 가 `ICONS.add` 로 바꾼다). */
+  icon?: LucideIcon
   /**
    * 열 때 부른다 — 항목을 그리기 전에. 트리 줄의 `+` · `…` 가 여기서 그 줄을 고른다(`panels/tree-row-actions.tsx` — 명령은 **고른 줄**에
    * 대해 돌므로, 항목의 켜고 끔도 고른 뒤의 판정으로 그려져야 한다).
@@ -235,13 +242,14 @@ export function ActionMenu(props: {
         ref={toggleRef}
         className={props.compact === true ? 'wb-shell-action-menu-toggle wb-shell-action-menu-compact' : 'wb-shell-action-menu-toggle'}
         aria-label={props.label}
+        title={props.label}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         onClick={() => (open ? setOpen(false) : openAt('first'))}
         onKeyDown={onToggleKeyDown}
       >
-        {props.glyph ?? '…'}
+        <ToggleIcon icon={props.icon ?? ICONS.more} compact={props.compact === true} />
       </button>
       {open && (
         <div
@@ -295,6 +303,12 @@ export function ActionMenu(props: {
       )}
     </div>
   )
+}
+
+/** 단추의 아이콘 — 조밀한 단추(트리 줄)는 14, 머리의 단추는 16(머리말 «단추는 아이콘만이다»). */
+function ToggleIcon(props: { icon: LucideIcon; compact: boolean }): ReactElement {
+  const Icon = props.icon
+  return <Icon className="wb-shell-icon" size={props.compact ? 14 : 16} strokeWidth={2} aria-hidden="true" />
 }
 
 /** 항목의 글자 — 아이콘이 있으면 그 앞에 선다(머리말 «항목의 아이콘»). */

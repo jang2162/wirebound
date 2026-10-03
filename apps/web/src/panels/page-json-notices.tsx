@@ -24,6 +24,7 @@
 import { useMemo, useState, type ReactElement } from 'react'
 import { SignedOut, type Failure } from '../api/failure'
 import type { PageImported } from '../api/types'
+import { shellIcon } from '../shell/icons'
 
 export interface PageJsonNotices {
   imported: PageImported | null
@@ -76,8 +77,8 @@ function PageImportedNotice(props: { imported: PageImported; onDismiss: () => vo
           </p>
         )}
       </div>
-      <button type="button" className="wb-shell-edit-alert-close" aria-label="가져오기 결과 닫기" onClick={props.onDismiss}>
-        닫기
+      <button type="button" className="wb-shell-edit-alert-close" aria-label="가져오기 결과 닫기" title="가져오기 결과 닫기" onClick={props.onDismiss}>
+        {shellIcon('close', 14)}
       </button>
     </div>
   )
@@ -91,8 +92,8 @@ function PageExportFailure(props: { failure: Failure; onDismiss: () => void }): 
       <p className="wb-shell-pagejson-notice-line" role="alert">
         {props.failure.message}
       </p>
-      <button type="button" className="wb-shell-edit-alert-close" aria-label="내보내기 실패 닫기" onClick={props.onDismiss}>
-        닫기
+      <button type="button" className="wb-shell-edit-alert-close" aria-label="내보내기 실패 닫기" title="내보내기 실패 닫기" onClick={props.onDismiss}>
+        {shellIcon('close', 14)}
       </button>
     </div>
   )
