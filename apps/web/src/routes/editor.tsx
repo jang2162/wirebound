@@ -46,6 +46,7 @@ import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
 import { EditorKeys } from '../shell/editor-keys'
+import { ICONS, shellIcon } from '../shell/icons'
 import { ShellDialog } from '../shell/shell-dialog'
 import { ComponentPalette, PaletteToggle } from '../palette/component-palette'
 import { ShellFooter } from '../shell/shell-footer'
@@ -730,12 +731,12 @@ function EditorShell(props: {
   const [structureHead, setStructureHead] = useState<HTMLDivElement | null>(null)
   /** `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. */
   const menuItems: ActionMenuItem[] = [
-    { key: 'account', label: '계정 설정', to: '/account' },
-    { key: 'settings', label: '프로젝트 설정', to: `/projects/${props.project.id}/settings` },
-    { key: 'snapshots', label: '스냅샷', onSelect: () => setDialog('snapshots') },
-    { key: 'export', label: '프로젝트 내보내기', onSelect: () => setDialog('export') },
+    { key: 'account', label: '계정 설정', icon: ICONS.account, to: '/account' },
+    { key: 'settings', label: '프로젝트 설정', icon: ICONS.projectSettings, to: `/projects/${props.project.id}/settings` },
+    { key: 'snapshots', label: '스냅샷', icon: ICONS.snapshots, onSelect: () => setDialog('snapshots') },
+    { key: 'export', label: '프로젝트 내보내기', icon: ICONS.exportProject, onSelect: () => setDialog('export') },
     // 요청이 도는 동안 끈다 — 두 번 눌러 두 번 나갈 이유가 없다(로그인 폼과 같은 관례).
-    { key: 'logout', label: '로그아웃', onSelect: logout, disabled: loggingOut },
+    { key: 'logout', label: '로그아웃', icon: ICONS.logout, onSelect: logout, disabled: loggingOut },
   ]
 
   return (
@@ -1135,12 +1136,13 @@ function UndoTools(props: { projectId: string; pageId: string | undefined }): Re
   })
 
   return (
+    // 아이콘만 남는 단추다 — 이름 · `title` 은 아이콘을 얹기 전의 글 그대로(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»).
     <div className="wb-shell-history" role="group" aria-label="편집 이력">
-      <button type="button" className="wb-shell-history-step" onClick={undo} disabled={!canUndo}>
-        되돌리기
+      <button type="button" className="wb-shell-history-step" aria-label="되돌리기" title="되돌리기" onClick={undo} disabled={!canUndo}>
+        {shellIcon('undo', 16)}
       </button>
-      <button type="button" className="wb-shell-history-step" onClick={redo} disabled={!canRedo}>
-        다시 실행
+      <button type="button" className="wb-shell-history-step" aria-label="다시 실행" title="다시 실행" onClick={redo} disabled={!canRedo}>
+        {shellIcon('redo', 16)}
       </button>
     </div>
   )
@@ -1740,17 +1742,21 @@ function CanvasTools(props: {
         <button
           type="button"
           className="wb-shell-zoom-step"
+          aria-label="축소"
+          title="축소"
           onClick={() => store.setZoom(zoom - ZOOM_STEP)}
         >
-          축소
+          {shellIcon('zoomOut', 16)}
         </button>
         <span className="wb-shell-zoom-value">{Math.round(zoom * 100)}%</span>
         <button
           type="button"
           className="wb-shell-zoom-step"
+          aria-label="확대"
+          title="확대"
           onClick={() => store.setZoom(zoom + ZOOM_STEP)}
         >
-          확대
+          {shellIcon('zoomIn', 16)}
         </button>
         {/* **누른 순간의 1회 계산이다** — 창 크기를 따라다니지 않는다. 따라다니게 하면
             사용자가 손으로 맞춘 배율을 창을 조금만 흔들어도 빼앗기고, 그것을 막으려면
@@ -1765,6 +1771,8 @@ function CanvasTools(props: {
         <button
           type="button"
           className="wb-shell-zoom-fit"
+          aria-label="화면 맞춤"
+          title="화면 맞춤"
           onClick={() => {
             const canvas = props.canvasRef.current
             if (canvas === null) return
@@ -1773,7 +1781,7 @@ function CanvasTools(props: {
             store.setZoom(next)
           }}
         >
-          화면 맞춤
+          {shellIcon('fitWidth', 16)}
         </button>
       </div>
     </>

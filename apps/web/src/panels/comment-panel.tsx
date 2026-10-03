@@ -148,6 +148,7 @@ import { isSessionUserChanged } from '../api/known-user'
 import type { WriteConclusion, WriteNote } from './write-ledger'
 import type { Comment, CommentCreated } from '../api/types'
 import { walkSafely } from '../edit/safe-walk'
+import { shellIcon } from '../shell/icons'
 import { nodeTypeLabel } from './node-shape'
 import { useRealtimeSetup } from '../realtime/context'
 import { useSessionUser } from '../session/session-context'
@@ -1084,10 +1085,12 @@ export function CommentPanel(props: {
               className="wb-shell-comment-submit"
               disabled={selectedNodeId === null || busy || draft.trim() === ''}
             >
+              {shellIcon('comment', 14, 'wb-shell-icon-lead')}
               코멘트 달기
             </button>
             {/* 「설계서 화면 구조」의 *"문서 순서대로 재번호"* 버튼. 표는 안 건드리고 문서만 바꾼다. */}
             <button type="button" className="wb-shell-comment-renumber" disabled={busy} onClick={renumber}>
+              {shellIcon('renumber', 14, 'wb-shell-icon-lead')}
               문서 순서대로 재번호
             </button>
           </div>
@@ -1208,19 +1211,23 @@ export function CommentPanel(props: {
                               setEditDraft(comment.body)
                             }}
                           >
+                            {shellIcon('rename', 14, 'wb-shell-icon-lead')}
                             수정
                           </button>
                         )}
                         {/* **삭제는 editor면 누구나 한다** — 수정과 갈린다(서버도 그렇게 가른다). viewer 에게는 없다(`canEdit`) —
                             제 글이어도 그렇다(역할이 깎인 사람의 옛 글). */}
                         {props.canEdit && (
+                          // 아이콘만 남는 단추 — 이름 · `title` 은 아이콘을 얹기 전의 글 그대로(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»).
                           <button
                             type="button"
                             className="wb-shell-comment-delete"
+                            aria-label="삭제"
+                            title="삭제"
                             disabled={busy}
                             onClick={() => remove(comment.id)}
                           >
-                            삭제
+                            {shellIcon('remove', 14)}
                           </button>
                         )}
                       </>

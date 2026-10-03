@@ -29,6 +29,7 @@ import { SignedOut } from '../api/failure'
 import { DropIndicator } from '../drag/drop-indicator'
 import { elementAt, scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
 import { ActionMenu } from '../shell/action-menu'
+import { ICONS } from '../shell/icons'
 import { MetaConflict } from './meta-conflict'
 import { PendingNotice } from './pending-notice'
 import type { TreeMenuNode, TreePage } from '../api/types'
@@ -410,12 +411,13 @@ export function MenuTree(props: {
         createPortal(
           <ActionMenu
             label="메뉴 트리에 추가"
-            glyph="+"
+            icon={ICONS.add}
             compact
             items={[
               {
                 key: 'new-root-menu',
                 label: '최상위 메뉴 추가',
+                icon: ICONS.addMenu,
                 disabled: commands.busy,
                 onSelect: () => commands.openInput('new-root-menu'),
               },

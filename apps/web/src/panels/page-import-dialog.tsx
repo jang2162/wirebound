@@ -49,10 +49,10 @@
  * 파일을 끌고 들어오면 칸이 강조된다. 키보드는 칸 안의 파일 입력(`<label>` 이 감싼 `<input type="file">` — 눈에는 감추되 포커스는 받는다)이
  * 받는다.
  */
-import { CircleCheck, CircleX, FileUp, TriangleAlert } from 'lucide-react'
 import { useRef, useState, type DragEvent, type FormEvent, type ReactElement } from 'react'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import { readTextFile } from '../files/file-io'
+import { ICONS, shellIcon } from '../shell/icons'
 import { ShellDialog } from '../shell/shell-dialog'
 import type { ImportTarget, TreeCommands } from '../tree/use-tree-commands'
 import { previewPageJson, SERVER_ONLY, type Preview, type PreviewIssue } from './page-json-preview'
@@ -158,7 +158,7 @@ function PageImportBody(props: { commands: TreeCommands }): ReactElement {
       }}
     >
       <label className={dragDepth > 0 ? 'wb-shell-pagejson-drop wb-shell-pagejson-drop-over' : 'wb-shell-pagejson-drop'}>
-        <FileUp className="wb-shell-pagejson-drop-icon" size={24} strokeWidth={1.75} aria-hidden="true" />
+        <ICONS.importJson className="wb-shell-pagejson-drop-icon" size={24} strokeWidth={1.75} aria-hidden="true" />
         <span className="wb-shell-pagejson-drop-lead">JSON 파일을 여기 끌어 놓거나 눌러서 고르세요</span>
         <span className="wb-shell-pagejson-drop-hint">
           {fileName === null ? '.wirebound-page.json — 페이지 «JSON 내보내기»로 받은 파일' : `고른 파일: ${fileName}`}
@@ -184,7 +184,7 @@ function PageImportBody(props: { commands: TreeCommands }): ReactElement {
           onClick={() => setPasteOpen((was) => !was)}
         >
           {/* 펼침 표시는 글자가 아니다 — 이름은 «JSON 직접 붙여 넣기»이고 상태는 `aria-expanded`가 말한다. */}
-          <span aria-hidden="true">{pasteOpen ? '▾' : '▸'}</span>
+          {shellIcon(pasteOpen ? 'collapse' : 'expand', 14)}
           JSON 직접 붙여 넣기
         </button>
         {pasteOpen && (
@@ -265,7 +265,7 @@ function PreviewCard(props: { preview: Preview; warningsOpen: boolean; onToggleW
       {/* **`role="status"`이지 `alert`이 아니다** — 읽은 것을 말하는 자리이지 실패 통지가 아니다(`preset-picker.tsx`가 확인 문장에 대해
           같은 판단을 적었다). */}
       <p className="wb-shell-pagejson-card-head" role="status">
-        <CircleCheck className="wb-shell-pagejson-icon-ok" size={16} strokeWidth={2} aria-hidden="true" />
+        <ICONS.succeeded className="wb-shell-pagejson-icon-ok" size={16} strokeWidth={2} aria-hidden="true" />
         <span>
           <strong>{preview.file.page.title}</strong> — 노드 {preview.nodes}개, 코멘트 {preview.comments}개
         </span>
@@ -281,7 +281,7 @@ function PreviewCard(props: { preview: Preview; warningsOpen: boolean; onToggleW
             aria-expanded={props.warningsOpen}
             onClick={props.onToggleWarnings}
           >
-            <TriangleAlert className="wb-shell-pagejson-icon-warn" size={14} strokeWidth={2} aria-hidden="true" />
+            <ICONS.warning className="wb-shell-pagejson-icon-warn" size={14} strokeWidth={2} aria-hidden="true" />
             경고 {preview.warnings.length}개(저장은 됩니다)
           </button>
           {props.warningsOpen && <IssueList issues={preview.warnings} />}
@@ -315,7 +315,7 @@ function FailedCard(props: { message: string; issues: readonly PreviewIssue[] })
   return (
     <div className="wb-shell-pagejson-card wb-shell-pagejson-card-failed">
       <p className="wb-shell-pagejson-card-head" role="alert">
-        <CircleX className="wb-shell-pagejson-icon-fail" size={16} strokeWidth={2} aria-hidden="true" />
+        <ICONS.failed className="wb-shell-pagejson-icon-fail" size={16} strokeWidth={2} aria-hidden="true" />
         <span>{props.message}</span>
       </p>
       {props.issues.length > 0 && <IssueList issues={props.issues} />}

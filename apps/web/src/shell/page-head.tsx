@@ -15,6 +15,7 @@ import { useSessionUser } from '../session/session-context'
 import { SessionNotices, useLogout } from '../session/session-menu'
 import { ActionMenu, type ActionMenuItem } from './action-menu'
 import { BrandLink } from './brand-link'
+import { ICONS } from './icons'
 
 export function PageHead(props: {
   /** `<h1>` 글자. */
@@ -26,10 +27,10 @@ export function PageHead(props: {
   const admin = user?.isInstanceAdmin === true
   const { logout, busy: loggingOut, failure: logoutFailure } = useLogout()
   const items: ActionMenuItem[] = [
-    { key: 'account', label: '계정 설정', to: '/account' },
-    ...(admin ? [{ key: 'themes', label: '테마 관리', to: '/admin/themes' }] : []),
+    { key: 'account', label: '계정 설정', icon: ICONS.account, to: '/account' },
+    ...(admin ? [{ key: 'themes', label: '테마 관리', icon: ICONS.themes, to: '/admin/themes' }] : []),
     // 요청이 도는 동안 끈다 — 두 번 눌러 두 번 나갈 이유가 없다(로그인 폼과 같은 관례).
-    { key: 'logout', label: '로그아웃', onSelect: logout, disabled: loggingOut },
+    { key: 'logout', label: '로그아웃', icon: ICONS.logout, onSelect: logout, disabled: loggingOut },
   ]
   const title = <h1 className="wb-shell-project-list-title">{props.title}</h1>
 

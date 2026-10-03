@@ -469,7 +469,7 @@ async function sweepControls(): Promise<number> {
       // **트리 줄의 `…`는 빼고** — 그 단추도 열 때 그 줄을 골라 선택을 옮기고, 항목(위로 · 삭제 …)은 한 번씩 열린 판과 단축키가 닿는다.
       // 메뉴 줄 `+`는 다시 연다 — 그 항목이 연 입구(이름 칸 · 가져오기 상자)는 그 줄을 대상으로 서므로 선택을 옮겨도 잃는 것이 없고,
       // 셋째 항목(가져오기)이 다른 길로는 안 닿는다(`REACH`의 «페이지 가져오기»).
-      const rowMore = el.closest('.wb-shell-tree-row-actions') !== null && el.textContent !== '+'
+      const rowMore = el.closest('.wb-shell-tree-row-actions') !== null && (el.getAttribute('aria-label') ?? '').endsWith(' 더 보기')
       const reopen =
         el.getAttribute('aria-haspopup') === 'menu' &&
         el.getAttribute('aria-expanded') !== 'true' &&

@@ -17,6 +17,7 @@
  */
 import type { ReactElement } from 'react'
 import { SignedOut } from '../api/failure'
+import { shellIcon } from './icons'
 import { useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
 
 export function EditAlert(): ReactElement | null {
@@ -35,8 +36,8 @@ export function EditAlert(): ReactElement | null {
   return (
     <div className="wb-shell-edit-alert-row">
       {alert}
-      <button type="button" className="wb-shell-edit-alert-close" aria-label="통지 닫기" onClick={store.closeLeaveNotice}>
-        닫기
+      <button type="button" className="wb-shell-edit-alert-close" aria-label="통지 닫기" title="통지 닫기" onClick={store.closeLeaveNotice}>
+        {shellIcon('close', 14)}
       </button>
     </div>
   )
