@@ -27,15 +27,17 @@ const OTHER_PROJECT = 'p_2'
 const PAGE = 'pg_1'
 const OTHER_PAGE = 'pg_2'
 
-function claim(over: Partial<LockClaim> = {}): LockClaim {
+/** 노드 하나짜리는 `nodeId`로 적는다 — 집합 케이스만 `nodeIds`를 쓴다. */
+function claim(over: Partial<Omit<LockClaim, 'nodeIds'>> & { nodeId?: string; nodeIds?: readonly string[] } = {}): LockClaim {
+  const { nodeId = 'n_a', nodeIds, ...rest } = over
   return {
     projectId: PROJECT,
     pageId: PAGE,
-    nodeId: 'n_a',
+    nodeIds: nodeIds ?? [nodeId],
     connectionId: 'wsc_1',
     userId: 'u_bora',
     userName: '보라',
-    ...over,
+    ...rest,
   }
 }
 
@@ -53,7 +55,7 @@ describe('잡고 놓는다', () => {
     expect(store.liveIn(PROJECT)).toEqual([{ pageId: PAGE, nodeId: 'n_a', userId: 'u_bora', userName: '보라' }])
   })
 
-  it('연결 하나가 드는 잠금은 하나다 — 다른 노드를 잡으면 앞 것이 사라진다', () => {
+  it('잡는 것은 집합을 갈아 끼우는 것이다 — 하나짜리로 다른 노드를 잡으면 앞 것이 사라진다', () => {
     const clock = fakeClock()
     const store = createLockStore(clock.now)
 
@@ -98,6 +100,79 @@ describe('잡고 놓는다', () => {
       [PAGE, 'n_a'],
       [OTHER_PAGE, 'n_b'],
     ])
+  })
+})
+
+/**
+ * **연결 하나가 서브트리 여럿을 쥔다**(설계서 「소프트 잠금」 · 여러 노드 선택). `hold`는 그 연결의 집합을 통째로 갈아 끼운다 — 무엇이
+ * 새로 들고 무엇이 남는지는 부르는 쪽(`ws/lock.ts`)이 `heldBy`로 읽어 판정한다. 만료는 집합째다(하트비트가 집합 전체를 미룬다).
+ */
+describe('집합', () => {
+  it('셋을 잡으면 목록에 세 줄이 선다 — 잠금 하나가 서브트리 하나다', () => {
+    const store = createLockStore(fakeClock().now)
+
+    store.hold(claim({ nodeIds: ['n_a', 'n_b', 'n_c'] }))
+
+    expect(store.liveIn(PROJECT)).toEqual([
+      { pageId: PAGE, nodeId: 'n_a', userId: 'u_bora', userName: '보라' },
+      { pageId: PAGE, nodeId: 'n_b', userId: 'u_bora', userName: '보라' },
+      { pageId: PAGE, nodeId: 'n_c', userId: 'u_bora', userName: '보라' },
+    ])
+    expect(store.liveCount()).toBe(3)
+    expect(store.heldBy('wsc_1')).toEqual({ pageId: PAGE, nodeIds: ['n_a', 'n_b', 'n_c'] })
+  })
+
+  it('집합을 줄이면 빠진 것만 사라진다 — 남은 것은 그대로다', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim({ nodeIds: ['n_a', 'n_b', 'n_c'] }))
+
+    expect(store.hold(claim({ nodeIds: ['n_a', 'n_c'] }))).toBe(true)
+
+    expect(nodeIdsIn(store)).toEqual(['n_a', 'n_c'])
+  })
+
+  it('같은 집합을 다시 잡는 것(하트비트)은 차례가 달라도 안 바뀐 것이고 집합 전체의 만료를 미룬다', () => {
+    const clock = fakeClock()
+    const store = createLockStore(clock.now)
+    store.hold(claim({ nodeIds: ['n_a', 'n_b'] }))
+
+    clock.advance(LOCK_TTL_MS - 1)
+    expect(store.hold(claim({ nodeIds: ['n_b', 'n_a'] }))).toBe(false)
+    clock.advance(LOCK_TTL_MS - 1)
+
+    expect(nodeIdsIn(store).sort()).toEqual(['n_a', 'n_b'])
+  })
+
+  it('만료는 집합째다 — 걷히면 집합의 줄이 함께 사라지고 프로젝트가 한 번 불린다', () => {
+    const clock = fakeClock()
+    const expired: string[] = []
+    const store = createLockStore(clock.now, LOCK_TTL_MS, (projectId) => expired.push(projectId))
+    store.hold(claim({ nodeIds: ['n_a', 'n_b'] }))
+
+    clock.advance(LOCK_TTL_MS)
+
+    expect(store.heldBy('wsc_1')).toBeNull()
+    expect(store.liveIn(PROJECT)).toEqual([])
+    expect(expired).toEqual([PROJECT])
+  })
+
+  it('빈 집합을 잡는 것은 놓는 것이다', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim({ nodeIds: ['n_a', 'n_b'] }))
+
+    expect(store.hold(claim({ nodeIds: [] }))).toBe(true)
+
+    expect(store.liveIn(PROJECT)).toEqual([])
+    expect(store.heldBy('wsc_1')).toBeNull()
+  })
+
+  it('놓으면 집합 전부가 사라진다', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim({ nodeIds: ['n_a', 'n_b'] }))
+
+    expect(store.release('wsc_1')).toBe(true)
+
+    expect(store.liveCount()).toBe(0)
   })
 })
 

@@ -363,7 +363,7 @@ describe('자격을 본 뒤 hold 전에 끼는 강등', () => {
       // **버린 것을 낸 쪽에 말한다** — 조용히 버리면 그 화면은 쥔 줄 안다. 대조 판(첫 `lock`)에는
       // 거절이 없다.
       expect(targetTab.received.filter((frame) => frame.type === 'lock-denied')).toEqual([
-        { type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeId: 'n_btn' },
+        { type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeIds: ['n_btn'] },
       ])
     })
   }, 30_000)

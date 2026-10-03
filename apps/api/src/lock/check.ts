@@ -32,7 +32,7 @@
  * 내 잠금 안의 노드를 바꾼다). 재는 자리: `test/ws-lock.test.ts` 「편집 커밋과 잠금 획득은 페이지 행에 줄 선다」.
  *
  * **선택끼리는 줄 서지 않는다** — `KEY SHARE`끼리는 부딪히지 않는다. 판정과 `hold`는 동기라(`selectionVerdict`) 같은 틱에 붙어,
- * 둘이 함께 행을 쥐어도 먼저 판정한 쪽이 잡고 뒤는 그것을 본다. **`FOR UPDATE`로 올리지 않는다** — 둘이 `KEY SHARE`를 쥔 채
+ * 둘이 함께 행을 쥐어도 먼저 판정한 쪽이 잡고 뒤는 그것을 본다(집합이어도 같다 — 한 프레임의 판정 전부와 `hold`가 한 틱이다). **`FOR UPDATE`로 올리지 않는다** — 둘이 `KEY SHARE`를 쥔 채
  * 서로 올리려 하면 교착이다. 그래서 문서도 행을 쥔 채 잠금 없이 읽는다(`readSelectionRoot`).
  *
  * **잠금 순서.** 편집: 페이지 행(`FOR UPDATE` — 여기) → (`applyEdit`이 같은 행을 다시 — 이미 쥐었다) → 멤버 행(`FOR SHARE` —
@@ -54,7 +54,7 @@
  * 서버는 `lock`을 거절하므로(`ws/lock.ts`의 머리말) 서버의 잠금 판정이 둘이다 — 편집(`lockConflictError`)과
  * 선택(`selectionVerdict`). **둘을 한 파일에 둔다:** 살아 있는 목록을 읽고(`liveIn`) 사람으로 좁히고(`locksAgainst`)
  * 판정 함수(`lockConflictOfOps` · `findLockConflict`)를 부르는 자리가 `apps/api`에 이 파일 하나라는 것을 `apps/web`의 `test/lock/one-verdict.test.ts`가 센다.
- * 편집은 `lockConflictOfOps(ops)` — 연산마다 좌표를 맞춘다 — 이고, 선택은 `findLockConflict`에 `findNodePath(root, nodeId)` 하나다(「소프트 잠금」).
+ * 편집은 `lockConflictOfOps(ops)` — 연산마다 좌표를 맞춘다 — 이고, 선택은 노드마다 `findLockConflict`에 `findNodePath(root, nodeId)` 하나다(「소프트 잠금」).
  * 둘은 같은 겹침(한쪽이 다른 쪽의 조상)으로 잰다(`@wirebound/schema`의 `lock.ts`).
  */
 import {
@@ -137,20 +137,23 @@ export async function lockConflictError(app: FastifyInstance, trx: DbHandle, inp
 export interface SelectionCheckInput {
   projectId: string
   pageId: string
-  /** 잡으려는 노드. **선택은 그 서브트리를 통째로 claim 한다**(설계서 「소프트 잠금」) — 포인터는 그 노드의 경로 하나다. */
-  nodeId: string
+  /**
+   * 새로 잡으려는 노드들. **선택은 노드마다 그 서브트리를 통째로 claim 한다**(설계서 「소프트 잠금」) — 노드마다 포인터는 그 노드의
+   * 경로 하나다. 서로는 견주지 않는다(같은 사람이다). 빈 목록이면 아무것도 안 읽는다.
+   */
+  nodeIds: readonly string[]
   /** 잡으려는 **사람** — 같은 사람의 다른 탭이 쥔 것에는 막히지 않는다. */
   userId: string
 }
 
 /**
- * `selectionVerdict`의 답. **`needs-document`는 판정이 아니라 부탁이다** — 같은 페이지에 남의 잠금이 있는데 문서를 아직 안
- * 읽었다. 부르는 쪽이 `readSelectionRoot`로 읽고 **다시 묻는다**(`ws/lock.ts`).
+ * `selectionVerdict`의 답 — 남이 쥔 것과 겹치는 노드(`held` — 물은 차례대로, 없으면 빈 목록). **`needs-document`는 판정이 아니라
+ * 부탁이다** — 같은 페이지에 남의 잠금이 있는데 문서를 아직 안 읽었다. 부르는 쪽이 `readSelectionRoot`로 읽고 **다시 묻는다**(`ws/lock.ts`).
  */
-export type SelectionVerdict = 'free' | 'held' | 'needs-document'
+export type SelectionVerdict = { held: string[] } | 'needs-document'
 
 /**
- * **이 자리를 잡아도 되는가** — 서버가 획득을 판정하는 자리(`ws/lock.ts`의 머리말). **동기다.**
+ * **이 자리들을 잡아도 되는가** — 서버가 획득을 판정하는 자리(`ws/lock.ts`의 머리말). **동기다.**
  *
  * 판정은 화면의 1차 방어와 **같은 함수에 같은 포인터**를 넣는다 — `findLockConflict`에 `findNodePath(root, nodeId)` 하나
  * (`apps/web`의 `store/editor-store.ts`의 `lockedBy`가 넣는 그것이다 · `packages/schema`의 `LockConflictInput.pointers`).
@@ -169,14 +172,18 @@ export function selectionVerdict(
   input: SelectionCheckInput,
   root: WbNode | null | undefined,
 ): SelectionVerdict {
+  if (input.nodeIds.length === 0) return { held: [] }
   const onPage = onPageOf(app, input)
-  if (locksAgainst(onPage, input.userId).length === 0) return 'free'
+  if (locksAgainst(onPage, input.userId).length === 0) return { held: [] }
   if (root === undefined) return 'needs-document'
-  if (root === null) return 'free'
+  if (root === null) return { held: [] }
 
-  const path = findNodePath(root, input.nodeId)
-  if (path === undefined) return 'free'
-  return findLockConflict({ root, locks: onPage, pointers: [path], viewerUserId: input.userId }) === null ? 'free' : 'held'
+  return {
+    held: input.nodeIds.filter((nodeId) => {
+      const path = findNodePath(root, nodeId)
+      return path !== undefined && findLockConflict({ root, locks: onPage, pointers: [path], viewerUserId: input.userId }) !== null
+    }),
+  }
 }
 
 /**

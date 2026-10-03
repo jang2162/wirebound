@@ -219,7 +219,7 @@ describe('연결 둘 · 사용자 둘 · 같은 사용자의 탭 둘', () => {
     })
   }, 30_000)
 
-  it('한 연결이 드는 잠금은 하나다 — 다른 노드를 고르면 앞 것을 놓는다', async () => {
+  it('하나짜리 `lock`은 집합을 그 하나로 갈아 끼운다 — 다른 노드를 고르면 앞 것을 놓는다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const boraTab = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
@@ -350,7 +350,7 @@ describe('획득 거절', () => {
         type: 'lock-denied',
         projectId: fx.project.id,
         pageId: fx.page.id,
-        nodeId: 'n_b',
+        nodeIds: ['n_b'],
       })
       await watcher.quiet()
       expect(denials(boraTab)).toEqual([])
@@ -370,11 +370,11 @@ describe('획득 거절', () => {
 
       // 쥔 것의 자손
       dahyeTab.send(lockFrame(fx.page.id, 'n_b1'))
-      expect((await dahyeTab.waitForCount('lock-denied', 1)).map((frame) => frame.nodeId)).toEqual(['n_b1'])
+      expect((await dahyeTab.waitForCount('lock-denied', 1)).map((frame) => frame.nodeIds)).toEqual([['n_b1']])
 
       // 쥔 것의 조상(루트)
       dahyeTab.send(lockFrame(fx.page.id, 'n_root'))
-      expect((await dahyeTab.waitForCount('lock-denied', 2)).map((frame) => frame.nodeId)).toEqual(['n_b1', 'n_root'])
+      expect((await dahyeTab.waitForCount('lock-denied', 2)).map((frame) => frame.nodeIds)).toEqual([['n_b1'], ['n_root']])
 
       // 형제 — 겹치지 않는다
       dahyeTab.send(lockFrame(fx.page.id, 'n_a'))
@@ -405,8 +405,11 @@ describe('획득 거절', () => {
     })
   }, 30_000)
 
-  /** 혼자 죽는 변조: 거절이 이 연결이 앞서 쥔 것을 안 놓는다. */
-  it('거절된 연결은 앞서 쥔 것도 놓는다 — 새 자리를 달라는 것이 앞 자리를 놓는 것이다', async () => {
+  /**
+   * 하나짜리 프레임이 거절되면 앞서 쥔 다른 노드도 놓인다 — 집합(`[n_b]`)에서 빠졌다. 집합의 부분 거절은 `ws-lock-set.test.ts`가 잰다.
+   * 혼자 죽는 변조: 집합에서 빠지는 것을 안 놓는다(그 파일의 «집합을 줄이면»과 함께 죽는다).
+   */
+  it('하나짜리 `lock`이 거절되면 앞서 쥔 것도 놓인다 — 집합에서 빠졌다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const boraTab = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
@@ -550,7 +553,7 @@ describe('획득 거절', () => {
       expect(onB).toHaveLength(1)
       // 진 쪽은 거절을 받았다. (누구에게 가는지는 위 «남이 쥔 자리» 케이스가 소유한다 — 여기서는 진 쪽만 본다.)
       const loser = onB[0]?.userId === fx.bora.user.id ? dahyeTab : boraTab
-      expect(denials(loser).map((frame) => frame.type === 'lock-denied' && frame.nodeId)).toEqual(['n_b'])
+      expect(denials(loser).map((frame) => frame.type === 'lock-denied' && frame.nodeIds)).toEqual([['n_b']])
     })
   }, 30_000)
 })
@@ -587,7 +590,7 @@ describe('잠금 목록은 보내는 순간 짓는다', () => {
       store.hold({
         projectId: fx.project.id,
         pageId: fx.page.id,
-        nodeId: 'n_b',
+        nodeIds: ['n_b'],
         connectionId: 'c-other',
         userId: fx.dahye.user.id,
         userName: fx.dahye.user.name,
@@ -896,7 +899,7 @@ describe('`lock`의 줄과 실패의 답', () => {
       }
       dahyeTab.send(lockWithId(fx.page.id, 'n_b', 2))
       await until('자격 확인에서 끝내지 못한 `lock`에 답이 온다', () => denials(dahyeTab).length === 1)
-      expect(denials(dahyeTab)).toEqual([{ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeId: 'n_b', lockId: 2 }])
+      expect(denials(dahyeTab)).toEqual([{ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeIds: ['n_b'], lockId: 2 }])
       expect(await locksEmpty(watcher)).toEqual([])
 
       dahyeTab.send(lockWithId(fx.page.id, 'n_c', 3))
@@ -912,7 +915,7 @@ describe('`lock`의 줄과 실패의 답', () => {
       }
       dahyeTab.send(lockWithId(fx.page.id, 'n_b1', 4))
       await until('트랜잭션 안에서 끝내지 못한 `lock`에 답이 온다', () => denials(dahyeTab).length === 2)
-      expect(denials(dahyeTab)[1]).toEqual({ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeId: 'n_b1', lockId: 4 })
+      expect(denials(dahyeTab)[1]).toEqual({ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeIds: ['n_b1'], lockId: 4 })
       expect(failVerdict).toBe(false)
       await until('앞서 쥔 `n_c`가 놓인다', () => nodesOf(ctx, fx.project.id).length === 0)
     })
@@ -979,7 +982,7 @@ describe('`lock`의 줄과 실패의 답', () => {
 
       expect(deniedWhileHeld).toBe(true)
       expect(waitersAfter).toBe(0)
-      expect(denials(dahyeTab)).toEqual([{ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeId: 'n_a', lockId: 2 }])
+      expect(denials(dahyeTab)).toEqual([{ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeIds: ['n_a'], lockId: 2 }])
       expect(await locksEmpty(watcher)).toEqual([])
       expect(failures.mock.calls.filter(([, message]) => message === 'WS 프레임 처리 실패')).toEqual([])
     })
@@ -1132,7 +1135,7 @@ describe('거절의 짝 · 만료의 알림 · 닫힌 연결', () => {
         type: 'lock-denied',
         projectId: fx.project.id,
         pageId: fx.page.id,
-        nodeId: 'n_b',
+        nodeIds: ['n_b'],
         lockId: 41,
       })
     })
