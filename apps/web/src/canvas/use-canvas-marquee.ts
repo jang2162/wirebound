@@ -2,7 +2,8 @@
  * **캔버스 사각형 고르기**(설계서 「설계서 화면 구조」의 «고르는 법»). 캔버스 문서에서 누르고 `DRAG_THRESHOLD`(4px) 넘게 움직이면 사각형이
  * 선다 — 캔버스에서 노드를 눌러 끄는 동작이 없으므로 어디서 시작해도 된다(노드를 옮기는 길은 손잡이 하나 — 손잡이 · 카드 끌기는 호스트
  * 문서에서 시작해 이 리스너에 안 닿는다). 떼면 그려진 상자가 사각형 안에 **완전히** 든 노드 가운데 가장 바깥 것들을 고른다(`./canvas-marquee.ts`
- * 의 `nodesInRect`) — Shift 를 누른 채 떼면 더한다. 4px 안에서 떼면 아무것도 안 한다 — 지금 클릭(고르기)이 그대로 돈다.
+ * 의 `nodesInRect`) — Shift 를 누른 채 떼면 더한다. 4px 안에서 떼면 아무것도 안 한다 — 지금 클릭(고르기)이 그대로 돈다. 아무것도 안
+ * 감싼 사각형도 그렇다(아래 «빈 사각형»).
  *
  * - **누름은 두 자리에서 받는다 — 캔버스 문서와 캔버스 칸의 빈 자리**(`.wb-shell-canvas` · 판 · 표면 — 문서 바깥 여백). 호스트에 건 리스너는
  *   iframe 안의 누름을 못 받고(`canvas-document.tsx`), 캔버스 문서 안에서만 시작하면 문서 폭을 다 차는 노드(블록 글 · 카드)를 **완전히**
@@ -15,6 +16,11 @@
  *   portal 이라 그 클릭이 표면으로 버블된다) 방금 고른 것이 사라진다(`swallowNextClick` — iframe 의 창). 칸의 빈 자리에서 선 사각형의
  *   클릭은 삼키지 않는다 — 누른 요소(칸 · 판)가 포인터를 붙잡아 클릭이 그 요소에 나고, 그것은 표면의 바깥이라 선택을 안 바꾼다(Chrome:
  *   칸 여백의 `elementFromPoint` 는 `main.wb-shell-canvas` 뿐이고 표면은 iframe 과 같은 상자다).
+ * - **빈 사각형은 누른 자리의 클릭이다** — 갈아 끼우기(Shift 없이)로 뗐는데 아무것도 안 감쌌으면 고르지 않고(선택을 비우지 않는다) 뗀 뒤
+ *   클릭도 삼키지 않는다. 그 클릭은 누른 요소에 난다(누른 요소가 포인터를 붙잡았다) — 노드 위에서 눌렀으면 표면의 `onClick`이 그 노드를
+ *   고르고, 칸 여백이면 여백 클릭과 같다(선택 그대로). 손은 클릭에도 4px 넘게 흔들린다(트랙패드 · 떨리는 손) — 빈 사각형으로 선택을 비우면
+ *   노드를 누른 손이 고른 것을 잃는다. 재는 자리: `apps/web/build-test/multiselect.test.ts`의 «노드 위에서 흔들린 클릭 …». Shift 를 누른 빈
+ *   사각형은 더할 것이 없어 아무 일도 없다(클릭은 삼킨다 — 그 클릭이 누른 노드를 더하거나 빼면 사각형을 그린 손의 뜻이 아니다).
  * - **Escape 는 사각형을 걷는다** — 고르지 않고, 선택 해제도 아니다(capture 로 받아 막는다 — 단축키의 선택 해제는 막힌 키를 안 본다).
  * - **글자 고르기를 걷는다** — 사각형이 서면 그 누름이 만든 글자 선택을 지운다. 누를 때는 안 건드린다(포커스 · 캐럿은 E1 의 단축키 · 클립보드가 본다).
  */
@@ -186,6 +192,8 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
       at.lastHost = toHost(event, source)
       const picked = at.cancelled ? null : nodesInRect(currentRect(at), drawnNodes())
       end()
+      // 빈 사각형(갈아 끼우기)은 누른 자리의 클릭이다 — 고르지도 클릭을 삼키지도 않는다(머리말 «빈 사각형»).
+      if (picked !== null && picked.length === 0 && !event.shiftKey) return
       if (source === 'frame') swallowNextClick(win)
       if (picked !== null) latest.current.onPick(picked, event.shiftKey)
     }

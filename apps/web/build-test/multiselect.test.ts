@@ -9,7 +9,7 @@
  * | 일괄 속성 | 같은 타입 둘의 갈리는 칸을 바꾸면 서버 revision 하나 · bob 화면에 한 번에 · Cmd+Z 한 번에 통째로 |
  * | 일괄 삭제 | 셋을 지우면 revision 하나 · Cmd+Z 한 번에 통째로 |
  * | 칸에 친 채 고른 것이 바뀐다 | 일부 거절 · 다른 탭의 지움 · 옮김이면 친 글이 앞 목록에 남은 노드로 · Cmd+클릭은 blur 가 앞 목록에 · 남은 노드가 없거나 타입이 바뀌었으면 하단 바 한 줄 |
- * | 사각형 | 줌 0.5 · 1.5 · 칸을 굴린 판 · 끝 스크롤 · 4px 안 뗌은 클릭 · Escape 는 걷기만 · 뗀 뒤의 클릭이 선택을 안 바꾼다 |
+ * | 사각형 | 줌 0.5 · 1.5 · 칸을 굴린 판 · 끝 스크롤 · 4px 안 뗌은 클릭 · 빈 사각형은 누른 자리의 클릭 · Escape 는 걷기만 · 뗀 뒤의 클릭이 선택을 안 바꾼다 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -553,6 +553,58 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         inside: 'IFRAME',
         card: true,
         picked: [id(0), id(1)],
+      })
+    } finally {
+      await a.close()
+    }
+  })
+
+  /**
+   * **아무것도 감싸지 않은 사각형은 누른 자리의 클릭이다**(`canvas/use-canvas-marquee.ts` 머리말 «빈 사각형») — 노드 위에서 누르고 4px 넘게
+   * 흔들려 뗀 손(6px · 10px · 트랙패드처럼 0 ~ 3px 떨림이 쌓여 문턱을 넘는 손)은 그 노드를 고른다. 칸 여백에서 그린 빈 사각형은 여백 클릭과
+   * 같다(선택 그대로). 카나리아: 흔들림이 문턱을 넘어 사각형이 섰다(그리는 동안 `[data-wb-marquee]` 1).
+   */
+  it('사각형 — 노드 위에서 흔들린 클릭은 그 노드를 고르고 칸 여백의 빈 사각형은 선택을 안 바꾼다', async () => {
+    const P = await fixture('marquee-jitter', TEXTS(6))
+    const a = await openTab(P)
+    try {
+      await narrow(a.page)
+      await row(a.page, id(5)).click()
+      const drawn: number[] = []
+      /** 노드 안쪽 한 점에서 누르고 `steps` 대로 옮겨 다닌 뒤 뗀다 — 마지막 자리에서 사각형이 서 있었는지 센다. */
+      const wobble = async (nodeId: string, steps: Array<[number, number]>) => {
+        const box = await nodeBox(a.page, nodeId)
+        const at = { x: box.x + 30, y: box.y + box.height / 2 }
+        await a.page.mouse.move(at.x, at.y)
+        await a.page.mouse.down()
+        for (const [dx, dy] of steps) await a.page.mouse.move(at.x + dx, at.y + dy)
+        drawn.push(await a.page.locator('[data-wb-marquee]').count())
+        await a.page.mouse.up()
+        await a.page.waitForTimeout(150)
+        return (await picked(a.page)).all
+      }
+      const six = await wobble(id(4), [[3, 0], [6, 0]])
+      const ten = await wobble(id(3), [[5, 2], [10, 0]])
+      const trackpad = await wobble(id(1), [[1, 0], [2, 1], [3, 2], [2, 3], [3, 3], [1, 2], [2, 2]])
+
+      const card = await nodeBox(a.page, id(0))
+      const pane = { x: card.x - 20, y: card.y + card.height / 2 }
+      const inPane = await a.page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.className ?? null, pane)
+      await a.page.mouse.move(pane.x, pane.y)
+      await a.page.mouse.down()
+      await a.page.mouse.move(pane.x - 4, pane.y + 6, { steps: 3 })
+      await a.page.mouse.move(pane.x - 2, pane.y + 12, { steps: 3 })
+      drawn.push(await a.page.locator('[data-wb-marquee]').count())
+      await a.page.mouse.up()
+      await a.page.waitForTimeout(150)
+      const margin = (await picked(a.page)).all
+      expect({ drawn, six, ten, trackpad, inPane: inPane?.includes('wb-shell-canvas') ?? false, margin }).toEqual({
+        drawn: [1, 1, 1, 1],
+        six: [id(4)],
+        ten: [id(3)],
+        trackpad: [id(1)],
+        inPane: true,
+        margin: [id(1)],
       })
     } finally {
       await a.close()
