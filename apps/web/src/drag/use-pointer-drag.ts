@@ -166,11 +166,11 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         if (event.button !== 0 || gesture.current !== null) return
         const element = event.currentTarget
         const point = { x: event.clientX, y: event.clientY }
-        const listening: { target: EventTarget; type: string; listener: EventListener }[] = []
+        const listening: { target: EventTarget; type: string; listener: EventListener; capture: boolean }[] = []
         let timer: ReturnType<typeof setInterval> | null = null
-        const listen = (target: EventTarget, type: string, listener: EventListener): void => {
-          target.addEventListener(type, listener)
-          listening.push({ target, type, listener })
+        const listen = (target: EventTarget, type: string, listener: EventListener, capture = false): void => {
+          target.addEventListener(type, listener, capture)
+          listening.push({ target, type, listener, capture })
         }
 
         const current: Gesture<S, D> = {
@@ -188,7 +188,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
             show(same === undefined || kept ? next : null)
           },
           teardown: () => {
-            for (const { target, type, listener } of listening) target.removeEventListener(type, listener)
+            for (const { target, type, listener, capture } of listening) target.removeEventListener(type, listener, capture)
             if (timer !== null) clearInterval(timer)
             if (typeof element.hasPointerCapture === 'function' && element.hasPointerCapture(current.pointerId)) {
               element.releasePointerCapture(current.pointerId)
@@ -272,7 +272,10 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         listen(window, 'pointercancel', (raw) => {
           if (mine(raw)) finish()
         })
-        listen(window, 'keydown', key)
+        // **capture 로 받는다** — 끄는 중의 Escape 는 취소이지 선택 해제가 아니다. 에디터 단축키는 문서의 버블에서 Escape 를 선택 해제로
+        // 받고 이미 막힌(`defaultPrevented`) 키는 안 본다(`edit/editor-shortcuts.ts` 의 `shortcutsBlocked`) — 창의 버블은 문서보다 늦어
+        // 여기서 막아도 해제가 먼저 돈다(Chrome: 손잡이 끌기를 Escape 로 취소하면 외곽선 · 손잡이가 사라졌다 — `build-test/canvas-preview.test.ts`).
+        listen(window, 'keydown', key, true)
         const canvas = latest.current.canvasDocument
         if (canvas !== null) listen(canvas, 'keydown', key)
       },
