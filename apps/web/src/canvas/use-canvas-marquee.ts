@@ -4,11 +4,15 @@
  * 문서에서 시작해 이 리스너에 안 닿는다). 떼면 그려진 상자가 사각형 안에 **완전히** 든 노드 가운데 가장 바깥 것들을 고른다(`./canvas-marquee.ts`
  * 의 `nodesInRect`) — Shift 를 누른 채 떼면 더한다. 4px 안에서 떼면 아무것도 안 한다 — 지금 클릭(고르기)이 그대로 돈다.
  *
- * - **포인터는 캔버스 문서에서 듣는다** — 호스트에 건 리스너는 iframe 안의 누름을 못 받는다(`canvas-document.tsx`). 사각형이 선 뒤에는
- *   누른 요소가 포인터를 붙잡아(`setPointerCapture`) iframe 밖으로 나가도 움직임이 온다.
+ * - **누름은 두 자리에서 받는다 — 캔버스 문서와 캔버스 칸의 빈 자리**(`.wb-shell-canvas` · 판 · 표면 — 문서 바깥 여백). 호스트에 건 리스너는
+ *   iframe 안의 누름을 못 받고(`canvas-document.tsx`), 캔버스 문서 안에서만 시작하면 문서 폭을 다 차는 노드(블록 글 · 카드)를 **완전히**
+ *   감쌀 수 없다 — 그 노드의 왼끝이 문서의 왼끝이라 그보다 왼쪽에서 누를 자리가 문서 안에 없다(Chrome: 1280 폭 문서의 글 상자가 x 0 에서 시작).
+ *   칸의 빈 자리만 시작점이다 — 손잡이 · 번호 마커 · 통지 같은 셸 겹의 요소에서 누른 것은 아니다. 사각형이 선 뒤에는 누른 요소가 포인터를
+ *   붙잡아(`setPointerCapture`) 그 문서 밖으로 나가도 움직임이 온다.
  * - **끝 스크롤은 끌어 놓기와 같은 셈**(`drag/use-pointer-drag.ts` 의 `edgeScrollStep`)이다 — 칸이 굴러도 누른 점은 문서 좌표로 붙잡혀 있고,
  *   지금 점은 틱마다 마지막 호스트 점을 그 순간의 iframe 자리로 옮긴다(`./canvas-marquee.ts` 머리말 «좌표 셋»). 휠로 굴려도 같다.
- * - **뗀 뒤의 클릭은 삼킨다** — 사각형이 선 누름의 클릭이 그 밑 노드 하나를 고르면 방금 고른 것이 사라진다(`swallowNextClick` — 이 iframe 의 창).
+ * - **뗀 뒤의 클릭은 삼킨다** — 사각형이 선 누름의 클릭이 그 밑 노드 하나를 고르거나(캔버스 문서) 선택을 비우면(칸의 빈 자리 — 표면의
+ *   `onClick`) 방금 고른 것이 사라진다(`swallowNextClick` — 누름이 난 창).
  * - **Escape 는 사각형을 걷는다** — 고르지 않고, 선택 해제도 아니다(capture 로 받아 막는다 — 단축키의 선택 해제는 막힌 키를 안 본다).
  * - **글자 고르기를 걷는다** — 사각형이 서면 그 누름이 만든 글자 선택을 지운다. 누를 때는 안 건드린다(포커스 · 캐럿은 E1 의 단축키 · 클립보드가 본다).
  */
@@ -47,8 +51,12 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
     interface Gesture {
       pointerId: number
       target: Element
+      /** 누름이 난 자리 — 캔버스 문서(`frame`)인가 칸의 빈 자리(`host`)인가. 움직임 · 뗌은 그 문서에서 받는다. */
+      source: 'frame' | 'host'
       /** 누른 점 — 문서 좌표. */
       start: Point
+      /** 누른 점 — 호스트 좌표(문턱을 화면 거리로 잰다). */
+      pressedHost: Point
       /** 마지막 포인터 — 호스트 좌표. */
       lastHost: Point
       started: boolean
@@ -58,7 +66,9 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
     let gesture: Gesture | null = null
 
     const frameRect = (): { left: number; top: number } => win.frameElement?.getBoundingClientRect() ?? { left: 0, top: 0 }
-    const toHost = (event: PointerEvent): Point => {
+    /** 이벤트의 호스트 좌표 — 캔버스 문서의 이벤트는 iframe 자리 · 줌을 걸어 옮긴다. */
+    const toHost = (event: PointerEvent, source: 'frame' | 'host'): Point => {
+      if (source === 'host') return { x: event.clientX, y: event.clientY }
       const rect = frameRect()
       const zoom = latest.current.zoom
       return { x: rect.left + event.clientX * zoom, y: rect.top + event.clientY * zoom }
@@ -109,31 +119,49 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
       return nodes
     }
 
-    const down = (event: PointerEvent): void => {
+    const begin = (event: PointerEvent, source: 'frame' | 'host'): void => {
       if (event.button !== 0 || !event.isPrimary || gesture !== null) return
       const target = event.target
       if (target === null || (target as Node).nodeType !== 1) return
+      const host = toHost(event, source)
       gesture = {
         pointerId: event.pointerId,
         target: target as Element,
-        start: { x: event.clientX, y: event.clientY },
-        lastHost: toHost(event),
+        source,
+        start: hostToDocument(host, frameRect(), latest.current.zoom),
+        pressedHost: host,
+        lastHost: host,
         started: false,
         cancelled: false,
         timer: null,
       }
     }
 
-    const move = (event: PointerEvent): void => {
+    const down = (event: PointerEvent): void => begin(event, 'frame')
+    /**
+     * 칸의 빈 자리 — 누른 요소가 표면 자신이거나 표면을 품은 상자(칸 · 판 · 그 사이 상자)일 때만이다. 표면 위의 셸 겹(손잡이 · 번호 마커 ·
+     * 통지)은 표면의 **자식**이라 표면을 품지 않는다(머리말).
+     */
+    const downOnPane = (event: PointerEvent): void => {
+      const target = event.target as Element | null
+      const surface = latest.current.surface()
+      if (target === null || target.nodeType !== 1 || surface === null) return
+      if (target.contains(surface)) begin(event, 'host')
+    }
+
+    const move = (event: PointerEvent, source: 'frame' | 'host'): void => {
       const at = gesture
-      if (at === null || event.pointerId !== at.pointerId) return
-      at.lastHost = toHost(event)
+      if (at === null || at.source !== source || event.pointerId !== at.pointerId) return
+      const host = toHost(event, source)
+      at.lastHost = host
       if (at.cancelled) return
       if (!at.started) {
-        if (Math.hypot(event.clientX - at.start.x, event.clientY - at.start.y) <= DRAG_THRESHOLD) return
+        // 문턱은 호스트 좌표의 움직임으로 잰다(줌이 곱해진 화면 거리 — 끌기와 같다).
+        if (Math.hypot(host.x - at.pressedHost.x, host.y - at.pressedHost.y) <= DRAG_THRESHOLD) return
         at.started = true
         if (typeof at.target.setPointerCapture === 'function') at.target.setPointerCapture(at.pointerId)
         win.getSelection()?.removeAllRanges()
+        window.getSelection()?.removeAllRanges()
         at.timer = setInterval(() => {
           const scroller = scrollParent(latest.current.surface())
           if (scroller !== null) {
@@ -146,23 +174,28 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
       draw(at)
     }
 
-    const up = (event: PointerEvent): void => {
+    const up = (event: PointerEvent, source: 'frame' | 'host'): void => {
       const at = gesture
-      if (at === null || event.pointerId !== at.pointerId) return
-      at.lastHost = toHost(event)
+      if (at === null || at.source !== source || event.pointerId !== at.pointerId) return
       if (!at.started) {
         end()
         return
       }
+      at.lastHost = toHost(event, source)
       const picked = at.cancelled ? null : nodesInRect(currentRect(at), drawnNodes())
       end()
-      swallowNextClick(win)
+      swallowNextClick(source === 'frame' ? win : window)
       if (picked !== null) latest.current.onPick(picked, event.shiftKey)
     }
 
     const cancel = (event: PointerEvent): void => {
       if (gesture !== null && event.pointerId === gesture.pointerId) end()
     }
+    const frameMove = (event: PointerEvent): void => move(event, 'frame')
+    const frameUp = (event: PointerEvent): void => up(event, 'frame')
+    const hostMove = (event: PointerEvent): void => move(event, 'host')
+    const hostUp = (event: PointerEvent): void => up(event, 'host')
+    const pane = scrollParent(latest.current.surface())
 
     const key = (event: KeyboardEvent): void => {
       const at = gesture
@@ -173,16 +206,24 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
     }
 
     doc.addEventListener('pointerdown', down)
-    doc.addEventListener('pointermove', move)
-    doc.addEventListener('pointerup', up)
+    doc.addEventListener('pointermove', frameMove)
+    doc.addEventListener('pointerup', frameUp)
     doc.addEventListener('pointercancel', cancel)
+    pane?.addEventListener('pointerdown', downOnPane)
+    document.addEventListener('pointermove', hostMove)
+    document.addEventListener('pointerup', hostUp)
+    document.addEventListener('pointercancel', cancel)
     win.addEventListener('keydown', key, true)
     window.addEventListener('keydown', key, true)
     return () => {
       doc.removeEventListener('pointerdown', down)
-      doc.removeEventListener('pointermove', move)
-      doc.removeEventListener('pointerup', up)
+      doc.removeEventListener('pointermove', frameMove)
+      doc.removeEventListener('pointerup', frameUp)
       doc.removeEventListener('pointercancel', cancel)
+      pane?.removeEventListener('pointerdown', downOnPane)
+      document.removeEventListener('pointermove', hostMove)
+      document.removeEventListener('pointerup', hostUp)
+      document.removeEventListener('pointercancel', cancel)
       win.removeEventListener('keydown', key, true)
       window.removeEventListener('keydown', key, true)
       end()

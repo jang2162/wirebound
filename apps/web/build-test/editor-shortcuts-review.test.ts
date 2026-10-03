@@ -12,7 +12,7 @@
  * | L1 닫힌 shadow 입력 | 캔버스의 포커스 받은 요소를 표면으로 안 본다 — 그 칸의 Backspace 가 노드를 지운다 |
  * | L4 붙이는 사이 떠남 | 페이지 목록을 읽는 사이 떠났다 돌아온 판을 id 로 «안 떠났다»로 읽고 붙인다 · 떠나 머물면 말없이 사라진다 |
  * | L5 굴림 | 화살표로 옮긴 선택이 화면 밖에 남는다 |
- * | L6 Cmd+A | 단축키가 Cmd+A 를 먹어 브라우저의 «전부 고르기»가 안 선다 |
+ * | L6 Cmd+A | (E1 판) 단축키가 Cmd+A 를 먹어 브라우저의 «전부 고르기»가 안 선다 — E2 가 «형제 모두 고르기»로 켜 케이스가 그 값을 잰다 |
  *
  * **Delete 의 반복 거름은 여기서 혼자 안 죽는다** — 키보드 삭제가 선택을 비우므로 반복된 Delete 에는 지울 것이 없다(누름 케이스는 둘을 다 뗀
  * 판에서만 죽는다). 반복 거름은 Cmd+D 누름 케이스와 `test/edit/use-editor-shortcuts.test.tsx` «누른 채의 반복»이 잰다.
@@ -498,7 +498,11 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
     }
   })
 
-  it('L6 Cmd+A 는 브라우저의 «전부 고르기»다 — 캔버스 글자가 골라지고 단축키가 막지 않는다', async () => {
+  /**
+   * E2 가 Cmd+A 를 «기준 노드의 형제 모두»로 켰다(설계서 「설계서 화면 구조」의 «고르는 법») — 브라우저의 «전부 고르기»를 막고(캔버스 글자가
+   * 안 골라진다) 카드 안 글 셋을 고른다. 기준 노드는 그대로다.
+   */
+  it('L6 Cmd+A 는 형제 모두 고르기다 — 브라우저의 «전부 고르기»를 막고 캔버스 글자가 안 골라진다', async () => {
     const { P } = await fixture(stack, alice, 'l6', CARD_PAGE())
     const { page, close } = await open(P)
     try {
@@ -520,7 +524,13 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
           canvasText: (frame.contentWindow!.getSelection()?.toString() ?? '').length > 0,
         }
       })
-      expect({ ...picked, selected: await selected(page) }).toEqual({ prevented: false, canvasText: true, selected: 'n_text0000002' })
+      const members = await page.evaluate(() => [...document.querySelectorAll('[data-wb-member-id]')].map((element) => element.getAttribute('data-wb-member-id')).sort())
+      expect({ ...picked, selected: await selected(page), members }).toEqual({
+        prevented: true,
+        canvasText: false,
+        selected: 'n_text0000002',
+        members: ['n_text0000001', 'n_text0000003'],
+      })
     } finally {
       await close()
     }
