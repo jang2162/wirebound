@@ -1771,6 +1771,8 @@ function CanvasTools(props: {
         <button
           type="button"
           className="wb-shell-zoom-fit"
+          aria-label="화면 맞춤"
+          title="화면 맞춤"
           onClick={() => {
             const canvas = props.canvasRef.current
             if (canvas === null) return
@@ -1779,8 +1781,7 @@ function CanvasTools(props: {
             store.setZoom(next)
           }}
         >
-          {shellIcon('fitWidth', 14, 'wb-shell-icon-lead')}
-          화면 맞춤
+          {shellIcon('fitWidth', 16)}
         </button>
       </div>
     </>
