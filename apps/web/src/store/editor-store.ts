@@ -716,6 +716,13 @@ export class EditorStore {
    */
   #queueEpoch = 0
 
+  /**
+   * **판을 연 수** — 페이지를 열거나(다른 페이지 · 비운 뒤 다시 엶) 비울(`clearPage` · `reset`) 때만 오른다. **같은 페이지를 다시 싣는 판**
+   * (재연결 재조회 · 복원 뒤 다시 읽기 · 편집 실패 수습 — 비우지 않고 같은 페이지를 `loadPage`)에서는 안 오른다. 가르는 값은 `#selectionFor`의
+   * «다시 싣는 중»과 같다. `#queueEpoch`와 갈리는 것이 그 판이다(`pageOpenEpoch`).
+   */
+  #pageOpenEpoch = 0
+
   /** 마지막으로 나간 편집이 나갈 때의 `#queueEpoch`. */
   #sentQueue = -1
 
@@ -863,6 +870,7 @@ export class EditorStore {
     const { pending, undoStack, redoStack } = this.#state
     this.#noteAbandoned(pending, this.#state.openPageId !== pageId)
     this.#queueEpoch += 1
+    if (this.#state.openPageId !== pageId || this.#state.document === null) this.#pageOpenEpoch += 1
     // 새로고침으로 채운 항목의 되짚기 재료도 그 판의 것이다 — 스택과 함께 버린다(받은 `inverse`를 쥐고 있다).
     this.#restoredHistory = null
     // **선택은 지우지 않고 다시 정한다** — 무엇으로 정하는지는 `#selectionFor`가 갖는다.
@@ -1102,10 +1110,11 @@ export class EditorStore {
   readonly sentFromOpenQueue = (): boolean => this.#sentQueue === this.#queueEpoch
 
   /**
-   * **지금 판의 세대**(`#queueEpoch`) — 판을 싣거나 비울 때마다 오른다. 비동기 일이 시작할 때 적어 두고 끝날 때 견주면 그 사이 떠났다
-   * 돌아온 판(페이지 id 는 같다)까지 «떠났다»로 읽힌다(`shell/editor-keys.tsx` 의 붙이기).
+   * **판을 연 세대**(`#pageOpenEpoch`) — 페이지를 열거나 비울 때만 오른다. 비동기 일이 시작할 때 적어 두고 끝날 때 견주면 그 사이 떠난 판
+   * (떠나 머묾 · 떠났다 돌아옴 — 페이지 id 는 같다)만 «떠났다»로 읽히고, 같은 페이지를 다시 실은 판은 안 떠난 것이다(`shell/editor-keys.tsx`
+   * 의 붙이기). 큐를 갈아 낀 수(`#queueEpoch`)로 견주면 다시 싣기까지 «떠났다»가 된다.
    */
-  readonly queueEpoch = (): number => this.#queueEpoch
+  readonly pageOpenEpoch = (): number => this.#pageOpenEpoch
 
   /**
    * **버린 편집이 이미 나간 것인가.** 판을 다시 싣는 자리(`loadPage`의 반환)가 «취소»와 «모름»을 가른다. 나간 편집은 커밋 뒤에
@@ -2089,6 +2098,7 @@ export class EditorStore {
     this.#leftPageId = this.#state.openPageId
     this.#noteAbandoned(pending, true)
     this.#queueEpoch += 1
+    this.#pageOpenEpoch += 1
     this.#restoredHistory = null
     this.#windowChanges = []
     this.#openingPageId = null
@@ -2780,6 +2790,7 @@ export class EditorStore {
     this.#projectId = projectId
     this.#noteAbandoned(this.#state.pending, true)
     this.#queueEpoch += 1
+    this.#pageOpenEpoch += 1
     this.#resets += 1
     // 앞 셸이 낸 복원은 이제 알아볼 수 없다(`#restoresInFlight`의 머리말) — 그 신호가 돌아온 셸에 오면 남의 복원으로 선다.
     for (const id of [...this.#restoresInFlight.keys()]) this.#takeInFlight(id)

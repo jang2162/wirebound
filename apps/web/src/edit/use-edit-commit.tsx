@@ -299,6 +299,15 @@ export function restoredRevisions(revisions: readonly RevisionInverse[]): Restor
   return revisions.map((revision) => ({ revisionId: revision.id, seq: revision.seq, inverse: revision.inverse }))
 }
 
+/** `commitOps`의 선택 인자. */
+export interface CommitOptions {
+  /**
+   * **누른 때의 통지** — 누른 뒤 답을 기다렸다가 내는 편집(페이지 목록을 읽은 뒤의 붙이기 — `shell/editor-keys.tsx`)이 준다. 기다리는 동안
+   * 잃음 조각이 섰으면(`EditorStore.tellLoss` — 수습 · 판을 다시 싣는 읽기) 그 편집이 치우지 않는다. 주지 않으면 앞 통지를 늘 치운다.
+   */
+  pressed?: EditFailure | null
+}
+
 export interface EditCommit {
   /** 노드의 prop 하나를 바꾼다. 적용할 수 없으면 아무 일도 일어나지 않는다. */
   commitProp: (nodeId: string, prop: string, value: unknown) => void
@@ -338,7 +347,7 @@ export interface EditCommit {
    *   지워도 죽는 케이스가 없다(`panels/structure-toolbar.tsx`의 `removeSelected`·`addNode` 주석에
    *   무엇이 덮는지 적어 두었다).
    */
-  commitOps: (ops: PatchOp[] | null) => boolean
+  commitOps: (ops: PatchOp[] | null, options?: CommitOptions) => boolean
   /** 한 단계 되돌린다. **서버에는 새 편집으로 나간다** — 서버에 undo 개념은 없다(README). */
   undo: () => void
   redo: () => void
@@ -663,10 +672,13 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    * 잇는다(jsdom: 이력을 받는 동안 선 «편집 1개를 버렸습니다»를 받은 뒤의 `setEditFailure(null)`이 지웠고, 조회 실패의 문장이 덮었다). 누른
    * 뒤 선 것이 없으면 누른 때와 같다 — 앞 통지를 치우거나 갈아 끼운다. 세션이 끊긴 통지는 늘 세운다.
    */
+  const lossArrivedSince = useCallback(
+    (pressed: EditFailure | null): boolean => store.getState().editFailure !== pressed && store.showsLoss(),
+    [store],
+  )
   const sayAfterWait = useCallback(
     (pressed: EditFailure | null, failure: EditFailure | null): void => {
-      const arrived = store.getState().editFailure !== pressed && store.showsLoss()
-      if (!arrived || failure?.kind === 'signed-out') {
+      if (!lossArrivedSince(pressed) || failure?.kind === 'signed-out') {
         store.setEditFailure(failure)
         return
       }
@@ -674,7 +686,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       const { message } = failure
       store.tellLoss({ key: 'undo-after-wait', rank: LOSS_RANK.history, counts: [], render: () => message })
     },
-    [store],
+    [store, lossArrivedSince],
   )
 
   const settle = useCallback(
@@ -803,7 +815,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    * 규칙(열린 페이지 대조·통지 치우기)이 두 벌이 되고, 한쪽만 고쳐지는 날이 온다.
    */
   const commitOps = useCallback(
-    (ops: PatchOp[] | null): boolean => {
+    (ops: PatchOp[] | null, options: CommitOptions = {}): boolean => {
       // 지금 열린 페이지가 아니면 편집을 만들지 않는다. `useOpenPage`가 주소와 대조한
       // 결과이므로, 주소가 바뀐 뒤 스토어가 아직 앞 페이지를 들고 있는 커밋에서도 여기가
       // `null`이다. **그 대조를 지우면 앞 페이지의 ops가 다음 페이지 경로로 나간다** —
@@ -818,12 +830,13 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       // 자리에서 거절한다.
       if (store.applyEdit(ops) === null) return false
 
-      // 앞 실패의 통지를 치운다. 남겨 두면 사용자가 방금 낸 편집도 실패했다고 읽는다.
-      store.setEditFailure(null)
+      // 앞 실패의 통지를 치운다. 남겨 두면 사용자가 방금 낸 편집도 실패했다고 읽는다. **누른 뒤 기다렸다가 내는 편집(`pressed`)은 그 사이
+      // 선 잃음을 치우지 않는다** — 누른 때의 통지가 아니라 그 뒤에 온 잃음이다(`sayAfterWait`와 같은 규칙 · `CommitOptions`).
+      if (options.pressed === undefined || !lossArrivedSince(options.pressed)) store.setEditFailure(null)
       void pump()
       return true
     },
-    [open, store, pump],
+    [open, store, pump, lossArrivedSince],
   )
 
   const commitProp = useCallback(

@@ -215,6 +215,35 @@ describe('EditorStore', () => {
     })
   })
 
+  it('판을 연 세대(`pageOpenEpoch`)는 페이지를 열거나 비울 때만 오른다 — 같은 페이지를 다시 실을 때는 그대로다', () => {
+    const store = new EditorStore()
+    const seen = (): number => store.pageOpenEpoch()
+    const steps: [string, number][] = []
+    store.loadPage('pg-a', doc('n_a'), 1)
+    steps.push(['연다', seen()])
+    store.loadPage('pg-a', doc('n_a'), 2)
+    steps.push(['같은 페이지 다시 실음', seen()])
+    store.loadPage('pg-b', doc('n_b'), 1)
+    steps.push(['다른 페이지', seen()])
+    store.loadPage('pg-a', doc('n_a'), 3)
+    steps.push(['돌아옴', seen()])
+    store.clearPage()
+    steps.push(['비움', seen()])
+    store.loadPage('pg-a', doc('n_a'), 3)
+    steps.push(['비운 뒤 같은 페이지를 엶', seen()])
+    store.reset('p2')
+    steps.push(['프로젝트를 옮김', seen()])
+    expect(steps).toEqual([
+      ['연다', 1],
+      ['같은 페이지 다시 실음', 1],
+      ['다른 페이지', 2],
+      ['돌아옴', 3],
+      ['비움', 4],
+      ['비운 뒤 같은 페이지를 엶', 5],
+      ['프로젝트를 옮김', 6],
+    ])
+  })
+
   it('clearPage는 openPageId·문서·headSeq·선택을 비운다', () => {
     const store = new EditorStore()
     store.loadPage('pg-a', doc('n_a'), 9)

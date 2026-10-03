@@ -291,32 +291,54 @@ function canvasKeyTarget(element: Element): boolean {
   }
 }
 
-/** 키를 제 일에 쓰는 위젯이 받는 키(`keyHeldByWidget`). 화살표는 Alt 를 든 순서 · 계층 조합도 함께다 — 키 이름으로 본다. */
-const WIDGET_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Delete', 'Backspace'])
+/** 목록을 오가는 위젯(메뉴 · 목록 · 고르기 무리 · 열린 행동 메뉴 · 고르개)이 쥐는 키. */
+const LIST_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape', 'Enter'])
+/** 가로 축 위젯(가로 탭 · 세로 손잡이 · 가로 값 조절)이 쥐는 키. */
+const ROW_KEYS: ReadonlySet<string> = new Set(['ArrowLeft', 'ArrowRight', 'Home', 'End'])
+/** 세로 축 위젯(세로 탭 · 가로 손잡이 · 세로 값 조절)이 쥐는 키. */
+const COLUMN_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'Home', 'End'])
 
-/** 그 키를 제 일에 쓰는 ARIA 위젯 — 메뉴 · 목록 · 탭 · 값 조절 · 손잡이(`shell/shell-resizer.tsx`) · 고르기 무리. */
-const WIDGET_ROLES = ['menu', 'menuitem', 'listbox', 'option', 'tablist', 'tab', 'slider', 'separator', 'radiogroup', 'combobox']
-  .map((role) => `[role="${role}"]`)
-  .join(',')
+const LIST_ROLES = ['menu', 'menuitem', 'listbox', 'option', 'radiogroup', 'combobox'].map((role) => `[role="${role}"]`).join(',')
 
 /**
  * **그 키를 위젯이 쥐었는가** — 키 리스너만 본다(클립보드 이벤트에는 키가 없다). 참이면 단축키가 그 키를 받지 않고 `preventDefault` 도 안
- * 건다 — 위젯과 브라우저가 그대로 갖는다.
+ * 건다 — 위젯과 브라우저가 그대로 갖는다. **위젯은 그 위젯이 쓰는 키만 쥔다** — Delete · Backspace · 명령 키 조합 · `?` 는 어느 위젯도 안 쥐어
+ * 입력 표면이 아니면(`shortcutsBlocked`) 단축키로 간다.
  *
- * | 조건 | 까닭 |
- * |---|---|
- * | 대상이 `WIDGET_ROLES` 안 | 위젯이 쓰지 않는 축의 키(열린 줄 메뉴의 ← →)가 전역 명령이 되면, 그 위젯이 쥔 대상이 바뀐다 — 줄 `…` 메뉴의 «삭제»는 «지금 고른 노드»에 대한 명령이라 ← 뒤 «삭제»가 부모를 지웠다(Chrome · `build-test/editor-shortcuts-review.test.ts` «H2») |
- * | 호스트 문서에 `[data-wb-holds-keys]` — 열린 행동 메뉴(`shell/action-menu.tsx`) · 열린 고르개(`panels/structure-toolbar.tsx` 의 `StructurePicker`) | 포커스가 그 안에 없어도(항목이 다 꺼진 메뉴는 토글에 남는다) Escape 가 메뉴를 닫으며 선택까지 풀었고, 고르개의 «취소»에서 친 Escape 가 선택을 풀어 고르개를 감췄다(`adding` 이 남아 다음 선택에 다시 섰다) |
+ * | 포커스가 어디 안인가 | 쥐는 키 | 까닭 |
+ * |---|---|---|
+ * | `role` menu · menuitem · listbox · option · radiogroup · combobox | 화살표 넷 · Home · End · Escape · Enter | 위젯이 안 쓰는 축의 키(열린 줄 메뉴의 ← →)가 전역 명령이 되면 그 위젯이 쥔 대상이 바뀐다 — 줄 `…` 메뉴의 «삭제»는 고른 노드에 대한 명령이라 ← 뒤 «삭제»가 부모를 지웠다(Chrome · `build-test/editor-shortcuts-review.test.ts` «H2») |
+ * | `[data-wb-holds-keys]` — 열린 행동 메뉴의 상자(단추 + 목록 — `shell/action-menu.tsx`) · 열린 고르개(`panels/structure-toolbar.tsx` 의 `StructurePicker`) | 같음 | 항목이 다 꺼진 메뉴는 포커스가 단추에 남는다 — 그 Escape 가 메뉴를 닫으며 선택까지 풀었다(«L2»). 고르개 안의 Escape 는 고르개가 받아 닫는다(`cancelAdd`) |
+ * | `role` tab · tablist | 탭 줄의 축(`aria-orientation` — 기본 가로)의 화살표 · Home · End | 로빙 탭(컴포넌트 판 갈래)은 ← → 로 탭을 옮긴다 |
+ * | `role` separator · slider | 그 축의 화살표 · Home · End | 손잡이(`shell/shell-resizer.tsx`)는 세로줄이 ← →, 가로줄이 ↑ ↓ 다(그 머리말 «`aria-orientation`») |
  *
- * **구조 트리의 줄 단추(`.wb-shell-structure-node`)는 예외다** — 트리는 이 표를 읽는 자리라(↑ ↓ 로 줄을 옮기고 Delete 로 지운다) 열린 고르개가
- * 그 곁에 서 있어도 줄에서는 선다. 그 줄은 역할 없는 `button` 이라 위 역할에는 안 걸린다. 그 Escape · Delete 로 선택이 비면 고르개도 걷힌다
- * (`useStructureCommands` 의 «선택이 비면 고르개를 걷는다»).
+ * **표지는 포커스가 그 안일 때만 쥔다** — 호스트 문서에 있기만 하면 쥐던 판은 고르개가 선 동안 캔버스 · 줌 단추 · 고르개를 연 `+` 토글에서 친
+ * Delete · ↓ · Escape 를 아무 말 없이 먹었다(Chrome · `build-test/editor-shortcuts-review-2.test.ts` «R2»). **역할마다 키를 가른다** — 모든
+ * 역할이 같은 일곱 키를 쥐던 판은 키를 하나도 안 쓰는 우측 패널 탭을 누른 뒤의 Delete · ↓ · Escape 를 먹었다(«R3»). 위젯이 안 쓰는 축의 화살표
+ * (탭의 ↑ ↓ · 손잡이의 직각)는 선택을 옮긴다 — 그 위젯은 대상을 쥐지 않아 해가 서지 않는다. 대상을 쥔 메뉴가 열린 동안 선택이 옮으면 그 메뉴는
+ * 닫힌다(`shell/action-menu.tsx` 의 `openWhile`).
  */
-export function keyHeldByWidget(event: Pick<KeyboardEvent, 'key' | 'target'>, host: Document = document): boolean {
-  if (!WIDGET_KEYS.has(event.key)) return false
+export function keyHeldByWidget(event: Pick<KeyboardEvent, 'key' | 'target'>): boolean {
   const target = event.target as Node | null
   const element = target !== null && target.nodeType === 1 ? (target as Element) : null
-  if (element?.closest('.wb-shell-structure-node') != null) return false
-  if (element?.closest(WIDGET_ROLES) != null) return true
-  return host.querySelector('[data-wb-holds-keys]') !== null
+  if (element === null) return false
+  if (element.closest(LIST_ROLES) !== null || element.closest('[data-wb-holds-keys]') !== null) return LIST_KEYS.has(event.key)
+  const tab = element.closest('[role="tab"],[role="tablist"]')
+  if (tab !== null) {
+    const list = tab.closest('[role="tablist"]')
+    return (list?.getAttribute('aria-orientation') === 'vertical' ? COLUMN_KEYS : ROW_KEYS).has(event.key)
+  }
+  const handle = element.closest('[role="separator"],[role="slider"]')
+  if (handle !== null) return (axisOf(handle) === 'row' ? ROW_KEYS : COLUMN_KEYS).has(event.key)
+  return false
+}
+
+/**
+ * 손잡이 · 값 조절이 움직이는 축. 분리선의 `aria-orientation` 은 **선이 놓인 방향**이라 세로줄이 ← →, 가로줄(ARIA 의 `separator` 기본값)이
+ * ↑ ↓ 로 움직인다. 값 조절은 놓인 방향(기본 가로)으로 움직인다.
+ */
+function axisOf(handle: Element): 'row' | 'column' {
+  const orientation = handle.getAttribute('aria-orientation')
+  if (handle.getAttribute('role') === 'separator') return orientation === 'vertical' ? 'row' : 'column'
+  return orientation === 'vertical' ? 'column' : 'row'
 }

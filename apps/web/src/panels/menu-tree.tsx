@@ -479,7 +479,12 @@ function MenuItem(props: {
           {node.title}
         </button>
         {drag !== null && (
-          <TreeRowActions name={node.title} {...menuRowItems(commands, 'menu', props.statusId)} onOpen={() => pick(commands, self)} />
+          <TreeRowActions
+            name={node.title}
+            {...menuRowItems(commands, 'menu', props.statusId)}
+            onOpen={() => pick(commands, self)}
+            picked={picked}
+          />
         )}
       </TreeRow>
       {drag !== null && picked && <RowPanel commands={commands} at="row" />}
@@ -565,6 +570,7 @@ function PageLink(props: {
               busy: exporter.exporting !== null,
             })}
             onOpen={() => pick(commands, self)}
+            picked={picked}
           />
         )}
       </TreeRow>

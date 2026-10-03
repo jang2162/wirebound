@@ -657,8 +657,18 @@ export function StructurePicker(props: {
   if (picker === null) return null
   return (
     // 고르개는 자기 줄을 요구한다(`flex-basis: 100%` — `test/shell-css-picker.test.ts`) — 감싸는 flex 상자가 이것이다.
-    // `data-wb-holds-keys` — 고르개가 선 동안 화살표 · Escape · Delete 는 에디터 단축키가 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`).
-    <div className="wb-shell-tree-panel" data-wb-holds-keys="">
+    // `data-wb-holds-keys` — 포커스가 고르개 안이면 화살표 · Escape 는 에디터 단축키가 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`).
+    // **고르개 안의 Escape 는 고르개를 닫는다**(«취소»와 같다) — 단축키에 넘기면 선택을 풀어 고르개가 감춰질 뿐 `adding` 이 남았다. 조합 중의
+    // Escape 는 조합의 키다(프리셋 이름 칸).
+    <div
+      className="wb-shell-tree-panel"
+      data-wb-holds-keys=""
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || event.nativeEvent.isComposing || event.defaultPrevented) return
+        event.preventDefault()
+        commands.cancelAdd()
+      }}
+    >
       {(picker === 'inside' || picker === 'after') && <TypePicker onPick={commands.pick} onCancel={commands.cancelAdd} />}
       {picker === 'pattern' && <PatternPicker onPick={commands.pickPattern} onCancel={commands.cancelAdd} />}
       {picker === 'preset' && (

@@ -169,43 +169,82 @@ describe('useEditorShortcuts', () => {
     expect(ran).toEqual(['undo', 'selectNext', 'delete'])
   })
 
-  it.each([
-    ['메뉴 항목', 'menuitem'],
-    ['탭', 'tab'],
-    ['손잡이', 'separator'],
-    ['목록', 'listbox'],
-  ])('%s(role) 안에서 친 화살표 · Escape · Delete 는 위젯의 것이다 — run 0 · 막지 않음 · Ctrl+Z 는 선다', (_label, role) => {
-    const { ran } = setup()
+  /** 그 역할(과 `aria-orientation`)을 단 상자 안의 단추. */
+  function widget(role: string, orientation?: string): HTMLButtonElement {
     const box = mount(document.createElement('div'))
     box.setAttribute('role', role)
-    const inner = box.appendChild(document.createElement('button'))
-    for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Delete', 'Backspace']) {
-      expect(press(inner, { key })).toBe(false)
-    }
+    if (orientation !== undefined) box.setAttribute('aria-orientation', orientation)
+    return box.appendChild(document.createElement('button'))
+  }
+
+  const ARROWS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'] as const
+  const ARROW_COMMAND: Record<(typeof ARROWS)[number], ShortcutCommand> = {
+    ArrowUp: 'selectPrev',
+    ArrowDown: 'selectNext',
+    ArrowLeft: 'selectParent',
+    ArrowRight: 'selectFirstChild',
+  }
+
+  it.each([
+    ['메뉴 항목', 'menuitem'],
+    ['목록', 'listbox'],
+  ])('%s(role) 안의 화살표 · Escape 는 위젯의 것이다(run 0 · 막지 않음) — Delete · Ctrl+Z 는 단축키가 받는다', (_label, role) => {
+    const { ran } = setup()
+    const inner = widget(role)
+    for (const key of [...ARROWS, 'Home', 'End', 'Escape', 'Enter']) expect(press(inner, { key })).toBe(false)
     expect(press(inner, { key: 'ArrowUp', altKey: true })).toBe(false)
+    expect(press(inner, { key: 'Delete' })).toBe(true)
     expect(press(inner, { key: 'z', code: 'KeyZ', ctrlKey: true })).toBe(true)
-    expect(ran).toEqual(['undo'])
+    expect(ran).toEqual(['delete', 'undo'])
   })
 
-  it('열린 메뉴 · 고르개(`data-wb-holds-keys`)가 있으면 포커스가 밖이어도 화살표 · Escape · Delete 가 안 선다 — 구조 트리 줄은 선다', () => {
+  it.each([
+    ['가로 탭 줄', 'tablist', undefined, ['ArrowLeft', 'ArrowRight']],
+    ['세로 탭 줄', 'tablist', 'vertical', ['ArrowUp', 'ArrowDown']],
+    ['가로 손잡이(기본)', 'separator', undefined, ['ArrowUp', 'ArrowDown']],
+    ['세로 손잡이', 'separator', 'vertical', ['ArrowLeft', 'ArrowRight']],
+    ['가로 값 조절(기본)', 'slider', undefined, ['ArrowLeft', 'ArrowRight']],
+  ] as const)('%s 는 제 축의 화살표만 쥔다 — 다른 축의 화살표 · Escape · Delete 는 단축키가 받는다', (_label, role, orientation, held) => {
+    const { ran } = setup()
+    const inner = widget(role, orientation)
+    const expected: ShortcutCommand[] = []
+    for (const key of ARROWS) {
+      const mine = (held as readonly string[]).includes(key)
+      expect(press(inner, { key })).toBe(!mine)
+      if (!mine) expected.push(ARROW_COMMAND[key])
+    }
+    expect(press(inner, { key: 'Home' })).toBe(false)
+    expect(press(inner, { key: 'Escape' })).toBe(true)
+    expect(press(inner, { key: 'Delete' })).toBe(true)
+    expect(ran).toEqual([...expected, 'deselect', 'delete'])
+  })
+
+  it('탭은 탭 줄의 축을 따른다 — 세로 탭 줄 안의 탭은 ↑ ↓ 를 쥔다', () => {
+    const { ran } = setup()
+    const list = mount(document.createElement('div'))
+    list.setAttribute('role', 'tablist')
+    list.setAttribute('aria-orientation', 'vertical')
+    const tab = list.appendChild(document.createElement('button'))
+    tab.setAttribute('role', 'tab')
+    expect(press(tab, { key: 'ArrowDown' })).toBe(false)
+    expect(press(tab, { key: 'ArrowRight' })).toBe(true)
+    expect(ran).toEqual(['selectFirstChild'])
+  })
+
+  it('열린 메뉴 · 고르개(`data-wb-holds-keys`)는 포커스가 그 안일 때만 화살표 · Escape 를 쥔다 — 밖의 키 · 안의 Delete 는 단축키가 받는다', () => {
     const { ran } = setup()
     const open = mount(document.createElement('div'))
     open.setAttribute('data-wb-holds-keys', '')
-    const toggle = mount(document.createElement('button'))
-    const treeRow = mount(document.createElement('button'))
-    treeRow.className = 'wb-shell-structure-node'
+    const inside = open.appendChild(document.createElement('button'))
+    const outside = mount(document.createElement('button'))
 
-    expect(press(toggle, { key: 'Escape' })).toBe(false)
-    expect(press(document.body, { key: 'Delete' })).toBe(false)
-    expect(press(document.body, { key: 'ArrowLeft' })).toBe(false)
-    expect(press(document.body, { key: '?', shiftKey: true })).toBe(true)
-    expect(press(treeRow, { key: 'ArrowDown' })).toBe(true)
-    expect(press(treeRow, { key: 'Escape' })).toBe(true)
-    expect(ran).toEqual(['help', 'selectNext', 'deselect'])
-
-    open.remove()
-    expect(press(toggle, { key: 'Escape' })).toBe(true)
-    expect(ran).toEqual(['help', 'selectNext', 'deselect', 'deselect'])
+    expect(press(inside, { key: 'Escape' })).toBe(false)
+    expect(press(inside, { key: 'ArrowLeft' })).toBe(false)
+    expect(press(inside, { key: 'Delete' })).toBe(true)
+    expect(press(outside, { key: 'Escape' })).toBe(true)
+    expect(press(outside, { key: 'ArrowDown' })).toBe(true)
+    expect(press(document.body, { key: 'Delete' })).toBe(true)
+    expect(ran).toEqual(['delete', 'deselect', 'selectNext', 'delete'])
   })
 
   it('캔버스 문서에서는 포커스가 문서 자체 · 단추 · 링크일 때만 선다 — 그 밖의 포커스 받은 요소(닫힌 shadow 호스트 등)는 표면이다', () => {

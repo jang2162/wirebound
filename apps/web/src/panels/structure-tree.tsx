@@ -416,6 +416,7 @@ function StructureNode(props: {
               onOpen={() => {
                 if (!picked) row.select(node.id)
               }}
+              picked={picked}
             />
           )}
         </div>
