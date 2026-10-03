@@ -166,8 +166,8 @@ describe('구조 트리의 키보드 단축키', () => {
    * 노드를 지운다 — 재현되는 고장이므로 케이스로 둔다.
    *
    * **상자 안에 진짜 DOM 노드를 넣어 잰다.** 이 화면이 그런 표면을 아직 그리지 않으므로
-   * 그리는 척하는 대신 **핸들러가 붙은 상자에 직접 붙이고 네이티브 이벤트를 올린다** —
-   * React는 루트에서 위임받으므로 자기가 그리지 않은 노드에서 난 이벤트도 그대로 지난다.
+   * 그리는 척하는 대신 **트리 상자에 직접 붙이고 네이티브 이벤트를 올린다** — 삭제 단축키는 에디터 단축키 리스너가 문서에서 받으므로
+   * (`edit/use-editor-shortcuts.ts`) 자기가 그리지 않은 노드에서 난 이벤트도 그대로 닿는다.
    */
   function handlerBox(): HTMLElement {
     const list = document.body.querySelector('.wb-shell-structure')
@@ -438,18 +438,16 @@ describe('구조 트리의 키보드 단축키', () => {
     expect(keyOps).toEqual(viaButton.calls[0]?.ops)
   })
 
-  it('삭제 단축키도 선택을 부모로 옮긴다', async () => {
-    // 버튼과 같은 함수를 부른다는 것의 다른 면 — «지우면 선택이 부모로 간다»가 단축키 경로에도 그대로 온다.
-    await openPage(doc(), { apiOverrides: server().api })
+  it('삭제 단축키는 지운 뒤 선택을 비운다 — 줄 «삭제»와 달리 부모를 고르지 않는다', async () => {
+    // 부모를 고르면 따로 친 둘째 Delete 가 그 부모를 지운다(`shell/editor-keys.tsx` 의 `run` 의 `delete`). 줄 `…` «삭제»가 부모를 고르는 것은
+    // `structure-toolbar.test.tsx` «삭제 뒤 선택이 부모로 옮겨진다»가 잰다.
+    const view = server()
+    await openPage(doc(), { apiOverrides: view.api })
     select('Button')
 
     fireEvent.keyDown(row('Button'), { key: 'Delete' })
 
-    await waitFor(() =>
-      expect(
-        structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]')
-          ?.textContent,
-      ).toBe('Card'),
-    )
+    await waitFor(() => expect(view.calls).toHaveLength(1))
+    expect(structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]')).toBeNull()
   })
 })

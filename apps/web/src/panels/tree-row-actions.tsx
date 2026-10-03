@@ -6,7 +6,8 @@
  *
  * 명령(`TreeCommands` · `StructureCommands`)은 **고른 줄**에 대해 돈다 — 키보드 단축키도 같은 명령을 부른다. 그래서 줄의 `+` · `…`를
  * 열면(`ActionMenu` 의 `onOpen`) 그 줄을 먼저 고르고, 항목의 켜고 끔은 고른 뒤의 판정(`treeAbilities` · `structureAbilities`)으로
- * 그린다. 여는 것과 고르는 것이 한 렌더에 묶이므로 목록이 앞 선택의 판정으로 한 번 그려지는 틈이 없다.
+ * 그린다. 여는 것과 고르는 것이 한 렌더에 묶이므로 목록이 앞 선택의 판정으로 한 번 그려지는 틈이 없다. **열린 뒤 그 줄이 고른 줄이 아니게
+ * 되면 메뉴를 닫는다**(`picked` → `ActionMenu` 의 `openWhile` — 그 머리말 «고른 대상이 바뀌면 닫는다»).
  *
  * ## 서는 조건은 CSS 가 갖는다 — 상태를 더하지 않는다
  *
@@ -38,14 +39,16 @@ export function TreeRowActions(props: {
   more?: readonly ActionMenuItem[]
   /** 열 때 — 그 줄을 고른다(머리말). */
   onOpen: () => void
+  /** 그 줄이 고른 줄인가 — 열린 뒤 거짓이 되면 메뉴를 닫는다(머리말). */
+  picked: boolean
 }): ReactElement {
   return (
     <span className="wb-shell-tree-row-actions">
       {props.add !== undefined && (
-        <ActionMenu label={`${props.name} 추가`} glyph="+" items={props.add} onOpen={props.onOpen} compact />
+        <ActionMenu label={`${props.name} 추가`} glyph="+" items={props.add} onOpen={props.onOpen} openWhile={props.picked} compact />
       )}
       {props.more !== undefined && (
-        <ActionMenu label={`${props.name} 더 보기`} items={props.more} onOpen={props.onOpen} compact />
+        <ActionMenu label={`${props.name} 더 보기`} items={props.more} onOpen={props.onOpen} openWhile={props.picked} compact />
       )}
     </span>
   )

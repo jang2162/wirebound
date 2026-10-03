@@ -6,7 +6,7 @@
  * `services/edit-pipeline.ts`의 `applyEdit` 하나로 모은다. 같은 이유가 zod 경계에도
  * 그대로 적용된다 — WebSocket 핸들러도 `applyEdit`을 부르기 전에 신뢰할 수 없는
  * 프레임을 걸러야 하는데, 그 규칙이 REST 라우트 파일 안에만 있으면 복제된다.
- * 복제하면 갈라지기 쉬운 값들이다: `ops`의 상한 200, 아래 `PatchPath` 술어, 그리고
+ * 복제하면 갈라지기 쉬운 값들이다: `ops`의 상한(`MAX_OPS_PER_EDIT`), 아래 `PatchPath` 술어, 그리고
  * **`value` 키 존재 요구**. 그 요구가 한쪽에서 빠지면 `undefined`가 문서에 심기고
  * `JSON.stringify`가 그 키를 조용히 지운다 — 서버가 ack한 편집과 저장된 문서가
  * 갈라지는 정확히 그 실패다.
@@ -15,6 +15,7 @@
  * WS 프레임)의 모양 검사이지 도메인 로직이 아니다. `applyEdit`은 zod를 모르고
  * 이미 신뢰된 `PatchOp[]`를 받는다(`apps/api/README.md` 「계층 규칙」 절).
  */
+import { MAX_OPS_PER_EDIT } from '@wirebound/schema'
 import { z } from 'zod'
 
 /**
@@ -112,7 +113,8 @@ export const OpsBody = z.strictObject({
   /** 클라이언트가 아는 마지막 seq. 새 페이지(이력 없음)는 0이다. */
   baseSeq: z.int().min(0),
   /**
-   * 최대 200개. 상한을 두는 이유는 요청 하나가 임의로 큰 문서 변형을 일으켜
+   * 최대 `MAX_OPS_PER_EDIT`(`@wirebound/schema` — 화면이 보내기 전에 같은 값으로 막는다). 상한을 두는
+   * 이유는 요청 하나가 임의로 큰 문서 변형을 일으켜
    * 메모리·CPU를 소진하는 것을 막기 위해서다 — 파이프라인은 페이지 행 잠금 안에서 ops 를
    * 하나씩 적용하므로 비용이 ops 수에 선형이다. 사람의 한 동작이 만드는
    * ops는 많아야 몇 개이고, 큰 변형은 `PUT .../schema`(통째 교체)의 몫이다.
@@ -120,7 +122,7 @@ export const OpsBody = z.strictObject({
    * 빈 배열은 허용한다(`.min(1)`을 걸지 않는다) — 파이프라인이 빈 ops에도 revision을
    * 남기도록 정의돼 있고, 그 성질에 기대는 호출자가 생길 수 있다.
    */
-  ops: z.array(PatchOpBody).max(200, 'ops는 200개 이하여야 합니다'),
+  ops: z.array(PatchOpBody).max(MAX_OPS_PER_EDIT, `ops는 ${MAX_OPS_PER_EDIT}개 이하여야 합니다`),
   /**
    * 서버는 저장하지 않고 응답에 그대로 되돌려 준다 — 멱등 키가 아니다.
    * 중복 적용은 baseSeq가 막는다. **여기서는 선택이다**(위 `ClientOpId` 참고).

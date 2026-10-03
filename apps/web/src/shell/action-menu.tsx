@@ -57,6 +57,23 @@
  * (머리가 접혀 단추가 왼쪽으로 가도 목록이 창 밖으로 안 나간다). **그 훅의 계약대로 단추까지 감싸는 상자에 건다.** Escape 는 그 훅도 받지만
  * 포커스를 돌려주려고 목록의 키 처리가 먼저 받는다 — 둘이 함께 닫아도 한 번 닫힌 상태에 한 번 더 닫는 것이라 결과가 같다.
  *
+ * ## 열린 동안 키는 메뉴의 것이다 — 단추까지
+ *
+ * 열린 동안 메뉴 상자(단추 + 목록)에 `data-wb-holds-keys` 를 단다 — 포커스가 그 안이면 화살표 · Home · End · Escape · Enter 는 에디터 단축키가
+ * 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`). **단추까지 감싸는 것은** 항목이 다 꺼진 메뉴는 포커스가 단추에 남아서다 — 그
+ * 단추의 Escape 가 메뉴를 닫으며 선택까지 풀었다(Chrome · `build-test/editor-shortcuts-review.test.ts` «L2»). 상자 밖(캔버스 · 트리 줄)의 키는
+ * 단축키가 받는다.
+ *
+ * ## 고른 대상이 바뀌면 닫는다 — `openWhile`
+ *
+ * 트리 줄의 `+` · `…` 는 **고른 줄**에 대한 명령이다 — 항목 · 켜고 끔 · 설명(`aria-describedby` 의 상태줄)이 다 고른 노드의 판정에서 나온다
+ * (`panels/tree-row-actions.tsx` 머리말 «누르면 먼저 그 줄을 고른다»). 메뉴가 열린 채 선택이 다른 길로 옮으면(Cmd+V · Cmd+D 가 넣은 노드를
+ * 고름 · 캔버스의 ↓) 메뉴는 연 줄의 이름을 단 채 새 노드의 명령을 든다 — «삭제»가 방금 붙인 노드를 지웠다(Chrome ·
+ * `build-test/editor-shortcuts-review-2.test.ts` «R1»). 그래서 그 줄이 고른 줄이 아니게 되면(`openWhile` 이 거짓) 닫는다. **항목을 연 줄의
+ * id 에 묶지 않은 까닭** — 묶을 것이 명령만이 아니다. 켜고 끔 · 설명 · `+` 가 여는 고르개 · 메뉴 트리의 이름 칸과 삭제 확인이 다 고른 것에
+ * 대해 돌아, 줄 id 를 실으려면 두 트리의 명령 묶음이 줄마다의 판정을 따로 지어야 한다. 닫으면 «열린 줄 메뉴 = 고른 줄»이 늘 참이라 그
+ * 전부가 맞는다.
+ *
  * ## 항목의 아이콘 — `icon` 에 lucide 컴포넌트를 준다
  *
  * 항목의 `icon`은 **컴포넌트**(`LucideIcon` — `lucide-react`)이지 그린 요소가 아니다. 크기 · 선 굵기 · 색을 이 부품이 정해 목록 안의 아이콘이
@@ -111,6 +128,8 @@ export function ActionMenu(props: {
   onOpen?: () => void
   /** 조밀한 단추 — 트리 줄 곁에 선다(줄 높이를 안 늘린다). */
   compact?: boolean
+  /** 열린 채 남는 조건 — 열린 동안 거짓이 되면 닫는다(머리말 «고른 대상이 바뀌면 닫는다»). 없으면 늘 참이다. */
+  openWhile?: boolean
 }): ReactElement {
   const [open, setOpen] = useState(false)
   /** 열 때 포커스를 줄 항목 — `'first'` · `'last'`. 목록이 그려진 뒤 이펙트가 옮긴다. */
@@ -132,6 +151,12 @@ export function ActionMenu(props: {
 
   const rootRef = usePopoverDismiss(open, close)
   const { placement, bodyRef } = usePopoverSide(rootRef, open)
+
+  // 연 렌더에서 이미 참이다 — 여는 누름(`onOpen`)이 그 줄을 고르는 것과 여는 것이 한 렌더에 묶인다.
+  const stale = open && props.openWhile === false
+  useEffect(() => {
+    if (stale) close()
+  })
 
   useEffect(() => {
     if (!open) return
@@ -204,7 +229,7 @@ export function ActionMenu(props: {
   }
 
   return (
-    <div className="wb-shell-action-menu" ref={rootRef}>
+    <div className="wb-shell-action-menu" ref={rootRef} data-wb-holds-keys={open ? '' : undefined}>
       <button
         type="button"
         ref={toggleRef}

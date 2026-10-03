@@ -726,9 +726,11 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         await a.page.mouse.move(empty.x + empty.width / 2, empty.y + empty.height / 2, { steps: 8 })
         const rightShown = (await indicators(a.page)).length
         await a.page.mouse.up({ button: 'right' })
-        await a.page.keyboard.press('Escape')
         await a.page.waitForTimeout(400)
+        // 고른 노드는 Escape **앞에서** 읽는다 — Escape 는 선택 해제 단축키다(정본 「설계서 화면 구조」의 단축키). 뒤의 Escape 는 오른쪽 단추가 연
+        // 것이 있으면 닫는 정리다.
         const selected = await a.page.evaluate(() => document.querySelector('.wb-shell-selection')?.getAttribute('data-wb-selected-id') ?? null)
+        await a.page.keyboard.press('Escape')
         expect({ overlaps: overlap.w > 0 && overlap.h > 0, hit, rightShown, selected, sent: a.patches.length, doc: await shape(P) }).toEqual({
           overlaps: true,
           hit: 'wb-shell-canvas-handle',

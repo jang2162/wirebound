@@ -297,7 +297,9 @@ export function MenuTree(props: {
   return outside(
     // **키 핸들러가 이 상자에 붙는다.** 트리와 줄 행동을 함께 감싸므로 어느 쪽에 포커스가
     // 있어도 단축키가 닿는다. 스타일이 없는 상자라 클래스는 테스트가 집을 이름 하나뿐이다.
-    <div className="wb-shell-tree-keys" onKeyDown={handleKeyDown}>
+    // **`data-wb-own-shortcuts` — 포커스가 이 상자 안이면 에디터 단축키 · 클립보드 리스너가 서지 않는다**(`edit/editor-shortcuts.ts` 의
+    // `shortcutsBlocked`). 이 상자의 `Delete` 는 메뉴 · 페이지의 삭제 확인이지 고른 노드의 삭제가 아니다.
+    <div className="wb-shell-tree-keys" data-wb-own-shortcuts="" onKeyDown={handleKeyDown}>
       {/* **조작 실패는 트리 안에 낸다.** `shell/edit-alert.tsx`와 섞지 않는 것은 그것이
           편집 파이프라인의 상태를 읽기 때문이다 — CRUD 실패는 그 상태와 무관하므로 섞으면
           서로 다른 두 실패가 한 문장 자리를 다툰다.
@@ -477,7 +479,12 @@ function MenuItem(props: {
           {node.title}
         </button>
         {drag !== null && (
-          <TreeRowActions name={node.title} {...menuRowItems(commands, 'menu', props.statusId)} onOpen={() => pick(commands, self)} />
+          <TreeRowActions
+            name={node.title}
+            {...menuRowItems(commands, 'menu', props.statusId)}
+            onOpen={() => pick(commands, self)}
+            picked={picked}
+          />
         )}
       </TreeRow>
       {drag !== null && picked && <RowPanel commands={commands} at="row" />}
@@ -563,6 +570,7 @@ function PageLink(props: {
               busy: exporter.exporting !== null,
             })}
             onOpen={() => pick(commands, self)}
+            picked={picked}
           />
         )}
       </TreeRow>

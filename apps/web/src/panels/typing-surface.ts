@@ -1,13 +1,13 @@
 /**
  * *"이 키 이벤트가 **사용자가 값을 넣거나 고르는 표면**에서 났는가"*를 판정하는 곳.
  *
- * **왜 이 물음이 필요한가.** 구조 트리의 키 핸들러는 트리와 툴바를 **함께** 감싸는 상자에
- * 붙어 있고, 그 상자 안에 고르개가 그려진다(`panels/structure-tree.tsx`). 첫 단축키가
+ * **왜 이 물음이 필요한가.** 에디터 단축키(`edit/editor-shortcuts.ts`의 `shortcutsBlocked`)는 호스트와 캔버스 문서 **전체**에서 키를
+ * 받고, 메뉴 트리 · 구조 트리 상자는 그 안에 이름 입력 · 고르개를 그린다. 단축키가
  * 수식 키 없는 `Delete`·`Backspace`를 삭제로 받으므로, 출처를 보지 않으면 **이름을
  * 고치다 오타를 지운 사용자가 설계서의 노드를 잃는다.**
  *
- * **순수 함수이고 React를 모른다** — `edit/`의 판정들과 같은 층이다. 그래서 이 상자
- * **밖에** 새 패널이 생겨도 같은 규칙을 한 줄로 가져다 쓸 수 있다.
+ * **순수 함수이고 React를 모른다** — `edit/`의 판정들과 같은 층이다. 그래서 어느 상자의
+ * 키 처리든 같은 규칙을 한 줄로 가져다 쓸 수 있다.
  *
  * ---
  *
@@ -36,6 +36,10 @@
  * ㉡ **폼 컨트롤이다** — 값을 타이핑하거나(`input`·`textarea`) 고른다(`select`).
  *    태그 이름이 아니라 **생성자로 본다**: `role`을 덧씌워도, 커스텀 요소가 그것을
  *    상속해도 같은 판정이 나온다.
+ *
+ * **생성자는 그 요소가 사는 창의 것을 쓴다.** 캔버스는 same-origin iframe 이라(`canvas/canvas-document.tsx`) 그 안의 `<input>` 은
+ * 호스트의 `HTMLInputElement` 의 인스턴스가 아니다 — 호스트 생성자로 보면 캔버스 안 입력에서 친 `?` · `Backspace` 가 단축키로 샌다
+ * (뷰 모드 캔버스는 테마의 입력을 그대로 받는다). 그래서 요소인지는 `nodeType` 으로, 생성자는 `ownerDocument.defaultView` 에서 읽는다.
  * ㉢ **ARIA가 편집 표면이라고 말한다**(`EDITABLE_ROLES`) — 아래 목록의 근거는 *"우리
  *    단축키와 같은 키를 그 역할이 이미 쓴다"*이다.
  * ㉣ **shadow root를 든 요소다** — 그 안에서 난 이벤트는 **호스트로 리타게팅되므로**
@@ -46,7 +50,6 @@
  * - **자기 키 처리를 하면서 편집 가능성도 role도 선언하지 않는 요소.** `tabindex`만 든
  *   `<div>`에 자체 `keydown`을 단 위젯이 그렇다 — 그런 위젯은 자기 이벤트를 멈추거나
  *   (`stopPropagation`) 위 넷 중 하나를 선언해야 한다.
- * - **다른 document의 요소**(`instanceof`가 거짓이 된다). 이 앱은 iframe을 그리지 않는다 — 그리게 되면 이 구멍이 열린다.
  * - **`mode: 'closed'`인 shadow root.** 그 호스트는 `shadowRoot`가 `null`이라 ㉣가 못
  *   본다(케이스가 그 한계를 값으로 고정한다). 리타게팅은 mode와 무관하게
  *   일어나므로 **구멍이 실재한다** — 다만 그것을 여는 방법이 없다. `attachShadow`를 다시
@@ -74,28 +77,32 @@ export const EDITABLE_ROLES: ReadonlySet<string> = new Set([
 ])
 
 export function isTypingSurface(target: EventTarget | null): boolean {
-  // 요소가 아니면(document·window·다른 realm의 노드) 판정할 것이 없다.
-  if (!(target instanceof HTMLElement)) return false
+  // 요소가 아니면(document·window·창 없는 문서의 노드) 판정할 것이 없다. 생성자는 그 요소의 창 것이다(위 ㉡).
+  const node = target as Node | null
+  if (node === null || typeof node !== 'object' || node.nodeType !== 1) return false
+  const view = node.ownerDocument?.defaultView
+  if (view === null || view === undefined || !(node instanceof view.HTMLElement)) return false
+  const element: HTMLElement = node
 
   // ㉠ 편집 가능하다. 속성과 프로퍼티를 **둘 다** 본다(위 머리말의 ㉠).
-  const editable = target.getAttribute('contenteditable')
+  const editable = element.getAttribute('contenteditable')
   if (editable !== null && editable !== 'false') return true
-  if (target.isContentEditable) return true
+  if (element.isContentEditable) return true
 
   // ㉡ 폼 컨트롤. **생성자로 본다** — 태그 이름 비교는 `role`을 덧씌우거나 커스텀 요소가
   // 상속하는 경우를 놓친다.
   if (
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement
+    element instanceof view.HTMLInputElement ||
+    element instanceof view.HTMLTextAreaElement ||
+    element instanceof view.HTMLSelectElement
   ) {
     return true
   }
 
   // ㉢ ARIA가 편집 표면이라고 말한다.
-  const role = target.getAttribute('role')
+  const role = element.getAttribute('role')
   if (role !== null && EDITABLE_ROLES.has(role)) return true
 
   // ㉣ 안을 볼 수 없다 — shadow root 안에서 난 이벤트는 호스트로 리타게팅된다.
-  return target.shadowRoot !== null
+  return element.shadowRoot !== null
 }

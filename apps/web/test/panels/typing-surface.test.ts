@@ -82,6 +82,27 @@ describe('isTypingSurface', () => {
     expect(isTypingSurface(el('div', { role: 'treeitem' }))).toBe(false)
   })
 
+  /**
+   * **캔버스는 same-origin iframe 이다** — 그 안의 요소는 호스트 창의 생성자의 인스턴스가 아니다. 호스트의 `instanceof` 로 보면 캔버스 안
+   * 입력이 표면이 아니게 되어, 뷰 모드 캔버스의 입력에서 친 `?` 가 도움말을 열고 `Backspace` 가 키 리스너에 닿는다.
+   */
+  it('다른 창(캔버스 iframe)의 입력 · 편집 가능 요소도 표면이다', () => {
+    const frame = document.createElement('iframe')
+    document.body.appendChild(frame)
+    const inner = frame.contentDocument!
+    const input = inner.createElement('input')
+    const editable = inner.createElement('div')
+    editable.setAttribute('contenteditable', 'true')
+    inner.body.append(input, editable)
+
+    expect(input instanceof HTMLElement).toBe(false) // 판의 전제 — 호스트 생성자로는 못 본다
+    expect(isTypingSurface(input)).toBe(true)
+    expect(isTypingSurface(inner.createElement('textarea'))).toBe(true)
+    expect(isTypingSurface(editable)).toBe(true)
+    expect(isTypingSurface(inner.createElement('button'))).toBe(false)
+    frame.remove()
+  })
+
   it('요소가 아닌 것에서는 던지지 않고 거짓이다', () => {
     // 이 층의 계약은 *"던지지 않는다"*다 — 구조 트리에 오류 경계가 없다.
     expect(isTypingSurface(null)).toBe(false)

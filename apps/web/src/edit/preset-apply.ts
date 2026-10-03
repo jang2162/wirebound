@@ -47,7 +47,7 @@
  */
 import {
   partitionIssues,
-  remapNodeIds,
+  prepareNodesForPaste,
   validatePage,
   type PageDocument,
   type PatchOp,
@@ -151,25 +151,15 @@ export function presetApply(
 }
 
 /**
- * 트리 전체에 새 id를 발급한다(설계서 「페이지 프리셋」 — *"프리셋 적용 시 노드 `id`를 새로 발급한다"*).
- *
- * **노드를 임시 root 하나에 담아 **한 번에** 리매핑한다.** 노드마다 따로 부르면 형제를
- * 가리키던 상호작용 `target`이 리매핑 대상 밖이 되어 **옛 id로 남는다** — 그러면 문서에
- * 없는 노드를 가리키고 `validatePage`가 `missing-interaction-target`(warning)을 낸다.
- * 케이스가 형제 사이를 가리키는 상호작용으로 그것을 잰다.
- *
- * **임시 root도 id를 하나 받아 가고 그것은 버려진다.** `generate`를 세는 케이스는 그
- * 한 번을 감안해야 한다 — 감추는 것보다 적어 두는 편이 싸다.
+ * 트리 전체에 새 id를 발급한다(설계서 「페이지 프리셋」 — *"프리셋 적용 시 노드 `id`를 새로 발급한다"*). 한 번에 짓는
+ * 까닭 · 임시 뿌리가 `generate` 를 하나 받아 가는 것 · 값 공유를 끊는 계약은 `@wirebound/schema` 의
+ * `prepareNodesForPaste` 머리말이 갖는다. 프리셋은 페이지 통째라 «밖을 가리키는 대상»을 거르지 않는다(keep 이 늘 참).
  */
 function remapForPage(nodes: readonly WbNode[], generate?: () => string): WbNode[] {
-  // **값 공유를 끊는 것은 `remapNodeIds`의 계약이다.** 여기서 `cloneNodes`를 한 번 더
-  // 부르면 같은 규칙이 두 곳에 생기고 **그 함수를 쓰는 다른 소비자(설계서 「페이지 JSON」의
-  // 가져오기)는 여전히 공유를 물려받는다.** 그래서 규칙은 아래층에 두고,
-  // `packages/schema`의 케이스가 그것을 잰다. 여기 케이스는 그 계약이 화면까지 닿는지를 잰다.
-  const wrapper: WbNode = { id: 'wb-preset-wrapper', type: 'Page', children: [...nodes] }
-  const remapped = remapNodeIds(wrapper, generate)
-  return remapped.root.children ?? []
+  return prepareNodesForPaste(nodes, KEEP_EVERY_TARGET, generate).nodes
 }
+
+const KEEP_EVERY_TARGET = { node: () => true, page: () => true }
 
 /**
  * `children`을 바꾸는 op 하나(**root 자체는 안 바꾼다**).

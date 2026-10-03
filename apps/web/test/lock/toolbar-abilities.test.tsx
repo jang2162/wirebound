@@ -30,7 +30,7 @@
  * 처음 닿는 것이 그 둘**이다(`../panels/toolbar-status-reach.test.tsx`의 표).
  *
  * **그래서 그 둘은 «꽂힐 자리»의 잠금을 지난다** — 판정에 키를 만들지 않은 이유는 그대로다
- * (`panels/structure-tree.tsx`의 `SHORTCUTS`). 둘이 지나는 잠금이 **서로 다른 것**이
+ * (`panels/structure-tree.tsx`의 `TREE_SHORTCUTS`). 둘이 지나는 잠금이 **서로 다른 것**이
  * 이 파일에서 값으로 갈린다:
  *
  * | 조작 | 지나는 잠금 | 왜 |
@@ -56,6 +56,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import {
   BUILTIN_PRESETS,
   lockConflictOfOps,
+  writeNodesEnvelope,
   type PageDocument,
   type PatchOp,
 } from '@wirebound/schema'
@@ -519,7 +520,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
    * **단축키가 이 파일의 핵심이다.** 판정을 툴바 컴포넌트에서 `disabled`로 겹치면 버튼은
    * 회색인데 **단축키만 살아 있다** — 키 이벤트는 `disabled`를 지나지 않는다. 그래서
    * 잠금은 `useStructureCommands`가 만드는 `abilities`에 들어 있고
-   * (`panels/structure-tree.tsx`의 `SHORTCUTS`가 그 값을 지난다), 이 케이스가 그것을 잰다.
+   * (에디터 단축키 `shell/editor-keys.tsx`가 그 값을 지난다), 이 케이스가 그것을 잰다.
    *
    * **셋을 함께 친다** — `Delete`(삭제)와 `Alt`+`↑`·`Alt`+`↓`(순서)다. 단축키가 잠금을
    * 안 보면 이 셋이 전부 나가고 서버가 셋 다 423으로 거절한다.
@@ -566,7 +567,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
    * **판정 밖의 둘도 단축키를 갖는다**(`Alt`+`Shift`+`I`·`P`). 단축키 표가 그 둘의 판정
    * 자리를 `null`로 두면 `null`이 *"지날 것이 없다"*를 뜻해 **잠금도 안 본다.** 그래서 표가
    * 불린을 내는 함수를 들고 그 둘도 자기 값을 갖는다(`panels/structure-tree.tsx`의
-   * `SHORTCUTS`).
+   * `TREE_SHORTCUTS`).
    *
    * **잠금이 풀린 «뒤»를 봐야 이 케이스가 산다.** 잠긴 동안 목록이 없는 것만 보면 단축키
    * 게이트를 빼도 **아무것도 안 죽는다**: 아래 `고르개가 열린 뒤에 잠금이 오면` 케이스가 세운 렌더
@@ -864,5 +865,75 @@ describe('막다른 길이 아니다 — 구조 편집만 얼고 셸은 산다',
     expect(modes.map((button) => button.disabled)).toEqual([false, false])
     // 좌측 메뉴 트리의 다른 페이지로 갈 수 있다 — 잠금은 이 페이지의 것이다.
     expect(screen.getByRole('link', { name: OTHER_PAGE_TITLE })).toBeTruthy()
+  })
+})
+
+/**
+ * **붙이기 · 복제 · 잘라내기도 같은 잠금을 지난다**(설계서 「권한 모델」의 «화면이 편집을 미리 묻는 자리»). 고른 노드를 남이 잡은 판은 편집
+ * 단축키가 서지 않고, 지을 편집이 남의 잠금에 부딪히는 판은 서버의 2차 방어와 같은 물음(`editBlockedBy`)으로 보내기 전에 막는다 — 어느
+ * 쪽이든 편집 0 · 423 0 이고 하단 바가 이유를 말한다. 대조는 같은 몸짓을 잠기지 않은 자리에서 친 판이다.
+ */
+describe('붙이기 · 복제 · 잘라내기도 막힌 자리에서는 아무것도 안 나간다', () => {
+  function clip(type: 'cut' | 'paste', text?: string): boolean {
+    const data = new Map<string, string>()
+    if (text !== undefined) data.set('text/plain', text)
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', {
+      value: { setData: (kind: string, value: string) => data.set(kind, value), getData: (kind: string) => data.get(kind) ?? '' },
+    })
+    document.body.dispatchEvent(event)
+    return event.defaultPrevented
+  }
+  const ENVELOPE = writeNodesEnvelope([{ id: 'src', type: 'Divider' }], 1)
+
+  it('고른 노드를 남이 잡았으면 붙이기 · 복제 · 잘라내기가 편집을 안 내고 이유를 말한다', async () => {
+    const view = await board()
+    select('Text')
+    view.lock([foreign('n-a')])
+
+    clip('paste', ENVELOPE)
+    await settle()
+    expect(view.calls).toEqual([])
+    expect(alertText()).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+    fireEvent.keyDown(document.body, { key: 'd', code: 'KeyD', ctrlKey: true })
+    await settle()
+    expect(view.calls).toEqual([])
+    expect(clip('cut')).toBe(false)
+    await settle()
+
+    expect(view.calls).toEqual([])
+    expect(view.status).toEqual([])
+  })
+
+  it('지을 편집이 남의 잠금에 부딪히면(바로 뒤 형제를 남이 잡음) 붙이기 · 복제가 안 나간다', async () => {
+    const view = await board()
+    select('Button')
+    view.lock([foreign('n-2')])
+
+    clip('paste', ENVELOPE)
+    await settle()
+    expect(alertText()).toBe('보라님이 편집 중이라 바꿀 수 없습니다')
+    fireEvent.keyDown(document.body, { key: 'd', code: 'KeyD', ctrlKey: true })
+    await settle()
+
+    expect(view.calls).toEqual([])
+    expect(view.status).toEqual([])
+  })
+
+  it('대조 — 잠기지 않은 자리에서는 같은 붙이기 · 복제 · 잘라내기가 나가고 서버가 받는다', async () => {
+    const view = await board()
+    view.lock([foreign('n-1')])
+    select('Divider')
+
+    clip('paste', ENVELOPE)
+    await waitFor(() => expect(view.calls).toHaveLength(1))
+    fireEvent.keyDown(document.body, { key: 'd', code: 'KeyD', ctrlKey: true })
+    await waitFor(() => expect(view.calls).toHaveLength(2))
+    expect(clip('cut')).toBe(true)
+    await waitFor(() => expect(view.calls).toHaveLength(3))
+    await settle()
+
+    expect(view.status).toEqual([200, 200, 200])
+    expect(alertText()).toBeNull()
   })
 })

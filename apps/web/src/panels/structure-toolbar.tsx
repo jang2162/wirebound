@@ -1,6 +1,7 @@
 /**
  * 구조 트리의 **조작 묶음**(`useStructureCommands`)과 **고르개 자리**(`StructurePicker`). 조작의 입구는 트리 줄의 `+` · `…`
- * (`panels/tree-row-actions.tsx`) · 트리 제목 줄의 뿌리 `+` · 끌어 놓기 · 키보드 단축키(`panels/structure-tree.tsx`의 `SHORTCUTS`)다 —
+ * (`panels/tree-row-actions.tsx`) · 트리 제목 줄의 뿌리 `+` · 끌어 놓기 · 키보드 단축키(에디터 단축키 `shell/editor-keys.tsx` · 트리 상자의
+ * 고르개 단축키 `panels/structure-tree.tsx`의 `TREE_SHORTCUTS`)다 —
  * 전부 이 파일의 명령을 부른다. 파일 이름의 «툴바»는 그 입구들이 한 줄 툴바였던 자리의 이름이다.
  *
  * **조작이 두 부류다.**
@@ -13,7 +14,7 @@
  * 뒤 부류가 판정을 갖지 않는 까닭은 각각 — 패턴은 선택이 없으면 root의 자식 끝에 꽂고,
  * 프리셋은 페이지 통째라 자리를 아예 고르지 않는다. 단축키 쪽도 같은 성질을 지나므로
  * 그 표에서 둘은 `StructureAbilities`가 아니라 `patternLocked`·`presetLocked`를 본다
- * (`panels/structure-tree.tsx`의 `SHORTCUTS`).
+ * (`panels/structure-tree.tsx`의 `TREE_SHORTCUTS`).
  *
  * **판정은 여기 없다.** 무엇을 할 수 있는지는 `edit/structure-actions.ts`의
  * `structureAbilities`가 정하고, 이 파일은 그 결과를 줄 행동에 넘길 뿐이다.
@@ -35,7 +36,7 @@
  * **완전하다고는 적지 않는다** — 잰 것은 그 반례 부류(배열 원소가 노드가 아닌 경우)와
  * 몇 가지 깨진 형태까지다.
  */
-import { useState, type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import type { NodeLock, WbNode } from '@wirebound/schema'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { useEditCommit } from '../edit/use-edit-commit'
@@ -69,7 +70,7 @@ export interface StructureCommands {
    * `패턴 넣기`가 남의 잠금에 막혔는가.
    *
    * **`abilities`에 키를 만들지 않는다**(`panels/structure-tree.tsx`의
-   * `SHORTCUTS` 주석) — `structureAbilities`는 선택이 없으면 `NOTHING`을 내는데 패턴은
+   * `TREE_SHORTCUTS` 주석) — `structureAbilities`는 선택이 없으면 `NOTHING`을 내는데 패턴은
    * **선택이 없어도 되는 조작**이라, 그 표에 넣으면 정확히 그 상태에서만 죽는다.
    *
    * **대신 «꽂힐 자리»의 잠금을 지난다.** 패턴이 꽂히는 자리는 고른 노드가 정하고
@@ -98,7 +99,11 @@ export interface StructureCommands {
    * 화면을 지나지 않고 재진다).
    */
   status: string
-  remove: () => void
+  /**
+   * 고른 노드를 지운다. 지운 뒤 무엇을 고르는지는 부르는 쪽이 정한다 — 줄 `…` «삭제»는 부모(`'parent'` — 기본), 키보드 삭제 · 잘라내기는
+   * 선택을 비운다(`'none'` — `shell/editor-keys.tsx` 머리말 «키보드 삭제는 선택을 비운다»).
+   */
+  remove: (selectAfter?: 'parent' | 'none') => void
   moveUp: () => void
   moveDown: () => void
   indent: () => void
@@ -263,8 +268,8 @@ export function useStructureCommands(props: {
    * **두 곳이 이 값을 쓴다.** 판정이 이것으로 꺼지고(`structureAbilities`의 셋째 인자 —
    * 그쪽 머리말에 왜 «전부» 꺼지는지와 실측이 있다), 상태줄이 사다리 맨 위에서 이유를
    * 말한다(`./toolbar-status.ts`). **판정을 끄는 자리가 여기인 것이 요점이다** — 툴바
-   * 컴포넌트에서 `disabled`를 겹치면 단축키가 안 막힌다(`panels/structure-tree.tsx`의
-   * `SHORTCUTS`는 `commands.abilities`를 지난다).
+   * 컴포넌트에서 `disabled`를 겹치면 단축키가 안 막힌다(에디터 단축키 `shell/editor-keys.tsx`는
+   * `commands.abilities`를 지난다).
    *
    * **여기서 구독하지 않고 받는다.** 스토어의 잠금 목록을 손에 쥐는 자리는 화면에 **하나**여야
    * 하고(`test/lock/one-verdict.test.ts` — *"셋째 판정은 여기서 먼저 보인다"*), 그 하나는
@@ -312,6 +317,16 @@ export function useStructureCommands(props: {
   const presetLocked = props.pageLock !== null
   /** 고르개가 열려 있으면 무엇을 고르는 중인지. 닫혀 있으면 `null`이다. */
   const [adding, setAdding] = useState<OpenPicker | null>(null)
+
+  /**
+   * **선택이 비면 고른 노드 곁의 고르개(`'inside'` · `'after'`)를 걷는다.** 그 둘은 고른 노드에 매여(`visiblePicker` — `abilities` 가 선택을
+   * 본다) 선택이 비면 감춰질 뿐이라, 걷지 않으면 다음에 고른 노드 곁에 다시 선다(Chrome — 트리 줄의 Escape · 키보드 삭제가 선택을 비운 판).
+   * 잠금으로 꺼진 판은 걷지 않는다(위 `visiblePicker` 머리말 «`adding`은 비우지 않는다») — 그쪽은 같은 노드가 다시 풀리는 판이다. 패턴 ·
+   * 프리셋은 고른 것 없이도 서므로 남긴다.
+   */
+  useEffect(() => {
+    if (selectedNodeId === null) setAdding((open) => (open === 'inside' || open === 'after' ? null : open))
+  }, [selectedNodeId])
 
   /**
    * 고른 타입으로 새 노드를 만들어 넣는다. 편집이 실제로 들어갔을 때만 선택을 옮긴다.
@@ -443,7 +458,7 @@ export function useStructureCommands(props: {
   }
 
   /**
-   * 선택 노드를 지운다. **지운 뒤 선택을 부모로 옮긴다.**
+   * 선택 노드를 지운다. **지운 뒤 선택을 부모로 옮긴다**(`selectAfter` 가 `'none'` 이면 비운다 — `StructureCommands.remove`).
    *
    * 옮기는 이유: `applyEdit`은 `selectedNodeId`를 건드리지 않으므로
    * 툴바가 옮기지 않으면 선택이 **사라진 노드를 가리킨 채** 남는다 — 사용자는 트리에서
@@ -473,13 +488,13 @@ export function useStructureCommands(props: {
    * `routes/editor.tsx`의 `ready` 게이트와 같은 것이다: 지금 통과하는 이유가 위의
    * 성질이 지켜지고 있어서이므로, 그것이 깨지는 날 이 검사가 마지막 방벽이다.
    */
-  function removeSelected(): void {
+  function removeSelected(selectAfter: 'parent' | 'none' = 'parent'): void {
     if (document === null || selectedNodeId === null) return
     const spot = nodeSpot(document, selectedNodeId)
     if (spot === null) return
 
     if (commitOps(removeNodeOps(document, selectedNodeId))) {
-      store.selectNode(spot.parentId)
+      store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
     }
   }
 
@@ -544,7 +559,7 @@ export function useStructureCommands(props: {
    *
    * **그 `null` 검사는 지워도 죽는 케이스가 없다.** 부모가 루트면 버튼이 이미 비활성이라
    * 클릭이 핸들러에 닿지 않고, 키보드 단축키도 `abilities.outdent`를 먼저 지난다
-   * (`panels/structure-tree.tsx`의 `SHORTCUTS`). 남은 것은 그 둘이 벗겨졌을 때의 방벽이다.
+   * (`shell/editor-keys.tsx`). 남은 것은 그 둘이 벗겨졌을 때의 방벽이다.
    *
    * 목적지가 `부모 인덱스 + 1`인 것도 소스를 빼는 것과 무관하다 — 노드는 부모의 배열
    * 안에 있으므로 조부모의 배열은 그대로다.
@@ -642,7 +657,18 @@ export function StructurePicker(props: {
   if (picker === null) return null
   return (
     // 고르개는 자기 줄을 요구한다(`flex-basis: 100%` — `test/shell-css-picker.test.ts`) — 감싸는 flex 상자가 이것이다.
-    <div className="wb-shell-tree-panel">
+    // `data-wb-holds-keys` — 포커스가 고르개 안이면 화살표 · Escape 는 에디터 단축키가 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`).
+    // **고르개 안의 Escape 는 고르개를 닫는다**(«취소»와 같다) — 단축키에 넘기면 선택을 풀어 고르개가 감춰질 뿐 `adding` 이 남았다. 조합 중의
+    // Escape 는 조합의 키다(프리셋 이름 칸).
+    <div
+      className="wb-shell-tree-panel"
+      data-wb-holds-keys=""
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || event.nativeEvent.isComposing || event.defaultPrevented) return
+        event.preventDefault()
+        commands.cancelAdd()
+      }}
+    >
       {(picker === 'inside' || picker === 'after') && <TypePicker onPick={commands.pick} onCancel={commands.cancelAdd} />}
       {picker === 'pattern' && <PatternPicker onPick={commands.pickPattern} onCancel={commands.cancelAdd} />}
       {picker === 'preset' && (

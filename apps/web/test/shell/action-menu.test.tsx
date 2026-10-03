@@ -95,6 +95,30 @@ describe('여닫기', () => {
     fireEvent.click(toggle())
     expect(screen.queryByRole('menu')).toBeNull()
   })
+
+  it('열린 동안 `openWhile` 이 거짓이 되면 닫고 포커스를 단추로 돌려준다 — 참인 채 다시 그리면 그대로다', () => {
+    const view = (openWhile: boolean) => (
+      <MemoryRouter>
+        <ActionMenu label="더 보기" items={items(vi.fn())} openWhile={openWhile} />
+      </MemoryRouter>
+    )
+    const { rerender } = render(view(true))
+    fireEvent.click(toggle())
+    rerender(view(true))
+    expect({ menus: screen.queryAllByRole('menu').length, focus: focused() }).toEqual({ menus: 1, focus: '가' })
+    rerender(view(false))
+    expect({ menus: screen.queryAllByRole('menu').length, focus: document.activeElement === toggle() }).toEqual({ menus: 0, focus: true })
+  })
+
+  it('열린 동안만 단추까지 감싼 상자에 `data-wb-holds-keys` 를 단다 — 키가 메뉴의 것이다', () => {
+    host()
+    const box = () => toggle().closest('[data-wb-holds-keys]')
+    expect(box()).toBeNull()
+    fireEvent.click(toggle())
+    expect(box()?.contains(menu())).toBe(true)
+    key('Escape')
+    expect(box()).toBeNull()
+  })
 })
 
 describe('키보드', () => {
