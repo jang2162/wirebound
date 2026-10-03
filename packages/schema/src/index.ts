@@ -41,6 +41,16 @@ export { assertValidLayout, assertValidPage, validateLayout, validatePage } from
 
 export { DocumentEnvelopeSchema, InteractionSchema, NODE_ID_PATTERN, WbNodeSchema } from './envelope'
 
+// 설계서 「설계서 화면 구조」의 클립보드 — 노드 봉투 읽기 · 쓰기 · 붙일 노드 짓기. 편집 묶음의 연산 수 상한도 여기 산다
+// (서버 `OpsBody` 와 화면이 같은 값을 읽는다).
+export {
+  MAX_OPS_PER_EDIT,
+  NODES_ENVELOPE_KIND,
+  prepareNodesForPaste,
+  readNodesEnvelope,
+  writeNodesEnvelope,
+} from './clipboard'
+
 export type {
   ActionProblem,
   InteractionIssueCode,

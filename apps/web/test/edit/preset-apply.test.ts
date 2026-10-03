@@ -34,7 +34,7 @@ function page(children: WbNode[] = [{ id: 'n_old00000001', type: 'Text' }]): Pag
   return doc({ id: 'n_root00000001', type: 'Page', children })
 }
 
-/** id를 결정적으로 만드는 이음매. **임시 root가 하나를 가져간다**(`remapForPage`의 주석). */
+/** id를 결정적으로 만드는 이음매. **임시 root가 하나를 가져간다**(`@wirebound/schema` 의 `prepareNodesForPaste` 머리말). */
 function counter(): () => string {
   let next = 0
   return () => {
