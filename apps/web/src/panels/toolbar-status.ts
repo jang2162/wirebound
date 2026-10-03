@@ -95,7 +95,7 @@
  * **순수 함수이고 React·DOM을 모른다** — 두 툴바가 같은 어휘를 쓰는지, 상태마다 무엇이
  * 나오는지가 화면을 지나지 않고 재진다.
  */
-import type { NodeLock } from '@wirebound/schema'
+import { MAX_OPS_PER_EDIT, type NodeLock } from '@wirebound/schema'
 import type { StructureAbilities } from '../edit/structure-actions'
 import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
 
@@ -171,6 +171,14 @@ export function deniedSelectionNotice(userNames: readonly string[]): string {
   return userNames.length === 0
     ? '다른 사람이 편집 중이라 고를 수 없습니다'
     : `${userNames.join(' · ')}님이 편집 중이라 고를 수 없습니다`
+}
+
+/**
+ * 고르기 몸짓(Cmd · Shift 클릭 · Cmd+A · 사각형)이 상한(`MAX_OPS_PER_EDIT`)에 걸려 더 고르지 않았을 때의 하단 바 문장 — 고른 것을 한 번에
+ * 지우는 묶음이 서버 상한을 넘지 않게 하는 수다(`store/selection-set.ts` 머리말).
+ */
+export function selectionCapNotice(): string {
+  return `한 번에 고를 수 있는 노드는 ${MAX_OPS_PER_EDIT}개까지입니다`
 }
 
 /** 고른 노드가 문서에 없을 때의 문장(`structureStatus` · `palette/palette-add.ts`). */

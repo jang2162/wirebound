@@ -9,6 +9,7 @@
  * | 복제 · 붙이기 | `edit/paste-ops.ts` 의 `duplicateOps` · `pasteOps` → `editBlockedBy` → `commitOps` | — |
  * | 복사 · 잘라내기 | 봉투(`writeNodesEnvelope`) · 잘라내기의 지우기는 삭제와 같은 명령 | — |
  * | 선택 이동 | `edit/selection-move.ts` → `store.selectNode` | 트리 줄 · 캔버스 누름 |
+ * | 형제 모두 고르기(Cmd+A) | `edit/selection-move.ts` 의 `siblingIds` → `store.selectMany` | 트리 · 캔버스의 Cmd · Shift 클릭 · 사각형(같은 스토어 명령 무리) |
  * | 도움말 | `shell/shortcut-help.tsx` | — |
  *
  * 복사 · 잘라내기 · 붙여넣기는 키가 아니라 `copy` · `cut` · `paste` 이벤트로 받는다(`edit/use-clipboard.ts`).
@@ -45,13 +46,13 @@ import {
   type NodeEdit,
 } from '../edit/paste-ops'
 import { findNodeSafely } from '../edit/safe-walk'
-import { moveSelection } from '../edit/selection-move'
+import { moveSelection, siblingIds } from '../edit/selection-move'
 import { useClipboard } from '../edit/use-clipboard'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { useEditorShortcuts } from '../edit/use-editor-shortcuts'
 import { lockedNotice } from '../panels/property-panel'
 import { useStructureCommands } from '../panels/structure-toolbar'
-import { lockedSelectionStatus } from '../panels/toolbar-status'
+import { lockedSelectionStatus, selectionCapNotice } from '../panels/toolbar-status'
 import type { EditFailure } from '../store/editor-store'
 import { LOSS_RANK } from '../store/loss-notice'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -257,6 +258,13 @@ export function EditorKeys(props: {
         if (next === null) return
         store.selectNode(next)
         revealNode(next, canvasDocument)
+        return
+      }
+      // **기준 노드의 형제 모두**(`siblingIds`) — 기준 노드는 그대로 둔다(루트였으면 목록의 마지막). 상한에 걸리면 말한다.
+      case 'selectSiblings': {
+        if (doc === null) return
+        const change = store.selectMany(siblingIds(doc.root, selectedNodeId), 'replace', selectedNodeId ?? undefined)
+        if (change.capped > 0) say(selectionCapNotice())
         return
       }
       case 'help':

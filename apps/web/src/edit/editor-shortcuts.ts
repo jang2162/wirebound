@@ -28,6 +28,7 @@ export type ShortcutCommand =
   | 'selectNext'
   | 'selectParent'
   | 'selectFirstChild'
+  | 'selectSiblings'
   | 'help'
 
 export type Platform = 'mac' | 'other'
@@ -100,8 +101,9 @@ const ALT_SHIFT: Record<Platform, string> = { mac: '⌥⇧', other: 'Alt+Shift+'
  *   Chrome · Firefox 에서 뒤로 · 앞으로라서다. `Shift` 를 더한 조합에 브라우저 · OS 기본 바인딩이 있는지는 재지 못했다.
  * - **`Tab` 은 빼앗지 않는다** — 키보드 사용자가 트리 · 패널을 빠져나갈 길이다.
  * - **`?` 는 `key` 로 본다** — 자판마다 `?` 자리가 다르다. `code` 가 `Slash` 인 Shift 판도 받는다(조합기가 `key` 를 바꾼 판).
- * - **Cmd+A 는 표에 없다** — 노드를 하나만 고르는 지금은 «형제 모두 고르기»가 할 일이 없고, 표에 두면 브라우저의 «전부 고르기»(캔버스 ·
- *   상호작용 문장의 글자)를 먹어 이어 친 Cmd+C 가 글자 대신 노드 봉투를 싣는다. 여럿 고르기가 서면 켠다.
+ * - **Cmd+A 는 «기준 노드의 형제 모두»다**(기준 노드가 루트거나 없으면 루트의 자식 모두 — 설계서 「설계서 화면 구조」의 «고르는 법»). 브라우저의
+ *   «전부 고르기»(캔버스 · 상호작용 문장의 글자)를 먹는다 — 이어 친 Cmd+C 는 글자 대신 고른 노드들의 봉투를 싣는다. 입력 칸 안의 Cmd+A 는
+ *   칸의 것이다(`shortcutsBlocked`). 고르기라 뷰 모드 · viewer 에서도 선다.
  */
 export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
   {
@@ -207,6 +209,14 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     match: (e) => bare(e) && !e.shiftKey && e.key === 'ArrowRight',
     edits: false,
     repeat: true,
+  },
+  {
+    command: 'selectSiblings',
+    label: '형제 모두 고르기',
+    keys: (p) => `${CMD[p]}A`,
+    match: (e, p) => mod(e, p) && !e.shiftKey && letter(e) === 'a',
+    edits: false,
+    repeat: false,
   },
   {
     command: 'help',
