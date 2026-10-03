@@ -438,18 +438,16 @@ describe('구조 트리의 키보드 단축키', () => {
     expect(keyOps).toEqual(viaButton.calls[0]?.ops)
   })
 
-  it('삭제 단축키도 선택을 부모로 옮긴다', async () => {
-    // 버튼과 같은 함수를 부른다는 것의 다른 면 — «지우면 선택이 부모로 간다»가 단축키 경로에도 그대로 온다.
-    await openPage(doc(), { apiOverrides: server().api })
+  it('삭제 단축키는 지운 뒤 선택을 비운다 — 줄 «삭제»와 달리 부모를 고르지 않는다', async () => {
+    // 부모를 고르면 따로 친 둘째 Delete 가 그 부모를 지운다(`shell/editor-keys.tsx` 의 `run` 의 `delete`). 줄 `…` «삭제»가 부모를 고르는 것은
+    // `structure-toolbar.test.tsx` «삭제 뒤 선택이 부모로 옮겨진다»가 잰다.
+    const view = server()
+    await openPage(doc(), { apiOverrides: view.api })
     select('Button')
 
     fireEvent.keyDown(row('Button'), { key: 'Delete' })
 
-    await waitFor(() =>
-      expect(
-        structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]')
-          ?.textContent,
-      ).toBe('Card'),
-    )
+    await waitFor(() => expect(view.calls).toHaveLength(1))
+    expect(structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]')).toBeNull()
   })
 })

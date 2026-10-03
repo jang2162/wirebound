@@ -151,6 +151,9 @@ export function droppedActionsNotice(count: number): string {
 /** 페이지 대상을 가늠하려고 읽은 페이지 목록이 실패했다 — 붙이지 않는다(대상을 모른 채 빼면 남길 동작까지 잃는다). */
 export const PASTE_PAGES_FAILURE = '페이지 목록을 읽지 못해 붙이지 못했습니다. 다시 붙여 넣으세요.'
 
+/** 페이지 목록을 읽는 사이 판이 갈렸다(떠남 · 떠났다 돌아옴 · 다시 실음) — 그 판의 기준 노드가 아니라 붙이지 않는다. */
+export const PASTE_LEFT_NOTICE = '붙이는 사이 페이지를 옮겨 붙이지 않았습니다. 다시 붙여 넣으세요.'
+
 /** 노드들에 빈 대상이 아닌 페이지 대상 동작(`navigate` · `openModal`)이 있는가 — 있을 때만 페이지 목록을 읽는다. */
 export function hasPageTargets(nodes: readonly WbNode[]): boolean {
   return nodes.some((root) =>

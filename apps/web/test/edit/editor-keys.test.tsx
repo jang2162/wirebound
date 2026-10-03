@@ -381,6 +381,8 @@ describe('클립보드 · 복제 — 셸', () => {
     expect(readNodesEnvelope(cut.written!)?.nodes[0]?.id).toBe('n-box')
     await waitFor(() => expect(srv.calls).toEqual([[{ op: 'remove', path: '/root/children/1' }]]))
     expect(structureTypes()).toEqual(['Page', 'Text', 'Divider'])
+    // 키보드 삭제처럼 선택을 비운다 — 부모를 고르면 이어 친 Ctrl+X 가 형제를 든 그 부모를 잘라 낸다(`shell/editor-keys.tsx` 의 `cut`).
+    expect(structureRegion().querySelectorAll('[aria-current="true"]')).toHaveLength(0)
 
     await undoOnceRestores(srv, 1)
   })

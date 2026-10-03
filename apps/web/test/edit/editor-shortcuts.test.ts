@@ -36,7 +36,8 @@ describe('shortcutFor — 키마다 그 명령', () => {
     expect(commandOf(cmd(platform, { key: 'Z', code: 'KeyZ', shiftKey: true }), platform)).toBe('redo')
     expect(commandOf(cmd(platform, { key: 'y', code: 'KeyY' }), platform)).toBe('redo')
     expect(commandOf(cmd(platform, { key: 'd', code: 'KeyD' }), platform)).toBe('duplicate')
-    expect(commandOf(cmd(platform, { key: 'a', code: 'KeyA' }), platform)).toBe('selectSiblings')
+    // Cmd+A 는 표에 없다 — 브라우저의 «전부 고르기»다(`EDITOR_SHORTCUTS` 머리말).
+    expect(commandOf(cmd(platform, { key: 'a', code: 'KeyA' }), platform)).toBeNull()
   })
 
   it('Cmd 와 Ctrl 이 엇갈리면 안 선다 — mac 의 Ctrl+Z · 그 밖의 Cmd(Win)+Z', () => {

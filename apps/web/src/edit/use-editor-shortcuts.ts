@@ -4,13 +4,14 @@
  * 호스트에 건 리스너는 캔버스 안의 키를 못 받는다 — 캔버스 문서는 별도 `Document` 라 그 안의 네이티브 이벤트가 호스트로 안 올라간다
  * (`canvas/canvas-document.tsx` 머리말). iframe 은 페이지를 옮길 때마다 새로 서므로 그 문서를 이펙트의 의존으로 둔다.
  *
- * **거르는 차례가 규격이다:** 서지 않는 때(`shortcutsBlocked` — 조합 · 이미 받음 · 입력 표면 · 제 단축키 상자 · 모달) → 표에서 찾기 →
- * 편집 명령인데 `editable` 이 거짓이면 안 섬 → `preventDefault` → `run`. **찾기 전에 걸러야** 입력 칸에서 친 `Backspace` 에
+ * **거르는 차례가 규격이다:** 서지 않는 때(`shortcutsBlocked` — 조합 · 이미 받음 · 입력 표면 · 제 단축키 상자 · 모달 · 캔버스의 대상) →
+ * 위젯이 쥔 키(`keyHeldByWidget`) → 표에서 찾기 → 편집 명령인데 `editable` 이 거짓이면 안 섬 → `preventDefault` → 거르는 반복이면 안 섬
+ * (`Shortcut.repeat`) → `run`. **찾기 전에 걸러야** 입력 칸에서 친 `Backspace` 에
  * `preventDefault` 가 안 걸린다(걸리면 글자가 안 지워진다). **안 서는 명령에는 `preventDefault` 를 안 건다** — 뷰 모드의 화살표 · Escape 가
  * 브라우저 기본 동작을 그대로 갖는다.
  */
 import { useEffect, useRef } from 'react'
-import { platformOf, shortcutFor, shortcutsBlocked, type Platform, type ShortcutCommand } from './editor-shortcuts'
+import { keyHeldByWidget, platformOf, shortcutFor, shortcutsBlocked, type Platform, type ShortcutCommand } from './editor-shortcuts'
 
 export function useEditorShortcuts(input: {
   /** `useCanvasDocument` 가 준다 — 캔버스가 없으면 `null`. */
@@ -31,12 +32,13 @@ export function useEditorShortcuts(input: {
   const { canvasDocument } = input
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (shortcutsBlocked(event)) return
+      if (shortcutsBlocked(event) || keyHeldByWidget(event)) return
       const { editable, run, platform } = latest.current
       const shortcut = shortcutFor(event, platform ?? platformOf(navigator))
       if (shortcut === null) return
       if (shortcut.edits && !editable) return
       event.preventDefault()
+      if (event.repeat && !shortcut.repeat) return
       run(shortcut.command)
     }
     const targets = canvasDocument === null ? [document] : [document, canvasDocument]

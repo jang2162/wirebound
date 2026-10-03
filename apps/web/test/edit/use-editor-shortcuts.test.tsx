@@ -155,4 +155,91 @@ describe('useEditorShortcuts', () => {
     press(document.body, { key: 'Delete' })
     expect(ran).toEqual(['deselect', 'selectNext'])
   })
+
+  it('누른 채의 반복 — Delete · Backspace · Ctrl+D 는 막기만 하고 안 선다, 되돌리기 · 화살표는 선다', () => {
+    const { ran } = setup()
+    // 거른 반복에도 막는다 — 막지 않으면 Ctrl/Cmd+D 반복이 브라우저의 책갈피를 연다.
+    expect(press(document.body, { key: 'Delete', repeat: true })).toBe(true)
+    expect(press(document.body, { key: 'Backspace', repeat: true })).toBe(true)
+    expect(press(document.body, { key: 'd', code: 'KeyD', ctrlKey: true, repeat: true })).toBe(true)
+    expect(press(document.body, { key: 'z', code: 'KeyZ', ctrlKey: true, repeat: true })).toBe(true)
+    expect(press(document.body, { key: 'ArrowDown', repeat: true })).toBe(true)
+    // 첫 누름(반복 아님)은 선다.
+    expect(press(document.body, { key: 'Delete' })).toBe(true)
+    expect(ran).toEqual(['undo', 'selectNext', 'delete'])
+  })
+
+  it.each([
+    ['메뉴 항목', 'menuitem'],
+    ['탭', 'tab'],
+    ['손잡이', 'separator'],
+    ['목록', 'listbox'],
+  ])('%s(role) 안에서 친 화살표 · Escape · Delete 는 위젯의 것이다 — run 0 · 막지 않음 · Ctrl+Z 는 선다', (_label, role) => {
+    const { ran } = setup()
+    const box = mount(document.createElement('div'))
+    box.setAttribute('role', role)
+    const inner = box.appendChild(document.createElement('button'))
+    for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Delete', 'Backspace']) {
+      expect(press(inner, { key })).toBe(false)
+    }
+    expect(press(inner, { key: 'ArrowUp', altKey: true })).toBe(false)
+    expect(press(inner, { key: 'z', code: 'KeyZ', ctrlKey: true })).toBe(true)
+    expect(ran).toEqual(['undo'])
+  })
+
+  it('열린 메뉴 · 고르개(`data-wb-holds-keys`)가 있으면 포커스가 밖이어도 화살표 · Escape · Delete 가 안 선다 — 구조 트리 줄은 선다', () => {
+    const { ran } = setup()
+    const open = mount(document.createElement('div'))
+    open.setAttribute('data-wb-holds-keys', '')
+    const toggle = mount(document.createElement('button'))
+    const treeRow = mount(document.createElement('button'))
+    treeRow.className = 'wb-shell-structure-node'
+
+    expect(press(toggle, { key: 'Escape' })).toBe(false)
+    expect(press(document.body, { key: 'Delete' })).toBe(false)
+    expect(press(document.body, { key: 'ArrowLeft' })).toBe(false)
+    expect(press(document.body, { key: '?', shiftKey: true })).toBe(true)
+    expect(press(treeRow, { key: 'ArrowDown' })).toBe(true)
+    expect(press(treeRow, { key: 'Escape' })).toBe(true)
+    expect(ran).toEqual(['help', 'selectNext', 'deselect'])
+
+    open.remove()
+    expect(press(toggle, { key: 'Escape' })).toBe(true)
+    expect(ran).toEqual(['help', 'selectNext', 'deselect', 'deselect'])
+  })
+
+  it('캔버스 문서에서는 포커스가 문서 자체 · 단추 · 링크일 때만 선다 — 그 밖의 포커스 받은 요소(닫힌 shadow 호스트 등)는 표면이다', () => {
+    const canvas = canvasDocument()
+    const { ran } = setup({ canvas })
+    const button = canvas.body.appendChild(canvas.createElement('button'))
+    const link = canvas.body.appendChild(canvas.createElement('a'))
+    link.setAttribute('href', '#x')
+    const bareLink = canvas.body.appendChild(canvas.createElement('a'))
+    bareLink.tabIndex = 0
+    // 닫힌 shadow 안 입력에 포커스가 있으면 문서의 `activeElement` 는 그 호스트다 — jsdom 은 shadow 안 포커스를 안 옮겨 호스트를 직접 고른다.
+    const host = canvas.body.appendChild(canvas.createElement('div'))
+    host.attachShadow({ mode: 'closed' })
+    host.tabIndex = 0
+    const text = canvas.body.appendChild(canvas.createElement('div'))
+    /** 그 요소에 포커스를 두고 그 요소에서 키를 올린다. */
+    const at = (element: HTMLElement, init: KeyboardEventInit) => {
+      element.focus()
+      return press(element, init)
+    }
+
+    expect(press(canvas.body, { key: 'Delete' })).toBe(true)
+    // 클립보드 이벤트처럼 대상이 포커스와 다른 판 — 포커스가 `body` 면 대상이 테마의 `div` 여도 선다.
+    expect(press(text, { key: 'ArrowDown' })).toBe(true)
+    expect(at(button, { key: 'Delete' })).toBe(true)
+    expect(at(link, { key: 'ArrowDown' })).toBe(true)
+    expect(at(bareLink, { key: 'Delete' })).toBe(false)
+    expect(at(host, { key: 'Backspace' })).toBe(false)
+    expect(at(host, { key: '?', shiftKey: true })).toBe(false)
+    expect(at(host, { key: 'z', code: 'KeyZ', ctrlKey: true })).toBe(false)
+    // 호스트 문서의 같은 요소는 그대로 선다 — 이 거름은 캔버스 문서만의 것이다.
+    const hostDiv = mount(document.createElement('div'))
+    hostDiv.tabIndex = 0
+    expect(at(hostDiv, { key: 'Delete' })).toBe(true)
+    expect(ran).toEqual(['delete', 'selectNext', 'delete', 'selectNext', 'delete'])
+  })
 })

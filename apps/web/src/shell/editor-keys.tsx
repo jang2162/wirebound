@@ -35,6 +35,7 @@ import { useApi } from '../api/context'
 import { useCanvasDocument } from '../canvas/canvas-document'
 import { platformOf, type ShortcutCommand } from '../edit/editor-shortcuts'
 import {
+  PASTE_LEFT_NOTICE,
   PASTE_PAGES_FAILURE,
   droppedActionsNotice,
   duplicateOps,
@@ -51,7 +52,7 @@ import { useEditorShortcuts } from '../edit/use-editor-shortcuts'
 import { lockedNotice } from '../panels/property-panel'
 import { useStructureCommands } from '../panels/structure-toolbar'
 import { lockedSelectionStatus } from '../panels/toolbar-status'
-import { isPageOpen, openDocumentNow, useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { openDocumentNow, useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 import { ShortcutHelp } from './shortcut-help'
 
@@ -151,14 +152,15 @@ export function EditorKeys(props: {
       return true
     }
     // 페이지 대상이 있으면 지금 프로젝트의 페이지 목록으로 가늠한다 — 이 화면에 목록을 든 곳이 메뉴 트리뿐이라(그 훅의 상태) 다시 읽는다.
-    // 읽는 사이 다른 페이지로 옮겼으면 붙이지도 말하지도 않는다(`isPageOpen`).
+    // **읽는 사이 판이 갈렸으면 붙이지 않고 말한다** — 페이지 id 가 아니라 판의 세대(`queueEpoch`)로 가른다. id 로 가르면 떠났다 돌아온 판이
+    // «안 떠났다»가 되어 돌아온 뒤의 선택 뒤에 붙었고, 떠나 머문 판은 말없이 사라졌다(Chrome · `build-test/editor-shortcuts-review.test.ts` «L4»).
+    const epoch = store.queueEpoch()
     void api.getTree(props.projectId).then(
       (menu) => {
-        if (isPageOpen(store, pageId)) finishPaste(pageId, read.nodes, pageTargetsOf(menu))
+        if (store.queueEpoch() === epoch) finishPaste(pageId, read.nodes, pageTargetsOf(menu))
+        else say(PASTE_LEFT_NOTICE)
       },
-      () => {
-        if (isPageOpen(store, pageId)) say(PASTE_PAGES_FAILURE)
-      },
+      () => say(store.queueEpoch() === epoch ? PASTE_PAGES_FAILURE : PASTE_LEFT_NOTICE),
     )
     return true
   }
@@ -173,7 +175,7 @@ export function EditorKeys(props: {
       return null
     }
     const text = copySelected()
-    if (text !== null) commands.remove()
+    if (text !== null) commands.remove('none')
     return text
   }
 
@@ -191,8 +193,10 @@ export function EditorKeys(props: {
       case 'redo':
         if (history.canRedo) history.redo()
         return
+      // **키보드 삭제는 선택을 비운다**(줄 `…` «삭제»는 부모를 고른다) — 부모를 고르면 따로 친 둘째 Delete 가 형제를 든 그 부모를 지운다
+      // (Chrome · `build-test/editor-shortcuts-review.test.ts` «H1»). 누른 채의 반복은 리스너가 거른다(`Shortcut.repeat`).
       case 'delete':
-        if (commands.abilities.remove) commands.remove()
+        if (commands.abilities.remove) commands.remove('none')
         return
       case 'moveUp':
         if (commands.abilities.moveUp) commands.moveUp()
@@ -219,14 +223,13 @@ export function EditorKeys(props: {
       case 'selectFirstChild': {
         if (doc === null) return
         const next = moveSelection(doc.root, selectedNodeId, command, (id) => store.selectionBlockedBy(id) !== null)
-        if (next !== null) store.selectNode(next)
+        if (next === null) return
+        store.selectNode(next)
+        revealNode(next, canvasDocument)
         return
       }
       case 'help':
         setHelpOpen(true)
-        return
-      // 형제 모두 고르기는 여럿 고르기가 서야 뜻이 있다 — 하나만 고르는 판에서는 기준 노드가 그대로다.
-      case 'selectSiblings':
         return
     }
   }
@@ -235,4 +238,18 @@ export function EditorKeys(props: {
   useClipboard({ canvasDocument, editable: props.editable, copy: copySelected, cut, paste })
 
   return <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} platform={platform} />
+}
+
+/**
+ * **화살표로 옮긴 선택을 구조 트리 줄 · 캔버스 노드에서 보이게 굴린다.** 선택 이동 키는 `preventDefault` 가 걸려 칸을 굴리지 않으므로 이것이
+ * 없으면 옮겨 간 선택이 화면 밖에 남는다(Chrome · `build-test/editor-shortcuts-review.test.ts` «L5»). `block: 'nearest'` — 이미 보이면 안 굴린다.
+ * 캔버스 노드는 iframe 문서 안이고, 그 `scrollIntoView` 가 호스트의 캔버스 칸까지 굴린다. **jsdom 에는 `scrollIntoView` 가 없다** — 있을 때만 부른다.
+ */
+function revealNode(nodeId: string, canvasDocument: Document | null): void {
+  // 셀렉터에 id 를 끼우지 않고 속성 값으로 찾는다 — 검증 전 문서의 id 는 셀렉터 글자를 품을 수 있다(`CSS.escape` 는 jsdom 에 없다).
+  const find = (root: Document | null, attribute: string): Element | undefined =>
+    root === null ? undefined : [...root.querySelectorAll(`[${attribute}]`)].find((element) => element.getAttribute(attribute) === nodeId)
+  for (const element of [find(document, 'data-tree-id'), find(canvasDocument, 'data-wb-id')]) {
+    if (element !== undefined && typeof element.scrollIntoView === 'function') element.scrollIntoView({ block: 'nearest' })
+  }
 }

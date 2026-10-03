@@ -227,6 +227,8 @@ export function ActionMenu(props: {
           }}
           data-side={placement.side}
           style={placement.style}
+          // 열린 동안 화살표 · Escape · Delete 는 에디터 단축키가 안 받는다 — 포커스가 토글에 남은 판도(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`).
+          data-wb-holds-keys=""
           onKeyDown={onListKeyDown}
         >
           {props.heading !== undefined && <p className="wb-shell-action-menu-heading">{props.heading}</p>}

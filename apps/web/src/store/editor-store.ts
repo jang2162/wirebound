@@ -1102,6 +1102,12 @@ export class EditorStore {
   readonly sentFromOpenQueue = (): boolean => this.#sentQueue === this.#queueEpoch
 
   /**
+   * **지금 판의 세대**(`#queueEpoch`) — 판을 싣거나 비울 때마다 오른다. 비동기 일이 시작할 때 적어 두고 끝날 때 견주면 그 사이 떠났다
+   * 돌아온 판(페이지 id 는 같다)까지 «떠났다»로 읽힌다(`shell/editor-keys.tsx` 의 붙이기).
+   */
+  readonly queueEpoch = (): number => this.#queueEpoch
+
+  /**
    * **버린 편집이 이미 나간 것인가.** 판을 다시 싣는 자리(`loadPage`의 반환)가 «취소»와 «모름»을 가른다. 나간 편집은 커밋 뒤에
    * 버려져도 이 탭에 돌아오지 않는다 — 답(ack)은 큐에 없어 버려지고(`ackEdit`), 방송은 낸 연결을 뺀다.
    */

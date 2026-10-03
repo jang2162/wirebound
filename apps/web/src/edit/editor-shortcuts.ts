@@ -28,7 +28,6 @@ export type ShortcutCommand =
   | 'selectNext'
   | 'selectParent'
   | 'selectFirstChild'
-  | 'selectSiblings'
   | 'help'
 
 export type Platform = 'mac' | 'other'
@@ -47,6 +46,12 @@ export interface Shortcut {
    * (삭제 · 순서 · 계층은 `structureAbilities` 의 잠금 · 되돌리기는 스토어의 `#startFrom` · 복제는 `editBlockedBy`).
    */
   edits: boolean
+  /**
+   * 누른 채의 키 반복(`event.repeat`)도 받는가. **지우기 · 복제는 안 받는다** — 지운 뒤 다음 반복이 다른 노드에 닿고(키보드 삭제는 선택을
+   * 비우지만 그 판정이 바뀌면 반복이 이어 지운다), 복제는 1s 누름에 사본이 열 몇 개 선다. 컴포넌트 판 «넣기»(`palette/component-palette.tsx`)와
+   * 같은 선례다. 되돌리기 · 다시 실행은 반복을 받는다 — 글 편집기의 Cmd+Z 와 같다. 거른 반복에도 `preventDefault` 는 건다(Cmd+D 의 책갈피).
+   */
+  repeat: boolean
 }
 
 /**
@@ -95,8 +100,8 @@ const ALT_SHIFT: Record<Platform, string> = { mac: '⌥⇧', other: 'Alt+Shift+'
  *   Chrome · Firefox 에서 뒤로 · 앞으로라서다. `Shift` 를 더한 조합에 브라우저 · OS 기본 바인딩이 있는지는 재지 못했다.
  * - **`Tab` 은 빼앗지 않는다** — 키보드 사용자가 트리 · 패널을 빠져나갈 길이다.
  * - **`?` 는 `key` 로 본다** — 자판마다 `?` 자리가 다르다. `code` 가 `Slash` 인 Shift 판도 받는다(조합기가 `key` 를 바꾼 판).
- * - **`selectSiblings`(Cmd+A)는 여럿 고르기가 서면 기준 노드의 형제 모두를 고른다** — 하나만 고르는 판에서는 기준 노드가 그대로다(셸의
- *   `run`). 표에 두는 것은 브라우저의 «페이지 글자 전부 고르기»가 에디터 위에서 서지 않게 하려는 것이다.
+ * - **Cmd+A 는 표에 없다** — 노드를 하나만 고르는 지금은 «형제 모두 고르기»가 할 일이 없고, 표에 두면 브라우저의 «전부 고르기»(캔버스 ·
+ *   상호작용 문장의 글자)를 먹어 이어 친 Cmd+C 가 글자 대신 노드 봉투를 싣는다. 여럿 고르기가 서면 켠다.
  */
 export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
   {
@@ -105,6 +110,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: (p) => `${CMD[p]}Z`,
     match: (e, p) => mod(e, p) && !e.shiftKey && letter(e) === 'z',
     edits: true,
+    repeat: true,
   },
   {
     command: 'redo',
@@ -112,6 +118,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: (p) => `${SHIFT_CMD[p]}Z · ${CMD[p]}Y`,
     match: (e, p) => mod(e, p) && ((e.shiftKey && letter(e) === 'z') || (!e.shiftKey && letter(e) === 'y')),
     edits: true,
+    repeat: true,
   },
   {
     command: 'delete',
@@ -119,6 +126,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: () => 'Delete · Backspace',
     match: (e) => bare(e) && (e.key === 'Delete' || e.key === 'Backspace'),
     edits: true,
+    repeat: false,
   },
   {
     command: 'duplicate',
@@ -126,13 +134,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: (p) => `${CMD[p]}D`,
     match: (e, p) => mod(e, p) && !e.shiftKey && letter(e) === 'd',
     edits: true,
-  },
-  {
-    command: 'selectSiblings',
-    label: '형제 모두 고르기',
-    keys: (p) => `${CMD[p]}A`,
-    match: (e, p) => mod(e, p) && !e.shiftKey && letter(e) === 'a',
-    edits: false,
+    repeat: false,
   },
   {
     command: 'deselect',
@@ -140,6 +142,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: () => 'Escape',
     match: (e) => bare(e) && !e.shiftKey && e.key === 'Escape',
     edits: false,
+    repeat: true,
   },
   {
     command: 'moveUp',
@@ -147,6 +150,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: (p) => `${ALT[p]}↑`,
     match: (e) => e.altKey && !e.shiftKey && !e.metaKey && !e.ctrlKey && e.key === 'ArrowUp',
     edits: true,
+    repeat: true,
   },
   {
     command: 'moveDown',
@@ -154,6 +158,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: (p) => `${ALT[p]}↓`,
     match: (e) => e.altKey && !e.shiftKey && !e.metaKey && !e.ctrlKey && e.key === 'ArrowDown',
     edits: true,
+    repeat: true,
   },
   {
     command: 'outdent',
@@ -161,6 +166,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: (p) => `${ALT_SHIFT[p]}←`,
     match: (e) => e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey && e.key === 'ArrowLeft',
     edits: true,
+    repeat: true,
   },
   {
     command: 'indent',
@@ -168,6 +174,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: (p) => `${ALT_SHIFT[p]}→`,
     match: (e) => e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey && e.key === 'ArrowRight',
     edits: true,
+    repeat: true,
   },
   {
     command: 'selectPrev',
@@ -175,6 +182,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: () => '↑',
     match: (e) => bare(e) && !e.shiftKey && e.key === 'ArrowUp',
     edits: false,
+    repeat: true,
   },
   {
     command: 'selectNext',
@@ -182,6 +190,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: () => '↓',
     match: (e) => bare(e) && !e.shiftKey && e.key === 'ArrowDown',
     edits: false,
+    repeat: true,
   },
   {
     command: 'selectParent',
@@ -189,6 +198,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: () => '←',
     match: (e) => bare(e) && !e.shiftKey && e.key === 'ArrowLeft',
     edits: false,
+    repeat: true,
   },
   {
     command: 'selectFirstChild',
@@ -196,6 +206,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: () => '→',
     match: (e) => bare(e) && !e.shiftKey && e.key === 'ArrowRight',
     edits: false,
+    repeat: true,
   },
   {
     command: 'help',
@@ -203,6 +214,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: () => '?',
     match: (e) => bare(e) && (e.key === '?' || (e.shiftKey && e.code === 'Slash')),
     edits: false,
+    repeat: true,
   },
 ]
 
@@ -237,15 +249,74 @@ export const CLIPBOARD_SHORTCUT_LINES: readonly ShortcutLine[] = [
  * | 글 입력 표면(`isTypingSurface`) | 입력 칸의 Delete · Cmd+Z · Cmd+C 는 그 칸의 것이다 |
  * | 제 단축키를 받는 상자 안(`[data-wb-own-shortcuts]`) | 메뉴 트리 상자 — 그 상자의 단축키가 받는다 |
  * | 모달이 열렸다(호스트 문서의 `dialog[open]`) | 상자 안 단추에서 친 Delete 가 뒤 화면의 노드를 지우면 안 된다 |
+ * | 캔버스 문서에서 포커스 받은 요소가 문서 자체(`body` · `html`) · 글을 안 받는 기본 컨트롤(`button` · `a[href]`)이 아니다 | 아래 «캔버스 문서는 서는 대상을 센다» |
  *
  * **대상은 `nodeType` 으로 본다** — 캔버스 iframe 에서 난 이벤트의 대상은 그 창의 `Element` 라 호스트의 `instanceof` 가 거짓이다
  * (`canvas/canvas-document.tsx` 머리말). 모달은 **호스트 문서**에서 찾는다 — 캔버스 문서에는 대화 상자가 서지 않는다.
+ *
+ * ## 캔버스 문서는 서는 대상을 센다 — 막는 대상을 세지 않는다
+ *
+ * 캔버스는 테마 뷰(임의의 React)를 그린다. **닫힌 shadow root 안의 입력**은 이벤트 대상이 호스트로 리타게팅되고 그 `shadowRoot` 가 `null` 이라
+ * `isTypingSurface` 가 못 본다(그 머리말 «이 판정이 못 보는 것») — 그 칸에서 친 Backspace 가 글자 대신 고른 노드를 지웠다(Chrome ·
+ * `build-test/editor-shortcuts-review.test.ts` «L1»). `composedPath()` 도 닫힌 root 안을 바깥에 안 보여 쓸 수 없다. 그래서 캔버스 문서에서는
+ * 거꾸로 센다 — 포커스가 없거나(`body`) 글을 안 받는 기본 컨트롤일 때만 서고, 그 밖의 포커스 받은 요소는 표면으로 본다. **`body` 하나로
+ * 좁히지 않는다** — 캔버스의 Button 노드를 누르면 포커스가 그 `button` 이다(Text · Field 노드는 `body`).
+ *
+ * **이벤트 대상이 아니라 그 문서의 `activeElement` 를 본다.** 클립보드 이벤트의 대상은 포커스가 아니라 고른 자리(캐럿)의 시작 요소라, 캔버스
+ * 본문을 누른 뒤의 Cmd+V 대상이 테마의 `div` 다 — 대상으로 가르면 붙이기가 막힌다(Chrome · `build-test/clipboard.test.ts`). 닫힌 shadow 안
+ * 입력에 포커스가 있으면 `activeElement` 는 그 호스트다. 키 이벤트는 대상이 곧 포커스 받은 요소라 어느 쪽이든 같다.
  */
 export function shortcutsBlocked(event: Event & { isComposing?: boolean }, host: Document = document): boolean {
   if (event.isComposing === true) return true
   if (event.defaultPrevented) return true
   if (isTypingSurface(event.target)) return true
   const target = event.target as Node | null
+  const canvas = target === null ? null : target.ownerDocument
+  if (canvas !== null && canvas !== host && canvas.activeElement !== null && !canvasKeyTarget(canvas.activeElement)) return true
   if (target !== null && target.nodeType === 1 && (target as Element).closest('[data-wb-own-shortcuts]') !== null) return true
   return host.querySelector('dialog[open]') !== null
+}
+
+/** 캔버스 문서에서 단축키가 서는 대상(`shortcutsBlocked` 의 «캔버스 문서는 서는 대상을 센다»). */
+function canvasKeyTarget(element: Element): boolean {
+  switch (element.localName) {
+    case 'body':
+    case 'html':
+    case 'button':
+      return true
+    case 'a':
+      return element.hasAttribute('href')
+    default:
+      return false
+  }
+}
+
+/** 키를 제 일에 쓰는 위젯이 받는 키(`keyHeldByWidget`). 화살표는 Alt 를 든 순서 · 계층 조합도 함께다 — 키 이름으로 본다. */
+const WIDGET_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Delete', 'Backspace'])
+
+/** 그 키를 제 일에 쓰는 ARIA 위젯 — 메뉴 · 목록 · 탭 · 값 조절 · 손잡이(`shell/shell-resizer.tsx`) · 고르기 무리. */
+const WIDGET_ROLES = ['menu', 'menuitem', 'listbox', 'option', 'tablist', 'tab', 'slider', 'separator', 'radiogroup', 'combobox']
+  .map((role) => `[role="${role}"]`)
+  .join(',')
+
+/**
+ * **그 키를 위젯이 쥐었는가** — 키 리스너만 본다(클립보드 이벤트에는 키가 없다). 참이면 단축키가 그 키를 받지 않고 `preventDefault` 도 안
+ * 건다 — 위젯과 브라우저가 그대로 갖는다.
+ *
+ * | 조건 | 까닭 |
+ * |---|---|
+ * | 대상이 `WIDGET_ROLES` 안 | 위젯이 쓰지 않는 축의 키(열린 줄 메뉴의 ← →)가 전역 명령이 되면, 그 위젯이 쥔 대상이 바뀐다 — 줄 `…` 메뉴의 «삭제»는 «지금 고른 노드»에 대한 명령이라 ← 뒤 «삭제»가 부모를 지웠다(Chrome · `build-test/editor-shortcuts-review.test.ts` «H2») |
+ * | 호스트 문서에 `[data-wb-holds-keys]` — 열린 행동 메뉴(`shell/action-menu.tsx`) · 열린 고르개(`panels/structure-toolbar.tsx` 의 `StructurePicker`) | 포커스가 그 안에 없어도(항목이 다 꺼진 메뉴는 토글에 남는다) Escape 가 메뉴를 닫으며 선택까지 풀었고, 고르개의 «취소»에서 친 Escape 가 선택을 풀어 고르개를 감췄다(`adding` 이 남아 다음 선택에 다시 섰다) |
+ *
+ * **구조 트리의 줄 단추(`.wb-shell-structure-node`)는 예외다** — 트리는 이 표를 읽는 자리라(↑ ↓ 로 줄을 옮기고 Delete 로 지운다) 열린 고르개가
+ * 그 곁에 서 있어도 줄에서는 선다. 그 줄은 역할 없는 `button` 이라 위 역할에는 안 걸린다. 그 Escape · Delete 로 선택이 비면 고르개도 걷힌다
+ * (`useStructureCommands` 의 «선택이 비면 고르개를 걷는다»).
+ */
+export function keyHeldByWidget(event: Pick<KeyboardEvent, 'key' | 'target'>, host: Document = document): boolean {
+  if (!WIDGET_KEYS.has(event.key)) return false
+  const target = event.target as Node | null
+  const element = target !== null && target.nodeType === 1 ? (target as Element) : null
+  if (element?.closest('.wb-shell-structure-node') != null) return false
+  if (element?.closest(WIDGET_ROLES) != null) return true
+  return host.querySelector('[data-wb-holds-keys]') !== null
 }

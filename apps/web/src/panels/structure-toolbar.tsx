@@ -36,7 +36,7 @@
  * **완전하다고는 적지 않는다** — 잰 것은 그 반례 부류(배열 원소가 노드가 아닌 경우)와
  * 몇 가지 깨진 형태까지다.
  */
-import { useState, type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import type { NodeLock, WbNode } from '@wirebound/schema'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { useEditCommit } from '../edit/use-edit-commit'
@@ -99,7 +99,11 @@ export interface StructureCommands {
    * 화면을 지나지 않고 재진다).
    */
   status: string
-  remove: () => void
+  /**
+   * 고른 노드를 지운다. 지운 뒤 무엇을 고르는지는 부르는 쪽이 정한다 — 줄 `…` «삭제»는 부모(`'parent'` — 기본), 키보드 삭제 · 잘라내기는
+   * 선택을 비운다(`'none'` — `shell/editor-keys.tsx` 머리말 «키보드 삭제는 선택을 비운다»).
+   */
+  remove: (selectAfter?: 'parent' | 'none') => void
   moveUp: () => void
   moveDown: () => void
   indent: () => void
@@ -315,6 +319,16 @@ export function useStructureCommands(props: {
   const [adding, setAdding] = useState<OpenPicker | null>(null)
 
   /**
+   * **선택이 비면 고른 노드 곁의 고르개(`'inside'` · `'after'`)를 걷는다.** 그 둘은 고른 노드에 매여(`visiblePicker` — `abilities` 가 선택을
+   * 본다) 선택이 비면 감춰질 뿐이라, 걷지 않으면 다음에 고른 노드 곁에 다시 선다(Chrome — 트리 줄의 Escape · 키보드 삭제가 선택을 비운 판).
+   * 잠금으로 꺼진 판은 걷지 않는다(위 `visiblePicker` 머리말 «`adding`은 비우지 않는다») — 그쪽은 같은 노드가 다시 풀리는 판이다. 패턴 ·
+   * 프리셋은 고른 것 없이도 서므로 남긴다.
+   */
+  useEffect(() => {
+    if (selectedNodeId === null) setAdding((open) => (open === 'inside' || open === 'after' ? null : open))
+  }, [selectedNodeId])
+
+  /**
    * 고른 타입으로 새 노드를 만들어 넣는다. 편집이 실제로 들어갔을 때만 선택을 옮긴다.
    *
    * **이 반환값 검사는 지워도 죽는 케이스가 없다.** 무조건 옮기도록 바꿔도 이 파일의 케이스가
@@ -444,7 +458,7 @@ export function useStructureCommands(props: {
   }
 
   /**
-   * 선택 노드를 지운다. **지운 뒤 선택을 부모로 옮긴다.**
+   * 선택 노드를 지운다. **지운 뒤 선택을 부모로 옮긴다**(`selectAfter` 가 `'none'` 이면 비운다 — `StructureCommands.remove`).
    *
    * 옮기는 이유: `applyEdit`은 `selectedNodeId`를 건드리지 않으므로
    * 툴바가 옮기지 않으면 선택이 **사라진 노드를 가리킨 채** 남는다 — 사용자는 트리에서
@@ -474,13 +488,13 @@ export function useStructureCommands(props: {
    * `routes/editor.tsx`의 `ready` 게이트와 같은 것이다: 지금 통과하는 이유가 위의
    * 성질이 지켜지고 있어서이므로, 그것이 깨지는 날 이 검사가 마지막 방벽이다.
    */
-  function removeSelected(): void {
+  function removeSelected(selectAfter: 'parent' | 'none' = 'parent'): void {
     if (document === null || selectedNodeId === null) return
     const spot = nodeSpot(document, selectedNodeId)
     if (spot === null) return
 
     if (commitOps(removeNodeOps(document, selectedNodeId))) {
-      store.selectNode(spot.parentId)
+      store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
     }
   }
 
@@ -643,7 +657,8 @@ export function StructurePicker(props: {
   if (picker === null) return null
   return (
     // 고르개는 자기 줄을 요구한다(`flex-basis: 100%` — `test/shell-css-picker.test.ts`) — 감싸는 flex 상자가 이것이다.
-    <div className="wb-shell-tree-panel">
+    // `data-wb-holds-keys` — 고르개가 선 동안 화살표 · Escape · Delete 는 에디터 단축키가 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`).
+    <div className="wb-shell-tree-panel" data-wb-holds-keys="">
       {(picker === 'inside' || picker === 'after') && <TypePicker onPick={commands.pick} onCancel={commands.cancelAdd} />}
       {picker === 'pattern' && <PatternPicker onPick={commands.pickPattern} onCancel={commands.cancelAdd} />}
       {picker === 'preset' && (
