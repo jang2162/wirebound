@@ -10,9 +10,12 @@
  * (설계서 「페이지 스키마 노드」). 빈 칸이 없으면 한 번 고른 변형에서 빠져나올 방법이 없다.
  */
 import type { ReactElement } from 'react'
+import { MIXED_PLACEHOLDER } from './text-control'
 
 /** 기본 표현으로 되돌리는 선택지의 글자. 빈 `<option>`은 사용자가 무엇인지 알 수 없다. */
 const CLEAR_LABEL = '(기본)'
+/** «여러 값» 칸의 값 — 앞 공백을 든 글자라 테마가 선언하는 변형 id 와 겹칠 일이 없다고 보고 골랐다(겹치면 그 변형을 못 고른다). */
+const MIXED_VALUE = ' mixed'
 
 export interface VariantControlProps {
   /** 테마 manifest 의 variant 선언 그대로(`variantFieldOf`). 라벨을 보이고 id 를 적는다. */
@@ -23,6 +26,8 @@ export interface VariantControlProps {
   disabled: boolean
   /** 빈 칸을 고르면 `null`이다 — 부르는 쪽이 그것을 `remove`로 옮긴다. */
   onCommit: (variant: string | null) => void
+  /** 고른 노드들의 변형이 갈린다(일괄 편집) — «여러 값» 칸을 맨 앞에 보이고 그것을 고르는 것은 커밋이 아니다. */
+  mixed?: boolean
 }
 
 export function VariantControl(props: VariantControlProps): ReactElement {
@@ -30,7 +35,8 @@ export function VariantControl(props: VariantControlProps): ReactElement {
 
   // 문서의 값이 선언된 변형에 없으면 빈 칸으로 둔다. 테마가 선언하지 않은 값을 든 문서가 그 경로이고, 그때 첫 선택지가
   // 골라진 것처럼 보이면 사용자가 건드리지도 않은 값이 정답처럼 뜬다. `SelectControl`과 같은 판단이다.
-  const current = typeof value === 'string' && options.some((option) => option.id === value) ? value : ''
+  const current =
+    props.mixed === true ? MIXED_VALUE : typeof value === 'string' && options.some((option) => option.id === value) ? value : ''
 
   return (
     <select
@@ -38,8 +44,12 @@ export function VariantControl(props: VariantControlProps): ReactElement {
       disabled={disabled}
       className="wb-shell-control"
       value={current}
-      onChange={(event) => onCommit(event.target.value === '' ? null : event.target.value)}
+      onChange={(event) => {
+        if (event.target.value === MIXED_VALUE) return
+        onCommit(event.target.value === '' ? null : event.target.value)
+      }}
     >
+      {props.mixed === true && <option value={MIXED_VALUE}>{MIXED_PLACEHOLDER}</option>}
       {/* **항상 있다.** 위 머리말의 이유이고, `SelectControl`과 갈리는 유일한 지점이다. */}
       <option value="">{CLEAR_LABEL}</option>
       {options.map((option) => (

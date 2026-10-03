@@ -982,6 +982,12 @@
   color: #fff;
 }
 
+/* 여럿을 고른 판의 기준 노드가 아닌 고른 줄(`panels/structure-tree.tsx`) — 기준 노드(위 채움)보다 옅게, 테두리만. */
+.wb-shell-structure-node-member {
+  box-shadow: inset 0 0 0 1px var(--wb-shell-accent);
+  color: var(--wb-shell-accent);
+}
+
 /* 메뉴 트리의 단추 — 빈 상태의 «최상위 메뉴» · 줄 아래 삭제 확인 · 소속 메뉴 목록의 «취소». */
 .wb-shell-menu-tool {
   appearance: none;
@@ -993,6 +999,24 @@
   font-size: 12px;
   color: var(--wb-shell-ink);
   cursor: pointer;
+}
+
+/* 여럿을 고른 판의 속성 패널 단추 — 타입이 섞였을 때의 «고른 노드 삭제»(`panels/property-panel.tsx` 의 `BulkProperties`). */
+.wb-shell-panel-action {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+.wb-shell-panel-action:disabled {
+  color: var(--wb-shell-muted);
+  cursor: not-allowed;
 }
 
 /* 할 수 없는 조작(조작이 나가 있는 동안). */
@@ -1187,6 +1211,23 @@
   outline-offset: 1px;
   border-radius: 2px;
   /* 아래의 노드가 그대로 눌려야 한다. 이것이 없으면 선택한 노드를 다시 누를 수 없다. */
+  pointer-events: none;
+}
+
+/* 여럿을 고른 판의 기준 노드가 아닌 고른 노드(`canvas/canvas.tsx`) — 기준 노드(위)보다 가늘게 · 끊어서. 누름은 그대로 아래로 간다. */
+.wb-shell-selection-member {
+  position: absolute;
+  outline: 1px dashed var(--wb-shell-accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* 캔버스 사각형 고르기(`canvas/use-canvas-marquee.ts`)가 그리는 동안의 사각형 — 문서 옆 셸 겹이다. 누름을 안 받는다. */
+.wb-shell-marquee {
+  position: absolute;
+  border: 1px solid var(--wb-shell-accent);
+  background: rgba(47, 111, 237, 0.08);
   pointer-events: none;
 }
 

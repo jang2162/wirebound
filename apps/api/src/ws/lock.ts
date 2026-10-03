@@ -10,15 +10,43 @@
  * | | `patch` | 잠금 |
  * |---|---|---|
  * | 답 | `patch-ack`/`patch-error`를 **낸 사람에게만** | 받으면 `locks` 목록을 **룸 전체에** · 거절하면 `lock-denied`를 **낸 사람에게만** |
- * | 짝짓기 | `clientOpId` | 받으면 없다 — 목록이 곧 답이다. 거절은 `pageId`·`nodeId`와 그 프레임의 `lockId`를 싣는다(아래) |
+ * | 짝짓기 | `clientOpId` | 받으면 없다 — 목록이 곧 답이다. 거절은 `pageId`·받지 않은 `nodeIds`와 그 프레임의 `lockId`를 싣는다(아래) |
  * | 끊겼을 때 | 기다리던 편집을 실패로 끝낸다 | **서버가 알아서 놓는다**(「소프트 잠금」) |
  *
  * 같은 채널에 얹으면 `failInFlight`의 뜻이 갈래마다 달라진다.
  *
  * # 서버가 획득을 거절한다
  *
- * **남이 이미 쥔 자리(또는 겹치는 서브트리)의 `lock`은 받지 않고, 낸 연결에 `lock-denied`로 답한다.** 겹침의 판정은 「소프트 잠금」의
+ * **남이 이미 쥔 자리(또는 겹치는 서브트리)는 받지 않고, 낸 연결에 그 노드를 `lock-denied`로 답한다.** 겹침의 판정은 「소프트 잠금」의
  * «선택 = 서브트리 claim» 그대로 — 화면의 1차 방어가 부르는 **스키마의 같은 함수**다(`lock/check.ts`의 `selectionVerdict`).
+ *
+ * # 집합을 갈아 끼운다 — 프레임마다 집합 전부를 판정한다
+ *
+ * `lock` 프레임은 «이 연결의 잠금을 이 집합으로»다(`protocol.ts`의 `LockFrame` — 하나짜리 `nodeId`는 `[nodeId]`다). 끝을 지을 때
+ * **집합의 노드 전부를 판정하고**, 막힌 노드만 `lock-denied`에 실은 채 나머지로 집합을 갈아 끼운다 — 앞 집합에서 빠진 것은 놓인다.
+ * 이미 쥔 노드도, 같은 집합을 다시 보내는 하트비트도 판정을 지난다(만료가 미뤄지는 것은 그 뒤다).
+ *
+ * **이미 쥔 노드도 다시 판정하는 까닭 — 쥔 뒤에 문서가 바뀐다.** «쥔 동안 남의 겹치는 잠금은 서지 못했다»는 문서가 그대로일 때만
+ * 참이다. 스냅샷 복원(`services/restore.ts`)은 잠금을 안 보고 문서를 통째로 갈아 끼워 이미 선 두 사람의 잠금을 조상/자손으로 만든다
+ * (설계서 「소프트 잠금」의 «거치지 않는 입구»). 쥔 노드를 판정하지 않으면 그 겹침은 둘 중 하나가 놓을 때까지 서고, 서로의 편집을
+ * 2차 방어(`lockConflictOfOps`)가 423 으로 막는다 — 한 사람은 고른 노드를 못 고치고 다른 사람은 제 노드를 못 지운다. 다시 판정하면
+ * **먼저 하트비트를 보낸 쪽이 겹친 노드를 거절받아 놓고**, 뒤에 보낸 쪽은 그것이 놓인 뒤라 그대로 선다(판정과 `hold`가 한 틱이다 —
+ * 아래). 거절받은 화면은 부분이면 그 노드를 선택에서 빼고 한 줄, 전부면 «잡지 않은 선택»에 선다(`apps/web`의 `lock-channel.ts`).
+ * 재는 자리: `test/ws-lock-set.test.ts`의 «복원이 두 사람의 잠금을 조상/자손으로 만들면 …» · «겹친 두 잠금의 하트비트가 행에 함께 줄
+ * 서도 …».
+ *
+ * **대가는 하트비트의 문서 조회다** — 같은 페이지에 남의 잠금이 있는 동안 하트비트(웹은 편집마다 보낸다)도 머리 문서를 읽고 집합
+ * 전부의 겹침을 묻는다. 남의 잠금이 없으면 읽지 않는 것은 그대로다(아래 «비용은 작다»). [api] 200 노드 집합을 쥔 연결이 같은 집합을 다시
+ * 보내고(같은 페이지에 남의 잠금 하나 · 뿌리 아래 Text N 개) 보낸 순간부터 `hold`가 불리기까지를 30번 재면 N 200(문서 15KB) p50 8.6ms ·
+ * N 2000(153KB) 9.5ms · N 7000(538KB) 15.6ms 이고, 그 가운데 판정(읽은 뒤의 `liveIn` → `hold`)은 1.5–3ms 다. 쥔 것을 판정하지 않으면
+ * 같은 하트비트가 3–4ms 다(문서를 안 읽는다) — 그 차가 대가다.
+ *
+ * **판정은 문서를 한 번 돈다**(`@wirebound/schema`의 `selectionConflicts` «문서를 한 번만 돈다») — 판정은 동기라 그동안 이벤트 루프 전체가
+ * 서고 페이지 행(`KEY SHARE`)을 쥔 트랜잭션 안이라 같은 페이지의 편집도 줄 선다. 노드마다 남의 잠금마다 문서를 훑으면 비용이 «고른 수 ×
+ * 남의 잠금 수»로 늘어 하트비트마다 초 단위가 된다. [api] Text 7000 · 고른 200 · 남의 잠금 801(넷이 200 개씩 + 하나)에서 하트비트 열 번의
+ * «보낸 순간 → `hold`»가 최대 15–17ms · 이벤트 루프 멈춤 최대 7–9ms 이고, 쥔 사람 다섯이 1s 마다 하트비트를 보내는 동안 남의 편집 왕복이
+ * 최대 96–104ms 다(노드마다 따로 물으면 하트비트 한 번 4.2s · 같은 편집이 초 단위 · 503). 다시 재는 법과 상한: `test/ws-lock-cost.test.ts`.
+ * **자기 집합 안의 겹침(조상과 자손)은 견주지 않는다** — 같은 사람의 잠금은 서로 막지 않는다(다른 탭과 같은 규칙).
  *
  * **겹친 잠금을 «둘 다 서로를 못 고치는» 보수적인 결과로 두지 않는다.** 겹치면 둘 다 막혀 누구도 못 고치고, 친 글은
  * 423 으로 사라진다 — 그리고 겹침은 드물지 않다(Chrome 두 화면에서 난다): 끊겼다 다시 붙는 화면의 재알림이 그 사이 남이
@@ -32,16 +60,17 @@
  *
  * | 판 | 답 | 까닭 |
  * |---|---|---|
- * | 겹치는 자리를 **다른 사람**이 쥐었다 | `lock-denied` · 이 연결이 쥔 것도 놓는다 | 새 자리를 달라는 것이 앞 자리를 놓는 것이다(연결 하나 = 잠금 하나). 놓지 않으면 화면은 아무것도 안 쥔 줄 아는데 앞 자리의 배지가 TTL 까지 남는다 |
+ * | 집합의 노드의 겹치는 자리를 **다른 사람**이 쥐었다 — 쥔 뒤 문서가 바뀌어 겹친 것도 | 그 노드만 `lock-denied` · 나머지는 쥔다 · 빠지는 것은 놓는다 | 집합을 갈아 끼우는 것이라 앞 집합에서 빠진 것은 어느 판이든 놓는다. 거절이 집합째면 남이 하나를 쥔 사이 나머지 고른 것까지 잃는다 |
  * | **같은 사람의 다른 탭**이 쥐었다 | 받는다(둘 다 쥔다) | 소유자는 사람이다. 편집의 2차 방어도 같은 사람을 막지 않는다(`lockConflictError`). 두 판정이 갈리면 화면이 잡은 자리를 서버가 편집에서 막는다 |
- * | **같은 연결이 같은 자리를 다시 보냈다**(하트비트 · 재알림) | 받는다 — 만료만 미룬다(목록은 안 흐른다) | 남이 겹쳐 쥔 판이 생기지 않는다 — 판정은 그대로 돌고 막히면 위 첫 줄이다 |
+ * | **같은 연결이 같은 집합을 다시 보냈다**(하트비트 · 재알림) | 판정한다 — 겹치지 않으면 만료만 미룬다(목록은 안 흐른다) · 겹치면 윗줄 | 쥔 사이 복원이 문서를 갈아 끼워 남의 잠금과 겹쳤을 수 있다(위 «집합을 갈아 끼운다») |
  * | 남의 잠금이 **TTL 을 넘겼다** | 받는다 | `liveIn`이 읽으며 걷는다(`lock/store.ts`) — 판정은 살아 있는 것만 본다 |
- * | 자격을 보는 사이 멤버십이 **잠금을 쥘 수 없게** 바뀌었다(viewer · 제거 — `membershipEpoch`) | `lock-denied` · 이 연결이 쥔 것도 놓는다 | 읽은 자격이 바뀌기 전의 것이다. 조용히 버리면 **화면은 쥔 줄 안다.** 답을 받은 화면은 «잡지 않은 선택»에 서고 다음 편집이 다시 보낸다. **편집 권한이 그대로인 변경(editor↔owner · 같은 역할)은 세대를 안 올린다** — 올리면 그 사이의 하트비트 하나가 정당한 잠금을 놓는다. 올리는 판정은 `ws/notify.ts`의 `canHold` 하나다 |
+ * | 자격을 보는 사이 멤버십이 **잠금을 쥘 수 없게** 바뀌었다(viewer · 제거 — `membershipEpoch`) | 프레임의 노드 전부 `lock-denied` · 이 연결이 쥔 것을 다 놓는다 | 읽은 자격이 바뀌기 전의 것이다. 조용히 버리면 **화면은 쥔 줄 안다.** 답을 받은 화면은 «잡지 않은 선택»에 서고 다음 편집이 다시 보낸다. **편집 권한이 그대로인 변경(editor↔owner · 같은 역할)은 세대를 안 올린다** — 올리면 그 사이의 하트비트 하나가 정당한 잠금을 놓는다. 올리는 판정은 `ws/notify.ts`의 `canHold` 하나다 |
  * | 끝나는 순간 연결이 **룸에 없다**(닫혔다 · 회수됐다) | 답 없음 · 잡지 않는다 | 닫힘의 해제(`releaseLocksOf`)는 이미 지나갔다 — 여기서 잡으면 아무도 안 놓는 잠금이 TTL 까지 선다 |
  * | viewer 가 보냈다 | 답 없음(`ws/routes.ts`) | 웹은 viewer 로 보내지 않는다. 강등이 끼면 `membership-changed`가 가고 화면이 놓는다 |
  * | 이 연결이 **뒤에 보낸** `lock`·`unlock`이 있다 | 답 없음 · 아무것도 안 한다 | 아래 «뒤에 온 것이 이긴다» |
- * | **DB 오류로 끝내지 못했다**(풀 대기 초과 · 연결 잃음 — 자격 확인이든 이 트랜잭션이든) | `lock-denied` · 이 연결이 쥔 것도 놓는다(`ws/routes.ts`의 `catch` → `denyLock`) | 서버는 아무것도 안 쥐었는데 답이 없으면 **화면은 쥔 줄 안다** — 남의 화면에는 배지가 없어 그 자리를 잡고 고칠 수 있다. 거절을 받은 화면은 «잡지 않은 선택»에 서고 다음 편집이 다시 보낸다. 뒤 프레임이 있으면 답하지 않는다(윗줄) |
- * | **페이지 행을 한도(`LOCK_ROW_WAIT_MS`) 넘게 기다렸다** | `lock-denied` · 이 연결이 쥔 것도 놓는다(`handleLockFrame`) | 행이 오래 쥐인 동안 함께 고르는 연결마다 풀 칸을 쥐고 서면 서버 전체가 503 이다(그 상수의 표). 답은 윗줄과 같다 |
+ * | **빈 집합**이다 | 답 없음 · 다 놓는다(트랜잭션을 안 연다) | `unlock`과 같다 — 놓기는 판정이 필요 없다 |
+ * | **DB 오류로 끝내지 못했다**(풀 대기 초과 · 연결 잃음 — 자격 확인이든 이 트랜잭션이든) | 프레임의 노드 전부 `lock-denied` · 이 연결이 쥔 것을 다 놓는다(`ws/routes.ts`의 `catch` → `denyLock`) | 서버는 아무것도 안 쥐었는데 답이 없으면 **화면은 쥔 줄 안다** — 남의 화면에는 배지가 없어 그 자리를 잡고 고칠 수 있다. 거절을 받은 화면은 «잡지 않은 선택»에 서고 다음 편집이 다시 보낸다. 뒤 프레임이 있으면 답하지 않는다(윗줄) |
+ * | **페이지 행을 한도(`LOCK_ROW_WAIT_MS`) 넘게 기다렸다** | 프레임의 노드 전부 `lock-denied` · 이 연결이 쥔 것을 다 놓는다(`handleLockFrame`) | 행이 오래 쥐인 동안 함께 고르는 연결마다 풀 칸을 쥐고 서면 서버 전체가 503 이다(그 상수의 표). 답은 윗줄과 같다 |
  *
  * **거절은 그 `lock` 프레임과 짝지어진다.** 프레임이 `lockId`를 실어 오면 `lock-denied`가 그것을 되돌려준다 — 화면은 **마지막으로
  * 보낸 `lock`의 거절만** 받아들인다(`apps/web`의 `lock-channel.ts` 「거절은 그 `lock` 프레임과 짝짓는다」).
@@ -158,22 +187,29 @@ function announce(app: FastifyInstance, projectId: string, changed: boolean): vo
   })
 }
 
-/**
- * 받지 않았다 — 이 연결이 쥔 것을 놓고(위 표) 낸 연결에만 답한다. 프레임의 `lockId`를 되돌려준다(위 «거절은 그 프레임과 짝지어진다»).
- *
- * **끝내지 못한 `lock`도 이 답이다** — DB 오류(풀 대기 초과 · 연결 잃음)로 판정까지 못 간 프레임에 `ws/routes.ts`의 `catch`가 부른다
- * (위 표). 그 프레임이 아직 마지막일 때만 부른다 — 뒤 프레임이 있으면 그것이 자기 답을 한다.
- */
-export function denyLock(app: FastifyInstance, connection: RoomConnection, frame: LockFrame): void {
-  releaseLocksOf(app, connection)
+/** 낸 연결에만 — 받지 않은 노드와 프레임의 `lockId`(위 «거절은 그 프레임과 짝지어진다»). 빈 목록이면 안 보낸다. */
+function sendDenied(connection: RoomConnection, frame: LockFrame, nodeIds: string[]): void {
+  if (nodeIds.length === 0) return
   const denied: ServerFrame = {
     type: 'lock-denied',
     projectId: connection.projectId,
     pageId: frame.pageId,
-    nodeId: frame.nodeId,
+    nodeIds,
     ...(frame.lockId !== undefined ? { lockId: frame.lockId } : {}),
   }
   connection.send(JSON.stringify(denied))
+}
+
+/**
+ * 프레임째 받지 않았다 — 이 연결이 쥔 것을 다 놓고(위 표) 프레임의 노드 전부를 낸 연결에만 답한다. 판정의 부분 거절은 이것이 아니다
+ * (`settle`).
+ *
+ * **끝내지 못한 `lock`도 이 답이다** — DB 오류(풀 대기 초과 · 연결 잃음)로 판정까지 못 간 프레임에 `ws/routes.ts`의 `catch`가 부른다
+ * (위 표). 그 프레임이 아직 마지막일 때만 부른다 — 뒤 프레임이 있으면 그것이 자기 답을 한다. 빈 집합이면 놓기만 한다.
+ */
+export function denyLock(app: FastifyInstance, connection: RoomConnection, frame: LockFrame): void {
+  releaseLocksOf(app, connection)
+  sendDenied(connection, frame, frame.nodeIds)
 }
 
 /** 연결이 아직 룸에 있는가 — 닫힘 · 회수가 룸에서 뺀 **뒤에** 놓는다(`ws/routes.ts`). */
@@ -182,8 +218,9 @@ function inRoom(app: FastifyInstance, connection: RoomConnection): boolean {
 }
 
 /**
- * 끝을 짓는다 — **동기다.** 뜻이 없어졌으면(뒤 프레임 · 룸에 없음) 아무것도 안 하고, 세대가 바뀌었으면 거절하고, 아니면 판정해
- * 거절하거나 잡는다. 문서가 필요하면 `needs-document`를 돌려준다(아무것도 안 했다).
+ * 끝을 짓는다 — **동기다.** 뜻이 없어졌으면(뒤 프레임 · 룸에 없음) 아무것도 안 하고, 세대가 바뀌었으면 거절하고, 아니면 집합 전부를
+ * 판정해 막힌 것을 뺀 나머지로 갈아 끼우고 막힌 것만 거절한다(위 «집합을 갈아 끼운다»). 문서가 필요하면 `needs-document`를 돌려준다(아무것도
+ * 안 했다).
  */
 function settle(
   app: FastifyInstance,
@@ -198,20 +235,19 @@ function settle(
     denyLock(app, connection, frame)
     return 'settled'
   }
-  const input = { projectId: connection.projectId, pageId: frame.pageId, nodeId: frame.nodeId, userId: connection.userId }
-  const verdict = selectionVerdict(app, input, root)
+  const base = { projectId: connection.projectId, pageId: frame.pageId, userId: connection.userId }
+  const verdict = selectionVerdict(app, { ...base, nodeIds: frame.nodeIds }, root)
   if (verdict === 'needs-document') return verdict
-  if (verdict === 'held') {
-    denyLock(app, connection, frame)
-    return 'settled'
-  }
+  const denied = new Set(verdict.held)
   const changed = app.realtime.locks.hold({
-    ...input,
+    ...base,
+    nodeIds: frame.nodeIds.filter((nodeId) => !denied.has(nodeId)),
     connectionId: connection.id,
     // **연결이 든다** — 프레임이 실어 온 값이 아니다(`ws/patch.ts`의 actor와 같은 이유).
     userName: connection.userName,
   })
   announce(app, connection.projectId, changed)
+  sendDenied(connection, frame, verdict.held)
   return 'settled'
 }
 
@@ -277,7 +313,8 @@ export function createLockLane(app: FastifyInstance, connection: RoomConnection)
 }
 
 /**
- * `lock` 하나. **같은 노드를 다시 보내는 것이 하트비트다** — 그때는 목록이 안 바뀌어 조용하다.
+ * `lock` 하나. **같은 집합을 다시 보내는 것이 하트비트다** — 그때는 목록이 안 바뀌어 조용하다. **빈 집합은 트랜잭션을 안 열고
+ * 놓는다**(`unlock`과 같다 — 위 표).
  *
  * **페이지 행을 `KEY SHARE`로 잡고** 문서 없이 묻는다. 문서가 필요하면(같은 페이지에 남의 잠금이 있다) 그 행을 쥔 채 머리 문서를
  * 읽고 처음부터 다시 묻는다(위 «판정과 잡기는 같은 틱이다»). 읽은 뒤의 판정은 `needs-document`를 내지 않는다. 그 프로젝트에 없는
@@ -289,6 +326,10 @@ export async function handleLockFrame(
   frame: LockFrame,
   turn: LockTurn,
 ): Promise<void> {
+  if (frame.nodeIds.length === 0) {
+    if (turn.current() && inRoom(app, connection)) releaseLocksOf(app, connection)
+    return
+  }
   try {
     await withTransaction(app.db, async (trx) => {
       await sql`select set_config('lock_timeout', ${`${LOCK_ROW_WAIT_MS}ms`}, true)`.execute(trx)

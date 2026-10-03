@@ -68,3 +68,27 @@ export function moveSelection(
   }
   return null
 }
+
+/**
+ * **Cmd+A 가 고를 노드** — 기준 노드의 형제 모두(그 노드 포함 · 문서 차례). 기준 노드가 없거나 루트거나 문서에 없으면 루트의 자식 모두다
+ * (설계서 「설계서 화면 구조」의 «고르는 법»). 남이 잡은 노드 · 상한은 스토어의 `selectMany`가 거른다. 노드가 아닌 원소 · 빈 id 는 뺀다.
+ */
+export function siblingIds(root: unknown, anchorId: string | null): string[] {
+  let parent: WbNode | null = null
+  for (const visit of walkSafely(root)) {
+    if (visit.parent === null && (anchorId === null || visit.node.id === anchorId)) {
+      parent = visit.node
+      break
+    }
+    if (visit.node.id === anchorId) {
+      parent = visit.parent
+      break
+    }
+  }
+  if (parent === null) {
+    const first = walkSafely(root).next()
+    parent = first.done === true ? null : first.value.node
+  }
+  const children = Array.isArray(parent?.children) ? parent.children : []
+  return children.filter((child): child is WbNode => typeof child === 'object' && child !== null && !Array.isArray(child) && selectable(child)).map((child) => child.id)
+}

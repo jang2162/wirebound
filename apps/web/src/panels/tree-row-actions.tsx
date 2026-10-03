@@ -7,7 +7,9 @@
  * 명령(`TreeCommands` · `StructureCommands`)은 **고른 줄**에 대해 돈다 — 키보드 단축키도 같은 명령을 부른다. 그래서 줄의 `+` · `…`를
  * 열면(`ActionMenu` 의 `onOpen`) 그 줄을 먼저 고르고, 항목의 켜고 끔은 고른 뒤의 판정(`treeAbilities` · `structureAbilities`)으로
  * 그린다. 여는 것과 고르는 것이 한 렌더에 묶이므로 목록이 앞 선택의 판정으로 한 번 그려지는 틈이 없다. **열린 뒤 그 줄이 고른 줄이 아니게
- * 되면 메뉴를 닫는다**(`picked` → `ActionMenu` 의 `openWhile` — 그 머리말 «고른 대상이 바뀌면 닫는다»).
+ * 되면 메뉴를 닫는다**(`picked` → `ActionMenu` 의 `openWhile` — 그 머리말 «고른 대상이 바뀌면 닫는다»). 구조 트리는 노드를 여럿 고를 수
+ * 있어 «고른 줄»이 **기준 노드**의 줄이고, 연 뒤 **고른 목록**이 바뀌어도 닫는다(`selection` — 여럿을 고른 판의 «삭제»는 고른 것 전부를
+ * 지운다 — 연 때의 목록이 아니게 되면 그 항목이 무엇을 지울지가 바뀐다).
  *
  * ## 서는 조건은 CSS 가 갖는다 — 상태를 더하지 않는다
  *
@@ -24,8 +26,8 @@
  * 읽을 때마다 같은 «못 한다»를 한 번 더 말할 뿐이다.
  */
 import { FileDown, FileUp, type LucideIcon } from 'lucide-react'
-import type { ReactElement } from 'react'
-import type { StructureAbilities } from '../edit/structure-actions'
+import { useEffect, useState, type ReactElement } from 'react'
+import { MULTI_DISABLED, MULTI_WHY_DISABLED, type StructureAbilities } from '../edit/structure-actions'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
 import type { TreeAbilities } from '../tree/tree-actions'
 import type { TreeCommands } from '../tree/use-tree-commands'
@@ -33,22 +35,43 @@ import type { StructureCommands } from './structure-toolbar'
 import { menuStatus } from './toolbar-status'
 
 /** 줄 행동 한 벌 — `+` · `…`(없으면 안 그린다). `name` 은 그 줄의 이름이다(접근 이름이 줄마다 갈리게). */
+/** 연 누름이 줄을 고른 뒤의 목록을 기다린다(`TreeRowActions`의 `openedWith`). */
+const PENDING: unique symbol = Symbol('pending')
+
 export function TreeRowActions(props: {
   name: string
   add?: readonly ActionMenuItem[]
   more?: readonly ActionMenuItem[]
   /** 열 때 — 그 줄을 고른다(머리말). */
   onOpen: () => void
-  /** 그 줄이 고른 줄인가 — 열린 뒤 거짓이 되면 메뉴를 닫는다(머리말). */
+  /** 그 줄이 고른 줄(구조 트리는 기준 노드)인가 — 열린 뒤 거짓이 되면 메뉴를 닫는다(머리말). */
   picked: boolean
+  /**
+   * 고른 목록을 글자 하나로(구조 트리 — 여러 노드 선택). 주면 **연 뒤 이 값이 바뀌어도 닫는다** — 기준 노드는 그대로인데 목록이 늘거나
+   * 준 판(Cmd 클릭 · Cmd+A · 남의 편집)이다. 연 렌더의 값을 이펙트에서 붙잡는다(여는 누름이 그 줄을 고른 뒤의 값이다).
+   */
+  selection?: string
 }): ReactElement {
+  /**
+   * 연 때의 목록. 이미 고른 줄이면 그 자리에서 붙잡고, 아니면 여는 누름이 그 줄을 고른 **뒤**의 값을 다음 렌더의 이펙트에서 붙잡는다(`PENDING`
+   * — 고르기가 목록을 바꾸므로 그 렌더는 꼭 온다). `null`이면 견주지 않는다(`selection`을 안 준 메뉴 트리 · 아직 안 연 메뉴).
+   */
+  const [openedWith, setOpenedWith] = useState<string | typeof PENDING | null>(null)
+  useEffect(() => {
+    if (openedWith === PENDING) setOpenedWith(props.selection ?? null)
+  })
+  const onOpen = (): void => {
+    setOpenedWith(props.picked ? (props.selection ?? null) : PENDING)
+    props.onOpen()
+  }
+  const live = props.picked && (openedWith === null || openedWith === PENDING || openedWith === (props.selection ?? null))
   return (
     <span className="wb-shell-tree-row-actions">
       {props.add !== undefined && (
-        <ActionMenu label={`${props.name} 추가`} glyph="+" items={props.add} onOpen={props.onOpen} openWhile={props.picked} compact />
+        <ActionMenu label={`${props.name} 추가`} glyph="+" items={props.add} onOpen={onOpen} openWhile={live} compact />
       )}
       {props.more !== undefined && (
-        <ActionMenu label={`${props.name} 더 보기`} items={props.more} onOpen={props.onOpen} openWhile={props.picked} compact />
+        <ActionMenu label={`${props.name} 더 보기`} items={props.more} onOpen={onOpen} openWhile={live} compact />
       )}
     </span>
   )
@@ -196,12 +219,14 @@ export function structureRowItems(
   const describedBy = commands.status === '' ? undefined : statusId
   const item = (key: keyof StructureAbilities, label: string, onSelect: () => void, danger = false): ActionMenuItem => {
     const allowed = commands.abilities[key]
+    // 여럿을 고른 판에서 꺼진 순서 · 계층은 «하나일 때만»이 이유다(`selectionAbilities`).
+    const why = commands.count > 1 && MULTI_DISABLED.has(key) ? MULTI_WHY_DISABLED : STRUCTURE_WHY_DISABLED[key]
     return {
       key,
       label,
       onSelect,
       disabled: !allowed,
-      title: allowed ? undefined : STRUCTURE_WHY_DISABLED[key],
+      title: allowed ? undefined : why,
       describedBy,
       danger,
     }

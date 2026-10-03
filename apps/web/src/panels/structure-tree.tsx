@@ -11,14 +11,15 @@
  * (`panels/structure-toolbar.tsx`)의 명령을 부르고, 판정과 편집은 그쪽이 한다. 삭제 · 순서 · 계층의 키는 에디터 단축키
  * (`shell/editor-keys.tsx`)가 같은 훅의 함수로 받는다.
  */
-import { useId, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { NodeLock, WbNode } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
-import type { ShortcutLine } from '../edit/editor-shortcuts'
+import { platformOf, type ShortcutLine } from '../edit/editor-shortcuts'
 import { usePublishTreeRegion } from '../drag/use-placement'
 import { scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
 import { findNodeSafely } from '../edit/safe-walk'
+import { visibleNodeOrder } from '../edit/selection-move'
 import { structureAbilities } from '../edit/structure-actions'
 import { sameDrop, type StructureDrop } from '../edit/structure-drop'
 import { ActionMenu } from '../shell/action-menu'
@@ -26,6 +27,7 @@ import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../stor
 import { useLockedBy } from '../store/use-locked-by'
 import { nodeTypeLabel } from './node-shape'
 import { structureTreeHint } from './structure-tree-hint'
+import { selectionCapNotice } from './toolbar-status'
 import { isTypingSurface } from './typing-surface'
 import { StructurePicker, useStructureCommands, type StructureCommands } from './structure-toolbar'
 import { structureRowItems, TreeRowActions } from './tree-row-actions'
@@ -105,6 +107,8 @@ export function StructureTree(props: {
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 그린다.
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
+  const [platform] = useState(() => platformOf(navigator))
   // **목록을 구독하는 자리는 이 파일 밖이다.** 잠금을 봐야 하는 패널이 둘(여기와 속성
   // 패널)이라 형제 둘 중 하나에 둘 수 없다 — 그 사정과 «자리는 하나»는
   // `store/use-locked-by.ts`가 갖는다. **판정은 스토어가 한다.**
@@ -202,6 +206,22 @@ export function StructureTree(props: {
 
   const rootId = typeof doc.root?.id === 'string' ? doc.root.id : null
   /**
+   * **줄을 누른다** — 클릭은 그것 하나, Cmd(mac) · Ctrl 클릭은 더하기 · 빼기, Shift 클릭은 기준 노드부터 보이는 차례로(설계서 「설계서 화면
+   * 구조」의 «고르는 법»). 규칙(조상 · 자손 · 루트 · 남의 잠금 · 상한)은 스토어 명령이 갖는다 — 상한에 걸렸으면 하단 바가 말한다.
+   */
+  const pick = (nodeId: string, event: MouseEvent<HTMLButtonElement>): void => {
+    const command = platform === 'mac' ? event.metaKey : event.ctrlKey
+    const change = command
+      ? store.toggleSelect(nodeId)
+      : event.shiftKey
+          ? store.selectRange(nodeId, visibleNodeOrder(doc.root))
+          : null
+    if (change === null) store.selectNode(nodeId)
+    else if (change.capped > 0) store.setEditFailure({ kind: 'message', message: selectionCapNotice() })
+  }
+  /** 고른 줄 전부 — 줄마다 «고른 줄인가»를 묻는다(강조). */
+  const selectedSet = new Set(selectedNodeIds)
+  /**
    * **고르개가 설 줄** — 고른 줄, 고른 것이 없거나 문서에 없으면 뿌리 줄. 패턴 · 프리셋은 고른 것 없이도 열리므로(뿌리 `+`) 붙을 줄이
    * 있어야 한다 — 페이지 통째의 조작이라 뿌리 줄 아래다.
    */
@@ -230,7 +250,9 @@ export function StructureTree(props: {
         <StructureNode
           node={doc.root}
           selectedNodeId={selectedNodeId}
-          onSelect={store.selectNode}
+          selected={selectedSet}
+          selection={selectedNodeIds.join(',')}
+          onSelect={pick}
           // 판정의 자리는 위 `lockOf` 선언이 갖는다 — 줄과 상태줄이 **같은 값**을 쓴다.
           lockOf={lockOf}
           blockedOf={store.selectionBlockedBy}
@@ -335,8 +357,13 @@ interface RowWiring {
 /** 노드 한 줄과 그 아래. 트리 자체가 재귀 구조라 컴포넌트도 재귀다. */
 function StructureNode(props: {
   node: WbNode
+  /** 기준 노드(`aria-current` · 줄 행동이 서는 줄). */
   selectedNodeId: string | null
-  onSelect: (nodeId: string) => void
+  /** 고른 노드 전부(기준 노드 포함) — 강조할 줄. */
+  selected: ReadonlySet<string>
+  /** 고른 목록의 글자 — 열린 줄 메뉴가 연 뒤 목록이 바뀌었는지 본다(`TreeRowActions`의 `selection`). */
+  selection: string
+  onSelect: (nodeId: string, event: MouseEvent<HTMLButtonElement>) => void
   /** 그 노드를 막는 남의 잠금을 내는 함수(`store/use-locked-by.ts`). 없으면 `null`을 낸다. */
   lockOf: (nodeId: string) => NodeLock | null
   /**
@@ -359,7 +386,14 @@ function StructureNode(props: {
   // id가 없는 노드는 잠금과 짝지을 것이 없다 — 아래에서 고를 수도 없다.
   const lock = isSelectable(node) ? props.lockOf(node.id) : null
 
+  /**
+   * **이 줄이 기준 노드인가** — 줄 행동이 서는 줄이고, 열린 줄 메뉴가 그대로 있을 조건이다(`TreeRowActions`의 `picked`). 여럿을 고른 판의
+   * 줄 행동은 기준 노드 줄의 `…`에서 연다 — 그 «삭제»가 고른 것 전부를 지운다. **다른 고른 줄의 `…`를 열면 그 줄 하나로 고른다**(`onOpen`).
+   * 연 뒤 고른 목록이 바뀌면(Cmd · Shift 클릭 · Cmd+A · 남의 편집 · 거절) 메뉴를 닫는다(`selection`) — 항목이 연 때의 목록에 대해 선다.
+   */
   const picked = props.selectedNodeId === node.id
+  /** 고른 줄인가 — 기준 노드가 아니어도(강조). */
+  const inSelection = isSelectable(node) && props.selected.has(node.id)
   /**
    * **남이 잡은 줄은 행동도 끌기도 없다 — 고른 줄은 빼고.** 줄 단추가 이미 꺼져 있다(`blockedOf`). 행동을 열면 그 줄을 먼저 고르는데
    * (아래 `onOpen`) 고르기가 막히므로 목록이 **앞 선택의 판정 · 명령**으로 설 것이다. **이미 고른 줄은 다르다** — 고른 뒤에 남의 잠금이
@@ -391,7 +425,7 @@ function StructureNode(props: {
         >
           <button
             type="button"
-            className="wb-shell-structure-node"
+            className={inSelection && !picked ? 'wb-shell-structure-node wb-shell-structure-node-member' : 'wb-shell-structure-node'}
             // 선택 표시는 `aria-current`가 갖고 색은 CSS가 가져간다 — 보조 기술이 읽는 것과
             // 눈에 보이는 것이 같은 하나에서 갈라져 나와야 둘이 어긋나지 않는다(메뉴 트리의
             // 페이지 링크와 같은 방식).
@@ -403,7 +437,7 @@ function StructureNode(props: {
             // `store.selectNode`가 하고(캔버스도 그 함수를 지난다) 여기 `disabled`는 **왜
             // 안 되는지를 보이는 쪽**이다 — 같은 모양인데 반응만 없으면 고장으로 읽힌다.
             disabled={props.blockedOf(node.id) !== null}
-            onClick={() => props.onSelect(node.id)}
+            onClick={(event) => props.onSelect(node.id, event)}
             {...(draggable ? row.drag.bind(node.id) : {})}
           >
             {typeLabel}
@@ -417,6 +451,7 @@ function StructureNode(props: {
                 if (!picked) row.select(node.id)
               }}
               picked={picked}
+              selection={props.selection}
             />
           )}
         </div>
@@ -449,6 +484,8 @@ function StructureNode(props: {
               key={isSelectable(child) ? child.id : `wb-invalid-${index}`}
               node={child}
               selectedNodeId={props.selectedNodeId}
+              selected={props.selected}
+              selection={props.selection}
               onSelect={props.onSelect}
               lockOf={props.lockOf}
               blockedOf={props.blockedOf}

@@ -595,7 +595,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId', () => {
       ctx.app.realtime.locks.hold({
         projectId: project.id,
         pageId: page.id,
-        nodeId: rootId,
+        nodeIds: [rootId],
         connectionId: 'conn-other',
         userId: other.user.id,
         userName: '남',

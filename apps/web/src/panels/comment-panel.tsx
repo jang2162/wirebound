@@ -164,6 +164,9 @@ const NO_PAGE = '페이지를 열면 코멘트가 보입니다'
 const NO_COMMENTS = '아직 코멘트가 없습니다'
 /** 노드를 고르지 않아 새 코멘트를 달 수 없을 때. */
 const NO_TARGET = '코멘트를 달 노드를 캔버스나 구조 트리에서 고르세요'
+
+/** 여럿을 고른 판(설계서 «여럿을 고른 판의 동작» — 코멘트 탭은 하나일 때만). 목록은 그대로고 새 코멘트만 못 단다. */
+export const MANY_TARGETS = '코멘트는 노드 하나를 골랐을 때 답니다'
 /** 새 코멘트가 달릴 노드의 머리(`targetOf`). */
 const TARGET = '달 곳'
 /** 조회가 이유 없이 실패했을 때. */
@@ -614,7 +617,13 @@ export function CommentPanel(props: {
   // 쓴다(다시 실은 판이 그 번호에 닿았나 — `divergedShown`).
   const open = useOpenPage(props.pageId)
   const document = open?.document ?? null
-  const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  /**
+   * **달 곳** — 하나를 골랐을 때만이다. 여럿이면 `null`로 읽어 «고른 것이 없다»와 같은 길로 상자 · 단추가 꺼진다(문장만 `MANY_TARGETS`).
+   * 초안의 열쇠도 이 값이라 여럿을 고른 동안의 초안은 안 생긴다 — 하나로 돌아오면 그 노드의 초안이 그대로 선다.
+   */
+  const anchorId = useEditorStore(store, (s) => s.selectedNodeId)
+  const many = useEditorStore(store, (s) => s.selectedNodeIds.length > 1)
+  const selectedNodeId = many ? null : anchorId
 
   // **일곱 다 칸이다**(위 `LIST` 선언의 주석). 아래 쓰기 함수들은 **이 렌더의 페이지를 단다** —
   // 응답이 오기 전에 탭을 오갔으면 지금 떠 있는 본문에 닿고, 페이지를 옮겼으면 어디에도
@@ -1068,7 +1077,7 @@ export function CommentPanel(props: {
               setDrafts((prev) => withDraft(prev, selectedNodeId, text))
             }}
           />
-          {selectedNodeId === null && <p className="wb-shell-panel-notice">{NO_TARGET}</p>}
+          {selectedNodeId === null && <p className="wb-shell-panel-notice">{many ? MANY_TARGETS : NO_TARGET}</p>}
           <div className="wb-shell-comment-actions">
             <button
               type="submit"

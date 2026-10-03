@@ -27,11 +27,10 @@
  * 4. `pointerup`, (1이 막히지 않았으면) `mouseup`, `click`.
  *
  * **1·2가 이 흉내가 잡으려는 회귀다** — «누르면 포커스를 빼앗지 않게» 하려고 누르는 이벤트를
- * 막는 것은 흔한 손질이고(끌어서 조절하는 손잡이·캔버스 패닝), 그 순간 blur 커밋이 사라져
- * 사용자는 친 글자를 잃는다. 2만 흉내 내고 1(`pointerdown`)을 모르면 — 탭·캔버스의
- * `onPointerDown`에 `preventDefault()`를 심었을 때 **Chrome 은 편집 0건 · 옛 값인데 흉내는
- * «커밋 1건»이라고 말한다.** 흉내가 그렇게 물러나는 것을 잡는 것이 흉내 자신의 검사
- * 둘이다(`panels/property-panel.test.tsx`의 «… 막으면 커밋이 없다» 둘).
+ * 막는 것은 흔한 손질이고(끌어서 조절하는 손잡이·캔버스 패닝), 그 순간 blur 커밋이 사라진다(누름이 위젯을 내리면 `onLeave`가
+ * 대신 커밋하지만 페이지를 옮기는 누름은 아니다 — `panels/property-panel.tsx`의 `useLeftoverCommit`). 2만 흉내 내고
+ * 1(`pointerdown`)을 모르면 `onPointerDown`에 `preventDefault()`를 심은 자리에서도 **흉내는 blur 를 낸다.** 흉내가 그렇게 물러나는 것을
+ * 잡는 것이 흉내 자신의 검사 둘이다(`panels/property-panel.test.tsx`의 «… 막으면 blur 가 없다» 둘).
  *
  * **`pointerdown`은 `MouseEvent`로 만든다** — jsdom 에는 `PointerEvent`가 없어
  * `fireEvent.pointerDown`은 `button`을 버린 평범한 `Event`를 낸다(`pointer-events.ts`의 머리말).
@@ -48,7 +47,8 @@
  * **Chrome 과 댄 결과** — 위젯 다섯 × 갈래 다섯(탭·모드·트리·캔버스·다른 페이지)의 25칸과
  * 흉내를 흔드는 갈래 열둘. 25칸은 나간 편집(수·페이지·경로·값) · 첫 focusout · 활성 요소 · 돌아와
  * 본 값 · 서버 값이 **전부 같다.** 갈래 열둘 가운데 **«커밋된다»고 말하는데 Chrome 은 안 하는
- * 칸은 0이다** — 탭·캔버스의 `pointerdown` 막음과 리사이저 클릭도 둘 다 0건으로 같다.
+ * 칸은 0이다** — 탭·캔버스의 `pointerdown` 막음과 리사이저 클릭도 둘 다 blur 가 없어 같다(탭 · 캔버스는 위젯이 내려가며
+ * `onLeave`로 커밋된다 — 흉내와 Chrome 이 같은 길이다. 그 커밋 수는 Chrome 에 다시 대지 않았다).
  * 남은 갈림은 아래 넷이고 **어느 것도 커밋 여부가 갈리지 않는다:**
  *
  * - **CSS 를 모른다.** `pointer-events: none`이면 브라우저의 클릭은 그 요소에 안 닿는데, 이
@@ -60,8 +60,8 @@
  *   커밋은 둘 다 1건 · `focusout → null`이다.
  * - **jsdom 은 포커스된 요소가 DOM 에서 빠질 때 blur 를 안 낸다** — 이 흉내의 몫이 아니다. 누르는
  *   이벤트가 막혀 포커스가 안 옮겨 간 채 선택·탭이 바뀌면 Chrome 은 칸이 빠질 때
- *   `focusout TEXTAREA → null`을 내고 이 흉내(jsdom)는 안 낸다. **커밋은 둘 다 0건이다** — React 는
- *   빠지는 요소의 `onBlur`를 부르지 않는다.
+ *   `focusout TEXTAREA → null`을 내고 이 흉내(jsdom)는 안 낸다. **blur 커밋은 둘 다 없다** — React 는
+ *   빠지는 요소의 `onBlur`를 부르지 않는다. 커밋이 나면 내려가는 위젯의 `onLeave`다(코드로 판단한 것이다 — Chrome 에서 따로 재지 않았다).
  * - **꺼진(`disabled`) 요소는 흉내 내지 않는다 — 던진다.** Chrome 실측: 꺼진 버튼(«다시
  *   실행»)을 누르면 **`pointerdown`·`pointerup`만** 그 버튼에 닿고 `mousedown`·`mouseup`·`click`은
  *   안 닿으며, 포커스는 놓인다(`focusout TEXTAREA → null` · 커밋 1건 · 활성 요소 `BODY`). 그

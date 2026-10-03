@@ -43,7 +43,10 @@ import { describePageTarget, type PageDocument } from '@wirebound/schema'
 import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
+import { platformOf } from '../edit/editor-shortcuts'
 import { findNodeSafely, walkSafely } from '../edit/safe-walk'
+import { selectionCapNotice } from '../panels/toolbar-status'
+import type { SelectionChange } from '../store/editor-store'
 import { nodeTypeLabel } from '../panels/node-shape'
 import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -52,6 +55,7 @@ import { applyPreviewLook, previewDocument } from './canvas-preview'
 import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
+import { useCanvasMarquee } from './use-canvas-marquee'
 import { themeFileUrl } from '../theme/bundle-loader'
 import { useProjectTheme, type ProjectThemeState } from '../theme/project-theme'
 // 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다. 설치는 import만으로
@@ -186,6 +190,7 @@ export function Canvas(props: {
   // 다시 그린다 — `use-editor-store.tsx`의 주석 참고.
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
   const mode = useEditorStore(store, (s) => s.mode)
   // 손잡이는 남이 잡은 노드에 안 선다 — 판정은 스토어(`store/use-locked-by.ts`).
   const lockOf = useLockedBy()
@@ -194,7 +199,8 @@ export function Canvas(props: {
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
 
   const surfaceRef = useRef<HTMLDivElement | null>(null)
-  const [box, setBox] = useState<Box | null>(null)
+  /** 고른 노드마다의 외곽선 상자 — 고른 차례(문서 차례). 기준 노드의 것이 `box`다. */
+  const [boxes, setBoxes] = useState<readonly OutlineBox[]>(NO_OUTLINES)
   const [markers, setMarkers] = useState<MarkerBox[]>(NO_MARKERS)
   /** 문서를 그리는 iframe. 그 문서가 서기 전에는 잴 것이 없다. */
   const [frame, setFrame] = useState<CanvasFrame | null>(null)
@@ -333,6 +339,26 @@ export function Canvas(props: {
   // 아웃라인은 편집 모드에만 있다(설계서 「설계서 화면 구조」 — 뷰 모드는 결과만 보여 준다). 선택 자체는
   // 남는다. 뷰 모드에서 선택을 지우면 모드를 오갈 때마다 고른 것이 사라진다.
   const outlinedNodeId = mode === 'edit' ? selectedNodeId : null
+  /** 외곽선을 그릴 노드 전부 — 고른 것마다 하나(설계서 «보이는 것»). 기준 노드는 진하게 · 나머지는 옅게. */
+  const outlinedIds = mode === 'edit' ? selectedNodeIds : NO_IDS
+  const box = boxes.find((item) => item.nodeId === outlinedNodeId)?.box ?? null
+  const [platform] = useState(() => platformOf(navigator))
+  /** 고르기 몸짓의 답 — 상한에 걸려 더 고르지 않았으면 하단 바가 말한다(구조 트리와 같은 문장). */
+  const tellCapped = (change: SelectionChange): void => {
+    if (change.capped > 0) store.setEditFailure({ kind: 'message', message: selectionCapNotice() })
+  }
+  /** Cmd(mac) · Ctrl · Shift 를 든 클릭 — 더하기 · 빼기(구조 트리는 Shift 가 범위다 · 캔버스에는 보이는 차례가 없어 더하기다). */
+  const adds = (event: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }): boolean =>
+    event.shiftKey || (platform === 'mac' ? event.metaKey : event.ctrlKey)
+  /** 사각형 고르기(`./use-canvas-marquee.ts`) — 그리는 동안의 사각형. */
+  const marquee = useCanvasMarquee({
+    frame,
+    surface: () => surfaceRef.current,
+    zoom,
+    enabled: mode === 'edit' && doc !== null,
+    root: () => (rendered ?? doc)?.root ?? null,
+    onPick: (nodeIds, add) => tellCapped(store.selectMany(nodeIds, add ? 'add' : 'replace')),
+  })
 
   /**
    * 선택된 노드의 자리를 재서 아웃라인 상자에 싣는다.
@@ -350,16 +376,18 @@ export function Canvas(props: {
    */
   useLayoutEffect(() => {
     const surface = surfaceRef.current
-    const target =
-      frame !== null && outlinedNodeId !== null ? findNodeElement(frame.document, outlinedNodeId) : null
-
-    if (surface === null || frame === null || target === null) {
-      setBox(null)
+    if (surface === null || frame === null || outlinedIds.length === 0) {
+      setBoxes((prev) => (prev.length === 0 ? prev : NO_OUTLINES))
       return
     }
 
-    const next = measure(target, frameOffset(frame, surface, zoom))
-    setBox((prev) => (sameBox(prev, next) ? prev : next))
+    const offset = frameOffset(frame, surface, zoom)
+    const next: OutlineBox[] = []
+    for (const nodeId of outlinedIds) {
+      const target = findNodeElement(frame.document, nodeId)
+      if (target !== null) next.push({ nodeId, box: measure(target, offset) })
+    }
+    setBoxes((prev) => (sameOutlines(prev, next) ? prev : next))
     // `doc`·`viewportWidth`가 의존성에 있는 것은 둘이 바뀌면 노드의 자리가 바뀌기
     // 때문이다. `zoom`은 자리를 바꾸지는 않지만 아래 계산이 그 값을 쓴다.
     // **겹layer도 자리를 바꾼다** — `setVisible`이 노드를 통째로 빼고 `setProp`이 크기를
@@ -369,7 +397,7 @@ export function Canvas(props: {
     // `live.overlay`의 참조가 그대로라 이 이펙트가 안 돌고, **아웃라인이 옛 자리에 남는다**.
     // **`frame`·`measureTick`도 자리를 바꾼다** — iframe 문서가 서야 잴 수 있고, 문서 밖의 것이 상자를 바꾸면
     // iframe 이 다시 잰다(위 `measureTick`).
-  }, [outlinedNodeId, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [outlinedIds, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **번호 마커의 자리를 잰다**(「설계서 화면 구조」). 위 아웃라인 이펙트와 같은 장치이고
@@ -432,9 +460,9 @@ export function Canvas(props: {
   if (doc === null) return null
   const previewDrawn = shownPreview !== null && rendered !== doc
 
-  /** 손잡이를 세울 노드 — 뿌리 · 남이 잡은 노드 · 문서에 없는 id 면 없다. */
+  /** 손잡이를 세울 노드 — 뿌리 · 남이 잡은 노드 · 문서에 없는 id 면 없다. **하나 골랐을 때만**(여럿을 함께 끌어 옮기지 않는다 — spec 범위 밖). */
   const handleNode =
-    outlinedNodeId === null || outlinedNodeId === doc.root?.id || lockOf(outlinedNodeId) !== null
+    outlinedNodeId === null || selectedNodeIds.length !== 1 || outlinedNodeId === doc.root?.id || lockOf(outlinedNodeId) !== null
       ? undefined
       : findNodeSafely(doc.root, outlinedNodeId)
 
@@ -459,7 +487,13 @@ export function Canvas(props: {
       // iframe 안의 클릭도 여기 닿는다 — 문서는 portal 로 그려져 React 이벤트가 이 트리로 버블링한다.
       onClick={(event: MouseEvent<HTMLDivElement>) => {
         if (mode !== 'edit') return
-        store.selectNode(frame === null ? null : nodeIdAt(event.target, frame.document.body))
+        const nodeId = frame === null ? null : nodeIdAt(event.target, frame.document.body)
+        // **Cmd · Shift 클릭은 더하거나 뺀다**(`toggleSelect`) — 노드 밖이면 아무것도 안 한다(고른 것을 지키려고 든 수식 키다).
+        if (adds(event)) {
+          if (nodeId !== null) tellCapped(store.toggleSelect(nodeId))
+          return
+        }
+        store.selectNode(nodeId)
       }}
       // **조작이 시작되는 자리**(위 `beginGesture`). 셋을 다는 것은 트리거 4종이 도는 DOM
       // 이벤트가 셋이기 때문이다(`render.tsx`의 `DOM_EVENT`) — 하나라도 빠뜨리면 그
@@ -496,9 +530,9 @@ export function Canvas(props: {
           onFrame={setFrame}
           onResize={bumpMeasure}
           // 문서 밖(iframe 의 빈 자리)을 누른 것 — 표면의 `onClick` · `onClickCapture` 가 받는 클릭과 같게 다룬다.
-          onBackgroundClick={() => {
+          onBackgroundClick={(event) => {
             if (mode === 'view') beginGesture()
-            else store.selectNode(null)
+            else if (!adds(event)) store.selectNode(null)
           }}
         >
           {(f) => (
@@ -521,6 +555,25 @@ export function Canvas(props: {
           className="wb-shell-selection"
           data-wb-selected-id={outlinedNodeId}
           style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+        />
+      )}
+      {/* 기준 노드가 아닌 고른 노드의 외곽선 — 옅게(`.wb-shell-selection-member`). 기준 노드의 것(`data-wb-selected-id`)은 위 하나다. */}
+      {boxes
+        .filter((item) => item.nodeId !== outlinedNodeId)
+        .map((item) => (
+          <div
+            key={item.nodeId}
+            className="wb-shell-selection-member"
+            data-wb-member-id={item.nodeId}
+            style={{ left: item.box.left, top: item.box.top, width: item.box.width, height: item.box.height }}
+          />
+        ))}
+      {/* 그리는 동안의 사각형(`./use-canvas-marquee.ts`) — 문서 옆 셸 겹이다(외곽선과 같은 까닭). */}
+      {marquee !== null && (
+        <div
+          className="wb-shell-marquee"
+          data-wb-marquee=""
+          style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }}
         />
       )}
 
@@ -760,4 +813,18 @@ function sameBox(a: Box | null, b: Box): boolean {
   return (
     a !== null && a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height
   )
+}
+
+/** 고른 노드 하나의 외곽선. */
+interface OutlineBox {
+  nodeId: string
+  box: Box
+}
+
+const NO_OUTLINES: readonly OutlineBox[] = []
+const NO_IDS: readonly string[] = []
+
+/** 두 외곽선 목록이 같은가 — `sameBox`와 같은 까닭(값이 같으면 앞 배열을 그대로 둔다). */
+function sameOutlines(a: readonly OutlineBox[], b: readonly OutlineBox[]): boolean {
+  return a.length === b.length && a.every((item, index) => item.nodeId === b[index]?.nodeId && sameBox(item.box, b[index]!.box))
 }

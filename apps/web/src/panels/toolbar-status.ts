@@ -95,7 +95,7 @@
  * **순수 함수이고 React·DOM을 모른다** — 두 툴바가 같은 어휘를 쓰는지, 상태마다 무엇이
  * 나오는지가 화면을 지나지 않고 재진다.
  */
-import type { NodeLock } from '@wirebound/schema'
+import { MAX_OPS_PER_EDIT, type NodeLock } from '@wirebound/schema'
 import type { StructureAbilities } from '../edit/structure-actions'
 import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
 
@@ -107,6 +107,10 @@ import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
  */
 export function structureStatus(input: {
   selectedNodeId: string | null
+  /** 고른 노드 수(여러 노드 선택). 둘 이상이면 «여럿» 칸이 잠금 다음에 선다. 빠뜨리면 1 이다. */
+  count?: number
+  /** 고른 노드 가운데 남이 잡은 것 — 여럿일 때 기준 노드 밖의 잠금도 말한다. */
+  anyLock?: NodeLock | null
   /** 고른 것이 문서 루트인가. 호출자가 `document.root.id`와 id로 비교한다. */
   isRoot: boolean
   /** 고른 노드를 막는 **남의** 잠금(`store.lockedBy`). 없으면 `null`. */
@@ -139,6 +143,11 @@ export function structureStatus(input: {
   // 것(*"왜 다 회색인가"*)에 답하지 않는다. **이유는 하나이므로 문장도 하나다** — 원인
   // (남이 편집 중)에 결과 둘을 잇는다.
   if (input.lock !== null) return lockedSelectionStatus(input.lock.userName)
+  // **여럿을 고른 판** — 고른 것 가운데 남이 잡은 것이 있으면 그것이 «삭제»가 꺼진 이유다. 아니면 순서 · 계층이 꺼진 이유를 말한다.
+  if ((input.count ?? 1) > 1) {
+    if (input.anyLock !== null && input.anyLock !== undefined) return `${input.anyLock.userName}님이 편집 중인 노드가 있어 함께 지울 수 없습니다`
+    return `${input.count}개를 골랐습니다 — 순서 · 계층 옮기기는 하나를 골랐을 때만 됩니다`
+  }
   if (input.isRoot) return '루트라 삭제·순서·계층을 바꿀 수 없습니다'
   // 루트가 아닌데 전부 꺼졌으면 그 노드가 문서에 없다 — 남이 그 노드를 지운 뒤 재조회
   // 전까지의 상태다. 찾은 비루트 노드는 `addAfter`·`remove`가 언제나 참이기 때문이다.
@@ -161,6 +170,24 @@ export function structureStatus(input: {
  */
 export function lockedSelectionStatus(userName: string): string {
   return `${userName}님이 편집 중이라 고를 수도 바꿀 수도 없습니다`
+}
+
+/**
+ * 여럿을 고르는 사이 남이 그중 일부를 먼저 잡아 서버가 거절했을 때의 하단 바 문장(`realtime/use-realtime.ts` — 그 노드는 선택에서
+ * 빠졌다). 이름은 `locks` 목록에서 읽고, 아직 모르면 이름 없이 말한다.
+ */
+export function deniedSelectionNotice(userNames: readonly string[]): string {
+  return userNames.length === 0
+    ? '다른 사람이 편집 중이라 고를 수 없습니다'
+    : `${userNames.join(' · ')}님이 편집 중이라 고를 수 없습니다`
+}
+
+/**
+ * 고르기 몸짓(Cmd · Shift 클릭 · Cmd+A · 사각형)이 상한(`MAX_OPS_PER_EDIT`)에 걸려 더 고르지 않았을 때의 하단 바 문장 — 고른 것을 한 번에
+ * 지우는 묶음이 서버 상한을 넘지 않게 하는 수다(`store/selection-set.ts` 머리말).
+ */
+export function selectionCapNotice(): string {
+  return `한 번에 고를 수 있는 노드는 ${MAX_OPS_PER_EDIT}개까지입니다`
 }
 
 /** 고른 노드가 문서에 없을 때의 문장(`structureStatus` · `palette/palette-add.ts`). */

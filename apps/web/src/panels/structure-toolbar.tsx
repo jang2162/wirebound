@@ -45,7 +45,8 @@ import { insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { patternInsert } from '../edit/pattern-insert'
 import { presetApply, presetFailureNotice } from '../edit/preset-apply'
 import { findNodeSafely } from '../edit/safe-walk'
-import { nodeSpot, structureAbilities, type StructureAbilities } from '../edit/structure-actions'
+import { nodeSpot, selectionAbilities, type StructureAbilities } from '../edit/structure-actions'
+import { removeManyOps } from '../edit/paste-ops'
 import type { StructureDrop } from '../edit/structure-drop'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { PatternPicker } from './pattern-picker'
@@ -66,6 +67,8 @@ import { structureStatus } from './toolbar-status'
  */
 export interface StructureCommands {
   abilities: StructureAbilities
+  /** 고른 노드 수 — 여럿이면 순서 · 계층이 꺼지고 그 이유가 «하나일 때만»이다(`selectionAbilities` · 줄 행동의 `title`). */
+  count: number
   /**
    * `패턴 넣기`가 남의 잠금에 막혔는가.
    *
@@ -298,6 +301,7 @@ export function useStructureCommands(props: {
   // (`store/use-editor-store.tsx`가 그 대조를 갖는 유일한 자리다).
   const document = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
   // 훅은 조건부로 부를 수 없으므로 페이지가 없어도 부른다. `pageId`가 없으면 `''`를
   // 주는데, 그 값은 어느 페이지 id와도 같지 않아 `commitOps`가 그 자리에서 돌아온다
   // (속성 패널과 같은 관례).
@@ -309,7 +313,14 @@ export function useStructureCommands(props: {
   // 아니다.
   const { commitOps } = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
 
-  const abilities = structureAbilities(document, selectedNodeId, props.selectedLock)
+  /**
+   * **여럿을 고른 판은 고른 것 전부를 본다**(`selectionAbilities`) — 기준 노드 밖의 잠금은 고른 노드마다 스토어의 `lockedBy`를 묻는다(판정은
+   * 스토어가 한다 — 목록을 손에 쥐지 않는다). 다시 그리는 것은 부르는 쪽의 잠금 구독(`useLockedBy`)이 한다.
+   */
+  const many = selectedNodeIds.length > 1
+  const otherLock = many ? (selectedNodeIds.map((id) => store.lockedBy(id)).find((lock) => lock !== null) ?? null) : null
+  const removable = many && document !== null && removeManyOps(document, selectedNodeIds) !== null
+  const abilities = selectionAbilities(document, selectedNodeIds, selectedNodeId, props.selectedLock, otherLock !== null, removable)
   // **판정 밖의 둘도 잠금을 지난다.** 어느 잠금을 지나는지는 각각의 필드 주석에 있다 —
   // 여기서 하는 것은 고르기뿐이고 판정은 스토어의 `lockedBy`가 이미 했다.
   const patternLock = selectedNodeId === null ? props.pageLock : props.selectedLock
@@ -493,6 +504,15 @@ export function useStructureCommands(props: {
     const spot = nodeSpot(document, selectedNodeId)
     if (spot === null) return
 
+    // **여럿이면 고른 것 전부를 묶음 하나로**(`removeManyOps` — 편집 하나 · 되돌리기 하나). 줄 `…` «삭제»는 기준 노드의 부모를 고른다.
+    // 남의 잠금은 판정(`abilities.remove`)이 이미 껐다 — 그래도 보내기 전에 서버와 같은 물음을 한 번 더 묻는다(`editBlockedBy`).
+    if (selectedNodeIds.length > 1) {
+      const ops = removeManyOps(document, selectedNodeIds)
+      if (ops === null || store.editBlockedBy(ops) !== null) return
+      if (commitOps(ops)) store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
+      return
+    }
+
     if (commitOps(removeNodeOps(document, selectedNodeId))) {
       store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
     }
@@ -587,12 +607,15 @@ export function useStructureCommands(props: {
       selectedNodeId,
       isRoot: document !== null && selectedNodeId !== null && document.root?.id === selectedNodeId,
       lock: props.selectedLock,
+      count: selectedNodeIds.length,
+      anyLock: otherLock,
       // **`presetLocked`를 끄는 그 값 그대로다.** 고른 것이 없을 때 아홉이 다 회색인
       // 이유가 이것뿐이라, 상태줄이 이 값을 못 보면 *"고르면 편집할 수 있습니다"*를
       // 그 자리에서도 말한다(그쪽 머리말의 표).
       pageLock: props.pageLock,
       abilities,
     }),
+    count: selectedNodeIds.length,
     remove: removeSelected,
     moveUp: () => moveSelected(-1),
     moveDown: () => moveSelected(1),

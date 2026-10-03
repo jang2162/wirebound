@@ -138,6 +138,7 @@ function structureToolbar(input: {
   })
   const commands: StructureCommands = {
     abilities,
+    count: selectedNodeId === null ? 0 : 1,
     // **하네스의 `lock` 하나가 훅의 두 값을 대신한다.** 화면에서 `selectedLock`이 있으면
     // `pageLock`도 반드시 있고(루트가 모든 노드의 조상이다), 이 표가 태우는 상태에는
     // 그 둘이 갈리는 자리가 없다 — 갈리는 자리(선택 없음 + 페이지 잠금)는

@@ -73,6 +73,9 @@ import '../catalog-setup'
 const NO_PAGE = '페이지를 열면 상호작용이 보입니다'
 /** 노드를 고르지 않아 규칙을 더할 수 없을 때. */
 const NO_TARGET = '상호작용을 걸 노드를 캔버스나 구조 트리에서 고르세요'
+
+/** 여럿을 고른 판(설계서 «여럿을 고른 판의 동작» — 상호작용 탭은 하나일 때만). 아래 «이 페이지의 상호작용» 목록은 그대로다. */
+export const MANY_TARGETS = '상호작용은 노드 하나를 골랐을 때 겁니다'
 /** 이 페이지에 규칙이 하나도 없을 때. */
 const NO_INTERACTIONS = '아직 상호작용이 없습니다'
 /** 아직 타겟을 고르지 않은 액션의 선택지 문안. */
@@ -130,6 +133,7 @@ export function InteractionPanel(props: {
   const store = useEditorStoreInstance()
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  const many = useEditorStore(store, (s) => s.selectedNodeIds.length > 1)
   // 속성 패널과 같은 관례 — 페이지가 없으면 `''`를 주고, 그러면 편집이 나갈 길이 없다.
   const { commitInteractions } = useEditCommit({
     projectId: props.projectId,
@@ -158,7 +162,9 @@ export function InteractionPanel(props: {
     <>
       <h2 className="wb-shell-panel-title">상호작용</h2>
 
-      {node === undefined ? (
+      {many ? (
+        <p className="wb-shell-panel-notice">{MANY_TARGETS}</p>
+      ) : node === undefined ? (
         <p className="wb-shell-panel-notice">{NO_TARGET}</p>
       ) : (
         <>

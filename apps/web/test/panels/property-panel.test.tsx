@@ -723,11 +723,11 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
   })
 
-  it('포커스가 안 옮겨 간 채 캔버스로 노드가 바뀌면 커밋되지 않은 타이핑은 버려진다 — `key` 장치', async () => {
+  it('포커스가 안 옮겨 간 채 캔버스로 노드가 바뀌면 커밋되지 않은 타이핑은 앞 노드에 커밋된다 — 새 노드로 안 옮겨 간다', async () => {
     // **이 케이스가 재는 것은 장치이지 사용자가 겪는 일이 아니다** — `test/edit/
     // undo-redo.test.tsx`의 트리 판과 같다. `fireEvent.click`은 포커스를 옮기지 않으므로
-    // blur 없이 선택이 바뀌고, 그때 `key`가 초안을 버린다(근거는 `panels/property-panel.tsx`의
-    // `PropControl` 주석).
+    // blur 없이 선택이 바뀌고, 그때 `key`가 위젯을 갈아 끼우며 내려가는 위젯의 초안이 앞 노드에 커밋된다(근거는
+    // `panels/property-panel.tsx`의 `PropControl` 주석 · `useLeftoverCommit`).
     //
     // ***"구조 트리로 고르면 blur가 나고, 캔버스는 `<div onClick>`이라 blur가 없다"*고 읽으면
     // 거꾸로다** — jsdom 에서는 둘 다 blur 가 없고(트리 판이 잰다), **Chrome 에서는 둘 다
@@ -737,14 +737,15 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     await openPage(EDIT_DOC, { apiOverrides: api })
 
     selectAt('Text', 0)
-    fireEvent.change(requireWidget('내용'), { target: { value: '버려질 타이핑' } })
+    fireEvent.change(requireWidget('내용'), { target: { value: '앞 노드의 타이핑' } })
 
     const other = canvasQuery('[data-wb-id="n-text2"]')
     if (other === null) throw new Error('캔버스에 둘째 노드가 없다')
     fireEvent.click(other)
 
-    // 초안은 나가지 않았고, 입력은 새 노드의 값이다.
-    expect(calls).toHaveLength(0)
+    // 초안은 앞 노드(첫 Text)에 나갔고, 입력은 새 노드의 값이다.
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/content', value: '앞 노드의 타이핑' }])
     expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
   })
 })
@@ -762,21 +763,24 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
  * 값은 `test/click-as-browser.ts`의 머리말).
  *
  * **이 절이 잡는 회귀는 «누르면 포커스를 안 빼앗게» 하는 손질이다** — 누른 요소의
- * **`pointerdown`이나 `mousedown`**에 `preventDefault()`를 걸면 실브라우저에서 blur 가 안 나 친
- * 글자가 사라진다. 흉내도 그때 포커스를 안 옮긴다(`clickAsBrowser`의 1·2번). **`mousedown`만
- * 존중하는 흉내로는 모자란다** — 탭·캔버스의 `onPointerDown`에 걸면 Chrome 은 편집 0건 · 옛 값인데
- * 그 흉내로는 이 절이 산다(web 전량 0 사망). 이 앱에 이미 그 꼴이 있다(`ShellResizer`).
+ * **`pointerdown`이나 `mousedown`**에 `preventDefault()`를 걸면 실브라우저에서 blur 가 안 난다. 흉내도 그때 포커스를 안
+ * 옮긴다(`clickAsBrowser`의 1·2번). **`mousedown`만 존중하는 흉내로는 모자란다** — 그 흉내는 `pointerdown`을 막은 자리에서도 blur 를
+ * 낸다. 이 앱에 이미 그 꼴이 있다(`ShellResizer`).
  *
- * **다섯이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 `--project web` 전체로 잰다.
- * 줄마다 `onMouseDown` 판과 `onPointerDown` 판을 **따로** 심고, 둘 다 그 케이스 하나만 죽인다:
+ * **blur 가 안 나도 글자를 다 잃지는 않는다** — 누름이 고른 것 · 패널을 바꿔 위젯이 내려가면 그 초안이 `onLeave`로 원래 노드에 커밋된다
+ * (`panels/property-panel.tsx`의 `useLeftoverCommit`). 그래서 이 절의 다섯은 둘로 갈린다 — 변조를 하나씩 심고 매번 복구해 이 파일로
+ * 잰다(`onPointerDown` 판 · 끌기 바인딩을 받는 줄은 그 spread **뒤에** 심는다 — 앞에 심으면 덮여 아무것도 안 바뀐다):
  *
- * | 변조 — 그 자리의 누르는 이벤트에 `preventDefault()` | 혼자 죽는 것 |
- * |---|---|
- * | 우측 패널의 탭 버튼(`routes/editor.tsx`의 `RightPanel`) | *"다른 탭을 누르면 …"* |
- * | 모드 토글의 «뷰 모드» 버튼(`ModeTools`) | *"모드를 바꾸면 …"* |
- * | 구조 트리의 줄 버튼(`panels/structure-tree.tsx`) | *"트리로 다른 노드를 누르면 …"* |
- * | 캔버스의 표면(`canvas/canvas.tsx`) | *"캔버스로 다른 노드를 누르면 …"* |
- * | 메뉴 트리의 페이지 링크(`panels/menu-tree.tsx`) | *"메뉴로 다른 페이지를 누르면 …"* |
+ * | 변조 — 그 자리의 `pointerdown`에 `preventDefault()` | 혼자 | `onLeave`를 함께 뗀 판(`TextControl`의 내려갈 때 정리 없음) |
+ * |---|---|---|
+ * | 우측 패널의 탭 버튼(`routes/editor.tsx`의 `RightPanel`) | *"다른 탭을 누르면 …"* 죽음(활성 요소 `BUTTON`을 본다) | — |
+ * | 모드 토글의 «뷰 모드» 버튼(`ModeTools`) | 산다 — 패널이 내려가며 커밋된다 | *"모드를 바꾸면 …"* 죽음 |
+ * | 구조 트리의 줄 버튼(`panels/structure-tree.tsx`) | 산다 — 위젯이 갈리며 커밋된다 | *"트리로 다른 노드를 누르면 …"* 죽음 |
+ * | 캔버스의 표면(`canvas/canvas.tsx`) | 산다 — 같다 | *"캔버스로 다른 노드를 누르면 …"* 죽음 |
+ * | 메뉴 트리의 페이지 링크(`panels/menu-tree.tsx`) | *"메뉴로 다른 페이지를 누르면 …"* 죽음 — 페이지가 바뀌면 `onLeave`는 쓰지 않고 말한다 | — |
+ *
+ * 모드 · 트리 · 캔버스 셋은 **두 겹이 막는다** — blur 커밋과 `onLeave`. 한 겹만 떼면 초록이고 이 셋은 blur 겹을 혼자 재지 못한다. `onLeave`
+ * 겹은 «포커스가 안 옮겨 간 채 …» 두 케이스(트리는 `test/edit/undo-redo.test.tsx`)가 혼자 잰다.
  *
  * **흉내에서 포커스 이동을 빼면 다섯이 함께 죽는다** — 흉내가 `fireEvent.click`과 같아진다.
  * 포커스 대상에서 `button`·`a[href]`·`[tabindex]`를 빼면 *"다른 탭을 누르면 …"*이 혼자 죽는다 —
@@ -786,15 +790,14 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
  *
  * | 변조 — 흉내를 약하게 | 혼자 죽는 것 |
  * |---|---|
- * | `pointerdown`의 `preventDefault()`를 무시한다(또는 `mousedown`만 존중하는 흉내로 되돌린다) | *"… `pointerdown`을 막으면 커밋이 없다 …"* |
- * | `mousedown`의 `preventDefault()`를 무시한다 | *"… `mousedown`을 막으면 커밋이 없다 …"* |
+ * | `pointerdown`의 `preventDefault()`를 무시한다(또는 `mousedown`만 존중하는 흉내로 되돌린다) | *"… `pointerdown`을 막으면 blur 가 없다 …"* |
+ * | `mousedown`의 `preventDefault()`를 무시한다 | *"… `mousedown`을 막으면 blur 가 없다 …"* |
  *
  * **이 검사 둘이 없으면 흉내를 약하게 해도 아무것도 안 죽고**, 제품 회귀와 겹치면(탭 `mousedown` 막음 +
  * 흉내가 그것을 무시) 그 회귀도 안 잡힌다(0 사망). 두 겹침 모두 흉내 검사가 혼자 죽는다.
  *
- * **실패 방향도 대조한다** — 위 표의 탭·캔버스 변조(두 이벤트 다)를 Chrome 에 런타임 리스너로
- * 심으면 실제로 편집 0건 · 돌아와 본 칸이 옛 값이다. 곧 이 절이 죽는 자리에서 사용자도 글자를
- * 잃는다.
+ * **실패 방향** — 흉내 검사 둘은 커밋 수가 아니라 `focusout` 수로 잰다: 막힌 누름에서 커밋은 흉내가 맞든 틀리든 `onLeave`로
+ * 하나 나가(탭이 바뀌어 위젯이 내려간다) 커밋 수로는 흉내의 물러남이 안 보인다.
  */
 describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전에 원래 노드로 커밋한다', () => {
   /** 편집을 받아 적는 가짜. **어느 페이지로 갔는지**도 적는다 — 페이지 갈래가 그것을 본다. */
@@ -899,8 +902,15 @@ describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전
    * 나란히 댈 수 있다. Chrome 값: 탭 + `pointerdown` 막음 → 편집 0 ·
    * 돌아오면 옛 값. 탭 + `mousedown` 막음 → 같음. 막지 않으면 위 *"다른 탭을 누르면 …"* — 1건.
    */
-  async function noCommitAfter(block: 'pointerdown' | 'mousedown'): Promise<void> {
+  /**
+   * 누르는 이벤트가 막혔으면 흉내는 포커스를 안 옮긴다 — 칸의 blur 가 없다(`focusout` 0). 칸의 초안은 탭이 바뀌며 위젯이 내려갈 때
+   * `onLeave`로 원래 노드에 커밋된다(`panels/property-panel.tsx`의 `useLeftoverCommit`) — 그것은 blur 가 아니다. 흉내가 막힘을 무시하고
+   * 포커스를 옮기면 `focusout`이 1 이다.
+   */
+  async function noBlurAfter(block: 'pointerdown' | 'mousedown'): Promise<void> {
     const { calls } = await typing()
+    let focusouts = 0
+    requireWidget('내용').addEventListener('focusout', () => (focusouts += 1))
     const tab = screen.getByRole('tab', { name: '코멘트' })
     tab.addEventListener(block, (event) => event.preventDefault())
 
@@ -909,18 +919,15 @@ describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    expect(calls).toHaveLength(0)
-
-    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
-    expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('옛 내용')
+    expect({ focusouts, calls }).toEqual({ focusouts: 0, calls: [{ pageId: PAGE_ID, ops: FIRST_TEXT }] })
   }
 
-  it('누르는 자리가 `pointerdown`을 막으면 커밋이 없다 — 흉내 자신의 검사', async () => {
-    await noCommitAfter('pointerdown')
+  it('누르는 자리가 `pointerdown`을 막으면 blur 가 없다 — 흉내 자신의 검사', async () => {
+    await noBlurAfter('pointerdown')
   })
 
-  it('누르는 자리가 `mousedown`을 막으면 커밋이 없다 — 흉내 자신의 검사', async () => {
-    await noCommitAfter('mousedown')
+  it('누르는 자리가 `mousedown`을 막으면 blur 가 없다 — 흉내 자신의 검사', async () => {
+    await noBlurAfter('mousedown')
   })
 })
 

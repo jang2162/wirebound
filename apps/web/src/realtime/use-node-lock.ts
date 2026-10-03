@@ -1,5 +1,6 @@
 /**
- * **고른 노드를 서버에 알린다**(설계서 「소프트 잠금」 — *"노드를 선택하면 그 서브트리에 잠금을 건다"*).
+ * **고른 노드를 서버에 알린다**(설계서 「소프트 잠금」 — *"노드를 선택하면 그 서브트리에 잠금을 건다"*). 고른 것이 여럿이면 고른
+ * 서브트리마다 잠금 하나 — 선택 목록(`selectedNodeIds`) 전부를 집합 하나로 보낸다(`lock-channel.ts`의 «자리는 노드 집합이다»).
  *
  * # 왜 스토어가 아니라 훅인가
  *
@@ -53,7 +54,7 @@
  * `['n-root', 'n-b', 'n-a']`다 — 첫 것이 아무도 누르지 않은 잠금이다.
  *
  * **예외를 보내는 쪽에만 두는 것이 요점이다.** 스토어의 `lockedBy`에는 루트 예외를 두지 않는다.
- * 그쪽 판정은 `@wirebound/schema`의 `findLockConflict`이고 **서버의 2차 방어가 부르는 바로
+ * 그쪽 판정은 `@wirebound/schema`의 `selectionConflicts`이고 **서버의 획득 판정이 부르는 바로
  * 그 함수**라, 여기서 갈라 두면 화면이 통과시킨 편집을 서버가 거절한다. 그리고 아무도 루트
  * 잠금을 보내지 않으면 그 잠금은 서버에 **생기지 않으므로** 예외를 둘 자리도 없다 — 그래도
  * 도착하면(이 예외를 모르는 클라이언트 등) 화면은 그것을 그대로 존중하는 편이 서버와 같은 판정이다.
@@ -110,7 +111,7 @@ export function useNodeLock(pageId: string | undefined, canHold: boolean): void 
   const store = useEditorStoreInstance()
   const channel = useLockChannel()
   const user = useSessionUser()
-  const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
   // **스토어가 든 것이 지금 주소의 페이지인가.** 위 머리말의 창을 닫는 값이다.
   const onThisPage = useOpenPage(pageId) !== null
   /**
@@ -136,15 +137,16 @@ export function useNodeLock(pageId: string | undefined, canHold: boolean): void 
     const promoted = !heldBefore.current && canHold
     heldBefore.current = canHold
     // **루트는 claim 하지 않는다**(위 머리말). 루트를 고른 것은 잠글 자리를 고른 것이 아니라
-    // 아직 아무 자리도 안 고른 것에 가깝다 — 앞에 잡고 있던 것이 있으면 여기서 놓는다.
-    const holdId = selectedNodeId === rootId ? null : selectedNodeId
+    // 아직 아무 자리도 안 고른 것에 가깝다 — 앞에 잡고 있던 것이 있으면 여기서 놓는다. 루트는 혼자일 때만 목록에 든다
+    // (`store/selection-set.ts`) — 빼면 빈 집합이다.
+    const holdIds = selectedNodeIds.filter((id) => id !== rootId)
     const holdPage = onThisPage && canHold ? pageId : null
-    // **승격은 잡지 않는다**(위 표). 막힌 선택은 앞 이펙트가 놓았다 — 다음 커밋이 `hold(…, null)`로 잡지 않은 선택도 지운다.
-    if (promoted && holdPage !== null && holdPage !== undefined && holdId !== null) {
-      channel?.keepUnclaimed(holdPage, holdId)
+    // **승격은 잡지 않는다**(위 표). 막힌 선택은 앞 이펙트가 놓았다 — 다음 커밋이 빈 집합으로 잡지 않은 선택도 지운다.
+    if (promoted && holdPage !== null && holdPage !== undefined && holdIds.length > 0) {
+      channel?.keepUnclaimed(holdPage, holdIds)
       return
     }
     // 통로가 없으면 아무것도 안 한다 — `RealtimeProvider` 없이 도는 화면이 그 판이다.
-    channel?.hold(holdPage, holdId)
-  }, [channel, pageId, selectedNodeId, onThisPage, rootId, canHold])
+    channel?.hold(holdPage, holdIds)
+  }, [channel, pageId, selectedNodeIds, onThisPage, rootId, canHold])
 }

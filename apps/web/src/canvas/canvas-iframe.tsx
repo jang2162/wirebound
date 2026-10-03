@@ -55,7 +55,7 @@ export function CanvasIframe(props: {
    * 문서 밖(iframe 의 `body` · `html` 자체)을 눌렀다. **React 의 `onClick` 으로는 안 온다** — portal 의 컨테이너(body)는
    * React 가 그린 요소가 아니라서, 그것을 누른 클릭은 React 트리의 어느 핸들러에도 닿지 않는다(jsdom · 실브라우저 같다).
    */
-  onBackgroundClick?: () => void
+  onBackgroundClick?: (event: MouseEvent) => void
   /**
    * iframe 의 클래스 · 이름. 없으면 캔버스의 것(`wb-shell-canvas-iframe` · «캔버스 문서»)이다. **캔버스가 아닌 문서는 제 것을 준다** — 셸 ·
    * 시험이 캔버스 iframe 을 그 클래스로 찾아(`build-test/editor-stack.ts` 의 `canvasFrame`), 같은 화면의 다른 iframe(하단 판의 축소판)이 그
@@ -114,7 +114,7 @@ export function CanvasIframe(props: {
     if (frame === null || onBackgroundClick === undefined) return
     const doc = frame.document
     const listener = (event: Event) => {
-      if (event.target === doc.body || event.target === doc.documentElement) onBackgroundClick()
+      if (event.target === doc.body || event.target === doc.documentElement) onBackgroundClick(event as MouseEvent)
     }
     doc.addEventListener('click', listener)
     return () => doc.removeEventListener('click', listener)

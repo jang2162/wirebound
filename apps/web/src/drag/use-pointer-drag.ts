@@ -252,14 +252,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         const edgeScroll = (): void => {
           const box = latest.current.options.scrollContainer?.() ?? null
           if (box === null) return
-          const frame = box.getBoundingClientRect()
-          const { x, y } = current.last
-          // 상자 밖은 끝 너머가 아니다(머리말 «끝 스크롤»).
-          if (x < frame.left || x > frame.right || y < frame.top || y > frame.bottom) return
-          const step = (EDGE_SPEED * EDGE_TICK) / 1000
-          let delta = 0
-          if (y < frame.top + EDGE_ZONE) delta = -step
-          else if (y > frame.bottom - EDGE_ZONE) delta = step
+          const delta = edgeScrollStep(box.getBoundingClientRect(), current.last)
           if (delta === 0) return
           const before = box.scrollTop
           box.scrollTop = Math.max(0, before + delta)
@@ -295,18 +288,34 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
   return { bind, dragging, hint, refresh }
 }
 
+/** 끝 스크롤의 틱 간격(ms) — 사각형 고르기(`canvas/use-canvas-marquee.ts`)도 같은 틱으로 민다. */
+export const EDGE_SCROLL_TICK = EDGE_TICK
+
+/**
+ * **끝 스크롤 한 틱에 밀 양(px)** — 점이 스크롤 상자의 위 · 아래 끝(`EDGE_ZONE`) 안이면 그쪽으로 `EDGE_SPEED`의 한 틱, 아니면 0. 상자 밖은
+ * 끝 너머가 아니다(머리말 «끝 스크롤»). 끌기와 사각형 고르기가 같은 셈을 쓴다.
+ */
+export function edgeScrollStep(frame: { left: number; right: number; top: number; bottom: number }, point: DragPoint): number {
+  const { x, y } = point
+  if (x < frame.left || x > frame.right || y < frame.top || y > frame.bottom) return 0
+  const step = (EDGE_SPEED * EDGE_TICK) / 1000
+  if (y < frame.top + EDGE_ZONE) return -step
+  if (y > frame.bottom - EDGE_ZONE) return step
+  return 0
+}
+
 /**
  * 끌기가 끝난 뒤 한 틱 동안 오는 `click` 하나를 삼킨다(머리말 «끈 뒤의 클릭을 삼킨다»). 붙잡는 단계에서 막아 줄 · 링크의 처리기와
- * 라우터까지 안 간다.
+ * 라우터까지 안 간다. 클릭이 서는 창을 준다 — 캔버스 사각형은 그 iframe 의 창이다(`canvas/use-canvas-marquee.ts`).
  */
-function swallowNextClick(): void {
+export function swallowNextClick(target: Window = window): void {
   const swallow = (event: MouseEvent): void => {
     event.preventDefault()
     event.stopPropagation()
-    window.removeEventListener('click', swallow, true)
+    target.removeEventListener('click', swallow, true)
   }
-  window.addEventListener('click', swallow, true)
-  setTimeout(() => window.removeEventListener('click', swallow, true), 0)
+  target.addEventListener('click', swallow, true)
+  setTimeout(() => target.removeEventListener('click', swallow, true), 0)
 }
 
 /**

@@ -12,7 +12,7 @@
  * **`type`이 판별자다.** 새 프레임을 더할 때 `type` 없이 필드만 늘리지 마라 — 받는 쪽이
  * 모양으로 갈래를 추측하게 되고, 그 추측은 조용히 틀린다.
  */
-import { NODE_ID_PATTERN, type PatchOp, type ValidationIssue } from '@wirebound/schema'
+import { MAX_OPS_PER_EDIT, NODE_ID_PATTERN, type PatchOp, type ValidationIssue } from '@wirebound/schema'
 import { z } from 'zod'
 import type { ProjectRole } from '../db/types'
 import type { ApiErrorCode, ApiErrorIssue } from '../errors'
@@ -64,7 +64,7 @@ export interface EventActor {
  * | `patch-ack` | **낸 사람에게만.** `patch` 프레임이 성공했다(설계서 「정방향 흐름」의 *"[본인] ack(seq) 수신"*) |
  * | `patch-error` | **낸 사람에게만.** `patch` 프레임이 실패했다 |
  * | `locks` | 잠금 목록이 바뀌었을 때(그리고 누가 들어올 때), **룸 전체에** — 설계서 「소프트 잠금」 |
- * | `lock-denied` | **낸 사람에게만.** `lock` 프레임을 받지 않았다 — 겹치는 자리를 남이 쥐고 있다(`ws/lock.ts`) |
+ * | `lock-denied` | **낸 사람에게만.** `lock` 프레임의 노드 가운데 받지 않은 것이 있다 — 겹치는 자리를 남이 쥐고 있다(`ws/lock.ts`) |
  * | `membership-changed` | 그 사람의 역할이 바뀌었거나 멤버에서 빠졌을 때, **그 사람의 연결에만**(`ws/notify.ts`) |
  * | `theme-changed` | 프로젝트의 테마 바인딩 · 토큰이 저장됐거나 판 3 스냅샷이 복원됐을 때, **룸 전체에**(낸 연결도) |
  */
@@ -81,7 +81,7 @@ export type ServerFrame =
        * **전부를 싣는 것이 판정이다.** 증분으로 보내면 받는 쪽이 목록을 스스로 쌓아야 하고,
        * 프레임 하나를 놓치면 그 목록이 **조용히** 틀린 채 남는다 — 잠금은 30초면 만료되는데
        * 화면의 배지는 영영 남는다. 전부를 실으면 **다음 프레임이 언제나 그것을 고친다.**
-       * 크기는 룸의 연결 수로 묶여 있다(연결 하나가 드는 잠금은 하나다).
+       * 크기는 룸의 연결 수 × 연결의 집합 상한(`MAX_OPS_PER_EDIT`)으로 묶여 있다.
        *
        * **낸 사람도 받는다.** 자기 잠금이 실제로 섰다는 것을 아는 수단이 이 목록뿐이다
        * (잠금 프레임은 답을 짝지어 기다리지 않는다).
@@ -89,9 +89,10 @@ export type ServerFrame =
       locks: LiveLock[]
     }
   /**
-   * **그 `lock`을 받지 않았다 — 이 연결은 이제 아무것도 쥐지 않는다.** 겹치는 서브트리를 다른 사람이 쥐고
-   * 있거나, 자격을 보는 사이 멤버십이 바뀌었다(`ws/lock.ts`의 표). 받지 않은 `lock`은 **이 연결이 앞서 쥔 것도 놓는다** —
-   * 새 자리를 달라는 것이 앞 자리를 놓는 것이기 때문이다(연결 하나가 드는 잠금은 하나다 — `lock/store.ts`).
+   * **그 `lock`의 `nodeIds` 가운데 이것들을 받지 않았다** — 실린 노드만 안 쥔다. 겹치는 서브트리를 다른 사람이 쥐고 있으면
+   * 그 노드만 실리고 **나머지(새로 받은 것 · 앞서 쥔 것 가운데 집합에 남은 것)는 쥔다.** 자격을 보는 사이 멤버십이 바뀌었거나
+   * 끝내지 못했으면(`ws/lock.ts`의 표) 프레임의 노드 전부가 실리고 이 연결은 아무것도 안 쥔다. 어느 판이든 **집합에서 빠진 것은
+   * 놓였다**(`lock/store.ts`의 «집합째 갈아 끼운다»).
    *
    * **누가 쥐었는지는 싣지 않는다.** 배지는 `locks` 목록이 그리고(그 목록은 룸 전체에 이미 흐른다), 이 프레임이 이름을 실으면
    * «누가 잡았나»의 출처가 둘이 된다. 받는 쪽은 그 자리를 «잡지 않은 선택»으로 둔다(`apps/web`의 `lock-channel.ts`).
@@ -100,7 +101,8 @@ export type ServerFrame =
       type: 'lock-denied'
       projectId: string
       pageId: string
-      nodeId: string
+      /** 받지 않은 노드 — 그 프레임의 `nodeIds`에서 온 것만, 그 차례대로. 비지 않는다. */
+      nodeIds: string[]
       /**
        * **거절된 그 `lock` 프레임의 `lockId`** — 실어 왔을 때만 되돌려준다. 받는 쪽은 이것으로 «내가 마지막으로 보낸
        * `lock`의 거절인가»를 가린다. 자리로만 짝지으면 같은 자리를 다시 보낸 뒤 닿은 앞 거절을 뒤 것으로 읽는다.
@@ -246,9 +248,15 @@ const PatchFrame = OpsBody.extend({
 })
 
 /**
- * 노드 하나를 잡는다(설계서 「소프트 잠금」의 *"노드를 선택하면 그 서브트리에 잠금을 건다"*).
+ * 이 연결의 잠금을 **이 노드 집합으로** 한다(설계서 「소프트 잠금」의 *"노드를 선택하면 그 서브트리에 잠금을 건다"* — 고른 서브트리마다
+ * 하나). 집합 전부를 판정해 막힌 것을 뺀 나머지를 쥐고, 빠지는 것은 놓는다(`ws/lock.ts` — 이미 쥔 것도 다시 판정한다). **빈 집합은
+ * `unlock`과 같다.**
  *
- * **같은 노드를 다시 보내는 것이 하트비트다**(「소프트 잠금」의 *"편집 중 하트비트로 갱신"*) — 갱신용
+ * **`nodeId`(하나)도 받는다** — `[nodeId]`로 읽는다(옛 화면 · 에이전트). 둘 다 싣거나 둘 다 없으면 규격 위반이다. 집합의 상한은
+ * `MAX_OPS_PER_EDIT`다 — 고른 것을 한 번에 지우는 묶음(노드 하나에 연산 하나)이 그 상한을 넘으면 어차피 못 보낸다. 같은 노드를 두 번
+ * 실으면 한 번 쥔다.
+ *
+ * **같은 집합을 다시 보내는 것이 하트비트다**(「소프트 잠금」의 *"편집 중 하트비트로 갱신"*) — 갱신용
  * 프레임을 따로 두지 않는다. 두면 *"잡기"*와 *"갱신"*이 갈래 둘이 되고, 잡지 않은 것을
  * 갱신하는 갈래가 생긴다.
  *
@@ -262,19 +270,23 @@ const PatchFrame = OpsBody.extend({
  * 때 — `lock/check.ts`의 `selectionVerdict`), 문서에 없는 노드의 잠금은 **아무것도 막지 못한다**
  * (`@wirebound/schema`의 `findLockConflict`) — 그래서 받아들이고, 30초면 사라진다.
  */
-const LockFrame = z.strictObject({
-  type: z.literal('lock'),
-  pageId: z.uuid(),
-  /** `@wirebound/schema`의 봉투가 노드 id에 쓰는 그 술어다 — 모양을 두 벌로 적지 않는다. */
-  nodeId: z.string().regex(NODE_ID_PATTERN),
-  /** 화면이 매긴 이 프레임의 차례(위). **선택이다** — 없으면 거절도 싣지 않는다(에이전트 · `lockId`를 모르는 화면). */
-  lockId: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
-})
+/** `@wirebound/schema`의 봉투가 노드 id에 쓰는 그 술어다 — 모양을 두 벌로 적지 않는다. */
+const LockNodeId = z.string().regex(NODE_ID_PATTERN)
+
+const LockFrame = z
+  .strictObject({
+    type: z.literal('lock'),
+    pageId: z.uuid(),
+    nodeIds: z.array(LockNodeId).max(MAX_OPS_PER_EDIT).optional(),
+    nodeId: LockNodeId.optional(),
+    /** 화면이 매긴 이 프레임의 차례(위). **선택이다** — 없으면 거절도 싣지 않는다(에이전트 · `lockId`를 모르는 화면). */
+    lockId: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  })
+  .refine((frame) => (frame.nodeId === undefined) !== (frame.nodeIds === undefined), 'nodeId 와 nodeIds 가운데 하나만 싣는다')
 
 /**
- * 잡고 있는 것을 놓는다. **`pageId`도 `nodeId`도 없다** — 연결 하나가 드는 잠금은 하나이므로
- * 놓을 것을 가리킬 값이 필요 없고, 실으면 *"그 연결이 실제로 든 것"*과 어긋날 수 있는 값이
- * 하나 늘어난다.
+ * 잡고 있는 것을 전부 놓는다. **`pageId`도 노드도 없다** — 연결의 집합 전부를 놓으므로 가리킬 값이 필요 없고, 실으면 *"그 연결이
+ * 실제로 든 것"*과 어긋날 수 있는 값이 하나 늘어난다.
  */
 const UnlockFrame = z.strictObject({ type: z.literal('unlock') })
 
@@ -285,7 +297,15 @@ const ClientFrameSchema = z.discriminatedUnion('type', [
   UnlockFrame,
 ])
 
-export type ClientFrame = z.infer<typeof ClientFrameSchema>
+type ParsedClientFrame = z.infer<typeof ClientFrameSchema>
+
+/**
+ * 읽은 프레임. **`lock`은 집합 하나로 읽힌 뒤다** — `nodeId`(하나)는 `[nodeId]`가 되고 중복은 걷혔다(`parseClientFrame`). 받는 쪽은
+ * 갈래를 둘로 보지 않는다.
+ */
+export type ClientFrame =
+  | Exclude<ParsedClientFrame, { type: 'lock' }>
+  | { type: 'lock'; pageId: string; nodeIds: string[]; lockId?: number }
 
 /**
  * 프레임 하나를 받으려면 지금 무슨 역할이어야 하는가. **설계서 「권한 모델」의 *"각 patch 수신 시 한 번"*이
@@ -365,5 +385,13 @@ export function parseClientFrame(raw: string): ClientFrame | null {
     return null
   }
   const parsed = ClientFrameSchema.safeParse(value)
-  return parsed.success ? parsed.data : null
+  if (!parsed.success) return null
+  const frame = parsed.data
+  if (frame.type !== 'lock') return frame
+  return {
+    type: 'lock',
+    pageId: frame.pageId,
+    nodeIds: [...new Set(frame.nodeIds ?? (frame.nodeId === undefined ? [] : [frame.nodeId]))],
+    ...(frame.lockId !== undefined ? { lockId: frame.lockId } : {}),
+  }
 }

@@ -37,6 +37,8 @@ export interface SwitchControlProps {
   /** 남이 잠근 자리라 못 바꾸는가. `TextControlProps.disabled`와 같은 값이다. */
   disabled: boolean
   onCommit: (value: boolean) => void
+  /** 고른 노드들의 값이 갈린다(일괄 편집) — 반쯤 켬(`indeterminate`)으로 보인다. 누르면 켬이 모두에 간다. */
+  mixed?: boolean
 }
 
 export function SwitchControl(props: SwitchControlProps): ReactElement {
@@ -52,7 +54,12 @@ export function SwitchControl(props: SwitchControlProps): ReactElement {
       disabled={disabled}
       className="wb-shell-control"
       type="checkbox"
-      checked={checked}
+      // `indeterminate`는 속성이 아니라 DOM 값이라 ref 로 건다. 갈린 칸은 꺼짐으로 그려 누르면 켬이 된다.
+      ref={(element) => {
+        if (element !== null) element.indeterminate = props.mixed === true
+      }}
+      aria-checked={props.mixed === true ? 'mixed' : undefined}
+      checked={props.mixed === true ? false : checked}
       onChange={(event) => onCommit(event.target.checked)}
     />
   )

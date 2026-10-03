@@ -49,9 +49,9 @@ export interface LockConflictInput {
   root: WbNode
   locks: readonly NodeLock[]
   /**
-   * 문서 루트(`{version, root}`) 기준 JSON Pointer들 — **`root`의 좌표다.** 노드 하나를 고르는 판정(`findNodePath(root, nodeId)`
-   * 하나)이 이것을 넣는다. **편집(`ops`)은 여기 넣지 않는다** — 편집의 포인터는 앞 연산을 적용한 뒤 문서의 좌표라 `root`의 좌표와
-   * 어긋난다. 편집은 `lockConflictOfOps`가 연산마다 좌표를 맞춰 이 함수와 같은 겹침으로 잰다.
+   * 문서 루트(`{version, root}`) 기준 JSON Pointer들 — **`root`의 좌표다.** **편집(`ops`)은 여기 넣지 않는다** — 편집의 포인터는 앞
+   * 연산을 적용한 뒤 문서의 좌표라 `root`의 좌표와 어긋난다. 편집은 `lockConflictOfOps`가 연산마다 좌표를 맞춰 이 함수와 같은 겹침으로
+   * 잰다. **노드를 고르는 판정도 여기 넣지 않는다** — 그것은 `selectionConflicts`다(이 함수는 남의 잠금마다 문서를 훑는다).
    */
   pointers: readonly string[]
   /** 이 사람의 잠금은 부딪치지 않는다(소유자는 사람이다 — `NodeLock.userId`). */
@@ -81,6 +81,84 @@ export function findLockConflict(input: LockConflictInput): NodeLock | null {
   }
 
   return null
+}
+
+export interface SelectionConflictInput {
+  root: WbNode
+  locks: readonly NodeLock[]
+  /** 고르려는 노드들 — **노드마다 그 서브트리를 통째로 claim 한다**(설계서 「소프트 잠금」). 서로는 견주지 않는다(같은 사람이다). */
+  nodeIds: readonly string[]
+  /** 이 사람의 잠금은 부딪치지 않는다(`locksAgainst`). */
+  viewerUserId: string
+}
+
+/**
+ * **이 노드들을 고를 수 있나** — 노드마다 부딪치는 **첫 잠금**(`nodeIds`와 같은 차례 · 없으면 `null`). 서버의 획득 판정(`apps/api`의
+ * `lock/check.ts`의 `selectionVerdict` — 잠금 프레임의 집합 전부)과 화면의 1차 방어(`apps/web`의 `store/editor-store.ts`의
+ * `lockedBy` — 노드 하나)가 **이 함수 하나**를 부른다.
+ *
+ * 겹침은 `findLockConflict`와 같다 — 고른 노드와 잠긴 노드 가운데 **한쪽이 다른 쪽의 조상이거나 같으면** 부딪친다. 여럿이 부딪치면
+ * `locks`의 차례로 첫 것이다(배지가 그 이름을 그린다). 같은 id 가 문서에 둘이면 전위 순회의 **첫 자리**다(`findNodePath`와 같다). 가리키는
+ * 노드가 문서에 없는 잠금은 아무것도 막지 못하고, 문서에 없는 노드는 막을 것이 없다.
+ *
+ * # 문서를 한 번만 돈다
+ *
+ * 노드마다 `findLockConflict`를 부르면 그 안에서 남의 잠금마다 `findNodePath`로 문서를 다시 훑는다 — 고른 수 × 남의 잠금 수 번의 훑기다.
+ * 서버는 잠금 프레임(하트비트 — 웹은 편집마다 보낸다)마다 집합 전부를 이것으로 판정하고, 그 판정은 동기라 이벤트 루프와 페이지 행을 쥔다
+ * (`apps/api`의 `ws/lock.ts`의 «판정과 잡기는 같은 틱이다»). 그래서 한 번 돌며 자리마다 번호(전위 순서)와 부모를 적고, 잠금을 그 자리에
+ * 놓은 뒤 «서브트리 안의 가장 앞선 잠금»(뒤에서 앞으로 부모에 모음)과 «조상 사슬의 가장 앞선 잠금»(앞에서 뒤로 부모에서 물려받음)을
+ * 한 번씩 짓는다 — 노드마다 그 둘의 앞선 쪽이 답이다. 문서 노드 수 + 잠금 수 + 고른 수에 비례한다. 옛 판정(노드마다 따로)과 답이 같은지는
+ * `test/lock-selection-oracle.test.ts`가 무작위 판으로 잰다.
+ *
+ * **검증 전 문서에서 던지지 않는다** — `children` 안의 노드가 아닌 원소(`null` 등)는 노드가 아니라 건너뛴다(화면은 검증 전 문서로 묻는다 —
+ * `apps/web`의 `edit/safe-walk.ts`). 남의 잠금이 없거나 고른 것이 없으면 문서를 돌지 않는다.
+ */
+export function selectionConflicts(input: SelectionConflictInput): (NodeLock | null)[] {
+  const against = locksAgainst(input.locks, input.viewerUserId)
+  if (against.length === 0 || input.nodeIds.length === 0) return input.nodeIds.map(() => null)
+
+  // 전위 순서의 자리마다 부모 자리 · 처음 나온 id 의 자리. 스택에 자식을 거꾸로 쌓아 `walkNodes`와 같은 차례로 돈다.
+  const parent: number[] = []
+  const firstAt = new Map<string, number>()
+  const stack: { node: WbNode; up: number }[] = [{ node: input.root, up: -1 }]
+  while (stack.length > 0) {
+    const { node, up } = stack.pop()!
+    const at = parent.length
+    parent.push(up)
+    if (!firstAt.has(node.id)) firstAt.set(node.id, at)
+    const children: unknown = node.children
+    if (!Array.isArray(children)) continue
+    for (let i = children.length - 1; i >= 0; i -= 1) {
+      const child: unknown = children[i]
+      if (child !== null && typeof child === 'object') stack.push({ node: child as WbNode, up: at })
+    }
+  }
+
+  // 자리마다 «그 자리에 선 가장 앞선 잠금»의 차례 — `none`은 없음.
+  const none = against.length
+  const own = new Array<number>(parent.length).fill(none)
+  against.forEach((lock, order) => {
+    const at = firstAt.get(lock.nodeId)
+    if (at !== undefined && order < own[at]!) own[at] = order
+  })
+  // 서브트리 안: 전위 순서에서 자식은 부모보다 뒤라, 뒤에서 앞으로 부모에 모은다. 조상 사슬: 앞에서 뒤로 부모에서 물려받는다.
+  const inside = own.slice()
+  for (let at = parent.length - 1; at > 0; at -= 1) {
+    const up = parent[at]!
+    if (inside[at]! < inside[up]!) inside[up] = inside[at]!
+  }
+  const above = own.slice()
+  for (let at = 1; at < parent.length; at += 1) {
+    const up = parent[at]!
+    if (above[up]! < above[at]!) above[at] = above[up]!
+  }
+
+  return input.nodeIds.map((nodeId) => {
+    const at = firstAt.get(nodeId)
+    if (at === undefined) return null
+    const order = Math.min(inside[at]!, above[at]!)
+    return order === none ? null : against[order]!
+  })
 }
 
 /**

@@ -58,14 +58,15 @@ export type ServerFrame =
       locks: NodeLockView[]
     }
   /**
-   * **내가 보낸 `lock`을 서버가 받지 않았다** — 겹치는 자리를 남이 쥐었거나 자격을 보는 사이 멤버십이 바뀌었다
-   * (서버 `ws/lock.ts`의 표). 이 연결은 이제 아무것도 쥐지 않는다. 받는 자리는 `lock-channel.ts`의 `denied`다.
+   * **내가 보낸 `lock`의 노드 가운데 서버가 받지 않은 것** — 겹치는 자리를 남이 쥐었으면 그 노드만 실리고 나머지는 쥐었다. 자격을
+   * 보는 사이 멤버십이 바뀌었거나 끝내지 못했으면 보낸 노드 전부가 실리고 이 연결은 아무것도 안 쥔다(서버 `ws/lock.ts`의 표). 받는
+   * 자리는 `lock-channel.ts`의 `denied`다.
    */
   | {
       type: 'lock-denied'
       projectId: string
       pageId: string
-      nodeId: string
+      nodeIds: string[]
       /** 거절된 그 `lock`의 `lockId` — `lock-channel.ts`가 마지막으로 보낸 것과 견준다. */
       lockId: number
     }
@@ -156,12 +157,12 @@ export type ClientFrame =
   | { type: 'ping' }
   | {
       /**
-       * 노드 하나를 잡는다(「소프트 잠금」). **같은 노드를 다시 보내는 것이 하트비트다** — 갱신용
-       * 프레임이 따로 없다.
+       * 이 연결의 잠금을 **이 노드 집합으로** 한다(「소프트 잠금」 — 고른 서브트리마다 하나). **같은 집합을 다시 보내는 것이
+       * 하트비트다** — 갱신용 프레임이 따로 없다. 서버는 집합 전부를 판정하고(이미 쥔 것도) 빠지는 것은 놓는다.
        */
       type: 'lock'
       pageId: string
-      nodeId: string
+      nodeIds: string[]
       /**
        * **이 `lock`의 차례** — 거절(`lock-denied`)이 그대로 되돌려준다. `lock-channel.ts`가 보낼 때마다 올린다. 서버에서는
        * 선택이다(에이전트는 안 싣는다).
@@ -169,7 +170,7 @@ export type ClientFrame =
       lockId: number
     }
   | {
-      /** 잡고 있는 것을 놓는다. **가리킬 값이 없다** — 연결 하나가 드는 잠금은 하나다. */
+      /** 잡고 있는 것을 전부 놓는다. **가리킬 값이 없다** — 이 연결의 집합 전부다. */
       type: 'unlock'
     }
   | {
@@ -193,9 +194,9 @@ export function patchFrame(input: Omit<Extract<ClientFrame, { type: 'patch' }>, 
   return JSON.stringify({ type: 'patch', ...input } satisfies ClientFrame)
 }
 
-/** 잠금 하나를 잡거나 갱신할 문자열(「소프트 잠금」). `lockId`는 거절과 짝지을 차례다. */
-export function lockFrame(pageId: string, nodeId: string, lockId: number): string {
-  return JSON.stringify({ type: 'lock', pageId, nodeId, lockId } satisfies ClientFrame)
+/** 잠금 집합을 잡거나 갱신할 문자열(「소프트 잠금」). `lockId`는 거절과 짝지을 차례다. */
+export function lockFrame(pageId: string, nodeIds: readonly string[], lockId: number): string {
+  return JSON.stringify({ type: 'lock', pageId, nodeIds: [...nodeIds], lockId } satisfies ClientFrame)
 }
 
 /** 잡고 있는 것을 놓는다. 프레임마다 같은 값이라 미리 만들어 둔다. */
@@ -253,8 +254,14 @@ export function parseServerFrame(raw: string): ServerFrame | null {
         : null
     case 'lock-denied':
       // **`lockId`가 없으면 버린다** — 짝지을 수 없는 거절은 어느 `lock`의 것인지 모른다(`lock-channel.ts` 「거절은 그 `lock` 프레임과 짝짓는다」).
-      return str(value.projectId) && str(value.pageId) && str(value.nodeId) && typeof value.lockId === 'number'
-        ? { type: 'lock-denied', projectId: value.projectId, pageId: value.pageId, nodeId: value.nodeId, lockId: value.lockId }
+      // 노드 목록도 원소를 하나씩 본다 — 문자열이 아닌 것이 섞이면 버린다(어느 노드를 뺄지 모른다).
+      return str(value.projectId) &&
+        str(value.pageId) &&
+        Array.isArray(value.nodeIds) &&
+        value.nodeIds.length > 0 &&
+        value.nodeIds.every(str) &&
+        typeof value.lockId === 'number'
+        ? { type: 'lock-denied', projectId: value.projectId, pageId: value.pageId, nodeIds: value.nodeIds, lockId: value.lockId }
         : null
     case 'page-changed':
       return str(value.projectId) &&

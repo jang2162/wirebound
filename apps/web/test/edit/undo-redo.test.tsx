@@ -401,11 +401,11 @@ describe('undo / redo', () => {
     expect(calls).toHaveLength(1)
   })
 
-  it('포커스가 안 옮겨 간 채 트리로 노드가 바뀌면 커밋되지 않은 타이핑은 버려진다 — `key` 장치', async () => {
+  it('포커스가 안 옮겨 간 채 트리로 노드가 바뀌면 커밋되지 않은 타이핑은 앞 노드에 커밋된다 — `key` 장치', async () => {
     // **이 케이스가 재는 것은 장치이지 사용자가 겪는 일이 아니다.** `fireEvent.click`은
     // 포커스를 옮기지 않아(`activeElement`는 `BODY`에 남는다) blur 가 안 나고, 그래서 선택이
     // 먼저 바뀐다 — 그때 `PropertyPanel`의 `key={node.id}`가 앞 노드의 초안을 **새 노드로
-    // 옮겨 가지 않고 버리는지**를 잠근다.
+    // 옮겨 가지 않고** 내려가는 위젯이 그것을 **앞 노드에** 커밋하는지(`useLeftoverCommit`)를 잠근다.
     //
     // **실브라우저(Chrome 실측)의 클릭은 다르다** — `mousedown`이 입력의 포커스를 거두어
     // 그 blur 가 **원래 노드로** 커밋한 뒤에 선택이 바뀐다. 그 행동은 `test/panels/
@@ -417,7 +417,7 @@ describe('undo / redo', () => {
 
     select('Text')
     fireEvent.focus(widget('내용'))
-    fireEvent.change(widget('내용'), { target: { value: '버려질 타이핑' } })
+    fireEvent.change(widget('내용'), { target: { value: '앞 노드의 타이핑' } })
 
     // 두 번째 `Text` 노드를 **클릭**한다(사용자가 하는 동작).
     fireEvent.click(
@@ -427,7 +427,9 @@ describe('undo / redo', () => {
     )
     await act(async () => {})
 
-    expect(calls).toHaveLength(0)
+    expect(calls.map((call) => call.ops)).toEqual([
+      [{ op: 'replace', path: '/root/children/0/props/content', value: '앞 노드의 타이핑' }],
+    ])
     expect(document.activeElement?.tagName).toBe('BODY')
     expect((widget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
   })
