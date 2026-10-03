@@ -16,11 +16,14 @@
  *   portal 이라 그 클릭이 표면으로 버블된다) 방금 고른 것이 사라진다(`swallowNextClick` — iframe 의 창). 칸의 빈 자리에서 선 사각형의
  *   클릭은 삼키지 않는다 — 누른 요소(칸 · 판)가 포인터를 붙잡아 클릭이 그 요소에 나고, 그것은 표면의 바깥이라 선택을 안 바꾼다(Chrome:
  *   칸 여백의 `elementFromPoint` 는 `main.wb-shell-canvas` 뿐이고 표면은 iframe 과 같은 상자다).
- * - **빈 사각형은 누른 자리의 클릭이다** — 갈아 끼우기(Shift 없이)로 뗐는데 아무것도 안 감쌌으면 고르지 않고(선택을 비우지 않는다) 뗀 뒤
- *   클릭도 삼키지 않는다. 그 클릭은 누른 요소에 난다(누른 요소가 포인터를 붙잡았다) — 노드 위에서 눌렀으면 표면의 `onClick`이 그 노드를
- *   고르고, 칸 여백이면 여백 클릭과 같다(선택 그대로). 손은 클릭에도 4px 넘게 흔들린다(트랙패드 · 떨리는 손) — 빈 사각형으로 선택을 비우면
- *   노드를 누른 손이 고른 것을 잃는다. 재는 자리: `apps/web/build-test/multiselect.test.ts`의 «노드 위에서 흔들린 클릭 …». Shift 를 누른 빈
- *   사각형은 더할 것이 없어 아무 일도 없다(클릭은 삼킨다 — 그 클릭이 누른 노드를 더하거나 빼면 사각형을 그린 손의 뜻이 아니다).
+ * - **작은 빈 사각형은 누른 자리의 클릭이다** — 갈아 끼우기(Shift 없이)로 뗐는데 아무것도 안 감쌌고 누른 점에서 `MARQUEE_CLICK_SLOP` 안에서만
+ *   움직였으면 고르지 않고(선택을 비우지 않는다) 뗀 뒤 클릭도 삼키지 않는다. 그 클릭은 누른 요소에 난다(누른 요소가 포인터를 붙잡았다) — 노드
+ *   위에서 눌렀으면 표면의 `onClick`이 그 노드를 고르고, 칸 여백이면 여백 클릭과 같다(선택 그대로). 손은 클릭에도 4px 넘게 흔들린다(트랙패드 ·
+ *   떨리는 손) — 빈 사각형으로 선택을 비우면 노드를 누른 손이 고른 것을 잃는다. **그보다 멀리 끈 빈 사각형은 아무것도 안 한다** — 고르지도
+ *   비우지도 않고 클릭은 삼킨다. 노드에서 시작해 수백 px 끈 손은 클릭한 것이 아니다 — 그 클릭이 누른 노드 하나로 고른 셋을 갈아 끼우면 사각형을
+ *   그린 손의 뜻이 아니다. 재는 자리: `apps/web/build-test/multiselect.test.ts`의 «노드 위에서 흔들린 클릭 …» · «노드에서 시작해 길게 끈 빈
+ *   사각형 …». Shift 를 누른 빈 사각형은 더할 것이 없어 아무 일도 없다(클릭은 삼킨다 — 그 클릭이 누른 노드를 더하거나 빼면 사각형을 그린 손의
+ *   뜻이 아니다).
  * - **Escape 는 사각형을 걷는다** — 고르지 않고, 선택 해제도 아니다(capture 로 받아 막는다 — 단축키의 선택 해제는 막힌 키를 안 본다).
  * - **글자 고르기를 걷는다** — 사각형이 서면 그 누름이 만든 글자 선택을 지운다. 누를 때는 안 건드린다(포커스 · 캐럿은 E1 의 단축키 · 클립보드가 본다).
  */
@@ -31,6 +34,14 @@ import { DRAG_THRESHOLD, EDGE_SCROLL_TICK, edgeScrollStep, scrollParent, swallow
 import { walkSafely } from '../edit/safe-walk'
 import type { CanvasFrame } from './canvas-iframe'
 import { hostToDocument, nodesInRect, rectBetween, toSurfaceRect, type Box, type MarqueeNode, type Point } from './canvas-marquee'
+
+/**
+ * **빈 사각형을 클릭으로 읽는 거리**(px · 호스트 좌표 — 누른 점에서 가장 멀리 간 곳, 줌이 곱해진 화면 거리). 넘으면 끈 것이다(머리말 «작은 빈
+ * 사각형»). 값은 흔들린 클릭과 끈 손 사이다 — 흔들린 클릭은 `DRAG_THRESHOLD`(4px)를 넘어 10px 까지 간다(`build-test/multiselect.test.ts` «노드
+ * 위에서 흔들린 클릭» 의 6 · 10px · 트랙패드 흉내 3px 남짓), 빈 끌기는 노드 하나의 높이(글 한 줄 20px 남짓) 밖으로 간다 — 그보다 짧게 끌어 아무것도
+ * 못 감싼 손은 클릭과 가르지 못한다.
+ */
+export const MARQUEE_CLICK_SLOP = 16
 
 export interface CanvasMarqueeInput {
   frame: CanvasFrame | null
@@ -67,6 +78,8 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
       pressedHost: Point
       /** 마지막 포인터 — 호스트 좌표. */
       lastHost: Point
+      /** 누른 점에서 가장 멀리 간 거리(호스트 좌표) — 빈 사각형이 클릭인가를 가른다(`MARQUEE_CLICK_SLOP`). */
+      farthest: number
       started: boolean
       cancelled: boolean
       timer: ReturnType<typeof setInterval> | null
@@ -139,6 +152,7 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
         start: hostToDocument(host, frameRect(), latest.current.zoom),
         pressedHost: host,
         lastHost: host,
+        farthest: 0,
         started: false,
         cancelled: false,
         timer: null,
@@ -162,10 +176,12 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
       if (at === null || at.source !== source || event.pointerId !== at.pointerId) return
       const host = toHost(event, source)
       at.lastHost = host
+      // 문턱은 호스트 좌표의 움직임으로 잰다(줌이 곱해진 화면 거리 — 끌기와 같다).
+      const moved = Math.hypot(host.x - at.pressedHost.x, host.y - at.pressedHost.y)
+      at.farthest = Math.max(at.farthest, moved)
       if (at.cancelled) return
       if (!at.started) {
-        // 문턱은 호스트 좌표의 움직임으로 잰다(줌이 곱해진 화면 거리 — 끌기와 같다).
-        if (Math.hypot(host.x - at.pressedHost.x, host.y - at.pressedHost.y) <= DRAG_THRESHOLD) return
+        if (moved <= DRAG_THRESHOLD) return
         at.started = true
         if (typeof at.target.setPointerCapture === 'function') at.target.setPointerCapture(at.pointerId)
         win.getSelection()?.removeAllRanges()
@@ -190,11 +206,15 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
         return
       }
       at.lastHost = toHost(event, source)
+      at.farthest = Math.max(at.farthest, Math.hypot(at.lastHost.x - at.pressedHost.x, at.lastHost.y - at.pressedHost.y))
       const picked = at.cancelled ? null : nodesInRect(currentRect(at), drawnNodes())
       end()
-      // 빈 사각형(갈아 끼우기)은 누른 자리의 클릭이다 — 고르지도 클릭을 삼키지도 않는다(머리말 «빈 사각형»).
-      if (picked !== null && picked.length === 0 && !event.shiftKey) return
+      const empty = picked !== null && picked.length === 0 && !event.shiftKey
+      // 작은 빈 사각형(갈아 끼우기)은 누른 자리의 클릭이다 — 고르지도 클릭을 삼키지도 않는다(머리말 «작은 빈 사각형»).
+      if (empty && at.farthest <= MARQUEE_CLICK_SLOP) return
       if (source === 'frame') swallowNextClick(win)
+      // 멀리 끈 빈 사각형은 아무것도 안 한다 — 클릭만 삼킨다.
+      if (empty) return
       if (picked !== null) latest.current.onPick(picked, event.shiftKey)
     }
 

@@ -9,8 +9,8 @@
  * | 늦은 목록 · 부분 거절 | bob 이 먼저 쥔 노드를 alice 가 사각형에 넣었다 — alice 는 bob 의 잠금 소식을 아직 못 받았다(WS 내림 지연). 서버가 그 노드만 거절하고 alice 의 선택에서 그것만 빠지며 하단 바 한 줄 |
  * | 일괄 속성 | 같은 타입 둘의 갈리는 칸을 바꾸면 서버 revision 하나 · bob 화면에 한 번에 · Cmd+Z 한 번에 통째로 |
  * | 일괄 삭제 | 셋을 지우면 revision 하나 · Cmd+Z 한 번에 통째로 |
- * | 칸에 친 채 고른 것이 바뀐다 | 일부 거절 · 다른 탭의 지움 · 옮김이면 친 글이 앞 목록에 남은 노드로 · Cmd+클릭은 blur 가 앞 목록에 · 남은 노드가 없거나 타입이 바뀌었으면 하단 바 한 줄 |
- * | 사각형 | 줌 0.5 · 1.5 · 칸을 굴린 판 · 끝 스크롤 · 4px 안 뗌은 클릭 · 빈 사각형은 누른 자리의 클릭 · Escape 는 걷기만 · 뗀 뒤의 클릭이 선택을 안 바꾼다 |
+ * | 칸에 친 채 고른 것이 바뀐다 | 일부 거절 · 다른 탭의 지움 · 옮김이면 친 글이 앞 목록에 남은 노드로 · Cmd+클릭은 blur 가 앞 목록에 · 남은 노드가 없거나 타입이 바뀌었으면 하단 바 한 줄 · 브라우저 «앞으로»로 다른 페이지면 안 쓰고 한 줄 · 다른 탭의 로그아웃이면 쓰기 0 |
+ * | 사각형 | 줌 0.5 · 1.5 · 칸을 굴린 판 · 끝 스크롤 · 4px 안 뗌은 클릭 · 작은 빈 사각형은 누른 자리의 클릭 · 길게 끈 빈 사각형은 아무것도 안 함 · Escape 는 걷기만 · 뗀 뒤의 클릭이 선택을 안 바꾼다 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -508,6 +508,112 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         await a.close()
       }
     })
+
+    /**
+     * 칸에 친 채 **브라우저 «앞으로»**(popstate)로 다른 페이지 — 칸에 포커스가 있어 blur 가 없다. 위젯이 내려갈 때 스토어는 아직 앞 페이지지만
+     * 주소는 다음 페이지라 쓰지 않는다(앞 페이지의 연산을 다음 페이지 경로로 내지 않는다) · 말없이 버리지도 않는다: 다음 페이지 화면에 하단 바 한
+     * 줄 · 앞 페이지로 돌아가면 그 줄이 풀린다. 두 페이지는 같은 노드 id 를 싣는다(엉뚱한 페이지에 쓰이면 보이게). 카나리아: 친 직후 칸 값 ·
+     * 포커스가 칸.
+     */
+    it.each([
+      ['하나', [0]],
+      ['여럿', [0, 1]],
+    ] as const)('브라우저 «앞으로»로 다른 페이지에 가면 어느 페이지에도 안 쓰고 하단 바 한 줄 — %s', async (_, picks) => {
+      const P = await fixture(`draft-forward-${picks.length}`, TEXTS(3))
+      const projectId = P.split('/')[2]!
+      const menuId = (await call('GET', P)).body.menuNodeId
+      const second = (await call('POST', `/projects/${projectId}/pages`, { menuNodeId: menuId, title: '쪽2' })).body.id
+      const P2 = `/projects/${projectId}/pages/${second}`
+      const seeded = await call('PATCH', `${P2}/ops`, {
+        baseSeq: 0,
+        ops: TEXTS(3).map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value: { ...value, props: { content: `둘째 ${at}` } } })),
+      })
+      if (seeded.status >= 300) throw new Error(`둘째 페이지 ${seeded.status}`)
+      const a = await openTab(P)
+      try {
+        // 기록에 다음 페이지를 쌓는다 — 메뉴 링크로 갔다가 «뒤로».
+        await a.page.getByRole('link', { name: '쪽2', exact: true }).click()
+        await a.page.waitForURL(`**${P2}`)
+        await canvasFrame(a.page).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        await a.page.goBack()
+        await a.page.waitForURL(`**${P}`)
+        await canvasFrame(a.page).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        await a.page.waitForTimeout(400)
+        const before = { A: await server(P), B: await server(P2) }
+        await row(a.page, id(picks[0]!)).click()
+        for (const n of picks.slice(1)) await row(a.page, id(n)).click({ modifiers: ['ControlOrMeta'] })
+        await content(a.page).fill('앞 페이지 글')
+        const typed = { value: await content(a.page).inputValue(), focused: await content(a.page).evaluate((el) => el === document.activeElement) }
+        await a.page.goForward()
+        await a.page.waitForURL(`**${P2}`)
+        await canvasFrame(a.page).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        await a.page.waitForTimeout(800)
+        const there = { A: await server(P), B: await server(P2), alerts: await alerts(a.page) }
+        await a.page.goBack()
+        await a.page.waitForURL(`**${P}`)
+        await canvasFrame(a.page).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        await a.page.waitForTimeout(500)
+        expect({
+          typed,
+          revisions: { A: there.A.headSeq - before.A.headSeq, B: there.B.headSeq - before.B.headSeq },
+          A: there.A.children,
+          B: there.B.children,
+          alerts: there.alerts,
+          back: await alerts(a.page),
+        }).toEqual({
+          typed: { value: '앞 페이지 글', focused: true },
+          revisions: { A: 0, B: 0 },
+          A: before.A.children,
+          B: before.B.children,
+          alerts: ['바뀐 선택 때문에 친 값을 쓰지 않았습니다'],
+          back: [],
+        })
+      } finally {
+        await a.close()
+      }
+    })
+
+    /**
+     * 칸에 친 채 **같은 브라우저의 다른 탭이 로그아웃** — 세션 소식에 셸이 내려가며 위젯이 초안을 넘기지만, 끝난 세션으로 쓰기를 내지 않는다
+     * (`panels/property-panel.tsx`의 `useLeftoverCommit` — 패널이 선 세션 세대). 이 탭이 낸 편집 요청(WS `patch` · REST `PATCH …/ops`)을 센다.
+     * 카나리아: 친 직후 칸 값 · 이 탭이 로그인 화면에 닿음 · 다른 탭의 로그아웃 요청이 셌다(요청을 세는 자가 돈다).
+     */
+    it('같은 브라우저의 다른 탭이 로그아웃하면 내려가는 칸이 쓰기를 내지 않는다', async () => {
+      const P = await fixture('draft-signed-out', TEXTS(3))
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+      const writes: string[] = []
+      page.on('websocket', (socket) => socket.on('framesent', (frame) => String(frame.payload).includes('"type":"patch"') && writes.push('ws patch')))
+      page.on('request', (request) => request.method() === 'PATCH' && request.url().includes('/ops') && writes.push(`REST ${request.method()}`))
+      const signOuts: string[] = []
+      try {
+        await page.goto(P)
+        await canvasFrame(page).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        const before = await server(P)
+        await row(page, id(0)).click()
+        await row(page, id(1)).click({ modifiers: ['ControlOrMeta'] })
+        await content(page).fill('로그아웃 전 글')
+        const typed = await content(page).inputValue()
+        const other = await context.newPage()
+        other.on('request', (request) => request.method() !== 'GET' && request.url().includes('/auth/') && signOuts.push(new URL(request.url()).pathname))
+        await other.goto(P)
+        await canvasFrame(other).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        await other.getByRole('button', { name: '더 보기', exact: true }).click()
+        await other.getByRole('menuitem', { name: '로그아웃' }).click()
+        await other.waitForURL('**/login**', { timeout: 10_000 })
+        await page.waitForURL('**/login**', { timeout: 10_000 })
+        await page.waitForTimeout(1000)
+        const after = await server(P)
+        expect({ typed, signedOut: signOuts.length > 0, writes, revisions: after.headSeq - before.headSeq, children: after.children }).toEqual({
+          typed: '로그아웃 전 글',
+          signedOut: true,
+          writes: [],
+          revisions: 0,
+          children: before.children,
+        })
+      } finally {
+        await context.close()
+      }
+    })
   })
 
   /**
@@ -655,6 +761,51 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         trackpad: [id(1)],
         inPane: true,
         margin: [id(1)],
+      })
+    } finally {
+      await a.close()
+    }
+  })
+
+  /**
+   * 노드 위에서 누르고 **길게 끈** 빈 사각형(가로로 끌어 높이 1px — 아무것도 완전히 안 감쌈)은 아무것도 안 한다 — 고른 셋이 그대로다(클릭으로
+   * 읽어 누른 노드 하나로 갈아 끼우지 않는다). 클릭으로 읽는 것은 누른 점에서 `MARQUEE_CLICK_SLOP`(16px) 안에서만 움직인 사각형이다 — 14px 은
+   * 누른 노드를 고르고 24px 은 그대로다. 카나리아: 떼기 직전 사각형이 서 있다(다섯 다).
+   */
+  it('사각형 — 노드에서 시작해 길게 끈 빈 사각형은 고른 것을 안 바꾼다', async () => {
+    const P = await fixture('marquee-long-empty', TEXTS(6))
+    const a = await openTab(P)
+    try {
+      await narrow(a.page)
+      const three = async () => {
+        await row(a.page, id(0)).click()
+        await row(a.page, id(1)).click({ modifiers: ['ControlOrMeta'] })
+        await row(a.page, id(3)).click({ modifiers: ['ControlOrMeta'] })
+      }
+      const drawn: number[] = []
+      /** `n_t02` 의 `fromX`(상자 왼끝 기준)에서 누르고 가로로 `dx` 끌어 뗀다. */
+      const drag = async (fromX: (box: Box) => number, dx: number) => {
+        await three()
+        const box = await nodeBox(a.page, id(2))
+        const at = { x: fromX(box), y: box.y + box.height / 2 }
+        await a.page.mouse.move(at.x, at.y)
+        await a.page.mouse.down()
+        await a.page.mouse.move(at.x + dx, at.y + 1, { steps: 12 })
+        drawn.push(await a.page.locator('[data-wb-marquee]').count())
+        await a.page.mouse.up()
+        await a.page.waitForTimeout(150)
+        return (await picked(a.page)).all
+      }
+      const leftward = await drag((box) => box.x + box.width - 20, -260)
+      const rightward = await drag((box) => box.x + 20, 420)
+      const past = await drag((box) => box.x + 40, 24)
+      const within = await drag((box) => box.x + 40, 14)
+      expect({ drawn, leftward, rightward, past, within }).toEqual({
+        drawn: [1, 1, 1, 1],
+        leftward: [id(0), id(1), id(3)],
+        rightward: [id(0), id(1), id(3)],
+        past: [id(0), id(1), id(3)],
+        within: [id(2)],
       })
     } finally {
       await a.close()

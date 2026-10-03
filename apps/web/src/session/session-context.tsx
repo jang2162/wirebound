@@ -440,6 +440,14 @@ export function useSessionEpochNow(): () => number {
 }
 
 /**
+ * `useSessionEpochNow`와 같되 **Provider 가 없으면 `null`이고 던지지 않는다**(`useSessionRenewal`과 같은 관례) — 셸 없이 패널만 세우는
+ * 화면 테스트에도 서는 자리가 쓴다(`panels/property-panel.tsx`의 `useLeftoverCommit` — 세션이 끝나 내려가는 칸은 쓰지 않는다).
+ */
+export function useSessionEpochNowOrNull(): (() => number) | null {
+  return useContext(SessionContext)?.epochNow ?? null
+}
+
+/**
  * 세션이 끊긴 것을 알았을 때 부른다(401). 이미 `anonymous`면 아무 일도 하지 않는다. **다른 탭에 알리지
  * 않는다**(위 머리말 «탭 사이») — 이 탭에서 로그아웃한 것은 `useSignOut`이다.
  */
