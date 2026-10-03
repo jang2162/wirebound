@@ -17,6 +17,9 @@
  * **Delete 의 반복 거름은 여기서 혼자 안 죽는다** — 키보드 삭제가 선택을 비우므로 반복된 Delete 에는 지울 것이 없다(누름 케이스는 둘을 다 뗀
  * 판에서만 죽는다). 반복 거름은 Cmd+D 누름 케이스와 `test/edit/use-editor-shortcuts.test.tsx` «누른 채의 반복»이 잰다.
  *
+ * **열린 줄 메뉴의 ← → 는 두 겹이 막는다** — 포커스가 `menuitem` 안이라는 역할 판정과 열린 메뉴의 표지(`data-wb-holds-keys`)다. 한 겹씩 떼면 이
+ * 케이스는 초록이다. 역할 판정은 «위젯(탭 · 손잡이)» 케이스가, 메뉴 표지는 «L2 · L3» 의 «Page 더 보기» 판이 혼자 잰다.
+ *
  * 서버 문서(`GET …/pages/:id`)로 단언한다.
  */
 import type { CDPSession, Page } from 'playwright-core'
