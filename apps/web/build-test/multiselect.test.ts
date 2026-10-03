@@ -5,6 +5,7 @@
  * | 판 | 무엇을 재나 |
  * |---|---|
  * | 두 계정 · 배지 | alice 가 셋을 고르면 bob 화면에 배지 셋 · bob 은 그 줄을 못 고른다(서버가 집합 잠금을 세 줄로 흘린다) |
+ * | 복원이 만든 겹침 | 복원이 alice · bob 의 잠금을 조상/자손으로 만든 뒤 bob 의 다음 프레임이 이미 쥔 노드도 거절받아 그것만 선택에서 빠진다 |
  * | 늦은 목록 · 부분 거절 | bob 이 먼저 쥔 노드를 alice 가 사각형에 넣었다 — alice 는 bob 의 잠금 소식을 아직 못 받았다(WS 내림 지연). 서버가 그 노드만 거절하고 alice 의 선택에서 그것만 빠지며 하단 바 한 줄 |
  * | 일괄 속성 | 같은 타입 둘의 갈리는 칸을 바꾸면 서버 revision 하나 · bob 화면에 한 번에 · Cmd+Z 한 번에 통째로 |
  * | 일괄 삭제 | 셋을 지우면 revision 하나 · Cmd+Z 한 번에 통째로 |
@@ -223,6 +224,55 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       await a.close()
       await b.close()
       await delay.close()
+    }
+  })
+
+  /**
+   * **복원이 두 사람의 잠금을 조상/자손으로 만들면 다음 `lock` 프레임이 겹친 노드를 거절한다**(서버 `ws/lock.ts`의 «집합을 갈아 끼운다 —
+   * 프레임마다 집합 전부를 판정한다»). alice 가 카드 `n_a`, bob 이 `n_x` · `n_b`를 쥔다. alice 가 `n_x`가 `n_a` 안에 있던 스냅샷을 복원한
+   * 뒤 bob 이 `n_c`를 Cmd+클릭으로 더하면, 그 프레임(`n_x` · `n_b` · `n_c`)에서 이미 쥔 `n_x`도 다시 판정되어 거절된다 — bob 의 선택에서
+   * `n_x`만 빠지고 하단 바 한 줄(일부 거절의 길). 카나리아: 복원 전 alice 화면에 bob 의 배지 둘 · 복원 응답 200 · bob 이 `restored`를 받았다.
+   */
+  it('복원이 만든 겹침 — 다음 프레임이 이미 쥔 노드도 거절해 그 노드만 선택에서 빠진다', async () => {
+    const P = await fixture('restore-overlap', [
+      { id: 'n_a', type: 'Card', props: { title: '카드' }, children: [T('n_a1', '안'), T('n_x', '엑스')] },
+      T('n_b', '비'),
+      T('n_c', '씨'),
+    ])
+    const projectId = P.split('/')[2]!
+    const snapshot = (await call('POST', `/projects/${projectId}/snapshots`, { tag: 'x-in-a' })).body
+    const head = (await call('GET', P)).body.headSeq
+    const flat = await call('PATCH', `${P}/ops`, { baseSeq: head, ops: [{ op: 'move', from: '/root/children/0/children/1', path: '/root/children/1' }] })
+    if (flat.status >= 300) throw new Error(`flat ${flat.status}`)
+    const a = await openTab(P)
+    const b = await openTab(P, 'bob')
+    try {
+      await row(a.page, 'n_a').click()
+      await row(b.page, 'n_x').click()
+      await row(b.page, 'n_b').click({ modifiers: ['ControlOrMeta'] })
+      const bobBadges = await poll(
+        'alice 화면에 bob 의 배지 둘',
+        () => a.page.locator('.wb-shell-structure-lock').count(),
+        (n) => n >= 2,
+      )
+      const restored = await call('POST', `/projects/${projectId}/snapshots/${snapshot.id}/restore`)
+      await b.page.waitForTimeout(500)
+      await row(b.page, 'n_c').click({ modifiers: ['ControlOrMeta'] })
+      await poll('거절이 bob 에게 닿는다', async () => b.received.filter((kind) => kind === 'lock-denied').length, (n) => n >= 1, 5000).catch(() => 0)
+      await b.page.waitForTimeout(300)
+      const alertsOfBob = await alerts(b.page)
+      expect({
+        bobBadges,
+        restored: restored.status,
+        bob: (await picked(b.page)).all,
+        alerts: alertsOfBob,
+        received: b.received.includes('restored'),
+        // bob 의 화면은 복원 뒤에도 앞 문서다(복원은 배너로 «다시 불러오기»를 기다린다) — 그 문서에서 `n_x`는 alice 의 `n_a` 밖이라 누가 쥐었는지
+        // 못 읽어 이름 없이 말한다(설계서 「소프트 잠금」의 «아직 모르면 «다른 사람이»»).
+      }).toEqual({ bobBadges: 2, restored: 200, bob: ['n_b', 'n_c'], alerts: ['다른 사람이 편집 중이라 고를 수 없습니다'], received: true })
+    } finally {
+      await a.close()
+      await b.close()
     }
   })
 
