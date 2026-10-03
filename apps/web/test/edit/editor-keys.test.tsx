@@ -9,7 +9,9 @@ import { describe, expect, it } from 'vitest'
 import type { PatchOp } from '@wirebound/schema'
 import type { ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
+import { readNodesEnvelope, writeNodesEnvelope, type WbNode } from '@wirebound/schema'
 import { CLIPBOARD_SHORTCUT_LINES, EDITOR_SHORTCUTS, platformOf } from '../../src/edit/editor-shortcuts'
+import { droppedActionsNotice } from '../../src/edit/paste-ops'
 import { HEAD_SEQ, canvasDocument, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
 
@@ -269,5 +271,165 @@ describe('에디터 단축키 — 셸', () => {
     fireEvent.keyDown(dialog, { key: 'Escape' })
     expect(screen.queryByRole('dialog', { name: '단축키' })).toBeNull()
     expect(selectedType()).toBe('Card')
+  })
+})
+
+/** 클립보드 이벤트를 올린다 — jsdom 에는 `clipboardData` 가 없어 가짜를 싣는다(`./use-clipboard.test.tsx` 머리말). */
+function clip(type: 'copy' | 'cut' | 'paste', target: EventTarget, text?: string): { written: string | undefined; prevented: boolean } {
+  const data = new Map<string, string>()
+  if (text !== undefined) data.set('text/plain', text)
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'clipboardData', {
+    value: { setData: (kind: string, value: string) => data.set(kind, value), getData: (kind: string) => data.get(kind) ?? '' },
+  })
+  target.dispatchEvent(event)
+  return { written: data.get('text/plain'), prevented: event.defaultPrevented }
+}
+
+function alertTexts(): string[] {
+  return screen.queryAllByRole('alert').map((element) => element.textContent ?? '')
+}
+
+/** 서버에 닿은 편집을 적용한 문서의 뿌리 자식 타입들 — 화면이 아니라 서버 문서로 본다. */
+async function undoOnceRestores(srv: ReturnType<typeof server>, before: number): Promise<void> {
+  await waitFor(() => expect(historyButton('되돌리기').disabled).toBe(false))
+  fireEvent.keyDown(document.body, ctrl('z'))
+  await waitFor(() => expect(srv.calls).toHaveLength(before + 1))
+  await waitFor(() => expect(structureTypes()).toEqual(INITIAL_TYPES))
+}
+
+describe('클립보드 · 복제 — 셸', () => {
+  it('복사가 고른 노드의 서브트리를 봉투로 싣는다 — 루트를 고른 판은 브라우저 복사가 그대로다', async () => {
+    await openPage(doc(), { apiOverrides: server().api })
+    fireEvent.click(row('Card'))
+    const copied = clip('copy', document.body)
+    expect(copied.prevented).toBe(true)
+    expect(readNodesEnvelope(copied.written!)).toEqual({ nodes: [{ id: 'n-box', type: 'Card', children: [{ id: 'n-1', type: 'Button' }] }] })
+
+    fireEvent.click(row('Page'))
+    expect(clip('copy', document.body)).toEqual({ written: undefined, prevented: false })
+  })
+
+  it('붙이기가 편집 하나를 내고(새 id · 기준 노드 바로 뒤) 붙인 노드를 고른다 — Ctrl+Z 한 번에 통째로 돌아온다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(row('Card'))
+    const envelope = clip('copy', document.body).written!
+    fireEvent.click(row('Text'))
+
+    expect(clip('paste', document.body, envelope).prevented).toBe(true)
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    const [op] = srv.calls[0]!
+    expect(op).toMatchObject({ op: 'add', path: '/root/children/1' })
+    const pasted = (op as { value: WbNode }).value
+    expect(pasted.type).toBe('Card')
+    expect(pasted.id).not.toBe('n-box')
+    expect(pasted.children![0]!.id).not.toBe('n-1')
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Card', 'Button', 'Card', 'Button', 'Divider'])
+    expect(structureRegion().querySelectorAll('[aria-current="true"]')).toHaveLength(1)
+    expect(within(structureRegion()).getAllByRole('button', { name: 'Card' })[0]!.getAttribute('aria-current')).toBe('true')
+
+    await undoOnceRestores(srv, 1)
+  })
+
+  it('봉투가 아닌 글은 아무것도 안 한다 — 편집 0 · 통지 0', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(row('Card'))
+    for (const text of ['그냥 글', '{"a":1}', JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [{ id: 'x', type: 'NoSuchType' }] })]) {
+      expect(clip('paste', document.body, text).prevented).toBe(false)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(srv.calls).toHaveLength(0)
+    expect(alertTexts()).toEqual([])
+  })
+
+  it('대상이 없는 동작은 빼고 붙이고 그 수를 말한다 — 지금 문서의 노드 · 프로젝트의 페이지를 가리키면 남긴다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(row('Divider'))
+    const button: WbNode = {
+      id: 'src-btn',
+      type: 'Button',
+      interactions: [
+        {
+          on: 'click',
+          actions: [
+            { type: 'setVisible', target: 'n-box', value: false }, // 지금 문서에 있다
+            { type: 'setVisible', target: 'n-elsewhere', value: true }, // 없다
+            { type: 'navigate', target: 'page:회원관리/회원 상세' }, // 지금 프로젝트에 있다
+            { type: 'openModal', target: 'page:남의 프로젝트/설정' }, // 없다
+          ],
+        },
+      ],
+    }
+    clip('paste', document.body, writeNodesEnvelope([button], 1))
+
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    const pasted = (srv.calls[0]![0] as { value: WbNode }).value
+    expect(pasted.interactions![0]!.actions.map((action) => action.target)).toEqual(['n-box', 'page:회원관리/회원 상세'])
+    await waitFor(() => expect(alertTexts()).toEqual([droppedActionsNotice(2)]))
+  })
+
+  it('잘라내기 = 봉투 + 지우기 편집 하나 — Ctrl+Z 한 번에 돌아온다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(row('Card'))
+
+    const cut = clip('cut', document.body)
+    expect(cut.prevented).toBe(true)
+    expect(readNodesEnvelope(cut.written!)?.nodes[0]?.id).toBe('n-box')
+    await waitFor(() => expect(srv.calls).toEqual([[{ op: 'remove', path: '/root/children/1' }]]))
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider'])
+
+    await undoOnceRestores(srv, 1)
+  })
+
+  it('루트를 고른 잘라내기는 아무것도 안 싣고 안 지운다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(row('Page'))
+    expect(clip('cut', document.body)).toEqual({ written: undefined, prevented: false })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('Ctrl+D 가 제 바로 뒤에 사본을 넣고 사본을 고른다 — Ctrl+Z 한 번에 돌아온다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(row('Card'))
+    fireEvent.keyDown(document.body, ctrl('d'))
+
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    expect(srv.calls[0]).toHaveLength(1)
+    expect(srv.calls[0]![0]).toMatchObject({ op: 'add', path: '/root/children/2' })
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Card', 'Button', 'Card', 'Button', 'Divider'])
+    expect(within(structureRegion()).getAllByRole('button', { name: 'Card' })[1]!.getAttribute('aria-current')).toBe('true')
+
+    await undoOnceRestores(srv, 1)
+  })
+
+  it('루트를 고른 Ctrl+D 는 편집 없이 이유를 말한다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(row('Page'))
+    fireEvent.keyDown(document.body, ctrl('d'))
+    await waitFor(() => expect(alertTexts()).toEqual(['루트가 아닌 노드를 고르세요']))
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('뷰 모드에서는 붙이기 · 잘라내기 · 복제가 안 서고 복사는 선다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(row('Card'))
+    const envelope = clip('copy', document.body).written!
+    fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+
+    expect(clip('paste', document.body, envelope).prevented).toBe(false)
+    expect(clip('cut', document.body).prevented).toBe(false)
+    fireEvent.keyDown(document.body, ctrl('d'))
+    expect(clip('copy', document.body).prevented).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(srv.calls).toHaveLength(0)
   })
 })

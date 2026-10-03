@@ -1,6 +1,7 @@
 /**
  * 구조 트리의 **조작 묶음**(`useStructureCommands`)과 **고르개 자리**(`StructurePicker`). 조작의 입구는 트리 줄의 `+` · `…`
- * (`panels/tree-row-actions.tsx`) · 트리 제목 줄의 뿌리 `+` · 끌어 놓기 · 키보드 단축키(`panels/structure-tree.tsx`의 `SHORTCUTS`)다 —
+ * (`panels/tree-row-actions.tsx`) · 트리 제목 줄의 뿌리 `+` · 끌어 놓기 · 키보드 단축키(에디터 단축키 `shell/editor-keys.tsx` · 트리 상자의
+ * 고르개 단축키 `panels/structure-tree.tsx`의 `TREE_SHORTCUTS`)다 —
  * 전부 이 파일의 명령을 부른다. 파일 이름의 «툴바»는 그 입구들이 한 줄 툴바였던 자리의 이름이다.
  *
  * **조작이 두 부류다.**
@@ -13,7 +14,7 @@
  * 뒤 부류가 판정을 갖지 않는 까닭은 각각 — 패턴은 선택이 없으면 root의 자식 끝에 꽂고,
  * 프리셋은 페이지 통째라 자리를 아예 고르지 않는다. 단축키 쪽도 같은 성질을 지나므로
  * 그 표에서 둘은 `StructureAbilities`가 아니라 `patternLocked`·`presetLocked`를 본다
- * (`panels/structure-tree.tsx`의 `SHORTCUTS`).
+ * (`panels/structure-tree.tsx`의 `TREE_SHORTCUTS`).
  *
  * **판정은 여기 없다.** 무엇을 할 수 있는지는 `edit/structure-actions.ts`의
  * `structureAbilities`가 정하고, 이 파일은 그 결과를 줄 행동에 넘길 뿐이다.
@@ -69,7 +70,7 @@ export interface StructureCommands {
    * `패턴 넣기`가 남의 잠금에 막혔는가.
    *
    * **`abilities`에 키를 만들지 않는다**(`panels/structure-tree.tsx`의
-   * `SHORTCUTS` 주석) — `structureAbilities`는 선택이 없으면 `NOTHING`을 내는데 패턴은
+   * `TREE_SHORTCUTS` 주석) — `structureAbilities`는 선택이 없으면 `NOTHING`을 내는데 패턴은
    * **선택이 없어도 되는 조작**이라, 그 표에 넣으면 정확히 그 상태에서만 죽는다.
    *
    * **대신 «꽂힐 자리»의 잠금을 지난다.** 패턴이 꽂히는 자리는 고른 노드가 정하고
@@ -263,8 +264,8 @@ export function useStructureCommands(props: {
    * **두 곳이 이 값을 쓴다.** 판정이 이것으로 꺼지고(`structureAbilities`의 셋째 인자 —
    * 그쪽 머리말에 왜 «전부» 꺼지는지와 실측이 있다), 상태줄이 사다리 맨 위에서 이유를
    * 말한다(`./toolbar-status.ts`). **판정을 끄는 자리가 여기인 것이 요점이다** — 툴바
-   * 컴포넌트에서 `disabled`를 겹치면 단축키가 안 막힌다(`panels/structure-tree.tsx`의
-   * `SHORTCUTS`는 `commands.abilities`를 지난다).
+   * 컴포넌트에서 `disabled`를 겹치면 단축키가 안 막힌다(에디터 단축키 `shell/editor-keys.tsx`는
+   * `commands.abilities`를 지난다).
    *
    * **여기서 구독하지 않고 받는다.** 스토어의 잠금 목록을 손에 쥐는 자리는 화면에 **하나**여야
    * 하고(`test/lock/one-verdict.test.ts` — *"셋째 판정은 여기서 먼저 보인다"*), 그 하나는
@@ -544,7 +545,7 @@ export function useStructureCommands(props: {
    *
    * **그 `null` 검사는 지워도 죽는 케이스가 없다.** 부모가 루트면 버튼이 이미 비활성이라
    * 클릭이 핸들러에 닿지 않고, 키보드 단축키도 `abilities.outdent`를 먼저 지난다
-   * (`panels/structure-tree.tsx`의 `SHORTCUTS`). 남은 것은 그 둘이 벗겨졌을 때의 방벽이다.
+   * (`shell/editor-keys.tsx`). 남은 것은 그 둘이 벗겨졌을 때의 방벽이다.
    *
    * 목적지가 `부모 인덱스 + 1`인 것도 소스를 빼는 것과 무관하다 — 노드는 부모의 배열
    * 안에 있으므로 조부모의 배열은 그대로다.
