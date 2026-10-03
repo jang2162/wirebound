@@ -163,6 +163,16 @@ export function lockedSelectionStatus(userName: string): string {
   return `${userName}님이 편집 중이라 고를 수도 바꿀 수도 없습니다`
 }
 
+/**
+ * 여럿을 고르는 사이 남이 그중 일부를 먼저 잡아 서버가 거절했을 때의 하단 바 문장(`realtime/use-realtime.ts` — 그 노드는 선택에서
+ * 빠졌다). 이름은 `locks` 목록에서 읽고, 아직 모르면 이름 없이 말한다.
+ */
+export function deniedSelectionNotice(userNames: readonly string[]): string {
+  return userNames.length === 0
+    ? '다른 사람이 편집 중이라 고를 수 없습니다'
+    : `${userNames.join(' · ')}님이 편집 중이라 고를 수 없습니다`
+}
+
 /** 고른 노드가 문서에 없을 때의 문장(`structureStatus` · `palette/palette-add.ts`). */
 export const NOT_IN_DOCUMENT_STATUS = '고른 노드가 문서에 없습니다'
 

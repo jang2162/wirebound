@@ -56,6 +56,7 @@ import { openRealtime } from './connection'
 import { useRealtimeSetup } from './context'
 import { realtimeUrl, type ServerFrame } from './protocol'
 import { useKnownUserHolder } from '../api/known-user'
+import { deniedSelectionNotice } from '../panels/toolbar-status'
 import { useSessionRenewal } from '../session/session-context'
 import { LOSS_RANK } from '../store/loss-notice'
 import { useEditorStoreInstance } from '../store/use-editor-store'
@@ -167,12 +168,20 @@ export function useRealtime(
             // 거른다(`lockedBy`) — 여기서 거르면 페이지를 옮길 때 목록이 낡는다.
             store.setLocks(frame.locks)
             break
-          case 'lock-denied':
+          case 'lock-denied': {
             // **서버가 판정했다.** 목록으로 «내 것이 섰나»를 추정하지 않는다 — 목록은 거꾸로 닿을 수 있어 추정하면
             // 거짓 잃음을 낸다(`lock-channel.ts`의 머리말).
             // 거절은 그 `lock` 프레임과 짝짓는다(`lockId` — `lock-channel.ts`의 그 절).
-            setup.lockChannel?.denied(frame.pageId, frame.nodeId, frame.lockId)
+            const refused = setup.lockChannel?.denied(frame.pageId, frame.nodeIds, frame.lockId) ?? []
+            if (refused.length > 0) {
+              // **일부 거절 — 그 노드만 선택에서 뺀다**(`lock-channel.ts`의 표). 누가 쥐었는지는 `locks` 목록에서 읽는다(이 프레임은
+              // 이름을 안 싣는다 — 출처 하나). 목록이 아직 안 닿았으면 이름 없이 말한다. 잃음 통지는 덮지 않는다.
+              const names = [...new Set(refused.map((id) => store.lockedBy(id)?.userName).filter((name) => name !== undefined))]
+              store.dropFromSelection(refused)
+              if (!store.showsLoss()) store.setEditFailure({ kind: 'message', message: deniedSelectionNotice(names) })
+            }
             break
+          }
           case 'patch-ack':
           case 'patch-error':
             // **내가 낸 편집의 답이다.** 짝짓는 것은 채널이 한다 — 여기서 하면 *"어느 ack가

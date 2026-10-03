@@ -1,5 +1,6 @@
 /**
- * **고른 노드를 서버에 알린다**(설계서 「소프트 잠금」 — *"노드를 선택하면 그 서브트리에 잠금을 건다"*).
+ * **고른 노드를 서버에 알린다**(설계서 「소프트 잠금」 — *"노드를 선택하면 그 서브트리에 잠금을 건다"*). 고른 것이 여럿이면 고른
+ * 서브트리마다 잠금 하나 — 선택 목록(`selectedNodeIds`) 전부를 집합 하나로 보낸다(`lock-channel.ts`의 «자리는 노드 집합이다»).
  *
  * # 왜 스토어가 아니라 훅인가
  *
@@ -110,7 +111,7 @@ export function useNodeLock(pageId: string | undefined, canHold: boolean): void 
   const store = useEditorStoreInstance()
   const channel = useLockChannel()
   const user = useSessionUser()
-  const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
   // **스토어가 든 것이 지금 주소의 페이지인가.** 위 머리말의 창을 닫는 값이다.
   const onThisPage = useOpenPage(pageId) !== null
   /**
@@ -136,15 +137,16 @@ export function useNodeLock(pageId: string | undefined, canHold: boolean): void 
     const promoted = !heldBefore.current && canHold
     heldBefore.current = canHold
     // **루트는 claim 하지 않는다**(위 머리말). 루트를 고른 것은 잠글 자리를 고른 것이 아니라
-    // 아직 아무 자리도 안 고른 것에 가깝다 — 앞에 잡고 있던 것이 있으면 여기서 놓는다.
-    const holdId = selectedNodeId === rootId ? null : selectedNodeId
+    // 아직 아무 자리도 안 고른 것에 가깝다 — 앞에 잡고 있던 것이 있으면 여기서 놓는다. 루트는 혼자일 때만 목록에 든다
+    // (`store/selection-set.ts`) — 빼면 빈 집합이다.
+    const holdIds = selectedNodeIds.filter((id) => id !== rootId)
     const holdPage = onThisPage && canHold ? pageId : null
-    // **승격은 잡지 않는다**(위 표). 막힌 선택은 앞 이펙트가 놓았다 — 다음 커밋이 `hold(…, null)`로 잡지 않은 선택도 지운다.
-    if (promoted && holdPage !== null && holdPage !== undefined && holdId !== null) {
-      channel?.keepUnclaimed(holdPage, holdId)
+    // **승격은 잡지 않는다**(위 표). 막힌 선택은 앞 이펙트가 놓았다 — 다음 커밋이 빈 집합으로 잡지 않은 선택도 지운다.
+    if (promoted && holdPage !== null && holdPage !== undefined && holdIds.length > 0) {
+      channel?.keepUnclaimed(holdPage, holdIds)
       return
     }
     // 통로가 없으면 아무것도 안 한다 — `RealtimeProvider` 없이 도는 화면이 그 판이다.
-    channel?.hold(holdPage, holdId)
-  }, [channel, pageId, selectedNodeId, onThisPage, rootId, canHold])
+    channel?.hold(holdPage, holdIds)
+  }, [channel, pageId, selectedNodeIds, onThisPage, rootId, canHold])
 }

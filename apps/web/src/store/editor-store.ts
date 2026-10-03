@@ -27,6 +27,7 @@ import {
 import type { NodeLockView } from '../realtime/protocol'
 import { anchorOps, rebaseAnchored, sameOps, type AnchoredOp } from './anchored-ops'
 import { LOSS_RANK, lossMessage, mergeLoss, type LossPart } from './loss-notice'
+import { normalizeSelection, sameSelection, type NormalizedSelection } from './selection-set'
 import {
   ackPending,
   clearPending,
@@ -186,7 +187,20 @@ export interface EditorState {
   baseDocument: PageDocument | null
   /** 이 문서의 최신 revision seq. 편집 요청이 `baseSeq`로 쓴다. */
   headSeq: number
+  /**
+   * **기준 노드** — 마지막으로 고른 것. 하나 고른 판의 고른 노드이고, 여럿 고른 판에서는 Shift 범위 · 화살표 이동 · 붙일 자리 · 속성
+   * 패널의 기준이다(설계서 「설계서 화면 구조」의 «선택»). `selectedNodeIds` 안의 하나이거나, 그것이 비었으면 `null`이다.
+   */
   selectedNodeId: string | null
+  /**
+   * **고른 노드 전부**(기준 노드 포함) — 문서 차례 · 조상/자손이 함께 없음 · 루트는 혼자일 때만 · 상한 `MAX_OPS_PER_EDIT`
+   * (`store/selection-set.ts` 의 `normalizeSelection`). 하나 고른 판은 길이 1 이다.
+   *
+   * **둘은 `#apply`가 함께 맞춘다**(`#withSelection`) — `selectedNodeId`만 바꾸는 자리(`selectNode` · 판을 비움)는 목록을 그 하나로
+   * 접고, 문서가 바뀌면 목록에서 문서에 없는 노드를 뺀다(남의 편집 · 되돌리기가 지운 노드). 목록을 직접 바꾸는 명령은
+   * `toggleSelect` · `selectRange` · `selectMany` 셋이다.
+   */
+  selectedNodeIds: readonly string[]
   mode: EditorMode
   viewportWidth: ViewportWidth
   /** 0.25 ~ 2.0 */
@@ -283,6 +297,14 @@ export interface EditorState {
   documentLoads: number
 }
 
+/** 빈 선택 목록 — 비울 때마다 새 배열을 만들면 `#apply`가 참조로 견줘 «바뀌었다»고 알린다. 얼려 둔다(나눠 쓰므로). */
+const NO_SELECTION: readonly string[] = Object.freeze([])
+
+/** 선택 명령의 답 — 상한(`MAX_OPS_PER_EDIT`)에 걸려 더 고르지 않은 수. 부르는 쪽이 그렇다고 알린다. */
+export interface SelectionChange {
+  capped: number
+}
+
 /**
  * 초기 상태. 상수 하나를 공유하지 않고 매번 새로 만드는 것은, 스토어마다 자기
  * 객체를 갖게 해서 한쪽에서 새어 나간 수정이 다른 스토어에 옮지 않게 하기 위해서다.
@@ -294,6 +316,7 @@ function initialState(): EditorState {
     baseDocument: null,
     headSeq: 0,
     selectedNodeId: null,
+    selectedNodeIds: NO_SELECTION,
     mode: 'edit',
     viewportWidth: 1280,
     zoom: 1,
@@ -876,7 +899,7 @@ export class EditorStore {
     // **선택은 지우지 않고 다시 정한다** — 무엇으로 정하는지는 `#selectionFor`가 갖는다.
     // 여는 경로는 루트로 시작하고(죽은 화면을 없앤다), 같은 페이지를 다시 싣는 재조회는
     // 보고 있던 자리를 그대로 둔다.
-    const selectedNodeId = this.#selectionFor(pageId, document)
+    const selection = this.#selectionFor(pageId, document)
     // 기다리던 번호 응답은 **이 페이지의 것일 때만** 남는다 — 아래 `#settleWaitingMarkers`.
     const samePage = this.#state.openPageId === pageId
     if (!samePage) this.#dropWaitingMarkers()
@@ -898,7 +921,8 @@ export class EditorStore {
       // 아래에서 `pending`을 함께 비우는 것과 같은 사실의 다른 면이다.
       baseDocument: document,
       headSeq,
-      selectedNodeId,
+      selectedNodeId: selection.anchor,
+      selectedNodeIds: selection.ids,
       // **이미 비어 있으면 같은 배열을 그대로 넘긴다**(`clearPage`와 같은 이유) — 빈 배열을
       // 새로 만들면 참조가 달라져 `pending`을 구독하는 쪽이 페이지를 열 때마다 헛일을 한다.
       pending: pending.length === 0 ? pending : [],
@@ -941,7 +965,7 @@ export class EditorStore {
    * 큐는 비어 있다(`loadPage`가 방금 비웠다) — 바탕과 화면이 함께 간다.
    */
   #replayWindow(pageId: string, ticket: number): void {
-    const { baseDocument, headSeq, selectedNodeId } = this.#state
+    const { baseDocument, headSeq } = this.#state
     if (baseDocument === null) return
     const changes = this.#windowChanges
       .filter((change) => change.pageId === pageId && change.begun >= ticket)
@@ -963,11 +987,8 @@ export class EditorStore {
       }
       seq = change.seq
     }
-    if (seq !== headSeq) {
-      // 얹은 revision 이 고른 노드를 지웠으면 놓는다(`#selectionFor`의 «사라진 노드는 놓는다»).
-      const keep = selectedNodeId === null || findNodePath(document.root, selectedNodeId) !== undefined
-      this.#apply({ document, baseDocument: document, headSeq: seq, ...(keep ? {} : { selectedNodeId: null }) })
-    }
+    // 얹은 revision 이 고른 노드를 지웠으면 목록에서 빠진다 — 문서가 바뀌는 모든 자리와 같은 길이다(`#withSelection`).
+    if (seq !== headSeq) this.#apply({ document, baseDocument: document, headSeq: seq })
     if (stale !== null) this.#markStale(stale)
   }
 
@@ -1291,8 +1312,8 @@ export class EditorStore {
    *
    * ## 사라진 노드는 놓는다
    *
-   * 다시 싣는 갈래에서 들고 있던 선택이 새 문서에 없으면 `null`이다 — 남이 지웠거나 스냅샷
-   * 복원으로 문서가 통째로 갈린 판이다. 그대로 두면 선택이 **존재하지 않는 노드**를 가리키고,
+   * 다시 싣는 갈래에서 들고 있던 선택 가운데 새 문서에 없는 것은 목록에서 빠진다(기준 노드가 빠지면 목록의 마지막 —
+   * `store/selection-set.ts`). 다 빠지면 빈 선택이다 — 남이 지웠거나 스냅샷 복원으로 문서가 통째로 갈린 판이다. 그대로 두면 선택이 **존재하지 않는 노드**를 가리키고,
    * 그 위에서 만든 편집은 없는 경로를 건드린다. 여기서도 루트로 옮기지는 않는다: 사용자가
    * 하지 않은 재조회가 자리를 옮기는 것은 같은 이유로 안 된다.
    *
@@ -1303,14 +1324,15 @@ export class EditorStore {
    * 채로 시작한다. 루트는 문서 전체의 조상이므로 **남이 그 페이지 안 어디든 잡고 있으면**
    * 부딪친다 — 그때는 `null`이다.
    */
-  #selectionFor(pageId: string, document: PageDocument): string | null {
-    const { openPageId, document: current, selectedNodeId } = this.#state
+  #selectionFor(pageId: string, document: PageDocument): { ids: readonly string[]; anchor: string | null } {
+    const { openPageId, document: current, selectedNodeId, selectedNodeIds } = this.#state
     if (openPageId === pageId && current !== null) {
-      if (selectedNodeId === null) return null
-      return findNodePath(document.root, selectedNodeId) === undefined ? null : selectedNodeId
+      if (selectedNodeIds.length === 0) return { ids: NO_SELECTION, anchor: null }
+      const kept = normalizeSelection(document.root, selectedNodeIds, selectedNodeId, 'outer')
+      return { ids: sameSelection(kept.ids, selectedNodeIds) ? selectedNodeIds : kept.ids, anchor: kept.anchor }
     }
     const rootId = document.root.id
-    return this.#blocksSelection(pageId, document, rootId) === null ? rootId : null
+    return this.#blocksSelection(pageId, document, rootId) === null ? { ids: [rootId], anchor: rootId } : { ids: NO_SELECTION, anchor: null }
   }
 
   /**
@@ -2610,6 +2632,102 @@ export class EditorStore {
   }
 
   /**
+   * **Cmd+클릭** — 고른 것이면 빼고, 아니면 더한다(설계서 「설계서 화면 구조」의 «고르는 법»). 더한 노드가 기준 노드가 되고, 그것의
+   * 조상 · 자손이 목록에 있으면 그것이 대신한다(루트를 더하면 루트 하나가 된다 — `normalizeSelection`의 `'anchor'`). 뺀 것이 기준
+   * 노드였으면 목록의 마지막이 기준이다. **남이 잡은 자리는 더하지 않는다**(`selectNode`와 같은 판정). 목록이 상한에 차 있으면 더하지
+   * 않고 `capped`로 답한다.
+   */
+  readonly toggleSelect = (nodeId: string): SelectionChange => {
+    const { document, selectedNodeId, selectedNodeIds } = this.#state
+    if (document === null) return { capped: 0 }
+    if (selectedNodeIds.includes(nodeId)) {
+      const ids = selectedNodeIds.filter((id) => id !== nodeId)
+      this.#apply({
+        selectedNodeIds: ids.length === 0 ? NO_SELECTION : ids,
+        selectedNodeId: selectedNodeId === nodeId ? (ids[ids.length - 1] ?? null) : selectedNodeId,
+      })
+      return { capped: 0 }
+    }
+    if (this.selectionBlockedBy(nodeId) !== null) return { capped: 0 }
+    const next = normalizeSelection(document.root, [...selectedNodeIds, nodeId], nodeId, 'anchor')
+    if (next.capped > 0) return { capped: next.capped }
+    this.#setSelection(next)
+    return { capped: 0 }
+  }
+
+  /**
+   * **Shift+클릭** — 기준 노드부터 누른 노드까지 `visibleOrder`(구조 트리의 보이는 차례)로 고른다. 목록을 그 범위로 **갈아 끼우고**
+   * 누른 노드가 기준 노드가 된다(기준 노드는 마지막으로 고른 것 — 다음 Shift 범위는 거기서 선다). 남이 잡은 줄은 건너뛰고, 조상 ·
+   * 자손은 가장 바깥 것이 남는다(`'outer'` — 누른 노드가 바깥 것 안에 들면 기준은 목록의 마지막). 루트는 범위가 루트 하나일 때만 든다.
+   * 기준 노드가 없거나 그 차례에 없으면 누른 것 하나다(`selectNode`).
+   */
+  readonly selectRange = (toId: string, visibleOrder: readonly string[]): SelectionChange => {
+    const { document, selectedNodeId } = this.#state
+    if (document === null) return { capped: 0 }
+    const from = selectedNodeId === null ? -1 : visibleOrder.indexOf(selectedNodeId)
+    const to = visibleOrder.indexOf(toId)
+    if (from === -1 || to === -1) {
+      this.selectNode(toId)
+      return { capped: 0 }
+    }
+    const range = visibleOrder
+      .slice(Math.min(from, to), Math.max(from, to) + 1)
+      .filter((id) => this.selectionBlockedBy(id) === null)
+    const next = normalizeSelection(document.root, this.#withoutRoot(document, range), toId, 'outer')
+    this.#setSelection(next)
+    return { capped: next.capped }
+  }
+
+  /**
+   * **여럿을 한 번에** — Cmd+A(형제 모두) · 캔버스 사각형. `'replace'`는 목록을 갈아 끼우고 `'add'`는 더한다(사각형을 Shift 로 그림).
+   * 남이 잡은 노드는 빠지고, 조상 · 자손은 가장 바깥 것이 남고, 루트는 혼자일 때만 든다. 기준 노드는 `anchor`(목록에 남으면)이고,
+   * 없으면 더할 때는 지금 기준 노드 · 갈아 끼울 때는 목록의 마지막이다. 상한을 넘은 것은 뒤에서 빼고 `capped`로 답한다.
+   */
+  readonly selectMany = (nodeIds: readonly string[], mode: 'replace' | 'add', anchor?: string): SelectionChange => {
+    const { document, selectedNodeId, selectedNodeIds } = this.#state
+    if (document === null) return { capped: 0 }
+    const picked = nodeIds.filter((id) => this.selectionBlockedBy(id) === null)
+    const base = mode === 'add' ? selectedNodeIds : []
+    const next = normalizeSelection(
+      document.root,
+      this.#withoutRoot(document, [...base, ...picked]),
+      anchor ?? (mode === 'add' ? selectedNodeId : null),
+      'outer',
+    )
+    this.#setSelection(next)
+    return { capped: next.capped }
+  }
+
+  /**
+   * **서버가 그 노드들의 잠금을 거절했다 — 선택에서 뺀다**(일부 거절 — `realtime/lock-channel.ts`의 `denied`). 기준 노드가 빠지면 목록의
+   * 마지막이 기준이다. 목록에 없는 것은 조용히 지난다(그 사이 사용자가 뺐다). 이유를 말하는 것은 부르는 쪽이다(`use-realtime.ts`).
+   */
+  readonly dropFromSelection = (nodeIds: readonly string[]): void => {
+    const { selectedNodeId, selectedNodeIds } = this.#state
+    const kept = selectedNodeIds.filter((id) => !nodeIds.includes(id))
+    if (kept.length === selectedNodeIds.length) return
+    this.#apply({
+      selectedNodeIds: kept.length === 0 ? NO_SELECTION : kept,
+      selectedNodeId: selectedNodeId !== null && kept.includes(selectedNodeId) ? selectedNodeId : (kept[kept.length - 1] ?? null),
+    })
+  }
+
+  /** 루트는 혼자일 때만 고른다(위 명령들) — 다른 것이 함께 있으면 뺀다. */
+  #withoutRoot(document: PageDocument, ids: readonly string[]): readonly string[] {
+    const others = ids.filter((id) => id !== document.root.id)
+    return others.length === 0 ? ids : others
+  }
+
+  /** 정리된 목록을 싣는다 — 같은 목록이면 앞 배열을 그대로 둔다(`#apply`는 참조로 견준다). */
+  #setSelection(next: NormalizedSelection): void {
+    const { selectedNodeIds } = this.#state
+    this.#apply({
+      selectedNodeIds: sameSelection(next.ids, selectedNodeIds) ? selectedNodeIds : next.ids.length === 0 ? NO_SELECTION : next.ids,
+      selectedNodeId: next.anchor,
+    })
+  }
+
+  /**
    * 그 노드를 **고르는 것을 막는** 남의 잠금 — `lockedBy`에 `selectionClaims`를 얹은 것이다. 선택이 잠금을
    * 걸지 않는 사람(viewer)에게는 늘 `null`이다. 구조 트리의 `disabled`가 이것을 본다 — 배지는 `lockedBy`를 그대로 본다.
    */
@@ -2629,16 +2747,23 @@ export class EditorStore {
    * 꺼지는 순간(강등)에는 선택을 그대로 둔다 — 막을 것이 줄 뿐이다.
    */
   readonly setSelectionClaims = (selectionClaims: boolean): void => {
-    const { selectedNodeId, document, openPageId } = this.#state
+    const { selectedNodeId, selectedNodeIds, document, openPageId } = this.#state
     // 판정은 `#lockConflictAt` 그대로다 — 새 값이 켜짐일 때만 묻는다(`#blocksSelection`은 아직 앞 값을 본다). 한 번의
-    // `#apply`로 둘을 함께 놓는다 — 둘로 나누면 구독자가 «켜졌는데 막힌 자리를 고른 채»인 상태를 한 번 본다.
-    const blocked =
-      selectionClaims &&
-      selectedNodeId !== null &&
-      document !== null &&
-      openPageId !== null &&
-      this.#lockConflictAt(openPageId, document, selectedNodeId) !== null
-    this.#apply(blocked ? { selectionClaims, selectedNodeId: null } : { selectionClaims })
+    // `#apply`로 둘을 함께 놓는다 — 둘로 나누면 구독자가 «켜졌는데 막힌 자리를 고른 채»인 상태를 한 번 본다. 여럿이면 막힌
+    // 것만 뺀다(기준 노드가 빠지면 목록의 마지막).
+    const kept =
+      selectionClaims && document !== null && openPageId !== null
+        ? selectedNodeIds.filter((id) => this.#lockConflictAt(openPageId, document, id) === null)
+        : selectedNodeIds
+    if (kept.length === selectedNodeIds.length) {
+      this.#apply({ selectionClaims })
+      return
+    }
+    this.#apply({
+      selectionClaims,
+      selectedNodeIds: kept.length === 0 ? NO_SELECTION : kept,
+      selectedNodeId: selectedNodeId !== null && kept.includes(selectedNodeId) ? selectedNodeId : (kept[kept.length - 1] ?? null),
+    })
   }
 
   /** 고르기를 막는 잠금 — 판정의 자리는 `#lockConflictAt` 하나이고, 여기는 `selectionClaims`를 얹을 뿐이다. */
@@ -2805,10 +2930,37 @@ export class EditorStore {
   }
 
   /**
-   * 바뀐 필드가 있을 때만 상태를 교체하고 알린다. 값이 같은데도 교체하면
-   * `getState()`의 참조가 달라져 구독자가 헛일을 한다.
+   * **선택 목록과 기준 노드를 함께 맞춘다**(`selectedNodeIds`의 머리말). 갈래 셋:
+   *
+   * | 바꾸는 것 | 목록 |
+   * |---|---|
+   * | 둘 다 | 그대로 — 부르는 쪽이 정리했다(`#setSelection` · `loadPage`) |
+   * | `selectedNodeId`만 | 그 하나로 접는다(`selectNode` · 판을 비움 — 하나 고르는 지금 길) |
+   * | 문서(선택은 안 건드림) | 새 문서에 없는 노드 · 새로 조상/자손이 된 노드를 뺀다(`'outer'`) — 남의 편집 · 되돌리기 · 리베이스가 지운 노드가 목록에 남지 않는다 |
+   *
+   * 문서마다 트리를 한 번 훑는다 — 고른 것이 없으면 안 훑는다.
    */
-  #apply(next: Partial<EditorState>): void {
+  #withSelection(update: Partial<EditorState>): Partial<EditorState> {
+    const { selectedNodeId, selectedNodeIds, document: current } = this.#state
+    if ('selectedNodeIds' in update) return update
+    if ('selectedNodeId' in update) {
+      const id = update.selectedNodeId ?? null
+      if (id === null) return { ...update, selectedNodeIds: NO_SELECTION }
+      return { ...update, selectedNodeIds: sameSelection(selectedNodeIds, [id]) ? selectedNodeIds : [id] }
+    }
+    const document = update.document
+    if (document === undefined || document === null || document === current || selectedNodeIds.length === 0) return update
+    const kept = normalizeSelection(document.root, selectedNodeIds, selectedNodeId, 'outer')
+    if (sameSelection(kept.ids, selectedNodeIds) && kept.anchor === selectedNodeId) return update
+    return { ...update, selectedNodeIds: kept.ids.length === 0 ? NO_SELECTION : kept.ids, selectedNodeId: kept.anchor }
+  }
+
+  /**
+   * 바뀐 필드가 있을 때만 상태를 교체하고 알린다. 값이 같은데도 교체하면
+   * `getState()`의 참조가 달라져 구독자가 헛일을 한다. 선택 목록은 `#withSelection`이 먼저 맞춘다.
+   */
+  #apply(update: Partial<EditorState>): void {
+    const next = this.#withSelection(update)
     let changed = false
     for (const key of Object.keys(next) as (keyof EditorState)[]) {
       if (next[key] !== this.#state[key]) {

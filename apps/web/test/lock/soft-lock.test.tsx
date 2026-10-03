@@ -115,7 +115,7 @@ interface Board {
   /** 끊고 다시 붙는다 — 예약된 재연결을 손으로 돌린다(진짜 타이머를 남기지 않는다). */
   reconnect: () => void
   /** 지금까지 **모든 소켓으로** 나간 잠금 프레임(`ping`은 뺀다). */
-  lockFrames: () => Array<{ type: string; pageId?: string; nodeId?: string }>
+  lockFrames: () => Array<{ type: string; pageId?: string; nodeIds?: string[] }>
 }
 
 async function board(): Promise<Board> {
@@ -394,7 +394,7 @@ describe('잠금을 잡는다 — 선택이 곧 잠금이다 (설계서 「소�
 
     fireEvent.click(treeButton('Section'))
 
-    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b', lockId: expect.any(Number) })
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeIds: ['n-b'], lockId: expect.any(Number) })
   })
 
   /**
@@ -420,7 +420,7 @@ describe('잠금을 잡는다 — 선택이 곧 잠금이다 (설계서 「소�
   it('루트로 돌아오면 잡고 있던 것을 놓는다', async () => {
     const view = await board()
     fireEvent.click(treeButton('Section'))
-    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b', lockId: expect.any(Number) })
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeIds: ['n-b'], lockId: expect.any(Number) })
 
     // 트리에서 루트 줄을 누른다. 잠글 자리를 고른 것이 아니므로 앞의 것을 놓아야 한다 —
     // 안 놓으면 사용자가 떠난 자리의 배지가 남의 화면에 남는다.
@@ -436,7 +436,7 @@ describe('잠금을 잡는다 — 선택이 곧 잠금이다 (설계서 「소�
     fireEvent.click(treeButton('Section'))
     fireEvent.click(treeButtonAt('Text', 0))
 
-    expect(view.lockFrames().map((frame) => frame.nodeId)).toEqual(['n-b', 'n-a'])
+    expect(view.lockFrames().map((frame) => frame.nodeIds)).toEqual([['n-b'], ['n-a']])
   })
 
   it('막힌 선택은 잠금도 안 낸다 — 화면이 안 고른 것을 서버에 알리지 않는다', async () => {
@@ -465,7 +465,7 @@ describe('잠금을 잡는다 — 선택이 곧 잠금이다 (설계서 「소�
     view.reconnect()
 
     expect(view.lockFrames().length).toBeGreaterThan(before)
-    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b', lockId: expect.any(Number) })
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeIds: ['n-b'], lockId: expect.any(Number) })
   })
 })
 
@@ -504,7 +504,7 @@ describe('페이지를 옮길 때', () => {
   it('새 주소에 **앞 페이지의 노드로** 잠금이 나가지 않는다', async () => {
     const view = await board()
     fireEvent.click(treeButton('Section'))
-    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b', lockId: expect.any(Number) })
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeIds: ['n-b'], lockId: expect.any(Number) })
 
     // 메뉴에서 다른 페이지로 옮긴다. 두 페이지의 문서는 노드 id가 같다(`board`가 그렇게 연다).
     fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
@@ -662,5 +662,96 @@ describe('상태줄 — 잠긴 조상의 이유는 배지가 아니라 여기 �
     view.push(locksFrame([foreign('n-a'), foreign('n-b', { userId: 'u-dahye', userName: '다혜' })]))
 
     expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+  })
+})
+
+/**
+ * **고른 것이 여럿이면 집합 하나로 잡는다**(`realtime/use-node-lock.ts` · `lock-channel.ts`의 «자리는 노드 집합이다»). 서버가 그 가운데
+ * 일부만 거절하면 그 노드만 선택에서 빠지고 하단 바가 누가 쥐었는지 말한다(이름은 `locks` 목록에서). 전부 거절이면 지금처럼 «잡지
+ * 않은 선택»이다 — 선택은 그대로다.
+ */
+describe('여러 노드 선택의 잠금', () => {
+  const lastLockId = (view: Board): number => {
+    const id = (view.lockFrames().at(-1) as { lockId?: number } | undefined)?.lockId
+    if (id === undefined) throw new Error('나간 lock 이 없다')
+    return id
+  }
+  const pickTwo = (view: Board): void => {
+    act(() => {
+      view.store.selectNode('n-a')
+      view.store.toggleSelect('n-b')
+    })
+  }
+
+  /** 혼자 죽는 변조: `useNodeLock`이 기준 노드 하나만 보낸다. */
+  it('여럿을 고르면 고른 노드 전부가 한 프레임에 실린다 · 다시 붙으면 그 집합을 다시 알린다', async () => {
+    const view = await board()
+    pickTwo(view)
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeIds: ['n-a', 'n-b'], lockId: expect.any(Number) })
+
+    view.reconnect()
+
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeIds: ['n-a', 'n-b'], lockId: expect.any(Number) })
+  })
+
+  /**
+   * 혼자 죽는 변조: `use-realtime`이 일부 거절을 선택에서 안 뺀다(`dropFromSelection`을 안 부른다) · 통지를 안 세운다(그 단언만 죽는다).
+   */
+  it('일부 거절은 그 노드만 선택에서 빼고 하단 바에 누가 쥐었는지 말한다 — 남은 것은 다시 보내지 않는다', async () => {
+    const view = await board()
+    pickTwo(view)
+    const sentBefore = view.lockFrames().length
+    view.push(locksFrame([foreign('n-b')]))
+
+    view.push({ type: 'lock-denied', projectId: PROJECT_ID, pageId: PAGE_ID, nodeIds: ['n-b'], lockId: lastLockId(view) })
+
+    expect({
+      ids: view.store.getState().selectedNodeIds,
+      anchor: view.store.getState().selectedNodeId,
+      notice: view.store.getState().editFailure,
+      sent: view.lockFrames().length - sentBefore,
+    }).toEqual({
+      ids: ['n-a'],
+      anchor: 'n-a',
+      notice: { kind: 'message', message: '보라님이 편집 중이라 고를 수 없습니다' },
+      sent: 0,
+    })
+  })
+
+  it('목록이 아직 안 닿았으면 이름 없이 말한다', async () => {
+    const view = await board()
+    pickTwo(view)
+
+    view.push({ type: 'lock-denied', projectId: PROJECT_ID, pageId: PAGE_ID, nodeIds: ['n-b'], lockId: lastLockId(view) })
+
+    expect(view.store.getState().editFailure).toEqual({ kind: 'message', message: '다른 사람이 편집 중이라 고를 수 없습니다' })
+  })
+
+  /** 혼자 죽는 변조: 전부 거절도 선택에서 뺀다(보던 것을 잃는다). */
+  it('전부 거절은 선택을 그대로 둔다 — 잡지 않은 선택이고 통지도 없다', async () => {
+    const view = await board()
+    pickTwo(view)
+
+    view.push({ type: 'lock-denied', projectId: PROJECT_ID, pageId: PAGE_ID, nodeIds: ['n-a', 'n-b'], lockId: lastLockId(view) })
+
+    expect({ ids: view.store.getState().selectedNodeIds, notice: view.store.getState().editFailure }).toEqual({ ids: ['n-a', 'n-b'], notice: null })
+  })
+
+  it('옛 차례의 거절은 버린다 — 그 뒤에 보낸 집합의 답이 아니다', async () => {
+    const view = await board()
+    pickTwo(view)
+    const old = lastLockId(view)
+    // 한 `act` 안에서 빼고 넣으면 이펙트가 같은 집합을 봐 아무것도 안 나간다 — 둘로 나눠 프레임 둘을 낸다.
+    act(() => {
+      view.store.toggleSelect('n-a')
+    })
+    act(() => {
+      view.store.toggleSelect('n-a')
+    })
+    expect(lastLockId(view)).toBeGreaterThan(old)
+
+    view.push({ type: 'lock-denied', projectId: PROJECT_ID, pageId: PAGE_ID, nodeIds: ['n-b'], lockId: old })
+
+    expect(view.store.getState().selectedNodeIds).toEqual(['n-a', 'n-b'])
   })
 })

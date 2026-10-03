@@ -42,9 +42,9 @@ describe('잡고 놓는다', () => {
     const channel = createLockChannel()
     channel.attach(link)
 
-    channel.hold('pg-1', 'n-a')
+    channel.hold('pg-1', ['n-a'])
 
-    expect(link.sent.map((raw) => JSON.parse(raw))).toEqual([{ type: 'lock', pageId: 'pg-1', nodeId: 'n-a', lockId: 1 }])
+    expect(link.sent.map((raw) => JSON.parse(raw))).toEqual([{ type: 'lock', pageId: 'pg-1', nodeIds: ['n-a'], lockId: 1 }])
   })
 
   it('**같은 자리를 다시 잡으면 아무것도 안 나간다** — 룸 전체가 목록을 다시 받는다', () => {
@@ -52,9 +52,9 @@ describe('잡고 놓는다', () => {
     const channel = createLockChannel()
     channel.attach(link)
 
-    channel.hold('pg-1', 'n-a')
-    channel.hold('pg-1', 'n-a')
-    channel.hold('pg-1', 'n-a')
+    channel.hold('pg-1', ['n-a'])
+    channel.hold('pg-1', ['n-a'])
+    channel.hold('pg-1', ['n-a'])
 
     expect(link.sent).toHaveLength(1)
   })
@@ -64,10 +64,10 @@ describe('잡고 놓는다', () => {
     const channel = createLockChannel()
     channel.attach(link)
 
-    channel.hold('pg-1', 'n-a')
-    channel.hold('pg-1', 'n-b')
+    channel.hold('pg-1', ['n-a'])
+    channel.hold('pg-1', ['n-b'])
 
-    expect(link.sent.map((raw) => (JSON.parse(raw) as { nodeId: string }).nodeId)).toEqual(['n-a', 'n-b'])
+    expect(link.sent.map((raw) => (JSON.parse(raw) as { nodeIds: string[] }).nodeIds)).toEqual([['n-a'], ['n-b']])
   })
 
   it('페이지만 바뀌어도 나간다 — 같은 노드 id가 두 페이지에 있을 수 있다', () => {
@@ -75,8 +75,8 @@ describe('잡고 놓는다', () => {
     const channel = createLockChannel()
     channel.attach(link)
 
-    channel.hold('pg-1', 'n-a')
-    channel.hold('pg-2', 'n-a')
+    channel.hold('pg-1', ['n-a'])
+    channel.hold('pg-2', ['n-a'])
 
     expect(link.sent.map((raw) => (JSON.parse(raw) as { pageId: string }).pageId)).toEqual(['pg-1', 'pg-2'])
   })
@@ -86,8 +86,8 @@ describe('잡고 놓는다', () => {
     const channel = createLockChannel()
     channel.attach(link)
 
-    channel.hold('pg-1', 'n-a')
-    channel.hold('pg-1', null)
+    channel.hold('pg-1', ['n-a'])
+    channel.hold('pg-1', [])
 
     expect(types(link)).toEqual(['lock', 'unlock'])
   })
@@ -97,8 +97,8 @@ describe('잡고 놓는다', () => {
     const channel = createLockChannel()
     channel.attach(link)
 
-    channel.hold('pg-1', null)
-    channel.hold(undefined, 'n-a')
+    channel.hold('pg-1', [])
+    channel.hold(undefined, ['n-a'])
 
     expect(link.sent).toEqual([])
   })
@@ -109,7 +109,7 @@ describe('하트비트와 다시 붙기', () => {
     const link = fakeLink()
     const channel = createLockChannel()
     channel.attach(link)
-    channel.hold('pg-1', 'n-a')
+    channel.hold('pg-1', ['n-a'])
 
     channel.refresh()
     channel.refresh()
@@ -132,20 +132,20 @@ describe('하트비트와 다시 붙기', () => {
     const second = fakeLink()
     const channel = createLockChannel()
     channel.attach(first)
-    channel.hold('pg-1', 'n-a')
+    channel.hold('pg-1', ['n-a'])
 
     channel.attach(second)
     channel.reannounce()
 
     // 차례는 연결이 아니라 통로의 것이다 — 다시 붙어도 이어서 올린다(앞 연결의 거절이 늦게 닿아도 짝이 안 맞는다).
-    expect(second.sent.map((raw) => JSON.parse(raw))).toEqual([{ type: 'lock', pageId: 'pg-1', nodeId: 'n-a', lockId: 2 }])
+    expect(second.sent.map((raw) => JSON.parse(raw))).toEqual([{ type: 'lock', pageId: 'pg-1', nodeIds: ['n-a'], lockId: 2 }])
   })
 
   it('연결이 없으면 조용하다 — 잠금을 못 잡은 것은 편집 실패가 아니다', () => {
     const channel = createLockChannel()
 
     expect(() => {
-      channel.hold('pg-1', 'n-a')
+      channel.hold('pg-1', ['n-a'])
       channel.refresh()
     }).not.toThrow()
   })
@@ -154,7 +154,7 @@ describe('하트비트와 다시 붙기', () => {
     const link = fakeLink()
     const channel = createLockChannel()
     channel.attach(link)
-    channel.hold('pg-1', 'n-a')
+    channel.hold('pg-1', ['n-a'])
 
     channel.detach()
     channel.refresh()
@@ -169,8 +169,9 @@ describe('하트비트와 다시 붙기', () => {
  */
 describe('잡지 않은 선택', () => {
   /** 마지막으로 보낸 `lock`의 거절 — 서버가 그 `lockId`를 되돌려준다. */
-  const denial = (channel: ReturnType<typeof createLockChannel>, link: { sent: string[] }, nodeId: string): void =>
-    channel.denied('pg-1', nodeId, lastLockId(link))
+  const denial = (channel: ReturnType<typeof createLockChannel>, link: { sent: string[] }, nodeId: string): void => {
+    channel.denied('pg-1', [nodeId], lastLockId(link))
+  }
 
   /**
    * 세 경로(고르기 `hold` · 첫 편집 `refresh`의 잡기 · 다시 붙은 `reannounce`)가 보낸 `lock`이 **모두** 거절을 받는다.
@@ -185,7 +186,7 @@ describe('잡지 않은 선택', () => {
     channel.attach(link)
 
     // 고르기 → 거절
-    channel.hold('pg-1', 'n-a')
+    channel.hold('pg-1', ['n-a'])
     denial(channel, link, 'n-a')
     channel.reannounce()
     expect(types(link)).toEqual(['lock'])
@@ -202,7 +203,7 @@ describe('잡지 않은 선택', () => {
     denial(channel, link, 'n-a')
 
     // 놓는다 — 서버는 거절하며 이미 놓았다
-    channel.hold('pg-1', null)
+    channel.hold('pg-1', [])
     expect(types(link)).toEqual(['lock', 'lock', 'lock', 'lock'])
   })
 
@@ -211,15 +212,15 @@ describe('잡지 않은 선택', () => {
     const link = fakeLink()
     const channel = createLockChannel()
     channel.attach(link)
-    channel.hold('pg-1', 'n-a')
+    channel.hold('pg-1', ['n-a'])
     const aId = lastLockId(link)
-    channel.hold('pg-1', 'n-b')
+    channel.hold('pg-1', ['n-b'])
 
-    channel.denied('pg-1', 'n-a', aId)
-    channel.denied('pg-2', 'n-b', lastLockId(link))
+    channel.denied('pg-1', ['n-a'], aId)
+    channel.denied('pg-2', ['n-b'], lastLockId(link))
     channel.reannounce()
 
-    expect(link.sent.map((raw) => (JSON.parse(raw) as { nodeId: string }).nodeId)).toEqual(['n-a', 'n-b', 'n-b'])
+    expect(link.sent.map((raw) => (JSON.parse(raw) as { nodeIds: string[] }).nodeIds)).toEqual([['n-a'], ['n-b'], ['n-b']])
   })
 
   /**
@@ -232,21 +233,84 @@ describe('잡지 않은 선택', () => {
     const channel = createLockChannel()
     channel.attach(link)
 
-    channel.hold('pg-1', 'n-a')
+    channel.hold('pg-1', ['n-a'])
     const first = lastLockId(link)
-    channel.hold('pg-1', 'n-b')
-    channel.hold('pg-1', 'n-a')
-    channel.denied('pg-1', 'n-a', first)
-    channel.hold('pg-1', null)
+    channel.hold('pg-1', ['n-b'])
+    channel.hold('pg-1', ['n-a'])
+    channel.denied('pg-1', ['n-a'], first)
+    channel.hold('pg-1', [])
     expect(types(link)).toEqual(['lock', 'lock', 'lock', 'unlock'])
 
     // 하트비트 — 같은 자리를 다시 보낸 뒤 닿은 앞 거절도 버리고, 마지막 것의 거절은 받는다(그 뒤 놓을 것이 없다).
-    channel.hold('pg-1', 'n-c')
+    channel.hold('pg-1', ['n-c'])
     const beat = lastLockId(link)
     channel.refresh()
-    channel.denied('pg-1', 'n-c', beat)
-    channel.denied('pg-1', 'n-c', lastLockId(link))
-    channel.hold('pg-1', null)
+    channel.denied('pg-1', ['n-c'], beat)
+    channel.denied('pg-1', ['n-c'], lastLockId(link))
+    channel.hold('pg-1', [])
     expect(types(link)).toEqual(['lock', 'lock', 'lock', 'unlock', 'lock', 'lock'])
+  })
+})
+
+/**
+ * **자리는 노드 집합이다**(`lock-channel.ts`의 그 절). 하나 고른 판은 길이 1 의 집합이고, 여럿 고른 판은 고른 서브트리 전부를 한 프레임에
+ * 싣는다. 거절은 둘로 갈린다 — 일부면 그 노드를 집합에서 빼고 돌려주고(부르는 쪽이 선택에서 뺀다), 전부면 «잡지 않은 선택»이다.
+ */
+describe('집합', () => {
+  const sentIds = (link: { sent: string[] }): string[][] =>
+    link.sent.map((raw) => JSON.parse(raw) as { type: string; nodeIds?: string[] }).filter((frame) => frame.type === 'lock').map((frame) => frame.nodeIds ?? [])
+
+  it('집합을 한 프레임에 싣고, 차례만 다른 같은 집합은 안 보내고, 바뀌면 보낸다', () => {
+    const link = fakeLink()
+    const channel = createLockChannel()
+    channel.attach(link)
+
+    channel.hold('pg-1', ['n-a', 'n-b'])
+    channel.hold('pg-1', ['n-b', 'n-a'])
+    channel.hold('pg-1', ['n-a', 'n-b', 'n-c'])
+
+    expect(sentIds(link)).toEqual([['n-a', 'n-b'], ['n-a', 'n-b', 'n-c']])
+  })
+
+  /** 혼자 죽는 변조: 일부 거절도 집합째 «잡지 않은 선택»으로 옮긴다(돌려주는 것이 없다 · 하트비트가 거절된 노드까지 싣는다). */
+  it('일부 거절은 그 노드를 집합에서 빼고 돌려준다 — 하트비트 · 다시 알림은 남은 것만 싣는다', () => {
+    const link = fakeLink()
+    const channel = createLockChannel()
+    channel.attach(link)
+    channel.hold('pg-1', ['n-a', 'n-b', 'n-c'])
+
+    expect(channel.denied('pg-1', ['n-b'], lastLockId(link))).toEqual(['n-b'])
+    channel.refresh()
+    channel.reannounce()
+    // 선택이 남은 둘로 바뀌어 오는 `hold`는 같은 집합이라 안 보낸다.
+    channel.hold('pg-1', ['n-a', 'n-c'])
+
+    expect(sentIds(link)).toEqual([['n-a', 'n-b', 'n-c'], ['n-a', 'n-c'], ['n-a', 'n-c']])
+  })
+
+  /** 혼자 죽는 변조: 전부 거절도 일부처럼 돌려준다(부르는 쪽이 선택을 비운다). */
+  it('전부 거절은 잡지 않은 선택이다 — 돌려주는 것이 없고, 첫 편집이 집합째 다시 잡는다', () => {
+    const link = fakeLink()
+    const channel = createLockChannel()
+    channel.attach(link)
+    channel.hold('pg-1', ['n-a', 'n-b'])
+
+    expect(channel.denied('pg-1', ['n-b', 'n-a'], lastLockId(link))).toEqual([])
+    channel.reannounce()
+    channel.refresh()
+
+    expect(sentIds(link)).toEqual([['n-a', 'n-b'], ['n-a', 'n-b']])
+  })
+
+  it('잡은 집합 밖의 노드만 실린 거절은 버린다', () => {
+    const link = fakeLink()
+    const channel = createLockChannel()
+    channel.attach(link)
+    channel.hold('pg-1', ['n-a'])
+
+    expect(channel.denied('pg-1', ['n-z'], lastLockId(link))).toEqual([])
+    channel.hold('pg-1', [])
+
+    expect(types(link)).toEqual(['lock', 'unlock'])
   })
 })
