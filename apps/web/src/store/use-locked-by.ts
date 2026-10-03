@@ -14,7 +14,7 @@
  *
  * # 판정은 여기서도 하지 않는다
  *
- * 이 파일은 `findLockConflict`를 부르지 않는다 — `store.lockedBy`를 **그대로 돌려준다.**
+ * 이 파일은 `selectionConflicts`를 부르지 않는다 — `store.lockedBy`를 **그대로 돌려준다.**
  * 목록을 뒤지는 코드가 여기 생기면 그것이 곧 두 벌째 판정이고, 그때 화면이 통과시킨 편집을
  * 서버가 거절한다(`packages/schema/src/lock.ts`의 머리말).
  */

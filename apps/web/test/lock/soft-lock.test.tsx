@@ -658,7 +658,7 @@ describe('상태줄 — 잠긴 조상의 이유는 배지가 아니라 여기 �
     const view = await board()
 
     // `n-a`는 루트의 다른 자식이라 루트와 부딪치는 것은 둘 다지만, 화면이 드는 것은
-    // `findLockConflict`가 낸 **첫 잠금** 하나다(`packages/schema/src/lock.ts`).
+    // `selectionConflicts`가 낸 **첫 잠금** 하나다(`packages/schema/src/lock.ts`).
     view.push(locksFrame([foreign('n-a'), foreign('n-b', { userId: 'u-dahye', userName: '다혜' })]))
 
     expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')

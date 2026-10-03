@@ -16,12 +16,11 @@
  */
 import {
   applyOps,
-  findLockConflict,
-  findNodePath,
   lockConflictOfOps,
   type NodeLock,
   type PageDocument,
   type PatchOp,
+  selectionConflicts,
   type ValidationIssue,
 } from '@wirebound/schema'
 import type { NodeLockView } from '../realtime/protocol'
@@ -2774,7 +2773,7 @@ export class EditorStore {
   /**
    * 그 노드를 **고를 수 없게 막는 남의 잠금**. 없으면 `null`이다(「소프트 잠금」).
    *
-   * **판정 자체는 `@wirebound/schema`의 `findLockConflict`가 한다** — 서버의 2차 방어가
+   * **판정 자체는 `@wirebound/schema`의 `selectionConflicts`가 한다** — 서버의 획득 판정이
    * 부르는 바로 그 함수다. 두 방어가 나뉜 것은 **자리**이지 판정이 아니다: 판정이 두 벌이면
    * 화면이 통과시킨 편집을 서버가 거절하고, 사용자는 값을 쳤는데 저장이 안 되는 것을 보되
    * **왜인지 화면에 없다.**
@@ -2801,56 +2800,41 @@ export class EditorStore {
   }
 
   /**
-   * 노드 **하나를 고르는** 자리의 잠금. `lockedBy`와 `#selectionFor`가 공유한다 —
-   * 둘 다 *"이 노드를 고를 수 있나"*를 묻고, 그 물음이 포인터로 바뀌는 자리가 여기다.
+   * 노드 **하나를 고르는** 자리의 잠금. `lockedBy`와 `#selectionFor`가 공유한다 — 둘 다 *"이 노드를 고를 수 있나"*를 묻는다.
    *
-   * **잠금이 없으면 문서를 뒤지지 않는다 — 순서가 계약이다.** `findNodePath`는 검증 전
-   * 문서에서 **던진다**(`children` 배열 안의 `null` — `edit/safe-walk.ts`의 머리말). 이
-   * 패널·구조 트리는 오류 경계 밖이라 던지면 `.wb-shell`이 통째로 사라진다. 실측: 이 두 줄을
-   * 뒤집으면 `test/panels/property-panel.test.tsx`의 *"children 배열 안에 노드가 아닌 원소가
-   * 있어도 노드를 고를 수 있다"*가 `reading 'id'`로 죽는다. 잠금이 하나도 없는 흔한 판에서
-   * 그 문서를 여는 것이 그 케이스이고, 지금 이 순서가 그것을 지킨다.
-   *
-   * **문서에 없는 노드는 부딪칠 자리가 없다.** 경로가 없으면 `null`이고, 그 판정은
-   * `findLockConflict`의 *"가리키는 노드가 문서에 없는 잠금은 아무것도 막지 못한다"*와
-   * 같은 방향이다.
-   */
-  #lockConflictAt(pageId: string, document: PageDocument, nodeId: string): NodeLock | null {
-    if (this.#state.locks.length === 0) return null
-    const path = findNodePath(document.root, nodeId)
-    if (path === undefined) return null
-    return this.#lockConflict(pageId, document, [path])
-  }
-
-  /**
-   * 잠금 판정의 **본체 한 자리**. **포인터를 받는 것이 요점이다** — 「소프트 잠금」이 나눈 두 방어가
-   * 같은 함수에 **다른 자리**를 넣는 형태이고(`lock.ts`의
-   * `LockConflictInput.pointers` 주석), 화면 안에서도 그 자리가 둘이다:
+   * 잠금 판정의 **본체**는 둘이고 화면 안에서 각각 한 자리가 부른다 — 「소프트 잠금」이 나눈 두 방어(화면 · 서버)가 같은 함수를 부르는
+   * 형태다:
    *
    * | 묻는 것 | 넣는 것 | 판정 | 부르는 쪽 |
    * |---|---|---|---|
-   * | 이 노드를 고를 수 있나 | `findNodePath(root, nodeId)` 하나 | `findLockConflict`(여기) | `lockedBy` |
+   * | 이 노드를 고를 수 있나 | 노드 id | `selectionConflicts`(여기) | `lockedBy` · `#selectionFor` |
    * | 이 편집 · 되돌리기를 낼 수 있나 | 편집(`ops` · `inverse`) 그대로 | `lockConflictOfOps`(`#editConflict`) | `editBlockedBy` · `#startFrom` |
    *
-   * **편집은 포인터로 바꿔 여기 넣지 않는다** — 편집의 포인터는 앞 연산을 적용한 뒤 문서의 좌표라 지금 문서의 잠금 경로와 어긋난다
-   * (`@wirebound/schema`의 `lockConflictOfOps` 머리말). **두 판정을 부르는 자리는 `apps/web` 전체에 각각 하나다**
-   * (`test/lock/one-verdict.test.ts`가 소스에서 센다). 둘째 갈래가 생겼다고 호출을 하나 더
-   * 두면 그 순간 판정이 두 벌이 된다.
+   * **두 판정을 부르는 자리는 `apps/web` 전체에 각각 하나다**(`test/lock/one-verdict.test.ts`가 소스에서 센다). 둘째 갈래가 생겼다고
+   * 호출을 하나 더 두면 그 순간 판정이 두 벌이 된다. 서버의 획득 판정(`apps/api`의 `lock/check.ts`의 `selectionVerdict`)이 같은 함수에
+   * 집합 전부를 넣는다.
+   *
+   * **검증 전 문서에서 던지지 않는다** — 문서(`children` 배열 안의 `null` — `edit/safe-walk.ts`의 머리말)를 훑다 던지면, 이 패널 · 구조
+   * 트리는 오류 경계 밖이라 `.wb-shell`이 통째로 사라진다(`test/panels/property-panel.test.tsx`의 *"children 배열 안에 노드가 아닌 원소가
+   * 있어도 노드를 고를 수 있다"* — 잠금이 없는 판). `selectionConflicts`는 노드가 아닌 원소를 건너뛰고, 잠금이 없으면 문서를 돌지 않는다.
+   *
+   * **문서에 없는 노드는 부딪칠 자리가 없다** — `null`이다(`selectionConflicts`의 «문서에 없는 노드는 막을 것이 없다»).
    *
    * **페이지와 문서를 인자로 받는 것도 그대로다** — `loadPage`가 첫 선택을 정할 때는 그 둘이
    * 아직 `#state`에 들어가 있지 않다(들어간 뒤에 물으면 `#apply`가 두 번 돌아 구독자가 두 번
    * 깬다).
    */
-  #lockConflict(pageId: string, document: PageDocument, pointers: readonly string[]): NodeLock | null {
+  #lockConflictAt(pageId: string, document: PageDocument, nodeId: string): NodeLock | null {
     const { locks, viewerUserId } = this.#state
     if (locks.length === 0) return null
-    return findLockConflict({
+    const [conflict] = selectionConflicts({
       root: document.root,
       locks: locks.filter((lock) => lock.pageId === pageId),
-      pointers,
+      nodeIds: [nodeId],
       // 누구인지 모르면 어느 잠금과도 같지 않은 값이 되어 **전부 남의 것**이 된다.
       viewerUserId: viewerUserId ?? '',
     })
+    return conflict ?? null
   }
 
   /**

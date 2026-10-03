@@ -61,9 +61,9 @@ const NOTHING: StructureAbilities = {
  * # 남이 잠근 자리는 전부 `false`다 (설계서 「소프트 잠금」)
  *
  * **셋째 인자는 판정이 아니라 «판정의 결과»다.** 스토어의 `lockedBy`가
- * `@wirebound/schema`의 `findLockConflict`로 낸 값을 그대로 받는다 — 서버의 2차 방어가
+ * `@wirebound/schema`의 `selectionConflicts`로 낸 값을 그대로 받는다 — 서버의 획득 판정이
  * 부르는 바로 그 함수다. 여기서 잠금을 **다시** 판정하면 화면에 판정이 두 벌이 되고,
- * 한쪽만 고쳐지면 둘이 조용히 갈린다(`test/lock/one-verdict.test.ts`가 `findLockConflict`를 부르는
+ * 한쪽만 고쳐지면 둘이 조용히 갈린다(`test/lock/one-verdict.test.ts`가 `selectionConflicts`를 부르는
  * 자리를 소스에서 센다 — `apps/web`에서 그것은 스토어 하나여야 한다).
  *
  * ## 왜 «전부»인가 — 서버는 그중 일부를 통과시킨다

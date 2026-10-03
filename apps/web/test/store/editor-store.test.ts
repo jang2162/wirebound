@@ -1357,8 +1357,8 @@ describe('EditorStore의 마커 반영', () => {
  * 잠기니 `lockedBy`도 예외로 두면 깔끔하다"*가 다음 사람에게 자연스러운 정리로 보인다.
  * **이 묶음이 그 정리를 막는 자리다.**
  *
- * **왜 막아야 하나.** `lockedBy`의 판정은 `@wirebound/schema`의 `findLockConflict`이고
- * **서버의 2차 방어가 부르는 바로 그 함수**다(`editor-store.ts`의 `lockedBy` 독블록).
+ * **왜 막아야 하나.** `lockedBy`의 판정은 `@wirebound/schema`의 `selectionConflicts`이고
+ * **서버의 획득 판정이 부르는 바로 그 함수**다(`editor-store.ts`의 `lockedBy` 독블록).
  * 여기에만 예외를 두면 판정이 두 벌이 되어, 화면이 통과시킨 편집을 서버가 거절한다 —
  * 사용자는 값을 쳤는데 저장이 안 되고 **왜인지는 화면에 없다.**
  *

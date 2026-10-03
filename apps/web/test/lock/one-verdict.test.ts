@@ -43,10 +43,16 @@ function filesMatching(root: string, pattern: RegExp): string[] {
   )
 }
 
-/** 판정을 부르는 자리 — 노드 하나를 고르는 판정. 선언은 세지 않는다. */
-const CALLS_VERDICT = /\bfindLockConflict\s*\(/
+/**
+ * 판정을 부르는 자리 — 노드를 고르는 판정(서버는 집합 전부 · 화면은 노드 하나). 선언은 세지 않는다. 이 판정은 문서를 한 번 돈다 —
+ * 노드마다 `findLockConflict`(남의 잠금마다 문서를 훑는다)를 부르면 고른 수 × 남의 잠금 수 번의 훑기가 서버의 동기 구간에 선다
+ * (`packages/schema/src/lock.ts`의 `selectionConflicts` «문서를 한 번만 돈다»).
+ */
+const CALLS_VERDICT = /\bselectionConflicts\s*\(/
 /** 판정을 **선언**하는 자리. */
-const DECLARES_VERDICT = /export\s+function\s+findLockConflict\s*\(/
+const DECLARES_VERDICT = /export\s+function\s+selectionConflicts\s*\(/
+/** 노드마다 따로 묻던 판정 — 앱이 부르지 않는다(위). */
+const CALLS_POINTER_VERDICT = /\bfindLockConflict\s*\(/
 /**
  * **편집**의 판정을 부르는 자리 — `lockConflictOfOps`는 연산마다 좌표를 맞춰 잠긴 자리를 따라간다(`packages/schema/src/lock.ts`). 편집을
  * 포인터로 모아 `findLockConflict`에 넣으면 앞 연산이 민 좌표를 편집 전 경로와 견줘 뚫린다(C2 리뷰 발견 1).
@@ -91,6 +97,13 @@ describe('판정은 한 벌이다', () => {
     expect(filesMatching(WEB_SRC, CALLS_VERDICT)).toEqual(['store/editor-store.ts'])
   })
 
+  it('노드마다 따로 묻는 판정(`findLockConflict`)을 앱이 부르지 않는다', () => {
+    // 답은 같지만(`packages/schema/test/lock-selection-oracle.test.ts`) 남의 잠금마다 문서를 훑는다 — 서버의 집합 판정에 쓰면 하트비트
+    // 하나가 이벤트 루프와 페이지 행을 초 단위로 쥔다(`apps/api/test/ws-lock-cost.test.ts`).
+    expect(filesMatching(API_SRC, CALLS_POINTER_VERDICT)).toEqual([])
+    expect(filesMatching(WEB_SRC, CALLS_POINTER_VERDICT)).toEqual([])
+  })
+
   it('편집의 판정도 선언은 `packages/schema`에 하나이고 **양쪽이** 그것을 부른다', () => {
     // 서버: `lock/check.ts`의 `lockConflictError`(REST `PATCH …/ops` · WS `patch` · MCP · `PUT …/schema`). 화면: 스토어의 `#editConflict`
     // (끌어 놓기의 `editBlockedBy` · 되돌리기의 `#startFrom`). 화면이 편집을 다른 판정으로 물으면 화면이 받는 자리를 서버가 거절하거나
@@ -103,7 +116,7 @@ describe('판정은 한 벌이다', () => {
   })
 
   it('편집을 포인터로 바꿔 넣는 옛 길이 앱에 없다', () => {
-    // 편집의 포인터를 모아 `findLockConflict`에 넣는 도우미(`lockPointers`)가 서면 좌표가 어긋나는 판정이 다시 선다.
+    // 편집의 포인터를 모아 `findLockConflict`(포인터를 받는 판정)에 넣는 도우미(`lockPointers`)가 서면 좌표가 어긋나는 판정이 다시 선다.
     expect(filesMatching(SCHEMA_SRC, /\blockPointers\b/)).toEqual([])
     expect(filesMatching(API_SRC, /\blockPointers\b/)).toEqual([])
     expect(filesMatching(WEB_SRC, /\blockPointers\b/)).toEqual([])
@@ -157,7 +170,7 @@ describe('판정은 한 벌이다', () => {
   it('그 자리가 **판정을 새로 짓지 않는다** — 목록을 쥐는 파일이 곧 판정하는 파일은 아니다', () => {
     // 위 케이스는 *"목록을 쥐는 자리가 하나"*만 세므로, 그 하나가 **자기 손으로** 판정하기
     // 시작하면 조용히 통과한다.
-    // `findLockConflict`를 부르는 자리가 스토어 하나라는 것은 위에서 이미 세므로, 여기서는
+    // `selectionConflicts`를 부르는 자리가 스토어 하나라는 것은 위에서 이미 세므로, 여기서는
     // 그 파일이 **문서를 뒤지는 코드를 갖지 않는다**는 것을 본다.
     //
     // # 이 자가 못 보는 것 — **혼자 믿지 마라**
@@ -193,7 +206,10 @@ describe('판정은 한 벌이다', () => {
     // 실제로 맞는 것이 있다는 것을 여기서 본다.
     expect(filesMatching(SCHEMA_SRC, CALLS_VERDICT).length).toBeGreaterThan(0)
     expect(filesMatching(SCHEMA_SRC, CALLS_OPS_VERDICT).length).toBeGreaterThan(0)
-    expect(filesMatching(WEB_SRC, /\bfindNodePath\s*\(/).length).toBeGreaterThan(0)
+    expect(filesMatching(SCHEMA_SRC, CALLS_POINTER_VERDICT).length).toBeGreaterThan(0)
+    // `findNodePath`는 화면이 더 부르지 않는다(노드를 고르는 판정이 노드 id 를 받는다) — 위 «판정을 새로 짓지 않는다»의 정규식이
+    // 맞는 것이 있다는 것을 선언하는 쪽에서 본다.
+    expect(filesMatching(SCHEMA_SRC, /\bfindNodePath\s*\(/).length).toBeGreaterThan(0)
   })
 
   /**
