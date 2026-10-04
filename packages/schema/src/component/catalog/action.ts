@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineComponent } from '../define'
+import { oneLine } from '../summary'
 
 export const ButtonDef = defineComponent({
   type: 'Button',
@@ -18,6 +19,7 @@ export const ButtonDef = defineComponent({
     { prop: 'disabled', control: 'switch', label: '비활성' },
     { prop: 'loading', control: 'switch', label: '로딩' },
   ],
+  summary: (props) => oneLine(props.label),
   states: ['disabled', 'loading'],
   children: 'none',
 })
@@ -38,6 +40,7 @@ export const LinkDef = defineComponent({
     // `states: ['disabled']`와 짝이다(`Button`과 같다).
     { prop: 'disabled', control: 'switch', label: '비활성' },
   ],
+  summary: (props) => oneLine(props.label),
   states: ['disabled'],
   children: 'none',
 })

@@ -36,7 +36,7 @@ const DESCRIPTION_MAX = 60
  * | 축 | 필드 | 누가 읽는가 |
  * |---|---|---|
  * | **노드의 계약** | `props`·`editor`·`variantFrom`·`states`·`children` | 검증기·렌더러·속성 패널 |
- * | **사람이 읽을 것** | `label`·`description`·`group` | 저작 UI(타입 고르개·문장화) |
+ * | **사람이 읽을 것** | `label`·`description`·`group`·`summary` | 저작 UI(타입 고르개·문장화·구조 트리 줄) |
  *
  * 아래 축은 **DOM에 나가지 않는다.** 렌더러가 노드에 싣는 `data-wb-*`(`id`·`component`·`variant`·`state`)는 전부 위
  * 축에서 나오고, 사람이 읽을 필드는 그중 하나도 만들지 않는다.
@@ -81,6 +81,12 @@ export interface ComponentDef {
    * `data-wb-state`). 빠진 것은 **enum prop → `data-wb-variant`**뿐이므로 그것을 채운다 — 테마가 겨냥할 속성이 늘지 않는다.
    */
   variantFrom?: string
+  /**
+   * 구조 트리 줄에서 타입 곁에 흐리게 붙는 한 줄 — 같은 타입이 여럿일 때 어느 것인지 가르는 데까지만(`Flex` → `가로`,
+   * `Button` → 라벨). 없는 컴포넌트는 요약이 없다. 받는 값은 기본값을 채운 props 이고, 규격에 안 맞는 노드면 원본
+   * props 다 — 그래서 값을 믿지 않고 읽는다(`./summary.ts`의 읽개들). 부르는 자리는 `display.ts`의 `nodeSummary` 하나다.
+   */
+  summary?: (props: Record<string, unknown>) => string | null
   /** 같은 이름의 prop이 true면 활성화되는 상태 */
   states: string[]
   children: 'none' | 'many'

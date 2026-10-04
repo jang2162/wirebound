@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineComponent } from '../define'
+import { axisWord, firstOf, integer, joined, oneLine } from '../summary'
 
 export const PageDef = defineComponent({
   type: 'Page',
@@ -53,6 +54,7 @@ export const FlexDef = defineComponent({
     { prop: 'justify', control: 'select', label: '주축 정렬', options: ['start', 'center', 'end', 'between'] },
     { prop: 'wrap', control: 'switch', label: '줄바꿈' },
   ],
+  summary: (props) => joined(axisWord(props.direction), props.wrap === true ? '줄바꿈' : null),
   states: [],
   children: 'many',
 })
@@ -66,6 +68,10 @@ export const GridDef = defineComponent({
     columns: z.number().int().min(1).max(12).default(2),
   }),
   editor: [{ prop: 'columns', control: 'number', label: '열 수' }],
+  summary: (props) => {
+    const columns = integer(props.columns)
+    return columns === null ? null : `${columns}열`
+  },
   states: [],
   children: 'many',
 })
@@ -83,6 +89,7 @@ export const CardDef = defineComponent({
     { prop: 'title', control: 'text', label: '제목' },
     { prop: 'subtitle', control: 'text', label: '부제' },
   ],
+  summary: (props) => oneLine(props.title),
   states: [],
   children: 'many',
 })
@@ -100,6 +107,7 @@ export const TabsDef = defineComponent({
     { prop: 'tabs', control: 'stringList', label: '탭 목록' },
     { prop: 'active', control: 'number', label: '활성 탭' },
   ],
+  summary: (props) => firstOf(props.tabs),
   states: [],
   children: 'many',
 })
