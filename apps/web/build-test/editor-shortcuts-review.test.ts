@@ -312,13 +312,25 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
     const { P, rootId } = await fixture(stack, alice, 'l2-l3', CARD_PAGE())
     const { page, close } = await open(P)
     try {
-      // L2 — 항목이 전부 꺼진 «Page 더 보기»: 포커스가 토글에 남는다.
+      // L2 — 항목이 전부 꺼진 «Page 더 보기»: 포커스가 토글에 남는다. 뿌리의 `…` 는 «별칭 바꾸기»가 켜져 있어, 뿌리를 고른 채 남(bob)이
+      // 자손 하나를 쥐게 해 전부 끈다(뿌리는 모든 노드의 조상이라 판정이 다 꺼진다 — `lock/toolbar-abilities.test.tsx` 와 같은 판).
       await row(page, rootId).click()
+      const projectId = P.split('/')[2]!
+      const member = await stack.request(alice, 'POST', `/projects/${projectId}/members`, { email: stack.users.bob.email, role: 'editor' })
+      if (member.status >= 300) throw new Error(`member ${member.status}`)
+      const bob = await stack.openTab(stack.users.bob, { viewport: { width: 1440, height: 900 } })
+      await bob.page.goto(P)
+      await canvasFrame(bob.page).locator('[data-wb-id]').first().waitFor()
+      await row(bob.page, 'n_text0000002').click()
+      await page.locator('[data-tree-id="n_text0000002"] ~ .wb-shell-structure-lock').waitFor()
       await page.getByRole('button', { name: 'Page 더 보기', exact: true }).click()
       const l2Focus = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))
       await page.keyboard.press('Escape')
       await sleep(150)
       const l2 = { focus: l2Focus, menus: await page.locator('[role="menu"]').count(), selected: await selected(page) }
+      // bob 이 나가면 잠금이 풀린다 — 아래 L3 이 그 노드를 고른다.
+      await bob.context.close()
+      await page.locator('[data-tree-id="n_text0000002"] ~ .wb-shell-structure-lock').waitFor({ state: 'detached' })
 
       // L3 — 타입 고르개의 «취소»에 포커스. 고르개 안의 Escape 는 고르개를 닫는다(`cancelAdd`) — 선택은 그대로다.
       const openPicker = async () => {
