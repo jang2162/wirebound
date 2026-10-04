@@ -231,7 +231,22 @@ describe('useEditorShortcuts', () => {
     expect(ran).toEqual(['selectFirstChild'])
   })
 
-  it('열린 메뉴 · 고르개(`data-wb-holds-keys`)는 포커스가 그 안일 때만 화살표 · Escape 를 쥔다 — 밖의 키 · 안의 Delete 는 단축키가 받는다', () => {
+  it('열린 행동 메뉴(`data-wb-holds-keys="menu"`)는 Delete · Backspace 도 쥔다 — 명령 키 조합 · `?` 는 단축키가 받는다', () => {
+    const { ran } = setup()
+    const menu = mount(document.createElement('div'))
+    menu.setAttribute('data-wb-holds-keys', 'menu')
+    const inside = menu.appendChild(document.createElement('button'))
+
+    expect(press(inside, { key: 'Delete' })).toBe(false)
+    expect(press(inside, { key: 'Backspace' })).toBe(false)
+    expect(press(inside, { key: 'Escape' })).toBe(false)
+    expect(press(inside, { key: 'd', ctrlKey: true })).toBe(true)
+    expect(press(inside, { key: '?' })).toBe(true)
+    expect(press(document.body, { key: 'Delete' })).toBe(true)
+    expect(ran).toEqual(['duplicate', 'help', 'delete'])
+  })
+
+  it('열린 고르개(`data-wb-holds-keys`)는 포커스가 그 안일 때만 화살표 · Escape 를 쥔다 — 밖의 키 · 안의 Delete 는 단축키가 받는다', () => {
     const { ran } = setup()
     const open = mount(document.createElement('div'))
     open.setAttribute('data-wb-holds-keys', '')

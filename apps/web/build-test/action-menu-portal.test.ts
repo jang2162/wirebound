@@ -4,8 +4,8 @@
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 키 — 구조 트리 줄 `…` | ↓ 가 항목을 안 옮긴다 · ← 가 선택을 옮긴다 · Escape 뒤 포커스가 단추가 아니다 · Delete 가 고른 노드를 안 지운다(정본 «단축키» — 위젯이 안 쓰는 키는 선다) |
- * | 키 — 메뉴 트리 줄 `…` 의 `?` · Delete | 에디터 도움말이 선다 · 메뉴 트리의 삭제 확인이 안 선다 · 에디터 단축키가 구조 노드를 지운다(메뉴 트리는 에디터 단축키를 안 받는다 — `data-wb-own-shortcuts`) |
+ * | 키 — 구조 트리 줄 `…` | ↓ 가 항목을 안 옮긴다 · ← 가 선택을 옮긴다 · Escape 뒤 포커스가 단추가 아니다 · 다시 연 메뉴의 Delete 가 고른 노드를 지운다(열린 행동 메뉴는 Delete 를 쥔다 — 판마다의 값은 `./action-menu-delete.test.ts`) |
+ * | 키 — 메뉴 트리 줄 `…` 의 `?` · Delete | 에디터 도움말이 선다 · 메뉴 트리의 삭제 확인이 선다 · 에디터 단축키가 구조 노드를 지운다(메뉴 트리는 에디터 단축키를 안 받는다 — `data-wb-own-shortcuts`) |
  * | Tab · Shift+Tab | Tab 이 단추 다음 자리로 안 간다 · Shift+Tab 이 단추에 안 선다 |
  * | 바깥 누름 | 다른 줄을 한 번 눌러 메뉴가 닫히고 그 줄이 골라지지 않는다 |
  * | 스크롤 · 창 크기 | 칸을 굴리면 목록이 단추를 안 따라간다 · 단추가 칸 밖으로 나가도 목록이 남는다 · 닫힌 뒤 칸이 되굴려진다 · 창을 좁히면 목록이 창 밖이다 |
@@ -98,7 +98,7 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
   const selectedRow = (page: Page): Promise<string | null> =>
     page.evaluate(() => document.querySelector('.wb-shell-region[aria-label="구조 트리"] [data-tree-row].wb-shell-tree-row-picked')?.getAttribute('data-tree-id') ?? null)
 
-  it('키 — 구조 트리 줄 `…`: ↓ 는 항목 사이 · ← 는 선택을 안 옮김 · Escape 는 닫고 단추로 · Delete 는 고른 노드를 지운다', async () => {
+  it('키 — 구조 트리 줄 `…`: ↓ 는 항목 사이 · ← 는 선택을 안 옮김 · Escape 는 닫고 단추로 · Delete 는 메뉴가 받는다', async () => {
     const { P } = await fixture('portal-keys')
     const { page, close } = await openEditor(P)
     try {
@@ -122,15 +122,15 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
         moved: true,
         afterLeft: { selected: target, menus: 1 },
         afterEscape: { menus: 0, focus: toggleName, selected: target },
-        deleted: true,
-        menus: 0,
+        deleted: false,
+        menus: 1,
       })
     } finally {
       await close()
     }
   })
 
-  it('키 — 메뉴 트리 페이지 줄 `…` 안에서 에디터 단축키(`?`)가 안 서고, Delete 는 메뉴 트리의 삭제 확인을 세우며 구조 노드는 그대로다', async () => {
+  it('키 — 메뉴 트리 페이지 줄 `…` 안에서 에디터 단축키(`?`)가 안 서고, Delete 는 메뉴가 받아 삭제 확인도 안 서며 구조 노드는 그대로다', async () => {
     const { P, pageIds } = await fixture('portal-menu-delete')
     const { page, close } = await openEditor(P)
     try {
@@ -138,8 +138,8 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
       await structureRow(page, nodeId(0)).locator('button').first().click()
       const before = await serverIds(P)
       await openRow(menuRow(page, pageIds[5]!), /더 보기$/)
-      // `?` 는 메뉴 트리가 안 쓰는 에디터 단축키(도움말)다 — 메뉴 트리 안에서는 안 선다(`data-wb-own-shortcuts`). Delete 는 메뉴 트리가 먼저
-      // 받아 `preventDefault` 하므로 이 표지 없이도 에디터 단축키가 안 받는다 — 표지를 재는 것은 `?` 다.
+      // `?` 는 메뉴 트리가 안 쓰는 에디터 단축키(도움말)다 — 메뉴 트리 안에서는 안 선다(`data-wb-own-shortcuts`) — 표지를 재는 것은 `?` 다.
+      // Delete 는 열린 메뉴가 쥐어 메뉴 트리의 삭제 확인도 에디터 단축키도 안 받는다(그 판의 축은 `./action-menu-delete.test.ts` 가 갖는다).
       await page.keyboard.press('?')
       await page.waitForTimeout(200)
       const help = await page.locator('dialog[open]').count()
@@ -147,7 +147,7 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
       await page.waitForTimeout(400)
       const confirm = await page.getByRole('button', { name: '정말 삭제합니까?' }).count()
 
-      expect({ help, confirm, structure: (await serverIds(P)).length === before.length }).toEqual({ help: 0, confirm: 1, structure: true })
+      expect({ help, confirm, structure: (await serverIds(P)).length === before.length }).toEqual({ help: 0, confirm: 0, structure: true })
     } finally {
       await close()
     }

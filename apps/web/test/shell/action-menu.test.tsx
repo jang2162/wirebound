@@ -112,17 +112,17 @@ describe('여닫기', () => {
   })
 
   /**
-   * 목록은 `document.body` 로 portal 되어 단추 상자 밖이다(`src/shell/action-menu.tsx` 머리말 «목록은 문서 맨 위 겹에 선다») — 목록 안의 키는
-   * 표지가 아니라 `role="menu"` 가 쥔다. 둘 다 에디터 단축키의 판정(`keyHeldByWidget`)으로 잰다.
+   * 목록은 `document.body` 로 portal 되어 단추 상자 밖이다(`src/shell/action-menu.tsx` 머리말 «목록은 문서 맨 위 겹에 선다») — 목록에도 같은
+   * 표지를 단다. 둘 다 에디터 단축키의 판정(`keyHeldByWidget`)으로 잰다.
    */
-  it('열린 동안만 단추까지 감싼 상자에 `data-wb-holds-keys` 를 단다 — 단추와 목록의 키가 메뉴의 것이다', () => {
+  it('열린 동안만 단추까지 감싼 상자와 목록에 `data-wb-holds-keys="menu"` 를 단다 — 단추와 목록의 키(Delete · Backspace 포함)가 메뉴의 것이다', () => {
     host()
-    const held = (element: Element) => keyHeldByWidget({ key: 'ArrowDown', target: element })
-    expect(held(toggle())).toBe(false)
+    const held = (element: Element, name = 'ArrowDown') => keyHeldByWidget({ key: name, target: element })
+    expect([held(toggle()), held(toggle(), 'Delete')]).toEqual([false, false])
     fireEvent.click(toggle())
-    expect([held(toggle()), held(document.activeElement!)]).toEqual([true, true])
+    expect([held(toggle()), held(document.activeElement!), held(toggle(), 'Delete'), held(document.activeElement!, 'Backspace')]).toEqual([true, true, true, true])
     key('Escape')
-    expect(held(toggle())).toBe(false)
+    expect([held(toggle()), held(toggle(), 'Delete')]).toEqual([false, false])
   })
 })
 
