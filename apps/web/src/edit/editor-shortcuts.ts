@@ -196,7 +196,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
   },
   {
     command: 'selectParent',
-    label: '부모 고르기',
+    label: '접기 · 부모 고르기',
     keys: () => '←',
     match: (e) => bare(e) && !e.shiftKey && e.key === 'ArrowLeft',
     edits: false,
@@ -204,7 +204,7 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
   },
   {
     command: 'selectFirstChild',
-    label: '첫 자식 고르기',
+    label: '펴기 · 첫 자식 고르기',
     keys: () => '→',
     match: (e) => bare(e) && !e.shiftKey && e.key === 'ArrowRight',
     edits: false,

@@ -10,27 +10,33 @@
  * (`drag/use-pointer-drag.ts` · 자리 판정 `edit/structure-drop.ts`) · 고르개 단축키(`TREE_SHORTCUTS`). 넷 다 `useStructureCommands`
  * (`panels/structure-toolbar.tsx`)의 명령을 부르고, 판정과 편집은 그쪽이 한다. 삭제 · 순서 · 계층의 키는 에디터 단축키
  * (`shell/editor-keys.tsx`)가 같은 훅의 함수로 받는다.
+ *
+ * **줄은 접힌다** — 줄 앞 펼침 단추 · 제목 줄의 «모두 접기» · «모두 펴기»(`./tree-fold.tsx`), 접힘은 페이지마다 화면의 상태(`tree/collapse.ts`)다.
+ * 고른 노드가 접힌 줄 안으로 들어가면 그 조상을 편다(아래 `chains`).
  */
-import { useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { NodeLock, WbNode } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
+import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { platformOf, type ShortcutLine } from '../edit/editor-shortcuts'
 import { usePublishTreeRegion } from '../drag/use-placement'
-import { scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
-import { findNodeSafely } from '../edit/safe-walk'
-import { visibleNodeOrder } from '../edit/selection-move'
+import { elementAt, scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
+import { findNodeSafely, walkSafely } from '../edit/safe-walk'
+import { ancestorIds, hasChildRows, visibleNodeOrder } from '../edit/selection-move'
 import { structureAbilities } from '../edit/structure-actions'
 import { sameDrop, type StructureDrop } from '../edit/structure-drop'
 import { ActionMenu } from '../shell/action-menu'
 import { ICONS } from '../shell/icons'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
+import { structureKey, useCollapsed, type Collapsed } from '../tree/collapse'
 import { nodeTypeLabel } from './node-shape'
 import { structureTreeHint } from './structure-tree-hint'
 import { selectionCapNotice } from './toolbar-status'
 import { isTypingSurface } from './typing-surface'
 import { StructurePicker, useStructureCommands, type StructureCommands } from './structure-toolbar'
+import { TreeFoldButtons, TreeToggle } from './tree-fold'
 import { structureRowItems, TreeRowActions } from './tree-row-actions'
 
 /**
@@ -154,6 +160,30 @@ export function StructureTree(props: {
   /** 줄을 찾는 상자 — 끄는 동안 포인터 밑 줄(`[data-tree-row]`)을 여기서 찾는다. */
   const treeRef = useRef<HTMLUListElement>(null)
   usePublishTreeRegion(treeRef)
+  /** 접힌 줄(`tree/collapse.ts` — 페이지마다 · 세션 동안). 에디터 단축키의 ← → 도 같은 것을 읽고 쓴다. */
+  const fold = useCollapsed(structureKey(props.pageId))
+  /**
+   * **고른 노드가 접힌 줄 안이면 그 조상을 편다**(설계서 «트리 줄마다 접기»). 고른 것이 어디서 왔든 — 캔버스 누름 · 붙여넣기 · 복제 · 화살표 ·
+   * 사각형 · 되돌리기 — 스토어의 선택 목록 하나로 모이므로 그것을 본다. **조상 사슬까지 열쇠에 든다** — 남의 편집이 고른 노드를 접힌 줄 안으로
+   * 옮기면 선택은 그대로여도 사슬이 바뀐다. 사람이 고른 노드의 조상을 접은 판은 사슬이 그대로라 다시 펴지 않는다(접은 손을 이기지 않는다).
+   */
+  const chains = doc === null ? '' : JSON.stringify(selectedNodeIds.map((id) => ancestorIds(doc.root, id)))
+  useLayoutEffect(() => {
+    if (chains === '') return
+    fold.expand((JSON.parse(chains) as string[][]).flat())
+    // `fold` 는 열쇠(페이지)가 바뀔 때만 새 함수다 — 사슬과 함께 본다.
+  }, [chains, fold.expand])
+  // 끄는 포인터가 접힌 줄 위에 머물면(`drag/hover-open.ts`) 그 줄을 편다 — 이 트리 줄 끌기 · 카드 · 손잡이 셋 다 이 이벤트로 온다.
+  useEffect(() => {
+    const tree = treeRef.current
+    if (tree === null) return
+    const open = (event: Event): void => {
+      const id = (event.target as HTMLElement).dataset['treeId']
+      if (id !== undefined && id !== '') fold.expand([id])
+    }
+    tree.addEventListener(HOVER_OPEN_EVENT, open)
+    return () => tree.removeEventListener(HOVER_OPEN_EVENT, open)
+  }, [fold.expand, doc === null])
   /**
    * **끌어 놓기.** 포인터 밑 줄과 띠로 놓을 자리를 받고(`./structure-tree-hint.ts` — 캔버스 손잡이 · 목록 카드가 트리 위를 지날 때도 같은
    * 함수다), 놓으면 `dropTo`가 `moveNodeOps`로 낸다. 남이 잡은 자리는 판정이 스토어의 `editBlockedBy`(서버의 2차 방어와 같은 물음)로
@@ -168,10 +198,12 @@ export function StructureTree(props: {
    * 옛 줄 상자에 남는다(캔버스의 `refresh` 를 트리에는 걸지 않았다).
    */
   const drag = usePointerDrag<string, StructureDrop>({
-    onOver: (source, point) =>
-      doc === null
+    onOver: (source, point) => {
+      hoverRow(elementAt(treeRef.current, '[data-tree-row]', point))
+      return doc === null
         ? null
-        : (structureTreeHint(treeRef.current, doc, { kind: 'node', id: source }, point, store.editBlockedBy)?.hint ?? null),
+        : (structureTreeHint(treeRef.current, doc, { kind: 'node', id: source }, point, store.editBlockedBy)?.hint ?? null)
+    },
     onDrop: (source, target) => commands.dropTo(source, target),
     sameDrop,
     scrollContainer: () => scrollParent(treeRef.current),
@@ -215,7 +247,7 @@ export function StructureTree(props: {
     const change = command
       ? store.toggleSelect(nodeId)
       : event.shiftKey
-          ? store.selectRange(nodeId, visibleNodeOrder(doc.root))
+          ? store.selectRange(nodeId, visibleNodeOrder(doc.root, fold.collapsed))
           : null
     if (change === null) store.selectNode(nodeId)
     else if (change.capped > 0) store.setEditFailure({ kind: 'message', message: selectionCapNotice() })
@@ -257,6 +289,7 @@ export function StructureTree(props: {
           // 판정의 자리는 위 `lockOf` 선언이 갖는다 — 줄과 상태줄이 **같은 값**을 쓴다.
           lockOf={lockOf}
           blockedOf={store.selectionBlockedBy}
+          fold={fold}
           row={
             props.editable
               ? { commands, drag, statusId, rootId, anchorId, picker, select: store.selectNode }
@@ -271,41 +304,47 @@ export function StructureTree(props: {
 
           **고칠 수 없으면 DOM 에서 뺀다**(`editable` — 셸의 `canEdit` 표 «동작 입구»). */}
       {props.editable && <StructureStatusLine commands={commands} id={statusId} />}
-      {props.editable &&
-        props.headSlot !== undefined &&
+      {props.headSlot !== undefined &&
         props.headSlot !== null &&
         createPortal(
-          // **뿌리 `+`** — 페이지 통째에 더하는 셋. «페이지에 추가»는 뿌리를 골라 «안에 추가»를 연다(spec 「툴바 대신 노드별 `+` · `…`」).
-          // 패턴은 고른 것을 풀고 연다 — 고른 것이 없으면 뿌리의 자식 끝에 꽂는다(`edit/pattern-insert.ts`).
-          <ActionMenu
-            label="구조 트리에 추가"
-            icon={ICONS.add}
-            compact
-            items={[
-              {
-                key: 'page',
-                label: '페이지에 추가',
-                icon: ICONS.addInside,
-                disabled: !rootAbilities.addInside,
-                onSelect: () => {
-                  if (rootId === null) return
-                  store.selectNode(rootId)
-                  commands.openAdd('inside')
-                },
-              },
-              {
-                key: 'pattern',
-                label: '패턴 넣기',
-                icon: ICONS.pattern,
-                disabled: typeof doc.root?.id !== 'string' || lockOf(doc.root.id) !== null,
-                onSelect: () => {
-                  store.selectNode(null)
-                  commands.openAdd('pattern')
-                },
-              },
-              { key: 'preset', label: '프리셋', icon: ICONS.preset, disabled: commands.presetLocked, onSelect: () => commands.openAdd('preset') },
-            ]}
-          />,
+          <>
+            {/* **모두 접기 · 모두 펴기** — 고르기와 같은 읽기라 고칠 수 없어도 선다. 모두 접어도 뿌리는 편 채다 — 뿌리는 하나라 접으면 줄 하나만
+                남는다(맨 위 갈래가 보이는 것이 «모두 접은» 트리다). */}
+            <TreeFoldButtons onCollapse={() => fold.collapse(foldableIds(doc.root, rootId))} onExpand={fold.expandAll} />
+            {props.editable && (
+              // **뿌리 `+`** — 페이지 통째에 더하는 셋. «페이지에 추가»는 뿌리를 골라 «안에 추가»를 연다(spec 「툴바 대신 노드별 `+` · `…`」).
+              // 패턴은 고른 것을 풀고 연다 — 고른 것이 없으면 뿌리의 자식 끝에 꽂는다(`edit/pattern-insert.ts`).
+              <ActionMenu
+                label="구조 트리에 추가"
+                icon={ICONS.add}
+                compact
+                items={[
+                  {
+                    key: 'page',
+                    label: '페이지에 추가',
+                    icon: ICONS.addInside,
+                    disabled: !rootAbilities.addInside,
+                    onSelect: () => {
+                      if (rootId === null) return
+                      store.selectNode(rootId)
+                      commands.openAdd('inside')
+                    },
+                  },
+                  {
+                    key: 'pattern',
+                    label: '패턴 넣기',
+                    icon: ICONS.pattern,
+                    disabled: typeof doc.root?.id !== 'string' || lockOf(doc.root.id) !== null,
+                    onSelect: () => {
+                      store.selectNode(null)
+                      commands.openAdd('pattern')
+                    },
+                  },
+                  { key: 'preset', label: '프리셋', icon: ICONS.preset, disabled: commands.presetLocked, onSelect: () => commands.openAdd('preset') },
+                ]}
+              />
+            )}
+          </>,
           props.headSlot,
         )}
     </div>
@@ -346,6 +385,14 @@ function isSelectable(node: WbNode): boolean {
   return typeof node.id === 'string' && node.id !== ''
 }
 
+/** «모두 접기»가 접을 줄 — 자식 줄이 있는 고를 수 있는 노드 전부, 뿌리만 빼고(`StructureTree` 의 머리 주석). */
+function foldableIds(root: unknown, rootId: string | null): string[] {
+  return [...walkSafely(root)]
+    .map((visit) => visit.node)
+    .filter((node) => isSelectable(node) && node.id !== rootId && hasChildRows(node))
+    .map((node) => node.id)
+}
+
 /** 편집할 수 있는 판에서 줄마다 내려가는 것 — 명령 · 끌기 · 상태줄 id · 뿌리 · 고르개가 설 줄 · 고르개 · 고르기. */
 interface RowWiring {
   commands: StructureCommands
@@ -374,6 +421,8 @@ function StructureNode(props: {
    * 사람(viewer)뿐이다 — 그에게는 배지는 서고 줄은 눌린다.
    */
   blockedOf: (nodeId: string) => NodeLock | null
+  /** 접힌 줄 · 접고 펴기(`tree/collapse.ts`). */
+  fold: Collapsed
   /** 편집할 수 있는 판의 줄 행동 · 끌기 배선. `null`이면 고르기만 한다(viewer · 뷰 모드). */
   row: RowWiring | null
 }): ReactElement {
@@ -407,6 +456,9 @@ function StructureNode(props: {
   const open = row !== null && isSelectable(node) && (picked || props.blockedOf(node.id) === null)
   const draggable = open && row.rootId !== node.id && props.lockOf(node.id) === null
   const lifted = row !== null && isSelectable(node) && row.drag.dragging === node.id
+  /** 펼침 단추가 서는 줄인가 — 고를 수 있고 자식 줄이 있다. id 없는 노드는 접힘을 적을 열쇠가 없어 늘 편 채다. */
+  const foldable = isSelectable(node) && hasChildRows(node)
+  const folded = foldable && props.fold.collapsed.has(node.id)
 
   return (
     <li>
@@ -425,6 +477,8 @@ function StructureNode(props: {
           data-tree-row=""
           data-tree-kind="node"
           data-tree-id={node.id}
+          // 끄는 포인터가 머물면 펴는 표지(`drag/hover-open.ts`).
+          data-tree-collapsed={folded ? '' : undefined}
         >
           <button
             type="button"
@@ -440,11 +494,15 @@ function StructureNode(props: {
             // `store.selectNode`가 하고(캔버스도 그 함수를 지난다) 여기 `disabled`는 **왜
             // 안 되는지를 보이는 쪽**이다 — 같은 모양인데 반응만 없으면 고장으로 읽힌다.
             disabled={props.blockedOf(node.id) !== null}
+            // 접고 펴는 줄의 상태 — 보조 기술이 읽는 것은 여기다(펼침 단추는 포인터 몫이다 — `./tree-fold.tsx`).
+            aria-expanded={foldable ? !folded : undefined}
             onClick={(event) => props.onSelect(node.id, event)}
             {...(draggable ? row.drag.bind(node.id) : {})}
           >
             {typeLabel}
           </button>
+          {/* 펼침 단추는 줄 단추 **뒤**에 두고 CSS 가 앞에 세운다(`./tree-fold.tsx` 머리말 «DOM 에서는 줄 단추 뒤다»). */}
+          <TreeToggle foldable={foldable} folded={folded} onToggle={() => props.fold.toggle(node.id)} />
           {open && (
             <TreeRowActions
               name={typeLabel}
@@ -474,7 +532,7 @@ function StructureNode(props: {
       {/* **고르개는 그 줄 바로 아래다**(`StructureTree`의 `anchorId`). */}
       {row !== null && isSelectable(node) && row.anchorId === node.id && row.picker}
 
-      {children.length > 0 && (
+      {children.length > 0 && !folded && (
         <ul className="wb-shell-structure-list">
           {/* **노드가 아닌 원소는 줄로 그리지 않는다.** 그릴 이름도 고를 id도 없고,
               `nodeTypeLabel`이 `node.type`을 읽는 순간 던진다. id 없는 노드(줄은 그린다)와
@@ -492,6 +550,7 @@ function StructureNode(props: {
               onSelect={props.onSelect}
               lockOf={props.lockOf}
               blockedOf={props.blockedOf}
+              fold={props.fold}
               row={row}
             />
           ))}

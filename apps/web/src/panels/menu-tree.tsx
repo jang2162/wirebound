@@ -21,18 +21,23 @@
  *
  * **조작의 입구는 셋이다** — 줄의 `+` · `…`(`panels/tree-row-actions.tsx`), 트리 제목 줄의 뿌리 `+`, 끌어 놓기(`drag/use-pointer-drag.ts`
  * · 자리 판정 `tree/tree-drop.ts`). 셋 다 `useTreeCommands`의 명령을 부르고, 키보드 단축키도 같은 명령이다.
+ *
+ * **메뉴는 접힌다** — 줄 앞 펼침 단추 · 제목 줄의 «모두 접기» · «모두 펴기»(`./tree-fold.tsx`) · 메뉴 줄의 ← →(`foldKey`). 접힘은 프로젝트마다
+ * 화면의 상태(`tree/collapse.ts`)이고, 열린 페이지 · 고른 줄이 접힌 메뉴 안이면 그 위 메뉴를 편다(아래 `chains`).
  */
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
 import { DropIndicator } from '../drag/drop-indicator'
+import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { elementAt, scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
 import { ActionMenu } from '../shell/action-menu'
 import { ICONS } from '../shell/icons'
 import { MetaConflict } from './meta-conflict'
 import { PendingNotice } from './pending-notice'
 import type { TreeMenuNode, TreePage } from '../api/types'
+import { menuKey, useCollapsed, type Collapsed } from '../tree/collapse'
 import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
 import { dropZone, menuDropTarget, type MenuDrop } from '../tree/tree-drop'
 import { useTreeCommands, type TreeCommands } from '../tree/use-tree-commands'
@@ -42,6 +47,7 @@ import type { PageJsonNotices } from './page-json-notices'
 import { PageImportDialog } from './page-import-dialog'
 import { menuStatus } from './toolbar-status'
 import { TreeInput } from './tree-input'
+import { TreeFoldButtons, TreeToggle } from './tree-fold'
 import { menuRowItems, TreeRowActions } from './tree-row-actions'
 import { isTypingSurface } from './typing-surface'
 
@@ -176,6 +182,36 @@ export function MenuTree(props: {
   const statusId = useId()
   /** 줄을 찾는 상자 — 끄는 동안 포인터 밑 줄(`[data-tree-row]`)을 여기서 찾는다. */
   const treeRef = useRef<HTMLUListElement>(null)
+  /** 접힌 메뉴(`tree/collapse.ts` — 프로젝트마다 · 세션 동안). 페이지는 접을 것이 없다. */
+  const fold = useCollapsed(menuKey(props.projectId))
+  /**
+   * **열린 페이지 · 고른 줄이 접힌 메뉴 안이면 그 위 메뉴를 편다**(설계서 «트리 줄마다 접기» — 구조 트리의 `chains` 와 같은 까닭). 주소로
+   * 연 페이지 · 남이 옮긴 메뉴도 같은 사슬로 본다. 사람이 그 위 메뉴를 접은 판은 사슬이 그대로라 다시 펴지 않는다.
+   */
+  const chains =
+    state.status === 'ready'
+      ? JSON.stringify([
+          props.pageId === undefined ? [] : menuAncestors(state.menu, { kind: 'page', id: props.pageId }),
+          commands.selection === null ? [] : menuAncestors(state.menu, commands.selection),
+        ])
+      : ''
+  useLayoutEffect(() => {
+    if (chains === '') return
+    fold.expand((JSON.parse(chains) as string[][]).flat())
+  }, [chains, fold.expand])
+  // 끄는 포인터가 접힌 메뉴 위에 머물면(`drag/hover-open.ts`) 그 메뉴를 편다.
+  const ready = state.status === 'ready'
+  useEffect(() => {
+    const tree = treeRef.current
+    if (tree === null) return
+    const open = (event: Event): void => {
+      const row = event.target as HTMLElement
+      const id = row.dataset['treeId']
+      if (row.dataset['treeKind'] === 'menu' && id !== undefined && id !== '') fold.expand([id])
+    }
+    tree.addEventListener(HOVER_OPEN_EVENT, open)
+    return () => tree.removeEventListener(HOVER_OPEN_EVENT, open)
+  }, [fold.expand, ready])
 
   /**
    * **끌어 놓기.** 포인터 밑 줄과 띠(`dropZone`)를 `menuDropTarget`에 물어 놓을 자리를 받고, 놓으면 `dropTo`가 보낸다. 판정 · 보내기가
@@ -185,6 +221,7 @@ export function MenuTree(props: {
     onOver: (source, point) => {
       if (state.status !== 'ready') return null
       const row = elementAt(treeRef.current, '[data-tree-row]', point)
+      hoverRow(row)
       const over = row === null ? null : rowSelection(row)
       if (row === null || over === null) return null
       const box = row.getBoundingClientRect()
@@ -245,6 +282,7 @@ export function MenuTree(props: {
      */
     if (isTypingSurface(event.target)) return
     if (commands.editing !== null || commands.reparenting !== null) return
+    if (foldKey(event, fold)) return
 
     const shortcut = SHORTCUTS.find((candidate) => candidate.match(event))
     if (shortcut === undefined) return
@@ -360,6 +398,7 @@ export function MenuTree(props: {
             drag={props.editable ? drag : null}
             statusId={statusId}
             exporter={exporter}
+            fold={fold}
           />
         ))}
       </ul>
@@ -404,25 +443,30 @@ export function MenuTree(props: {
 
           **뷰 모드에서는 DOM에서 뺀다** — 편집 도구에 대한 문장이다. */}
       {props.editable && <MenuStatusLine commands={commands} id={statusId} />}
-      {/* 뿌리 `+`. 제목 줄에 선다(`headSlot`). 고른 것에 매이지 않는 유일한 줄 행동이다 — 최상위 메뉴가 붙는 곳은 트리 자체다. */}
-      {props.editable &&
-        props.headSlot !== undefined &&
+      {/* 제목 줄(`headSlot`) — «모두 접기» · «모두 펴기»(고르기와 같은 읽기라 뷰 모드에도 선다)와 뿌리 `+`. 뿌리 `+`는 고른 것에 매이지 않는 유일한
+          줄 행동이다 — 최상위 메뉴가 붙는 곳은 트리 자체다. */}
+      {props.headSlot !== undefined &&
         props.headSlot !== null &&
         createPortal(
-          <ActionMenu
-            label="메뉴 트리에 추가"
-            icon={ICONS.add}
-            compact
-            items={[
-              {
-                key: 'new-root-menu',
-                label: '최상위 메뉴 추가',
-                icon: ICONS.addMenu,
-                disabled: commands.busy,
-                onSelect: () => commands.openInput('new-root-menu'),
-              },
-            ]}
-          />,
+          <>
+            <TreeFoldButtons onCollapse={() => fold.collapse(foldableMenus(state.menu))} onExpand={fold.expandAll} />
+            {props.editable && (
+              <ActionMenu
+                label="메뉴 트리에 추가"
+                icon={ICONS.add}
+                compact
+                items={[
+                  {
+                    key: 'new-root-menu',
+                    label: '최상위 메뉴 추가',
+                    icon: ICONS.addMenu,
+                    disabled: commands.busy,
+                    onSelect: () => commands.openInput('new-root-menu'),
+                  },
+                ]}
+              />
+            )}
+          </>,
           props.headSlot,
         )}
     </div>,
@@ -431,6 +475,41 @@ export function MenuTree(props: {
 
 /** 셸이 통지 자리를 안 넘겼을 때(`notices`) — 내보내기 실패를 말할 곳이 없다. */
 function ignoreFailure(): void {}
+
+/** 그 줄을 품은 메뉴의 id — 맨 위부터. 메뉴 자신은 빼고, 트리에 없으면 빈 목록. */
+function menuAncestors(menu: readonly TreeMenuNode[], target: TreeSelection): string[] {
+  for (const node of menu) {
+    if (target.kind === 'menu' && node.id === target.id) return []
+    if (target.kind === 'page' && node.pages.some((page) => page.id === target.id)) return [node.id]
+    const below = menuAncestors(node.children, target)
+    if (below.length > 0 || node.children.some((child) => target.kind === 'menu' && child.id === target.id)) return [node.id, ...below]
+  }
+  return []
+}
+
+/** «모두 접기»가 접을 메뉴 — 페이지나 하위 메뉴를 품은 것 전부. */
+function foldableMenus(menu: readonly TreeMenuNode[]): string[] {
+  return menu.flatMap((node) => [...(node.pages.length > 0 || node.children.length > 0 ? [node.id] : []), ...foldableMenus(node.children)])
+}
+
+/**
+ * **메뉴 줄에서 친 ← → — 접고 편다**(설계서 «트리 줄마다 접기» · 펼침 단추는 포인터 몫이다 — `./tree-fold.tsx`). 대상이 접고 펴는 메뉴 단추
+ * (`aria-expanded`)일 때만 받고, 받았으면 `true` — 단축키 표(`SHORTCUTS`)의 `Alt`+`Shift`+← → 와는 수식 키로 갈린다.
+ */
+function foldKey(event: KeyboardEvent, fold: Collapsed): boolean {
+  // 키를 `key` 로 받아 견준다 — `event.key === '` 는 위 표의 조합을 세는 닻이다(`test/panels/menu-keyboard.test.tsx` «표의 여섯을 다 덮는다»).
+  const key = event.key
+  if (event.altKey || event.shiftKey || event.metaKey || event.ctrlKey) return false
+  if (key !== 'ArrowLeft' && key !== 'ArrowRight') return false
+  const button = event.target as HTMLElement
+  const expanded = button.getAttribute('aria-expanded')
+  const id = button.closest<HTMLElement>('[data-tree-row]')?.dataset['treeId']
+  if (expanded === null || id === undefined) return false
+  event.preventDefault()
+  if (key === 'ArrowRight' && expanded === 'false') fold.expand([id])
+  if (key === 'ArrowLeft' && expanded === 'true') fold.collapse([id])
+  return true
+}
 
 /**
  * 메뉴 하나와 그 안의 것들. 자기 페이지를 먼저, 그다음 자식 메뉴를 품는다 — 둘은 각각
@@ -449,16 +528,19 @@ function MenuItem(props: {
   drag: PointerDrag<TreeSelection, MenuDrop> | null
   statusId: string
   exporter: PageJsonExport
+  fold: Collapsed
 }): ReactElement {
   const { node, projectId, pageId, commands, drag } = props
   const pages = byOrder(node.pages)
   const children = byOrder(node.children)
   const self: TreeSelection = { kind: 'menu', id: node.id }
   const picked = isPicked(commands.selection, self)
+  const foldable = pages.length > 0 || children.length > 0
+  const folded = foldable && props.fold.collapsed.has(node.id)
 
   return (
     <li>
-      <TreeRow self={self} picked={picked} drag={drag}>
+      <TreeRow self={self} picked={picked} drag={drag} folded={folded}>
         {/* **메뉴 제목은 누를 수 있다 — 누르는 것은 "여는 것"이 아니라 "가리키는 것"이다**.
             메뉴에는 열 문서가 없지만(「설계서 화면 구조」의 트리에서 문서를 가진 것은 페이지뿐이다) 고르는
             효과가 실재한다: 단축키 · 상태줄이 그 메뉴에 작동하게 된다. *"누를 수 있게 보이는 것은 그
@@ -475,11 +557,15 @@ function MenuItem(props: {
           type="button"
           className="wb-shell-tree-menu"
           aria-pressed={picked}
+          // 접고 펴는 줄의 상태 — 보조 기술이 읽는 것은 여기다(`./tree-fold.tsx` 머리말).
+          aria-expanded={foldable ? !folded : undefined}
           onClick={() => commands.select(self)}
           {...(drag === null ? {} : drag.bind(self))}
         >
           {node.title}
         </button>
+        {/* 펼침 단추는 줄 단추 **뒤**에 두고 CSS 가 앞에 세운다(`./tree-fold.tsx` 머리말 «DOM 에서는 줄 단추 뒤다»). */}
+        <TreeToggle foldable={foldable} folded={folded} onToggle={() => props.fold.toggle(node.id)} />
         {drag !== null && (
           <TreeRowActions
             name={node.title}
@@ -491,7 +577,7 @@ function MenuItem(props: {
       </TreeRow>
       {drag !== null && picked && <RowPanel commands={commands} at="row" />}
 
-      {(pages.length > 0 || children.length > 0) && (
+      {foldable && !folded && (
         <ul className="wb-shell-tree-list">
           {/* 여기 두 자리의 키도 인덱스가 아니라 id다 — 이유와 실측은 `MenuTree`의 키
               주석에 있다. */}
@@ -518,6 +604,7 @@ function MenuItem(props: {
               drag={drag}
               statusId={props.statusId}
               exporter={props.exporter}
+              fold={props.fold}
             />
           ))}
         </ul>
@@ -547,7 +634,7 @@ function PageLink(props: {
 
   return (
     <>
-      <TreeRow self={self} picked={picked} drag={drag}>
+      <TreeRow self={self} picked={picked} drag={drag} folded={false}>
         <Link
           className="wb-shell-tree-page"
           to={`/projects/${props.projectId}/pages/${props.page.id}`}
@@ -564,6 +651,7 @@ function PageLink(props: {
         >
           {props.page.title}
         </Link>
+        <TreeToggle foldable={false} folded={false} />
         {drag !== null && (
           <TreeRowActions
             name={props.page.title}
@@ -590,6 +678,8 @@ function TreeRow(props: {
   self: TreeSelection
   picked: boolean
   drag: PointerDrag<TreeSelection, MenuDrop> | null
+  /** 접힌 메뉴인가 — 끄는 포인터가 머물면 펴는 표지(`drag/hover-open.ts`). */
+  folded: boolean
   children: ReactElement | (ReactElement | false)[]
 }): ReactElement {
   const dragging = props.drag?.dragging
@@ -602,6 +692,7 @@ function TreeRow(props: {
       data-tree-row=""
       data-tree-kind={props.self.kind}
       data-tree-id={props.self.id}
+      data-tree-collapsed={props.folded ? '' : undefined}
     >
       {props.children}
     </div>

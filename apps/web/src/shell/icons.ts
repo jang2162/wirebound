@@ -29,6 +29,8 @@ import {
   Blocks,
   ChevronDown,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   CircleCheck,
   CircleUser,
   CircleX,
@@ -85,6 +87,9 @@ export const ICONS = {
   /** 접힌 것을 편다 · 편 것을 접는다 — 펼침 단추의 머리. */
   expand: ChevronRight,
   collapse: ChevronDown,
+  /** 트리의 줄을 모두 접는다 · 모두 편다 — 트리 머리. */
+  collapseAll: ChevronsDownUp,
+  expandAll: ChevronsUpDown,
   /** 이름 · 글을 고친다 — «이름 변경» · 코멘트 «수정». */
   rename: Pencil,
   moveUp: ArrowUp,
