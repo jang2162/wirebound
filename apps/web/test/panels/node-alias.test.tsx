@@ -7,7 +7,7 @@
  * (`data-tree-id`) — 줄의 접근 이름은 이 파일이 재는 것이 아니다.
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { lockConflictOfOps, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { applyOps, lockConflictOfOps, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
@@ -17,6 +17,7 @@ import { createEditChannel } from '../../src/realtime/edit-channel'
 import { createLockChannel } from '../../src/realtime/lock-channel'
 import type { NodeLockView, ServerFrame } from '../../src/realtime/protocol'
 import { HEAD_SEQ, PAGE_ID, PROJECT_ID, canvasDocument, openPage, pageDetail, pageDoc } from '../editor-harness'
+import { DROPPED_DRAFT_NOTICE } from '../../src/panels/property-panel'
 import { isOff, rowAction } from './tree-row'
 import '../../src/catalog-setup'
 
@@ -61,6 +62,8 @@ function doc(): PageDocument {
 interface Board {
   calls: PatchOp[][]
   lock: (locks: NodeLockView[]) => void
+  /** 같은 사람의 다른 탭이 낸 편집 — 서버 문서에 적용하고 그 revision 의 `page-changed` 프레임을 보낸다. */
+  peer: (ops: PatchOp[]) => void
 }
 
 async function board(): Promise<Board> {
@@ -74,7 +77,7 @@ async function board(): Promise<Board> {
     calls.push(body.ops)
     const conflict = lockConflictOfOps({ document: held, locks: live, ops: body.ops, viewerUserId: ME })
     if (conflict !== null) throw new ApiError(423, 'locked', `${conflict.userName}님이 편집 중인 영역입니다`)
-    const { applyOps, invertOps } = await import('@wirebound/schema')
+    const { invertOps } = await import('@wirebound/schema')
     const inverse = invertOps(held, body.ops)
     held = applyOps(held, body.ops)
     seq += 1
@@ -109,6 +112,22 @@ async function board(): Promise<Board> {
   await openPage(doc(), { realtime: setup, apiOverrides: { patchOps, getPage } })
   return {
     calls,
+    peer: (ops) => {
+      held = applyOps(held, ops)
+      seq += 1
+      const frame: ServerFrame = {
+        type: 'page-changed',
+        projectId: PROJECT_ID,
+        pageId: PAGE_ID,
+        seq,
+        ops,
+        warnings: [],
+        actor: { type: 'user', label: '나(다른 탭)' },
+      }
+      act(() => {
+        sockets.at(-1)?.onmessage?.({ data: JSON.stringify(frame) })
+      })
+    },
     lock: (locks) => {
       live = locks
       const frame: ServerFrame = { type: 'locks', projectId: PROJECT_ID, locks }
@@ -399,5 +418,57 @@ describe('접힘과 별칭 입력', () => {
     expect(treeInput()).toBeNull()
     expect(document.activeElement).toBe(field)
     expect(field.value).toBe('고치는 중')
+  })
+})
+
+/**
+ * **입력을 연 노드가 문서에서 빠진 판**(같은 사람의 다른 탭 · 같은 계정의 에이전트 — 남은 그 노드를 못 지운다). 입력은 노드 id 에 매인 화면
+ * 상태라(`src/panels/alias-edit.tsx`) 노드가 빠질 때 닫지 않으면 같은 id 가 되살아나는 순간(되돌리기 · 다른 탭) 묻지 않은 입력이 다시 서고
+ * 포커스를 가져간다.
+ */
+describe('입력을 연 노드가 문서에서 빠지면', () => {
+  const SAVE_NODE = { id: 'n-save', type: 'Button', props: { label: '저장' } }
+  const alerts = () => screen.queryAllByRole('alert').map((el) => el.textContent)
+
+  it('입력을 닫고 친 글을 버렸다고 하단 바가 말한다 — 같은 id 가 되살아나도 입력은 다시 안 서고 포커스를 안 가져간다', async () => {
+    const b = await board()
+    fireEvent.click(rowButton('n-save'))
+    fireEvent.doubleClick(rowButton('n-save'))
+    fireEvent.change(treeInput()!, { target: { value: '지움 중' } })
+
+    b.peer([{ op: 'remove', path: '/root/children/0/children/0' }])
+    expect({ input: treeInput(), alerts: alerts() }).toEqual({ input: null, alerts: [DROPPED_DRAFT_NOTICE] })
+
+    b.peer([{ op: 'add', path: '/root/children/0/children/0', value: SAVE_NODE }])
+    rowButton('n-save')
+    expect({ input: treeInput(), focus: document.activeElement?.tagName }).toEqual({ input: null, focus: 'BODY' })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(b.calls).toEqual([])
+  })
+
+  it('친 글이 없으면 말하지 않는다', async () => {
+    const b = await board()
+    fireEvent.click(rowButton('n-save'))
+    fireEvent.doubleClick(rowButton('n-save'))
+
+    b.peer([{ op: 'remove', path: '/root/children/0/children/0' }])
+    b.peer([{ op: 'add', path: '/root/children/0/children/0', value: SAVE_NODE }])
+    rowButton('n-save')
+    expect({ input: treeInput(), alerts: alerts() }).toEqual({ input: null, alerts: [] })
+  })
+
+  it('다른 부모로 옮겨지면 입력은 새 자리에 친 글째 선다 — Enter 가 옮긴 자리에 쓴다', async () => {
+    const b = await board()
+    fireEvent.click(rowButton('n-save'))
+    fireEvent.doubleClick(rowButton('n-save'))
+    fireEvent.change(treeInput()!, { target: { value: '옮김 중' } })
+
+    b.peer([{ op: 'move', from: '/root/children/0/children/0', path: '/root/children/-' }])
+    const input = treeInput()
+    const owner = input?.closest('li')?.querySelector(':scope > [data-tree-id]')?.getAttribute('data-tree-id')
+    expect({ value: input?.value, owner, alerts: alerts() }).toEqual({ value: '옮김 중', owner: 'n-save', alerts: [] })
+
+    fireEvent.keyDown(input!, { key: 'Enter' })
+    await waitFor(() => expect(b.calls).toEqual([[{ op: 'add', path: '/root/children/2/alias', value: '옮김 중' }]]))
   })
 })

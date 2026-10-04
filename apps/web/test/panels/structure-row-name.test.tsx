@@ -3,6 +3,7 @@
  *
  * - 줄 단추의 접근 이름은 보이는 글 그대로이고 `packages/schema` 의 `nodeRowLabel`과 같은 글이다(MCP 가 같은 것을 낸다).
  * - 요약만 흐린 조각이다(`.wb-shell-structure-summary`).
+ * - 별칭 · 요약 글은 `<bdi>` 로 방향을 격리한다(괄호는 밖) — 화면의 뒤집힘은 `build-test/node-alias.test.ts` «방향을 격리한다»가 잰다.
  * - 줄 행동 `+` · `…` 의 이름은 줄 글 전체로 짓는다 — 라벨이 «추가»인 Button 줄과 그 줄의 `+` 가 같은 이름이 되지 않게.
  * - **견주개 카나리아** — 같은 타입이 둘이면 `getByRole` 이 «여럿»으로 던지고, 줄 행동 토글은 고르지 않는다.
  */
@@ -70,6 +71,14 @@ describe('구조 트리 줄 — `타입 (별칭) 요약`', () => {
     expect(rowButton('n-b').querySelector('.wb-shell-structure-summary')?.textContent).toBe(' 둘째 글')
     expect(rowButton('n-sec').querySelector('.wb-shell-structure-summary')).toBeNull()
     expect(rowButton('n-a').querySelector('.wb-shell-structure-alias')).toBeNull()
+  })
+
+  it('별칭 · 요약 글은 방향을 격리한 `<bdi>` 안이고 괄호는 밖이다 — 사람 글이 줄의 다른 조각을 뒤집지 않게', async () => {
+    await openPage(doc())
+    const isolated = (nodeId: string) => [...rowButton(nodeId).querySelectorAll('bdi')].map((el) => el.textContent)
+    expect(isolated('n-b')).toEqual(['안내', '둘째 글'])
+    expect(isolated('n-flex')).toEqual(['머리 줄', '가로'])
+    expect(isolated('n-sec')).toEqual([])
   })
 
   it('줄 행동의 이름은 줄 글 전체다 — 라벨이 «추가»인 Button 줄과 그 줄의 `+` 가 갈린다', async () => {

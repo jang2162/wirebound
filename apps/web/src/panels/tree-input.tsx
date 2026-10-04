@@ -30,6 +30,8 @@ export function TreeInput(props: {
   initial: string
   onSubmit: (value: string) => void
   onCancel: () => void
+  /** 칠 때마다 — 입력 밖에서 친 글을 들어야 하는 자리(구조 트리의 별칭 입력 — `./alias-edit.tsx`)가 받는다. */
+  onEdit?: (value: string) => void
 }): ReactElement {
   const [value, setValue] = useState(props.initial)
   const box = useRef<HTMLInputElement>(null)
@@ -57,7 +59,10 @@ export function TreeInput(props: {
       type="text"
       aria-label={props.label}
       value={value}
-      onChange={(event) => setValue(event.target.value)}
+      onChange={(event) => {
+        setValue(event.target.value)
+        props.onEdit?.(event.target.value)
+      }}
       onKeyDown={(event) => {
         if (event.key === 'Enter') {
           // **여기서 빈 문자열을 거르지 않는다.** 무엇이 유효한 제목인지는 훅이 알고

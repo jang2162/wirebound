@@ -7,6 +7,8 @@
  * |---|---|
  * | F2 로 고친 별칭이 남의 화면 · 상호작용 문장 · 되돌리기에 선다 | 진짜 키(F2)가 입력을 안 연다 · 편집(WS `patch`)이 서버에 안 닿는다 · 남(bob)의 트리 줄 · 상호작용 문장이 안 바뀐다 · 되돌리기 한 번에 옛 글로 안 돌아온다 |
  * | 접힌 줄과 별칭 입력 — 숨은 노드의 F2 · 입력 안의 ← → | F2 가 숨은 노드의 조상을 안 펴 입력이 화면에 안 선다 · 입력 안의 ← → 가 줄을 접거나 고른 노드를 옮긴다(캐럿이 안 옮는다) |
+ * | 입력을 연 노드를 다른 탭이 지우면 · 되살리면 · 옮기면 | 입력이 말없이 사라진다(하단 바가 안 말한다) · 같은 id 가 되살아나면 묻지 않은 입력이 다시 서며 포커스를 가져간다 · 옮기면 친 글이 빈 칸으로 돌아간다 |
+ * | 줄의 별칭 · 요약은 방향을 격리한다 | 괄호가 안 닫힌 RTL 별칭 뒤의 `)` 와 RTL 요약이 한 RTL 덩이로 묶여 요약이 괄호 앞(왼쪽)에 선다 · 방향 제어 글자가 든 요약이 그 줄의 타입 · 별칭이나 이웃 줄을 뒤집는다 |
 | 좁은 창의 긴 별칭 · 요약이 칸 안에서 잘린다 | 줄 글이 트리 칸 밖으로 넘친다(글자 노드 `Range` 오른끝이 줄 단추 밖인데 잘리지 않는다) · 줄이 두 줄이 된다 · 문서가 가로로 스크롤한다 |
  * | 긴 별칭의 글이 우측 패널 밖으로 안 나간다(속성 · 상호작용 · 코멘트 탭) | 제목 · 문장 · «달 곳»의 글자 노드 `Range` 오른끝이 패널 밖이고 그 자리를 자르는 조상이 패널 안에 없다 |
  * | 긴 별칭이 든 상호작용 대상 고르개가 우측 패널 안에 선다 | 고르개 `<select>` 가 가장 긴 항목(60자 별칭) 폭으로 늘어 패널 밖으로 나간다 — 별칭은 문장의 라벨성 prop 과 달리 자르지 않는다 |
@@ -166,6 +168,119 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
       })
       await a.page.keyboard.press('Enter')
       await poll('별칭이 서버에 닿는다', async () => (await call('GET', P)).body.schema.root.children[0].children[0].alias, (alias) => alias === '저장 단추')
+    } finally {
+      await a.close()
+    }
+  })
+
+  /** 같은 사람의 다른 탭이 낸 편집 — alice 세션의 REST(`PATCH …/ops`)로 지금 머리 위에 낸다. */
+  async function otherTab(P: string, ops: unknown[]): Promise<void> {
+    const head = (await call('GET', P)).body.headSeq as number
+    const res = await call('PATCH', `${P}/ops`, { baseSeq: head, ops })
+    if (res.status !== 200) throw new Error(`다른 탭 편집 ${res.status} ${JSON.stringify(res.body)}`)
+  }
+
+  it('입력을 연 노드를 다른 탭이 지우면 입력이 닫히고 하단 바가 말한다 — 되살아나도 입력이 다시 안 서고, 옮겨지면 친 글째 선다', async () => {
+    const save = { id: 'n_save00000003', type: 'Button', props: { label: '저장' } }
+    const { P } = await fixture('f2-gone', [{ id: 'n_card00000003', type: 'Card', props: { title: '회원' }, children: [save] }])
+    const a = await openEditor(P, 'alice')
+    try {
+      const input = a.page.locator('.wb-shell-region[aria-label="구조 트리"]').getByRole('textbox', { name: '별칭', exact: true })
+      const alerts = () => a.page.getByRole('alert').allTextContents()
+      const seen = async () => ({
+        inputs: await input.count(),
+        focus: await a.page.evaluate(() => document.activeElement?.tagName ?? null),
+        alerts: await alerts(),
+      })
+
+      await rowButton(a.page, 'n_save00000003').click()
+      await a.page.keyboard.press('F2')
+      await expect.poll(() => input.evaluateAll((els) => els.map((el) => el === document.activeElement))).toEqual([true])
+      await a.page.keyboard.type('지움 중')
+
+      await otherTab(P, [{ op: 'remove', path: '/root/children/0/children/0' }])
+      await expect.poll(() => rowButton(a.page, 'n_save00000003').count()).toBe(0)
+      await expect.poll(seen).toEqual({ inputs: 0, focus: 'BODY', alerts: ['바뀐 선택 때문에 친 값을 쓰지 않았습니다'] })
+
+      // 다른 탭이 되돌린다 — 같은 id 가 같은 자리에 되살아난다.
+      await otherTab(P, [{ op: 'add', path: '/root/children/0/children/0', value: save }])
+      await expect.poll(() => rowButton(a.page, 'n_save00000003').count()).toBe(1)
+      await a.page.waitForTimeout(300)
+      expect(await seen()).toMatchObject({ inputs: 0, focus: 'BODY' })
+      expect(a.patches).toEqual([])
+
+      // 다시 열고 친 채 다른 부모로 옮겨진다 — 입력은 새 자리에 친 글째 서고 Enter 가 옮긴 자리에 쓴다.
+      await rowButton(a.page, 'n_save00000003').click()
+      await a.page.keyboard.press('F2')
+      await expect.poll(() => input.evaluateAll((els) => els.map((el) => el === document.activeElement))).toEqual([true])
+      await a.page.keyboard.type('옮김 중')
+      await otherTab(P, [{ op: 'move', from: '/root/children/0/children/0', path: '/root/children/-' }])
+      await expect.poll(() => a.page.locator('[data-tree-id="n_card00000003"] ~ ul [data-tree-id="n_save00000003"]').count()).toBe(0)
+      await expect.poll(() => input.evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))).toEqual(['옮김 중'])
+      await input.press('Enter')
+      await poll('옮긴 자리의 별칭', async () => (await call('GET', P)).body.schema.root.children[1]?.alias, (alias) => alias === '옮김 중')
+    } finally {
+      await a.close()
+    }
+  })
+
+  /** 줄 단추의 글자(UTF-16 한 칸)마다 화면 가로 가운데 — 폭이 없는 글자(방향 제어)는 `NaN`. */
+  const glyphs = (page: Page, id: string) =>
+    rowButton(page, id).evaluate((button) => {
+      const out: Array<{ ch: string; x: number }> = []
+      const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT)
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        const text = node.textContent ?? ''
+        for (let at = 0; at < text.length; at += 1) {
+          const range = document.createRange()
+          range.setStart(node, at)
+          range.setEnd(node, at + 1)
+          const rect = range.getBoundingClientRect()
+          out.push({ ch: text[at]!, x: rect.width === 0 ? Number.NaN : rect.left + rect.width / 2 })
+        }
+      }
+      return out
+    })
+
+  /** 논리 차례로 이은 조각들이 화면에서도 왼쪽부터 그 차례로 서는가 — 조각마다 가로 범위(폭 있는 글자만)를 견준다. */
+  function piecesInOrder(row: Array<{ ch: string; x: number }>, pieces: string[]): { text: string; inOrder: boolean; spans: string[] } {
+    const text = row.map((glyph) => glyph.ch).join('')
+    const spans: Array<[number, number]> = []
+    let at = 0
+    for (const piece of pieces) {
+      const start = text.indexOf(piece, at)
+      const xs = row.slice(start, start + piece.length).map((glyph) => glyph.x).filter((x) => !Number.isNaN(x))
+      spans.push([Math.min(...xs), Math.max(...xs)])
+      at = start + piece.length
+    }
+    const inOrder = spans.every((span, index) => index === 0 || spans[index - 1]![1] < span[0])
+    return { text, inOrder, spans: spans.map(([lo, hi]) => `${Math.round(lo)}-${Math.round(hi)}`) }
+  }
+
+  /**
+   * 별칭 · 요약 조각은 방향을 격리한다(`<bdi>`). **짝이 맞는 괄호는 격리 없이도 차례를 지킨다** — 괄호 짝 규칙(UBA N0)이 `(` 앞의 타입(LTR)을
+   * 보고 괄호를 왼쪽 → 오른쪽으로 세운다. 그래서 판은 **괄호가 안 닫힌 RTL 별칭**이다: 줄의 `)` 가 별칭 안의 `(` 와 짝이 되어 RTL 로 서고, 별칭
+   * · `)` · RTL 요약이 한 RTL 덩이로 묶여 요약이 괄호 앞(왼쪽)에 선다. 방향 제어 글자가 든 요약(라벨 몫 — 봉투가 막지 않는다)은 줄 글의 끝이라
+   * 격리 없이도 그 줄의 타입 · 별칭과 이웃 줄을 안 뒤집는다 — 그 둘은 원래 성질을 잠근다.
+   */
+  it('줄의 별칭 · 요약은 방향을 격리한다 — 괄호가 안 닫힌 RTL 별칭과 RTL 요약이 섞이지 않고, 방향 제어 글자가 든 요약은 그 줄 · 이웃 줄의 다른 글을 안 뒤집는다', async () => {
+    const { P } = await fixture('f2-bidi', [
+      { id: 'n_rtl000000001', type: 'Button', alias: 'زر الحفظ (رئيسي', props: { label: 'حفظ' } },
+      { id: 'n_rlo000000001', type: 'Card', alias: '카드', props: { title: '가\u202e나다' } },
+      { id: 'n_next00000001', type: 'Button', props: { label: '저장' } },
+    ])
+    const a = await openEditor(P, 'alice')
+    try {
+      const rtl = piecesInOrder(await glyphs(a.page, 'n_rtl000000001'), ['Button', '(', 'زر الحفظ (رئيسي', ')', 'حفظ'])
+      const rlo = piecesInOrder(await glyphs(a.page, 'n_rlo000000001'), ['Card', '(', '카드', ')', '가'])
+      const next = piecesInOrder(await glyphs(a.page, 'n_next00000001'), ['Button', '저', '장'])
+      // 판 카나리아 — 줄 글이 논리 차례 그대로 그려졌다(조각을 다 찾았다).
+      expect([rtl.text, rlo.text, next.text]).toEqual([
+        'Button (زر الحفظ (رئيسي) حفظ',
+        'Card (카드) 가\u202e나다',
+        'Button 저장',
+      ])
+      expect({ rtl, rlo: rlo.inOrder, next: next.inOrder }).toEqual({ rtl: { ...rtl, inOrder: true }, rlo: true, next: true })
     } finally {
       await a.close()
     }

@@ -527,8 +527,22 @@ function StructureNode(props: {
             ref={button}
           >
             {typeLabel}
-            {alias !== null && <span className="wb-shell-structure-alias">{` (${alias})`}</span>}
-            {summary !== null && <span className="wb-shell-structure-summary">{` ${summary}`}</span>}
+            {/* **별칭 · 요약은 사람 글이라 방향을 격리한다(`<bdi>`)** — 괄호는 격리 밖에 둔다. 격리가 없으면 괄호가 안 닫힌 RTL 별칭의 `(` 가
+                줄의 `)` 와 짝이 되어 별칭 · `)` · RTL 요약이 한 RTL 덩이로 서고, 라벨 · 제목에 든 방향 제어 글자(봉투가 별칭에만 막는다 —
+                `packages/schema/src/alias.ts`)가 뒤의 조각까지 뒤집는다(`build-test/node-alias.test.ts` «방향을 격리한다»). */}
+            {alias !== null && (
+              <span className="wb-shell-structure-alias">
+                {' ('}
+                <bdi>{alias}</bdi>
+                {')'}
+              </span>
+            )}
+            {summary !== null && (
+              <span className="wb-shell-structure-summary">
+                {' '}
+                <bdi>{summary}</bdi>
+              </span>
+            )}
           </button>
           {/* 펼침 단추는 줄 단추 **뒤**에 두고 CSS 가 앞에 세운다(`./tree-fold.tsx` 머리말 «DOM 에서는 줄 단추 뒤다»). */}
           <TreeToggle foldable={foldable} folded={folded} onToggle={() => props.fold.toggle(node.id)} />
@@ -565,7 +579,9 @@ function StructureNode(props: {
         <div className="wb-shell-tree-panel">
           <TreeInput
             label={ALIAS_INPUT_LABEL}
-            initial={nodeAlias(node) ?? ''}
+            // 친 글이 있으면 그것으로 선다 — 노드가 다른 부모로 옮겨져 줄이 새로 마운트돼도 이어 친다(`./alias-edit.tsx` 머리말).
+            initial={row.alias.draft() ?? nodeAlias(node) ?? ''}
+            onEdit={row.alias.type}
             onSubmit={(value) => {
               row.alias.close()
               row.commands.renameAlias(node.id, value)
