@@ -29,6 +29,8 @@ import { NO_THEME, resolveVariant } from '@wirebound/renderer'
 import {
   applyOps,
   getComponent,
+  nodeAlias,
+  nodeHeading,
   type ComponentDef,
   type EditorField,
   type NodeLock,
@@ -44,7 +46,7 @@ import { useEditCommit, type EditCommit } from '../edit/use-edit-commit'
 // 통째로 지운다. 실측: 그 문서에서 **노드를 고르는 순간** `.wb-shell`이 DOM에서 사라진다 —
 // 열기만 할 때는 여기까지 오지 않아 살아 있다.
 import { findNodeSafely } from '../edit/safe-walk'
-import { propOps, variantOps } from '../edit/ops'
+import { aliasOps, propOps, variantOps } from '../edit/ops'
 import { removeManyOps } from '../edit/paste-ops'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
@@ -327,17 +329,46 @@ export function PropertyPanel(props: {
   // 아니라 **필드 단위** 결과라 노드 단위로 말하는 모양은 편집과 맞지 않는다.
   return (
     <>
-      <h2 className="wb-shell-panel-title">{type}</h2>
+      <h2 className="wb-shell-panel-title">{nodeHeading(node)}</h2>
+      {/* **꺼진 위젯의 이유를 이 패널이 자기 자리에서 말한다.** 별칭 칸은 어느 컴포넌트에나 서므로 위젯이 없는 판이 없다 —
+          편집할 속성이 없는 컴포넌트(`Page`·`Slot`)도 꺼진 별칭 칸의 이유를 여기서 말한다. */}
+      {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
+      {/* **별칭이 맨 위다**(설계서 「설계서 화면 구조」의 노드 별칭) — props 가 아니라 노드 봉투의 필드이고 어느 컴포넌트에나 선다. 칸을
+          떠날 때 커밋하는 길은 글 칸과 같다(`TextControl`) — 편집은 `aliasOps` 하나. */}
+      <dl className="wb-shell-props">
+        <div className="wb-shell-prop" key={ALIAS_FIELD.prop} data-wb-node-alias="">
+          <dt className="wb-shell-prop-label">
+            <label id={`${controlId(ALIAS_FIELD.prop)}-label`} htmlFor={controlId(ALIAS_FIELD.prop)}>
+              {ALIAS_FIELD.label}
+            </label>
+          </dt>
+          <dd className="wb-shell-prop-value">
+            <TextControl
+              key={node.id}
+              field={ALIAS_FIELD}
+              value={nodeAlias(node) ?? ''}
+              id={controlId(ALIAS_FIELD.prop)}
+              disabled={blocked}
+              onCommit={(value) => {
+                if (blocked || doc === null) return
+                const ops = aliasOps(doc, node.id, String(value))
+                if (ops !== null) commitOps(ops)
+              }}
+              onLeave={(value) =>
+                commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) =>
+                  aliasOps(running, nodeId, String(value)),
+                )
+              }
+            />
+          </dd>
+        </div>
+      </dl>
       {fields.length === 0 && variantField === null ? (
         // `Page`·`Slot`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
         // "아직 고르지 않았다"와 구분되지 않는다.
         <p className="wb-shell-panel-notice">이 컴포넌트에는 편집할 속성이 없습니다</p>
       ) : (
         <>
-          {/* **꺼진 위젯의 이유를 이 패널이 자기 자리에서 말한다.** 위젯이 없으면 설명할
-              회색도 없으므로 이 갈래 안에만 둔다 — 편집할 속성이 없는 컴포넌트
-              (`Page`·`Slot`)에서는 위의 문장이 이미 그 자리를 설명한다. */}
-          {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
           <dl className="wb-shell-props">
             {/* **변형이 맨 앞이다.** 개별 prop이 아니라 이 노드가 어떤 표현인가를 정하는
                 것이라 상위다. */}
@@ -572,6 +603,12 @@ function controlId(prop: string): string {
  * *"editor가 스키마에 없는 prop을 가리킵니다"*로 던졌을 이름이다.
  */
 const VARIANT_FIELD = 'variant'
+
+/**
+ * 별칭 칸. 카탈로그의 `editor`가 아니라 패널이 정한다 — 별칭은 props 가 아니라 노드 봉투의 필드다(`variant`와 같은 층). `prop` 값은
+ * 입력의 id 를 짓는 데만 쓴다 — 카탈로그 prop 이름과 안 겹치게 `node-` 를 붙였다.
+ */
+const ALIAS_FIELD: EditorField = { prop: 'node-alias', control: 'text', label: '별칭' }
 
 /** 변형 컨트롤의 라벨. 패널이 정한다 — 카탈로그에 그 자리가 없다(아래 머리말). */
 const VARIANT_LABEL = '변형'

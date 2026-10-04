@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineComponent } from '../define'
+import { countOf, firstOf } from '../summary'
 
 export const ListDef = defineComponent({
   type: 'List',
@@ -31,6 +32,7 @@ export const ListDef = defineComponent({
     { prop: 'loading', control: 'switch', label: '로딩 상태' },
     { prop: 'empty', control: 'switch', label: '빈 상태' },
   ],
+  summary: (props) => firstOf(props.columns),
   states: ['selected', 'disabled', 'loading', 'empty'],
   children: 'none',
 })
@@ -53,6 +55,10 @@ export const TreeDef = defineComponent({
     { prop: 'selected', control: 'switch', label: '선택 상태' },
     { prop: 'disabled', control: 'switch', label: '비활성' },
   ],
+  summary: (props) => {
+    const count = countOf(props.items)
+    return count === null ? null : `항목 ${count}`
+  },
   states: ['selected', 'disabled'],
   children: 'none',
 })
@@ -72,6 +78,10 @@ export const KeyValueDef = defineComponent({
     { prop: 'pairs', control: 'pairList', label: '키-값' },
     { prop: 'columns', control: 'number', label: '열 수' },
   ],
+  summary: (props) => {
+    const count = countOf(props.pairs)
+    return count === null ? null : `${count}쌍`
+  },
   states: [],
   children: 'none',
 })

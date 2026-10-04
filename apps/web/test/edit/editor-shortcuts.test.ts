@@ -102,7 +102,7 @@ describe('shortcutFor — 키마다 그 명령', () => {
 
   it('편집을 내는 명령과 아닌 명령이 갈린다', () => {
     const edits = EDITOR_SHORTCUTS.filter((shortcut) => shortcut.edits).map((shortcut) => shortcut.command)
-    expect(edits.sort()).toEqual(['delete', 'duplicate', 'indent', 'moveDown', 'moveUp', 'outdent', 'redo', 'undo'])
+    expect(edits.sort()).toEqual(['alias', 'delete', 'duplicate', 'indent', 'moveDown', 'moveUp', 'outdent', 'redo', 'undo'])
   })
 
   it('명령마다 줄 하나 · 도움말 글자가 플랫폼을 따른다', () => {

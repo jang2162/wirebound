@@ -158,7 +158,7 @@ describe('일괄 삭제 · 복제 · 복사 · 잘라내기 — 편집 하나 ·
     await openPage(doc(), { apiOverrides: srv.api })
     pick('n-a', 'n-c')
     const more = within(screen.getByRole('region', { name: '구조 트리' }).querySelector<HTMLElement>('[data-tree-id="n-c"]')!).getByRole('button', {
-      name: 'Text 더 보기',
+      name: 'Text 다 더 보기',
     })
     fireEvent.click(more)
     fireEvent.click(screen.getByRole('menuitem', { name: '삭제' }))
@@ -235,7 +235,7 @@ describe('일괄 삭제 · 복제 · 복사 · 잘라내기 — 편집 하나 ·
     await new Promise((resolve) => setTimeout(resolve, 30))
     fireEvent.click(
       within(screen.getByRole('region', { name: '구조 트리' }).querySelector<HTMLElement>('[data-tree-id="n-c"]')!).getByRole('button', {
-        name: 'Text 더 보기',
+        name: 'Text 다 더 보기',
       }),
     )
     const remove = screen.getByRole('menuitem', { name: '삭제' })
@@ -261,7 +261,7 @@ describe('하나일 때만 되는 것', () => {
     pick('n-a', 'n-c')
     fireEvent.click(
       within(screen.getByRole('region', { name: '구조 트리' }).querySelector<HTMLElement>('[data-tree-id="n-c"]')!).getByRole('button', {
-        name: 'Text 더 보기',
+        name: 'Text 다 더 보기',
       }),
     )
     const items = ['위로', '아래로', '들여쓰기', '내어쓰기', '삭제'].map((name) => {

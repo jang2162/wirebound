@@ -17,7 +17,7 @@ import type { PatchResult, ProjectRole, ProjectView } from '../../src/api/types'
 import { PROJECT_ID, PROJECT_NAME, openPage, pageDoc } from '../editor-harness'
 import { fakeRealtime } from '../fake-realtime'
 import { adminThemeView, staticBundleLoader } from '../theme-loader'
-import { treeTool } from '../panels/tree-row'
+import { treeTool, structureRowName } from '../panels/tree-row'
 
 const PAIR: PageDocument = pageDoc({
   id: 'n-root',
@@ -50,7 +50,7 @@ function notices(box: HTMLElement): string[] {
 /** 구조 트리에서 첫 줄을 골라 «아래로»를 낸다 — REST 로 나간다. */
 async function moveDown(): Promise<void> {
   const tree = screen.getByRole('region', { name: '구조 트리' })
-  fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
+  fireEvent.click(within(tree).getByRole('button', { name: structureRowName('Text') }))
   fireEvent.click(treeTool(tree, '아래로'))
   await act(async () => {})
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineComponent } from '../define'
+import { SUMMARY_TEXT_MAX, axisWord, clipped, joined, oneLine } from '../summary'
 
 export const TextDef = defineComponent({
   type: 'Text',
@@ -22,6 +23,7 @@ export const TextDef = defineComponent({
     },
   ],
   variantFrom: 'role',
+  summary: (props) => clipped(props.content, SUMMARY_TEXT_MAX),
   states: [],
   children: 'none',
 })
@@ -41,6 +43,7 @@ export const MediaDef = defineComponent({
     { prop: 'ratio', control: 'select', label: '비율', options: ['16/9', '4/3', '1/1', '3/4'] },
     { prop: 'caption', control: 'text', label: '설명' },
   ],
+  summary: (props) => joined(oneLine(props.kind), oneLine(props.caption)),
   states: [],
   children: 'none',
 })
@@ -57,6 +60,7 @@ export const DividerDef = defineComponent({
     { prop: 'direction', control: 'select', label: '방향', options: ['horizontal', 'vertical'] },
   ],
   variantFrom: 'direction',
+  summary: (props) => axisWord(props.direction),
   states: [],
   children: 'none',
 })
@@ -77,6 +81,7 @@ export const PlaceholderDef = defineComponent({
     { prop: 'label', control: 'text', label: '라벨' },
     { prop: 'height', control: 'number', label: '높이(px)' },
   ],
+  summary: (props) => oneLine(props.label),
   states: [],
   children: 'none',
 })

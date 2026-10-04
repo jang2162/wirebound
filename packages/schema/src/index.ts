@@ -9,7 +9,7 @@ export type {
   PageDocument,
   WbNode,
 } from './node'
-export { createNodeId } from './node'
+export { NODE_ALIAS_MAX, createNodeId } from './node'
 
 export type { NodeVisit } from './tree'
 export { collectNodeIds, findNode, findNodePath, remapNodeIds, walkNodes } from './tree'
@@ -67,7 +67,11 @@ export {
   describeNode,
   describePageTarget,
   listInteractionSentences,
+  nodeDisplayName,
 } from './interaction/describe'
+export { nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
+export { hasRejectedAliasChar, isBlankAlias, tidyAlias } from './alias'
+export { SUMMARY_LIST_MAX, SUMMARY_TEXT_MAX } from './component/summary'
 
 // `wireb page get`과 설계서 「MCP 도구」의 `get_page`가 낼 것을 값으로. **CLI는 글자만
 // 만든다** — 무엇을 실을지는 이 함수가 정하고, `--json`이 그 값을 그대로 낸다.

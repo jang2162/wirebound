@@ -59,7 +59,7 @@
  * | 목록 칸에 친 글자도 잠금이 오가도 남는다 | **없음** — `ListControl`의 «꺼진 동안 온 blur는 무시» 줄을 빼면 아래 «풀린 뒤 같은 목록의 다른 칸…»과 함께 죽는다(그 케이스가 이 길 위에 선다). **«잠금 순간 목록 칸의 초안이 남는다» 축의 주인은 이 케이스다** |
  * | 잠금이 풀린 뒤 같은 목록의 다른 칸에 치면… | `ListControl`의 «다른 칸의 초안을 먼저 낸다» 줄을 뺀다 — 또는 그 줄이 `index`만 보고 `part`를 안 본다 |
  * | 안내 줄이 이름과 함께 뜨고… | 안내 줄을 뺀다 |
- * | 편집할 속성이 없는 컴포넌트에는… | 그 갈래에서도 안내를 낸다 |
+ * | 편집할 속성이 없는 컴포넌트도… | 안내를 «속성 칸이 있을 때»의 갈래 안으로 되돌린다 · 별칭 칸을 안 끈다 |
  * | 잠금이 풀리면 위젯이 돌아온다 | **없음** — `setLocks`가 빈 목록을 무시하면 «친 글자…»·«안내 줄…»과 함께 죽는다 |
  * | 형제가 잠겨도 그대로 바꾼다 | **없음** — «페이지에 잠금이 하나라도»로 넓히면 «상태줄…»과 함께 죽는다 |
  * | 내 잠금에는 안 막힌다 | `viewerUserId`를 빈 값으로 넘긴다 |
@@ -98,6 +98,7 @@ import '../../src/catalog-setup'
 // `?raw`로 읽는다 — `shell-css-coverage.test.ts`가 이미 쓰는 기전이고, jsdom 환경에서는
 // `import.meta.url`이 http URL이라 `node:fs`로 못 연다(실측: *"The URL must be of scheme file"*).
 import shellCss from '../../src/shell.css?raw'
+import { structureRowName } from '../panels/tree-row'
 
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
 
@@ -311,7 +312,7 @@ function panel(): HTMLElement {
 
 /** 트리에서 노드 하나를 고른다. 줄 이름이 타입이다. */
 function select(type: string): void {
-  fireEvent.click(within(structureRegion()).getByRole('button', { name: type }))
+  fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName(type) }))
 }
 
 /** 구조 트리 아래 상태줄의 글자. */
@@ -352,20 +353,18 @@ function disabledOf(elements: HTMLElement[]): boolean[] {
  *
  * # 그 대신 이 자가 **재는 범위**를 여기 적는다
  *
- * 위젯이 0개인 노드(이 픽스처에서는 `n-root` = `Page`)는 이 자의 범위 **밖**이다. 그런
- * 노드에서 남이 자손을 잠그면 상태줄은 이름을 말하는데 이 자는 `false`를 낸다 —
- * 실측이다(`says=true` · `widgets=0` · `off=false`). **그 갈래가 안 재지는 것은 아니다.**
- * 주인이 둘 있고, 둘 다 이 자와 **다른 것**을 본다:
+ * 하나 고른 판의 패널에는 위젯이 늘 하나 이상이다 — 별칭 칸이 어느 컴포넌트에나 선다(`src/panels/property-panel.tsx`의
+ * `ALIAS_FIELD`). 편집할 속성이 없는 컴포넌트(이 픽스처의 `n-root` = `Page`)는 그 칸 **하나**뿐이라 이 자가 재는
+ * «다 꺼졌다»가 그 칸 하나의 값이다. 그 노드의 주인이 둘 있다:
  *
- * - **패널 쪽** — 이 파일의 «편집할 속성이 없는 컴포넌트에는 안내를 얹지 않는다»가 바로 그
+ * - **패널 쪽** — 이 파일의 «편집할 속성이 없는 컴포넌트도 꺼진 별칭 칸의 이유를 말한다»가 바로 그
  *   판(`n-root` 선택 + `n-text` 잠금)을 세우고, 패널이 *"이 컴포넌트에는 편집할 속성이
- *   없습니다"*를 내며 잠금 안내는 **안** 낸다는 것을 잰다.
+ *   없습니다"*와 함께 잠금 안내를 내고 별칭 칸이 꺼진다는 것을 잰다.
  * - **툴바 쪽** — `lock/toolbar-abilities.test.tsx`의 «루트가 선택된 채 남이 자손을 잠그면
  *   하나 남았던 `안에 추가`까지 꺼진다»와 «페이지의 모든 자리가 잠기면 도구 아홉과 트리 줄이
  *   전부 꺼진다»가 그 노드에서 **정말 막히는가**를 잰다.
  *
- * 그래서 아래 `COMBOS`에 위젯 0개짜리 줄을 **넣지 않는다.** 넣으면 이 자의 `false` 때문에
- * 대조가 죽는데, 그것은 화면이 틀린 것이 아니라 **자가 그 노드를 못 재는 것**이다.
+ * 아래 `COMBOS`에 그 노드를 넣지 않는 것은 그 두 주인이 이미 재서다.
  */
 function allWidgetsOff(): boolean {
   const found = disabledOf(widgets())
@@ -627,16 +626,17 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
     expect(panelNotices()).toEqual([])
   })
 
-  it('편집할 속성이 없는 컴포넌트에는 안내를 얹지 않는다 — 설명할 회색이 없다', async () => {
+  it('편집할 속성이 없는 컴포넌트도 꺼진 별칭 칸의 이유를 말한다', async () => {
     const view = await board()
-    // 페이지를 열면 루트가 자동 선택된다. `Page`의 `editor`는 비어 있다.
+    // 페이지를 열면 루트가 자동 선택된다. `Page`의 `editor`는 비어 있다 — 위젯은 별칭 칸 하나다.
     expect(view.store.getState().selectedNodeId).toBe('n-root')
 
     view.lock([foreign('n-text')])
     await settle()
 
     within(panel()).getByText('이 컴포넌트에는 편집할 속성이 없습니다')
-    expect(panelNotices().some((text) => text.includes(HOLDER))).toBe(false)
+    expect(panelNotices().some((text) => text.includes(HOLDER))).toBe(true)
+    expect(disabledOf(widgets())).toEqual([true])
   })
 
   it('잠금이 풀리면 위젯이 돌아온다', async () => {

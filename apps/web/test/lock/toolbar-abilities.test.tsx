@@ -82,7 +82,7 @@ import {
   pageDetail,
   pageDoc,
 } from '../editor-harness'
-import { isOff, treeTool } from '../panels/tree-row'
+import { isOff, treeTool, structureRowName } from '../panels/tree-row'
 import { installPointerEvents } from '../pointer-events'
 
 beforeAll(installPointerEvents)
@@ -321,12 +321,12 @@ function gates(): { pattern: boolean; preset: boolean } {
 
 /** 트리에서 노드 하나를 고른다. 줄 이름이 타입이다. */
 function select(type: string): void {
-  fireEvent.click(within(structureRegion()).getByRole('button', { name: type }))
+  fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName(type) }))
 }
 
 /** 그 노드의 트리 줄. 단축키를 여기에 친다. */
 function row(type: string): HTMLElement {
-  return within(structureRegion()).getByRole('button', { name: type })
+  return within(structureRegion()).getByRole('button', { name: structureRowName(type) })
 }
 
 function statusLine(): string {
@@ -768,7 +768,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
     view.lock([foreign('n-box')])
 
     const rowBox = (type: string): HTMLElement =>
-      within(structureRegion()).getByRole('button', { name: type }).closest<HTMLElement>('[data-tree-row]')!
+      within(structureRegion()).getByRole('button', { name: structureRowName(type) }).closest<HTMLElement>('[data-tree-row]')!
     expect(rowBox('Card').querySelector('.wb-shell-tree-row-actions')).toBeNull()
     expect(rowBox('Text').querySelector('.wb-shell-tree-row-actions')).not.toBeNull()
 
@@ -794,7 +794,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
     select('Card')
     view.lock([foreign('n-1')])
 
-    const card = within(structureRegion()).getByRole('button', { name: 'Card' }).closest<HTMLElement>('[data-tree-row]')!
+    const card = within(structureRegion()).getByRole('button', { name: structureRowName('Card') }).closest<HTMLElement>('[data-tree-row]')!
     expect(card.classList.contains('wb-shell-tree-row-picked')).toBe(true)
     expect(card.querySelector('.wb-shell-tree-row-actions')).not.toBeNull()
     expect(live()).toEqual([])
@@ -823,7 +823,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
     expect(view.calls).toEqual([])
     expect(alertText()).toBeNull()
     // 트리에 `Card`가 그대로 있다 — 사라졌다 돌아온 흔적도 없다.
-    expect(within(structureRegion()).getByRole('button', { name: 'Card' })).toBeTruthy()
+    expect(within(structureRegion()).getByRole('button', { name: structureRowName('Card') })).toBeTruthy()
   })
 })
 

@@ -44,6 +44,7 @@ import {
 import { clickAsBrowser } from '../click-as-browser'
 import { fakeApi } from '../helpers'
 import '../../src/catalog-setup'
+import { structureRowName } from './tree-row'
 
 /**
  * **`options`를 갖지 않는 `select`.** 카탈로그에는 그런 자리가 없으므로(실측: `control:
@@ -219,9 +220,12 @@ function requireWidget(label: string): HTMLElement {
 /**
  * 속성 줄. 클래스로 찾는 것은 이 요소들에 접근성 이름을 붙일 이유가 없기 때문이다 —
  * 클래스가 바뀌면 여기서 빈 배열이 되어 요란하게 깨진다(`canvasFrame()`과 같은 방식).
+ *
+ * **맨 위 별칭 칸은 세지 않는다**(`[data-wb-node-alias]`) — 카탈로그의 `editor`에서 오는 줄이 아니라 어느 컴포넌트에나 서는 칸이다. 그 칸은
+ * `./node-alias.test.tsx`가 잰다.
  */
 function propRows(): { label: string; value: string }[] {
-  return [...panel().querySelectorAll('.wb-shell-prop')].map((row) => ({
+  return [...panel().querySelectorAll('.wb-shell-prop:not([data-wb-node-alias])')].map((row) => ({
     label: row.querySelector('.wb-shell-prop-label')?.textContent ?? '',
     // **위젯이 있으면 그 값이 사용자가 보는 값이다.** 입력의 내용은 `textContent`가 아니라
     // `value`에 있으므로, 그것을 보지 않으면 위젯이 생긴 자리가 전부 빈 문자열로 읽힌다.
@@ -253,7 +257,7 @@ function select(type: string): void {
 /** 같은 타입이 여럿일 때 몇 번째를 고를지. 문서 순서 그대로다. */
 function selectAt(type: string, index: number): void {
   const buttons = within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', {
-    name: type,
+    name: structureRowName(type),
   })
   const button = buttons[index]
   if (button === undefined) throw new Error(`구조 트리에 ${type}[${index}]이 없다`)
@@ -860,7 +864,7 @@ describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전
     const { calls } = await typing()
 
     clickAsBrowser(
-      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[1]!,
+      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!,
     )
     await waitFor(() => expect(calls).toHaveLength(1))
     // **경로가 첫 노드다.** 새 노드로 갔다면 `children/1`이다 — 그것이 더 나쁜 손실이다

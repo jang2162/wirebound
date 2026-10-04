@@ -14,7 +14,7 @@ import type { PatchResult } from '../../src/api/types'
 import { deselect, HEAD_SEQ, openPage, pageDoc, structureTypes } from '../editor-harness'
 import { installPointerEvents } from '../pointer-events'
 import '../../src/catalog-setup'
-import { isOff, pickedRow, rootAction, rowAction, rowToggle } from './tree-row'
+import { isOff, pickedRow, rootAction, rowAction, rowToggle, structureRowName, structureRowType } from './tree-row'
 
 beforeAll(installPointerEvents)
 afterEach(() => {
@@ -79,7 +79,7 @@ function structureRegion(): HTMLElement {
 
 /** 구조 트리에서 타입 이름의 줄 상자. */
 function row(type: string): HTMLElement {
-  const button = within(structureRegion()).getByRole('button', { name: type })
+  const button = within(structureRegion()).getByRole('button', { name: structureRowName(type) })
   const box = button.closest<HTMLElement>('[data-tree-row]')
   if (box === null) throw new Error(`${type} 줄 상자가 없다`)
   return box
@@ -97,11 +97,11 @@ function itemsOf(box: HTMLElement, which: '+' | '…'): string[] {
 }
 
 describe('줄 행동의 항목 — spec 「트리」 표', () => {
-  it('노드 줄: `+` 안에 추가 · 아래 추가 · 패턴 넣기, `…` 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제', async () => {
+  it('노드 줄: `+` 안에 추가 · 아래 추가 · 패턴 넣기, `…` 별칭 바꾸기 · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제', async () => {
     await openPage(doc(), { apiOverrides: server().api })
 
     expect(itemsOf(row('Card'), '+')).toEqual(['안에 추가', '아래 추가', '패턴 넣기'])
-    expect(itemsOf(row('Card'), '…')).toEqual(['위로', '아래로', '들여쓰기', '내어쓰기', '삭제'])
+    expect(itemsOf(row('Card'), '…')).toEqual(['별칭 바꾸기', '위로', '아래로', '들여쓰기', '내어쓰기', '삭제'])
   })
 
   it('뿌리 `+`(제목 줄): 페이지에 추가 · 패턴 넣기 · 프리셋', async () => {
@@ -140,7 +140,7 @@ describe('줄 행동을 열면 그 줄이 먼저 골라진다 · 고르개는 �
     // 고르개는 Card 줄의 항목(li) 안 · 자식 목록 앞이다.
     const item = row('Card').parentElement!
     expect(item.contains(picker)).toBe(true)
-    expect(picker.compareDocumentPosition(within(item).getByRole('button', { name: 'Button' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(picker.compareDocumentPosition(within(item).getByRole('button', { name: structureRowName('Button') })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.click(within(picker).getByRole('button', { name: '추가' }))
 
@@ -184,7 +184,7 @@ function layRows(): string[] {
     const top = at * 20
     return { left: 0, top, right: 200, bottom: top + 20, width: 200, height: 20, x: 0, y: top, toJSON: () => ({}) }
   })
-  return rows().map((box) => box.querySelector('.wb-shell-structure-node')?.textContent ?? '')
+  return rows().map((box) => structureRowType(box.querySelector('.wb-shell-structure-node')) ?? '')
 }
 
 function drag(titles: string[], from: string, to: string, zone: 'top' | 'middle' | 'bottom'): void {

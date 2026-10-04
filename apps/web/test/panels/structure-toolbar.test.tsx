@@ -23,7 +23,7 @@ import {
   structureTypes,
 } from '../editor-harness'
 import '../../src/catalog-setup'
-import { isOff, queryRowAction, treeTool } from './tree-row'
+import { isOff, queryRowAction, treeTool, structureRowName, structureRowType } from './tree-row'
 
 /**
  * 타입이 전부 다른 문서. **이름으로 노드를 고를 수 있어야** 순서가 바뀐 뒤에도 같은
@@ -122,13 +122,13 @@ function toolButton(name: string): HTMLElement {
 
 /** 트리에서 노드 하나를 고른다. 줄 이름이 타입이므로 문서의 타입이 전부 달라야 한다. */
 function select(type: string): void {
-  fireEvent.click(within(structureRegion()).getByRole('button', { name: type }))
+  fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName(type) }))
 }
 
 /** 지금 선택 표시가 붙은 줄의 이름. 표시가 없으면 `null`이다. */
 function selectedType(): string | null {
   const marked = structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]')
-  return marked?.textContent ?? null
+  return structureRowType(marked)
 }
 
 /** 셸 상단의 되돌리기 버튼. */
@@ -150,8 +150,8 @@ const BUTTONS = ['안에 추가', '아래 추가', '삭제', '위로', '아래�
  * 보지 않으면 "아무 일도 안 일어난 구현"이 통과한다.
  */
 function isNestedIn(childType: string, parentType: string): boolean {
-  const child = within(structureRegion()).getByRole('button', { name: childType }).closest('li')
-  const parent = within(structureRegion()).getByRole('button', { name: parentType }).closest('li')
+  const child = within(structureRegion()).getByRole('button', { name: structureRowName(childType) }).closest('li')
+  const parent = within(structureRegion()).getByRole('button', { name: structureRowName(parentType) }).closest('li')
   if (child === null || parent === null) throw new Error('구조 트리의 줄이 목록 항목이 아닙니다')
   return parent.contains(child)
 }

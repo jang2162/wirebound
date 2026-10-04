@@ -18,12 +18,13 @@
  *
  * ## 무엇을 부르는 이름이 어디서 오는가
  *
- * 문장의 주어·목적어는 노드다. 노드를 부르는 이름은 **번호 + 라벨 + 컴포넌트 이름**으로
- * 만든다:
+ * 문장의 주어·목적어는 노드다. 노드를 부르는 이름은 **번호 + 별칭**, 별칭이 없으면 **번호 + 라벨 + 컴포넌트 이름**으로
+ * 만든다(`nodeDisplayName`):
  *
  * | 조각 | 어디서 | 없으면 |
  * |---|---|---|
  * | `①` | 노드의 `marker` | **비운다** — 번호 없음은 정상 상태다(설계서 「페이지 스키마 노드」: *"없으면 코멘트 없음"*) |
+ * | `머리 저장` | 노드의 `alias`(사람이 붙인 이름 — 있으면 아래 둘 대신 선다) | 아래 둘 |
  * | `검색` | 라벨성 prop (`COMPONENT_NOUNS`의 `labelProp`) | 비운다 |
  * | `버튼` | **카탈로그의 `def.label`** | **영문 타입 이름**을 쓴다 |
  *
@@ -54,6 +55,7 @@
  */
 import { CATALOG_DEFS } from '../component/catalog/index'
 import { getComponent } from '../component/registry'
+import { nodeAlias } from '../display'
 import type { AnyDocument, Interaction, InteractionAction, InteractionTrigger, WbNode } from '../node'
 import { pageTargetPath } from '../page-target'
 import { walkNodes } from '../tree'
@@ -284,12 +286,26 @@ export function describeNode(node: WbNode): string {
  * 그려지고 `unknown-type` 이슈가 따로 붙으므로, 문장이 그것을 숨기지 않는 편이 맞다.
  */
 function nodeName(node: WbNode): string {
+  const named = nodeDisplayName(node)
+  const marker = markerOf(node)
+  return marker === null ? named : `${marker} ${named}`
+}
+
+/**
+ * 노드를 사람이 부르는 이름 — **별칭이 있으면 별칭, 없으면 라벨 + 한국어 이름**(`검색 버튼` / `목록` / `Bogus`).
+ * 번호는 싣지 않는다(문장 · 고르개는 `describeNode` 가 번호를 앞에 붙인다).
+ *
+ * **노드를 이름으로 부르는 자리는 이것을 거친다** — 별칭을 읽는 자리가 여럿이면 한 자리가 타입 이름으로 남는다.
+ */
+export function nodeDisplayName(node: WbNode): string {
+  return nodeAlias(node) ?? nounName(node)
+}
+
+function nounName(node: WbNode): string {
   const noun = COMPONENT_NOUNS[node.type]
   const base = noun?.name ?? (typeof node.type === 'string' ? node.type : '알 수 없는 노드')
   const label = noun?.labelProp === undefined ? undefined : readLabel(node, noun.labelProp)
-  const named = label === undefined ? base : `${label} ${base}`
-  const marker = markerOf(node)
-  return marker === null ? named : `${marker} ${named}`
+  return label === undefined ? base : `${label} ${base}`
 }
 
 /** 라벨성 prop의 값. 문자열이 아니거나 비어 있으면 `undefined`다. */

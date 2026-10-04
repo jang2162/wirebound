@@ -37,7 +37,7 @@ import {
   pageDoc,
   waitForNode,
 } from '../editor-harness'
-import { treeTool } from '../panels/tree-row'
+import { treeTool, structureRowName } from '../panels/tree-row'
 
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
 
@@ -207,7 +207,7 @@ function treeButton(typeLabel: string): HTMLElement {
 
 /** 같은 타입이 여럿일 때 그중 하나. 순서는 화면에 그려진 순서 그대로다. */
 function treeButtonAt(typeLabel: string, index: number): HTMLElement {
-  const found = within(structureList()).getAllByRole('button', { name: typeLabel })[index]
+  const found = within(structureList()).getAllByRole('button', { name: structureRowName(typeLabel) })[index]
   if (found === undefined) throw new Error(`${typeLabel} 줄이 ${index}번째에 없습니다`)
   return found
 }

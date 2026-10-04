@@ -140,7 +140,7 @@
  * `walkSafely`를 쓴다.
  */
 import { useCallback, useEffect, type ReactElement } from 'react'
-import type { PageDocument } from '@wirebound/schema'
+import { nodeAlias, type PageDocument } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, SignedOut, toFailure, type Failure } from '../api/failure'
 import { ApiError, type ApiClient } from '../api/client'
@@ -149,7 +149,7 @@ import type { WriteConclusion, WriteNote } from './write-ledger'
 import type { Comment, CommentCreated } from '../api/types'
 import { walkSafely } from '../edit/safe-walk'
 import { shellIcon } from '../shell/icons'
-import { nodeTypeLabel } from './node-shape'
+import { nodeHeadingLabel } from './node-shape'
 import { useRealtimeSetup } from '../realtime/context'
 import { useSessionUser } from '../session/session-context'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
@@ -528,6 +528,16 @@ function markersOf(document: PageDocument): Map<string, number | null> {
   return markers
 }
 
+/** 문서에서 노드 id → 별칭 표. 별칭이 없는 노드는 표에 없다. `markersOf`와 같은 이유로 `walkSafely`다. */
+function aliasesOf(document: PageDocument): Map<string, string> {
+  const aliases = new Map<string, string>()
+  for (const visit of walkSafely(document.root)) {
+    const alias = nodeAlias(visit.node)
+    if (alias !== null) aliases.set(visit.node.id, alias)
+  }
+  return aliases
+}
+
 /**
  * 코멘트를 노드별로 묶고 늘어놓는다. **순서가 이 함수의 계약이다**(위 머리말의 표).
  *
@@ -582,7 +592,7 @@ function rank(group: Group): number {
  * 그것이다(머리말 «새 코멘트 초안은 노드마다 …»). 다른 자리(아웃라인 · 호버)에서 읽으면 말하는 대상과 달리는 대상이 갈린다.
  *
  * **이름은 화면이 이미 쓰는 둘이다** — 번호와 id 는 아래 목록의 무리 머리가(`groupComments` — 번호가 없으면 `–`),
- * 타입은 구조 트리가 쓰는 것이다(`nodeTypeLabel`). 새 이름 체계를 짓지 않는다. 문서를 못 읽었거나 그 노드가 문서에
+ * 타입과 별칭은 속성 패널 제목이 쓰는 것이다(`nodeHeadingLabel` — `타입 (별칭)`). 새 이름 체계를 짓지 않는다. 문서를 못 읽었거나 그 노드가 문서에
  * 없으면 id 만 말한다 — 모르는 번호·타입을 지어내지 않는다(`Group.present`의 `'unknown'`과 같은 결).
  */
 function targetOf(document: PageDocument | null, nodeId: string): string {
@@ -591,7 +601,7 @@ function targetOf(document: PageDocument | null, nodeId: string): string {
       if (visit.node.id !== nodeId) continue
       const marker = visit.node.marker
       const numbered = typeof marker === 'number' && Number.isInteger(marker) ? String(marker) : '–'
-      return `${TARGET}: ${numbered} ${nodeTypeLabel(visit.node)} (${nodeId})`
+      return `${TARGET}: ${numbered} ${nodeHeadingLabel(visit.node)} (${nodeId})`
     }
   }
   return `${TARGET}: ${nodeId}`
@@ -1036,6 +1046,8 @@ export function CommentPanel(props: {
   }
 
   const groups = groupComments(state.comments, document)
+  // 무리 머리의 별칭 — 문서를 못 읽었으면 `null`(머리가 id 만 말한다).
+  const aliases = document === null ? null : aliasesOf(document)
   // 다시 받기가 **보이는 목록보다 새것일 때만** 말한다(`REFRESH`의 주석).
   const refreshNotice = refreshing !== null && refreshing.at > state.at ? refreshing : null
 
@@ -1160,7 +1172,11 @@ export function CommentPanel(props: {
                 <span className="wb-shell-comment-marker">{group.marker ?? '–'}</span>{' '}
                 {/* **`'unknown'`을 `'no'`와 갈라 말한다**. 문서를 못 읽었을 뿐인데
                     *"사라진 노드"*라고 적으면 화면이 거짓을 단언한다. */}
-                {group.present === 'no' ? `${MISSING_NODE} (${group.nodeId})` : group.nodeId}
+                {group.present === 'no'
+                  ? `${MISSING_NODE} (${group.nodeId})`
+                  : aliases?.get(group.nodeId) !== undefined
+                    ? `${aliases.get(group.nodeId)} (${group.nodeId})`
+                    : group.nodeId}
               </h3>
               <ul className="wb-shell-comment-list">
                 {group.comments.map((comment) => (

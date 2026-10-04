@@ -646,10 +646,18 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  /* 고르개가 담긴 상자 폭을 넘지 않게 — 아래 `.wb-shell-select` 와 짝이다. */
+  max-width: 100%;
+  min-width: 0;
   color: var(--wb-shell-muted);
 }
 
+/* **상자 폭을 넘지 않는다.** `<select>` 는 가장 긴 항목의 폭으로 서는데, 항목에 사람이 붙인 이름(별칭 — 60자까지 · 끊을 자리 없는
+   한 낱말도 된다)이 들면 우측 패널 밖으로 나간다(Chrome · `build-test/node-alias.test.ts` «대상 고르개»). 줄여도 고른 항목은 끝이 잘려 보일 뿐
+   열면 전부 보인다. */
 .wb-shell-select {
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid var(--wb-shell-line);
   border-radius: 6px;
   padding: 4px 6px;
@@ -981,6 +989,21 @@
   text-align: left;
   color: var(--wb-shell-ink);
   cursor: pointer;
+  /* 줄 글(`타입 (별칭) 요약`)은 한 줄이다 — 넘치면 끝에서 줄임표로 자른다. 끊을 자리 없는 긴 별칭도 줄을 늘리지 않는다. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 줄 요약(`panels/structure-tree.tsx`) — 타입 · 별칭보다 흐리게. 색을 정하지 않고 줄 글색을 옅게 낸다 — 고른 줄(채움 위의 흰 글) ·
+   꺼진 줄에서도 그 줄의 색을 따른다(결합자로 고른 줄을 따로 겨냥하지 않는다 — `test/shell-css-guard.ts`). */
+.wb-shell-structure-summary {
+  opacity: 0.65;
+}
+
+/* 줄의 별칭 — 타입과 같은 글색이다. 따로 둔 것은 조각을 가리키는 자리(넘침 측정 · 스크린숏)가 이름으로 찾게 하려는 것이다. */
+.wb-shell-structure-alias {
+  color: inherit;
 }
 
 /* id가 없어 고를 수 없는 줄(`panels/structure-tree.tsx`). 누를 수 없다는 것이 보여야
@@ -1636,6 +1659,8 @@
   margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
+  /* 머리에 별칭(60자 · 끊을 자리 없는 한 낱말도 된다)이 서므로 어디서든 접는다(`build-test/node-alias.test.ts` «우측 패널 밖»). */
+  overflow-wrap: anywhere;
 }
 
 /* 고를 노드가 없거나 그릴 속성이 없을 때의 문장. */
@@ -1835,6 +1860,8 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--wb-shell-muted);
+  /* 노드 이름(별칭)이 서는 자리 — `.wb-shell-panel-title`과 같은 까닭으로 접는다. */
+  overflow-wrap: anywhere;
 }
 
 /* 규칙 하나(`<fieldset>`). 브라우저 기본 테두리·여백을 셸의 값으로 바꾼다. 안의 `<legend>`는
@@ -1870,6 +1897,8 @@
   margin: 0;
   font-size: 12px;
   color: var(--wb-shell-muted);
+  /* 문장이 노드를 별칭으로 부른다 — `.wb-shell-panel-title`과 같은 까닭으로 접는다. */
+  overflow-wrap: anywhere;
 }
 
 /* 이 페이지의 상호작용 목록. `<ul>`의 UA 기본 둘을 지운다 — 위 목록 위젯과 같은 이유이고,

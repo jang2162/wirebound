@@ -268,3 +268,33 @@ it('하네스가 스냅샷 라우트를 실제로 건다', async () => {
   const said = (await callJson(io, 'list_pages')) as { pages: unknown[] }
   expect(said.pages).toHaveLength(3)
 })
+
+/**
+ * **별칭이 트리 읽기에 실린다**(설계서 「설계서 화면 구조」의 노드 별칭 — MCP 의 트리 읽기). 노드마다 `alias`(있을 때) · `rowLabel`
+ * (구조 트리 줄과 같은 글) · `name`(문장이 부르는 이름)이 별칭을 든다. 무엇을 싣는지는 `pageView` 가 정하고 그 칸마다의 값은
+ * `packages/schema/test/alias-naming.test.ts` 가 잰다 — 여기는 도구가 그것을 그대로 내는가다.
+ */
+describe('get_page — 별칭', () => {
+  it('노드의 `alias` · `rowLabel` · 별칭으로 부른 `name` 을 싣는다', async () => {
+    const 문서 = {
+      version: 1,
+      root: {
+        id: 'root',
+        type: 'Page',
+        children: [{ id: 'save', type: 'Button', alias: '머리 저장', props: { label: '저장' } }],
+      },
+    }
+    const payload = snapshotPayload({ pages: [page(PAGE_DETAIL, MENU_ADMIN, '별칭', 0, 문서, null)], comments: [] })
+    const said = (await callJson(harness({ payload }), 'get_page', { path: '관리자/별칭' })) as {
+      found: boolean
+      page: { nodes: { id: string; name: string; alias?: string; rowLabel: string }[] }
+    }
+    expect(said.found).toBe(true)
+    expect(said.page.nodes.find((node) => node.id === 'save')).toMatchObject({
+      name: '머리 저장',
+      alias: '머리 저장',
+      rowLabel: 'Button (머리 저장) 저장',
+    })
+    expect(said.page.nodes.find((node) => node.id === 'root')).not.toHaveProperty('alias')
+  })
+})

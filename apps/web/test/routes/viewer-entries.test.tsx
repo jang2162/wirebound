@@ -21,6 +21,7 @@ import { openDraftStore } from '../../src/panels/draft-store'
 import { openPage, pageDoc, PROJECT_ID, PROJECT_NAME, type EditorOptions, canvasQuery } from '../editor-harness'
 import { fakeRealtime, type FakeRealtime } from '../fake-realtime'
 import '../../src/catalog-setup'
+import { structureRowName } from '../panels/tree-row'
 
 const VIEWER: ProjectView = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role: 'viewer', themeRev: 0 }
 const EDITOR: ProjectView = { ...VIEWER, role: 'editor' }
@@ -140,7 +141,7 @@ describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다 �
     await openAsViewer(how)
     const structure = screen.getByRole('region', { name: '구조 트리' })
 
-    const card = within(structure).getByRole('button', { name: 'Card' })
+    const card = within(structure).getByRole('button', { name: structureRowName('Card') })
     expect((card as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(card)
     expect(card.getAttribute('aria-current')).toBe('true')

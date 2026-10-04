@@ -16,7 +16,7 @@
  */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import type { NodeLock, WbNode } from '@wirebound/schema'
+import { nodeAlias, nodeSummary, type NodeLock, type WbNode } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
 import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { platformOf, type ShortcutLine } from '../edit/editor-shortcuts'
@@ -31,12 +31,14 @@ import { ICONS } from '../shell/icons'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 import { structureKey, useCollapsed, type Collapsed } from '../tree/collapse'
+import { useAliasEdit, type AliasEdit } from './alias-edit'
 import { nodeTypeLabel } from './node-shape'
 import { structureTreeHint } from './structure-tree-hint'
 import { selectionCapNotice } from './toolbar-status'
 import { isTypingSurface } from './typing-surface'
 import { StructurePicker, useStructureCommands, type StructureCommands } from './structure-toolbar'
 import { TreeFoldButtons, TreeToggle } from './tree-fold'
+import { TreeInput } from './tree-input'
 import { structureRowItems, TreeRowActions } from './tree-row-actions'
 
 /**
@@ -152,6 +154,7 @@ export function StructureTree(props: {
     pageLock: typeof doc?.root?.id === 'string' ? lockOf(doc.root.id) : null,
   })
   const statusId = useId()
+  const alias = useAliasEdit(props.pageId)
   /**
    * 프리셋 이름칸에 친 글자. **고르개가 아니라 여기서 든다** — 고르개는 잠금이 걸리는 동안 DOM에서 빠지지만 트리는 그대로 있다.
    * 왜 이 하나만 가르는지는 `visiblePicker`의 머리말 «두 축»이 갖는다.
@@ -292,7 +295,7 @@ export function StructureTree(props: {
           fold={fold}
           row={
             props.editable
-              ? { commands, drag, statusId, rootId, anchorId, picker, select: store.selectNode }
+              ? { commands, drag, statusId, rootId, anchorId, picker, select: store.selectNode, alias }
               : null
           }
         />
@@ -393,6 +396,9 @@ function foldableIds(root: unknown, rootId: string | null): string[] {
     .map((node) => node.id)
 }
 
+/** 별칭 입력의 접근 이름 — 속성 패널 «별칭» 칸과 같은 낱말이다. */
+const ALIAS_INPUT_LABEL = '별칭'
+
 /** 편집할 수 있는 판에서 줄마다 내려가는 것 — 명령 · 끌기 · 상태줄 id · 뿌리 · 고르개가 설 줄 · 고르개 · 고르기. */
 interface RowWiring {
   commands: StructureCommands
@@ -402,6 +408,8 @@ interface RowWiring {
   anchorId: string | null
   picker: ReactNode
   select: (nodeId: string) => void
+  /** 별칭 입력이 선 줄(`./alias-edit.tsx`). */
+  alias: AliasEdit
 }
 
 /** 노드 한 줄과 그 아래. 트리 자체가 재귀 구조라 컴포넌트도 재귀다. */
@@ -435,6 +443,18 @@ function StructureNode(props: {
   // 재지 못했다.
   const children = Array.isArray(node.children) ? node.children : []
   const typeLabel = nodeTypeLabel(node)
+  /**
+   * **줄 글은 `타입 (별칭) 요약`이다**(설계서 「설계서 화면 구조」의 구조 트리 줄) — 같은 타입이 여럿일 때 어느 것인지 가르는 데까지만.
+   * 셋을 조각으로 나눠 그리는 것은 요약만 흐리게 하려는 것이고, 접근 이름은 셋을 이은 글 그대로다(`packages/schema` 의 `nodeRowLabel`과
+   * 같은 글 — MCP 가 같은 것을 낸다). 타입을 못 읽는 노드는 요약이 없다.
+   */
+  const alias = nodeAlias(node)
+  const summary = nodeSummary(node)
+  /**
+   * 줄 글 전부 — 줄 단추의 접근 이름과 같다. **줄 행동(`+` · `…`)의 이름도 이것으로 짓는다** — 타입만으로 지으면 라벨이 «추가»인 Button 줄
+   * (`Button 추가`)과 그 줄의 `+`(`Button 추가`)가 같은 이름이 된다.
+   */
+  const rowLabel = `${typeLabel}${alias === null ? '' : ` (${alias})`}${summary === null ? '' : ` ${summary}`}`
   // id가 없는 노드는 잠금과 짝지을 것이 없다 — 아래에서 고를 수도 없다.
   const lock = isSelectable(node) ? props.lockOf(node.id) : null
 
@@ -454,6 +474,8 @@ function StructureNode(props: {
    * 들리지도 않게 한다. 뿌리는 옮기지 않으므로 끌지 않는다.
    */
   const open = row !== null && isSelectable(node) && (picked || props.blockedOf(node.id) === null)
+  /** 줄 단추 — 별칭 입력을 닫은 뒤 포커스를 돌릴 자리. */
+  const button = useRef<HTMLButtonElement>(null)
   const draggable = open && row.rootId !== node.id && props.lockOf(node.id) === null
   const lifted = row !== null && isSelectable(node) && row.drag.dragging === node.id
   /** 펼침 단추가 서는 줄인가 — 고를 수 있고 자식 줄이 있다. id 없는 노드는 접힘을 적을 열쇠가 없어 늘 편 채다. */
@@ -497,16 +519,37 @@ function StructureNode(props: {
             // 접고 펴는 줄의 상태 — 보조 기술이 읽는 것은 여기다(펼침 단추는 포인터 몫이다 — `./tree-fold.tsx`).
             aria-expanded={foldable ? !folded : undefined}
             onClick={(event) => props.onSelect(node.id, event)}
+            // **더블클릭은 고른 줄에서만 별칭 입력을 연다** — 첫 누름이 그 줄을 고르므로 판정(`aliasLocked`)이 그 줄의 것이다.
+            onDoubleClick={() => {
+              if (open && picked && !row.commands.aliasLocked) row.alias.open(node.id)
+            }}
             {...(draggable ? row.drag.bind(node.id) : {})}
+            ref={button}
           >
             {typeLabel}
+            {/* **별칭 · 요약은 사람 글이라 방향을 격리한다(`<bdi>`)** — 괄호는 격리 밖에 둔다. 격리가 없으면 괄호가 안 닫힌 RTL 별칭의 `(` 가
+                줄의 `)` 와 짝이 되어 별칭 · `)` · RTL 요약이 한 RTL 덩이로 서고, 라벨 · 제목에 든 방향 제어 글자(봉투가 별칭에만 막는다 —
+                `packages/schema/src/alias.ts`)가 뒤의 조각까지 뒤집는다(`build-test/node-alias.test.ts` «방향을 격리한다»). */}
+            {alias !== null && (
+              <span className="wb-shell-structure-alias">
+                {' ('}
+                <bdi>{alias}</bdi>
+                {')'}
+              </span>
+            )}
+            {summary !== null && (
+              <span className="wb-shell-structure-summary">
+                {' '}
+                <bdi>{summary}</bdi>
+              </span>
+            )}
           </button>
           {/* 펼침 단추는 줄 단추 **뒤**에 두고 CSS 가 앞에 세운다(`./tree-fold.tsx` 머리말 «DOM 에서는 줄 단추 뒤다»). */}
           <TreeToggle foldable={foldable} folded={folded} onToggle={() => props.fold.toggle(node.id)} />
           {open && (
             <TreeRowActions
-              name={typeLabel}
-              {...structureRowItems(row.commands, row.statusId)}
+              name={rowLabel}
+              {...structureRowItems(row.commands, row.statusId, () => row.alias.open(node.id))}
               // 열면 그 줄을 먼저 고른다 — 이미 고른 줄이면 다시 고르지 않는다(열린 고르개가 닫히지 않게 — `openAdd`는 선택을 안 본다).
               onOpen={() => {
                 if (!picked) row.select(node.id)
@@ -527,6 +570,30 @@ function StructureNode(props: {
           조용히 사라진다. */}
       {lock !== null && lock.nodeId === node.id && (
         <span className="wb-shell-structure-lock">{lock.userName} 편집 중</span>
+      )}
+
+      {/* **별칭 입력은 그 줄 바로 아래다** — 메뉴 트리의 «이름 변경»과 같은 꼴(`./tree-input.tsx` — Enter 만 확정 · Escape · blur 는
+          취소). Enter · Escape 뒤에는 포커스를 줄 단추로 돌린다 — 키보드로 연 사람이 그 자리에서 이어 간다. blur 로 닫힌 판은 포커스가
+          이미 다른 데로 갔으니 건드리지 않는다. */}
+      {open && row.alias.nodeId === node.id && (
+        <div className="wb-shell-tree-panel">
+          <TreeInput
+            label={ALIAS_INPUT_LABEL}
+            // 친 글이 있으면 그것으로 선다 — 노드가 다른 부모로 옮겨져 줄이 새로 마운트돼도 이어 친다(`./alias-edit.tsx` 머리말).
+            initial={row.alias.draft() ?? nodeAlias(node) ?? ''}
+            onEdit={row.alias.type}
+            onSubmit={(value) => {
+              row.alias.close()
+              row.commands.renameAlias(node.id, value)
+              button.current?.focus()
+            }}
+            onCancel={() => {
+              const escaped = document.activeElement?.classList.contains('wb-shell-tree-input') === true
+              row.alias.close()
+              if (escaped) button.current?.focus()
+            }}
+          />
+        </div>
       )}
 
       {/* **고르개는 그 줄 바로 아래다**(`StructureTree`의 `anchorId`). */}

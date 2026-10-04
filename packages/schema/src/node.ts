@@ -21,12 +21,20 @@ export interface Interaction {
 export interface WbNode {
   id: string
   type: string
+  /**
+   * 사람이 붙인 이름. 노드를 가리키는 자리마다 타입 이름 대신(또는 곁에) 선다(`display.ts`). 모양 — 앞뒤 공백이 없는
+   * 1 ~ `NODE_ALIAS_MAX` 자 한 줄 — 은 봉투(`envelope.ts`의 `WbNodeSchema`)가 본다. 문서 안에서 유일할 필요는 없다.
+   */
+  alias?: string
   props?: Record<string, unknown>
   variant?: string
   marker?: number
   interactions?: Interaction[]
   children?: WbNode[]
 }
+
+/** 별칭 글자 수의 상한(코드 포인트로 센다). */
+export const NODE_ALIAS_MAX = 60
 
 declare const documentKind: unique symbol
 

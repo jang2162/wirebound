@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineComponent } from '../define'
+import { joined, oneLine } from '../summary'
 
 export const SearchFormDef = defineComponent({
   type: 'SearchForm',
@@ -24,6 +25,7 @@ export const EntryFormDef = defineComponent({
     title: z.string().default(''),
   }),
   editor: [{ prop: 'title', control: 'text', label: '제목' }],
+  summary: (props) => oneLine(props.title),
   states: [],
   children: 'many',
 })
@@ -57,6 +59,7 @@ export const FieldDef = defineComponent({
     { prop: 'invalid', control: 'switch', label: '오류 상태' },
   ],
   variantFrom: 'control',
+  summary: (props) => joined(oneLine(props.label), oneLine(props.control)),
   states: ['required', 'disabled', 'invalid'],
   children: 'none',
 })

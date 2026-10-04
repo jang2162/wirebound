@@ -17,7 +17,7 @@
  * 그 실측을 케이스로 옮긴 것이 `test/panels/structure-tree.test.tsx`·
  * `test/panels/property-panel.test.tsx`의 `type이 문자열이 아닌 노드가 있어도 / 골라도 셸은 살아 있다`다).
  */
-import type { WbNode } from '@wirebound/schema'
+import { nodeHeading, type WbNode } from '@wirebound/schema'
 
 /** 타입을 읽지 못한 노드 자리에 쓸 이름. 빈 줄로 두면 그 줄이 무엇인지 알 수 없다. */
 export const BROKEN_TYPE_LABEL = '(타입을 읽을 수 없는 노드)'
@@ -35,4 +35,12 @@ export function nodeType(node: WbNode): string | null {
 /** 화면에 그릴 타입 이름. 읽지 못한 노드에는 `BROKEN_TYPE_LABEL`이 대신 간다. */
 export function nodeTypeLabel(node: WbNode): string {
   return nodeType(node) ?? BROKEN_TYPE_LABEL
+}
+
+/**
+ * 화면에 그릴 `타입 (별칭)` — 별칭이 없으면 타입. 노드를 가리키는 자리(코멘트의 «달 곳» · 캔버스 손잡이)가 쓴다. 읽지 못한 노드에는
+ * `BROKEN_TYPE_LABEL`이 간다(`nodeTypeLabel`과 같다).
+ */
+export function nodeHeadingLabel(node: WbNode): string {
+  return nodeType(node) === null ? BROKEN_TYPE_LABEL : nodeHeading(node)
 }

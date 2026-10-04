@@ -12,7 +12,7 @@ import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import { createEditChannel } from '../../src/realtime/edit-channel'
 import { HEAD_SEQ, PAGE_ID, PROJECT_ID, openPage, pageDetail, pageDoc, structureTypes, canvasQuery } from '../editor-harness'
-import { treeTool } from '../panels/tree-row'
+import { treeTool, structureRowName } from '../panels/tree-row'
 
 class FakeSocket implements RealtimeSocket {
   onopen: (() => void) | null = null
@@ -81,7 +81,7 @@ async function mount(extra: Record<string, unknown> = {}) {
     sockets.flatMap((socket) => socket.sent.filter((raw) => raw.includes('"patch"')).map((raw) => JSON.parse(raw) as SentPatch))
   const tool = async (node: string, label: string): Promise<void> => {
     const tree = screen.getByRole('region', { name: '구조 트리' })
-    fireEvent.click(within(tree).getByRole('button', { name: node }))
+    fireEvent.click(within(tree).getByRole('button', { name: structureRowName(node) }))
     fireEvent.click(treeTool(tree, label))
     await act(async () => {})
   }

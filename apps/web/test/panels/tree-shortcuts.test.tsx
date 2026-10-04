@@ -22,6 +22,7 @@ import { ThemeBundleProvider } from '../../src/theme/bundle-context'
 import { fakeApi } from '../helpers'
 import { adminThemeView, staticBundleLoader } from '../theme-loader'
 import '../../src/catalog-setup'
+import { structureRowName } from './tree-row'
 
 function tree(): TreeMenuNode[] {
   return [
@@ -123,7 +124,7 @@ function menuKeys(): HTMLElement {
   return box as HTMLElement
 }
 function structureRow(name: string): HTMLElement {
-  return within(structureRegion()).getByRole('button', { name })
+  return within(structureRegion()).getByRole('button', { name: structureRowName(name) })
 }
 
 /** 마지막 `patchOps`가 실은 `move` op. 없으면 그 자리에서 던져 케이스가 요란하게 깨진다. */

@@ -193,6 +193,7 @@ export function stripMarkers(nodes: readonly WbNode[]): WbNode[] {
 
 function copyNode(node: WbNode): WbNode {
   const next: WbNode = { id: node.id, type: node.type }
+  if (node.alias !== undefined) next.alias = node.alias
   if (node.props !== undefined) next.props = cloneJsonValue(node.props)
   if (node.variant !== undefined) next.variant = node.variant
   if (node.interactions !== undefined) {

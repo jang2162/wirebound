@@ -47,7 +47,7 @@ import { platformOf } from '../edit/editor-shortcuts'
 import { findNodeSafely, walkSafely } from '../edit/safe-walk'
 import { selectionCapNotice } from '../panels/toolbar-status'
 import type { SelectionChange } from '../store/editor-store'
-import { nodeTypeLabel } from '../panels/node-shape'
+import { nodeHeadingLabel } from '../panels/node-shape'
 import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useAnnounceCanvasRemeasure, usePlacementPreview, usePublishCanvasRegion } from '../drag/use-placement'
@@ -633,7 +633,7 @@ export function Canvas(props: {
           projectId={props.projectId}
           pageId={props.pageId}
           nodeId={outlinedNodeId}
-          label={nodeTypeLabel(handleNode)}
+          label={nodeHeadingLabel(handleNode)}
           box={box}
           zoom={zoom}
           layoutKey={layoutKey}

@@ -19,6 +19,7 @@ import {
   selectionOutline,
   waitForNode,
 } from '../editor-harness'
+import { structureRowName, structureRowType } from './tree-row'
 
 /**
  * 셸이 만든 `EditorStore`. 화면만 보는 단언으로는 "선택이 스토어에 들어간다"를 지킬 수
@@ -105,7 +106,7 @@ function currentRows(): HTMLElement[] {
 function row(type: string): HTMLElement {
   const list = structureList()
   if (list === null) throw new Error('구조 트리 목록이 없습니다')
-  return within(list).getByRole('button', { name: type })
+  return within(list).getByRole('button', { name: structureRowName(type) })
 }
 
 describe('구조 트리', () => {
@@ -113,7 +114,7 @@ describe('구조 트리', () => {
     await openPage(DOC)
 
     // 깊이 우선 전위 순회. 문서 순서 그대로여야 캔버스와 눈으로 대조할 수 있다.
-    expect(nodeRows().map((node) => node.textContent)).toEqual([
+    expect(nodeRows().map((node) => structureRowType(node))).toEqual([
       'Page',
       'Flex',
       'SearchForm',
@@ -147,7 +148,7 @@ describe('구조 트리', () => {
 
     expect(screen.getByRole('region', { name: '구조 트리' })).toBeTruthy()
     // 노드가 아닌 원소는 줄로 그리지 않는다 — 그릴 이름도 고를 id도 없다.
-    expect(nodeRows().map((node) => node.textContent)).toEqual(['Page', 'Text'])
+    expect(nodeRows().map((node) => structureRowType(node))).toEqual(['Page', 'Text'])
   })
 
   it('노드 타입을 보여준다', async () => {
@@ -164,7 +165,7 @@ describe('구조 트리', () => {
       }),
     )
 
-    expect(nodeRows().map((node) => node.textContent)).toEqual([
+    expect(nodeRows().map((node) => structureRowType(node))).toEqual([
       'Page',
       'Card',
       'Text',
@@ -192,7 +193,7 @@ describe('구조 트리', () => {
     fireEvent.click(requireNode('n-search'))
 
     // 둘이 같은 스토어를 본다는 뜻이다. 각자 자기 상태를 들면 여기서 갈라진다.
-    expect(currentRows().map((node) => node.textContent)).toEqual(['SearchForm'])
+    expect(currentRows().map((node) => structureRowType(node))).toEqual(['SearchForm'])
   })
 
   it('구조 트리에서 선택하면 캔버스에도 반영된다', async () => {
@@ -209,16 +210,16 @@ describe('구조 트리', () => {
     // 양성 대조: 고르기 전에는 **루트 한 줄에만** 표시가 있다(페이지를 열면 그것이 고른
     // 자리다). 이것이 없으면 모든 줄에 표시를 다는 구현도 "선택된 줄에 표시가 있다"를
     // 통과한다 — 세는 것이 0에서 1로 바뀌었을 뿐 가르는 힘은 그대로다.
-    expect(currentRows().map((node) => node.textContent)).toEqual(['Page'])
+    expect(currentRows().map((node) => structureRowType(node))).toEqual(['Page'])
 
     fireEvent.click(row('List'))
 
-    expect(currentRows().map((node) => node.textContent)).toEqual(['List'])
+    expect(currentRows().map((node) => structureRowType(node))).toEqual(['List'])
 
     // 다른 줄을 고르면 표시가 옮겨 간다. 하나씩 늘어나는 구현을 가른다.
     fireEvent.click(row('Flex'))
 
-    expect(currentRows().map((node) => node.textContent)).toEqual(['Flex'])
+    expect(currentRows().map((node) => structureRowType(node))).toEqual(['Flex'])
   })
 
   it('id가 없는 노드는 고를 수 없는 줄이 된다', async () => {
@@ -236,7 +237,7 @@ describe('구조 트리', () => {
     // 어렵다.
     within(structureRegion()).getByText('Text')
     // 하지만 누를 수 있는 줄은 루트 하나뿐이다.
-    expect(nodeRows().map((node) => node.textContent)).toEqual(['Page'])
+    expect(nodeRows().map((node) => structureRowType(node))).toEqual(['Page'])
   })
 
   it('type이 문자열이 아닌 노드가 있어도 셸은 살아 있다', async () => {
@@ -258,7 +259,7 @@ describe('구조 트리', () => {
 
     // 그 줄은 **대신 쓸 이름으로 남는다.** 줄째 지워 버리면 캔버스에는 폴백이 그려져 있는데
     // 트리에서만 사라져 무엇이 깨졌는지 더 알기 어렵다(id 없는 노드와 같은 판단이다).
-    expect(nodeRows().map((node) => node.textContent)).toEqual([
+    expect(nodeRows().map((node) => structureRowType(node))).toEqual([
       'Page',
       '(타입을 읽을 수 없는 노드)',
     ])

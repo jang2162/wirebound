@@ -11,6 +11,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
 import { deselect, openPage, PAGE_ID, pageDetail, pageDoc } from '../editor-harness'
 import '../../src/catalog-setup'
+import { structureRowName } from './tree-row'
 
 /** 버튼 하나와 목록 하나. 버튼이 트리거, 목록이 타겟이다. */
 const DOC = pageDoc({
@@ -71,7 +72,7 @@ async function openInteractionTab(): Promise<void> {
 function selectNode(type: string): void {
   const list = document.body.querySelector('.wb-shell-structure-list')
   if (list === null) throw new Error('구조 트리 목록이 없습니다')
-  fireEvent.click(within(list as HTMLElement).getByRole('button', { name: type }))
+  fireEvent.click(within(list as HTMLElement).getByRole('button', { name: structureRowName(type) }))
 }
 
 /** 패널이 그린 문장들. 저작 자리의 문장과 목록의 문장이 모두 들어온다. */

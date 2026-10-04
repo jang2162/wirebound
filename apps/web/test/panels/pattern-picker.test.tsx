@@ -16,7 +16,7 @@ import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { deselect, openPage as openShell, pageDoc } from '../editor-harness'
 import { BROKEN_NOTICE, EMPTY_NOTICE, themePatterns } from '../../src/panels/pattern-picker'
 import { adminThemeView } from '../theme-loader'
-import { isOff, treeTool } from './tree-row'
+import { isOff, treeTool, structureRowName } from './tree-row'
 
 /**
  * 옛 시스템 테마 `portal` 이 선언하던 패턴 — 목록이 서는 판의 표본이다. 원본(`packages/themes` 의 시스템 테마)은 지워졌으므로
@@ -137,7 +137,7 @@ describe('패턴 고르개 — 여는 자리', () => {
 
   it('타입 고르개와 동시에 열리지 않는다', async () => {
     await openPage(doc())
-    fireEvent.click(within(structureRegion()).getByRole('button', { name: 'Text' }))
+    fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName('Text') }))
     fireEvent.click(toolButton('아래 추가'))
     expect(screen.getByRole('group', { name: '타입 고르기' })).toBeTruthy()
 

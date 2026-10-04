@@ -10,7 +10,7 @@ import type { PatchResult } from '../../src/api/types'
 import { logoutLossNotice } from '../../src/routes/editor'
 import { canvasQuery, chooseFromShellMenu, openPage, pageDetail, pageDoc } from '../editor-harness'
 import { tabHub, unauthenticatedError, type TabHub } from '../helpers'
-import { treeTool } from '../panels/tree-row'
+import { treeTool, structureRowName } from '../panels/tree-row'
 
 const pair = (): PageDocument =>
   pageDoc({
@@ -39,7 +39,7 @@ async function editWaiting(options: { answer: Promise<never> | 'now' }) {
   // 다시 로그인한 뒤 목록 조회가 401 이다 — 세션이 끊겨 로그인 화면으로 돌아간다(로그아웃이 아니다 — 남길 줄을 새로 안 정한다).
   await openPage(pair(), { apiOverrides: { patchOps, logout: async () => {}, login, listProjects: async () => Promise.reject(unauthenticatedError()) } })
   const tree = screen.getByRole('region', { name: '구조 트리' })
-  fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
+  fireEvent.click(within(tree).getByRole('button', { name: structureRowName('Text') }))
   fireEvent.click(treeTool(tree, '아래로'))
   await act(async () => {})
   expect(patchOps).toHaveBeenCalledTimes(1)
@@ -118,7 +118,7 @@ async function editRefusedLater(options: { recoverHangs: boolean; posting?: bool
     fireEvent.click(screen.getByRole('tab', { name: '속성' }))
   }
   const tree = screen.getByRole('region', { name: '구조 트리' })
-  fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
+  fireEvent.click(within(tree).getByRole('button', { name: structureRowName('Text') }))
   fireEvent.click(treeTool(tree, '아래로'))
   await act(async () => {})
   expect(patchOps).toHaveBeenCalledTimes(1)
@@ -247,7 +247,7 @@ describe('로그아웃을 기다리는 동안 다른 탭에서 사람이 바뀌�
       apiOverrides: { patchOps: () => new Promise<never>(() => {}), logout, listProjects: async () => [] },
     })
     const tree = screen.getByRole('region', { name: '구조 트리' })
-    fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
+    fireEvent.click(within(tree).getByRole('button', { name: structureRowName('Text') }))
     fireEvent.click(treeTool(tree, '아래로'))
     await act(async () => {})
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })

@@ -121,7 +121,7 @@ describe('구조 트리', () => {
   it('기준 노드 줄의 `…` 를 연 채 목록이 바뀌면(Ctrl+A) 메뉴가 닫힌다', async () => {
     await openPage(DOC)
     fireEvent.click(row('n-a'))
-    const more = within(treeList().querySelector<HTMLElement>('[data-tree-id="n-a"]')!).getByRole('button', { name: 'Text 더 보기' })
+    const more = within(treeList().querySelector<HTMLElement>('[data-tree-id="n-a"]')!).getByRole('button', { name: 'Text 가 더 보기' })
     fireEvent.click(more)
     expect(screen.queryAllByRole('menu')).toHaveLength(1)
 
@@ -136,7 +136,7 @@ describe('구조 트리', () => {
     await openPage(DOC)
     fireEvent.click(row('n-a'))
     fireEvent.click(row('n-b'), { ctrlKey: true })
-    fireEvent.click(within(treeList().querySelector<HTMLElement>('[data-tree-id="n-a"]')!).getByRole('button', { name: 'Text 더 보기' }))
+    fireEvent.click(within(treeList().querySelector<HTMLElement>('[data-tree-id="n-a"]')!).getByRole('button', { name: 'Text 가 더 보기' }))
     expect({ menus: screen.queryAllByRole('menu').length, ...picked() }).toEqual({ menus: 1, ids: ['n-a'], anchor: 'n-a' })
   })
 })

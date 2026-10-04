@@ -108,7 +108,8 @@ describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
       await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
       await page.getByRole('button', { name: LONG_MENU, exact: true }).click()
       // 노드는 구조 트리에서 고른다 — 창 700 에서는 캔버스 칸이 좁아 노드 상자의 가운데가 우측 패널 밑에 깔린다.
-      await page.getByRole('region', { name: '구조 트리' }).getByRole('button', { name: 'Tabs', exact: true }).click()
+      // 줄의 접근 이름은 `타입 (별칭) 요약`이라 줄을 id 로 찾는다(`test/panels/tree-row.ts` 의 `structureRowName` 머리말).
+      await page.locator('[data-tree-id="n_tabs000001"] > button.wb-shell-structure-node').click()
       await page.getByRole('button', { name: '1번째 지우기' }).waitFor()
 
       const fit = (await page.evaluate(`(${ICON_FIT})()`)) as { name: string; w: number; h: number; inside: boolean; over: number }[]
@@ -176,9 +177,9 @@ describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
       }
 
       const structure = page.getByRole('region', { name: '구조 트리' })
-      await structure.getByRole('button', { name: 'Tabs', exact: true }).click()
+      await structure.locator('[data-tree-id="n_tabs000001"] > button.wb-shell-structure-node').click()
       await probe('1번째 지우기')
-      await structure.getByRole('button', { name: 'Button', exact: true }).click()
+      await structure.locator('[data-tree-id="n_btn0000001"] > button.wb-shell-structure-node').click()
       await page.getByRole('tab', { name: '상호작용' }).click()
       await probe('규칙 1 삭제')
       await probe('액션 1 삭제')
