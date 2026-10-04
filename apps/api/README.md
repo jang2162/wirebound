@@ -309,7 +309,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/menu` | GET | viewer | — | 200 메뉴 트리(중첩 배열, `pages` 없음) |
 | `/api/projects/:projectId/menu` | POST | editor | `{ parentId?, title }` | 201 `{ id, projectId, parentId, title, sortOrder }` — **트리 응답과 다른 모양이다**(`children`·`pages`가 없다) |
 | `/api/projects/:projectId/menu/:nodeId` | PATCH | editor | `{ title?, parentId?, sortOrder? }`(하나 이상) | 200 `{ id, projectId, parentId, title, sortOrder }`(POST와 같은 키) |
-| `/api/projects/:projectId/menu/:nodeId` | DELETE | editor | — | 204(자식 메뉴·페이지가 있으면 409) |
+| `/api/projects/:projectId/menu/:nodeId` | DELETE | editor | — 또는 `{ cascade: true, expect: { menus, pages } }` | 본문 없음: 204(자식 메뉴·페이지가 있으면 409). 연쇄: 200 `{ deleted: { menus, pages }, safetySnapshot: { id, tag } }` · 수가 다르면 **409** `menu-subtree-changed`(아래 «메뉴 연쇄 삭제») |
 | `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 기본 스키마는 빈 `Page`다 |
 | `/api/projects/:projectId/pages/import` | POST | editor | `{ menuNodeId, file, title? }` | 201 `{ page, comments: { inserted, dangling }, ignoredLayoutRef?, warnings? }` — **페이지 JSON(설계서 「페이지 JSON」)으로 새 페이지를 만든다**(아래 "페이지 JSON 가져오기"). 봉투 위반·모르는 버전·NUL 400, 메뉴 없음 404, 카탈로그 **오류** 422 |
 | `/api/projects/:projectId/pages/:pageId` | GET | viewer | — | 200 페이지(스키마 포함, 최신 버전으로 마이그레이션되어 옴). `headSeq`가 다음 편집의 `baseSeq`다 |
@@ -730,6 +730,29 @@ PATCH /menu/:id    응답 그대로 → 400 인식할 수 없는 키: "id", "pro
 POST  /pages       응답 그대로 → 400 인식할 수 없는 키: "id", "sortOrder", "schemaVersion", "schema", "headSeq"
 PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "schemaVersion", "schema", "headSeq"
 ```
+
+### 메뉴 연쇄 삭제
+
+`DELETE /api/projects/:projectId/menu/:nodeId` 에 본문 `{ cascade: true, expect: { menus, pages } }` 를 실으면 그 메뉴와 밑의 메뉴 · 페이지를
+한 트랜잭션에서 지운다. `expect` 는 화면이 확인 문장에 보인 수다 — `menus` 는 밑의 메뉴 수(자기 빼고), `pages` 는 자기와 밑의 메뉴에 매인
+페이지 수. 본문이 없으면 지금처럼 하위가 있는 메뉴에 409 다 — MCP · CLI 는 연쇄 삭제를 내지 않는다.
+
+| 판 | 답 |
+|---|---|
+| 서버가 다시 센 수가 `expect` 와 같다 | 200 `{ deleted: { menus, pages }, safetySnapshot: { id, tag } }` |
+| 수가 다르다(그 사이 페이지 추가 · 메뉴 옮기기) | 409 · 이슈 하나(`path: "expect"` · `code: "menu-subtree-changed"` · `subtree: { menus, pages }` = 지금 수). 아무것도 안 지운다 |
+| 메뉴가 없다 | 404 |
+| `cascade` 가 `true` 가 아님 · `expect` 빠짐 · 음수 · 모르는 키 | 400 |
+| 같은 밀리초에 같은 이름의 안전망이 있다 · 캡처 지문 어긋남 | 409 — 다시 보내면 풀린다 |
+
+- **안전망 스냅샷** — 지우기 직전의 프로젝트를 스냅샷 하나로 남긴다. 태그는 `메뉴 "<제목>" 삭제 전 <capturedAt>`(제목은 60자 상한에 맞게
+  `…`로 줄인다), 설명에 원래 제목 · 지운 수 · 메뉴 id 가 든다. 스냅샷 목록에 보통 행으로 서고, 그것으로 복원(owner)하면 지운 서브트리가 그 id
+  그대로 돌아온다. 페이지의 이력(`revisions`)은 그 복원으로도 안 돌아온다(복원의 규칙과 같다).
+- **지우는 것** — 페이지마다 코멘트(키 있는 것은 묘비를 남긴다) → 페이지 행(이력은 CASCADE · 마지막 번호를 `page_seq_floors` 에 남긴다) →
+  메뉴(깊은 것부터) → 남은 형제의 `sortOrder` 를 당긴다.
+- **잠금 · 권한** — 복원과 같은 잠금(프로젝트 행 → 메뉴 → 페이지 → 레이아웃 → 코멘트)을 쥔 뒤 권한을 다시 보고(editor) 수를 견준다. 그래서
+  복원 중에는 기다리고, 기다리는 사이 멤버에서 빠진 사람은 수가 아니라 거절을 받는다.
+- **방송하지 않는다** — 페이지 `DELETE` 와 같다. 지운 페이지를 열어 둔 사람은 다음 편집에서 `not-found` 를 받는다.
 
 ### 페이지 메타의 충돌 모델 — `base`
 

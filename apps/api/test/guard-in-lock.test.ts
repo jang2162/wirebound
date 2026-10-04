@@ -2376,6 +2376,16 @@ const PROJECT_PROBES: ProjectProbe[] = [
     okStatus: 204,
   },
   {
+    route: 'DELETE /api/projects/:projectId/menu/:nodeId',
+    label: '메뉴 연쇄 삭제',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/menu/${fx.spareMenuId}`, { cascade: true, expect: { menus: 0, pages: 0 } }),
+    okStatus: 200,
+  },
+  {
     route: 'POST /api/projects/:projectId/pages',
     label: '페이지 생성',
     bobRole: 'editor',

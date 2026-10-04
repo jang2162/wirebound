@@ -311,6 +311,14 @@ const CASES: Case[] = [
     setup: 메뉴하나,
   },
   {
+    label: '메뉴 연쇄 삭제',
+    method: 'DELETE',
+    url: '/api/projects/:projectId/menu/:nodeId',
+    payload: { cascade: true, expect: { menus: 0, pages: 0 } },
+    allowed: ['owner', 'editor'],
+    setup: 메뉴하나,
+  },
+  {
     label: '페이지 생성',
     method: 'POST',
     url: '/api/projects/:projectId/pages',

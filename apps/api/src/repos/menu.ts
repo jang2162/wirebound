@@ -20,6 +20,8 @@ import { withTransaction, type DbHandle } from '../db/tx'
 import { assertLocking } from '../db/locking'
 import type { MenuRow } from '../services/menu-tree'
 import { lockProjectTree } from './projects'
+import { deletePageRow } from './pages'
+import { deletePageComments } from './comments'
 
 export interface MenuNodeRecord {
   id: string
@@ -524,10 +526,82 @@ export async function deleteMenuNode(db: DbHandle, projectId: string, nodeId: st
   })
 }
 
+/** 메뉴 하나와 그 밑 전부 — 연쇄 삭제(`services/menu-cascade.ts`)가 세고 지우는 단위. */
+export interface MenuSubtree {
+  id: string
+  title: string
+  parentId: string | null
+  sortOrder: number
+  /** 밑의 메뉴 id — **깊은 것부터**다(지우는 차례 — `parent_id`가 `RESTRICT`라 자식이 먼저 가야 한다). 자기는 들지 않는다. */
+  descendantIds: string[]
+  /** 자기와 밑의 메뉴에 매인 페이지 id. */
+  pageIds: string[]
+}
+
 /**
- * 프로젝트의 메뉴 행 전부를 `FOR UPDATE`로 잠근다. **부르는 자리가 둘이다** — 복원과 프로젝트 삭제(`routes/projects.ts` —
- * 메뉴 제목 쓰기와 고리를 만들지 않으려고 CASCADE 보다 먼저 잡는다. 까닭은 그 삭제 주석). 두 자리 다 이것보다 프로젝트
- * 행과 페이지를 먼저 잡는다.
+ * 메뉴 하나의 서브트리를 읽는다. 그 프로젝트에 없으면 `null`.
+ *
+ * **잠그지 않는다** — 부르는 쪽이 먼저 잠근다(`lockProjectForRestore` — 프로젝트 행이 새 하위 메뉴 · 페이지 삽입까지 막는다. 그
+ * 함수의 머리말 «왜 그렇게 갈리나»). 잠그기 전에 읽은 수는 화면이 본 수와 견줄 근거가 못 된다.
+ */
+export async function readMenuSubtree(trx: DbHandle, projectId: string, nodeId: string): Promise<MenuSubtree | null> {
+  const root = await trx
+    .selectFrom('menu_nodes')
+    .select(['id', 'title', 'parent_id', 'sort_order'])
+    .where('id', '=', nodeId)
+    .where('project_id', '=', projectId)
+    .executeTakeFirst()
+  if (!root) return null
+
+  const descendants = await sql<{ id: string; depth: number }>`
+    with recursive sub(id, depth) as (
+      select id, 1 from menu_nodes where parent_id = ${nodeId} and project_id = ${projectId}
+      union all
+      select m.id, sub.depth + 1 from menu_nodes m join sub on m.parent_id = sub.id
+    )
+    select id, depth from sub order by depth desc, id
+  `.execute(trx)
+  const menuIds = [nodeId, ...descendants.rows.map((row) => row.id)]
+  const pages = await trx.selectFrom('pages').select('id').where('menu_node_id', 'in', menuIds).orderBy('id').execute()
+
+  return {
+    id: root.id,
+    title: root.title,
+    parentId: root.parent_id,
+    sortOrder: root.sort_order,
+    descendantIds: descendants.rows.map((row) => row.id),
+    pageIds: pages.map((page) => page.id),
+  }
+}
+
+/**
+ * 서브트리를 지운다 — 페이지와 그 딸린 행 → 메뉴(깊은 것부터) → 남은 형제 당기기. 부르는 쪽이 잠근 트랜잭션 안에서 부른다.
+ *
+ * **페이지는 페이지 삭제(`repos/pages.ts`의 `deletePage`)와 같은 둘을 지난다** — 코멘트를 묘비와 함께 먼저 지우고
+ * (`deletePageComments` — CASCADE 에 맡기면 묘비 없이 사라진다) · 지운 페이지의 마지막 번호를 남긴다(`deletePageRow` 안의
+ * `recordPageSeqFloor`). 이력(`revisions`)은 CASCADE 로 간다. 페이지를 가리키는 그 밖의 열(`comment_tombstones.page_id` ·
+ * `page_seq_floors.page_id`)은 FK 가 아니다 — 지운 페이지를 되살릴 때 쓰려고 남는 행이다.
+ *
+ * **메뉴는 한 문장으로 지우지 않는다** — `parent_id`가 `RESTRICT`라 부모와 자식을 한 문장에 넣으면 차례가 문장 안의 행 차례에 매인다.
+ * 깊은 것부터 한 행씩 지운다(`readMenuSubtree`가 그 차례로 낸다).
+ */
+export async function deleteMenuSubtree(trx: DbHandle, projectId: string, subtree: MenuSubtree): Promise<void> {
+  for (const pageId of subtree.pageIds) {
+    await deletePageComments(trx, pageId)
+    await deletePageRow(trx, projectId, pageId)
+  }
+  for (const id of subtree.descendantIds) {
+    await trx.deleteFrom('menu_nodes').where('id', '=', id).where('project_id', '=', projectId).execute()
+  }
+  await trx.deleteFrom('menu_nodes').where('id', '=', subtree.id).where('project_id', '=', projectId).execute()
+  await closeGap(trx, projectId, subtree.parentId, subtree.sortOrder)
+}
+
+/**
+ * 프로젝트의 메뉴 행 전부를 `FOR UPDATE`로 잠근다. **부르는 자리가 둘이다** — `lockProjectForRestore`(복원 · 메뉴 연쇄 삭제)와 프로젝트
+ * 삭제(`routes/projects.ts` — 메뉴 제목 쓰기와 고리를 만들지 않으려고 CASCADE 보다 먼저 잡는다. 까닭은 그 삭제 주석). 두 자리 다
+ * 이것보다 프로젝트 행을 먼저 잡는다 — 페이지와의 차례는 갈린다(`lockProjectForRestore`는 메뉴 → 페이지, 프로젝트 삭제는 페이지 →
+ * 메뉴). 둘 다 프로젝트 행 `FOR UPDATE`를 먼저 쥐어 서로 겹치지 않는다.
  *
  * 잠금이 실제로 무엇을 막는지는 `repos/snapshots.ts`의 `lockProjectForRestore` 머리말에
  * 실측표로 있다 — 이 함수 하나만으로는 **새 루트 메뉴 삽입을 못 막는다**(잠금은 이미

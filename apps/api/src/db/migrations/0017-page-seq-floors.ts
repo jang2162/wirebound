@@ -18,8 +18,9 @@ import type { Kysely, Migration } from 'kysely'
  * `recordPageSeqFloor` — `greatest`). 되살릴 때 지우지 않으니 쓰기가 삭제 한 자리뿐이다.
  *
  * **DB 트리거로 잡지 않는다** — `0014`가 묘비에 내린 판정과 같다. `pages`의 `BEFORE DELETE` 트리거는 프로젝트 삭제의 CASCADE 도
- * 태워 지워지는 프로젝트를 가리키는 줄을 넣고, 그 삽입의 FK 검사가 프로젝트 삭제를 깬다. 페이지를 지우는 길은 둘이다 — 페이지
- * `DELETE`(`deletePage`)와 복원의 `delete-page`(`deletePageRow`). 메뉴 삭제는 `pages.menu_node_id`가 `RESTRICT`라 페이지를 안 지운다.
+ * 태워 지워지는 프로젝트를 가리키는 줄을 넣고, 그 삽입의 FK 검사가 프로젝트 삭제를 깬다. 페이지를 지우는 길은 셋이다 — 페이지
+ * `DELETE`(`deletePage`) · 복원의 `delete-page`(`deletePageRow`) · 메뉴 연쇄 삭제(`repos/menu.ts`의 `deleteMenuSubtree` — `deletePageRow`를
+ * 지난다). 본문 없는 메뉴 삭제는 `pages.menu_node_id`가 `RESTRICT`라 페이지를 안 지운다.
  *
  * **잠금 — 줄을 넣는 트랜잭션은 프로젝트 행을 먼저 쥐고 있다.** FK 가 프로젝트 행에 `FOR KEY SHARE`를 건다. 페이지 `DELETE`는 트리
  * 쓰기의 첫 잠금(`lockProjectTree` — `FOR NO KEY UPDATE`)으로, 복원은 `FOR UPDATE`로 그 행을 페이지보다 먼저 쥔다 — 제 트랜잭션의

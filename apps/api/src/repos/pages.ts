@@ -592,7 +592,7 @@ export async function lockPageShared(trx: DbHandle, projectId: string, pageId: s
  * 프로젝트의 페이지 행 전부를 `FOR UPDATE`로 잠근다. 복원의 근거와 실측표는 `repos/snapshots.ts`의
  * `lockProjectForRestore` 머리말에 있다.
  *
- * **부르는 자리가 둘이다** — 복원과 프로젝트 삭제(`routes/projects.ts`). 삭제는 CASCADE 가 멤버 행을 페이지보다
+ * **부르는 자리가 둘이다** — `lockProjectForRestore`(복원 · 메뉴 연쇄 삭제)와 프로젝트 삭제(`routes/projects.ts`). 삭제는 CASCADE 가 멤버 행을 페이지보다
  * 먼저 지우므로, 페이지 대기를 이것으로 **먼저** 치러야 커밋 순간의 재확인(`auth/roles.ts`의
  * `recheckProjectRole`)이 제 멤버 행을 보고, 역할 변경이 그 대기에 묶이지 않는다.
  *
@@ -675,7 +675,8 @@ export const UNKNOWN_SEQ_FLOOR = 2 ** 32
 
 /**
  * **지우는 페이지 id 가 쓴 마지막 번호를 남긴다**(`0017-page-seq-floors`) — 페이지 행을 지우는 트랜잭션에서 그 행의 `head_seq`로
- * 부른다. 부르는 자리는 페이지를 지우는 두 길이다: `deletePage`(페이지 `DELETE`) · `deletePageRow`(복원의 `delete-page`). 지우는
+ * 부른다. 부르는 자리는 페이지를 지우는 두 함수다: `deletePage`(페이지 `DELETE`) · `deletePageRow`(복원의 `delete-page` · 메뉴 연쇄
+ * 삭제의 `deleteMenuSubtree`). 지우는
  * 길이 늘면 여기를 부르게 한다 — 빠뜨리면 그 길로 지운 페이지를 되살릴 때 줄이 없어
  * `0017` 앞에 지운 판으로 읽힌다(`insertPageWithId` — 번호는 안 겹치지만 2^32 로 건너뛴다).
  *
@@ -719,8 +720,8 @@ export async function writePagePlacement(
 }
 
 /**
- * 페이지 행 하나를 **재번호 없이** 지운다(복원 전용). `deletePage`의 `closeGap`을 피하는
- * 이유는 `repos/menu.ts`의 `deleteMenuNodeRow`와 같다.
+ * 페이지 행 하나를 **재번호 없이** 지운다(복원 · 메뉴 연쇄 삭제). `deletePage`의 `closeGap`을 피하는
+ * 이유는 `repos/menu.ts`의 `deleteMenuNodeRow`와 같다 — 연쇄 삭제는 형제째 지우므로 당길 형제가 없다.
  *
  * **`revisions`·`comments`는 CASCADE로 함께 사라진다**(0005·0008). 복원은 그것에 순서를
  * 맡기지 않고 코멘트를 먼저 지우지만(계획의 1단계), 이력은 되살릴 수 없으므로 그대로 간다.
