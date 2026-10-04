@@ -314,6 +314,8 @@ function canvasKeyTarget(element: Element): boolean {
 
 /** 목록을 오가는 위젯(메뉴 · 목록 · 고르기 무리 · 열린 행동 메뉴 · 고르개)이 쥐는 키. */
 const LIST_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape', 'Enter'])
+/** 열린 행동 메뉴(`[data-wb-holds-keys="menu"]`)가 더 쥐는 키 — 아래 `keyHeldByWidget` 의 표. */
+const MENU_KEYS: ReadonlySet<string> = new Set([...LIST_KEYS, 'Delete', 'Backspace'])
 /** 가로 축 위젯(가로 탭 · 세로 손잡이 · 가로 값 조절)이 쥐는 키. */
 const ROW_KEYS: ReadonlySet<string> = new Set(['ArrowLeft', 'ArrowRight', 'Home', 'End'])
 /** 세로 축 위젯(세로 탭 · 가로 손잡이 · 세로 값 조절)이 쥐는 키. */
@@ -323,13 +325,14 @@ const LIST_ROLES = ['menu', 'menuitem', 'listbox', 'option', 'radiogroup', 'comb
 
 /**
  * **그 키를 위젯이 쥐었는가** — 키 리스너만 본다(클립보드 이벤트에는 키가 없다). 참이면 단축키가 그 키를 받지 않고 `preventDefault` 도 안
- * 건다 — 위젯과 브라우저가 그대로 갖는다. **위젯은 그 위젯이 쓰는 키만 쥔다** — Delete · Backspace · 명령 키 조합 · `?` 는 어느 위젯도 안 쥐어
- * 입력 표면이 아니면(`shortcutsBlocked`) 단축키로 간다.
+ * 건다 — 위젯과 브라우저가 그대로 갖는다. **위젯은 그 위젯이 쓰는 키만 쥔다** — 명령 키 조합 · `?` 는 어느 위젯도 안 쥐고, Delete ·
+ * Backspace 는 열린 행동 메뉴만 쥐어, 그 밖에서는 입력 표면이 아니면(`shortcutsBlocked`) 단축키로 간다.
  *
  * | 포커스가 어디 안인가 | 쥐는 키 | 까닭 |
  * |---|---|---|
  * | `role` menu · menuitem · listbox · option · radiogroup · combobox | 화살표 넷 · Home · End · Escape · Enter | 위젯이 안 쓰는 축의 키(열린 줄 메뉴의 ← →)가 전역 명령이 되면 그 위젯이 쥔 대상이 바뀐다 — 줄 `…` 메뉴의 «삭제»는 고른 노드에 대한 명령이라 ← 뒤 «삭제»가 부모를 지웠다(Chrome · `build-test/editor-shortcuts-review.test.ts` «H2») |
- * | `[data-wb-holds-keys]` — 열린 행동 메뉴의 상자(단추 + 목록 — `shell/action-menu.tsx`) · 열린 고르개(`panels/structure-toolbar.tsx` 의 `StructurePicker`) | 같음 | 항목이 다 꺼진 메뉴는 포커스가 단추에 남는다 — 그 Escape 가 메뉴를 닫으며 선택까지 풀었다(«L2»). 고르개 안의 Escape 는 고르개가 받아 닫는다(`cancelAdd`) |
+ * | `[data-wb-holds-keys="menu"]` — 열린 행동 메뉴의 단추 상자와 portal 된 목록(`shell/action-menu.tsx`) | 윗줄의 키 · Delete · Backspace | 메뉴는 고른 노드에 대한 명령을 들고 열려 있다 — 그 안의 Delete 가 노드를 지우면 메뉴는 닫히고(`openWhile`) 사람은 메뉴 항목을 고르려다 노드를 잃는다(Chrome · `build-test/action-menu-delete.test.ts`). 메뉴는 그 둘을 받아 아무것도 안 한다. 항목이 다 꺼진 메뉴는 포커스가 단추에 남는다 — 그 Escape 가 메뉴를 닫으며 선택까지 풀었다(«L2») |
+ * | `[data-wb-holds-keys]` — 열린 고르개(`panels/structure-toolbar.tsx` 의 `StructurePicker`) | 화살표 넷 · Home · End · Escape · Enter | 고르개 안의 Escape 는 고르개가 받아 닫는다(`cancelAdd`) |
  * | `role` tab · tablist | 탭 줄의 축(`aria-orientation` — 기본 가로)의 화살표 · Home · End | 로빙 탭(컴포넌트 판 갈래)은 ← → 로 탭을 옮긴다 |
  * | `role` separator · slider | 그 축의 화살표 · Home · End | 손잡이(`shell/shell-resizer.tsx`)는 세로줄이 ← →, 가로줄이 ↑ ↓ 다(그 머리말 «`aria-orientation`») |
  *
@@ -337,12 +340,15 @@ const LIST_ROLES = ['menu', 'menuitem', 'listbox', 'option', 'radiogroup', 'comb
  * Delete · ↓ · Escape 를 아무 말 없이 먹었다(Chrome · `build-test/editor-shortcuts-review-2.test.ts` «R2»). **역할마다 키를 가른다** — 모든
  * 역할이 같은 일곱 키를 쥐던 판은 키를 하나도 안 쓰는 우측 패널 탭을 누른 뒤의 Delete · ↓ · Escape 를 먹었다(«R3»). 위젯이 안 쓰는 축의 화살표
  * (탭의 ↑ ↓ · 손잡이의 직각)는 선택을 옮긴다 — 그 위젯은 대상을 쥐지 않아 해가 서지 않는다. 대상을 쥔 메뉴가 열린 동안 선택이 옮으면 그 메뉴는
- * 닫힌다(`shell/action-menu.tsx` 의 `openWhile`).
+ * 닫힌다(`shell/action-menu.tsx` 의 `openWhile`). **메뉴의 Delete · Backspace 는 역할(`menu` · `menuitem`)이 아니라 셸의 표지로 가른다** —
+ * 역할로 가르면 캔버스에서 테마가 그린 ARIA 메뉴의 단추를 누른 뒤의 Delete 도 먹는다. 메뉴 트리 상자의 키 처리도 이 판정을 지난다
+ * (`panels/menu-tree.tsx` 의 `handleKeyDown` — 목록의 키가 React 트리를 따라 그 상자에 닿는다).
  */
 export function keyHeldByWidget(event: Pick<KeyboardEvent, 'key' | 'target'>): boolean {
   const target = event.target as Node | null
   const element = target !== null && target.nodeType === 1 ? (target as Element) : null
   if (element === null) return false
+  if (element.closest('[data-wb-holds-keys="menu"]') !== null) return MENU_KEYS.has(event.key)
   if (element.closest(LIST_ROLES) !== null || element.closest('[data-wb-holds-keys]') !== null) return LIST_KEYS.has(event.key)
   const tab = element.closest('[role="tab"],[role="tablist"]')
   if (tab !== null) {

@@ -1359,6 +1359,20 @@
   outline-color: #7c3aed;
 }
 
+/* 배치 선의 안쪽 선(`canvas/layout-guides.tsx` 머리말 «안쪽 선») — Grid 의 열 · 행 사이 · Flex 의 자식 · 줄 사이. 바깥 점선보다 옅게(같은 색의
+   반투명) 긋는다. 상자는 폭 · 높이 0 의 테두리 하나다 — 굵기(`border-left-width` · `border-top-width`)와 자리는 캔버스가 인라인으로 준다(줌을
+   걷어 화면에서 1px). */
+.wb-shell-guide-line {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 0 dashed rgba(217, 119, 6, 0.45);
+}
+
+.wb-shell-guide-line-grid {
+  border-color: rgba(124, 58, 237, 0.45);
+}
+
 /* 모서리 표시(Flex → ↓ ← ↑ · Grid «N열») — 테두리 안 왼쪽 위. 줌을 걷는 `scale(1 / zoom)` 은 인라인이라 기준점이 왼쪽 위다. */
 .wb-shell-guide-tag {
   position: absolute;

@@ -62,7 +62,7 @@
  * - **DOM 포함 관계로 가르던 것은 옮겨 싣는다.** 바깥 누름은 목록을 `inside` 로 넘긴다(`use-popover-dismiss.ts` 머리말 «상자 밖에 그린
  *   목록은 …»). 에디터 단축키를 안 받는 상자의 표지(`data-wb-own-shortcuts` — 메뉴 트리)는 연 때 단추가 그 안이면 목록에도 단다
  *   (`edit/editor-shortcuts.ts` 의 `shortcutsBlocked` 는 대상의 DOM 조상을 본다 — 메뉴 트리가 안 쓰는 `?` 가 목록 안에서 에디터 도움말을
- *   열었다). 위젯이 쥐는 키의 표지(`data-wb-holds-keys`)는 목록에 안 단다 — 목록 안은 `role="menu"` 가 이미 쥔다(`keyHeldByWidget` 의 역할 목록).
+ *   열었다). 위젯이 쥐는 키의 표지(`data-wb-holds-keys="menu"`)도 목록에 단다 — 아래 «열린 동안 키는 메뉴의 것이다».
  * - **Tab 은 단추에서 나간다** — 목록이 문서 끝이라 브라우저의 다음 자리가 단추 다음이 아니다. 그래서 Tab 이면 단추에 포커스를 돌린 뒤
  *   기본 동작을 두고(단추 다음 자리로 간다), Shift+Tab 이면 단추에 멈춘다(단추 곁에 그리던 때 목록 앞 자리가 단추였다).
  *
@@ -75,10 +75,11 @@
  *
  * ## 열린 동안 키는 메뉴의 것이다 — 단추까지
  *
- * 열린 동안 단추를 감싼 상자에 `data-wb-holds-keys` 를 단다 — 포커스가 그 안이면 화살표 · Home · End · Escape · Enter 는 에디터 단축키가
- * 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`). **단추까지 감싸는 것은** 항목이 다 꺼진 메뉴는 포커스가 단추에 남아서다 — 그
+ * 열린 동안 단추를 감싼 상자와 portal 된 목록에 `data-wb-holds-keys="menu"` 를 단다 — 포커스가 그 안이면 화살표 · Home · End · Escape · Enter
+ * · Delete · Backspace 는 에디터 단축키도 메뉴를 품은 트리의 키 처리도 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget` — 표와 까닭은
+ * 거기). 메뉴는 Delete · Backspace 를 받아 아무것도 안 한다. **단추까지 감싸는 것은** 항목이 다 꺼진 메뉴는 포커스가 단추에 남아서다 — 그
  * 단추의 Escape 가 메뉴를 닫으며 선택까지 풀었다(Chrome · `build-test/editor-shortcuts-review.test.ts` «L2»). 상자 밖(캔버스 · 트리 줄)의 키는
- * 단축키가 받는다.
+ * 단축키가 받는다 — 메뉴를 연 채 포커스만 캔버스로 옮긴 판의 Delete 는 고른 노드를 지우고, 선택이 비어 메뉴도 닫힌다(`openWhile`).
  *
  * ## 고른 대상이 바뀌면 닫는다 — `openWhile`
  *
@@ -259,7 +260,7 @@ export function ActionMenu(props: {
   }
 
   return (
-    <div className="wb-shell-action-menu" ref={rootRef} data-wb-holds-keys={open ? '' : undefined}>
+    <div className="wb-shell-action-menu" ref={rootRef} data-wb-holds-keys={open ? 'menu' : undefined}>
       <button
         type="button"
         ref={toggleRef}
@@ -285,6 +286,7 @@ export function ActionMenu(props: {
             data-side={placement.side}
             data-block={placement.block}
             data-wb-own-shortcuts={ownShortcuts ? '' : undefined}
+            data-wb-holds-keys="menu"
             style={placement.style}
             onKeyDown={onListKeyDown}
           >

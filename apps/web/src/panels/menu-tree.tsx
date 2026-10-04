@@ -32,6 +32,7 @@ import { SignedOut } from '../api/failure'
 import { DropIndicator } from '../drag/drop-indicator'
 import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { elementAt, scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
+import { keyHeldByWidget } from '../edit/editor-shortcuts'
 import { ActionMenu } from '../shell/action-menu'
 import { ICONS } from '../shell/icons'
 import { MetaConflict } from './meta-conflict'
@@ -281,6 +282,9 @@ export function MenuTree(props: {
      * 그것이 편집 가능성·폼 컨트롤·ARIA 역할·shadow 호스트 넷으로 가른다.
      */
     if (isTypingSurface(event.target)) return
+    // 열린 행동 메뉴(줄 `…` · `+` · 제목 줄 `+`)가 쥔 키 — 목록의 키가 React 트리를 따라 여기 닿는다. 메뉴 안의 Delete 가 삭제 확인을, Alt+화살표가
+    // 고른 메뉴의 자리를 바꾸지 않게 에디터 단축키와 같은 판정을 지난다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`).
+    if (keyHeldByWidget(event)) return
     if (commands.editing !== null || commands.reparenting !== null) return
     if (foldKey(event, fold)) return
 
