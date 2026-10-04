@@ -772,7 +772,8 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       const over = await spot(page, ids['나']!, 'middle')
       await page.mouse.move(over.x, over.y)
       const boxes = await page.locator('[aria-label="메뉴와 구조"] .wb-shell-tree-row-actions').count()
-      const headButtons = await page.locator('[aria-label="메뉴와 구조"] .wb-shell-region-actions button').count()
+      // 제목 줄의 «모두 접기» · «모두 펴기»는 읽기 도구라 viewer 에게도 선다(`src/panels/tree-fold.tsx`) — 세는 것은 그 밖의 단추(뿌리 `+`)다.
+      const headButtons = await page.locator('[aria-label="메뉴와 구조"] .wb-shell-region-actions button:not(.wb-shell-tree-fold)').count()
       await page.locator('[aria-label="메뉴와 구조"] [data-tree-row] a, [aria-label="메뉴와 구조"] [data-tree-row] button').first().focus()
       const walked = await tabWalk(page, 30)
       expect({ boxes, headButtons, reached: walked.filter((name) => / (추가|더 보기)$/.test(name) || name === '+') }).toEqual({

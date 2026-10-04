@@ -165,7 +165,7 @@ describe('에디터 단축키 — 셸', () => {
     await waitFor(() => expect(structureTypes()).toEqual(INITIAL_TYPES))
   })
 
-  it('↑ ↓ ← → 가 구조 트리의 줄 차례로 고른다', async () => {
+  it('↑ ↓ ← → 가 구조 트리의 줄 차례로 고른다 — 자식 줄이 있는 줄의 ← 는 먼저 접고 → 는 먼저 편다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
     fireEvent.click(row('Text'))
 
@@ -179,6 +179,24 @@ describe('에디터 단축키 — 셸', () => {
     expect(selectedType()).toBe('Button')
     fireEvent.keyDown(document.body, { key: 'ArrowLeft' })
     expect(selectedType()).toBe('Card')
+    // 편 Card 의 ← 는 접는다 — 고른 것은 그대로, 안의 줄이 숨는다(`src/edit/selection-move.ts` 의 `foldStep`).
+    fireEvent.keyDown(document.body, { key: 'ArrowLeft' })
+    expect(selectedType()).toBe('Card')
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Card', 'Divider'])
+    // 접힌 줄의 ↓ 는 그 안을 건너뛴다.
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    expect(selectedType()).toBe('Divider')
+    fireEvent.keyDown(document.body, { key: 'ArrowUp' })
+    expect(selectedType()).toBe('Card')
+    // 접힌 Card 의 → 는 편다 · 다시 → 는 첫 자식.
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' })
+    expect(selectedType()).toBe('Card')
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' })
+    expect(selectedType()).toBe('Button')
+    fireEvent.keyDown(document.body, { key: 'ArrowLeft' })
+    fireEvent.keyDown(document.body, { key: 'ArrowLeft' })
+    // 접힌 Card 의 ← 는 부모로.
     fireEvent.keyDown(document.body, { key: 'ArrowLeft' })
     expect(selectedType()).toBe('Page')
   })

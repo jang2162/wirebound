@@ -217,6 +217,26 @@
   cursor: pointer;
 }
 
+/* 머리의 «배치 선» 토글(`canvas/layout-guides.tsx`) — 되돌리기 단추와 같은 줄 · 같은 꼴이다. 켠 판은 강조색 테두리(하단 바 «컴포넌트» 토글과
+   같은 말투). */
+.wb-shell-guides-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+.wb-shell-guides-toggle[aria-pressed='true'] {
+  border-color: var(--wb-shell-accent);
+  color: var(--wb-shell-accent);
+}
+
 /* 되돌릴 것이 없을 때. 회색만 두고 테두리는 남긴다 — 자리가 사라지면 옆 버튼이 움직인다. */
 .wb-shell-history-step:disabled {
   background: var(--wb-shell-chrome);
@@ -427,24 +447,26 @@
   pointer-events: none;
 }
 
-/* 카드 줄의 스크롤 상자 — 판의 남은 높이를 다 쓰고 넘치면 가로로 민다. */
+/* 카드 판의 스크롤 상자 — 판의 남은 높이를 다 쓰고 카드 줄이 넘치면 세로로 민다. 카드가 판 폭에 맞춰 감싸이므로 가로로는 안 넘친다. */
 .wb-shell-palette-cards {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
-/* 카드 줄(트랙). 축소판 깔개(`.wb-shell-palette-thumbs`)의 기준 상자라 `position: relative` 다 — 깔개가 트랙과 함께 스크롤해 카드 창과
-   어긋나지 않는다(`palette/palette-thumbs.tsx` 머리말 «같은 좌표»). 폭은 카드가 정한다(`max-content`). */
+/* 카드 판(트랙). 축소판 깔개(`.wb-shell-palette-thumbs`)의 기준 상자라 `position: relative` 다 — 깔개가 트랙과 함께 스크롤해 카드 창과
+   어긋나지 않는다(`palette/palette-thumbs.tsx` 머리말 «같은 좌표»). 폭은 판의 폭이고 카드가 그 안에서 줄을 바꾼다 — 높이는 줄 수가 정한다
+   (판보다 짧으면 판을 채운다 · 길면 위 스크롤 상자가 민다). 줄은 위에서부터 쌓는다(`align-content`). */
 .wb-shell-palette-track {
   position: relative;
   box-sizing: border-box;
   display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
   gap: 8px;
-  width: max-content;
-  min-width: 100%;
-  height: 100%;
+  width: 100%;
+  min-height: 100%;
   padding: 8px 12px;
 }
 
@@ -465,15 +487,23 @@
 }
 
 /* 카드 — 축소판이 비치는 창 · 이름 · «넣기» 단추. 창 자리만 투명하다(바탕을 칠하면 축소판이 가린다) — 테두리 · 이름 줄이 카드의 모양이다.
-   몸통은 끌기 전용이라 단추가 아니다 — 누른 채 움직일 때 이름 글자가 골라지지 않게 `user-select: none` 이다. 폭과 판 기본 높이를 함께
-   정한 잰 값은 `shell/sidebar-layout.ts` 의 `PALETTE_HEIGHT_DEFAULT` 주석. */
+   몸통은 끌기 전용이라 단추가 아니다 — 누른 채 움직일 때 이름 글자가 골라지지 않게 `user-select: none` 이다.
+
+   **크기는 정해져 있다(264 × 200 — 창 264 × 176 + 이름 줄)** — 판 높이를 따라 늘지 않고, 판이 높으면 줄을 더 쓴다. 판 기본 높이(340)에서
+   한 줄과 둘째 줄의 머리가 보이고, 창 900 의 판 최대(569)에서 두 줄이 다 보인다. 폭이 줄임을 정하는 표본은 줄임 비가 판 기본 높이의 옛
+   카드와 같고(창 폭 264), 세로로 긴 표본(KeyValue · Media)만 창 176 에 맞게 더 준다 — 잰 값과 다시 재는 법은
+   `apps/web/build-test/palette-wrap.test.ts` 머리말. */
 .wb-shell-palette-card {
   position: relative;
   z-index: 1;
   flex: none;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   width: 264px;
+  /* 판이 카드보다 좁으면(창 700 — 캔버스 칸이 최소로 준 판) 카드 폭이 판에 맞게 준다 — 가로로 넘치지 않는다. 축소판은 준 창에 다시 맞춘다. */
+  max-width: 100%;
+  height: 200px;
   padding: 0;
   border: 1px solid var(--wb-shell-line);
   border-radius: 6px;
@@ -1101,6 +1131,57 @@
   gap: 2px;
 }
 
+/* 줄 앞의 펼침 단추(`panels/tree-fold.tsx`) — 접힌 줄은 ▸ · 편 줄은 ▾. **줄의 `visibility`를 이기고 늘 보인다**(위 `.wb-shell-tree-row`
+   머리말 «줄 안에 새 요소를 넣으면»). 줄 높이(13px 글자 + 위아래 3px)를 안 늘린다. DOM 에서는 줄 단추 뒤라 `order` 가 앞에 세운다(그 파일
+   머리말 «DOM 에서는 줄 단추 뒤다»). */
+.wb-shell-tree-toggle {
+  visibility: visible;
+  order: -1;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--wb-shell-muted);
+  cursor: pointer;
+}
+
+.wb-shell-tree-toggle:hover {
+  background: var(--wb-shell-line);
+  color: var(--wb-shell-ink);
+}
+
+/* 자식 줄이 없는 줄의 빈 자리 — 펼침 단추와 같은 폭이라 이름이 깊이마다 같은 눈금에 선다. */
+.wb-shell-tree-toggle-space {
+  order: -1;
+  flex: none;
+  width: 16px;
+}
+
+/* 트리 머리의 «모두 접기» · «모두 펴기» — 뿌리 `+`(`.wb-shell-action-menu-compact`)와 같은 꼴로 그 곁에 선다. */
+.wb-shell-tree-fold {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 2px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 2px 3px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+.wb-shell-tree-fold:hover {
+  border-color: var(--wb-shell-accent);
+}
+
 /* 트리 줄 곁의 조밀한 행동 단추(`ActionMenu`의 `compact` — 아이콘 14px) — 줄 높이(13px 글자 + 위아래 3px)를 안 늘린다. */
 .wb-shell-action-menu-compact {
   border-radius: 4px;
@@ -1212,6 +1293,40 @@
   border-radius: 2px;
   /* 아래의 노드가 그대로 눌려야 한다. 이것이 없으면 선택한 노드를 다시 누를 수 없다. */
   pointer-events: none;
+}
+
+/* 배치 선(`canvas/layout-guides.tsx`) — Flex · Grid 노드의 점선 테두리. 외곽선 · 마커와 같은 문서 옆 셸 겹이고 누름을 안 받는다. 종류마다 색이
+   갈린다 — Flex 는 주황 · Grid 는 보라(선택 외곽선의 강조색과 안 겹친다). **`border` 가 아니라 `outline` 이다** — 테두리는 상자를 부풀려
+   높이 0 인 노드(빈 Flex)의 선이 2px 아래로 내려간다. 안쪽으로 그려(`outline-offset: -1px`) 노드 상자 밖으로 안 나간다. */
+.wb-shell-guide {
+  position: absolute;
+  outline: 1px dashed #d97706;
+  outline-offset: -1px;
+  pointer-events: none;
+}
+
+.wb-shell-guide-grid {
+  outline-color: #7c3aed;
+}
+
+/* 모서리 표시(Flex → ↓ ← ↑ · Grid «N열») — 테두리 안 왼쪽 위. 줌을 걷는 `scale(1 / zoom)` 은 인라인이라 기준점이 왼쪽 위다. */
+.wb-shell-guide-tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 0 4px;
+  border-radius: 0 0 3px 0;
+  background: #d97706;
+  color: #fff;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  transform-origin: top left;
+}
+
+.wb-shell-guide-tag-grid {
+  background: #7c3aed;
 }
 
 /* 여럿을 고른 판의 기준 노드가 아닌 고른 노드(`canvas/canvas.tsx`) — 기준 노드(위)보다 가늘게 · 끊어서. 누름은 그대로 아래로 간다. */

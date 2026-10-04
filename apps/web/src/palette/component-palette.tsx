@@ -169,8 +169,10 @@ function PaletteBody(props: { projectId: string; pageId: string | undefined }): 
 }
 
 /**
- * 카드 줄 — 가로로 늘어서고 넘치면 가로 스크롤이다. 카드마다 축소판이 비쳐 보이는 창(투명한 자리) · 한국어 이름 · «넣기» 단추가 선다. 축소판 깔개
- * (`./palette-thumbs.tsx`)는 카드 줄(트랙) 뒤에 같은 크기로 깔리고, 여기서 잰 창 좌표로 표본을 옮긴다.
+ * 카드 판 — 정해진 크기의 카드가 판 폭에 맞춰 여러 줄로 감싸이고 넘치면 판이 세로로 스크롤한다(설계서 「설계서 화면 구조」 «컴포넌트 목록»). 카드는
+ * 판 높이를 따라 늘지 않는다 — 판을 키우면 줄이 더 보인다(크기는 `shell.css` 의 `.wb-shell-palette-card`). 카드마다 축소판이 비쳐 보이는
+ * 창(투명한 자리) · 한국어 이름 · «넣기» 단추가 선다. 축소판 깔개(`./palette-thumbs.tsx`)는 트랙 뒤에 같은 크기로 깔리고, 여기서 잰 창 좌표로
+ * 표본을 옮긴다.
  */
 function PaletteCards(props: {
   projectId: string
@@ -209,7 +211,7 @@ function PaletteCards(props: {
   const focusIndex = Math.min(active, Math.max(0, props.types.length - 1))
   const [layout, setLayout] = useState<{ slots: ThumbSlot[]; width: number; height: number }>({ slots: [], width: 0, height: 0 })
 
-  // 창 좌표를 잰다 — 카드가 바뀌거나 트랙 크기가 바뀌면(판 높이 · 창 폭) 다시.
+  // 창 좌표를 잰다 — 카드가 바뀌거나 트랙 크기가 바뀌면(판 폭 — 줄이 다시 감싸인다 · 판 높이) 다시.
   useLayoutEffect(() => {
     const track = trackRef.current
     if (track === null) return
@@ -226,7 +228,7 @@ function PaletteCards(props: {
           height: box.height,
         })
       }
-      const next = { slots, width: track.scrollWidth, height: track.offsetHeight }
+      const next = { slots, width: track.offsetWidth, height: track.offsetHeight }
       setLayout((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next))
     }
     measure()

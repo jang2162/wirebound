@@ -99,7 +99,8 @@ import { structureTreeHint } from '../panels/structure-tree-hint'
 import { openDocumentNow, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 import type { DropZone } from '../tree/tree-drop'
-import { DRAG_THRESHOLD, scrollParent, type DragPoint, type DropHint } from './use-pointer-drag'
+import { hoverRow } from './hover-open'
+import { DRAG_THRESHOLD, elementAt, scrollParent, type DragPoint, type DropHint } from './use-pointer-drag'
 
 /** 캔버스 칸 — 문서를 그리는 iframe 의 창과 지금 줌. */
 export interface CanvasRegion {
@@ -363,6 +364,8 @@ export function usePlacementDrop(input: {
     if (document === null) return null
 
     const tree = regions.tree()
+    // 접힌 줄 위에 머물면 편다(`./hover-open.ts`) — 트리 밖이면 잰 것을 걷는다.
+    hoverRow(tree !== null && withinRegion(tree, point) ? elementAt(tree, '[data-tree-row]', point) : null)
     if (tree !== null && withinRegion(tree, point)) {
       const hit = structureTreeHint(tree, document, placing, point, store.editBlockedBy)
       if (hit === null) return null

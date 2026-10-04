@@ -846,10 +846,11 @@ describe('막다른 길이 아니다 — 구조 편집만 얼고 셸은 산다',
     expect(live()).toEqual([])
     expect(gates()).toEqual({ pattern: false, preset: false })
     // 트리 줄도 전부 꺼진다 — 고를 수 있는 노드가 하나도 없다. 줄 행동 · 뿌리 `+`의 단추(행동 메뉴를 여는 것)는 줄이 아니다 —
-    // 그 안의 항목이 꺼진 것은 위 `live` · `gates`가 잰다.
+    // 그 안의 항목이 꺼진 것은 위 `live` · `gates`가 잰다. 머리의 «모두 접기» · «모두 펴기»도 줄이 아니다 — 접기는 고르기와 같은 읽기라
+    // 잠금에 안 꺼진다(`src/panels/tree-fold.tsx`).
     const rows = within(structureRegion())
       .getAllByRole<HTMLButtonElement>('button')
-      .filter((button) => button.getAttribute('aria-haspopup') !== 'menu')
+      .filter((button) => button.getAttribute('aria-haspopup') !== 'menu' && !button.classList.contains('wb-shell-tree-fold'))
     expect(rows.filter((button) => !button.disabled)).toEqual([])
     expect(statusLine()).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })

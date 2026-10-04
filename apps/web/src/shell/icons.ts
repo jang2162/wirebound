@@ -29,6 +29,8 @@ import {
   Blocks,
   ChevronDown,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   CircleCheck,
   CircleUser,
   CircleX,
@@ -54,6 +56,7 @@ import {
   Plus,
   Redo2,
   Settings,
+  SquareDashed,
   Stamp,
   Trash2,
   TriangleAlert,
@@ -85,6 +88,9 @@ export const ICONS = {
   /** 접힌 것을 편다 · 편 것을 접는다 — 펼침 단추의 머리. */
   expand: ChevronRight,
   collapse: ChevronDown,
+  /** 트리의 줄을 모두 접는다 · 모두 편다 — 트리 머리. */
+  collapseAll: ChevronsDownUp,
+  expandAll: ChevronsUpDown,
   /** 이름 · 글을 고친다 — «이름 변경» · 코멘트 «수정». */
   rename: Pencil,
   moveUp: ArrowUp,
@@ -116,6 +122,8 @@ export const ICONS = {
   comment: MessageSquarePlus,
   /** 번호를 문서 순서로 다시 매긴다. */
   renumber: ListOrdered,
+  /** 캔버스의 배치 선(Flex · Grid 의 경계와 방향)을 켜고 끈다 — 머리. */
+  layoutGuides: SquareDashed,
   /** 동작이 아니라 결과의 표지 — 읽은 것 · 들어간 것(성공) · 실패 · 경고(페이지 가져오기 상자). */
   succeeded: CircleCheck,
   failed: CircleX,

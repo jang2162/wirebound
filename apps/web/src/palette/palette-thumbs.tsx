@@ -2,10 +2,10 @@
  * **축소판** — 하단 컴포넌트 판의 카드마다 그 컴포넌트를 프로젝트 테마로 그린 그림(spec `docs/superpowers/specs/2026-10-01-component-drag-design.md`
  * 「축소판」). **판 하나에 iframe 하나다** — 카드마다 iframe 을 두지 않는다.
  *
- * ## 같은 좌표 — iframe 을 카드 줄 뒤에 깔고 표본을 카드 창 자리로 옮긴다
+ * ## 같은 좌표 — iframe 을 카드 판 뒤에 깔고 표본을 카드 창 자리로 옮긴다
  *
- * iframe(`canvas/canvas-iframe.tsx` — 캔버스와 같은 시트 차례 · 같은 테마 공급자 `useProjectTheme`)을 카드 줄(트랙) 뒤에 트랙과 같은
- * 크기로 깐다. 트랙과 함께 스크롤하므로 스크롤 중에도 어긋날 것이 없다. 그 문서에 카드마다 표본 하나를 제 폭(`NATURAL_WIDTH`)으로 그린 뒤
+ * iframe(`canvas/canvas-iframe.tsx` — 캔버스와 같은 시트 차례 · 같은 테마 공급자 `useProjectTheme`)을 카드 판(트랙 — 카드가 여러 줄로
+ * 감싼다) 뒤에 트랙과 같은 크기로 깐다. 트랙과 함께 스크롤하므로 스크롤 중에도 어긋날 것이 없다. 그 문서에 카드마다 표본 하나를 제 폭(`NATURAL_WIDTH`)으로 그린 뒤
  * 표본 노드의 그린 상자를 재서(`getBoundingClientRect`) 카드의 창(투명한 자리) 안에 들어가게 줄이고 옮긴다(`transform`) · 노드 상자 밖은
  * 자른다(`clip-path`). 카드는 iframe 위에 서고 창 자리만 투명하다.
  *
@@ -18,7 +18,7 @@
  *
  * ## 다시 잰다
  *
- * 카드 창이 옮겨 가면(판 높이 · 탭 · 검색) 부르는 쪽이 새 창 좌표를 내린다. 테마 · 토큰이 바뀌면 다시 그린다. 문서 밖의 것(테마 시트가 늦게
+ * 카드 창이 옮겨 가면(판 폭이 바뀌어 줄이 다시 감싸임 · 탭 · 검색) 부르는 쪽이 새 창 좌표를 내린다. 테마 · 토큰이 바뀌면 다시 그린다. 문서 밖의 것(테마 시트가 늦게
  * 실림 · 글꼴)이 표본 상자를 바꾸면 iframe 이 다시 재라고 부른다(`onResize` · 글꼴 `loadingdone`).
  *
  * ## 그림이지 조작 대상이 아니다
@@ -148,6 +148,9 @@ export function PaletteThumbs(props: {
         >
           {(f) => (
             <ThemeProvider value={{ tokens, window: f.window }}>
+              {/* **문서가 트랙만큼은 길다** — iframe 은 문서 높이로 자라는데(`canvas/canvas-iframe.tsx`) 표본은 옮김(`transform`) 전 자리로
+                  쌓여 그 높이를 정한다. 카드가 여러 줄로 감싸여 트랙이 쌓인 표본보다 길면 아래 줄 카드의 표본이 iframe 밖으로 옮겨져 잘린다. */}
+              <div style={{ minHeight: props.height }}>
               {types.map((type) => {
                 const sample = thumbSample(type)
                 if (sample === null) return null
@@ -162,6 +165,7 @@ export function PaletteThumbs(props: {
                   </div>
                 )
               })}
+              </div>
             </ThemeProvider>
           )}
         </CanvasIframe>

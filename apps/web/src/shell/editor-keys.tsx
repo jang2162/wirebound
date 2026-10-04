@@ -8,7 +8,7 @@
  * | 삭제 · 위로 · 아래로 · 들여쓰기 · 내어쓰기 | `useStructureCommands` 의 명령 — `abilities` 가 참일 때만 | 구조 트리 줄 `…` |
  * | 복제 · 붙이기 | `edit/paste-ops.ts` 의 `duplicateOps` · `pasteOps` → `editBlockedBy` → `commitOps` | — |
  * | 복사 · 잘라내기 | 봉투(`writeNodesEnvelope`) · 잘라내기의 지우기는 삭제와 같은 명령 | — |
- * | 선택 이동 | `edit/selection-move.ts` → `store.selectNode` | 트리 줄 · 캔버스 누름 |
+ * | 선택 이동 | `edit/selection-move.ts` → `store.selectNode` — ← → 는 먼저 접고 편다(`foldStep` → `tree/collapse.ts`) | 트리 줄 · 캔버스 누름 · 줄 앞 펼침 단추 |
  * | 형제 모두 고르기(Cmd+A) | `edit/selection-move.ts` 의 `siblingIds` → `store.selectMany` | 트리 · 캔버스의 Cmd · Shift 클릭 · 사각형(같은 스토어 명령 무리) |
  * | 도움말 | `shell/shortcut-help.tsx` | — |
  *
@@ -46,7 +46,7 @@ import {
   type NodeEdit,
 } from '../edit/paste-ops'
 import { findNodeSafely } from '../edit/safe-walk'
-import { moveSelection, siblingIds } from '../edit/selection-move'
+import { foldStep, moveSelection, siblingIds } from '../edit/selection-move'
 import { useClipboard } from '../edit/use-clipboard'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { useEditorShortcuts } from '../edit/use-editor-shortcuts'
@@ -58,6 +58,7 @@ import type { EditFailure } from '../store/editor-store'
 import { LOSS_RANK } from '../store/loss-notice'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
+import { collapse, collapsedOf, expand, structureKey } from '../tree/collapse'
 import { ShortcutHelp } from './shortcut-help'
 
 export function EditorKeys(props: {
@@ -273,7 +274,16 @@ export function EditorKeys(props: {
       case 'selectParent':
       case 'selectFirstChild': {
         if (doc === null || manyPicked()) return
-        const next = moveSelection(doc.root, selectedNodeId, command, (id) => store.selectionBlockedBy(id) !== null)
+        // 접힘은 구조 트리와 같은 것(`tree/collapse.ts` — 이 페이지의 것)이다. ← → 는 접고 펼 것이 있으면 그것만 한다(`foldStep`).
+        const key = structureKey(props.pageId)
+        const collapsed = collapsedOf(key)
+        const fold = foldStep(doc.root, selectedNodeId, command, collapsed)
+        if (fold !== null) {
+          if (fold.fold === 'collapse') collapse(key, [fold.id])
+          else expand(key, [fold.id])
+          return
+        }
+        const next = moveSelection(doc.root, selectedNodeId, command, (id) => store.selectionBlockedBy(id) !== null, collapsed)
         if (next === null) return
         store.selectNode(next)
         revealNode(next, canvasDocument)

@@ -1,5 +1,7 @@
 import { act, cleanup, configure, getConfig } from '@testing-library/react'
 import { afterEach } from 'vitest'
+import { resetLayoutGuides } from '../src/canvas/layout-guides'
+import { resetCollapsed } from '../src/tree/collapse'
 
 // RTL은 **전역** `afterEach`가 있을 때만 자동 cleanup을 건다
 // (`@testing-library/react/dist/index.js`의 `typeof afterEach === 'function'` 분기).
@@ -8,6 +10,12 @@ import { afterEach } from 'vitest'
 // 이 줄을 빼면 `smoke.test.tsx`의 `같은 파일에서 두 번 렌더해도 앞 DOM이 남지 않는다`가
 // "found multiple elements"로 죽는다.
 afterEach(cleanup)
+
+// 트리 줄의 접힘은 모듈의 `Map` 이다(`src/tree/collapse.ts` — 운영은 새로 고침이 비운다). 케이스마다 같은 페이지 id 를 쓰므로 비우지 않으면
+// 앞 케이스가 접은 줄이 뒤 케이스의 트리에서 숨는다.
+afterEach(resetCollapsed)
+// 배치 선의 켬 · 끔도 모듈 값이다(`src/canvas/layout-guides.tsx`) — 다음 케이스는 저장소에서 다시 읽는다.
+afterEach(resetLayoutGuides)
 
 /**
  * `findBy*`·`waitFor`가 돌아온 뒤 **passive effect가 다 흐르도록** `act`를 한 번 더 준다.
