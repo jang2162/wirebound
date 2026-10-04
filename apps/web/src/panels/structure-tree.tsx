@@ -14,7 +14,7 @@
  * **줄은 접힌다** — 줄 앞 펼침 단추 · 제목 줄의 «모두 접기» · «모두 펴기»(`./tree-fold.tsx`), 접힘은 페이지마다 화면의 상태(`tree/collapse.ts`)다.
  * 고른 노드가 접힌 줄 안으로 들어가면 그 조상을 편다(아래 `chains`).
  */
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { nodeAlias, nodeSummary, type NodeLock, type WbNode } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
@@ -34,7 +34,7 @@ import { structureKey, useCollapsed, type Collapsed } from '../tree/collapse'
 import { useAliasEdit, type AliasEdit } from './alias-edit'
 import { nodeTypeLabel } from './node-shape'
 import { structureTreeHint } from './structure-tree-hint'
-import { selectionCapNotice } from './toolbar-status'
+import { patternReason, selectionCapNotice, structureItemReason } from './toolbar-status'
 import { isTypingSurface } from './typing-surface'
 import { StructurePicker, useStructureCommands, type StructureCommands } from './structure-toolbar'
 import { TreeFoldButtons, TreeToggle } from './tree-fold'
@@ -130,8 +130,8 @@ export function StructureTree(props: {
     projectId: props.projectId,
     pageId: props.pageId,
     // **고른 노드의 잠금도 여기서 내려 준다.** 그 값이 하는 일이 둘이다 — 줄 행동의 판정을
-    // 끄고(`structureAbilities`의 셋째 인자), 트리 아래 상태줄이 *"○○님이 편집 중"*을
-    // 그것으로 말한다. 목록을 손에 쥐는 자리는 화면에 하나여야 하고(그 규칙과 근거는
+    // 끄고(`structureAbilities`의 셋째 인자), 꺼진 항목의 이유가 *"○○님이 편집 중"*을
+    // 그것으로 말한다(`commands.why`). 목록을 손에 쥐는 자리는 화면에 하나여야 하고(그 규칙과 근거는
     // `test/lock/one-verdict.test.ts`), 그 하나가 바로 위의 구독이다.
     //
     // **단축키가 같은 값을 지나는 것이 요점이다.** 에디터 단축키(`shell/editor-keys.tsx`)도 같은 훅의 `abilities`를
@@ -141,8 +141,8 @@ export function StructureTree(props: {
     // **줄에 붙는 배지로는 안 닫히는 자리가 있다.** 배지는 잠금이 가리키는 노드에만
     // 붙는데(아래 `StructureNode`), 막히는 것은 그 **서브트리 전체**다 — 자동 선택된
     // 루트는 문서 안 모든 노드의 조상이라, 남이 아무 노드나 잡으면 루트 줄이
-    // `aria-current`인 채 회색이 되고, 상태줄이 이 값으로 말하지 않으면 그 이유가 화면
-    // 어디에도 없다.
+    // `aria-current`인 채 회색이 되고, 그 줄의 꺼진 항목이 이 값으로 말하지 않으면 그 이유가
+    // 화면 어디에도 없다.
     selectedLock: selectedNodeId === null ? null : lockOf(selectedNodeId),
     // **판정 밖의 둘이 지나는 잠금.** 루트는 문서 안 모든 노드의 조상이므로
     // `lockedBy(root)`가 곧 *"이 페이지에 살아 있는 남의 잠금이 있나"*다 — 목록을 다시
@@ -153,7 +153,6 @@ export function StructureTree(props: {
     // 그때는 `structureAbilities`도 아무것도 못 찾아 일곱이 이미 꺼져 있다.
     pageLock: typeof doc?.root?.id === 'string' ? lockOf(doc.root.id) : null,
   })
-  const statusId = useId()
   const alias = useAliasEdit(props.pageId)
   /**
    * 프리셋 이름칸에 친 글자. **고르개가 아니라 여기서 든다** — 고르개는 잠금이 걸리는 동안 DOM에서 빠지지만 트리는 그대로 있다.
@@ -264,7 +263,17 @@ export function StructureTree(props: {
   const anchorId =
     selectedNodeId !== null && findNodeSafely(doc.root, selectedNodeId) !== undefined ? selectedNodeId : rootId
   /** 뿌리의 판정 — 뿌리 `+`의 «페이지에 추가»가 뿌리를 골라 «안에 추가»를 열므로 그 판정을 먼저 본다(잠기면 뿌리를 못 고른다). */
-  const rootAbilities = structureAbilities(doc, rootId, rootId === null ? null : lockOf(rootId))
+  const rootLock = rootId === null ? null : lockOf(rootId)
+  const rootAbilities = structureAbilities(doc, rootId, rootLock)
+  /**
+   * 뿌리 `+`의 꺼진 항목이 드는 이유 — 줄 행동과 같은 함수(`./toolbar-status.ts`)를 뿌리를 고른 판으로 지난다. «페이지에 추가»는 뿌리를 골라
+   * «안에 추가»를 여는 것이라 그 판정 · 이유이고, «패턴 넣기»는 고른 것을 풀고 뿌리 끝에 꽂으므로 뿌리의 잠금이다.
+   */
+  const rootAddReason = structureItemReason(
+    { selectedNodeId: rootId, isRoot: true, lock: rootLock, pageLock: rootLock, abilities: rootAbilities },
+    'addInside',
+  )
+  const rootPatternReason = patternReason(rootLock)
   const picker = props.editable ? (
     <StructurePicker
       commands={commands}
@@ -289,24 +298,18 @@ export function StructureTree(props: {
           selected={selectedSet}
           selection={selectedNodeIds.join(',')}
           onSelect={pick}
-          // 판정의 자리는 위 `lockOf` 선언이 갖는다 — 줄과 상태줄이 **같은 값**을 쓴다.
+          // 판정의 자리는 위 `lockOf` 선언이 갖는다 — 줄과 꺼진 항목의 이유가 **같은 값**을 쓴다.
           lockOf={lockOf}
           blockedOf={store.selectionBlockedBy}
           fold={fold}
           row={
             props.editable
-              ? { commands, drag, statusId, rootId, anchorId, picker, select: store.selectNode, alias }
+              ? { commands, drag, rootId, anchorId, picker, select: store.selectNode, alias }
               : null
           }
         />
       </ul>
       {props.editable && <DropIndicator hint={drag.hint} />}
-      {/* **상태줄** — 고른 것에 무엇을 못 하는지 · 누가 잡았는지를 한 문장으로(`panels/toolbar-status.ts`의 `structureStatus`). 줄 행동의
-          항목이 이 줄을 설명으로 들고(`aria-describedby`), 할 말이 있으면 이 줄 자체가 탭 정지점이다 — 남이 잡은 자리에서는 줄 행동이
-          없어 키보드로 이유에 닿는 자리가 이 줄뿐이다(`test/panels/toolbar-status-reach.test.tsx`).
-
-          **고칠 수 없으면 DOM 에서 뺀다**(`editable` — 셸의 `canEdit` 표 «동작 입구»). */}
-      {props.editable && <StructureStatusLine commands={commands} id={statusId} />}
       {props.headSlot !== undefined &&
         props.headSlot !== null &&
         createPortal(
@@ -327,6 +330,8 @@ export function StructureTree(props: {
                     label: '페이지에 추가',
                     icon: ICONS.addInside,
                     disabled: !rootAbilities.addInside,
+                    title: rootAddReason,
+                    description: rootAddReason,
                     onSelect: () => {
                       if (rootId === null) return
                       store.selectNode(rootId)
@@ -338,12 +343,22 @@ export function StructureTree(props: {
                     label: '패턴 넣기',
                     icon: ICONS.pattern,
                     disabled: typeof doc.root?.id !== 'string' || lockOf(doc.root.id) !== null,
+                    title: rootPatternReason,
+                    description: rootPatternReason,
                     onSelect: () => {
                       store.selectNode(null)
                       commands.openAdd('pattern')
                     },
                   },
-                  { key: 'preset', label: '프리셋', icon: ICONS.preset, disabled: commands.presetLocked, onSelect: () => commands.openAdd('preset') },
+                  {
+                    key: 'preset',
+                    label: '프리셋',
+                    icon: ICONS.preset,
+                    disabled: commands.presetLocked,
+                    title: commands.why.preset,
+                    description: commands.why.preset,
+                    onSelect: () => commands.openAdd('preset'),
+                  },
                 ]}
               />
             )}
@@ -351,15 +366,6 @@ export function StructureTree(props: {
           props.headSlot,
         )}
     </div>
-  )
-}
-
-/** 상태줄(`StructureTree`의 주석). 할 말이 없으면 글자 없이 자리만 지킨다(`shell.css`의 `min-height`). */
-export function StructureStatusLine(props: { commands: StructureCommands; id: string }): ReactElement {
-  return (
-    <p className="wb-shell-structure-status" id={props.id} tabIndex={props.commands.status === '' ? undefined : 0}>
-      {props.commands.status}
-    </p>
   )
 }
 
@@ -399,11 +405,10 @@ function foldableIds(root: unknown, rootId: string | null): string[] {
 /** 별칭 입력의 접근 이름 — 속성 패널 «별칭» 칸과 같은 낱말이다. */
 const ALIAS_INPUT_LABEL = '별칭'
 
-/** 편집할 수 있는 판에서 줄마다 내려가는 것 — 명령 · 끌기 · 상태줄 id · 뿌리 · 고르개가 설 줄 · 고르개 · 고르기. */
+/** 편집할 수 있는 판에서 줄마다 내려가는 것 — 명령 · 끌기 · 뿌리 · 고르개가 설 줄 · 고르개 · 고르기. */
 interface RowWiring {
   commands: StructureCommands
   drag: PointerDrag<string, StructureDrop>
-  statusId: string
   rootId: string | null
   anchorId: string | null
   picker: ReactNode
@@ -549,7 +554,7 @@ function StructureNode(props: {
           {open && (
             <TreeRowActions
               name={rowLabel}
-              {...structureRowItems(row.commands, row.statusId, () => row.alias.open(node.id))}
+              {...structureRowItems(row.commands, () => row.alias.open(node.id))}
               // 열면 그 줄을 먼저 고른다 — 이미 고른 줄이면 다시 고르지 않는다(열린 고르개가 닫히지 않게 — `openAdd`는 선택을 안 본다).
               onOpen={() => {
                 if (!picked) row.select(node.id)

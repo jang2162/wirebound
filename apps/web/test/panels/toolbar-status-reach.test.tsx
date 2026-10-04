@@ -1,59 +1,49 @@
 /**
- * **상태줄에 키보드로 닿는가 — 열두 상태 전부에서.**
+ * **꺼진 항목이 이유를 `title` · `aria-description`으로 드는가 — 열두 상태 전부에서. 그리고 키보드가 그 이유에 닿는가.**
  *
- * `./toolbar-status.test.ts`가 *"어느 상태에서 어느 문장이 나오는가"*를 갖는다면, 이
- * 파일은 그 다음 질문 하나를 갖는다: **그 문장이 나와 있을 때 키보드 사용자가 거기
- * 닿는가.**
+ * `./toolbar-status.test.ts`가 *"어느 상태의 어느 항목에 어느 문장이 붙는가"*를 갖는다면, 이 파일은 그 다음 두 물음을 갖는다: **그 문장이
+ * 화면의 항목에 실려 있는가**(두 속성이 같은 문장으로), 그리고 **키보드 사용자가 그 문장에 닿는가.**
  *
- * # 왜 이 파일이 있나 — 줄 행동의 항목은 탭 정지점이 아니다
+ * # 키보드는 이유에 닿지 못한다 — 잃은 것을 값으로 적는다
  *
- * 두 트리의 조작은 줄의 `+` · `…`(`panels/tree-row-actions.tsx`)이고 그 항목은 행동 메뉴의 항목이다 — **Tab 이 아니라 화살표로
- * 옮긴다**(`shell/action-menu.tsx` — `menu` 역할의 약속). 항목이 상태줄을 설명으로 들어도(`aria-describedby`) 그 설명은 **포커스가
- * 항목에 닿을 때만** 읽히는데, 하필 **할 말이 가장 많은 상태들**에서 항목이 전부 꺼져(화살표가 건너뛴다) 닿을 항목이 없다:
- *
- * | 트리 | 상태 | 항목에 닿는가 |
- * |---|---|---|
- * | 구조 | 남이 잠갔다 | **아니다** — 줄 행동째 없다(잠긴 줄) · 뿌리 `+`의 셋도 꺼진다 |
- * | 구조 | 안 골랐다 · 문서에 없다 | 고른 줄이 없다 |
- * | 메뉴 | 보내는 중 | **아니다** — 항목이 전부 꺼진다 |
- * | 메뉴 | 안 골랐다 · 트리에 없다 | 고른 줄이 없다 |
- *
- * # 고른 길 — 상태줄 자체를 탭 정지점으로 둔다
- *
- * **할 말이 있으면 그 줄에 닿을 수 있다** — 어느 항목이 켜져 있는지를 보지 않으므로 열두 상태 전부에서 같은 이유로 성립하고,
- * 항목이 늘거나 줄어도 낡지 않는다. 값도 그 줄이 스스로 낸다 — 포커스가 닿으면 그 요소의 글이 곧 읽히는 것이라
- * `aria-describedby` 해석에 기대지 않는다.
- *
- * **`aria-describedby`는 그대로 둔다.** 그것이 하는 일은 *"조작을 하려는 그 순간"*에 이유를 붙여 주는 것이고(앱째로 잰다 —
- * `./menu-crud.test.tsx` «메뉴 트리 — 상태줄»), 이 `tabIndex`는 *"켠 항목이 하나도 없을 때"*의 바닥이다.
- *
- * **«패턴 넣기» · «프리셋»에는 설명을 걸지 않는다** — 선택이 없어도 되는 조작이라 *"트리에서 노드를 고르면 편집할 수 있습니다"*를
- * 그 항목의 설명으로 읽히게 하면 **없는 전제조건을 만든다**(`panels/tree-row-actions.tsx`의 `structureRowItems`).
+ * 줄 행동의 항목은 행동 메뉴의 항목이라 **Tab 이 아니라 화살표로 옮기고, 화살표는 꺼진 항목을 건너뛴다**(`shell/action-menu.tsx` —
+ * `menu` 역할의 약속). 이유는 **꺼진 항목에만** 실린다(켜진 항목에는 붙일 «왜 회색인가»가 없다). 그래서 포커스가 설 수 있는 자리(켜진
+ * 항목) 가운데 이유를 든 것이 **어느 상태에서도 없다** — 아래 표의 `reach`가 전부 0 이다. 트리 아래의 이유 줄(탭 정지점)이 그 바닥이었고,
+ * 그 줄이 없는 지금 키보드로 이유를 읽는 길은 이 파일이 재는 범위에 없다(보조 기술의 읽기 모드가 꺼진 항목의 설명을 읽는지는 jsdom 이
+ * 못 잰다). 닫는 길의 후보는 WAI-ARIA APG 처럼 꺼진 메뉴 항목에도 화살표가 서게 하는 것이다 — 그때 이 파일의 `reach`가 바뀐다.
  *
  * # 판정을 두 벌로 만들지 않는다 — `abilities`도 문안도 진짜를 지난다
  *
- * `./toolbar-status.test.ts`와 같은 이유다. 불리언을 손으로 채우면 **도달하지 않는 조합**을
- * 재게 되므로 문서와 트리를 짓고 `structureAbilities`·`treeAbilities`·`structureStatus`·
- * `menuStatus`를 그대로 지난다. 그래서 아래 열두 줄은 **진짜로 도달하는 열두 상태**다.
+ * 불리언을 손으로 채우면 **도달하지 않는 조합**을 재게 되므로 문서와 트리를 짓고 `structureAbilities` · `treeAbilities` · `structureWhy` ·
+ * `menuRowItems`를 그대로 지난다. 그래서 아래 열두 줄은 **진짜로 도달하는 열두 상태**다.
  *
- * # 상태줄만 떼어 렌더한다 — 여기서는 그것이 맞다
+ * # 줄 행동만 떼어 렌더한다
  *
- * **이 파일의 하중은 상태줄의 포커스 가능성 하나**이고, 열둘 중 둘(*"문서·트리에 없다"*)은
- * 화면 조작으로 도달시키기 어렵다 — 남이 지운 뒤 재조회 전까지의 창이다. 앱째로 재는 쪽은 `./structure-toolbar.test.tsx`(선택 해제)와
+ * 열둘 중 둘(*"문서 · 트리에 없다"*)은 화면 조작으로 도달시키기 어렵다 — 남이 지운 뒤 다시 받기 전의 창이다. 그리고 **«안 골랐다» 둘은
+ * 앱에서 줄 행동으로는 닿지 않는다** — 줄의 `+` · `…`를 열면 그 줄을 먼저 고른다(`panels/tree-row-actions.tsx` 머리말 «누르면 먼저 그 줄을
+ * 고른다»). 여기서는 그 상태의 명령으로 지은 항목을 그대로 그려 잰다. 앱째로 재는 쪽은 `./structure-toolbar.test.tsx` ·
  * `./menu-crud.test.tsx`(`busy`)에 있다.
  */
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { NodeLock, PageDocument, WbNode } from '@wirebound/schema'
 import type { TreeMenuNode } from '../../src/api/types'
+import { findNodeSafely } from '../../src/edit/safe-walk'
 import { structureAbilities } from '../../src/edit/structure-actions'
+import type { ActionMenuItem } from '../../src/shell/action-menu'
 import { treeAbilities, type TreeSelection } from '../../src/tree/tree-actions'
 import type { TreeCommands } from '../../src/tree/use-tree-commands'
-import { MenuStatusLine } from '../../src/panels/menu-tree'
 import type { StructureCommands } from '../../src/panels/structure-toolbar'
-import { StructureStatusLine } from '../../src/panels/structure-tree'
-import { structureRowItems } from '../../src/panels/tree-row-actions'
-import { menuStatus, structureStatus } from '../../src/panels/toolbar-status'
+import {
+  BUSY_REASON,
+  lockedSelectionStatus,
+  MISSING_IN_TREE_REASON,
+  NOT_IN_DOCUMENT_STATUS,
+  PICK_NODE_REASON,
+  structureWhy,
+} from '../../src/panels/toolbar-status'
+import { MENU_WHY_DISABLED, menuRowItems, STRUCTURE_WHY_DISABLED, structureRowItems, TreeRowActions } from '../../src/panels/tree-row-actions'
+import { reasonOf } from './tree-row'
 import '../../src/catalog-setup'
 
 afterEach(cleanup)
@@ -62,13 +52,10 @@ afterEach(cleanup)
  * ```
  * n-root (Page)
  * ├ n-a   (Text)      잎 — 자식을 담지 못한다
- * ├ n-box (Card)      가운데 컨테이너 — 들여·내어만 꺼진다(할 말이 없는 자리)
- * │  └ n-solo (Card)  외동 **컨테이너** — 순서 문장이 나오는 자리
+ * ├ n-box (Card)      가운데 컨테이너
+ * │  └ n-solo (Card)  외동 컨테이너
  * └ n-c   (Divider)   막내
  * ```
- * 문안의 사다리를 재는 것은 `./toolbar-status.test.ts`이고, 여기서는 **여섯 문장이 실제로
- * 나오기만 하면 된다.** 그래서 픽스처가 그 파일보다 얕다 — *"일곱이 다 켜지는 자리"*는
- * 여기서 재지 않는다(빈 문자열의 대조는 `n-box`가 맡는다).
  */
 function doc(): PageDocument {
   const root: WbNode = {
@@ -85,10 +72,10 @@ function doc(): PageDocument {
 
 /**
  * ```
- * mn-1 관리자  pages: pg-1     하위가 있다
- * │ └ mn-1-1 회원              비었고 **외동**
+ * mn-1 관리자  pages: pg-1     맏이 · 최상위
+ * │ └ mn-1-1 회원              비었고 외동
  * mn-2 포털                    비었고 형제가 있다
- * mn-3 설정                    비었고 형제가 있다 — 할 말이 없는 자리
+ * mn-3 설정                    비었고 형제가 있다
  * ```
  * **메뉴가 둘 이상이어야** `reparent`가 열린다(하나면 옮길 곳이 없다).
  */
@@ -113,39 +100,30 @@ function unused(): never {
   throw new Error('이 파일은 조작을 재지 않습니다')
 }
 
-/** 마지막으로 연 구조 판의 명령 — `잠금이 판정을 끈다`가 그 판의 줄 행동 항목을 짓는다. */
-let lastStructureCommands: StructureCommands | null = null
-
-function structureToolbar(input: {
-  selectedNodeId: string | null
-  lock?: NodeLock | null
-}): { toolbar: HTMLElement; status: string } {
+/** 그 상태의 구조 명령 — `useStructureCommands`가 짓는 것과 같은 함수(`structureWhy`)로 이유를 짓는다. */
+function structureCommands(input: { selectedNodeId: string | null; lock?: NodeLock | null }): StructureCommands {
   const document = doc()
   const { selectedNodeId } = input
   const lock = input.lock ?? null
-  // **잠금을 판정에도 넘긴다** — 화면에서 그 둘은 같은 값을 지난다
-  // (`panels/structure-toolbar.tsx`의 `useStructureCommands`). 상태줄에만 주면 도달하지
-  // 않는 조합을 재게 된다.
+  // **잠금을 판정에도 넘긴다** — 화면에서 그 둘은 같은 값을 지난다(`useStructureCommands`). 하네스의 `lock` 하나가 훅의 두 값
+  // (`selectedLock` · `pageLock`)을 대신한다 — 화면에서 `selectedLock`이 있으면 `pageLock`도 반드시 있다(루트가 모든 노드의 조상이다).
   const abilities = structureAbilities(document, selectedNodeId, lock)
-  const status = structureStatus({
-    selectedNodeId,
-    isRoot: selectedNodeId !== null && document.root.id === selectedNodeId,
-    lock,
-    // **아래 `presetLocked`와 같은 값을 쓴다** — 화면에서 그 둘은 한 값(`pageLock`)에서
-    // 나온다. 갈리는 자리는 아래 주석이 가리키는 파일이 셸째로 잰다.
-    pageLock: lock,
+  // 훅의 `aliasLocked`와 같은 조건 — 하나를 골랐고 · 문서에 있고 · 남이 안 잡았을 때만 켠다.
+  const aliasLocked = lock !== null || selectedNodeId === null || findNodeSafely(document.root, selectedNodeId) === undefined
+  return {
     abilities,
-  })
-  const commands: StructureCommands = {
-    abilities,
-    count: selectedNodeId === null ? 0 : 1,
-    // **하네스의 `lock` 하나가 훅의 두 값을 대신한다.** 화면에서 `selectedLock`이 있으면
-    // `pageLock`도 반드시 있고(루트가 모든 노드의 조상이다), 이 표가 태우는 상태에는
-    // 그 둘이 갈리는 자리가 없다 — 갈리는 자리(선택 없음 + 페이지 잠금)는
-    // `../lock/toolbar-abilities.test.tsx`가 셸째로 잰다.
     patternLocked: lock !== null,
     presetLocked: lock !== null,
-    status,
+    why: structureWhy(
+      {
+        selectedNodeId,
+        isRoot: selectedNodeId !== null && document.root.id === selectedNodeId,
+        lock,
+        pageLock: lock,
+        abilities,
+      },
+      { patternLock: lock, presetLock: lock, aliasLocked },
+    ),
     remove: unused,
     moveUp: unused,
     moveDown: unused,
@@ -158,29 +136,18 @@ function structureToolbar(input: {
     applyPreset: unused,
     cancelAdd: unused,
     dropTo: unused,
-    aliasLocked: lock !== null || selectedNodeId === null,
+    aliasLocked,
     renameAlias: unused,
   }
-  // **상태줄만 렌더한다**(머리말 «상태줄만 떼어 렌더한다»). `commands`는 `잠금이 판정을 끈다`가 줄 행동의 항목을 짓는 데 쓴다.
-  const view = render(<StructureStatusLine commands={commands} id="structure-status" />)
-  lastStructureCommands = commands
-  return { toolbar: view.container, status }
 }
 
-function menuToolbar(input: { selection: TreeSelection | null; busy?: boolean }): {
-  toolbar: HTMLElement
-  status: string
-} {
+function menuCommands(selection: TreeSelection | null, busy = false): TreeCommands {
   const menu = tree()
-  const { selection } = input
-  const busy = input.busy ?? false
-  const abilities = treeAbilities(menu, selection)
-  const status = menuStatus({ selection, busy, abilities })
-  const commands: TreeCommands = {
+  return {
     state: { status: 'ready', menu },
     selection,
     select: unused,
-    abilities,
+    abilities: treeAbilities(menu, selection),
     busy,
     failure: null,
     editing: null,
@@ -188,6 +155,9 @@ function menuToolbar(input: { selection: TreeSelection | null; busy?: boolean })
     submitInput: unused,
     cancelInput: unused,
     confirmingRemove: false,
+    removing: null,
+    confirmCascade: unused,
+    closeRemoving: unused,
     askRemove: unused,
     confirmRemove: unused,
     cancelRemove: unused,
@@ -210,213 +180,128 @@ function menuToolbar(input: { selection: TreeSelection | null; busy?: boolean })
     cancelReparent: unused,
     dropTo: unused,
   }
-  // **메뉴 쪽은 상태줄만 렌더한다.** 툴바가 없다 — 조작은 줄의 `+` · `…`(`panels/tree-row-actions.tsx`)이고 그 항목은 탭 정지점이
-  // 아니다(행동 메뉴의 항목은 화살표로 옮긴다 — `shell/action-menu.tsx`). 그래서 탭으로 이 문장에 닿는 길은 **줄 자신** 하나고,
-  // 항목이 이 줄을 설명으로 드는 쪽은 앱째로 잰다(`./menu-crud.test.tsx` «메뉴 트리 — 상태줄»).
-  const view = render(<MenuStatusLine commands={commands} id="menu-status" />)
-  return { toolbar: view.container, status }
 }
 
-function statusLine(toolbar: HTMLElement): HTMLElement {
-  const line = toolbar.querySelector<HTMLElement>('[class$="-status"]')
-  if (line === null) throw new Error('상태줄이 없습니다')
-  return line
+/** 그 줄 행동을 그린다 — 앱의 줄과 같은 부품(`TreeRowActions`)이다. */
+function draw(items: { add?: readonly ActionMenuItem[]; more?: readonly ActionMenuItem[] }): HTMLElement {
+  return render(<TreeRowActions name="줄" {...items} onOpen={() => {}} picked />).container
 }
 
-/**
- * 렌더한 조각 안의 **탭 정지점을 순서대로.**
- *
- * 브라우저의 탭 순서는 (양수 `tabindex`가 없으면) 곧 DOM 순서다 — 양수가 있으면 이 함수가 거짓말을 하므로 아래
- * `양수 tabindex는 쓰지 않는다`가 그것을 값으로 막는다.
- */
-function tabStops(toolbar: HTMLElement): HTMLElement[] {
-  return [
-    ...toolbar.querySelectorAll<HTMLElement>('button:not([disabled]), [tabindex]:not([tabindex="-1"])'),
-  ]
-}
-
-/** 그 정지점에서 상태줄 문장이 읽히는가 — 자기가 그 줄이거나, 그 줄을 설명으로 든다. */
-function reads(stop: HTMLElement, line: HTMLElement): boolean {
-  return stop === line || stop.getAttribute('aria-describedby') === line.id
-}
-
-/** 문장에 닿는 첫 정지점의 자리. 어디서도 못 읽으면 `-1`이다. */
-function firstStop(toolbar: HTMLElement): number {
-  const line = statusLine(toolbar)
-  return tabStops(toolbar).findIndex((stop) => reads(stop, line))
+/** 화면에 그린 항목 하나 — 연 목록에서 읽은 것. */
+interface Drawn {
+  label: string
+  off: boolean
+  reason: string | null
 }
 
 /**
- * **열두 상태 — 그 문장에 닿는 첫 정지점이 몇 번째인가.**
- *
- * `at`이 이 파일의 값이다. `-1`이면 **어디서도 못 읽는다** — 상태줄에 `tabIndex`가 없으면
- * 활성 버튼이 없는 여섯이 그렇게 된다(셋째 칸).
- *
- * | 상태 | `at` | 상태줄에 `tabIndex`가 없으면 | 첫 정지점이 무엇인가 |
- * |---|---|---|---|
- * | 구조 · 안 골랐다 | 0 | **-1** | **상태줄** |
- * | 구조 · 남이 잠갔다 | 0 | **-1** | **상태줄** — 줄 행동째 없고 뿌리 `+`도 꺼진다(아래) |
- * | 구조 · 루트다 | 0 | **-1** | **상태줄** |
- * | 구조 · 문서에 없다 | 0 | **-1** | **상태줄** |
- * | 구조 · 자식을 못 담는다 | 0 | **-1** | **상태줄** |
- * | 구조 · 형제가 없다 | 0 | **-1** | **상태줄** |
- * | 메뉴 · 보내는 중 | 0 | **-1** | **상태줄** |
- * | 메뉴 · 안 골랐다 | 0 | **-1** | **상태줄** |
- * | 메뉴 · 트리에 없다 | 0 | **-1** | **상태줄** |
- * | 메뉴 · 페이지다 | 0 | **-1** | **상태줄** |
- * | 메뉴 · 하위가 있다 | 0 | **-1** | **상태줄** |
- * | 메뉴 · 형제가 없다 | 0 | **-1** | **상태줄** |
- *
- * **메뉴 여섯은 상태줄만 렌더해 잰다**(`menuToolbar`의 주석) — 줄 행동의 항목은 탭 정지점이 아니라, 탭이 이 문장에 닿는 길은
- * 상태줄 자신뿐이다. 그래서 메뉴 쪽 셋째 칸이 전부 `-1`이다.
- *
- * **두 트리 다 상태줄만 렌더해 잰다**(`structureToolbar` · `menuToolbar`의 주석) — 셋째 칸이 전부 `-1`인 것이 이 파일의 요점이다:
- * 상태줄에 `tabIndex`가 없으면 탭으로는 그 문장에 영영 못 닿는다.
+ * `+` · `…`를 차례로 열어 항목을 읽는다. **`reach`는 연 뒤 포커스가 설 수 있는 항목(화살표가 서는 켜진 항목) 가운데 이유를 든 것의 수다** —
+ * 열면 첫 켠 항목에 포커스가 서고 화살표가 켠 항목 사이를 돈다(`shell/action-menu.tsx`의 `enabledItems`).
  */
-const STATES: {
-  name: string
-  at: number
-  open: () => { toolbar: HTMLElement; status: string }
-}[] = [
-  // 구조 여섯.
-  { name: '구조 · 안 골랐다', at: 0, open: () => structureToolbar({ selectedNodeId: null }) },
+function readItems(container: HTMLElement): { items: Drawn[]; reach: number } {
+  const items: Drawn[] = []
+  let reach = 0
+  for (const toggle of container.querySelectorAll<HTMLButtonElement>('[aria-haspopup="menu"]')) {
+    fireEvent.click(toggle)
+    const list = document.getElementById(toggle.getAttribute('aria-controls') ?? '')
+    if (list === null) throw new Error('열었는데 목록이 없다')
+    for (const item of within(list).getAllByRole('menuitem')) {
+      const off = item.getAttribute('aria-disabled') === 'true'
+      const reason = reasonOf(item)
+      items.push({ label: item.textContent ?? '', off, reason })
+      if (!off && reason !== null) reach += 1
+    }
+    // 연 뒤의 포커스가 켠 항목이거나(켠 것이 있으면) 단추다(다 꺼졌으면) — 어느 쪽도 이유를 들지 않는다.
+    if (document.activeElement !== null && reasonOf(document.activeElement) !== null) reach += 1
+    fireEvent.click(toggle)
+  }
+  return { items, reach }
+}
+
+/**
+ * **열두 상태 — 그 상태를 가르는 항목 하나와 그 항목의 이유.** `reach`는 키보드가 이유에 닿는 자리의 수다.
+ *
+ * | 상태 | 대표 항목 | 이유 | `reach` | 이유 줄(탭 정지점)이 있던 판 |
+ * |---|---|---|---|---|
+ * | 구조 · 안 골랐다 | 안에 추가 | «트리에서 노드를 고르면 …» | **0** | 닿았다 — 그 줄이 첫 정지점 |
+ * | 구조 · 남이 잠갔다 | 안에 추가 | «보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다» | **0** | 닿았다 |
+ * | 구조 · 루트다 | 삭제 | «루트가 아닌 노드를 고르세요» | **0** | 닿았다(켠 «안에 추가»가 그 줄을 설명으로 들었다) |
+ * | 구조 · 문서에 없다 | 삭제 | «고른 노드가 문서에 없습니다» | **0** | 닿았다 |
+ * | 구조 · 자식을 못 담는다 | 안에 추가 | `STRUCTURE_WHY_DISABLED.addInside` | **0** | 닿았다 |
+ * | 구조 · 형제가 없다 | 위로 | `STRUCTURE_WHY_DISABLED.moveUp` | **0** | 닿았다 |
+ * | 메뉴 · 보내는 중 | 이름 변경 | «조작을 보내는 중입니다» | **0** | 닿았다 |
+ * | 메뉴 · 안 골랐다 | 이름 변경 | `MENU_WHY_DISABLED.rename` | **0** | 닿았다 |
+ * | 메뉴 · 트리에 없다 | 이름 변경 | «고른 것이 트리에 없습니다» | **0** | 닿았다 |
+ * | 메뉴 · 페이지다 | 위로 | `MENU_WHY_DISABLED.moveUp` | **0** | 닿았다 |
+ * | 메뉴 · 최상위 맏이다 | 내어쓰기 | `MENU_WHY_DISABLED.outdent` | **0** | 닿았다 |
+ * | 메뉴 · 형제가 없다 | 위로 | `MENU_WHY_DISABLED.moveUp` | **0** | 닿았다 |
+ *
+ * «메뉴 · 최상위 맏이다»(`mn-1`)는 하위가 있는 메뉴다 — 그 «삭제»의 판정과 문장은 메뉴 연쇄 삭제가 갖으므로 «내어쓰기»로 잰다.
+ */
+const STATES: { name: string; open: () => HTMLElement; item: string; reason: string }[] = [
+  { name: '구조 · 안 골랐다', open: () => draw(structureRowItems(structureCommands({ selectedNodeId: null }), unused)), item: '안에 추가', reason: PICK_NODE_REASON },
   {
     name: '구조 · 남이 잠갔다',
-    at: 0,
-    open: () => structureToolbar({ selectedNodeId: 'n-root', lock: LOCK }),
+    open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-root', lock: LOCK }), unused)),
+    item: '안에 추가',
+    reason: lockedSelectionStatus('보라'),
   },
-  { name: '구조 · 루트다', at: 0, open: () => structureToolbar({ selectedNodeId: 'n-root' }) },
-  { name: '구조 · 문서에 없다', at: 0, open: () => structureToolbar({ selectedNodeId: 'n-gone' }) },
+  { name: '구조 · 루트다', open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-root' }), unused)), item: '삭제', reason: STRUCTURE_WHY_DISABLED.remove },
+  { name: '구조 · 문서에 없다', open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-gone' }), unused)), item: '삭제', reason: NOT_IN_DOCUMENT_STATUS },
   {
     name: '구조 · 자식을 못 담는다',
-    at: 0,
-    open: () => structureToolbar({ selectedNodeId: 'n-a' }),
+    open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-a' }), unused)),
+    item: '안에 추가',
+    reason: STRUCTURE_WHY_DISABLED.addInside,
   },
-  { name: '구조 · 형제가 없다', at: 0, open: () => structureToolbar({ selectedNodeId: 'n-solo' }) },
-  // 메뉴 여섯.
-  {
-    name: '메뉴 · 보내는 중',
-    at: 0,
-    open: () => menuToolbar({ selection: { kind: 'menu', id: 'mn-3' }, busy: true }),
-  },
-  { name: '메뉴 · 안 골랐다', at: 0, open: () => menuToolbar({ selection: null }) },
-  {
-    name: '메뉴 · 트리에 없다',
-    at: 0,
-    open: () => menuToolbar({ selection: { kind: 'menu', id: 'mn-gone' } }),
-  },
-  {
-    name: '메뉴 · 페이지다',
-    at: 0,
-    open: () => menuToolbar({ selection: { kind: 'page', id: 'pg-1' } }),
-  },
-  {
-    name: '메뉴 · 하위가 있다',
-    at: 0,
-    open: () => menuToolbar({ selection: { kind: 'menu', id: 'mn-1' } }),
-  },
-  {
-    name: '메뉴 · 형제가 없다',
-    at: 0,
-    open: () => menuToolbar({ selection: { kind: 'menu', id: 'mn-1-1' } }),
-  },
+  { name: '구조 · 형제가 없다', open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-solo' }), unused)), item: '위로', reason: STRUCTURE_WHY_DISABLED.moveUp },
+  { name: '메뉴 · 보내는 중', open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-3' }, true), 'menu')), item: '이름 변경', reason: BUSY_REASON },
+  { name: '메뉴 · 안 골랐다', open: () => draw(menuRowItems(menuCommands(null), 'menu')), item: '이름 변경', reason: MENU_WHY_DISABLED.rename },
+  { name: '메뉴 · 트리에 없다', open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-gone' }), 'menu')), item: '이름 변경', reason: MISSING_IN_TREE_REASON },
+  { name: '메뉴 · 페이지다', open: () => draw(menuRowItems(menuCommands({ kind: 'page', id: 'pg-1' }), 'page')), item: '위로', reason: MENU_WHY_DISABLED.moveUp },
+  { name: '메뉴 · 최상위 맏이다', open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-1' }), 'menu')), item: '내어쓰기', reason: MENU_WHY_DISABLED.outdent },
+  { name: '메뉴 · 형제가 없다', open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-1-1' }), 'menu')), item: '위로', reason: MENU_WHY_DISABLED.moveUp },
 ]
 
-describe('상태줄에 키보드로 닿는다 — 할 말이 있는 열두 상태 전부에서', () => {
-  it.each(STATES)('$name — $at 번째 정지점', ({ at, open }) => {
-    const { toolbar, status } = open()
+describe('꺼진 항목이 이유를 `title` · `aria-description`으로 든다 — 열두 상태 전부에서', () => {
+  it.each(STATES)('$name — «$item»', ({ open, item, reason }) => {
+    const { items } = readItems(open())
 
-    // 전제 둘. 이것이 거짓이면 이 줄은 *"할 말이 있는 상태"*를 재고 있지 않다.
-    expect(status).not.toBe('')
-    expect(statusLine(toolbar).textContent).toBe(status)
+    // 그 상태를 가르는 항목이 그 이유를 든다(두 속성이 같은 문장인지는 `reasonOf`가 던져 잰다).
+    expect(items.find((drawn) => drawn.label === item)).toEqual({ label: item, off: true, reason })
+    // **꺼진 항목은 전부 이유를 들고, 켜진 항목은 하나도 안 든다.**
+    expect(items.filter((drawn) => drawn.off !== (drawn.reason !== null))).toEqual([])
+    // 이유는 빈 글이 아니다.
+    expect(items.filter((drawn) => drawn.reason === '')).toEqual([])
+  })
+})
 
-    // **이 파일의 단언.** `-1`이면 탭으로는 그 문장에 영영 못 닿는다는 뜻이다.
-    expect(firstStop(toolbar)).toBe(at)
+describe('키보드가 이유에 닿지 못한다 — 열두 상태 전부에서(잃은 것)', () => {
+  it.each(STATES)('$name — 포커스가 서는 자리 가운데 이유를 든 것 0', ({ open }) => {
+    const { items, reach } = readItems(open())
+    // 전제: 이 상태에 이유를 든 항목이 실제로 있다 — 없으면 «닿지 못한다»가 공허하다.
+    expect(items.some((drawn) => drawn.reason !== null)).toBe(true)
+    expect(reach).toBe(0)
   })
 })
 
 /**
- * **잠금이 판정을 끈다** — `구조 · 남이 잠갔다`에서 키보드가 이유에 닿는 자리가 상태줄뿐인 까닭이다.
- *
- * **같은 노드를 잠금 없이 열어 대조한다.** 그러지 않으면 *"루트라 어차피 꺼진다"*와 구별되지 않는다 — 루트에서 켜져 있는 것은
- * `안에 추가` · `패턴 넣기`이고, 그것이 잠금으로 꺼지는 것이 여기서 재는 전부다.
- *
- * **판정 밖의 둘(`패턴 넣기` · `프리셋`)까지 꺼지는 것이 값이다.** 그 둘이 잠금으로 안 꺼지면 상태줄이 *"고를 수도 **바꿀 수도**
- * 없습니다"*라고 말한 직후 살아 있는 «바꾸는» 항목이 남는다 — 누르면 편집이 나가 423을 받는다(`panels/structure-toolbar.tsx`의
- * `patternLocked`·`presetLocked`에 실측이 있다). 이 상태가 왜 생기는지(잠금이 도착해도 선택은 그대로다)와 끄기로 한 근거는
- * `edit/structure-actions.ts`의 머리말이 갖는다.
+ * **잠금이 판정을 끈다** — 같은 노드를 잠금 없이 열어 대조한다. 그러지 않으면 *"루트라 어차피 꺼진다"*와 구별되지 않는다 — 루트에서 켜져
+ * 있는 것은 `안에 추가` · `패턴 넣기`이고, 그것이 잠금으로 꺼지고 **잠금을 말하는 것**이 여기서 재는 전부다.
  */
 describe('잠금이 판정을 끈다', () => {
-  function rootItems(): { label: string; off: boolean }[] {
-    if (lastStructureCommands === null) throw new Error('구조 판을 열지 않았다')
-    const { add } = structureRowItems(lastStructureCommands, 'structure-status', unused)
-    return add.map((item) => ({ label: item.label, off: item.disabled === true }))
-  }
-
-  it('잠기지 않은 루트에서는 `안에 추가` · `패턴 넣기`가 켜져 있다 — 대조', () => {
-    expect(structureAbilities(doc(), 'n-root').addInside).toBe(true)
-
-    structureToolbar({ selectedNodeId: 'n-root' })
-    expect(rootItems()).toEqual([
-      { label: '안에 추가', off: false },
-      { label: '아래 추가', off: true },
-      { label: '패턴 넣기', off: false },
+  it('잠기지 않은 루트에서는 `안에 추가` · `패턴 넣기`가 켜져 있고 이유가 없다 — 대조', () => {
+    const { items } = readItems(draw(structureRowItems(structureCommands({ selectedNodeId: 'n-root' }), unused)))
+    expect(items.filter((drawn) => ['안에 추가', '아래 추가', '패턴 넣기'].includes(drawn.label))).toEqual([
+      { label: '안에 추가', off: false, reason: null },
+      { label: '아래 추가', off: true, reason: STRUCTURE_WHY_DISABLED.addAfter },
+      { label: '패턴 넣기', off: false, reason: null },
     ])
-    expect(lastStructureCommands?.presetLocked).toBe(false)
   })
 
-  it('잠기면 판정 밖의 둘까지 다 꺼지고 상태줄만 정지점으로 남는다', () => {
-    expect(structureAbilities(doc(), 'n-root', LOCK).addInside).toBe(false)
-
-    const { toolbar } = structureToolbar({ selectedNodeId: 'n-root', lock: LOCK })
-    expect(rootItems()).toEqual([
-      { label: '안에 추가', off: true },
-      { label: '아래 추가', off: true },
-      { label: '패턴 넣기', off: true },
-    ])
-    expect(lastStructureCommands?.presetLocked).toBe(true)
-    expect(tabStops(toolbar).map((stop) => stop.textContent)).toEqual([statusLine(toolbar).textContent])
-  })
-})
-
-/**
- * **할 말이 없으면 정지점이 아니다.** 빈 줄에 탭이 서면 아무것도 읽히지 않는 정지점이 하나
- * 늘 뿐이다 — `aria-describedby`를 안 거는 것과 같은 판단이고(빈 요소를 가리키면 *"설명이
- * 있다"*는 관계만 남는다), 규칙을 하나로 유지한다: **자리는 지키되 닿지는 않는다.**
- */
-describe('할 말이 없으면 그 줄은 탭 정지점이 아니다', () => {
-  it('구조 — 들여·내어만 꺼진 자리', () => {
-    const { toolbar, status } = structureToolbar({ selectedNodeId: 'n-box' })
-
-    expect(status).toBe('')
-    const line = statusLine(toolbar)
-    expect(line.getAttribute('tabindex')).toBeNull()
-    expect(tabStops(toolbar).some((stop) => reads(stop, line))).toBe(false)
-    // 자리는 그대로 있다 — 사라지면 그 아래가 출렁인다.
-    expect(toolbar.contains(line)).toBe(true)
-  })
-
-  it('메뉴 — 비었고 형제가 있는 메뉴', () => {
-    const { toolbar, status } = menuToolbar({ selection: { kind: 'menu', id: 'mn-3' } })
-
-    expect(status).toBe('')
-    const line = statusLine(toolbar)
-    expect(line.getAttribute('tabindex')).toBeNull()
-    expect(tabStops(toolbar).some((stop) => reads(stop, line))).toBe(false)
-    expect(toolbar.contains(line)).toBe(true)
-  })
-})
-
-/**
- * **양수 `tabindex`는 쓰지 않는다.** 위 `tabStops`가 *"DOM 순서 = 탭 순서"*에 기대고 있으므로,
- * 양수가 하나라도 들어오면 이 파일의 수가 전부 거짓말이 된다. 그 전제를 값으로 못박는다.
- */
-describe('탭 순서가 DOM 순서다 — 양수 `tabindex`가 없다', () => {
-  it.each(STATES)('$name', ({ open }) => {
-    const positives = [...open().toolbar.querySelectorAll('[tabindex]')].filter(
-      (el) => Number(el.getAttribute('tabindex')) > 0,
-    )
-
-    expect(positives).toEqual([])
+  it('잠기면 판정 밖의 패턴 · 별칭까지 다 꺼지고 전부 잠근 사람을 말한다', () => {
+    const { items } = readItems(draw(structureRowItems(structureCommands({ selectedNodeId: 'n-root', lock: LOCK }), unused)))
+    expect(items.filter((drawn) => !drawn.off)).toEqual([])
+    expect(items.filter((drawn) => !(drawn.reason ?? '').includes('보라'))).toEqual([])
   })
 })

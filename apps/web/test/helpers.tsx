@@ -54,6 +54,7 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     createMenu: notStubbed('createMenu'),
     updateMenu: notStubbed('updateMenu'),
     deleteMenu: notStubbed('deleteMenu'),
+    deleteMenuCascade: notStubbed('deleteMenuCascade'),
     createPage: notStubbed('createPage'),
     updatePage: notStubbed('updatePage'),
     deletePage: notStubbed('deletePage'),

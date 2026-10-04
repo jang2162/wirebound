@@ -271,7 +271,7 @@ describe('«넣기» 단추 — 계획 D6 의 표', () => {
     expect(shellStore().getState().selectedNodeId).toBe(node.id)
   })
 
-  it('고른 노드를 남이 잡았다 → 넣지 않음 · 트리 상태줄과 같은 문장', async () => {
+  it('고른 노드를 남이 잡았다 → 넣지 않음 · 트리의 꺼진 항목과 같은 문장', async () => {
     const sent = await openWithPalette()
     await select('n-text')
     await act(async () => shellStore().setLocks([{ pageId: PAGE_ID, nodeId: 'n-text', userId: 'u-bora', userName: '보라' }]))

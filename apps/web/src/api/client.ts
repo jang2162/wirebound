@@ -222,13 +222,15 @@ export interface ApiClient {
     options?: WriteOptions,
   ): Promise<MenuNode>
   /**
-   * 메뉴 노드를 지운다. **자식 메뉴·페이지가 있으면 서버가 409를 낸다.**
-   *
-   * **실측**(api 하네스): 자식 메뉴만 있는 메뉴와 페이지만 있는 메뉴가 **둘 다** 409이고
-   * 코드·문장이 같다(`conflict` / `하위 메뉴나 페이지가 있어 삭제할 수 없습니다`).
-   * 둘 다 없으면 204다. `tree/tree-actions.ts`의 `remove`가 두 배열을 다 보는 근거다.
+   * 메뉴 노드를 지운다. **자식 메뉴·페이지가 있으면 서버가 409를 낸다**(`conflict` / `하위 메뉴나 페이지가 있어 삭제할 수 없습니다`).
+   * 하위가 있는 메뉴는 `deleteMenuCascade`로 지운다.
    */
   deleteMenu(projectId: string, nodeId: string): Promise<void>
+  /**
+   * 메뉴와 그 밑의 메뉴 · 페이지를 함께 지운다(apps/api README «메뉴 연쇄 삭제»). `expect`는 확인 상자가 보인 수다 — 서버가 다시 센
+   * 수와 다르면 409 이고 이슈(`MENU_SUBTREE_CHANGED`)의 `subtree`가 지금 수다. 지우기 직전 서버가 찍은 안전망 스냅샷을 돌려준다.
+   */
+  deleteMenuCascade(projectId: string, nodeId: string, expect: SubtreeCounts): Promise<MenuCascadeResult>
   /**
    * 페이지를 만든다. 서버가 빈 `Page` 문서를 기본 스키마로 채워 준다(README).
    *
@@ -597,7 +599,24 @@ export interface ApiErrorIssue {
   current?: string | null
   /** 테마 업로드의 `manifest` 이슈가 든 원래 코드(`validateManifest` 의 코드 — api README 「테마 패키지와 프로젝트 테마」). */
   manifestCode?: string
+  /** 메뉴 연쇄 삭제의 수가 서버와 다를 때 지금 수(`MENU_SUBTREE_CHANGED`). */
+  subtree?: SubtreeCounts
 }
+
+/** 메뉴 연쇄 삭제의 수 — 밑의 메뉴 수(자기 빼고) · 자기와 밑에 매인 페이지 수(`deleteMenuCascade`). */
+export interface SubtreeCounts {
+  menus: number
+  pages: number
+}
+
+/** 메뉴 연쇄 삭제의 답(`deleteMenuCascade`). */
+export interface MenuCascadeResult {
+  deleted: SubtreeCounts
+  safetySnapshot: { id: string; tag: string }
+}
+
+/** 연쇄 삭제의 수가 서버와 다를 때의 이슈 코드 — 서버 `routes/menu.ts`의 `MENU_SUBTREE_CHANGED`와 같은 글자다. */
+export const MENU_SUBTREE_CHANGED = 'menu-subtree-changed'
 
 /**
  * 요청이 실패했을 때 클라이언트가 던지는 오류.

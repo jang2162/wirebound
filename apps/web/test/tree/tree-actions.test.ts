@@ -11,6 +11,7 @@ import {
   flattenMenus,
   menuOutdentTarget,
   previousMenuSibling,
+  menuSubtree,
   treeAbilities,
   treeSpot,
 } from '../../src/tree/tree-actions'
@@ -66,17 +67,31 @@ describe('treeAbilities', () => {
     })
   })
 
-  it('페이지를 가진 메뉴는 지울 수 없다', () => {
-    // 서버가 409로 막는다(`apps/api/README.md` 「엔드포인트」). 눌러 봐야 실패할 버튼을 열어 두지 않는다.
-    const tree = [menu('m1', { pages: [page('pg1')] })]
+  it('하위(페이지 · 자식 메뉴)가 있는 메뉴도 지울 수 있다 — 확인 상자가 연쇄 삭제로 보낸다', () => {
+    // 하위가 있으면 `askRemove`가 확인 상자를 연다(`src/tree/use-tree-commands.tsx` · `../panels/menu-cascade-delete.test.tsx`).
+    const withPage = [menu('m1', { pages: [page('pg1')] })]
+    const withChild = [menu('m1', { children: [menu('m2')] })]
 
-    expect(treeAbilities(tree, { kind: 'menu', id: 'm1' }).remove).toBe(false)
+    expect(treeAbilities(withPage, { kind: 'menu', id: 'm1' }).remove).toBe(true)
+    expect(treeAbilities(withChild, { kind: 'menu', id: 'm1' }).remove).toBe(true)
+    // 트리에 없는 메뉴는 여전히 못 지운다(`NOTHING`).
+    expect(treeAbilities(withChild, { kind: 'menu', id: 'm-gone' }).remove).toBe(false)
   })
 
-  it('자식 메뉴를 가진 메뉴는 지울 수 없다', () => {
-    const tree = [menu('m1', { children: [menu('m2')] })]
-
-    expect(treeAbilities(tree, { kind: 'menu', id: 'm1' }).remove).toBe(false)
+  it('menuSubtree — 밑의 메뉴 수(자기 빼고)와 페이지(트리가 그리는 차례)', () => {
+    const tree = [
+      menu('m1', {
+        pages: [page('pg-b', { sortOrder: 1 }), page('pg-a', { sortOrder: 0 })],
+        children: [menu('m2', { pages: [page('pg-c')], children: [menu('m3')] })],
+      }),
+      menu('m4', { sortOrder: 1, pages: [page('pg-out')] }),
+    ]
+    const subtree = menuSubtree(tree, 'm1')
+    expect(subtree?.menus).toBe(2)
+    expect(subtree?.pages.map((item) => item.id)).toEqual(['pg-a', 'pg-b', 'pg-c'])
+    expect(menuSubtree(tree, 'm3')).toEqual({ title: 'm3', menus: 0, pages: [] })
+    expect(menuSubtree(tree, 'm-gone')).toBeNull()
+    expect(menuSubtree(null, 'm1')).toBeNull()
   })
 
   it('형제 셋 중 가운데 메뉴는 위·아래·들여쓰기가 다 된다', () => {

@@ -42,7 +42,7 @@ const METHODS = [
   'listMyTokens', 'revokeMyToken', 'revokeAllMyTokens', 'changePassword',
   'listMembers', 'addMember', 'updateMemberRole', 'removeMember',
   'getTree',
-  'createMenu', 'updateMenu', 'deleteMenu',
+  'createMenu', 'updateMenu', 'deleteMenu', 'deleteMenuCascade',
   'createPage', 'updatePage', 'deletePage', 'getPage', 'importPage',
   'patchOps', 'listMyRevisions', 'listRevisionsBefore',
   'listComments', 'createComment', 'updateComment', 'deleteComment', 'renumberComments',
@@ -120,6 +120,7 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   createMenu: ['../src/tree/use-tree-commands.tsx'],
   updateMenu: ['../src/tree/use-tree-commands.tsx'],
   deleteMenu: ['../src/tree/use-tree-commands.tsx'],
+  deleteMenuCascade: ['../src/tree/use-tree-commands.tsx'],
   createPage: ['../src/tree/use-tree-commands.tsx'],
   // **부르는 자리가 둘이다.** 트리 훅은 제목·소속 메뉴·순서를 고치고, 설명 탭은
   // `description` 하나를 고친다 — **본문의 키가 겹치지 않아** 두 자리가 서로의 값을

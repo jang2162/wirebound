@@ -1,113 +1,83 @@
 /**
- * 두 툴바(구조·메뉴) 아래에 서는 **상태줄 한 줄**의 문안.
+ * 두 트리(구조 · 메뉴)의 **꺼진 항목 하나가 드는 이유**의 문안.
  *
- * # 왜 이 줄이 있나
+ * # 어디에 붙나 — 꺼진 항목의 `title` 과 `aria-description`
  *
- * 비활성 버튼의 이유가 `title`에만 있으면 거의 안 보인다. **재 본 값:** 페이지를 막 열면(루트가 자동
- * 선택된다 — `store/editor-store.ts`의 `#selectionFor`) **구조 도구 일곱 중 여섯,
- * 메뉴 도구 아홉 중 여섯이 꺼져 있다.** 첫 화면의 대부분이 회색인데 그 이유는
- * **마우스를 1초 이상 올려야** 뜨고, **`disabled` 버튼은 탭 순서에서 빠지므로 키보드
- * 사용자는 영영 볼 수 없으며**, 터치에서는 아예 뜨지 않는다.
+ * 줄 행동(`+` · `…` — `panels/tree-row-actions.tsx`)의 항목과 트리 안의 꺼지는 단추는 꺼졌을 때 이 문장을 `title`(마우스를 올리면 보인다)과
+ * `aria-description`(보조 기술이 그 항목의 설명으로 읽는다)에 **같은 문장으로** 든다. 켜진 항목에는 둘 다 없다 — 켜진 항목에 붙일 «왜 회색인가»가
+ * 없다. 트리 아래에 늘 서는 이유 줄은 없다 — 꺼진 것에 마우스를 올려야 이유가 보인다.
  *
- * 그래서 **마우스를 안 올려도 보이는 자리**로 이유 하나를 꺼낸다. 대가는 세로 한 줄을
- * 상시 차지하는 것이고(`shell.css`의 `.wb-shell-structure-status`가 그 값을 갖는다),
- * 그것은 받아들이기로 한 것이다.
+ * **잃은 것 — 키보드로 이유에 닿는 자리.** 꺼진 메뉴 항목은 화살표가 건너뛰고(`shell/action-menu.tsx`), 꺼진 `<button>`은 탭 순서에서
+ * 빠진다. 그래서 키보드 사용자는 이 문장에 포커스로 닿지 못한다 — 열두 상태의 표는 `test/panels/toolbar-status-reach.test.tsx`가 갖는다.
  *
- * # 나열하지 않는다 — 이 파일의 어려운 부분이 그것이다
+ * # 항목 하나의 이유다 — 무리의 이유가 아니다
  *
- * 꺼진 것이 여섯이면 이유도 여섯이다. **여섯을 나열하면 그 줄이 노이즈가 되고**, 상시
- * 보이는 자리라 노이즈의 값이 특히 비싸다. 그래서 이 줄이 답하는 질문을 좁힌다:
+ * 각 함수는 **꺼진 항목 하나**에 대해 «그 항목이 지금 왜 꺼졌나»를 한 문장으로 낸다. 무리 전체를 한 문장으로 말하는 꼴(«자식을 담지 못하는
+ * 타입입니다» · «형제가 없어 …»)은 항목에 붙이면 엉뚱한 항목(«위로»)에 붙는다 — 그 자리는 항목마다의 조건 표(`STRUCTURE_WHY_DISABLED` ·
+ * `MENU_WHY_DISABLED`)가 맡는다. 이 파일이 그 표 **위에** 세우는 칸은 **표가 말하지 못하는 원인**뿐이다 — 잠금 · 고른 것이 없음 · 고른 것이
+ * 문서(트리)에 없음 · 여럿을 고름 · 보내는 중. 그 원인이 서면 표의 조건은 거짓이 된다(잠긴 루트에 «루트가 아닌 노드를 고르세요»는 지금
+ * 꺼진 까닭이 아니다).
  *
- * > **지금 고른 것이 무엇이라서 그런가** — 한 문장으로.
+ * ## 차례 — 잠금이 위다
  *
- * 사다리를 위에서부터 내려가며 **처음 맞는 것 하나만** 말한다. 나머지 이유는 그대로
- * `title`에 남는다(**남긴 판단**: 이 줄은 *대표* 이유 하나를 말하므로, 지우면 나머지는
- * 갈 곳이 없다. 둘은 겹치는 것이 아니라 **결이 다르다** — 이 줄은 *"고른 것이 무엇인가"*,
- * `title`은 *"그 버튼 하나가 활성이려면 무엇이 필요한가"*다).
+ * **화면에 다른 단서가 없는 것이 위다.** 잠긴 노드 자신에게는 *"○○ 편집 중"* 배지가 붙지만(`panels/structure-tree.tsx`) **그 조상**은 배지
+ * 없이 회색이 된다 — 그 자리가 곧 자동 선택된 루트라 페이지를 열어 둔 채 남이 아무 노드나 잡으면 루트 줄이 `aria-current`인 채 꺼지고 그
+ * 이유가 화면에 없다. 그래서 잠금이 표의 조건보다 먼저다. **«바꿀 수도 없습니다»가 참인 것은 우측 패널이 같은 `lockedBy` 값으로 함께 꺼지기
+ * 때문이다** — 두 표면의 범위가 같다는 것을 재는 것은 `test/lock/props-lock.test.tsx`의 «꺼진 항목이 이름을 말하는 판과 …»다. **문장을
+ * 좁히려면 그 케이스부터 본다.**
  *
- * # 사다리의 순서를 정한 두 규칙
+ * **잠금이 «문서에 없다»보다 먼저인 까닭은 하나 더 있다** — 잠기면 판정이 `NOTHING`이라 `addAfter` · `remove`가 둘 다 꺼지는데, 그 값은
+ * «문서에 없다»가 읽는 값과 같다. 순서를 뒤집으면 잠긴 자리에서 없는 노드 이야기가 나온다.
  *
- * 1. **화면에 다른 단서가 없는 것이 위다.** 잠금이 맨 위인 이유가 이것이다 — 잠긴 노드
- *    자신에게는 *"○○ 편집 중"* 배지가 붙지만(`panels/structure-tree.tsx`), **그 조상**은
- *    배지 없이 회색이 된다. 그 자리가 곧 자동 선택된 루트라 **페이지를 열어 둔 채 남이
- *    아무 노드나 잡으면** 루트 줄이 `aria-current`인 채 `disabled`가 되고 이유가 화면
- *    어디에도 없다. 반대로 형제 자리(맨 앞·맨 뒤)는 **트리를
- *    보면 보이므로** 사다리에 두지 않는다.
+ * ## «안 골랐다» 칸이 둘로 갈린다 — 페이지 잠금
  *
- *    **이 칸은 *"잠겨서 꺼졌다"*를 말한다** — 잠금이 판정(`structureAbilities`)을 끄므로
- *    아래 칸들과 성질이 같다: 아래 칸들도 전부 *"이래서 회색이다"*를 말한다. 맨 위인 근거는
- *    단서가 없다는 것이다.
+ * 고른 것이 없어도 쓸 수 있는 조작이 둘이고(`패턴 넣기` · `프리셋`), 그 둘은 **페이지에 남의 잠금이 하나라도 있으면 함께 꺼진다**
+ * (`panels/structure-toolbar.tsx`의 `patternLocked` · `presetLocked`). 그때 «고르면 편집할 수 있습니다»는 페이지 전체가 잠겨 고를 줄이 하나도
+ * 없는 판에서도 고르라고 말한다. 그래서 안 고른 판에 페이지 잠금이 있으면 원인(남이 편집 중)을 말한다.
  *
- *    **«바꿀 수도 없습니다»가 참인 것은 우측 패널이 같은 `lockedBy` 값으로 함께 꺼지기
- *    때문이다.** 우측 패널의 위젯이 살아 있으면 그 말을 하는 동안 값이 실제로 나가고 423을
- *    받는다. 두 표면의 범위가 같다는 것을 재는 것은
- *    `test/lock/props-lock.test.tsx`의 `상태줄이 이름을 말하는 판과 …`다. **문장을 좁히려면
- *    그 케이스부터 본다** — 좁히면 회색의 이유가 화면에서 사라진다.
- * 2. **무리가 통째로 죽었을 때만 말한다.** `위로`·`아래로` 중 하나라도 살아 있으면 그
- *    무리는 죽지 않았다 — 그때 *"맨 앞이라 위로가 안 됩니다"*를 띄우면 선택을 옮길 때마다
- *    문장이 바뀌어 줄이 깜빡인다.
- *
- * # «안 골랐다» 칸이 둘로 갈린다 — 페이지 잠금
- *
- * **두 규칙이 여기서 같은 답을 낸다.** 고른 것이 없어도 쓸 수 있는 조작이 둘이고
- * (`패턴 넣기`·`프리셋` — 선택이 없어도 자리가 정해진다), 그 둘은 **페이지에 남의 잠금이
- * 하나라도 있으면 함께 꺼진다**(`panels/structure-toolbar.tsx`의 `patternLocked`·
- * `presetLocked`). 그래서 *"안 골랐다"* 한 문장이면 두 상태를 덮는다.
- *
- * **잰 값(셸을 띄워 세 상태를 나란히 본다).**
- *
- * | 상태 | 도구 아홉 | 트리 줄 | «안 골랐다» 한 문장으로 말하면 |
- * |---|---|---|---|
- * | 안 골랐다 · 잠금 없음 | 일곱 회색 · **패턴·프리셋 켜짐** | 전부 켜짐 | *"고르면 편집할 수 있습니다"* — 참이다 |
- * | 안 골랐다 · 남의 잠금 하나(`n-1`) | **아홉 다 회색** | 셋 켜짐 · 셋 회색 · 배지 하나 | 같은 문장 — **왜 아홉이 회색인지 안 말한다** |
- * | 안 골랐다 · 페이지 전체 잠김 | **아홉 다 회색** | **전부 회색** | 같은 문장 — **고를 수 있는 줄이 하나도 없는데 고르라고 한다** |
- *
- * 규칙 1: 잠긴 줄에는 배지가 붙지만 *"그래서 `프리셋`이 회색이다"*는 화면 어디에도 없고,
- * 셋째 줄에서는 **모든 줄이 회색인 이유**가 통째로 없다. 규칙 2: 선택 없이 쓸 수 있는
- * 무리가 **정확히 그때 통째로 죽는다** — 잠금이 없으면 둘 다 켜져 있으므로 이 칸은
- * 깜빡이지 않는다.
- *
- * **문장이 «고르면 된다»를 되풀이하지 않는 것이 판단이다.** 둘째 줄에서는 고르는 것이
- * 실제로 답이지만 셋째 줄에서는 아니고, 이 함수는 둘을 가르지 못한다(가르려면 *"고를 수
- * 있는 줄이 하나라도 있나"*라는 **새 판정**이 필요하고 그것은 이 파일의 마지막 절이
- * 금지하는 것이다). 그래서 **둘 다에서 참인 것만** 말한다 — 지금 쓸 수 있는 도구가
- * 없다는 것과 그 원인. 고르면 되는지는 트리가 회색으로 말한다(규칙 1의 반대쪽 —
- * *"트리를 보면 보이는 것"*).
- *
- * # 다 켜져 있으면 빈 문자열이다
- *
- * **자리는 지키되 글자를 두지 않는다.** 이 줄의 계약이 *"왜 회색인가"*이므로 회색이 없으면
- * 할 말이 없다. 빈 줄이 레이아웃을 흔드는 것은 CSS의 `min-height`가 막는다 — 상시 보이는
- * 자리에 *"모두 쓸 수 있습니다"* 같은 문장을 두면, 정작 말할 것이 생겼을 때 눈이 그 자리를
- * 이미 무시하고 있다.
- *
- * **메뉴 쪽에는 "다 켜진 상태"가 아예 없다** — `옮기기`(reparent)가 메뉴 선택에서 **언제나**
- * 꺼진다(`tree/tree-actions.ts`: 메뉴는 `reparent: false`). 그래서 그 하나만 꺼진 상태도
- * 빈 문자열이다: 그 버튼을 말하려면 사다리 규칙 2를 어겨야 하고, 그 이유는 `title`에 있다.
+ * **패턴 · 프리셋 · 별칭은 판정 키가 없다** — 각자 잠금(별칭은 선택의 개수 · 있음까지)으로만 꺼지므로 그 까닭만 말한다. 패턴 · 프리셋은 선택이
+ * 없어도 되는 조작이라 «노드를 고르면 …»을 붙이지 않는다 — 붙이면 없는 전제조건을 만든다.
  *
  * # 판정을 두 벌로 만들지 않는다
  *
- * 이 파일은 **판정하지 않는다.** 무엇을 할 수 있는지는 `edit/structure-actions.ts`의
- * `structureAbilities`와 `tree/tree-actions.ts`의 `treeAbilities`가 정하고, 여기서는 그
- * 결과(`abilities`)와 **선택 자체의 성질**(잠금·루트·종류)만 읽는다. 루트인지도 다시
- * 판정하지 않고 `document.root.id`와의 **id 비교**를 호출자가 넘긴다.
+ * 이 파일은 **판정하지 않는다.** 무엇을 할 수 있는지는 `edit/structure-actions.ts`의 `structureAbilities` · `selectionAbilities`와
+ * `tree/tree-actions.ts`의 `treeAbilities`가 정하고, 여기서는 그 결과(`abilities`)와 **선택 자체의 성질**(잠금 · 루트 · 개수)만 읽는다.
+ * 루트인지도 다시 판정하지 않고 `document.root.id`와의 **id 비교**를 호출자가 넘긴다.
  *
- * **순수 함수이고 React·DOM을 모른다** — 두 툴바가 같은 어휘를 쓰는지, 상태마다 무엇이
- * 나오는지가 화면을 지나지 않고 재진다.
+ * **React · DOM 을 모른다** — 상태마다 어느 항목에 무엇이 붙는지가 화면을 지나지 않고 재진다(`test/panels/toolbar-status.test.ts`). 항목마다의
+ * 조건 표는 `./tree-row-actions.tsx`가 갖는다 — 그 파일이 이 파일의 함수를 부르고 이 파일이 그 표를 읽어 두 모듈이 서로를 부르지만, 둘 다
+ * 함수 몸 안에서만 쓰므로 적재 순서와 무관하다.
  */
 import { MAX_OPS_PER_EDIT, type NodeLock } from '@wirebound/schema'
-import type { StructureAbilities } from '../edit/structure-actions'
+import { MULTI_DISABLED, MULTI_WHY_DISABLED, type StructureAbilities } from '../edit/structure-actions'
 import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
+import { MENU_WHY_DISABLED, STRUCTURE_WHY_DISABLED } from './tree-row-actions'
+
+/** 구조 트리에서 고른 노드가 없을 때 — 고르면 된다(페이지에 남의 잠금이 없는 판). */
+export const PICK_NODE_REASON = '트리에서 노드를 고르면 편집할 수 있습니다'
+
+/** 고른 노드가 문서에 없을 때의 문장(`structureItemReason` · `palette/palette-add.ts`). */
+export const NOT_IN_DOCUMENT_STATUS = '고른 노드가 문서에 없습니다'
 
 /**
- * 구조 트리 아래 상태줄 문안. 할 말이 없으면 `''`다.
- *
- * `isRoot`를 인자로 받는 것은 위 머리말의 마지막 절이다 — 루트 판정을 여기서 다시 하면
- * 문서 순회가 한 벌 더 생기고, `structureAbilities`가 이미 지나간 그 판정과 갈릴 수 있다.
+ * 메뉴 트리의 조작이 나가 있는 동안(`busy`) — 항목이 판정과 무관하게 전부 꺼진다(`tree/use-tree-commands.tsx`의 조작 잠금). 곧 풀릴 상태라
+ * 판정 문안(«메뉴를 고르세요»)을 붙이면 거짓말이다.
  */
-export function structureStatus(input: {
+export const BUSY_REASON = '조작을 보내는 중입니다'
+
+/**
+ * 메뉴 트리에서 고른 것이 트리에 없을 때 — 남이 지웠거나 다른 세션이 트리를 바꾼 뒤 다시 받기 전의 창이다(`treeAbilities` 머리말). 찾은 것은
+ * 메뉴든 페이지든 `rename`이 참이라 `!rename`이 곧 이 상태다.
+ */
+export const MISSING_IN_TREE_REASON = '고른 것이 트리에 없습니다'
+
+/** 페이지 줄 `…`의 «JSON 내보내기»가 꺼졌을 때 — 내보내기는 한 번에 하나다(`panels/page-json-export.ts`). */
+export const EXPORT_BUSY_REASON = '페이지를 내보내는 중입니다'
+
+/** 구조 트리의 꺼진 항목 하나의 이유를 지을 때 읽는 것 — 판정의 결과와 선택 자체의 성질. */
+export interface StructureReasonInput {
   selectedNodeId: string | null
-  /** 고른 노드 수(여러 노드 선택). 둘 이상이면 «여럿» 칸이 잠금 다음에 선다. 빠뜨리면 1 이다. */
+  /** 고른 노드 수(여러 노드 선택). 빠뜨리면 1 이다. */
   count?: number
   /** 고른 노드 가운데 남이 잡은 것 — 여럿일 때 기준 노드 밖의 잠금도 말한다. */
   anyLock?: NodeLock | null
@@ -116,57 +86,101 @@ export function structureStatus(input: {
   /** 고른 노드를 막는 **남의** 잠금(`store.lockedBy`). 없으면 `null`. */
   lock: NodeLock | null
   /**
-   * **이 페이지에 남의 잠금이 하나라도 있는가** — `store.lockedBy(document.root.id)`가 낸
-   * 것이고, `useStructureCommands`가 `프리셋`을 끄는 데 쓰는 **그 값 그대로**다.
-   * 판정을 새로 짓지 않는다.
-   *
-   * **`lock`과 다른 값이다.** `lock`은 *고른 노드*를 막는 것이라 고른 것이 없으면 언제나
-   * `null`이고, 이것은 선택과 무관하다. 이 칸이 쓰이는 자리는 **고른 것이 없을 때뿐**이다
-   * (위 머리말의 표) — 고른 것이 있으면 아래 칸들이 *"고른 것이 무엇이라서"*를 답한다.
+   * **이 페이지에 남의 잠금이 하나라도 있는가** — `store.lockedBy(document.root.id)`가 낸 것이고, `useStructureCommands`가 `프리셋`을 끄는 데
+   * 쓰는 그 값 그대로다. 쓰이는 자리는 **고른 것이 없을 때뿐**이다(머리말 «안 골랐다 칸») — 고른 것이 있으면 `lock`과 항목의 조건이 답한다.
    */
   pageLock: NodeLock | null
   abilities: StructureAbilities
-}): string {
-  const { abilities } = input
-
-  // **«안 골랐다»가 두 칸이다**(머리말의 표). 선택 없이 쓸 수 있는 둘이 함께 죽는 자리라
-  // 규칙 2를 지나고, 그 이유가 화면에 없어 규칙 1로도 위다.
-  if (input.selectedNodeId === null && input.pageLock !== null) {
-    return `${input.pageLock.userName}님이 편집 중이라 지금은 쓸 수 있는 도구가 없습니다`
-  }
-  if (input.selectedNodeId === null) return '트리에서 노드를 고르면 편집할 수 있습니다'
-  // **사다리 규칙 1의 자리다.** 잠긴 노드 자신에게는 배지가 붙지만 그 조상에게는 안 붙는다 —
-  // 자동 선택된 루트가 늘 그 조상이다.
-  //
-  // **문장이 두 가지를 말하는 것은 둘 다 참이기 때문이다.** 잠금이 판정을 끄므로 이
-  // 줄이 **회색 일곱 개의 유일한 이유**이고, *"고를 수 없다"*만 말하면 정작 사용자가 묻는
-  // 것(*"왜 다 회색인가"*)에 답하지 않는다. **이유는 하나이므로 문장도 하나다** — 원인
-  // (남이 편집 중)에 결과 둘을 잇는다.
-  if (input.lock !== null) return lockedSelectionStatus(input.lock.userName)
-  // **여럿을 고른 판** — 고른 것 가운데 남이 잡은 것이 있으면 그것이 «삭제»가 꺼진 이유다. 아니면 순서 · 계층이 꺼진 이유를 말한다.
-  if ((input.count ?? 1) > 1) {
-    if (input.anyLock !== null && input.anyLock !== undefined) return `${input.anyLock.userName}님이 편집 중인 노드가 있어 함께 지울 수 없습니다`
-    return `${input.count}개를 골랐습니다 — 순서 · 계층 옮기기는 하나를 골랐을 때만 됩니다`
-  }
-  if (input.isRoot) return '루트라 삭제·순서·계층을 바꿀 수 없습니다'
-  // 루트가 아닌데 전부 꺼졌으면 그 노드가 문서에 없다 — 남이 그 노드를 지운 뒤 재조회
-  // 전까지의 상태다. 찾은 비루트 노드는 `addAfter`·`remove`가 언제나 참이기 때문이다.
-  //
-  // **`NOTHING`을 내는 갈래가 둘이다**(잠금과 «문서에 없다»). 이 칸이 잠금을 삼키지
-  // 않는 것은 위 칸이 먼저 답하기 때문이고, 그것이 사다리에서 잠금이 **위**여야 하는
-  // 두 번째 근거다 — 순서를 뒤집으면 잠긴 자리가 *"고른 노드가 문서에 없습니다"*로 보인다.
-  if (!abilities.addAfter && !abilities.remove) return NOT_IN_DOCUMENT_STATUS
-  // **카탈로그 제약은 화면 어디에도 안 보인다**(사다리 규칙 1) — 형제 자리와 달리 트리를
-  // 봐도 알 수 없으므로 위에 둔다.
-  if (!abilities.addInside) return '자식을 담지 못하는 타입입니다'
-  if (!abilities.moveUp && !abilities.moveDown) return '형제가 없어 순서를 바꿀 수 없습니다'
-
-  return ''
 }
 
 /**
- * 고른 노드를 남이 잡았을 때의 문장 — 상태줄 사다리의 맨 위 칸(`structureStatus`). 하단 판 카드의 «넣기» 단추가 같은 판에서 같은 문장을
- * 낸다(`palette/palette-add.ts`).
+ * 구조 트리 항목 `key`가 꺼졌을 때의 이유. 켜져 있으면 `undefined`다.
+ *
+ * 차례: 안 골랐고 페이지에 남의 잠금 → 안 골랐다 → 고른 노드를 남이 잡음 → 여럿(«삭제»의 남의 잠금 · 순서 · 계층의 «하나일 때만») → 문서에
+ * 없다 → 그 항목의 조건(`STRUCTURE_WHY_DISABLED` — 뿌리는 이것이 «루트가 아닌 노드를 고르세요»로 말한다).
+ */
+export function structureItemReason(input: StructureReasonInput, key: keyof StructureAbilities): string | undefined {
+  if (input.abilities[key]) return undefined
+  if (input.selectedNodeId === null) {
+    return input.pageLock === null ? PICK_NODE_REASON : `${input.pageLock.userName}님이 편집 중이라 지금은 쓸 수 있는 도구가 없습니다`
+  }
+  if (input.lock !== null) return lockedSelectionStatus(input.lock.userName)
+  if ((input.count ?? 1) > 1) {
+    if (key === 'remove' && input.anyLock !== null && input.anyLock !== undefined) {
+      return `${input.anyLock.userName}님이 편집 중인 노드가 있어 함께 지울 수 없습니다`
+    }
+    if (MULTI_DISABLED.has(key)) return MULTI_WHY_DISABLED
+  }
+  // 루트가 아닌데 «아래 추가» · «삭제»가 함께 꺼졌으면 그 노드가 문서에 없다 — 찾은 비루트 노드는 둘이 언제나 참이다(`structureAbilities`).
+  // 루트는 둘이 늘 꺼져 있으므로 이 칸에서 뺀다 — 고른 노드는 있고 그것이 루트다.
+  if (!input.isRoot && !input.abilities.addAfter && !input.abilities.remove) return NOT_IN_DOCUMENT_STATUS
+  return STRUCTURE_WHY_DISABLED[key]
+}
+
+/** 패턴 넣기가 꺼졌을 때 — 꽂힐 자리를 막은 잠금(`patternLocked` 의 잠금). 잠금이 없으면 `undefined`다. */
+export function patternReason(lock: NodeLock | null): string | undefined {
+  return lock === null ? undefined : `${lock.userName}님이 편집 중이라 패턴을 넣을 수 없습니다`
+}
+
+/** 프리셋이 꺼졌을 때 — 페이지에 남의 잠금이 하나라도 있다(`presetLocked`). 프리셋은 페이지 통째를 바꾼다. */
+export function presetReason(lock: NodeLock | null): string | undefined {
+  return lock === null ? undefined : `${lock.userName}님이 편집 중인 노드가 있어 프리셋을 놓을 수 없습니다`
+}
+
+/**
+ * 별칭 바꾸기가 꺼졌을 때(`aliasLocked`가 참일 때만 부른다) — 하나를 고르지 않았거나 · 고른 노드가 문서에 없거나 · 남이 잡았다. 잠금이
+ * 먼저다(위 «차례»와 같은 까닭).
+ */
+export function aliasReason(input: StructureReasonInput): string {
+  if (input.selectedNodeId === null) return PICK_NODE_REASON
+  if (input.lock !== null) return lockedSelectionStatus(input.lock.userName)
+  if ((input.count ?? 1) > 1) return MULTI_WHY_DISABLED
+  return NOT_IN_DOCUMENT_STATUS
+}
+
+/**
+ * 메뉴 트리 항목 `key`가 꺼졌을 때의 이유. 켜져 있고 보내는 중이 아니면 `undefined`다.
+ *
+ * 차례: 보내는 중(판정이 켠 항목도 꺼진다) → 안 골랐다(그 항목의 조건) → 트리에 없다 → 그 항목의 조건(`MENU_WHY_DISABLED`).
+ */
+export function menuItemReason(
+  input: { selection: TreeSelection | null; busy: boolean; abilities: TreeAbilities },
+  key: keyof TreeAbilities,
+): string | undefined {
+  if (input.busy) return BUSY_REASON
+  if (input.abilities[key]) return undefined
+  if (input.selection !== null && !input.abilities.rename) return MISSING_IN_TREE_REASON
+  return MENU_WHY_DISABLED[key]
+}
+
+/** 꺼진 항목의 이유 — 판정 일곱과 판정 키가 없는 셋(패턴 · 프리셋 · 별칭). 켜진 항목은 `undefined`다. */
+export type StructureWhy = { readonly [K in keyof StructureAbilities | 'pattern' | 'preset' | 'alias']?: string }
+
+/**
+ * 구조 트리 줄 행동이 싣는 이유 전부(`StructureCommands.why`). 판정 키가 없는 셋은 각자 끈 값을 받는다 — 패턴은 꽂힐 자리의 잠금,
+ * 프리셋은 페이지 잠금(`panels/structure-toolbar.tsx`의 `patternLocked` · `presetLocked`), 별칭은 `aliasLocked`.
+ */
+export function structureWhy(
+  input: StructureReasonInput,
+  gates: { patternLock: NodeLock | null; presetLock: NodeLock | null; aliasLocked: boolean },
+): StructureWhy {
+  return {
+    addInside: structureItemReason(input, 'addInside'),
+    addAfter: structureItemReason(input, 'addAfter'),
+    remove: structureItemReason(input, 'remove'),
+    moveUp: structureItemReason(input, 'moveUp'),
+    moveDown: structureItemReason(input, 'moveDown'),
+    indent: structureItemReason(input, 'indent'),
+    outdent: structureItemReason(input, 'outdent'),
+    pattern: patternReason(gates.patternLock),
+    preset: presetReason(gates.presetLock),
+    alias: gates.aliasLocked ? aliasReason(input) : undefined,
+  }
+}
+
+/**
+ * 고른 노드를 남이 잡았을 때의 문장 — 꺼진 항목의 이유에서 잠금 칸(`structureItemReason`). 하단 판 카드의 «넣기» 단추와 편집 단축키의
+ * 하단 바가 같은 판에서 같은 문장을 낸다(`palette/palette-add.ts` · `shell/editor-keys.tsx`).
  */
 export function lockedSelectionStatus(userName: string): string {
   return `${userName}님이 편집 중이라 고를 수도 바꿀 수도 없습니다`
@@ -188,38 +202,4 @@ export function deniedSelectionNotice(userNames: readonly string[]): string {
  */
 export function selectionCapNotice(): string {
   return `한 번에 고를 수 있는 노드는 ${MAX_OPS_PER_EDIT}개까지입니다`
-}
-
-/** 고른 노드가 문서에 없을 때의 문장(`structureStatus` · `palette/palette-add.ts`). */
-export const NOT_IN_DOCUMENT_STATUS = '고른 노드가 문서에 없습니다'
-
-/**
- * 메뉴 트리 아래 상태줄 문안. 할 말이 없으면 `''`다.
- *
- * **`busy`가 맨 위이고 판정 문안을 붙이지 않는다.** 조작이 나가 있는 동안은 줄 행동의 항목이 전부
- * 꺼지는데(`tree/use-tree-commands.tsx`의 조작 잠금), 그때 *"메뉴를 고르세요"*가 뜨면 거짓말이다 —
- * 곧 풀릴 상태이고 고른 것은 이미 있다. `panels/tree-row-actions.tsx`의 항목 `title`이 같은 이유로 `busy`를
- * 안 보는 것과 한 짝이다.
- */
-export function menuStatus(input: {
-  selection: TreeSelection | null
-  busy: boolean
-  abilities: TreeAbilities
-}): string {
-  const { abilities } = input
-
-  if (input.busy) return '조작을 보내는 중입니다'
-  if (input.selection === null) return '메뉴나 페이지를 고르면 편집할 수 있습니다'
-  // 찾지 못한 선택에만 `NOTHING`이 온다 — 찾은 것은 메뉴든 페이지든 `rename`이 참이다.
-  // 남이 지웠거나 다른 세션이 트리를 바꾼 뒤에 실제로 생기는 상태다(`treeAbilities` 머리말).
-  if (!abilities.rename) return '고른 것이 트리에 없습니다'
-  // 페이지는 컨테이너가 아니고(하위 추가 불가) 계층 이동도 성립하지 않는다 — 넷이 함께
-  // 꺼지는 하나의 성질이라 한 문장이다.
-  if (input.selection.kind === 'page') return '페이지라 하위 추가·계층 이동이 안 됩니다'
-  // **두 배열을 다 말하지 않는다** — `title`이 그 조건을 갖는다(하위 메뉴만 있어도, 페이지만
-  // 있어도 서버가 409다). 이 줄이 말하는 것은 *"고른 것이 무엇이라서"*다.
-  if (!abilities.remove) return '하위가 있는 메뉴라 삭제할 수 없습니다'
-  if (!abilities.moveUp && !abilities.moveDown) return '형제가 없어 순서를 바꿀 수 없습니다'
-
-  return ''
 }

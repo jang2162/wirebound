@@ -22,6 +22,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { ApiError, MENU_SUBTREE_CHANGED } from '../api/client'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
 import { MENU_TITLE_CHANGED, PAGE_META_CHANGED, judgeMeta, metaConflict } from '../api/page-meta'
@@ -33,6 +34,7 @@ import { useSessionEpoch } from '../session/session-context'
 import {
   flattenMenus,
   menuOutdentTarget,
+  menuSubtree,
   previousMenuSibling,
   treeAbilities,
   treeSpot,
@@ -144,11 +146,20 @@ export interface TreeCommands {
   /** Enter로 확정. 빈 문자열이면 아무것도 하지 않는다. */
   submitInput: (title: string) => void
   cancelInput: () => void
-  /** 삭제 확인(두 번 누르기의 첫 번째)이 걸려 있으면 `true`. */
+  /** 삭제 확인(두 번 누르기의 첫 번째)이 걸려 있으면 `true`. 하위가 없는 메뉴와 페이지의 길이다. */
   confirmingRemove: boolean
+  /**
+   * 고른 것을 지우려고 묻는다. **하위(메뉴 · 페이지)가 있는 메뉴면 확인 상자**(`removing` — `panels/menu-delete-dialog.tsx`)를, 아니면
+   * 두 번 누르기의 첫 번째(`confirmingRemove`)를 건다.
+   */
   askRemove: () => void
   confirmRemove: () => void
   cancelRemove: () => void
+  /** 연쇄 삭제 확인 상자의 대상. 닫혀 있으면 `null`. 상자의 수는 지금 트리에서 센다(`menuSubtree`) — 보이는 수가 보내는 수다. */
+  removing: RemoveTarget | null
+  /** 상자의 «삭제» — 상자가 보인 수를 싣고 연쇄 삭제를 보낸다. 서버가 다시 센 수가 다르면 트리를 다시 받고 상자를 다시 연다. */
+  confirmCascade: () => void
+  closeRemoving: () => void
   /** 형제 사이에서 한 칸 옮긴다. `-1`이면 위로, `+1`이면 아래로. */
   move: (delta: -1 | 1) => void
   /** 한 단계 안으로 — 앞 형제 메뉴의 마지막 자식이 된다. */
@@ -207,6 +218,15 @@ export interface TreeCommands {
    * 고르지 않는다(누름이 클릭이 아니다 — `drag/use-pointer-drag.ts` 의 «끈 뒤의 클릭을 삼킨다»).
    */
   dropTo: (dragged: TreeSelection, target: MenuDrop) => void
+}
+
+/**
+ * 연쇄 삭제 상자의 대상 — `TreeCommands.removing`. `changed`는 서버가 «그 사이 하위가 바뀌었다»(409 `MENU_SUBTREE_CHANGED`)로 돌려보내
+ * 새 수로 다시 묻는 판이다.
+ */
+export interface RemoveTarget {
+  menuId: string
+  changed: boolean
 }
 
 /** 가져오기 상자의 대상 메뉴 — `TreeCommands.importing`. */
@@ -287,6 +307,7 @@ export function useTreeCommands(props: {
   const [conflict, setConflict] = useState<TitleConflict | null>(null)
   const [editing, setEditing] = useState<TreeEditing | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const [removing, setRemoving] = useState<RemoveTarget | null>(null)
   const [pickingMenu, setPickingMenu] = useState(false)
   const [importing, setImporting] = useState<ImportTarget | null>(null)
   /**
@@ -537,6 +558,7 @@ export function useTreeCommands(props: {
     // **삭제 확인이 함께 풀린다**(확인이 풀리는 조건 중 하나) — 다른 항목에 대고 두 번째
     // 클릭이 되면 사용자가 확인한 것과 지워지는 것이 달라진다.
     setConfirmingRemove(false)
+    setRemoving(null)
   }
 
   /**
@@ -1061,6 +1083,49 @@ export function useTreeCommands(props: {
     )
   }
 
+  /**
+   * 연쇄 삭제를 보낸다(상자의 «삭제»). **싣는 수는 지금 트리에서 센다** — 상자가 그리는 수와 같은 함수(`menuSubtree`)다.
+   *
+   * **열린 페이지가 지운 서브트리 안이면 프로젝트 루트로 `replace` 이동한다** — 페이지 삭제(`confirmRemove`)와 같은 까닭(뒤로 가기가
+   * 지운 페이지로 돌아가면 404 다). 선택은 지운 메뉴의 부모로 간다(메뉴 삭제와 같다).
+   *
+   * **서버가 «수가 바뀌었다»로 돌려보내면 트리를 다시 받고 상자를 다시 연다**(`changed`) — 새 트리로 센 수가 상자에 서고, 사람이 그
+   * 수로 다시 누른다. 그 밖의 실패는 트리의 실패 줄로 간다(상자는 닫힌 채다).
+   */
+  function confirmCascade(): void {
+    if (removing === null || menu === null) return
+    const subtree = menuSubtree(menu, removing.menuId)
+    if (subtree === null) return
+    const target = removing.menuId
+    const parentId = treeSpot(menu, { kind: 'menu', id: target })?.parentId ?? null
+    const wasOpen = pageId !== undefined && subtree.pages.some((page) => page.id === pageId)
+    setRemoving(null)
+    // `run`의 실패 갈래는 `Failure`(문장)만 받는다 — 수가 바뀐 409 인지는 보낸 자리에서 가른다.
+    let changed = false
+    void run(
+      async () => {
+        try {
+          return await api.deleteMenuCascade(projectId, target, { menus: subtree.menus, pages: subtree.pages.length })
+        } catch (caught) {
+          changed = caught instanceof ApiError && caught.issues.some((issue) => issue.code === MENU_SUBTREE_CHANGED)
+          throw caught
+        }
+      },
+      () => {
+        setPicked(parentId === null ? null : { kind: 'menu', id: parentId })
+        if (wasOpen) navigate(`/projects/${projectId}`, { replace: true })
+      },
+      (failure) => {
+        if (!changed) {
+          setFailure(failure)
+          return
+        }
+        setRemoving({ menuId: target, changed: true })
+        void load(() => !unmounted.current, true, gone.current.signal)
+      },
+    )
+  }
+
   return {
     state,
     selection,
@@ -1073,6 +1138,9 @@ export function useTreeCommands(props: {
     submitInput,
     cancelInput: () => setEditing(null),
     confirmingRemove,
+    removing,
+    confirmCascade,
+    closeRemoving: () => setRemoving(null),
     askRemove: () => {
       // **조작이 나가 있으면 확인도 걸지 않는다(`run`과 같은 잠금).** 이 가드가 없으면
       // `busy` 중 `Delete`가 확인을 걸 때 그 확인이 **잠금이 풀린 뒤까지 살아남아**
@@ -1084,6 +1152,14 @@ export function useTreeCommands(props: {
       // 확인을 걸면서 열려 있던 입력과 앞 실패를 함께 지운다 — 한 번에 하나만 진행한다.
       setFailure(null)
       setEditing(null)
+      // **하위가 있는 메뉴는 상자로 묻는다** — 무엇이 함께 지워지는지(수 · 페이지 이름)를 보여야 하고, 두 번 누르기로는 그것을 말할
+      // 자리가 없다. 하위가 없으면 지금의 두 번 누르기 그대로다.
+      const subtree = selection?.kind === 'menu' ? menuSubtree(menu, selection.id) : null
+      if (selection?.kind === 'menu' && subtree !== null && (subtree.menus > 0 || subtree.pages.length > 0)) {
+        setConfirmingRemove(false)
+        setRemoving({ menuId: selection.id, changed: false })
+        return
+      }
       setConfirmingRemove(true)
     },
     confirmRemove,

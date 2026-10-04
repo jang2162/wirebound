@@ -1,7 +1,8 @@
 /**
  * **앱의 모달 하나**(spec `docs/superpowers/specs/2026-09-30-editor-shell-design.md` 「대화 상자」). 스냅샷 · 프로젝트 내보내기(셸이 그린다) ·
- * 페이지 가져오기(메뉴 트리가 그린다 — `panels/page-import-dialog.tsx`)가 에디터 위에서 이 안에 선다. 다른 확인(삭제 · 복원 · 토큰
- * 폐기)은 모달이 아니라 그 자리의 인라인 확인이다 — 모달은 이 하나만 쓴다.
+ * 페이지 가져오기 · 하위가 있는 메뉴의 삭제 확인(메뉴 트리가 그린다 — `panels/page-import-dialog.tsx` · `panels/menu-delete-dialog.tsx`)이
+ * 에디터 위에서 이 안에 선다. 다른 확인(페이지 · 빈 메뉴 삭제 · 복원 · 토큰 폐기)은 모달이 아니라 그 자리의 인라인 확인이다 — 모달은 이
+ * 하나만 쓴다.
  *
  * ## 상자 안의 키는 React 트리를 따라 버블된다 — 키 핸들러가 붙은 상자 안에 그리지 마라
  *
@@ -43,13 +44,19 @@ export function ShellDialog(props: {
   title: string
   /** Escape · 닫기 단추. 부르는 쪽이 `open`을 거짓으로 내린다. */
   onClose: () => void
+  /** 상자의 설명이 되는 요소의 id(`aria-describedby` — 띄어 여럿). 열릴 때 제목과 함께 읽힌다(`panels/menu-delete-dialog.tsx`). */
+  describedBy?: string
   children: ReactNode
 }): ReactElement | null {
   if (!props.open) return null
-  return <OpenDialog title={props.title} onClose={props.onClose}>{props.children}</OpenDialog>
+  return (
+    <OpenDialog title={props.title} onClose={props.onClose} describedBy={props.describedBy}>
+      {props.children}
+    </OpenDialog>
+  )
 }
 
-function OpenDialog(props: { title: string; onClose: () => void; children: ReactNode }): ReactElement {
+function OpenDialog(props: { title: string; onClose: () => void; describedBy: string | undefined; children: ReactNode }): ReactElement {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   /** `showModal`로 섰는가 — 아니면 Escape 를 키 이벤트로 받는다(머리말). */
@@ -113,7 +120,7 @@ function OpenDialog(props: { title: string; onClose: () => void; children: React
   }
 
   return (
-    <dialog ref={ref} className="wb-shell-dialog" aria-labelledby={titleId} onKeyDown={onKeyDown}>
+    <dialog ref={ref} className="wb-shell-dialog" aria-labelledby={titleId} aria-describedby={props.describedBy} onKeyDown={onKeyDown}>
       <div className="wb-shell-dialog-head">
         <h2 id={titleId} className="wb-shell-dialog-title">
           {props.title}

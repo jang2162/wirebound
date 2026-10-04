@@ -906,7 +906,7 @@
 }
 
 /* 메뉴 제목. **버튼이다** — 누르는 것이 "여는 것"이 아니라 "가리키는 것"이고
-   그 효과(단축키 · 상태줄 · 줄 행동이 그 메뉴에 작동한다)가 실재한다. 버튼의 기본 꼴을 벗겨 트리의 한 줄로
+   그 효과(단축키 · 줄 행동이 그 메뉴에 작동한다)가 실재한다. 버튼의 기본 꼴을 벗겨 트리의 한 줄로
    보이게 하되, 왼쪽 정렬과 전체 너비는 페이지 링크와 같은 눈금에 맞춘다. */
 .wb-shell-tree-menu {
   display: block;
@@ -1107,19 +1107,6 @@
   cursor: not-allowed;
 }
 
-/* 트리 아래 상태줄(`panels/menu-tree.tsx`의 `MenuStatusLine` · `panels/toolbar-status.ts`). 구조 쪽과
-   값이 겹치지만 클래스를 나눠 둔다 — 두 트리가 한 화면에 있고 문장이 다르므로, 한쪽의 여백을
-   고칠 때 다른 쪽이 따라 움직이면 안 된다.
-
-   **글자가 없어도 자리를 지킨다**(`min-height`). 안 지키면 선택을 옮길 때마다 그 아래 페이지 JSON 상자가 위아래로 튄다. */
-.wb-shell-menu-status {
-  margin: 8px 0 0;
-  min-height: 15px;
-  color: var(--wb-shell-muted);
-  font-size: 11px;
-  line-height: 15px;
-}
-
 /* 인라인 입력(`panels/tree-input.tsx`). 줄 아래 상자(`.wb-shell-tree-panel` · 구조 트리의 고르개 자리)가 `flex-wrap`이라
    `flex-basis: 100%`로 **자기 줄을 쓰게** 한다 — 입력이 단추 사이에 끼면 무엇을 치고 있는지가 보이지 않는다. */
 .wb-shell-tree-input {
@@ -1131,16 +1118,6 @@
   font: inherit;
   font-size: 12px;
   color: var(--wb-shell-ink);
-}
-
-/* 트리 아래 상태줄(`panels/structure-tree.tsx`의 `StructureStatusLine` · `panels/toolbar-status.ts`).
-   근거는 `.wb-shell-menu-status`와 한 벌이다 — 빈 줄의 자리(`min-height`). */
-.wb-shell-structure-status {
-  margin: 8px 0 0;
-  min-height: 15px;
-  color: var(--wb-shell-muted);
-  font-size: 11px;
-  line-height: 15px;
 }
 
 /* ── 트리 줄 행동(`panels/tree-row-actions.tsx`) ─────────────────────────────────────── */
@@ -1798,7 +1775,7 @@
 /* 남이 그 노드를 잠갔을 때(`panels/property-panel.tsx`). **이 줄이 없으면 «꺼졌다»가 화면에
    안 보인다** — 위 규칙이 `background`와 `color`를 직접 놓으므로 브라우저가 disabled에 주는
    기본 회색이 덮인다(자리를 지키고 색만 죽이는 `.wb-shell-history-step:disabled`와 같은 값).
-   **왜 회색인지는 패널의 안내 줄과 구조 트리의 상태줄이 이름과 함께 말한다.** */
+   **왜 회색인지는 패널의 안내 줄과 구조 트리 줄 행동의 꺼진 항목(`title` · `aria-description`)이 이름과 함께 말한다.** */
 .wb-shell-control:disabled {
   background: var(--wb-shell-chrome);
   color: var(--wb-shell-muted);
@@ -4089,4 +4066,109 @@
   background: var(--wb-shell-chrome);
   font-size: 12px;
   color: var(--wb-shell-muted);
+}
+
+/* 메뉴 연쇄 삭제 상자(`panels/menu-delete-dialog.tsx`). 붉은색(`#b42318`)은 되돌릴 수 없는 것의 몫이다(`.wb-shell-project-danger`) —
+   페이지째 지운다는 경고 상자와 확정 단추가 그것이다. 상자의 폭은 `.wb-shell-dialog` 의 것이다. */
+.wb-shell-menu-delete-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  text-align: left;
+}
+
+.wb-shell-menu-delete-sentence {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 서버가 «그 사이 하위가 바뀌었다»로 돌려보내 새 수로 다시 묻는 판 — 경고가 아니라 알림이라 주황(`.wb-shell-pagejson-icon-warn`)이다. */
+.wb-shell-menu-delete-changed {
+  margin: 0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.wb-shell-menu-delete-warning {
+  border: 1px solid #fecdca;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #fffbfa;
+  color: #b42318;
+}
+
+.wb-shell-menu-delete-warning-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-menu-delete-warning-icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.wb-shell-menu-delete-pages {
+  margin: 6px 0 0;
+  padding-left: 40px;
+}
+
+.wb-shell-menu-delete-page {
+  overflow-wrap: anywhere;
+}
+
+/* «외 N개» — 이름이 아니라 남은 수라 점을 안 찍는다. */
+.wb-shell-menu-delete-rest {
+  list-style: none;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-menu-delete-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-menu-delete-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.wb-shell-menu-delete-cancel {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 6px 14px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+/* 확정 — 글 + 위험 색(설계서 «글만»). 끈 단추는 회색으로 수렴한다(`.wb-shell-project-danger:disabled` 와 같은 판단). */
+.wb-shell-menu-delete-confirm {
+  appearance: none;
+  border: 1px solid #b42318;
+  border-radius: 6px;
+  padding: 6px 14px;
+  background: #b42318;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+}
+
+.wb-shell-menu-delete-confirm:disabled {
+  border-color: var(--wb-shell-line);
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: default;
 }

@@ -60,9 +60,12 @@ export function MetaConflict(props: {
   onDiscard: () => void
   /** 덮기가 나가 있는 동안 둘 다 끈다. */
   disabled?: boolean
+  /** 끈 동안 단추가 드는 이유(`title` · `aria-description`) — 메뉴 트리는 조작이 나가 있는 동안이다(`panels/toolbar-status.ts`의 `BUSY_REASON`). */
+  disabledReason?: string
 }): ReactElement {
   const { what, theirs } = props
   const late = props.late ?? false
+  const reason = props.disabled === true ? props.disabledReason : undefined
   return (
     <div className="wb-shell-meta-conflict" role="alert">
       <p className="wb-shell-meta-conflict-lead">
@@ -72,15 +75,15 @@ export function MetaConflict(props: {
       <p className="wb-shell-meta-conflict-theirs">{shown(what, theirs)}</p>
       <div className="wb-shell-meta-conflict-actions">
         {props.onOverwrite === undefined ? (
-          <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} onClick={props.onDiscard}>
+          <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} title={reason} aria-description={reason} onClick={props.onDiscard}>
             확인
           </button>
         ) : (
           <>
-            <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} onClick={props.onOverwrite}>
+            <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} title={reason} aria-description={reason} onClick={props.onOverwrite}>
               {late ? '지금 글로 덮기' : '내 글로 덮기'}
             </button>
-            <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} onClick={props.onDiscard}>
+            <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} title={reason} aria-description={reason} onClick={props.onDiscard}>
               {late ? '앞서 보낸 글로 두기' : '내 글 버리기'}
             </button>
           </>

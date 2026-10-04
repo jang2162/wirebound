@@ -83,7 +83,7 @@
  *
  * ## 고른 대상이 바뀌면 닫는다 — `openWhile`
  *
- * 트리 줄의 `+` · `…` 는 **고른 줄**에 대한 명령이다 — 항목 · 켜고 끔 · 설명(`aria-describedby` 의 상태줄)이 다 고른 노드의 판정에서 나온다
+ * 트리 줄의 `+` · `…` 는 **고른 줄**에 대한 명령이다 — 항목 · 켜고 끔 · 끈 이유(`title` · `aria-description`)가 다 고른 노드의 판정에서 나온다
  * (`panels/tree-row-actions.tsx` 머리말 «누르면 먼저 그 줄을 고른다»). 메뉴가 열린 채 선택이 다른 길로 옮으면(Cmd+V · Cmd+D 가 넣은 노드를
  * 고름 · 캔버스의 ↓) 메뉴는 연 줄의 이름을 단 채 새 노드의 명령을 든다 — «삭제»가 방금 붙인 노드를 지웠다(Chrome ·
  * `build-test/editor-shortcuts-review-2.test.ts` «R1»). 그래서 그 줄이 고른 줄이 아니게 되면(`openWhile` 이 거짓) 닫는다. **항목을 연 줄의
@@ -130,10 +130,10 @@ export interface ActionMenuItem {
   disabled?: boolean
   /** 되돌리기 어려운 일(삭제) — 색만 바뀐다. */
   danger?: boolean
-  /** 마우스가 머물 때의 설명 — 끈 항목이 왜 꺼졌는지(트리 줄의 `…`). */
+  /** 마우스가 머물 때의 설명 — 끈 항목이 왜 꺼졌는지(트리 줄의 `+` · `…`). */
   title?: string
-  /** 항목의 설명이 되는 요소의 id(`aria-describedby`) — 트리 아래 상태줄. */
-  describedBy?: string
+  /** 보조 기술이 읽는 항목의 설명(`aria-description`) — 끈 항목이 왜 꺼졌는지. 트리 줄은 `title` 과 같은 문장을 싣는다. */
+  description?: string
   /** 글자 앞의 아이콘 — lucide 컴포넌트(머리말 «항목의 아이콘»). */
   icon?: LucideIcon
 }
@@ -315,7 +315,7 @@ export function ActionMenu(props: {
                       className={item.danger === true ? 'wb-shell-action-menu-item wb-shell-action-menu-danger' : 'wb-shell-action-menu-item'}
                       aria-disabled={item.disabled === true ? true : undefined}
                       title={item.title}
-                      aria-describedby={item.describedBy}
+                      aria-description={item.description}
                       onClick={(event) => {
                         if (item.disabled === true) return
                         choose(item, event)

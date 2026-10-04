@@ -95,9 +95,9 @@ import { classDeclarations } from './shell-css-guard'
  * 이름에 `picker`가 든 것으로 넓히면 flex 상자가 다섯이 된다. 그중 셋은 아래
  * `ONE_LINE`이 받는다.
  *
- * **`status`가 함께 든 것은 같은 형태가 설 수 있기 때문이다** — 트리 아래 상태줄(`panels/toolbar-status.ts`)은 지금 flex 상자
- * 안에 서지 않아 `flex-basis`가 없지만, 어느 상자에 넣으며 자기 줄을 주면 고르개와 같은 짝이 생긴다 — 그때 이 파일의 1·2·4번이
- * 그대로 그 짝을 본다. **빈 줄이 자리를 지키는 쪽**(`min-height`)은 이 파일이 아는 축이 아니라 `./shell-css-status.test.ts`가 갖는다.
+ * **`status`가 함께 든 것은 같은 형태가 설 수 있기 때문이다** — 상태를 말하는 한 줄(`…-status`)을 고르개 곁의 flex 상자에 넣으며 자기
+ * 줄을 주면 고르개와 같은 짝이 생긴다 — 그때 이 파일의 1·2·4번이 그대로 그 짝을 본다. 지금 셸 CSS 에 그 이름의 클래스는 없다(트리의
+ * 꺼진 항목의 이유는 줄이 아니라 항목의 `title` · `aria-description`이다 — `src/panels/toolbar-status.ts`).
  */
 const SCOPE = /picker|status/
 

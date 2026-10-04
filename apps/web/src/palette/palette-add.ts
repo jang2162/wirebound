@@ -14,10 +14,10 @@
  *
  * | 판 | 문장 |
  * |---|---|
- * | 고른 잎을 남이 잡음(`lockedBy`) | 구조 트리 상태줄의 그 칸(`panels/toolbar-status.ts` 의 `lockedSelectionStatus`) |
+ * | 고른 잎을 남이 잡음(`lockedBy`) | 구조 트리 줄 행동의 꺼진 항목이 드는 잠금 이유(`panels/toolbar-status.ts` 의 `lockedSelectionStatus`) |
  * | 넣을 부모가 자식을 안 받음(검증 전 문서 — 잎의 부모가 자식을 안 받는 타입) | `+` 의 «안에 추가» 가 꺼졌을 때의 설명(`panels/tree-row-actions.tsx` 의 `STRUCTURE_WHY_DISABLED.addInside`) |
  * | 지을 편집이 남의 잠금에 부딪힘(넣을 자리 바로 뒤 형제를 남이 잡음 · 고른 컨테이너 · 뿌리를 남이 잡음) | 속성 패널의 잠금 문장(`panels/property-panel.tsx` 의 `lockedNotice`) |
- * | 그 밖 — 고른 노드가 문서에 없음 | 상태줄의 그 칸(`NOT_IN_DOCUMENT_STATUS`) |
+ * | 그 밖 — 고른 노드가 문서에 없음 | 꺼진 항목의 «문서에 없다» 이유(`NOT_IN_DOCUMENT_STATUS`) |
  *
  * **고른 노드의 잠금은 «그 뒤» 에 넣는 잎에만 먼저 본다.** 판정(서버와 같은 `lockConflictOfOps`)은 잠긴 노드 **뒤**에 넣기를 겹침으로 안
  * 세서 그 판만 따로 막는다. «안 끝» 에 넣는 판(뿌리 · 컨테이너)은 판정에 맡긴다 — `lockedBy` 는 고르기 판정이라 자손의 잠금도 막음으로
