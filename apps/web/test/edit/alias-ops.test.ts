@@ -53,7 +53,24 @@ describe('aliasOps', () => {
     expect(aliasOps(doc(), 'n-1', '😀'.repeat(61))).toEqual([{ op: 'add', path: PATH, value: '😀'.repeat(60) }])
   })
 
-  it.each(['저장', ' 저장 ', '저장\n버튼', '가'.repeat(80), '😀'.repeat(70), '<script>alert(1)</script>', `${'가'.repeat(59)} 나`])(
+  it('보이는 글자가 없으면 빈 값과 같다 — 있던 별칭은 `remove`, 없으면 `null`', () => {
+    expect(aliasOps(doc('옛 이름'), 'n-1', '\u200b')).toEqual([{ op: 'remove', path: PATH }])
+    expect(aliasOps(doc(), 'n-1', '\u202e\u200b')).toBeNull()
+  })
+
+  it.each([
+    '저장',
+    ' 저장 ',
+    '저장\n버튼',
+    '가'.repeat(80),
+    '😀'.repeat(70),
+    '<script>alert(1)</script>',
+    `${'가'.repeat(59)} 나`,
+    '저장\u0085버튼',
+    'a\u202eb',
+    'a\ud800b',
+    '\u200b가',
+  ])(
     '지은 연산을 적용한 노드는 봉투를 지난다 — %j',
     (value) => {
       const ops = aliasOps(doc(), 'n-1', value)

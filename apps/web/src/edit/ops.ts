@@ -11,9 +11,9 @@
  * 구조 트리는 오류 경계 밖이라 던지면 셸 전체가 흰 화면이 된다.
  */
 import {
-  NODE_ALIAS_MAX,
   applyOps,
   getByPointer,
+  tidyAlias,
   type Interaction,
   type PageDocument,
   type PatchOp,
@@ -136,9 +136,9 @@ export function variantOps(
 /**
  * 노드의 별칭(`alias`)을 바꾸는 op. `variantOps`와 같은 층이다 — 노드 봉투의 필드라 경로가 `/…/alias`다.
  *
- * **봉투가 거절할 값을 짓지 않는다** — 친 글을 봉투의 모양(`WbNodeSchema`의 `alias` — 앞뒤 공백 없음 · 한 줄 · 1 ~
- * `NODE_ALIAS_MAX` 자)으로 다듬는다: 줄을 바꾸는 글자(제어 문자 · U+2028 · U+2029)를 공백으로 · 앞뒤 공백을 걷고 · 상한에서
- * 자른 뒤 다시 걷는다. 거절을 받아 422 로 되돌리는 것보다 보낼 때 맞추는 편이 친 사람이 잃는 것이 적다.
+ * **봉투가 거절할 값을 짓지 않는다** — 친 글을 봉투와 한 벌인 다듬기(`@wirebound/schema` 의 `tidyAlias` — 표는
+ * `packages/schema/src/alias.ts` 머리말)로 맞춘다. 거절을 받아 422 로 되돌리는 것보다 보낼 때 맞추는 편이 친 사람이 잃는 것이
+ * 적다. 다듬어 빈 값(보이는 글자 없음)이면 지운다.
  *
  * | 노드 상태 | 다듬은 값 | op |
  * |---|---|---|
@@ -160,14 +160,6 @@ export function aliasOps(document: PageDocument, nodeId: string, alias: string |
   if (next === '') return has ? [{ op: 'remove', path }] : null
   if (has && node.alias === next) return null
   return has ? [{ op: 'replace', path, value: next }] : [{ op: 'add', path, value: next }]
-}
-
-/** 줄을 바꾸는 글자 — 봉투(`packages/schema/src/envelope.ts`의 `ALIAS_BREAKING`)가 막는 것과 같은 집합이다. */
-const ALIAS_BREAKING = /[\u0000-\u001f\u007f\u2028\u2029]+/g
-
-function tidyAlias(value: string): string {
-  const line = value.replace(ALIAS_BREAKING, ' ').trim()
-  return [...line].slice(0, NODE_ALIAS_MAX).join('').trim()
 }
 
 /**

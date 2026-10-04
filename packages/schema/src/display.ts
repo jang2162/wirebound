@@ -11,6 +11,7 @@
  * **검증 전 문서를 견딘다.** 웹은 서버 검증 전의 낙관적 문서를 그린다 — 별칭 · props 의 모양이 틀려도 던지지 않고
  * «없음»으로 읽는다.
  */
+import { isBlankAlias } from './alias'
 import { CATALOG_DEFS } from './component/catalog/index'
 import type { ComponentDef } from './component/define'
 import type { WbNode } from './node'
@@ -20,12 +21,14 @@ const DEFS: ReadonlyMap<string, ComponentDef> = new Map(CATALOG_DEFS.map((def) =
 /** 타입을 읽지 못한 노드(`type` 이 문자열이 아님)의 이름. 문장(`describe.ts`)이 같은 자리에 쓰는 말이다. */
 const UNKNOWN_TYPE = '알 수 없는 노드'
 
-/** 노드의 별칭. 없거나 모양이 틀렸으면(문자열이 아님 · 공백만) `null`. 앞뒤 공백은 걷어 읽는다. */
+/**
+ * 노드의 별칭. 없거나 모양이 틀렸으면(문자열이 아님 · 보이는 글자 없음 — `alias.ts` 의 `isBlankAlias`) `null`. 앞뒤 공백은
+ * 걷어 읽는다.
+ */
 export function nodeAlias(node: WbNode): string | null {
   const alias = (node as { alias?: unknown }).alias
-  if (typeof alias !== 'string') return null
-  const trimmed = alias.trim()
-  return trimmed.length === 0 ? null : trimmed
+  if (typeof alias !== 'string' || isBlankAlias(alias)) return null
+  return alias.trim()
 }
 
 /**

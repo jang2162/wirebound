@@ -70,6 +70,7 @@ export {
   nodeDisplayName,
 } from './interaction/describe'
 export { nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
+export { hasRejectedAliasChar, isBlankAlias, tidyAlias } from './alias'
 export { SUMMARY_LIST_MAX, SUMMARY_TEXT_MAX } from './component/summary'
 
 // `wireb page get`과 설계서 「MCP 도구」의 `get_page`가 낼 것을 값으로. **CLI는 글자만

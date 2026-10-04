@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { hasRejectedAliasChar, isBlankAlias } from './alias'
 import { NODE_ALIAS_MAX, type Interaction, type WbNode } from './node'
 
 /**
@@ -59,18 +60,20 @@ export const InteractionSchema: z.ZodType<Interaction> = z.strictObject({
 })
 
 /**
- * 별칭의 모양. 화면(트리 줄 · 문장 · 내보낸 목록)이 한 줄로 싣는 이름이라 **줄을 바꾸는 글자를 막는다** — 줄바꿈 · 탭 같은
- * 제어 문자와 U+2028 · U+2029. 앞뒤 공백은 **걷은 값만 받는다** — 화면은 걷어서 보내고, 걷지 않은 값을 받으면 같은 별칭이
- * 공백만 달라 둘로 갈린다. 길이는 코드 포인트로 센다(이모지 하나가 한 글자).
+ * 별칭의 모양 — 앞뒤 공백 없음 · 1 ~ `NODE_ALIAS_MAX` 자(코드 포인트 — 이모지 하나가 한 글자) · 받지 않는 글자 없음 · 보이는
+ * 글자 있음. 받지 않는 글자와 «보이는 글자»는 화면의 다듬기와 한 벌이다(`alias.ts` 머리말의 표). 앞뒤 공백은 **걷은 값만
+ * 받는다** — 화면은 걷어서 보내고, 걷지 않은 값을 받으면 같은 별칭이 공백만 달라 둘로 갈린다.
  */
-const ALIAS_BREAKING = /[\u0000-\u001f\u007f\u2028\u2029]/
 const AliasSchema = z
   .string()
   .refine((value) => value.trim() === value, { message: '별칭 앞뒤에 공백을 둘 수 없습니다' })
   .refine((value) => [...value].length >= 1 && [...value].length <= NODE_ALIAS_MAX, {
     message: `별칭은 1 ~ ${NODE_ALIAS_MAX}자입니다`,
   })
-  .refine((value) => !ALIAS_BREAKING.test(value), { message: '별칭은 한 줄이어야 합니다' })
+  .refine((value) => !hasRejectedAliasChar(value), {
+    message: '별칭에 줄을 바꾸는 글자 · 제어 문자 · 방향 제어 글자 · 짝 없는 서로게이트를 둘 수 없습니다',
+  })
+  .refine((value) => !isBlankAlias(value), { message: '별칭에 보이는 글자가 없습니다' })
 
 /**
  * 노드 봉투. 선언되지 않은 키는 거부한다 — "노드는 스타일을 갖지 않는다"(설계서 「페이지 스키마 노드」)를
