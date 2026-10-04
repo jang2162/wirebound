@@ -14,7 +14,7 @@ import type { ApiClient, } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
 import { HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
-import { isOff, treeTool } from './tree-row'
+import { isOff, treeTool, structureRowName, structureRowType } from './tree-row'
 
 /**
  * ```
@@ -84,7 +84,7 @@ function structureRegion(): HTMLElement {
 
 /** 트리의 노드 줄. 키 이벤트를 여기서 일으킨다 — 사용자가 고른 줄이 포커스를 갖는다. */
 function row(type: string): HTMLElement {
-  return within(structureRegion()).getByRole('button', { name: type })
+  return within(structureRegion()).getByRole('button', { name: structureRowName(type) })
 }
 
 function select(type: string): void {
@@ -310,9 +310,9 @@ describe('구조 트리의 키보드 단축키', () => {
     await waitFor(() =>
       expect(
         within(structureRegion())
-          .getByRole('button', { name: 'Card' })
+          .getByRole('button', { name: structureRowName('Card') })
           .closest('li')
-          ?.contains(within(structureRegion()).getByRole('button', { name: 'Divider' })),
+          ?.contains(within(structureRegion()).getByRole('button', { name: structureRowName('Divider') })),
       ).toBe(true),
     )
 
@@ -321,9 +321,9 @@ describe('구조 트리의 키보드 단축키', () => {
     await waitFor(() =>
       expect(
         within(structureRegion())
-          .getByRole('button', { name: 'Card' })
+          .getByRole('button', { name: structureRowName('Card') })
           .closest('li')
-          ?.contains(within(structureRegion()).getByRole('button', { name: 'Divider' })),
+          ?.contains(within(structureRegion()).getByRole('button', { name: structureRowName('Divider') })),
       ).toBe(false),
     )
   })
@@ -368,8 +368,8 @@ describe('구조 트리의 키보드 단축키', () => {
     select('Text')
 
     const inCard = (): boolean => {
-      const card = within(structureRegion()).getByRole('button', { name: 'Card' }).closest('li')
-      const text = within(structureRegion()).getByRole('button', { name: 'Text' })
+      const card = within(structureRegion()).getByRole('button', { name: structureRowName('Card') }).closest('li')
+      const text = within(structureRegion()).getByRole('button', { name: structureRowName('Text') })
       return card?.contains(text) ?? false
     }
     expect(inCard()).toBe(true)
@@ -385,9 +385,9 @@ describe('구조 트리의 키보드 단축키', () => {
 
     // **하지만 제자리가 아니다.** 원래는 `Link` **앞**이었는데 이제 뒤다 — 전위 순회로는
     // 세 상태가 전부 같아 보이므로(`Page, Card, Link, Text, Divider`) 형제 순서를 직접 본다.
-    const cardRow = within(structureRegion()).getByRole('button', { name: 'Card' }).closest('li')
+    const cardRow = within(structureRegion()).getByRole('button', { name: structureRowName('Card') }).closest('li')
     const siblings = [...(cardRow?.querySelectorAll('.wb-shell-structure-node') ?? [])].map(
-      (row) => row.textContent,
+      (row) => structureRowType(row),
     )
     expect(siblings).toEqual(['Card', 'Link', 'Text'])
   })

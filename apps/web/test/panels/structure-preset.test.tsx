@@ -14,7 +14,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { Comment, PageDetail, PatchResult, Preset } from '../../src/api/types'
 import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
-import { treeTool } from './tree-row'
+import { treeTool, structureRowName, structureRowType } from './tree-row'
 
 /**
  * ```
@@ -203,10 +203,7 @@ function alertText(): string | null {
 }
 
 function selectedType(): string | null {
-  return (
-    structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]')?.textContent ??
-    null
-  )
+  return structureRowType(structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]'))
 }
 
 /** 고르개를 열고 목록이 뜰 때까지 기다린다. */
@@ -526,7 +523,7 @@ describe('적용 — 기존 커밋 경로를 탄다', () => {
     const backend = server({ presets: [EMPTY_PRESET] })
     await openPage(doc(), { apiOverrides: backend.api })
 
-    fireEvent.click(within(structureRegion()).getByRole('button', { name: 'Card' }))
+    fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName('Card') }))
     await openPicker()
     await applyPreset(EMPTY_PRESET.id)
 
@@ -686,7 +683,7 @@ describe('입력 칸에서 친 키는 구조 조작으로 새지 않는다', () 
     const backend = server()
     await openPage(doc(), { apiOverrides: backend.api })
 
-    fireEvent.click(within(structureRegion()).getByRole('button', { name: 'Text' }))
+    fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName('Text') }))
     await openPicker()
     const input = screen.getByLabelText('프리셋 이름')
     fireEvent.change(input, { target: { value: '이름' } })
@@ -729,7 +726,7 @@ describe('단축키 — 판정 없는 조작', () => {
     const backend = server()
     await openPage(doc(), { apiOverrides: backend.api })
 
-    fireEvent.keyDown(within(structureRegion()).getByRole('button', { name: 'Card' }), {
+    fireEvent.keyDown(within(structureRegion()).getByRole('button', { name: structureRowName('Card') }), {
       code: 'KeyP',
       altKey: true,
       shiftKey: true,

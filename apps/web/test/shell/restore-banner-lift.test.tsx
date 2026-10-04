@@ -31,7 +31,7 @@ import {
   pageDoc,
   waitForNode,
 } from '../editor-harness'
-import { treeTool } from '../panels/tree-row'
+import { treeTool, structureRowName } from '../panels/tree-row'
 
 class FakeSocket implements RealtimeSocket {
   onopen: (() => void) | null = null
@@ -152,7 +152,7 @@ async function mount(options: { immediate?: (pageId: string) => PageDetail | und
   /** 구조 트리에서 첫 줄(Text)을 골라 «아래로»를 낸다 — WS 로 나가 답을 기다린다. */
   const moveDown = async (): Promise<{ clientOpId: string; pageId: string }> => {
     const tree = screen.getByRole('region', { name: '구조 트리' })
-    fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
+    fireEvent.click(within(tree).getByRole('button', { name: structureRowName('Text') }))
     fireEvent.click(treeTool(tree, '아래로'))
     await act(async () => {})
     const sent = sockets.flatMap((socket) => socket.sent.filter((raw) => raw.includes('"patch"')))

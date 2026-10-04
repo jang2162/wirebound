@@ -28,6 +28,7 @@ import {
   canvasQueryAll,
 } from '../editor-harness'
 import '../../src/catalog-setup'
+import { structureRowName } from '../panels/tree-row'
 
 class FakeSocket implements RealtimeSocket {
   onopen: (() => void) | null = null
@@ -428,7 +429,7 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
     fireEvent.click(undoButton())
     await waitFor(() => expect(undoButton().disabled).toBe(true))
 
-    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[1]!)
+    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!)
     const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
     fireEvent.change(box, { target: { value: '가 고침' } })
     fireEvent.blur(box)
@@ -458,7 +459,7 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
       apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: () => answer.promise, patchOps: patch.patchOps },
     })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
-    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[1]!)
+    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!)
     const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
     fireEvent.change(box, { target: { value: '가 고침' } })
     fireEvent.blur(box)
@@ -499,7 +500,7 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
     })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
     const patches = () => (sockets[0]?.sent ?? []).filter((frame) => (frame as { type?: string }).type === 'patch') as { ops: PatchOp[]; clientOpId: string }[]
-    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[1]!)
+    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!)
     const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
     fireEvent.change(box, { target: { value: '가 고침' } })
     fireEvent.blur(box)
@@ -720,7 +721,7 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
     }
     if (pressFirst) await press()
     for (const [index, value] of [[1, '가 고침'], [0, '밥 고침']] as const) {
-      fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[index]!)
+      fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[index]!)
       const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
       fireEvent.change(box, { target: { value } })
       fireEvent.blur(box)
@@ -904,7 +905,7 @@ describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답�
         },
       },
     })
-    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[0]!)
+    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[0]!)
     const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
     fireEvent.change(box, { target: { value: '가 고침' } })
     fireEvent.blur(box)

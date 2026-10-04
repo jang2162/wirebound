@@ -14,6 +14,7 @@ import { CLIPBOARD_SHORTCUT_LINES, EDITOR_SHORTCUTS, platformOf } from '../../sr
 import { droppedActionsNotice } from '../../src/edit/paste-ops'
 import { HEAD_SEQ, canvasDocument, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
+import { structureRowName, structureRowType } from '../panels/tree-row'
 
 /**
  * ```
@@ -69,12 +70,12 @@ function structureRegion(): HTMLElement {
 }
 
 function row(type: string): HTMLElement {
-  return within(structureRegion()).getByRole('button', { name: type })
+  return within(structureRegion()).getByRole('button', { name: structureRowName(type) })
 }
 
 /** 지금 고른 줄의 타입. 없으면 `null`. */
 function selectedType(): string | null {
-  return structureRegion().querySelector('[aria-current="true"]')?.textContent ?? null
+  return structureRowType(structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]'))
 }
 
 function historyButton(name: '되돌리기' | '다시 실행'): HTMLButtonElement {
@@ -345,7 +346,7 @@ describe('클립보드 · 복제 — 셸', () => {
     expect(pasted.children![0]!.id).not.toBe('n-1')
     expect(structureTypes()).toEqual(['Page', 'Text', 'Card', 'Button', 'Card', 'Button', 'Divider'])
     expect(structureRegion().querySelectorAll('[aria-current="true"]')).toHaveLength(1)
-    expect(within(structureRegion()).getAllByRole('button', { name: 'Card' })[0]!.getAttribute('aria-current')).toBe('true')
+    expect(within(structureRegion()).getAllByRole('button', { name: structureRowName('Card') })[0]!.getAttribute('aria-current')).toBe('true')
 
     await undoOnceRestores(srv, 1)
   })
@@ -424,7 +425,7 @@ describe('클립보드 · 복제 — 셸', () => {
     expect(srv.calls[0]).toHaveLength(1)
     expect(srv.calls[0]![0]).toMatchObject({ op: 'add', path: '/root/children/2' })
     expect(structureTypes()).toEqual(['Page', 'Text', 'Card', 'Button', 'Card', 'Button', 'Divider'])
-    expect(within(structureRegion()).getAllByRole('button', { name: 'Card' })[1]!.getAttribute('aria-current')).toBe('true')
+    expect(within(structureRegion()).getAllByRole('button', { name: structureRowName('Card') })[1]!.getAttribute('aria-current')).toBe('true')
 
     await undoOnceRestores(srv, 1)
   })

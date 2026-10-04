@@ -16,7 +16,7 @@
  */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { nodeAlias, type NodeLock, type WbNode } from '@wirebound/schema'
+import { nodeAlias, nodeSummary, type NodeLock, type WbNode } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
 import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { platformOf, type ShortcutLine } from '../edit/editor-shortcuts'
@@ -443,6 +443,18 @@ function StructureNode(props: {
   // 재지 못했다.
   const children = Array.isArray(node.children) ? node.children : []
   const typeLabel = nodeTypeLabel(node)
+  /**
+   * **줄 글은 `타입 (별칭) 요약`이다**(설계서 「설계서 화면 구조」의 구조 트리 줄) — 같은 타입이 여럿일 때 어느 것인지 가르는 데까지만.
+   * 셋을 조각으로 나눠 그리는 것은 요약만 흐리게 하려는 것이고, 접근 이름은 셋을 이은 글 그대로다(`packages/schema` 의 `nodeRowLabel`과
+   * 같은 글 — MCP 가 같은 것을 낸다). 타입을 못 읽는 노드는 요약이 없다.
+   */
+  const alias = nodeAlias(node)
+  const summary = nodeSummary(node)
+  /**
+   * 줄 글 전부 — 줄 단추의 접근 이름과 같다. **줄 행동(`+` · `…`)의 이름도 이것으로 짓는다** — 타입만으로 지으면 라벨이 «추가»인 Button 줄
+   * (`Button 추가`)과 그 줄의 `+`(`Button 추가`)가 같은 이름이 된다.
+   */
+  const rowLabel = `${typeLabel}${alias === null ? '' : ` (${alias})`}${summary === null ? '' : ` ${summary}`}`
   // id가 없는 노드는 잠금과 짝지을 것이 없다 — 아래에서 고를 수도 없다.
   const lock = isSelectable(node) ? props.lockOf(node.id) : null
 
@@ -515,12 +527,14 @@ function StructureNode(props: {
             ref={button}
           >
             {typeLabel}
+            {alias !== null && <span className="wb-shell-structure-alias">{` (${alias})`}</span>}
+            {summary !== null && <span className="wb-shell-structure-summary">{` ${summary}`}</span>}
           </button>
           {/* 펼침 단추는 줄 단추 **뒤**에 두고 CSS 가 앞에 세운다(`./tree-fold.tsx` 머리말 «DOM 에서는 줄 단추 뒤다»). */}
           <TreeToggle foldable={foldable} folded={folded} onToggle={() => props.fold.toggle(node.id)} />
           {open && (
             <TreeRowActions
-              name={typeLabel}
+              name={rowLabel}
               {...structureRowItems(row.commands, row.statusId, () => row.alias.open(node.id))}
               // 열면 그 줄을 먼저 고른다 — 이미 고른 줄이면 다시 고르지 않는다(열린 고르개가 닫히지 않게 — `openAdd`는 선택을 안 본다).
               onOpen={() => {

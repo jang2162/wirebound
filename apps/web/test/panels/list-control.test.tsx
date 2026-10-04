@@ -14,6 +14,7 @@ import type { ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
 import { openPage, pageDoc, canvasQuery } from '../editor-harness'
 import '../../src/catalog-setup'
+import { structureRowName } from './tree-row'
 
 const DOC = pageDoc({
   id: 'n-root',
@@ -51,7 +52,7 @@ function panel(): HTMLElement {
 
 function selectAt(type: string, index = 0): void {
   const buttons = within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', {
-    name: type,
+    name: structureRowName(type),
   })
   const button = buttons[index]
   if (button === undefined) throw new Error(`구조 트리에 ${type}[${index}]이 없다`)

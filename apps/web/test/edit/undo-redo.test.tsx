@@ -12,6 +12,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
 import { openPage, pageDetail, pageDoc, canvasQuery } from '../editor-harness'
 import '../../src/catalog-setup'
+import { structureRowName } from '../panels/tree-row'
 
 const TEXT_ID = 'n-text'
 const FIELD_ID = 'n-field'
@@ -81,7 +82,7 @@ function panel(): HTMLElement {
 function select(type: string): void {
   fireEvent.click(
     within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', {
-      name: type,
+      name: structureRowName(type),
     })[0]!,
   )
 }
@@ -422,7 +423,7 @@ describe('undo / redo', () => {
     // 두 번째 `Text` 노드를 **클릭**한다(사용자가 하는 동작).
     fireEvent.click(
       within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', {
-        name: 'Text',
+        name: structureRowName('Text'),
       })[1]!,
     )
     await act(async () => {})

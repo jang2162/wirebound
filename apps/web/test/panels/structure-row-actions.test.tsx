@@ -14,7 +14,7 @@ import type { PatchResult } from '../../src/api/types'
 import { deselect, HEAD_SEQ, openPage, pageDoc, structureTypes } from '../editor-harness'
 import { installPointerEvents } from '../pointer-events'
 import '../../src/catalog-setup'
-import { isOff, pickedRow, rootAction, rowAction, rowToggle } from './tree-row'
+import { isOff, pickedRow, rootAction, rowAction, rowToggle, structureRowName, structureRowType } from './tree-row'
 
 beforeAll(installPointerEvents)
 afterEach(() => {
@@ -79,7 +79,7 @@ function structureRegion(): HTMLElement {
 
 /** 구조 트리에서 타입 이름의 줄 상자. */
 function row(type: string): HTMLElement {
-  const button = within(structureRegion()).getByRole('button', { name: type })
+  const button = within(structureRegion()).getByRole('button', { name: structureRowName(type) })
   const box = button.closest<HTMLElement>('[data-tree-row]')
   if (box === null) throw new Error(`${type} 줄 상자가 없다`)
   return box
@@ -140,7 +140,7 @@ describe('줄 행동을 열면 그 줄이 먼저 골라진다 · 고르개는 �
     // 고르개는 Card 줄의 항목(li) 안 · 자식 목록 앞이다.
     const item = row('Card').parentElement!
     expect(item.contains(picker)).toBe(true)
-    expect(picker.compareDocumentPosition(within(item).getByRole('button', { name: 'Button' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(picker.compareDocumentPosition(within(item).getByRole('button', { name: structureRowName('Button') })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.click(within(picker).getByRole('button', { name: '추가' }))
 
@@ -184,7 +184,7 @@ function layRows(): string[] {
     const top = at * 20
     return { left: 0, top, right: 200, bottom: top + 20, width: 200, height: 20, x: 0, y: top, toJSON: () => ({}) }
   })
-  return rows().map((box) => box.querySelector('.wb-shell-structure-node')?.textContent ?? '')
+  return rows().map((box) => structureRowType(box.querySelector('.wb-shell-structure-node')) ?? '')
 }
 
 function drag(titles: string[], from: string, to: string, zone: 'top' | 'middle' | 'bottom'): void {

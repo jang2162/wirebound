@@ -22,7 +22,7 @@ import type { PageDetail, PatchResult } from '../../src/api/types'
 import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import { createNode } from '../../src/edit/create-node'
 import '../../src/catalog-setup'
-import { isOff, treeTool } from './tree-row'
+import { isOff, treeTool, structureRowName, structureRowType } from './tree-row'
 
 /**
  * ```
@@ -92,14 +92,11 @@ function toolButton(name: string): HTMLElement {
 }
 
 function select(type: string): void {
-  fireEvent.click(within(structureRegion()).getByRole('button', { name: type }))
+  fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName(type) }))
 }
 
 function selectedType(): string | null {
-  return (
-    structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]')?.textContent ??
-    null
-  )
+  return structureRowType(structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]'))
 }
 
 /** 타입 목록. 열려 있지 않으면 던진다. */

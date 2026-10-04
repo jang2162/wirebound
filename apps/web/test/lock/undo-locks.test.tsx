@@ -106,7 +106,7 @@ import {
   canvasQuery,
 } from '../editor-harness'
 import '../../src/catalog-setup'
-import { treeTool } from '../panels/tree-row'
+import { treeTool, structureRowName } from '../panels/tree-row'
 
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
 
@@ -291,7 +291,7 @@ function structureRegion(): HTMLElement {
 
 /** 트리에서 노드 하나를 고른다. 줄 이름이 타입이다. */
 function select(type: string): void {
-  fireEvent.click(within(structureRegion()).getByRole('button', { name: type }))
+  fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName(type) }))
 }
 
 function history(): HTMLElement {

@@ -98,6 +98,7 @@ import '../../src/catalog-setup'
 // `?raw`로 읽는다 — `shell-css-coverage.test.ts`가 이미 쓰는 기전이고, jsdom 환경에서는
 // `import.meta.url`이 http URL이라 `node:fs`로 못 연다(실측: *"The URL must be of scheme file"*).
 import shellCss from '../../src/shell.css?raw'
+import { structureRowName } from '../panels/tree-row'
 
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
 
@@ -311,7 +312,7 @@ function panel(): HTMLElement {
 
 /** 트리에서 노드 하나를 고른다. 줄 이름이 타입이다. */
 function select(type: string): void {
-  fireEvent.click(within(structureRegion()).getByRole('button', { name: type }))
+  fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName(type) }))
 }
 
 /** 구조 트리 아래 상태줄의 글자. */

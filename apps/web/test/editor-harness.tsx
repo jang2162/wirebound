@@ -32,6 +32,7 @@ import type { DraftStore } from '../src/panels/draft-store'
 import type { ThemeBundleLoader } from '../src/theme/bundle-loader'
 import { fakeApi, renderWithProviders } from './helpers'
 import { adminThemeView } from './theme-loader'
+import { structureRowType } from './panels/tree-row'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -329,8 +330,9 @@ export function canvasRootId(): string | null {
 export function structureTypes(): string[] {
   const region = document.body.querySelector('.wb-shell-structure')
   if (region === null) return []
+  // 줄 글은 `타입 (별칭) 요약`이다 — 타입만 읽는다(`./panels/tree-row.ts` 의 `structureRowType`).
   return [...region.querySelectorAll('.wb-shell-structure-node, .wb-shell-structure-broken')].map(
-    (row) => row.textContent ?? '',
+    (row) => structureRowType(row) ?? '',
   )
 }
 

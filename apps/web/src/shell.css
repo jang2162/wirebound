@@ -981,6 +981,21 @@
   text-align: left;
   color: var(--wb-shell-ink);
   cursor: pointer;
+  /* 줄 글(`타입 (별칭) 요약`)은 한 줄이다 — 넘치면 끝에서 줄임표로 자른다. 끊을 자리 없는 긴 별칭도 줄을 늘리지 않는다. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 줄 요약(`panels/structure-tree.tsx`) — 타입 · 별칭보다 흐리게. 색을 정하지 않고 줄 글색을 옅게 낸다 — 고른 줄(채움 위의 흰 글) ·
+   꺼진 줄에서도 그 줄의 색을 따른다(결합자로 고른 줄을 따로 겨냥하지 않는다 — `test/shell-css-guard.ts`). */
+.wb-shell-structure-summary {
+  opacity: 0.65;
+}
+
+/* 줄의 별칭 — 타입과 같은 글색이다. 따로 둔 것은 조각을 가리키는 자리(넘침 측정 · 스크린숏)가 이름으로 찾게 하려는 것이다. */
+.wb-shell-structure-alias {
+  color: inherit;
 }
 
 /* id가 없어 고를 수 없는 줄(`panels/structure-tree.tsx`). 누를 수 없다는 것이 보여야

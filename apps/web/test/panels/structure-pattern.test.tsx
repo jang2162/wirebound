@@ -16,7 +16,7 @@ import { ADMIN_FIXTURE } from '../admin-theme'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import { adminThemeView } from '../theme-loader'
-import { treeTool } from './tree-row'
+import { treeTool, structureRowName, structureRowType } from './tree-row'
 
 /** 옛 시스템 테마 `portal` 이 선언하던 패턴 — 원본은 지워졌으므로 이 파일이 값을 든다(`pattern-picker.test.tsx` 와 같은 값). */
 const PORTAL_PATTERNS = {
@@ -116,13 +116,12 @@ function toolButton(name: string): HTMLElement {
 }
 
 function select(type: string): void {
-  fireEvent.click(within(structureRegion()).getByRole('button', { name: type }))
+  fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName(type) }))
 }
 
 /** 지금 선택 표시가 붙은 줄의 이름. 표시가 없으면 `null`이다. */
 function selectedType(): string | null {
-  return structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]')
-    ?.textContent ?? null
+  return structureRowType(structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]'))
 }
 
 function alertText(): string | null {

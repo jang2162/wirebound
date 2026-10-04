@@ -27,7 +27,7 @@ import type { PatchResult, SessionUser } from '../../src/api/types'
 import { App } from '../../src/app'
 import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
 import { HEAD_SEQ, PAGE_ROUTE, PROJECT_NAME, SHELL_MENU, chooseFromShellMenu, openPage, pageDoc } from '../editor-harness'
-import { treeTool } from '../panels/tree-row'
+import { treeTool, structureRowName } from '../panels/tree-row'
 
 const DOC = pageDoc({ id: 'n-root', type: 'Page', children: [] })
 /** «아래로»를 낼 수 있는 문서 — 로그아웃 앞의 기다림을 재는 케이스가 편집 하나를 띄운다. */
@@ -213,7 +213,7 @@ describe('머리에서 로그아웃한다', () => {
       },
     })
     const tree = screen.getByRole('region', { name: '구조 트리' })
-    fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
+    fireEvent.click(within(tree).getByRole('button', { name: structureRowName('Text') }))
     fireEvent.click(treeTool(tree, '아래로'))
     await act(async () => {})
 

@@ -44,6 +44,7 @@ import {
 import { clickAsBrowser } from '../click-as-browser'
 import { fakeApi } from '../helpers'
 import '../../src/catalog-setup'
+import { structureRowName } from './tree-row'
 
 /**
  * **`options`를 갖지 않는 `select`.** 카탈로그에는 그런 자리가 없으므로(실측: `control:
@@ -256,7 +257,7 @@ function select(type: string): void {
 /** 같은 타입이 여럿일 때 몇 번째를 고를지. 문서 순서 그대로다. */
 function selectAt(type: string, index: number): void {
   const buttons = within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', {
-    name: type,
+    name: structureRowName(type),
   })
   const button = buttons[index]
   if (button === undefined) throw new Error(`구조 트리에 ${type}[${index}]이 없다`)
@@ -863,7 +864,7 @@ describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전
     const { calls } = await typing()
 
     clickAsBrowser(
-      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[1]!,
+      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!,
     )
     await waitFor(() => expect(calls).toHaveLength(1))
     // **경로가 첫 노드다.** 새 노드로 갔다면 `children/1`이다 — 그것이 더 나쁜 손실이다

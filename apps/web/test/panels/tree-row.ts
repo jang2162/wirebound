@@ -93,3 +93,27 @@ export function treeTool(region: HTMLElement, name: string): HTMLElement {
   if (name === '패턴 넣기' && region.querySelector('.wb-shell-tree-row-picked') === null) return rootAction(region, name)
   return rowAction(region, name)
 }
+
+/**
+ * **구조 트리 줄의 이름 견주개.** 줄의 접근 이름은 `타입 (별칭) 요약`이다(`src/panels/structure-tree.tsx` — `packages/schema` 의
+ * `nodeRowLabel`과 같은 글). 타입으로 노드를 고르던 찾기는 «그 타입으로 시작하는 **줄 단추**»로 찾는다 — `Text` 가 `Text 텍스트` 에도
+ * `Text (제목) 안내` 에도 맞고, `Tabs` 는 `Tab` 에 안 맞는다.
+ *
+ * **줄 단추(`.wb-shell-structure-node`)만 고른다** — 줄 행동의 `+` · `…`(`<줄 글> 추가` · `<줄 글> 더 보기`)도 같은 머리로 시작한다.
+ * 같은 타입이 둘이면 `getByRole` 이 «여럿»으로 던진다 — 도우미가 엉뚱한 줄을 고르는 거짓 초록 대신 판이 선다(`./structure-row-name.test.tsx`).
+ */
+export function structureRowName(type: string): (name: string, element: Element | null) => boolean {
+  const head = new RegExp(`^${type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?: |$)`)
+  return (name, element) => element !== null && element.classList.contains('wb-shell-structure-node') && head.test(name)
+}
+
+/**
+ * 구조 트리 줄의 **타입** — 줄 단추의 첫 글자 마디(`src/panels/structure-tree.tsx` 가 타입을 먼저 쓰고 별칭 · 요약을 조각으로 잇는다).
+ * 고를 수 없는 줄(`.wb-shell-structure-broken`)은 글 전부다. 줄 글 전부는 `textContent` 다.
+ */
+export function structureRowType(row: Element | null | undefined): string | null {
+  if (row === null || row === undefined) return null
+  if (!row.classList.contains('wb-shell-structure-node')) return row.textContent
+  const first = row.firstChild
+  return first !== null && first.nodeType === 3 ? first.textContent : row.textContent
+}

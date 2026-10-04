@@ -40,7 +40,7 @@ import {
   waitForNode,
   canvasQuery,
 } from '../editor-harness'
-import { treeTool } from '../panels/tree-row'
+import { treeTool, structureRowName } from '../panels/tree-row'
 
 class FakeSocket implements RealtimeSocket {
   onopen: (() => void) | null = null
@@ -544,7 +544,7 @@ describe('스스로 버린 소켓으로 답을 기다리던 편집', () => {
     await openPage(pair(), { realtime: wired.setup, apiOverrides: { getPage }, tabChannel: hub.channel })
     wired.open(0)
 
-    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getByRole('button', { name: 'Text' }))
+    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getByRole('button', { name: structureRowName('Text') }))
     fireEvent.click(tool('아래로'))
     await act(async () => {})
     // WS 로 나갔다 — 답을 기다린다.

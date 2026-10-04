@@ -20,6 +20,7 @@ import type { ProjectView, ProjectRole } from '../../src/api/types'
 import { OTHER_PAGE_ID, PAGE_ID, PROJECT_ID, PROJECT_NAME, openPage, pageDoc, waitForNode, canvasQuery } from '../editor-harness'
 import { fakeRealtime, type FakeRealtime } from '../fake-realtime'
 import '../../src/catalog-setup'
+import { structureRowName } from '../panels/tree-row'
 
 const ME = 'u-1'
 
@@ -106,7 +107,7 @@ const said = (lead: string): boolean => notice().some((text) => text.startsWith(
 const titleBox = (): HTMLInputElement => within(screen.getByRole('tabpanel')).getByRole('textbox', { name: '제목' }) as HTMLInputElement
 const notice = (): string[] => screen.queryAllByRole('status').map((el) => el.textContent ?? '')
 const treeRow = (label: string): HTMLButtonElement =>
-  within(screen.getByRole('region', { name: '구조 트리' })).getByRole('button', { name: label }) as HTMLButtonElement
+  within(screen.getByRole('region', { name: '구조 트리' })).getByRole('button', { name: structureRowName(label) }) as HTMLButtonElement
 
 describe('역할이 실행 중에 바뀐다 — 새로고침 없이', () => {
   /**
