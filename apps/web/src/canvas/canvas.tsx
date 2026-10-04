@@ -55,7 +55,7 @@ import { applyPreviewLook, isPreviewId, previewDocument } from './canvas-preview
 import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
-import { guideOf, useLayoutGuides, type Guide } from './layout-guides'
+import { guideOf, useLayoutGuides, type Guide, type GuideLine } from './layout-guides'
 import { useCanvasMarquee } from './use-canvas-marquee'
 import { themeFileUrl } from '../theme/bundle-loader'
 import { useProjectTheme, type ProjectThemeState } from '../theme/project-theme'
@@ -474,7 +474,7 @@ export function Canvas(props: {
       const target = findNodeElement(frame.document, node.id)
       if (target === null) continue
       const guide = guideOf(node, target, frame.window)
-      if (guide !== null) next.push({ nodeId: node.id, ...guide, box: measure(target, offset) })
+      if (guide !== null) next.push({ nodeId: node.id, ...guide, lines: guide.lines.map((line) => onSurface(line, offset)), box: measure(target, offset) })
     }
     setGuides((prev) => (sameGuides(prev, next) ? prev : next))
   }, [guidesOn, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
@@ -590,6 +590,19 @@ export function Canvas(props: {
           data-wb-guide={item.label}
           style={{ left: item.box.left, top: item.box.top, width: item.box.width, height: item.box.height }}
         >
+          {/* 안쪽 선(`./layout-guides.tsx` 머리말 «안쪽 선») — 굵기는 줌을 걷어 화면에서 늘 1px 이고, 선의 가운데가 잰 자리에 선다. */}
+          {item.lines.map((line, index) => (
+            <i
+              key={index}
+              className={item.kind === 'flex' ? 'wb-shell-guide-line' : 'wb-shell-guide-line wb-shell-guide-line-grid'}
+              data-wb-guide-line={line.axis}
+              style={
+                line.axis === 'x'
+                  ? { left: line.at - item.box.left - 0.5 / zoom, top: line.from - item.box.top, height: line.to - line.from, borderLeftWidth: 1 / zoom }
+                  : { top: line.at - item.box.top - 0.5 / zoom, left: line.from - item.box.left, width: line.to - line.from, borderTopWidth: 1 / zoom }
+              }
+            />
+          ))}
           <span
             className={item.kind === 'flex' ? 'wb-shell-guide-tag' : 'wb-shell-guide-tag wb-shell-guide-tag-grid'}
             style={{ transform: `scale(${1 / zoom})` }}
@@ -872,6 +885,7 @@ interface OutlineBox {
 const NO_OUTLINES: readonly OutlineBox[] = []
 
 /** 배치 선 하나 — 노드 · 종류 · 모서리 글 · 상자. */
+/** 배치 선 하나 — 상자와 안쪽 선은 표면 좌표다(`measure` · `onSurface`). */
 interface GuideBox extends Guide {
   nodeId: string
   box: Box
@@ -879,11 +893,30 @@ interface GuideBox extends Guide {
 
 const NO_GUIDES: readonly GuideBox[] = []
 
-/** 두 배치 선 목록이 같은가 — `sameBox` 와 같은 까닭(값이 같으면 앞 배열을 그대로 둔다). */
+/** 캔버스 문서 좌표의 안쪽 선 → 표면 좌표(`measure` 와 같은 셈 — iframe 의 자리만 더한다). */
+function onSurface(line: GuideLine, offset: { left: number; top: number }): GuideLine {
+  const [along, across] = line.axis === 'x' ? [offset.left, offset.top] : [offset.top, offset.left]
+  return { axis: line.axis, at: line.at + along, from: line.from + across, to: line.to + across }
+}
+
+/**
+ * 두 배치 선 목록이 같은가 — `sameBox` 와 같은 까닭(값이 같으면 앞 배열을 그대로 둔다). **안쪽 선까지 본다** — 남의 편집이 자식만 옮기면
+ * 노드 상자는 그대로라 상자만 보면 선이 옛 자리에 남는다.
+ */
 function sameGuides(a: readonly GuideBox[], b: readonly GuideBox[]): boolean {
   return a.length === b.length && a.every((item, index) => {
     const other = b[index]
-    return other !== undefined && item.nodeId === other.nodeId && item.label === other.label && sameBox(item.box, other.box)
+    return (
+      other !== undefined &&
+      item.nodeId === other.nodeId &&
+      item.label === other.label &&
+      sameBox(item.box, other.box) &&
+      item.lines.length === other.lines.length &&
+      item.lines.every((line, at) => {
+        const twin = other.lines[at]!
+        return line.axis === twin.axis && line.at === twin.at && line.from === twin.from && line.to === twin.to
+      })
+    )
   })
 }
 const NO_IDS: readonly string[] = []
