@@ -646,10 +646,18 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  /* 고르개가 담긴 상자 폭을 넘지 않게 — 아래 `.wb-shell-select` 와 짝이다. */
+  max-width: 100%;
+  min-width: 0;
   color: var(--wb-shell-muted);
 }
 
+/* **상자 폭을 넘지 않는다.** `<select>` 는 가장 긴 항목의 폭으로 서는데, 항목에 사람이 붙인 이름(별칭 — 60자까지 · 끊을 자리 없는
+   한 낱말도 된다)이 들면 우측 패널 밖으로 나간다(Chrome · `build-test/node-alias.test.ts` «대상 고르개»). 줄여도 고른 항목은 끝이 잘려 보일 뿐
+   열면 전부 보인다. */
 .wb-shell-select {
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid var(--wb-shell-line);
   border-radius: 6px;
   padding: 4px 6px;
@@ -1651,6 +1659,8 @@
   margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
+  /* 머리에 별칭(60자 · 끊을 자리 없는 한 낱말도 된다)이 서므로 어디서든 접는다(`build-test/node-alias.test.ts` «우측 패널 밖»). */
+  overflow-wrap: anywhere;
 }
 
 /* 고를 노드가 없거나 그릴 속성이 없을 때의 문장. */
@@ -1850,6 +1860,8 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--wb-shell-muted);
+  /* 노드 이름(별칭)이 서는 자리 — `.wb-shell-panel-title`과 같은 까닭으로 접는다. */
+  overflow-wrap: anywhere;
 }
 
 /* 규칙 하나(`<fieldset>`). 브라우저 기본 테두리·여백을 셸의 값으로 바꾼다. 안의 `<legend>`는
@@ -1885,6 +1897,8 @@
   margin: 0;
   font-size: 12px;
   color: var(--wb-shell-muted);
+  /* 문장이 노드를 별칭으로 부른다 — `.wb-shell-panel-title`과 같은 까닭으로 접는다. */
+  overflow-wrap: anywhere;
 }
 
 /* 이 페이지의 상호작용 목록. `<ul>`의 UA 기본 둘을 지운다 — 위 목록 위젯과 같은 이유이고,

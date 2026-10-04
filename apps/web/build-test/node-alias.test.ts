@@ -7,6 +7,8 @@
  * |---|---|
  * | F2 로 고친 별칭이 남의 화면 · 상호작용 문장 · 되돌리기에 선다 | 진짜 키(F2)가 입력을 안 연다 · 편집(WS `patch`)이 서버에 안 닿는다 · 남(bob)의 트리 줄 · 상호작용 문장이 안 바뀐다 · 되돌리기 한 번에 옛 글로 안 돌아온다 |
  * | 좁은 창의 긴 별칭 · 요약이 칸 안에서 잘린다 | 줄 글이 트리 칸 밖으로 넘친다(글자 노드 `Range` 오른끝이 줄 단추 밖인데 잘리지 않는다) · 줄이 두 줄이 된다 · 문서가 가로로 스크롤한다 |
+ * | 긴 별칭의 글이 우측 패널 밖으로 안 나간다(속성 · 상호작용 · 코멘트 탭) | 제목 · 문장 · «달 곳»의 글자 노드 `Range` 오른끝이 패널 밖이고 그 자리를 자르는 조상이 패널 안에 없다 |
+ * | 긴 별칭이 든 상호작용 대상 고르개가 우측 패널 안에 선다 | 고르개 `<select>` 가 가장 긴 항목(60자 별칭) 폭으로 늘어 패널 밖으로 나간다 — 별칭은 문장의 라벨성 prop 과 달리 자르지 않는다 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -163,6 +165,79 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
       }
       // 판 카나리아 — 긴 별칭 줄은 정말 단추를 넘는다(안 넘으면 이 케이스는 잘림을 안 잰 것이다).
       expect(measured.rows.find((row) => row.id === 'n_long00000001')?.overflowsButton).toBe(true)
+    } finally {
+      await a.close()
+    }
+  })
+
+  it.each([1440, 700])('긴 별칭의 글이 우측 패널 밖으로 안 나간다 — 창 %i', async (width) => {
+    const { P } = await fixture(`f2-panel-${width}`, [
+      {
+        id: 'n_long00000001',
+        type: 'Button',
+        alias: LONG_ALIAS,
+        marker: 1,
+        props: { label: '저장' },
+        interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_long00000001', value: false }] }],
+      },
+    ])
+    const a = await openEditor(P, 'alice', { width, height: width === 700 ? 700 : 900 })
+    try {
+      await rowButton(a.page, 'n_long00000001').click()
+      const past: Record<string, string[]> = {}
+      for (const tab of ['속성', '상호작용', '코멘트']) {
+        await a.page.getByRole('tab', { name: tab, exact: true }).click()
+        await a.page.waitForTimeout(200)
+        past[tab] = await a.page.evaluate((alias) => {
+          const panel = document.querySelector('aside[aria-label="우측 패널"]')!
+          const right = panel.getBoundingClientRect().right
+          const out: string[] = []
+          const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT)
+          for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+            if (!(node.textContent ?? '').includes(alias.slice(0, 10))) continue
+            const range = document.createRange()
+            range.selectNodeContents(node)
+            const end = Math.max(0, ...[...range.getClientRects()].map((rect) => rect.right))
+            if (end <= right + 0.5) continue
+            // 넘친 글을 자르는 조상이 패널 안에 있으면 보이지 않는다.
+            let clip: Element | null = node.parentElement
+            while (clip !== null && clip !== panel && getComputedStyle(clip).overflowX === 'visible') clip = clip.parentElement
+            if (clip !== null && clip !== panel && clip.getBoundingClientRect().right <= right + 0.5) continue
+            out.push((node.parentElement?.className || node.parentElement?.tagName) ?? '?')
+          }
+          return out
+        }, LONG_ALIAS)
+      }
+      expect(past).toEqual({ 속성: [], 상호작용: [], 코멘트: [] })
+    } finally {
+      await a.close()
+    }
+  })
+
+  it.each([1440, 700])('긴 별칭이 든 상호작용 대상 고르개가 우측 패널 안에 선다 — 창 %i', async (width) => {
+    const { P } = await fixture(`f2-picker-${width}`, [
+      {
+        id: 'n_save00000001',
+        type: 'Button',
+        props: { label: '저장' },
+        interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_long00000001', value: false }] }],
+      },
+      { id: 'n_long00000001', type: 'Card', alias: LONG_ALIAS },
+    ])
+    const a = await openEditor(P, 'alice', { width, height: width === 700 ? 700 : 900 })
+    try {
+      await rowButton(a.page, 'n_save00000001').click()
+      await a.page.getByRole('tab', { name: '상호작용' }).click()
+      const select = a.page.locator('aside label.wb-shell-field', { hasText: /^대상/ }).locator('select')
+      await select.waitFor({ timeout: 10_000 })
+      const measured = await select.evaluate((element) => {
+        const panel = element.closest('aside')!.getBoundingClientRect()
+        const box = element.getBoundingClientRect()
+        return { right: box.right, panelRight: panel.right, chosen: (element as HTMLSelectElement).selectedOptions[0]?.textContent ?? '' }
+      })
+      // 판 카나리아 — 고른 항목이 정말 긴 별칭이다.
+      expect(measured.chosen).toBe(LONG_ALIAS)
+      expect(measured.right).toBeLessThanOrEqual(measured.panelRight + 0.5)
     } finally {
       await a.close()
     }
