@@ -28,6 +28,7 @@ import { App } from '../../src/app'
 import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
 import { HEAD_SEQ, PAGE_ROUTE, PROJECT_NAME, SHELL_MENU, chooseFromShellMenu, openPage, pageDoc } from '../editor-harness'
 import { treeTool, structureRowName } from '../panels/tree-row'
+import { openedMenu } from '../opened-menu'
 
 const DOC = pageDoc({ id: 'n-root', type: 'Page', children: [] })
 /** «아래로»를 낼 수 있는 문서 — 로그아웃 앞의 기다림을 재는 케이스가 편집 하나를 띄운다. */
@@ -111,7 +112,7 @@ describe('머리에서 로그아웃한다', () => {
     await openShell(async () => {})
 
     fireEvent.click(within(header()).getByRole('button', { name: SHELL_MENU }))
-    expect(within(header()).getByText(USER.name)).toBeTruthy()
+    expect(within(openedMenu(header())).getByText(USER.name)).toBeTruthy()
   })
 
   it('누르면 로그아웃을 부르고 로그인 화면으로 간다', async () => {
@@ -164,7 +165,7 @@ describe('머리에서 로그아웃한다', () => {
     await within(footer()).findByRole('alert')
 
     fireEvent.click(within(header()).getByRole('button', { name: SHELL_MENU }))
-    const item = within(header()).getByRole('menuitem', { name: '로그아웃' })
+    const item = within(openedMenu(header())).getByRole('menuitem', { name: '로그아웃' })
     expect(item.getAttribute('aria-disabled')).toBeNull()
     fireEvent.click(item)
 
@@ -185,7 +186,7 @@ describe('머리에서 로그아웃한다', () => {
     chooseFromShellMenu('로그아웃')
     await waitFor(() => expect(calls).toBe(1))
     fireEvent.click(within(header()).getByRole('button', { name: SHELL_MENU }))
-    const item = within(header()).getByRole('menuitem', { name: '로그아웃' })
+    const item = within(openedMenu(header())).getByRole('menuitem', { name: '로그아웃' })
     expect(item.getAttribute('aria-disabled')).toBe('true')
     fireEvent.click(item)
     await act(async () => {})

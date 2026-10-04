@@ -1,5 +1,5 @@
 /**
- * **하단 바**(`src/shell/shell-footer.tsx`) — 캔버스 도구(뷰포트 · 줌)와 통지 줄이 머리에서 이리로 왔는가.
+ * **하단 바**(`src/shell/shell-footer.tsx`) — 통지 줄과 «컴포넌트»가 여기 서고, 캔버스 도구(뷰포트 · 줌)는 머리에 서는가.
  *
  * 통지마다 그 통지를 세우는 **실물 길**로 세운다(편집 거절 · 경고가 실린 답 · 남의 복원 프레임 · 테마 번들 실패 · 멤버십 신호) — 부품을
  * 떼어 그리면 «셸이 그 부품을 어디에 달았나»를 못 잰다. 통지가 무엇을 말하는지는 그 부품의 파일이 잰다.
@@ -55,18 +55,35 @@ async function moveDown(): Promise<void> {
   await act(async () => {})
 }
 
-describe('캔버스 도구는 하단 바에 있다', () => {
-  it('뷰포트 폭 · 줌(축소 · 값 · 확대 · 화면 맞춤)이 하단 바에 있고 머리에는 없다 — 모드는 머리에 남는다', async () => {
+/**
+ * **캔버스 도구는 머리의 «편집 / 뷰» 뒤 · `…` 앞에 선다**(`src/routes/editor.tsx` 의 `wb-shell-head-tools`) — 하단 바에는 «컴포넌트»만 남는다.
+ * jsdom 에는 `matchMedia` 가 없어 머리는 늘 펼친 단계다(`src/shell/head-fold.ts`) — 좁은 창의 접힘은 `build-test/editor-head-tools.test.ts`.
+ */
+describe('캔버스 도구는 머리에 있다', () => {
+  it('뷰포트 폭 · 줌(축소 · 값 · 확대 · 화면 맞춤)이 머리의 모드 뒤 · `…` 앞에 있고 하단 바에는 «컴포넌트»만 있다', async () => {
     await openPage(PAIR)
-    expect(within(footer()).getByRole('combobox', { name: '뷰포트 폭' })).toBeTruthy()
-    const zoom = within(footer()).getByRole('group', { name: '줌' })
+    expect(within(header()).getByRole('combobox', { name: '뷰포트 폭' })).toBeTruthy()
+    const zoom = within(header()).getByRole('group', { name: '줌' })
     expect(within(zoom).getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual(['축소', '확대', '화면 맞춤'])
     expect(within(zoom).getByText('100%')).toBeTruthy()
+    const order = [...header().querySelectorAll<HTMLElement>('[aria-label="모드"], select, [aria-label="줌"], [aria-haspopup="menu"]')].map(
+      (element) => element.getAttribute('aria-label') ?? element.tagName.toLowerCase(),
+    )
+    expect(order).toEqual(['모드', 'select', '줌', '더 보기'])
 
-    expect(within(header()).queryByRole('combobox', { name: '뷰포트 폭' })).toBeNull()
-    expect(within(header()).queryByRole('group', { name: '줌' })).toBeNull()
-    expect(within(header()).getByRole('group', { name: '모드' })).toBeTruthy()
-    expect(within(footer()).queryByRole('group', { name: '모드' })).toBeNull()
+    expect(within(footer()).queryByRole('combobox', { name: '뷰포트 폭' })).toBeNull()
+    expect(within(footer()).queryByRole('group', { name: '줌' })).toBeNull()
+    expect(within(footer()).getAllByRole('button').map((button) => button.textContent)).toEqual(['컴포넌트'])
+  })
+
+  it('뷰 모드에서도 뷰포트 폭 · 줌은 머리에 그대로다', async () => {
+    await openPage(PAIR)
+    fireEvent.click(within(header()).getByRole('button', { name: '뷰 모드' }))
+    expect([
+      within(header()).queryAllByRole('combobox', { name: '뷰포트 폭' }).length,
+      within(header()).queryAllByRole('group', { name: '줌' }).length,
+      within(footer()).queryAllByRole('button').length,
+    ]).toEqual([1, 1, 0])
   })
 })
 

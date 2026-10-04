@@ -6,7 +6,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 좁은 칸 | 사이드바 최소 폭(200) · 창 700 에서 아이콘만 남은 단추가 자르는 조상(가로 `overflow` 가 `visible` 이 아닌 가장 가까운 조상)이나 창 밖으로 나간다 · 아이콘이 단추 밖으로 나간다 · 긴 이름 줄의 `+` · `…` 가 다음 줄로 접힌다 · 목록 항목의 휴지통이 칸 아래로 접힌다 |
- * | 하단 바 한 줄 | 창 1024 · 좌측 기본 폭(캔버스 칸 444)에서 하단 바의 도구(«컴포넌트» · 뷰포트 폭 · 줌 묶음)가 두 줄로 접힌다 |
+ * | 머리 한 줄 | 창 1024 에서 머리의 가운데 도구(되돌리기 · 배치 선 · 모드 · 구분선 · 뷰포트 폭 · 줌 묶음)가 두 줄로 접힌다 |
  * | 휴지통의 위험 색 | 속성 목록 · 상호작용 · 코멘트의 휴지통이 마우스를 올려도 · 키보드 포커스에도 붉지 않다 · 끈 휴지통이 붉다 |
  *
  * **넘침은 요소 상자로 잰다** — 아이콘 단추에는 글자 노드가 없어 `CLAUDE.md` «화면 넘침은 요소 상자로만 세지 않는다»의 글자 판이 설
@@ -131,10 +131,11 @@ describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
   })
 
   /**
-   * 줌 묶음(축소 · 확대 · 화면 맞춤)이 아이콘만인 까닭을 잰다 — «화면 맞춤»에 글을 붙이면 이 판에서 도구가 두 줄이 된다(`src/shell.css`
-   * 의 `.wb-shell-zoom-fit`). 한 줄 = 도구 상자 안의 직계 자식이 모두 같은 줄(위끝이 하나)이다. 판 카나리아: 직계 자식이 셋이다.
+   * 줌 묶음(축소 · 확대 · 화면 맞춤)이 아이콘만인 까닭 — 머리의 폭 예산(`src/shell.css` 의 `.wb-shell-zoom-fit` · `src/shell/head-fold.ts`). 창 1024 는
+   * 접지 않는 단계(«뷰포트 폭» 글 · 줌 묶음이 머리에 선다)다. 한 줄 = 머리 가운데 무리의 직계 자식이 모두 같은 줄이다. 판 카나리아: 직계 자식이
+   * 여섯(되돌리기 묶음 · 배치 선 · 모드 · 구분선 · 뷰포트 폭 · 줌)이다. 머리가 한 줄에 드는 최소 창 폭은 `editor-head-tools.test.ts` 가 잰다.
    */
-  it('창 1024 · 좌측 기본 폭에서 하단 바의 도구가 한 줄이다', async () => {
+  it('창 1024 · 좌측 기본 폭에서 머리의 가운데 도구가 한 줄이다', async () => {
     const { P } = await fixture(stack, alice, 'icons-footer')
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1024, height: 768 } })
     try {
@@ -142,12 +143,12 @@ describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
       await page.evaluate((key) => localStorage.setItem(key, JSON.stringify({ sideWidth: 264, panelWidth: 300 })), LAYOUT_KEY)
       await page.reload()
       await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
-      const tools = await page.locator('.wb-shell-footer-tools').evaluate((box) => {
+      const tools = await page.locator('.wb-shell-head-tools').evaluate((box) => {
         const kids = [...box.children].map((kid) => kid.getBoundingClientRect())
         return { children: kids.length, rows: new Set(kids.map((rect) => Math.round(rect.top + rect.height / 2))).size }
       })
       const canvas = await page.locator('.wb-shell-canvas').evaluate((el) => Math.round(el.getBoundingClientRect().width))
-      expect({ canvas, tools }).toEqual({ canvas: 444, tools: { children: 3, rows: 1 } })
+      expect({ canvas, tools }).toEqual({ canvas: 444, tools: { children: 6, rows: 1 } })
     } finally {
       await context.close()
     }

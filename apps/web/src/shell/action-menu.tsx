@@ -51,15 +51,31 @@
  * 키 이벤트의 기본 동작을 막고 포커스 항목의 `click()` 을 부른다 — 링크면 라우터가 받고 단추면 `onSelect` 가 돈다. 한 길이라 두 번 돌지
  * 않는다.
  *
+ * ## 목록은 문서 맨 위 겹에 선다 — `document.body` 로 portal
+ *
+ * 단추 곁에 그리면 트리 칸(스크롤 칸)이 목록을 자르고 캔버스가 덮는다 — 자리와 잰 값은 `use-popover-side.ts` 머리말 «왜 단추 곁이 아닌가».
+ * 그래서 목록을 `document.body` 끝에 그리고 단추 상자로 지은 고정 좌표에 놓는다. 셸의 화면 루트 밖이라 팔레트 · 글꼴은 목록이 제
+ * 클래스로 받는다(`shell.css` 의 팔레트 블록 · `.wb-shell-action-menu-body`). 옮겨도 그대로인 것과 옮겨 실은 것:
+ *
+ * - **React 합성 이벤트는 React 트리를 따라 버블된다** — 목록 안의 키 · 누름은 지금처럼 단추를 품은 조상(트리 상자의 `onKeyDown`)에
+ *   닿는다. portal 은 그 길을 바꾸지 않는다.
+ * - **DOM 포함 관계로 가르던 것은 옮겨 싣는다.** 바깥 누름은 목록을 `inside` 로 넘긴다(`use-popover-dismiss.ts` 머리말 «상자 밖에 그린
+ *   목록은 …»). 에디터 단축키를 안 받는 상자의 표지(`data-wb-own-shortcuts` — 메뉴 트리)는 연 때 단추가 그 안이면 목록에도 단다
+ *   (`edit/editor-shortcuts.ts` 의 `shortcutsBlocked` 는 대상의 DOM 조상을 본다 — 메뉴 트리가 안 쓰는 `?` 가 목록 안에서 에디터 도움말을
+ *   열었다). 위젯이 쥐는 키의 표지(`data-wb-holds-keys`)는 목록에 안 단다 — 목록 안은 `role="menu"` 가 이미 쥔다(`keyHeldByWidget` 의 역할 목록).
+ * - **Tab 은 단추에서 나간다** — 목록이 문서 끝이라 브라우저의 다음 자리가 단추 다음이 아니다. 그래서 Tab 이면 단추에 포커스를 돌린 뒤
+ *   기본 동작을 두고(단추 다음 자리로 간다), Shift+Tab 이면 단추에 멈춘다(단추 곁에 그리던 때 목록 앞 자리가 단추였다).
+ *
  * ## 바깥 누름 · 자리는 셸의 두 훅을 쓴다
  *
  * 닫기는 `use-popover-dismiss.ts`(캔버스 iframe 의 문서까지 듣는다 — 그 훅의 «캔버스 iframe 의 문서에도 건다»), 자리는 `use-popover-side.ts`
- * (머리가 접혀 단추가 왼쪽으로 가도 목록이 창 밖으로 안 나간다). **그 훅의 계약대로 단추까지 감싸는 상자에 건다.** Escape 는 그 훅도 받지만
- * 포커스를 돌려주려고 목록의 키 처리가 먼저 받는다 — 둘이 함께 닫아도 한 번 닫힌 상태에 한 번 더 닫는 것이라 결과가 같다.
+ * (아래가 모자라면 위로 · 창 밖이면 안으로 끌어오고, 열린 동안 칸의 스크롤 · 창 크기를 따라간다). **그 훅의 계약대로 단추까지 감싸는
+ * 상자에 건다.** 단추가 스크롤 칸의 보이는 자리 밖으로 나가면 닫는다(그 훅의 «잃었다고 알린다»). Escape 는 닫기 훅도 받지만 포커스를
+ * 돌려주려고 목록의 키 처리가 먼저 받는다 — 둘이 함께 닫아도 한 번 닫힌 상태에 한 번 더 닫는 것이라 결과가 같다.
  *
  * ## 열린 동안 키는 메뉴의 것이다 — 단추까지
  *
- * 열린 동안 메뉴 상자(단추 + 목록)에 `data-wb-holds-keys` 를 단다 — 포커스가 그 안이면 화살표 · Home · End · Escape · Enter 는 에디터 단축키가
+ * 열린 동안 단추를 감싼 상자에 `data-wb-holds-keys` 를 단다 — 포커스가 그 안이면 화살표 · Home · End · Escape · Enter 는 에디터 단축키가
  * 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`). **단추까지 감싸는 것은** 항목이 다 꺼진 메뉴는 포커스가 단추에 남아서다 — 그
  * 단추의 Escape 가 메뉴를 닫으며 선택까지 풀었다(Chrome · `build-test/editor-shortcuts-review.test.ts` «L2»). 상자 밖(캔버스 · 트리 줄)의 키는
  * 단축키가 받는다.
@@ -88,6 +104,7 @@
  * 마우스를 올렸을 때의 `title` 을 함께 든다.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
+import { createPortal } from 'react-dom'
 import type { LucideIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { useCanvasDocument } from '../canvas/canvas-document'
@@ -141,6 +158,8 @@ export function ActionMenu(props: {
   const [open, setOpen] = useState(false)
   /** 열 때 포커스를 줄 항목 — `'first'` · `'last'`. 목록이 그려진 뒤 이펙트가 옮긴다. */
   const [entry, setEntry] = useState<'first' | 'last'>('first')
+  /** 연 때 단추가 단축키를 안 받는 상자 안이었나 — 목록에도 같은 표지를 단다(머리말 «DOM 포함 관계로 가르던 것은 옮겨 싣는다»). */
+  const [ownShortcuts, setOwnShortcuts] = useState(false)
   const toggleRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const listId = useId()
@@ -152,12 +171,13 @@ export function ActionMenu(props: {
    */
   function close(): void {
     const box = listRef.current
-    if (box !== null && box.contains(document.activeElement)) toggleRef.current?.focus()
+    // 스크롤하지 않는다 — 단추가 칸 밖으로 굴러가 닫힌 판(아래 `usePopoverSide` 의 잃음)에서 사람이 굴린 칸을 되굴리지 않는다.
+    if (box !== null && box.contains(document.activeElement)) toggleRef.current?.focus({ preventScroll: true })
     setOpen(false)
   }
 
-  const rootRef = usePopoverDismiss(open, close)
-  const { placement, bodyRef } = usePopoverSide(rootRef, open)
+  const rootRef = usePopoverDismiss(open, close, [listRef])
+  const { placement, bodyRef } = usePopoverSide(rootRef, open, close)
 
   // 연 렌더에서 이미 참이다 — 여는 누름(`onOpen`)이 그 줄을 고르는 것과 여는 것이 한 렌더에 묶인다.
   const stale = open && props.openWhile === false
@@ -168,10 +188,11 @@ export function ActionMenu(props: {
   useEffect(() => {
     if (!open) return
     const enabled = enabledItems(listRef.current)
-    ;(entry === 'first' ? enabled[0] : enabled[enabled.length - 1])?.focus()
+    ;(entry === 'first' ? enabled[0] : enabled[enabled.length - 1])?.focus({ preventScroll: true })
   }, [open, entry])
 
   function openAt(at: 'first' | 'last'): void {
+    setOwnShortcuts(toggleRef.current?.closest('[data-wb-own-shortcuts]') != null)
     props.onOpen?.()
     setEntry(at)
     setOpen(true)
@@ -214,7 +235,9 @@ export function ActionMenu(props: {
         close()
         return
       case 'Tab':
-        // 메뉴는 Tab 한 번으로 빠져나간다 — 닫고 포커스는 브라우저가 다음 자리로 옮기게 둔다.
+        // 메뉴는 Tab 한 번으로 빠져나간다 — 단추에서 나간다(머리말 «Tab 은 단추에서 나간다»).
+        toggleRef.current?.focus({ preventScroll: true })
+        if (event.shiftKey) event.preventDefault()
         setOpen(false)
         return
     }
@@ -251,56 +274,60 @@ export function ActionMenu(props: {
       >
         <ToggleIcon icon={props.icon ?? ICONS.more} compact={props.compact === true} />
       </button>
-      {open && (
-        <div
-          className="wb-shell-action-menu-body"
-          ref={(element) => {
-            listRef.current = element
-            bodyRef.current = element
-          }}
-          data-side={placement.side}
-          style={placement.style}
-          onKeyDown={onListKeyDown}
-        >
-          {props.heading !== undefined && <p className="wb-shell-action-menu-heading">{props.heading}</p>}
-          <ul className="wb-shell-action-menu-list" role="menu" id={listId} aria-label={props.label}>
-            {props.items.map((item) => (
-              <li key={item.key} className="wb-shell-action-menu-entry" role="none">
-                {item.to !== undefined && item.disabled !== true ? (
-                  <Link
-                    role="menuitem"
-                    tabIndex={-1}
-                    className="wb-shell-action-menu-item"
-                    to={item.to}
-                    onClick={(event) => {
-                      guardFollowingClick(event)
-                      close()
-                    }}
-                  >
-                    <ItemLabel item={item} />
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    tabIndex={-1}
-                    className={item.danger === true ? 'wb-shell-action-menu-item wb-shell-action-menu-danger' : 'wb-shell-action-menu-item'}
-                    aria-disabled={item.disabled === true ? true : undefined}
-                    title={item.title}
-                    aria-describedby={item.describedBy}
-                    onClick={(event) => {
-                      if (item.disabled === true) return
-                      choose(item, event)
-                    }}
-                  >
-                    <ItemLabel item={item} />
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            className="wb-shell-action-menu-body"
+            ref={(element) => {
+              listRef.current = element
+              bodyRef.current = element
+            }}
+            data-side={placement.side}
+            data-block={placement.block}
+            data-wb-own-shortcuts={ownShortcuts ? '' : undefined}
+            style={placement.style}
+            onKeyDown={onListKeyDown}
+          >
+            {props.heading !== undefined && <p className="wb-shell-action-menu-heading">{props.heading}</p>}
+            <ul className="wb-shell-action-menu-list" role="menu" id={listId} aria-label={props.label}>
+              {props.items.map((item) => (
+                <li key={item.key} className="wb-shell-action-menu-entry" role="none">
+                  {item.to !== undefined && item.disabled !== true ? (
+                    <Link
+                      role="menuitem"
+                      tabIndex={-1}
+                      className="wb-shell-action-menu-item"
+                      to={item.to}
+                      onClick={(event) => {
+                        guardFollowingClick(event)
+                        close()
+                      }}
+                    >
+                      <ItemLabel item={item} />
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      tabIndex={-1}
+                      className={item.danger === true ? 'wb-shell-action-menu-item wb-shell-action-menu-danger' : 'wb-shell-action-menu-item'}
+                      aria-disabled={item.disabled === true ? true : undefined}
+                      title={item.title}
+                      aria-describedby={item.describedBy}
+                      onClick={(event) => {
+                        if (item.disabled === true) return
+                        choose(item, event)
+                      }}
+                    >
+                      <ItemLabel item={item} />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

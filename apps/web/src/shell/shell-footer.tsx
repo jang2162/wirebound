@@ -1,7 +1,7 @@
 /**
- * **하단 바**(spec `docs/superpowers/specs/2026-09-30-editor-shell-design.md` 「하단 바」) — 캔버스 칸 아래 한 줄, 좌 · 우 사이드바 사이.
- * 왼쪽은 통지 줄, 오른쪽은 캔버스를 다루는 도구(뷰포트 · 줌)다. 칸이 좁아 통지가 읽을 폭(320)을 못 받으면 도구가 통지 아래 줄의 오른쪽 끝으로
- * 내려간다(`shell.css`의 `.wb-shell-footer`).
+ * **하단 바**(정본 `docs/superpowers/specs/2026-08-03-wirebound-design.md` 「설계서 화면 구조」의 «하단 바») — 캔버스 칸 아래 한 줄, 좌 · 우 사이드바
+ * 사이. 왼쪽은 통지 줄, 오른쪽은 «컴포넌트»(하단 컴포넌트 목록의 토글)다 — 캔버스를 다루는 도구(뷰포트 · 줌)는 머리에 있다(`routes/editor.tsx`
+ * 의 `CanvasTools`). 칸이 좁아 통지가 읽을 폭(320)을 못 받으면 «컴포넌트»가 통지 아래 줄의 오른쪽 끝으로 내려간다(`shell.css`의 `.wb-shell-footer`).
  *
  * **그리드의 한 칸이다**(`shell.css`의 `.wb-shell` — `grid-template-areas`의 `footer`). 캔버스와 이 바 사이에 다른 칸(아래에서 펼쳐지는 판)을
  * 끼울 수 있게 영역 이름으로 짓는다 — 칸을 하나 더하는 것은 줄 하나(`grid-template-rows` · `-areas`)를 더하는 일이다.
@@ -17,9 +17,9 @@
 import type { ReactElement, ReactNode, Ref } from 'react'
 
 export function ShellFooter(props: {
-  /** 통지들. 없으면 빈 줄이다 — 자리는 도구가 지킨다. */
+  /** 통지들. 없으면 빈 줄이다 — 높이는 셸 CSS 가 지킨다(`.wb-shell-footer` 의 `min-height`). */
   notices: ReactNode
-  /** 캔버스 도구(뷰포트 · 줌). */
+  /** 오른쪽 도구 — «컴포넌트»(편집 모드 · editor 이상일 때만 — 없으면 통지만이고 높이는 그대로다). */
   tools: ReactNode
   /** 하단 바 상자 — 셸이 판의 최대를 셀 때 잰다(`shell/sidebar-layout.ts` 머리말 «하단 판의 높이»). */
   ref?: Ref<HTMLElement>
