@@ -2,7 +2,7 @@
  * **축소판** — 하단 컴포넌트 판의 카드마다 그 컴포넌트를 프로젝트 테마로 그린 그림(spec `docs/superpowers/specs/2026-10-01-component-drag-design.md`
  * 「축소판」). **판 하나에 iframe 하나다** — 카드마다 iframe 을 두지 않는다.
  *
- * ## 같은 좌표 — iframe 을 카드 줄 뒤에 깔고 표본을 카드 창 자리로 옮긴다
+ * ## 같은 좌표 — iframe 을 카드 판 뒤에 깔고 표본을 카드 창 자리로 옮긴다
  *
  * iframe(`canvas/canvas-iframe.tsx` — 캔버스와 같은 시트 차례 · 같은 테마 공급자 `useProjectTheme`)을 카드 판(트랙 — 카드가 여러 줄로
  * 감싼다) 뒤에 트랙과 같은 크기로 깐다. 트랙과 함께 스크롤하므로 스크롤 중에도 어긋날 것이 없다. 그 문서에 카드마다 표본 하나를 제 폭(`NATURAL_WIDTH`)으로 그린 뒤
