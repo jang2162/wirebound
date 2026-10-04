@@ -217,6 +217,26 @@
   cursor: pointer;
 }
 
+/* 머리의 «배치 선» 토글(`canvas/layout-guides.tsx`) — 되돌리기 단추와 같은 줄 · 같은 꼴이다. 켠 판은 강조색 테두리(하단 바 «컴포넌트» 토글과
+   같은 말투). */
+.wb-shell-guides-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+.wb-shell-guides-toggle[aria-pressed='true'] {
+  border-color: var(--wb-shell-accent);
+  color: var(--wb-shell-accent);
+}
+
 /* 되돌릴 것이 없을 때. 회색만 두고 테두리는 남긴다 — 자리가 사라지면 옆 버튼이 움직인다. */
 .wb-shell-history-step:disabled {
   background: var(--wb-shell-chrome);
@@ -1273,6 +1293,40 @@
   border-radius: 2px;
   /* 아래의 노드가 그대로 눌려야 한다. 이것이 없으면 선택한 노드를 다시 누를 수 없다. */
   pointer-events: none;
+}
+
+/* 배치 선(`canvas/layout-guides.tsx`) — Flex · Grid 노드의 점선 테두리. 외곽선 · 마커와 같은 문서 옆 셸 겹이고 누름을 안 받는다. 종류마다 색이
+   갈린다 — Flex 는 주황 · Grid 는 보라(선택 외곽선의 강조색과 안 겹친다). **`border` 가 아니라 `outline` 이다** — 테두리는 상자를 부풀려
+   높이 0 인 노드(빈 Flex)의 선이 2px 아래로 내려간다. 안쪽으로 그려(`outline-offset: -1px`) 노드 상자 밖으로 안 나간다. */
+.wb-shell-guide {
+  position: absolute;
+  outline: 1px dashed #d97706;
+  outline-offset: -1px;
+  pointer-events: none;
+}
+
+.wb-shell-guide-grid {
+  outline-color: #7c3aed;
+}
+
+/* 모서리 표시(Flex → ↓ ← ↑ · Grid «N열») — 테두리 안 왼쪽 위. 줌을 걷는 `scale(1 / zoom)` 은 인라인이라 기준점이 왼쪽 위다. */
+.wb-shell-guide-tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 0 4px;
+  border-radius: 0 0 3px 0;
+  background: #d97706;
+  color: #fff;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  transform-origin: top left;
+}
+
+.wb-shell-guide-tag-grid {
+  background: #7c3aed;
 }
 
 /* 여럿을 고른 판의 기준 노드가 아닌 고른 노드(`canvas/canvas.tsx`) — 기준 노드(위)보다 가늘게 · 끊어서. 누름은 그대로 아래로 간다. */

@@ -56,6 +56,7 @@ import {
   Plus,
   Redo2,
   Settings,
+  SquareDashed,
   Stamp,
   Trash2,
   TriangleAlert,
@@ -121,6 +122,8 @@ export const ICONS = {
   comment: MessageSquarePlus,
   /** 번호를 문서 순서로 다시 매긴다. */
   renumber: ListOrdered,
+  /** 캔버스의 배치 선(Flex · Grid 의 경계와 방향)을 켜고 끈다 — 머리. */
+  layoutGuides: SquareDashed,
   /** 동작이 아니라 결과의 표지 — 읽은 것 · 들어간 것(성공) · 실패 · 경고(페이지 가져오기 상자). */
   succeeded: CircleCheck,
   failed: CircleX,

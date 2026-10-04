@@ -127,15 +127,15 @@ function isElement(value: unknown): value is Element {
   return typeof value === 'object' && value !== null && (value as Node).nodeType === 1
 }
 
-/** `display: contents` 는 상자가 없다 — 배치는 그 위 조상이 한다. */
-function layoutParent(element: Element, view: Window): Element | null {
+/** `display: contents` 는 상자가 없다 — 배치는 그 위 조상이 한다. 배치 선(`./layout-guides.ts`)도 이것으로 컨테이너를 찾는다. */
+export function layoutParent(element: Element, view: Window): Element | null {
   let parent = element.parentElement
   while (parent !== null && view.getComputedStyle(parent).display === 'contents') parent = parent.parentElement
   return parent
 }
 
 /** 배치 부모의 다른 자식 상자 — `display: contents` 자식은 그 안을 펼친다. 크기 0(숨김)은 줄을 안 만든다. */
-function siblingRects(parent: Element, self: Element, view: Window): Rect[] {
+export function siblingRects(parent: Element, self: Element, view: Window): Rect[] {
   const out: Rect[] = []
   const visit = (element: Element): void => {
     if (element === self) return

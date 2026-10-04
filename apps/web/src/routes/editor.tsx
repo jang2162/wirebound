@@ -49,6 +49,7 @@ import { EditorKeys } from '../shell/editor-keys'
 import { ICONS, shellIcon } from '../shell/icons'
 import { ShellDialog } from '../shell/shell-dialog'
 import { ComponentPalette, PaletteToggle } from '../palette/component-palette'
+import { GuidesToggle } from '../canvas/layout-guides'
 import { ShellFooter } from '../shell/shell-footer'
 import { ShellResizer } from '../shell/shell-resizer'
 import { useSidebarLayout } from '../shell/sidebar-layout'
@@ -775,6 +776,8 @@ function EditorShell(props: {
             **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
         <div className="wb-shell-head-tools">
           {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
+          {/* **배치 선**(`canvas/layout-guides.tsx`) — 편집 모드에서만 선다(선을 그리는 것도 편집 모드뿐이다). 읽기 도구라 viewer 에게도 선다. */}
+          {mode === 'edit' && <GuidesToggle />}
           <ModeTools />
         </div>
         {/* **오른쪽 끝의 `…`** — 이 프로젝트 전체 · 계정을 다루는 일(spec 「`…` 메뉴」). **역할로 감추지 않는다** — 항목 다섯이 모든 역할에게

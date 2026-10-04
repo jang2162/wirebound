@@ -51,10 +51,11 @@ import { nodeTypeLabel } from '../panels/node-shape'
 import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useAnnounceCanvasRemeasure, usePlacementPreview, usePublishCanvasRegion } from '../drag/use-placement'
-import { applyPreviewLook, previewDocument } from './canvas-preview'
+import { applyPreviewLook, isPreviewId, previewDocument } from './canvas-preview'
 import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
+import { guideOf, useLayoutGuides, type Guide } from './layout-guides'
 import { useCanvasMarquee } from './use-canvas-marquee'
 import { themeFileUrl } from '../theme/bundle-loader'
 import { useProjectTheme, type ProjectThemeState } from '../theme/project-theme'
@@ -202,6 +203,8 @@ export function Canvas(props: {
   /** 고른 노드마다의 외곽선 상자 — 고른 차례(문서 차례). 기준 노드의 것이 `box`다. */
   const [boxes, setBoxes] = useState<readonly OutlineBox[]>(NO_OUTLINES)
   const [markers, setMarkers] = useState<MarkerBox[]>(NO_MARKERS)
+  /** 배치 선(`./layout-guides.tsx`) — 켰고 편집 모드일 때 Flex · Grid 노드마다. */
+  const [guides, setGuides] = useState<readonly GuideBox[]>(NO_GUIDES)
   /** 문서를 그리는 iframe. 그 문서가 서기 전에는 잴 것이 없다. */
   const [frame, setFrame] = useState<CanvasFrame | null>(null)
   /**
@@ -450,6 +453,33 @@ export function Canvas(props: {
   }, [doc, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
+   * **배치 선의 자리를 잰다**(`./layout-guides.tsx`). 외곽선 · 마커와 같은 장치 · 같은 의존이다 — 줌 · 뷰포트 폭 · 남의 편집 · 미리보기 ·
+   * iframe 이 다시 잼이 노드를 옮긴다. **그린 문서(`rendered`)를 돈다** — 끄는 동안 미리보기가 형제를 밀면 선도 따라간다. 미리보기 노드
+   * 자체(`wb:preview:` — `./canvas-preview.ts`)에는 안 그린다 — 문서의 노드가 아니라 그 위의 그림이다. 편집 모드에서만 그린다 — 단추가
+   * 편집 모드에만 있다(`routes/editor.tsx` 의 머리).
+   */
+  const guidesOn = useLayoutGuides() && mode === 'edit'
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current
+    if (!guidesOn || surface === null || frame === null || rendered === null) {
+      setGuides((prev) => (prev.length === 0 ? prev : NO_GUIDES))
+      return
+    }
+    const offset = frameOffset(frame, surface, zoom)
+    const next: GuideBox[] = []
+    for (const visit of walkSafely(rendered.root)) {
+      const node = visit.node
+      if (node.type !== 'Flex' && node.type !== 'Grid') continue
+      if (isPreviewId(node.id)) continue
+      const target = findNodeElement(frame.document, node.id)
+      if (target === null) continue
+      const guide = guideOf(node, target, frame.window)
+      if (guide !== null) next.push({ nodeId: node.id, ...guide, box: measure(target, offset) })
+    }
+    setGuides((prev) => (sameGuides(prev, next) ? prev : next))
+  }, [guidesOn, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+
+  /**
    * **다시 잰 판** — 위 두 측정 이펙트와 같은 의존이 바뀔 때마다 새 값이다. 손잡이가 끄는 중이면 이 값이 바뀔 때 마지막 좌표로 다시
    * 묻는다(`./canvas-drag-handle.tsx` 머리말 «캔버스가 다시 잴 때») — 노드가 밀려도 표시가 옛 좌표에 남지 않게.
    */
@@ -550,6 +580,24 @@ export function Canvas(props: {
           조건이 둘인 것은 `box`만 보면 모드가 뷰로 바뀐 렌더와 그것을 지우는 레이아웃
           이펙트 사이에서 **id 없는 아웃라인**이 한 번 만들어지기 때문이다(레이아웃
           이펙트라 그려지기 전에 지워지지만, 만들지 않는 편이 낫다). */}
+      {/* **배치 선**(`./layout-guides.tsx`) — 외곽선보다 먼저 그려 그 밑에 선다. 모서리 글은 줌을 걷어 화면에서 늘 같은 크기다(손잡이와 같은 꼴). */}
+      {guides.map((item) => (
+        <div
+          key={item.nodeId}
+          className={item.kind === 'flex' ? 'wb-shell-guide' : 'wb-shell-guide wb-shell-guide-grid'}
+          data-wb-guide-kind={item.kind}
+          data-wb-guide-for={item.nodeId}
+          data-wb-guide={item.label}
+          style={{ left: item.box.left, top: item.box.top, width: item.box.width, height: item.box.height }}
+        >
+          <span
+            className={item.kind === 'flex' ? 'wb-shell-guide-tag' : 'wb-shell-guide-tag wb-shell-guide-tag-grid'}
+            style={{ transform: `scale(${1 / zoom})` }}
+          >
+            {item.label}
+          </span>
+        </div>
+      ))}
       {outlinedNodeId !== null && box !== null && (
         <div
           className="wb-shell-selection"
@@ -822,6 +870,22 @@ interface OutlineBox {
 }
 
 const NO_OUTLINES: readonly OutlineBox[] = []
+
+/** 배치 선 하나 — 노드 · 종류 · 모서리 글 · 상자. */
+interface GuideBox extends Guide {
+  nodeId: string
+  box: Box
+}
+
+const NO_GUIDES: readonly GuideBox[] = []
+
+/** 두 배치 선 목록이 같은가 — `sameBox` 와 같은 까닭(값이 같으면 앞 배열을 그대로 둔다). */
+function sameGuides(a: readonly GuideBox[], b: readonly GuideBox[]): boolean {
+  return a.length === b.length && a.every((item, index) => {
+    const other = b[index]
+    return other !== undefined && item.nodeId === other.nodeId && item.label === other.label && sameBox(item.box, other.box)
+  })
+}
 const NO_IDS: readonly string[] = []
 
 /** 두 외곽선 목록이 같은가 — `sameBox`와 같은 까닭(값이 같으면 앞 배열을 그대로 둔다). */
