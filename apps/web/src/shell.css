@@ -94,6 +94,7 @@
 .wb-shell,
 .wb-shell-project-list,
 .wb-shell-settings,
+.wb-shell-action-menu-body,
 .wb-shell-login {
   --wb-shell-line: #dfe3e8;
   --wb-shell-chrome: #f6f7f9;
@@ -2832,10 +2833,9 @@
 }
 
 /* ── 행동 메뉴(`shell/action-menu.tsx`) ─────────────────────────────────────────────────
-   에디터 머리 · 목록 머리의 `…` 와 트리 줄의 `+` · `…`. 단추까지 감싸는 상자가 떠 있는 목록의 기준이다(`position: relative` —
-   `use-popover-dismiss.ts` · `use-popover-side.ts`의 계약). 팔레트 · 글꼴은 그 자리의 조각(머리 · 좌측)이 세워 내려온다. */
+   에디터 머리 · 목록 머리의 `…` 와 트리 줄의 `+` · `…`. 단추까지 감싸는 상자는 바깥 누름 판정의 상자다(`use-popover-dismiss.ts`의 계약).
+   떠 있는 목록은 그 안이 아니라 `document.body` 끝에 선다(그 파일 머리말 «목록은 문서 맨 위 겹에 선다»). */
 .wb-shell-action-menu {
-  position: relative;
   display: inline-flex;
 }
 
@@ -2855,15 +2855,20 @@
   border-color: var(--wb-shell-accent);
 }
 
-/* 떠 있는 목록. 오른쪽 끝에 붙어 왼쪽으로 펴고, 화면 밖으로 나가면
-   `data-side`로 왼쪽 끝에 붙는다(`use-popover-side.ts`의 표). */
+/* 떠 있는 목록 — 화면 좌표(`left` · `top`)는 인라인이다(`use-popover-side.ts`의 두 표). 셸의 화면 루트 밖(`document.body`)이라 팔레트는 위
+   팔레트 블록에서 받고 글꼴 · 스킴은 여기 건다. 화면보다 높으면 안에서 스크롤한다. */
 .wb-shell-action-menu-body {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
   z-index: 30;
+  box-sizing: border-box;
   min-width: 180px;
   max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  color-scheme: light;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   padding: 4px 0;
   background: #fff;
   border: 1px solid var(--wb-shell-line);
@@ -2872,11 +2877,6 @@
   font-size: 13px;
   text-align: left;
   color: var(--wb-shell-ink);
-}
-
-.wb-shell-action-menu-body[data-side='start'] {
-  right: auto;
-  left: 0;
 }
 
 /* 머리 — 로그인한 사람. 항목이 아니므로 흐린 색이고, 목록과 선으로 가른다. */

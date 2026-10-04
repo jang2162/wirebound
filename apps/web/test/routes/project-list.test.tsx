@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectDetail, SessionUser } from '../../src/api/types'
+import { openedMenu } from '../opened-menu'
 import {
   currentPath,
   expiringSession,
@@ -196,7 +197,7 @@ describe('목록 머리의 `…`', () => {
 
   function openMenu(): string[] {
     fireEvent.click(within(head()).getByRole('button', { name: '더 보기' }))
-    return within(head()).getAllByRole('menuitem').map((item) => item.textContent ?? '')
+    return within(openedMenu(head())).getAllByRole('menuitem').map((item) => item.textContent ?? '')
   }
 
   it('계정 설정 · 로그아웃 — 메뉴 머리에 이름. 옛 계정 묶음과 «테마 관리» 링크는 없다', async () => {
@@ -209,15 +210,15 @@ describe('목록 머리의 `…`', () => {
     expect(within(head()).queryByText(USER.name)).toBeNull()
 
     expect(openMenu()).toEqual(['계정 설정', '로그아웃'])
-    expect(within(head()).getByText(USER.name)).toBeTruthy()
-    expect(within(head()).getByRole('menuitem', { name: '계정 설정' }).getAttribute('href')).toBe('/account')
+    expect(within(openedMenu(head())).getByText(USER.name)).toBeTruthy()
+    expect(within(openedMenu(head())).getByRole('menuitem', { name: '계정 설정' }).getAttribute('href')).toBe('/account')
   })
 
   it('인스턴스 관리자에게는 «테마 관리»가 가운데에 선다 — /admin/themes 로 간다', async () => {
     renderWithProviders(<App />, { client: fakeApi({ me: async () => ADMIN, listProjects: async () => [] }), route: '/' })
     await screen.findByText(EMPTY_NOTICE)
     expect(openMenu()).toEqual(['계정 설정', '테마 관리', '로그아웃'])
-    fireEvent.click(within(head()).getByRole('menuitem', { name: '테마 관리' }))
+    fireEvent.click(within(openedMenu(head())).getByRole('menuitem', { name: '테마 관리' }))
     expect(currentPath()).toBe('/admin/themes')
   })
 

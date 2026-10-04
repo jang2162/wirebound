@@ -15,6 +15,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter, useLocation } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { ActionMenu, DOUBLE_CLICK_MS, DOUBLE_CLICK_SLOP, type ActionMenuItem } from '../../src/shell/action-menu'
+import { keyHeldByWidget } from '../../src/edit/editor-shortcuts'
 
 function Where(): ReactElement {
   return <span data-testid="where">{useLocation().pathname}</span>
@@ -110,14 +111,18 @@ describe('여닫기', () => {
     expect({ menus: screen.queryAllByRole('menu').length, focus: document.activeElement === toggle() }).toEqual({ menus: 0, focus: true })
   })
 
-  it('열린 동안만 단추까지 감싼 상자에 `data-wb-holds-keys` 를 단다 — 키가 메뉴의 것이다', () => {
+  /**
+   * 목록은 `document.body` 로 portal 되어 단추 상자 밖이다(`src/shell/action-menu.tsx` 머리말 «목록은 문서 맨 위 겹에 선다») — 목록 안의 키는
+   * 표지가 아니라 `role="menu"` 가 쥔다. 둘 다 에디터 단축키의 판정(`keyHeldByWidget`)으로 잰다.
+   */
+  it('열린 동안만 단추까지 감싼 상자에 `data-wb-holds-keys` 를 단다 — 단추와 목록의 키가 메뉴의 것이다', () => {
     host()
-    const box = () => toggle().closest('[data-wb-holds-keys]')
-    expect(box()).toBeNull()
+    const held = (element: Element) => keyHeldByWidget({ key: 'ArrowDown', target: element })
+    expect(held(toggle())).toBe(false)
     fireEvent.click(toggle())
-    expect(box()?.contains(menu())).toBe(true)
+    expect([held(toggle()), held(document.activeElement!)]).toEqual([true, true])
     key('Escape')
-    expect(box()).toBeNull()
+    expect(held(toggle())).toBe(false)
   })
 })
 

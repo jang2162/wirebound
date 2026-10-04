@@ -12,6 +12,7 @@ import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectView, SessionUser } from '../../src/api/types'
 import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import { openedMenu } from '../opened-menu'
 import { adminThemeView } from '../theme-loader'
 
 /** 화면이 지어낼 리 없는 이름 — `…` 의 머리에 서버가 준 값이 그대로 오는지 잰다. */
@@ -56,7 +57,7 @@ function head(): HTMLElement {
 
 function openMenu(): string[] {
   fireEvent.click(within(head()).getByRole('button', { name: '더 보기' }))
-  return within(head()).getAllByRole('menuitem').map((item) => item.textContent ?? '')
+  return within(openedMenu(head())).getAllByRole('menuitem').map((item) => item.textContent ?? '')
 }
 
 describe.each(SCREENS)('$screen 머리', (at) => {
@@ -82,14 +83,14 @@ describe.each(SCREENS)('$screen 머리', (at) => {
   it('`…` — 계정 설정 · 로그아웃, 메뉴 머리에 이름. 계정 설정은 /account', async () => {
     await open(at, MEMBER)
     expect(openMenu()).toEqual(['계정 설정', '로그아웃'])
-    expect(within(head()).getByText(MEMBER.name)).toBeTruthy()
-    expect(within(head()).getByRole('menuitem', { name: '계정 설정' }).getAttribute('href')).toBe('/account')
+    expect(within(openedMenu(head())).getByText(MEMBER.name)).toBeTruthy()
+    expect(within(openedMenu(head())).getByRole('menuitem', { name: '계정 설정' }).getAttribute('href')).toBe('/account')
   })
 
   it('인스턴스 관리자에게는 «테마 관리»가 가운데에 선다 — /admin/themes', async () => {
     await open(at, ADMIN)
     expect(openMenu()).toEqual(['계정 설정', '테마 관리', '로그아웃'])
-    expect(within(head()).getByRole('menuitem', { name: '테마 관리' }).getAttribute('href')).toBe('/admin/themes')
+    expect(within(openedMenu(head())).getByRole('menuitem', { name: '테마 관리' }).getAttribute('href')).toBe('/admin/themes')
   })
 
   it('«로그아웃»은 한 번 부르고 로그인 화면으로 나간다', async () => {
@@ -100,7 +101,7 @@ describe.each(SCREENS)('$screen 머리', (at) => {
       },
     })
     openMenu()
-    fireEvent.click(within(head()).getByRole('menuitem', { name: '로그아웃' }))
+    fireEvent.click(within(openedMenu(head())).getByRole('menuitem', { name: '로그아웃' }))
     await waitFor(() => expect(currentPath()).toBe('/login'))
     expect(calls).toBe(1)
   })
@@ -112,7 +113,7 @@ describe.each(SCREENS)('$screen 머리', (at) => {
       },
     })
     openMenu()
-    fireEvent.click(within(head()).getByRole('menuitem', { name: '로그아웃' }))
+    fireEvent.click(within(openedMenu(head())).getByRole('menuitem', { name: '로그아웃' }))
     const alert = await screen.findByText(SERVER_MESSAGE)
     expect(alert.getAttribute('role')).toBe('alert')
     // 머리 **아래** 형제다 — 머리 안에 끼면 그 줄이 두꺼워진다(`shell/page-head.tsx` 머리말).

@@ -18,6 +18,12 @@
  * 반대편 손해는 받아들인다 — 밖에서 눌러 안으로 끌고 와 떼면 닫힌다. 그쪽은 사용자가
  * 이미 *"밖을 눌렀다"*이다.
  *
+ * ## 상자 밖에 그린 목록은 `inside` 로 넘긴다
+ *
+ * 목록을 상자 밖(portal — 행동 메뉴는 `document.body` 에 그린다)에 그리면 그 안의 누름이 DOM 포함 관계로는 «바깥»이다 — 넘기지 않으면
+ * 항목을 누르는 `mousedown` 이 먼저 닫아 목록이 사라지고 `click` 이 갈 곳이 없다(고르기가 안 된다). 그래서 상자 밖의 안쪽을
+ * `inside` 로 받는다. React 합성 이벤트는 portal 도 React 트리를 따라 버블되지만 이 훅은 네이티브 리스너라 DOM 만 본다.
+ *
  * ## 토글이 두 번 처리되지 않는다
  *
  * 토글 버튼이 ref 상자 **안**이므로 그 위의 `mousedown`은 *"바깥"*이 아니다. 그래서
@@ -72,6 +78,8 @@ import { useCanvasDocument } from '../canvas/canvas-document'
 export function usePopoverDismiss<T extends HTMLElement = HTMLDivElement>(
   open: boolean,
   close: () => void,
+  /** 상자 밖에 그린 안쪽(머리말 «상자 밖에 그린 목록은 …»). */
+  inside: readonly RefObject<HTMLElement | null>[] = [],
 ): RefObject<T | null> {
   const ref = useRef<T>(null)
   const canvasDocument = useCanvasDocument()
@@ -85,8 +93,10 @@ export function usePopoverDismiss<T extends HTMLElement = HTMLDivElement>(
    * **먼저 선언한다** — 이펙트는 선언 순서로 도므로 리스너가 걸릴 때 이미 최신이다.
    */
   const latest = useRef(close)
+  const latestInside = useRef(inside)
   useEffect(() => {
     latest.current = close
+    latestInside.current = inside
   })
 
   useEffect(() => {
@@ -101,6 +111,7 @@ export function usePopoverDismiss<T extends HTMLElement = HTMLDivElement>(
       const target = event.target as Node | null
       if (box === null || target === null || typeof target.nodeType !== 'number') return
       if (box.contains(target)) return
+      if (latestInside.current.some((extra) => extra.current?.contains(target) === true)) return
       latest.current()
     }
 

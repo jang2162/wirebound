@@ -1,23 +1,26 @@
 /**
- * **셸 머리의 떠 있는 목록을 어느 쪽에 붙이나**(`src/shell/use-popover-side.ts`) — 머리의 `…` 메뉴(`src/shell/action-menu.tsx`)가 쓴다.
+ * **셸의 떠 있는 목록을 어디에 놓나**(`src/shell/use-popover-side.ts`) — 행동 메뉴(`src/shell/action-menu.tsx`)가 쓴다.
  *
- * jsdom 에는 레이아웃이 없어 상자와 화면 폭이 모두 0 이다 — 그래서 **잰 치수를 심는다**: `getBoundingClientRect`를 클래스
- * 이름으로 갈라 돌려주고(토글을 감싼 상자의 양 끝 · 떠 있는 상자의 폭) 화면 폭(`documentElement.clientWidth`)을 심는다.
- * 실브라우저 값(Chrome · 높이 900)은 그 파일 머리말이 든다.
+ * jsdom 에는 레이아웃이 없어 상자와 화면이 모두 0 이다 — 그래서 **잰 치수를 심는다**: `getBoundingClientRect`를 클래스
+ * 이름으로 갈라 돌려주고(토글을 감싼 상자 · 떠 있는 상자 · 잘라 내는 칸) 화면 크기(`documentElement.clientWidth` · `clientHeight`)를 심는다.
+ * 실브라우저 값(Chrome)은 그 파일 머리말과 `build-test/action-menu-place.test.ts` 가 든다.
  *
- * 에디터 머리의 `…` 를 **실물로** 연다 — 판정은 훅 하나지만 상자에 `ref`와 `data-side`를 싣는 것은 부품이다. 빠뜨리면
+ * 에디터 머리의 `…` 를 **실물로** 연다 — 판정은 훅 하나지만 상자에 `ref` · `data-side` · 좌표를 싣는 것은 부품이다. 빠뜨리면
  * 목록이 옛 자리에 선다.
  */
-import { act, fireEvent, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { placePopover } from '../../src/shell/use-popover-side'
+import { ActionMenu } from '../../src/shell/action-menu'
+import { GAP, placePopover } from '../../src/shell/use-popover-side'
 import { openPage, pageDoc } from '../editor-harness'
 // **진짜 셸 CSS 를 문서에 싣는다** — 아래 «붙일 쪽의 규칙» 이 값으로 읽는다(`shell-css-wrap.test.ts`와 같은 기전).
 import '../../src/shell.css'
 
-/** 클래스 이름 → 심을 치수. 없는 것은 0 상자다. 화면 폭도 심는다(기본 1440). */
-function stubRects(rects: Record<string, Partial<DOMRect>>, viewport = 1440): void {
+/** 클래스 이름 → 심을 치수. 없는 것은 0 상자다. 화면 폭도 심는다(기본 1440). 높이는 `height` 를 주면 심는다(안 주면 jsdom 의 0). */
+function stubRects(rects: Record<string, Partial<DOMRect>>, viewport = 1440, height?: number): void {
   Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, get: () => viewport })
+  if (height !== undefined) Object.defineProperty(document.documentElement, 'clientHeight', { configurable: true, get: () => height })
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     const hit = Object.keys(rects).find((name) => this.classList.contains(name))
     const rect = { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, ...(hit ? rects[hit] : {}) }
@@ -27,8 +30,9 @@ function stubRects(rects: Record<string, Partial<DOMRect>>, viewport = 1440): vo
 
 afterEach(() => {
   vi.restoreAllMocks()
-  // 심은 화면 폭을 걷는다 — 프로토타입의 것(jsdom 은 0)이 다시 보인다.
+  // 심은 화면 크기를 걷는다 — 프로토타입의 것(jsdom 은 0)이 다시 보인다.
   Reflect.deleteProperty(document.documentElement, 'clientWidth')
+  Reflect.deleteProperty(document.documentElement, 'clientHeight')
 })
 
 const PANELS = [{ toggle: '더 보기', root: 'wb-shell-action-menu', body: 'wb-shell-action-menu-body', width: 200 }] as const
@@ -59,7 +63,7 @@ describe.each(PANELS)('$toggle 상자', (panel) => {
   })
 
   /**
-   * **두 쪽 다 넘치면 화면 안으로 끌어온다** — 상자에 `left`를 싣는다(부품이 상자에 `style`을 싣는 것까지 잰다 — 판정은
+   * **두 쪽 다 넘치면 화면 안으로 끌어온다** — 상자에 화면 좌표 `left`를 싣는다(부품이 상자에 `style`을 싣는 것까지 잰다 — 판정은
    * 아래 `placePopover` 표가 잰다). 화면 450 · 단추 150..190: 목록(200)은 오른쪽 끝에 붙이면 −10, 왼쪽 끝에 붙이면
    * 350 까지 — 넘치지 않으니 끌어오지 않는다. 화면 330 이면 둘 다 넘쳐 130..330 으로 끌어온다.
    */
@@ -70,25 +74,63 @@ describe.each(PANELS)('$toggle 상자', (panel) => {
     fireEvent.click(screen.getByRole('button', { name: panel.toggle }))
 
     expect(body(panel.body).dataset.side).toBe('start')
-    expect(body(panel.body).style.left).toBe(`${330 - panel.width - 150}px`)
+    expect(body(panel.body).style.left).toBe(`${330 - panel.width}px`)
   })
+
+})
+
+/**
+ * **아래가 모자라면 위로 연다** — 부품이 상자에 `data-block` · `top` 을 싣는 것까지 잰다. 최소 숙주로 연다 — 에디터 셸에는 잘라 내는
+ * 조상 칸이 있어, 화면 높이를 심으면 jsdom 의 0 상자인 그 칸들 밖으로 단추가 «나갔다»고 읽혀 닫힌다(아래 «잃으면 닫는다»). 화면 높이
+ * 900 · 단추 850..870 · 목록 높이 200: 아래로는 876..1076 이라 넘치고 위로는 644..844.
+ */
+it('단추 아래에 목록 높이만큼 자리가 없으면 위로 연다', () => {
+  stubRects(
+    { 'wb-shell-action-menu': { left: 1379, right: 1424, top: 850, bottom: 870, width: 45, height: 20 }, 'wb-shell-action-menu-body': { width: 200, height: 200 } },
+    1440,
+    900,
+  )
+  render(
+    <MemoryRouter>
+      <ActionMenu label="더 보기" items={[{ key: 'a', label: '가', onSelect: () => {} }]} />
+    </MemoryRouter>,
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
+
+  const box = body('wb-shell-action-menu-body')
+  expect({ block: box.dataset.block, top: box.style.top }).toEqual({ block: 'above', top: `${850 - GAP - 200}px` })
 })
 
 /**
  * **붙일 자리의 판정**(`use-popover-side.ts` 머리말의 표) — 잰 값만 받는 함수라 표를 줄마다 잰다. 값은 실브라우저에서 잰
  * 폭 표의 것이다(폭 414 · 554 의 떠 있는 상자 — 테두리 포함). 함수는 상자가 무엇인지 모른다 — 줄 이름은 그 값을 잰 상자의 이름이다.
  */
-describe('placePopover', () => {
+describe('placePopover — 가로', () => {
   it.each([
-    { label: '1280 내보내기 — 오른쪽 끝이 왼쪽 밖이라 왼쪽 끝', anchor: { left: 16, right: 60 }, width: 414, vw: 1280, side: 'start', left: undefined },
-    { label: '1280 스냅샷 — 오른쪽 끝에 붙여도 화면 안', anchor: { left: 1216, right: 1264 }, width: 554, vw: 1280, side: 'end', left: undefined },
-    { label: '600 내보내기 — 둘 다 넘쳐 끌어온다(상자는 화면에 든다)', anchor: { left: 364, right: 409 }, width: 414, vw: 600, side: 'start', left: -178 },
-    { label: '390 스냅샷 — 상자가 화면보다 넓으면 왼쪽 끝을 0 에', anchor: { left: 230, right: 264 }, width: 554, vw: 390, side: 'start', left: -230 },
+    { label: '1280 내보내기 — 오른쪽 끝이 왼쪽 밖이라 왼쪽 끝', anchor: { left: 16, right: 60 }, width: 414, vw: 1280, side: 'start', left: 16 },
+    { label: '1280 스냅샷 — 오른쪽 끝에 붙여도 화면 안', anchor: { left: 1216, right: 1264 }, width: 554, vw: 1280, side: 'end', left: 1264 - 554 },
+    { label: '600 내보내기 — 둘 다 넘쳐 끌어온다(상자는 화면에 든다)', anchor: { left: 364, right: 409 }, width: 414, vw: 600, side: 'start', left: 600 - 414 },
+    { label: '390 스냅샷 — 상자가 화면보다 넓으면 왼쪽 끝을 0 에', anchor: { left: 230, right: 264 }, width: 554, vw: 390, side: 'start', left: 0 },
   ])('$label', ({ anchor, width, vw, side, left }) => {
-    const placed = placePopover(anchor, width, vw)
+    const placed = placePopover({ ...anchor, top: 10, bottom: 30 }, { width, height: 100 }, { width: vw, height: 900 })
 
-    expect(placed.side).toBe(side)
-    expect(placed.style?.left).toBe(left)
+    expect({ side: placed.side, left: placed.style.left }).toEqual({ side, left })
+  })
+})
+
+/** **세로**(`use-popover-side.ts` 머리말의 둘째 표) — 화면 높이 700. */
+describe('placePopover — 세로', () => {
+  it.each([
+    { label: '아래에 자리가 있으면 아래로', anchor: { top: 100, bottom: 120 }, height: 240, block: 'below', top: 120 + GAP },
+    { label: '아래가 모자라고 위에 자리가 있으면 위로', anchor: { top: 600, bottom: 620 }, height: 240, block: 'above', top: 600 - GAP - 240 },
+    { label: '아래에 꼭 맞으면 아래로 — 끝 포함', anchor: { top: 434, bottom: 454 }, height: 240, block: 'below', top: 454 + GAP },
+    { label: '둘 다 모자라면 넓은 쪽(아래)으로 열고 화면 안으로 끌어온다', anchor: { top: 200, bottom: 220 }, height: 500, block: 'below', top: 700 - 500 },
+    { label: '둘 다 모자라면 넓은 쪽(위)으로 열고 화면 안으로 끌어온다', anchor: { top: 480, bottom: 500 }, height: 500, block: 'above', top: 0 },
+  ])('$label', ({ anchor, height, block, top }) => {
+    const placed = placePopover({ left: 600, right: 640, ...anchor }, { width: 200, height }, { width: 1440, height: 700 })
+
+    expect({ block: placed.block, top: placed.style.top }).toEqual({ block, top })
   })
 })
 
@@ -129,13 +171,13 @@ describe('열린 채 다시 고른다', () => {
     await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }))
     fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
     expect(body('wb-shell-action-menu-body').dataset.side).toBe('start')
-    expect(body('wb-shell-action-menu-body').style.left).toBe('')
+    expect(body('wb-shell-action-menu-body').style.left).toBe('150px')
     await nextFrame()
 
     viewport = 330
     await nextFrame()
 
-    expect(body('wb-shell-action-menu-body').style.left).toBe('-20px')
+    expect(body('wb-shell-action-menu-body').style.left).toBe('130px')
   })
 
   /** **닫으면 재기를 멈춘다** — 닫힌 채 프레임마다 앵커를 읽지 않는다(`use-popover-dismiss.ts`와 같은 판단). */
@@ -161,34 +203,86 @@ describe('열린 채 다시 고른다', () => {
 })
 
 /**
- * **붙일 쪽의 규칙이 그 상자에 걸린다** — 문서에 실린 `shell.css`를 지나 `getComputedStyle`로 읽는다(값으로 잰다 —
- * `shell-css-wrap.test.ts` 머리말). jsdom 에는 레이아웃이 없어 상자가 화면 안에 드는지는 못 잰다 — 그 값은 실브라우저의
- * 것이다(`use-popover-side.ts` 머리말).
+ * **떠 있는 상자의 규칙** — 문서에 실린 `shell.css`를 지나 `getComputedStyle`로 읽는다(값으로 잰다 — `shell-css-wrap.test.ts` 머리말).
+ * jsdom 에는 레이아웃이 없어 상자가 화면 안에 드는지는 못 잰다 — 그 값은 실브라우저의 것이다(`build-test/action-menu-place.test.ts`).
  */
-describe.each(PANELS)('$body 의 붙일 쪽 규칙', (panel) => {
-  function styleOf(side: string | null): CSSStyleDeclaration {
+describe.each(PANELS)('$body 의 규칙', (panel) => {
+  function styleOf(): CSSStyleDeclaration {
     const box = document.createElement('div')
     box.className = panel.body
-    if (side !== null) box.dataset.side = side
     document.body.appendChild(box)
     return getComputedStyle(box)
   }
 
-  it("기본은 오른쪽 끝이다 — 카나리아(이 파일이 진짜 shell.css 를 지난다)", () => {
-    expect(styleOf('end').right).toBe('0px')
-  })
-
-  it("data-side='start' 면 왼쪽 끝에 붙고 오른쪽은 풀린다", () => {
-    const style = styleOf('start')
-    expect(style.left).toBe('0px')
-    expect(style.right).toBe('auto')
+  /** 화면 좌표에 선다 — 조상 칸이 자르지 않는다(`use-popover-side.ts` 머리말 «왜 단추 곁이 아닌가»). 카나리아도 겸한다(진짜 shell.css). */
+  it('고정 상자다', () => {
+    expect(styleOf().position).toBe('fixed')
   })
 
   /**
-   * **화면보다 넓어지지 않는다** — 넓으면 끌어와도 오른쪽이 잘린다. 폭이 화면에 맞춰 줄어드는 것은 jsdom 이 못 잰다 — 규칙이 걸리는
-   * 것만 잰다.
+   * **화면보다 넓거나 높아지지 않는다** — 넓으면 끌어와도 오른쪽이 잘리고, 높으면 안에서 스크롤한다. 줄어드는 것은 jsdom 이 못 잰다 —
+   * 규칙이 걸리는 것만 잰다.
    */
-  it('화면 폭에 맞춰 줄어든다', () => {
-    expect(styleOf(null).maxWidth).toBe('calc(100vw - 32px)')
+  it('화면 크기에 맞춰 줄어든다', () => {
+    const style = styleOf()
+    expect({ maxWidth: style.maxWidth, maxHeight: style.maxHeight, overflowY: style.overflowY }).toEqual({
+      maxWidth: 'calc(100vw - 32px)',
+      maxHeight: 'calc(100vh - 16px)',
+      overflowY: 'auto',
+    })
+  })
+})
+
+/**
+ * **단추가 잘라 내는 칸의 보이는 자리 밖으로 나가면 닫는다**(`use-popover-side.ts` 머리말 «잃었다고 알린다»). 최소 숙주 — 스크롤 칸 하나
+ * (`overflow: auto` · 0..100) 안의 메뉴. 단추 가운데가 칸 안이면 그대로, 밖으로 굴러가면 다음 프레임에 닫힌다.
+ */
+describe('잃으면 닫는다', () => {
+  function host(): void {
+    render(
+      <MemoryRouter>
+        {/* 긴 꼴로 준다 — jsdom 은 `overflow` 줄임 꼴을 `overflowX` · `overflowY` 로 펴지 않는다. */}
+        <div className="probe-clip" style={{ overflowX: 'auto', overflowY: 'auto' }}>
+          <ActionMenu label="더 보기" items={[{ key: 'a', label: '가', onSelect: () => {} }]} />
+        </div>
+      </MemoryRouter>,
+    )
+  }
+
+  it('단추가 칸 밖으로 굴러가면 닫고, 칸 안에서 움직이면 그대로다', async () => {
+    const anchor = { left: 10, right: 40, top: 40, bottom: 60, width: 30, height: 20 }
+    stubRects({ 'probe-clip': { left: 0, right: 300, top: 0, bottom: 100 }, 'wb-shell-action-menu': anchor, 'wb-shell-action-menu-body': { width: 200, height: 80 } }, 1440, 900)
+    host()
+    fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
+    await nextFrame()
+
+    anchor.top = 70
+    anchor.bottom = 90
+    await nextFrame()
+    const stillOpen = screen.queryAllByRole('menu').length
+
+    anchor.top = 110
+    anchor.bottom = 130
+    await nextFrame()
+
+    expect({ stillOpen, after: screen.queryAllByRole('menu').length }).toEqual({ stillOpen: 1, after: 0 })
+  })
+
+  it('단추가 창 밖으로 나가도 닫는다 — 잘라 내는 칸이 없는 자리', async () => {
+    const anchor = { left: 10, right: 40, top: 40, bottom: 60, width: 30, height: 20 }
+    stubRects({ 'wb-shell-action-menu': anchor, 'wb-shell-action-menu-body': { width: 200, height: 80 } }, 1440, 900)
+    render(
+      <MemoryRouter>
+        <ActionMenu label="더 보기" items={[{ key: 'a', label: '가', onSelect: () => {} }]} />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
+    await nextFrame()
+
+    anchor.top = 910
+    anchor.bottom = 930
+    await nextFrame()
+
+    expect(screen.queryAllByRole('menu').length).toBe(0)
   })
 })

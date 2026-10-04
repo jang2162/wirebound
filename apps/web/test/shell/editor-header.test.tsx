@@ -7,6 +7,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { ProjectRole, ProjectView } from '../../src/api/types'
 import { PROJECT_ID, PROJECT_NAME, SHELL_MENU, chooseFromShellMenu, openPage, pageDoc } from '../editor-harness'
+import { openedMenu } from '../opened-menu'
 
 const DOC = pageDoc({ id: 'n-root', type: 'Page', children: [] })
 
@@ -83,7 +84,7 @@ describe('`…` 메뉴', () => {
   it.each(['owner', 'editor', 'viewer'] as const)('%s 에게 항목 다섯이 이 차례로 서고 머리에 사람 이름이 있다', async (role) => {
     await open(role)
     fireEvent.click(within(header()).getByRole('button', { name: SHELL_MENU }))
-    const menu = within(header()).getByRole('menu')
+    const menu = within(openedMenu(header())).getByRole('menu')
     expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       '계정 설정',
       '프로젝트 설정',
@@ -92,7 +93,7 @@ describe('`…` 메뉴', () => {
       '로그아웃',
     ])
     // 하네스의 로그인한 사람.
-    expect(within(header()).getByText('테스터')).toBeTruthy()
+    expect(within(openedMenu(header())).getByText('테스터')).toBeTruthy()
   })
 
   it('계정 설정 · 프로젝트 설정은 주소가 있는 링크다', async () => {
