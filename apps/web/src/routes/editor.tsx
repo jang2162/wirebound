@@ -52,6 +52,7 @@ import { ShellDialog } from '../shell/shell-dialog'
 import { ComponentPalette, PaletteToggle } from '../palette/component-palette'
 import { GuidesToggle } from '../canvas/layout-guides'
 import { ShellFooter } from '../shell/shell-footer'
+import { useHeadFold, type HeadFold } from '../shell/head-fold'
 import { ShellResizer } from '../shell/shell-resizer'
 import { useSidebarLayout } from '../shell/sidebar-layout'
 import { useNodeLock } from '../realtime/use-node-lock'
@@ -731,8 +732,18 @@ function EditorShell(props: {
   const [menuHead, setMenuHead] = useState<HTMLDivElement | null>(null)
   /** 구조 트리 제목 줄의 행동 자리 — 같은 까닭. */
   const [structureHead, setStructureHead] = useState<HTMLDivElement | null>(null)
-  /** `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. */
+  /** 머리가 좁은 창에서 접힌 단계(`shell/head-fold.ts`) — `folded` 면 줌 묶음이 `…` 의 첫 항목들이 된다. */
+  const fold = useHeadFold()
+  const zoomCommands = useZoomCommands(canvasRef)
+  /** `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. 접힌 머리의 줌이 맨 앞에 선다. */
   const menuItems: ActionMenuItem[] = [
+    ...(fold === 'folded'
+      ? [
+          { key: 'zoom-out', label: '축소', icon: ICONS.zoomOut, onSelect: zoomCommands.zoomOut },
+          { key: 'zoom-in', label: '확대', icon: ICONS.zoomIn, onSelect: zoomCommands.zoomIn },
+          { key: 'zoom-fit', label: '화면 맞춤', icon: ICONS.fitWidth, onSelect: zoomCommands.fit },
+        ]
+      : []),
     { key: 'account', label: '계정 설정', icon: ICONS.account, to: '/account' },
     { key: 'settings', label: '프로젝트 설정', icon: ICONS.projectSettings, to: `/projects/${props.project.id}/settings` },
     { key: 'snapshots', label: '스냅샷', icon: ICONS.snapshots, onSelect: () => setDialog('snapshots') },
@@ -759,8 +770,9 @@ function EditorShell(props: {
             <BrandLink />
             <h1 className="wb-shell-title">{props.project.name}</h1>
           </div>
-          {/* **가운데 — 설계서를 다루는 도구.** 되돌리기 · 다시 실행과 모드(편집/뷰)다. 캔버스를 다루는 도구(뷰포트 · 줌)는 캔버스 곁 —
-              하단 바(`ShellFooter`)에 있다.
+          {/* **가운데 — 설계서와 캔버스를 다루는 도구.** 되돌리기 · 다시 실행 · 배치 선 · 모드(편집/뷰) 다음에 구분선, 그 뒤가 캔버스를
+              다루는 도구(뷰포트 폭 · 줌)다. 캔버스 도구는 두 모드 다에 선다 — 보는 폭과 배율은 모드가 아니라 사람의 화면에 대한 값이다. 좁은
+              창에서는 «뷰포트 폭» 글을 감추고, 더 좁으면 줌 묶음을 오른쪽 끝 `…` 로 접는다(`shell/head-fold.ts` 의 단계 표).
 
               **되돌리기·다시 실행은 편집 모드에만 있다**.
               「설계서 화면 구조」가 뷰 모드에서 구조 트리를 접고 속성 탭을 페이지 설명으로 바꾸는 것과 같은
@@ -782,6 +794,9 @@ function EditorShell(props: {
             {/* **배치 선**(`canvas/layout-guides.tsx`) — 편집 모드에서만 선다(선을 그리는 것도 편집 모드뿐이다). 읽기 도구라 viewer 에게도 선다. */}
             {mode === 'edit' && <GuidesToggle />}
             <ModeTools />
+            {/* 접힌 머리에서는 구분선도 뺀다 — 뒤에 고르개 하나만 남아 가를 무리가 없고, 그 폭(선 1 + 틈 16)이 창 700 의 여유다(`shell/head-fold.ts`). */}
+            {fold !== 'folded' && <span className="wb-shell-head-divider" aria-hidden="true" />}
+            <CanvasTools canvasRef={canvasRef} fold={fold} />
           </div>
           {/* **오른쪽 끝의 `…`** — 이 프로젝트 전체 · 계정을 다루는 일(spec 「`…` 메뉴」). **역할로 감추지 않는다** — 항목 다섯이 모든 역할에게
               선다: 스냅샷 목록 · 내보내기 · 설정(읽기 전용 칸)은 viewer 도 본다(설계서 「권한 모델」 — 막는 것은 그 안의 생성 · 복원이고 그 판정은
@@ -954,7 +969,7 @@ function EditorShell(props: {
           />
         )}
 
-        {/* **하단 바**(`shell/shell-footer.tsx`) — 왼쪽은 통지 줄, 오른쪽은 캔버스 도구. 통지가 여럿이면 바가 위로 자라고 캔버스가 준다. */}
+        {/* **하단 바**(`shell/shell-footer.tsx`) — 왼쪽은 통지 줄, 오른쪽은 «컴포넌트». 통지가 여럿이면 바가 위로 자라고 캔버스가 준다. */}
         <ShellFooter
           ref={layout.footerRef}
           notices={
@@ -986,12 +1001,7 @@ function EditorShell(props: {
               <SessionNotices failure={logoutFailure} className="wb-shell-session-alert" />
             </>
           }
-          tools={
-            <>
-              {paletteEditable && <PaletteToggle open={layout.paletteOpen} onToggle={layout.togglePalette} />}
-              <CanvasTools canvasRef={canvasRef} />
-            </>
-          }
+          tools={paletteEditable && <PaletteToggle open={layout.paletteOpen} onToggle={layout.togglePalette} />}
         />
 
         {/* **캔버스와 우측 패널 사이의 손잡이**(`shell/sidebar-layout.ts` «두 폭은 한 예산을 나눠 쓴다»). 좌측 손잡이와 같은 부품이고 방향만
@@ -1715,19 +1725,53 @@ function ModeTools(): ReactElement {
   )
 }
 
-/** 뷰포트 프리셋 · 줌 — 하단 바의 오른쪽. 둘 다 스토어를 읽고 쓴다. */
+/**
+ * 줌 명령 셋 — 머리의 줌 묶음과 접힌 머리의 `…` 항목(`shell/head-fold.ts`)이 함께 부른다. 한계값(0.25~2)은 여기 두지 않는다 — 스토어가
+ * 클램프하므로 한 칸씩 밀기만 하면 되고, 한계가 바뀌어도 고칠 곳이 하나로 남는다.
+ */
+function useZoomCommands(canvasRef: RefObject<HTMLElement | null>): { zoomOut: () => void; zoomIn: () => void; fit: () => void } {
+  const store = useEditorStoreInstance()
+  return {
+    zoomOut: () => store.setZoom(store.getState().zoom - ZOOM_STEP),
+    zoomIn: () => store.setZoom(store.getState().zoom + ZOOM_STEP),
+    /* **누른 순간의 1회 계산이다** — 창 크기를 따라다니지 않는다. 따라다니게 하면
+       사용자가 손으로 맞춘 배율을 창을 조금만 흔들어도 빼앗기고, 그것을 막으려면
+       *"마지막으로 누른 것이 맞춤인가"*라는 상태가 하나 더 생긴다. 줌 명령 셋은
+       전부 **누른 값을 스토어에 놓는** 같은 모양이고, 이것도 그 하나다.
+
+       **폭 기준이다.** 높이까지 맞추면 페이지가 세로로 길어 대개 읽을 수 없는 배율이
+       나온다 — 뷰포트 프리셋이 폭만 고르는 것과 같은 축이다.
+
+       한계값은 여기서도 모른다 — 잰 배율을 그대로 넘기고 스토어가 클램프한다
+       (`fitZoom`이 `null`을 내는 것은 클램프가 아니라 *"재지 못했다"*이다). */
+    fit: () => {
+      const canvas = canvasRef.current
+      if (canvas === null) return
+      const next = fitZoom(canvas, store.getState().viewportWidth)
+      if (next === null) return
+      store.setZoom(next)
+    },
+  }
+}
+
+/**
+ * 뷰포트 프리셋 · 줌 — 머리의 «편집 / 뷰» 다음. 둘 다 스토어를 읽고 쓴다. `fold` 가 좁은 창의 단계다(`shell/head-fold.ts`) — `short` 부터
+ * «뷰포트 폭» 글을 눈에서만 감추고(고르개의 접근 이름은 그 글 그대로), `folded` 면 줌 묶음을 안 그린다(셸 `…` 가 든다).
+ */
 function CanvasTools(props: {
   /** 캔버스 칸. `화면 맞춤`이 이것의 폭을 잰다(위 `fitZoom`). */
   canvasRef: RefObject<HTMLElement | null>
+  fold: HeadFold
 }): ReactElement {
   const store = useEditorStoreInstance()
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
   const zoom = useEditorStore(store, (s) => s.zoom)
+  const commands = useZoomCommands(props.canvasRef)
 
   return (
     <>
       <label className="wb-shell-field">
-        뷰포트 폭
+        <span className={props.fold === 'wide' ? undefined : 'wb-shell-head-field-hidden'}>뷰포트 폭</span>
         <select
           className="wb-shell-select"
           value={viewportWidth}
@@ -1743,54 +1787,39 @@ function CanvasTools(props: {
         </select>
       </label>
 
-      {/* 한계값(0.25~2)을 이쪽에 두지 않는다. 스토어가 클램프하므로 버튼은 한 칸씩
-          밀기만 하면 되고, 한계가 바뀌어도 고칠 곳이 하나로 남는다. */}
-      <div className="wb-shell-zoom" role="group" aria-label="줌">
-        <button
-          type="button"
-          className="wb-shell-zoom-step"
-          aria-label="축소"
-          title="축소"
-          onClick={() => store.setZoom(zoom - ZOOM_STEP)}
-        >
-          {shellIcon('zoomOut', 16)}
-        </button>
-        <span className="wb-shell-zoom-value">{Math.round(zoom * 100)}%</span>
-        <button
-          type="button"
-          className="wb-shell-zoom-step"
-          aria-label="확대"
-          title="확대"
-          onClick={() => store.setZoom(zoom + ZOOM_STEP)}
-        >
-          {shellIcon('zoomIn', 16)}
-        </button>
-        {/* **누른 순간의 1회 계산이다** — 창 크기를 따라다니지 않는다. 따라다니게 하면
-            사용자가 손으로 맞춘 배율을 창을 조금만 흔들어도 빼앗기고, 그것을 막으려면
-            *"마지막으로 누른 것이 맞춤인가"*라는 상태가 하나 더 생긴다. 여기 버튼 셋은
-            전부 **누른 값을 스토어에 놓는** 같은 모양이고, 이것도 그 하나다.
-
-            **폭 기준이다.** 높이까지 맞추면 페이지가 세로로 길어 대개 읽을 수 없는 배율이
-            나온다 — 뷰포트 프리셋이 폭만 고르는 것과 같은 축이다.
-
-            한계값은 여기서도 모른다 — 잰 배율을 그대로 넘기고 스토어가 클램프한다
-            (`fitZoom`이 `null`을 내는 것은 클램프가 아니라 *"재지 못했다"*이다). */}
-        <button
-          type="button"
-          className="wb-shell-zoom-fit"
-          aria-label="화면 맞춤"
-          title="화면 맞춤"
-          onClick={() => {
-            const canvas = props.canvasRef.current
-            if (canvas === null) return
-            const next = fitZoom(canvas, viewportWidth)
-            if (next === null) return
-            store.setZoom(next)
-          }}
-        >
-          {shellIcon('fitWidth', 16)}
-        </button>
-      </div>
+      {props.fold !== 'folded' && (
+        <div className="wb-shell-zoom" role="group" aria-label="줌">
+          <button
+            type="button"
+            className="wb-shell-zoom-step"
+            aria-label="축소"
+            title="축소"
+            onClick={commands.zoomOut}
+          >
+            {shellIcon('zoomOut', 16)}
+          </button>
+          <span className="wb-shell-zoom-value">{Math.round(zoom * 100)}%</span>
+          <button
+            type="button"
+            className="wb-shell-zoom-step"
+            aria-label="확대"
+            title="확대"
+            onClick={commands.zoomIn}
+          >
+            {shellIcon('zoomIn', 16)}
+          </button>
+          {/* 누른 순간의 1회 계산 · 폭 기준(`useZoomCommands` 의 `fit`). */}
+          <button
+            type="button"
+            className="wb-shell-zoom-fit"
+            aria-label="화면 맞춤"
+            title="화면 맞춤"
+            onClick={commands.fit}
+          >
+            {shellIcon('fitWidth', 16)}
+          </button>
+        </div>
+      )}
     </>
   )
 }

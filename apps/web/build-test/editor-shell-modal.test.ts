@@ -150,11 +150,11 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
   })
 
   /**
-   * 창 1024 · 사이드바 기본에서 통지 셋(테마 못 실음 · 남의 복원 · 권한 바뀜 — 모두 실제로 세운다)이 선다. 캔버스 칸의 폭은 444 다 — 바가
-   * 안 접히면 하단 바 도구(뷰포트 · 줌 — 341)가 제 폭을 지키고 통지 칸은 남은 63 만 받아 한 줄이 한두 낱말이고, 바가 452 로 자라 캔버스가
-   * 198 이 된다(main 은 같은 통지가 전체 폭 머리에 서 캔버스 481). 바가 접히면 통지가 칸 폭을 다 쓰고 도구가 아래 줄 오른쪽 끝에 선다
-   * (`src/shell.css`의 `.wb-shell-footer`). 성질로 단언한다: 통지 한 줄의 폭 · 캔버스 몫(`CANVAS_MIN_WIDTH`와 같은 320) · 바가 창 안 · 도구가
-   * 눌림 · 도구의 오른끝이 바의 안쪽 여백(12)에 닿음.
+   * 창 1024 · 사이드바 기본에서 통지 셋(테마 못 실음 · 남의 복원 · 권한 바뀜 — 모두 실제로 세운다)이 선다. 캔버스 칸의 폭은 444 다 — 하단 바의
+   * 오른쪽 도구가 제 폭을 지키면 통지 칸이 남은 폭만 받아 한 줄이 한두 낱말이 되고 바가 자라 캔버스를 먹는다. 바가 접히면 통지가 칸 폭을 다
+   * 쓴다(`src/shell.css`의 `.wb-shell-footer`). 권한이 viewer 로 내려가 하단 바에는 도구가 없다(«컴포넌트»는 editor 이상) — 캔버스 도구(뷰포트 ·
+   * 줌)는 머리에 있다. 성질로 단언한다: 통지 한 줄의 폭 · 캔버스 몫(`CANVAS_MIN_WIDTH`와 같은 320) · 바가 창 안 · 머리의 캔버스 도구가 눌림 ·
+   * 하단 바에 도구가 없음.
    */
   it('창 1024 에서 통지 셋이 서도 통지 칸이 읽을 폭이고, 캔버스가 320 이상 남고, 바가 창 안이다', async () => {
     const { P, projectId } = await fixture(stack, alice, 'footer-narrow', 3)
@@ -192,8 +192,8 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
           narrowest: Math.min(...notices.map((notice) => Math.round(notice.getBoundingClientRect().width))),
           canvas: Math.round(document.querySelector('.wb-shell-canvas')!.getBoundingClientRect().height),
           barInWindow: bar.bottom <= innerHeight,
-          tools: [...document.querySelectorAll('.wb-shell-footer-tools select, .wb-shell-footer-tools button')].map(hitOk),
-          toolsRightGap: Math.round(bar.right - document.querySelector('.wb-shell-footer-tools')!.getBoundingClientRect().right),
+          tools: [...document.querySelectorAll('.wb-shell-header select, .wb-shell-header .wb-shell-zoom button')].map(hitOk),
+          footerTools: document.querySelectorAll('.wb-shell-footer-tools select, .wb-shell-footer-tools button').length,
         }
       })
       // eslint-disable-next-line no-console
@@ -205,19 +205,20 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
         캔버스: seen.canvas >= 320,
         바_창_안: seen.barInWindow,
         도구: seen.tools,
-        도구_오른끝: seen.toolsRightGap,
-      }).toEqual({ 통지_폭: true, 캔버스: true, 바_창_안: true, 도구: [true, true, true, true], 도구_오른끝: 12 })
+        하단_도구: seen.footerTools,
+      }).toEqual({ 통지_폭: true, 캔버스: true, 바_창_안: true, 도구: [true, true, true, true], 하단_도구: 0 })
     } finally {
       await context.close()
     }
   })
 
   /**
-   * 창 1024 · 통지 없음. 통지 무리의 기본 폭(320)은 통지가 있을 때의 것이다 — 빈 무리가 그 폭을 쥐면 캔버스 칸 444 에서 320 + 간격 + 도구 341 이
-   * 안 들어가 바가 접히고, 도구가 높이 0 인 빈 첫 줄 아래(줄 간격 6)로 내려간다. 바의 높이가 도구 한 줄 + 안쪽 여백(위아래 6)인지로 잰다.
+   * 창 1024 · 통지 없음. 통지 무리의 기본 폭(320)은 통지가 있을 때의 것이다 — 빈 무리가 그 폭을 쥐면 도구가 높이 0 인 빈 첫 줄 아래(줄 간격 6)로
+   * 내려갈 수 있다. 바가 한 줄 높이(셸 CSS 의 최소 높이 40)이고 «컴포넌트»의 오른끝이 바의 안쪽 여백(12)에 닿는지로 잰다. 남은 도구가
+   * «컴포넌트» 하나(26 높이 · 폭 100 남짓)라 빈 무리가 320 을 쥐어도 칸 444 에 들어간다 — 이 케이스가 지금 잡는 것은 한 줄 높이와 오른끝이다.
    * 판 카나리아: 통지가 0 이다.
    */
-  it('창 1024 에서 통지가 없으면 하단 바는 도구 한 줄이다', async () => {
+  it('창 1024 에서 통지가 없으면 하단 바는 «컴포넌트» 한 줄이다', async () => {
     const { P } = await fixture(stack, alice, 'footer-empty', 1)
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1024, height: 700 } })
     try {
@@ -237,7 +238,7 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
       console.log(`[창 1024 통지 없음] ${JSON.stringify(seen)}`)
 
       expect(seen.count).toBe(0)
-      expect({ 바_높이: seen.bar - seen.tools, 도구_오른끝: seen.toolsRightGap }).toEqual({ 바_높이: 12, 도구_오른끝: 12 })
+      expect({ 바_높이: seen.bar, 도구_오른끝: seen.toolsRightGap }).toEqual({ 바_높이: 40, 도구_오른끝: 12 })
     } finally {
       await context.close()
     }

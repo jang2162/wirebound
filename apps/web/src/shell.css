@@ -281,12 +281,37 @@
   font-size: 13px;
 }
 
-/* ── 하단 바(`shell/shell-footer.tsx`) ─────────────────────────────────────────────────
-   캔버스 칸 아래 한 줄. 셸이 그리는 조각이라 글꼴 · 스킴을 여기 건다(머리와 같은 값 — 문서를 감싸지 않으므로 상속 속성을 걸어도 된다).
+/* 머리의 구분선 — 설계서 도구(되돌리기 · 배치 선 · 모드)와 캔버스 도구(뷰포트 폭 · 줌) 사이(`routes/editor.tsx` 의 `wb-shell-head-tools`). */
+.wb-shell-head-divider {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  background: var(--wb-shell-line);
+}
 
-   **칸이 좁으면 도구가 통지 아래 줄로 내려간다**(`flex-wrap` · 통지 무리의 기본 폭 320). 접지 않으면 도구(뷰포트 · 줌 — 341px)가 제 폭을
-   지키고 통지가 남은 폭만 받는다 — 창 1024 · 사이드바 기본에서 캔버스 칸 444 에 통지 칸이 63px 이라 한 줄이 한두 낱말이고, 통지 셋이면
-   바가 452px 로 자라 캔버스가 198px 다(Chrome — `apps/web/build-test/editor-shell-modal.test.ts` «창 1024 에서 통지 셋»). */
+/* 좁은 창에서 «뷰포트 폭» 글을 눈에서만 감춘다(`shell/head-fold.ts` 의 `short`) — `display: none` 이면 고르개의 접근 이름(이 글이다)이
+   사라진다. `.wb-shell-pagejson-file` 과 같은 꼴이다. */
+.wb-shell-head-field-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* ── 하단 바(`shell/shell-footer.tsx`) ─────────────────────────────────────────────────
+   캔버스 칸 아래 한 줄 — 왼쪽은 통지, 오른쪽은 «컴포넌트»(편집 모드 · editor 이상). 셸이 그리는 조각이라 글꼴 · 스킴을 여기 건다(머리와 같은
+   값 — 문서를 감싸지 않으므로 상속 속성을 걸어도 된다).
+
+   **칸이 좁으면 «컴포넌트»가 통지 아래 줄로 내려간다**(`flex-wrap` · 통지 무리의 기본 폭 320). 접지 않으면 도구가 제 폭을 지키고 통지가
+   남은 폭만 받는다 — 통지 한 줄이 한두 낱말이 되어 바가 캔버스를 먹는다(Chrome — `apps/web/build-test/editor-shell-modal.test.ts` «창 1024
+   에서 통지 셋»).
+
+   **높이는 40 아래로 줄지 않는다(`min-height`)** — 캔버스 도구(뷰포트 폭 · 줌)가 머리로 간 뒤 남은 «컴포넌트» 단추는 38, 뷰 모드 · viewer 의
+   빈 바는 12 로 줄어(Chrome · 창 1440), 모드를 바꿀 때마다 캔버스 칸의 높이가 튄다. 40 은 도구가 한 줄로 서던 때의 높이다
+   (`build-test/editor-head-tools.test.ts` 가 두 모드에서 잰다). */
 .wb-shell-footer {
   grid-area: footer;
   color-scheme: light;
@@ -296,6 +321,8 @@
   justify-content: space-between;
   gap: 6px 16px;
   min-width: 0;
+  box-sizing: border-box;
+  min-height: 40px;
   padding: 6px 12px;
   background: var(--wb-shell-chrome);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -319,9 +346,8 @@
   display: none;
 }
 
-/* 뷰포트 · 줌. 칸이 좁으면 **줄어들며 안에서 줄을 바꾼다**. `flex: none`이면 최대 내용 폭(뷰포트 고르개 + 줌 넷)으로 서서 캔버스 칸이
-   최소(320)일 때 우측 패널 밑으로 들어가 «화면 맞춤»을 누를 수 없었다(Chrome · 창 1440 · 좌측 최대 — 단추 가운데의 `elementFromPoint`가
-   `.wb-shell-panel`). `margin-left: auto`는 바가 접혀 도구가 제 줄에 혼자 설 때도 오른쪽 끝에 두게 한다(`space-between`은 혼자인 줄을 왼쪽에 둔다). */
+/* «컴포넌트». 칸이 좁으면 **줄어들며 안에서 줄을 바꾼다**(`flex: none` 이면 최대 내용 폭으로 서서 캔버스 칸이 최소일 때 우측 패널 밑으로
+   들어간다). `margin-left: auto`는 바가 접혀 도구가 제 줄에 혼자 설 때도 오른쪽 끝에 두게 한다(`space-between`은 혼자인 줄을 왼쪽에 둔다). */
 .wb-shell-footer-tools {
   flex: 0 1 auto;
   min-width: 0;
@@ -692,8 +718,8 @@
   cursor: pointer;
 }
 
-/* `화면 맞춤` — 줌 묶음의 셋째 아이콘만 남는 단추(16px). 글을 붙이면 하단 바가 창 1024 · 좌측 기본 폭에서 두 줄이 된다(Chrome — 캔버스
-   칸 444 에서 바 높이 40 → 72 · `build-test/icon-buttons.test.ts`). **`.wb-shell-zoom-step`과 값이 같지만 규칙을 합치지 않는다** — 둘은
+/* `화면 맞춤` — 줌 묶음의 셋째 아이콘만 남는 단추(16px). 줌 묶음이 아이콘만인 것은 머리의 폭 예산 때문이다 — 머리가 한 줄에 드는 창 폭이
+   좁은 창의 접힘 문턱을 정한다(`shell/head-fold.ts`). **`.wb-shell-zoom-step`과 값이 같지만 규칙을 합치지 않는다** — 둘은
    *"한 칸 민다"*와 *"지금 폭에 맞춘다"*로 하는 일이 다르고, 한쪽의 생김새를 바꿀 때
    다른 쪽까지 끌려가면 안 된다. (머리말의 규칙이 막는 것은 결합자이지 같은 값의 규칙 둘이 아니다.) */
 .wb-shell-zoom-fit {
