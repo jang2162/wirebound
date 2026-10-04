@@ -6,7 +6,8 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | F2 로 고친 별칭이 남의 화면 · 상호작용 문장 · 되돌리기에 선다 | 진짜 키(F2)가 입력을 안 연다 · 편집(WS `patch`)이 서버에 안 닿는다 · 남(bob)의 트리 줄 · 상호작용 문장이 안 바뀐다 · 되돌리기 한 번에 옛 글로 안 돌아온다 |
- * | 좁은 창의 긴 별칭 · 요약이 칸 안에서 잘린다 | 줄 글이 트리 칸 밖으로 넘친다(글자 노드 `Range` 오른끝이 줄 단추 밖인데 잘리지 않는다) · 줄이 두 줄이 된다 · 문서가 가로로 스크롤한다 |
+ * | 접힌 줄과 별칭 입력 — 숨은 노드의 F2 · 입력 안의 ← → | F2 가 숨은 노드의 조상을 안 펴 입력이 화면에 안 선다 · 입력 안의 ← → 가 줄을 접거나 고른 노드를 옮긴다(캐럿이 안 옮는다) |
+| 좁은 창의 긴 별칭 · 요약이 칸 안에서 잘린다 | 줄 글이 트리 칸 밖으로 넘친다(글자 노드 `Range` 오른끝이 줄 단추 밖인데 잘리지 않는다) · 줄이 두 줄이 된다 · 문서가 가로로 스크롤한다 |
  * | 긴 별칭의 글이 우측 패널 밖으로 안 나간다(속성 · 상호작용 · 코멘트 탭) | 제목 · 문장 · «달 곳»의 글자 노드 `Range` 오른끝이 패널 밖이고 그 자리를 자르는 조상이 패널 안에 없다 |
  * | 긴 별칭이 든 상호작용 대상 고르개가 우측 패널 안에 선다 | 고르개 `<select>` 가 가장 긴 항목(60자 별칭) 폭으로 늘어 패널 밖으로 나간다 — 별칭은 문장의 라벨성 prop 과 달리 자르지 않는다 |
  */
@@ -117,6 +118,56 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
     } finally {
       await a.close()
       await b.close()
+    }
+  })
+
+  it('접힌 줄(F1)과 별칭 입력 — 숨은 노드의 F2 는 조상을 펴고 입력을 열고, 입력 안의 ← → 는 캐럿만 옮긴다', async () => {
+    const { P } = await fixture('f2-fold', [
+      {
+        id: 'n_card00000001',
+        type: 'Card',
+        alias: '회원 카드',
+        props: { title: '회원' },
+        children: [{ id: 'n_save00000002', type: 'Button', props: { label: '저장' } }],
+      },
+    ])
+    const a = await openEditor(P, 'alice')
+    try {
+      const expanded = () => rowButton(a.page, 'n_card00000001').getAttribute('aria-expanded')
+      // 고른 노드의 조상을 사람이 접는다 — F1 은 저절로 다시 펴지 않는다.
+      await rowButton(a.page, 'n_save00000002').click()
+      await a.page.locator('[data-tree-id="n_card00000001"] > [data-tree-toggle]').click()
+      expect({ expanded: await expanded(), saveRows: await rowButton(a.page, 'n_save00000002').count() }).toEqual({ expanded: 'false', saveRows: 0 })
+
+      await a.page.keyboard.press('F2')
+      const input = a.page.locator('.wb-shell-region[aria-label="구조 트리"]').getByRole('textbox', { name: '별칭' })
+      // 값으로 끝나게 읽는다 — 입력이 안 서면 `evaluate` 가 시간 초과로 죽어 무엇이 틀렸는지 안 남는다.
+      await input.waitFor({ timeout: 3000 }).catch(() => {})
+      const owner = await input.evaluateAll((els) => els.map((el) => el.closest('li')?.querySelector(':scope > [data-tree-id]')?.getAttribute('data-tree-id')))
+      const focused = await input.evaluateAll((els) => els.map((el) => el === document.activeElement))
+      expect({ expanded: await expanded(), owner, focused }).toEqual({ expanded: 'true', owner: ['n_save00000002'], focused: [true] })
+
+      // 입력 안의 ← → — 캐럿이 옮고, 고른 노드 · 접힘은 그대로다.
+      await a.page.keyboard.type('저장 단추')
+      await a.page.keyboard.press('ArrowLeft')
+      await a.page.keyboard.press('ArrowLeft')
+      const caret = () => input.evaluateAll((els) => els.map((el) => (el as HTMLInputElement).selectionStart))
+      const afterLeft = await caret()
+      await a.page.keyboard.press('ArrowRight')
+      const afterRight = await caret()
+      const current = await a.page
+        .locator('.wb-shell-region[aria-label="구조 트리"] [aria-current="true"]')
+        .evaluateAll((els) => els.map((el) => el.closest('[data-tree-id]')?.getAttribute('data-tree-id')))
+      expect({ afterLeft, afterRight, current, expanded: await expanded() }).toEqual({
+        afterLeft: [3],
+        afterRight: [4],
+        current: ['n_save00000002'],
+        expanded: 'true',
+      })
+      await a.page.keyboard.press('Enter')
+      await poll('별칭이 서버에 닿는다', async () => (await call('GET', P)).body.schema.root.children[0].children[0].alias, (alias) => alias === '저장 단추')
+    } finally {
+      await a.close()
     }
   })
 
