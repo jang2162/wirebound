@@ -236,7 +236,7 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 
 | code | HTTP 상태 | 의미 |
 |---|---|---|
-| `bad-request` | 400 | 요청 형식이 잘못됨(zod 검증 실패, 스키마 봉투 위반 등). 노드 봉투는 `@wirebound/schema` 의 `WbNodeSchema` 다 — 선언된 키 밖을 거절하고, 별칭 `alias` 는 앞뒤 공백 없는 한 줄 1 ~ 60자다. 문서를 통째 받는 자리(`PUT …/schema` · 가져오기 · 프리셋)의 위반이 이 줄이고, **편집(`…/ops` · WS `patch`)이 낸 문서의 위반은 422 `validation-failed` 의 `bad-document` 이슈다** |
+| `bad-request` | 400 | 요청 형식이 잘못됨(zod 검증 실패, 스키마 봉투 위반 등). 노드 봉투는 `@wirebound/schema` 의 `WbNodeSchema` 다 — 선언된 키 밖을 거절하고, 별칭 `alias` 는 앞뒤 공백 없는 1 ~ 60자로 받지 않는 글자(C0 · DEL · C1 · U+2028 · U+2029 · 방향 제어 글자 · 짝 없는 서로게이트)가 없고 보이는 글자가 있어야 한다(표는 `packages/schema/src/alias.ts` 머리말). 문서를 통째 받는 자리(`PUT …/schema` · 가져오기 · 프리셋)의 위반이 이 줄이고, **편집(`…/ops` · WS `patch`)이 낸 문서의 위반은 422 `validation-failed` 의 `bad-document` 이슈다** |
 | `bad-request` | **413** · **415** | 413 — 본문이 상한을 넘었다(«요청 본문이 너무 큽니다» — 앱 기본 1 MiB · 테마 업로드 10 MB). 415 — 그 라우트가 안 받는 `Content-Type`(테마 업로드는 `application/zip` · `application/octet-stream` 만 받는다) |
 | `unauthenticated` | 401 | 로그인이 필요함(세션 쿠키 없음/만료). **예외 하나 — 이슈 코드 `wrong-password`**(`POST /api/auth/password`의 지금 비밀번호가 틀렸다): 세션은 그대로다. 받는 쪽은 이 코드로 «세션 끝»과 가른다 |
 | `forbidden` | 403 | 로그인은 했지만 이 작업에 필요한 역할이 아님 |
