@@ -97,11 +97,11 @@ function itemsOf(box: HTMLElement, which: '+' | '…'): string[] {
 }
 
 describe('줄 행동의 항목 — spec 「트리」 표', () => {
-  it('노드 줄: `+` 안에 추가 · 아래 추가 · 패턴 넣기, `…` 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제', async () => {
+  it('노드 줄: `+` 안에 추가 · 아래 추가 · 패턴 넣기, `…` 별칭 바꾸기 · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제', async () => {
     await openPage(doc(), { apiOverrides: server().api })
 
     expect(itemsOf(row('Card'), '+')).toEqual(['안에 추가', '아래 추가', '패턴 넣기'])
-    expect(itemsOf(row('Card'), '…')).toEqual(['위로', '아래로', '들여쓰기', '내어쓰기', '삭제'])
+    expect(itemsOf(row('Card'), '…')).toEqual(['별칭 바꾸기', '위로', '아래로', '들여쓰기', '내어쓰기', '삭제'])
   })
 
   it('뿌리 `+`(제목 줄): 페이지에 추가 · 패턴 넣기 · 프리셋', async () => {

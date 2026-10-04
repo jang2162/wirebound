@@ -158,6 +158,8 @@ function structureToolbar(input: {
     applyPreset: unused,
     cancelAdd: unused,
     dropTo: unused,
+    aliasLocked: lock !== null || selectedNodeId === null,
+    renameAlias: unused,
   }
   // **상태줄만 렌더한다**(머리말 «상태줄만 떼어 렌더한다»). `commands`는 `잠금이 판정을 끈다`가 줄 행동의 항목을 짓는 데 쓴다.
   const view = render(<StructureStatusLine commands={commands} id="structure-status" />)
@@ -347,7 +349,7 @@ describe('상태줄에 키보드로 닿는다 — 할 말이 있는 열두 상�
 describe('잠금이 판정을 끈다', () => {
   function rootItems(): { label: string; off: boolean }[] {
     if (lastStructureCommands === null) throw new Error('구조 판을 열지 않았다')
-    const { add } = structureRowItems(lastStructureCommands, 'structure-status')
+    const { add } = structureRowItems(lastStructureCommands, 'structure-status', unused)
     return add.map((item) => ({ label: item.label, off: item.disabled === true }))
   }
 

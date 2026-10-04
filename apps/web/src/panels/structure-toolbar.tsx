@@ -41,7 +41,7 @@ import type { NodeLock, WbNode } from '@wirebound/schema'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { createNode } from '../edit/create-node'
-import { insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops'
+import { aliasOps, insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { patternInsert } from '../edit/pattern-insert'
 import { presetApply, presetFailureNotice } from '../edit/preset-apply'
 import { findNodeSafely } from '../edit/safe-walk'
@@ -52,6 +52,7 @@ import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../stor
 import { PatternPicker } from './pattern-picker'
 import { PresetPicker } from './preset-picker'
 import { TypePicker } from './type-picker'
+import { lockedNotice } from './property-panel'
 import { structureStatus } from './toolbar-status'
 
 /**
@@ -140,6 +141,17 @@ export interface StructureCommands {
    * 내는 것과 같은 종류다(spec 「드래그로 옮기기」 — 드래그만의 새 편집 종류를 만들지 않는다).
    */
   dropTo: (nodeId: string, target: StructureDrop) => void
+  /**
+   * 별칭을 고칠 수 없는가 — 하나를 고르지 않았거나(여럿 · 없음) · 고른 노드가 문서에 없거나 · 남이 잡았다(`selectedLock`). 줄 `…`
+   * «별칭 바꾸기»의 끔 · 더블클릭 · F2 가 같은 값을 지난다. `abilities`에 키를 두지 않는 까닭은 `patternLocked`와 같다 — 그 표는
+   * 구조(자리)의 판정이고 별칭은 자리와 무관하다.
+   */
+  aliasLocked: boolean
+  /**
+   * 그 노드의 별칭을 바꾼다(`aliasOps` — 빈 값은 지움). 보내기 전에 서버의 2차 방어와 같은 물음(`editBlockedBy`)을 한 번 더 —
+   * 입력을 연 뒤 도착한 남의 잠금이면 말하고 안 보낸다.
+   */
+  renameAlias: (nodeId: string, alias: string) => void
 }
 
 /**
@@ -631,6 +643,23 @@ export function useStructureCommands(props: {
     pickPattern: addPattern,
     applyPreset,
     cancelAdd: () => setAdding(null),
+    aliasLocked:
+      document === null ||
+      selectedNodeId === null ||
+      selectedNodeIds.length !== 1 ||
+      props.selectedLock !== null ||
+      findNodeSafely(document.root, selectedNodeId) === undefined,
+    renameAlias: (nodeId, alias) => {
+      if (document === null) return
+      const ops = aliasOps(document, nodeId, alias)
+      if (ops === null) return
+      const blocker = store.editBlockedBy(ops)
+      if (blocker !== null) {
+        store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
+        return
+      }
+      commitOps(ops)
+    },
   }
 }
 

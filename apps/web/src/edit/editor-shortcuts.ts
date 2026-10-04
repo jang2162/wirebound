@@ -29,6 +29,7 @@ export type ShortcutCommand =
   | 'selectParent'
   | 'selectFirstChild'
   | 'selectSiblings'
+  | 'alias'
   | 'help'
 
 export type Platform = 'mac' | 'other'
@@ -216,6 +217,16 @@ export const EDITOR_SHORTCUTS: readonly Shortcut[] = [
     keys: (p) => `${CMD[p]}A`,
     match: (e, p) => mod(e, p) && !e.shiftKey && letter(e) === 'a',
     edits: false,
+    repeat: false,
+  },
+  {
+    // **고른 노드 하나의 별칭 입력을 구조 트리 줄 아래에 연다**(`panels/alias-edit.tsx`) — 캔버스에 포커스가 있어도 선다. 반복은 안 받는다 —
+    // 연 입력에 포커스가 가 다음 반복은 입력 칸의 키다.
+    command: 'alias',
+    label: '별칭 바꾸기',
+    keys: () => 'F2',
+    match: (e) => bare(e) && !e.shiftKey && e.key === 'F2',
+    edits: true,
     repeat: false,
   },
   {

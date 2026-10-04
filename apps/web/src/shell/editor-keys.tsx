@@ -10,6 +10,7 @@
  * | 복사 · 잘라내기 | 봉투(`writeNodesEnvelope`) · 잘라내기의 지우기는 삭제와 같은 명령 | — |
  * | 선택 이동 | `edit/selection-move.ts` → `store.selectNode` — ← → 는 먼저 접고 편다(`foldStep` → `tree/collapse.ts`) | 트리 줄 · 캔버스 누름 · 줄 앞 펼침 단추 |
  * | 형제 모두 고르기(Cmd+A) | `edit/selection-move.ts` 의 `siblingIds` → `store.selectMany` | 트리 · 캔버스의 Cmd · Shift 클릭 · 사각형(같은 스토어 명령 무리) |
+ * | 별칭 바꾸기(F2) | `panels/alias-edit.tsx` 의 `open` — `aliasLocked` 가 거짓일 때만 | 구조 트리 줄 `…` «별칭 바꾸기» · 줄 더블클릭 |
  * | 도움말 | `shell/shortcut-help.tsx` | — |
  *
  * 복사 · 잘라내기 · 붙여넣기는 키가 아니라 `copy` · `cut` · `paste` 이벤트로 받는다(`edit/use-clipboard.ts`).
@@ -50,6 +51,7 @@ import { foldStep, moveSelection, siblingIds } from '../edit/selection-move'
 import { useClipboard } from '../edit/use-clipboard'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { useEditorShortcuts } from '../edit/use-editor-shortcuts'
+import { useAliasEdit } from '../panels/alias-edit'
 import { lockedNotice } from '../panels/property-panel'
 import { useStructureCommands } from '../panels/structure-toolbar'
 import { lockedSelectionStatus, selectionCapNotice } from '../panels/toolbar-status'
@@ -82,6 +84,7 @@ export function EditorKeys(props: {
   const history = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
   const api = useApi()
   const [helpOpen, setHelpOpen] = useState(false)
+  const aliasEdit = useAliasEdit()
   const [platform] = useState(() => platformOf(navigator))
   const canvasDocument = useCanvasDocument()
 
@@ -296,6 +299,10 @@ export function EditorKeys(props: {
         if (change.capped > 0) say(selectionCapNotice())
         return
       }
+      // **하나를 고른 판에서만** — 판정은 줄 `…` «별칭 바꾸기»의 끔과 같은 값(`aliasLocked`)이다.
+      case 'alias':
+        if (!commands.aliasLocked && selectedNodeId !== null) aliasEdit.open(selectedNodeId)
+        return
       case 'help':
         setHelpOpen(true)
         return

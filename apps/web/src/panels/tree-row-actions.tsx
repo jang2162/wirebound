@@ -202,7 +202,7 @@ export const STRUCTURE_WHY_DISABLED: Record<keyof StructureAbilities, string> = 
 }
 
 /**
- * 구조 트리 줄의 `+` · `…` 항목(spec 「트리」 표 — `+` 안에 추가 · 아래 추가, `…` 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제).
+ * 구조 트리 줄의 `+` · `…` 항목(spec 「트리」 표 — `+` 안에 추가 · 아래 추가, `…` 별칭 바꾸기 · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제).
  *
  * **`+`에 «패턴 넣기»를 함께 둔다** — 패턴은 고른 줄을 자리로 삼는 추가라(`edit/pattern-insert.ts`) 그 줄의 `+`가 제자리다. 잠금으로만
  * 꺼진다(`patternLocked` — 판정이 없는 조작이라 `title`도 없다). **뿌리 줄도 같은 항목을 끈 채 둔다** — 뿌리가 못 하는 것(아래 추가 ·
@@ -216,6 +216,8 @@ export const STRUCTURE_WHY_DISABLED: Record<keyof StructureAbilities, string> = 
 export function structureRowItems(
   commands: StructureCommands,
   statusId: string,
+  /** «별칭 바꾸기» — 그 줄 아래에 별칭 입력을 연다(`./alias-edit.tsx`). 끔은 `commands.aliasLocked`. */
+  openAlias: () => void,
 ): { add: ActionMenuItem[]; more: ActionMenuItem[] } {
   const describedBy = commands.status === '' ? undefined : statusId
   const item = (key: keyof StructureAbilities, label: string, icon: LucideIcon, onSelect: () => void, danger = false): ActionMenuItem => {
@@ -247,6 +249,14 @@ export function structureRowItems(
   return {
     add,
     more: [
+      {
+        key: 'alias',
+        label: '별칭 바꾸기',
+        icon: ICONS.rename,
+        onSelect: openAlias,
+        disabled: commands.aliasLocked,
+        describedBy,
+      },
       item('moveUp', '위로', ICONS.moveUp, commands.moveUp),
       item('moveDown', '아래로', ICONS.moveDown, commands.moveDown),
       item('indent', '들여쓰기', ICONS.indent, commands.indent),

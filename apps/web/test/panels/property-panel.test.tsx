@@ -219,9 +219,12 @@ function requireWidget(label: string): HTMLElement {
 /**
  * 속성 줄. 클래스로 찾는 것은 이 요소들에 접근성 이름을 붙일 이유가 없기 때문이다 —
  * 클래스가 바뀌면 여기서 빈 배열이 되어 요란하게 깨진다(`canvasFrame()`과 같은 방식).
+ *
+ * **맨 위 별칭 칸은 세지 않는다**(`[data-wb-node-alias]`) — 카탈로그의 `editor`에서 오는 줄이 아니라 어느 컴포넌트에나 서는 칸이다. 그 칸은
+ * `./node-alias.test.tsx`가 잰다.
  */
 function propRows(): { label: string; value: string }[] {
-  return [...panel().querySelectorAll('.wb-shell-prop')].map((row) => ({
+  return [...panel().querySelectorAll('.wb-shell-prop:not([data-wb-node-alias])')].map((row) => ({
     label: row.querySelector('.wb-shell-prop-label')?.textContent ?? '',
     // **위젯이 있으면 그 값이 사용자가 보는 값이다.** 입력의 내용은 `textContent`가 아니라
     // `value`에 있으므로, 그것을 보지 않으면 위젯이 생긴 자리가 전부 빈 문자열로 읽힌다.
