@@ -84,7 +84,7 @@ export function EditorKeys(props: {
   const history = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
   const api = useApi()
   const [helpOpen, setHelpOpen] = useState(false)
-  const aliasEdit = useAliasEdit()
+  const aliasEdit = useAliasEdit(props.pageId)
   const [platform] = useState(() => platformOf(navigator))
   const canvasDocument = useCanvasDocument()
 

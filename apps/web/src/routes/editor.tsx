@@ -743,7 +743,7 @@ function EditorShell(props: {
 
   return (
     // **별칭 입력이 선 줄**(`panels/alias-edit.tsx`) — 구조 트리가 그리고 에디터 단축키(F2)가 연다. 둘이 같은 값을 보게 셸이 한 번 깐다.
-    <AliasEditProvider>
+    <AliasEditProvider pageId={props.pageId}>
       <div className="wb-shell">
         <header className="wb-shell-header">
           {/* **머리의 왼쪽은 *"어디에 있고 어디로 나가는가"*다.** 가운데 도구들 · 오른쪽 끝의 `…` 와 갈리는 축이

@@ -21,9 +21,12 @@ afterEach(resetLayoutGuides)
 // inline 이 아닌 자식 앞뒤에 공백을 끼우므로, 구조 트리 줄(`src/panels/structure-tree.tsx` — 별칭 · 요약을 `<bdi>` 로 격리한다)의 이름이
 // Chrome 의 `Flex (머리 줄) 가로` 대신 `Flex ( 머리 줄 ) 가로` 가 된다. 브라우저의 UA 시트와 같은 값을 준다(`test/panels/structure-row-name.test.tsx`
 // «줄 글 · 접근 이름이 `nodeRowLabel` 과 같다»가 이것에 매여 있다).
-const uaDefaults = document.createElement('style')
-uaDefaults.textContent = 'bdi { display: inline; }'
-document.head.append(uaDefaults)
+// node 환경 파일(`// @vitest-environment node`)에는 문서가 없다.
+if (typeof document !== 'undefined') {
+  const uaDefaults = document.createElement('style')
+  uaDefaults.textContent = 'bdi { display: inline; }'
+  document.head.append(uaDefaults)
+}
 
 /**
  * `findBy*`·`waitFor`가 돌아온 뒤 **passive effect가 다 흐르도록** `act`를 한 번 더 준다.

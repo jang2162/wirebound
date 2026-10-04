@@ -154,7 +154,7 @@ export function StructureTree(props: {
     pageLock: typeof doc?.root?.id === 'string' ? lockOf(doc.root.id) : null,
   })
   const statusId = useId()
-  const alias = useAliasEdit()
+  const alias = useAliasEdit(props.pageId)
   /**
    * 프리셋 이름칸에 친 글자. **고르개가 아니라 여기서 든다** — 고르개는 잠금이 걸리는 동안 DOM에서 빠지지만 트리는 그대로 있다.
    * 왜 이 하나만 가르는지는 `visiblePicker`의 머리말 «두 축»이 갖는다.
