@@ -47,7 +47,7 @@ import {
   type NodeEdit,
 } from '../edit/paste-ops'
 import { findNodeSafely } from '../edit/safe-walk'
-import { foldStep, moveSelection, siblingIds } from '../edit/selection-move'
+import { ancestorIds, foldStep, moveSelection, siblingIds } from '../edit/selection-move'
 import { useClipboard } from '../edit/use-clipboard'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { useEditorShortcuts } from '../edit/use-editor-shortcuts'
@@ -299,9 +299,12 @@ export function EditorKeys(props: {
         if (change.capped > 0) say(selectionCapNotice())
         return
       }
-      // **하나를 고른 판에서만** — 판정은 줄 `…` «별칭 바꾸기»의 끔과 같은 값(`aliasLocked`)이다.
+      // **하나를 고른 판에서만** — 판정은 줄 `…` «별칭 바꾸기»의 끔과 같은 값(`aliasLocked`)이다. 고른 노드가 사람이 접은 줄 안에 숨었으면
+      // 조상을 먼저 편다 — 입력은 그 줄 아래에 서므로, 안 펴면 화면에 아무것도 안 서고 나중에 그 줄을 펴는 순간 묻지 않은 입력이 선다.
       case 'alias':
-        if (!commands.aliasLocked && selectedNodeId !== null) aliasEdit.open(selectedNodeId)
+        if (commands.aliasLocked || selectedNodeId === null) return
+        if (doc !== null) expand(structureKey(props.pageId), ancestorIds(doc.root, selectedNodeId))
+        aliasEdit.open(selectedNodeId)
         return
       case 'help':
         setHelpOpen(true)

@@ -317,3 +317,87 @@ describe('구조 트리 줄에서 고치기', () => {
     expect(b.calls).toEqual([])
   })
 })
+
+/**
+ * **접힘(F1)과 별칭 입력(F2)이 한 줄에 선 판.** ← → 는 에디터 단축키가 접고 펴는 키이고(`edit/selection-move.ts` 의 `foldStep`) 별칭 입력은
+ * 그 줄 아래의 글 칸이다 — 칸 안의 ← → 는 캐럿을 옮기는 키라 줄을 접거나 고른 노드를 옮기면 안 된다.
+ */
+describe('접힘과 별칭 입력', () => {
+  function toggle(nodeId: string): HTMLButtonElement {
+    const button = structureRegion().querySelector<HTMLButtonElement>(`[data-tree-id="${nodeId}"] > [data-tree-toggle]`)
+    if (button === null) throw new Error(`${nodeId} 펼침 단추가 없다`)
+    return button
+  }
+
+  function current(): string | null {
+    return structureRegion().querySelector('[aria-current="true"]')?.closest('[data-tree-id]')?.getAttribute('data-tree-id') ?? null
+  }
+
+  it('입력 안의 ← 는 펴진 줄을 접지 않고, → 는 고른 노드를 첫 자식으로 옮기지 않는다', async () => {
+    await board()
+    fireEvent.click(rowButton('n-card'))
+    fireEvent.doubleClick(rowButton('n-card'))
+    const input = treeInput()!
+    input.focus()
+    fireEvent.keyDown(input, { key: 'ArrowLeft', code: 'ArrowLeft' })
+    expect(rowButton('n-card').getAttribute('aria-expanded')).toBe('true')
+    expect(treeInput()).not.toBeNull()
+    fireEvent.keyDown(input, { key: 'ArrowRight', code: 'ArrowRight' })
+    expect(current()).toBe('n-card')
+    expect(treeInput()).toBe(input)
+  })
+
+  it('접힌 줄의 입력 안 → 는 펴지 않고, 잎 줄의 입력 안 ← 는 부모로 안 옮긴다', async () => {
+    await board()
+    fireEvent.click(rowButton('n-card'))
+    fireEvent.click(toggle('n-card'))
+    expect(rowButton('n-card').getAttribute('aria-expanded')).toBe('false')
+    fireEvent.doubleClick(rowButton('n-card'))
+    treeInput()!.focus()
+    fireEvent.keyDown(treeInput()!, { key: 'ArrowRight', code: 'ArrowRight' })
+    expect(rowButton('n-card').getAttribute('aria-expanded')).toBe('false')
+    fireEvent.keyDown(treeInput()!, { key: 'Escape' })
+
+    fireEvent.click(toggle('n-card'))
+    fireEvent.click(rowButton('n-save'))
+    fireEvent.doubleClick(rowButton('n-save'))
+    treeInput()!.focus()
+    fireEvent.keyDown(treeInput()!, { key: 'ArrowLeft', code: 'ArrowLeft' })
+    expect(current()).toBe('n-save')
+    expect(treeInput()).not.toBeNull()
+  })
+
+  it('접힌 줄에서 F2 — 입력은 그 줄 아래에 서고 줄은 접힌 채다', async () => {
+    await board()
+    fireEvent.click(rowButton('n-card'))
+    fireEvent.click(toggle('n-card'))
+    fireEvent.keyDown(canvasDocument().body, { key: 'F2', code: 'F2' })
+    expect(treeInput()?.value).toBe('회원 카드')
+    expect(rowButton('n-card').getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('고른 노드가 접힌 줄 안에 숨었을 때 F2 — 조상을 펴고 그 줄 아래에 입력이 선다', async () => {
+    // 사람이 고른 노드의 조상을 직접 접은 판(F1 — 저절로 다시 펴지 않는다). F2 가 숨은 줄에 입력을 «열면» 화면에 아무것도 안 서고,
+    // 나중에 사람이 그 줄을 펴는 순간 묻지 않은 입력이 선다.
+    await board()
+    fireEvent.click(rowButton('n-save'))
+    fireEvent.click(toggle('n-card'))
+    expect(structureRegion().querySelector('[data-tree-id="n-save"]')).toBeNull()
+    fireEvent.keyDown(canvasDocument().body, { key: 'F2', code: 'F2' })
+    expect(rowButton('n-card').getAttribute('aria-expanded')).toBe('true')
+    expect(treeInput()?.closest('li')?.querySelector(':scope > [data-tree-id]')?.getAttribute('data-tree-id')).toBe('n-save')
+  })
+
+  it('글 칸 안의 F2 는 트리 입력을 안 연다 — 속성 패널 «별칭» 칸에서 친 글이 그 칸에 남는다', async () => {
+    // 트리 줄 입력 안의 F2 는 같은 노드를 다시 «열» 뿐이라 거름을 떼도 안 보인다 — 거름이 하는 일이 보이는 칸은 다른 글 칸이다.
+    await board()
+    fireEvent.click(rowButton('n-card'))
+    const field = aliasField()
+    field.focus()
+    fireEvent.change(field, { target: { value: '고치는 중' } })
+    fireEvent.keyDown(field, { key: 'F2', code: 'F2' })
+    expect(treeInput()).toBeNull()
+    expect(document.activeElement).toBe(field)
+    expect(field.value).toBe('고치는 중')
+  })
+})
