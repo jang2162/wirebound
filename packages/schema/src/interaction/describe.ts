@@ -18,12 +18,13 @@
  *
  * ## 무엇을 부르는 이름이 어디서 오는가
  *
- * 문장의 주어·목적어는 노드다. 노드를 부르는 이름은 **번호 + 라벨 + 컴포넌트 이름**으로
- * 만든다:
+ * 문장의 주어·목적어는 노드다. 노드를 부르는 이름은 **번호 + 별칭**, 별칭이 없으면 **번호 + 라벨 + 컴포넌트 이름**으로
+ * 만든다(`nodeDisplayName`):
  *
  * | 조각 | 어디서 | 없으면 |
  * |---|---|---|
  * | `①` | 노드의 `marker` | **비운다** — 번호 없음은 정상 상태다(설계서 「페이지 스키마 노드」: *"없으면 코멘트 없음"*) |
+ * | `머리 저장` | 노드의 `alias`(사람이 붙인 이름 — 있으면 아래 둘 대신 선다) | 아래 둘 |
  * | `검색` | 라벨성 prop (`COMPONENT_NOUNS`의 `labelProp`) | 비운다 |
  * | `버튼` | **카탈로그의 `def.label`** | **영문 타입 이름**을 쓴다 |
  *
@@ -285,7 +286,7 @@ export function describeNode(node: WbNode): string {
  * 그려지고 `unknown-type` 이슈가 따로 붙으므로, 문장이 그것을 숨기지 않는 편이 맞다.
  */
 function nodeName(node: WbNode): string {
-  const named = nounName(node)
+  const named = nodeDisplayName(node)
   const marker = markerOf(node)
   return marker === null ? named : `${marker} ${named}`
 }

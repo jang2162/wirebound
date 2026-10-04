@@ -21,6 +21,7 @@
  * 않는다 — `describe.ts`의 `propLabel`이 레지스트리에서 못 찾으면 prop 이름을 쓴다). 설치는 **부르는 쪽**이 한다(`installCatalog`).
  */
 import type { PageDocument, WbNode } from './node'
+import { nodeAlias, nodeRowLabel } from './display'
 import { MISSING_NODE_NAME, describeNode, listInteractionSentences, type InteractionSentence } from './interaction/describe'
 import { pageTargetPath } from './page-target'
 import { walkNodes } from './tree'
@@ -55,6 +56,10 @@ export interface PageViewNode {
   depth: number
   /** 문장이 이 노드를 부르는 이름과 **같은 이름**이다(`describeNode`). */
   name: string
+  /** 사람이 붙인 별칭. 없으면 키가 없다. */
+  alias?: string
+  /** 구조 트리 줄과 같은 글 `타입 (별칭) 요약`(`nodeRowLabel`). 같은 타입이 여럿일 때 어느 것인지 가른다. */
+  rowLabel: string
   /** 문서 안의 자리(JSON 포인터). 편집 경로와 같다. */
   path: string
 }
@@ -114,6 +119,8 @@ export function pageView(input: PageViewInput): PageView {
       // 포인터의 `/children/` 마디 수가 곧 깊이다 — 순회가 이미 그 값을 문자열로 들고 있다.
       depth: path.split('/children/').length - 1,
       name: describeNode(node),
+      ...aliasEntry(node),
+      rowLabel: nodeRowLabel(node),
       path,
     })
   }
@@ -140,4 +147,9 @@ export function pageView(input: PageViewInput): PageView {
     }),
     interactions: listInteractionSentences(input.document),
   }
+}
+
+function aliasEntry(node: WbNode): { alias?: string } {
+  const alias = nodeAlias(node)
+  return alias === null ? {} : { alias }
 }
