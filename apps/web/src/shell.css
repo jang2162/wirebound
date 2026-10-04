@@ -427,24 +427,26 @@
   pointer-events: none;
 }
 
-/* 카드 줄의 스크롤 상자 — 판의 남은 높이를 다 쓰고 넘치면 가로로 민다. */
+/* 카드 판의 스크롤 상자 — 판의 남은 높이를 다 쓰고 카드 줄이 넘치면 세로로 민다. 카드가 판 폭에 맞춰 감싸이므로 가로로는 안 넘친다. */
 .wb-shell-palette-cards {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
-/* 카드 줄(트랙). 축소판 깔개(`.wb-shell-palette-thumbs`)의 기준 상자라 `position: relative` 다 — 깔개가 트랙과 함께 스크롤해 카드 창과
-   어긋나지 않는다(`palette/palette-thumbs.tsx` 머리말 «같은 좌표»). 폭은 카드가 정한다(`max-content`). */
+/* 카드 판(트랙). 축소판 깔개(`.wb-shell-palette-thumbs`)의 기준 상자라 `position: relative` 다 — 깔개가 트랙과 함께 스크롤해 카드 창과
+   어긋나지 않는다(`palette/palette-thumbs.tsx` 머리말 «같은 좌표»). 폭은 판의 폭이고 카드가 그 안에서 줄을 바꾼다 — 높이는 줄 수가 정한다
+   (판보다 짧으면 판을 채운다 · 길면 위 스크롤 상자가 민다). 줄은 위에서부터 쌓는다(`align-content`). */
 .wb-shell-palette-track {
   position: relative;
   box-sizing: border-box;
   display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
   gap: 8px;
-  width: max-content;
-  min-width: 100%;
-  height: 100%;
+  width: 100%;
+  min-height: 100%;
   padding: 8px 12px;
 }
 
@@ -465,15 +467,23 @@
 }
 
 /* 카드 — 축소판이 비치는 창 · 이름 · «넣기» 단추. 창 자리만 투명하다(바탕을 칠하면 축소판이 가린다) — 테두리 · 이름 줄이 카드의 모양이다.
-   몸통은 끌기 전용이라 단추가 아니다 — 누른 채 움직일 때 이름 글자가 골라지지 않게 `user-select: none` 이다. 폭과 판 기본 높이를 함께
-   정한 잰 값은 `shell/sidebar-layout.ts` 의 `PALETTE_HEIGHT_DEFAULT` 주석. */
+   몸통은 끌기 전용이라 단추가 아니다 — 누른 채 움직일 때 이름 글자가 골라지지 않게 `user-select: none` 이다.
+
+   **크기는 정해져 있다(264 × 200 — 창 264 × 176 + 이름 줄)** — 판 높이를 따라 늘지 않고, 판이 높으면 줄을 더 쓴다. 판 기본 높이(340)에서
+   한 줄과 둘째 줄의 머리가 보이고, 창 900 의 판 최대(569)에서 두 줄이 다 보인다. 폭이 줄임을 정하는 표본은 줄임 비가 판 기본 높이의 옛
+   카드와 같고(창 폭 264), 세로로 긴 표본(KeyValue · Media)만 창 176 에 맞게 더 준다 — 잰 값과 다시 재는 법은
+   `apps/web/build-test/palette-wrap.test.ts` 머리말. */
 .wb-shell-palette-card {
   position: relative;
   z-index: 1;
   flex: none;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   width: 264px;
+  /* 판이 카드보다 좁으면(창 700 — 캔버스 칸이 최소로 준 판) 카드 폭이 판에 맞게 준다 — 가로로 넘치지 않는다. 축소판은 준 창에 다시 맞춘다. */
+  max-width: 100%;
+  height: 200px;
   padding: 0;
   border: 1px solid var(--wb-shell-line);
   border-radius: 6px;

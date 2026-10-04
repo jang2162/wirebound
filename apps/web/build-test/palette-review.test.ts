@@ -13,7 +13,7 @@
  * | 빠른 두 번 누름 | 넣은 수 · 차례가 누른 수와 다르다(기록 — 두 번 누름은 넣기 둘) |
  * | Enter 누른 채 | 키 반복마다 넣는다 — 누른 채 한 번이 넣기 여럿이 된다 |
  * | 누르는 사이 남이 지움 | bob 이 alice 의 고른 노드를 지우려 함 → 그 답 · 뒤의 누름이 엉뚱한 자리로 간다 |
- * | 축소판 좌표 | 판 폭 셋(창 1440 · 1024 · 800)과 카드 줄을 가운데 · 끝까지 민 판에서 표본이 창 밖이다 · 표본 중심과 창 중심이 1px 넘게 어긋난다 |
+ * | 축소판 좌표 | 판 폭 셋(창 1440 · 1024 · 800)과 카드 판을 가운데 · 끝까지 세로로 민 판에서 표본이 창 밖이다 · 표본 중심과 창 중심이 1px 넘게 어긋난다 · 민 판이 하나도 없다 |
  * | 축소판 — 남이 테마를 바꿈 | bob 이 프로젝트 테마를 `system-portal` 로 바꾼 뒤에도 축소판 단추가 옛 테마 색이다 |
  * | 축소판 — 입력 표본 `inert` | 입력 표본 자리를 눌러 iframe 이 포커스 · 클릭을 받는다 · 그 점의 맨 위가 그 카드가 아니다 |
  * | 판 열고 접기 | 뷰 모드 · 실시간 viewer 강등에 판이 남는다 · 돌아오면 기억대로 안 선다 · 페이지를 옮기면 판이 닫히거나 표본이 빈다 |
@@ -499,7 +499,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
   })
 
   describe('축소판', () => {
-    it.each([1440, 1024, 800])('창 폭 %i — 카드 줄을 처음 · 가운데 · 끝까지 밀어도 표본이 카드 창 안 · 중심 차 1px 안', async (width) => {
+    it.each([1440, 1024, 800])('창 폭 %i — 카드 판을 처음 · 가운데 · 끝까지(세로로) 밀어도 표본이 카드 창 안 · 중심 차 1px 안', async (width) => {
       const { P } = await seed(`rv-thumb-${width}`, [BASIC])
       const { page, close } = await openEditor(P[0]!, 'alice', { width, height: 900 })
       try {
@@ -508,14 +508,19 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const tabs = page.getByRole('tablist', { name: '갈래' }).getByRole('tab')
         const worst: Record<string, number> = {}
         const outside: string[] = []
+        /** 끝까지 민 판의 `scrollTop` — 줄이 판보다 길었던 탭이 하나는 있어야 «민 판»을 잰 것이다(카나리아). */
+        let scrolled = 0
         let paletteWidth = 0
         for (let i = 0; i < (await tabs.count()); i += 1) {
           await tabs.nth(i).click()
           for (const at of ['start', 'middle', 'end'] as const) {
-            await page.evaluate((where) => {
+            // 카드는 판 폭에 맞춰 여러 줄로 감싸이고 판이 세로로 민다(`src/palette/component-palette.tsx` 의 `PaletteCards`).
+            const top = await page.evaluate((where) => {
               const box = document.querySelector('.wb-shell-palette-cards') as HTMLElement
-              box.scrollLeft = where === 'start' ? 0 : where === 'middle' ? (box.scrollWidth - box.clientWidth) / 2 : box.scrollWidth
+              box.scrollTop = where === 'start' ? 0 : where === 'middle' ? (box.scrollHeight - box.clientHeight) / 2 : box.scrollHeight
+              return box.scrollTop
             }, at)
+            scrolled = Math.max(scrolled, top)
             const read = await poll(
               '표본이 선다',
               async () => (await page.evaluate(CARD_THUMBS)) as Record<string, { inside: boolean; dx: number | null; dy: number | null }> | null,
@@ -531,10 +536,16 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         }
         // eslint-disable-next-line no-console
         console.log(`[리뷰 축소판 좌표] 창 ${width} · 판 폭 ${paletteWidth}: ${JSON.stringify(worst)}`)
-        expect({ outside, offCenter: Object.entries(worst).filter(([, d]) => d > 1).map(([t, d]) => `${t}:${d}`), types: Object.keys(worst).length }).toEqual({
+        expect({
+          outside,
+          offCenter: Object.entries(worst).filter(([, d]) => d > 1).map(([t, d]) => `${t}:${d}`),
+          types: Object.keys(worst).length,
+          scrolled: scrolled > 0,
+        }).toEqual({
           outside: [],
           offCenter: [],
           types: placeableGroups().flatMap((g) => g.types).length,
+          scrolled: true,
         })
       } finally {
         await close()
