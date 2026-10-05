@@ -16,7 +16,6 @@ import { z } from 'zod'
 import { samePageMeta } from '@wirebound/schema'
 import { requestEventActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
-import { withTransaction } from '../db/tx'
 import { badRequest, conflict, notFound, unauthenticated } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import {
@@ -32,6 +31,7 @@ import {
   updateMenuNode,
 } from '../repos/menu'
 import { CascadeSafetyTagTakenError, deleteMenuCascade } from '../services/menu-cascade'
+import { runTreeTransaction } from '../services/tree-write'
 import { notifyMenuChanged } from '../ws/notify'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
@@ -140,7 +140,7 @@ export function menuRoutes() {
 
       let written
       try {
-        written = await withTransaction(app.db, async (trx) => {
+        written = await runTreeTransaction(app, projectId, request, async (trx) => {
           const inserted = await insertMenuNode(trx, projectId, { parentId: body.parentId ?? null, title: body.title })
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 트리 쓰기의 첫 잠금(프로젝트 행)이
           // 복원 · 프로젝트 삭제 · 다른 트리 쓰기 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
@@ -182,7 +182,7 @@ export function menuRoutes() {
 
       let written
       try {
-        written = await withTransaction(app.db, async (trx) => {
+        written = await runTreeTransaction(app, projectId, request, async (trx) => {
           if (base !== undefined) {
             const current = await lockMenuTitle(trx, projectId, nodeId)
             if (current === null) return null
@@ -242,7 +242,7 @@ export function menuRoutes() {
         let outcome
         let rev = 0
         try {
-          outcome = await withTransaction(app.db, async (trx) => {
+          outcome = await runTreeTransaction(app, projectId, request, async (trx) => {
             const settled = await deleteMenuCascade(trx, {
               projectId,
               nodeId,
@@ -274,7 +274,7 @@ export function menuRoutes() {
       let result
       let rev = 0
       try {
-        result = await withTransaction(app.db, async (trx) => {
+        result = await runTreeTransaction(app, projectId, request, async (trx) => {
           const deleted = await deleteMenuNode(trx, projectId, nodeId)
           if (deleted === 'deleted') {
             // **커밋 순간의 권한** — 생성과 같은 자리다(트리 쓰기의 첫 잠금 뒤).

@@ -297,6 +297,12 @@ const ACTOR_SITES: ActorSite[] = [
     why: '**트리 쓰기의 `menu-changed` 프레임** — 요청이 정한 사람을 룸에 싣는다(`ws/notify.ts`의 `notifyMenuChanged`). 프레임만 나르고 revision 은 안 만든다',
   },
   {
+    file: 'services/tree-write.ts',
+    label: 'COMMIT 답을 잃은 트리 쓰기의 menu-changed',
+    origin: 'request-event',
+    why: '**커밋을 확인한 뒤 지금 번호로 낸 `menu-changed` 프레임** — 위 트리 쓰기와 같은 요청의 사람을 싣는다(`runTreeTransaction`). 프레임만 나르고 revision 은 안 만든다',
+  },
+  {
     file: 'routes/snapshots.ts',
     label: '복원의 menu-changed 프레임',
     origin: 'request-event',

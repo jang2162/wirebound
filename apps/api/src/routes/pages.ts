@@ -65,7 +65,6 @@ import {
 import { requestActor, requestEventActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
-import { withTransaction } from '../db/tx'
 import { badRequest, conflict, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
 // **실패 사유 → 상태 코드 표는 `http/edit-outcome.ts`에 둔다** — `routes/comments.ts`도 같은 표를
 // 쓴다(코멘트가 번호를 부여하려고 같은 파이프라인을 부른다). `withWarnings`가
@@ -80,6 +79,7 @@ import { applyEdit } from '../services/edit-pipeline'
 import { runEditTransaction } from '../services/lost-commit'
 import { broadcastOrigin, notifyMenuChanged, notifyPageChanged } from '../ws/notify'
 import { bumpMenuRev } from '../repos/menu'
+import { runTreeTransaction } from '../services/tree-write'
 import { importPage, type PageImportOutcome } from '../services/page-import'
 import {
   MenuNodeNotFoundError,
@@ -296,7 +296,7 @@ export function pageRoutes() {
 
       let written
       try {
-        written = await withTransaction(app.db, async (trx) => {
+        written = await runTreeTransaction(app, projectId, request, async (trx) => {
           const inserted = await insertPage(trx, projectId, {
             menuNodeId: body.menuNodeId,
             title: body.title,
@@ -359,7 +359,7 @@ export function pageRoutes() {
       }
 
       let rev = 0
-      const outcome = await withTransaction(app.db, async (trx) => {
+      const outcome = await runTreeTransaction(app, projectId, request, async (trx) => {
         const imported = await importPage(trx, {
           projectId,
           menuNodeId: body.menuNodeId,
@@ -434,7 +434,7 @@ export function pageRoutes() {
       const touchesTree = patch.title !== undefined || patch.menuNodeId !== undefined || patch.sortOrder !== undefined
       let written
       try {
-        written = await withTransaction(app.db, async (trx) => {
+        written = await runTreeTransaction(app, projectId, request, async (trx) => {
           const bump = async (updated: PageRecord | null) =>
             updated === null ? null : { page: updated, rev: touchesTree ? await bumpMenuRev(trx, projectId) : null }
           if (base !== undefined) {
@@ -731,7 +731,7 @@ export function pageRoutes() {
       const { projectId, pageId } = parseParams(PageParams, request.params)
 
       let rev = 0
-      const result = await withTransaction(app.db, async (trx) => {
+      const result = await runTreeTransaction(app, projectId, request, async (trx) => {
         const deleted = await deletePage(trx, projectId, pageId)
         if (deleted === 'deleted') {
           // **커밋 순간의 권한.** 위 DELETE 가 페이지 행 잠금에 선다.

@@ -15,6 +15,7 @@
  */
 import { DatabaseError } from 'pg'
 import { sql } from 'kysely'
+import { readWithin } from '../db/client'
 import { assertNoNulBytes } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { assertLocking } from '../db/locking'
@@ -750,4 +751,16 @@ export async function bumpMenuRev(trx: DbHandle, projectId: string): Promise<num
 export async function readMenuRev(db: DbHandle, projectId: string): Promise<number> {
   const row = await db.selectFrom('project_menu_revs').select('rev').where('project_id', '=', projectId).executeTakeFirst()
   return row === undefined ? 0 : Number(row.rev)
+}
+
+/**
+ * 지금 메뉴 트리 판 번호를 **풀에서 새로 빌린 연결로** `ms` 안에 읽는다(`db/client.ts`의 `readWithin` — 한도를 넘기면 그 연결째 버린다).
+ * 못 읽었으면 `null`. COMMIT 답을 잃은 트리 쓰기가 신호에 실을 번호를 읽는다(`services/tree-write.ts`).
+ */
+export async function readMenuRevWithin(db: DbHandle, projectId: string, ms: number): Promise<number | null> {
+  if (ms <= 0) return null
+  const query = db.selectFrom('project_menu_revs').select('rev').where('project_id', '=', projectId).compile()
+  const rows = await readWithin(db, query, ms)
+  if (rows === null) return null
+  return rows[0] === undefined ? 0 : Number(rows[0].rev)
 }

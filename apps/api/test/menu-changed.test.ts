@@ -14,6 +14,7 @@
  * | 트리 응답의 번호와 행은 한 시점이다 | 번호가 행보다 앞서면 화면이 옛 행을 새 판으로 믿고 그 판의 신호를 넘긴다(`routes/tree.ts`) |
  * | 번호 줄이 고리에 안 낀다 | 트리 쓰기의 맨 끝에서 잡는다(`0020-project-menu-revs` 머리말 «잠금») |
  */
+import { WIREBOUND_PAGE_VERSION } from '@wirebound/schema'
 import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -26,9 +27,11 @@ import {
   signup,
   withProxiedRealApi,
   withRealApi,
+  type ProxiedRealApi,
   type RealApiContext,
   type SignedUpUser,
 } from './helpers'
+import { DB_WRITE_NOT_APPLIED_MESSAGE } from '../src/services/lost-commit'
 import { WsProbe, joinRoom } from './ws-client'
 
 const db = getTestDb()
@@ -296,6 +299,118 @@ describe('잠금 — 번호 줄이 고리에 안 낀다(교착 0)', () => {
       expect(await deadlockCount()).toBe(deadlocks)
       // 삭제가 번호 줄도 지웠다(FK 가 없어 CASCADE 가 안 데려간다 — `repos/projects.ts`의 `deleteProject`).
       expect(await db.selectFrom('project_menu_revs').select('rev').where('project_id', '=', fx.projectId).execute()).toEqual([])
+    })
+  }, 30_000)
+})
+
+/**
+ * **COMMIT 답을 잃은 트리 쓰기도 신호를 낸다**(J1 리뷰 R3). `pg-fault-proxy`가 번호 문장 뒤의 COMMIT 을 Postgres 에 넘기고 그 답이 오는 순간
+ * api 쪽 연결을 끊는다 — 커밋은 됐는데 api 는 모른다. 답은 503 «모름» 그대로고, 룸은 새 연결로 읽은 지금 번호의 `menu-changed`를 받는다
+ * (`ws/notify.ts`의 `notifyMenuChangedAfterLoss`). 복원은 커밋을 확인하는 길(`services/lost-commit.ts`의 `runConfirmedTransaction`)이라
+ * 성공으로 답하고 제 번호를 보낸다 — 대조군이다.
+ */
+describe('답을 잃은 쓰기', () => {
+  const LOST = 'insert into "project_menu_revs"'
+  /** 무장한 뒤 보낸다 — 제 픽스처를 세우는 쓰기는 그 뒤에 부른다. */
+  const armed =
+    (send: (ctx: ProxiedRealApi, fx: Fx, P: string) => Promise<{ statusCode: number }>) =>
+    (ctx: ProxiedRealApi, fx: Fx, P: string) => {
+      ctx.proxy.dropCommitReplyAfter(LOST)
+      return send(ctx, fx, P)
+    }
+  const writes: {
+    label: string
+    status?: number
+    send: (ctx: ProxiedRealApi, fx: Fx, P: string) => Promise<{ statusCode: number }>
+  }[] = [
+    { label: 'POST …/menu', send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'POST', `${P}/menu`, { parentId: null, title: '잃은 메뉴' })) },
+    {
+      label: 'PATCH …/menu/:id — 이름',
+      send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'PATCH', `${P}/menu/${fx.menuId}`, { title: '잃은 이름', base: { title: '회원관리' } })),
+    },
+    {
+      label: 'PATCH …/menu/:id — 자리',
+      send: async (ctx, fx, P) => {
+        const side = await createMenuNode(ctx, fx.owner.cookie, fx.projectId, { title: '옆' })
+        ctx.proxy.dropCommitReplyAfter(LOST)
+        return inject(ctx, fx.owner, 'PATCH', `${P}/menu/${side.id}`, { sortOrder: 0 })
+      },
+    },
+    {
+      label: 'DELETE …/menu/:id — 본문 없는 삭제',
+      send: async (ctx, fx, P) => {
+        const empty = await createMenuNode(ctx, fx.owner.cookie, fx.projectId, { title: '빈 메뉴' })
+        ctx.proxy.dropCommitReplyAfter(LOST)
+        return inject(ctx, fx.owner, 'DELETE', `${P}/menu/${empty.id}`)
+      },
+    },
+    {
+      label: 'DELETE …/menu/:id — 연쇄 삭제',
+      send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'DELETE', `${P}/menu/${fx.menuId}`, { cascade: true, expect: { menuIds: [], pageIds: [fx.pageId] } })),
+    },
+    { label: 'POST …/pages', send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'POST', `${P}/pages`, { menuNodeId: fx.menuId, title: '잃은 페이지' })) },
+    {
+      label: 'POST …/pages/import',
+      send: armed((ctx, fx, P) =>
+        inject(ctx, fx.owner, 'POST', `${P}/pages/import`, {
+          menuNodeId: fx.menuId,
+          file: {
+            wireboundVersion: WIREBOUND_PAGE_VERSION,
+            page: { title: '가져온 페이지' },
+            schema: { version: 1, root: { id: 'file_root', type: 'Page', children: [] } },
+            comments: [],
+          },
+        }),
+      ),
+    },
+    { label: 'PATCH …/pages/:id', send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'PATCH', `${P}/pages/${fx.pageId}`, { title: '잃은 제목' })) },
+    { label: 'DELETE …/pages/:id', send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'DELETE', `${P}/pages/${fx.pageId}`)) },
+    {
+      label: '복원(대조군 — 커밋을 확인한다)',
+      status: 200,
+      send: async (ctx, fx, P) => {
+        const snapshot = (await inject(ctx, fx.owner, 'POST', `${P}/snapshots`, { tag: '잃은 복원' })).json() as { id: string }
+        await createMenuNode(ctx, fx.owner.cookie, fx.projectId, { title: '복원이 지울 메뉴' })
+        ctx.proxy.dropCommitReplyAfter(LOST)
+        return inject(ctx, fx.owner, 'POST', `${P}/snapshots/${snapshot.id}/restore`)
+      },
+    },
+  ]
+  for (const write of writes) {
+    it(write.label, async () => {
+      await withProxiedRealApi(async (ctx) => {
+        const fx = await fixture(ctx)
+        const P = `/api/projects/${fx.projectId}`
+        const watcher = await join(ctx, fx.projectId, fx.viewer)
+        await watcher.waitFor('joined')
+        // 무장은 `send` 가 제 픽스처를 다 세운 뒤에 건다(`armed`) — 픽스처의 쓰기가 무장을 먹으면 판이 안 선다.
+        const res = await write.send(ctx, fx, P)
+        expect(ctx.proxy.fired).toBe(true)
+        const after = await treeRev(ctx, fx)
+        await watcher.quiet()
+        const revs = watcher.received.filter((frame) => frame.type === 'menu-changed').map((frame) => (frame as { rev: number }).rev)
+        // 받은 신호의 마지막이 지금 번호다 — 앞의 것은 `send` 안에서 세운 픽스처의 신호다.
+        expect({ status: res.statusCode, last: revs.at(-1) ?? null }).toEqual({ status: write.status ?? 503, last: after })
+      })
+    }, 30_000)
+  }
+
+  it('COMMIT 이 서버에 못 닿으면 — 500 «반영되지 않았습니다» · 번호 그대로 · 신호 없음', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const watcher = await join(ctx, fx.projectId, fx.viewer)
+      await watcher.waitFor('joined')
+      const from = await treeRev(ctx, fx)
+      ctx.proxy.dropOnQuery('commit')
+      const res = await inject(ctx, fx.owner, 'POST', `/api/projects/${fx.projectId}/menu`, { parentId: null, title: '안 닿은 메뉴' })
+      expect(ctx.proxy.fired).toBe(true)
+      await watcher.quiet()
+      expect({
+        status: res.statusCode,
+        message: res.json().error.message,
+        rev: await treeRev(ctx, fx),
+        frames: watcher.received.filter((frame) => frame.type === 'menu-changed'),
+      }).toEqual({ status: 500, message: DB_WRITE_NOT_APPLIED_MESSAGE, rev: from, frames: [] })
     })
   }, 30_000)
 })
