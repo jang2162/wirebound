@@ -1425,6 +1425,36 @@
   background: #7c3aed;
 }
 
+/* 상태 영역 표지(`canvas/view-state-regions.ts`) — 얇은 청록 테두리와 오른쪽 위 꼬리표. 배치 선(주황 · 보라 — 왼쪽 위 글)과 겹쳐도 갈리게 색과
+   자리를 달리한다. 굵기는 캔버스가 줌을 걷어 인라인으로 준다(화면에서 1px). 누름은 그대로 아래 노드로 간다. */
+.wb-shell-region-mark {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid #0e7490;
+  pointer-events: none;
+}
+
+/* 지금 상태의 가지가 없어 기본 가지를 보이는 영역 — 흐리게(흰 겹)와 끊긴 테두리. 고치면 그 상태의 가지가 복사로 생긴다(`edit/view-state-fork.ts`). */
+.wb-shell-region-mark-dimmed {
+  border-style: dashed;
+  background: rgb(255 255 255 / 55%);
+}
+
+.wb-shell-region-tag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0 4px;
+  border-radius: 0 0 0 3px;
+  background: #0e7490;
+  color: #fff;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  transform-origin: top right;
+}
+
 /* 여럿을 고른 판의 기준 노드가 아닌 고른 노드(`canvas/canvas.tsx`) — 기준 노드(위)보다 가늘게 · 끊어서. 누름은 그대로 아래로 간다. */
 .wb-shell-selection-member {
   position: absolute;

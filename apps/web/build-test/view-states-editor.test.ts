@@ -7,6 +7,17 @@
  * | 페이지를 옮기면 | 옮겼다 돌아온 페이지가 앞서 고른 상태로 선다 |
  * | 창 900 | 접힌 머리의 `…` 항목으로 고르지 못한다 |
  * | 남이 상태를 지우면 | 지워진 상태를 고른 채 남아 캔버스가 아무 가지도 안 그리거나 머리가 지운 이름을 든다 |
+ * | 상태 추가 · 관리 · 삭제 확인 | 이름 규칙을 어긴 이름을 보낸다 · 더한 상태를 안 고른다 · 확인의 가지 수 · 노드가 실제로 지운 id 집합과 다르다 · 되돌리기 한 번에 안 돌아온다 |
+ * | 바뀐 목록 · 두 사람 | 확인을 연 뒤 바뀐 목록을 다시 안 세우거나 첫 누름에 보낸다 · 남의 노드 잠금이 목록 편집을 막는다 · 지울 가지 안 남의 잠금에 삭제가 켜져 있다 |
+ * | 되돌리기 · 리베이스 | 남이 순서를 바꾼 뒤 «상태 추가» 되돌리기가 남의 상태를 뺀다 · 가지가 생긴 상태의 되돌리기가 상태 · 가지를 잃는다 |
+ * | 나누기 · 풀기 · 가지 지우기 | 묶음 모양이 다르다 · 관리자 상태의 나누기가 그 가지를 안 만든다 · 이어지지 않은 형제에 켜져 있다 · 풀기가 안 묻는다 · 되돌리기 한 번에 안 돌아온다 |
+ * | 흐린 가지 안 편집 | 기본 가지가 바뀐다 · 편집이 두 프레임이다 · 고른 것이 복사로 안 옮긴다 · 되돌리기 한 번에 가지째 안 빠진다 · 두 사람의 잠금이 그 노드에 안 걸린다 |
+ * | 자리 규칙 | 영역의 «안에 추가» · 가지의 «아래 추가»가 켜져 있다 · 가지 줄을 영역 밖에 끌어 놓으면 옮긴다 |
+ * | 표지 | 꼬리표 · 흐림이 상태와 다르다 · 상자가 보이는 가지의 자식 합에서 1px 넘게 어긋난다(줌 · 스크롤 · 남의 편집 뒤) · 문서 안에 표지가 들어간다 · 뷰 모드에 남는다 |
+ *
+ * **못 재는 것:** 표지 상자에 iframe 의 표면 안 자리를 더하는 셈(`src/canvas/canvas.tsx` 의 상태 영역 표지 이펙트 — `frameOffset`)을 떼도 «표지»는
+ * 초록이다 — 판마다 iframe 이 표면 왼쪽 위에 서서 더할 값이 0 이다(배치 선 `./layout-guides.test.ts` 머리말과 같은 처지). 그 이펙트의 의존에서
+ * 줌을 떼도 초록이다 — 상자가 iframe 문서 좌표라 줌에 안 바뀐다(배치 선과 같은 의존을 맞춰 둔 것이다).
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -784,6 +795,95 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     } finally {
       await tab.close()
       await other.close()
+    }
+  })
+
+  // ── Task 4 — 캔버스 표지 ─────────────────────────────────────────────────────────
+
+  /** 표지 하나와 그 영역의 보이는 가지 자식(`kidIds`)의 차 — 꼬리표 · 흐림과 함께. */
+  async function markOf(page: Page, switchId: string, kidIds: string[]) {
+    return page.evaluate(
+      ({ switchId, kidIds }) => {
+        const iframe = document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement
+        const f = iframe.getBoundingClientRect()
+        const zoom = f.width / iframe.offsetWidth
+        const doc = iframe.contentDocument!
+        const mark = document.querySelector(`.wb-shell-region-mark[data-wb-region-for="${switchId}"]`)
+        const inDocument = doc.querySelectorAll('.wb-shell-region-mark, .wb-shell-region-tag').length
+        if (mark === null) return { label: null, dimmed: null, diff: null, inDocument }
+        const r = mark.getBoundingClientRect()
+        let l = Infinity
+        let t = Infinity
+        let rr = -Infinity
+        let b = -Infinity
+        for (const id of kidIds) {
+          const el = [...doc.querySelectorAll('[data-wb-id]')].find((e) => e.getAttribute('data-wb-id') === id)
+          if (el === undefined) continue
+          const c = el.getBoundingClientRect()
+          l = Math.min(l, f.left + c.left * zoom)
+          t = Math.min(t, f.top + c.top * zoom)
+          rr = Math.max(rr, f.left + c.right * zoom)
+          b = Math.max(b, f.top + c.bottom * zoom)
+        }
+        const diff = Math.max(Math.abs(r.left - l), Math.abs(r.top - t), Math.abs(r.right - rr), Math.abs(r.bottom - b))
+        return { label: mark.getAttribute('data-wb-region'), dimmed: mark.classList.contains('wb-shell-region-mark-dimmed'), diff: Math.round(diff * 100) / 100, inDocument }
+      },
+      { switchId, kidIds },
+    )
+  }
+  const fits = (value: { diff: number | null }) => ({ ...value, diff: value.diff !== null && value.diff <= 1 ? '≤1' : value.diff })
+
+  it('표지 — 상태마다 꼬리표(«상태 영역 · 가지 2» · «관리자 · 기본에서 다름» · «손님 · 기본과 같음» + 흐림) · 상자는 보이는 가지와 맞고 · 줌 · 스크롤 · 남의 편집 뒤에도 · 문서에는 아무것도 안 넣는다', async () => {
+    const fill = Array.from({ length: 24 }, (_, index) => text(`n_f${index}`, `채우는 글 ${index} — 캔버스를 세로로 길게 만든다`))
+    const { P } = await fixture('vs-marks', fill)
+    const tab = await openTab(P)
+    try {
+      const seen: Record<string, unknown> = {}
+      seen['기본'] = fits(await markOf(tab.page, 'n_sw', ['n_dt']))
+      await choose(tab.page, '관리자')
+      seen['관리자'] = fits(await markOf(tab.page, 'n_sw', ['n_at']))
+      await choose(tab.page, '손님')
+      seen['손님'] = fits(await markOf(tab.page, 'n_sw', ['n_dt']))
+      for (const step of ['확대', '확대', '축소', '축소', '축소'] as const) {
+        await tab.page.getByRole('button', { name: step, exact: true }).click()
+        await frames(tab.page)
+      }
+      seen['줌 0.75'] = fits(await markOf(tab.page, 'n_sw', ['n_dt']))
+      await tab.page.locator('.wb-shell-canvas').evaluate((el) => {
+        const scroller = [el, ...el.querySelectorAll('*')].find((node) => node.scrollHeight > node.clientHeight + 10 && getComputedStyle(node).overflowY !== 'visible')
+        if (scroller !== undefined) scroller.scrollTop = 120
+      })
+      await frames(tab.page)
+      seen['스크롤'] = fits(await markOf(tab.page, 'n_sw', ['n_dt']))
+      // 남이 기본 가지에 글 하나를 더하고(상자는 두 자식의 합이어야 한다) 영역 앞에 글 둘을 넣는다(영역이 아래로 밀린다).
+      const body = (await stack.request(bob, 'GET', P)).body
+      const seenFrames = tab.received.filter((kind) => kind === 'page-changed').length
+      const pushed = await stack.request(bob, 'PATCH', `${P}/ops`, {
+        baseSeq: body.headSeq,
+        ops: [
+          { op: 'add', path: '/root/children/1/children/0/children/-', value: text('n_dt2', '기본 가지의 둘째 글 — 첫째보다 길게 늘여 오른끝이 다르다') },
+          { op: 'add', path: '/root/children/0', value: text('n_p1', '밀어 내는 글 하나') },
+          { op: 'add', path: '/root/children/0', value: text('n_p2', '밀어 내는 글 둘') },
+        ],
+      })
+      expect(pushed.status).toBe(200)
+      await remoteArrived(tab.received, seenFrames)
+      await frames(tab.page)
+      seen['남의 편집 뒤'] = fits(await markOf(tab.page, 'n_sw', ['n_dt', 'n_dt2']))
+      await tab.page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+      await frames(tab.page)
+      seen['뷰 모드'] = (await markOf(tab.page, 'n_sw', ['n_dt'])).label
+      expect(seen).toEqual({
+        기본: { label: '상태 영역 · 가지 2', dimmed: false, diff: '≤1', inDocument: 0 },
+        관리자: { label: '관리자 · 기본에서 다름', dimmed: false, diff: '≤1', inDocument: 0 },
+        손님: { label: '손님 · 기본과 같음', dimmed: true, diff: '≤1', inDocument: 0 },
+        '줌 0.75': { label: '손님 · 기본과 같음', dimmed: true, diff: '≤1', inDocument: 0 },
+        스크롤: { label: '손님 · 기본과 같음', dimmed: true, diff: '≤1', inDocument: 0 },
+        '남의 편집 뒤': { label: '손님 · 기본과 같음', dimmed: true, diff: '≤1', inDocument: 0 },
+        '뷰 모드': null,
+      })
+    } finally {
+      await tab.close()
     }
   })
 })
