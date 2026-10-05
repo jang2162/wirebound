@@ -637,19 +637,27 @@ export function useStructureCommands(props: {
     selectedNodeIds.length !== 1 ||
     props.selectedLock !== null ||
     findNodeSafely(document.root, selectedNodeId) === undefined
-  // ── 상태 명령 ── 묶음 · 까닭은 `edit/view-state-actions.ts`, 잠금은 여기서(고른 노드의 잠금이 먼저 · 그다음 묶음의 `editBlockedBy`).
+  // ── 상태 명령 ── 묶음 · 까닭은 `edit/view-state-actions.ts`, 잠금은 여기서. **고른 노드의 잠금이 묶음의 까닭보다 먼저다** — 같은 `…` 의
+  // 구조 항목(`./toolbar-status.ts`)과 같은 차례라, 남이 잡은 줄의 꺼진 항목은 모두 같은 이유(잠금)를 말한다. 그다음 묶음의 `editBlockedBy`.
+  const selectionLockWhy =
+    props.selectedLock !== null
+      ? lockedSelectionStatus(props.selectedLock.userName)
+      : otherLock !== null
+        ? lockedSelectionStatus(otherLock.userName)
+        : undefined
   const lockWhy = (ops: readonly PatchOp[] | null): string | undefined => {
-    if (props.selectedLock !== null) return lockedSelectionStatus(props.selectedLock.userName)
-    if (otherLock !== null) return lockedSelectionStatus(otherLock.userName)
+    if (selectionLockWhy !== undefined) return selectionLockWhy
     const blocker = ops === null ? null : store.editBlockedBy(ops)
     return blocker === null ? undefined : `${blocker.userName}님이 편집 중인 노드가 있어 바꿀 수 없습니다`
   }
+  const whyOf = (plan: { reason: string } | { ops: PatchOp[] }): string | undefined =>
+    selectionLockWhy ?? ('reason' in plan ? plan.reason : lockWhy(plan.ops))
   const split = document === null ? { reason: SPLIT_PICK_REASON } : splitPlan(document, selectedNodeIds, viewState, () => 'n_probe0000000')
-  const splitWhy = 'reason' in split ? split.reason : lockWhy(split.ops)
+  const splitWhy = whyOf(split)
   const unsplit = document === null || selectedNodeId === null || many ? null : unsplitPlan(document, selectedNodeId)
-  const unsplitWhy = unsplit === null ? undefined : 'reason' in unsplit ? unsplit.reason : lockWhy(unsplit.ops)
+  const unsplitWhy = unsplit === null ? undefined : whyOf(unsplit)
   const caseRemoval = document === null || many ? null : nonDefaultCase(document, selectedNodeId) === null ? null : removeCasePlan(document, selectedNodeId!)
-  const removeCaseWhy = caseRemoval === null ? undefined : 'reason' in caseRemoval ? caseRemoval.reason : lockWhy(caseRemoval.ops)
+  const removeCaseWhy = caseRemoval === null ? undefined : whyOf(caseRemoval)
   const [unsplitting, setUnsplitting] = useState<UnsplitShown | null>(null)
   // 고른 것이 바뀌면 묻던 확인을 닫는다 — 확인은 연 순간의 영역에 대한 것이다.
   useEffect(() => {
