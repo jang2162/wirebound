@@ -236,7 +236,7 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 
 | code | HTTP 상태 | 의미 |
 |---|---|---|
-| `bad-request` | 400 | 요청 형식이 잘못됨(zod 검증 실패, 스키마 봉투 위반 등). 노드 봉투는 `@wirebound/schema` 의 `WbNodeSchema` 다 — 선언된 키 밖을 거절하고, 별칭 `alias` 는 앞뒤 공백 없는 1 ~ 60자로 받지 않는 글자(C0 · DEL · C1 · U+2028 · U+2029 · 방향 제어 글자 · 짝 없는 서로게이트)가 없고 보이는 글자가 있어야 한다(표는 `packages/schema/src/alias.ts` 머리말). 문서를 통째 받는 자리(`PUT …/schema` · 가져오기 · 프리셋)의 위반이 이 줄이고, **편집(`…/ops` · WS `patch`)이 낸 문서의 위반은 422 `validation-failed` 의 `bad-document` 이슈다** |
+| `bad-request` | 400 | 요청 형식이 잘못됨(zod 검증 실패, 스키마 봉투 위반 등). 노드 봉투는 `@wirebound/schema` 의 `WbNodeSchema` 다 — 선언된 키 밖을 거절하고, 별칭 `alias` 는 앞뒤 공백 없는 1 ~ 60자로 받지 않는 글자(C0 · DEL · C1 · U+2028 · U+2029 · 방향 제어 글자 · 짝 없는 서로게이트)가 없고 보이는 글자가 있어야 한다(표는 `packages/schema/src/alias.ts` 머리말). 페이지 봉투(`PageEnvelopeSchema`)는 거기에 화면 상태 목록 `viewStates`(많아야 20개 · 이름은 별칭과 같은 글자 규칙의 1 ~ 30자 · id 와 이름이 겹치지 않음 · id 가 `default` 아님)를 더한다. 문서를 통째 받는 자리(`PUT …/schema` · 가져오기 · 프리셋)의 위반이 이 줄이고, **편집(`…/ops` · WS `patch`)이 낸 문서의 위반은 422 `validation-failed` 의 `bad-document` 이슈다** |
 | `bad-request` | **413** · **415** | 413 — 본문이 상한을 넘었다(«요청 본문이 너무 큽니다» — 앱 기본 1 MiB · 테마 업로드 10 MB). 415 — 그 라우트가 안 받는 `Content-Type`(테마 업로드는 `application/zip` · `application/octet-stream` 만 받는다) |
 | `unauthenticated` | 401 | 로그인이 필요함(세션 쿠키 없음/만료). **예외 하나 — 이슈 코드 `wrong-password`**(`POST /api/auth/password`의 지금 비밀번호가 틀렸다): 세션은 그대로다. 받는 쪽은 이 코드로 «세션 끝»과 가른다 |
 | `forbidden` | 403 | 로그인은 했지만 이 작업에 필요한 역할이 아님 |
@@ -1332,8 +1332,13 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
    `ops` · `inverse`가 둘 다 문서 통째라 한 조회가 수백 MB 일 수 있다. 되돌리기의 두 조회는
    `fields=inverse`로 `ops`를 빼 그 반만 받는다.
 
+**ops 의 경로는 `/root` · `/viewStates`(화면 상태 목록 — 노드 밖의 문서 경로) 아래이거나 정확히 `/version`이다** — 그 밖은
+400 이다(`http/patch-ops.ts`의 `PatchPath`). `/viewStates/…` 편집의 모양은 6단계의 봉투 검증이 본다.
+
 **`PUT .../schema`가 만든 revision도 같은 방식으로 되돌린다 — 예외가 아니다.** 그
-revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `/version`이
+revision의 `ops`는 문서의 필드마다 하나씩이다 — `[replace /root, (add | remove /viewStates), replace /version]`
+(`@wirebound/schema`의 `replaceDocumentOps` — 가져오기 · 스냅샷 복원과 `PUT`의 방송도 같은 함수다. 받은 문서에 상태 목록이
+있으면 `add`, 없는데 저장된 문서에 있으면 `remove`). `inverse`에도 `/version`이
 남지만, 그것을 그대로 `PATCH .../ops`로 되보내면 200이다. undo가 싣는 `/version`은
 같은 값이므로 무연산으로 지나가기 때문이다.
 
@@ -1523,7 +1528,7 @@ id 를 실으면 **아무도 안 빠진다.** 쿠키 없이 토큰만 든 요청
 | 저장소 | 서버 **인메모리**. 프로세스가 죽으면 함께 사라진다 |
 
 **서버는 편집을 받을 때 잠금을 재확인한다(2차 방어).** 남의 잠긴 서브트리를 건드리는 편집은
-**`locked`(423)** 로 거절된다 — `PATCH .../ops`·`PUT .../schema`·`patch` 프레임 셋 다 같다. 편집이 건드리는 자리는 **연산마다 그 연산이 선 문서의 좌표로** 잰다 — 잠긴 노드의 자리를 연산마다 따라가며(앞 연산이 넣거나 뺀 만큼 · `move` 의 `path` 는 `from` 을 뺀 뒤) 견주고, 배열 번호는 적용이 읽는 대로 읽는다(`01` · `+1` 도 `1`). 적용이 실패하는 연산부터는 재지 않는다 — 그 앞에서(또는 그 연산 자신이) 잠긴 자리에 닿지 않았으면 묶음째 `patch-failed`(409)로 거절된다. 판정은 `@wirebound/schema` 의 `lockConflictOfOps` 하나이고 웹이 편집을 미리 묻는 자리(끌어 놓기 · 컴포넌트 목록의 «넣기» 단추 · 되돌리기 · 다시 실행 · 붙이기 · 복제 · 여럿을 고른 판의 지우기 · 잘라내기 · 일괄 속성 · 고른 것이 바뀌어 내려가는 칸의 초안)도 같은 함수다.
+**`locked`(423)** 로 거절된다 — `PATCH .../ops`·`PUT .../schema`·`patch` 프레임 셋 다 같다. 편집이 건드리는 자리는 **연산마다 그 연산이 선 문서의 좌표로** 잰다 — 잠긴 노드의 자리를 연산마다 따라가며(앞 연산이 넣거나 뺀 만큼 · `move` 의 `path` 는 `from` 을 뺀 뒤) 견주고, 배열 번호는 적용이 읽는 대로 읽는다(`01` · `+1` 도 `1`). 적용이 실패하는 연산부터는 재지 않는다 — 그 앞에서(또는 그 연산 자신이) 잠긴 자리에 닿지 않았으면 묶음째 `patch-failed`(409)로 거절된다. 상태 목록(`/viewStates/…`)은 노드 밖이라 어떤 노드 잠금과도 겹치지 않는다 — 같은 묶음 안의 노드 연산(상태 삭제가 지우는 가지 등)은 그대로 잰다. 판정은 `@wirebound/schema` 의 `lockConflictOfOps` 하나이고 웹이 편집을 미리 묻는 자리(끌어 놓기 · 컴포넌트 목록의 «넣기» 단추 · 되돌리기 · 다시 실행 · 붙이기 · 복제 · 여럿을 고른 판의 지우기 · 잘라내기 · 일괄 속성 · 고른 것이 바뀌어 내려가는 칸의 초안)도 같은 함수다.
 
 > **왜 409가 아닌가 — 이것이 계약이다.**
 >
