@@ -240,6 +240,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 화면을 바꾸는 pro
       selectable: [at('l_off').checkbox, at('l_on').checkbox],
       marks: [at('s_on').marks, at('q_on').marks, at('f_disabled').marks, at('f_invalid').marks, at('m_video').marks, at('l_on').marks, at('l_loading').marks],
     }
+    const [image, video] = [at('m_image').glyph, at('m_video').glyph]
     // eslint-disable-next-line no-console
     console.log(`[표지 화면 차] ${themeId} ${JSON.stringify(values)}`)
     // 카나리아 — 표지가 안 실리면 아래는 테마 CSS 가 아니라 다른 것을 잰다.
@@ -261,8 +262,8 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 화면을 바꾸는 pro
         disabledDiffers: values.disabled > 0,
         invalidDiffers: values.invalid > 0,
         loadingDiffers: values.loading > 0,
-        videoGlyphVisible: values.kind[1] !== null && values.kind[1].width > 0 && values.kind[1].height > 0,
-        videoGlyphDiffers: values.kind[1]?.text !== values.kind[0]?.text,
+        videoGlyphVisible: video !== null && video.width > 0 && video.height > 0,
+        videoGlyphDiffers: video?.text !== image?.text,
       },
       `${themeId} ${JSON.stringify(values)}`,
     ).toEqual({
