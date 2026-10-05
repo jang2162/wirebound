@@ -634,4 +634,82 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
       }
     }, 60_000)
   })
+
+  describe('6 · 닫힌 토글 · 카드 «넣기»의 화살표(정본과 견줌)', () => {
+    it('닫힌 `…` 의 ← · 카드 «넣기»의 ↓ 는 선택을 옮긴다 · 토글의 ↓ 는 메뉴를 연다 · 메뉴 트리 닫힌 토글의 Alt+↓ 는 메뉴만 연다', async () => {
+      const results: Record<string, unknown> = {}
+      {
+        const fx = await fixture('n11-toggle')
+        const { page, close } = await open(fx.url)
+        try {
+          await nodeRow(page, 'n_text0000002').click()
+          await nodeMenu(page, 'n_text0000002', 1).focus()
+          await page.keyboard.press('ArrowLeft')
+          const left = { selected: await selectedNode(page), menus: await menus(page), focus: await focusOf(page) }
+          await page.keyboard.press('Enter')
+          await page.locator('[role="menu"]').waitFor()
+          results['닫힌 … · ← 뒤 Enter'] = { left, selected: await selectedNode(page), menus: await menus(page), server: await serverPage(fx.url) }
+        } finally {
+          await close()
+        }
+      }
+      {
+        const fx = await fixture('n11-card')
+        const { page, close } = await open(fx.url)
+        try {
+          await nodeRow(page, 'n_text0000002').click()
+          await page.getByRole('contentinfo', { name: '하단 바' }).getByRole('button', { name: '컴포넌트', exact: true }).click()
+          await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill('Divider')
+          await page.locator('[data-wb-palette-card="Divider"]').waitFor()
+          await page.getByRole('button', { name: '구분선 넣기', exact: true }).focus()
+          await page.keyboard.press('ArrowDown')
+          results['카드 «넣기» · ↓'] = { selected: await selectedNode(page), focus: await focusOf(page), server: await serverPage(fx.url) }
+        } finally {
+          await close()
+        }
+      }
+      {
+        const fx = await fixture('o4')
+        const { page, close } = await open(fx.url)
+        try {
+          await nodeRow(page, 'n_text0000002').click()
+          await nodeMenu(page, 'n_text0000002', 1).click()
+          await page.locator('[role="menu"]').waitFor()
+          await page.keyboard.press('Escape')
+          const closed = { menus: await menus(page), focus: await focusOf(page) }
+          await page.keyboard.press('ArrowDown')
+          results['닫은 … 에서 ↓'] = { closed, menus: await menus(page), focus: await focusOf(page), selected: await selectedNode(page) }
+        } finally {
+          await close()
+        }
+      }
+      {
+        const fx = await fixture('o4-menu')
+        const { page, close } = await open(fx.url)
+        try {
+          const 가 = page.locator(`${TREE} [data-tree-row][data-tree-id="${fx.ids['가']}"]`)
+          await menuRow(page, fx.ids['가']!).click()
+          await 가.getByRole('button', { name: '가 더 보기', exact: true }).focus()
+          await page.keyboard.press('Alt+ArrowDown')
+          await sleep(300)
+          results['메뉴 트리 닫힌 … 에서 Alt+↓'] = { menus: await menus(page), server: await serverTree(fx) }
+        } finally {
+          await close()
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[J4 화살표 정본] ${JSON.stringify(results)}`)
+      expect(results).toEqual({
+        '닫힌 … · ← 뒤 Enter': {
+          left: { selected: 'n_card0000001', menus: 0, focus: 'Text 글 2 더 보기' },
+          selected: 'n_text0000002',
+          menus: 1,
+          server: WHOLE,
+        },
+        '카드 «넣기» · ↓': { selected: 'n_text0000003', focus: '구분선 넣기', server: WHOLE },
+        '닫은 … 에서 ↓': { closed: { menus: 0, focus: 'Text 글 2 더 보기' }, menus: 1, focus: 'menuitem', selected: 'n_text0000002' },
+        '메뉴 트리 닫힌 … 에서 Alt+↓': { menus: 1, server: TREE_WHOLE },
+      })
+    }, 120_000)
+  })
 })

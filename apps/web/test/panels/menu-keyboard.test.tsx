@@ -521,6 +521,16 @@ describe('줄 옮기기 · 접고 펴기 — 읽는 키', () => {
     })
   }
 
+  it('닫힌 `…` 토글의 Alt+↓ 는 메뉴만 연다 — 고른 메뉴를 옮기지 않는다(토글이 받은 키는 트리의 단축키가 거른다)', async () => {
+    const api = await open()
+    fireEvent.click(menuButton('권한'))
+    const toggle = within(treeRegion()).getByRole('button', { name: '권한 더 보기' })
+    toggle.focus()
+    fireEvent.keyDown(toggle, { key: 'ArrowDown', altKey: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect({ moved: api.updateMenu.mock.calls.length, menus: screen.queryAllByRole('menu').length }).toEqual({ moved: 0, menus: 1 })
+  })
+
   it('`+` · `…` 토글의 ↓ 는 줄을 옮기지 않는다 — 메뉴를 연다', async () => {
     await open()
     fireEvent.click(menuButton('권한'))

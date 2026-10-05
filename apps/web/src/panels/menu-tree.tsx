@@ -311,6 +311,10 @@ export function MenuTree(props: {
    * 살아남는다.
    */
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    // **더 가까운 받는 쪽이 이미 받은 키는 지나간다** — 줄 `+` · `…` 의 ↓ ↑ 는 메뉴를 연다(`shell/action-menu.tsx`). 안 거르면 닫힌 `…` 의
+    // Alt+↓ 가 메뉴를 열면서 고른 메뉴를 옮겼다(Chrome · `build-test/keyboard-holes.test.ts` «6»). 에디터 단축키도 같은 것을 거른다
+    // (`edit/editor-shortcuts.ts` 의 `shortcutsBlocked`).
+    if (event.defaultPrevented) return
     /**
      * **값을 넣거나 고르는 표면에서 난 키는 단축키를 찾기 전에 돌려보낸다**.
      *
