@@ -788,15 +788,18 @@ describe('메뉴 트리 선택', () => {
   it('메뉴를 고르면 그 메뉴의 판정이 툴바에 걸린다', async () => {
     await openEditor()
 
-    // `회원관리`는 페이지와 자식 메뉴를 둘 다 갖는다 — 서버가 409를 낼 자리라 비활성이다.
+    // `회원관리`는 페이지와 자식 메뉴를 둘 다 갖는다 — 삭제는 확인 상자를 거쳐 연쇄로 간다(`./menu-cascade-delete.test.tsx`).
     fireEvent.click(menuButton('회원관리'))
     expect(isOff(tool('하위 메뉴'))).toBe(false)
     expect(isOff(tool('페이지 추가'))).toBe(false)
-    expect(isOff(tool('삭제'))).toBe(true)
+    expect(isOff(tool('삭제'))).toBe(false)
+    // `회원관리`는 최상위의 맏이라 들여쓰기가 꺼진다 — 판정이 고른 메뉴에 걸리는지의 대조다.
+    expect(isOff(tool('들여쓰기'))).toBe(true)
 
-    // `주문관리`는 둘 다 비었다 — 서버가 204를 내므로 열어 둔다.
+    // `주문관리`는 둘 다 비었다 — 맏이가 아니라 들여쓰기가 산다.
     fireEvent.click(menuButton('주문관리'))
     expect(isOff(tool('삭제'))).toBe(false)
+    expect(isOff(tool('들여쓰기'))).toBe(false)
   })
 
   it('페이지를 누르면 메뉴 선택이 풀린다', async () => {

@@ -25,7 +25,7 @@
  * **메뉴는 접힌다** — 줄 앞 펼침 단추 · 제목 줄의 «모두 접기» · «모두 펴기»(`./tree-fold.tsx`) · 메뉴 줄의 ← →(`foldKey`). 접힘은 프로젝트마다
  * 화면의 상태(`tree/collapse.ts`)이고, 열린 페이지 · 고른 줄이 접힌 메뉴 안이면 그 위 메뉴를 편다(아래 `chains`).
  */
-import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
@@ -46,7 +46,8 @@ import { MenuPicker } from './menu-picker'
 import { usePageJsonExport, type PageJsonExport } from './page-json-export'
 import type { PageJsonNotices } from './page-json-notices'
 import { PageImportDialog } from './page-import-dialog'
-import { menuStatus } from './toolbar-status'
+import { MenuDeleteDialog } from './menu-delete-dialog'
+import { BUSY_REASON, menuItemReason } from './toolbar-status'
 import { TreeInput } from './tree-input'
 import { TreeFoldButtons, TreeToggle } from './tree-fold'
 import { menuRowItems, TreeRowActions } from './tree-row-actions'
@@ -180,7 +181,6 @@ export function MenuTree(props: {
   useEffect(() => {
     if (!props.editable) closeImport.current()
   }, [props.editable])
-  const statusId = useId()
   /** 줄을 찾는 상자 — 끄는 동안 포인터 밑 줄(`[data-tree-row]`)을 여기서 찾는다. */
   const treeRef = useRef<HTMLUListElement>(null)
   /** 접힌 메뉴(`tree/collapse.ts` — 프로젝트마다 · 세션 동안). 페이지는 접을 것이 없다. */
@@ -270,7 +270,7 @@ export function MenuTree(props: {
      * **값을 넣거나 고르는 표면에서 난 키는 단축키를 찾기 전에 돌려보낸다**.
      *
      * 바로 아래 상태 가드(`editing`·`reparenting`)로는 부족하다 — 그것은 **인라인 입력**이
-     * 열려 있을 때만 참인데, 이 상자 안에 그 둘이 아닌 입력 칸이 서면(행동 메뉴 · 상태줄 곁의 새 칸) 그 칸에서 친 `Backspace`가 여기까지
+     * 열려 있을 때만 참인데, 이 상자 안에 그 둘이 아닌 입력 칸이 서면(행동 메뉴 · 트리 아래의 새 칸) 그 칸에서 친 `Backspace`가 여기까지
      * 버블되어 **글자가 안 지워지고 메뉴 삭제 확인이 걸린다** — 구조 트리에서도 같은 고장이 난다. 가져오기 대화 상자는 이 상자 **밖**에
      * 선다(아래 반환 · `panels/page-import-dialog.tsx` 머리말 «키가 트리 단축키로 새지 않는다») — 단추에서 친 `Delete`는 이 가드로 못
      * 거른다.
@@ -302,7 +302,7 @@ export function MenuTree(props: {
   }
 
   /**
-   * **가져오기 대화 상자는 트리 상자 밖에 선다** — 조회 상태(불러오는 중 · 실패)와 무관하다(보낸 뒤 다시 받기가 실패해도 상자 안의 결말이
+   * **가져오기 · 메뉴 삭제 대화 상자는 트리 상자 밖에 선다** — 조회 상태(불러오는 중 · 실패)와 무관하다(보낸 뒤 다시 받기가 실패해도 상자 안의 결말이
    * 남아야 한다).
    *
    * **단축키 상자의 형제다 — 안에 넣지 마라.** 안이면 상자 안 단추에서 친 `Delete`가 React 트리를 따라 `handleKeyDown`에 닿아 고른 메뉴의
@@ -313,6 +313,7 @@ export function MenuTree(props: {
       <>
         {tree}
         {props.editable && <PageImportDialog commands={commands} />}
+        {props.editable && <MenuDeleteDialog commands={commands} />}
       </>
     )
   }
@@ -373,6 +374,7 @@ export function MenuTree(props: {
           theirs={commands.conflict.theirs}
           late={commands.conflict.late}
           disabled={commands.busy}
+          disabledReason={BUSY_REASON}
           onOverwrite={commands.overwriteTitle}
           onDiscard={commands.discardTitle}
         />
@@ -400,7 +402,6 @@ export function MenuTree(props: {
             pageId={props.pageId}
             commands={commands}
             drag={props.editable ? drag : null}
-            statusId={statusId}
             exporter={exporter}
             fold={fold}
           />
@@ -427,8 +428,13 @@ export function MenuTree(props: {
             <button
               type="button"
               className="wb-shell-menu-tool"
-              disabled={commands.busy}
-              onClick={() => commands.openInput('new-root-menu')}
+              aria-disabled={commands.busy || undefined}
+              title={commands.busy ? BUSY_REASON : undefined}
+              aria-description={commands.busy ? BUSY_REASON : undefined}
+              onClick={() => {
+                if (commands.busy) return
+                commands.openInput('new-root-menu')
+              }}
             >
               최상위 메뉴
             </button>
@@ -438,15 +444,6 @@ export function MenuTree(props: {
       {/* **줄에 붙지 않는 입력** — 최상위 메뉴는 트리 끝에 붙으므로 그 입력도 트리 아래다. 고른 것이 트리에서 사라진 채 열린
           입력(남이 지운 뒤 다시 받기 전의 창)도 붙을 줄이 없어 여기 선다. */}
       {props.editable && <RowPanel commands={commands} at="bottom" />}
-      {/* **상태줄** — 고른 것에 무엇을 못 하는지 · 보내는 중인지를 한 문장으로(`panels/toolbar-status.ts`의 `menuStatus`). 줄의
-          `…` 항목이 꺼진 까닭은 항목의 `title`이 조건으로 말하고, 이 줄이 그것이 말하지 않은 «지금 무엇이라서»를 말한다.
-
-          **할 말이 있으면 그 줄 자체가 탭 정지점이다** — 조작이 나가 있으면(`busy`) 줄 행동의 항목이 전부 꺼져 키보드로 이유에 닿을
-          자리가 이 줄뿐이다(`test/panels/toolbar-status-reach.test.tsx`). `role="alert"`도 `aria-live`도 걸지 않는다 — 선택을 옮길
-          때마다 읽히면 트리 탐색이 불가능해진다.
-
-          **뷰 모드에서는 DOM에서 뺀다** — 편집 도구에 대한 문장이다. */}
-      {props.editable && <MenuStatusLine commands={commands} id={statusId} />}
       {/* 제목 줄(`headSlot`) — «모두 접기» · «모두 펴기»(고르기와 같은 읽기라 뷰 모드에도 선다)와 뿌리 `+`. 뿌리 `+`는 고른 것에 매이지 않는 유일한
           줄 행동이다 — 최상위 메뉴가 붙는 곳은 트리 자체다. */}
       {props.headSlot !== undefined &&
@@ -465,6 +462,8 @@ export function MenuTree(props: {
                     label: '최상위 메뉴 추가',
                     icon: ICONS.addMenu,
                     disabled: commands.busy,
+                    title: commands.busy ? BUSY_REASON : undefined,
+                    description: commands.busy ? BUSY_REASON : undefined,
                     onSelect: () => commands.openInput('new-root-menu'),
                   },
                 ]}
@@ -530,7 +529,6 @@ function MenuItem(props: {
   pageId: string | undefined
   commands: TreeCommands
   drag: PointerDrag<TreeSelection, MenuDrop> | null
-  statusId: string
   exporter: PageJsonExport
   fold: Collapsed
 }): ReactElement {
@@ -547,7 +545,7 @@ function MenuItem(props: {
       <TreeRow self={self} picked={picked} drag={drag} folded={folded}>
         {/* **메뉴 제목은 누를 수 있다 — 누르는 것은 "여는 것"이 아니라 "가리키는 것"이다**.
             메뉴에는 열 문서가 없지만(「설계서 화면 구조」의 트리에서 문서를 가진 것은 페이지뿐이다) 고르는
-            효과가 실재한다: 단축키 · 상태줄이 그 메뉴에 작동하게 된다. *"누를 수 있게 보이는 것은 그
+            효과가 실재한다: 단축키 · 줄 행동이 그 메뉴에 작동하게 된다. *"누를 수 있게 보이는 것은 그
             자체로 거짓말이다"*는 **누르는 것 = 여는 것**일 때만 서는 판단이다.
 
             `<Link>`가 아니라 `<button>`인 것은 갈 주소가 없기 때문이다. 선택 표시가
@@ -573,7 +571,7 @@ function MenuItem(props: {
         {drag !== null && (
           <TreeRowActions
             name={node.title}
-            {...menuRowItems(commands, 'menu', props.statusId)}
+            {...menuRowItems(commands, 'menu')}
             onOpen={() => pick(commands, self)}
             picked={picked}
           />
@@ -593,7 +591,6 @@ function MenuItem(props: {
                 pageId={pageId}
                 commands={commands}
                 drag={drag}
-                statusId={props.statusId}
                 exporter={props.exporter}
               />
             </li>
@@ -606,7 +603,6 @@ function MenuItem(props: {
               pageId={pageId}
               commands={commands}
               drag={drag}
-              statusId={props.statusId}
               exporter={props.exporter}
               fold={props.fold}
             />
@@ -628,7 +624,6 @@ function PageLink(props: {
   pageId: string | undefined
   commands: TreeCommands
   drag: PointerDrag<TreeSelection, MenuDrop> | null
-  statusId: string
   exporter: PageJsonExport
 }): ReactElement {
   const { commands, drag, exporter } = props
@@ -659,7 +654,7 @@ function PageLink(props: {
         {drag !== null && (
           <TreeRowActions
             name={props.page.title}
-            {...menuRowItems(commands, 'page', props.statusId, {
+            {...menuRowItems(commands, 'page', {
               run: () => exporter.run(props.page.id),
               busy: exporter.exporting !== null,
             })}
@@ -765,20 +760,29 @@ function anchoredToRow(commands: TreeCommands): boolean {
  * **Esc를 이 단추에서 받는다** — 전역 리스너를 두지 않는 것은 그것이 다른 패널의 Esc까지 가로채기 때문이다. 확인이 풀리는 나머지
  * 조건(선택 변경 · 다른 조작 · «취소»)은 훅이 갖는다(`askRemove`의 짝).
  */
-function RemoveConfirm(props: { commands: TreeCommands }): ReactElement {
+export function RemoveConfirm(props: { commands: TreeCommands }): ReactElement {
   const { commands } = props
   const confirm = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     confirm.current?.focus()
   }, [])
+  /** 확인 단추가 꺼졌을 때의 이유 — `…`의 «삭제»와 같은 판정 · 같은 문장(`panels/toolbar-status.ts`의 `menuItemReason`). */
+  const removeReason = menuItemReason({ selection: commands.selection, busy: commands.busy, abilities: commands.abilities }, 'remove')
+  const off = !commands.abilities.remove || commands.busy
   return (
     <span className="wb-shell-tree-confirm">
+      {/* 꺼진 동안도 포커스는 받는다 — 이유(`aria-description`)에 키보드로 닿는 자리다(`shell/action-menu.tsx` 머리말 «끈 항목은 …»). */}
       <button
         type="button"
         ref={confirm}
         className="wb-shell-menu-tool"
-        disabled={!commands.abilities.remove || commands.busy}
-        onClick={commands.confirmRemove}
+        aria-disabled={off || undefined}
+        title={removeReason}
+        aria-description={removeReason}
+        onClick={() => {
+          if (off) return
+          commands.confirmRemove()
+        }}
         onKeyDown={(event) => {
           // `!==`로 쓴다 — 위 `SHORTCUTS`의 조합을 세는 자(`test/panels/menu-keyboard.test.tsx` «표의 여섯을 다 덮는다»)가 `event.key === '`를 닻으로 센다.
           if (event.key !== 'Escape') return
@@ -792,17 +796,6 @@ function RemoveConfirm(props: { commands: TreeCommands }): ReactElement {
         취소
       </button>
     </span>
-  )
-}
-
-/** 상태줄(`MenuTree`의 주석). 할 말이 없으면 글자 없이 자리만 지킨다(`shell.css`의 `min-height`). */
-export function MenuStatusLine(props: { commands: TreeCommands; id: string }): ReactElement {
-  const { commands } = props
-  const status = menuStatus({ selection: commands.selection, busy: commands.busy, abilities: commands.abilities })
-  return (
-    <p className="wb-shell-menu-status" id={props.id} tabIndex={status === '' ? undefined : 0}>
-      {status}
-    </p>
   )
 }
 

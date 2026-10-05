@@ -139,7 +139,7 @@ export async function findDefaultLayout(db: DbHandle, projectId: string): Promis
 }
 
 /**
- * 프로젝트의 레이아웃 행 전부를 `FOR UPDATE`로 잠근다. **복원 전용이다.**
+ * 프로젝트의 레이아웃 행 전부를 `FOR UPDATE`로 잠근다. `lockProjectForRestore`(복원 · 메뉴 연쇄 삭제)만 부른다.
  * 근거와 실측표는 `repos/snapshots.ts`의 `lockProjectForRestore` 머리말에 있다.
  */
 export async function lockProjectLayouts(trx: DbHandle, projectId: string): Promise<void> {

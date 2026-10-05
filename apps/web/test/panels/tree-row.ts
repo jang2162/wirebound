@@ -49,6 +49,42 @@ export function queryRowAction(region: HTMLElement, name: string, row: HTMLEleme
   return within(list).queryByRole('menuitem', { name })
 }
 
+/**
+ * 꺼진 항목이 드는 이유 — `aria-description`. **`title` 이 같은 문장이 아니면 던진다** — 둘은 한 문장이다(`src/panels/toolbar-status.ts`
+ * 머리말 «어디에 붙나»). 켜진 항목이면 `null`이다(그때 `title` 도 없다).
+ */
+export function reasonOf(item: Element): string | null {
+  const description = item.getAttribute('aria-description')
+  const title = item.getAttribute('title')
+  if (description !== title) throw new Error(`«${item.textContent ?? ''}»의 title(${String(title)})과 aria-description(${String(description)})이 다르다`)
+  return description
+}
+
+/** 그 줄에서 열린 `+` · `…`를 닫는다 — 열린 목록이 다음 걸음의 포커스 · 키를 쥐지 않게. */
+function closeRowMenus(row: HTMLElement): void {
+  for (const toggle of row.querySelectorAll<HTMLButtonElement>('[aria-haspopup="menu"][aria-expanded="true"]')) fireEvent.click(toggle)
+}
+
+/** 고른 줄(또는 준 줄)의 항목 하나가 드는 꺼진 이유(`reasonOf`). 연 목록은 닫는다. 항목이 없으면 던진다. */
+export function rowReason(region: HTMLElement, name: string, row: HTMLElement = pickedRow(region)): string | null {
+  const reason = reasonOf(rowAction(region, name, row))
+  closeRowMenus(row)
+  return reason
+}
+
+/** 고른 줄(또는 준 줄)의 `+` · `…` 항목 전부의 꺼진 이유 — 항목 글 → 이유(켜졌으면 `null`). 연 목록은 닫는다. */
+export function rowReasons(region: HTMLElement, row: HTMLElement = pickedRow(region)): Record<string, string | null> {
+  const reasons: Record<string, string | null> = {}
+  for (const toggle of row.querySelectorAll<HTMLButtonElement>('[aria-haspopup="menu"]')) {
+    if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
+    const list = document.getElementById(toggle.getAttribute('aria-controls') ?? '')
+    if (list === null) throw new Error('열었는데 목록이 없다')
+    for (const item of within(list).getAllByRole('menuitem')) reasons[item.textContent ?? ''] = reasonOf(item)
+    fireEvent.click(toggle)
+  }
+  return reasons
+}
+
 /** 항목을 고른다 — 옛 `fireEvent.click(툴바 단추)`. */
 export function chooseRowAction(region: HTMLElement, name: string, row?: HTMLElement): void {
   fireEvent.click(rowAction(region, name, row))

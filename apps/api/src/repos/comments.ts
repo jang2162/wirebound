@@ -415,8 +415,8 @@ export async function deleteComment(
 }
 
 /**
- * 그 페이지의 코멘트를 전부 지우며 키 있는 행을 묻는다(`0014-comment-tombstones-project`). **페이지 삭제가
- * CASCADE 전에 부른다**(`repos/pages.ts`의 `deletePage`). CASCADE 에 맡기면 묘비 없이 사라져, 복원이 그 페이지를
+ * 그 페이지의 코멘트를 전부 지우며 키 있는 행을 묻는다(`0014-comment-tombstones-project`). **페이지 삭제 · 메뉴 연쇄 삭제가
+ * CASCADE 전에 부른다**(`repos/pages.ts`의 `deletePage` · `repos/menu.ts`의 `deleteMenuSubtree`). CASCADE 에 맡기면 묘비 없이 사라져, 복원이 그 페이지를
  * 되살린 뒤 같은 키 재전송이 되살림(201)이다.
  *
  * 부르는 자리는 그 페이지 행을 `FOR UPDATE`로 쥔 채 부른다 — 쥐지 않으면 이 문장과 페이지 `DELETE` 사이에 커밋된
@@ -449,7 +449,7 @@ export async function lockProjectForBurial(trx: DbHandle, projectId: string): Pr
 }
 
 /**
- * 프로젝트의 코멘트 행 전부를 `FOR UPDATE`로 잠근다. **복원 전용이다.**
+ * 프로젝트의 코멘트 행 전부를 `FOR UPDATE`로 잠근다. `lockProjectForRestore`(복원 · 메뉴 연쇄 삭제)만 부른다.
  *
  * `pages`를 조인해 프로젝트로 좁히되 **`for update of c`**로 코멘트 행만 잠근다 —
  * `for update`만 쓰면 조인한 `pages` 행까지 잠그는데, 그것은 `lockProjectPages`가

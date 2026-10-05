@@ -21,12 +21,12 @@ function Where(): ReactElement {
   return <span data-testid="where">{useLocation().pathname}</span>
 }
 
-/** 끈 항목이 **맨 앞 · 가운데 · 맨 끝**에 있다 — 건너뛰기가 세 자리에서 다 돌아야 한다. */
+/** 끈 항목이 **맨 앞 · 가운데 · 맨 끝**에 있다 — 화살표가 세 자리에 다 서고 그 자리의 Enter · Space · 누름이 아무것도 안 해야 한다. */
 function items(onSelect: (key: string) => void): ActionMenuItem[] {
   return [
     { key: 'x', label: '맨 앞 끔', disabled: true, onSelect: () => onSelect('x') },
     { key: 'a', label: '가', onSelect: () => onSelect('a') },
-    { key: 'b', label: '가운데 끔', disabled: true, onSelect: () => onSelect('b') },
+    { key: 'b', label: '가운데 끔', disabled: true, description: '가운데가 꺼진 이유', onSelect: () => onSelect('b') },
     { key: 'c', label: '다', onSelect: () => onSelect('c') },
     { key: 'go', label: '가기', to: '/elsewhere' },
     { key: 'd', label: '맨 끝 끔', disabled: true, onSelect: () => onSelect('d') },
@@ -61,7 +61,7 @@ function key(name: string): void {
 }
 
 describe('여닫기', () => {
-  it('단추를 누르면 메뉴가 열리고 첫 켠 항목에 포커스가 간다', () => {
+  it('단추를 누르면 메뉴가 열리고 첫 항목에 포커스가 간다 — 끈 항목이어도', () => {
     host()
     expect(toggle().getAttribute('aria-haspopup')).toBe('menu')
     expect(toggle().getAttribute('aria-expanded')).toBe('false')
@@ -79,15 +79,18 @@ describe('여닫기', () => {
       '가기',
       '맨 끝 끔',
     ])
-    expect(focused()).toBe('가')
+    expect(focused()).toBe('맨 앞 끔')
   })
 
-  it('단추에서 ↓ 로도 열리고 첫 켠 항목에 포커스가 간다', () => {
+  it('단추에서 ↓ · ↑ 로도 열리고 첫 · 끝 항목에 포커스가 간다', () => {
     host()
     toggle().focus()
     key('ArrowDown')
     expect(toggle().getAttribute('aria-expanded')).toBe('true')
-    expect(focused()).toBe('가')
+    expect(focused()).toBe('맨 앞 끔')
+    key('Escape')
+    key('ArrowUp')
+    expect(focused()).toBe('맨 끝 끔')
   })
 
   it('열린 채 단추를 다시 누르면 닫힌다', () => {
@@ -106,7 +109,7 @@ describe('여닫기', () => {
     const { rerender } = render(view(true))
     fireEvent.click(toggle())
     rerender(view(true))
-    expect({ menus: screen.queryAllByRole('menu').length, focus: focused() }).toEqual({ menus: 1, focus: '가' })
+    expect({ menus: screen.queryAllByRole('menu').length, focus: focused() }).toEqual({ menus: 1, focus: '맨 앞 끔' })
     rerender(view(false))
     expect({ menus: screen.queryAllByRole('menu').length, focus: document.activeElement === toggle() }).toEqual({ menus: 0, focus: true })
   })
@@ -127,21 +130,45 @@ describe('여닫기', () => {
 })
 
 describe('키보드', () => {
-  it('↓ ↑ Home End 는 끈 항목을 건너뛰고 끝에서 돈다', () => {
+  it('↓ ↑ Home End 는 끈 항목에도 서고 끝에서 돈다', () => {
     host()
     fireEvent.click(toggle())
     const seen: string[] = []
-    for (const name of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp', 'ArrowUp', 'End', 'Home']) {
+    for (const name of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp', 'ArrowUp', 'End', 'ArrowDown', 'ArrowUp', 'Home', 'ArrowUp']) {
       key(name)
       seen.push(focused())
     }
-    // 켠 항목은 가 · 다 · 가기 셋이다 — 끝에서 돌 때 맨 끝 · 맨 앞의 끈 항목을 건넌다.
-    expect(seen).toEqual(['다', '가기', '가', '가기', '다', '가기', '가'])
+    expect(seen).toEqual(['가', '가운데 끔', '다', '가운데 끔', '가', '맨 끝 끔', '맨 앞 끔', '맨 끝 끔', '맨 앞 끔', '맨 끝 끔'])
+  })
+
+  it('끈 항목에 선 포커스는 그 이유(`aria-description`)를 든다 — 키보드로 이유에 닿는 자리', () => {
+    host()
+    fireEvent.click(toggle())
+    key('ArrowDown')
+    key('ArrowDown')
+    expect(document.activeElement?.getAttribute('role')).toBe('menuitem')
+    expect(document.activeElement?.getAttribute('aria-disabled')).toBe('true')
+    expect(document.activeElement?.getAttribute('aria-description')).toBe('가운데가 꺼진 이유')
+  })
+
+  it('끈 항목의 Enter · Space 는 아무것도 안 부르고 메뉴는 열린 채 · 포커스도 그 자리다', () => {
+    const onSelect = host()
+    fireEvent.click(toggle())
+    for (const name of ['Enter', ' ']) {
+      key(name)
+      expect({ name, menus: screen.queryAllByRole('menu').length, focus: focused() }).toEqual({ name, menus: 1, focus: '맨 앞 끔' })
+    }
+    key('End')
+    key('Enter')
+    expect({ menus: screen.queryAllByRole('menu').length, focus: focused() }).toEqual({ menus: 1, focus: '맨 끝 끔' })
+    expect(onSelect).not.toHaveBeenCalled()
   })
 
   it('Enter 는 그 항목을 한 번 부르고 닫고 포커스를 단추로 돌려준다', () => {
     const onSelect = host()
     fireEvent.click(toggle())
+    key('ArrowDown')
+    key('ArrowDown')
     key('ArrowDown')
     key('Enter')
     expect(onSelect.mock.calls).toEqual([['c']])
@@ -152,6 +179,7 @@ describe('키보드', () => {
   it('Space 도 Enter 와 같다', () => {
     const onSelect = host()
     fireEvent.click(toggle())
+    key('ArrowDown')
     key(' ')
     expect(onSelect.mock.calls).toEqual([['a']])
     expect(screen.queryByRole('menu')).toBeNull()
@@ -161,6 +189,7 @@ describe('키보드', () => {
     const onSelect = host()
     fireEvent.click(toggle())
     key('End')
+    key('ArrowUp')
     expect(focused()).toBe('가기')
     key('Enter')
     expect(screen.getByTestId('where').textContent).toBe('/elsewhere')
@@ -202,7 +231,7 @@ describe('누름', () => {
   it('바깥을 누르면 아무것도 안 부르고 닫고 포커스를 단추로 돌려준다', () => {
     const onSelect = host()
     fireEvent.click(toggle())
-    expect(focused()).toBe('가')
+    expect(focused()).toBe('맨 앞 끔')
     fireEvent.mouseDown(screen.getByRole('button', { name: '바깥' }))
     expect(screen.queryByRole('menu')).toBeNull()
     expect(document.activeElement).toBe(toggle())
@@ -294,6 +323,7 @@ describe('고른 뒤의 둘째 누름', () => {
   it('키보드로 고르면(Enter — `detail` 0) 삼키지 않는다', () => {
     const { onSelect, outside } = hostWithOutside()
     fireEvent.click(toggle())
+    key('ArrowDown')
     key('Enter')
     fireEvent.click(screen.getByRole('button', { name: '밑' }), { detail: 1 })
     expect({ select: onSelect.mock.calls, outside: outside.mock.calls.length }).toEqual({ select: [['a']], outside: 1 })

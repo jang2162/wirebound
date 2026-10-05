@@ -12,15 +12,17 @@
  *
  * | 키 | 어디서 | 무엇 |
  * |---|---|---|
- * | 클릭 · Enter · Space | 단추 | 열고 첫 켠 항목에 포커스(Enter · Space 는 단추의 기본 동작이 클릭을 낸다) |
- * | ↓ · ↑ | 단추 | 열고 첫 · 끝 켠 항목에 포커스 |
- * | ↓ · ↑ · Home · End | 목록 | 켠 항목 사이를 옮긴다 — 끝에서 돈다 |
- * | Enter · Space | 목록 | 포커스 항목을 고른다 |
+ * | 클릭 · Enter · Space | 단추 | 열고 첫 항목에 포커스(Enter · Space 는 단추의 기본 동작이 클릭을 낸다) |
+ * | ↓ · ↑ | 단추 | 열고 첫 · 끝 항목에 포커스 |
+ * | ↓ · ↑ · Home · End | 목록 | 항목 사이를 옮긴다(끈 항목에도 선다) — 끝에서 돈다 |
+ * | Enter · Space | 목록 | 포커스 항목을 고른다(끈 항목이면 아무것도 안 한다) |
  * | Escape · 바깥 누름 | 어디든 | 닫는다 |
  *
  * **끈 항목(`disabled`)은 `aria-disabled` 로 남긴다 — 빼지 않는다.** 할 수 없는 일이 목록에 있다는 것 자체가 정보다(트리의 «들여쓰기»가 지금
- * 안 되는 판). 화살표는 그것을 건너뛰고, 눌러도 아무것도 안 한다. `disabled` 속성을 쓰지 않는 것은 그 속성이 포커스와 클릭 이벤트를 함께 막아
- * 보조 기술에 «있다»도 덜 전하기 때문이다.
+ * 안 되는 판). **화살표는 거기에도 선다** — 포커스가 서야 보조 기술이 그 항목의 이유(`aria-description`)를 읽는다. 끈 항목의 이유에
+ * 키보드로 닿는 자리는 여기 하나다(트리 아래 이유 줄은 없다). 누르기 · Enter · Space 는 아무것도 안 한다. WAI-ARIA APG 메뉴 패턴의 «꺼진
+ * 항목도 포커스는 받되 고를 수 없다»와 같다. `disabled` 속성을 쓰지 않는 것은 그 속성이 포커스와 클릭 이벤트를 함께 막아 화살표가 설 수
+ * 없어서다.
  *
  * ## 닫히면 포커스를 단추로 돌려준다 — 포커스가 메뉴 안에 있었을 때만
  *
@@ -77,13 +79,14 @@
  *
  * 열린 동안 단추를 감싼 상자와 portal 된 목록에 `data-wb-holds-keys="menu"` 를 단다 — 포커스가 그 안이면 화살표 · Home · End · Escape · Enter
  * · Delete · Backspace 는 에디터 단축키도 메뉴를 품은 트리의 키 처리도 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget` — 표와 까닭은
- * 거기). 메뉴는 Delete · Backspace 를 받아 아무것도 안 한다. **단추까지 감싸는 것은** 항목이 다 꺼진 메뉴는 포커스가 단추에 남아서다 — 그
- * 단추의 Escape 가 메뉴를 닫으며 선택까지 풀었다(Chrome · `build-test/editor-shortcuts-review.test.ts` «L2»). 상자 밖(캔버스 · 트리 줄)의 키는
+ * 거기). 메뉴는 Delete · Backspace 를 받아 아무것도 안 한다. **단추까지 감싸는 것은** 포커스가 목록 항목에 못 선 채 열린 판에도 단추의 키가
+ * 단축키로 새지 않게 하려는 것이다 — 끈 항목에 화살표가 서지 않으면 항목이 다 꺼진 메뉴의 포커스가 단추에 남고, 그 단추의 Escape 가
+ * 메뉴를 닫으며 선택까지 풀었다(Chrome · `build-test/editor-shortcuts-review.test.ts` «L2» — 지금은 포커스가 첫 끈 항목에 서는 판을 잰다). 상자 밖(캔버스 · 트리 줄)의 키는
  * 단축키가 받는다 — 메뉴를 연 채 포커스만 캔버스로 옮긴 판의 Delete 는 고른 노드를 지우고, 선택이 비어 메뉴도 닫힌다(`openWhile`).
  *
  * ## 고른 대상이 바뀌면 닫는다 — `openWhile`
  *
- * 트리 줄의 `+` · `…` 는 **고른 줄**에 대한 명령이다 — 항목 · 켜고 끔 · 설명(`aria-describedby` 의 상태줄)이 다 고른 노드의 판정에서 나온다
+ * 트리 줄의 `+` · `…` 는 **고른 줄**에 대한 명령이다 — 항목 · 켜고 끔 · 끈 이유(`title` · `aria-description`)가 다 고른 노드의 판정에서 나온다
  * (`panels/tree-row-actions.tsx` 머리말 «누르면 먼저 그 줄을 고른다»). 메뉴가 열린 채 선택이 다른 길로 옮으면(Cmd+V · Cmd+D 가 넣은 노드를
  * 고름 · 캔버스의 ↓) 메뉴는 연 줄의 이름을 단 채 새 노드의 명령을 든다 — «삭제»가 방금 붙인 노드를 지웠다(Chrome ·
  * `build-test/editor-shortcuts-review-2.test.ts` «R1»). 그래서 그 줄이 고른 줄이 아니게 되면(`openWhile` 이 거짓) 닫는다. **항목을 연 줄의
@@ -130,10 +133,10 @@ export interface ActionMenuItem {
   disabled?: boolean
   /** 되돌리기 어려운 일(삭제) — 색만 바뀐다. */
   danger?: boolean
-  /** 마우스가 머물 때의 설명 — 끈 항목이 왜 꺼졌는지(트리 줄의 `…`). */
+  /** 마우스가 머물 때의 설명 — 끈 항목이 왜 꺼졌는지(트리 줄의 `+` · `…`). */
   title?: string
-  /** 항목의 설명이 되는 요소의 id(`aria-describedby`) — 트리 아래 상태줄. */
-  describedBy?: string
+  /** 보조 기술이 읽는 항목의 설명(`aria-description`) — 끈 항목이 왜 꺼졌는지. 트리 줄은 `title` 과 같은 문장을 싣는다. */
+  description?: string
   /** 글자 앞의 아이콘 — lucide 컴포넌트(머리말 «항목의 아이콘»). */
   icon?: LucideIcon
 }
@@ -188,8 +191,8 @@ export function ActionMenu(props: {
 
   useEffect(() => {
     if (!open) return
-    const enabled = enabledItems(listRef.current)
-    ;(entry === 'first' ? enabled[0] : enabled[enabled.length - 1])?.focus({ preventScroll: true })
+    const items = menuItems(listRef.current)
+    ;(entry === 'first' ? items[0] : items[items.length - 1])?.focus({ preventScroll: true })
   }, [open, entry])
 
   function openAt(at: 'first' | 'last'): void {
@@ -207,11 +210,11 @@ export function ActionMenu(props: {
 
   function onListKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     if (event.nativeEvent.isComposing) return
-    const enabled = enabledItems(listRef.current)
-    const at = enabled.indexOf(document.activeElement as HTMLElement)
+    const items = menuItems(listRef.current)
+    const at = items.indexOf(document.activeElement as HTMLElement)
     const move = (index: number): void => {
       event.preventDefault()
-      enabled[(index + enabled.length) % enabled.length]?.focus()
+      items[(index + items.length) % items.length]?.focus()
     }
     switch (event.key) {
       case 'ArrowDown':
@@ -315,7 +318,7 @@ export function ActionMenu(props: {
                       className={item.danger === true ? 'wb-shell-action-menu-item wb-shell-action-menu-danger' : 'wb-shell-action-menu-item'}
                       aria-disabled={item.disabled === true ? true : undefined}
                       title={item.title}
-                      aria-describedby={item.describedBy}
+                      aria-description={item.description}
                       onClick={(event) => {
                         if (item.disabled === true) return
                         choose(item, event)
@@ -376,10 +379,8 @@ function swallowFollowingClick(targets: readonly EventTarget[], at: { x: number;
   const timer = setTimeout(release, DOUBLE_CLICK_MS)
 }
 
-/** 목록 안의 켠 항목 — 화살표가 설 자리. 차례는 DOM 차례다. */
-function enabledItems(box: HTMLElement | null): HTMLElement[] {
+/** 목록 안의 항목 — 화살표가 설 자리(끈 항목 포함 — 머리말 «끈 항목은 …»). 차례는 DOM 차례다. */
+function menuItems(box: HTMLElement | null): HTMLElement[] {
   if (box === null) return []
-  return [...box.querySelectorAll<HTMLElement>('[role="menuitem"]')].filter(
-    (item) => item.getAttribute('aria-disabled') !== 'true',
-  )
+  return [...box.querySelectorAll<HTMLElement>('[role="menuitem"]')]
 }

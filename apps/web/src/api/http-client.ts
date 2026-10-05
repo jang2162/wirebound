@@ -10,6 +10,7 @@ import {
   type ApiClient,
   type ApiErrorCode,
   type ApiErrorIssue,
+  type MenuCascadeResult,
   type ReadOptions,
   type WriteOptions,
 } from './client'
@@ -428,6 +429,15 @@ function isExportPreview(value: unknown): boolean {
 const SHAPES = {
   /** 본문을 읽지 않는 요청. 204에서는 아래 조기 반환에 걸려 이 검사에 닿지 않는다. */
   noBody: () => true,
+  /** 메뉴 연쇄 삭제의 답 — 화면은 안전망의 `tag`를 통지 글자로 읽는다(`tree/use-tree-commands.tsx`). */
+  menuCascade: (value) =>
+    isRecord(value) &&
+    isRecord(value['deleted']) &&
+    typeof value['deleted']['menus'] === 'number' &&
+    typeof value['deleted']['pages'] === 'number' &&
+    isRecord(value['safetySnapshot']) &&
+    typeof value['safetySnapshot']['id'] === 'string' &&
+    typeof value['safetySnapshot']['tag'] === 'string',
   /**
    * «내 토큰» 목록(`account/tokens-section.tsx`). **`id`는 폐기 주소가 되므로 빈 문자열까지 막는다**(아래 `pageDetail`의 «주소가 되는
    * 값»과 같은 판단). 나머지는 줄의 글자로 그려지는 값이라 모양만 본다 — 객체가 React 자식으로 닿으면 목록이 통째로 빈다.
@@ -1381,6 +1391,11 @@ export function createHttpClient(
       ),
     deleteMenu: (projectId, nodeId) =>
       request<void>('DELETE', menuPath(projectId, nodeId), SHAPES.noBody),
+    deleteMenuCascade: (projectId, nodeId, seen) =>
+      request<MenuCascadeResult>('DELETE', menuPath(projectId, nodeId), SHAPES.menuCascade, {
+        cascade: true,
+        expect: { menuIds: [...seen.menuIds], pageIds: [...seen.pageIds] },
+      }),
     createPage: (projectId, body) =>
       // 응답은 `GET .../pages/:pageId`와 같은 여덟 키다 — 서버의 `toResponse` 하나가
       // 조회·생성·갱신 셋을 다 만든다(`apps/api/src/routes/pages.ts`). **그래서 같은 shape를

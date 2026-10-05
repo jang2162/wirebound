@@ -13,6 +13,7 @@ import { MULTI_KEY_NOTICE } from '../../src/shell/editor-keys'
 import { MIXED_TYPES_NOTICE } from '../../src/panels/property-panel'
 import type { EditorStore } from '../../src/store/editor-store'
 import { HEAD_SEQ, PAGE_ID, openPage, pageDetail, pageDoc } from '../editor-harness'
+import { reasonOf } from '../panels/tree-row'
 import '../../src/catalog-setup'
 
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
@@ -221,7 +222,7 @@ describe('일괄 삭제 · 복제 · 복사 · 잘라내기 — 편집 하나 ·
    * 고른 뒤 그 가운데 하나를 남이 잡았다(잠금은 고른 뒤 도착한다) — 묶음째 안 나가고 하단 바가 누가 잡았는지 말한다. 혼자 죽는 변조: 여럿의 판정이
    * 기준 노드의 잠금만 본다(`otherLock`).
    */
-  it('고른 것 가운데 하나를 남이 잡으면 Delete · Ctrl+D 가 아무것도 안 낸다 — «삭제»가 꺼지고 상태줄 · 하단 바가 말한다', async () => {
+  it('고른 것 가운데 하나를 남이 잡으면 Delete · Ctrl+D 가 아무것도 안 낸다 — «삭제»가 꺼져 이유를 들고 하단 바가 말한다', async () => {
     const srv = server()
     await openPage(doc(), { apiOverrides: srv.api })
     pick('n-a', 'n-c')
@@ -244,12 +245,12 @@ describe('일괄 삭제 · 복제 · 복사 · 잘라내기 — 편집 하나 ·
       calls: srv.calls.length,
       alert: screen.queryAllByRole('alert').map((element) => element.textContent),
       removeOff: remove.getAttribute('aria-disabled') === 'true' || (remove as HTMLButtonElement).disabled,
-      status: screen.getByRole('region', { name: '구조 트리' }).querySelector('.wb-shell-structure-status')?.textContent,
+      reason: reasonOf(remove),
     }).toEqual({
       calls: 0,
       alert: ['보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다'],
       removeOff: true,
-      status: '보라님이 편집 중인 노드가 있어 함께 지울 수 없습니다',
+      reason: '보라님이 편집 중인 노드가 있어 함께 지울 수 없습니다',
     })
   })
 })

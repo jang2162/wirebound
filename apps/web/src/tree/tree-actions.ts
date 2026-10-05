@@ -163,20 +163,9 @@ interface PageVisit {
  * 생기는 상태다**(선택은 파생값이라 트리가 바뀌어도 저절로 따라오지 않는다).
  * `structureAbilities`가 문서에 없는 노드에 `NOTHING`을 내는 것과 같은 계약이다.
  *
- * **`remove`가 서버 판정과 겹치는 것은 의도다.** 겹치더라도 눌러 봐야 실패할 버튼을 활성으로
- * 두지 않는다 — `edit/structure-actions.ts`·`projects/project-actions.ts`와 같은 정신이다.
- *
- * **실측**(다시 재는 법: api 하네스로 자식 메뉴·페이지를 둔 메뉴를 만들어 `DELETE`를 보낸다):
- *
- * ```
- * 자식 메뉴만 있는 메뉴 DELETE → 409 {"code":"conflict",
- *                                  "message":"하위 메뉴나 페이지가 있어 삭제할 수 없습니다"}
- * 페이지만   있는 메뉴 DELETE → 409 (코드·문장 같음)
- * 둘 다 없는 메뉴      DELETE → 204
- * ```
- *
- * **두 배열을 다 보는 것이 옳고, 과도하게 막지도 않는다.** 앞의 둘이 `pages`·`children`을
- * 각각 보아야 하는 근거이고, 셋째가 그 반대 방향(빈 메뉴를 잠그지 않는다)이다.
+ * **메뉴의 `remove`는 찾으면 늘 참이다.** 하위가 없으면 본문 없는 `DELETE`(204), 있으면 확인 상자가 함께 지울 것을 보인 뒤 연쇄
+ * 삭제(`ApiClient.deleteMenuCascade`)로 간다 — 본문 없는 `DELETE`는 하위가 있으면 409 라(apps/api README «메뉴 연쇄 삭제») 그 판에서
+ * 쓰지 않는다.
  *
  * **페이지의 `indent`·`outdent`가 언제나 불가한 근거:** 들여쓰기는 *"바로 앞 형제의
  * 마지막 자식이 된다"*이다(구조 트리의 들여쓰기와 같은 정의다). `panels/menu-tree.tsx`의
@@ -199,12 +188,9 @@ export function treeAbilities(
       addMenu: true,
       addPage: true,
       rename: true,
-      // **두 배열을 다 본다.** 서버의 FK 제약이 둘을 같은 에러로 잡는다.
-      // `byOrder`를 지나는 것은 길이를 세기 위해서가 아니라 배열이 아닌 값에서 던지지
-      // 않기 위해서다(머리말 «관문과 이 파일»의 실측).
-      remove:
-        byOrder<TreePage>(visit.node.pages).length === 0 &&
-        byOrder<TreeMenuNode>(visit.node.children).length === 0,
+      // 하위가 있어도 지운다 — 하위가 있으면 확인 상자가 함께 지울 것을 보이고 연쇄 삭제로 보낸다(`menuSubtree` ·
+      // `use-tree-commands.tsx`의 `askRemove`).
+      remove: true,
       moveUp: visit.index > 0,
       moveDown: visit.index < visit.siblings.length - 1,
       // 들여쓰기의 목적지는 앞 형제 메뉴다 — 없으면 갈 곳이 없다. 구조 트리와 달리
@@ -375,6 +361,36 @@ export function menuChildCount(menu: TreeMenuNode[], menuId: string, kind: 'menu
 }
 
 /** 트리 전체의 메뉴 수. `reparent` 판정이 "옮길 곳이 있는가"를 이것으로 본다. */
+/**
+ * 메뉴 하나의 밑 — 연쇄 삭제의 확인 상자가 보이고 그 id 를 서버에 싣는 것(`api/client.ts`의 `SubtreeSeen`). 꼴이 서버 409 의 지금
+ * 목록(`SubtreeListing`)과 같아 상자는 어느 쪽이든 같은 길로 그린다.
+ */
+export interface MenuSubtree {
+  title: string
+  /** 밑의 메뉴 — 자기는 안 든다. 트리가 그리는 차례(아래 `pages`와 같은 순회). */
+  menus: { id: string; title: string }[]
+  /** 자기와 밑의 메뉴에 매인 페이지 — 트리가 그리는 차례(메뉴마다 페이지 먼저, 그다음 하위 메뉴). */
+  pages: { id: string; title: string }[]
+}
+
+/** 메뉴의 밑을 센다. 트리에 없으면 `null`. */
+export function menuSubtree(menu: TreeMenuNode[] | null, menuId: string): MenuSubtree | null {
+  if (menu === null) return null
+  const visit = findMenu(menu, menuId, null)
+  if (visit === null) return null
+  const pages: MenuSubtree['pages'] = []
+  const menus: MenuSubtree['menus'] = []
+  const walk = (node: TreeMenuNode): void => {
+    for (const page of byOrder<TreePage>(node.pages)) pages.push({ id: page.id, title: page.title })
+    for (const child of byOrder<TreeMenuNode>(node.children)) {
+      menus.push({ id: child.id, title: child.title })
+      walk(child)
+    }
+  }
+  walk(visit.node)
+  return { title: visit.node.title, menus, pages }
+}
+
 function countMenus(nodes: TreeMenuNode[]): number {
   return byOrder<TreeMenuNode>(nodes).reduce((total, node) => total + 1 + countMenus(node.children), 0)
 }

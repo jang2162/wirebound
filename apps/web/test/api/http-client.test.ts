@@ -131,6 +131,7 @@ const pageImported: PageImported = { page, comments: { inserted: 2, dangling: 1 
 
 /** `POST /menu`·`PATCH /menu/:nodeId`의 응답. 트리 노드와 달리 `pages`·`children`이 없다. */
 const menuNode: MenuNode = { id: 'm1', projectId: 'p1', parentId: null, title: '회원관리', sortOrder: 0 }
+const cascadeResult = { deleted: { menus: 1, pages: 2 }, safetySnapshot: { id: 's1', tag: '메뉴 "회원관리" 삭제 전 2026-10-05T00:00:00.000Z' } }
 
 /** 코멘트 하나. `marker`가 **없는 것이 요점이다** — 번호는 노드의 값이다(설계서 「페이지 스키마 노드」). */
 const comment = {
@@ -304,6 +305,13 @@ const ENDPOINTS: Array<{
     method: 'DELETE',
     body: null,
     call: (c) => c.deleteMenu('p1', 'm1'),
+  },
+  {
+    client: 'deleteMenuCascade',
+    url: '/api/projects/p1/menu/m1',
+    method: 'DELETE',
+    body: cascadeResult,
+    call: (c) => c.deleteMenuCascade('p1', 'm1', { menuIds: ['m2'], pageIds: ['pg1', 'pg2'] }),
   },
   {
     client: 'createPage',
@@ -563,6 +571,12 @@ const SHAPE_CASES: Array<{
     call: (c) => c.createMenu('p1', { parentId: null, title: '가' }),
   },
   { shape: 'pageDetail', broken: { ...page, headSeq: '0' }, ok: page, call: (c) => c.getPage('p1', 'pg1') },
+  {
+    shape: 'menuCascade',
+    broken: { ...cascadeResult, safetySnapshot: { id: 's1' } },
+    ok: cascadeResult,
+    call: (c) => c.deleteMenuCascade('p1', 'm1', { menuIds: ['m2'], pageIds: ['pg1', 'pg2'] }),
+  },
   {
     // **`page.id`가 빈 문자열이면 막는다** — 가져오기가 성공하면 그 값이 그대로 주소가
     // 되고(`use-tree-commands.tsx`의 `importJson`), `/projects/p1/pages/`는 어느 라우트도
@@ -1684,6 +1698,20 @@ describe('메뉴 CRUD', () => {
     expect(stub.calls[0]?.url).toBe('/api/projects/p1/menu')
     expect(stub.calls[0]?.init?.method).toBe('POST')
     expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ parentId: null, title: '회원관리' })
+  })
+
+  it('deleteMenuCascade는 cascade 와 화면이 본 id 집합만 싣는다 — 넘긴 객체의 다른 키는 안 실린다', async () => {
+    const stub = stubFetch(jsonResponse(200, cascadeResult))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const result = await client.deleteMenuCascade('p1', 'm1', { menuIds: ['m2'], pageIds: ['pg1', 'pg2'], extra: 9 } as never)
+
+    expect(stub.calls[0]?.init?.method).toBe('DELETE')
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      cascade: true,
+      expect: { menuIds: ['m2'], pageIds: ['pg1', 'pg2'] },
+    })
+    expect(result.safetySnapshot.id).toBe('s1')
   })
 
   it('createMenu는 하위 메뉴의 parentId를 그대로 싣는다', async () => {

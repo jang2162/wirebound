@@ -20,20 +20,21 @@
  *
  * ## 할 수 없는 항목은 끈다 — 늘 못 하는 항목은 뺀다
  *
- * 판정이 지금 막은 항목은 목록에 남기고 끈다(`aria-disabled` · 마우스를 올리면 이유). **그 줄의 종류가 결코 못 하는 항목은 뺀다** —
+ * 판정이 지금 막은 항목은 목록에 남기고 끈다(`aria-disabled` · 이유는 `title` · `aria-description` — `./toolbar-status.ts` 머리말). **그 줄의
+ * 종류가 결코 못 하는 항목은 뺀다** —
  * 페이지의 들여쓰기 · 내어쓰기(`tree-actions.ts` 의 `treeAbilities` 머리말 «페이지의 `indent`·`outdent`가 언제나 불가한 근거»)와
  * 메뉴의 옮기기(소속 메뉴 고르기는 페이지의 것이다 — 메뉴의 부모는 끌어 놓기 · 들여쓰기 · 내어쓰기가 바꾼다). 늘 꺼진 항목은
  * 읽을 때마다 같은 «못 한다»를 한 번 더 말할 뿐이다.
  */
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useState, type ReactElement } from 'react'
-import { MULTI_DISABLED, MULTI_WHY_DISABLED, type StructureAbilities } from '../edit/structure-actions'
+import type { StructureAbilities } from '../edit/structure-actions'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
 import { ICONS } from '../shell/icons'
 import type { TreeAbilities } from '../tree/tree-actions'
 import type { TreeCommands } from '../tree/use-tree-commands'
 import type { StructureCommands } from './structure-toolbar'
-import { menuStatus } from './toolbar-status'
+import { EXPORT_BUSY_REASON, menuItemReason } from './toolbar-status'
 
 /** 줄 행동 한 벌 — `+` · `…`(없으면 안 그린다). `name` 은 그 줄의 이름이다(접근 이름이 줄마다 갈리게). */
 /** 연 누름이 줄을 고른 뒤의 목록을 기다린다(`TreeRowActions`의 `openedWith`). */
@@ -80,14 +81,15 @@ export function TreeRowActions(props: {
 
 /**
  * 메뉴 트리 항목이 꺼졌을 때의 설명. **조건을 그대로 옮긴다** — 판정은 `treeAbilities` 하나가 하고, 여기 있는 것은 «그 항목이
- * 켜지려면 무엇이 필요한가»뿐이다. 왜 지금 막혔는지를 한 문장으로 말하는 것은 트리 아래 상태줄이다(`toolbar-status.ts` 의 `menuStatus`).
+ * 켜지려면 무엇이 필요한가»뿐이다. 그보다 먼저 서는 원인(보내는 중 · 트리에 없다)은 `./toolbar-status.ts` 의 `menuItemReason`이 이 표 위에
+ * 세운다.
  */
-const MENU_WHY_DISABLED: Record<keyof TreeAbilities, string> = {
+export const MENU_WHY_DISABLED: Record<keyof TreeAbilities, string> = {
   addMenu: '메뉴를 고르세요',
   addPage: '메뉴를 고르세요',
   rename: '메뉴나 페이지를 고르세요',
-  // **두 배열을 다 말한다.** 서버가 자식 메뉴만 있어도, 페이지만 있어도 409를 낸다(`tree/tree-actions.ts`의 `remove` 주석).
-  remove: '하위 메뉴와 페이지가 없는 메뉴이거나, 페이지여야 합니다',
+  // 찾은 메뉴 · 페이지는 늘 지울 수 있다 — 하위가 있는 메뉴는 확인 상자가 연쇄로 보낸다(`tree/tree-actions.ts`의 `treeAbilities`).
+  remove: '메뉴나 페이지를 고르세요',
   moveUp: '앞에 형제가 있어야 합니다',
   moveDown: '뒤에 형제가 있어야 합니다',
   indent: '앞에 형제 메뉴가 있어야 합니다',
@@ -96,25 +98,25 @@ const MENU_WHY_DISABLED: Record<keyof TreeAbilities, string> = {
 }
 
 /**
- * 항목 하나 — **켜고 끔과 그 이유가 같은 판정 하나(`ability`)에서 나온다.** 조작이 나가 있는 동안(`busy`)은 다 꺼지되 이유를 안
- * 붙인다 — 곧 풀릴 상태에 «메뉴를 고르세요»가 뜨면 거짓말이다(그때 무엇을 하는지는 상태줄이 «보내는 중»으로 말한다).
+ * 항목 하나 — **켜고 끔과 그 이유가 같은 판정 하나(`ability`)에서 나온다.** 조작이 나가 있는 동안(`busy`)은 판정과 무관하게 다 꺼지고
+ * 이유가 «보내는 중»이다 — 곧 풀릴 상태에 «메뉴를 고르세요»가 뜨면 거짓말이다(`menuItemReason`). 이유는 `title` 과 `aria-description` 에
+ * 같은 문장으로 든다(`./toolbar-status.ts` 머리말).
  *
  * `key`는 판정과 따로 받는다 — 판정 하나에 항목이 둘일 수 있다(`addPage` — «페이지 추가» · «JSON 에서 가져오기…»).
  */
 function menuItem(
   commands: TreeCommands,
-  describedBy: string | undefined,
   ability: keyof TreeAbilities,
   entry: { key?: string; label: string; onSelect: () => void; danger?: boolean; icon: LucideIcon },
 ): ActionMenuItem {
-  const allowed = commands.abilities[ability]
+  const reason = menuItemReason({ selection: commands.selection, busy: commands.busy, abilities: commands.abilities }, ability)
   return {
     key: entry.key ?? ability,
     label: entry.label,
     onSelect: entry.onSelect,
-    disabled: !allowed || commands.busy,
-    title: allowed ? undefined : MENU_WHY_DISABLED[ability],
-    describedBy,
+    disabled: !commands.abilities[ability] || commands.busy,
+    title: reason,
+    description: reason,
     danger: entry.danger ?? false,
     icon: entry.icon,
   }
@@ -130,9 +132,6 @@ export interface PageExportEntry {
 /**
  * 메뉴 트리 줄의 `+` · `…` 항목(spec 「트리」 표). 페이지 줄에는 `+` 가 없다 — 페이지는 아무것도 담지 않는다.
  *
- * `statusId`는 트리 아래 상태줄의 id 다 — 할 말이 있으면 항목마다 그 줄을 설명으로 든다(`aria-describedby`). **포커스가 항목에 닿는
- * 그 순간**이 사용자가 그 조작을 하려는 때라 그때 한 번 읽힌다. 할 말이 없으면 가리키지 않는다(빈 설명을 읽히지 않게).
- *
  * **페이지 JSON 의 두 입구가 여기 있다**(설계서 「페이지 JSON」). 메뉴 `+`의 «JSON 에서 가져오기…»는 그 메뉴 밑에 새 페이지를 만드는
  * 상자를 연다(`TreeCommands.openImport` — 판정은 «페이지 추가»와 같은 `addPage`다. 가져오기도 페이지를 만드는 것이다). 페이지 `…`의
  * «JSON 내보내기»는 **그 줄의** 페이지를 파일로 낸다 — 읽기라 트리 판정 · 트리 조작의 잠금(`busy`)을 안 보고 제 내보내기만 기다린다.
@@ -141,15 +140,10 @@ export interface PageExportEntry {
 export function menuRowItems(
   commands: TreeCommands,
   kind: 'menu' | 'page',
-  statusId: string,
   exportEntry?: PageExportEntry,
 ): { add?: ActionMenuItem[]; more: ActionMenuItem[] } {
-  const describedBy =
-    menuStatus({ selection: commands.selection, busy: commands.busy, abilities: commands.abilities }) === ''
-      ? undefined
-      : statusId
   const item = (key: keyof TreeAbilities, label: string, icon: LucideIcon, onSelect: () => void, danger = false): ActionMenuItem =>
-    menuItem(commands, describedBy, key, { label, onSelect, danger, icon })
+    menuItem(commands, key, { label, onSelect, danger, icon })
   const rename = item('rename', '이름 변경', ICONS.rename, () => commands.openInput('rename'))
   const up = item('moveUp', '위로', ICONS.moveUp, () => commands.move(-1))
   const down = item('moveDown', '아래로', ICONS.moveDown, () => commands.move(1))
@@ -159,14 +153,24 @@ export function menuRowItems(
     const exported: ActionMenuItem[] =
       exportEntry === undefined
         ? []
-        : [{ key: 'export-json', label: 'JSON 내보내기', icon: ICONS.exportJson, onSelect: exportEntry.run, disabled: exportEntry.busy }]
+        : [
+            {
+              key: 'export-json',
+              label: 'JSON 내보내기',
+              icon: ICONS.exportJson,
+              onSelect: exportEntry.run,
+              disabled: exportEntry.busy,
+              title: exportEntry.busy ? EXPORT_BUSY_REASON : undefined,
+              description: exportEntry.busy ? EXPORT_BUSY_REASON : undefined,
+            },
+          ]
     return { more: [rename, item('reparent', '옮기기', ICONS.reparent, commands.openReparent), up, down, ...exported, remove] }
   }
   return {
     add: [
       item('addMenu', '하위 메뉴', ICONS.addMenu, () => commands.openInput('new-menu')),
       item('addPage', '페이지 추가', ICONS.addPage, () => commands.openInput('new-page')),
-      menuItem(commands, describedBy, 'addPage', {
+      menuItem(commands, 'addPage', {
         key: 'import-json',
         label: 'JSON 에서 가져오기…',
         onSelect: commands.openImport,
@@ -185,8 +189,9 @@ export function menuRowItems(
 }
 
 /**
- * 구조 트리 항목이 꺼졌을 때의 설명 — `MENU_WHY_DISABLED`와 같은 규칙(조건을 그대로 옮긴다 · 대표 이유는 상태줄이 말한다). 컴포넌트 목록
- * 카드의 «넣기» 단추가 «자식을 안 받는 자리» 에서 `addInside` 문장을 그대로 쓴다(`palette/palette-add.ts`).
+ * 구조 트리 항목이 꺼졌을 때의 설명 — `MENU_WHY_DISABLED`와 같은 규칙(조건을 그대로 옮긴다 · 그보다 먼저 서는 원인 — 잠금 · 고른 것 없음 ·
+ * 여럿 · 문서에 없음 — 은 `./toolbar-status.ts` 의 `structureItemReason`이 이 표 위에 세운다). 컴포넌트 목록 카드의 «넣기» 단추가 «자식을 안
+ * 받는 자리» 에서 `addInside` 문장을 그대로 쓴다(`palette/palette-add.ts`).
  */
 export const STRUCTURE_WHY_DISABLED: Record<keyof StructureAbilities, string> = {
   // **조건 둘을 다 말한다.** `acceptsChildren`은 카탈로그의 `many` 여부만이 아니라
@@ -205,36 +210,27 @@ export const STRUCTURE_WHY_DISABLED: Record<keyof StructureAbilities, string> = 
  * 구조 트리 줄의 `+` · `…` 항목(spec 「트리」 표 — `+` 안에 추가 · 아래 추가, `…` 별칭 바꾸기 · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제).
  *
  * **`+`에 «패턴 넣기»를 함께 둔다** — 패턴은 고른 줄을 자리로 삼는 추가라(`edit/pattern-insert.ts`) 그 줄의 `+`가 제자리다. 잠금으로만
- * 꺼진다(`patternLocked` — 판정이 없는 조작이라 `title`도 없다). **뿌리 줄도 같은 항목을 끈 채 둔다** — 뿌리가 못 하는 것(아래 추가 ·
+ * 꺼지고 그 잠금을 말한다(`patternLocked` · `why.pattern`). **뿌리 줄도 같은 항목을 끈 채 둔다** — 뿌리가 못 하는 것(아래 추가 ·
  * 삭제 · 순서 · 계층)은 **종류가 아니라 자리** 때문이라, 끈 항목의 이유(«루트가 아닌 노드를 고르세요»)가 할 말이 있다(머리말의 «뺀다»는
  * 종류가 결코 못 하는 항목 — 페이지의 계층 · 메뉴의 옮기기 — 에만 쓴다).
  *
- * `statusId`는 `menuRowItems`와 같다 — 할 말이 있으면 판정에 매인 항목이 상태줄을 설명으로 든다. 패턴은 들지 않는다 — 선택이 없어도
- * 되는 조작이라 *"트리에서 노드를 고르면 편집할 수 있습니다"*를 그 설명으로 붙이면 없는 전제조건을 만든다
- * (`test/panels/toolbar-status-reach.test.tsx` 머리말 «고른 길»).
+ * 꺼진 항목의 이유는 명령 묶음이 지어 둔 것(`commands.why` — `./toolbar-status.ts`)을 `title` 과 `aria-description` 에 같은 문장으로 싣는다.
  */
 export function structureRowItems(
   commands: StructureCommands,
-  statusId: string,
   /** «별칭 바꾸기» — 그 줄 아래에 별칭 입력을 연다(`./alias-edit.tsx`). 끔은 `commands.aliasLocked`. */
   openAlias: () => void,
 ): { add: ActionMenuItem[]; more: ActionMenuItem[] } {
-  const describedBy = commands.status === '' ? undefined : statusId
-  const item = (key: keyof StructureAbilities, label: string, icon: LucideIcon, onSelect: () => void, danger = false): ActionMenuItem => {
-    const allowed = commands.abilities[key]
-    // 여럿을 고른 판에서 꺼진 순서 · 계층은 «하나일 때만»이 이유다(`selectionAbilities`).
-    const why = commands.count > 1 && MULTI_DISABLED.has(key) ? MULTI_WHY_DISABLED : STRUCTURE_WHY_DISABLED[key]
-    return {
-      key,
-      label,
-      onSelect,
-      disabled: !allowed,
-      title: allowed ? undefined : why,
-      describedBy,
-      danger,
-      icon,
-    }
-  }
+  const item = (key: keyof StructureAbilities, label: string, icon: LucideIcon, onSelect: () => void, danger = false): ActionMenuItem => ({
+    key,
+    label,
+    onSelect,
+    disabled: !commands.abilities[key],
+    title: commands.why[key],
+    description: commands.why[key],
+    danger,
+    icon,
+  })
   const add = [
     item('addInside', '안에 추가', ICONS.addInside, () => commands.openAdd('inside')),
     item('addAfter', '아래 추가', ICONS.addAfter, () => commands.openAdd('after')),
@@ -244,6 +240,8 @@ export function structureRowItems(
       icon: ICONS.pattern,
       onSelect: () => commands.openAdd('pattern'),
       disabled: commands.patternLocked,
+      title: commands.why.pattern,
+      description: commands.why.pattern,
     },
   ]
   return {
@@ -255,7 +253,8 @@ export function structureRowItems(
         icon: ICONS.rename,
         onSelect: openAlias,
         disabled: commands.aliasLocked,
-        describedBy,
+        title: commands.why.alias,
+        description: commands.why.alias,
       },
       item('moveUp', '위로', ICONS.moveUp, commands.moveUp),
       item('moveDown', '아래로', ICONS.moveDown, commands.moveDown),

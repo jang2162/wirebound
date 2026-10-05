@@ -20,7 +20,7 @@ import { useTreeCommands, type TreeCommands } from '../../src/tree/use-tree-comm
 import type { MenuNode, PageDetail, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import { currentPath, fakeApi, renderWithProviders } from '../helpers'
-import { isOff, queryRowAction, treeTool } from './tree-row'
+import { isOff, queryRowAction, reasonOf, rootAction, rowReason, treeTool } from './tree-row'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 const PROJECT_NAME = '설계서'
@@ -562,15 +562,16 @@ describe('삭제', () => {
     expect(api.getTree).toHaveBeenCalledTimes(1)
   })
 
-  it('자식이 있는 메뉴는 삭제가 비활성이다', async () => {
-    // «자식이 있는 메뉴는 지우지 않는다»는 판정이 화면에 닿는 자리다. 서버도 409로
-    // 막지만(자식 메뉴만·페이지만·둘 다 전부 409 — `apps/api/test/menu.test.ts`의
-    // `자식 있는 노드는 409`), 눌러 봐야 실패할 버튼을 활성으로 두지 않는다.
+  it('자식이 있는 메뉴도 삭제가 켜져 있다 — 누르면 두 번 누르기가 아니라 확인 상자다', async () => {
+    // 하위가 있으면 연쇄 삭제의 확인 상자로 간다(`./menu-cascade-delete.test.tsx`가 상자를 잰다).
     await open()
 
     fireEvent.click(menuButton('회원관리'))
 
-    expect(isOff(tool('삭제'))).toBe(true)
+    expect(isOff(tool('삭제'))).toBe(false)
+    fireEvent.click(tool('삭제'))
+    expect(screen.getByRole('dialog', { name: '메뉴 삭제' })).toBeDefined()
+    expect(within(toolbar()).queryByRole('button', { name: '정말 삭제합니까?' })).toBeNull()
   })
 })
 
@@ -774,130 +775,113 @@ describe('인라인 입력의 용도 전환', () => {
 })
 
 /**
- * **트리 아래 상태줄**(`src/panels/toolbar-status.ts`). 구조 트리와 한 벌이고, 문안 표는
- * `./toolbar-status.test.ts`가 갖는다.
+ * **꺼진 항목의 이유**(`src/panels/toolbar-status.ts`의 `menuItemReason`) — 꺼진 줄 행동 항목 · 단추가 `title` 과 `aria-description` 에 같은
+ * 문장으로 든다. 문안의 차례는 `./toolbar-status.test.ts`, 열두 상태의 표는 `./toolbar-status-reach.test.tsx`가 갖는다.
  *
- * 여기서 재는 것은 **메뉴 트리에만 있는 축 둘**이다: ㉠ 선택의 **종류**(메뉴/페이지)가 문장을
- * 가른다, ㉡ **`busy`에는 판정 문안을 붙이지 않는다** — 줄 행동의 항목이 전부 꺼지는 유일한 상태인데
- * 그 이유가 판정이 아니다.
+ * 여기서 재는 것은 **메뉴 트리에만 있는 축**이다: **`busy`에는 판정 문안을 붙이지 않는다** — 줄 행동의 항목이 판정과 무관하게 전부 꺼지는
+ * 유일한 상태이고(판정이 켠 항목까지), 그 이유가 «보내는 중»이다. 그리고 트리 아래에 이유 줄이 서지 않는다. 메뉴 «삭제»의 판정 · 문장은
+ * 메뉴 연쇄 삭제가 갖으므로 여기서는 기대지 않는다.
  */
-function menuStatusLine(): HTMLElement {
-  const line = toolbar().querySelector<HTMLElement>('.wb-shell-menu-status')
-  if (line === null) throw new Error('메뉴 트리에 상태줄이 없습니다')
-  return line
+
+/** 메뉴 트리 영역 안 문단(`p`) 글 전부 — 이유 줄이 클래스를 바꿔 되살아나도 여기 걸린다. */
+function regionParagraphs(): string[] {
+  return [...treeRegion().querySelectorAll('p')].map((paragraph) => paragraph.textContent ?? '')
 }
 
-describe('메뉴 트리 — 상태줄', () => {
-  it('아무것도 안 고른 채 열리면 고르라고 말한다', async () => {
-    await open()
+/** 옛 이유 줄이 무리 전체를 한 문장으로 말하던 문장들 — 이제 어느 자리에도 서지 않는다. */
+const LINE_SENTENCES = ['메뉴나 페이지를 고르면 편집할 수 있습니다', '페이지라 하위 추가·계층 이동이 안 됩니다', '형제가 없어 순서를 바꿀 수 없습니다']
 
-    expect(menuStatusLine().textContent).toBe('메뉴나 페이지를 고르면 편집할 수 있습니다')
+/** `updateMenu`를 붙들어 조작 하나를 나가 있게 한다(`busy`). 놓으면 푼다. */
+function heldUpdate(): { updateMenu: ApiClient['updateMenu']; release: () => void } {
+  let release = (): void => {}
+  const held = new Promise<void>((resolve) => {
+    release = () => resolve()
   })
+  return {
+    updateMenu: vi.fn(async () => {
+      await held
+      return menuNode('m-order', '주문관리')
+    }),
+    release: () => release(),
+  }
+}
 
-  it('하위가 있는 메뉴를 고르면 삭제가 왜 꺼졌는지 말한다', async () => {
-    await open()
+/**
+ * 붙든 조작이 나갈 때까지 기다린다 — **기다리는 조건은 DOM 을 안 건드리는 값(불린 수)이다.** 줄 행동의 이유를 읽는 `rowReason`은 메뉴를
+ * 열고 닫아 DOM 을 바꾸므로 `waitFor` 안에 두면, 단언이 끝내 안 서는 판에서 그 변경이 `waitFor`의 관찰자를 다시 깨워 마이크로태스크가
+ * 끝없이 돌고 시간 한도도 못 와 케이스가 값 없이 멈춘다(«보내는 중» 이유를 뗀 변조가 그렇게 멈춘다). 나간 뒤 한 번만 읽는다.
+ */
+async function sent(call: ApiClient['updateMenu']): Promise<void> {
+  await waitFor(() => expect(call).toHaveBeenCalledTimes(1))
+}
 
-    fireEvent.click(menuButton('회원관리'))
-
-    expect(isOff(tool('삭제'))).toBe(true)
-    expect(menuStatusLine().textContent).toBe('하위가 있는 메뉴라 삭제할 수 없습니다')
-  })
-
-  it('페이지를 고르면 페이지라고 말한다', async () => {
-    // **페이지는 링크다** — 여는 것이 곧 고르는 것이고 선택은 주소에서 온다.
-    await open({}, '/projects/p-1/pages/pg-list')
-
-    expect(menuStatusLine().textContent).toBe('페이지라 하위 추가·계층 이동이 안 됩니다')
-  })
-
-  it('형제가 없는 메뉴는 순서를 못 바꾼다고 말한다', async () => {
-    // `권한`은 `회원관리`의 유일한 자식이다 — `위로`·`아래로`가 함께 죽는 유일한 자리.
+describe('메뉴 트리 — 꺼진 항목의 이유', () => {
+  it('형제가 없는 메뉴를 고르면 «위로» · «아래로»가 각자의 조건을 든다', async () => {
+    // `권한`은 `회원관리`의 유일한 자식이다 — `위로` · `아래로`가 함께 죽는 자리.
     await open()
 
     fireEvent.click(menuButton('권한'))
 
-    expect(isOff(tool('위로'))).toBe(true)
-    expect(isOff(tool('아래로'))).toBe(true)
-    expect(menuStatusLine().textContent).toBe('형제가 없어 순서를 바꿀 수 없습니다')
+    expect(rowReason(treeRegion(), '위로')).toBe('앞에 형제가 있어야 합니다')
+    expect(rowReason(treeRegion(), '아래로')).toBe('뒤에 형제가 있어야 합니다')
   })
 
-  it('**`옮기기` 하나가 없는 메뉴에는 아무 말도 하지 않는다**', async () => {
-    // `주문관리`는 형제가 있고 비었다. 메뉴 선택에서 `옮기기`는 **언제나** 못 하므로
-    // (`treeAbilities`) 메뉴 줄의 `…`에 아예 없고, 그것까지 말하면 메뉴를 고를 때마다 같은 문장이 선다.
+  it('페이지를 고르면 하위가 없는 항목은 빠지고 꺼진 순서가 제 조건을 든다', async () => {
+    // **페이지는 링크다** — 여는 것이 곧 고르는 것이고 선택은 주소에서 온다. `회원 목록`은 맏이다.
+    await open({}, '/projects/p-1/pages/pg-list')
+
+    expect(rowReason(treeRegion(), '위로')).toBe('앞에 형제가 있어야 합니다')
+    expect(rowReason(treeRegion(), '아래로')).toBeNull()
+  })
+
+  it('켜진 항목은 이유를 들지 않는다', async () => {
     await open()
 
     fireEvent.click(menuButton('주문관리'))
 
     expect(queryRowAction(treeRegion(), '옮기기')).toBeNull()
-    expect(menuStatusLine().textContent).toBe('')
-    expect(tool('삭제').getAttribute('aria-describedby')).toBeNull()
+    expect(rowReason(treeRegion(), '이름 변경')).toBeNull()
+    expect(rowReason(treeRegion(), '위로')).toBeNull()
   })
 
-  it('**보내는 중에는 판정 문안을 붙이지 않는다** — 곧 풀릴 상태다', async () => {
-    // 조작이 나가 있는 동안 아홉이 전부 꺼진다. 그때 *"메뉴를 고르세요"*가 뜨면
-    // 거짓말이다 — 고른 것은 이미 있다.
-    let release = (): void => {}
-    const held = new Promise<void>((resolve) => {
-      release = () => resolve()
-    })
-    const api = await open({ deleteMenu: vi.fn(async () => held) })
+  it('**보내는 중에는 판정이 켠 항목도 «보내는 중»을 든다** — 고른 것을 탓하지 않는다', async () => {
+    // 조작이 나가 있는 동안 항목이 전부 꺼진다. 그때 *"메뉴를 고르세요"*가 뜨면 거짓말이다 — 고른 것은 이미 있다.
+    const hold = heldUpdate()
+    const api = await open({ updateMenu: hold.updateMenu })
 
-    fireEvent.click(menuButton('권한'))
-    fireEvent.click(tool('삭제'))
-    fireEvent.click(tool('정말 삭제합니까?'))
+    fireEvent.click(menuButton('주문관리'))
+    expect(rowReason(treeRegion(), '이름 변경')).toBeNull()
+    fireEvent.click(tool('위로'))
 
-    await waitFor(() => expect(menuStatusLine().textContent).toBe('조작을 보내는 중입니다'))
+    await sent(hold.updateMenu)
+    expect(rowReason(treeRegion(), '이름 변경')).toBe('조작을 보내는 중입니다')
     expect(isOff(tool('이름 변경'))).toBe(true)
+    // 뿌리 `+`의 «최상위 메뉴 추가»도 같은 까닭으로 꺼져 같은 문장을 든다.
+    expect(reasonOf(rootAction(treeRegion(), '최상위 메뉴 추가'))).toBe('조작을 보내는 중입니다')
 
-    release()
+    hold.release()
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+    expect(rowReason(treeRegion(), '이름 변경')).toBeNull()
   })
 
-  it('**보내는 중에는 그 줄이 탭 정지점이고, 꺼진 항목이 그 줄을 설명으로 든다** — 앱째로 잰다', async () => {
-    // ***"켠 항목에 걸린 `aria-describedby`가 키보드가 그 문장에 닿는 길"*만으로는 모자라는
-    // 자리다.** `busy`면 줄 행동의 항목이 **전부** 꺼져 화살표가 설 항목이 하나도 없다 — 그때는
-    // `aria-describedby`가 읽힐 포커스가 없다. 그래서 줄 자체가 탭 정지점이 된다.
-    //
-    // 열두 상태의 표는 `./toolbar-status-reach.test.tsx`가 갖는다(상태줄만 떼어 렌더한다).
-    // **여기서 재는 것은 그 상태가 진짜 앱에서 나온다는 쪽이다** — 조작 하나를 실제로
-    // 붙들어 `busy`를 만든다.
-    let release = (): void => {}
-    const held = new Promise<void>((resolve) => {
-      release = () => resolve()
-    })
-    const api = await open({ deleteMenu: vi.fn(async () => held) })
+  /**
+   * **트리 아래에 이유 줄이 없다** — 영역 안 문단의 글에 꺼진 항목의 이유와 옛 줄의 문장이 하나도 없는지로 잰다(셀렉터의 부재만 재면 클래스를
+   * 바꾼 줄이 살아도 초록이다). **카나리아** — 같은 판에서 꺼진 항목이 «보내는 중»을 실제로 든다.
+   */
+  it('트리 아래에 이유 줄이 서지 않는다 — 보내는 중에도', async () => {
+    const hold = heldUpdate()
+    const api = await open({ updateMenu: hold.updateMenu })
 
-    fireEvent.click(menuButton('권한'))
-    fireEvent.click(tool('삭제'))
-    fireEvent.click(tool('정말 삭제합니까?'))
-    await waitFor(() => expect(menuStatusLine().textContent).toBe('조작을 보내는 중입니다'))
+    expect(regionParagraphs().filter((text) => LINE_SENTENCES.some((sentence) => text.includes(sentence)))).toEqual([])
+    fireEvent.click(menuButton('주문관리'))
+    fireEvent.click(tool('위로'))
+    await sent(hold.updateMenu)
+    expect(rowReason(treeRegion(), '이름 변경')).toBe('조작을 보내는 중입니다')
 
-    expect(menuStatusLine().tabIndex).toBe(0)
-    const item = tool('이름 변경')
-    expect(isOff(item)).toBe(true)
-    expect(item.getAttribute('aria-describedby')).toBe(menuStatusLine().id)
+    expect(regionParagraphs().filter((text) => text.includes('조작을 보내는 중입니다'))).toEqual([])
 
-    release()
+    hold.release()
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
-  })
-
-  it('켠 항목이 그 문장을 자기 설명으로 든다 — 켠 항목이 있을 때는 그쪽이 먼저다', async () => {
-    await open({}, '/projects/p-1/pages/pg-list')
-
-    tool('이름 변경')
-    const reachable = screen.getByRole('menuitem', {
-      name: '이름 변경',
-      description: '페이지라 하위 추가·계층 이동이 안 됩니다',
-    })
-    expect(isOff(reachable)).toBe(false)
-    expect(reachable.getAttribute('aria-describedby')).toBe(menuStatusLine().id)
-  })
-
-  it('알림 자리를 쓰지 않는다 — `role="alert"`도 `aria-live`도 아니다', async () => {
-    await open()
-
-    expect(menuStatusLine().getAttribute('role')).toBeNull()
-    expect(menuStatusLine().getAttribute('aria-live')).toBeNull()
   })
 })
 

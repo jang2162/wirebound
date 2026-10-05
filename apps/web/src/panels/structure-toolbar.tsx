@@ -53,7 +53,7 @@ import { PatternPicker } from './pattern-picker'
 import { PresetPicker } from './preset-picker'
 import { TypePicker } from './type-picker'
 import { lockedNotice } from './property-panel'
-import { structureStatus } from './toolbar-status'
+import { structureWhy, type StructureReasonInput, type StructureWhy } from './toolbar-status'
 
 /**
  * 줄 행동(`+` · `…`) · 끌어 놓기와 키보드 단축키가 **공유하는** 조작 묶음.
@@ -68,8 +68,6 @@ import { structureStatus } from './toolbar-status'
  */
 export interface StructureCommands {
   abilities: StructureAbilities
-  /** 고른 노드 수 — 여럿이면 순서 · 계층이 꺼지고 그 이유가 «하나일 때만»이다(`selectionAbilities` · 줄 행동의 `title`). */
-  count: number
   /**
    * `패턴 넣기`가 남의 잠금에 막혔는가.
    *
@@ -95,14 +93,13 @@ export interface StructureCommands {
    */
   presetLocked: boolean
   /**
-   * 트리 아래 상태줄에 설 한 문장. 할 말이 없으면 `''`다.
+   * 꺼진 항목마다의 이유 — 줄 행동이 꺼진 항목의 `title` · `aria-description`으로 싣는다(`./tree-row-actions.tsx`). 켜진 항목은 `undefined`다.
    *
-   * **줄 행동이 아니라 여기서 만든다** — 문안이 `abilities` 말고도 **선택 자체의 성질**
-   * (잠금·루트)을 보는데, 그 둘은 스토어와 문서에서 나오고 그것을 이미 든 자리가 여기다.
-   * 문안 자체는 `./toolbar-status.ts`가 갖는다(순수 함수 — 상태마다 무엇이 나오는지가
-   * 화면을 지나지 않고 재진다).
+   * **줄 행동이 아니라 여기서 짓는다** — 이유가 `abilities` 말고도 **선택 자체의 성질**(잠금 · 루트 · 개수)을 보는데, 그것은 스토어와 문서에서
+   * 나오고 그것을 이미 든 자리가 여기다. 문안 자체는 `./toolbar-status.ts`가 갖는다(순수 함수 — 상태마다 무엇이 나오는지가 화면을 지나지 않고
+   * 재진다).
    */
-  status: string
+  why: StructureWhy
   /**
    * 고른 노드를 지운다. 지운 뒤 무엇을 고르는지는 부르는 쪽이 정한다 — 줄 `…` «삭제»는 부모(`'parent'` — 기본), 키보드 삭제 · 잘라내기는
    * 선택을 비운다(`'none'` — `shell/editor-keys.tsx` 머리말 «키보드 삭제는 선택을 비운다»).
@@ -281,8 +278,8 @@ export function useStructureCommands(props: {
    * 고른 노드를 막는 **남의** 잠금(`store.lockedBy`가 낸 것). 없으면 `null`이다.
    *
    * **두 곳이 이 값을 쓴다.** 판정이 이것으로 꺼지고(`structureAbilities`의 셋째 인자 —
-   * 그쪽 머리말에 왜 «전부» 꺼지는지와 실측이 있다), 상태줄이 사다리 맨 위에서 이유를
-   * 말한다(`./toolbar-status.ts`). **판정을 끄는 자리가 여기인 것이 요점이다** — 툴바
+   * 그쪽 머리말에 왜 «전부» 꺼지는지와 실측이 있다), 꺼진 항목의 이유가 차례 맨 위에서 그
+   * 잠금을 말한다(`./toolbar-status.ts`). **판정을 끄는 자리가 여기인 것이 요점이다** — 툴바
    * 컴포넌트에서 `disabled`를 겹치면 단축키가 안 막힌다(에디터 단축키 `shell/editor-keys.tsx`는
    * `commands.abilities`를 지난다).
    *
@@ -609,25 +606,31 @@ export function useStructureCommands(props: {
     )
   }
 
+  const aliasLocked =
+    document === null ||
+    selectedNodeId === null ||
+    selectedNodeIds.length !== 1 ||
+    props.selectedLock !== null ||
+    findNodeSafely(document.root, selectedNodeId) === undefined
+  const reasonInput: StructureReasonInput = {
+    selectedNodeId,
+    // **루트인지는 id로 본다.** 판정을 다시 하지 않는다 — `structureAbilities`가 이미
+    // 지나간 순회를 한 벌 더 돌면 둘이 갈릴 수 있다(`./toolbar-status.ts` 머리말).
+    isRoot: document !== null && selectedNodeId !== null && document.root?.id === selectedNodeId,
+    lock: props.selectedLock,
+    count: selectedNodeIds.length,
+    anyLock: otherLock,
+    // **`presetLocked`를 끄는 그 값 그대로다.** 고른 것이 없을 때 아홉이 다 회색인 이유가 이것뿐이라, 이유가 이 값을 못 보면
+    // *"고르면 편집할 수 있습니다"*를 고를 줄이 없는 판에서도 말한다(`./toolbar-status.ts` 머리말 «안 골랐다 칸»).
+    pageLock: props.pageLock,
+    abilities,
+  }
+
   return {
     abilities,
     patternLocked,
     presetLocked,
-    // **루트인지는 id로 본다.** 판정을 다시 하지 않는다 — `structureAbilities`가 이미
-    // 지나간 순회를 한 벌 더 돌면 둘이 갈릴 수 있다(`./toolbar-status.ts` 머리말).
-    status: structureStatus({
-      selectedNodeId,
-      isRoot: document !== null && selectedNodeId !== null && document.root?.id === selectedNodeId,
-      lock: props.selectedLock,
-      count: selectedNodeIds.length,
-      anyLock: otherLock,
-      // **`presetLocked`를 끄는 그 값 그대로다.** 고른 것이 없을 때 아홉이 다 회색인
-      // 이유가 이것뿐이라, 상태줄이 이 값을 못 보면 *"고르면 편집할 수 있습니다"*를
-      // 그 자리에서도 말한다(그쪽 머리말의 표).
-      pageLock: props.pageLock,
-      abilities,
-    }),
-    count: selectedNodeIds.length,
+    why: structureWhy(reasonInput, { patternLock, presetLock: props.pageLock, aliasLocked }),
     remove: removeSelected,
     moveUp: () => moveSelected(-1),
     moveDown: () => moveSelected(1),
@@ -643,12 +646,7 @@ export function useStructureCommands(props: {
     pickPattern: addPattern,
     applyPreset,
     cancelAdd: () => setAdding(null),
-    aliasLocked:
-      document === null ||
-      selectedNodeId === null ||
-      selectedNodeIds.length !== 1 ||
-      props.selectedLock !== null ||
-      findNodeSafely(document.root, selectedNodeId) === undefined,
+    aliasLocked,
     renameAlias: (nodeId, alias) => {
       if (document === null) return
       const ops = aliasOps(document, nodeId, alias)

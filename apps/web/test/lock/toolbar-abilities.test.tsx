@@ -25,9 +25,9 @@
  *
  * `structureAbilities`가 내는 판정은 일곱이고, `패턴 넣기`·`프리셋`은 **걸 `ability`가
  * 없다.** 그 둘이 잠금을 안 보면 **그대로 423을 낸다:** 잠긴 노드를 고른 채 패턴을 꽂으면
- * `add …/children/2`가 나가 423을 받고 낙관적 적용이 붙었다 사라진다. 하필 그때 상태줄은
- * *"고를 수도 **바꿀 수도** 없습니다"* 라고 말하고 있고, 그 문장을 읽은 사용자가 **탭으로
- * 처음 닿는 것이 그 둘**이다(`../panels/toolbar-status-reach.test.tsx`의 표).
+ * `add …/children/2`가 나가 423을 받고 낙관적 적용이 붙었다 사라진다. 하필 그때 꺼진 항목들은
+ * *"고를 수도 **바꿀 수도** 없습니다"* 라고 말하고 있고, 그 문장을 읽은 사용자가 같은 메뉴에서 **화살표로 처음 닿는 것이 그 둘**이다
+ * (화살표는 켠 항목에만 선다 — `shell/action-menu.tsx`).
  *
  * **그래서 그 둘은 «꽂힐 자리»의 잠금을 지난다** — 판정에 키를 만들지 않은 이유는 그대로다
  * (`panels/structure-tree.tsx`의 `TREE_SHORTCUTS`). 둘이 지나는 잠금이 **서로 다른 것**이
@@ -82,7 +82,7 @@ import {
   pageDetail,
   pageDoc,
 } from '../editor-harness'
-import { isOff, treeTool, structureRowName } from '../panels/tree-row'
+import { isOff, reasonOf, rowReason, rowReasons, treeTool, structureRowName } from '../panels/tree-row'
 import { installPointerEvents } from '../pointer-events'
 
 beforeAll(installPointerEvents)
@@ -288,7 +288,7 @@ function structureRegion(): HTMLElement {
 }
 
 function toolbar(): HTMLElement {
-  // 옛 «구조 편집» 툴바 자리 — 줄 행동 · 고르개 · 상태줄이 트리 영역 안에 선다(`../panels/tree-row.ts`).
+  // 옛 «구조 편집» 툴바 자리 — 줄 행동 · 고르개가 트리 영역 안에 선다(`../panels/tree-row.ts`).
   return structureRegion()
 }
 
@@ -329,8 +329,15 @@ function row(type: string): HTMLElement {
   return within(structureRegion()).getByRole('button', { name: structureRowName(type) })
 }
 
-function statusLine(): string {
-  return structureRegion().querySelector('.wb-shell-structure-status')?.textContent ?? ''
+/** 고른 줄 항목의 꺼진 이유(`title` · `aria-description` — `../panels/tree-row.ts`의 `rowReason`). */
+function reason(name: string): string | null {
+  return rowReason(toolbar(), name)
+}
+
+/** 고른 줄 항목 가운데 이유에 잠근 사람(«보라»)을 싣는 것의 수 — 고른 줄이 없으면 0. */
+function namedReasons(): number {
+  if (structureRegion().querySelector('.wb-shell-tree-row-picked') === null) return 0
+  return Object.values(rowReasons(toolbar())).filter((text) => text?.includes('보라') === true).length
 }
 
 function alertText(): string | null {
@@ -369,7 +376,7 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
     // **판정 밖의 둘도 함께 꺼진다.** 그러지 않으면 아래 문장의 *"바꿀 수도"*가 거짓이다 —
     // 사용자가 그 문장을 읽고 탭을 누르면 살아 있는 «바꾸는» 버튼에 닿는다.
     expect(gates()).toEqual({ pattern: false, preset: false })
-    expect(statusLine()).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+    expect(reason('안에 추가')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
   /**
@@ -411,7 +418,8 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
     expect(view.store.getState().selectedNodeId).toBe('n-a')
     // `n-a`는 잎이라 `안에 추가`·`들여쓰기`가 원래 꺼진다(앞 형제 `없음` · 자식 불가).
     expect(live()).toEqual(['아래 추가', '삭제', '아래로'])
-    expect(statusLine()).toBe('자식을 담지 못하는 타입입니다')
+    expect(reason('안에 추가')).toBe('자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다')
+    expect(namedReasons()).toBe(0)
   })
 
   /**
@@ -455,31 +463,29 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
   })
 
   /**
-   * **아홉이 다 회색이면 상태줄이 그 이유를 말해야 한다.** 고른 것이 없을 때의 문장
-   * *"트리에서 노드를 고르면 편집할 수 있습니다"*는 이 상태에서 두 가지를 빠뜨린다 —
-   * 지금 켜진 도구가 하나도 없다는 것과, 그 원인이 남의 잠금이라는 것.
+   * **아홉이 다 회색이면 꺼진 항목이 그 이유를 말해야 한다.** 고른 것이 없으면 고른 줄이 없어 남는 것이 뿌리 `+`의 셋(페이지에 추가 ·
+   * 패턴 넣기 · 프리셋)이고, 셋 다 남의 잠금으로 꺼진다 — 그 이유가 잠금을 모르는 문장(*"트리에서 노드를 고르면 편집할 수 있습니다"*)이면
+   * 지금 켜진 도구가 하나도 없다는 것과 그 원인이 남의 잠금이라는 것을 빠뜨린다.
    *
-   * **여기서만 재지는 자리다.** 이 케이스가 잠그는 것은 **배선**이다 —
-   * `useStructureCommands`가 `프리셋`을 끄는 데 쓰는 `pageLock`을 상태줄에도 넘기는가.
-   * 안 넘기면 순수 함수 케이스는 전부 초록인 채 화면만 잠금을 모르는 문장으로 돌아간다.
+   * **여기서만 재지는 자리다.** 이 케이스가 잠그는 것은 **배선**이다 — `useStructureCommands`가 `프리셋`을 끄는 데 쓰는 `pageLock`을 그
+   * 이유에도 넘기는가(`why.preset`) · 뿌리 `+`가 뿌리의 잠금을 이유로 싣는가. 안 넘기면 순수 함수 케이스는 전부 초록인 채 화면만 잠금을
+   * 모르는 문장으로 돌아간다.
    *
-   * **문안을 글자로 다시 적지 않는다.** 그 자는 `../panels/toolbar-status.test.ts`가
-   * 소유하고, 여기서 같은 문장을 한 벌 더 두면 문안을 고칠 때 **자가 둘이라 갈린다**
-   * (*"판정이 두 벌이면 갈린다"*와 같은 부류다 — 다른 케이스의 단언을 글자 그대로 복사한
-   * 케이스는 어느 변조에서도 혼자 죽지 않는다). 여기서 재는 축은 둘이다:
-   * **잠금 소유자가 그 줄에 실렸는가**와 **잠금을 모르는 문장이 아닌가.**
+   * **문안을 글자로 다시 적지 않는다.** 그 자는 `../panels/toolbar-status.test.ts`가 소유한다. 여기서 재는 축은 둘이다: **잠금 소유자가 그
+   * 이유에 실렸는가**와 **잠금을 모르는 문장이 아닌가.**
    */
-  it('그때 상태줄이 아홉이 회색인 이유를 말한다 — 이름과 함께', async () => {
+  it('그때 뿌리 `+`의 꺼진 셋이 이름과 함께 이유를 든다', async () => {
     const view = await board()
     view.lock([foreign('n-1')])
 
     deselect()
 
-    // 전제를 값으로 못박는다 — 아홉이 다 회색인 것이 이 문장이 서는 근거다.
+    // 전제를 값으로 못박는다 — 아홉이 다 회색인 것이 이 이유가 서는 근거다.
     expect(live()).toEqual([])
     expect(gates()).toEqual({ pattern: false, preset: false })
-    expect(statusLine()).toContain('보라')
-    expect(statusLine()).not.toBe('트리에서 노드를 고르면 편집할 수 있습니다')
+    const reasons = ['페이지에 추가', '패턴 넣기', '프리셋'].map((name) => reasonOf(toolButton(name)))
+    expect(reasons.filter((text) => text?.includes('보라') !== true)).toEqual([])
+    expect(reasons).not.toContain('트리에서 노드를 고르면 편집할 수 있습니다')
   })
 
   it('대조 — 잠금이 없으면 고른 것이 없어도 둘 다 켜져 있다', async () => {
@@ -500,7 +506,7 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
 
     expect(live()).toEqual(['안에 추가', '아래 추가', '삭제', '위로', '아래로'])
     expect(gates()).toEqual({ pattern: true, preset: true })
-    expect(statusLine()).toBe('')
+    expect(namedReasons()).toBe(0)
   })
 
   it('내 잠금은 판정을 끄지 않는다 — 소유자 판정은 스토어가 지난다', async () => {
@@ -852,10 +858,10 @@ describe('막다른 길이 아니다 — 구조 편집만 얼고 셸은 산다',
       .getAllByRole<HTMLButtonElement>('button')
       .filter((button) => button.getAttribute('aria-haspopup') !== 'menu' && !button.classList.contains('wb-shell-tree-fold'))
     expect(rows.filter((button) => !button.disabled)).toEqual([])
-    expect(statusLine()).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+    expect(reason('안에 추가')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
-  it('그래도 뷰 모드와 다른 페이지는 남는다 — 이유는 상태줄이 이름과 함께 말한다', async () => {
+  it('그래도 뷰 모드와 다른 페이지는 남는다 — 이유는 꺼진 항목이 이름과 함께 말한다', async () => {
     const view = await board()
 
     view.lock([foreign('n-a'), foreign('n-box'), foreign('n-c')])
