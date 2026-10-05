@@ -178,7 +178,8 @@ describe('타입 목록과 노드 추가', () => {
       .map((def) => def.type)
       .filter((type) => !placeableTypes().includes(type))
 
-    expect(blocked).toEqual(['Slot'])
+    // 상태 영역 둘(`THEMELESS_TYPES`)은 홀로 설 수 없어 같은 거름에 빠진다 — 팔레트에도 카드가 없다. 나누기는 명령으로만 한다.
+    expect(blocked).toEqual(['Slot', 'StateSwitch', 'StateCase'])
     for (const type of blocked) {
       expect(optionValues(), type).not.toContain(type)
     }

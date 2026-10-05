@@ -1,4 +1,5 @@
 import {
+  caseFor,
   getComponent,
   getKoreanErrorMap,
   type AnyDocument,
@@ -68,6 +69,12 @@ export interface RenderOptions {
    * 기본 뷰다.
    */
   theme?: ThemeDefinition
+  /**
+   * **지금 화면 상태**(`PageDocument.viewStates`의 id). 상태 영역(`StateSwitch`)마다 그 상태의 가지를, 없으면 기본 가지를 그린다. 없거나
+   * `null`이면 기본이다. `renderDocument`는 그 문서의 목록에 없는 id 를 기본으로 돌린다 — 목록 밖 상태의 가지는 그려지지 않는다(설계
+   * spec 「상태 영역 노드」). `renderNode`는 목록을 모르므로 받은 값을 그대로 쓴다.
+   */
+  viewState?: string | null
 }
 
 /**
@@ -183,6 +190,16 @@ function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): React
   // 아니게 된다.
   if (nodeId !== '' && hiddenByOverlay(options.interaction?.overlay, nodeId)) return <></>
 
+  // **상태 영역은 테마가 그리지 않는다**(`THEMELESS_TYPES`) — 요소를 남기지 않고 가지 하나(영역) · 자식(가지)만 그 자리에 둔다. 요소를
+  // 하나라도 두면 부모 뷰의 배치(Flex 의 자식 · Grid 의 칸)가 그 요소 하나를 자식으로 보아 상태마다 화면이 갈린다. 가지 안 노드는 제
+  // 뷰가 `data-wb-id`를 달아 선택 외곽선 · 마커가 그대로 선다.
+  if (raw?.type === 'StateSwitch' && shapeError(node) === null) {
+    const picked = caseFor(node, options.viewState ?? null)
+    if (picked !== null) return renderNodeIn(root, picked, options)
+    options.onNodeError?.({ nodeId, type: 'StateSwitch', message: '상태 영역에 그릴 기본 가지가 없습니다' })
+    return <></>
+  }
+
   const rawChildren = raw?.children
 
   // 자식을 먼저 그린다. 이 노드가 실패해도 자식은 폴백 안에 그대로 들어간다 —
@@ -201,6 +218,7 @@ function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): React
       : null
 
   const type = readString(raw?.type)
+  if (type === 'StateCase' && shapeError(node) === null) return <>{children}</>
 
   const fallback = (message: string): ReactElement => {
     options.onNodeError?.({ nodeId, type, message })
@@ -394,5 +412,17 @@ const TRIGGERS_OF: Record<string, InteractionTrigger[]> = (() => {
  */
 export function renderDocument(doc: AnyDocument, options: RenderOptions = {}): ReactElement {
   const root = doc?.root as WbNode
-  return renderNodeIn(root, root, options)
+  return renderNodeIn(root, root, { ...options, viewState: knownViewState(doc, options.viewState) })
+}
+
+/**
+ * `viewState`가 그 문서의 목록(`viewStates`)에 있으면 그대로, 아니면 `null`(기본). 레이아웃에는 목록이 없어 늘 `null`이다 —
+ * `renderComposed`가 같은 옵션으로 두 문서를 그려도 레이아웃의 영역은 기본을 그린다. 검증 전 문서의 목록(배열이 아님 · 원소가 객체가
+ * 아님)도 던지지 않고 «없음»으로 읽는다.
+ */
+function knownViewState(doc: AnyDocument, viewState: string | null | undefined): string | null {
+  if (typeof viewState !== 'string') return null
+  const states: unknown = (doc as { viewStates?: unknown } | null | undefined)?.viewStates
+  if (!Array.isArray(states)) return null
+  return states.some((state) => (state as { id?: unknown } | null)?.id === viewState) ? viewState : null
 }

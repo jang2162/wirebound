@@ -14,7 +14,7 @@
 import { isBlankAlias } from './alias'
 import { CATALOG_DEFS } from './component/catalog/index'
 import type { ComponentDef } from './component/define'
-import type { WbNode } from './node'
+import { DEFAULT_CASE, type ViewState, type WbNode } from './node'
 
 const DEFS: ReadonlyMap<string, ComponentDef> = new Map(CATALOG_DEFS.map((def) => [def.type, def]))
 
@@ -31,14 +31,29 @@ export function nodeAlias(node: WbNode): string | null {
   return alias.trim()
 }
 
+/** 목록에 없는 상태를 가리키는 가지의 이름. 그 가지는 그려지지 않는다(렌더러 · lint). */
+export const UNKNOWN_VIEW_STATE_NAME = '목록에 없는 상태'
+
+/**
+ * 상태 가지가 가리키는 상태의 이름 — 기본 가지는 «기본», 목록(`viewStates` — 그 가지가 든 페이지의 것)에 없거나 `state`가 문자열이
+ * 아니면 `UNKNOWN_VIEW_STATE_NAME`.
+ */
+export function caseStateName(node: WbNode, viewStates?: readonly ViewState[]): string {
+  const state = isRecord(node.props) ? node.props.state : undefined
+  if (state === DEFAULT_CASE) return '기본'
+  return viewStates?.find((entry) => entry.id === state)?.name ?? UNKNOWN_VIEW_STATE_NAME
+}
+
 /**
  * 줄 요약 — 카탈로그 정의의 `summary` 를 부른다. 정의가 없거나 `summary` 가 없으면 `null`.
  *
  * props 는 기본값을 채워 넘긴다(`Flex` 에 `direction` 이 없어도 `가로`). 규격에 안 맞으면 원본을 넘기고, `summary` 의
  * 읽개(`component/summary.ts`)가 틀린 값을 `null` 로 읽는다.
  */
-export function nodeSummary(node: WbNode): string | null {
+export function nodeSummary(node: WbNode, viewStates?: readonly ViewState[]): string | null {
   if (typeof node.type !== 'string') return null
+  if (node.type === 'StateSwitch') return `가지 ${Array.isArray(node.children) ? node.children.length : 0}`
+  if (node.type === 'StateCase') return caseStateName(node, viewStates)
   const def = DEFS.get(node.type)
   if (def?.summary === undefined) return null
   const raw = isRecord(node.props) ? node.props : {}
@@ -54,10 +69,13 @@ export function nodeHeading(node: WbNode): string {
   return alias === null ? type : `${type} (${alias})`
 }
 
-/** `타입 (별칭) 요약` — 구조 트리 줄 · MCP 의 `rowLabel`. 별칭 · 요약이 없으면 그 조각을 생략한다. */
-export function nodeRowLabel(node: WbNode): string {
+/**
+ * `타입 (별칭) 요약` — 구조 트리 줄 · MCP 의 `rowLabel`. 별칭 · 요약이 없으면 그 조각을 생략한다. `viewStates`는 상태 가지의 요약
+ * (상태 이름)에만 쓴다 — 그 노드가 든 페이지의 목록을 넘긴다.
+ */
+export function nodeRowLabel(node: WbNode, viewStates?: readonly ViewState[]): string {
   const heading = nodeHeading(node)
-  const summary = nodeSummary(node)
+  const summary = nodeSummary(node, viewStates)
   return summary === null ? heading : `${heading} ${summary}`
 }
 

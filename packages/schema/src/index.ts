@@ -7,9 +7,19 @@ export type {
   InteractionTrigger,
   LayoutDocument,
   PageDocument,
+  ViewState,
   WbNode,
 } from './node'
-export { NODE_ALIAS_MAX, createNodeId } from './node'
+export {
+  DEFAULT_CASE,
+  NODE_ALIAS_MAX,
+  THEMELESS_TYPES,
+  VIEW_STATE_NAME_MAX,
+  VIEW_STATES_MAX,
+  createNodeId,
+} from './node'
+
+export { caseFor } from './view-state'
 
 export type { NodeVisit } from './tree'
 export { collectNodeIds, findNode, findNodePath, remapNodeIds, walkNodes } from './tree'
@@ -39,7 +49,14 @@ export type { IssueSeverity, ValidationCode, ValidationIssue } from './validate'
 export { ISSUE_SEVERITY, ignoredVariantMessage, partitionIssues } from './validate'
 export { assertValidLayout, assertValidPage, validateLayout, validatePage } from './validate'
 
-export { DocumentEnvelopeSchema, InteractionSchema, NODE_ID_PATTERN, WbNodeSchema } from './envelope'
+export {
+  DocumentEnvelopeSchema,
+  InteractionSchema,
+  NODE_ID_PATTERN,
+  PageEnvelopeSchema,
+  ViewStatesSchema,
+  WbNodeSchema,
+} from './envelope'
 
 // 설계서 「설계서 화면 구조」의 클립보드 — 노드 봉투 읽기 · 쓰기 · 붙일 노드 짓기. 편집 묶음의 연산 수 상한도 여기 산다
 // (서버 `OpsBody` 와 화면이 같은 값을 읽는다).
@@ -69,7 +86,7 @@ export {
   listInteractionSentences,
   nodeDisplayName,
 } from './interaction/describe'
-export { nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
+export { UNKNOWN_VIEW_STATE_NAME, caseStateName, nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
 export { hasRejectedAliasChar, isBlankAlias, tidyAlias } from './alias'
 export { SUMMARY_LIST_MAX, SUMMARY_TEXT_MAX } from './component/summary'
 

@@ -1,19 +1,22 @@
 // @vitest-environment jsdom
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { installCatalog, listComponents, validateLayout, validatePage } from '@wirebound/schema'
+import { THEMELESS_TYPES, installCatalog, listComponents, validateLayout, validatePage } from '@wirebound/schema'
 import { defineTheme, Root, useToken, view } from '@wirebound/theme-sdk'
 import { GALLERY_SAMPLES, galleryItems, ThemeGallery } from '@wirebound/theme-gallery'
 
 beforeAll(() => installCatalog())
 // 이 저장소는 vitest `globals` 를 켜지 않아 RTL 이 스스로 정리를 걸지 못한다(`apps/web/test/setup.ts`).
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
+/** 테마가 그리는 타입 — 상태 영역 둘(`THEMELESS_TYPES`)은 렌더러가 가지만 고르는 투명 노드라 갤러리에 칸이 없다. */
+const themed = (): string[] => listComponents().map((d) => d.type).filter((type) => !THEMELESS_TYPES.includes(type)).sort()
 const manifest = { id: 't', name: 't', version: '1.0.0', sdk: '^1.0.0', tokens: { items: {} },
   components: { List: { variants: [{ id: 'table', label: '표' }, { id: 'cards', label: '카드' }], defaultVariant: 'table' } } }
 
 describe('갤러리', () => {
-  it('표본이 카탈로그 전부를 덮는다', () => {
-    expect(Object.keys(GALLERY_SAMPLES).sort()).toEqual(listComponents().map((d) => d.type).sort())
+  it('표본이 카탈로그 전부를 덮는다 — 테마가 안 그리는 구조는 빼고', () => {
+    expect(themed().length).toBe(listComponents().length - 2)
+    expect(Object.keys(GALLERY_SAMPLES).sort()).toEqual(themed())
   })
   it('표본이 스키마 검증을 지난다 — 갤러리가 폴백을 그리지 않게', () => {
     for (const [type, samples] of Object.entries(GALLERY_SAMPLES)) {
@@ -43,7 +46,7 @@ describe('갤러리', () => {
     const { container } = render(<ThemeGallery theme={defineTheme({ manifest, views: {} })} tokens={{}} />)
     expect(container.querySelector('[data-wb-error]')).toBeNull()
     const drawn = new Set([...container.querySelectorAll('[data-wb-component]')].map((el) => el.getAttribute('data-wb-component')))
-    expect([...drawn].sort()).toEqual(listComponents().map((d) => d.type).sort())
+    expect([...drawn].sort()).toEqual(themed())
   })
   it('뷰 하나가 던져도 다른 항목은 그린다', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})

@@ -116,6 +116,32 @@ export function slotFixture(): PageDocument {
   }
 }
 
+/**
+ * **상태 영역이 든 문서.** 영역(`StateSwitch`)과 가지(`StateCase`)는 테마가 그리지 않아 DOM 요소를 남기지 않고, 상태를 안 고른 그리기는
+ * 기본 가지를 낸다 — 화면과 번들이 그 둘에서도 같은 DOM 을 내는지 잰다. 관리자 가지는 그려지지 않는다.
+ */
+export function stateFixture(): PageDocument {
+  nextId = 3000
+  return {
+    version: 1,
+    viewStates: [{ id: 's_admin', name: '관리자' }],
+    root: {
+      id: id(),
+      type: 'Page',
+      children: [
+        {
+          id: id(),
+          type: 'StateSwitch',
+          children: [
+            { id: id(), type: 'StateCase', props: { state: 'default' }, children: [{ id: id(), type: 'Button', props: { label: '보기' } }] },
+            { id: id(), type: 'StateCase', props: { state: 's_admin' }, children: [{ id: id(), type: 'Button', props: { label: '승인' } }] },
+          ],
+        },
+      ],
+    },
+  }
+}
+
 /** 노드 하나를 `Page` 아래에 둔 문서. */
 export function pageWith(node: WbNode): PageDocument {
   return { version: 1, root: { id: 'n_page', type: 'Page', children: [node] } }

@@ -19,7 +19,7 @@
  */
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { CATALOG_TYPES, installCatalog, requireComponent, type PageDocument } from '@wirebound/schema'
+import { CATALOG_TYPES, THEMELESS_TYPES, installCatalog, requireComponent, type PageDocument } from '@wirebound/schema'
 import { MARKED_PROPS, STATE_ARIA, markAttr } from '@wirebound/theme-sdk'
 import { renderDocument } from '@wirebound/renderer'
 
@@ -143,8 +143,12 @@ describe('카탈로그 × prop 인구조사', () => {
   it('표와 카탈로그가 같다 — 타입 · prop 이 하나도 안 빠지고 더 없다', () => {
     // 카나리아 — 카탈로그가 비면(설치 전) 아래가 빈 것끼리 견준다.
     expect(CATALOG_TYPES.length).toBeGreaterThan(15)
-    expect(Object.keys(CENSUS).sort()).toEqual([...CATALOG_TYPES].sort())
-    for (const type of CATALOG_TYPES) expect(Object.keys(CENSUS[type]!).sort(), type).toEqual(catalogProps(type).sort())
+    // 상태 영역 둘(`THEMELESS_TYPES`)은 기본 뷰가 없다 — 렌더러가 가지를 고르고 자식만 그린다. `StateCase.state`가 화면에 닿는 길(어느
+    // 가지가 서는가)은 `view-state.test.tsx`가 잰다.
+    const viewed = CATALOG_TYPES.filter((type) => !THEMELESS_TYPES.includes(type))
+    expect(viewed.length).toBe(CATALOG_TYPES.length - 2)
+    expect(Object.keys(CENSUS).sort()).toEqual([...viewed].sort())
+    for (const type of viewed) expect(Object.keys(CENSUS[type]!).sort(), type).toEqual(catalogProps(type).sort())
   })
 
   it('불리언 · enum 은 표지 · 상태 · 변형 가운데 하나로 싣고, 그 밖의 꼴은 셋이 아니다', () => {

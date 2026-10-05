@@ -80,6 +80,7 @@ import {
   EMPTY_MANIFEST,
   markedTheme,
   slotFixture,
+  stateFixture,
   typesIn,
 } from '../test-support/fixtures'
 
@@ -126,6 +127,7 @@ const FIXTURES = {
   넓게: broadFixture,
   Slot: slotFixture,
   폴백: brokenFixture,
+  상태: stateFixture,
 } as const
 
 /** 견줄 테마. 테마 없음(api 의 판)과 기본 뷰와 다른 DOM 을 내는 테마(`markedTheme`). */
@@ -365,7 +367,7 @@ describe('무엇을 덮었나 (문서 하나로 재지 마라)', () => {
 
 /* ------------------------------------------------------------------ 본론 */
 
-/** 견줄 판 전부 — 픽스처 셋 × 테마 둘. */
+/** 견줄 판 전부 — 픽스처 넷 × 테마 둘. */
 function boards(): [label: string, document_: PageDocument, theme: ThemeDefinition | undefined][] {
   return THEMES.flatMap(([themeLabel, theme]) =>
     Object.entries(FIXTURES).map(
@@ -396,11 +398,13 @@ describe('화면과 번들이 같은 DOM을 낸다', () => {
    * | 넓게 | 둘 | `marked` 의 뷰(`Button` · `Card`)와 `Section` 의 variant 선언이 문서에 닿는다 |
    * | Slot | 하나 | `Page` · `Slot` 뿐이라 `marked` 가 바꾸는 것이 없다 |
    * | 폴백 | 하나 | 폴백 상자는 테마를 안 탄다 — 렌더러가 뷰를 고르기 전에 멈춘 자리다 |
+   * | 상태 | 둘 | 기본 가지의 `Button`에 `marked` 의 뷰가 닿는다 — 영역 · 가지는 테마를 안 탄다 |
    */
   const DISTINCT_SHAPES: [fixture: keyof typeof FIXTURES, count: number][] = [
     ['넓게', 2],
     ['Slot', 1],
     ['폴백', 1],
+    ['상태', 2],
   ]
 
   it.each(DISTINCT_SHAPES)('%s 픽스처가 서로 다른 DOM을 내는 수', (fixture, count) => {

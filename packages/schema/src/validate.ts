@@ -1,8 +1,8 @@
 import type { ComponentDef } from './component/define'
 import { checkNodeAction, isPageTargetAction } from './interaction/check'
 import { getComponent } from './component/registry'
-import { DocumentEnvelopeSchema, NODE_ID_PATTERN } from './envelope'
-import type { LayoutDocument, PageDocument, WbNode } from './node'
+import { DocumentEnvelopeSchema, NODE_ID_PATTERN, PageEnvelopeSchema } from './envelope'
+import { DEFAULT_CASE, type LayoutDocument, type PageDocument, type WbNode } from './node'
 import { walkNodes } from './tree'
 import { getKoreanErrorMap } from './locale'
 
@@ -44,6 +44,17 @@ export type ValidationCode =
    * (설계서 「모델」(상호작용)의 *"prop 유효성"*).
    */
   | 'invalid-interaction-prop'
+  /**
+   * 상태 영역(`StateSwitch`)의 기본 가지(`StateCase` · `props.state` 가 `default`)가 정확히 하나가 아니다. 렌더러는 그 상태의 가지가
+   * 없으면 기본 가지를 그리므로, 없으면 그릴 것이 없고 둘이면 어느 것인지 정할 수 없다. 노드는 그 `StateSwitch`다.
+   */
+  | 'state-case-default'
+  /** 한 상태 영역 안에서 같은 상태를 가리키는 가지가 둘 이상이다. 노드는 뒤에 선 가지다. */
+  | 'state-case-duplicate'
+  /** `StateCase`가 `StateSwitch`의 자식이 아닌 자리에 섰다. */
+  | 'state-case-outside'
+  /** `StateSwitch`의 자식이 `StateCase`가 아니다. */
+  | 'state-switch-child'
 
 /**
  * 이슈가 편집·저장을 **막는가**.
@@ -102,6 +113,10 @@ export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'missing-interaction-target': 'warning',
   'invalid-interaction-target': 'warning',
   'invalid-interaction-prop': 'warning',
+  'state-case-default': 'error',
+  'state-case-duplicate': 'error',
+  'state-case-outside': 'error',
+  'state-switch-child': 'error',
 }
 
 export interface ValidationIssue {
@@ -191,7 +206,7 @@ export function ignoredVariantMessage(def: ComponentDef, variant: string): strin
 }
 
 export function validatePage(doc: PageDocument): ValidationIssue[] {
-  const envelopeIssues = validateEnvelope(doc)
+  const envelopeIssues = validateEnvelope(doc, PageEnvelopeSchema)
   if (envelopeIssues.length > 0) return envelopeIssues
 
   const issues = validateTree(doc.root)
@@ -203,7 +218,7 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
 }
 
 export function validateLayout(doc: LayoutDocument): ValidationIssue[] {
-  const envelopeIssues = validateEnvelope(doc)
+  const envelopeIssues = validateEnvelope(doc, DocumentEnvelopeSchema)
   if (envelopeIssues.length > 0) return envelopeIssues
 
   const issues = validateTree(doc.root)
@@ -221,8 +236,8 @@ export function validateLayout(doc: LayoutDocument): ValidationIssue[] {
  * root가 null이거나 형태가 깨져 있으면 walkNodes가 그대로 터지기 때문이다.
  * 실패하면 봉투 이슈만 담아 즉시 반환하고, 노드 단위 검증은 시도하지 않는다.
  */
-function validateEnvelope(doc: unknown): ValidationIssue[] {
-  const parsed = DocumentEnvelopeSchema.safeParse(doc, { error: getKoreanErrorMap() })
+function validateEnvelope(doc: unknown, schema: typeof DocumentEnvelopeSchema): ValidationIssue[] {
+  const parsed = schema.safeParse(doc, { error: getKoreanErrorMap() })
   if (parsed.success) return []
 
   return parsed.error.issues.map((issue) =>
@@ -311,7 +326,8 @@ function validateTree(root: WbNode): ValidationIssue[] {
     issues.push(makeIssue('bad-root', root.id, '/root', `루트는 Page여야 합니다 (현재: ${root.type})`))
   }
 
-  for (const { node, path } of walkNodes(root)) {
+  for (const { node, path, parent } of walkNodes(root)) {
+    issues.push(...checkStateRegion(node, path, parent))
     if (seen.has(node.id)) {
       issues.push(makeIssue('duplicate-id', node.id, path, `id가 중복됩니다: ${node.id}`))
     }
@@ -433,6 +449,46 @@ function checkInteractions(
     }
   }
 
+  return issues
+}
+
+/**
+ * 상태 영역의 구조 — `StateSwitch`의 자식은 `StateCase`만이고 기본 가지가 정확히 하나 · 상태마다 가지가 많아야 하나, `StateCase`는
+ * `StateSwitch` 아래에만 선다. **가지가 가리키는 상태가 페이지 목록에 있는지는 여기서 보지 않는다** — 그것은 lint 경고다(그 가지는
+ * 그려지지 않을 뿐 문서를 못 쓰게 하지 않고, 오류로 두면 상태를 지우는 편집이 가지를 함께 지우지 않은 판에서 막힌다 — 상호작용
+ * 이슈를 `warning`으로 둔 `ISSUE_SEVERITY` 머리말의 둘째 근거와 같다). 그래서 레이아웃 · 클립보드의 임시 뿌리처럼 목록이 없는
+ * 문서도 같은 판정을 받는다.
+ *
+ * `state`가 문자열이 아닌 가지는 기본도 상태도 아닌 것으로 센다 — 그 모양은 `invalid-props`가 따로 말한다.
+ */
+function checkStateRegion(node: WbNode, path: string, parent: WbNode | null): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  if (node.type === 'StateCase' && parent?.type !== 'StateSwitch') {
+    issues.push(makeIssue('state-case-outside', node.id, path, '상태 가지는 상태 영역 바로 아래에만 둘 수 있습니다'))
+  }
+  if (node.type !== 'StateSwitch') return issues
+
+  const children = node.children ?? []
+  let defaults = 0
+  const states = new Set<string>()
+  children.forEach((child, index) => {
+    const childPath = `${path}/children/${index}`
+    if (child.type !== 'StateCase') {
+      issues.push(makeIssue('state-switch-child', child.id, childPath, `상태 영역에는 상태 가지만 둘 수 있습니다 (현재: ${child.type})`))
+      return
+    }
+    const state = child.props?.state
+    if (state === DEFAULT_CASE) defaults += 1
+    else if (typeof state === 'string') {
+      if (states.has(state)) {
+        issues.push(makeIssue('state-case-duplicate', child.id, childPath, `한 상태 영역에 같은 상태의 가지가 둘입니다: ${state}`))
+      }
+      states.add(state)
+    }
+  })
+  if (defaults !== 1) {
+    issues.push(makeIssue('state-case-default', node.id, path, `상태 영역에는 기본 가지가 정확히 하나여야 합니다 (${defaults}개 발견)`))
+  }
   return issues
 }
 
