@@ -9,6 +9,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { systemThemeVersion } from '@wirebound/test-support/system-admin'
 import { buildTheme } from '@wirebound/theme-kit'
 import type { Page } from 'playwright-core'
 import { canvasFrame, type EditorStack, type Session, type StackUser } from './editor-stack'
@@ -81,6 +82,11 @@ export async function themeProject(
     if (member.status !== 201) throw new Error(`멤버 ${member.status} ${JSON.stringify(member.body)}`)
   }
   return { id: project.id, first: first.id, second: second.id, call }
+}
+
+/** 기동 시딩이 넣은 시스템 테마(`system-<이름>`)의 지금 판. 판은 글자로 적지 않는다 — 테마가 판을 올릴 때마다 케이스를 고치게 된다. */
+export function seededVersion(themeId: string): string {
+  return systemThemeVersion(themeId.replace(/^system-/, ''))
 }
 
 /** 프로젝트 테마를 API 로 저장한다 — 지금 `rev` 를 읽어 싣는다. */

@@ -1,6 +1,6 @@
 /** **구조 그룹 기본 뷰.** `Page`·`Slot`·`Section`·`Flex`·`Grid`·`Card`·`Tabs`. 옮긴 규칙은 `./index.ts` 머리말. */
 import type { CSSProperties } from 'react'
-import { componentRule, nodeVar, partRule } from '../css-tools'
+import { componentRule, nodeVar, partRule, zeroRule } from '../css-tools'
 import { view } from '../define'
 import { Root } from '../root'
 
@@ -100,5 +100,8 @@ export function structureCssBlocks(): string[] {
     partRule('Card', 'media', ['aspect-ratio: 16 / 9;']),
     // 가둔 칼럼을 가운데 둔다 — 테마가 `maxWidth` 만 걸고 가로 여백을 빠뜨려도 칼럼이 왼쪽에 붙지 않는다.
     partRule('Section', 'inner', ['margin-inline: auto;'], ['contained']),
+    // 좁은 여백(`compact`). 테마는 제 여백 규칙을 `[data-wb-compact]` 로 덮는다 — 이 둘은 테마가 없는 판의 모양이다.
+    zeroRule('[data-wb-component="Section"]', ['padding-block: 24px;']),
+    zeroRule('[data-wb-component="Section"][data-wb-compact]', ['padding-block: 8px;']),
   ]
 }

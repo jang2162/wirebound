@@ -22,7 +22,7 @@
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session, type ShownDrop } from './editor-stack'
-import { putTheme } from './theme-fixtures'
+import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -85,13 +85,13 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
 
   const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
 
-  /** 프로젝트 · 메뉴 · 페이지 하나에 문서를 싣는다. bob 은 `bobRole`. `theme` 을 주면 그 시스템 테마 `1.0.0`. */
+  /** 프로젝트 · 메뉴 · 페이지 하나에 문서를 싣는다. bob 은 `bobRole`. `theme` 을 주면 그 시스템 테마의 지금 판. */
   async function fixture(slug: string, nodes: SeedNode[], options: { theme?: string; bobRole?: string } = {}): Promise<{ P: string; projectId: string }> {
     const project = (await call('POST', '/projects', { name: 'D1 리뷰', slug: `${slug}-${Date.now().toString(36)}` })).body
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: options.bobRole ?? 'editor' })
     if (member.status >= 300) throw new Error(`member ${member.status}`)
-    if (options.theme !== undefined) await putTheme(call, project.id, { themeId: `system-${options.theme}`, version: '1.0.0', tokens: {} })
+    if (options.theme !== undefined) await putTheme(call, project.id, { themeId: `system-${options.theme}`, version: seededVersion(`system-${options.theme}`), tokens: {} })
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
     const seededOps = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })

@@ -70,8 +70,8 @@ const OLD_STRUCTURE = {
 describe('system-saas-marketing manifest', () => {
   it('id · 판 · sdk 범위', () => {
     expect(MANIFEST.id).toBe('system-saas-marketing')
-    expect(MANIFEST.version).toBe('1.0.0')
-    expect(MANIFEST.sdk).toBe('^1.0.0')
+    expect(MANIFEST.version).toBe('1.1.0')
+    expect(MANIFEST.sdk).toBe('^1.1.0')
   })
 
   it('components 선언은 카탈로그의 이름만 쓴다', () => {
@@ -116,7 +116,7 @@ describe('system-saas-marketing 뷰', () => {
     expect(Object.keys(DEFAULT_VIEWS).filter((type) => SAAS_MARKETING_THEME.views[type] === undefined)).toEqual([])
   })
 
-  it('Section 은 워시(band) 뒤에 가둔 칼럼(inner)을 두고 · compact 를 클래스로 싣는다', () => {
+  it('Section 은 워시(band) 뒤에 가둔 칼럼(inner)을 두고 · compact 는 data-wb-compact 로 선다', () => {
     const c = draw([
       { id: 's1', type: 'Section', props: {}, children: [{ id: 't', type: 'Text', props: { content: '안' } }] },
       { id: 's2', type: 'Section', props: { compact: true }, variant: 'hero', children: [] },
@@ -125,8 +125,8 @@ describe('system-saas-marketing 뷰', () => {
     expect(s1.getAttribute('data-wb-structure')).toBe('splitBg')
     expect(Array.from(s1.children).map((el) => el.getAttribute('data-wb-part'))).toEqual(['band', 'inner'])
     expect(s1.querySelector('[data-wb-part="inner"] > [data-wb-id="t"]')).not.toBeNull()
-    expect(s1.className).toBe('')
-    expect(node(c, 's2').className).toBe('wbsm-section-compact')
+    expect(s1.hasAttribute('data-wb-compact')).toBe(false)
+    expect(node(c, 's2').getAttribute('data-wb-compact')).toBe('')
     expect(node(c, 's2').getAttribute('data-wb-variant')).toBe('hero')
   })
 

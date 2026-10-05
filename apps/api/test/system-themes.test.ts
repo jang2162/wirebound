@@ -20,6 +20,7 @@ import { latestVisibleVersion, listThemePackages, setThemePackageHidden } from '
 import { backfillProjectThemes, seedSystemThemes } from '../src/services/system-themes'
 import { createProject, signup, TEST_DATABASE_URL, testConfig } from './helpers'
 import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
+import { SDK_VERSION } from '@wirebound/theme-sdk/version'
 
 const DATABASE = `wb_system_themes_${process.pid}_${Date.now()}`
 const url = (() => {
@@ -128,7 +129,7 @@ describe('seedSystemThemes', () => {
 
   it('sdk 범위 밖이면 던진다', async () => {
     const dir = artifactDir([{ manifest: manifest('system-future', '1.0.0', '^2.0.0') }])
-    await expect(seedSystemThemes(db, dir)).rejects.toThrow('호스트 SDK 1.0.0 과 맞지 않습니다: system-future@1.0.0 의 sdk 는 ^2.0.0')
+    await expect(seedSystemThemes(db, dir)).rejects.toThrow(`호스트 SDK ${SDK_VERSION} 과 맞지 않습니다: system-future@1.0.0 의 sdk 는 ^2.0.0`)
   })
 
   it('산출물이 하나도 없으면 던지고 `pnpm build` 를 말한다', async () => {

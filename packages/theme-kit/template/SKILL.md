@@ -54,6 +54,16 @@ export const ListView = view(({ props, variant, states, children }) => {
   에 들어갈 내용) · `nodeId` · `type`.
 - **`<Root>` 로 감싼다 — 빠뜨릴 수 없다.** `Root` 가 `data-wb-id` · `data-wb-component` · `data-wb-variant` · `data-wb-state` 와
   상호작용 핸들러를 루트 요소에 붙인다. 에디터는 그 속성으로 노드를 고르고 외곽선을 그린다.
+- **뷰는 `view(…)` 로 짠다.** `Root` 는 `view` 가 내린 노드의 props · 상태로 **prop 표지**와 접근성 속성을 함께 단다 — `view` 를
+  거치지 않은 맨 함수 뷰에는 안 선다.
+  - prop 표지: 화면을 바꾸는 불리언 · enum prop 가운데 상태 · 변형으로 실리지 않는 것. 불리언은 참일 때 `data-wb-<prop>=""`, enum
+    은 늘 `data-wb-<prop>="<값>"` — `Section` 의 `data-wb-compact`(좁은 여백) · `SearchForm` 의 `data-wb-collapsed`(접힘) · `List` 의
+    `data-wb-selectable` · `data-wb-pagination` · `Media` 의 `data-wb-kind` · `data-wb-ratio` · `Flex` 의 `data-wb-direction` ·
+    `data-wb-align` · `data-wb-justify` · `data-wb-wrap`.
+  - 상태(`data-wb-state~='disabled'`)가 참이면 `aria-disabled` · `loading` 은 `aria-busy` · `invalid` 는 `aria-invalid` · `required` 는
+    `aria-required` 가 `"true"` 로 선다. 그 뜻을 안쪽 요소로 옮기려면 `Root` 에 같은 이름(`undefined`)을 넘긴다.
+  - CSS 는 `[data-wb-component='Section'][data-wb-compact] { … }` 처럼 겨냥한다. 기본 뷰도 그 값으로 모양을 바꾼다(접힌 검색은
+    머리줄 `toggle` 조각만 남고 자식이 빠진다 · 목록의 `selectable` 은 `checkbox` 조각) — 테마 CSS 가 여백 · 색을 정한다.
 - **첫 렌더에 `Root` 를 반환한다.** 이펙트 · 상태를 기다렸다가 `Root` 를 그리면 누락으로 판정되어 그 노드는 SDK 기본 뷰로
   그려지고 콘솔에 경고가 난다.
 - `as` 로 루트 태그를 고른다(기본 `div`). 나머지 props(`className` · `style` · `aria-*`)는 루트 요소로 간다. 노드 속성

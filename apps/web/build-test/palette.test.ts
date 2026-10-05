@@ -27,7 +27,7 @@ import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { CANVAS_MIN_HEIGHT, PALETTE_HEIGHT_DEFAULT, PALETTE_HEIGHT_MIN } from '../src/shell/sidebar-layout'
 import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
-import { putTheme } from './theme-fixtures'
+import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -247,9 +247,9 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
 
   it('축소판 — 프로젝트 테마(system-portal)로 그리고, 남이 주색을 저장하면 따라간다', async () => {
     const project = await fixture(stack, alice, 'pal-portal', texts(1), { bob: true })
-    const manifest = (await project.call('GET', '/theme-packages/system-portal/1.0.0/manifest')).body
+    const manifest = (await project.call('GET', `/theme-packages/system-portal/${seededVersion('system-portal')}/manifest`)).body
     const portalPrimary = rgb(String(manifest.tokens.items['semantic.primary'].default))
-    await putTheme(project.call, project.projectId, { themeId: 'system-portal', version: '1.0.0', tokens: {} })
+    await putTheme(project.call, project.projectId, { themeId: 'system-portal', version: seededVersion('system-portal'), tokens: {} })
     const { context, page } = await stack.openTab(stack.users.bob, { viewport: { width: 1440, height: 900 } })
     try {
       await page.goto(project.P)
@@ -259,7 +259,7 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       const before = await poll('축소판 표지', async () => String(await page.evaluate(THUMB_BUTTON)), (value) => value === portalPrimary).catch(
         async () => String(await page.evaluate(THUMB_BUTTON)),
       )
-      await putTheme(project.call, project.projectId, { themeId: 'system-portal', version: '1.0.0', tokens: { 'semantic.primary': '#00aa11' } })
+      await putTheme(project.call, project.projectId, { themeId: 'system-portal', version: seededVersion('system-portal'), tokens: { 'semantic.primary': '#00aa11' } })
       const after = await poll('남의 저장을 따라간다', async () => String(await page.evaluate(THUMB_BUTTON)), (value) => value === 'rgb(0, 170, 17)').catch(
         async () => String(await page.evaluate(THUMB_BUTTON)),
       )

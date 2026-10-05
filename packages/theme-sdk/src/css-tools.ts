@@ -37,6 +37,14 @@ export function partRule(
   return rule(`[data-wb-component="${type}"]${scope} [data-wb-part="${part}"]`, declarations)
 }
 
+/**
+ * 특이도 0 규칙(`:where(…)`). prop 표지 · 상태가 테마 없이도 화면을 바꾸게 하는 최소 모양에 쓴다 — 테마는 같은 속성을 `[data-wb-component]`
+ * 하나(특이도 (0,1,0))로 덮는 일이 흔해, `componentRule` 의 (0,2,0) 으로 두면 기본값이 테마를 이긴다.
+ */
+export function zeroRule(selector: string, declarations: string[]): string {
+  return rule(`:where(${selector})`, declarations)
+}
+
 function rule(selector: string, declarations: string[]): string {
   return `${selector} {\n${declarations.map((line) => `  ${line}`).join('\n')}\n}`
 }

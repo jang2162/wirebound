@@ -17,8 +17,8 @@ export const MANIFEST: ThemeManifest = {
   id: 'system-saas-marketing',
   name: '마케팅',
   description: '랜딩·제품 소개 사이트 테마. 넓은 여백과 큰 타이포, 카드 그리드와 이미지 중심의 구성을 갖는다.',
-  version: '1.0.0',
-  sdk: '^1.0.0',
+  version: '1.1.0',
+  sdk: '^1.1.0',
   tokens: {
     groups: [
       { id: 'color', label: '색' },

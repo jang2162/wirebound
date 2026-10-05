@@ -22,7 +22,7 @@ import { unzipSync } from 'fflate'
 import type { BrowserContext, Frame, Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
-import { putTheme } from './theme-fixtures'
+import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -225,7 +225,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 캔버스 · 번들 · 
    * iframe(quirks 모드 — 아래 «캔버스 = 번들») 에서는 뷰포트(= iframe) 높이가 되어 iframe 이 문서 높이를 따라 자라는 고리가 선다.
    */
   it.each(THEMES)('%s — 세로 Divider 가 캔버스를 키우지 않고 번들에서 보인다', async (themeId) => {
-    await putTheme(fixture.call, fixture.id, { themeId, version: '1.0.0', tokens: {} })
+    await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 900 } })
     let heights: number[]
     try {
@@ -253,7 +253,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 캔버스 · 번들 · 
   }, 120_000)
 
   it.each(THEMES)('%s — 문서 폭 390 에서 글자가 문서 밖으로 안 나간다(번들)', async (themeId) => {
-    await putTheme(fixture.call, fixture.id, { themeId, version: '1.0.0', tokens: {} })
+    await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
     const files = await bundleFiles(stack, alice, fixture.id)
     const { context, page } = await openBundlePage(stack, files['회원-상세']!, 390)
     try {
@@ -271,7 +271,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 캔버스 · 번들 · 
    * 테마와 무관한 틀의 성질이라 system-admin 한 테마로 잰다.
    */
   it('system-admin — 같은 문서 폭(1280)에서 캔버스와 번들의 노드 세로 자리가 같다', async () => {
-    await putTheme(fixture.call, fixture.id, { themeId: 'system-admin', version: '1.0.0', tokens: {} })
+    await putTheme(fixture.call, fixture.id, { themeId: 'system-admin', version: seededVersion('system-admin'), tokens: {} })
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 900 } })
     let canvas: Record<string, number>
     let mode: string
@@ -297,7 +297,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 캔버스 · 번들 · 
   }, 120_000)
 
   it.each(THEMES)('%s — PPTX 화면 이미지가 720 폭을 넘지 않는다(번호 마커 포함)', async (themeId) => {
-    await putTheme(fixture.call, fixture.id, { themeId, version: '1.0.0', tokens: {} })
+    await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
     const preview = await fixture.call('GET', `/projects/${fixture.id}/export/preview?format=pptx`)
     expect({ screenless: preview.body.screenless, screenFailures: preview.body.screenFailures }).toEqual({ screenless: [], screenFailures: [] })
     const response = await fetch(`${stack.apiUrl}/api/projects/${fixture.id}/export?format=pptx`, { headers: { cookie: alice.cookie } })
@@ -311,7 +311,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 캔버스 · 번들 · 
   }, 120_000)
 
   it.each(THEMES)('%s — 토큰 칸마다 값을 바꾸면 미리보기의 계산 스타일이 바뀐다', async (themeId) => {
-    await putTheme(fixture.call, fixture.id, { themeId, version: '1.0.0', tokens: {} })
+    await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
     const manifest = (await fixture.call('GET', `/projects/${fixture.id}/theme`)).body.manifest
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 1000 } })
     const silent: string[] = []

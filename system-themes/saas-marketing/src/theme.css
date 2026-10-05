@@ -164,8 +164,8 @@
 [data-wb-component="Section"][data-wb-variant="muted"] > [data-wb-part="band"] {
   background: var(--wb-semantic-canvas);
 }
-/* `compact` prop — 좁은 여백. 반응형 규칙보다 구체적이라 어느 폭에서나 이긴다. */
-[data-wb-component="Section"][data-wb-structure="splitBg"].wbsm-section-compact {
+/* 좁은 여백(`compact` — SDK 가 `data-wb-compact` 로 싣는다). 반응형 규칙보다 구체적이라 어느 폭에서나 이긴다. */
+[data-wb-component="Section"][data-wb-structure="splitBg"][data-wb-compact] {
   padding-top: var(--wb-section-paddingYCompact);
   padding-bottom: var(--wb-section-paddingYCompact);
 }
@@ -475,6 +475,17 @@
   color: var(--wb-semantic-textInverse);
   border-radius: var(--wb-radius-full);
   padding: var(--wb-space-3) var(--wb-space-6);
+}
+/* 접힌 검색(`collapsed`)은 머리줄(`toggle`) 하나다 — 필드 · 단추가 DOM 에 없다. 알약 폭을 다 채운다. */
+[data-wb-component="SearchForm"] > [data-wb-part="toggle"] {
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--wb-semantic-text);
+  font-size: var(--wb-typography-h5-fontSize);
+  line-height: var(--wb-typography-h5-lineHeight);
+  font-weight: var(--wb-typography-h5-fontWeight);
 }
 
 /* 문의 · 데모 신청 폼 — 라벨이 컨트롤 위에 서서 한 열로 흐른다(옛 구조 `labelTop`). */

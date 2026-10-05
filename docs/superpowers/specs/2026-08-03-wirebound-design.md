@@ -331,7 +331,7 @@ defineComponent({
 
 **변형을 prop 에서 파생하는 컴포넌트가 있다**(`variantFrom` — `Text`의 `role` · `Field`의 `control` · `Divider`의 `direction`). 그 enum prop 의 값이 `data-wb-variant`가 되고, 노드의 `variant`는 무시된다(검증이 `ignored-variant` 경고로 알린다).
 
-상태는 props에서 파생된다. `states`에 선언된 이름과 같은 props가 `true`이면 그 상태가 활성화되고, 렌더러가 `data-wb-state`에 실어 보낸다. 상태는 설계서 표현에 필수다. "필수값 미입력 시 저장 버튼 비활성", "선택된 행 강조" 같은 서술을 목업에서 실제로 보여주려면 상태를 켤 수 있어야 한다. 상태 목록은 여기 고정 선언되어 있어 임의 상태를 만들 수 없다.
+상태는 props에서 파생된다. `states`에 선언된 이름과 같은 props가 `true`이면 그 상태가 활성화되고, 렌더러가 `data-wb-state`에 실어 보낸다(뷰의 루트에는 접근성 속성도 선다 — §6.1). 상태 · 변형으로 실리지 않는 불리언 · enum prop 은 prop 표지(`data-wb-<prop>`)로 실린다(§6.1). 상태는 설계서 표현에 필수다. "필수값 미입력 시 저장 버튼 비활성", "선택된 행 강조" 같은 서술을 목업에서 실제로 보여주려면 상태를 켤 수 있어야 한다. 상태 목록은 여기 고정 선언되어 있어 임의 상태를 만들 수 없다.
 
 속성 패널이 정의에서 자동 생성되므로 컴포넌트를 늘려도 에디터 코드를 수정하지 않는다.
 
@@ -369,12 +369,19 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 | `data-wb-component` | 컴포넌트 타입 | 렌더러 |
 | `data-wb-variant` | 변형(`variantFrom`이면 그 prop 값) | 렌더러 |
 | `data-wb-state` | 공백 구분 상태 목록 | 렌더러 |
+| `data-wb-<prop>` | prop 표지 — 불리언은 참일 때 빈 값, enum 은 그 값(`data-wb-compact=""` · `data-wb-kind="video"`) | SDK `Root` — `view()` 로 짠 뷰 전부 |
+| `aria-disabled` · `aria-busy` · `aria-invalid` · `aria-required` | 상태 `disabled` · `loading` · `invalid` · `required` 가 참이면 `true` | SDK `Root` — 뷰가 같은 이름을 넘기면 뷰 것 |
 | `data-wb-marker` · `data-wb-marker-offset` | 번호 마커의 자리(`top-start` 등)와 어긋남 `x,y` | SDK `Root` — 뷰가 `marker` 를 줄 때 |
 | `data-wb-focus` | 선택 외곽선 · 마커의 기준 상자 | SDK `Focus` — 없으면 루트가 기준이다 |
 | `data-wb-structure` | 기본 뷰의 형태 이름 | SDK 기본 뷰 |
 | `data-wb-part` | 기본 뷰의 내부 조각 이름 | SDK 기본 뷰 |
+| `data-wb-cell` | 기본 뷰의 표 칸 종류(`check` — `List` 의 체크 칸) | SDK 기본 뷰 |
 
-앞의 넷은 렌더러가 짓고 뷰가 자기 루트(`Root`)에 편다 — 어느 테마의 뷰든 같다. 마커 · 초점 자리는 뷰가 DOM 을 바꿔도 번호 마커 · 외곽선이 제 자리에 서게 하는 훅이고, 좌표는 `renderer` 의 한 함수가 이 속성으로 계산한다(에디터 오버레이 · 내보낸 번들 · PPTX 가 같은 함수를 쓴다 — `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「뷰 계약」). 뒤의 둘은 SDK 기본 뷰의 마크업 훅이라, 자기 뷰를 짠 테마는 자기 마크업을 쓴다(테마의 뷰가 기본 뷰를 불러 감싸면 그 훅이 그대로 선다).
+앞의 넷은 렌더러가 짓고 뷰가 자기 루트(`Root`)에 편다 — 어느 테마의 뷰든 같다. 마커 · 초점 자리는 뷰가 DOM 을 바꿔도 번호 마커 · 외곽선이 제 자리에 서게 하는 훅이고, 좌표는 `renderer` 의 한 함수가 이 속성으로 계산한다(에디터 오버레이 · 내보낸 번들 · PPTX 가 같은 함수를 쓴다 — `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「뷰 계약」). 뒤의 셋은 SDK 기본 뷰의 마크업 훅이라, 자기 뷰를 짠 테마는 자기 마크업을 쓴다(테마의 뷰가 기본 뷰를 불러 감싸면 그 훅이 그대로 선다).
+
+**prop 표지는 화면을 바꾸는 불리언 · enum prop 가운데 상태(`data-wb-state`) · 변형(`variantFrom` → `data-wb-variant`)으로 실리지 않는 것 전부에 선다** — 지금 `Section.compact` · `Flex` 의 `direction` · `align` · `justify` · `wrap` · `List` 의 `pagination` · `selectable` · `SearchForm.collapsed` · `Media` 의 `kind` · `ratio` 다(표는 `packages/theme-sdk/src/marks.ts` 의 `MARKED_PROPS`). 같은 값을 두 이름으로 싣지 않는다 — 상태 · 변형으로 실리는 prop 은 표지가 없다. 테마 CSS 는 `[data-wb-component="Section"][data-wb-compact]` 처럼 겨냥한다. 렌더러의 노드 속성 계약은 넓히지 않는다: `view()` 가 노드의 props · 상태를 문맥으로 내리고 `Root` 가 펴므로 기본 뷰와 테마 뷰가 같은 표지를 빠뜨릴 수 없다. `Root` 는 제 노드 id 의 문맥만 읽는다 — `view()` 를 거치지 않은 맨 함수 뷰의 `Root` 는 표지 · 접근성 속성을 안 편다(부모 노드의 것을 잘못 읽지 않게). 카탈로그에 불리언 · enum prop 이 생기면 표 · 상태 · 변형 가운데 하나에 들어야 한다 — `packages/renderer/test/prop-marks.test.tsx` 가 prop 마다 그 길과 «바꾸면 기본 뷰의 DOM 이 바뀐다» 를 센다.
+
+**SDK 기본 뷰는 표지 · 상태로 제 모양을 바꾼다** — 테마가 없어도 화면이 바뀐다. `Section` 의 위아래 여백은 compact 면 준다(특이도 0 — 테마의 여백 규칙이 이긴다), `SearchForm` 은 접히면 머리줄(`toggle` 조각)만 남고 자식이 DOM 에서 빠진다(`display: none` 으로 감추면 테마 CSS 가 되살릴 수 있다), `List` 는 `selectable` · `empty` · `loading` 을 체크 칸 · 빈 줄 · 막대 조각으로, `KeyValue` 는 `columns` 쌍씩 한 행으로, `Media` 는 `kind` 를 틀 가운데 표지(`glyph`)로 그린다. 시스템 테마 다섯이 표지를 읽는지는 `apps/web/build-test/theme-prop-marks.test.ts` 가 켬/끔의 상자 차로 잰다.
 
 ### 6.2 patterns — 테마가 소유한 구성 레시피
 

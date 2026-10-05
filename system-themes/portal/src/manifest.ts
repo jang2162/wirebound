@@ -17,8 +17,8 @@ export const MANIFEST: ThemeManifest = {
   id: 'system-portal',
   name: '포털',
   description: '기관·사내 포털 테마. 선으로 구역을 나누고, 목록은 제목과 날짜 줄로, 분류는 접었다 편다.',
-  version: '1.0.0',
-  sdk: '^1.0.0',
+  version: '1.1.0',
+  sdk: '^1.1.0',
   tokens: {
     groups: [
       { id: 'color', label: '색' },
@@ -119,7 +119,7 @@ export const MANIFEST: ThemeManifest = {
     SearchForm: {
       variants: [
         { id: 'collapsible', label: '접히는 검색' },
-        { id: 'inline', label: '한 줄 검색', hideProps: ['collapsed'] },
+        { id: 'inline', label: '한 줄 검색' },
       ],
       defaultVariant: 'collapsible',
     },

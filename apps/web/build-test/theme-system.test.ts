@@ -4,7 +4,7 @@
  * | 케이스 | 재는 성질 | 값 |
  * |---|---|---|
  * | 다섯 차례로 | 설정 페이지의 고르개 · 확인 · «바꾸기» 로 테마를 바꾸면 캔버스와 내보낸 번들이 **그 테마로** 선다 · 확인 상자의 수가 impact 응답과 같다 | 테마 표지(아래) · 확인 줄 |
- * | 0.1.0 → 1.0.0 | `system-admin@0.1.0` 에 고정한 프로젝트를 설정 페이지에서 올릴 때 확인 상자의 토큰 이전 · 없는 variant 수가 impact 응답과 같고, 올린 뒤 고친 토큰이 이어진다 | 확인 줄 · 목록 · 저장된 바인딩 |
+ * | 0.1.0 → 지금 판 | `system-admin@0.1.0` 에 고정한 프로젝트를 설정 페이지에서 올릴 때 확인 상자의 토큰 이전 · 없는 variant 수가 impact 응답과 같고, 올린 뒤 고친 토큰이 이어진다 | 확인 줄 · 목록 · 저장된 바인딩 |
  *
  * **테마 표지는 주 단추(`Button` `primary`)의 바탕색이다** — 다섯 테마의 `theme.css` 가 저마다의 규칙으로 그 단추를 `var(--wb-semantic-primary)`
  * 로 칠하고, 그 토큰의 기본값이 테마마다 다르다(기대값은 그 판의 manifest 에서 읽는다 — 색을 글자로 적지 않는다). SDK 기본 뷰의 CSS 는 단추에
@@ -14,7 +14,7 @@
  * `theme-system-review.test.ts` 가 잰다 — 여기서 다시 세우지 않는다. 캔버스가 판의 번들 · 시트를 싣는 차례 · 캐시 · `theme-changed` 따라가기는
  * `theme-canvas.test.ts`, 토큰 편집기는 `theme-settings.test.ts` 다.
  *
- * **`0.1.0` 판은 저장소에 얼린 산출물이다**(`fixtures/system-admin-0.1.0.wbtheme`) — 저장소 빌드는 지금 판(`1.0.0`)만 내고, 사용자 DB 에는
+ * **`0.1.0` 판은 저장소에 얼린 산출물이다**(`fixtures/system-admin-0.1.0.wbtheme`) — 저장소 빌드는 지금 판만 내고, 사용자 DB 에는
  * `0.1.0` 이 시딩돼 있다. 이 파일은 admin 트랙 병합 전 소스(`git archive 29bc91b7 system-themes/admin`)를 지금 kit 으로 지은 것이고, 케이스가
  * 그 sha256 이 `system-themes/admin/checksums.json` 의 `system-admin@0.1.0` 줄과 같은지 먼저 본다 — 다르면 사용자 DB 의 판이 아니다.
  * 판 DB 에는 기동 시딩과 같은 행 꼴로 넣는다(관리자 업로드는 `system-` 접두어를 거절한다).
@@ -29,6 +29,7 @@ import type { Frame, Page } from 'playwright-core'
 import { readWbtheme } from '@wirebound/themes'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -149,7 +150,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
       ],
     })
     for (const themeId of ORDER) {
-      const manifest = ok(await fixture.call('GET', `/theme-packages/${themeId}/1.0.0/manifest`), `manifest ${themeId}`)
+      const manifest = ok(await fixture.call('GET', `/theme-packages/${themeId}/${seededVersion(themeId)}/manifest`), `manifest ${themeId}`)
       expected.set(themeId, rgb(manifest.tokens.items['semantic.primary'].default))
     }
   }, 180_000)
@@ -176,11 +177,11 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
       await page.goto(`/projects/${fixture.id}/settings`)
       await page.getByRole('combobox', { name: '테마', exact: true }).selectOption(themeId)
       const box = await confirmBox(page)
-      const impact = ok(await fixture.call('GET', `/projects/${fixture.id}/theme/impact?themeId=${themeId}&version=1.0.0`), 'impact')
+      const impact = ok(await fixture.call('GET', `/projects/${fixture.id}/theme/impact?themeId=${themeId}&version=${seededVersion(themeId)}`), 'impact')
       expect(box).toEqual(impactAsBox(impact))
       await apply(page)
       const saved = ok(await fixture.call('GET', `/projects/${fixture.id}/theme`), '바인딩')
-      expect({ themeId: saved.themeId, version: saved.version }).toEqual({ themeId, version: '1.0.0' })
+      expect({ themeId: saved.themeId, version: saved.version }).toEqual({ themeId, version: seededVersion(themeId) })
 
       const frame = await openCanvas(page, fixture.id, fixture.pages.화면!)
       // 기다림이 끝나도 값으로 단언한다 — 시간 초과로 죽으면 무엇이 섰는지가 안 남는다.
@@ -200,7 +201,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
     }
   }, 180_000)
 
-  it('system-admin@0.1.0 에 고정한 프로젝트를 1.0.0 으로 올린다 — 확인 상자의 토큰 이전 · 없는 variant 수가 impact 와 같다', async () => {
+  it('system-admin@0.1.0 에 고정한 프로젝트를 지금 판으로 올린다 — 확인 상자의 토큰 이전 · 없는 variant 수가 impact 와 같다', async () => {
     const bytes = readFileSync(OLD_ADMIN)
     const sha256 = createHash('sha256').update(bytes).digest('hex')
     expect(sha256, '얼린 0.1.0 이 사용자 DB 에 시딩된 판(체크섬 줄)과 같다').toBe(JSON.parse(readFileSync(ADMIN_CHECKSUMS, 'utf8'))['system-admin@0.1.0'])
@@ -234,9 +235,9 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
       await page.goto(`/projects/${upgrade.id}/settings`)
       const version = page.getByRole('combobox', { name: '버전', exact: true })
       await expect.poll(() => version.inputValue()).toBe('0.1.0')
-      await version.selectOption('1.0.0')
+      await version.selectOption(seededVersion('system-admin'))
       const box = await confirmBox(page)
-      const impact = ok(await upgrade.call('GET', `/projects/${upgrade.id}/theme/impact?themeId=system-admin&version=1.0.0`), 'impact')
+      const impact = ok(await upgrade.call('GET', `/projects/${upgrade.id}/theme/impact?themeId=system-admin&version=${seededVersion('system-admin')}`), 'impact')
       expect(box).toEqual(impactAsBox(impact))
       // 카나리아 — 고친 토큰 둘이 이어지고, 심은 없는 variant 하나가 목록 페이지에만 선다.
       expect(box.tokens.kept).toBe(2)
@@ -246,6 +247,6 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
       await context.close()
     }
     const saved = ok(await upgrade.call('GET', `/projects/${upgrade.id}/theme`), '바인딩')
-    expect({ themeId: saved.themeId, version: saved.version, tokens: saved.tokens }).toEqual({ themeId: 'system-admin', version: '1.0.0', tokens })
+    expect({ themeId: saved.themeId, version: saved.version, tokens: saved.tokens }).toEqual({ themeId: 'system-admin', version: seededVersion('system-admin'), tokens })
   }, 180_000)
 })

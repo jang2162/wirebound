@@ -60,8 +60,8 @@ function declarations(style: CSSStyleDeclaration): [string, string][] {
 describe('system-commerce 선언', () => {
   it('id · 판 · sdk 범위 · 옛 meta 의 이름', () => {
     expect(manifest.id).toBe('system-commerce')
-    expect(manifest.version).toBe('1.0.0')
-    expect(manifest.sdk).toBe('^1.0.0')
+    expect(manifest.version).toBe('1.1.0')
+    expect(manifest.sdk).toBe('^1.1.0')
     expect(manifest.name).toBe('커머스')
   })
 
@@ -229,7 +229,7 @@ describe('뷰 — variant 마다 DOM', () => {
     expect(node(c, 'b').tagName).toBe('TABLE')
   })
 
-  it('SearchForm: collapsible 은 toggle 을 내고 접히면 자식이 DOM 에서 빠진다 · inline 은 기본 뷰', () => {
+  it('SearchForm: collapsible 은 toggle 을 내고 접히면 자식이 DOM 에서 빠진다 · inline 은 기본 뷰(접히면 같은 꼴)', () => {
     const field: WbNode = { id: 'f', type: 'Field', props: { label: '검색어' } }
     const c = draw([
       { id: 'a', type: 'SearchForm', props: {}, children: [field] },
@@ -241,7 +241,8 @@ describe('뷰 — variant 마다 DOM', () => {
     expect(Array.from(node(c, 'b').children).map((e) => e.getAttribute('data-wb-part'))).toEqual(['toggle'])
     expect(c.querySelector('[data-wb-id="f2"]')).toBeNull()
     expect(node(c, 'c').getAttribute('data-wb-structure')).toBe('inline')
-    expect(c.querySelector('[data-wb-id="f3"]')).not.toBeNull()
+    expect(Array.from(node(c, 'c').children).map((e) => e.getAttribute('data-wb-part'))).toEqual(['toggle'])
+    expect(c.querySelector('[data-wb-id="f3"]')).toBeNull()
   })
 })
 
