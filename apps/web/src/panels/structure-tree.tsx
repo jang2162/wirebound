@@ -40,6 +40,7 @@ import { isTypingSurface } from './typing-surface'
 import { StructurePicker, useStructureCommands, type StructureCommands } from './structure-toolbar'
 import { TreeFoldButtons, TreeToggle } from './tree-fold'
 import { TreeInput } from './tree-input'
+import { UnsplitDialog } from './unsplit-dialog'
 import { structureRowItems, TreeRowActions } from './tree-row-actions'
 
 /**
@@ -301,8 +302,9 @@ export function StructureTree(props: {
   ) : null
 
   return (
-    // **고르개 단축키가 이 상자에 붙는다 — 전역이 아니다**(고르개가 이 트리의 상태라서 — `TREE_SHORTCUTS` 머리말). 스타일이 없는
-    // 상자라 클래스도 붙이지 않는다.
+    <>
+    {/* **고르개 단축키가 이 상자에 붙는다 — 전역이 아니다**(고르개가 이 트리의 상태라서 — `TREE_SHORTCUTS` 머리말). 스타일이 없는
+        상자라 클래스도 붙이지 않는다. */}
     <div onKeyDown={handleKeyDown}>
       <ul className="wb-shell-structure" ref={treeRef}>
         <StructureNode
@@ -395,6 +397,9 @@ export function StructureTree(props: {
           props.headSlot,
         )}
     </div>
+    {/* **«상태 나누기 풀기» 확인**(`./unsplit-dialog.tsx`) — 단축키 상자의 형제다(상자 단추의 키가 트리의 단축키로 버블되지 않게). */}
+    {props.editable && <UnsplitDialog commands={commands.viewState} />}
+    </>
   )
 }
 

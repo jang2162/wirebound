@@ -24,6 +24,7 @@
  * 실거나(그러면 `loadPage`의 시그니처가 바뀌어 테스트까지 부르는 자리가 전부 바뀐다) 프롭을
  * 한 겹 더 놓거나다. 뷰 모드 탭은 자기 조회를 이미 갖고 있어 요청이 하나도 늘지 않는다.
  */
+import { forkedId } from '../edit/view-state-fork'
 import { useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { NO_THEME, resolveVariant } from '@wirebound/renderer'
 import {
@@ -146,13 +147,16 @@ function useLeftoverCommit(pageId: string | undefined, canEdit: boolean, commitO
     if (epochNow !== null && epochNow() !== bornIn) return
     const state = store.getState()
     const document = at.pageId !== undefined && state.openPageId === at.pageId ? state.document : null
+    // 방금 «복사 + 편집»으로 복사된 노드의 초안은 복사에 쓴다(`edit/view-state-fork.ts` 의 `forkedId` — 옛 노드는 이제 숨은 기본 가지다).
     const targets =
       document === null
         ? []
-        : at.nodeIds.filter((id) => {
-            const node = findNodeSafely(document.root, id)
-            return node !== undefined && nodeType(node) === at.type && store.lockedBy(id) === null
-          })
+        : at.nodeIds
+            .map((id) => forkedId(store, id))
+            .filter((id) => {
+              const node = findNodeSafely(document.root, id)
+              return node !== undefined && nodeType(node) === at.type && store.lockedBy(id) === null
+            })
     if (document === null || targets.length === 0) {
       if (!store.showsLoss()) store.setEditFailure({ kind: 'message', message: DROPPED_DRAFT_NOTICE })
       return
@@ -162,8 +166,11 @@ function useLeftoverCommit(pageId: string | undefined, canEdit: boolean, commitO
     for (const id of targets) {
       const step = build(running, id)
       if (step === null || step.length === 0) continue
+      const next = applyOps(running, step)
+      // 이미 그 값인 노드에는 안 쓴다 — 칸을 떠나며 낸 커밋이 이미 쓴 초안이 위젯의 정리로 한 번 더 오는 판(복사로 옮겨 간 칸)이다.
+      if (JSON.stringify(findNodeSafely(next.root, id)) === JSON.stringify(findNodeSafely(running.root, id))) continue
       ops.push(...step)
-      running = applyOps(running, step)
+      running = next
     }
     if (ops.length === 0) return
     const blocker = store.editBlockedBy(ops)

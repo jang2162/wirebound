@@ -12,7 +12,7 @@
  * 큐에 쌓이고, 앞 요청이 끝난 뒤 같은 루프가 그것을 집는다.
  */
 import { useCallback } from 'react'
-import type { Interaction, PatchOp } from '@wirebound/schema'
+import { createNodeId, type Interaction, type PatchOp } from '@wirebound/schema'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, toFailure } from '../api/failure'
@@ -22,7 +22,9 @@ import { EditNotSentError, UnansweredEditError, type EditChannel, type Unanswere
 import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import { MARKER_FRAME_WAIT_MS, type EditFailure, type EditStatus, type RestoredRevision, type UndoAttempt, type UndoHistoryNeed } from '../store/editor-store'
 import { LOSS_RANK, type LossPart } from '../store/loss-notice'
+import { useViewState } from '../shell/use-view-state'
 import { interactionsOps, propOps, variantOps } from './ops'
+import { planViewStateEdit, rememberFork } from './view-state-fork'
 
 /** 서버가 이유를 주지 않은 편집 실패에 쓸 문장(네트워크 단절 등). */
 const EDIT_UNKNOWN_FAILURE = '편집을 저장하지 못했습니다'
@@ -367,6 +369,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const store = useEditorStoreInstance()
   const open = useOpenPage(pageId)
   const status = useEditorStore(store, (s) => s.editStatus)
+  /** 지금 고른 화면 상태(`shell/use-view-state.ts`) — 흐린 기본 가지 안을 고친 편집을 «복사 + 편집»으로 바꾸는 판정(`commitOps`)이 본다. */
+  const { state: viewState } = useViewState(pageId)
   // 되짚기 이력을 받는 동안은 둘 다 꺼진다(`undo`의 `loadUndoHistory`) — 누른 것은 받은 뒤 한 번 되돌린다. **다시 실행도 끄는 까닭**: 받는
   // 동안 다시 실행이 맨 위에 세션 편집을 올리면 받은 뒤 그 되돌리기를 말없이 버린다(맨 위 비교). 받는 창은 조회 한 번이고 다시 실행 스택은
   // 그대로라, 받은 뒤 누르면 된다 — 막히는 것은 그 창 안의 누름뿐이다.
@@ -829,9 +833,30 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       if (open === null) return false
       // 만드는 쪽이 "요청을 보내지 마라"라고 답한 것이다(`edit/ops.ts` 머리말).
       if (ops === null) return false
+      // **상태를 고른 채 흐린 기본 가지 안을 고친 편집은 «복사 + 편집» 한 묶음이 된다**(`./view-state-fork.ts` — 판정과 표는 거기). 나눌 수
+      // 없는 묶음은 보내지 않고 말한다 — 그대로 보내면 기본 가지(모든 상태)가 바뀐다.
+      const plan = planViewStateEdit(open.document, ops, viewState, createNodeId)
+      if (plan.kind === 'refused') {
+        store.setEditFailure({ kind: 'message', message: plan.reason })
+        return false
+      }
+      const sent = plan.kind === 'fork' ? plan.ops : ops
       // 로컬 적용이 실패했다 — 클라이언트가 만든 잘못된 `ops`다. 보내 봐야 서버도 같은
       // 자리에서 거절한다.
-      if (store.applyEdit(ops) === null) return false
+      if (store.applyEdit(sent) === null) return false
+      // 고른 노드가 복사된 기본 가지 안이면 복사로 옮겨 고른다 — 다음 편집이 다시 흐린 가지(이제 숨은 기본 가지)를 고치지 않게.
+      if (plan.kind === 'fork') {
+        rememberFork(store, plan.remap)
+        const { selectedNodeIds, selectedNodeId } = store.getState()
+        if (selectedNodeIds.some((id) => plan.remap.has(id))) {
+          const anchor = selectedNodeId === null ? undefined : (plan.remap.get(selectedNodeId) ?? selectedNodeId)
+          store.selectMany(
+            selectedNodeIds.map((id) => plan.remap.get(id) ?? id),
+            'replace',
+            anchor,
+          )
+        }
+      }
 
       // 앞 실패의 통지를 치운다. 남겨 두면 사용자가 방금 낸 편집도 실패했다고 읽는다. **누른 뒤 기다렸다가 내는 편집(`pressed`)은 그 사이
       // 선 잃음을 치우지 않는다** — 누른 때의 통지가 아니라 그 뒤에 온 잃음이다(`sayAfterWait`와 같은 규칙 · `CommitOptions`).
@@ -839,7 +864,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       void pump()
       return true
     },
-    [open, store, pump, lossArrivedSince],
+    [open, store, pump, lossArrivedSince, viewState],
   )
 
   const commitProp = useCallback(

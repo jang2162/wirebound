@@ -59,7 +59,7 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
   const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
 
   /** 프로젝트 · 메뉴 · 페이지 둘(둘째는 빈 페이지). 첫 페이지에 상태 둘과 영역을 싣는다. bob 은 editor. */
-  async function fixture(slug: string): Promise<{ P: string; P2: string; pageId: string; page2Id: string }> {
+  async function fixture(slug: string, extra: unknown[] = []): Promise<{ P: string; P2: string; pageId: string; page2Id: string }> {
     const project = (await call('POST', '/projects', { name: '화면 상태', slug: `${slug}-${Date.now().toString(36)}` })).body
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
@@ -69,7 +69,7 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     const P = `/projects/${project.id}/pages/${pageId}`
     const seeded = await call('PATCH', `${P}/ops`, {
       baseSeq: 0,
-      ops: [{ op: 'add', path: '/viewStates', value: [ADMIN, GUEST] }, ...NODES.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value }))],
+      ops: [{ op: 'add', path: '/viewStates', value: [ADMIN, GUEST] }, ...[...NODES, ...extra].map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value }))],
     })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return { P, P2: `/projects/${project.id}/pages/${page2Id}`, pageId, page2Id }
@@ -524,6 +524,266 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       })
     } finally {
       await tab.close()
+    }
+  })
+
+  // ── Task 3 — 나누기 · 풀기 · 상태를 고른 채 편집 · 자리 규칙 ───────────────────────────────
+
+  /** 서버 문서의 모양 — 뿌리 밑의 노드를 `{ id: 자식 }` 꼴로(뿌리 빼고 · 가지는 `id(state)`). */
+  async function serverShape(P: string): Promise<unknown> {
+    const body = (await stack.request(alice, 'GET', P)).body
+    const shape = (node: { id: string; type: string; props?: { state?: string; content?: string }; children?: unknown[] }): unknown => {
+      const name = node.type === 'StateCase' ? `${node.id}(${node.props?.state})` : node.type === 'Text' ? `${node.id}:${node.props?.content}` : node.id
+      const kids = (node.children ?? []) as (typeof node)[]
+      return kids.length === 0 ? name : { [name]: kids.map(shape) }
+    }
+    return ((body.schema.root.children ?? []) as Parameters<typeof shape>[0][]).map(shape)
+  }
+  const treeRow = (page: Page, id: string) => page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"]`)
+  const pickRow = (page: Page, id: string) => treeRow(page, id).locator('.wb-shell-structure-node').click()
+  /** 고른 줄의 `…` · `+` 를 열어 항목을 읽는다 — 이름 · 꺼짐 · 까닭. */
+  async function rowMenu(page: Page, id: string, which: '더 보기' | '추가'): Promise<{ label: string; disabled: boolean; reason: string | null }[]> {
+    await page.waitForTimeout(600)
+    await treeRow(page, id).getByRole('button', { name: new RegExp(`${which}$`) }).click()
+    const items = await page.locator('[role="menu"] [role="menuitem"]').evaluateAll((els) =>
+      els.map((el) => ({ label: el.textContent ?? '', disabled: el.getAttribute('aria-disabled') === 'true', reason: el.getAttribute('title') })),
+    )
+    return items
+  }
+  async function rowCommand(page: Page, id: string, label: string): Promise<void> {
+    await page.waitForTimeout(600)
+    await treeRow(page, id).getByRole('button', { name: /더 보기$/ }).click()
+    await page.getByRole('menuitem', { name: label, exact: true }).click()
+  }
+
+  it('나누기 — 줄 `…` «상태별로 나누기»: 기본 상태면 기본 가지 하나, 관리자 상태면 관리자 가지도 복사로 · 되돌리기 한 번', async () => {
+    const { P } = await fixture('vs-split')
+    const tab = await openTab(P)
+    try {
+      const original = (await serverShape(P)) as unknown[]
+      await pickRow(tab.page, 'n_out')
+      let head = (await server(P)).headSeq
+      await rowCommand(tab.page, 'n_out', '상태별로 나누기')
+      await landed(P, head)
+      const splitDefault = await serverShape(P)
+      head = (await server(P)).headSeq
+      await undo(tab.page)
+      await landed(P, head)
+      const undone = await serverShape(P)
+      await choose(tab.page, '관리자')
+      await pickRow(tab.page, 'n_out')
+      head = (await server(P)).headSeq
+      await rowCommand(tab.page, 'n_out', '상태별로 나누기')
+      await landed(P, head)
+      const splitAdmin = await serverShape(P)
+      // 서버가 지은 새 id(`n_` + 12 hex)는 «NEW»로 — 모양만 견준다.
+      const norm = (value: unknown) => JSON.parse(JSON.stringify(value).replace(/n_[0-9a-f]{12}/g, 'NEW'))
+      expect({ splitDefault: norm(splitDefault), undone: JSON.stringify(undone) === JSON.stringify(original), splitAdmin: norm(splitAdmin) }).toEqual({
+        splitDefault: [{ NEW: [{ 'NEW(default)': ['n_out:영역 밖 글'] }] }, original[1]],
+        undone: true,
+        splitAdmin: [{ NEW: [{ 'NEW(default)': ['n_out:영역 밖 글'] }, { [`NEW(${ADMIN.id})`]: ['NEW:영역 밖 글'] }] }, original[1]],
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('여럿을 고른 나누기 — 이어진 형제가 아니면 꺼지고 까닭을 단다', async () => {
+    const { P } = await fixture('vs-split-many', [text('n_x', '셋째'), text('n_y', '넷째')])
+    const tab = await openTab(P)
+    try {
+      await pickRow(tab.page, 'n_out')
+      await treeRow(tab.page, 'n_x').locator('.wb-shell-structure-node').click({ modifiers: ['Meta'] })
+      // 줄 행동은 기준 노드(마지막에 누른 줄)에 선다.
+      const apart = (await rowMenu(tab.page, 'n_x', '더 보기')).find((item) => item.label === '상태별로 나누기')
+      await tab.page.keyboard.press('Escape')
+      await pickRow(tab.page, 'n_x')
+      await treeRow(tab.page, 'n_y').locator('.wb-shell-structure-node').click({ modifiers: ['Meta'] })
+      const together = (await rowMenu(tab.page, 'n_y', '더 보기')).find((item) => item.label === '상태별로 나누기')
+      expect({ apart, together }).toEqual({
+        apart: { label: '상태별로 나누기', disabled: true, reason: '같은 부모의 이어진 형제만 한 영역으로 나눌 수 있습니다' },
+        together: { label: '상태별로 나누기', disabled: false, reason: null },
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('흐린 기본 가지 안을 고친 편집은 «복사 + 편집» 한 묶음 — 기본 가지는 그대로 · 고른 것은 복사로 · 되돌리기 한 번에 가지째 빠진다', async () => {
+    const { P } = await fixture('vs-fork')
+    const tab = await openTab(P)
+    try {
+      await choose(tab.page, '손님')
+      await pickRow(tab.page, 'n_dt')
+      const head = (await server(P)).headSeq
+      const sent = tab.patches.length
+      const box = tab.page.locator('.wb-shell-panel textarea').first()
+      await box.click()
+      await box.fill('손님 글')
+      await box.evaluate((element) => (element as HTMLElement).blur())
+      await landed(P, head)
+      await frames(tab.page)
+      const forked = await serverShape(P)
+      const frames1 = tab.patches.length - sent
+      const picked = (
+        await tab.page.locator('.wb-shell-region[aria-label="구조 트리"] [aria-current="true"]').evaluateAll((els) => els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''))
+      ).join(',')
+      const canvas = (await shown(tab.page)).canvas
+      const after = await server(P)
+      await undo(tab.page)
+      await landed(P, after.headSeq)
+      const undone = await serverShape(P)
+      const sw = (forked as Record<string, unknown>[])[1] as Record<string, Record<string, string[]>[]>
+      const guest = sw['n_sw']!.find((entry) => Object.keys(entry)[0]!.endsWith(`(${GUEST.id})`))
+      const guestCase = guest === undefined ? null : Object.keys(guest)[0]!.replace(`(${GUEST.id})`, '')
+      const guestText = guest === undefined ? null : Object.values(guest)[0]![0]!
+      expect({
+        frames: frames1,
+        defaultBranch: sw['n_sw']!.filter((entry) => Object.keys(entry)[0] === 'n_cd(default)'),
+        guestText: guestText?.replace(/^n_[0-9a-f]{12}:/, 'NEW:'),
+        pickedIsCopy: picked !== 'n_dt' && guestText?.startsWith(`${picked}:`),
+        canvasHasCopy: canvas.length === 2 && canvas[0] === 'n_out' && canvas[1] !== 'n_dt',
+        undone: JSON.stringify(undone) === JSON.stringify([
+          'n_out:영역 밖 글',
+          { n_sw: [{ 'n_cd(default)': ['n_dt:기본 글'] }, { [`n_ca(${ADMIN.id})`]: ['n_at:관리자 글'] }] },
+        ]),
+        guestCaseNew: guestCase !== null && guestCase !== 'n_cd',
+      }).toEqual({
+        frames: 1,
+        defaultBranch: [{ 'n_cd(default)': ['n_dt:기본 글'] }],
+        guestText: 'NEW:손님 글',
+        pickedIsCopy: true,
+        canvasHasCopy: true,
+        undone: true,
+        guestCaseNew: true,
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('풀기 — 다른 가지가 있으면 확인(지워지는 가지 · 노드)을 묻고, 풀면 기본 가지 내용이 그 자리에 · 되돌리기 한 번', async () => {
+    const { P } = await fixture('vs-unsplit')
+    const tab = await openTab(P)
+    try {
+      const original = await serverShape(P)
+      await pickRow(tab.page, 'n_sw')
+      const head = (await server(P)).headSeq
+      await rowCommand(tab.page, 'n_sw', '상태 나누기 풀기')
+      await frames(tab.page)
+      // 묻지 않고 풀었으면 상자가 없다 — 값(`asked: null`)으로 죽는다.
+      const asked =
+        (await dialog(tab.page).count()) === 0
+          ? null
+          : {
+              title: await dialog(tab.page).getByRole('heading').first().textContent(),
+              sentence: await dialog(tab.page).locator('.wb-shell-view-states-sentence').textContent(),
+              ids: await dialog(tab.page).locator('[data-node-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id'))),
+            }
+      if (asked !== null) await dialog(tab.page).getByRole('button', { name: '풀기', exact: true }).click()
+      await landed(P, head)
+      const unsplit = await serverShape(P)
+      const after = (await server(P)).headSeq
+      await undo(tab.page)
+      await landed(P, after)
+      expect({ asked, unsplit, undone: JSON.stringify(await serverShape(P)) === JSON.stringify(original) }).toEqual({
+        asked: { title: '상태 나누기 풀기', sentence: '기본 가지만 남기고 가지 1개(관리자)의 내용이 함께 삭제됩니다.', ids: ['n_at'] },
+        unsplit: ['n_out:영역 밖 글', 'n_dt:기본 글'],
+        undone: true,
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('가지 줄 «이 상태 가지 지우기» — 그 가지만 지워 그 상태는 기본을 따라간다 · 기본 가지 줄에는 없고 «삭제»가 까닭과 함께 꺼진다', async () => {
+    const { P } = await fixture('vs-remove-case')
+    const tab = await openTab(P)
+    try {
+      await tab.page.getByRole('button', { name: '모든 가지 보기', exact: true }).click()
+      await pickRow(tab.page, 'n_cd')
+      const defaultRow = (await rowMenu(tab.page, 'n_cd', '더 보기')).filter((item) => ['이 상태 가지 지우기(기본으로 돌아감)', '삭제'].includes(item.label))
+      await tab.page.keyboard.press('Escape')
+      await pickRow(tab.page, 'n_ca')
+      const head = (await server(P)).headSeq
+      await rowCommand(tab.page, 'n_ca', '이 상태 가지 지우기(기본으로 돌아감)')
+      await landed(P, head)
+      expect({ defaultRow, after: await serverShape(P) }).toEqual({
+        defaultRow: [{ label: '삭제', disabled: true, reason: '기본 가지는 지울 수 없습니다 — 영역째 지우거나 «상태 나누기 풀기»를 쓰세요' }],
+        after: ['n_out:영역 밖 글', { n_sw: [{ 'n_cd(default)': ['n_dt:기본 글'] }] }],
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('영역 · 가지의 자리 규칙 — 영역의 «안에 추가» · 가지의 «아래 추가»가 까닭과 함께 꺼지고, 가지 줄을 영역 밖에 끌어 놓아도 안 옮긴다', async () => {
+    const { P } = await fixture('vs-rules')
+    const tab = await openTab(P)
+    try {
+      await pickRow(tab.page, 'n_sw')
+      const regionAdd = (await rowMenu(tab.page, 'n_sw', '추가')).find((item) => item.label === '안에 추가')
+      await tab.page.keyboard.press('Escape')
+      await pickRow(tab.page, 'n_cd')
+      const caseAdd = (await rowMenu(tab.page, 'n_cd', '추가')).find((item) => item.label === '아래 추가')
+      await tab.page.keyboard.press('Escape')
+      // 가지 줄을 끌어 영역 밖 글(n_out) 위에 놓는다.
+      const from = (await treeRow(tab.page, 'n_cd').locator('.wb-shell-structure-node').boundingBox())!
+      const to = (await treeRow(tab.page, 'n_out').locator('.wb-shell-structure-node').boundingBox())!
+      const before = await server(P)
+      const sent = tab.patches.length
+      await tab.page.mouse.move(from.x + 20, from.y + from.height / 2)
+      await tab.page.mouse.down()
+      await tab.page.mouse.move(from.x + 24, from.y + from.height / 2 + 8, { steps: 3 })
+      await tab.page.mouse.move(to.x + 20, to.y + to.height * 0.8, { steps: 8 })
+      const indicator = await tab.page.locator('.wb-shell-drop-indicator, [data-drop-indicator]').count()
+      await tab.page.mouse.up()
+      await tab.page.waitForTimeout(600)
+      expect({ regionAdd, caseAdd, indicator, sent: tab.patches.length - sent, headSame: (await server(P)).headSeq === before.headSeq }).toEqual({
+        regionAdd: { label: '안에 추가', disabled: true, reason: '상태 영역 안에는 가지만 섭니다 — 가지를 고르고 그 안에 추가하세요' },
+        caseAdd: { label: '아래 추가', disabled: true, reason: '가지 곁에는 노드를 둘 수 없습니다 — 상태 영역을 고르고 아래 추가하세요' },
+        indicator: 0,
+        sent: 0,
+        headSame: true,
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('두 사람이 다른 상태를 보며 같은 영역을 편집 — 흐린 기본 가지 노드를 alice 가 잡으면 bob 은 못 고르고, alice 의 편집이 가지를 복사해 옮긴 뒤에는 고른다', async () => {
+    const { P } = await fixture('vs-two-states')
+    const tab = await openTab(P)
+    const other = await openTab(P, { width: 1440, height: 900 }, 'bob')
+    try {
+      await choose(tab.page, '손님')
+      await pickRow(tab.page, 'n_dt')
+      // alice 의 잠금이 bob 에게 닿으면 n_dt 줄에 배지가 선다(줄 상자의 형제 — 위 «두 사람» 케이스의 `badge`).
+      await other.page.locator('[data-tree-row][data-tree-id="n_dt"] ~ .wb-shell-structure-lock').waitFor()
+      const blockedForBob = await treeRow(other.page, 'n_dt').locator('.wb-shell-structure-node').isDisabled()
+      const head = (await server(P)).headSeq
+      const box = tab.page.locator('.wb-shell-panel textarea').first()
+      await box.click()
+      await box.fill('손님 글')
+      await box.evaluate((element) => (element as HTMLElement).blur())
+      await landed(P, head)
+      // alice 의 선택이 복사로 옮겨 잠금이 풀린 것 — bob 의 n_dt 배지가 걷힌다. 3s 안에 안 걷히면 기다리지 않고 값(`freeForBob`)으로 죽는다.
+      await other.page.locator('[data-tree-row][data-tree-id="n_dt"] ~ .wb-shell-structure-lock').waitFor({ state: 'detached', timeout: 3_000 }).catch(() => undefined)
+      const freeForBob = !(await treeRow(other.page, 'n_dt').locator('.wb-shell-structure-node').isDisabled())
+      if (freeForBob) await pickRow(other.page, 'n_dt')
+      await frames(other.page)
+      const bobPicked = (
+        await other.page.locator('.wb-shell-region[aria-label="구조 트리"] [aria-current="true"]').evaluateAll((els) => els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''))
+      ).join(',')
+      expect({ blockedForBob, freeForBob, bobPicked, defaultText: JSON.stringify(await serverShape(P)).includes('n_dt:기본 글') }).toEqual({
+        blockedForBob: true,
+        freeForBob: true,
+        bobPicked: 'n_dt',
+        defaultText: true,
+      })
+    } finally {
+      await tab.close()
+      await other.close()
     }
   })
 })

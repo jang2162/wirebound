@@ -37,7 +37,7 @@
  * 몇 가지 깨진 형태까지다.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
-import type { NodeLock, WbNode } from '@wirebound/schema'
+import type { NodeLock, PatchOp, WbNode } from '@wirebound/schema'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { createNode } from '../edit/create-node'
@@ -45,7 +45,9 @@ import { aliasOps, insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops
 import { patternInsert } from '../edit/pattern-insert'
 import { presetApply, presetFailureNotice } from '../edit/preset-apply'
 import { findNodeSafely } from '../edit/safe-walk'
-import { nodeSpot, selectionAbilities, type StructureAbilities } from '../edit/structure-actions'
+import { nodeSpot, regionRulesAt, selectionAbilities, type StructureAbilities } from '../edit/structure-actions'
+import { nonDefaultCase, removeCasePlan, splitPlan, SPLIT_PICK_REASON, unsplitPlan, type UnsplitShown } from '../edit/view-state-actions'
+import { useViewState } from '../shell/use-view-state'
 import { removeManyOps } from '../edit/paste-ops'
 import type { StructureDrop } from '../edit/structure-drop'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -53,7 +55,7 @@ import { PatternPicker } from './pattern-picker'
 import { PresetPicker } from './preset-picker'
 import { TypePicker } from './type-picker'
 import { lockedNotice } from './property-panel'
-import { structureWhy, type StructureReasonInput, type StructureWhy } from './toolbar-status'
+import { lockedSelectionStatus, structureWhy, type StructureReasonInput, type StructureWhy } from './toolbar-status'
 
 /**
  * 줄 행동(`+` · `…`) · 끌어 놓기와 키보드 단축키가 **공유하는** 조작 묶음.
@@ -149,6 +151,28 @@ export interface StructureCommands {
    * 입력을 연 뒤 도착한 남의 잠금이면 말하고 안 보낸다.
    */
   renameAlias: (nodeId: string, alias: string) => void
+  /** 줄 `…` 의 상태 명령(`edit/view-state-actions.ts`) — 나누기 · 풀기(확인 상자) · 가지 지우기. */
+  viewState: ViewStateCommands
+}
+
+/** 줄 `…` 의 상태 명령 — 끈 까닭과 실행. 잠금은 고른 노드의 잠금 · 묶음의 `editBlockedBy` 로 끈다(구조 명령과 같은 자세). */
+export interface ViewStateCommands {
+  /** «상태별로 나누기»가 꺼진 까닭 — 켜졌으면 `undefined`. */
+  splitWhy: string | undefined
+  split: () => void
+  /** 고른 노드가 상태 영역인가 — «상태 나누기 풀기»를 싣는다. */
+  canUnsplit: boolean
+  unsplitWhy: string | undefined
+  /** 다른 가지가 있으면 확인 상자를 열고(`unsplitting`), 없으면 곧바로 푼다. */
+  askUnsplit: () => void
+  /** 확인을 묻는 중 — 지워지는 가지 · 노드. */
+  unsplitting: UnsplitShown | null
+  confirmUnsplit: () => void
+  cancelUnsplit: () => void
+  /** 고른 노드가 기본이 아닌 가지인가 — «이 상태 가지 지우기»를 싣는다. */
+  canRemoveCase: boolean
+  removeCaseWhy: string | undefined
+  removeCase: () => void
 }
 
 /**
@@ -321,6 +345,7 @@ export function useStructureCommands(props: {
   // 그 게이트가 없어 실제로 이 갈래를 지난다 — 관례를 맞춘 것이지 여기서 쓰이는 것이
   // 아니다.
   const { commitOps } = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
+  const { state: viewState } = useViewState(props.pageId)
 
   /**
    * **여럿을 고른 판은 고른 것 전부를 본다**(`selectionAbilities`) — 기준 노드 밖의 잠금은 고른 노드마다 스토어의 `lockedBy`를 묻는다(판정은
@@ -612,6 +637,61 @@ export function useStructureCommands(props: {
     selectedNodeIds.length !== 1 ||
     props.selectedLock !== null ||
     findNodeSafely(document.root, selectedNodeId) === undefined
+  // ── 상태 명령 ── 묶음 · 까닭은 `edit/view-state-actions.ts`, 잠금은 여기서(고른 노드의 잠금이 먼저 · 그다음 묶음의 `editBlockedBy`).
+  const lockWhy = (ops: readonly PatchOp[] | null): string | undefined => {
+    if (props.selectedLock !== null) return lockedSelectionStatus(props.selectedLock.userName)
+    if (otherLock !== null) return lockedSelectionStatus(otherLock.userName)
+    const blocker = ops === null ? null : store.editBlockedBy(ops)
+    return blocker === null ? undefined : `${blocker.userName}님이 편집 중인 노드가 있어 바꿀 수 없습니다`
+  }
+  const split = document === null ? { reason: SPLIT_PICK_REASON } : splitPlan(document, selectedNodeIds, viewState, () => 'n_probe0000000')
+  const splitWhy = 'reason' in split ? split.reason : lockWhy(split.ops)
+  const unsplit = document === null || selectedNodeId === null || many ? null : unsplitPlan(document, selectedNodeId)
+  const unsplitWhy = unsplit === null ? undefined : 'reason' in unsplit ? unsplit.reason : lockWhy(unsplit.ops)
+  const caseRemoval = document === null || many ? null : nonDefaultCase(document, selectedNodeId) === null ? null : removeCasePlan(document, selectedNodeId!)
+  const removeCaseWhy = caseRemoval === null ? undefined : 'reason' in caseRemoval ? caseRemoval.reason : lockWhy(caseRemoval.ops)
+  const [unsplitting, setUnsplitting] = useState<UnsplitShown | null>(null)
+  // 고른 것이 바뀌면 묻던 확인을 닫는다 — 확인은 연 순간의 영역에 대한 것이다.
+  useEffect(() => {
+    setUnsplitting(null)
+  }, [selectedNodeId])
+
+  function splitSelected(): void {
+    if (document === null || splitWhy !== undefined) return
+    // 판정의 묶음은 탐침 id 로 지었다 — 보낼 때는 새 id 로 다시 짓는다.
+    const plan = splitPlan(document, selectedNodeIds, viewState)
+    if ('reason' in plan) return
+    commitOps(plan.ops)
+  }
+
+  function runUnsplit(): void {
+    if (document === null || selectedNodeId === null) return
+    const plan = unsplitPlan(document, selectedNodeId)
+    if (plan === null || 'reason' in plan || lockWhy(plan.ops) !== undefined) return
+    if (commitOps(plan.ops)) setUnsplitting(null)
+  }
+
+  const viewStateCommands: ViewStateCommands = {
+    splitWhy,
+    split: splitSelected,
+    canUnsplit: unsplit !== null,
+    unsplitWhy,
+    askUnsplit: () => {
+      if (unsplit === null || 'reason' in unsplit || unsplitWhy !== undefined) return
+      if (unsplit.shown !== undefined && unsplit.shown.cases.length > 0) setUnsplitting(unsplit.shown)
+      else runUnsplit()
+    },
+    unsplitting,
+    confirmUnsplit: runUnsplit,
+    cancelUnsplit: () => setUnsplitting(null),
+    canRemoveCase: caseRemoval !== null,
+    removeCaseWhy,
+    removeCase: () => {
+      if (caseRemoval === null || 'reason' in caseRemoval || removeCaseWhy !== undefined) return
+      if (commitOps(caseRemoval.ops)) store.selectNode(null)
+    },
+  }
+
   const reasonInput: StructureReasonInput = {
     selectedNodeId,
     // **루트인지는 id로 본다.** 판정을 다시 하지 않는다 — `structureAbilities`가 이미
@@ -624,9 +704,11 @@ export function useStructureCommands(props: {
     // *"고르면 편집할 수 있습니다"*를 고를 줄이 없는 판에서도 말한다(`./toolbar-status.ts` 머리말 «안 골랐다 칸»).
     pageLock: props.pageLock,
     abilities,
+    region: regionRulesAt(document, selectedNodeId),
   }
 
   return {
+    viewState: viewStateCommands,
     abilities,
     patternLocked,
     presetLocked,
