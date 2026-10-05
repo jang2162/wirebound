@@ -54,10 +54,12 @@ import {
   describeNode,
   getComponent,
   listInteractionSentences,
+  namingContexts,
   type EditorField,
   type Interaction,
   type InteractionAction,
   type InteractionTrigger,
+  type NamingContext,
   type PageDocument,
   type WbNode,
 } from '@wirebound/schema'
@@ -220,7 +222,10 @@ function NodeRules(props: {
   const { document: doc, node, disabled, onChange } = props
   // **문서에서 읽는다 — 로컬 사본을 두지 않는다**(머리말의 근거).
   const interactions = Array.isArray(node.interactions) ? node.interactions : []
-  const choices = nodeChoices(doc)
+  // 이름은 그 노드가 속한 상태를 붙인다 — 문장(`listInteractionSentences`)과 같은 이름이다(`namingContexts`).
+  const naming = namingContexts(doc)
+  const choices = nodeChoices(doc, naming)
+  const title = describeNode(node, naming.get(node.id))
 
   /** 규칙 하나를 바꿔 통째로 낸다. `interactionsOps`가 배열을 통째 다루므로 짝이 맞는다. */
   const replaceAt = (index: number, next: Interaction): void => {
@@ -228,8 +233,8 @@ function NodeRules(props: {
   }
 
   return (
-    <section className="wb-shell-panel-section" aria-label={`${describeNode(node)}의 상호작용`}>
-      <h3 className="wb-shell-panel-subtitle">{describeNode(node)}</h3>
+    <section className="wb-shell-panel-section" aria-label={`${title}의 상호작용`}>
+      <h3 className="wb-shell-panel-subtitle">{title}</h3>
 
       {interactions.map((interaction, index) => (
         // **`key`가 자리(index)다.** 규칙에 식별자가 없고 배열의 자리가 곧 patch 경로
@@ -667,10 +672,10 @@ function TextField(props: {
  * 이름은 문장과 **같은 함수**가 만든다(`describeNode`) — 목록에서 고른 이름과 문장에
  * 나오는 이름이 갈리면 사용자가 둘을 잇지 못한다.
  */
-function nodeChoices(doc: PageDocument): { id: string; label: string }[] {
+function nodeChoices(doc: PageDocument, naming: ReadonlyMap<string, NamingContext>): { id: string; label: string }[] {
   const out: { id: string; label: string }[] = []
   for (const visit of walkSafely(doc.root)) {
-    out.push({ id: visit.node.id, label: describeNode(visit.node) })
+    out.push({ id: visit.node.id, label: describeNode(visit.node, naming.get(visit.node.id)) })
   }
   return out
 }

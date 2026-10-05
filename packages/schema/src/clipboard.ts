@@ -14,7 +14,7 @@ import { z } from 'zod'
 import { DocumentEnvelopeSchema } from './envelope'
 import { isPageTargetAction } from './interaction/check'
 import { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument, type Migration } from './migrate'
-import type { Interaction, InteractionAction, PageDocument, WbNode } from './node'
+import { DEFAULT_CASE, type Interaction, type InteractionAction, type PageDocument, type WbNode } from './node'
 import { collectNodeIds, remapNodeIds } from './tree'
 import { partitionIssues, validatePage } from './validate'
 
@@ -124,10 +124,11 @@ export function readNodesEnvelope(
  */
 export function prepareNodesForPaste(
   nodes: readonly WbNode[],
-  keep: { node: (id: string) => boolean; page: (target: string) => boolean },
+  keep: { node: (id: string) => boolean; page: (target: string) => boolean; state?: (id: string) => boolean },
   generate?: () => string,
-): { nodes: WbNode[]; droppedActions: number } {
-  const inside = new Set(nodes.flatMap((node) => collectNodeIds(node)))
+): { nodes: WbNode[]; droppedActions: number; droppedCases: DroppedCases[] } {
+  const pruned = pruneStateCases(nodes, keep.state ?? (() => true))
+  const inside = new Set(pruned.nodes.flatMap((node) => collectNodeIds(node)))
   let droppedActions = 0
 
   const keepAction = (action: InteractionAction): boolean => {
@@ -154,6 +155,46 @@ export function prepareNodesForPaste(
     return next
   }
 
-  const remapped = remapNodeIds(wrap(nodes.map(filter), CURRENT_DOCUMENT_VERSION).root, generate)
-  return { nodes: remapped.root.children ?? [], droppedActions }
+  const remapped = remapNodeIds(wrap(pruned.nodes.map(filter), CURRENT_DOCUMENT_VERSION).root, generate)
+  return { nodes: remapped.root.children ?? [], droppedActions, droppedCases: pruned.dropped }
+}
+
+/** 붙여넣기가 뺀 상태 가지 — 상태 id 마다 수. 통지(«상태 "X" 가지 N개를 뺐습니다»)는 상태 이름을 아는 화면이 짓는다. */
+export interface DroppedCases {
+  state: string
+  count: number
+}
+
+/**
+ * 붙일 노드의 상태 가지를 붙일 페이지에 맞춘다(설계 spec 「페이지 JSON · 프리셋 · 붙여넣기」).
+ *
+ * - 상태 영역 안의 가지 가운데 기본이 아니고 `keepState`가 거짓인 상태(붙일 페이지에 없는 상태)의 가지를 뺀다 — 상태마다 센다.
+ * - 그 뒤 기본 가지가 정확히 하나가 아닌 영역은 **영역째 풀어** 그 자리에 기본 가지의 내용을 둔다(기본 가지가 없으면 남은 첫 가지의 내용,
+ *   가지가 없으면 아무것도). 기본 가지는 빼지 않으므로 검증을 지난 노드에서는 이 갈래가 서지 않는다 — 검증 전 노드(복제 · 프리셋)도
+ *   «기본 가지 정확히 하나»를 깨지 않게 한다.
+ * - 붙일 노드의 맨 위에 선 가지(영역 없이 가지만 고른 판)는 그 내용으로 푼다 — 가지는 영역 밖에 설 수 없다(`state-case-outside`).
+ *
+ * 뺀 가지 안 노드는 상호작용 거르기의 «붙이는 노드» 집합에 들지 않는다 — 그 노드를 가리키던 동작은 밖을 가리키는 동작으로 다뤄진다.
+ */
+function pruneStateCases(nodes: readonly WbNode[], keepState: (id: string) => boolean): { nodes: WbNode[]; dropped: DroppedCases[] } {
+  const counts = new Map<string, number>()
+  const visit = (node: WbNode): WbNode[] => {
+    if (node.type === 'StateSwitch' && Array.isArray(node.children)) {
+      const cases = node.children.filter((child) => {
+        const state = child?.type === 'StateCase' ? child.props?.state : undefined
+        if (typeof state !== 'string' || state === DEFAULT_CASE || keepState(state)) return true
+        counts.set(state, (counts.get(state) ?? 0) + 1)
+        return false
+      })
+      const defaults = cases.filter((child) => child?.type === 'StateCase' && child.props?.state === DEFAULT_CASE)
+      if (defaults.length !== 1) {
+        const content = defaults[0] ?? cases.find((child) => child?.type === 'StateCase')
+        return (content?.children ?? []).flatMap(visit)
+      }
+      return [{ ...node, children: cases.flatMap(visit) }]
+    }
+    return [Array.isArray(node.children) ? { ...node, children: node.children.flatMap(visit) } : node]
+  }
+  const top = nodes.flatMap((node) => (node.type === 'StateCase' ? (node.children ?? []) : [node]))
+  return { nodes: top.flatMap(visit), dropped: [...counts].map(([state, count]) => ({ state, count })) }
 }

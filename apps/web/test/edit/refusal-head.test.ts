@@ -19,7 +19,7 @@ const SERVER_REFUSALS: Record<string, string[]> = {
   'unknown-type': ['알 수 없는 컴포넌트 타입: Bogus', '알 수 없는 컴포넌트 타입: Other'],
   'duplicate-id': ['id가 중복됩니다: n_route000001'],
   'nul-byte': ['문서에 NUL 문자(U+0000)를 포함할 수 없습니다'],
-  'bad-path': ['경로는 /root 아래이거나 /version이어야 합니다'],
+  'bad-path': ['경로는 /root · /viewStates 아래이거나 /version이어야 합니다'],
   'unsupported-version': ['지원하지 않는 문서 버전: 3', '지원하지 않는 문서 버전: 4'],
 }
 
@@ -35,7 +35,7 @@ describe('refusalHead', () => {
       'unknown-type': ['알 수 없는 컴포넌트 타입'],
       'duplicate-id': ['id가 중복됩니다'],
       'nul-byte': ['문서에 NUL 문자'],
-      'bad-path': ['경로는 /root 아래이거나 /version이어야 합니다'],
+      'bad-path': ['경로는 /root · /viewStates 아래이거나 /version이어야 합니다'],
       'unsupported-version': ['지원하지 않는 문서 버전'],
     })
   })

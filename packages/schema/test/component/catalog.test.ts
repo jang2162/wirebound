@@ -8,8 +8,8 @@ describe('컴포넌트 카탈로그', () => {
     installCatalog()
   })
 
-  it('19종을 등록한다', () => {
-    expect(listComponents()).toHaveLength(19)
+  it('21종을 등록한다', () => {
+    expect(listComponents()).toHaveLength(21)
   })
 
   it('CATALOG_TYPES와 등록 결과가 일치한다', () => {
@@ -18,7 +18,7 @@ describe('컴포넌트 카탈로그', () => {
 
   it('두 번 설치해도 중복 등록하지 않는다', () => {
     installCatalog()
-    expect(listComponents()).toHaveLength(19)
+    expect(listComponents()).toHaveLength(21)
   })
 
   it('자식을 담는 컴포넌트만 children이 many다', () => {
@@ -27,7 +27,7 @@ describe('컴포넌트 카탈로그', () => {
       .map((d) => d.type)
       .sort()
     expect(containers).toEqual([
-      'Card', 'EntryForm', 'Flex', 'Grid', 'Page', 'SearchForm', 'Section', 'Tabs',
+      'Card', 'EntryForm', 'Flex', 'Grid', 'Page', 'SearchForm', 'Section', 'StateCase', 'StateSwitch', 'Tabs',
     ])
   })
 

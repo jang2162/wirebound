@@ -38,6 +38,8 @@ describe('validateManifest', () => {
     ['기본값이 타입에 안 맞으면', 'token-default-type', edit((m) => { m.tokens.items['radius.card'].default = 'big' })],
     ['select 기본값이 선택지 밖이면', 'token-select-default', edit((m) => { m.tokens.items.density.default = 'loose' })],
     ['카탈로그에 없는 컴포넌트', 'unknown-component', edit((m) => { m.components.Carousel = m.components.List })],
+    ['테마가 안 그리는 구조', 'themeless-component', edit((m) => { m.components.StateSwitch = m.components.List })],
+    ['테마가 안 그리는 가지', 'themeless-component', edit((m) => { m.components.StateCase = m.components.List })],
     ['variantFrom 컴포넌트에 variants', 'variant-from-component', edit((m) => { m.components.Text = { variants: [{ id: 'a', label: 'a' }], defaultVariant: 'a' } })],
     ['variant id 가 겹치면', 'duplicate-variant', edit((m) => { m.components.List.variants.push({ id: 'table', label: '또' }) })],
     ['defaultVariant 가 목록 밖', 'default-variant-missing', edit((m) => { m.components.List.defaultVariant = 'grid' })],

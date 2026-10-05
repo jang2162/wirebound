@@ -32,9 +32,28 @@ export function referenceApplyOp<T>(doc: T, op: PatchOp): T {
       addAt(next, op.path, moved)
       break
     }
+    case 'test':
+      resolveSlot(next, op.path)
+      if (canonical(getByPointer(next, op.path)) !== canonical(op.value)) {
+        throw new PatchError(`값이 기대와 다릅니다: ${op.path}`, op.path)
+      }
+      break
   }
 
   return next
+}
+
+/** `test`의 같음 — 키를 정렬해 글자로 견준다(제품의 `jsonEqual`과 다른 길). 없는 자리는 어떤 값과도 같지 않다. */
+function canonical(value: unknown): string {
+  if (value === undefined) return '\u0000없음'
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value)
 }
 
 export function referenceApplyOps<T>(doc: T, ops: PatchOp[]): T {
@@ -126,6 +145,8 @@ export function referenceInvertOps<T>(doc: T, ops: PatchOp[]): PatchOp[] {
 
 function inverseOf(doc: unknown, op: PatchOp): PatchOp[] {
   switch (op.op) {
+    case 'test':
+      return []
     case 'add':
       return [inverseOfAdd(doc, op)]
     case 'remove': {

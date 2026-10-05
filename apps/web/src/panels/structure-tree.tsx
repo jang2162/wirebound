@@ -16,7 +16,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { nodeAlias, nodeSummary, type NodeLock, type WbNode } from '@wirebound/schema'
+import { nodeAlias, nodeSummary, type NodeLock, type ViewState, type WbNode } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
 import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { platformOf, type ShortcutLine } from '../edit/editor-shortcuts'
@@ -294,6 +294,8 @@ export function StructureTree(props: {
       <ul className="wb-shell-structure" ref={treeRef}>
         <StructureNode
           node={doc.root}
+          // 상태 가지 줄의 요약이 그 상태 이름을 읽는 목록 — 검증 전 문서라 배열이 아니면 없는 것으로 본다.
+          viewStates={Array.isArray(doc.viewStates) ? doc.viewStates : undefined}
           selectedNodeId={selectedNodeId}
           selected={selectedSet}
           selection={selectedNodeIds.join(',')}
@@ -420,6 +422,8 @@ interface RowWiring {
 /** 노드 한 줄과 그 아래. 트리 자체가 재귀 구조라 컴포넌트도 재귀다. */
 function StructureNode(props: {
   node: WbNode
+  /** 페이지의 상태 목록 — `StateCase` 줄의 요약(상태 이름)을 짓는다. 없으면 상태 가지가 «목록에 없는 상태»로 읽힌다. */
+  viewStates: readonly ViewState[] | undefined
   /** 기준 노드(`aria-current` · 줄 행동이 서는 줄). */
   selectedNodeId: string | null
   /** 고른 노드 전부(기준 노드 포함) — 강조할 줄. */
@@ -454,7 +458,7 @@ function StructureNode(props: {
    * 같은 글 — MCP 가 같은 것을 낸다). 타입을 못 읽는 노드는 요약이 없다.
    */
   const alias = nodeAlias(node)
-  const summary = nodeSummary(node)
+  const summary = nodeSummary(node, props.viewStates)
   /**
    * 줄 글 전부 — 줄 단추의 접근 이름과 같다. **줄 행동(`+` · `…`)의 이름도 이것으로 짓는다** — 타입만으로 지으면 라벨이 «추가»인 Button 줄
    * (`Button 추가`)과 그 줄의 `+`(`Button 추가`)가 같은 이름이 된다.
@@ -616,6 +620,7 @@ function StructureNode(props: {
             <StructureNode
               key={isSelectable(child) ? child.id : `wb-invalid-${index}`}
               node={child}
+              viewStates={props.viewStates}
               selectedNodeId={props.selectedNodeId}
               selected={props.selected}
               selection={props.selection}

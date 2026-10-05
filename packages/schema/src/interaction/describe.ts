@@ -55,10 +55,11 @@
  */
 import { CATALOG_DEFS } from '../component/catalog/index'
 import { getComponent } from '../component/registry'
-import { nodeAlias } from '../display'
+import { nodeAlias, viewStateName } from '../display'
 import type { AnyDocument, Interaction, InteractionAction, InteractionTrigger, WbNode } from '../node'
 import { pageTargetPath } from '../page-target'
 import { walkNodes } from '../tree'
+import { viewStateIndex } from '../view-state'
 
 /** 컴포넌트를 문장에서 부르는 이름과, 그 앞에 붙일 라벨을 담은 prop. */
 export interface ComponentNoun {
@@ -165,8 +166,15 @@ export function describeInteraction(
   source: WbNode,
   interaction: Interaction,
 ): string {
-  const nodes = nodeIndex(document)
-  return sentenceOf(nodes, source, interaction)
+  return sentenceOf(nodeIndex(document), source, interaction)
+}
+
+/**
+ * 노드를 부르는 이름에 붙일 상태 — 상태 영역의 가지 안 노드만(`viewStateIndex`), 이름은 그 문서의 목록에서. 영역 밖 노드는 없다.
+ * 레이아웃에는 목록이 없어 그 안 가지는 «목록에 없는 상태»로 읽힌다.
+ */
+export interface NamingContext {
+  viewStateName?: string
 }
 
 /**
@@ -174,35 +182,55 @@ export function describeInteraction(
  * 둘이 각자 순회하면 순서가 갈릴 수 있다.
  */
 export function listInteractionSentences(document: AnyDocument): InteractionSentence[] {
-  const nodes = nodeIndex(document)
+  const index = nodeIndex(document)
   const out: InteractionSentence[] = []
 
   for (const { node } of walkNodes(document.root)) {
     const interactions = node.interactions
     if (!Array.isArray(interactions)) continue
-    for (const [index, interaction] of interactions.entries()) {
-      out.push({ nodeId: node.id, index, on: interaction.on, text: sentenceOf(nodes, node, interaction) })
+    for (const [at, interaction] of interactions.entries()) {
+      out.push({ nodeId: node.id, index: at, on: interaction.on, text: sentenceOf(index, node, interaction) })
     }
   }
   return out
 }
 
-/** id → 노드. 문장 하나마다 문서를 다시 훑지 않게 한 번 만들어 돌려 쓴다. */
-function nodeIndex(document: AnyDocument): Map<string, WbNode> {
+/**
+ * id → 노드, 그리고 노드의 이름 짓기 맥락(속한 상태의 이름). 문장 하나마다 문서를 다시 훑지 않게 한 번 만들어 돌려 쓴다. 상태 영역이
+ * 없는 문서는 맥락이 비어 이름이 한 글자도 안 바뀐다.
+ */
+interface NodeIndex {
+  nodes: Map<string, WbNode>
+  naming: Map<string, NamingContext>
+}
+
+function nodeIndex(document: AnyDocument): NodeIndex {
   const nodes = new Map<string, WbNode>()
   for (const { node } of walkNodes(document.root)) nodes.set(node.id, node)
-  return nodes
+  return { nodes, naming: namingContexts(document) }
+}
+
+/**
+ * 문서의 노드 id → 이름 짓기 맥락(`NamingContext` — 속한 상태의 이름). 상태 영역 밖 노드는 없다(`get`이 `undefined` — 이름이 한 글자도 안
+ * 바뀐다). **노드를 이름으로 부르는 자리(문장 · 읽기 `pageView` · 화면의 패널 머리 · 대상 고르개 · 번들 코멘트)가 이것을 넘긴다** — 한 자리가
+ * 안 넘기면 같은 노드가 자리마다 다른 이름으로 불린다(K1 리뷰 R4).
+ */
+export function namingContexts(document: AnyDocument): Map<string, NamingContext> {
+  const states = (document as { viewStates?: { id: string; name: string }[] }).viewStates
+  const naming = new Map<string, NamingContext>()
+  for (const [id, state] of viewStateIndex(document.root)) naming.set(id, { viewStateName: viewStateName(states, state) })
+  return naming
 }
 
 function sentenceOf(
-  nodes: ReadonlyMap<string, WbNode>,
+  index: NodeIndex,
   source: WbNode,
   interaction: Interaction,
 ): string {
-  const trigger = `${nodeName(source)} ${TRIGGER_VERBS[interaction.on] ?? interaction.on} 시`
+  const trigger = `${nodeName(source, index.naming.get(source.id))} ${TRIGGER_VERBS[interaction.on] ?? interaction.on} 시`
   const actions = interaction.actions ?? []
   if (actions.length === 0) return `${trigger} 아무 일도 일어나지 않습니다`
-  return `${trigger} ${actions.map((action) => actionClause(nodes, action)).join(', ')}`
+  return `${trigger} ${actions.map((action) => actionClause(index, action)).join(', ')}`
 }
 
 /**
@@ -210,18 +238,19 @@ function sentenceOf(
  * **사라진 노드**(문서에 없는 id). 가운데를 오른쪽과 같은 말로 접으면, 액션을 막 더한
  * 사용자가 *"사라진 노드"*라는 문장을 본다.
  */
-function targetName(nodes: ReadonlyMap<string, WbNode>, target: string): string {
+function targetName(index: NodeIndex, target: string): string {
   if (typeof target !== 'string' || target.trim().length === 0) return UNSET_NODE
-  const node = nodes.get(target)
-  return node === undefined ? MISSING_NODE : nodeName(node)
+  const node = index.nodes.get(target)
+  return node === undefined ? MISSING_NODE : nodeName(node, index.naming.get(node.id))
 }
 
 /** 액션 하나의 절. **5종이 모두 여기 있다** — 유니온이라 빠뜨리면 컴파일러가 잡는다. */
-function actionClause(nodes: ReadonlyMap<string, WbNode>, action: InteractionAction): string {
+function actionClause(index: NodeIndex, action: InteractionAction): string {
+  const nodes = index.nodes
   switch (action.type) {
     case 'setProp': {
       const target = nodes.get(action.target)
-      const name = targetName(nodes, action.target)
+      const name = targetName(index, action.target)
       const known = typeof action.prop === 'string' && action.prop.trim().length > 0
       const label = known ? propLabel(target, action.prop) : UNSET_PROP
       // 「자동 문장화」의 표본이 참인 경우다: *"② 목록이 로딩 상태로 바뀝니다"*.
@@ -244,12 +273,12 @@ function actionClause(nodes: ReadonlyMap<string, WbNode>, action: InteractionAct
       return `${name}의 ${label}${subjectParticle(label)} ${shown}${directionParticle(spoken)} 바뀝니다`
     }
     case 'setVisible': {
-      const name = targetName(nodes, action.target)
+      const name = targetName(index, action.target)
       return `${name}${subjectParticle(name)} ${action.value ? '보입니다' : '숨겨집니다'}`
     }
     case 'switchTab': {
       const target = nodes.get(action.target)
-      const name = targetName(nodes, action.target)
+      const name = targetName(index, action.target)
       const tabName = tabLabel(target, action.tab)
       // **뜻이 없는 번호는 번호로 읽어 주지 않는다** — 그대로 셈하면 `tab: -3`이
       // `-2번째 탭`이 된다. 검증도 같은 값을 `invalid-interaction-prop`으로 잡는다.
@@ -275,8 +304,8 @@ function actionClause(nodes: ReadonlyMap<string, WbNode>, action: InteractionAct
  * **저작 UI의 타겟 목록이 이것을 쓴다** — 목록에서 고른 이름과 문장에 나오는 이름이
  * 갈리면 사용자가 둘을 잇지 못한다. 그래서 이름을 만드는 자리는 여기 하나다.
  */
-export function describeNode(node: WbNode): string {
-  return nodeName(node)
+export function describeNode(node: WbNode, context?: NamingContext): string {
+  return nodeName(node, context)
 }
 
 /**
@@ -285,8 +314,8 @@ export function describeNode(node: WbNode): string {
  * **카탈로그에 없는 타입은 영문 타입 이름을 그대로 쓴다.** 그 노드는 화면에도 폴백으로
  * 그려지고 `unknown-type` 이슈가 따로 붙으므로, 문장이 그것을 숨기지 않는 편이 맞다.
  */
-function nodeName(node: WbNode): string {
-  const named = nodeDisplayName(node)
+function nodeName(node: WbNode, context?: NamingContext): string {
+  const named = nodeDisplayName(node, context)
   const marker = markerOf(node)
   return marker === null ? named : `${marker} ${named}`
 }
@@ -297,8 +326,9 @@ function nodeName(node: WbNode): string {
  *
  * **노드를 이름으로 부르는 자리는 이것을 거친다** — 별칭을 읽는 자리가 여럿이면 한 자리가 타입 이름으로 남는다.
  */
-export function nodeDisplayName(node: WbNode): string {
-  return nodeAlias(node) ?? nounName(node)
+export function nodeDisplayName(node: WbNode, context?: NamingContext): string {
+  const name = nodeAlias(node) ?? nounName(node)
+  return context?.viewStateName === undefined ? name : `'${name}'(${context.viewStateName} 상태)`
 }
 
 function nounName(node: WbNode): string {

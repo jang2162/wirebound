@@ -22,7 +22,7 @@
  */
 import type { PageDocument, WbNode } from './node'
 import { nodeAlias, nodeRowLabel } from './display'
-import { MISSING_NODE_NAME, describeNode, listInteractionSentences, type InteractionSentence } from './interaction/describe'
+import { MISSING_NODE_NAME, describeNode, listInteractionSentences, namingContexts, type InteractionSentence } from './interaction/describe'
 import { pageTargetPath } from './page-target'
 import { walkNodes } from './tree'
 
@@ -109,6 +109,8 @@ export interface PageView {
  * 다시 정렬하면 화면·번들·CLI가 같은 페이지를 다른 순서로 읽는다.
  */
 export function pageView(input: PageViewInput): PageView {
+  // 이름 · 줄 글은 그 노드가 속한 상태를 붙인다(`namingContexts` · 줄 글은 목록의 이름) — 문장(`listInteractionSentences`)과 같은 이름이다.
+  const naming = namingContexts(input.document)
   const nodes = new Map<string, WbNode>()
   const outline: PageViewNode[] = []
   for (const { node, path } of walkNodes(input.document.root)) {
@@ -118,9 +120,9 @@ export function pageView(input: PageViewInput): PageView {
       type: node.type,
       // 포인터의 `/children/` 마디 수가 곧 깊이다 — 순회가 이미 그 값을 문자열로 들고 있다.
       depth: path.split('/children/').length - 1,
-      name: describeNode(node),
+      name: describeNode(node, naming.get(node.id)),
       ...aliasEntry(node),
-      rowLabel: nodeRowLabel(node),
+      rowLabel: nodeRowLabel(node, input.document.viewStates),
       path,
     })
   }
@@ -139,7 +141,7 @@ export function pageView(input: PageViewInput): PageView {
       const node = nodes.get(comment.nodeId)
       return {
         nodeId: comment.nodeId,
-        nodeName: node === undefined ? MISSING_NODE_NAME : describeNode(node),
+        nodeName: node === undefined ? MISSING_NODE_NAME : describeNode(node, naming.get(comment.nodeId)),
         body: comment.body,
         authorName: comment.authorName,
         createdAt: comment.createdAt,

@@ -38,7 +38,7 @@
  *
  * 봉투에 `documentVersion`을 따로 두는 판(`schema`는 root 노드로 두고 키를 하나 더)도
  * 놓고 봤는데, **위 표가 그 축의 집을 *"문서"*라고 적었다** — 봉투로 올리면 축이 섞인다.
- * 그리고 `PUT .../schema`의 본문이 이미 `{ schema: DocumentEnvelopeSchema }`라
+ * 그리고 `PUT .../schema`의 본문이 이미 `{ schema: PageEnvelopeSchema }`라
  * 이 저장소에서 *"`schema` 키 = 문서 봉투"*가 이미 한 번 쓰인 뜻이다.
  *
  * ---
@@ -72,7 +72,7 @@
  * 필드를 만들지 않는다**(적을 값이 없다). 그러므로 왕복에서 이 필드는 살아남지 않는다.
  */
 import { z } from 'zod'
-import { DocumentEnvelopeSchema, NODE_ID_PATTERN } from '../envelope'
+import { NODE_ID_PATTERN, PageEnvelopeSchema } from '../envelope'
 import type { PageDocument } from '../node'
 
 /** 봉투의 버전. 설계서 「페이지 JSON」이 문자열 `"1"`로 적었다. */
@@ -220,7 +220,7 @@ const CommentSchema = z.strictObject({
 export const PageJsonSchema = z.strictObject({
   wireboundVersion: z.string(),
   page: PageSectionSchema,
-  schema: DocumentEnvelopeSchema,
+  schema: PageEnvelopeSchema,
   comments: z.array(CommentSchema),
 })
 

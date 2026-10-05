@@ -270,14 +270,27 @@ describe('좁은 반증 — 번호 꼴 · 실패하는 묶음 · op 종류가 �
     })
   }, 30_000)
 
-  it.each([
-    ['copy', { op: 'copy', from: '/root/children/1', path: '/root/children/0' }],
-    ['test', { op: 'test', path: '/root/children/1/id', value: 'n_b' }],
-  ])('MCP(토큰) — RFC 6902 의 `%s`은 판정에 닿기 전에 400 이다', async (_name, op) => {
+  it('MCP(토큰) — RFC 6902 의 `copy`는 판정에 닿기 전에 400 이다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
-      const status = await viaAgent(ctx, fx, [op as never])
+      const status = await viaAgent(ctx, fx, [{ op: 'copy', from: '/root/children/1', path: '/root/children/0' } as never])
       expect({ status, b: await childrenOfB(fx.page.id) }).toEqual({ status: 400, b: ['n_b1', 'n_b2'] })
+    })
+  }, 30_000)
+
+  /**
+   * **`test`는 받는다 — 잠긴 노드를 재기만 하면 막지 않는다**(`lockConflictOfOps`가 `test`를 아무것도 안 건드린 것으로 센다). 값이 틀리면
+   * 적용 실패(409)이고, 같은 묶음의 쓰기는 그대로 판정된다.
+   */
+  it.each<[string, unknown[], number]>([
+    ['잠긴 `n_b`를 재기만 함 — 맞는 값', [{ op: 'test', path: '/root/children/1/id', value: 'n_b' }], 200],
+    ['잠긴 `n_b`를 재기만 함 — 틀린 값', [{ op: 'test', path: '/root/children/1/id', value: 'n_x' }], 409],
+    ['재고 지움', [{ op: 'test', path: '/root/children/1/id', value: 'n_b' }, { op: 'remove', path: '/root/children/1' }], 423],
+  ])('MCP(토큰) — `test` %s', async (_name, ops, expected) => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const status = await viaAgent(ctx, fx, ops as never)
+      expect({ status, b: await childrenOfB(fx.page.id) }).toEqual({ status: expected, b: ['n_b1', 'n_b2'] })
     })
   }, 30_000)
 })

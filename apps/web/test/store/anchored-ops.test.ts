@@ -3,7 +3,18 @@
  * **노드 id 로 붙잡은 ops 가 바뀐 문서에서 제 노드를 찾아가는가**(`src/store/anchored-ops.ts`). 판은 늘 «내 op 을 만든 문서 → 남이 같은 배열
  * 앞자리를 바꾼 문서»다 — 경로 그대로 얹으면 던지지 않고 **다른 노드**에 얹히는 판이라야 이 장치를 잰다.
  */
-import { applyOps, CURRENT_DOCUMENT_VERSION, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import {
+  addViewStateOps,
+  applyOps,
+  CURRENT_DOCUMENT_VERSION,
+  invertOps,
+  moveViewStateOps,
+  removeViewStateOps,
+  renameViewStateOps,
+  type PageDocument,
+  type PatchOp,
+  type WbNode,
+} from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { anchorOps, rebaseAnchored } from '../../src/store/anchored-ops'
 
@@ -192,5 +203,73 @@ describe('전제가 바뀐 op 은 얹지 않는다', () => {
     // 음성 대조: 자식 줄은 그대로이고 글만 바뀌었으면 얹는다.
     const edited = applyOps(MINE, [{ op: 'replace', path: '/root/children/0/props/content', value: '밥' }])
     expect(rebase(ops, edited)).not.toBeNull()
+  })
+})
+
+describe('상태 목록 — 번호 자리를 상태 id 로 다시 짓는다', () => {
+  const GA = { id: 's_ga', name: '가' }
+  const NA = { id: 's_na', name: '나' }
+  const DA = { id: 's_da', name: '다' }
+  const states = (viewStates: Array<{ id: string; name: string }> | undefined): PageDocument => ({
+    ...doc([text('x')]),
+    ...(viewStates === undefined ? {} : { viewStates }),
+  })
+  const names = (document: PageDocument | undefined) => document?.viewStates?.map((state) => state.name)
+
+  it('남이 순서를 바꾼 뒤 «상태 추가»의 되돌리기는 그 상태를 뺀다 — 남의 상태가 아니라', () => {
+    const before = states([GA])
+    const forward = addViewStateOps(before, '나', () => 's_na')!
+    const mine = applyOps(before, forward)
+    const undo = invertOps(before, forward)
+    const reordered = applyOps(mine, [{ op: 'move', from: '/viewStates/1', path: '/viewStates/0' }])
+    const result = rebase(undo, reordered, mine)
+    expect(result?.ops).toEqual([
+      { op: 'test', path: '/viewStates/0/id', value: 's_na' },
+      { op: 'remove', path: '/viewStates/0' },
+    ])
+    expect(names(result?.document)).toEqual(['가'])
+  })
+
+  it('남이 앞에 넣은 뒤 이름 바꾸기 · 순서 바꾸기는 그 상태의 지금 번호로 간다', () => {
+    const source = states([GA, NA])
+    const front = applyOps(source, [{ op: 'add', path: '/viewStates/0', value: DA }])
+    expect(names(rebase(renameViewStateOps(source, 's_na', '라')!, front, source)?.document)).toEqual(['다', '가', '라'])
+    expect(rebase(moveViewStateOps(source, 's_na', 0)!, front, source)?.ops).toEqual([
+      { op: 'test', path: '/viewStates/2/id', value: 's_na' },
+      { op: 'move', from: '/viewStates/2', path: '/viewStates/0' },
+    ])
+  })
+
+  it('남이 그 상태를 지웠으면 이름 바꾸기는 못 얹는다 — 다음 상태의 이름을 바꾸지 않는다', () => {
+    const source = states([GA, NA, DA])
+    const removed = applyOps(source, [{ op: 'remove', path: '/viewStates/1' }])
+    expect(rebase(renameViewStateOps(source, 's_na', '라')!, removed, source)).toBeNull()
+  })
+
+  it('상태 삭제의 되돌리기(넣을 자리)는 남이 앞에 넣어도 옛 앞 상태 뒤에 선다', () => {
+    const before = states([GA, NA, DA])
+    const forward = removeViewStateOps(before, 's_na')!.ops
+    const mine = applyOps(before, forward)
+    const undo = invertOps(before, forward)
+    const front = applyOps(mine, [{ op: 'add', path: '/viewStates/0', value: { id: 's_ra', name: '라' } }])
+    expect(names(rebase(undo, front, mine)?.document)).toEqual(['라', '가', '나', '다'])
+  })
+
+  it('상태 삭제의 되돌리기는 남이 그 틈에 넣었어도 옛 앞 상태 바로 뒤에 선다 — 뒤 상태 앞이 아니다', () => {
+    const before = states([GA, NA, DA])
+    const forward = removeViewStateOps(before, 's_na')!.ops
+    const mine = applyOps(before, forward)
+    const gap = applyOps(mine, [{ op: 'add', path: '/viewStates/1', value: { id: 's_ra', name: '라' } }])
+    expect(names(rebase(invertOps(before, forward), gap, mine)?.document)).toEqual(['가', '나', '라', '다'])
+  })
+
+  it('두 사람이 동시에 추가 — 끝에 넣기는 둘 다 남고, 없던 목록을 만드는 편집은 남이 먼저 만들었으면 못 얹는다(남의 목록을 덮는다)', () => {
+    const listed = states([GA])
+    const theirs = applyOps(listed, addViewStateOps(listed, '다', () => 's_da')!)
+    expect(names(rebase(addViewStateOps(listed, '나', () => 's_na')!, theirs, listed)?.document)).toEqual(['가', '다', '나'])
+
+    const bare = states(undefined)
+    const created = applyOps(bare, addViewStateOps(bare, '다', () => 's_da')!)
+    expect(rebase(addViewStateOps(bare, '나', () => 's_na')!, created, bare)).toBeNull()
   })
 })

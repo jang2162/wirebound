@@ -19,8 +19,13 @@ import { MAX_OPS_PER_EDIT } from '@wirebound/schema'
 import { z } from 'zod'
 
 /**
- * ops의 경로 제약. `/root`이거나 `/root/`로 시작하거나, 정확히 `/version`이어야 한다.
- * `move`의 `from`도 같은 술어를 쓴다.
+ * ops의 경로 제약. `/root`이거나 `/root/`로 시작하거나, `/viewStates`이거나 `/viewStates/`로 시작하거나, 정확히 `/version`이어야
+ * 한다. `move`의 `from`도 같은 술어를 쓴다.
+ *
+ * **`/viewStates`(페이지의 화면 상태 목록 — `@wirebound/schema`의 `PageDocument.viewStates`)는 노드 밖의 문서 경로다.** 목록의 모양은
+ * 파이프라인 6단계의 봉투 검증(`PageEnvelopeSchema`)이 보고, 잠금 판정은 `/root` 아래 경로끼리만 겹친다(`lockConflictOfOps`) —
+ * 남이 페이지 안 노드를 잡고 있어도 목록 편집은 지나가고, 같은 묶음의 노드 연산은 그대로 판정된다. 레이아웃은 이 라우트로 오지
+ * 않는다.
  *
  * **`/version`을 여는 이유.** 막아 두면 `PUT .../schema`가 만든 revision을 문서화된
  * undo 경로로 되돌릴 수 없다 — 그 경로가 파이프라인에 넘기는 ops는
@@ -42,8 +47,8 @@ import { z } from 'zod'
  *   되돌릴 수 있다"
  *
  * **대가.** `/version`에 관한 한 400(본문이 계약을 어김)과
- * 422(문서 내용이 처리 불가)의 경계가 흐려진다(설계서 「에러 처리」). `/root`·`/version` 둘 다
- * 아닌 경로는 여전히 여기서 400이다.
+ * 422(문서 내용이 처리 불가)의 경계가 흐려진다(설계서 「에러 처리」). `/root`·`/viewStates`·`/version` 어느
+ * 것도 아닌 경로는 여전히 여기서 400이다.
  *
  * 문서 루트 자체(`""`)는 `applyOp`가 애초에 거부한다. 이 제약은 **HTTP 본문에만**
  * 건다 — `PUT .../schema`가 파이프라인을 부를 때 만드는
@@ -52,9 +57,15 @@ import { z } from 'zod'
 export const PatchPath = z
   .string()
   .max(2000, '경로가 너무 깁니다')
-  .refine((path) => path === '/root' || path.startsWith('/root/') || path === '/version', {
-    message: '경로는 /root 아래이거나 /version이어야 합니다',
-  })
+  .refine(
+    (path) =>
+      path === '/root' ||
+      path.startsWith('/root/') ||
+      path === '/viewStates' ||
+      path.startsWith('/viewStates/') ||
+      path === '/version',
+    { message: '경로는 /root · /viewStates 아래이거나 /version이어야 합니다' },
+  )
 
 /**
  * `add`·`replace`가 싣는 임의의 JSON 값. **키 자체가 있어야 한다** — 값 없는 add는
@@ -74,7 +85,7 @@ export const PatchPath = z
 export const PatchValue = z.custom<unknown>((value) => value !== undefined, { message: 'value가 필요합니다' })
 
 /**
- * ops 하나. `@wirebound/schema`의 `PatchOp`(add·remove·replace·move 넷)와 같은
+ * ops 하나. `@wirebound/schema`의 `PatchOp`(add·remove·replace·move·test 다섯)와 같은
  * 모양을 zod로 다시 쓴 것이다 — 그 패키지에는 대응하는 zod 스키마가 없다. 패치
  * 함수들은 이미 신뢰된 입력을 받는 순수 함수이고(브라우저에서도 돈다), 신뢰할 수
  * 없는 입력을 거르는 것은 이 파일의 몫이기 때문이다.
@@ -86,7 +97,11 @@ export const PatchValue = z.custom<unknown>((value) => value !== undefined, { me
  * 컴파일러가 아니라 `undo-redo.test.ts`다(*"세 번 편집한 뒤 inverse를 역순으로 보내면 최초
  * 문서로 정확히 돌아온다"*가 유효한 `move`를 HTTP로 보낸다).
  *
- * 네 종류 밖(예: RFC 6902의 `copy`)은 여기서 400이다. 파이프라인은 op 종류를 검사
+ * **`test`는 상태 목록의 번호 자리에 «아직 그 상태가 있다»를 싣는다**(`@wirebound/schema`의 `guardViewStateOps`) — 맞지 않으면 적용이
+ * 실패해 409 `conflict`다(`http/edit-outcome.ts`의 `patch-failed`). 서버가 짓는 역연산(`inverse`)도 실으므로 되돌리기를 그대로 다시 내는
+ * 클라이언트가 이 연산을 받아야 한다. 경로 술어는 다른 연산과 같다.
+ *
+ * 다섯 종류 밖(예: RFC 6902의 `copy`)은 여기서 400이다. 파이프라인은 op 종류를 검사
  * 하지 않는다 — `applyOp`의 switch가 어느 분기도 타지 않아 문서가 그대로 남으므로,
  * 여기서 막지 않으면 "아무 일도 안 일어났는데 revision만 남는" 편집이 된다.
  */
@@ -95,6 +110,7 @@ export const PatchOpBody = z.discriminatedUnion('op', [
   z.strictObject({ op: z.literal('remove'), path: PatchPath }),
   z.strictObject({ op: z.literal('replace'), path: PatchPath, value: PatchValue }),
   z.strictObject({ op: z.literal('move'), path: PatchPath, from: PatchPath }),
+  z.strictObject({ op: z.literal('test'), path: PatchPath, value: PatchValue }),
 ])
 
 /**

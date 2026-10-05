@@ -48,8 +48,37 @@ declare const documentKind: unique symbol
 export interface PageDocument {
   version: number
   root: WbNode
+  /**
+   * 화면 상태 목록(설계서 「페이지 스키마 노드」의 화면 상태). 없거나 비면 상태가 없는 페이지다 — «기본»은 목록에 없고 늘 있다.
+   * 루트 노드가 아니라 문서에 두는 까닭: 카탈로그의 `states`(컴포넌트의 불리언 상태)와 이름이 겹치지 않고, 목록 편집
+   * (`/viewStates/…`)이 루트 노드 잠금 — 페이지 안의 어떤 잠금과도 조상 관계다 — 에 막히지 않는다(`lock.ts`의 겹침은 `/root`
+   * 아래 경로끼리만 선다). 모양은 봉투(`envelope.ts`의 `ViewStatesSchema`)가 본다.
+   */
+  viewStates?: ViewState[]
   readonly [documentKind]?: 'page'
 }
+
+/** 화면 상태 하나. `id`는 노드 id 와 같은 규칙으로 화면이 짓고 이름을 바꿔도 그대로다. `StateCase.props.state`가 가리키는 값이다. */
+export interface ViewState {
+  id: string
+  name: string
+}
+
+/** 상태 이름 글자 수의 상한(코드 포인트로 센다). */
+export const VIEW_STATE_NAME_MAX = 30
+
+/** 한 페이지의 상태 수 상한. */
+export const VIEW_STATES_MAX = 20
+
+/** 기본 가지의 `StateCase.props.state`. 상태 id 로 쓸 수 없다(봉투가 거절한다). */
+export const DEFAULT_CASE = 'default'
+
+/**
+ * 테마가 그리지 않는 카탈로그 타입 — 렌더러가 직접 다루는 투명 노드다(`StateSwitch`는 가지 하나를, `StateCase`는 자식만 그린다).
+ * 테마 manifest 는 이 타입을 선언할 수 없고(`unknown-component` 와 같은 결 — `packages/themes`의 `checkComponents`) 테마 갤러리 ·
+ * SDK 기본 뷰 · 컴포넌트 팔레트에 서지 않는다. 카탈로그 전부를 도는 인구조사는 이 목록으로 그 둘을 가른다.
+ */
+export const THEMELESS_TYPES: readonly string[] = ['StateSwitch', 'StateCase']
 
 /** 레이아웃 문서. Slot 노드를 정확히 하나 품는다 (설계서 「레이아웃」). */
 export interface LayoutDocument {

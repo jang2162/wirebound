@@ -23,7 +23,7 @@
  * 사람이 *"내가 못 찾은 것"*으로 읽는다 — **화면이 못 보는 것을 세어 적고 화면이 그것을
  * 말하게 한다.**
  */
-import { describeNode, type PageDocument, type WbNode } from '@wirebound/schema'
+import { describeNode, namingContexts, type PageDocument, type WbNode } from '@wirebound/schema'
 import { eachNode } from '../nodes'
 
 /**
@@ -99,11 +99,13 @@ export function commentEntries(
 
   const entries: CommentEntry[] = []
   const inTree = new Set<string>()
+  // 이름은 그 노드가 속한 상태를 붙인다 — 문장 · 화면과 같은 이름(`namingContexts`).
+  const naming = namingContexts(page)
 
   for (const node of eachNode(page.root)) {
     if (typeof node.id !== 'string') continue
     inTree.add(node.id)
-    const label = describeNode(node)
+    const label = describeNode(node, naming.get(node.id))
     const marker = markerOf(node)
     const own = byNode.get(node.id)
     if (own === undefined) {

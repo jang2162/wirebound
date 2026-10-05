@@ -25,6 +25,13 @@ describe('ValidationCode → lint 규칙', () => {
       'bad-root': 'document-invalid',
       'slot-count': 'document-invalid',
       'bad-document': 'document-invalid',
+      // 상태 영역의 구조 — 문서가 규격을 어긴 것이다(목록에 없는 상태의 가지는 검증이 아니라 lint 의 몫).
+      'state-case-default': 'document-invalid',
+      'state-case-duplicate': 'document-invalid',
+      'state-case-outside': 'document-invalid',
+      'state-switch-child': 'document-invalid',
+      // 저장 경계만 낸다(편집 전후) — lint 는 받지 않지만 표는 모든 코드를 덮는다.
+      'state-cases-left': 'document-invalid',
     })
   })
 

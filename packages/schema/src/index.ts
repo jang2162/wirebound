@@ -7,9 +7,31 @@ export type {
   InteractionTrigger,
   LayoutDocument,
   PageDocument,
+  ViewState,
   WbNode,
 } from './node'
-export { NODE_ALIAS_MAX, createNodeId } from './node'
+export {
+  DEFAULT_CASE,
+  NODE_ALIAS_MAX,
+  THEMELESS_TYPES,
+  VIEW_STATE_NAME_MAX,
+  VIEW_STATES_MAX,
+  createNodeId,
+} from './node'
+
+export { replaceDocumentOps } from './document-ops'
+export { caseFor, nodeViewState, viewStateIndex, visibleTree } from './view-state'
+export {
+  addViewStateOps,
+  editInForkOps,
+  forkCaseOps,
+  moveViewStateOps,
+  removeViewStateOps,
+  renameViewStateOps,
+  splitIntoStatesOps,
+  unsplitStatesOps,
+} from './view-state-ops'
+export { guardViewStateOps } from './view-state-guard'
 
 export type { NodeVisit } from './tree'
 export { collectNodeIds, findNode, findNodePath, remapNodeIds, walkNodes } from './tree'
@@ -37,9 +59,16 @@ export { BUILTIN_PRESETS, stripMarkers } from './preset/builtin'
 
 export type { IssueSeverity, ValidationCode, ValidationIssue } from './validate'
 export { ISSUE_SEVERITY, ignoredVariantMessage, partitionIssues } from './validate'
-export { assertValidLayout, assertValidPage, validateLayout, validatePage } from './validate'
+export { assertValidLayout, assertValidPage, checkViewStateRemoval, validateLayout, validatePage } from './validate'
 
-export { DocumentEnvelopeSchema, InteractionSchema, NODE_ID_PATTERN, WbNodeSchema } from './envelope'
+export {
+  DocumentEnvelopeSchema,
+  InteractionSchema,
+  NODE_ID_PATTERN,
+  PageEnvelopeSchema,
+  ViewStatesSchema,
+  WbNodeSchema,
+} from './envelope'
 
 // 설계서 「설계서 화면 구조」의 클립보드 — 노드 봉투 읽기 · 쓰기 · 붙일 노드 짓기. 편집 묶음의 연산 수 상한도 여기 산다
 // (서버 `OpsBody` 와 화면이 같은 값을 읽는다).
@@ -50,6 +79,7 @@ export {
   readNodesEnvelope,
   writeNodesEnvelope,
 } from './clipboard'
+export type { DroppedCases } from './clipboard'
 
 export type {
   ActionProblem,
@@ -59,7 +89,7 @@ export type {
 } from './interaction/check'
 export { checkNodeAction, checkPageAction, isPageTargetAction } from './interaction/check'
 
-export type { ComponentNoun, InteractionSentence } from './interaction/describe'
+export type { ComponentNoun, InteractionSentence, NamingContext } from './interaction/describe'
 export {
   COMPONENT_NOUNS,
   MISSING_NODE_NAME,
@@ -67,9 +97,10 @@ export {
   describeNode,
   describePageTarget,
   listInteractionSentences,
+  namingContexts,
   nodeDisplayName,
 } from './interaction/describe'
-export { nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
+export { UNKNOWN_VIEW_STATE_NAME, caseStateName, viewStateName, nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
 export { hasRejectedAliasChar, isBlankAlias, tidyAlias } from './alias'
 export { SUMMARY_LIST_MAX, SUMMARY_TEXT_MAX } from './component/summary'
 

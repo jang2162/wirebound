@@ -170,6 +170,51 @@ describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () =
     ])
   })
 
+  /**
+   * **패널 머리 · 접근 이름 · 대상 고르개는 문장과 같은 이름이다** — 상태 가지 안 노드는 그 상태를 붙인다(K1 리뷰 R4). 안 붙이면 고르개의
+   * «검색 버튼» 둘(기본 · 관리자)이 같은 글이 된다.
+   */
+  it('상태 가지 안 노드는 패널 머리 · 대상 고르개에서 그 상태를 붙인다', async () => {
+    await openPage({
+      ...pageDoc({
+        id: 'n-root',
+        type: 'Page',
+        children: [
+          {
+            id: 'n-sw',
+            type: 'StateSwitch',
+            children: [
+              { id: 'n-c0', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'n-list', type: 'List' }] },
+              {
+                id: 'n-c1',
+                type: 'StateCase',
+                props: { state: 's_admin' },
+                children: [
+                  {
+                    id: 'n-btn',
+                    type: 'Button',
+                    props: { label: '검색' },
+                    interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+      viewStates: [{ id: 's_admin', name: '관리자' }],
+    })
+    await openInteractionTab()
+    selectNode('Button')
+
+    const section = screen.getByRole('region', { name: "'검색 버튼'(관리자 상태)의 상호작용" })
+    expect(within(section).getByRole('heading', { level: 3 }).textContent).toBe("'검색 버튼'(관리자 상태)")
+    const select = screen.getByLabelText('대상') as HTMLSelectElement
+    const labels = [...select.options].map((option) => option.textContent)
+    expect(labels).toContain("'검색 버튼'(관리자 상태)")
+    expect(labels).toContain("'목록'(기본 상태)")
+  })
+
   /** **`setProp`의 속성도 목록이다** — 카탈로그의 `editor`에서 온다(속성 패널과 같은 출처). */
   it('setProp의 속성은 타겟 컴포넌트의 editor 목록이다', async () => {
     await openWithRule()

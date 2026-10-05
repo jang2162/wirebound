@@ -247,6 +247,11 @@ export function lockConflictOfOps(input: OpsLockConflictInput): NodeLock | null 
         shiftAfterAdd(held, to)
         continue
       }
+      // `test`는 문서를 안 바꾼다 — 잠긴 노드를 건드리지 않는다. 맞지 않으면 적용이 실패하므로 재기만 한다(아래 `catch` — 판정하지 않는 것).
+      if (op.op === 'test') {
+        applyOpInPlace(doc, op)
+        continue
+      }
       const at = canonicalAt(doc, op.path, op.op === 'add')
       const atHit = hit(at)
       if (atHit !== null) return atHit

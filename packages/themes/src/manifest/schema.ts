@@ -1,4 +1,4 @@
-import { getComponent, getKoreanErrorMap, installCatalog } from '@wirebound/schema'
+import { THEMELESS_TYPES, getComponent, getKoreanErrorMap, installCatalog } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { z } from 'zod'
 import { checkPatterns, PatternsSchema } from '../spec/patterns'
@@ -10,6 +10,8 @@ export type ManifestIssueCode =
   | 'unknown-token-ref' | 'token-ref-type' | 'token-ref-cycle' | 'token-default-type' | 'token-select-default'
   | 'unknown-component' | 'variant-from-component' | 'duplicate-variant' | 'default-variant-missing' | 'unknown-hide-prop'
   | 'pattern'
+  /** 테마가 그리지 않는 카탈로그 타입(`THEMELESS_TYPES` — 상태 영역)을 선언했다. 렌더러가 그 노드를 직접 다뤄 선언이 닿을 데가 없다. */
+  | 'themeless-component'
   /** 두 토큰 키가 같은 CSS 변수 이름이 된다(`a.b` · `a-b` → `--wb-a-b`). */
   | 'token-var-collision'
   /** `tokensCss` · `tokenValues` 에 받은 값의 키가 선언에 없다 — manifest 검증은 내지 않는다. */
@@ -124,6 +126,10 @@ function checkComponents(components: NonNullable<ThemeManifest['components']>): 
     const def = getComponent(type)
     if (!def) {
       issues.push({ code: 'unknown-component', path, message: `카탈로그에 없는 컴포넌트입니다: ${type}` })
+      continue
+    }
+    if (THEMELESS_TYPES.includes(type)) {
+      issues.push({ code: 'themeless-component', path, message: `${type} 은 테마가 그리지 않는 구조입니다 — 선언할 수 없습니다` })
       continue
     }
     if (def.variantFrom !== undefined) {

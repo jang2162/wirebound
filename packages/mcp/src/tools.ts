@@ -118,7 +118,7 @@ export const TOOLS: readonly ToolSpec[] = [
         ops: {
           type: 'array',
           description:
-            'RFC 6902 JSON Patch 연산 목록 (add·remove·replace·move·copy·test). 경로는 /root 아래를 가리킵니다 — get_page 응답의 nodes[].path 가 그 포인터입니다.',
+            'RFC 6902 JSON Patch 연산 목록 (add·remove·replace·move·test — copy 는 받지 않습니다). 경로는 /root 아래(get_page 응답의 nodes[].path 가 그 포인터입니다) · 화면 상태 목록 /viewStates 아래 · /version 입니다.',
           items: { type: 'object' },
         },
       },

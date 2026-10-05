@@ -159,7 +159,8 @@ function appliedTouch(board: Board): Touch | null | 'fails' {
         addAt(copy, op.path, moved)
         continue
       }
-      for (const one of locked) note(touchOf(copy, op.path, op.op, one))
+      // `test`는 문서를 안 바꾼다 — 아무것도 건드리지 않는다.
+      if (op.op !== 'test') for (const one of locked) note(touchOf(copy, op.path, op.op, one))
       applyOpInPlace(copy, op)
     }
   } catch {
