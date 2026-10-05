@@ -1,5 +1,5 @@
 import type { ColumnType, Generated, JSONColumnType } from 'kysely'
-import type { LayoutDocument, PageDocument, PatchOp, WbNode } from '@wirebound/schema'
+import type { LayoutDocument, PageDocument, PatchOp, ViewState, WbNode } from '@wirebound/schema'
 import type { SnapshotPayload, ThemeManifest } from '@wirebound/themes'
 
 /**
@@ -269,6 +269,8 @@ export interface PresetsTable {
   name: string
   description: string | null
   schema: JSONColumnType<WbNode[]>
+  /** 저장한 페이지의 화면 상태 목록(`0021-preset-view-states`). `NULL` 이면 목록 없이 저장한 것. */
+  view_states: ColumnType<ViewState[] | null, string | null, string | null>
   created_by: string
   created_at: Generated<Date>
   /** 이 값을 바꾸는 경로가 없다(수정 라우트가 없다). 근거는 0010의 주석에 있다. */

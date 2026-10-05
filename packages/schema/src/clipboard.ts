@@ -7,14 +7,18 @@
  * 봉투:
  *
  * ```jsonc
- * { "wirebound": "nodes", "version": 1, "nodes": [ … ] }   // version — 문서 봉투의 version(마이그레이션 진입점)
+ * { "wirebound": "nodes", "version": 1, "nodes": [ … ], "viewStates": [ … ] }   // version — 문서 봉투의 version(마이그레이션 진입점)
  * ```
+ *
+ * `viewStates` 는 노드를 꺼낸 페이지의 화면 상태 목록이다 — 목록이 있을 때만 싣는다(없는 페이지의 봉투는 그 키가 없는 옛 글자 그대로).
+ * 상태 id 는 페이지 안의 이름이라 다른 페이지에서는 뜻이 없다 — 붙이는 쪽이 뺀 가지를 **출처의 이름으로** 말하는 데만 쓴다(«상태
+ * "관리자" 가지 1개를 뺐습니다»). 가지를 남길지는 붙이는 페이지의 목록으로 가른다(`prepareNodesForPaste` 의 `keep.state`).
  */
 import { z } from 'zod'
-import { DocumentEnvelopeSchema } from './envelope'
+import { DocumentEnvelopeSchema, ViewStatesSchema } from './envelope'
 import { isPageTargetAction } from './interaction/check'
 import { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument, type Migration } from './migrate'
-import { DEFAULT_CASE, type Interaction, type InteractionAction, type PageDocument, type WbNode } from './node'
+import { DEFAULT_CASE, type Interaction, type InteractionAction, type PageDocument, type ViewState, type WbNode } from './node'
 import { collectNodeIds, remapNodeIds } from './tree'
 import { partitionIssues, validatePage } from './validate'
 
@@ -36,6 +40,7 @@ const NodesEnvelopeSchema = z.strictObject({
   wirebound: z.literal(NODES_ENVELOPE_KIND),
   version: z.int().positive(),
   nodes: z.array(z.unknown()).min(1),
+  viewStates: ViewStatesSchema.optional(),
 })
 
 /**
@@ -50,9 +55,13 @@ function wrap(nodes: readonly WbNode[], version: number): PageDocument {
   return { version, root: { id: WRAPPER_ID, type: 'Page', children: [...nodes] } }
 }
 
-/** 노드를 봉투 글자로. `version` 은 그 노드를 꺼낸 문서의 `version` 이다. */
-export function writeNodesEnvelope(nodes: readonly WbNode[], version: number): string {
-  return JSON.stringify({ wirebound: NODES_ENVELOPE_KIND, version, nodes })
+/**
+ * 노드를 봉투 글자로. `version` 은 그 노드를 꺼낸 문서의 `version`, `viewStates` 는 그 문서의 상태 목록이다(머리말 — 비었거나 없으면
+ * 키를 안 싣는다).
+ */
+export function writeNodesEnvelope(nodes: readonly WbNode[], version: number, viewStates?: readonly ViewState[]): string {
+  if (viewStates === undefined || viewStates.length === 0) return JSON.stringify({ wirebound: NODES_ENVELOPE_KIND, version, nodes })
+  return JSON.stringify({ wirebound: NODES_ENVELOPE_KIND, version, nodes, viewStates })
 }
 
 /**
@@ -64,6 +73,10 @@ export function writeNodesEnvelope(nodes: readonly WbNode[], version: number): s
  *   중복 id · 틀린 props · 자식을 못 담는 타입에 자식. `warning`(끊긴 상호작용 대상)은 막지 않는다 — 편집 파이프라인도
  *   막지 않고, 끊긴 대상은 `prepareNodesForPaste` 가 다룬다.
  *
+ * - **맨 위에 선 상태 가지는 받는다**(영역 없이 가지만 고른 복사) — 임시 뿌리 아래라 `state-case-outside` 가 서지만 붙이기가 그
+ *   내용으로 푼다(`prepareNodesForPaste`). 맨 위가 아닌 자리의 영역 밖 가지는 여전히 오류다.
+ * - `viewStates` 는 문서 봉투의 목록 규칙(`ViewStatesSchema`)을 지나야 한다 — 어기면 봉투째 `null`.
+ *
  * **검증을 못 지난 봉투도 «봉투가 아님» 과 같은 `null` 이다** — 화면은 그 둘을 가르지 않고 아무 일도 안 한다
  * (설계서 「설계서 화면 구조」의 클립보드 — 봉투가 아닌 글은 통지도 없다).
  *
@@ -73,7 +86,7 @@ export function readNodesEnvelope(
   text: string,
   migrations: Migration[] = MIGRATIONS,
   target: number = CURRENT_DOCUMENT_VERSION,
-): { nodes: WbNode[] } | null {
+): { nodes: WbNode[]; viewStates?: ViewState[] } | null {
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
@@ -93,9 +106,14 @@ export function readNodesEnvelope(
 
   const checked = DocumentEnvelopeSchema.safeParse(document)
   if (!checked.success) return null
-  if (partitionIssues(validatePage(checked.data)).errors.length > 0) return null
+  const top = new Set((checked.data.root.children ?? []).map((node) => node.id))
+  const errors = partitionIssues(validatePage(checked.data)).errors.filter(
+    (issue) => !(issue.code === 'state-case-outside' && issue.nodeId !== null && top.has(issue.nodeId)),
+  )
+  if (errors.length > 0) return null
 
-  return { nodes: checked.data.root.children ?? [] }
+  const nodes = checked.data.root.children ?? []
+  return envelope.data.viewStates === undefined ? { nodes } : { nodes, viewStates: envelope.data.viewStates }
 }
 
 /**

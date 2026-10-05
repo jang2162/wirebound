@@ -330,7 +330,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/snapshots/:snapshotId` | GET | viewer | — | 200 스냅샷 + `payload`. 남의 프로젝트의 id는 404(존재를 숨긴다) |
 | `/api/projects/:projectId/snapshots/:snapshotId/restore` | POST | **owner** | — | 200 복원 결과(아래 "복원"). **그때로 되돌린다**(설계서 「스냅샷」). 본문이 없다 — 안전망 스냅샷의 태그는 서버가 짓는다. 갈래별 상태는 아래 오류 표 |
 | `/api/projects/:projectId/presets` | GET | viewer | — | 200 프리셋 배열 — **내장 3종이 함께 나온다**(아래 "프리셋 응답 형태"). 내장이 먼저, 그 뒤로 프로젝트 프리셋이 만든 순서대로 |
-| `/api/projects/:projectId/presets` | POST | **editor** | `{ name, schema: WbNode[], description? }` | 201 프리셋. **`schema`는 문서 봉투가 아니라 root의 `children`이다.** `marker`는 저장하며 버린다. 이름 1~60자·설명 0~2000자 밖과 노드 봉투 위반·NUL은 400. **이름 중복은 오류가 아니다** |
+| `/api/projects/:projectId/presets` | POST | **editor** | `{ name, schema: WbNode[], description?, viewStates? }` | 201 프리셋. **`schema`는 문서 봉투가 아니라 root의 `children`이다.** `marker`는 저장하며 버린다. `viewStates` 는 저장한 페이지의 화면 상태 목록(페이지 봉투와 같은 목록 규칙). 이름 1~60자·설명 0~2000자 밖과 노드 봉투 위반·목록 규칙 위반·NUL은 400. **이름 중복은 오류가 아니다** |
 | `/api/projects/:projectId/presets/:presetId` | DELETE | **editor** | — | 204. 없는 id·남의 프로젝트의 id는 404, **내장 id(`builtin:…`)는 400**(경로가 uuid를 요구한다) |
 | `/api/projects/:projectId/export/preview` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — **내려받기 전에 화면이 말할 것**(아래 "내보내기"). **형식마다 답이 다르다**: html은 `{ format, pages, duplicateTargets, brokenLinks, errors, themeId, fileName }`, pptx는 `{ format, pages, screenless, screenFailures, fontWarning, fileName }`. 페이지가 없으면 409, 모르는 형식은 400, 내보내기가 밀려 있으면 503 + `Retry-After` |
 | `/api/projects/:projectId/export` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — html이면 `application/zip`(설계서 「HTML 정적 번들」), pptx면 `application/vnd.openxmlformats-officedocument.presentationml.presentation`(설계서 「로드맵」). 이름은 `Content-Disposition`에만 있다. 페이지가 없으면 409, 모르는 형식은 400, 내보내기가 밀려 있으면 503 + `Retry-After` |
@@ -1282,8 +1282,8 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 
 | `source` | `id` | 키 |
 |---|---|---|
-| `"builtin"` | `builtin:<키>`(`builtin:search-list` 등) | `id` · `source` · `name` · `description` · `nodes` |
-| `"project"` | uuid | 위의 다섯 + `createdBy` · `createdByName` · `createdAt` |
+| `"builtin"` | `builtin:<키>`(`builtin:search-list` 등) | `id` · `source` · `name` · `description` · `nodes` · `viewStates` |
+| `"project"` | uuid | 위의 여섯 + `createdBy` · `createdByName` · `createdAt` |
 
 **내장 항목에 `createdBy`를 `null`로 싣지 않는다** — 없는 값을 `null`로 말하면 받는 쪽이
 *"만든 사람이 지워졌다"*와 가르지 못한다.
@@ -1294,6 +1294,11 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 트리라 목록이 이미 나르는 것과 같고, 고른 직후 적용하는 화면이 그것을 반드시 쓴다.
 
 **상세 엔드포인트가 없다.** 목록이 `nodes`를 함께 내므로 고른 뒤 다시 물을 것이 없다.
+
+**`viewStates` 는 늘 실린다** — 저장한 페이지의 화면 상태 목록(`presets.view_states` — `0021-preset-view-states`)이고, 목록 없이 저장한
+프리셋 · 내장은 빈 목록이다. 노드의 상태 가지(`StateCase`)가 상태 id 로 그 목록을 가리킨다. 적용은 화면이 한다 — 페이지의 목록을
+지우지 않고 프리셋의 상태를 잇는다(같은 id 는 그대로 · 같은 이름은 페이지의 상태로 · 나머지는 끝에 더함, 20개 한도). 잇지 못한 상태의
+가지는 빼고 말한다(`apps/web/src/edit/preset-apply.ts` 의 `mergeViewStates`).
 
 #### 저장은 `marker`를 버리고 id는 그대로 담는다
 

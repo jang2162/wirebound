@@ -80,6 +80,64 @@
 하나가 끝나 새 `headSeq`를 받고 **나서** 다음을 불러라. 읽기(`list_pages`·`get_page`·
 `validate`)는 겹쳐도 된다.
 
+## 화면 상태를 다룰 때
+
+같은 페이지가 상황(권한 · 로그인 · 데이터 유무)에 따라 다른 화면을 보이면 설계서는 **화면 상태**로 적는다. 상태 목록은 문서의
+`viewStates`(`{ id, name }` 배열)이고, «기본»은 목록에 없이 늘 있다. 상태마다 다른 영역은 노드 둘이 감싼다.
+
+| 노드 | 자식 | 필드 |
+|---|---|---|
+| `StateSwitch`(상태 영역) | `StateCase` 만 | 없음 |
+| `StateCase`(상태 가지) | 평범한 노드 | `props.state` — `"default"` 또는 상태 id |
+
+- 영역마다 `default` 가지가 **정확히 하나**, 한 상태의 가지는 **많아야 하나**다. `StateCase` 는 `StateSwitch` 바로 아래에만 선다. 어기면 422 다.
+- 그 상태의 가지가 없는 영역은 그 상태에서 기본 가지를 그린다 — 다른 것만 가지로 둔다.
+- `get_page` 의 `page.viewStates` 가 목록이고, `nodes[].viewState`(`{ id, name }`)가 그 노드가 속한 상태다(가지와 그 안 노드만 —
+  영역 밖은 모든 상태에 있다). `nodes[].name` 도 «'승인 버튼'(관리자 상태)»처럼 상태를 단다.
+- 상태 전용 도구는 없다. **`patch_page` 의 JSON Patch 로 고친다** — 아래 꼴대로.
+- id 는 노드 id 와 같은 글자(영문 · 숫자 · `_` · `-`, 64자까지)로 네가 짓는다. 문서 안의 다른 id 와 겹치면 안 된다.
+
+**나누기** — 노드 하나를 영역으로 감싼다. 그 자리에 영역(기본 가지는 빈 채)을 넣고, 노드를 기본 가지로 옮긴다(아래는 `/root/children/1`
+의 노드). 한 묶음이라 편집 하나다.
+
+<!-- wirebound:example split -->
+```json
+[
+  { "op": "add", "path": "/root/children/1", "value": { "id": "n_sw_approve", "type": "StateSwitch", "children": [{ "id": "n_case_default", "type": "StateCase", "props": { "state": "default" }, "children": [] }] } },
+  { "op": "move", "from": "/root/children/2", "path": "/root/children/1/children/0/children/0" }
+]
+```
+
+**상태 더하기와 그 상태의 가지** — 목록이 **없으면** `/viewStates` 를 배열째 `add`, **있으면** `/viewStates/-` 로 끝에 더한다(목록이
+있는데 `/viewStates` 를 통째로 `add` 하면 남의 목록을 덮는다). 이름은 앞뒤 공백 없는 1 ~ 30자 · 페이지 안에서 겹치지 않음 · 많아야 20개.
+가지는 영역의 `children` 끝에 넣는다.
+
+<!-- wirebound:example add-state -->
+```json
+[
+  { "op": "add", "path": "/viewStates", "value": [{ "id": "s_admin", "name": "관리자" }] },
+  { "op": "add", "path": "/root/children/1/children/-", "value": { "id": "n_case_admin", "type": "StateCase", "props": { "state": "s_admin" }, "children": [{ "id": "n_approve_admin", "type": "Button", "props": { "label": "승인" } }] } }
+]
+```
+
+**이름 바꾸기 · 순서 바꾸기 · 지우기** — 목록의 자리(`/viewStates/<i>`)를 고치는 연산 앞에 `test /viewStates/<i>/id` 를 둔다. 그 사이 남이
+순서를 바꿨으면 409 로 막혀 남의 상태를 고치지 않는다. **상태를 지울 때는 그 상태의 가지를 같은 묶음에서 함께 지운다** — 목록에서만 빼면
+422 `state-cases-left` 다.
+
+<!-- wirebound:example remove-state -->
+```json
+[
+  { "op": "remove", "path": "/root/children/1/children/1" },
+  { "op": "test", "path": "/viewStates/0/id", "value": "s_admin" },
+  { "op": "remove", "path": "/viewStates/0" }
+]
+```
+
+**풀기** — 기본 가지의 자식을 영역 자리로 옮기고 영역을 지운다. 다른 가지는 영역과 함께 사라진다.
+
+`validate` 는 목록에 없는 상태를 가리키는 가지(`warning`) · 가지가 하나도 없는 상태(`info`) · 영역 안의 영역(`info`)을 말한다. `info` 는
+결함이 아니다 — `infos` 로 따로 센다.
+
 ## 회신할 때 (`add_comment`)
 
 **코멘트가 문서를 바꾼다.** 번호가 없던 노드에 첫 코멘트를 달면 서버가 번호(`marker`)를

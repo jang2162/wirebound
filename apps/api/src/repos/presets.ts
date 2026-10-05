@@ -8,7 +8,7 @@
  * 조인을 하는 이유와 같다: 목록이 *"누가 남긴 것인가"*를 그리려면 uuid만으로는 안 된다.
  */
 import { sql } from 'kysely'
-import type { WbNode } from '@wirebound/schema'
+import type { ViewState, WbNode } from '@wirebound/schema'
 import { assertLocking } from '../db/locking'
 import { containsNulByte } from '../db/nul-guard'
 import type { DbHandle } from '../db/tx'
@@ -36,6 +36,8 @@ export interface PresetRecord {
   name: string
   description: string | null
   nodes: WbNode[]
+  /** 저장한 페이지의 화면 상태 목록. 목록 없이 저장했으면 빈 목록이다(`NULL` 을 읽은 것). */
+  viewStates: ViewState[]
   createdBy: string
   createdByName: string
   createdAt: Date
@@ -47,6 +49,7 @@ interface PresetRow {
   name: string
   description: string | null
   schema: WbNode[]
+  view_states: ViewState[] | null
   created_by: string
   created_by_name: string
   created_at: Date
@@ -62,6 +65,7 @@ function selectPresets(db: DbHandle) {
       'presets.name',
       'presets.description',
       'presets.schema',
+      'presets.view_states',
       'presets.created_by',
       'presets.created_at',
       sql<string>`users.name`.as('created_by_name'),
@@ -75,6 +79,7 @@ function toRecord(row: PresetRow): PresetRecord {
     name: row.name,
     description: row.description,
     nodes: row.schema,
+    viewStates: row.view_states ?? [],
     createdBy: row.created_by,
     createdByName: row.created_by_name,
     createdAt: row.created_at,
@@ -96,10 +101,17 @@ export async function insertPreset(
     name: string
     description: string | null
     nodes: WbNode[]
+    /** 없거나 빈 목록이면 `NULL` 로 담는다 — 목록 없이 저장한 것과 같다. */
+    viewStates?: ViewState[]
     createdBy: string
   },
 ): Promise<PresetRecord> {
-  if (containsNulByte(input.name) || containsNulByte(input.description) || containsNulByte(input.nodes)) {
+  if (
+    containsNulByte(input.name) ||
+    containsNulByte(input.description) ||
+    containsNulByte(input.nodes) ||
+    containsNulByte(input.viewStates ?? null)
+  ) {
     throw new PresetNulByteError()
   }
 
@@ -111,6 +123,7 @@ export async function insertPreset(
         name: input.name,
         description: input.description,
         schema: JSON.stringify(input.nodes),
+        view_states: input.viewStates === undefined || input.viewStates.length === 0 ? null : JSON.stringify(input.viewStates),
         created_by: input.createdBy,
       })
       .returning('id')

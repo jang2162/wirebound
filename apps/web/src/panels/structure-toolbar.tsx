@@ -37,7 +37,7 @@
  * 몇 가지 깨진 형태까지다.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
-import type { NodeLock, PatchOp, WbNode } from '@wirebound/schema'
+import type { NodeLock, PatchOp, ViewState, WbNode } from '@wirebound/schema'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { createNode } from '../edit/create-node'
@@ -48,7 +48,7 @@ import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, regionRulesAt, selectionAbilities, type StructureAbilities } from '../edit/structure-actions'
 import { nonDefaultCase, removeCasePlan, splitPlan, SPLIT_PICK_REASON, unsplitKey, unsplitPlan, type UnsplitShown } from '../edit/view-state-actions'
 import { useViewState } from '../shell/use-view-state'
-import { removeManyOps } from '../edit/paste-ops'
+import { droppedCasesNotice, removeManyOps } from '../edit/paste-ops'
 import type { StructureDrop } from '../edit/structure-drop'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { PatternPicker } from './pattern-picker'
@@ -132,7 +132,7 @@ export interface StructureCommands {
    * *"어디에 꽂나"*가 아니라 *"무엇을 치우고 놓나"*다. 판정과 op 만들기는
    * `edit/preset-apply.ts`가 갖는다(`pickPattern`과 같은 이유).
    */
-  applyPreset: (nodes: WbNode[]) => void
+  applyPreset: (nodes: WbNode[], viewStates: readonly ViewState[]) => void
   cancelAdd: () => void
   /**
    * **끌어 놓은 자리로 옮긴다**(`edit/structure-drop.ts`의 `structureDropTarget`이 준 자리). 선택이 아니라 끈 노드에 대해 돈다 —
@@ -485,18 +485,21 @@ export function useStructureCommands(props: {
    * **문장은 순수 함수가 만든다**(`presetFailureNotice`) — 컴포넌트 안에서 만들면
    * *"콜론 뒤가 빈 문장"* 같은 결함이 화면을 지나야만 도달해 케이스를 쓸 수 없다.
    */
-  function applyPreset(nodes: WbNode[]): void {
+  function applyPreset(nodes: WbNode[], viewStates: readonly ViewState[]): void {
     setAdding(null)
     if (document === null) return
 
-    const attempt = presetApply(document, nodes)
+    const attempt = presetApply(document, nodes, undefined, viewStates)
     if (attempt.apply === null) {
       store.setEditFailure({ kind: 'message', message: presetFailureNotice(attempt) })
       return
     }
 
     // **여기부터는 평범한 편집이다** — undo·낙관적 적용·경고 표시가 그대로 따라온다.
-    if (commitOps(attempt.apply.ops)) store.selectNode(attempt.apply.selectId)
+    if (!commitOps(attempt.apply.ops)) return
+    store.selectNode(attempt.apply.selectId)
+    // 페이지 목록에 못 더한 상태(20개 한도) · 목록 없이 저장된 프리셋의 외래 가지를 뺐으면 붙이기와 같은 문장으로 말한다.
+    if (attempt.droppedCases.length > 0) store.setEditFailure({ kind: 'message', message: droppedCasesNotice(attempt.droppedCases, viewStates) })
   }
 
   /** 선택 노드의 **마지막 자식**으로. `children`이 없으면 0이고 `insertNodeOps`가 배열째 만든다. */
@@ -822,6 +825,8 @@ export function StructurePicker(props: {
    * **문서 봉투가 아니다**. 문서를 못 읽었으면 `null`이다.
    */
   currentNodes: readonly WbNode[] | null
+  /** 지금 페이지의 화면 상태 목록 — 프리셋 저장이 함께 담는다. */
+  currentViewStates: readonly ViewState[]
   presetName: string
   onPresetNameChange: (name: string) => void
 }): ReactElement | null {
@@ -873,6 +878,7 @@ function PickerBox(props: Parameters<typeof StructurePicker>[0] & { picker: Open
           projectId={props.projectId}
           pageId={props.pageId}
           currentNodes={props.currentNodes}
+          currentViewStates={props.currentViewStates}
           name={props.presetName}
           onNameChange={props.onPresetNameChange}
           onApply={commands.applyPreset}

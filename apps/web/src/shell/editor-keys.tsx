@@ -31,6 +31,7 @@ import {
   readNodesEnvelope,
   writeNodesEnvelope,
   type TargetedPage,
+  type ViewState,
   type WbNode,
 } from '@wirebound/schema'
 import { useApi } from '../api/context'
@@ -40,6 +41,7 @@ import {
   PASTE_LEFT_NOTICE,
   PASTE_PAGES_FAILURE,
   droppedActionsNotice,
+  droppedCasesNotice,
   duplicateOps,
   hasPageTargets,
   pageTargetsOf,
@@ -134,7 +136,8 @@ export function EditorKeys(props: {
   const copySelected = (): string | null => {
     if (doc === null || selectedNodeIds.length === 0 || selectedNodeIds.includes(doc.root?.id)) return null
     const nodes = selectedNodeIds.map((id) => findNodeSafely(doc.root, id)).filter((node): node is WbNode => node !== undefined)
-    return nodes.length === 0 ? null : writeNodesEnvelope(nodes, doc.version)
+    // 상태 목록을 함께 싣는다 — 붙이는 쪽이 뺀 가지를 이 페이지의 이름으로 말한다(`readNodesEnvelope` 머리말).
+    return nodes.length === 0 ? null : writeNodesEnvelope(nodes, doc.version, Array.isArray(doc.viewStates) ? doc.viewStates : undefined)
   }
 
   /** 여럿을 고른 판에서 하나일 때만 되는 키(순서 · 계층 · 화살표 고르기)를 눌렀다 — 끈 채 이유를 말한다. */
@@ -156,6 +159,7 @@ export function EditorKeys(props: {
   const finishPaste = (
     pageId: string,
     nodes: readonly WbNode[],
+    sourceStates: readonly ViewState[] | undefined,
     pages: readonly TargetedPage[] | null,
     anchor: string | null,
     pressed?: EditFailure | null,
@@ -167,9 +171,12 @@ export function EditorKeys(props: {
         ? say
         : (message: string) => (store.getState().editFailure !== pressed && store.showsLoss() ? tellPasteLoss(message) : say(message))
     const at = anchor !== null && findNodeSafely(document.root, anchor) !== undefined ? anchor : null
+    // 붙이는 페이지의 목록에 없는 상태의 가지는 뺀다(설계서 「설계서 화면 구조」 클립보드 · 화면 상태) — 상태 id 로 가른다.
+    const states = new Set((Array.isArray(document.viewStates) ? document.viewStates : []).map((state) => state.id))
     const prepared = prepareNodesForPaste(nodes, {
       node: (id) => findNodeSafely(document.root, id) !== undefined,
       page: (target) => pages !== null && matchPageTargets(pages, target).length > 0,
+      state: (id) => states.has(id),
     })
     if (at !== null && at !== document.root?.id) {
       const lock = store.lockedBy(at)
@@ -180,7 +187,11 @@ export function EditorKeys(props: {
     }
     const commitOps = (ops: Parameters<typeof history.commitOps>[0]): boolean => live.current.commitOps(ops, { pressed })
     if (!commitInsert(pasteOps(document, at, prepared.nodes), commitOps, tell)) return
-    if (prepared.droppedActions > 0) tell(droppedActionsNotice(prepared.droppedActions))
+    const dropped = [
+      ...(prepared.droppedCases.length > 0 ? [droppedCasesNotice(prepared.droppedCases, sourceStates)] : []),
+      ...(prepared.droppedActions > 0 ? [droppedActionsNotice(prepared.droppedActions)] : []),
+    ]
+    if (dropped.length > 0) tell(dropped.join(' '))
   }
 
   /** 붙이지 못했다는 말 — 잃음의 조각으로 앞 잃음 뒤에 잇는다(`EditorStore.tellLoss`). 같은 문장은 한 조각이다. */
@@ -195,7 +206,7 @@ export function EditorKeys(props: {
     if (pageId === undefined) return true
     const anchor = store.getState().selectedNodeId
     if (!hasPageTargets(read.nodes)) {
-      finishPaste(pageId, read.nodes, null, anchor)
+      finishPaste(pageId, read.nodes, read.viewStates, null, anchor)
       return true
     }
     // 페이지 대상이 있으면 지금 프로젝트의 페이지 목록으로 가늠한다 — 이 화면에 목록을 든 곳이 메뉴 트리뿐이라(그 훅의 상태) 다시 읽는다.
@@ -207,7 +218,7 @@ export function EditorKeys(props: {
     const pressed = store.getState().editFailure
     void api.getTree(props.projectId).then(
       (menu) => {
-        if (store.pageOpenEpoch() === opened) finishPaste(pageId, read.nodes, pageTargetsOf(menu), anchor, pressed)
+        if (store.pageOpenEpoch() === opened) finishPaste(pageId, read.nodes, read.viewStates, pageTargetsOf(menu), anchor, pressed)
         else tellPasteLoss(PASTE_LEFT_NOTICE)
       },
       () => tellPasteLoss(store.pageOpenEpoch() === opened ? PASTE_PAGES_FAILURE : PASTE_LEFT_NOTICE),

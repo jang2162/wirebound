@@ -9,9 +9,10 @@
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { BUILTIN_PRESETS, applyOps, invertOps, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { BUILTIN_PRESETS, applyOps, invertOps, partitionIssues, validatePage, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { Comment, PageDetail, PatchResult, Preset } from '../../src/api/types'
+import { droppedCasesNotice } from '../../src/edit/paste-ops'
 import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
 import { treeTool, structureRowName, structureRowType } from './tree-row'
@@ -62,7 +63,7 @@ const EMPTY_PRESET: Preset = {
 
 interface Server {
   calls: { ops: PatchOp[]; baseSeq: number }[]
-  created: { name: string; schema: unknown }[]
+  created: { name: string; schema: unknown; viewStates?: unknown }[]
   listCalls: number
   api: Partial<ApiClient>
 }
@@ -99,7 +100,7 @@ function server(
   } = {},
 ): Server {
   const calls: { ops: PatchOp[]; baseSeq: number }[] = []
-  const created: { name: string; schema: unknown }[] = []
+  const created: { name: string; schema: unknown; viewStates?: unknown }[] = []
   const state = {
     seq: HEAD_SEQ,
     held: options.document ?? doc(),
@@ -146,7 +147,7 @@ function server(
   }
 
   const createPreset: ApiClient['createPreset'] = async (_projectId, body) => {
-    created.push({ name: body.name, schema: body.schema })
+    created.push({ name: body.name, schema: body.schema, ...(body.viewStates === undefined ? {} : { viewStates: body.viewStates }) })
     const record: Preset = {
       id: `44444444-4444-4444-8444-44444444444${created.length}`,
       source: 'project',
@@ -773,5 +774,63 @@ describe('단축키 — 판정 없는 조작', () => {
     fireEvent.keyDown(keyTarget(), { code: 'KeyP', altKey: true })
 
     expect(screen.queryByRole('group', { name: '프리셋 고르기' })).toBeNull()
+  })
+})
+
+/**
+ * **화면 상태**(설계 spec 「페이지 JSON · 프리셋 · 붙여넣기」) — 저장이 페이지의 상태 목록을 함께 보내고, 적용이 프리셋의 목록을 페이지
+ * 목록에 잇는다. 잇는 규칙의 칸마다는 `test/edit/preset-apply-view-states.test.ts` 가 잰다 — 여기는 셸이 그 둘을 잇는지와 통지다.
+ */
+describe('화면 상태', () => {
+  const ADMIN = { id: 's_admin', name: '관리자' }
+  const stateArea = (states: string[]) => ({
+    id: 'p_sw',
+    type: 'StateSwitch',
+    children: [{ id: 'p_cd', type: 'StateCase', props: { state: 'default' }, children: [] }, ...states.map((state, index) => ({ id: `p_c${index}`, type: 'StateCase', props: { state }, children: [] }))],
+  })
+
+  it('저장이 페이지의 상태 목록을 함께 보낸다', async () => {
+    const withStates: PageDocument = { ...doc(), viewStates: [ADMIN] }
+    const backend = server({ document: withStates })
+    await openPage(withStates, { apiOverrides: backend.api })
+    await openPicker()
+    fireEvent.change(screen.getByLabelText('프리셋 이름'), { target: { value: '상태 화면' } })
+    fireEvent.click(pickerButton('현재 페이지를 프리셋으로 저장'))
+    await waitFor(() => expect(backend.created).toHaveLength(1))
+    expect(backend.created[0]!.viewStates).toEqual([ADMIN])
+  })
+
+  it('카나리아 — 상태가 없는 페이지의 저장은 목록 키를 안 싣는다', async () => {
+    const backend = server()
+    await openPage(doc(), { apiOverrides: backend.api })
+    await openPicker()
+    fireEvent.change(screen.getByLabelText('프리셋 이름'), { target: { value: '상태 없음' } })
+    fireEvent.click(pickerButton('현재 페이지를 프리셋으로 저장'))
+    await waitFor(() => expect(backend.created).toHaveLength(1))
+    expect('viewStates' in backend.created[0]!).toBe(false)
+  })
+
+  it('적용이 프리셋의 상태 목록을 페이지에 싣는다 — 편집 하나 · 검증 오류 0', async () => {
+    const preset: Preset = { ...PROJECT_PRESET, nodes: [stateArea(['s_admin'])], viewStates: [ADMIN] }
+    const backend = server({ presets: [preset] })
+    await openPage(doc(), { apiOverrides: backend.api })
+    await openPicker()
+    await applyPreset(preset.id)
+    await waitFor(() => expect(backend.calls).toHaveLength(1))
+    const after = applyOps(doc(), backend.calls[0]!.ops)
+    expect(after.viewStates).toEqual([ADMIN])
+    expect(after.root.children![0]!.children!.map((child) => child.props?.state)).toEqual(['default', 's_admin'])
+    expect(partitionIssues(validatePage(after)).errors).toEqual([])
+  })
+
+  it('목록 없이 저장된 프리셋의 가지 가운데 페이지에 없는 상태의 것을 빼고 말한다', async () => {
+    const preset: Preset = { ...PROJECT_PRESET, nodes: [stateArea(['s_gone'])] }
+    const backend = server({ presets: [preset] })
+    await openPage(doc(), { apiOverrides: backend.api })
+    await openPicker()
+    await applyPreset(preset.id)
+    await waitFor(() => expect(backend.calls).toHaveLength(1))
+    await waitFor(() => expect(alertText()).toBe(droppedCasesNotice([{ state: 's_gone', count: 1 }], [])))
+    expect(alertText()).toBe('상태 "s_gone" 가지 1개를 뺐습니다.')
   })
 })

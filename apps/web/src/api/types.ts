@@ -9,7 +9,7 @@
  * 예외는 `PageDetail.schema`다. 문서 스키마는 서버가 아니라 `@wirebound/schema`가
  * 소유하는 단일 진실이므로 그 타입을 그대로 쓴다.
  */
-import type { PageDocument, PatchOp, ValidationIssue, WbNode } from '@wirebound/schema'
+import type { PageDocument, PatchOp, ValidationIssue, ViewState, WbNode } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 
 /** 프로젝트 멤버의 역할. `owner` > `editor` > `viewer`(README "권한(역할)"). */
@@ -382,6 +382,11 @@ export interface Preset {
   name: string
   description: string | null
   nodes: WbNode[]
+  /**
+   * 저장한 페이지의 화면 상태 목록 — 노드의 상태 가지가 가리킨다. 서버는 늘 싣지만(없으면 빈 목록) 이 칸 전의 서버는 안 실으므로 없을 수
+   * 있다 — 그때는 목록 없이 저장된 프리셋과 같다(적용이 페이지에 없는 상태의 가지를 뺀다).
+   */
+  viewStates?: ViewState[]
 }
 
 export interface SnapshotSummary {
