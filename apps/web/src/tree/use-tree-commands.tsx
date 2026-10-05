@@ -67,11 +67,12 @@ const RENAME_SLOT = 'tree/rename'
  */
 const TREE_FAILURE = { name: 'tree/failure' }
 const TREE_CONFLICT = { name: 'tree/conflict' }
-/** 트리 칸 하나를 세운다 — `at`은 그 값을 낸 조회의 순서 번호다(`issueTreeRead`). */
+/** 트리 칸 하나를 세운다 — `at`은 그 값을 낸 조회의 순서 번호(`issueTreeRead`), `rev`는 그 답의 판 번호다(실패면 없다). */
 const TREE_STATE = { name: 'tree/state' }
 interface TreeStateUpdate {
   at: number
   state: TreeLoadState
+  rev?: number
 }
 /** 매달린 내 제목 하나를 고친다 — `titles`가 `null`이면 지운다. */
 const TREE_HANGING = { name: 'tree/hanging' }
@@ -94,6 +95,16 @@ const RENAME_GONE = '응답이 없어 서버를 다시 읽었더니 그 항목�
  * 에디터 안의 다른 프로젝트에 가 있던 경우에 거짓이 된다). 설명의 «이 페이지를 떠나 있는 동안 저장하지 못했습니다»(`pending-notice.tsx`)와 같은 결이다.
  */
 const RENAME_MISSED = '이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다'
+
+/**
+ * **트리가 바뀌어 사라진 항목에 열려 있던 입력을 닫았다** — 친 글이 있었을 때만 하단 바에 선다(`reconcile`). 누가 지웠는지 말하지 않는다 —
+ * 같은 사람의 다른 탭 · 복원도 같은 신호다(`shell/remote-alert.tsx`의 `NOTICE`와 같은 판정).
+ */
+export const TREE_DRAFT_DROPPED = '그 항목이 트리에서 사라져 친 이름을 쓰지 않았습니다'
+/** 연쇄 삭제 상자가 가리키던 메뉴가 트리에서 사라져 상자를 닫았다(`reconcile`). */
+export function cascadeClosedNotice(title: string): string {
+  return `"${title}" 메뉴가 트리에서 사라져 삭제 상자를 닫았습니다`
+}
 
 /**
  * **트리 조회를 낸 순서**. 트리 칸은 **늦게 낸 조회의 답만** 받는다(`newer`) — 도착 순서가 아니다.
@@ -147,6 +158,13 @@ export interface TreeCommands {
   /** Enter로 확정. 빈 문자열이면 아무것도 하지 않는다. */
   submitInput: (title: string) => void
   cancelInput: () => void
+  /** 입력에 친 글 — 칠 때마다. 다시 받은 트리가 그 입력의 대상을 지우면 친 글이 있었는지를 이것으로 안다(`reconcile`). */
+  typeInput: (value: string) => void
+  /**
+   * 입력이 설 때의 값 — 친 글이 있으면 그것, 없으면 `editing.initial`. **입력은 다시 마운트될 수 있다** — 남이 그 줄을 다른 부모로
+   * 옮기면 React 가 줄째 새로 그려 입력도 새로 선다. 시작 값을 `editing.initial`로 주면 친 글이 연 순간의 제목으로 말없이 돌아간다.
+   */
+  inputValue: () => string
   /** 삭제 확인(두 번 누르기의 첫 번째)이 걸려 있으면 `true`. 하위가 없는 메뉴와 페이지의 길이다. */
   confirmingRemove: boolean
   /**
@@ -158,7 +176,10 @@ export interface TreeCommands {
   cancelRemove: () => void
   /** 연쇄 삭제 확인 상자의 대상. 닫혀 있으면 `null`. 상자가 보이는 목록이 곧 보내는 id 집합이다(`cascadeShown`). */
   removing: RemoveTarget | null
-  /** 상자의 «삭제» — 상자가 보인 id 집합을 싣고 연쇄 삭제를 보낸다. 서버의 집합이 다르면 서버가 실은 지금 목록으로 상자를 다시 연다. */
+  /**
+   * 상자의 «삭제» — 상자가 보인 id 집합을 싣고 연쇄 삭제를 보낸다. 서버의 집합이 다르면 서버가 실은 지금 목록으로 상자를 다시 연다. 목록이 바뀐
+   * 뒤의 첫 부름은 보내지 않고 «새 목록 확인»만 푼다(`RemoveTarget.recheck`).
+   */
   confirmCascade: () => void
   closeRemoving: () => void
   /** 형제 사이에서 한 칸 옮긴다. `-1`이면 위로, `+1`이면 아래로. */
@@ -229,6 +250,13 @@ export interface RemoveTarget {
   menuId: string
   changed: boolean
   listed: MenuSubtree | null
+  /**
+   * **목록이 바뀐 뒤 사람이 아직 누르지 않았다** — 확인 단추가 «새 목록 확인»으로 서고, 그 첫 누름은 이것만 풀고 아무것도 안 보낸다
+   * (`confirmCascade`). 목록이 바뀌는 두 길(409 · 남의 변경으로 받은 트리 — `reconcile`)이 같이 세운다. 없으면 남의 변경으로 목록이
+   * 바뀐 바로 뒤의 누름(손을 단추에 올린 채 그 순간 누름)이 사람이 본 적 없는 새 목록을 지운다 — 보낸 id 가 서버의 지금 목록과 같아
+   * 서버의 견줌이 못 막는다. 시간으로 가르지 않는 것은 `CLAUDE.md` «뒤따르는 클릭을 삼키는 장치는 시간만으로 가르지 않는다».
+   */
+  recheck: boolean
 }
 
 /**
@@ -271,6 +299,20 @@ export function useTreeCommands(props: {
    * `failure`에 실으면 성공이 실패처럼 보인다. 없으면 결과를 말하지 않는다.
    */
   onImported?: (imported: PageImported | null) => void
+  /**
+   * **셸이 본 가장 큰 `menu-changed` 번호**(`realtime/use-realtime.ts`). 이 칸의 트리 번호보다 크면 다시 받는다(`refresh`). 없으면 0 —
+   * 실시간 연결이 없는 화면은 남의 변경을 안 받는다.
+   */
+  remoteRev?: number
+  /** 오를 때마다 다시 받는다 — 실시간 연결이 다시 붙었다(끊긴 동안의 `menu-changed`는 다시 오지 않는다). 셸의 `resyncToken`이다. */
+  resyncToken?: number
+  /** 하단 바에 한 줄 — 다시 받은 트리가 열린 입력 · 상자의 대상을 지웠을 때(`reconcile`). 없으면 말하지 않는다. */
+  onDropped?: (message: string) => void
+  /**
+   * **열린 페이지(`pageId`)가 트리에서 사라졌다** — 앞 트리에 있던 그 페이지가 새 트리에 없다. 셸이 캔버스에 넘겨 서버에 묻는다
+   * (`routes/editor.tsx`의 `CanvasFrame` «페이지가 사라짐»). 내가 지운 페이지는 안 부른다(`ownRemoval`) — 지운 조작이 프로젝트 뿌리로 옮긴다.
+   */
+  onPageGone?: (pageId: string) => void
 }): TreeCommands {
   const api = useApi()
   // **렌더 시점 판정이 아니라 명령형 이동(`useNavigate`)이다.** 렌더 시점 판정
@@ -280,6 +322,8 @@ export function useTreeCommands(props: {
   // 같은 판정을 되풀이하면 안 된다.
   const navigate = useNavigate()
   const { projectId, pageId, reloadToken } = props
+  const remoteRev = props.remoteRev ?? 0
+  const resyncToken = props.resyncToken ?? 0
 
   const [state, setState] = useState<TreeLoadState>({ status: 'loading' })
   /**
@@ -291,6 +335,20 @@ export function useTreeCommands(props: {
   const newer = useCallback((at: number): boolean => {
     if (at < shownAt.current) return false
     shownAt.current = at
+    return true
+  }, [])
+  /** 이 칸에 선 트리의 판 번호(`TreeRead.rev`). `settles`가 올린다. */
+  const shownRev = useRef(0)
+  /**
+   * **`at`에 낸 조회가 판 `rev`를 답했다 — 이 칸에 설 수 있는가.** 판 번호가 먼저다: 작은 번호의 답은 늦게 냈어도 낡았고(두 조회가 다른 연결로
+   * 가 서버에서 차례가 뒤집혔다), 큰 번호의 답은 일찍 냈어도 새것이다. 번호가 같으면 «늦게 낸 조회의 답만»(`newer`) — 번호를 모르는 답(테스트의
+   * 가짜 api 는 늘 0)이 그 규칙 하나로 갈린다. 서면 번호 둘을 올린다.
+   */
+  const settles = useCallback((at: number, rev: number): boolean => {
+    if (rev < shownRev.current) return false
+    if (rev === shownRev.current && at < shownAt.current) return false
+    shownRev.current = rev
+    shownAt.current = Math.max(shownAt.current, at)
     return true
   }, [])
   const [picked, setPicked] = useState<TreeSelection | null>(null)
@@ -355,6 +413,8 @@ export function useTreeCommands(props: {
    * 버려진다(남는 틈).
    */
   const hanging = useRef(new Map<string, string[]>())
+  /** 열린 입력에 친 글(`typeInput`). 입력을 열면 비운다 — `null`이면 아직 안 쳤다. */
+  const typed = useRef<string | null>(null)
 
   /**
    * **선택은 파생값이다.** `picked`가 `null`이면 주소가 말하는 페이지가 선택이다.
@@ -377,6 +437,36 @@ export function useTreeCommands(props: {
   const menu = state.status === 'ready' ? state.menu : null
   const abilities = treeAbilities(menu, selection)
 
+  /** 내가 지우려고 보낸 페이지 id — 그 페이지가 트리에서 빠져도 «사라짐»을 안 부른다(`onPageGone`). 트리에 다시 서면(복원) 걷는다. */
+  const ownRemoval = useRef(new Set<string>())
+  /** 앞 렌더의 트리 — «앞 트리에 있던 페이지가 새 트리에 없다»를 가른다. */
+  const lastMenu = useRef<TreeMenuNode[] | null>(null)
+  const onPageGone = useRef(props.onPageGone)
+  onPageGone.current = props.onPageGone
+  /**
+   * **열린 페이지가 트리에서 빠지면 셸에 알린다**(`onPageGone`). 트리가 바뀔 때마다 — 남의 변경으로 받은 트리든 내 조작 · 복원 뒤의 다시
+   * 받기든. **앞 트리에 있던 것만 센다** — 트리가 처음 설 때 주소의 페이지가 없는 판(다른 프로젝트의 주소 · 이미 지워진 주소)은 캔버스의 여는
+   * 조회가 이미 404 를 말한다.
+   */
+  useEffect(() => {
+    const before = lastMenu.current
+    lastMenu.current = menu
+    if (menu === null || pageId === undefined) return
+    const now = findPageTitle(menu, pageId) !== null
+    if (now) {
+      ownRemoval.current.delete(pageId)
+      return
+    }
+    if (before === null || findPageTitle(before, pageId) === null || ownRemoval.current.has(pageId)) return
+    onPageGone.current?.(pageId)
+  }, [menu, pageId])
+
+  /**
+   * **남의 변경으로 받은 트리에 열린 것을 맞추는 자리**(`reconcile` — 아래 선언). ref 인 것은 그 함수가 렌더마다 지금 상태를 닫아 새로 서기
+   * 때문이다 — `load`의 의존에 넣으면 마운트 조회가 렌더마다 다시 돈다.
+   */
+  const reconcileRef = useRef<(next: TreeMenuNode[]) => void>(() => {})
+
   /**
    * 트리를 받는다. `reload`가 `true`면 `loading`으로 되돌리지 않는다 — 조작 뒤의 재조회에서
    * 트리가 잠깐 사라지면 사용자가 방금 만든 것을 확인할 자리가 흔들린다.
@@ -388,20 +478,25 @@ export function useTreeCommands(props: {
    * 때문이다.** 그 예외는 이펙트 밖으로 새어 나가 앱 트리를 통째로 죽인다.
    */
   const load = useCallback(
-    async (alive: () => boolean, reload: boolean, cancel?: AbortSignal): Promise<void> => {
-      // **번호는 보낼 때 받는다**(`issueTreeRead`) — 그 뒤에 낸 조회의 답이 먼저 서 있으면 이 답은 낡았다(`newer`).
+    async (alive: () => boolean, reload: boolean, cancel?: AbortSignal, remote = false): Promise<void> => {
+      // **번호는 보낼 때 받는다**(`issueTreeRead`) — 판 번호가 같으면 그 뒤에 낸 조회의 답이 먼저 서 있는 이 답은 낡았다(`settles`).
       const at = issueTreeRead()
       if (!reload) setState({ status: 'loading' })
       try {
-        const next = await api.getTree(projectId, cancel === undefined ? undefined : { cancel })
-        if (alive() && newer(at)) setState({ status: 'ready', menu: next })
+        const read = await api.readTree(projectId, cancel === undefined ? undefined : { cancel })
+        if (!alive() || !settles(at, read.rev)) return
+        // **남의 변경으로 받은 트리면 열린 입력 · 상자 · 선택을 맞춘다**(`reconcile`) — 내 조작 뒤의 다시 받기는 그 조작이 스스로 맞춘다.
+        if (remote) reconcileRef.current(read.menu)
+        setState({ status: 'ready', menu: read.menu })
       } catch (caught) {
-        if (!alive() || !newer(at)) return
+        // **남의 변경으로 낸 조회의 실패는 조용히 둔다** — 화면은 앞 트리 그대로이고, 사람이 누른 조회가 아니다(재연결 재조회와 같은 판정 —
+        // `routes/editor.tsx`). 실패 화면으로 바꾸면 멀쩡히 보이던 트리를 가린다. 다음 신호 · 재연결이 다시 받는다.
+        if (!alive() || remote || !newer(at)) return
         // 실패 → 화면 규칙은 `api/failure.tsx`에 있다. 여기서 다시 판정하지 않는다.
         setState({ status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) })
       }
     },
-    [api, projectId, newer],
+    [api, projectId, newer, settles],
   )
 
   useEffect(() => {
@@ -462,6 +557,46 @@ export function useTreeCommands(props: {
   }, [])
 
   /**
+   * **남의 변경으로 다시 받는다** — `menu-changed`의 번호가 이 칸의 트리보다 크거나(`remoteRev`) 연결이 다시 붙었을 때(`resyncToken`).
+   *
+   * **받는 중에 온 신호는 합친다** — 조회가 떠 있으면 «한 번 더»만 적고, 끝나면 한 번 더 받는다. 떠 있던 조회는 그 신호보다 먼저 났을 수 있어
+   * (서버가 그 커밋 앞에서 읽었다) 버릴 수 없고, 신호마다 조회를 내면 남이 잇달아 고칠 때 조회가 줄을 선다. 신호 뒤에 낸 조회는 그 커밋 뒤에
+   * 읽으므로(신호는 커밋 뒤에 나간다) 합친 한 번이 그 사이 신호를 다 덮는다.
+   *
+   * **잠금(`inFlight`)을 안 잡는다** — 사람의 조작이 아니다. 조작이 떠 있어도 받고, 둘의 답은 판 번호로 가른다(`settles`).
+   */
+  const refreshing = useRef(false)
+  const refreshAgain = useRef(false)
+  const refresh = useCallback(async (): Promise<void> => {
+    if (refreshing.current) {
+      refreshAgain.current = true
+      return
+    }
+    refreshing.current = true
+    try {
+      do {
+        refreshAgain.current = false
+        await load(() => !unmounted.current, true, gone.current.signal, true)
+      } while (refreshAgain.current && !unmounted.current)
+    } finally {
+      refreshing.current = false
+    }
+  }, [load])
+
+  // 번호를 보고 판정한다 — 이 칸이 이미 그 판을 들고 있으면(내 쓰기의 다시 받기가 먼저 끝났다) 받지 않는다.
+  useEffect(() => {
+    if (remoteRev > shownRev.current) void refresh()
+  }, [remoteRev, refresh])
+
+  /** 재연결 신호 — 같은 신호에 두 번 돌지 않는다(위 `handledReload`와 같은 장치). */
+  const handledResync = useRef(0)
+  useEffect(() => {
+    if (resyncToken === 0 || handledResync.current === resyncToken) return
+    handledResync.current = resyncToken
+    void refresh()
+  }, [resyncToken, refresh])
+
+  /**
    * **이 트리가 받는 자리로 선다**(`panels/write-ledger.tsx`의 `Receiver` — 종류 `'tree'`). 이름 변경의 판정이 끝났을 때
    * 그 쓰기를 낸 트리가 내려가 있고 **새 트리가 떠 있으면**(에디터를 떠났다 돌아왔다) 판정의 말이 이 새 트리에 닿는다 — 낸
    * 인스턴스의 state 에만 쓰면(`if (alive()) …`) 새 트리는 «바뀌지 않았습니다»도 충돌 화면도 없이 잠금만 풀린다.
@@ -477,8 +612,8 @@ export function useTreeCommands(props: {
       else if (key === TREE_CONFLICT) setConflict(update as TitleConflict | null)
       else if (key === TREE_STATE) {
         // **늦게 낸 조회의 답만**(`newer`) — 이 트리의 마운트 조회가 배달된 값보다 먼저 났으면 그 조회의 답은 여기서 버려진다.
-        const { at: readAt, state: next } = update as TreeStateUpdate
-        if (newer(readAt)) setState(next)
+        const { at: readAt, state: next, rev } = update as TreeStateUpdate
+        if (rev === undefined ? newer(readAt) : settles(readAt, rev)) setState(next)
       }
       else if (key === TREE_HANGING) {
         const { item, titles } = update as HangingUpdate
@@ -486,7 +621,7 @@ export function useTreeCommands(props: {
         else hanging.current.set(item, titles)
       }
     },
-    [projectId, newer],
+    [projectId, newer, settles],
   )
   const sees = useCallback((at: PageAt): boolean => !unmounted.current && at.projectId === projectId, [projectId])
   const [token] = useState(() => Symbol('tree'))
@@ -503,8 +638,8 @@ export function useTreeCommands(props: {
    * `after`는 재조회 **뒤에** 부른다 — 주소를 옮기는 것이 그 자리다. 실패하면 부르지
    * 않는다: 만들지 못한 페이지로 가면 안 된다.
    *
-   * **실패해도 트리를 다시 받지 않는다.** 근거는 앞 문장 하나다 — 서버가 거절했다는 것은
-   * 트리가 그대로라는 뜻이라 받아 봐야 같은 것이 온다.
+   * **실패해도 트리를 다시 받지 않는다 — 404 만 뺀다.** 서버가 거절했다는 것은 트리가 그대로라는 뜻이라 받아 봐야 같은 것이 온다. 404 는
+   * 반대로 «이 트리가 낡았다»다(대상이 이미 없다 — 남이 지운 신호를 못 받았거나 실시간 연결이 없다) — 그때는 다시 받는다(아래 `catch`).
    *
    * **"재조회하면 실패 문장이 조회 상태에 덮인다"는 근거로 쓰지 않는다 — 조건이 빠진
    * 문장이다.** 실패 뒤에도 재조회하도록 바꿔 재면 **재조회가 성공하면 실패 문장이 그대로
@@ -542,6 +677,9 @@ export function useTreeCommands(props: {
       // **실패가 설 자리를 부른 쪽이 정할 수 있다**(`fail`) — 가져오기는 상자 안이다(`importJson`).
       if (fail === undefined) setFailure(failure)
       else fail(failure)
+      // **404 면 트리를 다시 받는다** — 대상이 이미 없다는 것은 이 트리가 낡았다는 신호다(남이 지웠는데 그 신호를 못 받았다 · 실시간 연결이
+      // 없다). 안 받으면 지워진 줄이 남아 다음 조작도 404 다. 다시 받은 트리는 남의 변경으로 받은 것과 같게 맞춘다(`reconcile`).
+      if (caught instanceof ApiError && caught.code === 'not-found') void load(() => !unmounted.current, true, gone.current.signal, true)
     } finally {
       // **잠금은 언마운트 여부와 무관하게 푼다.** `ref`는 렌더와 상관없는 값이라 여기서
       // 놓치면 그 인스턴스가 영구히 잠긴다. 표시(`setBusy`)만 마운트 여부를 본다.
@@ -591,6 +729,7 @@ export function useTreeCommands(props: {
     // **다른 조작을 시작하면 확인이 풀린다.**
     setConfirmingRemove(false)
     setPickingMenu(false)
+    typed.current = null
     setEditing({ kind, initial: kind === 'rename' ? currentTitle() : '' })
   }
 
@@ -654,7 +793,7 @@ export function useTreeCommands(props: {
       return { kind: 'message', message: metaConflictSentence('제목', current, late) }
     }
 
-    await renameLock.run<unknown, { at: number; menu: TreeMenuNode[] }>({
+    await renameLock.run<unknown, { at: number; menu: TreeMenuNode[]; rev: number }>({
       send: (signal) =>
         target.kind === 'menu'
           ? api.updateMenu(projectId, target.id, { title, base: { title: base } }, { signal })
@@ -663,7 +802,7 @@ export function useTreeCommands(props: {
       // 번호는 **보낼 때** 받는다(`issueTreeRead`) — 판정 뒤에 세우는 트리도 «늦게 낸 조회의 답만» 규칙을 지난다.
       verify: async (signal) => {
         const at = issueTreeRead()
-        return { at, menu: await api.getTree(projectId, { signal }) }
+        return { at, ...(await api.readTree(projectId, { signal })) }
       },
       settle: (outcome) => {
         if (outcome.kind === 'done') {
@@ -680,8 +819,8 @@ export function useTreeCommands(props: {
           return failure
         }
         reload = false
-        const { at: readAt, menu: read } = outcome.verdict
-        put(TREE_STATE, { at: readAt, state: { status: 'ready', menu: read } } satisfies TreeStateUpdate)
+        const { at: readAt, menu: read, rev } = outcome.verdict
+        put(TREE_STATE, { at: readAt, rev, state: { status: 'ready', menu: read } } satisfies TreeStateUpdate)
         const current = target.kind === 'menu' ? findMenuTitle(read, target.id) : findPageTitle(read, target.id)
         if (current === null) {
           const failure: Failure = { kind: 'message', message: RENAME_GONE }
@@ -696,7 +835,8 @@ export function useTreeCommands(props: {
     if (reload) {
       const at = issueTreeRead()
       try {
-        put(TREE_STATE, { at, state: { status: 'ready', menu: await api.getTree(projectId) } } satisfies TreeStateUpdate)
+        const read = await api.readTree(projectId)
+        put(TREE_STATE, { at, rev: read.rev, state: { status: 'ready', menu: read.menu } } satisfies TreeStateUpdate)
       } catch (caught) {
         put(TREE_STATE, { at, state: { status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) } } satisfies TreeStateUpdate)
       }
@@ -1086,17 +1226,24 @@ export function useTreeCommands(props: {
     // 않을 수 있고, 그것을 지우고 주소를 루트로 옮기면 **보고 있던 페이지가 닫힌다.** 그래서 지운 것이 주소의 페이지인지로 가른다.
     const target = selection.id
     const wasOpen = pageId === target
+    ownRemoval.current.add(target)
     void run(
       () => api.deletePage(projectId, target),
       () => {
         setPicked(null)
         if (wasOpen) navigate(`/projects/${projectId}`, { replace: true })
       },
+      (failure) => {
+        // 못 지웠다 — 그 페이지가 트리에서 빠지면(남이 먼저 지웠다 · 404) 내 지움이 아니다.
+        ownRemoval.current.delete(target)
+        setFailure(failure)
+      },
     )
   }
 
   /**
-   * 연쇄 삭제를 보낸다(상자의 «삭제»). **싣는 id 는 상자가 그리는 목록 그대로다**(`cascadeShown`).
+   * 연쇄 삭제를 보낸다(상자의 «삭제»). **싣는 id 는 상자가 그리는 목록 그대로다**(`cascadeShown`). 목록이 바뀐 뒤의 첫 누름은 보내지 않고
+   * «새 목록 확인»만 푼다(`RemoveTarget.recheck`).
    *
    * **열린 페이지가 지운 서브트리 안이면 프로젝트 루트로 `replace` 이동한다** — 페이지 삭제(`confirmRemove`)와 같은 까닭(뒤로 가기가
    * 지운 페이지로 돌아가면 404 다). 선택은 지운 메뉴의 부모로 간다(메뉴 삭제와 같다).
@@ -1109,9 +1256,14 @@ export function useTreeCommands(props: {
     if (removing === null || menu === null) return
     const subtree = cascadeShown(removing, menu)
     if (subtree === null) return
+    if (removing.recheck) {
+      setRemoving({ ...removing, recheck: false })
+      return
+    }
     const target = removing.menuId
     const parentId = treeSpot(menu, { kind: 'menu', id: target })?.parentId ?? null
     const wasOpen = pageId !== undefined && subtree.pages.some((page) => page.id === pageId)
+    for (const page of subtree.pages) ownRemoval.current.add(page.id)
     setRemoving(null)
     // `run`의 실패 갈래는 `Failure`(문장)만 받는다 — 목록이 바뀐 409 인지는 보낸 자리에서 가른다.
     let changed = false
@@ -1135,15 +1287,61 @@ export function useTreeCommands(props: {
         if (wasOpen) navigate(`/projects/${projectId}`, { replace: true })
       },
       (failure) => {
+        for (const page of subtree.pages) ownRemoval.current.delete(page.id)
         if (!changed) {
           setFailure(failure)
           return
         }
-        setRemoving({ menuId: target, changed: true, listed })
+        setRemoving({ menuId: target, changed: true, listed, recheck: true })
         void load(() => !unmounted.current, true, gone.current.signal)
       },
     )
   }
+
+  /**
+   * **남의 변경으로 받은 트리에 열린 것을 맞춘다**(`load`의 `remote` 갈래가 부른다 — 트리를 세우기 직전). 대상이 사라진 것은 닫고, 연쇄 삭제
+   * 상자는 목록이 바뀌었으면 새 목록으로 다시 세운다.
+   *
+   * | 열린 것 | 대상이 사라졌다 | 대상이 남았다 |
+   * |---|---|---|
+   * | 이름 입력 · 새 메뉴 · 새 페이지(고른 줄에 붙는 셋) | 닫는다 — 친 글이 있었으면 하단 바 `TREE_DRAFT_DROPPED` | 그대로(옮겨졌으면 새 자리에 친 글째 선다 — `inputValue` · 접힌 메뉴 안이면 `panels/menu-tree.tsx`의 `chains`가 편다) |
+   * | 고른 줄(`picked`) · 두 번 누르기 확인 · 소속 메뉴 목록 | 고름을 풀고(주소의 페이지로 돌아간다) 둘을 닫는다 | 그대로 |
+   * | 제목 충돌 통지 | 걷는다 — 무엇의 충돌인지가 화면에서 사라졌다 | 그대로 |
+   * | 연쇄 삭제 상자 | 닫는다 — 하단 바 `cascadeClosedNotice` | 보인 id 집합과 새 서브트리가 다르면 새 목록으로 다시 세우고 «목록이 바뀌었습니다» · 첫 누름은 «새 목록 확인»(409 와 같은 길 — `RemoveTarget.recheck`) |
+   *
+   * **열린 페이지가 사라진 것은 여기서 안 본다** — 아래 `onPageGone`의 이펙트가 트리마다 본다. 줄의 행동 메뉴는 그 줄이 트리에서 빠지며 함께
+   * 내려간다. 가져오기 상자는 연 순간의 메뉴 id 로 보내고 서버의 거절을 상자 안에 보인다(`importing` 머리말) — 여기서 안 닫는다.
+   *
+   * **내 조작 뒤의 다시 받기는 안 탄다** — 그 조작이 스스로 맞춘다(지운 메뉴의 부모로 고름 · 지운 페이지면 프로젝트 뿌리로).
+   */
+  function reconcile(next: TreeMenuNode[]): void {
+    const has = (target: TreeSelection): boolean => treeSpot(next, target) !== null
+    const told: string[] = []
+    if (selection !== null && !has(selection)) {
+      if (editing !== null && editing.kind !== 'new-root-menu') {
+        if (typed.current !== null && typed.current !== editing.initial) told.push(TREE_DRAFT_DROPPED)
+        typed.current = null
+        setEditing(null)
+      }
+      setConfirmingRemove(false)
+      setPickingMenu(false)
+      if (picked !== null) setPicked(null)
+    }
+    if (conflict !== null && !has(conflict.target)) setConflict(null)
+    if (removing !== null) {
+      const shown = cascadeShown(removing, menu)
+      const now = menuSubtree(next, removing.menuId)
+      if (now === null) {
+        setRemoving(null)
+        told.push(cascadeClosedNotice(shown?.title ?? findMenuTitle(menu ?? [], removing.menuId) ?? ''))
+      } else if (shown === null || !sameIds(shown, now)) {
+        setRemoving({ menuId: removing.menuId, changed: true, listed: now, recheck: true })
+      }
+    }
+    const last = told.at(-1)
+    if (last !== undefined) props.onDropped?.(last)
+  }
+  reconcileRef.current = reconcile
 
   return {
     state,
@@ -1156,6 +1354,10 @@ export function useTreeCommands(props: {
     openInput,
     submitInput,
     cancelInput: () => setEditing(null),
+    typeInput: (value) => {
+      typed.current = value
+    },
+    inputValue: () => typed.current ?? editing?.initial ?? '',
     confirmingRemove,
     removing,
     confirmCascade,
@@ -1176,7 +1378,7 @@ export function useTreeCommands(props: {
       const subtree = selection?.kind === 'menu' ? menuSubtree(menu, selection.id) : null
       if (selection?.kind === 'menu' && subtree !== null && (subtree.menus.length > 0 || subtree.pages.length > 0)) {
         setConfirmingRemove(false)
-        setRemoving({ menuId: selection.id, changed: false, listed: null })
+        setRemoving({ menuId: selection.id, changed: false, listed: null, recheck: false })
         return
       }
       setConfirmingRemove(true)
@@ -1254,4 +1456,14 @@ function findPageTitle(nodes: TreeMenuNode[], pageId: string): string | null {
     if (found !== null) return found
   }
   return null
+}
+
+/** 두 목록이 같은 메뉴 · 페이지 id 집합인가 — 서버의 연쇄 삭제 견줌과 같은 술어다(차례 · 제목은 안 본다 — 이름만 바뀐 판은 같은 행이다). */
+function sameIds(a: MenuSubtree, b: MenuSubtree): boolean {
+  const same = (x: { id: string }[], y: { id: string }[]): boolean => {
+    if (x.length !== y.length) return false
+    const ids = new Set(x.map((entry) => entry.id))
+    return y.every((entry) => ids.has(entry.id))
+  }
+  return same(a.menus, b.menus) && same(a.pages, b.pages)
 }

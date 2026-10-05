@@ -170,7 +170,9 @@ function banner(): string {
 }
 
 describe('남의 복원 배너 — 페이지만 읽는 조회는 풀지 않는다', () => {
-  it('신호 뒤 재연결 재조회가 새 판을 실어도 배너가 남는다 — 메뉴는 다시 안 읽었다', async () => {
+  // 재연결은 페이지와 메뉴 트리를 다시 읽는다(끊긴 동안의 `menu-changed`도 사라졌다 — `tree/use-tree-commands.tsx`의 `resyncToken`). 코멘트 ·
+  // 설명 · 테마 선택은 안 읽으므로 배너는 남는다 — 트리의 다시 받기는 배너를 거두는 판(`EditorStore.beginRestoreReread`)이 아니다.
+  it('신호 뒤 재연결 재조회가 페이지 · 메뉴를 새로 읽어도 배너가 남는다 — 복원이 바꾸는 것을 다 읽지 않았다', async () => {
     const view = await mount({ immediate: (pageId) => pageDetail(pageId, pair('n-after')) })
     expect(view.getTree).toHaveBeenCalledTimes(1)
 
@@ -179,8 +181,8 @@ describe('남의 복원 배너 — 페이지만 읽는 조회는 풀지 않는�
 
     view.reconnect()
     await waitForNode('n-after')
+    await waitFor(() => expect(view.getTree).toHaveBeenCalledTimes(2))
 
-    expect(view.getTree).toHaveBeenCalledTimes(1)
     expect(banner()).toMatch(RESTORED_BANNER)
   })
 

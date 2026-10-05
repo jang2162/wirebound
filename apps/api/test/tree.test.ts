@@ -158,7 +158,8 @@ describe('GET /api/projects/:projectId/tree', () => {
       const res = await ctx.app.inject({ method: 'GET', url: `/api/projects/${project.id}/tree`, cookies: owner.cookie })
 
       expect(res.statusCode).toBe(200)
-      expect(res.json()).toEqual({ menu: [] })
+      // 트리를 아무도 안 바꿨다 — 판 번호 0(`repos/menu.ts`의 `readMenuRev`).
+      expect(res.json()).toEqual({ menu: [], rev: 0 })
     })
   })
 
@@ -196,6 +197,8 @@ describe('GET /api/projects/:projectId/tree', () => {
             ],
           },
         ],
+        // 트리 쓰기 다섯(메뉴 둘 · 페이지 셋)이 하나씩 올렸다.
+        rev: 5,
       })
     })
   })
@@ -352,6 +355,8 @@ describe('완료 판정: 한 줄기 시나리오', () => {
             ],
           },
         ],
+        // 메뉴 둘 · 페이지 하나 — 스키마 저장은 트리를 안 바꿔 안 올린다.
+        rev: 3,
       })
 
       // 7. owner가 페이지를 조회해 스키마가 그대로인지 확인한다

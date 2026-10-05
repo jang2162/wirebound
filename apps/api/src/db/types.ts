@@ -222,6 +222,16 @@ export interface PageSeqFloorsTable {
 }
 
 /**
+ * 프로젝트 메뉴 트리의 판 번호(`0020-project-menu-revs`). 올리는 자리는 `repos/menu.ts`의 `bumpMenuRev` 하나다.
+ */
+export interface ProjectMenuRevsTable {
+  /** 프로젝트. FK 가 아니다(마이그레이션 머리말 «잠금»). */
+  project_id: string
+  /** `bigint`라 `pg`가 글자로 준다 — `head_seq`와 같다. */
+  rev: ColumnType<string, number, number>
+}
+
+/**
  * 스냅샷(`0009-snapshots`). 설계서 「스냅샷」의 **삭제 없는 태그**다.
  *
  * `payload`는 `JSONColumnType<SnapshotPayload>` — `PagesTable.schema`와 **같은 비대칭**이다:
@@ -319,6 +329,7 @@ export interface Database {
   comments: CommentsTable
   comment_tombstones: CommentTombstonesTable
   page_seq_floors: PageSeqFloorsTable
+  project_menu_revs: ProjectMenuRevsTable
   snapshots: SnapshotsTable
   presets: PresetsTable
   api_tokens: ApiTokensTable

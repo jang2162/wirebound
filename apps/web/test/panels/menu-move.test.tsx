@@ -432,7 +432,8 @@ describe('페이지의 소속 메뉴 고르기', () => {
     expect(isOff(tool('옮기기'))).toBe(true)
   })
 
-  it('실패하면 이유가 남고 트리를 다시 받지 않는다', async () => {
+  // **404 는 트리가 낡았다는 신호라 다시 받는다**(`tree/use-tree-commands.tsx`의 `run`) — 이유는 남는다. 다른 실패(위 메뉴의 403)는 안 받는다.
+  it('404 면 이유가 남고 트리를 다시 받는다', async () => {
     const api = await open(
       {
         updatePage: vi.fn(async () => {
@@ -446,6 +447,7 @@ describe('페이지의 소속 메뉴 고르기', () => {
     fireEvent.change(picker(), { target: { value: 'm-auth' } })
 
     await within(treeRegion()).findByText('대상을 찾을 수 없습니다')
-    expect(api.getTree).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+    expect(within(treeRegion()).getByText('대상을 찾을 수 없습니다')).toBeTruthy()
   })
 })

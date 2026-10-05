@@ -137,6 +137,28 @@ export function notifyRestored(app: FastifyInstance, input: RestoredInput): void
     })
 }
 
+export interface MenuChangedInput {
+  projectId: string
+  /** 그 쓰기가 올린 메뉴 트리 판 번호(`repos/menu.ts`의 `bumpMenuRev`). */
+  rev: number
+  actor: EventActor
+}
+
+/**
+ * 메뉴 · 페이지 트리가 바뀌었다 — 트리 쓰기가 **커밋 뒤에** 부른다. 부르는 자리는 `test/menu-broadcast-census.test.ts`가 소스에서 센다.
+ *
+ * **낸 사람의 연결도 빼지 않는다**(`notifyRestored`와 같은 판정). 쓰기의 답을 잃으면 낸 탭은 서버가 썼는지 모르고, 커밋이 그 탭의 다시
+ * 받기보다 늦으면 이 신호만이 트리가 낡았다는 것을 안다. 낸 탭은 답 뒤의 다시 받기로 이미 그 판(`rev`)을 들고 있으면 넘긴다 — 대가는
+ * 다시 받기가 신호보다 늦은 판의 조회 하나다(`apps/web`의 `tree/use-tree-commands.tsx`).
+ *
+ * 던지지 않는다 — 쓰기는 이미 커밋됐다(`notifyPageChanged`와 같은 자세).
+ */
+export function notifyMenuChanged(app: FastifyInstance, input: MenuChangedInput): void {
+  void app.realtime.broadcast.send(input.projectId, { type: 'menu-changed', ...input }).catch((error: unknown) => {
+    app.log.error({ err: error, projectId: input.projectId, rev: input.rev }, 'menu-changed 알림 실패')
+  })
+}
+
 export interface ThemeChangedInput {
   projectId: string
   themeId: string

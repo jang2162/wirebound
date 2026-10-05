@@ -31,9 +31,14 @@ function notStubbed(method: string): () => never {
   }
 }
 
-/** 테스트가 명시적으로 스텁한 메서드만 동작하는 `ApiClient`. */
+/**
+ * 테스트가 명시적으로 스텁한 메서드만 동작하는 `ApiClient`.
+ *
+ * **`readTree`는 스텁하지 않으면 그 객체의 `getTree`로 선다**(판 번호 0) — 메뉴 트리를 그리는 케이스가 `getTree`만 스텁하고 그 호출 수를
+ * 센다. 번호가 늘 0 이면 트리 칸은 «늦게 낸 조회의 답만»으로 가른다(`tree/use-tree-commands.tsx`의 `settles`).
+ */
 export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
-  return {
+  const api: ApiClient = {
     login: notStubbed('login'),
     logout: notStubbed('logout'),
     me: notStubbed('me'),
@@ -87,8 +92,10 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     uploadThemePackage: notStubbed('uploadThemePackage'),
     setThemePackageHidden: notStubbed('setThemePackageHidden'),
     downloadThemeTemplate: notStubbed('downloadThemeTemplate'),
+    readTree: async (projectId, options) => ({ menu: await api.getTree(projectId, options), rev: 0 }),
     ...overrides,
   }
+  return api
 }
 
 /** 세션이 없을 때 서버가 내는 오류. 여러 테스트가 같은 모양을 쓴다. */

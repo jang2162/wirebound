@@ -248,7 +248,7 @@ describe('성공 응답이 계약을 어기면 — http-client 층', () => {
   it('빈 트리·설명 없는 프로젝트처럼 정상인 경계값도 지나간다', async () => {
     // 계약이 허용하는 빈 값들이다. 검사가 "비어 있으면 잘못됐다"로 새면 여기서 죽는다.
     const api = client({
-      '/projects/p-1/tree': { menu: [] },
+      '/projects/p-1/tree': { menu: [], rev: 0 },
       '/projects': [],
       '/projects/p-1': { ...PROJECT_VIEW, description: null },
     })
@@ -317,7 +317,7 @@ describe('성공 응답이 계약을 어기면 — 화면 층', () => {
     renderWithProviders(<App />, {
       client: client({
         '/auth/me': USER,
-        '/tree': { menu: MENU },
+        '/tree': { menu: MENU, rev: 0 },
         '/pages/pg-1': { ...PAGE, schema: {} },
         '/projects/p-1': PROJECT_VIEW,
       }),
@@ -336,7 +336,7 @@ describe('성공 응답이 계약을 어기면 — 화면 층', () => {
     renderWithProviders(<App />, {
       client: client({
         '/auth/me': USER,
-        '/tree': { menu: MENU },
+        '/tree': { menu: MENU, rev: 0 },
         '/pages/pg-1': { ...PAGE, schema: { version: 1, root: { id: 'n-root', type: 99 } } },
         '/projects/p-1': PROJECT_VIEW,
       }),

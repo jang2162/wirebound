@@ -18,6 +18,7 @@ import { migration as m0016 } from './0016-api-tokens-user-idx'
 import { migration as m0017 } from './0017-page-seq-floors'
 import { migration as m0018 } from './0018-drop-json-themes'
 import { migration as m0019 } from './0019-theme-packages'
+import { migration as m0020 } from './0020-project-menu-revs'
 
 /**
  * 정적 마이그레이션 레지스트리.
@@ -51,6 +52,7 @@ export const MIGRATIONS: Record<string, Migration> = {
   '0017-page-seq-floors': m0017,
   '0018-drop-json-themes': m0018,
   '0019-theme-packages': m0019,
+  '0020-project-menu-revs': m0020,
 }
 
 export const migrationProvider: MigrationProvider = {

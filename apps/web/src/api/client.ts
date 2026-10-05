@@ -33,6 +33,7 @@ import type {
   ThemePackageVersion,
   ThemeRef,
   TreeMenuNode,
+  TreeRead,
 } from './types'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 
@@ -181,6 +182,11 @@ export interface ApiClient {
    * 트리 이름 변경의 «모름»(`tree/use-tree-commands.tsx`의 `rename` · `ReadOptions`의 머리말).
    */
   getTree(projectId: string, options?: ReadOptions): Promise<TreeMenuNode[]>
+  /**
+   * 같은 트리를 **판 번호와 함께**(`TreeRead`). 메뉴 트리 칸이 부른다 — 겹친 조회의 낡은 답 · 이미 받은 판의 `menu-changed`를 그 번호로
+   * 가른다(`tree/use-tree-commands.tsx`). 트리만 쓰는 자리(붙이기의 페이지 대상)는 `getTree`다.
+   */
+  readTree(projectId: string, options?: ReadOptions): Promise<TreeRead>
   /**
    * 메뉴 노드를 만든다. **`parentId: null`이 "루트에 만든다"이고 그것을 값으로 싣는다.**
    *

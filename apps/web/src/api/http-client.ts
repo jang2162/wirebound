@@ -40,6 +40,7 @@ import type {
   ThemePackageVersion,
   ThemeRef,
   TreeMenuNode,
+  TreeRead,
 } from './types'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 
@@ -452,6 +453,13 @@ const SHAPES = {
   projectList: (value) => isArrayOf(value, isProjectDetail),
   /** `{ menu }` 봉투. 서버가 이 엔드포인트에서만 쓴다(README "트리 응답 형태"). */
   treeEnvelope: (value) => isRecord(value) && isArrayOf(value['menu'], isTreeMenuNode),
+  /** 같은 봉투에 판 번호(`rev` — 0 이상의 정수)까지. 번호가 틀리면 그 답으로 낡음을 가를 수 없어 실패로 본다. */
+  treeRead: (value) =>
+    isRecord(value) &&
+    isArrayOf(value['menu'], isTreeMenuNode) &&
+    typeof value['rev'] === 'number' &&
+    Number.isSafeInteger(value['rev']) &&
+    value['rev'] >= 0,
   /**
    * 메뉴 노드 하나(`POST`·`PATCH .../menu`).
    *
@@ -1366,6 +1374,9 @@ export function createHttpClient(
       )
       return body.menu
     },
+    // **봉투를 벗기지 않는다** — 판 번호가 트리와 함께 가야 받는 쪽이 낡은 답을 가른다(`TreeRead`).
+    readTree: (projectId, options) =>
+      request<TreeRead>('GET', `${projectPath(projectId)}/tree`, SHAPES.treeRead, undefined, options),
     // 아래 여섯이 트리의 CRUD다. **생성·갱신 응답을 트리에 꽂지 않는다** — `MenuNode`에는
     // `pages`·`children`이 없고(`api/types.ts`), 서버가 `sort_order`를 재번호하므로
     // 부르는 쪽은 성공하면 `getTree`를 다시 부른다. 그래서 여기서 응답을 가공하지 않는다.

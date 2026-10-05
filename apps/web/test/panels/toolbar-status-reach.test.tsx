@@ -154,6 +154,8 @@ function menuCommands(selection: TreeSelection | null, busy = false): TreeComman
     openInput: unused,
     submitInput: unused,
     cancelInput: unused,
+    typeInput: unused,
+    inputValue: () => '',
     confirmingRemove: false,
     removing: null,
     confirmCascade: unused,
