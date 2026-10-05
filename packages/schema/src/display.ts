@@ -43,10 +43,15 @@ export function caseStateName(node: WbNode, viewStates?: readonly ViewState[]): 
   return typeof state === 'string' ? viewStateName(viewStates, state) : UNKNOWN_VIEW_STATE_NAME
 }
 
-/** 상태 id 의 이름 — 기본(`default`)은 «기본», 목록에 없으면 `UNKNOWN_VIEW_STATE_NAME`. */
+/**
+ * 상태 id 의 이름 — 기본(`default`)은 «기본», 목록에 없으면 `UNKNOWN_VIEW_STATE_NAME`. 화면은 검증 전 문서로도 부른다(구조 트리 · 상호작용
+ * 패널 — 오류 경계 밖) — 목록이 배열이 아니거나 항목이 객체가 아니어도 던지지 않는다.
+ */
 export function viewStateName(viewStates: readonly ViewState[] | undefined, state: string): string {
   if (state === DEFAULT_CASE) return '기본'
-  return viewStates?.find((entry) => entry.id === state)?.name ?? UNKNOWN_VIEW_STATE_NAME
+  if (!Array.isArray(viewStates)) return UNKNOWN_VIEW_STATE_NAME
+  const name = viewStates.find((entry: unknown) => isRecord(entry) && entry.id === state)?.name
+  return typeof name === 'string' ? name : UNKNOWN_VIEW_STATE_NAME
 }
 
 /**

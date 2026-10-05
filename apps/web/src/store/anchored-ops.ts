@@ -1,5 +1,5 @@
 /**
- * 편집 ops 를 **노드 id 로** 붙잡아 두고, 바뀐 문서 위에서 경로를 다시 짓는다. 리베이스(`EditorStore`의 `#rebaseOnto`)와
+ * 편집 ops 를 **노드 id 로**(상태 목록은 상태 id 로) 붙잡아 두고, 바뀐 문서 위에서 경로를 다시 짓는다. 리베이스(`EditorStore`의 `#rebaseOnto`)와
  * 되돌리기(`#startFrom`)가 쓴다. React·DOM·`fetch`를 모른다 — 스토어와 같은 이유다.
  *
  * ## 왜 경로를 다시 짓나 — 인덱스 경로는 남의 편집에 밀린다
@@ -20,7 +20,14 @@
  * |---|---|---|
  * | 노드(와 그 안의 필드) — `remove` · `replace` · 필드 `add` · `move`의 `from` | 노드 id + 그 아래 토큰 | 그 id 의 지금 경로 + 토큰. 없으면 못 얹음 |
  * | `children` 배열의 **넣을 자리** — `add …/children/<i>` · `move`의 `path` | 부모 id · 앞 형제 id 줄 · 뒤 형제 id 줄(가까운 것부터) · 옛 index | 살아 있는 가장 가까운 형제 곁 — 앞 형제면 그 뒤 · 뒤 형제면 그 앞(같은 거리면 앞) → 다 없으면 옛 index(길이로 자름). 부모가 없으면 못 얹음 |
- * | 노드 밖(`/version`) | 경로 그대로 | 그대로 |
+ * | 상태 목록의 항목(과 그 안) — `/viewStates/<i>(/…)`의 `remove` · `replace` · `test` · 항목 안 `add` · `move`의 `from` | 그 자리 상태의 id + 그 아래 토큰 | 그 id 의 지금 번호 + 토큰. 없으면(남이 뺐다) 못 얹음 |
+ * | 상태 목록의 **넣을 자리** — `add /viewStates/<i>` · `move`의 `path` | 앞 상태 id 줄 · 뒤 상태 id 줄 · 옛 번호 | 노드의 넣을 자리와 같은 규칙. 목록이 없으면 못 얹음 |
+ * | 노드 밖(`/version` · 목록째 `/viewStates`) | 경로 그대로 | 그대로 |
+ *
+ * **상태 목록도 번호로만 가리킬 수 있어 노드와 같은 위험이다** — 남이 순서를 바꾼 뒤의 되돌리기(서버 역연산 `remove /viewStates/1`)가 남의
+ * 상태를 뺐다(K1 리뷰 R1). 묶음이 싣는 `test /viewStates/<i>/id`(`@wirebound/schema`의 `guardViewStateOps`)도 같은 id 로 다시 지어져 늘
+ * 맞는다 — 그 `test`는 다시 짓지 않고 경로 그대로 내는 클라이언트를 막는 몫이다. 목록째를 만드는 `add /viewStates [상태]`는 «목록이 없었다»가
+ * 전제다(아래 «객체 키의 `add`») — 남이 먼저 목록을 만들었으면 못 얹는다.
  *
  * **넣을 자리는 원래 거리 순으로 앞 · 뒤 형제를 번갈아 본다 — 같은 거리면 앞 형제가 먼저다.** 뒤 형제로 먼저 잡으면 «끝에 넣기»(뒤 형제
  * 없음)와 «뒤 형제가 사라짐»이 같은 값이 된다. 앞 형제 줄을 끝까지 먼저 보면 바로 앞 형제가 사라지고 바로 뒤 형제가 산 판에서 원래 틈(뒤
@@ -74,6 +81,8 @@ type Anchor =
   | { kind: 'raw'; path: string }
   | { kind: 'node'; id: string; rest: string[] }
   | { kind: 'slot'; parentId: string; after: string[]; before: string[]; index: number | '-' }
+  | { kind: 'state'; id: string; rest: string[] }
+  | { kind: 'stateSlot'; after: string[]; before: string[]; index: number | '-' }
 
 /**
  * op 을 만든 문서에서 선 전제(머리말의 «전제가 바뀐 op»). `had`는 객체 키 `add`가 가리킨 키가 있었는가, `kids`는 통째로 바꾸는 `children`의 자식
@@ -86,7 +95,7 @@ interface Premise {
 
 /** 노드 id 로 붙잡은 op 하나. `value`는 원래 op 의 값을 그대로 든다 — `applyOps`가 넣을 때 복제한다. */
 export type AnchoredOp =
-  | { op: 'add' | 'replace'; at: Anchor; value: unknown; premise: Premise }
+  | { op: 'add' | 'replace' | 'test'; at: Anchor; value: unknown; premise: Premise }
   | { op: 'remove'; at: Anchor; premise: Premise }
   | { op: 'move'; from: Anchor; to: Anchor }
 
@@ -109,7 +118,7 @@ export function anchorOps(document: PageDocument, ops: readonly PatchOp[]): Anch
       anchored.push({ op: 'move', from: anchorPath(current, op.from, false), to: anchorPath(afterRemove, op.path, true) })
     } else {
       const at = anchorPath(current, op.path, op.op === 'add')
-      const premise = premiseOf(current, op.op, op.path)
+      const premise = op.op === 'test' ? {} : premiseOf(current, op.op, op.path)
       anchored.push(op.op === 'remove' ? { op: 'remove', at, premise } : { op: op.op, at, value: op.value, premise })
     }
     // 뒤 op 의 자리는 이 op 을 얹은 문서에서 잰다. 마지막 op 은 얹을 까닭이 없다.
@@ -181,6 +190,7 @@ export function sameOps(left: readonly PatchOp[], right: readonly PatchOp[]): bo
  */
 function anchorPath(document: PageDocument, path: string, slot: boolean): Anchor {
   const tokens = parsePointer(path)
+  if (tokens[0] === 'viewStates' && tokens.length >= 2) return anchorStatePath(document, path, tokens, slot)
   if (tokens[0] !== 'root' || !isNodeLike(document.root) || typeof document.root.id !== 'string') return { kind: 'raw', path }
   let node = document.root
   let i = 1
@@ -202,6 +212,23 @@ function anchorPath(document: PageDocument, path: string, slot: boolean): Anchor
   return { kind: 'node', id: node.id, rest: tokens.slice(i) }
 }
 
+/** 상태 목록 안의 경로를 상태 id 로 적는다(머리말 «자리의 셋»). 번호가 아니거나 id 없는 항목이면 경로 그대로다. */
+function anchorStatePath(document: PageDocument, path: string, tokens: string[], slot: boolean): Anchor {
+  const list: unknown = document.viewStates
+  const token = tokens[1]!
+  if (!Array.isArray(list)) return { kind: 'raw', path }
+  if (slot && tokens.length === 2) {
+    if (token === '-') return { kind: 'stateSlot', after: [], before: [], index: '-' }
+    if (!/^\d+$/.test(token)) return { kind: 'raw', path }
+    const index = Number(token)
+    return { kind: 'stateSlot', after: idsOf(list.slice(0, index)).reverse(), before: idsOf(list.slice(index)), index }
+  }
+  if (!/^\d+$/.test(token)) return { kind: 'raw', path }
+  const entry: unknown = list[Number(token)]
+  if (!isNodeLike(entry) || typeof entry.id !== 'string') return { kind: 'raw', path }
+  return { kind: 'state', id: entry.id, rest: tokens.slice(2) }
+}
+
 /** 형제들의 id 줄 — id 가 없는 원소는 뺀다(찾을 수 없다). */
 function idsOf(kids: readonly unknown[]): string[] {
   return kids.flatMap((kid) => (isNodeLike(kid) && typeof kid.id === 'string' ? [kid.id] : []))
@@ -210,6 +237,13 @@ function idsOf(kids: readonly unknown[]): string[] {
 /** 적어 둔 자리를 `document`에서 경로로 짓는다. 못 지으면 `null`. */
 function resolveAnchor(document: PageDocument, anchor: Anchor): string | null {
   if (anchor.kind === 'raw') return anchor.path
+  if (anchor.kind === 'state' || anchor.kind === 'stateSlot') {
+    const list: unknown = document.viewStates
+    if (!Array.isArray(list)) return null
+    if (anchor.kind === 'stateSlot') return `/viewStates/${anchor.index === '-' ? '-' : slotIndex(list, { ...anchor, index: anchor.index })}`
+    const index = list.findIndex((entry) => isNodeLike(entry) && entry.id === anchor.id)
+    return index === -1 ? null : formatPointer(['viewStates', String(index), ...anchor.rest])
+  }
   if (anchor.kind === 'node') {
     const nodePath = findNodePathSafely(document.root, anchor.id)
     if (nodePath === undefined) return null

@@ -246,6 +246,27 @@ describe('commentEntries — 번호와 코멘트를 맞춘다', () => {
     expect(entry?.label).toContain('②')
   })
 
+  /** 상태 가지 안 노드는 그 상태를 붙인다 — 문장 · 화면과 같은 이름이다(K1 리뷰 R4). */
+  it('상태 가지 안 노드의 이름은 그 상태를 붙인다 — 문장과 같은 이름', () => {
+    const target = node('n_000000000002', { marker: 1, props: { content: '승인 안내' } })
+    const page = {
+      ...documentOf([
+        {
+          id: 'n_000000000010',
+          type: 'StateSwitch',
+          children: [
+            { id: 'n_000000000011', type: 'StateCase', props: { state: 'default' }, children: [] },
+            { id: 'n_000000000012', type: 'StateCase', props: { state: 's_admin' }, children: [target] },
+          ],
+        },
+      ]),
+      viewStates: [{ id: 's_admin', name: '관리자' }],
+    }
+    const [entry] = commentEntries(page, [COMMENT])
+    expect(entry?.label).toBe(describeNode(target, { viewStateName: '관리자' }))
+    expect(entry?.label).toContain('(관리자 상태)')
+  })
+
   it('번호가 없어도 코멘트는 그린다', () => {
     const [entry] = commentEntries(documentOf([node('n_000000000002')]), [COMMENT])
     expect(entry?.kind).toBe('comment')

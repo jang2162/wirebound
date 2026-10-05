@@ -55,6 +55,12 @@ export type ValidationCode =
   | 'state-case-outside'
   /** `StateSwitch`의 자식이 `StateCase`가 아니다. */
   | 'state-switch-child'
+  /**
+   * **편집이 목록에서 뺀 상태(편집 전 목록에 있던 id)를 가리키는 가지가 편집 뒤 문서에 남았다.** 노드는 그 가지다. 문서 하나만 보고는 «뺐다»를
+   * 알 수 없어 `validatePage`는 이 코드를 안 낸다 — 저장 경계(편집 파이프라인)가 편집 전후로 `checkViewStateRemoval`을 부른다. 편집 전부터
+   * 목록 밖이던 가지는 여기 안 온다(lint 의 몫 — `checkStateRegion` 머리말).
+   */
+  | 'state-cases-left'
 
 /**
  * 이슈가 편집·저장을 **막는가**.
@@ -117,6 +123,7 @@ export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'state-case-duplicate': 'error',
   'state-case-outside': 'error',
   'state-switch-child': 'error',
+  'state-cases-left': 'error',
 }
 
 export interface ValidationIssue {
@@ -217,6 +224,41 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
   return issues
 }
 
+/**
+ * **편집이 목록에서 뺀 상태의 가지가 남았는가**(`state-cases-left`) — 저장 경계(`apps/api`의 `services/edit-pipeline.ts` 6단계)가 편집 전
+ * 문서 `before`와 적용 뒤 문서 `after`로 부른다. «뺀 상태»는 `before`의 목록에 있고 `after`의 목록에 없는 id 다(빼기 · id 바꾸기 · 목록째
+ * 빼거나 갈아 끼우기). 그 상태를 가리키는 `StateCase`가 `after`에 남았으면 가지마다 이슈 하나.
+ *
+ * **왜 오류인가** — 목록에서만 빼면 그 가지가 어느 상태에서도 안 그려지는데, 잠금 판정은 포인터 겹침이라 `/viewStates`는 가지 안 남의 잠금과
+ * 안 겹쳐 지나간다(K1 리뷰 R2). 상태 삭제는 가지째 지우는 묶음(`removeViewStateOps` — 가지 `remove`가 잠금 판정을 탄다)으로만 한다.
+ *
+ * | 입구 | 목록 밖 가지 |
+ * |---|---|
+ * | 편집(REST · WS) · `PUT …/schema` · 스냅샷 복원 — 파이프라인을 탄다 | 편집이 **뺀** 상태의 가지면 오류(422). 편집 전부터 목록 밖이면 통과 |
+ * | 페이지 JSON 가져오기 | 새 페이지(목록 없음)에 쓰므로 뺀 상태가 없다 — 통과(목록 밖 가지는 lint) |
+ * | 붙여넣기 · 복제 · 프리셋 | 목록을 안 바꾼다 — 통과(목록 밖 가지는 lint) |
+ * | 저장된 문서를 읽을 때(lint · `pageView`) | 오류가 아니다 — lint 경고(K3) |
+ *
+ * `after`의 봉투가 깨졌으면(`validatePage`가 `bad-document`만 내는 판) 부르지 않는다 — 트리를 걷지 못한다.
+ */
+export function checkViewStateRemoval(before: { viewStates?: unknown }, after: PageDocument): ValidationIssue[] {
+  const listed = (doc: { viewStates?: unknown }) =>
+    new Set(Array.isArray(doc.viewStates) ? doc.viewStates.flatMap((entry: unknown) => (entry !== null && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string' ? [(entry as { id: string }).id] : [])) : [])
+  const now = listed(after)
+  const removed = [...listed(before)].filter((id) => !now.has(id))
+  if (removed.length === 0) return []
+  const gone = new Set(removed)
+  const issues: ValidationIssue[] = []
+  for (const { node, path } of walkNodes(after.root)) {
+    const state = node.type === 'StateCase' ? node.props?.state : undefined
+    if (typeof state !== 'string' || !gone.has(state)) continue
+    issues.push(
+      makeIssue('state-cases-left', node.id, path, `목록에서 뺀 상태를 가리키는 가지가 남아 있습니다: ${state} — 상태 삭제는 그 가지를 함께 지웁니다`),
+    )
+  }
+  return issues
+}
+
 export function validateLayout(doc: LayoutDocument): ValidationIssue[] {
   const envelopeIssues = validateEnvelope(doc, DocumentEnvelopeSchema)
   if (envelopeIssues.length > 0) return envelopeIssues
@@ -255,9 +297,13 @@ function validateEnvelope(doc: unknown, schema: typeof DocumentEnvelopeSchema): 
  *   찾아낸 id도 신뢰하지 않는다 — 경로 위 한 지점의 정체성이 이미 깨졌다면, 그 밑에서
  *   찾은 id가 실제로 이 이슈를 가리키는 노드의 것인지 보장할 수 없기 때문이다.
  *
+ * - 경로가 `root` 아래가 아니면(상태 목록 `/viewStates/…` · `/version`) null — 노드가 아니다.
+ *
  * 알아낼 수 없으면 null.
  */
 function resolveNodeId(doc: unknown, path: readonly PropertyKey[]): string | null {
+  // 노드는 `root` 아래에만 있다 — 상태 목록의 항목(`{ id, name }`)도 `id`를 가져, 그 이슈가 상태 id 를 노드 id 로 실었다(K1 리뷰 R5).
+  if (path[0] !== 'root') return null
   let current: unknown = doc
   let nodeId: string | null = null
   let poisoned = false
@@ -454,10 +500,10 @@ function checkInteractions(
 
 /**
  * 상태 영역의 구조 — `StateSwitch`의 자식은 `StateCase`만이고 기본 가지가 정확히 하나 · 상태마다 가지가 많아야 하나, `StateCase`는
- * `StateSwitch` 아래에만 선다. **가지가 가리키는 상태가 페이지 목록에 있는지는 여기서 보지 않는다** — 그것은 lint 경고다(그 가지는
- * 그려지지 않을 뿐 문서를 못 쓰게 하지 않고, 오류로 두면 상태를 지우는 편집이 가지를 함께 지우지 않은 판에서 막힌다 — 상호작용
- * 이슈를 `warning`으로 둔 `ISSUE_SEVERITY` 머리말의 둘째 근거와 같다). 그래서 레이아웃 · 클립보드의 임시 뿌리처럼 목록이 없는
- * 문서도 같은 판정을 받는다.
+ * `StateSwitch` 아래에만 선다. **가지가 가리키는 상태가 페이지 목록에 있는지는 여기서 보지 않는다** — 문서 하나에서는 lint 경고다(그
+ * 가지는 그려지지 않을 뿐 문서를 못 쓰게 하지 않고, 오류로 두면 목록 밖 가지가 든 문서의 **무관한** 편집까지 막힌다 — 상호작용 이슈를
+ * `warning`으로 둔 `ISSUE_SEVERITY` 머리말의 둘째 근거와 같다). 편집이 목록에서 **뺀** 상태의 가지는 저장 경계가 편집 전후로 따로 막는다
+ * (`checkViewStateRemoval`). 그래서 레이아웃 · 클립보드의 임시 뿌리처럼 목록이 없는 문서도 같은 판정을 받는다.
  *
  * `state`가 문자열이 아닌 가지는 기본도 상태도 아닌 것으로 센다 — 그 모양은 `invalid-props`가 따로 말한다.
  */

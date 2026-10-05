@@ -13,7 +13,7 @@ import {
   type PageDocument,
   type WbNode,
 } from '../src/index'
-import { partitionIssues, validateLayout, validatePage } from '../src/validate'
+import { checkViewStateRemoval, partitionIssues, validateLayout, validatePage } from '../src/validate'
 
 beforeAll(() => {
   installCatalog()
@@ -184,5 +184,53 @@ describe('상태 영역 — StateSwitch · StateCase', () => {
       root: { id: ROOT, type: 'Page', children: [{ id: 'n_slot', type: 'Slot' }, switchOf('n_sw', [])] },
     }
     expect(partitionIssues(validateLayout(layout as never)).errors.map((issue) => issue.code)).toEqual(['state-case-default'])
+  })
+})
+
+describe('상태 목록 이슈의 노드 — 노드는 `root` 아래에만 있다', () => {
+  it.each<[string, unknown, string]>([
+    ['이름 겹침', [ADMIN, { id: 's_guest', name: '관리자' }], '/viewStates/1/name'],
+    ['id 패턴 밖', [ADMIN, { id: 'Guest!', name: '손님' }], '/viewStates/1/id'],
+    ['이름 앞뒤 공백', [ADMIN, { id: 's_guest', name: ' 손님' }], '/viewStates/1/name'],
+  ])('%s — `nodeId`는 null(상태 id 가 아니다)', (_name, viewStates, path) => {
+    const issues = validatePage(page([text('n_a')], viewStates))
+    expect(issues.map((issue) => ({ code: issue.code, nodeId: issue.nodeId, path: issue.path }))).toContainEqual({
+      code: 'bad-document',
+      nodeId: null,
+      path,
+    })
+    expect(issues.every((issue) => issue.nodeId === null)).toBe(true)
+  })
+
+  it('노드 이슈는 그대로 그 노드다(음성 대조)', () => {
+    const issues = validatePage(page([{ id: 'n_a', type: 'Text', props: 5 } as unknown as WbNode], [ADMIN]))
+    expect(issues.map((issue) => `${issue.code} ${issue.nodeId}`)).toEqual(['bad-document n_a'])
+  })
+})
+
+describe('checkViewStateRemoval — 편집이 목록에서 뺀 상태의 가지가 남음', () => {
+  const tree = [switchOf('n_sw', [caseOf('n_c0', DEFAULT_CASE), caseOf('n_c1', 's_admin', [text('n_ok')]), caseOf('n_c2', 's_guest')])]
+  const before = page(tree, [ADMIN, GUEST])
+  const left = (after: PageDocument) => checkViewStateRemoval(before, after).map((issue) => `${issue.code} ${issue.severity} ${issue.nodeId} ${issue.path}`)
+
+  it.each<[string, PageDocument, string[]]>([
+    ['하나를 빼면 그 상태의 가지마다', page(tree, [GUEST]), ['state-cases-left error n_c1 /root/children/0/children/1']],
+    ['목록째 빼면 모든 상태의 가지', page(tree), ['state-cases-left error n_c1 /root/children/0/children/1', 'state-cases-left error n_c2 /root/children/0/children/2']],
+    ['id 를 바꾸면 옛 id 의 가지', page(tree, [{ id: 's_root', name: '관리자' }, GUEST]), ['state-cases-left error n_c1 /root/children/0/children/1']],
+    ['가지도 함께 지우면 없음', page([switchOf('n_sw', [caseOf('n_c0', DEFAULT_CASE), caseOf('n_c2', 's_guest')])], [GUEST]), []],
+    ['이름 · 순서만 바꾸면 없음', page(tree, [GUEST, { id: 's_admin', name: '운영자' }]), []],
+    ['상태를 더하면 없음', page(tree, [ADMIN, GUEST, { id: 's_new', name: '새' }]), []],
+  ])('%s', (_name, after, expected) => {
+    expect(left(after)).toEqual(expected)
+  })
+
+  it('편집 전부터 목록 밖이던 가지는 내지 않는다 — lint 의 몫', () => {
+    const old = page(tree, [GUEST])
+    expect(checkViewStateRemoval(old, page(tree, [GUEST]))).toEqual([])
+    expect(checkViewStateRemoval(old, page(tree, []))).toEqual([expect.objectContaining({ nodeId: 'n_c2' })])
+  })
+
+  it('`validatePage`는 이 코드를 안 낸다 — 문서 하나로는 «뺐다»를 모른다', () => {
+    expect(codes(page(tree, [GUEST]))).toEqual([])
   })
 })

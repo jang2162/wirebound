@@ -14,7 +14,7 @@ import fc from 'fast-check'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { applyOps } from '../../src/patch/apply'
 import { invertOps } from '../../src/patch/inverse'
-import { formatPointer } from '../../src/patch/pointer'
+import { formatPointer, getByPointer } from '../../src/patch/pointer'
 import type { PatchOp } from '../../src/patch/types'
 import { referenceApplyOp, referenceApplyOps, referenceInvertOps } from './reference-patch'
 
@@ -77,7 +77,7 @@ interface Step {
 }
 
 const step: fc.Arbitrary<Step> = fc.record({
-  kind: fc.nat({ max: 3 }),
+  kind: fc.nat({ max: 4 }),
   pick: fc.nat({ max: 10_000 }),
   pick2: fc.nat({ max: 10_000 }),
   bogus: fc.nat({ max: 19 }),
@@ -96,6 +96,17 @@ function opOf(doc: Json, s: Step): PatchOp {
       return { op: 'remove', path: s.bogus === 0 ? wrong : at(existing, s.pick) }
     case 2:
       return { op: 'replace', path: s.bogus === 0 ? wrong : at(existing, s.pick), value: s.value }
+    case 4: {
+      // 반은 그 자리의 지금 값(맞음), 반은 무작위 값(대개 틀림). 넣을 자리(새 키 · 배열 끝)도 섞는다 — 없는 자리는 늘 틀림이다.
+      const path = s.bogus === 0 ? wrong : s.pick2 % 3 === 2 ? at(insertable, s.pick) : at(existing, s.pick)
+      let current: unknown
+      try {
+        current = getByPointer(doc, path)
+      } catch {
+        current = undefined
+      }
+      return { op: 'test', path, value: s.pick2 % 2 === 0 && current !== undefined ? structuredClone(current) : s.value }
+    }
     default:
       // 목적지는 원래 문서의 자리에서 고른다 — 값을 뺀 뒤에는 없는 자리(출발지 안쪽 ·
       // 밀린 인덱스)가 섞여 move 의 던지는 갈래가 저절로 나온다.

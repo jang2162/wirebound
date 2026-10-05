@@ -30,6 +30,8 @@ describe('ValidationCode → lint 규칙', () => {
       'state-case-duplicate': 'document-invalid',
       'state-case-outside': 'document-invalid',
       'state-switch-child': 'document-invalid',
+      // 저장 경계만 낸다(편집 전후) — lint 는 받지 않지만 표는 모든 코드를 덮는다.
+      'state-cases-left': 'document-invalid',
     })
   })
 

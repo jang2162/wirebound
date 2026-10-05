@@ -85,7 +85,7 @@ export const PatchPath = z
 export const PatchValue = z.custom<unknown>((value) => value !== undefined, { message: 'value가 필요합니다' })
 
 /**
- * ops 하나. `@wirebound/schema`의 `PatchOp`(add·remove·replace·move 넷)와 같은
+ * ops 하나. `@wirebound/schema`의 `PatchOp`(add·remove·replace·move·test 다섯)와 같은
  * 모양을 zod로 다시 쓴 것이다 — 그 패키지에는 대응하는 zod 스키마가 없다. 패치
  * 함수들은 이미 신뢰된 입력을 받는 순수 함수이고(브라우저에서도 돈다), 신뢰할 수
  * 없는 입력을 거르는 것은 이 파일의 몫이기 때문이다.
@@ -97,7 +97,11 @@ export const PatchValue = z.custom<unknown>((value) => value !== undefined, { me
  * 컴파일러가 아니라 `undo-redo.test.ts`다(*"세 번 편집한 뒤 inverse를 역순으로 보내면 최초
  * 문서로 정확히 돌아온다"*가 유효한 `move`를 HTTP로 보낸다).
  *
- * 네 종류 밖(예: RFC 6902의 `copy`)은 여기서 400이다. 파이프라인은 op 종류를 검사
+ * **`test`는 상태 목록의 번호 자리에 «아직 그 상태가 있다»를 싣는다**(`@wirebound/schema`의 `guardViewStateOps`) — 맞지 않으면 적용이
+ * 실패해 409 `conflict`다(`http/edit-outcome.ts`의 `patch-failed`). 서버가 짓는 역연산(`inverse`)도 실으므로 되돌리기를 그대로 다시 내는
+ * 클라이언트가 이 연산을 받아야 한다. 경로 술어는 다른 연산과 같다.
+ *
+ * 다섯 종류 밖(예: RFC 6902의 `copy`)은 여기서 400이다. 파이프라인은 op 종류를 검사
  * 하지 않는다 — `applyOp`의 switch가 어느 분기도 타지 않아 문서가 그대로 남으므로,
  * 여기서 막지 않으면 "아무 일도 안 일어났는데 revision만 남는" 편집이 된다.
  */
@@ -106,6 +110,7 @@ export const PatchOpBody = z.discriminatedUnion('op', [
   z.strictObject({ op: z.literal('remove'), path: PatchPath }),
   z.strictObject({ op: z.literal('replace'), path: PatchPath, value: PatchValue }),
   z.strictObject({ op: z.literal('move'), path: PatchPath, from: PatchPath }),
+  z.strictObject({ op: z.literal('test'), path: PatchPath, value: PatchValue }),
 ])
 
 /**

@@ -1,3 +1,4 @@
+import { guardViewStateOps } from '../view-state-guard'
 import { addAt, applyOpInPlace, removeAt } from './apply'
 import { formatPointer, getByPointer, parsePointer } from './pointer'
 import { PatchError, type PatchOp } from './types'
@@ -16,6 +17,10 @@ import { PatchError, type PatchOp } from './types'
  *
  * 문서는 `applyOps`처럼 **한 번 복제한 사본**을 연산마다 제자리로 진행시킨다(까닭은 그 함수의
  * 독스트링). 입력 문서는 변경하지 않는다.
+ *
+ * **`test`는 역이 없다** — 문서를 바꾸지 않으므로 그 자리에서 재기만 하고(맞지 않으면 `applyOps`처럼 던진다) 역 묶음에는 싣지 않는다.
+ * **역 묶음이 상태 목록의 있는 자리를 고치면 그 자리의 id 를 `test`로 싣는다**(`view-state-guard.ts`) — 되돌리기를 그 사이 남이 목록의
+ * 순서를 바꾼 문서에 내면 같은 번호가 남의 상태를 가리킨다. 그래서 역 묶음의 길이는 위 «길이가 다를 수 있다»에 더해 그 `test` 수만큼 는다.
  */
 export function invertOps<T>(doc: T, ops: PatchOp[]): PatchOp[] {
   if (ops.length === 0) return []
@@ -30,15 +35,16 @@ export function invertOps<T>(doc: T, ops: PatchOp[]): PatchOp[] {
       inverses.push(invertMoveInPlace(current, op))
       continue
     }
-    inverses.push([inverseOf(current, op)])
+    if (op.op !== 'test') inverses.push([inverseOf(current, op)])
     applyOpInPlace(current, op)
   }
 
-  return inverses.reverse().flat()
+  // `current`는 이제 적용 뒤 문서 — 역 묶음이 설 문서다.
+  return guardViewStateOps(current, inverses.reverse().flat())
 }
 
 /** `add`·`remove`·`replace`의 역. 문서를 읽기만 한다. */
-function inverseOf(doc: unknown, op: Exclude<PatchOp, { op: 'move' }>): PatchOp {
+function inverseOf(doc: unknown, op: Exclude<PatchOp, { op: 'move' | 'test' }>): PatchOp {
   switch (op.op) {
     case 'add':
       return inverseOfAdd(doc, op)

@@ -56,7 +56,34 @@ export function applyOpInPlace(doc: unknown, op: PatchOp): void {
       addAt(doc, op.path, removeAt(doc, op.from))
       break
     }
+    case 'test':
+      testAt(doc, op.path, op.value)
+      break
   }
+}
+
+/** `test` — 그 자리의 값이 `value`와 JSON 으로 같지 않으면(없으면) 던진다. 문서는 안 바꾼다. */
+export function testAt(doc: unknown, path: string, value: unknown): void {
+  // 뿌리(`""`)는 다른 연산처럼 받지 않는다 — 문서 전체를 견줄 까닭이 없고, 받으면 이 연산만 경로 규칙이 갈린다.
+  resolveSlot(doc, path)
+  if (!jsonEqual(getByPointer(doc, path), value)) {
+    throw new PatchError(`값이 기대와 다릅니다: ${path}`, path)
+  }
+}
+
+/** JSON 값의 같음(RFC 6902 「test」) — 객체는 키 차례를 안 본다. `undefined`(없는 자리)는 어떤 값과도 같지 않다. */
+function jsonEqual(left: unknown, right: unknown): boolean {
+  if (left === undefined || right === undefined) return false
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') return left === right
+  if (Array.isArray(left) !== Array.isArray(right)) return false
+  if (Array.isArray(left)) {
+    const other = right as unknown[]
+    return left.length === other.length && left.every((item, i) => jsonEqual(item, other[i]))
+  }
+  const leftKeys = Object.keys(left)
+  const rightRecord = right as Record<string, unknown>
+  if (leftKeys.length !== Object.keys(rightRecord).length) return false
+  return leftKeys.every((key) => Object.hasOwn(rightRecord, key) && jsonEqual((left as Record<string, unknown>)[key], rightRecord[key]))
 }
 
 interface Slot {

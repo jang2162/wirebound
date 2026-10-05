@@ -256,13 +256,13 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
     })
   })
 
-  it('op가 네 종류 밖이면 400이다', async () => {
+  it('op가 다섯 종류 밖이면 400이다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
 
       // RFC 6902의 copy는 wirebound의 PatchOp에 없다(`patch/types.ts`: add·remove·
-      // replace·move 넷뿐). 파이프라인은 op 종류를 검사하지 않으므로 — applyOp의
-      // switch가 아는 네 종류 밖이면 아무 분기도 타지 않고 문서를 그대로 돌려준다 —
+      // replace·move·test 다섯뿐). 파이프라인은 op 종류를 검사하지 않으므로 — applyOp의
+      // switch가 아는 다섯 종류 밖이면 아무 분기도 타지 않고 문서를 그대로 돌려준다 —
       // 여기서 막지 않으면 "아무 일도 안 일어났는데 revision은 남는" 편집이 된다.
       const res = await patchOps(
         ctx,

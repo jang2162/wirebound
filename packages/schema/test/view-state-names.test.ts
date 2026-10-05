@@ -11,6 +11,7 @@ import type { PageDocument, WbNode } from '../src/node'
 import { collectNodeIds, findNode } from '../src/tree'
 import { partitionIssues, validatePage } from '../src/validate'
 import { nodeViewState, viewStateIndex, visibleTree } from '../src/view-state'
+import { pageView } from '../src/page-view'
 
 beforeAll(() => {
   installCatalog()
@@ -116,6 +117,36 @@ describe('이름에 상태를 붙인다', () => {
     const doc = fixture()
     findNode(doc.root, 'n_out')!.interactions = [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_lost', value: false }] }]
     expect(listInteractionSentences(doc)[0]!.text).toBe("목록 버튼 클릭 시 '잃음 버튼'(목록에 없는 상태 상태)가 숨겨집니다")
+  })
+})
+
+describe('pageView — 읽기(CLI · 번들)의 이름도 상태를 붙인다(K1 리뷰 R4)', () => {
+  const view = () =>
+    pageView({
+      id: 'p_1',
+      title: '목록',
+      description: null,
+      target: 'page:목록',
+      menuPath: [],
+      document: fixture(),
+      comments: [
+        { nodeId: 'n_ok', body: '승인 문구', authorName: '보라', createdAt: '2026-10-05T00:00:00Z' },
+        { nodeId: 'n_out', body: '영역 밖', authorName: '보라', createdAt: '2026-10-05T00:00:00Z' },
+      ],
+    })
+  const row = (id: string) => view().nodes.find((node) => node.id === id)!
+
+  it('목록에 있는 상태의 가지 줄은 그 상태 이름이다 — «목록에 없는 상태»가 아니다', () => {
+    expect(row('n_c1').rowLabel).toContain('관리자')
+    expect(row('n_c1').rowLabel).not.toContain('목록에 없는 상태')
+    expect(row('n_c2').rowLabel).toContain('목록에 없는 상태')
+  })
+
+  it('가지 안 노드의 이름 · 코멘트의 노드 이름에 상태가 붙는다 — 영역 밖은 그대로', () => {
+    expect(row('n_ok').name).toBe(describeNode(findNode(fixture().root, 'n_ok')!, { viewStateName: '관리자' }))
+    expect(row('n_ok').name).toContain('(관리자 상태)')
+    expect(row('n_out').name).toBe(describeNode(findNode(fixture().root, 'n_out')!))
+    expect(view().comments.map((comment) => comment.nodeName)).toEqual([row('n_ok').name, row('n_out').name])
   })
 })
 

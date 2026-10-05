@@ -18,7 +18,8 @@
  * 4. `invertOps(before, ops)` → `PatchError`면 `patch-failed`.
  * 5. `applyOps(before, ops)` → `PatchError`면 `patch-failed`.
  * 6. `validatePage(after)` → **`error` 이슈가 있으면** `invalid`. 경고만 있으면 통과하고
- *    성공 결과의 `warnings`에 실린다.
+ *    성공 결과의 `warnings`에 실린다. 봉투가 맞으면 `checkViewStateRemoval(before, after)`(편집이 목록에서 뺀
+ *    상태의 가지가 남음 — 오류)를 함께 싣는다.
  * 7. `after.version !== before.version`이면 `invalid` — `ops`가 `/version`을 직접
  *    건드린 경우다(아래 "`version`은 편집 대상이 아니다" 참고).
  * 8. `containsNulByte(ops) || containsNulByte(inverse) || containsNulByte(after)` → `nul-byte`.
@@ -75,6 +76,7 @@
 import {
   ISSUE_SEVERITY,
   applyOps,
+  checkViewStateRemoval,
   invertOps,
   migrateDocument,
   partitionIssues,
@@ -184,7 +186,13 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
     //
     // 거부할 때는 **경고까지 함께** 싣는다. severity가 붙었으므로 받는 쪽이 가를 수 있고,
     // 거부 응답에서 경고를 빼면 사용자가 한 번에 고칠 수 있는 것을 두 번에 나눠 본다.
-    const issues = validatePage(after)
+    //
+    // **편집이 목록에서 뺀 상태의 가지도 여기서 막는다**(`checkViewStateRemoval` — 편집 전후를 봐야 «뺐다»를 안다). 봉투가 깨진 판은
+    // `validatePage`가 `bad-document`만 내고 트리를 안 걷는다 — 그 판에는 부르지 않는다.
+    const documentIssues = validatePage(after)
+    const issues = documentIssues.some((issue) => issue.code === 'bad-document')
+      ? documentIssues
+      : [...documentIssues, ...checkViewStateRemoval(before, after)]
     const { errors, warnings } = partitionIssues(issues)
     if (errors.length > 0) {
       return { ok: false, reason: 'invalid', issues }
@@ -220,7 +228,8 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
     // jsonb 컬럼에 저장되므로, 결과 문서만 검사하면 그 경우를 놓친다.
     //
     // **`containsNulByte(input.ops)` 단독을 격리하는 테스트는 없다.** 이 패치
-    // 엔진(add·remove·replace·move 네 종류, `@wirebound/schema`의 `patch/`)에서 그
+    // 엔진(add·remove·replace·move·test 다섯 종류, `@wirebound/schema`의 `patch/` — `test`의 값은 문서에도 역에도 남지 않고, 문서에
+    // NUL 이 없으니 NUL 값의 `test`는 5단계 전에 늘 실패한다)에서 그
     // 줄만 지웠을 때 실패하는 케이스를 아직 찾지 못했다. 관찰: ops가 NUL 값을
     // 도입했는데 after에는 안 남는다면(즉 그 값이 최종적으로 지워지거나 덮어써진다면),
     // 지우거나 덮어쓰는 연산의 역이 "지워지기/덮이기 직전의 값"을 그대로 담아

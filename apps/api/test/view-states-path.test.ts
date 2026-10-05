@@ -114,7 +114,11 @@ describe('상태 목록 — 문서 경로 편집', () => {
 
       const created = await patch(ctx, fx, fx.bora, 1, [{ op: 'add', path: '/viewStates', value: [ADMIN] }])
       expect(created.status, JSON.stringify(created.body)).toBe(200)
-      expect(created.body.inverse).toEqual([{ op: 'remove', path: '/viewStates' }])
+      // 목록째를 빼는 역연산은 그 목록 값 전부를 `test`로 싣는다(`guardViewStateOps`) — 그 사이 남이 더한 상태까지 빼지 않게.
+      expect(created.body.inverse).toEqual([
+        { op: 'test', path: '/viewStates', value: [ADMIN] },
+        { op: 'remove', path: '/viewStates' },
+      ])
       expect((await saved(ctx, fx)).viewStates).toEqual([ADMIN])
 
       expect((await patch(ctx, fx, fx.bora, 2, [{ op: 'add', path: '/viewStates/-', value: GUEST }])).status).toBe(200)

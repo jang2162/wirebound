@@ -151,6 +151,34 @@ describe('구조 트리', () => {
     expect(nodeRows().map((node) => structureRowType(node))).toEqual(['Page', 'Text'])
   })
 
+  it('상태 가지 줄의 요약은 페이지 목록의 상태 이름이다 — 목록에 있는 상태를 «목록에 없는 상태»로 읽지 않는다(K1 리뷰 R4)', async () => {
+    await openPage({
+      ...pageDoc({
+        id: 'n-root',
+        type: 'Page',
+        children: [
+          {
+            id: 'n-sw',
+            type: 'StateSwitch',
+            children: [
+              { id: 'n-c0', type: 'StateCase', props: { state: 'default' }, children: [] },
+              { id: 'n-c1', type: 'StateCase', props: { state: 's_admin' }, children: [] },
+              { id: 'n-c2', type: 'StateCase', props: { state: 's_gone' }, children: [] },
+            ],
+          },
+        ],
+      }),
+      viewStates: [{ id: 's_admin', name: '관리자' }],
+    })
+
+    const caseRows = nodeRows().filter((node) => structureRowType(node) === 'StateCase')
+    expect(caseRows.map((node) => node.getAttribute('aria-label') ?? node.textContent)).toEqual([
+      'StateCase 기본',
+      'StateCase 관리자',
+      'StateCase 목록에 없는 상태',
+    ])
+  })
+
   it('노드 타입을 보여준다', async () => {
     // 위 케이스와 다른 타입들로 연다. 타입이 문서에서 온다는 것을 못박는다 — 화면이
     // 무엇을 하드코딩해도 두 케이스를 함께 통과할 수는 없다.

@@ -214,6 +214,13 @@ describe('forkCaseOps · editInForkOps — 복사 + 편집(Review Focus 2)', () 
       '상호작용 대상을 가지 안 노드로',
       [{ op: 'replace', path: '/root/children/4/children/0/children/1/interactions/0/actions/0', value: { type: 'setVisible', target: 'n_e', value: false } }],
     ],
+    // 값 안의 노드 id · 번호(K1 리뷰 R3) — 안 옮기면 복사 가지에 기본 가지와 같은 id 가 서서 `duplicate-id`, 번호가 둘.
+    ['노드 통째 바꾸기 — 같은 id · 번호 든 값', [{ op: 'replace', path: '/root/children/4/children/0/children/0', value: text('n_d', { marker: 2, props: { content: '바꿈' } }) }]],
+    [
+      '노드 통째 바꾸기 — 새 id · 복사된 노드를 가리키는 값',
+      [{ op: 'replace', path: '/root/children/4/children/0/children/1', value: text('n_z', { interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_d', value: true }] }] }) }],
+    ],
+    ['상호작용 대상 글자 하나 바꾸기', [{ op: 'replace', path: '/root/children/4/children/0/children/1/interactions/0/actions/0/target', value: 'n_e' }]],
   ]
 
   it.each(EDITS)('%s — 기본 가지는 그대로이고 새 가지에 편집이 선다 · 되돌리기 한 번', (_label, edit) => {
@@ -241,6 +248,18 @@ describe('forkCaseOps · editInForkOps — 복사 + 편집(Review Focus 2)', () 
     expect(copy.children![1]!.interactions![0]!.actions[0]).toMatchObject({ target: result.remap.get('n_e') })
     // 복사 밖(영역 밖의 머리)을 가리키는 대상은 그대로다.
     expect(copy.children![2]!.interactions![0]!.actions.map((action) => action.target)).toEqual([result.remap.get('n_d'), 'n_head'])
+  })
+
+  it('`children` 키 없는 기본 가지의 첫 자식 넣기(`add …/children [노드]`)도 가지 안이다 — 새 가지에 선다', () => {
+    const before = fixture()
+    const sw = findNode(before.root, 'n_sw')!
+    sw.children![0] = { id: 'n_c0', type: 'StateCase', props: { state: 'default' } }
+    expect(partitionIssues(validatePage(before)).errors).toEqual([])
+    const edit: PatchOp[] = [{ op: 'add', path: '/root/children/4/children/0/children', value: [text('n_first')] }]
+    const result = editInForkOps(before, 'n_sw', 's_guest', edit, ids())!
+    const after = applied(before, result.ops)
+    expect(findNode(after.root, 'n_c0')).toEqual({ id: 'n_c0', type: 'StateCase', props: { state: 'default' } })
+    expect(childIds(findNode(after.root, 'n_sw')!.children![2]!)).toEqual(['n_first'])
   })
 
   it('편집이 기본 가지 밖을 가리키면 null — 모든 상태에 반영되는 평범한 편집이다', () => {

@@ -207,10 +207,19 @@ interface NodeIndex {
 function nodeIndex(document: AnyDocument): NodeIndex {
   const nodes = new Map<string, WbNode>()
   for (const { node } of walkNodes(document.root)) nodes.set(node.id, node)
+  return { nodes, naming: namingContexts(document) }
+}
+
+/**
+ * 문서의 노드 id → 이름 짓기 맥락(`NamingContext` — 속한 상태의 이름). 상태 영역 밖 노드는 없다(`get`이 `undefined` — 이름이 한 글자도 안
+ * 바뀐다). **노드를 이름으로 부르는 자리(문장 · 읽기 `pageView` · 화면의 패널 머리 · 대상 고르개 · 번들 코멘트)가 이것을 넘긴다** — 한 자리가
+ * 안 넘기면 같은 노드가 자리마다 다른 이름으로 불린다(K1 리뷰 R4).
+ */
+export function namingContexts(document: AnyDocument): Map<string, NamingContext> {
   const states = (document as { viewStates?: { id: string; name: string }[] }).viewStates
   const naming = new Map<string, NamingContext>()
   for (const [id, state] of viewStateIndex(document.root)) naming.set(id, { viewStateName: viewStateName(states, state) })
-  return { nodes, naming }
+  return naming
 }
 
 function sentenceOf(

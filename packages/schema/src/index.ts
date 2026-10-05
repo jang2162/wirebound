@@ -31,6 +31,7 @@ export {
   splitIntoStatesOps,
   unsplitStatesOps,
 } from './view-state-ops'
+export { guardViewStateOps } from './view-state-guard'
 
 export type { NodeVisit } from './tree'
 export { collectNodeIds, findNode, findNodePath, remapNodeIds, walkNodes } from './tree'
@@ -58,7 +59,7 @@ export { BUILTIN_PRESETS, stripMarkers } from './preset/builtin'
 
 export type { IssueSeverity, ValidationCode, ValidationIssue } from './validate'
 export { ISSUE_SEVERITY, ignoredVariantMessage, partitionIssues } from './validate'
-export { assertValidLayout, assertValidPage, validateLayout, validatePage } from './validate'
+export { assertValidLayout, assertValidPage, checkViewStateRemoval, validateLayout, validatePage } from './validate'
 
 export {
   DocumentEnvelopeSchema,
@@ -96,6 +97,7 @@ export {
   describeNode,
   describePageTarget,
   listInteractionSentences,
+  namingContexts,
   nodeDisplayName,
 } from './interaction/describe'
 export { UNKNOWN_VIEW_STATE_NAME, caseStateName, viewStateName, nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
