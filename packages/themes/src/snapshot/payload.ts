@@ -81,7 +81,7 @@
  * 선언되지 않은 절이 payload에 실리면 그 자리에서 파싱이 죽는다.
  */
 import { z } from 'zod'
-import { DocumentEnvelopeSchema, type LayoutDocument, type PageDocument } from '@wirebound/schema'
+import { DocumentEnvelopeSchema, PageEnvelopeSchema, type LayoutDocument, type PageDocument } from '@wirebound/schema'
 
 /**
  * 이 코드가 만드는 payload의 형식 버전. **올리는 것은 payload의 모양이 바뀔 때뿐이다** —
@@ -178,8 +178,8 @@ const PageSchema = z.strictObject({
   description: z.string().nullable(),
   sortOrder: z.int(),
   schemaVersion: z.int().positive(),
-  // 버전 값의 **의미**를 보지 않는 검사다(위 「저장된 문서를 그대로 담는다」 절). 999도 통과한다.
-  schema: DocumentEnvelopeSchema,
+  // 버전 값의 **의미**를 보지 않는 검사다(위 「저장된 문서를 그대로 담는다」 절). 999도 통과한다. 페이지 봉투라 화면 상태 목록을 받는다.
+  schema: PageEnvelopeSchema,
   headSeq: z.int().nonnegative(),
 }) as z.ZodType<SnapshotPage>
 

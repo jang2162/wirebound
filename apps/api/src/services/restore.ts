@@ -106,7 +106,7 @@ import { captureSnapshot, type CaptureHooks } from './snapshot-capture'
 import { planRestore, type RestoreSummary } from './restore-plan'
 import { SNAPSHOT_PAYLOAD_VERSION, type SnapshotPayload } from '@wirebound/themes'
 import type { UnsupportedVersionPage } from './restore-plan'
-import type { ValidationIssue } from '@wirebound/schema'
+import { replaceDocumentOps, type ValidationIssue } from '@wirebound/schema'
 
 /**
  * 안전망 스냅샷의 태그 앞머리. **형식을 못박고 케이스가 그 형식을 고정한다**(아래 `actor_label`
@@ -309,6 +309,8 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
 
   // 8단계. 계획의 순서가 곧 FK 순서다(`services/restore-plan.ts`의 표).
   const headSeqByPage = new Map(now.pages.map((page) => [page.id, page.headSeq]))
+  // 복원이 갈아 끼울 문서의 지금 판 — 상태 목록을 뺄지(`remove /viewStates`) 정하는 데 쓴다(`replaceDocumentOps`).
+  const schemaByPage = new Map(now.pages.map((page) => [page.id, page.schema]))
   let theme: ProjectThemeBinding | null = null
   const actorLabel = restoreActorLabel(target.tag)
 
@@ -339,8 +341,8 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
         })
         break
       case 'write-page-schema': {
-        // **`PUT .../schema`가 쓰는 것과 같은 두 ops다** — `applyOp`가 문서 루트에
-        // 적용하지 못하므로 `{version, root}`를 한 번에 갈아 끼울 수 없다
+        // **`PUT .../schema`가 쓰는 것과 같은 ops다**(`replaceDocumentOps`) — `applyOp`가 문서 루트에
+        // 적용하지 못하므로 `{version, root, viewStates}`를 한 번에 갈아 끼울 수 없다
         // (`routes/pages.ts`의 같은 자리 주석).
         //
         // `baseSeq`는 4단계가 읽은 그 페이지의 `head_seq`다. 1단계에서 잠갔으므로 그 사이
@@ -351,10 +353,7 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
           projectId: input.projectId,
           pageId: step.page.id,
           baseSeq,
-          ops: [
-            { op: 'replace', path: '/root', value: step.page.schema.root },
-            { op: 'replace', path: '/version', value: step.page.schema.version },
-          ],
+          ops: replaceDocumentOps(schemaByPage.get(step.page.id) ?? {}, step.page.schema),
           // 복원이 만든 revision은 평범한 편집과 구분돼야 한다(설계서 「스냅샷」의 *"복원 자체가
           // 이력에 남고"*의 실질).
           //

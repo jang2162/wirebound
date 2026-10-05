@@ -69,6 +69,7 @@ import {
   createNodeId,
   gatePageImport,
   planPageImport,
+  replaceDocumentOps,
   type PageJson,
   type ValidationIssue,
 } from '@wirebound/schema'
@@ -175,17 +176,15 @@ export async function importPage(db: DbHandle, input: PageImportInput): Promise<
         throw error
       }
 
-      // **`PUT .../schema`와 같은 두 op이다.** `applyOp`가 문서 루트(`""`)에 연산을 적용하지
-      // 못하므로 `/root`와 `/version`을 따로 replace한다. 방금 만든 페이지라 `headSeq`는 0이고
+      // **`PUT .../schema`와 같은 ops다**(`replaceDocumentOps`). `applyOp`가 문서 루트(`""`)에 연산을 적용하지
+      // 못하므로 `/root` · `/viewStates` · `/version`을 따로 갈아 끼운다. 방금 만든 페이지라 `headSeq`는 0이고
       // 그 값을 그대로 `baseSeq`로 쓴다 — 이 페이지의 id를 아는 다른 요청이 아직 없다.
       const outcome = await applyEdit(trx, {
         projectId: input.projectId,
         pageId: page.id,
         baseSeq: page.headSeq,
-        ops: [
-          { op: 'replace', path: '/root', value: plan.document.root },
-          { op: 'replace', path: '/version', value: plan.document.version },
-        ],
+        // 방금 만든 빈 문서에는 상태 목록이 없다 — 파일에 있으면 `add`로 싣는다.
+        ops: replaceDocumentOps(page.schema, plan.document),
         actor: input.actor,
       })
       // **던진다 — `return`이 아니다.** 여기서 값으로 돌려주면 위의 `insertPage`가 **커밋된다**.

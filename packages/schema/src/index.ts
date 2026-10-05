@@ -19,6 +19,7 @@ export {
   createNodeId,
 } from './node'
 
+export { replaceDocumentOps } from './document-ops'
 export { caseFor, nodeViewState, viewStateIndex, visibleTree } from './view-state'
 export {
   addViewStateOps,

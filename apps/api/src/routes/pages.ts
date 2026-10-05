@@ -53,10 +53,11 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import {
   CURRENT_DOCUMENT_VERSION,
-  DocumentEnvelopeSchema,
+  PageEnvelopeSchema,
   createNodeId,
   migrateDocument,
   parsePageJson,
+  replaceDocumentOps,
   PageDescriptionSchema,
   partitionIssues,
   validatePage,
@@ -181,11 +182,11 @@ const PAGE_META_CHANGED_MESSAGE = '다른 사람이 이 페이지를 먼저 바�
 
 /**
  * `PUT .../schema`의 본문. `schema` 하나만 선언한다 — 그 밖의 키는 게이트 1단계에서
- * 바로 400이다. `DocumentEnvelopeSchema`(`@wirebound/schema`)가 봉투(버전·루트 노드
- * 트리) 형태를 검사한다: `version`은 양의 정수, 각 노드는 `id`(패턴 일치)·`type`을
- * 갖고 선언되지 않은 키(예: `style`)를 갖지 않는다.
+ * 바로 400이다. `PageEnvelopeSchema`(`@wirebound/schema`)가 봉투(버전·루트 노드
+ * 트리·화면 상태 목록) 형태를 검사한다: `version`은 양의 정수, 각 노드는 `id`(패턴 일치)·`type`을
+ * 갖고 선언되지 않은 키(예: `style`)를 갖지 않으며, 상태 목록은 이름 · 수 · 겹침 규칙을 지킨다.
  */
-const PutSchemaBody = z.strictObject({ schema: DocumentEnvelopeSchema })
+const PutSchemaBody = z.strictObject({ schema: PageEnvelopeSchema })
 
 /**
  * `POST .../pages/import`의 본문.
@@ -563,10 +564,10 @@ export function pageRoutes() {
       // **`ops`를 한 번만 만든다.** 잠금 확인과 적용이 **같은 자리**를 봐야 한다 — 두 번
       // 만들면 한쪽만 고쳐지는 날 *"확인한 것과 적용한 것이 다른"* 상태가 되고, 그것은
       // 조용하다.
-      const putOps: PatchOp[] = [
-        { op: 'replace', path: '/root', value: migrated.root },
-        { op: 'replace', path: '/version', value: migrated.version },
-      ]
+      //
+      // **상태 목록도 함께 갈아 끼운다**(`replaceDocumentOps` — 빠지면 옛 목록이 남는다). 그 `add`/`remove`는 `before`(위에서 읽은
+      // head)를 본다 — 그 사이 다른 편집이 커밋되면 파이프라인이 `stale`로 끊는다(위 «경합 창»).
+      const putOps: PatchOp[] = replaceDocumentOps(before.schema, migrated)
 
       // **잠금 확인은 적용 직전이다**(설계서 「정방향 흐름」). `PUT`은 `/root`를 통째로 갈아 끼우므로
       // **잠긴 서브트리가 무엇이든 그 안에 있다** — 다른 사람이 무엇이든 잡고 있으면 막힌다.
@@ -613,10 +614,7 @@ export function pageRoutes() {
         projectId,
         pageId,
         seq: outcome.seq,
-        ops: [
-          { op: 'replace', path: '/root', value: outcome.schema.root },
-          { op: 'replace', path: '/version', value: outcome.schema.version },
-        ],
+        ops: replaceDocumentOps(before.schema, outcome.schema),
         warnings: outcome.warnings,
         actor: requestEventActor(request),
         origin: broadcastOrigin(request),
