@@ -7,11 +7,14 @@
  * 키보드 사용자의 비용이 커진다. `<select>`는 그 수와 무관하게 1이다.
  * `닫혀 있을 때 목록이 DOM에 없다`가 그 수를 실제로 센다(열면 2 — `<select>`와 `취소`).
  *
+ * **«취소»로 닫으면 목록을 연 자리로 포커스를 돌려준다** — 줄 `…` 의 «옮기기»는 행동 메뉴가 포커스를 `…` 로 돌려준 뒤 이 목록을 연다. 안 돌려주면
+ * 포커스를 쥔 «취소»가 사라져 `body` 로 떨어진다(구조 트리 고르개와 같은 까닭 — `panels/structure-toolbar.tsx` 의 `PickerBox`).
+ *
  * **목록은 `flattenMenus`가 만든다.** 손목록을 두면 트리가 자랄 때 어긋나는 자리가 하나 더
  * 생긴다. 경로에 조상 제목이 들어가는 것은 제목이 같은 메뉴를 가리기 위해서다 —
  * 서버에 유일성 제약이 없다.
  */
-import type { ReactElement } from 'react'
+import { useRef, useState, type ReactElement } from 'react'
 
 /** 아무것도 고르지 않은 상태의 값. `<option>`의 `value`와 겹치지 않아야 한다. */
 const NONE = ''
@@ -22,8 +25,19 @@ export function MenuPicker(props: {
   onPick: (menuId: string) => void
   onCancel: () => void
 }): ReactElement {
+  const box = useRef<HTMLDivElement>(null)
+  /** 목록이 처음 그려질 때의 포커스 — 연 자리. */
+  const [opener] = useState(() => {
+    const active = document.activeElement
+    return active instanceof HTMLElement && active !== document.body ? active : null
+  })
+  const cancel = (): void => {
+    const inside = box.current?.contains(document.activeElement) === true
+    props.onCancel()
+    if (inside && opener?.isConnected === true) opener.focus()
+  }
   return (
-    <div className="wb-shell-menu-picker">
+    <div className="wb-shell-menu-picker" ref={box}>
       <label className="wb-shell-menu-picker-label">
         소속 메뉴
         {/* **값을 들지 않는다.** 고르는 순간 요청이 나가고 목록이 닫히므로 중간 상태가
@@ -45,7 +59,7 @@ export function MenuPicker(props: {
           ))}
         </select>
       </label>
-      <button type="button" className="wb-shell-menu-tool" onClick={props.onCancel}>
+      <button type="button" className="wb-shell-menu-tool" onClick={cancel}>
         취소
       </button>
     </div>

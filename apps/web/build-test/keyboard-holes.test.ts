@@ -558,4 +558,80 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
       expect(results).toEqual({ Delete: kept, Backspace: kept })
     }, 60_000)
   })
+
+  describe('5 · 고르개를 닫은 뒤의 포커스', () => {
+    it('Escape · «취소»로 닫으면 포커스가 고르개를 연 자리로 돌아온다', async () => {
+      const cases: [string, (page: Page, fx: Fixture) => Promise<void>, (page: Page) => Promise<void>][] = [
+        ['줄 + «아래 추가» · Escape', (page) => openPicker(page, '아래 추가'), (page) => page.keyboard.press('Escape')],
+        ['줄 + «아래 추가» · «취소» Enter', (page) => openPicker(page, '아래 추가'), async (page) => {
+          await page.locator('.wb-shell-picker').getByRole('button', { name: '취소', exact: true }).focus()
+          await page.keyboard.press('Enter')
+        }],
+        ['줄 + «패턴 넣기» · Escape', (page) => openPicker(page, '패턴 넣기'), (page) => page.keyboard.press('Escape')],
+        ['머리 + «프리셋» · Escape', (page) => openPreset(page), (page) => page.keyboard.press('Escape')],
+        ['줄에서 Alt+Shift+I · Escape', async (page) => {
+          await nodeRow(page, 'n_text0000002').click()
+          await page.keyboard.press('Alt+Shift+KeyI')
+          await page.locator('.wb-shell-picker').waitFor()
+        }, (page) => page.keyboard.press('Escape')],
+        ['메뉴 트리 «옮기기» · «취소» Enter', async (page, fx) => {
+          await nodeRow(page, 'n_text0000002').click()
+          await openMove(page, fx)
+        }, async (page) => {
+          await page.locator('.wb-shell-menu-picker').getByRole('button', { name: '취소', exact: true }).focus()
+          await page.keyboard.press('Enter')
+        }],
+      ]
+      const results: Record<string, unknown> = {}
+      for (const [name, place, shut] of cases) {
+        const fx = await fixture(`picker-focus-${Object.keys(results).length}`)
+        const { page, close } = await open(fx.url)
+        try {
+          await place(page, fx)
+          const opener = await focusOf(page, fx.titles)
+          await page.locator(':is(.wb-shell-picker, .wb-shell-menu-picker) button:not([disabled])').first().focus()
+          await shut(page)
+          await sleep(150)
+          results[name] = {
+            opener,
+            pickers: await page.locator('.wb-shell-picker, .wb-shell-menu-picker').count(),
+            focus: await focusOf(page, fx.titles),
+            selected: await selectedNode(page),
+          }
+        } finally {
+          await close()
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[J4 고르개 포커스] ${JSON.stringify(results)}`)
+      const back = (opener: string) => ({ opener, pickers: 0, focus: opener, selected: 'n_text0000002' })
+      expect(results).toEqual({
+        '줄 + «아래 추가» · Escape': back('Text 글 2 추가'),
+        '줄 + «아래 추가» · «취소» Enter': back('Text 글 2 추가'),
+        '줄 + «패턴 넣기» · Escape': back('Text 글 2 추가'),
+        '머리 + «프리셋» · Escape': back('구조 트리에 추가'),
+        '줄에서 Alt+Shift+I · Escape': back('node:n_text0000002'),
+        '메뉴 트리 «옮기기» · «취소» Enter': back('가2:가2 더 보기'),
+      })
+    }, 180_000)
+
+    it('포커스가 고르개 밖에 있는 채 «취소»가 눌리면(포커스를 안 옮기는 누름) 그 포커스를 안 뺏는다', async () => {
+      const fx = await fixture('picker-focus-outside')
+      const { page, close } = await open(fx.url)
+      try {
+        await openPicker(page, '아래 추가')
+        const head = page.locator('header.wb-shell-header').getByRole('button', { name: '더 보기', exact: true })
+        await head.focus()
+        // 누름이 포커스를 안 옮기는 브라우저(macOS Safari 의 단추)를 흉내 낸다 — 포커스는 머리 `…` 에 남는다.
+        await page.locator('.wb-shell-picker').getByRole('button', { name: '취소', exact: true }).dispatchEvent('click')
+        await sleep(150)
+        const result = { pickers: await pickers(page), focus: await focusOf(page) }
+        // eslint-disable-next-line no-console
+        console.log(`[J4 고르개 포커스 — 밖] ${JSON.stringify(result)}`)
+        expect(result).toEqual({ pickers: 0, focus: '더 보기' })
+      } finally {
+        await close()
+      }
+    }, 60_000)
+  })
 })
