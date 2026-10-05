@@ -227,6 +227,125 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
     }
   }, 60_000)
 
+  /** 줄의 `+`(`more` 가 거짓) · `…`에서 항목을 고른다. */
+  async function openRowAction(page: Page, id: string, title: string, item: string, more = true): Promise<void> {
+    const target = row(page, id)
+    await target.locator('> button, > a').first().hover()
+    await target.getByRole('button', { name: `${title} ${more ? '더 보기' : '추가'}`, exact: true }).click()
+    await page.getByRole('menuitem', { name: item, exact: true }).click()
+  }
+
+  /** 그 줄을 품은 메뉴 줄의 id — 최상위면 `''`, 줄이 안 그려졌으면(접힌 메뉴 안) `null`. 화면 차례로는 못 가른다(«나» 밑의 «다»도 «나1» 뒤다). */
+  function parentRow(page: Page, id: string): Promise<string | null> {
+    return row(page, id)
+      .count()
+      .then((n) =>
+        n === 0
+          ? null
+          : row(page, id).evaluate((element) => element.closest('li')?.parentElement?.closest('li')?.querySelector(':scope > [data-tree-row]')?.getAttribute('data-tree-id') ?? ''),
+      )
+  }
+
+  /** 다음 트리 조회의 답이 오고 그 판이 그려질 때까지 — 단언할 값(줄 자리 · 입력)을 끝 조건에 안 넣는다. */
+  async function rereadSettled(page: Page, write: () => Promise<unknown>): Promise<void> {
+    const answered = page.waitForResponse(
+      (response) => response.request().method() === 'GET' && /\/api\/projects\/[^/]+\/tree$/.test(new URL(response.url()).pathname),
+      { timeout: ARRIVAL_LIMIT_MS },
+    )
+    await write()
+    await answered
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))))
+  }
+
+  /** 입력의 값 · 포커스 · 하단 바. */
+  async function inputState(page: Page) {
+    const input = page.getByLabel('이름', { exact: true })
+    const count = await input.count()
+    return {
+      count,
+      value: count === 1 ? await input.inputValue() : null,
+      focused: await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? null),
+      alerts: await page.getByRole('alert').allTextContents(),
+    }
+  }
+
+  /**
+   * **입력에 친 채 그 줄이 옮겨진다** — 다른 부모로 옮겨진 줄은 React 가 새로 마운트해 입력도 새로 선다. 친 글 · 포커스가 그대로 서고,
+   * 이어 친 글이 그 뒤에 붙는다. 접힌 메뉴 안으로 들어가면 그 메뉴가 펴지고 입력이 보인다(`panels/menu-tree.tsx`의 `chains`).
+   * 같은 부모 안 순서는 다시 마운트가 안 나는 대조군이다. 그 줄이 지워진 판은 위 «이름 입력» 케이스다.
+   */
+  describe('입력에 친 채 그 줄이 옮겨진다 — 친 글째 선다', () => {
+    type Fx = Awaited<ReturnType<typeof fixture>>
+    const cases: {
+      name: string
+      open: (fx: Fx, page: Page) => Promise<void>
+      move: (fx: Fx) => Promise<unknown>
+      /** 옮긴 줄과 옮겨 간 부모 — 대조군은 부모가 그대로다. */
+      moved: (fx: Fx) => [string, string]
+    }[] = [
+      {
+        name: '메뉴 이름 · 다른 부모로',
+        open: (fx, page) => openRowAction(page, fx.ids['다']!, '다', '이름 변경'),
+        move: (fx) => ok(call('PATCH', `${fx.P}/menu/${fx.ids['다']}`, { parentId: fx.ids['나'] })),
+        moved: (fx) => [fx.ids['다']!, fx.ids['나']!],
+      },
+      {
+        name: '페이지 이름 · 다른 메뉴로',
+        open: (fx, page) => openRowAction(page, fx.ids['가2']!, '가2', '이름 변경'),
+        move: (fx) => ok(call('PATCH', `${fx.P}/pages/${fx.ids['가2']}`, { menuNodeId: fx.ids['나'] })),
+        moved: (fx) => [fx.ids['가2']!, fx.ids['나']!],
+      },
+      {
+        name: '새 페이지 입력 · 그 메뉴를 다른 부모로',
+        open: (fx, page) => openRowAction(page, fx.ids['다']!, '다', '페이지 추가', false),
+        move: (fx) => ok(call('PATCH', `${fx.P}/menu/${fx.ids['다']}`, { parentId: fx.ids['나'] })),
+        moved: (fx) => [fx.ids['다']!, fx.ids['나']!],
+      },
+      {
+        name: '메뉴 이름 · 접힌 메뉴 안으로',
+        open: async (fx, page) => {
+          // 입력을 열기 전에 접는다 — 입력이 열린 채 접기 단추를 누르면 blur 가 입력을 닫는다.
+          // 펼침 단추는 `aria-hidden`이라 역할로 안 잡힌다(`panels/tree-fold.tsx`).
+          await row(page, fx.ids['나']!).locator('[data-tree-toggle]').click()
+          await poll('나1 이 접힌다', () => rowIds(page), (ids) => !ids.includes(fx.ids['나1']!), ARRIVAL_LIMIT_MS)
+          await openRowAction(page, fx.ids['다']!, '다', '이름 변경')
+        },
+        move: (fx) => ok(call('PATCH', `${fx.P}/menu/${fx.ids['다']}`, { parentId: fx.ids['나'] })),
+        moved: (fx) => [fx.ids['다']!, fx.ids['나']!],
+      },
+      {
+        name: '메뉴 이름 · 같은 부모 안 순서(대조군)',
+        open: (fx, page) => openRowAction(page, fx.ids['다']!, '다', '이름 변경'),
+        move: (fx) => ok(call('PATCH', `${fx.P}/menu/${fx.ids['다']}`, { sortOrder: 0 })),
+        moved: (fx) => [fx.ids['다']!, ''],
+      },
+    ]
+    for (const c of cases) {
+      it(c.name, async () => {
+        const fx = await fixture(`input-move-${cases.indexOf(c)}`)
+        const bob = await openBob(fx.url)
+        try {
+          await c.open(fx, bob.page)
+          const input = bob.page.getByLabel('이름', { exact: true })
+          await input.fill('친 글')
+          const frames = bob.frames.length
+          await rereadSettled(bob.page, () => c.move(fx))
+          const [moved, under] = c.moved(fx)
+          const after = { parent: await parentRow(bob.page, moved), ...(await inputState(bob.page)) }
+          await bob.page.keyboard.type('XY')
+          // 입력이 없으면(접힌 메뉴가 안 펴짐) 기다리지 않고 `null` — 단언이 값으로 죽게 한다.
+          const typedOn = (await input.count()) === 1 ? await input.inputValue() : null
+          // eslint-disable-next-line no-console
+          console.log('[메뉴 실시간] 입력 · 옮김', c.name, JSON.stringify({ after, typedOn }))
+          expect(bob.frames.length).toBe(frames + 1)
+          expect({ ...after, typedOn }).toEqual({ parent: under, count: 1, value: '친 글', focused: '이름', alerts: [], typedOn: '친 글XY' })
+        } finally {
+          await bob.close()
+        }
+      }, 60_000)
+    }
+  })
+
   // bob 이 연 페이지는 서브트리 밖이다 — 안이면 «페이지가 사라짐»이 판을 비우며 하단 바도 비워(`EditorStore.clearPage`) 상자의 한 줄이 안 남는다
   // (캔버스의 «대상을 찾을 수 없습니다»가 말한다).
   it('연쇄 상자 — 밑에 페이지가 더해지면 «목록이 바뀌었습니다»와 새 목록 · 그 메뉴가 지워지면 닫힌다', async () => {

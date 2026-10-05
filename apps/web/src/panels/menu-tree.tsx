@@ -745,7 +745,7 @@ function RowPanel(props: { commands: TreeCommands; at: 'row' | 'bottom' }): Reac
         // 값이 남는다 — `key`가 그것을 갈라 준다.
         key={commands.editing.kind}
         label={INPUT_LABEL}
-        initial={commands.editing.initial}
+        initial={commands.inputValue()}
         onSubmit={commands.submitInput}
         onCancel={commands.cancelInput}
         onEdit={commands.typeInput}

@@ -160,6 +160,11 @@ export interface TreeCommands {
   cancelInput: () => void
   /** 입력에 친 글 — 칠 때마다. 다시 받은 트리가 그 입력의 대상을 지우면 친 글이 있었는지를 이것으로 안다(`reconcile`). */
   typeInput: (value: string) => void
+  /**
+   * 입력이 설 때의 값 — 친 글이 있으면 그것, 없으면 `editing.initial`. **입력은 다시 마운트될 수 있다** — 남이 그 줄을 다른 부모로
+   * 옮기면 React 가 줄째 새로 그려 입력도 새로 선다. 시작 값을 `editing.initial`로 주면 친 글이 연 순간의 제목으로 말없이 돌아간다.
+   */
+  inputValue: () => string
   /** 삭제 확인(두 번 누르기의 첫 번째)이 걸려 있으면 `true`. 하위가 없는 메뉴와 페이지의 길이다. */
   confirmingRemove: boolean
   /**
@@ -1284,7 +1289,7 @@ export function useTreeCommands(props: {
    *
    * | 열린 것 | 대상이 사라졌다 | 대상이 남았다 |
    * |---|---|---|
-   * | 이름 입력 · 새 메뉴 · 새 페이지(고른 줄에 붙는 셋) | 닫는다 — 친 글이 있었으면 하단 바 `TREE_DRAFT_DROPPED` | 그대로(옮겨졌으면 새 자리에 선다) |
+   * | 이름 입력 · 새 메뉴 · 새 페이지(고른 줄에 붙는 셋) | 닫는다 — 친 글이 있었으면 하단 바 `TREE_DRAFT_DROPPED` | 그대로(옮겨졌으면 새 자리에 친 글째 선다 — `inputValue` · 접힌 메뉴 안이면 `panels/menu-tree.tsx`의 `chains`가 편다) |
    * | 고른 줄(`picked`) · 두 번 누르기 확인 · 소속 메뉴 목록 | 고름을 풀고(주소의 페이지로 돌아간다) 둘을 닫는다 | 그대로 |
    * | 제목 충돌 통지 | 걷는다 — 무엇의 충돌인지가 화면에서 사라졌다 | 그대로 |
    * | 연쇄 삭제 상자 | 닫는다 — 하단 바 `cascadeClosedNotice` | 보인 id 집합과 새 서브트리가 다르면 새 목록으로 다시 세우고 «목록이 바뀌었습니다»(409 와 같은 길) |
@@ -1337,6 +1342,7 @@ export function useTreeCommands(props: {
     typeInput: (value) => {
       typed.current = value
     },
+    inputValue: () => typed.current ?? editing?.initial ?? '',
     confirmingRemove,
     removing,
     confirmCascade,
