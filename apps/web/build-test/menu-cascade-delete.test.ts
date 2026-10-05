@@ -6,7 +6,7 @@
  * | 확인 상자 | 1440×900 에서 상자가 창 안에 굴림 없이 서는가(`PAGE_PREVIEW_LIMIT` 의 근거 — 상자 높이 · 목록 한 줄 높이 · 남는 높이) · 경고 상자의 위험 색 · 설명(`aria-describedby`) · «모두 삭제» 뒤 서버의 트리 · 안전망 |
  * | 하위가 없는 메뉴 | 상자 없이 줄 아래 두 번 누르기 |
  * | 같은 수 · 다른 페이지 | alice 의 트리가 낡은 사이 bob 이 페이지 하나를 밖으로 · 새 페이지 하나를 안으로 — 수는 같다. «모두 삭제»가 아무것도 안 지우고, 상자가 서버의 지금 목록 · «목록이 바뀌었습니다»로 다시 서고, 다시 누르면 그 목록을 지운다 |
- * | 받는 쪽 | 지운 페이지를 열어 둔 bob 의 화면 — 친 글 · 열린 줄 메뉴가 지운 뒤 어떻게 끝나는가. **페이지 `DELETE` 판과 같은 값인지** 견준다(연쇄 삭제는 방송하지 않는다 — 페이지 삭제와 같은 길) |
+ * | 받는 쪽 | 지운 페이지를 열어 둔 bob 의 화면 — 친 글 · 열린 줄 메뉴가 지운 뒤 어떻게 끝나는가. **페이지 `DELETE` 판과 같은 값인지** 견준다(둘 다 `menu-changed`를 낸다 — 트리를 다시 받고 «페이지가 사라짐»으로 간다) |
  *
  * `WB_SHOTS_DIR` 이 있으면 그 디렉터리에 스크린숏을 남긴다(사람이 보는 그림 — 케이스는 그 값에 기대지 않는다).
  */
@@ -232,11 +232,14 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
         .flatMap((node) => node.pages.map((page) => page.title))
         .sort()
 
-    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    // **alice 의 트리를 낡게 세운다** — 그의 WS(서버 → 브라우저)를 늦춰 bob 의 두 쓰기의 `menu-changed`가 «모두 삭제» 뒤에 닿게 한다. 신호가 먼저
+    // 닿으면 상자가 남의 변경으로 다시 서서(`reconcile` — `./menu-realtime.test.ts`) 409 길을 안 탄다. 판이 섰는지는 늦춘 덩어리 수로 본다.
+    const delay = await stack.startDownDelay(8_000)
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 }, origin: delay.origin })
     try {
       await page.goto(`/projects/${project.id}/pages/${env.id}`)
       await row(page, member.id).locator('> button, > a').first().waitFor()
-      // bob 의 두 쓰기 — 방송이 없어 alice 의 트리는 낡은 채다(수는 그대로 페이지 2).
+      // bob 의 두 쓰기 — 신호가 늦어 alice 의 트리는 낡은 채다(수는 그대로 페이지 2).
       const out = await stack.request(bob, 'PATCH', `/projects/${project.id}/pages/${moved.id}`, { menuNodeId: settings.id })
       expect(out.status).toBe(200)
       created(await stack.request(bob, 'POST', `/projects/${project.id}/pages`, { menuNodeId: member.id, title: '새 결제 화면(bob)' }))
@@ -272,14 +275,17 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
       await dialog.getByRole('button', { name: '모두 삭제', exact: true }).click()
       const left = await poll('서버 트리에서 회원관리가 사라진다', serverPages, (titles) => !titles.includes('회원 목록'))
       expect(left).toEqual(['환경', '회원 상세'])
+      expect(delay.delayed()).toBeGreaterThan(0)
     } finally {
       await context.close()
+      await delay.close()
     }
   })
 
   /**
    * **받는 쪽** — bob 이 연 페이지(`P1`)를 alice 가 지운다. 지우는 길 둘(페이지 `DELETE` · 그 페이지를 품은 메뉴의 연쇄 삭제)에서 bob 의 화면이
-   * 같은 값으로 끝나는지 견준다. 둘 다 방송하지 않으므로 bob 은 다음 편집에서야 안다.
+   * 같은 값으로 끝나는지 견준다. 둘 다 `menu-changed`를 내므로 bob 의 트리가 곧바로 다시 받고, 열린 페이지가 빠졌으니 캔버스가 서버에 물어
+   * «대상을 찾을 수 없습니다»로 간다(`src/routes/editor.tsx`의 «페이지가 사라짐»). 다음 편집을 기다리지 않는다.
    */
   describe('지운 페이지를 열어 둔 사람', () => {
     async function receiver(slug: string) {
@@ -333,7 +339,7 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
       }
     }
 
-    async function typedThenCommit(mode: 'page' | 'cascade') {
+    async function typed(mode: 'page' | 'cascade') {
       const fx = await receiver(`typed-${mode}`)
       const bob = await openBob(fx.P)
       try {
@@ -341,24 +347,22 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
         const field = bob.page.getByLabel('내용', { exact: true })
         await field.fill('친 글')
         const status = await remove(mode, fx)
-        await bob.page.waitForTimeout(1_500)
-        const afterDelete = { ...(await seen(bob.page)), field: await field.inputValue(), focused: await field.evaluate((el) => el === document.activeElement) }
-        await field.press('Tab')
-        const settled = await poll(
-          'bob 의 편집이 거절된다',
-          async () => ({ received: [...bob.received], view: await seen(bob.page) }),
-          (now) => now.received.includes('patch-error') || now.view.notices !== '' || now.view.alerts.length > 0,
-          10_000,
-        )
-        await bob.page.waitForTimeout(500)
+        const settled = await poll('bob 의 캔버스가 «페이지가 사라짐»으로', () => seen(bob.page), (now) => now.alerts.length > 0, 5_000)
+        await bob.page.waitForTimeout(300)
         if (mode === 'cascade') await shot(bob.page, '5-receiver-after-cascade')
-        return { status, afterDelete, patchError: settled.received.includes('patch-error'), afterCommit: await seen(bob.page) }
+        return {
+          status,
+          afterDelete: { ...(await seen(bob.page)), fields: await field.count() },
+          frames: bob.received.filter((kind) => kind === 'menu-changed').length,
+          patchError: bob.received.includes('patch-error'),
+          settledRows: settled.treeRows,
+        }
       } finally {
         await bob.context.close()
       }
     }
 
-    async function openMenuThenRename(mode: 'page' | 'cascade') {
+    async function openMenu(mode: 'page' | 'cascade') {
       const fx = await receiver(`menu-${mode}`)
       const bob = await openBob(fx.P)
       try {
@@ -367,45 +371,46 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
         await pageRow.getByRole('button', { name: '회원 목록 더 보기', exact: true }).click()
         await bob.page.getByRole('menuitem', { name: '이름 변경', exact: true }).waitFor()
         const status = await remove(mode, fx)
-        await bob.page.waitForTimeout(1_500)
-        const menuOpen = await bob.page.getByRole('menu').count()
-        await bob.page.getByRole('menuitem', { name: '이름 변경', exact: true }).click()
-        const input = bob.page.getByLabel('이름', { exact: true })
-        await input.fill('바뀐 이름')
-        await input.press('Enter')
-        const after = await poll('이름 변경의 답', () => seen(bob.page), (now) => now.alerts.length > 0, 10_000).catch(() => null)
-        return { status, menuOpen, after: after ?? (await seen(bob.page)) }
+        const after = await poll('줄이 빠진다', () => seen(bob.page), (now) => now.alerts.length > 0, 5_000)
+        await bob.page.waitForTimeout(300)
+        return { status, menuOpen: await bob.page.getByRole('menu').count(), pageRow: await pageRow.count(), after: { ...after, treeRows: null } }
       } finally {
         await bob.context.close()
       }
     }
 
-    it('친 글 — 지운 뒤에도 칸에 남고, 커밋하면 페이지 삭제와 같은 판으로 끝난다', async () => {
-      const page = await typedThenCommit('page')
-      const cascade = await typedThenCommit('cascade')
+    it('친 글 — 지우면 곧바로 «페이지가 사라짐»으로 가고 칸도 내려간다 · 페이지 삭제와 같은 판이다', async () => {
+      const page = await typed('page')
+      const cascade = await typed('cascade')
       // eslint-disable-next-line no-console
       console.log('[받는 쪽 · 친 글]', JSON.stringify({ page, cascade }, null, 1))
-      expect(page.status).toBe(204)
-      expect(cascade.status).toBe(200)
-      expect({ ...cascade, status: null, afterDelete: { ...cascade.afterDelete, treeRows: null }, afterCommit: { ...cascade.afterCommit, treeRows: null } }).toEqual({
+      expect([page.status, cascade.status]).toEqual([204, 200])
+      expect({ ...cascade, status: null, settledRows: null, afterDelete: { ...cascade.afterDelete, treeRows: null } }).toEqual({
         ...page,
         status: null,
+        settledRows: null,
         afterDelete: { ...page.afterDelete, treeRows: null },
-        afterCommit: { ...page.afterCommit, treeRows: null },
       })
-      // 지운 직후 bob 의 화면은 그대로다 — 방송이 없다(두 길 같다).
-      expect(cascade.afterDelete.field).toBe('친 글')
+      // 캔버스는 «대상을 찾을 수 없습니다» · 속성 칸의 친 글은 그 노드가 내려가며 하단 바가 말한다(`src/panels/property-panel.tsx`의 `DROPPED_DRAFT_NOTICE`).
+      expect({ alerts: page.afterDelete.alerts, fields: page.afterDelete.fields, canvas: page.afterDelete.canvas, frames: page.frames, patchError: page.patchError }).toEqual({
+        alerts: ['대상을 찾을 수 없습니다', '바뀐 선택 때문에 친 값을 쓰지 않았습니다'],
+        fields: 0,
+        canvas: '',
+        frames: 1,
+        patchError: false,
+      })
     })
 
-    it('열린 줄 메뉴 — 지운 뒤에도 열려 있고, 그 항목은 페이지 삭제와 같은 판으로 끝난다', async () => {
-      const page = await openMenuThenRename('page')
-      const cascade = await openMenuThenRename('cascade')
+    it('열린 줄 메뉴 — 지우면 그 줄과 함께 닫힌다 · 페이지 삭제와 같은 판이다', async () => {
+      const page = await openMenu('page')
+      const cascade = await openMenu('cascade')
       // eslint-disable-next-line no-console
       console.log('[받는 쪽 · 열린 메뉴]', JSON.stringify({ page, cascade }, null, 1))
-      expect({ menuOpen: cascade.menuOpen, alerts: cascade.after.alerts, path: cascade.after.path }).toEqual({
-        menuOpen: page.menuOpen,
-        alerts: page.after.alerts,
-        path: page.after.path,
+      expect({ ...cascade, status: null }).toEqual({ ...page, status: null })
+      expect({ menuOpen: page.menuOpen, pageRow: page.pageRow, path: page.after.path }).toEqual({
+        menuOpen: 0,
+        pageRow: 0,
+        path: '/projects/<id>/pages/<id>',
       })
     })
   })
