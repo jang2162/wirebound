@@ -9,6 +9,20 @@ export interface NodeBinding {
 
 export const NodeContext = createContext<NodeBinding | null>(null)
 
+/**
+ * 뷰가 그리는 노드의 입력 — `view()` 가 내리고 `Root` 가 prop 표지 · 상태의 접근성 속성(`./marks.ts`)을 지어 편다. `nodeId` 를 함께 싣는
+ * 까닭: `view()` 를 거치지 않은 뷰(맨 함수)의 `Root` 는 부모 노드의 문맥을 읽게 된다 — `Root` 가 제 노드 id(`NodeBinding.attrs`)와
+ * 견줘 다르면 안 편다.
+ */
+export interface ViewNode {
+  nodeId: string
+  type: string
+  props: Readonly<Record<string, unknown>>
+  states: readonly string[]
+}
+
+export const ViewNodeContext = createContext<ViewNode | null>(null)
+
 export interface ThemeRuntimeValue {
   tokens: Readonly<Record<string, string | number>>
   /** 문서가 그려지는 창. 캔버스에서는 iframe 의 창이고 전역 `window` 와 다르다. */

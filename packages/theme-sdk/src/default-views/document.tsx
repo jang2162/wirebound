@@ -1,6 +1,6 @@
 /** **문서 그룹 기본 뷰.** `Text`·`Media`·`Divider`·`Placeholder`. 옮긴 규칙은 `./index.ts` 머리말. */
 import type { CSSProperties } from 'react'
-import { componentRule, nodeVar, partRule } from '../css-tools'
+import { componentRule, nodeVar, partRule, zeroRule } from '../css-tools'
 import { view } from '../define'
 import { Root } from '../root'
 
@@ -23,16 +23,28 @@ export const TextView = view(({ props }) => (
   </Root>
 ))
 
-// 기본 구조 `image` — 빈 틀이 곧 «사진» 이다.
-export const MediaView = view(({ props }) => (
-  <Root as="figure" data-wb-structure="image">
-    <div
-      data-wb-part="frame"
-      style={{ [nodeVar('media', 'ratio')]: String(props.ratio) } as CSSProperties}
-    />
-    {props.caption ? <figcaption data-wb-part="caption">{String(props.caption)}</figcaption> : null}
-  </Root>
-))
+/** 종류(`kind`)마다 틀 가운데 표지. `image` 는 없다 — 빈 틀이 곧 «사진» 이다. */
+const MEDIA_GLYPH: Record<string, string> = { video: '▶', illustration: '✎', chart: '▤' }
+
+// 기본 구조 `image`.
+export const MediaView = view(({ props }) => {
+  const glyph = MEDIA_GLYPH[String(props.kind)]
+  return (
+    <Root as="figure" data-wb-structure="image">
+      <div
+        data-wb-part="frame"
+        style={{ [nodeVar('media', 'ratio')]: String(props.ratio) } as CSSProperties}
+      >
+        {glyph === undefined ? null : (
+          <span data-wb-part="glyph" aria-hidden="true">
+            {glyph}
+          </span>
+        )}
+      </div>
+      {props.caption ? <figcaption data-wb-part="caption">{String(props.caption)}</figcaption> : null}
+    </Root>
+  )
+})
 
 export const DividerView = view(() => <Root as="hr" data-wb-structure="default" />)
 
@@ -50,6 +62,8 @@ export const PlaceholderView = view(({ props }) => (
 export function documentCssBlocks(): string[] {
   return [
     partRule('Media', 'frame', [`aspect-ratio: var(${nodeVar('media', 'ratio')}, 16/9);`]),
+    // 표지를 틀 가운데 둔다. 틀의 높이는 `aspect-ratio` 가 정하므로 격자로 바꿔도 크기가 안 변한다.
+    zeroRule('[data-wb-component="Media"] [data-wb-part="frame"]', ['display: grid;', 'place-items: center;']),
     componentRule('Placeholder', 'default', [`height: var(${nodeVar('placeholder', 'height')}, 120px);`]),
   ]
 }

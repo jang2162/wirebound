@@ -1,4 +1,5 @@
-import type { ReactElement } from 'react'
+import { createElement, type ReactElement } from 'react'
+import { ViewNodeContext } from './context'
 import type { ThemeDefinition, ThemeManifest, View, ViewProps } from './types'
 
 export { SDK_VERSION } from './version'
@@ -19,6 +20,12 @@ export function defineManifest(manifest: ThemeManifest): ThemeManifest {
 export function view<P extends Record<string, unknown> = Record<string, unknown>>(
   render: (props: ViewProps<P>) => ReactElement,
 ): View {
-  const component = (props: ViewProps) => render(props as ViewProps<P>)
+  // 노드의 입력을 문맥으로 내린다 — `Root` 가 그것으로 prop 표지를 편다(`./marks.ts`).
+  const component = (props: ViewProps) =>
+    createElement(
+      ViewNodeContext.Provider,
+      { value: { nodeId: props.nodeId, type: props.type, props: props.props, states: props.states } },
+      render(props as ViewProps<P>),
+    )
   return component
 }
