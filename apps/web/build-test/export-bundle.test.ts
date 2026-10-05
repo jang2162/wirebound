@@ -166,16 +166,65 @@ async function downloadBundle(stack: EditorStack, session: Session, projectId: s
   return join(dir, dirname(index))
 }
 
-/** 번들의 첫 페이지를 파일로 연 탭. 콘솔 오류 · 페이지 오류를 모은다. */
-async function openBundle(stack: EditorStack, dir: string): Promise<{ context: BrowserContext; page: Page; errors: string[] }> {
-  const context = await stack.browser.newContext()
+/**
+ * 화면 상태가 있는 페이지 하나(«회원 목록» — 상태 «관리자» · «비로그인»). 영역 하나: 기본 가지 «보기», 관리자 가지 «승인»(제목을 숨기는
+ * 상호작용 · 코멘트). 비로그인 가지는 없다 — 기본으로 그린다.
+ */
+async function exportStateProject(stack: EditorStack, owner: Session): Promise<string> {
+  const call: Call = (method, path, body) => stack.request(owner, method, path, body)
+  const ok = (response: { status: number; body: any }, what: string): any => {
+    if (response.status >= 300) throw new Error(`픽스처 ${what} ${response.status} ${JSON.stringify(response.body)}`)
+    return response.body
+  }
+  const project = ok(await call('POST', '/projects', { name: '상태 판', slug: `states-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }), '프로젝트')
+  const menu = ok(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '관리자' }), '메뉴')
+  const page = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '회원 목록' }), '페이지')
+  const caseOf = (id: string, state: string, child: object) => ({ id, type: 'StateCase', props: { state }, children: [child] })
+  ok(
+    await call('PATCH', `/projects/${project.id}/pages/${page.id}/ops`, {
+      baseSeq: 0,
+      ops: [
+        { op: 'add', path: '/viewStates', value: [{ id: 's_admin00001', name: '관리자' }, { id: 's_guest00001', name: '비로그인' }] },
+        { op: 'add', path: '/root/children/0', value: { id: 'n_title00001', type: 'Text', props: { content: '회원 목록 제목' } } },
+        {
+          op: 'add',
+          path: '/root/children/1',
+          value: {
+            id: 'n_switch0001',
+            type: 'StateSwitch',
+            children: [
+              caseOf('n_cased00001', 'default', { id: 'n_view000001', type: 'Button', props: { label: '보기' } }),
+              caseOf('n_casea00001', 's_admin00001', {
+                id: 'n_apprv00001',
+                type: 'Button',
+                props: { label: '승인' },
+                interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_title00001', value: false }] }],
+              }),
+            ],
+          },
+        },
+      ],
+    }),
+    'ops',
+  )
+  ok(await call('POST', `/projects/${project.id}/pages/${page.id}/comments`, { nodeId: 'n_apprv00001', body: '관리자만 보는 단추' }), '코멘트')
+  return project.id
+}
+
+/** 번들의 첫 페이지를 파일로 연 탭. 콘솔 오류 · 페이지 오류를 모은다. `hash` 를 주면 그 해시로 연다. */
+async function openBundle(
+  stack: EditorStack,
+  dir: string,
+  options: { hash?: string; viewport?: { width: number; height: number } } = {},
+): Promise<{ context: BrowserContext; page: Page; errors: string[] }> {
+  const context = await stack.browser.newContext(options.viewport === undefined ? {} : { viewport: options.viewport })
   const page = await context.newPage()
   const errors: string[] = []
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text())
   })
   page.on('pageerror', (error) => errors.push(error.message))
-  await page.goto(pathToFileURL(join(dir, 'index.html')).href)
+  await page.goto(`${pathToFileURL(join(dir, 'index.html')).href}${options.hash ?? ''}`)
   await page.waitForSelector('html[data-wb-ready]', { state: 'attached', timeout: 10_000 })
   return { context, page, errors }
 }
@@ -304,6 +353,65 @@ describe.skipIf(!전제.ok)('내보낸 번들을 파일로 연다', () => {
       expect(await page.locator('link[data-wb-sheet="theme"]').count()).toBe(0)
     } finally {
       await context.close()
+    }
+  })
+
+  /**
+   * **화면 상태 전환기**(설계서 「HTML 정적 번들」) — 셸의 `select#wb-export-state` 를 고르면 목업이 그 상태의 가지로 다시 서고 주소 해시가
+   * 따라간다. 해시로 연 파일은 그 상태로 서고, 목록에 없는 id 는 기본이다. `WB_SHOTS_DIR` 를 주면 관리자 상태의 화면을 찍어 둔다.
+   */
+  it('상태가 있는 페이지는 전환기로 상태를 바꾸고, 해시로 연 파일은 그 상태로 선다', async () => {
+    const alice = await stack.login(stack.users.alice)
+    const dir = await downloadBundle(stack, alice, await exportStateProject(stack, alice))
+    const viewport = { width: 1440, height: 900 }
+    const canvas = (page: Page): Promise<string> => page.locator('.wb-export-canvas').innerText()
+
+    const first = await openBundle(stack, dir, { viewport })
+    try {
+      const { page, errors } = first
+      expect(await page.locator('#wb-export-state option').allInnerTexts()).toEqual(['기본', '관리자', '비로그인'])
+      expect(await canvas(page)).toContain('보기')
+      expect(await canvas(page)).not.toContain('승인')
+      expect(await page.locator('.wb-export-marker').count()).toBe(0)
+
+      await page.locator('#wb-export-state').selectOption('s_admin00001')
+      expect(await canvas(page)).toContain('승인')
+      expect(await canvas(page)).not.toContain('보기')
+      expect(new URL(page.url()).hash).toBe('#state=s_admin00001')
+      // 관리자 가지의 노드에 단 코멘트의 마커가 그 상태에서 선다.
+      expect(await page.locator('.wb-export-marker[data-wb-marker-for="n_apprv00001"]').count()).toBe(1)
+      // 상호작용 탭의 문장이 노드에 상태를 붙인다.
+      await page.locator('label[for="wb-export-tab-interactions"]').click()
+      expect(await page.locator('#wb-export-panel-interactions').innerText()).toContain("'승인 버튼'(관리자 상태)")
+      if (process.env.WB_SHOTS_DIR) await page.screenshot({ path: join(process.env.WB_SHOTS_DIR, 'k3-bundle-switcher.png') })
+
+      // 그 상태의 상호작용이 돈다.
+      await page.locator('[data-wb-id="n_apprv00001"]').click()
+      expect(await canvas(page)).not.toContain('회원 목록 제목')
+
+      await page.locator('#wb-export-state').selectOption('default')
+      expect(new URL(page.url()).hash).toBe('')
+      expect(await canvas(page)).toContain('보기')
+      expect(errors).toEqual([])
+    } finally {
+      await first.context.close()
+    }
+
+    const linked = await openBundle(stack, dir, { viewport, hash: '#state=s_admin00001' })
+    try {
+      expect(await linked.page.locator('#wb-export-state').inputValue()).toBe('s_admin00001')
+      expect(await canvas(linked.page)).toContain('승인')
+    } finally {
+      await linked.context.close()
+    }
+
+    const unknown = await openBundle(stack, dir, { viewport, hash: '#state=s_nope' })
+    try {
+      expect(await unknown.page.locator('#wb-export-state').inputValue()).toBe('default')
+      expect(await canvas(unknown.page)).toContain('보기')
+      expect(await canvas(unknown.page)).not.toContain('승인')
+    } finally {
+      await unknown.context.close()
     }
   })
 })

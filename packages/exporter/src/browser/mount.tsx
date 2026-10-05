@@ -39,6 +39,8 @@ export interface ExportMountInput {
   standing?: readonly string[]
   /** 링크로 옮긴다. 기본은 `window.location.href`. */
   navigate?: (href: string) => void
+  /** 처음 그릴 화면 상태(`RenderOptions.viewState`). 없거나 목록 밖이면 기본이다. */
+  viewState?: string | null
 }
 
 export interface ExportMount {
@@ -50,6 +52,8 @@ export interface ExportMount {
   remeasure(): void
   /** 늘 머리에 서는 줄을 바꾼다(`ExportMountInput.standing`). */
   say(lines: readonly string[]): void
+  /** 고른 화면 상태로 다시 그린다 — 상태 전환기 · 주소 해시가 부른다(`boot.tsx`). */
+  setViewState(viewState: string | null): void
   unmount(): void
 }
 
@@ -72,7 +76,7 @@ export function ambiguousPage(target: string): string {
 export function mountExportDocument(container: Element, input: ExportMountInput): ExportMount {
   const root = createRoot(container)
   const errors: NodeRenderError[] = []
-  const handle: CanvasHandle = { remeasure: () => {}, say: () => {} }
+  const handle: CanvasHandle = { remeasure: () => {}, say: () => {}, setViewState: () => {} }
   flushSync(() => {
     root.render(
       <ThemeProvider value={{ tokens: input.tokens, window: input.window }}>
@@ -91,6 +95,7 @@ export function mountExportDocument(container: Element, input: ExportMountInput)
     errors: [...errors],
     remeasure: () => flushSync(() => handle.remeasure()),
     say: (lines) => flushSync(() => handle.say(lines)),
+    setViewState: (viewState) => flushSync(() => handle.setViewState(viewState)),
     unmount: () => root.unmount(),
   }
 }
@@ -99,6 +104,7 @@ export function mountExportDocument(container: Element, input: ExportMountInput)
 interface CanvasHandle {
   remeasure: () => void
   say: (lines: readonly string[]) => void
+  setViewState: (viewState: string | null) => void
 }
 
 interface MarkerBox {
@@ -120,6 +126,7 @@ function ExportCanvas(props: {
   const [notices, setNotices] = useState<string[]>([])
   const [markers, setMarkers] = useState<MarkerBox[]>([])
   const [measureTick, setMeasureTick] = useState(0)
+  const [viewState, setViewState] = useState<string | null>(input.viewState ?? null)
   /** 이번 조작에서 이미 옮겨 가기로 했나 — 한 조작에 링크가 여럿이면 첫 것만 간다. */
   const leaving = useRef(false)
 
@@ -172,6 +179,7 @@ function ExportCanvas(props: {
     theme: input.theme,
     onNodeError: (error) => errors.push(error),
     interaction: { overlay, onEvent },
+    viewState,
   })
 
   // 셸의 상태 줄. 빈 목록이면 줄을 감춘다 — 빈 상자가 남으면 목업이 밀린다.
@@ -192,11 +200,17 @@ function ExportCanvas(props: {
 
   props.handle.remeasure = () => setMeasureTick((tick) => tick + 1)
   props.handle.say = (next) => setStanding([...next])
+  /** 상태를 바꾸는 것도 조작이다 — 앞 조작의 알림을 비운다(위 «알림은 마지막 조작이 만든 것»). */
+  props.handle.setViewState = (next) => {
+    setViewState(next)
+    setNotices((prev) => (prev.length === 0 ? prev : []))
+  }
 
   /**
    * 마커 자리. **그린 뒤에 잰다** — 좌표는 브라우저가 그려야 생긴다. 자리는 렌더러의 `markerPoint`(에디터 캔버스 · PPTX 와 같은 함수)이고,
    * 기준은 캔버스의 안쪽 상자(마커 겹layer가 `inset: 0` 으로 거기 선다). 숨겨진 노드 · 그리지 못한 노드에는 마커가 없다.
-   * 겹layer(상호작용) · 알림 줄 · 크기 바뀜 · 시트와 글꼴이 실린 뒤(`remeasure`)에 다시 잰다.
+   * 겹layer(상호작용) · 알림 줄 · 화면 상태 · 크기 바뀜 · 시트와 글꼴이 실린 뒤(`remeasure`)에 다시 잰다. 고른 상태에서 안 그려진
+   * 가지의 노드는 요소가 없어 마커도 없다.
    */
   useLayoutEffect(() => {
     const base = container.getBoundingClientRect()
@@ -211,7 +225,7 @@ function ExportCanvas(props: {
       next.push({ nodeId, marker, left: point.x - base.left - container.clientLeft, top: point.y - base.top - container.clientTop })
     }
     setMarkers((prev) => (sameMarkers(prev, next) ? prev : next))
-  }, [container, input.markers, overlay, lines, measureTick])
+  }, [container, input.markers, overlay, lines, viewState, measureTick])
 
   useEffect(() => {
     const win = input.window

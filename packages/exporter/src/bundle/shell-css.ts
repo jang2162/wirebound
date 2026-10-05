@@ -323,4 +323,32 @@ body {
   margin: 0;
   white-space: pre-wrap;
 }
+
+/* 전환기는 목업 위 셸의 줄이다 — 문서를 감싸지 않으므로 글자 속성을 건다(위 «상속되는 속성» 규율은 감싸개의 것). */
+.wb-export-states {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 0.875rem;
+  color: #1f2937;
+}
+
+.wb-export-states-label {
+  font-weight: 600;
+}
+
+.wb-export-state-select {
+  font: inherit;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+}
+
+/* 화면 모드(\`#wb-screen\`)는 목업만 찍는다 — 전환기도 셸이다. */
+.wb-export-screen .wb-export-states {
+  display: none;
+}
 `

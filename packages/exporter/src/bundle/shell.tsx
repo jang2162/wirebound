@@ -38,9 +38,8 @@
  * `.wb-export-canvas` 는 비어 있고 `runtime.js` 가 채운다(`bundle/index.ts` 머리말). 스크립트가 없으면 `<noscript>` 한 줄이 선다 —
  * 설계서 뷰어라 받아들인다(spec 「HTML 번들 — 브라우저 렌더」).
  */
-import type { InteractionSentence } from '@wirebound/schema'
+import { DEFAULT_CASE, viewStateName, type InteractionSentence, type PageDocument, type ViewState } from '@wirebound/schema'
 import type { ReactElement, ReactNode } from 'react'
-import type { PageDocument } from '@wirebound/schema'
 import type { CommentEntry } from './comments'
 // **문장화는 `../sentences`가 한 자리에서 한다** — 여기서 다시 짜면 PPTX와 갈린다.
 import {
@@ -49,9 +48,10 @@ import {
   EMPTY_INTERACTIONS,
   MARKER_WITHOUT_COMMENT,
   PANEL_TABS,
+  STATE_SWITCH_LABEL,
   type PanelTabId,
 } from '../labels'
-import { EXPORT_GLOBAL, PAGE_DATA_ID, THEME_SCRIPT_ID } from '../page-data'
+import { EXPORT_GLOBAL, PAGE_DATA_ID, STATE_SELECT_ID, THEME_SCRIPT_ID } from '../page-data'
 import { pageSentences } from '../sentences'
 
 /** 좌측 트리의 한 줄. */
@@ -172,6 +172,7 @@ export function shellBody(input: ShellInput): ReactElement {
         </ul>
       </nav>
       <main className="wb-export-mockup">
+        <StateSwitcher viewStates={input.page.viewStates} />
         <div className="wb-export-canvas" />
         <noscript>
           <p className="wb-export-noscript">{NOSCRIPT_LINE}</p>
@@ -215,6 +216,30 @@ export function shellBody(input: ShellInput): ReactElement {
     </div>
     {input.scripts}
     </>
+  )
+}
+
+/**
+ * **화면 상태 전환기** — 상태 목록이 있는 페이지만 싣는다(설계서 「HTML 정적 번들」 의 «상태가 없는 페이지는 지금 모양 그대로» — 빈 목록 ·
+ * 목록 없음은 아무것도 안 그린다). 기본이 첫 항목이고 목록 차례가 뒤따른다. 고르면 런타임이 목업을 다시 그리고 주소 해시를 고친다
+ * (`browser/boot.tsx`) — 스크립트가 없으면 목업도 없으므로 전환기만 남는다.
+ */
+function StateSwitcher({ viewStates }: { viewStates: readonly ViewState[] | undefined }): ReactElement | null {
+  if (!Array.isArray(viewStates) || viewStates.length === 0) return null
+  return (
+    <div className="wb-export-states">
+      <label className="wb-export-states-label" htmlFor={STATE_SELECT_ID}>
+        {STATE_SWITCH_LABEL}
+      </label>
+      <select className="wb-export-state-select" id={STATE_SELECT_ID} defaultValue={DEFAULT_CASE}>
+        <option value={DEFAULT_CASE}>{viewStateName(viewStates, DEFAULT_CASE)}</option>
+        {viewStates.map((state) => (
+          <option key={state.id} value={state.id}>
+            {state.name}
+          </option>
+        ))}
+      </select>
+    </div>
   )
 }
 

@@ -33,3 +33,6 @@ export const EMPTY_INTERACTIONS = '상호작용이 없습니다'
 
 /** 번호는 있는데 코멘트가 없는 노드의 말(`marker-without-comment`). */
 export const MARKER_WITHOUT_COMMENT = '코멘트가 달려 있지 않습니다'
+
+/** 화면 상태 전환기의 이름표 — 상태 목록이 있는 페이지만 그것을 싣는다. */
+export const STATE_SWITCH_LABEL = '화면 상태'
