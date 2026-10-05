@@ -26,6 +26,16 @@
  * **창이 좁아지면 둘을 차례로 조인다 — 우측 먼저 최소까지, 그다음 좌측**(`fitWidths`). 좌측은 트리라 폭이 곧 읽을 줄의 길이이고, 우측
  * 패널은 최소(300)에서도 칸이 선다. 조이는 것은 **그리는 값**이다 — 저장값은 그대로 두고 창이 다시 넓어지면 돌아온다(아래 «클램프가 두 번»).
  *
+ * ## 둘 다 최소인데도 캔버스 몫이 모자라면 사람이 접는다
+ *
+ * 두 폭이 최소(200 · 300)에 닿은 뒤로는 창이 준 만큼 캔버스가 준다 — 창 996 아래에서 캔버스 몫(`CANVAS_MIN_WIDTH`) 아래다. 그 아래를 메우는
+ * 길은 **좌측 · 우측을 접는 것**이다(`PanelFolds` — 머리 양 끝의 토글). 접힌 쪽은 격자에서 트랙째 빠지고(그 손잡이 · 여백까지 — `shell.css`
+ * 의 `.wb-shell-fold-side` · `.wb-shell-fold-panel`), 남은 쪽의 최대 · 조임이 그만큼 넓은 예산으로 셈한다(`widthBudget`).
+ *
+ * **저절로 접지 않는다.** 창 폭으로 접으면 창을 조금 흔드는 것만으로 트리 · 패널이 사라졌다 돌아오고, 그 사이 사람이 보던 자리(트리 스크롤 ·
+ * 탭)가 화면에서 빠진다. 접힘은 사람이 고른 값이라 폭과 같이 기억한다(아래 «`localStorage`에 기억한다» — 같은 키 · 같은 «필드마다 따로 버림»).
+ * **접힌 쪽은 DOM 에 남는다**(`display: none`) — 트리의 펼침 · 스크롤 · 패널의 탭 · 쓰던 글이 펴면 그대로 돌아온다.
+ *
  * ## `localStorage`에 기억한다
  *
  * 기억할지는 **잃는 것이 무엇인가**로 가른다 — 사람이 마우스로 힘들여 맞춘 폭이 새로고침마다 264px로 돌아가면 이 기능은
@@ -132,10 +142,11 @@ export const SIDE_WIDTH_DEFAULT = 264
 export const SIDE_WIDTH_MIN = 200
 
 /**
- * 사이드바가 아무리 넓어도 캔버스에 남겨 두는 폭(px). 설계서 미리보기가 가장 좁은
- * 뷰포트 프리셋(375px)에 못 미치더라도 **무엇이 그려지는지는 보여야 한다**는 선이다.
+ * 사이드바를 아무리 넓혀도 캔버스 칸에 남겨 두는 폭(px). **가장 좁은 뷰포트 프리셋(375)이 줌 100% 에서 칸 안에 드는 폭**에 여유를 얹은 값이다 —
+ * 375 + 칸의 안쪽 여백 48 = 423, 세로 스크롤바가 자리를 먹는 OS(고전 스크롤바 15)면 438. 그보다 좁은 칸에서는 어느 프리셋도 100% 로 다 안
+ * 보인다. 두 폭이 최소인데도 이 몫이 모자라는 창(996 아래)은 사람이 좌측 · 우측을 접어 메운다(머리말 «둘 다 최소인데도»).
  */
-export const CANVAS_MIN_WIDTH = 320
+export const CANVAS_MIN_WIDTH = 480
 
 /**
  * 두 폭 말고 격자가 가로로 쓰는 고정 몫(px) — 손잡이 둘(6 × 2) + 칸 사이 여백 넷(1px × 4 — 칸 다섯 사이).
@@ -143,6 +154,16 @@ export const CANVAS_MIN_WIDTH = 320
  * CSS 원문과 대조한다 — 한쪽만 고치면 최대가 틀린 값이 된다).
  */
 export const HANDLES_WIDTH = 6 * 2 + 1 * 4
+
+/**
+ * 좌측 · 우측의 접힘. 접힌 쪽은 격자에서 트랙째 빠진다 — 그 쪽의 손잡이(6)와 여백 둘(1 × 2)까지, 곧 `HANDLES_WIDTH` 의 절반이 함께 빠진다.
+ */
+export interface PanelFolds {
+  side: boolean
+  panel: boolean
+}
+
+const UNFOLDED: PanelFolds = { side: false, panel: false }
 
 /** 우측 패널 기본 폭(px) — 격자의 넷째 칸이 고정이던 때의 값 그대로다. 좌측과 같이 `.wb-shell-panel`의 인라인 `width`로 붙는다. */
 export const PANEL_WIDTH_DEFAULT = 300
@@ -282,15 +303,19 @@ export interface StoredLayout {
   /** 하단 판의 높이(px)와 열림(머리말 «하단 판의 높이»). */
   paletteHeight?: number
   paletteOpen?: boolean
+  /** 좌측 · 우측을 접었나(머리말 «둘 다 최소인데도»). 없으면 펼침이다. */
+  sideFolded?: boolean
+  panelFolded?: boolean
 }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
-/** 두 폭이 나눠 쓰는 가로(px) — 창에서 고정 몫과 캔버스 몫을 뗀 것. */
-function widthBudget(shellWidth: number): number {
-  return shellWidth - HANDLES_WIDTH - CANVAS_MIN_WIDTH
+/** 두 폭이 나눠 쓰는 가로(px) — 창에서 고정 몫과 캔버스 몫을 뗀 것. 접힌 쪽은 손잡이 · 여백도 안 쓴다(`PanelFolds`). */
+function widthBudget(shellWidth: number, folds: PanelFolds): number {
+  const handles = HANDLES_WIDTH * ((folds.side ? 0 : 0.5) + (folds.panel ? 0 : 0.5))
+  return shellWidth - handles - CANVAS_MIN_WIDTH
 }
 
 /**
@@ -300,39 +325,40 @@ function widthBudget(shellWidth: number): number {
  * `clampSideWidth`의 `min`과 `max`가 뒤집히면 결과가 튄다. 좁은 창에서는 최소를 지키고
  * 격자가 넘치게 두는 편이 낫다 — 그 상황에서 사이드바를 더 줄여도 캔버스는 여전히 못 쓴다.
  */
-export function sideWidthMax(shellWidth: number, panelWidth: number): number {
-  return Math.max(SIDE_WIDTH_MIN, widthBudget(shellWidth) - panelWidth)
+export function sideWidthMax(shellWidth: number, panelWidth: number, folds: PanelFolds = UNFOLDED): number {
+  return Math.max(SIDE_WIDTH_MIN, widthBudget(shellWidth, folds) - (folds.panel ? 0 : panelWidth))
 }
 
 /** 지금 창 · 지금 좌측 폭에서 우측 패널이 가질 수 있는 최대 폭(px). 최소보다 작아지지 않는다(`sideWidthMax`와 같은 까닭). */
-export function panelWidthMax(shellWidth: number, sideWidth: number): number {
-  return Math.max(PANEL_WIDTH_MIN, widthBudget(shellWidth) - sideWidth)
+export function panelWidthMax(shellWidth: number, sideWidth: number, folds: PanelFolds = UNFOLDED): number {
+  return Math.max(PANEL_WIDTH_MIN, widthBudget(shellWidth, folds) - (folds.side ? 0 : sideWidth))
 }
 
 /** 사이드바 폭을 우측의 지금 폭에 맞춰 자른다. 손잡이가 싣는 값이다. */
-export function clampSideWidth(width: number, shellWidth: number, panelWidth: number): number {
-  return clamp(width, SIDE_WIDTH_MIN, sideWidthMax(shellWidth, panelWidth))
+export function clampSideWidth(width: number, shellWidth: number, panelWidth: number, folds: PanelFolds = UNFOLDED): number {
+  return clamp(width, SIDE_WIDTH_MIN, sideWidthMax(shellWidth, panelWidth, folds))
 }
 
 /** 우측 폭을 좌측의 지금 폭에 맞춰 자른다. 손잡이가 싣는 값이다. */
-export function clampPanelWidth(width: number, shellWidth: number, sideWidth: number): number {
-  return clamp(width, PANEL_WIDTH_MIN, panelWidthMax(shellWidth, sideWidth))
+export function clampPanelWidth(width: number, shellWidth: number, sideWidth: number, folds: PanelFolds = UNFOLDED): number {
+  return clamp(width, PANEL_WIDTH_MIN, panelWidthMax(shellWidth, sideWidth, folds))
 }
 
 /**
  * **화면에 쓸 두 폭** — 저장값을 지금 창에 맞춰 조인다(머리말 «두 폭은 한 예산을 나눠 쓴다»). 넘치면 **우측을 먼저** 최소까지, 그래도 넘치면
- * 좌측을 최소까지 줄인다. 둘 다 최소인데도 넘치는 창(아주 좁은 창)은 격자가 넘치게 둔다 — `sideWidthMax`의 머리말.
+ * 좌측을 최소까지 줄인다. 둘 다 최소인데도 넘치는 창은 캔버스 칸이 그 몫 아래로 준다 — 메우는 길은 접기다(머리말 «둘 다 최소인데도»).
+ * 접힌 쪽은 예산에서 빠지고 조이지 않는다 — 그 값은 펼 때 다시 이 셈을 지난다.
  */
-export function fitWidths(side: number, panel: number, shellWidth: number): { side: number; panel: number } {
+export function fitWidths(side: number, panel: number, shellWidth: number, folds: PanelFolds = UNFOLDED): { side: number; panel: number } {
   let fittedSide = Math.max(SIDE_WIDTH_MIN, side)
   let fittedPanel = Math.max(PANEL_WIDTH_MIN, panel)
-  let over = fittedSide + fittedPanel - widthBudget(shellWidth)
-  if (over > 0) {
+  let over = (folds.side ? 0 : fittedSide) + (folds.panel ? 0 : fittedPanel) - widthBudget(shellWidth, folds)
+  if (over > 0 && !folds.panel) {
     const cut = Math.min(over, fittedPanel - PANEL_WIDTH_MIN)
     fittedPanel -= cut
     over -= cut
   }
-  if (over > 0) fittedSide -= Math.min(over, fittedSide - SIDE_WIDTH_MIN)
+  if (over > 0 && !folds.side) fittedSide -= Math.min(over, fittedSide - SIDE_WIDTH_MIN)
   return { side: fittedSide, panel: fittedPanel }
 }
 
@@ -447,12 +473,16 @@ export function readLayout(storage: Storage | null): StoredLayout {
   const panelWidth = usableNumber(record.panelWidth)
   const paletteHeight = usableNumber(record.paletteHeight)
   const paletteOpen = typeof record.paletteOpen === 'boolean' ? record.paletteOpen : undefined
+  const sideFolded = typeof record.sideFolded === 'boolean' ? record.sideFolded : undefined
+  const panelFolded = typeof record.panelFolded === 'boolean' ? record.panelFolded : undefined
   return {
     ...(sideWidth === undefined ? {} : { sideWidth }),
     ...(regionRatio === undefined ? {} : { regionRatio }),
     ...(panelWidth === undefined ? {} : { panelWidth }),
     ...(paletteHeight === undefined ? {} : { paletteHeight }),
     ...(paletteOpen === undefined ? {} : { paletteOpen }),
+    ...(sideFolded === undefined ? {} : { sideFolded }),
+    ...(panelFolded === undefined ? {} : { panelFolded }),
   }
 }
 
@@ -473,6 +503,13 @@ export interface SidebarLayout {
   regionResizerRef: RefObject<HTMLDivElement | null>
   /** 하단 바. 판의 최대를 셀 때 사이드바 상자에서 뗀다(머리말 «하단 판의 높이»). */
   footerRef: RefObject<HTMLElement | null>
+  /** 우측 패널. 좌측을 접었을 때 판의 최대를 이 상자에서 잰다(좌측과 같은 세 줄에 걸친다). */
+  panelRef: RefObject<HTMLElement | null>
+  /** 좌측 · 우측을 접었나(머리말 «둘 다 최소인데도»). 접힌 쪽은 격자에서 빠지고 그 손잡이는 안 선다. */
+  sideFolded: boolean
+  panelFolded: boolean
+  toggleSide: () => void
+  togglePanel: () => void
   /** 화면에 쓸 폭(px). 저장된 값이 아니라 **클램프를 지난 값**이다. */
   sideWidth: number
   sideWidthMin: number
@@ -542,6 +579,7 @@ export function useSidebarLayout(): SidebarLayout {
   const sideRef = useRef<HTMLElement | null>(null)
   const regionResizerRef = useRef<HTMLDivElement | null>(null)
   const footerRef = useRef<HTMLElement | null>(null)
+  const panelRef = useRef<HTMLElement | null>(null)
   const storageRef = useRef<Storage | null>(null)
   if (storageRef.current === null) storageRef.current = browserStorage()
 
@@ -582,9 +620,12 @@ export function useSidebarLayout(): SidebarLayout {
     return { shared, inset: regionInset(side.firstElementChild) }
   }, [])
 
-  /** 사이드바 상자(캔버스 · 판 · 하단 바 세 줄)에서 하단 바와 칸 사이 여백 둘을 뗀다. 못 재면 0. */
+  /**
+   * 사이드바 상자(캔버스 · 판 · 하단 바 세 줄)에서 하단 바와 칸 사이 여백 둘을 뗀다. 못 재면 0. 좌측이 접혀(`display: none` — 높이 0) 있으면
+   * 같은 세 줄에 걸친 우측 패널로 잰다 — 둘 다 접혔으면 못 잰 것이다.
+   */
   const measureRoom = useCallback((): number => {
-    const side = sideRef.current
+    const side = [sideRef.current, panelRef.current].find((box) => box !== null && box.getBoundingClientRect().height > 0) ?? null
     const footer = footerRef.current
     if (side === null || footer === null) return 0
     const height = side.getBoundingClientRect().height
@@ -598,7 +639,7 @@ export function useSidebarLayout(): SidebarLayout {
     setPaletteRoom(measureRoom())
     if (typeof ResizeObserver !== 'function') return
     const observer = new ResizeObserver(() => setPaletteRoom(measureRoom()))
-    for (const element of [sideRef.current, footerRef.current]) if (element !== null) observer.observe(element)
+    for (const element of [sideRef.current, panelRef.current, footerRef.current]) if (element !== null) observer.observe(element)
     return () => observer.disconnect()
   }, [measureRoom])
 
@@ -647,10 +688,12 @@ export function useSidebarLayout(): SidebarLayout {
     writeLayout(storageRef.current, stored)
   }, [stored])
 
+  const folds: PanelFolds = { side: stored.sideFolded === true, panel: stored.panelFolded === true }
   const { side: sideWidth, panel: panelWidth } = fitWidths(
     stored.sideWidth ?? SIDE_WIDTH_DEFAULT,
     stored.panelWidth ?? PANEL_WIDTH_DEFAULT,
     shellWidth,
+    folds,
   )
   const regionRatio = clampRegionRatio(stored.regionRatio ?? REGION_RATIO_DEFAULT, metrics.shared)
   const paletteHeight = fitPaletteHeight(stored.paletteHeight, shellHeight, paletteRoom)
@@ -660,20 +703,25 @@ export function useSidebarLayout(): SidebarLayout {
     sideRef,
     regionResizerRef,
     footerRef,
+    panelRef,
+    sideFolded: folds.side,
+    panelFolded: folds.panel,
+    toggleSide: () => setStored((prev) => ({ ...prev, sideFolded: prev.sideFolded !== true })),
+    togglePanel: () => setStored((prev) => ({ ...prev, panelFolded: prev.panelFolded !== true })),
     sideWidth,
     sideWidthMin: SIDE_WIDTH_MIN,
-    sideWidthMax: sideWidthMax(shellWidth, panelWidth),
+    sideWidthMax: sideWidthMax(shellWidth, panelWidth, folds),
     grabSideWidth: () => sideWidth,
     // 싣는 자리의 클램프는 **상대의 화면 폭**을 뺀다 — 저장값이 아니다. 조여진 상대를 기준으로 잘라야 손잡이가 화면에 보인 끝에서 멈춘다.
     setSideWidth: (width) =>
-      setStored((prev) => ({ ...prev, sideWidth: clampSideWidth(width, shellWidth, panelWidth) })),
+      setStored((prev) => ({ ...prev, sideWidth: clampSideWidth(width, shellWidth, panelWidth, folds) })),
     resetSideWidth: () => setStored((prev) => ({ ...prev, sideWidth: SIDE_WIDTH_DEFAULT })),
     panelWidth,
     panelWidthMin: PANEL_WIDTH_MIN,
-    panelWidthMax: panelWidthMax(shellWidth, sideWidth),
+    panelWidthMax: panelWidthMax(shellWidth, sideWidth, folds),
     grabPanelWidth: () => panelWidth,
     setPanelWidth: (width) =>
-      setStored((prev) => ({ ...prev, panelWidth: clampPanelWidth(width, shellWidth, sideWidth) })),
+      setStored((prev) => ({ ...prev, panelWidth: clampPanelWidth(width, shellWidth, sideWidth, folds) })),
     resetPanelWidth: () => setStored((prev) => ({ ...prev, panelWidth: PANEL_WIDTH_DEFAULT })),
     regionRatio,
     regionRatioMin: regionRatioMin(metrics.shared),

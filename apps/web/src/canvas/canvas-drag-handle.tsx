@@ -56,7 +56,7 @@ export function CanvasDragHandle(props: {
     onOver: placement.onOver,
     onDrop: placement.onDrop,
     sameDrop: placement.sameDrop,
-    // 캔버스 칸의 위 · 아래 끝에 대면 칸이 민다.
+    // 캔버스 칸의 위 · 아래 · 왼 · 오른 끝에 대면 칸이 민다(`drag/use-pointer-drag.ts` 머리말 «끝 스크롤»).
     scrollContainer: () => scrollParent(buttonRef.current),
   })
   const { refresh } = drag

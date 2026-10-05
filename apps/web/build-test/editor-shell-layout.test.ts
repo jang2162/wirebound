@@ -6,9 +6,9 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 우측 손잡이 | 왼쪽으로 끌어도 · `ArrowLeft`로도 안 넓어진다 · 두 번 눌러 300 이 아니다 · 새로고침 뒤 폭을 잃는다 |
- * | 창을 줄이면 | 캔버스가 320 아래 · 셸에 가로 넘침 · 우측보다 좌측을 먼저 조인다 · 저장값을 되쓴다 |
+ * | 창을 줄이면 | 캔버스가 480 아래 · 셸에 가로 넘침 · 우측보다 좌측을 먼저 조인다 · 저장값을 되쓴다 |
  * | 하단 바의 통지 둘 | 한쪽이 가려진다 · 캔버스가 안 준다(바가 안 자란다) |
- * | 화면 맞춤 | 맞춘 뒤 캔버스에 가로 넘침이 있다(줌 하한 25% 에 막힌 칸은 보이는 프레임이 넘친 만큼만) · 좌측 최대에서 «화면 맞춤»이 가려진다 |
+ * | 화면 맞춤 | 맞춘 뒤 캔버스에 가로 넘침이 있다(좌측 최대 · 넓은 프리셋 칸 포함 — 줌 하한이 맞춤을 막지 않는다) · 보이지 않는 넘침이 있다 · 좌측 최대에서 «화면 맞춤»이 가려진다 |
  * | 머리가 한 줄 | 창 1024 에서 머리가 두 줄이다(편집 · 뷰). 한 줄에 드는 최소 창 폭을 로그로 낸다 — `src/shell.css` «머리가 한 줄에 들어가는 폭» 표의 다시 재는 길 |
  */
 import type { Page } from 'playwright-core'
@@ -77,10 +77,10 @@ describe.skipIf(!전제.ok)('에디터 셸 가로 배치 — 실브라우저', (
   })
 
   /**
-   * 좌 400 · 우 500 을 1440 창에 두고 1024 로 줄인다 — 예산 688(1024 − 손잡이 둘 · 여백 넷 16 − 캔버스 320)에 212 넘친다. 우측이 먼저
-   * 최소(300)까지 200 줄고, 남은 12 를 좌측이 줄어 388. 저장값은 그대로다 — 창을 되돌리면 두 폭이 돌아온다.
+   * 좌 400 · 우 500 을 1440 창에 두고 1024 로 줄인다 — 예산 528(1024 − 손잡이 둘 · 여백 넷 16 − 캔버스 480)에 372 넘친다. 우측이 먼저
+   * 최소(300)까지 200 줄고, 남은 172 를 좌측이 줄어 228. 저장값은 그대로다 — 창을 되돌리면 두 폭이 돌아온다.
    */
-  it('두 폭을 넓힌 채 창을 1024 로 줄이면 우측 먼저 조이고 캔버스는 320 · 가로 넘침 0 — 되돌리면 두 폭이 돌아온다', async () => {
+  it('두 폭을 넓힌 채 창을 1024 로 줄이면 우측 먼저 조이고 캔버스는 480 · 가로 넘침 0 — 되돌리면 두 폭이 돌아온다', async () => {
     const { P } = await fixture(stack, alice, 'shrink', 3)
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
     try {
@@ -99,7 +99,7 @@ describe.skipIf(!전제.ok)('에디터 셸 가로 배치 — 실브라우저', (
 
       expect({ wide, narrow, back, stored: JSON.parse(stored ?? '{}') }).toEqual({
         wide: { side: 400, panel: 500, canvas: 1440 - 16 - 400 - 500, shellOverflow: 0 },
-        narrow: { side: 388, panel: 300, canvas: 320, shellOverflow: 0 },
+        narrow: { side: 228, panel: 300, canvas: 480, shellOverflow: 0 },
         back: { side: 400, panel: 500, canvas: 1440 - 16 - 400 - 500, shellOverflow: 0 },
         stored: { sideWidth: 400, panelWidth: 500 },
       })
@@ -164,11 +164,12 @@ describe.skipIf(!전제.ok)('에디터 셸 가로 배치 — 실브라우저', (
   })
 
   /**
-   * **화면 맞춤 뒤 가로 넘침**(`fitZoom` 머리말 «가운데 정렬은 보이는 폭으로 한다»). 창 1440 · 1280 × 좌측 기본 · 최대 × 프리셋 여섯. 넘침은
-   * 보이는 프레임이 칸을 넘은 만큼뿐이어야 한다 — 맞춘 줌이 하한(25%)에 막히지 않은 칸은 0, 막힌 칸(좌측 최대 × 넓은 프리셋)은 프레임이 정말
-   * 넘친 만큼. «화면 맞춤»은 **실제 클릭**으로 누른다 — 단추가 다른 칸 밑으로 들어가면 여기서 죽는다(머리의 줌 묶음 — `src/routes/editor.tsx` 의 `CanvasTools`).
+   * **화면 맞춤 뒤 가로 넘침**(`fitZoom` 머리말 «가운데 정렬은 보이는 폭으로 한다»). 창 1440 · 1280 × 좌측 기본 · 최대 × 프리셋 여섯 — 스물넷 칸 모두
+   * 0 이다. 좌측 최대(캔버스 몫 480 · 쓰는 폭 432) × 프리셋 1920 의 맞춤 0.225 도 줌 하한(5% — `src/store/editor-store.ts` 의 `MIN_ZOOM`) 위라
+   * 막히지 않는다. 보이지 않는 넘침(변환 전 폭이 넘침으로 잡힘)도 따로 센다. «화면 맞춤»은 **실제 클릭**으로 누른다 — 단추가 다른 칸 밑으로
+   * 들어가면 여기서 죽는다(머리의 줌 묶음 — `src/routes/editor.tsx` 의 `CanvasTools`).
    */
-  it('화면 맞춤 뒤 캔버스의 가로 넘침은 보이는 프레임이 넘친 만큼뿐이다 — 막히지 않은 칸은 0', async () => {
+  it('화면 맞춤 뒤 캔버스의 가로 넘침은 0 이다 — 좌측 최대 · 넓은 프리셋 칸까지', async () => {
     const { P } = await fixture(stack, alice, 'fit', 40)
     const cells: string[] = []
     const phantom: string[] = []
@@ -215,9 +216,9 @@ describe.skipIf(!전제.ok)('에디터 셸 가로 배치 — 실브라우저', (
         }
       }
     }
-    // 판 카나리아 — 24 칸을 다 쟀고, 막히지 않은 칸(좌측 기본)은 넘침이 0 이다.
+    // 판 카나리아 — 24 칸을 다 쟀다.
     expect(cells).toHaveLength(24)
-    expect(cells.filter((cell) => cell.includes('·기본·') && !cell.endsWith('over 0 visual 0'))).toEqual([])
+    expect(cells.filter((cell) => !cell.endsWith('over 0 visual 0'))).toEqual([])
     expect(phantom).toEqual([])
   }, 180_000)
 
@@ -243,6 +244,8 @@ describe.skipIf(!전제.ok)('에디터 셸 가로 배치 — 실브라우저', (
         while (wide - narrow > 1) {
           const mid = Math.floor((narrow + wide) / 2)
           await page.setViewportSize({ width: mid, height: 900 })
+          // 머리의 접힘 단계(`src/shell/head-fold.ts` — 미디어 쿼리)가 다시 그린 뒤에 잰다. 안 기다리면 앞 창의 단계로 그린 머리를 읽는다.
+          await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
           if ((await height()) <= one) wide = mid
           else narrow = mid
         }

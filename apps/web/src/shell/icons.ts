@@ -51,6 +51,8 @@ import {
   LogOut,
   MessageSquarePlus,
   MoveHorizontal,
+  PanelLeft,
+  PanelRight,
   Palette,
   Pencil,
   Plus,
@@ -85,6 +87,10 @@ export const ICONS = {
   zoomIn: ZoomIn,
   /** 캔버스 폭에 맞춘다(«화면 맞춤» — 폭 기준). */
   fitWidth: MoveHorizontal,
+  /** 좌측(메뉴 · 구조 트리)을 접고 편다 — 머리 왼쪽 끝의 토글(`shell/panel-fold.tsx`). */
+  foldSide: PanelLeft,
+  /** 우측 패널을 접고 편다 — 머리 오른쪽 끝(`…` 앞)의 토글. */
+  foldPanel: PanelRight,
   /** 접힌 것을 편다 · 편 것을 접는다 — 펼침 단추의 머리. */
   expand: ChevronRight,
   collapse: ChevronDown,

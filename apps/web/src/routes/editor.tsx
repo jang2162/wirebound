@@ -16,6 +16,8 @@
 import {
   useCallback,
   useEffect,
+  useId,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -53,6 +55,7 @@ import { ComponentPalette, PaletteToggle } from '../palette/component-palette'
 import { GuidesToggle } from '../canvas/layout-guides'
 import { ShellFooter } from '../shell/shell-footer'
 import { useHeadFold, type HeadFold } from '../shell/head-fold'
+import { PanelFoldToggle } from '../shell/panel-fold'
 import { ShellResizer } from '../shell/shell-resizer'
 import { useSidebarLayout } from '../shell/sidebar-layout'
 import { useNodeLock } from '../realtime/use-node-lock'
@@ -89,8 +92,14 @@ const NO_PAGE_NOTICE = '왼쪽 트리에서 페이지를 고르세요'
 /** 페이지 조회가 이유 없이 실패했을 때의 문장. 프로젝트 쪽(`UNKNOWN_FAILURE`)과 다르다. */
 const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
 
-/** 줌 한 칸. 한계(0.25~2)는 스토어가 클램프하므로 여기서 다시 알 필요가 없다. */
+/** 줌 한 칸. 한계(0.05~2)는 스토어가 클램프하므로 여기서 다시 알 필요가 없다. */
 const ZOOM_STEP = 0.25
+/**
+ * 축소 단추(−)가 멈추는 배율 — 한 칸(25%)이다. 스토어의 하한(5%)은 «화면 맞춤»이 좁은 칸에 넓은 프리셋을 맞추는 값이라, − 가 거기까지 내리면
+ * 25% 다음 누름이 5% 로 뛴다(단추의 단계가 25 · 50 · 75 … 가 아니게 된다). 맞춤이 이보다 낮게 둔 배율에서 − 는 아무것도 안 하고 + 는 25% 로
+ * 오른다(`useZoomCommands`).
+ */
+const ZOOM_OUT_FLOOR = ZOOM_STEP
 
 /**
  * **화면에 들어가는 폭 ÷ 뷰포트 폭.** 잴 수 없으면 `null`이다.
@@ -138,7 +147,7 @@ const ZOOM_STEP = 0.25
  *
  * 레이아웃이 없는 자리(jsdom, `display: none`)에서는 `clientWidth`가 0이고 계산된 CSS에
  * `padding`이 없다. 그때 나오는 0이나 `NaN`을 그대로 `setZoom`에 넘기면 **스토어가
- * 0.25로 클램프해** 아무 이유 없이 25%가 된다 — 재지 못한 것과 "폭이 25%다"는 다른
+ * 하한(0.05)으로 클램프해** 아무 이유 없이 5%가 된다 — 재지 못한 것과 "폭이 5%다"는 다른
  * 사실이므로 여기서 `null`로 갈라 부르는 쪽이 아무것도 안 하게 한다. **클램프를 여기서
  * 흉내 내는 것이 아니다** — 계산한 배율은 그대로 넘긴다(한계는 스토어 하나가 안다).
  */
@@ -680,6 +689,9 @@ function EditorShell(props: {
    * (`test/shell-css-guard.ts` 머리말의 ㉠ — *"자리·크기를 코드가 계산하는 것"*).
    */
   const layout = useSidebarLayout()
+  /** 접히는 두 상자의 id — 머리의 접기 토글이 `aria-controls` 로 가리킨다(`shell/panel-fold.tsx`). */
+  const sideId = useId()
+  const panelId = useId()
 
   /**
    * **구조 트리가 있을 때만 배분이 있다.** 뷰 모드에서는 상자가 하나뿐이라 손잡이가 나눌
@@ -755,7 +767,8 @@ function EditorShell(props: {
   return (
     // **별칭 입력이 선 줄**(`panels/alias-edit.tsx`) — 구조 트리가 그리고 에디터 단축키(F2)가 연다. 둘이 같은 값을 보게 셸이 한 번 깐다.
     <AliasEditProvider pageId={props.pageId}>
-      <div className="wb-shell">
+      {/* 접힌 쪽은 격자에서 트랙째 빠진다(`shell.css` 의 `.wb-shell-fold-side` · `.wb-shell-fold-panel`) — 상자는 DOM 에 남고 손잡이는 안 선다. */}
+      <div className={['wb-shell', layout.sideFolded ? 'wb-shell-fold-side' : '', layout.panelFolded ? 'wb-shell-fold-panel' : ''].filter(Boolean).join(' ')}>
         <header className="wb-shell-header">
           {/* **머리의 왼쪽은 *"어디에 있고 어디로 나가는가"*다.** 가운데 도구들 · 오른쪽 끝의 `…` 와 갈리는 축이
               이것이라, 둘을 한 묶음으로 싸서 `space-between`이 사이를 벌리지 못하게 한다.
@@ -767,7 +780,10 @@ function EditorShell(props: {
               제목은 *"지금 여기"*를 말한다 — `관리자 콘솔 설계서`를 눌렀더니 프로젝트
               **목록**으로 가는 것은 그 계약을 어긴다. 제목은 `<h1>` 글자라 접근성 트리에서도 `heading`이다. */}
           <div className="wb-shell-lead">
-            <BrandLink />
+            {/* **좌측 접기**는 머리 왼쪽 끝 — 접는 쪽과 같은 편이다(`shell/panel-fold.tsx`). */}
+            <PanelFoldToggle side="side" folded={layout.sideFolded} controls={sideId} onToggle={layout.toggleSide} />
+            {/* 접힌 머리(`short` · `folded`)에서는 로고 글자를 뺀다 — 좌우 접기 토글이 든 머리가 그 폭(78)으로 한 줄에 든다(`shell/head-fold.ts`). */}
+            <BrandLink compact={fold !== 'wide'} />
             <h1 className="wb-shell-title">{props.project.name}</h1>
           </div>
           {/* **가운데 — 설계서와 캔버스를 다루는 도구.** 되돌리기 · 다시 실행 · 배치 선 · 모드(편집/뷰) 다음에 구분선, 그 뒤가 캔버스를
@@ -801,7 +817,11 @@ function EditorShell(props: {
           {/* **오른쪽 끝의 `…`** — 이 프로젝트 전체 · 계정을 다루는 일(spec 「`…` 메뉴」). **역할로 감추지 않는다** — 항목 다섯이 모든 역할에게
               선다: 스냅샷 목록 · 내보내기 · 설정(읽기 전용 칸)은 viewer 도 본다(설계서 「권한 모델」 — 막는 것은 그 안의 생성 · 복원이고 그 판정은
               몸체가 한다). */}
-          <ActionMenu label="더 보기" heading={sessionUser?.name} items={menuItems} />
+          {/* **우측 접기**는 `…` 바로 앞 — 둘을 한 묶음으로 싸서 머리의 `space-between` 이 사이를 벌리지 못하게 한다. */}
+          <div className="wb-shell-head-end">
+            <PanelFoldToggle side="panel" folded={layout.panelFolded} controls={panelId} onToggle={layout.togglePanel} />
+            <ActionMenu label="더 보기" heading={sessionUser?.name} items={menuItems} />
+          </div>
           {/* **스냅샷 · 프로젝트 내보내기는 에디터 위의 대화 상자다**(`shell/shell-dialog.tsx`). 셸이 그리므로 셸이 내려가면 함께 내려간다.
 
               스냅샷 몸체에는 셸의 복원 콜백 넷을 그대로 준다 — 복원을 보낸 뒤 상자를 닫아도 답은 셸이 받는다(몸체가 보낸 순간 쥔 콜백).
@@ -834,7 +854,8 @@ function EditorShell(props: {
         </header>
 
         <nav
-          className="wb-shell-side"
+          id={sideId}
+          className={layout.sideFolded ? 'wb-shell-side wb-shell-folded' : 'wb-shell-side'}
           aria-label="메뉴와 구조"
           ref={layout.sideRef}
           style={{ width: `${layout.sideWidth}px` }}
@@ -928,20 +949,22 @@ function EditorShell(props: {
         </nav>
 
         {/* **사이드바와 캔버스 사이의 손잡이.** 편집·뷰 모드 둘 다에 있다 — 폭은 모드가
-            아니라 사람의 화면에 대한 값이다. */}
-        <ShellResizer
-          orientation="vertical"
-          className="wb-shell-side-resizer"
-          label="사이드바 폭"
-          value={layout.sideWidth}
-          min={layout.sideWidthMin}
-          max={layout.sideWidthMax}
-          valueText={`${Math.round(layout.sideWidth)}px`}
-          onGrab={layout.grabSideWidth}
-          onMove={layout.setSideWidth}
-          onEdge={(edge) => layout.setSideWidth(edge === 'min' ? layout.sideWidthMin : layout.sideWidthMax)}
-          onReset={layout.resetSideWidth}
-        />
+            아니라 사람의 화면에 대한 값이다. 좌측을 접으면 안 선다 — 끌 폭이 없다. */}
+        {!layout.sideFolded && (
+          <ShellResizer
+            orientation="vertical"
+            className="wb-shell-side-resizer"
+            label="사이드바 폭"
+            value={layout.sideWidth}
+            min={layout.sideWidthMin}
+            max={layout.sideWidthMax}
+            valueText={`${Math.round(layout.sideWidth)}px`}
+            onGrab={layout.grabSideWidth}
+            onMove={layout.setSideWidth}
+            onEdge={(edge) => layout.setSideWidth(edge === 'min' ? layout.sideWidthMin : layout.sideWidthMax)}
+            onReset={layout.resetSideWidth}
+          />
+        )}
 
         <main className="wb-shell-canvas" aria-label="캔버스" ref={canvasRef}>
           <CanvasFrame
@@ -1005,23 +1028,31 @@ function EditorShell(props: {
         />
 
         {/* **캔버스와 우측 패널 사이의 손잡이**(`shell/sidebar-layout.ts` «두 폭은 한 예산을 나눠 쓴다»). 좌측 손잡이와 같은 부품이고 방향만
-            반대다 — 왼쪽으로 끌면 패널이 넓어진다(`reversed`). */}
-        <ShellResizer
-          orientation="vertical"
-          className="wb-shell-panel-resizer"
-          label="우측 패널 폭"
-          reversed
-          value={layout.panelWidth}
-          min={layout.panelWidthMin}
-          max={layout.panelWidthMax}
-          valueText={`${Math.round(layout.panelWidth)}px`}
-          onGrab={layout.grabPanelWidth}
-          onMove={layout.setPanelWidth}
-          onEdge={(edge) => layout.setPanelWidth(edge === 'min' ? layout.panelWidthMin : layout.panelWidthMax)}
-          onReset={layout.resetPanelWidth}
-        />
+            반대다 — 왼쪽으로 끌면 패널이 넓어진다(`reversed`). 우측을 접으면 안 선다. */}
+        {!layout.panelFolded && (
+          <ShellResizer
+            orientation="vertical"
+            className="wb-shell-panel-resizer"
+            label="우측 패널 폭"
+            reversed
+            value={layout.panelWidth}
+            min={layout.panelWidthMin}
+            max={layout.panelWidthMax}
+            valueText={`${Math.round(layout.panelWidth)}px`}
+            onGrab={layout.grabPanelWidth}
+            onMove={layout.setPanelWidth}
+            onEdge={(edge) => layout.setPanelWidth(edge === 'min' ? layout.panelWidthMin : layout.panelWidthMax)}
+            onReset={layout.resetPanelWidth}
+          />
+        )}
 
-        <aside className="wb-shell-panel" aria-label="우측 패널" style={{ width: `${layout.panelWidth}px` }}>
+        <aside
+          id={panelId}
+          ref={layout.panelRef}
+          className={layout.panelFolded ? 'wb-shell-panel wb-shell-folded' : 'wb-shell-panel'}
+          aria-label="우측 패널"
+          style={{ width: `${layout.panelWidth}px` }}
+        >
           {/* **본문 넷이 같은 `canEdit`을 받는다** — 속성 · 상호작용은 끄고, 코멘트 폼 · 설명 편집기는 숨긴다. */}
           <RightPanel projectId={props.project.id} pageId={props.pageId} canEdit={canEdit} restoredToken={restoredToken} />
         </aside>
@@ -1291,6 +1322,22 @@ function CanvasFrame(props: {
   const zoom = useEditorStore(store, (s) => s.zoom)
   const themeStatus = useProjectTheme().status
   const [state, setState] = useState<PageLoadState>({ status: 'empty' })
+  /**
+   * **프레임의 변환 전 높이(px)** — 무대의 높이를 «보이는 높이»(이 값 × 줌)로 두려고 잰다(아래 무대의 주석). `transform` 은 레이아웃을 안
+   * 바꾸므로 `offsetHeight` 가 줌과 무관한 값이다. 문서가 자라거나 줄면 프레임이 다시 재어진다(`ResizeObserver`). 못 재면(jsdom) `null` —
+   * 무대 높이를 안 건다.
+   */
+  const frameRef = useRef<HTMLDivElement | null>(null)
+  const [frameHeight, setFrameHeight] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    const frame = frameRef.current
+    if (frame === null || typeof ResizeObserver !== 'function') return
+    const read = (): void => setFrameHeight(frame.offsetHeight)
+    read()
+    const observer = new ResizeObserver(read)
+    observer.observe(frame)
+    return () => observer.disconnect()
+  }, [])
   /**
    * **실패한 캔버스의 «다시 시도»가 올리는 수** — 페이지를 여는 이펙트가 이 값에 매여 다시 돈다(여는 길 그대로: 비우고 · 읽고 · 되돌리기
    * 이력을 채운다). 실패 문장만 두면 다시 여는 길이 다른 페이지로 갔다 오거나 새로고침뿐이다 — 판을 비운 복원 재조회의 실패가 앞 조회의
@@ -1662,10 +1709,16 @@ function CanvasFrame(props: {
   }, [api, projectId, pageId, store, applyServerPage, tellLost, restoredToken, restoredLead])
 
   return (
-    /* **무대 — 보이는 폭(프리셋 × 줌)짜리 상자.** 가운데 정렬과 칸의 가로 넘침이 이 폭으로 선다(`fitZoom` 머리말 «가운데 정렬은 보이는
-       폭으로 한다»). 세로는 프레임의 변환 전 높이 그대로다 — 줌이 1 보다 작으면 아래에 빈 스크롤이 남는다(이 상자가 고치지 않는 것). */
-    <div className="wb-shell-canvas-stage" style={{ width: `${viewportWidth * zoom}px` }}>
+    /* **무대 — 보이는 크기(프리셋 × 줌 · 프레임 높이 × 줌)짜리 상자.** 가운데 정렬과 칸의 넘침이 이 크기로 선다(`fitZoom` 머리말 «가운데
+       정렬은 보이는 폭으로 한다»). 안의 프레임은 `transform` 이 걸려 변환 뒤 상자로만 넘침에 든다 — 무대 높이를 안 걸면 무대가 프레임의 변환
+       전 높이로 서서, 줌이 1 보다 작을 때 칸 아래에 그 차만큼 빈 세로 스크롤이 선다(Chrome · 창 1440 · 글 40 줄 · 줌 50%: 칸의 세로 넘침이
+       줌 100% 와 같은 709). */
     <div
+      className="wb-shell-canvas-stage"
+      style={{ width: `${viewportWidth * zoom}px`, ...(frameHeight === null ? {} : { height: `${frameHeight * zoom}px` }) }}
+    >
+    <div
+      ref={frameRef}
       className="wb-shell-canvas-frame"
       // 폭은 프리셋 그대로, 줌은 그 위의 배율이다. 폭에 줌을 곱해 넣으면 "1280 폭에서
       // 어떻게 보이는가"라는 뷰포트 프리셋의 뜻이 깨진다.
@@ -1726,14 +1779,21 @@ function ModeTools(): ReactElement {
 }
 
 /**
- * 줌 명령 셋 — 머리의 줌 묶음과 접힌 머리의 `…` 항목(`shell/head-fold.ts`)이 함께 부른다. 한계값(0.25~2)은 여기 두지 않는다 — 스토어가
- * 클램프하므로 한 칸씩 밀기만 하면 되고, 한계가 바뀌어도 고칠 곳이 하나로 남는다.
+ * 줌 명령 셋 — 머리의 줌 묶음과 접힌 머리의 `…` 항목(`shell/head-fold.ts`)이 함께 부른다. 한계값(0.05~2)은 여기 두지 않는다 — 스토어가
+ * 클램프하므로 한 칸씩 밀기만 하면 되고, 한계가 바뀌어도 고칠 곳이 하나로 남는다. 축소만 제 바닥(`ZOOM_OUT_FLOOR`)이 있다.
  */
 function useZoomCommands(canvasRef: RefObject<HTMLElement | null>): { zoomOut: () => void; zoomIn: () => void; fit: () => void } {
   const store = useEditorStoreInstance()
   return {
-    zoomOut: () => store.setZoom(store.getState().zoom - ZOOM_STEP),
-    zoomIn: () => store.setZoom(store.getState().zoom + ZOOM_STEP),
+    zoomOut: () => {
+      const { zoom } = store.getState()
+      store.setZoom(Math.max(zoom - ZOOM_STEP, Math.min(zoom, ZOOM_OUT_FLOOR)))
+    },
+    // 맞춤이 25% 아래에 둔 배율에서는 한 칸(+25)이 아니라 다음 25 배수(25%)로 오른다 — 18% → 43% 처럼 단계 밖의 값으로 튀지 않는다.
+    zoomIn: () => {
+      const { zoom } = store.getState()
+      store.setZoom(zoom < ZOOM_OUT_FLOOR ? ZOOM_OUT_FLOOR : zoom + ZOOM_STEP)
+    },
     /* **누른 순간의 1회 계산이다** — 창 크기를 따라다니지 않는다. 따라다니게 하면
        사용자가 손으로 맞춘 배율을 창을 조금만 흔들어도 빼앗기고, 그것을 막으려면
        *"마지막으로 누른 것이 맞춤인가"*라는 상태가 하나 더 생긴다. 줌 명령 셋은

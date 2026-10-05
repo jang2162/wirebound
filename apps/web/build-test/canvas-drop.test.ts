@@ -415,7 +415,9 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
       type: 'Text',
       props: { content: `줄 ${i}` },
     }))
-    const { P } = await fixture('zoom', [[...texts, { id: 'n_box', type: 'Card', props: { title: '상자' } }]])
+    // 앞 채움 글 40 — 줌 0.5 에서도 문서가 칸보다 길어 칸을 굴릴 수 있게 한다(무대 높이가 줌을 따라 준다 — `src/routes/editor.tsx` 의 `CanvasFrame`).
+    const fillers: SeedNode[] = Array.from({ length: 40 }, (_, i) => ({ id: `n_f${String(i).padStart(2, '0')}`, type: 'Text', props: { content: `채움 ${i}` } }))
+    const { P } = await fixture('zoom', [[...fillers, ...texts, { id: 'n_box', type: 'Card', props: { title: '상자' } }]])
     const { page, close, patches } = await openEditor(P[0]!)
     const rows: Record<string, unknown> = {}
     try {

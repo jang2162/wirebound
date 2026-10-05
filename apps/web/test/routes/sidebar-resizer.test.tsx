@@ -16,8 +16,8 @@
  *
  * - **치수.** jsdom에 레이아웃이 없어 폭도 세로도 전부 0이다. `width: 264px`이 **실렸는지**는
  *   보지만 그래서 264px로 **그려지는지**는 못 본다(브라우저에서 쟀다).
- * - **`aria-valuemax`의 값.** 창 폭에서 계산되는데 jsdom의 `innerWidth`는 1024 고정이라
- *   실제 화면의 수와 다르다. 그 계산은 `sidebar-layout.test.ts`가 순수 함수로 본다.
+ * - **`aria-valuemax`의 값.** 창 폭에서 계산되는데 이 파일은 창을 1184 로 심는다(아래 `WINDOW_WIDTH`) — 실제 화면의 수와
+ *   다르다. 그 계산은 `sidebar-layout.test.ts`가 순수 함수로 본다.
  *
  * ## 세로 배분은 치수를 심어야 돈다
  *
@@ -139,8 +139,21 @@ function drawnTotal(): number {
   return menuHeight() + drawnHeight(structureRegion())
 }
 
-beforeEach(() => localStorage.clear())
-afterEach(() => localStorage.clear())
+/**
+ * 이 파일이 심는 창 폭. jsdom 의 기본 1024 는 두 기본 폭(264 · 300)과 손잡이 · 여백(16) · 캔버스 몫(480)을 다 못 담아(1060) 좌측이 228 로
+ * 조여 그려진다 — 여기 케이스는 «조이지 않은 판의 배선»을 잰다. 조이는 셈은 `sidebar-layout.test.ts` «창이 줄면 조이는 차례».
+ */
+const WINDOW_WIDTH = 1184
+const jsdomWidth = window.innerWidth
+
+beforeEach(() => {
+  localStorage.clear()
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: WINDOW_WIDTH })
+})
+afterEach(() => {
+  localStorage.clear()
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: jsdomWidth })
+})
 
 describe('셸이 손잡이를 낸다', () => {
   it('편집 모드에는 셋이다 — 좌측 폭, 두 영역 사이, 우측 폭', async () => {
@@ -172,7 +185,7 @@ describe('폭을 어디에 싣는가', () => {
   })
 
   it('창보다 큰 값은 지금 창에 맞춰 줄어든다 — 저장된 값은 그대로 둔다', async () => {
-    // jsdom의 창은 1024다. 저장된 1200은 그 창에서 그릴 수 없으므로 최대까지만 그린다.
+    // 창은 1184 다(`WINDOW_WIDTH`). 저장된 1200은 그 창에서 그릴 수 없으므로 최대까지만 그린다.
     // **저장소를 되쓰지 않는 것이 요점이다** — 되쓰면 좁은 화면에서 한 번 연 것만으로
     // 넓은 화면의 폭이 영구히 깎인다(브라우저에서 1440→900→1440으로 왕복해 확인했다).
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ sideWidth: 1200 }))
@@ -275,7 +288,7 @@ describe('사람이 정한 값이 남는다', () => {
 
 /**
  * **우측 폭**(`src/shell/sidebar-layout.ts` «두 폭은 한 예산을 나눠 쓴다»). 손잡이는 좌측과 같은 부품이고 **방향이 반대다** — 왼쪽으로 끌면 · `ArrowLeft`
- * 가 넓힌다(`ShellResizer`의 `reversed`). jsdom 의 창은 1024 다 — 좌측 기본 264 에서 우측의 최대는 1024 − 16 − 320 − 264 = 424.
+ * 가 넓힌다(`ShellResizer`의 `reversed`). 창은 1184 다(`WINDOW_WIDTH`) — 좌측 기본 264 에서 우측의 최대는 1184 − 16 − 480 − 264 = 424.
  */
 describe('우측 폭', () => {
   it('기본은 300 이고 우측 패널의 인라인 `width`다', async () => {
@@ -379,6 +392,47 @@ describe('배분 손잡이가 화면을 움직인다', () => {
 
     await waitFor(() => expect(handle.getAttribute('aria-valuenow')).toBe('9'))
     expect(menuHeight()).toBeCloseTo(REGION_MIN_HEIGHT, 6)
+  })
+})
+
+/**
+ * **좌측 · 우측 접기**(`src/shell/panel-fold.tsx` · `src/shell/sidebar-layout.ts` 머리말 «둘 다 최소인데도 캔버스 몫이 모자라면 사람이 접는다»).
+ * 접힌 상자는 DOM 에 남고(`.wb-shell-folded` — 격자에서 빠지는 것은 `shell.css`), 그 쪽 손잡이는 안 선다. 접힘은 저장소에 가고 다시 열어도
+ * 남는다. 칸 폭은 실브라우저 `build-test/editor-narrow-canvas.test.ts` «좁은 창» 이 잰다.
+ */
+describe('접기', () => {
+  it('좌측 접기 — 상자는 남고 접힌 표시 · 손잡이 없음 · 저장소에 간다, 펴면 되돌아온다', async () => {
+    await openPage(DOC)
+    fireEvent.click(screen.getByRole('button', { name: '좌측 패널 접기' }))
+    const toggle = await screen.findByRole('button', { name: '좌측 패널 펴기' })
+    expect({
+      expanded: toggle.getAttribute('aria-expanded'),
+      controls: toggle.getAttribute('aria-controls') === sidebar().id,
+      folded: sidebar().classList.contains('wb-shell-folded'),
+      shell: sidebar().parentElement?.classList.contains('wb-shell-fold-side'),
+      handle: screen.queryByRole('separator', { name: '사이드바 폭' }),
+      stored: JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
+    }).toEqual({ expanded: 'false', controls: true, folded: true, shell: true, handle: null, stored: { sideFolded: true } })
+
+    fireEvent.click(toggle)
+    await screen.findByRole('button', { name: '좌측 패널 접기' })
+    expect({
+      folded: sidebar().classList.contains('wb-shell-folded'),
+      handle: screen.queryByRole('separator', { name: '사이드바 폭' }) !== null,
+      stored: JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
+    }).toEqual({ folded: false, handle: true, stored: { sideFolded: false } })
+  })
+
+  it('우측 접기 — 기억한 접힘으로 열리고, 손잡이는 좌측 것만 선다', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ panelFolded: true }))
+    await openPage(DOC)
+    const toggle = screen.getByRole('button', { name: '우측 패널 펴기' })
+    expect({
+      expanded: toggle.getAttribute('aria-expanded'),
+      folded: panel().classList.contains('wb-shell-folded'),
+      shell: panel().parentElement?.classList.contains('wb-shell-fold-panel'),
+      handles: screen.getAllByRole('separator').map((handle) => handle.getAttribute('aria-label')),
+    }).toEqual({ expanded: 'false', folded: true, shell: true, handles: ['좌측 두 영역의 세로 배분', '사이드바 폭'] })
   })
 })
 

@@ -62,7 +62,8 @@
  *
  * ## 끝 스크롤
  *
- * `scrollContainer` 를 주면 끄는 동안 포인터가 그 상자의 위 · 아래 끝 `EDGE_ZONE` 안에 있을 때 `EDGE_SPEED` 로 민다. 포인터가 멈춰
+ * `scrollContainer` 를 주면 끄는 동안 포인터가 그 상자의 위 · 아래 · 왼 · 오른 끝 `EDGE_ZONE` 안에 있을 때 그쪽으로 `EDGE_SPEED` 로 민다 —
+ * 두 축은 따로 본다(모서리에서는 둘 다 민다). 가로는 칸보다 넓은 문서(창 1440 의 칸 860 에 프리셋 1280 · 줌 1 부터)의 화면 밖 쪽에 놓는 길이다. 포인터가 멈춰
  * 있어도 이어서 민다(타이머) — 트리 끝에 대고 기다리는 것이 그 몸짓이다. **상자 밖은 끝 너머가 아니다** — 포인터가 상자 밖(위 · 아래 · 옆)이면
  * 안 민다. 세로만 견주면 캔버스 칸 아래의 하단 판 전체가 «아래 끝 너머»로 읽혀, 판에서 카드를 쥐고 머뭇거리는 동안 칸이 끝까지 밀린다
  * (`build-test/palette.test.ts` «판 위에서 카드를 쥐고 머뭇거려도»). 판에서 캔버스로 올라가는 길은 칸 아래 끝 띠를 지나는 동안만 민다. 밀고 나면 같은 좌표로 `onOver` 를 다시 묻는다(줄이 포인터
@@ -73,7 +74,7 @@ import { useCanvasDocument } from '../canvas/canvas-document'
 
 /** 이만큼(px) 넘게 움직여야 끌기다. 그 안은 클릭(선택)이다. */
 export const DRAG_THRESHOLD = 4
-/** 스크롤 상자의 위 · 아래 끝에서 이만큼(px) 안이면 민다. */
+/** 스크롤 상자의 위 · 아래 · 왼 · 오른 끝에서 이만큼(px) 안이면 민다. */
 export const EDGE_ZONE = 24
 /** 끝 스크롤 속도(px/s). */
 export const EDGE_SPEED = 480
@@ -253,10 +254,8 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
           const box = latest.current.options.scrollContainer?.() ?? null
           if (box === null) return
           const delta = edgeScrollStep(box.getBoundingClientRect(), current.last)
-          if (delta === 0) return
-          const before = box.scrollTop
-          box.scrollTop = Math.max(0, before + delta)
-          if (box.scrollTop !== before) show(ask(current.last))
+          if (delta.x === 0 && delta.y === 0) return
+          if (edgeScrollBy(box, delta)) show(ask(current.last))
         }
 
         listen(window, 'pointermove', move)
@@ -292,16 +291,24 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
 export const EDGE_SCROLL_TICK = EDGE_TICK
 
 /**
- * **끝 스크롤 한 틱에 밀 양(px)** — 점이 스크롤 상자의 위 · 아래 끝(`EDGE_ZONE`) 안이면 그쪽으로 `EDGE_SPEED`의 한 틱, 아니면 0. 상자 밖은
- * 끝 너머가 아니다(머리말 «끝 스크롤»). 끌기와 사각형 고르기가 같은 셈을 쓴다.
+ * **끝 스크롤 한 틱에 밀 양(px)** — 축마다 따로: 점이 스크롤 상자의 그 축 끝(`EDGE_ZONE`) 안이면 그쪽으로 `EDGE_SPEED`의 한 틱, 아니면 0.
+ * 상자 밖은 끝 너머가 아니다(머리말 «끝 스크롤») — 두 축 다 0 이다. 끌기와 사각형 고르기가 같은 셈을 쓴다.
  */
-export function edgeScrollStep(frame: { left: number; right: number; top: number; bottom: number }, point: DragPoint): number {
+export function edgeScrollStep(frame: { left: number; right: number; top: number; bottom: number }, point: DragPoint): DragPoint {
   const { x, y } = point
-  if (x < frame.left || x > frame.right || y < frame.top || y > frame.bottom) return 0
+  if (x < frame.left || x > frame.right || y < frame.top || y > frame.bottom) return { x: 0, y: 0 }
   const step = (EDGE_SPEED * EDGE_TICK) / 1000
-  if (y < frame.top + EDGE_ZONE) return -step
-  if (y > frame.bottom - EDGE_ZONE) return step
-  return 0
+  const along = (at: number, start: number, end: number): number => (at < start + EDGE_ZONE ? -step : at > end - EDGE_ZONE ? step : 0)
+  return { x: along(x, frame.left, frame.right), y: along(y, frame.top, frame.bottom) }
+}
+
+/** 끝 스크롤 한 틱을 상자에 싣는다 — 실제로 굴렀으면 `true`(끝에 닿아 안 구른 축은 안 센다). */
+export function edgeScrollBy(box: HTMLElement, delta: DragPoint): boolean {
+  const left = box.scrollLeft
+  const top = box.scrollTop
+  if (delta.x !== 0) box.scrollLeft = Math.max(0, left + delta.x)
+  if (delta.y !== 0) box.scrollTop = Math.max(0, top + delta.y)
+  return box.scrollLeft !== left || box.scrollTop !== top
 }
 
 /**

@@ -8,7 +8,7 @@
  * 그래서 셸을 보는 케이스는 전부 `openShell()`로
  * 시작해 **성공한 조회에서만 나오는 프로젝트 이름**을 먼저 기다린다.
  */
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter, useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -306,6 +306,25 @@ describe('에디터 셸', () => {
     screen.getByText('100%')
     expect(shellStore().getState().zoom).toBe(1)
   })
+
+  /**
+   * **축소는 25% 에서 멈춘다**(`routes/editor.tsx` 의 `ZOOM_OUT_FLOOR`) — 스토어의 하한(5%)은 «화면 맞춤»이 쓰는 값이다. 맞춤이 그 아래에 둔
+   * 배율에서는 축소가 아무것도 안 하고 확대는 다음 25 배수(25%)로 오른다.
+   */
+  it('축소는 25% 에서 멈추고, 그 아래 배율에서는 축소가 그대로 · 확대는 25% 로', async () => {
+    await openShell()
+    for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole('button', { name: '축소' }))
+    screen.getByText('25%')
+    expect(shellStore().getState().zoom).toBe(0.25)
+
+    act(() => shellStore().setZoom(0.1))
+    fireEvent.click(screen.getByRole('button', { name: '축소' }))
+    expect(shellStore().getState().zoom).toBe(0.1)
+    fireEvent.click(screen.getByRole('button', { name: '확대' }))
+    expect(shellStore().getState().zoom).toBe(0.25)
+    fireEvent.click(screen.getByRole('button', { name: '확대' }))
+    expect(shellStore().getState().zoom).toBe(0.5)
+  })
 })
 
 /**
@@ -419,7 +438,7 @@ describe('화면 맞춤', () => {
    * **재지 못하면 아무것도 안 한다.** 심는 폭이 0이다 — `padding`은 그대로라 실제
    * 브라우저에서 캔버스가 `display: none`일 때의 모양이고, 그때 나오는 값은 852가 아니라
    * **−48**이다. 그대로 `setZoom`에 넘기면 스토어가 `MIN_ZOOM`으로 잘라 **아무 이유 없이
-   * 25%가 된다** — 재지 못한 것과 *"폭이 25%다"*는 다른 사실이다.
+   * 5%가 된다** — 재지 못한 것과 *"폭이 5%다"*는 다른 사실이다.
    *
    * **치수를 아예 안 심는 판(순수 jsdom)은 이 결정을 재지 못한다.** 그때는 계산된
    * `padding`이 없어 `usable`이 `NaN`이 되고, `fitZoom`의 가드를 지워도 **스토어의 NaN

@@ -30,7 +30,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { focusElement } from '@wirebound/renderer'
 import type { WbNode } from '@wirebound/schema'
-import { DRAG_THRESHOLD, EDGE_SCROLL_TICK, edgeScrollStep, scrollParent, swallowNextClick } from '../drag/use-pointer-drag'
+import { DRAG_THRESHOLD, EDGE_SCROLL_TICK, edgeScrollBy, edgeScrollStep, scrollParent, swallowNextClick } from '../drag/use-pointer-drag'
 import { walkSafely } from '../edit/safe-walk'
 import type { CanvasFrame } from './canvas-iframe'
 import { hostToDocument, nodesInRect, rectBetween, toSurfaceRect, type Box, type MarqueeNode, type Point } from './canvas-marquee'
@@ -188,10 +188,7 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
         window.getSelection()?.removeAllRanges()
         at.timer = setInterval(() => {
           const scroller = scrollParent(latest.current.surface())
-          if (scroller !== null) {
-            const delta = edgeScrollStep(scroller.getBoundingClientRect(), at.lastHost)
-            if (delta !== 0) scroller.scrollTop = Math.max(0, scroller.scrollTop + delta)
-          }
+          if (scroller !== null) edgeScrollBy(scroller, edgeScrollStep(scroller.getBoundingClientRect(), at.lastHost))
           if (gesture === at && !at.cancelled) draw(at)
         }, EDGE_SCROLL_TICK)
       }

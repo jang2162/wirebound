@@ -144,8 +144,12 @@ export const VIEWPORT_PRESETS = [1920, 1440, 1280, 1024, 768, 375] as const
 
 export type ViewportWidth = (typeof VIEWPORT_PRESETS)[number]
 
-/** 줌 한계 (「설계서 화면 구조」). */
-const MIN_ZOOM = 0.25
+/**
+ * 줌 한계 (「설계서 화면 구조」). **하한은 «화면 맞춤»이 요구하는 값이다** — 두 사이드바가 최소(200 · 300)인 창 700 의 캔버스 칸(184 · 안쪽
+ * 여백을 뺀 136)에 가장 넓은 프리셋(1920)을 맞추면 136 ÷ 1920 = 0.0708 이다. 그보다 낮은 하한은 맞춤을 막아 칸 밖으로 넘친다. 축소 단추(−)는
+ * 25% 아래로 안 내리고 그 아래의 확대(+)는 25% 로 오른다(`routes/editor.tsx` 의 `useZoomCommands`) — 그 아래는 맞춤만 간다.
+ */
+const MIN_ZOOM = 0.05
 const MAX_ZOOM = 2
 
 export interface EditorState {
@@ -202,7 +206,7 @@ export interface EditorState {
   selectedNodeIds: readonly string[]
   mode: EditorMode
   viewportWidth: ViewportWidth
-  /** 0.25 ~ 2.0 */
+  /** 0.05 ~ 2.0 */
   zoom: number
   /**
    * 보내지 않았거나 응답을 기다리는 편집. **`[0]`이 전송 중인 것이다**.
