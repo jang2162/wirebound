@@ -13,6 +13,7 @@
  * | `locks` | `store.setLocks` — 설계서 「소프트 잠금」의 배지와 선택 차단이 이 목록 위에 선다. **잠금 통로는 이 목록을 안 본다** — 내 `lock`이 섰는지는 서버가 거절로 말한다(아래 줄) |
  * | `lock-denied` | 잠금 통로의 `denied` — 서버가 내 `lock`을 받지 않았다. 그 자리는 «잡지 않은 선택»이 된다(`lock-channel.ts`) |
  * | `membership-changed` | `onMembership('changed')` — 셸이 프로젝트를 다시 읽는다(역할이 바뀌었거나 멤버에서 빠졌다) |
+ * | `menu-changed` | `onMenuChanged(rev)` — 셸이 본 가장 큰 번호를 메뉴 트리 칸에 넘긴다(`tree/use-tree-commands.tsx`의 `remoteRev`) |
  * | `joined` | 연결 id 를 홀더에 · `onMembership('joined')` — 아래 «룸에 든 순간이 경계다» |
  * | `presence`·`pong` | 아무것도 안 한다 |
  *
@@ -97,6 +98,8 @@ export function useRealtime(
   onMembership?: (cause: MembershipCause) => void,
   /** 테마 바인딩 · 토큰이 바뀌었다(`theme-changed`). 받는 것은 셸의 프로젝트 테마다(`theme/project-theme.tsx` 의 `applyFrame`). */
   onThemeChanged?: (frame: Extract<ServerFrame, { type: 'theme-changed' }>) => void,
+  /** 메뉴 · 페이지 트리가 그 번호의 판으로 바뀌었다(`menu-changed`). `onThemeChanged`와 같은 배치다(ref 로 쥔다). */
+  onMenuChanged?: (rev: number) => void,
 ): void {
   const store = useEditorStoreInstance()
   const setup = useRealtimeSetup()
@@ -106,6 +109,8 @@ export function useRealtime(
   // 테마 프레임의 받는 쪽은 ref 로 쥔다 — 연결의 의존에 넣으면 받는 쪽이 새로 설 때마다 룸을 다시 연다.
   const themeChanged = useRef(onThemeChanged)
   themeChanged.current = onThemeChanged
+  const menuChanged = useRef(onMenuChanged)
+  menuChanged.current = onMenuChanged
 
   useEffect(() => {
     if (!setup || !projectId) return
@@ -162,6 +167,9 @@ export function useRealtime(
             break
           case 'theme-changed':
             themeChanged.current?.(frame)
+            break
+          case 'menu-changed':
+            menuChanged.current?.(frame.rev)
             break
           case 'locks':
             // **프로젝트 전체의 목록이다.** 어느 페이지의 것인지는 스토어가 `openPageId`로

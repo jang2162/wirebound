@@ -107,6 +107,11 @@ export type ServerFrame =
    */
   | { type: 'membership-changed'; projectId: string }
   /**
+   * **메뉴 · 페이지 트리가 바뀌었다 — `rev` 판보다 낡은 트리는 다시 받아라**(서버 `ws/protocol.ts`의 그 갈래). 트리는 안 온다. 받는 자리는 메뉴
+   * 트리 칸이다(`tree/use-tree-commands.tsx`의 `remoteRev`) — 셸이 본 가장 큰 번호를 넘긴다. 낸 탭도 받는다 — 제 쓰기의 판은 번호로 넘긴다.
+   */
+  | { type: 'menu-changed'; projectId: string; rev: number }
+  /**
    * **프로젝트의 테마 바인딩 · 토큰이 바뀌었다**(서버 `ws/protocol.ts`의 그 갈래). 받는 자리는 셸의 프로젝트 테마다(`theme/project-theme.tsx`
    * 의 `applyFrame` — 판이 같으면 토큰만 바꾸고, 다르면 다시 읽어 번들을 싣는다).
    */
@@ -297,6 +302,11 @@ export function parseServerFrame(raw: string): ServerFrame | null {
         : null
     case 'membership-changed':
       return str(value.projectId) ? { type: 'membership-changed', projectId: value.projectId } : null
+    case 'menu-changed':
+      // 번호가 정수가 아니면 버린다 — 그 번호가 «이미 받은 판인가»를 가른다. `actor`는 읽는 자리가 없어 안 옮긴다.
+      return str(value.projectId) && typeof value.rev === 'number' && Number.isSafeInteger(value.rev)
+        ? { type: 'menu-changed', projectId: value.projectId, rev: value.rev }
+        : null
     case 'theme-changed':
       // 토큰 값은 하나씩 본다 — 글자 · 수 밖의 값이 CSS 변수로 흘러가지 않게.
       return str(value.projectId) &&

@@ -41,7 +41,7 @@ const METHODS = [
   'listProjects', 'getProject', 'createProject', 'updateProject', 'deleteProject',
   'listMyTokens', 'revokeMyToken', 'revokeAllMyTokens', 'changePassword',
   'listMembers', 'addMember', 'updateMemberRole', 'removeMember',
-  'getTree',
+  'getTree', 'readTree',
   'createMenu', 'updateMenu', 'deleteMenu', 'deleteMenuCascade',
   'createPage', 'updatePage', 'deletePage', 'getPage', 'importPage',
   'patchOps', 'listMyRevisions', 'listRevisionsBefore',
@@ -114,9 +114,11 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   updateProject: ['../src/settings/general-section.tsx'],
   // 설정 페이지의 «위험 구역» 하나다 — 목록 줄의 삭제는 없다(`routes/project-list.tsx` 머리말).
   deleteProject: ['../src/settings/danger-section.tsx'],
-  // **소비자가 둘이다.** 메뉴 트리는 트리를 그리고, 붙여넣기는 봉투의 페이지 대상(`page:…`)이 지금 프로젝트에 있는지 가늠한다
-  // (`shell/editor-keys.tsx` 의 `paste` — 메뉴 · 페이지의 `id` · `title` · `sortOrder` · `pages` · `children` 을 읽는다).
-  getTree: ['../src/shell/editor-keys.tsx', '../src/tree/use-tree-commands.tsx'],
+  // 붙여넣기가 봉투의 페이지 대상(`page:…`)이 지금 프로젝트에 있는지 가늠한다(`shell/editor-keys.tsx` 의 `paste` — 메뉴 · 페이지의 `id` ·
+  // `title` · `sortOrder` · `pages` · `children` 을 읽는다). 판 번호는 안 쓴다.
+  getTree: ['../src/shell/editor-keys.tsx'],
+  // 메뉴 트리가 트리를 그리고 판 번호로 겹친 조회의 낡은 답 · 이미 받은 판의 `menu-changed`를 가른다.
+  readTree: ['../src/tree/use-tree-commands.tsx'],
   createMenu: ['../src/tree/use-tree-commands.tsx'],
   updateMenu: ['../src/tree/use-tree-commands.tsx'],
   deleteMenu: ['../src/tree/use-tree-commands.tsx'],

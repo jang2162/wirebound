@@ -267,6 +267,7 @@ const ENDPOINTS: Array<{
   { client: 'removeMember', url: '/api/projects/p1/members/u2', method: 'DELETE', body: null, call: (c) => c.removeMember('p1', 'u2') },
   { client: 'getProject', url: '/api/projects/p1', method: 'GET', body: projectView, call: (c) => c.getProject('p1') },
   { client: 'getTree', url: '/api/projects/p1/tree', method: 'GET', body: { menu: [] }, call: (c) => c.getTree('p1') },
+  { client: 'readTree', url: '/api/projects/p1/tree', method: 'GET', body: { menu: [], rev: 3 }, call: (c) => c.readTree('p1') },
   { client: 'getPage', url: '/api/projects/p1/pages/pg1', method: 'GET', body: page, call: (c) => c.getPage('p1', 'pg1') },
   // --- 아래 줄들은 **각자 자기 describe에서도 URL이 단언되지만 이 표에도 있어야 한다** —
   // 표에서 빠진 것은 `표의 완전성`이 세고, 그 절이 없으면 아무도 모른다(`표의 완전성` 머리말). ---
@@ -564,6 +565,8 @@ const SHAPE_CASES: Array<{
   { shape: 'members', broken: [{ ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, userId: '' }], ok: [{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }], call: (c) => c.listMembers('p1') },
   { shape: 'member', broken: { ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, name: null }, ok: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, call: (c) => c.addMember('p1', 'b@b.c', 'editor') },
   { shape: 'treeEnvelope', broken: { menu: null }, ok: { menu: [treeNode] }, call: (c) => c.getTree('p1') },
+  // 번호가 없거나 정수가 아니면 낡음을 가를 수 없다 — 실패로 본다.
+  { shape: 'treeRead', broken: { menu: [treeNode], rev: 1.5 }, ok: { menu: [treeNode], rev: 0 }, call: (c) => c.readTree('p1') },
   {
     shape: 'menuNode',
     broken: { ...menuNode, sortOrder: '0' },

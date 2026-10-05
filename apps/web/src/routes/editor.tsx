@@ -278,6 +278,10 @@ const ROLE_NOTICE = {
 
 /** 재연결로 다시 읽었을 때의 앞머리. */
 const RESYNC_LEAD = '연결이 다시 붙어 페이지를 서버 상태로 다시 불러왔습니다.'
+/** 트리가 열린 페이지를 잃어 다시 읽었더니 페이지가 있었다(트리가 잠깐 낡았다) — 판이 달랐을 때의 앞머리(`CanvasFrame`의 `goneCheck`). */
+const PAGE_CHECK_LEAD = '페이지를 서버 상태로 다시 불러왔습니다.'
+/** 열린 페이지가 서버에서 지워졌다 — 판을 비우며 버린 편집을 말할 때의 앞머리(`CanvasFrame`의 `goneCheck`). 누가 지웠는지 말하지 않는다. */
+const PAGE_GONE_LEAD = '열어 둔 페이지가 지워졌습니다.'
 /** 내가 스냅샷을 복원해 다시 읽었을 때의 앞머리. **재연결과 다른 사건이다.** */
 const RESTORED_LEAD = '스냅샷을 복원해 페이지를 다시 불러왔습니다.'
 /**
@@ -608,13 +612,32 @@ function EditorShell(props: {
    *
    * | | 재연결(`resyncToken`) | 복원(`restoredToken`) |
    * |---|---|---|
-   * | 무엇이 달라졌나 | 끊긴 동안 놓친 이 **페이지**의 프레임 | **프로젝트 전체** — 페이지가 생기거나 사라진다 |
-   * | 트리를 다시 읽나 | 아니다 | **읽는다** — 목록 자체가 바뀐다 |
+   * | 무엇이 달라졌나 | 끊긴 동안 놓친 프레임(이 페이지의 편집 · `menu-changed`) | **프로젝트 전체** — 페이지가 생기거나 사라진다 |
+   * | 트리를 다시 읽나 | **읽는다** — 끊긴 동안의 `menu-changed`가 사라졌다(`MenuTree`의 `resyncToken`). 실패하면 조용히 둔다 | **읽는다** — 목록 자체가 바뀐다 |
    * | 재조회가 실패하면 | 조용히 둔다(화면은 재연결 전과 같고 잃은 것이 없다) | **말한다** — 화면에 남은 문서가 프로젝트의 상태가 아니라는 것을 이미 알기 때문이다 |
    *
-   * 한 토큰으로 접으면 저 셋을 갈 자리가 없어지고, 재연결마다 트리까지 다시 받게 된다.
+   * 한 토큰으로 접으면 저 셋을 갈 자리가 없어진다 — 재연결이 복원 배너를 거두는 다시 읽기가 된다(코멘트 · 설명 · 테마는 안 읽는데).
    */
   const [restoredToken, setRestoredToken] = useState(0)
+  /**
+   * **이 셸이 본 가장 큰 `menu-changed` 번호** — 좌측 트리(`MenuTree`의 `remoteRev`)가 제 트리의 번호보다 크면 다시 받는다. 가장 큰 것만 든다 —
+   * 방송은 연결마다 자격을 본 뒤 보내 두 쓰기의 프레임이 거꾸로 닿을 수 있다(서버 `ws/broadcast.ts`의 `deliver`).
+   */
+  const [menuRev, setMenuRev] = useState(0)
+  const onMenuChanged = useCallback((rev: number) => setMenuRev((seen) => Math.max(seen, rev)), [])
+  /**
+   * **트리가 열린 페이지를 잃었다**(`MenuTree`의 `onPageGone`) — 캔버스가 그 페이지를 다시 읽고, 서버에도 없으면 «페이지가 사라짐»으로 간다
+   * (`CanvasFrame`의 `goneCheck`). `at`은 신호마다 오르는 수다 — 같은 페이지를 다시 잃어도 새 신호다.
+   */
+  const [pageGone, setPageGone] = useState<{ pageId: string; at: number } | null>(null)
+  const onPageGone = useCallback((gone: string) => setPageGone((last) => ({ pageId: gone, at: (last?.at ?? 0) + 1 })), [])
+  /** 트리가 사라진 대상의 입력 · 상자를 닫으며 남기는 한 줄 — 하단 바(잃음 통지는 안 덮는다 · `panels/alias-edit.tsx`의 같은 자리). */
+  const onTreeDropped = useCallback(
+    (message: string) => {
+      if (!store.showsLoss()) store.setEditFailure({ kind: 'message', message })
+    },
+    [store],
+  )
   /**
    * **이 셸이 선 `reset` 세대**(`EditorStore.resetGeneration`). 셸 안에서 다른 프로젝트로 가면(뒤로 · 앞으로) 라우트는 스토어를 그대로 두고 이
    * 셸을 내린 뒤 새 셸을 세운다 — 복원을 보낸 몸체는 내려간 셸의 콜백을 쥔 채 답을 받는다. 그 콜백이 스토어에 쓰면 산 셸의 판을 바꾼다: 답이
@@ -664,6 +687,7 @@ function EditorShell(props: {
     // **역할은 룸에 들 때마다 다시 읽는다**(`MembershipCause` — 끊긴 동안의 `membership-changed`도 사라졌다).
     props.onMembership,
     theme.applyFrame,
+    onMenuChanged,
   )
   /**
    * **테마를 따라잡는다** — 라우트의 다시 읽기(룸에 듦 · 다시 붙음 · 멤버십 신호)가 받은 `themeRev` 가 쥔 바인딩보다 새것이면 다시 읽는다.
@@ -887,6 +911,10 @@ function EditorShell(props: {
               projectId={props.project.id}
               pageId={props.pageId}
               reloadToken={restoredToken}
+              remoteRev={menuRev}
+              resyncToken={resyncToken}
+              onDropped={onTreeDropped}
+              onPageGone={onPageGone}
               editable={mode === 'edit' && canEdit}
               headSlot={menuHead}
               notices={pageJsonNotices}
@@ -974,6 +1002,7 @@ function EditorShell(props: {
             resyncToken={resyncToken}
             restoredToken={restoredToken}
             restoredLead={restoredLead}
+            goneCheck={pageGone}
           />
         </main>
 
@@ -1315,6 +1344,8 @@ function CanvasFrame(props: {
   restoredToken: number
   /** 그 재조회가 잃은 것을 말할 때의 앞머리(셸의 `restoredLead`). */
   restoredLead: string
+  /** 트리가 이 페이지를 잃었다는 신호(셸의 `pageGone`). 오를 때마다 아래 «페이지가 사라짐» 이펙트가 돈다. */
+  goneCheck: { pageId: string; at: number } | null
 }): ReactElement {
   const api = useApi()
   const store = useEditorStoreInstance()
@@ -1351,7 +1382,9 @@ function CanvasFrame(props: {
   const handledResync = useRef(0)
   /** 복원 신호 쪽의 같은 장치. 두 이펙트가 각자 든다 — 신호가 서로 다르다. */
   const handledRestore = useRef(0)
-  const { projectId, pageId, resyncToken, restoredToken, restoredLead } = props
+  /** «페이지가 사라짐» 신호 쪽의 같은 장치. */
+  const handledGone = useRef(0)
+  const { projectId, pageId, resyncToken, restoredToken, restoredLead, goneCheck } = props
 
   /**
    * **서버가 준 페이지를 스토어에 놓고, 그러면서 잃은 것이 있으면 말한다.**
@@ -1707,6 +1740,54 @@ function CanvasFrame(props: {
     }
     // `restoredLead`는 신호와 함께만 바뀐다 — 그 값으로 다시 돌아도 위 `handledRestore`가 막는다.
   }, [api, projectId, pageId, store, applyServerPage, tellLost, restoredToken, restoredLead])
+
+  /**
+   * **트리가 이 페이지를 잃었다 — 서버에 묻는다**(셸의 `pageGone` — 좌측 트리가 다시 받은 트리에 열린 페이지가 없을 때 올린다 · `MenuTree`의
+   * `onPageGone`). 남이 페이지 · 그 메뉴를 지우면 이 탭은 다음 편집의 404 로만 알았다 — 트리가 지운 신호(`menu-changed`)를 받으면 여기로 온다.
+   *
+   * | 답 | 화면 |
+   * |---|---|
+   * | 404 | 판을 비우고(구조 트리 · 속성 패널도 그 페이지의 노드를 내린다) 버린 편집을 말한다(`PAGE_GONE_LEAD`) · 캔버스는 실패 문장 — 복원이 열린 페이지를 지운 판(아래 복원 이펙트의 실패 갈래)과 같은 끝이다 |
+   * | 있다 · 판이 같다 | 아무것도 안 한다(트리가 잠깐 낡았다) |
+   * | 있다 · 판이 다르다 | 서버 판을 싣는다(재연결 재조회와 같다 — `PAGE_CHECK_LEAD`) |
+   * | 그 밖의 실패 | 조용히 둔다(재연결 재조회와 같은 판정 — 사람이 낸 조회가 아니다) |
+   *
+   * **보낸 편집의 답을 받은 뒤에 묻는다**(`editsAnswered`) — 다른 다시 읽기와 같다. 판을 싣는 입구라 세대를 받는다(`EditorStore.beginPageLoad`의 표).
+   * 신호가 가리키는 페이지가 지금 열린 것이 아니면(그 사이 옮겼다) 신호만 소비한다 — 여는 이펙트가 새 페이지를 읽는다.
+   */
+  useEffect(() => {
+    if (goneCheck === null || handledGone.current === goneCheck.at) return
+    handledGone.current = goneCheck.at
+    if (pageId === undefined || pageId !== goneCheck.pageId) return
+
+    let alive = true
+    const leave = new AbortController()
+    void (async () => {
+      await editsAnswered(store, leave.signal)
+      if (!alive) return
+      const ticket = store.beginPageLoad(pageId)
+      try {
+        const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
+        if (!alive || !store.settlePageLoad(ticket)) return
+        if (store.holdsServerPage(pageId, page.headSeq, page.schema)) return
+        applyServerPage(pageId, page, PAGE_CHECK_LEAD, ticket)
+        setState({ status: 'ready' })
+      } catch (caught) {
+        if (!alive) return
+        if (!(caught instanceof ApiError && caught.code === 'not-found')) return
+        if (!store.settlePageLoad(ticket)) return
+        const { pending } = store.getState()
+        store.clearPage()
+        tellLost(PAGE_GONE_LEAD, pending, false)
+        setState({ status: 'failed', failure: toFailure(caught, PAGE_UNKNOWN_FAILURE) })
+      }
+    })()
+
+    return () => {
+      alive = false
+      leave.abort()
+    }
+  }, [api, projectId, pageId, store, applyServerPage, tellLost, goneCheck])
 
   return (
     /* **무대 — 보이는 크기(프리셋 × 줌 · 프레임 높이 × 줌)짜리 상자.** 가운데 정렬과 칸의 넘침이 이 크기로 선다(`fitZoom` 머리말 «가운데

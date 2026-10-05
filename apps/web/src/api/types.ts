@@ -205,6 +205,15 @@ export interface TreeMenuNode {
 }
 
 /**
+ * 트리 응답 그대로 — 트리와 그 **메뉴 트리 판 번호**(`rev` — 서버가 트리 쓰기마다 올린다 · `apps/api/README.md` 「실시간 (WebSocket)」의 «트리 쓰기는
+ * `menu-changed`를 낸다»). 번호와 트리는 서버가 한 시점에서 읽었다. 트리 칸이 겹친 조회의 낡은 답을 가르는 값이다(`tree/use-tree-commands.tsx`).
+ */
+export interface TreeRead {
+  menu: TreeMenuNode[]
+  rev: number
+}
+
+/**
  * `GET /api/projects/:projectId/pages/:pageId`의 응답. 여덟 키가 전부다 —
  * `projectId`는 경로에 이미 있어 응답에 없다(`apps/api/test/pages.test.ts`
  * "페이지 응답은 계약된 키만 담는다"가 이 키 집합을 못박고 있다).

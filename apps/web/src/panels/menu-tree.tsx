@@ -153,6 +153,13 @@ export function MenuTree(props: {
    * (그 파일의 머리말 «셸이 상태를 들고 트리가 채운다»). 없으면 결과 · 실패를 말하지 않는다.
    */
   notices?: PageJsonNotices
+  /** 남의 변경 · 재연결로 다시 받을 신호 — 그대로 훅에 넘긴다(`useTreeCommands`의 `remoteRev` · `resyncToken`). */
+  remoteRev?: number
+  resyncToken?: number
+  /** 다시 받은 트리가 열린 입력 · 상자의 대상을 지웠을 때의 한 줄(훅의 `onDropped`). 셸이 하단 바에 세운다. */
+  onDropped?: (message: string) => void
+  /** 열린 페이지가 트리에서 사라졌다(훅의 `onPageGone`). 셸이 캔버스에 넘긴다. */
+  onPageGone?: (pageId: string) => void
 }): ReactElement {
   // **훅을 부르는 자리는 여기 하나다**(`busy` 잠금의 전제). 줄 행동은 결과를 prop으로 받는다 —
   // 두 번째 호출자가 생기면 `busy` 잠금이 각자 것이 된다.
@@ -165,6 +172,10 @@ export function MenuTree(props: {
     pageId: props.pageId,
     reloadToken: props.reloadToken,
     onImported: props.notices?.showImported,
+    ...(props.remoteRev === undefined ? {} : { remoteRev: props.remoteRev }),
+    ...(props.resyncToken === undefined ? {} : { resyncToken: props.resyncToken }),
+    ...(props.onDropped === undefined ? {} : { onDropped: props.onDropped }),
+    ...(props.onPageGone === undefined ? {} : { onPageGone: props.onPageGone }),
   })
   const { state } = commands
   /** 페이지 줄 `…`의 «JSON 내보내기». 실패는 셸의 하단 바에 선다(`notices`). */
@@ -737,6 +748,7 @@ function RowPanel(props: { commands: TreeCommands; at: 'row' | 'bottom' }): Reac
         initial={commands.editing.initial}
         onSubmit={commands.submitInput}
         onCancel={commands.cancelInput}
+        onEdit={commands.typeInput}
       />
     ),
     commands.confirmingRemove && here(false) && <RemoveConfirm key="remove" commands={commands} />,

@@ -1026,6 +1026,7 @@ export class EditorStore {
    * | 재연결 재조회 | 같은 파일의 재연결 이펙트 |
    * | 복원 재조회 — 내 복원 · 남의 복원 배너의 단추 | 같은 파일의 복원 이펙트(`restoredToken`) |
    * | 편집 실패 수습 | `edit/use-edit-commit.tsx`의 `recover` |
+   * | 트리가 열린 페이지를 잃음 | `routes/editor.tsx`의 «페이지가 사라짐» 이펙트(`goneCheck`) |
    *
    * **판을 싣는 입구가 늘면 이 표에 줄을 더하고 세대를 받게 한다** — 안 받는 입구의 답은 세대를 모른 채 새 판을 덮는다.
    *
