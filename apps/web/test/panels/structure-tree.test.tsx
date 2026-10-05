@@ -170,6 +170,8 @@ describe('구조 트리', () => {
       }),
       viewStates: [{ id: 's_admin', name: '관리자' }],
     })
+    // 기본 보기는 지금 상태(기본)의 가지만 편다 — 가지 줄 셋을 다 읽으려고 «모든 가지 보기»를 켠다.
+    fireEvent.click(screen.getByRole('button', { name: '모든 가지 보기' }))
 
     const caseRows = nodeRows().filter((node) => structureRowType(node) === 'StateCase')
     expect(caseRows.map((node) => node.getAttribute('aria-label') ?? node.textContent)).toEqual([

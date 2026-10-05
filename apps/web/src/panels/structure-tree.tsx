@@ -16,7 +16,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { nodeAlias, nodeSummary, type NodeLock, type ViewState, type WbNode } from '@wirebound/schema'
+import { nodeAlias, nodeSummary, visibleTree, type NodeLock, type ViewState, type WbNode } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
 import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { platformOf, type ShortcutLine } from '../edit/editor-shortcuts'
@@ -27,7 +27,8 @@ import { ancestorIds, hasChildRows, visibleNodeOrder } from '../edit/selection-m
 import { structureAbilities } from '../edit/structure-actions'
 import { sameDrop, type StructureDrop } from '../edit/structure-drop'
 import { ActionMenu } from '../shell/action-menu'
-import { ICONS } from '../shell/icons'
+import { ICONS, shellIcon } from '../shell/icons'
+import { useViewState } from '../shell/use-view-state'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 import { structureKey, useCollapsed, type Collapsed } from '../tree/collapse'
@@ -154,6 +155,10 @@ export function StructureTree(props: {
     pageLock: typeof doc?.root?.id === 'string' ? lockOf(doc.root.id) : null,
   })
   const alias = useAliasEdit(props.pageId)
+  /** 지금 상태(`shell/use-view-state.ts`) — 상태 영역 줄 아래에는 그 상태의 가지만 편다. */
+  const { state: viewState } = useViewState(props.pageId)
+  /** «모든 가지 보기» — 켜면 상태 영역의 가지를 전부 편다(설계서 «화면 상태»). 트리 하나의 화면 값이라 페이지를 옮겨도 그대로다. */
+  const [allCases, setAllCases] = useState(false)
   /**
    * 프리셋 이름칸에 친 글자. **고르개가 아니라 여기서 든다** — 고르개는 잠금이 걸리는 동안 DOM에서 빠지지만 트리는 그대로 있다.
    * 왜 이 하나만 가르는지는 `visiblePicker`의 머리말 «두 축»이 갖는다.
@@ -241,6 +246,13 @@ export function StructureTree(props: {
 
   const rootId = typeof doc.root?.id === 'string' ? doc.root.id : null
   /**
+   * **그리는 트리** — 상태 영역마다 지금 상태의 가지 하나(없으면 기본 가지)만 남긴 트리(`visibleTree`), «모든 가지 보기»면 원 트리. 영역 ·
+   * 가지 노드는 남고 id 는 같다 — 고르기 · 잠금 · 줄 행동은 원 문서의 그 노드를 가리킨다. Shift 범위 고르기 · 모두 접기도 보이는 트리로 센다.
+   * 상태 영역이 없는 문서는 원 트리를 그대로 쓴다(검증 전 문서를 `visibleTree` 에 넘기지 않는다).
+   */
+  const hasSwitch = containsStateSwitch(doc.root)
+  const shown: WbNode = !hasSwitch || allCases ? doc.root : visibleTree(doc, viewState)
+  /**
    * **줄을 누른다** — 클릭은 그것 하나, Cmd(mac) · Ctrl 클릭은 더하기 · 빼기, Shift 클릭은 기준 노드부터 보이는 차례로(설계서 「설계서 화면
    * 구조」의 «고르는 법»). 규칙(조상 · 자손 · 루트 · 남의 잠금 · 상한)은 스토어 명령이 갖는다 — 상한에 걸렸으면 하단 바가 말한다.
    */
@@ -249,7 +261,7 @@ export function StructureTree(props: {
     const change = command
       ? store.toggleSelect(nodeId)
       : event.shiftKey
-          ? store.selectRange(nodeId, visibleNodeOrder(doc.root, fold.collapsed))
+          ? store.selectRange(nodeId, visibleNodeOrder(shown, fold.collapsed))
           : null
     if (change === null) store.selectNode(nodeId)
     else if (change.capped > 0) store.setEditFailure({ kind: 'message', message: selectionCapNotice() })
@@ -293,7 +305,7 @@ export function StructureTree(props: {
     <div onKeyDown={handleKeyDown}>
       <ul className="wb-shell-structure" ref={treeRef}>
         <StructureNode
-          node={doc.root}
+          node={shown}
           // 상태 가지 줄의 요약이 그 상태 이름을 읽는 목록 — 검증 전 문서라 배열이 아니면 없는 것으로 본다.
           viewStates={Array.isArray(doc.viewStates) ? doc.viewStates : undefined}
           selectedNodeId={selectedNodeId}
@@ -318,7 +330,20 @@ export function StructureTree(props: {
           <>
             {/* **모두 접기 · 모두 펴기** — 고르기와 같은 읽기라 고칠 수 없어도 선다. 모두 접어도 뿌리는 편 채다 — 뿌리는 하나라 접으면 줄 하나만
                 남는다(맨 위 갈래가 보이는 것이 «모두 접은» 트리다). */}
-            <TreeFoldButtons onCollapse={() => fold.collapse(foldableIds(doc.root, rootId))} onExpand={fold.expandAll} />
+            <TreeFoldButtons onCollapse={() => fold.collapse(foldableIds(shown, rootId))} onExpand={fold.expandAll} />
+            {/* **모든 가지 보기** — 상태 영역이 있는 페이지에만 선다. 읽기라 고칠 수 없어도 선다. */}
+            {hasSwitch && (
+              <button
+                type="button"
+                className="wb-shell-tree-fold"
+                aria-label={ALL_CASES_LABEL}
+                title={ALL_CASES_LABEL}
+                aria-pressed={allCases}
+                onClick={() => setAllCases((on) => !on)}
+              >
+                {shellIcon('allCases', 14)}
+              </button>
+            )}
             {props.editable && (
               // **뿌리 `+`** — 페이지 통째에 더하는 셋. «페이지에 추가»는 뿌리를 골라 «안에 추가»를 연다(spec 「툴바 대신 노드별 `+` · `…`」).
               // 패턴은 고른 것을 풀고 연다 — 고른 것이 없으면 뿌리의 자식 끝에 꽂는다(`edit/pattern-insert.ts`).
@@ -402,6 +427,15 @@ function foldableIds(root: unknown, rootId: string | null): string[] {
     .map((visit) => visit.node)
     .filter((node) => isSelectable(node) && node.id !== rootId && hasChildRows(node))
     .map((node) => node.id)
+}
+
+/** 상태 영역의 가지를 전부 펴는 토글의 이름. */
+export const ALL_CASES_LABEL = '모든 가지 보기'
+
+/** 문서에 상태 영역이 있는가 — 검증 전 문서라 걷기는 던지지 않는 `walkSafely` 다. */
+function containsStateSwitch(root: unknown): boolean {
+  for (const visit of walkSafely(root)) if (visit.node.type === 'StateSwitch') return true
+  return false
 }
 
 /** 별칭 입력의 접근 이름 — 속성 패널 «별칭» 칸과 같은 낱말이다. */

@@ -205,6 +205,8 @@ describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () =
       viewStates: [{ id: 's_admin', name: '관리자' }],
     })
     await openInteractionTab()
+    // 관리자 가지는 기본 보기에서 접혀 있다 — 구조 트리 줄로 고르려고 «모든 가지 보기»를 켠다.
+    fireEvent.click(screen.getByRole('button', { name: '모든 가지 보기' }))
     selectNode('Button')
 
     const section = screen.getByRole('region', { name: "'검색 버튼'(관리자 상태)의 상호작용" })

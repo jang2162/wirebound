@@ -46,6 +46,7 @@ import {
   History,
   Layers,
   LayoutTemplate,
+  ListTree,
   ListIndentDecrease,
   ListIndentIncrease,
   ListOrdered,
@@ -143,6 +144,8 @@ export const ICONS = {
   splitStates: Split,
   /** 상태 영역을 벗긴다 — «상태 나누기 풀기». */
   unsplitStates: Ungroup,
+  /** 구조 트리의 상태 영역 가지를 전부 편다 — «모든 가지 보기»(트리 머리). */
+  allCases: ListTree,
 } as const satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof ICONS

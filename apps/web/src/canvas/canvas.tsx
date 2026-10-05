@@ -50,6 +50,7 @@ import type { SelectionChange } from '../store/editor-store'
 import { nodeHeadingLabel } from '../panels/node-shape'
 import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { useViewState } from '../shell/use-view-state'
 import { useAnnounceCanvasRemeasure, usePlacementPreview, usePublishCanvasRegion } from '../drag/use-placement'
 import { applyPreviewLook, isPreviewId, previewDocument } from './canvas-preview'
 import { usePublishCanvasDocument } from './canvas-document'
@@ -190,6 +191,8 @@ export function Canvas(props: {
   // selector를 여러 번 부른다. 상태 객체 전체(`(s) => s`)를 고르면 어느 필드가 바뀌든
   // 다시 그린다 — `use-editor-store.tsx`의 주석 참고.
   const doc = useOpenDocument(props.pageId)
+  // **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 상태 영역은 그 상태의 가지를 그린다(없으면 기본 가지).
+  const { state: viewState } = useViewState(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
   const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
   const mode = useEditorStore(store, (s) => s.mode)
@@ -567,7 +570,7 @@ export function Canvas(props: {
         >
           {(f) => (
             <ThemeProvider value={{ tokens, window: f.window }}>
-              <CanvasDocument doc={rendered ?? doc} theme={definition} interaction={interaction} bannerHost={bannerHost} />
+              <CanvasDocument doc={rendered ?? doc} theme={definition} viewState={viewState} interaction={interaction} bannerHost={bannerHost} />
             </ThemeProvider>
           )}
         </CanvasIframe>
@@ -686,6 +689,8 @@ export function Canvas(props: {
 function CanvasDocument(props: {
   doc: PageDocument
   theme: ThemeDefinition
+  /** 지금 상태 — 렌더러의 `viewState`(목록 밖 id 는 렌더러가 기본으로 읽는다). */
+  viewState: string | null
   /**
    * 상호작용 런타임(「실행」). **`undefined`면 꺼진 것이고 편집 모드가 그렇다.**
    * 켜고 끄는 판단은 `Canvas`가 하고 여기는 그대로 넘긴다.
@@ -702,6 +707,7 @@ function CanvasDocument(props: {
   const errors: NodeRenderError[] = []
   const tree = renderDocument(props.doc, {
     theme: props.theme,
+    viewState: props.viewState,
     onNodeError: (error) => errors.push(error),
     // **키를 조건부로 넣는다.** `interaction: undefined`를 그냥 실어도 렌더러는 같게
     // 다루지만(`options.interaction === undefined` 검사), 켜지지 않았다는 것이 호출부에서

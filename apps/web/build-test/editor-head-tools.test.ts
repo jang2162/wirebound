@@ -120,9 +120,11 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
     console.log('[머리 · 하단 바 모양]', JSON.stringify(seen))
 
     const zoom = ['축소', '확대', '화면 맞춤']
-    const head = (mode: '편집 모드' | '뷰 모드', folded: boolean): string[] => [
+    // 상태 전환기는 창 1440 에만 머리에 선다 — 900 · 700 은 `…` 로 접힌다(`src/shell/head-fold.ts` 의 `tight`).
+    const head = (mode: '편집 모드' | '뷰 모드', folded: boolean, switcher: boolean): string[] => [
       '좌측 패널 접기',
       '프로젝트 목록',
+      ...(switcher ? ['화면 상태: 기본'] : []),
       ...(mode === '편집 모드' ? ['되돌리기', '다시 실행', '배치 선'] : []),
       '편집 모드',
       '뷰 모드',
@@ -140,7 +142,7 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
           covered: [],
           footer: 40,
           footerControls: mode === '편집 모드' ? ['컴포넌트'] : [],
-          headControls: head(mode, width === 700),
+          headControls: head(mode, width === 700, width === 1440),
         }
       }
     }

@@ -44,8 +44,8 @@ import { AliasEditProvider } from '../panels/alias-edit'
 import { StructureTree } from '../panels/structure-tree'
 import { leftUnsentNotice, restoredRevisions, useEditCommit } from '../edit/use-edit-commit'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
-import { ViewStateProvider } from '../shell/use-view-state'
-import { ViewStateSwitcher } from '../shell/view-state-switcher'
+import { ViewStateProvider, useViewState } from '../shell/use-view-state'
+import { ViewStateSwitcher, viewStateMenuItems } from '../shell/view-state-switcher'
 import { BrandLink } from '../shell/brand-link'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
@@ -513,12 +513,16 @@ export function EditorShellRoute(): ReactElement {
         <ProjectThemeProvider projectId={state.project.id}>
           {/* 끌기의 두 대상(구조 트리 · 캔버스)을 경로 층이 아는 통로(`drag/use-placement.ts`) — 둘의 공통 조상이 셸이다. */}
           <PlacementRegionsProvider>
-            <EditorShell
-              project={state.project}
-              roleKnown={roleKnown}
-              pageId={params.pageId}
-              onMembership={onMembership}
-            />
+            {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸째 한 번 깔고(셸의 머리 `…` 도 읽는다), 페이지를
+                옮기면 기본으로 돌아간다. */}
+            <ViewStateProvider pageId={params.pageId}>
+              <EditorShell
+                project={state.project}
+                roleKnown={roleKnown}
+                pageId={params.pageId}
+                onMembership={onMembership}
+              />
+            </ViewStateProvider>
           </PlacementRegionsProvider>
         </ProjectThemeProvider>
       </CanvasDocumentProvider>
@@ -773,7 +777,10 @@ function EditorShell(props: {
   /** 머리가 좁은 창에서 접힌 단계(`shell/head-fold.ts`) — `folded` 면 줌 묶음이 `…` 의 첫 항목들이 된다. */
   const fold = useHeadFold()
   const zoomCommands = useZoomCommands(canvasRef)
-  /** `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. 접힌 머리의 줌이 맨 앞에 선다. */
+  /** 상태 전환기가 머리에 서는가 — `tight` · `folded` 면 `…` 로 접힌다(`shell/head-fold.ts`). */
+  const switcherInHead = fold === 'wide' || fold === 'short'
+  const viewStateChoice = useViewState(props.pageId)
+  /** `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. 접힌 머리의 줌이 맨 앞에, 접힌 상태 전환기가 그다음에 선다. */
   const menuItems: ActionMenuItem[] = [
     ...(fold === 'folded'
       ? [
@@ -782,6 +789,7 @@ function EditorShell(props: {
           { key: 'zoom-fit', label: '화면 맞춤', icon: ICONS.fitWidth, onSelect: zoomCommands.fit },
         ]
       : []),
+    ...(!switcherInHead && props.pageId !== undefined ? viewStateMenuItems(viewStateChoice, { prefixed: true }) : []),
     { key: 'account', label: '계정 설정', icon: ICONS.account, to: '/account' },
     { key: 'settings', label: '프로젝트 설정', icon: ICONS.projectSettings, to: `/projects/${props.project.id}/settings` },
     { key: 'snapshots', label: '스냅샷', icon: ICONS.snapshots, onSelect: () => setDialog('snapshots') },
@@ -793,8 +801,6 @@ function EditorShell(props: {
   return (
     // **별칭 입력이 선 줄**(`panels/alias-edit.tsx`) — 구조 트리가 그리고 에디터 단축키(F2)가 연다. 둘이 같은 값을 보게 셸이 한 번 깐다.
     <AliasEditProvider pageId={props.pageId}>
-      {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸이 한 번 깔고, 페이지를 옮기면 기본으로 돌아간다. */}
-      <ViewStateProvider pageId={props.pageId}>
       {/* 접힌 쪽은 격자에서 트랙째 빠진다(`shell.css` 의 `.wb-shell-fold-side` · `.wb-shell-fold-panel`) — 상자는 DOM 에 남고 손잡이는 안 선다. */}
       <div className={['wb-shell', layout.sideFolded ? 'wb-shell-fold-side' : '', layout.panelFolded ? 'wb-shell-fold-panel' : ''].filter(Boolean).join(' ')}>
         <header className="wb-shell-header">
@@ -835,7 +841,7 @@ function EditorShell(props: {
               **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
           <div className="wb-shell-head-tools">
             {/* **상태 전환기**(`shell/view-state-switcher.tsx`) — 두 모드 · 모든 역할에 선다(고르기는 읽기다). 상태 목록을 고치는 항목만 편집 모드 && `canEdit`. */}
-            <ViewStateSwitcher projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />
+            {switcherInHead && <ViewStateSwitcher projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />}
             {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
             {/* **배치 선**(`canvas/layout-guides.tsx`) — 편집 모드에서만 선다(선을 그리는 것도 편집 모드뿐이다). 읽기 도구라 viewer 에게도 선다. */}
             {mode === 'edit' && <GuidesToggle />}
@@ -1092,7 +1098,6 @@ function EditorShell(props: {
           <RightPanel projectId={props.project.id} pageId={props.pageId} canEdit={canEdit} restoredToken={restoredToken} />
         </aside>
       </div>
-      </ViewStateProvider>
     </AliasEditProvider>
   )
 }
