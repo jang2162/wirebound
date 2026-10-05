@@ -309,9 +309,9 @@ describe('에디터 셸', () => {
 
   /**
    * **축소는 25% 에서 멈춘다**(`routes/editor.tsx` 의 `ZOOM_OUT_FLOOR`) — 스토어의 하한(5%)은 «화면 맞춤»이 쓰는 값이다. 맞춤이 그 아래에 둔
-   * 배율에서는 축소가 아무것도 안 하고 확대는 한 칸 오른다.
+   * 배율에서는 축소가 아무것도 안 하고 확대는 다음 25 배수(25%)로 오른다.
    */
-  it('축소는 25% 에서 멈추고, 그 아래 배율에서는 축소가 그대로 · 확대는 한 칸', async () => {
+  it('축소는 25% 에서 멈추고, 그 아래 배율에서는 축소가 그대로 · 확대는 25% 로', async () => {
     await openShell()
     for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole('button', { name: '축소' }))
     screen.getByText('25%')
@@ -321,7 +321,9 @@ describe('에디터 셸', () => {
     fireEvent.click(screen.getByRole('button', { name: '축소' }))
     expect(shellStore().getState().zoom).toBe(0.1)
     fireEvent.click(screen.getByRole('button', { name: '확대' }))
-    expect(shellStore().getState().zoom).toBeCloseTo(0.35, 10)
+    expect(shellStore().getState().zoom).toBe(0.25)
+    fireEvent.click(screen.getByRole('button', { name: '확대' }))
+    expect(shellStore().getState().zoom).toBe(0.5)
   })
 })
 

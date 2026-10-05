@@ -7,7 +7,7 @@
  * |---|---|
  * | 좁은 창 — 칸 폭 · 접기 · 기억 | 창 1440 · 1024 · 900 · 836 · 700 × 편집 · 뷰에서 칸 폭이 표와 다르다 · 셸에 가로 넘침 · 접으면 그 쪽의 트랙(손잡이 · 여백까지)이 안 빠진다 · 새로 고친 뒤 접힘을 잃는다 · 펴면 폭이 안 돌아온다 |
  * | 화면 맞춤 | 프리셋 1920 · 1440 · 1280 · 375 × 창 1440 · 900 · 700 에서 맞춘 뒤 칸에 가로 넘침이 있다(줌 하한에 막힌다) |
- * | 줌 하한 | 축소(−)가 25% 아래로 내린다 · 맞춤이 25% 아래로 못 간다 · 맞춘 배율에서 − 가 배율을 바꾼다 |
+ * | 줌 하한 | 축소(−)가 25% 아래로 내린다 · 맞춤이 25% 아래로 못 간다 · 맞춘 배율에서 − 가 배율을 바꾼다 · 거기서 + 가 25% 가 아니다 |
  * | 빈 세로 스크롤 | 줌 ≠ 1 에서 칸의 세로 넘침이 보이는 문서 아래끝 + 안쪽 여백과 다르다(빈 스크롤 · 잘림) |
  * | 낮은 줌의 겹 | 맞춘 줌(7% · 18%)에서 선택 외곽선 · 번호 마커 · 배치 선이 노드에서 1px 넘게 어긋난다 |
  * | 끝 스크롤 — 손잡이 · 카드 · 사각형 | 칸의 오른 · 왼 끝에 대도 가로로 안 민다 · 민 뒤 보인 놓을 자리와 서버에 놓인 자리가 다르다 · 민 뒤의 사각형이 처음 화면 밖 노드를 못 감싼다 |
@@ -189,9 +189,9 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
 
   /**
    * 창 900(머리에 줌 묶음이 선 판) · 프리셋 1920. − 셋이 100 → 75 → 50 → 25 이고 넷째 − 는 25 그대로. 맞춤이 25% 아래(336 ÷ 1920 → 18%)로 가고,
-   * 그 배율에서 − 는 그대로 · + 는 한 칸(25) 오른다.
+   * 그 배율에서 − 는 그대로 · + 는 다음 25 배수(25%) · 다시 + 는 한 칸(50%)이다.
    */
-  it('줌 하한 — 축소는 25% 에서 멈추고, 맞춤은 그 아래로 가며 거기서 축소는 그대로 · 확대는 한 칸', async () => {
+  it('줌 하한 — 축소는 25% 에서 멈추고, 맞춤은 그 아래로 가며 거기서 축소는 그대로 · 확대는 25% 로', async () => {
     const P = await fixture('floor', texts(3))
     const { page, close } = await open(P, { width: 900, height: 700 })
     try {
@@ -205,9 +205,9 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
       const steps = [await press('축소'), await press('축소'), await press('축소'), await press('축소')]
       const fitted = await press('화면 맞춤')
       const outAtFit = await press('축소')
-      const inAtFit = await press('확대')
+      const inAtFit = [await press('확대'), await press('확대')]
       // 맞춘 배율 = (칸 384 − 안쪽 여백 48) ÷ 1920 = 0.175.
-      expect({ steps, fitted, outAtFit, inAtFit }).toEqual({ steps: [0.75, 0.5, 0.25, 0.25], fitted: 0.175, outAtFit: 0.175, inAtFit: 0.425 })
+      expect({ steps, fitted, outAtFit, inAtFit }).toEqual({ steps: [0.75, 0.5, 0.25, 0.25], fitted: 0.175, outAtFit: 0.175, inAtFit: [0.25, 0.5] })
     } finally {
       await close()
     }
@@ -321,12 +321,15 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
 
     const scrollLeft = (page: Page) => page.evaluate(() => (document.querySelector('.wb-shell-canvas') as HTMLElement).scrollLeft)
 
-    /** 칸의 오른 끝(안쪽 8px)에 대고 기다린다 — 칸이 끝까지 밀릴 때까지(최대 4s). 민 양을 돌려준다. */
-    async function holdAtEdge(page: Page, side: 'left' | 'right'): Promise<number> {
+    /**
+     * 칸의 오른 · 왼 끝(안쪽 8px)에 대고 기다린다 — 칸이 끝까지 밀릴 때까지(최대 4s). 민 양을 돌려준다. `y` 를 안 주면 칸 세로 가운데다.
+     */
+    async function holdAtEdge(page: Page, side: 'left' | 'right', y?: number, arrived?: () => Promise<void>): Promise<number> {
       const pane = (await page.locator('.wb-shell-canvas').boundingBox())!
       const x = side === 'right' ? pane.x + pane.width - 8 : pane.x + 8
-      await page.mouse.move(x, pane.y + pane.height / 2, { steps: 6 })
       const start = await scrollLeft(page)
+      await page.mouse.move(x, y ?? pane.y + pane.height / 2, { steps: 6 })
+      await arrived?.()
       const target = side === 'right' ? await page.evaluate(() => { const c = document.querySelector('.wb-shell-canvas') as HTMLElement; return c.scrollWidth - c.clientWidth }) : 0
       await poll('칸이 끝까지 밀린다', () => scrollLeft(page), (value) => Math.abs(value - target) < 1, 4_000).catch(() => undefined)
       return (await scrollLeft(page)) - start
@@ -346,8 +349,9 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
     }
 
     /**
-     * 손잡이를 쥐고 칸 오른 끝에 대면 칸이 오른쪽 끝까지 밀리고(처음 칸 밖이던 넷째 열이 보인다), 넷째 열의 오른쪽 반에 놓으면 보인 자리(넷째
-     * 열 뒤)에 선다. 민 칸에서 보이는 넷째 열을 골라 그 손잡이를 쥐고 왼 끝에 대면 칸이 처음으로 돌아온다.
+     * 손잡이를 쥐고 그리드 첫 행 높이에서 칸 오른 끝에 대면 칸이 오른쪽 끝까지 밀린다(처음 칸 밖이던 넷째 열이 보인다). 닿은 순간에는 포인터
+     * 밑이 문서라 자리가 보이고, 끝까지 민 뒤에는 포인터 밑이 칸의 안쪽 여백(문서 밖)이라 **포인터를 안 움직여도** 표시가 걷힌다 — 밀 때마다
+     * 같은 좌표로 다시 묻는다(`edgeScrollBy`). 넷째 열의 오른쪽 반에 놓으면 보인 자리(넷째 열 뒤)에 선다. 민 칸에서 보이는 넷째 열을 골라 그 손잡이를 쥐고 왼 끝에 대면 칸이 처음으로 돌아온다.
      */
     it('손잡이 — 오른 끝에서 오른쪽으로 · 왼 끝에서 왼쪽으로 밀고, 민 뒤에 보인 자리에 놓인다', async () => {
       const P = await fixture('edge-handle', WIDE)
@@ -366,7 +370,12 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
         await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2)
         await page.mouse.down()
         await page.mouse.move(hb.x + hb.width / 2 + 3, hb.y + hb.height / 2 + 6, { steps: 3 })
-        const pushedRight = await holdAtEdge(page, 'right')
+        const row = await spot(page, 'n_w0', 0.5, 0.5)
+        let arrived = false
+        const pushedRight = await holdAtEdge(page, 'right', row.y, async () => {
+          arrived = (await shownDrops(page)).some((drop) => drop.kind === 'preview')
+        })
+        const held = (await shownDrops(page)).length
         const over = await spot(page, 'n_w3', 0.8, 0.5)
         await page.mouse.move(over.x, over.y, { steps: 6 })
         const shown = await poll('보인 자리', () => shownDrops(page), (drops) => drops.some((drop) => drop.kind === 'preview'))
@@ -388,6 +397,8 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
         expect({
           hiddenBefore,
           pushedRight: pushedRight > 0,
+          arrived,
+          held,
           preview: { parent: preview.parent, prev: preview.prev, next: preview.next },
           landed,
           pushedLeft: pushedLeft < 0,
@@ -395,6 +406,8 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
         }).toEqual({
           hiddenBefore: true,
           pushedRight: true,
+          arrived: true,
+          held: 0,
           preview: { parent: 'n_grid', prev: 'n_w3', next: 'n_w4' },
           landed: ['n_w0', 'n_w1', 'n_w2', 'n_w3', 'n_src', 'n_w4', 'n_w5', 'n_w6', 'n_w7'],
           pushedLeft: true,

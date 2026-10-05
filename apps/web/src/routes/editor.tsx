@@ -96,7 +96,8 @@ const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
 const ZOOM_STEP = 0.25
 /**
  * 축소 단추(−)가 멈추는 배율 — 한 칸(25%)이다. 스토어의 하한(5%)은 «화면 맞춤»이 좁은 칸에 넓은 프리셋을 맞추는 값이라, − 가 거기까지 내리면
- * 25% 다음 누름이 5% 로 뛴다(단추의 단계가 25 · 50 · 75 … 가 아니게 된다). 맞춤이 이보다 낮게 둔 배율에서 − 는 아무것도 안 한다.
+ * 25% 다음 누름이 5% 로 뛴다(단추의 단계가 25 · 50 · 75 … 가 아니게 된다). 맞춤이 이보다 낮게 둔 배율에서 − 는 아무것도 안 하고 + 는 25% 로
+ * 오른다(`useZoomCommands`).
  */
 const ZOOM_OUT_FLOOR = ZOOM_STEP
 
@@ -1788,7 +1789,11 @@ function useZoomCommands(canvasRef: RefObject<HTMLElement | null>): { zoomOut: (
       const { zoom } = store.getState()
       store.setZoom(Math.max(zoom - ZOOM_STEP, Math.min(zoom, ZOOM_OUT_FLOOR)))
     },
-    zoomIn: () => store.setZoom(store.getState().zoom + ZOOM_STEP),
+    // 맞춤이 25% 아래에 둔 배율에서는 한 칸(+25)이 아니라 다음 25 배수(25%)로 오른다 — 18% → 43% 처럼 단계 밖의 값으로 튀지 않는다.
+    zoomIn: () => {
+      const { zoom } = store.getState()
+      store.setZoom(zoom < ZOOM_OUT_FLOOR ? ZOOM_OUT_FLOOR : zoom + ZOOM_STEP)
+    },
     /* **누른 순간의 1회 계산이다** — 창 크기를 따라다니지 않는다. 따라다니게 하면
        사용자가 손으로 맞춘 배율을 창을 조금만 흔들어도 빼앗기고, 그것을 막으려면
        *"마지막으로 누른 것이 맞춤인가"*라는 상태가 하나 더 생긴다. 줌 명령 셋은
