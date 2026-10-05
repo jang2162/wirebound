@@ -21,7 +21,7 @@
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
-import { putTheme } from './theme-fixtures'
+import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -171,7 +171,7 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
   async function fixture(slug: string, theme: string, nodes: readonly unknown[] = NODES, tokens: Record<string, string> = {}): Promise<{ P: string }> {
     const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
     const project = (await call('POST', '/projects', { name: 'F1 배치 선', slug: `${slug}-${Date.now().toString(36)}` })).body
-    if (theme !== 'system-admin' || Object.keys(tokens).length > 0) await putTheme(call, project.id, { themeId: theme, version: '1.0.0', tokens })
+    if (theme !== 'system-admin' || Object.keys(tokens).length > 0) await putTheme(call, project.id, { themeId: theme, version: seededVersion(theme), tokens })
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' })).body
     const page = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body
     const P = `/projects/${project.id}/pages/${page.id}`

@@ -29,7 +29,7 @@ import { GALLERY_SAMPLES } from '@wirebound/theme-gallery'
 import { placeableGroups } from '../src/panels/type-picker'
 import { CANVAS_MIN_HEIGHT } from '../src/shell/sidebar-layout'
 import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
-import { putTheme } from './theme-fixtures'
+import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -582,7 +582,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
 
     it('bob 이 프로젝트 테마를 system-portal 로 바꾸면 alice 의 축소판도 그 테마로 선다', async () => {
       const { P, projectId } = await seed('rv-thumb-theme', [BASIC], 'owner')
-      const manifest = (await call('GET', '/theme-packages/system-portal/1.0.0/manifest')).body
+      const manifest = (await call('GET', `/theme-packages/system-portal/${seededVersion('system-portal')}/manifest`)).body
       const portalPrimary = rgb(String(manifest.tokens.items['semantic.primary'].default))
       const { page, close } = await openEditor(P[0]!)
       try {
@@ -590,7 +590,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         await only(page, 'Button')
         const before = await poll('축소판 단추', async () => String(await page.evaluate(THUMB_BUTTON)), (v) => v !== '단추 없음')
         const bobCall = (m: string, p: string, b?: unknown) => stack.request(bob, m, p, b)
-        await putTheme(bobCall, projectId, { themeId: 'system-portal', version: '1.0.0', tokens: {} })
+        await putTheme(bobCall, projectId, { themeId: 'system-portal', version: seededVersion('system-portal'), tokens: {} })
         const after = await poll('테마를 따라간다', async () => String(await page.evaluate(THUMB_BUTTON)), (v) => v === portalPrimary).catch(
           async () => String(await page.evaluate(THUMB_BUTTON)),
         )

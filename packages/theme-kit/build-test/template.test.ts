@@ -13,6 +13,7 @@ import { unzipSync } from 'fflate'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '@wirebound/schema'
 import { readWbtheme } from '@wirebound/themes'
+import { SDK_VERSION } from '@wirebound/theme-sdk/version'
 
 const repoRoot = process.cwd()
 const KIT = resolve(repoRoot, 'packages/theme-kit')
@@ -71,7 +72,7 @@ afterAll(() => rmSync(TMP, { recursive: true, force: true }))
 describe('스타터 템플릿 zip', () => {
   it('뼈대가 있다', () => {
     const names = Object.keys(zip)
-    for (const name of ['package.json', 'theme.config.ts', 'tsconfig.json', 'src/index.tsx', 'src/theme.css', 'SKILL.md', 'README.md', '.gitignore', 'vendor/wirebound-theme-sdk-1.0.0.tgz']) {
+    for (const name of ['package.json', 'theme.config.ts', 'tsconfig.json', 'src/index.tsx', 'src/theme.css', 'SKILL.md', 'README.md', '.gitignore', `vendor/wirebound-theme-sdk-${SDK_VERSION}.tgz`]) {
       expect(names, name).toContain(`${ROOT}/${name}`)
     }
     expect(names.some((n) => /^wirebound-theme-starter\/vendor\/wirebound-theme-kit-.+\.tgz$/.test(n))).toBe(true)
@@ -82,7 +83,7 @@ describe('스타터 템플릿 zip', () => {
 
   it('package.json 이 두 tarball 을 file: 로 가리킨다', () => {
     const pkg = JSON.parse(readFileSync(join(template, 'package.json'), 'utf8'))
-    expect(pkg.dependencies['@wirebound/theme-sdk']).toBe('file:vendor/wirebound-theme-sdk-1.0.0.tgz')
+    expect(pkg.dependencies['@wirebound/theme-sdk']).toBe(`file:vendor/wirebound-theme-sdk-${SDK_VERSION}.tgz`)
     expect(pkg.devDependencies['@wirebound/theme-kit']).toMatch(/^file:vendor\/wirebound-theme-kit-.+\.tgz$/)
     expect(pkg.scripts).toMatchObject({ dev: 'wb-theme dev', build: 'wb-theme build' })
   })

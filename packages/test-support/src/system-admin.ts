@@ -13,22 +13,30 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { readWbtheme, type ThemeManifest } from '@wirebound/themes'
 
-const DIST = fileURLToPath(new URL('../../../system-themes/admin/dist/', import.meta.url))
-
-function readManifest(): ThemeManifest {
+/** 시스템 테마 하나(`system-themes/<theme>`)의 산출물 manifest. */
+function readManifest(theme = 'admin'): ThemeManifest {
+  const dist = fileURLToPath(new URL(`../../../system-themes/${theme}/dist/`, import.meta.url))
   let artifacts: string[] = []
   try {
-    artifacts = readdirSync(DIST).filter((name) => name.endsWith('.wbtheme'))
+    artifacts = readdirSync(dist).filter((name) => name.endsWith('.wbtheme'))
   } catch {
     // 아래에서 까닭을 말한다.
   }
   // 빌드는 `dist` 를 비우고 낸다 — 둘 이상이면 옛 산출물이 남은 것이다(시딩도 둘 다 읽는다).
   if (artifacts.length !== 1) {
-    throw new Error(`system-admin 산출물이 하나여야 합니다(${DIST} — 지금 ${artifacts.length} 개) — 저장소 뿌리에서 \`pnpm build\``)
+    throw new Error(`system-${theme} 산출물이 하나여야 합니다(${dist} — 지금 ${artifacts.length} 개) — 저장소 뿌리에서 \`pnpm build\``)
   }
-  const { files, issues } = readWbtheme(new Uint8Array(readFileSync(`${DIST}${artifacts[0]}`)))
-  if (files === null) throw new Error(`system-admin 산출물이 검증을 못 지났습니다: ${JSON.stringify(issues)}`)
+  const { files, issues } = readWbtheme(new Uint8Array(readFileSync(`${dist}${artifacts[0]}`)))
+  if (files === null) throw new Error(`system-${theme} 산출물이 검증을 못 지났습니다: ${JSON.stringify(issues)}`)
   return files.manifest
+}
+
+/**
+ * 기동 시딩이 넣는 시스템 테마의 판(`system-<theme>` — `admin` · `commerce` · `docs` · `portal` · `saas-marketing`). `SYSTEM_ADMIN.version` 과
+ * 같은 까닭으로 케이스는 다른 시스템 테마의 판도 글자로 적지 않고 이것을 쓴다.
+ */
+export function systemThemeVersion(theme: string): string {
+  return readManifest(theme).version
 }
 
 export interface ColorToken {

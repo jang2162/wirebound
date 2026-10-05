@@ -3,7 +3,7 @@
  * 저장소 빌드가 낸 `theme.js` 를 공유 런타임으로 싣고 뷰가 제 DOM 을 내는지 본다 — 까닭 · 꼴은 `system-themes/portal/build-test/bundle-views.test.tsx`
  * 머리말. 조각 칸은 기본 뷰에 없는 `data-wb-part` 다 — `null` 이면 기본 뷰로 서는 곁의 variant 라 태그 · 구조만 본다.
  *
- * 관리자 화면의 뷰(`List` · `KeyValue`)는 기본 뷰와 태그 · 구조가 같다 — 기본 뷰에 없는 조각(`checkbox` · `skeleton` · `filler`)으로 뷰가 섰는지 가른다.
+ * 관리자 화면은 뷰를 내지 않는다 — 아래 칸은 번들을 실은 판에서 SDK 기본 뷰가 props 로 내는 조각(`checkbox` · `skeleton` · `filler`)을 본다.
  */
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -53,5 +53,20 @@ describe('번들의 뷰(공유 런타임)', () => {
     expect(root.tagName).toBe(tag)
     expect(root.getAttribute('data-wb-structure')).toBe(structure)
     if (part !== null) expect(root.querySelector(`[data-wb-part="${part}"]`)).not.toBeNull()
+  })
+})
+
+/**
+ * 번들의 테마 뷰도 prop 표지 · 상태의 접근성 속성을 싣는다 — 표지는 공유 런타임의 SDK(`view` · `Root`)가 펴므로 `theme.js` 를 다시 짓지 않아도
+ * 호스트 SDK 판을 따른다. 테마 CSS 가 이 표지를 겨냥한다.
+ */
+describe('번들의 뷰 — prop 표지 · 접근성 속성', () => {
+  it.each([
+    ['Section', undefined, { compact: true }, 'data-wb-compact', ''],
+    ['SearchForm', undefined, { collapsed: true }, 'data-wb-collapsed', ''],
+    ['Field', undefined, { invalid: true, required: true }, 'aria-invalid', 'true'],
+  ] as const)('%s:%s %j → %s="%s"', (type, variant, props, attr, value) => {
+    const root = draw({ id: 'n', type, ...(variant === undefined ? {} : { variant }), props } as WbNode)
+    expect(root.getAttribute(attr)).toBe(value)
   })
 })

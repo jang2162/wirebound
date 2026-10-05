@@ -14,8 +14,8 @@ export const MANIFEST: ThemeManifest = {
   id: 'system-commerce',
   name: '커머스',
   description: '상품 목록·상세 중심의 쇼핑몰 테마. 이미지가 먼저 오고 가격과 구매 액션이 강조된다.',
-  version: '1.0.0',
-  sdk: '^1.0.0',
+  version: '1.1.0',
+  sdk: '^1.1.0',
   tokens: {
     groups: [
       { id: 'color', label: '색' },
@@ -101,14 +101,14 @@ export const MANIFEST: ThemeManifest = {
     KeyValue: {
       variants: [
         { id: 'cardGrid', label: '속성 상자 격자' },
-        { id: 'table', label: '표', hideProps: ['columns'] },
+        { id: 'table', label: '표' },
       ],
       defaultVariant: 'cardGrid',
     },
     SearchForm: {
       variants: [
         { id: 'collapsible', label: '접히는 필터' },
-        { id: 'inline', label: '한 줄', hideProps: ['collapsed'] },
+        { id: 'inline', label: '한 줄' },
       ],
       defaultVariant: 'collapsible',
     },

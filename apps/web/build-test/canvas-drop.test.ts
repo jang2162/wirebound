@@ -23,7 +23,7 @@
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session, type ShownDrop } from './editor-stack'
-import { putTheme } from './theme-fixtures'
+import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -66,7 +66,7 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
 
   const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
 
-  /** 프로젝트 · 메뉴 하나 · 페이지(들)에 문서를 싣는다. `bob` 은 editor. `theme` 을 주면 그 시스템 테마 `1.0.0` 에 묶는다. */
+  /** 프로젝트 · 메뉴 하나 · 페이지(들)에 문서를 싣는다. `bob` 은 editor. `theme` 을 주면 그 시스템 테마의 지금 판에 묶는다. */
   async function fixture(
     slug: string,
     pages: SeedNode[][],
@@ -76,7 +76,7 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
     if (member.status >= 300) throw new Error(`member ${member.status}`)
-    if (theme !== undefined) await putTheme(call, project.id, { themeId: `system-${theme}`, version: '1.0.0', tokens: {} })
+    if (theme !== undefined) await putTheme(call, project.id, { themeId: `system-${theme}`, version: seededVersion(`system-${theme}`), tokens: {} })
     const P: string[] = []
     const pageIds: string[] = []
     for (const [index, nodes] of pages.entries()) {

@@ -33,8 +33,8 @@ function rootVars(): Map<string, string> {
 describe('system-portal manifest', () => {
   it('id · 판 · sdk 범위 · 이름은 옛 meta 그대로', () => {
     expect(manifest.id).toBe('system-portal')
-    expect(manifest.version).toBe('1.0.0')
-    expect(manifest.sdk).toBe('^1.0.0')
+    expect(manifest.version).toBe('1.1.0')
+    expect(manifest.sdk).toBe('^1.1.0')
     expect(manifest.name).toBe('포털')
     expect(manifest.description).toBe('기관·사내 포털 테마. 선으로 구역을 나누고, 목록은 제목과 날짜 줄로, 분류는 접었다 편다.')
   })

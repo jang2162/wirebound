@@ -59,3 +59,19 @@ describe('번들의 뷰(공유 런타임)', () => {
     if (part !== null) expect(root.querySelector(`[data-wb-part="${part}"]`)).not.toBeNull()
   })
 })
+
+/**
+ * 번들의 테마 뷰도 prop 표지 · 상태의 접근성 속성을 싣는다 — 표지는 공유 런타임의 SDK(`view` · `Root`)가 펴므로 `theme.js` 를 다시 짓지 않아도
+ * 호스트 SDK 판을 따른다. 테마 CSS 가 이 표지를 겨냥한다.
+ */
+describe('번들의 뷰 — prop 표지 · 접근성 속성', () => {
+  it.each([
+    ['SearchForm', undefined, { collapsed: true }, 'data-wb-collapsed', ''],
+    ['SearchForm', 'inline', { collapsed: true }, 'data-wb-collapsed', ''],
+    ['List', undefined, { selectable: true }, 'data-wb-selectable', ''],
+    ['List', 'cardGrid', { loading: true }, 'aria-busy', 'true'],
+  ] as const)('%s:%s %j → %s="%s"', (type, variant, props, attr, value) => {
+    const root = draw({ id: 'n', type, ...(variant === undefined ? {} : { variant }), props } as WbNode)
+    expect(root.getAttribute(attr)).toBe(value)
+  })
+})

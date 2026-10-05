@@ -60,8 +60,8 @@ function declarations(style: CSSStyleDeclaration): [string, string][] {
 describe('system-commerce 선언', () => {
   it('id · 판 · sdk 범위 · 옛 meta 의 이름', () => {
     expect(manifest.id).toBe('system-commerce')
-    expect(manifest.version).toBe('1.0.0')
-    expect(manifest.sdk).toBe('^1.0.0')
+    expect(manifest.version).toBe('1.1.0')
+    expect(manifest.sdk).toBe('^1.1.0')
     expect(manifest.name).toBe('커머스')
   })
 
