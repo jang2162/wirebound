@@ -7,8 +7,10 @@
  * `aria-description`(보조 기술이 그 항목의 설명으로 읽는다)에 **같은 문장으로** 든다. 켜진 항목에는 둘 다 없다 — 켜진 항목에 붙일 «왜 회색인가»가
  * 없다. 트리 아래에 늘 서는 이유 줄은 없다 — 꺼진 것에 마우스를 올려야 이유가 보인다.
  *
- * **잃은 것 — 키보드로 이유에 닿는 자리.** 꺼진 메뉴 항목은 화살표가 건너뛰고(`shell/action-menu.tsx`), 꺼진 `<button>`은 탭 순서에서
- * 빠진다. 그래서 키보드 사용자는 이 문장에 포커스로 닿지 못한다 — 열두 상태의 표는 `test/panels/toolbar-status-reach.test.tsx`가 갖는다.
+ * **키보드로 이유에 닿는 자리 — 포커스가 선 꺼진 항목.** 꺼진 메뉴 항목에도 화살표가 서고, 이유를 싣는 메뉴 밖의 꺼진 단추도
+ * `disabled` 대신 `aria-disabled` 라 탭 순서에 남는다(`shell/action-menu.tsx` 머리말 «끈 항목은 …»). 포커스가 서면 보조 기술이 그 설명을
+ * 읽는다 — 열두 상태의 표는 `test/panels/toolbar-status-reach.test.tsx`, Chrome 접근성 트리의 값은 `build-test/menu-reason-reach.test.ts`가
+ * 갖는다.
  *
  * # 항목 하나의 이유다 — 무리의 이유가 아니다
  *

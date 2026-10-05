@@ -1101,8 +1101,9 @@
   cursor: not-allowed;
 }
 
-/* 할 수 없는 조작(조작이 나가 있는 동안). */
-.wb-shell-menu-tool:disabled {
+/* 할 수 없는 조작(조작이 나가 있는 동안). 이유를 싣는 단추는 포커스를 받으려 `aria-disabled` 로 끈다(`action-menu.tsx` 머리말 «끈 항목은 …»). */
+.wb-shell-menu-tool:disabled,
+.wb-shell-menu-tool[aria-disabled='true'] {
   color: var(--wb-shell-muted);
   cursor: not-allowed;
 }
@@ -2733,6 +2734,12 @@
   cursor: pointer;
 }
 
+/* 덮기가 나가 있는 동안 — 포커스는 받는다(이유를 읽게 · `action-menu.tsx` 머리말 «끈 항목은 …»). */
+.wb-shell-meta-conflict-button[aria-disabled='true'] {
+  color: var(--wb-shell-muted);
+  cursor: not-allowed;
+}
+
 /* 나가 있는 쓰기가 시간 안에 응답을 못 받았을 때(`panels/pending-notice.tsx`) — «페이지 설명»과
    코멘트 탭이 같은 것을 쓴다. 결과를 모를 때 통지 옆에 «다시 확인» 단추가 선다. */
 .wb-shell-pending {
@@ -4166,7 +4173,7 @@
   cursor: pointer;
 }
 
-.wb-shell-menu-delete-confirm:disabled {
+.wb-shell-menu-delete-confirm[aria-disabled='true'] {
   border-color: var(--wb-shell-line);
   background: var(--wb-shell-chrome);
   color: var(--wb-shell-muted);

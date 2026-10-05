@@ -428,10 +428,13 @@ export function MenuTree(props: {
             <button
               type="button"
               className="wb-shell-menu-tool"
-              disabled={commands.busy}
+              aria-disabled={commands.busy || undefined}
               title={commands.busy ? BUSY_REASON : undefined}
               aria-description={commands.busy ? BUSY_REASON : undefined}
-              onClick={() => commands.openInput('new-root-menu')}
+              onClick={() => {
+                if (commands.busy) return
+                commands.openInput('new-root-menu')
+              }}
             >
               최상위 메뉴
             </button>
@@ -757,7 +760,7 @@ function anchoredToRow(commands: TreeCommands): boolean {
  * **Esc를 이 단추에서 받는다** — 전역 리스너를 두지 않는 것은 그것이 다른 패널의 Esc까지 가로채기 때문이다. 확인이 풀리는 나머지
  * 조건(선택 변경 · 다른 조작 · «취소»)은 훅이 갖는다(`askRemove`의 짝).
  */
-function RemoveConfirm(props: { commands: TreeCommands }): ReactElement {
+export function RemoveConfirm(props: { commands: TreeCommands }): ReactElement {
   const { commands } = props
   const confirm = useRef<HTMLButtonElement>(null)
   useEffect(() => {
@@ -765,16 +768,21 @@ function RemoveConfirm(props: { commands: TreeCommands }): ReactElement {
   }, [])
   /** 확인 단추가 꺼졌을 때의 이유 — `…`의 «삭제»와 같은 판정 · 같은 문장(`panels/toolbar-status.ts`의 `menuItemReason`). */
   const removeReason = menuItemReason({ selection: commands.selection, busy: commands.busy, abilities: commands.abilities }, 'remove')
+  const off = !commands.abilities.remove || commands.busy
   return (
     <span className="wb-shell-tree-confirm">
+      {/* 꺼진 동안도 포커스는 받는다 — 이유(`aria-description`)에 키보드로 닿는 자리다(`shell/action-menu.tsx` 머리말 «끈 항목은 …»). */}
       <button
         type="button"
         ref={confirm}
         className="wb-shell-menu-tool"
-        disabled={!commands.abilities.remove || commands.busy}
+        aria-disabled={off || undefined}
         title={removeReason}
         aria-description={removeReason}
-        onClick={commands.confirmRemove}
+        onClick={() => {
+          if (off) return
+          commands.confirmRemove()
+        }}
         onKeyDown={(event) => {
           // `!==`로 쓴다 — 위 `SHORTCUTS`의 조합을 세는 자(`test/panels/menu-keyboard.test.tsx` «표의 여섯을 다 덮는다»)가 `event.key === '`를 닻으로 센다.
           if (event.key !== 'Escape') return

@@ -4,13 +4,13 @@
  * `./toolbar-status.test.ts`가 *"어느 상태의 어느 항목에 어느 문장이 붙는가"*를 갖는다면, 이 파일은 그 다음 두 물음을 갖는다: **그 문장이
  * 화면의 항목에 실려 있는가**(두 속성이 같은 문장으로), 그리고 **키보드 사용자가 그 문장에 닿는가.**
  *
- * # 키보드는 이유에 닿지 못한다 — 잃은 것을 값으로 적는다
+ * # 키보드는 화살표로 이유에 닿는다
  *
- * 줄 행동의 항목은 행동 메뉴의 항목이라 **Tab 이 아니라 화살표로 옮기고, 화살표는 꺼진 항목을 건너뛴다**(`shell/action-menu.tsx` —
- * `menu` 역할의 약속). 이유는 **꺼진 항목에만** 실린다(켜진 항목에는 붙일 «왜 회색인가»가 없다). 그래서 포커스가 설 수 있는 자리(켜진
- * 항목) 가운데 이유를 든 것이 **어느 상태에서도 없다** — 아래 표의 `reach`가 전부 0 이다. 트리 아래의 이유 줄(탭 정지점)이 그 바닥이었고,
- * 그 줄이 없는 지금 키보드로 이유를 읽는 길은 이 파일이 재는 범위에 없다(보조 기술의 읽기 모드가 꺼진 항목의 설명을 읽는지는 jsdom 이
- * 못 잰다). 닫는 길의 후보는 WAI-ARIA APG 처럼 꺼진 메뉴 항목에도 화살표가 서게 하는 것이다 — 그때 이 파일의 `reach`가 바뀐다.
+ * 줄 행동의 항목은 행동 메뉴의 항목이라 **Tab 이 아니라 화살표로 옮기고, 화살표는 꺼진 항목에도 선다**(`shell/action-menu.tsx` 머리말
+ * «끈 항목은 …» — WAI-ARIA APG 메뉴 패턴). 이유는 **꺼진 항목에만** 실린다(켜진 항목에는 붙일 «왜 회색인가»가 없다). 그래서 메뉴를 열고
+ * 화살표로 한 바퀴 돌면 이유를 든 항목 전부에 포커스가 선다 — 아래 표의 `reach`가 그 수이고 꺼진 항목 수와 같다. 트리 아래의 이유
+ * 줄(탭 정지점)은 없다 — 키보드로 이유를 읽는 자리는 이것이다. 보조 기술이 포커스된 항목의 `aria-description`을 실제로 읽는지는 jsdom 이
+ * 못 잰다(Chrome AX 트리의 설명은 `build-test/menu-reason-reach.test.ts`가 잰다).
  *
  * # 판정을 두 벌로 만들지 않는다 — `abilities`도 문안도 진짜를 지난다
  *
@@ -195,46 +195,50 @@ interface Drawn {
 }
 
 /**
- * `+` · `…`를 차례로 열어 항목을 읽는다. **`reach`는 연 뒤 포커스가 설 수 있는 항목(화살표가 서는 켜진 항목) 가운데 이유를 든 것의 수다** —
- * 열면 첫 켠 항목에 포커스가 서고 화살표가 켠 항목 사이를 돈다(`shell/action-menu.tsx`의 `enabledItems`).
+ * `+` · `…`를 차례로 열어 항목을 읽는다. **`reach`는 연 뒤 화살표(↓)로 한 바퀴 돌며 포커스가 선 항목 가운데 이유를 든 것의 수다**
+ * (`reached` — 그 항목의 글). 여는 누름이 첫 항목에 포커스를 두고, ↓ 를 항목 수만큼 눌러 처음으로 돌아온다.
  */
-function readItems(container: HTMLElement): { items: Drawn[]; reach: number } {
+function readItems(container: HTMLElement): { items: Drawn[]; reach: number; reached: string[] } {
   const items: Drawn[] = []
-  let reach = 0
+  const reached = new Set<Element>()
   for (const toggle of container.querySelectorAll<HTMLButtonElement>('[aria-haspopup="menu"]')) {
     fireEvent.click(toggle)
     const list = document.getElementById(toggle.getAttribute('aria-controls') ?? '')
     if (list === null) throw new Error('열었는데 목록이 없다')
-    for (const item of within(list).getAllByRole('menuitem')) {
+    const menuItems = within(list).getAllByRole('menuitem')
+    for (const item of menuItems) {
       const off = item.getAttribute('aria-disabled') === 'true'
       const reason = reasonOf(item)
       items.push({ label: item.textContent ?? '', off, reason })
-      if (!off && reason !== null) reach += 1
     }
-    // 연 뒤의 포커스가 켠 항목이거나(켠 것이 있으면) 단추다(다 꺼졌으면) — 어느 쪽도 이유를 들지 않는다.
-    if (document.activeElement !== null && reasonOf(document.activeElement) !== null) reach += 1
+    for (let step = 0; step <= menuItems.length; step += 1) {
+      const at = document.activeElement
+      if (at !== null && list.contains(at) && reasonOf(at) !== null) reached.add(at)
+      fireEvent.keyDown(at ?? document.body, { key: 'ArrowDown' })
+    }
     fireEvent.click(toggle)
   }
-  return { items, reach }
+  return { items, reach: reached.size, reached: [...reached].map((element) => element.textContent ?? '') }
 }
 
 /**
- * **열두 상태 — 그 상태를 가르는 항목 하나와 그 항목의 이유.** `reach`는 키보드가 이유에 닿는 자리의 수다.
+ * **열두 상태 — 그 상태를 가르는 항목 하나와 그 항목의 이유.** 상태마다 `reach`(화살표로 닿은 이유의 수)가 꺼진 항목 수와 같고, 대표
+ * 항목이 그 안에 든다.
  *
- * | 상태 | 대표 항목 | 이유 | `reach` | 이유 줄(탭 정지점)이 있던 판 |
- * |---|---|---|---|---|
- * | 구조 · 안 골랐다 | 안에 추가 | «트리에서 노드를 고르면 …» | **0** | 닿았다 — 그 줄이 첫 정지점 |
- * | 구조 · 남이 잠갔다 | 안에 추가 | «보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다» | **0** | 닿았다 |
- * | 구조 · 루트다 | 삭제 | «루트가 아닌 노드를 고르세요» | **0** | 닿았다(켠 «안에 추가»가 그 줄을 설명으로 들었다) |
- * | 구조 · 문서에 없다 | 삭제 | «고른 노드가 문서에 없습니다» | **0** | 닿았다 |
- * | 구조 · 자식을 못 담는다 | 안에 추가 | `STRUCTURE_WHY_DISABLED.addInside` | **0** | 닿았다 |
- * | 구조 · 형제가 없다 | 위로 | `STRUCTURE_WHY_DISABLED.moveUp` | **0** | 닿았다 |
- * | 메뉴 · 보내는 중 | 이름 변경 | «조작을 보내는 중입니다» | **0** | 닿았다 |
- * | 메뉴 · 안 골랐다 | 이름 변경 | `MENU_WHY_DISABLED.rename` | **0** | 닿았다 |
- * | 메뉴 · 트리에 없다 | 이름 변경 | «고른 것이 트리에 없습니다» | **0** | 닿았다 |
- * | 메뉴 · 페이지다 | 위로 | `MENU_WHY_DISABLED.moveUp` | **0** | 닿았다 |
- * | 메뉴 · 최상위 맏이다 | 내어쓰기 | `MENU_WHY_DISABLED.outdent` | **0** | 닿았다 |
- * | 메뉴 · 형제가 없다 | 위로 | `MENU_WHY_DISABLED.moveUp` | **0** | 닿았다 |
+ * | 상태 | 대표 항목 | 이유 |
+ * |---|---|---|
+ * | 구조 · 안 골랐다 | 안에 추가 | «트리에서 노드를 고르면 …» |
+ * | 구조 · 남이 잠갔다 | 안에 추가 | «보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다» |
+ * | 구조 · 루트다 | 삭제 | «루트가 아닌 노드를 고르세요» |
+ * | 구조 · 문서에 없다 | 삭제 | «고른 노드가 문서에 없습니다» |
+ * | 구조 · 자식을 못 담는다 | 안에 추가 | `STRUCTURE_WHY_DISABLED.addInside` |
+ * | 구조 · 형제가 없다 | 위로 | `STRUCTURE_WHY_DISABLED.moveUp` |
+ * | 메뉴 · 보내는 중 | 이름 변경 | «조작을 보내는 중입니다» |
+ * | 메뉴 · 안 골랐다 | 이름 변경 | `MENU_WHY_DISABLED.rename` |
+ * | 메뉴 · 트리에 없다 | 이름 변경 | «고른 것이 트리에 없습니다» |
+ * | 메뉴 · 페이지다 | 위로 | `MENU_WHY_DISABLED.moveUp` |
+ * | 메뉴 · 최상위 맏이다 | 내어쓰기 | `MENU_WHY_DISABLED.outdent` |
+ * | 메뉴 · 형제가 없다 | 위로 | `MENU_WHY_DISABLED.moveUp` |
  *
  * «메뉴 · 최상위 맏이다»(`mn-1`)는 하위가 있는 메뉴다 — 그 «삭제»의 판정과 문장은 메뉴 연쇄 삭제가 갖으므로 «내어쓰기»로 잰다.
  */
@@ -276,12 +280,14 @@ describe('꺼진 항목이 이유를 `title` · `aria-description`으로 든다 
   })
 })
 
-describe('키보드가 이유에 닿지 못한다 — 열두 상태 전부에서(잃은 것)', () => {
-  it.each(STATES)('$name — 포커스가 서는 자리 가운데 이유를 든 것 0', ({ open }) => {
-    const { items, reach } = readItems(open())
-    // 전제: 이 상태에 이유를 든 항목이 실제로 있다 — 없으면 «닿지 못한다»가 공허하다.
-    expect(items.some((drawn) => drawn.reason !== null)).toBe(true)
-    expect(reach).toBe(0)
+describe('키보드가 화살표로 이유에 닿는다 — 열두 상태 전부에서', () => {
+  it.each(STATES)('$name — 이유를 든 항목 전부에 화살표가 선다 · «$item» 포함', ({ open, item }) => {
+    const { items, reach, reached } = readItems(open())
+    const reasoned = items.filter((drawn) => drawn.reason !== null)
+    // 카나리아: 이 상태에 이유를 든 항목이 실제로 있다 — 없으면 «닿는다»가 공허하다.
+    expect(reasoned.length).toBeGreaterThan(0)
+    expect(reach).toBe(reasoned.length)
+    expect(reached).toContain(item)
   })
 })
 

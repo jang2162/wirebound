@@ -65,7 +65,12 @@ export function MetaConflict(props: {
 }): ReactElement {
   const { what, theirs } = props
   const late = props.late ?? false
-  const reason = props.disabled === true ? props.disabledReason : undefined
+  const off = props.disabled === true
+  const reason = off ? props.disabledReason : undefined
+  // 꺼진 동안도 포커스는 받는다 — 이유(`aria-description`)에 키보드로 닿는 자리다(`shell/action-menu.tsx` 머리말 «끈 항목은 …»).
+  const unless = (run: () => void) => () => {
+    if (!off) run()
+  }
   return (
     <div className="wb-shell-meta-conflict" role="alert">
       <p className="wb-shell-meta-conflict-lead">
@@ -75,15 +80,15 @@ export function MetaConflict(props: {
       <p className="wb-shell-meta-conflict-theirs">{shown(what, theirs)}</p>
       <div className="wb-shell-meta-conflict-actions">
         {props.onOverwrite === undefined ? (
-          <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} title={reason} aria-description={reason} onClick={props.onDiscard}>
+          <button type="button" className="wb-shell-meta-conflict-button" aria-disabled={off || undefined} title={reason} aria-description={reason} onClick={unless(props.onDiscard)}>
             확인
           </button>
         ) : (
           <>
-            <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} title={reason} aria-description={reason} onClick={props.onOverwrite}>
+            <button type="button" className="wb-shell-meta-conflict-button" aria-disabled={off || undefined} title={reason} aria-description={reason} onClick={unless(props.onOverwrite)}>
               {late ? '지금 글로 덮기' : '내 글로 덮기'}
             </button>
-            <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} title={reason} aria-description={reason} onClick={props.onDiscard}>
+            <button type="button" className="wb-shell-meta-conflict-button" aria-disabled={off || undefined} title={reason} aria-description={reason} onClick={unless(props.onDiscard)}>
               {late ? '앞서 보낸 글로 두기' : '내 글 버리기'}
             </button>
           </>

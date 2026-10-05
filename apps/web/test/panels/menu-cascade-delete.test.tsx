@@ -288,9 +288,13 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     const box = await screen.findByRole('dialog', { name: MENU_DELETE_TITLE })
     await within(box).findByText(CASCADE_GONE)
     const confirm = within(box).getByRole('button', { name: MENU_DELETE_CONFIRM }) as HTMLButtonElement
-    expect(confirm.disabled).toBe(true)
+    // 꺼진 동안도 포커스는 받는다(`aria-disabled` — 이유에 키보드로 닿는다) · 눌러도 안 보낸다.
+    expect(confirm.getAttribute('aria-disabled')).toBe('true')
+    expect(confirm.disabled).toBe(false)
     expect(confirm.title).toBe(CASCADE_GONE)
     expect(confirm.getAttribute('aria-description')).toBe(CASCADE_GONE)
+    fireEvent.click(confirm)
+    expect(deleteMenuCascade).toHaveBeenCalledTimes(1)
   })
 })
 

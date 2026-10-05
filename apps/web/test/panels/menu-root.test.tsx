@@ -104,6 +104,12 @@ function rootButton(): HTMLButtonElement {
   return within(treeRegion()).getByRole('button', { name: ROOT_BUTTON }) as HTMLButtonElement
 }
 
+/** 꺼졌나 — 이유를 싣는 단추는 포커스를 받으려 `aria-disabled` 로 끈다(`src/shell/action-menu.tsx` 머리말 «끈 항목은 …»). */
+function rootOff(): boolean {
+  const button = rootButton()
+  return button.disabled || button.getAttribute('aria-disabled') === 'true'
+}
+
 function queryRootButton(): HTMLElement | null {
   return within(treeRegion()).queryByRole('button', { name: ROOT_BUTTON })
 }
@@ -252,15 +258,19 @@ describe('빈 메뉴 트리 — 최상위 메뉴를 만드는 자리', () => {
     fireEvent.click(rootButton())
     typeAndEnter('관리자')
 
-    await waitFor(() => expect(rootButton().disabled).toBe(true))
+    await waitFor(() => expect(rootOff()).toBe(true))
     // 게이트는 아직 닫혀 있다 — 요청이 나가 있는 **동안**이다.
-    expect(rootButton().disabled).toBe(true)
+    expect(rootOff()).toBe(true)
     expect(api.getTree).toHaveBeenCalledTimes(1)
+    // 꺼진 동안 누르면 아무것도 안 연다 — 포커스는 받되(`aria-disabled`) 고를 수 없다.
+    expect(rootButton().disabled).toBe(false)
+    fireEvent.click(rootButton())
+    expect(within(treeRegion()).queryByRole('textbox')).toBeNull()
 
     gate.release?.()
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
     // 잠금이지 영구 비활성이 아니다.
-    await waitFor(() => expect(rootButton().disabled).toBe(false))
+    await waitFor(() => expect(rootOff()).toBe(false))
   })
 
   /**

@@ -67,7 +67,7 @@ function OpenMenuDeleteDialog(props: { commands: TreeCommands; target: RemoveTar
   const shown = pages.slice(0, PAGE_PREVIEW_LIMIT)
   const rest = pages.length - shown.length
   const describedBy = pages.length > 0 ? `${sentenceId} ${warningId}` : sentenceId
-  // 꺼진 확인 단추의 까닭 — 마우스를 올리면 보이고 읽힌다(트리의 꺼진 항목과 같은 규칙).
+  // 꺼진 확인 단추의 까닭 — 마우스를 올리면 보이고, 꺼진 동안도 포커스를 받아 키보드로 읽힌다(`shell/action-menu.tsx` 머리말 «끈 항목은 …»).
   const why = subtree === null ? CASCADE_GONE : commands.busy ? CASCADE_BUSY : null
 
   return (
@@ -105,10 +105,13 @@ function OpenMenuDeleteDialog(props: { commands: TreeCommands; target: RemoveTar
           <button
             type="button"
             className="wb-shell-menu-delete-confirm"
-            disabled={why !== null}
+            aria-disabled={why !== null || undefined}
             title={why ?? undefined}
             aria-description={why ?? undefined}
-            onClick={commands.confirmCascade}
+            onClick={() => {
+              if (why !== null) return
+              commands.confirmCascade()
+            }}
           >
             {MENU_DELETE_CONFIRM}
           </button>
