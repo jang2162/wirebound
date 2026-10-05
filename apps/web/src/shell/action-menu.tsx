@@ -175,6 +175,8 @@ export function ActionMenu(props: {
   openWhile?: boolean
   /** 단추에 아이콘 뒤로 보이는 글자 — 지금 고른 값(머리 상태 전환기). 이름은 그대로 `label` 이다 — `label` 이 이 글자를 품게 짓는다. */
   text?: string
+  /** `text` 를 줄이지 않는다 — 짧고 고정인 글(영역 표지 «상태에 따라 다름»). 없으면 긴 상태 이름 몫의 폭에서 줄임표로 준다. */
+  fullText?: boolean
 }): ReactElement {
   const [open, setOpen] = useState(false)
   /** 열 때 포커스를 줄 항목 — `'first'` · `'last'`. 목록이 그려진 뒤 이펙트가 옮긴다. */
@@ -313,7 +315,7 @@ export function ActionMenu(props: {
         onKeyDown={onToggleKeyDown}
       >
         <ToggleIcon icon={props.icon ?? ICONS.more} compact={props.compact === true} />
-        {props.text !== undefined && <span className="wb-shell-action-menu-text">{props.text}</span>}
+        {props.text !== undefined && <span className={props.fullText === true ? 'wb-shell-action-menu-text wb-shell-action-menu-text-full' : 'wb-shell-action-menu-text'}>{props.text}</span>}
       </button>
       {open &&
         createPortal(

@@ -1520,8 +1520,6 @@
   border-radius: 0 0 4px 0;
   background: #f0fdfa;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  /* 표지의 글(«상태에 따라 다름»)은 짧고 고정이라 줄이지 않는다. */
-  --wb-shell-action-text-max: none;
 }
 
 .wb-shell-marker {
@@ -3005,12 +3003,17 @@
 }
 
 .wb-shell-action-menu-text {
-  /* 단추가 놓인 자리가 줄 수 있다(영역 표지 — `--wb-shell-action-text-max`). 머리 전환기는 기본값이다. */
-  max-width: var(--wb-shell-action-text-max, 8em);
+  /* 긴 상태 이름 몫이다(머리 전환기). 짧고 고정인 글은 `fullText` 로 걷는다(아래 `-full`). */
+  max-width: 8em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
+}
+
+/* 영역 표지의 «상태에 따라 다름» — 짧고 고정이라 줄이지 않는다(`action-menu.tsx` 의 `fullText`). */
+.wb-shell-action-menu-text.wb-shell-action-menu-text-full {
+  max-width: none;
 }
 
 .wb-shell-action-menu-text::after {

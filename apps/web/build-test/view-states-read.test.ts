@@ -145,6 +145,19 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
       expect(Math.abs(place.badge[0]! - place.region[0]!)).toBeLessThanOrEqual(1)
       expect(Math.abs(place.badge[1]! - place.region[1]!)).toBeLessThanOrEqual(1)
       for (const [at, value] of place.frame.entries()) expect(Math.abs(value - place.region[at]!)).toBeLessThanOrEqual(1)
+      // 표지의 글은 줄임표 없이 다 보인다(`fullText` — 머리 전환기의 `8em` 줄임을 걷는다). 이 기계의 글꼴로는 글이 100px · 한도 104px 라
+      // 걷지 않아도 맞는다 — 한글 글자가 더 넓은 글꼴(다른 OS)을 자간으로 흉내 내 잰다. 흉내가 실렸는지를 함께 본다.
+      const cut = await tab.page.evaluate(() => {
+        const text = document.querySelector('[data-wb-state-badge-for="n_sw"] .wb-shell-action-menu-text') as HTMLElement
+        const wide = document.createElement('style')
+        wide.textContent = '.wb-shell-action-menu-text { letter-spacing: 3px; }'
+        document.head.append(wide)
+        const value = { spacing: getComputedStyle(text).letterSpacing, scroll: text.scrollWidth, client: text.clientWidth }
+        wide.remove()
+        return value
+      })
+      expect(cut.spacing).toBe('3px')
+      expect(cut.scroll).toBeLessThanOrEqual(cut.client)
 
       // 알림 줄이 iframe 을 밀면 표지도 따라 내려간다(표면 좌표의 iframe 자리 — `canvas.tsx` 의 `frameOffset`).
       await canvasFrame(tab.page).locator('[data-wb-id="n_bad"]').click()
