@@ -40,6 +40,11 @@ export const UNKNOWN_VIEW_STATE_NAME = '목록에 없는 상태'
  */
 export function caseStateName(node: WbNode, viewStates?: readonly ViewState[]): string {
   const state = isRecord(node.props) ? node.props.state : undefined
+  return typeof state === 'string' ? viewStateName(viewStates, state) : UNKNOWN_VIEW_STATE_NAME
+}
+
+/** 상태 id 의 이름 — 기본(`default`)은 «기본», 목록에 없으면 `UNKNOWN_VIEW_STATE_NAME`. */
+export function viewStateName(viewStates: readonly ViewState[] | undefined, state: string): string {
   if (state === DEFAULT_CASE) return '기본'
   return viewStates?.find((entry) => entry.id === state)?.name ?? UNKNOWN_VIEW_STATE_NAME
 }

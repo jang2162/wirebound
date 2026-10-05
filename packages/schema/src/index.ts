@@ -19,7 +19,7 @@ export {
   createNodeId,
 } from './node'
 
-export { caseFor } from './view-state'
+export { caseFor, nodeViewState, viewStateIndex, visibleTree } from './view-state'
 export {
   addViewStateOps,
   editInForkOps,
@@ -77,6 +77,7 @@ export {
   readNodesEnvelope,
   writeNodesEnvelope,
 } from './clipboard'
+export type { DroppedCases } from './clipboard'
 
 export type {
   ActionProblem,
@@ -86,7 +87,7 @@ export type {
 } from './interaction/check'
 export { checkNodeAction, checkPageAction, isPageTargetAction } from './interaction/check'
 
-export type { ComponentNoun, InteractionSentence } from './interaction/describe'
+export type { ComponentNoun, InteractionSentence, NamingContext } from './interaction/describe'
 export {
   COMPONENT_NOUNS,
   MISSING_NODE_NAME,
@@ -96,7 +97,7 @@ export {
   listInteractionSentences,
   nodeDisplayName,
 } from './interaction/describe'
-export { UNKNOWN_VIEW_STATE_NAME, caseStateName, nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
+export { UNKNOWN_VIEW_STATE_NAME, caseStateName, viewStateName, nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
 export { hasRejectedAliasChar, isBlankAlias, tidyAlias } from './alias'
 export { SUMMARY_LIST_MAX, SUMMARY_TEXT_MAX } from './component/summary'
 
