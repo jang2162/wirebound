@@ -22,6 +22,7 @@ export {
   PAGE_LANDING,
   PAGE_LIST,
   경고가_있는_프로젝트,
+  상태가_있는_프로젝트,
   오류가_있는_프로젝트,
   LIST_VARIANTS,
   projectThemeResponse,

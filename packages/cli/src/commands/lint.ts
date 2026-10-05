@@ -78,7 +78,7 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
   const summary =
     report.issues.length === 0
       ? '결함 없음'
-      : `결함 ${report.issues.length}건 (error ${report.errors} · warning ${report.warnings})`
+      : `결함 ${report.issues.length}건 (error ${report.errors} · warning ${report.warnings}${report.infos > 0 ? ` · info ${report.infos}` : ''})`
   // **범위를 요약 줄에 단다.** 앞 줄이 *"전체 2건"*이라고 했는데 뒤 줄이
   // *"결함 없음"*이면 **사람은 뒤 줄을 읽는다** — 두 줄이 서로 부딪히지 않게 한다.
   io.out(report.filtered ? `${summary} — 경로 필터 안에서다 (전체 ${report.totalIssues}건)` : summary)
@@ -110,7 +110,8 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
    * **케이스가 이 판정을 든다** — `test/lint.test.ts`의 *"다른 페이지에 error 가 있어도
    * 경로를 주면 0이다"*. 아래를 전체에서 세게 바꾸면 그 케이스가 죽는다.
    */
-  const failing = failOn === 'warning' ? report.issues.length : report.errors
+  // `info` 는 어떤 선에도 안 든다 — 알림이지 결함이 아니다(설계서 「lint 규칙」).
+  const failing = failOn === 'warning' ? report.errors + report.warnings : report.errors
   if (failing === 0) return EXIT.ok
   io.err(
     failOn === 'warning'

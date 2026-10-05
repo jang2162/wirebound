@@ -512,6 +512,28 @@ describe('표를 덮는다 (D6)', () => {
             },
           }),
           page({ id: 'pg2', menuNodeId: '없는메뉴', title: '떠 있는', target: 'page:떠 있는', document: doc([]) }),
+          // 화면 상태 셋 — 목록 밖 상태의 가지 · 쓰이지 않는 상태 · 영역 안 영역.
+          page({
+            id: 'pg3',
+            title: '상태',
+            target: 'page:관리자/회원/상태',
+            document: {
+              version: 1,
+              viewStates: [{ id: 's_unused', name: '안씀' }],
+              root: {
+                id: nid(),
+                type: 'Page',
+                children: [
+                  node('StateSwitch', {
+                    children: [
+                      node('StateCase', { props: { state: 'default' }, children: [node('StateSwitch', { children: [node('StateCase', { props: { state: 'default' } })] })] }),
+                      node('StateCase', { props: { state: 's_gone' } }),
+                    ],
+                  }),
+                ],
+              },
+            },
+          }),
         ],
       }),
       { naming: { page: '^[가-힣 ]+$' } },

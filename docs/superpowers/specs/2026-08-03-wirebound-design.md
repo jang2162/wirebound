@@ -877,6 +877,11 @@ wireb export --format html -o dir  정적 번들 생성
 - 중복된 코멘트 번호
 - `EntryForm` 안에 `Field`가 하나도 없는 등 구조적 공백
 - 프로젝트 명명 규칙 위반 (설정 가능)
+- 목록에 없는 화면 상태를 가리키는 상태 가지 — 경고
+- 쓰이지 않는 화면 상태(가지가 하나도 없음) — 정보
+- 상태 영역 안의 상태 영역 — 정보
+
+등급은 `error` · `warning` · `info` 셋이다. `error` · `warning` 은 저장 경계의 등급 그대로이고, `info` 는 lint 만의 «알림»이다 — 고칠 것이 없을 수도 있는 설계의 모양이라 `wireb lint --fail-on warning` 도 그것으로 실패하지 않는다. `wireb lint` 의 요약과 MCP `validate` 의 `infos` 가 따로 센다.
 
 **테마 규칙** — 테마 자체의 결함(manifest · 토큰 · 뷰)은 lint 가 아니라 테마 빌드와 업로드 검증이 막는다(`docs/superpowers/specs/2026-09-27-code-themes-design.md` 「업로드 검증」). lint 는 문서가 프로젝트가 고른 테마와 어긋나는 것을 본다 — `wireb lint` · MCP `validate` 가 `GET /api/projects/:projectId/theme` 으로 그 manifest 를 받고, 못 받으면 이 규칙은 돌지 않고 그렇다고 말한다(`theme-unavailable`).
 - 현재 테마에 없는 `variant` — 프로젝트가 고른 테마의 `components` 가 선언한 컴포넌트에서만 본다

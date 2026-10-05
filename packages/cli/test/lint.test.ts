@@ -15,6 +15,7 @@ import {
   projectThemeResponse,
   snapshotPayload,
   경고가_있는_프로젝트,
+  상태가_있는_프로젝트,
   오류가_있는_프로젝트,
   테마에_없는_variant_프로젝트,
 } from './snapshot-fixture'
@@ -90,6 +91,21 @@ describe('종료 코드', () => {
 
     const 기본 = 준비(경고가_있는_프로젝트())
     expect(await run(['lint'], 기본)).toBe(EXIT.ok)
+  })
+
+  /** `info` 는 결함이 아니라 알림이다(설계서 「lint 규칙」 — 쓰이지 않는 화면 상태). 어떤 실패 선에도 안 든다. */
+  it('정보(info)만 있으면 --fail-on warning 에서도 0이고, 요약이 따로 센다', async () => {
+    const io = 준비(상태가_있는_프로젝트())
+    expect(await run(['lint', '--fail-on', 'warning'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    const out = io.stdout.join('\n')
+    expect(out).toContain('info\t관리자/회원/상태\tview-state-unused\t상태 "비로그인" 에는 가지가 하나도 없습니다')
+    expect(out).toContain('(error 0 · warning 0 · info 1)')
+  })
+
+  it('정보가 없으면 요약에 info 칸을 안 단다 — 옛 요약 그대로', async () => {
+    const io = 준비(경고가_있는_프로젝트())
+    await run(['lint'], io)
+    expect(io.stdout.join('\n')).toContain('(error 0 · warning 1)')
   })
 
   it('모르는 --fail-on 값은 조용히 기본값이 되지 않는다', async () => {

@@ -28,7 +28,7 @@
  * 무엇으로 가를지(예: `wireb lint`의 종료 코드)는 소비자가 정한다.
  */
 import { checkPageAction, isPageTargetAction } from '../interaction/check'
-import type { WbNode } from '../node'
+import { DEFAULT_CASE, type PageDocument, type WbNode } from '../node'
 import { walkNodes } from '../tree'
 import type { ValidationCode, ValidationIssue } from '../validate'
 import { validatePage } from '../validate'
@@ -137,6 +137,7 @@ function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: Reado
   if (validation.some((issue) => issue.code === 'bad-document')) return issues
 
   const markers = new Set<number>()
+  issues.push(...viewStateIssues(page.document, where))
 
   for (const { node, path } of walkNodes(page.document.root)) {
     // ① 코멘트가 없는 주요 컴포넌트
@@ -230,6 +231,52 @@ function pageTargetIssues(
     }
   }
 
+  return issues
+}
+
+/**
+ * 화면 상태 셋(설계서 「lint 규칙」의 상태 줄). 상태 id 는 문서의 목록(`viewStates`)이 정한다 — 목록이 없으면 기본만 있다.
+ *
+ * - `view-state-unknown` — 기본이 아니고 목록에 없는 상태의 가지. 그 가지는 아무 상태에서도 안 그려진다(렌더러 `caseFor`).
+ * - `view-state-unused` — 가지가 하나도 없는 상태. 자리는 목록의 그 항목(`/viewStates/<i>`) — 노드가 없다.
+ * - `view-state-nested` — 상태 영역 안의 상태 영역. 자리는 안쪽 영역. 허용되는 모양이라 알리기만 한다.
+ *
+ * 순회는 `walkNodes` 의 전위 차례라 조상 영역이 먼저 온다 — 안쪽 영역은 지나온 영역 경로를 접두로 갖는다.
+ */
+function viewStateIssues(document: PageDocument, where: { pageId: string }): LintIssue[] {
+  const issues: LintIssue[] = []
+  const list = Array.isArray(document.viewStates) ? document.viewStates : []
+  const listed = new Set(list.map((state) => state?.id).filter((id): id is string => typeof id === 'string'))
+  const used = new Set<string>()
+  const switches: string[] = []
+
+  for (const { node, path } of walkNodes(document.root)) {
+    if (node.type === 'StateSwitch') {
+      if (switches.some((outer) => path.startsWith(`${outer}/`))) {
+        issues.push(lintIssue('view-state-nested', { ...where, nodeId: node.id }, path, '상태 영역 안에 상태 영역이 있습니다'))
+      }
+      switches.push(path)
+    }
+    if (node.type !== 'StateCase') continue
+    const state: unknown = node.props?.state
+    if (typeof state !== 'string' || state === DEFAULT_CASE) continue
+    used.add(state)
+    if (!listed.has(state)) {
+      issues.push(
+        lintIssue(
+          'view-state-unknown',
+          { ...where, nodeId: node.id },
+          path,
+          `상태 가지가 페이지의 상태 목록에 없는 상태를 가리킵니다: ${state} — 이 가지는 어느 상태에서도 그려지지 않습니다`,
+        ),
+      )
+    }
+  }
+
+  for (const [index, state] of list.entries()) {
+    if (typeof state?.id !== 'string' || used.has(state.id)) continue
+    issues.push(lintIssue('view-state-unused', where, `/viewStates/${index}`, `상태 "${state.name}" 에는 가지가 하나도 없습니다`))
+  }
   return issues
 }
 
