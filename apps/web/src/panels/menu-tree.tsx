@@ -24,8 +24,12 @@
  *
  * **메뉴는 접힌다** — 줄 앞 펼침 단추 · 제목 줄의 «모두 접기» · «모두 펴기»(`./tree-fold.tsx`) · 메뉴 줄의 ← →(`foldKey`). 접힘은 프로젝트마다
  * 화면의 상태(`tree/collapse.ts`)이고, 열린 페이지 · 고른 줄이 접힌 메뉴 안이면 그 위 메뉴를 편다(아래 `chains`).
+ *
+ * **줄 단추 · 링크에서 ↑ ↓ 는 보이는 줄을 옮겨 다닌다**(`rowStep`) — 옮겨 간 줄을 고르고 포커스도 옮긴다. 페이지 줄로 옮기는 것은 고르는 것이고
+ * 여는 것은 그 링크의 Enter 다(클릭과 같은 길). ← → · ↑ ↓ 는 고르기와 같은 읽기라 뷰 모드에도 선다. 포커스가 선 줄이 다시 받은 트리에서
+ * 빠지면(남의 지우기 · 옮기기) 그 줄 · 이웃 줄로 포커스를 돌려준다(`refocus`) — 안 돌려주면 `body` 로 떨어져 키보드 사람이 트리를 다시 찾아간다.
  */
-import { useEffect, useLayoutEffect, useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type FocusEvent, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
@@ -39,7 +43,7 @@ import { MetaConflict } from './meta-conflict'
 import { PendingNotice } from './pending-notice'
 import type { TreeMenuNode, TreePage } from '../api/types'
 import { menuKey, useCollapsed, type Collapsed } from '../tree/collapse'
-import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
+import { treeSpot, type TreeAbilities, type TreeSelection } from '../tree/tree-actions'
 import { dropZone, menuDropTarget, type MenuDrop } from '../tree/tree-drop'
 import { useTreeCommands, type TreeCommands } from '../tree/use-tree-commands'
 import { MenuPicker } from './menu-picker'
@@ -167,6 +171,8 @@ export function MenuTree(props: {
   // **`editable`이 false여도 훅은 그대로 돈다.** 트리를 조회하는 것이 이 훅이라 끄면
   // 뷰 모드에서 트리 자체가 사라진다. 조작은 부르는 자리가 없어져서 닫히는 것이지
   // 훅이 꺼져서 닫히는 것이 아니다.
+  /** 앞 렌더에 보인 줄 — 화면 차례. 다시 받은 트리에서 사라진 줄의 이웃을 여기서 찾는다(`neighborOf`). */
+  const shownRows = useRef<TreeSelection[]>([])
   const commands = useTreeCommands({
     projectId: props.projectId,
     pageId: props.pageId,
@@ -176,6 +182,7 @@ export function MenuTree(props: {
     ...(props.resyncToken === undefined ? {} : { resyncToken: props.resyncToken }),
     ...(props.onDropped === undefined ? {} : { onDropped: props.onDropped }),
     ...(props.onPageGone === undefined ? {} : { onPageGone: props.onPageGone }),
+    pickAfterGone: (gone, next) => neighborOf(shownRows.current, gone, (row) => treeSpot(next, row) !== null),
   })
   const { state } = commands
   /** 페이지 줄 `…`의 «JSON 내보내기». 실패는 셸의 하단 바에 선다(`notices`). */
@@ -226,6 +233,38 @@ export function MenuTree(props: {
   }, [fold.expand, ready])
 
   /**
+   * **포커스가 선 줄 단추 · 링크** — 그 요소가 DOM 에서 빠진 렌더에 포커스를 돌려준다(아래 이펙트). 상자 안 다른 자리 · 상자 밖으로 포커스가
+   * 옮으면 걷는다. 옮겨 간 곳이 없는 blur(`relatedTarget` 이 `null` — 요소가 빠짐 · 창을 떠남)는 걷지 않는다.
+   */
+  const focusedRow = useRef<{ row: TreeSelection; element: HTMLElement } | null>(null)
+  function trackFocus(event: FocusEvent<HTMLDivElement>): void {
+    const row = rowOfControl(event.target)
+    const selection = row === null ? null : rowSelection(row)
+    focusedRow.current = selection === null ? null : { row: selection, element: event.target }
+  }
+  function untrackFocus(event: FocusEvent<HTMLDivElement>): void {
+    if (event.relatedTarget !== null && !event.currentTarget.contains(event.relatedTarget)) focusedRow.current = null
+  }
+  // **렌더마다 돈다** — 다시 받은 트리 · 펼침이 줄을 바꾼 뒤 DOM 을 본다. 포커스가 `body` 일 때만 옮긴다 — 사람이 다른 데로 옮긴 포커스는 안 뺏는다.
+  useLayoutEffect(() => {
+    const tree = treeRef.current
+    const lost = focusedRow.current
+    if (tree !== null && lost !== null && !lost.element.isConnected && (document.activeElement === null || document.activeElement === document.body)) {
+      const rows = shownRowsOf(tree)
+      const shown = (row: TreeSelection): boolean => rows.some((one) => isPicked(one, row))
+      // 고른 줄을 잃었으면 훅이 이미 이웃을 골랐다(`pickAfterGone`) — 같은 줄에 선다. 아니면 그 줄 자신(옮겨진 줄) · 보이는 이웃.
+      const picked = commands.selection !== null && isPicked(commands.selection, lost.row) ? null : commands.selection
+      const target = shown(lost.row)
+        ? lost.row
+        : picked !== null && shown(picked)
+          ? picked
+          : neighborOf(shownRows.current, lost.row, shown)
+      if (target !== null) rowControl(tree, target)?.focus()
+    }
+    if (tree !== null) shownRows.current = shownRowsOf(tree)
+  })
+
+  /**
    * **끌어 놓기.** 포인터 밑 줄과 띠(`dropZone`)를 `menuDropTarget`에 물어 놓을 자리를 받고, 놓으면 `dropTo`가 보낸다. 판정 · 보내기가
    * 줄 행동과 같은 명령 · 같은 서버 규칙을 쓴다(`tree/tree-drop.ts` 머리말).
    */
@@ -272,11 +311,6 @@ export function MenuTree(props: {
    * 살아남는다.
    */
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    // **뷰 모드에서는 단축키도 없다.** 줄 행동만 감추면 여기 아홉 조작이 키로 그대로 살아
-    // 있어, 화면에 아무 단추도 없는 상태에서 `Delete`가 메뉴를 지운다 — `disabled`를
-    // 지나지 않는다는 이 표의 성질(아래 `abilities` 검사 주석)이 여기서는 구멍이 된다.
-    if (!props.editable) return
-
     /**
      * **값을 넣거나 고르는 표면에서 난 키는 단축키를 찾기 전에 돌려보낸다**.
      *
@@ -296,8 +330,15 @@ export function MenuTree(props: {
     // 열린 행동 메뉴(줄 `…` · `+` · 제목 줄 `+`)가 쥔 키 — 목록의 키가 React 트리를 따라 여기 닿는다. 메뉴 안의 Delete 가 삭제 확인을, Alt+화살표가
     // 고른 메뉴의 자리를 바꾸지 않게 에디터 단축키와 같은 판정을 지난다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`).
     if (keyHeldByWidget(event)) return
-    if (commands.editing !== null || commands.reparenting !== null) return
+    // **읽는 키(← → 접고 펴기 · ↑ ↓ 줄 옮기기)는 뷰 모드에도 선다** — 고르기와 같은 읽기다(펼침 단추 · «모두 접기»가 뷰 모드에 서는 것과 같다).
     if (foldKey(event, fold)) return
+    if (rowStep(event, treeRef.current, commands.select)) return
+
+    // **뷰 모드에서는 편집 단축키가 없다.** 줄 행동만 감추면 여기 조작이 키로 그대로 살아
+    // 있어, 화면에 아무 단추도 없는 상태에서 `Delete`가 메뉴를 지운다 — `disabled`를
+    // 지나지 않는다는 이 표의 성질(아래 `abilities` 검사 주석)이 여기서는 구멍이 된다.
+    if (!props.editable) return
+    if (commands.editing !== null || commands.reparenting !== null) return
 
     const shortcut = SHORTCUTS.find((candidate) => candidate.match(event))
     if (shortcut === undefined) return
@@ -354,7 +395,7 @@ export function MenuTree(props: {
     // 있어도 단축키가 닿는다. 스타일이 없는 상자라 클래스는 테스트가 집을 이름 하나뿐이다.
     // **`data-wb-own-shortcuts` — 포커스가 이 상자 안이면 에디터 단축키 · 클립보드 리스너가 서지 않는다**(`edit/editor-shortcuts.ts` 의
     // `shortcutsBlocked`). 이 상자의 `Delete` 는 메뉴 · 페이지의 삭제 확인이지 고른 노드의 삭제가 아니다.
-    <div className="wb-shell-tree-keys" data-wb-own-shortcuts="" onKeyDown={handleKeyDown}>
+    <div className="wb-shell-tree-keys" data-wb-own-shortcuts="" onKeyDown={handleKeyDown} onFocus={trackFocus} onBlur={untrackFocus}>
       {/* **조작 실패는 트리 안에 낸다.** `shell/edit-alert.tsx`와 섞지 않는 것은 그것이
           편집 파이프라인의 상태를 읽기 때문이다 — CRUD 실패는 그 상태와 무관하므로 섞으면
           서로 다른 두 실패가 한 문장 자리를 다툰다.
@@ -523,6 +564,62 @@ function foldKey(event: KeyboardEvent, fold: Collapsed): boolean {
   if (key === 'ArrowRight' && expanded === 'false') fold.expand([id])
   if (key === 'ArrowLeft' && expanded === 'true') fold.collapse([id])
   return true
+}
+
+/**
+ * **줄 단추 · 링크에서 친 ↑ ↓ — 보이는 줄을 옮겨 다닌다**(설계서 «트리 줄 접기» · 구조 트리의 ↑ ↓ 와 같은 축). 옮겨 간 줄을 고르고(`select`) 그
+ * 줄 단추 · 링크에 포커스를 옮긴다 — 포커스가 남으면 이어 친 Enter · Delete 가 앞 줄에 닿는다. 페이지 줄은 고르기만 한다(여는 것은 링크의 Enter).
+ * 접힌 메뉴 안은 DOM 에 없어 건너뛴다. 끝에서는 멈춘다(돌지 않는다 — 구조 트리와 같다). 대상이 줄 단추 · 링크일 때만 받는다 — `+` · `…` 의
+ * ↑ ↓ 는 메뉴를 연다(`shell/action-menu.tsx`). 받았으면 `true`.
+ */
+function rowStep(event: KeyboardEvent, tree: HTMLElement | null, select: (selection: TreeSelection) => void): boolean {
+  if (event.altKey || event.shiftKey || event.metaKey || event.ctrlKey) return false
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return false
+  const row = rowOfControl(event.target)
+  if (tree === null || row === null) return false
+  event.preventDefault()
+  const rows = [...tree.querySelectorAll<HTMLElement>('[data-tree-row]')]
+  // `!==` 로 견준다 — 위 `SHORTCUTS` 의 조합을 세는 자(`test/panels/menu-keyboard.test.tsx` «표의 여섯을 다 덮는다»)가 `event.key === '` 를 닻으로 센다.
+  const next = rows[rows.indexOf(row) + (event.key !== 'ArrowUp' ? 1 : -1)]
+  const selection = next === undefined ? null : rowSelection(next)
+  if (next === undefined || selection === null) return true
+  select(selection)
+  rowControl(tree, selection)?.focus()
+  return true
+}
+
+/** 대상이 줄 단추 · 링크(줄 상자의 바로 아래 `.wb-shell-tree-menu` · `.wb-shell-tree-page`)면 그 줄 상자. */
+function rowOfControl(target: EventTarget | null): HTMLElement | null {
+  if (!(target instanceof HTMLElement)) return null
+  const row = target.parentElement
+  if (row === null || !row.hasAttribute('data-tree-row')) return null
+  return target.classList.contains('wb-shell-tree-menu') || target.classList.contains('wb-shell-tree-page') ? row : null
+}
+
+/** 그 줄의 줄 단추 · 링크. 줄이 안 그려졌으면(접힌 메뉴 안 · 트리에 없음) `null`. */
+function rowControl(tree: HTMLElement, selection: TreeSelection): HTMLElement | null {
+  const row = [...tree.querySelectorAll<HTMLElement>('[data-tree-row]')].find((one) => {
+    const at = rowSelection(one)
+    return at !== null && isPicked(at, selection)
+  })
+  return row?.querySelector<HTMLElement>(':scope > .wb-shell-tree-menu, :scope > .wb-shell-tree-page') ?? null
+}
+
+/** 보이는 줄 — 화면 차례. */
+function shownRowsOf(tree: HTMLElement): TreeSelection[] {
+  return [...tree.querySelectorAll<HTMLElement>('[data-tree-row]')].map(rowSelection).filter((row): row is TreeSelection => row !== null)
+}
+
+/**
+ * **사라진 줄의 이웃** — 앞 렌더의 보이는 차례(`order`)에서 그 줄 뒤로 처음 남은(`alive`) 줄, 없으면 앞으로 처음 남은 줄. 그 줄이 차례에 없었으면
+ * `null`. 다음 줄을 먼저 보는 것은 지운 자리에 올라오는 것이 다음 줄이기 때문이다(목록에서 지운 뒤의 흔한 자리).
+ */
+function neighborOf(order: readonly TreeSelection[], gone: TreeSelection, alive: (row: TreeSelection) => boolean): TreeSelection | null {
+  const at = order.findIndex((row) => isPicked(row, gone))
+  if (at === -1) return null
+  for (const row of order.slice(at + 1)) if (alive(row)) return row
+  for (const row of order.slice(0, at).reverse()) if (alive(row)) return row
+  return null
 }
 
 /**
