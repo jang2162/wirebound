@@ -103,22 +103,22 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
           await page.setViewportSize({ width, height: 800 })
           // 창 폭이 바뀐 뒤 셸이 `resize` 를 받아 다시 그릴 때까지 — 창 값만 기다리면 앞 창의 폭을 읽는다(두 프레임을 넘긴다).
           await poll('창이 바뀐다', () => page.evaluate(() => window.innerWidth), (value) => value === width)
-          await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
-          const open1 = await widths(page)
+          const open1 = await settled(page)
+          // 누른 뒤 한 번 그린 값을 읽는다 — 기다림의 끝 조건에 재는 값을 넣으면 그 값이 틀린 판이 값이 아니라 시간 초과로 죽는다.
           await page.getByRole('button', { name: '좌측 패널 접기', exact: true }).click()
-          const sideFolded = await poll('좌측이 접힌다', () => widths(page), (value) => value.side === 0)
+          const sideFolded = await settled(page)
           await page.getByRole('button', { name: '우측 패널 접기', exact: true }).click()
-          const bothFolded = await poll('우측이 접힌다', () => widths(page), (value) => value.panel === 0)
+          const bothFolded = await settled(page)
           await page.reload()
           await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
-          const reloaded = await poll('새로 고친 뒤 접힘이 남는다', () => widths(page), (value) => value.window === width)
-          await page.getByRole('button', { name: '좌측 패널 펴기', exact: true }).click()
-          await page.getByRole('button', { name: '우측 패널 펴기', exact: true }).click()
-          const back = await poll('펴면 돌아온다', () => widths(page), (value) => value.side > 0 && value.panel > 0)
+          const reloaded = await settled(page)
+          // 접힌 쪽만 편다 — 접힘을 잃은 판(새로 고친 뒤 펼침)에서도 판이 서서 위 `reloaded` 의 값으로 죽는다.
+          const foldedToggles = page.locator('.wb-shell-fold-toggle[aria-expanded="false"]')
+          for (let left = await foldedToggles.count(); left > 0; left -= 1) await foldedToggles.first().click()
+          const back = await settled(page)
           await page.getByRole('button', { name: '우측 패널 접기', exact: true }).click()
-          const panelFolded = await poll('우측만 접힌다', () => widths(page), (value) => value.panel === 0)
+          const panelFolded = await settled(page)
           await page.getByRole('button', { name: '우측 패널 펴기', exact: true }).click()
-          await poll('우측이 돌아온다', () => widths(page), (value) => value.panel > 0)
           rows.push(
             `${mode} ${width}: 펼침 ${open1.canvas}(좌 ${open1.side} · 우 ${open1.panel}) · 좌측 접음 ${sideFolded.canvas} · 우측 접음 ${panelFolded.canvas}(좌 ${panelFolded.side}) · 둘 다 ${bothFolded.canvas}`,
           )
@@ -378,10 +378,13 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
         const held = (await shownDrops(page)).length
         const over = await spot(page, 'n_w3', 0.8, 0.5)
         await page.mouse.move(over.x, over.y, { steps: 6 })
-        const shown = await poll('보인 자리', () => shownDrops(page), (drops) => drops.some((drop) => drop.kind === 'preview'))
-        const preview = shown.find((drop) => drop.kind === 'preview')!
+        await page.waitForTimeout(150)
+        const shownAt = (await shownDrops(page)).find((drop) => drop.kind === 'preview')
+        const preview = shownAt === undefined ? null : { parent: shownAt.parent, prev: shownAt.prev, next: shownAt.next }
         await page.mouse.up()
-        const landed = await poll('서버에 놓인다', () => serverGrid(P), (ids) => ids.includes('n_src'))
+        // 놓은 뒤 서버 판 — 놓기가 안 나간 판도 값(시드 그대로)으로 견준다.
+        await page.waitForTimeout(500)
+        const landed = await serverGrid(P)
 
         await page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="n_w3"] button').first().click()
         await page.locator('.wb-shell-selection[data-wb-selected-id="n_w3"]').waitFor()
@@ -399,7 +402,7 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
           pushedRight: pushedRight > 0,
           arrived,
           held,
-          preview: { parent: preview.parent, prev: preview.prev, next: preview.next },
+          preview,
           landed,
           pushedLeft: pushedLeft < 0,
           endsAtStart: await scrollLeft(page),
@@ -434,11 +437,13 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
         const pushed = await holdAtEdge(page, 'right')
         const over = await spot(page, 'n_w3', 0.2, 0.5)
         await page.mouse.move(over.x, over.y, { steps: 6 })
-        const shown = await poll('보인 자리', () => shownDrops(page), (drops) => drops.some((drop) => drop.kind === 'preview'))
-        const preview = shown.find((drop) => drop.kind === 'preview')!
+        await page.waitForTimeout(150)
+        const shownAt = (await shownDrops(page)).find((drop) => drop.kind === 'preview')
+        const preview = shownAt === undefined ? null : { parent: shownAt.parent, prev: shownAt.prev, next: shownAt.next }
         await page.mouse.up()
-        const landed = await poll('서버에 놓인다', () => serverGrid(P), (ids) => ids.includes('+'))
-        expect({ pushed: pushed > 0, preview: { parent: preview.parent, prev: preview.prev, next: preview.next }, landed }).toEqual({
+        await page.waitForTimeout(500)
+        const landed = await serverGrid(P)
+        expect({ pushed: pushed > 0, preview, landed }).toEqual({
           pushed: true,
           preview: { parent: 'n_grid', prev: 'n_w2', next: 'n_w3' },
           landed: ['n_w0', 'n_w1', 'n_w2', '+', 'n_w3', 'n_w4', 'n_w5', 'n_w6', 'n_w7'],
@@ -503,8 +508,8 @@ async function canvasState(page: Page) {
     return {
       zoom,
       presetWidth: frame.offsetWidth,
-      // 판 — 무대가 프레임의 보이는 크기다(줌이 실린 뒤).
-      settled: Math.abs(s.width - f.width) < 1 && Math.abs(s.height - f.height) < 1,
+      // 판 — 무대의 폭이 프레임의 보이는 폭이다(줌이 실린 뒤). 높이는 재는 값이라 판 조건에 안 넣는다(`gapY`).
+      settled: Math.abs(s.width - f.width) < 1,
       overX: canvas.scrollWidth - canvas.clientWidth,
       overY: canvas.scrollHeight - canvas.clientHeight,
       // 세로 넘침과 «보이는 문서 아래끝 + 여백» 의 차 — 문서가 칸보다 짧으면 넘침이 없어야 한다.
@@ -528,4 +533,10 @@ async function widths(page: Page) {
       shellOverflow: shell.scrollWidth - shell.clientWidth,
     }
   })
+}
+
+/** 셸이 다시 그릴 때까지(두 프레임) 기다린 뒤 폭을 읽는다. */
+async function settled(page: Page) {
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  return widths(page)
 }
