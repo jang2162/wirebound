@@ -336,20 +336,54 @@ describe('끝 스크롤', () => {
     expect(box.scrollTop).toBe(pushed)
   })
 
+  /** 가로도 같은 띠 · 같은 속도다 — 오른 끝은 오른쪽으로, 왼 끝은 왼쪽으로, 가운데 세로 줄(100)은 안 민다 · 모서리는 두 축을 다 민다. */
+  it('왼 · 오른 끝 24px 안이면 가로로 민다 — 세로와 같은 속도, 모서리는 두 축', async () => {
+    vi.useFakeTimers()
+    render(<Harness onDrop={vi.fn()} scroll />)
+    const box = screen.getByTestId('box')
+    frame(box)
+    box.scrollLeft = 400
+    box.scrollTop = 400
+    const run = async (x: number, y: number): Promise<{ left: number; top: number }> => {
+      const before = { left: box.scrollLeft, top: box.scrollTop }
+      moveTo(x, y)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500)
+      })
+      return { left: box.scrollLeft - before.left, top: box.scrollTop - before.top }
+    }
+
+    press('가', 100, 150)
+    const right = await run(190, 150)
+    const middle = await run(100, 150)
+    const left = await run(10, 150)
+    const corner = await run(190, 290)
+    release(190, 290)
+    // 세로 판과 같은 속도 — 반 초에 같은 만큼(틱 하나 — 480 × 16 ÷ 1000 = 7.68px — 의 어긋남까지).
+    const near = (a: number, b: number): boolean => Math.abs(a - b) <= 7.68 + 0.01
+    expect({
+      right: right.left > 0 && right.top === 0,
+      middle,
+      left: near(left.left, -right.left) && left.top === 0,
+      corner: near(corner.left, right.left) && near(corner.top, right.left),
+    }).toEqual({ right: true, middle: { left: 0, top: 0 }, left: true, corner: true })
+  })
+
   it('상자 밖은 끝 너머가 아니다 — 아래 · 위 · 옆에서는 안 민다', async () => {
     vi.useFakeTimers()
     render(<Harness onDrop={vi.fn()} scroll />)
     const box = screen.getByTestId('box')
     frame(box)
     box.scrollTop = 400
+    box.scrollLeft = 400
 
     press('가', 10, 100)
-    for (const [x, y] of [[10, 340], [10, -20], [260, 290], [260, 10]] as const) {
+    for (const [x, y] of [[10, 340], [10, -20], [260, 290], [260, 10], [-20, 150], [230, 150]] as const) {
       moveTo(x, y)
       await act(async () => {
         await vi.advanceTimersByTimeAsync(300)
       })
-      expect({ x, y, scrollTop: box.scrollTop }).toEqual({ x, y, scrollTop: 400 })
+      expect({ x, y, scrollTop: box.scrollTop, scrollLeft: box.scrollLeft }).toEqual({ x, y, scrollTop: 400, scrollLeft: 400 })
     }
   })
 
