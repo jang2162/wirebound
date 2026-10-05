@@ -250,6 +250,16 @@ describe('forkCaseOps · editInForkOps — 복사 + 편집(Review Focus 2)', () 
     expect(copy.children![2]!.interactions![0]!.actions.map((action) => action.target)).toEqual([result.remap.get('n_d'), 'n_head'])
   })
 
+  it('글자 하나짜리 대상 값(`replace …/target`)도 복사를 가리킨다 — 그 자리의 열쇠로 가른다', () => {
+    const edit: PatchOp[] = [{ op: 'replace', path: '/root/children/4/children/0/children/1/interactions/0/actions/0/target', value: 'n_d' }]
+    const result = editInForkOps(fixture(), 'n_sw', 's_guest', edit, ids())!
+    expect(result.ops.at(-1)).toEqual({
+      op: 'replace',
+      path: '/root/children/4/children/2/children/1/interactions/0/actions/0/target',
+      value: result.remap.get('n_d'),
+    })
+  })
+
   it('`children` 키 없는 기본 가지의 첫 자식 넣기(`add …/children [노드]`)도 가지 안이다 — 새 가지에 선다', () => {
     const before = fixture()
     const sw = findNode(before.root, 'n_sw')!

@@ -190,7 +190,7 @@ describe('상태 영역 — StateSwitch · StateCase', () => {
 describe('상태 목록 이슈의 노드 — 노드는 `root` 아래에만 있다', () => {
   it.each<[string, unknown, string]>([
     ['이름 겹침', [ADMIN, { id: 's_guest', name: '관리자' }], '/viewStates/1/name'],
-    ['id 패턴 밖', [ADMIN, { id: 'Guest!', name: '손님' }], '/viewStates/1/id'],
+    ['이름이 글자 아님', [ADMIN, { id: 's_guest', name: 5 }], '/viewStates/1/name'],
     ['이름 앞뒤 공백', [ADMIN, { id: 's_guest', name: ' 손님' }], '/viewStates/1/name'],
   ])('%s — `nodeId`는 null(상태 id 가 아니다)', (_name, viewStates, path) => {
     const issues = validatePage(page([text('n_a')], viewStates))

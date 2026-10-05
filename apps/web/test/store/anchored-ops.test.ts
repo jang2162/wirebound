@@ -255,6 +255,14 @@ describe('상태 목록 — 번호 자리를 상태 id 로 다시 짓는다', ()
     expect(names(rebase(undo, front, mine)?.document)).toEqual(['라', '가', '나', '다'])
   })
 
+  it('상태 삭제의 되돌리기는 남이 그 틈에 넣었어도 옛 앞 상태 바로 뒤에 선다 — 뒤 상태 앞이 아니다', () => {
+    const before = states([GA, NA, DA])
+    const forward = removeViewStateOps(before, 's_na')!.ops
+    const mine = applyOps(before, forward)
+    const gap = applyOps(mine, [{ op: 'add', path: '/viewStates/1', value: { id: 's_ra', name: '라' } }])
+    expect(names(rebase(invertOps(before, forward), gap, mine)?.document)).toEqual(['가', '나', '라', '다'])
+  })
+
   it('두 사람이 동시에 추가 — 끝에 넣기는 둘 다 남고, 없던 목록을 만드는 편집은 남이 먼저 만들었으면 못 얹는다(남의 목록을 덮는다)', () => {
     const listed = states([GA])
     const theirs = applyOps(listed, addViewStateOps(listed, '다', () => 's_da')!)
