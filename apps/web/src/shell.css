@@ -2940,6 +2940,53 @@
   border-color: var(--wb-shell-accent);
 }
 
+/* 고른 값을 보이는 단추(`action-menu.tsx` 머리말 «단추는 아이콘만이다»의 예외 — 머리 상태 전환기 `[기본 ▾]`). 아이콘과 글자를 한 줄에
+   세우고, 글자는 긴 상태 이름(30자)에서 줄임표로 준다 — 머리 폭이 이름에 안 달린다(`shell/head-fold.ts` 의 문턱은 «기본»으로 잰 값이다).
+   펼침 표지는 글자 뒤 삼각형이다 — 아이콘 표의 펼침 · 접기 화살표(`ICONS.collapse`)와 같은 그림을 두 뜻에 쓰지 않는다. */
+.wb-shell-action-menu-valued {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wb-shell-action-menu-text {
+  max-width: 8em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.wb-shell-action-menu-text::after {
+  content: '';
+  display: inline-block;
+  margin-left: 6px;
+  border: 4px solid transparent;
+  border-top-color: currentColor;
+  border-bottom-width: 0;
+  vertical-align: 2px;
+}
+
+/* 하나를 고르는 항목의 지금 값(`menuitemradio` — 상태 전환기의 상태 목록) — 굵게 · 앞에 점. */
+.wb-shell-action-menu-item[aria-checked='true'] {
+  font-weight: 600;
+}
+
+.wb-shell-action-menu-item[role='menuitemradio']::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: 2px;
+  background: transparent;
+}
+
+.wb-shell-action-menu-item[aria-checked='true']::before {
+  background: currentColor;
+}
+
 /* 떠 있는 목록 — 화면 좌표(`left` · `top`)는 인라인이다(`use-popover-side.ts`의 두 표). 셸의 화면 루트 밖(`document.body`)이라 팔레트는 위
    팔레트 블록에서 받고 글꼴 · 스킴은 여기 건다. 화면보다 높으면 안에서 스크롤한다. */
 .wb-shell-action-menu-body {

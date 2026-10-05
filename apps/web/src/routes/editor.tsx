@@ -44,6 +44,8 @@ import { AliasEditProvider } from '../panels/alias-edit'
 import { StructureTree } from '../panels/structure-tree'
 import { leftUnsentNotice, restoredRevisions, useEditCommit } from '../edit/use-edit-commit'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
+import { ViewStateProvider } from '../shell/use-view-state'
+import { ViewStateSwitcher } from '../shell/view-state-switcher'
 import { BrandLink } from '../shell/brand-link'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
@@ -791,6 +793,8 @@ function EditorShell(props: {
   return (
     // **별칭 입력이 선 줄**(`panels/alias-edit.tsx`) — 구조 트리가 그리고 에디터 단축키(F2)가 연다. 둘이 같은 값을 보게 셸이 한 번 깐다.
     <AliasEditProvider pageId={props.pageId}>
+      {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸이 한 번 깔고, 페이지를 옮기면 기본으로 돌아간다. */}
+      <ViewStateProvider pageId={props.pageId}>
       {/* 접힌 쪽은 격자에서 트랙째 빠진다(`shell.css` 의 `.wb-shell-fold-side` · `.wb-shell-fold-panel`) — 상자는 DOM 에 남고 손잡이는 안 선다. */}
       <div className={['wb-shell', layout.sideFolded ? 'wb-shell-fold-side' : '', layout.panelFolded ? 'wb-shell-fold-panel' : ''].filter(Boolean).join(' ')}>
         <header className="wb-shell-header">
@@ -830,6 +834,8 @@ function EditorShell(props: {
 
               **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
           <div className="wb-shell-head-tools">
+            {/* **상태 전환기**(`shell/view-state-switcher.tsx`) — 두 모드 · 모든 역할에 선다(고르기는 읽기다). 상태 목록을 고치는 항목만 편집 모드 && `canEdit`. */}
+            <ViewStateSwitcher projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />
             {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
             {/* **배치 선**(`canvas/layout-guides.tsx`) — 편집 모드에서만 선다(선을 그리는 것도 편집 모드뿐이다). 읽기 도구라 viewer 에게도 선다. */}
             {mode === 'edit' && <GuidesToggle />}
@@ -1086,6 +1092,7 @@ function EditorShell(props: {
           <RightPanel projectId={props.project.id} pageId={props.pageId} canEdit={canEdit} restoredToken={restoredToken} />
         </aside>
       </div>
+      </ViewStateProvider>
     </AliasEditProvider>
   )
 }
