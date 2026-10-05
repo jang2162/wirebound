@@ -140,6 +140,36 @@
   background: var(--wb-shell-line);
 }
 
+/* **좌측 · 우측을 접은 격자**(`shell/sidebar-layout.ts` 머리말 «둘 다 최소인데도 캔버스 몫이 모자라면 사람이 접는다»). 접힌 쪽의 트랙을 손잡이
+   트랙째 뺀다 — 빈 트랙만 남기면 그 사이 여백(1px × 2)이 캔버스 몫을 먹고 창 끝에 선이 선다. 접힌 상자는 `.wb-shell-folded` 로 감춘다(이름이
+   없는 격자 자리에 두면 암묵 트랙이 선다). 고정 몫은 `HANDLES_WIDTH` 의 절반씩 빠진다 — `widthBudget` 이 같은 셈이다. */
+.wb-shell.wb-shell-fold-side {
+  grid-template-columns: minmax(0, 1fr) 6px auto;
+  grid-template-areas:
+    'head head head'
+    'canvas panel-resizer panel'
+    'palette panel-resizer panel'
+    'footer panel-resizer panel';
+}
+
+.wb-shell.wb-shell-fold-panel {
+  grid-template-columns: auto 6px minmax(0, 1fr);
+  grid-template-areas:
+    'head head head'
+    'side side-resizer canvas'
+    'side side-resizer palette'
+    'side side-resizer footer';
+}
+
+.wb-shell.wb-shell-fold-side.wb-shell-fold-panel {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'head'
+    'canvas'
+    'palette'
+    'footer';
+}
+
 /* `color-scheme`은 상속 속성이다. `.wb-shell`에 걸면 캔버스 프레임 안까지 내려가,
    테마가 어두운 스킴을 실어도 그 안의 `<input>`·`<select>`·스크롤바만 UA가 밝은
    스킴으로 그린다. 그래서 셸이 그 컨트롤을 실제로 그리는 조각에만 각각 건다(위 4번). */
@@ -258,17 +288,41 @@
   min-width: 0;
 }
 
+/* 머리의 오른쪽 끝 — 우측 접기 토글과 `…`. 둘을 한 묶음으로 싸야 `space-between` 이 사이를 안 벌린다(`.wb-shell-lead` 와 같은 까닭). */
+.wb-shell-head-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 좌측 · 우측 접기 토글(`shell/panel-fold.tsx`) — 머리의 아이콘 단추라 «배치 선» 토글과 같은 꼴이다. 펼친 판(`aria-expanded`)과 접힌 판이 같은
+   꼴인 것은 상태를 아이콘이 아니라 옆의 상자가 말하기 때문이다(접히면 그 상자가 화면에서 빠진다). */
+.wb-shell-fold-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
 /* 머리의 가운데 — 되돌리기 · 모드. 줄을 바꿀 수 있다 — 근거는 `.wb-shell-header`의 `max-width`.
 
    ## 머리가 한 줄에 들어가는 폭 — 재서 적는다. 추정이 아니다
 
-   머리는 세 조각이다 — 왼쪽(로고 · 이름), 가운데(되돌리기 · 모드), 오른쪽 끝(`…`). 창 폭을 이분 탐색해 머리 높이가 넓은 창(2400)의
-   높이와 같은 가장 좁은 창 폭을 찾은 값(Chrome 헤드리스 · 프로젝트 이름 «관리자 콘솔 설계서»):
+   머리는 세 조각이다 — 왼쪽(좌측 접기 · 로고 · 이름), 가운데(되돌리기 · 모드 · 캔버스 도구), 오른쪽 끝(우측 접기 · `…`). 창 폭을 이분 탐색해
+   머리 높이가 넓은 창(2400)의 높이와 같은 가장 좁은 창 폭을 찾은 값(Chrome 헤드리스 · 프로젝트 이름 «관리자 콘솔 설계서» · 창이 좁아 머리가
+   접힌 단계 — `shell/head-fold.ts`):
 
    | 모드 | 한 줄에 드는 최소 창 폭 | 그보다 좁으면 |
    |---|---|---|
-   | 편집 (되돌리기 묶음이 있다) | 620px | 머리가 48 → 96px, `…` 가 둘째 줄 왼쪽 끝으로 내려간다 |
-   | 뷰 (되돌리기가 없다) | 470px | 〃 |
+   | 편집 (되돌리기 묶음이 있다) | 687px | 머리가 48 → 96px, `…` 가 둘째 줄 왼쪽 끝으로 내려간다 |
+   | 뷰 (되돌리기가 없다) | 561px | 〃 |
 
    **다시 재는 길:** `pnpm test:browser` 의 `apps/web/build-test/editor-shell-layout.test.ts` «머리는 창 1024 에서 한 줄이다» 가 같은 탐색을
    돌려 `[머리 한 줄 최소 창 폭]` 로그로 낸다(단언은 1024 이하인지만 — 글꼴이 기계마다 달라 수는 로그의 값이다). 이름이 길면 왼쪽 조각의
@@ -394,7 +448,7 @@
   outline: 2px solid var(--wb-shell-ink);
 }
 
-/* 판의 머리 줄 — 갈래 탭 · 검색 칸 · 거절 문장. 캔버스 칸이 좁으면(최소 320) 안에서 줄을 바꾼다 — 판이 `overflow: hidden` 이라 넘치면
+/* 판의 머리 줄 — 갈래 탭 · 검색 칸 · 거절 문장. 캔버스 칸이 좁으면(두 폭이 최소인 좁은 창은 캔버스 몫 480 아래다) 안에서 줄을 바꾼다 — 판이 `overflow: hidden` 이라 넘치면
    검색 칸이 잘린다. 줄이 늘면 카드 줄이 그만큼 준다. */
 .wb-shell-palette-head {
   flex: none;
@@ -1661,8 +1715,8 @@
 .wb-shell-panel {
   grid-area: panel;
   /* 폭은 인라인 `width`다(`shell/sidebar-layout.ts` — 좌측과 같은 장치). 격자 트랙이 `auto`라 그 값을 그대로 받는다. **`border-box`다** —
-     아래 좌우 여백(24)이 폭 밖에 붙으면 트랙이 인라인 폭 + 24 가 되어 캔버스 몫이 그만큼 준다(Chrome · 창 1440: 두 폭 최대에서 캔버스
-     296 < `CANVAS_MIN_WIDTH`). 좌측(`.wb-shell-side`)은 여백이 없어 같은 일이 없다. */
+     아래 좌우 여백(24)이 폭 밖에 붙으면 트랙이 인라인 폭 + 24 가 되어 캔버스 몫이 그만큼 준다(Chrome · 창 1440: 두 폭 최대에서 캔버스가
+     `CANVAS_MIN_WIDTH` 보다 24 좁다). 좌측(`.wb-shell-side`)은 여백이 없어 같은 일이 없다. */
   box-sizing: border-box;
   color-scheme: light;
   min-width: 0;
@@ -1671,6 +1725,13 @@
   background: #fff;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--wb-shell-ink);
+}
+
+/* 접힌 좌측 · 우측(`.wb-shell-fold-side` · `.wb-shell-fold-panel` 의 격자에서 빠진 상자). DOM 에는 남는다 — 펴면 트리의 펼침 · 스크롤 · 패널의
+   탭 · 쓰던 글이 그대로다(`shell/sidebar-layout.ts` 머리말 «둘 다 최소인데도»). 두 상자의 `display` 를 이기려고 한 단계 더 구체적으로 건다. */
+.wb-shell-side.wb-shell-folded,
+.wb-shell-panel.wb-shell-folded {
+  display: none;
 }
 
 /* 속성 패널(`panels/property-panel.tsx`). 머리에는 선택 노드의 컴포넌트 타입이 온다. */

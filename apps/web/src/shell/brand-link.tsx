@@ -6,11 +6,14 @@
  * 만들지 않는 것과 같은 근거: `routes/editor.tsx` 머리). 그래서 `aria-label`이 이름을 덮고, 아이콘은 `aria-hidden`이다.
  *
  * **`<Link>`다** — 주소가 있는 이동이라 새 탭으로 열 수 있어야 한다. 아이콘은 이 파일 안의 SVG 하나다 — 외부 글꼴 · 아이콘 묶음을 들이지 않는다.
+ *
+ * **`compact` 면 아이콘만 그린다** — 에디터 머리가 좁은 창에서 접힌 단계(`shell/head-fold.ts` 의 `short` · `folded`)다. 이름은 `aria-label` 이
+ * 들고 있어 글자를 빼도 접근 이름이 그대로다.
  */
 import type { ReactElement } from 'react'
 import { Link } from 'react-router'
 
-export function BrandLink(): ReactElement {
+export function BrandLink(props: { compact?: boolean } = {}): ReactElement {
   return (
     <Link className="wb-shell-brand" to="/" aria-label="프로젝트 목록">
       {/* 와이어프레임 한 장 — 머리 줄 · 옆 칸 · 본문 칸. 색은 글자색을 따른다(`currentColor`). */}
@@ -19,7 +22,7 @@ export function BrandLink(): ReactElement {
         <path d="M1.5 7h17M7 7v10.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
         <path d="M10 10.5h5.5M10 13.5h3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </svg>
-      <span className="wb-shell-brand-name">wirebound</span>
+      {props.compact !== true && <span className="wb-shell-brand-name">wirebound</span>}
     </Link>
   )
 }

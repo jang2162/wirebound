@@ -370,10 +370,12 @@ describe('EditorStore', () => {
     expect(second).toHaveBeenCalledTimes(1)
   })
 
-  it('setZoom은 0.25~2.0으로 클램프한다', () => {
+  it('setZoom은 0.05~2.0으로 클램프한다', () => {
     const store = new EditorStore()
-    store.setZoom(0.1)
-    expect(store.getState().zoom).toBe(0.25)
+    store.setZoom(0.01)
+    expect(store.getState().zoom).toBe(0.05)
+    store.setZoom(0.0708)
+    expect(store.getState().zoom).toBe(0.0708)
     store.setZoom(5)
     expect(store.getState().zoom).toBe(2)
     store.setZoom(0.5)
