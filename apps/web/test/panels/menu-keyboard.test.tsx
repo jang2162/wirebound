@@ -472,3 +472,71 @@ describe('뷰 모드에서는 단축키가 듣지 않는다', () => {
     )
   })
 })
+
+/**
+ * **줄 단추 · 링크의 ↑ ↓ · ← → — 읽는 키**(`menu-tree.tsx` 의 `rowStep` · `foldKey`). 보이는 줄을 옮겨 다니며 고르고 포커스를 옮기고, 뷰 모드에도
+ * 선다. jsdom 값이다 — 실브라우저 판(포커스 · 키 반복 · 접근성 트리 · 남의 바꿈 뒤 포커스)은 `build-test/keyboard-holes.test.ts` 가 갖는다.
+ */
+describe('줄 옮기기 · 접고 펴기 — 읽는 키', () => {
+  /** 메뉴 트리 줄의 고른 줄(`wb-shell-tree-row-picked`) 글자. */
+  function picked(): string[] {
+    return [...treeRegion().querySelectorAll('.wb-shell-tree-row-picked')].map((row) => row.firstElementChild?.textContent ?? '')
+  }
+  function link(title: string): HTMLElement {
+    return within(treeRegion()).getByRole('link', { name: title })
+  }
+
+  for (const mode of ['편집', '뷰'] as const) {
+    it(`${mode} 모드 — ↓ ↑ 가 보이는 줄을 고르며 포커스를 옮기고 페이지를 열지 않는다 · 끝에서 멈춘다`, async () => {
+      const getPage = vi.fn(async (_projectId: string, pageId: string) => pageDetail(pageId, `페이지 ${pageId}`))
+      const api = await open({ getPage })
+      if (mode === '뷰') fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+      const opened = getPage.mock.calls.length
+      menuButton('회원관리').focus()
+      const seen: string[] = []
+      for (const key of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp']) {
+        fireEvent.keyDown(document.activeElement!, { key })
+        seen.push(`${document.activeElement?.textContent}/${picked().join(',')}`)
+      }
+      menuButton('주문관리').focus()
+      fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' })
+      seen.push(`${document.activeElement?.textContent}/${picked().join(',')}`)
+      expect(seen).toEqual(['회원 목록/회원 목록', '회원 상세/회원 상세', '권한/권한', '회원 상세/회원 상세', '주문관리/회원 상세'])
+      expect(getPage.mock.calls.length).toBe(opened)
+      expect(api.updateMenu).not.toHaveBeenCalled()
+      expect(link('회원 목록').getAttribute('aria-current')).toBeNull()
+    })
+
+    it(`${mode} 모드 — 메뉴 줄의 ← → 가 접고 편다 · 접힌 메뉴 안은 ↓ 가 건너뛴다`, async () => {
+      await open()
+      if (mode === '뷰') fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+      menuButton('회원관리').focus()
+      fireEvent.keyDown(document.activeElement!, { key: 'ArrowLeft' })
+      const folded = menuButton('회원관리').getAttribute('aria-expanded')
+      fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' })
+      const next = document.activeElement?.textContent
+      menuButton('회원관리').focus()
+      fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' })
+      expect({ folded, next, unfolded: menuButton('회원관리').getAttribute('aria-expanded') }).toEqual({ folded: 'false', next: '주문관리', unfolded: 'true' })
+    })
+  }
+
+  it('닫힌 `…` 토글의 Alt+↓ 는 메뉴만 연다 — 고른 메뉴를 옮기지 않는다(토글이 받은 키는 트리의 단축키가 거른다)', async () => {
+    const api = await open()
+    fireEvent.click(menuButton('권한'))
+    const toggle = within(treeRegion()).getByRole('button', { name: '권한 더 보기' })
+    toggle.focus()
+    fireEvent.keyDown(toggle, { key: 'ArrowDown', altKey: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect({ moved: api.updateMenu.mock.calls.length, menus: screen.queryAllByRole('menu').length }).toEqual({ moved: 0, menus: 1 })
+  })
+
+  it('`+` · `…` 토글의 ↓ 는 줄을 옮기지 않는다 — 메뉴를 연다', async () => {
+    await open()
+    fireEvent.click(menuButton('권한'))
+    const toggle = within(treeRegion()).getByRole('button', { name: '권한 더 보기' })
+    toggle.focus()
+    fireEvent.keyDown(toggle, { key: 'ArrowDown' })
+    expect({ picked: picked(), menus: screen.queryAllByRole('menu').length }).toEqual({ picked: ['권한'], menus: 1 })
+  })
+})

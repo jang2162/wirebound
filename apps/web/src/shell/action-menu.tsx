@@ -81,8 +81,15 @@
  * · Delete · Backspace 는 에디터 단축키도 메뉴를 품은 트리의 키 처리도 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget` — 표와 까닭은
  * 거기). 메뉴는 Delete · Backspace 를 받아 아무것도 안 한다. **단추까지 감싸는 것은** 포커스가 목록 항목에 못 선 채 열린 판에도 단추의 키가
  * 단축키로 새지 않게 하려는 것이다 — 끈 항목에 화살표가 서지 않으면 항목이 다 꺼진 메뉴의 포커스가 단추에 남고, 그 단추의 Escape 가
- * 메뉴를 닫으며 선택까지 풀었다(Chrome · `build-test/editor-shortcuts-review.test.ts` «L2» — 지금은 포커스가 첫 끈 항목에 서는 판을 잰다). 상자 밖(캔버스 · 트리 줄)의 키는
- * 단축키가 받는다 — 메뉴를 연 채 포커스만 캔버스로 옮긴 판의 Delete 는 고른 노드를 지우고, 선택이 비어 메뉴도 닫힌다(`openWhile`).
+ * 메뉴를 닫으며 선택까지 풀었다(Chrome · `build-test/editor-shortcuts-review.test.ts` «L2» — 지금은 포커스가 첫 끈 항목에 서는 판을 잰다).
+ *
+ * ## 포커스가 메뉴 밖의 요소로 옮으면 닫는다 — `closeWhenFocusLeaves`
+ *
+ * 표지는 포커스가 그 안일 때만 쥐므로, 메뉴를 연 채 포커스만 밖(캔버스 iframe · 단추에서 친 Tab)으로 가면 열린 메뉴 곁에서 친 Delete 가 고른
+ * 노드를 지웠다(Chrome · `build-test/keyboard-holes.test.ts` «3»). 그래서 «열린 메뉴 = 포커스가 그 안»을 늘 참으로 둔다 — 밖의 요소가 포커스를
+ * 받으면 닫는다. 메뉴가 밖의 키까지 쥐는 길은 고르지 않았다 — 포커스 밖까지 쥐던 표지는 캔버스 · 줌 단추에서 친 키를 말없이 먹었다
+ * (`edit/editor-shortcuts.ts` 의 `keyHeldByWidget` «표지는 포커스가 그 안일 때만 쥔다»). **옮겨 간 곳이 없으면(`body` — 목록의 빈 자리 · 머리
+ * 누름, 창을 떠남) 닫지 않는다** — 목록 안 글자를 누르면 포커스가 `body` 로 가지만 사람은 메뉴 안을 눌렀다. 바깥 누름은 닫기 훅이 닫는다.
  *
  * ## 고른 대상이 바뀌면 닫는다 — `openWhile`
  *
@@ -183,6 +190,23 @@ export function ActionMenu(props: {
   const rootRef = usePopoverDismiss(open, close, [listRef])
   const { placement, bodyRef } = usePopoverSide(rootRef, open, close)
 
+  /** 지금 열려 있나 — 한 틱 뒤에 보는 `closeWhenFocusLeaves` 가 그때의 값을 읽는다. */
+  const openNow = useRef(open)
+  openNow.current = open
+  /**
+   * 단추 상자의 `focusout` — 포커스가 밖의 요소로 옮았으면 닫는다(머리말 «포커스가 메뉴 밖의 요소로 옮으면 닫는다»). portal 된 목록의 것도
+   * React 트리를 따라 여기 닿는다. `focusout` 때의 `activeElement` 는 옮겨 가는 중이라(`body`) 한 틱 뒤에 본다 — iframe 으로 옮으면 그때 그
+   * iframe 요소다.
+   */
+  function closeWhenFocusLeaves(): void {
+    setTimeout(() => {
+      const active = document.activeElement
+      if (!openNow.current || active === null || active === document.body) return
+      if (rootRef.current?.contains(active) === true || listRef.current?.contains(active) === true) return
+      close()
+    })
+  }
+
   // 연 렌더에서 이미 참이다 — 여는 누름(`onOpen`)이 그 줄을 고르는 것과 여는 것이 한 렌더에 묶인다.
   const stale = open && props.openWhile === false
   useEffect(() => {
@@ -263,7 +287,7 @@ export function ActionMenu(props: {
   }
 
   return (
-    <div className="wb-shell-action-menu" ref={rootRef} data-wb-holds-keys={open ? 'menu' : undefined}>
+    <div className="wb-shell-action-menu" ref={rootRef} data-wb-holds-keys={open ? 'menu' : undefined} onBlur={open ? closeWhenFocusLeaves : undefined}>
       <button
         type="button"
         ref={toggleRef}

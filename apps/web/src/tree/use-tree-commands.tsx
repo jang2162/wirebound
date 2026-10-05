@@ -313,6 +313,11 @@ export function useTreeCommands(props: {
    * (`routes/editor.tsx`의 `CanvasFrame` «페이지가 사라짐»). 내가 지운 페이지는 안 부른다(`ownRemoval`) — 지운 조작이 프로젝트 뿌리로 옮긴다.
    */
   onPageGone?: (pageId: string) => void
+  /**
+   * **남의 변경으로 고른 줄이 트리에서 사라졌을 때 고를 줄**(`reconcile`). 화면의 보이는 차례를 아는 쪽(`panels/menu-tree.tsx`의 `neighborOf`)이
+   * 이웃 줄을 준다. `null`이거나 없으면 고름을 풀어 주소의 페이지로 돌아간다.
+   */
+  pickAfterGone?: (gone: TreeSelection, next: TreeMenuNode[]) => TreeSelection | null
 }): TreeCommands {
   const api = useApi()
   // **렌더 시점 판정이 아니라 명령형 이동(`useNavigate`)이다.** 렌더 시점 판정
@@ -1305,7 +1310,7 @@ export function useTreeCommands(props: {
    * | 열린 것 | 대상이 사라졌다 | 대상이 남았다 |
    * |---|---|---|
    * | 이름 입력 · 새 메뉴 · 새 페이지(고른 줄에 붙는 셋) | 닫는다 — 친 글이 있었으면 하단 바 `TREE_DRAFT_DROPPED` | 그대로(옮겨졌으면 새 자리에 친 글째 선다 — `inputValue` · 접힌 메뉴 안이면 `panels/menu-tree.tsx`의 `chains`가 편다) |
-   * | 고른 줄(`picked`) · 두 번 누르기 확인 · 소속 메뉴 목록 | 고름을 풀고(주소의 페이지로 돌아간다) 둘을 닫는다 | 그대로 |
+   * | 고른 줄(주소의 페이지 포함) · 두 번 누르기 확인 · 소속 메뉴 목록 | 이웃 줄을 고르고(`pickAfterGone` — 없으면 고름을 풀어 주소의 페이지로) 둘을 닫는다 | 그대로 |
    * | 제목 충돌 통지 | 걷는다 — 무엇의 충돌인지가 화면에서 사라졌다 | 그대로 |
    * | 연쇄 삭제 상자 | 닫는다 — 하단 바 `cascadeClosedNotice` | 보인 id 집합과 새 서브트리가 다르면 새 목록으로 다시 세우고 «목록이 바뀌었습니다» · 첫 누름은 «새 목록 확인»(409 와 같은 길 — `RemoveTarget.recheck`) |
    *
@@ -1325,7 +1330,9 @@ export function useTreeCommands(props: {
       }
       setConfirmingRemove(false)
       setPickingMenu(false)
-      if (picked !== null) setPicked(null)
+      // 키보드로 줄을 옮겨 다니던 사람이 고른 줄을 잃고 주소의 페이지(트리의 다른 자리)로 튀지 않게 이웃 줄로 간다(설계서 «트리 줄 접기» 의 ↑ ↓).
+      const neighbor = props.pickAfterGone?.(selection, next) ?? null
+      if (neighbor !== null || picked !== null) setPicked(neighbor)
     }
     if (conflict !== null && !has(conflict.target)) setConflict(null)
     if (removing !== null) {

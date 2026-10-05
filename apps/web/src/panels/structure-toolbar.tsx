@@ -36,7 +36,7 @@
  * **완전하다고는 적지 않는다** — 잰 것은 그 반례 부류(배열 원소가 노드가 아닌 경우)와
  * 몇 가지 깨진 형태까지다.
  */
-import { useEffect, useState, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import type { NodeLock, WbNode } from '@wirebound/schema'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { useEditCommit } from '../edit/use-edit-commit'
@@ -701,26 +701,49 @@ export function StructurePicker(props: {
   presetName: string
   onPresetNameChange: (name: string) => void
 }): ReactElement | null {
-  const { commands } = props
   /** 지금 그려도 되는 고르개. 열려 있어도 그 조작이 막혔으면 `null`이다. */
-  const picker = visiblePicker(commands)
+  const picker = visiblePicker(props.commands)
   if (picker === null) return null
+  return <PickerBox {...props} picker={picker} />
+}
+
+/**
+ * 선 고르개의 상자 — 고르개가 설 때 마운트된다. **Escape · «취소»로 닫으면 고르개를 연 자리로 포커스를 돌려준다**(`cancel`) — 안 돌려주면
+ * 포커스를 쥔 고르개 단추가 사라져 `body` 로 떨어지고, 키보드 사람이 트리를 처음부터 다시 찾아간다(Chrome · `build-test/keyboard-holes.test.ts`
+ * «5»). 연 자리는 **고르개가 처음 그려질 때의 포커스**다 — 줄 · 머리 `+` 의 항목을 고르면 행동 메뉴가 포커스를 그 `+` 로 돌려준 뒤 고르개를
+ * 열고(`shell/action-menu.tsx` 머리말 «고르면 먼저 닫고 돌려준 뒤 부른다»), Alt+Shift+I · P 는 줄 단추에서 연다. 포커스가 고르개 밖이면(캔버스를
+ * 누른 뒤 · 고르개 안에 들어간 적 없음) 옮기지 않는다 — 사람이 둔 자리를 뺏지 않는다.
+ */
+function PickerBox(props: Parameters<typeof StructurePicker>[0] & { picker: OpenPicker }): ReactElement {
+  const { commands, picker } = props
+  const box = useRef<HTMLDivElement>(null)
+  const [opener] = useState(() => {
+    const active = document.activeElement
+    return active instanceof HTMLElement && active !== document.body ? active : null
+  })
+  const cancel = (): void => {
+    const inside = box.current?.contains(document.activeElement) === true
+    commands.cancelAdd()
+    if (inside && opener?.isConnected === true) opener.focus()
+  }
   return (
     // 고르개는 자기 줄을 요구한다(`flex-basis: 100%` — `test/shell-css-picker.test.ts`) — 감싸는 flex 상자가 이것이다.
-    // `data-wb-holds-keys` — 포커스가 고르개 안이면 화살표 · Escape 는 에디터 단축키가 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`).
+    // `data-wb-holds-keys` — 포커스가 고르개 안이면 화살표 · Escape · Delete · Backspace 는 에디터 단축키가 안 받는다(`edit/editor-shortcuts.ts` 의
+    // `keyHeldByWidget`) — 고르개 안의 Delete 가 넣을 자리인 고른 노드를 지우지 않게.
     // **고르개 안의 Escape 는 고르개를 닫는다**(«취소»와 같다) — 단축키에 넘기면 선택을 풀어 고르개가 감춰질 뿐 `adding` 이 남았다. 조합 중의
     // Escape 는 조합의 키다(프리셋 이름 칸).
     <div
+      ref={box}
       className="wb-shell-tree-panel"
       data-wb-holds-keys=""
       onKeyDown={(event) => {
         if (event.key !== 'Escape' || event.nativeEvent.isComposing || event.defaultPrevented) return
         event.preventDefault()
-        commands.cancelAdd()
+        cancel()
       }}
     >
-      {(picker === 'inside' || picker === 'after') && <TypePicker onPick={commands.pick} onCancel={commands.cancelAdd} />}
-      {picker === 'pattern' && <PatternPicker onPick={commands.pickPattern} onCancel={commands.cancelAdd} />}
+      {(picker === 'inside' || picker === 'after') && <TypePicker onPick={commands.pick} onCancel={cancel} />}
+      {picker === 'pattern' && <PatternPicker onPick={commands.pickPattern} onCancel={cancel} />}
       {picker === 'preset' && (
         <PresetPicker
           projectId={props.projectId}
@@ -729,7 +752,7 @@ export function StructurePicker(props: {
           name={props.presetName}
           onNameChange={props.onPresetNameChange}
           onApply={commands.applyPreset}
-          onCancel={commands.cancelAdd}
+          onCancel={cancel}
         />
       )}
     </div>

@@ -8,7 +8,7 @@
  * | 구조 트리 줄 `…` — 첫 항목 · 둘째 항목 · 단추에 포커스 | 메뉴가 열린 채 친 Delete · Backspace · 1s 누름이 고른 노드를 지운다 |
  * | 구조 트리 줄 `+` · 구조 트리 머리 · 셸 머리 `…` | 같은 판정이 그 메뉴들에서 안 선다 |
  * | 메뉴 트리 줄 `…` | 메뉴 목록의 키가 React 트리를 따라 메뉴 트리 상자의 단축키(`panels/menu-tree.tsx` 의 `handleKeyDown`)에 닿아 삭제 확인을 건다 |
- * | 메뉴를 닫은 뒤 · 캔버스를 눌러 닫힌 뒤 | 닫힌 메뉴의 Delete 가 고른 노드를 안 지운다(막는 것이 메뉴 밖까지 샌다) |
+ * | 메뉴를 닫은 뒤 · 캔버스를 눌러 닫힌 뒤 · 캔버스로 포커스만 옮겨 닫힌 뒤 | 닫힌 메뉴의 Delete 가 고른 노드를 안 지운다(막는 것이 메뉴 밖까지 샌다) · 포커스가 떠난 메뉴가 열린 채 남는다 |
  *
  * 서버 문서(`GET …/pages/:id`)와 열린 `role="menu"` 수로 단언한다.
  */
@@ -260,7 +260,8 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
     expect(results).toEqual({
       Escape: removed(0, 'menu'),
       '캔버스 누름': removed(0, 'iframe'),
-      '캔버스 포커스': removed(1, 'iframe'),
+      // 메뉴는 포커스가 밖으로 간 순간 닫힌다(`src/shell/action-menu.tsx` 머리말 «포커스가 메뉴 밖의 요소로 옮으면 닫는다»).
+      '캔버스 포커스': removed(0, 'iframe'),
     })
   })
 })
