@@ -14,6 +14,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { samePageMeta } from '@wirebound/schema'
+import { requestEventActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { withTransaction } from '../db/tx'
 import { badRequest, conflict, notFound, unauthenticated } from '../errors'
@@ -23,6 +24,7 @@ import {
   HasChildrenError,
   ParentNotFoundError,
   SelfParentError,
+  bumpMenuRev,
   deleteMenuNode,
   insertMenuNode,
   listMenuTree,
@@ -30,6 +32,7 @@ import {
   updateMenuNode,
 } from '../repos/menu'
 import { CascadeSafetyTagTakenError, deleteMenuCascade } from '../services/menu-cascade'
+import { notifyMenuChanged } from '../ws/notify'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const NodeParams = z.object({ projectId: z.uuid(), nodeId: z.uuid() })
@@ -135,14 +138,15 @@ export function menuRoutes() {
       const { projectId } = parseParams(ProjectIdParams, request.params)
       const body = parseBody(CreateMenuBody, request.body)
 
-      let node
+      let written
       try {
-        node = await withTransaction(app.db, async (trx) => {
+        written = await withTransaction(app.db, async (trx) => {
           const inserted = await insertMenuNode(trx, projectId, { parentId: body.parentId ?? null, title: body.title })
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 트리 쓰기의 첫 잠금(프로젝트 행)이
           // 복원 · 프로젝트 삭제 · 다른 트리 쓰기 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
           await recheckProjectRole(trx, request)
-          return inserted
+          // **판 번호는 맨 끝이다**(`repos/menu.ts`의 `bumpMenuRev`) — 이 파일의 쓰기 넷이 같다.
+          return { node: inserted, rev: await bumpMenuRev(trx, projectId) }
         })
       } catch (error) {
         if (error instanceof ParentNotFoundError) {
@@ -151,8 +155,9 @@ export function menuRoutes() {
         throw error
       }
 
+      notifyMenuChanged(app, { projectId, rev: written.rev, actor: requestEventActor(request) })
       reply.code(201)
-      return node
+      return written.node
     })
 
     /**
@@ -169,15 +174,15 @@ export function menuRoutes() {
      * **바탕 없는 경로도 쓴 뒤 재확인한다**(페이지와 같다). 메뉴 `POST` ·
      * `DELETE`도 쓴 뒤 재확인한다.
      *
-     * 방송하지 않는다 — 남이 바꾼 것은 저장할 때 409 로 안다(페이지와 같다).
+     * **쓰면 `menu-changed`를 방송한다**(이 파일의 쓰기 넷이 같다 — `ws/notify.ts`의 `notifyMenuChanged`). 409 는 쓰지 않았으니 안 보낸다.
      */
     app.patch('/:projectId/menu/:nodeId', { preHandler: projectGuard('editor') }, async (request) => {
       const { projectId, nodeId } = parseParams(NodeParams, request.params)
       const { base, ...patch } = parseBody(UpdateMenuBody, request.body)
 
-      let node
+      let written
       try {
-        node = await withTransaction(app.db, async (trx) => {
+        written = await withTransaction(app.db, async (trx) => {
           if (base !== undefined) {
             const current = await lockMenuTitle(trx, projectId, nodeId)
             if (current === null) return null
@@ -188,12 +193,14 @@ export function menuRoutes() {
                 { path: 'title', code: MENU_TITLE_CHANGED, message: MENU_TITLE_CHANGED_MESSAGE, current },
               ])
             }
-            return updateMenuNode(trx, projectId, nodeId, patch)
+            const renamed = await updateMenuNode(trx, projectId, nodeId, patch)
+            return renamed === null ? null : { node: renamed, rev: await bumpMenuRev(trx, projectId) }
           }
           const updated = await updateMenuNode(trx, projectId, nodeId, patch)
+          if (updated === null) return null
           // **커밋 순간의 권한** — 자리 옮기기는 트리 쓰기의 첫 잠금(프로젝트 행)을 기다릴 수 있다.
-          if (updated) await recheckProjectRole(trx, request)
-          return updated
+          await recheckProjectRole(trx, request)
+          return { node: updated, rev: await bumpMenuRev(trx, projectId) }
         })
       } catch (error) {
         if (error instanceof ParentNotFoundError) {
@@ -205,10 +212,11 @@ export function menuRoutes() {
         throw error
       }
 
-      if (!node) {
+      if (written === null) {
         throw notFound()
       }
-      return node
+      notifyMenuChanged(app, { projectId, rev: written.rev, actor: requestEventActor(request) })
+      return written.node
     })
 
     /**
@@ -222,7 +230,7 @@ export function menuRoutes() {
      * | 같음 | 집합이 다르다(수가 같아도) | **409** · 이슈 코드 `menu-subtree-changed` · `subtree` = 지금 목록(`{ title, menus, pages }` — 칸마다 `{ id, title }`, 트리 차례) — 아무것도 안 지운다. 화면은 그 목록으로 상자를 다시 세운다 |
      * | 같음 | 목록이 `CASCADE_ID_LIMIT`를 넘거나 id 가 겹치거나 uuid 가 아니다 | **400** |
      *
-     * 연쇄 갈래는 방송하지 않는다 — 페이지 `DELETE`와 같다(지운 페이지를 연 사람은 다음 편집의 404 로 안다).
+     * 지웠으면(204 · 200) `menu-changed`를 방송한다. 지운 페이지를 연 사람의 화면은 그 신호로 트리를 다시 받고 «페이지가 사라짐»으로 간다.
      */
     app.delete('/:projectId/menu/:nodeId', { preHandler: projectGuard('editor') }, async (request, reply) => {
       const { projectId, nodeId } = parseParams(NodeParams, request.params)
@@ -232,9 +240,10 @@ export function menuRoutes() {
         const currentUser = request.currentUser
         if (!currentUser) throw unauthenticated()
         let outcome
+        let rev = 0
         try {
-          outcome = await withTransaction(app.db, (trx) =>
-            deleteMenuCascade(trx, {
+          outcome = await withTransaction(app.db, async (trx) => {
+            const settled = await deleteMenuCascade(trx, {
               projectId,
               nodeId,
               seen: body.expect,
@@ -243,8 +252,10 @@ export function menuRoutes() {
               recheck: async () => {
                 await recheckProjectRole(trx, request)
               },
-            }),
-          )
+            })
+            if (settled.kind === 'deleted') rev = await bumpMenuRev(trx, projectId)
+            return settled
+          })
         } catch (error) {
           if (error instanceof CascadeSafetyTagTakenError) throw conflict(error.message)
           throw error
@@ -256,15 +267,20 @@ export function menuRoutes() {
             { path: 'expect', code: MENU_SUBTREE_CHANGED, message: MENU_SUBTREE_CHANGED_MESSAGE, subtree: outcome.subtree },
           ])
         }
+        notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
         return { deleted: outcome.deleted, safetySnapshot: outcome.safety }
       }
 
       let result
+      let rev = 0
       try {
         result = await withTransaction(app.db, async (trx) => {
           const deleted = await deleteMenuNode(trx, projectId, nodeId)
-          // **커밋 순간의 권한** — 생성과 같은 자리다(트리 쓰기의 첫 잠금 뒤).
-          if (deleted === 'deleted') await recheckProjectRole(trx, request)
+          if (deleted === 'deleted') {
+            // **커밋 순간의 권한** — 생성과 같은 자리다(트리 쓰기의 첫 잠금 뒤).
+            await recheckProjectRole(trx, request)
+            rev = await bumpMenuRev(trx, projectId)
+          }
           return deleted
         })
       } catch (error) {
@@ -277,6 +293,7 @@ export function menuRoutes() {
       if (result === 'not-found') {
         throw notFound()
       }
+      notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
       reply.code(204).send()
     })
   }

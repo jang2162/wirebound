@@ -16,7 +16,7 @@
  * |---|---|
  * | 관련 테이블 TRUNCATE | ACCESS EXCLUSIVE 잠금이라 같은 DB를 보는 커넥션을 이유 없이 세운다 |
  * | 만든 프로젝트만 지운다 | 케이스가 만든 id를 **호출자가 기억해야** 한다. 중간에 죽으면 그 목록이 사라져 다음 케이스가 오염된 판에서 돈다 — 지금 `beforeEach`·`afterEach` 양쪽에 거는 이유가 정확히 그것이다 |
- * | **`projects`·`users` 두 줄의 DELETE** ✅ | 나머지는 전부 그 둘에 FK로 매여 CASCADE로 따라간다 |
+ * | **`projects`·`users` 두 줄의 DELETE** ✅ | 나머지는 전부 그 둘에 FK로 매여 CASCADE로 따라간다 — FK 없이 둔 `project_menu_revs` 하나만 세 번째 줄로 지운다(`0020-project-menu-revs` 머리말 «잠금») |
  *
  * **아래 케이스가 그 마지막 칸을 실제로 센다.** 표에 적어 두기만 하면 새 테이블이 생겼을 때
  * 아무도 모른다.
@@ -53,6 +53,7 @@ const CLEARED_TABLES = [
   'comments',
   'snapshots',
   'presets',
+  'project_menu_revs',
 ] as const
 
 async function countRows(table: (typeof CLEARED_TABLES)[number]): Promise<number> {

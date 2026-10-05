@@ -756,7 +756,7 @@ PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "sch
   메뉴(깊은 것부터) → 남은 형제의 `sortOrder` 를 당긴다.
 - **잠금 · 권한** — 복원과 같은 잠금(프로젝트 행 → 메뉴 → 페이지 → 레이아웃 → 코멘트)을 쥔 뒤 권한을 다시 보고(editor) 집합을 견준다.
   그래서 복원 중에는 기다리고, 기다리는 사이 멤버에서 빠진 사람은 지금 목록이 아니라 거절을 받는다.
-- **방송하지 않는다** — 페이지 `DELETE` 와 같다. 지운 페이지를 열어 둔 사람은 다음 편집에서 `not-found` 를 받는다.
+- **지웠으면 `menu-changed`를 낸다**(위 «실시간»의 «트리 쓰기는 `menu-changed`를 낸다») — 409 · 400 은 안 낸다.
 
 ### 페이지 메타의 충돌 모델 — `base`
 
@@ -792,7 +792,8 @@ PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "sch
   볼 수 없는 차이로 충돌이 선다. 바탕은 바꿀 값의 규칙(길이 상한)으로 재지 않는다 — 모양만 본다.
 - **순서 · 소속 메뉴(`sortOrder`·`menuNodeId`)는 이 모델 밖이다** — 바탕을 받지 않고 나중이 이긴다. 바탕과 한 본문에 못 싣는다(위 표).
   바탕 없는 자리 옮기기 둘이 동시에 오면 교착이 날 수 있다(재시도 없이 500).
-- **방송하지 않는다** — 이 라우트는 다른 창에 바뀐 것을 알리지 않는다. 남이 바꾼 것은 저장할 때 409 로 안다.
+- **설명은 방송하지 않는다** — 남이 바꾼 설명은 저장할 때 409 로 안다. 제목 · 순서 · 소속 메뉴를 쓰면 트리 쓰기라 `menu-changed`를 낸다(위
+  «실시간»의 «트리 쓰기는 `menu-changed`를 낸다»).
 
 **누가 바탕을 보내는가.** 웹의 «페이지 설명» 탭(설명)과 메뉴 트리의 이름 변경(페이지 제목)이 보낸다 — 그 판정과 화면은
 `apps/web/src/api/page-meta.ts`가 소유한다. **CLI · MCP 는 이 라우트를 부르지 않는다**(페이지 문서는 `PATCH .../ops`로
@@ -1020,11 +1021,12 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 ### 트리 응답 형태 (`GET /api/projects/:projectId/tree`)
 
 메뉴 폴더와 페이지를 한 트리로 합쳐 좌측 패널에 그대로 쓸 수 있게 낸다(설계서 「설계서 화면 구조」).
-`menu`만 있다 — `pages.menu_node_id`가 `NOT NULL`이라 페이지는 항상 메뉴 노드에
+트리는 `menu` 하나다 — `pages.menu_node_id`가 `NOT NULL`이라 페이지는 항상 메뉴 노드에
 속하므로 별도의 `rootPages` 같은 필드는 없다.
 
 ```jsonc
 {
+  "rev": 12,
   "menu": [
     {
       "id": "…", "title": "회원관리", "sortOrder": 0,
@@ -1036,6 +1038,9 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
   ]
 }
 ```
+
+`rev`는 메뉴 트리 판 번호다(위 «실시간»의 «트리 쓰기는 `menu-changed`를 낸다») — 아무도 트리를 안 바꾼 프로젝트는 0 이다. 번호와 행은
+한 스냅숏에서 읽는다.
 
 페이지 항목에는 `id`·`title`·`sortOrder`만 있다 — `schema`는 실리지 않는다(트리는
 목록을 훑는 용도이고, 스키마를 포함하면 프로젝트가 커질수록 응답이 무거워진다).
@@ -1412,6 +1417,7 @@ COMMIT 앞에 받아 둔 xid 의 `pg_xact_status`다(쓰기마다 왕복 하나�
 | `page-changed` | `applyEdit`이 성공했을 때 | `projectId` · `pageId` · `seq` · `ops` · `warnings` · `actor` |
 | `restored` | 스냅샷 복원이 성공했을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `snapshotId` · `safetySnapshotId` · `actor` · (요청이 실어 왔으면) `clientRestoreId` |
 | `theme-changed` | 테마 바인딩 저장 · 판 3 복원이 커밋됐을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `themeId` · `version` · `tokens` · `rev` · `actor` — 받는 쪽은 자기가 든 `rev` 보다 크지 않으면 버린다 |
+| `menu-changed` | 메뉴 · 페이지 트리를 바꾸는 쓰기가 커밋됐을 때(아래 «트리 쓰기»), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `rev`(그 쓰기가 올린 메뉴 트리 판 번호) · `actor` — 트리는 안 싣는다. 받는 쪽은 자기가 든 트리의 `rev` 보다 크면 `GET …/tree`로 다시 받는다 |
 | `patch-ack` | `patch` 프레임이 성공했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `seq` · `revisionId` · `inverse` · `warnings` |
 | `patch-error` | `patch` 프레임이 실패했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `status` · `code` · `message` · `issues` — **REST 에러 봉투와 같은 값이다** |
 | `locks` | 잠금이 바뀌었을 때와 **누가 들어올 때**, 룸 전체에 | `projectId` · `locks[{ pageId, nodeId, userId, userName }]` |
@@ -1463,6 +1469,18 @@ id 를 실으면 **아무도 안 빠진다.** 쿠키 없이 토큰만 든 요청
 그 자리에서 닫고 잠금을 놓는다(`src/ws/notify.ts`의 `closeSessionConnections`). **로그아웃 · 프레임을
 받을 때 · 방송을 흘릴 때의 회수는 모두 그 연결에 도는 편집이 있으면 소켓을 그 답(`patch-error` 401 · 404) 뒤에 닫는다** — 잠금은
 곧바로 놓고 룸에서도 곧바로 빼 방송이 안 간다(`src/ws/rooms.ts`의 `closeWhenIdle`). 읽을 수 없는 프레임은 `4400`이다.
+
+**트리 쓰기는 `menu-changed`를 낸다.** 메뉴의 만들기 · 이름 · 자리 · 삭제(본문 없는 삭제 · 연쇄 삭제), 페이지의 만들기 · 가져오기 ·
+트리에 보이는 칸(제목 · 소속 메뉴 · 순서)의 수정 · 삭제, 스냅샷 복원이 커밋마다 하나씩 낸다. 설명만 바꾼 페이지 수정 · 거절된 쓰기는 안 낸다.
+쓰기 목록은 `test/menu-broadcast-census.test.ts`가 소스에서 센다(`menu_nodes` · `pages`에 쓰는 함수와 그 호출 자리).
+
+- **번호(`rev`)는 프로젝트마다 하나이고 커밋 차례로 오른다**(`project_menu_revs` — `src/db/migrations/0020-project-menu-revs.ts`). 트리
+  응답(`GET …/tree`)도 같은 번호를 싣고, 번호와 행을 한 스냅숏(`REPEATABLE READ`)에서 읽는다. 받는 쪽은 그 번호로 겹친 조회의 낡은 답을
+  버리고(작은 번호의 답) 이미 받은 판의 신호를 넘긴다. 방송은 연결마다 자격을 본 뒤 보내 두 쓰기의 프레임이 한 연결에 거꾸로 닿을 수
+  있다 — 차례가 아니라 번호로 판정한다.
+- **낸 연결도 받고, 연결 id 를 싣지 않는다**(`restored`와 같은 판정 — `src/ws/notify.ts`의 `notifyMenuChanged`). 쓰기의 답을 잃은 탭은 이
+  신호로 트리가 낡았다는 것을 안다. 제 쓰기의 신호는 번호로 알아보고 넘긴다 — 요청이 실은 연결 id 는 흉내 낼 수 있어 넘기는 판정에 안 쓴다.
+- 끊긴 동안의 신호는 다시 오지 않는다 — 다시 붙으면 트리를 한 번 다시 받는다.
 
 **하트비트는 앱 수준이다.** 브라우저 `WebSocket`은 프로토콜 ping을 보낼 수 없으므로, 연결이
 살아 있는지 재려면 `{"type":"ping"}`을 보내고 `pong`을 기다린다. **재연결도 클라이언트

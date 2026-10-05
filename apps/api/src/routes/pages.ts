@@ -78,7 +78,8 @@ import { OpsBody } from '../http/patch-ops'
 import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
 import { runEditTransaction } from '../services/lost-commit'
-import { broadcastOrigin, notifyPageChanged } from '../ws/notify'
+import { broadcastOrigin, notifyMenuChanged, notifyPageChanged } from '../ws/notify'
+import { bumpMenuRev } from '../repos/menu'
 import { importPage, type PageImportOutcome } from '../services/page-import'
 import {
   MenuNodeNotFoundError,
@@ -293,9 +294,9 @@ export function pageRoutes() {
       const { projectId } = parseParams(ProjectIdParams, request.params)
       const body = parseBody(CreatePageBody, request.body)
 
-      let page
+      let written
       try {
-        page = await withTransaction(app.db, async (trx) => {
+        written = await withTransaction(app.db, async (trx) => {
           const inserted = await insertPage(trx, projectId, {
             menuNodeId: body.menuNodeId,
             title: body.title,
@@ -306,7 +307,8 @@ export function pageRoutes() {
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 트리 쓰기의 첫 잠금(프로젝트 행)이
           // 복원 · 프로젝트 삭제 · 다른 트리 쓰기 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
           await recheckProjectRole(trx, request)
-          return inserted
+          // **트리 판 번호는 맨 끝이다**(`repos/menu.ts`의 `bumpMenuRev`) — 이 파일의 트리 쓰기 넷이 같다.
+          return { page: inserted, rev: await bumpMenuRev(trx, projectId) }
         })
       } catch (error) {
         if (error instanceof MenuNodeNotFoundError) {
@@ -315,8 +317,9 @@ export function pageRoutes() {
         throw error
       }
 
+      notifyMenuChanged(app, { projectId, rev: written.rev, actor: requestEventActor(request) })
       reply.code(201)
-      return toResponse(page)
+      return toResponse(written.page)
     })
 
     /**
@@ -355,6 +358,7 @@ export function pageRoutes() {
         throw unauthenticated()
       }
 
+      let rev = 0
       const outcome = await withTransaction(app.db, async (trx) => {
         const imported = await importPage(trx, {
           projectId,
@@ -368,12 +372,16 @@ export function pageRoutes() {
         })
         // **커밋 순간의 권한.** 생성과 같은 자리다 — `insertPage`의 트리 쓰기 첫 잠금 뒤. 실패한 가져오기는
         // 제 세이브포인트를 이미 되돌렸다(`importPage`) — 쓴 것이 없으니 재확인하지 않는다.
-        if (imported.kind === 'imported') await recheckProjectRole(trx, request)
+        if (imported.kind === 'imported') {
+          await recheckProjectRole(trx, request)
+          rev = await bumpMenuRev(trx, projectId)
+        }
         return imported
       })
       if (outcome.kind !== 'imported') {
         throw pageImportOutcomeToApiError(outcome)
       }
+      notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
 
       reply.code(201)
       return withWarnings(
@@ -414,16 +422,21 @@ export function pageRoutes() {
      * 행)를 이 모델이 바꾸지 않는다. **바탕이 있으면 자리 옮기기가 같은 본문에 못 온다**(`UpdatePageBody`의 셋째
      * 규칙 — 400) — 한 본문에 실으면 이 행을 먼저 잡고 형제를 잡아 순서가 거꾸로 선다.
      *
-     * **다른 창에 실시간으로 알리지 않는다** — 이 라우트는 방송하지 않는다(`notifyPageChanged`를 부르지 않는다 —
-     * 그 방송은 문서의 `seq`를 나른다). 남이 바꾼 것은 저장할 때 409 로 안다.
+     * **트리에 보이는 칸(제목 · 소속 메뉴 · 순서)을 쓰면 `menu-changed`를 방송한다**(`ws/notify.ts`의 `notifyMenuChanged`). 설명만 바꾸면
+     * 안 보낸다 — 트리 응답에 설명이 없다(`listPageRows`). 설명은 다른 창에 실시간으로 안 간다(`notifyPageChanged`는 문서의 `seq`를
+     * 나른다) — 남이 바꾼 것은 저장할 때 409 로 안다.
      */
     app.patch('/:projectId/pages/:pageId', { preHandler: projectGuard('editor') }, async (request) => {
       const { projectId, pageId } = parseParams(PageParams, request.params)
       const { base, ...patch } = parseBody(UpdatePageBody, request.body)
 
-      let page
+      // 트리 응답에 실리는 칸을 쓰는가(위 머리말) — 설명만이면 판 번호도 방송도 없다.
+      const touchesTree = patch.title !== undefined || patch.menuNodeId !== undefined || patch.sortOrder !== undefined
+      let written
       try {
-        page = await withTransaction(app.db, async (trx) => {
+        written = await withTransaction(app.db, async (trx) => {
+          const bump = async (updated: PageRecord | null) =>
+            updated === null ? null : { page: updated, rev: touchesTree ? await bumpMenuRev(trx, projectId) : null }
           if (base !== undefined) {
             const current = await lockPageMeta(trx, projectId, pageId)
             if (!current) return null
@@ -441,13 +454,13 @@ export function pageRoutes() {
                 })),
               )
             }
-            return updatePage(trx, projectId, pageId, patch)
+            return bump(await updatePage(trx, projectId, pageId, patch))
           }
           const updated = await updatePage(trx, projectId, pageId, patch)
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 위 UPDATE 가 페이지 행
           // 잠금에 선다 — 그 대기 뒤의 역할로 판정한다.
           if (updated) await recheckProjectRole(trx, request)
-          return updated
+          return bump(updated)
         })
       } catch (error) {
         if (error instanceof MenuNodeNotFoundError) {
@@ -456,10 +469,11 @@ export function pageRoutes() {
         throw error
       }
 
-      if (!page) {
+      if (written === null) {
         throw notFound()
       }
-      return toResponse(page)
+      if (written.rev !== null) notifyMenuChanged(app, { projectId, rev: written.rev, actor: requestEventActor(request) })
+      return toResponse(written.page)
     })
 
     app.put('/:projectId/pages/:pageId/schema', { preHandler: projectGuard('editor') }, async (request) => {
@@ -716,15 +730,20 @@ export function pageRoutes() {
     app.delete('/:projectId/pages/:pageId', { preHandler: projectGuard('editor') }, async (request, reply) => {
       const { projectId, pageId } = parseParams(PageParams, request.params)
 
+      let rev = 0
       const result = await withTransaction(app.db, async (trx) => {
         const deleted = await deletePage(trx, projectId, pageId)
-        // **커밋 순간의 권한.** 위 DELETE 가 페이지 행 잠금에 선다.
-        if (deleted === 'deleted') await recheckProjectRole(trx, request)
+        if (deleted === 'deleted') {
+          // **커밋 순간의 권한.** 위 DELETE 가 페이지 행 잠금에 선다.
+          await recheckProjectRole(trx, request)
+          rev = await bumpMenuRev(trx, projectId)
+        }
         return deleted
       })
       if (result === 'not-found') {
         throw notFound()
       }
+      notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
       reply.code(204).send()
     })
   }

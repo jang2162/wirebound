@@ -14,13 +14,18 @@
  * 페이지 스키마가 실리면 프로젝트가 커질수록 목록이 무거워진다.
  *
  * `rootPages`는 없다 — `pages.menu_node_id`가 `NOT NULL`이라 페이지는 항상 메뉴
- * 노드에 속한다. 응답은 `menu` 하나뿐이다.
+ * 노드에 속한다.
+ *
+ * **`rev`(메뉴 트리 판 번호 — `repos/menu.ts`의 `readMenuRev`)를 함께 싣고, 셋을 한 스냅숏에서 읽는다**(`REPEATABLE READ`). 화면은 이
+ * 번호로 겹친 조회의 낡은 답을 버리고 이미 받은 판의 `menu-changed`를 넘긴다 — 번호가 행보다 앞서면(번호를 따로 읽은 뒤 쓰기가 끼면)
+ * 옛 행을 새 판으로 믿고 그 판의 신호를 넘겨 조용히 낡는다. 테스트 하네스처럼 이미 트랜잭션 안이면 그 트랜잭션에서 읽는다.
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { projectGuard } from '../auth/roles'
 import { parseParams } from '../http/parse'
-import { listMenuRows } from '../repos/menu'
+import type { DbHandle } from '../db/tx'
+import { listMenuRows, readMenuRev } from '../repos/menu'
 import { listPageRows } from '../repos/pages'
 import { buildMenuTree } from '../services/menu-tree'
 
@@ -32,10 +37,13 @@ export function treeRoutes() {
     app.get('/:projectId/tree', { preHandler: projectGuard('viewer') }, async (request) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
 
-      const nodes = await listMenuRows(app.db, projectId)
-      const pages = await listPageRows(app.db, projectId)
-
-      return { menu: buildMenuTree(nodes, pages) }
+      const read = async (db: DbHandle) => {
+        const rev = await readMenuRev(db, projectId)
+        const nodes = await listMenuRows(db, projectId)
+        const pages = await listPageRows(db, projectId)
+        return { menu: buildMenuTree(nodes, pages), rev }
+      }
+      return app.db.isTransaction ? read(app.db) : app.db.transaction().setIsolationLevel('repeatable read').execute(read)
     })
   }
 }

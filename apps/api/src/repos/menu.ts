@@ -724,3 +724,30 @@ export async function writeMenuNodePlacement(
 export async function deleteMenuNodeRow(trx: DbHandle, projectId: string, nodeId: string): Promise<void> {
   await trx.deleteFrom('menu_nodes').where('id', '=', nodeId).where('project_id', '=', projectId).execute()
 }
+
+/**
+ * **트리 쓰기의 마지막 문장 — 메뉴 트리 판 번호를 1 올리고 그 값을 낸다**(`0020-project-menu-revs`). 메뉴 · 페이지 트리를 바꾸는 쓰기는
+ * 전부 커밋 앞에 이것을 부르고, 커밋 뒤 그 값으로 `menu-changed`를 방송한다(`ws/notify.ts`의 `notifyMenuChanged`). 빠뜨린 쓰기는
+ * `test/menu-broadcast-census.test.ts`가 소스에서 세어 잡는다.
+ *
+ * **트랜잭션의 맨 끝에서 부른다 — 재확인(`recheckProjectRole`)보다도 뒤다.** 이 줄을 쥔 뒤에 기다리는 잠금이 있으면 이 줄이 고리에 낀다
+ * (마이그레이션 머리말 «잠금»). 그래서 겹친 두 쓰기의 번호 차례가 커밋 차례다 — 뒤의 것이 앞의 커밋을 기다려 그 다음 번호를 받는다.
+ *
+ * 줄이 없으면 넣는다(그 프로젝트의 첫 트리 쓰기). FK 가 없어 넣기가 프로젝트 행을 안 건드린다.
+ */
+export async function bumpMenuRev(trx: DbHandle, projectId: string): Promise<number> {
+  assertLocking(trx, 'bumpMenuRev')
+  const row = await trx
+    .insertInto('project_menu_revs')
+    .values({ project_id: projectId, rev: 1 })
+    .onConflict((conflict) => conflict.column('project_id').doUpdateSet({ rev: sql<number>`project_menu_revs.rev + 1` }))
+    .returning('rev')
+    .executeTakeFirstOrThrow()
+  return Number(row.rev)
+}
+
+/** 지금 메뉴 트리 판 번호. 아직 아무도 트리를 안 바꿨으면 0 이다. 트리 응답이 행과 같은 시점에서 읽는다(`routes/tree.ts`). */
+export async function readMenuRev(db: DbHandle, projectId: string): Promise<number> {
+  const row = await db.selectFrom('project_menu_revs').select('rev').where('project_id', '=', projectId).executeTakeFirst()
+  return row === undefined ? 0 : Number(row.rev)
+}

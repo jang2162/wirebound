@@ -172,6 +172,18 @@ export type ServerFrame =
    */
   | { type: 'membership-changed'; projectId: string }
   /**
+   * **프로젝트의 메뉴 · 페이지 트리가 바뀌었다 — `rev` 판보다 낡은 트리는 다시 받아라.** 트리 쓰기(메뉴 · 페이지의 생성 · 이름 · 자리 ·
+   * 삭제 · 연쇄 삭제 · 가져오기 · 복원)가 커밋 뒤 하나씩 보낸다(`ws/notify.ts`의 `notifyMenuChanged`).
+   *
+   * **트리를 싣지 않는다 — 신호다.** 받는 쪽은 `GET …/tree`로 다시 받는다(그 응답도 `rev`를 싣는다). 바뀐 것만 실으면 받는 쪽이 트리를
+   * 스스로 고쳐 쌓아야 하고, 하나를 놓치면 조용히 틀린 채 남는다 — `locks`가 전부를 싣는 것과 같은 판정이되, 트리는 커서(메뉴 500 ·
+   * 페이지 2000 이면 수백 KB) 방송마다 연결마다 실을 수 없다.
+   *
+   * **낸 사람의 연결도 받는다 · 연결 id 를 싣지 않는다** — `restored`와 같은 판정(`notify.ts`의 `notifyMenuChanged`). 낸 탭은 제 쓰기의
+   * 판을 `rev`로 알아보고 넘긴다 — 서버가 지은 값이라 흉내 낼 수 없다.
+   */
+  | { type: 'menu-changed'; projectId: string; rev: number; actor: EventActor }
+  /**
    * **프로젝트의 테마가 바뀌었다** — 바인딩(`id@version`)이나 토큰 값. 받는 캔버스는 번들이 바뀌었으면 다시 싣고, 토큰만 바뀌었으면
    * CSS 변수 · `useToken` 값만 바꾼다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「실시간」). 값을 통째로 싣는다 —
    * 토큰은 작고(상한 16 KB — `routes/project-theme.ts`) 받는 쪽이 다시 읽지 않고 바로 칠한다. 놓친 탭은 `GET /projects/:id` 의

@@ -415,5 +415,10 @@ export async function updateProject(
  * 예외로 둘 근거를 없앤다(`src/db/tx.ts` 참고).
  */
 export async function deleteProject(db: DbHandle, projectId: string): Promise<void> {
-  await withTransaction(db, (trx) => trx.deleteFrom('projects').where('id', '=', projectId).execute())
+  await withTransaction(db, async (trx) => {
+    await trx.deleteFrom('projects').where('id', '=', projectId).execute()
+    // **트리 판 번호는 CASCADE 가 안 데려간다** — FK 가 없다(`0020-project-menu-revs` 머리말 «잠금»). 이 줄을 쥔 트리 쓰기는 커밋만
+    // 남았으므로 여기서 기다려도 고리가 없다.
+    await trx.deleteFrom('project_menu_revs').where('project_id', '=', projectId).execute()
+  })
 }

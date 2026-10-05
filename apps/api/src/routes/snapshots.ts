@@ -92,7 +92,8 @@ import { lockProjectShared } from '../repos/projects'
 import { captureSnapshot, type CaptureHooks } from '../services/snapshot-capture'
 import { runConfirmedTransaction } from '../services/lost-commit'
 import { restoreSnapshot, type RestoreOutcome, type RestoreResult } from '../services/restore'
-import { clientRestoreId, notifyRestored, notifyThemeChanged } from '../ws/notify'
+import { clientRestoreId, notifyMenuChanged, notifyRestored, notifyThemeChanged } from '../ws/notify'
+import { bumpMenuRev } from '../repos/menu'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const SnapshotParams = z.object({ projectId: z.uuid(), snapshotId: z.uuid() })
@@ -312,14 +313,20 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
 
         // **COMMIT 답을 잃으면 그 트랜잭션이 커밋됐는지 새 연결로 확인한다**(`services/lost-commit.ts`) — 커밋됐으면 성공이다.
         // `restored`는 페이지의 `seq`를 싣지 않고 받는 쪽이 다시 읽게 하는 프레임이라 머리를 보지 않고 보낸다.
+        let menuRev = 0
         const { result: outcome } = await runConfirmedTransaction(
           app.db,
           async (trx) => {
             const restored = await restoreSnapshot(trx, { projectId, snapshotId, actorId: currentUser.id })
-            // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원은 프로젝트의 페이지를
-            // 전부 잠근다(`lockProjectForRestore`) — 그 대기 뒤의 역할로 판정한다. 던지면 복원째 되돌아간다
-            // (`restoreSnapshot`의 트랜잭션은 이 안의 세이브포인트가 된다).
-            if (restored.kind === 'restored') await recheckProjectRole(trx, request)
+            if (restored.kind === 'restored') {
+              // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원은 프로젝트의 페이지를
+              // 전부 잠근다(`lockProjectForRestore`) — 그 대기 뒤의 역할로 판정한다. 던지면 복원째 되돌아간다
+              // (`restoreSnapshot`의 트랜잭션은 이 안의 세이브포인트가 된다).
+              await recheckProjectRole(trx, request)
+              // **트리 판 번호는 맨 끝이다**(`repos/menu.ts`의 `bumpMenuRev`). 메뉴 · 페이지가 그대로인 복원도 올린다 — 판 2 · 3 의 복원은
+              // 페이지를 지우고 되살리며, 무엇이 바뀌었는지 가려 올리면 한 갈래를 빠뜨린 판이 조용히 낡는다.
+              menuRev = await bumpMenuRev(trx, projectId)
+            }
             return restored
           },
           async (restored) => (restored.kind === 'restored' ? true : null),
@@ -339,6 +346,9 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
           actor: requestEventActor(request),
           clientRestoreId: clientRestoreId(request),
         })
+        // **트리도 알린다** — `restored`는 사람이 배너의 단추를 눌러야 다시 읽는다(`apps/web`의 `shell/remote-alert.tsx`). 트리가 그때까지
+        // 옛 판이면 그 위에서 내는 트리 쓰기(끌기 · 연쇄 상자)가 옛 차례 · 옛 목록으로 선다.
+        notifyMenuChanged(app, { projectId, rev: menuRev, actor: requestEventActor(request) })
         // **판 3 은 테마 바인딩도 되돌렸다** — 값이 같아도 `theme_rev` 가 올랐으므로 늘 알린다(spec 「스냅샷」). 캔버스는 `restored` 로
         // 문서를 다시 읽고, 테마는 이 프레임으로 다시 싣는다 — 둘이 따로 오는 것은 받는 자리가 다르기 때문이다(`ws/protocol.ts`).
         const theme = outcome.result.theme
