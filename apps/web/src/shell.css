@@ -1425,8 +1425,10 @@
   background: #7c3aed;
 }
 
-/* 상태 영역 표지(`canvas/view-state-regions.ts`) — 얇은 청록 테두리와 오른쪽 위 꼬리표. 배치 선(주황 · 보라 — 왼쪽 위 글)과 겹쳐도 갈리게 색과
-   자리를 달리한다. 굵기는 캔버스가 줌을 걷어 인라인으로 준다(화면에서 1px). 누름은 그대로 아래 노드로 간다. */
+/* 상태 영역 표지(`canvas/view-state-regions.ts`) — 얇은 청록 테두리와 왼쪽 위 바깥(상자 위에 붙은) 꼬리표. 꼬리표를 왼쪽에 두는 것은 영역이 캔버스
+   폭을 다 쓰고 캔버스 칸이 뷰포트 폭보다 좁으면 오른쪽 끝이 칸 밖이라 안 보여서고, 상자 밖에 두는 것은 안에 두면 영역의 첫 노드(단추 글)를
+   덮어서다. 배치 선(주황 · 보라 — 상자 안 왼쪽 위 글)과는 색 · 자리로 가른다. 굵기는 캔버스가 줌을
+   걷어 인라인으로 준다(화면에서 1px). 누름은 그대로 아래 노드로 간다. */
 .wb-shell-region-mark {
   position: absolute;
   box-sizing: border-box;
@@ -1442,17 +1444,17 @@
 
 .wb-shell-region-tag {
   position: absolute;
-  top: 0;
-  right: 0;
+  bottom: 100%;
+  left: -1px;
   padding: 0 4px;
-  border-radius: 0 0 0 3px;
+  border-radius: 3px 3px 0 0;
   background: #0e7490;
   color: #fff;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 11px;
   line-height: 16px;
   white-space: nowrap;
-  transform-origin: top right;
+  transform-origin: bottom left;
 }
 
 /* 여럿을 고른 판의 기준 노드가 아닌 고른 노드(`canvas/canvas.tsx`) — 기준 노드(위)보다 가늘게 · 끊어서. 누름은 그대로 아래로 간다. */
