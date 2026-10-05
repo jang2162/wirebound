@@ -121,12 +121,14 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
 
     const zoom = ['축소', '확대', '화면 맞춤']
     const head = (mode: '편집 모드' | '뷰 모드', folded: boolean): string[] => [
+      '좌측 패널 접기',
       '프로젝트 목록',
       ...(mode === '편집 모드' ? ['되돌리기', '다시 실행', '배치 선'] : []),
       '편집 모드',
       '뷰 모드',
       '뷰포트',
       ...(folded ? [] : zoom),
+      '우측 패널 접기',
       '더 보기',
     ]
     const expected: Record<string, Shape> = {}
