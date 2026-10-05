@@ -47,6 +47,7 @@ import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
 import { ViewStateProvider, useManageDialog, useViewState } from '../shell/use-view-state'
 import { ViewStatesDialog } from '../shell/view-states-dialog'
 import { ViewStateSwitcher, viewStateMenuItems } from '../shell/view-state-switcher'
+import { useViewStateAddress } from '../shell/view-state-address'
 import { BrandLink } from '../shell/brand-link'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
@@ -782,6 +783,8 @@ function EditorShell(props: {
   const switcherInHead = fold === 'wide' || fold === 'short'
   const viewStateChoice = useViewState(props.pageId)
   const manageDialog = useManageDialog()
+  // 주소 `?state=` — 열 때 읽고 뷰 모드 · viewer 에서 쓴다(`shell/view-state-address.ts`).
+  useViewStateAddress(props.pageId, mode === 'view' || !canEdit)
   /** `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. 접힌 머리의 줌이 맨 앞에, 접힌 상태 전환기가 그다음에 선다. */
   const menuItems: ActionMenuItem[] = [
     ...(fold === 'folded'
