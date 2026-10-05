@@ -246,23 +246,32 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
       await dialog.waitFor()
       const before = await dialog.locator('.wb-shell-menu-delete-pages li').allTextContents()
       await dialog.getByRole('button', { name: '모두 삭제', exact: true }).click()
-      await dialog.getByText('목록이 바뀌었습니다 — 다시 확인하세요.', { exact: true }).waitFor()
+      // 첫 누름의 답 — 상자가 «바뀌었다»로 다시 서거나(고친 판) 서버에서 서브트리가 사라진다(지운 판). 상자는 누르는 순간 닫혔다 답 뒤에
+      // 다시 서므로 «닫힘»을 끝 조건으로 쓰지 않는다. 어느 쪽이든 값으로 단언한다.
+      const first = await poll(
+        '첫 «모두 삭제»의 답이 선다',
+        async () => ({
+          changed: await dialog.getByText('목록이 바뀌었습니다 — 다시 확인하세요.', { exact: true }).count(),
+          deleted: !(await serverPages()).includes('회원 목록'),
+        }),
+        (state) => state.changed > 0 || state.deleted,
+      )
       const after = await dialog.locator('.wb-shell-menu-delete-pages li').allTextContents()
-      const sentence = await dialog.locator('.wb-shell-menu-delete-sentence').innerText()
+      const sentence = first.changed === 0 ? null : await dialog.locator('.wb-shell-menu-delete-sentence').innerText()
       const kept = await serverPages()
       const safety = ((await call('GET', `/projects/${project.id}/snapshots`)).body as unknown[]).length
-
-      await dialog.getByRole('button', { name: '모두 삭제', exact: true }).click()
-      const left = await poll('서버 트리에서 회원관리가 사라진다', serverPages, (titles) => !titles.includes('회원 목록'))
-
-      expect({ before, after, sentence, kept, safety, left }).toEqual({
+      expect({ before, first, after, sentence, kept, safety }).toEqual({
         before: ['회원 목록', '회원 상세'],
+        first: { changed: 1, deleted: false },
         after: ['회원 목록', '새 결제 화면(bob)'],
         sentence: '"회원관리" 메뉴와 페이지 2개가 함께 삭제됩니다',
         kept: ['새 결제 화면(bob)', '환경', '회원 목록', '회원 상세'],
         safety: 0,
-        left: ['환경', '회원 상세'],
       })
+
+      await dialog.getByRole('button', { name: '모두 삭제', exact: true }).click()
+      const left = await poll('서버 트리에서 회원관리가 사라진다', serverPages, (titles) => !titles.includes('회원 목록'))
+      expect(left).toEqual(['환경', '회원 상세'])
     } finally {
       await context.close()
     }
