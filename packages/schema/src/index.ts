@@ -20,6 +20,16 @@ export {
 } from './node'
 
 export { caseFor } from './view-state'
+export {
+  addViewStateOps,
+  editInForkOps,
+  forkCaseOps,
+  moveViewStateOps,
+  removeViewStateOps,
+  renameViewStateOps,
+  splitIntoStatesOps,
+  unsplitStatesOps,
+} from './view-state-ops'
 
 export type { NodeVisit } from './tree'
 export { collectNodeIds, findNode, findNodePath, remapNodeIds, walkNodes } from './tree'
