@@ -465,4 +465,97 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
       }
     }, 60_000)
   })
+
+  /** 줄 «글 2»의 `+` 에서 그 항목을 골라 고르개를 연다 — 포커스는 `+` 로 돌아온다. */
+  async function openPicker(page: Page, which: '아래 추가' | '패턴 넣기'): Promise<void> {
+    await nodeRow(page, 'n_text0000002').click()
+    await nodeMenu(page, 'n_text0000002', 0).click()
+    await item(page, which).click()
+    await page.locator('.wb-shell-picker').waitFor()
+  }
+
+  /** 메뉴 트리 «가2» 줄 `…` 의 «옮기기»(소속 메뉴 목록). */
+  async function openMove(page: Page, fx: Fixture): Promise<void> {
+    const target = page.locator(`${TREE} [data-tree-row][data-tree-id="${fx.ids['가2']}"]`)
+    await menuRow(page, fx.ids['가2']!).hover()
+    await target.getByRole('button', { name: '가2 더 보기', exact: true }).click()
+    await item(page, '옮기기').click()
+    await page.locator('.wb-shell-menu-picker').waitFor()
+  }
+
+  /** 구조 트리 머리 `+` 의 «프리셋». */
+  async function openPreset(page: Page): Promise<void> {
+    await nodeRow(page, 'n_text0000002').click()
+    await page.getByRole('button', { name: '구조 트리에 추가', exact: true }).click()
+    await item(page, '프리셋').click()
+    await page.locator('.wb-shell-picker').waitFor()
+  }
+
+  describe('4 · 고르개 안의 Delete', () => {
+    it('타입 · 패턴 · 프리셋 고르개 안의 Delete · Backspace · 누름은 고른 노드를 안 지우고 고르개는 열린 채다', async () => {
+      const cases: [string, (page: Page) => Promise<void>, (page: Page) => Promise<unknown>][] = [
+        ['타입 · Delete', (page) => openPicker(page, '아래 추가'), (page) => page.keyboard.press('Delete')],
+        ['타입 · Backspace', (page) => openPicker(page, '아래 추가'), (page) => page.keyboard.press('Backspace')],
+        ['타입 · 누름', (page) => openPicker(page, '아래 추가'), (page) => hold(page, DELETE)],
+        ['패턴 · Delete', (page) => openPicker(page, '패턴 넣기'), (page) => page.keyboard.press('Delete')],
+        ['프리셋 · Delete', (page) => openPreset(page), (page) => page.keyboard.press('Delete')],
+      ]
+      const results: Record<string, unknown> = {}
+      for (const [name, place, press] of cases) {
+        const fx = await fixture(`picker-del-${Object.keys(results).length}`)
+        const { page, close } = await open(fx.url)
+        try {
+          await place(page)
+          await page.locator('.wb-shell-picker button:not([disabled])').first().focus()
+          const inPicker = await page.evaluate(() => document.activeElement?.closest('.wb-shell-picker') != null)
+          const sent = await press(page)
+          results[name] = {
+            inPicker,
+            server: await serverPage(fx.url),
+            pickers: await pickers(page),
+            selected: await selectedNode(page),
+            ...(typeof sent === 'number' ? { held: sent >= 10 } : {}),
+          }
+        } finally {
+          await close()
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[J4 고르개 Delete] ${JSON.stringify(results)}`)
+      const kept = (extra: Record<string, unknown> = {}) => ({ inPicker: true, server: WHOLE, pickers: 1, selected: 'n_text0000002', ...extra })
+      expect(results).toEqual({
+        '타입 · Delete': kept(),
+        '타입 · Backspace': kept(),
+        '타입 · 누름': kept({ held: true }),
+        '패턴 · Delete': kept(),
+        '프리셋 · Delete': kept(),
+      })
+    }, 180_000)
+
+    /** 고치기 전에도 초록인 잠금 케이스다 — 메뉴 트리의 키 처리가 «옮기기»가 열린 동안 편집 단축키를 안 받는다(`src/panels/menu-tree.tsx` 의 `handleKeyDown`). */
+    it('메뉴 트리 «옮기기» 목록 안의 Delete · Backspace 는 고른 페이지의 삭제 확인을 안 걸고 목록은 열린 채다', async () => {
+      const results: Record<string, unknown> = {}
+      for (const key of ['Delete', 'Backspace']) {
+        const fx = await fixture(`move-del-${key.toLowerCase()}`)
+        const { page, close } = await open(fx.url)
+        try {
+          await openMove(page, fx)
+          await page.locator('.wb-shell-menu-picker').getByRole('button', { name: '취소', exact: true }).focus()
+          await page.keyboard.press(key)
+          await sleep(200)
+          results[key] = {
+            confirms: await page.locator('.wb-shell-tree-confirm').count(),
+            movers: await page.locator('.wb-shell-menu-picker').count(),
+            server: await serverTree(fx),
+          }
+        } finally {
+          await close()
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[J4 옮기기 Delete] ${JSON.stringify(results)}`)
+      const kept = { confirms: 0, movers: 1, server: TREE_WHOLE }
+      expect(results).toEqual({ Delete: kept, Backspace: kept })
+    }, 60_000)
+  })
 })

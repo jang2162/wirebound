@@ -707,7 +707,8 @@ export function StructurePicker(props: {
   if (picker === null) return null
   return (
     // 고르개는 자기 줄을 요구한다(`flex-basis: 100%` — `test/shell-css-picker.test.ts`) — 감싸는 flex 상자가 이것이다.
-    // `data-wb-holds-keys` — 포커스가 고르개 안이면 화살표 · Escape 는 에디터 단축키가 안 받는다(`edit/editor-shortcuts.ts` 의 `keyHeldByWidget`).
+    // `data-wb-holds-keys` — 포커스가 고르개 안이면 화살표 · Escape · Delete · Backspace 는 에디터 단축키가 안 받는다(`edit/editor-shortcuts.ts` 의
+    // `keyHeldByWidget`) — 고르개 안의 Delete 가 넣을 자리인 고른 노드를 지우지 않게.
     // **고르개 안의 Escape 는 고르개를 닫는다**(«취소»와 같다) — 단축키에 넘기면 선택을 풀어 고르개가 감춰질 뿐 `adding` 이 남았다. 조합 중의
     // Escape 는 조합의 키다(프리셋 이름 칸).
     <div
