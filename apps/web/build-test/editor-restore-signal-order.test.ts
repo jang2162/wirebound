@@ -259,7 +259,7 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
    * 표시(`EditorStore.beginRestoreReread`)가 산 스토어에 적히면, 그 뒤에 시작한 아무 페이지 조회가 복원 배너를 푼다 — 메뉴 · 테마는 다시
    * 읽지 않았는데(다시 읽는 자리들은 내려간 셸에 있었다). B 에서 남의 복원이 지운 페이지 «셋째»가 트리에 남은 채 배너가 사라진다.
    */
-  it('복원이 도는 사이 다른 프로젝트로 감 · 그 답이 거기 옴 — 남의 복원 배너가 트리를 다시 읽기 전에 안 풀린다', async () => {
+  it('복원이 도는 사이 다른 프로젝트로 감 · 그 답이 거기 옴 — 남의 복원 배너가 복원이 바꾸는 것을 다 읽기 전에 안 풀린다', async () => {
     const alice = await stack.login(stack.users.alice)
     const bob = await stack.login(stack.users.bob)
     const fx = await fixture(stack, alice, 'restore-dead-answer')
@@ -302,9 +302,10 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       // eslint-disable-next-line no-console
       console.log(`[죽은 셸의 답] ${events.join(' · ')} · 둘째로 옮긴 뒤 ${JSON.stringify(after)} · 상태줄 ${JSON.stringify(statuses)}`)
 
-      // 판 카나리아 — 트리는 아직 복원 앞 판이다(«셋째»가 있다), 서버에는 없다.
-      expect({ 트리에_셋째: after.트리에_셋째, 서버에_셋째: after.서버에_셋째 }).toEqual({ 트리에_셋째: true, 서버에_셋째: false })
-      // 성질 — 트리가 서버와 다르면 배너가 그렇다고 말한다.
+      // 판 카나리아 — 밥의 복원은 서버에서 «셋째»를 지웠고, 트리는 그 `menu-changed`로 이미 복원 뒤 판이다(`src/tree/use-tree-commands.tsx`).
+      // 캔버스 · 코멘트 · 설명 · 테마는 «다시 불러오기» 전까지 옛 판이다 — 배너가 남아야 하는 까닭이다.
+      expect({ 트리에_셋째: after.트리에_셋째, 서버에_셋째: after.서버에_셋째 }).toEqual({ 트리에_셋째: false, 서버에_셋째: false })
+      // 성질 — 복원이 바꾸는 것을 다 다시 읽지 않았으면 배너가 그렇다고 말한다.
       expect(after.배너).toBe(true)
     } finally {
       if (!released) await hold.release()

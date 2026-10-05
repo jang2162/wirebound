@@ -226,7 +226,8 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
    * 페이지 대상 봉투(«가기» — `navigate` → «둘째»)의 붙이기는 페이지 목록(`GET …/tree`)을 읽은 뒤 붙는다 — 그 조회를 붙잡은 사이 같은 페이지를
    * 다시 싣는다. 다시 실은 판은 누른 때의 기준 노드(«글 1»)가 남아 있으면 그 뒤에 붙고, 붙이기는 기다리는 사이 선 통지(다시 싣기의 «되돌리기
  * 이력이 초기화됐습니다» · 수습의 «취소됐습니다»)를 치우지도 덮지도 않는다.
-   * 판 카나리아: 붙잡은 조회 수 · V2 는 끊은 WS 수 · V5 · V6 은 가로챈 `patch` 프레임 수. V6 은 붙잡은 조회를 실패시킨다 — 붙이지 못했다는 말이 수습의
+   * 판 카나리아: 붙잡은 조회 수 · V2 는 끊은 WS 수 · V5 · V6 은 가로챈 `patch` 프레임 수. 붙잡는 것은 그 주소의 조회 전부다 — 붙이기의 것 하나에 더해
+   * V2 는 재연결의 트리 다시 받기 하나, V4b 는 복원의 `menu-changed`와 배너 단추의 다시 읽기가 트리를 하나씩 더 받는다(`src/tree/use-tree-commands.tsx`). V6 은 붙잡은 조회를 실패시킨다 — 붙이지 못했다는 말이 수습의
  * 통지 뒤에 잇는다(`EditorStore.tellLoss`).
    *
    * **편집 실패는 `page.routeWebSocket` 으로 세운다** — 편집은 WS `patch` 프레임으로 나가 `page.route` 로 `…/ops` 를 가로채면 아무것도 안 잡힌다.
@@ -342,14 +343,14 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
     expect(results).toEqual([
       {
         name: 'V2 재연결 — 끊긴 사이 남이 «글 1»을 고침',
-        held: 1,
+        held: 2,
         canary: { reset: true, bob: 200 },
         server: '글 1 (bob),가기,글 2,가기',
         alerts: [expect.stringContaining('연결이 다시 붙어 페이지를 서버 상태로 다시 불러왔습니다')],
       },
       {
         name: 'V4b 복원 → 배너 «다시 불러오기»',
-        held: 2,
+        held: 3,
         canary: { restore: 200 },
         server: '글 1,가기,글 2,가기',
         alerts: [expect.stringContaining('복원된 상태로 페이지를 다시 불러왔습니다')],
