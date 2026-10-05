@@ -8,9 +8,11 @@
  *    까닭은 3 의 캡처다: 지문(`readCaptureFingerprint`)이 프로젝트 전체를 보므로 서브트리 밖의 편집 하나가 캡처를 깨뜨린다 — 바쁜
  *    프로젝트에서 삭제가 «다시 시도하십시오»로 되풀이된다. 복원과 같은 잠금을 쥐면 그 판단(무엇이 막히고 무엇이 안 막히나)도 복원의
  *    것을 그대로 받는다(`repos/snapshots.ts`의 `lockProjectForRestore` 머리말 · `test/restore-lock-census.test.ts`).
- * 2. `readMenuSubtree` — 없으면 `not-found`. 그 뒤 **권한 재확인**(`recheck`) — 수를 견주기 **전**이다. 잠금을 기다리는 동안 멤버에서
- *    빠진 사람에게 지금 수를 409 로 흘리지 않는다(`routes/menu.ts`의 `PATCH` 머리말 «재확인이 견줌보다 먼저다»와 같은 까닭).
- * 3. 화면이 본 수와 견준다 — 다르면 `subtree-changed`(지금 수를 싣는다). **여기까지 아무것도 쓰지 않는다.**
+ * 2. `readMenuSubtree` — 없으면 `not-found`. 그 뒤 **권한 재확인**(`recheck`) — 목록을 견주기 **전**이다. 잠금을 기다리는 동안 멤버에서
+ *    빠진 사람에게 지금 목록을 409 로 흘리지 않는다(`routes/menu.ts`의 `PATCH` 머리말 «재확인이 견줌보다 먼저다»와 같은 까닭).
+ * 3. 화면이 본 **id 집합**(밑의 메뉴 · 페이지)과 견준다 — 다르면 `subtree-changed`(지금 목록을 싣는다). **여기까지 아무것도 쓰지 않는다.**
+ *    수로 견주지 않는 까닭: 남이 하나 빼고 하나 넣으면 수가 같아, 사람이 본 적 없는 페이지를 지우고 본 페이지를 남긴다. 이름만 바뀐 판은
+ *    같은 행이라 지나간다(상자의 이름이 낡았을 뿐 지우는 것은 본 그 행이다).
  * 4. `captureSnapshot` → `insertSnapshot` — **안전망 스냅샷**. 첫 쓰기다.
  * 5. `deleteMenuSubtree`.
  *
@@ -24,21 +26,39 @@
  * 밀리초) 조용히 이름을 바꾸지 않고 실패한다 — 복원의 안전망과 같은 판단이다(`services/restore.ts` 머리말 «안전망 스냅샷»).
  */
 import type { DbHandle } from '../db/tx'
-import { deleteMenuSubtree, readMenuSubtree } from '../repos/menu'
+import { deleteMenuSubtree, readMenuSubtree, type SubtreeEntry } from '../repos/menu'
 import { insertSnapshot, lockProjectForRestore } from '../repos/snapshots'
 import { captureSnapshot } from './snapshot-capture'
 
-/** 하위 메뉴 수(자기 빼고) · 페이지 수(자기와 하위에 매인 것 전부). 화면의 확인 문장이 보인 수다. */
+/** 하위 메뉴 수(자기 빼고) · 페이지 수(자기와 하위에 매인 것 전부). 지운 뒤 답에 싣는다. */
 export interface SubtreeCounts {
   menus: number
   pages: number
 }
 
+/** 화면이 확인 상자에 보인 것 — 밑의 메뉴 id(자기 빼고) · 자기와 밑에 매인 페이지 id. */
+export interface SubtreeSeen {
+  menuIds: readonly string[]
+  pageIds: readonly string[]
+}
+
+/** 409 에 싣는 지금 목록 — 화면은 이것으로 상자를 다시 세운다(차례는 `MenuSubtree`의 `listing`). */
+export interface SubtreeListing {
+  title: string
+  menus: SubtreeEntry[]
+  pages: SubtreeEntry[]
+}
+
 export type MenuCascadeOutcome =
   | { kind: 'deleted'; deleted: SubtreeCounts; safety: { id: string; tag: string } }
   | { kind: 'not-found' }
-  | { kind: 'subtree-changed'; subtree: SubtreeCounts }
+  | { kind: 'subtree-changed'; subtree: SubtreeListing }
   | { kind: 'fingerprint-mismatch' }
+
+function sameIds(seen: readonly string[], actual: readonly string[]): boolean {
+  const set = new Set(seen)
+  return set.size === actual.length && actual.every((id) => set.has(id))
+}
 
 /** 안전망 태그 충돌 — 첫 쓰기에서 나므로 던져 트랜잭션째 되돌린다(머리말). */
 export class CascadeSafetyTagTakenError extends Error {
@@ -74,7 +94,7 @@ export async function deleteMenuCascade(
   input: {
     projectId: string
     nodeId: string
-    expect: SubtreeCounts
+    seen: SubtreeSeen
     actorId: string
     /** 커밋 순간의 권한(`auth/roles.ts`의 `recheckProjectRole`) — 던지면 트랜잭션째 되돌아간다. */
     recheck: () => Promise<void>
@@ -85,10 +105,10 @@ export async function deleteMenuCascade(
   if (subtree === null) return { kind: 'not-found' }
   await input.recheck()
 
-  const counts: SubtreeCounts = { menus: subtree.descendantIds.length, pages: subtree.pageIds.length }
-  if (counts.menus !== input.expect.menus || counts.pages !== input.expect.pages) {
-    return { kind: 'subtree-changed', subtree: counts }
+  if (!sameIds(input.seen.menuIds, subtree.descendantIds) || !sameIds(input.seen.pageIds, subtree.pageIds)) {
+    return { kind: 'subtree-changed', subtree: { title: subtree.title, ...subtree.listing } }
   }
+  const counts: SubtreeCounts = { menus: subtree.descendantIds.length, pages: subtree.pageIds.length }
 
   const captured = await captureSnapshot(trx, input.projectId)
   if (captured.kind === 'fingerprint-mismatch') return { kind: 'fingerprint-mismatch' }

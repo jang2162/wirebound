@@ -311,7 +311,7 @@ const ENDPOINTS: Array<{
     url: '/api/projects/p1/menu/m1',
     method: 'DELETE',
     body: cascadeResult,
-    call: (c) => c.deleteMenuCascade('p1', 'm1', { menus: 1, pages: 2 }),
+    call: (c) => c.deleteMenuCascade('p1', 'm1', { menuIds: ['m2'], pageIds: ['pg1', 'pg2'] }),
   },
   {
     client: 'createPage',
@@ -575,7 +575,7 @@ const SHAPE_CASES: Array<{
     shape: 'menuCascade',
     broken: { ...cascadeResult, safetySnapshot: { id: 's1' } },
     ok: cascadeResult,
-    call: (c) => c.deleteMenuCascade('p1', 'm1', { menus: 1, pages: 2 }),
+    call: (c) => c.deleteMenuCascade('p1', 'm1', { menuIds: ['m2'], pageIds: ['pg1', 'pg2'] }),
   },
   {
     // **`page.id`가 빈 문자열이면 막는다** — 가져오기가 성공하면 그 값이 그대로 주소가
@@ -1700,14 +1700,17 @@ describe('메뉴 CRUD', () => {
     expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ parentId: null, title: '회원관리' })
   })
 
-  it('deleteMenuCascade는 cascade 와 화면이 본 수만 싣는다 — 넘긴 객체의 다른 키는 안 실린다', async () => {
+  it('deleteMenuCascade는 cascade 와 화면이 본 id 집합만 싣는다 — 넘긴 객체의 다른 키는 안 실린다', async () => {
     const stub = stubFetch(jsonResponse(200, cascadeResult))
     const client = createHttpClient(stub.fetchImpl)
 
-    const result = await client.deleteMenuCascade('p1', 'm1', { menus: 1, pages: 2, extra: 9 } as never)
+    const result = await client.deleteMenuCascade('p1', 'm1', { menuIds: ['m2'], pageIds: ['pg1', 'pg2'], extra: 9 } as never)
 
     expect(stub.calls[0]?.init?.method).toBe('DELETE')
-    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ cascade: true, expect: { menus: 1, pages: 2 } })
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      cascade: true,
+      expect: { menuIds: ['m2'], pageIds: ['pg1', 'pg2'] },
+    })
     expect(result.safetySnapshot.id).toBe('s1')
   })
 

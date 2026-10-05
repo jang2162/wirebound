@@ -4083,7 +4083,7 @@
   overflow-wrap: anywhere;
 }
 
-/* 서버가 «그 사이 하위가 바뀌었다»로 돌려보내 새 수로 다시 묻는 판 — 경고가 아니라 알림이라 주황(`.wb-shell-pagejson-icon-warn`)이다. */
+/* 서버가 «그 사이 하위가 바뀌었다»로 돌려보내 지금 목록으로 다시 묻는 판 — 경고가 아니라 알림이라 주황(`.wb-shell-pagejson-icon-warn`)이다. */
 .wb-shell-menu-delete-changed {
   margin: 0;
   border-radius: 6px;

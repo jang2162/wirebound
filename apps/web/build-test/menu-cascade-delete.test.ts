@@ -5,6 +5,7 @@
  * |---|---|
  * | 확인 상자 | 1440×900 에서 상자가 창 안에 굴림 없이 서는가(`PAGE_PREVIEW_LIMIT` 의 근거 — 상자 높이 · 목록 한 줄 높이 · 남는 높이) · 경고 상자의 위험 색 · 설명(`aria-describedby`) · «모두 삭제» 뒤 서버의 트리 · 안전망 |
  * | 하위가 없는 메뉴 | 상자 없이 줄 아래 두 번 누르기 |
+ * | 같은 수 · 다른 페이지 | alice 의 트리가 낡은 사이 bob 이 페이지 하나를 밖으로 · 새 페이지 하나를 안으로 — 수는 같다. «모두 삭제»가 아무것도 안 지우고, 상자가 서버의 지금 목록 · «목록이 바뀌었습니다»로 다시 서고, 다시 누르면 그 목록을 지운다 |
  * | 받는 쪽 | 지운 페이지를 열어 둔 bob 의 화면 — 친 글 · 열린 줄 메뉴가 지운 뒤 어떻게 끝나는가. **페이지 `DELETE` 판과 같은 값인지** 견준다(연쇄 삭제는 방송하지 않는다 — 페이지 삭제와 같은 길) |
  *
  * `WB_SHOTS_DIR` 이 있으면 그 디렉터리에 스크린숏을 남긴다(사람이 보는 그림 — 케이스는 그 값에 기대지 않는다).
@@ -216,6 +217,57 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
     }
   })
 
+  it('같은 수 · 다른 페이지 — 낡은 상자의 «모두 삭제»는 아무것도 안 지우고 지금 목록으로 상자를 다시 세운다', async () => {
+    const bob = await stack.login(stack.users.bob)
+    const project = created(await call('POST', '/projects', { name: '같은 수', slug: `cascade-same-${Date.now().toString(36)}` }))
+    const member = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '회원관리' }))
+    const settings = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '설정' }))
+    const added = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
+    if (added.status >= 300) throw new Error(`member ${added.status}`)
+    created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: member.id, title: '회원 목록' }))
+    const moved = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: member.id, title: '회원 상세' }))
+    const env = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: settings.id, title: '환경' }))
+    const serverPages = async (): Promise<string[]> =>
+      ((await call('GET', `/projects/${project.id}/tree`)).body.menu as { pages: { title: string }[] }[])
+        .flatMap((node) => node.pages.map((page) => page.title))
+        .sort()
+
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    try {
+      await page.goto(`/projects/${project.id}/pages/${env.id}`)
+      await row(page, member.id).locator('> button, > a').first().waitFor()
+      // bob 의 두 쓰기 — 방송이 없어 alice 의 트리는 낡은 채다(수는 그대로 페이지 2).
+      const out = await stack.request(bob, 'PATCH', `/projects/${project.id}/pages/${moved.id}`, { menuNodeId: settings.id })
+      expect(out.status).toBe(200)
+      created(await stack.request(bob, 'POST', `/projects/${project.id}/pages`, { menuNodeId: member.id, title: '새 결제 화면(bob)' }))
+
+      await chooseRowItem(page, member.id, '회원관리', '삭제')
+      const dialog = page.getByRole('dialog', { name: '메뉴 삭제', exact: true })
+      await dialog.waitFor()
+      const before = await dialog.locator('.wb-shell-menu-delete-pages li').allTextContents()
+      await dialog.getByRole('button', { name: '모두 삭제', exact: true }).click()
+      await dialog.getByText('목록이 바뀌었습니다 — 다시 확인하세요.', { exact: true }).waitFor()
+      const after = await dialog.locator('.wb-shell-menu-delete-pages li').allTextContents()
+      const sentence = await dialog.locator('.wb-shell-menu-delete-sentence').innerText()
+      const kept = await serverPages()
+      const safety = ((await call('GET', `/projects/${project.id}/snapshots`)).body as unknown[]).length
+
+      await dialog.getByRole('button', { name: '모두 삭제', exact: true }).click()
+      const left = await poll('서버 트리에서 회원관리가 사라진다', serverPages, (titles) => !titles.includes('회원 목록'))
+
+      expect({ before, after, sentence, kept, safety, left }).toEqual({
+        before: ['회원 목록', '회원 상세'],
+        after: ['회원 목록', '새 결제 화면(bob)'],
+        sentence: '"회원관리" 메뉴와 페이지 2개가 함께 삭제됩니다',
+        kept: ['새 결제 화면(bob)', '환경', '회원 목록', '회원 상세'],
+        safety: 0,
+        left: ['환경', '회원 상세'],
+      })
+    } finally {
+      await context.close()
+    }
+  })
+
   /**
    * **받는 쪽** — bob 이 연 페이지(`P1`)를 alice 가 지운다. 지우는 길 둘(페이지 `DELETE` · 그 페이지를 품은 메뉴의 연쇄 삭제)에서 bob 의 화면이
    * 같은 값으로 끝나는지 견준다. 둘 다 방송하지 않으므로 bob 은 다음 편집에서야 안다.
@@ -228,20 +280,23 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
       const added = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
       if (added.status >= 300) throw new Error(`member ${added.status}`)
       const p1 = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: member.id, title: '회원 목록' }))
-      created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: grade.id, title: '등급표' }))
+      const p2 = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: grade.id, title: '등급표' }))
       const seeded = await call('PATCH', `/projects/${project.id}/pages/${p1.id}/ops`, {
         baseSeq: 0,
         ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_text0000001', type: 'Text', props: { content: '처음' } } }],
       })
       if (seeded.status >= 300) throw new Error(`seed ${seeded.status}`)
-      return { projectId: project.id, member: member.id, p1: p1.id, P: `/projects/${project.id}/pages/${p1.id}` }
+      return { projectId: project.id, member: member.id, grade: grade.id, p1: p1.id, p2: p2.id, P: `/projects/${project.id}/pages/${p1.id}` }
     }
 
     async function remove(mode: 'page' | 'cascade', fx: Awaited<ReturnType<typeof receiver>>): Promise<number> {
       const answer =
         mode === 'page'
           ? await call('DELETE', `/projects/${fx.projectId}/pages/${fx.p1}`)
-          : await call('DELETE', `/projects/${fx.projectId}/menu/${fx.member}`, { cascade: true, expect: { menus: 1, pages: 2 } })
+          : await call('DELETE', `/projects/${fx.projectId}/menu/${fx.member}`, {
+              cascade: true,
+              expect: { menuIds: [fx.grade], pageIds: [fx.p1, fx.p2] },
+            })
       return answer.status
     }
 

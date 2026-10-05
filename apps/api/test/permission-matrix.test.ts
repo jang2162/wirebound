@@ -314,7 +314,7 @@ const CASES: Case[] = [
     label: '메뉴 연쇄 삭제',
     method: 'DELETE',
     url: '/api/projects/:projectId/menu/:nodeId',
-    payload: { cascade: true, expect: { menus: 0, pages: 0 } },
+    payload: { cascade: true, expect: { menuIds: [], pageIds: [] } },
     allowed: ['owner', 'editor'],
     setup: 메뉴하나,
   },

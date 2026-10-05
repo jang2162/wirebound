@@ -361,13 +361,16 @@ export function menuChildCount(menu: TreeMenuNode[], menuId: string, kind: 'menu
 }
 
 /** 트리 전체의 메뉴 수. `reparent` 판정이 "옮길 곳이 있는가"를 이것으로 본다. */
-/** 메뉴 하나의 밑 — 연쇄 삭제의 확인 상자가 보이고 서버에 싣는 수(`api/client.ts`의 `SubtreeCounts`). */
+/**
+ * 메뉴 하나의 밑 — 연쇄 삭제의 확인 상자가 보이고 그 id 를 서버에 싣는 것(`api/client.ts`의 `SubtreeSeen`). 꼴이 서버 409 의 지금
+ * 목록(`SubtreeListing`)과 같아 상자는 어느 쪽이든 같은 길로 그린다.
+ */
 export interface MenuSubtree {
   title: string
-  /** 밑의 메뉴 수 — 자기는 안 센다. */
-  menus: number
+  /** 밑의 메뉴 — 자기는 안 든다. 트리가 그리는 차례(아래 `pages`와 같은 순회). */
+  menus: { id: string; title: string }[]
   /** 자기와 밑의 메뉴에 매인 페이지 — 트리가 그리는 차례(메뉴마다 페이지 먼저, 그다음 하위 메뉴). */
-  pages: TreePage[]
+  pages: { id: string; title: string }[]
 }
 
 /** 메뉴의 밑을 센다. 트리에 없으면 `null`. */
@@ -375,12 +378,12 @@ export function menuSubtree(menu: TreeMenuNode[] | null, menuId: string): MenuSu
   if (menu === null) return null
   const visit = findMenu(menu, menuId, null)
   if (visit === null) return null
-  const pages: TreePage[] = []
-  let menus = 0
+  const pages: MenuSubtree['pages'] = []
+  const menus: MenuSubtree['menus'] = []
   const walk = (node: TreeMenuNode): void => {
-    pages.push(...byOrder<TreePage>(node.pages))
+    for (const page of byOrder<TreePage>(node.pages)) pages.push({ id: page.id, title: page.title })
     for (const child of byOrder<TreeMenuNode>(node.children)) {
-      menus += 1
+      menus.push({ id: child.id, title: child.title })
       walk(child)
     }
   }

@@ -1,7 +1,7 @@
 /**
  * **메뉴 연쇄 삭제 — 확인 상자**(`src/panels/menu-delete-dialog.tsx` · `src/tree/use-tree-commands.tsx`의 `askRemove` · `confirmCascade`).
  *
- * 하위(메뉴 · 페이지)가 있는 메뉴의 «삭제»는 확인 상자를 열고, 상자가 보인 수를 싣고 연쇄 삭제를 보낸다. 하위가 없는 메뉴는 줄 아래의
+ * 하위(메뉴 · 페이지)가 있는 메뉴의 «삭제»는 확인 상자를 열고, 상자가 보인 id 집합을 싣고 연쇄 삭제를 보낸다. 하위가 없는 메뉴는 줄 아래의
  * 두 번 누르기 그대로다(`./menu-crud.test.tsx` «삭제»).
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -153,12 +153,15 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     expect(items).toEqual(['회원 화면 1', '회원 화면 2', '회원 화면 3', '회원 화면 4', '회원 화면 5', '외 4개'])
   })
 
-  it('«모두 삭제»가 상자가 보인 수를 싣고 연쇄 삭제를 보낸다 — 트리를 다시 받는다', async () => {
+  it('«모두 삭제»가 상자가 보인 id 집합을 싣고 연쇄 삭제를 보낸다 — 트리를 다시 받는다', async () => {
     const api = await open()
     askDelete('회원관리')
     fireEvent.click(within(dialog()).getByRole('button', { name: MENU_DELETE_CONFIRM }))
     await waitFor(() => expect(api.deleteMenuCascade).toHaveBeenCalledTimes(1))
-    expect(api.deleteMenuCascade).toHaveBeenCalledWith('p-1', 'm-member', { menus: 1, pages: 3 })
+    expect(api.deleteMenuCascade).toHaveBeenCalledWith('p-1', 'm-member', {
+      menuIds: ['m-auth'],
+      pageIds: ['pg-m-0', 'pg-m-1', 'pg-a-0'],
+    })
     expect(api.deleteMenu).not.toHaveBeenCalled()
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
     expect(screen.queryByRole('dialog', { name: MENU_DELETE_TITLE })).toBeNull()
@@ -186,16 +189,36 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     expect(api.deleteMenuCascade).not.toHaveBeenCalled()
   })
 
-  it('서버가 «수가 바뀌었다»(409)면 트리를 다시 받고 새 수로 상자를 다시 연다', async () => {
+  /** 서버가 «목록이 바뀌었다»로 돌려보낸 409 — `subtree`가 지금 목록이다(apps/api README «메뉴 연쇄 삭제»). */
+  function changed(subtree: unknown): ApiError {
+    return new ApiError(409, 'conflict', '그 사이 하위 메뉴나 페이지가 바뀌었습니다', [
+      { path: 'expect', code: 'menu-subtree-changed', message: '바뀜', subtree },
+    ], true)
+  }
+
+  /** 남이 «회원 화면 2»를 빼고 «새 결제 화면(bob)»을 넣은 판 — 수(메뉴 1 · 페이지 3)는 처음과 같다. */
+  const NOW = {
+    title: '회원관리',
+    menus: [{ id: 'm-auth', title: '권한' }],
+    pages: [
+      { id: 'pg-m-0', title: '회원 화면 1' },
+      { id: 'pg-bob', title: '새 결제 화면(bob)' },
+      { id: 'pg-a-0', title: '권한 화면 1' },
+    ],
+  }
+
+  it('서버가 «목록이 바뀌었다»(409)면 그 409 의 목록으로 상자를 다시 열고 · 다시 누르면 그 목록의 id 를 싣는다', async () => {
     let reads = 0
     const getTree = vi.fn(async () => {
       reads += 1
+      // 다시 받은 트리는 409 뒤의 조회다 — 409 목록과 또 다를 수 있다. 상자는 409 목록을 보인다(`cascadeShown`).
       return reads === 1 ? tree() : tree(pages(3))
     })
+    let calls = 0
     const deleteMenuCascade = vi.fn(async (): Promise<MenuCascadeResult> => {
-      throw new ApiError(409, 'conflict', '그 사이 하위 메뉴나 페이지가 바뀌었습니다', [
-        { path: 'expect', code: 'menu-subtree-changed', message: '바뀜', subtree: { menus: 1, pages: 4 } },
-      ], true)
+      calls += 1
+      if (calls === 1) throw changed(NOW)
+      return DONE
     })
     await open({ getTree, deleteMenuCascade })
     askDelete('회원관리')
@@ -203,9 +226,33 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     await waitFor(() => expect(getTree).toHaveBeenCalledTimes(2))
     const box = await screen.findByRole('dialog', { name: MENU_DELETE_TITLE })
     expect(within(box).getByText(CASCADE_CHANGED)).toBeDefined()
-    await within(box).findByText('"회원관리" 메뉴와 하위 메뉴 1개 · 페이지 4개가 함께 삭제됩니다')
+    expect(within(box).getByText('"회원관리" 메뉴와 하위 메뉴 1개 · 페이지 3개가 함께 삭제됩니다')).toBeDefined()
+    expect(within(box).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['회원 화면 1', '새 결제 화면(bob)', '권한 화면 1'])
     // 트리의 실패 줄에는 서지 않는다 — 상자가 그 말을 한다.
     expect(within(region()).queryByRole('alert')).toBeNull()
+
+    fireEvent.click(within(box).getByRole('button', { name: MENU_DELETE_CONFIRM }))
+    await waitFor(() => expect(deleteMenuCascade).toHaveBeenCalledTimes(2))
+    expect(deleteMenuCascade).toHaveBeenNthCalledWith(1, 'p-1', 'm-member', { menuIds: ['m-auth'], pageIds: ['pg-m-0', 'pg-m-1', 'pg-a-0'] })
+    expect(deleteMenuCascade).toHaveBeenNthCalledWith(2, 'p-1', 'm-member', { menuIds: ['m-auth'], pageIds: ['pg-m-0', 'pg-bob', 'pg-a-0'] })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: MENU_DELETE_TITLE })).toBeNull())
+  })
+
+  it('409 의 목록에 열린 페이지가 들었으면(낡은 트리에서는 밖이었다) 지운 뒤 프로젝트 루트로 옮긴다', async () => {
+    let calls = 0
+    const deleteMenuCascade = vi.fn(async (): Promise<MenuCascadeResult> => {
+      calls += 1
+      if (calls === 1) throw changed({ ...NOW, pages: [...NOW.pages, { id: 'pg-moved', title: '옮겨 온 화면' }] })
+      return DONE
+    })
+    await open({ deleteMenuCascade }, '/projects/p-1/pages/pg-moved')
+    askDelete('회원관리')
+    fireEvent.click(within(dialog()).getByRole('button', { name: MENU_DELETE_CONFIRM }))
+    const box = await screen.findByRole('dialog', { name: MENU_DELETE_TITLE })
+    await within(box).findByText(CASCADE_CHANGED)
+    expect(currentPath()).toBe('/projects/p-1/pages/pg-moved')
+    fireEvent.click(within(box).getByRole('button', { name: MENU_DELETE_CONFIRM }))
+    await waitFor(() => expect(currentPath()).toBe('/projects/p-1'))
   })
 
   it('그 밖의 실패는 트리의 실패 줄로 간다', async () => {
@@ -226,14 +273,14 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     await waitFor(() => expect(currentPath()).toBe('/projects/p-1'))
   })
 
-  it('열린 동안 그 메뉴가 트리에서 사라지면 그렇게 말하고 확인을 끈다(까닭은 title · aria-description)', async () => {
+  it('409 의 목록이 꼴이 틀리면 다시 받은 트리로 센다 — 그 메뉴가 트리에서 사라졌으면 그렇게 말하고 확인을 끈다(까닭은 title · aria-description)', async () => {
     let reads = 0
     const getTree = vi.fn(async () => {
       reads += 1
       return reads === 1 ? tree() : tree().slice(1)
     })
     const deleteMenuCascade = vi.fn(async (): Promise<MenuCascadeResult> => {
-      throw new ApiError(409, 'conflict', '바뀜', [{ path: 'expect', code: 'menu-subtree-changed', message: '바뀜', subtree: { menus: 0, pages: 0 } }], true)
+      throw changed({ menus: 0, pages: 0 })
     })
     await open({ getTree, deleteMenuCascade })
     askDelete('회원관리')

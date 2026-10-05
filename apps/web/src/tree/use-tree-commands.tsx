@@ -22,7 +22,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { ApiError, MENU_SUBTREE_CHANGED } from '../api/client'
+import { ApiError, MENU_SUBTREE_CHANGED, readSubtreeListing } from '../api/client'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
 import { MENU_TITLE_CHANGED, PAGE_META_CHANGED, judgeMeta, metaConflict } from '../api/page-meta'
@@ -38,6 +38,7 @@ import {
   previousMenuSibling,
   treeAbilities,
   treeSpot,
+  type MenuSubtree,
   type TreeAbilities,
   type TreeSelection,
 } from './tree-actions'
@@ -155,9 +156,9 @@ export interface TreeCommands {
   askRemove: () => void
   confirmRemove: () => void
   cancelRemove: () => void
-  /** 연쇄 삭제 확인 상자의 대상. 닫혀 있으면 `null`. 상자의 수는 지금 트리에서 센다(`menuSubtree`) — 보이는 수가 보내는 수다. */
+  /** 연쇄 삭제 확인 상자의 대상. 닫혀 있으면 `null`. 상자가 보이는 목록이 곧 보내는 id 집합이다(`cascadeShown`). */
   removing: RemoveTarget | null
-  /** 상자의 «삭제» — 상자가 보인 수를 싣고 연쇄 삭제를 보낸다. 서버가 다시 센 수가 다르면 트리를 다시 받고 상자를 다시 연다. */
+  /** 상자의 «삭제» — 상자가 보인 id 집합을 싣고 연쇄 삭제를 보낸다. 서버의 집합이 다르면 서버가 실은 지금 목록으로 상자를 다시 연다. */
   confirmCascade: () => void
   closeRemoving: () => void
   /** 형제 사이에서 한 칸 옮긴다. `-1`이면 위로, `+1`이면 아래로. */
@@ -222,11 +223,22 @@ export interface TreeCommands {
 
 /**
  * 연쇄 삭제 상자의 대상 — `TreeCommands.removing`. `changed`는 서버가 «그 사이 하위가 바뀌었다»(409 `MENU_SUBTREE_CHANGED`)로 돌려보내
- * 새 수로 다시 묻는 판이다.
+ * 다시 묻는 판이고, `listed`는 그 409 가 실은 지금 목록이다 — 있으면 상자는 그것을 보이고 그 id 를 보낸다(`cascadeShown`).
  */
 export interface RemoveTarget {
   menuId: string
   changed: boolean
+  listed: MenuSubtree | null
+}
+
+/**
+ * 상자가 보이는 목록 — 서버가 409 로 실은 목록이 있으면 그것, 없으면 지금 트리에서 센 것. **상자와 보내는 자리(`confirmCascade`)가 이
+ * 함수 하나를 부른다** — 보이는 것이 보내는 것이어야 서버의 집합 견줌이 «사람이 본 것만 지운다»를 지킨다(apps/api README «메뉴 연쇄
+ * 삭제»). 409 목록을 트리보다 앞에 두는 까닭: 다시 받은 트리는 409 뒤의 조회라 그 사이 또 바뀌었을 수 있고, 그래도 서버가 다시 견주므로
+ * 어느 쪽을 보여도 본 것만 지운다 — 앞에 두면 상자가 «바뀌었다»를 말한 바로 그 목록을 보인다.
+ */
+export function cascadeShown(target: RemoveTarget, menu: TreeMenuNode[] | null): MenuSubtree | null {
+  return target.listed ?? menuSubtree(menu, target.menuId)
 }
 
 /** 가져오기 상자의 대상 메뉴 — `TreeCommands.importing`. */
@@ -1084,30 +1096,37 @@ export function useTreeCommands(props: {
   }
 
   /**
-   * 연쇄 삭제를 보낸다(상자의 «삭제»). **싣는 수는 지금 트리에서 센다** — 상자가 그리는 수와 같은 함수(`menuSubtree`)다.
+   * 연쇄 삭제를 보낸다(상자의 «삭제»). **싣는 id 는 상자가 그리는 목록 그대로다**(`cascadeShown`).
    *
    * **열린 페이지가 지운 서브트리 안이면 프로젝트 루트로 `replace` 이동한다** — 페이지 삭제(`confirmRemove`)와 같은 까닭(뒤로 가기가
    * 지운 페이지로 돌아가면 404 다). 선택은 지운 메뉴의 부모로 간다(메뉴 삭제와 같다).
    *
-   * **서버가 «수가 바뀌었다»로 돌려보내면 트리를 다시 받고 상자를 다시 연다**(`changed`) — 새 트리로 센 수가 상자에 서고, 사람이 그
-   * 수로 다시 누른다. 그 밖의 실패는 트리의 실패 줄로 간다(상자는 닫힌 채다).
+   * **서버가 «목록이 바뀌었다»로 돌려보내면 그 409 가 실은 지금 목록으로 상자를 다시 연다**(`changed` · `listed`) — 사람이 그 목록을
+   * 보고 다시 누른다. 트리도 다시 받는다(트리가 낡았다는 신호다). 목록의 꼴이 틀리면 다시 받은 트리로 센다. 그 밖의 실패는 트리의 실패
+   * 줄로 간다(상자는 닫힌 채다).
    */
   function confirmCascade(): void {
     if (removing === null || menu === null) return
-    const subtree = menuSubtree(menu, removing.menuId)
+    const subtree = cascadeShown(removing, menu)
     if (subtree === null) return
     const target = removing.menuId
     const parentId = treeSpot(menu, { kind: 'menu', id: target })?.parentId ?? null
     const wasOpen = pageId !== undefined && subtree.pages.some((page) => page.id === pageId)
     setRemoving(null)
-    // `run`의 실패 갈래는 `Failure`(문장)만 받는다 — 수가 바뀐 409 인지는 보낸 자리에서 가른다.
+    // `run`의 실패 갈래는 `Failure`(문장)만 받는다 — 목록이 바뀐 409 인지는 보낸 자리에서 가른다.
     let changed = false
+    let listed: MenuSubtree | null = null
     void run(
       async () => {
         try {
-          return await api.deleteMenuCascade(projectId, target, { menus: subtree.menus, pages: subtree.pages.length })
+          return await api.deleteMenuCascade(projectId, target, {
+            menuIds: subtree.menus.map((entry) => entry.id),
+            pageIds: subtree.pages.map((page) => page.id),
+          })
         } catch (caught) {
-          changed = caught instanceof ApiError && caught.issues.some((issue) => issue.code === MENU_SUBTREE_CHANGED)
+          const issue = caught instanceof ApiError ? caught.issues.find((each) => each.code === MENU_SUBTREE_CHANGED) : undefined
+          changed = issue !== undefined
+          listed = issue === undefined ? null : readSubtreeListing(issue.subtree)
           throw caught
         }
       },
@@ -1120,7 +1139,7 @@ export function useTreeCommands(props: {
           setFailure(failure)
           return
         }
-        setRemoving({ menuId: target, changed: true })
+        setRemoving({ menuId: target, changed: true, listed })
         void load(() => !unmounted.current, true, gone.current.signal)
       },
     )
@@ -1155,9 +1174,9 @@ export function useTreeCommands(props: {
       // **하위가 있는 메뉴는 상자로 묻는다** — 무엇이 함께 지워지는지(수 · 페이지 이름)를 보여야 하고, 두 번 누르기로는 그것을 말할
       // 자리가 없다. 하위가 없으면 지금의 두 번 누르기 그대로다.
       const subtree = selection?.kind === 'menu' ? menuSubtree(menu, selection.id) : null
-      if (selection?.kind === 'menu' && subtree !== null && (subtree.menus > 0 || subtree.pages.length > 0)) {
+      if (selection?.kind === 'menu' && subtree !== null && (subtree.menus.length > 0 || subtree.pages.length > 0)) {
         setConfirmingRemove(false)
-        setRemoving({ menuId: selection.id, changed: false })
+        setRemoving({ menuId: selection.id, changed: false, listed: null })
         return
       }
       setConfirmingRemove(true)

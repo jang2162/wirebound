@@ -96,17 +96,29 @@ export const MENU_TITLE_CHANGED = 'menu-title-changed'
 const MENU_TITLE_CHANGED_MESSAGE = '다른 사람이 이 메뉴를 먼저 바꿨습니다'
 
 /**
- * 연쇄 삭제의 본문 — 화면이 확인 문장에 보인 수를 싣는다(아래 `DELETE` 머리말). `cascade`는 `true`만 받는다: `false`를 «연쇄 없는
- * 삭제»로 읽으면 본문 없는 요청과 같은 뜻의 길이 둘이 된다.
+ * 연쇄 삭제가 받는 id 목록 하나의 상한. 프로젝트의 메뉴 · 페이지 수에는 상한이 없어 여기서 정한다 — 두 목록이 다 차도(uuid 한 칸이
+ * JSON 으로 39 바이트 · 2 × 10 000 칸 ≈ 780 KB) 앱의 본문 상한(Fastify 기본 1 MiB)보다 작아, 넘는 요청이 413 이 아니라 이 400 으로
+ * 끝난다. 이보다 큰 서브트리는 연쇄로 못 지운다 — 하위를 나눠 지운다.
+ */
+export const CASCADE_ID_LIMIT = 10_000
+
+const SeenIds = z
+  .array(z.uuid())
+  .max(CASCADE_ID_LIMIT, `id는 ${CASCADE_ID_LIMIT}개 이하여야 합니다`)
+  .refine((ids) => new Set(ids).size === ids.length, 'id가 겹칩니다')
+
+/**
+ * 연쇄 삭제의 본문 — 화면이 확인 상자에 보인 **id 집합**을 싣는다(아래 `DELETE` 머리말). `cascade`는 `true`만 받는다: `false`를 «연쇄
+ * 없는 삭제»로 읽으면 본문 없는 요청과 같은 뜻의 길이 둘이 된다.
  */
 const CascadeDeleteBody = z.strictObject({
   cascade: z.literal(true),
-  expect: z.strictObject({ menus: z.int().min(0), pages: z.int().min(0) }),
+  expect: z.strictObject({ menuIds: SeenIds, pageIds: SeenIds }),
 })
 
-/** 연쇄 삭제의 수 불일치 이슈 코드. 웹은 같은 글자를 `MENU_SUBTREE_CHANGED`로 든다. */
+/** 연쇄 삭제의 목록 불일치 이슈 코드. 웹은 같은 글자를 `MENU_SUBTREE_CHANGED`로 든다. */
 export const MENU_SUBTREE_CHANGED = 'menu-subtree-changed'
-const MENU_SUBTREE_CHANGED_MESSAGE = '그 사이 하위 메뉴나 페이지가 바뀌었습니다 — 지금 수를 확인하고 다시 지우십시오'
+const MENU_SUBTREE_CHANGED_MESSAGE = '그 사이 하위 메뉴나 페이지가 바뀌었습니다 — 지금 목록을 확인하고 다시 지우십시오'
 
 /** 안전망 캡처의 지문이 어긋났다 — 잠금 밖의 조각(코멘트 작성자 이름)이 바뀐 판이다(`services/restore.ts` 머리말 «`fingerprint-mismatch`»). */
 const FINGERPRINT_MISMATCH_MESSAGE = '삭제 직전 상태를 저장하는 동안 프로젝트가 바뀌었습니다 — 다시 시도하십시오'
@@ -206,8 +218,9 @@ export function menuRoutes() {
      * |---|---|---|
      * | 없음 | 없다 | 204 |
      * | 없음 | 있다 | **409** «하위 메뉴나 페이지가 있어 삭제할 수 없습니다» — 아무것도 안 지운다(MCP · CLI · 옛 클라이언트의 길) |
-     * | `{ cascade: true, expect }` | `expect`와 같은 수 | **200** `{ deleted, safetySnapshot }` — 안전망 스냅샷을 찍고 서브트리를 지운다(`services/menu-cascade.ts`) |
-     * | `{ cascade: true, expect }` | 수가 다르다 | **409** · 이슈 코드 `menu-subtree-changed` · `subtree` = 지금 수 — 아무것도 안 지운다. 화면은 새 수로 다시 묻는다 |
+     * | `{ cascade: true, expect: { menuIds, pageIds } }` | 밑의 메뉴 · 페이지 id 집합이 같다 | **200** `{ deleted, safetySnapshot }` — 안전망 스냅샷을 찍고 서브트리를 지운다(`services/menu-cascade.ts`) |
+     * | 같음 | 집합이 다르다(수가 같아도) | **409** · 이슈 코드 `menu-subtree-changed` · `subtree` = 지금 목록(`{ title, menus, pages }` — 칸마다 `{ id, title }`, 트리 차례) — 아무것도 안 지운다. 화면은 그 목록으로 상자를 다시 세운다 |
+     * | 같음 | 목록이 `CASCADE_ID_LIMIT`를 넘거나 id 가 겹치거나 uuid 가 아니다 | **400** |
      *
      * 연쇄 갈래는 방송하지 않는다 — 페이지 `DELETE`와 같다(지운 페이지를 연 사람은 다음 편집의 404 로 안다).
      */
@@ -224,9 +237,9 @@ export function menuRoutes() {
             deleteMenuCascade(trx, {
               projectId,
               nodeId,
-              expect: body.expect,
+              seen: body.expect,
               actorId: currentUser.id,
-              // **커밋 순간의 권한** — 프로젝트 잠금 뒤 · 수를 견주기 전이다(`services/menu-cascade.ts` 머리말).
+              // **커밋 순간의 권한** — 프로젝트 잠금 뒤 · 목록을 견주기 전이다(`services/menu-cascade.ts` 머리말).
               recheck: async () => {
                 await recheckProjectRole(trx, request)
               },

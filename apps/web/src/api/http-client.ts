@@ -1391,10 +1391,10 @@ export function createHttpClient(
       ),
     deleteMenu: (projectId, nodeId) =>
       request<void>('DELETE', menuPath(projectId, nodeId), SHAPES.noBody),
-    deleteMenuCascade: (projectId, nodeId, expect) =>
+    deleteMenuCascade: (projectId, nodeId, seen) =>
       request<MenuCascadeResult>('DELETE', menuPath(projectId, nodeId), SHAPES.menuCascade, {
         cascade: true,
-        expect: { menus: expect.menus, pages: expect.pages },
+        expect: { menuIds: [...seen.menuIds], pageIds: [...seen.pageIds] },
       }),
     createPage: (projectId, body) =>
       // 응답은 `GET .../pages/:pageId`와 같은 여덟 키다 — 서버의 `toResponse` 하나가

@@ -11,11 +11,11 @@
  * - 상자의 설명(`aria-describedby`)이 문장과 경고 상자를 함께 품는다 — 상자가 열릴 때 함께 읽힌다.
  * - 확인 단추는 글 + 위험 색이다(설계서 «글만» — 되돌릴 수 없는 일을 확정하는 단추).
  *
- * # 수는 지금 트리에서 센다
+ * # 보이는 목록이 보내는 id 집합이다
  *
- * 상자는 연 순간의 수를 얼리지 않는다 — 열린 동안 트리를 다시 받으면(복원 · 서버의 «수가 바뀌었다» 409 뒤) 새 수가 선다. 보내는 수도 같은
- * 함수(`menuSubtree`)로 센다(`TreeCommands.confirmCascade`) — 보이는 수가 보내는 수다. 그 메뉴가 트리에서 사라졌으면 그렇게 말하고 확인을
- * 끈다.
+ * 상자와 보내는 자리가 같은 함수(`cascadeShown`)로 목록을 얻는다 — 서버는 그 id 집합으로 견주어, 다르면 아무것도 안 지우고 지금 목록을
+ * 409 에 싣는다. 그때 상자는 그 목록으로 다시 서고 «목록이 바뀌었습니다» 한 줄을 띄운다. 409 목록이 없으면 상자는 연 순간을 얼리지
+ * 않는다 — 열린 동안 트리를 다시 받으면(복원) 새 목록이 선다. 그 메뉴가 트리에서 사라졌으면 그렇게 말하고 확인을 끈다.
  *
  * # 상자는 단축키 상자 **밖**에 선다
  *
@@ -25,8 +25,7 @@
 import { useId, type ReactElement } from 'react'
 import { shellIcon } from '../shell/icons'
 import { ShellDialog } from '../shell/shell-dialog'
-import { menuSubtree } from '../tree/tree-actions'
-import type { RemoveTarget, TreeCommands } from '../tree/use-tree-commands'
+import { cascadeShown, type RemoveTarget, type TreeCommands } from '../tree/use-tree-commands'
 
 /**
  * 경고 상자에 이름을 보일 페이지 수. 나머지는 «외 N개»로 센다. 1440×900 창에서 상자가 굴림 없이 서는 수다 — 다시 재는 법:
@@ -48,7 +47,7 @@ export function cascadeWarning(pages: number): string {
 }
 
 export const CASCADE_SAFETY_NOTE = '지우기 직전 상태를 스냅샷으로 남깁니다 — 프로젝트 owner 가 그 스냅샷으로 되돌릴 수 있습니다.'
-export const CASCADE_CHANGED = '그 사이 하위 메뉴나 페이지가 바뀌었습니다 — 바뀐 수를 확인하고 다시 누르십시오.'
+export const CASCADE_CHANGED = '목록이 바뀌었습니다 — 다시 확인하세요.'
 export const CASCADE_BUSY = '조작을 보내는 중입니다'
 export const CASCADE_GONE = '이 메뉴가 트리에 없습니다 — 다른 사람이 먼저 지웠을 수 있습니다.'
 
@@ -63,7 +62,7 @@ function OpenMenuDeleteDialog(props: { commands: TreeCommands; target: RemoveTar
   const sentenceId = useId()
   const warningId = useId()
   const menu = commands.state.status === 'ready' ? commands.state.menu : null
-  const subtree = menuSubtree(menu, target.menuId)
+  const subtree = cascadeShown(target, menu)
   const pages = subtree?.pages ?? []
   const shown = pages.slice(0, PAGE_PREVIEW_LIMIT)
   const rest = pages.length - shown.length
@@ -80,7 +79,7 @@ function OpenMenuDeleteDialog(props: { commands: TreeCommands; target: RemoveTar
           </p>
         )}
         <p id={sentenceId} className="wb-shell-menu-delete-sentence">
-          {subtree === null ? CASCADE_GONE : cascadeSentence(subtree.title, subtree.menus, pages.length)}
+          {subtree === null ? CASCADE_GONE : cascadeSentence(subtree.title, subtree.menus.length, pages.length)}
         </p>
         {pages.length > 0 && (
           <div id={warningId} className="wb-shell-menu-delete-warning">

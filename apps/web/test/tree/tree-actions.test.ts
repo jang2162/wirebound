@@ -78,7 +78,7 @@ describe('treeAbilities', () => {
     expect(treeAbilities(withChild, { kind: 'menu', id: 'm-gone' }).remove).toBe(false)
   })
 
-  it('menuSubtree — 밑의 메뉴 수(자기 빼고)와 페이지(트리가 그리는 차례)', () => {
+  it('menuSubtree — 밑의 메뉴(자기 빼고)와 페이지 — 둘 다 트리가 그리는 차례 · id 와 이름', () => {
     const tree = [
       menu('m1', {
         pages: [page('pg-b', { sortOrder: 1 }), page('pg-a', { sortOrder: 0 })],
@@ -87,9 +87,10 @@ describe('treeAbilities', () => {
       menu('m4', { sortOrder: 1, pages: [page('pg-out')] }),
     ]
     const subtree = menuSubtree(tree, 'm1')
-    expect(subtree?.menus).toBe(2)
+    expect(subtree?.menus.map((item) => item.id)).toEqual(['m2', 'm3'])
     expect(subtree?.pages.map((item) => item.id)).toEqual(['pg-a', 'pg-b', 'pg-c'])
-    expect(menuSubtree(tree, 'm3')).toEqual({ title: 'm3', menus: 0, pages: [] })
+    expect(subtree?.pages[0]).toEqual({ id: 'pg-a', title: expect.any(String) })
+    expect(menuSubtree(tree, 'm3')).toEqual({ title: 'm3', menus: [], pages: [] })
     expect(menuSubtree(tree, 'm-gone')).toBeNull()
     expect(menuSubtree(null, 'm1')).toBeNull()
   })

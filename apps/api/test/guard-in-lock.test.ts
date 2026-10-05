@@ -2382,7 +2382,7 @@ const PROJECT_PROBES: ProjectProbe[] = [
     demotion: 'role',
     holders: ['restore', 'tree'],
     fire: (ctx, fx) =>
-      fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/menu/${fx.spareMenuId}`, { cascade: true, expect: { menus: 0, pages: 0 } }),
+      fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/menu/${fx.spareMenuId}`, { cascade: true, expect: { menuIds: [], pageIds: [] } }),
     okStatus: 200,
   },
   {

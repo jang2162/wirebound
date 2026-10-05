@@ -159,7 +159,7 @@ const PROBES: Probe[] = [
     label: '메뉴 연쇄 삭제(cascade) — 복원과 같은 잠금을 쥔다(`services/menu-cascade.ts`)',
     method: 'DELETE',
     url: (ids) => `/api/projects/${ids.projectId}/menu/${ids.spareMenuId}`,
-    payload: () => ({ cascade: true, expect: { menus: 0, pages: 0 } }),
+    payload: () => ({ cascade: true, expect: { menuIds: [], pageIds: [] } }),
     restoreWrites: true,
     blocked: true,
   },

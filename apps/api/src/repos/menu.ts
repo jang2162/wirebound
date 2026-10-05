@@ -536,13 +536,23 @@ export interface MenuSubtree {
   descendantIds: string[]
   /** 자기와 밑의 메뉴에 매인 페이지 id. */
   pageIds: string[]
+  /**
+   * 밑의 메뉴 · 페이지의 이름 — **트리가 그리는 차례**다(메뉴마다 페이지 먼저, 그다음 하위 메뉴 · 둘 다 `sort_order`). 화면이 본 목록과
+   * 다를 때 409 에 싣는 지금 목록이고, 화면은 이 차례 그대로 확인 상자를 다시 세운다(웹 `tree/tree-actions.ts`의 `menuSubtree`와 같은 차례).
+   */
+  listing: { menus: SubtreeEntry[]; pages: SubtreeEntry[] }
+}
+
+export interface SubtreeEntry {
+  id: string
+  title: string
 }
 
 /**
  * 메뉴 하나의 서브트리를 읽는다. 그 프로젝트에 없으면 `null`.
  *
  * **잠그지 않는다** — 부르는 쪽이 먼저 잠근다(`lockProjectForRestore` — 프로젝트 행이 새 하위 메뉴 · 페이지 삽입까지 막는다. 그
- * 함수의 머리말 «왜 그렇게 갈리나»). 잠그기 전에 읽은 수는 화면이 본 수와 견줄 근거가 못 된다.
+ * 함수의 머리말 «왜 그렇게 갈리나»). 잠그기 전에 읽은 목록은 화면이 본 목록과 견줄 근거가 못 된다.
  */
 export async function readMenuSubtree(trx: DbHandle, projectId: string, nodeId: string): Promise<MenuSubtree | null> {
   const root = await trx
@@ -553,16 +563,45 @@ export async function readMenuSubtree(trx: DbHandle, projectId: string, nodeId: 
     .executeTakeFirst()
   if (!root) return null
 
-  const descendants = await sql<{ id: string; depth: number }>`
-    with recursive sub(id, depth) as (
-      select id, 1 from menu_nodes where parent_id = ${nodeId} and project_id = ${projectId}
+  const descendants = await sql<{ id: string; depth: number; parent_id: string; title: string; sort_order: number }>`
+    with recursive sub(id, depth, parent_id, title, sort_order) as (
+      select id, 1, parent_id, title, sort_order from menu_nodes where parent_id = ${nodeId} and project_id = ${projectId}
       union all
-      select m.id, sub.depth + 1 from menu_nodes m join sub on m.parent_id = sub.id
+      select m.id, sub.depth + 1, m.parent_id, m.title, m.sort_order from menu_nodes m join sub on m.parent_id = sub.id
     )
-    select id, depth from sub order by depth desc, id
+    select id, depth, parent_id, title, sort_order from sub order by depth desc, id
   `.execute(trx)
   const menuIds = [nodeId, ...descendants.rows.map((row) => row.id)]
-  const pages = await trx.selectFrom('pages').select('id').where('menu_node_id', 'in', menuIds).orderBy('id').execute()
+  const pages = await trx
+    .selectFrom('pages')
+    .select(['id', 'title', 'menu_node_id', 'sort_order'])
+    .where('menu_node_id', 'in', menuIds)
+    .orderBy('id')
+    .execute()
+
+  const bySort = <T extends { id: string; sort_order: number }>(a: T, b: T): number =>
+    a.sort_order - b.sort_order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  const group = <T extends { id: string; sort_order: number }>(rows: T[], key: (row: T) => string): Map<string, T[]> => {
+    const groups = new Map<string, T[]>()
+    for (const row of rows) {
+      const list = groups.get(key(row))
+      if (list === undefined) groups.set(key(row), [row])
+      else list.push(row)
+    }
+    for (const list of groups.values()) list.sort(bySort)
+    return groups
+  }
+  const pagesOf = group(pages, (row) => row.menu_node_id)
+  const childrenOf = group(descendants.rows, (row) => row.parent_id)
+  const listing: MenuSubtree['listing'] = { menus: [], pages: [] }
+  const walk = (menuId: string): void => {
+    for (const page of pagesOf.get(menuId) ?? []) listing.pages.push({ id: page.id, title: page.title })
+    for (const child of childrenOf.get(menuId) ?? []) {
+      listing.menus.push({ id: child.id, title: child.title })
+      walk(child.id)
+    }
+  }
+  walk(nodeId)
 
   return {
     id: root.id,
@@ -571,6 +610,7 @@ export async function readMenuSubtree(trx: DbHandle, projectId: string, nodeId: 
     sortOrder: root.sort_order,
     descendantIds: descendants.rows.map((row) => row.id),
     pageIds: pages.map((page) => page.id),
+    listing,
   }
 }
 

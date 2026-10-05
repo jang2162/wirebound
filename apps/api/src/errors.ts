@@ -74,9 +74,10 @@ export interface ApiErrorIssue {
    */
   current?: string | null
   /**
-   * 메뉴 연쇄 삭제가 화면이 본 수와 다를 때(이슈 코드 `menu-subtree-changed` — `routes/menu.ts`의 `DELETE`) 지금 수. 화면이 이 수로 다시 묻는다.
+   * 메뉴 연쇄 삭제가 화면이 본 id 집합과 다를 때(이슈 코드 `menu-subtree-changed` — `routes/menu.ts`의 `DELETE`) 지금 목록. 화면이 이
+   * 목록으로 상자를 다시 세운다.
    */
-  subtree?: { menus: number; pages: number }
+  subtree?: { title: string; menus: { id: string; title: string }[]; pages: { id: string; title: string }[] }
   /**
    * 테마 패키지 업로드의 manifest 이슈(`code: 'manifest'`)가 `validateManifest` 에서 받은 원래 코드 — 업로드 화면이 사유를 항목별로
    * 가른다(`routes/admin-themes.ts`).
