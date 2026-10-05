@@ -10,7 +10,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -78,15 +78,21 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
   async function openTab(P: string, viewport = { width: 1440, height: 900 }, user: 'alice' | 'bob' = 'alice') {
     const { context, page } = await stack.openTab(stack.users[user], { viewport })
     const patches: string[] = []
+    /** 받은 프레임의 종류(`page-changed` · `patch-ack` · `patch-error` …). */
+    const received: string[] = []
     page.on('websocket', (socket) => {
       socket.on('framesent', (frame) => {
         const payload = typeof frame.payload === 'string' ? frame.payload : frame.payload.toString()
         if (payload.includes('"type":"patch"')) patches.push(payload)
       })
+      socket.on('framereceived', (frame) => {
+        const kind = /"type":"([a-z-]+)"/.exec(String(frame.payload))?.[1]
+        if (kind !== undefined) received.push(kind)
+      })
     })
     await page.goto(P)
     await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
-    return { page, patches, close: () => context.close() }
+    return { page, patches, received, close: () => context.close() }
   }
 
   const switcher = (page: Page) => page.getByRole('button', { name: /^화면 상태:/ })
@@ -124,11 +130,22 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       await all.click()
       await frames(tab.page)
       seen['모든 가지'] = { pressed: await all.getAttribute('aria-pressed'), tree: (await shown(tab.page)).tree }
+      // 영역 줄의 요약은 보이는 가지가 하나여도 가지 전부를 센다.
+      await all.click()
+      await frames(tab.page)
+      seen['영역 줄'] = await tab.page.locator('[data-tree-row][data-tree-id="n_sw"] .wb-shell-structure-node').textContent()
+      // 뷰 모드의 전환기는 고르기만 — 상태 목록을 고치는 항목이 없다.
+      await tab.page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+      await switcher(tab.page).click()
+      seen['뷰 모드 항목'] = await tab.page.locator('[role="menu"] [role^="menuitem"]').allTextContents()
+      await tab.page.keyboard.press('Escape')
       expect(seen).toEqual({
         처음: { canvas: ['n_out', 'n_dt'], tree: ['n_out', 'n_sw', 'n_cd', 'n_dt'], head: '화면 상태: 기본' },
         관리자: { canvas: ['n_out', 'n_at'], tree: ['n_out', 'n_sw', 'n_ca', 'n_at'], head: '화면 상태: 관리자' },
         손님: { canvas: ['n_out', 'n_dt'], tree: ['n_out', 'n_sw', 'n_cd', 'n_dt'], head: '화면 상태: 손님' },
         '모든 가지': { pressed: 'true', tree: ['n_out', 'n_sw', 'n_cd', 'n_dt', 'n_ca', 'n_at'] },
+        '영역 줄': 'StateSwitch 가지 2',
+        '뷰 모드 항목': ['기본', '관리자', '손님'],
       })
       expect(tab.patches).toEqual([])
     } finally {
@@ -213,6 +230,297 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       expect({ before, after: await shown(tab.page) }).toEqual({
         before: { canvas: ['n_out', 'n_at'], tree: ['n_out', 'n_sw', 'n_ca', 'n_at'], head: '화면 상태: 관리자' },
         after: { canvas: ['n_out', 'n_dt'], tree: ['n_out', 'n_sw', 'n_cd', 'n_dt'], head: '화면 상태: 기본' },
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  // ── Task 2 — 상태 관리 · 삭제 확인 ─────────────────────────────────────────────────
+
+  /** 서버 문서 — 목록 · 노드 id 집합(뿌리 빼고) · 머리 번호. */
+  async function server(P: string): Promise<{ states: string[]; ids: string[]; headSeq: number }> {
+    const body = (await stack.request(alice, 'GET', P)).body
+    const ids: string[] = []
+    const walk = (node: { id: string; children?: unknown[] }, root: boolean): void => {
+      if (!root) ids.push(node.id)
+      for (const child of (node.children ?? []) as { id: string; children?: unknown[] }[]) walk(child, false)
+    }
+    walk(body.schema.root, true)
+    return { states: ((body.schema.viewStates ?? []) as { name: string }[]).map((state) => state.name), ids, headSeq: body.headSeq as number }
+  }
+  /**
+   * 서버 머리 번호가 `after` 를 넘을 때까지 — 보낸 편집이 닿았다는 것만 기다린다(재는 값은 그 뒤 `server`). 3s 안에 안 닿으면 던지지 않고
+   * 돌아온다 — 안 보낸 판은 뒤의 단언이 서버 값으로 죽는다(시간 초과로 죽지 않게).
+   */
+  const landed = (P: string, after: number) => poll('서버에 닿음', () => server(P), (value) => value.headSeq > after, 3_000).catch(() => null)
+  const dialog = (page: Page) => page.getByRole('dialog')
+  /**
+   * 전환기의 «상태 추가» · «상태 관리…»로 상자를 연다. 같은 자리의 메뉴 항목을 다시 누르는 판이라 앞 누름에서 `DOUBLE_CLICK_MS`(500ms)를 넘겨
+   * 누른다(`src/shell/action-menu.tsx` — 포인터로 고른 뒤 같은 자리의 클릭 하나를 삼킨다).
+   */
+  async function openManage(page: Page, item: '상태 추가' | '상태 관리…'): Promise<void> {
+    await page.waitForTimeout(600)
+    await switcher(page).click()
+    await page.getByRole('menuitem', { name: item, exact: true }).click()
+    await dialog(page).waitFor()
+  }
+  const undo = (page: Page) => page.getByRole('button', { name: '되돌리기', exact: true }).click()
+  /** 확인 상자의 모양 — 문장 · 함께 지워지는 노드 id · 확인 단추 글과 꺼짐 · 알림. */
+  async function confirmShape(page: Page) {
+    const box = dialog(page)
+    // 상자가 닫혔으면(누름이 보냈다) 그렇다고 값으로 낸다 — 없는 요소를 기다리면 시간 초과로 죽는다.
+    if ((await box.locator('.wb-shell-view-states-danger').count()) === 0) return { gone: true }
+    return {
+      sentence: (await box.locator('.wb-shell-view-states-sentence').textContent()) ?? '',
+      ids: await box.locator('[data-node-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id') ?? '')),
+      button: (await box.locator('.wb-shell-view-states-danger').textContent()) ?? '',
+      disabled: await box.locator('.wb-shell-view-states-danger').getAttribute('aria-disabled'),
+      reason: await box.locator('.wb-shell-view-states-danger').getAttribute('title'),
+      changed: await box.locator('.wb-shell-view-states-changed').count(),
+    }
+  }
+
+  it('상태 추가 — 이름 규칙을 어기면 보내지 않고 까닭을 말하며, 더하면 그 상태를 고르고 · 되돌리기 한 번에 빠진다', async () => {
+    const { P } = await fixture('vs-add')
+    const tab = await openTab(P)
+    try {
+      const start = await server(P)
+      await openManage(tab.page, '상태 추가')
+      const field = dialog(tab.page).getByLabel('새 상태 이름')
+      await field.fill('관리자')
+      await dialog(tab.page).getByRole('button', { name: '추가' }).click()
+      const duplicate = (await dialog(tab.page).locator('.wb-shell-view-states-problem').allTextContents()).join('')
+      await field.fill('가'.repeat(31))
+      await dialog(tab.page).getByRole('button', { name: '추가' }).click()
+      const long = (await dialog(tab.page).locator('.wb-shell-view-states-problem').allTextContents()).join('')
+      const refusedSent = tab.patches.length
+      await field.fill('  직원  ')
+      await dialog(tab.page).getByRole('button', { name: '추가' }).click()
+      await landed(P, start.headSeq)
+      await frames(tab.page)
+      const added = { server: (await server(P)).states, head: await switcher(tab.page).getAttribute('aria-label'), dialogs: await dialog(tab.page).count() }
+      const head = (await server(P)).headSeq
+      await undo(tab.page)
+      await landed(P, head)
+      await frames(tab.page)
+      expect({ duplicate, long, refusedSent, added, undone: (await server(P)).states, headAfterUndo: await switcher(tab.page).getAttribute('aria-label') }).toEqual({
+        duplicate: '같은 이름의 상태가 있습니다',
+        long: '이름은 30자까지입니다',
+        refusedSent: 0,
+        added: { server: ['관리자', '손님', '직원'], head: '화면 상태: 직원', dialogs: 0 },
+        undone: ['관리자', '손님'],
+        headAfterUndo: '화면 상태: 기본',
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('상태 관리 — 이름 바꾸기 · 순서 · 삭제(확인의 가지 수 · 노드 = 실제로 지운 id 집합) · 되돌리기 한 번에 상태와 가지가 돌아온다', async () => {
+    const { P } = await fixture('vs-manage')
+    const tab = await openTab(P)
+    try {
+      await openManage(tab.page, '상태 관리…')
+      let head = (await server(P)).headSeq
+      await dialog(tab.page).getByRole('button', { name: '손님 이름 바꾸기', exact: true }).click()
+      await dialog(tab.page).getByLabel('손님 새 이름').fill('방문자')
+      await dialog(tab.page).getByRole('button', { name: '저장', exact: true }).click()
+      await landed(P, head)
+      const renamed = (await server(P)).states
+      head = (await server(P)).headSeq
+      await dialog(tab.page).getByRole('button', { name: '방문자 위로', exact: true }).click()
+      await landed(P, head)
+      const moved = (await server(P)).states
+      const before = await server(P)
+      await dialog(tab.page).getByRole('button', { name: '관리자 삭제', exact: true }).click()
+      const shape = await confirmShape(tab.page)
+      await dialog(tab.page).locator('.wb-shell-view-states-danger').click()
+      await landed(P, before.headSeq)
+      const after = await server(P)
+      const removed = before.ids.filter((id) => !after.ids.includes(id))
+      await dialog(tab.page).getByRole('button', { name: '닫기' }).click()
+      await undo(tab.page)
+      await landed(P, after.headSeq)
+      const restored = await server(P)
+      expect({ renamed, moved, shape, removed, afterStates: after.states, restoredStates: restored.states, restoredIds: restored.ids }).toEqual({
+        renamed: ['관리자', '방문자'],
+        moved: ['방문자', '관리자'],
+        shape: { sentence: '"관리자" 상태를 지웁니다. 가지 1개의 내용이 함께 삭제됩니다.', ids: ['n_at'], button: '삭제', disabled: null, reason: null, changed: 0 },
+        removed: ['n_ca', 'n_at'],
+        afterStates: ['방문자'],
+        restoredStates: ['방문자', '관리자'],
+        restoredIds: before.ids,
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('확인을 연 뒤 남이 그 상태로 가지를 더하면 상자가 새 목록으로 다시 서고, 첫 누름은 «새 목록 확인»이라 안 보낸다', async () => {
+    const { P } = await fixture('vs-changed')
+    const tab = await openTab(P)
+    try {
+      await openManage(tab.page, '상태 관리…')
+      await dialog(tab.page).getByRole('button', { name: '손님 삭제', exact: true }).click()
+      const opened = await confirmShape(tab.page)
+      const head = (await server(P)).headSeq
+      const added = await stack.request(bob, 'PATCH', `${P}/ops`, {
+        baseSeq: head,
+        ops: [{ op: 'add', path: '/root/children/1/children/2', value: { id: 'n_cg', type: 'StateCase', props: { state: GUEST.id }, children: [text('n_gt', '손님 글')] } }],
+      })
+      expect(added.status).toBe(200)
+      // 남의 편집이 이 탭에 닿은 것 — 구조 트리의 영역 줄 요약이 «가지 3»이 된다(재는 것은 그 뒤 상자의 모양이다).
+      await tab.page.locator('[data-tree-row][data-tree-id="n_sw"] button', { hasText: '가지 3' }).first().waitFor({ state: 'attached' })
+      await frames(tab.page)
+      const changed = await confirmShape(tab.page)
+      const sentBefore = tab.patches.length
+      await dialog(tab.page).locator('.wb-shell-view-states-danger').click()
+      await frames(tab.page)
+      const afterFirst = { sent: tab.patches.length - sentBefore, button: ((await confirmShape(tab.page)) as { button?: string }).button }
+      await tab.page.waitForTimeout(600)
+      const beforeSecond = await server(P)
+      // 첫 누름이 보냈으면(상자가 닫힘) 둘째는 없다 — 값(`afterFirst`)으로 죽는다.
+      if ((await dialog(tab.page).locator('.wb-shell-view-states-danger').count()) > 0) await dialog(tab.page).locator('.wb-shell-view-states-danger').click()
+      await landed(P, beforeSecond.headSeq)
+      const after = await server(P)
+      expect({ opened, changed, afterFirst, removed: beforeSecond.ids.filter((id) => !after.ids.includes(id)), states: after.states }).toEqual({
+        opened: { sentence: '"손님" 상태를 지웁니다. 이 상태의 가지는 없습니다.', ids: [], button: '삭제', disabled: null, reason: null, changed: 0 },
+        changed: { sentence: '"손님" 상태를 지웁니다. 가지 1개의 내용이 함께 삭제됩니다.', ids: ['n_gt'], button: '새 목록 확인', disabled: null, reason: null, changed: 1 },
+        afterFirst: { sent: 0, button: '삭제' },
+        removed: ['n_cg', 'n_gt'],
+        states: ['관리자'],
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('두 사람 — bob 이 페이지 안 노드를 잡아도 상태 추가 · 이름 바꾸기는 막히지 않고, 지울 가지 안 노드를 잡으면 삭제가 꺼지고 까닭을 단다', async () => {
+    const { P } = await fixture('vs-two')
+    const tab = await openTab(P)
+    const other = await openTab(P, { width: 1440, height: 900 }, 'bob')
+    const bobName = stack.users.bob.name
+    try {
+      // 배지는 줄 상자의 형제다(`src/panels/structure-tree.tsx` 의 «편집 중» 배지).
+      const badge = (page: Page, id: string) => page.locator(`[data-tree-row][data-tree-id="${id}"] ~ .wb-shell-structure-lock`)
+      // bob 이 영역 밖 글을 고른다(잠금) — alice 의 트리에 배지가 서면 잠금이 닿은 것이다.
+      await other.page.locator('[data-tree-row][data-tree-id="n_out"] button').first().click()
+      await badge(tab.page, 'n_out').waitFor()
+      let head = (await server(P)).headSeq
+      await openManage(tab.page, '상태 추가')
+      await dialog(tab.page).getByLabel('새 상태 이름').fill('직원')
+      await dialog(tab.page).getByRole('button', { name: '추가' }).click()
+      await landed(P, head)
+      const added = (await server(P)).states
+      head = (await server(P)).headSeq
+      await openManage(tab.page, '상태 관리…')
+      await dialog(tab.page).getByRole('button', { name: '손님 이름 바꾸기', exact: true }).click()
+      await dialog(tab.page).getByLabel('손님 새 이름').fill('방문자')
+      await dialog(tab.page).getByRole('button', { name: '저장', exact: true }).click()
+      await landed(P, head)
+      const renamed = (await server(P)).states
+      await dialog(tab.page).getByRole('button', { name: '닫기' }).click()
+      // bob 이 관리자 가지 안 글을 잡는다 — alice 도 관리자를 보아 그 줄의 배지를 기다린다.
+      await choose(other.page, '관리자')
+      await other.page.locator('[data-tree-row][data-tree-id="n_at"] button').first().click()
+      await choose(tab.page, '관리자')
+      await badge(tab.page, 'n_at').waitFor()
+      await openManage(tab.page, '상태 관리…')
+      await dialog(tab.page).getByRole('button', { name: '관리자 삭제', exact: true }).click()
+      const blocked = await confirmShape(tab.page)
+      const sent = tab.patches.length
+      const beforeClick = (await server(P)).headSeq
+      // 꺼진 단추(`aria-disabled`)도 누름은 받는다 — playwright 는 그것을 «안 켜짐»으로 기다리므로 힘으로 누른다.
+      await dialog(tab.page).locator('.wb-shell-view-states-danger').click({ force: true })
+      await tab.page.waitForTimeout(600)
+      expect({ added, renamed, blocked, sentOnClick: tab.patches.length - sent, headSame: (await server(P)).headSeq === beforeClick }).toEqual({
+        added: ['관리자', '손님', '직원'],
+        renamed: ['관리자', '방문자', '직원'],
+        blocked: {
+          sentence: '"관리자" 상태를 지웁니다. 가지 1개의 내용이 함께 삭제됩니다.',
+          ids: ['n_at'],
+          button: '삭제',
+          disabled: 'true',
+          reason: `${bobName}님이 편집 중인 노드가 있어 함께 지울 수 없습니다`,
+          changed: 0,
+        },
+        sentOnClick: 0,
+        headSame: true,
+      })
+    } finally {
+      await tab.close()
+      await other.close()
+    }
+  })
+
+  /** 남의 편집(`page-changed`)이 이 탭에 닿을 때까지 — 받은 프레임의 수가 `after` 를 넘는다. */
+  async function remoteArrived(received: string[], after: number): Promise<void> {
+    await poll('남의 편집이 닿음', async () => received.filter((kind) => kind === 'page-changed').length, (count) => count > after)
+  }
+
+  it('남이 순서를 바꾼 뒤 «상태 추가» 되돌리기는 내가 더한 상태만 뺀다 — 남의 상태를 안 뺀다(K1 R1 의 화면 몫)', async () => {
+    const { P } = await fixture('vs-undo-moved')
+    const tab = await openTab(P)
+    try {
+      const start = await server(P)
+      await openManage(tab.page, '상태 추가')
+      await dialog(tab.page).getByLabel('새 상태 이름').fill('직원')
+      await dialog(tab.page).getByRole('button', { name: '추가' }).click()
+      await landed(P, start.headSeq)
+      const body = (await stack.request(bob, 'GET', P)).body
+      const staff = (body.schema.viewStates as { id: string; name: string }[]).find((state) => state.name === '직원')!
+      const seen = tab.received.filter((kind) => kind === 'page-changed').length
+      const moved = await stack.request(bob, 'PATCH', `${P}/ops`, {
+        baseSeq: body.headSeq,
+        ops: [
+          { op: 'test', path: '/viewStates/2/id', value: staff.id },
+          { op: 'move', from: '/viewStates/2', path: '/viewStates/0' },
+        ],
+      })
+      expect(moved.status).toBe(200)
+      await remoteArrived(tab.received, seen)
+      const head = (await server(P)).headSeq
+      await undo(tab.page)
+      await landed(P, head)
+      expect({ movedTo: (await server(P)).states }).toEqual({ movedTo: ['관리자', '손님'] })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('남이 그 상태로 가지를 만든 뒤의 «상태 추가» 되돌리기 — 서버가 422 로 막고 상태 · 가지가 남는다(K1 이월 11 — 화면의 말은 로그)', async () => {
+    const { P } = await fixture('vs-undo-cased')
+    const tab = await openTab(P)
+    try {
+      const start = await server(P)
+      await openManage(tab.page, '상태 추가')
+      await dialog(tab.page).getByLabel('새 상태 이름').fill('직원')
+      await dialog(tab.page).getByRole('button', { name: '추가' }).click()
+      await landed(P, start.headSeq)
+      const body = (await stack.request(bob, 'GET', P)).body
+      const staff = (body.schema.viewStates as { id: string; name: string }[]).find((state) => state.name === '직원')!
+      const seen = tab.received.filter((kind) => kind === 'page-changed').length
+      const cased = await stack.request(bob, 'PATCH', `${P}/ops`, {
+        baseSeq: body.headSeq,
+        ops: [{ op: 'add', path: '/root/children/1/children/2', value: { id: 'n_cs', type: 'StateCase', props: { state: staff.id }, children: [text('n_st', '직원 글')] } }],
+      })
+      expect(cased.status).toBe(200)
+      await remoteArrived(tab.received, seen)
+      const before = await server(P)
+      const errors = tab.received.filter((kind) => kind === 'patch-error').length
+      await undo(tab.page)
+      await poll('되돌리기의 답', async () => tab.received.filter((kind) => kind === 'patch-error').length, (count) => count > errors)
+      await tab.page.waitForTimeout(800)
+      const after = await server(P)
+      const notices = await tab.page.locator('.wb-shell-footer [role="alert"], .wb-shell-footer [role="status"]').allTextContents()
+      // eslint-disable-next-line no-console
+      console.log('[상태 추가 되돌리기 — 가지가 생긴 뒤]', JSON.stringify({ notices, head: await switcher(tab.page).getAttribute('aria-label') }))
+      expect({ states: after.states, ids: after.ids, headSame: after.headSeq === before.headSeq, noticed: notices.length > 0 }).toEqual({
+        states: ['관리자', '손님', '직원'],
+        ids: before.ids,
+        headSame: true,
+        noticed: true,
       })
     } finally {
       await tab.close()

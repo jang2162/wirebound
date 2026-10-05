@@ -12,7 +12,8 @@ import type { ReactElement } from 'react'
 import { viewStateName } from '@wirebound/schema'
 import { ActionMenu, type ActionMenuItem } from './action-menu'
 import { ICONS } from './icons'
-import { useViewState, type ViewStateChoice } from './use-view-state'
+import { useManageDialog, useViewState, type ManageDialog, type ViewStateChoice } from './use-view-state'
+import { ADD_STATE_TITLE, MANAGE_STATES_TITLE } from './view-states-dialog'
 
 /** 단추의 접근 이름 머리 — 뒤에 지금 상태의 이름이 붙는다. */
 export const VIEW_STATE_SWITCHER_LABEL = '화면 상태'
@@ -23,9 +24,14 @@ export function currentStateName(choice: ViewStateChoice): string {
 }
 
 /**
- * 전환기의 항목 — 머리 전환기와 접힌 `…` 가 같은 것을 쓴다. `prefixed` 면 상태 항목의 글에 «화면 상태: »를 붙인다(접힌 판).
+ * 전환기의 항목 — 머리 전환기와 접힌 `…` 가 같은 것을 쓴다. `prefixed` 면 상태 항목의 글에 «화면 상태: »를 붙인다(접힌 판). `manage` 를 주면
+ * 끝에 «상태 추가» · «상태 관리…»를 싣는다(편집 모드 && 편집 권한 — 상자는 `shell/view-states-dialog.tsx`).
  */
-export function viewStateMenuItems(choice: ViewStateChoice, options: { prefixed: boolean }): ActionMenuItem[] {
+export function viewStateMenuItems(
+  choice: ViewStateChoice,
+  options: { prefixed: boolean; manage?: (dialog: ManageDialog) => void },
+): ActionMenuItem[] {
+  const manage = options.manage
   const label = (name: string): string => (options.prefixed ? `${VIEW_STATE_SWITCHER_LABEL}: ${name}` : name)
   return [
     { key: 'view-state-default', label: label(viewStateName(choice.viewStates, 'default')), icon: ICONS.viewStates, checked: choice.state === null, onSelect: () => choice.choose(null) },
@@ -36,6 +42,12 @@ export function viewStateMenuItems(choice: ViewStateChoice, options: { prefixed:
       checked: choice.state === entry.id,
       onSelect: () => choice.choose(entry.id),
     })),
+    ...(manage === undefined
+      ? []
+      : [
+          { key: 'view-state-add', label: ADD_STATE_TITLE, icon: ICONS.add, onSelect: () => manage('add') },
+          { key: 'view-state-manage', label: `${MANAGE_STATES_TITLE}…`, icon: ICONS.viewStates, onSelect: () => manage('manage') },
+        ]),
   ]
 }
 
@@ -46,7 +58,9 @@ export function ViewStateSwitcher(props: {
   editable: boolean
 }): ReactElement | null {
   const choice = useViewState(props.pageId)
+  const { open } = useManageDialog()
   if (props.pageId === undefined) return null
   const name = currentStateName(choice)
-  return <ActionMenu label={`${VIEW_STATE_SWITCHER_LABEL}: ${name}`} icon={ICONS.viewStates} text={name} items={viewStateMenuItems(choice, { prefixed: false })} />
+  const items = viewStateMenuItems(choice, { prefixed: false, ...(props.editable ? { manage: open } : {}) })
+  return <ActionMenu label={`${VIEW_STATE_SWITCHER_LABEL}: ${name}`} icon={ICONS.viewStates} text={name} items={items} />
 }

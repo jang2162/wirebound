@@ -250,7 +250,8 @@ export function StructureTree(props: {
    * 가지 노드는 남고 id 는 같다 — 고르기 · 잠금 · 줄 행동은 원 문서의 그 노드를 가리킨다. Shift 범위 고르기 · 모두 접기도 보이는 트리로 센다.
    * 상태 영역이 없는 문서는 원 트리를 그대로 쓴다(검증 전 문서를 `visibleTree` 에 넘기지 않는다).
    */
-  const hasSwitch = containsStateSwitch(doc.root)
+  const switches = stateSwitches(doc.root)
+  const hasSwitch = switches.size > 0
   const shown: WbNode = !hasSwitch || allCases ? doc.root : visibleTree(doc, viewState)
   /**
    * **줄을 누른다** — 클릭은 그것 하나, Cmd(mac) · Ctrl 클릭은 더하기 · 빼기, Shift 클릭은 기준 노드부터 보이는 차례로(설계서 「설계서 화면
@@ -308,6 +309,7 @@ export function StructureTree(props: {
           node={shown}
           // 상태 가지 줄의 요약이 그 상태 이름을 읽는 목록 — 검증 전 문서라 배열이 아니면 없는 것으로 본다.
           viewStates={Array.isArray(doc.viewStates) ? doc.viewStates : undefined}
+          switches={switches}
           selectedNodeId={selectedNodeId}
           selected={selectedSet}
           selection={selectedNodeIds.join(',')}
@@ -432,10 +434,14 @@ function foldableIds(root: unknown, rootId: string | null): string[] {
 /** 상태 영역의 가지를 전부 펴는 토글의 이름. */
 export const ALL_CASES_LABEL = '모든 가지 보기'
 
-/** 문서에 상태 영역이 있는가 — 검증 전 문서라 걷기는 던지지 않는 `walkSafely` 다. */
-function containsStateSwitch(root: unknown): boolean {
-  for (const visit of walkSafely(root)) if (visit.node.type === 'StateSwitch') return true
-  return false
+/**
+ * 문서의 상태 영역 — id → 원 노드. 보이는 트리(`visibleTree`)의 영역 노드는 가지를 하나만 남겨, 그 줄의 요약 «가지 N»은 원 노드로 센다.
+ * 검증 전 문서라 걷기는 던지지 않는 `walkSafely` 다.
+ */
+function stateSwitches(root: unknown): ReadonlyMap<string, WbNode> {
+  const found = new Map<string, WbNode>()
+  for (const visit of walkSafely(root)) if (visit.node.type === 'StateSwitch' && typeof visit.node.id === 'string') found.set(visit.node.id, visit.node)
+  return found
 }
 
 /** 별칭 입력의 접근 이름 — 속성 패널 «별칭» 칸과 같은 낱말이다. */
@@ -458,6 +464,8 @@ function StructureNode(props: {
   node: WbNode
   /** 페이지의 상태 목록 — `StateCase` 줄의 요약(상태 이름)을 짓는다. 없으면 상태 가지가 «목록에 없는 상태»로 읽힌다. */
   viewStates: readonly ViewState[] | undefined
+  /** 원 문서의 상태 영역(`stateSwitches`) — 보이는 트리에서도 영역 줄의 «가지 N»이 가지 전부를 센다. */
+  switches: ReadonlyMap<string, WbNode>
   /** 기준 노드(`aria-current` · 줄 행동이 서는 줄). */
   selectedNodeId: string | null
   /** 고른 노드 전부(기준 노드 포함) — 강조할 줄. */
@@ -492,7 +500,7 @@ function StructureNode(props: {
    * 같은 글 — MCP 가 같은 것을 낸다). 타입을 못 읽는 노드는 요약이 없다.
    */
   const alias = nodeAlias(node)
-  const summary = nodeSummary(node, props.viewStates)
+  const summary = nodeSummary(node.type === 'StateSwitch' ? (props.switches.get(node.id) ?? node) : node, props.viewStates)
   /**
    * 줄 글 전부 — 줄 단추의 접근 이름과 같다. **줄 행동(`+` · `…`)의 이름도 이것으로 짓는다** — 타입만으로 지으면 라벨이 «추가»인 Button 줄
    * (`Button 추가`)과 그 줄의 `+`(`Button 추가`)가 같은 이름이 된다.
@@ -655,6 +663,7 @@ function StructureNode(props: {
               key={isSelectable(child) ? child.id : `wb-invalid-${index}`}
               node={child}
               viewStates={props.viewStates}
+              switches={props.switches}
               selectedNodeId={props.selectedNodeId}
               selected={props.selected}
               selection={props.selection}

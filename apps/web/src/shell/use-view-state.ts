@@ -19,15 +19,21 @@ interface Chosen {
   state: string
 }
 
+/** 열린 상태 다루기 상자 — «상태 추가»(이름 칸 하나) · «상태 관리…»(목록 전부). `shell/view-states-dialog.tsx` 가 그린다. */
+export type ManageDialog = 'add' | 'manage'
+
 interface ViewStateContextValue {
   chosen: Chosen | null
   setChosen: (chosen: Chosen | null) => void
+  dialog: ManageDialog | null
+  setDialog: (dialog: ManageDialog | null) => void
 }
 
 const ViewStateContext = createContext<ViewStateContextValue | null>(null)
 
 export function ViewStateProvider(props: { pageId: string | undefined; children: ReactNode }): ReactElement {
   const [chosen, setChosen] = useState<Chosen | null>(null)
+  const [dialog, setDialog] = useState<ManageDialog | null>(null)
   const [seenPage, setSeenPage] = useState(props.pageId)
   // 페이지가 바뀐 렌더에서 곧바로 지운다(머리말 «페이지를 옮기면 …»).
   let current = chosen
@@ -35,8 +41,10 @@ export function ViewStateProvider(props: { pageId: string | undefined; children:
     setSeenPage(props.pageId)
     setChosen(null)
     current = null
+    // 열린 상자는 앞 페이지의 목록을 다룬다 — 함께 닫는다.
+    setDialog(null)
   }
-  const value = useMemo(() => ({ chosen: current, setChosen }), [current])
+  const value = useMemo(() => ({ chosen: current, setChosen, dialog, setDialog }), [current, dialog])
   return createElement(ViewStateContext.Provider, { value }, props.children)
 }
 
@@ -67,4 +75,13 @@ export function useViewState(pageId: string | undefined): ViewStateChoice {
     [setChosen, pageId],
   )
   return { state, viewStates, choose }
+}
+
+/** 상태 다루기 상자의 열림 — 전환기 · 접힌 `…` 의 항목이 열고, 상자가 닫는다. 깔지 않은 판은 늘 닫혀 있다. */
+export function useManageDialog(): { dialog: ManageDialog | null; open: (dialog: ManageDialog) => void; close: () => void } {
+  const context = useContext(ViewStateContext)
+  const setDialog = context?.setDialog
+  const open = useCallback((dialog: ManageDialog) => setDialog?.(dialog), [setDialog])
+  const close = useCallback(() => setDialog?.(null), [setDialog])
+  return { dialog: context?.dialog ?? null, open, close }
 }
