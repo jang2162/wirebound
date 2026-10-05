@@ -8,7 +8,9 @@
  * | 걸린 시간 | 메뉴 만들기 · 이름 · 옮기기 · 지우기 · 연쇄 삭제 · 페이지 만들기 · 페이지 지우기 — 보낸 순간부터 bob 의 트리에 서기까지(ms) |
  * | 열린 줄 메뉴 | bob 이 줄의 `…`를 연 채 alice 가 그 줄을 지운다 — 메뉴가 닫힌다 |
  * | 이름 입력 | bob 이 친 채 alice 가 그 메뉴를 지운다 — 입력이 닫히고 하단 바가 말한다 |
+ * | 입력 · 옮김 | bob 이 친 채 alice 가 그 줄을 다른 부모로 · 접힌 메뉴 안으로 · 같은 부모 안에서 옮긴다 — 입력이 친 글째 서고 이어 친 글이 뒤에 붙는다 |
  * | 연쇄 상자 | bob 이 연 채 alice 가 그 밑에 페이지를 더한다 → «목록이 바뀌었습니다»와 새 목록 · 그 메뉴를 지운다 → 상자가 닫힌다 |
+ * | 연쇄 상자 · 바뀐 직후의 누름 | 바뀌고 30ms 뒤의 누름 · 두 번 바뀜 · 더블클릭 · Enter · 줄어든 목록 · 409 와 신호가 겹친 판 — 첫 누름은 «새 목록 확인»만 푼다 |
  * | 열린 페이지 | bob 이 연 페이지를 alice 가 지운다 — 캔버스가 «대상을 찾을 수 없습니다»로 간다 |
  * | 재연결 | bob 의 WS 를 끊고 그 사이 alice 가 쓴다 — 다시 붙으면 트리가 선다 |
  * | 복원 | alice 의 복원 — bob 의 트리가 곧바로 되돌아가고 복원 배너는 남는다 |
@@ -379,6 +381,224 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
       await bob.close()
     }
   }, 60_000)
+
+  /**
+   * **목록이 바뀐 직후의 누름**(J1 리뷰 R2) — 남의 변경으로 연쇄 상자의 목록이 바뀌면 확인 단추가 «새 목록 확인»으로 서고, 첫 누름은 그 글만
+   * «모두 삭제»로 되돌린다(요청 없음 · `RemoveTarget.recheck`). 둘째 누름이 새 목록을 지운다. 409 길(`./menu-cascade-delete.test.ts`
+   * «같은 수 · 다른 페이지»)도 같은 단추 · 같은 한 줄이다 — 아래 «409 와 신호가 겹친 판»이 두 길을 한 판에 세운다.
+   */
+  describe('연쇄 상자 — 목록이 바뀐 직후의 누름은 새 목록 확인이다', () => {
+    const CONFIRM = '모두 삭제'
+    const RECHECK = '새 목록 확인'
+
+    /** 누른 뒤 그 판이 그려질 때까지 — 보냈으면 요청 이벤트가 이미 섰다. */
+    const settle = (page: Page) => page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))))
+
+    interface Cascade {
+      bob: BobTab
+      dialog: ReturnType<Page['getByRole']>
+      /** bob 의 탭이 낸 연쇄 삭제(`DELETE …/menu/:id`) 수. */
+      deletes: () => number
+      /** 확인 단추의 글 · «목록이 바뀌었습니다» 줄 수 · 목록. 상자가 닫혔으면 단추 `null` — 기다리지 않고 값으로 죽게 한다. */
+      state: () => Promise<{ button: string | null; changed: number; listed: string[] }>
+      serverHas: (title: string) => Promise<boolean>
+      /** 연 뒤에 낸 트리 조회가 모두 답을 받을 때까지. */
+      readsDone: () => Promise<void>
+    }
+
+    async function openCascade(fx: Awaited<ReturnType<typeof fixture>>, origin?: string): Promise<Cascade> {
+      const bob = await openBob(fx.outside, origin)
+      let deletes = 0
+      bob.page.on('request', (request: Request) => {
+        if (request.method() === 'DELETE' && /\/menu\/[^/]+$/.test(new URL(request.url()).pathname)) deletes += 1
+      })
+      const base = bob.treeReads.length
+      let readsEnded = 0
+      const ended = (request: Request) => {
+        if (request.method() === 'GET' && /\/api\/projects\/[^/]+\/tree$/.test(new URL(request.url()).pathname)) readsEnded += 1
+      }
+      bob.page.on('requestfinished', ended)
+      bob.page.on('requestfailed', ended)
+      await openRowAction(bob.page, fx.ids['가']!, '가', '삭제')
+      const dialog = bob.page.getByRole('dialog', { name: '메뉴 삭제', exact: true })
+      await dialog.waitFor()
+      const serverTitles = async (): Promise<string[]> => {
+        const tree = await ok(call('GET', `${fx.P}/tree`))
+        const walk = (nodes: { title: string; pages: { title: string }[]; children: unknown[] }[]): string[] =>
+          nodes.flatMap((node) => [node.title, ...node.pages.map((page) => page.title), ...walk(node.children as typeof nodes)])
+        return walk(tree.menu)
+      }
+      return {
+        bob,
+        dialog,
+        deletes: () => deletes,
+        state: async () => ({
+          button: (await dialog.count()) === 0 ? null : await dialog.locator('.wb-shell-menu-delete-confirm').innerText(),
+          changed: await dialog.getByText(CASCADE_CHANGED, { exact: true }).count(),
+          listed: await dialog.locator('.wb-shell-menu-delete-pages li').allTextContents(),
+        }),
+        serverHas: async (title) => (await serverTitles()).includes(title),
+        readsDone: async () => {
+          await poll('트리 조회가 끝난다', async () => bob.treeReads.length - base - readsEnded, (pending) => pending <= 0, ARRIVAL_LIMIT_MS)
+          await settle(bob.page)
+        },
+      }
+    }
+
+    it('목록이 바뀌고 30ms 뒤의 누름 — 지우지 않고 «모두 삭제»로 돌아간다 · 다음 누름이 새 목록을 지운다', async () => {
+      const fx = await fixture('recheck-30ms')
+      const c = await openCascade(fx)
+      try {
+        // 목록(`li` 수)이 바뀌는 순간 30ms 뒤 단추를 누른다 — 사람이 단추에 손을 올린 채 그 순간 누른 판(리뷰 R2 의 판).
+        await c.bob.page.evaluate(() => {
+          const before = document.querySelectorAll('.wb-shell-menu-delete-pages li').length
+          const w = window as unknown as { __recheck: { changedAt?: number; clickedAt?: number } }
+          w.__recheck = {}
+          const observer = new MutationObserver(() => {
+            if (document.querySelectorAll('.wb-shell-menu-delete-pages li').length === before) return
+            observer.disconnect()
+            w.__recheck.changedAt = performance.now()
+            setTimeout(() => {
+              ;(document.querySelector('.wb-shell-menu-delete-confirm') as HTMLButtonElement).click()
+              w.__recheck.clickedAt = performance.now()
+            }, 30)
+          })
+          observer.observe(document.body, { childList: true, subtree: true })
+        })
+        await ok(call('POST', `${fx.P}/pages`, { menuNodeId: fx.ids['가-하위'], title: '방금 더한 페이지' }))
+        const at = await poll(
+          '바뀐 목록 위의 누름',
+          () => c.bob.page.evaluate(() => (window as unknown as { __recheck: { changedAt?: number; clickedAt?: number } }).__recheck),
+          (value) => value.clickedAt !== undefined,
+          ARRIVAL_LIMIT_MS,
+        )
+        await settle(c.bob.page)
+        const first = { ...(await c.state()), deletes: c.deletes(), kept: await c.serverHas('방금 더한 페이지') }
+        // eslint-disable-next-line no-console
+        console.log('[메뉴 실시간] 바뀐 목록 위의 누름(ms)', (at.clickedAt ?? 0) - (at.changedAt ?? 0), JSON.stringify(first))
+        expect(first).toEqual({ button: CONFIRM, changed: 1, listed: ['가1', '가2', '방금 더한 페이지'], deletes: 0, kept: true })
+
+        await c.dialog.getByRole('button', { name: CONFIRM, exact: true }).click()
+        await poll('서버에서 «가»가 사라진다', () => c.serverHas('가'), (has) => !has, ARRIVAL_LIMIT_MS)
+        expect({ deletes: c.deletes(), added: await c.serverHas('방금 더한 페이지') }).toEqual({ deletes: 1, added: false })
+      } finally {
+        await c.bob.close()
+      }
+    }, 60_000)
+
+    it('확인한 뒤 목록이 또 바뀌면 다시 «새 목록 확인»이다 · 그 단추의 더블클릭은 안 지운다', async () => {
+      const fx = await fixture('recheck-twice')
+      const c = await openCascade(fx)
+      try {
+        await rereadSettled(c.bob.page, () => call('POST', `${fx.P}/pages`, { menuNodeId: fx.ids['가'], title: '하나' }))
+        expect(await c.state()).toEqual({ button: RECHECK, changed: 1, listed: ['가1', '가2', '하나'] })
+        await c.dialog.locator('.wb-shell-menu-delete-confirm').click()
+        await settle(c.bob.page)
+        expect({ ...(await c.state()), deletes: c.deletes() }).toEqual({ button: CONFIRM, changed: 1, listed: ['가1', '가2', '하나'], deletes: 0 })
+        await rereadSettled(c.bob.page, () => call('POST', `${fx.P}/pages`, { menuNodeId: fx.ids['가'], title: '둘' }))
+        expect(await c.state()).toEqual({ button: RECHECK, changed: 1, listed: ['가1', '가2', '하나', '둘'] })
+        // 더블클릭 — 첫 누름은 확인으로 소비되고, 둘째(`detail` 2)는 버린다.
+        await c.dialog.locator('.wb-shell-menu-delete-confirm').dblclick()
+        await settle(c.bob.page)
+        expect({ ...(await c.state()), deletes: c.deletes(), kept: await c.serverHas('둘') }).toEqual({
+          button: CONFIRM,
+          changed: 1,
+          listed: ['가1', '가2', '하나', '둘'],
+          deletes: 0,
+          kept: true,
+        })
+        await c.dialog.getByRole('button', { name: CONFIRM, exact: true }).click()
+        await poll('서버에서 «가»가 사라진다', () => c.serverHas('가'), (has) => !has, ARRIVAL_LIMIT_MS)
+        expect(await c.serverHas('둘')).toBe(false)
+      } finally {
+        await c.bob.close()
+      }
+    }, 60_000)
+
+    it('키보드 Enter — 단추에 포커스를 둔 채 목록이 바뀌면 첫 Enter 는 확인 · 둘째가 지운다', async () => {
+      const fx = await fixture('recheck-enter')
+      const c = await openCascade(fx)
+      try {
+        await c.dialog.locator('.wb-shell-menu-delete-confirm').focus()
+        await rereadSettled(c.bob.page, () => call('POST', `${fx.P}/pages`, { menuNodeId: fx.ids['가-하위'], title: '방금 더한 페이지' }))
+        await c.bob.page.keyboard.press('Enter')
+        await settle(c.bob.page)
+        const first = { ...(await c.state()), deletes: c.deletes(), kept: await c.serverHas('방금 더한 페이지') }
+        expect(first).toEqual({ button: CONFIRM, changed: 1, listed: ['가1', '가2', '방금 더한 페이지'], deletes: 0, kept: true })
+        await c.bob.page.keyboard.press('Enter')
+        await poll('서버에서 «가»가 사라진다', () => c.serverHas('가'), (has) => !has, ARRIVAL_LIMIT_MS)
+        expect(c.deletes()).toBe(1)
+      } finally {
+        await c.bob.close()
+      }
+    }, 60_000)
+
+    it('줄어든 목록(남이 하위 페이지를 지움)도 첫 누름은 확인이다', async () => {
+      const fx = await fixture('recheck-shrunk')
+      const c = await openCascade(fx)
+      try {
+        await rereadSettled(c.bob.page, () => call('DELETE', `${fx.P}/pages/${fx.ids['가2']}`))
+        expect(await c.state()).toEqual({ button: RECHECK, changed: 1, listed: ['가1'] })
+        await c.dialog.locator('.wb-shell-menu-delete-confirm').click()
+        await settle(c.bob.page)
+        expect({ ...(await c.state()), deletes: c.deletes(), kept: await c.serverHas('가') }).toEqual({
+          button: CONFIRM,
+          changed: 1,
+          listed: ['가1'],
+          deletes: 0,
+          kept: true,
+        })
+        await c.dialog.getByRole('button', { name: CONFIRM, exact: true }).click()
+        await poll('서버에서 «가»가 사라진다', () => c.serverHas('가'), (has) => !has, ARRIVAL_LIMIT_MS)
+      } finally {
+        await c.bob.close()
+      }
+    }, 60_000)
+
+    /**
+     * **409 와 신호가 겹친 판** — bob 의 WS(서버 → 브라우저)를 늦춰 alice 의 쓰기 신호가 bob 의 «모두 삭제» 뒤에 닿게 한다. 첫 누름은 낡은
+     * 목록을 보내 409 를 받고(409 길), 늦은 신호는 그 409 목록과 같은 트리를 세운다(신호 길 — 목록이 같아 다시 세우지 않는다). 두 길이 같은
+     * 한 줄 · 같은 단추를 보이고, 신호가 와도 «새 목록 확인»이 풀리지 않는다.
+     */
+    it('409 와 신호가 겹친 판 — 같은 한 줄 · 같은 단추 · 신호가 확인을 안 푼다', async () => {
+      const fx = await fixture('recheck-409')
+      const delay = await stack.startDownDelay(2_000)
+      const c = await openCascade(fx, delay.origin)
+      try {
+        const frames = c.bob.frames.length
+        const added = created(await call('POST', `${fx.P}/pages`, { menuNodeId: fx.ids['가-하위'], title: '방금 더한 페이지' })).id
+        await c.dialog.locator('.wb-shell-menu-delete-confirm').click()
+        // 409 의 답 — 상자가 «바뀌었다»로 다시 선다(누르는 순간 닫혔다 답 뒤에 다시 선다).
+        await poll('409 뒤 다시 선 상자', () => c.dialog.getByText(CASCADE_CHANGED, { exact: true }).count(), (n) => n > 0, ARRIVAL_LIMIT_MS)
+        expect({ ...(await c.state()), deletes: c.deletes(), signalYet: c.bob.frames.length > frames }).toEqual({
+          button: RECHECK,
+          changed: 1,
+          listed: ['가1', '가2', '방금 더한 페이지'],
+          deletes: 1,
+          signalYet: false,
+        })
+        await poll('늦은 신호', async () => c.bob.frames.length, (n) => n > frames, 10_000)
+        // 신호가 낸 다시 받기가 있으면 그 답까지 — 409 뒤의 다시 받기가 이미 그 판을 받았으면 신호는 다시 받지 않는다.
+        await settle(c.bob.page)
+        await c.readsDone()
+        expect({ ...(await c.state()), delayed: delay.delayed() > 0 }).toEqual({
+          button: RECHECK,
+          changed: 1,
+          listed: ['가1', '가2', '방금 더한 페이지'],
+          delayed: true,
+        })
+        await c.dialog.locator('.wb-shell-menu-delete-confirm').click()
+        await settle(c.bob.page)
+        expect({ ...(await c.state()), deletes: c.deletes() }).toEqual({ button: CONFIRM, changed: 1, listed: ['가1', '가2', '방금 더한 페이지'], deletes: 1 })
+        await c.dialog.getByRole('button', { name: CONFIRM, exact: true }).click()
+        await poll('서버에서 «가»가 사라진다', () => c.serverHas('가'), (has) => !has, ARRIVAL_LIMIT_MS)
+        expect({ deletes: c.deletes(), added: (await call('GET', `${fx.P}/pages/${added}`)).status }).toEqual({ deletes: 2, added: 404 })
+      } finally {
+        await c.bob.close()
+        await delay.close()
+      }
+    }, 60_000)
+  })
 
   it('열린 페이지 — alice 가 지우면 캔버스가 «대상을 찾을 수 없습니다»로 간다(ms)', async () => {
     const fx = await fixture('open-page')

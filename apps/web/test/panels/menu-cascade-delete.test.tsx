@@ -12,6 +12,7 @@ import { App } from '../../src/app'
 import {
   CASCADE_CHANGED,
   CASCADE_GONE,
+  CASCADE_RECHECK,
   CASCADE_SAFETY_NOTE,
   MENU_DELETE_CONFIRM,
   MENU_DELETE_TITLE,
@@ -231,6 +232,9 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     // 트리의 실패 줄에는 서지 않는다 — 상자가 그 말을 한다.
     expect(within(region()).queryByRole('alert')).toBeNull()
 
+    // 바뀐 목록 뒤의 첫 누름은 «새 목록 확인»만 푼다 — 아무것도 안 보낸다(`RemoveTarget.recheck`).
+    fireEvent.click(within(box).getByRole('button', { name: CASCADE_RECHECK }))
+    expect(deleteMenuCascade).toHaveBeenCalledTimes(1)
     fireEvent.click(within(box).getByRole('button', { name: MENU_DELETE_CONFIRM }))
     await waitFor(() => expect(deleteMenuCascade).toHaveBeenCalledTimes(2))
     expect(deleteMenuCascade).toHaveBeenNthCalledWith(1, 'p-1', 'm-member', { menuIds: ['m-auth'], pageIds: ['pg-m-0', 'pg-m-1', 'pg-a-0'] })
@@ -251,6 +255,7 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     const box = await screen.findByRole('dialog', { name: MENU_DELETE_TITLE })
     await within(box).findByText(CASCADE_CHANGED)
     expect(currentPath()).toBe('/projects/p-1/pages/pg-moved')
+    fireEvent.click(within(box).getByRole('button', { name: CASCADE_RECHECK }))
     fireEvent.click(within(box).getByRole('button', { name: MENU_DELETE_CONFIRM }))
     await waitFor(() => expect(currentPath()).toBe('/projects/p-1'))
   })

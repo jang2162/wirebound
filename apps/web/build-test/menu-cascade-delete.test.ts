@@ -5,7 +5,7 @@
  * |---|---|
  * | 확인 상자 | 1440×900 에서 상자가 창 안에 굴림 없이 서는가(`PAGE_PREVIEW_LIMIT` 의 근거 — 상자 높이 · 목록 한 줄 높이 · 남는 높이) · 경고 상자의 위험 색 · 설명(`aria-describedby`) · «모두 삭제» 뒤 서버의 트리 · 안전망 |
  * | 하위가 없는 메뉴 | 상자 없이 줄 아래 두 번 누르기 |
- * | 같은 수 · 다른 페이지 | alice 의 트리가 낡은 사이 bob 이 페이지 하나를 밖으로 · 새 페이지 하나를 안으로 — 수는 같다. «모두 삭제»가 아무것도 안 지우고, 상자가 서버의 지금 목록 · «목록이 바뀌었습니다»로 다시 서고, 다시 누르면 그 목록을 지운다 |
+ * | 같은 수 · 다른 페이지 | alice 의 트리가 낡은 사이 bob 이 페이지 하나를 밖으로 · 새 페이지 하나를 안으로 — 수는 같다. «모두 삭제»가 아무것도 안 지우고, 상자가 서버의 지금 목록 · «목록이 바뀌었습니다» · 단추 «새 목록 확인»으로 다시 서고, 그 단추를 누른 뒤 «모두 삭제»가 그 목록을 지운다 |
  * | 받는 쪽 | 지운 페이지를 열어 둔 bob 의 화면 — 친 글 · 열린 줄 메뉴가 지운 뒤 어떻게 끝나는가. **페이지 `DELETE` 판과 같은 값인지** 견준다(둘 다 `menu-changed`를 낸다 — 트리를 다시 받고 «페이지가 사라짐»으로 간다) |
  *
  * `WB_SHOTS_DIR` 이 있으면 그 디렉터리에 스크린숏을 남긴다(사람이 보는 그림 — 케이스는 그 값에 기대지 않는다).
@@ -261,17 +261,26 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
       )
       const after = await dialog.locator('.wb-shell-menu-delete-pages li').allTextContents()
       const sentence = first.changed === 0 ? null : await dialog.locator('.wb-shell-menu-delete-sentence').innerText()
+      const button = first.changed === 0 ? null : await dialog.locator('.wb-shell-menu-delete-confirm').innerText()
       const kept = await serverPages()
       const safety = ((await call('GET', `/projects/${project.id}/snapshots`)).body as unknown[]).length
-      expect({ before, first, after, sentence, kept, safety }).toEqual({
+      expect({ before, first, after, sentence, button, kept, safety }).toEqual({
         before: ['회원 목록', '회원 상세'],
         first: { changed: 1, deleted: false },
         after: ['회원 목록', '새 결제 화면(bob)'],
         sentence: '"회원관리" 메뉴와 페이지 2개가 함께 삭제됩니다',
+        button: '새 목록 확인',
         kept: ['새 결제 화면(bob)', '환경', '회원 목록', '회원 상세'],
         safety: 0,
       })
 
+      // 첫 누름은 «새 목록 확인»만 푼다(`RemoveTarget.recheck` — 신호 길과 같다 · `./menu-realtime.test.ts`).
+      await dialog.getByRole('button', { name: '새 목록 확인', exact: true }).click()
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))))
+      expect({ button: await dialog.locator('.wb-shell-menu-delete-confirm').count(), kept: await serverPages() }).toEqual({
+        button: 1,
+        kept: ['새 결제 화면(bob)', '환경', '회원 목록', '회원 상세'],
+      })
       await dialog.getByRole('button', { name: '모두 삭제', exact: true }).click()
       const left = await poll('서버 트리에서 회원관리가 사라진다', serverPages, (titles) => !titles.includes('회원 목록'))
       expect(left).toEqual(['환경', '회원 상세'])

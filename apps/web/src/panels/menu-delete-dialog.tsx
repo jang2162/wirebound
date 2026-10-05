@@ -18,6 +18,10 @@
  * 바뀌어도 같은 길이다** — 새 목록으로 다시 서고 같은 한 줄을 띄운다. 그 메뉴가 사라졌으면 상자를 닫고 하단 바가 말한다(`tree/use-tree-commands.tsx`의
  * `reconcile`). 내 조작의 다시 받기(409 의 목록이 꼴이 틀린 판)로 그 메뉴가 사라졌으면 상자는 그렇게 말하고 확인을 끈다.
  *
+ * **목록이 바뀐 뒤 확인 단추는 «새 목록 확인»이다** — 두 길 모두, 첫 누름은 그 글만 «모두 삭제»로 되돌리고 아무것도 안 보낸다
+ * (`RemoveTarget.recheck`). 메뉴가 사라져 확인이 꺼진 판은 «모두 삭제»(꺼짐) 그대로다. 그 첫 누름의 더블클릭 둘째(`detail` 2 이상)는 버린다 — 둘째 누름이 곧바로 새 목록을 지우면 첫 누름을 소비한
+ * 뜻이 없다. 따로 누른 두 번(각 `detail` 1)은 사람이 바뀐 단추 글을 본 뒤의 누름으로 받는다.
+ *
  * # 상자는 단축키 상자 **밖**에 선다
  *
  * 메뉴 트리가 그리는 자리는 `PageImportDialog`와 같다(`panels/menu-tree.tsx`의 `outside`) — 상자 단추에서 친 `Delete`가 뒤 트리의 삭제
@@ -49,6 +53,8 @@ export function cascadeWarning(pages: number): string {
 
 export const CASCADE_SAFETY_NOTE = '지우기 직전 상태를 스냅샷으로 남깁니다 — 프로젝트 owner 가 그 스냅샷으로 되돌릴 수 있습니다.'
 export const CASCADE_CHANGED = '목록이 바뀌었습니다 — 다시 확인하세요.'
+/** 목록이 바뀐 뒤 확인 단추의 글 — 누르면 «모두 삭제»로 돌아간다. */
+export const CASCADE_RECHECK = '새 목록 확인'
 export const CASCADE_BUSY = '조작을 보내는 중입니다'
 export const CASCADE_GONE = '이 메뉴가 트리에 없습니다 — 다른 사람이 먼저 지웠을 수 있습니다.'
 
@@ -109,12 +115,12 @@ function OpenMenuDeleteDialog(props: { commands: TreeCommands; target: RemoveTar
             aria-disabled={why !== null || undefined}
             title={why ?? undefined}
             aria-description={why ?? undefined}
-            onClick={() => {
-              if (why !== null) return
+            onClick={(event) => {
+              if (why !== null || event.detail > 1) return
               commands.confirmCascade()
             }}
           >
-            {MENU_DELETE_CONFIRM}
+            {target.recheck && subtree !== null ? CASCADE_RECHECK : MENU_DELETE_CONFIRM}
           </button>
         </div>
       </div>

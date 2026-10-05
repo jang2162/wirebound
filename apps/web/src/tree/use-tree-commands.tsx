@@ -176,7 +176,10 @@ export interface TreeCommands {
   cancelRemove: () => void
   /** 연쇄 삭제 확인 상자의 대상. 닫혀 있으면 `null`. 상자가 보이는 목록이 곧 보내는 id 집합이다(`cascadeShown`). */
   removing: RemoveTarget | null
-  /** 상자의 «삭제» — 상자가 보인 id 집합을 싣고 연쇄 삭제를 보낸다. 서버의 집합이 다르면 서버가 실은 지금 목록으로 상자를 다시 연다. */
+  /**
+   * 상자의 «삭제» — 상자가 보인 id 집합을 싣고 연쇄 삭제를 보낸다. 서버의 집합이 다르면 서버가 실은 지금 목록으로 상자를 다시 연다. 목록이 바뀐
+   * 뒤의 첫 부름은 보내지 않고 «새 목록 확인»만 푼다(`RemoveTarget.recheck`).
+   */
   confirmCascade: () => void
   closeRemoving: () => void
   /** 형제 사이에서 한 칸 옮긴다. `-1`이면 위로, `+1`이면 아래로. */
@@ -247,6 +250,13 @@ export interface RemoveTarget {
   menuId: string
   changed: boolean
   listed: MenuSubtree | null
+  /**
+   * **목록이 바뀐 뒤 사람이 아직 누르지 않았다** — 확인 단추가 «새 목록 확인»으로 서고, 그 첫 누름은 이것만 풀고 아무것도 안 보낸다
+   * (`confirmCascade`). 목록이 바뀌는 두 길(409 · 남의 변경으로 받은 트리 — `reconcile`)이 같이 세운다. 없으면 남의 변경으로 목록이
+   * 바뀐 바로 뒤의 누름(손을 단추에 올린 채 그 순간 누름)이 사람이 본 적 없는 새 목록을 지운다 — 보낸 id 가 서버의 지금 목록과 같아
+   * 서버의 견줌이 못 막는다. 시간으로 가르지 않는 것은 `CLAUDE.md` «뒤따르는 클릭을 삼키는 장치는 시간만으로 가르지 않는다».
+   */
+  recheck: boolean
 }
 
 /**
@@ -1232,7 +1242,8 @@ export function useTreeCommands(props: {
   }
 
   /**
-   * 연쇄 삭제를 보낸다(상자의 «삭제»). **싣는 id 는 상자가 그리는 목록 그대로다**(`cascadeShown`).
+   * 연쇄 삭제를 보낸다(상자의 «삭제»). **싣는 id 는 상자가 그리는 목록 그대로다**(`cascadeShown`). 목록이 바뀐 뒤의 첫 누름은 보내지 않고
+   * «새 목록 확인»만 푼다(`RemoveTarget.recheck`).
    *
    * **열린 페이지가 지운 서브트리 안이면 프로젝트 루트로 `replace` 이동한다** — 페이지 삭제(`confirmRemove`)와 같은 까닭(뒤로 가기가
    * 지운 페이지로 돌아가면 404 다). 선택은 지운 메뉴의 부모로 간다(메뉴 삭제와 같다).
@@ -1245,6 +1256,10 @@ export function useTreeCommands(props: {
     if (removing === null || menu === null) return
     const subtree = cascadeShown(removing, menu)
     if (subtree === null) return
+    if (removing.recheck) {
+      setRemoving({ ...removing, recheck: false })
+      return
+    }
     const target = removing.menuId
     const parentId = treeSpot(menu, { kind: 'menu', id: target })?.parentId ?? null
     const wasOpen = pageId !== undefined && subtree.pages.some((page) => page.id === pageId)
@@ -1277,7 +1292,7 @@ export function useTreeCommands(props: {
           setFailure(failure)
           return
         }
-        setRemoving({ menuId: target, changed: true, listed })
+        setRemoving({ menuId: target, changed: true, listed, recheck: true })
         void load(() => !unmounted.current, true, gone.current.signal)
       },
     )
@@ -1292,7 +1307,7 @@ export function useTreeCommands(props: {
    * | 이름 입력 · 새 메뉴 · 새 페이지(고른 줄에 붙는 셋) | 닫는다 — 친 글이 있었으면 하단 바 `TREE_DRAFT_DROPPED` | 그대로(옮겨졌으면 새 자리에 친 글째 선다 — `inputValue` · 접힌 메뉴 안이면 `panels/menu-tree.tsx`의 `chains`가 편다) |
    * | 고른 줄(`picked`) · 두 번 누르기 확인 · 소속 메뉴 목록 | 고름을 풀고(주소의 페이지로 돌아간다) 둘을 닫는다 | 그대로 |
    * | 제목 충돌 통지 | 걷는다 — 무엇의 충돌인지가 화면에서 사라졌다 | 그대로 |
-   * | 연쇄 삭제 상자 | 닫는다 — 하단 바 `cascadeClosedNotice` | 보인 id 집합과 새 서브트리가 다르면 새 목록으로 다시 세우고 «목록이 바뀌었습니다»(409 와 같은 길) |
+   * | 연쇄 삭제 상자 | 닫는다 — 하단 바 `cascadeClosedNotice` | 보인 id 집합과 새 서브트리가 다르면 새 목록으로 다시 세우고 «목록이 바뀌었습니다» · 첫 누름은 «새 목록 확인»(409 와 같은 길 — `RemoveTarget.recheck`) |
    *
    * **열린 페이지가 사라진 것은 여기서 안 본다** — 아래 `onPageGone`의 이펙트가 트리마다 본다. 줄의 행동 메뉴는 그 줄이 트리에서 빠지며 함께
    * 내려간다. 가져오기 상자는 연 순간의 메뉴 id 로 보내고 서버의 거절을 상자 안에 보인다(`importing` 머리말) — 여기서 안 닫는다.
@@ -1320,7 +1335,7 @@ export function useTreeCommands(props: {
         setRemoving(null)
         told.push(cascadeClosedNotice(shown?.title ?? findMenuTitle(menu ?? [], removing.menuId) ?? ''))
       } else if (shown === null || !sameIds(shown, now)) {
-        setRemoving({ menuId: removing.menuId, changed: true, listed: now })
+        setRemoving({ menuId: removing.menuId, changed: true, listed: now, recheck: true })
       }
     }
     const last = told.at(-1)
@@ -1363,7 +1378,7 @@ export function useTreeCommands(props: {
       const subtree = selection?.kind === 'menu' ? menuSubtree(menu, selection.id) : null
       if (selection?.kind === 'menu' && subtree !== null && (subtree.menus.length > 0 || subtree.pages.length > 0)) {
         setConfirmingRemove(false)
-        setRemoving({ menuId: selection.id, changed: false, listed: null })
+        setRemoving({ menuId: selection.id, changed: false, listed: null, recheck: false })
         return
       }
       setConfirmingRemove(true)
