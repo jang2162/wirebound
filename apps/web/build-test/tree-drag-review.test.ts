@@ -315,19 +315,16 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
   })
 
   /**
-   * 메뉴 트리는 남의 트리 변경을 실시간으로 받지 않는다(제 조작 뒤에만 다시 받는다 — `use-tree-commands.tsx`의 `run`). 그래서 끄는 중
-   * 남이 그 페이지를 지워도 줄이 남고, 놓으면 지워진 페이지에 요청이 하나 나간다. 이 케이스는 그 판에서 **조용하지 않은지**를 잠근다 —
-   * 요청은 거절되고(404) 트리 칸이 실패를 말한다. 옛 툴바의 «옮기기»도 같은 판이다(원래 있던 길 — 리뷰 보고 항목 2).
+   * 끄는 중 남이 그 페이지를 지운다. 메뉴 트리는 남의 변경을 받으므로(`menu-changed`) 끈 줄이 트리에서 빠지고, 놓아도 요청이 안 나간다 —
+   * 놓는 판정이 지금 트리로 끈 것을 못 찾는다(`use-tree-commands.tsx`의 `dropTo`). 끄는 표시도 남지 않는다. 남의 변경을 받지 않으면 줄이
+   * 남고 지워진 페이지에 요청 하나가 나가 404 · 트리 칸이 실패를 말한다.
    */
-  it('메뉴: 끄는 중 남이 그 페이지를 지우면 — 트리는 모르고 요청 하나가 거절되며 실패를 말한다', async () => {
+  it('메뉴: 끄는 중 남이 그 페이지를 지우면 — 줄이 빠지고 놓아도 요청이 없다', async () => {
     const { projectId, P, ids } = await menuFixture('page-gone', 'editor')
     const tab = await openEditor(P)
-    const answers: number[] = []
-    tab.page.on('response', (response) => {
-      if (response.request().method() === 'PATCH' && response.url().includes(ids['나1']!)) answers.push(response.status())
-    })
     try {
       const { page } = tab
+      await page.waitForTimeout(300)
       await grab(page, ids['나1']!)
       const target = await spot(page, ids['가']!, 'middle')
       await page.mouse.move(target.x, target.y, { steps: 6 })
@@ -338,20 +335,18 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
         .catch(() => false)
       await page.mouse.move(target.x, target.y + 1, { steps: 2 })
       await page.mouse.up()
-      await poll('답', async () => answers.length, (n) => n > 0, 5_000)
+      await page.waitForTimeout(500)
       const said = await page.locator('.wb-shell-region[aria-label="메뉴·페이지 트리"] [role="alert"]').allInnerTexts()
       const tree = await serverTree(projectId)
 
-      expect({ removed: removed.status, gone, writes: tab.writes.length, answers, said: said.join(' ').length > 0, 가: titles(find(tree, '가')!.pages) }).toEqual({
-        removed: 204,
-        gone: false,
-        writes: 1,
-        answers: [404],
-        said: true,
-        가: ['가1', '가2'],
-      })
-      // eslint-disable-next-line no-console
-      console.log('[page-gone]', JSON.stringify({ said }))
+      expect({
+        removed: removed.status,
+        gone,
+        writes: tab.writes.length,
+        said,
+        lifted: await page.locator('.wb-shell-tree-row-dragging').count(),
+        가: titles(find(tree, '가')!.pages),
+      }).toEqual({ removed: 204, gone: true, writes: 0, said: [], lifted: 0, 가: ['가1', '가2'] })
     } finally {
       await tab.close()
     }
