@@ -405,4 +405,64 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
       }
     }, 60_000)
   })
+
+  describe('3 · 포커스가 떠난 행동 메뉴', () => {
+    it('열린 메뉴에서 포커스가 밖(캔버스 · 다음 단추)으로 가면 메뉴가 닫힌다 — 그 뒤의 Delete 는 닫힌 메뉴처럼 고른 노드를 지운다', async () => {
+      const ways: [string, (page: Page) => Promise<void>][] = [
+        [
+          '캔버스 포커스',
+          (page) => page.evaluate(() => (document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement).contentWindow!.focus()),
+        ],
+        [
+          '단추에서 Tab',
+          async (page) => {
+            await nodeMenu(page, 'n_text0000002', 1).focus()
+            await page.keyboard.press('Tab')
+          },
+        ],
+        ['메뉴 안에서 Tab', (page) => page.keyboard.press('Tab')],
+      ]
+      const results: Record<string, unknown> = {}
+      for (const [name, leave] of ways) {
+        const fx = await fixture(`menu-leave-${Object.keys(results).length}`)
+        const { page, close } = await open(fx.url)
+        try {
+          await nodeRow(page, 'n_text0000002').click()
+          await nodeMenu(page, 'n_text0000002', 1).click()
+          await page.locator('[role="menu"]').waitFor()
+          await leave(page)
+          await sleep(150)
+          const left = { menus: await menus(page), focus: await focusOf(page) }
+          await page.keyboard.press('Delete')
+          results[name] = { ...left, server: await serverPage(fx.url), after: await menus(page) }
+        } finally {
+          await close()
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[J4 떠난 메뉴] ${JSON.stringify(results)}`)
+      expect(results).toEqual({
+        '캔버스 포커스': { menus: 0, focus: 'iframe', server: WITHOUT_TEXT2, after: 0 },
+        '단추에서 Tab': { menus: 0, focus: 'node:n_text0000003', server: WITHOUT_TEXT2, after: 0 },
+        '메뉴 안에서 Tab': { menus: 0, focus: 'node:n_text0000003', server: WITHOUT_TEXT2, after: 0 },
+      })
+    }, 120_000)
+
+    it('목록 안의 빈 자리(머리 · 여백)를 누르면 포커스가 `body` 로 가도 메뉴는 열린 채다', async () => {
+      const fx = await fixture('menu-heading')
+      const { page, close } = await open(fx.url)
+      try {
+        await page.locator('header.wb-shell-header').getByRole('button', { name: '더 보기', exact: true }).click()
+        await page.locator('[role="menu"]').waitFor()
+        await page.locator('.wb-shell-action-menu-heading').click()
+        await sleep(150)
+        const result = { focus: await focusOf(page), menus: await menus(page) }
+        // eslint-disable-next-line no-console
+        console.log(`[J4 떠난 메뉴 — 머리 누름] ${JSON.stringify(result)}`)
+        expect(result).toEqual({ focus: 'body', menus: 1 })
+      } finally {
+        await close()
+      }
+    }, 60_000)
+  })
 })

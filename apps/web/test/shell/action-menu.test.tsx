@@ -10,7 +10,7 @@
  *   돌아온다»는 메뉴 안에 있던 포커스를 떠돌게 두지 않는다는 것까지다(누른 자리가 포커스를 받는 판은 그 누름이 가져간다).
  * - **자리(`usePopoverSide`)는 안 잰다** — jsdom 은 레이아웃이 없다. 그 판정은 `popover-side.test.tsx` 가 잰다.
  */
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter, useLocation } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
@@ -126,6 +126,32 @@ describe('여닫기', () => {
     expect([held(toggle()), held(document.activeElement!), held(toggle(), 'Delete'), held(document.activeElement!, 'Backspace')]).toEqual([true, true, true, true])
     key('Escape')
     expect([held(toggle()), held(toggle(), 'Delete')]).toEqual([false, false])
+  })
+})
+
+describe('포커스가 밖으로 가면', () => {
+  /** 한 틱 뒤에 본다 — `focusout` 때의 `activeElement` 는 옮겨 가는 중이다(`closeWhenFocusLeaves`). */
+  const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+
+  it('밖의 요소가 포커스를 받으면 닫는다 — 단추로 되돌리지 않는다', async () => {
+    host()
+    fireEvent.click(toggle())
+    screen.getByRole('button', { name: '바깥' }).focus()
+    await tick()
+    expect({ menus: screen.queryAllByRole('menu').length, focus: focused() }).toEqual({ menus: 0, focus: '바깥' })
+  })
+
+  it('항목 사이 · 단추로 옮기거나 포커스가 `body` 로 떨어지면(빈 자리 누름) 열린 채다', async () => {
+    host()
+    fireEvent.click(toggle())
+    const open: number[] = []
+    // 걸음마다 한 틱을 기다린다 — 타이머가 끝에 몰려 돌면 그때의 포커스(`body`)만 본다.
+    for (const step of [() => key('ArrowDown'), () => toggle().focus(), () => (document.activeElement as HTMLElement).blur()]) {
+      step()
+      await tick()
+      open.push(screen.queryAllByRole('menu').length)
+    }
+    expect(open).toEqual([1, 1, 1])
   })
 })
 
