@@ -9,10 +9,19 @@
  * - **깔지 않은 판**(컴포넌트를 혼자 그리는 케이스)은 늘 기본이고 `choose` 는 아무것도 안 한다.
  *
  * 읽기 주소 `?state=` 는 이 훅이 모른다 — 뷰 모드 · viewer 가 주소를 읽어 `choose` 를 부른다.
+ *
+ * **«모든 가지 보기»도 여기 둔다**(`useAllCases`) — 구조 트리의 토글이지만 편집 판정(`edit/use-edit-commit.tsx` 의 `commitOps` — 안 보이는 가지를
+ * 고치는 편집을 막는다)과 고른 것 정리(아래 `HiddenSelectionPrune`)가 같은 값을 본다. 트리 하나의 화면 값이라 페이지를 옮겨도 그대로다.
+ *
+ * **고른 노드가 안 보이게 되면 고른 것에서 뺀다**(`HiddenSelectionPrune` — K2 리뷰 H2). 남이 같은 영역에 지금 상태의 가지를 먼저 만들면 고르던
+ * 흐린 노드가 숨은 기본 가지가 된다 — 고른 채 두면 속성 패널이 안 보이는 노드를 그리고 친 글이 그 노드(모든 상태가 보는 기본 가지)에 썼다. 상태를
+ * 바꾸거나 «모든 가지 보기»를 끈 판도 같다. 뺄 때 위젯이 넘기는 초안은 그 노드에 안 쓴다(`panels/property-panel.tsx` 의 `useLeftoverCommit` ·
+ * `panels/alias-edit.tsx` — 하단 바 `DROPPED_DRAFT_NOTICE`).
  */
-import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactElement, type ReactNode } from 'react'
+import { createContext, createElement, Fragment, useCallback, useContext, useLayoutEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react'
 import type { ViewState } from '@wirebound/schema'
-import { useOpenDocument } from '../store/use-editor-store'
+import { hiddenNodeIds } from '../edit/view-state-fork'
+import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 
 interface Chosen {
   pageId: string
@@ -27,6 +36,8 @@ interface ViewStateContextValue {
   setChosen: (chosen: Chosen | null) => void
   dialog: ManageDialog | null
   setDialog: (dialog: ManageDialog | null) => void
+  allCases: boolean
+  setAllCases: (next: boolean | ((on: boolean) => boolean)) => void
 }
 
 const ViewStateContext = createContext<ViewStateContextValue | null>(null)
@@ -34,6 +45,7 @@ const ViewStateContext = createContext<ViewStateContextValue | null>(null)
 export function ViewStateProvider(props: { pageId: string | undefined; children: ReactNode }): ReactElement {
   const [chosen, setChosen] = useState<Chosen | null>(null)
   const [dialog, setDialog] = useState<ManageDialog | null>(null)
+  const [allCases, setAllCases] = useState(false)
   const [seenPage, setSeenPage] = useState(props.pageId)
   // 페이지가 바뀐 렌더에서 곧바로 지운다(머리말 «페이지를 옮기면 …»).
   let current = chosen
@@ -44,8 +56,27 @@ export function ViewStateProvider(props: { pageId: string | undefined; children:
     // 열린 상자는 앞 페이지의 목록을 다룬다 — 함께 닫는다.
     setDialog(null)
   }
-  const value = useMemo(() => ({ chosen: current, setChosen, dialog, setDialog }), [current, dialog])
-  return createElement(ViewStateContext.Provider, { value }, props.children)
+  const value = useMemo(() => ({ chosen: current, setChosen, dialog, setDialog, allCases, setAllCases }), [current, dialog, allCases])
+  return createElement(ViewStateContext.Provider, { value }, createElement(Fragment, null, createElement(HiddenSelectionPrune, { pageId: props.pageId }), props.children))
+}
+
+/**
+ * 고른 노드 가운데 지금 안 보이는 것을 고른 것에서 뺀다(머리말). 문서 · 상태 · «모든 가지 보기»가 바뀐 커밋에서 곧바로 — 레이아웃 이펙트라 안 보이는
+ * 노드를 그린 판이 화면에 서지 않는다. 남의 잠금 거절과 같은 스토어 명령(`dropFromSelection`)이다.
+ */
+function HiddenSelectionPrune(props: { pageId: string | undefined }): null {
+  const store = useEditorStoreInstance()
+  const document = useOpenDocument(props.pageId)
+  const selected = useEditorStore(store, (s) => s.selectedNodeIds)
+  const { state } = useViewState(props.pageId)
+  const { allCases } = useAllCases()
+  useLayoutEffect(() => {
+    if (selected.length === 0) return
+    const hidden = hiddenNodeIds(document, state, allCases)
+    const gone = selected.filter((id) => hidden.has(id))
+    if (gone.length > 0) store.dropFromSelection(gone)
+  }, [store, document, selected, state, allCases])
+  return null
 }
 
 export interface ViewStateChoice {
@@ -75,6 +106,21 @@ export function useViewState(pageId: string | undefined): ViewStateChoice {
     [setChosen, pageId],
   )
   return { state, viewStates, choose }
+}
+
+/** «모든 가지 보기» — 깔지 않은 판(구조 트리만 띄운 케이스)은 그 컴포넌트 안의 상태로 물러선다. */
+export function useAllCases(): { allCases: boolean; setAllCases: (next: boolean | ((on: boolean) => boolean)) => void } {
+  const context = useContext(ViewStateContext)
+  const [local, setLocal] = useState(false)
+  return context === null ? { allCases: local, setAllCases: setLocal } : { allCases: context.allCases, setAllCases: context.setAllCases }
+}
+
+/** 지금 안 보이는 노드인가(`edit/view-state-fork.ts` 의 `hiddenNodeIds`) — 지금 상태 · «모든 가지 보기»로. */
+export function useHiddenNodes(pageId: string | undefined): ReadonlySet<string> {
+  const document = useOpenDocument(pageId)
+  const { state } = useViewState(pageId)
+  const { allCases } = useAllCases()
+  return useMemo(() => hiddenNodeIds(document, state, allCases), [document, state, allCases])
 }
 
 /** 상태 다루기 상자의 열림 — 전환기 · 접힌 `…` 의 항목이 열고, 상자가 닫는다. 깔지 않은 판은 늘 닫혀 있다. */

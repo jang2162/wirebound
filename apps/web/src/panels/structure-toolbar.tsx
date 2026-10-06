@@ -46,7 +46,7 @@ import { patternInsert } from '../edit/pattern-insert'
 import { presetApply, presetFailureNotice } from '../edit/preset-apply'
 import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, regionRulesAt, selectionAbilities, type StructureAbilities } from '../edit/structure-actions'
-import { nonDefaultCase, removeCasePlan, splitPlan, SPLIT_PICK_REASON, unsplitPlan, type UnsplitShown } from '../edit/view-state-actions'
+import { nonDefaultCase, removeCasePlan, splitPlan, SPLIT_PICK_REASON, unsplitKey, unsplitPlan, type UnsplitShown } from '../edit/view-state-actions'
 import { useViewState } from '../shell/use-view-state'
 import { removeManyOps } from '../edit/paste-ops'
 import type { StructureDrop } from '../edit/structure-drop'
@@ -155,6 +155,18 @@ export interface StructureCommands {
   viewState: ViewStateCommands
 }
 
+/**
+ * **풀기 확인이 보이는 것** — 상태 삭제 확인(`shell/view-states-dialog.tsx` 머리말 «상태 삭제 확인 — 보인 id 집합을 보낸다»)과 같은 꼴이다. 연 순간
+ * (또는 다시 선 순간)의 열쇠(지워지는 가지 id 와 그 안 노드 id 전부 — `unsplitKey`)를 쥐고, 렌더마다 지금 문서로 다시 지은 열쇠와 견준다. 다르면 새
+ * 목록으로 다시 서며 «목록이 바뀌었습니다»(`changed`), 확인 단추는 «새 목록 확인»(`recheck` — 첫 누름은 안 보낸다). 누를 때 한 번 더 견준다. 연
+ * 뒤 남이 그 영역에 가지를 만들면 보지 않은 가지까지 지웠다(K2 리뷰 H3).
+ */
+export interface UnsplitAsk {
+  shown: UnsplitShown | null
+  changed: boolean
+  recheck: boolean
+}
+
 /** 줄 `…` 의 상태 명령 — 끈 까닭과 실행. 잠금은 고른 노드의 잠금 · 묶음의 `editBlockedBy` 로 끈다(구조 명령과 같은 자세). */
 export interface ViewStateCommands {
   /** «상태별로 나누기»가 꺼진 까닭 — 켜졌으면 `undefined`. */
@@ -165,8 +177,8 @@ export interface ViewStateCommands {
   unsplitWhy: string | undefined
   /** 다른 가지가 있으면 확인 상자를 열고(`unsplitting`), 없으면 곧바로 푼다. */
   askUnsplit: () => void
-  /** 확인을 묻는 중 — 지워지는 가지 · 노드. */
-  unsplitting: UnsplitShown | null
+  /** 확인을 묻는 중 — 지금 문서로 지은 지워지는 가지 · 노드(영역이 없으면 `shown` 이 `null`)와 견줌의 결과. */
+  unsplitting: UnsplitAsk | null
   confirmUnsplit: () => void
   cancelUnsplit: () => void
   /** 고른 노드가 기본이 아닌 가지인가 — «이 상태 가지 지우기»를 싣는다. */
@@ -658,11 +670,18 @@ export function useStructureCommands(props: {
   const unsplitWhy = unsplit === null ? undefined : whyOf(unsplit)
   const caseRemoval = document === null || many ? null : nonDefaultCase(document, selectedNodeId) === null ? null : removeCasePlan(document, selectedNodeId!)
   const removeCaseWhy = caseRemoval === null ? undefined : whyOf(caseRemoval)
-  const [unsplitting, setUnsplitting] = useState<UnsplitShown | null>(null)
+  const [unsplitting, setUnsplitting] = useState<{ switchId: string; key: string; changed: boolean; recheck: boolean } | null>(null)
   // 고른 것이 바뀌면 묻던 확인을 닫는다 — 확인은 연 순간의 영역에 대한 것이다.
   useEffect(() => {
     setUnsplitting(null)
   }, [selectedNodeId])
+  const unsplitNow = unsplitting === null || document === null ? null : unsplitPlan(document, unsplitting.switchId)
+  const unsplitShown = unsplitNow !== null && 'ops' in unsplitNow ? (unsplitNow.shown ?? null) : null
+  const unsplitNowKey = unsplitShown === null ? '' : unsplitKey(unsplitShown)
+  // 묻는 사이 지울 것이 바뀌었으면(남의 편집이 닿음) 새 목록으로 다시 선다 — 렌더 중에 고친다(누를 때 보는 열쇠와 같은 값).
+  if (unsplitting !== null && unsplitNowKey !== unsplitting.key) {
+    setUnsplitting({ switchId: unsplitting.switchId, key: unsplitNowKey, changed: true, recheck: true })
+  }
 
   function splitSelected(): void {
     if (document === null || splitWhy !== undefined) return
@@ -676,6 +695,20 @@ export function useStructureCommands(props: {
     if (document === null || selectedNodeId === null) return
     const plan = unsplitPlan(document, selectedNodeId)
     if (plan === null || 'reason' in plan || lockWhy(plan.ops) !== undefined) return
+    if (unsplitting !== null) {
+      const key = plan.shown === undefined ? '' : unsplitKey(plan.shown)
+      // 렌더 중의 견줌(위)이 대개 먼저 잡는다. 이 줄은 남의 편집이 스토어에 닿고 다시 그리기 전에 누름이 온 판의 몫이다(상태 삭제 확인의
+      // `confirmRemove` 와 같은 자리).
+      if (key !== unsplitting.key) {
+        setUnsplitting({ switchId: unsplitting.switchId, key, changed: true, recheck: true })
+        return
+      }
+      // 바뀐 목록을 본 첫 누름 — 단추 글만 «풀기»로 되돌린다.
+      if (unsplitting.recheck) {
+        setUnsplitting({ ...unsplitting, recheck: false })
+        return
+      }
+    }
     if (commitOps(plan.ops)) setUnsplitting(null)
   }
 
@@ -686,10 +719,11 @@ export function useStructureCommands(props: {
     unsplitWhy,
     askUnsplit: () => {
       if (unsplit === null || 'reason' in unsplit || unsplitWhy !== undefined) return
-      if (unsplit.shown !== undefined && unsplit.shown.cases.length > 0) setUnsplitting(unsplit.shown)
+      if (unsplit.shown !== undefined && unsplit.shown.cases.length > 0)
+        setUnsplitting({ switchId: unsplit.shown.switchId, key: unsplitKey(unsplit.shown), changed: false, recheck: false })
       else runUnsplit()
     },
-    unsplitting,
+    unsplitting: unsplitting === null ? null : { shown: unsplitShown, changed: unsplitting.changed, recheck: unsplitting.recheck },
     confirmUnsplit: runUnsplit,
     cancelUnsplit: () => setUnsplitting(null),
     canRemoveCase: caseRemoval !== null,

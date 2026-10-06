@@ -22,7 +22,7 @@ import { EditNotSentError, UnansweredEditError, type EditChannel, type Unanswere
 import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import { MARKER_FRAME_WAIT_MS, type EditFailure, type EditStatus, type RestoredRevision, type UndoAttempt, type UndoHistoryNeed } from '../store/editor-store'
 import { LOSS_RANK, type LossPart } from '../store/loss-notice'
-import { useViewState } from '../shell/use-view-state'
+import { useAllCases, useViewState } from '../shell/use-view-state'
 import { interactionsOps, propOps, variantOps } from './ops'
 import { planViewStateEdit, rememberFork } from './view-state-fork'
 
@@ -371,6 +371,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const status = useEditorStore(store, (s) => s.editStatus)
   /** 지금 고른 화면 상태(`shell/use-view-state.ts`) — 흐린 기본 가지 안을 고친 편집을 «복사 + 편집»으로 바꾸는 판정(`commitOps`)이 본다. */
   const { state: viewState } = useViewState(pageId)
+  /** «모든 가지 보기» — 켰으면 안 보이는 가지가 없다(그 판정의 예외 — `./view-state-fork.ts` 의 표). */
+  const { allCases } = useAllCases()
   // 되짚기 이력을 받는 동안은 둘 다 꺼진다(`undo`의 `loadUndoHistory`) — 누른 것은 받은 뒤 한 번 되돌린다. **다시 실행도 끄는 까닭**: 받는
   // 동안 다시 실행이 맨 위에 세션 편집을 올리면 받은 뒤 그 되돌리기를 말없이 버린다(맨 위 비교). 받는 창은 조회 한 번이고 다시 실행 스택은
   // 그대로라, 받은 뒤 누르면 된다 — 막히는 것은 그 창 안의 누름뿐이다.
@@ -834,8 +836,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       // 만드는 쪽이 "요청을 보내지 마라"라고 답한 것이다(`edit/ops.ts` 머리말).
       if (ops === null) return false
       // **상태를 고른 채 흐린 기본 가지 안을 고친 편집은 «복사 + 편집» 한 묶음이 된다**(`./view-state-fork.ts` — 판정과 표는 거기). 나눌 수
-      // 없는 묶음은 보내지 않고 말한다 — 그대로 보내면 기본 가지(모든 상태)가 바뀐다.
-      const plan = planViewStateEdit(open.document, ops, viewState, createNodeId)
+      // 없는 묶음 · 안 보이는 가지를 고치는 묶음은 보내지 않고 말한다 — 그대로 보내면 기본 가지(모든 상태)나 사람이 못 보는 가지가 바뀐다.
+      const plan = planViewStateEdit(open.document, ops, viewState, createNodeId, allCases)
       if (plan.kind === 'refused') {
         store.setEditFailure({ kind: 'message', message: plan.reason })
         return false
@@ -864,7 +866,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       void pump()
       return true
     },
-    [open, store, pump, lossArrivedSince, viewState],
+    [open, store, pump, lossArrivedSince, viewState, allCases],
   )
 
   const commitProp = useCallback(

@@ -24,7 +24,7 @@
  * 실거나(그러면 `loadPage`의 시그니처가 바뀌어 테스트까지 부르는 자리가 전부 바뀐다) 프롭을
  * 한 겹 더 놓거나다. 뷰 모드 탭은 자기 조회를 이미 갖고 있어 요청이 하나도 늘지 않는다.
  */
-import { forkedId } from '../edit/view-state-fork'
+import { forkedId, hiddenNodeIds } from '../edit/view-state-fork'
 import { useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { NO_THEME, resolveVariant } from '@wirebound/renderer'
 import {
@@ -53,6 +53,7 @@ import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../stor
 import { useLockedBy } from '../store/use-locked-by'
 import { LOSS_RANK } from '../store/loss-notice'
 import { useSessionEpochNowOrNull } from '../session/session-context'
+import { useAllCases, useViewState } from '../shell/use-view-state'
 import { ListControl } from './controls/list-control'
 import { SelectControl } from './controls/select-control'
 import { SwitchControl } from './controls/switch-control'
@@ -117,7 +118,7 @@ type BuildOps = (running: PageDocument, nodeId: string) => PatchOp[] | null
  * | 앞 목록에서 | 하는 일 |
  * |---|---|
  * | 아직 문서에 있고 · 그때의 타입 그대로고 · 남이 안 쥔 노드가 있다 | 그 노드들에 쓴다 — 편집 하나(묶음). 하단 바는 치우지 않는다(일부 거절의 통지가 그 자리에 있다) |
- * | 그런 노드가 없다(전부 지워짐 · 타입이 갈림 · 남이 쥠 · 다른 페이지로 옮겨 갔다) | 버리고 하단 바에 `DROPPED_DRAFT_NOTICE` 한 줄(잃음 통지는 안 덮는다) |
+ * | 그런 노드가 없다(전부 지워짐 · 타입이 갈림 · 남이 쥠 · 지금 상태에서 안 보임 · 다른 페이지로 옮겨 갔다) | 버리고 하단 바에 `DROPPED_DRAFT_NOTICE` 한 줄(잃음 통지는 안 덮는다) |
  * | 쓸 노드는 있는데 편집이 큐에 못 들어갔다(`commitOps`가 `false` — 주소가 이미 다른 페이지다) | 버리고 같은 한 줄을 **떠남의 조각**으로(아래) |
  * | 고칠 수 없는 역할이다 | 아무것도 안 한다 — 위젯이 꺼진 까닭은 패널이 이미 말한다 |
  * | 패널이 선 세션이 끝났다(로그아웃 · 다른 탭의 로그아웃 · 다른 사람으로 바뀜 — 세션 세대가 올랐다) | 아무것도 안 한다 — 끝난 세션으로 쓰기를 내지 않는다. 버린 것은 그 로그아웃의 한 줄이 말하는 몫이다 |
@@ -132,15 +133,18 @@ type BuildOps = (running: PageDocument, nodeId: string) => PatchOp[] | null
  * «칸에 친 채 고른 것이 바뀐다» 절.
  */
 function useLeftoverCommit(pageId: string | undefined, canEdit: boolean, commitOps: EditCommit['commitOps']) {
+  // 지금 상태 · «모든 가지 보기» — 안 보이는 노드(남이 가지를 먼저 만들어 숨은 흐린 노드)에는 초안을 안 쓴다(`edit/view-state-fork.ts` 의 `hiddenNodeIds`).
+  const { state: viewState } = useViewState(pageId)
+  const { allCases } = useAllCases()
   const store = useEditorStoreInstance()
   // **패널이 선 세션 세대**(`session/session-context.tsx` «세션 세대»). 세션이 끝나면 셸이 내려가며 위젯의 정리가 여기를 부른다 — 그때 지금
   // 세대가 이것과 다르면 쓰지 않는다. 셸은 세션을 넘어 살지 않으므로(문지기가 로그인 · 목록으로 보낸다) 처음 그린 세대가 그 세션이다.
   const epochNow = useSessionEpochNowOrNull()
   const [bornIn] = useState(() => epochNow?.() ?? null)
   // 내려가는 위젯의 정리는 다시 그린 **뒤에** 돈다 — 그때의 `commitOps`(지금 열린 페이지)를 읽는다.
-  const latest = useRef({ canEdit, commitOps })
+  const latest = useRef({ canEdit, commitOps, viewState, allCases })
   useLayoutEffect(() => {
-    latest.current = { canEdit, commitOps }
+    latest.current = { canEdit, commitOps, viewState, allCases }
   })
   return (at: { pageId: string | undefined; nodeIds: readonly string[]; type: string }, build: BuildOps): void => {
     if (!latest.current.canEdit) return
@@ -148,6 +152,7 @@ function useLeftoverCommit(pageId: string | undefined, canEdit: boolean, commitO
     const state = store.getState()
     const document = at.pageId !== undefined && state.openPageId === at.pageId ? state.document : null
     // 방금 «복사 + 편집»으로 복사된 노드의 초안은 복사에 쓴다(`edit/view-state-fork.ts` 의 `forkedId` — 옛 노드는 이제 숨은 기본 가지다).
+    const hidden = hiddenNodeIds(document, latest.current.viewState, latest.current.allCases)
     const targets =
       document === null
         ? []
@@ -155,7 +160,7 @@ function useLeftoverCommit(pageId: string | undefined, canEdit: boolean, commitO
             .map((id) => forkedId(store, id))
             .filter((id) => {
               const node = findNodeSafely(document.root, id)
-              return node !== undefined && nodeType(node) === at.type && store.lockedBy(id) === null
+              return node !== undefined && nodeType(node) === at.type && store.lockedBy(id) === null && !hidden.has(id)
             })
     if (document === null || targets.length === 0) {
       if (!store.showsLoss()) store.setEditFailure({ kind: 'message', message: DROPPED_DRAFT_NOTICE })

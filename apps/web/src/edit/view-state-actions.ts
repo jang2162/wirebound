@@ -58,6 +58,11 @@ export interface UnsplitShown {
   nodes: { id: string; label: string }[]
 }
 
+/** 풀기 확인의 견줄 열쇠 — 지워지는 가지 id 와 그 안 노드 id 전부를 정렬해 이은 글(`panels/structure-toolbar.tsx` 의 `UnsplitAsk`). */
+export function unsplitKey(shown: UnsplitShown): string {
+  return [...shown.cases.map((entry) => entry.id), ...shown.nodes.map((entry) => entry.id)].sort().join(',')
+}
+
 /** 상태 영역을 벗기는 묶음과, 지워지는 다른 가지. `null` 이면 그 노드는 영역이 아니다. */
 export function unsplitPlan(doc: PageDocument, switchId: string): (Plan & { shown?: UnsplitShown }) | null {
   const node = findNodeSafely(doc.root, switchId)

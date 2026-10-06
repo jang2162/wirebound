@@ -30,7 +30,7 @@ import type { TreeMenuNode } from '../api/types'
 import { STRUCTURE_WHY_DISABLED } from '../panels/tree-row-actions'
 import { insertNodeOps, removeNodeOps } from './ops'
 import { findNodeSafely, walkSafely } from './safe-walk'
-import { acceptsChildren, nodeSpot } from './structure-actions'
+import { acceptsChildren, nodeSpot, regionRulesAt } from './structure-actions'
 
 export type NodeEdit = { ops: PatchOp[]; insertedIds: string[] } | { reason: string }
 
@@ -84,6 +84,9 @@ function insertMany(document: PageDocument, parentId: string, index: number, nod
 export function pasteOps(document: PageDocument, anchorId: string | null, nodes: readonly WbNode[]): NodeEdit {
   const placed = stripMarkers(nodes)
   const rootId: unknown = document.root?.id
+  // 가지 곁에는 못 붙인다 — 상태 영역의 자리 규칙의 까닭을 싣는다(일반 검증 문장은 사람이 «가지 곁»으로 못 읽는다 · K2 리뷰 L3).
+  const caseSide = anchorId === null ? undefined : regionRulesAt(document, anchorId).addAfter
+  if (caseSide !== undefined) return { reason: caseSide }
   const spot = anchorId === null || anchorId === rootId ? null : nodeSpot(document, anchorId)
   if (spot !== null) return insertMany(document, spot.parentId, spot.index + 1, placed)
   if (typeof rootId !== 'string') return { reason: NO_PASTE_SPOT }
@@ -97,7 +100,8 @@ export function pasteOps(document: PageDocument, anchorId: string | null, nodes:
  * 사본의 id 재발급은 붙이기와 같은 함수(`prepareNodesForPaste`)이고 keep 은 늘 참이다 — 같은 문서 안이라 사본 밖을 가리키던 대상(같은 페이지의
  * 대화 상자를 여는 단추)은 그대로 맞다. 사본 안을 가리키던 대상은 사본을 따라간다.
  *
- * 루트 · 문서에 없는 노드는 `reason`(`+` 의 «아래 추가» 가 꺼졌을 때의 설명 — 루트 뒤에는 형제가 설 수 없다).
+ * 루트 · 문서에 없는 노드는 `reason`(`+` 의 «아래 추가» 가 꺼졌을 때의 설명 — 루트 뒤에는 형제가 설 수 없다). 상태 가지는 그 줄의 «아래 추가»를
+ * 끈 까닭(`regionRules`)이다.
  */
 export function duplicateOps(document: PageDocument, nodeIds: readonly string[], generate?: () => string): NodeEdit {
   if (nodeIds.length > MAX_OPS_PER_EDIT) return { reason: tooManyOpsNotice(nodeIds.length) }
@@ -108,6 +112,10 @@ export function duplicateOps(document: PageDocument, nodeIds: readonly string[],
     const node = findNodeSafely(running.root, nodeId)
     const spot = nodeSpot(running, nodeId)
     if (node === undefined || spot === null) return { reason: STRUCTURE_WHY_DISABLED.addAfter }
+    // 가지는 제 곁에 사본을 못 둔다(상태 영역의 자리 규칙 — 영역 안에는 가지만 서고 상태마다 하나다). 막지 않으면 홀로 선 가지를 풀어 그 내용을
+    // 영역 안에 넣어 서버가 거절했다(K2 리뷰 L1).
+    const caseSide = regionRulesAt(running, nodeId).addAfter
+    if (caseSide !== undefined) return { reason: caseSide }
     const copy = stripMarkers(prepareNodesForPaste([node], KEEP_EVERY_TARGET, generate).nodes)[0]!
     const step = insertNodeOps(running, spot.parentId, spot.index + 1, copy)
     if (step === null) return { reason: NO_PASTE_SPOT }

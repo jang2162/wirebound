@@ -1,19 +1,20 @@
 /**
- * **상태를 고른 채 낸 편집이 흐린 기본 가지 안을 고치면 «복사 + 편집»으로 바꾼다**(설계서 「설계서 화면 구조」 «화면 상태»). 화면이 편집을 내는
- * 통로 하나(`edit/use-edit-commit.tsx` 의 `commitOps`)가 이 판정을 지난다 — 속성 · 구조 · 붙이기 · 끌어 놓기 · 별칭 · 상호작용이 다 그 통로다.
+ * **상태를 고른 채 낸 편집이 흐린 기본 가지 안을 고치면 «복사 + 편집»으로 바꾸고, 안 보이는 가지를 고치면 보내지 않는다**(설계서 「설계서 화면
+ * 구조」 «화면 상태»). 화면이 편집을 내는 통로 하나(`edit/use-edit-commit.tsx` 의 `commitOps`)가 이 판정을 지난다 — 속성 · 구조 · 붙이기 · 끌어
+ * 놓기 · 별칭 · 상호작용이 다 그 통로다.
  *
- * | 지금 상태 · 편집 | 결과 |
+ * | 묶음이 건드리는 것(`viewStateTouch`) | 결과 |
  * |---|---|
- * | 기본 | 그대로(`plain`) |
- * | 기본이 아니고, 편집이 «그 상태의 가지가 없는 영역»의 기본 가지 안을 건드리지 않는다 | 그대로 — 영역 밖 편집은 모든 상태에 반영된다(노드가 하나뿐) |
- * | 그런 영역 하나의 기본 가지 안만 건드린다 | `editInForkOps` — 그 상태의 가지를 기본 가지 복사(새 id)로 만들고 편집을 그 복사로 옮긴 한 묶음(`fork`) · 되돌리기 한 번 |
- * | 그런 영역 안과 밖을 함께 건드린다 · 그런 영역 둘을 건드린다 · 가지 자신의 필드를 건드린다 | 보내지 않는다(`refused`) — 그대로 보내면 기본 가지(모든 상태)를 바꾸고, 나눌 길이 없다 |
+ * | 지킬 가지가 없다 · 영역 밖만 · 영역째 사라지는 가지(영역 지우기 · 풀기) | 그대로(`plain`) — 영역 밖 편집은 모든 상태에 반영된다(노드가 하나뿐) |
+ * | 흐린 기본 가지(지금 상태의 가지가 없는 영역) 하나의 안만 | `editInForkOps` — 그 상태의 가지를 기본 가지 복사(새 id)로 만들고 편집을 그 복사로 옮긴 한 묶음(`fork`) · 되돌리기 한 번 |
+ * | 흐린 가지 안과 밖 · 흐린 가지 둘 · 흐린 가지 자신의 필드 | 보내지 않는다(`refused` · `FORK_REFUSED`) — 그대로 보내면 기본 가지(모든 상태)를 바꾸고, 나눌 길이 없다 |
+ * | 안 보이는 가지(«모든 가지 보기»가 꺼졌을 때) | 보내지 않는다(`refused` · `HIDDEN_REFUSED`) — 사람이 못 보는 가지를 바꾼다. 남의 편집으로 고른 노드가 숨은 판이다 |
  *
- * **«건드린다»는 포인터(`path` · `from`)가 그 기본 가지의 경로 아래인가로 센다.** 영역 노드 · 가지 노드 자신을 지우거나 옮기는 편집은 기본 가지
- * **안**이 아니라 평범한 편집이다(영역째 지우기는 모든 상태에서 지운다). 겹친 영역은 바깥 것을 고른다 — 바깥 영역의 흐린 기본 가지를 통째로
- * 복사하면 안쪽 영역도 복사 안에 선다(지금 상태에서 보이는 것은 바깥의 흐린 가지다).
+ * **«건드린다»는 노드 정체성으로 센다**(`@wirebound/schema` 의 `viewStateTouch` 머리말) — 묶음의 포인터는 앞 연산을 적용한 뒤의 좌표라, 편집 전
+ * 문서의 경로와 글자로 견주면 앞 형제를 민 묶음(끌어 놓기 · 여럿 Delete · 여럿 Cmd+D)이 기본 가지를 바꿨다(K2 리뷰 H1). 겹친 영역은 바깥 것을
+ * 고른다 — 바깥 영역의 흐린 기본 가지를 통째로 복사하면 안쪽 영역도 복사 안에 선다(지금 상태에서 보이는 것은 바깥의 흐린 가지다).
  */
-import { DEFAULT_CASE, editInForkOps, parsePointer, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import { DEFAULT_CASE, editInForkOps, viewStateTouch, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
 
 export type ViewStateEditPlan =
   | { kind: 'plain' }
@@ -23,81 +24,26 @@ export type ViewStateEditPlan =
 /** 흐린 가지를 건드리는 편집을 나눌 수 없을 때의 말. */
 export const FORK_REFUSED = '이 상태의 가지가 없는 영역 안과 밖을 한 번에 고칠 수 없습니다 — 영역 안을 먼저 고쳐 이 상태의 가지를 만드세요'
 
+/** 지금 상태에서 안 보이는 가지를 건드리는 편집의 말. */
+export const HIDDEN_REFUSED = '지금 화면 상태에서 보이지 않는 가지는 고칠 수 없습니다 — «모든 가지 보기»를 켜고 고르세요'
+
 const PLAIN: ViewStateEditPlan = { kind: 'plain' }
 
-function caseState(node: unknown): string | null {
-  if (typeof node !== 'object' || node === null) return null
-  const record = node as { type?: unknown; props?: { state?: unknown } }
-  return record.type === 'StateCase' && typeof record.props?.state === 'string' ? record.props.state : null
-}
-
-/** 지금 상태에서 흐린 기본 가지를 보이는 영역 — 영역 id 와 그 기본 가지의 포인터 토큰. 보이는 길(지금 상태의 가지)만 따라 내려간다. */
-export function dimmedRegions(doc: PageDocument, viewState: string): { switchId: string; tokens: string[] }[] {
-  const found: { switchId: string; tokens: string[] }[] = []
-  const visit = (node: WbNode, tokens: string[]): void => {
-    const children = Array.isArray(node.children) ? node.children : []
-    if (node.type === 'StateSwitch') {
-      const own = children.findIndex((child) => caseState(child) === viewState)
-      const fallback = children.findIndex((child) => caseState(child) === DEFAULT_CASE)
-      if (own === -1 && fallback !== -1) {
-        found.push({ switchId: node.id, tokens: [...tokens, 'children', String(fallback)] })
-        // 바깥 영역의 흐린 가지 안은 그 영역을 복사하면 함께 따라간다 — 안쪽은 따로 세지 않는다(머리말 «겹친 영역»).
-        return
-      }
-      const shown = own !== -1 ? own : fallback
-      if (shown !== -1) visit(children[shown]!, [...tokens, 'children', String(shown)])
-      return
-    }
-    children.forEach((child, index) => {
-      if (typeof child === 'object' && child !== null) visit(child, [...tokens, 'children', String(index)])
-    })
-  }
-  visit(doc.root, ['root'])
-  return found
-}
-
-function tokensOf(pointer: string): string[] | null {
-  try {
-    return parsePointer(pointer)
-  } catch {
-    return null
-  }
-}
-
-/** `pointer` 가 그 기본 가지의 `children` 키나 그 아래인가. */
-function under(pointer: string[], caseTokens: string[]): boolean {
-  return pointer.length > caseTokens.length && pointer[caseTokens.length] === 'children' && caseTokens.every((token, index) => pointer[index] === token)
-}
-
-/** 가지 자신(필드 포함)인가 — `children` 밖의 가지 경로 아래. */
-function onCase(pointer: string[], caseTokens: string[]): boolean {
-  return pointer.length >= caseTokens.length && caseTokens.every((token, index) => pointer[index] === token) && !under(pointer, caseTokens)
-}
-
-export function planViewStateEdit(doc: PageDocument, ops: readonly PatchOp[], viewState: string | null, newId: () => string): ViewStateEditPlan {
-  if (viewState === null || ops.length === 0) return PLAIN
-  let regions: { switchId: string; tokens: string[] }[]
-  try {
-    regions = dimmedRegions(doc, viewState)
-  } catch {
-    return PLAIN
-  }
-  if (regions.length === 0) return PLAIN
-  const pointers: string[][] = []
-  for (const op of ops) {
-    for (const pointer of op.op === 'move' ? [op.path, op.from] : [op.path]) {
-      const tokens = tokensOf(pointer)
-      if (tokens === null) return PLAIN
-      pointers.push(tokens)
-    }
-  }
-  const touched = regions.filter((region) => pointers.some((pointer) => under(pointer, region.tokens) || (onCase(pointer, region.tokens) && pointer.length > region.tokens.length)))
-  if (touched.length === 0) return PLAIN
-  if (touched.length > 1) return { kind: 'refused', reason: FORK_REFUSED }
-  const region = touched[0]!
-  const forked = editInForkOps(doc, region.switchId, viewState, [...ops], newId)
+/** `allCases` — 구조 트리의 «모든 가지 보기»(`shell/use-view-state.ts` 의 `useAllCases`). 켜면 모든 가지가 보이는 가지다. */
+export function planViewStateEdit(
+  doc: PageDocument,
+  ops: readonly PatchOp[],
+  viewState: string | null,
+  newId: () => string,
+  allCases = false,
+): ViewStateEditPlan {
+  const touch = viewStateTouch(doc, ops, viewState, allCases)
+  if (touch.kind === 'none') return PLAIN
+  if (touch.kind === 'hidden') return { kind: 'refused', reason: HIDDEN_REFUSED }
+  if (touch.kind === 'mixed' || viewState === null) return { kind: 'refused', reason: FORK_REFUSED }
+  const forked = editInForkOps(doc, touch.switchId, viewState, [...ops], newId)
   if (forked === null) return { kind: 'refused', reason: FORK_REFUSED }
-  return { kind: 'fork', ops: forked.ops, remap: forked.remap, switchId: region.switchId }
+  return { kind: 'fork', ops: forked.ops, remap: forked.remap, switchId: touch.switchId }
 }
 
 /**
@@ -119,4 +65,39 @@ export function rememberFork(owner: object, remap: ReadonlyMap<string, string>):
 /** 방금 복사된 노드면 그 복사의 id, 아니면 그대로. */
 export function forkedId(owner: object, nodeId: string): string {
   return recentForks.get(owner)?.get(nodeId) ?? nodeId
+}
+
+/**
+ * **지금 상태에서 안 보이는 노드** — 보이는 길(영역마다 지금 상태의 가지, 없으면 기본 가지) 밖의 가지와 그 안 전부(`allCases` 면 없다). 흐린
+ * 기본 가지는 보인다. 고른 것 · 친 글이 이 노드에 남으면 안 된다 — 남이 같은 영역의 가지를 먼저 만들면 고른 흐린 노드가 이리 숨는다(K2 리뷰 H2 ·
+ * `shell/use-view-state.ts` 의 `HiddenSelectionPrune` · `panels/property-panel.tsx` 의 `useLeftoverCommit` · `panels/alias-edit.tsx`). 검증 전
+ * 문서가 들어온다 — 던지지 않는다.
+ */
+export function hiddenNodeIds(doc: PageDocument | null, viewState: string | null, allCases: boolean): ReadonlySet<string> {
+  const hidden = new Set<string>()
+  if (doc === null || allCases) return hidden
+  const all = (node: WbNode): void => {
+    if (typeof node.id === 'string') hidden.add(node.id)
+    for (const child of Array.isArray(node.children) ? node.children : []) if (isNode(child)) all(child)
+  }
+  const visit = (node: WbNode): void => {
+    const children = (Array.isArray(node.children) ? node.children : []).filter(isNode)
+    if (node.type !== 'StateSwitch') {
+      children.forEach(visit)
+      return
+    }
+    const own = viewState === null ? -1 : children.findIndex((child) => caseState(child) === viewState)
+    const shown = own !== -1 ? own : children.findIndex((child) => caseState(child) === DEFAULT_CASE)
+    children.forEach((child, index) => (index === shown ? visit(child) : all(child)))
+  }
+  if (isNode(doc.root)) visit(doc.root)
+  return hidden
+}
+
+function isNode(value: unknown): value is WbNode {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function caseState(node: WbNode): unknown {
+  return node.type === 'StateCase' ? node.props?.state : undefined
 }

@@ -8,28 +8,44 @@
  */
 import { useId, type ReactElement } from 'react'
 import { ShellDialog } from '../shell/shell-dialog'
+import { STATES_CHANGED, STATES_RECHECK } from '../shell/view-states-dialog'
 import { UNSPLIT_LABEL } from '../edit/view-state-actions'
 import type { ViewStateCommands } from './structure-toolbar'
 
 /** 지워지는 노드 이름을 보이는 수 — 나머지는 «외 N개»(상태 삭제 상자와 같은 수 — `shell/view-states-dialog.tsx`). */
 const PREVIEW_LIMIT = 8
 
+/** 묻는 사이 영역이 사라졌다(남이 풀거나 지웠다). */
+export const UNSPLIT_GONE = '이 영역이 문서에 없습니다 — 다른 사람이 먼저 풀거나 지웠을 수 있습니다.'
+
 export function unsplitSentence(cases: readonly { name: string }[]): string {
-  return `기본 가지만 남기고 가지 ${cases.length}개(${cases.map((entry) => entry.name).join(' · ')})의 내용이 함께 삭제됩니다.`
+  return cases.length === 0
+    ? '기본 가지만 남기고 영역을 풉니다. 함께 지워지는 가지는 없습니다.'
+    : `기본 가지만 남기고 가지 ${cases.length}개(${cases.map((entry) => entry.name).join(' · ')})의 내용이 함께 삭제됩니다.`
 }
 
+/**
+ * 보이는 목록은 렌더마다 지금 문서로 지은 것이다(`panels/structure-toolbar.tsx` 의 `UnsplitAsk` — 연 순간의 목록과 다르면 «목록이 바뀌었습니다»와
+ * «새 목록 확인»). 문장 · 단추 글은 상태 삭제 확인과 같은 것을 쓴다.
+ */
 export function UnsplitDialog(props: { commands: ViewStateCommands }): ReactElement | null {
-  const shown = props.commands.unsplitting
+  const ask = props.commands.unsplitting
   const sentenceId = useId()
-  if (shown === null) return null
-  const nodes = shown.nodes.slice(0, PREVIEW_LIMIT)
-  const rest = shown.nodes.length - nodes.length
-  const why = props.commands.unsplitWhy
+  if (ask === null) return null
+  const shown = ask.shown
+  const nodes = shown === null ? [] : shown.nodes.slice(0, PREVIEW_LIMIT)
+  const rest = (shown?.nodes.length ?? 0) - nodes.length
+  const why = shown === null ? UNSPLIT_GONE : props.commands.unsplitWhy
   return (
     <ShellDialog open title={UNSPLIT_LABEL} onClose={props.commands.cancelUnsplit} describedBy={sentenceId}>
       <div className="wb-shell-view-states-body">
+        {ask.changed && (
+          <p className="wb-shell-view-states-changed" role="status">
+            {STATES_CHANGED}
+          </p>
+        )}
         <p id={sentenceId} className="wb-shell-view-states-sentence">
-          {unsplitSentence(shown.cases)}
+          {shown === null ? UNSPLIT_GONE : unsplitSentence(shown.cases)}
         </p>
         {nodes.length > 0 && (
           <ul className="wb-shell-view-states-removed" aria-label="함께 지워지는 노드">
@@ -41,7 +57,7 @@ export function UnsplitDialog(props: { commands: ViewStateCommands }): ReactElem
             {rest > 0 && <li className="wb-shell-view-states-rest">외 {rest}개</li>}
           </ul>
         )}
-        <p className="wb-shell-view-states-note">되돌리기(Cmd+Z)로 영역과 가지를 함께 되살립니다.</p>
+        {shown !== null && <p className="wb-shell-view-states-note">되돌리기(Cmd+Z)로 영역과 가지를 함께 되살립니다.</p>}
         <div className="wb-shell-view-states-foot">
           <button type="button" className="wb-shell-view-states-button" onClick={props.commands.cancelUnsplit}>
             취소
@@ -53,11 +69,12 @@ export function UnsplitDialog(props: { commands: ViewStateCommands }): ReactElem
             title={why}
             aria-description={why}
             onClick={(event) => {
+              // 더블클릭의 둘째 누름은 버린다 — 첫 누름이 «목록이 바뀌었습니다»로 다시 세운 상자를 곧바로 풀지 않게.
               if (why !== undefined || event.detail > 1) return
               props.commands.confirmUnsplit()
             }}
           >
-            풀기
+            {ask.recheck && shown !== null ? STATES_RECHECK : '풀기'}
           </button>
         </div>
       </div>
