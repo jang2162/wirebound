@@ -8,7 +8,7 @@
  * | 몸짓 | 무엇 |
  * |---|---|
  * | 누름(주 버튼) | 아직 끌기가 아니다 — 누른 자리를 쥐고 기다린다 |
- * | 4px 넘게 움직임(`DRAG_THRESHOLD`) | 끌기가 선다 · 누른 요소가 포인터를 붙잡는다 · 이때부터 움직일 때마다 `onOver` |
+ * | 4px 넘게 움직임(`DRAG_THRESHOLD`) | 끌기가 선다 · 누른 요소가 포인터를 붙잡는다 · 이때부터 움직일 때마다 `onOver` (**터치는 다르다** — 아래 «터치는 길게 눌러 끈다») |
  * | 뗌 | 뗀 좌표로 `onOver` 를 다시 물어 `null` 이 아니면 `onDrop` 한 번 — `sameDrop` 을 주면 그 답이 보인 답일 때만(아래) |
  * | Escape · `pointercancel` | 취소 — 표시를 걷고 뒤의 뗌도 아무것도 안 한다 |
  *
@@ -49,6 +49,24 @@
  * 손가락의 `pointerup` 이 창에 와 끌기를 그 자리에 놓는다(`build-test/tree-drag-review.test.ts`). 그래서 누른 포인터의 `pointerId` 가
  * 아닌 이벤트는 셋 다 모른 척한다. 다른 포인터의 누름은 새 끌기를 세우지도 않는다(`bind` 의 «이미 누른 것이 있으면 돌아간다»).
  *
+ * ## 끄는 동안 캔버스 iframe 은 포인터를 안 받는다
+ *
+ * 캡처가 iframe 경계를 못 넘는 포인터가 있다 — CDP 의 펜(`pointerType: 'pen'`)은 `hasPointerCapture` 가 참이어도 캔버스 iframe 위의 `pointermove` ·
+ * `pointerup` 이 iframe 문서로 가 호스트 `window` 에 안 온다(끌기가 안 끝나 이름표 · 들린 줄이 남고, 다음 누름은 «이미 누른 것이 있다» 로 무시된다 —
+ * `build-test/drag-pointer-kinds.test.ts`). 그래서 **누른 순간부터 끌기가 끝날 때까지 호스트 문서의 모든 iframe 을 `pointer-events: none` 으로
+ * 둔다**(`html.wb-drag-iframes-inert iframe` — `shell.css`). 위 포인터는 iframe 밑의 호스트 요소로 가 캡처한 요소 · `window` 까지 온다. 놓을
+ * 자리의 판정은 좌표로 iframe 문서를 직접 묻는 것이라(`canvas/canvas-drop.ts`) 영향이 없다. 누름 때 거는 것은 첫 move 가 이미 iframe 위인 판을 막기
+ * 위해서다. 끌기 여럿이 겹쳐도(마우스 + 펜) 센 수가 0 이 될 때만 푼다. 캔버스 안의 사각형 고르기(`canvas/use-canvas-marquee.ts`)는 이 훅이 아니다.
+ *
+ * ## 터치는 길게 눌러 끈다
+ *
+ * 터치로 끌기가 서려면 카드 · 줄의 `touch-action: auto` 인 채 판의 스크롤과 갈라야 한다 — 첫 움직임이 스크롤이 되면 브라우저가 `pointercancel` 을 보내
+ * 끌기가 취소된다. 그래서 **터치는 `TOUCH_HOLD_MS`(300ms) 동안 `TOUCH_HOLD_SLOP`(8px) 안에서 가만히 눌러야 끌기가 선다**(서는 순간 누른 자리로 한 번
+ * `onOver`). 그 전에 8px 넘게 움직이면 이 누름은 끌기가 아니다 — 스크롤이 그대로 간다. 끌기가 서면 `touchmove` 의 기본 동작(스크롤)을 막아 그 손가락의
+ * 스크롤 · `pointercancel` 이 안 온다. 그 리스너는 **`{ passive: false }` 로 누른 때부터 건다**(window 의 `touchmove` 는 기본이 passive 이고, 끌기가 선 뒤에
+ * 걸면 이미 스크롤로 간 제스처는 못 막는다). `touchStart: 'now'` 는 작은 단추(캔버스 손잡이)가 쓴다 — 그 단추는 `touch-action: none` 이라 길게 누를
+ * 필요 없이 곧바로 문턱(4px)으로 선다. 펜 · 마우스는 문턱뿐이다.
+ *
  * ## 링크의 기본 끌기를 막는다
  *
  * `<a>` · 그림은 누른 채 움직이면 브라우저의 기본 DnD 가 선다 — 그러면 `pointercancel` 이 와 이 끌기가 취소된다. `bind` 가 주는
@@ -74,6 +92,10 @@ import { useCanvasDocument } from '../canvas/canvas-document'
 
 /** 이만큼(px) 넘게 움직여야 끌기다. 그 안은 클릭(선택)이다. */
 export const DRAG_THRESHOLD = 4
+/** 터치로 끌기가 서려면 이만큼(ms) 가만히 눌러야 한다(머리말 «터치는 길게 눌러 끈다»). */
+export const TOUCH_HOLD_MS = 300
+/** 길게 누르는 동안 이만큼(px) 넘게 움직이면 끌기가 아니라 스크롤이다. */
+export const TOUCH_HOLD_SLOP = 8
 /** 스크롤 상자의 위 · 아래 · 왼 · 오른 끝에서 이만큼(px) 안이면 민다. */
 export const EDGE_ZONE = 24
 /** 끝 스크롤 속도(px/s). */
@@ -106,6 +128,11 @@ export interface PointerDragOptions<S, D> {
   scrollContainer?: () => HTMLElement | null
   /** 두 값이 같은 자리인가 — 주면 놓는 답이 보인 답일 때만 놓는다(머리말 «놓는 답은 보인 답이다»). */
   sameDrop?: (shown: D, landed: D) => boolean
+  /**
+   * 터치로 끌기가 서는 법 — `'hold'`(기본)는 길게 눌러야 서고, `'now'` 는 문턱만 넘으면 곧바로 선다(`touch-action: none` 인 작은 단추).
+   * 펜 · 마우스는 이 값과 무관하다.
+   */
+  touchStart?: 'hold' | 'now'
 }
 
 export interface PointerDrag<S, D> {
@@ -120,6 +147,22 @@ export interface PointerDrag<S, D> {
   hint: DropHint<D> | null
   /** 포인터 밑이 바뀌었다 — 마지막 좌표로 다시 물어 같은 자리면 다시 그리고 다르면 걷는다(머리말). 끌기가 아니면 아무것도 안 한다. */
   refresh: () => void
+}
+
+/** 지금 iframe 을 막고 있는 누름의 수 — 0 이 되면 푼다(머리말 «끄는 동안 캔버스 iframe 은 포인터를 안 받는다»). */
+let iframeHolds = 0
+
+/** 호스트 문서의 iframe 이 포인터를 안 받게 한다. 돌려주는 함수가 그 몫을 거둔다(두 번 불러도 한 번만). */
+function holdIframesInert(): () => void {
+  iframeHolds += 1
+  document.documentElement.classList.add('wb-drag-iframes-inert')
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    iframeHolds -= 1
+    if (iframeHolds === 0) document.documentElement.classList.remove('wb-drag-iframes-inert')
+  }
 }
 
 /** 한 번의 누름 — 끌기가 섰는지와 걷을 것들. */
@@ -167,12 +210,16 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         if (event.button !== 0 || gesture.current !== null) return
         const element = event.currentTarget
         const point = { x: event.clientX, y: event.clientY }
-        const listening: { target: EventTarget; type: string; listener: EventListener; capture: boolean }[] = []
+        const listening: { target: EventTarget; type: string; listener: EventListener; options: AddEventListenerOptions }[] = []
         let timer: ReturnType<typeof setInterval> | null = null
-        const listen = (target: EventTarget, type: string, listener: EventListener, capture = false): void => {
-          target.addEventListener(type, listener, capture)
-          listening.push({ target, type, listener, capture })
+        let holdTimer: ReturnType<typeof setTimeout> | null = null
+        const touch = event.pointerType === 'touch'
+        const holdToStart = touch && (latest.current.options.touchStart ?? 'hold') === 'hold'
+        const listen = (target: EventTarget, type: string, listener: EventListener, options: AddEventListenerOptions = {}): void => {
+          target.addEventListener(type, listener, options)
+          listening.push({ target, type, listener, options })
         }
+        const releaseIframes = holdIframesInert()
 
         const current: Gesture<S, D> = {
           source,
@@ -189,8 +236,10 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
             show(same === undefined || kept ? next : null)
           },
           teardown: () => {
-            for (const { target, type, listener, capture } of listening) target.removeEventListener(type, listener, capture)
+            for (const { target, type, listener, options } of listening) target.removeEventListener(type, listener, options)
             if (timer !== null) clearInterval(timer)
+            if (holdTimer !== null) clearTimeout(holdTimer)
+            releaseIframes()
             if (typeof element.hasPointerCapture === 'function' && element.hasPointerCapture(current.pointerId)) {
               element.releasePointerCapture(current.pointerId)
             }
@@ -213,14 +262,24 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
           const at = { x: moved.clientX, y: moved.clientY }
           current.last = at
           if (!current.started) {
-            if (Math.hypot(at.x - current.start.x, at.y - current.start.y) <= DRAG_THRESHOLD) return
-            current.started = true
-            // 붙잡기는 끌기가 선 뒤다(머리말 «누를 때 붙잡지 않는다»).
-            if (typeof element.setPointerCapture === 'function') element.setPointerCapture(current.pointerId)
-            setDragging(() => source)
-            timer = setInterval(edgeScroll, EDGE_TICK)
+            const far = Math.hypot(at.x - current.start.x, at.y - current.start.y)
+            if (holdToStart) {
+              // 길게 누르기 전의 움직임은 스크롤이다(머리말 «터치는 길게 눌러 끈다») — 이 누름을 놓아 준다.
+              if (far > TOUCH_HOLD_SLOP) finish()
+              return
+            }
+            if (far <= DRAG_THRESHOLD) return
+            begin()
           }
           show(ask(at))
+        }
+
+        /** 끌기가 선다 — 붙잡기는 끌기가 선 뒤다(머리말 «누를 때 붙잡지 않는다»). */
+        const begin = (): void => {
+          current.started = true
+          if (typeof element.setPointerCapture === 'function') element.setPointerCapture(current.pointerId)
+          setDragging(() => source)
+          timer = setInterval(edgeScroll, EDGE_TICK)
         }
 
         const up = (raw: Event): void => {
@@ -258,6 +317,24 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
           if (edgeScrollBy(box, delta)) show(ask(current.last))
         }
 
+        if (holdToStart) {
+          holdTimer = setTimeout(() => {
+            holdTimer = null
+            begin()
+            show(ask(current.last))
+          }, TOUCH_HOLD_MS)
+        }
+        if (touch) {
+          // 끌기가 선 뒤의 스크롤 · 길게 누름 메뉴 · 글자 고르기를 막는다. `touchmove` 는 **누른 때부터** `passive: false` 로 건다(머리말).
+          listen(window, 'touchmove', (raw) => {
+            if (current.started && raw.cancelable) raw.preventDefault()
+          }, { passive: false })
+          for (const type of ['contextmenu', 'selectstart']) {
+            listen(window, type, (raw) => {
+              if (current.started) raw.preventDefault()
+            })
+          }
+        }
         listen(window, 'pointermove', move)
         listen(window, 'pointerup', up)
         // 포인터를 잃은 것(창 밖 · 기기 분리 · 기본 DnD)도 끝이다 — 안 걷으면 다음 클릭이 끌기처럼 보인다.
@@ -267,7 +344,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         // **capture 로 받는다** — 끄는 중의 Escape 는 취소이지 선택 해제가 아니다. 에디터 단축키는 문서의 버블에서 Escape 를 선택 해제로
         // 받고 이미 막힌(`defaultPrevented`) 키는 안 본다(`edit/editor-shortcuts.ts` 의 `shortcutsBlocked`) — 창의 버블은 문서보다 늦어
         // 여기서 막아도 해제가 먼저 돈다(Chrome: 손잡이 끌기를 Escape 로 취소하면 외곽선 · 손잡이가 사라졌다 — `build-test/canvas-preview.test.ts`).
-        listen(window, 'keydown', key, true)
+        listen(window, 'keydown', key, { capture: true })
         const canvas = latest.current.canvasDocument
         if (canvas !== null) listen(canvas, 'keydown', key)
       },

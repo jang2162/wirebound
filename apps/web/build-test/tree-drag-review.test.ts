@@ -560,7 +560,7 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
     return () => page.evaluate(() => (window as unknown as { __log: string[] }).__log)
   }
 
-  it('터치 한 손가락으로는 끌기가 서지 않는다 — 브라우저가 팬으로 가져가 `pointercancel`(값)', async () => {
+  it('터치로 길게 누르지 않고 움직이면 끌기가 서지 않는다 — 브라우저가 팬으로 가져가 `pointercancel`(값)', async () => {
     const { projectId, P, ids } = await menuFixture('touch-one')
     const tab = await openEditor(P)
     const cdp: CDPSession = await tab.page.context().newCDPSession(tab.page)

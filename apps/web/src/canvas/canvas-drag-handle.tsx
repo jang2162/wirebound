@@ -56,6 +56,8 @@ export function CanvasDragHandle(props: {
     onOver: placement.onOver,
     onDrop: placement.onDrop,
     sameDrop: placement.sameDrop,
+    // 작은 단추라 `touch-action: none`(`shell.css`)으로 곧바로 끈다 — 터치도 길게 누르지 않는다.
+    touchStart: 'now',
     // 캔버스 칸의 위 · 아래 · 왼 · 오른 끝에 대면 칸이 민다(`drag/use-pointer-drag.ts` 머리말 «끝 스크롤»).
     scrollContainer: () => scrollParent(buttonRef.current),
   })

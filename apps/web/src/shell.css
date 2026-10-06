@@ -1357,6 +1357,12 @@
   border: 0;
 }
 
+/* 끄는 동안(`drag/use-pointer-drag.ts` 머리말 «끄는 동안 캔버스 iframe 은 포인터를 안 받는다») 호스트의 iframe 은 포인터를 안 받는다 — 펜의 캡처가
+   iframe 경계를 못 넘어 move · up 이 iframe 문서로 간다. 클래스는 끌기 훅이 문서 뿌리에 걸고 거둔다. */
+:root.wb-drag-iframes-inert iframe {
+  pointer-events: none;
+}
+
 /* 테마 번들을 싣는 숨은 iframe(`theme/bundle-loader.ts` 머리말 «적재 realm»). 문서를 그리지 않는다 — 크기 0 · 감춤으로 자리를 안 잡는다. */
 .wb-shell-bundle-realm {
   position: absolute;
@@ -1491,6 +1497,8 @@
   transform-origin: top left;
   cursor: grab;
   pointer-events: auto;
+  /* 터치로 곧바로 끈다(`touchStart: 'now'`) — 이 값이 없으면 첫 움직임이 스크롤이 되어 `pointercancel` 이 온다(좌측 손잡이와 같은 근거). */
+  touch-action: none;
 }
 
 /* 번호 마커(설계서 「설계서 화면 구조」). 선택 아웃라인과 **같은 자리에 산다** — 문서 노드 위에 겹쳐
