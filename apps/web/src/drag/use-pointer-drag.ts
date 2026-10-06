@@ -53,8 +53,8 @@
  *
  * 캡처가 iframe 경계를 못 넘는 포인터가 있다 — CDP 의 펜(`pointerType: 'pen'`)은 `hasPointerCapture` 가 참이어도 캔버스 iframe 위의 `pointermove` ·
  * `pointerup` 이 iframe 문서로 가 호스트 `window` 에 안 온다(끌기가 안 끝나 이름표 · 들린 줄이 남고, 다음 누름은 «이미 누른 것이 있다» 로 무시된다 —
- * `build-test/drag-pointer-kinds.test.ts`). 그래서 **누른 순간부터 끌기가 끝날 때까지 호스트 문서의 모든 iframe 을 `pointer-events: none` 으로
- * 둔다**(`html.wb-drag-iframes-inert iframe` — `shell.css`). 위 포인터는 iframe 밑의 호스트 요소로 가 캡처한 요소 · `window` 까지 온다. 놓을
+ * `build-test/drag-pointer-kinds.test.ts`). 그래서 **누른 순간부터 끌기가 끝날 때까지 캔버스 iframe 을 `pointer-events: none` 으로
+ * 둔다**(인라인 style). 위 포인터는 iframe 밑의 호스트 요소로 가 캡처한 요소 · `window` 까지 온다. 놓을
  * 자리의 판정은 좌표로 iframe 문서를 직접 묻는 것이라(`canvas/canvas-drop.ts`) 영향이 없다. 누름 때 거는 것은 첫 move 가 이미 iframe 위인 판을 막기
  * 위해서다. 끌기 여럿이 겹쳐도(마우스 + 펜) 센 수가 0 이 될 때만 푼다. 캔버스 안의 사각형 고르기(`canvas/use-canvas-marquee.ts`)는 이 훅이 아니다.
  *
@@ -151,17 +151,29 @@ export interface PointerDrag<S, D> {
 
 /** 지금 iframe 을 막고 있는 누름의 수 — 0 이 되면 푼다(머리말 «끄는 동안 캔버스 iframe 은 포인터를 안 받는다»). */
 let iframeHolds = 0
+/** 막은 iframe 과 그 전의 인라인 `pointer-events` — 풀 때 되돌린다. */
+const inertFrames = new Map<HTMLElement, string>()
 
-/** 호스트 문서의 iframe 이 포인터를 안 받게 한다. 돌려주는 함수가 그 몫을 거둔다(두 번 불러도 한 번만). */
+/**
+ * 호스트 문서의 iframe 이 포인터를 안 받게 한다. 돌려주는 함수가 그 몫을 거둔다(두 번 불러도 한 번만).
+ * **인라인 style 로 건다** — `shell.css` 의 누수 검사(`apps/web/test/shell-css.test.ts`)가 결합자 선택자(`.끌기중 .iframe`)를 막는다.
+ */
 function holdIframesInert(): () => void {
   iframeHolds += 1
-  document.documentElement.classList.add('wb-drag-iframes-inert')
+  if (iframeHolds === 1) {
+    for (const frame of document.querySelectorAll<HTMLElement>('iframe')) {
+      inertFrames.set(frame, frame.style.pointerEvents)
+      frame.style.pointerEvents = 'none'
+    }
+  }
   let released = false
   return () => {
     if (released) return
     released = true
     iframeHolds -= 1
-    if (iframeHolds === 0) document.documentElement.classList.remove('wb-drag-iframes-inert')
+    if (iframeHolds > 0) return
+    for (const [frame, before] of inertFrames) frame.style.pointerEvents = before
+    inertFrames.clear()
   }
 }
 

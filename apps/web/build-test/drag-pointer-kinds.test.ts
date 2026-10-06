@@ -344,7 +344,7 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
         await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill('Divider')
         const card = page.locator('[data-wb-palette-card="Divider"]')
         await card.waitFor()
-        const reads = () => page.evaluate(() => ({ iframe: getComputedStyle(document.querySelector('iframe.wb-shell-canvas-iframe')!).pointerEvents, root: document.documentElement.classList.contains('wb-drag-iframes-inert') }))
+        const reads = () => page.evaluate(() => ({ iframe: getComputedStyle(document.querySelector('iframe.wb-shell-canvas-iframe')!).pointerEvents }))
         const idle = await reads()
         const d = await driver(page, kind)
         const from = center((await card.boundingBox())!)
@@ -362,10 +362,10 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
         const selected = await page.evaluate(() => document.querySelector('.wb-shell-selection')?.getAttribute('data-wb-selected-id') ?? null)
         expect({ kind, idle, pressed, over, done, selected }).toEqual({
           kind,
-          idle: { iframe: 'auto', root: false },
-          pressed: { iframe: 'none', root: true },
-          over: { iframe: 'none', root: true },
-          done: { iframe: 'auto', root: false },
+          idle: { iframe: 'auto' },
+          pressed: { iframe: 'none' },
+          over: { iframe: 'none' },
+          done: { iframe: 'auto' },
           selected: 'n_text',
         })
       } finally {
