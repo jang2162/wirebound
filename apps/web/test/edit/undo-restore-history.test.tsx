@@ -719,6 +719,7 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
       fireEvent.click(undoButton())
       await waitFor(() => expect(undoButton().disabled).toBe(true))
     }
+    const firstPatch = () => (sockets[0]?.sent ?? []).find((frame) => (frame as { type?: string }).type === 'patch') as { clientOpId: string } | undefined
     if (pressFirst) await press()
     for (const [index, value] of [[1, '가 고침'], [0, '밥 고침']] as const) {
       fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[index]!)
@@ -743,7 +744,27 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
     await act(async () => {})
     // 판 카나리아 — 리베이스가 줄 선 편집을 버리고 말했다.
     expect({ alert: alertText(), contents: contents() }).toEqual({ alert: DROPPED, contents: ['가 고침', '나'] })
-    if (!pressFirst) await press()
+    if (!pressFirst) {
+      // 나간 «가 고침» 의 ack 가 닿아야 누른 되돌리기가 미뤄지지 않는다(`afterAck`) — 그 ack 가 세션 항목을 맨 위에 올리므로 이 누름은 이력을
+      // 받지 않고 그 세션 항목을 되돌린다. 재는 것은 «누르기 전의 통지를 누른 되돌리기가 치운다» 하나다.
+      act(() => {
+        sockets[0]?.onmessage?.({
+          data: JSON.stringify({
+            type: 'patch-ack',
+            projectId: PROJECT_ID,
+            pageId: PAGE_ID,
+            clientOpId: firstPatch()?.clientOpId,
+            seq: HEAD_SEQ + 2,
+            revisionId: 'rev-session',
+            inverse: [{ op: 'replace', path: '/root/children/0/props/content', value: '가' }],
+            warnings: [],
+          }),
+        })
+      })
+      await act(async () => {})
+      fireEvent.click(undoButton())
+      await act(async () => {})
+    }
   }
 
   it('이력을 받은 뒤의 되돌리기가 그 사이 선 버림 통지를 치우지 않는다', async () => {

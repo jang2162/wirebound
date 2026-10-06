@@ -1340,6 +1340,17 @@ export class EditorStore {
   }
 
   /**
+   * **그 스택을 먹일 ack 가 큐에 남았나** — 되돌리기 스택은 편집이 ack 될 때 서버가 준 `inverse` 로 쌓인다(`ackEdit`). 그 전에 누르면 스택 맨 위는
+   * 내 마지막 편집이 아니라 그 앞의 항목이라 엉뚱한 것(새로고침으로 채운 첫 편집이면 페이지 통째)을 되돌린다. undo 스택은 되돌리기가 아닌 편집
+   * (`edit` · `redo`)의 ack 가, redo 스택은 되돌리기(`undo`)의 ack 가 먹인다. 부르는 쪽이 이것이 `false` 가 될 때까지 미룬다(`useEditCommit`).
+   */
+  readonly awaitsStackAck = (kind: 'undo' | 'redo'): boolean =>
+    this.#state.pending.some((edit) => (kind === 'undo' ? edit.kind !== 'undo' : edit.kind === 'undo'))
+
+  /** 지금 판의 세대 — 미뤄 둔 일이 판이 갈렸는지(재연결 · 복원 · 수습 · 떠남) 가를 때 쓴다. */
+  readonly boardEpoch = (): number => this.#queueEpoch
+
+  /**
    * **새로고침으로 채울 되돌리기의 판** — 판을 실은 바로 뒤에 부른다(`routes/editor.tsx`의 `restoreUndo`). 목록 답을 실을 때
    * (`restoreUndoStack`) 이것과 견줘, 그 사이 판이 다시 실렸거나 비었으면 버린다. 열린 판이 없으면 `null`.
    */
