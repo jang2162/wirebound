@@ -6,6 +6,8 @@
  * | viewer 가 `?state=` 주소로 연다 | 주소의 상태로 안 선다 · 없는 id 가 기본으로 안 간다 |
  * | 영역 표지 | 뷰 모드에서 영역에 안 선다 · 영역의 왼쪽 위에 안 붙는다 · 가지 목록이 그 영역의 가지가 아니다 · 고른 상태가 캔버스 · 머리 · 주소에 안 간다 |
  * | 붙이기 통지 | 다른 페이지에서 온 영역의 없는 상태 가지를 안 빼거나 출처의 이름으로 안 말한다 |
+ * | 창 900 | 전환기가 `…` 로 접힌 머리(K2 `shell/head-fold.ts` 의 `tight`)에서 `…` 의 상태 항목 · 영역 표지 · 주소가 한 값을 안 따른다 |
+ * | 고른 노드 | 뷰 모드에서 영역 표지로 상태를 바꿔 숨은 노드가 고른 것에 남는다(K2 `HiddenSelectionPrune`) · 편집이 나간다 · 편집 모드로 돌아와 주소가 바뀐다 |
  *
  * `WB_SHOTS_DIR` 를 주면 창 1440×900 의 화면을 찍어 둔다 — 뷰 모드 머리 전환기 · 영역 표지와 가지 목록 · 붙이기 통지.
  */
@@ -83,15 +85,44 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
     return { P, P2: `/projects/${project.id}/pages/${page2Id}` }
   }
 
-  async function openTab(path: string, user: 'alice' | 'bob' = 'alice') {
-    const { context, page } = await stack.openTab(stack.users[user], { viewport: VIEWPORT })
+  /** 탭을 연다 — 나간 편집 프레임(`patch`)을 센다(뷰 모드에는 편집이 없다). */
+  async function openTab(path: string, user: 'alice' | 'bob' = 'alice', viewport = VIEWPORT) {
+    const { context, page } = await stack.openTab(stack.users[user], { viewport })
+    const patches: string[] = []
+    page.on('websocket', (socket) => {
+      socket.on('framesent', (frame) => {
+        const payload = typeof frame.payload === 'string' ? frame.payload : frame.payload.toString()
+        if (payload.includes('"type":"patch"')) patches.push(payload)
+      })
+    })
     await page.goto(path)
     await canvasFrame(page).locator('[data-wb-id]').first().waitFor({ state: 'attached' })
-    return { page, close: () => context.close() }
+    return { page, patches, close: () => context.close() }
   }
 
   const switcher = (page: Page) => page.getByRole('button', { name: /^화면 상태:/ })
   const badge = (page: Page) => page.getByRole('button', { name: /^상태에 따라 다름/ })
+  const canvasIds = async (page: Page) => (await canvasFrame(page).locator('[data-wb-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))).slice(1)
+  /**
+   * 메뉴의 항목을 고르고 닫힌 것을 기다린다. 같은 자리를 곧 다시 누르는 판이 있어 `DOUBLE_CLICK_MS`(500ms — `shell/action-menu.tsx`)를 넘겨
+   * 돌아온다 — 안 넘기면 다음 누름이 더블클릭의 둘째로 삼켜진다.
+   */
+  async function pick(page: Page, name: string): Promise<void> {
+    await page.getByRole('menuitemradio', { name, exact: true }).click()
+    await page.locator('[role="menu"]').waitFor({ state: 'detached' })
+    await frames(page)
+    await page.waitForTimeout(600)
+  }
+  /** 연 메뉴의 고른 항목을 읽고 Escape 로 닫는다. */
+  async function checkedIn(page: Page, opener: ReturnType<Page['locator']>): Promise<string[]> {
+    await opener.click()
+    await page.getByRole('menuitemradio').first().waitFor()
+    const checked = await page.getByRole('menuitemradio', { checked: true }).allTextContents()
+    await page.keyboard.press('Escape')
+    await page.locator('[role="menu"]').waitFor({ state: 'detached' })
+    await page.waitForTimeout(600)
+    return checked
+  }
   const frames = (page: Page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   /** 캔버스에 선 노드 id(뿌리 뺌) · 머리 전환기 이름 · 주소의 질의. */
   async function shown(page: Page): Promise<{ canvas: string[]; head: string; search: string }> {
@@ -118,7 +149,7 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
     }
     expect(seen).toEqual({
       관리자: { canvas: ['n_out', 'n_bad', 'n_at'], head: '화면 상태: 관리자', search: '?state=s_admin' },
-      // viewer 는 뷰 모드다 — 기본으로 서며 없는 id 의 질의를 걷는다.
+      // viewer 는 모드와 상관없이 주소를 쓴다 — 기본으로 서며 없는 id 의 질의를 걷는다.
       '없는 id': { canvas: ['n_out', 'n_bad', 'n_dt'], head: '화면 상태: 기본', search: '' },
     })
   })
@@ -189,6 +220,79 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
           ['관리자', 'false'],
         ],
         after: { canvas: ['n_out', 'n_bad', 'n_at'], head: '화면 상태: 관리자', search: '?state=s_admin' },
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('창 900 — 전환기가 `…` 로 접힌 머리에서 `…` 의 상태 항목 · 영역 표지 · 주소가 한 값을 따른다', async () => {
+    const { P } = await fixture('vs-read-tight')
+    const tab = await openTab(`${P}?state=s_admin`, 'bob', { width: 900, height: 700 })
+    try {
+      // viewer 도 «편집 모드»로 연다(읽기 전용) — 영역 표지는 뷰 모드에만 선다.
+      await tab.page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+      await badge(tab.page).waitFor()
+      await frames(tab.page)
+      const more = tab.page.locator('.wb-shell-header').getByRole('button', { name: '더 보기', exact: true })
+      const read = async () => ({
+        inHead: await switcher(tab.page).count(),
+        folded: await checkedIn(tab.page, more),
+        badge: await checkedIn(tab.page, badge(tab.page)),
+        canvas: await canvasIds(tab.page),
+        search: new URL(tab.page.url()).search,
+      })
+      const seen: Record<string, unknown> = { 열림: await read() }
+      // 영역 표지로 기본 — 접힌 `…` 의 항목과 주소가 따른다.
+      await badge(tab.page).click()
+      await pick(tab.page, '기본')
+      seen['표지로 기본'] = await read()
+      // 접힌 `…` 로 관리자 — 영역 표지의 목록과 주소가 따른다.
+      await more.click()
+      await pick(tab.page, '화면 상태: 관리자')
+      seen['… 로 관리자'] = await read()
+      expect({ seen, patches: tab.patches.length }).toEqual({
+        seen: {
+          열림: { inHead: 0, folded: ['화면 상태: 관리자'], badge: ['관리자'], canvas: ['n_out', 'n_bad', 'n_at'], search: '?state=s_admin' },
+          '표지로 기본': { inHead: 0, folded: ['화면 상태: 기본'], badge: ['기본'], canvas: ['n_out', 'n_bad', 'n_dt'], search: '' },
+          '… 로 관리자': { inHead: 0, folded: ['화면 상태: 관리자'], badge: ['관리자'], canvas: ['n_out', 'n_bad', 'n_at'], search: '?state=s_admin' },
+        },
+        patches: 0,
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('고른 노드 — 뷰 모드에서 영역 표지로 상태를 바꿔 고른 노드가 숨으면 고른 것에서 빠지고, 편집은 안 나간다', async () => {
+    const { P } = await fixture('vs-read-pick')
+    const tab = await openTab(P)
+    const tree = tab.page.locator('.wb-shell-region[aria-label="구조 트리"]')
+    const picked = () => tree.locator('[aria-current="true"], .wb-shell-structure-node-member').evaluateAll((els) => els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''))
+    const panelEmpty = async () => (await tab.page.locator('.wb-shell-panel').first().textContent())?.includes('노드를 고르면 속성이 보입니다') ?? false
+    try {
+      await tree.locator('[data-tree-row][data-tree-id="n_dt"] .wb-shell-structure-node').click()
+      await frames(tab.page)
+      const before = { picked: await picked(), panelEmpty: await panelEmpty() }
+      await tab.page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+      await badge(tab.page).waitFor()
+      await badge(tab.page).click()
+      await pick(tab.page, '관리자')
+      const inView = { canvas: await canvasIds(tab.page), search: new URL(tab.page.url()).search }
+      await tab.page.getByRole('button', { name: '편집 모드', exact: true }).click()
+      await tree.waitFor()
+      await frames(tab.page)
+      expect({
+        before,
+        inView,
+        after: { picked: await picked(), panelEmpty: await panelEmpty(), head: await switcher(tab.page).getAttribute('aria-label'), search: new URL(tab.page.url()).search },
+        patches: tab.patches.length,
+      }).toEqual({
+        before: { picked: ['n_dt'], panelEmpty: false },
+        inView: { canvas: ['n_out', 'n_bad', 'n_at'], search: '?state=s_admin' },
+        // 편집 모드는 주소를 안 고친다(`shell/view-state-address.ts`) — 뷰 모드가 쓴 값이 남는다.
+        after: { picked: [], panelEmpty: true, head: '화면 상태: 관리자', search: '?state=s_admin' },
+        patches: 0,
       })
     } finally {
       await tab.close()
