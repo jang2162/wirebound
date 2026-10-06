@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest'
 import { run } from '@wirebound/cli'
 import { EXIT, lookupPage } from '@wirebound/cli/embed'
-import { MENU_ADMIN, PAGE_DETAIL, page, snapshotPayload, stub } from '@wirebound/cli/test-support'
+import { MENU_ADMIN, PAGE_DETAIL, page, snapshotPayload, stub, 상태가_있는_프로젝트 } from '@wirebound/cli/test-support'
 import { callTool } from '../src/server'
 import { PROJECT, SERVER, callJson, harness } from './harness'
 
@@ -88,6 +88,7 @@ describe('get_page — 무엇을 싣나', () => {
         'path',
         'target',
         'title',
+        'viewStates',
       ].sort(),
     )
   })
@@ -296,5 +297,23 @@ describe('get_page — 별칭', () => {
       rowLabel: 'Button (머리 저장) 저장',
     })
     expect(said.page.nodes.find((node) => node.id === 'root')).not.toHaveProperty('alias')
+  })
+})
+
+describe('get_page — 화면 상태', () => {
+  /** 설계서 「MCP 도구」 — 트리 읽기가 상태 목록과 영역을 그대로 보이고, 가지마다 상태 이름을 붙인다. */
+  it('상태 목록과 가지마다(그 안 노드까지) 상태 이름을 싣는다', async () => {
+    const said = (await callJson(harness({ payload: 상태가_있는_프로젝트() }), 'get_page', { path: '관리자/회원/상태' })) as {
+      found: boolean
+      page: { viewStates: { id: string; name: string }[]; nodes: { id: string; type: string; viewState?: { id: string; name: string } }[] }
+    }
+    expect(said.found).toBe(true)
+    expect(said.page.viewStates.map((state) => state.name)).toEqual(['관리자', '비로그인'])
+    const byId = new Map(said.page.nodes.map((node) => [node.id, node]))
+    expect(byId.get('st_switch')!.type).toBe('StateSwitch')
+    expect(byId.get('st_case_a')!.viewState).toEqual({ id: 's_admin', name: '관리자' })
+    expect(byId.get('st_approve')!.viewState).toEqual({ id: 's_admin', name: '관리자' })
+    expect(byId.get('st_view')!.viewState).toEqual({ id: 'default', name: '기본' })
+    expect(byId.get('st_title')!.viewState).toBeUndefined()
   })
 })

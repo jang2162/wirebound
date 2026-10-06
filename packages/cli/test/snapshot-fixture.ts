@@ -127,6 +127,54 @@ export function 경고가_있는_프로젝트(): SnapshotPayload {
   return payload
 }
 
+/**
+ * **화면 상태가 있는 페이지 하나**(«상태», 경로 `관리자/회원/상태`)를 더한다 — 상태 «관리자» · «비로그인», 영역 하나(기본 가지 «보기» ·
+ * 관리자 가지 «승인» — 승인은 제목을 숨기는 상호작용을 든다). 비로그인에는 가지가 없어 lint 가 `view-state-unused`(info) 하나를 낸다 —
+ * 결함(`error` · `warning`)은 없다.
+ *
+ * `packages/mcp` 도 이것을 본다 — `get_page` 의 상태 필드 · `validate` 의 `infos`.
+ */
+export function 상태가_있는_프로젝트(): SnapshotPayload {
+  const payload = snapshotPayload()
+  payload.pages.push(
+    page('20000000-0000-4000-8000-00000000000a', MENU_MEMBER, '상태', 10, {
+      version: 1,
+      viewStates: [
+        { id: 's_admin', name: '관리자' },
+        { id: 's_guest', name: '비로그인' },
+      ],
+      root: {
+        id: 'st_root',
+        type: 'Page',
+        children: [
+          { id: 'st_title', type: 'Text', props: { content: '회원' } },
+          {
+            id: 'st_switch',
+            type: 'StateSwitch',
+            children: [
+              { id: 'st_case_d', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'st_view', type: 'Button', props: { label: '보기' } }] },
+              {
+                id: 'st_case_a',
+                type: 'StateCase',
+                props: { state: 's_admin' },
+                children: [
+                  {
+                    id: 'st_approve',
+                    type: 'Button',
+                    props: { label: '승인' },
+                    interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'st_title', value: false }] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    }, null),
+  )
+  return payload
+}
+
 /** 봉투가 깨진 문서 하나 — `document-invalid`가 `error`다. */
 export function 오류가_있는_프로젝트(): SnapshotPayload {
   const payload = snapshotPayload()

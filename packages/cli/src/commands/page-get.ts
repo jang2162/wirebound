@@ -86,6 +86,9 @@ export function renderPageView(view: PageView): string[] {
     lines.push(`  ${view.description}`)
   }
 
+  // 화면 상태가 있으면 목록을 먼저 말한다 — 구조의 «(관리자 상태)» 가 무엇의 이름인지. 없으면 줄을 안 낸다(옛 출력 그대로).
+  if (view.viewStates.length > 0) lines.push(`  화면 상태: 기본 · ${view.viewStates.map((state) => state.name).join(' · ')}`)
+
   lines.push('', '구조')
   for (const node of view.nodes) {
     lines.push(`  ${'  '.repeat(node.depth)}${node.name}`)

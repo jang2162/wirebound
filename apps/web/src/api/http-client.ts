@@ -1097,7 +1097,7 @@ const BODY_KEYS = {
   // 프리셋 저장. 서버의 `PresetBody`가 `z.strictObject`라 선언되지 않은 키는 그
   // 자체로 400이고, **`id`·`source`·`nodes`가 그 자리다** — 목록 항목을 그대로 되보내는
   // 실수가 실제로 있을 법하다(`createSnapshot`이 같은 자리에서 같은 판단).
-  createPreset: { name: true, description: true, schema: true } satisfies Record<
+  createPreset: { name: true, description: true, schema: true, viewStates: true } satisfies Record<
     keyof Parameters<ApiClient['createPreset']>[1],
     true
   >,

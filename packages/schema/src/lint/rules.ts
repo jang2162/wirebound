@@ -23,15 +23,23 @@
  * **lint는 저장 게이트가 아니다**. lint가 낸 목록을 무엇으로 가를지는 소비자(웹·CLI·MCP)가
  * 정한다.
  *
- * ## severity 축은 새로 만들지 않는다
+ * ## severity 축 — 저장 경계의 둘에 `info` 하나를 lint 만 더한다
  *
- * lint가 쓰는 값은 `IssueSeverity`(`error`·`warning`) 그대로이고 축도 같다 — ***"이 결함이
- * 문서를 무효로 만드는가."*** relay 규칙이 그 축의 값을 그대로 나르므로 lint가 다른 축을
- * 쓰면 한 목록 안에서 같은 필드가 두 뜻을 갖게 된다. **severity를 스스로 고르는 규칙은 전부
- * `warning`이다** — 그중 어느 것도 문서를 무효로 만들지 않는다(코멘트가 없어도, 번호가 겹쳐도,
- * 메뉴에 안 붙어도 문서는 그대로 선다).
+ * lint가 쓰는 `error`·`warning`은 `IssueSeverity` 그대로이고 축도 같다 — ***"이 결함이
+ * 문서를 무효로 만드는가."*** relay 규칙이 그 축의 값을 그대로 나르므로 lint가 그 둘의 뜻을
+ * 바꾸면 한 목록 안에서 같은 필드가 두 뜻을 갖게 된다. **severity를 스스로 고르는 규칙은
+ * `warning` 아니면 `info`다** — 그중 어느 것도 문서를 무효로 만들지 않는다(코멘트가 없어도,
+ * 번호가 겹쳐도, 메뉴에 안 붙어도 문서는 그대로 선다).
+ *
+ * **`info`는 결함이 아니라 알림이다** — 「lint 규칙」이 «정보»로 적은 줄(쓰이지 않는 화면 상태 · 상태 영역 안의 상태 영역)만
+ * 쓴다. 고칠 것이 없을 수도 있는 설계의 모양이라 `warning`으로 내면 `--fail-on warning`을 건 파이프라인이 멀쩡한 설계서에
+ * 멈춘다. 저장 경계(`IssueSeverity`)는 `info`를 모른다 — 저장은 lint 를 부르지 않는다. 소비자(`wireb lint` · MCP
+ * `validate`)는 `info`를 따로 세고 어떤 실패 선에도 넣지 않는다.
  */
 import type { IssueSeverity } from '../validate'
+
+/** lint 이슈의 등급 — 저장 경계의 둘(`IssueSeverity`) + lint 만의 `info`(위 머리말). */
+export type LintSeverity = IssueSeverity | 'info'
 
 /** 규칙 하나의 식별자. `wireb lint`의 출력과 MCP `validate`의 응답이 이 문자열을 싣는다. */
 export type LintRuleId = (typeof LINT_RULES)[number]['id']
@@ -57,7 +65,7 @@ export interface LintRule {
   group: LintRuleGroup
   owner: LintRuleOwner
   /** `null`이면 **날라 온 이슈의 severity를 그대로 쓴다**(위 머리말). */
-  severity: IssueSeverity | null
+  severity: LintSeverity | null
   /** 설정이 있어야만 도는 규칙인가. 안 주면 그 규칙이 **안 도는 것이 옳다.** */
   requiresConfig?: true
 }
@@ -115,6 +123,28 @@ export const LINT_RULES = [
     severity: 'warning',
     requiresConfig: true,
   },
+  {
+    id: 'view-state-unknown',
+    spec: '목록에 없는 화면 상태를 가리키는 상태 가지 — 경고',
+    group: 'document',
+    owner: 'schema',
+    // 그 가지는 그려지지 않는다(렌더러) — 설계한 화면이 아무 상태에서도 안 보인다. 문서는 그대로 선다.
+    severity: 'warning',
+  },
+  {
+    id: 'view-state-unused',
+    spec: '쓰이지 않는 화면 상태(가지가 하나도 없음) — 정보',
+    group: 'document',
+    owner: 'schema',
+    severity: 'info',
+  },
+  {
+    id: 'view-state-nested',
+    spec: '상태 영역 안의 상태 영역 — 정보',
+    group: 'document',
+    owner: 'schema',
+    severity: 'info',
+  },
   // ── 테마 규칙 (「lint 규칙」) ───────────────────────────────────────────────
   {
     id: 'theme-variant',
@@ -142,7 +172,7 @@ export const LINT_RULES = [
  * `lintIssue`가 이 집합만 받으므로 **relay 규칙에 severity를 지어 넣는 코드가 컴파일되지
  * 않는다**(머리말 «날라 오는 것은 그대로 둔다»를 타입으로 지키는 자리).
  */
-export type OwnSeverityRuleId = Extract<(typeof LINT_RULES)[number], { severity: IssueSeverity }>['id']
+export type OwnSeverityRuleId = Extract<(typeof LINT_RULES)[number], { severity: LintSeverity }>['id']
 
 /** 날라 온 이슈의 severity를 그대로 쓰는 규칙의 id. */
 export type RelayRuleId = Exclude<LintRuleId, OwnSeverityRuleId>

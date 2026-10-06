@@ -1501,6 +1501,27 @@
 
    `translate`로 좌상단 밖으로 조금 빼는 것은 노드의 첫 글자를 가리지 않기 위해서다.
    `pointer-events: none`은 아웃라인과 같은 이유다 — 마커 아래의 노드가 그대로 눌려야 한다. */
+/* 영역 표지(`canvas/state-badges.tsx`) — 뷰 모드에서 상태 영역에 옅은 점선 · 안쪽 왼쪽 위에 «상태에 따라 다름» 단추. 테두리는 누름을 안
+   받고(아래 노드가 그대로 눌린다) 단추만 받는다. 단추는 줌을 걷어(인라인 `scale`) 화면에서 늘 같은 크기다. */
+.wb-shell-state-region {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed #0d9488;
+  pointer-events: none;
+}
+
+.wb-shell-state-badge {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  pointer-events: auto;
+  border-radius: 0 0 4px 0;
+  background: #f0fdfa;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
 .wb-shell-marker {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -2982,11 +3003,17 @@
 }
 
 .wb-shell-action-menu-text {
+  /* 긴 상태 이름 몫이다(머리 전환기). 짧고 고정인 글은 `fullText` 로 걷는다(아래 `-full`). */
   max-width: 8em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
+}
+
+/* 영역 표지의 «상태에 따라 다름» — 짧고 고정이라 줄이지 않는다(`action-menu.tsx` 의 `fullText`). */
+.wb-shell-action-menu-text.wb-shell-action-menu-text-full {
+  max-width: none;
 }
 
 .wb-shell-action-menu-text::after {

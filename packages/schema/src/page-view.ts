@@ -20,11 +20,12 @@
  * 설치 전에 부르면 `setProp`의 라벨이 `로딩 상태`가 아니라 `loading`으로 나온다(던지지는
  * 않는다 — `describe.ts`의 `propLabel`이 레지스트리에서 못 찾으면 prop 이름을 쓴다). 설치는 **부르는 쪽**이 한다(`installCatalog`).
  */
-import type { PageDocument, WbNode } from './node'
-import { nodeAlias, nodeRowLabel } from './display'
+import type { PageDocument, ViewState, WbNode } from './node'
+import { nodeAlias, nodeRowLabel, viewStateName } from './display'
 import { MISSING_NODE_NAME, describeNode, listInteractionSentences, namingContexts, type InteractionSentence } from './interaction/describe'
 import { pageTargetPath } from './page-target'
 import { walkNodes } from './tree'
+import { viewStateIndex } from './view-state'
 
 /**
  * 코멘트 하나. **어느 노드에 달렸는지를 이름으로도 말한다** — id만 내면 읽는 사람이 그것을
@@ -62,6 +63,12 @@ export interface PageViewNode {
   rowLabel: string
   /** 문서 안의 자리(JSON 포인터). 편집 경로와 같다. */
   path: string
+  /**
+   * 이 노드가 속한 화면 상태 — 상태 가지(`StateCase`)와 그 안 노드만 든다(`viewStateIndex` — 가장 가까운 기본이 아닌 가지의 상태,
+   * 기본 가지들 안에만 있으면 `default`). 이름은 «기본» · 목록의 이름 · 목록에 없으면 «목록에 없는 상태». 영역 밖 노드 · 영역
+   * (`StateSwitch`) 자신은 키가 없다 — 모든 상태에 있다.
+   */
+  viewState?: { id: string; name: string }
 }
 
 /** `pageView`가 받는 코멘트. 이름은 이 함수가 붙인다. */
@@ -92,6 +99,8 @@ export interface PageView {
   /** 접두를 벗긴 「모델」(상호작용)의 경로. **사람이 치는 것이 이 모양이다**(`wireb page get 관리자/회원/목록`). */
   path: string
   menuPath: readonly string[]
+  /** 화면 상태 목록(`document.viewStates`). 없으면 빈 목록 — «기본»은 늘 있어 목록에 없다. */
+  viewStates: ViewState[]
   /** 문서의 노드 수. **뿌리를 센다** — 빈 페이지도 1이다. */
   nodeCount: number
   /** 노드를 읽는 순서로 편 것. `nodeCount`와 길이가 같다. */
@@ -111,6 +120,8 @@ export interface PageView {
 export function pageView(input: PageViewInput): PageView {
   // 이름 · 줄 글은 그 노드가 속한 상태를 붙인다(`namingContexts` · 줄 글은 목록의 이름) — 문장(`listInteractionSentences`)과 같은 이름이다.
   const naming = namingContexts(input.document)
+  const viewStates = Array.isArray(input.document.viewStates) ? input.document.viewStates : []
+  const states = viewStateIndex(input.document.root)
   const nodes = new Map<string, WbNode>()
   const outline: PageViewNode[] = []
   for (const { node, path } of walkNodes(input.document.root)) {
@@ -124,6 +135,7 @@ export function pageView(input: PageViewInput): PageView {
       ...aliasEntry(node),
       rowLabel: nodeRowLabel(node, input.document.viewStates),
       path,
+      ...stateEntry(states.get(node.id), viewStates),
     })
   }
 
@@ -134,6 +146,7 @@ export function pageView(input: PageViewInput): PageView {
     target: input.target,
     path: pageTargetPath(input.target),
     menuPath: input.menuPath,
+    viewStates,
     nodeCount: outline.length,
     nodes: outline,
     document: input.document,
@@ -149,6 +162,10 @@ export function pageView(input: PageViewInput): PageView {
     }),
     interactions: listInteractionSentences(input.document),
   }
+}
+
+function stateEntry(state: string | undefined, viewStates: readonly ViewState[]): { viewState?: { id: string; name: string } } {
+  return state === undefined ? {} : { viewState: { id: state, name: viewStateName(viewStates, state) } }
 }
 
 function aliasEntry(node: WbNode): { alias?: string } {

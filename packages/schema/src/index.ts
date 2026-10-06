@@ -171,7 +171,7 @@ export { gatePageImport, planPageImport } from './page-json/import'
 
 // 설계서 「lint 규칙」. **표는 그 절의 줄 전부를 들지만 구현은 소유자를 따른다**:
 // 설계서 규칙은 여기, 테마 규칙은 `@wirebound/themes`. 합치는 자리는 그쪽이다.
-export type { LintRule, LintRuleGroup, LintRuleId, LintRuleOwner, OwnSeverityRuleId, RelayRuleId } from './lint/rules'
+export type { LintRule, LintRuleGroup, LintRuleId, LintRuleOwner, LintSeverity, OwnSeverityRuleId, RelayRuleId } from './lint/rules'
 export { LINT_RULES, lintRule } from './lint/rules'
 export type { LintIssue, LintWhere } from './lint/issue'
 export { lintIssue, relayLintIssue } from './lint/issue'

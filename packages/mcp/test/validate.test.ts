@@ -12,6 +12,7 @@ import {
   snapshotPayload,
   stub,
   경고가_있는_프로젝트,
+  상태가_있는_프로젝트,
   오류가_있는_프로젝트,
   테마에_없는_variant_프로젝트,
 } from '@wirebound/cli/test-support'
@@ -24,6 +25,7 @@ interface Report {
   failing: boolean
   errors: number
   warnings: number
+  infos: number
   totalIssues: number
   outsideErrors: number
   droppedProjectIssues: number
@@ -257,5 +259,15 @@ describe('이슈가 다음 걸음을 든다', () => {
     for (const issue of said.issues.filter((i) => i.pageId === null)) {
       expect(issue.pagePath).toBeNull()
     }
+  })
+})
+
+describe('알림(info)은 결함이 아니다', () => {
+  /** 설계서 「lint 규칙」 — 쓰이지 않는 화면 상태는 `info`. `failing` · `warnings` 에 안 들고 `infos` 가 센다. */
+  it('info 만 있는 프로젝트는 failing 이 아니고, infos 가 따로 센다', async () => {
+    const said = (await callJson(harness({ payload: 상태가_있는_프로젝트() }), 'validate')) as Report
+    expect(said.failing).toBe(false)
+    expect([said.errors, said.warnings, said.infos]).toEqual([0, 0, 1])
+    expect(said.issues.map((issue) => [issue.rule, issue.severity, issue.pagePath])).toEqual([['view-state-unused', 'info', '관리자/회원/상태']])
   })
 })

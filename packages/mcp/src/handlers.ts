@@ -149,6 +149,8 @@ const validate: ToolHandler = async (io, args) => {
     failing: report.errors > 0,
     errors: report.errors,
     warnings: report.warnings,
+    /** 알림(`info`) 수 — 결함이 아니다. `failing` 에도 `warnings` 에도 안 든다. */
+    infos: report.infos,
     totalIssues: report.totalIssues,
     /** 경로 밖에 남은 `error`. **0이 아니면 이 응답만 보고 *"괜찮다"*로 읽으면 안 된다.** */
     outsideErrors: report.outsideErrors,

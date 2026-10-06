@@ -68,7 +68,7 @@
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { BUILTIN_PRESETS, WbNodeSchema, stripMarkers, type PagePreset } from '@wirebound/schema'
+import { BUILTIN_PRESETS, ViewStatesSchema, WbNodeSchema, stripMarkers, type PagePreset } from '@wirebound/schema'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction } from '../db/tx'
@@ -100,6 +100,11 @@ const PresetBody = z.strictObject({
   name: z.string().min(1, '이름을 입력하세요').max(60, '이름은 60자 이하여야 합니다'),
   description: z.string().max(2000, '설명은 2000자 이하여야 합니다').nullable().optional(),
   schema: z.array(WbNodeSchema),
+  /**
+   * 저장한 페이지의 화면 상태 목록 — 노드의 상태 가지가 가리키는 이름표다(`0021-preset-view-states`). 페이지 봉투와 같은 목록 규칙.
+   * 없으면 목록 없이 담는다.
+   */
+  viewStates: ViewStatesSchema.optional(),
 })
 
 /** 목록 항목 — 내장. `source`가 판별자다. */
@@ -110,6 +115,8 @@ function toBuiltinResponse(preset: PagePreset) {
     name: preset.name,
     description: preset.description,
     nodes: preset.nodes,
+    // 내장 프리셋은 화면 상태를 안 쓴다 — 목록 · 생성 응답이 늘 이 키를 싣는다(받는 쪽이 갈래를 두지 않게).
+    viewStates: [],
   }
 }
 
@@ -121,6 +128,7 @@ function toProjectResponse(record: PresetRecord) {
     name: record.name,
     description: record.description,
     nodes: record.nodes,
+    viewStates: record.viewStates,
     createdBy: record.createdBy,
     createdByName: record.createdByName,
     createdAt: record.createdAt,
@@ -168,7 +176,12 @@ export function presetRoutes() {
       // **그래서 이 줄만 지우는 변이에는 죽는 케이스가 없다**(둘 다 400이라 케이스가 못 가른다).
       // 그래도 두는 이유는 위의 *"jsonb를 만들기 전에 끝난다"*이고, 그 성질은 상태
       // 코드로는 잴 수 없다.
-      if (containsNulByte(body.name) || containsNulByte(body.description ?? null) || containsNulByte(body.schema)) {
+      if (
+        containsNulByte(body.name) ||
+        containsNulByte(body.description ?? null) ||
+        containsNulByte(body.schema) ||
+        containsNulByte(body.viewStates ?? null)
+      ) {
         throw badRequest('프리셋에 NUL 문자(U+0000)를 포함할 수 없습니다')
       }
 
@@ -191,6 +204,7 @@ export function presetRoutes() {
             name: body.name,
             description: body.description ?? null,
             nodes: stripMarkers(body.schema),
+            viewStates: body.viewStates ?? [],
             createdBy: currentUser.id,
           })
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 삽입의 FK 가 프로젝트 행에 거는

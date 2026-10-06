@@ -7,12 +7,18 @@
  *
  * **테마를 못 쓰면 테마 시트를 뗀다** — 캔버스와 같다(spec 「캔버스 iframe」 의 «번들이 실패하면 `theme` 을 뺀다»). 기본 뷰에 테마 CSS
  * 가 얹히면 어느 쪽도 아닌 화면이 된다.
+ *
+ * **화면 상태는 주소 해시가 든다**(`#state=<id>` — `STATE_HASH_PREFIX`). 처음 그릴 때 해시의 상태로 그리고, 셸의 전환기를 고르면 다시
+ * 그리며 해시를 바꿔 쓴다(`replaceState` — 상태 전환은 이동이 아니라 뒤로 가기가 그것을 하나씩 밟지 않는다). 해시가 바뀌면(주소를 고침 ·
+ * 같은 페이지의 링크) 그 상태로 다시 그린다. 목록에 없는 id 는 기본이다 — 렌더러도 기본으로 그리지만(`renderDocument`) 전환기가 그 id 를
+ * 못 고르므로 여기서 먼저 기본으로 접는다.
  */
 import { NO_THEME } from '@wirebound/renderer'
+import { DEFAULT_CASE, type PageDocument } from '@wirebound/schema'
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import { adoptManifest, type RuntimeHandle } from '@wirebound/theme-sdk/runtime'
 import { tokenValues } from '@wirebound/themes'
-import { PAGE_DATA_ID, SCREEN_HASH, THEME_SCRIPT_ID, type ExportPageData } from '../page-data'
+import { PAGE_DATA_ID, SCREEN_HASH, STATE_HASH_PREFIX, STATE_SELECT_ID, THEME_SCRIPT_ID, type ExportPageData } from '../page-data'
 import { mountExportDocument, type ExportMount } from './mount'
 import { FAILED_ATTRIBUTE, fontsSettled, nextFrame, READY_ATTRIBUTE, SCREEN_CLASS, sheetSettled } from './ready'
 
@@ -76,7 +82,9 @@ export async function boot(env: BootEnv): Promise<BootResult> {
       if (failures.length > 0) doc.querySelector(THEME_SHEET_SELECTOR)?.remove()
     }
 
+    const states = stateIds(data.document)
     const mount = mountExportDocument(canvas, {
+      viewState: stateFromHash(win.location.hash, states),
       document: data.document,
       theme,
       tokens,
@@ -87,6 +95,12 @@ export async function boot(env: BootEnv): Promise<BootResult> {
       standing: failures,
       ...(env.navigate === undefined ? {} : { navigate: env.navigate }),
     })
+    const unwire = wireStateSwitch(win, mount, states)
+    const unmount = mount.unmount
+    mount.unmount = () => {
+      unwire()
+      unmount()
+    }
     if (mount.thrown.length > 0) {
       failures.push(`테마 뷰가 던졌습니다: ${mount.thrown.join(', ')}`)
       mount.say(failures)
@@ -98,6 +112,54 @@ export async function boot(env: BootEnv): Promise<BootResult> {
   } catch (error) {
     failures.push(`번들 페이지를 세우지 못했습니다: ${error instanceof Error ? error.message : String(error)}`)
     return await finish(null)
+  }
+}
+
+/** 문서의 상태 id 들. 목록이 없거나 모양이 틀리면 비어 있다 — 그러면 모든 해시가 기본이다. */
+function stateIds(document: PageDocument): Set<string> {
+  const ids = new Set<string>()
+  if (!Array.isArray(document.viewStates)) return ids
+  for (const state of document.viewStates) if (typeof state?.id === 'string') ids.add(state.id)
+  return ids
+}
+
+/** 해시의 상태 — `#state=<id>` 이고 그 id 가 목록에 있을 때만. 아니면 기본(`null`). */
+function stateFromHash(hash: string, ids: ReadonlySet<string>): string | null {
+  if (!hash.startsWith(STATE_HASH_PREFIX)) return null
+  let id: string
+  try {
+    id = decodeURIComponent(hash.slice(STATE_HASH_PREFIX.length))
+  } catch {
+    return null
+  }
+  return ids.has(id) ? id : null
+}
+
+/**
+ * 셸의 전환기(상태 목록이 있는 페이지만 싣는다)와 주소 해시를 마운트에 잇는다. 전환기가 없으면 아무것도 안 건다. 건 것을 거두는 함수를
+ * 낸다 — 마운트를 내리면 함께 거둔다(케이스가 한 창에서 여러 번 세운다).
+ */
+function wireStateSwitch(win: Window, mount: ExportMount, ids: ReadonlySet<string>): () => void {
+  const found = win.document.getElementById(STATE_SELECT_ID)
+  if (found === null || found.tagName !== 'SELECT') return () => {}
+  const select = found as HTMLSelectElement
+  select.value = stateFromHash(win.location.hash, ids) ?? DEFAULT_CASE
+  const onChange = (): void => {
+    const state = ids.has(select.value) ? select.value : null
+    mount.setViewState(state)
+    const { pathname, search } = win.location
+    win.history.replaceState(win.history.state, '', state === null ? `${pathname}${search}` : `${STATE_HASH_PREFIX}${encodeURIComponent(state)}`)
+  }
+  const onHash = (): void => {
+    const state = stateFromHash(win.location.hash, ids)
+    select.value = state ?? DEFAULT_CASE
+    mount.setViewState(state)
+  }
+  select.addEventListener('change', onChange)
+  win.addEventListener('hashchange', onHash)
+  return () => {
+    select.removeEventListener('change', onChange)
+    win.removeEventListener('hashchange', onHash)
   }
 }
 

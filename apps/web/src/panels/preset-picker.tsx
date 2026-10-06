@@ -40,7 +40,7 @@
  * 끊는다) 편집을 만드는 일은 툴바가 한다 — 여기서 하는 것은 고르는 것과 저장 요청뿐이다.
  */
 import { useEffect, useState, type ReactElement } from 'react'
-import type { WbNode } from '@wirebound/schema'
+import type { ViewState, WbNode } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { walkSafely } from '../edit/safe-walk'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
@@ -76,6 +76,8 @@ export function PresetPicker(props: {
    * `null`이고 그때 저장 버튼이 비활성이다.
    */
   currentNodes: readonly WbNode[] | null
+  /** 지금 페이지의 화면 상태 목록 — 저장이 노드와 함께 담는다(상태 가지가 가리키는 이름표다). 없으면 빈 목록. */
+  currentViewStates: readonly ViewState[]
   /**
    * 이름칸에 친 글자. **이 컴포넌트가 안 든다 — 툴바가 든다.**
    *
@@ -89,8 +91,8 @@ export function PresetPicker(props: {
    */
   name: string
   onNameChange: (name: string) => void
-  /** 고른 프리셋을 놓는다. 편집을 만드는 것은 툴바다(판정이 컴포넌트로 들어오지 않는다). */
-  onApply: (nodes: WbNode[]) => void
+  /** 고른 프리셋을 놓는다(노드와 그 상태 목록). 편집을 만드는 것은 툴바다(판정이 컴포넌트로 들어오지 않는다). */
+  onApply: (nodes: WbNode[], viewStates: readonly ViewState[]) => void
   onCancel: () => void
 }): ReactElement {
   const api = useApi()
@@ -169,7 +171,7 @@ export function PresetPicker(props: {
   function apply(): void {
     if (selected === undefined) return
     setConfirming(false)
-    props.onApply(selected.nodes)
+    props.onApply(selected.nodes, selected.viewStates ?? [])
   }
 
   async function save(): Promise<void> {
@@ -183,6 +185,8 @@ export function PresetPicker(props: {
         // **`marker`를 여기서 지우지 않는다** — 버리는 자리는 서버다(`apps/api/README.md` 「저장은 `marker`를
         // 버리고 id는 그대로 담는다」). 규칙의 자리가 하나여야 다른 저장 경로(MCP · CLI)에도 같은 것이 걸린다.
         schema: [...props.currentNodes],
+        // 상태 목록이 없으면 키를 안 싣는다 — 목록 없이 저장한 것과 같다(서버가 빈 목록으로 낸다).
+        ...(props.currentViewStates.length === 0 ? {} : { viewStates: [...props.currentViewStates] }),
       })
       setSaved(`프리셋으로 저장했습니다: ${created.name}`)
       props.onNameChange('')

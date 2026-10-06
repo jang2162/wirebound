@@ -298,6 +298,7 @@ export function StructureTree(props: {
       // **문서를 여기서 이미 읽었으므로 그대로 내려 준다.** `children`이 배열이 아닌 문서에서는 `null`이다 —
       // 그때 저장할 것이 없고, 고르개의 저장 버튼이 비활성이 된다.
       currentNodes={Array.isArray(doc.root?.children) ? doc.root.children : null}
+      currentViewStates={Array.isArray(doc.viewStates) ? doc.viewStates : []}
       presetName={presetName}
       onPresetNameChange={setPresetName}
     />

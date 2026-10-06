@@ -62,6 +62,8 @@ export interface LintReport {
   errors: number
   /** 걸러진 것 안의 `warning` 수. */
   warnings: number
+  /** 걸러진 것 안의 `info` 수 — 결함이 아니라 알림이다(설계서 「lint 규칙」). 어떤 실패 선에도 안 든다. */
+  infos: number
   /** 경로 **밖에** 남은 `error` 수(위 머리말). 필터가 없으면 0. */
   outsideErrors: number
   /** `pageId`가 `null`이라 경로 필터에서 빠진 이슈 수(위 머리말). 필터가 없으면 0. */
@@ -120,7 +122,8 @@ export function lintReport(
         totalIssues: all.length,
         filtered: false,
         errors: countErrors(all),
-        warnings: all.length - countErrors(all),
+        warnings: countSeverity(all, 'warning'),
+        infos: countSeverity(all, 'info'),
         outsideErrors: 0,
         droppedProjectIssues: 0,
         notes,
@@ -141,7 +144,8 @@ export function lintReport(
       totalIssues: all.length,
       filtered: true,
       errors,
-      warnings: issues.length - errors,
+      warnings: countSeverity(issues, 'warning'),
+      infos: countSeverity(issues, 'info'),
       outsideErrors: countErrors(all) - errors,
       // **`filterLintIssues`가 `pageId`로만 거른다** — 메뉴 이름 이슈는
       // `pageId`가 `null`이라 어느 경로를 줘도 빠진다.
@@ -153,5 +157,9 @@ export function lintReport(
 }
 
 export function countErrors(issues: readonly LintIssue[]): number {
-  return issues.filter((issue) => issue.severity === 'error').length
+  return countSeverity(issues, 'error')
+}
+
+function countSeverity(issues: readonly LintIssue[], severity: LintIssue['severity']): number {
+  return issues.filter((issue) => issue.severity === severity).length
 }

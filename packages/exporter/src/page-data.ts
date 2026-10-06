@@ -19,6 +19,17 @@ export const EXPORT_GLOBAL = '__wirebound_export__'
 /** 이 해시로 열면 화면 모드다 — 셸을 숨기고 목업만 남긴다(PPTX 가 찍는 판). */
 export const SCREEN_HASH = '#wb-screen'
 
+/**
+ * 화면 상태 전환기(`<select>`)의 id — 상태 목록이 있는 페이지만 싣는다(`bundle/shell.tsx`). 값은 `default`(기본) 또는 상태 id 다.
+ */
+export const STATE_SELECT_ID = 'wb-export-state'
+
+/**
+ * 고른 화면 상태를 싣는 주소 해시의 머리 — `#state=<id>`(id 는 `encodeURIComponent`). 기본은 해시를 비운다. 목록에 없는 id 는 기본으로
+ * 그린다(런타임 `browser/boot.tsx`).
+ */
+export const STATE_HASH_PREFIX = '#state='
+
 /** 번들 안에서 런타임이 사는 자리. */
 export const RUNTIME_JS_PATH = 'assets/runtime.js'
 

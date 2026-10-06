@@ -19,11 +19,13 @@ import {
   stripMarkers,
   targetedPages,
   validatePage,
+  type DroppedCases,
   type PageDocument,
   type PatchOp,
   type TargetMenuNode,
   type TargetPage,
   type TargetedPage,
+  type ViewState,
   type WbNode,
 } from '@wirebound/schema'
 import type { TreeMenuNode } from '../api/types'
@@ -154,6 +156,17 @@ export function removeManyOps(document: PageDocument, nodeIds: readonly string[]
 /** 붙이며 뺀 동작의 수(`prepareNodesForPaste` 의 `droppedActions`). */
 export function droppedActionsNotice(count: number): string {
   return `상호작용 동작 ${count}개는 대상이 없어 빼고 붙였습니다.`
+}
+
+/**
+ * 붙이며 뺀 상태 가지(`prepareNodesForPaste` 의 `droppedCases` — 붙이는 페이지의 목록에 없는 상태). 상태마다 한 문장이고 이름은 출처
+ * 페이지의 목록(봉투의 `viewStates`)에서 읽는다 — 상태 id 는 페이지 안의 이름이라 붙이는 페이지에서는 못 읽는다. 출처 목록이 없는 봉투면
+ * id 를 그대로 쓴다.
+ */
+export function droppedCasesNotice(dropped: readonly DroppedCases[], sourceStates: readonly ViewState[] | undefined): string {
+  return dropped
+    .map(({ state, count }) => `상태 "${sourceStates?.find((entry) => entry.id === state)?.name ?? state}" 가지 ${count}개를 뺐습니다.`)
+    .join(' ')
 }
 
 /** 페이지 대상을 가늠하려고 읽은 페이지 목록이 실패했다 — 붙이지 않는다(대상을 모른 채 빼면 남길 동작까지 잃는다). */

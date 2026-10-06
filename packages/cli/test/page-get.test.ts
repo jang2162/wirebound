@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { EXIT } from '../src/exit'
 import { run } from '../src/run'
 import { createFakeIo, stub, type FakeIo } from './fake-io'
-import { MENU_ADMIN, PAGE_DETAIL, PAGE_LIST, page, snapshotPayload } from './snapshot-fixture'
+import { MENU_ADMIN, PAGE_DETAIL, PAGE_LIST, page, snapshotPayload, 상태가_있는_프로젝트 } from './snapshot-fixture'
 import type { SnapshotPayload } from '@wirebound/themes'
 
 const SERVER = 'https://wb.example.com'
@@ -266,5 +266,21 @@ describe('못 올리는 문서 버전을 말한다', () => {
     const io = 준비()
     expect(await run(['page', 'get', '관리자/회원/목록'], io)).toBe(EXIT.ok)
     expect(io.stderr.join('\n')).not.toContain('올릴 수 없습니다')
+  })
+})
+
+describe('화면 상태', () => {
+  it('상태 목록을 머리에 한 줄로 말하고, 구조의 노드 이름이 상태를 단다', async () => {
+    const io = 준비(상태가_있는_프로젝트())
+    expect(await run(['page', 'get', '관리자/회원/상태'], io)).toBe(EXIT.ok)
+    const out = io.stdout.join('\n')
+    expect(out).toContain('  화면 상태: 기본 · 관리자 · 비로그인')
+    expect(out).toContain("'승인 버튼'(관리자 상태)")
+  })
+
+  it('상태가 없는 페이지에는 그 줄이 없다', async () => {
+    const io = 준비()
+    await run(['page', 'get', '관리자/회원/목록'], io)
+    expect(io.stdout.join('\n')).not.toContain('화면 상태')
   })
 })

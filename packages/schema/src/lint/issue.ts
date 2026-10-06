@@ -19,13 +19,13 @@
  * 둘 다 `null`이다.
  */
 import type { IssueSeverity } from '../validate'
-import type { LintRuleId, OwnSeverityRuleId, RelayRuleId } from './rules'
+import type { LintRuleId, LintSeverity, OwnSeverityRuleId, RelayRuleId } from './rules'
 import { lintRule } from './rules'
 
 export interface LintIssue {
   /** 어느 규칙이 냈는가. `LINT_RULES`의 id다. */
   rule: LintRuleId
-  severity: IssueSeverity
+  severity: LintSeverity
   /** 이 이슈가 난 페이지. 페이지 밖이면 `null`. */
   pageId: string | null
   /** 이 이슈가 난 노드. 노드 단위가 아니면 `null`. */

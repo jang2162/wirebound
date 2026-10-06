@@ -46,12 +46,15 @@
  * (`invertOps` → `applyOps`)를 지나야 하고, 케이스가 그 왕복을 잰다.
  */
 import {
+  VIEW_STATES_MAX,
   partitionIssues,
   prepareNodesForPaste,
   validatePage,
+  type DroppedCases,
   type PageDocument,
   type PatchOp,
   type ValidationIssue,
+  type ViewState,
   type WbNode,
 } from '@wirebound/schema'
 import { isNodeLike } from './safe-walk'
@@ -99,6 +102,11 @@ export interface PresetApplyResult {
   reason: PresetApplyReason | null
   /** `reason === 'invalid'`일 때만 비어 있지 않다. 화면이 그대로 보인다. */
   issues: ValidationIssue[]
+  /**
+   * 빼고 놓은 상태 가지 — 상태 id 는 **프리셋의 것**이다(통지가 프리셋의 목록으로 이름을 읽는다 — `droppedCasesNotice`). 실패 갈래는
+   * 빈 목록이다.
+   */
+  droppedCases: DroppedCases[]
 }
 
 /**
@@ -120,15 +128,26 @@ export function presetApply(
   document: PageDocument,
   nodes: readonly WbNode[],
   generate?: () => string,
+  viewStates?: readonly ViewState[],
 ): PresetApplyResult {
   const root = document.root
   // **root가 노드가 아니면 놓을 자리가 없다.** `{...null}`이 던지지는 않지만 그렇게 만든
   // 문서는 봉투부터 깨져 있어 `'invalid'`로 뭉뚱그려지고, 그러면 화면이 *"프리셋이
   // 잘못됐다"*고 말하게 된다 — 잘못된 것은 문서다.
-  if (!isNodeLike(root)) return { apply: null, reason: 'no-root', issues: [] }
+  if (!isNodeLike(root)) return { apply: null, reason: 'no-root', issues: [], droppedCases: [] }
 
-  const placed = remapForPage(nodes, generate)
-  const after: PageDocument = { version: document.version, root: { ...root, children: placed } }
+  const states = mergeViewStates(document.viewStates, viewStates ?? [])
+  const prepared = prepareNodesForPaste(
+    states.rename.size === 0 ? nodes : nodes.map((node) => renameCaseStates(node, states.rename)),
+    { ...KEEP_EVERY_TARGET, state: (id) => states.ids.has(id) },
+    generate,
+  )
+  const placed = prepared.nodes
+  const after: PageDocument = {
+    version: document.version,
+    ...(states.list === undefined ? {} : { viewStates: states.list }),
+    root: { ...root, children: placed },
+  }
 
   // **`error`만 본다.** `warning`은 편집 파이프라인도 막지 않으므로 여기서
   // 막으면 화면만 서버보다 엄격해진다 — 끊긴 상호작용 `target`이 그 자리다.
@@ -139,26 +158,75 @@ export function presetApply(
     // 바꿔도 그 이슈가 남는다. 이슈가 있을 때만 한 번 더 도므로 평소 비용이 없다.
     const pageOnly: PageDocument = { version: document.version, root: { ...root, children: [] } }
     const pageErrors = partitionIssues(validatePage(pageOnly)).errors
-    if (pageErrors.length > 0) return { apply: null, reason: 'broken-page', issues: pageErrors }
-    return { apply: null, reason: 'invalid', issues: errors }
+    if (pageErrors.length > 0) return { apply: null, reason: 'broken-page', issues: pageErrors, droppedCases: [] }
+    return { apply: null, reason: 'invalid', issues: errors, droppedCases: [] }
   }
 
   return {
-    apply: { ops: [childrenOp(root, placed)], selectId: placed[0]?.id ?? null },
+    // 목록을 먼저 잇는다 — 가지가 가리킬 상태가 같은 묶음 안에서 먼저 선다.
+    apply: { ops: [...states.ops, childrenOp(root, placed)], selectId: placed[0]?.id ?? null },
     reason: null,
     issues: [],
+    droppedCases: prepared.droppedCases,
   }
 }
 
 /**
- * 트리 전체에 새 id를 발급한다(설계서 「페이지 프리셋」 — *"프리셋 적용 시 노드 `id`를 새로 발급한다"*). 한 번에 짓는
- * 까닭 · 임시 뿌리가 `generate` 를 하나 받아 가는 것 · 값 공유를 끊는 계약은 `@wirebound/schema` 의
- * `prepareNodesForPaste` 머리말이 갖는다. 프리셋은 페이지 통째라 «밖을 가리키는 대상»을 거르지 않는다(keep 이 늘 참).
+ * **프리셋의 상태 목록을 페이지 목록에 잇는다**(설계 spec 「페이지 JSON · 프리셋 · 붙여넣기」 — 프리셋이 원본의 `viewStates` 를 싣는다).
+ * 페이지의 목록은 지우지 않는다 — 프리셋은 뿌리의 `children` 만 갈아 끼우고, 목록에서 상태를 빼면 남의 상태 편집과 겹치고 가지가 남은
+ * 상태면 저장이 막는다(`state-cases-left`).
+ *
+ * | 프리셋의 상태 | 페이지에 | 결과 |
+ * |---|---|---|
+ * | 같은 id | 있다 | 그 상태 그대로(이름은 페이지의 것) |
+ * | 같은 이름 · 다른 id | 있다 | 가지를 페이지의 그 id 로 옮김(`rename`) — 같은 이름을 둘 둘 수 없다 |
+ * | 둘 다 | 없다 | 목록 끝에 더함(목록이 없으면 배열째) |
+ * | 더하면 `VIEW_STATES_MAX` 를 넘는다 | — | 안 더함 — 그 상태의 가지는 `prepareNodesForPaste` 가 빼고 센다 |
+ *
+ * 붙이기와 달리 이름으로 맞추는 것은 프리셋은 목록째 오기 때문이다 — 같은 이름을 더할 수 없으니 이름이 곧 같은 상태다. 붙이기는 상태 id
+ * 로만 가른다(`shell/editor-keys.tsx` 의 `finishPaste`).
  */
-function remapForPage(nodes: readonly WbNode[], generate?: () => string): WbNode[] {
-  return prepareNodesForPaste(nodes, KEEP_EVERY_TARGET, generate).nodes
+function mergeViewStates(
+  current: unknown,
+  incoming: readonly ViewState[],
+): { list: ViewState[] | undefined; ops: PatchOp[]; ids: Set<string>; rename: Map<string, string> } {
+  const existing = Array.isArray(current) ? (current as ViewState[]) : undefined
+  const ids = new Set((existing ?? []).map((state) => state.id))
+  const byName = new Map((existing ?? []).map((state) => [state.name, state.id]))
+  const rename = new Map<string, string>()
+  const added: ViewState[] = []
+  for (const state of incoming) {
+    if (ids.has(state.id)) continue
+    const named = byName.get(state.name)
+    if (named !== undefined) {
+      rename.set(state.id, named)
+      continue
+    }
+    if (ids.size >= VIEW_STATES_MAX) continue
+    added.push({ id: state.id, name: state.name })
+    ids.add(state.id)
+    byName.set(state.name, state.id)
+  }
+  if (added.length === 0) return { list: existing, ops: [], ids, rename }
+  if (existing === undefined) return { list: added, ops: [{ op: 'add', path: '/viewStates', value: added }], ids, rename }
+  return { list: [...existing, ...added], ops: added.map((state) => ({ op: 'add', path: '/viewStates/-', value: state })), ids, rename }
 }
 
+/** 상태 가지의 `state` 를 표대로 바꾼 사본(`mergeViewStates` 의 `rename`). 입력을 바꾸지 않는다. */
+function renameCaseStates(node: WbNode, rename: ReadonlyMap<string, string>): WbNode {
+  const state = node.type === 'StateCase' ? node.props?.state : undefined
+  const next: WbNode =
+    typeof state === 'string' && rename.has(state) ? { ...node, props: { ...node.props, state: rename.get(state)! } } : { ...node }
+  if (Array.isArray(node.children)) next.children = node.children.map((child) => renameCaseStates(child, rename))
+  return next
+}
+
+/**
+ * 트리 전체에 새 id를 발급한다(설계서 「페이지 프리셋」 — *"프리셋 적용 시 노드 `id`를 새로 발급한다"*) — `presetApply` 가
+ * `prepareNodesForPaste` 를 부른다. 한 번에 짓는 까닭 · 임시 뿌리가 `generate` 를 하나 받아 가는 것 · 값 공유를 끊는 계약은 그 함수의
+ * 머리말이 갖는다. 프리셋은 페이지 통째라 «밖을 가리키는 대상»을 거르지 않는다(노드 · 페이지 keep 이 늘 참) — 상태 가지만 페이지의 목록으로
+ * 거른다(`mergeViewStates`).
+ */
 const KEEP_EVERY_TARGET = { node: () => true, page: () => true }
 
 /**
@@ -188,7 +256,7 @@ function childrenOp(root: WbNode, placed: WbNode[]): PatchOp {
  * `reason`이 `null`인(성공한) 결과를 넣으면 빈 문자열이다 — 부르는 쪽이 실패 갈래에서만
  * 부르므로 오늘 도달하지 않고, 던지지 않는 것이 이 층의 계약이다.
  */
-export function presetFailureNotice(result: PresetApplyResult): string {
+export function presetFailureNotice(result: Omit<PresetApplyResult, 'droppedCases'>): string {
   if (result.reason === null) return ''
   if (result.reason === 'no-root') return BROKEN_DOCUMENT_NOTICE
   const head = result.reason === 'broken-page' ? BROKEN_PAGE_NOTICE : BROKEN_PRESET_NOTICE

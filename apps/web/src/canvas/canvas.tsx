@@ -58,6 +58,7 @@ import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
 import { guideOf, useLayoutGuides, type Guide, type GuideLine } from './layout-guides'
 import { regionMarks, type RegionMark } from './view-state-regions'
+import { StateRegionBadges } from './state-badges'
 import { useCanvasMarquee } from './use-canvas-marquee'
 import { themeFileUrl } from '../theme/bundle-loader'
 import { useProjectTheme, type ProjectThemeState } from '../theme/project-theme'
@@ -711,6 +712,11 @@ export function Canvas(props: {
           {item.marker}
         </span>
       ))}
+
+      {/* **영역 표지**(`./state-badges.tsx`) — 뷰 모드에서 상태 영역마다 «상태에 따라 다름». 누르면 가지 목록에서 상태를 고른다. */}
+      {mode === 'view' && rendered !== null && props.pageId !== undefined && (
+        <StateRegionBadges pageId={props.pageId} doc={rendered} frame={frame} surfaceRef={surfaceRef} zoom={zoom} layoutKey={layoutKey} />
+      )}
     </div>
   )
 }
@@ -858,7 +864,7 @@ function isElement(target: EventTarget | null): target is Element {
  * `querySelector('[data-wb-id="…"]')`를 쓰지 않는 것은 id가 문서에서 온 임의의
  * 문자열이기 때문이다 — 따옴표나 역슬래시가 섞이면 셀렉터 문법이 깨진다.
  */
-function findNodeElement(doc: Document, nodeId: string): Element | null {
+export function findNodeElement(doc: Document, nodeId: string): Element | null {
   for (const element of Array.from(doc.querySelectorAll('[data-wb-id]'))) {
     if (element.getAttribute('data-wb-id') === nodeId) return element
   }
@@ -871,7 +877,7 @@ function findNodeElement(doc: Document, nodeId: string): Element | null {
  * 두 사각형 모두 호스트 화면 좌표라 프레임의 `scale(zoom)`이 곱해져 있어 차를 `zoom`으로 나눈다. iframe 이 표면의
  * 맨 위에 서지 않는 판(알림 줄 · 오류 배너가 위에 있다)이 있어 0 으로 두지 않는다.
  */
-function frameOffset(frame: CanvasFrame, surface: HTMLElement, zoom: number): { left: number; top: number } {
+export function frameOffset(frame: CanvasFrame, surface: HTMLElement, zoom: number): { left: number; top: number } {
   const element = frame.window.frameElement
   if (element === null) return { left: 0, top: 0 }
   const outer = element.getBoundingClientRect()
