@@ -99,6 +99,7 @@ export function StateRegionBadges(props: {
               icon={ICONS.viewStates}
               text={STATE_BADGE_LABEL}
               fullText
+              tag
               compact
               items={(region.node.children ?? []).flatMap((child) => {
                 const state: unknown = child?.type === 'StateCase' ? child.props?.state : undefined

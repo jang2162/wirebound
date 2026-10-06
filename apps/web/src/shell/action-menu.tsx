@@ -177,6 +177,8 @@ export function ActionMenu(props: {
   text?: string
   /** `text` 를 줄이지 않는다 — 짧고 고정인 글(영역 표지 «상태에 따라 다름»). 없으면 긴 상태 이름 몫의 폭에서 줄임표로 준다. */
   fullText?: boolean
+  /** 영역 꼬리표 크기(11px · 줄 높이 16px)로 줄인다 — 영역 표지가 위 형제를 덜 가리게(`canvas/state-badges.tsx`). `fullText` 와 함께 쓴다. */
+  tag?: boolean
 }): ReactElement {
   const [open, setOpen] = useState(false)
   /** 열 때 포커스를 줄 항목 — `'first'` · `'last'`. 목록이 그려진 뒤 이펙트가 옮긴다. */
@@ -303,7 +305,7 @@ export function ActionMenu(props: {
       <button
         type="button"
         ref={toggleRef}
-        className={['wb-shell-action-menu-toggle', props.compact === true ? 'wb-shell-action-menu-compact' : '', props.text !== undefined ? 'wb-shell-action-menu-valued' : '']
+        className={['wb-shell-action-menu-toggle', props.compact === true ? 'wb-shell-action-menu-compact' : '', props.text !== undefined ? 'wb-shell-action-menu-valued' : '', props.tag === true ? 'wb-shell-action-menu-tag' : '']
           .filter(Boolean)
           .join(' ')}
         aria-label={props.label}
@@ -315,7 +317,7 @@ export function ActionMenu(props: {
         onKeyDown={onToggleKeyDown}
       >
         <ToggleIcon icon={props.icon ?? ICONS.more} compact={props.compact === true} />
-        {props.text !== undefined && <span className={props.fullText === true ? 'wb-shell-action-menu-text wb-shell-action-menu-text-full' : 'wb-shell-action-menu-text'}>{props.text}</span>}
+        {props.text !== undefined && <span className={['wb-shell-action-menu-text', props.fullText === true ? 'wb-shell-action-menu-text-full' : '', props.tag === true ? 'wb-shell-action-menu-text-tag' : ''].filter(Boolean).join(' ')}>{props.text}</span>}
       </button>
       {open &&
         createPortal(

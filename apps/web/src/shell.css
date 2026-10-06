@@ -1524,8 +1524,8 @@
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
-/* 단추를 꼬리표(`.wb-shell-region-tag` — 11px · 줄 높이 16px)와 같은 크기로 줄인다 — 위 형제 노드를 덜 가린다. */
-.wb-shell-state-badge .wb-shell-action-menu-toggle {
+/* 단추를 꼬리표(`.wb-shell-region-tag` — 11px · 줄 높이 16px)와 같은 크기로 줄인다 — 위 형제 노드를 덜 가린다(`action-menu.tsx` 의 `tag`). */
+.wb-shell-action-menu-toggle.wb-shell-action-menu-tag {
   padding: 0 4px;
   border-width: 0;
   border-radius: 3px 3px 0 0;
@@ -1533,7 +1533,7 @@
   line-height: 16px;
 }
 
-.wb-shell-state-badge .wb-shell-action-menu-text {
+.wb-shell-action-menu-text.wb-shell-action-menu-text-tag {
   font-size: 11px;
 }
 
