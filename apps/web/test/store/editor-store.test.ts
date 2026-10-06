@@ -914,6 +914,40 @@ describe('EditorStore의 편집 상태', () => {
  * 한쪽만 움직이면 *"화면에는 번호가 없는데 다음 편집은 번호가 있는 revision 위에서
  * 만들어지는"* 상태가 되고, 그 어긋남은 아무도 모르는 채 남는다.
  */
+describe('EditorStore 의 미룬 되돌리기 슬롯', () => {
+  it('슬롯은 하나다 — 쥐고 있으면 새 요청은 null · 놓으면 다시 쥔다 · 앞 훅의 낡은 해제는 새 슬롯을 놓지 않는다', () => {
+    const store = new EditorStore()
+    const first = store.claimDeferral(() => undefined)
+    expect(first).not.toBeNull()
+    expect(store.claimDeferral(() => undefined)).toBeNull()
+    first?.()
+    const second = store.claimDeferral(() => undefined)
+    expect(second).not.toBeNull()
+    first?.()
+    expect(store.claimDeferral(() => undefined)).toBeNull()
+  })
+
+  it('편집을 못 내는 화면이 되면(뷰 모드 · viewer) 쥔 것이 취소된다 — 편집 모드 · 켜짐으로 바뀔 때는 아니다', () => {
+    const store = new EditorStore()
+    const cancelled: string[] = []
+    const hold = (): void => {
+      store.claimDeferral(() => cancelled.push('취소'))
+    }
+    hold()
+    store.setMode('edit')
+    store.setSelectionClaims(true)
+    expect(cancelled).toEqual([])
+    store.setMode('view')
+    expect(cancelled).toEqual(['취소'])
+
+    const other = new EditorStore()
+    const seen: string[] = []
+    other.claimDeferral(() => seen.push('취소'))
+    other.setSelectionClaims(false)
+    expect(seen).toEqual(['취소'])
+  })
+})
+
 describe('EditorStore의 마커 반영', () => {
   /** `n_root` 아래 자식 하나를 둔 문서. 마커를 붙일 자리가 필요하다. */
   function withChild(): PageDocument {

@@ -416,4 +416,41 @@ describe('프로젝트를 옮긴 뒤의 전송', () => {
       ['prj-b', 'pg-b'],
     ])
   })
+
+  /**
+   * **미룬 되돌리기의 슬롯은 그것을 건 훅이 내려가면 풀린다**(`useEditCommit` 의 `afterAck` · 언마운트 정리). 슬롯은 스토어의 하나뿐이라(`claimDeferral`)
+   * 훅이 정리 없이 내려가면 ack 가 안 와도 풀리지 않고 — 셸의 다른 훅이 건 미룸은 **조용히 버려진다**. 판: 편집 하나가 답 없이 떠 있고(ack 전) 둘째 훅이
+   * 되돌리기를 눌러 미룬다 → 그 훅만 내려간다. 모드 · 역할 전환은 스토어가 따로 거둔다(`setMode` · `setSelectionClaims` — `store/editor-store.test.ts`)
+   * 라 여기가 정리만 재는 자리다.
+   */
+  it('미룬 되돌리기를 건 훅이 내려가면 슬롯이 풀린다', async () => {
+    const { calls, patchOps } = deferredPatchOps()
+    const client = { patchOps } as unknown as ApiClient
+    await openPage(textDoc(), { apiOverrides: { patchOps } })
+    mountDriver(client)
+    commit(NEW_TEXT)
+    await waitFor(() => expect(calls).toHaveLength(1))
+
+    const undoRef: { current: (() => void) | null } = { current: null }
+    function UndoDriver(): ReactElement {
+      undoRef.current = useEditCommit({ projectId: PROJECT_ID, pageId: PAGE_ID }).undo
+      return <span />
+    }
+    const second = render(
+      <ApiProvider client={client}>
+        <EditorStoreProvider store={shellStore()}>
+          <UndoDriver />
+        </EditorStoreProvider>
+      </ApiProvider>,
+    )
+    act(() => undoRef.current?.())
+    // 판 카나리아 — 미룸이 슬롯을 쥐었다(다른 훅의 누름은 받지 못한다).
+    expect(shellStore().claimDeferral(() => undefined)).toBeNull()
+
+    second.unmount()
+
+    const freed = shellStore().claimDeferral(() => undefined)
+    expect(freed).not.toBeNull()
+    freed?.()
+  })
 })

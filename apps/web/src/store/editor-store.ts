@@ -1347,8 +1347,31 @@ export class EditorStore {
   readonly awaitsStackAck = (kind: 'undo' | 'redo'): boolean =>
     this.#state.pending.some((edit) => (kind === 'undo' ? edit.kind !== 'undo' : edit.kind === 'undo'))
 
+  /** **그 스택을 먹일 큐의 편집 id** 들(`awaitsStackAck` 가 세는 것) — 미룬 되돌리기가 «누른 때의 마지막 것» 이 나갔는지 가른다(`useEditCommit` 의 `afterAck`). */
+  readonly stackFeeders = (kind: 'undo' | 'redo'): string[] =>
+    this.#state.pending.filter((edit) => (kind === 'undo' ? edit.kind !== 'undo' : edit.kind === 'undo')).map((edit) => edit.clientOpId)
+
+  /** 큐의 편집 id 전부 — 누른 뒤 새로 들어온 편집이 있는지 가른다(`afterAck`). */
+  readonly queuedEdits = (): string[] => this.#state.pending.map((edit) => edit.clientOpId)
+
   /** 지금 판의 세대 — 미뤄 둔 일이 판이 갈렸는지(재연결 · 복원 · 수습 · 떠남) 가를 때 쓴다. */
   readonly boardEpoch = (): number => this.#queueEpoch
+
+  /**
+   * **미룬 되돌리기 · 다시 실행의 단일 슬롯**(`useEditCommit` 의 `afterAck`) — 미룬 것이 있으면 `null`(새 누름은 겹치지 않는다). 슬롯이 훅 인스턴스마다
+   * 있으면 머리 단추와 단축키가 각자 미뤄 ack 에 두 단계가 나가 페이지가 비었다(`beginPump` 와 같은 까닭). 준 `cancel` 은 편집을 못 내는 화면이 되면
+   * (뷰 모드 · viewer) 불린다 — 미룬 것이 그 화면에서 커밋되지 않게. 돌려준 함수는 슬롯을 놓는다.
+   */
+  readonly claimDeferral = (cancel: () => void): (() => void) | null => {
+    if (this.#deferral !== null) return null
+    const slot = { cancel }
+    this.#deferral = slot
+    return () => {
+      if (this.#deferral === slot) this.#deferral = null
+    }
+  }
+
+  #deferral: { cancel: () => void } | null = null
 
   /**
    * **새로고침으로 채울 되돌리기의 판** — 판을 실은 바로 뒤에 부른다(`routes/editor.tsx`의 `restoreUndo`). 목록 답을 실을 때
@@ -2560,6 +2583,13 @@ export class EditorStore {
     this.#apply({ editFailure: this.#composeLoss(mergeLoss(shown, part)) })
   }
 
+  /** **제 조각만 거둔다** — 그 열쇠의 조각이 아직 통지에 있을 때만(다른 통지가 갈아 끼웠으면 건드리지 않는다). 다른 조각은 남긴다. */
+  readonly withdrawLoss = (key: string): void => {
+    const shown = this.#shownLoss()
+    if (!shown.some((part) => part.key === key)) return
+    this.#apply({ editFailure: this.#composeLoss(shown.filter((part) => part.key !== key)) })
+  }
+
   /**
    * **떠나며 버린 편집을 말한다** — 판을 비우는 자리가 지우지 않는 조각이다(`#lossParts`의 `sticky`). 앞의 떠남 조각은 이 문장이 대신한다 —
    * 수가 없는 조각이고(`LossPart.render`), 거절의 문장이 떠날 때 버린 것까지 합쳐 센다(`abandonedUnsent`). `pages`는 그 조각이 «다시 열어
@@ -2762,6 +2792,7 @@ export class EditorStore {
    * 꺼지는 순간(강등)에는 선택을 그대로 둔다 — 막을 것이 줄 뿐이다.
    */
   readonly setSelectionClaims = (selectionClaims: boolean): void => {
+    if (!selectionClaims) this.#deferral?.cancel()
     const { selectedNodeId, selectedNodeIds, document, openPageId } = this.#state
     // 판정은 `#lockConflictAt` 그대로다 — 새 값이 켜짐일 때만 묻는다(`#blocksSelection`은 아직 앞 값을 본다). 한 번의
     // `#apply`로 둘을 함께 놓는다 — 둘로 나누면 구독자가 «켜졌는데 막힌 자리를 고른 채»인 상태를 한 번 본다. 여럿이면 막힌
@@ -2884,6 +2915,7 @@ export class EditorStore {
   }
 
   readonly setMode = (mode: EditorMode): void => {
+    if (mode !== 'edit') this.#deferral?.cancel()
     this.#apply({ mode })
   }
 

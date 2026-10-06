@@ -89,6 +89,57 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
       await context.close()
     }
   })
+
+  /** 늦춘 WS 로 에디터를 열고 둘째 글을 골라 룸에 든 뒤 `Alt+↑` 로 옮긴다 — 서버가 커밋한 것을 본 뒤(ack 는 아직)까지. */
+  async function movedWithAckPending(slug: string): Promise<{ P: string; page: Page; log: string[]; T0: number; close: () => Promise<void> }> {
+    const { P } = await fixture(stack, alice, slug)
+    const delay = await stack.startDownDelay(DELAY_MS)
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 }, origin: delay.origin })
+    const log: string[] = []
+    const T0 = Date.now()
+    page.on('websocket', (ws) => ws.on('framereceived', (frame) => log.push(`${Date.now() - T0} ${String(frame.payload).slice(0, 40)}`)))
+    await page.goto(P)
+    await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
+    await poll('WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
+    await poll('룸에 든다', async () => log.slice(), (lines) => lines.some((line) => line.includes('"joined"')))
+    await page.keyboard.press('Alt+ArrowUp')
+    await poll('Alt+↑ 가 서버에 닿는다', () => server(P), (s) => s.headSeq === 2)
+    return { P, page, log, T0, close: () => context.close() }
+  }
+
+  /** 판 카나리아 — 누른 때 ack 는 아직 안 왔다(늦춘 WS). */
+  const noAckYet = (log: string[], T0: number): string[] => log.filter((line) => line.includes('patch-ack') && Number(line.split(' ')[0]) <= Date.now() - T0)
+
+  it('누른 뒤 ack 전에 지운 노드는 되돌림에 되살아나지 않는다 — 미룬 되돌리기는 버려지고 지움만 서버에 간다', async () => {
+    const t = await movedWithAckPending('undo-then-delete')
+    try {
+      await t.page.keyboard.press('ControlOrMeta+z')
+      await t.page.keyboard.press('Delete')
+      expect(noAckYet(t.log, t.T0)).toEqual([])
+      // 지움이 서버에 닿을 때까지 — 값은 아래에서 단언한다.
+      await poll('Delete 가 서버에 닿는다', () => server(t.P), (s) => s.headSeq >= 3, 8_000)
+      await t.page.waitForTimeout(DELAY_MS * 3)
+      const final = await server(t.P)
+      expect(final).toEqual({ ids: ['n_text0000001', 'n_text0000003', 'n_field000001'], headSeq: 3 })
+      expect(await t.page.locator('.wb-shell-edit-alert').allTextContents()).toEqual(['되돌리기 전에 새 편집이 있어 되돌리지 않았습니다.'])
+    } finally {
+      await t.close()
+    }
+  })
+
+  it('키보드 Cmd+Z 와 머리 «되돌리기» 단추를 함께 눌러도 한 단계만 나간다 — 페이지가 비지 않는다', async () => {
+    const t = await movedWithAckPending('undo-key-and-button')
+    try {
+      await t.page.keyboard.press('ControlOrMeta+z')
+      await t.page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기', exact: true }).click()
+      expect(noAckYet(t.log, t.T0)).toEqual([])
+      await poll('되돌림이 서버에 닿는다', () => server(t.P), (s) => s.headSeq >= 3, 8_000)
+      await t.page.waitForTimeout(DELAY_MS * 4)
+      expect(await server(t.P)).toEqual({ ids: ['n_text0000001', 'n_text0000002', 'n_text0000003', 'n_field000001'], headSeq: 3 })
+    } finally {
+      await t.close()
+    }
+  })
 })
 
 async function fixture(stack: EditorStack, owner: Session, slug: string): Promise<{ P: string; projectId: string }> {
