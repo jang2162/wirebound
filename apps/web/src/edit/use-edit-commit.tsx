@@ -11,7 +11,7 @@
  * 아래 `pumpingRef`와 **한 번에 하나씩 `await`하는 루프**다. 루프가 도는 동안 들어온 편집은
  * 큐에 쌓이고, 앞 요청이 끝난 뒤 같은 루프가 그것을 집는다.
  */
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { createNodeId, type Interaction, type PatchOp } from '@wirebound/schema'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
@@ -25,6 +25,9 @@ import { LOSS_RANK, type LossPart } from '../store/loss-notice'
 import { useAllCases, useViewState } from '../shell/use-view-state'
 import { interactionsOps, propOps, variantOps } from './ops'
 import { planViewStateEdit, rememberFork } from './view-state-fork'
+
+/** 내 편집의 ack 를 기다려 미룬 되돌리기 · 다시 실행의 한도(`useEditCommit` 의 `afterAck`) — ack 에는 시간 한도가 없어 미룬 것이 끝없이 조용할 수 있다. */
+export const UNDO_ACK_WAIT_MS = 3_000
 
 /** 서버가 이유를 주지 않은 편집 실패에 쓸 문장(네트워크 단절 등). */
 const EDIT_UNKNOWN_FAILURE = '편집을 저장하지 못했습니다'
@@ -251,6 +254,17 @@ function skippedNotice(skipped: number, applied: boolean): string {
   const head = skippedHead(skipped)
   return applied ? `${head} 그 앞의 편집을 되돌렸습니다.` : `${head} 되돌릴 것이 더 없습니다.`
 }
+
+/** 내 편집의 ack 를 기다리다 한도(`UNDO_ACK_WAIT_MS`)가 지났을 때의 안내 — 그 편집이 서버에 닿았는지 모르므로 앞 항목을 되돌리지 않는다. */
+const ACK_WAIT_EXPIRED = '편집이 아직 서버에 닿지 않아 되돌리지 못했습니다. 잠시 뒤 다시 눌러 주세요.'
+/** 미룬 되돌리기가 ack 로 풀렸을 때 누른 뒤 낸 편집이 큐에 있으면 — 그 편집을 되돌리지 않는다(`afterAck`). */
+const UNDO_SUPERSEDED = '되돌리기 전에 새 편집이 있어 되돌리지 않았습니다.'
+/** 미룬 되돌리기가 기다리던 편집이 ack 아닌 길(리베이스 버림 · 거절)로 큐를 떠났을 때 — 앞 편집을 대신 되돌리지 않는다(`afterAck`). */
+const UNDO_UNSAVED = '되돌리려던 편집이 저장되지 않아 되돌리지 않았습니다.'
+/** 한도 문장은 한 조각이다 — 두 번 눌러도 한 문장이다. 거두는 것은 마지막 누름만 한다(`afterAck` · `expirySeq`). */
+const ACK_WAIT_KEY = 'undo-ack-wait'
+/** 한도 문장을 낸 누름의 차례 — 앞 누름의 구독이 뒤 누름의 문장을 거두지 않게 한다. */
+let expirySeq = 0
 
 /** 건너뛴 것만 말하는 앞 문장 — 되짚기 이력을 받는 동안과 받지 못했을 때도 쓴다(`undo` · `loadUndoHistory`). */
 function skippedHead(skipped: number): string {
@@ -798,25 +812,115 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   )
 
   /**
+   * **스택을 먹일 내 편집의 ack 가 닿을 때까지 미뤘다가 한 번 한다**(`EditorStore.awaitsStackAck`). 스택은 ack 가 쌓으므로 그 전에 누른 되돌리기는
+   * 그 편집이 아니라 그 앞의 것을 되돌렸다(새로고침으로 채운 첫 편집 — 페이지가 통째로 비었다).
+   *
+   * - **미룸은 스토어의 단일 슬롯이다**(`EditorStore.claimDeferral`) — 이미 미뤄 둔 것이 있으면 같은 종류의 새 누름(키 · 단추)은 버린다. 한 단계만.
+   *   **다른 종류는 슬롯 뒤에 한 줄 세운다**(`deferBehindSlot`) — 되돌리기 → 다시 실행을 번갈아 누르면 누른 차례대로 나간다.
+   * - **끝나는 때는 «누른 때 큐의 마지막 먹이 편집»이 큐에서 나갔을 때다.** 누른 뒤 낸 편집은 기다리지 않는다 — 그 편집의 ack 까지 기다렸다 하면 되돌리기가
+   *   누른 뒤에 낸 편집을 되돌렸다. 나간 때 누른 뒤 새로 들어온 편집이 큐에 있으면 되돌리지 않고 그렇다고 말한다.
+   * - **되돌리는 것은 그 편집이 ack 로 나갔을 때만이다**(`EditorStore.deferralAcked`) — 스택 맨 위가 바뀌었는지로 가르면 앞 편집의 ack 가 맨 위를 바꿔 놓은 채
+   *   마지막 편집이 리베이스 버림 · 거절로 떠난 판에서 앞 편집이 되돌려진다. 그 길로 떠났으면 되돌리지 않고 말한다(`UNDO_UNSAVED`).
+   * - 판이 갈렸거나(`boardEpoch`) 편집을 못 내는 화면이 되면(`claimDeferral` 의 `cancel`) 버린다. 한도(`UNDO_ACK_WAIT_MS`)가 지나면 말하고 버린다.
+   * - **구독 · 마이크로태스크의 판 대조(`boardEpoch`)는 방어다** — 판을 비우는 자리가 큐 · 스택을 함께 비워 구독의 첫 알림에서 이미 끝난다(재는 케이스 없음 — `test/edit/undo-before-ack.test.tsx` 머리말).
+   * - **말은 서 있는 잃음 통지를 덮지 않고 잇는다**(`EditorStore.tellLoss`) · 거둘 때는 제 조각만 거둔다(`withdrawLoss`).
+   */
+  const ownDeferral = useRef<(() => void) | null>(null)
+  useEffect(() => () => ownDeferral.current?.(), [])
+  const afterAck = useCallback(
+    (kind: 'undo' | 'redo', run: () => void): void => {
+      if (store.deferBehindSlot(kind, () => afterAck(kind, run))) return
+      if (!store.awaitsStackAck(kind)) {
+        run()
+        return
+      }
+      let stop = (): void => undefined
+      let timer: ReturnType<typeof setTimeout> | undefined
+      let release: (() => void) | null = null
+      const finish = (): void => {
+        stop()
+        clearTimeout(timer)
+        release?.()
+        ownDeferral.current = null
+      }
+      const feeders = store.stackFeeders(kind)
+      const lastFeeder = feeders[feeders.length - 1]!
+      release = store.claimDeferral(finish, lastFeeder, kind)
+      if (release === null) return
+      const known = new Set(store.queuedEdits())
+      const epoch = store.boardEpoch()
+      const pressedAhead = (): boolean => store.stackFeeders(kind).includes(lastFeeder)
+      stop = store.subscribe(() => {
+        if (store.boardEpoch() !== epoch) {
+          finish()
+          return
+        }
+        if (pressedAhead()) return
+        const acked = store.deferralAcked()
+        const behind = acked ? store.takeDeferralBehind() : null
+        finish()
+        // 구독은 스토어가 바뀌는 중에 불린다 — 되돌리기 · 말은 그 바깥에서 낸다.
+        queueMicrotask(() => {
+          if (store.boardEpoch() !== epoch) return
+          if (!acked) {
+            // 버린 쪽(리베이스 · 거절)의 잃음 통지에 이어 한 번만 선다 — 조각 열쇠가 같아 되풀이해도 한 문장이다.
+            store.tellLoss({ key: 'undo-unsaved', rank: LOSS_RANK.history, counts: [], render: () => UNDO_UNSAVED })
+            return
+          }
+          if (store.queuedEdits().some((id) => !known.has(id))) {
+            store.tellLoss({ key: 'undo-superseded', rank: LOSS_RANK.history, counts: [], render: () => UNDO_SUPERSEDED })
+            return
+          }
+          run()
+          behind?.()
+        })
+      })
+      timer = setTimeout(() => {
+        finish()
+        if (store.boardEpoch() !== epoch) return
+        // **«아직 닿지 않았다»는 ack 가 한도 직후 오면 거짓이 된다** — 그때 제 조각만 거둔다(다른 통지가 갈아 끼웠으면 건드리지 않는다).
+        const mine = (expirySeq += 1)
+        store.tellLoss({ key: ACK_WAIT_KEY, rank: LOSS_RANK.history, counts: [], render: () => ACK_WAIT_EXPIRED })
+        const retract = store.subscribe(() => {
+          if (mine !== expirySeq) {
+            retract()
+            return
+          }
+          if (store.boardEpoch() !== epoch || !pressedAhead()) {
+            retract()
+            queueMicrotask(() => {
+              if (store.boardEpoch() === epoch && mine === expirySeq) store.withdrawLoss(ACK_WAIT_KEY)
+            })
+          }
+        })
+      }, UNDO_ACK_WAIT_MS)
+      ownDeferral.current = finish
+    },
+    [store],
+  )
+
+  /**
    * 되돌리기 한 단계. 새로고침으로 채운 항목에 닿았는데 되짚기 이력이 모자라면 스토어가 멈추고 조회를 낸다(`UndoAttempt.history`) — 맨 위가 그
    * 항목이든, 맨 위 세션 항목을 건너뛰고 닿았든. 받은 뒤 되돌리고, 건너뛴 세션 항목은 그 결과와 함께 센다. 받는 동안은 건너뛴 것만 말한다.
    */
   const undo = useCallback(() => {
     if (open === null || store.getState().undoHistoryLoading) return
-    const attempt = store.startUndo()
-    if (attempt.history === undefined) {
-      settle(attempt, 0)
-      return
-    }
-    if (attempt.skipped > 0) store.setEditFailure({ kind: 'message', message: skippedHead(attempt.skipped) })
-    void loadUndoHistory(attempt.history, attempt.skipped)
-  }, [open, store, settle, loadUndoHistory])
+    afterAck('undo', () => {
+      const attempt = store.startUndo()
+      if (attempt.history === undefined) {
+        settle(attempt, 0)
+        return
+      }
+      if (attempt.skipped > 0) store.setEditFailure({ kind: 'message', message: skippedHead(attempt.skipped) })
+      void loadUndoHistory(attempt.history, attempt.skipped)
+    })
+  }, [open, store, settle, loadUndoHistory, afterAck])
 
   const redo = useCallback(() => {
     // 받는 동안은 버린다 — 단추가 먼저 막는다(`canRedo`). `undo`의 같은 가드와 짝이다.
     if (store.getState().undoHistoryLoading) return
-    step(store.startRedo)
-  }, [step, store])
+    afterAck('redo', () => step(store.startRedo))
+  }, [step, store, afterAck])
 
   /**
    * 편집 하나를 큐에 넣고 전송을 밟는다. **`commitProp`과 구조 편집(구조 트리의 명령)이

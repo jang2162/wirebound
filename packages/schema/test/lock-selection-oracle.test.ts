@@ -16,22 +16,51 @@ import { parsePointer } from '../src/patch/pointer'
 import { findNodePath } from '../src/tree'
 
 /** 옛 판정의 사본 — `apps/api`의 `selectionVerdict`가 노드마다 부르던 `findLockConflict({ pointers: [findNodePath(root, nodeId)] })`. */
-function oldVerdict(root: WbNode, locks: readonly NodeLock[], nodeIds: readonly string[], viewerUserId: string): (NodeLock | null)[] {
+function oldVerdict(
+  locks: readonly NodeLock[],
+  nodeIds: readonly string[],
+  viewerUserId: string,
+  pathOf: (nodeId: string) => string | undefined,
+): (NodeLock | null)[] {
   const overlaps = (a: readonly string[], b: readonly string[]) => {
     for (let i = 0; i < Math.min(a.length, b.length); i += 1) if (a[i] !== b[i]) return false
     return true
   }
   return nodeIds.map((nodeId) => {
-    const path = findNodePath(root, nodeId)
+    const path = pathOf(nodeId)
     if (path === undefined) return null
     const target = parsePointer(path)
     for (const lock of locks.filter((l) => l.userId !== viewerUserId)) {
-      const lockPath = findNodePath(root, lock.nodeId)
+      const lockPath = pathOf(lock.nodeId)
       if (lockPath === undefined) continue
       if (overlaps(parsePointer(lockPath), target)) return lock
     }
     return null
   })
+}
+
+/** 잠금 하나가 묻는 노드마다 겹치는가 — 옛 판정과 같은 규칙이고 `firstOfMany` 가 «겹치는 잠금이 여럿인 노드»를 세는 데 쓴다. */
+function overlapsPerNode(lock: NodeLock, nodeIds: readonly string[], pathOf: (nodeId: string) => string | undefined): boolean[] {
+  const held = parsePointer(pathOf(lock.nodeId)!)
+  return nodeIds.map((nodeId) => {
+    const path = pathOf(nodeId)
+    if (path === undefined) return false
+    const target = parsePointer(path)
+    for (let i = 0; i < Math.min(held.length, target.length); i += 1) if (held[i] !== target[i]) return false
+    return true
+  })
+}
+
+/**
+ * `findNodePath` 를 판마다 노드당 한 번만 부르는 사본 — 같은 함수라 규칙은 그대로다. 안 쓰면 옛 판정의 사본이 노드 수 × 잠금 수 × 문서 훑기로 불어
+ * 이 파일이 혼자 3.4s 가 걸렸다(새 판정은 0.01s · 사본 쪽이 거의 전부 — `pnpm test --maxWorkers=50%` 부하에서 5s 한도를 넘었다).
+ */
+function memoPaths(root: WbNode): (nodeId: string) => string | undefined {
+  const seen = new Map<string, string | undefined>()
+  return (nodeId) => {
+    if (!seen.has(nodeId)) seen.set(nodeId, findNodePath(root, nodeId))
+    return seen.get(nodeId)
+  }
 }
 
 /** 씨앗을 받는 난수(mulberry32) — 실패한 판을 씨앗으로 다시 세운다. */
@@ -92,9 +121,9 @@ function board(seed: number): Board {
 }
 
 /** 판의 노드 하나가 어떤 꼴로 막혔나 — 카나리아가 센다. */
-function kindOf(root: WbNode, nodeId: string, lock: NodeLock): 'self' | 'inside' | 'contains' {
-  const at = findNodePath(root, nodeId)!
-  const held = findNodePath(root, lock.nodeId)!
+function kindOf(pathOf: (nodeId: string) => string | undefined, nodeId: string, lock: NodeLock): 'self' | 'inside' | 'contains' {
+  const at = pathOf(nodeId)!
+  const held = pathOf(lock.nodeId)!
   if (at === held) return 'self'
   return at.startsWith(`${held}/`) ? 'inside' : 'contains'
 }
@@ -105,7 +134,8 @@ describe('selectionConflicts — 옛 판정(노드마다 따로)과 같은 답',
     for (let seed = 1; seed <= 4000; seed += 1) {
       const { root, locks, ask } = board(seed)
       const viewer = USERS[seed % USERS.length]!
-      const expected = oldVerdict(root, locks, ask, viewer)
+      const pathOf = memoPaths(root)
+      const expected = oldVerdict(locks, ask, viewer, pathOf)
       const actual = selectionConflicts({ root, locks, nodeIds: ask, viewerUserId: viewer })
       expect(actual.length, `seed ${seed}`).toBe(ask.length)
       for (let i = 0; i < ask.length; i += 1) {
@@ -121,15 +151,17 @@ describe('selectionConflicts — 옛 판정(노드마다 따로)과 같은 답',
       }
       walk(root)
       if (names > new Set(ask).size - 1) tally.duplicateIds += 1
+      const overlapping = locks
+        .filter((l) => l.userId !== viewer && pathOf(l.nodeId) !== undefined)
+        .map((l) => overlapsPerNode(l, ask, pathOf))
       expected.forEach((lock, i) => {
         if (lock === null) {
           tally.free += 1
           return
         }
         tally.blocked += 1
-        tally[kindOf(root, ask[i]!, lock)] += 1
-        const against = locks.filter((l) => l.userId !== viewer && findNodePath(root, l.nodeId) !== undefined)
-        if (against.filter((l) => oldVerdict(root, [l], [ask[i]!], viewer)[0] !== null).length > 1) tally.firstOfMany += 1
+        tally[kindOf(pathOf, ask[i]!, lock)] += 1
+        if (overlapping.filter((verdicts) => verdicts[i]).length > 1) tally.firstOfMany += 1
       })
     }
     // **카나리아 — 판이 실제로 겹침과 비겹침을 둘 다 넉넉히 낸다.** 무작위 판이 한쪽만 내면 두 판정이 «다 null» 로 같아 아무것도 안 잰다.

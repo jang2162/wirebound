@@ -707,8 +707,8 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
       .map((node) => node.textContent)
       .join(' | ')
 
-  /** `pressFirst`면 누른 뒤 버림이 서고(받는 동안), 아니면 버림이 선 뒤 누른다(누르기 전의 통지). */
-  async function dropped(before: ApiClient['listRevisionsBefore'], pressFirst: boolean): Promise<void> {
+  /** 누른 뒤 이력을 받는 동안 버림이 선다. */
+  async function dropped(before: ApiClient['listRevisionsBefore']): Promise<void> {
     const { setup, sockets } = wiring()
     await openPage(OPENED, { realtime: setup, apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: before } })
     act(() => {
@@ -719,7 +719,7 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
       fireEvent.click(undoButton())
       await waitFor(() => expect(undoButton().disabled).toBe(true))
     }
-    if (pressFirst) await press()
+    await press()
     for (const [index, value] of [[1, '가 고침'], [0, '밥 고침']] as const) {
       fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[index]!)
       const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
@@ -743,12 +743,11 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
     await act(async () => {})
     // 판 카나리아 — 리베이스가 줄 선 편집을 버리고 말했다.
     expect({ alert: alertText(), contents: contents() }).toEqual({ alert: DROPPED, contents: ['가 고침', '나'] })
-    if (!pressFirst) await press()
   }
 
   it('이력을 받은 뒤의 되돌리기가 그 사이 선 버림 통지를 치우지 않는다', async () => {
     const answer = deferred<RevisionSummary[]>()
-    await dropped(() => answer.promise, true)
+    await dropped(() => answer.promise)
 
     await act(async () => {
       answer.resolve([summary(HEAD_SEQ, [{ op: 'replace', path: '/root/children/0/props/content', value: 'x' }], 'u-bob')])
@@ -760,7 +759,7 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
 
   it('이력 조회가 실패하면 그 사이 선 버림 통지 뒤에 실패를 잇는다', async () => {
     let reject!: (error: unknown) => void
-    await dropped(() => new Promise<RevisionSummary[]>((_resolve, fail) => (reject = fail)), true)
+    await dropped(() => new Promise<RevisionSummary[]>((_resolve, fail) => (reject = fail)))
 
     await act(async () => {
       reject(new ApiError(500, 'internal', '되짚기 조회 실패 [NT]'))
@@ -770,9 +769,48 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
     expect(alertText()).toBe(`${DROPPED} 되짚기 조회 실패 [NT] — 되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.`)
   })
 
+  /**
+   * **누르기 전에 서 있던 통지는 받은 뒤의 되돌리기가 치운다 — 누른 때의 통지다**(`lossArrivedSince` 의 `editFailure !== pressed` 항). 판: 나간 편집 하나가
+   * 답 없이 줄에 선 채 밥이 그 노드를 지워 리베이스가 그 편집을 버리고 말한다 — 큐가 비어 누름이 미뤄지지 않고(`afterAck`) 곧바로 새로고침으로 채운
+   * 항목에 닿아 이력 조회를 낸다. 이력을 받는 동안 선 잃음은 없으므로 받은 뒤의 되돌리기가 서 있던 통지를 치운다. **이 판에는 ack 가 없다 — 세션 항목이
+   * 맨 위에 안 올라 이력을 받는 길로 간다**(편집이 큐에 있으면 미뤄 그 ack 가 세션 항목을 올려 이 길에 안 닿는다).
+   */
   it('누르기 전에 서 있던 통지는 받은 뒤의 되돌리기가 치운다 — 누른 때의 통지다', async () => {
     const answer = deferred<RevisionSummary[]>()
-    await dropped(() => answer.promise, false)
+    const { setup, sockets } = wiring()
+    await openPage(OPENED, { realtime: setup, apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: () => answer.promise } })
+    act(() => {
+      sockets[0]?.onopen?.()
+    })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[0]!)
+    const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
+    fireEvent.change(box, { target: { value: '밥 고침' } })
+    fireEvent.blur(box)
+    await act(async () => {})
+    act(() => {
+      sockets[0]?.onmessage?.({
+        data: JSON.stringify({
+          type: 'page-changed',
+          projectId: PROJECT_ID,
+          pageId: PAGE_ID,
+          seq: HEAD_SEQ + 1,
+          ops: [{ op: 'remove', path: '/root/children/0' }],
+          warnings: [],
+          actor: { type: 'user', label: '밥' },
+        }),
+      })
+    })
+    await act(async () => {})
+    // 판 카나리아 — 리베이스가 나간 편집을 버리고 말했고(큐 비어) 되돌리기 단추는 켜져 있다 · 편집은 한 번 나갔다.
+    expect({ alert: alertText(), contents: contents(), disabled: undoButton().disabled, sent: (sockets[0]?.sent ?? []).filter((frame) => (frame as { type?: string }).type === 'patch').length }).toEqual({
+      alert: DROPPED,
+      contents: ['가', '나'],
+      disabled: false,
+      sent: 1,
+    })
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(undoButton().disabled).toBe(true))
 
     await act(async () => {
       answer.resolve([summary(HEAD_SEQ, [{ op: 'replace', path: '/root/children/0/props/content', value: 'x' }], 'u-bob')])
