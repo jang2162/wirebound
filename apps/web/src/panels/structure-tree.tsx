@@ -16,7 +16,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { nodeAlias, nodeSummary, type NodeLock, type ViewState, type WbNode } from '@wirebound/schema'
+import { nodeAlias, nodeSummary, visibleTree, type NodeLock, type ViewState, type WbNode } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
 import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { platformOf, type ShortcutLine } from '../edit/editor-shortcuts'
@@ -27,7 +27,8 @@ import { ancestorIds, hasChildRows, visibleNodeOrder } from '../edit/selection-m
 import { structureAbilities } from '../edit/structure-actions'
 import { sameDrop, type StructureDrop } from '../edit/structure-drop'
 import { ActionMenu } from '../shell/action-menu'
-import { ICONS } from '../shell/icons'
+import { ICONS, shellIcon } from '../shell/icons'
+import { useAllCases, useHiddenNodes, useViewState } from '../shell/use-view-state'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 import { structureKey, useCollapsed, type Collapsed } from '../tree/collapse'
@@ -39,6 +40,7 @@ import { isTypingSurface } from './typing-surface'
 import { StructurePicker, useStructureCommands, type StructureCommands } from './structure-toolbar'
 import { TreeFoldButtons, TreeToggle } from './tree-fold'
 import { TreeInput } from './tree-input'
+import { UnsplitDialog } from './unsplit-dialog'
 import { structureRowItems, TreeRowActions } from './tree-row-actions'
 
 /**
@@ -154,6 +156,12 @@ export function StructureTree(props: {
     pageLock: typeof doc?.root?.id === 'string' ? lockOf(doc.root.id) : null,
   })
   const alias = useAliasEdit(props.pageId)
+  /** 지금 상태(`shell/use-view-state.ts`) — 상태 영역 줄 아래에는 그 상태의 가지만 편다. */
+  const { state: viewState } = useViewState(props.pageId)
+  /** «모든 가지 보기» — 켜면 상태 영역의 가지를 전부 편다(설계서 «화면 상태»). 편집 판정 · 고른 것 정리도 보는 값이라 셸이 든다(`useAllCases`). */
+  const { allCases, setAllCases } = useAllCases()
+  /** 지금 안 보이는 노드 — 그 안 노드를 남이 잡아 꺼진 줄에 까닭을 단다(`hiddenLockNotice`). */
+  const hidden = useHiddenNodes(props.pageId)
   /**
    * 프리셋 이름칸에 친 글자. **고르개가 아니라 여기서 든다** — 고르개는 잠금이 걸리는 동안 DOM에서 빠지지만 트리는 그대로 있다.
    * 왜 이 하나만 가르는지는 `visiblePicker`의 머리말 «두 축»이 갖는다.
@@ -241,6 +249,14 @@ export function StructureTree(props: {
 
   const rootId = typeof doc.root?.id === 'string' ? doc.root.id : null
   /**
+   * **그리는 트리** — 상태 영역마다 지금 상태의 가지 하나(없으면 기본 가지)만 남긴 트리(`visibleTree`), «모든 가지 보기»면 원 트리. 영역 ·
+   * 가지 노드는 남고 id 는 같다 — 고르기 · 잠금 · 줄 행동은 원 문서의 그 노드를 가리킨다. Shift 범위 고르기 · 모두 접기도 보이는 트리로 센다.
+   * 상태 영역이 없는 문서는 원 트리를 그대로 쓴다(검증 전 문서를 `visibleTree` 에 넘기지 않는다).
+   */
+  const switches = stateSwitches(doc.root)
+  const hasSwitch = switches.size > 0
+  const shown: WbNode = !hasSwitch || allCases ? doc.root : visibleTree(doc, viewState)
+  /**
    * **줄을 누른다** — 클릭은 그것 하나, Cmd(mac) · Ctrl 클릭은 더하기 · 빼기, Shift 클릭은 기준 노드부터 보이는 차례로(설계서 「설계서 화면
    * 구조」의 «고르는 법»). 규칙(조상 · 자손 · 루트 · 남의 잠금 · 상한)은 스토어 명령이 갖는다 — 상한에 걸렸으면 하단 바가 말한다.
    */
@@ -249,7 +265,7 @@ export function StructureTree(props: {
     const change = command
       ? store.toggleSelect(nodeId)
       : event.shiftKey
-          ? store.selectRange(nodeId, visibleNodeOrder(doc.root, fold.collapsed))
+          ? store.selectRange(nodeId, visibleNodeOrder(shown, fold.collapsed))
           : null
     if (change === null) store.selectNode(nodeId)
     else if (change.capped > 0) store.setEditFailure({ kind: 'message', message: selectionCapNotice() })
@@ -288,14 +304,17 @@ export function StructureTree(props: {
   ) : null
 
   return (
-    // **고르개 단축키가 이 상자에 붙는다 — 전역이 아니다**(고르개가 이 트리의 상태라서 — `TREE_SHORTCUTS` 머리말). 스타일이 없는
-    // 상자라 클래스도 붙이지 않는다.
+    <>
+    {/* **고르개 단축키가 이 상자에 붙는다 — 전역이 아니다**(고르개가 이 트리의 상태라서 — `TREE_SHORTCUTS` 머리말). 스타일이 없는
+        상자라 클래스도 붙이지 않는다. */}
     <div onKeyDown={handleKeyDown}>
       <ul className="wb-shell-structure" ref={treeRef}>
         <StructureNode
-          node={doc.root}
+          node={shown}
           // 상태 가지 줄의 요약이 그 상태 이름을 읽는 목록 — 검증 전 문서라 배열이 아니면 없는 것으로 본다.
           viewStates={Array.isArray(doc.viewStates) ? doc.viewStates : undefined}
+          switches={switches}
+          hidden={hidden}
           selectedNodeId={selectedNodeId}
           selected={selectedSet}
           selection={selectedNodeIds.join(',')}
@@ -318,7 +337,20 @@ export function StructureTree(props: {
           <>
             {/* **모두 접기 · 모두 펴기** — 고르기와 같은 읽기라 고칠 수 없어도 선다. 모두 접어도 뿌리는 편 채다 — 뿌리는 하나라 접으면 줄 하나만
                 남는다(맨 위 갈래가 보이는 것이 «모두 접은» 트리다). */}
-            <TreeFoldButtons onCollapse={() => fold.collapse(foldableIds(doc.root, rootId))} onExpand={fold.expandAll} />
+            <TreeFoldButtons onCollapse={() => fold.collapse(foldableIds(shown, rootId))} onExpand={fold.expandAll} />
+            {/* **모든 가지 보기** — 상태 영역이 있는 페이지에만 선다. 읽기라 고칠 수 없어도 선다. */}
+            {hasSwitch && (
+              <button
+                type="button"
+                className="wb-shell-tree-fold"
+                aria-label={ALL_CASES_LABEL}
+                title={ALL_CASES_LABEL}
+                aria-pressed={allCases}
+                onClick={() => setAllCases((on) => !on)}
+              >
+                {shellIcon('allCases', 14)}
+              </button>
+            )}
             {props.editable && (
               // **뿌리 `+`** — 페이지 통째에 더하는 셋. «페이지에 추가»는 뿌리를 골라 «안에 추가»를 연다(spec 「툴바 대신 노드별 `+` · `…`」).
               // 패턴은 고른 것을 풀고 연다 — 고른 것이 없으면 뿌리의 자식 끝에 꽂는다(`edit/pattern-insert.ts`).
@@ -368,6 +400,9 @@ export function StructureTree(props: {
           props.headSlot,
         )}
     </div>
+    {/* **«상태 나누기 풀기» 확인**(`./unsplit-dialog.tsx`) — 단축키 상자의 형제다(상자 단추의 키가 트리의 단축키로 버블되지 않게). */}
+    {props.editable && <UnsplitDialog commands={commands.viewState} />}
+    </>
   )
 }
 
@@ -404,6 +439,24 @@ function foldableIds(root: unknown, rootId: string | null): string[] {
     .map((node) => node.id)
 }
 
+/** 안 보이는 가지 안 노드를 남이 잡아 꺼진 줄의 까닭. */
+export function hiddenLockNotice(userName: string): string {
+  return `${userName}님이 이 영역의 다른 가지를 편집 중입니다`
+}
+
+/** 상태 영역의 가지를 전부 펴는 토글의 이름. */
+export const ALL_CASES_LABEL = '모든 가지 보기'
+
+/**
+ * 문서의 상태 영역 — id → 원 노드. 보이는 트리(`visibleTree`)의 영역 노드는 가지를 하나만 남겨, 그 줄의 요약 «가지 N»은 원 노드로 센다.
+ * 검증 전 문서라 걷기는 던지지 않는 `walkSafely` 다.
+ */
+function stateSwitches(root: unknown): ReadonlyMap<string, WbNode> {
+  const found = new Map<string, WbNode>()
+  for (const visit of walkSafely(root)) if (visit.node.type === 'StateSwitch' && typeof visit.node.id === 'string') found.set(visit.node.id, visit.node)
+  return found
+}
+
 /** 별칭 입력의 접근 이름 — 속성 패널 «별칭» 칸과 같은 낱말이다. */
 const ALIAS_INPUT_LABEL = '별칭'
 
@@ -424,6 +477,10 @@ function StructureNode(props: {
   node: WbNode
   /** 페이지의 상태 목록 — `StateCase` 줄의 요약(상태 이름)을 짓는다. 없으면 상태 가지가 «목록에 없는 상태»로 읽힌다. */
   viewStates: readonly ViewState[] | undefined
+  /** 원 문서의 상태 영역(`stateSwitches`) — 보이는 트리에서도 영역 줄의 «가지 N»이 가지 전부를 센다. */
+  switches: ReadonlyMap<string, WbNode>
+  /** 지금 안 보이는 노드(`shell/use-view-state.ts` 의 `useHiddenNodes`). */
+  hidden: ReadonlySet<string>
   /** 기준 노드(`aria-current` · 줄 행동이 서는 줄). */
   selectedNodeId: string | null
   /** 고른 노드 전부(기준 노드 포함) — 강조할 줄. */
@@ -458,7 +515,7 @@ function StructureNode(props: {
    * 같은 글 — MCP 가 같은 것을 낸다). 타입을 못 읽는 노드는 요약이 없다.
    */
   const alias = nodeAlias(node)
-  const summary = nodeSummary(node, props.viewStates)
+  const summary = nodeSummary(node.type === 'StateSwitch' ? (props.switches.get(node.id) ?? node) : node, props.viewStates)
   /**
    * 줄 글 전부 — 줄 단추의 접근 이름과 같다. **줄 행동(`+` · `…`)의 이름도 이것으로 짓는다** — 타입만으로 지으면 라벨이 «추가»인 Button 줄
    * (`Button 추가`)과 그 줄의 `+`(`Button 추가`)가 같은 이름이 된다.
@@ -466,6 +523,18 @@ function StructureNode(props: {
   const rowLabel = `${typeLabel}${alias === null ? '' : ` (${alias})`}${summary === null ? '' : ` ${summary}`}`
   // id가 없는 노드는 잠금과 짝지을 것이 없다 — 아래에서 고를 수도 없다.
   const lock = isSelectable(node) ? props.lockOf(node.id) : null
+  /**
+   * **이 줄을 끈 잠금이 안 보이는 가지 안 노드인가**(K2 리뷰 L4). 잠긴 노드의 배지(아래 «○○ 편집 중»)는 그 노드의 줄에 서는데 그 줄이 트리에
+   * 없다 — 꺼진 줄만 남아 까닭이 화면 어디에도 없었다. 꺼진 줄의 `title` 에 까닭을 싣고, 그 가지를 품은 영역 줄에 배지를 단다.
+   */
+  const blocker = isSelectable(node) ? props.blockedOf(node.id) : null
+  const hiddenBlocker = blocker !== null && props.hidden.has(blocker.nodeId) ? blocker : null
+  const holdsHiddenLock =
+    hiddenBlocker !== null &&
+    node.type === 'StateSwitch' &&
+    (props.switches.get(node.id)?.children ?? []).some(
+      (kase) => isSelectable(kase) && !children.some((shown) => isSelectable(shown) && shown.id === kase.id) && findNodeSafely(kase, hiddenBlocker.nodeId) !== undefined,
+    )
 
   /**
    * **이 줄이 기준 노드인가** — 줄 행동이 서는 줄이고, 열린 줄 메뉴가 그대로 있을 조건이다(`TreeRowActions`의 `picked`). 여럿을 고른 판의
@@ -524,7 +593,8 @@ function StructureNode(props: {
             // **누를 수 없다는 것이 보여야 한다**(설계서 「소프트 잠금」의 *"선택이 차단된다"*). 막는 것 자체는
             // `store.selectNode`가 하고(캔버스도 그 함수를 지난다) 여기 `disabled`는 **왜
             // 안 되는지를 보이는 쪽**이다 — 같은 모양인데 반응만 없으면 고장으로 읽힌다.
-            disabled={props.blockedOf(node.id) !== null}
+            disabled={blocker !== null}
+            title={hiddenBlocker === null ? undefined : hiddenLockNotice(hiddenBlocker.userName)}
             // 접고 펴는 줄의 상태 — 보조 기술이 읽는 것은 여기다(펼침 단추는 포인터 몫이다 — `./tree-fold.tsx`).
             aria-expanded={foldable ? !folded : undefined}
             onClick={(event) => props.onSelect(node.id, event)}
@@ -580,6 +650,11 @@ function StructureNode(props: {
       {lock !== null && lock.nodeId === node.id && (
         <span className="wb-shell-structure-lock">{lock.userName} 편집 중</span>
       )}
+      {holdsHiddenLock && (
+        <span className="wb-shell-structure-lock" title={hiddenLockNotice(hiddenBlocker!.userName)}>
+          {hiddenBlocker!.userName} 편집 중 · 다른 가지
+        </span>
+      )}
 
       {/* **별칭 입력은 그 줄 바로 아래다** — 메뉴 트리의 «이름 변경»과 같은 꼴(`./tree-input.tsx` — Enter 만 확정 · Escape · blur 는
           취소). Enter · Escape 뒤에는 포커스를 줄 단추로 돌린다 — 키보드로 연 사람이 그 자리에서 이어 간다. blur 로 닫힌 판은 포커스가
@@ -621,6 +696,8 @@ function StructureNode(props: {
               key={isSelectable(child) ? child.id : `wb-invalid-${index}`}
               node={child}
               viewStates={props.viewStates}
+              switches={props.switches}
+              hidden={props.hidden}
               selectedNodeId={props.selectedNodeId}
               selected={props.selected}
               selection={props.selection}

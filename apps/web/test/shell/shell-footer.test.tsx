@@ -69,7 +69,8 @@ describe('캔버스 도구는 머리에 있다', () => {
     const order = [...header().querySelectorAll<HTMLElement>('[aria-label="모드"], select, [aria-label="줌"], [aria-haspopup="menu"]')].map(
       (element) => element.getAttribute('aria-label') ?? element.tagName.toLowerCase(),
     )
-    expect(order).toEqual(['모드', 'select', '줌', '더 보기'])
+    // 상태 전환기(`shell/view-state-switcher.tsx`)는 머리 도구의 맨 앞이다 — 이 판은 상태 목록이 없어 «기본».
+    expect(order).toEqual(['화면 상태: 기본', '모드', 'select', '줌', '더 보기'])
 
     expect(within(footer()).queryByRole('combobox', { name: '뷰포트 폭' })).toBeNull()
     expect(within(footer()).queryByRole('group', { name: '줌' })).toBeNull()

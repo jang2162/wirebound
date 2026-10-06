@@ -44,7 +44,9 @@ import {
   FolderPlus,
   GripVertical,
   History,
+  Layers,
   LayoutTemplate,
+  ListTree,
   ListIndentDecrease,
   ListIndentIncrease,
   ListOrdered,
@@ -58,11 +60,13 @@ import {
   Plus,
   Redo2,
   Settings,
+  Split,
   SquareDashed,
   Stamp,
   Trash2,
   TriangleAlert,
   Undo2,
+  Ungroup,
   X,
   ZoomIn,
   ZoomOut,
@@ -134,6 +138,14 @@ export const ICONS = {
   succeeded: CircleCheck,
   failed: CircleX,
   warning: TriangleAlert,
+  /** 화면 상태를 고르고 다룬다 — 머리 상태 전환기 · «상태 관리…»(`shell/view-state-switcher.tsx`). */
+  viewStates: Layers,
+  /** 고른 노드를 상태 영역으로 감싼다 — «상태별로 나누기». */
+  splitStates: Split,
+  /** 상태 영역을 벗긴다 — «상태 나누기 풀기». */
+  unsplitStates: Ungroup,
+  /** 구조 트리의 상태 영역 가지를 전부 편다 — «모든 가지 보기»(트리 머리). */
+  allCases: ListTree,
 } as const satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof ICONS

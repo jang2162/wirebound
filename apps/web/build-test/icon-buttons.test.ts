@@ -133,7 +133,7 @@ describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
   /**
    * 줌 묶음(축소 · 확대 · 화면 맞춤)이 아이콘만인 까닭 — 머리의 폭 예산(`src/shell.css` 의 `.wb-shell-zoom-fit` · `src/shell/head-fold.ts`). 창 1024 는
    * 접지 않는 단계(«뷰포트 폭» 글 · 줌 묶음이 머리에 선다)다. 한 줄 = 머리 가운데 무리의 직계 자식이 모두 같은 줄이다. 판 카나리아: 직계 자식이
-   * 여섯(되돌리기 묶음 · 배치 선 · 모드 · 구분선 · 뷰포트 폭 · 줌)이다. 머리가 한 줄에 드는 최소 창 폭은 `editor-head-tools.test.ts` 가 잰다. 저장한
+   * 일곱(상태 전환기 · 되돌리기 묶음 · 배치 선 · 모드 · 구분선 · 뷰포트 폭 · 줌)이다. 머리가 한 줄에 드는 최소 창 폭은 `editor-head-tools.test.ts` 가 잰다. 저장한
    * 좌측 기본 폭(264)은 창 1024 에서 캔버스 몫(480)을 남기려고 228 로 조여 그려진다 — 칸 480 이 그 판의 카나리아다(`src/shell/sidebar-layout.ts` 의 `fitWidths`).
    */
   it('창 1024 · 좌측 기본 폭에서 머리의 가운데 도구가 한 줄이다', async () => {
@@ -149,7 +149,7 @@ describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
         return { children: kids.length, rows: new Set(kids.map((rect) => Math.round(rect.top + rect.height / 2))).size }
       })
       const canvas = await page.locator('.wb-shell-canvas').evaluate((el) => Math.round(el.getBoundingClientRect().width))
-      expect({ canvas, tools }).toEqual({ canvas: 480, tools: { children: 6, rows: 1 } })
+      expect({ canvas, tools }).toEqual({ canvas: 480, tools: { children: 7, rows: 1 } })
     } finally {
       await context.close()
     }

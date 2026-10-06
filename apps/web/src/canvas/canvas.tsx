@@ -50,12 +50,14 @@ import type { SelectionChange } from '../store/editor-store'
 import { nodeHeadingLabel } from '../panels/node-shape'
 import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { useViewState } from '../shell/use-view-state'
 import { useAnnounceCanvasRemeasure, usePlacementPreview, usePublishCanvasRegion } from '../drag/use-placement'
 import { applyPreviewLook, isPreviewId, previewDocument } from './canvas-preview'
 import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
 import { guideOf, useLayoutGuides, type Guide, type GuideLine } from './layout-guides'
+import { regionMarks, type RegionMark } from './view-state-regions'
 import { useCanvasMarquee } from './use-canvas-marquee'
 import { themeFileUrl } from '../theme/bundle-loader'
 import { useProjectTheme, type ProjectThemeState } from '../theme/project-theme'
@@ -190,6 +192,8 @@ export function Canvas(props: {
   // selector를 여러 번 부른다. 상태 객체 전체(`(s) => s`)를 고르면 어느 필드가 바뀌든
   // 다시 그린다 — `use-editor-store.tsx`의 주석 참고.
   const doc = useOpenDocument(props.pageId)
+  // **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 상태 영역은 그 상태의 가지를 그린다(없으면 기본 가지).
+  const { state: viewState } = useViewState(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
   const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
   const mode = useEditorStore(store, (s) => s.mode)
@@ -205,6 +209,8 @@ export function Canvas(props: {
   const [markers, setMarkers] = useState<MarkerBox[]>(NO_MARKERS)
   /** 배치 선(`./layout-guides.tsx`) — 켰고 편집 모드일 때 Flex · Grid 노드마다. */
   const [guides, setGuides] = useState<readonly GuideBox[]>(NO_GUIDES)
+  /** 상태 영역 표지(`./view-state-regions.ts`) — 편집 모드일 때 영역마다. */
+  const [regions, setRegions] = useState<readonly RegionBox[]>(NO_REGIONS)
   /** 문서를 그리는 iframe. 그 문서가 서기 전에는 잴 것이 없다. */
   const [frame, setFrame] = useState<CanvasFrame | null>(null)
   /**
@@ -480,6 +486,24 @@ export function Canvas(props: {
   }, [guidesOn, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
+   * **상태 영역 표지의 자리를 잰다**(`./view-state-regions.ts`). 배치 선과 같은 장치 · 같은 의존에 지금 상태를 더했다 — 상태를 바꾸면 보이는
+   * 가지가 바뀌어 상자 · 꼬리표가 바뀐다. 편집 모드에서만 그린다(뷰 모드의 «상태에 따라 다름» 표지는 다른 자리다).
+   */
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current
+    if (mode !== 'edit' || surface === null || frame === null || rendered === null) {
+      setRegions((prev) => (prev.length === 0 ? prev : NO_REGIONS))
+      return
+    }
+    const offset = frameOffset(frame, surface, zoom)
+    const next = regionMarks(rendered, viewState, (id) => findNodeElement(frame.document, id)).map((mark) => ({
+      ...mark,
+      box: { left: offset.left + mark.rect.left, top: offset.top + mark.rect.top, width: mark.rect.width, height: mark.rect.height },
+    }))
+    setRegions((prev) => (sameRegions(prev, next) ? prev : next))
+  }, [mode, viewState, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+
+  /**
    * **다시 잰 판** — 위 두 측정 이펙트와 같은 의존이 바뀔 때마다 새 값이다. 손잡이가 끄는 중이면 이 값이 바뀔 때 마지막 좌표로 다시
    * 묻는다(`./canvas-drag-handle.tsx` 머리말 «캔버스가 다시 잴 때») — 노드가 밀려도 표시가 옛 좌표에 남지 않게.
    */
@@ -567,7 +591,7 @@ export function Canvas(props: {
         >
           {(f) => (
             <ThemeProvider value={{ tokens, window: f.window }}>
-              <CanvasDocument doc={rendered ?? doc} theme={definition} interaction={interaction} bannerHost={bannerHost} />
+              <CanvasDocument doc={rendered ?? doc} theme={definition} viewState={viewState} interaction={interaction} bannerHost={bannerHost} />
             </ThemeProvider>
           )}
         </CanvasIframe>
@@ -580,6 +604,21 @@ export function Canvas(props: {
           조건이 둘인 것은 `box`만 보면 모드가 뷰로 바뀐 렌더와 그것을 지우는 레이아웃
           이펙트 사이에서 **id 없는 아웃라인**이 한 번 만들어지기 때문이다(레이아웃
           이펙트라 그려지기 전에 지워지지만, 만들지 않는 편이 낫다). */}
+      {/* **상태 영역 표지**(`./view-state-regions.ts`) — 배치 선 · 외곽선보다 먼저 그려 그 밑에 선다. 흐린 영역은 겹 하나를 더 얹는다. 꼬리표는 줌을 걷어
+          화면에서 늘 같은 크기다(배치 선의 모서리 글과 같은 꼴). */}
+      {regions.map((item) => (
+        <div
+          key={item.switchId}
+          className={item.dimmed ? 'wb-shell-region-mark wb-shell-region-mark-dimmed' : 'wb-shell-region-mark'}
+          data-wb-region-for={item.switchId}
+          data-wb-region={item.label}
+          style={{ left: item.box.left, top: item.box.top, width: item.box.width, height: item.box.height, borderWidth: 1 / zoom }}
+        >
+          <span className="wb-shell-region-tag" style={{ transform: `scale(${1 / zoom})` }}>
+            {item.label}
+          </span>
+        </div>
+      ))}
       {/* **배치 선**(`./layout-guides.tsx`) — 외곽선보다 먼저 그려 그 밑에 선다. 모서리 글은 줌을 걷어 화면에서 늘 같은 크기다(손잡이와 같은 꼴). */}
       {guides.map((item) => (
         <div
@@ -686,6 +725,8 @@ export function Canvas(props: {
 function CanvasDocument(props: {
   doc: PageDocument
   theme: ThemeDefinition
+  /** 지금 상태 — 렌더러의 `viewState`(목록 밖 id 는 렌더러가 기본으로 읽는다). */
+  viewState: string | null
   /**
    * 상호작용 런타임(「실행」). **`undefined`면 꺼진 것이고 편집 모드가 그렇다.**
    * 켜고 끄는 판단은 `Canvas`가 하고 여기는 그대로 넘긴다.
@@ -702,6 +743,7 @@ function CanvasDocument(props: {
   const errors: NodeRenderError[] = []
   const tree = renderDocument(props.doc, {
     theme: props.theme,
+    viewState: props.viewState,
     onNodeError: (error) => errors.push(error),
     // **키를 조건부로 넣는다.** `interaction: undefined`를 그냥 실어도 렌더러는 같게
     // 다루지만(`options.interaction === undefined` 검사), 켜지지 않았다는 것이 호출부에서
@@ -892,6 +934,24 @@ interface GuideBox extends Guide {
 }
 
 const NO_GUIDES: readonly GuideBox[] = []
+
+/** 상태 영역 표지 하나 — 상자는 표면 좌표다(`measure` 와 같은 셈). */
+interface RegionBox extends RegionMark {
+  box: Box
+}
+
+const NO_REGIONS: readonly RegionBox[] = []
+
+/** 두 표지 목록이 같은가 — `sameBox` 와 같은 까닭(값이 같으면 앞 배열을 그대로 둔다). */
+function sameRegions(a: readonly RegionBox[], b: readonly RegionBox[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((item, index) => {
+      const other = b[index]!
+      return item.switchId === other.switchId && item.label === other.label && item.dimmed === other.dimmed && sameBox(item.box, other.box)
+    })
+  )
+}
 
 /** 캔버스 문서 좌표의 안쪽 선 → 표면 좌표(`measure` 와 같은 셈 — iframe 의 자리만 더한다). */
 function onSurface(line: GuideLine, offset: { left: number; top: number }): GuideLine {

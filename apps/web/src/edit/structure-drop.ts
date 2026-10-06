@@ -89,6 +89,8 @@ export function structureDropTarget(
   if (draggedId === overId) return null
   const dragged = findVisit(document, draggedId)
   if (dragged === null || dragged.parent === null) return null
+  // 가지는 끌어 옮기지 않는다 — 영역 밖은 `state-case-outside`, 영역 안 차례는 뜻이 없다(`structure-actions.ts` 의 `regionRules`).
+  if (dragged.node.type === 'StateCase') return null
   if (contains(dragged.node, overId)) return null
 
   const sameParent = parentId === dragged.parent.id

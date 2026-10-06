@@ -31,6 +31,8 @@ export {
   splitIntoStatesOps,
   unsplitStatesOps,
 } from './view-state-ops'
+export type { ViewStateTouch } from './view-state-touch'
+export { viewStateTouch } from './view-state-touch'
 export { guardViewStateOps } from './view-state-guard'
 
 export type { NodeVisit } from './tree'

@@ -112,7 +112,13 @@
  * ## 단추는 아이콘만이다 — 이름과 `title` 은 `label`
  *
  * 단추의 그림은 `icon`(기본 `…` — 표의 `more`, 트리 줄 · 뿌리의 `+` 는 `add`)이고 글자가 없다. 그래서 `label` 이 접근 이름(`aria-label`)과
- * 마우스를 올렸을 때의 `title` 을 함께 든다.
+ * 마우스를 올렸을 때의 `title` 을 함께 든다. **하나뿐인 예외는 고른 값을 보이는 단추다**(`text` — 머리의 상태 전환기 `[기본 ▾]`): 아이콘
+ * 뒤에 그 글자와 펼침 표지(`shell.css` 의 `.wb-shell-action-menu-text` — 아이콘 표의 펼침 · 접기 화살표와 갈리게 글자 겹의 삼각형)가 선다. 이름은 그때도 `label` 이고, 보이는 글자가 이름 안에 들게(«화면 상태: 기본») 부르는 쪽이 짓는다.
+ *
+ * ## 하나를 고르는 항목 — `checked`
+ *
+ * 항목에 `checked` 를 주면 `menuitemradio` · `aria-checked` 로 선다(상태 전환기의 상태 목록 — 지금 상태가 참). 화살표 · Enter 는 다른 항목과
+ * 같다 — 목록 안의 자리를 셀 때 두 역할을 함께 센다(`menuItems`).
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
@@ -146,6 +152,8 @@ export interface ActionMenuItem {
   description?: string
   /** 글자 앞의 아이콘 — lucide 컴포넌트(머리말 «항목의 아이콘»). */
   icon?: LucideIcon
+  /** 하나를 고르는 무리의 항목 — 주면 `menuitemradio` 이고 참이 지금 고른 것이다(머리말 «하나를 고르는 항목»). */
+  checked?: boolean
 }
 
 export function ActionMenu(props: {
@@ -165,6 +173,8 @@ export function ActionMenu(props: {
   compact?: boolean
   /** 열린 채 남는 조건 — 열린 동안 거짓이 되면 닫는다(머리말 «고른 대상이 바뀌면 닫는다»). 없으면 늘 참이다. */
   openWhile?: boolean
+  /** 단추에 아이콘 뒤로 보이는 글자 — 지금 고른 값(머리 상태 전환기). 이름은 그대로 `label` 이다 — `label` 이 이 글자를 품게 짓는다. */
+  text?: string
 }): ReactElement {
   const [open, setOpen] = useState(false)
   /** 열 때 포커스를 줄 항목 — `'first'` · `'last'`. 목록이 그려진 뒤 이펙트가 옮긴다. */
@@ -291,7 +301,9 @@ export function ActionMenu(props: {
       <button
         type="button"
         ref={toggleRef}
-        className={props.compact === true ? 'wb-shell-action-menu-toggle wb-shell-action-menu-compact' : 'wb-shell-action-menu-toggle'}
+        className={['wb-shell-action-menu-toggle', props.compact === true ? 'wb-shell-action-menu-compact' : '', props.text !== undefined ? 'wb-shell-action-menu-valued' : '']
+          .filter(Boolean)
+          .join(' ')}
         aria-label={props.label}
         title={props.label}
         aria-haspopup="menu"
@@ -301,6 +313,7 @@ export function ActionMenu(props: {
         onKeyDown={onToggleKeyDown}
       >
         <ToggleIcon icon={props.icon ?? ICONS.more} compact={props.compact === true} />
+        {props.text !== undefined && <span className="wb-shell-action-menu-text">{props.text}</span>}
       </button>
       {open &&
         createPortal(
@@ -337,7 +350,8 @@ export function ActionMenu(props: {
                   ) : (
                     <button
                       type="button"
-                      role="menuitem"
+                      role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
+                      aria-checked={item.checked}
                       tabIndex={-1}
                       className={item.danger === true ? 'wb-shell-action-menu-item wb-shell-action-menu-danger' : 'wb-shell-action-menu-item'}
                       aria-disabled={item.disabled === true ? true : undefined}
@@ -406,5 +420,5 @@ function swallowFollowingClick(targets: readonly EventTarget[], at: { x: number;
 /** 목록 안의 항목 — 화살표가 설 자리(끈 항목 포함 — 머리말 «끈 항목은 …»). 차례는 DOM 차례다. */
 function menuItems(box: HTMLElement | null): HTMLElement[] {
   if (box === null) return []
-  return [...box.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+  return [...box.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]')]
 }

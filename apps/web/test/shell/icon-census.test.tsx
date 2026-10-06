@@ -108,6 +108,7 @@ const MENU_ITEMS = [
   '프로젝트 내보내기',
   '로그아웃',
   '테마 관리',
+  '기본',
 ]
 
 /** 일부러 아이콘을 안 주는 행동 메뉴 항목(머리말 2) — 없다. 생기면 이름과 까닭을 여기 둔다. */
@@ -155,7 +156,8 @@ async function openEveryMenu(): Promise<MenuEntry[]> {
     await act(async () => {})
     const list = document.getElementById(next.getAttribute('aria-controls') ?? '')
     if (list === null) throw new Error(`«${menu}»를 열었는데 목록이 없다`)
-    for (const item of within(list).getAllByRole('menuitem')) {
+    // 하나를 고르는 항목(`menuitemradio` — 상태 전환기)도 행동 메뉴 항목이다.
+    for (const item of [...within(list).queryAllByRole('menuitem'), ...within(list).queryAllByRole('menuitemradio')]) {
       entries.push({ menu, item: item.textContent ?? '', icon: item.querySelector('svg.wb-shell-action-menu-icon') !== null })
     }
     fireEvent.keyDown(list, { key: 'Escape' })
