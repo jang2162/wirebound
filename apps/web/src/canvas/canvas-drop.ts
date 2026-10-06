@@ -28,6 +28,16 @@
  * 상자 왼 · 위를 빼고 줌으로 나눈다» 한 줄이면 된다(`hostToFrame`). 칸의 스크롤 · 표면 안 iframe 의 자리(`canvas.tsx` 의 `frameOffset`)
  * 를 따로 더하지 않는다 — 그 값들로 다시 짓는 길은 하나라도 빠뜨리면 그만큼 어긋난다. iframe 은 문서 높이를 따라 자라 안쪽 스크롤이
  * 없고(`canvas-iframe.tsx`), 있더라도 두 값이 같은 창 좌표라 서로 지운다.
+ *
+ * ## 문서 아래 바탕은 페이지 끝이다
+ *
+ * iframe 은 문서 높이만큼만 서서(짧은 문서는 최소 높이) 캔버스 칸이 그보다 길면 문서 밑에 칸의 바탕이 남는다. **캔버스 칸 안이고 문서 iframe
+ * 아래끝보다 밑인 점은 «페이지 끝»으로 읽는다** — 문서 안의 노드 없는 바탕과 같은 답이다. 하단 판에서 카드를 쥐고 올라오면 먼저 닿는 자리가
+ * 그 바탕이라, 못 놓는 자리로 두면 «캔버스로 끌어도 안 놓인다»가 된다(창 1440×900 · 판 기본 높이 · 짧은 문서에서 판 바로 위 125px —
+ * `build-test/canvas-drop-below.test.ts` 의 `gap`). 긴 문서를 끝까지 민 판의 칸 안쪽 여백(문서 밑 24px)도 같은 자리다.
+ *
+ * **문서 옆 · 위의 바탕은 못 놓는 자리로 남긴다** — 놓다 마는 자리가 칸 안에 하나는 있어야 하고(Escape 말고), 문서가 칸보다 좁고 긴 판에서는
+ * 옆 바탕의 페이지 끝이 화면 밖이라 미리보기 없이 놓이게 된다. 아래 바탕은 문서 끝이 보일 때만 드러나므로 미리보기가 늘 보인다.
  */
 import { dropZone, type DropZone } from '../tree/tree-drop'
 
@@ -151,8 +161,9 @@ export function siblingRects(parent: Element, self: Element, view: Window): Rect
 }
 
 /**
- * **호스트 창의 점 → 캔버스 자리.** iframe 상자 밖이거나(캔버스 칸의 회색 여백 · 칸 밖) `clip` 상자(캔버스 칸) 밖이면 `null` — 스크롤로
- * 칸 밖에 밀려난 iframe 부분은 머리 · 사이드바 밑에 깔려 있다.
+ * **호스트 창의 점 → 캔버스 자리.** `clip` 상자(캔버스 칸) 밖이면 `null` — 스크롤로 칸 밖에 밀려난 iframe 부분은 머리 · 사이드바 밑에 깔려
+ * 있다. 칸 안에서 iframe 상자 밖이면 문서 아래끝보다 밑일 때만 페이지 끝이고(머리말 «문서 아래 바탕은 페이지 끝이다») 옆 · 위는 `null` 이다.
+ * `clip` 이 없으면(칸이 없는 숙주) iframe 밖은 다 `null` 이다 — «아래»의 끝을 정할 상자가 없다.
  *
  * 포인터 밑 요소에서 가장 가까운 `[data-wb-id]` 조상이 대상이다. `node(id)` 가 `null` 인 id(문서에 없는 — 폴백의 빈 id · 합성의 유령)는
  * 건너뛰고 위로 오른다. 그런 조상이 없거나 뿌리면 페이지 끝이다.
@@ -172,11 +183,14 @@ export function canvasHitAt(
   const element = frame.frameElement
   if (element === null) return null
   const frameRect = plain(element.getBoundingClientRect())
-  if (!inside(hostPoint, frameRect)) return null
   if (clip !== null && !inside(hostPoint, clip)) return null
+  const doc = frame.document
+  if (!inside(hostPoint, frameRect)) {
+    if (clip === null || hostPoint.y < frameRect.top + frameRect.height) return null
+    return pageEndHit(firstNodeElement(doc, node) ?? doc.body, frameRect, zoom)
+  }
 
   const point = hostToFrame(hostPoint, frameRect, zoom)
-  const doc = frame.document
   const under: unknown = doc.elementFromPoint(point.x, point.y)
   let cursor: Element | null = isElement(under) ? under : null
   let found: { element: Element; id: string; info: HitNode } | null = null
@@ -191,11 +205,7 @@ export function canvasHitAt(
     cursor = cursor.parentElement
   }
 
-  if (found === null || found.info.root) {
-    const rootElement = found?.element ?? firstNodeElement(doc, node)
-    const rect = plain((rootElement ?? doc.body).getBoundingClientRect())
-    return { pageEnd: true, rect: frameToHost(rect, frameRect, zoom), layout: VERTICAL }
-  }
+  if (found === null || found.info.root) return pageEndHit(found?.element ?? firstNodeElement(doc, node) ?? doc.body, frameRect, zoom)
 
   const rect = plain(found.element.getBoundingClientRect())
   const parent = layoutParent(found.element, frame)
@@ -207,7 +217,12 @@ export function canvasHitAt(
   return { overId: found.id, zone, rect: frameToHost(rect, frameRect, zoom), layout }
 }
 
-/** 페이지 끝 표시가 붙을 뿌리 요소 — 문서 차례로 처음 만나는 뿌리. 없으면(빈 문서를 안 그리는 뷰) `body`. */
+/** 페이지 끝 — 표시가 붙을 상자는 뿌리 요소의 것이다. */
+function pageEndHit(rootElement: Element, frameRect: Rect, zoom: number): CanvasHit {
+  return { pageEnd: true, rect: frameToHost(plain(rootElement.getBoundingClientRect()), frameRect, zoom), layout: VERTICAL }
+}
+
+/** 페이지 끝 표시가 붙을 뿌리 요소 — 문서 차례로 처음 만나는 뿌리. 없으면(빈 문서를 안 그리는 뷰) `null` 이고 부르는 쪽이 `body` 를 쓴다. */
 function firstNodeElement(doc: Document, node: (id: string) => HitNode | null): Element | null {
   for (const element of Array.from(doc.querySelectorAll('[data-wb-id]'))) {
     const id = element.getAttribute('data-wb-id')
