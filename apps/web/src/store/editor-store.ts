@@ -1361,17 +1361,41 @@ export class EditorStore {
    * **미룬 되돌리기 · 다시 실행의 단일 슬롯**(`useEditCommit` 의 `afterAck`) — 미룬 것이 있으면 `null`(새 누름은 겹치지 않는다). 슬롯이 훅 인스턴스마다
    * 있으면 머리 단추와 단축키가 각자 미뤄 ack 에 두 단계가 나가 페이지가 비었다(`beginPump` 와 같은 까닭). 준 `cancel` 은 편집을 못 내는 화면이 되면
    * (뷰 모드 · viewer) 불린다 — 미룬 것이 그 화면에서 커밋되지 않게. 돌려준 함수는 슬롯을 놓는다.
+   *
+   * `watch` 는 누른 때 큐의 마지막 먹이 편집의 id 다 — 그 편집이 **ack 로** 스택에 올랐는지가 슬롯의 끝 조건이다(`deferralAcked`). 스택 맨 위가 바뀌었는지로
+   * 가르면 앞 편집의 ack 가 맨 위를 바꿔 놓은 채 마지막 편집이 ack 아닌 길(리베이스 버림 · 거절)로 큐를 떠난 판에서 앞 편집이 되돌려진다.
    */
-  readonly claimDeferral = (cancel: () => void): (() => void) | null => {
+  readonly claimDeferral = (cancel: () => void, watch: string | null = null, kind: 'undo' | 'redo' | null = null): (() => void) | null => {
     if (this.#deferral !== null) return null
-    const slot = { cancel }
+    const slot = { cancel, watch, kind, acked: false, behind: null as (() => void) | null }
     this.#deferral = slot
     return () => {
       if (this.#deferral === slot) this.#deferral = null
     }
   }
 
-  #deferral: { cancel: () => void } | null = null
+  /** 슬롯이 지켜보는 편집(`claimDeferral` 의 `watch`)이 ack 로 스택에 올랐나 — 큐를 다른 길로 떠난 것은 `false` 다. */
+  readonly deferralAcked = (): boolean => this.#deferral?.acked === true
+
+  /**
+   * **미루는 동안 또 누른 것을 처리한다** — 슬롯이 비었으면 `false`(부른 쪽이 계속한다). 찼으면 같은 종류는 버리고(한 단계만) 다른 종류는 슬롯 뒤에 한
+   * 줄 세운다(`behind` — 마지막 것만). 되돌리기 → 다시 실행을 번갈아 누른 것이 누른 차례대로 나가게 한다 — 안 세우면 슬롯을 비켜 간 쪽이 먼저 나간다.
+   */
+  readonly deferBehindSlot = (kind: 'undo' | 'redo', press: () => void): boolean => {
+    const slot = this.#deferral
+    if (slot === null) return false
+    if (slot.kind !== null && slot.kind !== kind) slot.behind = press
+    return true
+  }
+
+  /** 슬롯 뒤에 세운 누름을 꺼낸다(`deferBehindSlot`) — 슬롯의 일이 끝나 되돌림을 낸 뒤에만 부른다. */
+  readonly takeDeferralBehind = (): (() => void) | null => {
+    const behind = this.#deferral?.behind ?? null
+    if (this.#deferral !== null) this.#deferral.behind = null
+    return behind
+  }
+
+  #deferral: { cancel: () => void; watch: string | null; kind: 'undo' | 'redo' | null; acked: boolean; behind: (() => void) | null } | null = null
 
   /**
    * **새로고침으로 채울 되돌리기의 판** — 판을 실은 바로 뒤에 부른다(`routes/editor.tsx`의 `restoreUndo`). 목록 답을 실을 때
@@ -2483,6 +2507,8 @@ export class EditorStore {
     // 늦게 도착한 응답의 경고가 지금 문서의 것으로 실리지 않는다 — `headSeq`를 그 자리에서
     // 막는 것과 같은 근거다.
     const warnings = result.warnings ?? NO_WARNINGS
+    // 미룬 되돌리기가 지켜보는 편집의 ack 는 **큐에서 빠지는 바로 이 적용 앞에** 적는다 — 구독이 «나갔다»를 보는 알림에서 «ack 로 나갔다»가 읽혀야 한다.
+    if (this.#deferral !== null && this.#deferral.watch === clientOpId) this.#deferral.acked = true
     this.#apply({
       pending: nextPendingQueue,
       baseDocument: nextBase,

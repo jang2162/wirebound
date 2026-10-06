@@ -259,7 +259,11 @@ function skippedNotice(skipped: number, applied: boolean): string {
 const ACK_WAIT_EXPIRED = '편집이 아직 서버에 닿지 않아 되돌리지 못했습니다. 잠시 뒤 다시 눌러 주세요.'
 /** 미룬 되돌리기가 ack 로 풀렸을 때 누른 뒤 낸 편집이 큐에 있으면 — 그 편집을 되돌리지 않는다(`afterAck`). */
 const UNDO_SUPERSEDED = '되돌리기 전에 새 편집이 있어 되돌리지 않았습니다.'
-/** 한도 문장의 조각 열쇠를 누름마다 달리 지어 제 조각만 거두게 한다(`afterAck`). */
+/** 미룬 되돌리기가 기다리던 편집이 ack 아닌 길(리베이스 버림 · 거절)로 큐를 떠났을 때 — 앞 편집을 대신 되돌리지 않는다(`afterAck`). */
+const UNDO_UNSAVED = '되돌리려던 편집이 저장되지 않아 되돌리지 않았습니다.'
+/** 한도 문장은 한 조각이다 — 두 번 눌러도 한 문장이다. 거두는 것은 마지막 누름만 한다(`afterAck` · `expirySeq`). */
+const ACK_WAIT_KEY = 'undo-ack-wait'
+/** 한도 문장을 낸 누름의 차례 — 앞 누름의 구독이 뒤 누름의 문장을 거두지 않게 한다. */
 let expirySeq = 0
 
 /** 건너뛴 것만 말하는 앞 문장 — 되짚기 이력을 받는 동안과 받지 못했을 때도 쓴다(`undo` · `loadUndoHistory`). */
@@ -811,18 +815,21 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    * **스택을 먹일 내 편집의 ack 가 닿을 때까지 미뤘다가 한 번 한다**(`EditorStore.awaitsStackAck`). 스택은 ack 가 쌓으므로 그 전에 누른 되돌리기는
    * 그 편집이 아니라 그 앞의 것을 되돌렸다(새로고침으로 채운 첫 편집 — 페이지가 통째로 비었다).
    *
-   * - **미룸은 스토어의 단일 슬롯이다**(`EditorStore.claimDeferral`) — 이미 미뤄 둔 것이 있으면 새 누름(키 · 단추 · 되돌리기 · 다시 실행)은 버린다. 한 단계만.
+   * - **미룸은 스토어의 단일 슬롯이다**(`EditorStore.claimDeferral`) — 이미 미뤄 둔 것이 있으면 같은 종류의 새 누름(키 · 단추)은 버린다. 한 단계만.
+   *   **다른 종류는 슬롯 뒤에 한 줄 세운다**(`deferBehindSlot`) — 되돌리기 → 다시 실행을 번갈아 누르면 누른 차례대로 나간다.
    * - **끝나는 때는 «누른 때 큐의 마지막 먹이 편집»이 큐에서 나갔을 때다.** 누른 뒤 낸 편집은 기다리지 않는다 — 그 편집의 ack 까지 기다렸다 하면 되돌리기가
    *   누른 뒤에 낸 편집을 되돌렸다. 나간 때 누른 뒤 새로 들어온 편집이 큐에 있으면 되돌리지 않고 그렇다고 말한다.
-   * - 그 편집이 실패했거나 리베이스가 버렸으면(스택 맨 위가 그대로) 그 잃음이 이미 말해졌고, 앞 항목을 대신 되돌리지 않는다.
+   * - **되돌리는 것은 그 편집이 ack 로 나갔을 때만이다**(`EditorStore.deferralAcked`) — 스택 맨 위가 바뀌었는지로 가르면 앞 편집의 ack 가 맨 위를 바꿔 놓은 채
+   *   마지막 편집이 리베이스 버림 · 거절로 떠난 판에서 앞 편집이 되돌려진다. 그 길로 떠났으면 되돌리지 않고 말한다(`UNDO_UNSAVED`).
    * - 판이 갈렸거나(`boardEpoch`) 편집을 못 내는 화면이 되면(`claimDeferral` 의 `cancel`) 버린다. 한도(`UNDO_ACK_WAIT_MS`)가 지나면 말하고 버린다.
    * - **구독 · 마이크로태스크의 판 대조(`boardEpoch`)는 방어다** — 판을 비우는 자리가 큐 · 스택을 함께 비워 구독의 첫 알림에서 이미 끝난다(재는 케이스 없음 — `test/edit/undo-before-ack.test.tsx` 머리말).
-   * - **말은 서 있는 잃음 통지를 덮지 않고 잇는다**(`EditorStore.tellLoss`) · 거둘 때는 제 조각만 거둔다(`withdrawLoss` — 열쇠가 누를 때마다 다르다).
+   * - **말은 서 있는 잃음 통지를 덮지 않고 잇는다**(`EditorStore.tellLoss`) · 거둘 때는 제 조각만 거둔다(`withdrawLoss`).
    */
   const ownDeferral = useRef<(() => void) | null>(null)
   useEffect(() => () => ownDeferral.current?.(), [])
   const afterAck = useCallback(
     (kind: 'undo' | 'redo', run: () => void): void => {
+      if (store.deferBehindSlot(kind, () => afterAck(kind, run))) return
       if (!store.awaitsStackAck(kind)) {
         run()
         return
@@ -836,16 +843,11 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         release?.()
         ownDeferral.current = null
       }
-      release = store.claimDeferral(finish)
-      if (release === null) return
       const feeders = store.stackFeeders(kind)
       const lastFeeder = feeders[feeders.length - 1]!
+      release = store.claimDeferral(finish, lastFeeder, kind)
+      if (release === null) return
       const known = new Set(store.queuedEdits())
-      const top = (): unknown => {
-        const stack = kind === 'undo' ? store.getState().undoStack : store.getState().redoStack
-        return stack[stack.length - 1]
-      }
-      const pressedTop = top()
       const epoch = store.boardEpoch()
       const pressedAhead = (): boolean => store.stackFeeders(kind).includes(lastFeeder)
       stop = store.subscribe(() => {
@@ -854,29 +856,40 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           return
         }
         if (pressedAhead()) return
+        const acked = store.deferralAcked()
+        const behind = acked ? store.takeDeferralBehind() : null
         finish()
-        // 구독은 스토어가 바뀌는 중에 불린다 — 되돌리기는 그 바깥에서 낸다.
-        if (top() === pressedTop) return
+        // 구독은 스토어가 바뀌는 중에 불린다 — 되돌리기 · 말은 그 바깥에서 낸다.
         queueMicrotask(() => {
           if (store.boardEpoch() !== epoch) return
+          if (!acked) {
+            // 버린 쪽(리베이스 · 거절)의 잃음 통지에 이어 한 번만 선다 — 조각 열쇠가 같아 되풀이해도 한 문장이다.
+            store.tellLoss({ key: 'undo-unsaved', rank: LOSS_RANK.history, counts: [], render: () => UNDO_UNSAVED })
+            return
+          }
           if (store.queuedEdits().some((id) => !known.has(id))) {
             store.tellLoss({ key: 'undo-superseded', rank: LOSS_RANK.history, counts: [], render: () => UNDO_SUPERSEDED })
             return
           }
           run()
+          behind?.()
         })
       })
       timer = setTimeout(() => {
         finish()
         if (store.boardEpoch() !== epoch) return
         // **«아직 닿지 않았다»는 ack 가 한도 직후 오면 거짓이 된다** — 그때 제 조각만 거둔다(다른 통지가 갈아 끼웠으면 건드리지 않는다).
-        const key = `undo-ack-wait:${(expirySeq += 1)}`
-        store.tellLoss({ key, rank: LOSS_RANK.history, counts: [], render: () => ACK_WAIT_EXPIRED })
+        const mine = (expirySeq += 1)
+        store.tellLoss({ key: ACK_WAIT_KEY, rank: LOSS_RANK.history, counts: [], render: () => ACK_WAIT_EXPIRED })
         const retract = store.subscribe(() => {
+          if (mine !== expirySeq) {
+            retract()
+            return
+          }
           if (store.boardEpoch() !== epoch || !pressedAhead()) {
             retract()
             queueMicrotask(() => {
-              if (store.boardEpoch() === epoch) store.withdrawLoss(key)
+              if (store.boardEpoch() === epoch && mine === expirySeq) store.withdrawLoss(ACK_WAIT_KEY)
             })
           }
         })

@@ -27,11 +27,13 @@ const DELAY_MS = 600
 describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
   let stack: EditorStack
   let alice: Session
+  let bob: Session
 
   beforeAll(async () => {
     if (!전제.ok) return
     stack = await startEditorStack(전제)
     alice = await stack.login(stack.users.alice)
+    bob = await stack.login(stack.users.bob)
   })
 
   afterAll(async () => {
@@ -140,11 +142,48 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
       await t.close()
     }
   })
+
+  it('누른 때의 마지막 편집이 ack 없이 큐를 떠나면 앞 편집을 되돌리지 않는다 — 앞 편집의 ack 가 맨 위를 바꿔 놓은 채 리베이스가 마지막 편집을 버린 판', async () => {
+    const { P } = await fixture(stack, alice, 'undo-last-dropped', true)
+    const D = 1200
+    const delay = await stack.startDownDelay(D)
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 }, origin: delay.origin })
+    const log: string[] = []
+    const T0 = Date.now()
+    page.on('websocket', (ws) => ws.on('framereceived', (frame) => log.push(`${Date.now() - T0} ${String(frame.payload).slice(0, 40)}`)))
+    try {
+      await page.goto(P)
+      await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
+      await poll('WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
+      await poll('룸에 든다', async () => log.slice(), (lines) => lines.some((line) => line.includes('"joined"')))
+      // A(둘째 글 ↓ 이동) 비행 · B(셋째 글 고침) · C(첫째 글 고침) 큐 — 누른 때의 마지막 편집은 C.
+      await page.keyboard.press('Alt+ArrowDown')
+      await canvasFrame(page).locator('[data-wb-id="n_text0000003"]').click()
+      await page.locator('.wb-shell-panel textarea').first().fill('B글')
+      await canvasFrame(page).locator('[data-wb-id="n_text0000001"]').click()
+      await page.locator('.wb-shell-panel textarea').first().fill('C글')
+      await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
+      await page.keyboard.press('ControlOrMeta+z')
+      // 판 카나리아 — 누른 때 ack 는 아직 안 왔다(늦춘 WS).
+      expect(noAckYet(log, T0)).toEqual([])
+      // 밥이 C 의 노드를 지워 리베이스가 C 를 버린다(ack 아닌 길로 큐를 떠난다).
+      const head = (await stack.request(bob, 'GET', P)).body
+      const index = (head.schema.root.children as { id: string }[]).findIndex((child) => child.id === 'n_text0000001')
+      const removed = await stack.request(bob, 'PATCH', `${P}/ops`, { baseSeq: head.headSeq, ops: [{ op: 'remove', path: `/root/children/${index}` }] })
+      expect(removed.status).toBeLessThan(300)
+      await page.waitForTimeout(D * 8)
+      // A 는 되돌려지지 않았다(둘째 글이 ↓ 이동한 채) — 되돌림 패치도 없다.
+      expect(await server(P)).toEqual({ ids: ['n_text0000003', 'n_text0000002', 'n_field000001'], headSeq: 4 })
+    } finally {
+      await context.close()
+    }
+  })
 })
 
-async function fixture(stack: EditorStack, owner: Session, slug: string): Promise<{ P: string; projectId: string }> {
+async function fixture(stack: EditorStack, owner: Session, slug: string, withBob = false): Promise<{ P: string; projectId: string }> {
   const call = (method: string, path: string, body?: unknown) => stack.request(owner, method, path, body)
   const project = created(await call('POST', '/projects', { name: 'ack 전 되돌리기', slug: `${slug}-${Date.now().toString(36)}` }))
+  if (withBob) created(await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' }))
   const menu = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' }))
   const target = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' }))
   const P = `/projects/${project.id}/pages/${target.id}`

@@ -5,12 +5,14 @@
  *
  * | 입구 | 끝 |
  * |---|---|
- * | ack 전 누름 | 누른 때 큐의 마지막 편집의 ack 가 닿으면 스택 맨 위가 바뀐 것을 보고 한 번 되돌린다 |
+ * | ack 전 누름 | 누른 때 큐의 마지막 편집이 **ack 로** 나가면 한 번 되돌린다(`EditorStore.deferralAcked`) |
  * | 미루는 동안 또 누름(같은 키 · 키 + 머리 단추) | 버린다 — 슬롯은 스토어에 하나다 · 한 단계만 나간다 |
+ * | 미루는 동안 반대 종류를 누름(되돌리기 ↔ 다시 실행) | 슬롯 뒤에 한 줄 선다 — 누른 차례대로 나가고 서로를 새 편집으로 버리지 않는다 |
+ * | 마지막 편집이 ack 아닌 길(리베이스 버림 · 거절)로 떠남 | 앞 편집의 ack 가 맨 위를 바꿨어도 되돌리지 않는다 · «되돌리려던 편집이 저장되지 않아 …» 가 잃음 통지에 한 번 이어진다 |
  * | 누른 뒤에 낸 편집(Delete · 속성 글) | 기다리지도 되돌리지도 않는다 — ack 때 큐에 있으면 버리고 말한다 |
  * | 답이 거절(`patch-error`) | 미룬 것은 버린다 · 앞 항목을 되돌리지 않는다 |
- * | 리베이스가 그 편집을 버림 | 맨 위가 그대로라 하지 않는다 · 버림 통지가 선다 |
- * | 한도(3s) 지남 | 말하고 안 한다(서 있는 잃음 통지를 덮지 않고 잇는다) · ack 가 그 뒤에 오면 그 조각만 거둔다 |
+ * | 리베이스가 그 편집을 버림 | 하지 않는다 · 버림 통지가 서고 «저장되지 않아» 가 이어진다 |
+ * | 한도(3s) 지남 | 말하고 안 한다(서 있는 잃음 통지를 덮지 않고 잇는다 · 두 번 눌러도 한 조각) · ack 가 그 뒤에 오면 마지막 누름이 기다린 편집이 나갔을 때 그 조각만 거둔다 |
  * | 미루는 동안 페이지를 옮김 | 버린다 — 새 판에 아무것도 안 나간다 |
  * | 미루는 동안 뷰 모드 · viewer | 버린다 — 키 · 단추 어느 입구로 눌렀든 |
  *
@@ -63,6 +65,7 @@ const OLD_ENTRY: RevisionSummary = {
 const INVERSE: PatchOp[] = [{ op: 'replace', path: '/root/children/0/props/content', value: '가' }]
 
 const undoButton = () => within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name: '되돌리기' })
+const redoButton = () => within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name: '다시 실행' })
 const contents = () =>
   canvasQueryAll('[data-wb-id^="n-"]')
     .filter((node) => node.getAttribute('data-wb-id') !== 'n-root')
@@ -133,6 +136,7 @@ const pressKey = (): void => {
 
 const BOB_REMOVES_FIRST = { type: 'page-changed', seq: HEAD_SEQ + 1, ops: [{ op: 'remove', path: '/root/children/0' }], actor: { type: 'user', label: '밥' } }
 const BOB_REMOVES_SECOND = { type: 'page-changed', seq: HEAD_SEQ + 1, ops: [{ op: 'remove', path: '/root/children/1' }], actor: { type: 'user', label: '밥' } }
+const UNSAVED = '되돌리려던 편집이 저장되지 않아 되돌리지 않았습니다.'
 const LOST_SECOND = '다른 사람의 변경과 겹쳐 아직 저장되지 않은 편집 1개를 버렸습니다.'
 
 afterEach(() => {
@@ -287,7 +291,112 @@ describe('ack 전의 되돌리기', () => {
     expect({ sent: s.patches().length, contents: contents(), alert: alerts() }).toEqual({
       sent: 1,
       contents: ['나'],
-      alert: '다른 사람의 변경과 겹쳐 아직 저장되지 않은 편집 1개를 버렸습니다.',
+      alert: `${LOST_SECOND} ${UNSAVED}`,
     })
+  })
+
+  it('마지막 편집이 ack 아닌 길로 떠나면 앞 편집의 ack 가 맨 위를 바꿔 놓아도 앞 편집을 되돌리지 않는다', async () => {
+    const s = await stage()
+    // [가 고침(비행), 나 고침(큐)] 에서 누른다 — 누른 때의 마지막 편집은 «나 고침».
+    await s.edit(1, '나 고침')
+    fireEvent.click(undoButton())
+    await act(async () => {})
+    // 앞 편집이 ack 되어 스택 맨 위가 바뀐다.
+    s.ackFirst()
+    await waitFor(() => expect(s.patches()).toHaveLength(2))
+    // 밥이 «나»를 지워 리베이스가 «나 고침»을 버린다 — ack 가 아닌 길로 큐를 떠난다.
+    s.frame({ ...BOB_REMOVES_SECOND, seq: HEAD_SEQ + 2 })
+    await act(async () => {})
+    await act(async () => {})
+    expect({ sent: s.patches().length, contents: contents(), alert: alerts() }).toEqual({
+      sent: 2,
+      contents: ['가 고침'],
+      alert: `${LOST_SECOND} ${UNSAVED}`,
+    })
+  })
+
+  it('둘째 편집이 거절되어도 앞 편집을 되돌리지 않고 되돌리려던 편집 문장을 한 번만 잇는다', async () => {
+    const s = await stage()
+    await s.edit(1, '나 고침')
+    fireEvent.click(undoButton())
+    await act(async () => {})
+    s.ackFirst()
+    await waitFor(() => expect(s.patches()).toHaveLength(2))
+    // 둘째 편집을 서버가 거절한다 — 거절 수습의 말에 되돌리려던 편집 문장이 한 번 이어진다.
+    s.frame({ type: 'patch-error', clientOpId: s.patches()[1]?.clientOpId, status: 409, code: 'conflict', message: '페이지가 이미 변경되었습니다', issues: [] })
+    await act(async () => {})
+    await act(async () => {})
+    expect(s.patches()).toHaveLength(2)
+    expect(alerts().split(UNSAVED)).toHaveLength(2)
+  })
+
+  it('한도 문장은 두 번 눌러도 한 조각이다', async () => {
+    const s = await stage()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    fireEvent.click(undoButton())
+    await act(async () => {
+      vi.advanceTimersByTime(UNDO_ACK_WAIT_MS + 1)
+    })
+    fireEvent.click(undoButton())
+    await act(async () => {
+      vi.advanceTimersByTime(UNDO_ACK_WAIT_MS + 1)
+    })
+    const sentence = '편집이 아직 서버에 닿지 않아 되돌리지 못했습니다. 잠시 뒤 다시 눌러 주세요.'
+    expect(alerts()).toBe(sentence)
+    // 거두는 것은 마지막 누름이 끝났을 때다.
+    s.ackFirst()
+    await act(async () => {})
+    await act(async () => {})
+    expect({ alert: alerts(), sent: s.patches().length }).toEqual({ alert: '', sent: 1 })
+  })
+
+  it('한도 문장은 앞 누름이 기다린 편집이 나가도 뒤 누름이 기다리는 동안 거두지 않는다', async () => {
+    const s = await stage()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    fireEvent.click(undoButton())
+    await act(async () => {
+      vi.advanceTimersByTime(UNDO_ACK_WAIT_MS + 1)
+    })
+    // 둘째 편집이 큐에 서고(앞 편집은 아직 답 없음) 두 번째 누름이 그 편집을 기다린다.
+    await s.edit(1, '나 고침')
+    fireEvent.click(undoButton())
+    await act(async () => {
+      vi.advanceTimersByTime(UNDO_ACK_WAIT_MS + 1)
+    })
+    s.ackFirst()
+    await act(async () => {})
+    await act(async () => {})
+    // 앞 누름이 기다린 편집은 나갔지만 뒤 누름이 기다리는 편집은 아직 큐에 있다 — 문장이 남는다.
+    expect(alerts()).toContain('아직 서버에 닿지 않아')
+  })
+
+  it('되돌리기 · 다시 실행을 번갈아 누르면 누른 차례대로 나간다 — 서로를 새 편집으로 버리지 않는다', async () => {
+    const s = await stage()
+    const set = (index: number, value: string): PatchOp[] => [{ op: 'replace', path: `/root/children/${index}/props/content`, value }]
+    s.ack(0, set(0, '가'))
+    await s.edit(1, '나 고침')
+    await waitFor(() => expect(s.patches()).toHaveLength(2))
+    s.ack(1, set(1, '나'))
+    // 둘을 되돌려 다시 실행 스택에 둘을 쌓는다(되돌림마다 ack 까지 기다린다).
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(s.patches()).toHaveLength(3))
+    s.ack(2, set(1, '나 고침'))
+    await act(async () => {})
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(s.patches()).toHaveLength(4))
+    s.ack(3, set(0, '가 고침'))
+    await waitFor(() => expect(redoButton().disabled).toBe(false))
+    // 다시 실행 → 되돌리기 → 다시 실행 을 ack 전에 연타한다.
+    fireEvent.click(redoButton())
+    await waitFor(() => expect(s.patches()).toHaveLength(5))
+    fireEvent.click(undoButton())
+    fireEvent.click(redoButton())
+    await act(async () => {})
+    s.ack(4, set(0, '가'))
+    await waitFor(() => expect(s.patches()).toHaveLength(6))
+    s.ack(5, set(0, '가 고침'))
+    await waitFor(() => expect(s.patches()).toHaveLength(7))
+    // 누른 차례(다시 실행 · 되돌리기 · 다시 실행)대로 셋이 나갔고 버려진 것이 없다.
+    expect({ values: s.patches().slice(4).map((p) => (p.ops[0] as { value?: string }).value), alert: alerts() }).toEqual({ values: ['가 고침', '가', '가 고침'], alert: '' })
   })
 })
