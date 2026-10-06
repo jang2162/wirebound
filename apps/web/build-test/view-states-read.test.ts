@@ -4,7 +4,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | viewer 가 `?state=` 주소로 연다 | 주소의 상태로 안 선다 · 없는 id 가 기본으로 안 간다 |
- * | 영역 표지 | 뷰 모드에서 영역에 안 선다 · 영역의 왼쪽 위에 안 붙는다 · 가지 목록이 그 영역의 가지가 아니다 · 고른 상태가 캔버스 · 머리 · 주소에 안 간다 |
+ * | 영역 표지 | 뷰 모드에서 영역에 안 선다 · 영역 상자의 왼쪽 위 바깥(편집 모드 꼬리표와 같은 자리)에 안 붙는다 · 가지 목록이 그 영역의 가지가 아니다 · 고른 상태가 캔버스 · 머리 · 주소에 안 간다 |
  * | 붙이기 통지 | 다른 페이지에서 온 영역의 없는 상태 가지를 안 빼거나 출처의 이름으로 안 말한다 |
  * | 창 900 | 전환기가 `…` 로 접힌 머리(K2 `shell/head-fold.ts` 의 `tight`)에서 `…` 의 상태 항목 · 영역 표지 · 주소가 한 값을 안 따른다 |
  * | 고른 노드 | 뷰 모드에서 영역 표지로 상태를 바꿔 숨은 노드가 고른 것에 남는다(K2 `HiddenSelectionPrune`) · 편집이 나간다 · 편집 모드로 돌아와 주소가 바뀐다 |
@@ -154,7 +154,7 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
     })
   })
 
-  it('영역 표지 — 뷰 모드에서 영역의 안쪽 왼쪽 위에 서고, 누르면 그 영역의 가지에서 고른다 · 머리 · 주소가 따라간다', async () => {
+  it('영역 표지 — 뷰 모드에서 영역 상자의 왼쪽 위 바깥에 붙어 서고, 누르면 그 영역의 가지에서 고른다 · 머리 · 주소가 따라간다', async () => {
     const { P } = await fixture('vs-read-badge')
     const tab = await openTab(P)
     try {
@@ -162,7 +162,7 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
       await tab.page.getByRole('button', { name: '뷰 모드' }).click()
       await badge(tab.page).waitFor()
       await frames(tab.page)
-      // 표지의 왼쪽 위 = 영역(그려진 가지 자식 상자)의 왼쪽 위 — 화면 좌표. 점선 상자는 영역 상자 그대로다.
+      // 표지의 왼쪽 아래 = 영역(그려진 가지 자식 상자)의 왼쪽 위 — 화면 좌표(꼬리표처럼 상자 위에 붙고, 점선 테두리의 안쪽 끝에 맞춰 1px 왼쪽). 점선 상자는 영역 상자 그대로다.
       const place = await tab.page.evaluate(() => {
         const iframe = document.querySelector('iframe') as HTMLIFrameElement
         const outer = iframe.getBoundingClientRect()
@@ -171,9 +171,9 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
         const holder = document.querySelector('[data-wb-state-badge-for="n_sw"]')!.getBoundingClientRect()
         const frameBox = document.querySelector('[data-wb-state-region-for="n_sw"]')!.getBoundingClientRect()
         const region = [outer.left + inner.left * scale, outer.top + inner.top * scale, outer.left + inner.right * scale, outer.top + inner.bottom * scale]
-        return { region, badge: [holder.left, holder.top], frame: [frameBox.left, frameBox.top, frameBox.right, frameBox.bottom], iframeTop: outer.top }
+        return { region, badge: [holder.left, holder.bottom], frame: [frameBox.left, frameBox.top, frameBox.right, frameBox.bottom], iframeTop: outer.top }
       })
-      expect(Math.abs(place.badge[0]! - place.region[0]!)).toBeLessThanOrEqual(1)
+      expect(Math.abs(place.badge[0]! - (place.region[0]! - 1))).toBeLessThanOrEqual(1)
       expect(Math.abs(place.badge[1]! - place.region[1]!)).toBeLessThanOrEqual(1)
       for (const [at, value] of place.frame.entries()) expect(Math.abs(value - place.region[at]!)).toBeLessThanOrEqual(1)
       // 표지의 글은 줄임표 없이 다 보인다(`fullText` — 머리 전환기의 `8em` 줄임을 걷는다). 이 기계의 글꼴로는 글이 100px · 한도 104px 라
@@ -200,7 +200,7 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
         const scale = outer.width / iframe.clientWidth
         const inner = iframe.contentDocument!.querySelector('[data-wb-id="n_dt"]')!.getBoundingClientRect()
         const holder = document.querySelector('[data-wb-state-badge-for="n_sw"]')!.getBoundingClientRect()
-        return { shifted: outer.top, region: outer.top + inner.top * scale, badge: holder.top }
+        return { shifted: outer.top, region: outer.top + inner.top * scale, badge: holder.bottom }
       })
       // 카나리아 — 알림 줄이 iframe 을 실제로 밀었다(안 밀면 iframe 자리를 안 더하는 변조가 산다).
       expect(pushed.shifted).toBeGreaterThan(place.iframeTop + 5)
@@ -224,6 +224,99 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
     } finally {
       await tab.close()
     }
+  })
+
+  /**
+   * 표지가 **어느 노드도 안 가린다** — 표지 상자와 캔버스의 모든 노드 상자의 겹침 면적 · 영역 첫 줄의 왼쪽 끝 · 가운데에서 `elementFromPoint` 가 표지가
+   * 아닌 것. 창 폭 · 줌 · 캔버스 스크롤마다 잰다. 표지가 화면 안(캔버스 칸 안)에 서는지도 함께 본다(눌러야 하므로).
+   *
+   * 위 형제 바로 밑에 붙는 자리라 간격이 표지 높이(18px)보다 좁으면 위 형제의 아래끝을 그만큼 가린다 — 편집 모드 꼬리표와 같은 값이다. 영역 안 노드와 첫 줄은
+   * 어느 판에서도 안 가려야 한다. 판 카나리아: 간격이 좁은 판과 넉넉한 판이 둘 다 있다 · 잰 판의 수.
+   */
+  it('영역 표지 자리 — 창 폭 1440 · 900 · 375 · 줌 · 캔버스 스크롤에서 어느 노드도 안 가린다', async () => {
+    const { P } = await fixture('vs-read-badge-cover')
+    const seen: Record<string, unknown> = {}
+    for (const [label, viewport] of [['1440', VIEWPORT], ['900', { width: 900, height: 700 }], ['375', { width: 375, height: 700 }]] as const) {
+      const tab = await openTab(P, 'alice', viewport)
+      try {
+        await tab.page.getByRole('button', { name: '뷰 모드' }).click()
+        await badge(tab.page).waitFor()
+        await frames(tab.page)
+        const measure = () =>
+          tab.page.evaluate(() => {
+            const iframe = document.querySelector('iframe') as HTMLIFrameElement
+            const outer = iframe.getBoundingClientRect()
+            const scale = outer.width / iframe.clientWidth
+            const holder = document.querySelector('[data-wb-state-badge-for="n_sw"]')!.getBoundingClientRect()
+            const nodes = [...iframe.contentDocument!.querySelectorAll('[data-wb-id]')].slice(1).map((el) => {
+              const r = el.getBoundingClientRect()
+              return { id: el.getAttribute('data-wb-id')!, left: outer.left + r.left * scale, top: outer.top + r.top * scale, right: outer.left + r.right * scale, bottom: outer.top + r.bottom * scale }
+            })
+            const overlap = (n: { left: number; top: number; right: number; bottom: number }) =>
+              Math.max(0, Math.min(holder.right, n.right) - Math.max(holder.left, n.left)) * Math.max(0, Math.min(holder.bottom, n.bottom) - Math.max(holder.top, n.top))
+            const covered = nodes.filter((n) => overlap(n) > 0).map((n) => [n.id, Math.round(overlap(n))])
+            const first = nodes.find((n) => n.id === 'n_dt')!
+            const above = nodes.find((n) => n.id === 'n_bad')!
+            // 영역 첫 줄의 왼쪽 끝 · 가운데 — 표지가 위에 서면 elementFromPoint 가 표지다.
+            const probes = [[first.left + 3, first.top + 3], [first.left + 60, first.top + 3], [first.left + 3, (first.top + first.bottom) / 2]]
+            const hit = probes.map(([x, y]) => document.elementFromPoint(x!, y!)?.closest('[data-wb-state-badge-for]') !== null)
+            const frameBox = document.querySelector('.wb-shell-canvas')?.getBoundingClientRect() ?? outer
+            return {
+              covered,
+              firstLineUnderBadge: hit,
+              badgeSize: [Math.round(holder.width), Math.round(holder.height)],
+              gapAbove: Math.round(first.top - above.bottom),
+              inCanvas: holder.left >= frameBox.left - 1 && holder.right <= frameBox.right + 1,
+            }
+          })
+        seen[`${label} · 100%`] = await measure()
+        if (label !== '375') await shot(tab.page, `m1-view-badge-${label}.png`)
+        // 줌 — 머리의 줌 단추(접힌 머리 — 창 900 · 375 — 에는 없다. 그 폭은 100% 와 스크롤만 잰다).
+        const zoomIn = tab.page.getByRole('button', { name: '확대', exact: true })
+        const zoomOut = tab.page.getByRole('button', { name: '축소', exact: true })
+        if ((await zoomIn.count()) > 0) {
+          await zoomIn.click()
+          await zoomIn.click()
+          await frames(tab.page)
+          seen[`${label} · 확대`] = await measure()
+          for (let step = 0; step < 4; step += 1) await zoomOut.click()
+          await frames(tab.page)
+          seen[`${label} · 축소`] = await measure()
+        } else seen[`${label} · 줌 단추`] = '없음(접힌 머리)'
+        // 캔버스 스크롤 — 가로 · 세로로 조금 민다(스크롤할 거리가 없으면 그대로).
+        await tab.page.evaluate(() => {
+          const scroller = document.querySelector('.wb-shell-canvas-scroll, .wb-shell-canvas')?.parentElement as HTMLElement | null
+          for (const el of [document.querySelector('.wb-shell-canvas-scroll'), scroller]) if (el instanceof HTMLElement) el.scrollTo(30, 30)
+        })
+        await frames(tab.page)
+        seen[`${label} · 스크롤`] = await measure()
+      } finally {
+        await tab.close()
+      }
+    }
+    type Seen = { covered: [string, number][]; firstLineUnderBadge: boolean[]; badgeSize: number[]; gapAbove: number; inCanvas: boolean }
+    const measured = Object.entries(seen).flatMap(([where, value]) => (typeof value === 'string' ? [] : [[where, value as Seen] as const]))
+    // 판 카나리아 — 줌 단추 없는 창(375)이 «없음»으로 적혔고, 잰 판이 열 가까이다.
+    expect({ measured: measured.length, noZoom: Object.values(seen).filter((value) => typeof value === 'string').length }).toEqual({ measured: 10, noZoom: 1 })
+    const verdict = Object.fromEntries(
+      measured.map(([where, row]) => [
+        where,
+        {
+          // 영역 안 노드 · 첫 줄 왼쪽 끝은 어느 판에서도 안 가린다.
+          coversRegion: row.covered.some(([id]) => id !== 'n_bad') || row.firstLineUnderBadge.includes(true),
+          // 위 형제와의 간격이 표지 높이 이상이면 아무것도 안 가린다 — 모자라면 그 간격만큼 위 형제의 아래끝을 가린다(꼬리표와 같다).
+          coversAboveOnlyWhenTight: (row.covered.length > 0) === (row.gapAbove < row.badgeSize[1]!),
+          size: row.badgeSize,
+          // 창 375 는 캔버스 칸이 48px 라 표지(113px)가 칸 밖으로 나가는 것이 이 자리 몫이 아니다(안쪽에 둔 옛 자리도 같은 왼쪽 끝이다).
+          inCanvas: where.startsWith('375') ? null : row.inCanvas,
+        },
+      ]),
+    )
+    const same = (where: string) => ({ coversRegion: false, coversAboveOnlyWhenTight: true, size: [113, 18], inCanvas: where.startsWith('375') ? null : true })
+    expect(verdict).toEqual(Object.fromEntries(measured.map(([where]) => [where, same(where)])))
+    // 판 카나리아 — 위 형제가 빠듯한 판(간격 < 표지 높이)과 넉넉한 판이 둘 다 있다(그래야 «빠듯할 때만 가린다»가 양쪽을 잰다).
+    const gaps = measured.map(([, row]) => row.gapAbove)
+    expect({ tight: gaps.some((gap) => gap < 18), roomy: gaps.some((gap) => gap >= 18) }).toEqual({ tight: true, roomy: true })
   })
 
   it('창 900 — 전환기가 `…` 로 접힌 머리에서 `…` 의 상태 항목 · 영역 표지 · 주소가 한 값을 따른다', async () => {

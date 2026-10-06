@@ -103,14 +103,29 @@ export function refusedBeforeCommit(caught: unknown): boolean {
  */
 function reason(error: ApiError): string {
   const detail = error.issues
-    .map((issue: unknown) =>
-      typeof issue === 'object' && issue !== null && typeof (issue as { message?: unknown }).message === 'string'
-        ? (issue as { message: string }).message
-        : '',
-    )
-    .filter((message) => message !== '')
+    .map((issue: unknown) => {
+      if (typeof issue !== 'object' || issue === null) return ''
+      const { code, message } = issue as { code?: unknown; message?: unknown }
+      // 화면 상태의 422 는 서버 문장이 상태 id 를 실어 사람에게 기계 값이 보인다 — 코드로 사람 문장을 짓는다(`VIEW_STATE_SENTENCES`).
+      if (typeof code === 'string' && Object.hasOwn(VIEW_STATE_SENTENCES, code)) return VIEW_STATE_SENTENCES[code]!
+      return typeof message === 'string' ? message : ''
+    })
+    // 가지마다 이슈가 하나라 같은 문장이 여럿 온다 — 한 번만 보인다.
+    .filter((message, index, all) => message !== '' && all.indexOf(message) === index)
 
   return detail.length === 0 ? error.message : detail.join(' · ')
+}
+
+/**
+ * **화면 상태의 저장 경계 오류(422)를 사람 문장으로**(`packages/schema` 의 `validate.ts` — `checkViewStateRemoval` · 상태 영역 검증). 서버 문장은
+ * 상태 id 를 싣는다(`state-cases-left` · `state-case-duplicate`). 이 표가 닿는 오류는 이 다섯이다 — 그 밖의 `state-*` 코드는 lint 의 몫이라 응답에 안 온다.
+ */
+const VIEW_STATE_SENTENCES: Readonly<Record<string, string>> = {
+  'state-cases-left': '그 상태로 만든 가지가 남아 있어 목록에서만 뺄 수 없습니다 — 상태 관리에서 지우세요',
+  'state-case-duplicate': '한 상태 영역에 같은 상태의 가지가 둘이 될 수 없습니다',
+  'state-case-default': '상태 영역에는 기본 가지가 하나여야 합니다',
+  'state-case-outside': '상태 가지는 상태 영역 바로 아래에만 둘 수 있습니다',
+  'state-switch-child': '상태 영역에는 상태 가지만 둘 수 있습니다',
 }
 
 /**

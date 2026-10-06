@@ -192,7 +192,7 @@ function mergeViewStates(
 ): { list: ViewState[] | undefined; ops: PatchOp[]; ids: Set<string>; rename: Map<string, string> } {
   const existing = Array.isArray(current) ? (current as ViewState[]) : undefined
   const ids = new Set((existing ?? []).map((state) => state.id))
-  const byName = new Map((existing ?? []).map((state) => [state.name, state.id]))
+  const byName = statesByName(existing)
   const rename = new Map<string, string>()
   const added: ViewState[] = []
   for (const state of incoming) {
@@ -212,8 +212,32 @@ function mergeViewStates(
   return { list: [...existing, ...added], ops: added.map((state) => ({ op: 'add', path: '/viewStates/-', value: state })), ids, rename }
 }
 
+/**
+ * **상태를 이름으로 맞추는 자 — 프리셋과 붙여넣기가 함께 쓴다**(두 벌로 짓지 않는다). 이름은 글자 그대로 견준다 — 상태 상자가 이름을 앞뒤 공백을 뗀 채
+ * 받고 같은 이름을 거절하는 것(`shell/view-states-dialog.tsx`)과 같은 규칙이라 대소문자도 다른 이름이다.
+ */
+function statesByName(list: readonly ViewState[] | undefined): Map<string, string> {
+  return new Map((list ?? []).map((state) => [state.name, state.id]))
+}
+
+/**
+ * **붙이는 페이지에 같은 이름의 상태가 있으면 그 id 로 가지를 옮기는 표**(출처 id → 페이지 id). 같은 id 는 그대로라 표에 안 든다. 이름이 페이지에 없는
+ * 상태는 표에 없다 — 그 가지는 `prepareNodesForPaste` 가 빼고 센다. 프리셋의 `mergeViewStates` 가 같은 이름을 같은 규칙으로 맞춘다.
+ */
+export function renameStatesByName(current: unknown, incoming: readonly ViewState[] | undefined): Map<string, string> {
+  const existing = Array.isArray(current) ? (current as ViewState[]) : undefined
+  const ids = new Set((existing ?? []).map((state) => state.id))
+  const byName = statesByName(existing)
+  const rename = new Map<string, string>()
+  for (const state of incoming ?? []) {
+    const named = ids.has(state.id) ? undefined : byName.get(state.name)
+    if (named !== undefined) rename.set(state.id, named)
+  }
+  return rename
+}
+
 /** 상태 가지의 `state` 를 표대로 바꾼 사본(`mergeViewStates` 의 `rename`). 입력을 바꾸지 않는다. */
-function renameCaseStates(node: WbNode, rename: ReadonlyMap<string, string>): WbNode {
+export function renameCaseStates(node: WbNode, rename: ReadonlyMap<string, string>): WbNode {
   const state = node.type === 'StateCase' ? node.props?.state : undefined
   const next: WbNode =
     typeof state === 'string' && rename.has(state) ? { ...node, props: { ...node.props, state: rename.get(state)! } } : { ...node }
