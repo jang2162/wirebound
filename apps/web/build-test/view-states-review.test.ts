@@ -233,6 +233,20 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
     expect(result).toEqual({ canary: { selection: ['n_dt', 'n_pre'] }, frames: [], defaultSame: true, notices: [FORK_REFUSED] })
   })
 
+  it('H1 여럿 일괄 속성 — `n_pre` · `n_dt` 를 함께 고른 속성 칸의 글은 보내지 않고 까닭을 말한다 · 기본 가지 그대로', async () => {
+    const result = await shiftedEntry('h1-bulk', async (page) => {
+      await pickRow(page, 'n_pre')
+      await pickRow(page, 'n_dt', true)
+      const selection = (await picked(page)).sort()
+      const box = panelText(page)
+      await box.click()
+      await box.fill('일괄 고침')
+      await box.evaluate((element) => (element as HTMLElement).blur())
+      return { selection, boxes: await panelText(page).count() }
+    })
+    expect(result).toEqual({ canary: { selection: ['n_dt', 'n_pre'], boxes: 1 }, frames: [], defaultSame: true, notices: [FORK_REFUSED] })
+  })
+
   /**
    * H2 판 — alice(손님)가 흐린 노드를 고르고 `during` 을 한 채, bob(손님)이 흐린 `n_dt3` 를 고쳐 손님 가지를 먼저 만든다. bob 의 글이 alice 캔버스에
    * 서면(판이 섰다) `after` 를 하고 값을 읽는다.
@@ -479,6 +493,29 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
     expect([duplicate, paste]).toEqual([
       { frames: [], headSame: true, notices: [CASE_SIDE] },
       { frames: [], headSame: true, notices: [CASE_SIDE] },
+    ])
+  })
+
+  it('L1 가지 줄의 Cmd+X · Delete — 기본 가지는 둘 다 말없이 안 보낸다(까닭은 꺼진 삭제 항목이 단다) · 다른 가지는 그 가지만 지운다(목록은 그대로)', async () => {
+    const base = await caseRow('l1-cut-d', async (page) => {
+      await allCases(page)
+      await pickRow(page, 'n_cd')
+      await page.keyboard.press('Meta+x')
+    })
+    const other = await caseRow('l1-cut-a', async (page) => {
+      await allCases(page)
+      await pickRow(page, 'n_ca')
+      await page.keyboard.press('Meta+x')
+    })
+    const baseDelete = await caseRow('l1-del-d', async (page) => {
+      await allCases(page)
+      await pickRow(page, 'n_cd')
+      await page.keyboard.press('Delete')
+    })
+    expect([base, baseDelete, other]).toEqual([
+      { frames: [], headSame: true, notices: [] },
+      { frames: [], headSame: true, notices: [] },
+      { frames: [[{ op: 'remove', path: '/root/children/1/children/1' }]], headSame: false, notices: [] },
     ])
   })
 

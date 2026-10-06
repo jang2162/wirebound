@@ -500,7 +500,7 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     }
   })
 
-  it('남이 그 상태로 가지를 만든 뒤의 «상태 추가» 되돌리기 — 서버가 422 로 막고 상태 · 가지가 남는다(K1 이월 11 — 화면의 말은 로그)', async () => {
+  it('남이 그 상태로 가지를 만든 뒤의 «상태 추가» 되돌리기 — 서버가 422 로 막고 상태 · 가지가 남는다(K1 이월 11 — 화면의 말은 사람 문장)', async () => {
     const { P } = await fixture('vs-undo-cased')
     const tab = await openTab(P)
     try {
@@ -525,13 +525,20 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       await tab.page.waitForTimeout(800)
       const after = await server(P)
       const notices = await tab.page.locator('.wb-shell-footer [role="alert"], .wb-shell-footer [role="status"]').allTextContents()
-      // eslint-disable-next-line no-console
-      console.log('[상태 추가 되돌리기 — 가지가 생긴 뒤]', JSON.stringify({ notices, head: await switcher(tab.page).getAttribute('aria-label') }))
-      expect({ states: after.states, ids: after.ids, headSame: after.headSeq === before.headSeq, noticed: notices.length > 0 }).toEqual({
+      // 사람 문장이다 — 서버 이슈 문장의 상태 id(`s_…`)가 안 보인다(`api/failure.tsx` 의 `VIEW_STATE_SENTENCES`).
+      const shotsDir = process.env['WB_SHOTS_DIR']
+      if (shotsDir !== undefined) {
+        for (const width of [1440, 900]) {
+          await tab.page.setViewportSize({ width, height: width === 1440 ? 900 : 700 })
+          await tab.page.waitForTimeout(400)
+          await tab.page.screenshot({ path: `${shotsDir}/m1-state-cases-left-${width}.png` })
+        }
+      }
+      expect({ states: after.states, ids: after.ids, headSame: after.headSeq === before.headSeq, notices }).toEqual({
         states: ['관리자', '손님', '직원'],
         ids: before.ids,
         headSame: true,
-        noticed: true,
+        notices: ['그 상태로 만든 가지가 남아 있어 목록에서만 뺄 수 없습니다 — 상태 관리에서 지우세요 — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다.'],
       })
     } finally {
       await tab.close()

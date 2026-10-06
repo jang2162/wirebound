@@ -48,6 +48,7 @@ import {
   pasteOps,
   type NodeEdit,
 } from '../edit/paste-ops'
+import { renameCaseStates, renameStatesByName } from '../edit/preset-apply'
 import { findNodeSafely } from '../edit/safe-walk'
 import { ancestorIds, foldStep, moveSelection, siblingIds } from '../edit/selection-move'
 import { useClipboard } from '../edit/use-clipboard'
@@ -171,9 +172,11 @@ export function EditorKeys(props: {
         ? say
         : (message: string) => (store.getState().editFailure !== pressed && store.showsLoss() ? tellPasteLoss(message) : say(message))
     const at = anchor !== null && findNodeSafely(document.root, anchor) !== undefined ? anchor : null
-    // 붙이는 페이지의 목록에 없는 상태의 가지는 뺀다(설계서 「설계서 화면 구조」 클립보드 · 화면 상태) — 상태 id 로 가른다.
+    // 붙이는 페이지에 같은 이름의 상태가 있으면 가지를 그 id 로 옮기고(프리셋과 같은 자 — `renameStatesByName`), 없는 이름의 가지는 뺀다
+    // (설계서 「설계서 화면 구조」 클립보드 · 화면 상태).
     const states = new Set((Array.isArray(document.viewStates) ? document.viewStates : []).map((state) => state.id))
-    const prepared = prepareNodesForPaste(nodes, {
+    const rename = renameStatesByName(document.viewStates, sourceStates)
+    const prepared = prepareNodesForPaste(rename.size === 0 ? nodes : nodes.map((node) => renameCaseStates(node, rename)), {
       node: (id) => findNodeSafely(document.root, id) !== undefined,
       page: (target) => pages !== null && matchPageTargets(pages, target).length > 0,
       state: (id) => states.has(id),

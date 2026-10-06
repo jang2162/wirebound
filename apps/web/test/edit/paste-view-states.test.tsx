@@ -132,6 +132,38 @@ describe('붙일 페이지에 없는 상태의 가지를 빼고 말한다', () =
   })
 })
 
+describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(프리셋과 같은 자)', () => {
+  /** 붙일 페이지의 «관리자»는 출처와 id 가 다르다. */
+  const OTHER_ADMIN: ViewState = { id: 's_page_admin', name: '관리자' }
+
+  it('같은 이름의 상태가 있으면 가지를 그 id 로 옮기고 말하지 않는다 · 없는 이름의 가지만 빼고 센다 · 검증 오류 0', async () => {
+    const area: WbNode = {
+      id: 'sw',
+      type: 'StateSwitch',
+      children: [caseOf('c-d', 'default', [button('b-d', '보기')]), caseOf('c-a', 's_admin', [button('b-a', '승인')]), caseOf('c-g', 's_guest', [button('b-g', '로그인')])],
+    }
+    const { srv, pasted } = await pasteInto(target([OTHER_ADMIN]), writeNodesEnvelope([area], 1, [ADMIN, GUEST]))
+    expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default', 's_page_admin'])
+    await waitFor(() => expect(alertTexts()).toEqual(['상태 "비로그인" 가지 1개를 뺐습니다.']))
+    expect(errorsOf(srv.held())).toEqual([])
+  })
+
+  it('이름이 글자 그대로 같을 때만 맞춘다 — 대소문자 · 다른 글자는 다른 상태다', async () => {
+    const area: WbNode = { id: 'sw', type: 'StateSwitch', children: [caseOf('c-d', 'default', []), caseOf('c-a', 's_a', [button('b-a', '승인')])] }
+    const { pasted } = await pasteInto(target([{ id: 's_page_a', name: 'Admin' }]), writeNodesEnvelope([area], 1, [{ id: 's_a', name: 'admin' }]))
+    expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default'])
+    await waitFor(() => expect(alertTexts()).toEqual(['상태 "admin" 가지 1개를 뺐습니다.']))
+  })
+
+  it('같은 id 는 이름이 달라도 그대로다(같은 페이지 · 이름을 고친 복사)', async () => {
+    const area: WbNode = { id: 'sw', type: 'StateSwitch', children: [caseOf('c-d', 'default', []), caseOf('c-a', 's_admin', [button('b-a', '승인')])] }
+    const { pasted } = await pasteInto(target([{ id: 's_admin', name: '운영자' }]), writeNodesEnvelope([area], 1, [ADMIN]))
+    expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default', 's_admin'])
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(alertTexts()).toEqual([])
+  })
+})
+
 describe('복사가 출처의 상태 목록을 싣는다', () => {
   it('상태가 있는 페이지에서 고른 영역의 봉투에 목록이 실린다', async () => {
     const area: WbNode = { id: 'sw', type: 'StateSwitch', children: [caseOf('c-d', 'default', [button('b-d', '보기')]), caseOf('c-a', 's_admin', [])] }
