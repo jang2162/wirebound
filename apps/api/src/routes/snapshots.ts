@@ -92,6 +92,7 @@ import { lockProjectShared } from '../repos/projects'
 import { captureSnapshot, type CaptureHooks } from '../services/snapshot-capture'
 import { runConfirmedTransaction } from '../services/lost-commit'
 import { restoreSnapshot, type RestoreOutcome, type RestoreResult } from '../services/restore'
+import { releaseLocksOnPages } from '../ws/lock'
 import { clientRestoreId, notifyMenuChanged, notifyRestored, notifyThemeChanged } from '../ws/notify'
 import { bumpMenuRev } from '../repos/menu'
 
@@ -349,6 +350,8 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
         // **트리도 알린다** — `restored`는 사람이 배너의 단추를 눌러야 다시 읽는다(`apps/web`의 `shell/remote-alert.tsx`). 트리가 그때까지
         // 옛 판이면 그 위에서 내는 트리 쓰기(끌기 · 연쇄 상자)가 옛 차례 · 옛 목록으로 선다.
         notifyMenuChanged(app, { projectId, rev: menuRev, actor: requestEventActor(request) })
+        // 판에 없어 지운 페이지의 잠금 — 페이지 삭제 · 연쇄 삭제와 같다(`ws/lock.ts`의 `releaseLocksOnPages`).
+        releaseLocksOnPages(app, projectId, outcome.result.deletedPageIds)
         // **판 3 은 테마 바인딩도 되돌렸다** — 값이 같아도 `theme_rev` 가 올랐으므로 늘 알린다(spec 「스냅샷」). 캔버스는 `restored` 로
         // 문서를 다시 읽고, 테마는 이 프레임으로 다시 싣는다 — 둘이 따로 오는 것은 받는 자리가 다르기 때문이다(`ws/protocol.ts`).
         const theme = outcome.result.theme

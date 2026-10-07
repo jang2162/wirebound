@@ -228,7 +228,7 @@ function settle(
   frame: LockFrame,
   turn: LockTurn,
   root: WbNode | null | undefined,
-  headSeq: number | null,
+  headSeq: number,
 ): 'settled' | 'needs-document' {
   if (!turn.current()) return 'settled'
   if (!inRoom(app, connection)) return 'settled'
@@ -239,7 +239,7 @@ function settle(
   const base = { projectId: connection.projectId, pageId: frame.pageId, userId: connection.userId }
   // **판정을 지난 그대로면 다시 안 묻는다**(위 «대가는 하트비트의 문서 조회다» 의 줄이는 길) — 같은 집합 · 그 뒤 살아 있는 잠금이 안 바뀜 ·
   // 문서 머리 번호가 그대로면 판정의 입력이 같다. 만료만 미룬다.
-  if (headSeq !== null && app.realtime.locks.isJudged(connection.id, frame.pageId, frame.nodeIds, headSeq)) {
+  if (app.realtime.locks.isJudged(connection.id, frame.pageId, frame.nodeIds, headSeq)) {
     app.realtime.locks.hold(
       { ...base, nodeIds: frame.nodeIds, connectionId: connection.id, userName: connection.userName },
       headSeq,
@@ -255,7 +255,7 @@ function settle(
     connectionId: connection.id,
     // **연결이 든다** — 프레임이 실어 온 값이 아니다(`ws/patch.ts`의 actor와 같은 이유).
     userName: connection.userName,
-  }, verdict.held.length === 0 && headSeq !== null ? headSeq : undefined)
+  }, verdict.held.length === 0 ? headSeq : undefined)
   announce(app, connection.projectId, changed)
   sendDenied(connection, frame, verdict.held)
   return 'settled'
@@ -327,8 +327,11 @@ export function createLockLane(app: FastifyInstance, connection: RoomConnection)
  * 놓는다**(`unlock`과 같다 — 위 표).
  *
  * **페이지 행을 `KEY SHARE`로 잡고** 문서 없이 묻는다. 문서가 필요하면(같은 페이지에 남의 잠금이 있다) 그 행을 쥔 채 머리 문서를
- * 읽고 처음부터 다시 묻는다(위 «판정과 잡기는 같은 틱이다»). 읽은 뒤의 판정은 `needs-document`를 내지 않는다. 그 프로젝트에 없는
- * 페이지면 문서가 없는 것으로 판정한다(«막지 않는다» — `lock/check.ts`의 `selectionVerdict`).
+ * 읽고 처음부터 다시 묻는다(위 «판정과 잡기는 같은 틱이다»). 읽은 뒤의 판정은 `needs-document`를 내지 않는다.
+ *
+ * **그 프로젝트에 없는 페이지(지웠다)면 잡지 않고 이 연결이 쥔 것을 놓는다** — 지운 페이지를 쥔 화면은 트리를 다시 받아 떠나기 전까지
+ * 같은 집합을 다시 보낸다(편집 직전 하트비트). 잡으면 삭제가 커밋 뒤에 놓은 잠금(`releaseLocksOnPages`)이 되살아나 룸의 목록에 남는다.
+ * 삭제와 겨뤄도 안 되살아난다 — 삭제가 행을 지우는 잠금은 이 `KEY SHARE`와 부딪쳐, 이 프레임이 먼저면 잡은 뒤 삭제가 놓고 늦으면 행이 없다.
  */
 export async function handleLockFrame(
   app: FastifyInstance,
@@ -344,7 +347,11 @@ export async function handleLockFrame(
     await withTransaction(app.db, async (trx) => {
       await sql`select set_config('lock_timeout', ${`${LOCK_ROW_WAIT_MS}ms`}, true)`.execute(trx)
       const headSeq = await lockPageSharedHead(trx, connection.projectId, frame.pageId)
-      if (settle(app, connection, frame, turn, headSeq === null ? null : undefined, headSeq) === 'settled') return
+      if (headSeq === null) {
+        if (turn.current() && inRoom(app, connection)) releaseLocksOf(app, connection)
+        return
+      }
+      if (settle(app, connection, frame, turn, undefined, headSeq) === 'settled') return
       settle(app, connection, frame, turn, await readSelectionRoot(trx, connection.projectId, frame.pageId), headSeq)
     })
   } catch (error) {
@@ -356,9 +363,10 @@ export async function handleLockFrame(
 }
 
 /**
- * **지운 페이지의 잠금을 놓는다** — 페이지 삭제 · 메뉴 연쇄 삭제가 커밋 **뒤에** 부른다(`routes/pages.ts` · `routes/menu.ts`). 안 놓으면 그 잠금이
- * 룸의 `locks` 목록에 TTL 이나 쥔 화면이 놓을 때까지 남는다(집합이면 200 줄까지). 던지지 않는다 — 쓰기는 이미 커밋됐다. **복원이 지우는
- * 페이지는 여기로 오지 않는다**(복원은 지운 목록을 값으로 안 돌려준다 — 남는 것은 TTL 이 걷는다).
+ * **지운 페이지의 잠금을 놓는다** — 페이지 삭제 · 메뉴 연쇄 삭제 · 복원(판에 없던 페이지)이 커밋 **뒤에** 부른다(`routes/pages.ts` ·
+ * `routes/menu.ts` · `routes/snapshots.ts`). 안 놓으면 그 잠금이 룸의 `locks` 목록에 TTL 이나 쥔 화면이 놓을 때까지 남는다(집합이면 200 줄까지).
+ * 던지지 않는다 — 쓰기는 이미 커밋됐다. **답을 잃은 쓰기(503 «모름»)는 부르지 않는다** — 늦은 커밋 지켜보기도 신호만 낸다. 남은 잠금은 쥔
+ * 화면의 다음 하트비트가 놓는다(`handleLockFrame` — 없는 페이지).
  */
 export function releaseLocksOnPages(app: FastifyInstance, projectId: string, pageIds: readonly string[]): void {
   announce(app, projectId, app.realtime.locks.releasePages(projectId, pageIds))
