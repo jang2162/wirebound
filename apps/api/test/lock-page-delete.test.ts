@@ -1,8 +1,8 @@
 /**
  * ⚠️ 이 파일은 테스트 DB에 **실제로 커밋한다.** `helpers.ts`의 `withRealApi`를 쓴다.
  *
- * **지운 페이지의 잠금은 놓인다**(`ws/lock.ts` 의 `releaseLocksOnPages`) — 페이지 삭제 · 메뉴 연쇄 삭제가 커밋 뒤에 부른다. 안 놓으면 그 잠금이
- * 룸의 `locks` 목록에 TTL(30s)이나 쥔 화면이 놓을 때까지 남는다.
+ * **지운 페이지의 잠금은 놓인다**(`ws/lock.ts` 의 `releaseLocksOnPages`) — 페이지 삭제 · 메뉴 연쇄 삭제 · 복원이 커밋 뒤에 부른다. 안 놓으면 그 잠금이
+ * 룸의 `locks` 목록에 TTL(30s)이나 쥔 화면이 놓을 때까지 남는다. **놓은 뒤 쥔 화면이 같은 집합을 다시 보내도 다시 서지 않는다**(`handleLockFrame` — 없는 페이지).
  *
  * **변조와 죽는 케이스**(백업 후 바이트 비교 복원):
  *
@@ -12,6 +12,8 @@
  * | `routes/menu.ts` 의 줄을 지운다 | 「연쇄 삭제」 **혼자** |
  * | `store.releasePages` 가 아무것도 안 놓는다 | 위 둘 + 저장소 케이스(`lock-store.test.ts`) |
  * | 다른 페이지의 잠금까지 놓는다(`gone.has` 를 뗀다) | 「남은 페이지의 잠금은 그대로」 **혼자** |
+ * | `ws/lock.ts` 의 `handleLockFrame` 이 없는 페이지도 잡는다(`headSeq === null` 갈래를 뗀다) | 「같은 집합을 다시 보내도」 **혼자**(지운 페이지의 잠금이 다시 섬 · 보라가 목록을 한 번 더 받음) |
+ * | `routes/snapshots.ts` 의 `releaseLocksOnPages` 줄을 지운다 · `services/restore.ts` 가 지운 id 를 안 모은다 | 「복원이 지운 페이지」 **혼자**(각각) |
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
