@@ -65,6 +65,16 @@ export const LOST_COMMIT_POLL_MS = 10
 /** 다시 묻는 간격의 상한 — 결말을 늦게 알게 되는 몫이 이것까지다. */
 export const LOST_COMMIT_POLL_MAX_MS = 40
 
+/**
+ * 한도(`LOST_COMMIT_PROBE_MS`) 안에 결말이 안 난 잃은 COMMIT 을 **응답 뒤에도** 지켜보는 시간 — 넘기면 지켜보기를 그만둔다. 끊긴 연결의 COMMIT 은
+ * 서버에서 아직 돌 수 있고(트리거 · 잠금 대기) 커밋되면 방송이 빠진다. 트랜잭션 유휴 한도(`db/client.ts` 의 `idle_in_transaction_session_timeout`)보다
+ * 길게 두지 않는다 — 그 뒤에는 백엔드가 트랜잭션을 되돌려 `aborted` 다.
+ */
+export const LOST_COMMIT_LATE_MS = 30_000
+
+/** 응답 뒤 지켜보는 동안 결말을 묻는 간격 — 응답을 붙잡지 않으므로 조밀하게 안 묻는다(풀 칸을 덜 쓴다). */
+export const LOST_COMMIT_LATE_POLL_MS = 500
+
 /** 커밋 안 된 것을 확인한 쓰기의 문장 — 봉투 있는 500 에 싣는다(머리말의 표). */
 export const DB_WRITE_NOT_APPLIED_MESSAGE = '데이터베이스와의 연결이 끊겨 요청이 반영되지 않았습니다 — 다시 시도하세요'
 
@@ -72,9 +82,15 @@ export const DB_WRITE_NOT_APPLIED_MESSAGE = '데이터베이스와의 연결이 
  * 그 xid 의 결말 — 마감(`deadline`, `Date.now()`의 값) 안에서, `in progress`면 `LOST_COMMIT_POLL_MS`부터 늘려 가며 다시
  * 묻는다. 결말이 안 났거나 묻지 못했으면 `null`이다. 묻는 연결은 풀에서 새로 빌린다(`readWithin` — 한도를 넘기면 그 연결째 버린다).
  */
-export async function settleTransaction(db: DbHandle, xid: string, deadline: number): Promise<'committed' | 'aborted' | null> {
+export async function settleTransaction(
+  db: DbHandle,
+  xid: string,
+  deadline: number,
+  /** 처음 간격 · 상한 — 응답을 붙잡는 확인은 기본값, 응답 뒤 지켜보기는 `LOST_COMMIT_LATE_POLL_MS` 로 고정한다. */
+  poll: { start: number; max: number } = { start: LOST_COMMIT_POLL_MS, max: LOST_COMMIT_POLL_MAX_MS },
+): Promise<'committed' | 'aborted' | null> {
   const query = sql<{ status: string | null }>`select pg_xact_status(${xid}::xid8) as status`.compile(db)
-  let pause = LOST_COMMIT_POLL_MS
+  let pause = poll.start
   for (;;) {
     const left = deadline - Date.now()
     if (left <= 0) return null
@@ -83,7 +99,7 @@ export async function settleTransaction(db: DbHandle, xid: string, deadline: num
     // 못 물었다(`undefined`) · xid 가 너무 옛것이다(`null`) — 결말을 모른다.
     if (status !== 'in progress') return null
     await new Promise((resolve) => setTimeout(resolve, Math.min(pause, Math.max(0, deadline - Date.now()))))
-    pause = Math.min(pause * 2, LOST_COMMIT_POLL_MAX_MS)
+    pause = Math.min(pause * 2, poll.max)
   }
 }
 
@@ -114,11 +130,15 @@ export interface Settled<T> {
  * `confirm`은 본문의 결과(끝까지 돈 것)와 확인의 마감(결말을 묻고 남은 몫)을 받아 **방송해도 되는가**를 낸다. `null`이면 «모름»이다
  * — 원래 오류를 그대로 던진다.
  * 확인할 것이 없는 결과(문서를 안 바꾼 쓰기)도 `null`이다 — 그 쓰기는 방송할 것이 없고, 커밋됐는지 가를 행도 없다.
+ *
+ * **`onLateCommit`** — 한도 안에 결말이 안 난 판(503 «모름»)을 **응답 뒤에도** `LOST_COMMIT_LATE_MS` 까지 지켜보다 커밋됐으면 부른다(응답은
+ * 붙잡지 않는다). 안 부르면 한도 뒤에 커밋된 쓰기는 방송이 빠진다. 던지지 않는다 — 지켜보기의 실패는 삼킨다(응답은 이미 나갔다).
  */
 export async function runConfirmedTransaction<T>(
   db: DbHandle,
   fn: (trx: DbHandle) => Promise<T>,
   confirm: (result: T, deadline: number) => Promise<boolean | null>,
+  onLateCommit?: (result: T) => Promise<void> | void,
 ): Promise<Settled<T>> {
   // 본문이 끝까지 돌았으면 그 결과와 xid 를 든다 — 그 뒤에 난 `DbConnectionLostError`는 COMMIT(과 뒤따른 ROLLBACK)의 것이다.
   const finished: { body?: { result: T; xid: string | null } } = {}
@@ -137,11 +157,28 @@ export async function runConfirmedTransaction<T>(
     const deadline = Date.now() + LOST_COMMIT_PROBE_MS
     const settled = await settleTransaction(db, body.xid, deadline)
     if (settled === 'aborted') throw internal(DB_WRITE_NOT_APPLIED_MESSAGE)
-    if (settled === null) throw error
+    if (settled === null) {
+      if (onLateCommit !== undefined) watchLateCommit(db, body.xid, () => onLateCommit(body.result))
+      throw error
+    }
     const broadcast = await confirm(body.result, deadline)
     if (broadcast === null) throw error
     return { result: body.result, broadcast, confirmedAfterLoss: true }
   }
+}
+
+/**
+ * 응답 뒤에 그 xid 의 결말을 지켜본다 — 커밋이면 `then` 을 부른다. **응답을 붙잡지 않는다**(기다리지 않고 돌아간다). 타이머가 프로세스를 붙잡지
+ * 않게 하고(`settleTransaction` 의 `readWithin` 이 `unref`), 실패는 삼킨다.
+ */
+function watchLateCommit(db: DbHandle, xid: string, then: () => Promise<void> | void): void {
+  void (async () => {
+    const settled = await settleTransaction(db, xid, Date.now() + LOST_COMMIT_LATE_MS, {
+      start: LOST_COMMIT_LATE_POLL_MS,
+      max: LOST_COMMIT_LATE_POLL_MS,
+    })
+    if (settled === 'committed') await then()
+  })().catch(() => {})
 }
 
 /** revision 하나를 남긴 쓰기의 그 revision — 확인이 찾는 행이다. */

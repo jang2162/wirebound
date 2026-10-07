@@ -577,15 +577,23 @@ export async function deletePage(db: DbHandle, projectId: string, pageId: string
  * 대상이 `projectId` 소속이 아니면(지워졌거나 다른 프로젝트) `false`다 — 부르는 쪽이 404 로 읽는다.
  */
 export async function lockPageShared(trx: DbHandle, projectId: string, pageId: string): Promise<boolean> {
+  return (await lockPageSharedHead(trx, projectId, pageId)) !== null
+}
+
+/**
+ * `lockPageShared` 와 같은 잠금이고 **그 행의 `head_seq` 를 돌려준다**(없으면 `null`). 행을 쥔 채 읽으므로 커밋된 머리 번호다 —
+ * `ws/lock.ts` 의 하트비트가 «문서가 그대로인가» 를 문서를 읽지 않고 가르는 데 쓴다.
+ */
+export async function lockPageSharedHead(trx: DbHandle, projectId: string, pageId: string): Promise<number | null> {
   assertLocking(trx, 'lockPageShared')
   const row = await trx
     .selectFrom('pages')
-    .select('id')
+    .select('head_seq')
     .where('id', '=', pageId)
     .where('project_id', '=', projectId)
     .forKeyShare()
     .executeTakeFirst()
-  return row !== undefined
+  return row === undefined ? null : Number(row.head_seq)
 }
 
 /**

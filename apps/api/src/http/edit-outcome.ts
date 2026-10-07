@@ -38,5 +38,7 @@ export function editOutcomeToApiError(
       return badRequest(outcome.message)
     case 'nul-byte':
       return badRequest('문서에 NUL 문자(U+0000)를 포함할 수 없습니다')
+    case 'lone-surrogate':
+      return badRequest('문서에 짝 없는 서로게이트 글자를 포함할 수 없습니다')
   }
 }

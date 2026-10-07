@@ -131,7 +131,7 @@ import { sql } from 'kysely'
 import { DatabaseError } from 'pg'
 import { withTransaction } from '../db/tx'
 import { readSelectionRoot, selectionVerdict } from '../lock/check'
-import { lockPageShared } from '../repos/pages'
+import { lockPageSharedHead } from '../repos/pages'
 import type { ClientFrame, ServerFrame } from './protocol'
 import type { RoomConnection } from './rooms'
 
@@ -228,6 +228,7 @@ function settle(
   frame: LockFrame,
   turn: LockTurn,
   root: WbNode | null | undefined,
+  headSeq: number | null,
 ): 'settled' | 'needs-document' {
   if (!turn.current()) return 'settled'
   if (!inRoom(app, connection)) return 'settled'
@@ -236,6 +237,15 @@ function settle(
     return 'settled'
   }
   const base = { projectId: connection.projectId, pageId: frame.pageId, userId: connection.userId }
+  // **판정을 지난 그대로면 다시 안 묻는다**(위 «대가는 하트비트의 문서 조회다» 의 줄이는 길) — 같은 집합 · 그 뒤 살아 있는 잠금이 안 바뀜 ·
+  // 문서 머리 번호가 그대로면 판정의 입력이 같다. 만료만 미룬다.
+  if (headSeq !== null && app.realtime.locks.isJudged(connection.id, frame.pageId, frame.nodeIds, headSeq)) {
+    app.realtime.locks.hold(
+      { ...base, nodeIds: frame.nodeIds, connectionId: connection.id, userName: connection.userName },
+      headSeq,
+    )
+    return 'settled'
+  }
   const verdict = selectionVerdict(app, { ...base, nodeIds: frame.nodeIds }, root)
   if (verdict === 'needs-document') return verdict
   const denied = new Set(verdict.held)
@@ -245,7 +255,7 @@ function settle(
     connectionId: connection.id,
     // **연결이 든다** — 프레임이 실어 온 값이 아니다(`ws/patch.ts`의 actor와 같은 이유).
     userName: connection.userName,
-  })
+  }, verdict.held.length === 0 && headSeq !== null ? headSeq : undefined)
   announce(app, connection.projectId, changed)
   sendDenied(connection, frame, verdict.held)
   return 'settled'
@@ -333,9 +343,9 @@ export async function handleLockFrame(
   try {
     await withTransaction(app.db, async (trx) => {
       await sql`select set_config('lock_timeout', ${`${LOCK_ROW_WAIT_MS}ms`}, true)`.execute(trx)
-      const page = await lockPageShared(trx, connection.projectId, frame.pageId)
-      if (settle(app, connection, frame, turn, page ? undefined : null) === 'settled') return
-      settle(app, connection, frame, turn, await readSelectionRoot(trx, connection.projectId, frame.pageId))
+      const headSeq = await lockPageSharedHead(trx, connection.projectId, frame.pageId)
+      if (settle(app, connection, frame, turn, headSeq === null ? null : undefined, headSeq) === 'settled') return
+      settle(app, connection, frame, turn, await readSelectionRoot(trx, connection.projectId, frame.pageId), headSeq)
     })
   } catch (error) {
     // **행을 한도 넘게 기다렸다**(`LOCK_ROW_WAIT_MS`) — 예외가 아니라 판정이다. 끝내지 못한 `lock`과 같은 답이고 같은 조건이다
@@ -343,6 +353,15 @@ export async function handleLockFrame(
     if (!(error instanceof DatabaseError && error.code === LOCK_NOT_AVAILABLE)) throw error
     if (turn.current() && inRoom(app, connection)) denyLock(app, connection, frame)
   }
+}
+
+/**
+ * **지운 페이지의 잠금을 놓는다** — 페이지 삭제 · 메뉴 연쇄 삭제가 커밋 **뒤에** 부른다(`routes/pages.ts` · `routes/menu.ts`). 안 놓으면 그 잠금이
+ * 룸의 `locks` 목록에 TTL 이나 쥔 화면이 놓을 때까지 남는다(집합이면 200 줄까지). 던지지 않는다 — 쓰기는 이미 커밋됐다. **복원이 지우는
+ * 페이지는 여기로 오지 않는다**(복원은 지운 목록을 값으로 안 돌려준다 — 남는 것은 TTL 이 걷는다).
+ */
+export function releaseLocksOnPages(app: FastifyInstance, projectId: string, pageIds: readonly string[]): void {
+  announce(app, projectId, app.realtime.locks.releasePages(projectId, pageIds))
 }
 
 /**

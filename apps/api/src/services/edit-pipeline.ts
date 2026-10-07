@@ -22,7 +22,8 @@
  *    상태의 가지가 남음 — 오류)를 함께 싣는다.
  * 7. `after.version !== before.version`이면 `invalid` — `ops`가 `/version`을 직접
  *    건드린 경우다(아래 "`version`은 편집 대상이 아니다" 참고).
- * 8. `containsNulByte(ops) || containsNulByte(inverse) || containsNulByte(after)` → `nul-byte`.
+ * 8. `containsNulByte(ops) || containsNulByte(inverse) || containsNulByte(after)` → `nul-byte`. 같은 세 곳에 짝 없는 서로게이트가
+ *    있으면 → `lone-surrogate`(jsonb 캐스팅이 죽어 500 이 되는 것을 400 으로 — `db/nul-guard.ts` 의 `containsLoneSurrogate`).
  * 9. `insertRevision(seq = headSeq + 1)`.
  * 10. `writePageSchemaAtSeq(after, after.version, seq)`.
  *
@@ -86,7 +87,7 @@ import {
   type PageDocument,
   type ValidationIssue,
 } from '@wirebound/schema'
-import { containsNulByte } from '../db/nul-guard'
+import { containsLoneSurrogate, containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { lockPageForEdit, writePageSchemaAtSeq } from '../repos/pages'
 import { insertRevision, type RevisionActor } from '../repos/revisions'
@@ -121,6 +122,7 @@ export type EditOutcome =
   | { ok: false; reason: 'invalid'; issues: ValidationIssue[] }
   | { ok: false; reason: 'unsupported-version'; message: string }
   | { ok: false; reason: 'nul-byte' }
+  | { ok: false; reason: 'lone-surrogate' }
 
 /** `PatchError`를 잡아 `patch-failed` 결과 값으로 바꾼다. 다른 예외는 다시 던진다. */
 function toPatchFailed(error: unknown): Extract<EditOutcome, { reason: 'patch-failed' }> {
@@ -244,6 +246,9 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
     // 이 엔진에 op 종류가 늘어나면(예: 값을 안 남기는 삭제류 연산) 그 기댈 곳이 사라진다.
     if (containsNulByte(input.ops) || containsNulByte(inverse) || containsNulByte(after)) {
       return { ok: false, reason: 'nul-byte' }
+    }
+    if (containsLoneSurrogate(input.ops) || containsLoneSurrogate(inverse) || containsLoneSurrogate(after)) {
+      return { ok: false, reason: 'lone-surrogate' }
     }
 
     // 9·10단계: 여기 도달했다는 것 자체가 1~8 전부를 통과했다는 뜻이다. 이제부터만

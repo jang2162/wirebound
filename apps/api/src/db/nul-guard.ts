@@ -42,6 +42,38 @@ export function containsNulByte(value: unknown): boolean {
   return false
 }
 
+/** 문자열에 짝 없는 서로게이트(높은 쪽 D800–DBFF 뒤에 낮은 쪽 DC00–DFFF 가 안 오거나, 낮은 쪽이 홀로 선 것)가 있는가. */
+function hasLoneSurrogate(text: string): boolean {
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index)
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = text.charCodeAt(index + 1)
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true
+      index += 1
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * 문서 트리 안 어딘가의 문자열(값 · 객체 키)에 **짝 없는 서로게이트**가 있는지 훑는다 — `containsNulByte` 와 같은 모양의 훑기다.
+ * `JSON.stringify` 는 외짝을 이스케이프 글자로 그대로 내보내고 Postgres 의 `::jsonb` 캐스팅이 `22P02`(invalid input syntax for type
+ * json)로 죽어 **500** 이 된다. 텍스트 칸(`text`)에는 `pg` 가 UTF-8 로 옮기며 U+FFFD 로 바꿔 쓰므로 죽지 않는다 — 이 함수가 지키는 것은
+ * **jsonb 로 가는 입구**(편집 ops · 문서 · 프리셋 · 스냅샷)다.
+ */
+export function containsLoneSurrogate(value: unknown): boolean {
+  if (typeof value === 'string') return hasLoneSurrogate(value)
+  if (Array.isArray(value)) return value.some(containsLoneSurrogate)
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).some(
+      ([key, entryValue]) => hasLoneSurrogate(key) || containsLoneSurrogate(entryValue),
+    )
+  }
+  return false
+}
+
 /**
  * **사용자가 보낸 글자에 NUL 이 있어 쓰기 전에 거절한다** — `http/error-handler.ts`가 400 `bad-request`로
  * 낸다(그 자리가 이 클래스의 유일한 번역자다 — 라우트가 따로 잡지 않는다).

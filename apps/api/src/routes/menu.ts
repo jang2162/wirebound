@@ -32,6 +32,7 @@ import {
 } from '../repos/menu'
 import { CascadeSafetyTagTakenError, deleteMenuCascade } from '../services/menu-cascade'
 import { runTreeTransaction } from '../services/tree-write'
+import { releaseLocksOnPages } from '../ws/lock'
 import { notifyMenuChanged } from '../ws/notify'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
@@ -268,6 +269,8 @@ export function menuRoutes() {
           ])
         }
         notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
+        // 지운 서브트리의 페이지 — 견줌을 지났으니 화면이 본 id 집합이 곧 지운 것이다(`services/menu-cascade.ts` 의 3).
+        releaseLocksOnPages(app, projectId, body.expect.pageIds)
         return { deleted: outcome.deleted, safetySnapshot: outcome.safety }
       }
 
