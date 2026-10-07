@@ -148,10 +148,11 @@ describe('지운 페이지의 잠금은 놓인다', () => {
 
       const res = await ctx.app.inject({ method: 'POST', url: `/api/projects/${w.project.id}/snapshots/${snapshotId}/restore`, cookies: w.owner.cookie })
       expect(res.statusCode, res.body).toBe(200)
+      // 놓기는 응답 전에 끝난다(라우트가 커밋 뒤 동기로 부른다) — 방송을 기다리기 전에 저장소의 값으로 잰다.
+      expect(ctx.app.realtime.locks.liveIn(w.project.id).map((lock) => lock.pageId)).toEqual([w.keep.id])
 
       const list = await locksUntil(w.boraTab, (locks) => locks.length === 1, '복원이 지운 페이지의 잠금이 사라진다')
       expect(list.map((lock) => lock.nodeId)).toEqual([w.keepRoot])
-      expect(ctx.app.realtime.locks.liveIn(w.project.id).map((lock) => lock.pageId)).toEqual([w.keep.id])
     })
   })
 })
