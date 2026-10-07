@@ -1491,6 +1491,8 @@
   transform-origin: top left;
   cursor: grab;
   pointer-events: auto;
+  /* 터치로 곧바로 끈다(`touchStart: 'now'`) — 이 값이 없으면 첫 움직임이 스크롤이 되어 `pointercancel` 이 온다(좌측 손잡이와 같은 근거). */
+  touch-action: none;
 }
 
 /* 번호 마커(설계서 「설계서 화면 구조」). 선택 아웃라인과 **같은 자리에 산다** — 문서 노드 위에 겹쳐
