@@ -360,25 +360,32 @@ const poolsOf = new WeakMap<DbHandle, Pool>()
  *
  * **`createDb`로 만든 핸들이 아니면(트랜잭션 핸들 등) 돌리지 않고 `null`이다** — 버릴 연결을 고를 수 없다. 편집 트랜잭션이
  * COMMIT 답을 잃는 판은 풀 핸들에서만 난다.
+ *
+ * **`signal`이 서면 한도를 기다리지 않고 같은 길로 끝낸다**(그 연결을 버리고 `null`). 닫는 앱이 늦은 커밋 지켜보기를 걷는 자리다
+ * (`services/lost-commit.ts`의 `createLateCommitWatch`) — `pool.end()`는 빌려 간 연결이 돌아올 때까지 기다린다.
  */
-export async function readWithin<R>(db: DbHandle, query: CompiledQuery<R>, ms: number): Promise<R[] | null> {
+export async function readWithin<R>(db: DbHandle, query: CompiledQuery<R>, ms: number, signal?: AbortSignal): Promise<R[] | null> {
   const pool = poolsOf.get(db)
-  if (pool === undefined) return null
+  if (pool === undefined || signal?.aborted === true) return null
   return new Promise<R[] | null>((resolve) => {
     let settled = false
     let held: PoolClient | null = null
     const settle = (rows: R[] | null) => {
       settled = true
       clearTimeout(timer)
+      signal?.removeEventListener('abort', giveUp)
       resolve(rows)
     }
-    const timer = setTimeout(() => {
+    const giveUp = () => {
+      if (settled) return
       // 질의 중이면 그 연결을 버린다 — 걸린 질의는 연결이 닫히며 거절된다(아래 `catch`가 삼킨다).
       if (held !== null) held.release(true)
       held = null
       settle(null)
-    }, ms)
+    }
+    const timer = setTimeout(giveUp, ms)
     timer.unref()
+    signal?.addEventListener('abort', giveUp, { once: true })
     pool.connect().then(
       async (client) => {
         if (settled) {

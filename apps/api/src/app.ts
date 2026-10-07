@@ -26,6 +26,7 @@ import { treeRoutes } from './routes/tree'
 import { ensureCatalog } from './schema-setup'
 import type { ScreenRenderer } from './services/screen-render'
 import { readExportRuntime } from './services/export-runtime'
+import { createLateCommitWatch, type LateCommitWatch } from './services/lost-commit'
 import { backfillProjectThemes, seedSystemThemes } from './services/system-themes'
 import { withTransaction } from './db/tx'
 import { registerRealtime } from './ws'
@@ -38,6 +39,8 @@ declare module 'fastify' {
      * 막힘을 푸는 입구(`auth/unlock-socket.ts` — `main.ts` 가 연다)가 푼다.
      */
     loginLimiter: LoginLimiter
+    /** 이 앱의 늦은 커밋 지켜보기 — 트리 쓰기가 답을 잃은 COMMIT 을 응답 뒤에도 본다(`services/lost-commit.ts`의 `createLateCommitWatch`). 앱을 닫을 때 걷는다. */
+    lateCommits: LateCommitWatch
   }
 }
 
@@ -228,6 +231,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   app.decorate('db', db)
   app.decorate('loginLimiter', createLoginLimiter())
+  app.decorate('lateCommits', createLateCommitWatch(db))
+  app.addHook('onClose', async () => app.lateCommits.stop())
   closeConnectionsAfterReplyWhileClosing(app)
   registerErrorHandler(app)
   await registerAuthPlugin(app, config)

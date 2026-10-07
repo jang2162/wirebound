@@ -16,7 +16,7 @@
  * 맨 끝 문장) 커밋을 확인하면 그대로 성공으로 돌려줄 수 있다.
  *
  * **한도 뒤에 커밋된 것.** 확인 한도(`LOST_COMMIT_PROBE_MS`)를 넘겨도 끊긴 연결의 COMMIT 이 서버에서 아직 돌 수 있다(트리거 · 잠금 대기). 응답은 503 으로
- * 보내되 그 xid 의 결말을 `LOST_COMMIT_LATE_MS` 까지 응답 뒤에도 지켜보다 커밋되면 신호를 낸다(`runConfirmedTransaction` 의 `onLateCommit`). **편집 ·
+ * 보내되 그 xid 의 결말을 `LOST_COMMIT_LATE_MS` 까지 응답 뒤에도 지켜보다 커밋되면 신호를 낸다(`runConfirmedTransaction` 의 `late` — 앱의 `lateCommits`). **편집 ·
  * 복원 · 게시의 늦은 커밋은 지켜보지 않는다** — 그 방송은 번호 프레임(`seq` 의 이음)이라 늦게 내면 순서가 틀어진다.
  *
  * **지금 번호로 낸다 — 이 쓰기가 올린 번호가 아니라.** 그 번호가 이 쓰기의 것 이상이면 받는 쪽은 그 판까지 받고, 그 사이 더 나아갔으면
@@ -50,7 +50,7 @@ export async function runTreeTransaction<T>(
       return true
     },
     // 한도 안에 결말이 안 났다 — 503 «모름» 뒤에 커밋되면 신호를 낸다(머리말의 «한도 뒤에 커밋된 것»).
-    () => signal(LOST_COMMIT_PROBE_MS),
+    { watch: app.lateCommits, onCommit: () => signal(LOST_COMMIT_PROBE_MS) },
   )
   return result
 }

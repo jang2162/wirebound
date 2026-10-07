@@ -72,6 +72,12 @@ export interface FaultProxy {
    * 자리다(잃은 COMMIT 의 결말을 묻는 폴링). 머리말대로 매개변수 값도 글자에 든다.
    */
   countQueries(fragment: string): { readonly count: number }
+  /**
+   * `fragment` 를 담은 덩어리를 **Postgres 에 넘기지 않고 버린다 — 연결은 둔다**(그 질의의 답이 영영 안 온다). `stop()`까지 모든 연결에서
+   * 계속 서고, 무장 · 붙잡기와 따로 선다(함께 걸 수 있다). `count`는 버린 덩어리 수다. 그 연결의 질의 하나가 답을 못 받는 판(NAT 유휴 끊김 ·
+   * 죽은 유휴 연결 · 분할)의 흉내다 — 다른 질의는 그대로 지나므로 «그 사이 다른 요청은 멀쩡하다»는 이 흉내의 산물이다.
+   */
+  swallowQueries(fragment: string): { stop(): void; readonly count: number }
   /** 무장이 쏴졌는가. */
   readonly fired: boolean
   close(): Promise<void>
@@ -131,6 +137,7 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
   let delay: { fragment: string; ms: number | Promise<void>; onHeld?: () => void } | null = null
   const startup: StartupPolicy = { reject: new Set(), drop: new Set() }
   const counters: { fragment: string; count: number }[] = []
+  const swallows: { fragment: string; on: boolean; count: number }[] = []
   const sockets = new Set<net.Socket>()
 
   const server = net.createServer((client) => {
@@ -173,6 +180,11 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
       }
       const text = chunk.toString('latin1').toLowerCase()
       for (const counter of counters) if (text.includes(counter.fragment)) counter.count += 1
+      const swallow = swallows.find((slot) => slot.on && text.includes(slot.fragment))
+      if (swallow !== undefined) {
+        swallow.count += 1
+        return
+      }
       if (arm?.kind === 'query' && text.includes(arm.fragment)) {
         arm = null
         fired = true
@@ -291,6 +303,18 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
       return {
         get count() {
           return counter.count
+        },
+      }
+    },
+    swallowQueries: (fragment) => {
+      const slot = { fragment: fragment.toLowerCase(), on: true, count: 0 }
+      swallows.push(slot)
+      return {
+        stop: () => {
+          slot.on = false
+        },
+        get count() {
+          return slot.count
         },
       }
     },
