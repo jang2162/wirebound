@@ -10,14 +10,14 @@
 import { sql } from 'kysely'
 import type { ViewState, WbNode } from '@wirebound/schema'
 import { assertLocking } from '../db/locking'
-import { containsNulByte } from '../db/nul-guard'
+import { containsLoneSurrogate, containsNulByte } from '../db/nul-guard'
 import type { DbHandle } from '../db/tx'
 import { withTransaction } from '../db/tx'
 
-/** 프리셋 어딘가에 NUL(U+0000)이 있을 때 던진다. 호출자가 400으로 매핑한다. */
+/** 프리셋 어딘가에 NUL(U+0000)이나 jsonb 가 못 담는 짝 없는 서로게이트가 있을 때 던진다. 호출자가 400으로 매핑한다. */
 export class PresetNulByteError extends Error {
-  constructor() {
-    super('프리셋에 NUL 문자(U+0000)를 포함할 수 없습니다')
+  constructor(reason: 'nul' | 'lone-surrogate' = 'nul') {
+    super(reason === 'nul' ? '프리셋에 NUL 문자(U+0000)를 포함할 수 없습니다' : '프리셋에 짝 없는 서로게이트 글자를 포함할 수 없습니다')
     this.name = 'PresetNulByteError'
   }
 }
@@ -113,6 +113,9 @@ export async function insertPreset(
     containsNulByte(input.viewStates ?? null)
   ) {
     throw new PresetNulByteError()
+  }
+  if (containsLoneSurrogate(input.nodes) || containsLoneSurrogate(input.viewStates ?? null)) {
+    throw new PresetNulByteError('lone-surrogate')
   }
 
   return withTransaction(db, async (trx) => {

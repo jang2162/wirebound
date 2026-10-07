@@ -1,5 +1,6 @@
 import type { Writable } from 'node:stream'
 import type { FastifyInstance } from 'fastify'
+import type { Pool } from 'pg'
 import { buildApp, type BuildAppOptions } from '../src/app'
 import type { ApiConfig } from '../src/config'
 import { loadConfig } from '../src/config'
@@ -242,6 +243,13 @@ export async function withRealApi(
 
 export interface ProxiedRealApi extends RealApiContext {
   proxy: FaultProxy
+  /** 앱의 풀 — 케이스가 쥔 칸(`totalCount − idleCount`)을 읽는다. */
+  pool: Pool
+  /**
+   * 앱을 닫고 풀을 끝낸다 — 종료 신호의 차례(`shutdown.ts` — `app.close()` 뒤 `db.destroy()`)와 같다. 두 단계가 걸린 시간(ms)을 돌려준다.
+   * 부른 뒤에는 하네스의 끝이 다시 닫지 않는다.
+   */
+  close(): Promise<{ appMs: number; dbMs: number }>
 }
 
 /**
@@ -250,16 +258,25 @@ export interface ProxiedRealApi extends RealApiContext {
  */
 export async function withProxiedRealApi(fn: (ctx: ProxiedRealApi) => Promise<void>): Promise<void> {
   const proxy = await startFaultProxy(TEST_DATABASE_URL)
-  const db = createDb(createPool(proxy.url, () => undefined))
+  const pool = createPool(proxy.url, () => undefined)
+  const db = createDb(pool)
   const app = await buildApp({ db, config: testConfig() })
   await app.listen({ port: 0, host: '127.0.0.1' })
   const address = app.server.address()
   if (address === null || typeof address === 'string') throw new Error('포트를 열지 못했습니다')
-  try {
-    await fn({ app, db, port: address.port, proxy })
-  } finally {
+  let closed = false
+  const close = async (): Promise<{ appMs: number; dbMs: number }> => {
+    closed = true
+    const start = performance.now()
     await app.close()
+    const appClosed = performance.now()
     await db.destroy()
+    return { appMs: Math.round(appClosed - start), dbMs: Math.round(performance.now() - appClosed) }
+  }
+  try {
+    await fn({ app, db, port: address.port, proxy, pool, close })
+  } finally {
+    if (!closed) await close()
     await proxy.close()
   }
 }

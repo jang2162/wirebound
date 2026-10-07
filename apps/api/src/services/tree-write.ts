@@ -1,20 +1,23 @@
 /**
  * **트리 쓰기의 트랜잭션** — 메뉴 · 페이지 트리를 바꾸는 라우트(`routes/menu.ts` · `routes/pages.ts`)가 `withTransaction` 대신 부른다.
  *
- * **COMMIT 답을 잃어도 커밋됐으면 `menu-changed`를 낸다.** 라우트는 트랜잭션이 정상 반환한 뒤에만 방송한다 — 답을 잃은 쓰기는
- * 503 «모름»으로 끝나 그 커밋의 신호가 아무 연결에도 안 가고, 남의 트리는 다음 신호 · 재연결까지 낡는다. 낸 탭도 그 503 을 실패로
- * 말하고 다시 받지 않는다(`apps/web`의 `tree/use-tree-commands.tsx` — 트리 조작의 실패는 404 만 다시 받는다).
+ * **COMMIT 답을 잃어도 커밋됐으면 성공으로 답하고 `menu-changed`를 낸다.** 라우트는 트랜잭션이 정상 반환한 뒤에만 방송한다 — 답을 잃은 쓰기가
+ * 503 «모름»으로 끝나면 그 커밋의 신호가 아무 연결에도 안 가고, 남의 트리는 다음 신호 · 재연결까지 낡는다. 낸 탭도 «실패»를 말한다.
  *
  * 확인은 복원과 같은 길이다(`services/lost-commit.ts`의 `runConfirmedTransaction` — 그 xid 의 결말을 새 연결로 묻는다):
  *
  * | 결말 | 답 | 신호 |
  * |---|---|---|
- * | 커밋됐다 | 원래 오류(503 «모름») 그대로 | **새 연결로 읽은 지금 번호로 낸다** |
+ * | 커밋됐다 | **본문의 결과 그대로 — 답을 안 잃은 판과 같다** | 새 연결로 읽은 지금 번호로 여기서 낸다(라우트도 제 번호로 한 번 더 낸다 — 신호는 멱등이다) |
  * | 커밋 안 됐다(`aborted`) | 봉투 있는 500 «반영되지 않았습니다» | 안 낸다 |
- * | 한도 안에 결말을 모른다 | 503 «모름» | 안 낸다 |
+ * | 한도 안에 결말을 모른다 | 503 «모름» | **그 뒤에 커밋되면 낸다**(아래) |
  *
- * **답은 503 그대로 둔다** — 라우트마다 결과의 꼴(번호를 결과에 싣는가 · 바깥 변수에 적는가)이 달라 커밋된 결과를 성공으로 되돌려
- * 줄 자리가 하나가 아니다. 신호만 있으면 낸 탭도 그 신호로 트리를 다시 받는다(낸 연결도 받는다 — `ws/notify.ts`의 `notifyMenuChanged`).
+ * **본문이 끝까지 돌았으면 그 결과가 곧 커밋된 결과다** — 라우트는 번호 · 만든 행을 결과나 바깥 변수에 **커밋 앞에서** 적으므로(`bumpMenuRev` 가
+ * 맨 끝 문장) 커밋을 확인하면 그대로 성공으로 돌려줄 수 있다.
+ *
+ * **한도 뒤에 커밋된 것.** 확인 한도(`LOST_COMMIT_PROBE_MS`)를 넘겨도 끊긴 연결의 COMMIT 이 서버에서 아직 돌 수 있다(트리거 · 잠금 대기). 응답은 503 으로
+ * 보내되 그 xid 의 결말을 `LOST_COMMIT_LATE_MS` 까지 응답 뒤에도 지켜보다 커밋되면 신호를 낸다(`runConfirmedTransaction` 의 `late` — 앱의 `lateCommits`). **편집 ·
+ * 복원 · 게시의 늦은 커밋은 지켜보지 않는다** — 그 방송은 번호 프레임(`seq` 의 이음)이라 늦게 내면 순서가 틀어진다.
  *
  * **지금 번호로 낸다 — 이 쓰기가 올린 번호가 아니라.** 그 번호가 이 쓰기의 것 이상이면 받는 쪽은 그 판까지 받고, 그 사이 더 나아갔으면
  * 받는 쪽이 이미 가진 번호라 넘긴다(신호는 멱등이다 — 번호가 화면의 판보다 클 때만 다시 받는다).
@@ -26,7 +29,7 @@ import { requestEventActor } from '../auth/actor'
 import type { DbHandle } from '../db/tx'
 import { readMenuRevWithin } from '../repos/menu'
 import { notifyMenuChanged } from '../ws/notify'
-import { runConfirmedTransaction } from './lost-commit'
+import { LOST_COMMIT_PROBE_MS, runConfirmedTransaction } from './lost-commit'
 
 export async function runTreeTransaction<T>(
   app: FastifyInstance,
@@ -34,11 +37,20 @@ export async function runTreeTransaction<T>(
   request: FastifyRequest,
   fn: (trx: DbHandle) => Promise<T>,
 ): Promise<T> {
-  const { result } = await runConfirmedTransaction(app.db, fn, async (_result, deadline) => {
-    const rev = await readMenuRevWithin(app.db, projectId, deadline - Date.now())
+  const signal = async (ms: number): Promise<void> => {
+    const rev = await readMenuRevWithin(app.db, projectId, ms)
     if (rev !== null) notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
-    // 답은 «모름» 그대로다(머리말).
-    return null
-  })
+  }
+  const { result } = await runConfirmedTransaction(
+    app.db,
+    fn,
+    async (_result, deadline) => {
+      await signal(deadline - Date.now())
+      // 커밋을 확인했다 — 본문의 결과가 성공이다(머리말). 지금 번호를 못 읽었어도 커밋은 확인됐다.
+      return true
+    },
+    // 한도 안에 결말이 안 났다 — 503 «모름» 뒤에 커밋되면 신호를 낸다(머리말의 «한도 뒤에 커밋된 것»).
+    { watch: app.lateCommits, onCommit: () => signal(LOST_COMMIT_PROBE_MS) },
+  )
   return result
 }

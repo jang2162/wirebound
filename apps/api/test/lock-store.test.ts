@@ -320,3 +320,133 @@ describe('무엇이 바뀌었는지 낸다 — 안 바뀐 것을 룸에 알리�
     expect(store.hold(claim())).toBe(true)
   })
 })
+
+describe('판정을 지난 그대로인가 — 하트비트가 문서를 안 읽어도 되는 때(`isJudged`)', () => {
+  const HEAD = 7
+  const judged = (store: LockStore, nodeIds: readonly string[] = ['n_a'], headSeq = HEAD, connectionId = 'wsc_1') =>
+    store.isJudged(connectionId, PAGE, nodeIds, headSeq)
+
+  it('도장을 찍은 그대로면 참이다 — 같은 집합 · 같은 머리 번호 · 남의 잠금이 안 바뀜', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim(), HEAD)
+    store.hold(claim({ connectionId: 'wsc_2', userId: 'u_dahye', nodeId: 'n_z' }), HEAD)
+    // 남이 **나보다 뒤에** 잡았으니 내 도장은 낡았다 — 아래 케이스가 그것이다. 여기서는 내가 다시 찍어 지금 세대에 맞춘다.
+    store.hold(claim(), HEAD)
+
+    expect(judged(store)).toBe(true)
+  })
+
+  it('도장 없이 쥔 집합은 거짓이다', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim())
+
+    expect(judged(store)).toBe(false)
+  })
+
+  it('문서의 머리 번호가 달라졌으면 거짓이다 — 편집 · 복원이 문서를 바꿨다', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim(), HEAD)
+
+    expect(judged(store, ['n_a'], HEAD + 1)).toBe(false)
+  })
+
+  it('집합이 다르면 거짓이다 — 노드를 더하거나 뺀 프레임은 새로 판정한다', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim({ nodeIds: ['n_a', 'n_b'] }), HEAD)
+
+    expect(judged(store, ['n_a'])).toBe(false)
+    expect(judged(store, ['n_a', 'n_b', 'n_c'])).toBe(false)
+    expect(judged(store, ['n_b', 'n_a'])).toBe(true)
+  })
+
+  it('남이 새로 잡으면 거짓이다 — 내 판정은 그 잠금을 못 봤다', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim(), HEAD)
+    store.hold(claim({ connectionId: 'wsc_2', userId: 'u_dahye', nodeId: 'n_z' }))
+
+    expect(judged(store)).toBe(false)
+  })
+
+  it('남이 놓거나 만료되어도 거짓이다 — 목록이 바뀐 것은 같다', () => {
+    const clock = fakeClock()
+    const store = createLockStore(clock.now)
+    store.hold(claim({ connectionId: 'wsc_2', userId: 'u_dahye', nodeId: 'n_z' }))
+    store.hold(claim(), HEAD)
+    expect(judged(store)).toBe(true)
+
+    store.release('wsc_2')
+    expect(judged(store)).toBe(false)
+
+    store.hold(claim(), HEAD)
+    store.hold(claim({ connectionId: 'wsc_3', userId: 'u_dahye', nodeId: 'n_y' }))
+    store.hold(claim(), HEAD)
+    expect(judged(store)).toBe(true)
+    clock.advance(LOCK_TTL_MS - 1)
+    store.hold(claim(), HEAD)
+    clock.advance(1)
+    // wsc_3 만 만료된다 — 걷는 자리(`sweep` · `liveIn`)가 세대를 올린다. 걷기 전의 `isJudged` 는 만료를 안 본다(남의 잠금이 줄기만 하므로 판정을 건너뛰어도 막지 못할 것이 안 생긴다).
+    store.sweep()
+    expect(judged(store)).toBe(false)
+  })
+
+  it('남의 하트비트는 세대를 안 올린다 — 같은 집합을 다시 보내는 것은 목록이 안 바뀐다', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim({ connectionId: 'wsc_2', userId: 'u_dahye', nodeId: 'n_z' }))
+    store.hold(claim(), HEAD)
+
+    store.hold(claim({ connectionId: 'wsc_2', userId: 'u_dahye', nodeId: 'n_z' }))
+
+    expect(judged(store)).toBe(true)
+  })
+
+  it('다른 프로젝트의 변경은 세대를 안 올린다', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim(), HEAD)
+
+    store.hold(claim({ connectionId: 'wsc_9', projectId: OTHER_PROJECT, nodeId: 'n_q' }))
+
+    expect(judged(store)).toBe(true)
+  })
+
+  it('만료되면 거짓이다 — 도장은 쥔 집합에 붙어 산다', () => {
+    const clock = fakeClock()
+    const store = createLockStore(clock.now)
+    store.hold(claim(), HEAD)
+
+    clock.advance(LOCK_TTL_MS)
+
+    expect(judged(store)).toBe(false)
+  })
+})
+
+describe('지운 페이지의 잠금을 놓는다(`releasePages`)', () => {
+  it('그 페이지의 잠금만 연결과 상관없이 놓고, 놓은 것이 있으면 true 다', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim({ connectionId: 'wsc_1', pageId: PAGE, nodeId: 'n_a' }))
+    store.hold(claim({ connectionId: 'wsc_2', pageId: PAGE, userId: 'u_dahye', nodeId: 'n_b' }))
+    store.hold(claim({ connectionId: 'wsc_3', pageId: OTHER_PAGE, nodeId: 'n_c' }))
+
+    expect(store.releasePages(PROJECT, [PAGE])).toBe(true)
+
+    expect(nodeIdsIn(store)).toEqual(['n_c'])
+  })
+
+  it('놓을 것이 없으면 false 이고 다른 프로젝트의 같은 페이지 id 는 안 건드린다', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim({ connectionId: 'wsc_1', projectId: OTHER_PROJECT, pageId: PAGE, nodeId: 'n_a' }))
+
+    expect(store.releasePages(PROJECT, [PAGE])).toBe(false)
+    expect(nodeIdsIn(store, OTHER_PROJECT)).toEqual(['n_a'])
+  })
+
+  it('놓으면 목록 세대가 올라 남의 도장이 낡는다(`isJudged`)', () => {
+    const store = createLockStore(fakeClock().now)
+    store.hold(claim({ connectionId: 'wsc_2', pageId: OTHER_PAGE, userId: 'u_dahye', nodeId: 'n_z' }))
+    store.hold(claim({ connectionId: 'wsc_1' }), 7)
+    expect(store.isJudged('wsc_1', PAGE, ['n_a'], 7)).toBe(true)
+
+    store.releasePages(PROJECT, [OTHER_PAGE])
+
+    expect(store.isJudged('wsc_1', PAGE, ['n_a'], 7)).toBe(false)
+  })
+})

@@ -389,11 +389,46 @@ describe('답을 잃은 쓰기', () => {
         const after = await treeRev(ctx, fx)
         await watcher.quiet()
         const revs = watcher.received.filter((frame) => frame.type === 'menu-changed').map((frame) => (frame as { rev: number }).rev)
-        // 받은 신호의 마지막이 지금 번호다 — 앞의 것은 `send` 안에서 세운 픽스처의 신호다.
-        expect({ status: res.statusCode, last: revs.at(-1) ?? null }).toEqual({ status: write.status ?? 503, last: after })
+        // 받은 신호의 마지막이 지금 번호다 — 앞의 것은 `send` 안에서 세운 픽스처의 신호다. 커밋을 확인했으니 답은 성공이다(2xx — 쓰기마다 코드가 다르다).
+        expect(res.statusCode, `${write.label} 의 답`).toBeGreaterThanOrEqual(200)
+        expect(res.statusCode, `${write.label} 의 답`).toBeLessThan(300)
+        expect(revs.at(-1) ?? null).toBe(after)
       })
     }, 30_000)
   }
+
+  /**
+   * **확인 한도(`LOST_COMMIT_PROBE_MS` 1s)를 넘겨 커밋되는 잃은 COMMIT 도 신호를 낸다**(`services/tree-write.ts` 의 «한도 뒤에 커밋된 것»). 답은 503 «모름»이지만
+   * 커밋은 된다 — 신호가 없으면 남의 트리가 다음 신호 · 재연결까지 낡는다. COMMIT 을 3s 늦추고(`DEFERRABLE INITIALLY DEFERRED` 제약 트리거의
+   * `pg_sleep`) api 쪽 연결만 끊는다(`halfCutOnQuery`) — 한도 안에는 결말이 안 난다.
+   */
+  it('한도를 넘겨 커밋된 잃은 COMMIT — 503 «모름» 뒤 커밋되면 룸이 그 번호의 신호를 받는다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const watcher = await join(ctx, fx.projectId, fx.viewer)
+      await watcher.waitFor('joined')
+      const from = await treeRev(ctx, fx)
+      await sql.raw(`create or replace function zz_slow_rev() returns trigger language plpgsql as $$ begin perform pg_sleep(3); return null; end $$`).execute(db)
+      await sql.raw(`create constraint trigger zz_slow_rev after insert or update on project_menu_revs deferrable initially deferred for each row execute function zz_slow_rev()`).execute(db)
+      try {
+        ctx.proxy.halfCutOnQuery('commit')
+        const res = await inject(ctx, fx.owner, 'POST', `/api/projects/${fx.projectId}/menu`, { parentId: null, title: '늦게 커밋될 메뉴' })
+        expect(ctx.proxy.fired).toBe(true)
+        expect(res.statusCode).toBe(503)
+        // 커밋은 3s 뒤에 선다 — 그 번호의 신호가 한도 밖에서라도 와야 한다.
+        const deadline = Date.now() + 15_000
+        while (Date.now() < deadline && !watcher.received.some((frame) => frame.type === 'menu-changed' && frame.rev > from)) {
+          await watcher.quiet(100)
+        }
+        const after = await treeRev(ctx, fx)
+        expect(after).toBeGreaterThan(from)
+        expect(watcher.received.filter((frame) => frame.type === 'menu-changed').map((frame) => frame.rev).at(-1) ?? null).toBe(after)
+      } finally {
+        await sql`drop trigger if exists zz_slow_rev on project_menu_revs`.execute(db)
+        await sql`drop function if exists zz_slow_rev()`.execute(db)
+      }
+    })
+  }, 40_000)
 
   it('COMMIT 이 서버에 못 닿으면 — 500 «반영되지 않았습니다» · 번호 그대로 · 신호 없음', async () => {
     await withProxiedRealApi(async (ctx) => {

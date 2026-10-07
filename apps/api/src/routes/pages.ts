@@ -65,7 +65,7 @@ import {
 } from '@wirebound/schema'
 import { requestActor, requestEventActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
-import { containsNulByte } from '../db/nul-guard'
+import { containsLoneSurrogate, containsNulByte } from '../db/nul-guard'
 import { badRequest, conflict, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
 // **실패 사유 → 상태 코드 표는 `http/edit-outcome.ts`에 둔다** — `routes/comments.ts`도 같은 표를
 // 쓴다(코멘트가 번호를 부여하려고 같은 파이프라인을 부른다). `withWarnings`가
@@ -78,6 +78,7 @@ import { OpsBody } from '../http/patch-ops'
 import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
 import { runEditTransaction } from '../services/lost-commit'
+import { releaseLocksOnPages } from '../ws/lock'
 import { broadcastOrigin, notifyMenuChanged, notifyPageChanged } from '../ws/notify'
 import { bumpMenuRev } from '../repos/menu'
 import { runTreeTransaction } from '../services/tree-write'
@@ -521,6 +522,10 @@ export function pageRoutes() {
       if (containsNulByte(migrated)) {
         throw badRequest('문서에 NUL 문자(U+0000)를 포함할 수 없습니다')
       }
+      // 짝 없는 서로게이트도 같은 자리에서 끊는다 — jsonb 캐스팅이 죽어 500 이 된다(`db/nul-guard.ts` 의 `containsLoneSurrogate`).
+      if (containsLoneSurrogate(migrated)) {
+        throw badRequest('문서에 짝 없는 서로게이트 글자를 포함할 수 없습니다')
+      }
 
       // `PATCH .../ops`의 같은 검사와 같은 이유로 `as`로 좁히지 않고 던진다: 아래에서
       // `currentUser.id`·`.name`을 **반드시** 읽으므로, `as` 버전은 가드가 빠지는 순간
@@ -742,6 +747,7 @@ export function pageRoutes() {
         throw notFound()
       }
       notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
+      releaseLocksOnPages(app, projectId, [pageId])
       reply.code(204).send()
     })
   }

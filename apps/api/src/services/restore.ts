@@ -135,6 +135,8 @@ export interface RestoreResult {
    * 서버가 지은 payload 에서는 늘 비어 있고, 차는 것은 손댄 payload · 다른 인스턴스에서 온 DB · 뒤에 조여진 규칙이다.
    */
   droppedThemeTokens: string[]
+  /** 이 복원이 지운 페이지(판에 없던 것) — 라우트가 커밋 뒤 그 잠금을 놓는다(`ws/lock.ts`의 `releaseLocksOnPages`). */
+  deletedPageIds: string[]
 }
 
 export type RestoreOutcome =
@@ -313,6 +315,7 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
   const schemaByPage = new Map(now.pages.map((page) => [page.id, page.schema]))
   let theme: ProjectThemeBinding | null = null
   const actorLabel = restoreActorLabel(target.tag)
+  const deletedPageIds: string[] = []
 
   for (const step of steps) {
     switch (step.kind) {
@@ -321,6 +324,7 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
         break
       case 'delete-page':
         await deletePageRow(trx, input.projectId, step.id)
+        deletedPageIds.push(step.id)
         break
       case 'create-menu':
         await insertMenuNodeWithId(trx, input.projectId, step.node)
@@ -404,5 +408,5 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
     }
   }
 
-  return { summary, safety: { id: safety.id, tag: safety.tag }, theme, droppedThemeTokens }
+  return { summary, safety: { id: safety.id, tag: safety.tag }, theme, droppedThemeTokens, deletedPageIds }
 }

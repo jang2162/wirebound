@@ -140,13 +140,14 @@ function undoButton(): HTMLButtonElement {
 /**
  * 페이지 문서에 둘 수 있는 타입. **손으로 적지 않는다** — 카탈로그를 훑어 실제로
  * `validatePage`를 통과하는 것만 남긴다(`../edit/create-node.test.ts`의 `페이지에 둘 수 없는
- * 타입은 Slot뿐이다`와 같은 계산이다).
+ * 타입은 Slot뿐이다`와 같은 계산이다). **뿌리가 될 수 있는 타입(`Page`)은 뺀다** — 안에 두면 한 장이 뿌리를 둘 갖는다(`panels/type-picker.tsx` 의 `placeableGroups`).
  */
 function placeableTypes(): string[] {
   return listComponents()
     .filter((def) => {
       const node = createNode(def.type, () => 'n-probe')
       if (node === null) return false
+      if (!validatePage({ version: 1, root: node }).some((issue) => issue.code === 'bad-root')) return false
       return (
         validatePage({ version: 1, root: { id: 'r', type: 'Page', children: [node] } }).length === 0
       )
@@ -179,7 +180,8 @@ describe('타입 목록과 노드 추가', () => {
       .filter((type) => !placeableTypes().includes(type))
 
     // 상태 영역 둘(`THEMELESS_TYPES`)은 홀로 설 수 없어 같은 거름에 빠진다 — 팔레트에도 카드가 없다. 나누기는 명령으로만 한다.
-    expect(blocked).toEqual(['Slot', 'StateSwitch', 'StateCase'])
+    // `Page` 는 뿌리 타입이라 안에 못 둔다(`bad-root` 가 안 나는 타입).
+    expect(blocked).toEqual(['Page', 'Slot', 'StateSwitch', 'StateCase'])
     for (const type of blocked) {
       expect(optionValues(), type).not.toContain(type)
     }

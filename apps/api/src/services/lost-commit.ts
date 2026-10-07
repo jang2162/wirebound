@@ -65,6 +65,16 @@ export const LOST_COMMIT_POLL_MS = 10
 /** 다시 묻는 간격의 상한 — 결말을 늦게 알게 되는 몫이 이것까지다. */
 export const LOST_COMMIT_POLL_MAX_MS = 40
 
+/**
+ * 한도(`LOST_COMMIT_PROBE_MS`) 안에 결말이 안 난 잃은 COMMIT 을 **응답 뒤에도** 지켜보는 시간 — 넘기면 지켜보기를 그만둔다. 끊긴 연결의 COMMIT 은
+ * 서버에서 아직 돌 수 있고(트리거 · 잠금 대기) 커밋되면 방송이 빠진다. 트랜잭션 유휴 한도(`db/client.ts` 의 `idle_in_transaction_session_timeout`)보다
+ * 길게 두지 않는다 — 그 뒤에는 백엔드가 트랜잭션을 되돌려 `aborted` 다.
+ */
+export const LOST_COMMIT_LATE_MS = 30_000
+
+/** 응답 뒤 지켜보는 동안 결말을 묻는 간격 — 응답을 붙잡지 않으므로 조밀하게 안 묻는다(풀 칸을 덜 쓴다). 한 번 묻기의 한도는 `LOST_COMMIT_PROBE_MS`다. */
+export const LOST_COMMIT_LATE_POLL_MS = 500
+
 /** 커밋 안 된 것을 확인한 쓰기의 문장 — 봉투 있는 500 에 싣는다(머리말의 표). */
 export const DB_WRITE_NOT_APPLIED_MESSAGE = '데이터베이스와의 연결이 끊겨 요청이 반영되지 않았습니다 — 다시 시도하세요'
 
@@ -114,11 +124,15 @@ export interface Settled<T> {
  * `confirm`은 본문의 결과(끝까지 돈 것)와 확인의 마감(결말을 묻고 남은 몫)을 받아 **방송해도 되는가**를 낸다. `null`이면 «모름»이다
  * — 원래 오류를 그대로 던진다.
  * 확인할 것이 없는 결과(문서를 안 바꾼 쓰기)도 `null`이다 — 그 쓰기는 방송할 것이 없고, 커밋됐는지 가를 행도 없다.
+ *
+ * **`late`** — 한도 안에 결말이 안 난 판(503 «모름»)을 **응답 뒤에도** `late.watch` 로 지켜보다 커밋됐으면 `late.onCommit` 을 부른다(응답은
+ * 붙잡지 않는다 — `createLateCommitWatch`). 안 주면 한도 뒤에 커밋된 쓰기는 방송이 빠진다.
  */
 export async function runConfirmedTransaction<T>(
   db: DbHandle,
   fn: (trx: DbHandle) => Promise<T>,
   confirm: (result: T, deadline: number) => Promise<boolean | null>,
+  late?: { watch: LateCommitWatch; onCommit: (result: T) => Promise<void> | void },
 ): Promise<Settled<T>> {
   // 본문이 끝까지 돌았으면 그 결과와 xid 를 든다 — 그 뒤에 난 `DbConnectionLostError`는 COMMIT(과 뒤따른 ROLLBACK)의 것이다.
   const finished: { body?: { result: T; xid: string | null } } = {}
@@ -137,11 +151,101 @@ export async function runConfirmedTransaction<T>(
     const deadline = Date.now() + LOST_COMMIT_PROBE_MS
     const settled = await settleTransaction(db, body.xid, deadline)
     if (settled === 'aborted') throw internal(DB_WRITE_NOT_APPLIED_MESSAGE)
-    if (settled === null) throw error
+    if (settled === null) {
+      if (late !== undefined) late.watch.add(body.xid, () => late.onCommit(body.result))
+      throw error
+    }
     const broadcast = await confirm(body.result, deadline)
     if (broadcast === null) throw error
     return { result: body.result, broadcast, confirmedAfterLoss: true }
   }
+}
+
+/**
+ * **응답 뒤 늦은 커밋 지켜보기** — 앱마다 하나다(`app.ts`가 만들어 `app.lateCommits`에 두고 닫을 때 `stop`한다). 지켜볼 xid 를 모아
+ * **한 연결 · 한 질의로** 묻는다(`unnest`).
+ *
+ * **xid 마다 따로 묻지 않는 까닭.** 확인 질의가 답을 못 받는 판(분할 · 죽은 연결)에서는 묻기 하나가 칸 하나를 제 한도까지 쥔다 — 잃음 N 개를
+ * 따로 지켜보면 칸 N 개가 쥐여 풀이 차고 남의 프로젝트 요청까지 503 이다(잃음은 바로 그런 DB 장애 판에서 몰린다). 묶으면 지켜보기가 쥐는 칸은
+ * 언제나 하나까지다. 동시 수에 상한을 두는 길(넘치면 안 지켜본다)은 넘친 쓰기의 신호를 버린다.
+ *
+ * **한 번 묻기의 한도는 `LOST_COMMIT_PROBE_MS`다 — 마감(`LOST_COMMIT_LATE_MS`)까지 남은 몫이 아니라.** 남은 몫을 주면 조건이 풀린 뒤에도 그
+ * 묻기가 칸을 마감까지 쥐고, 답을 못 받은 채 마감에 닿아 신호가 빠진다. 못 물었으면 쉰 뒤(`LOST_COMMIT_LATE_POLL_MS`) 다시 묻는다 — xid
+ * 마다 제 마감까지.
+ *
+ * **`stop`은 답을 기다리는 묻기까지 걷는다**(그 연결째 버린다 — `readWithin`의 `signal`). `pool.end()`는 빌려 간 연결이 돌아올 때까지
+ * 기다려, 안 걷으면 종료가 묻기의 한도만큼 붙잡힌다. 신호를 내는 중의 읽기(`then` — 지금 번호)는 못 걷는다 — 그 읽기의 한도까지다.
+ *
+ * 잰 값은 `test/late-commit-watch.test.ts`(확인 질의 무응답 · 잃은 트리 쓰기 10).
+ */
+export interface LateCommitWatch {
+  /** 그 xid 가 `LOST_COMMIT_LATE_MS` 안에 커밋되면 `then`을 부른다. 기다리지 않고 돌아가며 던지지 않는다(실패는 삼킨다 — 응답은 이미 나갔다). */
+  add(xid: string, then: () => Promise<void> | void): void
+  /** 지켜보기를 걷는다 — 그 뒤의 `add`는 아무것도 안 한다. */
+  stop(): void
+}
+
+export function createLateCommitWatch(db: DbHandle): LateCommitWatch {
+  const pending = new Map<string, { deadline: number; then: () => Promise<void> | void }>()
+  const stopped = new AbortController()
+  let running = false
+  const drain = async (): Promise<void> => {
+    try {
+      for (;;) {
+        const now = Date.now()
+        for (const [xid, entry] of pending) if (entry.deadline <= now) pending.delete(xid)
+        if (pending.size === 0 || stopped.signal.aborted) return
+        const xids = [...pending.keys()]
+        const query = sql<{ xid: string; status: string | null }>`
+          select x::text as xid, pg_xact_status(x) as status from unnest(${xids}::xid8[]) as x
+        `.compile(db)
+        for (const row of (await readWithin(db, query, LOST_COMMIT_PROBE_MS, stopped.signal)) ?? []) {
+          // 아직 돈다 — 다음 묻기로. 결말이 났거나 xid 가 너무 옛것이면(`null`) 그만 본다.
+          if (row.status === 'in progress') continue
+          const entry = pending.get(row.xid)
+          pending.delete(row.xid)
+          // 차례로 낸다 — 신호의 읽기도 칸 하나를 쓴다.
+          if (row.status === 'committed' && entry !== undefined && !stopped.signal.aborted) {
+            await Promise.resolve()
+              .then(entry.then)
+              .catch(() => {})
+          }
+        }
+        await pause(LOST_COMMIT_LATE_POLL_MS, stopped.signal)
+      }
+    } finally {
+      // `return`과 같은 차례에 선다 — 그 사이에 든 `add`가 지켜보기 없이 남지 않는다.
+      running = false
+    }
+  }
+  return {
+    add(xid, then) {
+      if (stopped.signal.aborted) return
+      pending.set(xid, { deadline: Date.now() + LOST_COMMIT_LATE_MS, then })
+      if (running) return
+      running = true
+      drain().catch(() => {})
+    },
+    stop() {
+      stopped.abort()
+      pending.clear()
+    },
+  }
+}
+
+/** `ms` 쉰다 — `signal`이 서면 곧바로 깬다. 타이머가 프로세스를 붙잡지 않는다. */
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve()
+    const wake = () => {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', wake)
+      resolve()
+    }
+    const timer = setTimeout(wake, ms)
+    timer.unref()
+    signal.addEventListener('abort', wake, { once: true })
+  })
 }
 
 /** revision 하나를 남긴 쓰기의 그 revision — 확인이 찾는 행이다. */

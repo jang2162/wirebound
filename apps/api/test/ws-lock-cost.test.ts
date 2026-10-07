@@ -99,10 +99,28 @@ describe('하트비트 판정은 고른 수 × 남의 잠금 수로 늘지 않�
       const realHold = locks.hold
       let holdAt = 0
       let holds = 0
-      locks.hold = (claim) => {
+      locks.hold = (claim, judgedAtHeadSeq) => {
         holdAt = performance.now()
         holds += 1
-        return realHold.call(locks, claim)
+        return realHold.call(locks, claim, judgedAtHeadSeq)
+      }
+      // 도장이 하트비트를 건너뛰게 했는가 — 건너뛴 수를 센다(0 이면 위 «문서를 안 읽는다» 를 안 잰 것이다).
+      const realIsJudged = locks.isJudged
+      let skipped = 0
+      locks.isJudged = (...args) => {
+        const result = realIsJudged.apply(locks, args)
+        if (result) skipped += 1
+        return result
+      }
+      // 첫 하트비트는 판정을 다시 한다 — 쥔 뒤 남의 잠금이 더 섰으니 «판정을 지난 그대로» 가 아니다(`lock/store.ts` 의 `isJudged`). 그 뒤의 열 번이
+      // 도장 덕에 문서를 안 읽는 값이다. 첫 번째는 재지 않고 도장이 찍히기를 기다린다.
+      {
+        holdAt = 0
+        tabs[0]!.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[0], lockId: 1000 }))
+        for (let t = 0; t < 6000 && holdAt === 0; t += 1) await sleep(10)
+        expect(holdAt, '워밍업 `hold`가 안 불렸다').not.toBe(0)
+        holds = 0
+        skipped = 0
       }
       const beats: number[] = []
       let stall = 0
@@ -127,8 +145,11 @@ describe('하트비트 판정은 고른 수 × 남의 잠금 수로 늘지 않�
         clearInterval(ticker)
         stall = Math.max(stall, performance.now() - lastTick)
         locks.hold = realHold
+        locks.isJudged = realIsJudged
       }
-      console.log('BEATS', JSON.stringify({ p50: p50(beats), max: max(beats), stall, holds }))
+      console.log('BEATS', JSON.stringify({ p50: p50(beats), max: max(beats), stall, holds, skipped }))
+      // 열 번 다 도장으로 건너뛴다 — 그 사이 남의 잠금이 안 바뀌었고 문서도 그대로다.
+      expect(skipped).toBe(10)
       // **하트비트 단언을 여기서 한다** — 판정이 느린 판은 다음 단계(1s 주기의 하트비트 다섯)가 이벤트 루프를 채워 편집이 몇 분씩 서서
       // 케이스가 값이 아니라 시간 초과로 죽는다. 카나리아: 판정이 실제로 돌았다(`hold` 열 번).
       expect(holds).toBe(10)

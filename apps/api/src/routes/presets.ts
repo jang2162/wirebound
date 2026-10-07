@@ -70,7 +70,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { BUILTIN_PRESETS, ViewStatesSchema, WbNodeSchema, stripMarkers, type PagePreset } from '@wirebound/schema'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
-import { containsNulByte } from '../db/nul-guard'
+import { containsLoneSurrogate, containsNulByte } from '../db/nul-guard'
 import { withTransaction } from '../db/tx'
 import { badRequest, notFound, unauthenticated } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
@@ -183,6 +183,10 @@ export function presetRoutes() {
         containsNulByte(body.viewStates ?? null)
       ) {
         throw badRequest('프리셋에 NUL 문자(U+0000)를 포함할 수 없습니다')
+      }
+      // 짝 없는 서로게이트는 `schema`·`viewStates`(jsonb)에서 500 이다 — 이름·설명(텍스트 칸)은 U+FFFD 로 바뀌어 죽지 않는다.
+      if (containsLoneSurrogate(body.schema) || containsLoneSurrogate(body.viewStates ?? null)) {
+        throw badRequest('프리셋에 짝 없는 서로게이트 글자를 포함할 수 없습니다')
       }
 
       // `projectGuard('editor')`가 이미 인증을 요구하므로 여기 도달했다면 `currentUser`는

@@ -5,7 +5,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 판을 열면 캔버스 칸이 준다 | 판 높이만큼 안 준다 · 최대에서 캔버스 칸이 `CANVAS_MIN_HEIGHT` 아래 · 셸이 세로로 넘친다 · 새로고침 뒤 열림 · 높이를 잃는다 |
- * | 축소판 — 카드마다 표본 | 탭 다섯을 돌며 어느 카드의 창 안에 그 타입의 `[data-wb-component]` 가 안 선다(빈 카드) · 카드가 18 보다 적다 · 줄임 비의 가운데 값이 0.6 아래(축소판이 작아 안 읽힌다) |
+ * | 축소판 — 카드마다 표본 | 탭 다섯을 돌며 어느 카드의 창 안에 그 타입의 `[data-wb-component]` 가 안 선다(빈 카드) · 카드가 17 보다 적다 · 줄임 비의 가운데 값이 0.6 아래(축소판이 작아 안 읽힌다) |
  * | 축소판 — 테마 표지 | `system-portal` 프로젝트에서 축소판 단추의 바탕이 그 테마 주색(`semantic.primary` 기본값)이 아니다 |
  * | 축소판 — 남이 토큰을 저장 | 저장 뒤에도 축소판 단추의 바탕이 옛 값이다 |
  * | 축소판 — 번들을 못 실음 | 축소판이 빈다(기본 뷰로 안 선다) |
@@ -270,7 +270,8 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       console.log(`[축소판 표본] ${JSON.stringify(shown)}`)
       // eslint-disable-next-line no-console
       console.log(`[축소판 줄임 비] ${JSON.stringify(scales)}`)
-      expect(cards).toBeGreaterThanOrEqual(18)
+      // 17 — 둘 수 있는 타입 전부(뿌리 타입 `Page` 는 `placeableGroups` 가 뺀다).
+      expect(cards).toBeGreaterThanOrEqual(17)
       // 축소판이 읽힌다 — 판 기본 높이 · 창 1440×900 에서 표본 절반 넘게가 0.6 배 이상으로 선다(`PALETTE_HEIGHT_DEFAULT` 주석).
       const sorted = Object.values(scales).filter((value): value is number => value !== null).sort((a, b) => a - b)
       expect(sorted[Math.floor(sorted.length / 2)]).toBeGreaterThanOrEqual(0.6)
