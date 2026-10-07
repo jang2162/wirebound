@@ -48,12 +48,38 @@ describe.skipIf(!전제.ok)('에디터 단축키 — 실브라우저', () => {
     return { ids: children.map((child) => child.id), headSeq: response.body.headSeq }
   }
 
-  /** 고른 노드 — 속성 패널 글 칸의 값(픽스처의 글은 노드마다 다르다). */
-  const selected = (page: Page) => page.locator('.wb-shell-panel textarea').first().inputValue()
+  /** 탭이 주고받은 WS 프레임의 종류 · 앞 120자 — `selected()` 가 시간 안에 못 읽으면 오류 글에 실어 어느 프레임이 오갔는지 남긴다. */
+  const wsFrames = new WeakMap<Page, string[]>()
+  function watchFrames(page: Page): void {
+    const log: string[] = []
+    wsFrames.set(page, log)
+    page.on('websocket', (socket) => {
+      const note = (way: string) => (frame: { payload: string | Buffer }) => {
+        const text = typeof frame.payload === 'string' ? frame.payload : frame.payload.toString()
+        log.push(`${way} ${text.slice(0, 120)}`)
+      }
+      socket.on('framesent', note('→'))
+      socket.on('framereceived', note('←'))
+    })
+  }
+
+  /**
+   * 고른 노드 — 속성 패널 글 칸의 값(픽스처의 글은 노드마다 다르다). **시간 한도가 있다** — 칸이 안 서는 판(고른 노드가 없다)은 도구 기본 한도(30s)까지
+   * 기다리지 않고 15s 에 WS 프레임 기록과 함께 죽는다.
+   */
+  const selected = async (page: Page): Promise<string> => {
+    try {
+      return await page.locator('.wb-shell-panel textarea').first().inputValue({ timeout: 15_000 })
+    } catch (error) {
+      const frames = wsFrames.get(page) ?? []
+      throw new Error(`${(error as Error).message}\nWS 프레임(최근 ${Math.min(frames.length, 40)}/${frames.length}):\n${frames.slice(-40).join('\n')}`)
+    }
+  }
 
   it('캔버스 iframe 에 포커스가 있어도 Alt+↑ · Cmd+Z · ↓ · Delete · ? 가 선다', async () => {
     const { P } = await fixture(stack, alice, 'keys-canvas')
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    watchFrames(page)
     try {
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
@@ -99,6 +125,7 @@ describe.skipIf(!전제.ok)('에디터 단축키 — 실브라우저', () => {
   it('속성 패널 글 칸의 Backspace · Cmd+Z 는 칸의 것이다 — 노드 편집 0', async () => {
     const { P } = await fixture(stack, alice, 'keys-field')
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    watchFrames(page)
     try {
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()

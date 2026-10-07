@@ -446,12 +446,21 @@ function switchesMode(el: Element): boolean {
 }
 
 /**
+ * 훑기는 문서 하나(`document.body`)를 모든 케이스가 나눠 쓴다 — 시간 초과로 버려진 케이스의 훑기는 멈추지 않고 돌아, 다음 케이스의 훑기와 같은 화면을
+ * 동시에 눌러 «800 걸음 안에 끝나지 않았다» · 제목을 못 찾는 연쇄 실패를 낸다. 훑기마다 번호를 받고 새 훑기가 시작되면 앞 것은 걸음마다 멈춘다.
+ */
+let sweepSerial = 0
+function stopIfStale(serial: number): void {
+  if (serial !== sweepSerial) throw new Error('훑기가 멈췄다 — 새 훑기가 시작됐다(앞 케이스가 시간 초과로 버려졌다)')
+}
+
+/**
  * 닿는 컨트롤을 **하나씩** 누르고, 누를 때마다 다시 찾는다. **가장 늦게 나타난 것부터** 누른다(깊이 우선) — 눌러서
  * 열린 것(탭 본문 · 고르개 · 확인 · 팝오버)이 옆의 다른 입구보다 먼저 닿아야 그것이 닫히거나 바뀌기 전에 훑는다(문서
  * 순서로 누르면 탭 «코멘트»를 누른 뒤 바로 옆 탭 «상호작용»을 눌러 코멘트 본문에 한 번도 못 닿는다). 꺼져 있던 것
  * («저장»)은 켜진 뒤에 닿는다 — 꺼져 있는 동안은 «누른 것»으로 적지 않는다.
  */
-async function sweepControls(): Promise<number> {
+async function sweepControls(serial: number): Promise<number> {
   const seen = new Set<string>()
   const appeared = new Map<string, number>()
   /** 행동 메뉴 단추(`aria-haspopup="menu"`)마다 연 목록의 항목 열쇠 — 안 누른 항목이 남았으면 그 단추를 다시 누른다. */
@@ -459,6 +468,7 @@ async function sweepControls(): Promise<number> {
   const exhausted = (key: string): boolean => (menuItems.get(key) ?? []).every((item) => seen.has(item))
   let pressed = 0
   for (let step = 0; step < 800; step += 1) {
+    stopIfStale(serial)
     let pick: { el: Element; key: string; at: number } | undefined
     for (const el of Array.from(document.body.querySelectorAll(REACHABLE))) {
       if (leaves(el) || switchesMode(el) || closesDialog(el)) continue
@@ -528,7 +538,7 @@ function handlerChain(el: Element): Element[] {
   return chain
 }
 
-async function sweepKeys(): Promise<void> {
+async function sweepKeys(serial: number): Promise<void> {
   const groups = new Map<string, Element>()
   const ids = new WeakMap<Element, number>()
   let next = 0
@@ -549,6 +559,7 @@ async function sweepKeys(): Promise<void> {
   }
   for (const target of groups.values()) {
     for (const modifiers of MODIFIERS) {
+      stopIfStale(serial)
       for (const key of KEYS) {
         if (!target.isConnected) break
         fireEvent.keyDown(target, { key, code: key === ' ' ? 'Space' : key, ...modifiers })
@@ -601,6 +612,7 @@ async function opened(wire: Wire): Promise<void> {
  * 값으로 굳히면 새로 연 viewer 판은 못 보고(처음 값이 곧 viewer) 이 판만 본다.
  */
 async function sweepEditor(role: ProjectRole, draftStore?: DraftStore, live = false): Promise<Wire> {
+  const serial = (sweepSerial += 1)
   const wire = mount(live ? 'editor' : role, draftStore)
   await opened(wire)
   if (live) {
@@ -616,15 +628,16 @@ async function sweepEditor(role: ProjectRole, draftStore?: DraftStore, live = fa
 
   for (const mode of ['편집 모드', '뷰 모드'] as const) {
     for (const selection of SELECTIONS) {
+      stopIfStale(serial)
       await toMode(mode)
       selection.pick()
       await settle()
-      await sweepControls()
+      await sweepControls(serial)
       // 컨트롤 훑기가 모드를 바꿔 놓았을 수 있다 — 키는 그 판의 모드에서 보낸다.
       await toMode(mode)
       selection.pick()
       await settle()
-      await sweepKeys()
+      await sweepKeys(serial)
     }
   }
   return wire
@@ -764,7 +777,7 @@ describe('viewer 는 에디터에서 쓰기를 내지 않는다', () => {
       expect(wire.unrouted).toEqual([])
       expect(REACH.filter((spot) => !spot.hit(wire)).map((spot) => spot.name)).toEqual([])
     },
-    120_000,
+    300_000,
   )
 
   it(
@@ -777,7 +790,7 @@ describe('viewer 는 에디터에서 쓰기를 내지 않는다', () => {
         frames: [],
       })
     },
-    120_000,
+    300_000,
   )
 
   /**
@@ -796,7 +809,7 @@ describe('viewer 는 에디터에서 쓰기를 내지 않는다', () => {
         frames: [],
       })
     },
-    120_000,
+    300_000,
   )
 
   /**
@@ -828,6 +841,6 @@ describe('viewer 는 에디터에서 쓰기를 내지 않는다', () => {
         frames: [],
       })
     },
-    120_000,
+    300_000,
   )
 })

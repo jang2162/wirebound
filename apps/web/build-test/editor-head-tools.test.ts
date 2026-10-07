@@ -203,6 +203,47 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
   })
 
   /**
+   * **문턱 둘레의 창 폭마다 머리가 한 줄이고 단계가 문턱대로 선다** — 위 케이스의 창 셋(1440 · 900 · 700)은 문턱에서 멀어 문턱 상수를 낮춰도
+   * (`HEAD_SHORT_BELOW` 1099 → 1050 등) 같은 단계라 머리가 한 줄이다. 문턱 바로 밑(문턱 − 2)과 문턱에서 단계(«뷰포트 폭» 글 · 상태 전환기 · 줌이 머리에
+   * 있는가 · 줌 앞의 구분선이 있는가)와 한 줄을 함께 단언한다 — 단계로 가르므로 문턱이 어느 쪽으로 얼마를 움직여도 문턱 − 2 · 문턱 한쪽이 다른 단계가 되어 죽는다(머리가 두 줄이
+   * 되는 것은 문턱을 잰 값의 여유(20 남짓)보다 더 내렸을 때뿐이라 높이로는 못 가른다).
+   * 문턱을 새로 재면 아래 표의 창 폭을 같이 옮긴다(`src/shell/head-fold.ts` 의 «다시 재는 길»).
+   */
+  it('문턱 둘레의 창 폭 — 머리는 한 줄이고 상태 전환기 · 줌은 문턱대로 머리에 선다', async () => {
+    const P = await fixture('head-edge')
+    const seen: Record<string, { head: number; overflow: number; label: boolean; switcher: boolean; zoom: boolean; divider: number }> = {}
+    const expected: typeof seen = {}
+    const widths = [1099, 1097, 1000, 965, 963, 878, 876]
+    for (const width of widths) {
+      const { page, close } = await open(P, { width, height: 700 })
+      try {
+        for (const mode of ['편집 모드', '뷰 모드'] as const) {
+          await page.getByRole('button', { name: mode, exact: true }).click()
+          await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+          const s = await shape(page)
+          // «뷰포트 폭» 글이 눈에 보이는가 — `wide` 단계에서만 선다(`short` 부터 눈에서만 감춘다).
+          const label = await page.locator('.wb-shell-header label').evaluate((el) => {
+            const text = [...el.querySelectorAll('span')].find((span) => span.textContent === '뷰포트 폭')
+            return text !== undefined && text.getBoundingClientRect().width > 1
+          })
+          seen[`${width} ${mode}`] = {
+            head: s.head,
+            overflow: s.overflow,
+            label,
+            switcher: s.headControls.includes('화면 상태: 기본'),
+            zoom: s.headControls.includes('축소'),
+            divider: await page.locator('.wb-shell-header .wb-shell-head-divider').count(),
+          }
+          expected[`${width} ${mode}`] = { head: 48, overflow: 0, label: width >= 1099, switcher: width >= 965, zoom: width >= 878, divider: width >= 878 ? 1 : 0 }
+        }
+      } finally {
+        await close()
+      }
+    }
+    expect(seen).toEqual(expected)
+  })
+
+  /**
    * **문턱을 재는 자** — 머리 한 줄에 드는 최소 창 폭을 이분 탐색해 로그로 낸다(단언은 수가 섰는지만 — 글꼴이 기계마다 달라 수는 로그의
    * 값이다). 지금 문턱의 단계로 재므로 단계마다 재려면 `src/shell/head-fold.ts` 의 두 상수를 바꿔 돌린다(그 파일 «다시 재는 길»). 창을 바꾼
    * 뒤 두 프레임을 기다린다 — 미디어 쿼리의 바뀜은 다음 그리기 때 온다.

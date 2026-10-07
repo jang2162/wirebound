@@ -38,12 +38,23 @@ const TEXTS = 7000
 const SET = 200
 /** 쥔 사람 — 보라 + 넷. 보라가 보는 남의 잠금은 넷 × 200 + 다혜의 하나 = 801. */
 const HOLDERS = 5
-/** **상한**(ms) — 하트비트 하나의 «보낸 순간 → `hold`». */
-const HEARTBEAT_LIMIT_MS = 100
-/** **상한**(ms) — 그동안의 이벤트 루프 멈춤. */
-const LOOP_STALL_LIMIT_MS = 100
-/** **상한**(ms) — 쥔 사람 다섯이 1s 마다 하트비트를 보내는 동안 남의 편집 왕복. */
+/**
+ * **상한**(ms) — 하트비트 열 번의 «보낸 순간 → `hold`» **가운데 값**. 판정이 고른 수 × 남의 잠금 수로 늘면 **모든** 하트비트가 느려진다(고치기 전 한
+ * 번에 4.2s) — 가운데 값은 그것을 잡고, 붐비는 기계가 하트비트 하나를 스케줄러 끼어들기로 늦추는 것은 안 잡는다. 최댓값 하나로 상한을 잡으면 붐빌 때
+ * 거짓 빨강이다: 혼자 18 · 44 · 27ms 인 판이 15 개 일을 겹쳐 돌리면 열 번 가운데 하나가 101 · 199 · 320ms, 가운데 값은 25 · 47 · 135ms.
+ */
+const HEARTBEAT_LIMIT_MS = 200
+/** **상한**(ms) — 열 번 가운데 가장 늦은 것. 가운데 값이 못 보는 «한 번씩 크게 서는» 판정을 잡는다 — 4.2s 아래의 값이라 붐비는 판의 최대(320ms)가 넘지 않는다. */
+const HEARTBEAT_WORST_LIMIT_MS = 2000
+/** **상한**(ms) — 그동안의 이벤트 루프 멈춤. 판정이 동기라 느린 판정은 곧 이 멈춤이다(고치기 전 4.2s) — 붐벼서 생기는 수십 ms 는 넘지 않게 둔다. */
+const LOOP_STALL_LIMIT_MS = 1000
+/**
+ * **상한**(ms) — 쥔 사람 다섯이 1s 마다 하트비트를 보내는 동안 남의 편집 왕복의 **가운데 값**. 판정이 느리면 편집이 줄 서 503 으로 끝나는 것은 아래
+ * `statuses` 가 잡는다(고치기 전 판의 실패) — 이 값은 «편집이 느려졌다» 만 잰다. 혼자 최대 191 · 196 · 453ms 라 최댓값은 따로 넉넉하게 둔다.
+ */
 const EDIT_LIMIT_MS = 1000
+/** **상한**(ms) — 남의 편집 왕복 가운데 가장 늦은 것. */
+const EDIT_WORST_LIMIT_MS = 5000
 
 describe('하트비트 판정은 고른 수 × 남의 잠금 수로 늘지 않는다', () => {
   it(`Text ${TEXTS} · 고른 ${SET} · 남의 잠금 ${(HOLDERS - 1) * SET + 1} — 하트비트 판정 · 루프 멈춤 · 남의 편집 왕복이 상한 안이다`, { timeout: 300_000 }, async () => {
@@ -121,7 +132,8 @@ describe('하트비트 판정은 고른 수 × 남의 잠금 수로 늘지 않�
       // **하트비트 단언을 여기서 한다** — 판정이 느린 판은 다음 단계(1s 주기의 하트비트 다섯)가 이벤트 루프를 채워 편집이 몇 분씩 서서
       // 케이스가 값이 아니라 시간 초과로 죽는다. 카나리아: 판정이 실제로 돌았다(`hold` 열 번).
       expect(holds).toBe(10)
-      expect(max(beats)).toBeLessThan(HEARTBEAT_LIMIT_MS)
+      expect(p50(beats)).toBeLessThan(HEARTBEAT_LIMIT_MS)
+      expect(max(beats)).toBeLessThan(HEARTBEAT_WORST_LIMIT_MS)
       expect(stall).toBeLessThan(LOOP_STALL_LIMIT_MS)
 
       // 2) 쥔 사람 다섯이 1s 마다 하트비트를 보내는 동안 세라의 편집 20 — 요청 왕복.
@@ -164,7 +176,8 @@ describe('하트비트 판정은 고른 수 × 남의 잠금 수로 늘지 않�
       expect(sent).toBeGreaterThanOrEqual(HOLDERS)
       expect(denied).toBe(0)
       expect(statuses.every((s) => s === 200), JSON.stringify(statuses)).toBe(true)
-      expect(max(edits)).toBeLessThan(EDIT_LIMIT_MS)
+      expect(p50(edits)).toBeLessThan(EDIT_LIMIT_MS)
+      expect(max(edits)).toBeLessThan(EDIT_WORST_LIMIT_MS)
     })
   })
 })
