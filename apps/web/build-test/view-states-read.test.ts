@@ -221,6 +221,43 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
         ],
         after: { canvas: ['n_out', 'n_bad', 'n_at'], head: '화면 상태: 관리자', search: '?state=s_admin' },
       })
+
+      // 기본으로 돌아간다 — 표지가 «기본» 가지에서 고르면 기본 상태다(주소에 `state` 가 안 남는다).
+      await tab.page.waitForTimeout(600)
+      await badge(tab.page).click()
+      await tab.page.getByRole('menuitemradio', { name: '기본', exact: true }).waitFor()
+      await pick(tab.page, '기본')
+      expect(await shown(tab.page)).toEqual({ canvas: ['n_out', 'n_bad', 'n_dt'], head: '화면 상태: 기본', search: '' })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  /**
+   * **고르지 않은 가지 안의 영역에는 표지가 안 선다** — 관리자 가지 안에 영역 하나를 더 둔 판(`n_sw2`). 기본 상태에서 그 영역은 그려지지 않으므로 표지는
+   * 하나뿐이고, 관리자 상태에서는 둘이다. 영역이 안 그려지면 `state-badges.tsx` 의 `left === Infinity` 도 표지를 막아 `visibleTree` 거름만 떼는
+   * 변조는 이 케이스에서 안 죽는다(같은 값 — 둘이 한 성질을 두 겹으로 막는다). 두 겹을 함께 떼면 이 케이스만 죽는다 — 이 성질을 소유하는 케이스다.
+   */
+  it('영역 표지 — 고르지 않은 가지 안의 영역에는 안 서고, 그 가지를 고르면 선다', async () => {
+    const { P } = await fixture('vs-read-nested')
+    const head = (await call('GET', P)).body.headSeq as number
+    const nested = {
+      id: 'n_sw2',
+      type: 'StateSwitch',
+      children: [{ id: 'n_cd2', type: 'StateCase', props: { state: 'default' }, children: [text('n_dt2', '안쪽 기본 글')] }],
+    }
+    const put = await call('PATCH', `${P}/ops`, { baseSeq: head, ops: [{ op: 'add', path: '/root/children/2/children/1/children/-', value: nested }] })
+    if (put.status !== 200) throw new Error(`중첩 ${put.status} ${JSON.stringify(put.body)}`)
+    const tab = await openTab(P)
+    try {
+      await tab.page.getByRole('button', { name: '뷰 모드' }).click()
+      await badge(tab.page).first().waitFor()
+      await frames(tab.page)
+      const defaults = await tab.page.locator('[data-wb-state-badge-for]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-state-badge-for')))
+      await badge(tab.page).click()
+      await pick(tab.page, '관리자')
+      const admin = await tab.page.locator('[data-wb-state-badge-for]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-state-badge-for')))
+      expect({ defaults, admin }).toEqual({ defaults: ['n_sw'], admin: ['n_sw', 'n_sw2'] })
     } finally {
       await tab.close()
     }
@@ -375,6 +412,8 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
       await tab.page.getByRole('button', { name: '편집 모드', exact: true }).click()
       await tree.waitFor()
       await frames(tab.page)
+      // `after.picked` 는 숨은 가지의 줄이 안 그려져 고른 노드를 안 비우는 변조(`HiddenSelectionPrune` 뗌)에서도 `[]` 다 — 비었는지는 `panelEmpty` 가 잰다.
+      // `picked` 는 `before` 의 «골라졌다» 카나리아와 «남은 줄이 없다» 몫이다.
       expect({
         before,
         inView,

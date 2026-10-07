@@ -224,6 +224,68 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
     }
   })
 
+  /**
+   * **스냅샷 복원이 입력을 연 노드를 빼거나 옮기는 판** — 복원은 배너 «다시 불러오기» 를 눌러야 화면에 실리고, 그 누름이 입력의 포커스를 가져가
+   * blur 로 입력이 먼저 취소된다(`tree-input.tsx` — blur 는 취소). 그래서 복원으로 «입력은 열린 채 노드만 빠지거나 옮겨지는» 판은 서지 않는다 —
+   * 상자가 스토어 문서로 가르는 길(`alias-edit.tsx`)은 다른 탭의 편집이 닿는 위 케이스가 잰다. 여기는 복원 쪽의 성질을 잠근다: 누르기 전에는 입력이
+   * 그대로고 · 누른 뒤에는 닫히며(하단 바는 복원 통지가 말한다) · 친 글은 어느 노드에도 안 쓰인다(뺀 판은 없는 노드 · 옮긴 판은 옮긴 자리의 노드).
+   */
+  it('입력을 연 노드를 스냅샷 복원이 빼거나 옮겨도 «다시 불러오기» 뒤 입력은 닫히고 친 글은 어디에도 안 쓰인다', async () => {
+    const save = { id: 'n_save00000004', type: 'Button', props: { label: '저장' } }
+    const card = { id: 'n_card00000004', type: 'Card', props: { title: '회원' }, children: [] as unknown[] }
+    const { P } = await fixture('f2-restore', [card])
+    const projectId = P.split('/')[2]!
+    const snapshot = async (tag: string): Promise<string> => {
+      const made = await call('POST', `/projects/${projectId}/snapshots`, { tag })
+      if (made.status >= 300) throw new Error(`스냅샷 ${made.status} ${JSON.stringify(made.body)}`)
+      return made.body.id as string
+    }
+    const restore = async (id: string): Promise<void> => {
+      const done = await call('POST', `/projects/${projectId}/snapshots/${id}/restore`)
+      if (done.status >= 300) throw new Error(`복원 ${done.status} ${JSON.stringify(done.body)}`)
+    }
+    const aliases = async () =>
+      JSON.stringify(((await call('GET', P)).body.schema.root.children as { id: string; alias?: string }[]).map((node) => [node.id, node.alias ?? null]))
+    /** 입력을 열고 글을 친 채 복원을 건 뒤 «다시 불러오기» 를 누른다 — 누르기 전 입력 수와 누른 뒤 상태를 낸다. */
+    async function typeThenRestore(snapshotId: string, typed: string) {
+      const a = await openEditor(P, 'alice')
+      try {
+        const input = a.page.locator('.wb-shell-region[aria-label="구조 트리"]').getByRole('textbox', { name: '별칭', exact: true })
+        const reload = a.page.getByRole('button', { name: '다시 불러오기' })
+        await rowButton(a.page, 'n_save00000004').click()
+        await a.page.keyboard.press('F2')
+        await expect.poll(() => input.evaluateAll((els) => els.map((el) => el === document.activeElement))).toEqual([true])
+        await a.page.keyboard.type(typed)
+        await restore(snapshotId)
+        await reload.waitFor()
+        const before = await input.count()
+        await reload.click()
+        await reload.waitFor({ state: 'detached' })
+        await expect.poll(() => input.count()).toBe(0)
+        return { before, alerts: await a.page.getByRole('alert').allTextContents(), patches: a.patches }
+      } finally {
+        await a.close()
+      }
+    }
+    // 1) 뺀다 — 복원할 판에는 저장 단추가 없다.
+    const without = await snapshot('without')
+    await otherTab(P, [{ op: 'add', path: '/root/children/0/children/0', value: save }])
+    const removed = await typeThenRestore(without, '복원 중')
+    expect({ removed, aliases: await aliases() }).toEqual({
+      removed: { before: 1, alerts: ['복원된 상태로 페이지를 다시 불러왔습니다. 되돌리기 이력이 초기화됐습니다.'], patches: [] },
+      aliases: '[["n_card00000004",null]]',
+    })
+    // 2) 옮긴다 — 복원할 판에서 저장 단추는 카드 밖(뿌리 끝)에 있다(앞 복원으로 지금 문서에는 저장 단추가 없다).
+    await otherTab(P, [{ op: 'add', path: '/root/children/-', value: save }])
+    const outside = await snapshot('outside')
+    await otherTab(P, [{ op: 'move', from: '/root/children/1', path: '/root/children/0/children/-' }])
+    const moved = await typeThenRestore(outside, '옮겨 복원')
+    expect({ moved, aliases: await aliases() }).toEqual({
+      moved: { before: 1, alerts: ['복원된 상태로 페이지를 다시 불러왔습니다. 되돌리기 이력이 초기화됐습니다.'], patches: [] },
+      aliases: '[["n_card00000004",null],["n_save00000004",null]]',
+    })
+  })
+
   /** 줄 단추의 글자(UTF-16 한 칸)마다 화면 가로 가운데 — 폭이 없는 글자(방향 제어)는 `NaN`. */
   const glyphs = (page: Page, id: string) =>
     rowButton(page, id).evaluate((button) => {

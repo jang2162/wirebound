@@ -75,7 +75,9 @@ const NARROWS_BY_OWNER = /\blocksAgainst\s*\(/
 /** 화면이 스토어의 잠금 목록을 손에 쥐는 자리. `#state`가 private이라 selector 말고 길이 없다. */
 const SELECTS_LOCK_LIST = /useEditorStore\s*\([^,]+,\s*\(\s*\w+\s*\)\s*=>\s*\w+\s*\.\s*locks\s*\)/
 
-describe('판정은 한 벌이다', () => {
+// 소스를 TypeScript 파서로 훑어 혼자 최대 4.2s 가 걸리는 케이스가 있다 — 기본 한도(5s)로는 붐비는 판(두 배 겹쳐 돌림)에서 일곱이 시간 초과로 빨강이다.
+// 한도를 늘려도 훑기가 틀린 답을 내는 것은 그대로 잡힌다(시간 초과는 «돌았다»만 잰다).
+describe('판정은 한 벌이다', { timeout: 60_000 }, () => {
   it('훑을 소스를 실제로 읽는다', () => {
     // 경로가 어긋나면 **빈 집합에서 아래가 전부 조용히 통과한다.**
     expect(sourceFiles(API_SRC).length).toBeGreaterThan(10)

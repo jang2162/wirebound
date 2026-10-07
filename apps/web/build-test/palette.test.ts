@@ -207,6 +207,42 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
     }
   })
 
+  /**
+   * **좌측 패널을 접은 판의 하단 판 최대** — `measureRoom`(`src/shell/sidebar-layout.ts`)은 좌측 상자가 접혀 높이가 0 이면 같은 세 줄에 걸친
+   * 우측 패널로 잰다. 못 재면 창 높이 셈으로 물러서 최대가 어긋난다 — 좌측을 펴 둔 판의 최대(위 케이스가 재는 값)와 접은 판의 최대가 같아야 한다.
+   */
+  it.each([900, 700])('좌측 패널을 접어도 하단 판의 최대는 펴 둔 판과 같다 — 창 높이 %i', async (windowHeight) => {
+    const { P } = await fixture(stack, alice, `pal-fold${windowHeight}`, texts(3))
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: windowHeight } })
+    try {
+      await page.goto(P)
+      await canvasFrame(page).locator('[data-wb-id="n_t0"]').waitFor()
+      await page.getByRole('contentinfo', { name: '하단 바' }).getByRole('button', { name: '컴포넌트', exact: true }).click()
+      await page.getByRole('region', { name: '컴포넌트 목록' }).waitFor()
+      const handle = page.getByRole('separator', { name: '컴포넌트 목록 높이' })
+      const tallestNow = async () => {
+        await handle.focus()
+        await page.keyboard.press('End')
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+        return heights(page)
+      }
+      const open = await tallestNow()
+      await page.getByRole('button', { name: '좌측 패널 접기', exact: true }).click()
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+      const folded = await tallestNow()
+      // eslint-disable-next-line no-console
+      console.log(`[하단 판 최대 · 좌측 접힘] 창 ${windowHeight}: ${JSON.stringify({ open, folded })}`)
+      expect({ palette: folded.palette, canvas: folded.canvas, overflow: folded.overflow }).toEqual({
+        palette: open.palette,
+        canvas: open.canvas,
+        overflow: 0,
+      })
+      expect(folded.canvas!).toBeGreaterThanOrEqual(CANVAS_MIN_HEIGHT)
+    } finally {
+      await context.close()
+    }
+  })
+
   it('축소판 — 카드마다 그 타입의 표본이 창 안에 선다 · 빈 카드가 없다', async () => {
     const { P } = await fixture(stack, alice, 'pal-thumbs', texts(1))
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
