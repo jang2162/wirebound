@@ -8,10 +8,13 @@
  * |---|---|---|
  * | HTTP 본문(PUT · 가져오기 · 프리셋 · REST ops …) | JSON 중첩 `MAX_JSON_NESTING` | `preValidation` 훅(`app.ts`) |
  * | 편집 파이프라인(WS `patch` · REST ops · 복원 …) | `ops` 의 JSON 중첩 | `applyEdit` 4단계 앞 |
- * | 편집 뒤 문서 | 노드 깊이 `MAX_NODE_DEPTH` | `applyEdit` 5단계 뒤 — **한도 안의 편집을 되풀이해 깊이를 쌓아도 적용이 안 넘친다** |
+ *
+ * **REST ops 케이스는 두 겹이 함께 막는다 — 한 겹씩 떼면 초록이다**(훅만 떼도 파이프라인이, 파이프라인만 떼도 훅이 막는다). 둘을 함께 떼면 REST ops 3000 · 8000 · 350 단계가 500 · 500 · 200 이고 PUT · 프리셋 · WS `patch` 도 같이 죽는다.
+ *
+ * **편집 뒤 문서의 깊이는 따로 안 본다** — 한도 안의 편집을 되풀이해도 경로 길이 한도(`http/patch-ops.ts` 2000 글자)가 쌓임을 멈춘다(맨 아래 케이스 — `services/nesting.ts` 머리말).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { MAX_JSON_NESTING, MAX_NODE_DEPTH } from '../src/services/nesting'
+import { MAX_JSON_NESTING } from '../src/services/nesting'
 import { createMenuNode, createPage, createProject, resetRealData, signup, withApi, withRealApi, type TestContext } from './helpers'
 import { WsProbe, joinRoom } from './ws-client'
 
@@ -54,7 +57,7 @@ async function world(ctx: TestContext) {
 
 /** 노드 단계 → JSON 단계(노드 하나가 객체 + `children` 배열 = 둘). 한도 위로 넘치는 깊이. */
 const TOO_DEEP = Math.ceil(MAX_JSON_NESTING / 2) + 50
-const FIXED = { error: { code: 'bad-request', message: expect.stringContaining('너무 깊') } }
+const FIXED = { error: { code: 'bad-request', message: expect.stringContaining('너무 깁니다') } }
 
 describe('입구 — 깊이가 한도를 넘으면 400 이고 아무것도 안 바뀐다', () => {
   it.each([3000, 8000, TOO_DEEP])('PATCH …/ops — 노드 단계 %i', async (depth) => {
@@ -121,21 +124,21 @@ describe('대조군 — 한도 안의 깊이는 그대로 저장된다', () => {
   })
 })
 
-describe('한도 안의 편집을 되풀이해 깊이를 쌓아도 막힌다 — 적용이 넘치기 전에', () => {
-  it('가장 깊은 노드 밑에 한도 안의 사슬을 계속 달면 문서 깊이가 한도에 닿는 편집이 400 이고 그 뒤에도 편집이 선다', async () => {
+describe('한도 안의 편집을 되풀이해 깊이를 쌓아도 멈춘다 — 적용이 넘치기 전에', () => {
+  it('가장 깊은 노드 밑에 한도 안의 사슬을 계속 달면 경로 길이 한도에서 400 으로 멈추고 그 뒤에도 편집이 선다', async () => {
     await withApi(async (ctx) => {
       const w = await world(ctx)
       const step = 120
       // 한 조각은 맨 밑이 빈 Section 인 사슬이다 — 다음 조각을 그 밑에 단다. 조각 하나가 `step + 1` 단계를 더한다.
       let leafPath = '/root'
       const statuses: number[] = []
-      for (let round = 0; round < Math.ceil(MAX_NODE_DEPTH / step) + 2; round += 1) {
+      for (let round = 0; round < 6; round += 1) {
         const res = await w.patch(chain(step, 'section'), `${leafPath}/children/-`)
         statuses.push(res.statusCode)
         if (res.statusCode !== 200) break
         leafPath += '/children/0'.repeat(step + 1)
       }
-      // 마지막 하나가 400 이다(깊이 한도), 그 앞은 전부 200.
+      // 마지막 하나가 400 이다(경로 길이 한도 — 셋째 조각), 그 앞은 전부 200.
       expect(statuses.at(-1)).toBe(400)
       expect(statuses.slice(0, -1).every((status) => status === 200)).toBe(true)
       // 그 뒤에도 평범한 편집이 선다 — 문서가 적용이 넘치는 깊이에 닿지 않았다.

@@ -8,11 +8,13 @@
  *
  * | 변조 | 죽는 것 |
  * |---|---|
- * | `routes/pages.ts` 의 `releaseLocksOnPages` 줄을 지운다 | 「페이지 삭제」 **혼자** |
- * | `routes/menu.ts` 의 줄을 지운다 | 「연쇄 삭제」 **혼자** |
+ * | `routes/pages.ts` 의 삭제 라우트가 `runTreeTransaction` 에 `goneOf`(지운 페이지 id)를 안 넘긴다 | 「페이지 삭제」 · 「남은 페이지」 · 「같은 집합을 다시 보내도」 · 「답을 잃은 삭제 COMMIT」의 페이지 삭제(넷 — 앞 셋은 페이지 삭제 라우트로 판을 세운다) |
+ * | `routes/menu.ts` 의 연쇄 삭제가 `goneOf` 를 안 넘긴다 | 「연쇄 삭제」 · 「답을 잃은 삭제 COMMIT」의 연쇄 삭제 |
+ * | `services/tree-write.ts` 의 늦은 커밋 갈래(`releaseGone(body)`)를 지운다 | 「답을 잃은 삭제 COMMIT」 둘 **(제때 커밋된 앞 케이스는 산다)** |
+ * | `services/tree-write.ts` 의 제때 커밋 갈래(`releaseGone(result)`)를 지운다 | 「페이지 삭제」 · 「연쇄 삭제」 · 「남은 페이지」 · 「같은 집합을 다시 보내도」 |
  * | `store.releasePages` 가 아무것도 안 놓는다 | 위 둘 + 저장소 케이스(`lock-store.test.ts`) |
  * | 다른 페이지의 잠금까지 놓는다(`gone.has` 를 뗀다) | 「남은 페이지의 잠금은 그대로」 **혼자** |
- * | `ws/lock.ts` 의 `handleLockFrame` 이 없는 페이지도 잡는다(`headSeq === null` 갈래를 뗀다) | 「같은 집합을 다시 보내도」 **혼자**(지운 페이지의 잠금이 다시 섬 · 보라가 목록을 한 번 더 받음) |
+ * | `ws/lock.ts` 의 `handleLockFrame` 이 없는 페이지도 잡는다(`structureSeq === null` 갈래를 뗀다) | 「같은 집합을 다시 보내도」 **혼자**(지운 페이지의 잠금이 다시 섬 · 보라가 목록을 한 번 더 받음) |
  * | `routes/snapshots.ts` 의 `releaseLocksOnPages` 줄을 지운다 · `services/restore.ts` 가 지운 id 를 안 모은다 | 「복원이 지운 페이지」 **혼자**(각각) |
  */
 import { sql } from 'kysely'

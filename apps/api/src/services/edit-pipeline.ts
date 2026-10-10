@@ -91,7 +91,7 @@ import {
 import { containsLoneSurrogate, containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { sameStructure } from '../lock/structure'
-import { jsonNestingExceeds, nodeDepthExceeds } from './nesting'
+import { jsonNestingExceeds } from './nesting'
 import { lockPageForEdit, writePageSchemaAtSeq } from '../repos/pages'
 import { insertRevision, type RevisionActor } from '../repos/revisions'
 
@@ -126,7 +126,7 @@ export type EditOutcome =
   | { ok: false; reason: 'unsupported-version'; message: string }
   | { ok: false; reason: 'nul-byte' }
   | { ok: false; reason: 'lone-surrogate' }
-  /** `ops` 의 중첩이 `MAX_JSON_NESTING` 을 넘거나 편집 뒤 문서가 `MAX_NODE_DEPTH` 를 넘는다(`services/nesting.ts`). */
+  /** `ops` 의 중첩이 `MAX_JSON_NESTING` 을 넘는다(`services/nesting.ts`). */
   | { ok: false; reason: 'too-deep' }
 
 /** `PatchError`를 잡아 `patch-failed` 결과 값으로 바꾼다. 다른 예외는 다시 던진다. */
@@ -185,11 +185,6 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
       after = applyOps(before, input.ops)
     } catch (error) {
       return toPatchFailed(error)
-    }
-
-    // 5.5단계: 편집 뒤 문서의 깊이 — 한도 안의 편집을 되풀이해 깊이를 쌓아도 다음 적용이 스택을 안 넘게 문서가 한도에 머문다.
-    if (nodeDepthExceeds(after.root)) {
-      return { ok: false, reason: 'too-deep' }
     }
 
     // 6단계: 적용 후 문서를 검증한다 — 적용 전 문서를 검증하면 항상 통과해 버려
