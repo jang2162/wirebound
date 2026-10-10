@@ -8,6 +8,7 @@
  *   조사가 맞는다(`page-import-dialog.tsx`의 `importDialogTitle`과 같은 수).
  * - **페이지가 있으면 경고 상자** — 경고 아이콘 · 위험 색으로 «페이지 M개와 그 안의 설계가 모두 삭제됩니다», 그 아래 지워질 페이지 이름의
  *   앞 `PAGE_PREVIEW_LIMIT`개와 «외 N개». 페이지는 이력까지 지워져 되돌리기가 없다 — 안전망 스냅샷으로만 돌아온다.
+ * - **지울 페이지가 있으면 링크 한 줄** — 밖에서 이 페이지들로 가는 링크가 끊긴다(`CASCADE_LINK_NOTE`). 어느 링크인지는 `wireb lint` 의 몫이다.
  * - 상자의 설명(`aria-describedby`)이 문장과 경고 상자를 함께 품는다 — 상자가 열릴 때 함께 읽힌다.
  * - 확인 단추는 글 + 위험 색이다(설계서 «글만» — 되돌릴 수 없는 일을 확정하는 단추).
  *
@@ -52,6 +53,11 @@ export function cascadeWarning(pages: number): string {
 }
 
 export const CASCADE_SAFETY_NOTE = '지우기 직전 상태를 스냅샷으로 남깁니다 — 프로젝트 owner 가 그 스냅샷으로 되돌릴 수 있습니다.'
+/**
+ * 지울 페이지가 있을 때만 더하는 한 줄 — 밖에서 이 페이지들로 가는 링크(`navigate` · `openModal`)가 끊긴다. 상자는 다른 페이지의 설계를 읽지 않아 어느 링크인지는
+ * 못 말한다(그 목록은 `wireb lint` · MCP lint 의 `page-target-missing` 이 낸다) — 있을 수 있다는 것과 찾는 길만 말한다.
+ */
+export const CASCADE_LINK_NOTE = '다른 페이지에서 이 페이지들로 가는 링크(이동 · 모달 열기)가 있으면 끊깁니다 — wireb lint 로 찾을 수 있습니다.'
 export const CASCADE_CHANGED = '목록이 바뀌었습니다 — 다시 확인하세요.'
 /** 목록이 바뀐 뒤 확인 단추의 글 — 누르면 «모두 삭제»로 돌아간다. */
 export const CASCADE_RECHECK = '새 목록 확인'
@@ -105,6 +111,7 @@ function OpenMenuDeleteDialog(props: { commands: TreeCommands; target: RemoveTar
           </div>
         )}
         {subtree !== null && <p className="wb-shell-menu-delete-note">{CASCADE_SAFETY_NOTE}</p>}
+        {subtree !== null && pages.length > 0 && <p className="wb-shell-menu-delete-note">{CASCADE_LINK_NOTE}</p>}
         <div className="wb-shell-menu-delete-foot">
           <button type="button" className="wb-shell-menu-delete-cancel" onClick={commands.closeRemoving}>
             취소

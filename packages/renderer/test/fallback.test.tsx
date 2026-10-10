@@ -70,6 +70,16 @@ describe('렌더 실패 폴백', () => {
     expect(errorMessages(markup(renderNode(broken)))).toEqual([issue!.message])
   })
 
+  it('별칭을 단 노드의 props 폴백은 타입 뒤에 별칭을 붙이고 validate.ts 의 문장과 글자까지 같다(L-125)', () => {
+    const broken: WbNode = { id: 'n_000000000002', type: 'List', alias: '회원 목록', props: { items: -1 } }
+    const doc: PageDocument = { version: 1, root: { id: 'n_000000000001', type: 'Page', children: [broken] } }
+    const issue = validatePage(doc).find((i) => i.code === 'invalid-props')
+    const message = errorMessages(markup(renderNode(broken)))[0]!
+    expect(message).toBe(issue!.message)
+    // 타입이 문장의 머리다 — 첫 `(` 앞이 별칭에 안 갈린다(`apps/web` 의 `refusalHead`).
+    expect(message.startsWith("List의 props가 올바르지 않습니다 ('회원 목록'): ")).toBe(true)
+  })
+
   it('props가 잘못돼도 형제 노드는 정상으로 그려진다', () => {
     const html = markup(
       renderNode({

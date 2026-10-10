@@ -1,4 +1,5 @@
 import {
+  aliasNote,
   caseFor,
   getComponent,
   getKoreanErrorMap,
@@ -307,7 +308,7 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions):
     // 문안은 validate.ts의 `invalid-props` 이슈와 같아야 한다.
     // fallback.test.tsx가 두 문자열이 같은지 직접 비교해 갈라지는 것을 막는다.
     return fallback(
-      `${node.type}의 props가 올바르지 않습니다: ${parsed.error.issues
+      `${node.type}의 props가 올바르지 않습니다${aliasNote(node)}: ${parsed.error.issues
         .map((issue) => `${issue.path.join('.')} ${issue.message}`)
         .join(', ')}`,
     )

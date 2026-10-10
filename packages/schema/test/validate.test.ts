@@ -95,6 +95,23 @@ describe('validatePage', () => {
     expect(validatePage(doc)).toContainEqual(expect.objectContaining({ code: 'slot-count' }))
   })
 
+  it('invalid-props · children-not-allowed 문장은 별칭이 있으면 타입 뒤에 별칭을 붙인다 — 없으면 그대로다(L-125)', () => {
+    const doc = page({
+      id: 'n_000000000001',
+      type: 'Page',
+      children: [
+        { id: 'n_000000000002', type: 'List', alias: '회원 목록', props: { items: -1 } },
+        { id: 'n_000000000003', type: 'List', props: { items: -1 } },
+        { id: 'n_000000000004', type: 'Divider', alias: '구분선', children: [{ id: 'n_000000000005', type: 'Text', props: { content: 'x' } }] },
+      ],
+    })
+    const issues = validatePage(doc)
+    const said = (code: string, nodeId: string) => issues.find((issue) => issue.code === code && issue.nodeId === nodeId)?.message
+    expect(said('invalid-props', 'n_000000000002')).toMatch(/^List의 props가 올바르지 않습니다 \('회원 목록'\): /)
+    expect(said('invalid-props', 'n_000000000003')).toMatch(/^List의 props가 올바르지 않습니다: /)
+    expect(said('children-not-allowed', 'n_000000000004')).toBe("Divider은 자식을 담을 수 없습니다 ('구분선')")
+  })
+
   it('invalid-props의 zod 메시지는 한국어여야 한다', () => {
     const doc = page({
       id: 'n_000000000001',

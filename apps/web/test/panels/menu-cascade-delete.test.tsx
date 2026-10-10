@@ -13,6 +13,7 @@ import {
   CASCADE_CHANGED,
   CASCADE_GONE,
   CASCADE_RECHECK,
+  CASCADE_LINK_NOTE,
   CASCADE_SAFETY_NOTE,
   MENU_DELETE_CONFIRM,
   MENU_DELETE_TITLE,
@@ -130,8 +131,20 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     // 트리가 그리는 차례 — 메뉴마다 페이지 먼저, 그다음 하위 메뉴.
     expect(within(box).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['회원 화면 1', '회원 화면 2', '권한 화면 1'])
     expect(within(box).getByText(CASCADE_SAFETY_NOTE)).toBeDefined()
+    // 지울 페이지가 있으면 밖에서 오는 링크가 끊긴다는 한 줄(L-113 a).
+    expect(within(box).getByText(CASCADE_LINK_NOTE)).toBeDefined()
     // 줄 아래의 두 번 누르기 확인은 서지 않는다.
     expect(within(region()).queryByRole('button', { name: '정말 삭제합니까?' })).toBeNull()
+  })
+
+  it('지울 페이지가 없으면(빈 하위 메뉴만) 링크 한 줄이 서지 않는다 — 끊길 페이지 링크가 없다', async () => {
+    const empty = tree()
+    empty[1]!.children = [{ id: 'm-empty', title: '빈 하위', sortOrder: 0, pages: [], children: [] }]
+    await open({ getTree: vi.fn(async () => empty) })
+    askDelete('주문관리')
+    const box = dialog()
+    expect(within(box).getByText('"주문관리" 메뉴와 하위 메뉴 1개가 함께 삭제됩니다')).toBeDefined()
+    expect(within(box).queryByText(CASCADE_LINK_NOTE)).toBeNull()
   })
 
   it('상자의 설명이 문장과 경고 상자를 함께 품는다(aria-describedby)', async () => {

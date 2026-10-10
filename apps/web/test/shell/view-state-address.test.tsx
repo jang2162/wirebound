@@ -8,7 +8,7 @@
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { useLocation } from 'react-router'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
 import { PAGE_ROUTE, canvasDocument, openPage, pageDoc } from '../editor-harness'
 import '../../src/catalog-setup'
@@ -115,10 +115,24 @@ describe('?state= 쓰기 — 뷰 모드만', () => {
 })
 
 describe('영역 표지 — 뷰 모드', () => {
+  // jsdom 은 배치가 없어 모든 상자가 0×0 이다 — 영역 표지는 그려진 자식의 상자로 서므로(`canvas/view-state-regions.ts` 의 `boxOf` 가 0×0 을 건너뛴다) 노드 요소에
+  // 크기를 준다. 캔버스는 iframe 이라 그 창의 `Element`(호스트와 다른 영역)에 건다. 실브라우저 값은 `build-test/view-states-read.test.ts` ·
+  // `build-test/n19-notices.test.ts` 가 잰다.
+  const sizeCanvas = async (): Promise<void> => {
+    await waitFor(() => canvasDocument())
+    const proto = (canvasDocument().defaultView as unknown as { Element: typeof Element }).Element.prototype
+    vi.spyOn(proto, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const sized = this.hasAttribute('data-wb-id')
+      return { left: 8, top: 8, right: sized ? 128 : 8, bottom: sized ? 28 : 8, width: sized ? 120 : 0, height: sized ? 20 : 0, x: 8, y: 8, toJSON: () => ({}) } as DOMRect
+    })
+  }
+  afterEach(() => vi.restoreAllMocks())
+
   const badge = (): HTMLElement | null => screen.queryByRole('button', { name: /^상태에 따라 다름/ })
 
   it('뷰 모드에서만 영역에 선다', async () => {
     await open()
+    await sizeCanvas()
     expect(badge()).toBeNull()
     toView()
     await waitFor(() => expect(badge()).not.toBeNull())
@@ -126,6 +140,7 @@ describe('영역 표지 — 뷰 모드', () => {
 
   it('누르면 그 영역의 가지 목록이 나오고, 고르면 상태가 바뀐다 — 머리 전환기 · 주소도', async () => {
     await open()
+    await sizeCanvas()
     toView()
     await waitFor(() => expect(badge()).not.toBeNull())
     fireEvent.click(badge()!)
@@ -143,6 +158,7 @@ describe('영역 표지 — 뷰 모드', () => {
 
   it('목록에 없는 상태의 가지는 목록에 안 싣는다 — 고를 수 없다', async () => {
     await open(PAGE_ROUTE, doc([{ id: 'n-cx', type: 'StateCase', props: { state: 's_gone' }, children: [{ id: 'n-gone', type: 'Text', props: { content: '사라진' } }] }]))
+    await sizeCanvas()
     toView()
     await waitFor(() => expect(badge()).not.toBeNull())
     fireEvent.click(badge()!)

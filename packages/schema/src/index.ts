@@ -104,7 +104,7 @@ export {
   namingContexts,
   nodeDisplayName,
 } from './interaction/describe'
-export { UNKNOWN_VIEW_STATE_NAME, caseStateName, viewStateName, nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
+export { UNKNOWN_VIEW_STATE_NAME, aliasNote, caseStateName, viewStateName, nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
 export { hasRejectedAliasChar, isBlankAlias, tidyAlias } from './alias'
 export { SUMMARY_LIST_MAX, SUMMARY_TEXT_MAX } from './component/summary'
 

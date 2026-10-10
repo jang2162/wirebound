@@ -1,6 +1,7 @@
 import type { ComponentDef } from './component/define'
 import { checkNodeAction, isPageTargetAction } from './interaction/check'
 import { getComponent } from './component/registry'
+import { aliasNote } from './display'
 import { DocumentEnvelopeSchema, NODE_ID_PATTERN, PageEnvelopeSchema } from './envelope'
 import { DEFAULT_CASE, type LayoutDocument, type PageDocument, type WbNode } from './node'
 import { walkNodes } from './tree'
@@ -397,7 +398,7 @@ function validateTree(root: WbNode): ValidationIssue[] {
           'invalid-props',
           node.id,
           `${path}/props`,
-          `${node.type}의 props가 올바르지 않습니다: ${parsed.error.issues
+          `${node.type}의 props가 올바르지 않습니다${aliasNote(node)}: ${parsed.error.issues
             .map((issue) => `${issue.path.join('.')} ${issue.message}`)
             .join(', ')}`,
         ),
@@ -406,7 +407,7 @@ function validateTree(root: WbNode): ValidationIssue[] {
 
     if (def.children === 'none' && (node.children?.length ?? 0) > 0) {
       issues.push(
-        makeIssue('children-not-allowed', node.id, `${path}/children`, `${node.type}은 자식을 담을 수 없습니다`),
+        makeIssue('children-not-allowed', node.id, `${path}/children`, `${node.type}은 자식을 담을 수 없습니다${aliasNote(node)}`),
       )
     }
 

@@ -85,8 +85,8 @@ function extentOf(node: unknown, viewState: string | null, find: (id: string) =>
   return childrenExtent(value, viewState, find)
 }
 
-/** 보이는 가지의 자식 자리의 합. 그려진 자식이 없으면 `null`. */
-function childrenExtent(shown: WbNode, viewState: string | null, find: (id: string) => Element | null): Rect | null {
+/** 보이는 가지의 자식 자리의 합. 그려진 자식이 없으면 `null`. 뷰 모드의 영역 표지(`state-badges.tsx`)도 이 함수로 상자를 짓는다. */
+export function childrenExtent(shown: WbNode, viewState: string | null, find: (id: string) => Element | null): Rect | null {
   const rects: Rect[] = []
   for (const child of Array.isArray(shown.children) ? shown.children : []) {
     const rect = extentOf(child, viewState, find)

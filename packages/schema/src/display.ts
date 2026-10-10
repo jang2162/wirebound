@@ -12,6 +12,7 @@
  * «없음»으로 읽는다.
  */
 import { isBlankAlias } from './alias'
+import { isolateBidi } from './bidi'
 import { CATALOG_DEFS } from './component/catalog/index'
 import type { ComponentDef } from './component/define'
 import { DEFAULT_CASE, type ViewState, type WbNode } from './node'
@@ -70,6 +71,16 @@ export function nodeSummary(node: WbNode, viewStates?: readonly ViewState[]): st
   const parsed = def.props.safeParse(raw)
   const props = parsed.success && isRecord(parsed.data) ? parsed.data : raw
   return def.summary(props)
+}
+
+/**
+ * 검증 · 폴백 문장이 타입 뒤에 붙이는 별칭 꼬리 — ` ('별칭')`, 별칭이 없으면 빈 글. 사람이 그 노드를 부르는 이름이라 타입만으로는 어느 노드인지 모르는 문장
+ * (`validate.ts` 의 `invalid-props` · `children-not-allowed` · 렌더러의 폴백)이 쓴다. **타입이 문장 머리를 지킨다** — `타입의 props가 올바르지 않습니다 ('별칭'): …`
+ * 꼴이라 첫 `(` · `:` 앞이 머리인 소비자(`apps/web` 의 `refusalHead` — 거절 조각의 열쇠)가 별칭에 따라 갈리지 않는다. 별칭이 없는 노드의 문장은 안 바뀐다.
+ */
+export function aliasNote(node: WbNode): string {
+  const alias = nodeAlias(node)
+  return alias === null ? '' : ` ('${isolateBidi(alias)}')`
 }
 
 /** `타입 (별칭)` — 별칭이 없으면 `타입`. 속성 패널 제목 · 캔버스 손잡이처럼 요약이 없는 자리가 쓴다. */
