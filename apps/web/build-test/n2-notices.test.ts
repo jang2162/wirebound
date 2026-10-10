@@ -126,8 +126,9 @@ describe.skipIf(!전제.ok)('N2 정보 통지 — 실브라우저', () => {
 
       await page.keyboard.press('F2')
 
-      const input = page.locator('.wb-shell-region[aria-label="구조 트리"]').getByRole('textbox', { name: '별칭' })
-      await input.waitFor({ timeout: 3000 })
+      // CSS 로 찾는다 — `getByRole` 은 접혀 감춰진(display: none) 입력을 못 찾아, 접힌 채 열리는 결함이 «값 없는 시간 초과» 로 죽는다(구분력이 아니다).
+      const input = page.locator('.wb-shell-region[aria-label="구조 트리"] li:has(> [data-tree-id="n_card00000001"]) input')
+      await input.waitFor({ state: 'attached', timeout: 3000 })
       const box = await input.boundingBox()
       expect({ folded: await side.evaluate((el) => el.classList.contains('wb-shell-folded')), visible: (box?.width ?? 0) > 0 && (box?.x ?? -1) >= 0 }).toEqual({
         folded: false,

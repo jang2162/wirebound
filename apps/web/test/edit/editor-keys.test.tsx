@@ -455,8 +455,8 @@ describe('클립보드 · 복제 — 셸', () => {
    * Q17 · L-078 — 기본 가지는 지울 수 없다(`regionRules`). 줄 `…` 의 «삭제» 는 `title` 이 까닭을 말하지만 키로 친 사람에게는 말이 없었다.
    * 지금은 Delete · Cmd+X 가 정보 통지로 말한다 — 편집 0 · 봉투 0.
    */
-  it('기본 가지에서 Delete · Cut 은 안 지우고 까닭을 정보 통지로 말한다', async () => {
-    const withRegion = pageDoc({
+  const REGION_DOC = () =>
+    pageDoc({
       id: 'n-root',
       type: 'Page',
       children: [
@@ -467,18 +467,27 @@ describe('클립보드 · 복제 — 셸', () => {
         },
       ],
     })
-    const srv = server(withRegion)
-    await openPage(withRegion, { apiOverrides: srv.api })
-    fireEvent.click(structureRegion().querySelector<HTMLElement>('[data-tree-id="c-d"] > .wb-shell-structure-node')!)
 
+  async function openOnDefaultCase() {
+    const srv = server(REGION_DOC())
+    await openPage(REGION_DOC(), { apiOverrides: srv.api })
+    fireEvent.click(structureRegion().querySelector<HTMLElement>('[data-tree-id="c-d"] > .wb-shell-structure-node')!)
+    return srv
+  }
+
+  it('기본 가지에서 Delete 는 안 지우고 까닭을 정보 통지로 말한다', async () => {
+    const srv = await openOnDefaultCase()
     fireEvent.keyDown(document.body, { key: 'Delete', code: 'Delete' })
     await waitFor(() => expect(infoTexts()).toEqual([DEFAULT_CASE_REMOVE_REASON]))
     expect(alertTexts()).toEqual([])
+    expect(srv.calls).toHaveLength(0)
+  })
 
-    // 앞 통지를 치우고 같은 말로 다시 선다 — Cut 도 같은 까닭이다(봉투는 안 싣고 브라우저의 잘라내기가 그대로다).
-    fireEvent.keyDown(document.body, ctrl('x'))
+  it('기본 가지에서 Cut 은 봉투를 안 싣고 안 지우고 같은 까닭을 말한다(브라우저의 잘라내기가 그대로다)', async () => {
+    const srv = await openOnDefaultCase()
     expect(clip('cut', document.body)).toEqual({ written: undefined, prevented: false })
-    expect(infoTexts()).toEqual([DEFAULT_CASE_REMOVE_REASON])
+    await waitFor(() => expect(infoTexts()).toEqual([DEFAULT_CASE_REMOVE_REASON]))
+    expect(alertTexts()).toEqual([])
     expect(srv.calls).toHaveLength(0)
   })
 
