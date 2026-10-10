@@ -574,6 +574,36 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
     })
 
     /**
+     * 칸에 친 채 **로고 링크 «프로젝트 목록»을 눌러 에디터를 떠난다**(장부 L-091 · 정본 «칸에 친 채 떠나는 두 길») — 사람의 누름이라 blur 가 먼저 돌아 주소가
+     * 아직 그 페이지일 때 친 그 페이지에 쓴다(편집 하나). 위 «앞으로»가 어느 페이지에도 안 쓰는 것과 일부러 다르다. 단언은 서버 값: 친 글이 그 페이지에
+     * 있고 revision 이 하나 늘었다. 카나리아: 친 직후 칸 값 · 포커스가 칸 · 도착한 주소가 목록.
+     *
+     * **두 겹이 함께 막는다 — 한 겹씩 떼면 초록이다**: 누름의 blur 커밋(`panels/controls/text-control.tsx` 의 `onBlur`)과 위젯 정리의 쓰기(`useLeftoverCommit`)가
+     * 각자 그 페이지에 쓴다. 둘 다 떼면 서버가 그대로여서 죽는다(마지막 값 `headSeq 1`).
+     */
+    it('로고 링크로 에디터를 떠나면 친 글이 그 페이지에 쓰이고 revision 이 하나 는다 — «앞으로»와 일부러 다른 규칙', async () => {
+      const P = await fixture('draft-leave-link', TEXTS(3))
+      const a = await openTab(P)
+      try {
+        const before = await server(P)
+        await row(a.page, id(0)).click()
+        await content(a.page).fill('떠나며 친 글')
+        const typed = { value: await content(a.page).inputValue(), focused: await content(a.page).evaluate((el) => el === document.activeElement) }
+        await a.page.getByRole('link', { name: '프로젝트 목록', exact: true }).click()
+        await a.page.waitForURL((url) => url.pathname === '/')
+        await poll('친 글이 서버에 닿는다', () => server(P), (now) => now.headSeq > before.headSeq, 5_000)
+        const after = await server(P)
+        expect({
+          typed,
+          revisions: after.headSeq - before.headSeq,
+          first: after.children[0]?.split(':')[1],
+        }).toEqual({ typed: { value: '떠나며 친 글', focused: true }, revisions: 1, first: '떠나며 친 글' })
+      } finally {
+        await a.close()
+      }
+    })
+
+    /**
      * 칸에 친 채 **같은 브라우저의 다른 탭이 로그아웃** — 세션 소식에 셸이 내려가며 위젯이 초안을 넘기지만, 끝난 세션으로 쓰기를 내지 않는다
      * (`panels/property-panel.tsx`의 `useLeftoverCommit` — 패널이 선 세션 세대). 이 탭이 낸 편집 요청(WS `patch` · REST `PATCH …/ops`)을 센다.
      * 카나리아: 친 직후 칸 값 · 이 탭이 로그인 화면에 닿음 · 다른 탭의 로그아웃 요청이 셌다(요청을 세는 자가 돈다).
