@@ -152,25 +152,33 @@ export default defineConfig({
           // 없다) 재려는 것이 *"빌드된 것"*이 아니라 *"진짜 브라우저"*라 결이 같다.
           //
           // **`apps/web/build-test`는 에디터를 실브라우저로 모는 판이다** — 파일마다 일회용 DB · api · vite · Chrome 을 띄우고
-          // 거둔다(`editor-stack.ts`). 그 파일들만 돌리는 것이 `pnpm test:browser`다. **Postgres 가 있어야 돈다** — 없으면
-          // 건너뛰고 그렇다고 말한다. 포트는 빈 것을 받아 워크트리끼리 안 부딪힌다.
+          // 거둔다(`editor-stack.ts`). 그 파일들은 이 프로젝트가 아니라 `vitest.browser.config.ts` 가 파일 병렬로 돌린다
+          // (`pnpm test:browser`) — 여기 다시 담으면 같은 파일이 두 번 돈다. **`export-bundle.test.ts` 만 예외로 여기 든다** — 제
+          // `beforeAll` 에서 `packages/exporter/dist/runtime.js` 를 다시 짓는데, 이 프로젝트는 파일을 차례로 돌려 그 `dist` 를
+          // 다른 파일과 겹쳐 쓰지 않는다. 새 앱 `build-test` 는 여기 줄을 더해야 돈다(앱 글롭을 쓰지 않는 까닭이 이것이다).
+          // **Postgres 가 있어야 돈다** — 없으면 건너뛰고 그렇다고 말한다. 포트는 빈 것을 받아 워크트리끼리 안 부딪힌다.
           //
           // `system-themes/*/build-test` 는 시스템 테마를 저장소 빌드(`wb-theme build`)로 `.wbtheme` 로 내고 실어 본다.
-          include: ['packages/*/build-test/**/*.test.ts', 'apps/*/build-test/**/*.test.ts', 'system-themes/*/build-test/**/*.test.{ts,tsx}'],
+          include: [
+            'packages/*/build-test/**/*.test.ts',
+            'apps/api/build-test/**/*.test.ts',
+            'apps/web/build-test/export-bundle.test.ts',
+            'system-themes/*/build-test/**/*.test.{ts,tsx}',
+          ],
           // tsdown 재빌드를 beforeAll에서 돈다. 기본 테스트 실행에서 분리한 이유:
           // pnpm test가 PATH의 pnpm과 전체 재빌드에 묶이면 개발 루프가 매번 수십 초씩
           // 느려진다. 이 프로젝트만 `pnpm test:build`로 따로 돌린다.
           testTimeout: 300_000,
           hookTimeout: 300_000,
-          // **파일을 차례로 돌린다** — 포크 프로세스는 워커 수만큼 떠도 파일은 하나씩 돈다(다시 재는 법: `pnpm test:build
+          // **파일을 차례로 돌린다** — 포크 프로세스는 워커 수만큼 떠도 파일은 하나씩 돈다(다시 재는 법: `pnpm test:build:serial
           // --reporter=json` 의 파일별 시작 · 끝 시각이 겹치지 않는다). 파일마다 `beforeAll`에서 `packages/*`를 재빌드하고 tsdown 이 `dist`를
           // 비운 뒤 채우므로, 둘이 나란히 돌면 한쪽이 읽는 `dist`를 다른 쪽이 지운다(`Cannot find module …/dist/index.js`
           // — `--maxWorkers=25%`로 돌리면 mcp `dist-smoke`가 죽는다). 워커 수를 CLI 로 얼마를 주든 이 줄이 막는다.
           // `fileParallelism`은 여기 쓰면 조용히 무시된다(위 api 프로젝트 주석) — 같은 이유로 `singleFork`다.
-          // 에디터 판(`apps/web/build-test`)은 이 줄에 기대지 않는다 — `dist` 를 안 읽고 포트 · DB 를 판마다 새로 받는다. 다시 재는
-          // 법: `pnpm test:browser` 둘을 한꺼번에 띄운다. 하나만 `dist` 에 닿는다 — `export-bundle.test.ts` 가 번들에 실릴
+          // 에디터 판(`apps/web/build-test`)은 이 줄에 기대지 않는다 — `dist` 를 안 읽고 포트 · DB 를 판마다 새로 받아 파일끼리
+          // 겹쳐 돌아도 된다(`vitest.browser.config.ts`). 하나만 `dist` 에 닿는다 — `export-bundle.test.ts` 가 번들에 실릴
           // `packages/exporter/dist/runtime.js` 를 제 `beforeAll` 에서 다시 짓는다(그 파일 하나만 덮고 `dist` 를 비우지 않는다 —
-          // `vite.runtime.config.ts` 의 `emptyOutDir`).
+          // `vite.runtime.config.ts` 의 `emptyOutDir`). 그 파일이 이 프로젝트에 남은 까닭이다.
           pool: 'forks',
           poolOptions: { forks: { singleFork: true } },
         },

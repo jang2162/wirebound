@@ -1043,8 +1043,9 @@ SCREEN_CHROMIUM_PATH=/usr/bin/chromium
 pnpm test          # 규격·값·인구조사.  Postgres 가 필요하다 (브라우저는 안 띄운다)
 pnpm typecheck     # 컴파일
 pnpm build         # packages/* 의 dist
-pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브라우저 · 운영 compose 의 값 (없으면 건너뛴다)
-pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만 — apps/web/build-test (Postgres · 브라우저가 없으면 건너뛴다)
+pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브라우저 · 운영 compose 의 값 (없으면 건너뛴다). 아래 둘을 차례로 돈다
+pnpm test:build:serial  # 그 가운데 파일을 차례로 도는 갈래 — 루트 vitest 의 build 프로젝트(실브라우저 에디터 판은 빠진다)
+pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만, 파일 병렬 — apps/web/build-test (Postgres · 브라우저가 없으면 건너뛴다)
 ```
 
 - **`pnpm test`는 실제 Postgres 에 붙는다.** 컨테이너가 healthy 여야 하고 테스트 DB(기본 `wirebound_test`)가 있어야 한다(「테스트가 이유를 알기 어려운 접속 에러로 죽는다」).
@@ -1057,7 +1058,7 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 - **`pnpm test:build`는 시작할 때 패키지를 다시 빌드한다**(`vitest.config.ts`가 *"tsdown 재빌드를 `beforeAll`에서 돈다"*고 적는다). 그래서 넷 중 이것만 다른 셋과 결이 다르다 — 이미 빌드된 자리에서도 **10초 남짓** 든다(`time pnpm test:build` 로 잰다).
 - **`pnpm test:browser`는 에디터를 헤드리스 Chrome 으로 모는 판이다** — jsdom 이 못 재는 포커스 · blur · 클릭 좌표 · 두 연결의
   도착 순서를 잰다. 파일마다 일회용 DB(`apps/api/.env` 의 `DATABASE_URL` 컨테이너에 새로 만들고 끝에 지운다) · api · vite ·
-  Chrome 을 빈 포트로 띄우고 거둔다 — 워크트리 여럿이 동시에 돌려도 안 부딪힌다. `pnpm test:build`도 이 파일들을 돈다.
+  Chrome 을 빈 포트로 띄우고 거둔다 — 워크트리 여럿이 동시에 돌려도 안 부딪힌다. `pnpm test:build`의 둘째 갈래가 이 파일들이다 — 파일 병렬(워커 3, `vitest.browser.config.ts`)로 돌고 `pnpm test:browser --maxWorkers=1` 로 직렬이 된다. 붐비는 기계에서 시간 상한을 단언하는 케이스(`apps/api/test/edit-lost-commit.test.ts` 등)가 빨강이면 워커 수를 줄여 다시 돈다. `export-bundle.test.ts` 만 `pnpm test:build:serial` 이 돈다(`packages/exporter/dist` 를 다시 짓는다).
   브라우저는 시스템 Chrome 을 먼저, 없으면 playwright-core 캐시를 띄워 보고, `EDITOR_BROWSER_PATH`를 주면 그것만 띄워 본다.
   Postgres 에 못 붙거나 브라우저가 안 뜨면 까닭을 한 줄 찍고 건너뛴다. **워크트리에서 `DATABASE_URL`이 compose 기본 포트면
   멈춘다** — 최상위 체크아웃의 컨테이너에 DB 를 만들지 않는다. 웹은 vite dev 로 띄운다 — `EDITOR_STACK_BUNDLE=build pnpm
@@ -1067,7 +1068,7 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 
 ### 트랙 게이트 — 건드린 영역만 돌린다
 
-**`pnpm test:build` 는 `apps/web/build-test` 전부를 이미 돈다 — `pnpm test:browser` 는 그 부분집합이다.** 둘을 함께 적으면 실브라우저 판이 두 번 돈다(실브라우저 판이 `test:build` 시간의 대부분이다 — 다시 재는 법: `pnpm test:build` 와 `pnpm test:browser` 의 벽시계). **전량 게이트는 `pnpm typecheck` · `pnpm build` · `pnpm test` · `pnpm test:build` 넷이다** — `test:browser` 는 따로 적지 않는다.
+**`pnpm test:build` 는 `pnpm test:build:serial` 과 `pnpm test:browser` 를 차례로 돈다 — 둘 다 이미 든다.** 셋을 함께 적으면 판이 두 번 돈다(`pnpm test:browser` 는 `apps/web/build-test` 에서 `export-bundle.test.ts` 만 뺀 전부이고, 그 파일은 `test:build:serial` 이 돈다. 실브라우저 판이 `test:build` 시간의 대부분이다 — 다시 재는 법: 두 갈래의 벽시계). **전량 게이트는 `pnpm typecheck` · `pnpm build` · `pnpm test` · `pnpm test:build` 넷이다** — `test:browser` 는 따로 적지 않는다. 두 갈래가 빠짐없이 한 번씩 도는지는 `pnpm vitest list --filesOnly --project build` 와 `pnpm vitest list --filesOnly -c vitest.browser.config.ts` 의 파일 합이 `apps/*/build-test` · `packages/*/build-test` · `system-themes/*/build-test` 전부와 같은지로 센다.
 
 한 트랙이 한 영역만 건드렸으면 그 영역의 게이트만 돈다. 트랙끼리의 겹침은 **병합 뒤 합친 판의 전량 게이트 한 번**이 잡는다(한 트랙이 바꾼 동작이 다른 트랙 케이스의 판 만들기를 없애면 영역 게이트는 둘 다 초록이다).
 
@@ -1075,7 +1076,7 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 | --- | --- |
 | 문서 · 주석만(코드 글자 불변) | `pnpm typecheck` + 그 글을 읽는 케이스(`git grep` 으로 센다) |
 | `apps/api/**` 만 | `pnpm typecheck` · `pnpm build` · `pnpm vitest run --project api` · `pnpm vitest run --project build apps/api/build-test` |
-| `apps/web/**` 만 | `pnpm typecheck` · `pnpm build` · `pnpm vitest run --project web` · `pnpm test:browser` |
+| `apps/web/**` 만 | `pnpm typecheck` · `pnpm build` · `pnpm vitest run --project web` · `pnpm test:browser` · `pnpm vitest run --project build apps/web/build-test/export-bundle.test.ts` |
 | 그 밖 — `packages/*` · `system-themes/*` · 루트 설정 · 두 앱에 걸침 · 정본 문서를 읽는 케이스 | 전량 넷 |
 
 - **이펙트 · 마운트 순서를 바꾼 트랙은** `EDITOR_STACK_BUNDLE=build pnpm test:browser`(운영 번들)도 돈다.

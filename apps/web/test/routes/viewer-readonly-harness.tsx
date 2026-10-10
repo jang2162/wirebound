@@ -1,6 +1,8 @@
 /**
  * **viewer 는 에디터 어디서도 쓰기를 내지 않는다**(설계서 「권한 모델」 — *"조회 전용 — 편집·코멘트 모두 불가"*).
  *
+ * 이 파일은 훑기 도구만 갖는다 — 케이스는 `viewer-readonly-reach` · `-viewer` · `-demoted` · `-restored` 네 파일이 하나씩 갖는다. 훑기 한 번이 무거워 한 파일에 몰면 web 프로젝트의 벽시계가 그 파일 하나에 묶이므로 파일마다 한 케이스로 갈랐다.
+ *
  * ## 무엇을 재는가 — 쓰기 **요청**이다, 버튼의 글자가 아니다
  *
  * 에디터를 viewer 로 그리고 **닿는 컨트롤을 전부 누르고 · 고르고 · 치고 · 제출하고, 키보드 단축키를 보낸 뒤**
@@ -12,7 +14,7 @@
  * - **WS** — 가짜 소켓이 보낸 프레임을 적는다. **`ping` 이 아닌 프레임은 전부 쓰기**다(`patch` · `lock` · `unlock` —
  *   서버가 셋 다 editor 게이트로 받는다: `apps/api/src/ws/protocol.ts`의 `MIN_ROLE_FOR_FRAME`).
  *
- * **대조가 이 자의 구분력이다.** 같은 훑기를 editor 로 돌리면 쓰기가 **입구마다** 나와야 한다(아래 `REACH`). 그것이
+ * **대조가 이 자의 구분력이다.** 같은 훑기를 editor 로 돌리면 쓰기가 **입구마다** 나와야 한다(아래 `REACH` · `viewer-readonly-reach.test.tsx`). 그것이
  * 안 나오면 훑기가 그 입구에 닿지 못한 것이고, 그때 viewer 의 0 은 아무것도 말하지 않는다. 칸은 **요청의 모양**으로 가른다 —
  * 메서드 · 경로 · 본문의 키. 경로 하나를 한 칸으로 보면 한 경로에 선 입구 여럿 중 하나만 닿아도 칸이 산다
  * (`PATCH pages/:id`는 설명 저장 · 순서 옮기기가 함께 쓰고, `…/comments`는 달기 · 수정 · 삭제 · 재번호가 함께 쓴다).
@@ -20,10 +22,10 @@
  * **대조가 입구 하나를 따로 증언하지 못하는 곳**(칸이 없거나 둘이 서로를 덮는다):
  *
  * - **구조 줄 행동 ↔ 구조 단축키** — 둘 다 `patch structure`를 낸다. 한쪽만 꺼도 칸이 산다. 가르지 않는다 —
- *   viewer 에게 **단축키** 축은 이 파일의 viewer 케이스가 소유하고(단축키 가드를 지운 변조가 여기서만 죽는다),
+ *   viewer 에게 **단축키** 축은 `viewer-readonly-viewer.test.tsx` 의 viewer 케이스가 소유하고(단축키 가드를 지운 변조가 여기서만 죽는다),
  *   **줄 행동**은 `viewer-entries.test.tsx`의 «구조 트리»가 소유한다(줄 행동째 없다).
  * - **메뉴 트리 단축키 ↔ 메뉴 줄 행동** — 둘 다 `menu` 경로로 쓴다. 한쪽만 꺼도 «메뉴 트리» 칸이 산다(editor 대조는 둘 다 닿는다 —
- *   단축키 쪽은 `handleKeyDown`에 탐침을 심어 센다). viewer 에게 **단축키** 축은 이 파일의 viewer 케이스가 소유한다.
+ *   단축키 쪽은 `handleKeyDown`에 탐침을 심어 센다). viewer 에게 **단축키** 축은 `viewer-readonly-viewer.test.tsx` 의 viewer 케이스가 소유한다.
  * - **페이지 이름 변경 · 페이지 추가** — editor 훑기가 **못 닿는다**(칸이 없다). 둘 다 줄 행동이 여는 «이름» 칸인데 그 칸은
  *   하나가 용도만 바꿔 서서(`menu-tree.tsx`의 `RowPanel` · `TreeInput`) 아래 `keyOf`로는 한 칸이다 — 처음 연 용도만
  *   친다(줄 행동으로 옮긴 뒤 어느 용도가 처음인지는 다시 재지 않았다 — 칸이 없는 것은 그대로다).
@@ -32,9 +34,9 @@
  * ## 사각 — 이 자가 닿지 못하는 것
  *
  * - **서버가 만들어야 서는 상태**: 409 충돌 화면(«내 글로 덮기»), 남이 쥔 잠금, «모름»·재전송 통지, 복원 통지.
- *   viewer 는 그 상태에 이르는 쓰기를 못 내므로 스스로는 못 닿는다(역할이 바뀐 **뒤** 새로고침 전의 화면은 아래
+ *   viewer 는 그 상태에 이르는 쓰기를 못 내므로 스스로는 못 닿는다(역할이 바뀐 **뒤** 새로고침 전의 화면은 `viewer-readonly-demoted.test.tsx` 의
  *   «실행 중에 내린 viewer» 케이스가 훑는다).
- * - **새로고침 뒤 되살아나는 칸**은 사각이 **아니다** — 마지막 케이스(«저장소에 editor 때의 초안 칸 다섯을 둔 채 …»)가
+ * - **새로고침 뒤 되살아나는 칸**은 사각이 **아니다** — `viewer-readonly-restored.test.tsx` 의 케이스(«저장소에 editor 때의 초안 칸 다섯을 둔 채 …»)가
  *   소유한다. 다른 케이스들은 초안 저장소를 안 세워(`renderWithProviders`의 `draftStore` 생략) 저장소에서 되살아나는
  *   상태가 입력 공간 밖이고, 그 틈으로 강등된 사람의 수정 상자가 설 수 있다. 그 케이스는 editor 때 칸 다섯(`RESTORED_SLOTS`)을
  *   **화면으로** 채운 저장소 위에서 viewer 로 다시 연다. **칸 목록은 손으로 적은 것이다** — `slot(…, { save })`를 새로 달면 이 판은 그 칸을 안 채우므로 모른다(죽지도
@@ -55,8 +57,8 @@
  *   (0 이면 대표가 바뀐 것이다). 대조는 그것을 증명하지 못한다 — 대표 고르기를 새로 짓지는 않는다(자를 한 판 더 짓는 거래다).
  * - **jsdom 값이다.** 포커스 · blur 순서는 실브라우저와 갈린다(CLAUDE.md) — 실브라우저 값은 이 파일이 갖지 않는다.
  */
-import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, expect } from 'vitest'
 import { CURRENT_DOCUMENT_VERSION, pageJsonText, toPageJson, type PageDocument } from '@wirebound/schema'
 import { App } from '../../src/app'
 import { createHttpClient } from '../../src/api/http-client'
@@ -611,7 +613,7 @@ async function opened(wire: Wire): Promise<void> {
  * `live`면 **editor 로 열어 입구가 선 것을 본 뒤 실행 중에 viewer 로 내리고** 훑는다. 받는 쪽이 `canEdit`을 처음
  * 값으로 굳히면 새로 연 viewer 판은 못 보고(처음 값이 곧 viewer) 이 판만 본다.
  */
-async function sweepEditor(role: ProjectRole, draftStore?: DraftStore, live = false): Promise<Wire> {
+export async function sweepEditor(role: ProjectRole, draftStore?: DraftStore, live = false): Promise<Wire> {
   const serial = (sweepSerial += 1)
   const wire = mount(live ? 'editor' : role, draftStore)
   await opened(wire)
@@ -651,7 +653,7 @@ afterEach(() => {
  * editor 가 **입구마다** 쓰기를 내는가 — 훑기가 그 입구에 닿았다는 증거다. 하나라도 안 나오면 viewer 의 0 이 그 입구에
  * 대해 아무것도 말하지 않는다. 칸은 요청의 모양(메서드 · 경로 · 본문 키)으로 가른다(머리말).
  */
-const REACH: { name: string; hit: (wire: Wire) => boolean }[] = [
+export const REACH: { name: string; hit: (wire: Wire) => boolean }[] = [
   { name: '메뉴 트리(메뉴 CRUD · 순서)', hit: (w) => w.writes.some((r) => route(r)[0] === 'menu') },
   // **한 경로(`PATCH pages/:id`)에 입구가 넷이다** — 이름 변경 · 설명 저장 · 순서 옮기기 · 메뉴 옮기기. 경로로 재면 메뉴 트리의
   // 순서 옮기기가 설명 저장 대신 칸을 채운다. 본문의 키로 가른다. **이름 변경(`title`)은 칸이 없다** — 이
@@ -697,7 +699,7 @@ function commentRoute(write: Write): string[] | undefined {
 }
 
 /** 탭 하나의 저장소 — 새로고침은 **같은 저장소 위에 새 문서**다(`page-meta-conflict.test.tsx`의 것과 같은 작은 판). */
-class MemoryStorage implements Storage {
+export class MemoryStorage implements Storage {
   readonly #items = new Map<string, string>()
   get length(): number {
     return this.#items.size
@@ -720,7 +722,7 @@ class MemoryStorage implements Storage {
 }
 
 /** 저장소에서 되살아나는 칸 전부 — `slot(…, { save })`를 단 칸이다(`comment-panel.tsx` · `page-description.tsx`). */
-const RESTORED_SLOTS = [
+export const RESTORED_SLOTS = [
   'comments/drafts',
   'comments/edit-draft',
   'comments/editing-id',
@@ -729,7 +731,7 @@ const RESTORED_SLOTS = [
 ]
 
 /** 그 사람의 사본에 든 칸 이름. */
-function storedSlots(session: Storage): string[] {
+export function storedSlots(session: Storage): string[] {
   const raw = session.getItem(DRAFT_KEY_PREFIX + ME.id)
   if (raw === null) return []
   return Object.keys((JSON.parse(raw) as { slots: Record<string, unknown> }).slots).sort()
@@ -740,7 +742,7 @@ function storedSlots(session: Storage): string[] {
  * 칸을 버리고 이 판이 빈 저장소로 초록이 된다. 새 코멘트는 한 번 보내 둔다 — 거절(403) 뒤에도 같은 글이면 같은 키라
  * 멱등 키 칸(`comments/post-keys`)이 선다.
  */
-async function fillDraftsAsEditor(store: DraftStore): Promise<void> {
+export async function fillDraftsAsEditor(store: DraftStore): Promise<void> {
   const wire = mount('editor', store)
   await opened(wire)
 
@@ -768,79 +770,3 @@ async function fillDraftsAsEditor(store: DraftStore): Promise<void> {
   fireEvent.change(edit, { target: { value: '강등 전에 고치던 글' } })
   await settle()
 }
-
-describe('viewer 는 에디터에서 쓰기를 내지 않는다', () => {
-  it(
-    'editor 로 훑으면 입구마다 쓰기가 나온다 — 훑기가 닿는다는 대조',
-    async () => {
-      const wire = await sweepEditor('editor')
-      expect(wire.unrouted).toEqual([])
-      expect(REACH.filter((spot) => !spot.hit(wire)).map((spot) => spot.name)).toEqual([])
-    },
-    300_000,
-  )
-
-  it(
-    'viewer 로 훑으면 HTTP 쓰기 0 · WS 쓰기 프레임 0',
-    async () => {
-      const wire = await sweepEditor('viewer')
-      expect(wire.unrouted).toEqual([])
-      expect({ http: [...new Set(wire.http)].sort(), frames: [...new Set(wire.frames)].sort() }).toEqual({
-        http: [],
-        frames: [],
-      })
-    },
-    300_000,
-  )
-
-  /**
-   * **실행 중에 내린 viewer** — editor 로 열어 둔 화면이 새로고침 없이 viewer 가 된 뒤 같은 훑기. 내리기 전에는 아무것도
-   * 안 눌렀다 — 루트는 잡지 않으므로 내리는 순간의 `unlock`도 없다(잡은 자리를 놓는 것은 `role-live.test.tsx`가 잰다).
-   *
-   * 혼자 죽는 변조: 코멘트 패널이 `canEdit`을 **마운트 때 값으로 굳힌다** — 새로 연 viewer 판은 못 본다(처음 값이 곧 거짓).
-   */
-  it(
-    'editor 로 연 화면을 실행 중에 viewer 로 내린 뒤 훑어도 HTTP 쓰기 0 · WS 쓰기 프레임 0',
-    async () => {
-      const wire = await sweepEditor('viewer', undefined, true)
-      expect(wire.unrouted).toEqual([])
-      expect({ http: [...new Set(wire.http)].sort(), frames: [...new Set(wire.frames)].sort() }).toEqual({
-        http: [],
-        frames: [],
-      })
-    },
-    300_000,
-  )
-
-  /**
-   * **새로고침 뒤 되살아나는 칸**(머리말 «사각»의 그 줄을 이 판이 소유한다). editor 때 칸 다섯을 채운 저장소
-   * 위에서 viewer 로 다시 연다 — 강등된 사람이 새로고침한 판이다. 되살린 수정 상자가 viewer 에게 서면 «저장»이
-   * `PATCH …/comments/:id`를 낸다.
-   *
-   * 죽는 변조: 코멘트 패널의 `editing`이 역할을 안 본다(`editing = editingId`) — `viewer-entries`의 «되살린 수정 상자»와
-   * **함께** 죽는다(그 케이스가 **그리는** 축 — 본문 · 상자 없음 · 다시 editor 면 돌아옴 — 을 소유하고, 이 판은 **요청**을
-   * 소유한다). 이 파일과 `viewer-entries`에서 이 판만 죽는 변조: 코멘트 패널이 마운트 때 되살린 멱등 키(`comments/post-keys`)로
-   * 게시를 다시 보낸다(그 밖에서는 editor 의 기존 케이스 하나가 함께 죽는다 — `comment-panel.test.tsx`의 «탭·페이지를 오가도
-   * 쓰던 말이 제자리에 있다» 묶음의 «… 잠금이 남는다»).
-   */
-  it(
-    '저장소에 editor 때의 초안 칸 다섯을 둔 채 viewer 로 다시 열어 훑어도 HTTP 쓰기 0 · WS 쓰기 프레임 0',
-    async () => {
-      const session = new MemoryStorage()
-      const shared = new MemoryStorage()
-      await fillDraftsAsEditor(openDraftStore(() => session, () => shared))
-      expect(storedSlots(session)).toEqual(RESTORED_SLOTS)
-      cleanup()
-      // 새로고침 — 같은 저장소 위에 새 문서. 칸은 그대로 있어야 이 판이 무언가를 잰다.
-      expect(storedSlots(session)).toEqual(RESTORED_SLOTS)
-
-      const wire = await sweepEditor('viewer', openDraftStore(() => session, () => shared))
-      expect(wire.unrouted).toEqual([])
-      expect({ http: [...new Set(wire.http)].sort(), frames: [...new Set(wire.frames)].sort() }).toEqual({
-        http: [],
-        frames: [],
-      })
-    },
-    300_000,
-  )
-})

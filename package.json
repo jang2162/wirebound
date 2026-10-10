@@ -11,8 +11,9 @@
     "build:template": "pnpm --filter @wirebound/theme-kit build && node packages/theme-kit/bin/wb-theme.js pack-template",
     "test": "vitest run --project '!build'",
     "test:watch": "vitest --project '!build'",
-    "test:build": "vitest run --project build",
-    "test:browser": "vitest run --project build apps/web/build-test",
+    "test:build": "pnpm test:build:serial; s=$?; pnpm test:browser; b=$?; [ $s -ne 0 ] && exit $s; exit $b",
+    "test:build:serial": "vitest run --project build",
+    "test:browser": "vitest run -c vitest.browser.config.ts",
     "typecheck": "tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json system-themes/*/tsconfig*.json"
   },
   "devDependencies": {
