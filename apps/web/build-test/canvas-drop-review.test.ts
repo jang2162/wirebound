@@ -422,6 +422,32 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       }
     })
 
+    /**
+     * L-002 — 앞 · 뒤 표시의 차례가 밀리는 판. bob 이 뿌리 첫 자리에 넣으면 n_mid 의 차례가 하나 밀리고 한 줄 높이만큼 아래로 간다. 포인터
+     * 밑에는 n_card 의 뒤 띠가 와 있고 그것도 «n_mid 앞» 이다(같은 부모 · 같은 자리). 부모를 견주므로 표시는 걷히지 않고 새 자리로 옮겨 가고
+     * 떼면 n_mid 앞에 놓인다(옛 판 — 차례까지 견줌 — 은 표시가 걷히고 편집 0).
+     */
+    it('bob 이 뿌리 첫 자리에 넣어 차례가 밀려도 표시가 따라가고 놓으면 n_mid 앞이다', async () => {
+      const { P } = await fixture('order-shifted', DOC)
+      const { page, close, armed } = await armedBeforeMid(P)
+      try {
+        const status = await bobOps(P, [{ op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+        await canvasFrame(page).locator('[data-wb-id="n_bob"]').waitFor()
+        await page.waitForTimeout(150)
+        const afterShift = (await indicators(page)).map((h) => `${h.placement}:${h.axis}`)
+        await page.mouse.up()
+        const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s).includes('"n_t3","n_mid"'), 3000).catch(() => shape(P))
+        expect({ armed, status, afterShift, final }).toEqual({
+          armed: ['before:y'],
+          status: 200,
+          afterShift: ['after:y'],
+          final: { ROOT: ['n_bob', 'n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_t3', 'n_mid', 'n_empt', 'n_t0', 'n_t1', 'n_t2', 'n_end'] },
+        })
+      } finally {
+        await close()
+      }
+    })
+
     /** 대조군 — 표시한 자리를 안 미는 남의 편집(아래 노드의 글)에는 표시가 남고 보인 자리에 선다. */
     it('bob 이 아래 다른 노드의 글을 고쳐도 표시가 남고 놓으면 보인 자리에 선다', async () => {
       const { P } = await fixture('prop-below', DOC)
@@ -614,6 +640,49 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         })
       } finally {
         await close()
+      }
+    })
+  })
+
+  /** L-002 — 넣은 칸이 포인터 밑으로 밀려 오는 판. 위 «못 재는 것» 이 이 케이스다. */
+  describe('«안» 표시 — 넣은 칸이 포인터 밑으로 밀려 와도', () => {
+    const DOC: SeedNode[] = [
+      text('n_top', '위 글'),
+      { id: 'n_grid', type: 'Grid', props: { columns: 3 }, children: [text('n_g0', '칸 영')] },
+      text('n_t3', '옮길 글'),
+      text('n_end', '끝'),
+    ]
+
+    it('둘째 칸에 세운 «안» 표시가 새 칸의 «뒤» 로 따라가고 떼면 그 그리드 끝이다', async () => {
+      const { P } = await fixture('inside-shifted', DOC)
+      const tab = await openTab(P)
+      try {
+        const group = tab.page.getByRole('group', { name: '줌' })
+        for (let step = 0; step < 12; step += 1) {
+          const now = Number((await group.locator('.wb-shell-zoom-value').textContent())?.replace('%', '')) / 100
+          if (Math.abs(now - 0.5) < 0.01) break
+          await group.getByRole('button', { name: now < 0.5 ? '확대' : '축소', exact: true }).click()
+        }
+        await select(tab.page, 'n_t3')
+        await handle(tab.page).waitFor()
+        const grid = await nodeBox(tab.page, 'n_grid')
+        const g0 = await nodeBox(tab.page, 'n_g0')
+        await grabTo(tab.page, { x: grid.x + (grid.width * 1.5) / 3, y: g0.y + g0.height / 2 })
+        const armed = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
+        const status = await bobOps(P, [{ op: 'add', path: '/root/children/1/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+        await canvasFrame(tab.page).locator('[data-wb-id="n_bob"]').waitFor()
+        await tab.page.waitForTimeout(150)
+        const afterInsert = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
+        await tab.page.mouse.up()
+        const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s).includes('n_t3"]'), 3000).catch(() => shape(P))
+        expect({ armed, status, afterInsert, final }).toEqual({
+          armed: ['inside:null'],
+          status: 200,
+          afterInsert: ['after:x'],
+          final: { ROOT: ['n_top', { n_grid: ['n_bob', 'n_g0', 'n_t3'] }, 'n_end'] },
+        })
+      } finally {
+        await tab.close()
       }
     })
   })
