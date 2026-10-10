@@ -27,6 +27,8 @@ import { ensureCatalog } from './schema-setup'
 import type { ScreenRenderer } from './services/screen-render'
 import { readExportRuntime } from './services/export-runtime'
 import { createLateCommitWatch, type LateCommitWatch } from './services/lost-commit'
+import { TOO_DEEP_MESSAGE, jsonNestingExceeds } from './services/nesting'
+import { badRequest } from './errors'
 import { backfillProjectThemes, seedSystemThemes } from './services/system-themes'
 import { withTransaction } from './db/tx'
 import { registerRealtime } from './ws'
@@ -235,6 +237,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.addHook('onClose', async () => app.lateCommits.stop())
   closeConnectionsAfterReplyWhileClosing(app)
   registerErrorHandler(app)
+  // **본문의 중첩이 한도를 넘으면 라우트에 닿기 전에 400 이다**(`services/nesting.ts`) — PUT · 가져오기 · 프리셋 · REST ops 가 모두 같은 자리를 지난다. 파일(Buffer)은 안 본다.
+  app.addHook('preValidation', async (request) => {
+    const body: unknown = request.body
+    if (body !== null && typeof body === 'object' && !Buffer.isBuffer(body) && jsonNestingExceeds(body)) throw badRequest(TOO_DEEP_MESSAGE)
+  })
   await registerAuthPlugin(app, config)
   registerProjectRoleDecorator(app)
   // 실시간 층. **인증·역할 데코레이터 뒤여야 한다** — WS 라우트가
