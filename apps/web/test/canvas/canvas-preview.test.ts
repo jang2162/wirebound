@@ -67,6 +67,34 @@ describe('previewDocument — 새 타입', () => {
   })
 })
 
+describe('previewDocument — 노드 객체 공유(L-009)', () => {
+  /**
+   * 렌더러가 노드 객체 동일성으로 엘리먼트를 재사용하므로(`packages/renderer/src/render.tsx` 의 `nodeCacheFor`) 사본이 건드리지 않은 서브트리를 **같은 객체**로
+   * 두는 것이 미리보기의 비용을 길 위의 노드로 줄인다 — 새 타입 · 옮기기 둘 다.
+   */
+  it('끼운 길(뿌리 · 부모)만 새 객체고 나머지 노드는 스토어 문서의 그 객체다', () => {
+    const root = DOC.root as WbNode
+    const [a, box, b] = root.children as WbNode[]
+    const out = previewDocument(DOC, { placing: { kind: 'new', type: 'Divider' }, target: { parentId: 'n-box', index: 1, placement: 'after' } })!
+    const outRoot = out.root as WbNode
+    const [outA, outBox, outB] = outRoot.children as WbNode[]
+    expect({
+      rootIsNew: outRoot !== root,
+      boxIsNew: outBox !== box,
+      untouchedSiblingsShared: outA === a && outB === b,
+      boxChildrenShared: (outBox!.children as WbNode[])[0] === (box!.children as WbNode[])[0] && (outBox!.children as WbNode[])[2] === (box!.children as WbNode[])[1],
+    }).toEqual({ rootIsNew: true, boxIsNew: true, untouchedSiblingsShared: true, boxChildrenShared: true })
+  })
+
+  it('옮기기도 같다 — 옮기는 노드의 원본과 길 밖의 형제가 그 객체다', () => {
+    const root = DOC.root as WbNode
+    const [a, box, b] = root.children as WbNode[]
+    const out = previewDocument(DOC, { placing: { kind: 'node', id: 'n-a' }, target: { parentId: 'n-root', index: 2, placement: 'after' } })!
+    const outChildren = (out.root as WbNode).children as WbNode[]
+    expect({ original: outChildren[0] === a, untouched: outChildren[1] === box && outChildren[2] === b }).toEqual({ original: true, untouched: true })
+  })
+})
+
 describe('previewDocument — 옮기기', () => {
   it('사본을 새 자리에 끼우고 원본은 제자리에 둔다 — 사본의 id 는 서브트리 전부 미리보기 id 다', () => {
     const out = previewDocument(DOC, { placing: { kind: 'node', id: 'n-box' }, target: { parentId: 'n-root', index: 2, placement: 'after' } })
