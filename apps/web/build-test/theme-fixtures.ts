@@ -5,7 +5,7 @@
  * 안에서 짓는다** — 업로드가 받는 진짜 산출물이고, 그 `Card` 뷰가 «샘플 카드» 를 그려 SDK 기본 뷰와 갈린다(시스템 테마 `system-admin` 의
  * 첫 판은 뷰가 기본 뷰 그대로라 «테마 뷰로 그렸다» 를 못 가른다).
  */
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,6 +24,37 @@ export async function sampleTheme(): Promise<Uint8Array> {
     return new Uint8Array(readFileSync(built.file))
   } finally {
     rmSync(outDir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * **실제 컨트롤을 그리는 테마**(`controls@1.0.0`) — `Button` 은 `<button>`, `Field` 는 `<input>` 을 그린다. SDK 기본 뷰는 입력을 `<div>` 로 그려 포커스 요소가 없어
+ * (`packages/theme-sdk` 의 기본 뷰) 축소판의 `inert`(`src/palette/palette-thumbs.tsx`)가 «진짜 컨트롤» 에서도 서는지를 못 가른다. kit 의 `sample-theme` 를 복사해
+ * 두 뷰만 바꿔 `buildTheme` 로 짓는다 — 업로드가 받는 진짜 산출물이다.
+ */
+export async function controlsTheme(): Promise<Uint8Array> {
+  const dir = mkdtempSync(join(tmpdir(), 'wb-controls-theme-'))
+  try {
+    cpSync(SAMPLE_ROOT, dir, { recursive: true })
+    writeFileSync(
+      join(dir, 'theme.config.ts'),
+      `import { defineManifest } from '@wirebound/theme-sdk'
+export default defineManifest({ id: 'controls', name: '컨트롤', version: '1.0.0', sdk: '^1.0.0', tokens: { items: {} } })
+`,
+    )
+    writeFileSync(
+      join(dir, 'src/index.tsx'),
+      `import { defineTheme, Root, view } from '@wirebound/theme-sdk'
+import manifest from '../theme.config'
+const Button = view(({ props }) => <Root as="button">{String(props.label ?? '단추')}</Root>)
+const Field = view(({ props }) => <Root as="div"><input type="text" aria-label="실제 입력" defaultValue={String(props.label ?? '')} /></Root>)
+export default defineTheme({ manifest, views: { Button, Field } })
+`,
+    )
+    const built = await buildTheme({ root: dir, entry: 'src/index.tsx', outDir: join(dir, 'out') })
+    return new Uint8Array(readFileSync(built.file))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 }
 

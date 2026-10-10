@@ -39,6 +39,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import type { NodeLock, PatchOp, ViewState, WbNode } from '@wirebound/schema'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
+import { addAbilitiesUnderLock } from '../edit/add-abilities'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { createNode } from '../edit/create-node'
 import { aliasOps, insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops'
@@ -214,8 +215,8 @@ export type OpenPicker = 'inside' | 'after' | 'pattern' | 'preset'
  *
  * | 고르개 | 그려도 되는 조건 | 그 조건이 잠금을 어떻게 보나 |
  * |---|---|---|
- * | `'inside'` | `abilities.addInside` | `structureAbilities`가 잠금을 지난다 |
- * | `'after'` | `abilities.addAfter` | 같음 |
+ * | `'inside'` | `abilities.addInside` | `edit/add-abilities.ts` — 넣는 편집이 남의 잠금에 부딪히나 |
+ * | `'after'` | `abilities.addAfter` | 같음 — 고른 노드의 잠금도 먼저 본다 |
  * | `'pattern'` | `!patternLocked` | 꽂힐 자리의 잠금(고른 노드 · 없으면 루트) |
  * | `'preset'` | `!presetLocked` | 페이지에 남의 잠금이 하나라도 |
  *
@@ -366,7 +367,10 @@ export function useStructureCommands(props: {
   const many = selectedNodeIds.length > 1
   const otherLock = many ? (selectedNodeIds.map((id) => store.lockedBy(id)).find((lock) => lock !== null) ?? null) : null
   const removable = many && document !== null && removeManyOps(document, selectedNodeIds) !== null
-  const abilities = selectionAbilities(document, selectedNodeIds, selectedNodeId, props.selectedLock, otherLock !== null, removable)
+  const selectionBased = selectionAbilities(document, selectedNodeIds, selectedNodeId, props.selectedLock, otherLock !== null, removable)
+  // «안에 추가» · «아래 추가» 는 고른 노드의 잠금이 아니라 **넣는 편집이 부딪히나** 로 가른다(카드 «넣기» 와 같은 물음 — `edit/add-abilities.ts`).
+  const adds = document === null || selectedNodeId === null ? null : addAbilitiesUnderLock(document, selectedNodeId, props.selectedLock, store.editBlockedBy)
+  const abilities = adds === null ? selectionBased : { ...selectionBased, addInside: adds.addInside, addAfter: adds.addAfter }
   // **판정 밖의 둘도 잠금을 지난다.** 어느 잠금을 지나는지는 각각의 필드 주석에 있다 —
   // 여기서 하는 것은 고르기뿐이고 판정은 스토어의 `lockedBy`가 이미 했다.
   const patternLock = selectedNodeId === null ? props.pageLock : props.selectedLock
@@ -415,6 +419,12 @@ export function useStructureCommands(props: {
     const ops =
       adding === 'inside' ? insertInside(selectedNodeId, node) : insertAfter(selectedNodeId, node)
 
+    // 고르개를 연 뒤 남이 그 자리를 잡았을 수 있다(고르개는 `visiblePicker` 가 걷지만 누름이 먼저 올 수 있다) — 보내기 전에 서버와 같은 물음을 한 번 더.
+    const blocker = ops === null ? null : store.editBlockedBy(ops)
+    if (blocker !== null) {
+      store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
+      return
+    }
     if (commitOps(ops)) store.selectNode(node.id)
   }
 
@@ -750,6 +760,10 @@ export function useStructureCommands(props: {
     pageLock: props.pageLock,
     abilities,
     region: regionRulesAt(document, selectedNodeId),
+    addBlocked: {
+      ...(adds?.insideBlockedBy == null ? {} : { addInside: lockedNotice(adds.insideBlockedBy.userName) }),
+      ...(adds?.afterBlockedBy == null ? {} : { addAfter: lockedNotice(adds.afterBlockedBy.userName) }),
+    },
   }
 
   return {

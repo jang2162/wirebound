@@ -422,6 +422,32 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       }
     })
 
+    /**
+     * L-002 — 앞 · 뒤 표시의 차례가 밀리는 판. bob 이 뿌리 첫 자리에 넣으면 n_mid 의 차례가 하나 밀리고 한 줄 높이만큼 아래로 간다. 포인터
+     * 밑에는 n_card 의 뒤 띠가 와 있고 그것도 «n_mid 앞» 이다(같은 부모 · 같은 자리). 부모를 견주므로 표시는 걷히지 않고 새 자리로 옮겨 가고
+     * 떼면 n_mid 앞에 놓인다(옛 판 — 차례까지 견줌 — 은 표시가 걷히고 편집 0).
+     */
+    it('bob 이 뿌리 첫 자리에 넣어 차례가 밀려도 표시가 따라가고 놓으면 n_mid 앞이다', async () => {
+      const { P } = await fixture('order-shifted', DOC)
+      const { page, close, armed } = await armedBeforeMid(P)
+      try {
+        const status = await bobOps(P, [{ op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+        await canvasFrame(page).locator('[data-wb-id="n_bob"]').waitFor()
+        await page.waitForTimeout(150)
+        const afterShift = (await indicators(page)).map((h) => `${h.placement}:${h.axis}`)
+        await page.mouse.up()
+        const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s).includes('"n_t3","n_mid"'), 3000).catch(() => shape(P))
+        expect({ armed, status, afterShift, final }).toEqual({
+          armed: ['before:y'],
+          status: 200,
+          afterShift: ['after:y'],
+          final: { ROOT: ['n_bob', 'n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_t3', 'n_mid', 'n_empt', 'n_t0', 'n_t1', 'n_t2', 'n_end'] },
+        })
+      } finally {
+        await close()
+      }
+    })
+
     /** 대조군 — 표시한 자리를 안 미는 남의 편집(아래 노드의 글)에는 표시가 남고 보인 자리에 선다. */
     it('bob 이 아래 다른 노드의 글을 고쳐도 표시가 남고 놓으면 보인 자리에 선다', async () => {
       const { P } = await fixture('prop-below', DOC)
@@ -509,9 +535,11 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         try {
           const status = await bobOps(P, [{ op: 'remove', path: '/root/children/3' }])
           await treeRow(page, 'n_empt').waitFor({ state: 'detached' })
+          await page.waitForTimeout(150)
+          const afterRemoved = (await indicators(page)).map((h) => h.placement)
           await page.mouse.up()
           await page.waitForTimeout(800)
-          expect({ armed, status }).toEqual({ armed: ['inside'], status: 200 })
+          expect({ armed, status, afterRemoved }).toEqual({ armed: ['inside'], status: 200, afterRemoved: [] })
           expect(await shape(P)).toEqual({ ROOT: ['n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_mid', 'n_t0', 'n_t1', 'n_t2', 'n_t3', 'n_end'] })
         } finally {
           await close()
@@ -524,13 +552,41 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         try {
           const status = await bobOps(P, [{ op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
           await treeRow(page, 'n_bob').waitFor({ state: 'attached' })
+          await page.waitForTimeout(150)
+          const afterShift = (await indicators(page)).map((h) => h.placement)
           await page.mouse.up()
           await page.waitForTimeout(800)
-          expect({ armed, status }).toEqual({ armed: ['before'], status: 200 })
+          expect({ armed, status, afterShift }).toEqual({ armed: ['before'], status: 200, afterShift: [] })
           expect([
             { ROOT: ['n_bob', 'n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_mid', 'n_empt', 'n_t0', 'n_t1', 'n_t2', 'n_t3', 'n_end'] },
             { ROOT: ['n_bob', 'n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_t3', 'n_mid', 'n_empt', 'n_t0', 'n_t1', 'n_t2', 'n_end'] },
           ]).toContainEqual(await shape(P))
+        } finally {
+          await close()
+        }
+      })
+
+      /** L-027 — 줄이 밀려 포인터 밑에 같은 부모의 다른 줄이 오면 표시가 그 줄로 따라가고 놓으면 표시한 줄 앞에 선다. */
+      it('bob 이 뿌리 첫 자리에 넣어 같은 부모의 다른 줄이 포인터 밑으로 오면 표시가 따라가고 놓으면 그 줄 앞이다', async () => {
+        const { P } = await fixture('tree-follow', DOC)
+        const { page, close, armed } = await armedOnRow(P, 'n_t1', 0.15)
+        try {
+          const status = await bobOps(P, [{ op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+          await treeRow(page, 'n_bob').waitFor({ state: 'attached' })
+          await page.waitForTimeout(150)
+          const shown = await indicators(page)
+          const t0 = (await treeRow(page, 'n_t0').boundingBox())!
+          await page.mouse.up()
+          await page.waitForTimeout(800)
+          expect({ armed, status, shown: shown.map((h) => h.placement), onT0: shown.length === 1 && Math.abs(shown[0]!.rect.y - t0.y) < 2 }).toEqual({
+            armed: ['before'],
+            status: 200,
+            shown: ['before'],
+            onT0: true,
+          })
+          expect(await shape(P)).toEqual({
+            ROOT: ['n_bob', 'n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_mid', 'n_empt', 'n_t3', 'n_t0', 'n_t1', 'n_t2', 'n_end'],
+          })
         } finally {
           await close()
         }
@@ -615,6 +671,125 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       } finally {
         await close()
       }
+    })
+  })
+
+  /** L-002 — 넣은 칸이 포인터 밑으로 밀려 오는 판. 위 «못 재는 것» 이 이 케이스다. */
+  describe('«안» 표시 — 넣은 칸이 포인터 밑으로 밀려 와도', () => {
+    const DOC: SeedNode[] = [
+      text('n_top', '위 글'),
+      { id: 'n_grid', type: 'Grid', props: { columns: 3 }, children: [text('n_g0', '칸 영')] },
+      text('n_t3', '옮길 글'),
+      text('n_end', '끝'),
+    ]
+
+    it('둘째 칸에 세운 «안» 표시가 새 칸의 «뒤» 로 따라가고 떼면 그 그리드 끝이다', async () => {
+      const { P } = await fixture('inside-shifted', DOC)
+      const tab = await openTab(P)
+      try {
+        const group = tab.page.getByRole('group', { name: '줌' })
+        for (let step = 0; step < 12; step += 1) {
+          const now = Number((await group.locator('.wb-shell-zoom-value').textContent())?.replace('%', '')) / 100
+          if (Math.abs(now - 0.5) < 0.01) break
+          await group.getByRole('button', { name: now < 0.5 ? '확대' : '축소', exact: true }).click()
+        }
+        await select(tab.page, 'n_t3')
+        await handle(tab.page).waitFor()
+        const grid = await nodeBox(tab.page, 'n_grid')
+        const g0 = await nodeBox(tab.page, 'n_g0')
+        await grabTo(tab.page, { x: grid.x + (grid.width * 1.5) / 3, y: g0.y + g0.height / 2 })
+        const armed = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
+        const status = await bobOps(P, [{ op: 'add', path: '/root/children/1/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+        await canvasFrame(tab.page).locator('[data-wb-id="n_bob"]').waitFor()
+        await tab.page.waitForTimeout(150)
+        const afterInsert = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
+        await tab.page.mouse.up()
+        const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s).includes('n_t3"]'), 3000).catch(() => shape(P))
+        expect({ armed, status, afterInsert, final }).toEqual({
+          armed: ['inside:null'],
+          status: 200,
+          afterInsert: ['after:x'],
+          final: { ROOT: ['n_top', { n_grid: ['n_bob', 'n_g0', 'n_t3'] }, 'n_end'] },
+        })
+      } finally {
+        await tab.close()
+      }
+    })
+  })
+
+  /**
+   * L-003 — CSS `direction: rtl` 로 바뀐 보이는 차례. 가로 `Flex` 가 rtl 이면 DOM 의 첫 자식이 오른쪽 끝에 선다 — 왼쪽 절반은 «문서의 뒤» 다.
+   * 고치기 전: `flex-direction` 만 읽어(`row` — 뒤집힘 아님) 왼쪽 절반을 «앞» 으로 읽었고 미리보기가 포인터의 반대편에 섰다.
+   * `order` 는 읽지 않는다 — 새 노드가 `order: 0` 으로 서므로 DOM 의 «앞 · 뒤» 가 보이는 자리의 뜻을 못 갖는다(아래 케이스가 잰 값을 적는다).
+   */
+  describe('보이는 차례 — direction: rtl · order', () => {
+    const DOC: SeedNode[] = [
+      text('n_top', '위 글'),
+      {
+        id: 'n_row',
+        type: 'Flex',
+        props: { direction: 'row' },
+        children: [text('n_r0', '가로 하나'), text('n_r1', '가로 둘'), text('n_r2', '가로 셋')],
+      },
+      text('n_t3', '옮길 글'),
+    ]
+
+    /** 가로 무리의 `target` 자식의 왼 · 오른 절반 한가운데에서 보인 미리보기 — DOM 이웃(앞 → 뒤)과 보이는 자리(미리보기 왼끝이 자식들 왼끝 가운데 어디인가). */
+    async function previewAt(css: string, target: string): Promise<{ left: string; right: string; visual: string[] }> {
+      const { P } = await fixture('visual-order', DOC)
+      const tab = await openTab(P)
+      try {
+        const frame = (await (await tab.page.$('iframe.wb-shell-canvas-iframe'))!.contentFrame())!
+        await frame.evaluate((rule) => {
+          const style = document.createElement('style')
+          style.textContent = rule
+          document.head.appendChild(style)
+        }, css)
+        // 줌 0.5 — rtl 이면 가로 무리가 문서의 오른쪽 끝에 서므로 1280px 문서가 칸(860px)에 다 들어와야 한다.
+        const group = tab.page.getByRole('group', { name: '줌' })
+        for (let step = 0; step < 12; step += 1) {
+          const now = Number((await group.locator('.wb-shell-zoom-value').textContent())?.replace('%', '')) / 100
+          if (Math.abs(now - 0.5) < 0.01) break
+          await group.getByRole('button', { name: now < 0.5 ? '확대' : '축소', exact: true }).click()
+        }
+        await select(tab.page, 'n_t3')
+        await handle(tab.page).waitFor()
+        const boxes = await nodeBoxes(tab.page, ['n_r0', 'n_r1', 'n_r2'])
+        const mid = boxes[target]!
+        const out: Record<'left' | 'right', string> = { left: '', right: '' }
+        for (const side of ['left', 'right'] as const) {
+          await grabTo(tab.page, { x: mid.x + mid.width * (side === 'left' ? 0.2 : 0.8), y: mid.y + mid.height / 2 })
+          const shown = await indicators(tab.page)
+          // 미리보기가 보이는 가로 차례의 어디에 섰나 — 자식 셋의 왼끝 사이에서 미리보기 왼끝이 몇 번째인가.
+          const lefts = Object.values(boxes).map((box) => box.x).sort((a, b) => a - b)
+          const rank = shown.length === 0 ? -1 : lefts.filter((x) => x < shown[0]!.rect.x - 1).length
+          out[side] = shown.length === 0 ? '없음' : `${shown[0]!.placement}:${shown[0]!.prev}→${shown[0]!.next} 보이는 ${rank}번째`
+          await tab.page.keyboard.press('Escape')
+          await tab.page.mouse.up()
+          await tab.page.waitForTimeout(100)
+        }
+        const visual = Object.entries(boxes).sort((a, b) => a[1].x - b[1].x).map(([id]) => id)
+        return { ...out, visual }
+      } finally {
+        await tab.close()
+      }
+    }
+
+    it('direction: rtl — 왼쪽 절반이 문서의 «뒤» 다(보이는 오른쪽 끝이 첫 자식)', async () => {
+      const got = await previewAt('[data-wb-id="n_row"]{direction:rtl}', 'n_r1')
+      // 왼쪽 절반(포인터가 n_r1 의 왼쪽 = n_r2 쪽)은 «n_r1 뒤» 이고 미리보기가 n_r1 의 왼쪽(보이는 둘째 자리 — 앞에 n_r2 · n_r1 이 아닌 …)에 선다.
+      expect(got).toEqual({ visual: ['n_r2', 'n_r1', 'n_r0'], left: expect.stringMatching(/^after:n_r1→n_r2 /), right: expect.stringMatching(/^before:n_r0→n_r1 /) })
+    })
+
+    /**
+     * 기록 — `order` 는 안 읽는다. n_r0 가 `order: 2` 라 보이는 차례는 n_r1 · n_r2 · n_r0 이다. 보이는 맨 끝(n_r0)의 오른쪽 절반은 «n_r0 뒤»
+     * 로 읽혀 DOM 이웃 `n_r0→n_r1` 사이에 서는데, 새 노드는 `order: 0` 이라 그 자리가 **보이는 맨 앞**이다 — 포인터(맨 끝)와 미리보기(맨 앞)가 갈린다.
+     * 고치지 않는다: 놓을 노드의 `order` 를 정할 수 없어(문서 스키마에 `order` 가 없다) DOM 앞 · 뒤가 보이는 자리의 뜻을 못 갖는다. 시스템 테마 다섯의
+     * 노드 상자에 `order` 규칙이 없다(`src/canvas/canvas-drop.ts` 머리말).
+     */
+    it('기록 — order 는 안 읽는다: 보이는 맨 끝의 오른쪽 절반이 «보이는 맨 앞» 에 미리보기를 세운다', async () => {
+      const got = await previewAt('[data-wb-id="n_r0"]{order:2}', 'n_r0')
+      expect(got).toEqual({ visual: ['n_r1', 'n_r2', 'n_r0'], left: expect.stringMatching(/^before:/), right: 'after:n_r0→n_r1 보이는 0번째' })
     })
   })
 

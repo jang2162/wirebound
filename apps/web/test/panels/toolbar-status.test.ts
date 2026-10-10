@@ -25,6 +25,7 @@
 import { describe, expect, it } from 'vitest'
 import type { NodeLock, PageDocument, WbNode } from '@wirebound/schema'
 import type { TreeMenuNode } from '../../src/api/types'
+import { addAbilitiesUnderLock } from '../../src/edit/add-abilities'
 import { MULTI_WHY_DISABLED, selectionAbilities, structureAbilities, type StructureAbilities } from '../../src/edit/structure-actions'
 import { treeAbilities, type TreeAbilities, type TreeSelection } from '../../src/tree/tree-actions'
 import {
@@ -93,8 +94,19 @@ function one(nodeId: string | null, lock: NodeLock | null = null, pageLock: Node
     isRoot: nodeId !== null && document.root.id === nodeId,
     lock,
     pageLock,
-    abilities: structureAbilities(document, nodeId, lock),
+    abilities: realAbilities(document, nodeId, lock),
   }
+}
+
+/**
+ * 하나 고른 판의 진짜 판정 — `useStructureCommands` 가 `structureAbilities` 위에 «안에 추가» · «아래 추가» 의 잠금(`edit/add-abilities.ts` — 넣는
+ * 편집이 부딪히나)을 얹는 그대로다. 남의 잠금이 편집에 안 부딪히는 판(`blockedBy` 가 늘 `null`)이라 «안에 추가» 는 고른 노드의 잠금과 무관하다.
+ */
+function realAbilities(document: PageDocument, nodeId: string | null, lock: NodeLock | null): StructureAbilities {
+  const base = structureAbilities(document, nodeId, lock)
+  if (nodeId === null) return base
+  const adds = addAbilitiesUnderLock(document, nodeId, lock, () => null)
+  return { ...base, addInside: adds.addInside, addAfter: adds.addAfter }
 }
 
 /** 여럿을 고른 상태의 입력 — 기준 노드는 마지막 것이다. `anyLock` 은 기준 노드 밖에서 남이 잡은 것. */
@@ -189,8 +201,8 @@ describe('구조 — 잠금이 차례의 맨 위다(고른 것이 있을 때)', 
    * **배지가 안 붙는 자리다.** 잠긴 노드 자신에게는 트리 줄에 *"보라 편집 중"* 배지가 붙지만 막히는 것은 그 서브트리 전체다 — 자동 선택된
    * 루트가 늘 그 조상이다. 루트가 원래 못 하는 여섯도 지금 꺼진 까닭은 잠금이다(`안에 추가`가 잠금으로 함께 꺼진다).
    */
-  it('루트가 남의 잠금에 막히면 일곱 다 이름과 함께 잠금을 말한다', () => {
-    expect(Object.values(reasons(one('n-root', BORA)))).toEqual(KEYS.map(() => lockedSelectionStatus('보라')))
+  it('루트가 남의 잠금에 막히면 «안에 추가» 만 켜지고 — 남의 잠금이 편집에 안 부딪힌다 — 여섯은 이름과 함께 잠금을 말한다', () => {
+    expect(reasons(one('n-root', BORA))).toEqual(Object.fromEntries(KEYS.map((key) => [key, key === 'addInside' ? undefined : lockedSelectionStatus('보라')])))
   })
 
   /**

@@ -30,7 +30,7 @@ import { ActionMenu } from '../shell/action-menu'
 import { ICONS, shellIcon } from '../shell/icons'
 import { useAllCases, useHiddenNodes, useViewState } from '../shell/use-view-state'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import { useLockedBy } from '../store/use-locked-by'
+import { useLockedBy, useLocksVersion } from '../store/use-locked-by'
 import { structureKey, useCollapsed, type Collapsed } from '../tree/collapse'
 import { useAliasEdit, type AliasEdit } from './alias-edit'
 import { nodeTypeLabel } from './node-shape'
@@ -203,9 +203,9 @@ export function StructureTree(props: {
    * 싣는다(`usePublishTreeRegion`) — 다른 끌기가 트리 위를 지날 때 이 줄들로 판정한다.
    *
    * **놓는 답은 보인 답이다**(`sameDrop` — 캔버스 손잡이와 같은 판정 함수). 끄는 사이 남이 보인 줄의 노드를 지우거나 앞에 줄을 넣으면
-   * 멈춘 포인터 밑에 다른 줄이 와 있어, 끌기 장치가 뗀 좌표로 다시 물은 답이 보인 띠와 다른 자리다 — 그때는 놓지 않는다
-   * (`drag/use-pointer-drag.ts` 머리말 «놓는 답은 보인 답이다» · `build-test/canvas-drop-review.test.ts` «구조 트리 줄 끌기»). 표시는
-   * 옛 줄 상자에 남는다(캔버스의 `refresh` 를 트리에는 걸지 않았다).
+   * 멈춘 포인터 밑에 다른 부모의 줄이 와 있으면 끌기 장치가 뗀 좌표로 다시 물은 답이 보인 자리와 다른 부모다 — 그때는 놓지 않는다
+   * (`drag/use-pointer-drag.ts` 머리말 «놓는 답은 보인 답이다» · `build-test/canvas-drop-review.test.ts` «구조 트리 줄 끌기»). 문서 · 잠금이 바뀌면
+   * 표시를 마지막 좌표로 다시 물어(`refresh`) 새 줄로 옮기거나 걷는다 — 같은 부모의 줄이면 따라가고(`sameDrop` 은 부모만 견준다) 다른 부모면 걷는다.
    */
   const drag = usePointerDrag<string, StructureDrop>({
     onOver: (source, point) => {
@@ -218,6 +218,12 @@ export function StructureTree(props: {
     sameDrop,
     scrollContainer: () => scrollParent(treeRef.current),
   })
+  // 끄는 사이 문서 · 잠금이 바뀌어 줄이 밀리거나 사라지면 표시를 마지막 좌표로 다시 묻는다 — 같은 부모의 줄이면 새 줄로 옮겨 가고, 다른 부모 ·
+  // 못 놓는 자리면 걷는다. 안 부르면 표시가 옛 줄 상자에 남는다(`refresh` 는 끌기가 아니면 아무것도 안 한다).
+  const locksVersion = useLocksVersion()
+  useLayoutEffect(() => {
+    drag.refresh()
+  }, [drag.refresh, doc, locksVersion])
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     // **고칠 수 없으면 단축키도 없다**(`editable`). 찾기 전에 돌아가므로 `preventDefault`도 안 걸린다.

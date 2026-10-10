@@ -10,7 +10,7 @@ import { useRef, type ReactElement } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { CanvasDocumentProvider, usePublishCanvasDocument } from '../../src/canvas/canvas-document'
 import { DropIndicator } from '../../src/drag/drop-indicator'
-import { usePointerDrag, type DropHint } from '../../src/drag/use-pointer-drag'
+import { EDGE_ENTER_DWELL_MS, usePointerDrag, type DropHint } from '../../src/drag/use-pointer-drag'
 import { installPointerEvents } from '../pointer-events'
 
 beforeAll(installPointerEvents)
@@ -385,6 +385,62 @@ describe('끝 스크롤', () => {
       })
       expect({ x, y, scrollTop: box.scrollTop, scrollLeft: box.scrollLeft }).toEqual({ x, y, scrollTop: 400, scrollLeft: 400 })
     }
+  })
+
+  /**
+   * L-005 — 상자 **밖에서** 띠로 들어온 끌기(판에서 캔버스로 올라가는 카드)는 띠에 머문 뒤에야 민다. 지나가는 것은 안 민다. 위 케이스들은
+   * 상자 안에서 누른 끌기(트리 줄 · 손잡이)라 곧바로 민다.
+   */
+  it('밖에서 띠로 들어온 끌기는 EDGE_ENTER_DWELL_MS 동안 머문 뒤에야 민다 · 지나가기만 하면 안 민다', async () => {
+    vi.useFakeTimers()
+    render(<Harness onDrop={vi.fn()} scroll />)
+    const box = screen.getByTestId('box')
+    frame(box)
+    const advance = async (ms: number): Promise<void> => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms)
+      })
+    }
+
+    press('가', 100, 400)
+    moveTo(100, 340)
+    await advance(100)
+    moveTo(100, 290) // 띠 안 — 밖에서 들어왔다
+    await advance(EDGE_ENTER_DWELL_MS - 50)
+    const waiting = box.scrollTop
+    moveTo(100, 150) // 지나갔다
+    await advance(400)
+    const passed = box.scrollTop
+    moveTo(100, 290)
+    await advance(EDGE_ENTER_DWELL_MS + 400)
+    const stayed = box.scrollTop
+    expect({ waiting, passed, pushedAfterDwell: stayed > 0 }).toEqual({ waiting: 0, passed: 0, pushedAfterDwell: true })
+  })
+
+  it('안에 섰다 띠로 간 것은 곧바로 밀고 · 상자 밖으로 나갔다 돌아온 띠는 다시 머물러야 민다', async () => {
+    vi.useFakeTimers()
+    render(<Harness onDrop={vi.fn()} scroll />)
+    const box = screen.getByTestId('box')
+    frame(box)
+    const advance = async (ms: number): Promise<void> => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms)
+      })
+    }
+
+    press('가', 100, 400)
+    moveTo(100, 150) // 밖에서 곧장 안으로 — 안에 섰다
+    await advance(50)
+    moveTo(100, 290)
+    await advance(100)
+    const insideFirst = box.scrollTop
+    moveTo(100, 340) // 상자 밖으로
+    await advance(50)
+    box.scrollTop = 0
+    moveTo(100, 290) // 밖에서 다시 들어온다
+    await advance(EDGE_ENTER_DWELL_MS - 50)
+    const reentered = box.scrollTop
+    expect({ insideFirstPushed: insideFirst > 0, reentered }).toEqual({ insideFirstPushed: true, reentered: 0 })
   })
 
   it('밀고 나면 같은 좌표로 자리를 다시 묻는다 — 줄이 포인터 밑으로 지나간다', async () => {

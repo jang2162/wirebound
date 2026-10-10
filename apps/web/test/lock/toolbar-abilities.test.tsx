@@ -359,40 +359,47 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
   })
 
   /**
-   * **이것이 도구가 새는 흔한 상태다.** 페이지를 열면 루트가 자동 선택되고, 남이 그 페이지의
-   * 아무 노드나 잡으면 루트가 그 조상이라 `lockedBy(root)`가 그 잠금을 낸다.
+   * **이것이 도구가 새는 흔한 상태다 — 그리고 `안에 추가` 하나는 서버가 받는다.** 페이지를 열면 루트가 자동 선택되고, 남이 그 페이지의
+   * 아무 노드나 잡으면 루트가 그 조상이라 `lockedBy(root)`가 그 잠금을 낸다. 그때 켜져 있는 것은 `안에 추가` **하나**(루트라 나머지 여섯은
+   * 원래 꺼진다)이고, 그것을 누르면 `add /root/children/3`이 나가 **서버가 통과시킨다**(대역이 `lockConflictOfOps` 를 그대로 돈다).
    *
-   * 도구가 잠금을 안 보면 여기서 `안에 추가` **하나**가 켜져 있고(루트라 나머지 여섯은 원래
-   * 꺼진다), 그것을 누르면 `add /root/children/3`이 나가 **서버가 통과시킨다.**
+   * 도구가 고른 노드(뿌리)의 잠금을 보고 꺼 버리면 서버가 받는 편집을 화면이 막는다 — 하단 판 카드의 «넣기» 는 같은 판에서 페이지 끝에 넣는다
+   * (`palette/palette-add.ts` 머리말, `build-test/palette-review.test.ts` «페이지를 연 그대로(뿌리 선택)»). 그래서 `안에 추가` 는 고른 노드의 잠금이
+   * 아니라 **넣는 편집이 남의 잠금에 부딪히나**로 가른다(`edit/add-abilities.ts`). 판정 밖의 둘(패턴 · 프리셋)은 그대로 꺼진다.
    */
-  it('루트가 선택된 채 남이 자손을 잠그면 하나 남았던 `안에 추가`까지 꺼진다', async () => {
+  it('루트가 선택된 채 남이 자손을 잠가도 `안에 추가`는 산다 — 서버가 받는 편집이다 · 판정 밖의 둘은 꺼진다', async () => {
     const view = await board()
     expect(view.store.getState().selectedNodeId).toBe('n-root')
     expect(live()).toEqual(['안에 추가'])
 
     view.lock([foreign('n-1')])
 
-    expect(live()).toEqual([])
-    // **판정 밖의 둘도 함께 꺼진다.** 그러지 않으면 아래 문장의 *"바꿀 수도"*가 거짓이다 —
-    // 사용자가 그 문장을 읽고 탭을 누르면 살아 있는 «바꾸는» 버튼에 닿는다.
+    expect(live()).toEqual(['안에 추가'])
+    // **판정 밖의 둘은 함께 꺼진다.** 그러지 않으면 *"바꿀 수도"* 를 말하는 문장이 거짓이다.
     expect(gates()).toEqual({ pattern: false, preset: false })
-    expect(reason('안에 추가')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+    expect(reason('안에 추가')).toBeNull()
+
+    fireEvent.click(treeTool(toolbar(), '안에 추가'))
+    fireEvent.click(await screen.findByRole('button', { name: '추가' }))
+    await settle()
+    expect({ status: view.status, paths: view.calls.map((call) => call.ops.map((op) => op.path)) }).toEqual({ status: [200], paths: [['/root/children/3']] })
   })
 
   /**
-   * **비루트는 꺼지는 것이 다섯이라 값이 다르다.** 그 다섯 중 셋(`삭제`·`위로`·`아래로`)은
-   * 그냥 두면 423을 받고, 둘(`안에 추가`·`아래 추가`)은 서버가 통과시킨다 — 그래도 전부
-   * 끄는 근거는 `edit/structure-actions.ts`의 머리말에 있다.
+   * **비루트는 꺼지는 것이 다섯이라 값이 다르다.** 그 다섯 중 셋(`삭제`·`위로`·`아래로`)은 그냥 두면 423을 받아 꺼지고, `아래 추가`는 고른 노드를
+   * 남이 잡았으면(자손의 잠금도 센다) 카드 «넣기» 와 같이 꺼진다. **`안에 추가`는 산다** — 컨테이너 안 끝에 넣는 편집은 잠긴 자식을 안 건드려
+   * 서버가 받는다(`edit/add-abilities.ts`).
    */
-  it('비루트가 선택된 채 그 자식이 잠기면 다섯이 함께 꺼진다', async () => {
+  it('비루트가 선택된 채 그 자식이 잠기면 넷이 꺼지고 `안에 추가`만 남는다', async () => {
     const view = await board()
     select('Card')
     expect(live()).toEqual(['안에 추가', '아래 추가', '삭제', '위로', '아래로'])
 
     view.lock([foreign('n-1')])
 
-    expect(live()).toEqual([])
+    expect(live()).toEqual(['안에 추가'])
     expect(gates()).toEqual({ pattern: false, preset: false })
+    expect(reason('아래 추가')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
   it('고른 노드 «자신»이 잠겨도 같다 — 조상·자손·자기 셋이 한 판정이다', async () => {
@@ -416,9 +423,23 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
     select('Text')
 
     expect(view.store.getState().selectedNodeId).toBe('n-a')
-    // `n-a`는 잎이라 `안에 추가`·`들여쓰기`가 원래 꺼진다(앞 형제 `없음` · 자식 불가).
-    expect(live()).toEqual(['아래 추가', '삭제', '아래로'])
+    // `n-a`는 잎이라 `안에 추가`·`들여쓰기`가 원래 꺼진다(앞 형제 `없음` · 자식 불가). **`아래 추가`도 꺼진다 — 잠금이 «바로 뒤 형제»(`n-box`)의 안에 있어
+    // 그 자리에 넣는 편집이 부딪힌다**(서버가 423 으로 거절하는 편집 — 카드 «넣기» 가 같은 판에서 세우는 문장과 같다).
+    expect(live()).toEqual(['삭제', '아래로'])
     expect(reason('안에 추가')).toBe('자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다')
+    expect(reason('아래 추가')).toBe('보라님이 편집 중이라 바꿀 수 없습니다')
+  })
+
+  /** 잠금에서 먼 잎은 `아래 추가`가 그대로 산다 — 위 케이스의 «바로 뒤 형제» 가 이 꺼짐의 조건이다. */
+  it('잠금에서 먼 잎(`n-c`)의 `아래 추가`는 산다 — 바로 뒤 형제의 잠금만 막는다', async () => {
+    const view = await board()
+    view.lock([foreign('n-1')])
+
+    select('Divider')
+
+    expect(view.store.getState().selectedNodeId).toBe('n-c')
+    expect(live()).toContain('아래 추가')
+    expect(reason('아래 추가')).toBeNull()
     expect(namedReasons()).toBe(0)
   })
 
@@ -500,7 +521,7 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
     const view = await board()
     select('Card')
     view.lock([foreign('n-1')])
-    expect(live()).toEqual([])
+    expect(live()).toEqual(['안에 추가'])
 
     view.lock([])
 
@@ -803,7 +824,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
     const card = within(structureRegion()).getByRole('button', { name: structureRowName('Card') }).closest<HTMLElement>('[data-tree-row]')!
     expect(card.classList.contains('wb-shell-tree-row-picked')).toBe(true)
     expect(card.querySelector('.wb-shell-tree-row-actions')).not.toBeNull()
-    expect(live()).toEqual([])
+    expect(live()).toEqual(['안에 추가'])
 
     const handle = card.querySelector<HTMLElement>('.wb-shell-structure-node')!
     fireEvent.pointerDown(handle, { button: 0, clientX: 10, clientY: 10, pointerId: 1 })
@@ -844,12 +865,13 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
  * 페이지 이동은 각자의 케이스가 갖는다.
  */
 describe('막다른 길이 아니다 — 구조 편집만 얼고 셸은 산다', () => {
-  it('페이지의 모든 자리가 잠기면 도구 아홉과 트리 줄이 전부 꺼진다', async () => {
+  it('페이지의 모든 자리가 잠기면 트리 줄이 전부 꺼지고 도구는 `안에 추가` 하나만 남는다', async () => {
     const view = await board()
 
     view.lock([foreign('n-a'), foreign('n-box'), foreign('n-c')])
 
-    expect(live()).toEqual([])
+    // 뿌리 끝에 넣는 편집은 어느 자식의 잠금과도 안 부딪혀 서버가 받는다 — `안에 추가` 하나가 남는다(`edit/add-abilities.ts`).
+    expect(live()).toEqual(['안에 추가'])
     expect(gates()).toEqual({ pattern: false, preset: false })
     // 트리 줄도 전부 꺼진다 — 고를 수 있는 노드가 하나도 없다. 줄 행동 · 뿌리 `+`의 단추(행동 메뉴를 여는 것)는 줄이 아니다 —
     // 그 안의 항목이 꺼진 것은 위 `live` · `gates`가 잰다. 머리의 «모두 접기» · «모두 펴기»도 줄이 아니다 — 접기는 고르기와 같은 읽기라
@@ -858,7 +880,7 @@ describe('막다른 길이 아니다 — 구조 편집만 얼고 셸은 산다',
       .getAllByRole<HTMLButtonElement>('button')
       .filter((button) => button.getAttribute('aria-haspopup') !== 'menu' && !button.classList.contains('wb-shell-tree-fold'))
     expect(rows.filter((button) => !button.disabled)).toEqual([])
-    expect(reason('안에 추가')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+    expect(reason('안에 추가')).toBeNull()
   })
 
   it('그래도 뷰 모드와 다른 페이지는 남는다 — 이유는 꺼진 항목이 이름과 함께 말한다', async () => {

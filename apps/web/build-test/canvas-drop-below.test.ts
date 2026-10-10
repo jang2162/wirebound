@@ -16,6 +16,7 @@
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -74,11 +75,12 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
 
   const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
 
-  async function fixture(slug: string, nodes: readonly SeedNode[]): Promise<string> {
+  async function fixture(slug: string, nodes: readonly SeedNode[], theme?: string): Promise<string> {
     const project = (await call('POST', '/projects', { name: 'M2 바탕', slug: `${slug}-${Date.now().toString(36)}` })).body
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
     if (member.status >= 300) throw new Error(`member ${member.status}`)
+    if (theme !== undefined) await putTheme(call, project.id, { themeId: `system-${theme}`, version: seededVersion(`system-${theme}`), tokens: {} })
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
     const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
@@ -307,8 +309,8 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
     try {
       await openPalette(page)
       const b = await boxes(page)
-      // 칸 아래 끝에서 40 ~ 110px 위에 가운데가 선 글 하나 — 그 위 25% 띠(앞 형제 자리)를 겨눈다. 노드 사이의 틈은 문서 안의 바탕이라
-      // 고치기 전에도 페이지 끝이다(`src/canvas/canvas-drop.ts` 의 «노드가 없는 바탕 · 뿌리 자체는 페이지 끝»).
+      // 칸 아래 끝에서 40 ~ 110px 위에 가운데가 선 글 하나 — 그 위 25% 띠(앞 형제 자리)를 겨눈다. 노드 사이의 틈은 가장 가까운 자식의 앞 · 뒤다
+      // (`src/canvas/canvas-drop.ts` 머리말 «뿌리의 노드 사이 바탕»).
       let over: { id: string; box: Box } | null = null
       for (const node of LONG) {
         const box = await nodeBox(page, node.id)
@@ -365,6 +367,78 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
         count: 41,
         sent: 1,
       })
+    } finally {
+      await close()
+    }
+  })
+  /**
+   * L-006 — 뿌리의 노드 사이 바탕. 시스템 테마의 뿌리는 자식 사이에 간격이 있어(admin 은 14px) 그 바탕에 선 포인터는 «뿌리 자신» 이었고 페이지 끝으로
+   * 읽혔다 — 위아래로 쓸면 미리보기가 노드 곁 → 페이지 끝(`n_t5→null`) → 노드 곁로 뛰었다. 지금은 간격 양쪽 자식의 «뒤 · 앞» 쌍이다.
+   */
+  it('뿌리의 노드 사이 바탕을 위아래로 쓸어도 미리보기가 페이지 끝으로 안 간다 — 간격 양쪽 자식 사이에 선다', async () => {
+    const six: SeedNode[] = Array.from({ length: 6 }, (_, i) => ({ id: `n_g${i}`, type: 'Text', props: { content: `글 ${i}` } }))
+    const P = await fixture('below-gap', six, 'admin')
+    const { page, close } = await openEditor(P)
+    try {
+      await page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="n_g0"] button`).first().click()
+      await grabHandle(page)
+      const boxesById: Record<string, Box> = {}
+      for (const node of six) boxesById[node.id] = await nodeBox(page, node.id)
+      const x = boxesById['n_g3']!.x + 20
+      const samples: { gap: string; y: number; shown: string[] }[] = []
+      // 끄는 노드(n_g0)를 뺀 이웃 사이 간격 넷 — 간격마다 위 · 가운데 · 아래 점.
+      for (let i = 1; i < 5; i += 1) {
+        const above = boxesById[`n_g${i}`]!
+        const below = boxesById[`n_g${i + 1}`]!
+        const gapTop = above.y + above.height
+        const gapHeight = below.y - gapTop
+        for (const fraction of [0.15, 0.5, 0.85]) {
+          const y = gapTop + gapHeight * fraction
+          await page.mouse.move(x, y)
+          await page.waitForTimeout(40)
+          samples.push({
+            gap: `n_g${i}~n_g${i + 1}`,
+            y: Math.round(y),
+            shown: (await shownDrops(page)).map((drop) => `${drop.prev}→${drop.next}`),
+          })
+        }
+      }
+      const gapHeights = [1, 2, 3, 4].map((i) => boxesById[`n_g${i + 1}`]!.y - (boxesById[`n_g${i}`]!.y + boxesById[`n_g${i}`]!.height))
+      await page.mouse.up()
+      expect({ gapsExist: gapHeights.every((h) => h >= 8), pairs: samples.map((sample) => `${sample.gap} ${sample.shown.join()}`) }).toEqual({
+        gapsExist: true,
+        pairs: [1, 2, 3, 4].flatMap((i) => [0, 1, 2].map(() => `n_g${i}~n_g${i + 1} n_g${i}→n_g${i + 1}`)),
+      })
+    } finally {
+      await close()
+    }
+  })
+  /**
+   * 기록(L-017) — 문서 옆 · 위의 칸 바탕이 «못 놓는 자리» 인 까닭의 값. 창 1440 · 칸 860 에서 프리셋 375 · 줌 100% 의 옆 바탕은 왼 243 · 오른 242px 이고(위 24px), 줌 50% 는 336px 씩이다(문서가 칸에
+   * 다 들어와 칸 스크롤이 없다). 긴 문서(글 40)의 페이지 끝은 줌 100% 에서 칸 아래끝보다 648px 밑이라 — 옆 바탕을 «페이지 끝» 으로 읽으면 — 미리보기가 화면 밖에 선다. 줌 50% 는 칸 안(68px 위)이라 보인다.
+   * 설계가 «못 놓는 자리» 로 둔 둘(남이 잡은 빈 카드 안 · 프리셋 375 문서 왼쪽 바탕)은 결함이 아니다. 값이 바뀌면 이 케이스가 알린다.
+   */
+  it('기록 — 프리셋 375 의 옆 바탕 폭과 긴 문서의 페이지 끝 자리(줌 100% · 50%)', async () => {
+    const P = await fixture('below-record', LONG)
+    const { page, close } = await openEditor(P)
+    try {
+      await page.getByLabel('뷰포트 폭').selectOption('375')
+      await poll('프리셋이 실린다', () => boxes(page), (v) => Math.abs(v.frame.width - 375) < 1)
+      const at = async () => {
+        const b = await boxes(page)
+        const last = await nodeBox(page, 'n_t39')
+        return { left: Math.round(b.frame.x - b.cell.x), right: Math.round(b.cell.x + b.cell.width - b.frame.x - b.frame.width), top: Math.round(b.frame.y - b.cell.y), pageEndBelowCell: Math.round(last.y - (b.cell.y + b.cell.height)), scrolls: b.scrollMax > 0 }
+      }
+      const full = await at()
+      for (let i = 0; i < 2; i += 1) await page.getByRole('group', { name: '줌' }).getByRole('button', { name: '축소', exact: true }).click()
+      await page.waitForTimeout(300)
+      const half = await at()
+      // eslint-disable-next-line no-console
+      console.log(`[옆 바탕] 프리셋 375 · 줌 100% ${JSON.stringify(full)} · 줌 50% ${JSON.stringify(half)}`)
+      expect({
+        fullWide: full.left > 200 && full.right > 200 && full.top === 24 && full.scrolls && full.pageEndBelowCell > 500,
+        halfWide: half.left > 300 && half.right > 300 && !half.scrolls && half.pageEndBelowCell < 0,
+      }).toEqual({ fullWide: true, halfWide: true })
     } finally {
       await close()
     }

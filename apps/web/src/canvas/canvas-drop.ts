@@ -17,9 +17,13 @@
  * | `grid` · `inline-grid` | 자식 가운데 둘이 같은 줄(세로로 겹침)에 서면 x — 마지막 줄에 혼자 선 칸도 x |
  * | 그 밖(`block` …) | 이 노드가 형제와 같은 줄에 서면 x(인라인 상자가 늘어선 판), 아니면 y |
  *
- * **못 보는 것:** CSS `order` · `direction: rtl` 로 바뀐 보이는 차례는 안 읽는다 — 그 판에서는 보이는 왼쪽이 문서의 앞이라고 셈한다.
- * 시스템 테마 다섯에는 노드를 자식으로 담는 상자에 그런 규칙이 없다(다시 재는 법: `grep -rn "row-reverse\|order:\|direction: *rtl"
- * system-themes/*\/src` — 걸리는 것은 `Field` 의 체크 · 라디오 줄이고 그 안에는 노드가 없다).
+ * **`direction: rtl` 도 읽는다** — 가로 축이면 첫 자식이 오른쪽 끝이라 `row-reverse` 처럼 보이는 앞 · 뒤가 문서 차례와 반대다(`axisOf`). 고치기 전에는
+ * `flex-direction` 만 읽어 rtl 가로 무리에서 왼쪽 절반을 «앞» 으로 읽었고 미리보기가 포인터의 반대편에 섰다(`build-test/canvas-drop-review.test.ts`
+ * «보이는 차례»).
+ *
+ * **못 보는 것:** CSS `order` 로 바뀐 보이는 차례는 안 읽는다 — 새 노드가 `order: 0` 이라 DOM 의 «앞 · 뒤» 가 보이는 자리의 뜻을 못 갖는다(보이는 맨 끝의 오른쪽
+ * 절반이 «맨 앞» 에 미리보기를 세운다 — 같은 파일의 «기록» 케이스). 시스템 테마 다섯에는 노드를 자식으로 담는 상자에 `order` · `direction` 규칙이 없다(다시 재는 법:
+ * `grep -rn "row-reverse\|order:\|direction: *rtl" system-themes/*\/src` — 걸리는 것은 `Field` 의 체크 · 라디오 줄이고 그 안에는 노드가 없다).
  *
  * ## 좌표는 iframe 요소의 호스트 상자 하나로 환산한다
  *
@@ -29,10 +33,20 @@
  * 를 따로 더하지 않는다 — 그 값들로 다시 짓는 길은 하나라도 빠뜨리면 그만큼 어긋난다. iframe 은 문서 높이를 따라 자라 안쪽 스크롤이
  * 없고(`canvas-iframe.tsx`), 있더라도 두 값이 같은 창 좌표라 서로 지운다.
  *
+ * ## 뿌리의 노드 사이 바탕은 가장 가까운 자식의 앞 · 뒤다
+ *
+ * 뿌리 요소는 자식 사이의 간격(`gap` · 여백)도 덮는다 — 포인터가 그 바탕에 서면 «뿌리 자신» 이라 페이지 끝으로 읽혔고, 위아래로 쓸면 미리보기가
+ * 노드 곁 → 페이지 끝 → 노드 곁로 뛰었다(`build-test/canvas-drop-below.test.ts` «노드 사이 바탕»). 그래서 그 바탕은 **점에서 가장 가까운 뿌리
+ * 직계 자식**(`nearestChild`)의 앞 · 뒤다 — 띠는 그 자식의 반쪽(앞 · 뒤)뿐이고 «안» 은 없다(바탕은 그 자식의 몸통이 아니다). 앞 · 뒤 쌍으로는 간격 양쪽
+ * 자식의 «뒤» 와 «앞» 이 같은 자리다. 뿌리의 자식이 없으면 페이지 끝이다.
+ *
+ * **못 읽는 것:** 뿌리 밖 컨테이너(카드 · 그리드)의 노드 사이 바탕은 그 컨테이너 자신이라 «안»(끝) 으로 읽힌다 — 같은 떨림이 있으나 그 안의 위치는
+ * 컨테이너의 «안» 이라 데이터를 잃지 않는다(재지 않았다).
+ *
  * ## 문서 아래 바탕은 페이지 끝이다
  *
  * iframe 은 문서 높이만큼만 서서(짧은 문서는 최소 높이) 캔버스 칸이 그보다 길면 문서 밑에 칸의 바탕이 남는다. **캔버스 칸 안이고 문서 iframe
- * 아래끝보다 밑인 점은 «페이지 끝»으로 읽는다** — 문서 안의 노드 없는 바탕과 같은 답이다. 하단 판에서 카드를 쥐고 올라오면 먼저 닿는 자리가
+ * 아래끝보다 밑인 점은 «페이지 끝»으로 읽는다** — 뿌리 자식이 없는 문서 안과 같은 답이다. 하단 판에서 카드를 쥐고 올라오면 먼저 닿는 자리가
  * 그 바탕이라, 못 놓는 자리로 두면 «캔버스로 끌어도 안 놓인다»가 된다(창 1440×900 · 판 기본 높이 · 짧은 문서에서 판 바로 위 125px —
  * `build-test/canvas-drop-below.test.ts` 의 `gap`). 긴 문서를 끝까지 민 판의 칸 안쪽 여백(문서 밑 24px)도 같은 자리다.
  *
@@ -62,8 +76,8 @@ export interface Layout {
 }
 
 /**
- * 포인터 밑 캔버스 자리. `rect` 는 표시가 붙을 상자의 **호스트 창 좌표**다(`DropIndicator` 가 `position: fixed` 로 그린다). 노드가 없는
- * 바탕 · 뿌리 자체는 페이지 끝이고 그 상자는 뿌리의 것이다.
+ * 포인터 밑 캔버스 자리. `rect` 는 표시가 붙을 상자의 **호스트 창 좌표**다(`DropIndicator` 가 `position: fixed` 로 그린다). 문서 아래
+ * 바탕 · 뿌리 자신(자식이 없을 때)은 페이지 끝이고 그 상자는 뿌리의 것이다.
  */
 export type CanvasHit =
   | { overId: string; zone: DropZone; rect: Rect; layout: Layout }
@@ -99,18 +113,22 @@ function sameRow(a: Rect, b: Rect): boolean {
   return a.top < b.top + b.height && b.top < a.top + a.height
 }
 
-/** 부모 배치의 축(머리말의 표). `siblings` 는 같은 부모의 다른 자식 상자다. */
-export function axisOf(style: { display: string; flexDirection: string }, siblings: readonly Rect[], self: Rect): Layout {
+/**
+ * 부모 배치의 축(머리말의 표). `siblings` 는 같은 부모의 다른 자식 상자다. `direction: rtl` 은 **가로 축**의 보이는 차례를 뒤집는다 — 플렉스 `row` ·
+ * 그리드 · 인라인 줄 모두 첫 자식이 오른쪽 끝에 선다(`row-reverse` 와 겹치면 서로 지운다). 세로 축은 `direction` 과 무관하다.
+ */
+export function axisOf(style: { display: string; flexDirection: string; direction?: string }, siblings: readonly Rect[], self: Rect): Layout {
+  const rtl = style.direction === 'rtl'
   if (style.display === 'flex' || style.display === 'inline-flex') {
-    const reversed = style.flexDirection.endsWith('-reverse')
-    return { axis: style.flexDirection.startsWith('row') ? 'x' : 'y', reversed }
+    const axis: Axis = style.flexDirection.startsWith('row') ? 'x' : 'y'
+    return { axis, reversed: style.flexDirection.endsWith('-reverse') !== (axis === 'x' && rtl) }
   }
   if (style.display === 'grid' || style.display === 'inline-grid') {
     const all = [self, ...siblings]
     const horizontal = all.some((a, i) => all.some((b, j) => j > i && sameRow(a, b)))
-    return horizontal ? { axis: 'x', reversed: false } : VERTICAL
+    return horizontal ? { axis: 'x', reversed: rtl } : VERTICAL
   }
-  return siblings.some((sibling) => sameRow(self, sibling)) ? { axis: 'x', reversed: false } : VERTICAL
+  return siblings.some((sibling) => sameRow(self, sibling)) ? { axis: 'x', reversed: rtl } : VERTICAL
 }
 
 /** 호스트 창의 점 → iframe 창의 점. `frame` 은 iframe 요소의 호스트 상자다(머리말 «좌표는»). */
@@ -166,7 +184,7 @@ export function siblingRects(parent: Element, self: Element, view: Window): Rect
  * `clip` 이 없으면(칸이 없는 숙주) iframe 밖은 다 `null` 이다 — «아래»의 끝을 정할 상자가 없다.
  *
  * 포인터 밑 요소에서 가장 가까운 `[data-wb-id]` 조상이 대상이다. `node(id)` 가 `null` 인 id(문서에 없는 — 폴백의 빈 id · 합성의 유령)는
- * 건너뛰고 위로 오른다. 그런 조상이 없거나 뿌리면 페이지 끝이다.
+ * 건너뛰고 위로 오른다. 그런 조상이 없으면 페이지 끝이고, 뿌리면 가장 가까운 뿌리 자식의 앞 · 뒤다(머리말 «뿌리의 노드 사이 바탕») — 자식이 없을 때만 페이지 끝.
  *
  * **배치 미리보기 위면 `{ preview: true }` 다**(`isPreview` — `./canvas-preview.ts` 의 id 머리) — 미리보기는 문서의 노드가 아니라 그 위의
  * 그림이라 대상도 · 그 부모의 «안» 도 아니다. 판정은 미리보기를 숨기고 재므로(`drag/use-placement.ts` 머리말 «판정은 미리보기를 뺀
@@ -205,16 +223,52 @@ export function canvasHitAt(
     cursor = cursor.parentElement
   }
 
-  if (found === null || found.info.root) return pageEndHit(found?.element ?? firstNodeElement(doc, node) ?? doc.body, frameRect, zoom)
+  if (found === null) return pageEndHit(firstNodeElement(doc, node) ?? doc.body, frameRect, zoom)
+  if (found.info.root) {
+    // 뿌리의 노드 사이 바탕 — 가장 가까운 자식의 앞 · 뒤다(머리말 «뿌리의 노드 사이 바탕은 가장 가까운 자식의 앞 · 뒤다»). 자식이 없으면 페이지 끝.
+    const nearest = nearestChild(found.element, point, node, isPreview)
+    return nearest === null
+      ? pageEndHit(found.element, frameRect, zoom)
+      : nodeHit(frame, frameRect, zoom, point, nearest.element, nearest.id, { root: false, acceptsChildren: false, empty: false })
+  }
+  return nodeHit(frame, frameRect, zoom, point, found.element, found.id, found.info)
+}
 
-  const rect = plain(found.element.getBoundingClientRect())
-  const parent = layoutParent(found.element, frame)
-  const layout =
-    parent === null
-      ? VERTICAL
-      : axisOf(frame.getComputedStyle(parent), siblingRects(parent, found.element, frame), rect)
-  const zone = zoneOf(rect, layout.axis, layout.reversed, point, found.info.acceptsChildren, found.info.empty)
-  return { overId: found.id, zone, rect: frameToHost(rect, frameRect, zoom), layout }
+/** 포인터 밑 노드 요소에서 «대상 + 띠» 를 낸다 — 부모의 배치 축으로 띠를 가른다(머리말 표). */
+function nodeHit(frame: Window, frameRect: Rect, zoom: number, point: Point, element: Element, id: string, info: HitNode): CanvasHit {
+  const rect = plain(element.getBoundingClientRect())
+  const parent = layoutParent(element, frame)
+  const layout = parent === null ? VERTICAL : axisOf(frame.getComputedStyle(parent), siblingRects(parent, element, frame), rect)
+  const zone = zoneOf(rect, layout.axis, layout.reversed, point, info.acceptsChildren, info.empty)
+  return { overId: id, zone, rect: frameToHost(rect, frameRect, zoom), layout }
+}
+
+/**
+ * 뿌리 요소의 노드 자식 가운데 `point`(iframe 창 좌표)에 가장 가까운 것 — 점이 상자 안이면 거리 0 이다. 크기 0(숨김 · 미리보기)과 미리보기는
+ * 건너뛴다. 동점이면 문서 차례가 앞선 쪽. 없으면 `null`.
+ */
+function nearestChild(
+  rootElement: Element,
+  point: Point,
+  node: (id: string) => HitNode | null,
+  isPreview: (id: string) => boolean,
+): { element: Element; id: string } | null {
+  let best: { element: Element; id: string; distance: number } | null = null
+  for (const element of Array.from(rootElement.querySelectorAll('[data-wb-id]'))) {
+    const id = element.getAttribute('data-wb-id')
+    if (id === null || id === '' || isPreview(id)) continue
+    // 뿌리의 **직계** 노드 자식만 — 자식의 자손은 그 자식 곁이 아니라 안이라 뿌리 사이 바탕의 후보가 아니다.
+    if (element.parentElement?.closest('[data-wb-id]') !== rootElement) continue
+    const info = node(id)
+    if (info === null || info.root) continue
+    const box = element.getBoundingClientRect()
+    if (box.width <= 0 && box.height <= 0) continue
+    const dx = Math.max(box.left - point.x, 0, point.x - (box.left + box.width))
+    const dy = Math.max(box.top - point.y, 0, point.y - (box.top + box.height))
+    const distance = Math.hypot(dx, dy)
+    if (best === null || distance < best.distance) best = { element, id, distance }
+  }
+  return best === null ? null : { element: best.element, id: best.id }
 }
 
 /** 페이지 끝 — 표시가 붙을 상자는 뿌리 요소의 것이다. */

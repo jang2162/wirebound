@@ -279,23 +279,16 @@ describe('놓는 편집(`dropOps`)', () => {
 })
 
 describe('같은 자리인가(`sameDrop`)', () => {
-  it('앞 · 뒤는 부모 · 차례 · 띠가 다 같아야 같다', () => {
-    const shown = { parentId: 'p', index: 2, placement: 'before' as const }
-    expect([
-      sameDrop(shown, { ...shown }),
-      sameDrop(shown, { ...shown, index: 3 }),
-      sameDrop(shown, { ...shown, parentId: 'q' }),
-      sameDrop(shown, { ...shown, placement: 'after' }),
-    ]).toEqual([true, false, false, false])
-  })
-
-  it('안은 부모 · 띠만 본다 — 남이 그 상자의 자식을 넣거나 빼도 «그 상자 안 끝» 이다', () => {
-    const shown = { parentId: 'p', index: 2, placement: 'inside' as const }
-    expect([
-      sameDrop(shown, { ...shown, index: 1 }),
-      sameDrop(shown, { ...shown, index: 3 }),
-      sameDrop(shown, { ...shown, parentId: 'q' }),
-      sameDrop(shown, { parentId: 'p', index: 2, placement: 'after' }),
-    ]).toEqual([true, true, false, false])
+  it('부모만 본다 — 띠 · 차례는 안 본다(차례는 놓을 때 지금 문서로 다시 판정한다)', () => {
+    for (const placement of ['before', 'after', 'inside'] as const) {
+      const shown = { parentId: 'p', index: 2, placement }
+      expect([
+        sameDrop(shown, { ...shown }),
+        sameDrop(shown, { ...shown, index: 1 }),
+        sameDrop(shown, { ...shown, index: 3 }),
+        sameDrop(shown, { parentId: 'p', index: 2, placement: placement === 'inside' ? 'after' : 'inside' }),
+        sameDrop(shown, { ...shown, parentId: 'q' }),
+      ]).toEqual([true, true, true, true, false])
+    }
   })
 })

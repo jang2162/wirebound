@@ -95,6 +95,11 @@ export interface StructureReasonInput {
   abilities: StructureAbilities
   /** 상태 영역의 자리 규칙이 끈 항목과 까닭(`edit/structure-actions.ts` 의 `regionRules`) — 표(`STRUCTURE_WHY_DISABLED`)보다 먼저 말한다. */
   region?: RegionBlocked
+  /**
+   * «안에 추가» · «아래 추가» 를 **넣는 편집이 남의 잠금에 부딪혀** 끈 문장(`edit/add-abilities.ts`) — 카드 «넣기» 가 같은 판에서 세우는 문장과 같다
+   * (`panels/property-panel.tsx` 의 `lockedNotice`). 있으면 아래 모든 칸보다 먼저 말한다.
+   */
+  addBlocked?: { addInside?: string; addAfter?: string }
 }
 
 /**
@@ -105,6 +110,8 @@ export interface StructureReasonInput {
  */
 export function structureItemReason(input: StructureReasonInput, key: keyof StructureAbilities): string | undefined {
   if (input.abilities[key]) return undefined
+  const blockedEdit = key === 'addInside' || key === 'addAfter' ? input.addBlocked?.[key] : undefined
+  if (blockedEdit !== undefined) return blockedEdit
   if (input.selectedNodeId === null) {
     return input.pageLock === null ? PICK_NODE_REASON : `${input.pageLock.userName}님이 편집 중이라 지금은 쓸 수 있는 도구가 없습니다`
   }

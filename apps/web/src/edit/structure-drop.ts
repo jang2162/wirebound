@@ -120,14 +120,17 @@ export function pageEndTarget(
  * **같은 자리인가** — 보인 자리와 다시 물은 자리를 견준다. 끌기 장치의 «놓는 답은 보인 답이다»(`drag/use-pointer-drag.ts` 의 `sameDrop`
  * — 구조 트리 줄 끌기 · 캔버스 손잡이)와 경로 층의 보인 자리 다시 판정(`drag/use-placement.ts` 의 `holds`)이 같은 이 함수다.
  *
- * | 띠 | 같다 |
- * |---|---|
- * | 앞 · 뒤 | 부모 · 차례 · 띠가 다 같다 — 남의 편집이 보인 자리의 차례를 밀면 다른 자리다(보인 것과 다른 차례로 넣지 않는다) |
- * | 안 | 부모 · 띠가 같다 — 보인 뜻이 «그 상자 안 끝» 이라 남이 그 자식을 넣거나 빼도 같은 자리다(차례는 놓을 때 지금 끝으로 다시 판정) |
+ * **부모만 견준다.** 띠 · 차례는 안 본다 — 놓을 때 부르는 쪽이 지금 문서로 그 자리를 다시 판정하므로(`drag/use-placement.ts` 의 `onDrop`)
+ * 차례는 **지금 문서를 따라간다**. 남이 형제를 넣거나 빼 차례가 밀려도 · 넣은 칸이 포인터 밑으로 밀려 와 «안» 이 «그 칸 뒤» 로 바뀌어도(같은
+ * 그리드 끝) 같은 부모 안의 자리라 표시도 놓기도 새 자리를 따라가고, 부모가 다르면(포인터 밑에 다른 상자가 온 판 · 보인 노드가 다른 부모로
+ * 옮겨진 판) 다른 자리다 — 보인 상자가 아닌 곳으로 놓지 않는다.
+ *
+ * **대가:** 같은 부모 안에서는 사람이 본 차례와 놓는 차례가 다를 수 있다 — 끄는 사이 남이 그 부모의 형제를 넣거나 빼면 놓는 자리는 «뗀
+ * 좌표 밑의 지금 자리»다. 표시는 캔버스가 다시 잴 때(`refresh`) 그 새 자리로 옮겨 가므로(트리 줄은 문서가 바뀔 때 — `panels/structure-tree.tsx`)
+ * 포인터가 멈춰 있으면 보인 자리가 곧 놓는 자리다.
  */
 export function sameDrop(a: StructureDrop, b: StructureDrop): boolean {
-  if (a.parentId !== b.parentId || a.placement !== b.placement) return false
-  return a.placement === 'inside' || a.index === b.index
+  return a.parentId === b.parentId
 }
 
 /**

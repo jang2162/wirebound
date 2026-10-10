@@ -57,6 +57,19 @@ describe('axisOf — 부모의 계산 스타일 · 형제 상자', () => {
     expect(axisOf({ display: 'inline-flex', flexDirection: 'row' }, [], self)).toEqual({ axis: 'x', reversed: false })
   })
 
+  it('direction: rtl — 가로 축의 앞 · 뒤가 뒤집힌다(`row-reverse` 와 겹치면 지운다) · 세로 축은 그대로', () => {
+    const rtl = { direction: 'rtl' }
+    expect(axisOf({ display: 'flex', flexDirection: 'row', ...rtl }, [], self)).toEqual({ axis: 'x', reversed: true })
+    expect(axisOf({ display: 'flex', flexDirection: 'row-reverse', ...rtl }, [], self)).toEqual({ axis: 'x', reversed: false })
+    expect(axisOf({ display: 'flex', flexDirection: 'column', ...rtl }, [], self)).toEqual({ axis: 'y', reversed: false })
+    expect(axisOf({ display: 'grid', flexDirection: 'row', ...rtl }, [right], self)).toEqual({ axis: 'x', reversed: true })
+    expect(axisOf({ display: 'grid', flexDirection: 'row', ...rtl }, [below], self)).toEqual({ axis: 'y', reversed: false })
+    expect(axisOf({ display: 'block', flexDirection: 'row', ...rtl }, [right], self)).toEqual({ axis: 'x', reversed: true })
+    expect(axisOf({ display: 'block', flexDirection: 'row', ...rtl }, [below], self)).toEqual({ axis: 'y', reversed: false })
+    // ltr(명시) · 생략은 그대로다.
+    expect(axisOf({ display: 'flex', flexDirection: 'row', direction: 'ltr' }, [], self)).toEqual({ axis: 'x', reversed: false })
+  })
+
   it('block: 형제가 아래로 쌓이면 y · 형제가 같은 줄에 서면 x(인라인 상자)', () => {
     expect(axisOf({ display: 'block', flexDirection: 'row' }, [below], self)).toEqual({ axis: 'y', reversed: false })
     expect(axisOf({ display: 'block', flexDirection: 'row' }, [], self)).toEqual({ axis: 'y', reversed: false })

@@ -286,7 +286,7 @@ describe('놓는 순간 다시 판정한다', () => {
     expect(placement().live({ value, rect: HOST_RECT, placement: 'after' })).toBeNull()
   })
 
-  it('«안» 표시는 남이 그 상자에 자식을 넣어도 남는다 · 앞 · 뒤 표시는 차례가 밀리면 걷힌다', async () => {
+  it('«안» · 앞 · 뒤 표시는 남이 형제를 넣어 차례가 밀려도 같은 부모면 남는다', async () => {
     const { value } = await armed()
     regions.hit = { overId: 'n-box', zone: 'inside', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
     const inside = over(adding, 520, 240)
@@ -308,7 +308,35 @@ describe('놓는 순간 다시 판정한다', () => {
     expect({
       inside: placement().live(inside) !== null,
       after: placement().live({ value, rect: HOST_RECT, placement: 'after' }) !== null,
-    }).toEqual({ inside: true, after: false })
+    }).toEqual({ inside: true, after: true })
+  })
+
+  it('보인 노드가 다른 부모로 옮겨지면 앞 · 뒤 표시가 걷힌다 — 부모가 다르면 다른 자리다', async () => {
+    const { value } = await armed()
+    act(() => {
+      shellStore().applyRemoteChange(PAGE_ID, {
+        seq: HEAD_SEQ + 1,
+        ops: [{ op: 'move', from: '/root/children/0', path: '/root/children/0/children/0' }],
+        warnings: [],
+      })
+    })
+    expect(placement().live({ value, rect: HOST_RECT, placement: 'after' })).toBeNull()
+  })
+
+  it('놓을 때는 뗀 좌표의 지금 자리다 — 같은 부모 안에서 차례가 밀리면 밀린 차례로 놓인다', async () => {
+    const { sent, value } = await armed()
+    act(() => {
+      shellStore().applyRemoteChange(PAGE_ID, {
+        seq: HEAD_SEQ + 1,
+        ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n-bob', type: 'Text' } }],
+        warnings: [],
+      })
+    })
+    // 끌기 장치가 뗀 좌표로 다시 물은 답(`landed`)이 같은 부모면 `sameDrop` 이 놓게 두고 `onDrop` 이 지금 문서로 다시 판정한다.
+    expect(placement().sameDrop(value, value)).toBe(true)
+    drop(adding, value)
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]![0]).toMatchObject({ op: 'add', path: '/root/children/2', value: { type: 'Text' } })
   })
 
   it('끄는 사이 페이지가 바뀌었다 → 표시가 걷히고 놓아도 편집 0', async () => {

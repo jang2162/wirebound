@@ -44,7 +44,7 @@ import { PendingNotice } from './pending-notice'
 import type { TreeMenuNode, TreePage } from '../api/types'
 import { menuKey, useCollapsed, type Collapsed } from '../tree/collapse'
 import { treeSpot, type TreeAbilities, type TreeSelection } from '../tree/tree-actions'
-import { dropZone, menuDropTarget, type MenuDrop } from '../tree/tree-drop'
+import { dropZone, menuDropTarget, sameMenuDrop, type MenuDrop } from '../tree/tree-drop'
 import { useTreeCommands, type TreeCommands } from '../tree/use-tree-commands'
 import { MenuPicker } from './menu-picker'
 import { usePageJsonExport, type PageJsonExport } from './page-json-export'
@@ -267,6 +267,9 @@ export function MenuTree(props: {
   /**
    * **끌어 놓기.** 포인터 밑 줄과 띠(`dropZone`)를 `menuDropTarget`에 물어 놓을 자리를 받고, 놓으면 `dropTo`가 보낸다. 판정 · 보내기가
    * 줄 행동과 같은 명령 · 같은 서버 규칙을 쓴다(`tree/tree-drop.ts` 머리말).
+   *
+   * **놓는 답은 보인 답이다**(`sameMenuDrop` · `refresh`) — 끄는 사이 남이 줄을 밀어 포인터 밑에 다른 부모의 줄이 오면 놓지 않고 표시를
+   * 걷는다. 같은 부모의 줄이면 표시가 새 줄로 따라가고 차례는 놓을 때 지금 트리로 정한다(구조 트리 줄 끌기와 같다 — `panels/structure-tree.tsx`).
    */
   const drag = usePointerDrag<TreeSelection, MenuDrop>({
     onOver: (source, point) => {
@@ -290,8 +293,14 @@ export function MenuTree(props: {
       }
     },
     onDrop: (source, target) => commands.dropTo(source, target),
+    sameDrop: sameMenuDrop,
     scrollContainer: () => scrollParent(treeRef.current),
   })
+  // 끄는 사이 남의 변경으로 트리가 바뀌어 줄이 밀리면 표시를 마지막 좌표로 다시 묻는다 — 같은 부모의 줄이면 따라가고 다른 부모면 걷는다.
+  const shownMenu = state.status === 'ready' ? state.menu : null
+  useLayoutEffect(() => {
+    drag.refresh()
+  }, [drag.refresh, shownMenu])
 
   /**
    * 단축키를 받는다. **상자에 붙이지 전역이 아니다** — 다른 패널에서 타이핑하는 키는 다른

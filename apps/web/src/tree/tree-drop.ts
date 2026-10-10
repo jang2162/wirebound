@@ -69,6 +69,15 @@ export function menuDropTarget(
   return besides(menu, from, over, zone)
 }
 
+/**
+ * **같은 자리인가** — 끌기 장치의 «놓는 답은 보인 답이다»(`drag/use-pointer-drag.ts` 의 `sameDrop`)에 주는 견줌. **부모만 본다** — 차례 · 띠는
+ * 놓을 때 지금 트리로 다시 판정한 자리가 곧 놓는 자리다(구조 트리의 `edit/structure-drop.ts` 의 `sameDrop` 과 같은 뜻 — 두 트리가 한 규칙이다).
+ * 끄는 사이 남이 줄을 밀어 포인터 밑에 다른 부모의 줄이 오면 뗀 좌표의 그 줄로 가지 않는다.
+ */
+export function sameMenuDrop(a: MenuDrop, b: MenuDrop): boolean {
+  return a.parentId === b.parentId
+}
+
 /** 포인터 밑 줄의 앞 · 뒤 — 그 줄의 부모 안에서 그 줄의 자리(뒤면 하나 뒤). */
 function besides(
   menu: TreeMenuNode[],

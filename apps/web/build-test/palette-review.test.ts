@@ -29,7 +29,7 @@ import { GALLERY_SAMPLES } from '@wirebound/theme-gallery'
 import { placeableGroups } from '../src/panels/type-picker'
 import { CANVAS_MIN_HEIGHT } from '../src/shell/sidebar-layout'
 import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
-import { putTheme, seededVersion } from './theme-fixtures'
+import { controlsTheme, makeAdmin, putTheme, seededVersion, uploadRaw } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -429,7 +429,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       }
     })
 
-    it('빠르게 두 번 누름 — 누른 수만큼 넣고, 둘째는 첫째가 넣은(고른) 노드 뒤다(기록)', async () => {
+    it('빠르게 두 번 누름(더블클릭) — 하나만 넣는다(L-021 — 둘째는 `DOUBLE_CLICK_MS` 안의 같은 카드라 버린다)', async () => {
       const { P } = await seed('rv-click-dbl', [BASIC])
       const { page, close, patches } = await openEditor(P[0]!)
       try {
@@ -441,7 +441,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const dbl = { shape: await shape(P[0]!), sent: patches.length }
         // eslint-disable-next-line no-console
         console.log(`[리뷰 두 번 누름] ${JSON.stringify(dbl)}`)
-        expect(dbl).toEqual({ shape: { n_root: ['n_text', '+Divider', '+Divider', { n_card: ['n_intx'] }, 'n_empt', 'n_last'] }, sent: 2 })
+        expect(dbl).toEqual({ shape: { n_root: ['n_text', '+Divider', { n_card: ['n_intx'] }, 'n_empt', 'n_last'] }, sent: 1 })
       } finally {
         await close()
       }
@@ -494,6 +494,85 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         })
       } finally {
         await close()
+      }
+    })
+  })
+
+  /**
+   * L-029 · L-030 — 트리 줄 `+` 의 «아래 추가» · «안에 추가» 도 카드 «넣기» 와 같은 판에서 같은 답을 낸다(`src/edit/add-abilities.ts`).
+   * 고치기 전 값: 잎의 바로 뒤 형제를 bob 이 잡은 판에서 `+` 의 «아래 추가» 는 켜져 있어 고르개에서 «추가» 를 누르면 프레임 1 이 나가고 서버가
+   * 423 으로 거절했다(알림 «밥님이 편집 중인 영역입니다 — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다»). 뿌리를 고른 채(페이지를 연
+   * 그대로) bob 이 다른 노드를 잡으면 뿌리 줄 `+` 의 세 항목이 전부 «밥님이 편집 중이라 고를 수도 바꿀 수도 없습니다» 로 꺼졌다 — 카드 «넣기» 는
+   * 서버가 받는 페이지 끝 넣기를 한다.
+   */
+  describe('트리 줄 `+` — 남의 잠금', () => {
+    /** 줄 `+` 를 열어 항목들의 `[라벨, 꺼짐, 이유]` 를 읽는다 — 메뉴는 열린 채 둔다. */
+    async function plusItems(page: Page, rowId: string): Promise<{ label: string; off: boolean; reason: string | null }[]> {
+      await treeRow(page, rowId).hover()
+      await treeRow(page, rowId).locator('button[aria-haspopup="menu"]').nth(0).click()
+      return page
+        .locator('[role="menu"] [role="menuitem"]')
+        .evaluateAll((els) => els.map((el) => ({ label: el.textContent ?? '', off: el.getAttribute('aria-disabled') === 'true', reason: el.getAttribute('title') })))
+    }
+
+    it('잎의 바로 뒤 형제를 bob 이 잡았다 → `+` 의 «아래 추가» 가 꺼지고 이유가 카드 «넣기» 의 거절 문장과 같다 · 프레임 0', async () => {
+      const { P } = await seed('rv-plus-next', [BASIC])
+      const b = await openEditor(P[0]!, 'bob')
+      const { page, close, patches } = await openEditor(P[0]!)
+      try {
+        await pick(page, 'n_text')
+        await pick(b.page, 'n_card')
+        await poll('bob 의 잠금이 alice 에게', () => page.locator('.wb-shell-structure-lock').count(), (n) => n > 0)
+        const items = await plusItems(page, 'n_text')
+        const after = items.find((item) => item.label === '아래 추가')
+        // 눌러도 아무 일이 없다(꺼진 항목) — 고르개가 서지 않는다.
+        await page.getByRole('menuitem', { name: '아래 추가', exact: true }).click({ force: true })
+        await page.waitForTimeout(400)
+        const picker = await page.locator('.wb-shell-picker').count()
+        await page.keyboard.press('Escape')
+        await openPalette(page)
+        await only(page, 'Divider')
+        const card = await clickAdd(page, P[0]!, patches)
+        expect({ after, picker, sent: patches.length, shape: await shape(P[0]!), cardNotice: card.notice }).toEqual({
+          after: { label: '아래 추가', off: true, reason: '밥님이 편집 중이라 바꿀 수 없습니다' },
+          picker: 0,
+          sent: 0,
+          shape: ORIGINAL,
+          cardNotice: '밥님이 편집 중이라 바꿀 수 없습니다',
+        })
+      } finally {
+        await close()
+        await b.close()
+      }
+    })
+
+    it('페이지를 연 그대로(뿌리 선택) bob 이 다른 노드를 잡아도 뿌리 줄 `+` 의 «안에 추가» 가 켜져 있고 페이지 끝에 넣는다', async () => {
+      const { P } = await seed('rv-plus-root', [BASIC])
+      const { page, close, patches } = await openEditor(P[0]!)
+      const b = await openEditor(P[0]!, 'bob')
+      try {
+        const rootId = ((await call('GET', P[0]!)).body.schema.root as { id: string }).id
+        await pick(b.page, 'n_last')
+        await poll('bob 의 잠금이 alice 에게', () => page.locator('.wb-shell-structure-lock').count(), (n) => n > 0)
+        const items = await plusItems(page, rootId)
+        await page.getByRole('menuitem', { name: '안에 추가', exact: true }).click()
+        await page.locator('.wb-shell-picker').waitFor()
+        await page.locator('.wb-shell-picker').getByRole('button', { name: '추가', exact: true }).click()
+        await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL), 4000).catch(() => null)
+        expect({
+          items: items.map((item) => `${item.label}:${item.off ? '꺼짐' : '켜짐'}`),
+          sent: patches.length,
+          alert: await page.locator('[role="alert"]').allInnerTexts(),
+          last: ((await call('GET', P[0]!)).body.schema.root.children as { id: string; type: string }[]).at(-1)?.type !== 'Text',
+        }).toEqual({
+          items: ['안에 추가:켜짐', '아래 추가:꺼짐', '패턴 넣기:꺼짐'],
+          sent: 1,
+          alert: [],
+          last: true,
+        })
+      } finally {
+        await close()
+        await b.close()
       }
     })
   })
@@ -575,6 +654,63 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         // eslint-disable-next-line no-console
         console.log(`[리뷰 표본 없는 타입] ${JSON.stringify(results)}`)
         expect(Object.entries(results).filter(([, ok]) => !ok)).toEqual([])
+      } finally {
+        await close()
+      }
+    })
+
+    /**
+     * L-018 — SDK 기본 뷰는 입력을 `<div>` 로 그려 포커스 요소가 없다. **실제 `<button>` · `<input>` 을 그리는 테마**(`./theme-fixtures.ts` 의 `controlsTheme`)에서도
+     * 축소판 `inert` 가 서는가 — 그 자리를 누르면 iframe 이 클릭 · 포커스를 안 받고(그 점의 맨 위는 그 카드) Tab 이 iframe 으로 안 들어간다. 잰 값: 둘 다 클릭 0 · 포커스 0 ·
+     * Tab 마흔 번에 한 번도 안 닿는다.
+     */
+    it('실제 컨트롤을 그리는 테마 뷰의 축소판에서도 inert 다 — 누름 · 포커스 · Tab 이 iframe 에 안 닿는다', async () => {
+      await makeAdmin(stack, stack.users.alice)
+      expect(await uploadRaw(stack, alice, await controlsTheme())).toBe(201)
+      const { P, projectId } = await seed('rv-thumb-controls', [BASIC])
+      await putTheme(call, projectId, { themeId: 'controls', version: '1.0.0', tokens: {} })
+      const { page, close } = await openEditor(P[0]!)
+      try {
+        await openPalette(page)
+        const got: Record<string, unknown> = {}
+        for (const [type, selector] of [['Button', 'button'], ['Field', 'input']] as const) {
+          await only(page, type)
+          const at = (await poll(
+            `${type} 표본`,
+            () => page.evaluate(
+              ({ t, sel }) => {
+                const iframe = document.querySelector('iframe.wb-shell-palette-thumbs-iframe') as HTMLIFrameElement
+                const real = iframe.contentDocument?.querySelector(`[data-wb-palette-thumb="${t}"] ${sel}`)
+                if (real === null || real === undefined) return null
+                const f = iframe.getBoundingClientRect()
+                const r = real.getBoundingClientRect()
+                return r.width === 0 ? null : { x: f.left + r.left + r.width / 2, y: f.top + r.top + r.height / 2 }
+              },
+              { t: type, sel: selector },
+            ),
+            (value) => value !== null,
+            5000,
+          ))!
+          await page.evaluate(`(() => {
+            const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe').contentDocument
+            window.__hits = { clicks: 0, focus: 0 }
+            doc.addEventListener('click', () => window.__hits.clicks++, true)
+            doc.addEventListener('focusin', () => window.__hits.focus++, true)
+          })()`)
+          const top = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-wb-palette-card]')?.getAttribute('data-wb-palette-card') ?? null, at)
+          await page.mouse.click(at.x, at.y)
+          await page.getByRole('separator', { name: '컴포넌트 목록 높이' }).focus()
+          let reachedThumbs = false
+          for (let i = 0; i < 40; i += 1) {
+            await page.keyboard.press('Tab')
+            reachedThumbs ||= await page.evaluate(() => document.activeElement?.classList.contains('wb-shell-palette-thumbs-iframe') === true)
+          }
+          got[type] = { top, hits: await page.evaluate('window.__hits'), reachedThumbs }
+        }
+        expect(got).toEqual({
+          Button: { top: 'Button', hits: { clicks: 0, focus: 0 }, reachedThumbs: false },
+          Field: { top: 'Field', hits: { clicks: 0, focus: 0 }, reachedThumbs: false },
+        })
       } finally {
         await close()
       }
@@ -931,11 +1067,12 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
 
     /**
      * 표시 «n_last 앞» 을 세운 채 bob 이 위 글(n_text)을 길게 고쳐 n_last 가 밀린다. D1 의 손잡이 판(`./canvas-drop-review.test.ts` «bob 이 위
-     * 노드의 글을 길게 고쳐 …»)과 같은 성질 — 다시 잰 뒤 표시가 걷히고 놓은 자리가 보인 자리거나 편집 0 — 을 카드 출처로 단언한다. 판은
+     * 노드의 글을 길게 고쳐 …»)과 같은 성질 — 다시 잰 뒤 표시가 같은 부모 안의 새 자리(포인터 밑)로 따라가고 놓은 자리가 그 자리 — 을 카드 출처로 단언한다
+     * (L-002 — `sameDrop` 이 부모만 견준다. 옛 판은 표시가 걷히고 편집 0). 판은
      * 캔버스의 형제라 캔버스가 다시 잰 것을 경로 층으로 받아 끌기 장치의 `refresh` 를 부른다(`drag/use-placement.ts` 의 `useCanvasRemeasured`) —
-     * 그 구독을 떼면 빨강이다(표시가 옛 y 에 남는다 · 놓으면 편집 0). 표시를 걷기만 하는 판은 아래 대조군이 잡는다.
+     * 그 구독을 떼면 빨강이다(표시가 옛 y 에 남는다 · 놓으면 편집 0). 표시를 안 옮기고 걷기만 하는 판은 아래 대조군이 잡는다.
      */
-    it('bob 이 위 글을 길게 고쳐 표시한 노드가 밀리면 표시가 걷히고 놓은 자리가 보인 자리거나 편집 0 이다', async () => {
+    it('bob 이 위 글을 길게 고쳐 표시한 노드가 밀리면 같은 부모 안의 새 자리로 표시가 따라가고 놓은 자리가 그 자리다', async () => {
       const { P } = await seed('rv-drag-shift', [BASIC])
       const tab = await openEditor(P[0]!)
       const { page, close } = tab
@@ -956,8 +1093,8 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const final = await shape(P[0]!)
         // eslint-disable-next-line no-console
         console.log(`[리뷰 카드 끌기 밀림] ${JSON.stringify({ armedHint, status, afterShift, lastNow, final })}`)
-        expect({ armed: armedHint.map((h) => h.placement), status, afterShift }).toEqual({ armed: ['before'], status: 200, afterShift: [] })
-        expect([ORIGINAL, { n_root: ['n_text', { n_card: ['n_intx'] }, 'n_empt', '+Divider', 'n_last'] }]).toContainEqual(final)
+        expect({ armed: armedHint.map((h) => h.placement), status, afterShift: afterShift.map((h) => h.placement) }).toEqual({ armed: ['before'], status: 200, afterShift: ['after'] })
+        expect(final).toEqual({ n_root: ['n_text', { n_card: ['n_intx'] }, '+Divider', 'n_empt', 'n_last'] })
       } finally {
         await close()
       }

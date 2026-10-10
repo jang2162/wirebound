@@ -178,6 +178,57 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
  * 결과가 어긋날 수 없다"*가 그 자리에서 깨진다.
  */
 function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): ReactElement {
+  const cache = nodeCacheFor(node, options)
+  if (cache === null) return renderNodeUncached(root, node, options)
+  const hit = cache.get(node)
+  if (hit !== undefined) return hit
+  let failed = false
+  const element = renderNodeUncached(root, node, {
+    ...options,
+    onNodeError: (error) => {
+      failed = true
+      options.onNodeError?.(error)
+    },
+  })
+  // **오류가 난 서브트리는 기억하지 않는다** — 오류는 `onNodeError` 로 말해야 하므로 다시 그려야 하고, 폴백은 카탈로그 설치 같은 렌더러 밖의 상태에도 기대
+  // (`getComponent` — 설치 전에 그린 폴백이 설치 뒤에도 남으면 안 된다). 오류 없는 서브트리만 재사용하면 `onNodeError` 를 다시 흉내 낼 일도 없다.
+  if (!failed) cache.set(node, element)
+  return element
+}
+
+/** 테마 → 화면 상태 → 노드 객체 → 그린 엘리먼트. 키가 약해서 문서 · 테마가 버려지면 함께 사라진다. */
+const NODE_CACHE = new WeakMap<object, Map<string, WeakMap<object, ReactElement>>>()
+
+/**
+ * **노드 객체 동일성으로 엘리먼트를 재사용한다** — 문서의 편집은 지나는 길의 노드만 새 객체로 만들고(`applyOps` · `canvas/canvas-preview.ts` 의
+ * `previewDocument`) 나머지 서브트리는 그 객체 그대로다. 같은 엘리먼트를 돌려주면 React 가 그 서브트리를 다시 그리지 않는다 — 배치 미리보기가 서고 걷힐
+ * 때마다 문서 전체(노드 200 이면 긴 작업 두 번 · 각 68ms)를 다시 그리던 비용이 길 위의 노드로 줄어든다(`apps/web/build-test/canvas-preview.test.ts` «노드 200»).
+ *
+ * **캐시가 서는 판은 «그린 것이 노드 · 테마 · 화면 상태만으로 정해지는» 판이다.** 상호작용 런타임을 켠 렌더(`interaction` — 핸들러가 문서 `root` 를 닫는다 · 겹layer 가
+ * 노드를 숨기고 props 를 덮는다)와 `slot` 을 받는 렌더(레이아웃 — 같은 노드가 주입한 엘리먼트에 따라 갈린다)는 안 쓴다 — `null`. 오류가 난 서브트리도 기억하지 않는다
+ * (`renderNodeIn`).
+ *
+ * **노드 객체를 제자리에서 고치지 마라** — 고치면 캐시가 옛 모양을 돌려준다. 문서는 불변으로 다룬다(스토어의 편집은 새 객체를 만든다).
+ */
+function nodeCacheFor(node: unknown, options: RenderOptions): WeakMap<object, ReactElement> | null {
+  if (options.interaction !== undefined || options.slot !== undefined) return null
+  if (typeof node !== 'object' || node === null) return null
+  const theme: object = options.theme ?? NO_THEME
+  let byState = NODE_CACHE.get(theme)
+  if (byState === undefined) {
+    byState = new Map()
+    NODE_CACHE.set(theme, byState)
+  }
+  const stateKey = options.viewState ?? ''
+  let byNode = byState.get(stateKey)
+  if (byNode === undefined) {
+    byNode = new WeakMap()
+    byState.set(stateKey, byNode)
+  }
+  return byNode
+}
+
+function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions): ReactElement {
   const raw = node as unknown as { id?: unknown; type?: unknown; children?: unknown } | null
   const nodeId = readString(raw?.id)
 

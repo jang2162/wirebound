@@ -510,4 +510,46 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
       await context.close()
     }
   })
+  /**
+   * 기록(L-020) — 안쪽 선의 한계 둘을 값으로 적는다. **칸 걸침**: 스키마에 걸침이 없어 CSS(`grid-column: span 2`)로 흉내 낸다 — 걸친 자식이 두 열 묶음을 하나로 이어 그 행의 열
+   * 사이 세로선이 하나 빠진다(3열 Grid 의 세로선 2 → 1 · 가로선은 행 구성이 바뀌어 1 → 2). **세로 Flex 줄바꿈**: 높이를 정한 판(90px)에서만 서고 열 사이에 세로선이 선다
+   * (자식 여섯이 열 여섯으로 흩어져 세로선 5 · 가로선 0 · 모서리 글은 «↓» 그대로). 높이가 안 정해진 판은 줄바꿈이 없다(가로선 5 · 세로선 0). 이 둘은 고치지 않는 한계다 —
+   * 값이 바뀌면 이 케이스가 알린다.
+   */
+  it('기록 — 칸 걸침은 열 사이 선을 지우고 세로 Flex 줄바꿈은 높이가 정해진 판에서만 선다', async () => {
+    const six = (prefix: string) => Array.from({ length: 6 }, (_, index) => ({ id: `${prefix}${index}`, type: 'Text', props: { content: `칸 ${index}` } }))
+    const { P } = await fixture('lines-limits', 'system-admin', [
+      { id: 'n_gridplain', type: 'Grid', props: { columns: 3 }, children: six('p') },
+      { id: 'n_gridspan', type: 'Grid', props: { columns: 3 }, children: six('s') },
+      { id: 'n_vwrap', type: 'Flex', props: { direction: 'column', wrap: true }, children: six('v') },
+      ...texts('limitsfill_', 12, (index) => `채움 ${index}`),
+    ])
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    const read = () => page.evaluate(`(() => {
+      const out = {}
+      for (const guide of document.querySelectorAll('[data-wb-guide-for]')) {
+        out[guide.getAttribute('data-wb-guide-for')] = guide.querySelectorAll('[data-wb-guide-line="x"]').length + '/' + guide.querySelectorAll('[data-wb-guide-line="y"]').length
+      }
+      return out
+    })()`)
+    try {
+      await page.goto(P)
+      await canvasFrame(page).locator('[data-wb-id="n_gridplain"]').waitFor()
+      await page.getByRole('button', { name: '배치 선', exact: true }).click()
+      const before = await poll('선', () => read() as Promise<Record<string, string>>, (value) => value['n_vwrap'] !== undefined, 5_000)
+      const frame = (await (await page.$('iframe.wb-shell-canvas-iframe'))!.contentFrame())!
+      await frame.evaluate(() => {
+        const style = document.createElement('style')
+        style.textContent = '[data-wb-id="s1"]{grid-column: span 2}[data-wb-id="n_vwrap"]{height:90px !important}'
+        document.head.appendChild(style)
+      })
+      const after = await poll('걸침 · 높이 뒤의 선', () => read() as Promise<Record<string, string>>, (value) => value['n_gridspan'] === '1/2' && value['n_vwrap'] === '5/0', 5_000).catch(() => read())
+      expect({ before, after }).toEqual({
+        before: { n_gridplain: '2/1', n_gridspan: '2/1', n_vwrap: '0/5' },
+        after: { n_gridplain: '2/1', n_gridspan: '1/2', n_vwrap: '5/0' },
+      })
+    } finally {
+      await context.close()
+    }
+  })
 })
