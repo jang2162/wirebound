@@ -535,9 +535,11 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         try {
           const status = await bobOps(P, [{ op: 'remove', path: '/root/children/3' }])
           await treeRow(page, 'n_empt').waitFor({ state: 'detached' })
+          await page.waitForTimeout(150)
+          const afterRemoved = (await indicators(page)).map((h) => h.placement)
           await page.mouse.up()
           await page.waitForTimeout(800)
-          expect({ armed, status }).toEqual({ armed: ['inside'], status: 200 })
+          expect({ armed, status, afterRemoved }).toEqual({ armed: ['inside'], status: 200, afterRemoved: [] })
           expect(await shape(P)).toEqual({ ROOT: ['n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_mid', 'n_t0', 'n_t1', 'n_t2', 'n_t3', 'n_end'] })
         } finally {
           await close()
@@ -550,13 +552,41 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         try {
           const status = await bobOps(P, [{ op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
           await treeRow(page, 'n_bob').waitFor({ state: 'attached' })
+          await page.waitForTimeout(150)
+          const afterShift = (await indicators(page)).map((h) => h.placement)
           await page.mouse.up()
           await page.waitForTimeout(800)
-          expect({ armed, status }).toEqual({ armed: ['before'], status: 200 })
+          expect({ armed, status, afterShift }).toEqual({ armed: ['before'], status: 200, afterShift: [] })
           expect([
             { ROOT: ['n_bob', 'n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_mid', 'n_empt', 'n_t0', 'n_t1', 'n_t2', 'n_t3', 'n_end'] },
             { ROOT: ['n_bob', 'n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_t3', 'n_mid', 'n_empt', 'n_t0', 'n_t1', 'n_t2', 'n_end'] },
           ]).toContainEqual(await shape(P))
+        } finally {
+          await close()
+        }
+      })
+
+      /** L-027 — 줄이 밀려 포인터 밑에 같은 부모의 다른 줄이 오면 표시가 그 줄로 따라가고 놓으면 표시한 줄 앞에 선다. */
+      it('bob 이 뿌리 첫 자리에 넣어 같은 부모의 다른 줄이 포인터 밑으로 오면 표시가 따라가고 놓으면 그 줄 앞이다', async () => {
+        const { P } = await fixture('tree-follow', DOC)
+        const { page, close, armed } = await armedOnRow(P, 'n_t1', 0.15)
+        try {
+          const status = await bobOps(P, [{ op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+          await treeRow(page, 'n_bob').waitFor({ state: 'attached' })
+          await page.waitForTimeout(150)
+          const shown = await indicators(page)
+          const t0 = (await treeRow(page, 'n_t0').boundingBox())!
+          await page.mouse.up()
+          await page.waitForTimeout(800)
+          expect({ armed, status, shown: shown.map((h) => h.placement), onT0: shown.length === 1 && Math.abs(shown[0]!.rect.y - t0.y) < 2 }).toEqual({
+            armed: ['before'],
+            status: 200,
+            shown: ['before'],
+            onT0: true,
+          })
+          expect(await shape(P)).toEqual({
+            ROOT: ['n_bob', 'n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_mid', 'n_empt', 'n_t3', 'n_t0', 'n_t1', 'n_t2', 'n_end'],
+          })
         } finally {
           await close()
         }

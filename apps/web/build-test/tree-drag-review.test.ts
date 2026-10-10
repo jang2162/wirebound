@@ -774,6 +774,40 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
     }
   })
 
+  /**
+   * L-028 — 메뉴 트리 끌기도 놓는 답이 보인 답이어야 한다. bob 이 나1 을 쥐고 나3 의 아래 띠(«나 안 끝»)를 세운 채 alice 가 위 줄(가2)을 지우면
+   * 줄이 하나 올라가 포인터 밑에 «다» 메뉴 줄이 온다 — 안 견주면 떼는 순간 나1 이 보인 자리(나) 가 아닌 «다 안» 으로 간다.
+   */
+  it('메뉴: 끄는 중 남이 위 줄을 지워 포인터 밑에 다른 부모의 줄이 오면 표시가 걷히고 놓아도 요청이 없다', async () => {
+    const { projectId, P, ids } = await menuFixture('menu-shifted', 'editor')
+    const tab = await openEditor(P, 'bob')
+    try {
+      const { page } = tab
+      await page.waitForTimeout(300)
+      await grab(page, ids['나1']!)
+      const target = await spot(page, ids['나3']!, 'bottom')
+      await page.mouse.move(target.x, target.y, { steps: 6 })
+      const armed = await counts(page)
+      const removed = await stack.request(alice, 'DELETE', `/projects/${projectId}/pages/${ids['가2']}`)
+      await row(page, ids['가2']!).waitFor({ state: 'detached', timeout: 3_000 })
+      await page.waitForTimeout(200)
+      const afterShift = await counts(page)
+      await page.mouse.up()
+      await page.waitForTimeout(600)
+      const tree = await serverTree(projectId)
+      expect({
+        armed: armed.hint,
+        removed: removed.status,
+        afterShift: afterShift.hint,
+        writes: tab.writes.length,
+        나: titles(find(tree, '나')!.pages),
+        다: titles(find(tree, '다')!.pages),
+      }).toEqual({ armed: 1, removed: 204, afterShift: 0, writes: 0, 나: ['나1', '나2', '나3'], 다: [] })
+    } finally {
+      await tab.close()
+    }
+  })
+
   // ── 항목 4 — 줄 행동 ─────────────────────────────────────────────────────────────────────────────────
 
   /** Tab 을 `n` 번 눌러 포커스가 선 요소의 접근 이름 — 트리 안의 것만. */
