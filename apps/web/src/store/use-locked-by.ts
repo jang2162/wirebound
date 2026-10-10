@@ -48,3 +48,13 @@ export function useLockedBy(): (nodeId: string) => NodeLock | null {
   useEditorStore(store, (s) => s.locks)
   return store.lockedBy
 }
+
+/**
+ * **잠금 목록이 바뀔 때마다 달라지는 값** — 효과의 의존으로만 쓴다(`useLayoutEffect(…, [locksVersion])`). 내용을 읽지 않는다: 읽는 판정은 `store.lockedBy` 하나다
+ * (위 머리말). 목록을 구독하는 자리를 이 파일 하나로 두려는 것이라(`test/lock/one-verdict.test.ts` «화면이 잠금 목록을 손에 쥐는 자리도 하나다») 목록이 바뀐 줄
+ * 알아야 하는 화면(끄는 중의 구조 트리 줄 — `panels/structure-tree.tsx`)은 이것으로 받는다.
+ */
+export function useLocksVersion(): unknown {
+  const store = useEditorStoreInstance()
+  return useEditorStore(store, (s) => s.locks)
+}

@@ -585,7 +585,8 @@ describe('꺼진 항목의 이유 — 잠긴 조상의 이유는 배지가 아�
 
     view.push(locksFrame([foreign('n-b')]))
 
-    expect(rowReason(structureRegion(), '안에 추가')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+    // `안에 추가`는 뿌리 끝에 넣는 편집이 잠긴 자손과 안 부딪혀 산다(`edit/add-abilities.ts`) — 이유가 없다. 나머지는 이름과 함께 잠금을 말한다.
+    expect(rowReason(structureRegion(), '안에 추가')).toBeNull()
     expect(rowReason(structureRegion(), '삭제')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
@@ -598,7 +599,10 @@ describe('꺼진 항목의 이유 — 잠긴 조상의 이유는 배지가 아�
 
     expect(view.store.getState().selectedNodeId).toBe('n-a')
     expect(rowReason(structureRegion(), '안에 추가')).toBe('자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다')
-    expect(Object.values(rowReasons(structureRegion())).filter((reason) => reason?.includes('보라') === true)).toEqual([])
+    // 잠금을 말하는 이유는 하나뿐이다 — `n-a` 의 **바로 뒤 형제**(`n-b`)가 잠겨 «아래 추가» 가 넣는 편집의 충돌로 꺼진다. 고른 노드의 잠금(`고를 수도 …`)은 없다.
+    expect(Object.entries(rowReasons(structureRegion())).filter(([, reason]) => reason?.includes('보라') === true)).toEqual([
+      ['아래 추가', '보라님이 편집 중이라 바꿀 수 없습니다'],
+    ])
   })
 
   it('내 잠금은 꺼진 항목의 이유에도 안 뜬다', async () => {
@@ -649,7 +653,9 @@ describe('꺼진 항목의 이유 — 잠긴 조상의 이유는 배지가 아�
       '보라 편집 중',
     )
     // 문장은 «조상» 경우(`그 이유가 고른 줄의 꺼진 항목에 온다`)와 **글자까지 같다.**
-    expect(rowReason(structureRegion(), '안에 추가')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+    expect(rowReason(structureRegion(), '삭제')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+    // 루트 «자신» 이 잠기면 뿌리 끝에 넣는 편집도 부딪친다 — `안에 추가`는 «넣는 편집» 의 문장을 든다(`edit/add-abilities.ts`).
+    expect(rowReason(structureRegion(), '안에 추가')).toBe('보라님이 편집 중이라 바꿀 수 없습니다')
   })
 
   it('사람이 둘이면 부딪치는 쪽의 이름이 온다', async () => {
@@ -659,7 +665,7 @@ describe('꺼진 항목의 이유 — 잠긴 조상의 이유는 배지가 아�
     // `selectionConflicts`가 낸 **첫 잠금** 하나다(`packages/schema/src/lock.ts`).
     view.push(locksFrame([foreign('n-a'), foreign('n-b', { userId: 'u-dahye', userName: '다혜' })]))
 
-    expect(rowReason(structureRegion(), '안에 추가')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+    expect(rowReason(structureRegion(), '삭제')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 })
 

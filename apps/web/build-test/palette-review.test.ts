@@ -498,6 +498,85 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
     })
   })
 
+  /**
+   * L-029 · L-030 — 트리 줄 `+` 의 «아래 추가» · «안에 추가» 도 카드 «넣기» 와 같은 판에서 같은 답을 낸다(`src/edit/add-abilities.ts`).
+   * 고치기 전 값: 잎의 바로 뒤 형제를 bob 이 잡은 판에서 `+` 의 «아래 추가» 는 켜져 있어 고르개에서 «추가» 를 누르면 프레임 1 이 나가고 서버가
+   * 423 으로 거절했다(알림 «밥님이 편집 중인 영역입니다 — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다»). 뿌리를 고른 채(페이지를 연
+   * 그대로) bob 이 다른 노드를 잡으면 뿌리 줄 `+` 의 세 항목이 전부 «밥님이 편집 중이라 고를 수도 바꿀 수도 없습니다» 로 꺼졌다 — 카드 «넣기» 는
+   * 서버가 받는 페이지 끝 넣기를 한다.
+   */
+  describe('트리 줄 `+` — 남의 잠금', () => {
+    /** 줄 `+` 를 열어 항목들의 `[라벨, 꺼짐, 이유]` 를 읽는다 — 메뉴는 열린 채 둔다. */
+    async function plusItems(page: Page, rowId: string): Promise<{ label: string; off: boolean; reason: string | null }[]> {
+      await treeRow(page, rowId).hover()
+      await treeRow(page, rowId).locator('button[aria-haspopup="menu"]').nth(0).click()
+      return page
+        .locator('[role="menu"] [role="menuitem"]')
+        .evaluateAll((els) => els.map((el) => ({ label: el.textContent ?? '', off: el.getAttribute('aria-disabled') === 'true', reason: el.getAttribute('title') })))
+    }
+
+    it('잎의 바로 뒤 형제를 bob 이 잡았다 → `+` 의 «아래 추가» 가 꺼지고 이유가 카드 «넣기» 의 거절 문장과 같다 · 프레임 0', async () => {
+      const { P } = await seed('rv-plus-next', [BASIC])
+      const b = await openEditor(P[0]!, 'bob')
+      const { page, close, patches } = await openEditor(P[0]!)
+      try {
+        await pick(page, 'n_text')
+        await pick(b.page, 'n_card')
+        await poll('bob 의 잠금이 alice 에게', () => page.locator('.wb-shell-structure-lock').count(), (n) => n > 0)
+        const items = await plusItems(page, 'n_text')
+        const after = items.find((item) => item.label === '아래 추가')
+        // 눌러도 아무 일이 없다(꺼진 항목) — 고르개가 서지 않는다.
+        await page.getByRole('menuitem', { name: '아래 추가', exact: true }).click({ force: true })
+        await page.waitForTimeout(400)
+        const picker = await page.locator('.wb-shell-picker').count()
+        await page.keyboard.press('Escape')
+        await openPalette(page)
+        await only(page, 'Divider')
+        const card = await clickAdd(page, P[0]!, patches)
+        expect({ after, picker, sent: patches.length, shape: await shape(P[0]!), cardNotice: card.notice }).toEqual({
+          after: { label: '아래 추가', off: true, reason: '밥님이 편집 중이라 바꿀 수 없습니다' },
+          picker: 0,
+          sent: 0,
+          shape: ORIGINAL,
+          cardNotice: '밥님이 편집 중이라 바꿀 수 없습니다',
+        })
+      } finally {
+        await close()
+        await b.close()
+      }
+    })
+
+    it('페이지를 연 그대로(뿌리 선택) bob 이 다른 노드를 잡아도 뿌리 줄 `+` 의 «안에 추가» 가 켜져 있고 페이지 끝에 넣는다', async () => {
+      const { P } = await seed('rv-plus-root', [BASIC])
+      const { page, close, patches } = await openEditor(P[0]!)
+      const b = await openEditor(P[0]!, 'bob')
+      try {
+        const rootId = ((await call('GET', P[0]!)).body.schema.root as { id: string }).id
+        await pick(b.page, 'n_last')
+        await poll('bob 의 잠금이 alice 에게', () => page.locator('.wb-shell-structure-lock').count(), (n) => n > 0)
+        const items = await plusItems(page, rootId)
+        await page.getByRole('menuitem', { name: '안에 추가', exact: true }).click()
+        await page.locator('.wb-shell-picker').waitFor()
+        await page.locator('.wb-shell-picker').getByRole('button', { name: '추가', exact: true }).click()
+        await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL), 4000).catch(() => null)
+        expect({
+          items: items.map((item) => `${item.label}:${item.off ? '꺼짐' : '켜짐'}`),
+          sent: patches.length,
+          alert: await page.locator('[role="alert"]').allInnerTexts(),
+          last: ((await call('GET', P[0]!)).body.schema.root.children as { id: string; type: string }[]).at(-1)?.type !== 'Text',
+        }).toEqual({
+          items: ['안에 추가:켜짐', '아래 추가:꺼짐', '패턴 넣기:꺼짐'],
+          sent: 1,
+          alert: [],
+          last: true,
+        })
+      } finally {
+        await close()
+        await b.close()
+      }
+    })
+  })
+
   describe('축소판', () => {
     it.each([1440, 1024, 800])('창 폭 %i — 카드 판을 처음 · 가운데 · 끝까지(세로로) 밀어도 표본이 카드 창 안 · 중심 차 1px 안', async (width) => {
       const { P } = await seed(`rv-thumb-${width}`, [BASIC])

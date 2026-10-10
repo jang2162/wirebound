@@ -30,7 +30,7 @@ import { ActionMenu } from '../shell/action-menu'
 import { ICONS, shellIcon } from '../shell/icons'
 import { useAllCases, useHiddenNodes, useViewState } from '../shell/use-view-state'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import { useLockedBy } from '../store/use-locked-by'
+import { useLockedBy, useLocksVersion } from '../store/use-locked-by'
 import { structureKey, useCollapsed, type Collapsed } from '../tree/collapse'
 import { useAliasEdit, type AliasEdit } from './alias-edit'
 import { nodeTypeLabel } from './node-shape'
@@ -220,10 +220,10 @@ export function StructureTree(props: {
   })
   // 끄는 사이 문서 · 잠금이 바뀌어 줄이 밀리거나 사라지면 표시를 마지막 좌표로 다시 묻는다 — 같은 부모의 줄이면 새 줄로 옮겨 가고, 다른 부모 ·
   // 못 놓는 자리면 걷는다. 안 부르면 표시가 옛 줄 상자에 남는다(`refresh` 는 끌기가 아니면 아무것도 안 한다).
-  const locks = useEditorStore(store, (s) => s.locks)
+  const locksVersion = useLocksVersion()
   useLayoutEffect(() => {
     drag.refresh()
-  }, [drag.refresh, doc, locks])
+  }, [drag.refresh, doc, locksVersion])
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     // **고칠 수 없으면 단축키도 없다**(`editable`). 찾기 전에 돌아가므로 `preventDefault`도 안 걸린다.
