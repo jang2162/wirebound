@@ -697,4 +697,52 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
     // 늦추지 않은 판 — 많아야 둘(신호가 먼저 와 그 다시 받기와 답 뒤 조회가 겹쳤다).
     expect(plain.reads).toBeLessThanOrEqual(2)
   }, 90_000)
+  /**
+   * **내 조작 뒤의 다시 받기가 남의 지움을 함께 싣는 판**(장부 L-094) — 그 신호는 이미 받은 판이라 `reconcile` 을 안 타고, 고른 줄이 사라진 줄을
+   * 가리킨 채 남아 트리의 단축키가 죽었다. bob 이 «다» 를 고른 채 alice 가 «다» 를 지우고, bob 의 WS(서버 → 브라우저)를 늦춰 신호보다 먼저
+   * bob 의 «최상위 메뉴 추가» 답 뒤 다시 받기가 지운 트리를 받게 한다. 판 카나리아: 늦춘 WS 에 프레임이 실제로 지연됐고, 트리에서 «다» 줄이 사라졌다.
+   * 단언은 성질이다 — 사라진 줄을 고른 채가 아니라 주소의 페이지가 선택이라 Delete 가 그 페이지의 삭제 확인을 건다(남의 지움만 있었던 판과 같다).
+   */
+  it('내 조작 뒤의 다시 받기가 남의 지움을 싣는 판 — 사라진 줄을 고른 채 남지 않아 Delete 가 주소의 페이지에 닿는다', async () => {
+    const confirmAfterDelete = async (own: boolean, slug: string): Promise<{ rows: number; pressed: number; confirm: number; delayed: number }> => {
+      const fx = await fixture(slug)
+      const delay = own ? await stack.startDownDelay(1_500) : null
+      const bob = await openBob(fx.url, delay?.origin)
+      try {
+        await bob.page.locator(`${TREE} button.wb-shell-tree-menu`, { hasText: '다' }).first().click()
+        await poll('룸에 든 채 지연된다', async () => (delay === null ? 1 : delay.delayed()), (n) => n >= 1)
+        await ok(call('DELETE', `${fx.P}/menu/${fx.ids['다']}`))
+        if (own) {
+          await bob.page.locator(`${TREE} .wb-shell-region-actions [aria-haspopup="menu"]`).click()
+          await bob.page.getByRole('menuitem', { name: '최상위 메뉴 추가', exact: true }).click()
+          const input = bob.page.getByLabel('이름', { exact: true })
+          await input.fill('새 메뉴')
+          await input.press('Enter')
+        }
+        await poll('트리에서 «다» 가 사라진다', () => rowIds(bob.page), (ids) => !ids.includes(fx.ids['다']!), 5_000)
+        // 지연된 신호가 닿을 때까지 — 신호가 닿아도 같은 값이어야 한다.
+        await bob.page.waitForTimeout(own ? 2_200 : 600)
+        await bob.page.locator(`${TREE} .wb-shell-region-actions button`).first().focus()
+        await bob.page.keyboard.press('Delete')
+        const confirm = await bob.page.getByRole('button', { name: '정말 삭제합니까?', exact: true }).count()
+        return {
+          rows: (await rowIds(bob.page)).length,
+          pressed: await bob.page.locator(`${TREE} button[aria-pressed="true"]`).count(),
+          confirm,
+          delayed: delay?.delayed() ?? 0,
+        }
+      } finally {
+        await bob.close()
+        await delay?.close()
+      }
+    }
+    const only = await confirmAfterDelete(false, 'pick-remote')
+    const own = await confirmAfterDelete(true, 'pick-own')
+    // eslint-disable-next-line no-console
+    console.log('[메뉴 실시간] 고른 줄 · 남의 지움', JSON.stringify({ only, own }))
+    expect(only.confirm).toBe(1)
+    expect({ confirm: own.confirm, pressed: own.pressed }).toEqual({ confirm: 1, pressed: 0 })
+    expect(own.delayed).toBeGreaterThan(0)
+  }, 90_000)
+
 })
