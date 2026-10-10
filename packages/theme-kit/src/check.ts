@@ -1,8 +1,8 @@
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import { THEMELESS_TYPES, getComponent, installCatalog } from '@wirebound/schema'
-import { renderDocument } from '@wirebound/renderer'
+import { installCatalog } from '@wirebound/schema'
+import { renderDocument, unusedViewKeys } from '@wirebound/renderer'
 import { galleryItemDocument, galleryItems } from '@wirebound/theme-gallery'
 import { ThemeProvider, type ThemeDefinition, type ThemeManifest } from '@wirebound/theme-sdk'
 import { installRuntime } from '@wirebound/theme-sdk/runtime'
@@ -188,16 +188,7 @@ function openingTag(element: Element): string {
  * `install` 된 카탈로그에서 읽으므로 `installCatalog()` 뒤에 부른다.
  */
 function findBadViewKeys(definition: ThemeDefinition): ThemeCheckError[] {
-  const errors: ThemeCheckError[] = []
-  for (const key of Object.keys(definition.views)) {
-    const message = THEMELESS_TYPES.includes(key)
-      ? `views.${key} 는 테마가 그리지 않는 타입의 뷰입니다 — 렌더러가 직접 다뤄 쓰이지 않습니다`
-      : getComponent(key) === undefined
-        ? `views.${key} 는 카탈로그에 없는 타입의 뷰입니다 — 쓰이지 않습니다`
-        : null
-    if (message !== null) errors.push({ type: key, variant: undefined, label: '', message, source: 'bundle' })
-  }
-  return errors
+  return unusedViewKeys(definition.views).map(({ key, message }) => ({ type: key, variant: undefined, label: '', message, source: 'bundle' }))
 }
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

@@ -807,6 +807,44 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
     }
   })
 
+  /**
+   * L-238 — `refresh`(끄는 사이 트리가 바뀌면 마지막 좌표로 다시 묻는다)만 가르는 판. 위 케이스는 `refresh` 를 떼도 `sameMenuDrop` 을 떼도 죽어
+   * 둘을 못 가른다. 여기서는 남이 **다른 부모의 줄**을 지워(가2 — 나 위) 포인터 밑에 **같은 부모의 줄**(나2)이 오고, 그 자리는 끄는 나3 의
+   * 제자리(나2 뒤)라 `onOver` 가 `null` 이다. `refresh` 가 있으면 표시가 걷히고 `sameDrop` 은 이 길에 안 든다(`reask` 의 `next === null`) —
+   * `refresh` 를 뗀 변조에서만 표시가 옛 자리에 남는다.
+   */
+  it('메뉴: 끄는 중 남이 위 줄을 지워 포인터 밑에 같은 부모의 줄이 오면 — 표시가 새 자리로 다시 물어 걷힌다(제자리)', async () => {
+    const { projectId, P, ids } = await menuFixture('menu-refresh-only', 'editor')
+    const tab = await openEditor(P, 'bob')
+    try {
+      const { page } = tab
+      await page.waitForTimeout(300)
+      await grab(page, ids['나3']!)
+      const target = await spot(page, ids['나1']!, 'bottom')
+      await page.mouse.move(target.x, target.y, { steps: 6 })
+      const armed = await counts(page)
+      const removed = await stack.request(alice, 'DELETE', `/projects/${projectId}/pages/${ids['가2']}`)
+      await row(page, ids['가2']!).waitFor({ state: 'detached', timeout: 3_000 })
+      await page.waitForTimeout(200)
+      const box = (await row(page, ids['나2']!).boundingBox())!
+      const underPointer = target.y >= box.y && target.y <= box.y + box.height ? '나2' : null
+      const afterShift = await counts(page)
+      await page.mouse.up()
+      await page.waitForTimeout(600)
+      const tree = await serverTree(projectId)
+      expect({
+        armed: armed.hint,
+        removed: removed.status,
+        underPointer,
+        afterShift: afterShift.hint,
+        writes: tab.writes.length,
+        나: titles(find(tree, '나')!.pages),
+      }).toEqual({ armed: 1, removed: 204, underPointer: '나2', afterShift: 0, writes: 0, 나: ['나1', '나2', '나3'] })
+    } finally {
+      await tab.close()
+    }
+  })
+
   // ── 항목 4 — 줄 행동 ─────────────────────────────────────────────────────────────────────────────────
 
   /** Tab 을 `n` 번 눌러 포커스가 선 요소의 접근 이름 — 트리 안의 것만. */

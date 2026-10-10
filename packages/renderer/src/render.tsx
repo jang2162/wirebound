@@ -20,6 +20,7 @@ import {
 import { NO_THEME } from './no-theme'
 import { resolveVariant } from './variant'
 import { ViewHost } from './view-host'
+import { warnUnusedViewKeys } from './view-keys'
 
 export interface RenderOptions {
   /** Slot 자리에 넣을 내용. compose가 채운다. */
@@ -462,6 +463,7 @@ const TRIGGERS_OF: Record<string, InteractionTrigger[]> = (() => {
  * `renderNode`의 모양 가드가 루트 자리에 폴백을 그린다.
  */
 export function renderDocument(doc: AnyDocument, options: RenderOptions = {}): ReactElement {
+  warnUnusedViewKeys(options.theme)
   const root = doc?.root as WbNode
   return renderNodeIn(root, root, { ...options, viewState: knownViewState(doc, options.viewState) })
 }
