@@ -444,7 +444,7 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
         data.setData('text/plain', text)
         document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
       }, envelope)
-      const notice = tab.page.getByRole('alert').filter({ hasText: '가지' })
+      const notice = tab.page.locator('.wb-shell-info-notice').filter({ hasText: '가지' })
       await notice.waitFor()
       await shot(tab.page, 'k3-paste-notice.png')
       expect(await notice.innerText()).toContain('상태 "관리자" 가지 1개를 뺐습니다.')

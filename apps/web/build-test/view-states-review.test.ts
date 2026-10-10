@@ -23,6 +23,8 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { DEFAULT_CASE_REMOVE_REASON } from '../src/edit/structure-actions'
+import { HIDDEN_SELECTION_NOTICE } from '../src/shell/use-view-state'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
@@ -292,7 +294,7 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
 
   it('H2 고른 채 — 남이 가지를 먼저 만들어 고른 흐린 노드가 숨으면 고른 것에서 빠지고 속성 패널이 빈다', async () => {
     const result = await hiddenAfterFork('h2-pick', ['n_dt'], async () => {})
-    expect(result).toEqual({ forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [], aliasInput: 0 })
+    expect(result).toEqual({ forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [HIDDEN_SELECTION_NOTICE], aliasInput: 0 })
   })
 
   it('H2 속성 칸 친 중 — 친 글은 숨은 노드에 안 쓰고 떠남을 말한다', async () => {
@@ -308,7 +310,7 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
         if ((await panelText(page).count()) > 0) await panelText(page).evaluate((element) => (element as HTMLElement).blur())
       },
     )
-    expect(result).toEqual({ forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT], aliasInput: 0 })
+    expect(result).toEqual({ forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE], aliasInput: 0 })
   })
 
   it('H2 트리 이름 입력 중 · F2 중 — 입력이 닫히고 친 별칭을 안 쓰며 떠남을 말한다 · «모든 가지 보기»를 켜도 묻지 않은 입력이 안 선다', async () => {
@@ -322,8 +324,8 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
     const dbl = await hiddenAfterFork('h2-alias-dbl', ['n_dt'], typeAlias((page) => treeRow(page, 'n_dt').locator('.wb-shell-structure-node').dblclick()), showAll)
     const f2 = await hiddenAfterFork('h2-alias-f2', ['n_dt'], typeAlias((page) => page.keyboard.press('F2')), showAll)
     expect([dbl, f2]).toEqual([
-      { forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT], aliasInput: 0 },
-      { forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT], aliasInput: 0 },
+      { forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE], aliasInput: 0 },
+      { forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE], aliasInput: 0 },
     ])
   })
 
@@ -339,7 +341,7 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
         if ((await panelText(page).count()) > 0) await panelText(page).evaluate((element) => (element as HTMLElement).blur())
       },
     )
-    expect(result).toEqual({ forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT], aliasInput: 0 })
+    expect(result).toEqual({ forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE], aliasInput: 0 })
   })
 
   /**
@@ -513,8 +515,9 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
       await page.keyboard.press('Delete')
     })
     expect([base, baseDelete, other]).toEqual([
-      { frames: [], headSame: true, notices: [] },
-      { frames: [], headSame: true, notices: [] },
+      // 기본 가지의 Cmd+X · Delete 는 이제 자리 규칙의 까닭을 정보 통지가 말한다(L-078).
+      { frames: [], headSame: true, notices: [DEFAULT_CASE_REMOVE_REASON] },
+      { frames: [], headSame: true, notices: [DEFAULT_CASE_REMOVE_REASON] },
       { frames: [[{ op: 'remove', path: '/root/children/1/children/1' }]], headSame: false, notices: [] },
     ])
   })
