@@ -3069,7 +3069,12 @@ export class EditorStore {
    * `getState()`의 참조가 달라져 구독자가 헛일을 한다. 선택 목록은 `#withSelection`이 먼저 맞춘다.
    */
   #apply(update: Partial<EditorState>): void {
-    const next = this.#withSelection(update)
+    let next = this.#withSelection(update)
+    // **고른 것이 바뀌면 정보 통지를 걷는다** — «여럿을 고른 판입니다 …» 같은 말은 그 고름에 대한 말이라, 하나로 다시 골라도 남으면 낡은 말이다. 같은 갱신이
+    // 새 통지를 함께 싣거나(`infoNotice` 가 든 갱신) 목록이 같으면 건드리지 않는다.
+    if (next.selectedNodeIds !== undefined && !('infoNotice' in next) && this.#state.infoNotice !== null && !sameSelection(next.selectedNodeIds, this.#state.selectedNodeIds)) {
+      next = { ...next, infoNotice: null }
+    }
     let changed = false
     for (const key of Object.keys(next) as (keyof EditorState)[]) {
       if (next[key] !== this.#state[key]) {

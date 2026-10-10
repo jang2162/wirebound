@@ -48,6 +48,29 @@ describe('정보 통지는 한 칸이다', () => {
   })
 })
 
+describe('고른 것이 바뀌면 정보 통지를 걷는다', () => {
+  it('고름이 달라지면 걷고 같은 고름을 다시 골라서는 안 걷는다', () => {
+    const store = new EditorStore()
+    store.selectNode('n-a')
+    store.setInfoNotice('여럿을 고른 판입니다')
+    store.selectNode('n-a')
+    expect(store.getState().infoNotice).toBe('여럿을 고른 판입니다')
+    store.selectNode('n-b')
+    expect(store.getState().infoNotice).toBeNull()
+  })
+
+  it('고름을 비워도 걷는다 · 새 통지와 함께 바꾼 갱신은 새 통지가 이긴다', () => {
+    const store = new EditorStore()
+    store.selectNode('n-a')
+    store.setInfoNotice('옛 통지')
+    store.selectNode(null)
+    expect(store.getState().infoNotice).toBeNull()
+    store.selectNode('n-a')
+    store.setInfoNotice('새 통지')
+    expect(store.getState().infoNotice).toBe('새 통지')
+  })
+})
+
 describe('트리가 닫은 입력 · 상자의 한 줄(L-084)', () => {
   it('열린 페이지가 함께 사라져 판을 비워도 한 줄은 한 번 남고 그다음 비움이 치운다', () => {
     const store = new EditorStore()

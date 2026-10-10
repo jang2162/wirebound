@@ -332,6 +332,9 @@ describe('구조 트리 줄에서 고치기', () => {
     // 말없이 안 하지 않는다 — 정보 통지(`role="status"`)가 «하나만 고르면 바꿀 수 있다» 를 말하고, 실패 자리(`alert`)는 비어 있다.
     expect(infoTexts()).toEqual([ALIAS_MANY_NOTICE])
     expect(screen.queryAllByRole('alert')).toEqual([])
+    // 하나로 다시 고르면 걷는다 — 낡은 말이 남지 않는다. 같은 고름 위의 F2 는 걷지 않는다(위 단언).
+    fireEvent.click(rowButton('n-save'))
+    expect(infoTexts()).toEqual([])
   })
 
   /**

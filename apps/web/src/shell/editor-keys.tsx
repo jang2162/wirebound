@@ -291,7 +291,7 @@ export function EditorKeys(props: {
       case 'redo':
         if (history.canRedo) history.redo()
         // 되돌림이 큐에 있거나 미뤄져 있으면(ack 전) 다시 실행 스택은 비어 있다 — 말없이 버리지 않고 이유를 말한다(단추는 꺼져 있어 그것이 말이다).
-        else if (store.undoInFlight()) say(REDO_BEFORE_ACK_NOTICE)
+        else if (store.undoInFlight()) info(REDO_BEFORE_ACK_NOTICE)
         return
       // **키보드 삭제는 선택을 비운다**(줄 `…` «삭제»는 부모를 고른다) — 부모를 고르면 따로 친 둘째 Delete 가 형제를 든 그 부모를 지운다
       // (Chrome · `build-test/editor-shortcuts-review.test.ts` «H1»). 누른 채의 반복은 리스너가 거른다(`Shortcut.repeat`).
