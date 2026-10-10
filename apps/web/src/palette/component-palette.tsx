@@ -91,7 +91,7 @@ function matching(groups: readonly PickableGroup[], query: string): PickableType
 }
 
 /** 줄 안에서 화살표 · Home/End 가 옮겨 갈 차례. 그 키가 아니면 `null`. */
-function rovingStep(key: string, index: number, count: number): number | null {
+export function rovingStep(key: string, index: number, count: number): number | null {
   if (count === 0) return null
   if (key === 'ArrowRight') return Math.min(count - 1, index + 1)
   if (key === 'ArrowLeft') return Math.max(0, index - 1)

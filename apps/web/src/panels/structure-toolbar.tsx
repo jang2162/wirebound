@@ -36,7 +36,7 @@
  * **완전하다고는 적지 않는다** — 잰 것은 그 반례 부류(배열 원소가 노드가 아닌 경우)와
  * 몇 가지 깨진 형태까지다.
  */
-import { useEffect, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import type { NodeLock, PatchOp, ViewState, WbNode } from '@wirebound/schema'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { addAbilitiesUnderLock } from '../edit/add-abilities'
@@ -45,6 +45,7 @@ import { createNode } from '../edit/create-node'
 import { aliasOps, insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { patternInsert } from '../edit/pattern-insert'
 import { presetApply, presetFailureNotice } from '../edit/preset-apply'
+import { reselectAfterReject } from '../edit/reselect-after-reject'
 import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, regionRulesAt, selectionAbilities, type StructureAbilities } from '../edit/structure-actions'
 import { nonDefaultCase, removeCasePlan, splitPlan, SPLIT_PICK_REASON, unsplitKey, unsplitPlan, type UnsplitShown } from '../edit/view-state-actions'
@@ -568,12 +569,24 @@ export function useStructureCommands(props: {
     if (selectedNodeIds.length > 1) {
       const ops = removeManyOps(document, selectedNodeIds)
       if (ops === null || store.editBlockedBy(ops) !== null) return
-      if (commitOps(ops)) store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
+      const removed = {
+        nodes: selectedNodeIds.flatMap((id) => {
+          const at = nodeSpot(document, id)
+          return at === null ? [] : [{ id, parentId: at.parentId }]
+        }),
+        anchor: selectedNodeId,
+      }
+      if (commitOps(ops)) {
+        store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
+        reselectAfterReject(store, removed)
+      }
       return
     }
 
+    const removed = { nodes: [{ id: selectedNodeId, parentId: spot.parentId }], anchor: selectedNodeId }
     if (commitOps(removeNodeOps(document, selectedNodeId))) {
       store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
+      reselectAfterReject(store, removed)
     }
   }
 
@@ -851,7 +864,7 @@ export function StructurePicker(props: {
 }
 
 /**
- * 선 고르개의 상자 — 고르개가 설 때 마운트된다. **Escape · «취소»로 닫으면 고르개를 연 자리로 포커스를 돌려준다**(`cancel`) — 안 돌려주면
+ * 선 고르개의 상자 — 고르개가 설 때 마운트된다. **고르개가 내려가면(Escape · «취소» · 항목을 고름) 고르개를 연 자리로 포커스를 돌려준다** — 안 돌려주면
  * 포커스를 쥔 고르개 단추가 사라져 `body` 로 떨어지고, 키보드 사람이 트리를 처음부터 다시 찾아간다(Chrome · `build-test/keyboard-holes.test.ts`
  * «5»). 연 자리는 **고르개가 처음 그려질 때의 포커스**다 — 줄 · 머리 `+` 의 항목을 고르면 행동 메뉴가 포커스를 그 `+` 로 돌려준 뒤 고르개를
  * 열고(`shell/action-menu.tsx` 머리말 «고르면 먼저 닫고 돌려준 뒤 부른다»), Alt+Shift+I · P 는 줄 단추에서 연다. 포커스가 고르개 밖이면(캔버스를
@@ -864,11 +877,15 @@ function PickerBox(props: Parameters<typeof StructurePicker>[0] & { picker: Open
     const active = document.activeElement
     return active instanceof HTMLElement && active !== document.body ? active : null
   })
-  const cancel = (): void => {
-    const inside = box.current?.contains(document.activeElement) === true
-    commands.cancelAdd()
-    if (inside && opener?.isConnected === true) opener.focus()
-  }
+  const cancel = commands.cancelAdd
+  // **고르개가 내려갈 때 포커스가 그 안이면 연 자리로 돌려준다** — Escape · «취소» · 항목을 고른 뒤(넣기 · 패턴 · 프리셋 적용) · 남이 고른 노드를
+  // 지워 고르개가 감춰질 때가 한 길이다. 정리는 DOM 에서 빠지기 전에 돌아 포커스를 쥔 단추가 아직 `activeElement` 다.
+  useLayoutEffect(() => {
+    const element = box.current
+    return () => {
+      if (element?.contains(document.activeElement) === true && opener?.isConnected === true) opener.focus()
+    }
+  }, [opener])
   return (
     // 고르개는 자기 줄을 요구한다(`flex-basis: 100%` — `test/shell-css-picker.test.ts`) — 감싸는 flex 상자가 이것이다.
     // `data-wb-holds-keys` — 포커스가 고르개 안이면 화살표 · Escape · Delete · Backspace 는 에디터 단축키가 안 받는다(`edit/editor-shortcuts.ts` 의

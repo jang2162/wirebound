@@ -44,8 +44,8 @@
  * # 파일 칸 — OS 파일 끌어 놓기
  *
  * 브라우저의 HTML5 끌어 놓기다(`drop`의 `dataTransfer.files`) — 앱의 포인터 끌기 장치(`drag/use-pointer-drag.ts`)와 무관하다. **몸체 전체가
- * 받는다** — 받지 않은 자리에 놓인 파일은 브라우저가 연다. Chrome 은 새 탭으로 열어 에디터 탭이 그대로이고, 브라우저에 따라 현재 탭을 그
- * 파일로 옮겨 에디터를 떠난다(Firefox · Safari 는 재지 않았다). 몸체 밖(상자 머리 · 배경막)은 받지 않는다 — 그 자리에 놓은 파일도 같다.
+ * 받는다** — 몸체 밖(상자 머리 · 배경막)에 놓인 파일은 상자(`ShellDialog`)가 막는다(브라우저가 열지 않는다 — 머리말 «파일을 놓아도 브라우저가
+ * 열지 않는다»). 몸체 안의 받지 않는 자리도 같은 길이다.
  * 파일을 끌고 들어오면 칸이 강조된다. 키보드는 칸 안의 파일 입력(`<label>` 이 감싼 `<input type="file">` — 눈에는 감추되 포커스는 받는다)이
  * 받는다.
  */
@@ -67,12 +67,12 @@ export function importDialogTitle(target: ImportTarget): string {
   return `페이지 가져오기 — ${target.title} 메뉴로`
 }
 
-export function PageImportDialog(props: { commands: TreeCommands }): ReactElement | null {
+export function PageImportDialog(props: { commands: TreeCommands; focusFallback?: () => HTMLElement | null }): ReactElement | null {
   const { commands } = props
   const target = commands.importing
   if (target === null) return null
   return (
-    <ShellDialog open title={importDialogTitle(target)} onClose={commands.closeImport}>
+    <ShellDialog open title={importDialogTitle(target)} onClose={commands.closeImport} focusFallback={props.focusFallback}>
       <PageImportBody commands={commands} />
     </ShellDialog>
   )

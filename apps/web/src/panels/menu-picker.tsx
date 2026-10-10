@@ -7,14 +7,14 @@
  * 키보드 사용자의 비용이 커진다. `<select>`는 그 수와 무관하게 1이다.
  * `닫혀 있을 때 목록이 DOM에 없다`가 그 수를 실제로 센다(열면 2 — `<select>`와 `취소`).
  *
- * **«취소»로 닫으면 목록을 연 자리로 포커스를 돌려준다** — 줄 `…` 의 «옮기기»는 행동 메뉴가 포커스를 `…` 로 돌려준 뒤 이 목록을 연다. 안 돌려주면
+ * **목록이 내려가면(«취소» · Escape · 메뉴를 고름) 목록을 연 자리로 포커스를 돌려준다** — 줄 `…` 의 «옮기기»는 행동 메뉴가 포커스를 `…` 로 돌려준 뒤 이 목록을 연다. 안 돌려주면
  * 포커스를 쥔 «취소»가 사라져 `body` 로 떨어진다(구조 트리 고르개와 같은 까닭 — `panels/structure-toolbar.tsx` 의 `PickerBox`).
  *
  * **목록은 `flattenMenus`가 만든다.** 손목록을 두면 트리가 자랄 때 어긋나는 자리가 하나 더
  * 생긴다. 경로에 조상 제목이 들어가는 것은 제목이 같은 메뉴를 가리기 위해서다 —
  * 서버에 유일성 제약이 없다.
  */
-import { useRef, useState, type ReactElement } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 
 /** 아무것도 고르지 않은 상태의 값. `<option>`의 `value`와 겹치지 않아야 한다. */
 const NONE = ''
@@ -31,13 +31,24 @@ export function MenuPicker(props: {
     const active = document.activeElement
     return active instanceof HTMLElement && active !== document.body ? active : null
   })
-  const cancel = (): void => {
-    const inside = box.current?.contains(document.activeElement) === true
-    props.onCancel()
-    if (inside && opener?.isConnected === true) opener.focus()
-  }
+  // **목록이 내려갈 때 포커스가 그 안이면 연 자리로 돌려준다** — «취소» · Escape · 메뉴를 고른 뒤가 한 길이다. 정리는 DOM 에서 빠지기 전에 돈다.
+  useLayoutEffect(() => {
+    const element = box.current
+    return () => {
+      if (element?.contains(document.activeElement) === true && opener?.isConnected === true) opener.focus()
+    }
+  }, [opener])
   return (
-    <div className="wb-shell-menu-picker" ref={box}>
+    // **목록 안의 Escape 는 목록을 닫는다**(«취소»와 같다 — 구조 트리 고르개와 같은 축). 한글 조합 중의 Escape 는 조합의 키다.
+    <div
+      className="wb-shell-menu-picker"
+      ref={box}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || event.nativeEvent.isComposing || event.defaultPrevented) return
+        event.preventDefault()
+        props.onCancel()
+      }}
+    >
       <label className="wb-shell-menu-picker-label">
         소속 메뉴
         {/* **값을 들지 않는다.** 고르는 순간 요청이 나가고 목록이 닫히므로 중간 상태가
@@ -59,7 +70,7 @@ export function MenuPicker(props: {
           ))}
         </select>
       </label>
-      <button type="button" className="wb-shell-menu-tool" onClick={cancel}>
+      <button type="button" className="wb-shell-menu-tool" onClick={props.onCancel}>
         취소
       </button>
     </div>

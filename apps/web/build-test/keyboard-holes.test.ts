@@ -16,6 +16,9 @@
  *
  * 서버의 트리(`GET …/tree`) · 문서(`GET …/pages/:id`)로 지워지지 않았음을 단언한다.
  */
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { CDPSession, Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
@@ -259,7 +262,8 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
           '↑': { focus: '다', picked: ['다'], opened: '가1' },
           '다 접고 ↓': { focus: '나', picked: ['나'], opened: '가1', rows: ['가', '가1', '가2', '다', '나', '나1'] },
           '끝에서 ↓': { focus: '나1', picked: ['나1'], opened: '가1' },
-          '맨 위에서 ↑': { focus: '가', picked: ['나1'], opened: '가1' },
+          // 코드로 준 포커스도 그 줄을 고른다(포커스가 줄에 서면 그 줄이 고른 줄이다 — «7»).
+          '맨 위에서 ↑': { focus: '가', picked: ['가'], opened: '가1' },
           '가2 에서 Enter': { focus: '가2', picked: ['가2'], opened: '가2' },
         })
         expect(await serverTree(fx)).toBe(TREE_WHOLE)
@@ -396,8 +400,9 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
             toggles: 0,
           },
           tabbed: ['다:다 추가', '다:다 더 보기', '다1'],
-          left: { 다: [{ role: 'button', expanded: false, pressed: 'false' }] },
-          right: { 다: [{ role: 'button', expanded: true, pressed: 'false' }] },
+          // 포커스가 선 줄이 고른 줄이라 `pressed` 가 참이다(«7»).
+          left: { 다: [{ role: 'button', expanded: false, pressed: 'true' }] },
+          right: { 다: [{ role: 'button', expanded: true, pressed: 'true' }] },
         })
       } finally {
         await cdp.detach().catch(() => {})
@@ -711,5 +716,449 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
         '메뉴 트리 닫힌 … 에서 Alt+↓': { menus: 1, server: TREE_WHOLE },
       })
     }, 120_000)
+  })
+
+  describe('7 · N4 키보드 · 포커스 마무리', () => {
+    it('메뉴 트리 — 포커스가 선 줄이 고른 줄이다(Tab 으로 닿은 줄의 Delete 는 그 줄의 삭제 확인) · Home · End 는 보이는 첫 · 끝 줄(L-032 · L-033)', async () => {
+      const fx = await fixture('n4-home')
+      const { page, close } = await open(fx.url)
+      try {
+        // 열린 페이지는 «가1» — 고른 줄도 «가1» 이다. Tab 으로 «가2» 에 닿는 것은 그 링크에 포커스가 서는 것과 같다.
+        const before = await state(page, fx)
+        await menuRow(page, fx.ids['가2']!).focus()
+        const arrived = await state(page, fx)
+        await page.keyboard.press('Delete')
+        await sleep(200)
+        const confirm = await page.locator('.wb-shell-tree-confirm').evaluateAll((all, titles) => all.map((one) => titles[one.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? one.parentElement?.previousElementSibling?.getAttribute('data-tree-id') ?? ''] ?? '?'), fx.titles)
+        await page.keyboard.press('Escape')
+        await menuRow(page, fx.ids['가2']!).focus()
+        await page.keyboard.press('Home')
+        const home = await state(page, fx)
+        await page.keyboard.press('End')
+        const end = await state(page, fx)
+        await page.keyboard.press('Home')
+        const homeAgain = await state(page, fx)
+        // eslint-disable-next-line no-console
+        console.log(`[N4 메뉴 포커스 · Home · End] ${JSON.stringify({ before, arrived, confirm, home, end, homeAgain })}`)
+        expect({ before, arrived, home, end, homeAgain }).toEqual({
+          before: { focus: 'body', picked: ['가1'], opened: '가1' },
+          arrived: { focus: '가2', picked: ['가2'], opened: '가1' },
+          home: { focus: '가', picked: ['가'], opened: '가1' },
+          end: { focus: '나1', picked: ['나1'], opened: '가1' },
+          homeAgain: { focus: '가', picked: ['가'], opened: '가1' },
+        })
+        // 삭제 확인은 포커스가 선 «가2» 줄 몫이다 — 서버 트리는 그대로(확인만 섰다).
+        expect(confirm).toEqual(['가2'])
+        expect(await serverTree(fx)).toBe(TREE_WHOLE)
+      } finally {
+        await close()
+      }
+    }, 60_000)
+
+    it('구조 트리 — 줄에 포커스를 둔 채 화살표로 선택을 옮기면 포커스가 따라가 이어 친 Enter · Space 가 앞 줄을 다시 고르지 않는다(L-033)', async () => {
+      const fx = await fixture('n4-struct')
+      const { page, close } = await open(fx.url)
+      try {
+        await nodeRow(page, 'n_text0000002').click()
+        const steps: Record<string, unknown> = {}
+        const read = async () => ({ selected: await selectedNode(page), focus: await focusOf(page) })
+        await page.keyboard.press('ArrowDown')
+        steps['↓'] = await read()
+        await page.keyboard.press('Enter')
+        steps['↓ Enter'] = await read()
+        await page.keyboard.press('ArrowUp')
+        await page.keyboard.press('Space')
+        steps['↑ Space'] = await read()
+        // ← 는 부모(카드)로 · → 는 첫 자식으로 — 포커스도 따라간다.
+        await page.keyboard.press('ArrowLeft')
+        steps['←'] = await read()
+        await page.keyboard.press('ArrowRight')
+        steps['→'] = await read()
+        // 포커스가 캔버스 · 패널에 있으면 건드리지 않는다.
+        await page.locator('.wb-shell-tab').first().focus()
+        await page.keyboard.press('ArrowDown')
+        steps['탭에서 ↓'] = await read()
+        // eslint-disable-next-line no-console
+        console.log(`[N4 구조 트리 포커스] ${JSON.stringify(steps)}`)
+        expect(steps).toEqual({
+          '↓': { selected: 'n_text0000003', focus: 'node:n_text0000003' },
+          '↓ Enter': { selected: 'n_text0000003', focus: 'node:n_text0000003' },
+          '↑ Space': { selected: 'n_text0000002', focus: 'node:n_text0000002' },
+          '←': { selected: 'n_card0000001', focus: 'node:n_card0000001' },
+          '→': { selected: 'n_text0000001', focus: 'node:n_text0000001' },
+          '탭에서 ↓': { selected: 'n_text0000002', focus: 'tab' },
+        })
+        expect(await serverPage(fx.url)).toBe(WHOLE)
+      } finally {
+        await close()
+      }
+    }, 60_000)
+
+    /** 정본(`shell/action-menu.tsx` 머리말 «끈 항목은 …» — 누르기 · Enter · Space 는 아무것도 안 한다)과 같은 값이라 고치기 전에도 초록이다(L-070). */
+    it('꺼진 항목을 누르면 메뉴는 열린 채 남고 아무 편집도 안 나간다 — 정본대로(L-070)', async () => {
+      const fx = await fixture('n4-disabled')
+      const { page, close } = await open(fx.url)
+      try {
+        await nodeRow(page, 'n_text0000001').click()
+        await nodeMenu(page, 'n_text0000001', 1).click()
+        await page.locator('[role="menu"]').waitFor()
+        const off = await page.locator('[role="menuitem"][aria-disabled="true"]').evaluateAll((all) => all.map((one) => one.textContent))
+        await page.locator('[role="menuitem"][aria-disabled="true"]').first().click({ force: true })
+        await sleep(200)
+        await page.keyboard.press('Enter')
+        await sleep(200)
+        const result = { off, menus: await menus(page), focus: await focusOf(page), server: await serverPage(fx.url) }
+        // eslint-disable-next-line no-console
+        console.log(`[N4 꺼진 항목] ${JSON.stringify(result)}`)
+        expect(result).toEqual({ off: ['위로', '들여쓰기'], menus: 1, focus: 'menuitem', server: WHOLE })
+      } finally {
+        await close()
+      }
+    }, 60_000)
+
+    it('고르개에서 항목을 고르면 포커스가 고르개를 연 자리로 돌아온다 — 타입 · 패턴 고르개(L-044)', async () => {
+      const results: Record<string, unknown> = {}
+      for (const which of ['아래 추가', '패턴 넣기'] as const) {
+        const fx = await fixture(`n4-pick-${results ? Object.keys(results).length : 0}`)
+        const { page, close } = await open(fx.url)
+        try {
+          await openPicker(page, which)
+          const opener = await focusOf(page)
+          await page.locator('.wb-shell-picker button:not([disabled])').first().click()
+          await sleep(400)
+          results[which] = { opener, pickers: await pickers(page), focus: await focusOf(page) }
+        } finally {
+          await close()
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[N4 고른 뒤 포커스] ${JSON.stringify(results)}`)
+      expect(results).toEqual({
+        '아래 추가': { opener: 'Text 글 2 추가', pickers: 0, focus: 'Text 글 2 추가' },
+        '패턴 넣기': { opener: 'Text 글 2 추가', pickers: 0, focus: 'Text 글 2 추가' },
+      })
+    }, 120_000)
+
+    it('옮기기 목록 안의 Escape 는 목록을 닫고 연 자리로 포커스를 돌려준다 — 고르는 칸 · «취소» 모두(L-045)', async () => {
+      const results: Record<string, unknown> = {}
+      for (const [name, focus] of [
+        ['고르는 칸', (page: Page) => page.locator('.wb-shell-menu-picker select').focus()],
+        ['«취소»', (page: Page) => page.locator('.wb-shell-menu-picker button').focus()],
+      ] as const) {
+        const fx = await fixture(`n4-moveesc-${Object.keys(results).length}`)
+        const { page, close } = await open(fx.url)
+        try {
+          await openMove(page, fx)
+          const opener = await focusOf(page, fx.titles)
+          await focus(page)
+          await page.keyboard.press('Escape')
+          await sleep(200)
+          results[name] = { opener, movers: await page.locator('.wb-shell-menu-picker').count(), focus: await focusOf(page, fx.titles), server: await serverTree(fx) }
+        } finally {
+          await close()
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[N4 옮기기 Escape] ${JSON.stringify(results)}`)
+      const back = { opener: '가2:가2 더 보기', movers: 0, focus: '가2:가2 더 보기', server: TREE_WHOLE }
+      expect(results).toEqual({ '고르는 칸': back, '«취소»': back })
+    }, 120_000)
+
+    it('상자를 연 메뉴가 그 사이 사라지면 상자를 닫을 때 포커스가 트리의 줄로 간다 — `body` 로 안 떨어진다(L-058)', async () => {
+      const fx = await fixture('n4-dialoggone')
+      const { page, close } = await open(fx.url)
+      try {
+        const target = page.locator(`${TREE} [data-tree-row][data-tree-id="${fx.ids['나']}"]`)
+        await menuRow(page, fx.ids['나']!).hover()
+        await target.getByRole('button', { name: '나 추가', exact: true }).click()
+        await page.getByRole('menuitem', { name: 'JSON 에서 가져오기…', exact: true }).click()
+        await page.getByRole('dialog').waitFor()
+        await ok(stack.request(bob, 'DELETE', `${fx.P}/menu/${fx.ids['나']}`, { cascade: true, expect: { menuIds: [], pageIds: [fx.ids['나1']] } }))
+        await poll('트리에서 «나» 가 빠짐', () => visibleRows(page, fx.titles), (rows) => !rows.includes('나'), 5_000)
+        const open1 = await page.getByRole('dialog').count()
+        await page.keyboard.press('Escape')
+        await sleep(300)
+        const result = { dialogOpenAfterRemoteDelete: open1, dialogs: await page.getByRole('dialog').count(), focus: await focusOf(page, fx.titles), picked: await pickedRows(page, fx.titles) }
+        // eslint-disable-next-line no-console
+        console.log(`[N4 사라진 메뉴의 상자] ${JSON.stringify(result)}`)
+        // 포커스는 고른 줄이다 — 남이 지운 «나» 를 고르고 있었으면 다시 받은 트리가 이웃 «다1» 을 골랐다(`panels/menu-tree.tsx` 의 `treeFocusFallback`).
+        expect(result).toEqual({ dialogOpenAfterRemoteDelete: 1, dialogs: 0, focus: '다1', picked: ['다1'] })
+      } finally {
+        await close()
+      }
+    }, 60_000)
+
+    /**
+     * 값으로 적어 둘 것(L-035) — 열린 페이지가 남의 지움으로 사라지면 고른 줄이 이웃 줄로 옮는다. 정본(`use-tree-commands.tsx` 의 `reconcile` ·
+     * `pickAfterGone`)대로다. **포커스가 그 줄에 있으면 다시 받은 트리가 포커스를 이웃 줄로 돌려주고(`refocus`) 그 포커스가 줄을 고르므로** 두 길이
+     * 같은 값을 낸다 — 포커스가 다른 데(우측 탭 — 캔버스는 지운 페이지를 내려 포커스를 `body` 로 떨어뜨려 같은 길을 탄다)에 있는 판이 `pickAfterGone` 의 몫이다.
+     */
+    it('열린 페이지가 남의 지움으로 사라지면 고른 줄이 이웃 줄로 옮는다 — 포커스가 그 줄에 있으면 따라가고 우측 탭에 있으면 그대로다(L-035 — 값)', async () => {
+      const results: Record<string, unknown> = {}
+      for (const where of ['줄', '탭'] as const) {
+        const fx = await fixture(`n4-gone-${where === '줄' ? 'row' : 'tab'}`)
+        const { page, close } = await open(fx.url)
+        try {
+          await menuRow(page, fx.ids['나1']!).click()
+          await page.locator(`${TREE} [data-tree-id="${fx.ids['나1']}"] > a[aria-current="page"]`).waitFor({ state: 'attached' })
+          await sleep(300)
+          if (where === '탭') await page.locator('.wb-shell-tab').first().focus()
+          const before = await state(page, fx)
+          await ok(stack.request(bob, 'DELETE', `${fx.P}/pages/${fx.ids['나1']}`))
+          await poll('트리에서 «나1» 이 빠짐', () => visibleRows(page, fx.titles), (rows) => !rows.includes('나1'), 5_000)
+          await sleep(500)
+          results[where] = { before, after: await state(page, fx) }
+        } finally {
+          await close()
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[N4 열린 페이지가 사라짐] ${JSON.stringify(results)}`)
+      expect(results).toEqual({
+        줄: { before: { focus: '나1', picked: ['나1'], opened: '나1' }, after: { focus: '나', picked: ['나'], opened: '나1' } },
+        탭: { before: { focus: 'tab', picked: ['나1'], opened: '나1' }, after: { focus: 'tab', picked: ['나'], opened: '나1' } },
+      })
+    }, 120_000)
+
+    it('우측 패널 탭 — ← → Home End 로 탭을 옮기고 포커스가 따라간다 · 고른 탭만 Tab 정지점이다(L-037)', async () => {
+      const fx = await fixture('n4-tabs')
+      const { page, close } = await open(fx.url)
+      try {
+        const tabs = page.locator('.wb-shell-tab')
+        const selectedTab = () => page.locator('.wb-shell-tab[aria-selected="true"]').textContent()
+        const read = async () => ({ tab: await selectedTab(), focus: await page.evaluate(() => document.activeElement?.textContent ?? '') })
+        const steps: Record<string, unknown> = {}
+        steps['탭 정지점'] = await tabs.evaluateAll((all) => all.map((one) => one.getAttribute('tabindex')))
+        await tabs.first().focus()
+        steps['처음'] = await read()
+        await page.keyboard.press('ArrowRight')
+        steps['→'] = await read()
+        await page.keyboard.press('End')
+        steps['End'] = await read()
+        await page.keyboard.press('ArrowRight')
+        steps['끝에서 →'] = await read()
+        await page.keyboard.press('ArrowLeft')
+        steps['←'] = await read()
+        await page.keyboard.press('Home')
+        steps['Home'] = await read()
+        steps['본문 id'] = await page.locator('[role="tabpanel"]').getAttribute('aria-labelledby')
+        // 탭의 ← → 는 위젯이 쥔다 — 고른 노드는 그대로다(`keyHeldByWidget`).
+        await nodeRow(page, 'n_text0000002').click()
+        await tabs.first().focus()
+        await page.keyboard.press('ArrowRight')
+        steps['노드를 고른 채 →'] = { selected: await selectedNode(page), ...(await read()) }
+        // eslint-disable-next-line no-console
+        console.log(`[N4 우측 탭] ${JSON.stringify(steps)}`)
+        expect(steps).toEqual({
+          '탭 정지점': ['0', '-1', '-1'],
+          처음: { tab: '속성', focus: '속성' },
+          '→': { tab: '코멘트', focus: '코멘트' },
+          End: { tab: '상호작용', focus: '상호작용' },
+          '끝에서 →': { tab: '상호작용', focus: '상호작용' },
+          '←': { tab: '코멘트', focus: '코멘트' },
+          Home: { tab: '속성', focus: '속성' },
+          '본문 id': 'wb-tab-props',
+          '노드를 고른 채 →': { selected: 'n_text0000002', tab: '코멘트', focus: '코멘트' },
+        })
+      } finally {
+        await close()
+      }
+    }, 60_000)
+
+    /**
+     * 거절된 삭제의 선택(L-061) — **세 경로(줄 `…` «삭제» · 키보드 단일 · 키보드 일괄)가 같은 선택으로 돌아온다.** 편집을 서버에 닿기 전에 잡아 두었다가(`routeWebSocket` 의
+     * `patch` 프레임) 423 `patch-error` 로 거절하고, 남이 그 사이 노드를 지우거나 다른 부모로 옮긴 판은 잡아 둔 동안 bob 이 보낸다. 돌아온 노드가 없으면 선택은 빈 채다.
+     * 판 카나리아: `held`(잡은 프레임 수 — 받아들임 판은 0) · 남이 보낸 요청의 상태 코드.
+     */
+    it('거절된 삭제가 노드를 돌려놓으면 고른 노드도 돌아온다 — 줄 … · 키보드 단일 · 일괄이 같다 · 남이 지웠거나 옮겼으면 비운 채다(L-061)', async () => {
+      type Variant = { path: 'row' | 'key'; pick: string[]; reject: boolean; bob?: 'remove' | 'move' }
+      const variants: [string, Variant][] = [
+        ['줄 … 삭제 · 하나', { path: 'row', pick: ['n_text0000002'], reject: true }],
+        ['키보드 · 하나', { path: 'key', pick: ['n_text0000002'], reject: true }],
+        ['키보드 · 여럿', { path: 'key', pick: ['n_text0000001', 'n_text0000003'], reject: true }],
+        ['키보드 · 여럿 · 남이 하나를 지움', { path: 'key', pick: ['n_text0000001', 'n_text0000003'], reject: true, bob: 'remove' }],
+        ['키보드 · 하나 · 남이 다른 부모로 옮김', { path: 'key', pick: ['n_text0000002'], reject: true, bob: 'move' }],
+        ['키보드 · 여럿 · 받아들임', { path: 'key', pick: ['n_text0000001', 'n_text0000003'], reject: false }],
+      ]
+      const results: Record<string, unknown> = {}
+      for (const [name, variant] of variants) {
+        const fx = await fixture(`n4-423-${Object.keys(results).length}`)
+        const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+        try {
+          const projectId = fx.P.split('/').pop()!
+          let armed = false
+          let held: { send: (text: string) => void; frame: any } | null = null
+          let heldCount = 0
+          await page.routeWebSocket(/\/ws/, (route) => {
+            const server = route.connectToServer()
+            route.onMessage((message) => {
+              const frame = (() => {
+                try {
+                  return JSON.parse(typeof message === 'string' ? message : message.toString())
+                } catch {
+                  return null
+                }
+              })()
+              if (variant.reject && armed && held === null && frame?.type === 'patch') {
+                heldCount += 1
+                held = { send: (text) => route.send(text), frame }
+                return
+              }
+              server.send(message)
+            })
+            server.onMessage((message) => route.send(message))
+          })
+          await page.goto(fx.url)
+          await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').waitFor()
+          await sleep(600)
+          const picked = () =>
+            page.locator('[data-tree-kind="node"]').evaluateAll((all) =>
+              all
+                .filter((one) => one.querySelector(':scope > button[aria-current="true"], :scope > button.wb-shell-structure-node-member') !== null)
+                .map((one) => one.getAttribute('data-tree-id')),
+            )
+          await nodeRow(page, variant.pick[0]!).click()
+          for (const id of variant.pick.slice(1)) {
+            await page.keyboard.down('ControlOrMeta')
+            await nodeRow(page, id).click()
+            await page.keyboard.up('ControlOrMeta')
+          }
+          const before = await picked()
+          armed = true
+          if (variant.path === 'row') {
+            await nodeMenu(page, variant.pick[0]!, 1).click()
+            await item(page, '삭제').click()
+          } else {
+            await page.keyboard.press('Delete')
+          }
+          let bobStatus: number | null = null
+          if (variant.reject) {
+            await poll('편집을 잡았다', async () => heldCount, (n) => n === 1, 5_000)
+            if (variant.bob !== undefined) {
+              // 내 선택의 잠금이 풀리는 사이의 423 은 다시 보낸다.
+              for (let attempt = 0; attempt < 15 && bobStatus !== 200; attempt += 1) {
+                const now = await stack.request(bob, 'GET', fx.url)
+                const op = variant.bob === 'remove' ? { op: 'remove', path: '/root/children/0/children/0' } : { op: 'move', from: '/root/children/0/children/1', path: '/root/children/2' }
+                bobStatus = (await stack.request(bob, 'PATCH', `${fx.url}/ops`, { baseSeq: now.body.headSeq, ops: [op] })).status
+                if (bobStatus !== 200) await sleep(300)
+              }
+              await sleep(500)
+            }
+            held!.send(JSON.stringify({ type: 'patch-error', projectId, pageId: held!.frame.pageId, clientOpId: held!.frame.clientOpId, status: 423, code: 'locked', message: '밥님이 편집 중인 노드입니다', issues: [] }))
+          }
+          await sleep(1_500)
+          results[name] = { before, held: heldCount, bob: bobStatus, after: await picked() }
+        } finally {
+          await context.close()
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[N4 거절된 삭제의 선택] ${JSON.stringify(results)}`)
+      expect(results).toEqual({
+        '줄 … 삭제 · 하나': { before: ['n_text0000002'], held: 1, bob: null, after: ['n_text0000002'] },
+        '키보드 · 하나': { before: ['n_text0000002'], held: 1, bob: null, after: ['n_text0000002'] },
+        '키보드 · 여럿': { before: ['n_text0000001', 'n_text0000003'], held: 1, bob: null, after: ['n_text0000001', 'n_text0000003'] },
+        '키보드 · 여럿 · 남이 하나를 지움': { before: ['n_text0000001', 'n_text0000003'], held: 1, bob: 200, after: [] },
+        '키보드 · 하나 · 남이 다른 부모로 옮김': { before: ['n_text0000002'], held: 1, bob: 200, after: [] },
+        '키보드 · 여럿 · 받아들임': { before: ['n_text0000001', 'n_text0000003'], held: 0, bob: null, after: [] },
+      })
+    }, 300_000)
+
+    it('속성 고르개에 같은 값의 change 가 와도 편집을 안 낸다 — 다른 값은 낸다(L-062)', async () => {
+      const fx = await fixture('n4-select')
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+      try {
+        let patches = 0
+        await page.routeWebSocket(/\/ws/, (route) => {
+          const server = route.connectToServer()
+          route.onMessage((message) => {
+            try {
+              if (JSON.parse(typeof message === 'string' ? message : message.toString())?.type === 'patch') patches += 1
+            } catch {
+              /* 프레임이 아닌 것은 그대로 보낸다 */
+            }
+            server.send(message)
+          })
+          server.onMessage((message) => route.send(message))
+        })
+        await page.goto(fx.url)
+        await canvasFrame(page).locator('[data-wb-id="n_card0000001"]').waitFor()
+        await sleep(600)
+        await canvasFrame(page).locator('[data-wb-id="n_card0000001"]').click()
+        const select = page.locator('select.wb-shell-control').first()
+        await select.waitFor()
+        await select.selectOption('h1')
+        await poll('첫 편집이 나감', async () => patches, (n) => n >= 1, 5_000)
+        const first = patches
+        // 같은 값의 change — Playwright 의 `selectOption` 은 값이 같아도 `input` · `change` 를 낸다.
+        await select.selectOption('h1')
+        await sleep(800)
+        const same = patches
+        await select.selectOption('h2')
+        await poll('다른 값은 나감', async () => patches, (n) => n > same, 5_000)
+        // eslint-disable-next-line no-console
+        console.log(`[N4 같은 값의 change] ${JSON.stringify({ first, same, other: patches })}`)
+        expect({ first, same, other: patches }).toEqual({ first: 1, same: 1, other: 2 })
+      } finally {
+        await context.close()
+      }
+    }, 60_000)
+
+    it('상자 머리 · 배경막에 놓은 파일을 브라우저가 열지 않는다 — 파일 칸에 놓은 파일은 받는다(L-063)', async () => {
+      const fx = await fixture('n4-filedrop')
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+      const dir = await mkdtemp(join(tmpdir(), 'wb-n4-drop-'))
+      const file = join(dir, 'dropped.wirebound-page.json')
+      await writeFile(
+        file,
+        JSON.stringify({ wireboundVersion: '1', page: { title: '놓은 파일', description: null }, schema: { version: 1, root: { id: 'file_root', type: 'Page', children: [{ id: 'file_text', type: 'Text', props: { content: '본문' } }] } }, comments: [] }),
+      )
+      try {
+        await page.goto(fx.url)
+        await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').waitFor()
+        await page.locator(`${TREE} [data-tree-row]`).first().waitFor({ state: 'attached' })
+        await sleep(400)
+        const target = page.locator(`${TREE} [data-tree-row][data-tree-id="${fx.ids['나']}"]`)
+        await menuRow(page, fx.ids['나']!).hover()
+        await target.getByRole('button', { name: '나 추가', exact: true }).click()
+        await page.getByRole('menuitem', { name: 'JSON 에서 가져오기…', exact: true }).click()
+        const dialog = page.getByRole('dialog')
+        await dialog.waitFor()
+        const cdp = await context.newCDPSession(page)
+        const drop = async (x: number, y: number) => {
+          const data = { items: [], files: [file], dragOperationsMask: 1 }
+          await cdp.send('Input.dispatchDragEvent', { type: 'dragEnter', x, y, data })
+          await cdp.send('Input.dispatchDragEvent', { type: 'dragOver', x, y, data })
+          await cdp.send('Input.dispatchDragEvent', { type: 'drop', x, y, data })
+          await sleep(500)
+        }
+        const centre = async (selector: string) => {
+          const box = (await page.locator(selector).boundingBox())!
+          return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+        }
+        const results: Record<string, unknown> = {}
+        const url = page.url()
+        // 상자 머리 · 배경막(상자 밖 왼쪽 위 모서리) · 몸체의 파일 칸.
+        const head = await centre('.wb-shell-dialog-head h2')
+        await drop(head.x, head.y)
+        results['머리'] = { tabs: context.pages().length, url: page.url() === url, dialogs: await dialog.count() }
+        await drop(4, 4)
+        results['배경막'] = { tabs: context.pages().length, url: page.url() === url, dialogs: await dialog.count() }
+        const zone = await centre('.wb-shell-pagejson-drop')
+        await drop(zone.x, zone.y)
+        const preview = await poll('칸이 받음', () => dialog.getByRole('status').textContent(), (text) => (text ?? '').includes('놓은 파일'), 5_000).catch(() => 'no preview')
+        results['파일 칸'] = { tabs: context.pages().length, url: page.url() === url, dialogs: await dialog.count(), received: String(preview).includes('놓은 파일') }
+        // eslint-disable-next-line no-console
+        console.log(`[N4 파일 놓기] ${JSON.stringify(results)}`)
+        expect(results).toEqual({
+          머리: { tabs: 1, url: true, dialogs: 1 },
+          배경막: { tabs: 1, url: true, dialogs: 1 },
+          '파일 칸': { tabs: 1, url: true, dialogs: 1, received: true },
+        })
+      } finally {
+        await context.close()
+        await rm(dir, { recursive: true, force: true })
+      }
+    }, 90_000)
   })
 })

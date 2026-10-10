@@ -374,13 +374,10 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
     expect(screen.getByRole('alert').textContent).toContain(SERVER_REASON)
   })
 
-  it('편집이 실패해도 툴바가 옮긴 선택은 남는다 — 두 경로가 갈리지 않는다', async () => {
-    // **실패 경로가 선택을 따로 손대지 않는다**는 것을 고정한다. `loadPage`가 같은 페이지를
-    // 다시 싣는 경로에서는 선택을 건드리지 않으므로(`store/editor-store.ts`의 `#selectionFor` —
-    // 사용자가 하지도 않은 재조회가 자리를 뺏지 않는다) 실패 뒤에도 «삭제 뒤 선택은 부모»
-    // 그대로 **부모**다. 되돌아온 문서 위에서 사용자는 고르던 자리 곁에 그대로 있다.
-    //
-    // 재조회가 선택까지 비우면 여기가 `null`이 되어 «삭제 뒤 선택은 부모»와 실패 경로가 갈린다.
+  it('편집이 실패해 노드가 돌아오면 고른 노드도 돌아온다 — 삭제 뒤 부모로 옮겼던 선택이 고르던 노드로 되돌아간다', async () => {
+    // 이 케이스는 «실패 경로는 선택을 따로 손대지 않는다 — 삭제 뒤 선택은 부모 그대로»를 못박았었다. 거절된 삭제가 문서를 돌려놓는데 선택만 부모에
+    // 남으면 «거절되면 이전 상태로» 가 깨지고 사람이 방금 고른 것을 다시 골라야 해서 바꿨다(`edit/reselect-after-reject.ts`). 세 경로(툴바 · 키보드 단일 ·
+    // 일괄)가 같은 선택으로 돌아오는 표는 실브라우저 `build-test/keyboard-holes.test.ts` «7» 이 잠근다.
     const srv = server({ failAt: 1 })
     await openPage(doc(), { apiOverrides: srv.api })
     select('Card')
@@ -388,8 +385,7 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
     fireEvent.click(toolButton('삭제'))
 
     await waitFor(() => expect(structureTypes()).toEqual(INITIAL_TYPES))
-    // 삭제가 옮겨 둔 부모(`Page` — 이 문서의 루트)가 그대로다.
-    expect(selectedType()).toBe('Page')
+    await waitFor(() => expect(selectedType()).toBe('Card'))
   })
 })
 
