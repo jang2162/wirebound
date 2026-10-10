@@ -243,7 +243,9 @@ export function Canvas(props: {
   // 그린 뒤 미리보기에 모양(반투명)을 얹는다 — 걷히거나 자리가 바뀌면 되돌린다.
   useLayoutEffect(() => {
     if (frame === null || shownPreview === null || rendered === doc) return
-    return applyPreviewLook(frame.document, shownPreview)
+    // 숨은 자리의 미리보기는 부모를 셸의 강조색 테두리로 보인다(`applyPreviewLook`) — 색은 호스트의 셸 변수에서 읽는다(캔버스 문서에는 셸 CSS 가 없다).
+    const accent = surfaceRef.current === null ? '' : getComputedStyle(surfaceRef.current).getPropertyValue('--wb-shell-accent').trim()
+    return applyPreviewLook(frame.document, shownPreview, accent === '' ? '#2f6fed' : accent)
   }, [frame, rendered, doc, shownPreview])
 
   /**

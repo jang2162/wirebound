@@ -122,8 +122,15 @@ function elementOf(doc: Document, id: string): HTMLElement | null {
 /**
  * 그린 미리보기에 모양을 얹는다 — 끼운 사본의 루트를 반투명으로, 옮기는 원본을 더 흐리게(머리말 «반투명은 그린 뒤 인라인 스타일로»).
  * 돌려준 함수가 얹은 값을 원래 값으로 되돌린다.
+ *
+ * ## 안 보이는 자리에 선 미리보기는 부모를 테두리로 보인다
+ *
+ * 테마가 자식 일부를 숨기면(활성 탭 밖의 패널 · 접힌 묶음) 그 자리에 끼운 미리보기도 숨어 상자가 0 × 0 이다 — 끄는 사람은 아무것도 안 보는 채 놓는다(실브라우저:
+ * 활성 패널만 보이는 `Tabs` 의 첫 패널 «뒤» 가 `rect 0x0`). 그때는 미리보기가 들어갈 **부모**에 `accent` 테두리를 둘러 «이 안으로 들어간다» 를 보인다 —
+ * 캔버스 위의 자리는 미리보기가 대신하므로(`drag/drop-indicator.tsx`) 안 숨는 자리에는 필요 없고, 숨은 자리에만 선다. 테두리는 안쪽으로 그려(`outline-offset`)
+ * 문서의 배치를 안 민다. 미리보기가 걷히면 원래 값으로 돌아온다.
  */
-export function applyPreviewLook(doc: Document, preview: PlacementPreview): () => void {
+export function applyPreviewLook(doc: Document, preview: PlacementPreview, accent: string): () => void {
   const touched: { element: HTMLElement; opacity: string }[] = []
   const dim = (element: HTMLElement | null, opacity: string): void => {
     if (element === null) return
@@ -131,10 +138,26 @@ export function applyPreviewLook(doc: Document, preview: PlacementPreview): () =
     element.style.opacity = opacity
   }
   const insertedId = preview.placing.kind === 'new' ? `${PREVIEW_ID_PREFIX}0` : `${PREVIEW_ID_PREFIX}${preview.placing.id}`
-  dim(elementOf(doc, insertedId), PREVIEW_OPACITY)
+  const inserted = elementOf(doc, insertedId)
+  dim(inserted, PREVIEW_OPACITY)
   if (preview.placing.kind === 'node') dim(elementOf(doc, preview.placing.id), MOVING_OPACITY)
+
+  let outlined: { element: HTMLElement; outline: string; offset: string } | null = null
+  if (inserted !== null) {
+    const box = inserted.getBoundingClientRect()
+    const parent = box.width === 0 && box.height === 0 ? elementOf(doc, preview.target.parentId) : null
+    if (parent !== null) {
+      outlined = { element: parent, outline: parent.style.outline, offset: parent.style.outlineOffset }
+      parent.style.outline = `2px solid ${accent}`
+      parent.style.outlineOffset = '-2px'
+    }
+  }
   return () => {
     for (const { element, opacity } of touched) element.style.opacity = opacity
+    if (outlined !== null) {
+      outlined.element.style.outline = outlined.outline
+      outlined.element.style.outlineOffset = outlined.offset
+    }
   }
 }
 
