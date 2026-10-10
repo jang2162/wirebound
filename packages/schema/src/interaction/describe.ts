@@ -55,6 +55,7 @@
  */
 import { CATALOG_DEFS } from '../component/catalog/index'
 import { getComponent } from '../component/registry'
+import { isolateBidi } from '../bidi'
 import { nodeAlias, viewStateName } from '../display'
 import type { AnyDocument, Interaction, InteractionAction, InteractionTrigger, WbNode } from '../node'
 import { pageTargetPath } from '../page-target'
@@ -344,7 +345,7 @@ function readLabel(node: WbNode, prop: string): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   if (trimmed.length === 0) return undefined
-  return trimmed.length > LABEL_MAX ? `${trimmed.slice(0, LABEL_MAX)}…` : trimmed
+  return isolateBidi(trimmed.length > LABEL_MAX ? `${trimmed.slice(0, LABEL_MAX)}…` : trimmed)
 }
 
 /**
@@ -382,7 +383,7 @@ function tabLabel(target: WbNode | undefined, index: number): string | null {
   const tabs = target?.props?.tabs
   if (!Array.isArray(tabs)) return null
   const name = tabs[index]
-  return typeof name === 'string' && name.trim().length > 0 ? name.trim() : null
+  return typeof name === 'string' && name.trim().length > 0 ? isolateBidi(name.trim()) : null
 }
 
 /**
@@ -407,12 +408,12 @@ export function describePageTarget(target: string): string {
  */
 function pageName(target: string): string {
   const path = pageTargetPath(target)
-  return path.length === 0 ? UNSET_PAGE : `${path} 페이지`
+  return path.length === 0 ? UNSET_PAGE : `${isolateBidi(path)} 페이지`
 }
 
 /** `setProp`의 값을 문장에 싣는 모양. 문자열은 따옴표로 감싸 낱말 경계를 보인다. */
 function showValue(value: unknown): string {
-  if (typeof value === 'string') return `"${value}"`
+  if (typeof value === 'string') return `"${isolateBidi(value)}"`
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   if (value === null) return '없음'
   if (Array.isArray(value)) return `${value.length}개 항목`

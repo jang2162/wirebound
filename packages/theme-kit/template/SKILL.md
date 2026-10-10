@@ -62,8 +62,12 @@ export const ListView = view(({ props, variant, states, children }) => {
     `data-wb-align` · `data-wb-justify` · `data-wb-wrap`.
   - 상태(`data-wb-state~='disabled'`)가 참이면 `aria-disabled` · `loading` 은 `aria-busy` · `invalid` 는 `aria-invalid` · `required` 는
     `aria-required` 가 `"true"` 로 선다. 그 뜻을 안쪽 요소로 옮기려면 `Root` 에 같은 이름(`undefined`)을 넘긴다.
+    `aria-required` 는 역할 없는 `div` 에서는 보조 기술이 읽지 않으니, 입력 칸을 그리는 뷰는 그 뜻을 역할(`textbox` · `combobox` 등)과 이름을 단
+    조각으로 옮긴다(기본 `Field` 뷰가 그렇게 한다).
   - CSS 는 `[data-wb-component='Section'][data-wb-compact] { … }` 처럼 겨냥한다. 기본 뷰도 그 값으로 모양을 바꾼다(접힌 검색은
-    머리줄 `toggle` 조각만 남고 자식이 빠진다 · 목록의 `selectable` 은 `checkbox` 조각) — 테마 CSS 가 여백 · 색을 정한다.
+    머리줄 `toggle` 조각만 남고 자식이 빠진다 · 표 구조 목록의 `selectable` 은 `checkbox` 조각) — 테마 CSS 가 여백 · 색을 정한다.
+  - **`List.selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다.** 줄 · 카드 목록 구조의 뷰는 표지 `data-wb-selectable` 만 서고
+    체크 칸이 없다 — 그 구조에 체크 칸이 필요하면 뷰가 직접 그린다.
 - **첫 렌더에 `Root` 를 반환한다.** 이펙트 · 상태를 기다렸다가 `Root` 를 그리면 누락으로 판정되어 그 노드는 SDK 기본 뷰로
   그려지고 콘솔에 경고가 난다.
 - `as` 로 루트 태그를 고른다(기본 `div`). 나머지 props(`className` · `style` · `aria-*`)는 루트 요소로 간다. 노드 속성

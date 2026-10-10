@@ -131,3 +131,39 @@ describe('기본 CSS', () => {
     expect(block(':where([data-wb-component="List"] [data-wb-part="skeleton"])')).toMatch(/height: [\d.]+em;/)
   })
 })
+
+describe('Field — 접근성 속성은 control 조각에 선다', () => {
+  const attrs = (el: Element, names: string[]) => names.map((name) => el.getAttribute(name))
+  const control = (el: Element) => el.querySelector('[data-wb-part="control"]')!
+
+  it.each([
+    ['text', 'textbox'],
+    ['number', 'spinbutton'],
+    ['select', 'combobox'],
+    ['date', 'textbox'],
+    ['dateRange', 'textbox'],
+    ['checkbox', 'checkbox'],
+    ['radio', 'radiogroup'],
+    ['textarea', 'textbox'],
+  ])('%s → role=%s · 이름 · required · invalid 가 조각에, 루트에는 없다', (kind, role) => {
+    const el = draw({ id: 'f1', type: 'Field', props: { label: '이름', control: kind, required: true, invalid: true } })
+    expect(attrs(control(el), ['role', 'aria-label', 'aria-required', 'aria-invalid'])).toEqual([role, '이름', 'true', 'true'])
+    expect(attrs(el, ['aria-required', 'aria-invalid'])).toEqual([null, null])
+  })
+
+  it('상태가 꺼져 있으면 조각에도 안 선다', () => {
+    const el = draw({ id: 'f2', type: 'Field', props: { label: '이름' } })
+    expect(attrs(control(el), ['role', 'aria-required', 'aria-invalid'])).toEqual(['textbox', null, null])
+  })
+
+  it('file 은 required 를 받는 역할이 없어 루트에 그대로 두고 조각에는 역할 · 이름을 안 단다', () => {
+    const el = draw({ id: 'f3', type: 'Field', props: { label: '첨부', control: 'file', required: true } })
+    expect(attrs(el, ['aria-required'])).toEqual(['true'])
+    expect(attrs(control(el), ['role', 'aria-label', 'aria-required'])).toEqual([null, null, null])
+  })
+
+  it('disabled 는 전역 속성이라 루트에 그대로 선다', () => {
+    const el = draw({ id: 'f4', type: 'Field', props: { label: '이름', disabled: true } })
+    expect(attrs(el, ['aria-disabled'])).toEqual(['true'])
+  })
+})

@@ -67,6 +67,8 @@ describe('번들의 뷰 — prop 표지 · 접근성 속성', () => {
     ['Field', undefined, { invalid: true, required: true }, 'aria-invalid', 'true'],
   ] as const)('%s:%s %j → %s="%s"', (type, variant, props, attr, value) => {
     const root = draw({ id: 'n', type, ...(variant === undefined ? {} : { variant }), props } as WbNode)
-    expect(root.getAttribute(attr)).toBe(value)
+    // `Field` 의 상태 접근성 속성은 루트가 아니라 `control` 조각에 선다(`default-views/input.tsx`).
+    const target = type === 'Field' ? root.querySelector('[data-wb-part="control"]')! : root
+    expect(target.getAttribute(attr)).toBe(value)
   })
 })

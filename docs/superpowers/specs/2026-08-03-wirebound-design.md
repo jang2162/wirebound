@@ -231,7 +231,7 @@ snapshots(id, project_id, tag, description, payload jsonb,
 
 `id`는 생성 시 부여되고 절대 바뀌지 않는다. 노드를 트리 안에서 옮겨도 유지되므로 코멘트와 상호작용 타겟이 따라간다. 가져오기·프리셋 적용·패턴 삽입 시에만 새 id를 발급하며, 그때 참조도 함께 리매핑한다.
 
-**별칭(`alias`)** 은 같은 타입이 여럿일 때 사람이 가르려고 붙이는 이름이다. 앞뒤 공백이 없는 1 ~ 60자(코드 포인트로 센다)이고, 받지 않는 글자 — 줄을 바꾸거나 출력을 제어하는 글자(C0 · DEL · C1 · U+2028 · U+2029) · 방향 제어 글자(U+061C · U+200E · U+200F · U+202A ~ U+202E · U+2066 ~ U+2069) · 짝 없는 서로게이트 — 가 없고, 보이는 글자가 하나는 있다(공백과 폭 없는 글자 U+200B ~ U+200D · U+2060 · U+FEFF 만이면 빈 값이다). 비우면 필드째 지운다. 받지 않는 글자의 표는 한 벌이다(`packages/schema/src/alias.ts`) — 봉투는 거절하고 화면은 같은 표로 다듬는다. 모양은 노드 봉투(`WbNodeSchema`)가 보므로 저장 경계(문서 저장 · 편집 · 가져오기 · 클립보드 봉투 · 프리셋)가 같은 판정을 받는다 — 별칭이 없는 옛 문서는 그대로 읽힌다. 문서 안에서 유일할 필요는 없다. 복사 · 붙여넣기 · 복제 · 프리셋 · 가져오기에서 노드와 함께 간다. 노드를 사람이 부르는 이름은 하나(`packages/schema` 의 `nodeDisplayName` — 별칭이 있으면 별칭, 없으면 라벨성 prop + 카탈로그 한국어 이름)이고, 노드를 가리키는 자리(구조 트리 줄 · 속성 패널 제목 · 상호작용 문장과 대상 고르개 · 코멘트의 노드 표시 · 캔버스 손잡이 · 내보낸 설계서 · CLI `page get` · MCP `get_page`)가 모두 그 이름을 거친다.
+**별칭(`alias`)** 은 같은 타입이 여럿일 때 사람이 가르려고 붙이는 이름이다. 앞뒤 공백이 없는 1 ~ 60자(코드 포인트로 센다)이고, 받지 않는 글자 — 줄을 바꾸거나 출력을 제어하는 글자(C0 · DEL · C1 · U+2028 · U+2029) · 방향 제어 글자(U+061C · U+200E · U+200F · U+202A ~ U+202E · U+2066 ~ U+2069) · 짝 없는 서로게이트 — 가 없고, 보이는 글자가 하나는 있다(공백과 폭 없는 글자 U+200B ~ U+200D · U+2060 · U+FEFF 만이면 빈 값이다). 비우면 필드째 지운다. 받지 않는 글자의 표는 한 벌이다(`packages/schema/src/alias.ts`) — 봉투는 거절하고 화면은 같은 표로 다듬는다. 모양은 노드 봉투(`WbNodeSchema`)가 보므로 저장 경계(문서 저장 · 편집 · 가져오기 · 클립보드 봉투 · 프리셋)가 같은 판정을 받는다 — 별칭이 없는 옛 문서는 그대로 읽힌다. 문서 안에서 유일할 필요는 없다. 복사 · 붙여넣기 · 복제 · 프리셋 · 가져오기에서 노드와 함께 간다. 노드를 사람이 부르는 이름은 하나(`packages/schema` 의 `nodeDisplayName` — 별칭이 있으면 별칭, 없으면 라벨성 prop + 카탈로그 한국어 이름)이고, 노드를 가리키는 자리(구조 트리 줄 · 속성 패널 제목 · 상호작용 문장과 대상 고르개 · 코멘트의 노드 표시 · 캔버스 손잡이 · 내보낸 설계서 · CLI `page get` · MCP `get_page`)가 모두 그 이름을 거친다. 라벨 · 제목 · 탭 이름 · 컬럼 이름처럼 별칭이 아닌 사람 글은 방향 제어 글자를 막지 않으므로, 그 글이 이름으로 이어 붙는 자리(문장 · 줄 요약 · 고르개 항목 · 내보낸 목록)는 **이름마다** 방향을 가둔다(`packages/schema` 의 `isolateBidi` — 제어 글자가 든 이름만 U+2068 … U+2069 로 감싸고 보통 글은 한 글자도 안 바꾼다).
 
 **화면 상태.** 같은 페이지가 상황(권한 · 로그인 여부 · 데이터 유무)에 따라 다른 화면을 보이면, 기본 페이지에서 영역을 골라 상태마다 다르게 그리고 나머지는 기본을 따라가게 한다. 상태 목록은 루트 노드가 아니라 **페이지 문서**의 선택 필드다 — `{ "version": 1, "root": { … }, "viewStates": [{ "id": "s_admin", "name": "관리자" }] }`. 문서에 두는 까닭은 카탈로그의 `states`(컴포넌트의 불리언 상태 — §5.1)와 이름이 겹치지 않고, 목록 편집(JSON Patch `/viewStates/…`)이 노드 잠금에 막히지 않게 하려는 것이다 — 잠금 판정은 `/root` 아래 경로끼리만 겹치므로 남이 페이지 안 어느 노드(뿌리 포함)를 잡고 있어도 목록 편집은 지나가고, 같은 묶음의 노드 연산은 그대로 판정된다. 상태는 많아야 20개, 이름은 앞뒤 공백 없는 1 ~ 30자(코드 포인트)로 별칭과 같은 받지 않는 글자 표를 따르고 한 페이지 안에서 겹치지 않는다. id 는 노드 id 규칙이고 `default` 일 수 없으며 이름을 바꿔도 그대로다. «기본»은 목록에 없고 늘 있다 — 목록이 비거나 없으면 상태가 없는 페이지다. 레이아웃에는 목록이 없다. 모양은 페이지 봉투(`PageEnvelopeSchema`)가 보므로 저장 경계(문서 저장 · 편집 · 가져오기 · 스냅샷)가 같은 판정을 받는다.
 
@@ -365,7 +365,7 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 - **프로젝트의 테마 바인딩은 owner 가 바꾼다**(`PUT /api/projects/:projectId/theme` — `theme_rev` 낙관적 동시성, 숨긴 버전은 지금 고정한 판의 토큰만 고칠 때만). 토큰은 대상 manifest 로 검증하고 기본값과 같은 값을 뺀 뒤 저장한다(값 200 글자 · 전체 16 KB 상한). 저장은 프로젝트 룸에 `theme-changed` 를 방송한다. 바꾸기 전의 영향(이어지는 · 버려지는 · 기본값으로 서는 토큰 수, 새 테마에 없는 variant 를 쓰는 노드 수)은 `GET …/theme/impact` 가 계산한다. lint 의 테마 규칙이 «현재 테마에 없는 variant» 를 본다(§12.4).
 - **변형은 manifest 가 선언한다** — `components[type].variants` · `defaultVariant` · `hideProps`. 노드의 `variant`가 선언 밖이면 렌더러가 `defaultVariant`로 그린다(페이지 데이터는 바꾸지 않는다). 속성 패널의 변형 칸과 감출 속성도 이 선언을 읽는다.
 - **내보내기(HTML 번들 · PPTX 화면)도 프로젝트가 고정한 `id@버전` 의 번들 · CSS · 토큰으로 그린다**(§11.3). 테마 코드는 브라우저(내보낸 페이지 · PPTX 의 Chromium)에서만 돈다 — api 의 Node 프로세스는 패키지 파일을 바이트로 번들에 싣기만 한다.
-- **테마는 저장소 밖에서 짜서 `.wbtheme` 한 파일로 빌드한다.** 스타터 템플릿(`wb-theme pack-template` 이 짓는 zip — SDK · kit tarball 과 코딩 에이전트용 `SKILL.md` 동봉)을 풀고 `wb-theme dev` 로 갤러리를 보며 짜고, `wb-theme build` 가 manifest 를 검증해 `dist/<id>-<version>.wbtheme` 를 낸다. `wb-theme check` 는 갤러리 칸 전부를 빌드한 번들로 그려 오류를, `wb-theme shots` 는 실 Chromium 스크린숏으로 콘솔 오류 · 가로 넘침을 본다(§3.3). `.wbtheme` 는 zip 이고 `manifest.json` · `theme.js`(IIFE — `react` · `react/jsx-runtime` · `@wirebound/theme-sdk` 를 번들에 넣지 않고 호스트가 세운 `__wirebound_runtime__` 에서 읽는다) · `theme.css` · `assets/**` 만 든다. 읽기(`readWbtheme`)는 크기 · 항목 수 · 경로 · 허용 목록 · 링크를 풀기 전에 본다. 시스템 테마 다섯도 `pnpm build` 가 같은 길로 `.wbtheme` 를 낸다. 만든 `.wbtheme` 는 관리자가 올린다(위 «테마 관리»).
+- **테마는 저장소 밖에서 짜서 `.wbtheme` 한 파일로 빌드한다.** 스타터 템플릿(`wb-theme pack-template` 이 짓는 zip — SDK · kit tarball 과 코딩 에이전트용 `SKILL.md` 동봉)을 풀고 `wb-theme dev` 로 갤러리를 보며 짜고, `wb-theme build` 가 manifest 를 검증해 `dist/<id>-<version>.wbtheme` 를 낸다. `wb-theme check` 는 갤러리 칸 전부를 빌드한 번들로 그려 오류를(그리지 않는 타입 · 카탈로그에 없는 타입을 가리키는 `views` 키도 오류다 — 렌더러가 읽지 않아 조용히 버려진다), `wb-theme shots` 는 실 Chromium 스크린숏으로 콘솔 오류 · 가로 넘침을 본다(§3.3). `.wbtheme` 는 zip 이고 `manifest.json` · `theme.js`(IIFE — `react` · `react/jsx-runtime` · `@wirebound/theme-sdk` 를 번들에 넣지 않고 호스트가 세운 `__wirebound_runtime__` 에서 읽는다) · `theme.css` · `assets/**` 만 든다. 읽기(`readWbtheme`)는 크기 · 항목 수 · 경로 · 허용 목록 · 링크를 풀기 전에 본다. 시스템 테마 다섯도 `pnpm build` 가 같은 길로 `.wbtheme` 를 낸다. 만든 `.wbtheme` 는 관리자가 올린다(위 «테마 관리»).
 
 ### 6.1 노드 속성
 
@@ -378,7 +378,7 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 | `data-wb-variant` | 변형(`variantFrom`이면 그 prop 값) | 렌더러 |
 | `data-wb-state` | 공백 구분 상태 목록 | 렌더러 |
 | `data-wb-<prop>` | prop 표지 — 불리언은 참일 때 빈 값, enum 은 그 값(`data-wb-compact=""` · `data-wb-kind="video"`) | SDK `Root` — `view()` 로 짠 뷰 전부 |
-| `aria-disabled` · `aria-busy` · `aria-invalid` · `aria-required` | 상태 `disabled` · `loading` · `invalid` · `required` 가 참이면 `true` | SDK `Root` — 뷰가 같은 이름을 넘기면 뷰 것 |
+| `aria-disabled` · `aria-busy` · `aria-invalid` · `aria-required` | 상태 `disabled` · `loading` · `invalid` · `required` 가 참이면 `true` | SDK `Root` — 뷰가 같은 이름을 넘기면 뷰 것(기본 `Field` 뷰는 `aria-required` · `aria-invalid` 를 루트가 아니라 입력 종류별 역할 · 이름을 단 `control` 조각에 둔다 — 역할 없는 `div` 의 `aria-required` 는 보조 기술이 못 읽는다. `file` 만 받는 역할이 없어 루트에 남는다) |
 | `data-wb-marker` · `data-wb-marker-offset` | 번호 마커의 자리(`top-start` 등)와 어긋남 `x,y` | SDK `Root` — 뷰가 `marker` 를 줄 때 |
 | `data-wb-focus` | 선택 외곽선 · 마커의 기준 상자 | SDK `Focus` — 없으면 루트가 기준이다 |
 | `data-wb-structure` | 기본 뷰의 형태 이름 | SDK 기본 뷰 |
@@ -389,7 +389,7 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 
 **prop 표지는 화면을 바꾸는 불리언 · enum prop 가운데 상태(`data-wb-state`) · 변형(`variantFrom` → `data-wb-variant`)으로 실리지 않는 것 전부에 선다** — 지금 `Section.compact` · `Flex` 의 `direction` · `align` · `justify` · `wrap` · `List` 의 `pagination` · `selectable` · `SearchForm.collapsed` · `Media` 의 `kind` · `ratio` 다(표는 `packages/theme-sdk/src/marks.ts` 의 `MARKED_PROPS`). 같은 값을 두 이름으로 싣지 않는다 — 상태 · 변형으로 실리는 prop 은 표지가 없다. 테마 CSS 는 `[data-wb-component="Section"][data-wb-compact]` 처럼 겨냥한다. 렌더러의 노드 속성 계약은 넓히지 않는다: `view()` 가 노드의 props · 상태를 문맥으로 내리고 `Root` 가 펴므로 기본 뷰와 테마 뷰가 같은 표지를 빠뜨릴 수 없다. `Root` 는 제 노드 id 의 문맥만 읽는다 — `view()` 를 거치지 않은 맨 함수 뷰의 `Root` 는 표지 · 접근성 속성을 안 편다(부모 노드의 것을 잘못 읽지 않게). 카탈로그에 불리언 · enum prop 이 생기면 표 · 상태 · 변형 가운데 하나에 들어야 한다 — `packages/renderer/test/prop-marks.test.tsx` 가 prop 마다 그 길과 «바꾸면 기본 뷰의 DOM 이 바뀐다» 를 센다.
 
-**SDK 기본 뷰는 표지 · 상태로 제 모양을 바꾼다** — 테마가 없어도 화면이 바뀐다. `Section` 의 위아래 여백은 compact 면 준다(특이도 0 — 테마의 여백 규칙이 이긴다), `SearchForm` 은 접히면 머리줄(`toggle` 조각)만 남고 자식이 DOM 에서 빠진다(`display: none` 으로 감추면 테마 CSS 가 되살릴 수 있다), `List` 는 `selectable` · `empty` · `loading` 을 체크 칸 · 빈 줄 · 막대 조각으로, `KeyValue` 는 `columns` 쌍씩 한 행으로, `Media` 는 `kind` 를 틀 가운데 표지(`glyph`)로 그린다. 시스템 테마 다섯이 표지를 읽는지는 `apps/web/build-test/theme-prop-marks.test.ts` 가 켬/끔의 상자 차로 잰다.
+**SDK 기본 뷰는 표지 · 상태로 제 모양을 바꾼다** — 테마가 없어도 화면이 바뀐다. `Section` 의 위아래 여백은 compact 면 준다(특이도 0 — 테마의 여백 규칙이 이긴다), `SearchForm` 은 접히면 머리줄(`toggle` 조각)만 남고 자식이 DOM 에서 빠진다(`display: none` 으로 감추면 테마 CSS 가 되살릴 수 있다), `List` 는 `selectable` · `empty` · `loading` 을 체크 칸 · 빈 줄 · 막대 조각으로, `KeyValue` 는 `columns` 쌍씩 한 행으로, `Media` 는 `kind` 를 틀 가운데 표지(`glyph`)로 그린다. 시스템 테마 다섯이 표지를 읽는지는 `apps/web/build-test/theme-prop-marks.test.ts` 가 켬/끔의 상자 차로 잰다. **`List.selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다** — 표 구조는 체크 칸을 머리에 하나 · 행마다 하나 그리고, 줄 · 카드 목록 구조(`mediaList` · `cardGrid` · `stackedList` 등)는 표지 `data-wb-selectable` 만 서고 체크 칸을 그리지 않는다. 시스템 테마 다섯은 `List` variant 전부에서 이 계약대로 서고(표 구조 variant 가 없는 `system-commerce` 는 어느 variant 에도 체크 칸이 없다), 같은 테스트가 variant 를 구조로 가르며 잰다. 줄 · 카드 목록에 체크 칸이 필요한 테마는 자기 뷰가 그린다.
 
 ### 6.2 patterns — 테마가 소유한 구성 레시피
 
@@ -871,6 +871,8 @@ wireb page get <경로> [--json]     페이지 조회
 wireb lint [경로]                  규칙 검증
 wireb export --format html -o dir  정적 번들 생성
 ```
+
+터미널로 나가는 글(`--json` 포함)은 라벨 · 제목 · 코멘트 본문처럼 설계서를 고치는 누구나 넣을 수 있는 글을 싣는다 — `\n` · `\t` 를 뺀 C0 · DEL · C1(`U+009B` 는 CSI) · 줄 · 문단 구분 · 방향 제어 글자를 `\uXXXX` 글로 바꿔 낸다(`packages/cli/src/terminal-safe.ts` — `--json` 은 읽은 값이 같다). 파일에 쓰는 바이트는 안 바뀐다.
 
 ### 12.4 lint 규칙
 

@@ -12,6 +12,7 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { homedir } from 'node:os'
 import type { HttpRequestInit, HttpResponse, Io } from './io'
+import { terminalSafe } from './terminal-safe'
 
 /** 자격 파일의 권한. 소유자만 읽고 쓴다. */
 export const CREDENTIALS_FILE_MODE = 0o600
@@ -26,8 +27,9 @@ export function createNodeIo(): Io {
     cwd: process.cwd(),
     home: homedir(),
     env: process.env,
-    out: (line) => process.stdout.write(`${line}\n`),
-    err: (line) => process.stderr.write(`${line}\n`),
+    // 터미널로 나가는 글만 거른다(`./terminal-safe.ts`) — 파일에 쓰는 바이트는 아래 `files.write` 가 그대로 쓴다.
+    out: (line) => process.stdout.write(`${terminalSafe(line)}\n`),
+    err: (line) => process.stderr.write(`${terminalSafe(line)}\n`),
     files: {
       read: async (path) => {
         try {

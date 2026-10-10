@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import { installCatalog } from '@wirebound/schema'
+import { THEMELESS_TYPES, getComponent, installCatalog } from '@wirebound/schema'
 import { renderDocument } from '@wirebound/renderer'
 import { galleryItemDocument, galleryItems } from '@wirebound/theme-gallery'
 import { ThemeProvider, type ThemeDefinition, type ThemeManifest } from '@wirebound/theme-sdk'
@@ -100,10 +100,11 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
       const message = loadError ?? 'theme.js 가 테마를 등록하지 않았습니다'
       return { items: 0, errors: [{ type: '', variant: undefined, label: '', message, source: 'bundle' }], unusedTokens, undeclaredVariantsUsedByPatterns }
     }
+    const viewKeyErrors = findBadViewKeys(definition)
     const theme: ThemeDefinition = { ...definition, manifest }
     const tokens = tokenValues(manifest, {})
     const items = galleryItems(theme)
-    const errors: ThemeCheckError[] = []
+    const errors: ThemeCheckError[] = [...viewKeyErrors]
 
     // 붙잡은 동안 react 가 act 경고를 내지 않게 — vitest 의 testing-library 가 이 값을 켜 둔다.
     const flags = globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -142,6 +143,24 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
     }
     return { items: items.length, errors, unusedTokens, undeclaredVariantsUsedByPatterns }
   })
+}
+
+/**
+ * **뷰 키가 읽히는 자리가 없는 것** — 렌더러는 `views[노드 타입]` 만 읽는다. 상태 영역(`THEMELESS_TYPES`)은 렌더러가 직접 다뤄 뷰를 안 부르고,
+ * 카탈로그에 없는 키는 부를 노드가 없다. 둘 다 조용히 버려져 «뷰를 짰는데 안 쓰인다» 로만 나타난다(manifest 는 같은 선언을 거절한다).
+ * `install` 된 카탈로그에서 읽으므로 `installCatalog()` 뒤에 부른다.
+ */
+function findBadViewKeys(definition: ThemeDefinition): ThemeCheckError[] {
+  const errors: ThemeCheckError[] = []
+  for (const key of Object.keys(definition.views)) {
+    const message = THEMELESS_TYPES.includes(key)
+      ? `views.${key} 는 테마가 그리지 않는 타입의 뷰입니다 — 렌더러가 직접 다뤄 쓰이지 않습니다`
+      : getComponent(key) === undefined
+        ? `views.${key} 는 카탈로그에 없는 타입의 뷰입니다 — 쓰이지 않습니다`
+        : null
+    if (message !== null) errors.push({ type: key, variant: undefined, label: '', message, source: 'bundle' })
+  }
+  return errors
 }
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -207,7 +226,7 @@ function findUndeclaredPatternVariants(manifest: ThemeManifest): UndeclaredPatte
 export function formatCheckReport(report: ThemeCheckReport): { ok: boolean; lines: string[] } {
   const lines: string[] = [`갤러리 칸 ${report.items} 개`]
   for (const error of report.errors) {
-    const at = error.type === '' ? '번들' : `${error.type}${error.variant === undefined ? '' : ` · ${error.variant}`} — ${error.label}`
+    const at = error.source === 'bundle' ? '번들' : `${error.type}${error.variant === undefined ? '' : ` · ${error.variant}`} — ${error.label}`
     lines.push(`✗ [${error.source}] ${at}: ${error.message}`)
   }
   for (const key of report.unusedTokens) lines.push(`✗ 안 쓰는 토큰: ${key} — theme.css · 뷰 어디서도 var(${tokenVar(key)}) · useToken 으로 안 읽는다`)

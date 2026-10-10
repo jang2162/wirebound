@@ -18,6 +18,7 @@ export type MarkKind = 'flag' | 'value'
 export const MARKED_PROPS: Readonly<Record<string, Readonly<Record<string, MarkKind>>>> = Object.freeze({
   Section: { compact: 'flag' },
   Flex: { direction: 'value', align: 'value', justify: 'value', wrap: 'flag' },
+  // `selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다 — 줄 · 카드 목록은 표지만 선다(spec 「6.1 노드 속성」).
   List: { pagination: 'flag', selectable: 'flag' },
   SearchForm: { collapsed: 'flag' },
   Media: { kind: 'value', ratio: 'value' },
@@ -25,7 +26,8 @@ export const MARKED_PROPS: Readonly<Record<string, Readonly<Record<string, MarkK
 
 /**
  * 상태마다 루트에 다는 접근성 속성. 상태는 `data-wb-state` 로 이미 실리므로 표지가 아니라 뜻을 더한다. `selected` 는 없다 — 루트가
- * 표 · 목록이라 `aria-selected` 를 받는 역할이 아니다. `empty` 도 없다(해당하는 속성이 없다).
+ * 표 · 목록이라 `aria-selected` 를 받는 역할이 아니다. `empty` 도 없다(해당하는 속성이 없다). `Field` 의 기본 뷰는 `invalid` ·
+ * `required` 의 속성을 루트가 아니라 `control` 조각에 둔다(`default-views/input.tsx`).
  */
 export const STATE_ARIA: Readonly<Record<string, string>> = Object.freeze({
   disabled: 'aria-disabled',

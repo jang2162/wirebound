@@ -17,12 +17,13 @@
  *
  * **보지 않는 것:** 위 다섯 말고도 보이지 않는 글자(한글 채움 문자 U+3164 · 보이지 않는 연산자 U+2061 ~ U+2064 등)는 «보이는
  * 글자»로 센다. 폭 없는 글자가 보이는 글자 사이에 끼는 것(ZWJ 로 이은 이모지)은 받는다. 라벨 · 제목 같은 props 의 글은 이 표를
- * 거치지 않는다.
+ * 거치지 않는다 — 그 글이 이름으로 이어 붙는 자리는 `./bidi.ts` 의 `isolateBidi` 가 이름마다 방향을 가둔다.
  */
+import { BIDI_CONTROL_CLASS } from './bidi'
 import { NODE_ALIAS_MAX } from './node'
 
 const LINE_BREAKING = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/gu
-const HIDDEN_CONTROL = /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\p{Cs}]/gu
+const HIDDEN_CONTROL = new RegExp(`[${BIDI_CONTROL_CLASS}\\p{Cs}]`, 'gu')
 const REJECTED = new RegExp(`${LINE_BREAKING.source}|${HIDDEN_CONTROL.source}`, 'u')
 const INVISIBLE_ONLY = /^[\s\u200b-\u200d\u2060\ufeff]*$/u
 
