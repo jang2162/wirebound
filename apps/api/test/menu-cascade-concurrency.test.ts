@@ -22,6 +22,7 @@ import { sql } from 'kysely'
 import type { PatchOp } from '@wirebound/schema'
 import type { ServerFrame } from '../src/ws/protocol'
 import { withTransaction } from '../src/db/tx'
+import { CASCADE_SAFETY_KEEP } from '../src/services/menu-cascade'
 import {
   createMenuNode,
   createPage,
@@ -140,7 +141,14 @@ async function holdRow(table: Held, id: string): Promise<{ pid: number; release:
 /**
  * 행을 쥔 채 `runs`를 차례로 줄 세우고 놓는다. `runs[i]`는 앞의 `i`개가 줄을 선 것을 본 뒤에 시작한다. 결과는 `runs`의 차례로.
  */
-async function queued<T>(table: Held, id: string, runs: Array<() => Promise<T>>, label: string): Promise<T[]> {
+async function queued<T>(
+  table: Held,
+  id: string,
+  runs: Array<() => Promise<T>>,
+  label: string,
+  /** 모두 줄을 선 뒤 · 놓기 전에 부른다 — 줄에 선 요청이 아직 무엇을 안 건드렸는지 본다. */
+  whileLined?: () => Promise<void>,
+): Promise<T[]> {
   const holder = await holdRow(table, id)
   const running: Promise<T>[] = []
   let lined: unknown
@@ -149,6 +157,7 @@ async function queued<T>(table: Held, id: string, runs: Array<() => Promise<T>>,
       running.push(run())
       await waitForWaiters(holder.pid, index + 1, label)
     }
+    if (whileLined !== undefined) await whileLined()
   } catch (error) {
     lined = error
   }
@@ -412,6 +421,96 @@ describe('메뉴 연쇄 삭제와 겹친 트리 쓰기 — 프로젝트 행에�
         else expect([first!.statusCode, second!.statusCode]).toEqual([201, 409])
       }
     })
+  })
+})
+
+/**
+ * **안전망 상한**(`services/menu-cascade.ts` 머리말 «안전망 스냅샷») — 상한에 닿은 프로젝트의 연쇄는 가장 오래된 안전망을 지운다. 지우기는
+ * 프로젝트 행을 쥔 뒤라, 그 스냅샷으로 복원하는 요청과 프로젝트 삭제가 프로젝트 행에서 줄을 선다. 상한에 안 닿은 같은 겹침(대조군)은 위의
+ * «스냅샷 복원» · «프로젝트 삭제»다.
+ */
+describe('안전망 상한 — 지우는 연쇄와 겹친 복원 · 프로젝트 삭제', () => {
+  /** 판에 상한만큼 안전망을 쌓는다(서브트리 밖 메뉴 · 페이지를 하나씩 연쇄로 지운다) — 가장 오래된 것의 id. */
+  async function fill(b: Board): Promise<string> {
+    let oldest: string | undefined
+    for (let i = 0; i < CASCADE_SAFETY_KEEP; i += 1) {
+      const menu = await createMenuNode(b.ctx, b.owner.cookie, b.projectId, { title: `쌓을 ${i}` })
+      const page = await createPage(b.ctx, b.owner.cookie, b.projectId, menu.id, { title: `쌓을 페이지 ${i}` })
+      const res = await cascade(b, menu.id, { menuIds: [], pageIds: [page.id] })
+      expect(res.statusCode, res.body).toBe(200)
+      oldest ??= (JSON.parse(res.body) as { safetySnapshot: { id: string } }).safetySnapshot.id
+    }
+    return oldest!
+  }
+
+  async function exists(snapshotId: string): Promise<boolean> {
+    return (await db.selectFrom('snapshots').select('id').where('id', '=', snapshotId).executeTakeFirst()) !== undefined
+  }
+
+  /** 다른 연결에서 그 행을 잠가 본다 — 남이 쥐었으면(지우는 중) 거른다. */
+  async function rowFree(snapshotId: string): Promise<boolean> {
+    const rows = await sql`select id from snapshots where id = ${snapshotId} for update skip locked`.execute(db)
+    return rows.rows.length === 1
+  }
+
+  it('밀려날 안전망으로 복원 — 연쇄가 먼저면 복원이 404 · 복원이 먼저면 둘 다 성공하고 그 뒤에 지워진다 · 줄에 선 동안 그 행은 아무도 안 쥔다', async () => {
+    await withRealApi(async (ctx) => {
+      for (let round = 0; round < ROUNDS; round += 1) {
+        for (const order of ['cascade-first', 'restore-first'] as const) {
+          const b = await board(ctx)
+          const oldest = await fill(b)
+          const restore = () => send(b, 'POST', `/snapshots/${oldest}/restore`)
+          const label = `안전망 상한 · 복원 · ${order}`
+          let freeWhileLined: boolean | undefined
+          const answers = await queued(
+            'projects',
+            b.projectId,
+            order === 'cascade-first' ? [() => cascade(b), restore] : [restore, () => cascade(b)],
+            label,
+            async () => {
+              freeWhileLined = await rowFree(oldest)
+            },
+          )
+          const [deleted, restored] = order === 'cascade-first' ? answers : [answers[1]!, answers[0]!]
+          expect(answers.map((answer) => answer.statusCode), `${label} · ${answers.map((answer) => answer.body).join(' · ')}`).not.toContain(500)
+          expect(freeWhileLined, label).toBe(true)
+          expect(deleted!.statusCode, deleted!.body).toBe(200)
+          if (order === 'cascade-first') {
+            expect(restored!.statusCode, restored!.body).toBe(404)
+            expect((JSON.parse(restored!.body) as { error: { message: string } }).error.message).toBe('스냅샷을 찾을 수 없습니다')
+          } else {
+            expect(restored!.statusCode, restored!.body).toBe(200)
+          }
+          expect(await exists(oldest), label).toBe(false)
+          const kept = await db
+            .selectFrom('snapshots')
+            .select('id')
+            .where('project_id', '=', b.projectId)
+            .where('kind', '=', 'cascade-safety')
+            .execute()
+          expect(kept, label).toHaveLength(CASCADE_SAFETY_KEEP)
+        }
+      }
+    })
+  })
+
+  it('프로젝트 삭제 — 어느 차례든 교착이 없다 · 프로젝트 삭제가 먼저면 연쇄가 404', async () => {
+    const oldestOf = new Map<string, string>()
+    await bothOrders(
+      '안전망 상한 · 프로젝트 삭제',
+      (b) => ['projects', b.projectId],
+      (b) => send(b, 'DELETE', ''),
+      async (b, order, deleted, gone) => {
+        expect(gone.statusCode, gone.body).toBe(204)
+        if (order === 'other-first') expect(deleted.statusCode, deleted.body).toBe(404)
+        else expect(deleted.statusCode, deleted.body).toBe(200)
+        expect(await exists(oldestOf.get(b.projectId)!)).toBe(false)
+        expect(await db.selectFrom('snapshots').select('id').where('project_id', '=', b.projectId).execute()).toEqual([])
+      },
+      async (b) => {
+        oldestOf.set(b.projectId, await fill(b))
+      },
+    )
   })
 })
 

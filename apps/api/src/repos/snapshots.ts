@@ -19,7 +19,8 @@
  * **`pg_column_size`가 아닌 이유:** 그쪽은 TOAST 압축 뒤의 물리 크기라 같은 문서도 압축률에
  * 따라 값이 달라진다. 보관 정책이 알고 싶은 것은 *"이 스냅샷이 담은 내용의 크기"*다.
  *
- * **상한을 두지 않는다.** 두려면 값이 있어야 하고, 그 값이 지금 없다.
+ * **크기 상한을 두지 않는다.** 두려면 값이 있어야 하고, 그 값이 지금 없다. 개수 상한은 메뉴 연쇄 삭제의 안전망에만 있다
+ * (`services/menu-cascade.ts` 머리말 «안전망 스냅샷» — 아래 `trimCascadeSafetySnapshots`).
  *
  * ---
  *
@@ -71,6 +72,7 @@ import { lockProjectLayouts } from './layouts'
 import { lockProjectMenuNodes } from './menu'
 import { lockProjectPages } from './pages'
 import { lockProjectRow } from './projects'
+import type { SnapshotKind } from '../db/types'
 import type { SnapshotPayload } from '@wirebound/themes'
 
 /** 스냅샷 어딘가에 NUL(U+0000)이 있을 때 던진다. 호출자가 400으로 매핑한다. */
@@ -210,6 +212,8 @@ export async function insertSnapshot(
     description: string | null
     payload: SnapshotPayload
     createdBy: string
+    /** 없으면 `tag`(사람이 찍은 것). 안전망을 찍는 둘(복원 · 연쇄 삭제)이 제 값을 싣는다 — 뜻은 `0022-snapshot-kind`. */
+    kind?: SnapshotKind
   },
 ): Promise<SnapshotDetail> {
   assertNoNulByte(input)
@@ -223,6 +227,7 @@ export async function insertSnapshot(
         description: input.description,
         payload: JSON.stringify(input.payload),
         created_by: input.createdBy,
+        kind: input.kind ?? 'tag',
         // **`capturedAt`과 같은 값이다 — 사본이 아니라 같은 값이다**(위 머리말).
         // `SnapshotPayloadSchema`가 `capturedAt`을 ISO datetime으로 강제하므로 여기서
         // `Invalid Date`가 나올 수 없다.
@@ -239,6 +244,34 @@ export async function insertSnapshot(
     }
     return record
   })
+}
+
+/**
+ * 그 프로젝트의 연쇄 삭제 안전망(`kind = 'cascade-safety'`) 가운데 최근 `keep`개만 남기고 지운다 — 지운 id 를 낸다. 차례는 목록과 같다
+ * (`selectSnapshots` — `created_at` 내림차순, 같으면 `tag`).
+ *
+ * **프로젝트 행을 쥔 트랜잭션에서만 부른다**(`services/menu-cascade.ts` — `lockProjectForRestore` 뒤). 복원도 같은 행을 먼저 쥐므로, 복원이
+ * 읽고 쓰는 동안 그 스냅샷이 지워지지 않고 지워진 뒤의 복원은 404 다(`test/menu-cascade-concurrency.test.ts` «안전망 상한»).
+ */
+export async function trimCascadeSafetySnapshots(trx: DbHandle, projectId: string, keep: number): Promise<string[]> {
+  assertLocking(trx, 'trimCascadeSafetySnapshots')
+  const rows = await trx
+    .deleteFrom('snapshots')
+    .where(
+      'id',
+      'in',
+      trx
+        .selectFrom('snapshots')
+        .select('id')
+        .where('project_id', '=', projectId)
+        .where('kind', '=', 'cascade-safety')
+        .orderBy('created_at', 'desc')
+        .orderBy('tag', 'asc')
+        .offset(keep),
+    )
+    .returning('id')
+    .execute()
+  return rows.map((row) => row.id)
 }
 
 /** 그 프로젝트의 스냅샷 전부(최근 것이 먼저). **payload 본문은 싣지 않는다.** */

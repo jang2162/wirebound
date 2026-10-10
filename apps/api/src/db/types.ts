@@ -232,7 +232,7 @@ export interface ProjectMenuRevsTable {
 }
 
 /**
- * 스냅샷(`0009-snapshots`). 설계서 「스냅샷」의 **삭제 없는 태그**다.
+ * 스냅샷(`0009-snapshots`). 설계서 「스냅샷」의 **삭제 없는 태그**다 — 메뉴 연쇄 삭제의 안전망만 개수 상한으로 지워진다(`kind`).
  *
  * `payload`는 `JSONColumnType<SnapshotPayload>` — `PagesTable.schema`와 **같은 비대칭**이다:
  * 삽입 시엔 `JSON.stringify`한 문자열, 조회 시엔 파싱된 객체. 그 규격을 소유하는 것은
@@ -249,7 +249,12 @@ export interface SnapshotsTable {
   payload: JSONColumnType<SnapshotPayload>
   created_by: string
   created_at: Generated<Date>
+  /** 누가 왜 찍었나(`0022-snapshot-kind`) — 연쇄 삭제의 안전망만 개수 상한이 있다. */
+  kind: Generated<SnapshotKind>
 }
+
+/** `snapshots.kind` 의 값 — 뜻은 `0022-snapshot-kind` 의 표. */
+export type SnapshotKind = 'tag' | 'restore-safety' | 'cascade-safety'
 
 /**
  * 페이지 프리셋(`0010-presets`). 설계서 「페이지 프리셋」의 *"프로젝트가 소유한 페이지 통째 템플릿"*이다.

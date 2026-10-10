@@ -40,6 +40,8 @@ import { sql } from 'kysely'
  * 아니다** — `project_id`가 `ON DELETE CASCADE`라 프로젝트를 지우면 그 스냅샷도 함께 간다.
  * 그것이 옳은 이유는 `revisions`·`comments`와 같다: 프로젝트가 사라지면 스냅샷이 가리키는
  * 대상 자체가 없다. 「스냅샷」이 막는 것은 *"기록을 골라서 지우는 것"*이지 프로젝트 삭제가 아니다.
+ * 저절로 지워지는 다른 하나는 메뉴 연쇄 삭제의 안전망이다 — 프로젝트마다 개수 상한이 있다(`0022-snapshot-kind` · `services/menu-cascade.ts`
+ * 머리말 «안전망 스냅샷»).
  *
  * **`created_by`는 `ON DELETE RESTRICT`다** — `comments.author_id`와 같은 이유다.
  * 사용자를 지우는 경로가 없어 지금은 도달하지 않지만, 그 경로를 만드는 사람에게 *"그 사람이 얼린
