@@ -129,6 +129,28 @@ describe('토큰 값이 스냅샷 · 복원을 막지 않는다', () => {
   })
 })
 
+describe('토큰 키 · 값이 외짝 서로게이트 · NUL 을 실으면 PUT 이 거절하고 칸은 그대로다(`projects.theme_tokens` 는 `json`)', () => {
+  // `json` 칸은 외짝 서로게이트 이스케이프를 받는다(`psql`: `'{"a":"\\ud800"}'::json` 은 통과 · `->>` · `::jsonb` 는 22P02) — 입구가 막지 않으면 그 값이 스냅샷
+  // payload(`jsonb`)에서 터진다. 값은 `checkTokenValue` 의 `BAD_CHAR` 가, 키는 manifest 에 없는 키라는 이유로 거절된다.
+  it.each([
+    ['값 — 외짝 서로게이트', { 'font.body': '"a\ud800b"' }],
+    ['값 — NUL', { 'font.body': '"a\u0000b"' }],
+    ['키 — 외짝 서로게이트', { 'font.body\ud800': 'serif' }],
+    ['키 — NUL', { 'font.body\u0000': 'serif' }],
+  ])('%s', async (_label, tokens) => {
+    await withApi(async (ctx) => {
+      await store(ctx.db, FONT)
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+
+      const saved = await put(ctx.app, project.id, owner, { themeId: 'fonted', version: '1.0.0', tokens, rev: 0 })
+
+      const row = await ctx.db.selectFrom('projects').select(['theme_tokens', 'theme_rev']).where('id', '=', project.id).executeTakeFirstOrThrow()
+      expect({ status: saved.statusCode, tokens: row.theme_tokens }).toEqual({ status: 422, tokens: {} })
+    })
+  })
+})
+
 describe('복원은 토큰을 검증하지 않는다', () => {
   it('판 3 payload 의 theme.tokens 에 manifest 에 없는 키가 있으면 바인딩에 넣지 않는다', async () => {
     await withApi(async (ctx) => {

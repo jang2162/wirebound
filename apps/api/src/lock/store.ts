@@ -78,13 +78,14 @@ export interface LockStore {
    * **밖에서 보이는 것이 바뀌었으면 `true`다.** 하트비트는 만료 시각만 미루므로 `false`이고,
    * 그래서 부르는 쪽이 룸에 안 바뀐 목록을 다시 흘리지 않는다.
    */
-  hold(claim: LockClaim, judgedAtHeadSeq?: number): boolean
+  hold(claim: LockClaim, judgedAtStructureSeq?: number): boolean
   /**
    * 이 연결의 집합이 **지금도 판정을 지난 그대로인가** — 같은 페이지의 같은 집합이고, 판정한 뒤 그 프로젝트의 살아 있는 잠금이 하나도 안 바뀌었고
-   * (`hold` 의 `judgedAtHeadSeq` 로 도장을 찍은 때의 목록 세대와 같다), 문서의 머리 번호가 그때와 같다. 참이면 하트비트는 문서를 읽지 않고 만료만
+   * (`hold` 의 `judgedAtStructureSeq` 로 도장을 찍은 때의 목록 세대와 같다), 문서의 구조 번호(`pages.structure_seq` — 노드를 더하고 · 지우고 · 옮긴
+   * 편집만 올린다)가 그때와 같다. 판정은 노드의 부모 사슬만 읽으므로 내용만 고친 편집은 판정을 안 바꾼다. 참이면 하트비트는 문서를 읽지 않고 만료만
    * 미룬다(`ws/lock.ts`).
    */
-  isJudged(connectionId: string, pageId: string, nodeIds: readonly string[], headSeq: number): boolean
+  isJudged(connectionId: string, pageId: string, nodeIds: readonly string[], structureSeq: number): boolean
   /** 이 연결이 지금 쥔 것 — 없거나 만료됐으면 `null`(만료면 그 자리에서 걷는다). */
   heldBy(connectionId: string): { pageId: string; nodeIds: string[] } | null
   /** 이 연결이 잡고 있는 것을 놓는다. **놓은 것이 있었으면 `true`.** */
@@ -99,14 +100,16 @@ export interface LockStore {
   liveIn(projectId: string): LiveLock[]
   /** 살아 있는 잠금(서브트리)의 수. 누수를 재는 자리가 쓴다. */
   liveCount(): number
+  /** 목록 세대를 들고 있는 프로젝트의 수 — 잠금이 있는 프로젝트만이어야 한다(누수를 재는 자리가 쓴다). */
+  generationCount(): number
   /** 만료된 것을 전부 걷는다 — 걷힌 것마다 `onExpired`가 불린다(위 «걷은 것은 알린다»). 읽는 자가 없는 방을 위한 것이다. */
   sweep(): void
 }
 
 interface LockRecord extends LockClaim {
   expiresAt: number
-  /** `hold` 가 판정을 지났다고 도장 찍은 때의 문서 머리 번호 · 프로젝트의 목록 세대. 도장이 없으면 `undefined`. */
-  judged?: { headSeq: number; generation: number }
+  /** `hold` 가 판정을 지났다고 도장 찍은 때의 문서 구조 번호 · 프로젝트의 목록 세대. 도장이 없으면 `undefined`. */
+  judged?: { structureSeq: number; generation: number }
 }
 
 /** 두 집합이 같은가 — 차례는 안 본다(둘 다 중복이 없다). */
@@ -137,6 +140,15 @@ export function createLockStore(
   const bump = (projectId: string): void => {
     generations.set(projectId, (generations.get(projectId) ?? 0) + 1)
   }
+  /**
+   * **놓을 것이 없어진 프로젝트의 세대를 지운다** — 안 지우면 표가 프로세스 수명 동안 다룬 프로젝트 수만큼 자란다. 지워도 되는 까닭: 세대를 읽는 자리는
+   * 도장을 쥔 잠금(`isJudged`)과 새 도장을 찍는 `hold` 뿐인데, 그 프로젝트에 잠금이 없으면 읽을 도장이 없고 새 `hold` 는 `bump` 로 다시 시작한다.
+   * 공개 연산이 끝나는 자리마다 부른다(`bump` 가 만든 항목이 잠금 없이 남지 않게).
+   */
+  const tidy = (projectId: string): void => {
+    for (const record of held.values()) if (record.projectId === projectId) return
+    generations.delete(projectId)
+  }
 
   /** 만료됐으면 그 자리에서 지우고 `undefined`. **걷는 자리는 여기 하나다** — 알림도 여기서 나간다. */
   const liveAt = (connectionId: string, at: number): LockRecord | undefined => {
@@ -145,6 +157,7 @@ export function createLockStore(
     if (record.expiresAt <= at) {
       held.delete(connectionId)
       bump(record.projectId)
+      tidy(record.projectId)
       onExpired(record.projectId)
       return undefined
     }
@@ -152,13 +165,14 @@ export function createLockStore(
   }
 
   return {
-    hold: (claim, judgedAtHeadSeq) => {
+    hold: (claim, judgedAtStructureSeq) => {
       const at = now()
       const before = liveAt(claim.connectionId, at)
       const nodeIds = [...claim.nodeIds]
       if (nodeIds.length === 0) {
         held.delete(claim.connectionId)
         if (before !== undefined) bump(claim.projectId)
+        tidy(claim.projectId)
         return before !== undefined
       }
       // 앞의 것이 같은 페이지의 같은 집합이었으면 밖에서 보이는 것은 그대로다.
@@ -166,18 +180,20 @@ export function createLockStore(
       if (changed) bump(claim.projectId)
       // **도장은 이 `hold` 가 올린 세대에 찍는다** — 판정과 `hold` 가 한 틱이라 그 사이 남의 변경이 끼지 못한다.
       const judged =
-        judgedAtHeadSeq === undefined ? undefined : { headSeq: judgedAtHeadSeq, generation: generations.get(claim.projectId) ?? 0 }
+        judgedAtStructureSeq === undefined
+          ? undefined
+          : { structureSeq: judgedAtStructureSeq, generation: generations.get(claim.projectId) ?? 0 }
       held.set(claim.connectionId, { ...claim, nodeIds, expiresAt: at + ttlMs, ...(judged ? { judged } : {}) })
       return changed
     },
 
-    isJudged: (connectionId, pageId, nodeIds, headSeq) => {
+    isJudged: (connectionId, pageId, nodeIds, structureSeq) => {
       const record = liveAt(connectionId, now())
       if (record === undefined || record.judged === undefined) return false
       return (
         record.pageId === pageId &&
         sameSet(record.nodeIds, nodeIds) &&
-        record.judged.headSeq === headSeq &&
+        record.judged.structureSeq === structureSeq &&
         record.judged.generation === (generations.get(record.projectId) ?? 0)
       )
     },
@@ -191,7 +207,10 @@ export function createLockStore(
       const at = now()
       const live = liveAt(connectionId, at)
       held.delete(connectionId)
-      if (live !== undefined) bump(live.projectId)
+      if (live !== undefined) {
+        bump(live.projectId)
+        tidy(live.projectId)
+      }
       return live !== undefined
     },
 
@@ -206,6 +225,7 @@ export function createLockStore(
         released = true
       }
       if (released) bump(projectId)
+      tidy(projectId)
       return released
     },
 
@@ -230,6 +250,8 @@ export function createLockStore(
       }
       return count
     },
+
+    generationCount: () => generations.size,
 
     sweep: () => {
       const at = now()

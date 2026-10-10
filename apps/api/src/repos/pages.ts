@@ -428,6 +428,8 @@ export interface LockedPage {
   schema: PageDocument
   schemaVersion: number
   headSeq: number
+  /** 구조가 마지막으로 바뀐 편집의 seq(`0023-pages-structure-seq`). */
+  structureSeq: number
 }
 
 /**
@@ -466,7 +468,7 @@ export async function lockPageForEdit(trx: DbHandle, projectId: string, pageId: 
 
   const row = await trx
     .selectFrom('pages')
-    .select(['id', 'schema', 'schema_version', 'head_seq'])
+    .select(['id', 'schema', 'schema_version', 'head_seq', 'structure_seq'])
     .where('id', '=', pageId)
     .where('project_id', '=', projectId)
     .forUpdate()
@@ -480,12 +482,13 @@ export async function lockPageForEdit(trx: DbHandle, projectId: string, pageId: 
     schemaVersion: row.schema_version,
     // head_seq는 pg가 문자열로 주는 bigint다 — repos/pages.ts의 toRecord와 같은 이유로 변환한다.
     headSeq: Number(row.head_seq),
+    structureSeq: Number(row.structure_seq),
   }
 }
 
 /**
  * 편집 파이프라인(`services/edit-pipeline.ts`)이 패치를 적용한 결과를 저장한다. `schema`·`schema_version`·
- * `head_seq`·`updated_at` 넷을 함께 갱신한다 — 다른 컬럼(`title`·`menu_node_id` 등)은
+ * `head_seq`·`structure_seq`·`updated_at` 다섯을 함께 갱신한다 — 다른 컬럼(`title`·`menu_node_id` 등)은
  * 건드리지 않는다. 반환값은 없다(`void`) — 호출자가 이미 결과 문서(`schema`)와 새
  * `headSeq`를 갖고 있으므로 다시 읽어 돌려줄 이유가 없다.
  *
@@ -507,6 +510,8 @@ export async function writePageSchemaAtSeq(
   schema: PageDocument,
   schemaVersion: number,
   headSeq: number,
+  /** 구조가 바뀐 편집이면 `headSeq`, 아니면 읽은 `LockedPage.structureSeq` 그대로. */
+  structureSeq: number,
 ): Promise<void> {
   if (!trx.isTransaction) {
     throw new Error('writePageSchemaAtSeq는 트랜잭션 핸들(trx)로만 불러야 합니다 — lockPageForEdit과 같은 트랜잭션이어야 합니다.')
@@ -515,7 +520,13 @@ export async function writePageSchemaAtSeq(
   await withTransaction(trx, async (tx) => {
     await tx
       .updateTable('pages')
-      .set({ schema: JSON.stringify(schema), schema_version: schemaVersion, head_seq: headSeq, updated_at: sql`now()` })
+      .set({
+        schema: JSON.stringify(schema),
+        schema_version: schemaVersion,
+        head_seq: headSeq,
+        structure_seq: structureSeq,
+        updated_at: sql`now()`,
+      })
       .where('id', '=', pageId)
       .execute()
   })
@@ -577,23 +588,23 @@ export async function deletePage(db: DbHandle, projectId: string, pageId: string
  * 대상이 `projectId` 소속이 아니면(지워졌거나 다른 프로젝트) `false`다 — 부르는 쪽이 404 로 읽는다.
  */
 export async function lockPageShared(trx: DbHandle, projectId: string, pageId: string): Promise<boolean> {
-  return (await lockPageSharedHead(trx, projectId, pageId)) !== null
+  return (await lockPageSharedStructure(trx, projectId, pageId)) !== null
 }
 
 /**
- * `lockPageShared` 와 같은 잠금이고 **그 행의 `head_seq` 를 돌려준다**(없으면 `null`). 행을 쥔 채 읽으므로 커밋된 머리 번호다 —
- * `ws/lock.ts` 의 하트비트가 «문서가 그대로인가» 를 문서를 읽지 않고 가르는 데 쓴다.
+ * `lockPageShared` 와 같은 잠금이고 **그 행의 `structure_seq` 를 돌려준다**(없으면 `null`). 행을 쥔 채 읽으므로 커밋된 값이다 —
+ * `ws/lock.ts` 의 하트비트가 «문서의 구조가 그대로인가» 를 문서를 읽지 않고 가르는 데 쓴다.
  */
-export async function lockPageSharedHead(trx: DbHandle, projectId: string, pageId: string): Promise<number | null> {
+export async function lockPageSharedStructure(trx: DbHandle, projectId: string, pageId: string): Promise<number | null> {
   assertLocking(trx, 'lockPageShared')
   const row = await trx
     .selectFrom('pages')
-    .select('head_seq')
+    .select('structure_seq')
     .where('id', '=', pageId)
     .where('project_id', '=', projectId)
     .forKeyShare()
     .executeTakeFirst()
-  return row === undefined ? null : Number(row.head_seq)
+  return row === undefined ? null : Number(row.structure_seq)
 }
 
 /**
@@ -662,6 +673,8 @@ export async function insertPageWithId(
   },
 ): Promise<void> {
   const floor = await trx.selectFrom('page_seq_floors').select('head_seq').where('page_id', '=', input.id).executeTakeFirst()
+  // 구조 번호도 같은 값에서 시작한다 — 지운 id 가 쓴 번호보다 크므로 옛 도장과 안 겹친다.
+  const head = floor === undefined ? UNKNOWN_SEQ_FLOOR : Number(floor.head_seq) + 1
   await trx
     .insertInto('pages')
     .values({
@@ -673,7 +686,8 @@ export async function insertPageWithId(
       sort_order: input.sortOrder,
       schema: JSON.stringify(input.schema),
       schema_version: input.schemaVersion,
-      head_seq: floor === undefined ? UNKNOWN_SEQ_FLOOR : Number(floor.head_seq) + 1,
+      head_seq: head,
+      structure_seq: head,
     })
     .execute()
 }

@@ -234,7 +234,7 @@ describe('repos/revisions', () => {
     })
   })
 
-  it('writePageSchemaAtSeq는 schema·schema_version·head_seq·updated_at을 함께 갱신한다', async () => {
+  it('writePageSchemaAtSeq는 schema·schema_version·head_seq·structure_seq·updated_at을 함께 갱신한다', async () => {
     await withApi(async (ctx) => {
       const owner = await signup(ctx)
       const project = await createProject(ctx, owner.cookie)
@@ -252,17 +252,18 @@ describe('repos/revisions', () => {
         root: { id: 'n_root000001', type: 'Page', children: [{ id: 'n_child00001', type: 'Text', props: { text: '새 내용' } }] },
       }
 
-      await writePageSchemaAtSeq(ctx.db, page.id, newSchema, 2, 5)
+      await writePageSchemaAtSeq(ctx.db, page.id, newSchema, 2, 5, 3)
 
       const after = await ctx.db
         .selectFrom('pages')
-        .select(['schema', 'schema_version', 'head_seq', 'updated_at'])
+        .select(['schema', 'schema_version', 'head_seq', 'structure_seq', 'updated_at'])
         .where('id', '=', page.id)
         .executeTakeFirstOrThrow()
 
       expect(after.schema).toEqual(newSchema)
       expect(after.schema_version).toBe(2)
       expect(Number(after.head_seq)).toBe(5)
+      expect(Number(after.structure_seq)).toBe(3)
       expect(after.updated_at.getTime()).toBeGreaterThanOrEqual(before.updated_at.getTime())
     })
   })
@@ -275,7 +276,7 @@ describe('repos/revisions', () => {
       const page = await createPage(ctx, owner.cookie, project.id, menu.id, { title: '원래 제목' })
 
       const newSchema: PageDocument = { version: 1, root: { id: 'n_root000002', type: 'Page', children: [] } }
-      await writePageSchemaAtSeq(ctx.db, page.id, newSchema, 1, 1)
+      await writePageSchemaAtSeq(ctx.db, page.id, newSchema, 1, 1, 1)
 
       const after = await ctx.db
         .selectFrom('pages')
@@ -313,7 +314,7 @@ describe('repos/revisions', () => {
       // 이 테스트 이름이 주장하는 "NUL 문자로 인한 22P05"가 실제로 일어났는지는
       // 아무도 확인하지 않는다. pg 에러의 SQLSTATE는 message가 아니라 `code`에
       // 실리므로(message는 'unsupported Unicode escape sequence'다) 코드를 단언한다.
-      await expect(writePageSchemaAtSeq(ctx.db, page.id, docWithNul, 1, 1)).rejects.toMatchObject({ code: '22P05' })
+      await expect(writePageSchemaAtSeq(ctx.db, page.id, docWithNul, 1, 1, 1)).rejects.toMatchObject({ code: '22P05' })
 
       // 세이브포인트가 실제로 트랜잭션을 지켰다는 유일한 증거: 같은 withApi
       // 트랜잭션 위에서 던진 이후 쿼리가 25P02 없이 성공한다. "실패한다"만
@@ -343,6 +344,6 @@ describe('repos/revisions', () => {
     const root = getTestDb()
     expect(root.isTransaction).toBe(false)
     const schema: PageDocument = { version: 1, root: { id: 'n_guardtest01', type: 'Page', children: [] } }
-    await expect(writePageSchemaAtSeq(root, NONEXISTENT_UUID, schema, 1, 1)).rejects.toThrow()
+    await expect(writePageSchemaAtSeq(root, NONEXISTENT_UUID, schema, 1, 1, 1)).rejects.toThrow()
   })
 })

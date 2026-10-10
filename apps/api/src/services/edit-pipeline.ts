@@ -22,10 +22,11 @@
  *    상태의 가지가 남음 — 오류)를 함께 싣는다.
  * 7. `after.version !== before.version`이면 `invalid` — `ops`가 `/version`을 직접
  *    건드린 경우다(아래 "`version`은 편집 대상이 아니다" 참고).
- * 8. `containsNulByte(ops) || containsNulByte(inverse) || containsNulByte(after)` → `nul-byte`. 같은 세 곳에 짝 없는 서로게이트가
- *    있으면 → `lone-surrogate`(jsonb 캐스팅이 죽어 500 이 되는 것을 400 으로 — `db/nul-guard.ts` 의 `containsLoneSurrogate`).
+ * 8. `containsNulByte(ops) || containsNulByte(inverse) || containsNulByte(after)` → `nul-byte`. 그리고
+ *    `ops` 에 짝 없는 서로게이트가 있으면 → `lone-surrogate`(jsonb 캐스팅이 죽어 500 이 되는 것을 400 으로 — `db/nul-guard.ts` 의 `containsLoneSurrogate`. `ops` 만
+ *    훑는다 — 아래 8단계 코드의 이유).
  * 9. `insertRevision(seq = headSeq + 1)`.
- * 10. `writePageSchemaAtSeq(after, after.version, seq)`.
+ * 10. `writePageSchemaAtSeq(after, after.version, seq, structureSeq)` — 구조(노드 추가 · 삭제 · 옮김)가 바뀐 편집만 `structureSeq = seq`, 아니면 읽은 값 그대로.
  *
  * **1~8 중 어디서든 실패하면 9·10에 도달하지 못한다.** 실패를 `return`하면
  * `withTransaction`의 콜백이 정상 종료하므로 그 트랜잭션은 커밋되지만, 그 시점까지
@@ -89,6 +90,8 @@ import {
 } from '@wirebound/schema'
 import { containsLoneSurrogate, containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
+import { sameStructure } from '../lock/structure'
+import { jsonNestingExceeds, nodeDepthExceeds } from './nesting'
 import { lockPageForEdit, writePageSchemaAtSeq } from '../repos/pages'
 import { insertRevision, type RevisionActor } from '../repos/revisions'
 
@@ -123,6 +126,8 @@ export type EditOutcome =
   | { ok: false; reason: 'unsupported-version'; message: string }
   | { ok: false; reason: 'nul-byte' }
   | { ok: false; reason: 'lone-surrogate' }
+  /** `ops` 의 중첩이 `MAX_JSON_NESTING` 을 넘거나 편집 뒤 문서가 `MAX_NODE_DEPTH` 를 넘는다(`services/nesting.ts`). */
+  | { ok: false; reason: 'too-deep' }
 
 /** `PatchError`를 잡아 `patch-failed` 결과 값으로 바꾼다. 다른 예외는 다시 던진다. */
 function toPatchFailed(error: unknown): Extract<EditOutcome, { reason: 'patch-failed' }> {
@@ -160,6 +165,11 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
       return { ok: false, reason: 'stale', headSeq: locked.headSeq }
     }
 
+    // 3.5단계: `ops` 의 중첩이 한도를 넘으면 적용 · 역 계산(재귀)이 스택을 넘기기 전에 끊는다(`services/nesting.ts`).
+    if (jsonNestingExceeds(input.ops)) {
+      return { ok: false, reason: 'too-deep' }
+    }
+
     // 4단계: invertOps를 applyOps보다 먼저 돌린다 — invertOps가 더 엄격하고, before
     // (적용 전 문서)가 필요하다(위 독스트링의 "4를 5보다 먼저 한다" 참고).
     let inverse: PatchOp[]
@@ -175,6 +185,11 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
       after = applyOps(before, input.ops)
     } catch (error) {
       return toPatchFailed(error)
+    }
+
+    // 5.5단계: 편집 뒤 문서의 깊이 — 한도 안의 편집을 되풀이해 깊이를 쌓아도 다음 적용이 스택을 안 넘게 문서가 한도에 머문다.
+    if (nodeDepthExceeds(after.root)) {
+      return { ok: false, reason: 'too-deep' }
     }
 
     // 6단계: 적용 후 문서를 검증한다 — 적용 전 문서를 검증하면 항상 통과해 버려
@@ -247,7 +262,10 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
     if (containsNulByte(input.ops) || containsNulByte(inverse) || containsNulByte(after)) {
       return { ok: false, reason: 'nul-byte' }
     }
-    if (containsLoneSurrogate(input.ops) || containsLoneSurrogate(inverse) || containsLoneSurrogate(after)) {
+    // **외짝 서로게이트는 `ops` 만 훑는다.** 앞 문서는 jsonb 에서 와 외짝이 없고(jsonb 는 외짝 이스케이프를 못 담는다), `inverse` · `after` 의 새 글자는 전부
+    // `ops` 의 값 · 경로에서 온다(`move` 는 옛 글자를 옮길 뿐이다). 세 곳을 다 훑으면 문서 크기만큼 든다 — 538KB 문서(Text 7000)에서 p50 2.6ms(최대 8.8)로,
+    // 페이지 행을 `FOR UPDATE` 로 쥔 채 이벤트 루프를 세운다(재는 법: Text 7000 문서 하나에 `containsLoneSurrogate` 를 200번 부른 p50).
+    if (containsLoneSurrogate(input.ops)) {
       return { ok: false, reason: 'lone-surrogate' }
     }
 
@@ -261,7 +279,9 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
       ops: input.ops,
       inverse,
     })
-    await writePageSchemaAtSeq(trx, input.pageId, after, after.version, seq)
+    // 구조(노드 추가 · 삭제 · 옮김)가 바뀐 편집만 구조 번호를 올린다 — 잠금 하트비트의 도장이 읽는다(`0023-pages-structure-seq`).
+    const structureSeq = sameStructure(before.root, after.root) ? locked.structureSeq : seq
+    await writePageSchemaAtSeq(trx, input.pageId, after, after.version, seq, structureSeq)
 
     return {
       ok: true,

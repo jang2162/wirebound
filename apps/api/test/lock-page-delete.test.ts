@@ -15,6 +15,7 @@
  * | `ws/lock.ts` 의 `handleLockFrame` 이 없는 페이지도 잡는다(`headSeq === null` 갈래를 뗀다) | 「같은 집합을 다시 보내도」 **혼자**(지운 페이지의 잠금이 다시 섬 · 보라가 목록을 한 번 더 받음) |
  * | `routes/snapshots.ts` 의 `releaseLocksOnPages` 줄을 지운다 · `services/restore.ts` 가 지운 id 를 안 모은다 | 「복원이 지운 페이지」 **혼자**(각각) |
  */
+import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   addMember,
@@ -23,6 +24,7 @@ import {
   createProject,
   resetRealData,
   signup,
+  withProxiedRealApi,
   withRealApi,
   type RealApiContext,
   type SignedUpUser,
@@ -157,4 +159,63 @@ describe('지운 페이지의 잠금은 놓인다', () => {
       expect(list.map((lock) => lock.nodeId)).toEqual([w.keepRoot])
     })
   })
+})
+
+/**
+ * **답을 잃은 삭제 COMMIT 이 한도(`LOST_COMMIT_PROBE_MS`) 뒤에 커밋돼도 지운 페이지의 잠금은 놓인다**(`services/tree-write.ts` 의 `runTreeTransaction` —
+ * 늦은 커밋 지켜보기가 신호(`menu-changed`)와 함께 놓기를 잇는다). 응답은 503 «모름»이라 라우트의 놓기 줄은 안 돈다 — 지켜보기가 잇지 않으면 잠금이
+ * TTL(30s)이나 쥔 화면이 놓을 때까지 룸의 `locks` 목록에 남는다.
+ *
+ * COMMIT 을 3s 늦추고(`DEFERRABLE INITIALLY DEFERRED` 제약 트리거의 `pg_sleep` — `menu-changed.test.ts` «한도를 넘겨 커밋된 잃은 COMMIT» 과 같은 장치) api 쪽
+ * 연결만 끊는다(`halfCutOnQuery`).
+ */
+describe('답을 잃은 삭제 COMMIT 이 늦게 커밋돼도 잠금이 놓인다', () => {
+  const slowCommit = async (db: RealApiContext['db']): Promise<() => Promise<void>> => {
+    await sql.raw(`create or replace function zz_slow_rev() returns trigger language plpgsql as $$ begin perform pg_sleep(3); return null; end $$`).execute(db)
+    await sql.raw(`create constraint trigger zz_slow_rev after insert or update on project_menu_revs deferrable initially deferred for each row execute function zz_slow_rev()`).execute(db)
+    return async () => {
+      await sql`drop trigger if exists zz_slow_rev on project_menu_revs`.execute(db)
+      await sql`drop function if exists zz_slow_rev()`.execute(db)
+    }
+  }
+
+  it('페이지 삭제 — 503 «모름» 뒤 커밋되면 그 페이지의 잠금만 사라진다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const w = await world(ctx)
+      const restore = await slowCommit(ctx.db)
+      try {
+        ctx.proxy.halfCutOnQuery('commit')
+        const res = await ctx.app.inject({ method: 'DELETE', url: `/api/projects/${w.project.id}/pages/${w.gone.id}`, cookies: w.owner.cookie })
+        expect(ctx.proxy.fired).toBe(true)
+        expect(res.statusCode).toBe(503)
+        const list = await locksUntil(w.boraTab, (locks) => locks.length === 1, '늦게 커밋된 삭제가 그 페이지의 잠금을 놓는다')
+        expect(list.map((lock) => lock.nodeId)).toEqual([w.keepRoot])
+        expect(ctx.app.realtime.locks.liveIn(w.project.id).map((lock) => lock.pageId)).toEqual([w.keep.id])
+      } finally {
+        await restore()
+      }
+    })
+  }, 40_000)
+
+  it('메뉴 연쇄 삭제 — 503 «모름» 뒤 커밋되면 서브트리 페이지의 잠금이 전부 사라진다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const w = await world(ctx)
+      const restore = await slowCommit(ctx.db)
+      try {
+        ctx.proxy.halfCutOnQuery('commit')
+        const res = await ctx.app.inject({
+          method: 'DELETE',
+          url: `/api/projects/${w.project.id}/menu/${w.menu.id}`,
+          cookies: w.owner.cookie,
+          payload: { cascade: true, expect: { menuIds: [], pageIds: [w.keep.id, w.gone.id] } },
+        })
+        expect(ctx.proxy.fired).toBe(true)
+        expect(res.statusCode).toBe(503)
+        await locksUntil(w.boraTab, (locks) => locks.length === 0, '늦게 커밋된 연쇄 삭제가 두 페이지의 잠금을 다 놓는다')
+        expect(ctx.app.realtime.locks.liveCount()).toBe(0)
+      } finally {
+        await restore()
+      }
+    })
+  }, 40_000)
 })

@@ -56,53 +56,59 @@ const EDIT_LIMIT_MS = 1000
 /** **상한**(ms) — 남의 편집 왕복 가운데 가장 늦은 것. */
 const EDIT_WORST_LIMIT_MS = 5000
 
+/** 판 — Text 7000 한 페이지 · 쥔 사람 다섯(고른 200 씩) · 다혜의 `n_sec`. 쥔 사람 0(보라)이 하트비트를 보낸다. */
+async function buildFixture(ctx: Parameters<Parameters<typeof withRealApi>[0]>[0]) {
+  const holders = [] as Awaited<ReturnType<typeof signup>>[]
+  for (let k = 0; k < HOLDERS; k += 1) holders.push(await signup(ctx))
+  const dahye = await signup(ctx)
+  const sera = await signup(ctx)
+  const project = await createProject(ctx, holders[0]!.cookie)
+  for (const u of [...holders.slice(1), dahye, sera]) await addMember(ctx, project.id, u.user.id, 'editor')
+  const menu = await createMenuNode(ctx, holders[0]!.cookie, project.id)
+  const page = await createPage(ctx, holders[0]!.cookie, project.id, menu.id, { title: 'p' })
+  const texts = Array.from({ length: TEXTS }, (_, i) => ({
+    id: `n_t${String(i).padStart(5, '0')}`,
+    type: 'Text',
+    props: { content: `줄 ${i} 가나다라마바사 아자차카타파하` },
+  }))
+  const schema = { version: 1, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_sec', type: 'Section', children: [] }, ...texts] } }
+  const P = `/api/projects/${project.id}/pages/${page.id}`
+  const put = await ctx.app.inject({ method: 'PUT', url: `${P}/schema`, cookies: holders[0]!.cookie, payload: { schema } })
+  expect(put.statusCode).toBe(200)
+
+  // 다혜가 `n_sec`, 쥔 사람 k 가 Text 200 개씩(k 번째 묶음). 세라는 아무도 안 쥔 마지막 Text 를 고친다.
+  const sets = holders.map((_, k) => texts.slice(k * SET, (k + 1) * SET).map((t) => t.id))
+  const dahyeTab = await joinRoom(ctx.port, project.id, dahye.cookie.wb_session)
+  opened.push(dahyeTab)
+  dahyeTab.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: ['n_sec'], lockId: 1 }))
+  const tabs: WsProbe[] = []
+  for (const [k, u] of holders.entries()) {
+    const tab = await joinRoom(ctx.port, project.id, u.cookie.wb_session)
+    opened.push(tab)
+    tabs.push(tab)
+    tab.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[k], lockId: 1 }))
+  }
+  const want = 1 + HOLDERS * SET
+  for (let t = 0; t < 3000 && ctx.app.realtime.locks.liveIn(project.id).length !== want; t += 1) await sleep(10)
+  // 카나리아 — 판이 섰다: 남의 잠금 801 이 보라에게 보인다.
+  expect(ctx.app.realtime.locks.liveIn(project.id).length).toBe(want)
+
+  return { holders, dahye, sera, project, page, texts, P, sets, tabs, want }
+}
+
 describe('하트비트 판정은 고른 수 × 남의 잠금 수로 늘지 않는다', () => {
   it(`Text ${TEXTS} · 고른 ${SET} · 남의 잠금 ${(HOLDERS - 1) * SET + 1} — 하트비트 판정 · 루프 멈춤 · 남의 편집 왕복이 상한 안이다`, { timeout: 300_000 }, async () => {
     await withRealApi(async (ctx) => {
-      const holders = [] as Awaited<ReturnType<typeof signup>>[]
-      for (let k = 0; k < HOLDERS; k += 1) holders.push(await signup(ctx))
-      const dahye = await signup(ctx)
-      const sera = await signup(ctx)
-      const project = await createProject(ctx, holders[0]!.cookie)
-      for (const u of [...holders.slice(1), dahye, sera]) await addMember(ctx, project.id, u.user.id, 'editor')
-      const menu = await createMenuNode(ctx, holders[0]!.cookie, project.id)
-      const page = await createPage(ctx, holders[0]!.cookie, project.id, menu.id, { title: 'p' })
-      const texts = Array.from({ length: TEXTS }, (_, i) => ({
-        id: `n_t${String(i).padStart(5, '0')}`,
-        type: 'Text',
-        props: { content: `줄 ${i} 가나다라마바사 아자차카타파하` },
-      }))
-      const schema = { version: 1, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_sec', type: 'Section', children: [] }, ...texts] } }
-      const P = `/api/projects/${project.id}/pages/${page.id}`
-      const put = await ctx.app.inject({ method: 'PUT', url: `${P}/schema`, cookies: holders[0]!.cookie, payload: { schema } })
-      expect(put.statusCode).toBe(200)
-
-      // 다혜가 `n_sec`, 쥔 사람 k 가 Text 200 개씩(k 번째 묶음). 세라는 아무도 안 쥔 마지막 Text 를 고친다.
-      const sets = holders.map((_, k) => texts.slice(k * SET, (k + 1) * SET).map((t) => t.id))
-      const dahyeTab = await joinRoom(ctx.port, project.id, dahye.cookie.wb_session)
-      opened.push(dahyeTab)
-      dahyeTab.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: ['n_sec'], lockId: 1 }))
-      const tabs: WsProbe[] = []
-      for (const [k, u] of holders.entries()) {
-        const tab = await joinRoom(ctx.port, project.id, u.cookie.wb_session)
-        opened.push(tab)
-        tabs.push(tab)
-        tab.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[k], lockId: 1 }))
-      }
-      const want = 1 + HOLDERS * SET
-      for (let t = 0; t < 3000 && ctx.app.realtime.locks.liveIn(project.id).length !== want; t += 1) await sleep(10)
-      // 카나리아 — 판이 섰다: 남의 잠금 801 이 보라에게 보인다.
-      expect(ctx.app.realtime.locks.liveIn(project.id).length).toBe(want)
-
+      const { holders, sera, project, page, texts, P, sets, tabs } = await buildFixture(ctx)
       // 1) 보라(쥔 사람 0)의 하트비트 열 번 — 보낸 순간 → `hold`, 그 사이 이벤트 루프의 가장 긴 멈춤(끝에서 한 번 더 잰다).
       const { locks } = ctx.app.realtime
       const realHold = locks.hold
       let holdAt = 0
       let holds = 0
-      locks.hold = (claim, judgedAtHeadSeq) => {
+      locks.hold = (claim, judgedAtStructureSeq) => {
         holdAt = performance.now()
         holds += 1
-        return realHold.call(locks, claim, judgedAtHeadSeq)
+        return realHold.call(locks, claim, judgedAtStructureSeq)
       }
       // 도장이 하트비트를 건너뛰게 했는가 — 건너뛴 수를 센다(0 이면 위 «문서를 안 읽는다» 를 안 잰 것이다).
       const realIsJudged = locks.isJudged
@@ -199,6 +205,106 @@ describe('하트비트 판정은 고른 수 × 남의 잠금 수로 늘지 않�
       expect(statuses.every((s) => s === 200), JSON.stringify(statuses)).toBe(true)
       expect(p50(edits)).toBeLessThan(EDIT_LIMIT_MS)
       expect(max(edits)).toBeLessThan(EDIT_WORST_LIMIT_MS)
+    })
+  })
+})
+
+/**
+ * # 웹이 실제로 내는 하트비트 — 편집 직전의 잠금 프레임
+ *
+ * 웹은 편집마다 같은 집합을 다시 보낸다(하트비트). 편집은 `head_seq` 를 올리므로 «문서 머리 번호가 그대로면 판정을 건너뛴다» 는 도장은 그 흐름에서
+ * 적중하지 않는다(위 첫 케이스는 편집 없는 하트비트라 열 번 다 건너뛴다). **도장의 문서 축은 구조(노드 추가 · 삭제 · 옮김)가 바뀔 때만 오르는 수**
+ * (`pages.structure_seq`)다 — 내용(props)만 고친 편집 뒤의 하트비트는 건너뛰고, 구조를 바꾼 편집 뒤의 것은 다시 판정한다.
+ *
+ * 다시 재는 법: 이 파일을 혼자 돌리면 `WEB BEATS` 줄에 두 판의 «보낸 순간 → `hold`» 가운데 값 · 건너뛴 수가 찍힌다.
+ */
+describe('편집 직전의 하트비트(웹 흐름)', () => {
+  it(`Text ${TEXTS} · 고른 ${SET} · 남의 잠금 ${(HOLDERS - 1) * SET + 1} — props 만 고친 편집 뒤의 하트비트는 건너뛰고 구조를 바꾼 편집 뒤의 것은 다시 판정한다`, { timeout: 300_000 }, async () => {
+    await withRealApi(async (ctx) => {
+      const { holders, project, page, P, sets, tabs } = await buildFixture(ctx)
+      const { locks } = ctx.app.realtime
+      const realHold = locks.hold
+      const realIsJudged = locks.isJudged
+      let holdAt = 0
+      let holds = 0
+      let skipped = 0
+      locks.hold = (claim, stamp) => {
+        holdAt = performance.now()
+        holds += 1
+        return realHold.call(locks, claim, stamp)
+      }
+      locks.isJudged = (...args) => {
+        const result = realIsJudged.apply(locks, args)
+        if (result) skipped += 1
+        return result
+      }
+      let lockId = 5000
+      const beat = async (): Promise<number> => {
+        holdAt = 0
+        const sentAt = performance.now()
+        tabs[0]!.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[0], lockId: (lockId += 1) }))
+        const deadline = Date.now() + 60_000
+        while (holdAt === 0 && Date.now() < deadline) await sleep(1)
+        expect(holdAt, '`hold`가 안 불렸다').not.toBe(0)
+        return holdAt - sentAt
+      }
+      const headSeq = async (): Promise<number> =>
+        Number((await ctx.app.inject({ method: 'GET', url: P, cookies: holders[0]!.cookie })).json().headSeq)
+      /** 보라가 제 노드의 props 를 고친다 — 구조는 그대로다. */
+      const editProps = async (i: number): Promise<void> => {
+        const r = await ctx.app.inject({
+          method: 'PATCH',
+          url: `${P}/ops`,
+          cookies: holders[0]!.cookie,
+          payload: { baseSeq: await headSeq(), ops: [{ op: 'replace', path: '/root/children/1/props', value: { content: `보라 ${i}` } }] },
+        })
+        expect(r.statusCode).toBe(200)
+      }
+      try {
+        // 워밍업 — 도장을 찍는다(첫 하트비트는 남의 잠금이 더 선 뒤라 다시 판정한다).
+        await beat()
+
+        // 1) props 만 고친다 → 하트비트. 판정을 건너뛰어야 한다.
+        holds = 0
+        skipped = 0
+        const contentBeats: number[] = []
+        for (let i = 0; i < 10; i += 1) {
+          await editProps(i)
+          contentBeats.push(await beat())
+        }
+        const contentSkipped = skipped
+        const contentHolds = holds
+
+        // 2) 구조를 바꾼다(Text 를 보라의 집합 밖에 더한다) → 하트비트. 다시 판정해야 한다(카나리아 — 도장이 구조 변경을 놓치지 않는다).
+        holds = 0
+        skipped = 0
+        const structureBeats: number[] = []
+        for (let i = 0; i < 5; i += 1) {
+          const r = await ctx.app.inject({
+            method: 'PATCH',
+            url: `${P}/ops`,
+            cookies: holders[0]!.cookie,
+            payload: {
+              baseSeq: await headSeq(),
+              ops: [{ op: 'add', path: `/root/children/${TEXTS + 1}`, value: { id: `n_new${i}`, type: 'Text', props: { content: `새 ${i}` } } }],
+            },
+          })
+          expect(r.statusCode).toBe(200)
+          structureBeats.push(await beat())
+        }
+        console.log(
+          'WEB BEATS',
+          JSON.stringify({ contentP50: p50(contentBeats), contentSkipped, contentHolds, structureP50: p50(structureBeats), structureSkipped: skipped }),
+        )
+        expect(contentHolds).toBe(10)
+        expect(contentSkipped).toBe(10)
+        expect(holds).toBe(5)
+        expect(skipped).toBe(0)
+        expect(project.id).toBeTruthy()
+      } finally {
+        locks.hold = realHold
+        locks.isJudged = realIsJudged
+      }
     })
   })
 })

@@ -13,6 +13,7 @@
  */
 import { badRequest, conflict, notFound, validationFailed, type ApiError } from '../errors'
 import type { EditOutcome } from '../services/edit-pipeline'
+import { TOO_DEEP_MESSAGE } from '../services/nesting'
 
 export function editOutcomeToApiError(
   outcome: Extract<EditOutcome, { ok: false }>,
@@ -40,5 +41,7 @@ export function editOutcomeToApiError(
       return badRequest('문서에 NUL 문자(U+0000)를 포함할 수 없습니다')
     case 'lone-surrogate':
       return badRequest('문서에 짝 없는 서로게이트 글자를 포함할 수 없습니다')
+    case 'too-deep':
+      return badRequest(TOO_DEEP_MESSAGE)
   }
 }

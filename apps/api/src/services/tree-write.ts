@@ -19,6 +19,10 @@
  * 보내되 그 xid 의 결말을 `LOST_COMMIT_LATE_MS` 까지 응답 뒤에도 지켜보다 커밋되면 신호를 낸다(`runConfirmedTransaction` 의 `late` — 앱의 `lateCommits`). **편집 ·
  * 복원 · 게시의 늦은 커밋은 지켜보지 않는다** — 그 방송은 번호 프레임(`seq` 의 이음)이라 늦게 내면 순서가 틀어진다.
  *
+ * **지운 페이지의 잠금 놓기도 같은 자리에서 잇는다**(`goneOf`). 페이지 삭제 · 메뉴 연쇄 삭제는 커밋 뒤에 그 페이지들의 잠금을 놓는데(`ws/lock.ts` 의
+ * `releaseLocksOnPages`), 응답이 503 «모름»이면 라우트의 그 줄은 안 돈다 — 늦은 커밋 지켜보기가 신호만 내고 놓기를 안 이으면 잠금이 룸의 목록에 TTL 이나 쥔
+ * 화면이 놓을 때까지 남는다. 그래서 **놓기도 신호처럼 여기서 한 번만 쓴다**(제때 커밋된 판도 같은 자리를 지난다 — 라우트가 따로 부르지 않는다).
+ *
  * **지금 번호로 낸다 — 이 쓰기가 올린 번호가 아니라.** 그 번호가 이 쓰기의 것 이상이면 받는 쪽은 그 판까지 받고, 그 사이 더 나아갔으면
  * 받는 쪽이 이미 가진 번호라 넘긴다(신호는 멱등이다 — 번호가 화면의 판보다 클 때만 다시 받는다).
  *
@@ -28,6 +32,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { requestEventActor } from '../auth/actor'
 import type { DbHandle } from '../db/tx'
 import { readMenuRevWithin } from '../repos/menu'
+import { releaseLocksOnPages } from '../ws/lock'
 import { notifyMenuChanged } from '../ws/notify'
 import { LOST_COMMIT_PROBE_MS, runConfirmedTransaction } from './lost-commit'
 
@@ -36,7 +41,13 @@ export async function runTreeTransaction<T>(
   projectId: string,
   request: FastifyRequest,
   fn: (trx: DbHandle) => Promise<T>,
+  /** 이 쓰기가 지운 페이지 id — 커밋이 확인된 뒤(제때든 늦게든) 그 잠금을 놓는다. 안 지웠으면 빈 목록. 안 주면 놓을 것이 없는 쓰기다. */
+  goneOf?: (result: T) => readonly string[],
 ): Promise<T> {
+  const releaseGone = (result: T): void => {
+    const gone = goneOf?.(result) ?? []
+    if (gone.length > 0) releaseLocksOnPages(app, projectId, gone)
+  }
   const signal = async (ms: number): Promise<void> => {
     const rev = await readMenuRevWithin(app.db, projectId, ms)
     if (rev !== null) notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
@@ -49,8 +60,15 @@ export async function runTreeTransaction<T>(
       // 커밋을 확인했다 — 본문의 결과가 성공이다(머리말). 지금 번호를 못 읽었어도 커밋은 확인됐다.
       return true
     },
-    // 한도 안에 결말이 안 났다 — 503 «모름» 뒤에 커밋되면 신호를 낸다(머리말의 «한도 뒤에 커밋된 것»).
-    { watch: app.lateCommits, onCommit: () => signal(LOST_COMMIT_PROBE_MS) },
+    // 한도 안에 결말이 안 났다 — 503 «모름» 뒤에 커밋되면 신호를 내고 지운 페이지의 잠금을 놓는다(머리말의 «한도 뒤에 커밋된 것»).
+    {
+      watch: app.lateCommits,
+      onCommit: async (body) => {
+        releaseGone(body)
+        await signal(LOST_COMMIT_PROBE_MS)
+      },
+    },
   )
+  releaseGone(result)
   return result
 }

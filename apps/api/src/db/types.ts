@@ -104,6 +104,11 @@ export interface PagesTable {
    * select 타입이 `string`이고, insert는 생략 가능하다(DEFAULT 0).
    */
   head_seq: ColumnType<string, number | undefined, number>
+  /**
+   * 구조(노드 추가 · 삭제 · 옮김)가 마지막으로 바뀐 편집의 seq(`0023-pages-structure-seq`). `head_seq` 와 같은 이유로 select 타입이 `string`이다.
+   * 새 행은 `head_seq` 와 같게 넣고, 편집은 구조가 바뀐 때만 올린다.
+   */
+  structure_seq: ColumnType<string, number | undefined, number>
 }
 
 /** revision을 만든 주체의 종류. 설계서 「테이블 정의」. `'mcp'`·`'cli'`는 API 토큰으로 들어온 편집이다(`auth/actor.ts`). */

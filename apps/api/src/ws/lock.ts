@@ -131,7 +131,7 @@ import { sql } from 'kysely'
 import { DatabaseError } from 'pg'
 import { withTransaction } from '../db/tx'
 import { readSelectionRoot, selectionVerdict } from '../lock/check'
-import { lockPageSharedHead } from '../repos/pages'
+import { lockPageSharedStructure } from '../repos/pages'
 import type { ClientFrame, ServerFrame } from './protocol'
 import type { RoomConnection } from './rooms'
 
@@ -228,7 +228,7 @@ function settle(
   frame: LockFrame,
   turn: LockTurn,
   root: WbNode | null | undefined,
-  headSeq: number,
+  structureSeq: number,
 ): 'settled' | 'needs-document' {
   if (!turn.current()) return 'settled'
   if (!inRoom(app, connection)) return 'settled'
@@ -238,11 +238,11 @@ function settle(
   }
   const base = { projectId: connection.projectId, pageId: frame.pageId, userId: connection.userId }
   // **판정을 지난 그대로면 다시 안 묻는다**(위 «대가는 하트비트의 문서 조회다» 의 줄이는 길) — 같은 집합 · 그 뒤 살아 있는 잠금이 안 바뀜 ·
-  // 문서 머리 번호가 그대로면 판정의 입력이 같다. 만료만 미룬다.
-  if (app.realtime.locks.isJudged(connection.id, frame.pageId, frame.nodeIds, headSeq)) {
+  // 문서의 구조 번호(노드를 더하고 · 지우고 · 옮긴 편집만 올린다 — `pages.structure_seq`)가 그대로면 판정의 입력이 같다. 만료만 미룬다.
+  if (app.realtime.locks.isJudged(connection.id, frame.pageId, frame.nodeIds, structureSeq)) {
     app.realtime.locks.hold(
       { ...base, nodeIds: frame.nodeIds, connectionId: connection.id, userName: connection.userName },
-      headSeq,
+      structureSeq,
     )
     return 'settled'
   }
@@ -255,7 +255,7 @@ function settle(
     connectionId: connection.id,
     // **연결이 든다** — 프레임이 실어 온 값이 아니다(`ws/patch.ts`의 actor와 같은 이유).
     userName: connection.userName,
-  }, verdict.held.length === 0 ? headSeq : undefined)
+  }, verdict.held.length === 0 ? structureSeq : undefined)
   announce(app, connection.projectId, changed)
   sendDenied(connection, frame, verdict.held)
   return 'settled'
@@ -346,13 +346,13 @@ export async function handleLockFrame(
   try {
     await withTransaction(app.db, async (trx) => {
       await sql`select set_config('lock_timeout', ${`${LOCK_ROW_WAIT_MS}ms`}, true)`.execute(trx)
-      const headSeq = await lockPageSharedHead(trx, connection.projectId, frame.pageId)
-      if (headSeq === null) {
+      const structureSeq = await lockPageSharedStructure(trx, connection.projectId, frame.pageId)
+      if (structureSeq === null) {
         if (turn.current() && inRoom(app, connection)) releaseLocksOf(app, connection)
         return
       }
-      if (settle(app, connection, frame, turn, undefined, headSeq) === 'settled') return
-      settle(app, connection, frame, turn, await readSelectionRoot(trx, connection.projectId, frame.pageId), headSeq)
+      if (settle(app, connection, frame, turn, undefined, structureSeq) === 'settled') return
+      settle(app, connection, frame, turn, await readSelectionRoot(trx, connection.projectId, frame.pageId), structureSeq)
     })
   } catch (error) {
     // **행을 한도 넘게 기다렸다**(`LOCK_ROW_WAIT_MS`) — 예외가 아니라 판정이다. 끝내지 못한 `lock`과 같은 답이고 같은 조건이다
@@ -363,10 +363,11 @@ export async function handleLockFrame(
 }
 
 /**
- * **지운 페이지의 잠금을 놓는다** — 페이지 삭제 · 메뉴 연쇄 삭제 · 복원(판에 없던 페이지)이 커밋 **뒤에** 부른다(`routes/pages.ts` ·
- * `routes/menu.ts` · `routes/snapshots.ts`). 안 놓으면 그 잠금이 룸의 `locks` 목록에 TTL 이나 쥔 화면이 놓을 때까지 남는다(집합이면 200 줄까지).
- * 던지지 않는다 — 쓰기는 이미 커밋됐다. **답을 잃은 쓰기(503 «모름»)는 부르지 않는다** — 늦은 커밋 지켜보기도 신호만 낸다. 남은 잠금은 쥔
- * 화면의 다음 하트비트가 놓는다(`handleLockFrame` — 없는 페이지).
+ * **지운 페이지의 잠금을 놓는다** — 페이지 삭제 · 메뉴 연쇄 삭제 · 복원(판에 없던 페이지)이 커밋 **뒤에** 부른다(복원은 `routes/snapshots.ts`,
+ * 페이지 삭제 · 연쇄 삭제는 `services/tree-write.ts` 의 `runTreeTransaction`). 안 놓으면 그 잠금이 룸의 `locks` 목록에 TTL 이나 쥔 화면이 놓을 때까지 남는다(집합이면 200 줄까지).
+ * 던지지 않는다 — 쓰기는 이미 커밋됐다. **답을 잃은 트리 쓰기(503 «모름»)도 늦게 커밋되면 부른다**(`runTreeTransaction` 의 늦은 커밋 지켜보기 — 신호와 함께).
+ * **답을 잃은 복원은 안 부른다**(그 방송은 번호 프레임이라 늦게 내지 않는다 — `services/tree-write.ts` 머리말). 남은 잠금은 쥔 화면의 다음 하트비트가
+ * 놓는다(`handleLockFrame` — 없는 페이지).
  */
 export function releaseLocksOnPages(app: FastifyInstance, projectId: string, pageIds: readonly string[]): void {
   announce(app, projectId, app.realtime.locks.releasePages(projectId, pageIds))

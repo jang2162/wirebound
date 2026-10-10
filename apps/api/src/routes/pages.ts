@@ -78,7 +78,6 @@ import { OpsBody } from '../http/patch-ops'
 import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
 import { runEditTransaction } from '../services/lost-commit'
-import { releaseLocksOnPages } from '../ws/lock'
 import { broadcastOrigin, notifyMenuChanged, notifyPageChanged } from '../ws/notify'
 import { bumpMenuRev } from '../repos/menu'
 import { runTreeTransaction } from '../services/tree-write'
@@ -742,12 +741,11 @@ export function pageRoutes() {
           rev = await bumpMenuRev(trx, projectId)
         }
         return deleted
-      })
+      }, (deleted) => (deleted === 'deleted' ? [pageId] : []))
       if (result === 'not-found') {
         throw notFound()
       }
       notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
-      releaseLocksOnPages(app, projectId, [pageId])
       reply.code(204).send()
     })
   }
