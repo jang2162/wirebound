@@ -36,6 +36,7 @@ describe('checkTheme', () => {
     expect(report.items).toBeGreaterThan(0)
     expect(report.unusedTokens).toEqual([])
     expect(report.undeclaredVariantsUsedByPatterns).toEqual([])
+    expect(report.focusables).toEqual([])
     expect(typeof document).toBe('undefined')
     expect(typeof window).toBe('undefined')
   })
@@ -53,6 +54,33 @@ describe('checkTheme', () => {
     )
     expect(fallbacks.every((error) => error.message.includes('단추가 터졌다'))).toBe(true)
     expect(new Set(report.errors.map((error) => error.type))).toEqual(new Set(['Button']))
+  })
+
+  /**
+   * 포커스 받는 요소 경고(L-046) — 에디터는 캔버스에서 단추 · 링크가 아닌 포커스 받은 요소를 입력 표면으로 보고 단축키 · 노드 복사를 안 받는다.
+   * 기본 뷰 테마는 0 이고(첫 케이스의 `focusables`), `tabindex` · `summary` · `controls` 를 켠 `video` 를 그리는 뷰는 그 컴포넌트의 칸에 선다 — 경고라 `ok` 는 그대로다.
+   */
+  it('포커스 받는 요소는 경고로 선다 — tabindex · summary · controls 영상, 단추 · 링크 · 입력 칸은 아니다 · 종료 코드에 안 든다', async () => {
+    const views = `{
+      Card: () => h(Root, null, h('div', { tabIndex: 0 }, '카드'), h('div', { tabIndex: -1 }, '눌러서 포커스'), h('div', { tabIndex: 'abc' }, '무효'), h('button', { type: 'button', tabIndex: 0 }, '단추'), h('a', { href: '#x', tabIndex: 0 }, '링크'), h('input', { 'aria-label': '칸', tabIndex: 0 })),
+      Text: () => h(Root, null, h('details', null, h('summary', null, '접기'))),
+      Media: () => h(Root, null, h('video', { controls: true }), h('audio', null)),
+    }`
+    const report = await checkTheme(files(BASE, { views }))
+    expect(report.errors).toEqual([])
+    const byType = new Map<string, Set<string>>()
+    for (const found of report.focusables) byType.set(found.type, (byType.get(found.type) ?? new Set()).add(found.element))
+    // 부모 컴포넌트의 칸(탭 · 목록 …)은 자식으로 이 뷰들을 품어 같은 요소가 거기서도 선다 — 뷰를 짠 세 타입의 칸만 본다.
+    const own = Object.fromEntries(['Card', 'Text', 'Media'].map((type) => [type, [...(byType.get(type) ?? [])].sort()]))
+    expect(own).toEqual({
+      Card: ['<div tabindex="-1">', '<div tabindex="0">'],
+      Text: ['<summary>'],
+      Media: ['<video controls>'],
+    })
+    const { ok, lines } = formatCheckReport(report)
+    expect(ok).toBe(true)
+    expect(lines.filter((line) => line.startsWith('⚠')).some((line) => line.includes('Card') && line.includes('<div tabindex="0">') && line.includes('칸)'))).toBe(true)
+    expect(lines.at(-1)).toBe('✓ 오류 없음')
   })
 
   it('Root 를 안 그리는 뷰는 콘솔 오류로 선다', async () => {

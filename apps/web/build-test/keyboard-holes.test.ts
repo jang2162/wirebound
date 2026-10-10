@@ -886,29 +886,37 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
       }
     }, 60_000)
 
-    /** 값으로 적어 둘 것(L-035) — 열린 페이지가 남의 지움으로 사라지면 고른 줄이 다음으로 남은 줄로 옮는다. 정본(`use-tree-commands.tsx` 의 `reconcile` · `pickAfterGone`)대로다. */
-    it('열린 페이지가 남의 지움으로 사라지면 고른 줄이 이웃 줄로 옮고 포커스가 따라간다(L-035 — 값)', async () => {
-      const fx = await fixture('n4-gone')
-      const { page, close } = await open(fx.url)
-      try {
-        await menuRow(page, fx.ids['나1']!).click()
-        await page.locator(`${TREE} [data-tree-id="${fx.ids['나1']}"] > a[aria-current="page"]`).waitFor({ state: 'attached' })
-        await sleep(300)
-        const before = await state(page, fx)
-        await ok(stack.request(bob, 'DELETE', `${fx.P}/pages/${fx.ids['나1']}`))
-        await poll('트리에서 «나1» 이 빠짐', () => visibleRows(page, fx.titles), (rows) => !rows.includes('나1'), 5_000)
-        await sleep(500)
-        const after = await state(page, fx)
-        // eslint-disable-next-line no-console
-        console.log(`[N4 열린 페이지가 사라짐] ${JSON.stringify({ before, after })}`)
-        expect({ before, after }).toEqual({
-          before: { focus: '나1', picked: ['나1'], opened: '나1' },
-          after: { focus: '나', picked: ['나'], opened: '나1' },
-        })
-      } finally {
-        await close()
+    /**
+     * 값으로 적어 둘 것(L-035) — 열린 페이지가 남의 지움으로 사라지면 고른 줄이 이웃 줄로 옮는다. 정본(`use-tree-commands.tsx` 의 `reconcile` ·
+     * `pickAfterGone`)대로다. **포커스가 그 줄에 있으면 다시 받은 트리가 포커스를 이웃 줄로 돌려주고(`refocus`) 그 포커스가 줄을 고르므로** 두 길이
+     * 같은 값을 낸다 — 포커스가 다른 데(우측 탭 — 캔버스는 지운 페이지를 내려 포커스를 `body` 로 떨어뜨려 같은 길을 탄다)에 있는 판이 `pickAfterGone` 의 몫이다.
+     */
+    it('열린 페이지가 남의 지움으로 사라지면 고른 줄이 이웃 줄로 옮는다 — 포커스가 그 줄에 있으면 따라가고 우측 탭에 있으면 그대로다(L-035 — 값)', async () => {
+      const results: Record<string, unknown> = {}
+      for (const where of ['줄', '탭'] as const) {
+        const fx = await fixture(`n4-gone-${where === '줄' ? 'row' : 'tab'}`)
+        const { page, close } = await open(fx.url)
+        try {
+          await menuRow(page, fx.ids['나1']!).click()
+          await page.locator(`${TREE} [data-tree-id="${fx.ids['나1']}"] > a[aria-current="page"]`).waitFor({ state: 'attached' })
+          await sleep(300)
+          if (where === '탭') await page.locator('.wb-shell-tab').first().focus()
+          const before = await state(page, fx)
+          await ok(stack.request(bob, 'DELETE', `${fx.P}/pages/${fx.ids['나1']}`))
+          await poll('트리에서 «나1» 이 빠짐', () => visibleRows(page, fx.titles), (rows) => !rows.includes('나1'), 5_000)
+          await sleep(500)
+          results[where] = { before, after: await state(page, fx) }
+        } finally {
+          await close()
+        }
       }
-    }, 60_000)
+      // eslint-disable-next-line no-console
+      console.log(`[N4 열린 페이지가 사라짐] ${JSON.stringify(results)}`)
+      expect(results).toEqual({
+        줄: { before: { focus: '나1', picked: ['나1'], opened: '나1' }, after: { focus: '나', picked: ['나'], opened: '나1' } },
+        탭: { before: { focus: 'tab', picked: ['나1'], opened: '나1' }, after: { focus: 'tab', picked: ['나'], opened: '나1' } },
+      })
+    }, 120_000)
 
     it('우측 패널 탭 — ← → Home End 로 탭을 옮기고 포커스가 따라간다 · 고른 탭만 Tab 정지점이다(L-037)', async () => {
       const fx = await fixture('n4-tabs')
@@ -955,19 +963,30 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
       }
     }, 60_000)
 
-    it('일괄 · 단일 삭제가 423 으로 거절돼 노드가 돌아오면 고른 노드도 돌아온다 — 거절이 아니면 선택은 비운 채다(L-061)', async () => {
+    /**
+     * 거절된 삭제의 선택(L-061) — **세 경로(줄 `…` «삭제» · 키보드 단일 · 키보드 일괄)가 같은 선택으로 돌아온다.** 편집을 서버에 닿기 전에 잡아 두었다가(`routeWebSocket` 의
+     * `patch` 프레임) 423 `patch-error` 로 거절하고, 남이 그 사이 노드를 지우거나 다른 부모로 옮긴 판은 잡아 둔 동안 bob 이 보낸다. 돌아온 노드가 없으면 선택은 빈 채다.
+     * 판 카나리아: `held`(잡은 프레임 수 — 받아들임 판은 0) · 남이 보낸 요청의 상태 코드.
+     */
+    it('거절된 삭제가 노드를 돌려놓으면 고른 노드도 돌아온다 — 줄 … · 키보드 단일 · 일괄이 같다 · 남이 지웠거나 옮겼으면 비운 채다(L-061)', async () => {
+      type Variant = { path: 'row' | 'key'; pick: string[]; reject: boolean; bob?: 'remove' | 'move' }
+      const variants: [string, Variant][] = [
+        ['줄 … 삭제 · 하나', { path: 'row', pick: ['n_text0000002'], reject: true }],
+        ['키보드 · 하나', { path: 'key', pick: ['n_text0000002'], reject: true }],
+        ['키보드 · 여럿', { path: 'key', pick: ['n_text0000001', 'n_text0000003'], reject: true }],
+        ['키보드 · 여럿 · 남이 하나를 지움', { path: 'key', pick: ['n_text0000001', 'n_text0000003'], reject: true, bob: 'remove' }],
+        ['키보드 · 하나 · 남이 다른 부모로 옮김', { path: 'key', pick: ['n_text0000002'], reject: true, bob: 'move' }],
+        ['키보드 · 여럿 · 받아들임', { path: 'key', pick: ['n_text0000001', 'n_text0000003'], reject: false }],
+      ]
       const results: Record<string, unknown> = {}
-      for (const [name, reject, pick] of [
-        ['여럿 · 거절', true, ['n_text0000001', 'n_text0000003']],
-        ['하나 · 거절', true, ['n_text0000002']],
-        ['여럿 · 받아들임', false, ['n_text0000001', 'n_text0000003']],
-      ] as const) {
+      for (const [name, variant] of variants) {
         const fx = await fixture(`n4-423-${Object.keys(results).length}`)
         const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
         try {
           const projectId = fx.P.split('/').pop()!
           let armed = false
-          let failed = 0
+          let held: { send: (text: string) => void; frame: any } | null = null
+          let heldCount = 0
           await page.routeWebSocket(/\/ws/, (route) => {
             const server = route.connectToServer()
             route.onMessage((message) => {
@@ -978,9 +997,9 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
                   return null
                 }
               })()
-              if (reject && armed && failed === 0 && frame?.type === 'patch') {
-                failed += 1
-                route.send(JSON.stringify({ type: 'patch-error', projectId, pageId: frame.pageId, clientOpId: frame.clientOpId, status: 423, code: 'locked', message: '밥님이 편집 중인 노드입니다', issues: [] }))
+              if (variant.reject && armed && held === null && frame?.type === 'patch') {
+                heldCount += 1
+                held = { send: (text) => route.send(text), frame }
                 return
               }
               server.send(message)
@@ -996,32 +1015,52 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
                 .filter((one) => one.querySelector(':scope > button[aria-current="true"], :scope > button.wb-shell-structure-node-member') !== null)
                 .map((one) => one.getAttribute('data-tree-id')),
             )
-          await nodeRow(page, pick[0]!).click()
-          for (const id of pick.slice(1)) {
+          await nodeRow(page, variant.pick[0]!).click()
+          for (const id of variant.pick.slice(1)) {
             await page.keyboard.down('ControlOrMeta')
             await nodeRow(page, id).click()
             await page.keyboard.up('ControlOrMeta')
           }
           const before = await picked()
           armed = true
-          await page.keyboard.press('Delete')
-          await poll('서버에 닿았거나 거절됨', async () => failed, (n) => !reject || n === 1, 5_000)
-          await sleep(1_200)
-          results[name] = { before, failed, after: await picked(), tree: await page.locator('[data-tree-kind="node"]').evaluateAll((all) => all.map((one) => one.getAttribute('data-tree-id'))) }
+          if (variant.path === 'row') {
+            await nodeMenu(page, variant.pick[0]!, 1).click()
+            await item(page, '삭제').click()
+          } else {
+            await page.keyboard.press('Delete')
+          }
+          let bobStatus: number | null = null
+          if (variant.reject) {
+            await poll('편집을 잡았다', async () => heldCount, (n) => n === 1, 5_000)
+            if (variant.bob !== undefined) {
+              // 내 선택의 잠금이 풀리는 사이의 423 은 다시 보낸다.
+              for (let attempt = 0; attempt < 15 && bobStatus !== 200; attempt += 1) {
+                const now = await stack.request(bob, 'GET', fx.url)
+                const op = variant.bob === 'remove' ? { op: 'remove', path: '/root/children/0/children/0' } : { op: 'move', from: '/root/children/0/children/1', path: '/root/children/2' }
+                bobStatus = (await stack.request(bob, 'PATCH', `${fx.url}/ops`, { baseSeq: now.body.headSeq, ops: [op] })).status
+                if (bobStatus !== 200) await sleep(300)
+              }
+              await sleep(500)
+            }
+            held!.send(JSON.stringify({ type: 'patch-error', projectId, pageId: held!.frame.pageId, clientOpId: held!.frame.clientOpId, status: 423, code: 'locked', message: '밥님이 편집 중인 노드입니다', issues: [] }))
+          }
+          await sleep(1_500)
+          results[name] = { before, held: heldCount, bob: bobStatus, after: await picked() }
         } finally {
           await context.close()
         }
       }
       // eslint-disable-next-line no-console
       console.log(`[N4 거절된 삭제의 선택] ${JSON.stringify(results)}`)
-      const all = ['n_root', 'n_card0000001', 'n_text0000001', 'n_text0000002', 'n_text0000003', 'n_text0000004']
-      void all
-      expect(Object.fromEntries(Object.entries(results).map(([name, value]) => [name, { before: (value as any).before, failed: (value as any).failed, after: (value as any).after }]))).toEqual({
-        '여럿 · 거절': { before: ['n_text0000001', 'n_text0000003'], failed: 1, after: ['n_text0000001', 'n_text0000003'] },
-        '하나 · 거절': { before: ['n_text0000002'], failed: 1, after: ['n_text0000002'] },
-        '여럿 · 받아들임': { before: ['n_text0000001', 'n_text0000003'], failed: 0, after: [] },
+      expect(results).toEqual({
+        '줄 … 삭제 · 하나': { before: ['n_text0000002'], held: 1, bob: null, after: ['n_text0000002'] },
+        '키보드 · 하나': { before: ['n_text0000002'], held: 1, bob: null, after: ['n_text0000002'] },
+        '키보드 · 여럿': { before: ['n_text0000001', 'n_text0000003'], held: 1, bob: null, after: ['n_text0000001', 'n_text0000003'] },
+        '키보드 · 여럿 · 남이 하나를 지움': { before: ['n_text0000001', 'n_text0000003'], held: 1, bob: 200, after: [] },
+        '키보드 · 하나 · 남이 다른 부모로 옮김': { before: ['n_text0000002'], held: 1, bob: 200, after: [] },
+        '키보드 · 여럿 · 받아들임': { before: ['n_text0000001', 'n_text0000003'], held: 0, bob: null, after: [] },
       })
-    }, 180_000)
+    }, 300_000)
 
     it('속성 고르개에 같은 값의 change 가 와도 편집을 안 낸다 — 다른 값은 낸다(L-062)', async () => {
       const fx = await fixture('n4-select')

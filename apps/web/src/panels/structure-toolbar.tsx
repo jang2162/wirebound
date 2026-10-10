@@ -569,7 +569,13 @@ export function useStructureCommands(props: {
     if (selectedNodeIds.length > 1) {
       const ops = removeManyOps(document, selectedNodeIds)
       if (ops === null || store.editBlockedBy(ops) !== null) return
-      const removed = { ids: selectedNodeIds, anchor: selectedNodeId }
+      const removed = {
+        nodes: selectedNodeIds.flatMap((id) => {
+          const at = nodeSpot(document, id)
+          return at === null ? [] : [{ id, parentId: at.parentId }]
+        }),
+        anchor: selectedNodeId,
+      }
       if (commitOps(ops)) {
         store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
         restoreSelectionOnReload(store, removed)
@@ -577,7 +583,7 @@ export function useStructureCommands(props: {
       return
     }
 
-    const removed = { ids: [selectedNodeId], anchor: selectedNodeId }
+    const removed = { nodes: [{ id: selectedNodeId, parentId: spot.parentId }], anchor: selectedNodeId }
     if (commitOps(removeNodeOps(document, selectedNodeId))) {
       store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
       restoreSelectionOnReload(store, removed)

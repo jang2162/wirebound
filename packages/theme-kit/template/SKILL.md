@@ -70,6 +70,7 @@ export const ListView = view(({ props, variant, states, children }) => {
     체크 칸이 없다 — 그 구조에 체크 칸이 필요하면 뷰가 직접 그린다.
 - **첫 렌더에 `Root` 를 반환한다.** 이펙트 · 상태를 기다렸다가 `Root` 를 그리면 누락으로 판정되어 그 노드는 SDK 기본 뷰로
   그려지고 콘솔에 경고가 난다.
+- **포커스 받는 요소는 단추(`<button>`) · 링크(`<a href>`) · 입력 칸(`input` · `select` · `textarea`)만 쓴다.** 에디터 캔버스는 포커스가 선 요소가 단추 · 링크가 아니면 입력 표면으로 보고 단축키 · 노드 복사를 안 받는다 — `tabIndex` 를 단 `div` · `summary` · `controls` 를 켠 `video` · `audio` 를 누른 뒤에는 Delete · Cmd+C · Cmd+D 가 안 서고 통지도 없다(닫힌 shadow 안의 입력과 `tabindex` 만 단 요소를 DOM 으로 못 가려서다). 탭 · 접힘 같은 위젯도 `<button>` 으로 짜고 `role="tab"` 은 그 단추에 얹는다. `wb-theme check` 가 갤러리 칸에서 이런 요소를 찾아 경고한다(오류가 아니라 종료 코드에 안 든다).
 - `as` 로 루트 태그를 고른다(기본 `div`). 나머지 props(`className` · `style` · `aria-*`)는 루트 요소로 간다. 노드 속성
   (`data-wb-*`)은 테마가 같은 이름을 넘겨도 노드 것이 이긴다.
 - **`<Focus>`** — 선택 외곽선이 감쌀 요소. 엘리먼트 **하나**만 감싼다(감싸는 요소를 더하지 않고 그 자식에 속성만 단다).

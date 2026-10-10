@@ -611,8 +611,8 @@ function rowStep(event: KeyboardEvent, tree: HTMLElement | null, select: (select
   const rows = [...tree.querySelectorAll<HTMLElement>('[data-tree-row]')]
   // `!==` 로 견준다 — 위 `SHORTCUTS` 의 조합을 세는 자(`test/panels/menu-keyboard.test.tsx` «표의 여섯을 다 덮는다»)가 `event.key === '` 를 닻으로 센다.
   // Home · End 는 보이는 첫 · 끝 줄이다(접힌 메뉴 안은 DOM 에 없다).
-  const next =
-    event.key === 'Home' ? rows[0] : event.key === 'End' ? rows[rows.length - 1] : rows[rows.indexOf(row) + (event.key !== 'ArrowUp' ? 1 : -1)]
+  const key = event.key
+  const next = key === 'Home' ? rows[0] : key === 'End' ? rows[rows.length - 1] : rows[rows.indexOf(row) + (key !== 'ArrowUp' ? 1 : -1)]
   const selection = next === undefined ? null : rowSelection(next)
   if (next === undefined || selection === null) return true
   select(selection)
