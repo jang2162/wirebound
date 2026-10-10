@@ -16,6 +16,7 @@
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -74,11 +75,12 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
 
   const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
 
-  async function fixture(slug: string, nodes: readonly SeedNode[]): Promise<string> {
+  async function fixture(slug: string, nodes: readonly SeedNode[], theme?: string): Promise<string> {
     const project = (await call('POST', '/projects', { name: 'M2 바탕', slug: `${slug}-${Date.now().toString(36)}` })).body
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
     if (member.status >= 300) throw new Error(`member ${member.status}`)
+    if (theme !== undefined) await putTheme(call, project.id, { themeId: `system-${theme}`, version: seededVersion(`system-${theme}`), tokens: {} })
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
     const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
@@ -307,8 +309,8 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
     try {
       await openPalette(page)
       const b = await boxes(page)
-      // 칸 아래 끝에서 40 ~ 110px 위에 가운데가 선 글 하나 — 그 위 25% 띠(앞 형제 자리)를 겨눈다. 노드 사이의 틈은 문서 안의 바탕이라
-      // 고치기 전에도 페이지 끝이다(`src/canvas/canvas-drop.ts` 의 «노드가 없는 바탕 · 뿌리 자체는 페이지 끝»).
+      // 칸 아래 끝에서 40 ~ 110px 위에 가운데가 선 글 하나 — 그 위 25% 띠(앞 형제 자리)를 겨눈다. 노드 사이의 틈은 가장 가까운 자식의 앞 · 뒤다
+      // (`src/canvas/canvas-drop.ts` 머리말 «뿌리의 노드 사이 바탕»).
       let over: { id: string; box: Box } | null = null
       for (const node of LONG) {
         const box = await nodeBox(page, node.id)
@@ -364,6 +366,48 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
         last: '+Divider',
         count: 41,
         sent: 1,
+      })
+    } finally {
+      await close()
+    }
+  })
+  /**
+   * L-006 — 뿌리의 노드 사이 바탕. 시스템 테마의 뿌리는 자식 사이에 간격이 있어(admin 은 14px) 그 바탕에 선 포인터는 «뿌리 자신» 이었고 페이지 끝으로
+   * 읽혔다 — 위아래로 쓸면 미리보기가 노드 곁 → 페이지 끝(`n_t5→null`) → 노드 곁로 뛰었다. 지금은 간격 양쪽 자식의 «뒤 · 앞» 쌍이다.
+   */
+  it('뿌리의 노드 사이 바탕을 위아래로 쓸어도 미리보기가 페이지 끝으로 안 간다 — 간격 양쪽 자식 사이에 선다', async () => {
+    const six: SeedNode[] = Array.from({ length: 6 }, (_, i) => ({ id: `n_g${i}`, type: 'Text', props: { content: `글 ${i}` } }))
+    const P = await fixture('below-gap', six, 'admin')
+    const { page, close } = await openEditor(P)
+    try {
+      await page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="n_g0"] button`).first().click()
+      await grabHandle(page)
+      const boxesById: Record<string, Box> = {}
+      for (const node of six) boxesById[node.id] = await nodeBox(page, node.id)
+      const x = boxesById['n_g3']!.x + 20
+      const samples: { gap: string; y: number; shown: string[] }[] = []
+      // 끄는 노드(n_g0)를 뺀 이웃 사이 간격 넷 — 간격마다 위 · 가운데 · 아래 점.
+      for (let i = 1; i < 5; i += 1) {
+        const above = boxesById[`n_g${i}`]!
+        const below = boxesById[`n_g${i + 1}`]!
+        const gapTop = above.y + above.height
+        const gapHeight = below.y - gapTop
+        for (const fraction of [0.15, 0.5, 0.85]) {
+          const y = gapTop + gapHeight * fraction
+          await page.mouse.move(x, y)
+          await page.waitForTimeout(40)
+          samples.push({
+            gap: `n_g${i}~n_g${i + 1}`,
+            y: Math.round(y),
+            shown: (await shownDrops(page)).map((drop) => `${drop.prev}→${drop.next}`),
+          })
+        }
+      }
+      const gapHeights = [1, 2, 3, 4].map((i) => boxesById[`n_g${i + 1}`]!.y - (boxesById[`n_g${i}`]!.y + boxesById[`n_g${i}`]!.height))
+      await page.mouse.up()
+      expect({ gapsExist: gapHeights.every((h) => h >= 8), pairs: samples.map((sample) => `${sample.gap} ${sample.shown.join()}`) }).toEqual({
+        gapsExist: true,
+        pairs: [1, 2, 3, 4].flatMap((i) => [0, 1, 2].map(() => `n_g${i}~n_g${i + 1} n_g${i}→n_g${i + 1}`)),
       })
     } finally {
       await close()
