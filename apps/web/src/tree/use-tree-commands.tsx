@@ -1323,7 +1323,8 @@ export function useTreeCommands(props: {
    * **열린 페이지가 사라진 것은 여기서 안 본다** — 아래 `onPageGone`의 이펙트가 트리마다 본다. 줄의 행동 메뉴는 그 줄이 트리에서 빠지며 함께
    * 내려간다. 가져오기 상자는 연 순간의 메뉴 id 로 보내고 서버의 거절을 상자 안에 보인다(`importing` 머리말) — 여기서 안 닫는다.
    *
-   * **내 조작 뒤의 다시 받기는 안 탄다** — 그 조작이 스스로 맞춘다(지운 메뉴의 부모로 고름 · 지운 페이지면 프로젝트 뿌리로).
+   * **내 조작 뒤의 다시 받기는 안 탄다** — 그 조작이 스스로 맞춘다(지운 메뉴의 부모로 고름 · 지운 페이지면 프로젝트 뿌리로). 그 다시 받기가 남의 지움을
+   * 함께 실었을 때 사라진 줄을 고른 채 남는 것만 `prunePicked` 가 맞춘다.
    */
   function reconcile(next: TreeMenuNode[]): void {
     const has = (target: TreeSelection): boolean => treeSpot(next, target) !== null

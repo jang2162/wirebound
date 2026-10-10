@@ -746,10 +746,10 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   )
 
   const step = useCallback(
-    (start: () => UndoAttempt): void => {
+    (start: () => UndoAttempt, pressed?: EditFailure | null): void => {
       // 지금 열린 페이지가 아니면 아무것도 하지 않는다(`commitProp`과 같은 대조).
       if (open === null) return
-      settle(start(), 0)
+      settle(start(), 0, pressed)
     },
     [open, settle],
   )
@@ -765,14 +765,14 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    *   건너뛰어져 스택에서 사라진다 — 한 번의 끊김으로 이력을 잃는다. 세션이 끊겼으면 그 통지(`<SignedOut />`)로 간다.
    */
   const loadUndoHistory = useCallback(
-    async (first: UndoHistoryNeed, skipped: number): Promise<void> => {
+    async (first: UndoHistoryNeed, skipped: number, pressedBefore?: EditFailure | null): Promise<void> => {
       const target = store.queuePageId()
       const project = store.queueProjectId() ?? projectId
       if (target === null) return
       const { undoStack } = store.getState()
       const top = undoStack[undoStack.length - 1]
       // 누른 때의 통지 — 받는 동안 선 잃음을 가른다(`sayAfterWait`).
-      const pressed = store.getState().editFailure
+      const pressed = pressedBefore === undefined ? store.getState().editFailure : pressedBefore
       const leave = new AbortController()
       const stop = store.subscribe(() => {
         if (!store.undoHistoryLive(first)) leave.abort()
@@ -828,10 +828,12 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const ownDeferral = useRef<(() => void) | null>(null)
   useEffect(() => () => ownDeferral.current?.(), [])
   const afterAck = useCallback(
-    (kind: 'undo' | 'redo', run: () => void): void => {
+    (kind: 'undo' | 'redo', run: (pressed: EditFailure | null) => void): void => {
       if (store.deferBehindSlot(kind, () => afterAck(kind, run))) return
+      // 누른 때의 통지 — 기다리는 사이 선 잃음을 가른다(`sayAfterWait`). 미룬 되돌림의 `settle` 이 그 잃음을 치우지 않는다.
+      const pressed = store.getState().editFailure
       if (!store.awaitsStackAck(kind)) {
-        run()
+        run(pressed)
         return
       }
       let stop = (): void => undefined
@@ -871,7 +873,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
             store.tellLoss({ key: 'undo-superseded', rank: LOSS_RANK.history, counts: [], render: () => UNDO_SUPERSEDED })
             return
           }
-          run()
+          run(pressed)
           behind?.()
         })
       })
@@ -905,21 +907,21 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    */
   const undo = useCallback(() => {
     if (open === null || store.getState().undoHistoryLoading) return
-    afterAck('undo', () => {
+    afterAck('undo', (pressed) => {
       const attempt = store.startUndo()
       if (attempt.history === undefined) {
-        settle(attempt, 0)
+        settle(attempt, 0, pressed)
         return
       }
       if (attempt.skipped > 0) store.setEditFailure({ kind: 'message', message: skippedHead(attempt.skipped) })
-      void loadUndoHistory(attempt.history, attempt.skipped)
+      void loadUndoHistory(attempt.history, attempt.skipped, pressed)
     })
   }, [open, store, settle, loadUndoHistory, afterAck])
 
   const redo = useCallback(() => {
     // 받는 동안은 버린다 — 단추가 먼저 막는다(`canRedo`). `undo`의 같은 가드와 짝이다.
     if (store.getState().undoHistoryLoading) return
-    afterAck('redo', () => step(store.startRedo))
+    afterAck('redo', (pressed) => step(store.startRedo, pressed))
   }, [step, store, afterAck])
 
   /**

@@ -12,6 +12,7 @@
  * | 누른 뒤에 낸 편집(Delete · 속성 글) | 기다리지도 되돌리지도 않는다 — ack 때 큐에 있으면 버리고 말한다 |
  * | 답이 거절(`patch-error`) | 미룬 것은 버린다 · 앞 항목을 되돌리지 않는다 |
  * | 리베이스가 그 편집을 버림 | 하지 않는다 · 버림 통지가 서고 «저장되지 않아» 가 이어진다 |
+ * | 미루는 동안 잃음이 섬(리베이스가 가운데 편집을 버림) | ack 로 나간 되돌림이 그 통지를 안 지운다 — 누른 때의 통지로 가른다(`sayAfterWait`) |
  * | 한도(3s) 지남 | 말하고 안 한다(서 있는 잃음 통지를 덮지 않고 잇는다 · 두 번 눌러도 한 조각) · ack 가 그 뒤에 오면 마지막 누름이 기다린 편집이 나갔을 때 그 조각만 거둔다 |
  * | 미루는 동안 페이지를 옮김 | 버린다 — 새 판에 아무것도 안 나간다 |
  * | 미루는 동안 뷰 모드 · viewer | 버린다 — 키 · 단추 어느 입구로 눌렀든 |
@@ -257,6 +258,26 @@ describe('ack 전의 되돌리기', () => {
     await act(async () => {})
     // ack 가 와서 한도 문장을 거둘 때는 제 조각만 거둔다.
     expect(alerts()).toBe(LOST_SECOND)
+  })
+
+  it('미루는 동안 선 잃음(리베이스가 가운데 편집을 버림)은 ack 로 나간 되돌림이 지우지 않는다(L-088)', async () => {
+    const s = await stage()
+    // 큐: A(가 고침 · 나감) · B(나 고침) · C(가 고침 2). 누른 때 마지막 먹이 편집은 C.
+    await s.edit(1, '나 고침')
+    await s.edit(0, '가 고침 2')
+    fireEvent.click(undoButton())
+    await act(async () => {})
+    // 밥이 «나» 를 지워 리베이스가 B 를 버린다 — 잃음 통지가 선다.
+    s.frame(BOB_REMOVES_SECOND)
+    await act(async () => {})
+    expect(alerts()).toContain(LOST_SECOND)
+    s.ackFirst()
+    await waitFor(() => expect(s.patches()).toHaveLength(2))
+    s.ack(1, [{ op: 'replace', path: '/root/children/0/props/content', value: '가 고침' }])
+    await waitFor(() => expect(s.patches()).toHaveLength(3))
+    await act(async () => {})
+    // 되돌림(셋째 패치)이 나갔고, 그 사이 선 잃음 통지는 그대로다.
+    expect({ sent: s.patches().length, alert: alerts() }).toEqual({ sent: 3, alert: LOST_SECOND })
   })
 
   it('키보드로 미룬 뒤 뷰 모드로 바꾸면 버린다 — 뷰 모드에서 커밋되지 않는다', async () => {
