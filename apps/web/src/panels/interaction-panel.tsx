@@ -242,7 +242,7 @@ function NodeRules(props: {
         <fieldset className="wb-shell-interaction" key={index}>
           <legend>규칙 {index + 1}</legend>
 
-          <label className="wb-shell-field">
+          <label className="wb-shell-field wb-shell-field-oneline">
             트리거
             <select
               className="wb-shell-select"
@@ -348,7 +348,7 @@ function ActionRow(props: {
       {/* **보이는 라벨은 `종류`이고 그룹의 이름이 `액션 N`이다.** 둘 다 `액션 N`이면
           접근성 이름이 겹쳐 보조 기술이 두 컨트롤을 같은 것으로 읽는다(실측: RTL의
           `getByLabelText('액션 1')`이 둘을 찾아 던졌다). */}
-      <label className="wb-shell-field">
+      <label className="wb-shell-field wb-shell-field-oneline">
         종류
         <select
           className="wb-shell-select"
@@ -375,7 +375,7 @@ function ActionRow(props: {
           onCommit={(value) => onChange({ ...action, target: value })}
         />
       ) : (
-        <label className="wb-shell-field">
+        <label className="wb-shell-field wb-shell-field-oneline">
           대상
           <select
             className="wb-shell-select"
@@ -395,7 +395,7 @@ function ActionRow(props: {
       )}
 
       {action.type === 'setVisible' && (
-        <label className="wb-shell-field">
+        <label className="wb-shell-field wb-shell-field-oneline">
           어떻게
           <select
             className="wb-shell-select"
@@ -477,7 +477,7 @@ function TabPicker(props: {
   }
 
   return (
-    <label className="wb-shell-field">
+    <label className="wb-shell-field wb-shell-field-oneline">
       탭
       <select
         className="wb-shell-select"
@@ -528,7 +528,7 @@ function PropPicker(props: {
           onCommit={(value) => props.onChange({ prop: value })}
         />
       ) : (
-        <label className="wb-shell-field">
+        <label className="wb-shell-field wb-shell-field-oneline">
           속성
           <select
             className="wb-shell-select"
@@ -571,7 +571,7 @@ function ValueField(props: {
 }): ReactElement {
   if (props.field?.control === 'switch') {
     return (
-      <label className="wb-shell-field">
+      <label className="wb-shell-field wb-shell-field-oneline">
         값
         <select
           className="wb-shell-select"
@@ -638,7 +638,7 @@ function TextField(props: {
   }
 
   return (
-    <label className="wb-shell-field">
+    <label className="wb-shell-field wb-shell-field-oneline">
       {props.label}
       <input
         className="wb-shell-input"

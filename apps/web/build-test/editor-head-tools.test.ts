@@ -171,14 +171,14 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
   })
 
   /** 접힌 창(700) — `…` 의 첫 항목 셋이 줌이고, 누르면 배율이 바뀐다(배율은 캔버스 프레임의 `scale`). 같은 자리를 다시 누를 때는 더블클릭 간격을 넘긴다. */
-  it('창 700 — 줌은 셸 `…` 의 첫 항목 셋이고 누르면 배율이 바뀐다', async () => {
+  it('창 700 — 줌은 셸 `…` 의 첫 항목 셋(앞에 눌리지 않는 배율 한 줄)이고 누르면 배율이 바뀐다', async () => {
     const P = await fixture('head-folded')
     const { page, close } = await open(P, { width: 700, height: 700 })
     try {
       const scale = () => page.locator('.wb-shell-canvas-frame').evaluate((el) => (el as HTMLElement).style.transform)
       const menu = page.locator('.wb-shell-header').getByRole('button', { name: '더 보기', exact: true })
       await menu.click()
-      const items = (await page.getByRole('menuitem').allTextContents()).slice(0, 3)
+      const items = (await page.getByRole('menuitem').allTextContents()).slice(0, 4)
       const before = await scale()
       await page.getByRole('menuitem', { name: '확대', exact: true }).click()
       const afterIn = await scale()
@@ -191,7 +191,7 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
       await page.getByRole('menuitem', { name: '화면 맞춤', exact: true }).click()
       const afterFit = await scale()
       expect({ items, before, afterIn, afterOut, fitChanged: afterFit !== afterOut }).toEqual({
-        items: ['축소', '확대', '화면 맞춤'],
+        items: ['배율 100%', '축소', '확대', '화면 맞춤'],
         before: 'scale(1)',
         afterIn: 'scale(1.25)',
         afterOut: 'scale(1)',

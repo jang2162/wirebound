@@ -122,20 +122,23 @@ export function CanvasIframe(props: {
 
   useLayoutEffect(() => {
     if (frame === null) return
-    const measure = () => {
-      setHeight(Math.max(MIN_HEIGHT, contentHeight(frame)))
-      onResize?.()
-    }
-    measure()
     const Observer = (frame.window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver
-    const observer = Observer ? new Observer(measure) : null
+    let observer: ResizeObserver | null = null
+    const measure = () => {
+      setHeight(Math.max(MIN_HEIGHT, naturalHeight(frame, iframe)))
+      onResize?.()
+      // `body` 가 뷰포트 단위 최소 높이를 가지면 내용이 줄어도 `body` 크기가 안 변해 관찰자가 안 깬다 — 그 안의 문서 뿌리도 함께 본다(이미 보는 요소는 그대로다).
+      for (const child of Array.from(frame.document.body.children)) observer?.observe(child)
+    }
+    observer = Observer ? new Observer(measure) : null
+    measure()
     observer?.observe(frame.document.body)
     frame.window.addEventListener(MEASURE_EVENT, measure)
     return () => {
       observer?.disconnect()
       frame.window.removeEventListener(MEASURE_EVENT, measure)
     }
-  }, [frame, onResize])
+  }, [frame, iframe, onResize])
 
   // portal 을 iframe **앞에** 둔다. 언마운트는 형제 순서대로 걷는데, iframe 을 먼저 떼면 jsdom 은 그 문서를 버려
   // portal 의 자식을 뗄 자리가 없어진다(`NotFoundError`). 실브라우저에서도 떼인 iframe 의 문서를 만지지 않는 편이 낫다.
@@ -165,6 +168,31 @@ function contentHeight(frame: CanvasFrame): number {
   const { document: doc, window: win } = frame
   const top = doc.body.getBoundingClientRect().top + win.scrollY
   return Math.ceil(Math.max(doc.documentElement.getBoundingClientRect().height, top + doc.body.scrollHeight))
+}
+
+/**
+ * **뷰포트 단위에 안 묶인 문서 높이** — 잠깐 iframe 을 최소 높이로 줄여 재고 되돌린다. 테마가 뿌리 · `body` 에 `min-height: 100vh` 를 걸면 `contentHeight`
+ * 는 iframe 높이(= 그 `100vh`)에 묶여 문서가 줄어도 안 줄고, 바깥 여백이 더해져 잴 때마다 자란다(실측: 400ms 마다 +336px 로 끝없이 자랐다 —
+ * `build-test/n1-layout.test.ts` 「뷰포트 높이 테마」). 줄여 재면 그 단위가 최소 높이로 풀려 값이 문서 내용만 남는다. 같은 작업 안에서 줄이고 되돌려
+ * 그림은 한 번도 줄지 않는다 — 다만 줄이는 동안 앞선 칸의 스크롤이 문서 끝에 맞춰 당겨지므로 스크롤 조상의 자리를 되돌려 놓는다.
+ */
+function naturalHeight(frame: CanvasFrame, iframe: HTMLIFrameElement | null): number {
+  if (iframe === null) return contentHeight(frame)
+  const kept: { element: HTMLElement; top: number; left: number }[] = []
+  for (let element = iframe.parentElement; element !== null; element = element.parentElement) {
+    if (element.scrollTop !== 0 || element.scrollLeft !== 0) kept.push({ element, top: element.scrollTop, left: element.scrollLeft })
+  }
+  const before = iframe.style.height
+  iframe.style.height = `${MIN_HEIGHT}px`
+  try {
+    return contentHeight(frame)
+  } finally {
+    iframe.style.height = before
+    for (const { element, top, left } of kept) {
+      element.scrollTop = top
+      element.scrollLeft = left
+    }
+  }
 }
 
 /**
