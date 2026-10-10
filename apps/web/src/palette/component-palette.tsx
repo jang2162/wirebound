@@ -22,14 +22,14 @@
  *   `useCanvasRemeasured`). 끄는 동안 포인터 곁에 카드 이름표가 따라온다. 몸통을 누르기만 하고 떼면(문턱 안) **아무것도 안 한다** —
  *   넣지도 고르지도 않는다. 누름 한 번이 넣기면 끌려다 문턱을 못 넘은 손이 노드를 넣는다. 몸통은 단추가 아니다(포커스를 안 받는다).
  * - **«넣기» 단추**(오른쪽 위 `+` 아이콘 — 접근 이름 · `title` `<한국어 이름> 넣기`): 누름 · Enter 가 고른 노드에 따라 자리를 골라(`./palette-add.ts`) 지금
- *   편집 전송 길(`useEditCommit` 의 `commitOps`)로 넣고 넣은 노드를 고른다. 누른 채의 키 반복(`event.repeat`)은 넣지 않는다. 못 넣으면 판
+ *   편집 전송 길(`useEditCommit` 의 `commitOps`)로 넣고 넣은 노드를 고른다. 누른 채의 키 반복(`event.repeat`)은 넣지 않는다. **더블클릭 · 연달아 친 Enter 의 둘째도 안 넣는다** — 같은 카드를 `DOUBLE_CLICK_MS` 안에 다시 누른 것(포인터는 `DOUBLE_CLICK_SLOP` 안의 같은 자리)은 첫 넣기가 이미 한 일이다(고치기 전: 노드 둘 — 실브라우저). 다른 카드의 연타 · 간격이 지난 같은 카드는 넣는다. 못 넣으면 판
  *   머리에 이유 한 줄을 세운다 — 다음 누름이 걷고, 그 문장을 세운 판(페이지 · 고른 노드)이 바뀌어도 걷는다(판은 페이지를 옮겨도 셸과
  *   함께 남아, 걷는 입구를 세지 않고 문장에 판을 적어 둔다 — 한 번 어긋나면 비운다. 떠났다 돌아와도 다시 서지 않는다). 단추도 카드 안이라
  *   그 자리에서 문턱 밖으로 끌면 끌기다 — 끈 뒤의 `click` 은 끌기 장치가 삼켜 넣기로 새지 않는다.
  * - **이름은 «추가»가 아니라 «넣기»다** — 구조 트리 줄의 `+` 가 `<이름> 추가`(`panels/tree-row-actions.tsx`)라, playwright 의
  *   `getByRole(…, { name })`(부분 일치)이 «버튼 추가» 하나로 두 단추를 함께 잡는다.
  */
-import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { COMPONENT_GROUP_LABELS, type ComponentGroup } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
 import { useCanvasRemeasured, usePlacementDrop, usePublishPlacementPreview, type PlacementDrop } from '../drag/use-placement'
@@ -42,6 +42,7 @@ import { ShellResizer } from '../shell/shell-resizer'
 import { shellIcon } from '../shell/icons'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
 import { paletteAddTarget } from './palette-add'
+import { DOUBLE_CLICK_MS, DOUBLE_CLICK_SLOP } from '../shell/action-menu'
 import { PaletteThumbs, type ThumbSlot } from './palette-thumbs'
 
 /** 판의 id — 하단 바의 토글이 `aria-controls` 로 가리킨다. */
@@ -237,9 +238,24 @@ function PaletteCards(props: {
     return () => observer?.disconnect()
   }, [props.types])
 
+  /** 마지막으로 **넣은** «넣기» 누름 — 같은 카드의 더블클릭 · Enter 두 번의 둘째를 버린다(머리말 «카드»). 못 넣은(거절) 누름은 안 적는다. */
+  const lastAdd = useRef<{ type: string; at: number; x: number; y: number; pointer: boolean } | null>(null)
+
+  /**
+   * 더블클릭 · 연달아 친 Enter 의 **둘째**인가 — 같은 카드를 `DOUBLE_CLICK_MS` 안에 다시 눌렀다. 포인터는 자리도 본다(`DOUBLE_CLICK_SLOP` 안 — 단추 안
+   * 같은 자리). 다른 카드의 연타 · 간격이 지난 같은 카드의 누름은 뜻한 넣기다.
+   */
+  const repeatsLastAdd = (type: string, event: MouseEvent<HTMLButtonElement>): boolean => {
+    const previous = lastAdd.current
+    if (previous === null || previous.type !== type || performance.now() - previous.at >= DOUBLE_CLICK_MS) return false
+    const pointer = event.detail > 0
+    return !pointer || !previous.pointer || Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <= DOUBLE_CLICK_SLOP
+  }
+
   /** «넣기» 단추의 누름 · Enter — 고른 노드에 따라 넣는다(`./palette-add.ts`). */
-  const add = (type: string): void => {
+  const add = (type: string, event: MouseEvent<HTMLButtonElement>): void => {
     if (props.pageId === undefined) return
+    if (repeatsLastAdd(type, event)) return
     const document = openDocumentNow(store, props.pageId)
     if (document === null) return
     const verdict = paletteAddTarget({
@@ -257,7 +273,10 @@ function PaletteCards(props: {
     const placing: Placing = { kind: 'new', type }
     const node = createNode(type)
     if (node === null) return
-    if (commitOps(dropOps(document, placing, verdict.target, node))) store.selectNode(node.id)
+    if (commitOps(dropOps(document, placing, verdict.target, node))) {
+      store.selectNode(node.id)
+      lastAdd.current = { type, at: performance.now(), x: event.clientX, y: event.clientY, pointer: event.detail > 0 }
+    }
   }
 
   const moveCard = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
@@ -300,7 +319,7 @@ function PaletteCards(props: {
               tabIndex={index === focusIndex ? 0 : -1}
               onFocus={() => setActive(index)}
               onKeyDown={(event) => moveCard(event, index)}
-              onClick={() => add(type.type)}
+              onClick={(event) => add(type.type, event)}
             >
               {shellIcon('add', 14)}
             </button>

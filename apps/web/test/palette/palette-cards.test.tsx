@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
 import { lockedNotice } from '../../src/panels/property-panel'
+import { DOUBLE_CLICK_MS } from '../../src/shell/action-menu'
 import { lockedSelectionStatus } from '../../src/panels/toolbar-status'
 import { STRUCTURE_WHY_DISABLED } from '../../src/panels/tree-row-actions'
 import { EditorStore } from '../../src/store/editor-store'
@@ -346,6 +347,47 @@ describe('«넣기» 단추 — 계획 D6 의 표', () => {
     await select('n-text')
     const back = { selected: shellStore().getState().selectedNodeId, notice: notice() }
     expect({ refused, moved, back, sent }).toEqual({ refused: lockedSelectionStatus('보라'), moved: '', back: { selected: 'n-text', notice: '' }, sent: [] })
+  })
+
+  // L-021 — 더블클릭 · 연달아 친 Enter(`click` 의 `detail` 0) 의 둘째는 첫 넣기가 이미 한 일이다(머리말 «카드»).
+  it('같은 카드를 더블클릭 간격 안에 다시 누르면 둘째는 넣지 않는다 · 다른 카드 · 간격 뒤의 같은 카드는 넣는다', async () => {
+    const sent = await openWithPalette()
+    await select(null)
+    search('i')
+    const now = vi.spyOn(performance, 'now')
+    try {
+      now.mockReturnValue(1_000)
+      await clickCard('Divider')
+      now.mockReturnValue(1_200)
+      await clickCard('Divider')
+      const afterRepeat = sent.length
+      now.mockReturnValue(1_300)
+      await clickCard('Link')
+      const afterOther = sent.length
+      now.mockReturnValue(1_300 + DOUBLE_CLICK_MS + 1)
+      await clickCard('Link')
+      expect({ afterRepeat, afterOther, afterLater: sent.length }).toEqual({ afterRepeat: 1, afterOther: 2, afterLater: 3 })
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  it('거절된 누름은 «넣은 누름» 으로 안 적는다 — 풀린 뒤 곧바로 다시 누르면 넣는다', async () => {
+    const sent = await openWithPalette()
+    await select('n-text')
+    await act(async () => shellStore().setLocks([{ pageId: PAGE_ID, nodeId: 'n-text', userId: 'u-bora', userName: '보라' }]))
+    search('Divider')
+    const now = vi.spyOn(performance, 'now')
+    try {
+      now.mockReturnValue(5_000)
+      await clickCard('Divider')
+      await act(async () => shellStore().setLocks([]))
+      now.mockReturnValue(5_100)
+      await clickCard('Divider')
+      expect({ refusedThenAdded: sent.length }).toEqual({ refusedThenAdded: 1 })
+    } finally {
+      now.mockRestore()
+    }
   })
 
   it('거절 문장은 다음 넣기가 걷는다', async () => {

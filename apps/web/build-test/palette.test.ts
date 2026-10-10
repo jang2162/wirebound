@@ -725,6 +725,57 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       }
     })
 
+    /**
+     * L-021 — «넣기» 단추의 더블클릭 · Enter 두 번은 노드를 하나만 넣는다(`DOUBLE_CLICK_MS` 안에 같은 카드 · 같은 자리의 둘째 누름은 버린다).
+     * 고치기 전 값: 더블클릭 · Enter 두 번이 노드를 둘 넣었다. 정당한 연타 — 서로 다른 카드 · 더블클릭 간격(500ms) 뒤의 같은 카드 — 는 그대로 넣는다.
+     */
+    it('«넣기» 단추의 더블클릭 · Enter 두 번은 노드를 하나만 넣고 — 다른 카드의 연타 · 간격 뒤의 같은 카드는 넣는다', async () => {
+      const { P } = await seed('pal-double', [BASIC])
+      const { page, close, patches } = await openEditor(P[0]!)
+      try {
+        await openPalette(page)
+        const add = (type: string) => page.locator(`[data-wb-palette-card="${type}"] .wb-shell-palette-add`)
+        const count = async () => (await addedIds(P[0]!)).length
+        const settle = async (n: number) => poll('서버 문서', count, (v) => v >= n, 3000).catch(count)
+
+        await only(page, 'Divider')
+        await add('Divider').dblclick()
+        const afterDouble = await settle(1)
+        await page.waitForTimeout(400)
+        const afterDoubleSettled = await count()
+
+        await add('Divider').focus()
+        await page.keyboard.press('Enter')
+        await page.keyboard.press('Enter')
+        await page.waitForTimeout(500)
+        const afterEnters = await count()
+
+        // 정당한 연타 — 서로 다른 카드를 잇달아.
+        await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill('i')
+        await page.locator('[data-wb-palette-card="Link"]').waitFor()
+        await add('Link').click()
+        await add('Divider').click()
+        await page.waitForTimeout(500)
+        const afterOthers = await count()
+
+        // 간격 뒤의 같은 카드(더블클릭 간격 500ms 를 넘긴다).
+        await page.waitForTimeout(600)
+        await add('Divider').click()
+        await page.waitForTimeout(500)
+        const afterLater = await count()
+        expect({ afterDouble, afterDoubleSettled, afterEnters, afterOthers, afterLater }).toEqual({
+          afterDouble: 1,
+          afterDoubleSettled: 1,
+          afterEnters: 2,
+          afterOthers: 4,
+          afterLater: 5,
+        })
+        expect(patches.length).toBe(5)
+      } finally {
+        await close()
+      }
+    })
+
     it('몸통 누름은 안 넣고 · «넣기» 단추의 Enter 로 넣고 · 끌어 놓은 뒤의 클릭은 한 번 더 넣지 않는다', async () => {
       const { P } = await seed('pal-enter', [BASIC])
       const { page, close, patches } = await openEditor(P[0]!)
