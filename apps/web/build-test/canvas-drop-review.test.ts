@@ -717,6 +717,82 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
     })
   })
 
+  /**
+   * L-003 — CSS `direction: rtl` 로 바뀐 보이는 차례. 가로 `Flex` 가 rtl 이면 DOM 의 첫 자식이 오른쪽 끝에 선다 — 왼쪽 절반은 «문서의 뒤» 다.
+   * 고치기 전: `flex-direction` 만 읽어(`row` — 뒤집힘 아님) 왼쪽 절반을 «앞» 으로 읽었고 미리보기가 포인터의 반대편에 섰다.
+   * `order` 는 읽지 않는다 — 새 노드가 `order: 0` 으로 서므로 DOM 의 «앞 · 뒤» 가 보이는 자리의 뜻을 못 갖는다(아래 케이스가 잰 값을 적는다).
+   */
+  describe('보이는 차례 — direction: rtl · order', () => {
+    const DOC: SeedNode[] = [
+      text('n_top', '위 글'),
+      {
+        id: 'n_row',
+        type: 'Flex',
+        props: { direction: 'row' },
+        children: [text('n_r0', '가로 하나'), text('n_r1', '가로 둘'), text('n_r2', '가로 셋')],
+      },
+      text('n_t3', '옮길 글'),
+    ]
+
+    /** 가로 무리의 `target` 자식의 왼 · 오른 절반 한가운데에서 보인 미리보기 — DOM 이웃(앞 → 뒤)과 보이는 자리(미리보기 왼끝이 자식들 왼끝 가운데 어디인가). */
+    async function previewAt(css: string, target: string): Promise<{ left: string; right: string; visual: string[] }> {
+      const { P } = await fixture('visual-order', DOC)
+      const tab = await openTab(P)
+      try {
+        const frame = (await (await tab.page.$('iframe.wb-shell-canvas-iframe'))!.contentFrame())!
+        await frame.evaluate((rule) => {
+          const style = document.createElement('style')
+          style.textContent = rule
+          document.head.appendChild(style)
+        }, css)
+        // 줌 0.5 — rtl 이면 가로 무리가 문서의 오른쪽 끝에 서므로 1280px 문서가 칸(860px)에 다 들어와야 한다.
+        const group = tab.page.getByRole('group', { name: '줌' })
+        for (let step = 0; step < 12; step += 1) {
+          const now = Number((await group.locator('.wb-shell-zoom-value').textContent())?.replace('%', '')) / 100
+          if (Math.abs(now - 0.5) < 0.01) break
+          await group.getByRole('button', { name: now < 0.5 ? '확대' : '축소', exact: true }).click()
+        }
+        await select(tab.page, 'n_t3')
+        await handle(tab.page).waitFor()
+        const boxes = await nodeBoxes(tab.page, ['n_r0', 'n_r1', 'n_r2'])
+        const mid = boxes[target]!
+        const out: Record<'left' | 'right', string> = { left: '', right: '' }
+        for (const side of ['left', 'right'] as const) {
+          await grabTo(tab.page, { x: mid.x + mid.width * (side === 'left' ? 0.2 : 0.8), y: mid.y + mid.height / 2 })
+          const shown = await indicators(tab.page)
+          // 미리보기가 보이는 가로 차례의 어디에 섰나 — 자식 셋의 왼끝 사이에서 미리보기 왼끝이 몇 번째인가.
+          const lefts = Object.values(boxes).map((box) => box.x).sort((a, b) => a - b)
+          const rank = shown.length === 0 ? -1 : lefts.filter((x) => x < shown[0]!.rect.x - 1).length
+          out[side] = shown.length === 0 ? '없음' : `${shown[0]!.placement}:${shown[0]!.prev}→${shown[0]!.next} 보이는 ${rank}번째`
+          await tab.page.keyboard.press('Escape')
+          await tab.page.mouse.up()
+          await tab.page.waitForTimeout(100)
+        }
+        const visual = Object.entries(boxes).sort((a, b) => a[1].x - b[1].x).map(([id]) => id)
+        return { ...out, visual }
+      } finally {
+        await tab.close()
+      }
+    }
+
+    it('direction: rtl — 왼쪽 절반이 문서의 «뒤» 다(보이는 오른쪽 끝이 첫 자식)', async () => {
+      const got = await previewAt('[data-wb-id="n_row"]{direction:rtl}', 'n_r1')
+      // 왼쪽 절반(포인터가 n_r1 의 왼쪽 = n_r2 쪽)은 «n_r1 뒤» 이고 미리보기가 n_r1 의 왼쪽(보이는 둘째 자리 — 앞에 n_r2 · n_r1 이 아닌 …)에 선다.
+      expect(got).toEqual({ visual: ['n_r2', 'n_r1', 'n_r0'], left: expect.stringMatching(/^after:n_r1→n_r2 /), right: expect.stringMatching(/^before:n_r0→n_r1 /) })
+    })
+
+    /**
+     * 기록 — `order` 는 안 읽는다. n_r0 가 `order: 2` 라 보이는 차례는 n_r1 · n_r2 · n_r0 이다. 보이는 맨 끝(n_r0)의 오른쪽 절반은 «n_r0 뒤»
+     * 로 읽혀 DOM 이웃 `n_r0→n_r1` 사이에 서는데, 새 노드는 `order: 0` 이라 그 자리가 **보이는 맨 앞**이다 — 포인터(맨 끝)와 미리보기(맨 앞)가 갈린다.
+     * 고치지 않는다: 놓을 노드의 `order` 를 정할 수 없어(문서 스키마에 `order` 가 없다) DOM 앞 · 뒤가 보이는 자리의 뜻을 못 갖는다. 시스템 테마 다섯의
+     * 노드 상자에 `order` 규칙이 없다(`src/canvas/canvas-drop.ts` 머리말).
+     */
+    it('기록 — order 는 안 읽는다: 보이는 맨 끝의 오른쪽 절반이 «보이는 맨 앞» 에 미리보기를 세운다', async () => {
+      const got = await previewAt('[data-wb-id="n_r0"]{order:2}', 'n_r0')
+      expect(got).toEqual({ visual: ['n_r1', 'n_r2', 'n_r0'], left: expect.stringMatching(/^before:/), right: 'after:n_r0→n_r1 보이는 0번째' })
+    })
+  })
+
   describe('손잡이', () => {
     const DOC: SeedNode[] = [
       { id: 'n_text', type: 'Text', props: { content: '글' }, marker: 12 },

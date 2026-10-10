@@ -17,9 +17,13 @@
  * | `grid` · `inline-grid` | 자식 가운데 둘이 같은 줄(세로로 겹침)에 서면 x — 마지막 줄에 혼자 선 칸도 x |
  * | 그 밖(`block` …) | 이 노드가 형제와 같은 줄에 서면 x(인라인 상자가 늘어선 판), 아니면 y |
  *
- * **못 보는 것:** CSS `order` · `direction: rtl` 로 바뀐 보이는 차례는 안 읽는다 — 그 판에서는 보이는 왼쪽이 문서의 앞이라고 셈한다.
- * 시스템 테마 다섯에는 노드를 자식으로 담는 상자에 그런 규칙이 없다(다시 재는 법: `grep -rn "row-reverse\|order:\|direction: *rtl"
- * system-themes/*\/src` — 걸리는 것은 `Field` 의 체크 · 라디오 줄이고 그 안에는 노드가 없다).
+ * **`direction: rtl` 도 읽는다** — 가로 축이면 첫 자식이 오른쪽 끝이라 `row-reverse` 처럼 보이는 앞 · 뒤가 문서 차례와 반대다(`axisOf`). 고치기 전에는
+ * `flex-direction` 만 읽어 rtl 가로 무리에서 왼쪽 절반을 «앞» 으로 읽었고 미리보기가 포인터의 반대편에 섰다(`build-test/canvas-drop-review.test.ts`
+ * «보이는 차례»).
+ *
+ * **못 보는 것:** CSS `order` 로 바뀐 보이는 차례는 안 읽는다 — 새 노드가 `order: 0` 이라 DOM 의 «앞 · 뒤» 가 보이는 자리의 뜻을 못 갖는다(보이는 맨 끝의 오른쪽
+ * 절반이 «맨 앞» 에 미리보기를 세운다 — 같은 파일의 «기록» 케이스). 시스템 테마 다섯에는 노드를 자식으로 담는 상자에 `order` · `direction` 규칙이 없다(다시 재는 법:
+ * `grep -rn "row-reverse\|order:\|direction: *rtl" system-themes/*\/src` — 걸리는 것은 `Field` 의 체크 · 라디오 줄이고 그 안에는 노드가 없다).
  *
  * ## 좌표는 iframe 요소의 호스트 상자 하나로 환산한다
  *
@@ -109,18 +113,22 @@ function sameRow(a: Rect, b: Rect): boolean {
   return a.top < b.top + b.height && b.top < a.top + a.height
 }
 
-/** 부모 배치의 축(머리말의 표). `siblings` 는 같은 부모의 다른 자식 상자다. */
-export function axisOf(style: { display: string; flexDirection: string }, siblings: readonly Rect[], self: Rect): Layout {
+/**
+ * 부모 배치의 축(머리말의 표). `siblings` 는 같은 부모의 다른 자식 상자다. `direction: rtl` 은 **가로 축**의 보이는 차례를 뒤집는다 — 플렉스 `row` ·
+ * 그리드 · 인라인 줄 모두 첫 자식이 오른쪽 끝에 선다(`row-reverse` 와 겹치면 서로 지운다). 세로 축은 `direction` 과 무관하다.
+ */
+export function axisOf(style: { display: string; flexDirection: string; direction?: string }, siblings: readonly Rect[], self: Rect): Layout {
+  const rtl = style.direction === 'rtl'
   if (style.display === 'flex' || style.display === 'inline-flex') {
-    const reversed = style.flexDirection.endsWith('-reverse')
-    return { axis: style.flexDirection.startsWith('row') ? 'x' : 'y', reversed }
+    const axis: Axis = style.flexDirection.startsWith('row') ? 'x' : 'y'
+    return { axis, reversed: style.flexDirection.endsWith('-reverse') !== (axis === 'x' && rtl) }
   }
   if (style.display === 'grid' || style.display === 'inline-grid') {
     const all = [self, ...siblings]
     const horizontal = all.some((a, i) => all.some((b, j) => j > i && sameRow(a, b)))
-    return horizontal ? { axis: 'x', reversed: false } : VERTICAL
+    return horizontal ? { axis: 'x', reversed: rtl } : VERTICAL
   }
-  return siblings.some((sibling) => sameRow(self, sibling)) ? { axis: 'x', reversed: false } : VERTICAL
+  return siblings.some((sibling) => sameRow(self, sibling)) ? { axis: 'x', reversed: rtl } : VERTICAL
 }
 
 /** 호스트 창의 점 → iframe 창의 점. `frame` 은 iframe 요소의 호스트 상자다(머리말 «좌표는»). */
