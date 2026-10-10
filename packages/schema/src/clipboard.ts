@@ -192,16 +192,29 @@ export interface DroppedCases {
  *   «기본 가지 정확히 하나»를 깨지 않게 한다.
  * - 붙일 노드의 맨 위에 선 가지(영역 없이 가지만 고른 판)는 그 내용으로 푼다 — 가지는 영역 밖에 설 수 없다(`state-case-outside`).
  *
+ * 뺀 가지 **안에 든** 가지도 상태마다 센다 — 붙일 페이지에 있는 상태의 가지는 «상태가 없어서» 빠진 것이 아니라 세지 않는다.
+ *
  * 뺀 가지 안 노드는 상호작용 거르기의 «붙이는 노드» 집합에 들지 않는다 — 그 노드를 가리키던 동작은 밖을 가리키는 동작으로 다뤄진다.
  */
 function pruneStateCases(nodes: readonly WbNode[], keepState: (id: string) => boolean): { nodes: WbNode[]; dropped: DroppedCases[] } {
   const counts = new Map<string, number>()
+  const count = (state: string): void => void counts.set(state, (counts.get(state) ?? 0) + 1)
+  /** 뺀 가지 안에 든 가지 — 붙일 페이지에 없는 상태의 것도 그 상태 이름으로 센다(바깥 가지만 세면 안쪽 가지의 이름이 통지에 안 선다). */
+  const countInside = (node: WbNode): void => {
+    for (const child of Array.isArray(node.children) ? node.children : []) {
+      if (typeof child !== 'object' || child === null) continue
+      const state = child.type === 'StateCase' ? child.props?.state : undefined
+      if (typeof state === 'string' && state !== DEFAULT_CASE && !keepState(state)) count(state)
+      countInside(child)
+    }
+  }
   const visit = (node: WbNode): WbNode[] => {
     if (node.type === 'StateSwitch' && Array.isArray(node.children)) {
       const cases = node.children.filter((child) => {
         const state = child?.type === 'StateCase' ? child.props?.state : undefined
         if (typeof state !== 'string' || state === DEFAULT_CASE || keepState(state)) return true
-        counts.set(state, (counts.get(state) ?? 0) + 1)
+        count(state)
+        countInside(child)
         return false
       })
       const defaults = cases.filter((child) => child?.type === 'StateCase' && child.props?.state === DEFAULT_CASE)

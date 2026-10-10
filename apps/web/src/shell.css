@@ -1453,6 +1453,20 @@
   background: rgb(255 255 255 / 55%);
 }
 
+/* 빈 가지의 자리표 «여기 비어 있음»(`canvas/view-state-regions.ts`) — 영역 상자 안 가운데. 줌을 걷어 화면에서 늘 같은 크기다. */
+.wb-shell-region-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: #0e7490;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  transform-origin: center;
+  translate: -50% -50%;
+}
+
 .wb-shell-region-tag {
   position: absolute;
   bottom: 100%;

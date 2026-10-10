@@ -893,4 +893,149 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       await tab.close()
     }
   })
+
+  // ── N8 — 고른 영역 · 가지의 캔버스 외곽선 · 빈 가지 자리표(L-072 · L-073) ─────────────────────────
+
+  /** 빈 기본 가지를 가진 영역 — 앞 형제는 위의 `n_sw`(요소 없는 투명 노드)다. 관리자 가지에는 글이 있다. */
+  const EMPTY_AREA = {
+    id: 'n_sw0',
+    type: 'StateSwitch',
+    props: {},
+    children: [
+      { id: 'n_cd0', type: 'StateCase', props: { state: 'default' }, children: [] },
+      { id: 'n_ca0', type: 'StateCase', props: { state: ADMIN.id }, children: [text('n_at0', '관리자만 글')] },
+    ],
+  }
+
+  /**
+   * 셸 겹의 상자(`selector`)와 그 값 — 화면 좌표의 상자와 `kidIds`(캔버스 요소들)의 합의 차(`diff`), 외곽선 굵기(화면 px = 계산값 × 줌).
+   * `kidIds` 가 비면 차는 `null`(자리표 — 합이 없다).
+   */
+  async function overlayBox(page: Page, selector: string, kidIds: string[]) {
+    return page.evaluate(
+      ({ selector, kidIds }) => {
+        const iframe = document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement
+        const f = iframe.getBoundingClientRect()
+        const zoom = f.width / iframe.offsetWidth
+        const doc = iframe.contentDocument!
+        const box = document.querySelector(selector) as HTMLElement | null
+        if (box === null) return null
+        const r = box.getBoundingClientRect()
+        let l = Infinity
+        let t = Infinity
+        let rr = -Infinity
+        let b = -Infinity
+        for (const id of kidIds) {
+          const el = [...doc.querySelectorAll('[data-wb-id]')].find((e) => e.getAttribute('data-wb-id') === id)
+          if (el === undefined) continue
+          const c = el.getBoundingClientRect()
+          l = Math.min(l, f.left + c.left * zoom)
+          t = Math.min(t, f.top + c.top * zoom)
+          rr = Math.max(rr, f.left + c.right * zoom)
+          b = Math.max(b, f.top + c.bottom * zoom)
+        }
+        const diff = kidIds.length === 0 ? null : Math.round(Math.max(Math.abs(r.left - l), Math.abs(r.top - t), Math.abs(r.right - rr), Math.abs(r.bottom - b)) * 100) / 100
+        const outline = Math.round(parseFloat(getComputedStyle(box).outlineWidth) * zoom * 100) / 100
+        return { diff, outline, height: Math.round(r.height / zoom), zoom: Math.round(zoom * 100) / 100, top: r.top, bottom: r.bottom }
+      },
+      { selector, kidIds },
+    )
+  }
+  const near = (value: { diff: number | null; outline: number } | null) =>
+    value === null ? null : { diff: value.diff === null ? null : value.diff <= 1 ? '≤1' : value.diff, outline: Math.abs(value.outline - 2) <= 0.05 ? '2px' : value.outline }
+
+  it('영역 · 가지 줄을 고르면 캔버스에 외곽선이 선다 — 상자는 보이는 가지의 자식 합 · 굵기는 일반 노드와 같은 줌 규칙 · 그려지지 않은 가지는 없다', async () => {
+    const { P } = await fixture('vs-outline')
+    const tab = await openTab(P)
+    try {
+      const seen: Record<string, unknown> = {}
+      const sel = (id: string) => `.wb-shell-selection[data-wb-selected-id="${id}"]`
+      await pickRow(tab.page, 'n_sw')
+      await frames(tab.page)
+      seen['영역'] = near(await overlayBox(tab.page, sel('n_sw'), ['n_dt']))
+      await pickRow(tab.page, 'n_cd')
+      await frames(tab.page)
+      seen['기본 가지'] = near(await overlayBox(tab.page, sel('n_cd'), ['n_dt']))
+      // 손잡이: 영역에는 서고 가지에는 없다(가지는 영역 밖으로 못 옮긴다).
+      seen['가지 손잡이'] = await tab.page.locator('.wb-shell-canvas-handle').count()
+      await choose(tab.page, '관리자')
+      await pickRow(tab.page, 'n_sw')
+      await frames(tab.page)
+      seen['관리자 영역'] = near(await overlayBox(tab.page, sel('n_sw'), ['n_at']))
+      // 안 그려진 가지(기본) — 외곽선이 없다.
+      await pickRow(tab.page, 'n_ca')
+      await tab.page.getByRole('button', { name: '모든 가지 보기', exact: true }).click()
+      await pickRow(tab.page, 'n_cd')
+      await frames(tab.page)
+      seen['그려지지 않은 기본 가지'] = await tab.page.locator(sel('n_cd')).count()
+      await tab.page.getByRole('button', { name: '모든 가지 보기', exact: true }).click()
+      for (const step of ['확대', '확대', '축소', '축소', '축소'] as const) {
+        await tab.page.getByRole('button', { name: step, exact: true }).click()
+        await frames(tab.page)
+      }
+      await pickRow(tab.page, 'n_sw')
+      await frames(tab.page)
+      const region = await overlayBox(tab.page, sel('n_sw'), ['n_at'])
+      seen['줌 0.75'] = region === null ? null : region.diff !== null && region.diff <= 1 ? '상자 ≤1' : region.diff
+      // 굵기는 일반 노드의 선택 외곽선과 같은 줌 규칙을 따른다(`canvas.tsx` 의 `outlineWidth: 2 / zoom`) — 같은 줌에서 같은 값이다.
+      await pickRow(tab.page, 'n_out')
+      await frames(tab.page)
+      const plain = await overlayBox(tab.page, sel('n_out'), ['n_out'])
+      seen['줌 0.75 굵기 = 일반 노드'] = region !== null && plain !== null && region.outline === plain.outline
+      expect(seen).toEqual({
+        영역: { diff: '≤1', outline: '2px' },
+        '기본 가지': { diff: '≤1', outline: '2px' },
+        '가지 손잡이': 0,
+        '관리자 영역': { diff: '≤1', outline: '2px' },
+        '그려지지 않은 기본 가지': 0,
+        '줌 0.75': '상자 ≤1',
+        '줌 0.75 굵기 = 일반 노드': true,
+      })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('빈 가지의 영역 — «여기 비어 있음» 자리표가 앞 형제 아래에 서고(문서를 안 민다) · 고르면 그 상자에 외곽선이 선다 · 가지에 글이 있는 상태에서는 자리표가 없다', async () => {
+    const { P } = await fixture('vs-empty', [EMPTY_AREA])
+    const tab = await openTab(P)
+    try {
+      const seen: Record<string, unknown> = {}
+      const docBottom = () =>
+        canvasFrame(tab.page).locator('[data-wb-id="n_dt"]').evaluate((el) => Math.round(el.getBoundingClientRect().bottom * 100) / 100)
+      const before = await docBottom()
+      const placeholder = tab.page.locator('.wb-shell-region-mark[data-wb-region-for="n_sw0"] [data-wb-region-empty]')
+      seen['자리표 글'] = await placeholder.textContent()
+      const mark = await overlayBox(tab.page, '.wb-shell-region-mark[data-wb-region-for="n_sw0"]', [])
+      const upper = await overlayBox(tab.page, '.wb-shell-region-mark[data-wb-region-for="n_sw"]', ['n_dt'])
+      // 앞 형제(영역 n_sw — 요소 없음)의 마지막 그려진 글 바로 아래에 선다 — 겹치지 않는다.
+      seen['앞 영역 바로 아래'] = mark !== null && upper !== null ? Math.abs(mark.top - upper.bottom) <= 1 : null
+      seen['높이'] = mark?.height
+      await pickRow(tab.page, 'n_sw0')
+      await frames(tab.page)
+      const outline = await overlayBox(tab.page, '.wb-shell-selection[data-wb-selected-id="n_sw0"]', [])
+      seen['외곽선이 자리표 상자'] = outline !== null && mark !== null ? Math.abs(outline.top - mark.top) <= 1 && Math.abs(outline.bottom - mark.bottom) <= 1 : null
+      seen['외곽선 굵기'] = outline === null ? null : Math.abs(outline.outline - 2) <= 0.05 ? '2px' : outline.outline
+      seen['문서가 안 밀림'] = (await docBottom()) === before
+      seen['문서 안 자리표'] = await canvasFrame(tab.page).locator('[data-wb-region-empty]').count()
+      await choose(tab.page, '관리자')
+      seen['관리자 — 자리표'] = await tab.page.locator('[data-wb-region-empty]').count()
+      await tab.page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+      await frames(tab.page)
+      seen['뷰 모드 — 자리표'] = await tab.page.locator('[data-wb-region-empty]').count()
+      expect(seen).toEqual({
+        '자리표 글': '여기 비어 있음',
+        '앞 영역 바로 아래': true,
+        높이: 28,
+        '외곽선이 자리표 상자': true,
+        '외곽선 굵기': '2px',
+        '문서가 안 밀림': true,
+        '문서 안 자리표': 0,
+        '관리자 — 자리표': 0,
+        '뷰 모드 — 자리표': 0,
+      })
+    } finally {
+      await tab.close()
+    }
+  })
 })

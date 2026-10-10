@@ -75,10 +75,13 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
   for (const line of renderNotes(report.notes)) io.out(line)
   for (const issue of report.issues) io.out(renderIssue(issue, report.pathOf))
 
+  // `info` 는 알림이라 «결함 N건» 에 안 든다 — 실패 선(아래)과 같은 셈이다. 따로 센다.
+  const defects = report.errors + report.warnings
+  const infoNote = report.infos > 0 ? ` · info ${report.infos}건` : ''
   const summary =
-    report.issues.length === 0
-      ? '결함 없음'
-      : `결함 ${report.issues.length}건 (error ${report.errors} · warning ${report.warnings}${report.infos > 0 ? ` · info ${report.infos}` : ''})`
+    defects === 0
+      ? `결함 없음${report.infos > 0 ? ` (info ${report.infos}건)` : ''}`
+      : `결함 ${defects}건 (error ${report.errors} · warning ${report.warnings})${infoNote}`
   // **범위를 요약 줄에 단다.** 앞 줄이 *"전체 2건"*이라고 했는데 뒤 줄이
   // *"결함 없음"*이면 **사람은 뒤 줄을 읽는다** — 두 줄이 서로 부딪히지 않게 한다.
   io.out(report.filtered ? `${summary} — 경로 필터 안에서다 (전체 ${report.totalIssues}건)` : summary)
