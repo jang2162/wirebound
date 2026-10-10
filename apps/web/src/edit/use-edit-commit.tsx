@@ -21,6 +21,7 @@ import { useEditChannel, useLockChannel } from '../realtime/context'
 import { EditNotSentError, UnansweredEditError, type EditChannel, type UnansweredCause } from '../realtime/edit-channel'
 import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import { MARKER_FRAME_WAIT_MS, type EditFailure, type EditStatus, type RestoredRevision, type UndoAttempt, type UndoHistoryNeed } from '../store/editor-store'
+import type { PendingEdit } from '../store/edit-queue'
 import { LOSS_RANK, type LossPart } from '../store/loss-notice'
 import { useAllCases, useViewState } from '../shell/use-view-state'
 import { interactionsOps, propOps, variantOps } from './ops'
@@ -209,7 +210,7 @@ const UNANSWERED_RECOVER_FAILURE = '페이지를 다시 불러오지도 못했�
  * 이유를 듣는다"*로 세운 경계를 넘는다. 구분자는 **우리 쪽 문장에 붙이는 것**이라
  * 그 경계 안이다.
  */
-function refusedLoss(caught: unknown, message: string, lost: number): LossPart {
+export function refusedLoss(caught: unknown, message: string, lost: readonly PendingEdit[]): LossPart {
   return {
     // **열쇠는 거절의 `code`와 문장의 머리다** — 까닭마다 한 조각이다. 열쇠가 하나면 서로 다른 두 거절이 합쳐져 뒤 까닭으로 읽힌다(jsdom: 409
     // `conflict` 뒤 `locked` → «밥님이 편집 중인 노드입니다 — … 편집 2개»). `code`만으로도 모자란다 — 서버가 `stale` · `patch-failed`를 둘 다
@@ -217,8 +218,13 @@ function refusedLoss(caught: unknown, message: string, lost: number): LossPart {
     // 조각이 는다.
     key: `recover:${caught instanceof ApiError ? caught.code : 'other'}:${refusalHead(message)}`,
     rank: LOSS_RANK.cancelled,
-    counts: [lost],
-    render: ([count]) => `${message} — 페이지를 서버 상태로 다시 불러왔고, 편집 ${count ?? 0}개가 취소됐습니다.`,
+    // 둘로 센다 — 편집 · 되돌리기(와 다시 실행). 남의 복원이 미루는 동안 와 내 되돌림이 409 를 받은 판(L-096)을 «편집 1개» 로 말하면 내가 한
+    // 일이 아니라 다른 편집이 취소된 것으로 읽힌다. 되돌리기가 없으면 문장은 옛 그대로다.
+    counts: [lost.filter((edit) => edit.kind === 'edit').length, lost.filter((edit) => edit.kind !== 'edit').length],
+    render: ([edits, history]) => {
+      const what = [...((edits ?? 0) > 0 || (history ?? 0) === 0 ? [`편집 ${edits ?? 0}개`] : []), ...((history ?? 0) > 0 ? [`되돌리기 · 다시 실행 ${history}개`] : [])]
+      return `${message} — 페이지를 서버 상태로 다시 불러왔고, ${what.join(' · ')}가 취소됐습니다.`
+    },
   }
 }
 
@@ -261,6 +267,11 @@ const ACK_WAIT_EXPIRED = '편집이 아직 서버에 닿지 않아 되돌리지 
 const UNDO_SUPERSEDED = '되돌리기 전에 새 편집이 있어 되돌리지 않았습니다.'
 /** 미룬 되돌리기가 기다리던 편집이 ack 아닌 길(리베이스 버림 · 거절)로 큐를 떠났을 때 — 앞 편집을 대신 되돌리지 않는다(`afterAck`). */
 const UNDO_UNSAVED = '되돌리려던 편집이 저장되지 않아 되돌리지 않았습니다.'
+/**
+ * 미룬 되돌리기 · 다시 실행이 기다리는 동안 판이 갈려(페이지를 옮김 · 같은 페이지를 다시 실음) 안 했을 때 — 판을 비우는 자리가 큐 · 스택을 함께
+ * 비워 되돌릴 것이 없다(`afterAck` 의 `boardEpoch`). 말없이 버리면 누른 키가 아무것도 안 한 것으로 남는다.
+ */
+const undoBoardChanged = (kind: 'undo' | 'redo'): string => `화면이 바뀌어 미뤄 둔 ${kind === 'undo' ? '되돌리기' : '다시 실행'}는 하지 않았습니다.`
 /** 한도 문장은 한 조각이다 — 두 번 눌러도 한 문장이다. 거두는 것은 마지막 누름만 한다(`afterAck` · `expirySeq`). */
 const ACK_WAIT_KEY = 'undo-ack-wait'
 /** 한도 문장을 낸 누름의 차례 — 앞 누름의 구독이 뒤 누름의 문장을 거두지 않게 한다. */
@@ -466,7 +477,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           store.tellLoss(unknownLoss(why, lost - 1, lateCommitArrives(why, channel)))
           return
         }
-        store.tellLoss(refusedLoss(caught, failure.message, lost))
+        store.tellLoss(refusedLoss(caught, failure.message, [...dropped, ...alsoDropped]))
       } catch (recoverCaught) {
         // **떠났으면 말하지도 비우지도 않는다** — 끊긴 조회의 거절이거나 떠난 뒤의 실패다. 아래 `failEdits`는 **지금 열린 페이지의**
         // 큐를 비운다 — 떠난 페이지의 수습이 옆 페이지의 편집을 버리면 안 된다.
@@ -477,7 +488,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           store.tellLoss(
             unknown
               ? unknownLoss(why, dropped.length - 1, lateCommitArrives(why, channel))
-              : refusedLoss(caught, failure.message, dropped.length),
+              : refusedLoss(caught, failure.message, dropped),
           )
           return
         }
@@ -856,6 +867,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       stop = store.subscribe(() => {
         if (store.boardEpoch() !== epoch) {
           finish()
+          // 구독은 스토어가 바뀌는 중에 불린다 — 말은 그 바깥에서 낸다. 판이 갈린 뒤의 통지라 비운 판이 지우지 않는다.
+          queueMicrotask(() => store.tellLoss({ key: 'undo-board-changed', rank: LOSS_RANK.history, counts: [], render: () => undoBoardChanged(kind) }))
           return
         }
         if (pressedAhead()) return

@@ -28,6 +28,7 @@
  * 무엇으로 가를지(예: `wireb lint`의 종료 코드)는 소비자가 정한다.
  */
 import { checkPageAction, isPageTargetAction } from '../interaction/check'
+import { nodeDisplayName } from '../interaction/describe'
 import { DEFAULT_CASE, type PageDocument, type WbNode } from '../node'
 import { walkNodes } from '../tree'
 import type { ValidationCode, ValidationIssue } from '../validate'
@@ -147,7 +148,7 @@ function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: Reado
           'comment-missing',
           { ...where, nodeId: node.id },
           path,
-          `${node.type}에 코멘트가 없습니다 — 주요 컴포넌트는 설명이 필요합니다`,
+          `${nodeDisplayName(node)}(${node.type})에 코멘트가 없습니다 — 주요 컴포넌트는 설명이 필요합니다`,
         ),
       )
     }

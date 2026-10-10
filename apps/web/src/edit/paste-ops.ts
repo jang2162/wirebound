@@ -175,6 +175,17 @@ export const PASTE_PAGES_FAILURE = '페이지 목록을 읽지 못해 붙이지 
 /** 페이지 목록을 읽는 사이 페이지를 떠났다(떠나 머묾 · 떠났다 돌아옴) — 누른 판의 기준 노드가 아니라 붙이지 않는다. 같은 페이지를 다시 실은 판은 붙는다. */
 export const PASTE_LEFT_NOTICE = '붙이는 사이 페이지를 옮겨 붙이지 않았습니다. 다시 붙여 넣으세요.'
 
+/**
+ * 페이지 목록을 읽는 사이 **열린 페이지 자체가 사라졌다**(복원이 그 페이지를 지웠다 — `clearPage({ restoreReread: true })`) — «옮겼다» 가 아니라
+ * «없어졌다» 가 맞다. 읽어 온 목록에 그 페이지가 없을 때만 이 문장이다(`menuHasPage`).
+ */
+export const PASTE_GONE_NOTICE = '붙이는 사이 이 페이지가 없어져 붙이지 않았습니다.'
+
+/** 프로젝트 트리(`getTree`)에 그 페이지가 있는가. */
+export function menuHasPage(menu: readonly TreeMenuNode[], pageId: string): boolean {
+  return menu.some((node) => node.pages.some((page) => page.id === pageId) || menuHasPage(node.children, pageId))
+}
+
 /** 노드들에 빈 대상이 아닌 페이지 대상 동작(`navigate` · `openModal`)이 있는가 — 있을 때만 페이지 목록을 읽는다. */
 export function hasPageTargets(nodes: readonly WbNode[]): boolean {
   return nodes.some((root) =>

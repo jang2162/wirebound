@@ -323,7 +323,8 @@ export function PropertyPanel(props: {
   if (def === undefined) {
     return (
       <>
-        <h2 className="wb-shell-panel-title">{type}</h2>
+        {/* 제목은 다른 판과 같은 이름이다(`nodeHeading` — 별칭을 지었으면 «타입 (별칭)»). 타입만 쓰면 별칭을 지은 사람이 제 노드를 못 찾는다. */}
+        <h2 className="wb-shell-panel-title">{nodeHeading(node)}</h2>
         {/* 캔버스는 이 노드를 폴백으로 그리고 배너로 알린다. 패널이 잠자코 비어 있으면
             사용자는 "왜 속성이 안 나오지"를 묻게 된다. */}
         <p className="wb-shell-panel-notice">카탈로그에 없는 컴포넌트입니다: {type}</p>

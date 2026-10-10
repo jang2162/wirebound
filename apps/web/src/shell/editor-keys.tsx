@@ -38,12 +38,14 @@ import { useApi } from '../api/context'
 import { useCanvasDocument } from '../canvas/canvas-document'
 import { platformOf, type ShortcutCommand } from '../edit/editor-shortcuts'
 import {
+  PASTE_GONE_NOTICE,
   PASTE_LEFT_NOTICE,
   PASTE_PAGES_FAILURE,
   droppedActionsNotice,
   droppedCasesNotice,
   duplicateOps,
   hasPageTargets,
+  menuHasPage,
   pageTargetsOf,
   pasteOps,
   type NodeEdit,
@@ -253,7 +255,8 @@ export function EditorKeys(props: {
     void api.getTree(props.projectId).then(
       (menu) => {
         if (store.pageOpenEpoch() === opened) finishPaste(pageId, read.nodes, read.viewStates, pageTargetsOf(menu), anchor, pressed)
-        else tellPasteLoss(PASTE_LEFT_NOTICE)
+        // 다시 읽은 목록에 이 페이지가 없으면 «옮겼다» 가 아니라 «없어졌다» 다(복원이 지운 판).
+        else tellPasteLoss(menuHasPage(menu, pageId) ? PASTE_LEFT_NOTICE : PASTE_GONE_NOTICE)
       },
       () => tellPasteLoss(store.pageOpenEpoch() === opened ? PASTE_PAGES_FAILURE : PASTE_LEFT_NOTICE),
     )

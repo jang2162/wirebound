@@ -2220,8 +2220,8 @@ export class EditorStore {
       undoHistoryLoading: false,
       editStatus: 'idle',
       // 떠나며 버린 편집을 말하는 조각만 남긴다(`#lossParts`의 `sticky`).
-      editFailure: this.#keptLoss(),
-      infoNotice: null,
+      editFailure: this.#keptLoss(true),
+      infoNotice: this.#keptInfo(),
       editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
       // 복원 낡음은 복원 뒤 다시 읽기만 푼다(`beginRestoreReread`) — 페이지를 옮기며 비우는 판은 메뉴 · 코멘트를 다시 안 읽었다.
       remoteStale: this.#keepsRestored(options.restoreReread === true) ? this.#restoredStale() : null,
@@ -2604,10 +2604,17 @@ export class EditorStore {
     this.#apply({ editFailure })
   }
 
-  /** 정보 통지를 세우거나(앞의 것을 바꿔 끼운다) 치운다(`null`). 그리는 것은 `shell/info-notice.tsx` 다 — `infoNotice` 의 머리말. */
-  readonly setInfoNotice = (infoNotice: string | null): void => {
+  /**
+   * 정보 통지를 세우거나(앞의 것을 바꿔 끼운다) 치운다(`null`). 그리는 것은 `shell/info-notice.tsx` 다 — `infoNotice` 의 머리말.
+   *
+   * `survivesLeave` — **다음 `clearPage` 한 번을 넘긴다.** 연쇄 삭제가 열린 페이지까지 지우면 «지웠습니다 · 스냅샷으로 되돌릴 수 있습니다» 가 선
+   * 뒤 열린 페이지를 프로젝트 뿌리로 옮기며 판을 비워(`clearPage`) 한 줄이 서자마자 사라진다(`#droppedLine` 과 같은 까닭).
+   */
+  readonly setInfoNotice = (infoNotice: string | null, options: { survivesLeave?: boolean } = {}): void => {
+    this.#infoKept = infoNotice !== null && options.survivesLeave === true ? infoNotice : null
     this.#apply({ infoNotice })
   }
+  #infoKept: string | null = null
 
   /**
    * **잃음을 말한다 — 앞 잃음을 덮지 않고 잇는다**(`store/loss-notice.ts`). 지금 통지가 잃음의 조각이 아니면(되돌리기 · 프리셋 · 없음) 새로
@@ -2678,8 +2685,33 @@ export class EditorStore {
     return this.#lossNotice
   }
 
-  /** 판을 비우는 자리가 둘 통지 — 떠남의 조각만 남긴다(`#lossParts`). 다 남으면 같은 참조다. 조각이 아닌 통지는 치운다. */
-  #keptLoss(): EditFailure | null {
+  /**
+   * 트리가 사라진 대상의 입력 · 상자를 닫으며 남긴 한 줄(`tellDropped`) — **다음 `clearPage` 한 번**을 넘긴다. 열린 페이지가 함께 사라진 판은 그
+   * 신호(`routes/editor.tsx` 의 `pageGone` → 캔버스의 «사라짐» 확인)가 한 줄 **뒤에** 판을 비워, 비우는 자리가 조각이 아닌 통지를 치워 한 줄이 서자마자
+   * 사라졌다(캔버스의 «대상을 찾을 수 없습니다» 는 친 글을 안 썼다는 말을 안 한다). 한 번만 넘긴다 — 페이지를 옮길 때마다 남으면 낡은 줄이 된다.
+   */
+  #droppedLine: EditFailure | null = null
+
+  /** 입력 · 상자를 닫으며 남기는 한 줄을 세운다 — 잃음 통지가 서 있으면 덮지 않는다. 다음 `clearPage` 한 번을 넘긴다(`#droppedLine`). */
+  readonly tellDropped = (message: string): void => {
+    if (this.showsLoss()) return
+    const failure: EditFailure = { kind: 'message', message }
+    this.#droppedLine = failure
+    this.setEditFailure(failure)
+  }
+
+  /** 판을 비우며 정보 통지를 넘기는가 — `survivesLeave` 로 세운 그 글 하나만, 한 번. */
+  #keptInfo(): string | null {
+    const kept = this.#infoKept
+    this.#infoKept = null
+    return kept !== null && this.#state.infoNotice === kept ? kept : null
+  }
+
+  /** 판을 비우는 자리가 둘 통지 — 떠남의 조각만 남긴다(`#lossParts`). 다 남으면 같은 참조다. 조각이 아닌 통지는 치운다(`#droppedLine` 한 번만 빼고). */
+  #keptLoss(keepDropped = false): EditFailure | null {
+    const dropped = this.#droppedLine
+    this.#droppedLine = null
+    if (keepDropped && dropped !== null && this.#state.editFailure === dropped && this.#shownLoss().length === 0) return dropped
     const parts = this.#shownLoss()
     const kept = parts.filter((part) => part.sticky !== undefined)
     if (kept.length === parts.length && kept.length > 0) return this.#state.editFailure
