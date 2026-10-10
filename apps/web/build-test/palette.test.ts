@@ -639,6 +639,55 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       }
     })
 
+    /**
+     * L-005 — 판에서 캔버스로 올라가는 카드가 칸 아래 끝 띠(24px)를 **지나가기만** 하면 칸을 안 민다(`EDGE_ENTER_DWELL_MS` 300ms 머문 뒤에야 민다).
+     * 고치기 전 값: 띠에 80ms 머물면 56px · 250ms 136px · 600ms 312px 가 밀렸다. 이 케이스의 머묾(30 · 120ms)은 띠 안을 걸어 들어가는 시간(스텝 8 개)을 더해도 300ms 아래다.
+     */
+    it('판에서 올라오는 카드가 칸 아래 끝 띠를 지나가기만 하면 캔버스 칸이 안 밀린다 — 띠에 머물면 민다', async () => {
+      const long: SeedNode[] = [...BASIC, ...Array.from({ length: 30 }, (_, i) => ({ id: `n_more${i}`, type: 'Text', props: { content: `더 ${i}` } }))]
+      const { P } = await seed('pal-edge-pass', [long])
+      const { page, close, patches } = await openEditor(P[0]!)
+      try {
+        await openPalette(page)
+        await only(page, 'Divider')
+        const pane = page.locator('.wb-shell-canvas')
+        const scrollTop = () => pane.evaluate((el) => Math.round(el.scrollTop))
+        const room = await pane.evaluate((el) => el.scrollHeight - el.clientHeight)
+        const box = (await pane.boundingBox())!
+        const x = box.x + box.width / 2
+        const passes: Record<string, number> = {}
+        for (const dwell of [30, 120]) {
+          await grabCard(page, 'Divider')
+          await moveTo(page, { x, y: box.y + box.height + 6 })
+          await moveTo(page, { x, y: box.y + box.height - 12 })
+          await page.waitForTimeout(dwell)
+          await moveTo(page, { x, y: box.y + box.height - 80 })
+          await page.waitForTimeout(100)
+          passes[`${dwell}ms`] = await scrollTop()
+          await page.keyboard.press('Escape')
+          await page.mouse.up()
+          await pane.evaluate((el) => (el.scrollTop = 0))
+        }
+        await grabCard(page, 'Divider')
+        await moveTo(page, { x, y: box.y + box.height + 6 })
+        await moveTo(page, { x, y: box.y + box.height - 12 })
+        await page.waitForTimeout(1200)
+        const stayed = await scrollTop()
+        await page.keyboard.press('Escape')
+        await page.mouse.up()
+        // eslint-disable-next-line no-console
+        console.log(`[띠를 지나감] ${JSON.stringify({ room, passes, stayed })}`)
+        expect({ room: room > 200, passes, stayedPushed: stayed > 100, sent: patches.length }).toEqual({
+          room: true,
+          passes: { '30ms': 0, '120ms': 0 },
+          stayedPushed: true,
+          sent: 0,
+        })
+      } finally {
+        await close()
+      }
+    })
+
     it('끄는 중 페이지를 옮기면(뒤로 가기) 표시가 걷히고 새 페이지 위에 놓아도 편집이 없다', async () => {
       const page2: SeedNode[] = [
         { id: 'n_text2', type: 'Text', props: { content: '글' } },

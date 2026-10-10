@@ -84,7 +84,10 @@
  * 두 축은 따로 본다(모서리에서는 둘 다 민다). 가로는 칸보다 넓은 문서(창 1440 의 칸 860 에 프리셋 1280 · 줌 1 부터)의 화면 밖 쪽에 놓는 길이다. 포인터가 멈춰
  * 있어도 이어서 민다(타이머) — 트리 끝에 대고 기다리는 것이 그 몸짓이다. **상자 밖은 끝 너머가 아니다** — 포인터가 상자 밖(위 · 아래 · 옆)이면
  * 안 민다. 세로만 견주면 캔버스 칸 아래의 하단 판 전체가 «아래 끝 너머»로 읽혀, 판에서 카드를 쥐고 머뭇거리는 동안 칸이 끝까지 밀린다
- * (`build-test/palette.test.ts` «판 위에서 카드를 쥐고 머뭇거려도»). 판에서 캔버스로 올라가는 길은 칸 아래 끝 띠를 지나는 동안만 민다. 밀고 나면 같은 좌표로 `onOver` 를 다시 묻는다(줄이 포인터
+ * (`build-test/palette.test.ts` «판 위에서 카드를 쥐고 머뭇거려도»). 판에서 캔버스로 올라가는 길은 칸 아래 끝 띠를 지나는 동안만 민다 — 그것도 **밖에서 띠로 들어온 끌기는 `EDGE_ENTER_DWELL_MS` 동안 띠에 머문 뒤에야 민다**(지나가는 카드가 칸을 밀지
+ * 않게 — 띠 24px 를 지나는 0.1 ~ 0.3s 에 56 ~ 136px 를 밀었다: 창 1440×900 · 긴 문서에서 판의 카드를 칸 아래 띠에 80 · 250 · 600ms 머문 값). 끌기를 시작한 자리가 그 상자 안이면(트리 줄 ·
+ * 캔버스 손잡이) 띠가 처음부터 «안에서 간 것» 이라 곧바로 민다. 상자 안의 띠 아닌 곳에 섰다 가면 그 상자의 띠는 «안에서 간 것» 이고, 상자 밖으로 나가면 다시
+ * «밖에서 온 것» 이다. 밀고 나면 같은 좌표로 `onOver` 를 다시 묻는다(줄이 포인터
  * 밑으로 지나갔다). 틱은 `setInterval` 이다 — `requestAnimationFrame` 은 가려진 탭에서 멈추고 jsdom 에는 없다.
  */
 import { useCallback, useEffect, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react'
@@ -100,6 +103,11 @@ export const TOUCH_HOLD_SLOP = 8
 export const EDGE_ZONE = 24
 /** 끝 스크롤 속도(px/s). */
 export const EDGE_SPEED = 480
+/**
+ * 상자 **밖에서** 끝 띠로 들어온 끌기가 민다기 전에 그 띠에 머물러야 하는 시간(ms) — 머리말 «끝 스크롤» 의 «지나가는 끌기». 판에서 캔버스로 올라가는
+ * 카드는 칸 아래 끝 띠를 지나는 0.1 ~ 0.3s 동안에도 밀었다(0.6s 머뭇거리면 312px).
+ */
+export const EDGE_ENTER_DWELL_MS = 300
 /** 끝 스크롤 틱(ms). */
 const EDGE_TICK = 16
 
@@ -189,6 +197,10 @@ interface Gesture<S, D> {
   shown: DropHint<D> | null
   /** 마지막 좌표로 다시 묻는다(`refresh`). */
   reask: () => void
+  /** 끝 스크롤 — 포인터가 안(띠 아닌 곳)에 있었던 상자. 그 상자의 띠로 들어오는 것은 밖에서 지나가는 것이 아니다(머리말 «끝 스크롤»). */
+  settled: HTMLElement | null
+  /** 끝 스크롤 — 밖에서 띠로 들어온 때(`performance.now()`). 띠 밖이면 `null`. */
+  stripSince: number | null
   /** 걷기 — 리스너 · 타이머. */
   teardown: () => void
 }
@@ -241,6 +253,8 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
           last: point,
           started: false,
           shown: null,
+          settled: null,
+          stripSince: null,
           reask: () => {
             const same = latest.current.options.sameDrop
             const next = ask(current.last)
@@ -289,6 +303,9 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         /** 끌기가 선다 — 붙잡기는 끌기가 선 뒤다(머리말 «누를 때 붙잡지 않는다»). */
         const begin = (): void => {
           current.started = true
+          // 끌기를 시작한 자리가 끝 스크롤 상자 안이면 그 상자의 띠는 처음부터 «안에서 간 것» 이다(트리 줄 · 캔버스 손잡이).
+          const startBox = latest.current.options.scrollContainer?.() ?? null
+          if (startBox !== null && withinBox(startBox.getBoundingClientRect(), current.start)) current.settled = startBox
           if (typeof element.setPointerCapture === 'function') element.setPointerCapture(current.pointerId)
           setDragging(() => source)
           timer = setInterval(edgeScroll, EDGE_TICK)
@@ -323,9 +340,24 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
 
         const edgeScroll = (): void => {
           const box = latest.current.options.scrollContainer?.() ?? null
-          if (box === null) return
-          const delta = edgeScrollStep(box.getBoundingClientRect(), current.last)
-          if (delta.x === 0 && delta.y === 0) return
+          if (box === null) {
+            current.stripSince = null
+            return
+          }
+          const frame = box.getBoundingClientRect()
+          const delta = edgeScrollStep(frame, current.last)
+          if (delta.x === 0 && delta.y === 0) {
+            // 상자 안(띠 아님)에 서면 이 상자의 띠는 «안에서 간 것» 이고, 상자 밖이면 다음 띠 진입은 «밖에서 온 것» 이다.
+            current.stripSince = null
+            current.settled = withinBox(frame, current.last) ? box : current.settled === box ? null : current.settled
+            return
+          }
+          // 밖에서 띠로 들어온 끌기는 머문 뒤에야 민다 — 지나가는 것은 밀지 않는다(`EDGE_ENTER_DWELL_MS`).
+          if (current.settled !== box) {
+            const now = performance.now()
+            current.stripSince ??= now
+            if (now - current.stripSince < EDGE_ENTER_DWELL_MS) return
+          }
           if (edgeScrollBy(box, delta)) show(ask(current.last))
         }
 
@@ -389,6 +421,11 @@ export function edgeScrollStep(frame: { left: number; right: number; top: number
   const step = (EDGE_SPEED * EDGE_TICK) / 1000
   const along = (at: number, start: number, end: number): number => (at < start + EDGE_ZONE ? -step : at > end - EDGE_ZONE ? step : 0)
   return { x: along(x, frame.left, frame.right), y: along(y, frame.top, frame.bottom) }
+}
+
+/** 점이 상자 안인가(`edgeScrollStep` 이 «밖은 끝 너머가 아니다» 로 가르는 경계와 같다). */
+function withinBox(frame: { left: number; right: number; top: number; bottom: number }, point: DragPoint): boolean {
+  return point.x >= frame.left && point.x <= frame.right && point.y >= frame.top && point.y <= frame.bottom
 }
 
 /** 끝 스크롤 한 틱을 상자에 싣는다 — 실제로 굴렀으면 `true`(끝에 닿아 안 구른 축은 안 센다). */
