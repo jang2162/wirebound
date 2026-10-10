@@ -281,7 +281,7 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
     }
   })
 
-  it('구조: 끄는 중 남이 놓을 컨테이너를 잡으면 다음 움직임에 표시가 걷히고 놓아도 편집이 없다', async () => {
+  it('구조: 끄는 중 남이 놓을 컨테이너를 잡으면 포인터가 멈춰 있어도 표시가 곧바로 걷히고 놓아도 편집이 없다', async () => {
     const { P } = await structureFixture('locked-mid')
     const bobTab = await openEditor(P, 'bob')
     const tab = await openEditor(P)
@@ -293,7 +293,7 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       const before = await counts(page)
       await bobTab.page.locator('.wb-shell-region[aria-label="구조 트리"]').getByRole('button', { name: 'Card', exact: true }).click()
       await page.locator('.wb-shell-structure-lock').waitFor()
-      // 포인터가 멈춰 있는 동안 — 표시가 그대로인가(잠금이 온 것만으로는 다시 묻지 않는다).
+      // 포인터가 멈춰 있는 동안 — 잠금이 오면 트리가 표시를 다시 물어(`refresh`) 못 놓는 자리라 걷는다.
       const stillBeforeMove = await counts(page)
       await page.mouse.move(over.x, over.y + 1, { steps: 2 })
       const afterMove = await counts(page)
@@ -302,8 +302,7 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
 
       expect({ before, stillBeforeMove, afterMove, sent: tab.patches.length, shape: await serverShape(P) }).toEqual({
         before: { lifted: 1, hint: 1 },
-        // 잠금 프레임만으로는 다시 묻지 않는다 — 포인터가 움직일 때까지 옛 표시가 남는다(뗌은 다시 묻는다 — 아래 `sent: 0`).
-        stillBeforeMove: { lifted: 1, hint: 1 },
+        stillBeforeMove: { lifted: 1, hint: 0 },
         afterMove: { lifted: 1, hint: 0 },
         sent: 0,
         shape: ORIGINAL,

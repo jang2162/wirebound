@@ -429,7 +429,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       }
     })
 
-    it('빠르게 두 번 누름 — 누른 수만큼 넣고, 둘째는 첫째가 넣은(고른) 노드 뒤다(기록)', async () => {
+    it('빠르게 두 번 누름(더블클릭) — 하나만 넣는다(L-021 — 둘째는 `DOUBLE_CLICK_MS` 안의 같은 카드라 버린다)', async () => {
       const { P } = await seed('rv-click-dbl', [BASIC])
       const { page, close, patches } = await openEditor(P[0]!)
       try {
@@ -441,7 +441,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const dbl = { shape: await shape(P[0]!), sent: patches.length }
         // eslint-disable-next-line no-console
         console.log(`[리뷰 두 번 누름] ${JSON.stringify(dbl)}`)
-        expect(dbl).toEqual({ shape: { n_root: ['n_text', '+Divider', '+Divider', { n_card: ['n_intx'] }, 'n_empt', 'n_last'] }, sent: 2 })
+        expect(dbl).toEqual({ shape: { n_root: ['n_text', '+Divider', { n_card: ['n_intx'] }, 'n_empt', 'n_last'] }, sent: 1 })
       } finally {
         await close()
       }
@@ -1067,11 +1067,12 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
 
     /**
      * 표시 «n_last 앞» 을 세운 채 bob 이 위 글(n_text)을 길게 고쳐 n_last 가 밀린다. D1 의 손잡이 판(`./canvas-drop-review.test.ts` «bob 이 위
-     * 노드의 글을 길게 고쳐 …»)과 같은 성질 — 다시 잰 뒤 표시가 걷히고 놓은 자리가 보인 자리거나 편집 0 — 을 카드 출처로 단언한다. 판은
+     * 노드의 글을 길게 고쳐 …»)과 같은 성질 — 다시 잰 뒤 표시가 같은 부모 안의 새 자리(포인터 밑)로 따라가고 놓은 자리가 그 자리 — 을 카드 출처로 단언한다
+     * (L-002 — `sameDrop` 이 부모만 견준다. 옛 판은 표시가 걷히고 편집 0). 판은
      * 캔버스의 형제라 캔버스가 다시 잰 것을 경로 층으로 받아 끌기 장치의 `refresh` 를 부른다(`drag/use-placement.ts` 의 `useCanvasRemeasured`) —
-     * 그 구독을 떼면 빨강이다(표시가 옛 y 에 남는다 · 놓으면 편집 0). 표시를 걷기만 하는 판은 아래 대조군이 잡는다.
+     * 그 구독을 떼면 빨강이다(표시가 옛 y 에 남는다 · 놓으면 편집 0). 표시를 안 옮기고 걷기만 하는 판은 아래 대조군이 잡는다.
      */
-    it('bob 이 위 글을 길게 고쳐 표시한 노드가 밀리면 표시가 걷히고 놓은 자리가 보인 자리거나 편집 0 이다', async () => {
+    it('bob 이 위 글을 길게 고쳐 표시한 노드가 밀리면 같은 부모 안의 새 자리로 표시가 따라가고 놓은 자리가 그 자리다', async () => {
       const { P } = await seed('rv-drag-shift', [BASIC])
       const tab = await openEditor(P[0]!)
       const { page, close } = tab
@@ -1092,8 +1093,8 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const final = await shape(P[0]!)
         // eslint-disable-next-line no-console
         console.log(`[리뷰 카드 끌기 밀림] ${JSON.stringify({ armedHint, status, afterShift, lastNow, final })}`)
-        expect({ armed: armedHint.map((h) => h.placement), status, afterShift }).toEqual({ armed: ['before'], status: 200, afterShift: [] })
-        expect([ORIGINAL, { n_root: ['n_text', { n_card: ['n_intx'] }, 'n_empt', '+Divider', 'n_last'] }]).toContainEqual(final)
+        expect({ armed: armedHint.map((h) => h.placement), status, afterShift: afterShift.map((h) => h.placement) }).toEqual({ armed: ['before'], status: 200, afterShift: ['after'] })
+        expect(final).toEqual({ n_root: ['n_text', { n_card: ['n_intx'] }, '+Divider', 'n_empt', 'n_last'] })
       } finally {
         await close()
       }

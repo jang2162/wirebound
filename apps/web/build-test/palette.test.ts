@@ -743,6 +743,8 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
         const afterDouble = await settle(1)
         await page.waitForTimeout(400)
         const afterDoubleSettled = await count()
+        // Enter 는 더블클릭 간격(500ms)을 넘긴 뒤에 친다 — 안이면 같은 카드의 둘째라 버려진다.
+        await page.waitForTimeout(600)
 
         await add('Divider').focus()
         await page.keyboard.press('Enter')
