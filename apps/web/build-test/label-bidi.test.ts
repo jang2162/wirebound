@@ -138,6 +138,21 @@ describe.skipIf(!전제.ok)('라벨 · 탭 이름의 방향 제어 글자 — �
     }
   })
 
+  it('상호작용 문장 목록(고른 노드 없음) — 페이지 전체 목록의 문장도 뒤따르는 이름을 안 뒤집는다', async () => {
+    const a = await openEditor()
+    try {
+      await a.page.getByRole('tab', { name: '상호작용' }).click()
+      // 고른 노드가 없으면 편집 칸 대신 페이지 전체 문장 목록이 선다.
+      const item = a.page.locator('li.wb-shell-interaction-sentence').first()
+      await item.waitFor()
+      const sentence = piecesInOrder(await glyphsOf(item), ['①', HOSTILE, '클릭', '②', '저장'])
+      expect(sentence.spans.every((span) => !span.includes('Infinity')), JSON.stringify(sentence)).toBe(true)
+      expect(sentence.inOrder, JSON.stringify(sentence)).toBe(true)
+    } finally {
+      await a.close()
+    }
+  })
+
   it('대상 고르개 항목 — 같은 이름 함수가 낸 글이라 문장과 같은 격리를 갖는다', async () => {
     const a = await openEditor()
     try {
