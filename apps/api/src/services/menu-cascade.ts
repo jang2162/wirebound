@@ -27,7 +27,7 @@
  */
 import type { DbHandle } from '../db/tx'
 import { deleteMenuSubtree, readMenuSubtree, type SubtreeEntry } from '../repos/menu'
-import { insertSnapshot, lockProjectForRestore } from '../repos/snapshots'
+import { insertSnapshot, lockProjectForRestore, trimCascadeSafetySnapshots } from '../repos/snapshots'
 import { captureSnapshot } from './snapshot-capture'
 
 /** 하위 메뉴 수(자기 빼고) · 페이지 수(자기와 하위에 매인 것 전부). 지운 뒤 답에 싣는다. */
@@ -67,6 +67,9 @@ export class CascadeSafetyTagTakenError extends Error {
     this.name = 'CascadeSafetyTagTakenError'
   }
 }
+
+/** 프로젝트마다 남기는 연쇄 삭제 안전망의 수(머리말 «안전망 스냅샷»). */
+export const CASCADE_SAFETY_KEEP = 20
 
 /** 태그 상한(`routes/snapshots.ts`의 `SnapshotBody` — 60). */
 const TAG_MAX = 60
@@ -121,12 +124,14 @@ export async function deleteMenuCascade(
       description: `메뉴 "${subtree.title}"와 하위 메뉴 ${counts.menus}개 · 페이지 ${counts.pages}개를 지우기 직전 상태 — 메뉴 ${subtree.id}`,
       payload: captured.payload,
       createdBy: input.actorId,
+      kind: 'cascade-safety',
     })
   } catch (error) {
     if (isUniqueViolation(error)) throw new CascadeSafetyTagTakenError(tag)
     throw error
   }
 
+  await trimCascadeSafetySnapshots(trx, input.projectId, CASCADE_SAFETY_KEEP)
   await deleteMenuSubtree(trx, input.projectId, subtree)
   return { kind: 'deleted', deleted: counts, safety: { id: safety.id, tag: safety.tag } }
 }

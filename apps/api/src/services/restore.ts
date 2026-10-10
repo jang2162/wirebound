@@ -303,6 +303,7 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
       description: `"${target.tag}"(으)로 복원하기 직전 상태 — 스냅샷 ${target.id}`,
       payload: now,
       createdBy: input.actorId,
+      kind: 'restore-safety',
     })
   } catch (error) {
     if (isUniqueViolation(error)) throw new RestoreAbort({ kind: 'safety-tag-taken', tag: safetyTag })

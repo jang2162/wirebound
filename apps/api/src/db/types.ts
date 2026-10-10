@@ -249,7 +249,12 @@ export interface SnapshotsTable {
   payload: JSONColumnType<SnapshotPayload>
   created_by: string
   created_at: Generated<Date>
+  /** 누가 왜 찍었나(`0022-snapshot-kind`) — 연쇄 삭제의 안전망만 개수 상한이 있다. */
+  kind: Generated<SnapshotKind>
 }
+
+/** `snapshots.kind` 의 값 — 뜻은 `0022-snapshot-kind` 의 표. */
+export type SnapshotKind = 'tag' | 'restore-safety' | 'cascade-safety'
 
 /**
  * 페이지 프리셋(`0010-presets`). 설계서 「페이지 프리셋」의 *"프로젝트가 소유한 페이지 통째 템플릿"*이다.
