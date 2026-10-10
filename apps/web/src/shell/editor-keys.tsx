@@ -256,6 +256,8 @@ export function EditorKeys(props: {
         return
       case 'redo':
         if (history.canRedo) history.redo()
+        // 되돌림이 큐에 있거나 미뤄져 있으면(ack 전) 다시 실행 스택은 비어 있다 — 말없이 버리지 않고 이유를 말한다(단추는 꺼져 있어 그것이 말이다).
+        else if (store.undoInFlight()) say(REDO_BEFORE_ACK_NOTICE)
         return
       // **키보드 삭제는 선택을 비운다**(줄 `…` «삭제»는 부모를 고른다) — 부모를 고르면 따로 친 둘째 Delete 가 형제를 든 그 부모를 지운다
       // (Chrome · `build-test/editor-shortcuts-review.test.ts` «H1»). 누른 채의 반복은 리스너가 거른다(`Shortcut.repeat`).
@@ -331,6 +333,9 @@ export function EditorKeys(props: {
 
   return <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} platform={platform} />
 }
+
+/** 되돌림이 서버에 닿기 전에 누른 «다시 실행» — 스택은 되돌림의 ack 가 채운다(`EditorStore.ackEdit`). */
+export const REDO_BEFORE_ACK_NOTICE = '되돌리는 중입니다 — 서버에 닿은 뒤에 다시 실행할 수 있습니다.'
 
 /** 여럿을 고른 판에서 순서 · 계층 · 화살표 고르기 키를 눌렀을 때의 하단 바 문장 — 줄 행동의 끈 이유(`MULTI_WHY_DISABLED`)를 잇는다. */
 export const MULTI_KEY_NOTICE = `여럿을 고른 판입니다 — 순서 · 계층 옮기기와 화살표로 고르기는 ${MULTI_WHY_DISABLED}`

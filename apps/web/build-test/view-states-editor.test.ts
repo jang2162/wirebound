@@ -647,6 +647,9 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
         await tab.page.locator('.wb-shell-region[aria-label="구조 트리"] [aria-current="true"]').evaluateAll((els) => els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''))
       ).join(',')
       const canvas = (await shown(tab.page)).canvas
+      // 칸을 떠나며 낸 «복사 + 편집» 뒤 위젯의 정리가 같은 초안을 한 번 더 넘긴다 — 복사 id 표(`forkedId` · `rememberFork`)가 그것을 복사로 돌려 «이미 그 값»으로 걸러야
+      // 한다. 표가 없으면 옛 노드(이제 숨은 기본 가지)가 쓸 대상이 못 돼 «바뀐 선택 때문에 친 값을 쓰지 않았습니다» 가 거짓으로 선다(장부 L-075).
+      const alerts = await tab.page.locator('.wb-shell-edit-alert').allTextContents()
       const after = await server(P)
       await undo(tab.page)
       await landed(P, after.headSeq)
@@ -666,6 +669,7 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
           { n_sw: [{ 'n_cd(default)': ['n_dt:기본 글'] }, { [`n_ca(${ADMIN.id})`]: ['n_at:관리자 글'] }] },
         ]),
         guestCaseNew: guestCase !== null && guestCase !== 'n_cd',
+        alerts,
       }).toEqual({
         frames: 1,
         defaultBranch: [{ 'n_cd(default)': ['n_dt:기본 글'] }],
@@ -674,6 +678,7 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
         canvasHasCopy: true,
         undone: true,
         guestCaseNew: true,
+        alerts: [],
       })
     } finally {
       await tab.close()

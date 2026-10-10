@@ -199,6 +199,50 @@ describe.skipIf(!전제.ok)('페이지 JSON — 가져오기 상자 · 내보내
     }
   })
 
+  /**
+   * **대상 메뉴를 남이 지워 트리가 다시 받아져도 가져오기 상자는 안 닫힌다**(장부 L-087 · 정본 `panels/page-import-dialog.tsx` «실패가 서는 자리»).
+   * 열린 줄 메뉴 · 이름 입력 · 연쇄 상자는 닫히지만(`reconcile`) 상자는 연 순간의 메뉴 id 로 보내고 서버의 거절을 상자 안에 보인다 —
+   * 고른 파일 · 글자 · 제목을 잃지 않는 편이 낫다. 판: 상자를 열고 api 로 대상 메뉴를 지운다(같은 사람의 다른 탭) — 트리 줄이 사라진 뒤에도
+   * 상자가 남고, 가져오기는 거절이 상자 바닥에 서며 페이지가 생기지 않는다. 판 카나리아: 트리에서 그 줄이 실제로 사라졌다.
+   */
+  it('대상 메뉴가 남의 지움으로 트리에서 사라져도 상자는 남고, 가져오기의 거절이 상자 안에 선다 — 페이지는 안 생긴다', async () => {
+    const { projectId, P, ids } = await fixture('import-gone')
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    try {
+      await page.goto(P)
+      await rowLabel(page, ids.target).waitFor()
+      await openImport(page, ids.target)
+      const dialog = page.getByRole('dialog', { name: '페이지 가져오기 — 가져올 곳 메뉴로', exact: true })
+      await dialog.waitFor()
+      await dialog.getByLabel('페이지 파일', { exact: true }).setInputFiles({
+        name: 'gone.wirebound-page.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(pageFile('사라진 곳으로')),
+      })
+      await poll('미리보기', () => dialog.getByRole('status').textContent(), (text) => (text ?? '').includes('사라진 곳으로'))
+
+      const removed = await stack.request(alice, 'DELETE', `/projects/${projectId}/menu/${ids.target}`)
+      expect(removed.status).toBeLessThan(300)
+      await poll('트리에서 줄이 사라진다', () => row(page, ids.target).count(), (n) => n === 0, 5_000)
+      const openAfterTree = await page.locator('dialog[open]').count()
+      // 단계마다 그 단계의 값을 그 자리에서 — 상자를 닫는 변조가 뒤 단계의 시간 초과가 아니라 이 값으로 죽는다.
+      expect(openAfterTree).toBe(1)
+
+      await dialog.getByRole('button', { name: '가져오기', exact: true }).click()
+      const text = await poll('상자 안의 거절', () => dialog.textContent(), (t) => (t ?? '').includes('찾을 수 없'), 8_000)
+      const tree = (await stack.request(alice, 'GET', `/projects/${projectId}/tree`)).body.menu as { id: string; title: string; pages: { title: string }[] }[]
+      expect({
+        상자_트리가_바뀐_뒤: openAfterTree,
+        상자_거절_뒤: await page.locator('dialog[open]').count(),
+        거절이_상자_안: (text ?? '').includes('찾을 수 없'),
+        글자가_남음: (text ?? '').includes('사라진 곳으로'),
+        생긴_페이지: tree.flatMap((menu) => menu.pages.map((p) => p.title)).filter((title) => title === '사라진 곳으로'),
+      }).toEqual({ 상자_트리가_바뀐_뒤: 1, 상자_거절_뒤: 1, 거절이_상자_안: true, 글자가_남음: true, 생긴_페이지: [] })
+    } finally {
+      await context.close()
+    }
+  })
+
   /** 메뉴 «가져올 곳»(빈 메뉴) · 메뉴 «원본» 안에 페이지 «첫째»(노드 하나) · «둘째». */
   async function fixture(slug: string): Promise<{ projectId: string; P: string; ids: { target: string; first: string; second: string } }> {
     const call = (method: string, path: string, body?: unknown) => stack.request(alice, method, path, body)

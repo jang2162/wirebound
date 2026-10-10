@@ -471,6 +471,11 @@ export function useTreeCommands(props: {
    * 때문이다 — `load`의 의존에 넣으면 마운트 조회가 렌더마다 다시 돈다.
    */
   const reconcileRef = useRef<(next: TreeMenuNode[]) => void>(() => {})
+  /**
+   * **내 조작 · 복원 뒤의 다시 받기가 남의 지움까지 실었을 때 고른 줄만 맞추는 자리**(`prunePicked` — 아래 선언). 그 신호는 이미 받은 판이라 `reconcile`
+   * 을 안 타고(`remoteRev > shownRev` 가 거짓), 맞추지 않으면 고른 줄이 사라진 줄을 가리킨 채 남아 단축키가 죽는다(Chrome · `build-test/menu-realtime.test.ts`).
+   */
+  const pruneRef = useRef<(next: TreeMenuNode[]) => void>(() => {})
 
   /**
    * 트리를 받는다. `reload`가 `true`면 `loading`으로 되돌리지 않는다 — 조작 뒤의 재조회에서
@@ -492,6 +497,7 @@ export function useTreeCommands(props: {
         if (!alive() || !settles(at, read.rev)) return
         // **남의 변경으로 받은 트리면 열린 입력 · 상자 · 선택을 맞춘다**(`reconcile`) — 내 조작 뒤의 다시 받기는 그 조작이 스스로 맞춘다.
         if (remote) reconcileRef.current(read.menu)
+        else pruneRef.current(read.menu)
         setState({ status: 'ready', menu: read.menu })
       } catch (caught) {
         // **남의 변경으로 낸 조회의 실패는 조용히 둔다** — 화면은 앞 트리 그대로이고, 사람이 누른 조회가 아니다(재연결 재조회와 같은 판정 —
@@ -1317,7 +1323,8 @@ export function useTreeCommands(props: {
    * **열린 페이지가 사라진 것은 여기서 안 본다** — 아래 `onPageGone`의 이펙트가 트리마다 본다. 줄의 행동 메뉴는 그 줄이 트리에서 빠지며 함께
    * 내려간다. 가져오기 상자는 연 순간의 메뉴 id 로 보내고 서버의 거절을 상자 안에 보인다(`importing` 머리말) — 여기서 안 닫는다.
    *
-   * **내 조작 뒤의 다시 받기는 안 탄다** — 그 조작이 스스로 맞춘다(지운 메뉴의 부모로 고름 · 지운 페이지면 프로젝트 뿌리로).
+   * **내 조작 뒤의 다시 받기는 안 탄다** — 그 조작이 스스로 맞춘다(지운 메뉴의 부모로 고름 · 지운 페이지면 프로젝트 뿌리로). 그 다시 받기가 남의 지움을
+   * 함께 실었을 때 사라진 줄을 고른 채 남는 것만 `prunePicked` 가 맞춘다.
    */
   function reconcile(next: TreeMenuNode[]): void {
     const has = (target: TreeSelection): boolean => treeSpot(next, target) !== null
@@ -1349,6 +1356,19 @@ export function useTreeCommands(props: {
     if (last !== undefined) props.onDropped?.(last)
   }
   reconcileRef.current = reconcile
+
+  /**
+   * **고른 줄이 받은 트리에서 사라졌으면 풀거나 이웃으로 옮긴다** — 내 조작 · 복원 뒤의 다시 받기가 부른다(`load` 의 `remote` 아닌 갈래). 열린 입력 ·
+   * 상자는 건드리지 않는다: 조작이 나가 있는 동안은 못 열고(`inFlight`), 연쇄 상자는 그 조작이 스스로 닫는다. 조작이 제 `after` 로 고르는 줄은
+   * 이 뒤에 서므로 이긴다(지운 메뉴의 부모 · 지운 페이지면 풀기). 주소의 페이지(고름이 `null`)는 안 본다 — 사라짐은 `onPageGone` 이 말한다.
+   */
+  function prunePicked(next: TreeMenuNode[]): void {
+    setPicked((now) => {
+      if (now === null || treeSpot(next, now) !== null) return now
+      return props.pickAfterGone?.(now, next) ?? null
+    })
+  }
+  pruneRef.current = prunePicked
 
   return {
     state,
