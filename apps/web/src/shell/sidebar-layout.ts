@@ -117,6 +117,7 @@
  * 여백을 되돌린다.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { flushSync } from 'react-dom'
 
 /**
  * 사이드바 기본 폭(px). **`shell.css`가 아니라 여기가 한 자리다** — 격자의 첫 트랙이
@@ -634,11 +635,13 @@ export function useSidebarLayout(): SidebarLayout {
     return Math.max(0, height - footer.getBoundingClientRect().height - (Number.isFinite(gap) ? gap * 2 : 0))
   }, [])
 
-  // 하단 바는 셸이 다시 그리지 않아도 자란다(통지는 제 부품이 그린다) — 바와 사이드바 상자의 크기가 바뀌면 다시 잰다.
+  // 하단 바는 셸이 다시 그리지 않아도 자란다(통지는 제 부품이 그린다) — 바와 사이드바 상자의 크기가 바뀌면 다시 잰다. **관찰자 콜백 안에서는
+  // 곧바로 반영한다**(`flushSync`) — React 가 다음 작업으로 미루면 그 사이 한 프레임이 옛 판 높이로 그려진다(통지가 서면 캔버스가 한 프레임
+  // 눌렸다 돌아오고, 걷히면 한 프레임 부풀었다 돌아온다 — `apps/web/build-test/n1-layout.test.ts` 가 프레임마다 잰다).
   useLayoutEffect(() => {
     setPaletteRoom(measureRoom())
     if (typeof ResizeObserver !== 'function') return
-    const observer = new ResizeObserver(() => setPaletteRoom(measureRoom()))
+    const observer = new ResizeObserver(() => flushSync(() => setPaletteRoom(measureRoom())))
     for (const element of [sideRef.current, panelRef.current, footerRef.current]) if (element !== null) observer.observe(element)
     return () => observer.disconnect()
   }, [measureRoom])

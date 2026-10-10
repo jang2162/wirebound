@@ -779,6 +779,7 @@ function EditorShell(props: {
   /** 머리가 좁은 창에서 접힌 단계(`shell/head-fold.ts`) — `folded` 면 줌 묶음이 `…` 의 첫 항목들이 된다. */
   const fold = useHeadFold()
   const zoomCommands = useZoomCommands(canvasRef)
+  const zoom = useEditorStore(store, (s) => s.zoom)
   /** 상태 전환기가 머리에 서는가 — `tight` · `folded` 면 `…` 로 접힌다(`shell/head-fold.ts`). */
   const switcherInHead = fold === 'wide' || fold === 'short'
   const viewStateChoice = useViewState(props.pageId)
@@ -789,6 +790,8 @@ function EditorShell(props: {
   const menuItems: ActionMenuItem[] = [
     ...(fold === 'folded'
       ? [
+          // 줌 묶음이 머리에서 빠지면 지금 배율이 어디에도 안 보인다 — 눌리지 않는 한 줄로 알린다(항목 이름 «축소» · «확대» 는 그대로다).
+          { key: 'zoom-value', label: `배율 ${Math.round(zoom * 100)}%`, disabled: true },
           { key: 'zoom-out', label: '축소', icon: ICONS.zoomOut, onSelect: zoomCommands.zoomOut },
           { key: 'zoom-in', label: '확대', icon: ICONS.zoomIn, onSelect: zoomCommands.zoomIn },
           { key: 'zoom-fit', label: '화면 맞춤', icon: ICONS.fitWidth, onSelect: zoomCommands.fit },

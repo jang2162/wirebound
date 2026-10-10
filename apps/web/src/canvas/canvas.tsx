@@ -655,7 +655,7 @@ export function Canvas(props: {
         <div
           className="wb-shell-selection"
           data-wb-selected-id={outlinedNodeId}
-          style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+          style={{ left: box.left, top: box.top, width: box.width, height: box.height, outlineWidth: 2 / zoom, outlineOffset: 1 / zoom }}
         />
       )}
       {/* 기준 노드가 아닌 고른 노드의 외곽선 — 옅게(`.wb-shell-selection-member`). 기준 노드의 것(`data-wb-selected-id`)은 위 하나다. */}
@@ -666,7 +666,7 @@ export function Canvas(props: {
             key={item.nodeId}
             className="wb-shell-selection-member"
             data-wb-member-id={item.nodeId}
-            style={{ left: item.box.left, top: item.box.top, width: item.box.width, height: item.box.height }}
+            style={{ left: item.box.left, top: item.box.top, width: item.box.width, height: item.box.height, outlineWidth: 1 / zoom, outlineOffset: 1 / zoom }}
           />
         ))}
       {/* 그리는 동안의 사각형(`./use-canvas-marquee.ts`) — 문서 옆 셸 겹이다(외곽선과 같은 까닭). */}
