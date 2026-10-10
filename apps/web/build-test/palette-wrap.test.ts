@@ -10,7 +10,7 @@
  * | 아래 줄 카드 — 휠 · «넣기» · 끌기 | 휠로 카드 판이 안 밀린다 · 끝까지 민 판의 마지막 카드 «넣기»가 넣지 않는다 · 아래 줄 카드를 캔버스에 끌어 놓은 노드가 서버 문서에 없다 |
  *
  * **잰 값**(창 1440×900 · 사이드바 기본 · 검색 «e»): 한 줄 카드 수 · 판 높이마다 보이는 줄 · 표본 중심 차 최대 · 세로로 긴 표본(`KeyValue` ·
- * `Media`)의 줄임 비를 `[목록 줄바꿈]` 로그로 낸다. 다시 재는 법: `pnpm vitest run --project build apps/web/build-test/palette-wrap.test.ts`.
+ * `Media`)의 줄임 비를 `[목록 줄바꿈]` 로그로 낸다. 다시 재는 법: `pnpm vitest run -c vitest.browser.config.ts apps/web/build-test/palette-wrap.test.ts`.
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
