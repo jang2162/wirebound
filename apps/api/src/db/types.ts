@@ -232,7 +232,7 @@ export interface ProjectMenuRevsTable {
 }
 
 /**
- * 스냅샷(`0009-snapshots`). 설계서 「스냅샷」의 **삭제 없는 태그**다.
+ * 스냅샷(`0009-snapshots`). 설계서 「스냅샷」의 **삭제 없는 태그**다 — 메뉴 연쇄 삭제의 안전망만 개수 상한으로 지워진다(`kind`).
  *
  * `payload`는 `JSONColumnType<SnapshotPayload>` — `PagesTable.schema`와 **같은 비대칭**이다:
  * 삽입 시엔 `JSON.stringify`한 문자열, 조회 시엔 파싱된 객체. 그 규격을 소유하는 것은

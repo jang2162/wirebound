@@ -69,7 +69,7 @@ describe('0022 — 스냅샷의 kind', () => {
     const restore = await row(`복원 전 ${at}`, at)
     const cascadeOtherTime = await row('메뉴 "흉내" 삭제 전 2026-01-02T03:04:05.679Z', at)
     const restoreOtherTime = await row('복원 전 2020-01-01T00:00:00.000Z', at)
-    const noQuote = await row(`메뉴 흉내 삭제 전 ${at}`, at)
+    const noPrefix = await row(`흉내" 삭제 전 ${at}`, at)
     const plain = await row('v1', at)
     await migrateTo('0022-snapshot-kind')
 
@@ -79,7 +79,7 @@ describe('0022 — 스냅샷의 kind', () => {
       restore: await kindOf(restore),
       cascadeOtherTime: await kindOf(cascadeOtherTime),
       restoreOtherTime: await kindOf(restoreOtherTime),
-      noQuote: await kindOf(noQuote),
+      noPrefix: await kindOf(noPrefix),
       plain: await kindOf(plain),
     }).toEqual({
       cascade: 'cascade-safety',
@@ -87,7 +87,7 @@ describe('0022 — 스냅샷의 kind', () => {
       restore: 'restore-safety',
       cascadeOtherTime: 'tag',
       restoreOtherTime: 'tag',
-      noQuote: 'tag',
+      noPrefix: 'tag',
       plain: 'tag',
     })
   })
