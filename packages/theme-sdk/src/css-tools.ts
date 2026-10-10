@@ -1,10 +1,7 @@
 /**
- * 기본 뷰의 CSS 를 만드는 도구. `packages/renderer/src/structure-css-tools.ts` 의 사본이다 — 렌더러의 구조
- * 경로가 걷히면(A1b) 이쪽이 남는다. 이름 · 셀렉터 모양의 근거(노드 변수 접두어, 특이도를 테마와 맞추는 까닭,
- * `:where()` 의 Chromium 실측표)는 그 파일의 머리말이 갖는다.
- *
- * **두 벌이 같은 문자열을 내야 한다** — 캔버스(기본 뷰)와 내보내기(구조 경로)가 같은 CSS 를 읽어야 같은 화면이다.
- * `packages/renderer/test/default-view-parity.test.tsx` 의 «기본 CSS 는 기본 구조를 겨냥한 옛 규칙을 전부 싣는다» 가 대조한다.
+ * 기본 뷰(`default-views/*`)의 CSS 를 만드는 도구. 이름 · 셀렉터 모양의 근거(노드 변수 접두어, 특이도를 테마와 맞추는 까닭,
+ * `:where()` 의 Chromium 실측표)는 걷힌 구조 경로의 같은 이름 도구에 있었다 — 다시 보려면
+ * `git show b1cfd823^:packages/renderer/src/structure-css-tools.ts` 의 머리말.
  */
 
 /** 노드마다 달라지는 값을 나르는 커스텀 프로퍼티의 접두어. 테마 토큰(`--wb-<키>`)과 이름공간을 가른다. */
