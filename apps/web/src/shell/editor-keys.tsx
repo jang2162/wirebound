@@ -236,7 +236,7 @@ export function EditorKeys(props: {
     if (read.kind === 'not-envelope') return false
     const pageId = props.pageId
     if (read.kind === 'rejected') {
-      if (pageId !== undefined) info(`${PASTE_REJECTED_HEAD} ${read.reason}`)
+      if (pageId !== undefined) info(`${PASTE_REJECTED_HEAD} ${shorten(read.reason)}`)
       return true
     }
     if (pageId === undefined) return true
@@ -381,6 +381,13 @@ export const REDO_BEFORE_ACK_NOTICE = '되돌리는 중입니다 — 서버에 �
 
 /** 여럿을 고른 판에서 F2 를 눌렀을 때의 정보 통지 — `MULTI_KEY_NOTICE` 와 같은 꼴이다. */
 export const ALIAS_MANY_NOTICE = `여럿을 고른 판입니다 — 별칭 바꾸기는 ${MULTI_WHY_DISABLED}`
+
+/** 거절의 까닭은 한 줄에 들게 자른다 — 서버 문장 못지않게 긴 검증 문장(props 오류)이 정보 통지 한 칸을 두세 줄로 키우지 않게(`EditorState.infoNotice`). */
+const REASON_MAX = 80
+function shorten(reason: string): string {
+  const letters = [...reason]
+  return letters.length <= REASON_MAX ? reason : `${letters.slice(0, REASON_MAX).join('')}…`
+}
 
 /** 우리 봉투인데 이 판에 못 싣는 복사를 붙였을 때의 머리 — 뒤에 `inspectNodesEnvelope` 의 까닭이 붙는다. */
 export const PASTE_REJECTED_HEAD = '복사한 노드를 이 페이지에 붙일 수 없어 붙이지 않았습니다 —'
