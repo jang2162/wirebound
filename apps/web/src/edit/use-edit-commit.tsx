@@ -824,6 +824,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    * - 판이 갈렸거나(`boardEpoch`) 편집을 못 내는 화면이 되면(`claimDeferral` 의 `cancel`) 버린다. 한도(`UNDO_ACK_WAIT_MS`)가 지나면 말하고 버린다.
    * - **구독 · 마이크로태스크의 판 대조(`boardEpoch`)는 방어다** — 판을 비우는 자리가 큐 · 스택을 함께 비워 구독의 첫 알림에서 이미 끝난다(재는 케이스 없음 — `test/edit/undo-before-ack.test.tsx` 머리말).
    * - **말은 서 있는 잃음 통지를 덮지 않고 잇는다**(`EditorStore.tellLoss`) · 거둘 때는 제 조각만 거둔다(`withdrawLoss`).
+   * - **미루는 사이 선 잃음은 미룬 되돌림 · 다시 실행의 `settle` 도 치우지 않는다** — `run` 이 누른 때의 통지를 받아 `sayAfterWait` 길로 말한다.
    */
   const ownDeferral = useRef<(() => void) | null>(null)
   useEffect(() => () => ownDeferral.current?.(), [])
