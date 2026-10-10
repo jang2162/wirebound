@@ -1005,7 +1005,7 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
         canvasFrame(tab.page).locator('[data-wb-id="n_dt"]').evaluate((el) => Math.round(el.getBoundingClientRect().bottom * 100) / 100)
       const before = await docBottom()
       const placeholder = tab.page.locator('.wb-shell-region-mark[data-wb-region-for="n_sw0"] [data-wb-region-empty]')
-      seen['자리표 글'] = await placeholder.textContent()
+      seen['자리표 글'] = (await placeholder.count()) === 0 ? null : await placeholder.textContent()
       const mark = await overlayBox(tab.page, '.wb-shell-region-mark[data-wb-region-for="n_sw0"]', [])
       const upper = await overlayBox(tab.page, '.wb-shell-region-mark[data-wb-region-for="n_sw"]', ['n_dt'])
       // 앞 형제(영역 n_sw — 요소 없음)의 마지막 그려진 글 바로 아래에 선다 — 겹치지 않는다.
