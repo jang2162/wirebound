@@ -178,6 +178,71 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
     }
   })
 
+  /**
+   * **앞 편집이 거절돼도 큐의 뒤 편집이 서버에 커밋되지 않는다**(장부 L-090 · 옛 R2b). [A, B] 가 큐에 있고 A 의 `patch` 프레임이 `patch-error` 로
+   * 돌아오면 수습이 큐를 비워 B 도 취소된다 — 누른 Cmd+Z 도 «저장되지 않아» 로 버려진다. 판: 첫 `patch` 프레임을 서버에 안 넘기고 B 가 큐에 들 때까지
+   * 붙잡았다 거절로 답한다(`page.routeWebSocket` — 가로챈 프레임 수가 카나리아). 답을 안 붙잡으면 B 가 거절 뒤에 눌린 새 편집이 되어 커밋된다
+   * (그 판은 정상이다 — 사람이 거절을 본 뒤 낸 편집). 룸에 든(`joined`) 뒤에 눌러야 한다 — 그 전의 편집은 REST 로 나가 가로챈 프레임 수가 틀어진다.
+   *
+   * **혼자 죽는 변조가 없다** — 되돌림을 «저장되지 않아» 로 버리는 갈래(`afterAck` 의 `!acked`)를 떼면 아래 «마지막 편집이 ack 없이 …» 가 함께 죽고, 큐를 비우는 쪽(`recover`)은
+   * `test/edit/edit-recovery.test.tsx` «보내지 못한 편집을 잃었다고 알린다» 가 소유한다. 이 케이스의 몫은 두 갈래가 **한 판에서 함께** 서는 실브라우저 값이다.
+   */
+  it('앞 편집 A 가 거절되면 큐의 B 도 서버에 안 나가고 누른 Cmd+Z 는 «저장되지 않아» 로 버려진다 — 서버는 그대로다(L-090)', async () => {
+    const { P } = await fixture(stack, alice, 'a-rejected')
+    const delay = await stack.startDownDelay(DELAY_MS)
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 }, origin: delay.origin })
+    let patches = 0
+    let held = 0
+    try {
+      await page.routeWebSocket(/\/ws/, (route) => {
+        const server = route.connectToServer()
+        route.onMessage((message) => {
+          const text = typeof message === 'string' ? message : message.toString()
+          let frame: { type?: string; clientOpId?: string; pageId?: string } = {}
+          try {
+            frame = JSON.parse(text)
+          } catch {
+            // 프레임이 아닌 것은 그대로 넘긴다.
+          }
+          if (frame.type === 'patch') {
+            patches += 1
+            if (patches === 1) {
+              held += 1
+              setTimeout(
+                () => route.send(JSON.stringify({ type: 'patch-error', projectId: P.split('/')[2], pageId: frame.pageId, clientOpId: frame.clientOpId, status: 422, code: 'validation-failed', message: 'rv', issues: [] })),
+                1_200,
+              )
+              return
+            }
+          }
+          server.send(message)
+        })
+        server.onMessage((message) => route.send(message))
+      })
+      const joined: string[] = []
+      page.on('websocket', (ws) => ws.on('framereceived', (frame) => String(frame.payload).includes('"joined"') && joined.push('joined')))
+      await page.goto(P)
+      await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
+      await poll('WS 가 붙는다', async () => delay.delayed(), (n) => n >= 1)
+      // 룸에 든 뒤에 누른다 — 그 전의 편집은 WS 가 안 열려 REST 로 나가 가로챈 프레임 수가 틀어진다.
+      await poll('룸에 든다', async () => joined.slice(), (lines) => lines.length >= 1)
+      await page.keyboard.press('Alt+ArrowDown')
+      await page.keyboard.press('Alt+ArrowDown')
+      await page.keyboard.press('ControlOrMeta+z')
+      await page.waitForTimeout(1_200 + DELAY_MS * 4)
+      const alerts = (await page.locator('.wb-shell-edit-alert').allTextContents()).join(' | ')
+      expect({ patches, held, server: await server(P), alerts: { canceled: alerts.includes('편집 2개가 취소됐습니다'), unsaved: alerts.includes('되돌리려던 편집이 저장되지 않아') } }).toEqual({
+        patches: 1,
+        held: 1,
+        server: { ids: ['n_text0000001', 'n_text0000002', 'n_text0000003', 'n_field000001'], headSeq: 1 },
+        alerts: { canceled: true, unsaved: true },
+      })
+    } finally {
+      await context.close()
+      await delay.close()
+    }
+  })
+
   it('누른 때의 마지막 편집이 ack 없이 큐를 떠나면 앞 편집을 되돌리지 않는다 — 앞 편집의 ack 가 맨 위를 바꿔 놓은 채 리베이스가 마지막 편집을 버린 판', async () => {
     const { P } = await fixture(stack, alice, 'undo-last-dropped', true)
     const D = 1200
