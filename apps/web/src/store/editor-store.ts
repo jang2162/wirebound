@@ -1374,6 +1374,9 @@ export class EditorStore {
     }
   }
 
+  /** **되돌림이 아직 다시 실행 스택을 못 채웠나** — 큐에 나가 있거나(ack 전) 앞 편집의 ack 를 기다려 미뤄져 있다(`claimDeferral`). 다시 실행 키가 말없이 버려지는 두 창이다. */
+  readonly undoInFlight = (): boolean => this.stackFeeders('redo').length > 0 || this.#deferral?.kind === 'undo'
+
   /** 슬롯이 지켜보는 편집(`claimDeferral` 의 `watch`)이 ack 로 스택에 올랐나 — 큐를 다른 길로 떠난 것은 `false` 다. */
   readonly deferralAcked = (): boolean => this.#deferral?.acked === true
 

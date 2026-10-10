@@ -143,6 +143,41 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
     }
   })
 
+  const REDO_NOTICE = '되돌리는 중입니다 — 서버에 닿은 뒤에 다시 실행할 수 있습니다.'
+
+  it('미룬 되돌리기 위에 누른 Cmd+Shift+Z 는 이유를 말하고 아무것도 더 보내지 않는다(L-089)', async () => {
+    const t = await movedWithAckPending('redo-while-deferred')
+    try {
+      await t.page.keyboard.press('ControlOrMeta+z')
+      await t.page.keyboard.press('ControlOrMeta+Shift+z')
+      expect(noAckYet(t.log, t.T0)).toEqual([])
+      expect(await t.page.locator('.wb-shell-edit-alert').allTextContents()).toEqual([REDO_NOTICE])
+      await poll('되돌림이 서버에 닿는다', () => server(t.P), (s) => s.headSeq >= 3, 8_000)
+      await t.page.waitForTimeout(DELAY_MS * 4)
+      expect(await server(t.P)).toEqual({ ids: ['n_text0000001', 'n_text0000002', 'n_text0000003', 'n_field000001'], headSeq: 3 })
+    } finally {
+      await t.close()
+    }
+  })
+
+  it('큐에 나간 되돌림의 ack 전에 누른 Cmd+Shift+Z 도 이유를 말한다 — 서버에는 되돌림 하나뿐이다(L-089)', async () => {
+    const t = await movedWithAckPending('redo-while-queued')
+    try {
+      await t.page.keyboard.press('ControlOrMeta+z')
+      // 되돌림이 서버에 닿았으나 그 ack(늦춘 WS)는 아직 — 이 틈이 큐에 나간 되돌림의 창이다.
+      await poll('되돌림이 서버에 닿는다', () => server(t.P), (s) => s.headSeq === 3, 8_000)
+      const acks = t.log.filter((line) => line.includes('patch-ack')).length
+      await t.page.keyboard.press('ControlOrMeta+Shift+z')
+      // 판 카나리아 — 누른 때 되돌림의 ack(둘째 patch-ack)는 아직 안 왔다.
+      expect(acks).toBeLessThan(2)
+      expect(await t.page.locator('.wb-shell-edit-alert').allTextContents()).toEqual([REDO_NOTICE])
+      await t.page.waitForTimeout(DELAY_MS * 3)
+      expect(await server(t.P)).toEqual({ ids: ['n_text0000001', 'n_text0000002', 'n_text0000003', 'n_field000001'], headSeq: 3 })
+    } finally {
+      await t.close()
+    }
+  })
+
   it('누른 때의 마지막 편집이 ack 없이 큐를 떠나면 앞 편집을 되돌리지 않는다 — 앞 편집의 ack 가 맨 위를 바꿔 놓은 채 리베이스가 마지막 편집을 버린 판', async () => {
     const { P } = await fixture(stack, alice, 'undo-last-dropped', true)
     const D = 1200
