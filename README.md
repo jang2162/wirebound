@@ -1065,6 +1065,22 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
   `SIGKILL` 로 죽어도 그 api · vite 는 스스로 끝나고, 남은 DB(`wb_browser_*`)는 다음 실행이 지운다.
 - 파일 하나만 돌리려면 `pnpm vitest run <경로>`, api 만 돌리려면 `pnpm vitest run --project api`.
 
+### 트랙 게이트 — 건드린 영역만 돌린다
+
+**`pnpm test:build` 는 `apps/web/build-test` 전부를 이미 돈다 — `pnpm test:browser` 는 그 부분집합이다.** 둘을 함께 적으면 실브라우저 판이 두 번 돈다(실브라우저 판이 `test:build` 시간의 대부분이다 — 다시 재는 법: `pnpm test:build` 와 `pnpm test:browser` 의 벽시계). **전량 게이트는 `pnpm typecheck` · `pnpm build` · `pnpm test` · `pnpm test:build` 넷이다** — `test:browser` 는 따로 적지 않는다.
+
+한 트랙이 한 영역만 건드렸으면 그 영역의 게이트만 돈다. 트랙끼리의 겹침은 **병합 뒤 합친 판의 전량 게이트 한 번**이 잡는다(한 트랙이 바꾼 동작이 다른 트랙 케이스의 판 만들기를 없애면 영역 게이트는 둘 다 초록이다).
+
+| 바꾼 곳 | 돌리는 것 |
+| --- | --- |
+| 문서 · 주석만(코드 글자 불변) | `pnpm typecheck` + 그 글을 읽는 케이스(`git grep` 으로 센다) |
+| `apps/api/**` 만 | `pnpm typecheck` · `pnpm build` · `pnpm vitest run --project api` · `pnpm vitest run --project build apps/api/build-test` |
+| `apps/web/**` 만 | `pnpm typecheck` · `pnpm build` · `pnpm vitest run --project web` · `pnpm test:browser` |
+| 그 밖 — `packages/*` · `system-themes/*` · 루트 설정 · 두 앱에 걸침 · 정본 문서를 읽는 케이스 | 전량 넷 |
+
+- **이펙트 · 마운트 순서를 바꾼 트랙은** `EDITOR_STACK_BUNDLE=build pnpm test:browser`(운영 번들)도 돈다.
+- **한 기계에서 전량 게이트는 동시에 둘까지만 띄운다** — 영역 게이트는 셈에 안 든다. 게이트 체인은 `nice -n 10` 아래에서 돌려 기계가 굼뜨지 않게 한다.
+
 > **브라우저가 없을 때 `test:build`가 찍는 줄은 「넣는 법」 절의 명령을 권한다.** 그 스모크
 > (`apps/api/build-test/screen-chromium.test.ts`)는 **브라우저를 실제로 띄워 보고** 안 뜨면 건너뛴다 — `--only-shell` 만
 > 넣은 기계에서도 돈다. **서버가 쓰는 브라우저로 돈다** — `SCREEN_CHROMIUM_PATH` 를 서버와 같은 순서(셸 → `apps/api/.env`)로
