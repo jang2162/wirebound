@@ -157,6 +157,10 @@ export function MenuTree(props: {
    * (그 파일의 머리말 «셸이 상태를 들고 트리가 채운다»). 없으면 결과 · 실패를 말하지 않는다.
    */
   notices?: PageJsonNotices
+  /**
+   * 페이지를 읽어 내보내기 **전의 기다림**(`usePageJsonExport`의 `settle`) — 셸이 열린 페이지의 보낸 편집의 답을 기다린다. 없으면 바로 읽는다.
+   */
+  beforeExport?: (pageId: string) => Promise<void>
   /** 남의 변경 · 재연결로 다시 받을 신호 — 그대로 훅에 넘긴다(`useTreeCommands`의 `remoteRev` · `resyncToken`). */
   remoteRev?: number
   resyncToken?: number
@@ -186,7 +190,7 @@ export function MenuTree(props: {
   })
   const { state } = commands
   /** 페이지 줄 `…`의 «JSON 내보내기». 실패는 셸의 하단 바에 선다(`notices`). */
-  const exporter = usePageJsonExport(props.projectId, props.notices?.showExportFailure ?? ignoreFailure)
+  const exporter = usePageJsonExport(props.projectId, props.notices?.showExportFailure ?? ignoreFailure, props.beforeExport)
   /**
    * **편집할 수 없게 되면 가져오기 상자를 닫는다** — 역할이 내려가거나(viewer) 모드가 바뀌면 상자가 화면에서 빠지는데, 대상을 훅에 남겨
    * 두면 다시 편집할 수 있게 된 순간 아무도 열지 않은 상자가 다시 선다. 모달이라 상자가 떠 있는 동안 모드 단추에는 못 닿고, 이 갈래는 셸이

@@ -8,6 +8,9 @@
  * **실패는 하단 바의 통지다**(`panels/page-json-notices.tsx` — 셸이 상태를 들고 여기서는 `showFailure`로 채운다). 줄 메뉴는 고르면
  * 닫히므로 그 자리에 말할 곳이 없다. 다음 내보내기를 시작하면 앞 실패를 걷는다(걷히는 때의 표는 그 파일 머리말).
  *
+ * **열린 페이지는 보낸 편집의 답을 받은 뒤에 읽는다**(`settle`) — 칸에 친 채 줄 `…`를 누르면 그 클릭이 blur 로 낸 편집(WS)과 이 읽기(REST)가 다른
+ * 연결로 겨뤄, 읽기가 앞서면 파일에 방금 친 글이 없다(Chrome `build-test/editor-export-open-edits.test.ts`). 기다림은 셸이 한도를 쥔다.
+ *
  * **한 번에 하나다**(`exporting`). 두 번 눌러 같은 파일을 두 번 받을 까닭이 없다 — 내보내는 동안 항목이 꺼진다.
  */
 import { useEffect, useRef, useState } from 'react'
@@ -25,7 +28,11 @@ export interface PageJsonExport {
   run: (pageId: string) => void
 }
 
-export function usePageJsonExport(projectId: string, showFailure: (failure: Failure | null) => void): PageJsonExport {
+export function usePageJsonExport(
+  projectId: string,
+  showFailure: (failure: Failure | null) => void,
+  settle?: (pageId: string) => Promise<void>,
+): PageJsonExport {
   const api = useApi()
   const [exporting, setExporting] = useState<string | null>(null)
   /** 같은 tick 의 두 번째 호출을 막는 잠금 — `busy` 를 state 로만 두면 같은 렌더의 클로저가 거짓을 본다(`use-tree-commands.tsx`의 `inFlight`). */
@@ -44,6 +51,8 @@ export function usePageJsonExport(projectId: string, showFailure: (failure: Fail
     setExporting(pageId)
     showFailure(null)
     try {
+      await settle?.(pageId)
+      if (unmounted.current) return
       const [page, comments] = await Promise.all([api.getPage(projectId, pageId), api.listComments(projectId, pageId)])
       if (unmounted.current) return
       const exported = pageExport(page, comments)

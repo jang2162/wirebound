@@ -404,3 +404,91 @@ describe('XML 로 못 담는 글자', () => {
     expect(texts(slide(parts, 1))).toContain('a < b && c')
   })
 })
+
+describe('별칭 — PPTX 산출물로 잰다(L-126)', () => {
+  /**
+   * 번들(`alias.test.ts`)과 같은 표본이다 — 상호작용 문장 · 코멘트 줄의 노드 이름이 별칭이다. **코드가 `commentEntries` · `pageSentences` 를 부른다는 것이
+   * 아니라 슬라이드 · 노트의 글자로 잰다.** 별칭이 없는 노드는 옛 이름(`describeNode`)이다.
+   */
+  const ALIASED = documentOf([
+    {
+      id: 'n_save',
+      type: 'Button',
+      alias: '저장 버튼',
+      props: { label: '저장' },
+      marker: 1,
+      interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_list', value: false }] }],
+    },
+    { id: 'n_list', type: 'List', alias: '회원 목록', props: {}, marker: 2 },
+  ])
+
+  it('상호작용 문장 · 코멘트 줄이 별칭으로 노드를 부른다 — 슬라이드와 노트 모두', () => {
+    const { parts } = exportPptx({ pages: [{ title: '별칭', document: ALIASED, comments: [{ nodeId: 'n_list', body: '정렬' }] }] })
+    for (const [label, root] of [['슬라이드', slide(parts, 1)], ['노트', notes(parts, 1)]] as const) {
+      const lines = texts(root)
+      expect(lines.some((line) => line.includes('저장 버튼 클릭 시') && line.includes('회원 목록이 숨겨집니다')), `${label}: ${lines.join(' | ')}`).toBe(true)
+      expect(lines, label).toContain('② 회원 목록')
+    }
+  })
+
+  it('판 카나리아 — 별칭을 걷으면 같은 자리가 옛 이름이다', () => {
+    const plain = documentOf([
+      { ...(ALIASED.root.children![0] as WbNode), alias: undefined },
+      { ...(ALIASED.root.children![1] as WbNode), alias: undefined },
+    ])
+    const { parts } = exportPptx({ pages: [{ title: '별칭', document: plain, comments: [{ nodeId: 'n_list', body: '정렬' }] }] })
+    const lines = texts(slide(parts, 1))
+    expect(lines.join(' | ')).not.toContain('회원 목록')
+    expect(lines).toContain(describeNode(plain.root.children![1] as WbNode))
+  })
+})
+
+describe('화면 상태가 있는 페이지 — PPTX 는 기본 상태만 찍는다(L-120 · 사용자 결정 Q23)', () => {
+  /**
+   * 한 장이 페이지 하나다 — 상태마다 장을 내지 않는다. 화면 이미지는 호출자가 그린 한 장이고(`screen`), 이 함수는 상태를 모른다. 코멘트 · 상호작용
+   * 글은 번들과 같은 함수가 짓는다(상태 가지 안 노드의 이름에 상태가 붙는다 — 설계서 «내보내기»). 값으로 적는다 — 슬라이드 수 = 페이지 수.
+   */
+  const STATED: PageDocument = {
+    version: 1,
+    viewStates: [{ id: 's_admin', name: '관리자' }],
+    root: {
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        {
+          id: 'n_sw',
+          type: 'StateSwitch',
+          children: [
+            { id: 'n_cd', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'n_view', type: 'Button', props: { label: '보기' }, marker: 1 }] },
+            {
+              id: 'n_ca',
+              type: 'StateCase',
+              props: { state: 's_admin' },
+              children: [
+                {
+                  id: 'n_approve',
+                  type: 'Button',
+                  props: { label: '승인' },
+                  marker: 2,
+                  interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_view', value: false }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as WbNode,
+  }
+
+  it('상태가 둘이어도 슬라이드는 페이지 하나에 한 장이다', () => {
+    const { parts } = exportPptx({
+      pages: [{ title: '상태', document: STATED, comments: [{ nodeId: 'n_approve', body: '권한 확인' }] }],
+    })
+    const slides = parts.filter((part) => /^ppt\/slides\/slide\d+\.xml$/.test(part.path))
+    expect(slides).toHaveLength(1)
+    // 코멘트 · 상호작용 글은 상태마다 갈리지 않는다 — 관리자 가지 안 노드의 이름에 상태가 붙는다.
+    const lines = texts(slide(parts, 1))
+    expect(lines).toContain('권한 확인')
+    expect(lines.some((line) => line.includes('(관리자 상태)'))).toBe(true)
+  })
+})

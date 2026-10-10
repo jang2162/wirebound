@@ -764,6 +764,8 @@ function EditorShell(props: {
    * 세션이 남는다. 한도 뒤에 잃는 편집은 셸째 내려가므로 로그인 화면이 말한다(`logoutLossNotice` · `useSignOutNotice`).
    */
   const { logout, busy: loggingOut, failure: logoutFailure } = useLogout(settleEdits)
+  /** 페이지 JSON 내보내기 앞의 기다림 — **열린 페이지만** 보낸 편집의 답을 기다린다(`panels/page-json-export.ts`). 다른 줄의 페이지는 그 편집과 무관하다. */
+  const settleBeforeExport = useCallback((pageId: string) => (pageId === props.pageId ? editsAnswered(store) : Promise.resolve()), [store, props.pageId])
   const sessionUser = useSessionUser()
   /**
    * 열린 대화 상자 — 스냅샷 · 내보내기. 한 번에 하나다(모달이다). 셋째 상자인 페이지 가져오기는 메뉴 트리가 연다 — 보내기 · 잠금이 트리의
@@ -942,6 +944,7 @@ function EditorShell(props: {
               editable={mode === 'edit' && canEdit}
               headSlot={menuHead}
               notices={pageJsonNotices}
+              beforeExport={settleBeforeExport}
             />
           </ShellRegion>
           {/* 구조 트리는 편집 모드에서만 있다. 뷰 모드에서는 접혀 메뉴 트리가 좌측 전체를

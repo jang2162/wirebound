@@ -39,7 +39,7 @@ import {
   type InteractionOverlay,
   type NodeRenderError,
 } from '@wirebound/renderer'
-import { describePageTarget, type PageDocument } from '@wirebound/schema'
+import { describePageTarget, type PageDocument, type WbNode } from '@wirebound/schema'
 import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
@@ -57,7 +57,7 @@ import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
 import { guideOf, useLayoutGuides, type Guide, type GuideLine } from './layout-guides'
-import { regionMarks, type RegionMark } from './view-state-regions'
+import { EMPTY_BRANCH_LABEL, regionBoxOf, regionMarks, type RegionMark } from './view-state-regions'
 import { StateRegionBadges } from './state-badges'
 import { useCanvasMarquee } from './use-canvas-marquee'
 import { themeFileUrl } from '../theme/bundle-loader'
@@ -397,7 +397,13 @@ export function Canvas(props: {
     const next: OutlineBox[] = []
     for (const nodeId of outlinedIds) {
       const target = findNodeElement(frame.document, nodeId)
-      if (target !== null) next.push({ nodeId, box: measure(target, offset) })
+      if (target !== null) {
+        next.push({ nodeId, box: measure(target, offset) })
+        continue
+      }
+      // 상태 영역 · 가지는 렌더러의 투명 노드라 요소가 없다 — 표지와 같은 «보이는 가지 자식 합»(빈 가지면 자리표)으로 잰다.
+      const rect = rendered === null ? null : regionBoxOf(rendered, nodeId, viewState, (id) => findNodeElement(frame.document, id))
+      if (rect !== null) next.push({ nodeId, box: { left: offset.left + rect.left, top: offset.top + rect.top, width: rect.width, height: rect.height } })
     }
     setBoxes((prev) => (sameOutlines(prev, next) ? prev : next))
     // `doc`·`viewportWidth`가 의존성에 있는 것은 둘이 바뀌면 노드의 자리가 바뀌기
@@ -409,7 +415,7 @@ export function Canvas(props: {
     // `live.overlay`의 참조가 그대로라 이 이펙트가 안 돌고, **아웃라인이 옛 자리에 남는다**.
     // **`frame`·`measureTick`도 자리를 바꾼다** — iframe 문서가 서야 잴 수 있고, 문서 밖의 것이 상자를 바꾸면
     // iframe 이 다시 잰다(위 `measureTick`).
-  }, [outlinedIds, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [outlinedIds, rendered, viewState, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **번호 마커의 자리를 잰다**(「설계서 화면 구조」). 위 아웃라인 이펙트와 같은 장치이고
@@ -521,7 +527,7 @@ export function Canvas(props: {
   const handleNode =
     outlinedNodeId === null || selectedNodeIds.length !== 1 || outlinedNodeId === doc.root?.id || lockOf(outlinedNodeId) !== null
       ? undefined
-      : findNodeSafely(doc.root, outlinedNodeId)
+      : handleTarget(findNodeSafely(doc.root, outlinedNodeId))
 
   return (
     <div
@@ -620,6 +626,11 @@ export function Canvas(props: {
           <span className="wb-shell-region-tag" style={{ transform: `scale(${1 / zoom})` }}>
             {item.label}
           </span>
+          {item.empty && (
+            <span className="wb-shell-region-empty" data-wb-region-empty="" style={{ transform: `scale(${1 / zoom})` }}>
+              {EMPTY_BRANCH_LABEL}
+            </span>
+          )}
         </div>
       ))}
       {/* **배치 선**(`./layout-guides.tsx`) — 외곽선보다 먼저 그려 그 밑에 선다. 모서리 글은 줌을 걷어 화면에서 늘 같은 크기다(손잡이와 같은 꼴). */}
@@ -942,6 +953,11 @@ interface GuideBox extends Guide {
 }
 
 const NO_GUIDES: readonly GuideBox[] = []
+
+/** 손잡이를 세울 노드 — 가지(`StateCase`)는 영역 밖으로 못 옮기므로(`edit/structure-drop.ts`) 손잡이가 없다. */
+function handleTarget(node: WbNode | undefined): WbNode | undefined {
+  return node?.type === 'StateCase' ? undefined : node
+}
 
 /** 상태 영역 표지 하나 — 상자는 표면 좌표다(`measure` 와 같은 셈). */
 interface RegionBox extends RegionMark {

@@ -99,7 +99,18 @@ describe('종료 코드', () => {
     expect(await run(['lint', '--fail-on', 'warning'], io), io.stderr.join('\n')).toBe(EXIT.ok)
     const out = io.stdout.join('\n')
     expect(out).toContain('info\t관리자/회원/상태\tview-state-unused\t상태 "비로그인" 에는 가지가 하나도 없습니다')
-    expect(out).toContain('(error 0 · warning 0 · info 1)')
+    expect(out).toContain('결함 없음 (info 1건)')
+    expect(out).not.toMatch(/결함 \d+건/)
+  })
+
+  it('경고와 정보가 섞이면 «결함 N건» 은 error · warning 합이고 info 는 밖에 따로 선다', async () => {
+    const payload = 경고가_있는_프로젝트()
+    payload.pages.push(상태가_있는_프로젝트().pages.at(-1)!)
+    const io = 준비(payload)
+    await run(['lint'], io)
+    const out = io.stdout.join('\n')
+    expect(out).toContain('결함 1건 (error 0 · warning 1) · info 1건')
+    expect(out).not.toContain('결함 2건')
   })
 
   it('정보가 없으면 요약에 info 칸을 안 단다 — 옛 요약 그대로', async () => {

@@ -9,9 +9,10 @@
  * **실브라우저로는 재지 않는다.** jsdom의 클릭과 실브라우저의 클릭이 갈리는 자리는 이
  * 파일이 못 본다.
  */
-import { act, fireEvent, screen } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { EditorStore } from '../../src/store/editor-store'
+import '../../src/catalog-setup'
 import { HEAD_SEQ, PAGE_ID, canvasSurface, nodeElement, openPage, pageDoc, requireNode } from '../editor-harness'
 
 /** 셸이 만든 스토어를 쥔다. 근거는 `canvas.test.tsx`의 같은 장치 주석. */
@@ -680,5 +681,64 @@ describe('런타임 상태는 언제 사라지는가', () => {
 
     expect(requireNode('n-search').textContent).toContain('찾기')
     expect(requireNode('n-list').getAttribute('data-wb-state')).toBe('loading')
+  })
+})
+
+describe('화면 상태를 바꿔도 시연은 남는다 — 번들과 같은 계약(L-121)', () => {
+  /**
+   * 리셋 축은 모드 · 페이지 · 문서를 실은 횟수뿐이다(`runtimeKey`) — **화면 상태는 축이 아니다.** 내보낸 번들도 같다(`packages/exporter/test/
+   * browser-mount.test.tsx` 의 «상태를 바꿔도 상호작용 겹은 남는다» — 결과가 어긋날 수 없다). «기본» 가지의 버튼이 영역 밖 제목을 숨기면 «관리자» 로
+   * 바꿔도 · 기본으로 돌아와도 제목은 숨은 채다. **jsdom 값이다**(머리 전환기 메뉴를 눌러 상태를 고른다). 바꾸려면 두 곳을 함께 바꾼다.
+   */
+  it('기본에서 숨긴 제목은 다른 상태에서도, 기본으로 돌아와도 숨은 채다', async () => {
+    const doc = {
+      ...pageDoc({
+        id: 'n-root',
+        type: 'Page',
+        children: [
+          { id: 'n-title', type: 'Text', props: { content: '제목' } },
+          {
+            id: 'n-sw',
+            type: 'StateSwitch',
+            children: [
+              {
+                id: 'n-cd',
+                type: 'StateCase',
+                props: { state: 'default' },
+                children: [
+                  {
+                    id: 'n-hide',
+                    type: 'Button',
+                    props: { label: '숨김' },
+                    interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n-title', value: false }] }],
+                  },
+                ],
+              },
+              { id: 'n-ca', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'n-adm', type: 'Button', props: { label: '승인' } }] },
+            ],
+          },
+        ],
+      }),
+      viewStates: [{ id: 's_admin', name: '관리자' }],
+    }
+    await openPage(doc)
+    toView()
+    const pick = async (name: string): Promise<void> => {
+      fireEvent.click(screen.getByRole('button', { name: /^화면 상태:/ }))
+      fireEvent.click(await screen.findByRole('menuitemradio', { name }))
+    }
+    expect(nodeElement('n-title')).not.toBeNull()
+    fireEvent.click(requireNode('n-hide'))
+    expect(nodeElement('n-title')).toBeNull()
+
+    await pick('관리자')
+    // 판 카나리아 — 상태가 실제로 바뀌었다.
+    await waitFor(() => expect(nodeElement('n-adm')).not.toBeNull())
+    expect(nodeElement('n-hide')).toBeNull()
+    expect(nodeElement('n-title')).toBeNull()
+
+    await pick('기본')
+    await waitFor(() => expect(nodeElement('n-hide')).not.toBeNull())
+    expect(nodeElement('n-title')).toBeNull()
   })
 })

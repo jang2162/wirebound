@@ -56,3 +56,57 @@ describe('가지만 고른 복사', () => {
     expect(readNodesEnvelope(writeNodesEnvelope([wrapped], 1, [ADMIN]))).toBeNull()
   })
 })
+
+/**
+ * 붙이기 통지의 가지 셈 — «상태 "X" 가지 N개» 는 **상태 X 의 가지**가 몇 개 빠졌는가다(상태 삭제 확인 «가지 N개의 내용이 함께 삭제됩니다» 와 같은
+ * 뜻 — `removeViewStateOps` 의 `removedCaseIds`). 뺀 가지 **안에 든** 가지도 센다 — 바깥 가지만 세면 안쪽 가지의 상태(붙일 페이지에 없는)가 통지에
+ * 이름조차 안 섰다(L-081). 붙일 페이지에 있는 상태의 가지는 «상태가 없어서» 빠진 것이 아니라 바깥 가지와 함께 간 것이라 세지 않는다.
+ */
+describe('뺀 가지 안의 가지', () => {
+  const inner = (state: string, id: string): WbNode => ({
+    id: `c_${id}`,
+    type: 'StateCase',
+    props: { state },
+    children: [{ id: `b_${id}`, type: 'Button', props: { label: id } }],
+  })
+  const nested: WbNode = {
+    id: 'sw_out',
+    type: 'StateSwitch',
+    children: [
+      { id: 'c_out_d', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'b_out_d', type: 'Button', props: { label: '보기' } }] },
+      {
+        id: 'c_out_g',
+        type: 'StateCase',
+        props: { state: 's_guest' },
+        children: [
+          {
+            id: 'sw_in',
+            type: 'StateSwitch',
+            children: [
+              { id: 'c_in_d', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'b_in_d', type: 'Button', props: { label: '안' } }] },
+              inner('s_vip', 'vip'),
+              inner('s_admin', 'adm'),
+            ],
+          },
+        ],
+      },
+    ],
+  }
+
+  it('뺀 가지 안의 가지는 그 상태 이름으로 센다 — 붙일 페이지에 있는 상태의 가지는 세지 않는다', () => {
+    const prepared = prepareNodesForPaste([nested], { node: () => true, page: () => true, state: (id) => id === 's_admin' })
+    expect(prepared.droppedCases).toEqual([
+      { state: 's_guest', count: 1 },
+      { state: 's_vip', count: 1 },
+    ])
+    // 판 카나리아 — 바깥 가지가 통째로 빠졌다(안쪽 영역 · 가지 모두 문서에 없다).
+    expect(JSON.stringify(prepared.nodes)).not.toContain('s_vip')
+    expect(JSON.stringify(prepared.nodes)).not.toContain('s_admin')
+  })
+
+  it('안 빠지는 가지 안쪽에서 빠진 가지는 예전처럼 한 번만 센다', () => {
+    const keptOuter: WbNode = { ...nested, children: [nested.children![0]!, { ...nested.children![1]!, props: { state: 's_admin' } }] }
+    const prepared = prepareNodesForPaste([keptOuter], { node: () => true, page: () => true, state: (id) => id === 's_admin' })
+    expect(prepared.droppedCases).toEqual([{ state: 's_vip', count: 1 }])
+  })
+})

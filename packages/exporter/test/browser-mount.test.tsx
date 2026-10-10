@@ -194,3 +194,57 @@ describe('상태가 많아도 폭주하지 않는다', () => {
     expect(status.hasAttribute('hidden')).toBe(true)
   })
 })
+
+describe('상태를 바꿔도 상호작용 겹은 남는다 — 에디터 캔버스와 같은 계약(L-121)', () => {
+  /**
+   * 겹layer(숨긴 노드 · 바꾼 prop)의 리셋 축은 모드 · 페이지 · 문서를 실은 횟수뿐이다(`apps/web/src/canvas/canvas.tsx` 의 `runtimeKey` — 화면 상태는 축이
+   * 아니다). 번들이 같은 값을 지키는지 잰다 — **jsdom 값**이다(렌더러의 겹 처리이고 좌표 · 포커스가 없다). «기본» 가지의 버튼이 영역 밖 제목을 숨기면
+   * 다른 상태로 바꿔도 제목은 숨은 채고, 기본으로 돌아와도 그렇다. 상태 전환기가 그 겹을 지우게 바꾸면 에디터 캔버스도 함께 바꿔야 한다(결과가 어긋날
+   * 수 없다 — 설계서 «내보내기»).
+   */
+  const STATED: PageDocument = {
+    version: 1,
+    viewStates: [{ id: 's_admin', name: '관리자' }],
+    root: {
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_title', type: 'Text', props: { content: '제목' } },
+        {
+          id: 'n_sw',
+          type: 'StateSwitch',
+          children: [
+            {
+              id: 'n_case_d',
+              type: 'StateCase',
+              props: { state: 'default' },
+              children: [
+                {
+                  id: 'n_hide',
+                  type: 'Button',
+                  props: { label: '숨김' },
+                  interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_title', value: false }] }],
+                },
+              ],
+            },
+            { id: 'n_case_a', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'n_adm', type: 'Button', props: { label: '승인' } }] },
+          ],
+        },
+      ],
+    } as WbNode,
+  }
+
+  it('기본에서 숨긴 제목은 다른 상태에서도 기본으로 돌아와도 숨은 채다', () => {
+    const { canvas } = mount(STATED)
+    const title = (): boolean => canvas.querySelector('[data-wb-id="n_title"]') !== null
+    expect(title()).toBe(true)
+    press(canvas, 'n_hide')
+    expect(title()).toBe(false)
+    act(() => mounted!.setViewState('s_admin'))
+    // 판 카나리아 — 상태가 실제로 바뀌었다(관리자 가지의 버튼이 서고 기본 가지의 버튼은 없다).
+    expect([canvas.querySelector('[data-wb-id="n_adm"]') !== null, canvas.querySelector('[data-wb-id="n_hide"]') !== null]).toEqual([true, false])
+    expect(title()).toBe(false)
+    act(() => mounted!.setViewState(null))
+    expect(title()).toBe(false)
+  })
+})
