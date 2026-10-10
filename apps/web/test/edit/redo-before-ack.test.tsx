@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { applyOps, invertOps, type PatchOp } from '@wirebound/schema'
 import type { ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
-import { REDO_BEFORE_ACK_NOTICE } from '../../src/shell/editor-keys'
+import { ALIAS_MANY_NOTICE, REDO_BEFORE_ACK_NOTICE } from '../../src/shell/editor-keys'
 import { HEAD_SEQ, openPage, pageDetail, pageDoc } from '../editor-harness'
 import '../../src/catalog-setup'
 import { structureRowName } from '../panels/tree-row'
@@ -49,6 +49,11 @@ function server() {
 const history = (name: '되돌리기' | '다시 실행') => within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name })
 const redoKey = (): boolean => fireEvent.keyDown(document.body, { key: 'Z', code: 'KeyZ', ctrlKey: true, shiftKey: true })
 
+/** 정보 통지 한 칸(`shell/info-notice.tsx`)의 글. */
+const infoTexts = (): string[] =>
+  screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
+const rowOf = (type: string) => within(screen.getByRole('region', { name: '구조 트리' })).getByRole('button', { name: structureRowName(type) })
+
 describe('다시 실행 키 — 되돌림의 ack 전', () => {
   it('되돌림이 큐에 있는 동안 누르면 이유를 말하고 아무것도 보내지 않는다 — 답이 닿으면 같은 키가 다시 실행한다', async () => {
     const srv = server()
@@ -76,5 +81,28 @@ describe('다시 실행 키 — 되돌림의 ack 전', () => {
     redoKey()
     expect(screen.queryByText(REDO_BEFORE_ACK_NOTICE)).toBeNull()
     expect(srv.calls).toHaveLength(0)
+  })
+
+  /**
+   * 다시 실행의 까닭과 다른 정보 통지가 같은 칸을 겨룬다 — 쌓지 않고 나중 것이 앞의 것을 바꿔 끼운다(`EditorState.infoNotice`). 실패 자리(`alert`)는 안 쓴다.
+   */
+  it('다시 실행의 까닭은 정보 통지 한 칸에 서서 앞의 정보 통지를 바꿔 끼운다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(rowOf('Card'))
+    fireEvent.keyDown(document.body, { key: 'ArrowUp', altKey: true })
+    await waitFor(() => expect(history('되돌리기').disabled).toBe(false))
+    fireEvent.click(history('되돌리기'))
+    await waitFor(() => expect(srv.calls).toHaveLength(2))
+
+    // 여럿을 골라 F2 — 앞의 정보 통지가 선다.
+    fireEvent.click(rowOf('Text'), { ctrlKey: true })
+    fireEvent.keyDown(document.body, { key: 'F2', code: 'F2' })
+    expect(infoTexts()).toEqual([ALIAS_MANY_NOTICE])
+
+    redoKey()
+    expect(infoTexts()).toEqual([REDO_BEFORE_ACK_NOTICE])
+    expect(screen.queryAllByRole('alert')).toEqual([])
+    srv.release()
   })
 })

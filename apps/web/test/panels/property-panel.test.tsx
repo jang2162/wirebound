@@ -87,7 +87,7 @@ const DOC = pageDoc({
         ],
       },
     },
-    { id: 'n-ghost', type: '없는타입' },
+    { id: 'n-ghost', type: '없는타입', alias: '옛 위젯' },
   ],
 })
 
@@ -372,6 +372,8 @@ describe('속성 패널', () => {
     // 캔버스는 이 노드를 폴백으로 그리고 배너로 알린다. 패널도 자기 자리에서 말해야
     // 사용자가 "왜 속성이 안 나오지"를 묻지 않는다.
     within(panel()).getByText('카탈로그에 없는 컴포넌트입니다: 없는타입')
+    // L-125 — 제목도 «타입 (별칭)» 이다(다른 판 · 줄 글과 같은 이름).
+    expect(within(panel()).getByRole('heading', { level: 2 }).textContent).toBe('없는타입 (옛 위젯)')
     expect(propRows()).toHaveLength(0)
   })
 

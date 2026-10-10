@@ -166,6 +166,8 @@ export function MenuTree(props: {
   resyncToken?: number
   /** 다시 받은 트리가 열린 입력 · 상자의 대상을 지웠을 때의 한 줄(훅의 `onDropped`). 셸이 하단 바에 세운다. */
   onDropped?: (message: string) => void
+  /** 연쇄 삭제가 성공했다 — 안전망 스냅샷을 알리는 한 줄(훅의 `onCascaded`). 셸이 정보 통지 자리에 세운다. */
+  onCascaded?: (message: string) => void
   /** 열린 페이지가 트리에서 사라졌다(훅의 `onPageGone`). 셸이 캔버스에 넘긴다. */
   onPageGone?: (pageId: string) => void
 }): ReactElement {
@@ -185,6 +187,7 @@ export function MenuTree(props: {
     ...(props.remoteRev === undefined ? {} : { remoteRev: props.remoteRev }),
     ...(props.resyncToken === undefined ? {} : { resyncToken: props.resyncToken }),
     ...(props.onDropped === undefined ? {} : { onDropped: props.onDropped }),
+    ...(props.onCascaded === undefined ? {} : { onCascaded: props.onCascaded }),
     ...(props.onPageGone === undefined ? {} : { onPageGone: props.onPageGone }),
     pickAfterGone: (gone, next) => neighborOf(shownRows.current, gone, (row) => treeSpot(next, row) !== null),
   })

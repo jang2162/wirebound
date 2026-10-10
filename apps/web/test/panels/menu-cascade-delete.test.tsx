@@ -18,6 +18,7 @@ import {
   MENU_DELETE_TITLE,
   PAGE_PREVIEW_LIMIT,
 } from '../../src/panels/menu-delete-dialog'
+import { cascadeDoneNotice } from '../../src/tree/use-tree-commands'
 import { currentPath, fakeApi, renderWithProviders } from '../helpers'
 import { rowNamed, treeTool } from './tree-row'
 
@@ -86,6 +87,11 @@ async function open(overrides: Partial<ApiClient> = {}, route = '/projects/p-1')
   await screen.findByRole('heading', { name: PROJECT_NAME })
   await screen.findByText('회원관리')
   return { client, getTree: (overrides.getTree as typeof getTree | undefined) ?? getTree, deleteMenu, deleteMenuCascade: (overrides.deleteMenuCascade as typeof deleteMenuCascade | undefined) ?? deleteMenuCascade }
+}
+
+/** 정보 통지 한 칸(`shell/info-notice.tsx`)의 글. */
+function infoTexts(): string[] {
+  return screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
 }
 
 function region(): HTMLElement {
@@ -166,6 +172,9 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     expect(api.deleteMenu).not.toHaveBeenCalled()
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
     expect(screen.queryByRole('dialog', { name: MENU_DELETE_TITLE })).toBeNull()
+    // L-113 — 지우기 직전 안전망 스냅샷을 정보 통지가 알린다(되돌리려면 어느 스냅샷인지).
+    await waitFor(() => expect(infoTexts()).toEqual([cascadeDoneNotice(DONE)]))
+    expect(infoTexts()[0]).toContain(DONE.safetySnapshot.tag)
   })
 
   it('«취소» · Escape 는 아무것도 안 보낸다', async () => {
@@ -276,6 +285,9 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     askDelete('회원관리')
     fireEvent.click(within(dialog()).getByRole('button', { name: MENU_DELETE_CONFIRM }))
     await waitFor(() => expect(currentPath()).toBe('/projects/p-1'))
+    // 열린 페이지까지 지워 판이 비워져도(`clearPage`) 그 한 줄은 남는다 — `EditorStore.setInfoNotice` 의 `survivesLeave`.
+    await waitFor(() => expect(screen.queryByText('대상을 찾을 수 없습니다')).toBeNull())
+    expect(infoTexts()).toEqual([cascadeDoneNotice(DONE)])
   })
 
   it('409 의 목록이 꼴이 틀리면 다시 받은 트리로 센다 — 그 메뉴가 트리에서 사라졌으면 그렇게 말하고 확인을 끈다(까닭은 title · aria-description)', async () => {

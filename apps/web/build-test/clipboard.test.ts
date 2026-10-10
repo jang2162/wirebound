@@ -52,7 +52,8 @@ describe.skipIf(!전제.ok)('클립보드 — 실브라우저', () => {
     return (response.body.schema.root.children ?? []) as PastedNode[]
   }
 
-  const alerts = (page: Page) => page.locator('.wb-shell-edit-alert').allTextContents()
+  // 뺀 동작 수는 실패 자리(`.wb-shell-edit-alert`)가 아니라 정보 통지 한 칸이 말한다(`shell/info-notice.tsx`).
+  const alerts = (page: Page) => page.locator('.wb-shell-info-notice').allTextContents()
 
   it('복사 → 같은 컨텍스트의 다른 탭 · 다른 프로젝트 페이지에 붙이면 새 id 로 들어가고, 대상이 없는 동작은 빠지며 그 수를 말한다', async () => {
     const source = await sourceProject(stack, alice)

@@ -151,7 +151,8 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
       await t.page.keyboard.press('ControlOrMeta+z')
       await t.page.keyboard.press('ControlOrMeta+Shift+z')
       expect(noAckYet(t.log, t.T0)).toEqual([])
-      expect(await t.page.locator('.wb-shell-edit-alert').allTextContents()).toEqual([REDO_NOTICE])
+      // 다시 실행의 까닭은 정보 통지 한 칸이 말한다(`shell/info-notice.tsx`).
+      expect(await t.page.locator('.wb-shell-info-notice').allTextContents()).toEqual([REDO_NOTICE])
       await poll('되돌림이 서버에 닿는다', () => server(t.P), (s) => s.headSeq >= 3, 8_000)
       await t.page.waitForTimeout(DELAY_MS * 4)
       expect(await server(t.P)).toEqual({ ids: ['n_text0000001', 'n_text0000002', 'n_text0000003', 'n_field000001'], headSeq: 3 })
@@ -170,7 +171,8 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
       await t.page.keyboard.press('ControlOrMeta+Shift+z')
       // 판 카나리아 — 누른 때 되돌림의 ack(둘째 patch-ack)는 아직 안 왔다.
       expect(acks).toBeLessThan(2)
-      expect(await t.page.locator('.wb-shell-edit-alert').allTextContents()).toEqual([REDO_NOTICE])
+      // 다시 실행의 까닭은 정보 통지 한 칸이 말한다(`shell/info-notice.tsx`).
+      expect(await t.page.locator('.wb-shell-info-notice').allTextContents()).toEqual([REDO_NOTICE])
       await t.page.waitForTimeout(DELAY_MS * 3)
       expect(await server(t.P)).toEqual({ ids: ['n_text0000001', 'n_text0000002', 'n_text0000003', 'n_field000001'], headSeq: 3 })
     } finally {

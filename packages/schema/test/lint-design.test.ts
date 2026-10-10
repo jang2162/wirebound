@@ -61,6 +61,19 @@ describe('① 코멘트가 없는 주요 컴포넌트', () => {
     expect(issues[0]!.pageId).toBe('pg1')
   })
 
+  // L-125 — 문장은 노드를 사람이 부르는 이름(별칭 · 라벨 + 한국어 이름)으로 부르고 타입은 괄호에 붙인다. 타입만 쓰면 별칭을 지은 사람이 제 노드를 못 찾는다.
+  it('메시지는 별칭이 있으면 별칭으로, 없으면 한국어 이름으로 노드를 부르고 타입을 곁에 둔다', () => {
+    const named = node('List', { alias: '회원 목록' })
+    const plain = node('List')
+    const messages = lintDesign(project({ pages: [page({ document: doc([named, plain]) })] }))
+      .filter((issue) => issue.rule === 'comment-missing')
+      .map((issue) => issue.message)
+    expect(messages).toEqual([
+      '회원 목록(List)에 코멘트가 없습니다 — 주요 컴포넌트는 설명이 필요합니다',
+      '목록(List)에 코멘트가 없습니다 — 주요 컴포넌트는 설명이 필요합니다',
+    ])
+  })
+
   it('코멘트가 붙은 노드는 내지 않는다', () => {
     const list = node('List')
     const entry = node('EntryForm', { children: [node('Field')] })

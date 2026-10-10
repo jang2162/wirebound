@@ -231,6 +231,15 @@ export interface EditorState {
   /** 마지막 편집 실패. 새 편집을 내면 지워진다 — 남아 있으면 방금 낸 편집도 실패한 것으로 읽힌다. */
   editFailure: EditFailure | null
   /**
+   * **정보 통지 — 실패가 아닌 한 줄**(`shell/info-notice.tsx`). 실패 자리(`editFailure` · `role="alert"`)와 갈라 둔다: 붙이기에서 동작을 뺐다 ·
+   * 키가 아무것도 안 했다 · 고른 것이 숨었다 같은 말은 **일이 실패한 것이 아니라** 사람이 알면 좋은 것이라, 같은 자리에 서면 보조 기술이
+   * 방금 한 편집이 실패한 줄 안다(`EditWarnings` · `RemoteAlert` 가 `status` 인 것과 같은 판정).
+   *
+   * **한 칸이다 — 쌓지 않고 바꿔 끼운다.** 정보 통지를 줄마다 쌓으면 창 800×500 에서 여덟 줄이 셸을 93px 넘쳤다(N1 이 쟀다). 새 정보 통지는
+   * 앞의 것을 대신하고, 새 편집 · 되돌리기 · 페이지 옮김이 치운다 — 낡은 정보가 새 판 위에 남아 «방금 한 일의 결과» 로 읽히지 않게.
+   */
+  infoNotice: string | null
+  /**
    * **서버가 마지막 편집 응답에 실어 보낸 문서 경고**(「정방향 흐름」).
    *
    * **실패가 아니다.** severity가 `warning`인 이슈는 저장을 막지 않고 문서에 남는다 —
@@ -329,6 +338,7 @@ function initialState(): EditorState {
     undoHistoryLoading: false,
     editStatus: 'idle',
     editFailure: null,
+    infoNotice: null,
     editWarnings: NO_WARNINGS,
     locks: NO_LOCKS,
     viewerUserId: null,
@@ -2210,7 +2220,8 @@ export class EditorStore {
       undoHistoryLoading: false,
       editStatus: 'idle',
       // 떠나며 버린 편집을 말하는 조각만 남긴다(`#lossParts`의 `sticky`).
-      editFailure: this.#keptLoss(),
+      editFailure: this.#keptLoss(true),
+      infoNotice: this.#keptInfo(),
       editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
       // 복원 낡음은 복원 뒤 다시 읽기만 푼다(`beginRestoreReread`) — 페이지를 옮기며 비우는 판은 메뉴 · 코멘트를 다시 안 읽었다.
       remoteStale: this.#keepsRestored(options.restoreReread === true) ? this.#restoredStale() : null,
@@ -2594,6 +2605,18 @@ export class EditorStore {
   }
 
   /**
+   * 정보 통지를 세우거나(앞의 것을 바꿔 끼운다) 치운다(`null`). 그리는 것은 `shell/info-notice.tsx` 다 — `infoNotice` 의 머리말.
+   *
+   * `survivesLeave` — **다음 `clearPage` 한 번을 넘긴다.** 연쇄 삭제가 열린 페이지까지 지우면 «지웠습니다 · 스냅샷으로 되돌릴 수 있습니다» 가 선
+   * 뒤 열린 페이지를 프로젝트 뿌리로 옮기며 판을 비워(`clearPage`) 한 줄이 서자마자 사라진다(`#droppedLine` 과 같은 까닭).
+   */
+  readonly setInfoNotice = (infoNotice: string | null, options: { survivesLeave?: boolean } = {}): void => {
+    this.#infoKept = infoNotice !== null && options.survivesLeave === true ? infoNotice : null
+    this.#apply({ infoNotice })
+  }
+  #infoKept: string | null = null
+
+  /**
    * **잃음을 말한다 — 앞 잃음을 덮지 않고 잇는다**(`store/loss-notice.ts`). 지금 통지가 잃음의 조각이 아니면(되돌리기 · 프리셋 · 없음) 새로
    * 시작한다. **세션이 끊긴 통지는 덮지 않는다** — 그 통지는 셸을 로그인으로 보내는 중이고, 뒤에 온 잃음이 덮으면 끊긴 세션 위에 편집 화면이
    * 남는다.
@@ -2662,8 +2685,33 @@ export class EditorStore {
     return this.#lossNotice
   }
 
-  /** 판을 비우는 자리가 둘 통지 — 떠남의 조각만 남긴다(`#lossParts`). 다 남으면 같은 참조다. 조각이 아닌 통지는 치운다. */
-  #keptLoss(): EditFailure | null {
+  /**
+   * 트리가 사라진 대상의 입력 · 상자를 닫으며 남긴 한 줄(`tellDropped`) — **다음 `clearPage` 한 번**을 넘긴다. 열린 페이지가 함께 사라진 판은 그
+   * 신호(`routes/editor.tsx` 의 `pageGone` → 캔버스의 «사라짐» 확인)가 한 줄 **뒤에** 판을 비워, 비우는 자리가 조각이 아닌 통지를 치워 한 줄이 서자마자
+   * 사라졌다(캔버스의 «대상을 찾을 수 없습니다» 는 친 글을 안 썼다는 말을 안 한다). 한 번만 넘긴다 — 페이지를 옮길 때마다 남으면 낡은 줄이 된다.
+   */
+  #droppedLine: EditFailure | null = null
+
+  /** 입력 · 상자를 닫으며 남기는 한 줄을 세운다 — 잃음 통지가 서 있으면 덮지 않는다. 다음 `clearPage` 한 번을 넘긴다(`#droppedLine`). */
+  readonly tellDropped = (message: string): void => {
+    if (this.showsLoss()) return
+    const failure: EditFailure = { kind: 'message', message }
+    this.#droppedLine = failure
+    this.setEditFailure(failure)
+  }
+
+  /** 판을 비우며 정보 통지를 넘기는가 — `survivesLeave` 로 세운 그 글 하나만, 한 번. */
+  #keptInfo(): string | null {
+    const kept = this.#infoKept
+    this.#infoKept = null
+    return kept !== null && this.#state.infoNotice === kept ? kept : null
+  }
+
+  /** 판을 비우는 자리가 둘 통지 — 떠남의 조각만 남긴다(`#lossParts`). 다 남으면 같은 참조다. 조각이 아닌 통지는 치운다(`#droppedLine` 한 번만 빼고). */
+  #keptLoss(keepDropped = false): EditFailure | null {
+    const dropped = this.#droppedLine
+    this.#droppedLine = null
+    if (keepDropped && dropped !== null && this.#state.editFailure === dropped && this.#shownLoss().length === 0) return dropped
     const parts = this.#shownLoss()
     const kept = parts.filter((part) => part.sticky !== undefined)
     if (kept.length === parts.length && kept.length > 0) return this.#state.editFailure
@@ -3021,7 +3069,12 @@ export class EditorStore {
    * `getState()`의 참조가 달라져 구독자가 헛일을 한다. 선택 목록은 `#withSelection`이 먼저 맞춘다.
    */
   #apply(update: Partial<EditorState>): void {
-    const next = this.#withSelection(update)
+    let next = this.#withSelection(update)
+    // **고른 것이 바뀌면 정보 통지를 걷는다** — «여럿을 고른 판입니다 …» 같은 말은 그 고름에 대한 말이라, 하나로 다시 골라도 남으면 낡은 말이다. 같은 갱신이
+    // 새 통지를 함께 싣거나(`infoNotice` 가 든 갱신) 목록이 같으면 건드리지 않는다.
+    if (next.selectedNodeIds !== undefined && !('infoNotice' in next) && this.#state.infoNotice !== null && !sameSelection(next.selectedNodeIds, this.#state.selectedNodeIds)) {
+      next = { ...next, infoNotice: null }
+    }
     let changed = false
     for (const key of Object.keys(next) as (keyof EditorState)[]) {
       if (next[key] !== this.#state[key]) {

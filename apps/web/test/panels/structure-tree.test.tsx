@@ -19,6 +19,7 @@ import {
   selectionOutline,
   waitForNode,
 } from '../editor-harness'
+import { HIDDEN_SELECTION_NOTICE } from '../../src/shell/use-view-state'
 import { structureRowName, structureRowType } from './tree-row'
 
 /**
@@ -87,6 +88,11 @@ function structureList(): HTMLElement | null {
 }
 
 /** 구조 트리의 노드 줄. 순서는 화면에 그려진 순서 그대로다. */
+/** 정보 통지 한 칸(`shell/info-notice.tsx`)의 글. */
+function infoTexts(): string[] {
+  return screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
+}
+
 function nodeRows(): HTMLElement[] {
   const list = structureList()
   // 줄 단추만 — 줄의 `+` · `…`(행동 메뉴 단추)는 줄이 아니다.
@@ -179,6 +185,40 @@ describe('구조 트리', () => {
       'StateCase 관리자',
       'StateCase 목록에 없는 상태',
     ])
+  })
+
+  /**
+   * L-076 · Q15 — 흐린(지금 상태 밖) 가지의 노드를 «모든 가지 보기»로 고른 뒤 그 보기를 끄면 고른 것이 숨어 선택 · 속성 패널이 조용히 비었다.
+   * 지금은 정보 통지가 까닭을 한 줄로 말한다 — 혼자 죽는 변조: `HiddenSelectionPrune` 의 `setInfoNotice` 를 뗀다.
+   */
+  it('흐린 가지의 노드를 고른 채 «모든 가지 보기»를 끄면 선택에서 빼고 까닭을 정보 통지로 말한다', async () => {
+    await openPage({
+      ...pageDoc({
+        id: 'n-root',
+        type: 'Page',
+        children: [
+          {
+            id: 'n-sw',
+            type: 'StateSwitch',
+            children: [
+              { id: 'n-c0', type: 'StateCase', props: { state: 'default' }, children: [] },
+              { id: 'n-c1', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'n-btn', type: 'Button' }] },
+            ],
+          },
+        ],
+      }),
+      viewStates: [{ id: 's_admin', name: '관리자' }],
+    })
+    fireEvent.click(screen.getByRole('button', { name: '모든 가지 보기' }))
+    fireEvent.click(row('Button'))
+    expect(shellStore().getState().selectedNodeIds).toEqual(['n-btn'])
+    expect(infoTexts()).toEqual([])
+
+    fireEvent.click(screen.getByRole('button', { name: '모든 가지 보기' }))
+
+    expect(shellStore().getState().selectedNodeIds).toEqual([])
+    expect(infoTexts()).toEqual([HIDDEN_SELECTION_NOTICE])
+    expect(screen.queryAllByRole('alert')).toEqual([])
   })
 
   it('노드 타입을 보여준다', async () => {

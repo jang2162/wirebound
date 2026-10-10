@@ -51,6 +51,7 @@ import { ViewStateSwitcher, viewStateMenuItems } from '../shell/view-state-switc
 import { useViewStateAddress } from '../shell/view-state-address'
 import { BrandLink } from '../shell/brand-link'
 import { EditAlert } from '../shell/edit-alert'
+import { InfoNotice } from '../shell/info-notice'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
 import { EditorKeys } from '../shell/editor-keys'
@@ -641,12 +642,9 @@ function EditorShell(props: {
   const [pageGone, setPageGone] = useState<{ pageId: string; at: number } | null>(null)
   const onPageGone = useCallback((gone: string) => setPageGone((last) => ({ pageId: gone, at: (last?.at ?? 0) + 1 })), [])
   /** 트리가 사라진 대상의 입력 · 상자를 닫으며 남기는 한 줄 — 하단 바(잃음 통지는 안 덮는다 · `panels/alias-edit.tsx`의 같은 자리). */
-  const onTreeDropped = useCallback(
-    (message: string) => {
-      if (!store.showsLoss()) store.setEditFailure({ kind: 'message', message })
-    },
-    [store],
-  )
+  const onTreeDropped = useCallback((message: string) => store.tellDropped(message), [store])
+  /** 연쇄 삭제가 끝났다 — 안전망 스냅샷을 정보 통지로(열린 페이지까지 지웠으면 이어 판이 비워져도 한 번 넘긴다 · `EditorStore.setInfoNotice`). */
+  const onTreeCascaded = useCallback((message: string) => store.setInfoNotice(message, { survivesLeave: true }), [store])
   /**
    * **이 셸이 선 `reset` 세대**(`EditorStore.resetGeneration`). 셸 안에서 다른 프로젝트로 가면(뒤로 · 앞으로) 라우트는 스토어를 그대로 두고 이
    * 셸을 내린 뒤 새 셸을 세운다 — 복원을 보낸 몸체는 내려간 셸의 콜백을 쥔 채 답을 받는다. 그 콜백이 스토어에 쓰면 산 셸의 판을 바꾼다: 답이
@@ -901,7 +899,13 @@ function EditorShell(props: {
           {props.pageId !== undefined && <ViewStatesDialog projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />}
           {/* **에디터 단축키**(`shell/editor-keys.tsx`) — 호스트와 캔버스 문서에 리스너를 걸고, `?` 의 도움말 상자를 여기 그린다. 편집 명령은
               편집 모드 && `canEdit` 일 때만, 고르기 · 선택 이동 · 도움말은 늘 선다. */}
-          <EditorKeys projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />
+          <EditorKeys
+            projectId={props.project.id}
+            pageId={props.pageId}
+            editable={mode === 'edit' && canEdit}
+            sideFolded={layout.sideFolded}
+            onUnfoldSide={layout.toggleSide}
+          />
         </header>
 
         <nav
@@ -941,6 +945,7 @@ function EditorShell(props: {
               remoteRev={menuRev}
               resyncToken={resyncToken}
               onDropped={onTreeDropped}
+              onCascaded={onTreeCascaded}
               onPageGone={onPageGone}
               editable={mode === 'edit' && canEdit}
               headSlot={menuHead}
@@ -1059,6 +1064,8 @@ function EditorShell(props: {
                   받고 보내지 못한 편집을 잃는다. 하단 바는 어느 패널을 보고 있어도 캔버스
                   바로 아래라 눈에 들어온다. */}
               <EditAlert />
+              {/* **정보 통지는 한 칸이다**(`shell/info-notice.tsx`) — 실패가 아닌 한 줄이 쌓이지 않고 바꿔 끼워진다. */}
+              <InfoNotice />
               {/* **경고는 실패가 아니다**. 실패 통지 바로 옆에 두되 `role`이 다르다 —
                   근거는 `shell/edit-warnings.tsx`의 머리말에 있다. */}
               <EditWarnings />

@@ -64,56 +64,76 @@ export function writeNodesEnvelope(nodes: readonly WbNode[], version: number, vi
   return JSON.stringify({ wirebound: NODES_ENVELOPE_KIND, version, nodes, viewStates })
 }
 
+/** 봉투를 읽은 결과 — `rejected` 는 우리 봉투(`wirebound: "nodes"`)인데 지금 문서에 실을 수 없는 것이다(`reason` 은 사람이 읽는 한 줄). */
+export type NodesEnvelopeRead =
+  | { kind: 'ok'; nodes: WbNode[]; viewStates?: ViewState[] }
+  | { kind: 'rejected'; reason: string }
+  | { kind: 'not-envelope' }
+
 /**
- * 글자에서 봉투를 읽는다. **봉투가 아니거나 지금 문서에 실을 수 없는 노드면 `null` 이다 — 던지지 않는다.**
+ * 글자에서 봉투를 읽는다 — **봉투가 아닌 글(`not-envelope`)과 검증을 못 지난 봉투(`rejected`)를 가른다.** 던지지 않는다.
  *
- * - JSON 이 아니다 · `wirebound: "nodes"` 가 아니다 · 모르는 키가 있다 · 노드가 없다 → `null`
- * - 옛 `version` 은 문서 마이그레이션 체인(`migrateDocument`)으로 올린다. 지금보다 높거나 올릴 길이 없으면 `null`
- * - 올린 노드는 문서 봉투(`DocumentEnvelopeSchema`)와 문서 검증(`validatePage` 의 `error`)을 지나야 한다 — 없는 타입 ·
- *   중복 id · 틀린 props · 자식을 못 담는 타입에 자식. `warning`(끊긴 상호작용 대상)은 막지 않는다 — 편집 파이프라인도
- *   막지 않고, 끊긴 대상은 `prepareNodesForPaste` 가 다룬다.
+ * - JSON 이 아니다 · `wirebound` 가 `"nodes"` 가 아니다 → `not-envelope` (브라우저의 붙여넣기가 그대로다 · 통지 없음)
+ * - `wirebound: "nodes"` 인데 모르는 키가 있다 · 노드가 없다 · 옛 `version` 을 올릴 길이 없다(지금보다 높다 · 체인이 없다) · 올린 노드가
+ *   문서 봉투(`DocumentEnvelopeSchema`)와 문서 검증(`validatePage` 의 `error`)을 못 지난다(없는 타입 · 중복 id · 틀린 props ·
+ *   자식을 못 담는 타입에 자식) → `rejected` — 화면이 «붙이지 않았다» 와 까닭을 말한다. `warning`(끊긴 상호작용 대상)은 막지 않는다 —
+ *   편집 파이프라인도 막지 않고, 끊긴 대상은 `prepareNodesForPaste` 가 다룬다.
  *
  * - **맨 위에 선 상태 가지는 받는다**(영역 없이 가지만 고른 복사) — 임시 뿌리 아래라 `state-case-outside` 가 서지만 붙이기가 그
  *   내용으로 푼다(`prepareNodesForPaste`). 맨 위가 아닌 자리의 영역 밖 가지는 여전히 오류다.
- * - `viewStates` 는 문서 봉투의 목록 규칙(`ViewStatesSchema`)을 지나야 한다 — 어기면 봉투째 `null`.
+ * - `viewStates` 는 문서 봉투의 목록 규칙(`ViewStatesSchema`)을 지나야 한다 — 어기면 `rejected`.
  *
- * **검증을 못 지난 봉투도 «봉투가 아님» 과 같은 `null` 이다** — 화면은 그 둘을 가르지 않고 아무 일도 안 한다
- * (설계서 「설계서 화면 구조」의 클립보드 — 봉투가 아닌 글은 통지도 없다).
+ * **「이 판에 없는 타입」도 `rejected` 다** — 봉투는 타입 이름을 담고 카탈로그는 이 판이 아는 것만 안다(`validatePage` 의 `unknown-type`).
  *
  * `migrations` · `target` 은 케이스가 마이그레이션 갈래를 재는 이음매다(`migrateDocument` 와 같은 꼴). 운영은 기본값.
  */
-export function readNodesEnvelope(
+export function inspectNodesEnvelope(
   text: string,
   migrations: Migration[] = MIGRATIONS,
   target: number = CURRENT_DOCUMENT_VERSION,
-): { nodes: WbNode[]; viewStates?: ViewState[] } | null {
+): NodesEnvelopeRead {
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
   } catch {
-    return null
+    return { kind: 'not-envelope' }
+  }
+  if (typeof parsed !== 'object' || parsed === null || (parsed as { wirebound?: unknown }).wirebound !== NODES_ENVELOPE_KIND) {
+    return { kind: 'not-envelope' }
   }
 
   const envelope = NodesEnvelopeSchema.safeParse(parsed)
-  if (!envelope.success) return null
+  if (!envelope.success) return { kind: 'rejected', reason: '봉투의 모양이 맞지 않습니다.' }
 
   let document: PageDocument
   try {
     document = migrateDocument(wrap(envelope.data.nodes as WbNode[], envelope.data.version), migrations, target)
   } catch {
-    return null
+    return { kind: 'rejected', reason: '이 판이 읽을 수 없는 버전입니다.' }
   }
 
   const checked = DocumentEnvelopeSchema.safeParse(document)
-  if (!checked.success) return null
+  if (!checked.success) return { kind: 'rejected', reason: '노드의 모양이 맞지 않습니다.' }
   const top = new Set((checked.data.root.children ?? []).map((node) => node.id))
   const errors = partitionIssues(validatePage(checked.data)).errors.filter(
     (issue) => !(issue.code === 'state-case-outside' && issue.nodeId !== null && top.has(issue.nodeId)),
   )
-  if (errors.length > 0) return null
+  const first = errors[0]
+  if (first !== undefined) return { kind: 'rejected', reason: first.message }
 
   const nodes = checked.data.root.children ?? []
-  return envelope.data.viewStates === undefined ? { nodes } : { nodes, viewStates: envelope.data.viewStates }
+  return envelope.data.viewStates === undefined ? { kind: 'ok', nodes } : { kind: 'ok', nodes, viewStates: envelope.data.viewStates }
+}
+
+/** `inspectNodesEnvelope` 의 `ok` 만 — 봉투가 아니거나 못 지난 봉투는 둘 다 `null` 이다(둘을 가르려면 `inspectNodesEnvelope`). */
+export function readNodesEnvelope(
+  text: string,
+  migrations: Migration[] = MIGRATIONS,
+  target: number = CURRENT_DOCUMENT_VERSION,
+): { nodes: WbNode[]; viewStates?: ViewState[] } | null {
+  const read = inspectNodesEnvelope(text, migrations, target)
+  if (read.kind !== 'ok') return null
+  return read.viewStates === undefined ? { nodes: read.nodes } : { nodes: read.nodes, viewStates: read.viewStates }
 }
 
 /**

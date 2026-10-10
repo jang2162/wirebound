@@ -292,7 +292,8 @@ describe('하나일 때만 되는 것', () => {
       calls: srv.calls.length,
       picked: shellStore().getState().selectedNodeIds,
       alert: screen.queryAllByRole('alert').map((element) => element.textContent),
-    }).toEqual({ calls: 0, picked: ['n-b', 'n-c'], alert: [MULTI_KEY_NOTICE] })
+      info: screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent),
+    }).toEqual({ calls: 0, picked: ['n-b', 'n-c'], alert: [], info: [MULTI_KEY_NOTICE] })
   })
 })
 

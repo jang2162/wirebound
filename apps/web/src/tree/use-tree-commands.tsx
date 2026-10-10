@@ -22,7 +22,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { ApiError, MENU_SUBTREE_CHANGED, readSubtreeListing } from '../api/client'
+import { ApiError, MENU_SUBTREE_CHANGED, readSubtreeListing, type MenuCascadeResult } from '../api/client'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
 import { MENU_TITLE_CHANGED, PAGE_META_CHANGED, judgeMeta, metaConflict } from '../api/page-meta'
@@ -102,6 +102,12 @@ const RENAME_MISSED = '이 화면을 떠나 있는 동안 이름을 바꾸지 �
  */
 export const TREE_DRAFT_DROPPED = '그 항목이 트리에서 사라져 친 이름을 쓰지 않았습니다'
 /** 연쇄 삭제 상자가 가리키던 메뉴가 트리에서 사라져 상자를 닫았다(`reconcile`). */
+/** 연쇄 삭제의 결과 한 줄 — 지운 수와 «되돌리려면» 어느 스냅샷인지(서버가 지우기 직전에 찍는다 · `deleteMenuCascade`). */
+export function cascadeDoneNotice(result: MenuCascadeResult): string {
+  const { menus, pages } = result.deleted
+  return `메뉴 ${menus + 1}개 · 페이지 ${pages}개를 지웠습니다. 되돌리려면 스냅샷 «${result.safetySnapshot.tag}» 로 복원하세요.`
+}
+
 export function cascadeClosedNotice(title: string): string {
   return `"${title}" 메뉴가 트리에서 사라져 삭제 상자를 닫았습니다`
 }
@@ -308,6 +314,11 @@ export function useTreeCommands(props: {
   resyncToken?: number
   /** 하단 바에 한 줄 — 다시 받은 트리가 열린 입력 · 상자의 대상을 지웠을 때(`reconcile`). 없으면 말하지 않는다. */
   onDropped?: (message: string) => void
+  /**
+   * 연쇄 삭제가 성공했다 — 안전망 스냅샷을 알리는 정보 한 줄(`cascadeDoneNotice`). 열린 페이지까지 지웠으면 이 줄 뒤에 판이 비워지므로 부르는 쪽이 그
+   * 한 번을 넘기게 세운다(`EditorStore.setInfoNotice` 의 `survivesLeave`). 없으면 말하지 않는다.
+   */
+  onCascaded?: (message: string) => void
   /**
    * **열린 페이지(`pageId`)가 트리에서 사라졌다** — 앞 트리에 있던 그 페이지가 새 트리에 없다. 셸이 캔버스에 넘겨 서버에 묻는다
    * (`routes/editor.tsx`의 `CanvasFrame` «페이지가 사라짐»). 내가 지운 페이지는 안 부른다(`ownRemoval`) — 지운 조작이 프로젝트 뿌리로 옮긴다.
@@ -1279,13 +1290,15 @@ export function useTreeCommands(props: {
     // `run`의 실패 갈래는 `Failure`(문장)만 받는다 — 목록이 바뀐 409 인지는 보낸 자리에서 가른다.
     let changed = false
     let listed: MenuSubtree | null = null
+    let done: MenuCascadeResult | null = null
     void run(
       async () => {
         try {
-          return await api.deleteMenuCascade(projectId, target, {
+          done = await api.deleteMenuCascade(projectId, target, {
             menuIds: subtree.menus.map((entry) => entry.id),
             pageIds: subtree.pages.map((page) => page.id),
           })
+          return done
         } catch (caught) {
           const issue = caught instanceof ApiError ? caught.issues.find((each) => each.code === MENU_SUBTREE_CHANGED) : undefined
           changed = issue !== undefined
@@ -1295,6 +1308,8 @@ export function useTreeCommands(props: {
       },
       () => {
         setPicked(parentId === null ? null : { kind: 'menu', id: parentId })
+        // 한 줄이 먼저다 — 아래 이동이 판을 비워도 그 한 번은 넘어간다(`onCascaded` 머리말).
+        if (done !== null) props.onCascaded?.(cascadeDoneNotice(done))
         if (wasOpen) navigate(`/projects/${projectId}`, { replace: true })
       },
       (failure) => {
