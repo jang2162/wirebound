@@ -27,8 +27,9 @@ export interface TextControlProps {
   disabled: boolean
   onCommit: (value: string | number) => void
   /**
-   * 칸이 받는 글자 수의 상한 — 입력창의 `maxLength` 다(UTF-16 단위라 이모지 같은 글자는 둘로 센다 — 서버의 코드 포인트 한도보다 **더 빡빡한**
-   * 쪽이라 칸이 받은 글이 저장 때 잘리는 일은 없다). 주면 빈 칸의 자리표로 그 한도를 말한다(`placeholder`) — 안 주면 끝없이 받는다.
+   * 칸이 받는 글자 수의 상한 — **코드 포인트**로 센다(서버의 한도와 같은 단위 — 이모지 하나가 한 글자). 입력창의 `maxLength` 는 UTF-16 단위라 이모지를 둘로 세어
+   * 한도의 절반에서 멈춘다(L-241) — 그래서 `onChange` 가 코드 포인트로 막고(`clampPoints`) 입력창의 `maxLength` 는 어느 글도 그보다 안 길 상한(`2 ×`)으로 둔다.
+   * 주면 빈 칸의 자리표로 그 한도를 말한다(`placeholder`) — 안 주면 끝없이 받는다.
    */
   maxLength?: number
   placeholder?: string
@@ -57,6 +58,27 @@ function toDraft(value: unknown): string {
   // 검증을 통과하지 못한 문서가 스토어에 실릴 수 있으므로 빈 칸으로 시작한다 —
   // `JSON.stringify`를 쓰면 사용자가 코드를 편집하게 된다.
   return ''
+}
+
+/**
+ * 코드 포인트 한도(`max`)를 넘는 입력을 한도로 자른다 — **넣은 글(앞 · 뒤가 안 바뀐 사이)만** 자른다. 입력창의 `maxLength` 처럼 가운데에 친 글자가 끝 글자를 밀어내지
+ * 않는다. 한도 안이면 그대로, 한도 앞서 이미 넘은 글(`previous`)이면 더 늘리지 않는다.
+ */
+export function clampPoints(previous: string, next: string, max: number): string {
+  const points = (text: string): number => [...text].length
+  if (points(next) <= max) return next
+  let head = 0
+  while (head < previous.length && head < next.length && previous[head] === next[head]) head += 1
+  // 짝의 앞 절반(high surrogate)에서 멈췄으면 한 칸 물린다 — 글자를 반으로 가르지 않는다.
+  if (head > 0 && /[\ud800-\udbff]/.test(next[head - 1]!)) head -= 1
+  let tail = 0
+  while (tail < previous.length - head && tail < next.length - head && previous[previous.length - 1 - tail] === next[next.length - 1 - tail]) tail += 1
+  if (tail > 0 && /[\udc00-\udfff]/.test(next[next.length - tail]!)) tail -= 1
+  const before = next.slice(0, head)
+  const after = tail === 0 ? '' : next.slice(next.length - tail)
+  const room = max - points(before) - points(after)
+  if (room < 0) return points(previous) <= max ? previous : [...next].slice(0, max).join('')
+  return before + [...next.slice(head, next.length - tail)].slice(0, room).join('') + after
 }
 
 export function TextControl(props: TextControlProps): ReactElement {
@@ -126,9 +148,12 @@ export function TextControl(props: TextControlProps): ReactElement {
     disabled,
     className: 'wb-shell-control',
     ...(props.mixed === true ? { placeholder: MIXED_PLACEHOLDER } : props.placeholder === undefined ? {} : { placeholder: props.placeholder, title: props.placeholder }),
-    ...(props.maxLength === undefined ? {} : { maxLength: props.maxLength }),
+    ...(props.maxLength === undefined ? {} : { maxLength: props.maxLength * 2 }),
     value: draft,
-    onChange: (event: { target: { value: string } }) => setDraft(event.target.value),
+    onChange: (event: { target: { value: string } }) => {
+      const typed = event.target.value
+      setDraft((previous) => (props.maxLength === undefined ? typed : clampPoints(previous, typed, props.maxLength)))
+    },
     onBlur: commit,
   }
 

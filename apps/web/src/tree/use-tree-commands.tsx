@@ -1365,6 +1365,10 @@ export function useTreeCommands(props: {
         told.push(cascadeClosedNotice(shown?.title ?? findMenuTitle(menu ?? [], removing.menuId) ?? ''))
       } else if (shown === null || !sameIds(shown, now)) {
         setRemoving({ menuId: removing.menuId, changed: true, listed: now, recheck: true })
+      } else if (removing.listed !== null && !sameListing(removing.listed, now)) {
+        // 같은 id 집합에서 이름 · 차례만 바뀐 판 — 서버가 «바뀌었다»를 안 말하는(409 아님) 같은 행이다. 앞서 목록이 바뀌어 `listed` 를 쥐었으면 상자가 그 낡은 이름을
+        // 계속 보이므로 새 이름으로 갈아 끼운다(`listed` 가 없으면 상자는 트리에서 바로 센다 — 이미 새 이름이다). 확인을 다시 묻지 않는다 — 지울 것은 그대로다.
+        setRemoving({ ...removing, listed: now })
       }
     }
     const last = told.at(-1)
@@ -1498,6 +1502,13 @@ function findPageTitle(nodes: TreeMenuNode[], pageId: string): string | null {
     if (found !== null) return found
   }
   return null
+}
+
+/** 두 목록이 이름 · 차례까지 같은가 — 상자가 그리는 것 전부(문장의 메뉴 이름 · 지워질 페이지 이름과 차례). */
+function sameListing(a: MenuSubtree, b: MenuSubtree): boolean {
+  const same = (x: { id: string; title: string }[], y: { id: string; title: string }[]): boolean =>
+    x.length === y.length && x.every((entry, at) => entry.id === y[at]!.id && entry.title === y[at]!.title)
+  return a.title === b.title && same(a.menus, b.menus) && same(a.pages, b.pages)
 }
 
 /** 두 목록이 같은 메뉴 · 페이지 id 집합인가 — 서버의 연쇄 삭제 견줌과 같은 술어다(차례 · 제목은 안 본다 — 이름만 바뀐 판은 같은 행이다). */

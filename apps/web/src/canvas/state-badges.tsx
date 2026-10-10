@@ -4,7 +4,7 @@
  * `?state=` 가 같은 값을 따른다).
  *
  * - **서는 영역은 지금 상태에서 보이는 것뿐이다**(`visibleTree`) — 고르지 않은 가지 안의 영역은 그려지지 않아 자리가 없다.
- * - **영역은 그려진 가지의 자식 상자를 합친 상자다** — 영역 · 가지는 DOM 요소를 남기지 않는다(렌더러의 투명 노드). 그 상자에 옅은 점선을
+ * - **영역은 그려진 가지의 자식 상자를 합친 상자다** — 영역 · 가지는 DOM 요소를 남기지 않는다(렌더러의 투명 노드). 자식이 다른 영역이면 그 안쪽 그려진 것까지 합친다(편집 모드 표지와 같은 함수 `childrenExtent`). 그 상자에 옅은 점선을
  *   두르고 표지를 상자의 왼쪽 위 **바깥**(상자 위에 붙은)에 둔다 — 편집 모드의 영역 꼬리표(`canvas/view-state-regions.ts`)와 같은 자리 · 모양이다.
  *   오른쪽에 두면 페이지가 캔버스 칸보다 넓은 판(뷰포트 1280 · 줌 100%)에서 화면 밖에 서 누를 수 없고, 안쪽에 두면 영역 첫 줄의 왼쪽 끝을 가린다. 그려진
  *   자식이 없는 영역(빈 가지)은 표지가 없다 — 머리 전환기로 고른다.
@@ -19,6 +19,7 @@ import { ICONS } from '../shell/icons'
 import { useViewState } from '../shell/use-view-state'
 import { findNodeElement, frameOffset } from './canvas'
 import type { CanvasFrame } from './canvas-iframe'
+import { childrenExtent } from './view-state-regions'
 
 /** 표지의 보이는 글이자 접근 이름의 머리. */
 export const STATE_BADGE_LABEL = '상태에 따라 다름'
@@ -62,21 +63,9 @@ export function StateRegionBadges(props: {
       const node = originals.get(id)
       const shown = node === undefined ? null : caseFor(node, choice.state)
       if (node === undefined || shown === null) continue
-      let left = Infinity
-      let top = Infinity
-      let right = -Infinity
-      let bottom = -Infinity
-      for (const child of shown.children ?? []) {
-        const element = typeof child?.id === 'string' ? findNodeElement(frame.document, child.id) : null
-        if (element === null) continue
-        const rect = element.getBoundingClientRect()
-        left = Math.min(left, rect.left)
-        top = Math.min(top, rect.top)
-        right = Math.max(right, rect.right)
-        bottom = Math.max(bottom, rect.bottom)
-      }
-      if (left === Infinity) continue
-      next.push({ nodeId: id, left: offset.left + left, top: offset.top + top, width: right - left, height: bottom - top, node })
+      const box = childrenExtent(shown, choice.state, (childId) => findNodeElement(frame.document, childId))
+      if (box === null) continue
+      next.push({ nodeId: id, left: offset.left + box.left, top: offset.top + box.top, width: box.width, height: box.height, node })
     }
     setRegions((prev) => (sameRegions(prev, next) ? prev : next))
   }, [doc, frame, zoom, layoutKey, choice.state, props.surfaceRef])
