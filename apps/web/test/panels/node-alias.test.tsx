@@ -357,7 +357,8 @@ describe('구조 트리 줄에서 고치기', () => {
   it('속성 패널 별칭 칸은 60자까지 받는다고 말한다', async () => {
     await board()
     fireEvent.click(rowButton('n-card'))
-    expect(aliasField().maxLength).toBe(60)
+    // 입력창의 `maxLength` 는 UTF-16 상한(`2 ×`)일 뿐이다 — 60 코드 포인트는 `clampPoints` 가 자른다(`test/panels/text-clamp.test.ts` · 실브라우저 `build-test/n19-notices.test.ts`).
+    expect(aliasField().maxLength).toBe(120)
     expect(aliasField().placeholder).toBe('60자까지')
   })
 
