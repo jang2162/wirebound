@@ -376,7 +376,7 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
 
   it('편집이 실패해 노드가 돌아오면 고른 노드도 돌아온다 — 삭제 뒤 부모로 옮겼던 선택이 고르던 노드로 되돌아간다', async () => {
     // 이 케이스는 «실패 경로는 선택을 따로 손대지 않는다 — 삭제 뒤 선택은 부모 그대로»를 못박았었다. 거절된 삭제가 문서를 돌려놓는데 선택만 부모에
-    // 남으면 «거절되면 이전 상태로» 가 깨지고 사람이 방금 고른 것을 다시 골라야 해서 바꿨다(`edit/restore-selection.ts`). 세 경로(툴바 · 키보드 단일 ·
+    // 남으면 «거절되면 이전 상태로» 가 깨지고 사람이 방금 고른 것을 다시 골라야 해서 바꿨다(`edit/reselect-after-reject.ts`). 세 경로(툴바 · 키보드 단일 ·
     // 일괄)가 같은 선택으로 돌아오는 표는 실브라우저 `build-test/keyboard-holes.test.ts` «7» 이 잠근다.
     const srv = server({ failAt: 1 })
     await openPage(doc(), { apiOverrides: srv.api })

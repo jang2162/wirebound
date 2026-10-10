@@ -16,7 +16,7 @@ export interface RemovedNode {
   parentId: string
 }
 
-export function restoreSelectionOnReload(store: EditorStore, removed: { nodes: readonly RemovedNode[]; anchor: string | null }): void {
+export function reselectAfterReject(store: EditorStore, removed: { nodes: readonly RemovedNode[]; anchor: string | null }): void {
   const start = store.getState()
   const pageId = start.openPageId
   const loads = start.documentLoads

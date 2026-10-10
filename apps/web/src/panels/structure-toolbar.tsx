@@ -45,7 +45,7 @@ import { createNode } from '../edit/create-node'
 import { aliasOps, insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { patternInsert } from '../edit/pattern-insert'
 import { presetApply, presetFailureNotice } from '../edit/preset-apply'
-import { restoreSelectionOnReload } from '../edit/restore-selection'
+import { reselectAfterReject } from '../edit/reselect-after-reject'
 import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, regionRulesAt, selectionAbilities, type StructureAbilities } from '../edit/structure-actions'
 import { nonDefaultCase, removeCasePlan, splitPlan, SPLIT_PICK_REASON, unsplitKey, unsplitPlan, type UnsplitShown } from '../edit/view-state-actions'
@@ -578,7 +578,7 @@ export function useStructureCommands(props: {
       }
       if (commitOps(ops)) {
         store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
-        restoreSelectionOnReload(store, removed)
+        reselectAfterReject(store, removed)
       }
       return
     }
@@ -586,7 +586,7 @@ export function useStructureCommands(props: {
     const removed = { nodes: [{ id: selectedNodeId, parentId: spot.parentId }], anchor: selectedNodeId }
     if (commitOps(removeNodeOps(document, selectedNodeId))) {
       store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
-      restoreSelectionOnReload(store, removed)
+      reselectAfterReject(store, removed)
     }
   }
 

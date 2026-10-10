@@ -237,14 +237,18 @@ export function MenuTree(props: {
    * 옮으면 걷는다. 옮겨 간 곳이 없는 blur(`relatedTarget` 이 `null` — 요소가 빠짐 · 창을 떠남)는 걷지 않는다.
    */
   const focusedRow = useRef<{ row: TreeSelection; element: HTMLElement } | null>(null)
+  /** 포인터를 누르고 있는 동안 참 — 그 사이의 포커스는 포인터가 준 것이다(키 · 코드가 준 포커스가 아니다). 키를 치면 거둔다. */
+  const pointerFocus = useRef(false)
   function trackFocus(event: FocusEvent<HTMLDivElement>): void {
     const row = rowOfControl(event.target)
     const selection = row === null ? null : rowSelection(row)
     focusedRow.current = selection === null ? null : { row: selection, element: event.target }
     // **포커스가 줄에 서면 그 줄이 고른 줄이다** — Tab 으로 다른 줄에 선 채 친 Delete 가 열린 페이지(고른 줄이던)의 삭제 확인을 걸지 않게 한다.
+    // **포인터가 준 포커스는 제외한다**(`pointerFocus`) — 누름은 제 클릭이 고른다. 목록이 닫힌 뒤 같은 자리에 오는 둘째 누름처럼 삼켜진 클릭도 밑 줄에 포커스는
+    // 주므로, 그 포커스가 줄을 고르면 열어 둔 삭제 확인이 풀린다(`build-test/tree-drag-review.test.ts` «삭제 항목의 둘째 누름 …»).
     // 줄 단추 · 링크만 본다(`+` · `…` 는 누르면 제 줄을 고른다 — `pick`). 이미 고른 줄이면 다시 안 고른다 — `select` 가 열린 입력 · 확인을 닫는다.
     // 열린 페이지의 링크면 «주소가 말하는 것»으로 푼다(`PageLink` 의 클릭과 같다) — 따로 적으면 주소가 옮긴 뒤 낡은 고름이 남는다.
-    if (selection !== null && !isPicked(commands.selection, selection)) {
+    if (selection !== null && !pointerFocus.current && !isPicked(commands.selection, selection)) {
       commands.select(selection.kind === 'page' && selection.id === props.pageId ? null : selection)
     }
   }
@@ -326,6 +330,7 @@ export function MenuTree(props: {
    * 살아남는다.
    */
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    pointerFocus.current = false
     // **더 가까운 받는 쪽이 이미 받은 키는 지나간다** — 줄 `+` · `…` 의 ↓ ↑ 는 메뉴를 연다(`shell/action-menu.tsx`). 안 거르면 닫힌 `…` 의
     // Alt+↓ 가 메뉴를 열면서 고른 메뉴를 옮겼다(Chrome · `build-test/keyboard-holes.test.ts` «6»). 에디터 단축키도 같은 것을 거른다
     // (`edit/editor-shortcuts.ts` 의 `shortcutsBlocked`).
@@ -425,7 +430,22 @@ export function MenuTree(props: {
     // 있어도 단축키가 닿는다. 스타일이 없는 상자라 클래스는 테스트가 집을 이름 하나뿐이다.
     // **`data-wb-own-shortcuts` — 포커스가 이 상자 안이면 에디터 단축키 · 클립보드 리스너가 서지 않는다**(`edit/editor-shortcuts.ts` 의
     // `shortcutsBlocked`). 이 상자의 `Delete` 는 메뉴 · 페이지의 삭제 확인이지 고른 노드의 삭제가 아니다.
-    <div className="wb-shell-tree-keys" data-wb-own-shortcuts="" onKeyDown={handleKeyDown} onFocus={trackFocus} onBlur={untrackFocus}>
+    <div
+      className="wb-shell-tree-keys"
+      data-wb-own-shortcuts=""
+      onKeyDown={handleKeyDown}
+      onFocus={trackFocus}
+      onBlur={untrackFocus}
+      onPointerDownCapture={() => {
+        pointerFocus.current = true
+      }}
+      onPointerUp={() => {
+        pointerFocus.current = false
+      }}
+      onPointerCancel={() => {
+        pointerFocus.current = false
+      }}
+    >
       {/* **조작 실패는 트리 안에 낸다.** `shell/edit-alert.tsx`와 섞지 않는 것은 그것이
           편집 파이프라인의 상태를 읽기 때문이다 — CRUD 실패는 그 상태와 무관하므로 섞으면
           서로 다른 두 실패가 한 문장 자리를 다툰다.

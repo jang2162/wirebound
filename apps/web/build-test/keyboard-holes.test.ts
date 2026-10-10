@@ -262,7 +262,8 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
           '↑': { focus: '다', picked: ['다'], opened: '가1' },
           '다 접고 ↓': { focus: '나', picked: ['나'], opened: '가1', rows: ['가', '가1', '가2', '다', '나', '나1'] },
           '끝에서 ↓': { focus: '나1', picked: ['나1'], opened: '가1' },
-          '맨 위에서 ↑': { focus: '가', picked: ['나1'], opened: '가1' },
+          // 코드로 준 포커스도 그 줄을 고른다(포커스가 줄에 서면 그 줄이 고른 줄이다 — «7»).
+          '맨 위에서 ↑': { focus: '가', picked: ['가'], opened: '가1' },
           '가2 에서 Enter': { focus: '가2', picked: ['가2'], opened: '가2' },
         })
         expect(await serverTree(fx)).toBe(TREE_WHOLE)
@@ -399,8 +400,9 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
             toggles: 0,
           },
           tabbed: ['다:다 추가', '다:다 더 보기', '다1'],
-          left: { 다: [{ role: 'button', expanded: false, pressed: 'false' }] },
-          right: { 다: [{ role: 'button', expanded: true, pressed: 'false' }] },
+          // 포커스가 선 줄이 고른 줄이라 `pressed` 가 참이다(«7»).
+          left: { 다: [{ role: 'button', expanded: false, pressed: 'true' }] },
+          right: { 다: [{ role: 'button', expanded: true, pressed: 'true' }] },
         })
       } finally {
         await cdp.detach().catch(() => {})
