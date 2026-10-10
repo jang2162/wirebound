@@ -33,5 +33,7 @@ export { resolveVariant } from './variant'
 
 export { NO_THEME } from './no-theme'
 
+export { unusedViewKeys } from './view-keys'
+
 export type { Point } from './marker'
 export { focusElement, markerPoint } from './marker'
