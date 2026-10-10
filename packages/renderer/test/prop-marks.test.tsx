@@ -194,14 +194,21 @@ describe('카탈로그 × prop 인구조사', () => {
     expect(root(type, { [prop]: !alt }).getAttribute(markAttr(prop))).toBe(alt ? null : '')
   })
 
+  // `Field` 의 `aria-required` · `aria-invalid` 는 역할 없는 루트가 아니라 `control` 조각에 선다(`default-views/input.tsx`).
+  const ariaHolder = (type: string, el: Element, prop: string): Element =>
+    type === 'Field' && (prop === 'required' || prop === 'invalid') ? el.querySelector('[data-wb-part="control"]')! : el
+
   it.each(CELLS.filter((c) => c.route === 'state'))('$name — 상태와 접근성 속성', ({ type, prop }) => {
     const el = root(type, { [prop]: true })
     expect((el.getAttribute('data-wb-state') ?? '').split(' ')).toContain(prop)
     const aria = STATE_ARIA[prop]
-    if (aria !== undefined) expect(el.getAttribute(aria)).toBe('true')
+    if (aria !== undefined) expect(ariaHolder(type, el, prop).getAttribute(aria)).toBe('true')
     cleanup()
     // 꺼진 판에는 접근성 속성이 없다 — 늘 다는 변조를 잡는다.
-    if (aria !== undefined) expect(root(type, { [prop]: false }).hasAttribute(aria)).toBe(false)
+    if (aria !== undefined) {
+      const off = root(type, { [prop]: false })
+      expect(ariaHolder(type, off, prop).hasAttribute(aria)).toBe(false)
+    }
   })
 
   it.each(CELLS.filter((c) => c.route === 'variant'))('$name — data-wb-variant', ({ type, prop, alt }) => {

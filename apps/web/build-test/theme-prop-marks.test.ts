@@ -9,17 +9,17 @@
  * | `SearchForm` collapsed | 루트 높이 · 안의 필드 수 | 켜면 낮아지고 필드가 DOM 에서 빠진다 |
  * | `Field` disabled · invalid · `List` loading | 루트 · 조각의 계산 스타일 | 꺼진 판과 다른 속성이 하나 이상 |
  * | `Media` kind | 틀 안 표지(`glyph`)의 글자 · 상자 | `video` 는 보이는 표지이고 `image` 의 것(없거나 다른 글자)과 다르다 |
- * | `List` selectable | 체크 칸 상자 | 값만 적는다 — 표가 아닌 variant 는 체크 칸을 안 그린다(이월) |
+ * | `List` selectable | 체크 칸 상자 | 표 구조(`data-wb-structure="table"`) variant 는 체크 칸을 그리고, 그 밖의 variant 는 안 그린다(`selectable` 은 표에서만 뜻이 있다 — 아래 «selectable 은 표 구조에서만») |
  *
  * 내보낸 번들(HTML · 문서 폭 1280)에서 잰다 — 캔버스와 같은 CSS 를 싣고(`theme-system-review.test.ts` «캔버스 = 번들»), 에디터 셸 없이
  * 문서만 서서 값이 흔들리지 않는다. 테마는 저장소 빌드가 낸 산출물을 api 가 기동 때 넣은 것이다 — `pnpm build` 가 먼저다.
  *
  * `WB_PROP_MARKS_SHOTS=<디렉터리>` 를 주면 짝마다 켬/끔을 한 장에 담은 스크린숏을 그 디렉터리에 남긴다(`<테마>-<짝>.png`).
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { unzipSync } from 'fflate'
 import type { BrowserContext, Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -41,6 +41,19 @@ const fields = (prefix: string) => [
   { id: `${prefix}_2`, type: 'Field', props: { label: '상태', control: 'select' } },
 ]
 
+/**
+ * 테마마다 `List` 가 선언한 variant — 저장소 빌드가 낸 `.wbtheme` 의 `manifest.json` 에서 읽는다(손으로 옮겨 적으면 variant 가 늘 때
+ * 낡는다). 선언 밖의 variant 로 그리면 렌더러가 `defaultVariant` 로 그려 «그 variant 를 쟀다» 가 거짓이 된다.
+ */
+function declaredListVariants(themeId: (typeof THEMES)[number]): string[] {
+  const name = themeId.replace(/^system-/, '')
+  const file = fileURLToPath(new URL(`../../../system-themes/${name}/dist/${themeId}-${seededVersion(themeId)}.wbtheme`, import.meta.url))
+  const manifest = JSON.parse(new TextDecoder().decode(unzipSync(new Uint8Array(readFileSync(file)))['manifest.json']!))
+  return manifest.components.List.variants.map((v: { id: string }) => v.id)
+}
+const LIST_VARIANTS = Object.fromEntries(THEMES.map((id) => [id, declaredListVariants(id)])) as Record<(typeof THEMES)[number], string[]>
+const selectableId = (variant: string) => `ls_${variant}`
+
 /** 켬/끔 짝. variant 는 달지 않는다 — 테마의 `defaultVariant` 로 선다. */
 const NODES = [
   { id: 's_off', type: 'Section', props: {}, children: [text('s_off_t', '회원 관리')] },
@@ -50,11 +63,20 @@ const NODES = [
   { id: 'f_plain', type: 'Field', props: { label: '이름', placeholder: '홍길동' } },
   { id: 'f_disabled', type: 'Field', props: { label: '이름', placeholder: '홍길동', disabled: true } },
   { id: 'f_invalid', type: 'Field', props: { label: '이름', placeholder: '홍길동', invalid: true } },
+  // 접근성 트리 판(아래 «Field 의 필수 · 오류는 접근성 트리에 선다») 전용 — 위 짝과 같은 상자 차 재기에는 안 쓴다.
+  { id: 'f_ax', type: 'Field', props: { label: '접근성 이름', required: true, invalid: true } },
   { id: 'm_image', type: 'Media', props: { kind: 'image', ratio: '4/3' } },
   { id: 'm_video', type: 'Media', props: { kind: 'video', ratio: '4/3' } },
   { id: 'l_off', type: 'List', props: { items: 2, columns: ['이름', '상태'], pagination: false } },
   { id: 'l_on', type: 'List', props: { items: 2, columns: ['이름', '상태'], pagination: false, selectable: true } },
   { id: 'l_loading', type: 'List', props: { items: 2, columns: ['이름', '상태'], pagination: false, loading: true } },
+  // 테마마다 선언한 `List` variant 전부 — `selectable` 을 켠 채(아래 «selectable 은 표 구조에서만»).
+  ...[...new Set(Object.values(LIST_VARIANTS).flat())].map((variant) => ({
+    id: selectableId(variant),
+    type: 'List',
+    variant,
+    props: { items: 2, columns: ['이름', '상태'], pagination: false, selectable: true },
+  })),
 ]
 
 /** 짝마다 스크린숏에 담을 두 노드. */
@@ -97,7 +119,7 @@ const MEASURE = `(input) => {
       fields: el.querySelectorAll('[data-wb-component="Field"]').length,
       glyph: box('[data-wb-part="glyph"]'),
       checkbox: box('[data-wb-part="checkbox"]'),
-      marks: [...el.attributes].filter((a) => /^data-wb-(compact|collapsed|selectable|kind)$|^aria-(disabled|invalid|busy)$/.test(a.name)).map((a) => a.name + '=' + a.value),
+      marks: [...el.attributes, ...(el.querySelector('[data-wb-part="control"]')?.attributes ?? [])].filter((a) => /^data-wb-(compact|collapsed|selectable|kind)$|^aria-(disabled|invalid|busy)$/.test(a.name)).map((a) => a.name + '=' + a.value),
     }
   }
   return out
@@ -277,5 +299,76 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 화면을 바꾸는 pro
       videoGlyphVisible: true,
       videoGlyphDiffers: true,
     })
+  }, 180_000)
+
+  /**
+   * **`selectable` 은 표 구조에서만 뜻이 있다** — 체크 칸은 SDK 기본 뷰의 표(`data-wb-structure="table"`)가 그린다. 그 밖의 구조(줄 ·
+   * 카드 목록)는 표지 `data-wb-selectable` 만 서고 체크 칸이 없다 — 계약 문장은 spec 「6.1 노드 속성」. 테마마다 선언한 variant 전부를
+   * 구조로 가르고, 표 구조는 체크 칸이 머리 하나 + 행마다(둘) 보이는 상자로 서는지 센다.
+   */
+  it.each(THEMES)('%s — selectable 은 표 구조에서만 체크 칸을 그린다', async (themeId) => {
+    await putTheme(call, projectId, { themeId, version: seededVersion(themeId), tokens: {} })
+    const { context, page } = await open(await bundlePage())
+    let rows: Array<{ variant: string; structure: string | null; mark: boolean; checkCells: number; boxes: Array<[number, number]> }>
+    try {
+      rows = await page.evaluate(
+        (ids) =>
+          ids.map(([variant, id]) => {
+            const el = document.querySelector(`[data-wb-id="${id}"]`)!
+            return {
+              variant,
+              structure: el.getAttribute('data-wb-structure'),
+              mark: el.hasAttribute('data-wb-selectable'),
+              checkCells: el.querySelectorAll('[data-wb-cell="check"]').length,
+              boxes: [...el.querySelectorAll('[data-wb-part="checkbox"]')].map((n) => {
+                const r = n.getBoundingClientRect()
+                return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10] as [number, number]
+              }),
+            }
+          }),
+        LIST_VARIANTS[themeId].map((variant) => [variant, selectableId(variant)] as const),
+      )
+    } finally {
+      await context.close()
+    }
+    // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
+    const detail = `${themeId} ${JSON.stringify(rows)}`
+    const tables = rows.filter((row) => row.structure === 'table')
+    // 카나리아 — variant 가 안 읽히면 아래는 아무것도 안 잰다. 표 구조를 갖는 테마는 하나 이상 읽혀야 하고, `system-commerce` 는 표 variant 가
+    // 없는 테마다(그 테마가 표를 더하면 이 줄이 알린다 — 그때 위 문장과 이 목록을 함께 고친다).
+    expect(rows.length, detail).toBeGreaterThan(0)
+    expect(tables.length > 0, detail).toBe(themeId !== 'system-commerce')
+    for (const row of rows) {
+      expect(row.mark, `${detail} — ${row.variant} 표지`).toBe(true)
+      if (row.structure === 'table') {
+        expect({ cells: row.checkCells, visible: row.boxes.every(([w, h]) => w > 0 && h > 0), boxes: row.boxes.length }, `${detail} — ${row.variant}`).toEqual({ cells: 3, visible: true, boxes: 3 })
+      } else {
+        expect({ cells: row.checkCells, boxes: row.boxes.length }, `${detail} — ${row.variant}`).toEqual({ cells: 0, boxes: 0 })
+      }
+    }
+  }, 180_000)
+
+  /**
+   * **`Field` 의 필수 · 오류는 접근성 트리에 선다** — 역할 없는 `div` 루트에 단 `aria-required` 는 Chrome 의 접근성 트리가 버린다(`aria-invalid` 만
+   * 남고 이름도 비어 있다). 기본 `Field` 뷰는 그 속성을 입력 종류별 역할과 이름을 단 `control` 조각에 둔다 — 그 조각이 이름이 있는
+   * `textbox` 로 서고 `required` · `invalid` 가 둘 다 읽히는지를 CDP 접근성 트리로 잰다. 시스템 테마 다섯은 `Field` 뷰가 없어 기본 뷰다.
+   */
+  it.each(THEMES)('%s — Field 의 필수 · 오류는 접근성 트리에 선다', async (themeId) => {
+    await putTheme(call, projectId, { themeId, version: seededVersion(themeId), tokens: {} })
+    const { context, page } = await open(await bundlePage())
+    try {
+      const cdp = await context.newCDPSession(page)
+      await cdp.send('Accessibility.enable')
+      const { nodes } = (await cdp.send('Accessibility.getFullAXTree')) as {
+        nodes: Array<{ ignored?: boolean; role?: { value: string }; name?: { value: string }; properties?: Array<{ name: string; value: { value: unknown } }> }>
+      }
+      const hits = nodes
+        .filter((node) => node.ignored !== true && node.role?.value === 'textbox' && node.name?.value === '접근성 이름')
+        .map((node) => Object.fromEntries((node.properties ?? []).filter((p) => p.name === 'required' || p.name === 'invalid').map((p) => [p.name, p.value.value])))
+      // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
+      expect(hits, themeId).toEqual([{ required: true, invalid: 'true' }])
+    } finally {
+      await context.close()
+    }
   }, 180_000)
 })

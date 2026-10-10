@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import type { WbthemeFiles } from '@wirebound/themes'
-import { checkTheme } from '@wirebound/theme-kit'
+import { checkTheme, formatCheckReport } from '@wirebound/theme-kit'
 import { galleryItems } from '@wirebound/theme-gallery'
 import { DEFAULT_VIEWS } from '@wirebound/theme-sdk'
 
@@ -60,6 +60,23 @@ describe('checkTheme', () => {
     expect(report.errors.length).toBeGreaterThan(0)
     expect(report.errors.every((error) => error.type === 'Card' && error.source === 'console')).toBe(true)
     expect(report.errors[0]!.message).toContain('Root 를 그리지 않아')
+  })
+
+  it('테마가 안 그리는 타입(StateSwitch)의 뷰 키는 오류로 선다 — 문장도 그 키를 말한다', async () => {
+    const report = await checkTheme(files(BASE, { views: `{ StateSwitch: () => h('div', null, '무시된다') }` }))
+    expect(report.errors.map((error) => [error.type, error.source, error.message])).toEqual([
+      ['StateSwitch', 'bundle', expect.stringContaining('그리지 않는')],
+    ])
+    expect(report.items).toBeGreaterThan(0)
+    expect(formatCheckReport(report).lines).toContain('✗ [bundle] 번들: views.StateSwitch 는 테마가 그리지 않는 타입의 뷰입니다 — 렌더러가 직접 다뤄 쓰이지 않습니다')
+  })
+
+  it('카탈로그에 없는 타입의 뷰 키는 오류로 선다 — 있는 타입의 뷰 키는 깨끗하다', async () => {
+    const report = await checkTheme(files(BASE, { views: `{ Ghost: () => h('div', null, '없는 타입') }` }))
+    expect(report.errors.map((error) => [error.type, error.source, error.message])).toEqual([
+      ['Ghost', 'bundle', expect.stringContaining('카탈로그에 없는')],
+    ])
+    // 기본 뷰 테마(`views` 가 `DEFAULT_VIEWS` 전부)는 위 첫 케이스가 오류 0 으로 잰다.
   })
 
   it('번들이 등록하지 않으면 오류 하나로 끝난다', async () => {

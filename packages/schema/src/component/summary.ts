@@ -3,6 +3,7 @@
  * 틀린 값은 «없음»(`null`)으로 읽고 던지지 않는다. 구조 트리는 오류 경계 밖이라 여기서 던지면 셸이 통째로 사라진다
  * (`apps/web/src/panels/node-shape.ts` 머리말).
  */
+import { isolateBidi } from '../bidi'
 
 /** `Text` 내용을 요약에 싣는 상한. 넘으면 자르고 `…` 를 붙인다. */
 export const SUMMARY_TEXT_MAX = 20
@@ -11,19 +12,28 @@ export const SUMMARY_LIST_MAX = 3
 
 const SEPARATOR = ' · '
 
-/** 한 줄로 접은 글. 문자열이 아니거나 비면 `null`. 줄바꿈 · 연속 공백은 공백 하나다 — 요약은 한 줄이다. */
-export function oneLine(value: unknown): string | null {
+/** 접은 한 줄(방향을 안 가둔 글). 자르는 읽개가 코드 포인트로 자른 **뒤에** 가둔다 — 가둔 글을 자르면 끝 격리가 잘려 나간다. */
+function foldLine(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const line = value.replace(/\s+/g, ' ').trim()
   return line.length === 0 ? null : line
 }
 
+/**
+ * 한 줄로 접은 글. 문자열이 아니거나 비면 `null`. 줄바꿈 · 연속 공백은 공백 하나다 — 요약은 한 줄이다. **방향 제어 글자가 든 글은 가둬서**
+ * (`isolateBidi`) 돌려준다 — 요약은 이름 여럿을 ` · ` 로 이어, 한 이름의 제어 글자가 뒤따르는 이름을 뒤집는다.
+ */
+export function oneLine(value: unknown): string | null {
+  const line = foldLine(value)
+  return line === null ? null : isolateBidi(line)
+}
+
 /** `oneLine` 을 `max` 글자(코드 포인트)에서 자른 것. */
 export function clipped(value: unknown, max: number): string | null {
-  const line = oneLine(value)
+  const line = foldLine(value)
   if (line === null) return null
   const chars = [...line]
-  return chars.length > max ? `${chars.slice(0, max).join('')}…` : line
+  return isolateBidi(chars.length > max ? `${chars.slice(0, max).join('')}…` : line)
 }
 
 /** 글 배열의 앞 `SUMMARY_LIST_MAX` 개를 ` · ` 로 이은 것. 배열이 아니거나 글이 없으면 `null`. */
