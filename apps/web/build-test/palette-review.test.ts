@@ -29,7 +29,7 @@ import { GALLERY_SAMPLES } from '@wirebound/theme-gallery'
 import { placeableGroups } from '../src/panels/type-picker'
 import { CANVAS_MIN_HEIGHT } from '../src/shell/sidebar-layout'
 import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
-import { putTheme, seededVersion } from './theme-fixtures'
+import { controlsTheme, makeAdmin, putTheme, seededVersion, uploadRaw } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -654,6 +654,63 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         // eslint-disable-next-line no-console
         console.log(`[리뷰 표본 없는 타입] ${JSON.stringify(results)}`)
         expect(Object.entries(results).filter(([, ok]) => !ok)).toEqual([])
+      } finally {
+        await close()
+      }
+    })
+
+    /**
+     * L-018 — SDK 기본 뷰는 입력을 `<div>` 로 그려 포커스 요소가 없다. **실제 `<button>` · `<input>` 을 그리는 테마**(`./theme-fixtures.ts` 의 `controlsTheme`)에서도
+     * 축소판 `inert` 가 서는가 — 그 자리를 누르면 iframe 이 클릭 · 포커스를 안 받고(그 점의 맨 위는 그 카드) Tab 이 iframe 으로 안 들어간다. 잰 값: 둘 다 클릭 0 · 포커스 0 ·
+     * Tab 마흔 번에 한 번도 안 닿는다.
+     */
+    it('실제 컨트롤을 그리는 테마 뷰의 축소판에서도 inert 다 — 누름 · 포커스 · Tab 이 iframe 에 안 닿는다', async () => {
+      await makeAdmin(stack, stack.users.alice)
+      expect(await uploadRaw(stack, alice, await controlsTheme())).toBe(201)
+      const { P, projectId } = await seed('rv-thumb-controls', [BASIC])
+      await putTheme(call, projectId, { themeId: 'controls', version: '1.0.0', tokens: {} })
+      const { page, close } = await openEditor(P[0]!)
+      try {
+        await openPalette(page)
+        const got: Record<string, unknown> = {}
+        for (const [type, selector] of [['Button', 'button'], ['Field', 'input']] as const) {
+          await only(page, type)
+          const at = (await poll(
+            `${type} 표본`,
+            () => page.evaluate(
+              ({ t, sel }) => {
+                const iframe = document.querySelector('iframe.wb-shell-palette-thumbs-iframe') as HTMLIFrameElement
+                const real = iframe.contentDocument?.querySelector(`[data-wb-palette-thumb="${t}"] ${sel}`)
+                if (real === null || real === undefined) return null
+                const f = iframe.getBoundingClientRect()
+                const r = real.getBoundingClientRect()
+                return r.width === 0 ? null : { x: f.left + r.left + r.width / 2, y: f.top + r.top + r.height / 2 }
+              },
+              { t: type, sel: selector },
+            ),
+            (value) => value !== null,
+            5000,
+          ))!
+          await page.evaluate(`(() => {
+            const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe').contentDocument
+            window.__hits = { clicks: 0, focus: 0 }
+            doc.addEventListener('click', () => window.__hits.clicks++, true)
+            doc.addEventListener('focusin', () => window.__hits.focus++, true)
+          })()`)
+          const top = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-wb-palette-card]')?.getAttribute('data-wb-palette-card') ?? null, at)
+          await page.mouse.click(at.x, at.y)
+          await page.getByRole('separator', { name: '컴포넌트 목록 높이' }).focus()
+          let reachedThumbs = false
+          for (let i = 0; i < 40; i += 1) {
+            await page.keyboard.press('Tab')
+            reachedThumbs ||= await page.evaluate(() => document.activeElement?.classList.contains('wb-shell-palette-thumbs-iframe') === true)
+          }
+          got[type] = { top, hits: await page.evaluate('window.__hits'), reachedThumbs }
+        }
+        expect(got).toEqual({
+          Button: { top: 'Button', hits: { clicks: 0, focus: 0 }, reachedThumbs: false },
+          Field: { top: 'Field', hits: { clicks: 0, focus: 0 }, reachedThumbs: false },
+        })
       } finally {
         await close()
       }
