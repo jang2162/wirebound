@@ -18,6 +18,7 @@ import { createLockChannel } from '../../src/realtime/lock-channel'
 import type { NodeLockView, ServerFrame } from '../../src/realtime/protocol'
 import { HEAD_SEQ, PAGE_ID, PROJECT_ID, canvasDocument, openPage, pageDetail, pageDoc } from '../editor-harness'
 import { DROPPED_DRAFT_NOTICE } from '../../src/panels/property-panel'
+import { ALIAS_MANY_NOTICE } from '../../src/shell/editor-keys'
 import { isOff, rowAction } from './tree-row'
 import '../../src/catalog-setup'
 
@@ -158,6 +159,11 @@ function aliasField(): HTMLInputElement {
 }
 
 /** 구조 트리에 선 별칭 입력. 없으면 `null`. */
+/** 정보 통지 한 칸(`shell/info-notice.tsx`)의 글. */
+function infoTexts(): string[] {
+  return screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
+}
+
 function treeInput(): HTMLInputElement | null {
   return within(structureRegion()).queryByRole<HTMLInputElement>('textbox', { name: '별칭' })
 }
@@ -323,6 +329,33 @@ describe('구조 트리 줄에서 고치기', () => {
     fireEvent.click(rowButton('n-text'), { ctrlKey: true })
     fireEvent.keyDown(canvasDocument().body, { key: 'F2', code: 'F2' })
     expect(treeInput()).toBeNull()
+    // 말없이 안 하지 않는다 — 정보 통지(`role="status"`)가 «하나만 고르면 바꿀 수 있다» 를 말하고, 실패 자리(`alert`)는 비어 있다.
+    expect(infoTexts()).toEqual([ALIAS_MANY_NOTICE])
+    expect(screen.queryAllByRole('alert')).toEqual([])
+  })
+
+  /**
+   * L-041 — 좌측을 접으면 구조 트리 줄이 안 보인다(DOM 에는 남는다). F2 가 접힌 채 입력을 열면 보이는 것이 없고 펴는 순간 묻지 않은 입력이 서
+   * 있었다. 지금은 F2 가 펴고 연다 — 혼자 죽는 변조: `onUnfoldSide` 호출을 뗀다.
+   */
+  it('좌측을 접은 채 F2 — 펴고 입력을 연다', async () => {
+    await board()
+    fireEvent.click(rowButton('n-card'))
+    fireEvent.click(screen.getByRole('button', { name: '좌측 패널 접기' }))
+    expect(document.querySelector('.wb-shell-side')!.classList.contains('wb-shell-folded')).toBe(true)
+
+    fireEvent.keyDown(canvasDocument().body, { key: 'F2', code: 'F2' })
+
+    expect(document.querySelector('.wb-shell-side')!.classList.contains('wb-shell-folded')).toBe(false)
+    expect(treeInput()?.value).toBe('회원 카드')
+  })
+
+  /** L-042 — 속성 패널 별칭 칸은 61자째부터 받지 않고 «60자까지» 를 말한다(떠날 때 말없이 잘리던 판). */
+  it('속성 패널 별칭 칸은 60자까지 받는다고 말한다', async () => {
+    await board()
+    fireEvent.click(rowButton('n-card'))
+    expect(aliasField().maxLength).toBe(60)
+    expect(aliasField().placeholder).toBe('60자까지')
   })
 
   it('입력이 연 뒤 남이 그 노드를 잡으면 Enter 가 안 보낸다', async () => {

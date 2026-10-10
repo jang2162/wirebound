@@ -908,6 +908,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    */
   const undo = useCallback(() => {
     if (open === null || store.getState().undoHistoryLoading) return
+    store.setInfoNotice(null)
     afterAck('undo', (pressed) => {
       const attempt = store.startUndo()
       if (attempt.history === undefined) {
@@ -922,6 +923,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const redo = useCallback(() => {
     // 받는 동안은 버린다 — 단추가 먼저 막는다(`canRedo`). `undo`의 같은 가드와 짝이다.
     if (store.getState().undoHistoryLoading) return
+    store.setInfoNotice(null)
     afterAck('redo', (pressed) => step(store.startRedo, pressed))
   }, [step, store, afterAck])
 
@@ -970,6 +972,9 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       // 앞 실패의 통지를 치운다. 남겨 두면 사용자가 방금 낸 편집도 실패했다고 읽는다. **누른 뒤 기다렸다가 내는 편집(`pressed`)은 그 사이
       // 선 잃음을 치우지 않는다** — 누른 때의 통지가 아니라 그 뒤에 온 잃음이다(`sayAfterWait`와 같은 규칙 · `CommitOptions`).
       if (options.keepNotice !== true && (options.pressed === undefined || !lossArrivedSince(options.pressed))) store.setEditFailure(null)
+      // 정보 통지는 «앞 판의 일» 이다 — 새 편집이 그 위에 남으면 방금 한 일의 결과로 읽힌다(`EditorState.infoNotice`). 붙이기가 이 편집 뒤에 세우는
+      // 정보 통지는 이 줄보다 늦다.
+      store.setInfoNotice(null)
       void pump()
       return true
     },

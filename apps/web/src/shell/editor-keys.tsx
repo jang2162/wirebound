@@ -26,9 +26,9 @@
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import {
+  inspectNodesEnvelope,
   matchPageTargets,
   prepareNodesForPaste,
-  readNodesEnvelope,
   writeNodesEnvelope,
   type TargetedPage,
   type ViewState,
@@ -58,7 +58,7 @@ import { useAliasEdit } from '../panels/alias-edit'
 import { lockedNotice } from '../panels/property-panel'
 import { useStructureCommands } from '../panels/structure-toolbar'
 import { lockedSelectionStatus, selectionCapNotice } from '../panels/toolbar-status'
-import { MULTI_WHY_DISABLED } from '../edit/structure-actions'
+import { MULTI_WHY_DISABLED, regionRulesAt } from '../edit/structure-actions'
 import type { EditFailure } from '../store/editor-store'
 import { LOSS_RANK } from '../store/loss-notice'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -71,6 +71,12 @@ export function EditorKeys(props: {
   pageId: string | undefined
   /** 편집 모드 && `canEdit` — 편집 명령이 이것으로 선다. 고르기 · 선택 이동 · 도움말은 늘 선다. */
   editable: boolean
+  /**
+   * 좌측 사이드바를 접었는가 · 펴는 함수. F2 의 입력은 구조 트리 줄에 서므로(`panels/alias-edit.tsx`) 접힌 채 열면 보이는 것이 없다 — 먼저
+   * 펴고 연다. 안 주면(트리만 띄운 판) 접힘을 모른다.
+   */
+  sideFolded?: boolean
+  onUnfoldSide?: () => void
 }): ReactElement {
   const store = useEditorStoreInstance()
   const doc = useOpenDocument(props.pageId)
@@ -93,6 +99,8 @@ export function EditorKeys(props: {
 
   /** 알림 — 편집 실패와 같은 하단 바 한 자리(`EditAlert`). 패턴 넣기 · 프리셋의 실패와 같은 통로다. */
   const say = (message: string): void => store.setEditFailure({ kind: 'message', message })
+  /** 정보 통지 — 실패가 아닌 한 줄(`shell/info-notice.tsx`). 키가 아무것도 안 한 까닭 · 붙이며 뺀 것을 말하는 자리다. */
+  const info = (message: string): void => store.setInfoNotice(message)
 
   /**
    * 노드를 넣는 편집을 낸다 — 이유면 말하고, 남의 잠금에 부딪히면(서버의 2차 방어와 같은 물음 — 스토어의 `editBlockedBy`) 말하고 안 보낸다.
@@ -133,6 +141,22 @@ export function EditorKeys(props: {
     return false
   }
 
+  /**
+   * 지울 수 없는 까닭이 **자리 규칙**(기본 가지 · 영역 안 가지 규칙 — `regionRulesAt`)이면 키를 친 사람에게 말한다. 끈 항목에만 까닭이 있던 자리다
+   * (줄 `…` 의 «삭제» 는 `title` 이 말한다). 남의 잠금 · 루트 · 고른 것 없음은 말하지 않는다 — 앞의 둘은 `selectedLockedByOther` 와 브라우저의
+   * 기본 동작이 맡는다.
+   */
+  const saySpotReason = (): void => {
+    if (doc === null) return
+    for (const nodeId of selectedNodeIds) {
+      const reason = regionRulesAt(doc, nodeId).remove
+      if (reason !== undefined) {
+        info(reason)
+        return
+      }
+    }
+  }
+
   /** 고른 노드들의 봉투 — 문서 차례(목록이 이미 그 차례다). 고른 것이 없거나 루트면 `null` — 브라우저의 복사가 그대로다. */
   const copySelected = (): string | null => {
     if (doc === null || selectedNodeIds.length === 0 || selectedNodeIds.includes(doc.root?.id)) return null
@@ -144,7 +168,7 @@ export function EditorKeys(props: {
   /** 여럿을 고른 판에서 하나일 때만 되는 키(순서 · 계층 · 화살표 고르기)를 눌렀다 — 끈 채 이유를 말한다. */
   const manyPicked = (): boolean => {
     if (selectedNodeIds.length <= 1) return false
-    say(MULTI_KEY_NOTICE)
+    info(MULTI_KEY_NOTICE)
     return true
   }
 
@@ -194,7 +218,8 @@ export function EditorKeys(props: {
       ...(prepared.droppedCases.length > 0 ? [droppedCasesNotice(prepared.droppedCases, sourceStates)] : []),
       ...(prepared.droppedActions > 0 ? [droppedActionsNotice(prepared.droppedActions)] : []),
     ]
-    if (dropped.length > 0) tell(dropped.join(' '))
+    // **붙이기는 성공했다** — 뺀 것은 정보 통지 자리다(실패 자리의 `role="alert"` 는 «붙이지 못했다» 를 말한다). 앞 잃음의 통지는 건드리지 않는다.
+    if (dropped.length > 0) info(dropped.join(' '))
   }
 
   /** 붙이지 못했다는 말 — 잃음의 조각으로 앞 잃음 뒤에 잇는다(`EditorStore.tellLoss`). 같은 문장은 한 조각이다. */
@@ -203,9 +228,15 @@ export function EditorKeys(props: {
 
   /** 붙이기 — 봉투가 아니면 `false`(브라우저의 붙여넣기가 그대로다 · 통지 없음). */
   const paste = (text: string): boolean => {
-    const read = readNodesEnvelope(text)
-    if (read === null) return false
+    const read = inspectNodesEnvelope(text)
+    // 봉투가 아닌 글은 브라우저의 붙여넣기가 그대로다(통지 없음). **우리 봉투인데 이 판에 못 싣는 것**(없는 타입 · 중복 id · 지금보다 높은 버전)은
+    // 말없이 안 붙이지 않고 까닭을 말한다 — 같은 글이 입력 칸에는 글로 붙지만 캔버스 · 트리 쪽 붙이기는 여기서 끝난다.
+    if (read.kind === 'not-envelope') return false
     const pageId = props.pageId
+    if (read.kind === 'rejected') {
+      if (pageId !== undefined) info(`${PASTE_REJECTED_HEAD} ${read.reason}`)
+      return true
+    }
     if (pageId === undefined) return true
     const anchor = store.getState().selectedNodeId
     if (!hasPageTargets(read.nodes)) {
@@ -235,7 +266,7 @@ export function EditorKeys(props: {
    */
   const cut = (): string | null => {
     if (!commands.abilities.remove) {
-      selectedLockedByOther()
+      if (!selectedLockedByOther()) saySpotReason()
       return null
     }
     const text = copySelected()
@@ -263,6 +294,7 @@ export function EditorKeys(props: {
       // (Chrome · `build-test/editor-shortcuts-review.test.ts` «H1»). 누른 채의 반복은 리스너가 거른다(`Shortcut.repeat`).
       case 'delete':
         if (commands.abilities.remove) commands.remove('none')
+        else saySpotReason()
         return
       case 'moveUp':
         if (manyPicked()) return
@@ -318,8 +350,15 @@ export function EditorKeys(props: {
       // **하나를 고른 판에서만** — 판정은 줄 `…` «별칭 바꾸기»의 끔과 같은 값(`aliasLocked`)이다. 고른 노드가 사람이 접은 줄 안에 숨었으면
       // 조상을 먼저 편다 — 입력은 그 줄 아래에 서므로, 안 펴면 화면에 아무것도 안 서고 나중에 그 줄을 펴는 순간 묻지 않은 입력이 선다.
       case 'alias':
+        // **여럿을 고른 판은 말하고 안 한다** — 줄 `…` «별칭 바꾸기» 가 같은 판에서 꺼지는 것(`aliasLocked`)과 같은 값이다.
+        if (selectedNodeIds.length > 1) {
+          info(ALIAS_MANY_NOTICE)
+          return
+        }
         if (commands.aliasLocked || selectedNodeId === null) return
         if (doc !== null) expand(structureKey(props.pageId), ancestorIds(doc.root, selectedNodeId))
+        // 접힌 좌측은 입력이 설 줄을 안 보인다 — 펴고 연다.
+        if (props.sideFolded === true) props.onUnfoldSide?.()
         aliasEdit.open(selectedNodeId)
         return
       case 'help':
@@ -336,6 +375,12 @@ export function EditorKeys(props: {
 
 /** 되돌림이 서버에 닿기 전에 누른 «다시 실행» — 스택은 되돌림의 ack 가 채운다(`EditorStore.ackEdit`). */
 export const REDO_BEFORE_ACK_NOTICE = '되돌리는 중입니다 — 서버에 닿은 뒤에 다시 실행할 수 있습니다.'
+
+/** 여럿을 고른 판에서 F2 를 눌렀을 때의 정보 통지 — `MULTI_KEY_NOTICE` 와 같은 꼴이다. */
+export const ALIAS_MANY_NOTICE = `여럿을 고른 판입니다 — 별칭 바꾸기는 ${MULTI_WHY_DISABLED}`
+
+/** 우리 봉투인데 이 판에 못 싣는 복사를 붙였을 때의 머리 — 뒤에 `inspectNodesEnvelope` 의 까닭이 붙는다. */
+export const PASTE_REJECTED_HEAD = '복사한 노드를 이 페이지에 붙일 수 없어 붙이지 않았습니다 —'
 
 /** 여럿을 고른 판에서 순서 · 계층 · 화살표 고르기 키를 눌렀을 때의 하단 바 문장 — 줄 행동의 끈 이유(`MULTI_WHY_DISABLED`)를 잇는다. */
 export const MULTI_KEY_NOTICE = `여럿을 고른 판입니다 — 순서 · 계층 옮기기와 화살표로 고르기는 ${MULTI_WHY_DISABLED}`

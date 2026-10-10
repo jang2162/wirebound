@@ -30,6 +30,7 @@ import { NO_THEME, resolveVariant } from '@wirebound/renderer'
 import {
   applyOps,
   getComponent,
+  NODE_ALIAS_MAX,
   nodeAlias,
   nodeHeading,
   type ComponentDef,
@@ -361,6 +362,9 @@ export function PropertyPanel(props: {
               field={ALIAS_FIELD}
               value={nodeAlias(node) ?? ''}
               id={controlId(ALIAS_FIELD.prop)}
+              // 61자째부터는 칸이 받지 않는다 — 안 막으면 떠날 때 `tidyAlias` 가 60자에서 말없이 잘라 저장했다.
+              maxLength={NODE_ALIAS_MAX}
+              placeholder={`${NODE_ALIAS_MAX}자까지`}
               disabled={blocked}
               onCommit={(value) => {
                 if (blocked || doc === null) return

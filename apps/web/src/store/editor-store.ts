@@ -231,6 +231,15 @@ export interface EditorState {
   /** 마지막 편집 실패. 새 편집을 내면 지워진다 — 남아 있으면 방금 낸 편집도 실패한 것으로 읽힌다. */
   editFailure: EditFailure | null
   /**
+   * **정보 통지 — 실패가 아닌 한 줄**(`shell/info-notice.tsx`). 실패 자리(`editFailure` · `role="alert"`)와 갈라 둔다: 붙이기에서 동작을 뺐다 ·
+   * 키가 아무것도 안 했다 · 고른 것이 숨었다 같은 말은 **일이 실패한 것이 아니라** 사람이 알면 좋은 것이라, 같은 자리에 서면 보조 기술이
+   * 방금 한 편집이 실패한 줄 안다(`EditWarnings` · `RemoteAlert` 가 `status` 인 것과 같은 판정).
+   *
+   * **한 칸이다 — 쌓지 않고 바꿔 끼운다.** 정보 통지를 줄마다 쌓으면 창 800×500 에서 여덟 줄이 셸을 93px 넘쳤다(N1 이 쟀다). 새 정보 통지는
+   * 앞의 것을 대신하고, 새 편집 · 되돌리기 · 페이지 옮김이 치운다 — 낡은 정보가 새 판 위에 남아 «방금 한 일의 결과» 로 읽히지 않게.
+   */
+  infoNotice: string | null
+  /**
    * **서버가 마지막 편집 응답에 실어 보낸 문서 경고**(「정방향 흐름」).
    *
    * **실패가 아니다.** severity가 `warning`인 이슈는 저장을 막지 않고 문서에 남는다 —
@@ -329,6 +338,7 @@ function initialState(): EditorState {
     undoHistoryLoading: false,
     editStatus: 'idle',
     editFailure: null,
+    infoNotice: null,
     editWarnings: NO_WARNINGS,
     locks: NO_LOCKS,
     viewerUserId: null,
@@ -2211,6 +2221,7 @@ export class EditorStore {
       editStatus: 'idle',
       // 떠나며 버린 편집을 말하는 조각만 남긴다(`#lossParts`의 `sticky`).
       editFailure: this.#keptLoss(),
+      infoNotice: null,
       editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
       // 복원 낡음은 복원 뒤 다시 읽기만 푼다(`beginRestoreReread`) — 페이지를 옮기며 비우는 판은 메뉴 · 코멘트를 다시 안 읽었다.
       remoteStale: this.#keepsRestored(options.restoreReread === true) ? this.#restoredStale() : null,
@@ -2591,6 +2602,11 @@ export class EditorStore {
   /** 실패 통지를 세우거나(`Failure`) 치운다(`null`). 그리는 것은 `shell/edit-alert.tsx`다. */
   readonly setEditFailure = (editFailure: EditFailure | null): void => {
     this.#apply({ editFailure })
+  }
+
+  /** 정보 통지를 세우거나(앞의 것을 바꿔 끼운다) 치운다(`null`). 그리는 것은 `shell/info-notice.tsx` 다 — `infoNotice` 의 머리말. */
+  readonly setInfoNotice = (infoNotice: string | null): void => {
+    this.#apply({ infoNotice })
   }
 
   /**

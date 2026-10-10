@@ -12,6 +12,8 @@ import type { PageDetail, PatchResult } from '../../src/api/types'
 import { readNodesEnvelope, writeNodesEnvelope, type WbNode } from '@wirebound/schema'
 import { CLIPBOARD_SHORTCUT_LINES, EDITOR_SHORTCUTS, platformOf } from '../../src/edit/editor-shortcuts'
 import { droppedActionsNotice } from '../../src/edit/paste-ops'
+import { DEFAULT_CASE_REMOVE_REASON } from '../../src/edit/structure-actions'
+import { PASTE_REJECTED_HEAD } from '../../src/shell/editor-keys'
 import { HEAD_SEQ, canvasDocument, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
 import { structureRowName, structureRowType } from '../panels/tree-row'
@@ -309,6 +311,11 @@ function alertTexts(): string[] {
   return screen.queryAllByRole('alert').map((element) => element.textContent ?? '')
 }
 
+/** 정보 통지 한 칸(`shell/info-notice.tsx` — `role="status"`)의 글. 실패 자리(`alert`)와 갈라 읽는다. */
+function infoTexts(): string[] {
+  return screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
+}
+
 /** 서버에 닿은 편집을 적용한 문서의 뿌리 자식 타입들 — 화면이 아니라 서버 문서로 본다. */
 async function undoOnceRestores(srv: ReturnType<typeof server>, before: number): Promise<void> {
   await waitFor(() => expect(historyButton('되돌리기').disabled).toBe(false))
@@ -355,12 +362,50 @@ describe('클립보드 · 복제 — 셸', () => {
     const srv = server()
     await openPage(doc(), { apiOverrides: srv.api })
     fireEvent.click(row('Card'))
-    for (const text of ['그냥 글', '{"a":1}', JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [{ id: 'x', type: 'NoSuchType' }] })]) {
+    for (const text of ['그냥 글', '{"a":1}', JSON.stringify({ wirebound: 'page', version: 1, nodes: [] })]) {
       expect(clip('paste', document.body, text).prevented).toBe(false)
     }
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(srv.calls).toHaveLength(0)
+    expect([...alertTexts(), ...infoTexts()]).toEqual([])
+  })
+
+  /**
+   * L-048 — 우리 봉투(`wirebound: "nodes"`)인데 이 판에 못 싣는 것(없는 타입 · 중복 id · 지금보다 높은 버전)은 «봉투 아님» 처럼 말없이 안 붙지
+   * 않고 정보 통지가 까닭을 말한다. 브라우저의 붙여넣기는 막는다(`prevented`) — 같은 글이 캔버스에 글로 붙는 일은 없다.
+   */
+  it('검증을 못 지나는 봉투는 안 붙이고 까닭을 정보 통지로 말한다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(row('Card'))
+    const unknown = writeNodesEnvelope([{ id: 'x', type: 'NoSuchType' }] as WbNode[], 1)
+    expect(clip('paste', document.body, unknown).prevented).toBe(true)
+    await waitFor(() => expect(infoTexts()).toEqual([`${PASTE_REJECTED_HEAD} 알 수 없는 컴포넌트 타입: NoSuchType`]))
     expect(alertTexts()).toEqual([])
+    // 같은 종류의 정보 통지는 쌓지 않고 바꿔 끼운다.
+    expect(clip('paste', document.body, writeNodesEnvelope([{ id: 'y', type: 'Text' }, { id: 'y', type: 'Text' }] as WbNode[], 1)).prevented).toBe(true)
+    await waitFor(() => expect(infoTexts()).toHaveLength(1))
+    expect(infoTexts()[0]).not.toContain('NoSuchType')
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  /** L-047 — 붙이기는 성공했다. 뺀 동작 수는 `alert` 가 아니라 정보 통지다 · 다음 편집이 치운다. */
+  it('붙이며 뺀 동작 수는 실패 자리가 아니라 정보 통지가 말하고 다음 편집이 치운다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(row('Divider'))
+    const button: WbNode = {
+      id: 'src-btn',
+      type: 'Button',
+      interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n-elsewhere', value: true }] }],
+    }
+    clip('paste', document.body, writeNodesEnvelope([button], 1))
+    await waitFor(() => expect(infoTexts()).toEqual([droppedActionsNotice(1)]))
+    expect(alertTexts()).toEqual([])
+
+    fireEvent.keyDown(document.body, ctrl('d'))
+    await waitFor(() => expect(srv.calls).toHaveLength(2))
+    expect(infoTexts()).toEqual([])
   })
 
   it('대상이 없는 동작은 빼고 붙이고 그 수를 말한다 — 지금 문서의 노드 · 프로젝트의 페이지를 가리키면 남긴다', async () => {
@@ -387,7 +432,7 @@ describe('클립보드 · 복제 — 셸', () => {
     await waitFor(() => expect(srv.calls).toHaveLength(1))
     const pasted = (srv.calls[0]![0] as { value: WbNode }).value
     expect(pasted.interactions![0]!.actions.map((action) => action.target)).toEqual(['n-box', 'page:회원관리/회원 상세'])
-    await waitFor(() => expect(alertTexts()).toEqual([droppedActionsNotice(2)]))
+    await waitFor(() => expect(infoTexts()).toEqual([droppedActionsNotice(2)]))
   })
 
   it('잘라내기 = 봉투 + 지우기 편집 하나 — Ctrl+Z 한 번에 돌아온다', async () => {
@@ -404,6 +449,37 @@ describe('클립보드 · 복제 — 셸', () => {
     expect(structureRegion().querySelectorAll('[aria-current="true"]')).toHaveLength(0)
 
     await undoOnceRestores(srv, 1)
+  })
+
+  /**
+   * Q17 · L-078 — 기본 가지는 지울 수 없다(`regionRules`). 줄 `…` 의 «삭제» 는 `title` 이 까닭을 말하지만 키로 친 사람에게는 말이 없었다.
+   * 지금은 Delete · Cmd+X 가 정보 통지로 말한다 — 편집 0 · 봉투 0.
+   */
+  it('기본 가지에서 Delete · Cut 은 안 지우고 까닭을 정보 통지로 말한다', async () => {
+    const withRegion = pageDoc({
+      id: 'n-root',
+      type: 'Page',
+      children: [
+        {
+          id: 'sw',
+          type: 'StateSwitch',
+          children: [{ id: 'c-d', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'b-d', type: 'Button' }] }],
+        },
+      ],
+    })
+    const srv = server(withRegion)
+    await openPage(withRegion, { apiOverrides: srv.api })
+    fireEvent.click(structureRegion().querySelector<HTMLElement>('[data-tree-id="c-d"] > .wb-shell-structure-node')!)
+
+    fireEvent.keyDown(document.body, { key: 'Delete', code: 'Delete' })
+    await waitFor(() => expect(infoTexts()).toEqual([DEFAULT_CASE_REMOVE_REASON]))
+    expect(alertTexts()).toEqual([])
+
+    // 앞 통지를 치우고 같은 말로 다시 선다 — Cut 도 같은 까닭이다(봉투는 안 싣고 브라우저의 잘라내기가 그대로다).
+    fireEvent.keyDown(document.body, ctrl('x'))
+    expect(clip('cut', document.body)).toEqual({ written: undefined, prevented: false })
+    expect(infoTexts()).toEqual([DEFAULT_CASE_REMOVE_REASON])
+    expect(srv.calls).toHaveLength(0)
   })
 
   it('루트를 고른 잘라내기는 아무것도 안 싣고 안 지운다', async () => {

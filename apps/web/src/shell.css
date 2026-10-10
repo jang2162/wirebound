@@ -2954,6 +2954,14 @@
   color: #2a4a7a;
 }
 
+/* 정보 통지 한 줄(`shell/info-notice.tsx`). 실패 통지(`.wb-shell-edit-alert`)와 같은 줄 자리 · 같은 글자 크기이고 `role="status"` 다 — 한 칸이라
+   쌓이지 않으므로 높이는 한 문장이 전부다. 색을 주지 않는 것은 실패 통지와 같다. */
+.wb-shell-info-notice {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+}
+
 /* 테마를 못 실었다는 한 줄(`theme/theme-alert.tsx`). 남의 변경 통지(`.wb-shell-remote-alert`)와 같은 줄 자리 · 같은 `role`이고, 색은
    경고(`.wb-shell-edit-warnings`)와 같다 — 화면이 테마 대신 기본 모양으로 서 있다. 끝의 단추는 `.wb-shell-remote-reload`다. */
 .wb-shell-theme-alert {

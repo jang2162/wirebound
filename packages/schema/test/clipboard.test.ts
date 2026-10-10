@@ -10,6 +10,7 @@ import {
   MAX_OPS_PER_EDIT,
   NODES_ENVELOPE_KIND,
   prepareNodesForPaste,
+  inspectNodesEnvelope,
   readNodesEnvelope,
   writeNodesEnvelope,
 } from '../src/clipboard'
@@ -83,6 +84,36 @@ describe('writeNodesEnvelope · readNodesEnvelope', () => {
     ['id 형식 밖', [{ id: 'a b', type: 'Text' }]],
   ])('검증을 못 지나는 노드면 null — %s', (_label, nodes) => {
     expect(readNodesEnvelope(writeNodesEnvelope(nodes as WbNode[], 1))).toBeNull()
+  })
+
+  // 봉투가 아닌 글(통지 없음)과 우리 봉투인데 못 지난 것(까닭을 말함)을 가른다 — `readNodesEnvelope` 는 둘 다 null 이라 못 가른다.
+  it.each([
+    ['빈 글', ''],
+    ['그냥 글', '안녕하세요'],
+    ['일반 JSON', '{"a":1}'],
+    ['페이지 봉투', JSON.stringify({ wirebound: 'page', version: 1, nodes: [LIST] })],
+    ['잘린 JSON', writeNodesEnvelope([LIST], 1).slice(0, 20)],
+    ['배열', JSON.stringify([LIST])],
+  ])('inspect — 봉투가 아니다 — %s', (_label, text) => {
+    expect(inspectNodesEnvelope(text)).toEqual({ kind: 'not-envelope' })
+  })
+
+  it.each([
+    ['노드 없음', JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [] })],
+    ['버전 없음', JSON.stringify({ wirebound: 'nodes', nodes: [LIST] })],
+    ['모르는 키', JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [LIST], extra: 1 })],
+    ['없는 타입', writeNodesEnvelope([{ id: 'a', type: 'NoSuchType' }] as WbNode[], 1)],
+    ['중복 id', writeNodesEnvelope([LIST, { ...LIST }], 1)],
+    ['지금보다 높은 버전', writeNodesEnvelope([LIST], 999)],
+  ])('inspect — 우리 봉투인데 못 지났다 — %s', (_label, text) => {
+    const read = inspectNodesEnvelope(text)
+    expect(read.kind).toBe('rejected')
+    expect(read.kind === 'rejected' && read.reason.length).toBeGreaterThan(0)
+  })
+
+  it('inspect — 없는 타입의 까닭은 그 타입 이름을 말한다', () => {
+    const read = inspectNodesEnvelope(writeNodesEnvelope([{ id: 'a', type: 'NoSuchType' }] as WbNode[], 1))
+    expect(read.kind === 'rejected' && read.reason).toContain('NoSuchType')
   })
 
   it('옛 version 봉투는 문서 마이그레이션 체인으로 올려 읽는다', () => {

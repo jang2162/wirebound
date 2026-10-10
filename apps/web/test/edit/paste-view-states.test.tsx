@@ -75,6 +75,11 @@ function alertTexts(): string[] {
   return screen.queryAllByRole('alert').map((element) => element.textContent ?? '')
 }
 
+/** 정보 통지 한 칸(`shell/info-notice.tsx` — `role="status"`)의 글. 실패 자리(`alert`)와 갈라 읽는다. */
+function infoTexts(): string[] {
+  return screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
+}
+
 /** 붙인 뒤 서버 문서 — 검증 오류가 없어야 한다. */
 function errorsOf(doc: PageDocument): string[] {
   return partitionIssues(validatePage(doc)).errors.map((issue) => `${issue.code} ${issue.message}`)
@@ -100,9 +105,10 @@ describe('붙일 페이지에 없는 상태의 가지를 빼고 말한다', () =
     expect(pasted.type).toBe('StateSwitch')
     expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default'])
     await waitFor(() =>
-      expect(alertTexts()).toEqual([droppedCasesNotice([{ state: 's_admin', count: 1 }, { state: 's_guest', count: 1 }], [ADMIN, GUEST])]),
+      expect(infoTexts()).toEqual([droppedCasesNotice([{ state: 's_admin', count: 1 }, { state: 's_guest', count: 1 }], [ADMIN, GUEST])]),
     )
-    expect(alertTexts()[0]).toBe('상태 "관리자" 가지 1개를 뺐습니다. 상태 "비로그인" 가지 1개를 뺐습니다.')
+    expect(alertTexts()).toEqual([])
+    expect(infoTexts()[0]).toBe('상태 "관리자" 가지 1개를 뺐습니다. 상태 "비로그인" 가지 1개를 뺐습니다.')
     expect(errorsOf(srv.held())).toEqual([])
   })
 
@@ -111,7 +117,7 @@ describe('붙일 페이지에 없는 상태의 가지를 빼고 말한다', () =
     expect(pasted.type).toBe('Button')
     expect(pasted.props?.label).toBe('승인')
     await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(alertTexts()).toEqual([])
+    expect([...alertTexts(), ...infoTexts()]).toEqual([])
     expect(errorsOf(srv.held())).toEqual([])
   })
 
@@ -121,14 +127,14 @@ describe('붙일 페이지에 없는 상태의 가지를 빼고 말한다', () =
     const { srv, pasted } = await pasteInto(target([ADMIN]), writeNodesEnvelope([outer], 1, [ADMIN, GUEST]))
     expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default', 's_admin'])
     expect(pasted.children![0]!.children![0]!.children!.map((child) => child.props?.state)).toEqual(['default'])
-    await waitFor(() => expect(alertTexts()).toEqual(['상태 "비로그인" 가지 1개를 뺐습니다.']))
+    await waitFor(() => expect(infoTexts()).toEqual(['상태 "비로그인" 가지 1개를 뺐습니다.']))
     expect(errorsOf(srv.held())).toEqual([])
   })
 
   it('출처의 목록이 없는 봉투(옛 판)는 상태 id 로 말한다', async () => {
     const area: WbNode = { id: 'sw', type: 'StateSwitch', children: [caseOf('c-d', 'default', []), caseOf('c-x', 's_x', [])] }
     await pasteInto(target(), writeNodesEnvelope([area], 1))
-    await waitFor(() => expect(alertTexts()).toEqual(['상태 "s_x" 가지 1개를 뺐습니다.']))
+    await waitFor(() => expect(infoTexts()).toEqual(['상태 "s_x" 가지 1개를 뺐습니다.']))
   })
 })
 
@@ -144,7 +150,7 @@ describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(프리
     }
     const { srv, pasted } = await pasteInto(target([OTHER_ADMIN]), writeNodesEnvelope([area], 1, [ADMIN, GUEST]))
     expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default', 's_page_admin'])
-    await waitFor(() => expect(alertTexts()).toEqual(['상태 "비로그인" 가지 1개를 뺐습니다.']))
+    await waitFor(() => expect(infoTexts()).toEqual(['상태 "비로그인" 가지 1개를 뺐습니다.']))
     expect(errorsOf(srv.held())).toEqual([])
   })
 
@@ -152,7 +158,7 @@ describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(프리
     const area: WbNode = { id: 'sw', type: 'StateSwitch', children: [caseOf('c-d', 'default', []), caseOf('c-a', 's_a', [button('b-a', '승인')])] }
     const { pasted } = await pasteInto(target([{ id: 's_page_a', name: 'Admin' }]), writeNodesEnvelope([area], 1, [{ id: 's_a', name: 'admin' }]))
     expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default'])
-    await waitFor(() => expect(alertTexts()).toEqual(['상태 "admin" 가지 1개를 뺐습니다.']))
+    await waitFor(() => expect(infoTexts()).toEqual(['상태 "admin" 가지 1개를 뺐습니다.']))
   })
 
   it('같은 id 는 이름이 달라도 그대로다(같은 페이지 · 이름을 고친 복사)', async () => {
@@ -160,7 +166,7 @@ describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(프리
     const { pasted } = await pasteInto(target([{ id: 's_admin', name: '운영자' }]), writeNodesEnvelope([area], 1, [ADMIN]))
     expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default', 's_admin'])
     await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(alertTexts()).toEqual([])
+    expect([...alertTexts(), ...infoTexts()]).toEqual([])
   })
 })
 

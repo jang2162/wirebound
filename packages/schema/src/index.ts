@@ -78,7 +78,9 @@ export {
   MAX_OPS_PER_EDIT,
   NODES_ENVELOPE_KIND,
   prepareNodesForPaste,
+  inspectNodesEnvelope,
   readNodesEnvelope,
+  type NodesEnvelopeRead,
   writeNodesEnvelope,
 } from './clipboard'
 export type { DroppedCases } from './clipboard'

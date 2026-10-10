@@ -74,10 +74,17 @@ function HiddenSelectionPrune(props: { pageId: string | undefined }): null {
     if (selected.length === 0) return
     const hidden = hiddenNodeIds(document, state, allCases)
     const gone = selected.filter((id) => hidden.has(id))
-    if (gone.length > 0) store.dropFromSelection(gone)
+    if (gone.length === 0) return
+    store.dropFromSelection(gone)
+    // 고른 것만 빠지고 친 글이 없던 판은 말이 없었다 — 선택 · 속성 패널이 조용히 비어 «왜 사라졌나» 만 남는다. 친 글이 있던 판의 통지
+    // (`DROPPED_DRAFT_NOTICE`)는 실패 자리에 따로 선다 — 둘은 다른 일이다(이쪽은 정보 한 줄).
+    store.setInfoNotice(HIDDEN_SELECTION_NOTICE)
   }, [store, document, selected, state, allCases])
   return null
 }
+
+/** 고른 노드가 지금 상태에서 안 보이게 되어 고른 것에서 뺐을 때의 정보 통지(`HiddenSelectionPrune`). */
+export const HIDDEN_SELECTION_NOTICE = '고른 노드가 지금 상태에서는 보이지 않아 선택에서 뺐습니다. «모든 가지 보기»를 켜면 다시 고를 수 있습니다.'
 
 export interface ViewStateChoice {
   /** 지금 상태의 id — 기본이면 `null`. 목록에 없으면 `null`(머리말). */
