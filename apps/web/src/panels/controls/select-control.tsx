@@ -48,7 +48,9 @@ export function SelectControl(props: SelectControlProps): ReactElement | null {
       className="wb-shell-control"
       value={current}
       onChange={(event) => {
-        if (event.target.value !== '') onCommit(event.target.value)
+        // **같은 값의 `change` 는 편집이 아니다** — 사람 손은 안 내지만 합성 `change`(자동화 · 보조 도구)는 같은 값으로도 온다. 안 걸러내면 값이 안 바뀌는
+        // 편집 하나가 되돌리기 이력 한 칸을 먹는다. 갈린 일괄 값(`current` 가 빈 칸)에서 고르는 것은 늘 새 값이다.
+        if (event.target.value !== '' && event.target.value !== current) onCommit(event.target.value)
       }}
     >
       {current === '' && <option value="">{props.mixed === true ? MIXED_PLACEHOLDER : ''}</option>}

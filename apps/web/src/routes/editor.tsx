@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent,
   type ReactElement,
   type ReactNode,
   type RefObject,
@@ -55,7 +56,7 @@ import { RemoteAlert } from '../shell/remote-alert'
 import { EditorKeys } from '../shell/editor-keys'
 import { ICONS, shellIcon } from '../shell/icons'
 import { ShellDialog } from '../shell/shell-dialog'
-import { ComponentPalette, PaletteToggle } from '../palette/component-palette'
+import { ComponentPalette, PaletteToggle, rovingStep } from '../palette/component-palette'
 import { GuidesToggle } from '../canvas/layout-guides'
 import { ShellFooter } from '../shell/shell-footer'
 import { useHeadFold, type HeadFold } from '../shell/head-fold'
@@ -1159,20 +1160,38 @@ function RightPanel(props: {
   // 고른 탭이 이 모드에 없으면 첫 탭이다(위 머리말의 판정). **`chosen`을 고치지 않는다** —
   // 뷰 모드에서 속성을 보고 있었다는 사실이 남아 있어야 편집 모드로 돌아갈 때 되살아난다.
   const tab = tabs.some((item) => item.id === chosen) ? chosen : (tabs[0]?.id ?? 'comments')
+  const tabRefs = useRef(new Map<PanelTab, HTMLButtonElement>())
+  /** 탭 줄의 ← → Home End — 고른 탭을 옮기고 포커스도 따라간다(APG 탭 패턴 · 컴포넌트 판의 갈래 탭과 같다). 끝에서 멈춘다. */
+  const moveTab = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+    const next = rovingStep(event.key, index, tabs.length)
+    if (next === null) return
+    event.preventDefault()
+    const target = tabs[next]
+    if (target === undefined) return
+    setChosen(target.id)
+    tabRefs.current.get(target.id)?.focus()
+  }
 
   return (
     <>
       <div className="wb-shell-tabs" role="tablist" aria-label="우측 패널 탭">
-        {tabs.map((item) => (
+        {tabs.map((item, index) => (
           <button
             key={item.id}
+            ref={(element) => {
+              if (element === null) tabRefs.current.delete(item.id)
+              else tabRefs.current.set(item.id, element)
+            }}
             type="button"
             role="tab"
             id={`wb-tab-${item.id}`}
             className="wb-shell-tab"
             aria-selected={tab === item.id}
             aria-controls={`wb-tabpanel-${item.id}`}
+            tabIndex={tab === item.id ? 0 : -1}
             onClick={() => setChosen(item.id)}
+            onKeyDown={(event) => moveTab(event, index)}
           >
             {item.label}
           </button>

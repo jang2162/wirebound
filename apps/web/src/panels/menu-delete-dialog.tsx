@@ -58,13 +58,13 @@ export const CASCADE_RECHECK = '새 목록 확인'
 export const CASCADE_BUSY = '조작을 보내는 중입니다'
 export const CASCADE_GONE = '이 메뉴가 트리에 없습니다 — 다른 사람이 먼저 지웠을 수 있습니다.'
 
-export function MenuDeleteDialog(props: { commands: TreeCommands }): ReactElement | null {
+export function MenuDeleteDialog(props: { commands: TreeCommands; focusFallback?: () => HTMLElement | null }): ReactElement | null {
   const target = props.commands.removing
   if (target === null) return null
-  return <OpenMenuDeleteDialog commands={props.commands} target={target} />
+  return <OpenMenuDeleteDialog commands={props.commands} target={target} focusFallback={props.focusFallback} />
 }
 
-function OpenMenuDeleteDialog(props: { commands: TreeCommands; target: RemoveTarget }): ReactElement {
+function OpenMenuDeleteDialog(props: { commands: TreeCommands; target: RemoveTarget; focusFallback: (() => HTMLElement | null) | undefined }): ReactElement {
   const { commands, target } = props
   const sentenceId = useId()
   const warningId = useId()
@@ -78,7 +78,7 @@ function OpenMenuDeleteDialog(props: { commands: TreeCommands; target: RemoveTar
   const why = subtree === null ? CASCADE_GONE : commands.busy ? CASCADE_BUSY : null
 
   return (
-    <ShellDialog open title={MENU_DELETE_TITLE} onClose={commands.closeRemoving} describedBy={describedBy}>
+    <ShellDialog open title={MENU_DELETE_TITLE} onClose={commands.closeRemoving} describedBy={describedBy} focusFallback={props.focusFallback}>
       <div className="wb-shell-menu-delete-body">
         {target.changed && (
           <p className="wb-shell-menu-delete-changed" role="status">

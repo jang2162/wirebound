@@ -304,6 +304,7 @@ export function EditorKeys(props: {
         if (next === null) return
         store.selectNode(next)
         revealNode(next, canvasDocument)
+        followFocus(next)
         return
       }
       // **기준 노드의 형제 모두**(`siblingIds`) — 기준 노드는 그대로 둔다(루트였으면 목록의 마지막). 상한에 걸리면 말한다.
@@ -334,6 +335,17 @@ export function EditorKeys(props: {
 
 /** 여럿을 고른 판에서 순서 · 계층 · 화살표 고르기 키를 눌렀을 때의 하단 바 문장 — 줄 행동의 끈 이유(`MULTI_WHY_DISABLED`)를 잇는다. */
 export const MULTI_KEY_NOTICE = `여럿을 고른 판입니다 — 순서 · 계층 옮기기와 화살표로 고르기는 ${MULTI_WHY_DISABLED}`
+
+/**
+ * **포커스가 구조 트리 줄 단추에 있었으면 옮겨 간 선택의 줄로 따라간다.** 안 따라가면 선택은 다음 줄인데 포커스는 앞 줄에 남아, 이어 친
+ * Enter · Space 가 포커스 줄(앞 줄)을 다시 골랐다(Chrome · `build-test/keyboard-holes.test.ts` «7»). 포커스가 다른 곳(캔버스 · 패널)이면 안 건드린다 — 사람이 둔 자리다.
+ */
+function followFocus(nodeId: string): void {
+  const active = document.activeElement
+  if (!(active instanceof HTMLElement) || !active.classList.contains('wb-shell-structure-node')) return
+  const row = [...document.querySelectorAll('[data-tree-kind="node"]')].find((one) => one.getAttribute('data-tree-id') === nodeId)
+  row?.querySelector<HTMLElement>(':scope > button.wb-shell-structure-node')?.focus()
+}
 
 /**
  * **화살표로 옮긴 선택을 구조 트리 줄 · 캔버스 노드에서 보이게 굴린다.** 선택 이동 키는 `preventDefault` 가 걸려 칸을 굴리지 않으므로 이것이

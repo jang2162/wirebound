@@ -33,9 +33,10 @@
  * ## 닫히면 연 요소로 포커스를 돌려준다
  *
  * 연 순간의 `document.activeElement` 를 쥔다. `…` 메뉴의 항목에서 열었으면 메뉴가 먼저 닫히며 포커스를 `…` 로 돌려준 뒤라(`action-menu.tsx`
- * «고르면 먼저 닫고 …») `…` 로 간다. 연 요소가 그 사이 사라졌으면(셸째 내려감) 돌려주지 않는다.
+ * «고르면 먼저 닫고 …») `…` 로 간다. 연 요소가 그 사이 사라졌으면(남이 대상 메뉴를 지움 · 셸째 내려감) `focusFallback` 이 고른 자리로 간다 — 안
+ * 주면 포커스가 `body` 로 떨어진다. 셸째 내려가면 그 자리도 없어 `focus()` 는 아무것도 안 한다. 연 순간 포커스가 없었으면(`body`) 돌려주지 않는다.
  */
-import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, type DragEvent, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import { shellIcon } from './icons'
 
 export function ShellDialog(props: {
@@ -46,17 +47,28 @@ export function ShellDialog(props: {
   onClose: () => void
   /** 상자의 설명이 되는 요소의 id(`aria-describedby` — 띄어 여럿). 열릴 때 제목과 함께 읽힌다(`panels/menu-delete-dialog.tsx`). */
   describedBy?: string
+  /**
+   * 연 요소가 그 사이 사라졌을 때 포커스를 돌려줄 자리(머리말 «닫히면 연 요소로 포커스를 돌려준다»). 닫는 순간에 부른다 — `null` 이면 돌려주지
+   * 않는다. 없으면 안 돌려준다.
+   */
+  focusFallback?: () => HTMLElement | null
   children: ReactNode
 }): ReactElement | null {
   if (!props.open) return null
   return (
-    <OpenDialog title={props.title} onClose={props.onClose} describedBy={props.describedBy}>
+    <OpenDialog title={props.title} onClose={props.onClose} describedBy={props.describedBy} focusFallback={props.focusFallback}>
       {props.children}
     </OpenDialog>
   )
 }
 
-function OpenDialog(props: { title: string; onClose: () => void; describedBy: string | undefined; children: ReactNode }): ReactElement {
+function OpenDialog(props: {
+  title: string
+  onClose: () => void
+  describedBy: string | undefined
+  focusFallback: (() => HTMLElement | null) | undefined
+  children: ReactNode
+}): ReactElement {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   /** `showModal`로 섰는가 — 아니면 Escape 를 키 이벤트로 받는다(머리말). */
@@ -65,8 +77,10 @@ function OpenDialog(props: { title: string; onClose: () => void; describedBy: st
   const composing = useRef(false)
   /** 마지막 `onClose` — 인라인 화살표를 받아도 이펙트를 다시 돌리지 않는다(`use-popover-dismiss.ts`의 `latest`와 같은 까닭). */
   const latest = useRef(props.onClose)
+  const fallback = useRef(props.focusFallback)
   useEffect(() => {
     latest.current = props.onClose
+    fallback.current = props.focusFallback
   })
 
   // 그리기 전에 세운다 — 첫 프레임에 뒤 화면 위로 비모달 상자가 한 번 보이지 않게 한다.
@@ -108,6 +122,7 @@ function OpenDialog(props: { title: string; onClose: () => void; describedBy: st
         else dialog.removeAttribute('open')
       }
       if (opener !== null && opener.isConnected) opener.focus()
+      else if (opener !== null) fallback.current?.()?.focus()
     }
   }, [])
 
@@ -119,8 +134,27 @@ function OpenDialog(props: { title: string; onClose: () => void; describedBy: st
     latest.current()
   }
 
+  /**
+   * **파일을 놓아도 브라우저가 열지 않는다** — 받지 않은 자리(상자 머리 · 배경막 · 몸체의 파일 칸 밖)에 놓인 파일을 브라우저가 열면(Chrome 새 탭 ·
+   * Firefox · Safari 는 현재 탭을 옮겨 에디터를 떠난다) 모달에 든 사람이 입력을 잃는다. 안쪽이 이미 받은 이벤트(`defaultPrevented` — 가져오기
+   * 상자의 파일 칸)는 그대로 둔다. 파일이 아닌 끌기(글자 · 링크)는 브라우저의 것이다.
+   */
+  function swallowFiles(event: DragEvent<HTMLDialogElement>): void {
+    if (event.defaultPrevented || !event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    if (event.type === 'dragover') event.dataTransfer.dropEffect = 'none'
+  }
+
   return (
-    <dialog ref={ref} className="wb-shell-dialog" aria-labelledby={titleId} aria-describedby={props.describedBy} onKeyDown={onKeyDown}>
+    <dialog
+      ref={ref}
+      className="wb-shell-dialog"
+      aria-labelledby={titleId}
+      aria-describedby={props.describedBy}
+      onKeyDown={onKeyDown}
+      onDragOver={swallowFiles}
+      onDrop={swallowFiles}
+    >
       <div className="wb-shell-dialog-head">
         <h2 id={titleId} className="wb-shell-dialog-title">
           {props.title}

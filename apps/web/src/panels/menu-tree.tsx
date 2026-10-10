@@ -25,7 +25,7 @@
  * **메뉴는 접힌다** — 줄 앞 펼침 단추 · 제목 줄의 «모두 접기» · «모두 펴기»(`./tree-fold.tsx`) · 메뉴 줄의 ← →(`foldKey`). 접힘은 프로젝트마다
  * 화면의 상태(`tree/collapse.ts`)이고, 열린 페이지 · 고른 줄이 접힌 메뉴 안이면 그 위 메뉴를 편다(아래 `chains`).
  *
- * **줄 단추 · 링크에서 ↑ ↓ 는 보이는 줄을 옮겨 다닌다**(`rowStep`) — 옮겨 간 줄을 고르고 포커스도 옮긴다. 페이지 줄로 옮기는 것은 고르는 것이고
+ * **줄 단추 · 링크에서 ↑ ↓ · Home · End 는 보이는 줄을 옮겨 다닌다**(`rowStep`) — 옮겨 간 줄을 고르고 포커스도 옮긴다. 페이지 줄로 옮기는 것은 고르는 것이고
  * 여는 것은 그 링크의 Enter 다(클릭과 같은 길). ← → · ↑ ↓ 는 고르기와 같은 읽기라 뷰 모드에도 선다. 포커스가 선 줄이 다시 받은 트리에서
  * 빠지면(남의 지우기 · 옮기기) 그 줄 · 이웃 줄로 포커스를 돌려준다(`refocus`) — 안 돌려주면 `body` 로 떨어져 키보드 사람이 트리를 다시 찾아간다.
  */
@@ -241,6 +241,12 @@ export function MenuTree(props: {
     const row = rowOfControl(event.target)
     const selection = row === null ? null : rowSelection(row)
     focusedRow.current = selection === null ? null : { row: selection, element: event.target }
+    // **포커스가 줄에 서면 그 줄이 고른 줄이다** — Tab 으로 다른 줄에 선 채 친 Delete 가 열린 페이지(고른 줄이던)의 삭제 확인을 걸지 않게 한다.
+    // 줄 단추 · 링크만 본다(`+` · `…` 는 누르면 제 줄을 고른다 — `pick`). 이미 고른 줄이면 다시 안 고른다 — `select` 가 열린 입력 · 확인을 닫는다.
+    // 열린 페이지의 링크면 «주소가 말하는 것»으로 푼다(`PageLink` 의 클릭과 같다) — 따로 적으면 주소가 옮긴 뒤 낡은 고름이 남는다.
+    if (selection !== null && !isPicked(commands.selection, selection)) {
+      commands.select(selection.kind === 'page' && selection.id === props.pageId ? null : selection)
+    }
   }
   function untrackFocus(event: FocusEvent<HTMLDivElement>): void {
     if (event.relatedTarget !== null && !event.currentTarget.contains(event.relatedTarget)) focusedRow.current = null
@@ -367,6 +373,17 @@ export function MenuTree(props: {
   }
 
   /**
+   * 상자를 연 줄이 그 사이 사라졌을 때(남이 대상 메뉴를 지움 · 내가 확인한 삭제) 상자가 포커스를 돌려줄 자리 — 고른 줄, 없으면 보이는 첫 줄
+   * (`shell/shell-dialog.tsx` 의 `focusFallback`). 안 주면 포커스가 `body` 로 떨어진다.
+   */
+  function treeFocusFallback(): HTMLElement | null {
+    const tree = treeRef.current
+    if (tree === null) return null
+    const picked = commands.selection === null ? null : rowControl(tree, commands.selection)
+    return picked ?? tree.querySelector<HTMLElement>('[data-tree-row] > .wb-shell-tree-menu, [data-tree-row] > .wb-shell-tree-page')
+  }
+
+  /**
    * **가져오기 · 메뉴 삭제 대화 상자는 트리 상자 밖에 선다** — 조회 상태(불러오는 중 · 실패)와 무관하다(보낸 뒤 다시 받기가 실패해도 상자 안의 결말이
    * 남아야 한다).
    *
@@ -377,8 +394,8 @@ export function MenuTree(props: {
     return (
       <>
         {tree}
-        {props.editable && <PageImportDialog commands={commands} />}
-        {props.editable && <MenuDeleteDialog commands={commands} />}
+        {props.editable && <PageImportDialog commands={commands} focusFallback={treeFocusFallback} />}
+        {props.editable && <MenuDeleteDialog commands={commands} focusFallback={treeFocusFallback} />}
       </>
     )
   }
@@ -580,20 +597,22 @@ function foldKey(event: KeyboardEvent, fold: Collapsed): boolean {
 }
 
 /**
- * **줄 단추 · 링크에서 친 ↑ ↓ — 보이는 줄을 옮겨 다닌다**(설계서 «트리 줄 접기» · 구조 트리의 ↑ ↓ 와 같은 축). 옮겨 간 줄을 고르고(`select`) 그
+ * **줄 단추 · 링크에서 친 ↑ ↓ · Home · End — 보이는 줄을 옮겨 다닌다**(설계서 «트리 줄 접기» · 구조 트리의 ↑ ↓ 와 같은 축 · Home · End 는 보이는 첫 · 끝 줄). 옮겨 간 줄을 고르고(`select`) 그
  * 줄 단추 · 링크에 포커스를 옮긴다 — 포커스가 남으면 이어 친 Enter · Delete 가 앞 줄에 닿는다. 페이지 줄은 고르기만 한다(여는 것은 링크의 Enter).
  * 접힌 메뉴 안은 DOM 에 없어 건너뛴다. 끝에서는 멈춘다(돌지 않는다 — 구조 트리와 같다). 대상이 줄 단추 · 링크일 때만 받는다 — `+` · `…` 의
  * ↑ ↓ 는 메뉴를 연다(`shell/action-menu.tsx`). 받았으면 `true`.
  */
 function rowStep(event: KeyboardEvent, tree: HTMLElement | null, select: (selection: TreeSelection) => void): boolean {
   if (event.altKey || event.shiftKey || event.metaKey || event.ctrlKey) return false
-  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return false
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown' && event.key !== 'Home' && event.key !== 'End') return false
   const row = rowOfControl(event.target)
   if (tree === null || row === null) return false
   event.preventDefault()
   const rows = [...tree.querySelectorAll<HTMLElement>('[data-tree-row]')]
   // `!==` 로 견준다 — 위 `SHORTCUTS` 의 조합을 세는 자(`test/panels/menu-keyboard.test.tsx` «표의 여섯을 다 덮는다»)가 `event.key === '` 를 닻으로 센다.
-  const next = rows[rows.indexOf(row) + (event.key !== 'ArrowUp' ? 1 : -1)]
+  // Home · End 는 보이는 첫 · 끝 줄이다(접힌 메뉴 안은 DOM 에 없다).
+  const next =
+    event.key === 'Home' ? rows[0] : event.key === 'End' ? rows[rows.length - 1] : rows[rows.indexOf(row) + (event.key !== 'ArrowUp' ? 1 : -1)]
   const selection = next === undefined ? null : rowSelection(next)
   if (next === undefined || selection === null) return true
   select(selection)
