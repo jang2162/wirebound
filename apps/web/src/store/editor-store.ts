@@ -405,6 +405,7 @@ const WINDOW_CHANGES_LIMIT = 500
  * |---|---|---|
  * | `'gap'` | **프레임을 놓쳤다** — 온 `seq`가 내 다음 번호가 아니다 | 다시 붙으면 화면이 스스로 다시 읽는다. 안 풀리면 새로고침 |
  * | `'diverged'` | 얹으려다 `applyOps`가 던졌다 | 새로고침 |
+ * | `'late'` | **이 페이지의 늦게 커밋된 변경이 있다** — 서버가 번호 없는 `page-stale`로 알렸다(답을 잃은 편집 · 게시의 COMMIT 이 확인 한도를 넘겨 커밋됐다) | 「다시 불러오기」 — **이 페이지만** 다시 읽는다 |
  * | `'restored'` | 남이 **스냅샷을 복원했다** — 판이 통째로 갈렸다 | 새로고침 |
  *
  * **`'pending'`(*"보내지 않은 편집이 있어 미뤘다"*) 갈래는 없다** — 남의 변경은 리베이스로
@@ -427,7 +428,8 @@ const WINDOW_CHANGES_LIMIT = 500
  *
  * | 세기 | `reason` | 왜 그 자리인가 |
  * |---|---|---|
- * | 3 | `'restored'` | **판이 통째로 갈렸다.** 갭도 갈라짐도 그것의 결과다 — 원인이 증상을 덮으면 안 된다 |
+ * | 4 | `'restored'` | **판이 통째로 갈렸다.** 갭도 갈라짐도 그것의 결과다 — 원인이 증상을 덮으면 안 된다 |
+ * | 3 | `'late'` | **이 페이지에 못 받은 revision 이 있다고 서버가 말했다.** 뒤따르는 갭도 갈라짐도 그것의 결과일 수 있다(뒤 revision 의 프레임이 그 빠진 번호 위에 안 얹힌다) |
  * | 2 | `'diverged'` | 지금 이 프레임을 내 바탕이 못 받아들인다. 가장 좁고 구체적인 실패다 |
  * | 1 | `'gap'` | 못 받은 것이 있다 |
  *
@@ -435,7 +437,7 @@ const WINDOW_CHANGES_LIMIT = 500
  * 뜻이 있다.
  */
 export interface RemoteStale {
-  reason: 'gap' | 'diverged' | 'restored'
+  reason: 'gap' | 'diverged' | 'late' | 'restored'
   /**
    * **`'restored'`에만 — 답을 잃은 내 복원이 세운 낡음이다**(없으면 알아보지 못한 복원 신호 — 남의 것이거나 알아보는 목록을 벗어난 내 것).
    * 세기 · 푸는 자리는 `'restored'` 그대로고 문장과 단추의 앞머리만 갈린다(`shell/remote-alert.tsx`의 `OWN_RESTORE_NOTICE`).
@@ -471,7 +473,8 @@ export interface RestoreSignal {
 const STALE_RANK: Record<RemoteStale['reason'], number> = {
   gap: 1,
   diverged: 2,
-  restored: 3,
+  late: 3,
+  restored: 4,
 }
 
 /**
@@ -499,6 +502,12 @@ export interface RemoteChange {
 
 /** 복원 신호 앞에 시작한 조회의 판 · 복원 뒤 다시 읽기가 아닌 판에 두는 낡음(`loadPage` · `clearPage`). */
 const RESTORED_STALE: RemoteStale = { reason: 'restored' }
+
+/** 늦게 커밋된 변경이 있는 낡음(`markPageStale` · `loadPage`의 `lateKept`). 참조를 고정한다 — `NO_WARNINGS`와 같은 이유다. */
+const LATE_STALE: RemoteStale = { reason: 'late' }
+
+/** `#lateAt`에 드는 페이지 수의 한도 — 쌓이는 것을 끊는다. 넘기면 가장 오래된 것부터 버린다(그 페이지의 다음 조회는 `late`를 모르는 판처럼 믿는다 — 아래 `markPageStale`). */
+const LATE_PAGES_LIMIT = 16
 
 /** 내 복원의 답을 잃은 낡음(`markRestoreUnanswered`). */
 const RESTORE_UNANSWERED_STALE: RemoteStale = { reason: 'restored', own: 'unanswered' }
@@ -779,6 +788,16 @@ export class EditorStore {
   #openingPageId: string | null = null
 
   /**
+   * **페이지마다 «늦게 커밋된 변경이 있다» 신호(`page-stale`)가 왔을 때까지 시작한 조회 수**(`markPageStale`). 이 수 이하의 세대가 읽은 판은 그 커밋 앞의
+   * 판본일 수 있다 — 서버는 커밋한 뒤에 신호를 내지만 신호가 닿는 사이 시작한 조회는 그 커밋 앞을 읽었을 수 있다(`#restoredAt`과 같은 잣대). 그 판을 실어도
+   * 낡음(`'late'`)을 그대로 둔다(`loadPage`). 이 수보다 뒤에 시작한 조회의 판이 풀고(`loadPage` · `confirmPageFresh`), 풀리면 항목은 두어도 무해하다(뒤의 조회는 늘 더 크다).
+   *
+   * **적는 페이지는 열린 페이지와 여는 페이지다**(`#openingPageId`) — 여는 길은 조회 전에 판을 비우므로 열린 페이지만 적으면 여는 조회가 옛 판을 싣고도 «풀렸다»고 읽는다.
+   * 열려 있지도 여는 중도 아닌 페이지의 신호는 버린다 — 다음에 여는 조회가 신호 뒤에 시작해 커밋을 읽는다.
+   */
+  #lateAt = new Map<string, number>()
+
+  /**
    * **마지막 복원 신호가 왔을 때까지 시작한 조회 수**(`markRestored`). 이 수 이하의 세대가 읽은 판은 복원 앞의 판본일 수 있다 — 그 답을
    * 실어도 낡음(`'restored'`)을 그대로 둔다(`loadPage`).
    */
@@ -955,7 +974,12 @@ export class EditorStore {
       // 남는다 — *"고쳤는데 고쳤다고 말하지 않는"* 부류다. **복원 신호 앞에 시작한 조회의 판만 예외다**(위 `beforeRestore`) — 푸는
       // 쪽이 복원 앞 판을 최신처럼 보이게 한다(스토어: 창 안 복원 신호 → 복원 앞 답 → 낡음 `null`). **복원 낡음은 페이지 판으로 안
       // 푼다**(`#keepsRestored`) — 복원은 메뉴 · 코멘트도 바꿨다.
-      remoteStale: beforeRestore || this.#keepsRestored(options.restoreReread === true, ticket) ? this.#restoredStale() : null,
+      remoteStale:
+        beforeRestore || this.#keepsRestored(options.restoreReread === true, ticket)
+          ? this.#restoredStale()
+          : this.#lateKept(pageId, ticket)
+            ? this.#lateStale()
+            : null,
       documentLoads: this.#state.documentLoads + 1,
     })
     // **다시 읽은 판에도 기다리던 번호 응답을 제 차례에 얹는다**(`applyMarkerChange`의 «내 다음 번호가 아니면 …») — 아래 창 얹기
@@ -2019,6 +2043,46 @@ export class EditorStore {
   }
 
   /**
+   * **그 페이지에 늦게 커밋된 변경이 있다고 표시한다**(`page-stale`). 답을 잃은 편집 · 게시의 COMMIT 이 확인 한도를 넘겨 커밋되면 서버는 그 revision 의
+   * 번호 프레임을 못 내고(늦은 옛 번호를 «다음 번호»로 얹으면 뒤 revision 이 빠진 화면이 최신으로 선다) 이 신호를 낸다. **얹을 것이 없다** — 번호도 `ops`도
+   * 안 온다. 할 수 있는 것은 «이 페이지가 낡았다»고 말하는 것뿐이고, 푸는 것은 다시 실은 판이다(`loadPage` · `confirmPageFresh`).
+   *
+   * **열린 페이지일 때만 낡음을 세운다 · 여는 중인 페이지는 적기만 한다**(`#lateAt`). 다른 페이지의 신호는 버린다(그 페이지는 다음에 열 때 읽는다).
+   * 멱등이다 — 이미 서 있으면 아무것도 안 한다(`#markStale`). **낸 사람의 탭도 받는다**: 그 탭의 다시 읽기가 커밋보다 먼저 읽었으면(수습의 조회) 이 신호만이
+   * 낡았다는 것을 안다 — 읽은 뒤에 시작한 판을 이미 실었으면 거짓 경보다(읽는 순간 신호가 이미 닿은 줄은 알 수 없다 — 번호가 없다). 대가는 경보 하나와 다시 읽기 하나다.
+   */
+  readonly markPageStale = (pageId: string): void => {
+    const opened = this.#state.openPageId === pageId
+    if (!opened && this.#openingPageId !== pageId) return
+    this.#lateAt.delete(pageId)
+    this.#lateAt.set(pageId, this.#pageLoadsBegun)
+    if (this.#lateAt.size > LATE_PAGES_LIMIT) this.#lateAt.delete(this.#lateAt.keys().next().value as string)
+    if (opened) this.#markStale('late')
+  }
+
+  /**
+   * **서버 판이 그대로라고 본 조회가 `'late'` 낡음을 푼다**(`routes/editor.tsx`의 «다시 불러오기» · 재연결 재조회 — 둘 다 `holdsServerPage`로 같다고 보고 판을
+   * 싣지 않고 돌아온다). 판을 안 실으면 `loadPage`가 안 도니 낡음이 남는다. **이 조회가 신호 뒤에 시작했을 때만이다**(`ticket`이 `#lateAt`보다 크다) — 신호 앞에
+   * 시작한 조회는 그 커밋 앞을 읽었을 수 있고, 그 판이 «같다»는 것은 낡은 판이 같다는 것이다. 다른 낡음(복원 · 갭 · 갈라짐)은 안 건드린다.
+   */
+  readonly confirmPageFresh = (pageId: string, ticket: number): void => {
+    const { remoteStale, openPageId } = this.#state
+    if (remoteStale?.reason !== 'late' || openPageId !== pageId || this.#lateKept(pageId, ticket)) return
+    this.#apply({ remoteStale: null })
+  }
+
+  /** 판을 싣는 조회(`ticket`)가 그 페이지의 `page-stale` 신호보다 앞에 시작했는가 — 그 판은 늦은 커밋 앞일 수 있어 `'late'`를 남긴다(`#lateAt`). `ticket`이 없으면(세대 없는 입구) 거짓이다. */
+  #lateKept(pageId: string, ticket?: number): boolean {
+    const at = this.#lateAt.get(pageId)
+    return ticket !== undefined && at !== undefined && ticket <= at
+  }
+
+  /** 늦은 낡음 — 서 있으면 그것, 아니면 고정 참조(`#restoredStale`과 같은 이유). **복원 낡음을 대신 돌려주지 않는다** — 이 자리는 복원이 풀린 판에서 늦은 낡음만 남기는 곳이다. */
+  #lateStale(): RemoteStale {
+    return this.#state.remoteStale?.reason === 'late' ? this.#state.remoteStale : LATE_STALE
+  }
+
+  /**
    * **판이 통째로 갈렸다고 표시한다.** 남이 스냅샷을 복원하면 페이지가 사라지거나 생기고
    * 문서가 통째로 바뀌므로 `ops`로 표현되지 않는다 — 얹을 것이 없고, 할 수 있는 정직한
    * 일은 그 사실을 말하는 것뿐이다.
@@ -3033,6 +3097,7 @@ export class EditorStore {
     this.#restoredHistory = null
     this.#windowChanges = []
     this.#openingPageId = null
+    this.#lateAt.clear()
     this.#dropWaitingMarkers()
     // 떠나며 버린 편집을 말하는 조각은 남긴다(`#lossParts`의 `sticky`) — 캔버스의 여는 이펙트가 프로젝트를 옮기며 먼저 판을 비우고 그 조각을 세운다.
     this.#apply({ ...initialState(), editFailure: this.#keptLoss() })

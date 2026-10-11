@@ -164,7 +164,7 @@ import { findPageById, lockPageForEdit, lockPageShared } from '../repos/pages'
 import { lockProjectShared } from '../repos/projects'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
 import { runRevisionTransaction, type Settled, type WrittenRevision } from '../services/lost-commit'
-import { broadcastOrigin, notifyPageChanged } from '../ws/notify'
+import { broadcastOrigin, notifyPageChanged, pageStaleOnLateCommit } from '../ws/notify'
 
 /**
  * 파이프라인 실패를 **트랜잭션 밖으로 던져** 그 구간을 되돌린다(머리말의 규칙 1).
@@ -304,13 +304,16 @@ async function rebroadcastPostRevision(app: FastifyInstance, projectId: string, 
  * 재생이 번호 프레임을 다시 보낸다(`rebroadcastPostRevision`). 둘이 겹치면 한 게시의 성공을 두 길이 저마다 판정한다.
  */
 async function runWrite<T>(
-  db: DbHandle,
+  app: FastifyInstance,
+  projectId: string,
   pageId: string,
   fn: (trx: DbHandle) => Promise<T>,
   revisionOf: (result: T) => WrittenRevision | null = () => null,
 ): Promise<Settled<T>> {
   try {
-    return await runRevisionTransaction(db, pageId, fn, revisionOf)
+    // **한도 뒤에 커밋된 쓰기는 번호 없는 `page-stale`을 낸다**(`services/lost-commit.ts`의 «늦게 커밋된 편집 · 게시») — 쓰기 셋 모두다.
+    // 게시는 `revisionOf`를 안 줘 확인이 «모름»이므로 한도 안에 커밋돼도 번호 프레임을 못 낸다(웹의 같은 키 재전송이 재생으로 낸다).
+    return await runRevisionTransaction(app.db, pageId, fn, revisionOf, pageStaleOnLateCommit(app, projectId, pageId))
   } catch (error) {
     if (error instanceof EditRollback) throw editOutcomeToApiError(error.outcome, error.baseSeq)
     throw error
@@ -661,7 +664,7 @@ export function commentRoutes() {
       // 트랜잭션 안이면 SAVEPOINT로 감싸므로(`db/tx.ts`), 안쪽의 `applyEdit`이 여는
       // 트랜잭션은 이 구간의 세이브포인트가 된다. 나누면 *"번호는 붙었는데 코멘트가
       // 없다"*(머리말 「번호는 있는데 코멘트 행이 없는 노드」의 상태)가 실패 경로에서 실제로 만들어진다.
-      const { result } = await runWrite(app.db, pageId, async (trx) => {
+      const { result } = await runWrite(app, projectId, pageId, async (trx) => {
         // **잠근다.** 그리고 같은 키를 한 번 더 본다 — 같은 키가 동시에 왔으면 앞 요청이 방금 커밋했다.
         // 안 보면 이 요청이 같은 키로 둘째 행을 넣으려다 유일 색인에 걸려 **500** 이다(같은 게시를 두 번
         // 보낸 사람이 «모름»을 듣는다). 페이지 행을 잠갔으므로 같은 페이지의 게시는 여기서 한 줄로 선다.
@@ -839,7 +842,8 @@ export function commentRoutes() {
         await loadDocument(app, projectId, pageId)
 
         const { result, broadcast } = await runWrite(
-          app.db,
+          app,
+          projectId,
           pageId,
           async (trx) => {
             // **지우기 전에 잠근다**(규칙 2). **같은 노드의 마지막 둘을 동시에 지우면** 잠금 없이는 둘 다 *"마지막이
@@ -925,7 +929,8 @@ export function commentRoutes() {
         }
 
         const { result, broadcast } = await runWrite(
-          app.db,
+          app,
+          projectId,
           pageId,
           async (trx) => {
             const locked = await lockPageForEdit(trx, projectId, pageId)

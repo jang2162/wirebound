@@ -78,7 +78,7 @@ import { OpsBody } from '../http/patch-ops'
 import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
 import { runEditTransaction } from '../services/lost-commit'
-import { broadcastOrigin, notifyMenuChanged, notifyPageChanged } from '../ws/notify'
+import { broadcastOrigin, notifyMenuChanged, notifyPageChanged, pageStaleOnLateCommit } from '../ws/notify'
 import { bumpMenuRev } from '../repos/menu'
 import { runTreeTransaction } from '../services/tree-write'
 import { importPage, type PageImportOutcome } from '../services/page-import'
@@ -602,7 +602,7 @@ export function pageRoutes() {
         // 잠갔다 — 그 대기 뒤의 역할로 판정한다. 던지면 이 트랜잭션째 되돌아간다.
         if (edited.ok) await recheckProjectRole(trx, request)
         return edited
-      })
+      }, pageStaleOnLateCommit(app, projectId, pageId))
       const outcome = settled.outcome
 
       if (!outcome.ok) {
@@ -687,7 +687,7 @@ export function pageRoutes() {
         // **커밋 순간의 권한.** `PUT .../schema`와 같은 자리 · 같은 까닭이다.
         if (edited.ok) await recheckProjectRole(trx, request)
         return edited
-      })
+      }, pageStaleOnLateCommit(app, projectId, pageId))
       const outcome = settled.outcome
 
       if (!outcome.ok) {

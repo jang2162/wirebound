@@ -201,6 +201,21 @@ export interface CutProxy {
   close(): Promise<void>
 }
 
+/**
+ * api ↔ DB 사이의 TCP 프록시(`startEditorStack`의 `dbHalfCut` 옵션) — **그 질의를 서버에 넘긴 뒤 api 쪽 소켓만 끊는다.** 서버의 백엔드는 상대가 떠난 줄
+ * 모른 채 그 트랜잭션을 마친다 — 커밋은 되는데 api 는 COMMIT 의 답을 잃는다(`apps/api/test/pg-fault-proxy.ts`의 `halfCutOnQuery`와 같은 장치다. 두 앱은
+ * 서로를 import 하지 않아 이쪽에 작게 다시 짓는다).
+ */
+export interface DbHalfCut {
+  /**
+   * 무장한다 — **그 글자를 담은 질의를 보낸 연결이 다음에 보내는 `COMMIT`**에서 쏜다(한 번 쏘면 풀린다). 배경 요청의 COMMIT 이 먼저 맞지 않게 연결마다
+   * 글자를 본 뒤의 COMMIT 만 고른다.
+   */
+  arm(fragment: string): void
+  /** 쐈는가 — 판이 섰는지의 카나리아다. */
+  readonly fired: boolean
+}
+
 export interface Census {
   /** 띄운 프로세스 그룹에 산 프로세스. */
   readonly processes: number
@@ -249,6 +264,8 @@ export interface EditorStack {
   startDownDelay(ms: number, match?: RegExp): Promise<{ origin: string; delayed(): number; close(): Promise<void> }>
   /** 고른 연결만 끊는 프록시(`CutProxy`). */
   startCutProxy(): Promise<CutProxy>
+  /** api 가 DB 에 닿는 길의 프록시 — `startEditorStack(…, { dbHalfCut: true })`일 때만 있다. */
+  readonly dbHalfCut: DbHalfCut | null
   close(): Promise<Teardown>
 }
 
@@ -440,7 +457,10 @@ export async function sweepStaleBrowserDatabases(
 /**
  * 판을 세운다. **도중에 던지면 그때까지 띄운 것을 거두고 다시 던진다.**
  */
-export async function startEditorStack(prerequisite: Extract<Prerequisite, { ok: true }>): Promise<EditorStack> {
+export async function startEditorStack(
+  prerequisite: Extract<Prerequisite, { ok: true }>,
+  options: { dbHalfCut?: boolean } = {},
+): Promise<EditorStack> {
   const database = browserDatabaseName()
   const admin = new pg.Client({ connectionString: prerequisite.databaseUrl })
   await admin.connect()
@@ -511,6 +531,20 @@ export async function startEditorStack(prerequisite: Extract<Prerequisite, { ok:
       if (migrate.status !== 0) throw new Error(`migrate 종료 ${migrate.status}\n${migrate.stdout}\n${migrate.stderr}`)
     }
 
+    // 옵션을 준 판만 api 를 DB 프록시 뒤에 둔다 — 다른 케이스 파일의 api 는 DB 에 곧장 붙는다.
+    let dbHalfCut: DbHalfCut | null = null
+    let apiDatabaseUrl = databaseUrl
+    if (options.dbHalfCut === true) {
+      const proxy = await startDbHalfCutProxy(databaseUrl)
+      ports.push(proxy.port)
+      closers.push(proxy.close)
+      dbHalfCut = proxy
+      const proxied = new URL(databaseUrl)
+      proxied.hostname = '127.0.0.1'
+      proxied.port = String(proxy.port)
+      apiDatabaseUrl = proxied.toString()
+    }
+
     const apiPort = await freePort()
     ports.push(apiPort)
     const apiUrl = `http://127.0.0.1:${apiPort}`
@@ -522,7 +556,7 @@ export async function startEditorStack(prerequisite: Extract<Prerequisite, { ok:
         NODE_ENV: 'development',
         HOST: '127.0.0.1',
         PORT: String(apiPort),
-        DATABASE_URL: databaseUrl,
+        DATABASE_URL: apiDatabaseUrl,
         SESSION_COOKIE_NAME: `wb_browser_${apiPort}`,
         LOG_LEVEL: 'warn',
       }),
@@ -672,6 +706,7 @@ export async function startEditorStack(prerequisite: Extract<Prerequisite, { ok:
         closers.push(proxy.close)
         return { origin: `http://127.0.0.1:${proxy.port}`, blackhole: proxy.blackhole, reset: proxy.reset, close: proxy.close }
       },
+      dbHalfCut,
       close: teardown,
     }
     return stack
@@ -679,6 +714,68 @@ export async function startEditorStack(prerequisite: Extract<Prerequisite, { ok:
     const left = await teardown().catch(() => undefined)
     throw new Error(`판을 못 세웠다(거둔 뒤 남은 것: ${JSON.stringify(left)}): ${(error as Error).message}`)
   }
+}
+
+/** `DbHalfCut`의 프록시 — 위 타입의 머리말. 연결마다 무장 글자를 본 뒤의 `COMMIT`(단순 질의 `Q`)을 서버에 넘기고 api 쪽 소켓만 끊는다. */
+function startDbHalfCutProxy(databaseUrl: string): Promise<DbHalfCut & { port: number; close(): Promise<void> }> {
+  const upstream = new URL(databaseUrl)
+  const upstreamPort = Number(upstream.port || 5432)
+  const upstreamHost = upstream.hostname
+  const sockets = new Set<net.Socket>()
+  let fragment: string | null = null
+  let fired = false
+  const server = net.createServer((client) => {
+    const up = net.connect(upstreamPort, upstreamHost)
+    sockets.add(client)
+    sockets.add(up)
+    let sawFragment = false
+    /** 쏘았다 — 서버 쪽 소켓은 `close()`까지 둔다. */
+    let orphaned = false
+    client.on('data', (chunk: Buffer) => {
+      const text = chunk.toString('latin1').toLowerCase()
+      if (fragment !== null && text.includes(fragment)) sawFragment = true
+      if (fragment !== null && sawFragment && chunk[0] === 0x51 && text.slice(5).startsWith('commit')) {
+        fragment = null
+        fired = true
+        orphaned = true
+        up.write(chunk)
+        client.destroy()
+        return
+      }
+      up.write(chunk)
+    })
+    up.on('data', (chunk) => {
+      if (!orphaned) client.write(chunk)
+    })
+    const end = (): void => {
+      client.destroy()
+      if (!orphaned) up.destroy()
+    }
+    client.on('error', end)
+    client.on('close', end)
+    up.on('error', () => client.destroy())
+    up.on('close', () => client.destroy())
+  })
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address !== null ? address.port : 0
+      resolve({
+        port,
+        arm(next) {
+          fragment = next.toLowerCase()
+          fired = false
+        },
+        get fired() {
+          return fired
+        },
+        async close() {
+          for (const socket of sockets) socket.destroy()
+          await new Promise<void>((done) => server.close(() => done()))
+        },
+      })
+    })
+  })
 }
 
 /**

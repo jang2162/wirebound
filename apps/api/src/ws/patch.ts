@@ -37,7 +37,7 @@ import { editOutcomeToApiError } from '../http/edit-outcome'
 import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
 import { runEditTransaction } from '../services/lost-commit'
-import { notifyPageChanged } from './notify'
+import { notifyPageChanged, pageStaleOnLateCommit } from './notify'
 import { MIN_ROLE_FOR_FRAME, type ClientFrame, type ServerFrame } from './protocol'
 import type { RoomConnection } from './rooms'
 
@@ -116,7 +116,7 @@ export async function handlePatchFrame(
         })
       }
       return edited
-    })
+    }, pageStaleOnLateCommit(app, connection.projectId, frame.pageId))
   } catch (error) {
     // 잠금 충돌(423)과 재확인의 거절은 REST 봉투와 같은 값으로 낸 사람에게 돌려준다. 그 밖의 예외는 그대로 던진다 —
     // `ws/routes.ts`의 `catch`가 500 프레임으로 답한다.

@@ -23,6 +23,10 @@
  * 코멘트를 지운 뒤 복원하면 서버 1 · 탭 0 이던 판). 낡음을 푸는 것은 단추가 아니라 다시 실은 판이다(`loadPage` · `clearPage`) —
  * 다시 읽기가 실패하면 캔버스가 그 실패를 말하고 스토어를 비운다(복원 재조회의 실패 갈래).
  *
+ * **`'late'`에도 «다시 불러오기»가 있다 — 그 페이지만 다시 읽는다**(`routes/editor.tsx`의 `lateToken`). 서버가 말한 것은 «이 페이지에 번호 프레임 없이 커밋된 변경이 있다»
+ * 뿐이라 다시 읽을 것도 그 페이지의 판 하나다. 풀리는 것도 그 페이지의 판이 실린 때뿐이다(`EditorStore.loadPage` · `confirmPageFresh`) — 신호가 닿기 **앞에 시작한**
+ * 조회의 판은 안 푼다(그 커밋 앞을 읽었을 수 있다).
+ *
  * **다시 읽는 창에 커밋된 남의 편집은 조용히 빠질 수 있다.** 응답이 그 커밋 앞을 읽었으면 판에 없고, 그 프레임은 응답보다 먼저
  * 와 갭으로 버려졌고, 실린 판이 낡음을 푼다 — 다음 프레임이 갭을 세울 때까지 아무 말이 없다(jsdom: 응답 head 40 · 그 사이
  * 프레임 41 → 배너 풀림 · 41 의 노드 없음 · 42 에서 «받지 못한 변경»). 판을 다시 싣는 길(재연결 재조회 · 내 복원 · 이 단추 ·
@@ -49,6 +53,7 @@ import { useEditorStore, useEditorStoreInstance } from '../store/use-editor-stor
 const NOTICE: Record<RemoteStale['reason'], string> = {
   gap: '받지 못한 변경이 있어 화면이 최신이 아닙니다. 새로고침하면 맞춰집니다.',
   diverged: '다른 사람의 변경을 화면에 반영하지 못했습니다. 새로고침하면 맞춰집니다.',
+  late: '이 페이지에 늦게 반영된 변경이 있어 화면이 최신이 아닙니다.',
   restored: '스냅샷이 복원됐습니다. 다시 불러와 지금 상태를 확인하세요.',
 }
 
@@ -66,8 +71,9 @@ const OWN_RESTORE_NOTICE: Record<NonNullable<RemoteStale['own']>, string> = {
 
 export function RemoteAlert(props: {
   /**
-   * 남이 복원한 판을 다시 읽는다 — 셸의 복원 신호를 올린다(`routes/editor.tsx`의 `restoredToken`). **반드시 받는다** — 선택 인자면
-   * 새 호출자가 빠뜨릴 때 단추가 조용히 아무 일도 안 한다. 서 있는 낡음을 넘긴다 — 셸이 다시 읽으며 말할 앞머리를 고른다(`own`).
+   * 낡은 판을 다시 읽는다. `'restored'`면 복원이 바꾸는 것을 전부 다시 읽는 셸의 복원 신호를 올리고(`routes/editor.tsx`의 `restoredToken`), `'late'`면 **그 페이지만**
+   * 다시 읽는다(`lateToken`). **반드시 받는다** — 선택 인자면 새 호출자가 빠뜨릴 때 단추가 조용히 아무 일도 안 한다. 서 있는 낡음을 넘긴다 — 셸이 갈래와 다시 읽으며
+   * 말할 앞머리를 고른다(`reason` · `own`).
    */
   onReload: (stale: RemoteStale) => void
 }): ReactElement | null {
@@ -79,7 +85,7 @@ export function RemoteAlert(props: {
   return (
     <p className="wb-shell-remote-alert" role="status">
       {stale.own === undefined ? NOTICE[stale.reason] : OWN_RESTORE_NOTICE[stale.own]}
-      {stale.reason === 'restored' && (
+      {(stale.reason === 'restored' || stale.reason === 'late') && (
         <>
           {' '}
           <button type="button" className="wb-shell-remote-reload" onClick={() => props.onReload(stale)}>
