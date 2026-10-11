@@ -86,6 +86,17 @@ describe('읽는 것', () => {
     expect(parseServerFrame(JSON.stringify({ ...base, safetySnapshotId: 9 }))).toEqual(base)
   })
 
+  it('page-stale 은 프로젝트와 페이지 id 만 옮긴다 — 모르는 필드(번호 · actor)는 버리고, 페이지 id 가 없으면 프레임을 버린다', () => {
+    const base = { type: 'page-stale', projectId: 'p', pageId: 'g' }
+
+    expect(parseServerFrame(JSON.stringify(base))).toEqual(base)
+    // 서버가 나중에 더한 필드가 이 갈래를 깨지 않고, 번호가 실려 와도 받는 쪽이 번호로 얹지 않는다.
+    expect(parseServerFrame(JSON.stringify({ ...base, seq: 9, actor: { type: 'user', label: '홍' }, extra: true }))).toEqual(base)
+    expect(parseServerFrame(JSON.stringify({ type: 'page-stale', projectId: 'p' }))).toBeNull()
+    expect(parseServerFrame(JSON.stringify({ ...base, pageId: 7 }))).toBeNull()
+    expect(parseServerFrame(JSON.stringify({ type: 'page-stale', pageId: 'g' }))).toBeNull()
+  })
+
   it('patch-ack의 값을 그대로 옮긴다 — undo 스택이 이것을 든다', () => {
     expect(parseServerFrame(JSON.stringify(PATCH_ACK))).toEqual(PATCH_ACK)
   })

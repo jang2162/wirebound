@@ -304,6 +304,9 @@ const OWN_RESTORE_LEAD: Record<NonNullable<RemoteStale['own']>, string> = {
   landed: SIGNALLED_RESTORE_LEAD,
 }
 
+/** 늦게 커밋된 변경(`page-stale`)의 단추로 그 페이지를 다시 읽었을 때의 앞머리(`CanvasFrame`의 `lateToken`). 누가 썼는지 말하지 않는다 — 신호가 모른다. */
+const LATE_LEAD = '늦게 반영된 변경을 포함해 페이지를 서버 상태로 다시 불러왔습니다.'
+
 /** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
 type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
 
@@ -629,6 +632,12 @@ function EditorShell(props: {
    * 한 토큰으로 접으면 저 셋을 갈 자리가 없어진다 — 재연결이 복원 배너를 거두는 다시 읽기가 된다(코멘트 · 설명 · 테마는 안 읽는데).
    */
   const [restoredToken, setRestoredToken] = useState(0)
+  /**
+   * **늦게 커밋된 변경(`page-stale`)의 «다시 불러오기» 신호.** 값에는 뜻이 없고 오를 때마다 **열린 페이지 하나만** 다시 읽는다(`CanvasFrame`의 `lateToken`) — 서버가
+   * 말한 것은 «이 페이지에 번호 프레임 없이 커밋된 변경이 있다»뿐이라 메뉴 · 코멘트 · 테마는 안 바뀌었다. 복원 신호(`restoredToken`)와 재연결 신호(`resyncToken`)를
+   * 재사용하지 않는다 — 앞의 것은 프로젝트 전체를 다시 읽고(코멘트 본문을 다시 세운다), 뒤의 것은 실패를 조용히 두고 앞머리가 «연결이 다시 붙어»다.
+   */
+  const [lateToken, setLateToken] = useState(0)
   /**
    * **이 셸이 본 가장 큰 `menu-changed` 번호** — 좌측 트리(`MenuTree`의 `remoteRev`)가 제 트리의 번호보다 크면 다시 받는다. 가장 큰 것만 든다 —
    * 방송은 연결마다 자격을 본 뒤 보내 두 쓰기의 프레임이 거꾸로 닿을 수 있다(서버 `ws/broadcast.ts`의 `deliver`).
@@ -1035,6 +1044,7 @@ function EditorShell(props: {
             resyncToken={resyncToken}
             restoredToken={restoredToken}
             restoredLead={restoredLead}
+            lateToken={lateToken}
             goneCheck={pageGone}
           />
         </main>
@@ -1072,7 +1082,15 @@ function EditorShell(props: {
               {/* **남의 변경 때문에 화면이 낡았다는 통지**. `EditAlert`와 자리는 같고
                   `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
                   근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
-              <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.own === undefined ? SIGNALLED_RESTORE_LEAD : OWN_RESTORE_LEAD[stale.own])} />
+              <RemoteAlert
+                onReload={(stale) => {
+                  if (stale.reason === 'late') {
+                    if (shellLive()) setLateToken((token) => token + 1)
+                    return
+                  }
+                  reloadAfterRestore(stale.own === undefined ? SIGNALLED_RESTORE_LEAD : OWN_RESTORE_LEAD[stale.own])
+                }}
+              />
               {/* **테마를 못 실었다**(`theme/theme-alert.tsx`) — 캔버스는 기본 뷰로 그리고 있다. */}
               <ThemeAlert />
               {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
@@ -1397,6 +1415,8 @@ function CanvasFrame(props: {
   restoredToken: number
   /** 그 재조회가 잃은 것을 말할 때의 앞머리(셸의 `restoredLead`). */
   restoredLead: string
+  /** 늦게 커밋된 변경의 «다시 불러오기» 신호(셸의 `lateToken`). 오를 때마다 아래 늦은 변경 이펙트가 열린 페이지 하나를 다시 읽는다. */
+  lateToken: number
   /** 트리가 이 페이지를 잃었다는 신호(셸의 `pageGone`). 오를 때마다 아래 «페이지가 사라짐» 이펙트가 돈다. */
   goneCheck: { pageId: string; at: number } | null
 }): ReactElement {
@@ -1435,9 +1455,11 @@ function CanvasFrame(props: {
   const handledResync = useRef(0)
   /** 복원 신호 쪽의 같은 장치. 두 이펙트가 각자 든다 — 신호가 서로 다르다. */
   const handledRestore = useRef(0)
+  /** 늦은 변경 신호 쪽의 같은 장치. */
+  const handledLate = useRef(0)
   /** «페이지가 사라짐» 신호 쪽의 같은 장치. */
   const handledGone = useRef(0)
-  const { projectId, pageId, resyncToken, restoredToken, restoredLead, goneCheck } = props
+  const { projectId, pageId, resyncToken, restoredToken, restoredLead, lateToken, goneCheck } = props
 
   /**
    * **서버가 준 페이지를 스토어에 놓고, 그러면서 잃은 것이 있으면 말한다.**
@@ -1689,7 +1711,11 @@ function CanvasFrame(props: {
         // 되돌리지 못한 거절된 편집을 화면에 둔다(`holdsServerPage`의 머리말). **이 자리에만
         // 둔다** — 복원 경로는 판이 통째로 갈렸다는 신호라 늘 싣는다. 열린 페이지를 함께 보는 것은 «내 바탕»이 이 페이지의
         // 것일 때만 견주려는 것이다 — 그 대조만 떼도 지키는 케이스가 없다(여는 조회가 도는 중이면 그 조회가 싣는다).
-        if (store.holdsServerPage(pageId, page.headSeq, page.schema)) return
+        if (store.holdsServerPage(pageId, page.headSeq, page.schema)) {
+          // 판을 안 싣고 돌아와도 이 조회가 `page-stale` 신호 뒤에 시작했으면 «늦은 변경» 낡음은 푼다(`EditorStore.confirmPageFresh`).
+          store.confirmPageFresh(pageId, ticket)
+          return
+        }
         applyServerPage(pageId, page, RESYNC_LEAD, ticket)
         // **여는 조회가 실패해 있었으면 캔버스를 되살린다** — 복원 재조회의 같은 줄과 같다. 판은 방금 스토어에 실려 구조
         // 트리 · 속성 패널이 그리는데 캔버스만 실패 문장이면 세 자리가 다른 사실을 말한다. 위에서 넘어간 갈래는 스토어가
@@ -1793,6 +1819,49 @@ function CanvasFrame(props: {
     }
     // `restoredLead`는 신호와 함께만 바뀐다 — 그 값으로 다시 돌아도 위 `handledRestore`가 막는다.
   }, [api, projectId, pageId, store, applyServerPage, tellLost, restoredToken, restoredLead])
+
+  /**
+   * **늦게 커밋된 변경이 있다(`page-stale`) — 그 페이지만 다시 읽는다**(`RemoteAlert`의 «다시 불러오기»). 서버가 말한 것은 이 페이지에 번호 프레임 없이 커밋된 변경이
+   * 있다는 것뿐이라 메뉴 · 코멘트 · 테마는 안 읽는다.
+   *
+   * | 답 | 화면 |
+   * |---|---|
+   * | 판이 다르다 | 서버 판을 싣는다(`LATE_LEAD`) — 판을 싣는 입구라 세대를 받는다(`EditorStore.beginPageLoad`의 표) · 풀리는 것은 그 판이다(`loadPage`) |
+   * | 판이 같다 | 판을 안 싣는다(되돌리기 이력을 지킨다) · 이 조회가 신호 뒤에 시작했으면 낡음만 푼다(`confirmPageFresh`) — 거짓 경보를 걷는다 |
+   * | 실패 | **조용히 둔다 — 낡음이 그대로 서 있다**(푸는 것은 다시 실은 판뿐이다). 다시 누르면 다시 읽는다 |
+   *
+   * **보낸 편집의 답을 받은 뒤에 읽는다**(`editsAnswered`) — 누르는 클릭이 blur 로 편집을 내고 곧바로 이 조회를 낸다. 신호가 같은 값에 두 번 돌지 않는다(`handledLate`).
+   */
+  useEffect(() => {
+    if (lateToken === 0 || handledLate.current === lateToken) return
+    handledLate.current = lateToken
+    if (pageId === undefined) return
+
+    let alive = true
+    const leave = new AbortController()
+    void (async () => {
+      await editsAnswered(store, leave.signal)
+      if (!alive) return
+      const ticket = store.beginPageLoad(pageId)
+      try {
+        const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
+        if (!alive || !store.settlePageLoad(ticket)) return
+        if (store.holdsServerPage(pageId, page.headSeq, page.schema)) {
+          store.confirmPageFresh(pageId, ticket)
+          return
+        }
+        applyServerPage(pageId, page, LATE_LEAD, ticket)
+        setState({ status: 'ready' })
+      } catch {
+        // 낡음이 그대로 서 있다 — 위 표.
+      }
+    })()
+
+    return () => {
+      alive = false
+      leave.abort()
+    }
+  }, [api, projectId, pageId, store, applyServerPage, lateToken])
 
   /**
    * **트리가 이 페이지를 잃었다 — 서버에 묻는다**(셸의 `pageGone` — 좌측 트리가 다시 받은 트리에 열린 페이지가 없을 때 올린다 · `MenuTree`의

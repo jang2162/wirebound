@@ -1,0 +1,280 @@
+/**
+ * **늦게 커밋된 변경의 경보**(`page-stale` 프레임 → `EditorStore.markPageStale` → `RemoteAlert`의 «다시 불러오기»). 서버가 답을 잃은 편집 · 게시의 COMMIT 이 확인 한도를
+ * 넘겨 커밋됐다고 번호 없이 알린다(`apps/api/test/late-commit-stale.test.ts`). 받는 쪽은 얹을 것이 없고 그 페이지가 낡았다고 말한다.
+ *
+ * | 판 | 경보 |
+ * |---|---|
+ * | 열린 페이지의 프레임 | 선다 — 누르기 전에는 다시 읽지 않는다 |
+ * | 다른 페이지의 프레임 | 안 선다 |
+ * | 단추 | **그 페이지만** 다시 읽는다(메뉴 트리 · 코멘트는 안 읽는다) · 판이 실리면 풀린다 |
+ * | 단추의 조회가 같은 판을 받음 | 판을 안 싣고(되돌리기 이력을 지킨다) 경보만 푼다 |
+ * | 단추의 조회가 실패 | 경보가 그대로 선다 |
+ * | 신호 앞에 시작한 재연결 재조회가 신호 뒤에 답함 | 경보가 남는다 — 그 조회는 늦은 커밋 앞을 읽었을 수 있다 |
+ * | 신호 뒤 재연결 재조회가 같은 판을 받음 | 경보가 풀린다 |
+ * | 복원 낡음이 서 있음 | 늦은 경보가 덮지 않는다 — 복원 단추는 전부 다시 읽는다 |
+ */
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import type { PageDocument } from '@wirebound/schema'
+import { describe, expect, it, vi } from 'vitest'
+import { ApiError, type ApiClient } from '../../src/api/client'
+import type { PageDetail, TreeMenuNode } from '../../src/api/types'
+import type { RealtimeSocket } from '../../src/realtime/connection'
+import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
+import { createEditChannel } from '../../src/realtime/edit-channel'
+import { OTHER_PAGE_ID, OTHER_PAGE_TITLE, PAGE_ID, PROJECT_ID, nodeElement, openPage, pageDetail, pageDoc, waitForNode } from '../editor-harness'
+
+class FakeSocket implements RealtimeSocket {
+  onopen: (() => void) | null = null
+  onmessage: ((event: { data: unknown }) => void) | null = null
+  onclose: (() => void) | null = null
+  onerror: (() => void) | null = null
+  send(): void {}
+  close(): void {
+    this.onclose?.()
+  }
+}
+
+const doc = (childId: string): PageDocument => pageDoc({ id: 'n-root', type: 'Page', children: [{ id: childId, type: 'Text', props: {} }] })
+
+const TREE: TreeMenuNode[] = [
+  {
+    id: 'mn-1',
+    title: '회원관리',
+    sortOrder: 1,
+    pages: [
+      { id: PAGE_ID, title: '회원 목록', sortOrder: 1 },
+      { id: OTHER_PAGE_ID, title: OTHER_PAGE_TITLE, sortOrder: 2 },
+    ],
+    children: [],
+  },
+]
+
+const staleFrame = (pageId: string = PAGE_ID) => ({ type: 'page-stale', projectId: PROJECT_ID, pageId })
+const RESTORED_FRAME = { type: 'restored', projectId: PROJECT_ID, snapshotId: 's1', actor: { type: 'user', label: '밥' } }
+
+const LATE_ALERT = /늦게 반영된 변경/
+const RESTORED_ALERT = /스냅샷이 복원됐습니다/
+
+interface Held {
+  pageId: string
+  resolve: (page: PageDetail) => void
+  reject: (error: unknown) => void
+}
+
+/**
+ * 셸을 열고 소켓을 붙인다. `getPage`의 첫 부름(여는 조회)만 곧바로 답한다. 그 뒤는 `after`가 있으면 그 값으로 곧바로, 없으면 붙잡아 둔다(`held`).
+ */
+async function mount(options: { after?: (pageId: string) => Promise<PageDetail> } = {}) {
+  const sockets: FakeSocket[] = []
+  const scheduled: (() => void)[] = []
+  const setup: RealtimeSetup = {
+    holder: createConnectionIdHolder(),
+    channel: createEditChannel(),
+    origin: 'http://localhost:5173',
+    connection: {
+      createSocket: () => {
+        const socket = new FakeSocket()
+        sockets.push(socket)
+        return socket
+      },
+      schedule: (run) => {
+        scheduled.push(run)
+        return scheduled.length
+      },
+      cancel: () => {},
+    },
+  }
+  const held: Held[] = []
+  let calls = 0
+  const getPage = vi.fn((_projectId: string, pageId: string) => {
+    calls += 1
+    if (calls === 1) return Promise.resolve(pageDetail(pageId, doc('n-before')))
+    if (options.after !== undefined) return options.after(pageId)
+    return new Promise<PageDetail>((resolve, reject) => held.push({ pageId, resolve, reject }))
+  })
+  const getTree = vi.fn(async () => TREE)
+  await openPage(doc('n-before'), { realtime: setup, apiOverrides: { getTree, getPage } as Partial<ApiClient> })
+  act(() => {
+    sockets[0]?.onopen?.()
+  })
+  const last = (): FakeSocket => sockets[sockets.length - 1]!
+  const push = (frame: object): void => {
+    act(() => {
+      last().onmessage?.({ data: JSON.stringify(frame) })
+    })
+  }
+  const reconnect = (): void => {
+    act(() => {
+      last().onclose?.()
+    })
+    act(() => {
+      scheduled.pop()?.()
+    })
+    act(() => {
+      last().onopen?.()
+    })
+  }
+  return { getPage, getTree, held, push, reconnect }
+}
+
+/** 서 있는 `status` 전부의 글. */
+function banner(): string {
+  return screen
+    .queryAllByRole('status')
+    .map((element) => element.textContent ?? '')
+    .join(' | ')
+}
+
+const reloadButton = (): HTMLElement => screen.getByRole('button', { name: '다시 불러오기' })
+
+describe('늦은 변경 경보', () => {
+  it('열린 페이지의 프레임이 경보를 세운다 — 누르기 전에는 다시 읽지 않는다', async () => {
+    const view = await mount({ after: async (pageId) => pageDetail(pageId, doc('n-after')) })
+
+    view.push(staleFrame())
+
+    expect(banner()).toMatch(LATE_ALERT)
+    expect(reloadButton()).toBeTruthy()
+    expect(view.getPage).toHaveBeenCalledTimes(1)
+    // 누가 썼는지 말하지 않는다 — 신호가 모른다.
+    expect(banner()).not.toMatch(/다른 사람|내가/)
+  })
+
+  it('다른 페이지의 프레임은 경보를 세우지 않는다', async () => {
+    const view = await mount()
+
+    view.push(staleFrame(OTHER_PAGE_ID))
+
+    expect(banner()).not.toMatch(LATE_ALERT)
+    expect(screen.queryByRole('button', { name: '다시 불러오기' })).toBeNull()
+  })
+
+  it('단추는 그 페이지만 다시 읽고 서버 판이 실리면 풀린다 — 메뉴 트리는 안 읽는다', async () => {
+    const view = await mount({ after: async (pageId) => pageDetail(pageId, doc('n-after')) })
+    expect(view.getTree).toHaveBeenCalledTimes(1)
+
+    view.push(staleFrame())
+    fireEvent.click(reloadButton())
+
+    await waitForNode('n-after')
+    expect(nodeElement('n-before')).toBeNull()
+    expect(view.getPage).toHaveBeenCalledTimes(2)
+    expect(view.getTree).toHaveBeenCalledTimes(1)
+    expect(banner()).not.toMatch(LATE_ALERT)
+    expect(screen.queryByRole('button', { name: '다시 불러오기' })).toBeNull()
+  })
+
+  it('프레임이 여러 번 와도 경보는 하나이고 단추 한 번에 조회 한 번이다', async () => {
+    const view = await mount({ after: async (pageId) => pageDetail(pageId, doc('n-after')) })
+
+    view.push(staleFrame())
+    view.push(staleFrame())
+    view.push(staleFrame())
+    expect(screen.getAllByRole('button', { name: '다시 불러오기' })).toHaveLength(1)
+
+    fireEvent.click(reloadButton())
+    await waitForNode('n-after')
+
+    expect(view.getPage).toHaveBeenCalledTimes(2)
+  })
+
+  it('단추의 조회가 같은 판을 받으면 판을 안 싣고 경보만 푼다 — 거짓 경보를 걷는다', async () => {
+    const view = await mount({ after: async (pageId) => pageDetail(pageId, doc('n-before')) })
+    const node = nodeElement('n-before')
+
+    view.push(staleFrame())
+    fireEvent.click(reloadButton())
+
+    await waitFor(() => expect(banner()).not.toMatch(LATE_ALERT))
+    expect(view.getPage).toHaveBeenCalledTimes(2)
+    // 판을 안 실었다 — 같은 DOM 노드가 그대로 있다.
+    expect(nodeElement('n-before')).toBe(node)
+  })
+
+  it('단추의 조회가 실패하면 경보가 그대로 서 있다 — 다시 누르면 다시 읽는다', async () => {
+    let attempt = 0
+    const view = await mount({
+      after: async (pageId) => {
+        attempt += 1
+        if (attempt === 1) throw new ApiError(503, 'internal', '서버에 닿지 못했습니다', [], true)
+        return pageDetail(pageId, doc('n-after'))
+      },
+    })
+
+    view.push(staleFrame())
+    fireEvent.click(reloadButton())
+    await waitFor(() => expect(view.getPage).toHaveBeenCalledTimes(2))
+    await act(async () => {})
+
+    expect(banner()).toMatch(LATE_ALERT)
+    expect(nodeElement('n-before')).not.toBeNull()
+
+    fireEvent.click(reloadButton())
+    await waitForNode('n-after')
+    expect(banner()).not.toMatch(LATE_ALERT)
+  })
+})
+
+describe('늦은 변경 경보 — 신호의 시점', () => {
+  /**
+   * 신호가 닿는 사이 시작한 조회는 늦은 커밋 앞을 읽었을 수 있다. 재연결 재조회가 신호 앞에 시작해 신호 뒤에 답하면 그 판을 싣되(서버 판이다) 경보는
+   * 남긴다 — 풀리는 것은 신호 뒤에 시작한 조회다.
+   */
+  it('신호 앞에 시작한 재연결 재조회가 신호 뒤에 답하면 판은 실리지만 경보가 남는다', async () => {
+    const view = await mount()
+
+    view.reconnect()
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.push(staleFrame())
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(PAGE_ID, doc('n-after')))
+    })
+    await waitForNode('n-after')
+
+    expect(banner()).toMatch(LATE_ALERT)
+  })
+
+  it('신호 뒤 재연결 재조회가 같은 판을 받으면 경보가 풀린다', async () => {
+    const view = await mount({ after: async (pageId) => pageDetail(pageId, doc('n-before')) })
+
+    view.push(staleFrame())
+    expect(banner()).toMatch(LATE_ALERT)
+    view.reconnect()
+
+    await waitFor(() => expect(banner()).not.toMatch(LATE_ALERT))
+    expect(view.getPage).toHaveBeenCalledTimes(2)
+  })
+
+  it('신호 뒤 재연결 재조회가 서버 판을 실으면 경보가 풀린다', async () => {
+    const view = await mount({ after: async (pageId) => pageDetail(pageId, doc('n-after')) })
+
+    view.push(staleFrame())
+    view.reconnect()
+
+    await waitForNode('n-after')
+    expect(banner()).not.toMatch(LATE_ALERT)
+  })
+
+  it('경보가 서 있는 동안 다음 번호가 건너뛴 프레임이 와도 문장이 바뀌지 않는다 — 갭은 늦은 변경의 결과다', async () => {
+    const view = await mount()
+
+    view.push(staleFrame())
+    view.push({ type: 'page-changed', projectId: PROJECT_ID, pageId: PAGE_ID, seq: 99, ops: [], warnings: [], actor: { type: 'user', label: '밥' } })
+
+    expect(banner()).toMatch(LATE_ALERT)
+    expect(banner()).not.toMatch(/받지 못한 변경/)
+  })
+
+  it('복원 낡음이 서 있으면 늦은 경보가 덮지 않는다 — 단추는 복원 뒤 다시 읽기를 탄다(메뉴 트리도 다시 읽는다)', async () => {
+    const view = await mount({ after: async (pageId) => pageDetail(pageId, doc('n-after')) })
+
+    view.push(RESTORED_FRAME)
+    view.push(staleFrame())
+
+    expect(banner()).toMatch(RESTORED_ALERT)
+    expect(banner()).not.toMatch(LATE_ALERT)
+    fireEvent.click(reloadButton())
+    await waitFor(() => expect(view.getTree).toHaveBeenCalledTimes(2))
+    await waitForNode('n-after')
+  })
+})

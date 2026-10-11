@@ -24,6 +24,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { PatchOp, ValidationIssue } from '@wirebound/schema'
 import { roleAtLeast } from '../auth/roles'
 import type { ProjectRole } from '../db/types'
+import type { LateCommitWatch } from '../services/lost-commit'
 import type { BroadcastOrigin } from './broadcast'
 import { releaseLocksOf } from './lock'
 import { MIN_ROLE_FOR_FRAME, WS_CLOSE, type EventActor, type ServerFrame } from './protocol'
@@ -85,6 +86,27 @@ export function notifyPageChanged(app: FastifyInstance, input: PageChangedInput)
     .catch((error: unknown) => {
       app.log.error({ err: error, projectId: input.projectId, pageId: input.pageId }, 'page-changed 알림 실패')
     })
+}
+
+/**
+ * 그 페이지가 낡았다 — **번호 없이** 알린다(`protocol.ts`의 `page-stale`). 답을 잃은 편집 · 게시가 확인 한도를 넘겨 **늦게** 커밋됐을 때 부른다
+ * (`pageStaleOnLateCommit`).
+ *
+ * **낸 사람의 연결도 빼지 않는다**(`notifyRestored`와 같은 판정) — 연결에서 제 연결을 빼는 방송은 이 신호를 안 보내, 답을 잃은 낸 탭이 그 탭의
+ * 다시 읽기보다 늦게 커밋된 편집을 모른 채 조용히 낡는다. 던지지 않는다 — 쓰기는 이미 커밋됐다.
+ */
+export function notifyPageStale(app: FastifyInstance, input: { projectId: string; pageId: string }): void {
+  void app.realtime.broadcast.send(input.projectId, { type: 'page-stale', ...input }).catch((error: unknown) => {
+    app.log.error({ err: error, projectId: input.projectId, pageId: input.pageId }, 'page-stale 알림 실패')
+  })
+}
+
+/**
+ * 답을 잃은 쓰기(편집 · 게시)의 COMMIT 이 한도 뒤에 커밋되면 `page-stale`을 내게 하는 지켜보기 인자 — `runEditTransaction` ·
+ * `runRevisionTransaction`의 `late`에 그대로 넘긴다. **서버가 지은 값(프로젝트 · 페이지 id)만 싣는다.**
+ */
+export function pageStaleOnLateCommit(app: FastifyInstance, projectId: string, pageId: string): { watch: LateCommitWatch; onCommit: () => void } {
+  return { watch: app.lateCommits, onCommit: () => notifyPageStale(app, { projectId, pageId }) }
 }
 
 /**

@@ -18,7 +18,8 @@
  * | 커밋됐고 그 revision 이 지금 머리다 | 성공(원래 결과 그대로) | 한다 |
  * | 커밋됐는데 머리가 더 나아갔다 | 성공 | **안 한다** — 룸은 뒤의 `seq`에서 이미 이것을 놓친 줄 안다(`gap`). 늦게 온 옛 번호를 웹은 «다음 번호»로 얹어 뒤 revision 이 빠진 화면을 최신으로 둔다(`routes/comments.ts`의 `rebroadcastPostRevision`과 같은 조건) |
  * | **커밋 안 됐다**(`aborted`) | 봉투 있는 500 «반영되지 않았다»(`DB_WRITE_NOT_APPLIED_MESSAGE`) — 웹은 그것을 «커밋 전»으로 읽는다(`apps/web`의 `refusedBeforeCommit`) | 안 한다 |
- * | 한도(`LOST_COMMIT_PROBE_MS`) 안에 결말이 안 났다 · 확인이 실패했다 · 커밋됐는데 머리를 못 읽었다 | 원래 오류(503 «모름») | 안 한다 |
+ * | 한도(`LOST_COMMIT_PROBE_MS`) 안에 결말이 안 났다 | 원래 오류(503 «모름») | 번호 프레임은 **안 한다**. 그 뒤 `LOST_COMMIT_LATE_MS` 안에 커밋되면 **번호 없는 `page-stale`**(아래 «늦게 커밋된 편집 · 게시») |
+ * | 확인이 실패했다 · 커밋됐는데 머리를 못 읽었다 | 원래 오류(503 «모름») | 안 한다 |
  *
  * **커밋이 끝날 때까지 본다.** 끊긴 연결의 COMMIT 이 서버에서 아직 돌면 `in progress`다 — 간격을 `LOST_COMMIT_POLL_MS`에서
  * `LOST_COMMIT_POLL_MAX_MS`까지 늘려 가며 다시 묻고 한도에서 멈춘다(잃은 COMMIT 여럿이 한꺼번에 돌 때 묻는 질의가 풀을 덜 채운다 —
@@ -43,7 +44,13 @@
  * 첫 보내기의 말이다 — 같은 키로 다시 보낸 것은 재생 갈래에서 이 500 이 날 수 있고(앞 게시는 달려 있다), 웹은 그 칸을 «모름»으로
  * 읽는다(`apps/web`의 `knownRejection`).
  *
- * 잰 값은 `test/edit-lost-commit.test.ts` · `test/lost-commit-writes.test.ts`(TCP 프록시가 COMMIT 답을 끊는다).
+ * **늦게 커밋된 편집 · 게시** — 한도 안에 결말이 안 난 판은 응답 뒤에도 `LOST_COMMIT_LATE_MS`까지 지켜본다(`LateCommitWatch`). 커밋되면 **번호를
+ * 안 싣는 `page-stale { pageId }`**를 룸 전체에(낸 연결도) 보낸다(`ws/notify.ts`의 `pageStaleOnLateCommit`). **그 revision 의 `page-changed`를
+ * 늦게 내지 않는다** — 그 사이 더 나아간 머리가 있으면 받는 쪽이 옛 `seq`를 «다음 번호»로 얹어 뒤 revision 이 빠진 화면을 최신으로 둔다. 받는
+ * 쪽(`apps/web`)은 얹을 것 없이 «그 페이지를 다시 읽어라»만 안다. 트리 쓰기(`services/tree-write.ts`)는 번호가 `menu-changed`의 `rev`라 지금 번호를
+ * 읽어 그대로 늦게 낸다 — 이 둘은 신호의 성질이 다르다.
+ *
+ * 잰 값은 `test/edit-lost-commit.test.ts` · `test/lost-commit-writes.test.ts`(TCP 프록시가 COMMIT 답을 끊는다) · `test/late-commit-stale.test.ts`(늦은 커밋).
  */
 import { sql } from 'kysely'
 import { readWithin } from '../db/client'
@@ -263,16 +270,32 @@ export async function runRevisionTransaction<T>(
   pageId: string,
   fn: (trx: DbHandle) => Promise<T>,
   revisionOf: (result: T) => WrittenRevision | null,
+  /**
+   * 한도 뒤에 커밋되면 부른다(`pageStaleOnLateCommit`). **필수다** — 새 호출자가 빠뜨리면 컴파일이 막는다(빠뜨린 입구는 늦은 커밋에 남의 화면이 조용히 낡는다).
+   * 일부러 안 내는 입구면 `null`을 넘기고 그 까닭을 호출 자리에 적는다.
+   */
+  late: LateCommitSignal | null,
 ): Promise<Settled<T>> {
-  return runConfirmedTransaction(db, fn, async (result, deadline) => {
-    const revision = revisionOf(result)
-    if (revision === null) return null
-    const left = deadline - Date.now()
-    if (left <= 0) return null
-    const seen = await findRevisionCommitWithin(db, pageId, revision.revisionId, left)
-    if (seen === null || !seen.committed) return null
-    return seen.headSeq === revision.seq
-  })
+  return runConfirmedTransaction(
+    db,
+    fn,
+    async (result, deadline) => {
+      const revision = revisionOf(result)
+      if (revision === null) return null
+      const left = deadline - Date.now()
+      if (left <= 0) return null
+      const seen = await findRevisionCommitWithin(db, pageId, revision.revisionId, left)
+      if (seen === null || !seen.committed) return null
+      return seen.headSeq === revision.seq
+    },
+    late === null ? undefined : { watch: late.watch, onCommit: late.onCommit },
+  )
+}
+
+/** 늦은 커밋 지켜보기에 넘기는 신호 — 결과를 안 읽는다(번호가 없는 신호다). */
+export interface LateCommitSignal {
+  watch: LateCommitWatch
+  onCommit: () => Promise<void> | void
 }
 
 /**
@@ -283,9 +306,15 @@ export async function runEditTransaction(
   db: DbHandle,
   pageId: string,
   fn: (trx: DbHandle) => Promise<EditOutcome>,
+  /** 한도 뒤에 커밋되면 부른다 — 필수다(`runRevisionTransaction`의 `late`). 입구마다 넘기는지는 `test/late-commit-stale.test.ts`가 잰다. */
+  late: LateCommitSignal | null,
 ): Promise<SettledEdit> {
-  const settled = await runRevisionTransaction(db, pageId, fn, (outcome) =>
-    outcome.ok ? { revisionId: outcome.revisionId, seq: outcome.seq } : null,
+  const settled = await runRevisionTransaction(
+    db,
+    pageId,
+    fn,
+    (outcome) => (outcome.ok ? { revisionId: outcome.revisionId, seq: outcome.seq } : null),
+    late,
   )
   return { outcome: settled.result, broadcast: settled.broadcast, confirmedAfterLoss: settled.confirmedAfterLoss }
 }

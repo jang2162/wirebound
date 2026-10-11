@@ -1384,11 +1384,20 @@ COMMIT 앞에 받아 둔 xid 의 `pg_xact_status`다(쓰기마다 왕복 하나�
 |---|---|---|
 | 커밋됐다 | **원래 성공 응답**(`seq` · `revisionId` · `inverse`) | 그 revision 이 아직 페이지의 머리(`head_seq`)일 때만 — 머리가 더 나아갔으면 룸은 뒤의 `seq`에서 이것을 놓친 줄 이미 안다(늦게 온 옛 번호를 받는 쪽이 «다음 번호»로 얹으면 뒤 revision 이 빠진 화면이 최신이 된다) |
 | 커밋 안 됐다(COMMIT 이 서버에 못 닿았다) | 봉투 있는 **500** «…요청이 반영되지 않았습니다 — 다시 시도하세요» — 웹은 «커밋 전»으로 읽는다 | 없음 |
-| 1초 안에 결말이 안 났다 · 묻지 못했다 · 커밋됐는데 머리를 못 읽었다 | 503 «모름» 그대로 | 없음 |
+| 1초 안에 결말이 안 났다 | 503 «모름» 그대로 | 번호 프레임은 없음. **그 뒤 30초 안에 커밋되면 번호 없는 `page-stale`**(아래 «늦게 커밋된 편집 · 게시») |
+| 묻지 못했다 · 커밋됐는데 머리를 못 읽었다 | 503 «모름» 그대로 | 없음 |
 
 1초를 넘긴 확인은 그 연결째 버린다 — 기다리기만 멈추면 그 연결이 응답 뒤에도 풀 칸을 쥐어, 되풀이되면 풀이 찬다
 (`src/db/client.ts`의 `readWithin`). 다시 보낸 것을 알아보는 재생 키를 두지 않은 것은 편집을 내는 쪽이 다시 보내지 않기 때문이다 — 웹은 «모름»이면 페이지를
 다시 읽고, MCP 는 재시도하지 않는다. 근거는 `src/services/lost-commit.ts`, 잰 값은 `test/edit-lost-commit.test.ts`.
+
+**늦게 커밋된 편집 · 게시.** 1초 안에 결말이 안 난 판은 응답 뒤에도 30초(`LOST_COMMIT_LATE_MS`)까지 서버가 지켜본다(앱마다 하나 — 한 연결 ·
+한 질의로 묶어 묻는다). 커밋되면 룸 전체에 **번호 없는 `page-stale { projectId, pageId }`**를 보낸다 — **낸 사람의 연결도 받는다**(답을 잃은 탭이 다시
+읽기보다 늦게 커밋된 편집을 모른 채 조용히 낡지 않게). 그 revision 의 `page-changed`는 **늦게 내지 않는다** — 그 사이 머리가 더 나아갔으면 받는 쪽이
+옛 `seq`를 «다음 번호»로 얹어 뒤 revision 이 빠진 화면을 최신으로 둔다. 받는 화면은 열린 페이지의 프레임이면 «다시 불러오기» 경보를 세우고 그 페이지만
+다시 읽게 한다. 편집 셋(`PATCH .../ops` · WS `patch` · `PUT .../schema`)과 코멘트 쓰기 셋(게시 · 삭제 · 재번호)이 같은 길이다(잰 값은
+`test/late-commit-stale.test.ts`). 트리 쓰기는 번호가 `menu-changed`의 `rev`라 지금 번호를 읽어 그대로 늦게 낸다(아래 «트리 쓰기»). **복원은 `page-stale`을
+내지 않는다** — 늦게 커밋된 복원은 아직 신호가 없다(복원이 바꾸는 것은 페이지 하나가 아니다).
 
 **편집 밖의 쓰기 넷도 같다** — `PUT .../schema` · 코멘트 삭제 · 재번호 · 복원(잰 값은 `test/lost-commit-writes.test.ts`). 방송은 앞의
 셋이 그 revision 이 머리일 때만 · 복원의 `restored`는 커밋이면 늘 보낸다(`seq`를 싣지 않고 받는 쪽이 다시 읽게 하는 프레임이다).
@@ -1440,6 +1449,7 @@ COMMIT 앞에 받아 둔 xid 의 `pg_xact_status`다(쓰기마다 왕복 하나�
 | `joined` | 붙은 직후, **그 연결에게만** | `projectId` · `connectionId` · `userId` · `role` |
 | `presence` | 누가 들어오거나 나갈 때, 룸 전체에 | `projectId` · `participants[{ connectionId, userId, userName }]` |
 | `page-changed` | `applyEdit`이 성공했을 때 | `projectId` · `pageId` · `seq` · `ops` · `warnings` · `actor` |
+| `page-stale` | 답을 잃은 편집 · 게시의 COMMIT 이 확인 한도(1초)를 넘겨 **늦게** 커밋됐을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `pageId` — **번호도 `actor`도 안 싣는다.** 받는 쪽은 그 페이지가 낡았다고만 안다(열린 페이지면 «다시 불러오기» 경보) |
 | `restored` | 스냅샷 복원이 성공했을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `snapshotId` · `safetySnapshotId` · `actor` · (요청이 실어 왔으면) `clientRestoreId` |
 | `theme-changed` | 테마 바인딩 저장 · 판 3 복원이 커밋됐을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `themeId` · `version` · `tokens` · `rev` · `actor` — 받는 쪽은 자기가 든 `rev` 보다 크지 않으면 버린다 |
 | `menu-changed` | 메뉴 · 페이지 트리를 바꾸는 쓰기가 커밋됐을 때(아래 «트리 쓰기»), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `rev`(그 쓰기가 올린 메뉴 트리 판 번호) · `actor` — 트리는 안 싣는다. 받는 쪽은 자기가 든 트리의 `rev` 보다 크면 `GET …/tree`로 다시 받는다 |
