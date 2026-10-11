@@ -71,7 +71,7 @@
  * 수 없다** — 그것은 캡처가 만들기 전이라 아직 없다. 그래서 본문의 두 필드(`tag`·
  * `description`)만 여기서 보고, payload는 repo가 본다.
  */
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { requestEventActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
@@ -307,67 +307,90 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
       }
 
       // **COMMIT 답을 잃으면 그 트랜잭션이 커밋됐는지 새 연결로 확인한다**(`services/lost-commit.ts`) — 커밋됐으면 성공이다.
-      // `restored`는 페이지의 `seq`를 싣지 않고 받는 쪽이 다시 읽게 하는 프레임이라 머리를 보지 않고 보낸다.
-      let menuRev = 0
+      // `restored`는 페이지의 `seq`를 싣지 않고 받는 쪽이 다시 읽게 하는 프레임이라 머리를 보지 않고 보낸다. 한도 안에 결말을 모르면
+      // 503 «모름»을 내되 응답 뒤에도 지켜보다 커밋되면 **같은 꼬리를 늦게 낸다**(`late` — 아래 `announceRestore`).
       const { result: outcome } = await runConfirmedTransaction(
         app.db,
-        async (trx) => {
+        async (trx): Promise<RestoreBody> => {
           const restored = await restoreSnapshot(trx, { projectId, snapshotId, actorId: currentUser.id })
-          if (restored.kind === 'restored') {
-            // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원은 프로젝트의 페이지를
-            // 전부 잠근다(`lockProjectForRestore`) — 그 대기 뒤의 역할로 판정한다. 던지면 복원째 되돌아간다
-            // (`restoreSnapshot`의 트랜잭션은 이 안의 세이브포인트가 된다).
-            await recheckProjectRole(trx, request)
-            // **트리 판 번호는 맨 끝이다**(`repos/menu.ts`의 `bumpMenuRev`). 메뉴 · 페이지가 그대로인 복원도 올린다 — 판 2 · 3 의 복원은
-            // 페이지를 지우고 되살리며, 무엇이 바뀌었는지 가려 올리면 한 갈래를 빠뜨린 판이 조용히 낡는다.
-            menuRev = await bumpMenuRev(trx, projectId)
-          }
-          return restored
+          if (restored.kind !== 'restored') return { restored, menuRev: 0 }
+          // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원은 프로젝트의 페이지를
+          // 전부 잠근다(`lockProjectForRestore`) — 그 대기 뒤의 역할로 판정한다. 던지면 복원째 되돌아간다
+          // (`restoreSnapshot`의 트랜잭션은 이 안의 세이브포인트가 된다).
+          await recheckProjectRole(trx, request)
+          // **트리 판 번호는 맨 끝이다**(`repos/menu.ts`의 `bumpMenuRev`). 메뉴 · 페이지가 그대로인 복원도 올린다 — 판 2 · 3 의 복원은
+          // 페이지를 지우고 되살리며, 무엇이 바뀌었는지 가려 올리면 한 갈래를 빠뜨린 판이 조용히 낡는다.
+          return { restored, menuRev: await bumpMenuRev(trx, projectId) }
         },
-        async (restored) => (restored.kind === 'restored' ? true : null),
+        async ({ restored }) => (restored.kind === 'restored' ? true : null),
+        { watch: app.lateCommits, onCommit: (body) => announceRestore(app, request, projectId, snapshotId, body) },
       )
-      if (outcome.kind !== 'restored') {
-        throw restoreOutcomeToApiError(outcome)
+      if (outcome.restored.kind !== 'restored') {
+        throw restoreOutcomeToApiError(outcome.restored)
       }
 
-      // **복원을 룸에 알린다.** 복원은 세 자원(메뉴·페이지·코멘트)을 한꺼번에 바꾸므로, 알리지 않으면
-      // 다른 접속자는 낡은 문서 위에서 편집하다 `stale` 409를 받고 화면은 왜인지 말할
-      // 수단이 없다. **커밋 뒤**다 — `restoreSnapshot`이 자기
-      // 트랜잭션을 닫고 돌아온 뒤에 알린다.
-      notifyRestored(app, {
-        projectId,
-        snapshotId,
-        safetySnapshotId: outcome.result.safety.id,
-        actor: requestEventActor(request),
-        clientRestoreId: clientRestoreId(request),
-      })
-      // **트리도 알린다** — `restored`는 사람이 배너의 단추를 눌러야 다시 읽는다(`apps/web`의 `shell/remote-alert.tsx`). 트리가 그때까지
-      // 옛 판이면 그 위에서 내는 트리 쓰기(끌기 · 연쇄 상자)가 옛 차례 · 옛 목록으로 선다.
-      notifyMenuChanged(app, { projectId, rev: menuRev, actor: requestEventActor(request) })
-      // 판에 없어 지운 페이지의 잠금 — 페이지 삭제 · 연쇄 삭제와 같다(`ws/lock.ts`의 `releaseLocksOnPages`).
-      releaseLocksOnPages(app, projectId, outcome.result.deletedPageIds)
-      // **판 3 은 테마 바인딩도 되돌렸다** — 값이 같아도 `theme_rev` 가 올랐으므로 늘 알린다(spec 「스냅샷」). 캔버스는 `restored` 로
-      // 문서를 다시 읽고, 테마는 이 프레임으로 다시 싣는다 — 둘이 따로 오는 것은 받는 자리가 다르기 때문이다(`ws/protocol.ts`).
-      const theme = outcome.result.theme
-      if (theme !== null && theme.themeId !== null && theme.version !== null) {
-        notifyThemeChanged(app, {
-          projectId,
-          themeId: theme.themeId,
-          version: theme.version,
-          tokens: theme.tokens,
-          rev: theme.rev,
-          actor: requestEventActor(request),
-        })
-      }
+      // **커밋 뒤**다 — `restoreSnapshot`이 자기 트랜잭션을 닫고 돌아온 뒤에 알린다.
+      announceRestore(app, request, projectId, snapshotId, outcome)
 
-      const dropped = outcome.result.droppedThemeTokens
+      const dropped = outcome.restored.result.droppedThemeTokens
       if (dropped.length > 0) {
         request.log.warn(
           { projectId, snapshotId, droppedThemeTokens: dropped },
           `복원: 판의 manifest 를 못 지난 테마 토큰 ${dropped.length} 개를 버렸습니다(기본값으로 선다)`,
         )
       }
-      return toRestoreResponse(outcome.result)
+      return toRestoreResponse(outcome.restored.result)
+    })
+  }
+}
+
+/** 복원 트랜잭션 본문의 결과 — 판정과, 커밋된 복원이면 그 트랜잭션이 올린 트리 판 번호(아니면 0 · 안 읽는다). */
+interface RestoreBody {
+  restored: RestoreOutcome
+  menuRev: number
+}
+
+/**
+ * **복원의 꼬리 — 커밋 뒤에 룸에 알리는 넷.** 복원은 세 자원(메뉴·페이지·코멘트)과 테마 바인딩을 한꺼번에 바꾸므로, 알리지 않으면 다른 접속자는
+ * 낡은 문서 위에서 편집하다 `stale` 409를 받고 화면은 왜인지 말할 수단이 없다.
+ *
+ * **제때 커밋(응답 자리)과 늦은 커밋(503 «모름» 뒤 지켜보기 — `services/lost-commit.ts`의 `late`)이 이 하나를 부른다.** 두 벌로 두면 한쪽이
+ * 한 자원을 빠뜨린 채 받는 쪽이 조용히 낡는다(`page-stale`로 대신할 수 없는 까닭 — 그 단추는 페이지 하나만 다시 읽는다). 늦게 내도 안전한 까닭:
+ * `restored`는 `seq`를 안 실어 받는 쪽의 번호 이음을 안 건드리고, `menu-changed` · `theme-changed`는 **트랜잭션 안에서 지은 번호**를 실어 그
+ * 사이 다른 쓰기가 앞섰으면 받는 쪽이 번호로 넘긴다(`apps/web`의 `use-tree-commands.tsx` · `theme/project-theme.tsx`). 잠금 놓기는 그 사이 다른
+ * 복원이 그 페이지를 되살렸어도 쥔 쪽의 다음 하트비트가 되잡는다(`ws/lock.ts`의 `handleLockFrame`). 복원이 안 된 판정(`restored.kind`가
+ * 아님)은 알릴 것이 없다 — 늦은 길도 같은 판정을 받으므로 여기서 가른다.
+ *
+ * | 프레임 | 까닭 |
+ * |---|---|
+ * | `restored` | 받는 쪽이 다시 읽는다(`apps/web`의 `shell/remote-alert.tsx` — 사람이 배너의 단추를 눌러야). 낸 탭도 받는다(`ws/notify.ts`의 `notifyRestored`) |
+ * | `menu-changed` | 트리가 그때까지 옛 판이면 그 위에서 내는 트리 쓰기(끌기 · 연쇄 상자)가 옛 차례 · 옛 목록으로 선다 |
+ * | 지운 페이지 잠금 놓기 | 페이지 삭제 · 연쇄 삭제와 같다(`ws/lock.ts`의 `releaseLocksOnPages`) |
+ * | `theme-changed` | **판 3 은 테마 바인딩도 되돌렸다** — 값이 같아도 `theme_rev` 가 올랐으므로 늘 알린다(spec 「스냅샷」). 캔버스는 `restored`로 문서를 다시 읽고 테마는 이 프레임으로 다시 싣는다 — 받는 자리가 다르다(`ws/protocol.ts`) |
+ *
+ * 던지지 않는다 — 알림은 저마다 실패를 로그로 남긴다(`ws/notify.ts` 머리말). 잰 값은 `test/late-commit-stale.test.ts`의 «늦게 커밋된 복원».
+ */
+function announceRestore(app: FastifyInstance, request: FastifyRequest, projectId: string, snapshotId: string, body: RestoreBody): void {
+  if (body.restored.kind !== 'restored') return
+  const { result } = body.restored
+  notifyRestored(app, {
+    projectId,
+    snapshotId,
+    safetySnapshotId: result.safety.id,
+    actor: requestEventActor(request),
+    clientRestoreId: clientRestoreId(request),
+  })
+  notifyMenuChanged(app, { projectId, rev: body.menuRev, actor: requestEventActor(request) })
+  releaseLocksOnPages(app, projectId, result.deletedPageIds)
+  const theme = result.theme
+  if (theme !== null && theme.themeId !== null && theme.version !== null) {
+    notifyThemeChanged(app, {
+      projectId,
+      themeId: theme.themeId,
+      version: theme.version,
+      tokens: theme.tokens,
+      rev: theme.rev,
+      actor: requestEventActor(request),
     })
   }
 }

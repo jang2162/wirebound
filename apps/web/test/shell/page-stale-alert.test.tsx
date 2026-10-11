@@ -8,7 +8,7 @@
  * | 다른 페이지의 프레임 | 안 선다 |
  * | 단추 | **그 페이지만** 다시 읽는다(메뉴 트리 · 코멘트는 안 읽는다) · 판이 실리면 풀린다 |
  * | 단추의 조회가 같은 판을 받음 | 판을 안 싣고(되돌리기 이력을 지킨다) 경보만 푼다 |
- * | 단추의 조회가 실패 | 경보가 그대로 선다 |
+ * | 단추의 조회가 실패 | 한 줄로 말한다(`routes/editor.tsx`의 `lateReloadFailedNotice` — 복원 뒤 다시 읽기의 실패 문장과 같은 꼴 · 누가 썼는지 안 말함) · 경보는 그대로 선다 · 다시 눌러 판이 실리면 그 줄은 걷힌다 |
  * | 신호 앞에 시작한 재연결 재조회가 신호 뒤에 답함 | 경보가 남는다 — 그 조회는 늦은 커밋 앞을 읽었을 수 있다 |
  * | 신호 뒤 재연결 재조회가 같은 판을 받음 | 경보가 풀린다 |
  * | 복원 낡음이 서 있음 | 늦은 경보가 덮지 않는다 — 복원 단추는 전부 다시 읽는다 |
@@ -221,6 +221,35 @@ describe('늦은 변경 경보', () => {
 
     fireEvent.click(reloadButton())
     await waitForNode('n-after')
+    expect(banner()).not.toMatch(LATE_ALERT)
+  })
+
+  it('단추의 조회가 실패하면 한 줄로 말한다 — 경보는 그대로 남고, 다시 눌러 판이 실리면 그 줄은 걷힌다', async () => {
+    let attempt = 0
+    const view = await mount({
+      after: async (pageId) => {
+        attempt += 1
+        if (attempt === 1) throw new ApiError(503, 'internal', '서버에 닿지 못했습니다', [], true)
+        return pageDetail(pageId, doc('n-after'))
+      },
+    })
+
+    view.push(staleFrame())
+    fireEvent.click(reloadButton())
+    await waitFor(() => expect(view.getPage).toHaveBeenCalledTimes(2))
+    await act(async () => {})
+
+    // 사람이 누른 조회라 말한다 — 복원 뒤 다시 읽기의 실패 문장과 같은 앞머리 · 까닭 · 다시 누르라는 말. 누가 썼는지는 없다.
+    expect(screen.queryByRole('alert')?.textContent ?? null).toBe(
+      '페이지를 다시 불러오지 못했습니다. 서버에 닿지 못했습니다 — 화면은 아직 최신이 아닙니다. «다시 불러오기»를 다시 누르세요.',
+    )
+    expect(banner()).toMatch(LATE_ALERT)
+    expect(nodeElement('n-before')).not.toBeNull()
+
+    fireEvent.click(reloadButton())
+    await waitForNode('n-after')
+    // 판이 실리면 그 줄은 거짓이라 걷힌다(`untilLoad`).
+    expect(screen.queryByRole('alert')).toBeNull()
     expect(banner()).not.toMatch(LATE_ALERT)
   })
 })

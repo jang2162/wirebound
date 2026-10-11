@@ -304,6 +304,14 @@ const OWN_RESTORE_LEAD: Record<NonNullable<RemoteStale['own']>, string> = {
 /** 늦게 커밋된 변경(`page-stale`)의 단추로 그 페이지를 다시 읽었을 때의 앞머리(`CanvasFrame`의 `lateToken`). 누가 썼는지 말하지 않는다 — 신호가 모른다. */
 const LATE_LEAD = '늦게 반영된 변경을 포함해 페이지를 서버 상태로 다시 불러왔습니다.'
 
+/**
+ * 늦게 커밋된 변경의 «다시 불러오기» 조회가 실패했을 때의 한 줄(`CanvasFrame`의 늦은 변경 이펙트 — `EditorStore.tellLoss`). 복원 뒤 다시 읽기의 실패 문장
+ * (`RELOAD_FAILED_LEAD`)과 같은 꼴이고 누가 썼는지 말하지 않는다. 화면은 그대로라(판을 비우지 않는다) 까닭을 이 줄이 싣는다 — 복원 쪽은 캔버스가 말한다.
+ * 경보는 그대로 서 있어 다시 누를 수 있다고 말한다.
+ */
+const lateReloadFailedNotice = (reason: string): string =>
+  `${RELOAD_FAILED_LEAD} ${reason} — 화면은 아직 최신이 아닙니다. «다시 불러오기»를 다시 누르세요.`
+
 /** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
 type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
 
@@ -1808,7 +1816,7 @@ function CanvasFrame(props: {
    * |---|---|
    * | 판이 다르다 | 서버 판을 싣는다(`LATE_LEAD`) — 판을 싣는 입구라 세대를 받는다(`EditorStore.beginPageLoad`의 표) · 풀리는 것은 그 판이다(`loadPage`) |
    * | 판이 같다 | 판을 안 싣는다(되돌리기 이력을 지킨다) · 이 조회가 신호 뒤에 시작했으면 낡음만 푼다(`confirmPageFresh`) — 거짓 경보를 걷는다 |
-   * | 실패 | **조용히 둔다 — 낡음이 그대로 서 있다**(푸는 것은 다시 실은 판뿐이다). 다시 누르면 다시 읽는다 |
+   * | 실패 | **한 줄로 말한다**(`lateReloadFailedNotice` — 사람이 누른 조회다) · 낡음은 그대로 서 있다(푸는 것은 다시 실은 판뿐이다). 다시 누르면 다시 읽고, 판이 실리면 그 줄은 걷힌다(`untilLoad`) |
    *
    * **보낸 편집의 답을 받은 뒤에 읽는다**(`editsAnswered`) — 누르는 클릭이 blur 로 편집을 내고 곧바로 이 조회를 낸다. 신호가 같은 값에 두 번 돌지 않는다(`handledLate`).
    */
@@ -1832,8 +1840,18 @@ function CanvasFrame(props: {
         }
         applyServerPage(pageId, page, LATE_LEAD, ticket)
         setState({ status: 'ready' })
-      } catch {
-        // 낡음이 그대로 서 있다 — 위 표.
+      } catch (caught) {
+        // 떠나며 끊은 조회는 말하지 않는다(복원 이펙트의 같은 자리). 낡음은 그대로 서 있다 — 위 표. **판을 비우지 않는다** — 복원과 달리 화면의 판이
+        // 서버 판이 아니라는 것은 «늦게 반영된 변경이 있다»뿐이고, 비우면 멀쩡한 문서를 지운다.
+        if (!alive) return
+        const failure = toFailure(caught, PAGE_UNKNOWN_FAILURE)
+        if (failure.kind === 'signed-out') {
+          // 세션이 끊긴 것은 한 줄이 아니다 — `EditAlert`이 화면을 로그인으로 갈아 끼운다(`edit/use-edit-commit.tsx`의 같은 갈래).
+          store.setEditFailure(failure)
+          return
+        }
+        const message = lateReloadFailedNotice(failure.message)
+        store.tellLoss({ key: 'late-reload-failed', rank: LOSS_RANK.cancelled, counts: [], render: () => message, untilLoad: true })
       }
     })()
 
