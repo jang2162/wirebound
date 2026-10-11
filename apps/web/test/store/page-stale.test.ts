@@ -178,6 +178,23 @@ describe('여는 중인 페이지', () => {
     expect(store.getState().remoteStale).toBeNull()
   })
 
+  /**
+   * 신호의 기록(`#lateAt`)은 페이지 수 한도(16)가 있다 — 열려 있지도 여는 중도 아닌 페이지의 신호를 안 적어야 그 신호가 여는 중인 페이지의 기록을 밀어내지 않는다. 안 적으면
+   * 밀려난 페이지의 조회는 신호 앞에 시작했어도 «풀린다»로 읽힌다.
+   */
+  it('다른 페이지의 신호가 한도를 넘게 와도 여는 중인 페이지의 기록을 밀어내지 않는다', () => {
+    const store = new EditorStore()
+    store.loadPage('page_1', doc(), 4)
+    store.clearPage()
+    const ticket = store.beginPageLoad('page_2')
+    store.markPageStale('page_2')
+    for (let index = 0; index < 40; index += 1) store.markPageStale(`other_${index}`)
+    store.settlePageLoad(ticket)
+    store.loadPage('page_2', doc(), 8, ticket)
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'late' })
+  })
+
   it('프로젝트를 옮기면(`reset`) 신호의 기록을 잊는다', () => {
     const store = new EditorStore()
     store.loadPage('page_1', doc(), 4)

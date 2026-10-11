@@ -399,7 +399,7 @@ const NO_DISCARDS: DiscardTally = { unknown: 0, refused: 0, unsent: 0 }
 const WINDOW_CHANGES_LIMIT = 500
 
 /**
- * 화면이 낡은 이유. **셋을 가른다 — 사용자가 할 일이 다르고, 무엇이 일어났는지도 다르다.**
+ * 화면이 낡은 이유. **넷을 가른다 — 사용자가 할 일이 다르고, 무엇이 일어났는지도 다르다.**
  *
  * | `reason` | 무엇이 일어났나 | 사용자가 할 일 |
  * |---|---|---|

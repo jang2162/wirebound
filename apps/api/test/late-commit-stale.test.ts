@@ -22,7 +22,7 @@
  * | 제때 커밋에도 `page-stale`을 낸다 | 「제때 커밋은 안 낸다」 |
  */
 import { sql } from 'kysely'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LOST_COMMIT_PROBE_MS } from '../src/services/lost-commit'
 import type { ServerFrame } from '../src/ws/protocol'
 import {
@@ -137,10 +137,23 @@ async function lateWrite(ctx: ProxiedRealApi, fx: Fixture, run: () => Promise<nu
   })
 }
 
-/** 늦게 커밋돼 `page-stale` 이 오기까지 기다린 뒤 값을 확인한다 — 커밋됐고(머리가 올랐고) 프레임이 정확히 이 모양이다. */
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** 그 페이지의 머리가 `seq` 가 될 때까지 — 늦은 커밋이 닿았는지를 DB 의 값으로 기다린다(프레임을 기다리지 않는다). */
+async function committed(fx: Fixture, seq: number): Promise<void> {
+  await vi.waitFor(async () => expect(await headSeq(fx.pageId)).toBe(seq), { timeout: STALE_WAIT_MS, interval: 50 })
+}
+
+/**
+ * 늦게 커밋돼 `page-stale` 이 오기까지 기다린 뒤 값을 확인한다 — 커밋됐고(머리가 올랐고) 프레임이 정확히 이 모양이다.
+ *
+ * **프레임을 던지는 기다림으로 기다리지 않는다** — 신호가 안 오는 고장이 «프레임이 N 개까지 차지 않았습니다» 시간 초과로 죽으면 단언 값이 아니다. 커밋은 DB 의 값으로 기다리고
+ * (`committed`), 그 뒤 지켜보기가 낼 몫만 짧게 기다린 다음 프레임 목록을 견준다 — 안 오면 `[]` 와 견준 값 차이로 죽는다.
+ */
 async function expectStale(fx: Fixture, probe: WsProbe, before: number, count = 1): Promise<void> {
-  await probe.waitForCount('page-stale', count, STALE_WAIT_MS)
-  expect(await headSeq(fx.pageId)).toBe(before + count)
+  await committed(fx, before + count)
+  const until = Date.now() + 4_000
+  while (pageStale(probe.received).length < count && Date.now() < until) await sleep(50)
   expect(pageStale(probe.received)).toEqual(Array.from({ length: count }, () => ({ type: 'page-stale', projectId: fx.projectId, pageId: fx.pageId })))
 }
 
@@ -233,7 +246,7 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
       })
       await expectStale(fx, fx.watcher, before)
       // 낸 사람의 연결도 받는다.
-      await fx.author.waitFor('page-stale', STALE_WAIT_MS)
+      await expectStale(fx, fx.author, before)
     })
   }, 40_000)
 
@@ -294,7 +307,7 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
           expect(ctx.proxy.fired).toBe(true)
           expect(res.statusCode).toBe(503)
           // 첫 커밋이 끝나야 둘째가 이어 선다(같은 페이지 행) — 둘째 요청의 `baseSeq` 도 그 뒤 번호여야 한다.
-          await fx.watcher.waitForCount('page-stale', id === 'n_one' ? 1 : 2, STALE_WAIT_MS)
+          await committed(fx, before + (id === 'n_one' ? 1 : 2))
         }
       })
       await expectStale(fx, fx.watcher, before, 2)
