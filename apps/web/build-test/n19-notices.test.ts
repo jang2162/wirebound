@@ -16,7 +16,7 @@
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { HIDDEN_SELECTION_NOTICE } from '../src/shell/use-view-state'
-import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { canvasFrame, delayServerFrames, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -337,6 +337,71 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
     } finally {
       await b.context.close()
       await delay.close()
+    }
+  }, 90_000)
+
+  /**
+   * **위 R11 은 «강등 → 미룸을 거둔다»(`EditorStore.setSelectionClaims`)를 못 가른다** — `startDownDelay` 는 서버 → 브라우저를 통째로 늦춰 강등 신호가
+   * ack 와 1 ~ 28ms 로 붙어 오고, 미룸을 거두든(고침) 안 거두고 나갔다 거절되든(변조 M5) 서버 값(머리 2 · 노드 차례)이 같다. 이 케이스는
+   * `delayServerFrames` 로 **ack 만** 늦춰 강등 신호가 ack 보다 앞서게 한다 — 그러면 미룸이 ack 가 닿기 전에 거둬져 되돌림 `patch` 가 **나가지도 않고**,
+   * 거두지 않으면 ack 가 닿는 순간 나갔다가 viewer 라 거절된다. 가르는 값은 서버가 아니라 **이 탭이 서버로 보낸 `patch` 프레임 수**다.
+   */
+  it('L-282 — ack 만 늦춰 강등이 ack 보다 앞서면 미룬 되돌리기를 거둔다 — ack 가 닿아도 되돌림 patch 가 나가지 않는다', async () => {
+    const mk = async (path: string, body: unknown) => {
+      const r = await call('POST', path, body)
+      if (r.status !== 201) throw new Error(`픽스처 ${r.status} ${JSON.stringify(r.body)}`)
+      return r.body
+    }
+    const project = (await mk('/projects', { name: 'N25', slug: `n25-r11-${Date.now().toString(36)}` })).id as string
+    const menu = (await mk(`/projects/${project}/menu`, { parentId: null, title: '메뉴' })).id as string
+    const first = (await mk(`/projects/${project}/pages`, { menuNodeId: menu, title: '첫째' })).id as string
+    // 강등당하는 쪽은 alice(프로젝트를 만든 owner) 다 — bob 의 탭에서는 미룬 되돌리기가 강등이 없어도 나가지 않아(대조군) 가르는 것이 없다.
+    // bob 을 owner 로 더해 alice 를 강등하게 한다.
+    await mk(`/projects/${project}/members`, { email: stack.users.bob.email, role: 'owner' })
+    const bob = await stack.login(stack.users.bob)
+    const members = (await stack.request(bob, 'GET', `/projects/${project}/members`)).body as { userId: string; email: string }[]
+    const alicesId = members.find((m) => m.email === stack.users.alice.email)!.userId
+    const P = `/projects/${project}/pages/${first}`
+    const texts = [1, 2, 3].map((n, index) => ({ op: 'add', path: `/root/children/${index}`, value: { id: `n_text000000${n}`, type: 'Text', props: { content: `글 ${n} — 캔버스를 채운다` } } }))
+    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: texts })
+    if (seeded.status >= 300) throw new Error(`seed ${seeded.status}`)
+    const ACK_DELAY_MS = 1_500
+    const b = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    const delay = await delayServerFrames(b.page, ['patch-ack'], ACK_DELAY_MS)
+    const arrivals = () => delay.delivered().filter((a) => a.type === 'patch-ack' || a.type === 'membership-changed' || a.type === 'joined')
+    try {
+      await b.page.goto(P)
+      await canvasFrame(b.page).locator('[data-wb-id="n_text0000002"]').click()
+      await poll('룸에 든다', async () => arrivals().map((a) => a.type), (types) => types.includes('joined'))
+      await b.page.keyboard.press('Alt+ArrowUp')
+      await poll('서버에 닿는다', async () => (await call('GET', P)).body.headSeq, (n) => n === 2)
+      await b.page.keyboard.press('ControlOrMeta+z')
+      const demoted = await stack.request(bob, 'PATCH', `/projects/${project}/members/${alicesId}`, { role: 'viewer' })
+      await poll('ack 가 늦춰져 닿는다', async () => arrivals().map((a) => a.type), (types) => types.includes('patch-ack'), ACK_DELAY_MS * 3)
+      await b.page.waitForTimeout(1_000)
+      const server = (await call('GET', P)).body
+      const at = (type: string) => arrivals().find((a) => a.type === type)?.at ?? 0
+      // eslint-disable-next-line no-console
+      console.log(`[L-282] 강등 신호가 ack 보다 ${at('patch-ack') - at('membership-changed')}ms 앞섰다 · 보낸 프레임 ${delay.sent().join(',')} · 늦춘 프레임 ${delay.delayed()}`)
+      expect({
+        demoted: demoted.status,
+        // 판 카나리아 — ack 를 늦췄고(1 이상) 강등 신호가 ack 보다 먼저 닿았다.
+        delayed: delay.delayed() >= 1,
+        order: arrivals().map((a) => a.type).filter((type) => type !== 'joined'),
+        // 가르는 값 — 미룬 되돌림이 거둬져 나가지 않았다(거두지 않으면 ack 뒤에 `patch` 가 하나 더 나가 viewer 라 거절된다).
+        patchFrames: delay.sent().filter((type) => type === 'patch').length,
+        head: server.headSeq,
+        ids: server.schema.root.children.map((c: { id: string }) => c.id),
+      }).toEqual({
+        demoted: 200,
+        delayed: true,
+        order: ['membership-changed', 'patch-ack'],
+        patchFrames: 1,
+        head: 2,
+        ids: ['n_text0000002', 'n_text0000001', 'n_text0000003'],
+      })
+    } finally {
+      await b.context.close()
     }
   }, 90_000)
 
