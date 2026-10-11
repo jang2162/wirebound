@@ -12,15 +12,7 @@
  * 4. `error`는 여전히 422이고, 그 응답의 `issues`에 **경고까지 함께** 실린다.
  */
 import { describe, expect, it } from 'vitest'
-import {
-  createMenuNode,
-  createPage,
-  createProject,
-  signup,
-  withApi,
-  type SignedUpUser,
-  type TestContext,
-} from './helpers'
+import { createMenuNode, createPage, createProject, signup, withApi, type SignedUpUser, type TestContext } from './helpers'
 
 /** `pages.test.ts`의 같은 이름 픽스처와 같다 — 프로젝트·메뉴·페이지 하나씩. */
 async function createProjectWithPage(ctx: TestContext, owner: SignedUpUser) {
@@ -69,11 +61,7 @@ describe('경고는 편집을 막지 않는다', () => {
       expect(res.statusCode).toBe(200)
 
       // 저장까지 갔는가 — 200만 보면 "게이트는 통과했는데 안 썼다"와 구별되지 않는다.
-      const stored = await ctx.db
-        .selectFrom('pages')
-        .select('schema')
-        .where('id', '=', page.id)
-        .executeTakeFirstOrThrow()
+      const stored = await ctx.db.selectFrom('pages').select('schema').where('id', '=', page.id).executeTakeFirstOrThrow()
       expect((stored.schema as { root: { children: unknown[] } }).root.children.length).toBe(2)
     })
   })
@@ -122,11 +110,7 @@ describe('경고는 편집을 막지 않는다', () => {
       expect(res.json().warnings).toHaveLength(1)
       expect(res.json().warnings[0].code).toBe('ignored-variant')
 
-      const stored = await ctx.db
-        .selectFrom('pages')
-        .select('schema')
-        .where('id', '=', page.id)
-        .executeTakeFirstOrThrow()
+      const stored = await ctx.db.selectFrom('pages').select('schema').where('id', '=', page.id).executeTakeFirstOrThrow()
       const children = (stored.schema as { root: { children: { props?: { content?: string } }[] } }).root.children
       expect(children[1]!.props!.content).toBe('바꿈')
     })
@@ -202,11 +186,7 @@ describe('경고는 편집을 막지 않는다', () => {
         })
 
         expect(res.statusCode).toBe(422)
-        const stored = await ctx.db
-          .selectFrom('pages')
-          .select('schema')
-          .where('id', '=', page.id)
-          .executeTakeFirstOrThrow()
+        const stored = await ctx.db.selectFrom('pages').select('schema').where('id', '=', page.id).executeTakeFirstOrThrow()
         const children = (stored.schema as { root: { children: { props?: { content?: string } }[] } }).root.children
         expect(children[1]!.props!.content).toBe('처음')
       })
@@ -239,9 +219,7 @@ describe('상호작용 타겟이 끊겨도 편집을 막지 않는다', () => {
             id: 'n_button',
             type: 'Button',
             props: { label: '검색' },
-            interactions: [
-              { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
-            ],
+            interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
           },
           { id: 'n_list', type: 'List' },
         ],
@@ -268,11 +246,7 @@ describe('상호작용 타겟이 끊겨도 편집을 막지 않는다', () => {
 
       expect(res.statusCode).toBe(200)
       // **삭제가 실제로 저장됐는가** — 200만 보면 "게이트는 통과했는데 안 썼다"와 갈리지 않는다.
-      const stored = await ctx.db
-        .selectFrom('pages')
-        .select('schema')
-        .where('id', '=', page.id)
-        .executeTakeFirstOrThrow()
+      const stored = await ctx.db.selectFrom('pages').select('schema').where('id', '=', page.id).executeTakeFirstOrThrow()
       expect((stored.schema as { root: { children: unknown[] } }).root.children).toHaveLength(1)
     })
   })

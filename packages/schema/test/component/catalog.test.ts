@@ -13,7 +13,11 @@ describe('컴포넌트 카탈로그', () => {
   })
 
   it('CATALOG_TYPES와 등록 결과가 일치한다', () => {
-    expect(listComponents().map((d) => d.type).sort()).toEqual([...CATALOG_TYPES].sort())
+    expect(
+      listComponents()
+        .map((d) => d.type)
+        .sort(),
+    ).toEqual([...CATALOG_TYPES].sort())
   })
 
   it('두 번 설치해도 중복 등록하지 않는다', () => {
@@ -26,9 +30,7 @@ describe('컴포넌트 카탈로그', () => {
       .filter((d) => d.children === 'many')
       .map((d) => d.type)
       .sort()
-    expect(containers).toEqual([
-      'Card', 'EntryForm', 'Flex', 'Grid', 'Page', 'SearchForm', 'Section', 'StateCase', 'StateSwitch', 'Tabs',
-    ])
+    expect(containers).toEqual(['Card', 'EntryForm', 'Flex', 'Grid', 'Page', 'SearchForm', 'Section', 'StateCase', 'StateSwitch', 'Tabs'])
   })
 
   it('Slot은 자식을 담지 않는다', () => {

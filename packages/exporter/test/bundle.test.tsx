@@ -35,9 +35,7 @@ const LIST_PAGE: PageDocument = {
         interactions: [
           {
             on: 'click',
-            actions: [
-              { type: 'setProp', target: 'n_000000000003', prop: 'loading', value: true },
-            ],
+            actions: [{ type: 'setProp', target: 'n_000000000003', prop: 'loading', value: true }],
           },
         ],
       },
@@ -141,10 +139,7 @@ describe('exportBundle — <head>', () => {
    */
   it.each(['index.html', 'pages/회원-목록.html'])('%s의 head에 스타일시트 링크 둘뿐이다', (path) => {
     const head = parse(fileAt(twoPages(), path)).head
-    expect([...head.querySelectorAll('link')].map((link) => link.getAttribute('rel'))).toEqual([
-      'stylesheet',
-      'stylesheet',
-    ])
+    expect([...head.querySelectorAll('link')].map((link) => link.getAttribute('rel'))).toEqual(['stylesheet', 'stylesheet'])
     expect(head.querySelectorAll('style')).toHaveLength(0)
     expect(head.querySelectorAll('script')).toHaveLength(0)
   })
@@ -152,15 +147,12 @@ describe('exportBundle — <head>', () => {
   /** **셸이 먼저, 문서 시트가 나중이다** — 문서 시트끼리의 차례는 캔버스와 같다(기본 뷰 → 테마 → 토큰). */
   it('시트 순서가 셸 → 기본 뷰다', () => {
     const bundle = twoPages()
+    expect([...parse(fileAt(bundle, 'index.html')).head.querySelectorAll('link')].map((link) => link.getAttribute('href'))).toEqual([
+      'assets/shell.css',
+      'assets/views.css',
+    ])
     expect(
-      [...parse(fileAt(bundle, 'index.html')).head.querySelectorAll('link')].map((link) =>
-        link.getAttribute('href'),
-      ),
-    ).toEqual(['assets/shell.css', 'assets/views.css'])
-    expect(
-      [...parse(fileAt(bundle, 'pages/회원-목록.html')).head.querySelectorAll('link')].map((link) =>
-        link.getAttribute('href'),
-      ),
+      [...parse(fileAt(bundle, 'pages/회원-목록.html')).head.querySelectorAll('link')].map((link) => link.getAttribute('href')),
     ).toEqual(['../assets/shell.css', '../assets/views.css'])
   })
 
@@ -324,9 +316,7 @@ describe('exportBundle — 좌측 트리', () => {
   })
 
   it('페이지끼리는 이름만으로 오간다', () => {
-    const links = [
-      ...parse(fileAt(twoPages(), 'pages/회원-목록.html')).querySelectorAll('.wb-export-nav-link'),
-    ]
+    const links = [...parse(fileAt(twoPages(), 'pages/회원-목록.html')).querySelectorAll('.wb-export-nav-link')]
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '%ED%9A%8C%EC%9B%90-%EB%AA%A9%EB%A1%9D.html',
       '%ED%9A%8C%EC%9B%90-%EC%83%81%EC%84%B8.html',
@@ -335,9 +325,7 @@ describe('exportBundle — 좌측 트리', () => {
   })
 
   it('보고 있는 페이지만 aria-current를 든다', () => {
-    const links = [
-      ...parse(fileAt(twoPages(), 'pages/회원-상세.html')).querySelectorAll('.wb-export-nav-link'),
-    ]
+    const links = [...parse(fileAt(twoPages(), 'pages/회원-상세.html')).querySelectorAll('.wb-export-nav-link')]
     expect(links.map((link) => link.getAttribute('aria-current'))).toEqual([null, 'page'])
   })
 })
@@ -351,31 +339,23 @@ describe('exportBundle — 우측 탭 셋', () => {
 
   it('설계서 「설계서 화면 구조」의 뷰 모드와 같은 셋이다', () => {
     const labels = [...panel(fileAt(twoPages(), 'index.html')).querySelectorAll('.wb-export-tab')]
-    expect(labels.map((label) => label.textContent)).toEqual([
-      '페이지 설명',
-      '코멘트',
-      '상호작용',
-    ])
+    expect(labels.map((label) => label.textContent)).toEqual(['페이지 설명', '코멘트', '상호작용'])
   })
 
   it('라디오 셋이 한 이름을 나누고 첫째가 켜져 있다', () => {
-    const radios = [
-      ...panel(fileAt(twoPages(), 'index.html')).querySelectorAll('input[type="radio"]'),
-    ]
-    expect(radios.map((radio) => radio.getAttribute('name'))).toEqual([
-      'wb-export-tab',
-      'wb-export-tab',
-      'wb-export-tab',
-    ])
+    const radios = [...panel(fileAt(twoPages(), 'index.html')).querySelectorAll('input[type="radio"]')]
+    expect(radios.map((radio) => radio.getAttribute('name'))).toEqual(['wb-export-tab', 'wb-export-tab', 'wb-export-tab'])
     expect(radios.map((radio) => radio.hasAttribute('checked'))).toEqual([true, false, false])
   })
 
   /** 라벨의 `for`와 본문의 id가 어긋나면 시트의 `~` 규칙이 아무것도 안 켠다. */
   it('라벨과 본문이 라디오 id로 이어져 있다', () => {
     const box = panel(fileAt(twoPages(), 'index.html'))
-    expect([...box.querySelectorAll('.wb-export-tab')].map((label) => label.getAttribute('for'))).toEqual(
-      ['wb-export-tab-description', 'wb-export-tab-comments', 'wb-export-tab-interactions'],
-    )
+    expect([...box.querySelectorAll('.wb-export-tab')].map((label) => label.getAttribute('for'))).toEqual([
+      'wb-export-tab-description',
+      'wb-export-tab-comments',
+      'wb-export-tab-interactions',
+    ])
     expect([...box.querySelectorAll('.wb-export-tabpanel')].map((section) => section.id)).toEqual([
       'wb-export-panel-description',
       'wb-export-panel-comments',
@@ -384,30 +364,21 @@ describe('exportBundle — 우측 탭 셋', () => {
   })
 
   it('페이지 설명을 그리고, 없으면 없다고 말한다', () => {
-    expect(
-      parse(fileAt(twoPages(), 'pages/회원-목록.html')).querySelector('.wb-export-description')
-        ?.textContent,
-    ).toBe('등급으로 거른다')
-    expect(
-      parse(fileAt(twoPages(), 'pages/회원-상세.html')).querySelector('#wb-export-panel-description')
-        ?.textContent,
-    ).toBe('페이지 설명이 없습니다')
+    expect(parse(fileAt(twoPages(), 'pages/회원-목록.html')).querySelector('.wb-export-description')?.textContent).toBe('등급으로 거른다')
+    expect(parse(fileAt(twoPages(), 'pages/회원-상세.html')).querySelector('#wb-export-panel-description')?.textContent).toBe(
+      '페이지 설명이 없습니다',
+    )
   })
 })
 
 describe('exportBundle — 코멘트 탭', () => {
   function entries(path: string): Element[] {
-    return [
-      ...parse(fileAt(twoPages(), path)).querySelectorAll('#wb-export-panel-comments .wb-export-entry'),
-    ]
+    return [...parse(fileAt(twoPages(), path)).querySelectorAll('#wb-export-panel-comments .wb-export-entry')]
   }
 
   it('코멘트와 고아 마커를 문서 순서로 든다', () => {
     const lines = entries('pages/회원-목록.html')
-    expect(lines.map((line) => line.getAttribute('data-wb-marker-for'))).toEqual([
-      'n_000000000002',
-      'n_000000000003',
-    ])
+    expect(lines.map((line) => line.getAttribute('data-wb-marker-for'))).toEqual(['n_000000000002', 'n_000000000003'])
     expect(lines.map((line) => line.getAttribute('data-wb-marker'))).toEqual(['1', '2'])
   })
 
@@ -434,48 +405,35 @@ describe('exportBundle — 코멘트 탭', () => {
         {
           title: '회원 목록',
           document: LIST_PAGE,
-          comments: [
-            { nodeId: 'n_000000000003', body: '본문', authorName: '장병현', createdAt: '2026-08-14' },
-          ],
+          comments: [{ nodeId: 'n_000000000003', body: '본문', authorName: '장병현', createdAt: '2026-08-14' }],
         },
       ],
       runtimeJs: RUNTIME,
     })
-    const line = [
-      ...parse(fileAt(bundle, 'pages/회원-목록.html')).querySelectorAll(
-        '#wb-export-panel-comments .wb-export-entry',
-      ),
-    ][1]!
+    const line = [...parse(fileAt(bundle, 'pages/회원-목록.html')).querySelectorAll('#wb-export-panel-comments .wb-export-entry')][1]!
     const meta = [...line.querySelectorAll('.wb-export-entry-meta')]
     expect(meta.map((element) => element.textContent)).toEqual(['장병현 · 2026-08-14'])
   })
 
   it('코멘트도 마커도 없으면 없다고 말한다', () => {
-    expect(
-      parse(fileAt(twoPages(), 'pages/회원-상세.html')).querySelector('#wb-export-panel-comments')
-        ?.textContent,
-    ).toBe('코멘트가 없습니다')
+    expect(parse(fileAt(twoPages(), 'pages/회원-상세.html')).querySelector('#wb-export-panel-comments')?.textContent).toBe(
+      '코멘트가 없습니다',
+    )
   })
 })
 
 describe('exportBundle — 상호작용 탭', () => {
   it('describeInteraction의 문장을 그린다', () => {
-    const lines = [
-      ...parse(fileAt(twoPages(), 'pages/회원-목록.html')).querySelectorAll(
-        '#wb-export-panel-interactions .wb-export-entry',
-      ),
-    ]
+    const lines = [...parse(fileAt(twoPages(), 'pages/회원-목록.html')).querySelectorAll('#wb-export-panel-interactions .wb-export-entry')]
     expect(lines).toHaveLength(1)
     expect(lines[0]?.getAttribute('data-wb-interaction-for')).toBe('n_000000000002')
     expect(lines[0]?.textContent).toBe('① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
   })
 
   it('상호작용이 없으면 없다고 말한다', () => {
-    expect(
-      parse(fileAt(twoPages(), 'pages/회원-상세.html')).querySelector(
-        '#wb-export-panel-interactions',
-      )?.textContent,
-    ).toBe('상호작용이 없습니다')
+    expect(parse(fileAt(twoPages(), 'pages/회원-상세.html')).querySelector('#wb-export-panel-interactions')?.textContent).toBe(
+      '상호작용이 없습니다',
+    )
   })
 })
 
@@ -536,12 +494,9 @@ describe('exportBundle — errors를 삼키지 않는다', () => {
       },
     }
     const bundle = exportBundle({ pages: [{ title: '노드 아님', document: withNull }], runtimeJs: RUNTIME })
-    expect(bundle.errors.map((item) => item.error.message)).toEqual([
-      '노드가 객체가 아닙니다: null',
-    ])
-    expect(
-      parse(fileAt(bundle, 'pages/노드-아님.html')).querySelector('#wb-export-panel-interactions')
-        ?.textContent,
-    ).toBe('상호작용이 없습니다')
+    expect(bundle.errors.map((item) => item.error.message)).toEqual(['노드가 객체가 아닙니다: null'])
+    expect(parse(fileAt(bundle, 'pages/노드-아님.html')).querySelector('#wb-export-panel-interactions')?.textContent).toBe(
+      '상호작용이 없습니다',
+    )
   })
 })

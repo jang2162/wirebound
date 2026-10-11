@@ -76,24 +76,12 @@ const LINE_STYLES =
     .join('') +
   '</a:lnStyleLst>'
 
-const EFFECT_STYLES =
-  '<a:effectStyleLst>' +
-  '<a:effectStyle><a:effectLst/></a:effectStyle>'.repeat(3) +
-  '</a:effectStyleLst>'
+const EFFECT_STYLES = '<a:effectStyleLst>' + '<a:effectStyle><a:effectLst/></a:effectStyle>'.repeat(3) + '</a:effectStyleLst>'
 
-const BG_FILL_STYLES =
-  '<a:bgFillStyleLst>' +
-  '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'.repeat(3) +
-  '</a:bgFillStyleLst>'
+const BG_FILL_STYLES = '<a:bgFillStyleLst>' + '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'.repeat(3) + '</a:bgFillStyleLst>'
 
 function fontCollection(tag: 'majorFont' | 'minorFont'): string {
-  return (
-    `<a:${tag}>` +
-    `<a:latin typeface="${LATIN}"/>` +
-    `<a:ea typeface="${KOREAN}"/>` +
-    '<a:cs typeface=""/>' +
-    `</a:${tag}>`
-  )
+  return `<a:${tag}>` + `<a:latin typeface="${LATIN}"/>` + `<a:ea typeface="${KOREAN}"/>` + '<a:cs typeface=""/>' + `</a:${tag}>`
 }
 
 /** 테마 파트의 글자 전부. **인자가 없다** — 값이 하나뿐이고 그것이 위 머리말의 판정이다. */

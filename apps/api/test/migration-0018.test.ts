@@ -58,21 +58,40 @@ async function seedV1(): Promise<{ projectId: string; pageId: string; snapshotId
   const layoutSchema = { version: 1, root: { id: 'l_root', type: 'Page', children: [{ id: 'l_slot', type: 'Slot' }] } }
   await sql`insert into users (id, email, name, password_hash) values (${userId}, ${`seed-${userId}@example.com`}, '씨앗', 'x')`.execute(db)
   await sql`insert into projects (id, name, slug) values (${projectId}, '옛 프로젝트', ${`p-${projectId.slice(0, 8)}`})`.execute(db)
-  await sql`insert into layouts (id, project_id, name, theme_id, schema) values (${layoutId}, ${projectId}, '기본', null, ${JSON.stringify(layoutSchema)})`.execute(db)
+  await sql`insert into layouts (id, project_id, name, theme_id, schema) values (${layoutId}, ${projectId}, '기본', null, ${JSON.stringify(layoutSchema)})`.execute(
+    db,
+  )
   await sql`update projects set default_layout_id = ${layoutId} where id = ${projectId}`.execute(db)
   await sql`insert into project_members (project_id, user_id, role) values (${projectId}, ${userId}, 'owner')`.execute(db)
-  await sql`insert into menu_nodes (id, project_id, parent_id, title, sort_order) values (${menuId}, ${projectId}, null, '회원', 0)`.execute(db)
-  await sql`insert into pages (id, project_id, menu_node_id, title, sort_order, schema, schema_version) values (${pageId}, ${projectId}, ${menuId}, '원래 제목', 0, ${JSON.stringify(DOC('원문'))}, 1)`.execute(db)
+  await sql`insert into menu_nodes (id, project_id, parent_id, title, sort_order) values (${menuId}, ${projectId}, null, '회원', 0)`.execute(
+    db,
+  )
+  await sql`insert into pages (id, project_id, menu_node_id, title, sort_order, schema, schema_version) values (${pageId}, ${projectId}, ${menuId}, '원래 제목', 0, ${JSON.stringify(DOC('원문'))}, 1)`.execute(
+    db,
+  )
   const payload = {
     payloadVersion: 1,
     capturedAt: new Date().toISOString(),
     menu: [{ id: menuId, parentId: null, title: '회원', sortOrder: 0 }],
-    pages: [{ id: pageId, menuNodeId: menuId, title: '원래 제목', description: null, sortOrder: 0, schemaVersion: 1, schema: DOC('원문'), headSeq: 0 }],
+    pages: [
+      {
+        id: pageId,
+        menuNodeId: menuId,
+        title: '원래 제목',
+        description: null,
+        sortOrder: 0,
+        schemaVersion: 1,
+        schema: DOC('원문'),
+        headSeq: 0,
+      },
+    ],
     layouts: [{ id: layoutId, name: '기본', themeId: null, schema: layoutSchema }],
     themes: [{ layoutId, themeId: null, theme: null }],
     comments: [],
   }
-  await sql`insert into snapshots (id, project_id, tag, payload, created_by) values (${snapshotId}, ${projectId}, 'v1', ${JSON.stringify(payload)}, ${userId})`.execute(db)
+  await sql`insert into snapshots (id, project_id, tag, payload, created_by) values (${snapshotId}, ${projectId}, 'v1', ${JSON.stringify(payload)}, ${userId})`.execute(
+    db,
+  )
   return { projectId, pageId, snapshotId }
 }
 
@@ -98,8 +117,12 @@ describe('0018 — 옛 JSON 테마 걷기', () => {
 
   it('0018 은 테마 표와 레이아웃의 테마 칸을 지운다', async () => {
     await migrateTo('0018-drop-json-themes')
-    const tables = await sql<{ name: string }>`select table_name as name from information_schema.tables where table_schema = 'public' and table_name = 'themes'`.execute(db)
-    const columns = await sql<{ name: string }>`select column_name as name from information_schema.columns where table_name = 'layouts' and column_name = 'theme_id'`.execute(db)
+    const tables = await sql<{
+      name: string
+    }>`select table_name as name from information_schema.tables where table_schema = 'public' and table_name = 'themes'`.execute(db)
+    const columns = await sql<{
+      name: string
+    }>`select column_name as name from information_schema.columns where table_name = 'layouts' and column_name = 'theme_id'`.execute(db)
     expect({ themes: tables.rows.length, themeId: columns.rows.length }).toEqual({ themes: 0, themeId: 0 })
   })
 

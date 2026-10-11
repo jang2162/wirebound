@@ -64,7 +64,11 @@ describe('캔버스 도구는 머리에 있다', () => {
     await openPage(PAIR)
     expect(within(header()).getByRole('combobox', { name: '뷰포트 폭' })).toBeTruthy()
     const zoom = within(header()).getByRole('group', { name: '줌' })
-    expect(within(zoom).getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual(['축소', '확대', '화면 맞춤'])
+    expect(
+      within(zoom)
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label') ?? button.textContent),
+    ).toEqual(['축소', '확대', '화면 맞춤'])
     expect(within(zoom).getByText('100%')).toBeTruthy()
     const order = [...header().querySelectorAll<HTMLElement>('[aria-label="모드"], select, [aria-label="줌"], [aria-haspopup="menu"]')].map(
       (element) => element.getAttribute('aria-label') ?? element.tagName.toLowerCase(),
@@ -74,7 +78,11 @@ describe('캔버스 도구는 머리에 있다', () => {
 
     expect(within(footer()).queryByRole('combobox', { name: '뷰포트 폭' })).toBeNull()
     expect(within(footer()).queryByRole('group', { name: '줌' })).toBeNull()
-    expect(within(footer()).getAllByRole('button').map((button) => button.textContent)).toEqual(['컴포넌트'])
+    expect(
+      within(footer())
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['컴포넌트'])
   })
 
   it('뷰 모드에서도 뷰포트 폭 · 줌은 머리에 그대로다', async () => {

@@ -112,11 +112,7 @@ export async function callApi(io: Io, server: string, request: ApiRequest): Prom
  * 값이고(위 표), zip이 아닌 오류 봉투를 바이트로 받아 봐야 아무 말도 못 한다. 진짜
  * `Response`의 본문은 한 번만 읽히므로 **둘 중 하나만** 부른다.
  */
-export async function callApiBytes(
-  io: Io,
-  server: string,
-  request: ApiRequest,
-): Promise<ApiBytesResponse> {
+export async function callApiBytes(io: Io, server: string, request: ApiRequest): Promise<ApiBytesResponse> {
   const { url, response } = await send(io, server, request)
   if (response.status < 200 || response.status >= 300) {
     assertOk(response, await response.text(), request, url)
@@ -152,11 +148,7 @@ function dispositionFileName(header: string | null): string | null {
  * 보내기까지. **세 갈래 중 앞의 둘**(헤더에 못 싣는 자격 · 닿지 못함)이 여기서 갈린다 —
  * 글자로 읽든 바이트로 읽든 같은 판정이어야 하므로 한 자리에 둔다.
  */
-async function send(
-  io: Io,
-  server: string,
-  request: ApiRequest,
-): Promise<{ url: string; response: HttpResponse }> {
+async function send(io: Io, server: string, request: ApiRequest): Promise<{ url: string; response: HttpResponse }> {
   const url = `${server}${request.path}`
   // **자기 종류를 언제나 싣는다**(위 머리말). 요청마다 고르게 두지 않는 것이 요점이다.
   const headers: Record<string, string> = { [CLIENT_KIND_HEADER]: io.client }

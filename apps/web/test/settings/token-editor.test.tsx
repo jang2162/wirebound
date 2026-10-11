@@ -45,7 +45,9 @@ function renderEditor(role: ProjectRole = 'owner', overrides: Partial<ApiClient>
   const api = {
     getProjectTheme: vi.fn(async () => view({ 'semantic.primary': '#ff0000' })),
     listThemePackages: vi.fn(async () => []),
-    putProjectTheme: vi.fn(async (_id: string, body: { tokens: Record<string, string | number>; rev: number }) => view(body.tokens, body.rev + 1)),
+    putProjectTheme: vi.fn(async (_id: string, body: { tokens: Record<string, string | number>; rev: number }) =>
+      view(body.tokens, body.rev + 1),
+    ),
     ...overrides,
   }
   renderWithProviders(<App />, {
@@ -192,7 +194,10 @@ describe('토큰 편집기 — 저장의 실패', () => {
     type('주색', '#0000ff')
     fireEvent.click(save())
     const conflict = await within(editor()).findByRole('group', { name: '서버 값과 내 값' })
-    const rows = within(conflict).getAllByRole('row').slice(1).map((row) => row.textContent)
+    const rows = within(conflict)
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => row.textContent)
     expect(rows).toEqual(['주색#00ff00#0000ff', '모서리8px4px'])
 
     fireEvent.click(within(conflict).getByRole('button', { name: '서버 값으로' }))
@@ -255,11 +260,18 @@ describe('토큰 편집기 — 미리보기', () => {
 
   it('미리보기 갤러리는 서버 manifest 의 variant 로 칸을 짓는다 — 번들이 실은 manifest 가 아니라', async () => {
     // 서버에만 Button `huge` — 번들(시험용 로더의 ADMIN_FIXTURE)은 제 manifest 에 없는 variant 다.
-    const server: ThemeManifest = { ...MANIFEST, components: { Button: { variants: [{ id: 'huge', label: '아주 큼' }], defaultVariant: 'huge' } } }
+    const server: ThemeManifest = {
+      ...MANIFEST,
+      components: { Button: { variants: [{ id: 'huge', label: '아주 큼' }], defaultVariant: 'huge' } },
+    }
     renderEditor('owner', { getProjectTheme: vi.fn(async () => ({ ...view(), manifest: server })) })
     await ready()
     await waitFor(() => expect(preview().querySelectorAll('[data-wb-gallery-item^="Button/"]').length).toBeGreaterThan(0))
-    const buttons = new Set([...preview().querySelectorAll('[data-wb-gallery-item^="Button/"]')].map((el) => el.getAttribute('data-wb-gallery-item')!.split('/')[1]))
+    const buttons = new Set(
+      [...preview().querySelectorAll('[data-wb-gallery-item^="Button/"]')].map(
+        (el) => el.getAttribute('data-wb-gallery-item')!.split('/')[1],
+      ),
+    )
     expect([...buttons]).toEqual(['huge'])
   })
 })

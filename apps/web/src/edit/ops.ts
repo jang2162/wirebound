@@ -10,15 +10,7 @@
  * 던지지 않는 것도 같은 이유다 — 이 함수들은 렌더 도중에도 불릴 수 있고, 속성 패널과
  * 구조 트리는 오류 경계 밖이라 던지면 셸 전체가 흰 화면이 된다.
  */
-import {
-  applyOps,
-  getByPointer,
-  tidyAlias,
-  type Interaction,
-  type PageDocument,
-  type PatchOp,
-  type WbNode,
-} from '@wirebound/schema'
+import { applyOps, getByPointer, tidyAlias, type Interaction, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
 // **schema의 `findNodePath`·`findNode`·`walkNodes`를 쓰지 않는다.** 셋 다 `walkNodes`를
 // 지나고 그것이 `children` 배열 안의 `null` 원소에서 던진다 — 이 파일의 계약("던지지
 // 않는다")이 거기서 깨진다(`./safe-walk.ts` 머리말에 실측).
@@ -55,12 +47,7 @@ const ROOT_PATH = '/root'
  * `remove /…/props` · `remove /…/props/<prop>` · `replace /…/props/<prop>(옛 값)` 하나씩이다
  * (`test/edit/ops.test.ts`의 `서버가 만들 inverse를 여기서 재 둔다`).
  */
-export function propOps(
-  document: PageDocument,
-  nodeId: string,
-  prop: string,
-  value: unknown,
-): PatchOp[] | null {
+export function propOps(document: PageDocument, nodeId: string, prop: string, value: unknown): PatchOp[] | null {
   const nodePath = findNodePathSafely(document.root, nodeId)
   if (nodePath === undefined) return null
 
@@ -112,11 +99,7 @@ export function propOps(
  * | `variant` 키가 있다 | `null` | `remove /…/variant` |
  * | `variant` 키가 없다 | `null` | **`null`** — 지울 것이 없다 |
  */
-export function variantOps(
-  document: PageDocument,
-  nodeId: string,
-  variant: string | null,
-): PatchOp[] | null {
+export function variantOps(document: PageDocument, nodeId: string, variant: string | null): PatchOp[] | null {
   const nodePath = findNodePathSafely(document.root, nodeId)
   if (nodePath === undefined) return null
 
@@ -187,11 +170,7 @@ export function aliasOps(document: PageDocument, nodeId: string, alias: string |
  * **빈 배열을 `remove`로 옮기는 이유:** 남기면 *"상호작용 없음"*의 표현이 두 벌(키 없음 /
  * 빈 배열)이 된다. `WbNodeSchema.interactions`가 `.optional()`이라 키가 없는 것이 정상이다.
  */
-export function interactionsOps(
-  document: PageDocument,
-  nodeId: string,
-  interactions: readonly Interaction[],
-): PatchOp[] | null {
+export function interactionsOps(document: PageDocument, nodeId: string, interactions: readonly Interaction[]): PatchOp[] | null {
   const nodePath = findNodePathSafely(document.root, nodeId)
   if (nodePath === undefined) return null
 
@@ -203,9 +182,7 @@ export function interactionsOps(
   const has = Object.hasOwn(node, 'interactions')
 
   if (interactions.length === 0) return has ? [{ op: 'remove', path }] : null
-  return has
-    ? [{ op: 'replace', path, value: interactions }]
-    : [{ op: 'add', path, value: interactions }]
+  return has ? [{ op: 'replace', path, value: interactions }] : [{ op: 'add', path, value: interactions }]
 }
 
 /**
@@ -231,12 +208,7 @@ export function interactionsOps(
  * 노드에 배열째 `add`를 주면 던지지 않고 그 문자열을 배열로 갈아 끼운다(`addAt`이
  * 객체 부모에서는 키 할당이라서다). `propOps`가 `props`에 대해 내린 것과 같은 판단이다.
  */
-export function insertNodeOps(
-  document: PageDocument,
-  parentId: string,
-  index: number,
-  node: WbNode,
-): PatchOp[] | null {
+export function insertNodeOps(document: PageDocument, parentId: string, index: number, node: WbNode): PatchOp[] | null {
   const parentPath = findNodePathSafely(document.root, parentId)
   if (parentPath === undefined) return null
 
@@ -306,12 +278,7 @@ export function removeNodeOps(document: PageDocument, nodeId: string): PatchOp[]
  * **적용해 보기 전에 끊는 것**이고, 그마저도 `EditorStore.applyEdit`의 `try/catch`가
  * 뒤에서 잡는다(`test/edit/ops.test.ts`의 `자손을 부모로 주면 null이다 —`).
  */
-export function moveNodeOps(
-  document: PageDocument,
-  nodeId: string,
-  parentId: string,
-  index: number,
-): PatchOp[] | null {
+export function moveNodeOps(document: PageDocument, nodeId: string, parentId: string, index: number): PatchOp[] | null {
   const from = findNodePathSafely(document.root, nodeId)
   if (from === undefined || from === ROOT_PATH) return null
 

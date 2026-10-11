@@ -35,10 +35,7 @@ function keysInObjectSchema(source: string, name: string): string[] {
 
 /** **env 를 읽겠다고 선언한 자 전부.** 한 소스만 보면 다른 소스의 새 키가 조용히 빠진다. */
 function declaredKeys(): string[] {
-  return [
-    ...keysInObjectSchema(CONFIG_SOURCE, 'EnvSchema'),
-    ...keysInObjectSchema(SEED_SOURCE, 'SeedEnvSchema'),
-  ].sort()
+  return [...keysInObjectSchema(CONFIG_SOURCE, 'EnvSchema'), ...keysInObjectSchema(SEED_SOURCE, 'SeedEnvSchema')].sort()
 }
 
 describe('.env.example 이 무엇을 드나', () => {

@@ -12,19 +12,8 @@ import { DatabaseError } from 'pg'
 import { createPool } from '../src/db/client'
 import type { DbHandle } from '../src/db/tx'
 import type { Database } from '../src/db/types'
-import {
-  SnapshotNulByteError,
-  findSnapshotById,
-  insertSnapshot,
-  listSnapshots,
-  readCaptureFingerprint,
-} from '../src/repos/snapshots'
-import {
-  SNAPSHOT_PAYLOAD_VERSION,
-  SNAPSHOT_RESOURCES,
-  SnapshotPayloadSchema,
-  type SnapshotPayload,
-} from '@wirebound/themes'
+import { SnapshotNulByteError, findSnapshotById, insertSnapshot, listSnapshots, readCaptureFingerprint } from '../src/repos/snapshots'
+import { SNAPSHOT_PAYLOAD_VERSION, SNAPSHOT_RESOURCES, SnapshotPayloadSchema, type SnapshotPayload } from '@wirebound/themes'
 import { TEST_DATABASE_URL, createProject, signup, withApi, type TestContext } from './helpers'
 
 const NUL = String.fromCharCode(0)
@@ -310,11 +299,7 @@ describe('listSnapshots', () => {
 
       expect(record.createdAt.toISOString()).toBe(capturedAt)
       // 응답만이 아니라 **행**이 그렇다 — 컬럼 기본값(`now()`)이 이겼다면 여기서 갈린다.
-      const row = await ctx.db
-        .selectFrom('snapshots')
-        .select('created_at')
-        .where('id', '=', record.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('snapshots').select('created_at').where('id', '=', record.id).executeTakeFirstOrThrow()
       expect(row.created_at.toISOString()).toBe(capturedAt)
     })
   })
@@ -454,10 +439,7 @@ describe('readCaptureFingerprint', () => {
     await withApi(async (ctx) => {
       const { project } = await fixture(ctx)
 
-      const parsed = JSON.parse((await readCaptureFingerprint(ctx.db, project.id)).fingerprint) as Record<
-        string,
-        unknown
-      >
+      const parsed = JSON.parse((await readCaptureFingerprint(ctx.db, project.id)).fingerprint) as Record<string, unknown>
 
       expect(Object.keys(parsed).sort()).toEqual(['comments', 'layouts', 'menu_nodes', 'pages', 'theme'])
     })

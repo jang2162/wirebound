@@ -111,9 +111,13 @@ describe('옛 성질 — Section 의 가둔 칼럼', () => {
     const bounded = inner.filter((r) => r.style.getPropertyValue('max-width') !== '')
     // 양성 대조 — 없으면 아래 단언이 빈 배열에서 초록이다.
     expect(bounded.length).toBeGreaterThan(0)
-    for (const r of bounded) expect([r.style.getPropertyValue('margin-left'), r.style.getPropertyValue('margin-right')], r.selector).toEqual(['auto', 'auto'])
+    for (const r of bounded)
+      expect([r.style.getPropertyValue('margin-left'), r.style.getPropertyValue('margin-right')], r.selector).toEqual(['auto', 'auto'])
     const margins = inner.flatMap((r) =>
-      ['margin-left', 'margin-right', 'margin'].map((p) => r.style.getPropertyValue(p)).filter((v) => v !== '' && v !== 'auto').map((v) => `${r.where} ${r.selector}: ${v}`),
+      ['margin-left', 'margin-right', 'margin']
+        .map((p) => r.style.getPropertyValue(p))
+        .filter((v) => v !== '' && v !== 'auto')
+        .map((v) => `${r.where} ${r.selector}: ${v}`),
     )
     expect(margins).toEqual([])
   })
@@ -217,7 +221,10 @@ describe('뷰 — variant 마다 DOM', () => {
   })
 
   it('KeyValue: cardGrid 는 쌍마다 상자 · 열 수를 노드 변수로 싣는다 · table 은 기본 뷰', () => {
-    const pairs = [{ key: '소재', value: '면' }, { key: '원산지', value: '한국' }]
+    const pairs = [
+      { key: '소재', value: '면' },
+      { key: '원산지', value: '한국' },
+    ]
     const c = draw([
       { id: 'a', type: 'KeyValue', props: { pairs, columns: 3 } },
       { id: 'b', type: 'KeyValue', variant: 'table', props: { pairs } },
@@ -255,7 +262,12 @@ describe('뷰 — 마커 · 초점', () => {
 
   it.each(VIEW_TYPES)('%s: 선언한 variant 마다 초점은 루트 · 마커 자리 속성이 없다(top-start)', (type) => {
     const variants = manifest.components![type]!.variants.map((v) => v.id)
-    const c = draw(variants.map((variant, i) => ({ id: `n${i}`, type, variant, props: {}, children: type === 'Card' || type === 'SearchForm' ? [] : undefined }) as WbNode))
+    const c = draw(
+      variants.map(
+        (variant, i) =>
+          ({ id: `n${i}`, type, variant, props: {}, children: type === 'Card' || type === 'SearchForm' ? [] : undefined }) as WbNode,
+      ),
+    )
     for (let i = 0; i < variants.length; i++) {
       const root = node(c, `n${i}`)
       expect(focusElement(root), `${type}/${variants[i]}`).toBe(root)
@@ -277,7 +289,12 @@ describe('뷰 — 마커 · 초점', () => {
  */
 describe('CSS — 컨테이너 조각이 중첩 노드로 새지 않는다', () => {
   function matching(el: Element): string[] {
-    return styleRules().flatMap((r) => r.selector.split(',').map((s) => s.trim()).filter((s) => el.matches(s)))
+    return styleRules().flatMap((r) =>
+      r.selector
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => el.matches(s)),
+    )
   }
 
   it('Card 안 List 의 title · media · body 는 Card 의 규칙을 받지 않는다', () => {
@@ -295,7 +312,9 @@ describe('CSS — 컨테이너 조각이 중첩 노드로 새지 않는다', () 
   })
 
   it('EntryForm 안 Field 의 label 은 EntryForm 의 label 규칙을 받지 않는다', () => {
-    const c = draw([{ id: 'ef', type: 'EntryForm', props: { title: '주문서' }, children: [{ id: 'f', type: 'Field', props: { label: '받는 분' } }] }])
+    const c = draw([
+      { id: 'ef', type: 'EntryForm', props: { title: '주문서' }, children: [{ id: 'f', type: 'Field', props: { label: '받는 분' } }] },
+    ])
     const hits = matching(node(c, 'f').querySelector('[data-wb-part="label"]')!)
     expect(hits.some((s) => s.includes('"Field"'))).toBe(true)
     expect(hits.filter((s) => s.includes('"EntryForm"'))).toEqual([])

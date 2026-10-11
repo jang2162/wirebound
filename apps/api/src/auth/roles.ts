@@ -71,11 +71,7 @@ export async function findMembership(
   /** `'share'`면 그 멤버 행을 `FOR SHARE`로 잡는다 — 커밋 순간의 재확인만 쓴다(`recheckProjectRole`). */
   lock: 'none' | 'share' = 'none',
 ): Promise<ProjectRole | null> {
-  const query = db
-    .selectFrom('project_members')
-    .select('role')
-    .where('project_id', '=', projectId)
-    .where('user_id', '=', userId)
+  const query = db.selectFrom('project_members').select('role').where('project_id', '=', projectId).where('user_id', '=', userId)
   if (lock === 'share') assertLocking(db, 'findMembership')
   const row = await (lock === 'share' ? query.forShare() : query).executeTakeFirst()
 

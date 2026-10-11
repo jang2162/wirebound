@@ -127,7 +127,9 @@ export function usePopoverSide<T extends HTMLElement = HTMLDivElement>(
   onLost: () => void,
 ): { placement: PopoverPlacement; bodyRef: RefObject<T | null> } {
   const bodyRef = useRef<T>(null)
-  const [placement, setPlacement] = useState<PopoverPlacement>(() => placePopover({ left: 0, right: 0, top: 0, bottom: 0 }, { width: 0, height: 0 }, { width: 0, height: 0 }))
+  const [placement, setPlacement] = useState<PopoverPlacement>(() =>
+    placePopover({ left: 0, right: 0, top: 0, bottom: 0 }, { width: 0, height: 0 }, { width: 0, height: 0 }),
+  )
   // 마지막 `onLost` 를 든다 — 의존으로 두면 렌더마다 재기를 걷었다 다시 건다(`use-popover-dismiss.ts` 의 `latest` 와 같은 판단).
   const lost = useRef(onLost)
   useLayoutEffect(() => {
@@ -149,14 +151,27 @@ export function usePopoverSide<T extends HTMLElement = HTMLDivElement>(
       const root = element.ownerDocument.documentElement
       const viewport = { width: root.clientWidth, height: root.clientHeight }
       const boxes = clips.map((clip) => clip.getBoundingClientRect())
-      const inputs = [at.left, at.right, at.top, at.bottom, body.width, body.height, viewport.width, viewport.height, ...boxes.flatMap((b) => [b.left, b.top, b.right, b.bottom])].join(' ')
+      const inputs = [
+        at.left,
+        at.right,
+        at.top,
+        at.bottom,
+        body.width,
+        body.height,
+        viewport.width,
+        viewport.height,
+        ...boxes.flatMap((b) => [b.left, b.top, b.right, b.bottom]),
+      ].join(' ')
       if (inputs === seen) return
       seen = inputs
       const measured = viewport.width > 0 && viewport.height > 0
       const x = (at.left + at.right) / 2
       const y = (at.top + at.bottom) / 2
       const gone = at.width === 0 && at.height === 0
-      const hidden = gone || !inside(x, y, { left: 0, top: 0, right: viewport.width, bottom: viewport.height }) || boxes.some((box) => !inside(x, y, box))
+      const hidden =
+        gone ||
+        !inside(x, y, { left: 0, top: 0, right: viewport.width, bottom: viewport.height }) ||
+        boxes.some((box) => !inside(x, y, box))
       if (measured && hidden) {
         lost.current()
         return
@@ -164,7 +179,9 @@ export function usePopoverSide<T extends HTMLElement = HTMLDivElement>(
       const next = placePopover(at, body, viewport)
       // **같은 자리면 같은 객체를 둔다** — 판정은 부를 때마다 새 `style` 을 만들어, 그대로 넣으면 다시 고를 때마다 다시 그린다.
       setPlacement((prev) =>
-        prev.side === next.side && prev.block === next.block && prev.style.left === next.style.left && prev.style.top === next.style.top ? prev : next,
+        prev.side === next.side && prev.block === next.block && prev.style.left === next.style.left && prev.style.top === next.style.top
+          ? prev
+          : next,
       )
     }
     const watch = (): void => {

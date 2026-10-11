@@ -24,10 +24,7 @@ function get(port: number, path: string, agent: Agent): Promise<{ status: number
 
 /** `ms` 안에 안 끝나면 거절한다. */
 function within<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${ms}ms 안에 안 끝났습니다`)), ms)),
-  ])
+  return Promise.race([promise, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${ms}ms 안에 안 끝났습니다`)), ms))])
 }
 
 describe('닫는 중에 도는 요청', () => {

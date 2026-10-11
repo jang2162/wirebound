@@ -62,25 +62,20 @@ async function editSomething(value: string): Promise<void> {
 
 /** 화면에 뜬 경고 줄들. */
 function warnings(): string[] {
-  return [...document.body.querySelectorAll('.wb-shell-edit-warnings-item')].map(
-    (item) => item.textContent ?? '',
-  )
+  return [...document.body.querySelectorAll('.wb-shell-edit-warnings-item')].map((item) => item.textContent ?? '')
 }
 
 describe('편집 응답의 warnings', () => {
   it('경고가 오면 화면에 그린다 — 여기가 그 이슈들이 사람에게 닿는 첫 자리다', async () => {
     await openPage(DOC, {
       apiOverrides: {
-        patchOps: async () =>
-          patchResult([issue('setProp의 타겟 노드가 문서에 없습니다: n-gone')]),
+        patchOps: async () => patchResult([issue('setProp의 타겟 노드가 문서에 없습니다: n-gone')]),
       },
     })
 
     await editSomething('조회')
 
-    await waitFor(() =>
-      expect(warnings()).toEqual(['setProp의 타겟 노드가 문서에 없습니다: n-gone']),
-    )
+    await waitFor(() => expect(warnings()).toEqual(['setProp의 타겟 노드가 문서에 없습니다: n-gone']))
     // 몇 개인지 먼저 말한다 — 목록만 있으면 그것이 무엇인지 알 수 없다.
     expect(screen.getByText('저장했지만 문서에 경고 1개가 있습니다')).toBeTruthy()
   })

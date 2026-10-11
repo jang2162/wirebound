@@ -66,9 +66,7 @@ describe('멱등 키의 유일 색인(0012)', () => {
       const input = { pageId: fx.pageId, nodeId: fx.rootNodeId, body: '말', authorId: fx.userId, idempotencyKey: 'k' }
       await insertComment(ctx.db, input)
 
-      await expect(withTransaction(ctx.db, (trx) => insertComment(trx, input))).rejects.toThrow(
-        /comments_page_author_idempotency_key_idx/,
-      )
+      await expect(withTransaction(ctx.db, (trx) => insertComment(trx, input))).rejects.toThrow(/comments_page_author_idempotency_key_idx/)
       // 키가 없는 행은 여럿이다 — `NULL`끼리는 같은 값이 아니다.
       await insertComment(ctx.db, { ...input, idempotencyKey: undefined })
       await insertComment(ctx.db, { ...input, idempotencyKey: undefined })
@@ -103,9 +101,7 @@ describe('NUL 가드 — 마지막 방벽', () => {
         authorId: fx.userId,
       })
 
-      await expect(
-        updateCommentBody(ctx.db, fx.pageId, created.id, `가${NUL}나`),
-      ).rejects.toBeInstanceOf(CommentNulByteError)
+      await expect(updateCommentBody(ctx.db, fx.pageId, created.id, `가${NUL}나`)).rejects.toBeInstanceOf(CommentNulByteError)
     })
   })
 

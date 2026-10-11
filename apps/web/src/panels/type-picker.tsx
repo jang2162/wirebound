@@ -64,10 +64,7 @@ const EMPTY_NOTICE = '고를 수 있는 타입이 없습니다'
 /** 설명 줄의 id. `aria-describedby`가 가리킨다. */
 const DESC_ID = 'wb-shell-picker-desc'
 
-export function TypePicker(props: {
-  onPick: (type: string) => void
-  onCancel: () => void
-}): ReactElement {
+export function TypePicker(props: { onPick: (type: string) => void; onCancel: () => void }): ReactElement {
   // 카탈로그는 실행 중에 바뀌지 않는다(`catalog-setup`이 한 번 설치한다). 매 렌더
   // `validatePage`를 타입 수만큼 돌리지 않도록 한 번만 계산한다.
   const groups = useMemo(placeableGroups, [])
@@ -107,11 +104,7 @@ export function TypePicker(props: {
           </optgroup>
         ))}
       </select>
-      <button
-        type="button"
-        className="wb-shell-picker-action"
-        onClick={() => props.onPick(picked)}
-      >
+      <button type="button" className="wb-shell-picker-action" onClick={() => props.onPick(picked)}>
         추가
       </button>
       <button type="button" className="wb-shell-picker-action" onClick={props.onCancel}>

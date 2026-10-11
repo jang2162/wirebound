@@ -58,7 +58,9 @@ it('0019 → 0018 — 판 3 payload 가 판 2 모양(theme 없음)으로 돌아�
     comments: [],
     theme: { themeId: 'system-admin', version: '0.1.0', tokens: {} },
   }
-  await sql`insert into snapshots (project_id, tag, payload, created_by) values (${projectId}, '판3', ${JSON.stringify(payload)}, ${userId})`.execute(db)
+  await sql`insert into snapshots (project_id, tag, payload, created_by) values (${projectId}, '판3', ${JSON.stringify(payload)}, ${userId})`.execute(
+    db,
+  )
 
   await migrateTo('0018-drop-json-themes')
 

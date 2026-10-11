@@ -21,7 +21,16 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session, type ShownDrop } from './editor-stack'
+import {
+  canvasFrame,
+  editorStackPrerequisite,
+  poll,
+  shownDrops,
+  startEditorStack,
+  type EditorStack,
+  type Session,
+  type ShownDrop,
+} from './editor-stack'
 import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
@@ -86,15 +95,30 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
   const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
 
   /** 프로젝트 · 메뉴 · 페이지 하나에 문서를 싣는다. bob 은 `bobRole`. `theme` 을 주면 그 시스템 테마의 지금 판. */
-  async function fixture(slug: string, nodes: SeedNode[], options: { theme?: string; bobRole?: string } = {}): Promise<{ P: string; projectId: string }> {
+  async function fixture(
+    slug: string,
+    nodes: SeedNode[],
+    options: { theme?: string; bobRole?: string } = {},
+  ): Promise<{ P: string; projectId: string }> {
     const project = (await call('POST', '/projects', { name: 'D1 리뷰', slug: `${slug}-${Date.now().toString(36)}` })).body
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
-    const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: options.bobRole ?? 'editor' })
+    const member = await call('POST', `/projects/${project.id}/members`, {
+      email: stack.users.bob.email,
+      role: options.bobRole ?? 'editor',
+    })
     if (member.status >= 300) throw new Error(`member ${member.status}`)
-    if (options.theme !== undefined) await putTheme(call, project.id, { themeId: `system-${options.theme}`, version: seededVersion(`system-${options.theme}`), tokens: {} })
+    if (options.theme !== undefined)
+      await putTheme(call, project.id, {
+        themeId: `system-${options.theme}`,
+        version: seededVersion(`system-${options.theme}`),
+        tokens: {},
+      })
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
-    const seededOps = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seededOps = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    })
     if (seededOps.status >= 300) throw new Error(`seed ${seededOps.status} ${JSON.stringify(seededOps.body)}`)
     return { P, projectId: project.id }
   }
@@ -114,7 +138,10 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
   }
 
   async function openTab(P: string, user: 'alice' | 'bob' = 'alice', origin?: string) {
-    const { context, page } = await stack.openTab(stack.users[user], { viewport: { width: 1440, height: 900 }, ...(origin === undefined ? {} : { origin }) })
+    const { context, page } = await stack.openTab(stack.users[user], {
+      viewport: { width: 1440, height: 900 },
+      ...(origin === undefined ? {} : { origin }),
+    })
     const patches: string[] = []
     /** 받은 프레임의 종류(`patch-error` · `patch-ack` …) — 리베이스가 섰는지의 카나리아. */
     const received: string[] = []
@@ -193,7 +220,12 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
      */
     const DOC: SeedNode[] = [
       text('n_a', '첫 글'),
-      { id: 'n_flex', type: 'Flex', props: { direction: 'row', wrap: true }, children: Array.from({ length: 7 }, (_, i) => text(`n_x${i}`, `가로 무리의 꽤 긴 글 조각 ${i} 입니다`)) },
+      {
+        id: 'n_flex',
+        type: 'Flex',
+        props: { direction: 'row', wrap: true },
+        children: Array.from({ length: 7 }, (_, i) => text(`n_x${i}`, `가로 무리의 꽤 긴 글 조각 ${i} 입니다`)),
+      },
       { id: 'n_grid', type: 'Grid', props: { columns: 3 }, children: Array.from({ length: 5 }, (_, i) => text(`n_g${i}`, `칸 ${i}`)) },
       {
         id: 'n_card',
@@ -208,12 +240,21 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
             children: [
               { id: 'n_in', type: 'Card', props: { title: '가로 안 카드' }, children: [text('n_i0', '안 하나'), text('n_i1', '안 둘')] },
               text('n_r1', '가로 곁'),
-              { id: 'n_rcol', type: 'Flex', props: { direction: 'column' }, children: [text('n_rc0', '곁 세로 하나'), text('n_rc1', '곁 세로 둘')] },
+              {
+                id: 'n_rcol',
+                type: 'Flex',
+                props: { direction: 'column' },
+                children: [text('n_rc0', '곁 세로 하나'), text('n_rc1', '곁 세로 둘')],
+              },
             ],
           },
         ],
       },
-      { id: 'n_form', type: 'SearchForm', children: ['이름', '상태', '날짜'].map((label, i) => ({ id: `n_f${i}`, type: 'Field', props: { label } })) },
+      {
+        id: 'n_form',
+        type: 'SearchForm',
+        children: ['이름', '상태', '날짜'].map((label, i) => ({ id: `n_f${i}`, type: 'Field', props: { label } })),
+      },
       { id: 'n_sec', type: 'Section', children: [text('n_s0', '영역 글')] },
       { id: 'n_empty', type: 'Card', props: { title: '빈 카드' } },
       { id: 'n_tabs', type: 'Tabs', children: [text('n_tb0', '탭 글')] },
@@ -251,7 +292,7 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
 
     it('다섯 테마 × 줌 셋 · 칸을 민 판 · 뒤집힌 가로 무리에서 뗀 순간의 미리보기가 선 자리가 서버 문서의 자리다', async () => {
       const rand = seeded(7)
-      const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!
+      const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!
       const wrong: unknown[] = []
       const count = { trials: 0, shown: 0, none: 0, x: 0, inside: 0, reversed: 0, scrolled: 0 }
       for (const theme of THEMES) {
@@ -282,12 +323,15 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
               await select(page, moved)
               await handle(page).waitFor()
               // 손잡이가 칸 위 끝에서 80 + 0..200px 아래에 서게 민다(칸 끝 24px 의 끝 스크롤에 안 걸리게).
-              await page.evaluate((extra) => {
-                const canvas = document.querySelector('.wb-shell-canvas') as HTMLElement
-                const h = document.querySelector('.wb-shell-canvas-handle')!.getBoundingClientRect()
-                canvas.scrollTop += h.top - canvas.getBoundingClientRect().top - 80 - extra
-                canvas.scrollLeft += Math.min(0, h.left - canvas.getBoundingClientRect().left - 20)
-              }, Math.floor(rand() * 200))
+              await page.evaluate(
+                (extra) => {
+                  const canvas = document.querySelector('.wb-shell-canvas') as HTMLElement
+                  const h = document.querySelector('.wb-shell-canvas-handle')!.getBoundingClientRect()
+                  canvas.scrollTop += h.top - canvas.getBoundingClientRect().top - 80 - extra
+                  canvas.scrollLeft += Math.min(0, h.left - canvas.getBoundingClientRect().left - 20)
+                },
+                Math.floor(rand() * 200),
+              )
               const boxes = await nodeBoxes(page, all)
               const inPane = (p: { x: number; y: number }) =>
                 p.x > pane.x + 4 && p.x < pane.x + pane.width - 4 && p.y > pane.y + 40 && p.y < pane.y + pane.height - 40
@@ -298,9 +342,10 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
                 const roll = rand()
                 const id = roll < 0.3 && rowChildren.length > 0 ? pick(rowChildren) : roll < 0.7 ? pick(all) : null
                 const b = id === null ? null : boxes[id]
-                const p = b === null || b === undefined
-                  ? { x: pane.x + rand() * pane.width, y: pane.y + rand() * pane.height }
-                  : { x: b.x + b.width * (0.02 + rand() * 0.96), y: b.y + b.height * (0.02 + rand() * 0.96) }
+                const p =
+                  b === null || b === undefined
+                    ? { x: pane.x + rand() * pane.width, y: pane.y + rand() * pane.height }
+                    : { x: b.x + b.width * (0.02 + rand() * 0.96), y: b.y + b.height * (0.02 + rand() * 0.96) }
                 if (inPane(p)) target = p
               }
               if (target === null) continue
@@ -329,20 +374,35 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
               // 포인터는 미리보기 위거나 그 곁(부모 · 앞뒤 이웃)에 있다 — 판정이 포인터 밑 노드 곁에 미리보기를 세운다(`src/drag/use-placement.ts`
               // 머리말 «판정은 미리보기를 뺀 배치로»).
               const ptr = target
-              const within = (b: Box | undefined) => b !== undefined && ptr.x >= b.x - 1 && ptr.x <= b.x + b.width + 1 && ptr.y >= b.y - 1 && ptr.y <= b.y + b.height + 1
+              const within = (b: Box | undefined) =>
+                b !== undefined && ptr.x >= b.x - 1 && ptr.x <= b.x + b.width + 1 && ptr.y >= b.y - 1 && ptr.y <= b.y + b.height + 1
               const beside =
                 within(indicator.rect) ||
                 [indicator.parent, indicator.prev, indicator.next].some((id) => id !== null && within(atRelease[id])) ||
                 indicator.parent === before.id
               let after: Doc
               try {
-                after = await poll('서버 문서', () => serverRoot(P), (r) => JSON.stringify(r) !== JSON.stringify(before), 4000)
+                after = await poll(
+                  '서버 문서',
+                  () => serverRoot(P),
+                  (r) => JSON.stringify(r) !== JSON.stringify(before),
+                  4000,
+                )
               } catch {
                 wrong.push({ theme, zoom, trial, moved, indicator, kind: '미리보기가 섰는데 편집이 없다' })
                 continue
               }
               if (!beside || !lands(after, moved, indicator)) {
-                wrong.push({ theme, zoom, trial, moved, target, indicator, beside, placed: locate(after, moved) && { parent: locate(after, moved)!.parent!.id, index: locate(after, moved)!.index } })
+                wrong.push({
+                  theme,
+                  zoom,
+                  trial,
+                  moved,
+                  target,
+                  indicator,
+                  beside,
+                  placed: locate(after, moved) && { parent: locate(after, moved)!.parent!.id, index: locate(after, moved)!.index },
+                })
               }
             }
           }
@@ -351,10 +411,14 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         }
       }
       // 판의 수 하한(카나리아) — 아무것도 안 잰 판이 «어긋남 0» 으로 초록이 되지 않게.
-      expect({
-        wrong,
-        enough: count.trials >= 40 && count.shown >= 25 && count.x >= 4 && count.inside >= 4 && count.reversed >= 1 && count.scrolled >= 10,
-      }, JSON.stringify(count)).toEqual({ wrong: [], enough: true })
+      expect(
+        {
+          wrong,
+          enough:
+            count.trials >= 40 && count.shown >= 25 && count.x >= 4 && count.inside >= 4 && count.reversed >= 1 && count.scrolled >= 10,
+        },
+        JSON.stringify(count),
+      ).toEqual({ wrong: [], enough: true })
     })
   })
 
@@ -409,7 +473,11 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       try {
         const midBefore = (await nodeBox(page, 'n_mid')).y
         const status = await bobOps(P, [{ op: 'replace', path: '/root/children/0/props/content', value: LONG }])
-        await poll('alice 캔버스에서 n_mid 가 밀린다', async () => (await nodeBox(page, 'n_mid')).y, (y) => y > midBefore + 40)
+        await poll(
+          'alice 캔버스에서 n_mid 가 밀린다',
+          async () => (await nodeBox(page, 'n_mid')).y,
+          (y) => y > midBefore + 40,
+        )
         await page.waitForTimeout(100)
         const afterShift = (await indicators(page)).map((h) => `${h.placement}:${h.axis}@${Math.round(h.rect.y)}`)
         await page.mouse.up()
@@ -431,12 +499,19 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       const { P } = await fixture('order-shifted', DOC)
       const { page, close, armed } = await armedBeforeMid(P)
       try {
-        const status = await bobOps(P, [{ op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+        const status = await bobOps(P, [
+          { op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } },
+        ])
         await canvasFrame(page).locator('[data-wb-id="n_bob"]').waitFor()
         await page.waitForTimeout(150)
         const afterShift = (await indicators(page)).map((h) => `${h.placement}:${h.axis}`)
         await page.mouse.up()
-        const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s).includes('"n_t3","n_mid"'), 3000).catch(() => shape(P))
+        const final = await poll(
+          '서버 문서',
+          () => shape(P),
+          (s) => JSON.stringify(s).includes('"n_t3","n_mid"'),
+          3000,
+        ).catch(() => shape(P))
         expect({ armed, status, afterShift, final }).toEqual({
           armed: ['before:y'],
           status: 200,
@@ -458,8 +533,18 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         const stillShown = (await indicators(page)).map((h) => `${h.placement}:${h.axis}`)
         await page.mouse.up()
         // 바뀔 때까지만 기다리고 자리는 값으로 견준다 — 놓기가 버려진 판이 시간 초과가 아니라 값으로 죽게.
-        const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s) !== JSON.stringify(ORIGINAL), 3000).catch(() => shape(P))
-        expect({ armed, status, stillShown, final }).toEqual({ armed: ['before:y'], status: 200, stillShown: ['before:y'], final: BEFORE_MID })
+        const final = await poll(
+          '서버 문서',
+          () => shape(P),
+          (s) => JSON.stringify(s) !== JSON.stringify(ORIGINAL),
+          3000,
+        ).catch(() => shape(P))
+        expect({ armed, status, stillShown, final }).toEqual({
+          armed: ['before:y'],
+          status: 200,
+          stillShown: ['before:y'],
+          final: BEFORE_MID,
+        })
       } finally {
         await close()
       }
@@ -492,10 +577,20 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         // bob 이 편집 1 보다 먼저 커밋한다 — 편집 1 은 `patch-error` 를 받고 리베이스돼 다시 나간다.
         const status = await bobOps(P, [{ op: 'replace', path: '/root/children/4/props/content', value: '아래 영!' }])
         const errorsAtArm = received.filter((k) => k === 'patch-error').length
-        await poll('리베이스 뒤 다시 보낸 편집의 답', async () => received.filter((k) => k === 'patch-ack').length, (n) => n >= 1, 12000)
+        await poll(
+          '리베이스 뒤 다시 보낸 편집의 답',
+          async () => received.filter((k) => k === 'patch-ack').length,
+          (n) => n >= 1,
+          12000,
+        )
         const stillShown = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
         await tab.page.mouse.up()
-        const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s).includes('"n_t3","n_t0"'), 8000).catch(() => shape(P))
+        const final = await poll(
+          '서버 문서',
+          () => shape(P),
+          (s) => JSON.stringify(s).includes('"n_t3","n_t0"'),
+          8000,
+        ).catch(() => shape(P))
         expect({ status, rebasedWhileHeld: errorsAtArm === 0 && received.includes('patch-error'), armed, stillShown, final }).toEqual({
           status: 200,
           rebasedWhileHeld: true,
@@ -540,7 +635,9 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
           await page.mouse.up()
           await page.waitForTimeout(800)
           expect({ armed, status, afterRemoved }).toEqual({ armed: ['inside'], status: 200, afterRemoved: [] })
-          expect(await shape(P)).toEqual({ ROOT: ['n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_mid', 'n_t0', 'n_t1', 'n_t2', 'n_t3', 'n_end'] })
+          expect(await shape(P)).toEqual({
+            ROOT: ['n_top', { n_card: ['n_k0', 'n_k1'] }, 'n_mid', 'n_t0', 'n_t1', 'n_t2', 'n_t3', 'n_end'],
+          })
         } finally {
           await close()
         }
@@ -550,7 +647,9 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         const { P } = await fixture('tree-shifted', DOC)
         const { page, close, armed } = await armedOnRow(P, 'n_mid', 0.15)
         try {
-          const status = await bobOps(P, [{ op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+          const status = await bobOps(P, [
+            { op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } },
+          ])
           await treeRow(page, 'n_bob').waitFor({ state: 'attached' })
           await page.waitForTimeout(150)
           const afterShift = (await indicators(page)).map((h) => h.placement)
@@ -571,14 +670,21 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         const { P } = await fixture('tree-follow', DOC)
         const { page, close, armed } = await armedOnRow(P, 'n_t1', 0.15)
         try {
-          const status = await bobOps(P, [{ op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+          const status = await bobOps(P, [
+            { op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } },
+          ])
           await treeRow(page, 'n_bob').waitFor({ state: 'attached' })
           await page.waitForTimeout(150)
           const shown = await indicators(page)
           const t0 = (await treeRow(page, 'n_t0').boundingBox())!
           await page.mouse.up()
           await page.waitForTimeout(800)
-          expect({ armed, status, shown: shown.map((h) => h.placement), onT0: shown.length === 1 && Math.abs(shown[0]!.rect.y - t0.y) < 2 }).toEqual({
+          expect({
+            armed,
+            status,
+            shown: shown.map((h) => h.placement),
+            onT0: shown.length === 1 && Math.abs(shown[0]!.rect.y - t0.y) < 2,
+          }).toEqual({
             armed: ['before'],
             status: 200,
             shown: ['before'],
@@ -600,7 +706,12 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
           const status = await bobOps(P, [{ op: 'remove', path: '/root/children/1/children/1' }])
           await treeRow(page, 'n_k1').waitFor({ state: 'detached' })
           await page.mouse.up()
-          const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s).includes('n_t3"]'), 3000).catch(() => shape(P))
+          const final = await poll(
+            '서버 문서',
+            () => shape(P),
+            (s) => JSON.stringify(s).includes('n_t3"]'),
+            3000,
+          ).catch(() => shape(P))
           expect({ armed, status, final }).toEqual({
             armed: ['inside'],
             status: 200,
@@ -650,7 +761,9 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       const at = { x: grid.x + (grid.width * (col + 0.5)) / 3, y: g0.y + g0.height / 2 }
       await grabTo(tab.page, at)
       const armed = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
-      const status = await bobOps(P, [{ op: 'add', path: '/root/children/1/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+      const status = await bobOps(P, [
+        { op: 'add', path: '/root/children/1/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } },
+      ])
       await canvasFrame(tab.page).locator('[data-wb-id="n_bob"]').waitFor()
       await tab.page.waitForTimeout(150)
       const afterInsert = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
@@ -661,7 +774,12 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       const { page, close, P, armed, status, afterInsert } = await armedInGrid('inside-kept', 2)
       try {
         await page.mouse.up()
-        const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s).includes('n_t3"]'), 3000).catch(() => shape(P))
+        const final = await poll(
+          '서버 문서',
+          () => shape(P),
+          (s) => JSON.stringify(s).includes('n_t3"]'),
+          3000,
+        ).catch(() => shape(P))
         expect({ armed, status, afterInsert, final }).toEqual({
           armed: ['inside:null'],
           status: 200,
@@ -699,12 +817,19 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         const g0 = await nodeBox(tab.page, 'n_g0')
         await grabTo(tab.page, { x: grid.x + (grid.width * 1.5) / 3, y: g0.y + g0.height / 2 })
         const armed = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
-        const status = await bobOps(P, [{ op: 'add', path: '/root/children/1/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } }])
+        const status = await bobOps(P, [
+          { op: 'add', path: '/root/children/1/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob' } } },
+        ])
         await canvasFrame(tab.page).locator('[data-wb-id="n_bob"]').waitFor()
         await tab.page.waitForTimeout(150)
         const afterInsert = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
         await tab.page.mouse.up()
-        const final = await poll('서버 문서', () => shape(P), (s) => JSON.stringify(s).includes('n_t3"]'), 3000).catch(() => shape(P))
+        const final = await poll(
+          '서버 문서',
+          () => shape(P),
+          (s) => JSON.stringify(s).includes('n_t3"]'),
+          3000,
+        ).catch(() => shape(P))
         expect({ armed, status, afterInsert, final }).toEqual({
           armed: ['inside:null'],
           status: 200,
@@ -761,14 +886,18 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
           await grabTo(tab.page, { x: mid.x + mid.width * (side === 'left' ? 0.2 : 0.8), y: mid.y + mid.height / 2 })
           const shown = await indicators(tab.page)
           // 미리보기가 보이는 가로 차례의 어디에 섰나 — 자식 셋의 왼끝 사이에서 미리보기 왼끝이 몇 번째인가.
-          const lefts = Object.values(boxes).map((box) => box.x).sort((a, b) => a - b)
+          const lefts = Object.values(boxes)
+            .map((box) => box.x)
+            .sort((a, b) => a - b)
           const rank = shown.length === 0 ? -1 : lefts.filter((x) => x < shown[0]!.rect.x - 1).length
           out[side] = shown.length === 0 ? '없음' : `${shown[0]!.placement}:${shown[0]!.prev}→${shown[0]!.next} 보이는 ${rank}번째`
           await tab.page.keyboard.press('Escape')
           await tab.page.mouse.up()
           await tab.page.waitForTimeout(100)
         }
-        const visual = Object.entries(boxes).sort((a, b) => a[1].x - b[1].x).map(([id]) => id)
+        const visual = Object.entries(boxes)
+          .sort((a, b) => a[1].x - b[1].x)
+          .map(([id]) => id)
         return { ...out, visual }
       } finally {
         await tab.close()
@@ -778,7 +907,11 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
     it('direction: rtl — 왼쪽 절반이 문서의 «뒤» 다(보이는 오른쪽 끝이 첫 자식)', async () => {
       const got = await previewAt('[data-wb-id="n_row"]{direction:rtl}', 'n_r1')
       // 왼쪽 절반(포인터가 n_r1 의 왼쪽 = n_r2 쪽)은 «n_r1 뒤» 이고 미리보기가 n_r1 의 왼쪽(보이는 둘째 자리 — 앞에 n_r2 · n_r1 이 아닌 …)에 선다.
-      expect(got).toEqual({ visual: ['n_r2', 'n_r1', 'n_r0'], left: expect.stringMatching(/^after:n_r1→n_r2 /), right: expect.stringMatching(/^before:n_r0→n_r1 /) })
+      expect(got).toEqual({
+        visual: ['n_r2', 'n_r1', 'n_r0'],
+        left: expect.stringMatching(/^after:n_r1→n_r2 /),
+        right: expect.stringMatching(/^before:n_r0→n_r1 /),
+      })
     })
 
     /**
@@ -789,7 +922,11 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
      */
     it('기록 — order 는 안 읽는다: 보이는 맨 끝의 오른쪽 절반이 «보이는 맨 앞» 에 미리보기를 세운다', async () => {
       const got = await previewAt('[data-wb-id="n_r0"]{order:2}', 'n_r0')
-      expect(got).toEqual({ visual: ['n_r1', 'n_r2', 'n_r0'], left: expect.stringMatching(/^before:/), right: 'after:n_r0→n_r1 보이는 0번째' })
+      expect(got).toEqual({
+        visual: ['n_r1', 'n_r2', 'n_r0'],
+        left: expect.stringMatching(/^before:/),
+        right: 'after:n_r0→n_r1 보이는 0번째',
+      })
     })
   })
 
@@ -813,7 +950,11 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       const a = await openTab(P, 'alice', delay.origin)
       const b = await openTab(P, 'bob')
       try {
-        await poll('alice 의 WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
+        await poll(
+          'alice 의 WS 가 늦춰진 채 붙는다',
+          async () => delay.delayed(),
+          (n) => n >= 1,
+        )
         await a.page.waitForTimeout(4500)
         await select(b.page, 'n_card')
         await select(a.page, 'n_intx')
@@ -823,7 +964,12 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         const armed = (await indicators(a.page)).map((h) => h.placement)
         // 기다림은 «bob 의 잠금 소식이 닿았다» 까지만 — 손잡이가 걷혔는지는 그 뒤 값으로 견준다(시간 초과로 죽지 않게).
         const locksBefore = a.received.filter((kind) => kind === 'locks').length
-        await poll('bob 의 잠금 소식이 alice 에게 닿는다', async () => a.received.filter((kind) => kind === 'locks').length, (n) => n > locksBefore, 8000)
+        await poll(
+          'bob 의 잠금 소식이 alice 에게 닿는다',
+          async () => a.received.filter((kind) => kind === 'locks').length,
+          (n) => n > locksBefore,
+          8000,
+        )
         await a.page.waitForTimeout(200)
         const afterLock = { handle: await handle(a.page).count(), shown: (await indicators(a.page)).length }
         await a.page.mouse.move(empty.x + empty.width / 2 + 6, empty.y + empty.height / 2)
@@ -855,7 +1001,12 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         const aliceId = members.find((m) => m.email === stack.users.alice.email)!.userId
         const demote = (await stack.request(bob, 'PATCH', `/projects/${projectId}/members/${aliceId}`, { role: 'viewer' })).status
         // 강등 소식(`membership-changed`)이 닿은 뒤 셸이 역할을 다시 읽을 짬을 두고 값으로 견준다(시간 초과로 죽지 않게).
-        await poll('강등 소식이 alice 에게 닿는다', async () => a.received.includes('membership-changed'), (got) => got, 5000)
+        await poll(
+          '강등 소식이 alice 에게 닿는다',
+          async () => a.received.includes('membership-changed'),
+          (got) => got,
+          5000,
+        )
         await a.page.waitForTimeout(1000)
         const afterDemote = { handle: await handle(a.page).count(), shown: (await indicators(a.page)).length }
         await a.page.mouse.move(empty.x + empty.width / 2 + 6, empty.y + empty.height / 2)
@@ -904,9 +1055,18 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         await a.page.waitForTimeout(400)
         // 고른 노드는 Escape **앞에서** 읽는다 — Escape 는 선택 해제 단축키다(정본 「설계서 화면 구조」의 단축키). 뒤의 Escape 는 오른쪽 단추가 연
         // 것이 있으면 닫는 정리다.
-        const selected = await a.page.evaluate(() => document.querySelector('.wb-shell-selection')?.getAttribute('data-wb-selected-id') ?? null)
+        const selected = await a.page.evaluate(
+          () => document.querySelector('.wb-shell-selection')?.getAttribute('data-wb-selected-id') ?? null,
+        )
         await a.page.keyboard.press('Escape')
-        expect({ overlaps: overlap.w > 0 && overlap.h > 0, hit, rightShown, selected, sent: a.patches.length, doc: await shape(P) }).toEqual({
+        expect({
+          overlaps: overlap.w > 0 && overlap.h > 0,
+          hit,
+          rightShown,
+          selected,
+          sent: a.patches.length,
+          doc: await shape(P),
+        }).toEqual({
           overlaps: true,
           hit: 'wb-shell-canvas-handle',
           rightShown: 0,

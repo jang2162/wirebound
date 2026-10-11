@@ -99,12 +99,7 @@ import { EmptyProjectError, UnsupportedDocumentError, readExportRows } from '../
 import { ExportAbortedError, ExportWorkerPool, type ExportAdmission } from '../services/export-worker'
 import type { HtmlJobResult, PptxJobResult } from '../services/export-worker-protocol'
 import type { ScreenRenderer } from '../services/screen-render'
-import {
-  PPTX_CONTENT_TYPE,
-  bundleFileName,
-  bundleRootDirectory,
-  pptxFileName,
-} from '../services/export-zip'
+import { PPTX_CONTENT_TYPE, bundleFileName, bundleRootDirectory, pptxFileName } from '../services/export-zip'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 
@@ -313,48 +308,52 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer; render
      * 거짓을 말한다. *"번들 자신이 말한다"* — 그 페이지의 상태
      * 줄에 이유가 뜬다.
      */
-    app.get('/:projectId/export/preview', { preHandler: projectGuard('viewer') }, quietWhenGone(async (request, reply) => {
-      const { projectId } = parseParams(ProjectIdParams, request.params)
-      const { format } = parseQuery(FormatQuery, request.query)
-      const signal = abortOnClientGone(request, reply)
+    app.get(
+      '/:projectId/export/preview',
+      { preHandler: projectGuard('viewer') },
+      quietWhenGone(async (request, reply) => {
+        const { projectId } = parseParams(ProjectIdParams, request.params)
+        const { format } = parseQuery(FormatQuery, request.query)
+        const signal = abortOnClientGone(request, reply)
 
-      if (format === 'pptx') {
-        const pptx = await buildPptxOrFail(app, workers, request, projectId, screenRenderer, false, signal)
+        if (format === 'pptx') {
+          const pptx = await buildPptxOrFail(app, workers, request, projectId, screenRenderer, false, signal)
+          return {
+            format,
+            pages: pptx.pages,
+            /**
+             * **아무도 안 그린 페이지들.** 그리는 자가 없으면 전부다.
+             * *"그리려다 실패했다"*는 아래 `screenFailures`로 간다 — 둘이 접히면 화면이
+             * 거짓을 말한다.
+             */
+            screenless: pptx.screenless,
+            /** **그리려다 죽은 페이지들과 그 이유.** 번들의 `errors`가 있는 자리다. */
+            screenFailures: pptx.screenFailures,
+            /** 그린 기계에 한글 글꼴이 없었다. 없으면 `null`이다. */
+            fontWarning: pptx.fontWarning,
+            fileName: pptxFileName(await projectSlug(app, projectId)),
+          }
+        }
+
+        const bundle = await buildHtmlOrFail(app, workers, request, projectId, null, signal)
+
         return {
           format,
-          pages: pptx.pages,
-          /**
-           * **아무도 안 그린 페이지들.** 그리는 자가 없으면 전부다.
-           * *"그리려다 실패했다"*는 아래 `screenFailures`로 간다 — 둘이 접히면 화면이
-           * 거짓을 말한다.
-           */
-          screenless: pptx.screenless,
-          /** **그리려다 죽은 페이지들과 그 이유.** 번들의 `errors`가 있는 자리다. */
-          screenFailures: pptx.screenFailures,
-          /** 그린 기계에 한글 글꼴이 없었다. 없으면 `null`이다. */
-          fontWarning: pptx.fontWarning,
-          fileName: pptxFileName(await projectSlug(app, projectId)),
+          pages: bundle.pages,
+          duplicateTargets: bundle.duplicateTargets,
+          brokenLinks: bundle.brokenLinks,
+          // `errors[].error`는 `NodeRenderError`다 — 그대로 싣는다. 화면이 `title`로
+          // 어느 페이지인지 말한다(경로는 잘리거나 순번이 붙어 제목과 다를 수 있다).
+          errors: bundle.errors,
+          /** 번들이 실은 테마(`"id@판"`) — 바인딩이 없거나 패키지를 못 읽었으면 `null`(기본 뷰). */
+          themeId: bundle.themeId,
+          /** 바인딩은 있는데 패키지를 못 읽은 까닭. 정상이면 `null`. */
+          themeWarning: bundle.themeWarning,
+          /** 내려받을 때 붙을 이름. **화면이 이것을 지어내지 않는다** — 두 벌이면 갈린다. */
+          fileName: bundleFileName(await projectSlug(app, projectId)),
         }
-      }
-
-      const bundle = await buildHtmlOrFail(app, workers, request, projectId, null, signal)
-
-      return {
-        format,
-        pages: bundle.pages,
-        duplicateTargets: bundle.duplicateTargets,
-        brokenLinks: bundle.brokenLinks,
-        // `errors[].error`는 `NodeRenderError`다 — 그대로 싣는다. 화면이 `title`로
-        // 어느 페이지인지 말한다(경로는 잘리거나 순번이 붙어 제목과 다를 수 있다).
-        errors: bundle.errors,
-        /** 번들이 실은 테마(`"id@판"`) — 바인딩이 없거나 패키지를 못 읽었으면 `null`(기본 뷰). */
-        themeId: bundle.themeId,
-        /** 바인딩은 있는데 패키지를 못 읽은 까닭. 정상이면 `null`. */
-        themeWarning: bundle.themeWarning,
-        /** 내려받을 때 붙을 이름. **화면이 이것을 지어내지 않는다** — 두 벌이면 갈린다. */
-        fileName: bundleFileName(await projectSlug(app, projectId)),
-      }
-    }))
+      }),
+    )
 
     /**
      * **zip 그 자체.**
@@ -367,24 +366,28 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer; render
      * **요청** 쪽이고 응답에는 걸리지 않는다). 번들 전체가 페이지 수의 제곱이므로
      * 언젠가 이 자리가 물음이 된다.
      */
-    app.get('/:projectId/export', { preHandler: projectGuard('viewer') }, quietWhenGone(async (request, reply) => {
-      const { projectId } = parseParams(ProjectIdParams, request.params)
-      const { format } = parseQuery(FormatQuery, request.query)
-      const slug = await projectSlug(app, projectId)
-      const signal = abortOnClientGone(request, reply)
+    app.get(
+      '/:projectId/export',
+      { preHandler: projectGuard('viewer') },
+      quietWhenGone(async (request, reply) => {
+        const { projectId } = parseParams(ProjectIdParams, request.params)
+        const { format } = parseQuery(FormatQuery, request.query)
+        const slug = await projectSlug(app, projectId)
+        const signal = abortOnClientGone(request, reply)
 
-      if (format === 'pptx') {
-        // **뿌리 폴더가 없다** — 워커가 `zipParts`로 묶는다(`services/export-job.ts`). `[Content_Types].xml`이 패키지
-        // 뿌리에 있어야 하고, 폴더 하나를 씌우면 받는 쪽이 그것을 못 찾아 **파일이 통째로 안 열린다.**
-        const pptx = await buildPptxOrFail(app, workers, request, projectId, screenRenderer, true, signal)
-        reply.header(SCREEN_FAILURES_HEADER, String(pptx.screenFailures.length))
-        reply.header(SCREENLESS_HEADER, String(pptx.screenless.length))
-        return sendFile(reply, pptx.zip!, PPTX_CONTENT_TYPE, pptxFileName(slug))
-      }
+        if (format === 'pptx') {
+          // **뿌리 폴더가 없다** — 워커가 `zipParts`로 묶는다(`services/export-job.ts`). `[Content_Types].xml`이 패키지
+          // 뿌리에 있어야 하고, 폴더 하나를 씌우면 받는 쪽이 그것을 못 찾아 **파일이 통째로 안 열린다.**
+          const pptx = await buildPptxOrFail(app, workers, request, projectId, screenRenderer, true, signal)
+          reply.header(SCREEN_FAILURES_HEADER, String(pptx.screenFailures.length))
+          reply.header(SCREENLESS_HEADER, String(pptx.screenless.length))
+          return sendFile(reply, pptx.zip!, PPTX_CONTENT_TYPE, pptxFileName(slug))
+        }
 
-      const bundle = await buildHtmlOrFail(app, workers, request, projectId, bundleRootDirectory(slug), signal)
-      return sendFile(reply, bundle.zip!, 'application/zip', bundleFileName(slug))
-    }))
+        const bundle = await buildHtmlOrFail(app, workers, request, projectId, bundleRootDirectory(slug), signal)
+        return sendFile(reply, bundle.zip!, 'application/zip', bundleFileName(slug))
+      }),
+    )
   }
 }
 
@@ -398,12 +401,7 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer; render
  * **형식마다 다시 적지 않는다** — 헤더 둘 중 하나를 빠뜨리면 브라우저가 파일을 열어
  * 보이거나 이름 없이 저장하고, 그 사고는 형식마다 따로 난다.
  */
-function sendFile(
-  reply: FastifyReply,
-  bytes: Uint8Array,
-  contentType: string,
-  fileName: string,
-): Buffer {
+function sendFile(reply: FastifyReply, bytes: Uint8Array, contentType: string, fileName: string): Buffer {
   reply.header('content-type', contentType)
   reply.header('content-disposition', `attachment; filename="${fileName}"`)
   // 워커가 옮겨 준 버퍼를 그대로 감싼다 — 복제하지 않는다.

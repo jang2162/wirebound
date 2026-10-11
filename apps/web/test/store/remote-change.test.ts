@@ -39,13 +39,15 @@ function warning(nodeId: string): ValidationIssue {
 
 /** 페이지 하나를 열어 둔 스토어. */
 function opened(): EditorStore {
-  const store = new EditorStore({ nextOpId: (() => {
-    let issued = 0
-    return () => {
-      issued += 1
-      return `op_${issued}`
-    }
-  })() })
+  const store = new EditorStore({
+    nextOpId: (() => {
+      let issued = 0
+      return () => {
+        issued += 1
+        return `op_${issued}`
+      }
+    })(),
+  })
   store.loadPage('page_1', doc(), 4)
   return store
 }

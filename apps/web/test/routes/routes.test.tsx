@@ -59,9 +59,7 @@ function renderAt(route: string): void {
           root: {
             id: 'n_00000000000a',
             type: 'Page',
-            children: [
-              { id: 'n_00000000000b', type: 'Text', props: { content: `페이지 ${pageId}` } },
-            ],
+            children: [{ id: 'n_00000000000b', type: 'Text', props: { content: `페이지 ${pageId}` } }],
           },
         },
       }),

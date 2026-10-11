@@ -303,18 +303,21 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
   /** **다른 탭에 알리는 자리는 여기 하나다**(위 머리말 «탭 사이»). 통로가 없으면 아무것도 안 한다. */
   const announce = useCallback((news: SessionNews) => channel?.post(news), [channel])
 
-  const signOut = useCallback((notice?: string) => {
-    // **명시적 로그아웃이면 이 탭의 초안 사본을 지운다**(아래 «초안의 사본») — 세션을 끝내기 **전에**: 지운 뒤에
-    // 그 사람의 화면이 한 번 더 커밋돼도 저장소가 그것을 받지 않는다(`panels/draft-store.tsx`의 `generation`).
-    // **올린 세대를 소식에 싣는다** — 듣는 탭은 그 번호로 `max`만 한다(`panels/draft-store.tsx`의 «표지는 세대 번호다»).
-    const era = drafts?.forget()
-    // **한 줄은 이 로그아웃이 연 세대에 매단다**(`useSignOutNotice`).
-    setSession((current) => {
-      const next = ended(current)
-      return { ...next, farewell: notice === undefined ? null : { epoch: next.epoch, text: notice } }
-    })
-    announce(era === undefined ? { kind: 'signed-out' } : { kind: 'signed-out', era })
-  }, [announce, drafts])
+  const signOut = useCallback(
+    (notice?: string) => {
+      // **명시적 로그아웃이면 이 탭의 초안 사본을 지운다**(아래 «초안의 사본») — 세션을 끝내기 **전에**: 지운 뒤에
+      // 그 사람의 화면이 한 번 더 커밋돼도 저장소가 그것을 받지 않는다(`panels/draft-store.tsx`의 `generation`).
+      // **올린 세대를 소식에 싣는다** — 듣는 탭은 그 번호로 `max`만 한다(`panels/draft-store.tsx`의 «표지는 세대 번호다»).
+      const era = drafts?.forget()
+      // **한 줄은 이 로그아웃이 연 세대에 매단다**(`useSignOutNotice`).
+      setSession((current) => {
+        const next = ended(current)
+        return { ...next, farewell: notice === undefined ? null : { epoch: next.epoch, text: notice } }
+      })
+      announce(era === undefined ? { kind: 'signed-out' } : { kind: 'signed-out', era })
+    },
+    [announce, drafts],
+  )
 
   const confirm = useCallback(
     (sessionUser: SessionUser) => {

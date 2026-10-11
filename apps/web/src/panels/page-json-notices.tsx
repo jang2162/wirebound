@@ -46,9 +46,7 @@ export function PageJsonNoticeList(props: { notices: PageJsonNotices }): ReactEl
   const { notices } = props
   return (
     <>
-      {notices.imported !== null && (
-        <PageImportedNotice imported={notices.imported} onDismiss={() => notices.showImported(null)} />
-      )}
+      {notices.imported !== null && <PageImportedNotice imported={notices.imported} onDismiss={() => notices.showImported(null)} />}
       {notices.exportFailure !== null && (
         <PageExportFailure failure={notices.exportFailure} onDismiss={() => notices.showExportFailure(null)} />
       )}
@@ -67,8 +65,7 @@ function PageImportedNotice(props: { imported: PageImported; onDismiss: () => vo
         </p>
         {imported.comments.dangling > 0 && (
           <p className="wb-shell-pagejson-notice-line">
-            그중 {imported.comments.dangling}개는 가리키던 노드가 파일에 없어 <strong>&ldquo;사라진 노드&rdquo;</strong>로
-            들어갔습니다.
+            그중 {imported.comments.dangling}개는 가리키던 노드가 파일에 없어 <strong>&ldquo;사라진 노드&rdquo;</strong>로 들어갔습니다.
           </p>
         )}
         {imported.ignoredLayoutRef !== undefined && (
@@ -77,7 +74,13 @@ function PageImportedNotice(props: { imported: PageImported; onDismiss: () => vo
           </p>
         )}
       </div>
-      <button type="button" className="wb-shell-edit-alert-close" aria-label="가져오기 결과 닫기" title="가져오기 결과 닫기" onClick={props.onDismiss}>
+      <button
+        type="button"
+        className="wb-shell-edit-alert-close"
+        aria-label="가져오기 결과 닫기"
+        title="가져오기 결과 닫기"
+        onClick={props.onDismiss}
+      >
         {shellIcon('close', 14)}
       </button>
     </div>
@@ -92,7 +95,13 @@ function PageExportFailure(props: { failure: Failure; onDismiss: () => void }): 
       <p className="wb-shell-pagejson-notice-line" role="alert">
         {props.failure.message}
       </p>
-      <button type="button" className="wb-shell-edit-alert-close" aria-label="내보내기 실패 닫기" title="내보내기 실패 닫기" onClick={props.onDismiss}>
+      <button
+        type="button"
+        className="wb-shell-edit-alert-close"
+        aria-label="내보내기 실패 닫기"
+        title="내보내기 실패 닫기"
+        onClick={props.onDismiss}
+      >
         {shellIcon('close', 14)}
       </button>
     </div>

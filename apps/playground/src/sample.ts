@@ -61,9 +61,7 @@ export const samplePage: PageDocument = {
         interactions: [
           {
             on: 'select',
-            actions: [
-              { type: 'navigate', target: 'page:관리자/회원/상세' },
-            ],
+            actions: [{ type: 'navigate', target: 'page:관리자/회원/상세' }],
           },
         ],
       },

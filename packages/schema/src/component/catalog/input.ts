@@ -37,9 +37,7 @@ export const FieldDef = defineComponent({
   group: 'input',
   props: z.strictObject({
     label: z.string().default('라벨'),
-    control: z
-      .enum(['text', 'number', 'select', 'date', 'dateRange', 'checkbox', 'radio', 'textarea', 'file'])
-      .default('text'),
+    control: z.enum(['text', 'number', 'select', 'date', 'dateRange', 'checkbox', 'radio', 'textarea', 'file']).default('text'),
     placeholder: z.string().default(''),
     required: z.boolean().default(false),
     disabled: z.boolean().default(false),

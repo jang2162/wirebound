@@ -15,8 +15,6 @@ import type { DbHandle } from './tx'
  */
 export function assertLocking(trx: DbHandle, fnName: string): void {
   if (!trx.isTransaction) {
-    throw new Error(
-      `${fnName}은 트랜잭션 핸들(trx)로만 불러야 합니다 — 그렇지 않으면 FOR UPDATE 잠금이 이 문장 직후 즉시 풀립니다.`,
-    )
+    throw new Error(`${fnName}은 트랜잭션 핸들(trx)로만 불러야 합니다 — 그렇지 않으면 FOR UPDATE 잠금이 이 문장 직후 즉시 풀립니다.`)
   }
 }

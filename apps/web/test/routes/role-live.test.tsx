@@ -39,7 +39,14 @@ const OTHER_DOC: PageDocument = pageDoc({
   children: [{ id: 'n-x', type: 'Card', props: { title: '상세' } }],
 })
 
-const project = (role: ProjectRole): ProjectView => ({ id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role, themeRev: 0 })
+const project = (role: ProjectRole): ProjectView => ({
+  id: PROJECT_ID,
+  name: PROJECT_NAME,
+  slug: 'admin-console',
+  description: null,
+  role,
+  themeRev: 0,
+})
 
 const MEMBERSHIP = { type: 'membership-changed', projectId: PROJECT_ID }
 /** 밥이 그 노드를 쥐었다 — 서버의 `locks` 프레임(프로젝트 전부). */

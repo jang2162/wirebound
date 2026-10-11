@@ -397,9 +397,12 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       await page.waitForTimeout(600)
       const midWrites = [...tab.writes]
       await dropAt(page, await spot(page, ids['나2']!, 'top'))
-      const tree = await poll('서버 트리', () => serverTree(projectId), (menu) => find(menu, '나')!.pages.length === 4, 5_000).catch(
-        async () => serverTree(projectId),
-      )
+      const tree = await poll(
+        '서버 트리',
+        () => serverTree(projectId),
+        (menu) => find(menu, '나')!.pages.length === 4,
+        5_000,
+      ).catch(async () => serverTree(projectId))
 
       expect({
         focused,
@@ -519,7 +522,9 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       // 둘째 손가락 · 펜이 다른 자리(트리 밖)에서 떨어진다 — 끄는 첫 포인터(마우스)는 아직 누른 채다.
       await page.evaluate(
         ({ x, y }) => {
-          window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 77, pointerType: 'touch', clientX: x, clientY: y, bubbles: true }))
+          window.dispatchEvent(
+            new PointerEvent('pointerup', { pointerId: 77, pointerType: 'touch', clientX: x, clientY: y, bubbles: true }),
+          )
         },
         { x: target.x, y: target.y },
       )
@@ -644,7 +649,12 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       try {
         await grab(tab.page, ids['가2']!)
         await dropAt(tab.page, await spot(tab.page, ids[over]!, zone))
-        const tree = await poll('서버 트리', () => serverTree(projectId), (menu) => find(menu, '나')!.pages.length === 4, 5_000)
+        const tree = await poll(
+          '서버 트리',
+          () => serverTree(projectId),
+          (menu) => find(menu, '나')!.pages.length === 4,
+          5_000,
+        )
         got.push(titles(find(tree, '나')!.pages))
       } finally {
         await tab.close()
@@ -671,7 +681,12 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       try {
         await grab(tab.page, ids['다']!)
         await dropAt(tab.page, await spot(tab.page, ids[over]!, zone))
-        const tree = await poll('서버 트리', () => serverTree(projectId), (menu) => menu.length === 2, 5_000)
+        const tree = await poll(
+          '서버 트리',
+          () => serverTree(projectId),
+          (menu) => menu.length === 2,
+          5_000,
+        )
         got.down.push(titles(find(tree, '가')!.children))
       } finally {
         await tab.close()
@@ -683,7 +698,12 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       try {
         await grab(tab.page, ids['가-하위']!)
         await dropAt(tab.page, await spot(tab.page, ids[over]!, zone))
-        const tree = await poll('서버 트리', () => serverTree(projectId), (menu) => menu.length === 4, 5_000)
+        const tree = await poll(
+          '서버 트리',
+          () => serverTree(projectId),
+          (menu) => menu.length === 4,
+          5_000,
+        )
         got.up.push(titles(tree))
       } finally {
         await tab.close()
@@ -706,17 +726,29 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       page
         .locator('.wb-shell-region[aria-label="메뉴·페이지 트리"] [data-tree-row][data-tree-kind="page"]')
         .evaluateAll((rows) => rows.map((r) => r.getAttribute('data-tree-id')))
-        .then((list) => list.filter((id) => [ids['나1'], ids['나2'], ids['나3']].includes(id!)).map((id) => Object.keys(ids).find((k) => ids[k] === id)))
+        .then((list) =>
+          list.filter((id) => [ids['나1'], ids['나2'], ids['나3']].includes(id!)).map((id) => Object.keys(ids).find((k) => ids[k] === id)),
+        )
     try {
       await grab(aliceTab.page, ids['나3']!)
       await dropAt(aliceTab.page, await spot(aliceTab.page, ids['나1']!, 'top'))
-      const first = await poll('서버 트리', () => serverTree(projectId), (menu) => titles(find(menu, '나')!.pages)[0] === '나3', 5_000)
+      const first = await poll(
+        '서버 트리',
+        () => serverTree(projectId),
+        (menu) => titles(find(menu, '나')!.pages)[0] === '나3',
+        5_000,
+      )
       await bobTab.page.waitForTimeout(800)
       const bobSeesBefore = await pagesOfNa(bobTab.page)
       // bob 의 뜻 — 나1 을 나2 뒤로.
       await grab(bobTab.page, ids['나1']!)
       await dropAt(bobTab.page, await spot(bobTab.page, ids['나2']!, 'bottom'))
-      await poll('bob 의 요청', async () => bobTab.writes.length, (n) => n === 1, 5_000)
+      await poll(
+        'bob 의 요청',
+        async () => bobTab.writes.length,
+        (n) => n === 1,
+        5_000,
+      )
       await bobTab.page.waitForTimeout(600)
       const second = await serverTree(projectId)
 
@@ -749,7 +781,9 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       page
         .locator('.wb-shell-region[aria-label="메뉴·페이지 트리"] [data-tree-row][data-tree-kind="page"]')
         .evaluateAll((rows) => rows.map((r) => r.getAttribute('data-tree-id')))
-        .then((list) => list.filter((id) => [ids['나1'], ids['나2'], ids['나3']].includes(id!)).map((id) => Object.keys(ids).find((k) => ids[k] === id)))
+        .then((list) =>
+          list.filter((id) => [ids['나1'], ids['나2'], ids['나3']].includes(id!)).map((id) => Object.keys(ids).find((k) => ids[k] === id)),
+        )
     try {
       await bobTab.page.waitForTimeout(300)
       await grab(bobTab.page, ids['나1']!)
@@ -757,10 +791,20 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       const liftedBefore = await lifted()
       const moved = await stack.request(alice, 'PATCH', `/projects/${projectId}/pages/${ids['나3']}`, { sortOrder: 0 })
       expect(moved.status).toBe(200)
-      const seenDuring = await poll('bob 의 트리가 새 차례로', () => order(bobTab.page), (now) => now[0] === '나3', 5_000).catch(() => null)
+      const seenDuring = await poll(
+        'bob 의 트리가 새 차례로',
+        () => order(bobTab.page),
+        (now) => now[0] === '나3',
+        5_000,
+      ).catch(() => null)
       const liftedDuring = await lifted()
       await dropAt(bobTab.page, await spot(bobTab.page, ids['나2']!, 'bottom'))
-      await poll('bob 의 요청', async () => bobTab.writes.length, (n) => n === 1, 5_000)
+      await poll(
+        'bob 의 요청',
+        async () => bobTab.writes.length,
+        (n) => n === 1,
+        5_000,
+      )
       await bobTab.page.waitForTimeout(600)
       expect({
         liftedBefore,
@@ -941,48 +985,51 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       const table: Record<string, { deleted: boolean; confirm: number; under: unknown }> = {}
       for (const width of widths) {
         for (const at of ['left', 'middle', 'right'] as const) {
-        for (const gesture of ['dblclick', 'twice'] as const) {
-          const { projectId, P, ids } = await menuFixture(`del-${width}-${at}-${gesture}`)
-          const tab = await openEditor(P, 'alice', { width, height: 900 })
-          try {
-            const { page } = tab
-            const over = await spot(page, ids['나2']!, 'middle')
-            await page.mouse.move(over.x, over.y)
-            await row(page, ids['나2']!).getByRole('button', { name: '나2 더 보기' }).click()
-            const item = page.getByRole('menuitem', { name: '삭제' })
-            const box = (await item.boundingBox())!
-            const points = {
-              left: { x: box.x + 3, y: box.y + box.height / 2 },
-              middle: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-              right: { x: box.x + box.width - 3, y: box.y + box.height / 2 },
-            }
-            const pressAt = points[at]
-            if (gesture === 'dblclick') {
-              await page.mouse.dblclick(pressAt.x, pressAt.y)
-            } else {
-              await page.mouse.click(pressAt.x, pressAt.y)
-              await page.waitForTimeout(350)
-              await page.mouse.click(pressAt.x, pressAt.y)
-            }
-            await page.waitForTimeout(500)
-            const under = await page.evaluate((pts) => {
-              const out: Record<string, string> = {}
-              for (const [key, p] of Object.entries(pts)) {
-                const el = document.elementFromPoint(p.x, p.y)
-                out[key] = el === null ? 'null' : `${el.tagName.toLowerCase()}:${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 12)}`
+          for (const gesture of ['dblclick', 'twice'] as const) {
+            const { projectId, P, ids } = await menuFixture(`del-${width}-${at}-${gesture}`)
+            const tab = await openEditor(P, 'alice', { width, height: 900 })
+            try {
+              const { page } = tab
+              const over = await spot(page, ids['나2']!, 'middle')
+              await page.mouse.move(over.x, over.y)
+              await row(page, ids['나2']!).getByRole('button', { name: '나2 더 보기' }).click()
+              const item = page.getByRole('menuitem', { name: '삭제' })
+              const box = (await item.boundingBox())!
+              const points = {
+                left: { x: box.x + 3, y: box.y + box.height / 2 },
+                middle: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+                right: { x: box.x + box.width - 3, y: box.y + box.height / 2 },
               }
-              return out
-            }, points)
-            const tree = await serverTree(projectId)
-            table[`${width}/${at}/${gesture}`] = {
-              deleted: !titles(find(tree, '나')!.pages).includes('나2'),
-              confirm: await page.getByRole('button', { name: '정말 삭제합니까?' }).count(),
-              under,
+              const pressAt = points[at]
+              if (gesture === 'dblclick') {
+                await page.mouse.dblclick(pressAt.x, pressAt.y)
+              } else {
+                await page.mouse.click(pressAt.x, pressAt.y)
+                await page.waitForTimeout(350)
+                await page.mouse.click(pressAt.x, pressAt.y)
+              }
+              await page.waitForTimeout(500)
+              const under = await page.evaluate((pts) => {
+                const out: Record<string, string> = {}
+                for (const [key, p] of Object.entries(pts)) {
+                  const el = document.elementFromPoint(p.x, p.y)
+                  out[key] =
+                    el === null
+                      ? 'null'
+                      : `${el.tagName.toLowerCase()}:${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 12)}`
+                }
+                return out
+              }, points)
+              const tree = await serverTree(projectId)
+              table[`${width}/${at}/${gesture}`] = {
+                deleted: !titles(find(tree, '나')!.pages).includes('나2'),
+                confirm: await page.getByRole('button', { name: '정말 삭제합니까?' }).count(),
+                under,
+              }
+            } finally {
+              await tab.close()
             }
-          } finally {
-            await tab.close()
           }
-        }
         }
       }
       // eslint-disable-next-line no-console
@@ -1054,7 +1101,10 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       await page.waitForTimeout(600)
       const tree = await serverTree(projectId)
       // 첫 Enter 가 확인 단추에 포커스를 옮겨 둘째 Enter 가 지운다 — 옛 툴바(«삭제» 단추가 제자리에서 «정말 삭제합니까?»로 바뀜)와 같은 몸짓이다.
-      expect({ focusedAfterFirst, 나: titles(find(tree, '나')!.pages) }).toEqual({ focusedAfterFirst: '정말 삭제합니까?', 나: ['나1', '나3'] })
+      expect({ focusedAfterFirst, 나: titles(find(tree, '나')!.pages) }).toEqual({
+        focusedAfterFirst: '정말 삭제합니까?',
+        나: ['나1', '나3'],
+      })
     } finally {
       await tab.close()
     }
@@ -1069,11 +1119,23 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       const { page } = tab
       await grabNode(page, 'n_text0000001')
       await dropAt(page, await nodeSpot(page, 'n_divi0000001', 'bottom'))
-      const moved = await poll('서버 문서', () => serverShape(P), (shape) => JSON.stringify(shape) !== JSON.stringify(ORIGINAL))
+      const moved = await poll(
+        '서버 문서',
+        () => serverShape(P),
+        (shape) => JSON.stringify(shape) !== JSON.stringify(ORIGINAL),
+      )
       await page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' }).click()
-      const undone = await poll('서버 문서', () => serverShape(P), (shape) => JSON.stringify(shape) === JSON.stringify(ORIGINAL))
+      const undone = await poll(
+        '서버 문서',
+        () => serverShape(P),
+        (shape) => JSON.stringify(shape) === JSON.stringify(ORIGINAL),
+      )
       await page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '다시 실행' }).click()
-      const redone = await poll('서버 문서', () => serverShape(P), (shape) => JSON.stringify(shape) !== JSON.stringify(ORIGINAL))
+      const redone = await poll(
+        '서버 문서',
+        () => serverShape(P),
+        (shape) => JSON.stringify(shape) !== JSON.stringify(ORIGINAL),
+      )
       expect({ moved, undone, redone, sent: tab.patches.length }).toEqual({
         moved: { Page: [{ Card: ['Text'] }, 'Divider', 'Text'] },
         undone: ORIGINAL,
@@ -1094,7 +1156,12 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
       const beforeAny = await undoButton.isDisabled()
       await grab(page, ids['가2']!)
       await dropAt(page, await spot(page, ids['나']!, 'middle'))
-      await poll('서버 트리', () => serverTree(projectId), (menu) => find(menu, '나')!.pages.length === 4, 5_000)
+      await poll(
+        '서버 트리',
+        () => serverTree(projectId),
+        (menu) => find(menu, '나')!.pages.length === 4,
+        5_000,
+      )
       await page.waitForTimeout(300)
       const afterMenuDrag = await undoButton.isDisabled()
       await undoButton.click()

@@ -76,7 +76,6 @@ describe.each(PANELS)('$toggle 상자', (panel) => {
     expect(body(panel.body).dataset.side).toBe('start')
     expect(body(panel.body).style.left).toBe(`${330 - panel.width}px`)
   })
-
 })
 
 /**
@@ -86,7 +85,10 @@ describe.each(PANELS)('$toggle 상자', (panel) => {
  */
 it('단추 아래에 목록 높이만큼 자리가 없으면 위로 연다', () => {
   stubRects(
-    { 'wb-shell-action-menu': { left: 1379, right: 1424, top: 850, bottom: 870, width: 45, height: 20 }, 'wb-shell-action-menu-body': { width: 200, height: 200 } },
+    {
+      'wb-shell-action-menu': { left: 1379, right: 1424, top: 850, bottom: 870, width: 45, height: 20 },
+      'wb-shell-action-menu-body': { width: 200, height: 200 },
+    },
     1440,
     900,
   )
@@ -108,10 +110,38 @@ it('단추 아래에 목록 높이만큼 자리가 없으면 위로 연다', () 
  */
 describe('placePopover — 가로', () => {
   it.each([
-    { label: '1280 내보내기 — 오른쪽 끝이 왼쪽 밖이라 왼쪽 끝', anchor: { left: 16, right: 60 }, width: 414, vw: 1280, side: 'start', left: 16 },
-    { label: '1280 스냅샷 — 오른쪽 끝에 붙여도 화면 안', anchor: { left: 1216, right: 1264 }, width: 554, vw: 1280, side: 'end', left: 1264 - 554 },
-    { label: '600 내보내기 — 둘 다 넘쳐 끌어온다(상자는 화면에 든다)', anchor: { left: 364, right: 409 }, width: 414, vw: 600, side: 'start', left: 600 - 414 },
-    { label: '390 스냅샷 — 상자가 화면보다 넓으면 왼쪽 끝을 0 에', anchor: { left: 230, right: 264 }, width: 554, vw: 390, side: 'start', left: 0 },
+    {
+      label: '1280 내보내기 — 오른쪽 끝이 왼쪽 밖이라 왼쪽 끝',
+      anchor: { left: 16, right: 60 },
+      width: 414,
+      vw: 1280,
+      side: 'start',
+      left: 16,
+    },
+    {
+      label: '1280 스냅샷 — 오른쪽 끝에 붙여도 화면 안',
+      anchor: { left: 1216, right: 1264 },
+      width: 554,
+      vw: 1280,
+      side: 'end',
+      left: 1264 - 554,
+    },
+    {
+      label: '600 내보내기 — 둘 다 넘쳐 끌어온다(상자는 화면에 든다)',
+      anchor: { left: 364, right: 409 },
+      width: 414,
+      vw: 600,
+      side: 'start',
+      left: 600 - 414,
+    },
+    {
+      label: '390 스냅샷 — 상자가 화면보다 넓으면 왼쪽 끝을 0 에',
+      anchor: { left: 230, right: 264 },
+      width: 554,
+      vw: 390,
+      side: 'start',
+      left: 0,
+    },
   ])('$label', ({ anchor, width, vw, side, left }) => {
     const placed = placePopover({ ...anchor, top: 10, bottom: 30 }, { width, height: 100 }, { width: vw, height: 900 })
 
@@ -123,10 +153,28 @@ describe('placePopover — 가로', () => {
 describe('placePopover — 세로', () => {
   it.each([
     { label: '아래에 자리가 있으면 아래로', anchor: { top: 100, bottom: 120 }, height: 240, block: 'below', top: 120 + GAP },
-    { label: '아래가 모자라고 위에 자리가 있으면 위로', anchor: { top: 600, bottom: 620 }, height: 240, block: 'above', top: 600 - GAP - 240 },
+    {
+      label: '아래가 모자라고 위에 자리가 있으면 위로',
+      anchor: { top: 600, bottom: 620 },
+      height: 240,
+      block: 'above',
+      top: 600 - GAP - 240,
+    },
     { label: '아래에 꼭 맞으면 아래로 — 끝 포함', anchor: { top: 434, bottom: 454 }, height: 240, block: 'below', top: 454 + GAP },
-    { label: '둘 다 모자라면 넓은 쪽(아래)으로 열고 화면 안으로 끌어온다', anchor: { top: 200, bottom: 220 }, height: 500, block: 'below', top: 700 - 500 },
-    { label: '둘 다 모자라면 넓은 쪽(위)으로 열고 화면 안으로 끌어온다', anchor: { top: 480, bottom: 500 }, height: 500, block: 'above', top: 0 },
+    {
+      label: '둘 다 모자라면 넓은 쪽(아래)으로 열고 화면 안으로 끌어온다',
+      anchor: { top: 200, bottom: 220 },
+      height: 500,
+      block: 'below',
+      top: 700 - 500,
+    },
+    {
+      label: '둘 다 모자라면 넓은 쪽(위)으로 열고 화면 안으로 끌어온다',
+      anchor: { top: 480, bottom: 500 },
+      height: 500,
+      block: 'above',
+      top: 0,
+    },
   ])('$label', ({ anchor, height, block, top }) => {
     const placed = placePopover({ left: 600, right: 640, ...anchor }, { width: 200, height }, { width: 1440, height: 700 })
 
@@ -251,7 +299,15 @@ describe('잃으면 닫는다', () => {
 
   it('단추가 칸 밖으로 굴러가면 닫고, 칸 안에서 움직이면 그대로다', async () => {
     const anchor = { left: 10, right: 40, top: 40, bottom: 60, width: 30, height: 20 }
-    stubRects({ 'probe-clip': { left: 0, right: 300, top: 0, bottom: 100 }, 'wb-shell-action-menu': anchor, 'wb-shell-action-menu-body': { width: 200, height: 80 } }, 1440, 900)
+    stubRects(
+      {
+        'probe-clip': { left: 0, right: 300, top: 0, bottom: 100 },
+        'wb-shell-action-menu': anchor,
+        'wb-shell-action-menu-body': { width: 200, height: 80 },
+      },
+      1440,
+      900,
+    )
     host()
     fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
     await nextFrame()

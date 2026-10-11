@@ -126,7 +126,13 @@ function recordingPatch(): { calls: PatchOp[][]; patchOps: ApiClient['patchOps']
     patchOps: async (_projectId, _pageId, body) => {
       calls.push(body.ops)
       seq += 1
-      const result: PatchResult = { seq, revisionId: `rev-new-${seq}`, inverse: [], schemaVersion: 1, ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }) }
+      const result: PatchResult = {
+        seq,
+        revisionId: `rev-new-${seq}`,
+        inverse: [],
+        schemaVersion: 1,
+        ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+      }
       return result
     },
   }
@@ -195,7 +201,9 @@ describe('새로고침 되돌리기가 끊긴 자리를 받아 되짚는다', ()
     const patches = () => (sockets[0]?.sent ?? []).filter((frame) => (frame as { type?: string }).type === 'patch') as { ops: PatchOp[] }[]
     await waitFor(() => expect(patches().length + patch.calls.length).toBe(1))
     expect(before.mock.calls.map((call) => (call as unknown[])[2])).toEqual([{ beforeSeq: HEAD_SEQ + 2, limit: 1 }])
-    expect([...patches().map((frame) => frame.ops), ...patch.calls]).toEqual([[{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }]])
+    expect([...patches().map((frame) => frame.ops), ...patch.calls]).toEqual([
+      [{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }],
+    ])
     expect(contents()).toEqual(['밥', '가', '옛 나'])
   })
 
@@ -361,7 +369,11 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
     fireEvent.click(undoButton())
     await waitFor(() => expect(patch.calls).toHaveLength(2))
 
-    expect({ atOpen, fetches: before.mock.calls.length, contents: contents() }).toEqual({ atOpen: 0, fetches: 1, contents: ['밥', '가', '옛옛 나'] })
+    expect({ atOpen, fetches: before.mock.calls.length, contents: contents() }).toEqual({
+      atOpen: 0,
+      fetches: 1,
+      contents: ['밥', '가', '옛옛 나'],
+    })
   })
 
   /**
@@ -402,7 +414,11 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
       return answer.promise
     })
     await openPage(OPENED, {
-      apiOverrides: { listMyRevisions: async (_projectId, pageId) => (pageId === PAGE_ID ? MINE : []), listRevisionsBefore: before, patchOps: patch.patchOps },
+      apiOverrides: {
+        listMyRevisions: async (_projectId, pageId) => (pageId === PAGE_ID ? MINE : []),
+        listRevisionsBefore: before,
+        patchOps: patch.patchOps,
+      },
       docs: { 'pg-2': doc(text('n-other', '다른 페이지')) },
     })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
@@ -416,7 +432,11 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
     })
     await act(async () => {})
 
-    expect({ aborted: signals[0]?.aborted, sent: patch.calls, contents: contents() }).toEqual({ aborted: true, sent: [], contents: ['다른 페이지'] })
+    expect({ aborted: signals[0]?.aborted, sent: patch.calls, contents: contents() }).toEqual({
+      aborted: true,
+      sent: [],
+      contents: ['다른 페이지'],
+    })
   })
 
   it('받는 동안 이 탭의 편집이 맨 위에 오르면 그 누름은 되돌리지 않는다 — 누른 때 되돌리려던 것이 아니다', async () => {
@@ -429,7 +449,9 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
     fireEvent.click(undoButton())
     await waitFor(() => expect(undoButton().disabled).toBe(true))
 
-    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!)
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!,
+    )
     const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
     fireEvent.change(box, { target: { value: '가 고침' } })
     fireEvent.blur(box)
@@ -459,7 +481,9 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
       apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: () => answer.promise, patchOps: patch.patchOps },
     })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
-    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!)
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!,
+    )
     const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
     fireEvent.change(box, { target: { value: '가 고침' } })
     fireEvent.blur(box)
@@ -479,7 +503,12 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
     await waitFor(() => expect(patch.calls.length).toBeGreaterThan(2))
     await act(async () => {})
 
-    expect({ whileLoading, sent: patch.calls.slice(2), notice: screen.queryByRole('alert')?.textContent ?? null, redo: !redoButton().disabled }).toEqual({
+    expect({
+      whileLoading,
+      sent: patch.calls.slice(2),
+      notice: screen.queryByRole('alert')?.textContent ?? null,
+      redo: !redoButton().disabled,
+    }).toEqual({
       whileLoading: { undo: true, redo: true },
       sent: [[{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }]],
       notice: null,
@@ -499,8 +528,11 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
       sockets[0]?.onopen?.()
     })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
-    const patches = () => (sockets[0]?.sent ?? []).filter((frame) => (frame as { type?: string }).type === 'patch') as { ops: PatchOp[]; clientOpId: string }[]
-    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!)
+    const patches = () =>
+      (sockets[0]?.sent ?? []).filter((frame) => (frame as { type?: string }).type === 'patch') as { ops: PatchOp[]; clientOpId: string }[]
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!,
+    )
     const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
     fireEvent.change(box, { target: { value: '가 고침' } })
     fireEvent.blur(box)
@@ -517,9 +549,17 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
       inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: '가' }],
     })
     await act(async () => {})
-    frame({ type: 'page-changed', seq: HEAD_SEQ + 2, ops: [{ op: 'remove', path: '/root/children/1' }], actor: { type: 'user', label: '밥' } })
+    frame({
+      type: 'page-changed',
+      seq: HEAD_SEQ + 2,
+      ops: [{ op: 'remove', path: '/root/children/1' }],
+      actor: { type: 'user', label: '밥' },
+    })
     await waitFor(() => expect(contents()).toEqual(['밥', '나']))
-    return () => patches().slice(1).map((sent) => sent.ops)
+    return () =>
+      patches()
+        .slice(1)
+        .map((sent) => sent.ops)
   }
 
   it('맨 위 세션 항목을 건너뛴 누름이 복원 항목에 닿으면 받은 뒤 제 노드를 되돌리고, 건너뛴 것은 그 세션 항목 하나다', async () => {
@@ -601,7 +641,12 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
       fireEvent.click(undoButton())
       await waitFor(() => expect(patch.calls).toHaveLength(1))
 
-      expect(first).toEqual({ notice: `${failure.says} — 되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.`, sent: 0, contents: ['밥', '가', '나'], enabled: true })
+      expect(first).toEqual({
+        notice: `${failure.says} — 되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.`,
+        sent: 0,
+        contents: ['밥', '가', '나'],
+        enabled: true,
+      })
       expect(patch.calls[0]).toEqual([{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }])
     })
   }
@@ -623,7 +668,9 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
       const fetchImpl: typeof fetch = (input, init) => {
         asked.push(String(input))
         if (answers) {
-          return Promise.resolve(new Response(JSON.stringify([bobInsert(HEAD_SEQ)]), { status: 200, headers: { 'content-type': 'application/json' } }))
+          return Promise.resolve(
+            new Response(JSON.stringify([bobInsert(HEAD_SEQ)]), { status: 200, headers: { 'content-type': 'application/json' } }),
+          )
         }
         return new Promise((_resolve, reject) => {
           init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
@@ -640,7 +687,11 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2 * READ_DEADLINE_MS - 1)
       })
-      const waiting = { asked: asked.length, disabled: undoButton().disabled, notice: screen.queryByText('되돌리지 않았습니다', { exact: false }) }
+      const waiting = {
+        asked: asked.length,
+        disabled: undoButton().disabled,
+        notice: screen.queryByText('되돌리지 않았습니다', { exact: false }),
+      }
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1)
       })
@@ -651,7 +702,11 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
       }
       expect({ waiting, timedOut }).toEqual({
         waiting: { asked: 2, disabled: true, notice: null },
-        timedOut: { notice: '서버가 응답하지 않습니다 — 잠시 뒤 새로고침하세요 — 되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.', sent: 0, enabled: true },
+        timedOut: {
+          notice: '서버가 응답하지 않습니다 — 잠시 뒤 새로고침하세요 — 되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.',
+          sent: 0,
+          enabled: true,
+        },
       })
       vi.useRealTimers()
       answers = true
@@ -720,8 +775,13 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
       await waitFor(() => expect(undoButton().disabled).toBe(true))
     }
     await press()
-    for (const [index, value] of [[1, '가 고침'], [0, '밥 고침']] as const) {
-      fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[index]!)
+    for (const [index, value] of [
+      [1, '가 고침'],
+      [0, '밥 고침'],
+    ] as const) {
+      fireEvent.click(
+        within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[index]!,
+      )
       const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
       fireEvent.change(box, { target: { value } })
       fireEvent.blur(box)
@@ -778,12 +838,17 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
   it('누르기 전에 서 있던 통지는 받은 뒤의 되돌리기가 치운다 — 누른 때의 통지다', async () => {
     const answer = deferred<RevisionSummary[]>()
     const { setup, sockets } = wiring()
-    await openPage(OPENED, { realtime: setup, apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: () => answer.promise } })
+    await openPage(OPENED, {
+      realtime: setup,
+      apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: () => answer.promise },
+    })
     act(() => {
       sockets[0]?.onopen?.()
     })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
-    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[0]!)
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[0]!,
+    )
     const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
     fireEvent.change(box, { target: { value: '밥 고침' } })
     fireEvent.blur(box)
@@ -803,7 +868,12 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
     })
     await act(async () => {})
     // 판 카나리아 — 리베이스가 나간 편집을 버리고 말했고(큐 비어) 되돌리기 단추는 켜져 있다 · 편집은 한 번 나갔다.
-    expect({ alert: alertText(), contents: contents(), disabled: undoButton().disabled, sent: (sockets[0]?.sent ?? []).filter((frame) => (frame as { type?: string }).type === 'patch').length }).toEqual({
+    expect({
+      alert: alertText(),
+      contents: contents(),
+      disabled: undoButton().disabled,
+      sent: (sockets[0]?.sent ?? []).filter((frame) => (frame as { type?: string }).type === 'patch').length,
+    }).toEqual({
       alert: DROPPED,
       contents: ['가', '나'],
       disabled: false,
@@ -866,13 +936,18 @@ describe('번갈아 고친 페이지', () => {
 
 describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답을 싣지 않는다', () => {
   /** 되돌리기 목록을 붙잡은 채 연결을 한 번 끊었다 다시 붙인다 — 재조회가 돌려주는 판은 `resync`다. */
-  async function reconnectWhileListing(resync: { headSeq: number; doc: PageDocument }): Promise<{ release(mine?: RevisionSummary[]): Promise<void> }> {
+  async function reconnectWhileListing(resync: {
+    headSeq: number
+    doc: PageDocument
+  }): Promise<{ release(mine?: RevisionSummary[]): Promise<void> }> {
     const { setup, sockets, scheduled } = wiring()
     const list = deferred<RevisionSummary[]>()
     let calls = 0
     const getPage = vi.fn(async (_projectId: string, pageId: string) => {
       calls += 1
-      return calls === 1 ? pageDetail(pageId, doc(text('n-ga', '가'), text('n-na', '나'))) : { ...pageDetail(pageId, resync.doc), headSeq: resync.headSeq }
+      return calls === 1
+        ? pageDetail(pageId, doc(text('n-ga', '가'), text('n-na', '나')))
+        : { ...pageDetail(pageId, resync.doc), headSeq: resync.headSeq }
     })
     await openPage(doc(text('n-ga', '가'), text('n-na', '나')), {
       realtime: setup,
@@ -903,7 +978,10 @@ describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답�
   }
 
   it('재연결 재조회가 판을 다시 실으면 붙잡혔던 목록 답을 싣지 않는다', async () => {
-    const view = await reconnectWhileListing({ headSeq: HEAD_SEQ + 1, doc: doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나')) })
+    const view = await reconnectWhileListing({
+      headSeq: HEAD_SEQ + 1,
+      doc: doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나')),
+    })
     await waitForNode('n-bob')
 
     await view.release()
@@ -916,7 +994,10 @@ describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답�
    * 않았다(`tellLost`의 `hadUndo`). 실을 것이 없던 목록이면 잃은 것이 없어 말하지 않는다(대조).
    */
   it('재연결 재조회가 판을 다시 실어 목록 답을 버리면 그렇다고 한 줄 말한다', async () => {
-    const view = await reconnectWhileListing({ headSeq: HEAD_SEQ + 1, doc: doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나')) })
+    const view = await reconnectWhileListing({
+      headSeq: HEAD_SEQ + 1,
+      doc: doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나')),
+    })
     await waitForNode('n-bob')
     const beforeRelease = screen.queryByRole('alert')?.textContent ?? null
 
@@ -943,7 +1024,9 @@ describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답�
         },
       },
     })
-    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[0]!)
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[0]!,
+    )
     const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
     fireEvent.change(box, { target: { value: '가 고침' } })
     fireEvent.blur(box)
@@ -964,7 +1047,10 @@ describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답�
   })
 
   it('재연결 재조회가 판을 다시 실었어도 실을 것이 없던 목록이면 말하지 않는다', async () => {
-    const view = await reconnectWhileListing({ headSeq: HEAD_SEQ + 1, doc: doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나')) })
+    const view = await reconnectWhileListing({
+      headSeq: HEAD_SEQ + 1,
+      doc: doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나')),
+    })
     await waitForNode('n-bob')
 
     await view.release([])

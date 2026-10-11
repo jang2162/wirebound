@@ -76,7 +76,9 @@ function firedRules(page: PageDocument): string[] {
   const events: InteractionEvent[] = []
   const root = createRoot(host)
   act(() => {
-    flushSync(() => root.render(renderDocument(page, { theme: NO_THEME, interaction: { overlay: {}, onEvent: (event) => events.push(event) } })))
+    flushSync(() =>
+      root.render(renderDocument(page, { theme: NO_THEME, interaction: { overlay: {}, onEvent: (event) => events.push(event) } })),
+    )
   })
   for (const element of [...host.querySelectorAll('[data-wb-id]')]) {
     for (const kind of ['click', 'change', 'submit']) {
@@ -189,9 +191,9 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
     const bundle = exportBundle({ pages: [{ title: '한 장', document: page }], runtimeJs: '/* runtime */' })
     const html = bundle.files.find((file) => file.path === 'pages/한-장.html')!.content as string
     const parsed = new DOMParser().parseFromString(html, 'text/html')
-    const written = [
-      ...parsed.querySelectorAll('#wb-export-panel-interactions [data-wb-interaction-for]'),
-    ].map((line) => line.getAttribute('data-wb-interaction-for'))
+    const written = [...parsed.querySelectorAll('#wb-export-panel-interactions [data-wb-interaction-for]')].map((line) =>
+      line.getAttribute('data-wb-interaction-for'),
+    )
     expect([...new Set(firedRules(page).map((rule) => rule.split('#')[0]))]).toEqual([...new Set(written)])
     expect(written.length).toBeGreaterThan(1)
   })
@@ -228,9 +230,9 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
     const bundle = exportBundle({ pages: [{ title: '깨짐', document: broken }], runtimeJs: '/* runtime */' })
     const html = bundle.files.find((file) => file.path === 'pages/깨짐.html')!.content as string
     const parsed = new DOMParser().parseFromString(html, 'text/html')
-    const written = [
-      ...parsed.querySelectorAll('#wb-export-panel-interactions [data-wb-interaction-for]'),
-    ].map((line) => line.getAttribute('data-wb-interaction-for'))
+    const written = [...parsed.querySelectorAll('#wb-export-panel-interactions [data-wb-interaction-for]')].map((line) =>
+      line.getAttribute('data-wb-interaction-for'),
+    )
     expect(written).toHaveLength(RULES.length)
     expect([...new Set(firedRules(broken).map((rule) => rule.split('#')[0]))]).toEqual([...new Set(written)])
     // 그 노드는 여전히 errors가 이름을 든다 — 조용히 넘기는 것이 아니다.
@@ -271,9 +273,7 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
               {
                 type: 'Button',
                 props: { label: '이름없음' },
-                interactions: [
-                  { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
-                ],
+                interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
               },
               { id: 'n_list', type: 'List', props: {} },
             ],
@@ -292,9 +292,7 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
                 id: 'n_h',
                 type: 'Button',
                 props: { label: '호버' },
-                interactions: [
-                  { on: 'hover', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
-                ],
+                interactions: [{ on: 'hover', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
               },
               { id: 'n_list', type: 'List', props: {} },
             ],

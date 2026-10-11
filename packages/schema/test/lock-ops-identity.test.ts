@@ -51,7 +51,7 @@ interface Board {
 
 function boardOf(seed: number): Board | null {
   const rnd = prng(seed)
-  const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]!
+  const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]!
   let next = 0
   const node = (depth: number): WbNode => {
     const made: WbNode = { id: `n${next++}`, type: 'Box', props: { x: 1 } }
@@ -218,10 +218,13 @@ describe('판정이 적용과 같은 규칙으로 읽는 번호 꼴 — 잠긴 n
     return (removeAt(copy, `/root/children/${token}`) as WbNode).id
   }
 
-  it.each(['1', '01', '1.0', ' 1', '+1', '1e0', '0x1', '0b1', '\t1\n'])('`remove /root/children/%j` — 적용은 n_b 를 지우고 판정은 막는다', (token) => {
-    expect(removedId(token)).toBe('n_b')
-    expect(verdict([{ op: 'remove', path: `/root/children/${token}` }])).toBe('n_b')
-  })
+  it.each(['1', '01', '1.0', ' 1', '+1', '1e0', '0x1', '0b1', '\t1\n'])(
+    '`remove /root/children/%j` — 적용은 n_b 를 지우고 판정은 막는다',
+    (token) => {
+      expect(removedId(token)).toBe('n_b')
+      expect(verdict([{ op: 'remove', path: `/root/children/${token}` }])).toBe('n_b')
+    },
+  )
 
   it.each(['', '-0', '0', '00'])('`remove /root/children/%j` — 적용은 n_a 를 지우고 판정은 안 막는다', (token) => {
     expect(removedId(token)).toBe('n_a')

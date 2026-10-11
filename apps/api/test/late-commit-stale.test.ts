@@ -55,10 +55,16 @@ const STALE_WAIT_MS = LATE_COMMIT_MS + 6_000
 /** 그 페이지의 revision 행이 설 때 COMMIT 을 `ms` 늦춘다 — `DEFERRABLE INITIALLY DEFERRED` 제약 트리거의 `pg_sleep`. */
 async function slowCommit<T>(pageId: string, ms: number, run: () => Promise<T>): Promise<T> {
   const db = getTestDb()
-  await sql.raw(`create or replace function zz_slow_commit() returns trigger language plpgsql as $$ begin perform pg_sleep(${ms / 1000}); return null; end $$`).execute(db)
-  await sql.raw(
-    `create constraint trigger zz_slow_commit after insert on revisions deferrable initially deferred for each row when (new.page_id = '${pageId}') execute function zz_slow_commit()`,
-  ).execute(db)
+  await sql
+    .raw(
+      `create or replace function zz_slow_commit() returns trigger language plpgsql as $$ begin perform pg_sleep(${ms / 1000}); return null; end $$`,
+    )
+    .execute(db)
+  await sql
+    .raw(
+      `create constraint trigger zz_slow_commit after insert on revisions deferrable initially deferred for each row when (new.page_id = '${pageId}') execute function zz_slow_commit()`,
+    )
+    .execute(db)
   try {
     return await run()
   } finally {
@@ -154,7 +160,9 @@ async function expectStale(fx: Fixture, probe: WsProbe, before: number, count = 
   await committed(fx, before + count)
   const until = Date.now() + 4_000
   while (pageStale(probe.received).length < count && Date.now() < until) await sleep(50)
-  expect(pageStale(probe.received)).toEqual(Array.from({ length: count }, () => ({ type: 'page-stale', projectId: fx.projectId, pageId: fx.pageId })))
+  expect(pageStale(probe.received)).toEqual(
+    Array.from({ length: count }, () => ({ type: 'page-stale', projectId: fx.projectId, pageId: fx.pageId })),
+  )
 }
 
 describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () => {
@@ -163,7 +171,12 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
       const fx = await fixture(ctx)
       await fx.watcher.quiet()
       const { status, before } = await lateWrite(ctx, fx, async () => {
-        const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: await headSeq(fx.pageId), ops: addText('n_late') } })
+        const res = await ctx.app.inject({
+          method: 'PATCH',
+          url: fx.opsUrl,
+          cookies: fx.owner.cookie,
+          payload: { baseSeq: await headSeq(fx.pageId), ops: addText('n_late') },
+        })
         return res.statusCode
       })
       expect(status).toBe(503)
@@ -176,7 +189,12 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
       const fx = await fixture(ctx)
       const mark = fx.watcher.received.length
       const { before } = await lateWrite(ctx, fx, async () => {
-        const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: await headSeq(fx.pageId), ops: addText('n_late') } })
+        const res = await ctx.app.inject({
+          method: 'PATCH',
+          url: fx.opsUrl,
+          cookies: fx.owner.cookie,
+          payload: { baseSeq: await headSeq(fx.pageId), ops: addText('n_late') },
+        })
         return res.statusCode
       })
       await expectStale(fx, fx.watcher, before)
@@ -208,7 +226,12 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
       const { before } = await lateWrite(ctx, fx, async () => {
-        const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: await headSeq(fx.pageId), ops: addText('n_late') } })
+        const res = await ctx.app.inject({
+          method: 'PATCH',
+          url: fx.opsUrl,
+          cookies: fx.owner.cookie,
+          payload: { baseSeq: await headSeq(fx.pageId), ops: addText('n_late') },
+        })
         return res.statusCode
       })
       await expectStale(fx, fx.viewerTab, before)
@@ -239,7 +262,9 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
       const before = await headSeq(fx.pageId)
       await slowCommit(fx.pageId, LATE_COMMIT_MS, async () => {
         ctx.proxy.halfCutOnQuery('commit')
-        fx.author.send(JSON.stringify({ type: 'patch', pageId: fx.pageId, baseSeq: before, ops: addText('n_ws_late'), clientOpId: 'op_ws_late' }))
+        fx.author.send(
+          JSON.stringify({ type: 'patch', pageId: fx.pageId, baseSeq: before, ops: addText('n_ws_late'), clientOpId: 'op_ws_late' }),
+        )
         const error = await fx.author.waitFor('patch-error', 10_000)
         expect(ctx.proxy.fired).toBe(true)
         expect(error).toMatchObject({ clientOpId: 'op_ws_late', status: 503 })
@@ -254,7 +279,12 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
       const { status, before } = await lateWrite(ctx, fx, async () => {
-        const res = await ctx.app.inject({ method: 'POST', url: `${fx.pageUrl}/comments`, cookies: fx.owner.cookie, payload: { nodeId: 'n_a', body: '말' } })
+        const res = await ctx.app.inject({
+          method: 'POST',
+          url: `${fx.pageUrl}/comments`,
+          cookies: fx.owner.cookie,
+          payload: { nodeId: 'n_a', body: '말' },
+        })
         return res.statusCode
       })
       expect(status).toBe(503)
@@ -265,7 +295,12 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
   it('코멘트 삭제 — 마지막 코멘트의 번호를 지우는 revision 이 늦게 커밋되면 page-stale 을 받는다', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
-      const posted = await ctx.app.inject({ method: 'POST', url: `${fx.pageUrl}/comments`, cookies: fx.owner.cookie, payload: { nodeId: 'n_a', body: '말' } })
+      const posted = await ctx.app.inject({
+        method: 'POST',
+        url: `${fx.pageUrl}/comments`,
+        cookies: fx.owner.cookie,
+        payload: { nodeId: 'n_a', body: '말' },
+      })
       expect(posted.statusCode, posted.body).toBe(201)
       const commentId = posted.json().comment.id as string
       await fx.watcher.waitFor('page-changed')
@@ -283,7 +318,12 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
       const fx = await fixture(ctx)
       // 뒤 노드에 먼저 달아 문서 순서와 번호가 어긋나게 한다(n_a = 2 · n_b = 1).
       for (const nodeId of ['n_b', 'n_a']) {
-        const res = await ctx.app.inject({ method: 'POST', url: `${fx.pageUrl}/comments`, cookies: fx.owner.cookie, payload: { nodeId, body: `${nodeId}의 말` } })
+        const res = await ctx.app.inject({
+          method: 'POST',
+          url: `${fx.pageUrl}/comments`,
+          cookies: fx.owner.cookie,
+          payload: { nodeId, body: `${nodeId}의 말` },
+        })
         expect(res.statusCode, res.body).toBe(201)
       }
       await fx.watcher.waitForCount('page-changed', 2)
@@ -303,7 +343,12 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
       await slowCommit(fx.pageId, LATE_COMMIT_MS, async () => {
         for (const id of ['n_one', 'n_two']) {
           ctx.proxy.halfCutOnQuery('commit')
-          const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: await headSeq(fx.pageId), ops: addText(id) } })
+          const res = await ctx.app.inject({
+            method: 'PATCH',
+            url: fx.opsUrl,
+            cookies: fx.owner.cookie,
+            payload: { baseSeq: await headSeq(fx.pageId), ops: addText(id) },
+          })
           expect(ctx.proxy.fired).toBe(true)
           expect(res.statusCode).toBe(503)
           // 첫 커밋이 끝나야 둘째가 이어 선다(같은 페이지 행) — 둘째 요청의 `baseSeq` 도 그 뒤 번호여야 한다.
@@ -322,7 +367,12 @@ describe('page-stale 이 안 나가는 판 — 대조군', () => {
       const before = await headSeq(fx.pageId)
       await slowCommit(fx.pageId, 300, async () => {
         ctx.proxy.halfCutOnQuery('commit')
-        const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: before, ops: addText('n_timely') } })
+        const res = await ctx.app.inject({
+          method: 'PATCH',
+          url: fx.opsUrl,
+          cookies: fx.owner.cookie,
+          payload: { baseSeq: before, ops: addText('n_timely') },
+        })
         expect(ctx.proxy.fired).toBe(true)
         expect(res.statusCode, res.body).toBe(200)
       })
@@ -334,7 +384,12 @@ describe('page-stale 이 안 나가는 판 — 대조군', () => {
   it('답을 안 잃은 편집(제때 커밋)은 page-stale 이 없다', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
-      const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: await headSeq(fx.pageId), ops: addText('n_plain') } })
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: fx.opsUrl,
+        cookies: fx.owner.cookie,
+        payload: { baseSeq: await headSeq(fx.pageId), ops: addText('n_plain') },
+      })
       expect(res.statusCode, res.body).toBe(200)
       await fx.watcher.waitFor('page-changed')
       expect(pageStale(await fx.watcher.quiet(1_200))).toEqual([])
@@ -346,7 +401,12 @@ describe('page-stale 이 안 나가는 판 — 대조군', () => {
       const fx = await fixture(ctx)
       const before = await headSeq(fx.pageId)
       ctx.proxy.dropOnQuery('commit')
-      const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: before, ops: addText('n_gone') } })
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: fx.opsUrl,
+        cookies: fx.owner.cookie,
+        payload: { baseSeq: before, ops: addText('n_gone') },
+      })
       expect(ctx.proxy.fired).toBe(true)
       expect(res.statusCode, res.body).toBe(500)
       expect(pageStale(await fx.watcher.quiet(1_500))).toEqual([])
@@ -360,13 +420,24 @@ describe('page-stale 이 안 나가는 판 — 대조군', () => {
       const before = await headSeq(fx.pageId)
       // COMMIT 을 늦추되 그 안에서 던져 되돌린다 — 늦은 커밋이 아니라 늦은 되돌림이다.
       const db = getTestDb()
-      await sql.raw(`create or replace function zz_slow_fail() returns trigger language plpgsql as $$ begin perform pg_sleep(${LATE_COMMIT_MS / 1000}); raise exception 'zz late rollback'; end $$`).execute(db)
-      await sql.raw(
-        `create constraint trigger zz_slow_fail after insert on revisions deferrable initially deferred for each row when (new.page_id = '${fx.pageId}') execute function zz_slow_fail()`,
-      ).execute(db)
+      await sql
+        .raw(
+          `create or replace function zz_slow_fail() returns trigger language plpgsql as $$ begin perform pg_sleep(${LATE_COMMIT_MS / 1000}); raise exception 'zz late rollback'; end $$`,
+        )
+        .execute(db)
+      await sql
+        .raw(
+          `create constraint trigger zz_slow_fail after insert on revisions deferrable initially deferred for each row when (new.page_id = '${fx.pageId}') execute function zz_slow_fail()`,
+        )
+        .execute(db)
       try {
         ctx.proxy.halfCutOnQuery('commit')
-        const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: before, ops: addText('n_rolled') } })
+        const res = await ctx.app.inject({
+          method: 'PATCH',
+          url: fx.opsUrl,
+          cookies: fx.owner.cookie,
+          payload: { baseSeq: before, ops: addText('n_rolled') },
+        })
         expect(res.statusCode).toBeGreaterThanOrEqual(500)
         expect(pageStale(await fx.watcher.quiet(LATE_COMMIT_MS + 1_500))).toEqual([])
         expect(await headSeq(fx.pageId)).toBe(before)

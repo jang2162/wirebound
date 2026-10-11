@@ -105,8 +105,17 @@ const CENSUS: Record<string, Record<string, Cell>> = {
 
 /** SDK 와 렌더러가 이미 쓰는 `data-wb-*` 이름 — 표지가 이것과 겹치면 셀렉터의 뜻이 갈린다. */
 const RESERVED = [
-  'data-wb-id', 'data-wb-component', 'data-wb-variant', 'data-wb-state', 'data-wb-structure', 'data-wb-part',
-  'data-wb-focus', 'data-wb-marker', 'data-wb-marker-offset', 'data-wb-error', 'data-wb-cell',
+  'data-wb-id',
+  'data-wb-component',
+  'data-wb-variant',
+  'data-wb-state',
+  'data-wb-structure',
+  'data-wb-part',
+  'data-wb-focus',
+  'data-wb-marker',
+  'data-wb-marker-offset',
+  'data-wb-error',
+  'data-wb-cell',
 ]
 
 interface ZodNode {
@@ -137,7 +146,9 @@ function root(type: string, props: Record<string, unknown>): Element {
 }
 
 // `name` 은 케이스 이름 — vitest 의 `$type` 꼴은 이름에 안 풀려 `undefined` 로 찍힌다.
-const CELLS = Object.entries(CENSUS).flatMap(([type, props]) => Object.entries(props).map(([prop, cell]) => ({ name: `${type}.${prop}`, type, prop, ...cell })))
+const CELLS = Object.entries(CENSUS).flatMap(([type, props]) =>
+  Object.entries(props).map(([prop, cell]) => ({ name: `${type}.${prop}`, type, prop, ...cell })),
+)
 
 describe('카탈로그 × prop 인구조사', () => {
   it('표와 카탈로그가 같다 — 타입 · prop 이 하나도 안 빠지고 더 없다', () => {
@@ -159,14 +170,19 @@ describe('카탈로그 × prop 인구조사', () => {
       const selectable = leaf === 'boolean' || leaf === 'enum'
       const expected = def.states.includes(prop) ? 'state' : def.variantFrom === prop ? 'variant' : selectable ? 'mark' : null
       if (expected !== null && route !== expected) problems.push(`${type}.${prop}(${leaf}) — 표 ${route} · 규칙 ${expected}`)
-      if (expected === null && (route === 'mark' || route === 'state' || route === 'variant')) problems.push(`${type}.${prop}(${leaf}) — 표 ${route}`)
+      if (expected === null && (route === 'mark' || route === 'state' || route === 'variant'))
+        problems.push(`${type}.${prop}(${leaf}) — 표 ${route}`)
     }
     expect(problems).toEqual([])
   })
 
   it('SDK 의 표지 표(MARKED_PROPS)가 인구조사의 mark 칸과 같고 꼴이 맞다(불리언 flag · enum value)', () => {
-    const fromCensus = CELLS.filter((c) => c.route === 'mark').map((c) => `${c.type}.${c.prop}:${leafType(c.type, c.prop) === 'boolean' ? 'flag' : 'value'}`)
-    const fromSdk = Object.entries(MARKED_PROPS).flatMap(([type, props]) => Object.entries(props).map(([prop, kind]) => `${type}.${prop}:${kind}`))
+    const fromCensus = CELLS.filter((c) => c.route === 'mark').map(
+      (c) => `${c.type}.${c.prop}:${leafType(c.type, c.prop) === 'boolean' ? 'flag' : 'value'}`,
+    )
+    const fromSdk = Object.entries(MARKED_PROPS).flatMap(([type, props]) =>
+      Object.entries(props).map(([prop, kind]) => `${type}.${prop}:${kind}`),
+    )
     expect(fromSdk.sort()).toEqual(fromCensus.sort())
   })
 
@@ -189,10 +205,13 @@ describe('카탈로그 × prop 인구조사', () => {
     else expect(el.getAttribute(attr)).toBe(alt)
   })
 
-  it.each(CELLS.filter((c) => c.route === 'mark' && typeof c.alt === 'boolean'))('$name — 반대 값이면 표지가 없다/있다', ({ type, prop, alt }) => {
-    // 불리언 표지는 참일 때만 선다 — 기본값 판에서 그 반대인지 본다(기본 참인 `pagination` 은 기본 판에 선다).
-    expect(root(type, { [prop]: !alt }).getAttribute(markAttr(prop))).toBe(alt ? null : '')
-  })
+  it.each(CELLS.filter((c) => c.route === 'mark' && typeof c.alt === 'boolean'))(
+    '$name — 반대 값이면 표지가 없다/있다',
+    ({ type, prop, alt }) => {
+      // 불리언 표지는 참일 때만 선다 — 기본값 판에서 그 반대인지 본다(기본 참인 `pagination` 은 기본 판에 선다).
+      expect(root(type, { [prop]: !alt }).getAttribute(markAttr(prop))).toBe(alt ? null : '')
+    },
+  )
 
   // `Field` 의 `aria-required` · `aria-invalid` 는 역할 없는 루트가 아니라 `control` 조각에 선다(`default-views/input.tsx`).
   const ariaHolder = (type: string, el: Element, prop: string): Element =>

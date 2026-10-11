@@ -116,11 +116,7 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
   // `info` 는 어떤 선에도 안 든다 — 알림이지 결함이 아니다(설계서 「lint 규칙」).
   const failing = failOn === 'warning' ? report.errors + report.warnings : report.errors
   if (failing === 0) return EXIT.ok
-  io.err(
-    failOn === 'warning'
-      ? `결함 ${failing}건이 있습니다 (--fail-on warning)`
-      : `error ${failing}건이 있습니다`,
-  )
+  io.err(failOn === 'warning' ? `결함 ${failing}건이 있습니다 (--fail-on warning)` : `error ${failing}건이 있습니다`)
   return EXIT.findings
 }
 

@@ -18,10 +18,16 @@ function cssJustify(value: string): string {
 }
 
 export const PageView = view(({ children }) => (
-  <Root as="div" data-wb-structure="default">{children}</Root>
+  <Root as="div" data-wb-structure="default">
+    {children}
+  </Root>
 ))
 
-export const SlotView = view(({ slot }) => <Root as="div" data-wb-structure="default">{slot}</Root>)
+export const SlotView = view(({ slot }) => (
+  <Root as="div" data-wb-structure="default">
+    {slot}
+  </Root>
+))
 
 // 기본 구조 `contained` — `inner` 는 테마가 `maxWidth` 를 거는 자리다.
 export const SectionView = view(({ children }) => (
@@ -91,10 +97,7 @@ export function structureCssBlocks(): string[] {
       `justify-content: var(${nodeVar('flex', 'justify')}, start);`,
       `flex-wrap: var(${nodeVar('flex', 'wrap')}, nowrap);`,
     ]),
-    componentRule('Grid', 'default', [
-      'display: grid;',
-      `grid-template-columns: repeat(var(${nodeVar('grid', 'columns')}, 1), 1fr);`,
-    ]),
+    componentRule('Grid', 'default', ['display: grid;', `grid-template-columns: repeat(var(${nodeVar('grid', 'columns')}, 1), 1fr);`]),
     // `Card` 의 기본 구조(`plain`)에는 `media` 조각이 없어 기본 뷰에는 닿지 않는다. 테마 뷰가 `media` 조각을 내면
     // 받는다 — 빈 상자에 높이를 준다.
     partRule('Card', 'media', ['aspect-ratio: 16 / 9;']),

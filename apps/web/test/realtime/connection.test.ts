@@ -10,12 +10,7 @@
  * | `close()`가 재연결을 멈춘다 | 프로젝트를 옮길 때마다 소켓이 하나씩 쌓인다 |
  */
 import { describe, expect, it } from 'vitest'
-import {
-  openRealtime,
-  type RealtimeConnection,
-  type RealtimeSocket,
-  type RealtimeStatus,
-} from '../../src/realtime/connection'
+import { openRealtime, type RealtimeConnection, type RealtimeSocket, type RealtimeStatus } from '../../src/realtime/connection'
 import type { ServerFrame } from '../../src/realtime/protocol'
 
 /** 손으로 밀 수 있는 소켓. 실제 네트워크가 없어야 갈래를 하나씩 태울 수 있다. */

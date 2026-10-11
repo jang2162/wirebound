@@ -68,9 +68,7 @@ const LIST_PAGE: PageDocument = {
         id: 'n_broken',
         type: 'Button',
         props: { label: '깨짐' },
-        interactions: [
-          { on: 'click', actions: [{ type: 'setProp', target: 'n_사라짐', prop: 'loading', value: true }] },
-        ],
+        interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_사라짐', prop: 'loading', value: true }] }],
       },
       {
         id: 'n_empty',
@@ -98,34 +96,26 @@ const LIST_PAGE: PageDocument = {
         id: 'n_show',
         type: 'Button',
         props: { label: '되돌림' },
-        interactions: [
-          { on: 'click', actions: [{ type: 'setVisible', target: 'n_card', value: true }] },
-        ],
+        interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_card', value: true }] }],
       },
       {
         id: 'n_submit',
         type: 'Button',
         props: { label: '보냄' },
-        interactions: [
-          { on: 'submit', actions: [{ type: 'setProp', target: 'n_list', prop: 'empty', value: true }] },
-        ],
+        interactions: [{ on: 'submit', actions: [{ type: 'setProp', target: 'n_list', prop: 'empty', value: true }] }],
       },
       // **중첩**. 속을 누르면 겉까지 버블링하고, 바른 판도 겉→속 순서여야 한다.
       {
         id: 'n_outer',
         type: 'Card',
         props: { title: '겉' },
-        interactions: [
-          { on: 'click', actions: [{ type: 'setProp', target: 'n_outer', prop: 'subtitle', value: '겉눌림' }] },
-        ],
+        interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_outer', prop: 'subtitle', value: '겉눌림' }] }],
         children: [
           {
             id: 'n_inner',
             type: 'Button',
             props: { label: '속' },
-            interactions: [
-              { on: 'click', actions: [{ type: 'setProp', target: 'n_inner', prop: 'label', value: '속눌림' }] },
-            ],
+            interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_inner', prop: 'label', value: '속눌림' }] }],
           },
         ],
       },
@@ -221,7 +211,8 @@ function canvas(): Element {
 function press(nodeId: string, type = 'click'): Event {
   const target = canvas().querySelector(`[data-wb-id="${nodeId}"]`)
   if (target === null) throw new Error(`누를 노드가 없습니다: ${nodeId}`)
-  const event = type === 'click' ? new MouseEvent('click', { bubbles: true, cancelable: true }) : new Event(type, { bubbles: true, cancelable: true })
+  const event =
+    type === 'click' ? new MouseEvent('click', { bubbles: true, cancelable: true }) : new Event(type, { bubbles: true, cancelable: true })
   act(() => {
     target.dispatchEvent(event)
   })
@@ -244,7 +235,10 @@ function expected(overlay: InteractionOverlay): string {
   act(() => {
     flushSync(() =>
       root.render(
-        createElement(ThemeProvider, { value: { tokens: {}, window }, children: renderDocument(LIST_PAGE, { theme: NO_THEME, interaction: { overlay } }) }),
+        createElement(ThemeProvider, {
+          value: { tokens: {}, window },
+          children: renderDocument(LIST_PAGE, { theme: NO_THEME, interaction: { overlay } }),
+        }),
       ),
     )
   })
@@ -282,9 +276,7 @@ describe('스크립트가 없어도 번들이 쓸모 있다', () => {
     expect(document.querySelectorAll('.wb-export-tab')).toHaveLength(3)
     expect(document.querySelectorAll('.wb-export-tab-radio')).toHaveLength(3)
     expect(document.querySelector('.wb-export-canvas [data-wb-id]')).toBeNull()
-    expect(
-      document.querySelectorAll('#wb-export-panel-comments [data-wb-marker-for]').length,
-    ).toBeGreaterThan(0)
+    expect(document.querySelectorAll('#wb-export-panel-comments [data-wb-marker-for]').length).toBeGreaterThan(0)
   })
 
   /**
@@ -294,15 +286,9 @@ describe('스크립트가 없어도 번들이 쓸모 있다', () => {
    */
   it('런타임을 돌려도 좌측 트리와 우측 탭이 그대로다', async () => {
     load('pages/회원-목록.html')
-    const before = [
-      document.querySelector('.wb-export-nav')?.outerHTML,
-      document.querySelector('.wb-export-panel')?.outerHTML,
-    ]
+    const before = [document.querySelector('.wb-export-nav')?.outerHTML, document.querySelector('.wb-export-panel')?.outerHTML]
     await run()
-    expect([
-      document.querySelector('.wb-export-nav')?.outerHTML,
-      document.querySelector('.wb-export-panel')?.outerHTML,
-    ]).toEqual(before)
+    expect([document.querySelector('.wb-export-nav')?.outerHTML, document.querySelector('.wb-export-panel')?.outerHTML]).toEqual(before)
   })
 
   /** 런타임이 그린 누르기 전의 문서 = 캔버스 미리보기가 그린 것. 준비 신호가 서고 실패는 없다. */
@@ -318,11 +304,11 @@ describe('스크립트가 없어도 번들이 쓸모 있다', () => {
   it('런타임이 탭 라디오를 건드리지 않는다', async () => {
     load('pages/회원-목록.html')
     await run()
-    expect(
-      [...document.querySelectorAll('.wb-export-tab-radio')].map((radio) =>
-        (radio as HTMLInputElement).checked,
-      ),
-    ).toEqual([true, false, false])
+    expect([...document.querySelectorAll('.wb-export-tab-radio')].map((radio) => (radio as HTMLInputElement).checked)).toEqual([
+      true,
+      false,
+      false,
+    ])
   })
 })
 
@@ -333,9 +319,7 @@ describe('누르면 웹 앱에서 누른 것과 같은 화면이 된다 (설계�
     load('pages/회원-목록.html')
     await run()
     press('n_btn')
-    expect(drawn()).toBe(
-      expected({ n_list: { loading: true }, n_tabs: { active: 1 }, n_card: { visible: false } }),
-    )
+    expect(drawn()).toBe(expected({ n_list: { loading: true }, n_tabs: { active: 1 }, n_card: { visible: false } }))
   })
 
   it('누르기 전과 후가 다르다 — 카나리아', async () => {
@@ -407,9 +391,7 @@ describe('누르면 웹 앱에서 누른 것과 같은 화면이 된다 (설계�
     await run()
     press('n_inner')
     expect(canvas().querySelector('[data-wb-id="n_inner"]')?.textContent).toBe('속눌림')
-    expect(
-      canvas().querySelector('[data-wb-id="n_outer"] [data-wb-part="subtitle"]')?.textContent,
-    ).toBe('겉눌림')
+    expect(canvas().querySelector('[data-wb-id="n_outer"] [data-wb-part="subtitle"]')?.textContent).toBe('겉눌림')
   })
 
   /**
@@ -424,9 +406,7 @@ describe('누르면 웹 앱에서 누른 것과 같은 화면이 된다 (설계�
     await run()
     const event = press('n_submit', 'submit')
     expect(event.defaultPrevented).toBe(true)
-    expect(canvas().querySelector('[data-wb-id="n_list"]')?.getAttribute('data-wb-state')).toBe(
-      'empty',
-    )
+    expect(canvas().querySelector('[data-wb-id="n_list"]')?.getAttribute('data-wb-state')).toBe('empty')
   })
 
   it('규칙이 없는 노드의 제출은 막지 않는다', async () => {
@@ -576,7 +556,15 @@ describe('못 한 것을 조용히 넘기지 않는다', () => {
             id: 'n_twice',
             type: 'Button',
             props: { label: '둘' },
-            interactions: [{ on: 'click', actions: [{ type: 'navigate', target: 'page:회원/상세' }, { type: 'navigate', target: 'page:회원/목록' }] }],
+            interactions: [
+              {
+                on: 'click',
+                actions: [
+                  { type: 'navigate', target: 'page:회원/상세' },
+                  { type: 'navigate', target: 'page:회원/목록' },
+                ],
+              },
+            ],
           },
         ],
       } as WbNode,
@@ -651,9 +639,7 @@ describe('번호 마커 겹layer', () => {
   function numbered(): [string, string][] {
     const seen = new Set<string>()
     const out: [string, string][] = []
-    for (const line of document.querySelectorAll(
-      '#wb-export-panel-comments [data-wb-marker-for][data-wb-marker]',
-    )) {
+    for (const line of document.querySelectorAll('#wb-export-panel-comments [data-wb-marker-for][data-wb-marker]')) {
       const nodeId = line.getAttribute('data-wb-marker-for') ?? ''
       if (seen.has(nodeId)) continue
       seen.add(nodeId)
@@ -678,9 +664,7 @@ describe('번호 마커 겹layer', () => {
   it('같은 노드의 코멘트가 둘이어도 마커는 하나다', async () => {
     load('pages/회원-목록.html')
     await run()
-    const lines = [
-      ...document.querySelectorAll('#wb-export-panel-comments [data-wb-marker-for="n_list"]'),
-    ]
+    const lines = [...document.querySelectorAll('#wb-export-panel-comments [data-wb-marker-for="n_list"]')]
     expect(lines.length).toBe(2)
     expect(markers().filter(([nodeId]) => nodeId === 'n_list')).toHaveLength(1)
   })
@@ -706,7 +690,11 @@ describe('번호 마커 겹layer', () => {
   it('0·음수·비정수 번호는 그리지 않는다', async () => {
     load('pages/회원-목록.html')
     await run()
-    expect(markers().map(([nodeId]) => nodeId).sort()).toEqual(['n_card', 'n_list'])
+    expect(
+      markers()
+        .map(([nodeId]) => nodeId)
+        .sort(),
+    ).toEqual(['n_card', 'n_list'])
   })
 
   it('숨겨진 노드의 마커는 사라진다', async () => {

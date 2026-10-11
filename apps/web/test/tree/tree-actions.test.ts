@@ -7,14 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { TreeMenuNode, TreePage } from '../../src/api/types'
-import {
-  flattenMenus,
-  menuOutdentTarget,
-  previousMenuSibling,
-  menuSubtree,
-  treeAbilities,
-  treeSpot,
-} from '../../src/tree/tree-actions'
+import { flattenMenus, menuOutdentTarget, previousMenuSibling, menuSubtree, treeAbilities, treeSpot } from '../../src/tree/tree-actions'
 
 /** 케이스마다 손으로 만들지 않도록 최소 트리를 만드는 도우미. */
 function menu(id: string, over: Partial<TreeMenuNode> = {}): TreeMenuNode {
@@ -48,9 +41,7 @@ describe('treeAbilities', () => {
     // 삭제 직후·다른 세션의 변경 뒤에 실제로 생기는 상태다. 선택은 파생값이라
     // 트리가 바뀌어도 저절로 따라오지 않는다.
     expect(treeAbilities([menu('m1')], { kind: 'menu', id: 'gone' }).remove).toBe(false)
-    expect(treeAbilities([menu('m1', { pages: [page('pg1')] })], { kind: 'page', id: 'gone' }).rename).toBe(
-      false,
-    )
+    expect(treeAbilities([menu('m1', { pages: [page('pg1')] })], { kind: 'page', id: 'gone' }).rename).toBe(false)
   })
 
   it('루트 메뉴 하나뿐이면 만들기·이름 변경·삭제만 된다', () => {
@@ -96,11 +87,7 @@ describe('treeAbilities', () => {
   })
 
   it('형제 셋 중 가운데 메뉴는 위·아래·들여쓰기가 다 된다', () => {
-    const tree = [
-      menu('m1', { sortOrder: 0 }),
-      menu('m2', { sortOrder: 1 }),
-      menu('m3', { sortOrder: 2 }),
-    ]
+    const tree = [menu('m1', { sortOrder: 0 }), menu('m2', { sortOrder: 1 }), menu('m3', { sortOrder: 2 })]
 
     const abilities = treeAbilities(tree, { kind: 'menu', id: 'm2' })
 
@@ -111,11 +98,7 @@ describe('treeAbilities', () => {
 
   it('형제 셋 중 첫째는 위로도 들여쓰기도 못 한다', () => {
     // 들여쓰기의 목적지는 **앞 형제**다 — 앞이 없으면 갈 곳이 없다.
-    const tree = [
-      menu('m1', { sortOrder: 0 }),
-      menu('m2', { sortOrder: 1 }),
-      menu('m3', { sortOrder: 2 }),
-    ]
+    const tree = [menu('m1', { sortOrder: 0 }), menu('m2', { sortOrder: 1 }), menu('m3', { sortOrder: 2 })]
 
     const abilities = treeAbilities(tree, { kind: 'menu', id: 'm1' })
 
@@ -136,10 +119,7 @@ describe('treeAbilities', () => {
     // `indent`·`outdent`가 **언제나** 불가한 근거: 트리가 페이지를 먼저 그리므로
     // 페이지의 앞 형제는 항상 페이지이고, 페이지는 자식을 갖지 못한다. 여기서는 앞
     // 형제가 페이지로 **있는** 상태를 만들어 그 조건이 갖춰져도 여전히 불가임을 본다.
-    const tree = [
-      menu('m1', { pages: [page('pg1', { sortOrder: 0 }), page('pg2', { sortOrder: 1 })] }),
-      menu('m2'),
-    ]
+    const tree = [menu('m1', { pages: [page('pg1', { sortOrder: 0 }), page('pg2', { sortOrder: 1 })] }), menu('m2')]
 
     const abilities = treeAbilities(tree, { kind: 'page', id: 'pg2' })
 
@@ -227,19 +207,13 @@ describe('treeSpot', () => {
     // **서버가 순서대로 준다는 것에 기대지 않는다.** 배열 순서로 세면 `m1`이 0,
     // `sortOrder`로 세면 2다. 화면도 `byOrder`로 다시 세워 그리므로(`menu-tree.tsx`),
     // 배열 기준으로 세면 사용자가 보는 자리와 목적지 계산이 어긋난다.
-    const tree = [
-      menu('m1', { sortOrder: 2 }),
-      menu('m2', { sortOrder: 0 }),
-      menu('m3', { sortOrder: 1 }),
-    ]
+    const tree = [menu('m1', { sortOrder: 2 }), menu('m2', { sortOrder: 0 }), menu('m3', { sortOrder: 1 })]
 
     expect(treeSpot(tree, { kind: 'menu', id: 'm1' })?.index).toBe(2)
     expect(treeSpot(tree, { kind: 'menu', id: 'm2' })?.index).toBe(0)
 
     // 페이지도 같다 — 저장소 함수가 달라도(`repos/pages.ts`) 화면 쪽 규칙은 하나다.
-    const withPages = [
-      menu('m1', { pages: [page('pg1', { sortOrder: 1 }), page('pg2', { sortOrder: 0 })] }),
-    ]
+    const withPages = [menu('m1', { pages: [page('pg1', { sortOrder: 1 }), page('pg2', { sortOrder: 0 })] })]
 
     expect(treeSpot(withPages, { kind: 'page', id: 'pg1' })?.index).toBe(1)
     expect(treeSpot(withPages, { kind: 'page', id: 'pg2' })?.index).toBe(0)
@@ -248,11 +222,7 @@ describe('treeSpot', () => {
   it('판정도 sortOrder 정렬 기준이다', () => {
     // `treeSpot`만 고치고 판정을 배열 기준으로 두면 "위로가 활성인데 앞 형제가 없다"가
     // 된다. 배열 첫째(`m1`)가 `sortOrder`로는 막내다.
-    const tree = [
-      menu('m1', { sortOrder: 2 }),
-      menu('m2', { sortOrder: 0 }),
-      menu('m3', { sortOrder: 1 }),
-    ]
+    const tree = [menu('m1', { sortOrder: 2 }), menu('m2', { sortOrder: 0 }), menu('m3', { sortOrder: 1 })]
 
     expect(treeAbilities(tree, { kind: 'menu', id: 'm1' }).moveDown).toBe(false)
     expect(treeAbilities(tree, { kind: 'menu', id: 'm2' }).moveUp).toBe(false)
@@ -261,11 +231,7 @@ describe('treeSpot', () => {
 
 describe('previousMenuSibling', () => {
   it('sortOrder 순으로 바로 앞의 형제를 준다', () => {
-    const tree = [
-      menu('m1', { sortOrder: 2 }),
-      menu('m2', { sortOrder: 0 }),
-      menu('m3', { sortOrder: 1 }),
-    ]
+    const tree = [menu('m1', { sortOrder: 2 }), menu('m2', { sortOrder: 0 }), menu('m3', { sortOrder: 1 })]
 
     expect(previousMenuSibling(tree, 'm1')?.id).toBe('m3')
     expect(previousMenuSibling(tree, 'm3')?.id).toBe('m2')
@@ -280,10 +246,7 @@ describe('previousMenuSibling', () => {
 
   it('자식 메뉴는 같은 부모 안에서만 앞을 본다', () => {
     // 앞 형제를 트리 전체의 앞 노드로 찾으면 `m3`의 앞이 `m2`가 아니라 다른 층의 것이 된다.
-    const tree = [
-      menu('m1', { children: [menu('m2'), menu('m3', { sortOrder: 1 })] }),
-      menu('m4', { sortOrder: 1 }),
-    ]
+    const tree = [menu('m1', { children: [menu('m2'), menu('m3', { sortOrder: 1 })] }), menu('m4', { sortOrder: 1 })]
 
     expect(previousMenuSibling(tree, 'm3')?.id).toBe('m2')
     expect(previousMenuSibling(tree, 'm2')).toBeNull()
@@ -292,10 +255,7 @@ describe('previousMenuSibling', () => {
 
 describe('menuOutdentTarget', () => {
   it('부모의 부모와 부모의 자리를 준다', () => {
-    const tree = [
-      menu('m1', { sortOrder: 0 }),
-      menu('m2', { sortOrder: 1, children: [menu('m3')] }),
-    ]
+    const tree = [menu('m1', { sortOrder: 0 }), menu('m2', { sortOrder: 1, children: [menu('m3')] })]
 
     // `m3`을 내어쓰면 루트 목록의 `m2` 다음 자리로 간다 — `index + 1`은 호출자가 만든다.
     expect(menuOutdentTarget(tree, 'm3')).toEqual({ parentId: null, index: 1 })
@@ -409,10 +369,7 @@ describe('깨진 트리를 넣어도 던지지 않는다', () => {
   it('배열 안의 null은 형제 수에서 빠진다', () => {
     // 던지지 않는 것만 보면 "원소를 세는 자리가 조용히 어긋난다"를 못 잡는다. `null`을
     // 형제로 세면 `moveDown`이 갈 곳 없는 자리를 활성으로 연다.
-    const tree = [
-      { id: 'm1', title: '가', sortOrder: 0, pages: [], children: [] },
-      null,
-    ] as unknown as TreeMenuNode[]
+    const tree = [{ id: 'm1', title: '가', sortOrder: 0, pages: [], children: [] }, null] as unknown as TreeMenuNode[]
 
     expect(treeSpot(tree, { kind: 'menu', id: 'm1' })?.siblingCount).toBe(1)
     expect(treeAbilities(tree, { kind: 'menu', id: 'm1' }).moveDown).toBe(false)

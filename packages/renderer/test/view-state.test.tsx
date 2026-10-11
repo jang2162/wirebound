@@ -20,7 +20,13 @@ afterEach(() => {
 const text = (id: string): WbNode => ({ id, type: 'Text', props: { content: id } })
 const caseOf = (id: string, state: string, children: WbNode[]): WbNode => ({ id, type: 'StateCase', props: { state }, children })
 
-function doc(children: WbNode[], viewStates = [{ id: 's_admin', name: '관리자' }, { id: 's_guest', name: '비로그인' }]): PageDocument {
+function doc(
+  children: WbNode[],
+  viewStates = [
+    { id: 's_admin', name: '관리자' },
+    { id: 's_guest', name: '비로그인' },
+  ],
+): PageDocument {
   return { version: 1, root: { id: 'n_root', type: 'Page', children }, viewStates }
 }
 
@@ -83,9 +89,7 @@ describe('상태 영역 그리기', () => {
   })
 
   it('가지 안 노드에 마커 · 선택 표지가 그대로 선다', () => {
-    const marked = doc([
-      { id: 'n_sw', type: 'StateSwitch', children: [caseOf('n_c0', 'default', [{ ...text('n_base'), marker: 3 }])] },
-    ])
+    const marked = doc([{ id: 'n_sw', type: 'StateSwitch', children: [caseOf('n_c0', 'default', [{ ...text('n_base'), marker: 3 }])] }])
     const { container } = drawn(renderDocument(marked))
     const el = container.querySelector('[data-wb-id="n_base"]')!
     expect(el.getAttribute('data-wb-component')).toBe('Text')
@@ -118,7 +122,11 @@ describe('상태 영역 그리기', () => {
         id: 'l_root',
         type: 'Page',
         children: [
-          { id: 'l_sw', type: 'StateSwitch', children: [caseOf('l_c0', 'default', [text('l_base')]), caseOf('l_c1', 's_admin', [text('l_admin')])] },
+          {
+            id: 'l_sw',
+            type: 'StateSwitch',
+            children: [caseOf('l_c0', 'default', [text('l_base')]), caseOf('l_c1', 's_admin', [text('l_admin')])],
+          },
           { id: 'l_slot', type: 'Slot' },
         ],
       },

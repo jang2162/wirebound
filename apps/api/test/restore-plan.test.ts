@@ -279,9 +279,7 @@ describe('미지원 문서 버전 — 설계서 「스키마 마이그레이션�
 
     expect(outcome.kind).toBe('unsupported-version')
     if (outcome.kind !== 'unsupported-version') return
-    expect(outcome.pages).toEqual([
-      { id: PAGE_A, title: `페이지 ${PAGE_A.slice(0, 4)}`, version: 999, source: 'snapshot' },
-    ])
+    expect(outcome.pages).toEqual([{ id: PAGE_A, title: `페이지 ${PAGE_A.slice(0, 4)}`, version: 999, source: 'snapshot' }])
   })
 
   it('저장된 문서가 미지원이면 그것도 막는다 — 두 방향 모두', () => {
@@ -359,17 +357,11 @@ describe('미지원 문서 버전 — 설계서 「스키마 마이그레이션�
     const frozen = doc('그대로', 999)
     const p = payload({
       menu: [menuNode(MENU_A)],
-      pages: [
-        page(PAGE_A, { schemaVersion: 999, schema: frozen }),
-        page(PAGE_B, { schema: doc('그때') }),
-      ],
+      pages: [page(PAGE_A, { schemaVersion: 999, schema: frozen }), page(PAGE_B, { schema: doc('그때') })],
     })
     const c = current({
       menu: [menuNode(MENU_A)],
-      pages: [
-        page(PAGE_A, { schemaVersion: 999, schema: frozen }),
-        page(PAGE_B, { schema: doc('지금') }),
-      ],
+      pages: [page(PAGE_A, { schemaVersion: 999, schema: frozen }), page(PAGE_B, { schema: doc('지금') })],
     })
 
     const outcome = planRestore(p, c)

@@ -19,7 +19,11 @@ const SERVER_REFUSALS: Record<string, string[]> = {
   'unknown-type': ['알 수 없는 컴포넌트 타입: Bogus', '알 수 없는 컴포넌트 타입: Other'],
   'duplicate-id': ['id가 중복됩니다: n_route000001'],
   // 별칭을 단 노드의 문장은 타입 뒤 괄호에 별칭이 든다(`validate.ts` 의 `aliasNote`) — 머리가 별칭에 안 갈린다.
-  'invalid-props': ["List의 props가 올바르지 않습니다 ('회원 목록'): items 너무 작습니다", "List의 props가 올바르지 않습니다 ('주문: 목록'): items 너무 작습니다", 'List의 props가 올바르지 않습니다: items 너무 작습니다'],
+  'invalid-props': [
+    "List의 props가 올바르지 않습니다 ('회원 목록'): items 너무 작습니다",
+    "List의 props가 올바르지 않습니다 ('주문: 목록'): items 너무 작습니다",
+    'List의 props가 올바르지 않습니다: items 너무 작습니다',
+  ],
   'children-not-allowed': ["Divider은 자식을 담을 수 없습니다 ('구분선')", 'Divider은 자식을 담을 수 없습니다'],
   'nul-byte': ['문서에 NUL 문자(U+0000)를 포함할 수 없습니다'],
   'bad-path': ['경로는 /root · /viewStates 아래이거나 /version이어야 합니다'],

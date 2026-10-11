@@ -65,4 +65,3 @@ export const DEFAULT_LANG = 'ko'
 export function installRegistries(): void {
   installCatalog()
 }
-

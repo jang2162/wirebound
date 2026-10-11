@@ -70,13 +70,28 @@ describe.skipIf(!전제.ok)('페이지 JSON — 가져오기 상자 · 내보내
         mimeType: 'application/json',
         buffer: Buffer.from(pageFile('디스크에서 온 목록')),
       })
-      const status = await poll('미리보기', () => dialog.getByRole('status').textContent(), (text) => (text ?? '').includes('디스크에서 온 목록'))
+      const status = await poll(
+        '미리보기',
+        () => dialog.getByRole('status').textContent(),
+        (text) => (text ?? '').includes('디스크에서 온 목록'),
+      )
       const before = new URL(page.url()).pathname
       await dialog.getByRole('button', { name: '가져오기', exact: true }).click()
 
-      const after = await poll('새 페이지로 옮긴다', async () => new URL(page.url()).pathname, (path) => path !== before)
-      const notice = await poll('하단 바 통지', () => page.locator('.wb-shell-footer-notices').innerText(), (text) => text.includes('가져왔습니다'))
-      const tree = (await stack.request(alice, 'GET', `/projects/${projectId}/tree`)).body.menu as { id: string; pages: { id: string; title: string }[] }[]
+      const after = await poll(
+        '새 페이지로 옮긴다',
+        async () => new URL(page.url()).pathname,
+        (path) => path !== before,
+      )
+      const notice = await poll(
+        '하단 바 통지',
+        () => page.locator('.wb-shell-footer-notices').innerText(),
+        (text) => text.includes('가져왔습니다'),
+      )
+      const tree = (await stack.request(alice, 'GET', `/projects/${projectId}/tree`)).body.menu as {
+        id: string
+        pages: { id: string; title: string }[]
+      }[]
       const target = tree.find((menu) => menu.id === ids.target)
 
       expect({
@@ -130,9 +145,17 @@ describe.skipIf(!전제.ok)('페이지 JSON — 가져오기 상자 · 내보내
         mimeType: 'application/json',
         buffer: Buffer.from(pageFile('닫은 상자의 목록')),
       })
-      await poll('미리보기', () => dialog.getByRole('status').textContent(), (text) => (text ?? '').includes('닫은 상자의 목록'))
+      await poll(
+        '미리보기',
+        () => dialog.getByRole('status').textContent(),
+        (text) => (text ?? '').includes('닫은 상자의 목록'),
+      )
       await dialog.getByRole('button', { name: '가져오기', exact: true }).click()
-      await poll('요청이 붙잡혔다', async () => requests, (n) => n === 1)
+      await poll(
+        '요청이 붙잡혔다',
+        async () => requests,
+        (n) => n === 1,
+      )
 
       const 보내는_중 = await dialog.getByRole('button', { name: '가져오는 중…', exact: true }).count()
       const 취소_꺼짐 = await dialog.getByRole('button', { name: '취소', exact: true }).isDisabled()
@@ -141,9 +164,16 @@ describe.skipIf(!전제.ok)('페이지 JSON — 가져오기 상자 · 내보내
       const 닫힌_뒤_상자 = await page.locator('dialog[open]').count()
 
       release?.()
-      const notice = await poll('하단 바 통지', () => page.locator('.wb-shell-footer-notices').innerText(), (text) => text.includes('가져왔습니다'))
+      const notice = await poll(
+        '하단 바 통지',
+        () => page.locator('.wb-shell-footer-notices').innerText(),
+        (text) => text.includes('가져왔습니다'),
+      )
       // 트리가 다시 받혀 새 줄이 선 뒤에 주소를 본다 — 옮기는 일은 다시 받은 뒤에 돈다(`useTreeCommands`의 `run`).
-      const tree = (await stack.request(alice, 'GET', `/projects/${projectId}/tree`)).body.menu as { id: string; pages: { id: string; title: string }[] }[]
+      const tree = (await stack.request(alice, 'GET', `/projects/${projectId}/tree`)).body.menu as {
+        id: string
+        pages: { id: string; title: string }[]
+      }[]
       const made = tree.find((menu) => menu.id === ids.target)?.pages[0]
       await rowLabel(page, made?.id ?? '').waitFor()
 
@@ -219,18 +249,36 @@ describe.skipIf(!전제.ok)('페이지 JSON — 가져오기 상자 · 내보내
         mimeType: 'application/json',
         buffer: Buffer.from(pageFile('사라진 곳으로')),
       })
-      await poll('미리보기', () => dialog.getByRole('status').textContent(), (text) => (text ?? '').includes('사라진 곳으로'))
+      await poll(
+        '미리보기',
+        () => dialog.getByRole('status').textContent(),
+        (text) => (text ?? '').includes('사라진 곳으로'),
+      )
 
       const removed = await stack.request(alice, 'DELETE', `/projects/${projectId}/menu/${ids.target}`)
       expect(removed.status).toBeLessThan(300)
-      await poll('트리에서 줄이 사라진다', () => row(page, ids.target).count(), (n) => n === 0, 5_000)
+      await poll(
+        '트리에서 줄이 사라진다',
+        () => row(page, ids.target).count(),
+        (n) => n === 0,
+        5_000,
+      )
       const openAfterTree = await page.locator('dialog[open]').count()
       // 단계마다 그 단계의 값을 그 자리에서 — 상자를 닫는 변조가 뒤 단계의 시간 초과가 아니라 이 값으로 죽는다.
       expect(openAfterTree).toBe(1)
 
       await dialog.getByRole('button', { name: '가져오기', exact: true }).click()
-      const text = await poll('상자 안의 거절', () => dialog.textContent(), (t) => (t ?? '').includes('찾을 수 없'), 8_000)
-      const tree = (await stack.request(alice, 'GET', `/projects/${projectId}/tree`)).body.menu as { id: string; title: string; pages: { title: string }[] }[]
+      const text = await poll(
+        '상자 안의 거절',
+        () => dialog.textContent(),
+        (t) => (t ?? '').includes('찾을 수 없'),
+        8_000,
+      )
+      const tree = (await stack.request(alice, 'GET', `/projects/${projectId}/tree`)).body.menu as {
+        id: string
+        title: string
+        pages: { title: string }[]
+      }[]
       expect({
         상자_트리가_바뀐_뒤: openAfterTree,
         상자_거절_뒤: await page.locator('dialog[open]').count(),
@@ -285,7 +333,10 @@ function pageFile(title: string): string {
   return JSON.stringify({
     wireboundVersion: '1',
     page: { title, description: null },
-    schema: { version: 1, root: { id: 'file_root', type: 'Page', children: [{ id: 'file_text', type: 'Text', props: { content: '본문' } }] } },
+    schema: {
+      version: 1,
+      root: { id: 'file_root', type: 'Page', children: [{ id: 'file_text', type: 'Text', props: { content: '본문' } }] },
+    },
     comments: [{ nodeId: 'file_text', body: '가' }],
   })
 }

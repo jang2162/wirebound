@@ -237,9 +237,7 @@ describe('shell.css 커버리지 — 코드가 붙인 클래스에 규칙이 있
 
     const ruled = ruledClasses(withoutRule)
     expect(ruled.has('wb-shell-panel-title')).toBe(false)
-    expect(findUncoveredClasses(SOURCES, ruled).map((item) => item.className)).toContain(
-      'wb-shell-panel-title',
-    )
+    expect(findUncoveredClasses(SOURCES, ruled).map((item) => item.className)).toContain('wb-shell-panel-title')
   })
 
   it('안 쓰이는 규칙은 잡지 않는다 — 방향이 코드 → CSS 한쪽이다', () => {

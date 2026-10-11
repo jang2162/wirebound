@@ -48,7 +48,11 @@ describe.skipIf(!전제.ok)('떠나며 버린 편집의 수', () => {
       await canvasFrame(page).locator('body', { hasText: '2쪽 원문' }).waitFor()
       await hold.release()
 
-      await poll('보낸 편집이 서버에 닿는다', () => server(stack, alice, fx.P1), (value) => value.head === 2)
+      await poll(
+        '보낸 편집이 서버에 닿는다',
+        () => server(stack, alice, fx.P1),
+        (value) => value.head === 2,
+      )
       const settled = await stable(page)
       // eslint-disable-next-line no-console
       console.log(`[떠남 · 저장됨] ${log.lines.join(' · ')} · 통지 ${JSON.stringify(settled.notices)}`)
@@ -81,7 +85,11 @@ describe.skipIf(!전제.ok)('떠나며 버린 편집의 수', () => {
       await hold.release()
       expect((await bobs).status).toBe(200)
 
-      await poll('앨리스 편집의 거절이 닿는다', async () => log.lines.slice(), (lines) => lines.some((line) => line.startsWith('WS← patch-error')))
+      await poll(
+        '앨리스 편집의 거절이 닿는다',
+        async () => log.lines.slice(),
+        (lines) => lines.some((line) => line.startsWith('WS← patch-error')),
+      )
       const settled = await stable(page)
       // eslint-disable-next-line no-console
       console.log(`[떠남 · 거절됨] ${log.lines.join(' · ')} · 통지 ${JSON.stringify(settled.notices)}`)
@@ -123,7 +131,11 @@ describe.skipIf(!전제.ok)('떠나며 버린 편집의 수', () => {
       await hold.release()
       expect((await bobs).status).toBe(200)
 
-      await poll('앨리스 편집의 거절이 닿는다', async () => log.lines.slice(), (lines) => lines.some((line) => line.startsWith('WS← patch-error')))
+      await poll(
+        '앨리스 편집의 거절이 닿는다',
+        async () => log.lines.slice(),
+        (lines) => lines.some((line) => line.startsWith('WS← patch-error')),
+      )
       const settled = await stable(page)
       // eslint-disable-next-line no-console
       console.log(`[두 번 떠남 · 거절됨] ${log.lines.join(' · ')} · 통지 ${JSON.stringify(settled.notices)}`)
@@ -234,7 +246,11 @@ async function leaveSaved(page: Page, stack: EditorStack, alice: Session, fx: Fi
   await page.getByRole('link', { name: '둘째' }).click()
   await canvasFrame(page).locator('body', { hasText: '2쪽 원문' }).waitFor()
   await hold.release()
-  await poll('보낸 편집이 서버에 닿는다', () => server(stack, alice, fx.P1), (value) => value.head === 2)
+  await poll(
+    '보낸 편집이 서버에 닿는다',
+    () => server(stack, alice, fx.P1),
+    (value) => value.head === 2,
+  )
 }
 
 /** 첫 글을 고치고 blur 로 커밋한다. */
@@ -331,7 +347,9 @@ function watch(page: Page, fx: Fixture): { lines: string[] } {
       const payload = String(frame.payload)
       if (!payload.includes('"patch"')) return
       const target = /"pageId":"([^"]+)"/.exec(payload)?.[1]
-      lines.push(`WS→ patch ${target === fx.first ? '1쪽' : target === fx.second ? '2쪽' : target} baseSeq=${/"baseSeq":(\d+)/.exec(payload)?.[1]}`)
+      lines.push(
+        `WS→ patch ${target === fx.first ? '1쪽' : target === fx.second ? '2쪽' : target} baseSeq=${/"baseSeq":(\d+)/.exec(payload)?.[1]}`,
+      )
     })
     ws.on('framereceived', (frame) => {
       const payload = String(frame.payload)

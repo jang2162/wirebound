@@ -92,8 +92,20 @@ const PAIRS: Record<string, [string, string]> = {
 
 /** 계산 스타일 견주기에 쓰는 속성 — 상자 좌표는 넣지 않는다(옆 노드가 좌표를 흔든다). */
 const STYLE_PROPS = [
-  'color', 'backgroundColor', 'opacity', 'borderTopColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderBottomWidth',
-  'boxShadow', 'outlineColor', 'outlineStyle', 'textDecorationLine', 'cursor', 'fontWeight',
+  'color',
+  'backgroundColor',
+  'opacity',
+  'borderTopColor',
+  'borderBottomColor',
+  'borderLeftColor',
+  'borderTopWidth',
+  'borderBottomWidth',
+  'boxShadow',
+  'outlineColor',
+  'outlineStyle',
+  'textDecorationLine',
+  'cursor',
+  'fontWeight',
 ]
 
 /**
@@ -165,11 +177,23 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 화면을 바꾸는 pro
       if (r.status >= 300) throw new Error(`픽스처 ${what} ${r.status} ${JSON.stringify(r.body)}`)
       return r.body
     }
-    const project = ok(await call('POST', '/projects', { name: '표지 설계서', slug: `marks-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }), '프로젝트')
+    const project = ok(
+      await call('POST', '/projects', {
+        name: '표지 설계서',
+        slug: `marks-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      }),
+      '프로젝트',
+    )
     projectId = project.id
     const menu = ok(await call('POST', `/projects/${projectId}/menu`, { parentId: null, title: '표지' }), '메뉴')
     const page = ok(await call('POST', `/projects/${projectId}/pages`, { menuNodeId: menu.id, title: '켬끔' }), '페이지')
-    ok(await call('PATCH', `/projects/${projectId}/pages/${page.id}/ops`, { baseSeq: 0, ops: NODES.map((value, i) => ({ op: 'add', path: `/root/children/${i}`, value })) }), 'ops')
+    ok(
+      await call('PATCH', `/projects/${projectId}/pages/${page.id}/ops`, {
+        baseSeq: 0,
+        ops: NODES.map((value, i) => ({ op: 'add', path: `/root/children/${i}`, value })),
+      }),
+      'ops',
+    )
     if (SHOTS !== undefined) mkdirSync(SHOTS, { recursive: true })
   }, 180_000)
 
@@ -235,140 +259,172 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 화면을 바꾸는 pro
     await page.screenshot({ path: join(SHOTS!, `${theme.replace(/^system-/, '')}-${name}.png`), clip })
   }
 
-  it.each(THEMES)('%s — 켬/끔이 상자를 바꾼다', async (themeId) => {
-    await putTheme(call, projectId, { themeId, version: seededVersion(themeId), tokens: {} })
-    const { context, page } = await open(await bundlePage())
-    let m: Record<string, Measured | null>
-    try {
-      expect(await page.evaluate(() => document.documentElement.getAttribute('data-wb-failed'))).toBeNull()
-      m = await page.evaluate(`(${MEASURE})(${JSON.stringify({ ids: NODES.map((n) => n.id), props: STYLE_PROPS })})`)
-      if (SHOTS !== undefined) for (const [name, pair] of Object.entries(PAIRS)) await shoot(page, themeId, name, pair)
-    } finally {
-      await context.close()
-    }
-    const at = (id: string): Measured => {
-      const v = m[id]
-      if (v === null || v === undefined) throw new Error(`${themeId} — ${id} 가 안 그려졌다`)
-      return v
-    }
-    // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
-    const values = {
-      compact: { paddingTop: [at('s_off').paddingTop, at('s_on').paddingTop], height: [at('s_off').height, at('s_on').height] },
-      collapsed: { height: [at('q_off').height, at('q_on').height], fields: [at('q_off').fields, at('q_on').fields] },
-      disabled: styleDiff(at('f_plain'), at('f_disabled')),
-      invalid: styleDiff(at('f_plain'), at('f_invalid')),
-      loading: styleDiff(at('l_off'), at('l_loading')),
-      kind: [at('m_image').glyph, at('m_video').glyph],
-      selectable: [at('l_off').checkbox, at('l_on').checkbox],
-      marks: [at('s_on').marks, at('q_on').marks, at('f_disabled').marks, at('f_invalid').marks, at('m_video').marks, at('l_on').marks, at('l_loading').marks],
-    }
-    const [image, video] = [at('m_image').glyph, at('m_video').glyph]
-    // eslint-disable-next-line no-console
-    console.log(`[표지 화면 차] ${themeId} ${JSON.stringify(values)}`)
-    // 카나리아 — 표지가 안 실리면 아래는 테마 CSS 가 아니라 다른 것을 잰다.
-    expect(values.marks, `${themeId} 표지`).toEqual([
-      ['data-wb-compact='],
-      ['data-wb-collapsed='],
-      ['aria-disabled=true'],
-      ['aria-invalid=true'],
-      ['data-wb-kind=video'],
-      ['data-wb-selectable='],
-      ['aria-busy=true'],
-    ])
-    expect(
-      {
-        compactNarrower: values.compact.paddingTop[1]! < values.compact.paddingTop[0]!,
-        compactShorter: values.compact.height[1]! < values.compact.height[0]!,
-        collapsedShorter: values.collapsed.height[1]! < values.collapsed.height[0]!,
-        collapsedFields: values.collapsed.fields,
-        disabledDiffers: values.disabled > 0,
-        invalidDiffers: values.invalid > 0,
-        loadingDiffers: values.loading > 0,
-        videoGlyphVisible: video !== null && video.width > 0 && video.height > 0,
-        videoGlyphDiffers: video?.text !== image?.text,
-      },
-      `${themeId} ${JSON.stringify(values)}`,
-    ).toEqual({
-      compactNarrower: true,
-      compactShorter: true,
-      collapsedShorter: true,
-      collapsedFields: [2, 0],
-      disabledDiffers: true,
-      invalidDiffers: true,
-      loadingDiffers: true,
-      videoGlyphVisible: true,
-      videoGlyphDiffers: true,
-    })
-  }, 180_000)
+  it.each(THEMES)(
+    '%s — 켬/끔이 상자를 바꾼다',
+    async (themeId) => {
+      await putTheme(call, projectId, { themeId, version: seededVersion(themeId), tokens: {} })
+      const { context, page } = await open(await bundlePage())
+      let m: Record<string, Measured | null>
+      try {
+        expect(await page.evaluate(() => document.documentElement.getAttribute('data-wb-failed'))).toBeNull()
+        m = await page.evaluate(`(${MEASURE})(${JSON.stringify({ ids: NODES.map((n) => n.id), props: STYLE_PROPS })})`)
+        if (SHOTS !== undefined) for (const [name, pair] of Object.entries(PAIRS)) await shoot(page, themeId, name, pair)
+      } finally {
+        await context.close()
+      }
+      const at = (id: string): Measured => {
+        const v = m[id]
+        if (v === null || v === undefined) throw new Error(`${themeId} — ${id} 가 안 그려졌다`)
+        return v
+      }
+      // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
+      const values = {
+        compact: { paddingTop: [at('s_off').paddingTop, at('s_on').paddingTop], height: [at('s_off').height, at('s_on').height] },
+        collapsed: { height: [at('q_off').height, at('q_on').height], fields: [at('q_off').fields, at('q_on').fields] },
+        disabled: styleDiff(at('f_plain'), at('f_disabled')),
+        invalid: styleDiff(at('f_plain'), at('f_invalid')),
+        loading: styleDiff(at('l_off'), at('l_loading')),
+        kind: [at('m_image').glyph, at('m_video').glyph],
+        selectable: [at('l_off').checkbox, at('l_on').checkbox],
+        marks: [
+          at('s_on').marks,
+          at('q_on').marks,
+          at('f_disabled').marks,
+          at('f_invalid').marks,
+          at('m_video').marks,
+          at('l_on').marks,
+          at('l_loading').marks,
+        ],
+      }
+      const [image, video] = [at('m_image').glyph, at('m_video').glyph]
+      // eslint-disable-next-line no-console
+      console.log(`[표지 화면 차] ${themeId} ${JSON.stringify(values)}`)
+      // 카나리아 — 표지가 안 실리면 아래는 테마 CSS 가 아니라 다른 것을 잰다.
+      expect(values.marks, `${themeId} 표지`).toEqual([
+        ['data-wb-compact='],
+        ['data-wb-collapsed='],
+        ['aria-disabled=true'],
+        ['aria-invalid=true'],
+        ['data-wb-kind=video'],
+        ['data-wb-selectable='],
+        ['aria-busy=true'],
+      ])
+      expect(
+        {
+          compactNarrower: values.compact.paddingTop[1]! < values.compact.paddingTop[0]!,
+          compactShorter: values.compact.height[1]! < values.compact.height[0]!,
+          collapsedShorter: values.collapsed.height[1]! < values.collapsed.height[0]!,
+          collapsedFields: values.collapsed.fields,
+          disabledDiffers: values.disabled > 0,
+          invalidDiffers: values.invalid > 0,
+          loadingDiffers: values.loading > 0,
+          videoGlyphVisible: video !== null && video.width > 0 && video.height > 0,
+          videoGlyphDiffers: video?.text !== image?.text,
+        },
+        `${themeId} ${JSON.stringify(values)}`,
+      ).toEqual({
+        compactNarrower: true,
+        compactShorter: true,
+        collapsedShorter: true,
+        collapsedFields: [2, 0],
+        disabledDiffers: true,
+        invalidDiffers: true,
+        loadingDiffers: true,
+        videoGlyphVisible: true,
+        videoGlyphDiffers: true,
+      })
+    },
+    180_000,
+  )
 
   /**
    * **`selectable` 은 표 구조에서만 뜻이 있다** — 체크 칸은 SDK 기본 뷰의 표(`data-wb-structure="table"`)가 그린다. 그 밖의 구조(줄 ·
    * 카드 목록)는 표지 `data-wb-selectable` 만 서고 체크 칸이 없다 — 계약 문장은 spec 「6.1 노드 속성」. 테마마다 선언한 variant 전부를
    * 구조로 가르고, 표 구조는 체크 칸이 머리 하나 + 행마다(둘) 보이는 상자로 서는지 센다.
    */
-  it.each(THEMES)('%s — selectable 은 표 구조에서만 체크 칸을 그린다', async (themeId) => {
-    await putTheme(call, projectId, { themeId, version: seededVersion(themeId), tokens: {} })
-    const { context, page } = await open(await bundlePage())
-    let rows: Array<{ variant: string; structure: string | null; mark: boolean; checkCells: number; boxes: Array<[number, number]> }>
-    try {
-      rows = await page.evaluate(
-        (ids) =>
-          ids.map(([variant, id]) => {
-            const el = document.querySelector(`[data-wb-id="${id}"]`)!
-            return {
-              variant,
-              structure: el.getAttribute('data-wb-structure'),
-              mark: el.hasAttribute('data-wb-selectable'),
-              checkCells: el.querySelectorAll('[data-wb-cell="check"]').length,
-              boxes: [...el.querySelectorAll('[data-wb-part="checkbox"]')].map((n) => {
-                const r = n.getBoundingClientRect()
-                return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10] as [number, number]
-              }),
-            }
-          }),
-        LIST_VARIANTS[themeId].map((variant) => [variant, selectableId(variant)] as const),
-      )
-    } finally {
-      await context.close()
-    }
-    // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
-    const detail = `${themeId} ${JSON.stringify(rows)}`
-    const tables = rows.filter((row) => row.structure === 'table')
-    // 카나리아 — variant 가 안 읽히면 아래는 아무것도 안 잰다. 표 구조를 갖는 테마는 하나 이상 읽혀야 하고, `system-commerce` 는 표 variant 가
-    // 없는 테마다(그 테마가 표를 더하면 이 줄이 알린다 — 그때 위 문장과 이 목록을 함께 고친다).
-    expect(rows.length, detail).toBeGreaterThan(0)
-    expect(tables.length > 0, detail).toBe(themeId !== 'system-commerce')
-    for (const row of rows) {
-      expect(row.mark, `${detail} — ${row.variant} 표지`).toBe(true)
-      if (row.structure === 'table') {
-        expect({ cells: row.checkCells, visible: row.boxes.every(([w, h]) => w > 0 && h > 0), boxes: row.boxes.length }, `${detail} — ${row.variant}`).toEqual({ cells: 3, visible: true, boxes: 3 })
-      } else {
-        expect({ cells: row.checkCells, boxes: row.boxes.length }, `${detail} — ${row.variant}`).toEqual({ cells: 0, boxes: 0 })
+  it.each(THEMES)(
+    '%s — selectable 은 표 구조에서만 체크 칸을 그린다',
+    async (themeId) => {
+      await putTheme(call, projectId, { themeId, version: seededVersion(themeId), tokens: {} })
+      const { context, page } = await open(await bundlePage())
+      let rows: Array<{ variant: string; structure: string | null; mark: boolean; checkCells: number; boxes: Array<[number, number]> }>
+      try {
+        rows = await page.evaluate(
+          (ids) =>
+            ids.map(([variant, id]) => {
+              const el = document.querySelector(`[data-wb-id="${id}"]`)!
+              return {
+                variant,
+                structure: el.getAttribute('data-wb-structure'),
+                mark: el.hasAttribute('data-wb-selectable'),
+                checkCells: el.querySelectorAll('[data-wb-cell="check"]').length,
+                boxes: [...el.querySelectorAll('[data-wb-part="checkbox"]')].map((n) => {
+                  const r = n.getBoundingClientRect()
+                  return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10] as [number, number]
+                }),
+              }
+            }),
+          LIST_VARIANTS[themeId].map((variant) => [variant, selectableId(variant)] as const),
+        )
+      } finally {
+        await context.close()
       }
-    }
-  }, 180_000)
+      // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
+      const detail = `${themeId} ${JSON.stringify(rows)}`
+      const tables = rows.filter((row) => row.structure === 'table')
+      // 카나리아 — variant 가 안 읽히면 아래는 아무것도 안 잰다. 표 구조를 갖는 테마는 하나 이상 읽혀야 하고, `system-commerce` 는 표 variant 가
+      // 없는 테마다(그 테마가 표를 더하면 이 줄이 알린다 — 그때 위 문장과 이 목록을 함께 고친다).
+      expect(rows.length, detail).toBeGreaterThan(0)
+      expect(tables.length > 0, detail).toBe(themeId !== 'system-commerce')
+      for (const row of rows) {
+        expect(row.mark, `${detail} — ${row.variant} 표지`).toBe(true)
+        if (row.structure === 'table') {
+          expect(
+            { cells: row.checkCells, visible: row.boxes.every(([w, h]) => w > 0 && h > 0), boxes: row.boxes.length },
+            `${detail} — ${row.variant}`,
+          ).toEqual({ cells: 3, visible: true, boxes: 3 })
+        } else {
+          expect({ cells: row.checkCells, boxes: row.boxes.length }, `${detail} — ${row.variant}`).toEqual({ cells: 0, boxes: 0 })
+        }
+      }
+    },
+    180_000,
+  )
 
   /**
    * **`Field` 의 필수 · 오류는 접근성 트리에 선다** — 역할 없는 `div` 루트에 단 `aria-required` 는 Chrome 의 접근성 트리가 버린다(`aria-invalid` 만
    * 남고 이름도 비어 있다). 기본 `Field` 뷰는 그 속성을 입력 종류별 역할과 이름을 단 `control` 조각에 둔다 — 그 조각이 이름이 있는
    * `textbox` 로 서고 `required` · `invalid` 가 둘 다 읽히는지를 CDP 접근성 트리로 잰다. 시스템 테마 다섯은 `Field` 뷰가 없어 기본 뷰다.
    */
-  it.each(THEMES)('%s — Field 의 필수 · 오류는 접근성 트리에 선다', async (themeId) => {
-    await putTheme(call, projectId, { themeId, version: seededVersion(themeId), tokens: {} })
-    const { context, page } = await open(await bundlePage())
-    try {
-      const cdp = await context.newCDPSession(page)
-      await cdp.send('Accessibility.enable')
-      const { nodes } = (await cdp.send('Accessibility.getFullAXTree')) as {
-        nodes: Array<{ ignored?: boolean; role?: { value: string }; name?: { value: string }; properties?: Array<{ name: string; value: { value: unknown } }> }>
+  it.each(THEMES)(
+    '%s — Field 의 필수 · 오류는 접근성 트리에 선다',
+    async (themeId) => {
+      await putTheme(call, projectId, { themeId, version: seededVersion(themeId), tokens: {} })
+      const { context, page } = await open(await bundlePage())
+      try {
+        const cdp = await context.newCDPSession(page)
+        await cdp.send('Accessibility.enable')
+        const { nodes } = (await cdp.send('Accessibility.getFullAXTree')) as {
+          nodes: Array<{
+            ignored?: boolean
+            role?: { value: string }
+            name?: { value: string }
+            properties?: Array<{ name: string; value: { value: unknown } }>
+          }>
+        }
+        const hits = nodes
+          .filter((node) => node.ignored !== true && node.role?.value === 'textbox' && node.name?.value === '접근성 이름')
+          .map((node) =>
+            Object.fromEntries(
+              (node.properties ?? []).filter((p) => p.name === 'required' || p.name === 'invalid').map((p) => [p.name, p.value.value]),
+            ),
+          )
+        // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
+        expect(hits, themeId).toEqual([{ required: true, invalid: 'true' }])
+      } finally {
+        await context.close()
       }
-      const hits = nodes
-        .filter((node) => node.ignored !== true && node.role?.value === 'textbox' && node.name?.value === '접근성 이름')
-        .map((node) => Object.fromEntries((node.properties ?? []).filter((p) => p.name === 'required' || p.name === 'invalid').map((p) => [p.name, p.value.value])))
-      // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
-      expect(hits, themeId).toEqual([{ required: true, invalid: 'true' }])
-    } finally {
-      await context.close()
-    }
-  }, 180_000)
+    },
+    180_000,
+  )
 })

@@ -121,8 +121,24 @@ const TREE: TreeMenuNode[] = [
 
 /** **하나는 내가 쓴 코멘트다** — 작성자에게만 서는 «수정»이 역할을 보는지 재려면 viewer 자신의 글이 있어야 한다. */
 const COMMENTS: Comment[] = [
-  { id: 'c-1', nodeId: 'n-card', body: '카드 문구 확인', authorId: ME.id, authorName: ME.name, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' },
-  { id: 'c-2', nodeId: 'n-btn', body: '버튼 위치', authorId: 'u-2', authorName: '밥', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' },
+  {
+    id: 'c-1',
+    nodeId: 'n-card',
+    body: '카드 문구 확인',
+    authorId: ME.id,
+    authorName: ME.name,
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z',
+  },
+  {
+    id: 'c-2',
+    nodeId: 'n-btn',
+    body: '버튼 위치',
+    authorId: 'u-2',
+    authorName: '밥',
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z',
+  },
 ]
 
 const SNAPSHOTS: SnapshotSummary[] = [
@@ -251,7 +267,16 @@ function mount(role: ProjectRole, draftStore?: DraftStore): Wire {
         200,
         format === 'pptx'
           ? { format, pages, screenless: [], screenFailures: [], fontWarning: null, fileName: 'deck.pptx' }
-          : { format: 'html', pages, duplicateTargets: [], brokenLinks: [], errors: [], themeId: null, themeWarning: null, fileName: 'site.zip' },
+          : {
+              format: 'html',
+              pages,
+              duplicateTargets: [],
+              brokenLinks: [],
+              errors: [],
+              themeId: null,
+              themeWarning: null,
+              fileName: 'site.zip',
+            },
       )
     }
     // 내려받기 — 파일 그 자체. jsdom 에는 `URL.createObjectURL`이 없어 저장은 거기서 실패하지만 이 자가 세는 것은 쓰기다.
@@ -398,8 +423,7 @@ async function activate(el: Element): Promise<void> {
     return
   }
   const typing =
-    (el instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(el.type)) ||
-    el instanceof HTMLTextAreaElement
+    (el instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(el.type)) || el instanceof HTMLTextAreaElement
   if (typing) {
     act(() => {
       el.focus()
@@ -439,7 +463,9 @@ function tier(el: Element): number {
  * **대화 상자의 «취소»도 누르지 않는다** — «닫기»와 같은 까닭이다(가져오기 상자의 «취소»는 «가져오기»보다 문서 순서가 앞이다).
  */
 function closesDialog(el: Element): boolean {
-  return el.closest('dialog') !== null && (el.classList.contains('wb-shell-dialog-close') || el.classList.contains('wb-shell-pagejson-cancel'))
+  return (
+    el.closest('dialog') !== null && (el.classList.contains('wb-shell-dialog-close') || el.classList.contains('wb-shell-pagejson-cancel'))
+  )
 }
 
 /** 모드는 바깥 고리(`sweepEditor`)가 정한다 — 훑기가 모드를 바꾸면 그 판의 나머지가 다른 모드를 훑는다. */
@@ -483,16 +509,10 @@ async function sweepControls(serial: number): Promise<number> {
       // 셋째 항목(가져오기)이 다른 길로는 안 닿는다(`REACH`의 «페이지 가져오기»).
       const rowMore = el.closest('.wb-shell-tree-row-actions') !== null && (el.getAttribute('aria-label') ?? '').endsWith(' 더 보기')
       const reopen =
-        el.getAttribute('aria-haspopup') === 'menu' &&
-        el.getAttribute('aria-expanded') !== 'true' &&
-        !rowMore &&
-        !exhausted(key)
+        el.getAttribute('aria-haspopup') === 'menu' && el.getAttribute('aria-expanded') !== 'true' && !rowMore && !exhausted(key)
       if (isOff(el) || (seen.has(key) && !reopen)) continue
       const at = appeared.get(key) ?? step
-      const better =
-        pick === undefined ||
-        tier(el) < tier(pick.el) ||
-        (tier(el) === tier(pick.el) && at > pick.at)
+      const better = pick === undefined || tier(el) < tier(pick.el) || (tier(el) === tier(pick.el) && at > pick.at)
       if (better) pick = { el, key, at }
     }
     if (pick === undefined) return pressed
@@ -547,7 +567,7 @@ async function sweepKeys(serial: number): Promise<void> {
   const idOf = (el: Element): number => {
     let id = ids.get(el)
     if (id === undefined) {
-      id = (next += 1)
+      id = next += 1
       ids.set(el, id)
     }
     return id

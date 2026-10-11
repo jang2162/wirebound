@@ -5,6 +5,7 @@
   "singleQuote": true,
   "trailingComma": "all",
   "sortPackageJson": false,
+  "embeddedLanguageFormatting": "off",
   "ignorePatterns": [
     "**/*.md",
     "**/*.css",

@@ -94,12 +94,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
-import type {
-  ExportFormat,
-  ExportPreview,
-  HtmlExportPreview,
-  PptxExportPreview,
-} from '../api/types'
+import type { ExportFormat, ExportPreview, HtmlExportPreview, PptxExportPreview } from '../api/types'
 import { saveBlob } from '../files/file-io'
 
 /** 조회 상태. 성공과 실패를 판별 유니온으로 가른다(`routes/editor.tsx`와 같은 이유). */
@@ -181,20 +176,10 @@ export function ExportBody(props: { projectId: string }): ReactElement {
           중인지 알아야 한다. 눌림은 **고른 것**을 따른다 — 응답을 기다리는 동안에도
           고름은 이미 정해져 있다. */}
       <div className="wb-shell-export-formats" role="group" aria-label="내보내기 형식">
-        <button
-          type="button"
-          className="wb-shell-export-format"
-          aria-pressed={format === 'html'}
-          onClick={() => choose('html')}
-        >
+        <button type="button" className="wb-shell-export-format" aria-pressed={format === 'html'} onClick={() => choose('html')}>
           HTML 번들
         </button>
-        <button
-          type="button"
-          className="wb-shell-export-format"
-          aria-pressed={format === 'pptx'}
-          onClick={() => choose('pptx')}
-        >
+        <button type="button" className="wb-shell-export-format" aria-pressed={format === 'pptx'} onClick={() => choose('pptx')}>
           PPTX
         </button>
       </div>
@@ -202,8 +187,7 @@ export function ExportBody(props: { projectId: string }): ReactElement {
       {state.status === 'loading' && <p role="status">내보낼 것을 확인하는 중…</p>}
       {/* 세션이 끊겼으면 문장이 아니라 로그인이다(`api/failure.tsx` 머리말) — 이
           화면만 다르게 굴면 사용자는 *"내보내기가 고장 났다"*로 읽는다. */}
-      {state.status === 'failed' &&
-        (state.failure.kind === 'signed-out' ? <SignedOut /> : <p role="alert">{state.failure.message}</p>)}
+      {state.status === 'failed' && (state.failure.kind === 'signed-out' ? <SignedOut /> : <p role="alert">{state.failure.message}</p>)}
       {/* **`preview.format`으로 가른다 — 고른 형식이 아니라.** 그려지는 값과 그 값이
           나온 응답이 같은 것이어야 한다. */}
       {state.status === 'ready' &&
@@ -422,12 +406,7 @@ function DownloadButton(props: { preview: ExportPreview; projectId: string }): R
 
   return (
     <>
-      <button
-        type="button"
-        className="wb-shell-export-download"
-        disabled={state.status === 'running'}
-        onClick={() => void save()}
-      >
+      <button type="button" className="wb-shell-export-download" disabled={state.status === 'running'} onClick={() => void save()}>
         {preview.fileName} 내려받기
       </button>
       {state.status === 'running' && (
@@ -439,8 +418,7 @@ function DownloadButton(props: { preview: ExportPreview; projectId: string }): R
         </p>
       )}
       {/* 세션이 끊겼으면 문장이 아니라 로그인이다 — 미리보기의 실패와 같은 규칙(위 `ExportPanel`). */}
-      {state.status === 'failed' &&
-        (state.failure.kind === 'signed-out' ? <SignedOut /> : <p role="alert">{state.failure.message}</p>)}
+      {state.status === 'failed' && (state.failure.kind === 'signed-out' ? <SignedOut /> : <p role="alert">{state.failure.message}</p>)}
     </>
   )
 }

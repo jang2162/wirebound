@@ -240,22 +240,22 @@ function settle(
   // **판정을 지난 그대로면 다시 안 묻는다**(위 «대가는 하트비트의 문서 조회다» 의 줄이는 길) — 같은 집합 · 그 뒤 살아 있는 잠금이 안 바뀜 ·
   // 문서의 구조 번호(노드를 더하고 · 지우고 · 옮긴 편집만 올린다 — `pages.structure_seq`)가 그대로면 판정의 입력이 같다. 만료만 미룬다.
   if (app.realtime.locks.isJudged(connection.id, frame.pageId, frame.nodeIds, structureSeq)) {
-    app.realtime.locks.hold(
-      { ...base, nodeIds: frame.nodeIds, connectionId: connection.id, userName: connection.userName },
-      structureSeq,
-    )
+    app.realtime.locks.hold({ ...base, nodeIds: frame.nodeIds, connectionId: connection.id, userName: connection.userName }, structureSeq)
     return 'settled'
   }
   const verdict = selectionVerdict(app, { ...base, nodeIds: frame.nodeIds }, root)
   if (verdict === 'needs-document') return verdict
   const denied = new Set(verdict.held)
-  const changed = app.realtime.locks.hold({
-    ...base,
-    nodeIds: frame.nodeIds.filter((nodeId) => !denied.has(nodeId)),
-    connectionId: connection.id,
-    // **연결이 든다** — 프레임이 실어 온 값이 아니다(`ws/patch.ts`의 actor와 같은 이유).
-    userName: connection.userName,
-  }, verdict.held.length === 0 ? structureSeq : undefined)
+  const changed = app.realtime.locks.hold(
+    {
+      ...base,
+      nodeIds: frame.nodeIds.filter((nodeId) => !denied.has(nodeId)),
+      connectionId: connection.id,
+      // **연결이 든다** — 프레임이 실어 온 값이 아니다(`ws/patch.ts`의 actor와 같은 이유).
+      userName: connection.userName,
+    },
+    verdict.held.length === 0 ? structureSeq : undefined,
+  )
   announce(app, connection.projectId, changed)
   sendDenied(connection, frame, verdict.held)
   return 'settled'
@@ -333,12 +333,7 @@ export function createLockLane(app: FastifyInstance, connection: RoomConnection)
  * 같은 집합을 다시 보낸다(편집 직전 하트비트). 잡으면 삭제가 커밋 뒤에 놓은 잠금(`releaseLocksOnPages`)이 되살아나 룸의 목록에 남는다.
  * 삭제와 겨뤄도 안 되살아난다 — 삭제가 행을 지우는 잠금은 이 `KEY SHARE`와 부딪쳐, 이 프레임이 먼저면 잡은 뒤 삭제가 놓고 늦으면 행이 없다.
  */
-export async function handleLockFrame(
-  app: FastifyInstance,
-  connection: RoomConnection,
-  frame: LockFrame,
-  turn: LockTurn,
-): Promise<void> {
+export async function handleLockFrame(app: FastifyInstance, connection: RoomConnection, frame: LockFrame, turn: LockTurn): Promise<void> {
   if (frame.nodeIds.length === 0) {
     if (turn.current() && inRoom(app, connection)) releaseLocksOf(app, connection)
     return

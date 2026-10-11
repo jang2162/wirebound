@@ -48,7 +48,15 @@ import { presetApply, presetFailureNotice } from '../edit/preset-apply'
 import { reselectAfterReject } from '../edit/reselect-after-reject'
 import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, regionRulesAt, selectionAbilities, type StructureAbilities } from '../edit/structure-actions'
-import { nonDefaultCase, removeCasePlan, splitPlan, SPLIT_PICK_REASON, unsplitKey, unsplitPlan, type UnsplitShown } from '../edit/view-state-actions'
+import {
+  nonDefaultCase,
+  removeCasePlan,
+  splitPlan,
+  SPLIT_PICK_REASON,
+  unsplitKey,
+  unsplitPlan,
+  type UnsplitShown,
+} from '../edit/view-state-actions'
 import { useViewState } from '../shell/use-view-state'
 import { droppedCasesNotice, removeManyOps } from '../edit/paste-ops'
 import type { StructureDrop } from '../edit/structure-drop'
@@ -370,7 +378,10 @@ export function useStructureCommands(props: {
   const removable = many && document !== null && removeManyOps(document, selectedNodeIds) !== null
   const selectionBased = selectionAbilities(document, selectedNodeIds, selectedNodeId, props.selectedLock, otherLock !== null, removable)
   // «안에 추가» · «아래 추가» 는 고른 노드의 잠금이 아니라 **넣는 편집이 부딪히나** 로 가른다(카드 «넣기» 와 같은 물음 — `edit/add-abilities.ts`).
-  const adds = document === null || selectedNodeId === null ? null : addAbilitiesUnderLock(document, selectedNodeId, props.selectedLock, store.editBlockedBy)
+  const adds =
+    document === null || selectedNodeId === null
+      ? null
+      : addAbilitiesUnderLock(document, selectedNodeId, props.selectedLock, store.editBlockedBy)
   const abilities = adds === null ? selectionBased : { ...selectionBased, addInside: adds.addInside, addAfter: adds.addAfter }
   // **판정 밖의 둘도 잠금을 지난다.** 어느 잠금을 지나는지는 각각의 필드 주석에 있다 —
   // 여기서 하는 것은 고르기뿐이고 판정은 스토어의 `lockedBy`가 이미 했다.
@@ -417,8 +428,7 @@ export function useStructureCommands(props: {
     const node = createNode(type)
     if (node === null) return
 
-    const ops =
-      adding === 'inside' ? insertInside(selectedNodeId, node) : insertAfter(selectedNodeId, node)
+    const ops = adding === 'inside' ? insertInside(selectedNodeId, node) : insertAfter(selectedNodeId, node)
 
     // 고르개를 연 뒤 남이 그 자리를 잡았을 수 있다(고르개는 `visiblePicker` 가 걷지만 누름이 먼저 올 수 있다) — 보내기 전에 서버와 같은 물음을 한 번 더.
     const blocker = ops === null ? null : store.editBlockedBy(ops)
@@ -469,9 +479,7 @@ export function useStructureCommands(props: {
         message:
           attempt.reason === 'no-spot'
             ? NO_SPOT_NOTICE
-            : `${brokenPattern(pattern, key)} ${attempt.issues
-                .map((entry) => entry.message)
-                .join(' / ')}`,
+            : `${brokenPattern(pattern, key)} ${attempt.issues.map((entry) => entry.message).join(' / ')}`,
       })
       return
     }
@@ -510,7 +518,8 @@ export function useStructureCommands(props: {
     if (!commitOps(attempt.apply.ops)) return
     store.selectNode(attempt.apply.selectId)
     // 페이지 목록에 못 더한 상태(20개 한도) · 목록 없이 저장된 프리셋의 외래 가지를 뺐으면 붙이기와 같은 문장으로 말한다.
-    if (attempt.droppedCases.length > 0) store.setEditFailure({ kind: 'message', message: droppedCasesNotice(attempt.droppedCases, viewStates) })
+    if (attempt.droppedCases.length > 0)
+      store.setEditFailure({ kind: 'message', message: droppedCasesNotice(attempt.droppedCases, viewStates) })
   }
 
   /** 선택 노드의 **마지막 자식**으로. `children`이 없으면 0이고 `insertNodeOps`가 배열째 만든다. */
@@ -664,9 +673,7 @@ export function useStructureCommands(props: {
     const parentSpot = nodeSpot(document, spot.parentId)
     if (parentSpot === null) return
 
-    commitOps(
-      moveNodeOps(document, selectedNodeId, parentSpot.parentId, parentSpot.index + 1),
-    )
+    commitOps(moveNodeOps(document, selectedNodeId, parentSpot.parentId, parentSpot.index + 1))
   }
 
   const aliasLocked =
@@ -694,7 +701,8 @@ export function useStructureCommands(props: {
   const splitWhy = whyOf(split)
   const unsplit = document === null || selectedNodeId === null || many ? null : unsplitPlan(document, selectedNodeId)
   const unsplitWhy = unsplit === null ? undefined : whyOf(unsplit)
-  const caseRemoval = document === null || many ? null : nonDefaultCase(document, selectedNodeId) === null ? null : removeCasePlan(document, selectedNodeId!)
+  const caseRemoval =
+    document === null || many ? null : nonDefaultCase(document, selectedNodeId) === null ? null : removeCasePlan(document, selectedNodeId!)
   const removeCaseWhy = caseRemoval === null ? undefined : whyOf(caseRemoval)
   const [unsplitting, setUnsplitting] = useState<{ switchId: string; key: string; changed: boolean; recheck: boolean } | null>(null)
   // 고른 것이 바뀌면 묻던 확인을 닫는다 — 확인은 연 순간의 영역에 대한 것이다.

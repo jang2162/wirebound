@@ -81,7 +81,14 @@ function Control(props: {
     case 'color':
       return (
         <>
-          <input className="wb-shell-settings-input" id={id} type="text" value={text} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />
+          <input
+            className="wb-shell-settings-input"
+            id={id}
+            type="text"
+            value={text}
+            readOnly={readOnly}
+            onChange={(e) => onChange(e.target.value)}
+          />
           {HEX6.test(text) && (
             <input
               className="wb-shell-settings-color"
@@ -101,7 +108,16 @@ function Control(props: {
       const number = parsed?.[1] ?? (unitOnly !== null ? '' : text === '0' ? '0' : null)
       const unit = parsed?.[2] ?? unitOnly?.[1] ?? 'px'
       if (number === null) {
-        return <input className="wb-shell-settings-input" id={id} type="text" value={text} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />
+        return (
+          <input
+            className="wb-shell-settings-input"
+            id={id}
+            type="text"
+            value={text}
+            readOnly={readOnly}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        )
       }
       return (
         <>
@@ -174,6 +190,15 @@ function Control(props: {
         </select>
       )
     case 'shadow':
-      return <input className="wb-shell-settings-input" id={id} type="text" value={text} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />
+      return (
+        <input
+          className="wb-shell-settings-input"
+          id={id}
+          type="text"
+          value={text}
+          readOnly={readOnly}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
   }
 }

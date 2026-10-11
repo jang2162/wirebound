@@ -24,7 +24,11 @@ function doc(): PageDocument {
       type: 'Page',
       children: [
         text('n_pre'),
-        { id: 'n_sw', type: 'StateSwitch', children: [kase('n_cd', 'default', [text('n_dt'), text('n_dt2')]), kase('n_ca', 's_admin', [text('n_at')])] },
+        {
+          id: 'n_sw',
+          type: 'StateSwitch',
+          children: [kase('n_cd', 'default', [text('n_dt'), text('n_dt2')]), kase('n_ca', 's_admin', [text('n_at')])],
+        },
         text('n_out'),
       ],
     },
@@ -37,9 +41,27 @@ describe('viewStateTouch', () => {
   it('흐린 기본 가지 안만 — fork · 앞 형제를 민 뒤의 좌표도 같은 가지로 읽는다', () => {
     expect({
       inside: viewStateTouch(doc(), [SET_DT], 's_guest', false),
-      shiftedRemove: viewStateTouch(doc(), [{ op: 'remove', path: '/root/children/0' }, { op: 'remove', path: '/root/children/0/children/0/children/0' }], 's_guest', false),
-      movePathAfterFrom: viewStateTouch(doc(), [{ op: 'move', from: '/root/children/0', path: '/root/children/0/children/0/children/1' }], 's_guest', false),
-      numberForm: viewStateTouch(doc(), [{ op: 'replace', path: '/root/children/01/children/0/children/0/props/content', value: '바뀜' }], 's_guest', false),
+      shiftedRemove: viewStateTouch(
+        doc(),
+        [
+          { op: 'remove', path: '/root/children/0' },
+          { op: 'remove', path: '/root/children/0/children/0/children/0' },
+        ],
+        's_guest',
+        false,
+      ),
+      movePathAfterFrom: viewStateTouch(
+        doc(),
+        [{ op: 'move', from: '/root/children/0', path: '/root/children/0/children/0/children/1' }],
+        's_guest',
+        false,
+      ),
+      numberForm: viewStateTouch(
+        doc(),
+        [{ op: 'replace', path: '/root/children/01/children/0/children/0/props/content', value: '바뀜' }],
+        's_guest',
+        false,
+      ),
     }).toEqual({
       inside: { kind: 'fork', switchId: 'n_sw' },
       shiftedRemove: { kind: 'mixed' },

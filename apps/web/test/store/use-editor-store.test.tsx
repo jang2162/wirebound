@@ -172,10 +172,7 @@ function OpenPageProbe(props: { pageId: string | undefined; seen: (OpenPage | nu
   return <span>{`zoom ${zoom} / ${open === null ? '없음' : `${open.document.root.id}:${open.headSeq}`}`}</span>
 }
 
-function renderOpenPage(
-  store: EditorStore,
-  pageId: string | undefined,
-): { seen: (OpenPage | null)[] } {
+function renderOpenPage(store: EditorStore, pageId: string | undefined): { seen: (OpenPage | null)[] } {
   const seen: (OpenPage | null)[] = []
   render(
     <EditorStoreProvider store={store}>
@@ -286,9 +283,7 @@ describe('useOpenPage', () => {
   it('Provider 밖에서 부르면 던진다', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      expect(() => render(<OpenPageProbe pageId={PAGE_ID} seen={[]} />)).toThrow(
-        /EditorStoreProvider/,
-      )
+      expect(() => render(<OpenPageProbe pageId={PAGE_ID} seen={[]} />)).toThrow(/EditorStoreProvider/)
     } finally {
       consoleError.mockRestore()
     }

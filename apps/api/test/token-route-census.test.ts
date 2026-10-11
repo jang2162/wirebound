@@ -175,9 +175,7 @@ describe('인구조사 — 토큰이 닿지 않는 라우트', () => {
       }
 
       // **목록을 통째로 단언한다** — 어느 줄이 새는지 실패 메시지가 그대로 말한다.
-      expect(observed).toEqual(
-        Object.fromEntries(Object.keys(observed).map((key) => [key, key.endsWith('/ws') ? 401 : 404])),
-      )
+      expect(observed).toEqual(Object.fromEntries(Object.keys(observed).map((key) => [key, key.endsWith('/ws') ? 401 : 404])))
     })
   })
 
@@ -198,9 +196,7 @@ describe('인구조사 — 토큰이 닿지 않는 라우트', () => {
 
   it('`:projectId`가 없고 인증이 필요한 라우트는 전부 401이다', async () => {
     await withCensus(async ({ ctx, routes, header, requiresAuth }) => {
-      const targets = routes
-        .filter((route) => !route.url.includes(PROJECT_ID_PARAM) && requiresAuth(route))
-        .flatMap(expand)
+      const targets = routes.filter((route) => !route.url.includes(PROJECT_ID_PARAM) && requiresAuth(route)).flatMap(expand)
       expect(targets.length).toBeGreaterThan(0)
 
       const observed: Record<string, number> = {}
@@ -216,9 +212,7 @@ describe('인구조사 — 토큰이 닿지 않는 라우트', () => {
 
   it('`:projectId`가 없고 공개인 라우트는 토큰이 실려도 답이 달라지지 않는다', async () => {
     await withCensus(async ({ ctx, routes, header, requiresAuth }) => {
-      const targets = routes
-        .filter((route) => !route.url.includes(PROJECT_ID_PARAM) && !requiresAuth(route))
-        .flatMap(expand)
+      const targets = routes.filter((route) => !route.url.includes(PROJECT_ID_PARAM) && !requiresAuth(route)).flatMap(expand)
       expect(targets.length).toBeGreaterThan(0)
 
       for (const target of targets) {

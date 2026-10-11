@@ -50,7 +50,11 @@ describe('system-portal manifest', () => {
       expect(decl.label, key).toMatch(/[가-힣]/)
     }
     // 쓰지 않는 무리를 폼에 내놓지 않는다.
-    for (const group of groups) expect(items.some(([, d]) => d.group === group), group).toBe(true)
+    for (const group of groups)
+      expect(
+        items.some(([, d]) => d.group === group),
+        group,
+      ).toBe(true)
   })
 
   it('토큰마다 CSS 의 :root 에 같은 이름 · 같은 기본값의 변수가 있다', () => {
@@ -120,7 +124,10 @@ describe('서체의 두 층이 같은 이름을 가리킨다', () => {
   it('@font-face 의 src 는 local() 뿐이다', () => {
     for (const face of faces()) {
       const src = /src:\s*([^;]+);/.exec(face)![1]!
-      expect(src.split(/,\s*(?=local\()/).every((s) => /^local\("[^"]+"\)$/.test(s.trim())), src).toBe(true)
+      expect(
+        src.split(/,\s*(?=local\()/).every((s) => /^local\("[^"]+"\)$/.test(s.trim())),
+        src,
+      ).toBe(true)
     }
   })
 
@@ -146,8 +153,8 @@ describe('Section 은 가둔 칼럼을 가운데 둔다', () => {
   })
 
   it('inner 의 margin 을 다른 값으로 덮는 규칙이 없다', () => {
-    const overrides = [...css.matchAll(/([^{}]*\[data-wb-part="inner"\][^{}]*)\{([^}]*)\}/g)].filter(
-      (m) => [...m[2]!.matchAll(/margin(?:-left|-right|-inline)?:\s*([^;]+);/g)].some((d) => d[1]!.trim() !== 'auto'),
+    const overrides = [...css.matchAll(/([^{}]*\[data-wb-part="inner"\][^{}]*)\{([^}]*)\}/g)].filter((m) =>
+      [...m[2]!.matchAll(/margin(?:-left|-right|-inline)?:\s*([^;]+);/g)].some((d) => d[1]!.trim() !== 'auto'),
     )
     expect(overrides.map((m) => m[1]!.trim())).toEqual([])
   })

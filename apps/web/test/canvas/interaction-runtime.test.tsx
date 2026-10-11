@@ -47,9 +47,7 @@ const DOC = pageDoc({
       type: 'Button',
       props: { label: '검색' },
       marker: 1,
-      interactions: [
-        { on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] },
-      ],
+      interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
     },
     { id: 'n-list', type: 'List', props: {}, marker: 2 },
   ],
@@ -65,9 +63,7 @@ function toEdit(): void {
 
 /** 캔버스가 낸 런타임 알림 줄들. 없으면 빈 배열이다. */
 function notices(): string[] {
-  return [...document.body.querySelectorAll('.wb-shell-canvas-runtime-item')].map(
-    (item) => item.textContent ?? '',
-  )
+  return [...document.body.querySelectorAll('.wb-shell-canvas-runtime-item')].map((item) => item.textContent ?? '')
 }
 
 describe('설계서 「실행」 — 편집 모드에서는 동작하지 않는다', () => {
@@ -150,9 +146,7 @@ describe('설계서 「실행」 — 뷰 모드에서 실제로 동작한다', (
             id: 'n-toggle',
             type: 'Button',
             props: { label: '접기' },
-            interactions: [
-              { on: 'click', actions: [{ type: 'setVisible', target: 'n-card', value: false }] },
-            ],
+            interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n-card', value: false }] }],
           },
           {
             id: 'n-card',
@@ -182,17 +176,14 @@ describe('설계서 「실행」 — 뷰 모드에서 실제로 동작한다', (
             id: 'n-go',
             type: 'Button',
             props: { label: '상세로' },
-            interactions: [
-              { on: 'click', actions: [{ type: 'switchTab', target: 'n-tabs', tab: 1 }] },
-            ],
+            interactions: [{ on: 'click', actions: [{ type: 'switchTab', target: 'n-tabs', tab: 1 }] }],
           },
           { id: 'n-tabs', type: 'Tabs', props: { tabs: ['기본정보', '상세정보'], active: 0 } },
         ],
       }),
     )
     toView()
-    const selected = (): string | null =>
-      requireNode('n-tabs').querySelector('[aria-selected="true"]')?.textContent ?? null
+    const selected = (): string | null => requireNode('n-tabs').querySelector('[aria-selected="true"]')?.textContent ?? null
     expect(selected()).toBe('기본정보')
 
     fireEvent.click(requireNode('n-go'))
@@ -212,9 +203,7 @@ describe('트리거 4종이 실제로 닿는가 — 재서 적는다', () => {
             id: 'n-tabs',
             type: 'Tabs',
             props: { tabs: ['기본정보', '상세정보'], active: 0 },
-            interactions: [
-              { on: 'select', actions: [{ type: 'setVisible', target: 'n-list', value: false }] },
-            ],
+            interactions: [{ on: 'select', actions: [{ type: 'setVisible', target: 'n-list', value: false }] }],
           },
           { id: 'n-list', type: 'List', props: {} },
         ],
@@ -239,9 +228,7 @@ describe('트리거 4종이 실제로 닿는가 — 재서 적는다', () => {
             id: 'n-form',
             type: 'SearchForm',
             props: {},
-            interactions: [
-              { on: 'submit', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] },
-            ],
+            interactions: [{ on: 'submit', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
           },
           { id: 'n-list', type: 'List', props: {} },
         ],
@@ -272,9 +259,7 @@ describe('트리거 4종이 실제로 닿는가 — 재서 적는다', () => {
             id: 'n-field',
             type: 'Field',
             props: { label: '이름' },
-            interactions: [
-              { on: 'change', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] },
-            ],
+            interactions: [{ on: 'change', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
           },
           { id: 'n-list', type: 'List', props: {} },
         ],
@@ -304,9 +289,7 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
             id: 'n-btn',
             type: 'Button',
             props: { label: '검색' },
-            interactions: [
-              { on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'loading', value: true }] },
-            ],
+            interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'loading', value: true }] }],
           },
         ],
       }),
@@ -333,9 +316,7 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
             id: 'n-btn',
             type: 'Button',
             props: { label: '검색' },
-            interactions: [
-              { on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: '없는속성', value: 1 }] },
-            ],
+            interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: '없는속성', value: 1 }] }],
           },
           { id: 'n-list', type: 'List', props: {} },
         ],
@@ -381,17 +362,13 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
             id: 'n-bad',
             type: 'Button',
             props: { label: '깨진' },
-            interactions: [
-              { on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'loading', value: true }] },
-            ],
+            interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'loading', value: true }] }],
           },
           {
             id: 'n-ok',
             type: 'Button',
             props: { label: '멀쩡한' },
-            interactions: [
-              { on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] },
-            ],
+            interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
           },
           { id: 'n-list', type: 'List', props: {} },
         ],
@@ -417,9 +394,7 @@ describe('navigate·openModal은 알리고 움직이지 않는다', () => {
         id: 'n-link',
         type: 'Button',
         props: { label: '상세' },
-        interactions: [
-          { on: 'click', actions: [{ type: 'navigate', target: 'page:관리자/회원/상세' }] },
-        ],
+        interactions: [{ on: 'click', actions: [{ type: 'navigate', target: 'page:관리자/회원/상세' }] }],
       },
     ],
   })
@@ -430,9 +405,7 @@ describe('navigate·openModal은 알리고 움직이지 않는다', () => {
 
     fireEvent.click(requireNode('n-link'))
 
-    expect(notices()).toEqual([
-      '관리자/회원/상세 페이지 이동 규칙입니다. 이 화면에서는 페이지를 옮기지 않습니다.',
-    ])
+    expect(notices()).toEqual(['관리자/회원/상세 페이지 이동 규칙입니다. 이 화면에서는 페이지를 옮기지 않습니다.'])
     // 주소가 그대로다 — 옮겼다면 캔버스의 문서가 갈렸을 것이다.
     expect(shellStore().getState().openPageId).toBe(PAGE_ID)
   })
@@ -447,9 +420,7 @@ describe('navigate·openModal은 알리고 움직이지 않는다', () => {
             id: 'n-link',
             type: 'Button',
             props: { label: '등록' },
-            interactions: [
-              { on: 'click', actions: [{ type: 'openModal', target: 'page:관리자/회원/등록' }] },
-            ],
+            interactions: [{ on: 'click', actions: [{ type: 'openModal', target: 'page:관리자/회원/등록' }] }],
           },
         ],
       }),
@@ -458,9 +429,7 @@ describe('navigate·openModal은 알리고 움직이지 않는다', () => {
 
     fireEvent.click(requireNode('n-link'))
 
-    expect(notices()).toEqual([
-      '관리자/회원/등록 페이지 모달 열기 규칙입니다. 이 화면에서는 모달을 열지 않습니다.',
-    ])
+    expect(notices()).toEqual(['관리자/회원/등록 페이지 모달 열기 규칙입니다. 이 화면에서는 모달을 열지 않습니다.'])
   })
 })
 
@@ -474,9 +443,7 @@ describe('알림은 "마지막 조작이 만든 것"이다', () => {
         id: 'n-bad',
         type: 'Button',
         props: { label: '깨진' },
-        interactions: [
-          { on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'x', value: 1 }] },
-        ],
+        interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'x', value: 1 }] }],
       },
       { id: 'n-plain', type: 'Text', props: { content: '규칙 없는 글' } },
       { id: 'n-list', type: 'List', props: {} },
@@ -531,10 +498,7 @@ describe('알림은 "마지막 조작이 만든 것"이다', () => {
 
     fireEvent.click(requireNode('n-both'))
 
-    expect(notices()).toEqual([
-      'setProp의 타겟 노드가 문서에 없습니다: n-gone',
-      'switchTab의 타겟 노드가 문서에 없습니다: n-gone2',
-    ])
+    expect(notices()).toEqual(['setProp의 타겟 노드가 문서에 없습니다: n-gone', 'switchTab의 타겟 노드가 문서에 없습니다: n-gone2'])
   })
 
   it('두 번 누르면 쌓이지 않는다 — 조작마다 새로 시작한다', async () => {
@@ -556,7 +520,8 @@ describe('겹layer가 안 바뀐 조작도 자리를 다시 잰다', () => {
     //
     // jsdom의 `getBoundingClientRect`는 전부 0이라 자리를 그대로는 잴 수 없다 —
     // **알림 줄이 있는지에 따라 다른 값을 내는 가짜 상자**를 심어 잰다.
-    const rect = (top: number): DOMRect => ({ top, left: 0, width: 10, height: 10, right: 10, bottom: top + 10, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+    const rect = (top: number): DOMRect =>
+      ({ top, left: 0, width: 10, height: 10, right: 10, bottom: top + 10, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
     const original = Element.prototype.getBoundingClientRect
     Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
       if (this.classList.contains('wb-shell-canvas-surface')) return rect(0)
@@ -576,16 +541,13 @@ describe('겹layer가 안 바뀐 조작도 자리를 다시 잰다', () => {
               type: 'Button',
               props: { label: '깨진' },
               marker: 1,
-              interactions: [
-                { on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'x', value: 1 }] },
-              ],
+              interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'x', value: 1 }] }],
             },
           ],
         }),
       )
       toView()
-      const marker = (): string | undefined =>
-        document.body.querySelector<HTMLElement>('[data-wb-marker-for="n-bad"]')?.style.top
+      const marker = (): string | undefined => document.body.querySelector<HTMLElement>('[data-wb-marker-for="n-bad"]')?.style.top
       expect(marker()).toBe('0px')
 
       fireEvent.click(requireNode('n-bad'))
@@ -627,9 +589,7 @@ describe('런타임 상태는 언제 사라지는가', () => {
             id: 'n-btn',
             type: 'Button',
             props: { label: '검색' },
-            interactions: [
-              { on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'x', value: 1 }] },
-            ],
+            interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'x', value: 1 }] }],
           },
         ],
       }),
@@ -714,7 +674,12 @@ describe('화면 상태를 바꿔도 시연은 남는다 — 번들과 같은 �
                   },
                 ],
               },
-              { id: 'n-ca', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'n-adm', type: 'Button', props: { label: '승인' } }] },
+              {
+                id: 'n-ca',
+                type: 'StateCase',
+                props: { state: 's_admin' },
+                children: [{ id: 'n-adm', type: 'Button', props: { label: '승인' } }],
+              },
             ],
           },
         ],

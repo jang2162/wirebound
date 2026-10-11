@@ -45,7 +45,13 @@ import {
   PICK_NODE_REASON,
   structureWhy,
 } from '../../src/panels/toolbar-status'
-import { MENU_WHY_DISABLED, menuRowItems, STRUCTURE_WHY_DISABLED, structureRowItems, TreeRowActions } from '../../src/panels/tree-row-actions'
+import {
+  MENU_WHY_DISABLED,
+  menuRowItems,
+  STRUCTURE_WHY_DISABLED,
+  structureRowItems,
+  TreeRowActions,
+} from '../../src/panels/tree-row-actions'
 import { reasonOf } from './tree-row'
 import '../../src/catalog-setup'
 
@@ -113,7 +119,10 @@ function structureCommands(input: { selectedNodeId: string | null; lock?: NodeLo
   const base = structureAbilities(document, selectedNodeId, lock)
   // «안에 추가» · «아래 추가» 는 `useStructureCommands` 가 `structureAbilities` 위에 얹는 그대로(`edit/add-abilities.ts`) — 넣는 편집이 남의 잠금에 부딪히나.
   // 이 판에는 스토어가 없어 «부딪힘» 을 «잠금이 고른 노드 자신에 있다» 로 대신한다(그 노드 안 · 뒤에 넣는 편집은 어느 쪽이든 부딪힌다).
-  const adds = selectedNodeId === null ? null : addAbilitiesUnderLock(document, selectedNodeId, lock, () => (lock !== null && lock.nodeId === selectedNodeId ? lock : null))
+  const adds =
+    selectedNodeId === null
+      ? null
+      : addAbilitiesUnderLock(document, selectedNodeId, lock, () => (lock !== null && lock.nodeId === selectedNodeId ? lock : null))
   const abilities = adds === null ? base : { ...base, addInside: adds.addInside, addAfter: adds.addAfter }
   // 훅의 `aliasLocked`와 같은 조건 — 하나를 골랐고 · 문서에 있고 · 남이 안 잡았을 때만 켠다.
   const aliasLocked = lock !== null || selectedNodeId === null || findNodeSafely(document.root, selectedNodeId) === undefined
@@ -148,7 +157,14 @@ function structureCommands(input: { selectedNodeId: string | null; lock?: NodeLo
     renameAlias: unused,
     // 상태 명령 — 이 판의 문서에는 영역이 없다. «상태별로 나누기»의 끔은 잠금(고른 노드)과 같은 까닭을 싣는다(`useStructureCommands`).
     viewState: {
-      splitWhy: lock !== null ? lockedSelectionStatus(lock.userName) : selectedNodeId === null ? SPLIT_PICK_REASON : selectedNodeId === document.root.id ? SPLIT_ROOT_REASON : undefined,
+      splitWhy:
+        lock !== null
+          ? lockedSelectionStatus(lock.userName)
+          : selectedNodeId === null
+            ? SPLIT_PICK_REASON
+            : selectedNodeId === document.root.id
+              ? SPLIT_ROOT_REASON
+              : undefined,
       split: unused,
       canUnsplit: false,
       unsplitWhy: undefined,
@@ -267,28 +283,78 @@ function readItems(container: HTMLElement): { items: Drawn[]; reach: number; rea
  * «메뉴 · 최상위 맏이다»(`mn-1`)는 하위가 있는 메뉴다 — 그 «삭제»의 판정과 문장은 메뉴 연쇄 삭제가 갖으므로 «내어쓰기»로 잰다.
  */
 const STATES: { name: string; open: () => HTMLElement; item: string; reason: string }[] = [
-  { name: '구조 · 안 골랐다', open: () => draw(structureRowItems(structureCommands({ selectedNodeId: null }), unused)), item: '안에 추가', reason: PICK_NODE_REASON },
+  {
+    name: '구조 · 안 골랐다',
+    open: () => draw(structureRowItems(structureCommands({ selectedNodeId: null }), unused)),
+    item: '안에 추가',
+    reason: PICK_NODE_REASON,
+  },
   {
     name: '구조 · 남이 잠갔다',
     open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-root', lock: LOCK }), unused)),
     item: '삭제',
     reason: lockedSelectionStatus('보라'),
   },
-  { name: '구조 · 루트다', open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-root' }), unused)), item: '삭제', reason: STRUCTURE_WHY_DISABLED.remove },
-  { name: '구조 · 문서에 없다', open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-gone' }), unused)), item: '삭제', reason: NOT_IN_DOCUMENT_STATUS },
+  {
+    name: '구조 · 루트다',
+    open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-root' }), unused)),
+    item: '삭제',
+    reason: STRUCTURE_WHY_DISABLED.remove,
+  },
+  {
+    name: '구조 · 문서에 없다',
+    open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-gone' }), unused)),
+    item: '삭제',
+    reason: NOT_IN_DOCUMENT_STATUS,
+  },
   {
     name: '구조 · 자식을 못 담는다',
     open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-a' }), unused)),
     item: '안에 추가',
     reason: STRUCTURE_WHY_DISABLED.addInside,
   },
-  { name: '구조 · 형제가 없다', open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-solo' }), unused)), item: '위로', reason: STRUCTURE_WHY_DISABLED.moveUp },
-  { name: '메뉴 · 보내는 중', open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-3' }, true), 'menu')), item: '이름 변경', reason: BUSY_REASON },
-  { name: '메뉴 · 안 골랐다', open: () => draw(menuRowItems(menuCommands(null), 'menu')), item: '이름 변경', reason: MENU_WHY_DISABLED.rename },
-  { name: '메뉴 · 트리에 없다', open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-gone' }), 'menu')), item: '이름 변경', reason: MISSING_IN_TREE_REASON },
-  { name: '메뉴 · 페이지다', open: () => draw(menuRowItems(menuCommands({ kind: 'page', id: 'pg-1' }), 'page')), item: '위로', reason: MENU_WHY_DISABLED.moveUp },
-  { name: '메뉴 · 최상위 맏이다', open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-1' }), 'menu')), item: '내어쓰기', reason: MENU_WHY_DISABLED.outdent },
-  { name: '메뉴 · 형제가 없다', open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-1-1' }), 'menu')), item: '위로', reason: MENU_WHY_DISABLED.moveUp },
+  {
+    name: '구조 · 형제가 없다',
+    open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-solo' }), unused)),
+    item: '위로',
+    reason: STRUCTURE_WHY_DISABLED.moveUp,
+  },
+  {
+    name: '메뉴 · 보내는 중',
+    open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-3' }, true), 'menu')),
+    item: '이름 변경',
+    reason: BUSY_REASON,
+  },
+  {
+    name: '메뉴 · 안 골랐다',
+    open: () => draw(menuRowItems(menuCommands(null), 'menu')),
+    item: '이름 변경',
+    reason: MENU_WHY_DISABLED.rename,
+  },
+  {
+    name: '메뉴 · 트리에 없다',
+    open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-gone' }), 'menu')),
+    item: '이름 변경',
+    reason: MISSING_IN_TREE_REASON,
+  },
+  {
+    name: '메뉴 · 페이지다',
+    open: () => draw(menuRowItems(menuCommands({ kind: 'page', id: 'pg-1' }), 'page')),
+    item: '위로',
+    reason: MENU_WHY_DISABLED.moveUp,
+  },
+  {
+    name: '메뉴 · 최상위 맏이다',
+    open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-1' }), 'menu')),
+    item: '내어쓰기',
+    reason: MENU_WHY_DISABLED.outdent,
+  },
+  {
+    name: '메뉴 · 형제가 없다',
+    open: () => draw(menuRowItems(menuCommands({ kind: 'menu', id: 'mn-1-1' }), 'menu')),
+    item: '위로',
+    reason: MENU_WHY_DISABLED.moveUp,
+  },
 ]
 
 describe('꺼진 항목이 이유를 `title` · `aria-description`으로 든다 — 열두 상태 전부에서', () => {

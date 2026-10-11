@@ -65,12 +65,23 @@ function sheets(zip: Map<string, Uint8Array>): string[] {
 async function store(ctx: TestContext, bytes: Uint8Array): Promise<ThemeManifest> {
   const { files, issues } = readWbtheme(bytes)
   if (files === null) throw new Error(`픽스처가 검증을 못 지났다: ${JSON.stringify(issues)}`)
-  await insertThemePackage(ctx.db, { manifest: files.manifest, bytes, sha256: createHash('sha256').update(bytes).digest('hex'), uploadedBy: null })
+  await insertThemePackage(ctx.db, {
+    manifest: files.manifest,
+    bytes,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    uploadedBy: null,
+  })
   return files.manifest
 }
 
 /** 고정한 판 · 토큰을 바꾼다 — owner 의 PUT(지금 rev 로). */
-async function bind(ctx: TestContext, fx: Fixture, themeId: string, version: string, tokens: Record<string, string | number>): Promise<void> {
+async function bind(
+  ctx: TestContext,
+  fx: Fixture,
+  themeId: string,
+  version: string,
+  tokens: Record<string, string | number>,
+): Promise<void> {
   const current = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fx.projectId}/theme`, cookies: fx.owner.cookie })
   const res = await ctx.app.inject({
     method: 'PUT',
@@ -99,7 +110,12 @@ describe('system-admin 에 고정한 프로젝트', () => {
       expect(strFromU8(zip.get('assets/theme/theme.css')!)).toBe(pkg.themeCss)
       expect(strFromU8(zip.get('assets/tokens.css')!)).toBe(tokensCss(view.manifest, { [colorKey]: '#123456' }).css)
       expect(strFromU8(zip.get('assets/tokens.css')!)).toContain('#123456')
-      expect(pageData(zip)).toEqual({ ...pageData(zip), themeRef: { themeId: 'system-admin', version: SYSTEM_ADMIN.version }, manifest: view.manifest, tokens: { [colorKey]: '#123456' } })
+      expect(pageData(zip)).toEqual({
+        ...pageData(zip),
+        themeRef: { themeId: 'system-admin', version: SYSTEM_ADMIN.version },
+        manifest: view.manifest,
+        tokens: { [colorKey]: '#123456' },
+      })
       expect(sheets(zip)).toEqual(['../assets/shell.css', '../assets/views.css', '../assets/theme/theme.css', '../assets/tokens.css'])
     })
   })
@@ -194,7 +210,13 @@ describe('api 는 테마 코드를 실행하지 않는다', () => {
   /** 자가 정말 무엇을 잡는지 — 걸려야 할 꼴이 걸리고 주석 속 인용은 안 걸린다. */
   it('자가 잡는 꼴과 안 잡는 꼴 — 카나리아', () => {
     const caught = (text: string): boolean => CODE_FROM_TEXT.test(stripComments(text, 'probe.ts'))
-    expect(['new Function("x")', "import vm from 'node:vm'", 'eval(code)', 'await import(url)', 'Function ("x")'].map(caught)).toEqual([true, true, true, true, true])
+    expect(['new Function("x")', "import vm from 'node:vm'", 'eval(code)', 'await import(url)', 'Function ("x")'].map(caught)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+    ])
     expect(['// new Function(x)', '/* eval(x) */', "const s = 'text'"].map(caught)).toEqual([false, false, false])
   })
 })

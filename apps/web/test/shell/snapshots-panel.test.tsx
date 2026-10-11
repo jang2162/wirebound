@@ -29,13 +29,7 @@ import type { ReactElement } from 'react'
 import { useNavigate } from 'react-router'
 import type { WbNode } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type {
-  PageDetail,
-  ProjectView,
-  ProjectRole,
-  RestoreResult,
-  SnapshotSummary,
-} from '../../src/api/types'
+import type { PageDetail, ProjectView, ProjectRole, RestoreResult, SnapshotSummary } from '../../src/api/types'
 import { currentPath, expiringSession } from '../helpers'
 import {
   PAGE_ID,
@@ -555,9 +549,7 @@ describe('저장', () => {
     await screen.findByText('아직 스냅샷이 없습니다.')
     saveWith('v1', '릴리스 직전')
 
-    await waitFor(() =>
-      expect(createSnapshot).toHaveBeenCalledWith(PROJECT_ID, { tag: 'v1', description: '릴리스 직전' }),
-    )
+    await waitFor(() => expect(createSnapshot).toHaveBeenCalledWith(PROJECT_ID, { tag: 'v1', description: '릴리스 직전' }))
   })
 })
 
@@ -896,9 +888,7 @@ describe('조회 실패', () => {
 
     await openPanel(client)
 
-    expect((await within(panel()).findByRole('alert')).textContent).toContain(
-      '프로젝트를 찾을 수 없습니다',
-    )
+    expect((await within(panel()).findByRole('alert')).textContent).toContain('프로젝트를 찾을 수 없습니다')
     // **제목도 함께 있다** — *"목록을 통째로 못 받았다"*와 *"저장이 실패했다"*는 다른
     // 사실인데, 서버 문장만 있으면 둘이 같은 모양으로 보인다.
     expect(within(panel()).getByText('스냅샷을 열지 못했습니다')).toBeTruthy()
@@ -1058,7 +1048,15 @@ describe('복원 뒤 재동기화', () => {
         trees += 1
         return trees === 1
           ? [{ id: 'mn-1', title: '회원관리', sortOrder: 1, pages: [{ id: PAGE_ID, title: '회원 목록', sortOrder: 1 }], children: [] }]
-          : [{ id: 'mn-1', title: '회원관리', sortOrder: 1, pages: [{ id: PAGE_ID, title: '되살아난 페이지', sortOrder: 1 }], children: [] }]
+          : [
+              {
+                id: 'mn-1',
+                title: '회원관리',
+                sortOrder: 1,
+                pages: [{ id: PAGE_ID, title: '되살아난 페이지', sortOrder: 1 }],
+                children: [],
+              },
+            ]
       },
     })
     expect(screen.getByText('회원 목록')).toBeTruthy()
@@ -1122,9 +1120,7 @@ describe('복원 뒤 재동기화', () => {
    * 페이지를 열 때 그 페이지를 **두 번** 읽는다.
    */
   it('페이지를 안 연 채로 복원해도, 그 뒤에 연 페이지는 한 번만 읽는다', async () => {
-    const getPage = vi.fn(async (_projectId: string, pageId: string) =>
-      pageDetail(pageId, pageDoc(옛뿌리)),
-    )
+    const getPage = vi.fn(async (_projectId: string, pageId: string) => pageDetail(pageId, pageDoc(옛뿌리)))
     renderEditor({
       route: PROJECT_ROUTE,
       apiOverrides: {
@@ -1208,9 +1204,7 @@ describe('복원 뒤 재동기화', () => {
           return restoreResult()
         },
         getPage: async (_projectId, pageId) =>
-          restored
-            ? { ...pageDetail(pageId, pageDoc(새뿌리)), description: '스냅샷의 설명' }
-            : pageDetail(pageId, pageDoc(옛뿌리)),
+          restored ? { ...pageDetail(pageId, pageDoc(새뿌리)), description: '스냅샷의 설명' } : pageDetail(pageId, pageDoc(옛뿌리)),
       },
     })
     fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
@@ -1223,9 +1217,7 @@ describe('복원 뒤 재동기화', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
 
-    await waitFor(() =>
-      expect((screen.getByRole('textbox', { name: '페이지 설명' }) as HTMLTextAreaElement).value).toBe('스냅샷의 설명'),
-    )
+    await waitFor(() => expect((screen.getByRole('textbox', { name: '페이지 설명' }) as HTMLTextAreaElement).value).toBe('스냅샷의 설명'))
   })
 
   it('스냅샷을 저장하는 것만으로는 다시 읽지 않는다 — 프로젝트가 안 바뀌었다', async () => {

@@ -69,7 +69,15 @@ export function paletteAddTarget(input: {
   if (target !== null) return { ok: true, target }
 
   // 왜 못 넣나 — 머리말의 표 차례대로(고른 잎의 잠금은 위에서 봤다).
-  const slot = atEnd ? (typeof rootId === 'string' ? { parentId: rootId, index: childCount(document.root) } : null) : node === undefined ? null : inside ? { parentId: selected, index: childCount(node) } : afterSlot(document, selected)
+  const slot = atEnd
+    ? typeof rootId === 'string'
+      ? { parentId: rootId, index: childCount(document.root) }
+      : null
+    : node === undefined
+      ? null
+      : inside
+        ? { parentId: selected, index: childCount(node) }
+        : afterSlot(document, selected)
   if (slot === null) return { ok: false, reason: NOT_IN_DOCUMENT_STATUS }
   if (!acceptsChildren(findNodeSafely(document.root, slot.parentId))) return { ok: false, reason: STRUCTURE_WHY_DISABLED.addInside }
   const probe = createNode(input.type, () => 'palette-probe')

@@ -15,7 +15,13 @@ import type { TreeCommands } from '../../src/tree/use-tree-commands'
 afterEach(cleanup)
 
 /** 꺼졌고 포커스를 받고 이유를 든다 — 세 값을 한 번에. */
-function offState(button: HTMLElement): { off: string | null; nativeDisabled: boolean; focused: boolean; title: string; description: string | null } {
+function offState(button: HTMLElement): {
+  off: string | null
+  nativeDisabled: boolean
+  focused: boolean
+  title: string
+  description: string | null
+} {
   button.focus()
   return {
     off: button.getAttribute('aria-disabled'),
@@ -30,10 +36,18 @@ describe('제목 충돌 단추 — 덮기가 나가 있는 동안', () => {
   it('덮기 · 버리기 둘 다 꺼진 채 포커스를 받고 이유를 들고 · 눌러도 안 부른다', () => {
     const onOverwrite = vi.fn()
     const onDiscard = vi.fn()
-    render(<MetaConflict what="제목" theirs="남의 제목" onOverwrite={onOverwrite} onDiscard={onDiscard} disabled disabledReason={BUSY_REASON} />)
+    render(
+      <MetaConflict what="제목" theirs="남의 제목" onOverwrite={onOverwrite} onDiscard={onDiscard} disabled disabledReason={BUSY_REASON} />,
+    )
     for (const name of ['내 글로 덮기', '내 글 버리기']) {
       const button = screen.getByRole('button', { name })
-      expect(offState(button), name).toEqual({ off: 'true', nativeDisabled: false, focused: true, title: BUSY_REASON, description: BUSY_REASON })
+      expect(offState(button), name).toEqual({
+        off: 'true',
+        nativeDisabled: false,
+        focused: true,
+        title: BUSY_REASON,
+        description: BUSY_REASON,
+      })
       fireEvent.click(button)
       fireEvent.keyDown(button, { key: 'Enter' })
     }
@@ -67,7 +81,13 @@ describe('메뉴 삭제의 두 번 누르기 확인 — 조작이 나가 있는 
     const confirmRemove = vi.fn()
     return {
       confirmRemove,
-      commands: { selection, busy, abilities: treeAbilities(menu, selection), confirmRemove, cancelRemove: vi.fn() } as unknown as TreeCommands,
+      commands: {
+        selection,
+        busy,
+        abilities: treeAbilities(menu, selection),
+        confirmRemove,
+        cancelRemove: vi.fn(),
+      } as unknown as TreeCommands,
     }
   }
 

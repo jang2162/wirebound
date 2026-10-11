@@ -51,7 +51,14 @@ describe.skipIf(!전제.ok)('멤버 제외 확인', () => {
   })
 
   const isMember = async () =>
-    Number((await stack.query<{ n: string }>('select count(*) as n from project_members where project_id = $1 and user_id = $2', [projectId, aliceId]))[0]!.n) === 1
+    Number(
+      (
+        await stack.query<{ n: string }>('select count(*) as n from project_members where project_id = $1 and user_id = $2', [
+          projectId,
+          aliceId,
+        ])
+      )[0]!.n,
+    ) === 1
 
   /** 폭 하나의 탭. `load` 가 앨리스를 그 이름으로 멤버로 되돌리고 설정을 다시 싣는다. DELETE 요청을 센다. */
   async function tab(width: number): Promise<{ page: Page; load(name: string): Promise<string[]>; close(): Promise<void> }> {
@@ -65,7 +72,10 @@ describe.skipIf(!전제.ok)('멤버 제외 확인', () => {
       async load(name) {
         await stack.query('update users set name = $1 where id = $2', [name, aliceId])
         if (!(await isMember())) {
-          const added = await stack.request(bob, 'POST', `/projects/${projectId}/members`, { email: stack.users.alice.email, role: 'editor' })
+          const added = await stack.request(bob, 'POST', `/projects/${projectId}/members`, {
+            email: stack.users.alice.email,
+            role: 'editor',
+          })
           if (added.status !== 201) throw new Error(`픽스처 member ${added.status}`)
         }
         await page.goto(`/projects/${projectId}/settings`)
@@ -106,7 +116,10 @@ describe.skipIf(!전제.ok)('멤버 제외 확인', () => {
         const dx = Math.max(0, confirm.x - (asked.x + asked.width), asked.x - (confirm.x + confirm.width))
         const dy = Math.max(0, confirm.y - (asked.y + asked.height), asked.y - (confirm.y + confirm.height))
         rows.push(`${width} ${key}: 거리 ${Math.round(Math.hypot(dx, dy))} · 단추 높이 ${Math.round(asked.height)}`)
-        expect(Math.round(Math.hypot(dx, dy)), `${width} ${key} — 확정과 묻던 자리의 거리(단추 높이 ${Math.round(asked.height)})`).toBeGreaterThanOrEqual(asked.height - 0.5)
+        expect(
+          Math.round(Math.hypot(dx, dy)),
+          `${width} ${key} — 확정과 묻던 자리의 거리(단추 높이 ${Math.round(asked.height)})`,
+        ).toBeGreaterThanOrEqual(asked.height - 0.5)
       }
     } finally {
       await close()
@@ -126,10 +139,13 @@ describe.skipIf(!전제.ok)('멤버 제외 확인', () => {
           const [x, y] = (await points(page, `${name} 제외`))[point]
           await page.getByRole('button', { name: `${name} 제외`, exact: true }).click()
           await page.getByRole('button', { name: `${name} 제외 확정`, exact: true }).waitFor()
-          const under = await page.evaluate(([px, py]) => {
-            const el = document.elementFromPoint(px!, py!)
-            return el === null ? '없음' : (el.closest('button')?.innerText ?? el.tagName)
-          }, [x, y])
+          const under = await page.evaluate(
+            ([px, py]) => {
+              const el = document.elementFromPoint(px!, py!)
+              return el === null ? '없음' : (el.closest('button')?.innerText ?? el.tagName)
+            },
+            [x, y],
+          )
           rows.push(`${width} ${key} ${point}: ${under}`)
         }
       }

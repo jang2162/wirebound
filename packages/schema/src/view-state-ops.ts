@@ -60,12 +60,7 @@ function copyCase(source: WbNode, state: string, newId: () => string): { node: W
  * `null`인 판: 노드가 없음 · 비었음 · 뿌리 · 부모가 다름 · 이어지지 않음 · 상태 영역의 가지(`StateCase`)를 감쌈 · `viewState`가 목록에
  * 없음. 상태 영역 자체를 감싸는 것은 받는다(영역 안의 영역).
  */
-export function splitIntoStatesOps(
-  doc: PageDocument,
-  nodeIds: string[],
-  viewState: string | null,
-  newId: () => string,
-): PatchOp[] | null {
+export function splitIntoStatesOps(doc: PageDocument, nodeIds: string[], viewState: string | null, newId: () => string): PatchOp[] | null {
   if (nodeIds.length === 0 || new Set(nodeIds).size !== nodeIds.length) return null
   const placed: Placed[] = []
   for (const id of nodeIds) {
@@ -84,10 +79,19 @@ export function splitIntoStatesOps(
   const first = indexes[0]!
   const sw = at(parentTokens, first)
   const ops: PatchOp[] = [
-    { op: 'add', path: sw, value: { id: newId(), type: 'StateSwitch', children: [{ id: newId(), type: 'StateCase', props: { state: DEFAULT_CASE }, children: [] }] } },
+    {
+      op: 'add',
+      path: sw,
+      value: {
+        id: newId(),
+        type: 'StateSwitch',
+        children: [{ id: newId(), type: 'StateCase', props: { state: DEFAULT_CASE }, children: [] }],
+      },
+    },
   ]
   // 영역이 `first`에 섰으니 감쌀 형제는 한 칸 뒤에서 차례로 빠진다.
-  for (let i = 0; i < indexes.length; i += 1) ops.push({ op: 'move', from: at(parentTokens, first + 1), path: at(parentTokens, first, 'children', 0, 'children', '-') })
+  for (let i = 0; i < indexes.length; i += 1)
+    ops.push({ op: 'move', from: at(parentTokens, first + 1), path: at(parentTokens, first, 'children', 0, 'children', '-') })
   if (forState !== null) {
     const children = parent!.children!.slice(first, first + indexes.length)
     const { node } = copyCase({ id: 'wrap', type: 'StateCase', children }, forState, newId)

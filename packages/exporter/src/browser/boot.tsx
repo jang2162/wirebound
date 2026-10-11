@@ -148,7 +148,11 @@ function wireStateSwitch(win: Window, mount: ExportMount, ids: ReadonlySet<strin
     const state = ids.has(select.value) ? select.value : null
     mount.setViewState(state)
     const { pathname, search } = win.location
-    win.history.replaceState(win.history.state, '', state === null ? `${pathname}${search}` : `${STATE_HASH_PREFIX}${encodeURIComponent(state)}`)
+    win.history.replaceState(
+      win.history.state,
+      '',
+      state === null ? `${pathname}${search}` : `${STATE_HASH_PREFIX}${encodeURIComponent(state)}`,
+    )
   }
   const onHash = (): void => {
     const state = stateFromHash(win.location.hash, ids)

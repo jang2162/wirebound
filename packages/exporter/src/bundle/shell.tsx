@@ -154,67 +154,59 @@ export function shellBody(input: ShellInput): ReactElement {
   const sentences = pageSentences(input.page)
   return (
     <>
-    <div className="wb-export">
-      <nav className="wb-export-nav" aria-label="페이지">
-        <p className="wb-export-nav-heading">페이지</p>
-        <ul className="wb-export-nav-list">
-          {input.nav.map((item) => (
-            <li key={item.href} className="wb-export-nav-item">
-              <a
-                className="wb-export-nav-link"
-                href={item.href}
-                aria-current={item.current ? 'page' : undefined}
-              >
-                {item.title}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      <main className="wb-export-mockup">
-        <StateSwitcher viewStates={input.page.viewStates} />
-        <div className="wb-export-canvas" />
-        <noscript>
-          <p className="wb-export-noscript">{NOSCRIPT_LINE}</p>
-        </noscript>
-        {/* **런타임이 못 한 것을 말하는 자리.** 비어 있고 `hidden`이므로
+      <div className="wb-export">
+        <nav className="wb-export-nav" aria-label="페이지">
+          <p className="wb-export-nav-heading">페이지</p>
+          <ul className="wb-export-nav-list">
+            {input.nav.map((item) => (
+              <li key={item.href} className="wb-export-nav-item">
+                <a className="wb-export-nav-link" href={item.href} aria-current={item.current ? 'page' : undefined}>
+                  {item.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <main className="wb-export-mockup">
+          <StateSwitcher viewStates={input.page.viewStates} />
+          <div className="wb-export-canvas" />
+          <noscript>
+            <p className="wb-export-noscript">{NOSCRIPT_LINE}</p>
+          </noscript>
+          {/* **런타임이 못 한 것을 말하는 자리.** 비어 있고 `hidden`이므로
             스크립트가 없으면 아무것도 아니다 — 번들은 스크립트 없이도 그대로 읽힌다. */}
-        <div className="wb-export-status" role="status" aria-live="polite" hidden />
-      </main>
-      <aside className="wb-export-panel">
-        {TABS.map((tab, index) => (
-          <input
-            key={tab.id}
-            className="wb-export-tab-radio"
-            type="radio"
-            name={RADIO_NAME}
-            id={radioId(tab.id)}
-            defaultChecked={index === 0}
-          />
-        ))}
-        <div className="wb-export-tablist">
-          {TABS.map((tab) => (
-            <label
+          <div className="wb-export-status" role="status" aria-live="polite" hidden />
+        </main>
+        <aside className="wb-export-panel">
+          {TABS.map((tab, index) => (
+            <input
               key={tab.id}
-              className={`wb-export-tab wb-export-tab-${tab.id}`}
-              htmlFor={radioId(tab.id)}
-            >
-              {tab.label}
-            </label>
+              className="wb-export-tab-radio"
+              type="radio"
+              name={RADIO_NAME}
+              id={radioId(tab.id)}
+              defaultChecked={index === 0}
+            />
           ))}
-        </div>
-        <section className="wb-export-tabpanel" id={panelId('description')}>
-          <DescriptionTab description={input.description} />
-        </section>
-        <section className="wb-export-tabpanel" id={panelId('comments')}>
-          <CommentTab entries={input.comments} />
-        </section>
-        <section className="wb-export-tabpanel" id={panelId('interactions')}>
-          <InteractionTab sentences={sentences} />
-        </section>
-      </aside>
-    </div>
-    {input.scripts}
+          <div className="wb-export-tablist">
+            {TABS.map((tab) => (
+              <label key={tab.id} className={`wb-export-tab wb-export-tab-${tab.id}`} htmlFor={radioId(tab.id)}>
+                {tab.label}
+              </label>
+            ))}
+          </div>
+          <section className="wb-export-tabpanel" id={panelId('description')}>
+            <DescriptionTab description={input.description} />
+          </section>
+          <section className="wb-export-tabpanel" id={panelId('comments')}>
+            <CommentTab entries={input.comments} />
+          </section>
+          <section className="wb-export-tabpanel" id={panelId('interactions')}>
+            <InteractionTab sentences={sentences} />
+          </section>
+        </aside>
+      </div>
+      {input.scripts}
     </>
   )
 }
@@ -282,32 +274,18 @@ function CommentTab({ entries }: { entries: readonly CommentEntry[] }): ReactEle
  * 작성자·시각. **둘 다 없으면 줄 자체를 안 그린다** — 빈 자리를 두면 *"이름이 없는
  * 사람"*과 *"이름을 안 실은 경로"*가 같은 화면이 된다.
  */
-function CommentMeta({
-  authorName,
-  createdAt,
-}: {
-  authorName: string | null
-  createdAt: string | null
-}): ReactElement | null {
+function CommentMeta({ authorName, createdAt }: { authorName: string | null; createdAt: string | null }): ReactElement | null {
   const parts = [authorName, createdAt].filter((part): part is string => part !== null)
   if (parts.length === 0) return null
   return <p className="wb-export-entry-meta">{parts.join(' · ')}</p>
 }
 
-function InteractionTab({
-  sentences,
-}: {
-  sentences: readonly InteractionSentence[]
-}): ReactElement {
+function InteractionTab({ sentences }: { sentences: readonly InteractionSentence[] }): ReactElement {
   if (sentences.length === 0) return <p className="wb-export-empty">{EMPTY_INTERACTIONS}</p>
   return (
     <ul className="wb-export-list">
       {sentences.map((sentence) => (
-        <li
-          key={`${sentence.nodeId}-${sentence.index}`}
-          className="wb-export-entry"
-          data-wb-interaction-for={sentence.nodeId}
-        >
+        <li key={`${sentence.nodeId}-${sentence.index}`} className="wb-export-entry" data-wb-interaction-for={sentence.nodeId}>
           <span className="wb-export-entry-body">{sentence.text}</span>
         </li>
       ))}

@@ -75,7 +75,9 @@ async function open(client: ApiClient): Promise<HTMLElement> {
 }
 
 function row(section: HTMLElement, name: string): HTMLElement {
-  const found = within(section).getAllByRole('listitem').find((item) => within(item).queryByText(name) !== null)
+  const found = within(section)
+    .getAllByRole('listitem')
+    .find((item) => within(item).queryByText(name) !== null)
   if (found === undefined) throw new Error(`${name} 줄이 없다`)
   return found
 }

@@ -85,9 +85,7 @@ async function listen(config: ReturnType<typeof loadConfig>, db: ReturnType<type
   // **빈 볼륨으로 뜨는 것이 정상 경로**가 되는데, 사람은 그것을 *"설계서가 사라졌다"* 로
   // 읽는다. 데이터는 다른 이름의 볼륨에 있다 — 그 갈림을 여기서 한 줄로 말한다.
   app.log.info(
-    `이 서버가 보는 DB: ${describeDatabaseTarget(config.databaseUrl)} · ${describeSchemaState(
-      await countExecutedMigrations(db),
-    )}`,
+    `이 서버가 보는 DB: ${describeDatabaseTarget(config.databaseUrl)} · ${describeSchemaState(await countExecutedMigrations(db))}`,
   )
 }
 

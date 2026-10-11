@@ -334,8 +334,8 @@ function IssueList(props: { issues: readonly PreviewIssue[] }): ReactElement {
     <ul className="wb-shell-pagejson-issues">
       {props.issues.map((issue) => (
         <li key={`${issue.path}:${issue.nodeId ?? ''}:${issue.message}`}>
-          <code>{issue.path === '' ? '(파일 전체)' : issue.path}</code>{' '}
-          {issue.nodeId != null && <code>{issue.nodeId}</code>} {issue.message}
+          <code>{issue.path === '' ? '(파일 전체)' : issue.path}</code> {issue.nodeId != null && <code>{issue.nodeId}</code>}{' '}
+          {issue.message}
         </li>
       ))}
     </ul>

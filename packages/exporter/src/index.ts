@@ -19,11 +19,5 @@ export { scriptJson } from './script-json'
 // 설계서 「로드맵」의 PPTX. `exportBundle`이 「HTML 정적 번들」이고 이것이 보고용 산출물이다.
 // **파트 목록을 낼 뿐 zip을 만들지 않는다** — 그 이유는 `pptx/index.ts`의 「파일 시스템도 zip도
 // 모른다」 절에 있다.
-export type {
-  ExportPptxOptions,
-  ExportedPptx,
-  PptxPage,
-  PptxPart,
-  PptxScreen,
-} from './pptx/index'
+export type { ExportPptxOptions, ExportedPptx, PptxPage, PptxPart, PptxScreen } from './pptx/index'
 export { exportPptx, NO_SCREEN } from './pptx/index'

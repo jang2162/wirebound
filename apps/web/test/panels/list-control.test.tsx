@@ -115,9 +115,7 @@ describe('속성 패널 — 목록 컨트롤', () => {
 
     await waitFor(() => expect(calls).toHaveLength(1))
     // **배열 통째로 `replace`다.** 인덱스를 조작하는 `add /…/columns/-`가 아니다.
-    expect(lastOps(calls)).toEqual([
-      { op: 'replace', path: '/root/children/0/props/columns', value: ['이름', '이메일', ''] },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/columns', value: ['이름', '이메일', ''] }])
   })
 
   it('항목을 지우면 그 자리가 빠진다', async () => {
@@ -128,9 +126,7 @@ describe('속성 패널 — 목록 컨트롤', () => {
     fireEvent.click(removeButtons('컬럼')[0]!)
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([
-      { op: 'replace', path: '/root/children/0/props/columns', value: ['이메일'] },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/columns', value: ['이메일'] }])
   })
 
   it('항목을 고치면 blur에 나간다', async () => {
@@ -147,9 +143,7 @@ describe('속성 패널 — 목록 컨트롤', () => {
 
     fireEvent.blur(input)
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([
-      { op: 'replace', path: '/root/children/0/props/columns', value: ['성명', '이메일'] },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/columns', value: ['성명', '이메일'] }])
   })
 
   it('항목이 그대로면 blur해도 나가지 않는다', async () => {
@@ -251,9 +245,7 @@ describe('속성 패널 — 목록 컨트롤', () => {
     fireEvent.click(addButton('컬럼'))
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([
-      { op: 'replace', path: '/root/children/2/props/columns', value: [''] },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/2/props/columns', value: [''] }])
   })
 
   it('편집한 목록이 캔버스에 반영된다', async () => {

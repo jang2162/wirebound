@@ -53,7 +53,10 @@ function piecesInOrder(row: Glyph[], pieces: string[]): { text: string; inOrder:
   for (const piece of pieces) {
     const start = text.indexOf(piece, at)
     if (start < 0) throw new Error(`조각 ${JSON.stringify(piece)} 가 글에 없다: ${JSON.stringify(text)}`)
-    const xs = row.slice(start, start + piece.length).map((glyph) => glyph.x).filter((x) => !Number.isNaN(x))
+    const xs = row
+      .slice(start, start + piece.length)
+      .map((glyph) => glyph.x)
+      .filter((x) => !Number.isNaN(x))
     spans.push([Math.min(...xs), Math.max(...xs)])
     at = start + piece.length
   }
@@ -90,7 +93,10 @@ describe.skipIf(!전제.ok)('라벨 · 탭 이름의 방향 제어 글자 — �
       { id: 'n_list00000001', type: 'Button', marker: 2, props: { label: '저장' } },
       { id: 'n_tabs00000001', type: 'Tabs', props: { tabs: [`x${RLO}yz`, '둘째', '셋째'] } },
     ]
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
   }, 120_000)
 
@@ -116,7 +122,10 @@ describe.skipIf(!전제.ok)('라벨 · 탭 이름의 방향 제어 글자 — �
       const tabsRow = a.page.locator('[data-tree-id="n_tabs00000001"] > button.wb-shell-structure-node')
       const tabs = piecesInOrder(await glyphsOf(tabsRow), ['Tabs', `x${RLO}yz`, '둘째', '셋째'])
       // 판 카나리아 — 조각마다 폭 있는 글자를 잡았다(줄이 접혀 있으면 범위가 비어 `Infinity` 다).
-      expect(tabs.spans.every((span) => !span.includes('Infinity')), JSON.stringify(tabs)).toBe(true)
+      expect(
+        tabs.spans.every((span) => !span.includes('Infinity')),
+        JSON.stringify(tabs),
+      ).toBe(true)
       expect(tabs.inOrder, JSON.stringify(tabs)).toBe(true)
     } finally {
       await a.close()
@@ -131,7 +140,10 @@ describe.skipIf(!전제.ok)('라벨 · 탭 이름의 방향 제어 글자 — �
       const sentenceBox = a.page.locator('.wb-shell-interaction-sentence').first()
       await sentenceBox.waitFor()
       const sentence = piecesInOrder(await glyphsOf(sentenceBox), ['①', HOSTILE, '클릭', '②', '저장'])
-      expect(sentence.spans.every((span) => !span.includes('Infinity')), JSON.stringify(sentence)).toBe(true)
+      expect(
+        sentence.spans.every((span) => !span.includes('Infinity')),
+        JSON.stringify(sentence),
+      ).toBe(true)
       expect(sentence.inOrder, JSON.stringify(sentence)).toBe(true)
     } finally {
       await a.close()
@@ -146,7 +158,10 @@ describe.skipIf(!전제.ok)('라벨 · 탭 이름의 방향 제어 글자 — �
       const item = a.page.locator('li.wb-shell-interaction-sentence').first()
       await item.waitFor()
       const sentence = piecesInOrder(await glyphsOf(item), ['①', HOSTILE, '클릭', '②', '저장'])
-      expect(sentence.spans.every((span) => !span.includes('Infinity')), JSON.stringify(sentence)).toBe(true)
+      expect(
+        sentence.spans.every((span) => !span.includes('Infinity')),
+        JSON.stringify(sentence),
+      ).toBe(true)
       expect(sentence.inOrder, JSON.stringify(sentence)).toBe(true)
     } finally {
       await a.close()
@@ -163,7 +178,10 @@ describe.skipIf(!전제.ok)('라벨 · 탭 이름의 방향 제어 글자 — �
       const options = await a.page.locator('.wb-shell-interaction select option').allTextContents()
       const picked = options.filter((text) => text.includes(HOSTILE))
       expect(picked.length, JSON.stringify(options)).toBeGreaterThan(0)
-      expect(picked.every((text) => text.includes(`\u2068${HOSTILE}\u2069`)), JSON.stringify(options)).toBe(true)
+      expect(
+        picked.every((text) => text.includes(`\u2068${HOSTILE}\u2069`)),
+        JSON.stringify(options),
+      ).toBe(true)
     } finally {
       await a.close()
     }
@@ -194,7 +212,10 @@ describe.skipIf(!전제.ok)('라벨 · 탭 이름의 방향 제어 글자 — �
       await entry.waitFor({ state: 'visible' })
       const sentence = piecesInOrder(await glyphsOf(entry), ['①', HOSTILE, '클릭', '②', '저장'])
       // 판 카나리아 — 글자 상자가 잡혔다(닫힌 탭이면 범위가 비어 `Infinity` 다).
-      expect(sentence.spans.every((span) => !span.includes('Infinity')), JSON.stringify(sentence)).toBe(true)
+      expect(
+        sentence.spans.every((span) => !span.includes('Infinity')),
+        JSON.stringify(sentence),
+      ).toBe(true)
       expect(sentence.inOrder, JSON.stringify(sentence)).toBe(true)
     } finally {
       await context.close()

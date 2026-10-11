@@ -161,8 +161,7 @@ export function normalizeServer(server: string): string {
 }
 
 /** 두 갈래가 같은 문장을 쓴다 — 갈래마다 다른 말을 하면 사람이 원인을 둘로 센다. */
-const SERVER_HINT =
-  '서버 주소는 http:// 또는 https:// 로 시작해야 합니다. `.wirebound.json`의 server 나 --server 를 확인하세요'
+const SERVER_HINT = '서버 주소는 http:// 또는 https:// 로 시작해야 합니다. `.wirebound.json`의 server 나 --server 를 확인하세요'
 
 /** 바인딩 파일의 글자. **`init`이 쓰는 것과 케이스가 읽는 것이 같은 함수에서 나온다.** */
 export function serializeBinding(binding: Binding, existing?: Record<string, unknown>): string {

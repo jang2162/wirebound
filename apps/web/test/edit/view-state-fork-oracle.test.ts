@@ -16,7 +16,16 @@
  * (`shifted`)을 절반쯤 싣는다(H1 의 꼴 — 끌어 놓기 · 여럿 Delete · 여럿 Cmd+D). 번호는 가끔 적용이 같은 수로 읽는 다른 꼴(`01` · `1.0`)로 쓴다.
  */
 import { describe, expect, it } from 'vitest'
-import { applyOps, findNode, findNodePath, parsePointer, formatPointer, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import {
+  applyOps,
+  findNode,
+  findNodePath,
+  parsePointer,
+  formatPointer,
+  type PageDocument,
+  type PatchOp,
+  type WbNode,
+} from '@wirebound/schema'
 import { planViewStateEdit } from '../../src/edit/view-state-fork'
 
 const STATES = ['s_admin', 's_guest'] as const
@@ -49,12 +58,14 @@ function walk(node: WbNode, visit: (node: WbNode, parent: WbNode | null) => void
 
 function boardOf(seed: number): Board {
   const rnd = prng(seed)
-  const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]!
+  const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]!
   let next = 0
   const id = (): string => `n_${seed}_${next++}`
   const text = (): WbNode => ({ id: id(), type: 'Text', props: { content: `t${next}` } })
   const content = (depth: number): WbNode[] =>
-    Array.from({ length: 1 + Math.floor(rnd() * 3) }, () => (depth > 0 && rnd() < 0.2 ? region(depth - 1) : depth > 0 && rnd() < 0.3 ? box(depth - 1) : text()))
+    Array.from({ length: 1 + Math.floor(rnd() * 3) }, () =>
+      depth > 0 && rnd() < 0.2 ? region(depth - 1) : depth > 0 && rnd() < 0.3 ? box(depth - 1) : text(),
+    )
   const box = (depth: number): WbNode => ({ id: id(), type: 'Box', props: {}, children: content(depth) })
   const region = (depth: number): WbNode => {
     const cases: WbNode[] = [{ id: id(), type: 'StateCase', props: { state: 'default' }, children: content(depth) }]
@@ -66,7 +77,11 @@ function boardOf(seed: number): Board {
   const children: WbNode[] = Array.from({ length: Math.floor(rnd() * 3) }, () => (rnd() < 0.7 ? text() : box(1)))
   const regions = 1 + (rnd() < 0.3 ? 1 : 0)
   for (let i = 0; i < regions; i += 1) {
-    children.push(rnd() < 0.25 ? { id: id(), type: 'Box', props: {}, children: [...Array.from({ length: Math.floor(rnd() * 2) }, text), region(1)] } : region(1))
+    children.push(
+      rnd() < 0.25
+        ? { id: id(), type: 'Box', props: {}, children: [...Array.from({ length: Math.floor(rnd() * 2) }, text), region(1)] }
+        : region(1),
+    )
     if (rnd() < 0.5) children.push(text())
   }
   const doc: PageDocument = {
@@ -112,7 +127,8 @@ function boardOf(seed: number): Board {
     const first = kids.findIndex((kid) => JSON.stringify(kid).includes('"StateSwitch"'))
     return first <= 0 ? [] : nodes().filter((entry) => entry.parent === cur.root && kids.indexOf(entry.node) < first)
   }
-  const containers = (): { node: WbNode; path: string }[] => nodes().filter((entry) => Array.isArray(entry.node.children) && entry.node.type !== 'StateSwitch')
+  const containers = (): { node: WbNode; path: string }[] =>
+    nodes().filter((entry) => Array.isArray(entry.node.children) && entry.node.type !== 'StateSwitch')
 
   type Kind = 'shift' | 'inside' | 'any'
   const opOf = (kind: Kind): PatchOp | null => {
@@ -128,20 +144,30 @@ function boardOf(seed: number): Board {
       return target.node.type === 'Text'
         ? { op: 'replace', path: mangle(`${target.path}/props/content`), value: `r${next++}` }
         : target.node.type === 'StateCase' && rnd() < 0.3
-          ? { op: 'replace', path: mangle(`${target.path}/props/state`), value: pick(['default', ...STATES].filter((state) => state !== target.node.props?.state)) }
+          ? {
+              op: 'replace',
+              path: mangle(`${target.path}/props/state`),
+              value: pick(['default', ...STATES].filter((state) => state !== target.node.props?.state)),
+            }
           : null
     }
     if (what === 'remove') return { op: 'remove', path: mangle(target.path) }
     if (what === 'add') {
       if (kind === 'shift') return { op: 'add', path: mangle(target.path), value: text() }
-      return { op: 'add', path: mangle(Array.isArray(target.node.children) && target.node.type !== 'StateSwitch' ? `${target.path}/children/0` : target.path), value: text() }
+      return {
+        op: 'add',
+        path: mangle(Array.isArray(target.node.children) && target.node.type !== 'StateSwitch' ? `${target.path}/children/0` : target.path),
+        value: text(),
+      }
     }
     return { op: 'move', from: mangle(target.path), path: mangle(at()) }
   }
 
   const ops: PatchOp[] = []
   const shifted = rnd() < 0.5
-  const plan: Kind[] = shifted ? ['shift', 'inside', ...(rnd() < 0.5 ? [pick(['shift', 'inside', 'any'] as const)] : [])] : Array.from({ length: 1 + Math.floor(rnd() * 3) }, () => pick(['inside', 'any', 'shift'] as const))
+  const plan: Kind[] = shifted
+    ? ['shift', 'inside', ...(rnd() < 0.5 ? [pick(['shift', 'inside', 'any'] as const)] : [])]
+    : Array.from({ length: 1 + Math.floor(rnd() * 3) }, () => pick(['inside', 'any', 'shift'] as const))
   for (const kind of plan) {
     for (let tries = 0; tries < 6; tries += 1) {
       const op = opOf(kind)
@@ -163,7 +189,11 @@ function boardOf(seed: number): Board {
 }
 
 /** 지킬 가지 — 지금 상태에서 흐린 기본 가지 · «모든 가지 보기»가 꺼졌으면 안 보이는 가지. 보이는 길만 따라간다(바깥 것이 안쪽을 덮는다). */
-function guarded(doc: PageDocument, viewState: string | null, allCases: boolean): { caseId: string; switchId: string; why: 'dimmed' | 'hidden' }[] {
+function guarded(
+  doc: PageDocument,
+  viewState: string | null,
+  allCases: boolean,
+): { caseId: string; switchId: string; why: 'dimmed' | 'hidden' }[] {
   const out: { caseId: string; switchId: string; why: 'dimmed' | 'hidden' }[] = []
   const visit = (node: WbNode, shownPath: boolean): void => {
     const kids = node.children ?? []
@@ -199,12 +229,27 @@ function snapshot(doc: PageDocument, keep: readonly { caseId: string; switchId: 
 function shape(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(shape)
   if (value === null || typeof value !== 'object') return value
-  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'id' && key !== 'marker').map(([key, inner]) => [key, shape(inner)]))
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'id' && key !== 'marker')
+      .map(([key, inner]) => [key, shape(inner)]),
+  )
 }
 
 describe('planViewStateEdit — 오라클(지킬 가지의 깊은 사본 = 적용 뒤)', () => {
   it('무작위 묶음에서 지킬 가지가 바뀌는 `plain` · `fork` 가 0, 괜히 막는 `refused` 가 0, `fork` 는 편집을 복사로 옮긴다', () => {
-    const tally = { boards: 0, multiOp: 0, shifted: 0, plain: 0, fork: 0, refused: 0, shiftedCaught: 0, hiddenGuarded: 0, dimmedGuarded: 0, touched: 0 }
+    const tally = {
+      boards: 0,
+      multiOp: 0,
+      shifted: 0,
+      plain: 0,
+      fork: 0,
+      refused: 0,
+      shiftedCaught: 0,
+      hiddenGuarded: 0,
+      dimmedGuarded: 0,
+      touched: 0,
+    }
     const broken: { seed: number; why: string; kind: string; ops: PatchOp[]; viewState: string | null; allCases: boolean }[] = []
     /** 어긋난 판의 수 — 까닭마다(첫 여덟만 `broken` 에 싣는다). */
     const diverged: Record<string, number> = {}
@@ -240,7 +285,8 @@ describe('planViewStateEdit — 오라클(지킬 가지의 깊은 사본 = 적�
       const note = (why: string) => {
         diverged[why] = (diverged[why] ?? 0) + 1
         if (board.shifted) diverged[`${why} — 앞 형제를 민 묶음`] = (diverged[`${why} — 앞 형제를 민 묶음`] ?? 0) + 1
-        if (broken.length < 8) broken.push({ seed, why, kind: plan.kind, ops: board.ops, viewState: board.viewState, allCases: board.allCases })
+        if (broken.length < 8)
+          broken.push({ seed, why, kind: plan.kind, ops: board.ops, viewState: board.viewState, allCases: board.allCases })
       }
       if (plan.kind === 'refused') {
         if (!touches) note('괜히 막음')
@@ -254,14 +300,21 @@ describe('planViewStateEdit — 오라클(지킬 가지의 깊은 사본 = 적�
         continue
       }
       const now = snapshot(after, keep)
-      const changed = keep.filter((entry) => now.has(entry.caseId) && before.has(entry.caseId) && before.get(entry.caseId) !== now.get(entry.caseId))
+      const changed = keep.filter(
+        (entry) => now.has(entry.caseId) && before.has(entry.caseId) && before.get(entry.caseId) !== now.get(entry.caseId),
+      )
       if (changed.length > 0) note(`지킬 가지가 바뀜(${[...new Set(changed.map((entry) => entry.why))].join(' · ')})`)
       if (plan.kind === 'fork') {
         const sw = findNode(after.root, plan.switchId)
         const made = sw?.children?.find((kid) => kid.props?.state === board.viewState)
         const defaultId = findNode(board.doc.root, plan.switchId)?.children?.find((kid) => kid.props?.state === 'default')?.id
         const plain = defaultId === undefined ? undefined : findNode(applyOps(board.doc, board.ops).root, defaultId)
-        if (made === undefined || plain === undefined || JSON.stringify(shape(made.children ?? [])) !== JSON.stringify(shape(plain.children ?? []))) note('복사가 편집과 다름')
+        if (
+          made === undefined ||
+          plain === undefined ||
+          JSON.stringify(shape(made.children ?? [])) !== JSON.stringify(shape(plain.children ?? []))
+        )
+          note('복사가 편집과 다름')
       }
     }
 

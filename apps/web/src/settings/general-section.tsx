@@ -91,14 +91,7 @@ export function GeneralSection(props: { project: ProjectView; onSaved: (project:
             </p>
           )}
         </Field>
-        <Field
-          id={ids.description}
-          label="설명"
-          value={description}
-          readOnly={!canRename}
-          busy={busy}
-          onChange={edit(setDescription)}
-        />
+        <Field id={ids.description} label="설명" value={description} readOnly={!canRename} busy={busy} onChange={edit(setDescription)} />
         {canRename && (
           <button className="wb-shell-project-submit" type="submit" disabled={busy || !changed}>
             저장

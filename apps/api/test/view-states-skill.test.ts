@@ -65,7 +65,12 @@ describe('스킬 문서의 화면 상태 꼴', () => {
 
       let seq = 1
       const send = async (name: string): Promise<PageDocument> => {
-        const res = await ctx.app.inject({ method: 'PATCH', url: `${base}/ops`, cookies: owner.cookie, payload: { baseSeq: seq, ops: examples.get(name) } })
+        const res = await ctx.app.inject({
+          method: 'PATCH',
+          url: `${base}/ops`,
+          cookies: owner.cookie,
+          payload: { baseSeq: seq, ops: examples.get(name) },
+        })
         expect(res.statusCode, `${name}: ${res.body}`).toBe(200)
         seq = (res.json() as { seq: number }).seq
         const got = await ctx.app.inject({ method: 'GET', url: base, cookies: owner.cookie })

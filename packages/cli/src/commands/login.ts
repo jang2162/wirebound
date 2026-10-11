@@ -55,9 +55,7 @@ export async function runLogin(io: Io, options: LoginOptions): Promise<number> {
 
   const password = await readPassword(io)
   if (password === undefined) {
-    throw configError(
-      '비밀번호를 읽을 수 없습니다. tty가 아니면 표준입력으로 주거나 WIREB_PASSWORD를 설정하세요',
-    )
+    throw configError('비밀번호를 읽을 수 없습니다. tty가 아니면 표준입력으로 주거나 WIREB_PASSWORD를 설정하세요')
   }
 
   const login = await callApi(io, server, {

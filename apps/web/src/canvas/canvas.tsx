@@ -295,8 +295,7 @@ export function Canvas(props: {
    * 지금 키의 상태로 맞춘 것. **갱신 함수 안에서 옛 키의 상태에 얹지 않기 위해서다** —
    * 모드를 바꾼 뒤 첫 이벤트가 앞 모드의 알림에 덧붙는 것을 막는다.
    */
-  const normalize = (prev: RuntimeState): RuntimeState =>
-    prev.key === runtimeKey ? prev : emptyRuntime(runtimeKey)
+  const normalize = (prev: RuntimeState): RuntimeState => (prev.key === runtimeKey ? prev : emptyRuntime(runtimeKey))
 
   /**
    * **알림은 "마지막 조작이 만든 것"이다** — 이 규칙 하나가 아래 갈래 둘을 함께 닫는다.
@@ -403,7 +402,8 @@ export function Canvas(props: {
       }
       // 상태 영역 · 가지는 렌더러의 투명 노드라 요소가 없다 — 표지와 같은 «보이는 가지 자식 합»(빈 가지면 자리표)으로 잰다.
       const rect = rendered === null ? null : regionBoxOf(rendered, nodeId, viewState, (id) => findNodeElement(frame.document, id))
-      if (rect !== null) next.push({ nodeId, box: { left: offset.left + rect.left, top: offset.top + rect.top, width: rect.width, height: rect.height } })
+      if (rect !== null)
+        next.push({ nodeId, box: { left: offset.left + rect.left, top: offset.top + rect.top, width: rect.width, height: rect.height } })
     }
     setBoxes((prev) => (sameOutlines(prev, next) ? prev : next))
     // `doc`·`viewportWidth`가 의존성에 있는 것은 둘이 바뀌면 노드의 자리가 바뀌기
@@ -489,7 +489,8 @@ export function Canvas(props: {
       const target = findNodeElement(frame.document, node.id)
       if (target === null) continue
       const guide = guideOf(node, target, frame.window)
-      if (guide !== null) next.push({ nodeId: node.id, ...guide, lines: guide.lines.map((line) => onSurface(line, offset)), box: measure(target, offset) })
+      if (guide !== null)
+        next.push({ nodeId: node.id, ...guide, lines: guide.lines.map((line) => onSurface(line, offset)), box: measure(target, offset) })
     }
     setGuides((prev) => (sameGuides(prev, next) ? prev : next))
   }, [guidesOn, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
@@ -600,7 +601,13 @@ export function Canvas(props: {
         >
           {(f) => (
             <ThemeProvider value={{ tokens, window: f.window }}>
-              <CanvasDocument doc={rendered ?? doc} theme={definition} viewState={viewState} interaction={interaction} bannerHost={bannerHost} />
+              <CanvasDocument
+                doc={rendered ?? doc}
+                theme={definition}
+                viewState={viewState}
+                interaction={interaction}
+                bannerHost={bannerHost}
+              />
             </ThemeProvider>
           )}
         </CanvasIframe>
@@ -651,8 +658,18 @@ export function Canvas(props: {
               data-wb-guide-line={line.axis}
               style={
                 line.axis === 'x'
-                  ? { left: line.at - item.box.left - 0.5 / zoom, top: line.from - item.box.top, height: line.to - line.from, borderLeftWidth: 1 / zoom }
-                  : { top: line.at - item.box.top - 0.5 / zoom, left: line.from - item.box.left, width: line.to - line.from, borderTopWidth: 1 / zoom }
+                  ? {
+                      left: line.at - item.box.left - 0.5 / zoom,
+                      top: line.from - item.box.top,
+                      height: line.to - line.from,
+                      borderLeftWidth: 1 / zoom,
+                    }
+                  : {
+                      top: line.at - item.box.top - 0.5 / zoom,
+                      left: line.from - item.box.left,
+                      width: line.to - line.from,
+                      borderTopWidth: 1 / zoom,
+                    }
               }
             />
           ))}
@@ -679,7 +696,14 @@ export function Canvas(props: {
             key={item.nodeId}
             className="wb-shell-selection-member"
             data-wb-member-id={item.nodeId}
-            style={{ left: item.box.left, top: item.box.top, width: item.box.width, height: item.box.height, outlineWidth: 1 / zoom, outlineOffset: 1 / zoom }}
+            style={{
+              left: item.box.left,
+              top: item.box.top,
+              width: item.box.width,
+              height: item.box.height,
+              outlineWidth: 1 / zoom,
+              outlineOffset: 1 / zoom,
+            }}
           />
         ))}
       {/* 그리는 동안의 사각형(`./use-canvas-marquee.ts`) — 문서 옆 셸 겹이다(외곽선과 같은 까닭). */}
@@ -775,21 +799,19 @@ function CanvasDocument(props: {
       {errors.length > 0 &&
         props.bannerHost !== null &&
         createPortal(
-        <div className="wb-shell-canvas-error" role="alert">
-          <p className="wb-shell-canvas-error-title">
-            노드 {errors.length}개를 그리지 못했습니다
-          </p>
-          <ul className="wb-shell-canvas-error-list">
-            {/* 키가 인덱스인 것은 이 목록이 렌더마다 새로 만들어지고 상태를 갖는 자식이
+          <div className="wb-shell-canvas-error" role="alert">
+            <p className="wb-shell-canvas-error-title">노드 {errors.length}개를 그리지 못했습니다</p>
+            <ul className="wb-shell-canvas-error-list">
+              {/* 키가 인덱스인 것은 이 목록이 렌더마다 새로 만들어지고 상태를 갖는 자식이
                 없기 때문이다. 노드 id는 키가 될 수 없다 — 모양 가드가 흡수한 폴백은
                 id가 빈 문자열이라 서로 겹친다. */}
-            {errors.map((error, index) => (
-              <li key={index} className="wb-shell-canvas-error-item">
-                {error.message}
-              </li>
-            ))}
-          </ul>
-        </div>,
+              {errors.map((error, index) => (
+                <li key={index} className="wb-shell-canvas-error-item">
+                  {error.message}
+                </li>
+              ))}
+            </ul>
+          </div>,
           props.bannerHost,
         )}
       {tree}
@@ -813,10 +835,7 @@ interface BoundaryState {
  * 오류 문장이 남는다. 문서 객체의 동일성을 키로 쓰는 것은 스토어가 문서를 갈아 끼울 때만
  * 새 객체가 되기 때문이다(`editor-store.ts`).
  */
-class CanvasBoundary extends Component<
-  { resetKey: PageDocument; children: ReactNode },
-  BoundaryState
-> {
+class CanvasBoundary extends Component<{ resetKey: PageDocument; children: ReactNode }, BoundaryState> {
   override state: BoundaryState = { message: null }
 
   static getDerivedStateFromError(error: unknown): BoundaryState {
@@ -932,9 +951,7 @@ function sameMarkers(a: readonly MarkerBox[], b: readonly MarkerBox[]): boolean 
 }
 
 function sameBox(a: Box | null, b: Box): boolean {
-  return (
-    a !== null && a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height
-  )
+  return a !== null && a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height
 }
 
 /** 고른 노드 하나의 외곽선. */
@@ -988,20 +1005,23 @@ function onSurface(line: GuideLine, offset: { left: number; top: number }): Guid
  * 노드 상자는 그대로라 상자만 보면 선이 옛 자리에 남는다.
  */
 function sameGuides(a: readonly GuideBox[], b: readonly GuideBox[]): boolean {
-  return a.length === b.length && a.every((item, index) => {
-    const other = b[index]
-    return (
-      other !== undefined &&
-      item.nodeId === other.nodeId &&
-      item.label === other.label &&
-      sameBox(item.box, other.box) &&
-      item.lines.length === other.lines.length &&
-      item.lines.every((line, at) => {
-        const twin = other.lines[at]!
-        return line.axis === twin.axis && line.at === twin.at && line.from === twin.from && line.to === twin.to
-      })
-    )
-  })
+  return (
+    a.length === b.length &&
+    a.every((item, index) => {
+      const other = b[index]
+      return (
+        other !== undefined &&
+        item.nodeId === other.nodeId &&
+        item.label === other.label &&
+        sameBox(item.box, other.box) &&
+        item.lines.length === other.lines.length &&
+        item.lines.every((line, at) => {
+          const twin = other.lines[at]!
+          return line.axis === twin.axis && line.at === twin.at && line.from === twin.from && line.to === twin.to
+        })
+      )
+    })
+  )
 }
 const NO_IDS: readonly string[] = []
 

@@ -30,9 +30,7 @@ import {
 /** slug 형식: 소문자·숫자·하이픈. 하이픈으로 시작하거나 끝날 수 없고 1~64자다. */
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
 
-const Slug = z
-  .string()
-  .regex(SLUG_PATTERN, '슬러그는 소문자·숫자·하이픈만 쓸 수 있고, 하이픈으로 시작하거나 끝날 수 없습니다')
+const Slug = z.string().regex(SLUG_PATTERN, '슬러그는 소문자·숫자·하이픈만 쓸 수 있고, 하이픈으로 시작하거나 끝날 수 없습니다')
 const Name = z.string().min(1, '이름을 입력하세요').max(120, '이름은 120자 이하여야 합니다')
 const Description = z.string().max(2000, '설명은 2000자 이하여야 합니다').nullable()
 

@@ -156,5 +156,7 @@ export function siblingIds(root: unknown, anchorId: string | null): string[] {
     parent = first.done === true ? null : first.value.node
   }
   const children = Array.isArray(parent?.children) ? parent.children : []
-  return children.filter((child): child is WbNode => typeof child === 'object' && child !== null && !Array.isArray(child) && selectable(child)).map((child) => child.id)
+  return children
+    .filter((child): child is WbNode => typeof child === 'object' && child !== null && !Array.isArray(child) && selectable(child))
+    .map((child) => child.id)
 }

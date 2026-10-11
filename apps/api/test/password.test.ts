@@ -44,17 +44,12 @@ describe('hashPassword', () => {
     ['N·r 조합이 메모리 상한을 넘음', { N: 2 ** 20, r: 8, p: 1 }],
     ['r이 0', { N: 1024, r: 0, p: 1 }],
     ['p가 0', { N: 1024, r: 8, p: 0 }],
-  ])(
-    '쓰기 경로도 읽기 경로와 같은 검증을 쓴다 — parseEncoded라면 거부할 파라미터(%s)는 해싱 전에 거부한다',
-    async (_label, badParams) => {
-      // 메시지까지 단언하는 이유: 그냥 rejects.toThrow()면 Node가 던진 영문 에러로도
-      // 통과해 버려, validateScryptParams를 지워도 초록이 된다. 우리 검증 함수의
-      // 한국어 메시지를 고정한다.
-      await expect(hashPassword('아무비번', badParams)).rejects.toThrow(
-        /scrypt 파라미터가 올바르지 않습니다/,
-      )
-    },
-  )
+  ])('쓰기 경로도 읽기 경로와 같은 검증을 쓴다 — parseEncoded라면 거부할 파라미터(%s)는 해싱 전에 거부한다', async (_label, badParams) => {
+    // 메시지까지 단언하는 이유: 그냥 rejects.toThrow()면 Node가 던진 영문 에러로도
+    // 통과해 버려, validateScryptParams를 지워도 초록이 된다. 우리 검증 함수의
+    // 한국어 메시지를 고정한다.
+    await expect(hashPassword('아무비번', badParams)).rejects.toThrow(/scrypt 파라미터가 올바르지 않습니다/)
+  })
 })
 
 describe('verifyPassword', () => {

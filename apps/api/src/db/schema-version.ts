@@ -67,7 +67,9 @@ export async function readExecutedMigrationTimes(db: DbHandle): Promise<Executed
  */
 export function timestampOrderSlip(rows: readonly ExecutedMigration[]): { index: number; byTime: string; byName: string } | null {
   const byTime = [...rows]
-    .sort((a, b) => (a.timestamp === b.timestamp ? a.name.localeCompare(b.name) : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()))
+    .sort((a, b) =>
+      a.timestamp === b.timestamp ? a.name.localeCompare(b.name) : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    )
     .map((row) => row.name)
   const byName = rows.map((row) => row.name).sort()
   const index = byTime.findIndex((name, i) => name !== byName[i])

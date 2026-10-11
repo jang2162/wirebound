@@ -87,7 +87,9 @@ function searchable(text: string): string {
 /** 검색어에 맞는 카드 — 한국어 이름 · 영문 타입. 갈래 차례 그대로. */
 function matching(groups: readonly PickableGroup[], query: string): PickableType[] {
   const wanted = searchable(query.trim())
-  return groups.flatMap((group) => group.types).filter((type) => searchable(type.label).includes(wanted) || searchable(type.type).includes(wanted))
+  return groups
+    .flatMap((group) => group.types)
+    .filter((type) => searchable(type.label).includes(wanted) || searchable(type.type).includes(wanted))
 }
 
 /** 줄 안에서 화살표 · Home/End 가 옮겨 갈 차례. 그 키가 아니면 `null`. */
@@ -204,7 +206,8 @@ function PaletteCards(props: {
   // 보인 자리를 캔버스에 미리보기로 끼운다 — 캔버스 위의 선 · 강조는 미리보기가 대신하고, 트리 위면 트리의 선 · 강조도 그린다
   // (`drag/use-placement.ts` 머리말 «배치 미리보기»).
   usePublishPlacementPreview(hint?.value ?? null)
-  const dragged = drag.dragging?.kind === 'new' ? props.types.find((type) => type.type === (drag.dragging as { type: string }).type) : undefined
+  const dragged =
+    drag.dragging?.kind === 'new' ? props.types.find((type) => type.type === (drag.dragging as { type: string }).type) : undefined
 
   const trackRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef<(HTMLButtonElement | null)[]>([])

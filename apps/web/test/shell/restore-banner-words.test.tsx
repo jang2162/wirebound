@@ -75,9 +75,7 @@ describe('복원 배너의 문장 — 신호로 가를 수 없는 «누가»를 
     expect(bannerText()).toMatch(/알 수 없습니다/)
 
     act(() => {
-
       store.markRestored({ safetySnapshotId: 's-bob', clientRestoreId: 'r-1' })
-
     })
 
     expect(store.getState().remoteStale).toEqual({ reason: 'restored', own: 'landed' })
@@ -156,9 +154,7 @@ describe('복원 배너의 문장 — 신호로 가를 수 없는 «누가»를 
     expect(bannerText()).toBeNull()
 
     act(() => {
-
       vi.advanceTimersByTime(RESTORE_SIGNAL_WAIT_MS)
-
     })
 
     expect(store.getState().remoteStale).toEqual({ reason: 'restored' })

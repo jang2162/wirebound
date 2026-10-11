@@ -14,11 +14,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
 import { CATALOG_TYPES } from '../src/component/catalog/index'
 import type { Interaction, InteractionAction, InteractionTrigger, PageDocument } from '../src/node'
-import {
-  COMPONENT_NOUNS,
-  describeInteraction,
-  listInteractionSentences,
-} from '../src/interaction/describe'
+import { COMPONENT_NOUNS, describeInteraction, listInteractionSentences } from '../src/interaction/describe'
 
 beforeAll(() => {
   installCatalog()
@@ -53,9 +49,7 @@ describe('자동 문장화의 첫째 예 — 글자까지', () => {
         type: 'Button',
         marker: 1,
         props: { label: '검색' },
-        interactions: [
-          { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
-        ],
+        interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
       },
       { id: 'n_list', type: 'List', marker: 2 },
     )
@@ -82,9 +76,7 @@ describe('자동 문장화의 둘째 예 — 구조는 같고 이름 둘이 다�
         id: 'n_tabs',
         type: 'Tabs',
         marker: 3,
-        interactions: [
-          { on: 'select', actions: [{ type: 'setVisible', target: 'n_basic', value: false }] },
-        ],
+        interactions: [{ on: 'select', actions: [{ type: 'setVisible', target: 'n_basic', value: false }] }],
       },
       { id: 'n_basic', type: 'Section', marker: 4 },
     )
@@ -98,9 +90,7 @@ describe('자동 문장화의 둘째 예 — 구조는 같고 이름 둘이 다�
         id: 'n_tabs',
         type: 'Tabs',
         marker: 3,
-        interactions: [
-          { on: 'select', actions: [{ type: 'setVisible', target: 'n_basic', value: false }] },
-        ],
+        interactions: [{ on: 'select', actions: [{ type: 'setVisible', target: 'n_basic', value: false }] }],
       },
       { id: 'n_basic', type: 'Card', marker: 4, props: { title: '기본정보' } },
     )
@@ -123,9 +113,7 @@ describe('마커가 없어도 문장이 성립한다', () => {
         id: 'n_search',
         type: 'Button',
         props: { label: '검색' },
-        interactions: [
-          { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
-        ],
+        interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
       },
       { id: 'n_list', type: 'List' },
     )
@@ -138,9 +126,7 @@ describe('마커가 없어도 문장이 성립한다', () => {
         id: 'n_search',
         type: 'Button',
         props: { label: '검색' },
-        interactions: [
-          { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
-        ],
+        interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
       },
       { id: 'n_list', type: 'List', marker: 2 },
     )
@@ -276,22 +262,18 @@ describe('액션 5종', () => {
   })
 
   it('setVisible — 참', () => {
-    expect(withAction({ type: 'setVisible', target: 'n_tgt', value: true })).toBe(
-      '실행 버튼 클릭 시 목록이 보입니다',
-    )
+    expect(withAction({ type: 'setVisible', target: 'n_tgt', value: true })).toBe('실행 버튼 클릭 시 목록이 보입니다')
   })
 
   it('setVisible — 거짓', () => {
-    expect(withAction({ type: 'setVisible', target: 'n_tgt', value: false })).toBe(
-      '실행 버튼 클릭 시 목록이 숨겨집니다',
-    )
+    expect(withAction({ type: 'setVisible', target: 'n_tgt', value: false })).toBe('실행 버튼 클릭 시 목록이 숨겨집니다')
   })
 
   /** 타겟이 `Tabs`면 그 `tabs` 배열에서 이름을 읽는다 — 번호보다 읽는 사람에게 뜻이 있다. */
   it('switchTab — 탭 이름을 읽는다', () => {
-    expect(
-      withAction({ type: 'switchTab', target: 'n_tgt', tab: 1 }, 'Tabs', { tabs: ['기본정보', '상세정보'] }),
-    ).toBe('실행 버튼 클릭 시 탭이 "상세정보" 탭으로 바뀝니다')
+    expect(withAction({ type: 'switchTab', target: 'n_tgt', tab: 1 }, 'Tabs', { tabs: ['기본정보', '상세정보'] })).toBe(
+      '실행 버튼 클릭 시 탭이 "상세정보" 탭으로 바뀝니다',
+    )
   })
 
   /**
@@ -329,9 +311,7 @@ describe('액션 5종', () => {
   })
 
   it('navigate — page: 접두를 벗긴다', () => {
-    expect(withAction({ type: 'navigate', target: 'page:관리자/회원/상세' })).toBe(
-      '실행 버튼 클릭 시 관리자/회원/상세 페이지로 이동합니다',
-    )
+    expect(withAction({ type: 'navigate', target: 'page:관리자/회원/상세' })).toBe('실행 버튼 클릭 시 관리자/회원/상세 페이지로 이동합니다')
   })
 
   it('openModal', () => {
@@ -570,9 +550,7 @@ describe('COMPONENT_NOUNS는 카탈로그 전체를 덮는다', () => {
       .filter(([, noun]) => noun.labelProp !== undefined)
       .map(([type]) => type)
       .sort()
-    expect(withLabel).toEqual([
-      'Button', 'Card', 'EntryForm', 'Field', 'Link', 'Media', 'Placeholder', 'Text',
-    ])
+    expect(withLabel).toEqual(['Button', 'Card', 'EntryForm', 'Field', 'Link', 'Media', 'Placeholder', 'Text'])
   })
 
   /** `labelProp`은 그 컴포넌트에 **실제로 있는** prop이어야 한다. */
@@ -580,12 +558,15 @@ describe('COMPONENT_NOUNS는 카탈로그 전체를 덮는다', () => {
     const broken: string[] = []
     for (const [type, noun] of Object.entries(COMPONENT_NOUNS)) {
       if (noun.labelProp === undefined) continue
-      const document = doc({
-        id: 'n_src',
-        type: 'Button',
-        props: { label: '실행' },
-        interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_tgt', value: true }] }],
-      }, { id: 'n_tgt', type, props: { [noun.labelProp]: '표본' } })
+      const document = doc(
+        {
+          id: 'n_src',
+          type: 'Button',
+          props: { label: '실행' },
+          interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_tgt', value: true }] }],
+        },
+        { id: 'n_tgt', type, props: { [noun.labelProp]: '표본' } },
+      )
       if (!sentence(document).includes('표본')) broken.push(type)
     }
     expect(broken).toEqual([])

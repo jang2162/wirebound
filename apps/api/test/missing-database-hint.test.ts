@@ -62,14 +62,12 @@ describe('무엇이 실리나 — **자격 문자열이 안 실린다**', () => 
     const line = (missingDatabaseHint(missingDatabaseError(), URL_WITH_SECRET) ?? '')
       .split('\n')
       .find((row) => row.includes('CREATE DATABASE'))
-    expect(line).toBe(
-      "  docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_feat_a;'",
-    )
+    expect(line).toBe("  docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_feat_a;'")
   })
 
   it('ASCII 가 아닌 이름을 퍼센트 인코딩된 채로 권하지 않는다', () => {
     const hint = missingDatabaseHint(missingDatabaseError(), 'postgres://u:p@127.0.0.1:5433/wb_아직없다')
-    expect(hint).toContain("CREATE DATABASE wb_아직없다;")
+    expect(hint).toContain('CREATE DATABASE wb_아직없다;')
     expect(hint).not.toContain('%EC%95%84')
   })
 })

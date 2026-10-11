@@ -14,14 +14,7 @@ import { describe, expect, it } from 'vitest'
 import type { PatchOp } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
-import {
-  deselect,
-  HEAD_SEQ,
-  openPage,
-  pageDetail,
-  pageDoc,
-  structureTypes,
-} from '../editor-harness'
+import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
 import { isOff, queryRowAction, reasonOf, rowReason, rowReasons, treeTool, structureRowName, structureRowType } from './tree-row'
 
@@ -133,10 +126,7 @@ function selectedType(): string | null {
 
 /** 셸 상단의 되돌리기 버튼. */
 function undoButton(): HTMLButtonElement {
-  return within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>(
-    'button',
-    { name: '되돌리기' },
-  )
+  return within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name: '되돌리기' })
 }
 
 /** 툴바 버튼의 이름. 늘어나면 `버튼이 전부 비활성이다`가 새 버튼도 함께 본다. */
@@ -150,8 +140,12 @@ const BUTTONS = ['안에 추가', '아래 추가', '삭제', '위로', '아래�
  * 보지 않으면 "아무 일도 안 일어난 구현"이 통과한다.
  */
 function isNestedIn(childType: string, parentType: string): boolean {
-  const child = within(structureRegion()).getByRole('button', { name: structureRowName(childType) }).closest('li')
-  const parent = within(structureRegion()).getByRole('button', { name: structureRowName(parentType) }).closest('li')
+  const child = within(structureRegion())
+    .getByRole('button', { name: structureRowName(childType) })
+    .closest('li')
+  const parent = within(structureRegion())
+    .getByRole('button', { name: structureRowName(parentType) })
+    .closest('li')
   if (child === null || parent === null) throw new Error('구조 트리의 줄이 목록 항목이 아닙니다')
   return parent.contains(child)
 }
@@ -250,9 +244,7 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
     fireEvent.click(toolButton('위로'))
 
     // Card가 Text 앞으로. 자식 둘이 따라간다.
-    await waitFor(() =>
-      expect(structureTypes()).toEqual(['Page', 'Card', 'Button', 'Link', 'Text', 'Divider']),
-    )
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Card', 'Button', 'Link', 'Text', 'Divider']))
   })
 
   it('위로 옮기면 move op이 나간다', async () => {
@@ -263,9 +255,7 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
     fireEvent.click(toolButton('위로'))
 
     await waitFor(() => expect(srv.calls).toHaveLength(1))
-    expect(srv.calls[0]?.ops).toEqual([
-      { op: 'move', from: '/root/children/1', path: '/root/children/0' },
-    ])
+    expect(srv.calls[0]?.ops).toEqual([{ op: 'move', from: '/root/children/1', path: '/root/children/0' }])
   })
 
   it('첫 형제는 위로 버튼이 비활성이다', async () => {
@@ -284,9 +274,7 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
 
     fireEvent.click(toolButton('아래로'))
 
-    await waitFor(() =>
-      expect(structureTypes()).toEqual(['Page', 'Card', 'Button', 'Link', 'Text', 'Divider']),
-    )
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Card', 'Button', 'Link', 'Text', 'Divider']))
   })
 
   it('아래로 옮기면 move op이 나간다', async () => {
@@ -297,9 +285,7 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
     fireEvent.click(toolButton('아래로'))
 
     await waitFor(() => expect(srv.calls).toHaveLength(1))
-    expect(srv.calls[0]?.ops).toEqual([
-      { op: 'move', from: '/root/children/0', path: '/root/children/1' },
-    ])
+    expect(srv.calls[0]?.ops).toEqual([{ op: 'move', from: '/root/children/0', path: '/root/children/1' }])
   })
 
   it('막내는 아래로 버튼이 비활성이다', async () => {
@@ -319,9 +305,7 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
 
     fireEvent.click(toolButton('아래로'))
 
-    await waitFor(() =>
-      expect(structureTypes()).toEqual(['Page', 'Card', 'Button', 'Link', 'Text', 'Divider']),
-    )
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Card', 'Button', 'Link', 'Text', 'Divider']))
     expect(selectedType()).toBe('Text')
   })
 
@@ -478,9 +462,7 @@ describe('구조 툴바 — 들여쓰기와 내어쓰기', () => {
     fireEvent.click(toolButton('들여쓰기'))
 
     await waitFor(() => expect(srv.calls).toHaveLength(1))
-    expect(srv.calls[0]?.ops).toEqual([
-      { op: 'move', from: '/root/children/2', path: '/root/children/1/children/2' },
-    ])
+    expect(srv.calls[0]?.ops).toEqual([{ op: 'move', from: '/root/children/2', path: '/root/children/1/children/2' }])
   })
 
   it('앞 형제에 children 키가 없으면 배열을 먼저 만든다', async () => {
@@ -552,9 +534,7 @@ describe('구조 툴바 — 들여쓰기와 내어쓰기', () => {
     fireEvent.click(toolButton('내어쓰기'))
 
     await waitFor(() => expect(srv.calls).toHaveLength(1))
-    expect(srv.calls[0]?.ops).toEqual([
-      { op: 'move', from: '/root/children/1/children/0', path: '/root/children/2' },
-    ])
+    expect(srv.calls[0]?.ops).toEqual([{ op: 'move', from: '/root/children/1/children/0', path: '/root/children/2' }])
   })
 
   it('부모가 루트면 내어쓰기가 비활성이다', async () => {

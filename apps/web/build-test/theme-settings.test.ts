@@ -54,7 +54,11 @@ describe.skipIf(!전제.ok)('설정 페이지의 토큰 편집', () => {
     try {
       await b.page.goto(`/projects/${project.id}/pages/${project.first}`)
       await canvasFrame(b.page).locator('body', { hasText: '원문' }).waitFor()
-      await poll('bob 테마 변수', () => canvasVar(b.page, COLOR.cssVar), (value) => value === COLOR.value)
+      await poll(
+        'bob 테마 변수',
+        () => canvasVar(b.page, COLOR.cssVar),
+        (value) => value === COLOR.value,
+      )
       b.page.on('framenavigated', (frame) => {
         if (frame === b.page.mainFrame()) bobNavigations += 1
       })
@@ -62,17 +66,29 @@ describe.skipIf(!전제.ok)('설정 페이지의 토큰 편집', () => {
       await a.page.goto(`/projects/${project.id}/settings`)
       const primary = a.page.getByRole('group', { name: '토큰' }).getByLabel(COLOR.label, { exact: true })
       await primary.waitFor()
-      await poll('미리보기가 선다', () => previewVar(a.page, COLOR.cssVar), (value) => value === COLOR.value)
+      await poll(
+        '미리보기가 선다',
+        () => previewVar(a.page, COLOR.cssVar),
+        (value) => value === COLOR.value,
+      )
 
       await primary.fill('#ff5500')
-      await poll('미리보기가 초안을 따라간다', () => previewVar(a.page, COLOR.cssVar), (value) => value === '#ff5500')
+      await poll(
+        '미리보기가 초안을 따라간다',
+        () => previewVar(a.page, COLOR.cssVar),
+        (value) => value === '#ff5500',
+      )
       // 초안은 bob 에게 가지 않는다.
       await b.page.waitForTimeout(300)
       expect(await canvasVar(b.page, COLOR.cssVar)).toBe(COLOR.value)
 
       await a.page.getByRole('button', { name: '토큰 저장' }).click()
       await a.page.getByText('토큰을 저장했습니다').waitFor()
-      await poll('bob 의 캔버스가 새 값', () => canvasVar(b.page, COLOR.cssVar), (value) => value === '#ff5500')
+      await poll(
+        'bob 의 캔버스가 새 값',
+        () => canvasVar(b.page, COLOR.cssVar),
+        (value) => value === '#ff5500',
+      )
       expect(bobNavigations).toBe(0)
       expect(bobFiles.js()).toBe(1)
 
@@ -92,7 +108,11 @@ describe.skipIf(!전제.ok)('설정 페이지의 토큰 편집', () => {
       await page.goto(`/projects/${project.id}/settings`)
       const primary = page.getByRole('group', { name: '토큰' }).getByLabel(COLOR.label, { exact: true })
       await primary.waitFor()
-      await poll('미리보기가 선다', () => previewVar(page, COLOR.cssVar), (value) => value === COLOR.value)
+      await poll(
+        '미리보기가 선다',
+        () => previewVar(page, COLOR.cssVar),
+        (value) => value === COLOR.value,
+      )
       await primary.fill('#12')
       await page.getByText(`고칠 칸이 있습니다 — ${COLOR.label}`).waitFor()
       expect(await page.getByRole('button', { name: '토큰 저장' }).isDisabled()).toBe(true)

@@ -47,7 +47,21 @@ describe('번들의 뷰(공유 런타임)', () => {
     ['List', undefined, { selectable: true }, 'TABLE', 'table', 'checkbox'],
     ['List', 'compact', { loading: true }, 'TABLE', 'table', 'skeleton'],
     ['List', 'featured', { selectable: true }, 'TABLE', 'table', 'checkbox'],
-    ['KeyValue', undefined, { pairs: [{ key: '이름', value: '홍' }, { key: '나이', value: '3' }, { key: '등급', value: 'VIP' }], columns: 2 }, 'TABLE', 'table', 'filler'],
+    [
+      'KeyValue',
+      undefined,
+      {
+        pairs: [
+          { key: '이름', value: '홍' },
+          { key: '나이', value: '3' },
+          { key: '등급', value: 'VIP' },
+        ],
+        columns: 2,
+      },
+      'TABLE',
+      'table',
+      'filler',
+    ],
   ] as const)('%s:%s %j → <%s data-wb-structure="%s"> · 조각 %s', (type, variant, props, tag, structure, part) => {
     const root = draw({ id: 'n', type, ...(variant === undefined ? {} : { variant }), props } as WbNode)
     expect(root.tagName).toBe(tag)

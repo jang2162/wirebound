@@ -103,10 +103,7 @@ export const PatternSchema: z.ZodType<ThemePattern> = z.strictObject({
   schema: PatternNodeSchema,
 })
 
-export const PatternsSchema: z.ZodType<Record<string, ThemePattern>> = z.record(
-  z.string(),
-  PatternSchema,
-)
+export const PatternsSchema: z.ZodType<Record<string, ThemePattern>> = z.record(z.string(), PatternSchema)
 
 /**
  * 패턴을 검증한다. **전개는 여기서 하지 않는다**(`pattern/expand.ts`) — 이름·슬롯 계약·`schema`
@@ -128,13 +125,7 @@ export function checkPatterns(patterns: Record<string, ThemePattern>): { issues:
     const path = `patterns.${name}`
 
     if (!PATTERN_NAME.test(name)) {
-      issues.push(
-        issue(
-          'bad-pattern-name',
-          path,
-          `패턴 이름은 <범주>.<변형>이고 범주는 고정 목록입니다: ${JSON.stringify(name)}`,
-        ),
-      )
+      issues.push(issue('bad-pattern-name', path, `패턴 이름은 <범주>.<변형>이고 범주는 고정 목록입니다: ${JSON.stringify(name)}`))
     }
 
     const declared = new Set(Object.keys(pattern.slots ?? {}))
@@ -143,9 +134,7 @@ export function checkPatterns(patterns: Record<string, ThemePattern>): { issues:
 
     for (const slot of declared) {
       if (!used.has(slot)) {
-        issues.push(
-          issue('unused-slot', `${path}.slots.${slot}`, `schema가 쓰지 않는 슬롯입니다: ${slot}`),
-        )
+        issues.push(issue('unused-slot', `${path}.slots.${slot}`, `schema가 쓰지 않는 슬롯입니다: ${slot}`))
       }
     }
   }
@@ -153,22 +142,14 @@ export function checkPatterns(patterns: Record<string, ThemePattern>): { issues:
   return { issues }
 }
 
-function checkNode(
-  node: PatternNode,
-  path: string,
-  declared: ReadonlySet<string>,
-  used: Set<string>,
-  issues: ThemeIssue[],
-): void {
+function checkNode(node: PatternNode, path: string, declared: ReadonlySet<string>, used: Set<string>, issues: ThemeIssue[]): void {
   if (node.slot !== undefined) {
     // 한 슬롯 이름을 노드 둘이 쓰는 것을 막지 않는다 — 「patterns」가 그 경우를 말하지 않았다.
     // 여기서 막으면 그 정하지 않은 것을 이 단계가 정하는 셈이 된다(전개는 처음 만난 노드를
     // 고른다 — `pattern/expand.ts`의 `expandNode`).
     used.add(node.slot)
     if (!declared.has(node.slot)) {
-      issues.push(
-        issue('unknown-slot', path, `slots에 선언되지 않은 슬롯입니다: ${node.slot}`),
-      )
+      issues.push(issue('unknown-slot', path, `slots에 선언되지 않은 슬롯입니다: ${node.slot}`))
     }
   }
 
@@ -181,9 +162,7 @@ function checkNode(
 
   const def = getComponent(node.type)
   if (!def) {
-    issues.push(
-      issue('bad-pattern-node', path, `카탈로그에 없는 컴포넌트 타입: ${node.type}`),
-    )
+    issues.push(issue('bad-pattern-node', path, `카탈로그에 없는 컴포넌트 타입: ${node.type}`))
     // 자식은 계속 본다. 여기서 멈추면 **타입 오타 하나가 그 밑의 이슈를 가린다** —
     // `schema`의 `validateTree`도 알 수 없는 타입에서 `continue`할 뿐 순회를 멈추지 않는다.
     // (`test/spec-patterns.test.ts`의 `첫 이슈에서 멈추지 않는다`가 지킨다.)
@@ -225,16 +204,12 @@ function checkNode(
     // `variantFrom`이 없는 컴포넌트의 값은 보지 않는다 — 고를 수 있는 변형은 패턴을 든 테마의 manifest 가 선언하고
     // (`components[type].variants`) 이 함수는 패턴만 받는다. 스키마가 페이지 노드의 값을 판정하지 않는 것과 같다.
     if (def.variantFrom !== undefined) {
-      issues.push(
-        issue('bad-pattern-node', `${path}.variant`, ignoredVariantMessage(def, node.variant)),
-      )
+      issues.push(issue('bad-pattern-node', `${path}.variant`, ignoredVariantMessage(def, node.variant)))
     }
   }
 
   if (def.children === 'none' && children.length > 0) {
-    issues.push(
-      issue('bad-pattern-node', `${path}.children`, `${node.type}은 자식을 담을 수 없습니다`),
-    )
+    issues.push(issue('bad-pattern-node', `${path}.children`, `${node.type}은 자식을 담을 수 없습니다`))
   }
 
   recurse()

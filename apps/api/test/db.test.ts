@@ -32,23 +32,20 @@ describe('스키마', () => {
 
   it('users.email에 UNIQUE 제약이 걸려 있다', async () => {
     await withApi(async ({ db }) => {
-      await db.insertInto('users')
-        .values({ email: 'dup@example.com', name: '갑', password_hash: 'x' })
-        .execute()
-      await expect(
-        db.insertInto('users')
-          .values({ email: 'dup@example.com', name: '을', password_hash: 'y' })
-          .execute(),
-      ).rejects.toThrow()
+      await db.insertInto('users').values({ email: 'dup@example.com', name: '갑', password_hash: 'x' }).execute()
+      await expect(db.insertInto('users').values({ email: 'dup@example.com', name: '을', password_hash: 'y' }).execute()).rejects.toThrow()
     })
   })
 
   it('사용자를 지우면 세션이 함께 지워진다', async () => {
     await withApi(async ({ db }) => {
-      const user = await db.insertInto('users')
+      const user = await db
+        .insertInto('users')
         .values({ email: 'cascade@example.com', name: '병', password_hash: 'x' })
-        .returning('id').executeTakeFirstOrThrow()
-      await db.insertInto('sessions')
+        .returning('id')
+        .executeTakeFirstOrThrow()
+      await db
+        .insertInto('sessions')
         .values({ id: 'sess-1', user_id: user.id, expires_at: new Date(Date.now() + 3_600_000) })
         .execute()
 
@@ -63,9 +60,7 @@ describe('스키마', () => {
 describe('withApi 격리', () => {
   it('한 테스트가 넣은 행이 다음 테스트에 보이지 않는다', async () => {
     await withApi(async ({ db }) => {
-      await db.insertInto('users')
-        .values({ email: '격리@example.com', name: '정', password_hash: 'x' })
-        .execute()
+      await db.insertInto('users').values({ email: '격리@example.com', name: '정', password_hash: 'x' }).execute()
       const found = await db.selectFrom('users').selectAll().where('email', '=', '격리@example.com').execute()
       expect(found).toHaveLength(1)
     })
@@ -111,21 +106,16 @@ describe('withTransaction', () => {
     // 모든 쿼리가 실제 내용과 무관하게 `25P02 current transaction is aborted`로
     // 실패했을 것이다 — SAVEPOINT 없이는 이 테스트 자체가 통과할 수 없는 대목이다.
     await withApi(async ({ db }) => {
-      await db.insertInto('users')
-        .values({ email: 'savepoint@example.com', name: '무', password_hash: 'x' })
-        .execute()
+      await db.insertInto('users').values({ email: 'savepoint@example.com', name: '무', password_hash: 'x' }).execute()
 
       await expect(
         withTransaction(db, async (trx) => {
-          await trx.insertInto('users')
-            .values({ email: 'savepoint@example.com', name: '중복', password_hash: 'y' })
-            .execute()
+          await trx.insertInto('users').values({ email: 'savepoint@example.com', name: '중복', password_hash: 'y' }).execute()
         }),
       ).rejects.toThrow()
 
       // 복구됐다면 이 쿼리는 정상 실행되고, 세이브포인트 이전에 넣은 행 하나만 보여야 한다.
-      const rows = await db.selectFrom('users').selectAll()
-        .where('email', '=', 'savepoint@example.com').execute()
+      const rows = await db.selectFrom('users').selectAll().where('email', '=', 'savepoint@example.com').execute()
       expect(rows).toHaveLength(1)
     })
   })

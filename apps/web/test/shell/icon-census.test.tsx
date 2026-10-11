@@ -47,8 +47,24 @@ const DOC: PageDocument = pageDoc({
 
 /** 하나는 내 글(하네스의 사용자 `u-1`)이라 «수정»도 선다. */
 const COMMENTS: Comment[] = [
-  { id: 'c-1', nodeId: 'n-btn', body: '버튼 문구 확인', authorId: 'u-1', authorName: '테스터', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' },
-  { id: 'c-2', nodeId: 'n-btn', body: '버튼 위치', authorId: 'u-2', authorName: '밥', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' },
+  {
+    id: 'c-1',
+    nodeId: 'n-btn',
+    body: '버튼 문구 확인',
+    authorId: 'u-1',
+    authorName: '테스터',
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z',
+  },
+  {
+    id: 'c-2',
+    nodeId: 'n-btn',
+    body: '버튼 위치',
+    authorId: 'u-2',
+    authorName: '밥',
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z',
+  },
 ]
 
 const EDITOR_API: Partial<ApiClient> = {

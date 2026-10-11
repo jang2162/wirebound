@@ -171,7 +171,11 @@ describe.skipIf(!전제.ok)('배너 «다시 불러오기»와 blur 커밋의 �
         if (request.method() === 'GET' && request.url().endsWith(secondPath)) events.push(`${at()} GET 둘째`)
       })
       await button.click()
-      await poll('다시 읽기의 페이지 조회가 붙잡힌다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('GET 첫째 붙잡음')))
+      await poll(
+        '다시 읽기의 페이지 조회가 붙잡힌다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('GET 첫째 붙잡음')),
+      )
       events.push(`${at()} 둘째로 옮김`)
       await page.getByRole('link', { name: '둘째' }).click()
       await canvasFrame(page).locator('body', { hasText: '둘째 원문' }).waitFor()

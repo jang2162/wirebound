@@ -25,8 +25,7 @@ function cmd(platform: Platform, init: Partial<ShortcutKeyEvent>): ShortcutKeyEv
   return key(platform === 'mac' ? { metaKey: true, ...init } : { ctrlKey: true, ...init })
 }
 
-const commandOf = (event: ShortcutKeyEvent, platform: Platform): ShortcutCommand | null =>
-  shortcutFor(event, platform)?.command ?? null
+const commandOf = (event: ShortcutKeyEvent, platform: Platform): ShortcutCommand | null => shortcutFor(event, platform)?.command ?? null
 
 describe('shortcutFor — 키마다 그 명령', () => {
   const PLATFORMS: Platform[] = ['mac', 'other']

@@ -33,9 +33,7 @@ export const migration: Migration = {
       .createTable('project_members')
       .addColumn('project_id', 'uuid', (col) => col.notNull().references('projects.id').onDelete('cascade'))
       .addColumn('user_id', 'uuid', (col) => col.notNull().references('users.id').onDelete('cascade'))
-      .addColumn('role', 'text', (col) =>
-        col.notNull().check(sql`role in ('owner', 'editor', 'viewer')`),
-      )
+      .addColumn('role', 'text', (col) => col.notNull().check(sql`role in ('owner', 'editor', 'viewer')`))
       .addColumn('invited_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`now()`))
       .addPrimaryKeyConstraint('project_members_pk', ['project_id', 'user_id'])
       .execute()

@@ -120,7 +120,11 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
 
   const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
 
-  async function seed(slug: string, pages: SeedNode[][], bobRole: 'editor' | 'owner' = 'editor'): Promise<{ P: string[]; projectId: string; pageIds: string[] }> {
+  async function seed(
+    slug: string,
+    pages: SeedNode[][],
+    bobRole: 'editor' | 'owner' = 'editor',
+  ): Promise<{ P: string[]; projectId: string; pageIds: string[] }> {
     const project = (await call('POST', '/projects', { name: 'D2 리뷰', slug: `${slug}-${Date.now().toString(36)}` })).body
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: bobRole })
@@ -131,7 +135,10 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: `쪽${index + 1}` })).body.id
       const path = `/projects/${project.id}/pages/${pageId}`
       if (nodes.length > 0) {
-        const seeded = await call('PATCH', `${path}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+        const seeded = await call('PATCH', `${path}/ops`, {
+          baseSeq: 0,
+          ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+        })
         if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
       }
       P.push(path)
@@ -143,7 +150,9 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
   async function shape(P: string): Promise<unknown> {
     const walk = (node: { id: string; type: string; children?: unknown[] }, root: boolean): unknown => {
       const name = root ? 'n_root' : KNOWN.has(node.id) ? node.id : `+${node.type}`
-      return Array.isArray(node.children) && node.children.length > 0 ? { [name]: node.children.map((child) => walk(child as never, false)) } : name
+      return Array.isArray(node.children) && node.children.length > 0
+        ? { [name]: node.children.map((child) => walk(child as never, false)) }
+        : name
     }
     return walk((await call('GET', P)).body.schema.root, true)
   }
@@ -216,7 +225,9 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
   /** 지금 고른 노드 — 구조 트리의 `aria-current` 줄(뿌리도 센다). */
   async function selectedId(page: Page): Promise<string | null> {
     return page.evaluate(
-      () => document.querySelector('.wb-shell-structure-node[aria-current="true"]')?.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? null,
+      () =>
+        document.querySelector('.wb-shell-structure-node[aria-current="true"]')?.closest('[data-tree-row]')?.getAttribute('data-tree-id') ??
+        null,
     )
   }
 
@@ -283,7 +294,10 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         } else await treeRow(page, what).locator('.wb-shell-structure-node').click()
         const before = await selectedId(page)
         const result = await clickAdd(page, P[0]!, patches)
-        expect({ ...result, selectedBefore: what === 'none' ? before === null : what === 'root' ? before !== null : before === what }).toEqual({
+        expect({
+          ...result,
+          selectedBefore: what === 'none' ? before === null : what === 'root' ? before !== null : before === what,
+        }).toEqual({
           shape: expected,
           notice: '',
           selectedIsNew: true,
@@ -302,7 +316,11 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       try {
         await pick(page, 'n_text')
         await pick(b.page, 'n_card')
-        await poll('bob 의 잠금이 alice 에게', () => page.locator('.wb-shell-structure-lock').count(), (n) => n > 0)
+        await poll(
+          'bob 의 잠금이 alice 에게',
+          () => page.locator('.wb-shell-structure-lock').count(),
+          (n) => n > 0,
+        )
         await openPalette(page)
         await only(page, 'Divider')
         const result = await clickAdd(page, P[0]!, patches)
@@ -334,7 +352,12 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         console.log(`[리뷰 부모 잠금] ${JSON.stringify({ bobSelected, result })}`)
         expect({ bobSelected, result }).toEqual({
           bobSelected: expect.not.stringMatching(/^n_card$/),
-          result: { shape: { n_root: ['n_text', { n_card: ['n_intx', '+Divider'] }, 'n_empt', 'n_last'] }, notice: '', selectedIsNew: true, sent: 1 },
+          result: {
+            shape: { n_root: ['n_text', { n_card: ['n_intx', '+Divider'] }, 'n_empt', 'n_last'] },
+            notice: '',
+            selectedIsNew: true,
+            sent: 1,
+          },
         })
       } finally {
         await close()
@@ -356,7 +379,11 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       try {
         const openedWith = await selectedId(page)
         await pick(b.page, 'n_last')
-        await poll('bob 의 잠금이 alice 에게', () => page.locator('.wb-shell-structure-lock').count(), (n) => n > 0)
+        await poll(
+          'bob 의 잠금이 alice 에게',
+          () => page.locator('.wb-shell-structure-lock').count(),
+          (n) => n > 0,
+        )
         await openPalette(page)
         await only(page, 'Divider')
         const result = await clickAdd(page, P[0]!, patches)
@@ -367,7 +394,12 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         })
         // eslint-disable-next-line no-console
         console.log(`[리뷰 뿌리 + 남의 잠금] ${JSON.stringify({ openedWith, result, server: server.status })}`)
-        expect({ openedWithRoot: openedWith !== null && !KNOWN.has(openedWith), server: server.status, notice: result.notice, sent: result.sent }).toEqual({
+        expect({
+          openedWithRoot: openedWith !== null && !KNOWN.has(openedWith),
+          server: server.status,
+          notice: result.notice,
+          sent: result.sent,
+        }).toEqual({
           openedWithRoot: true,
           server: 200,
           notice: '',
@@ -390,7 +422,11 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       try {
         await pick(page, 'n_text')
         await pick(b.page, 'n_card')
-        await poll('bob 의 잠금이 alice 에게', () => page.locator('.wb-shell-structure-lock').count(), (n) => n > 0)
+        await poll(
+          'bob 의 잠금이 alice 에게',
+          () => page.locator('.wb-shell-structure-lock').count(),
+          (n) => n > 0,
+        )
         await openPalette(page)
         await only(page, 'Divider')
         const refused = await clickAdd(page, P[0]!, patches)
@@ -490,7 +526,12 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         console.log(`[리뷰 고른 노드 지움] ${JSON.stringify({ removed, result })}`)
         expect({ removed, result }).toEqual({
           removed: 423,
-          result: { shape: { n_root: ['n_text', { n_card: ['n_intx'] }, 'n_empt', 'n_last', '+Divider'] }, notice: '', selectedIsNew: true, sent: 1 },
+          result: {
+            shape: { n_root: ['n_text', { n_card: ['n_intx'] }, 'n_empt', 'n_last', '+Divider'] },
+            notice: '',
+            selectedIsNew: true,
+            sent: 1,
+          },
         })
       } finally {
         await close()
@@ -510,9 +551,13 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
     async function plusItems(page: Page, rowId: string): Promise<{ label: string; off: boolean; reason: string | null }[]> {
       await treeRow(page, rowId).hover()
       await treeRow(page, rowId).locator('button[aria-haspopup="menu"]').nth(0).click()
-      return page
-        .locator('[role="menu"] [role="menuitem"]')
-        .evaluateAll((els) => els.map((el) => ({ label: el.textContent ?? '', off: el.getAttribute('aria-disabled') === 'true', reason: el.getAttribute('title') })))
+      return page.locator('[role="menu"] [role="menuitem"]').evaluateAll((els) =>
+        els.map((el) => ({
+          label: el.textContent ?? '',
+          off: el.getAttribute('aria-disabled') === 'true',
+          reason: el.getAttribute('title'),
+        })),
+      )
     }
 
     it('잎의 바로 뒤 형제를 bob 이 잡았다 → `+` 의 «아래 추가» 가 꺼지고 이유가 카드 «넣기» 의 거절 문장과 같다 · 프레임 0', async () => {
@@ -522,7 +567,11 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       try {
         await pick(page, 'n_text')
         await pick(b.page, 'n_card')
-        await poll('bob 의 잠금이 alice 에게', () => page.locator('.wb-shell-structure-lock').count(), (n) => n > 0)
+        await poll(
+          'bob 의 잠금이 alice 에게',
+          () => page.locator('.wb-shell-structure-lock').count(),
+          (n) => n > 0,
+        )
         const items = await plusItems(page, 'n_text')
         const after = items.find((item) => item.label === '아래 추가')
         // 눌러도 아무 일이 없다(꺼진 항목) — 고르개가 서지 않는다.
@@ -553,12 +602,21 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       try {
         const rootId = ((await call('GET', P[0]!)).body.schema.root as { id: string }).id
         await pick(b.page, 'n_last')
-        await poll('bob 의 잠금이 alice 에게', () => page.locator('.wb-shell-structure-lock').count(), (n) => n > 0)
+        await poll(
+          'bob 의 잠금이 alice 에게',
+          () => page.locator('.wb-shell-structure-lock').count(),
+          (n) => n > 0,
+        )
         const items = await plusItems(page, rootId)
         await page.getByRole('menuitem', { name: '안에 추가', exact: true }).click()
         await page.locator('.wb-shell-picker').waitFor()
         await page.locator('.wb-shell-picker').getByRole('button', { name: '추가', exact: true }).click()
-        await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL), 4000).catch(() => null)
+        await poll(
+          '서버 문서',
+          () => shape(P[0]!),
+          (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL),
+          4000,
+        ).catch(() => null)
         expect({
           items: items.map((item) => `${item.label}:${item.off ? '꺼짐' : '켜짐'}`),
           sent: patches.length,
@@ -578,58 +636,66 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
   })
 
   describe('축소판', () => {
-    it.each([1440, 1024, 800])('창 폭 %i — 카드 판을 처음 · 가운데 · 끝까지(세로로) 밀어도 표본이 카드 창 안 · 중심 차 1px 안', async (width) => {
-      const { P } = await seed(`rv-thumb-${width}`, [BASIC])
-      const { page, close } = await openEditor(P[0]!, 'alice', { width, height: 900 })
-      try {
-        await openPalette(page)
-        // 검색어 «» — 갈래 탭이 아니라 카드 전부를 세우려 공백 아닌 한 글자 대신 모든 타입에 든 글을 못 고르므로 탭을 돈다.
-        const tabs = page.getByRole('tablist', { name: '갈래' }).getByRole('tab')
-        const worst: Record<string, number> = {}
-        const outside: string[] = []
-        /** 끝까지 민 판의 `scrollTop` — 줄이 판보다 길었던 탭이 하나는 있어야 «민 판»을 잰 것이다(카나리아). */
-        let scrolled = 0
-        let paletteWidth = 0
-        for (let i = 0; i < (await tabs.count()); i += 1) {
-          await tabs.nth(i).click()
-          for (const at of ['start', 'middle', 'end'] as const) {
-            // 카드는 판 폭에 맞춰 여러 줄로 감싸이고 판이 세로로 민다(`src/palette/component-palette.tsx` 의 `PaletteCards`).
-            const top = await page.evaluate((where) => {
-              const box = document.querySelector('.wb-shell-palette-cards') as HTMLElement
-              box.scrollTop = where === 'start' ? 0 : where === 'middle' ? (box.scrollHeight - box.clientHeight) / 2 : box.scrollHeight
-              return box.scrollTop
-            }, at)
-            scrolled = Math.max(scrolled, top)
-            const read = await poll(
-              '표본이 선다',
-              async () => (await page.evaluate(CARD_THUMBS)) as Record<string, { inside: boolean; dx: number | null; dy: number | null }> | null,
-              (v) => v !== null && Object.values(v).length > 0 && Object.values(v).every((c) => c.inside),
-              3000,
-            ).catch(async () => (await page.evaluate(CARD_THUMBS)) as Record<string, { inside: boolean; dx: number | null; dy: number | null }>)
-            for (const [type, c] of Object.entries(read ?? {})) {
-              if (!c.inside) outside.push(`${type}@${at}`)
-              worst[type] = Math.max(worst[type] ?? 0, Math.abs(c.dx ?? 99), Math.abs(c.dy ?? 99))
+    it.each([1440, 1024, 800])(
+      '창 폭 %i — 카드 판을 처음 · 가운데 · 끝까지(세로로) 밀어도 표본이 카드 창 안 · 중심 차 1px 안',
+      async (width) => {
+        const { P } = await seed(`rv-thumb-${width}`, [BASIC])
+        const { page, close } = await openEditor(P[0]!, 'alice', { width, height: 900 })
+        try {
+          await openPalette(page)
+          // 검색어 «» — 갈래 탭이 아니라 카드 전부를 세우려 공백 아닌 한 글자 대신 모든 타입에 든 글을 못 고르므로 탭을 돈다.
+          const tabs = page.getByRole('tablist', { name: '갈래' }).getByRole('tab')
+          const worst: Record<string, number> = {}
+          const outside: string[] = []
+          /** 끝까지 민 판의 `scrollTop` — 줄이 판보다 길었던 탭이 하나는 있어야 «민 판»을 잰 것이다(카나리아). */
+          let scrolled = 0
+          let paletteWidth = 0
+          for (let i = 0; i < (await tabs.count()); i += 1) {
+            await tabs.nth(i).click()
+            for (const at of ['start', 'middle', 'end'] as const) {
+              // 카드는 판 폭에 맞춰 여러 줄로 감싸이고 판이 세로로 민다(`src/palette/component-palette.tsx` 의 `PaletteCards`).
+              const top = await page.evaluate((where) => {
+                const box = document.querySelector('.wb-shell-palette-cards') as HTMLElement
+                box.scrollTop = where === 'start' ? 0 : where === 'middle' ? (box.scrollHeight - box.clientHeight) / 2 : box.scrollHeight
+                return box.scrollTop
+              }, at)
+              scrolled = Math.max(scrolled, top)
+              const read = await poll(
+                '표본이 선다',
+                async () =>
+                  (await page.evaluate(CARD_THUMBS)) as Record<string, { inside: boolean; dx: number | null; dy: number | null }> | null,
+                (v) => v !== null && Object.values(v).length > 0 && Object.values(v).every((c) => c.inside),
+                3000,
+              ).catch(
+                async () => (await page.evaluate(CARD_THUMBS)) as Record<string, { inside: boolean; dx: number | null; dy: number | null }>,
+              )
+              for (const [type, c] of Object.entries(read ?? {})) {
+                if (!c.inside) outside.push(`${type}@${at}`)
+                worst[type] = Math.max(worst[type] ?? 0, Math.abs(c.dx ?? 99), Math.abs(c.dy ?? 99))
+              }
             }
+            paletteWidth = await page.evaluate(() => Math.round(document.querySelector('.wb-shell-palette')!.getBoundingClientRect().width))
           }
-          paletteWidth = await page.evaluate(() => Math.round(document.querySelector('.wb-shell-palette')!.getBoundingClientRect().width))
+          // eslint-disable-next-line no-console
+          console.log(`[리뷰 축소판 좌표] 창 ${width} · 판 폭 ${paletteWidth}: ${JSON.stringify(worst)}`)
+          expect({
+            outside,
+            offCenter: Object.entries(worst)
+              .filter(([, d]) => d > 1)
+              .map(([t, d]) => `${t}:${d}`),
+            types: Object.keys(worst).length,
+            scrolled: scrolled > 0,
+          }).toEqual({
+            outside: [],
+            offCenter: [],
+            types: placeableGroups().flatMap((g) => g.types).length,
+            scrolled: true,
+          })
+        } finally {
+          await close()
         }
-        // eslint-disable-next-line no-console
-        console.log(`[리뷰 축소판 좌표] 창 ${width} · 판 폭 ${paletteWidth}: ${JSON.stringify(worst)}`)
-        expect({
-          outside,
-          offCenter: Object.entries(worst).filter(([, d]) => d > 1).map(([t, d]) => `${t}:${d}`),
-          types: Object.keys(worst).length,
-          scrolled: scrolled > 0,
-        }).toEqual({
-          outside: [],
-          offCenter: [],
-          types: placeableGroups().flatMap((g) => g.types).length,
-          scrolled: true,
-        })
-      } finally {
-        await close()
-      }
-    })
+      },
+    )
 
     it('표본 없는 타입도 카드 창 안에 선다(기록 — 어느 타입이 표본이 없는지)', async () => {
       const missing = placeableGroups()
@@ -673,21 +739,25 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       try {
         await openPalette(page)
         const got: Record<string, unknown> = {}
-        for (const [type, selector] of [['Button', 'button'], ['Field', 'input']] as const) {
+        for (const [type, selector] of [
+          ['Button', 'button'],
+          ['Field', 'input'],
+        ] as const) {
           await only(page, type)
           const at = (await poll(
             `${type} 표본`,
-            () => page.evaluate(
-              ({ t, sel }) => {
-                const iframe = document.querySelector('iframe.wb-shell-palette-thumbs-iframe') as HTMLIFrameElement
-                const real = iframe.contentDocument?.querySelector(`[data-wb-palette-thumb="${t}"] ${sel}`)
-                if (real === null || real === undefined) return null
-                const f = iframe.getBoundingClientRect()
-                const r = real.getBoundingClientRect()
-                return r.width === 0 ? null : { x: f.left + r.left + r.width / 2, y: f.top + r.top + r.height / 2 }
-              },
-              { t: type, sel: selector },
-            ),
+            () =>
+              page.evaluate(
+                ({ t, sel }) => {
+                  const iframe = document.querySelector('iframe.wb-shell-palette-thumbs-iframe') as HTMLIFrameElement
+                  const real = iframe.contentDocument?.querySelector(`[data-wb-palette-thumb="${t}"] ${sel}`)
+                  if (real === null || real === undefined) return null
+                  const f = iframe.getBoundingClientRect()
+                  const r = real.getBoundingClientRect()
+                  return r.width === 0 ? null : { x: f.left + r.left + r.width / 2, y: f.top + r.top + r.height / 2 }
+                },
+                { t: type, sel: selector },
+              ),
             (value) => value !== null,
             5000,
           ))!
@@ -697,13 +767,18 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
             doc.addEventListener('click', () => window.__hits.clicks++, true)
             doc.addEventListener('focusin', () => window.__hits.focus++, true)
           })()`)
-          const top = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-wb-palette-card]')?.getAttribute('data-wb-palette-card') ?? null, at)
+          const top = await page.evaluate(
+            ({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-wb-palette-card]')?.getAttribute('data-wb-palette-card') ?? null,
+            at,
+          )
           await page.mouse.click(at.x, at.y)
           await page.getByRole('separator', { name: '컴포넌트 목록 높이' }).focus()
           let reachedThumbs = false
           for (let i = 0; i < 40; i += 1) {
             await page.keyboard.press('Tab')
-            reachedThumbs ||= await page.evaluate(() => document.activeElement?.classList.contains('wb-shell-palette-thumbs-iframe') === true)
+            reachedThumbs ||= await page.evaluate(
+              () => document.activeElement?.classList.contains('wb-shell-palette-thumbs-iframe') === true,
+            )
           }
           got[type] = { top, hits: await page.evaluate('window.__hits'), reachedThumbs }
         }
@@ -724,14 +799,24 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       try {
         await openPalette(page)
         await only(page, 'Button')
-        const before = await poll('축소판 단추', async () => String(await page.evaluate(THUMB_BUTTON)), (v) => v !== '단추 없음')
+        const before = await poll(
+          '축소판 단추',
+          async () => String(await page.evaluate(THUMB_BUTTON)),
+          (v) => v !== '단추 없음',
+        )
         const bobCall = (m: string, p: string, b?: unknown) => stack.request(bob, m, p, b)
         await putTheme(bobCall, projectId, { themeId: 'system-portal', version: seededVersion('system-portal'), tokens: {} })
-        const after = await poll('테마를 따라간다', async () => String(await page.evaluate(THUMB_BUTTON)), (v) => v === portalPrimary).catch(
+        const after = await poll(
+          '테마를 따라간다',
           async () => String(await page.evaluate(THUMB_BUTTON)),
-        )
+          (v) => v === portalPrimary,
+        ).catch(async () => String(await page.evaluate(THUMB_BUTTON)))
         const thumbs = await page.evaluate(CARD_THUMBS)
-        expect({ changed: before !== portalPrimary, after, thumbsInside: Object.values(thumbs as object).every((c: { inside: boolean }) => c.inside) }).toEqual({
+        expect({
+          changed: before !== portalPrimary,
+          after,
+          thumbsInside: Object.values(thumbs as object).every((c: { inside: boolean }) => c.inside),
+        }).toEqual({
           changed: true,
           after: portalPrimary,
           thumbsInside: true,
@@ -748,7 +833,11 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       try {
         await openPalette(page)
         await only(page, 'Field')
-        await poll('입력 표본', async () => (await page.evaluate(CARD_THUMBS)) as Record<string, { inside: boolean }> | null, (v) => v?.Field?.inside === true)
+        await poll(
+          '입력 표본',
+          async () => (await page.evaluate(CARD_THUMBS)) as Record<string, { inside: boolean }> | null,
+          (v) => v?.Field?.inside === true,
+        )
         await page.evaluate(`(() => {
           const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe').contentDocument
           window.__thumbHits = { clicks: 0, focus: 0 }
@@ -765,14 +854,28 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         })()`)) as { x: number; y: number } | null
         if (center === null) throw new Error('입력 표본에 컨트롤 자리가 없다')
         // 축소판 문서 전체의 포커스 받을 요소 수 — SDK 기본 뷰 · 시스템 테마는 입력을 `<div>` 로 그린다(기록).
-        const focusables = await page.evaluate(`document.querySelector('iframe.wb-shell-palette-thumbs-iframe').contentDocument.querySelectorAll('input, select, textarea, button, a[href], [tabindex]').length`)
-        const top = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-wb-palette-card]')?.getAttribute('data-wb-palette-card') ?? null, center)
+        const focusables = await page.evaluate(
+          `document.querySelector('iframe.wb-shell-palette-thumbs-iframe').contentDocument.querySelectorAll('input, select, textarea, button, a[href], [tabindex]').length`,
+        )
+        const top = await page.evaluate(
+          ({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-wb-palette-card]')?.getAttribute('data-wb-palette-card') ?? null,
+          center,
+        )
         await page.mouse.click(center.x, center.y)
         await page.keyboard.type('ab')
         await page.waitForTimeout(500)
-        const active = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('data-wb-palette-card') ?? document.activeElement?.tagName ?? null)
+        const active = await page.evaluate(
+          () =>
+            (document.activeElement as HTMLElement | null)?.getAttribute('data-wb-palette-card') ?? document.activeElement?.tagName ?? null,
+        )
         const hits = await page.evaluate('window.__thumbHits')
-        expect({ top, hits, active, sent: patches.length, focusables }).toEqual({ top: 'Field', hits: { clicks: 0, focus: 0 }, active: 'BODY', sent: 0, focusables: 0 })
+        expect({ top, hits, active, sent: patches.length, focusables }).toEqual({
+          top: 'Field',
+          hits: { clicks: 0, focus: 0 },
+          active: 'BODY',
+          sent: 0,
+          focusables: 0,
+        })
       } finally {
         await close()
       }
@@ -789,7 +892,10 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const footer = page.getByRole('contentinfo', { name: '하단 바' })
         await page.getByRole('button', { name: '뷰 모드' }).click()
         await page.waitForTimeout(300)
-        const inView = { palette: await page.getByRole('region', { name: '컴포넌트 목록' }).count(), toggle: await footer.getByRole('button', { name: '컴포넌트', exact: true }).count() }
+        const inView = {
+          palette: await page.getByRole('region', { name: '컴포넌트 목록' }).count(),
+          toggle: await footer.getByRole('button', { name: '컴포넌트', exact: true }).count(),
+        }
         await page.getByRole('button', { name: '편집 모드' }).click()
         await page.getByRole('region', { name: '컴포넌트 목록' }).waitFor()
         const back = await page.getByRole('region', { name: '컴포넌트 목록' }).count()
@@ -806,7 +912,12 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const query = await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).inputValue()
         // eslint-disable-next-line no-console
         console.log(`[리뷰 판 모드 · 옮김] ${JSON.stringify({ inView, back, afterMove, query, thumbs })}`)
-        expect({ inView, back, afterMove, thumbsOk: thumbs !== null && Object.values(thumbs).length > 0 && Object.values(thumbs).every((c) => c.inside) }).toEqual({
+        expect({
+          inView,
+          back,
+          afterMove,
+          thumbsOk: thumbs !== null && Object.values(thumbs).length > 0 && Object.values(thumbs).every((c) => c.inside),
+        }).toEqual({
           inView: { palette: 0, toggle: 0 },
           back: 1,
           afterMove: 1,
@@ -825,14 +936,23 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const members = (await call('GET', `/projects/${projectId}/members`)).body as { userId: string; email: string }[]
         const bobId = members.find((m) => m.email === stack.users.bob.email)!.userId
         const demote = (await call('PATCH', `/projects/${projectId}/members/${bobId}`, { role: 'viewer' })).status
-        const gone = await poll('판이 걷힌다', () => b.page.getByRole('region', { name: '컴포넌트 목록' }).count(), (n) => n === 0, 6000).catch(() =>
-          b.page.getByRole('region', { name: '컴포넌트 목록' }).count(),
-        )
-        const toggle = await b.page.getByRole('contentinfo', { name: '하단 바' }).getByRole('button', { name: '컴포넌트', exact: true }).count()
+        const gone = await poll(
+          '판이 걷힌다',
+          () => b.page.getByRole('region', { name: '컴포넌트 목록' }).count(),
+          (n) => n === 0,
+          6000,
+        ).catch(() => b.page.getByRole('region', { name: '컴포넌트 목록' }).count())
+        const toggle = await b.page
+          .getByRole('contentinfo', { name: '하단 바' })
+          .getByRole('button', { name: '컴포넌트', exact: true })
+          .count()
         const promote = (await call('PATCH', `/projects/${projectId}/members/${bobId}`, { role: 'editor' })).status
-        const back = await poll('다시 선다', () => b.page.getByRole('region', { name: '컴포넌트 목록' }).count(), (n) => n === 1, 6000).catch(() =>
-          b.page.getByRole('region', { name: '컴포넌트 목록' }).count(),
-        )
+        const back = await poll(
+          '다시 선다',
+          () => b.page.getByRole('region', { name: '컴포넌트 목록' }).count(),
+          (n) => n === 1,
+          6000,
+        ).catch(() => b.page.getByRole('region', { name: '컴포넌트 목록' }).count())
         expect({ demote, gone, toggle, promote, back }).toEqual({ demote: 200, gone: 0, toggle: 0, promote: 200, back: 1 })
       } finally {
         await b.close()
@@ -909,7 +1029,8 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
           await openPalette(page)
           const handle = page.getByRole('separator', { name: '컴포넌트 목록 높이' })
           const drawn = () => page.evaluate(() => Math.round(document.querySelector('.wb-shell-palette')!.getBoundingClientRect().height))
-          const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('wirebound.editor.sidebar') ?? '{}').paletteHeight as number | undefined)
+          const stored = () =>
+            page.evaluate(() => JSON.parse(localStorage.getItem('wirebound.editor.sidebar') ?? '{}').paletteHeight as number | undefined)
           const notices = async (on: boolean) => {
             await page.evaluate((add) => {
               const box = document.querySelector('.wb-shell-footer-notices')!
@@ -964,25 +1085,52 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       }
       // eslint-disable-next-line no-console
       console.log(`[통지 중 손잡이] ${JSON.stringify(seen)}`)
-      const at = (key: string) => seen[key] as { max: { drawn: number; stored: number }; squeezed: number; touched: { drawn: number; stored: number }; cleared: number }
+      const at = (key: string) =>
+        seen[key] as {
+          max: { drawn: number; stored: number }
+          squeezed: number
+          touched: { drawn: number; stored: number }
+          cleared: number
+        }
       const verdict: Record<string, unknown> = {}
       for (const height of [700, 800]) {
         for (const name of ['ArrowUp', 'End', 'dragUp']) {
           const v = at(`${height} ${name}`)
-          verdict[`${height} ${name}`] = { screen: v.touched.drawn === v.squeezed, stored: v.touched.stored === v.max.stored, cleared: v.cleared === v.max.drawn }
+          verdict[`${height} ${name}`] = {
+            screen: v.touched.drawn === v.squeezed,
+            stored: v.touched.stored === v.max.stored,
+            cleared: v.cleared === v.max.drawn,
+          }
         }
-        for (const [name, step] of [['ArrowDown', 16], ['dragDown', 30]] as const) {
+        for (const [name, step] of [
+          ['ArrowDown', 16],
+          ['dragDown', 30],
+        ] as const) {
           const v = at(`${height} ${name}`)
           const want = Math.max(220, v.squeezed - step)
-          verdict[`${height} ${name}`] = { screen: v.touched.drawn === want, stored: v.touched.stored === want, cleared: v.cleared === want }
+          verdict[`${height} ${name}`] = {
+            screen: v.touched.drawn === want,
+            stored: v.touched.stored === want,
+            cleared: v.cleared === want,
+          }
         }
         const reloaded = seen[`${height} 새로 고침`] as { drawn: number }
         verdict[`${height} 새로 고침`] = reloaded.drawn === at(`${height} ArrowUp`).max.drawn
       }
       const ok = { screen: true, stored: true, cleared: true }
       expect(verdict).toEqual({
-        '700 ArrowUp': ok, '700 End': ok, '700 dragUp': ok, '700 ArrowDown': ok, '700 dragDown': ok, '700 새로 고침': true,
-        '800 ArrowUp': ok, '800 End': ok, '800 dragUp': ok, '800 ArrowDown': ok, '800 dragDown': ok, '800 새로 고침': true,
+        '700 ArrowUp': ok,
+        '700 End': ok,
+        '700 dragUp': ok,
+        '700 ArrowDown': ok,
+        '700 dragDown': ok,
+        '700 새로 고침': true,
+        '800 ArrowUp': ok,
+        '800 End': ok,
+        '800 dragUp': ok,
+        '800 ArrowDown': ok,
+        '800 dragDown': ok,
+        '800 새로 고침': true,
       })
     })
 
@@ -1026,14 +1174,24 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       const { page, close, patches, armedHint } = await armed(P[0]!)
       try {
         await pick(b.page, 'n_empt')
-        await poll('잠금', () => page.locator('.wb-shell-structure-lock').count(), (n) => n > 0)
+        await poll(
+          '잠금',
+          () => page.locator('.wb-shell-structure-lock').count(),
+          (n) => n > 0,
+        )
         const still = (await indicators(page)).length
         const here = await spotIn(page, 'n_empt', 0.5, 0.5)
         await page.mouse.move(here.x + 1, here.y + 1)
         const moved = (await indicators(page)).length
         await page.mouse.up()
         await page.waitForTimeout(500)
-        expect({ armedHint, still, moved, sent: patches.length, shape: await shape(P[0]!) }).toEqual({ armedHint: ['inside'], still: 0, moved: 0, sent: 0, shape: ORIGINAL })
+        expect({ armedHint, still, moved, sent: patches.length, shape: await shape(P[0]!) }).toEqual({
+          armedHint: ['inside'],
+          still: 0,
+          moved: 0,
+          sent: 0,
+          shape: ORIGINAL,
+        })
       } finally {
         await close()
         await b.close()
@@ -1084,7 +1242,11 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         await page.mouse.move(lastBox.x + lastBox.width * 0.3, lastBox.y + lastBox.height * 0.1, { steps: 8 })
         const armedHint = await indicators(page)
         const status = await bobOps(P[0]!, [{ op: 'replace', path: '/root/children/0/props/content', value: '아주 긴 글 '.repeat(120) }])
-        await poll('밀린다', async () => (await nodeBox(page, 'n_last')).y, (y) => y > lastBox.y + 40)
+        await poll(
+          '밀린다',
+          async () => (await nodeBox(page, 'n_last')).y,
+          (y) => y > lastBox.y + 40,
+        )
         await page.waitForTimeout(150)
         const afterShift = await indicators(page)
         const lastNow = Math.round((await nodeBox(page, 'n_last')).y)
@@ -1093,7 +1255,11 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const final = await shape(P[0]!)
         // eslint-disable-next-line no-console
         console.log(`[리뷰 카드 끌기 밀림] ${JSON.stringify({ armedHint, status, afterShift, lastNow, final })}`)
-        expect({ armed: armedHint.map((h) => h.placement), status, afterShift: afterShift.map((h) => h.placement) }).toEqual({ armed: ['before'], status: 200, afterShift: ['after'] })
+        expect({ armed: armedHint.map((h) => h.placement), status, afterShift: afterShift.map((h) => h.placement) }).toEqual({
+          armed: ['before'],
+          status: 200,
+          afterShift: ['after'],
+        })
         expect(final).toEqual({ n_root: ['n_text', { n_card: ['n_intx'] }, '+Divider', 'n_empt', 'n_last'] })
       } finally {
         await close()
@@ -1122,9 +1288,16 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const stillShown = (await indicators(page)).map((h) => h.placement)
         const lastNow = Math.round((await nodeBox(page, 'n_last')).y)
         await page.mouse.up()
-        const final = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(ORIGINAL), 3000).catch(() => shape(P[0]!))
+        const final = await poll(
+          '서버 문서',
+          () => shape(P[0]!),
+          (s) => JSON.stringify(s) !== JSON.stringify(ORIGINAL),
+          3000,
+        ).catch(() => shape(P[0]!))
         // eslint-disable-next-line no-console
-        console.log(`[리뷰 카드 끌기 안 밀림] ${JSON.stringify({ armed, status, stillShown, lastBefore: Math.round(lastBox.y), lastNow, final })}`)
+        console.log(
+          `[리뷰 카드 끌기 안 밀림] ${JSON.stringify({ armed, status, stillShown, lastBefore: Math.round(lastBox.y), lastNow, final })}`,
+        )
         expect({ armed, status, stillShown, final }).toEqual({
           armed: ['before'],
           status: 200,
@@ -1149,9 +1322,17 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const members = (await stack.request(bob, 'GET', `/projects/${projectId}/members`)).body as { userId: string; email: string }[]
         const aliceId = members.find((m) => m.email === stack.users.alice.email)!.userId
         const demote = (await stack.request(bob, 'PATCH', `/projects/${projectId}/members/${aliceId}`, { role: 'viewer' })).status
-        await poll('강등 소식', async () => a.received.includes('membership-changed'), (got) => got, 5000)
+        await poll(
+          '강등 소식',
+          async () => a.received.includes('membership-changed'),
+          (got) => got,
+          5000,
+        )
         await a.page.waitForTimeout(1000)
-        const afterDemote = { palette: await a.page.getByRole('region', { name: '컴포넌트 목록' }).count(), shown: (await indicators(a.page)).length }
+        const afterDemote = {
+          palette: await a.page.getByRole('region', { name: '컴포넌트 목록' }).count(),
+          shown: (await indicators(a.page)).length,
+        }
         await a.page.mouse.move(empty.x + empty.width / 2 + 6, empty.y + empty.height / 2)
         const afterMove = (await indicators(a.page)).length
         await a.page.mouse.up()

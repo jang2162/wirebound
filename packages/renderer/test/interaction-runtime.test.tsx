@@ -10,13 +10,7 @@
  * **여기가 지키는 가장 중요한 것:** *"상호작용을 끈 렌더는 규칙이 없는 문서의 렌더와 글자까지
  * 같다."*
  */
-import {
-  installCatalog,
-  validatePage,
-  type Interaction,
-  type PageDocument,
-  type WbNode,
-} from '@wirebound/schema'
+import { installCatalog, validatePage, type Interaction, type PageDocument, type WbNode } from '@wirebound/schema'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { renderDocument, type InteractionEvent } from '../src/render'
@@ -53,9 +47,7 @@ function stripped(doc: PageDocument): PageDocument {
   }
 }
 
-const CLICK_SETS_LOADING: Interaction[] = [
-  { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
-]
+const CLICK_SETS_LOADING: Interaction[] = [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }]
 
 /** 눌린 결과를 모은다. 이벤트 핸들러가 하는 일을 그대로 흉내 낸다(상태는 호출자가 든다). */
 function press(
@@ -76,11 +68,7 @@ function press(
 }
 
 /** 트리에서 그 노드의 루트에 실릴 핸들러를 찾는다 — 노드의 `ViewHost`가 뷰에 넘기는 속성(`binding.attrs`)에 있다. */
-function handlerOf(
-  tree: unknown,
-  nodeId: string,
-  dom: string,
-): ((event: unknown) => void) | undefined {
+function handlerOf(tree: unknown, nodeId: string, dom: string): ((event: unknown) => void) | undefined {
   return attrsOf(tree, nodeId)?.[dom] as ((event: unknown) => void) | undefined
 }
 
@@ -100,9 +88,7 @@ function attrsOf(tree: unknown, nodeId: string): Record<string, unknown> | undef
 }
 
 function markup(doc: PageDocument, overlay?: InteractionOverlay): string {
-  return renderToStaticMarkup(
-    renderDocument(doc, overlay === undefined ? {} : { interaction: { overlay } }),
-  )
+  return renderToStaticMarkup(renderDocument(doc, overlay === undefined ? {} : { interaction: { overlay } }))
 }
 
 describe('끈 렌더는 바뀌지 않는다', () => {
@@ -155,9 +141,7 @@ describe('셋을 실행한다', () => {
   })
 
   it('switchTab이 Tabs의 활성 탭을 덮는다 — 뷰는 그대로다', () => {
-    const doc = example([
-      { on: 'click', actions: [{ type: 'switchTab', target: 'n_tabs', tab: 1 }] },
-    ])
+    const doc = example([{ on: 'click', actions: [{ type: 'switchTab', target: 'n_tabs', tab: 1 }] }])
     const { overlay } = press(doc, 'n_btn')
 
     const before = markup(doc)
@@ -179,9 +163,7 @@ describe('셋을 실행한다', () => {
             id: 'n_btn',
             type: 'Button',
             props: { label: '접기' },
-            interactions: [
-              { on: 'click', actions: [{ type: 'setVisible', target: 'n_card', value: false }] },
-            ],
+            interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_card', value: false }] }],
           },
           {
             id: 'n_card',
@@ -205,9 +187,7 @@ describe('셋을 실행한다', () => {
   })
 
   it('visible은 props로 내려가지 않는다 — 내려가면 strictObject가 노드를 폴백으로 만든다', () => {
-    const doc = example([
-      { on: 'click', actions: [{ type: 'setVisible', target: 'n_list', value: true }] },
-    ])
+    const doc = example([{ on: 'click', actions: [{ type: 'setVisible', target: 'n_list', value: true }] }])
     const { overlay } = press(doc, 'n_btn')
 
     expect(overlay['n_list']).toEqual({ visible: true })
@@ -244,9 +224,7 @@ describe('순서', () => {
   })
 
   it('다른 트리거의 규칙은 돌지 않는다', () => {
-    const doc = example([
-      { on: 'submit', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
-    ])
+    const doc = example([{ on: 'submit', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }])
 
     const { events, overlay } = press(doc, 'n_btn')
 
@@ -287,7 +265,11 @@ describe('트리거 4종이 DOM 이벤트에 붙는다', () => {
     const doc = example([{ on: 'submit', actions: [] }])
     const tree = renderDocument(doc, { interaction: {} })
     let prevented = false
-    const event = { preventDefault: () => { prevented = true } }
+    const event = {
+      preventDefault: () => {
+        prevented = true
+      },
+    }
 
     handlerOf(tree, 'n_btn', 'onSubmit')?.(event)
 
@@ -300,7 +282,15 @@ describe('트리거 4종이 DOM 이벤트에 붙는다', () => {
     const tree = renderDocument(doc, { interaction: {} })
     let prevented = false
 
-    handlerOf(tree, 'n_btn', 'onClick')?.({ preventDefault: () => { prevented = true } })
+    handlerOf(
+      tree,
+      'n_btn',
+      'onClick',
+    )?.({
+      preventDefault: () => {
+        prevented = true
+      },
+    })
 
     expect(prevented).toBe(false)
   })
@@ -326,9 +316,7 @@ describe('깨진 규칙', () => {
   }
 
   it('끊긴 타겟 — 조용히 지나가지 않고 검증기와 같은 문장을 낸다', () => {
-    const doc = example([
-      { on: 'click', actions: [{ type: 'setProp', target: 'n_gone', prop: 'loading', value: true }] },
-    ])
+    const doc = example([{ on: 'click', actions: [{ type: 'setProp', target: 'n_gone', prop: 'loading', value: true }] }])
 
     const { events, overlay } = press(doc, 'n_btn')
 
@@ -343,25 +331,17 @@ describe('깨진 규칙', () => {
       },
     ])
     // **저장 게이트가 하는 말과 같아야 한다** — 두 벌로 두면 갈린다.
-    expect(events[0]?.issues[0]?.message).toBe(
-      validationMessage(doc, 'missing-interaction-target'),
-    )
+    expect(events[0]?.issues[0]?.message).toBe(validationMessage(doc, 'missing-interaction-target'))
   })
 
   it('아직 안 고른 타겟은 사라진 것과 갈라 말한다', () => {
-    const doc = example([
-      { on: 'click', actions: [{ type: 'setProp', target: '', prop: 'loading', value: true }] },
-    ])
+    const doc = example([{ on: 'click', actions: [{ type: 'setProp', target: '', prop: 'loading', value: true }] }])
 
-    expect(press(doc, 'n_btn').events[0]?.issues[0]?.message).toBe(
-      'setProp의 타겟을 아직 고르지 않았습니다',
-    )
+    expect(press(doc, 'n_btn').events[0]?.issues[0]?.message).toBe('setProp의 타겟을 아직 고르지 않았습니다')
   })
 
   it('없는 prop — 겹layer에 닿지 못한다', () => {
-    const doc = example([
-      { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: '없는속성', value: 1 }] },
-    ])
+    const doc = example([{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: '없는속성', value: 1 }] }])
 
     const { events, overlay } = press(doc, 'n_btn')
 
@@ -374,9 +354,7 @@ describe('깨진 규칙', () => {
   it('예약 키 visible은 setProp으로 넘볼 수 없다', () => {
     // 이것이 깨지면 `setProp { prop: 'visible' }`이 겹layer의 예약 자리를 덮어 노드를
     // 숨긴다 — 카탈로그에 `visible` prop이 생기는 날 이 케이스가 먼저 죽는다.
-    const doc = example([
-      { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'visible', value: false }] },
-    ])
+    const doc = example([{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'visible', value: false }] }])
 
     const { events, overlay } = press(doc, 'n_btn')
 
@@ -386,9 +364,7 @@ describe('깨진 규칙', () => {
   })
 
   it('타입이 안 맞는 값 — 카탈로그의 zod가 판정한다', () => {
-    const doc = example([
-      { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'items', value: -3 }] },
-    ])
+    const doc = example([{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'items', value: -3 }] }])
 
     const { events, overlay } = press(doc, 'n_btn')
 
@@ -397,9 +373,7 @@ describe('깨진 규칙', () => {
   })
 
   it('범위 밖 탭 — Tabs가 아닌 노드에 탭을 넘긴다', () => {
-    const doc = example([
-      { on: 'click', actions: [{ type: 'switchTab', target: 'n_list', tab: 1 }] },
-    ])
+    const doc = example([{ on: 'click', actions: [{ type: 'switchTab', target: 'n_list', tab: 1 }] }])
 
     const { events, overlay } = press(doc, 'n_btn')
 
@@ -410,9 +384,7 @@ describe('깨진 규칙', () => {
   })
 
   it('뜻이 없는 탭 번호도 잡는다 — Tabs.active와 같은 규칙이다', () => {
-    const doc = example([
-      { on: 'click', actions: [{ type: 'switchTab', target: 'n_tabs', tab: 1.5 }] },
-    ])
+    const doc = example([{ on: 'click', actions: [{ type: 'switchTab', target: 'n_tabs', tab: 1.5 }] }])
 
     const { events, overlay } = press(doc, 'n_btn')
 
@@ -531,8 +503,6 @@ describe('runInteraction — 상태를 들지 않는 순수 함수', () => {
     } as unknown as PageDocument
 
     expect(() => runInteraction(doc.root, 'n_btn', 'click')).not.toThrow()
-    expect(runInteraction(doc.root, 'n_btn', 'click').issues[0]?.code).toBe(
-      'missing-interaction-target',
-    )
+    expect(runInteraction(doc.root, 'n_btn', 'click').issues[0]?.code).toBe('missing-interaction-target')
   })
 })

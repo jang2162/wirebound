@@ -15,7 +15,10 @@ import { broadFixture, brokenFixture, EMPTY_MANIFEST, SAMPLE_PAGE, slotFixture }
 
 const THEME: BundleTheme = {
   ref: { themeId: 'test', version: '0.0.0' },
-  manifest: { ...EMPTY_MANIFEST, tokens: { items: { 'color.primary': { type: 'color', label: '주색', default: '#2563eb' } } } } as BundleTheme['manifest'],
+  manifest: {
+    ...EMPTY_MANIFEST,
+    tokens: { items: { 'color.primary': { type: 'color', label: '주색', default: '#2563eb' } } },
+  } as BundleTheme['manifest'],
   tokens: { 'color.primary': '#0a7d33' },
   themeJs: '/* theme.js */',
   themeCss: '.t{color:red}',

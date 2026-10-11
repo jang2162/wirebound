@@ -15,10 +15,7 @@ import { badRequest, conflict, notFound, validationFailed, type ApiError } from 
 import type { EditOutcome } from '../services/edit-pipeline'
 import { TOO_DEEP_MESSAGE } from '../services/nesting'
 
-export function editOutcomeToApiError(
-  outcome: Extract<EditOutcome, { ok: false }>,
-  baseSeq: number,
-): ApiError {
+export function editOutcomeToApiError(outcome: Extract<EditOutcome, { ok: false }>, baseSeq: number): ApiError {
   switch (outcome.reason) {
     case 'not-found':
       return notFound()

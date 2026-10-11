@@ -202,7 +202,9 @@ describe('구조 — 잠금이 차례의 맨 위다(고른 것이 있을 때)', 
    * 루트가 늘 그 조상이다. 루트가 원래 못 하는 여섯도 지금 꺼진 까닭은 잠금이다(`안에 추가`가 잠금으로 함께 꺼진다).
    */
   it('루트가 남의 잠금에 막히면 «안에 추가» 만 켜지고 — 남의 잠금이 편집에 안 부딪힌다 — 여섯은 이름과 함께 잠금을 말한다', () => {
-    expect(reasons(one('n-root', BORA))).toEqual(Object.fromEntries(KEYS.map((key) => [key, key === 'addInside' ? undefined : lockedSelectionStatus('보라')])))
+    expect(reasons(one('n-root', BORA))).toEqual(
+      Object.fromEntries(KEYS.map((key) => [key, key === 'addInside' ? undefined : lockedSelectionStatus('보라')])),
+    )
   })
 
   /**

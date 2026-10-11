@@ -157,14 +157,7 @@ function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: Reado
     const marker = node.marker
     if (typeof marker === 'number' && Number.isInteger(marker)) {
       if (markers.has(marker)) {
-        issues.push(
-          lintIssue(
-            'duplicate-marker',
-            { ...where, nodeId: node.id },
-            `${path}/marker`,
-            `코멘트 번호가 중복됩니다: ${marker}`,
-          ),
-        )
+        issues.push(lintIssue('duplicate-marker', { ...where, nodeId: node.id }, `${path}/marker`, `코멘트 번호가 중복됩니다: ${marker}`))
       }
       markers.add(marker)
     }
@@ -174,12 +167,7 @@ function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: Reado
       if (node.type !== gap.container) continue
       if (hasDescendant(node, gap.requires)) continue
       issues.push(
-        lintIssue(
-          'structural-gap',
-          { ...where, nodeId: node.id },
-          path,
-          `${gap.container} 안에 ${gap.requires}가 하나도 없습니다`,
-        ),
+        lintIssue('structural-gap', { ...where, nodeId: node.id }, path, `${gap.container} 안에 ${gap.requires}가 하나도 없습니다`),
       )
     }
 
@@ -201,12 +189,7 @@ function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: Reado
  * **존재 검사는 새로 한다.** 그 함수가 못 하는 것이 그것이고(문서 하나만 보므로), 프로젝트
  * 전체를 받는 자리가 여기다.
  */
-function pageTargetIssues(
-  node: WbNode,
-  path: string,
-  where: { pageId: string },
-  targets: ReadonlySet<string>,
-): LintIssue[] {
+function pageTargetIssues(node: WbNode, path: string, where: { pageId: string }, targets: ReadonlySet<string>): LintIssue[] {
   const issues: LintIssue[] = []
 
   for (const [index, interaction] of (node.interactions ?? []).entries()) {
@@ -349,9 +332,7 @@ function namingIssues(project: LintProject, config: LintConfig): LintIssue[] {
     }
     for (const entry of entries) {
       if (pattern.test(entry.title)) continue
-      issues.push(
-        lintIssue('naming', entry.where, '/', `${entry.kind} 이름이 명명 규칙(${source})에 어긋납니다: ${entry.title}`),
-      )
+      issues.push(lintIssue('naming', entry.where, '/', `${entry.kind} 이름이 명명 규칙(${source})에 어긋납니다: ${entry.title}`))
     }
   }
 
@@ -392,11 +373,7 @@ function commentedNodes(project: LintProject): Map<string, Set<string>> {
  * 누가 이 표의 오른쪽을 severity를 스스로 든 규칙으로 바꾸면 그 줄이 컴파일되지 않는다.
  */
 function relayValidation(pageId: string, issue: ValidationIssue): LintIssue {
-  return relayLintIssue(
-    VALIDATION_RULE[issue.code],
-    { pageId, ...(issue.nodeId === null ? {} : { nodeId: issue.nodeId }) },
-    issue,
-  )
+  return relayLintIssue(VALIDATION_RULE[issue.code], { pageId, ...(issue.nodeId === null ? {} : { nodeId: issue.nodeId }) }, issue)
 }
 
 /** 자손 어딘가에 그 타입이 있는가. 자기 자신은 세지 않는다. */

@@ -101,9 +101,7 @@ const VERTICAL: Layout = { axis: 'y', reversed: false }
 export function zoneOf(rect: Rect, axis: Axis, reversed: boolean, point: Point, acceptsChildren: boolean, empty: boolean): DropZone {
   if (acceptsChildren && empty) return 'inside'
   const zone =
-    axis === 'x'
-      ? dropZone(point.x - rect.left, rect.width, acceptsChildren)
-      : dropZone(point.y - rect.top, rect.height, acceptsChildren)
+    axis === 'x' ? dropZone(point.x - rect.left, rect.width, acceptsChildren) : dropZone(point.y - rect.top, rect.height, acceptsChildren)
   if (!reversed || zone === 'inside') return zone
   return zone === 'before' ? 'after' : 'before'
 }
@@ -117,7 +115,11 @@ function sameRow(a: Rect, b: Rect): boolean {
  * 부모 배치의 축(머리말의 표). `siblings` 는 같은 부모의 다른 자식 상자다. `direction: rtl` 은 **가로 축**의 보이는 차례를 뒤집는다 — 플렉스 `row` ·
  * 그리드 · 인라인 줄 모두 첫 자식이 오른쪽 끝에 선다(`row-reverse` 와 겹치면 서로 지운다). 세로 축은 `direction` 과 무관하다.
  */
-export function axisOf(style: { display: string; flexDirection: string; direction?: string }, siblings: readonly Rect[], self: Rect): Layout {
+export function axisOf(
+  style: { display: string; flexDirection: string; direction?: string },
+  siblings: readonly Rect[],
+  self: Rect,
+): Layout {
   const rtl = style.direction === 'rtl'
   if (style.display === 'flex' || style.display === 'inline-flex') {
     const axis: Axis = style.flexDirection.startsWith('row') ? 'x' : 'y'
@@ -214,7 +216,8 @@ export function canvasHitAt(
   let found: { element: Element; id: string; info: HitNode } | null = null
   while (cursor !== null && doc.body.contains(cursor)) {
     const id = cursor.getAttribute('data-wb-id')
-    if (id !== null && isPreview(id)) return { preview: true, rect: frameToHost(plain(cursor.getBoundingClientRect()), frameRect, zoom), layout: VERTICAL }
+    if (id !== null && isPreview(id))
+      return { preview: true, rect: frameToHost(plain(cursor.getBoundingClientRect()), frameRect, zoom), layout: VERTICAL }
     const info = id === null || id === '' ? null : node(id)
     if (id !== null && info !== null) {
       found = { element: cursor, id, info }

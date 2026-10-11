@@ -141,9 +141,7 @@ export function PresetPicker(props: {
 
   // **세션이 끊긴 갈래는 문장으로 말하지 않는다** — 화면을 로그인으로 갈아 끼운다
   // (`comment-panel.tsx`가 같은 판단을 적었다: 남아 있는 화면 자체가 없다).
-  const signedOut =
-    (load.status === 'failed' && load.failure.kind === 'signed-out') ||
-    saveFailure?.kind === 'signed-out'
+  const signedOut = (load.status === 'failed' && load.failure.kind === 'signed-out') || saveFailure?.kind === 'signed-out'
   if (signedOut) return <SignedOut />
 
   if (load.status !== 'ready') {
@@ -151,9 +149,7 @@ export function PresetPicker(props: {
     // 상태에 따라 달라진다(`PatternPicker`가 같은 판단을 적었다).
     return (
       <div className="wb-shell-picker" role="group" aria-label="프리셋 고르기">
-        <p className="wb-shell-picker-notice">
-          {load.status === 'loading' ? LOADING : failureMessage(load.failure)}
-        </p>
+        <p className="wb-shell-picker-notice">{load.status === 'loading' ? LOADING : failureMessage(load.failure)}</p>
         <button type="button" className="wb-shell-picker-action" onClick={props.onCancel}>
           프리셋 취소
         </button>
@@ -163,9 +159,7 @@ export function PresetPicker(props: {
 
   // 첫 항목을 기본값으로 삼되 **`useState`의 초기값으로 두지 않는다** — 조회가 끝나기
   // 전에 마운트되므로 초기값이 영원히 빈 문자열로 굳는다(`PatternPicker`의 실측).
-  const current = load.presets.some((preset) => preset.id === picked)
-    ? picked
-    : (load.presets[0]?.id ?? '')
+  const current = load.presets.some((preset) => preset.id === picked) ? picked : (load.presets[0]?.id ?? '')
   const selected = load.presets.find((preset) => preset.id === current)
 
   function apply(): void {
@@ -229,30 +223,19 @@ export function PresetPicker(props: {
           {/* **덮는다는 것을 먼저 말한다.** `role="alert"`이 아닌 것은 이것이 실패
               통지가 아니라 **묻는 말**이기 때문이다 — 편집 실패의 알림 자리
               (`EditAlert`)와 섞이면 그 하나뿐인 통지 규칙이 흩어진다. */}
-          <p className="wb-shell-picker-notice">
-            {overwriteNotice(orphanedCount(load.commentNodes, props.currentNodes))}
-          </p>
+          <p className="wb-shell-picker-notice">{overwriteNotice(orphanedCount(load.commentNodes, props.currentNodes))}</p>
           <div className="wb-shell-picker-row">
             <button type="button" className="wb-shell-picker-action" onClick={apply}>
               덮고 적용
             </button>
-            <button
-              type="button"
-              className="wb-shell-picker-action"
-              onClick={() => setConfirming(false)}
-            >
+            <button type="button" className="wb-shell-picker-action" onClick={() => setConfirming(false)}>
               적용 취소
             </button>
           </div>
         </>
       ) : (
         <div className="wb-shell-picker-row">
-          <button
-            type="button"
-            className="wb-shell-picker-action"
-            disabled={selected === undefined}
-            onClick={() => setConfirming(true)}
-          >
+          <button type="button" className="wb-shell-picker-action" disabled={selected === undefined} onClick={() => setConfirming(true)}>
             프리셋 적용
           </button>
         </div>
@@ -283,9 +266,7 @@ export function PresetPicker(props: {
         </button>
       </div>
       {saved !== null && <p className="wb-shell-picker-notice">{saved}</p>}
-      {saveFailure !== null && (
-        <p className="wb-shell-picker-notice">{failureMessage(saveFailure)}</p>
-      )}
+      {saveFailure !== null && <p className="wb-shell-picker-notice">{failureMessage(saveFailure)}</p>}
 
       <button type="button" className="wb-shell-picker-action" onClick={props.onCancel}>
         프리셋 취소
@@ -351,10 +332,7 @@ type OrphanCount =
  * **`walkSafely`로 훑는다.** 검증 전 문서에는 노드가 아닌 원소가 있을 수 있고
  * (`edit/safe-walk.ts`), 이 컴포넌트는 오류 경계 밖이라 순회가 던지면 셸이 사라진다.
  */
-function orphanedCount(
-  commentNodes: string[] | null,
-  currentNodes: readonly WbNode[] | null,
-): OrphanCount {
+function orphanedCount(commentNodes: string[] | null, currentNodes: readonly WbNode[] | null): OrphanCount {
   // **모르는 것이 둘이고 둘은 다른 말이다.** 둘을 `null` 하나로 접으면
   // **코멘트를 읽었는데도** *"코멘트 수를 읽지 못했습니다"*라고 말한다 — 화면이 사실과
   // 다른 것을 말하는 부류다. 코멘트 쪽을 먼저 보는 것은 **둘 다 모를 때** 그쪽이 더 앞선

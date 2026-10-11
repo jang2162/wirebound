@@ -99,7 +99,11 @@ describe('숨긴 판을 다시 고르는 경주', () => {
       // 차례로 보냈다면 B 의 바탕은 other-y 라 422 `hidden-version` 이다(B 가 먼저면 rev 가 안 맞아 409) — 겹친 판도 숨긴 판을 새로
       // 고르지 않아야 한다.
       expect(resB.statusCode, resB.body).not.toBe(200)
-      const row = await db.selectFrom('projects').select(['theme_id', 'theme_version']).where('id', '=', project.id).executeTakeFirstOrThrow()
+      const row = await db
+        .selectFrom('projects')
+        .select(['theme_id', 'theme_version'])
+        .where('id', '=', project.id)
+        .executeTakeFirstOrThrow()
       expect(row).toEqual({ theme_id: 'other-y', theme_version: '1.0.0' })
     })
   })
@@ -123,7 +127,8 @@ describe('토큰 값이 스냅샷 · 복원을 막지 않는다', () => {
       const back = saved.statusCode === 200 ? await restore(ctx, project.id, owner, older.json().id) : null
 
       // 막는 자리는 둘 중 하나다 — PUT 이 422 로 거절하거나, 받았으면 스냅샷(201)과 복원(200)이 선다.
-      const outcome = saved.statusCode === 422 ? 'rejected' : `put ${saved.statusCode} · snapshot ${after?.statusCode} · restore ${back?.statusCode}`
+      const outcome =
+        saved.statusCode === 422 ? 'rejected' : `put ${saved.statusCode} · snapshot ${after?.statusCode} · restore ${back?.statusCode}`
       expect(['rejected', 'put 200 · snapshot 201 · restore 200']).toContain(outcome)
     })
   })
@@ -145,7 +150,11 @@ describe('토큰 키 · 값이 외짝 서로게이트 · NUL 을 실으면 PUT �
 
       const saved = await put(ctx.app, project.id, owner, { themeId: 'fonted', version: '1.0.0', tokens, rev: 0 })
 
-      const row = await ctx.db.selectFrom('projects').select(['theme_tokens', 'theme_rev']).where('id', '=', project.id).executeTakeFirstOrThrow()
+      const row = await ctx.db
+        .selectFrom('projects')
+        .select(['theme_tokens', 'theme_rev'])
+        .where('id', '=', project.id)
+        .executeTakeFirstOrThrow()
       expect({ status: saved.statusCode, tokens: row.theme_tokens }).toEqual({ status: 422, tokens: {} })
     })
   })
@@ -157,7 +166,10 @@ describe('복원은 토큰을 검증하지 않는다', () => {
       await store(ctx.db, FONT)
       const owner = await signup(ctx)
       const project = await createProject(ctx, owner.cookie)
-      expect((await put(ctx.app, project.id, owner, { themeId: 'fonted', version: '1.0.0', tokens: { 'font.body': 'serif' }, rev: 0 })).statusCode).toBe(200)
+      expect(
+        (await put(ctx.app, project.id, owner, { themeId: 'fonted', version: '1.0.0', tokens: { 'font.body': 'serif' }, rev: 0 }))
+          .statusCode,
+      ).toBe(200)
       const snap = await snapshot(ctx, project.id, owner, '판3')
       expect(snap.statusCode, snap.body).toBe(201)
       const id = snap.json().id as string
@@ -166,7 +178,9 @@ describe('복원은 토큰을 검증하지 않는다', () => {
       expect(payload.payloadVersion).toBe(3)
       await ctx.db
         .updateTable('snapshots')
-        .set({ payload: JSON.stringify({ ...payload, theme: { themeId: 'fonted', version: '1.0.0', tokens: { 'no.such': 'x' } } }) as never })
+        .set({
+          payload: JSON.stringify({ ...payload, theme: { themeId: 'fonted', version: '1.0.0', tokens: { 'no.such': 'x' } } }) as never,
+        })
         .where('id', '=', id)
         .execute()
 

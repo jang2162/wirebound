@@ -116,12 +116,7 @@ export function checkPassword(password: string): string {
  * 사람이라 잊은 사람의 CLI 를 모르고 끊을 수 있다. ③ 그 사람은 어차피 새 비밀번호로 로그인한다 — 거두는 길이 한 걸음 뒤에
  * 있다. 로그인하지 않을 사람의 토큰을 거둬야 하는 판(퇴사 등)은 멤버 제거가 그 프로젝트 토큰을 지운다.
  */
-export async function resetPassword(
-  db: DbHandle,
-  email: string,
-  password: string,
-  scryptN: number,
-): Promise<ResetPasswordOutcome> {
+export async function resetPassword(db: DbHandle, email: string, password: string, scryptN: number): Promise<ResetPasswordOutcome> {
   const normalized = normalizeEmail(email)
   const passwordHash = await hashPassword(checkPassword(password), { ...DEFAULT_SCRYPT_PARAMS, N: scryptN })
   let reachedCommit = false
@@ -156,9 +151,7 @@ async function writeReset(trx: DbHandle, normalized: string, passwordHash: strin
     .selectFrom('api_tokens')
     .innerJoin('projects', 'projects.id', 'api_tokens.project_id')
     .leftJoin('project_members', (join) =>
-      join
-        .onRef('project_members.project_id', '=', 'api_tokens.project_id')
-        .onRef('project_members.user_id', '=', 'api_tokens.user_id'),
+      join.onRef('project_members.project_id', '=', 'api_tokens.project_id').onRef('project_members.user_id', '=', 'api_tokens.user_id'),
     )
     .select([
       'projects.id as projectId',
@@ -172,9 +165,7 @@ async function writeReset(trx: DbHandle, normalized: string, passwordHash: strin
 }
 
 /** 프로젝트별로 묶는다. 순서는 DB 정렬(콜레이션)에 안 기대고 코드 포인트로 — 출력이 기계마다 같다. */
-function groupTokens(
-  rows: { projectId: string; projectName: string; tokenName: string; memberId: string | null }[],
-): RemainingTokens[] {
+function groupTokens(rows: { projectId: string; projectName: string; tokenName: string; memberId: string | null }[]): RemainingTokens[] {
   const byProject = new Map<string, RemainingTokens>()
   for (const row of rows) {
     const group = byProject.get(row.projectId) ?? {

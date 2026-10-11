@@ -276,13 +276,21 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
         giveUp = reject
       })
       held.catch(() => {})
-      const slot = { fragment: fragment.toLowerCase(), ms: released, onHeld: () => {
-        clearTimeout(limit)
-        markHeld()
-      } }
+      const slot = {
+        fragment: fragment.toLowerCase(),
+        ms: released,
+        onHeld: () => {
+          clearTimeout(limit)
+          markHeld()
+        },
+      }
       const limit = setTimeout(() => {
         if (delay === slot) delay = null
-        giveUp(new Error(`프록시: '${fragment}'를 담은 질의가 ${heldWithinMs}ms 안에 안 왔습니다 — 판이 안 섰습니다(그 질의의 글자가 바뀌었거나, 요청이 그 질의 앞에서 끝났거나, 다음 붙잡기가 이 칸을 덮었다)`))
+        giveUp(
+          new Error(
+            `프록시: '${fragment}'를 담은 질의가 ${heldWithinMs}ms 안에 안 왔습니다 — 판이 안 섰습니다(그 질의의 글자가 바뀌었거나, 요청이 그 질의 앞에서 끝났거나, 다음 붙잡기가 이 칸을 덮었다)`,
+          ),
+        )
       }, heldWithinMs)
       limit.unref()
       delay = slot

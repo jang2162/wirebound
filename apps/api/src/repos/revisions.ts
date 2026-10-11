@@ -125,11 +125,7 @@ const REVISION_INVERSE_COLUMNS = ['id', 'seq', 'actor_type', 'actor_id', 'actor_
  * 0005 주석)를 가리키므로, `actor_type`을 걸지 않으면 값이 우연히 겹칠 때 남의
  * 이력이 섞인다.
  */
-export async function listRevisions(
-  db: DbHandle,
-  pageId: string,
-  options: ListRevisionsOptions,
-): Promise<RevisionRecord[]> {
+export async function listRevisions(db: DbHandle, pageId: string, options: ListRevisionsOptions): Promise<RevisionRecord[]> {
   const rows = await filtered(db, pageId, options).select(REVISION_COLUMNS).execute()
   return rows.map(toRecord)
 }
@@ -153,11 +149,7 @@ function filtered(db: DbHandle, pageId: string, options: ListRevisionsOptions) {
  * `listRevisions`와 같은 행을 고르되 **`ops` 열을 읽지 않는다** — 되돌리기(새로고침 뒤 스택 복원 · 되짚기)는 `inverse`만 쓴다. 문서 통째 교체
  * revision 은 두 열이 각각 문서 한 벌이라 `ops`를 빼면 응답이 반이 되고, DB 도 그 열을 풀어 읽지 않는다.
  */
-export async function listRevisionsInverse(
-  db: DbHandle,
-  pageId: string,
-  options: ListRevisionsOptions,
-): Promise<RevisionInverseRecord[]> {
+export async function listRevisionsInverse(db: DbHandle, pageId: string, options: ListRevisionsOptions): Promise<RevisionInverseRecord[]> {
   const rows = await filtered(db, pageId, options).select(REVISION_INVERSE_COLUMNS).execute()
   return rows.map((row) => ({
     id: row.id,

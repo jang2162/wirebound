@@ -81,13 +81,7 @@ export function ThemeSection(props: { project: ProjectView }): ReactElement {
             <ThemeChooser projectId={projectId} view={state.view} onSaved={saved} onStale={() => void reload()} />
           )}
           {state.view.themeId !== null && state.view.version !== null && state.view.manifest !== null && (
-            <TokenEditor
-              projectId={projectId}
-              view={state.view}
-              canEdit={canChoose}
-              onSaved={saved}
-              onStale={() => void reload()}
-            />
+            <TokenEditor projectId={projectId} view={state.view} canEdit={canChoose} onSaved={saved} onStale={() => void reload()} />
           )}
         </>
       )}

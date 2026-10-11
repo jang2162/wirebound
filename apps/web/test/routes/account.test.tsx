@@ -20,9 +20,13 @@ const MISMATCH = '새 비밀번호 두 칸이 다릅니다'
 const WRONG = '지금 비밀번호가 맞지 않습니다'
 
 function wrongPasswordError(): ApiError {
-  return new ApiError(401, 'unauthenticated', '이메일 또는 비밀번호가 올바르지 않습니다', [
-    { path: 'currentPassword', code: 'wrong-password', message: '지금 비밀번호가 맞지 않습니다' },
-  ], true)
+  return new ApiError(
+    401,
+    'unauthenticated',
+    '이메일 또는 비밀번호가 올바르지 않습니다',
+    [{ path: 'currentPassword', code: 'wrong-password', message: '지금 비밀번호가 맞지 않습니다' }],
+    true,
+  )
 }
 
 function server(overrides: Partial<ApiClient> = {}) {
@@ -159,7 +163,13 @@ describe('비밀번호 바꾸기', () => {
   it('400 은 서버의 이유를 보인다', async () => {
     const { client } = server({
       changePassword: async () => {
-        throw new ApiError(400, 'bad-request', '요청을 처리할 수 없습니다', [{ path: 'newPassword', message: '비밀번호는 8자 이상이어야 합니다' }], true)
+        throw new ApiError(
+          400,
+          'bad-request',
+          '요청을 처리할 수 없습니다',
+          [{ path: 'newPassword', message: '비밀번호는 8자 이상이어야 합니다' }],
+          true,
+        )
       },
     })
     await openAccount(client)

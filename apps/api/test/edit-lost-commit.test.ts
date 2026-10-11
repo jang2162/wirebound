@@ -66,10 +66,16 @@ const PROBE_LIMIT_MS = LOST_COMMIT_PROBE_MS + 500
 /** 그 페이지의 revision 행이 설 때 COMMIT 을 `ms` 늦춘다 — `DEFERRABLE INITIALLY DEFERRED` 제약 트리거의 `pg_sleep`. */
 async function slowCommit<T>(pageId: string, ms: number, run: () => Promise<T>): Promise<T> {
   const db = getTestDb()
-  await sql.raw(`create or replace function zz_slow_commit() returns trigger language plpgsql as $$ begin perform pg_sleep(${ms / 1000}); return null; end $$`).execute(db)
-  await sql.raw(
-    `create constraint trigger zz_slow_commit after insert on revisions deferrable initially deferred for each row when (new.page_id = '${pageId}') execute function zz_slow_commit()`,
-  ).execute(db)
+  await sql
+    .raw(
+      `create or replace function zz_slow_commit() returns trigger language plpgsql as $$ begin perform pg_sleep(${ms / 1000}); return null; end $$`,
+    )
+    .execute(db)
+  await sql
+    .raw(
+      `create constraint trigger zz_slow_commit after insert on revisions deferrable initially deferred for each row when (new.page_id = '${pageId}') execute function zz_slow_commit()`,
+    )
+    .execute(db)
   try {
     return await run()
   } finally {
@@ -105,7 +111,9 @@ function addText(id: string) {
 }
 
 async function revisionSeqs(pageId: string): Promise<number[]> {
-  const { rows } = await sql<{ seq: number }>`select seq::int as seq from revisions where page_id = ${pageId} order by seq`.execute(getTestDb())
+  const { rows } = await sql<{ seq: number }>`select seq::int as seq from revisions where page_id = ${pageId} order by seq`.execute(
+    getTestDb(),
+  )
   return rows.map((row) => row.seq)
 }
 
@@ -152,7 +160,12 @@ describe('COMMIT 답을 잃은 편집', () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
       ctx.proxy.dropOnQuery('commit')
-      const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_gone') } })
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: fx.opsUrl,
+        cookies: fx.owner.cookie,
+        payload: { baseSeq: 0, ops: addText('n_gone') },
+      })
       expect(ctx.proxy.fired).toBe(true)
       expect(res.statusCode, res.body).toBe(500)
       expect(res.json()).toEqual({ error: { code: 'internal', message: DB_WRITE_NOT_APPLIED_MESSAGE } })
@@ -183,7 +196,12 @@ describe('COMMIT 답을 잃은 편집', () => {
       const fx = await fixture(ctx)
       await slowCommit(fx.pageId, 500, async () => {
         ctx.proxy.halfCutOnQuery('commit')
-        const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_late') } })
+        const res = await ctx.app.inject({
+          method: 'PATCH',
+          url: fx.opsUrl,
+          cookies: fx.owner.cookie,
+          payload: { baseSeq: 0, ops: addText('n_late') },
+        })
         expect(ctx.proxy.fired).toBe(true)
         expect(res.statusCode, res.body).toBe(200)
         expect(res.json()).toMatchObject({ seq: 1 })
@@ -198,7 +216,12 @@ describe('COMMIT 답을 잃은 편집', () => {
       await slowCommit(fx.pageId, 3_000, async () => {
         ctx.proxy.halfCutOnQuery('commit')
         const started = Date.now()
-        const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_long') } })
+        const res = await ctx.app.inject({
+          method: 'PATCH',
+          url: fx.opsUrl,
+          cookies: fx.owner.cookie,
+          payload: { baseSeq: 0, ops: addText('n_long') },
+        })
         expect(ctx.proxy.fired).toBe(true)
         expect(res.statusCode, res.body).toBe(503)
         expect(res.json().error.message).toBe(DB_UNREACHABLE_WRITE_MESSAGE)
@@ -248,7 +271,12 @@ describe('COMMIT 답을 잃은 편집', () => {
         )
         try {
           const started = Date.now()
-          const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_edge') } })
+          const res = await ctx.app.inject({
+            method: 'PATCH',
+            url: fx.opsUrl,
+            cookies: fx.owner.cookie,
+            payload: { baseSeq: 0, ops: addText('n_edge') },
+          })
           const elapsed = Date.now() - started
           expect(ctx.proxy.fired).toBe(true)
           // 결말(`committed`)을 한도 안에 알고 머리를 읽으러 갔다 — 판이 섰다.
@@ -272,7 +300,12 @@ describe('COMMIT 답을 잃은 편집', () => {
       ctx.proxy.dropCommitReplyAfter('insert into "revisions"')
       ctx.proxy.delayQuery(fragment, 3_000)
       const started = Date.now()
-      const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_slow') } })
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: fx.opsUrl,
+        cookies: fx.owner.cookie,
+        payload: { baseSeq: 0, ops: addText('n_slow') },
+      })
       const elapsed = Date.now() - started
       expect(res.statusCode, res.body).toBe(503)
       expect(elapsed).toBeLessThan(PROBE_LIMIT_MS)
@@ -306,7 +339,12 @@ describe('COMMIT 답을 잃은 편집', () => {
       for (let seq = 0; seq < 4; seq += 1) {
         proxy.dropCommitReplyAfter('insert into "revisions"')
         held.push(proxy.holdQuery(seq % 2 === 0 ? XACT : PROBE))
-        const res = await app.inject({ method: 'PATCH', url: opsUrl, cookies: owner.cookie, payload: { baseSeq: seq, ops: addText(`n_${seq}`) } })
+        const res = await app.inject({
+          method: 'PATCH',
+          url: opsUrl,
+          cookies: owner.cookie,
+          payload: { baseSeq: seq, ops: addText(`n_${seq}`) },
+        })
         expect(res.statusCode, res.body).toBe(503)
         // 응답이 나간 뒤 쥔 칸이 없다 — 붙잡힌 확인 질의의 연결은 풀을 떠났다.
         expect(pool.totalCount - pool.idleCount).toBe(0)
@@ -330,13 +368,23 @@ describe('COMMIT 답을 잃은 편집', () => {
       const fx = await fixture(ctx)
       ctx.proxy.dropCommitReplyAfter('insert into "revisions"')
       ctx.proxy.delayQuery(PROBE, 700)
-      const mine = ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_mine') } })
+      const mine = ctx.app.inject({
+        method: 'PATCH',
+        url: fx.opsUrl,
+        cookies: fx.owner.cookie,
+        payload: { baseSeq: 0, ops: addText('n_mine') },
+      })
       const deadline = Date.now() + 5_000
       while ((await revisionSeqs(fx.pageId)).length === 0) {
         if (Date.now() > deadline) throw new Error('내 편집이 커밋되지 않았다 — 시나리오가 성립하지 않았다')
         await new Promise((resolve) => setTimeout(resolve, 10))
       }
-      const peer = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.peer.cookie, payload: { baseSeq: 1, ops: addText('n_peer') } })
+      const peer = await ctx.app.inject({
+        method: 'PATCH',
+        url: fx.opsUrl,
+        cookies: fx.peer.cookie,
+        payload: { baseSeq: 1, ops: addText('n_peer') },
+      })
       expect(peer.statusCode, peer.body).toBe(200)
 
       const res = await mine

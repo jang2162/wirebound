@@ -65,9 +65,7 @@ import { SNAPSHOT_PAYLOAD_VERSION, SnapshotPayloadSchema, type SnapshotPayload }
  * 캡처의 결과. **`'fingerprint-mismatch'`가 유일한 실패 갈래다** — 그 밖의 사정(문서
  * 버전이 미래다, 프로젝트가 비었다)은 전부 정상이고 payload에 그대로 실린다.
  */
-export type CaptureOutcome =
-  | { kind: 'captured'; payload: SnapshotPayload }
-  | { kind: 'fingerprint-mismatch' }
+export type CaptureOutcome = { kind: 'captured'; payload: SnapshotPayload } | { kind: 'fingerprint-mismatch' }
 
 /**
  * 수집 도중에 끼어들 자리. **테스트 전용이다** — 운영 코드(`routes/snapshots.ts`)는 절대
@@ -86,11 +84,7 @@ export interface CaptureHooks {
   afterPages?: () => Promise<void>
 }
 
-export async function captureSnapshot(
-  db: DbHandle,
-  projectId: string,
-  hooks?: CaptureHooks,
-): Promise<CaptureOutcome> {
+export async function captureSnapshot(db: DbHandle, projectId: string, hooks?: CaptureHooks): Promise<CaptureOutcome> {
   const before = await readCaptureFingerprint(db, projectId)
 
   const menu = await listMenuNodes(db, projectId)

@@ -28,11 +28,7 @@ async function scene(ctx: RealApiContext) {
 }
 
 /** 핸드셰이크만 하고 더 안 읽는 연결. `drained()`는 그제야 읽기 시작해 서버가 끊을 때(EOF) 풀린다. */
-function unansweringClient(
-  port: number,
-  projectId: string,
-  token: string,
-): Promise<{ drained: () => Promise<void>; destroy: () => void }> {
+function unansweringClient(port: number, projectId: string, token: string): Promise<{ drained: () => Promise<void>; destroy: () => void }> {
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1')
     sockets.push(socket)

@@ -274,11 +274,11 @@ describe('코멘트 삭제의 동시성', () => {
       const fx = await setup(ctx)
       const a = await postComment(ctx, fx, 'n_a', '가에 붙은 말')
       const b = await postComment(ctx, fx, 'n_b', '나에 붙은 말')
-      const before = Number((await db.selectFrom('pages').select('head_seq').where('id', '=', fx.pageId).executeTakeFirstOrThrow()).head_seq)
-
-      const [resA, resB] = await withPageRowHeld(fx.pageId, 2, () =>
-        Promise.all([deleteComment(ctx, fx, a), deleteComment(ctx, fx, b)]),
+      const before = Number(
+        (await db.selectFrom('pages').select('head_seq').where('id', '=', fx.pageId).executeTakeFirstOrThrow()).head_seq,
       )
+
+      const [resA, resB] = await withPageRowHeld(fx.pageId, 2, () => Promise.all([deleteComment(ctx, fx, a), deleteComment(ctx, fx, b)]))
 
       expect([resA.statusCode, resB.statusCode]).toEqual([200, 200])
       expect(await commentCount(fx.pageId)).toBe(0)
@@ -320,10 +320,7 @@ describe('코멘트 삭제의 동시성', () => {
       const second = await postComment(ctx, fx, 'n_a', '둘째')
       expect(markerOf(await schemaOf(fx.pageId), 'n_a')).toBe(1)
 
-      const [resA, resB] = await Promise.all([
-        deleteComment(ctx, fx, first),
-        deleteComment(ctx, fx, second),
-      ])
+      const [resA, resB] = await Promise.all([deleteComment(ctx, fx, first), deleteComment(ctx, fx, second)])
 
       // **둘 다 성공한다.** 앞의 삭제는 문서를 안 바꾸므로 `head_seq`가 그대로이고,
       // 그래서 뒤의 삭제가 `stale`에 걸리지 않는다 — 잠금이 순서를 만들 뿐이다.
@@ -436,7 +433,9 @@ describe('재번호의 동시성', () => {
       // 뒤 노드에 먼저 달아 문서 순서와 번호가 어긋나게 한다(n_a = 2 · n_b = 1).
       await postComment(ctx, fx, 'n_b')
       await postComment(ctx, fx, 'n_a')
-      const before = Number((await db.selectFrom('pages').select('head_seq').where('id', '=', fx.pageId).executeTakeFirstOrThrow()).head_seq)
+      const before = Number(
+        (await db.selectFrom('pages').select('head_seq').where('id', '=', fx.pageId).executeTakeFirstOrThrow()).head_seq,
+      )
 
       const [edit, renumber] = await withPageRowQueued(fx.pageId, [
         () =>
@@ -476,8 +475,7 @@ describe('줄 세기는 그 행에 묶인다 — `withPageRowHeld` 의 술어', 
       const held = new Promise<void>((resolve) => {
         markHeld = resolve
       })
-      const lockUser = (trx: typeof db) =>
-        trx.selectFrom('users').select('id').where('id', '=', fx.owner.user.id).forUpdate().execute()
+      const lockUser = (trx: typeof db) => trx.selectFrom('users').select('id').where('id', '=', fx.owner.user.id).forUpdate().execute()
       const other = withTransaction(db, async (trx) => {
         await lockUser(trx)
         markHeld()

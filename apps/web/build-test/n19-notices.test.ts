@@ -16,7 +16,15 @@
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { HIDDEN_SELECTION_NOTICE } from '../src/shell/use-view-state'
-import { canvasFrame, delayServerFrames, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import {
+  canvasFrame,
+  delayServerFrames,
+  editorStackPrerequisite,
+  poll,
+  startEditorStack,
+  type EditorStack,
+  type Session,
+} from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -94,7 +102,13 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
       const edit = await page.evaluate(() =>
         [...document.querySelectorAll('[data-wb-region-for]')].map((el) => {
           const box = (el as HTMLElement).getBoundingClientRect()
-          return [el.getAttribute('data-wb-region-for'), Math.round(box.left), Math.round(box.top), Math.round(box.width), Math.round(box.height)]
+          return [
+            el.getAttribute('data-wb-region-for'),
+            Math.round(box.left),
+            Math.round(box.top),
+            Math.round(box.width),
+            Math.round(box.height),
+          ]
         }),
       )
       await page.getByRole('button', { name: '뷰 모드' }).click()
@@ -103,12 +117,20 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
       const view = await page.evaluate(() =>
         [...document.querySelectorAll('[data-wb-state-region-for]')].map((el) => {
           const box = (el as HTMLElement).getBoundingClientRect()
-          return [el.getAttribute('data-wb-state-region-for'), Math.round(box.left), Math.round(box.top), Math.round(box.width), Math.round(box.height)]
+          return [
+            el.getAttribute('data-wb-state-region-for'),
+            Math.round(box.left),
+            Math.round(box.top),
+            Math.round(box.width),
+            Math.round(box.height),
+          ]
         }),
       )
       expect(view).toEqual(edit)
       // 두 영역의 상자가 같아 표지 둘이 같은 자리에 겹쳐 선다(편집 모드의 꼬리표 둘도 같다) — 표지가 영역마다 하나씩 서는 것만 잠근다.
-      expect(await page.locator('[data-wb-state-badge-for]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-state-badge-for')))).toEqual(['n_sw', 'n_in'])
+      expect(
+        await page.locator('[data-wb-state-badge-for]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-state-badge-for'))),
+      ).toEqual(['n_sw', 'n_in'])
     } finally {
       await close()
     }
@@ -192,13 +214,24 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
       await page.getByRole('dialog', { name: '메뉴 삭제', exact: true }).waitFor()
       const tree = (await call('GET', `${P}/tree`)).body
       const sub = tree.menu.find((m: { id: string }) => m.id === m1)
-      const del = await call('DELETE', `${P}/menu/${m1}`, { cascade: true, expect: { menuIds: [], pageIds: sub.pages.map((x: { id: string }) => x.id) } })
+      const del = await call('DELETE', `${P}/menu/${m1}`, {
+        cascade: true,
+        expect: { menuIds: [], pageIds: sub.pages.map((x: { id: string }) => x.id) },
+      })
       expect(del.status).toBe(200)
       // 한 줄이 서고 3s 동안 그대로다 — 캔버스의 «사라짐» 확인이 판을 비우는 자리(`clearPage`)가 한 줄을 치우지 않는다.
       const want = ['대상을 찾을 수 없습니다', '"가" 메뉴가 트리에서 사라져 삭제 상자를 닫았습니다']
-      await poll('두 줄이 선다', () => page.getByRole('alert').allTextContents(), (texts) => want.every((line) => texts.includes(line)), 5_000)
+      await poll(
+        '두 줄이 선다',
+        () => page.getByRole('alert').allTextContents(),
+        (texts) => want.every((line) => texts.includes(line)),
+        5_000,
+      )
       await page.waitForTimeout(3_000)
-      expect({ dialog: await page.getByRole('dialog').count(), alerts: await page.getByRole('alert').allTextContents() }).toEqual({ dialog: 0, alerts: want })
+      expect({ dialog: await page.getByRole('dialog').count(), alerts: await page.getByRole('alert').allTextContents() }).toEqual({
+        dialog: 0,
+        alerts: want,
+      })
     } finally {
       await context.close()
     }
@@ -215,7 +248,11 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
     const first = await mk(`/projects/${project}/pages`, { menuNodeId: menu, title: '첫째' })
     const second = await mk(`/projects/${project}/pages`, { menuNodeId: menu, title: '둘째' })
     const P = `/projects/${project}/pages/${first}`
-    const texts = [1, 2, 3].map((n, index) => ({ op: 'add', path: `/root/children/${index}`, value: { id: `n_text000000${n}`, type: 'Text', props: { content: `글 ${n}` } } }))
+    const texts = [1, 2, 3].map((n, index) => ({
+      op: 'add',
+      path: `/root/children/${index}`,
+      value: { id: `n_text000000${n}`, type: 'Text', props: { content: `글 ${n}` } },
+    }))
     const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: texts })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status}`)
     const delay = await stack.startDownDelay(600)
@@ -225,15 +262,35 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
     try {
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
-      await poll('WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
-      await poll('룸에 든다', async () => log.slice(), (lines) => lines.some((line) => line.includes('"joined"')))
+      await poll(
+        'WS 가 늦춰진 채 붙는다',
+        async () => delay.delayed(),
+        (n) => n >= 1,
+      )
+      await poll(
+        '룸에 든다',
+        async () => log.slice(),
+        (lines) => lines.some((line) => line.includes('"joined"')),
+      )
       await page.keyboard.press('Alt+ArrowUp')
-      await poll('서버에 닿는다', async () => (await call('GET', P)).body.headSeq, (n) => n === 2)
+      await poll(
+        '서버에 닿는다',
+        async () => (await call('GET', P)).body.headSeq,
+        (n) => n === 2,
+      )
       await page.keyboard.press('ControlOrMeta+z')
-      await page.locator(`[data-tree-row][data-tree-id="${second}"] > a, [data-tree-row][data-tree-id="${second}"] > button`).first().click()
+      await page
+        .locator(`[data-tree-row][data-tree-id="${second}"] > a, [data-tree-row][data-tree-id="${second}"] > button`)
+        .first()
+        .click()
       // 한 줄은 새 페이지 위에 서므로 «이전 화면에서» 로 어느 화면의 되돌리기였는지 밝힌다 — 그렇지 않으면 새 페이지의 되돌리기로 읽힌다.
       const line = '화면이 바뀌어 이전 화면에서 미뤄 둔 되돌리기는 하지 않았습니다.'
-      await poll('한 줄이 선다', () => page.getByRole('alert').allTextContents(), (texts) => texts.includes(line), 5_000)
+      await poll(
+        '한 줄이 선다',
+        () => page.getByRole('alert').allTextContents(),
+        (texts) => texts.includes(line),
+        5_000,
+      )
       // 늦춘 WS 의 ack(600ms)가 닿은 뒤에도 그대로이고 서버에는 옮김 하나뿐이다(미룬 되돌림이 안 나갔다).
       await page.waitForTimeout(1_500)
       expect({
@@ -258,7 +315,11 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
     const member = await call('POST', `/projects/${project}/members`, { email: stack.users.bob.email, role: 'editor' })
     if (member.status >= 300) throw new Error(`member ${member.status}`)
     const P = `/projects/${project}/pages/${first}`
-    const texts = [1, 2, 3].map((n, index) => ({ op: 'add', path: `/root/children/${index}`, value: { id: `n_text000000${n}`, type: 'Text', props: { content: `글 ${n} — 캔버스를 채운다` } } }))
+    const texts = [1, 2, 3].map((n, index) => ({
+      op: 'add',
+      path: `/root/children/${index}`,
+      value: { id: `n_text000000${n}`, type: 'Text', props: { content: `글 ${n} — 캔버스를 채운다` } },
+    }))
     const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: texts })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status}`)
     const D = 1500
@@ -271,8 +332,16 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
     try {
       await a.page.goto(P)
       await canvasFrame(a.page).locator('[data-wb-id="n_text0000002"]').waitFor()
-      await poll('WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
-      await poll('룸에 든다', async () => log.slice(), (lines) => lines.some((line) => line.includes('"joined"')))
+      await poll(
+        'WS 가 늦춰진 채 붙는다',
+        async () => delay.delayed(),
+        (n) => n >= 1,
+      )
+      await poll(
+        '룸에 든다',
+        async () => log.slice(),
+        (lines) => lines.some((line) => line.includes('"joined"')),
+      )
       await b.page.goto(P)
       await canvasFrame(b.page).locator('[data-wb-id="n_text0000002"]').click()
       await b.page.waitForTimeout(400)
@@ -283,8 +352,14 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
       const server = (await call('GET', P)).body
       // 판 카나리아 — 423 은 서버가 낸 것이다(늦춘 WS 로 앞선 patch-error 프레임이 닿았다) · 잠금 알림은 그 뒤에 닿았다.
       expect(log.some((line) => line.includes('"patch-error"'))).toBe(true)
-      expect({ alerts: await a.page.locator('.wb-shell-edit-alert').allTextContents(), head: server.headSeq, ids: server.schema.root.children.map((c: { id: string }) => c.id) }).toEqual({
-        alerts: ['밥님이 편집 중인 영역입니다 — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다. 되돌리려던 편집이 저장되지 않아 되돌리지 않았습니다.'],
+      expect({
+        alerts: await a.page.locator('.wb-shell-edit-alert').allTextContents(),
+        head: server.headSeq,
+        ids: server.schema.root.children.map((c: { id: string }) => c.id),
+      }).toEqual({
+        alerts: [
+          '밥님이 편집 중인 영역입니다 — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다. 되돌리려던 편집이 저장되지 않아 되돌리지 않았습니다.',
+        ],
         head: 1,
         ids: ['n_text0000001', 'n_text0000002', 'n_text0000003'],
       })
@@ -306,7 +381,11 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
     const first = (await mk(`/projects/${project}/pages`, { menuNodeId: menu, title: '첫째' })).id as string
     const member = await mk(`/projects/${project}/members`, { email: stack.users.bob.email, role: 'editor' })
     const P = `/projects/${project}/pages/${first}`
-    const texts = [1, 2, 3].map((n, index) => ({ op: 'add', path: `/root/children/${index}`, value: { id: `n_text000000${n}`, type: 'Text', props: { content: `글 ${n} — 캔버스를 채운다` } } }))
+    const texts = [1, 2, 3].map((n, index) => ({
+      op: 'add',
+      path: `/root/children/${index}`,
+      value: { id: `n_text000000${n}`, type: 'Text', props: { content: `글 ${n} — 캔버스를 채운다` } },
+    }))
     const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: texts })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status}`)
     const D = 1500
@@ -318,17 +397,34 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
     try {
       await b.page.goto(P)
       await canvasFrame(b.page).locator('[data-wb-id="n_text0000002"]').click()
-      await poll('WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
-      await poll('룸에 든다', async () => log.slice(), (lines) => lines.some((line) => line.includes('"joined"')))
+      await poll(
+        'WS 가 늦춰진 채 붙는다',
+        async () => delay.delayed(),
+        (n) => n >= 1,
+      )
+      await poll(
+        '룸에 든다',
+        async () => log.slice(),
+        (lines) => lines.some((line) => line.includes('"joined"')),
+      )
       await b.page.keyboard.press('Alt+ArrowUp')
-      await poll('서버에 닿는다', async () => (await call('GET', P)).body.headSeq, (n) => n === 2)
+      await poll(
+        '서버에 닿는다',
+        async () => (await call('GET', P)).body.headSeq,
+        (n) => n === 2,
+      )
       await b.page.keyboard.press('ControlOrMeta+z')
       const demoted = await call('PATCH', `/projects/${project}/members/${member.userId}`, { role: 'viewer' })
       await b.page.waitForTimeout(D * 3)
       const server = (await call('GET', P)).body
       // 판 카나리아 — 강등 알림(`membership-changed`)이 ack 뒤에 닿았다(되돌림이 풀린 뒤 강등이 닿는 차례).
       const order = log.map((line) => line.split('"')[3] ?? '').filter((type) => type === 'patch-ack' || type === 'membership-changed')
-      expect({ demoted: demoted.status, order, head: server.headSeq, ids: server.schema.root.children.map((c: { id: string }) => c.id) }).toEqual({
+      expect({
+        demoted: demoted.status,
+        order,
+        head: server.headSeq,
+        ids: server.schema.root.children.map((c: { id: string }) => c.id),
+      }).toEqual({
         demoted: 200,
         order: ['patch-ack', 'membership-changed'],
         head: 2,
@@ -362,7 +458,11 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
     const members = (await stack.request(bob, 'GET', `/projects/${project}/members`)).body as { userId: string; email: string }[]
     const alicesId = members.find((m) => m.email === stack.users.alice.email)!.userId
     const P = `/projects/${project}/pages/${first}`
-    const texts = [1, 2, 3].map((n, index) => ({ op: 'add', path: `/root/children/${index}`, value: { id: `n_text000000${n}`, type: 'Text', props: { content: `글 ${n} — 캔버스를 채운다` } } }))
+    const texts = [1, 2, 3].map((n, index) => ({
+      op: 'add',
+      path: `/root/children/${index}`,
+      value: { id: `n_text000000${n}`, type: 'Text', props: { content: `글 ${n} — 캔버스를 채운다` } },
+    }))
     const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: texts })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status}`)
     const ACK_DELAY_MS = 1_500
@@ -372,22 +472,39 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
     try {
       await b.page.goto(P)
       await canvasFrame(b.page).locator('[data-wb-id="n_text0000002"]').click()
-      await poll('룸에 든다', async () => arrivals().map((a) => a.type), (types) => types.includes('joined'))
+      await poll(
+        '룸에 든다',
+        async () => arrivals().map((a) => a.type),
+        (types) => types.includes('joined'),
+      )
       await b.page.keyboard.press('Alt+ArrowUp')
-      await poll('서버에 닿는다', async () => (await call('GET', P)).body.headSeq, (n) => n === 2)
+      await poll(
+        '서버에 닿는다',
+        async () => (await call('GET', P)).body.headSeq,
+        (n) => n === 2,
+      )
       await b.page.keyboard.press('ControlOrMeta+z')
       const demoted = await stack.request(bob, 'PATCH', `/projects/${project}/members/${alicesId}`, { role: 'viewer' })
-      await poll('ack 가 늦춰져 닿는다', async () => arrivals().map((a) => a.type), (types) => types.includes('patch-ack'), ACK_DELAY_MS * 3)
+      await poll(
+        'ack 가 늦춰져 닿는다',
+        async () => arrivals().map((a) => a.type),
+        (types) => types.includes('patch-ack'),
+        ACK_DELAY_MS * 3,
+      )
       await b.page.waitForTimeout(1_000)
       const server = (await call('GET', P)).body
       const at = (type: string) => arrivals().find((a) => a.type === type)?.at ?? 0
       // eslint-disable-next-line no-console
-      console.log(`[L-282] 강등 신호가 ack 보다 ${at('patch-ack') - at('membership-changed')}ms 앞섰다 · 보낸 프레임 ${delay.sent().join(',')} · 늦춘 프레임 ${delay.delayed()}`)
+      console.log(
+        `[L-282] 강등 신호가 ack 보다 ${at('patch-ack') - at('membership-changed')}ms 앞섰다 · 보낸 프레임 ${delay.sent().join(',')} · 늦춘 프레임 ${delay.delayed()}`,
+      )
       expect({
         demoted: demoted.status,
         // 판 카나리아 — ack 를 늦췄고(1 이상) 강등 신호가 ack 보다 먼저 닿았다.
         delayed: delay.delayed() >= 1,
-        order: arrivals().map((a) => a.type).filter((type) => type !== 'joined'),
+        order: arrivals()
+          .map((a) => a.type)
+          .filter((type) => type !== 'joined'),
         // 가르는 값 — 미룬 되돌림이 거둬져 나가지 않았다(거두지 않으면 ack 뒤에 `patch` 가 하나 더 나가 viewer 라 거절된다).
         patchFrames: delay.sent().filter((type) => type === 'patch').length,
         head: server.headSeq,

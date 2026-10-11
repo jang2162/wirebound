@@ -61,12 +61,7 @@
  * 먼저 잰다 — 알려진 차이 아홉을 실제로 갈라내는지 본다.
  */
 import { NO_THEME, renderDocument } from '@wirebound/renderer'
-import {
-  CATALOG_TYPES,
-  installCatalog,
-  validatePage,
-  type PageDocument,
-} from '@wirebound/schema'
+import { CATALOG_TYPES, installCatalog, validatePage, type PageDocument } from '@wirebound/schema'
 import { defineTheme, Root, view, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -74,15 +69,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { mountExportDocument } from '../src/browser/mount'
 import { exportBundle } from '../src/bundle/index'
 import { describeTree, normalizeStyle } from '../test-support/dom-compare'
-import {
-  brokenFixture,
-  broadFixture,
-  EMPTY_MANIFEST,
-  markedTheme,
-  slotFixture,
-  stateFixture,
-  typesIn,
-} from '../test-support/fixtures'
+import { brokenFixture, broadFixture, EMPTY_MANIFEST, markedTheme, slotFixture, stateFixture, typesIn } from '../test-support/fixtures'
 
 installCatalog()
 
@@ -157,17 +144,11 @@ describe('견주는 자가 실제로 갈라낸다', () => {
   const DIFFERENT: [name: string, html: string][] = [
     ['속성 값이 다르다', '<div data-wb-id="b" data-wb-component="List"><span>가</span><b>나</b></div>'],
     ['속성이 하나 없다', '<div data-wb-id="a"><span>가</span><b>나</b></div>'],
-    [
-      '속성이 하나 더 있다',
-      '<div data-wb-id="a" data-wb-component="List" data-wb-state="selected"><span>가</span><b>나</b></div>',
-    ],
+    ['속성이 하나 더 있다', '<div data-wb-id="a" data-wb-component="List" data-wb-state="selected"><span>가</span><b>나</b></div>'],
     ['자식 순서가 다르다', '<div data-wb-id="a" data-wb-component="List"><b>나</b><span>가</span></div>'],
     ['태그가 다르다', '<div data-wb-id="a" data-wb-component="List"><span>가</span><i>나</i></div>'],
     ['텍스트가 다르다', '<div data-wb-id="a" data-wb-component="List"><span>다</span><b>나</b></div>'],
-    [
-      '자식이 하나 더 있다',
-      '<div data-wb-id="a" data-wb-component="List"><span>가</span><b>나</b><i>다</i></div>',
-    ],
+    ['자식이 하나 더 있다', '<div data-wb-id="a" data-wb-component="List"><span>가</span><b>나</b><i>다</i></div>'],
     ['깊이가 다르다', '<div data-wb-id="a" data-wb-component="List"><span><b>가</b></span><b>나</b></div>'],
     ['텍스트가 사라졌다', '<div data-wb-id="a" data-wb-component="List"><span></span><b>나</b></div>'],
   ]
@@ -183,9 +164,7 @@ describe('견주는 자가 실제로 갈라낸다', () => {
   const STYLED = (style: string): string => `<div style="${style}"></div>`
 
   it('스타일은 적는 꼴만 다르면 같다고 한다', () => {
-    expect(describeTree(parse(STYLED('--wb-node-grid-columns:2')))).toEqual(
-      describeTree(parse(STYLED('--wb-node-grid-columns: 2;'))),
-    )
+    expect(describeTree(parse(STYLED('--wb-node-grid-columns:2')))).toEqual(describeTree(parse(STYLED('--wb-node-grid-columns: 2;'))))
   })
 
   it.each([
@@ -194,9 +173,7 @@ describe('견주는 자가 실제로 갈라낸다', () => {
     ['선언이 없다', ''],
     ['이름이 다르다', '--wb-node-grid-rows:2'],
   ])('스타일 선언이 다르면 갈라낸다 — %s', (_name, style) => {
-    expect(describeTree(parse(STYLED(style)))).not.toEqual(
-      describeTree(parse(STYLED('--wb-node-grid-columns:2'))),
-    )
+    expect(describeTree(parse(STYLED(style)))).not.toEqual(describeTree(parse(STYLED('--wb-node-grid-columns:2'))))
   })
 
   it('선언 없는 style 속성은 없는 것과 같다', () => {
@@ -204,9 +181,7 @@ describe('견주는 자가 실제로 갈라낸다', () => {
   })
 
   it('선언이 하나라도 있으면 없는 것과 갈린다', () => {
-    expect(describeTree(parse(STYLED('color:red')))).not.toEqual(
-      describeTree(parse('<div></div>')),
-    )
+    expect(describeTree(parse(STYLED('color:red')))).not.toEqual(describeTree(parse('<div></div>')))
   })
 
   it('텍스트 노드 경계는 접는다', () => {
@@ -253,7 +228,8 @@ describe('두 경로가 모두 클라이언트 렌더다', () => {
   })
 
   it('이웃한 글자와 식이 텍스트 노드 둘이다 — 화면과 같다', () => {
-    const nodes = (root: Element): (string | null)[] => [...root.querySelector('[data-probe="title"]')!.childNodes].map((node) => node.nodeValue)
+    const nodes = (root: Element): (string | null)[] =>
+      [...root.querySelector('[data-probe="title"]')!.childNodes].map((node) => node.nodeValue)
     expect(nodes(bundleTree(broadFixture(), SECTIONED))).toEqual(['구획 ', '1'])
     expect(nodes(bundleTree(broadFixture(), SECTIONED))).toEqual(nodes(screenTree(broadFixture(), SECTIONED)))
   })
@@ -324,9 +300,7 @@ describe('무엇을 덮었나 (문서 하나로 재지 마라)', () => {
    */
   it('Slot은 페이지 문서에 둘 수 없다 — 그래서 픽스처가 갈려 있다', () => {
     const errors = validatePage(slotFixture()).filter((issue) => issue.severity === 'error')
-    expect(errors.map((issue) => `${issue.path}: ${issue.message}`)).toEqual([
-      '/root: 페이지에는 Slot을 둘 수 없습니다 (1개 발견)',
-    ])
+    expect(errors.map((issue) => `${issue.path}: ${issue.message}`)).toEqual(['/root: 페이지에는 Slot을 둘 수 없습니다 (1개 발견)'])
   })
 
   /** 폴백 픽스처가 실제로 폴백을 그리는지. 안 그리면 아래 견주기가 그 상자를 안 재는 것이다. */
@@ -345,24 +319,17 @@ describe('무엇을 덮었나 (문서 하나로 재지 마라)', () => {
    * 손으로 옮긴 여섯이다 — 렌더러의 `WbAttrs`에서 끌어오면 그쪽이 줄 때 기대값도 준다. `structure` · `part` 는 SDK 기본 뷰가
    * 다는 마크업 훅이다.
    */
-  const CONTRACT_ATTRS = [
-    'data-wb-id',
-    'data-wb-component',
-    'data-wb-structure',
-    'data-wb-variant',
-    'data-wb-part',
-    'data-wb-state',
-  ]
+  const CONTRACT_ATTRS = ['data-wb-id', 'data-wb-component', 'data-wb-structure', 'data-wb-variant', 'data-wb-part', 'data-wb-state']
 
-  it.each([['화면', screenTree], ['번들', bundleTree]] as const)(
-    '%s 경로에 여섯 속성이 다 나온다',
-    (_name, path) => {
-      const lines = describeTree(path(broadFixture(), undefined)).join('\n')
-      for (const attr of CONTRACT_ATTRS) {
-        expect(lines, attr).toContain(`${attr}=`)
-      }
-    },
-  )
+  it.each([
+    ['화면', screenTree],
+    ['번들', bundleTree],
+  ] as const)('%s 경로에 여섯 속성이 다 나온다', (_name, path) => {
+    const lines = describeTree(path(broadFixture(), undefined)).join('\n')
+    for (const attr of CONTRACT_ATTRS) {
+      expect(lines, attr).toContain(`${attr}=`)
+    }
+  })
 })
 
 /* ------------------------------------------------------------------ 본론 */
@@ -371,21 +338,15 @@ describe('무엇을 덮었나 (문서 하나로 재지 마라)', () => {
 function boards(): [label: string, document_: PageDocument, theme: ThemeDefinition | undefined][] {
   return THEMES.flatMap(([themeLabel, theme]) =>
     Object.entries(FIXTURES).map(
-      ([fixtureLabel, make]) =>
-        [`${themeLabel} · ${fixtureLabel}`, make(), theme] as [string, PageDocument, ThemeDefinition | undefined],
+      ([fixtureLabel, make]) => [`${themeLabel} · ${fixtureLabel}`, make(), theme] as [string, PageDocument, ThemeDefinition | undefined],
     ),
   )
 }
 
 describe('화면과 번들이 같은 DOM을 낸다', () => {
-  it.each(boards().map((board) => [board[0], board[1], board[2]] as const))(
-    '%s',
-    (_label, document_, theme) => {
-      expect(describeTree(bundleTree(document_, theme))).toEqual(
-        describeTree(screenTree(document_, theme)),
-      )
-    },
-  )
+  it.each(boards().map((board) => [board[0], board[1], board[2]] as const))('%s', (_label, document_, theme) => {
+    expect(describeTree(bundleTree(document_, theme))).toEqual(describeTree(screenTree(document_, theme)))
+  })
 
   /**
    * **판이 실제로 서로 다른 DOM을 내는지 센다.** 전부 같으면 위 반복이 한 판을 여러 번
@@ -408,10 +369,7 @@ describe('화면과 번들이 같은 DOM을 낸다', () => {
   ]
 
   it.each(DISTINCT_SHAPES)('%s 픽스처가 서로 다른 DOM을 내는 수', (fixture, count) => {
-    const shapes = new Set(
-      THEMES.map(([, theme]) => describeTree(bundleTree(FIXTURES[fixture](), theme)).join('\n')),
-    )
+    const shapes = new Set(THEMES.map(([, theme]) => describeTree(bundleTree(FIXTURES[fixture](), theme)).join('\n')))
     expect(shapes.size).toBe(count)
   })
-
 })

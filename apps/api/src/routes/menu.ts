@@ -242,22 +242,27 @@ export function menuRoutes() {
         let outcome
         let rev = 0
         try {
-          outcome = await runTreeTransaction(app, projectId, request, async (trx) => {
-            const settled = await deleteMenuCascade(trx, {
-              projectId,
-              nodeId,
-              seen: body.expect,
-              actorId: currentUser.id,
-              // **커밋 순간의 권한** — 프로젝트 잠금 뒤 · 목록을 견주기 전이다(`services/menu-cascade.ts` 머리말).
-              recheck: async () => {
-                await recheckProjectRole(trx, request)
-              },
-            })
-            if (settled.kind === 'deleted') rev = await bumpMenuRev(trx, projectId)
-            return settled
-          },
-          // 지운 서브트리의 페이지 — 견줌을 지났으니 화면이 본 id 집합이 곧 지운 것이다(`services/menu-cascade.ts` 의 3). 놓기는 `runTreeTransaction` 이 한다.
-          (settled) => (settled.kind === 'deleted' ? body.expect.pageIds : []))
+          outcome = await runTreeTransaction(
+            app,
+            projectId,
+            request,
+            async (trx) => {
+              const settled = await deleteMenuCascade(trx, {
+                projectId,
+                nodeId,
+                seen: body.expect,
+                actorId: currentUser.id,
+                // **커밋 순간의 권한** — 프로젝트 잠금 뒤 · 목록을 견주기 전이다(`services/menu-cascade.ts` 머리말).
+                recheck: async () => {
+                  await recheckProjectRole(trx, request)
+                },
+              })
+              if (settled.kind === 'deleted') rev = await bumpMenuRev(trx, projectId)
+              return settled
+            },
+            // 지운 서브트리의 페이지 — 견줌을 지났으니 화면이 본 id 집합이 곧 지운 것이다(`services/menu-cascade.ts` 의 3). 놓기는 `runTreeTransaction` 이 한다.
+            (settled) => (settled.kind === 'deleted' ? body.expect.pageIds : []),
+          )
         } catch (error) {
           if (error instanceof CascadeSafetyTagTakenError) throw conflict(error.message)
           throw error

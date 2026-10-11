@@ -53,13 +53,14 @@ class OverlapRenderer implements ScreenRenderer {
     this.active += 1
     this.maxActive = Math.max(this.maxActive, this.active)
     for (const wake of this.wake.splice(0)) wake()
-    if (this.active < 2) await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, HOLD_MS)
-      this.wake.push(() => {
-        clearTimeout(timer)
-        resolve()
+    if (this.active < 2)
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, HOLD_MS)
+        this.wake.push(() => {
+          clearTimeout(timer)
+          resolve()
+        })
       })
-    })
     this.active -= 1
     return { results: job.pages.map(() => ({ ok: false, reason: '가짜' })), fontWarning: null }
   }

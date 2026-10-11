@@ -108,12 +108,25 @@ interface Tab {
 
 function tab(shared = new MemoryStorage()): Tab {
   const session = new MemoryStorage()
-  return { session, shared, store: openDraftStore(() => session, () => shared) }
+  return {
+    session,
+    shared,
+    store: openDraftStore(
+      () => session,
+      () => shared,
+    ),
+  }
 }
 
 /** 새 문서 — 같은 저장소 위의 새 사본 객체. */
 function renewed(current: Tab): Tab {
-  return { ...current, store: openDraftStore(() => current.session, () => current.shared) }
+  return {
+    ...current,
+    store: openDraftStore(
+      () => current.session,
+      () => current.shared,
+    ),
+  }
 }
 
 // ---- 화면 ----
@@ -651,7 +664,10 @@ describe('명시적 로그아웃 — 이 브라우저에 그 사람의 초안·�
     // 다른 사람이 들어오면 앞 사람의 칸은 그때 지워지므로(아래 «다른 사람» 절) 두 사람의 칸이 함께 있는 것은
     // **이 탭의 사람을 알기 전**(`admit` 전 — 문서가 선 뒤 `me()`의 답 전)이거나 그 지우기가 던진 판이다.
     const session = new MemoryStorage()
-    const store = openDraftStore(() => session, () => new MemoryStorage())
+    const store = openDraftStore(
+      () => session,
+      () => new MemoryStorage(),
+    )
     const visit = { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': '설명' } }
     store.keep(ALICE.id, visit, store.generation)
     store.keep(BOB.id, visit, store.generation)
@@ -667,13 +683,22 @@ describe('명시적 로그아웃 — 이 브라우저에 그 사람의 초안·�
     // `sessionStorage`를 되살린다 — Chromium 151 의 값은 `write-ledger.tsx`의 입구 표). B 는 로그아웃 소식을 못 받았다.
     const shared = new MemoryStorage()
     const bSession = new MemoryStorage()
-    const b = openDraftStore(() => bSession, () => shared)
+    const b = openDraftStore(
+      () => bSession,
+      () => shared,
+    )
     b.keep(ALICE.id, { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': 'B 의 설명' } }, b.generation)
-    const a = openDraftStore(() => new MemoryStorage(), () => shared)
+    const a = openDraftStore(
+      () => new MemoryStorage(),
+      () => shared,
+    )
     expect(a.forget()).toBe(1)
 
     // **다시 열리는 것만으로 지운다** — 읽기를 기다리면 되살린 탭에 다른 사람이 들어온 판에서 아무도 안 읽는다.
-    openDraftStore(() => bSession, () => shared)
+    openDraftStore(
+      () => bSession,
+      () => shared,
+    )
     expect(bSession.draftKeys()).toEqual([])
     expect(shared.getItem(FORGOTTEN_KEY)).toBe('1')
   })
@@ -681,9 +706,15 @@ describe('명시적 로그아웃 — 이 브라우저에 그 사람의 초안·�
   it('연 뒤에 다른 탭이 로그아웃해도(소식이 안 닿은 판) — 읽기 전에 표지를 본다', () => {
     const shared = new MemoryStorage()
     const bSession = new MemoryStorage()
-    const b = openDraftStore(() => bSession, () => shared)
+    const b = openDraftStore(
+      () => bSession,
+      () => shared,
+    )
     b.keep(ALICE.id, { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': 'B 의 설명' } }, b.generation)
-    openDraftStore(() => new MemoryStorage(), () => shared).forget()
+    openDraftStore(
+      () => new MemoryStorage(),
+      () => shared,
+    ).forget()
 
     expect(b.recall(ALICE.id, 'p-1', PAGE_ID)).toEqual({})
     expect(bSession.draftKeys()).toEqual([])
@@ -694,17 +725,29 @@ describe('명시적 로그아웃 — 이 브라우저에 그 사람의 초안·�
     // 표지와 사본을 시각으로 견주면 이 사본(얼린 탭이 표지보다 늦은 시각에 쓴 것)이 남는다.
     const shared = new MemoryStorage()
     const bSession = new MemoryStorage()
-    const b = openDraftStore(() => bSession, () => shared)
-    openDraftStore(() => new MemoryStorage(), () => shared).forget()
+    const b = openDraftStore(
+      () => bSession,
+      () => shared,
+    )
+    openDraftStore(
+      () => new MemoryStorage(),
+      () => shared,
+    ).forget()
     b.keep(ALICE.id, { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': '못 듣고 친 설명' } }, b.generation)
 
-    openDraftStore(() => bSession, () => shared)
+    openDraftStore(
+      () => bSession,
+      () => shared,
+    )
     expect(bSession.draftKeys()).toEqual([])
   })
 
   it('로그아웃 뒤에 커밋된 앞 화면은 저장소에 쓰지 못한다 — 로그아웃 소식과 화면이 내려가는 렌더 사이', () => {
     const session = new MemoryStorage()
-    const store = openDraftStore(() => session, () => new MemoryStorage())
+    const store = openDraftStore(
+      () => session,
+      () => new MemoryStorage(),
+    )
     const since = store.generation
     store.forget()
     store.keep(ALICE.id, { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': '늦은 글자' } }, since)
@@ -750,7 +793,10 @@ describe('로그아웃 표지 — 세대 번호', () => {
     const backend = server()
     let current = tab()
     // 다른 탭 B — 로그아웃 **전에** 떴고 소식을 늦게 듣는다.
-    const other = openDraftStore(() => new MemoryStorage(), () => current.shared)
+    const other = openDraftStore(
+      () => new MemoryStorage(),
+      () => current.shared,
+    )
     const options = await open(backend, current)
     await logout()
     await login(ALICE)
@@ -769,8 +815,14 @@ describe('로그아웃 표지 — 세대 번호', () => {
 
   it('옛 판 탭의 소식(번호 없음) — 들은 탭 둘이 같은 번호에 닿는다', () => {
     const shared = new MemoryStorage()
-    const b = openDraftStore(() => new MemoryStorage(), () => shared)
-    const c = openDraftStore(() => new MemoryStorage(), () => shared)
+    const b = openDraftStore(
+      () => new MemoryStorage(),
+      () => shared,
+    )
+    const c = openDraftStore(
+      () => new MemoryStorage(),
+      () => shared,
+    )
 
     b.forgetHeard(undefined)
     c.forgetHeard(undefined)
@@ -877,7 +929,10 @@ describe('다른 사람 — 앞 사람의 초안을 읽지 않고, 들어오는 
 
   it('사람이 바뀐 뒤 앞 사람의 화면은 앞 사람의 칸에 못 쓴다 — 소식과 화면이 내려가는 렌더 사이', () => {
     const session = new MemoryStorage()
-    const store = openDraftStore(() => session, () => new MemoryStorage())
+    const store = openDraftStore(
+      () => session,
+      () => new MemoryStorage(),
+    )
     const visit = { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': '앨리스의 늦은 글자' } }
     store.admit(ALICE.id)
     store.keep(ALICE.id, visit, store.generation)
@@ -929,7 +984,12 @@ describe('다른 페이지로 가면 버린다: 저장소는 이 탭이 마지�
 
     cleanup()
     current = renewed(current)
-    await openPage(OTHER_DOC, { ...options, docs: { [PAGE_ID]: DOC }, route: `/projects/p-1/pages/${OTHER_PAGE_ID}`, draftStore: current.store })
+    await openPage(OTHER_DOC, {
+      ...options,
+      docs: { [PAGE_ID]: DOC },
+      route: `/projects/p-1/pages/${OTHER_PAGE_ID}`,
+      draftStore: current.store,
+    })
     await toPage(PAGE_TITLE, ROOT_ID)
     await toCommentTab()
 

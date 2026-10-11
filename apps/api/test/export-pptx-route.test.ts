@@ -46,9 +46,7 @@ function doc(rootId: string, buttonId: string, label: string): PageDocument {
           type: 'Button',
           props: { label },
           marker: 1,
-          interactions: [
-            { on: 'click', actions: [{ type: 'navigate', target: 'page:관리자/회원/상세' }] },
-          ],
+          interactions: [{ on: 'click', actions: [{ type: 'navigate', target: 'page:관리자/회원/상세' }] }],
         },
       ],
     },
@@ -114,12 +112,8 @@ describe('GET /:projectId/export?format=pptx', () => {
       })
 
       expect(res.statusCode).toBe(200)
-      expect(res.headers['content-type']).toBe(
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      )
-      expect(res.headers['content-disposition']).toBe(
-        'attachment; filename="wirebound-export-pptx-one.pptx"',
-      )
+      expect(res.headers['content-type']).toBe('application/vnd.openxmlformats-officedocument.presentationml.presentation')
+      expect(res.headers['content-disposition']).toBe('attachment; filename="wirebound-export-pptx-one.pptx"')
     })
   })
 
@@ -148,9 +142,7 @@ describe('GET /:projectId/export?format=pptx', () => {
         cookies: fixture.cookie,
       })
 
-      const slides = Object.keys(unpack(res.rawPayload)).filter((path) =>
-        /^ppt\/slides\/slide\d+\.xml$/.test(path),
-      )
+      const slides = Object.keys(unpack(res.rawPayload)).filter((path) => /^ppt\/slides\/slide\d+\.xml$/.test(path))
       expect(slides).toHaveLength(3)
     })
   })
@@ -193,9 +185,7 @@ describe('GET /:projectId/export?format=pptx', () => {
         url: `/api/projects/${fixture.projectId}/export?format=pptx`,
         cookies: fixture.cookie,
       })
-      const notes = Object.keys(unpack(res.rawPayload)).filter((path) =>
-        /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(path),
-      )
+      const notes = Object.keys(unpack(res.rawPayload)).filter((path) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(path))
       expect(notes).toHaveLength(3)
     })
   })
@@ -271,11 +261,7 @@ describe('GET /:projectId/export/preview?format=pptx', () => {
       expect(res.json().fileName).toBe('wirebound-export-pptx-preview.pptx')
       // **그리는 자를 안 넣었으므로 전부다**(`withApi`가 기본으로 안 준다).
       // 넣었을 때 무엇이 되는지는 `test/export-pptx-screens.test.ts`가 잰다.
-      expect(res.json().screenless).toEqual([
-        '관리자 대시보드',
-        '관리자 회원 목록',
-        '관리자 회원 상세',
-      ])
+      expect(res.json().screenless).toEqual(['관리자 대시보드', '관리자 회원 목록', '관리자 회원 상세'])
     })
   })
 
@@ -296,14 +282,7 @@ describe('GET /:projectId/export/preview?format=pptx', () => {
         url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`,
         cookies: fixture.cookie,
       })
-      expect(Object.keys(res.json()).sort()).toEqual([
-        'fileName',
-        'fontWarning',
-        'format',
-        'pages',
-        'screenFailures',
-        'screenless',
-      ])
+      expect(Object.keys(res.json()).sort()).toEqual(['fileName', 'fontWarning', 'format', 'pages', 'screenFailures', 'screenless'])
     })
   })
 

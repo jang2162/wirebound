@@ -47,11 +47,7 @@ export class DuplicateSlugError extends Error {
 }
 
 function isSlugUniqueViolation(error: unknown): boolean {
-  return (
-    error instanceof DatabaseError &&
-    error.code === UNIQUE_VIOLATION &&
-    error.constraint === PROJECTS_SLUG_UNIQUE_CONSTRAINT
-  )
+  return error instanceof DatabaseError && error.code === UNIQUE_VIOLATION && error.constraint === PROJECTS_SLUG_UNIQUE_CONSTRAINT
 }
 
 /**
@@ -113,10 +109,7 @@ export async function insertProject(
         .returning(['id', 'name', 'slug', 'description'])
         .executeTakeFirstOrThrow()
 
-      await trx
-        .insertInto('project_members')
-        .values({ project_id: project.id, user_id: ownerId, role: 'owner' })
-        .execute()
+      await trx.insertInto('project_members').values({ project_id: project.id, user_id: ownerId, role: 'owner' }).execute()
 
       // 2단계: 기본 레이아웃. 문서는 `Page` 하나와 `Slot` 하나다 — 그릇의 최소본이다. **그 `schema`를 그리는 코드는
       // 없다** — `repos/layouts.ts`의 `defaultLayoutDocument` 주석 참고.
@@ -127,11 +120,7 @@ export async function insertProject(
       })
 
       // 3단계: 순환을 닫는다.
-      await trx
-        .updateTable('projects')
-        .set({ default_layout_id: layout.id })
-        .where('id', '=', project.id)
-        .execute()
+      await trx.updateTable('projects').set({ default_layout_id: layout.id }).where('id', '=', project.id).execute()
 
       return { ...project, role: 'owner' as const }
     })
@@ -163,11 +152,7 @@ export async function listProjectsForUser(db: DbHandle, userId: string): Promise
  * 멤버십 확인은 이 함수의 일이 아니다 — 호출자(`projectGuard`)가 이미 확인했다고 가정한다.
  */
 export async function findProjectById(db: DbHandle, projectId: string): Promise<ProjectRecord | null> {
-  const row = await db
-    .selectFrom('projects')
-    .select(['id', 'name', 'slug', 'description'])
-    .where('id', '=', projectId)
-    .executeTakeFirst()
+  const row = await db.selectFrom('projects').select(['id', 'name', 'slug', 'description']).where('id', '=', projectId).executeTakeFirst()
 
   return row ?? null
 }

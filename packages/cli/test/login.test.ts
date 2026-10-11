@@ -122,10 +122,7 @@ describe('wireb login — 자격을 만드는 유일한 명령', () => {
   it('--server 와 --project 를 둘 다 주면 바인딩이 없어도 된다', async () => {
     const io = loginIo()
     io.fs.delete('/repo/.wirebound.json')
-    const code = await run(
-      ['login', '--email', 'a@example.com', '--server', `${SERVER}/`, '--project', PROJECT],
-      io,
-    )
+    const code = await run(['login', '--email', 'a@example.com', '--server', `${SERVER}/`, '--project', PROJECT], io)
 
     expect(code, io.stderr.join('\n')).toBe(EXIT.ok)
     expect(io.requests[0]?.url).toBe(`${SERVER}/api/auth/login`)
@@ -271,10 +268,7 @@ describe('자격 저장소', () => {
     await run(['login', '--email', 'a@example.com', '--server', SERVER, '--project', 'prj_other'], io)
 
     const stored = JSON.parse(io.text('/home/tester/.wirebound/credentials.json') ?? '')
-    expect(stored.credentials.map((entry: { projectId: string }) => entry.projectId)).toEqual([
-      PROJECT,
-      'prj_other',
-    ])
+    expect(stored.credentials.map((entry: { projectId: string }) => entry.projectId)).toEqual([PROJECT, 'prj_other'])
   })
 
   it('모르는 형식의 자격 파일을 조용히 덮지 않는다', async () => {

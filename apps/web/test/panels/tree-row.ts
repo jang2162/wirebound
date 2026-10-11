@@ -56,7 +56,8 @@ export function queryRowAction(region: HTMLElement, name: string, row: HTMLEleme
 export function reasonOf(item: Element): string | null {
   const description = item.getAttribute('aria-description')
   const title = item.getAttribute('title')
-  if (description !== title) throw new Error(`«${item.textContent ?? ''}»의 title(${String(title)})과 aria-description(${String(description)})이 다르다`)
+  if (description !== title)
+    throw new Error(`«${item.textContent ?? ''}»의 title(${String(title)})과 aria-description(${String(description)})이 다르다`)
   return description
 }
 

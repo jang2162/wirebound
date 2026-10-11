@@ -28,9 +28,7 @@ export function parsePointer(pointer: string): string[] {
 
 export function formatPointer(tokens: string[]): string {
   if (tokens.length === 0) return ''
-  return `/${tokens
-    .map((token) => String(token).replace(/~/g, '~0').replace(/\//g, '~1'))
-    .join('/')}`
+  return `/${tokens.map((token) => String(token).replace(/~/g, '~0').replace(/\//g, '~1')).join('/')}`
 }
 
 /**

@@ -331,18 +331,14 @@ async function renderAll(
       if (index >= requests.length) return
       if (index >= limits.maxPages) {
         // **분모를 함께 말한다.** *"몇 장 중 몇 번째가 빠졌다"*가 없으면 조용히 빠진 것과 같다.
-        results[index] = failure(
-          `화면 이미지 상한 ${limits.maxPages}장을 넘었습니다 (${requests.length}장 중 ${index + 1}번째)`,
-        )
+        results[index] = failure(`화면 이미지 상한 ${limits.maxPages}장을 넘었습니다 (${requests.length}장 중 ${index + 1}번째)`)
         continue
       }
       results[index] = await renderOne(browser, job.files, requests[index]!, limits.timeoutMs, limits.maxArea)
     }
   }
 
-  await Promise.all(
-    Array.from({ length: Math.min(limits.concurrency, requests.length) }, () => worker()),
-  )
+  await Promise.all(Array.from({ length: Math.min(limits.concurrency, requests.length) }, () => worker()))
   return results
 }
 
@@ -401,7 +397,10 @@ async function renderOne(
 
 /** 번들 안 경로를 URL 경로로 — 마디마다 인코딩한다(한글 파일 이름). 받는 쪽(`newRenderContext`)이 되돌린다. */
 function encodePath(path: string): string {
-  return path.split('/').map((segment) => encodeURIComponent(segment)).join('/')
+  return path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
 }
 
 /** 준비 신호(`<html data-wb-ready>`)가 한도 안에 섰나. 한도를 넘으면 `false` — 다른 실패는 던진다(부른 쪽이 값으로 바꾼다). */

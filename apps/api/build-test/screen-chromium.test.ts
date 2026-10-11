@@ -41,12 +41,7 @@ import {
   SCREEN_TOO_LARGE,
 } from '../src/services/screen-render-chromium'
 import { readExportRuntime } from '../src/services/export-runtime'
-import {
-  decideKoreanGlyphs,
-  readPngSize,
-  type KoreanGlyphSamples,
-  type ScreenJob,
-} from '../src/services/screen-render'
+import { decideKoreanGlyphs, readPngSize, type KoreanGlyphSamples, type ScreenJob } from '../src/services/screen-render'
 import { builtSample } from '../test/theme-fixtures'
 import { readApiEnvFile } from '../test/test-database-url'
 import { bundled, countColor, inlineTheme, jobOf, packageTheme, raw, type Entry } from './screen-jobs'
@@ -183,9 +178,7 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
     const batch = await draw(requests)
 
     const screens: (PptxScreen | null)[] = batch.results.map((result, index) =>
-      result.ok
-        ? { fileName: `screen${index + 1}.png`, bytes: result.bytes, width: result.width, height: result.height }
-        : null,
+      result.ok ? { fileName: `screen${index + 1}.png`, bytes: result.bytes, width: result.width, height: result.height } : null,
     )
 
     const { parts, screenless } = exportPptx({
@@ -317,7 +310,9 @@ describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
       ),
     ])
     const [result] = batch.results
-    expect(result!.ok ? `그림 ${result!.width}×${result!.height}` : result!.reason).toMatch(new RegExp(`^${SCREEN_TOO_LARGE} — 720×\\d+px\\(`))
+    expect(result!.ok ? `그림 ${result!.width}×${result!.height}` : result!.reason).toMatch(
+      new RegExp(`^${SCREEN_TOO_LARGE} — 720×\\d+px\\(`),
+    )
   })
 
   /**
@@ -337,7 +332,13 @@ describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
       .join('\n')
     const chain = families.map((family) => `Slow${family}`).join(', ')
     const batch = await draw(
-      [raw('느린 글꼴', '<!doctype html><html lang="ko"><body><p>회원 목록</p></body></html>', `${faces}\nbody { font-family: ${chain}, sans-serif }`)],
+      [
+        raw(
+          '느린 글꼴',
+          '<!doctype html><html lang="ko"><body><p>회원 목록</p></body></html>',
+          `${faces}\nbody { font-family: ${chain}, sans-serif }`,
+        ),
+      ],
       { timeoutMs: 3000 },
     )
     expect(batch.results).toEqual([{ ok: false, reason: `${SCREEN_NOT_READY} — 3000ms` }])
@@ -359,7 +360,11 @@ describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
     let batch
     try {
       batch = await draw([
-        raw('자라는 장', '<!doctype html><html lang="ko"><body style="margin:0"><div style="height:100px">자란다</div></body></html>', 'body { color: #111 }'),
+        raw(
+          '자라는 장',
+          '<!doctype html><html lang="ko"><body style="margin:0"><div style="height:100px">자란다</div></body></html>',
+          'body { color: #111 }',
+        ),
       ])
     } finally {
       proto.screenshot = original
@@ -447,10 +452,7 @@ function browserProcesses(): number {
 }
 
 /** `render`가 도는 동안의 **최고** 프로세스 수와 끝난 뒤의 수. */
-async function processWatch(
-  requests: readonly Entry[],
-  concurrency: number,
-): Promise<{ peak: number; after: number }> {
+async function processWatch(requests: readonly Entry[], concurrency: number): Promise<{ peak: number; after: number }> {
   let peak = 0
   // **100ms 다.** 세는 값(`ps` · `/proc` 을 훑는 것)이 작지 않아 25ms 로 재면 이 케이스 하나가 20초를 먹는다
   // (macOS `ps` 로 쟀다). 재려는 것은 최고치의 **자릿수**이지 순간값이 아니다.
@@ -514,15 +516,19 @@ describe.skipIf(!있다)('브라우저·페이지 수명', () => {
  * (SIGTERM · SIGHUP 은 실패 40 · SIGINT 는 playwright 가 `process.exit(130)` 해 한 줄도 못 낸다).
  */
 describe.skipIf(!있다)('그리는 중에 신호를 받아도', () => {
-  it.each(['SIGTERM', 'SIGINT', 'SIGHUP'])('%s — 도는 그리기가 끝까지 그린다', (signal) => {
-    const child = spawnSync(
-      fileURLToPath(new URL('../node_modules/.bin/tsx', import.meta.url)),
-      [fileURLToPath(new URL('./render-through-signal.ts', import.meta.url)), signal, EXECUTABLE_PATH ?? '-'],
-      { encoding: 'utf8', timeout: 60_000 },
-    )
-    expect({ status: child.status, signal: child.signal, stderr: child.stderr }).toEqual({ status: 0, signal: null, stderr: '' })
-    expect(JSON.parse(child.stdout)).toEqual({ failures: 0, total: 40 })
-  }, 90_000)
+  it.each(['SIGTERM', 'SIGINT', 'SIGHUP'])(
+    '%s — 도는 그리기가 끝까지 그린다',
+    (signal) => {
+      const child = spawnSync(
+        fileURLToPath(new URL('../node_modules/.bin/tsx', import.meta.url)),
+        [fileURLToPath(new URL('./render-through-signal.ts', import.meta.url)), signal, EXECUTABLE_PATH ?? '-'],
+        { encoding: 'utf8', timeout: 60_000 },
+      )
+      expect({ status: child.status, signal: child.signal, stderr: child.stderr }).toEqual({ status: 0, signal: null, stderr: '' })
+      expect(JSON.parse(child.stdout)).toEqual({ failures: 0, total: 40 })
+    },
+    90_000,
+  )
 })
 
 describe.skipIf(!있다)('두부 판정자', () => {
@@ -684,8 +690,7 @@ describe.skipIf(!있다)('바깥으로 나가는 요청 — 일곱 길 전부', 
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     const address = server.address()
-    const base =
-      typeof address === 'object' && address !== null ? `http://127.0.0.1:${address.port}` : ''
+    const base = typeof address === 'object' && address !== null ? `http://127.0.0.1:${address.port}` : ''
 
     try {
       const html = [
@@ -726,7 +731,10 @@ describe.skipIf(!있다)('바깥으로 나가는 요청 — 일곱 길 전부', 
       let batch
       try {
         batch = await draw(
-          [raw('바깥 자원 일곱 길', html, 'body { color: #111 }'), bundled('테마가 가리키는 바깥', doc(1, 2), inlineTheme({ themeCss, before }))],
+          [
+            raw('바깥 자원 일곱 길', html, 'body { color: #111 }'),
+            bundled('테마가 가리키는 바깥', doc(1, 2), inlineTheme({ themeCss, before })),
+          ],
           { timeoutMs: 5000 },
         )
       } finally {
@@ -818,7 +826,11 @@ describe.skipIf(!있다)('번들 페이지를 연다', () => {
     const batch = await draw([
       requestFor(1, 2),
       bundled('등록 안 함', doc(2, 2), inlineTheme({ id: 'silent', register: false })),
-      bundled('던지는 뷰', doc(3, 2), inlineTheme({ id: 'thrower', views: `{ Button: rt.sdk.view(() => { throw new Error('뷰가 던진다') }) }` })),
+      bundled(
+        '던지는 뷰',
+        doc(3, 2),
+        inlineTheme({ id: 'thrower', views: `{ Button: rt.sdk.view(() => { throw new Error('뷰가 던진다') }) }` }),
+      ),
       requestFor(4, 2),
     ])
     expect(batch.results.map((result) => (result.ok ? 'ok' : result.reason))).toEqual([

@@ -297,12 +297,12 @@ describe('패턴 삽입 — 실패 갈래마다 무엇이 되돌아가는가', (
   it('선언 안 된 슬롯을 쓰는 패턴도 막고 그 슬롯 이름을 말한다', async () => {
     const backend = server()
     holder.patterns = {
-        'content.bad': {
-          name: '슬롯 오타',
-          slots: { title: 'text' },
-          schema: { type: 'Section', children: [{ type: 'Text', slot: 'titel' }] },
-        },
-      }
+      'content.bad': {
+        name: '슬롯 오타',
+        slots: { title: 'text' },
+        schema: { type: 'Section', children: [{ type: 'Text', slot: 'titel' }] },
+      },
+    }
     await openPage(doc(), { apiOverrides: backend.api })
 
     select('Card')

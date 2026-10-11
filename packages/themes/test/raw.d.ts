@@ -20,10 +20,7 @@ declare module '*.json?raw' {
  * 제약이다 — 여기서 최소로 선언한다.
  */
 interface ImportMeta {
-  glob(
-    pattern: string,
-    options: { query: '?raw'; eager: true; import: 'default' },
-  ): Record<string, string>
+  glob(pattern: string, options: { query: '?raw'; eager: true; import: 'default' }): Record<string, string>
 }
 
 /**

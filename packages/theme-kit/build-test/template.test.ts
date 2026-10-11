@@ -58,7 +58,10 @@ beforeAll(async () => {
   extract(zip, work)
   template = join(work, ROOT)
   packages = { sdk: '', kit: '' }
-  for (const [key, prefix] of [['sdk', 'wirebound-theme-sdk-'], ['kit', 'wirebound-theme-kit-']] as const) {
+  for (const [key, prefix] of [
+    ['sdk', 'wirebound-theme-sdk-'],
+    ['kit', 'wirebound-theme-kit-'],
+  ] as const) {
     const tgz = readdirSync(join(template, 'vendor')).find((n) => n.startsWith(prefix))!
     const into = join(work, key)
     mkdirSync(into)
@@ -72,7 +75,17 @@ afterAll(() => rmSync(TMP, { recursive: true, force: true }))
 describe('스타터 템플릿 zip', () => {
   it('뼈대가 있다', () => {
     const names = Object.keys(zip)
-    for (const name of ['package.json', 'theme.config.ts', 'tsconfig.json', 'src/index.tsx', 'src/theme.css', 'SKILL.md', 'README.md', '.gitignore', `vendor/wirebound-theme-sdk-${SDK_VERSION}.tgz`]) {
+    for (const name of [
+      'package.json',
+      'theme.config.ts',
+      'tsconfig.json',
+      'src/index.tsx',
+      'src/theme.css',
+      'SKILL.md',
+      'README.md',
+      '.gitignore',
+      `vendor/wirebound-theme-sdk-${SDK_VERSION}.tgz`,
+    ]) {
       expect(names, name).toContain(`${ROOT}/${name}`)
     }
     expect(names.some((n) => /^wirebound-theme-starter\/vendor\/wirebound-theme-kit-.+\.tgz$/.test(n))).toBe(true)
@@ -93,7 +106,9 @@ describe('스타터 템플릿 zip', () => {
       const raw = readFileSync(join(packages[key], 'package.json'), 'utf8')
       expect(raw, key).not.toContain('workspace:')
       const pkg = JSON.parse(raw)
-      const names = [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.peerDependencies ?? {})].filter((n) => n.startsWith('@wirebound/'))
+      const names = [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.peerDependencies ?? {})].filter((n) =>
+        n.startsWith('@wirebound/'),
+      )
       expect(names, key).toEqual(key === 'kit' ? ['@wirebound/theme-sdk'] : [])
       expect(Object.keys(pkg.peerDependencies ?? {}).includes('@wirebound/theme-sdk') || key === 'sdk').toBe(true)
     }
@@ -139,19 +154,23 @@ describe('스타터 템플릿 zip', () => {
     expect(readWbtheme(new Uint8Array(readFileSync(r.file))).issues).toEqual([])
   })
 
-  it.skipIf(!INSTALL)('저장소 밖에서 설치하고 빌드한다(WB_TEMPLATE_INSTALL=1)', () => {
-    const outside = mkdtempSync(join(tmpdir(), 'wb-template-install-'))
-    try {
-      extract(zip, outside)
-      const root = join(outside, ROOT)
-      execFileSync('npm', ['install', '--no-audit', '--no-fund'], { cwd: root, stdio: 'pipe' })
-      execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'pipe' })
-      const built = readdirSync(join(root, 'dist')).filter((n) => n.endsWith('.wbtheme'))
-      expect(built).toEqual(['my-theme-0.1.0.wbtheme'])
-      expect(readWbtheme(new Uint8Array(readFileSync(join(root, 'dist', built[0]!)))).issues).toEqual([])
-      execFileSync('npm', ['run', 'typecheck'], { cwd: root, stdio: 'pipe' })
-    } finally {
-      rmSync(outside, { recursive: true, force: true })
-    }
-  }, 300_000)
+  it.skipIf(!INSTALL)(
+    '저장소 밖에서 설치하고 빌드한다(WB_TEMPLATE_INSTALL=1)',
+    () => {
+      const outside = mkdtempSync(join(tmpdir(), 'wb-template-install-'))
+      try {
+        extract(zip, outside)
+        const root = join(outside, ROOT)
+        execFileSync('npm', ['install', '--no-audit', '--no-fund'], { cwd: root, stdio: 'pipe' })
+        execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'pipe' })
+        const built = readdirSync(join(root, 'dist')).filter((n) => n.endsWith('.wbtheme'))
+        expect(built).toEqual(['my-theme-0.1.0.wbtheme'])
+        expect(readWbtheme(new Uint8Array(readFileSync(join(root, 'dist', built[0]!)))).issues).toEqual([])
+        execFileSync('npm', ['run', 'typecheck'], { cwd: root, stdio: 'pipe' })
+      } finally {
+        rmSync(outside, { recursive: true, force: true })
+      }
+    },
+    300_000,
+  )
 })

@@ -19,11 +19,7 @@ describe('revisions 스키마', () => {
       const menu = await createMenuNode(ctx, owner.cookie, project.id)
       const page = await createPage(ctx, owner.cookie, project.id, menu.id)
 
-      const row = await ctx.db
-        .selectFrom('pages')
-        .select('head_seq')
-        .where('id', '=', page.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('pages').select('head_seq').where('id', '=', page.id).executeTakeFirstOrThrow()
 
       // pg는 int8(bigint)을 정밀도 손실을 피하려고 문자열로 준다. 이 사실이
       // db/types.ts의 컬럼 타입(`ColumnType<string, ...>`)과 repos의 Number()

@@ -11,13 +11,7 @@ import { DEFAULT_VIEWS, type NodeBinding, type ThemeDefinition } from '@wireboun
 import { Fragment, type ReactElement, type ReactNode } from 'react'
 import { activeStates, type WbAttrs, type WbHandlers } from './attrs'
 import { FallbackNode } from './fallback'
-import {
-  hiddenByOverlay,
-  overlayProps,
-  runInteraction,
-  type InteractionOverlay,
-  type InteractionResult,
-} from './interaction/runtime'
+import { hiddenByOverlay, overlayProps, runInteraction, type InteractionOverlay, type InteractionResult } from './interaction/runtime'
 import { NO_THEME } from './no-theme'
 import { resolveVariant } from './variant'
 import { ViewHost } from './view-host'
@@ -263,11 +257,7 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions):
   const childNodes: unknown[] = Array.isArray(rawChildren) ? rawChildren : []
   const children: ReactNode =
     childNodes.length > 0
-      ? childNodes.map((child, index) => (
-          <Fragment key={childKey(child, index)}>
-            {renderNodeIn(root, child as WbNode, options)}
-          </Fragment>
-        ))
+      ? childNodes.map((child, index) => <Fragment key={childKey(child, index)}>{renderNodeIn(root, child as WbNode, options)}</Fragment>)
       : null
 
   const type = readString(raw?.type)

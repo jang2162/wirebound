@@ -16,8 +16,7 @@ afterEach(() => {
 })
 
 const base: ThemeManifest = { id: 't', name: 't', version: '0.0.0', sdk: '^1.0.0', tokens: { items: {} } }
-const page = (children: unknown[]): PageDocument =>
-  ({ root: { id: 'root', type: 'Page', props: {}, children } }) as never
+const page = (children: unknown[]): PageDocument => ({ root: { id: 'root', type: 'Page', props: {}, children } }) as never
 
 function draw(doc: PageDocument, theme: ThemeDefinition, errors: NodeRenderError[] = []) {
   return render(<>{renderDocument(doc, { theme, onNodeError: (e) => errors.push(e) })}</>)
@@ -25,18 +24,32 @@ function draw(doc: PageDocument, theme: ThemeDefinition, errors: NodeRenderError
 
 describe('뷰 경로', () => {
   it('테마 뷰가 있으면 그것으로, 없으면 기본 뷰로 그린다', () => {
-    const Button = view(({ props }) => <Root as="button" className="mine">{String(props.label)}</Root>)
-    const { container } = draw(page([{ id: 'b', type: 'Button', props: { label: '저장' } }, { id: 't', type: 'Text', props: { content: '안녕' } }]),
-      { manifest: base, views: { Button } })
+    const Button = view(({ props }) => (
+      <Root as="button" className="mine">
+        {String(props.label)}
+      </Root>
+    ))
+    const { container } = draw(
+      page([
+        { id: 'b', type: 'Button', props: { label: '저장' } },
+        { id: 't', type: 'Text', props: { content: '안녕' } },
+      ]),
+      { manifest: base, views: { Button } },
+    )
     expect(container.querySelector('[data-wb-id="b"]')!.className).toBe('mine')
     expect(container.querySelector('[data-wb-id="t"]')!.getAttribute('data-wb-structure')).toBe('default')
   })
 
   it('뷰는 props · states · variant · children 을 받는다', () => {
     const seen: unknown[] = []
-    const List = view((p) => { seen.push(p); return <Root /> })
-    draw(page([{ id: 'l', type: 'List', props: { selected: true }, variant: 'cards' }]),
-      { manifest: { ...base, components: { List: { variants: [{ id: 'cards', label: '카드' }], defaultVariant: 'cards' } } }, views: { List } })
+    const List = view((p) => {
+      seen.push(p)
+      return <Root />
+    })
+    draw(page([{ id: 'l', type: 'List', props: { selected: true }, variant: 'cards' }]), {
+      manifest: { ...base, components: { List: { variants: [{ id: 'cards', label: '카드' }], defaultVariant: 'cards' } } },
+      views: { List },
+    })
     const p = seen[0] as { nodeId: string; states: string[]; variant: string; props: Record<string, unknown> }
     expect(p.nodeId).toBe('l')
     expect(p.states).toContain('selected')
@@ -46,7 +59,10 @@ describe('뷰 경로', () => {
 
   it('노드 속성: data-wb-structure 는 없고 variant · state 는 있다', () => {
     const List = view(() => <Root />)
-    const { container } = draw(page([{ id: 'l', type: 'List', props: { selected: true }, variant: 'x' }]), { manifest: base, views: { List } })
+    const { container } = draw(page([{ id: 'l', type: 'List', props: { selected: true }, variant: 'x' }]), {
+      manifest: base,
+      views: { List },
+    })
     const el = container.querySelector('[data-wb-id="l"]')!
     expect(el.hasAttribute('data-wb-structure')).toBe(false)
     expect(el.getAttribute('data-wb-variant')).toBe('x')
@@ -62,9 +78,16 @@ describe('뷰 경로', () => {
 
   it('뷰가 던지면 그 노드만 폴백이 서고 형제는 산다', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const Button = view(() => { throw new Error('테마 버그') })
-    const { container } = draw(page([{ id: 'b', type: 'Button', props: { label: 'x' } }, { id: 't', type: 'Text', props: { content: '산다' } }]),
-      { manifest: base, views: { Button } })
+    const Button = view(() => {
+      throw new Error('테마 버그')
+    })
+    const { container } = draw(
+      page([
+        { id: 'b', type: 'Button', props: { label: 'x' } },
+        { id: 't', type: 'Text', props: { content: '산다' } },
+      ]),
+      { manifest: base, views: { Button } },
+    )
     const fb = container.querySelector('[data-wb-id="b"]')!
     expect(fb.getAttribute('data-wb-error')).toContain('테마 버그')
     expect(screen.getByText('산다')).toBeTruthy()
@@ -102,7 +125,13 @@ describe('뷰 경로', () => {
   it('Root 를 빠뜨렸던 뷰가 편집으로 Root 를 그리게 되면 테마 뷰로 돌아온다', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const Button = view(({ props }) =>
-      props.label === '빠짐' ? <button>Root 없음</button> : <Root as="button" className="mine">{String(props.label)}</Root>,
+      props.label === '빠짐' ? (
+        <button>Root 없음</button>
+      ) : (
+        <Root as="button" className="mine">
+          {String(props.label)}
+        </Root>
+      ),
     )
     const theme = { manifest: base, views: { Button } }
     const doc = (label: string) => page([{ id: 'b', type: 'Button', props: { label } }])
@@ -124,7 +153,10 @@ describe('뷰 경로', () => {
     const Button = view(() => <button>Root 없음</button>)
     const theme = { manifest: base, views: { Button } }
     const doc = (sibling: string) =>
-      page([{ id: 'b', type: 'Button', props: { label: '기본' } }, { id: 't', type: 'Text', props: { content: sibling } }])
+      page([
+        { id: 'b', type: 'Button', props: { label: '기본' } },
+        { id: 't', type: 'Text', props: { content: sibling } },
+      ])
     const warnings = () => err.mock.calls.filter((c) => String(c[0]).includes('Root')).length
     const { container, rerender } = render(<>{renderDocument(doc('하나'), { theme })}</>)
     const first = warnings()

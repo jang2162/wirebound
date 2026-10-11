@@ -52,9 +52,9 @@ describe('① 코멘트가 없는 주요 컴포넌트', () => {
     const list = node('List')
     const entry = node('EntryForm', { children: [node('Field')] })
     const search = node('SearchForm', { children: [node('Field')] })
-    const issues = lintDesign(
-      project({ pages: [page({ document: doc([list, entry, search]) })] }),
-    ).filter((issue) => issue.rule === 'comment-missing')
+    const issues = lintDesign(project({ pages: [page({ document: doc([list, entry, search]) })] })).filter(
+      (issue) => issue.rule === 'comment-missing',
+    )
 
     expect(issues.map((issue) => issue.nodeId).sort()).toEqual([list.id, entry.id, search.id].sort())
     expect(issues[0]!.severity).toBe('warning')
@@ -100,15 +100,11 @@ describe('① 코멘트가 없는 주요 컴포넌트', () => {
       }),
     ).filter((issue) => issue.rule === 'comment-missing')
 
-    expect(issues.map((issue) => `${issue.pageId}:${issue.nodeId}`).sort()).toEqual(
-      [`pg1:${list.id}`, `pg2:${other.id}`].sort(),
-    )
+    expect(issues.map((issue) => `${issue.pageId}:${issue.nodeId}`).sort()).toEqual([`pg1:${list.id}`, `pg2:${other.id}`].sort())
   })
 
   it('주요 컴포넌트가 아닌 노드는 보지 않는다', () => {
-    const issues = lintDesign(
-      project({ pages: [page({ document: doc([node('Text'), node('Button'), node('Card')]) })] }),
-    )
+    const issues = lintDesign(project({ pages: [page({ document: doc([node('Text'), node('Button'), node('Card')]) })] }))
     expect(rulesOf(issues)).not.toContain('comment-missing')
   })
 })
@@ -137,10 +133,7 @@ describe('② 어느 메뉴에도 연결되지 않은 페이지', () => {
           { id: 'c1', parentId: 'c2', title: '순환 가' },
           { id: 'c2', parentId: 'c1', title: '순환 나' },
         ],
-        pages: [
-          page({ document: doc([]) }),
-          page({ id: 'pg2', menuNodeId: 'c1', title: '갇힌', target: 'page:갇힌', document: doc([]) }),
-        ],
+        pages: [page({ document: doc([]) }), page({ id: 'pg2', menuNodeId: 'c1', title: '갇힌', target: 'page:갇힌', document: doc([]) })],
       }),
     ).filter((issue) => issue.rule === 'page-unlinked')
 
@@ -188,10 +181,7 @@ describe('④ navigate/openModal 대상 페이지가 존재하지 않음', () =>
     })
     const issues = lintDesign(
       project({
-        pages: [
-          page({ document: doc([button]) }),
-          page({ id: 'pg2', title: '상세', target: 'page:관리자/회원/상세', document: doc([]) }),
-        ],
+        pages: [page({ document: doc([button]) }), page({ id: 'pg2', title: '상세', target: 'page:관리자/회원/상세', document: doc([]) })],
       }),
     ).filter((issue) => issue.rule === 'page-target-missing')
 
@@ -212,9 +202,9 @@ describe('④ navigate/openModal 대상 페이지가 존재하지 않음', () =>
     const goer = node('Button', {
       interactions: [{ on: 'click', actions: [{ type: 'navigate', target: 'page:관리자/회원/없음2' }] }],
     })
-    const issues = lintDesign(
-      project({ pages: [page({ document: doc([opener, goer]) })] }),
-    ).filter((issue) => issue.rule === 'page-target-missing')
+    const issues = lintDesign(project({ pages: [page({ document: doc([opener, goer]) })] })).filter(
+      (issue) => issue.rule === 'page-target-missing',
+    )
 
     expect(issues.map((issue) => issue.nodeId).sort()).toEqual([opener.id, goer.id].sort())
     const opened = issues.find((issue) => issue.nodeId === opener.id)!
@@ -242,10 +232,7 @@ describe('④ navigate/openModal 대상 페이지가 존재하지 않음', () =>
     })
     const issues = lintDesign(
       project({
-        pages: [
-          page({ document: doc([button]) }),
-          page({ id: 'pg2', title: '상세', target: 'page:관리자/회원/상세', document: doc([]) }),
-        ],
+        pages: [page({ document: doc([button]) }), page({ id: 'pg2', title: '상세', target: 'page:관리자/회원/상세', document: doc([]) })],
       }),
     ).filter((issue) => issue.rule === 'page-target-missing')
 
@@ -269,9 +256,9 @@ describe('⑤ 중복된 코멘트 번호', () => {
     const first = node('Text', { marker: 3 })
     const second = node('Text', { marker: 3 })
     const third = node('Text', { marker: 4 })
-    const issues = lintDesign(
-      project({ pages: [page({ document: doc([first, second, third]) })] }),
-    ).filter((issue) => issue.rule === 'duplicate-marker')
+    const issues = lintDesign(project({ pages: [page({ document: doc([first, second, third]) })] })).filter(
+      (issue) => issue.rule === 'duplicate-marker',
+    )
 
     // **뒤에 온 것만 낸다** — `duplicate-id`가 같은 모양이다.
     expect(issues.map((issue) => issue.nodeId)).toEqual([second.id])
@@ -301,18 +288,16 @@ describe('⑥ 구조적 공백', () => {
     const entry = node('EntryForm', { children: [node('Text')] })
     const search = node('SearchForm', { children: [] })
     const filled = node('EntryForm', { children: [node('Field')] })
-    const issues = lintDesign(
-      project({ pages: [page({ document: doc([entry, search, filled]) })] }),
-    ).filter((issue) => issue.rule === 'structural-gap')
+    const issues = lintDesign(project({ pages: [page({ document: doc([entry, search, filled]) })] })).filter(
+      (issue) => issue.rule === 'structural-gap',
+    )
 
     expect(issues.map((issue) => issue.nodeId).sort()).toEqual([entry.id, search.id].sort())
   })
 
   it('자손에 있으면 채워진 것으로 본다', () => {
     const entry = node('EntryForm', { children: [node('Card', { children: [node('Field')] })] })
-    const issues = lintDesign(project({ pages: [page({ document: doc([entry]) })] })).filter(
-      (issue) => issue.rule === 'structural-gap',
-    )
+    const issues = lintDesign(project({ pages: [page({ document: doc([entry]) })] })).filter((issue) => issue.rule === 'structural-gap')
     expect(issues).toEqual([])
   })
 })
@@ -333,9 +318,7 @@ describe('⑦ 프로젝트 명명 규칙 (설정 가능)', () => {
   })
 
   it('페이지 이름 규칙을 주면 어긋난 페이지를 낸다', () => {
-    const issues = lintDesign(project({ pages }), { naming: { page: '^[가-힣 ]+$' } }).filter(
-      (issue) => issue.rule === 'naming',
-    )
+    const issues = lintDesign(project({ pages }), { naming: { page: '^[가-힣 ]+$' } }).filter((issue) => issue.rule === 'naming')
     expect(issues.map((issue) => issue.pageId)).toEqual(['pg2'])
     expect(issues[0]!.message).toContain('member_list')
   })
@@ -378,9 +361,7 @@ describe('⑦ 프로젝트 명명 규칙 (설정 가능)', () => {
     })
 
     it('설정을 주면 그 규칙이 실제로 난다', () => {
-      const fired = lintDesign(project({ pages }), { naming: { page: '^[가-힣 ]+$' } }).map(
-        (issue) => issue.rule,
-      )
+      const fired = lintDesign(project({ pages }), { naming: { page: '^[가-힣 ]+$' } }).map((issue) => issue.rule)
       for (const rule of configured) {
         expect(fired, rule.id).toContain(rule.id)
       }
@@ -388,9 +369,7 @@ describe('⑦ 프로젝트 명명 규칙 (설정 가능)', () => {
   })
 
   it('규칙이 정규식이 아니면 그 사실을 이슈로 낸다 — 조용히 넘기지 않는다', () => {
-    const issues = lintDesign(project({ pages }), { naming: { page: '([' } }).filter(
-      (issue) => issue.rule === 'naming',
-    )
+    const issues = lintDesign(project({ pages }), { naming: { page: '([' } }).filter((issue) => issue.rule === 'naming')
     expect(issues).toHaveLength(1)
     expect(issues[0]!.pageId).toBeNull()
     expect(issues[0]!.message).toContain('([')
@@ -442,9 +421,7 @@ describe('봉투가 깨진 문서 — 던지지 않고 이슈로 낸다', () => 
 
   for (const { name, document } of broken) {
     it(`${name} — document-invalid를 내고 던지지 않는다`, () => {
-      const issues = lintDesign(
-        project({ pages: [page({ document: document as PageDocument })] }),
-      )
+      const issues = lintDesign(project({ pages: [page({ document: document as PageDocument })] }))
       expect(issues.every((issue) => issue.rule === 'document-invalid')).toBe(true)
       expect(issues.length).toBeGreaterThan(0)
       expect(issues[0]!.pageId).toBe('pg1')
@@ -512,15 +489,7 @@ describe('표를 덮는다 (D6)', () => {
               root: {
                 id: nid(),
                 type: 'Page',
-                children: [
-                  node('List'),
-                  entry,
-                  marked,
-                  marked2,
-                  button,
-                  { id: dup, type: 'Text' },
-                  { id: dup, type: 'Text' },
-                ],
+                children: [node('List'), entry, marked, marked2, button, { id: dup, type: 'Text' }, { id: dup, type: 'Text' }],
               },
             },
           }),
@@ -539,7 +508,10 @@ describe('표를 덮는다 (D6)', () => {
                 children: [
                   node('StateSwitch', {
                     children: [
-                      node('StateCase', { props: { state: 'default' }, children: [node('StateSwitch', { children: [node('StateCase', { props: { state: 'default' } })] })] }),
+                      node('StateCase', {
+                        props: { state: 'default' },
+                        children: [node('StateSwitch', { children: [node('StateCase', { props: { state: 'default' } })] })],
+                      }),
                       node('StateCase', { props: { state: 's_gone' } }),
                     ],
                   }),

@@ -21,7 +21,14 @@ describe('readWbtheme', () => {
   })
 
   it('같은 입력이면 같은 바이트 — 다시 빌드한 시스템 테마의 sha256 이 안 바뀐다', () => {
-    const input = () => ({ manifest: MANIFEST as never, themeJs: 'x', assets: new Map([['assets/b.svg', strToU8('b')], ['assets/a.svg', strToU8('a')]]) })
+    const input = () => ({
+      manifest: MANIFEST as never,
+      themeJs: 'x',
+      assets: new Map([
+        ['assets/b.svg', strToU8('b')],
+        ['assets/a.svg', strToU8('a')],
+      ]),
+    })
     const first = packWbtheme(input())
     const assets = new Map([...input().assets].reverse())
     expect(packWbtheme({ ...input(), assets })).toEqual(first)

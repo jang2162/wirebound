@@ -32,34 +32,57 @@ interface Entry {
 function build(entries: Entry[], eocd: { disk?: number; total?: number } = {}): Uint8Array {
   const chunks: Uint8Array[] = []
   let pos = 0
-  const push = (u: Uint8Array) => { chunks.push(u); pos += u.length }
+  const push = (u: Uint8Array) => {
+    chunks.push(u)
+    pos += u.length
+  }
   const offsets: number[] = []
   entries.forEach((e) => {
-    if (e.sameLocalAs !== undefined) { offsets.push(offsets[e.sameLocalAs]!); return }
+    if (e.sameLocalAs !== undefined) {
+      offsets.push(offsets[e.sameLocalAs]!)
+      return
+    }
     const name = strToU8(e.name)
     const h = new DataView(new ArrayBuffer(30))
-    h.setUint32(0, 0x04034b50, true); h.setUint16(6, 0x800, true); h.setUint16(8, e.method ?? 0, true)
-    h.setUint32(18, e.data.length, true); h.setUint32(22, e.data.length, true); h.setUint16(26, name.length, true)
+    h.setUint32(0, 0x04034b50, true)
+    h.setUint16(6, 0x800, true)
+    h.setUint16(8, e.method ?? 0, true)
+    h.setUint32(18, e.data.length, true)
+    h.setUint32(22, e.data.length, true)
+    h.setUint16(26, name.length, true)
     offsets.push(pos)
-    push(new Uint8Array(h.buffer)); push(name); push(e.data)
+    push(new Uint8Array(h.buffer))
+    push(name)
+    push(e.data)
   })
   const cdStart = pos
   entries.forEach((e, i) => {
     const name = strToU8(e.name)
     const h = new DataView(new ArrayBuffer(46))
-    h.setUint32(0, 0x02014b50, true); h.setUint16(8, 0x800, true); h.setUint16(10, e.method ?? 0, true)
-    h.setUint32(20, e.data.length, true); h.setUint32(24, e.usize ?? e.data.length, true)
-    h.setUint16(28, name.length, true); h.setUint32(38, ((e.mode ?? 0o100644) << 16) >>> 0, true); h.setUint32(42, offsets[i]!, true)
-    push(new Uint8Array(h.buffer)); push(name)
+    h.setUint32(0, 0x02014b50, true)
+    h.setUint16(8, 0x800, true)
+    h.setUint16(10, e.method ?? 0, true)
+    h.setUint32(20, e.data.length, true)
+    h.setUint32(24, e.usize ?? e.data.length, true)
+    h.setUint16(28, name.length, true)
+    h.setUint32(38, ((e.mode ?? 0o100644) << 16) >>> 0, true)
+    h.setUint32(42, offsets[i]!, true)
+    push(new Uint8Array(h.buffer))
+    push(name)
   })
   const q = new DataView(new ArrayBuffer(22))
   q.setUint32(0, 0x06054b50, true)
-  q.setUint16(8, eocd.disk ?? entries.length, true); q.setUint16(10, eocd.total ?? entries.length, true)
-  q.setUint32(12, pos - cdStart, true); q.setUint32(16, cdStart, true)
+  q.setUint16(8, eocd.disk ?? entries.length, true)
+  q.setUint16(10, eocd.total ?? entries.length, true)
+  q.setUint32(12, pos - cdStart, true)
+  q.setUint32(16, cdStart, true)
   push(new Uint8Array(q.buffer))
   const out = new Uint8Array(pos)
   let at = 0
-  for (const c of chunks) { out.set(c, at); at += c.length }
+  for (const c of chunks) {
+    out.set(c, at)
+    at += c.length
+  }
   return out
 }
 
@@ -90,16 +113,25 @@ function zip64Pointing(fflateSees: Uint8Array, readerSees: Uint8Array): Uint8Arr
   const v = new DataView(out.buffer)
   out.set(head, 0)
   out.set(tail, head.length)
-  v.setUint32(z64At, 0x06064b50, true); v.setBigUint64(z64At + 4, 44n, true)
-  v.setUint32(z64At + 32, evCount, true); v.setUint32(z64At + 48, evOffset, true)
-  v.setUint32(z64At + 56, 0x07064b50, true); v.setUint32(z64At + 64, z64At, true)
+  v.setUint32(z64At, 0x06064b50, true)
+  v.setBigUint64(z64At + 4, 44n, true)
+  v.setUint32(z64At + 32, evCount, true)
+  v.setUint32(z64At + 48, evOffset, true)
+  v.setUint32(z64At + 56, 0x07064b50, true)
+  v.setUint32(z64At + 64, z64At, true)
   const e = z64At + 76
-  v.setUint32(e, 0x06054b50, true); v.setUint16(e + 8, gCount, true); v.setUint16(e + 10, gCount, true)
-  v.setUint32(e + 12, gSize, true); v.setUint32(e + 16, gOffset + head.length, true)
+  v.setUint32(e, 0x06054b50, true)
+  v.setUint16(e + 8, gCount, true)
+  v.setUint16(e + 10, gCount, true)
+  v.setUint32(e + 12, gSize, true)
+  v.setUint32(e + 16, gOffset + head.length, true)
   return out
 }
 
-const base = (): Entry[] => [{ name: 'manifest.json', data: MANIFEST }, { name: 'theme.js', data: strToU8(CHECKED) }]
+const base = (): Entry[] => [
+  { name: 'manifest.json', data: MANIFEST },
+  { name: 'theme.js', data: strToU8(CHECKED) },
+]
 
 /** 판독기가 거절했으면 `'rejected'`, 통과했으면 실린 theme.js 와 자산 이름 · 실린 바이트 합. */
 function loaded(bytes: Uint8Array) {
@@ -126,7 +158,11 @@ describe('readWbtheme — 판독기와 fflate 가 같은 것을 읽는다', () =
   })
 
   it('zip64 로케이터가 가리키는 다른 중앙 디렉터리의 항목이 실리지 않는다', () => {
-    const evil = build([{ name: 'manifest.json', data: MANIFEST }, { name: 'theme.js', data: strToU8('/*ZIP64*/') }, { name: '../outside.txt', data: strToU8('x') }])
+    const evil = build([
+      { name: 'manifest.json', data: MANIFEST },
+      { name: 'theme.js', data: strToU8('/*ZIP64*/') },
+      { name: '../outside.txt', data: strToU8('x') },
+    ])
     const r = loaded(zip64Pointing(evil, build(base())))
     expect(r === 'rejected' ? r : r.themeJs).not.toBe('/*ZIP64*/')
   })
@@ -134,7 +170,10 @@ describe('readWbtheme — 판독기와 fflate 가 같은 것을 읽는다', () =
   it('zip64 로케이터가 이름이 같은 다른 중앙 디렉터리를 가리켜도 링크 판정은 fflate 가 읽는 디렉터리의 속성으로 선다', () => {
     // A2 좁은 반증 2 — 목록 대조는 이름 · 차례 · 수만 견준다. 링크 판정(외부 속성)은 판독기의 디렉터리에서만 읽으므로, 두 디렉터리가
     // 이름까지 같으면 목록 대조는 갈림을 못 본다. 이 판을 막는 것은 로케이터 거절 하나다(그 거절만 떼면 이 케이스만 죽는다).
-    const linked = build([{ name: 'manifest.json', data: MANIFEST }, { name: 'theme.js', data: strToU8('../../etc/passwd'), mode: 0o120777 }])
+    const linked = build([
+      { name: 'manifest.json', data: MANIFEST },
+      { name: 'theme.js', data: strToU8('../../etc/passwd'), mode: 0o120777 },
+    ])
     const { files, issues } = readWbtheme(zip64Pointing(linked, build(base())))
     // 거절의 이유는 두 디렉터리가 갈린다는 것(`bad-zip`)이거나 링크(`symlink`)여야 한다 — 다른 이유로 막히면 이 판을 안 잰 것이다.
     expect(files).toBeNull()
@@ -160,7 +199,9 @@ describe('readWbtheme — 판독기와 fflate 가 같은 것을 읽는다', () =
     const result = readWbtheme(bytes)
     const after = process.memoryUsage()
     const grew = { arrayBuffers: after.arrayBuffers - before.arrayBuffers, rss: after.rss - before.rss }
-    console.log(`[wbtheme 메모리] 판정 ${JSON.stringify(result.issues.map((i) => i.code))} · arrayBuffers +${(grew.arrayBuffers / 1048576).toFixed(1)} MB · rss +${(grew.rss / 1048576).toFixed(1)} MB`)
+    console.log(
+      `[wbtheme 메모리] 판정 ${JSON.stringify(result.issues.map((i) => i.code))} · arrayBuffers +${(grew.arrayBuffers / 1048576).toFixed(1)} MB · rss +${(grew.rss / 1048576).toFixed(1)} MB`,
+    )
     return { result, grew }
   }
 
@@ -203,11 +244,16 @@ describe('readWbtheme — 판독기와 fflate 가 같은 것을 읽는다', () =
     // 상한(50 MB) 안이다. 스트림을 끝까지 풀면 항목마다 256 MB 를 푸는 일이 든다(A2 좁은 반증 2 — 항목 195 에 59 s).
     const zeros = new Uint8Array(1024 * 1024)
     const parts: Uint8Array[] = []
-    const deflate = new Deflate({ level: 9 }, (chunk) => { parts.push(chunk) })
+    const deflate = new Deflate({ level: 9 }, (chunk) => {
+      parts.push(chunk)
+    })
     for (let i = 0; i < 256; i++) deflate.push(zeros)
     deflate.push(new Uint8Array(0), true)
     const packed = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
-    parts.reduce((at, p) => { packed.set(p, at); return at + p.length }, 0)
+    parts.reduce((at, p) => {
+      packed.set(p, at)
+      return at + p.length
+    }, 0)
     const entries: Entry[] = [...base(), { name: 'assets/a0.png', data: packed, method: 8, usize: 1 }]
     for (let i = 1; i < 195; i++) entries.push({ name: `assets/a${i}.png`, data: packed, method: 8, usize: 1, sameLocalAs: 2 })
     const bytes = build(entries)
@@ -218,4 +264,3 @@ describe('readWbtheme — 판독기와 fflate 가 같은 것을 읽는다', () =
     expect(ms).toBeLessThan(5_000)
   }, 180_000)
 })
-

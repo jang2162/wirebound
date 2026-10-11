@@ -21,16 +21,7 @@ import type { PatchResult } from '../../src/api/types'
 import { useEditCommit } from '../../src/edit/use-edit-commit'
 import { EditorStore } from '../../src/store/editor-store'
 import { EditorStoreProvider } from '../../src/store/use-editor-store'
-import {
-  HEAD_SEQ,
-  OTHER_PAGE_ID,
-  PAGE_ID,
-  PROJECT_ID,
-  openPage,
-  pageDoc,
-  waitForNode,
-  canvasQuery,
-} from '../editor-harness'
+import { HEAD_SEQ, OTHER_PAGE_ID, PAGE_ID, PROJECT_ID, openPage, pageDoc, waitForNode, canvasQuery } from '../editor-harness'
 
 /** 셸이 만든 스토어를 붙잡는 자리. 아래 `vi.mock`이 채운다. */
 const createdStores: EditorStore[] = []
@@ -112,8 +103,7 @@ function deferredPatchOps(): { calls: RecordedPatch[]; patchOps: ApiClient['patc
         projectId,
         pageId,
         body,
-        settle: (result) =>
-          resolve(result ?? patchResult(body.baseSeq + 1, body.clientOpId ?? 'op-?')),
+        settle: (result) => resolve(result ?? patchResult(body.baseSeq + 1, body.clientOpId ?? 'op-?')),
         fail: reject,
       })
     })
@@ -191,9 +181,7 @@ describe('useEditCommit', () => {
     expect(calls[0]?.body.baseSeq).toBe(HEAD_SEQ)
     expect(calls[0]?.projectId).toBe(PROJECT_ID)
     expect(calls[0]?.pageId).toBe(PAGE_ID)
-    expect(calls[0]?.body.ops).toEqual([
-      { op: 'replace', path: '/root/children/0/props/content', value: NEW_TEXT },
-    ])
+    expect(calls[0]?.body.ops).toEqual([{ op: 'replace', path: '/root/children/0/props/content', value: NEW_TEXT }])
   })
 
   it('ack를 받으면 다음 baseSeq가 응답의 seq다', async () => {
@@ -253,9 +241,7 @@ describe('useEditCommit', () => {
     expect(calls[0]?.body.clientOpId).toBe('op-1')
     expect(calls[1]?.body.clientOpId).toBe('op-2')
     expect(calls[1]?.body.baseSeq).toBe(HEAD_SEQ + 1)
-    expect(calls[1]?.body.ops).toEqual([
-      { op: 'replace', path: '/root/children/0/props/content', value: '두 번째' },
-    ])
+    expect(calls[1]?.body.ops).toEqual([{ op: 'replace', path: '/root/children/0/props/content', value: '두 번째' }])
   })
 
   it('적용할 수 없는 편집은 요청을 만들지 않는다', async () => {
@@ -321,9 +307,7 @@ describe('useEditCommit', () => {
     await act(async () => {
       calls[0]?.settle(patchResult(HEAD_SEQ + 1, 'op-1'))
     })
-    await waitFor(() =>
-      expect(screen.getByTestId('edit-status').textContent).toBe('idle'),
-    )
+    await waitFor(() => expect(screen.getByTestId('edit-status').textContent).toBe('idle'))
   })
 
   it('캔버스는 ack 뒤에도 낙관적으로 적용한 값을 유지한다', async () => {

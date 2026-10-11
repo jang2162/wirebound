@@ -34,9 +34,7 @@ const DOC_WITH_RULE = pageDoc({
       type: 'Button',
       props: { label: '검색' },
       marker: 1,
-      interactions: [
-        { on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] },
-      ],
+      interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
     },
     { id: 'n-list', type: 'List', marker: 2 },
   ],
@@ -63,9 +61,7 @@ function editable(): { calls: { ops: PatchOp[] }[]; api: Partial<ApiClient> } {
 
 async function openInteractionTab(): Promise<void> {
   fireEvent.click(screen.getByRole('tab', { name: '상호작용' }))
-  await waitFor(() =>
-    expect(screen.getByRole('tab', { name: '상호작용' }).getAttribute('aria-selected')).toBe('true'),
-  )
+  await waitFor(() => expect(screen.getByRole('tab', { name: '상호작용' }).getAttribute('aria-selected')).toBe('true'))
 }
 
 /** 구조 트리에서 노드를 고른다. */
@@ -77,9 +73,7 @@ function selectNode(type: string): void {
 
 /** 패널이 그린 문장들. 저작 자리의 문장과 목록의 문장이 모두 들어온다. */
 function sentences(): string[] {
-  return [...document.body.querySelectorAll('.wb-shell-interaction-sentence')].map(
-    (element) => element.textContent?.trim() ?? '',
-  )
+  return [...document.body.querySelectorAll('.wb-shell-interaction-sentence')].map((element) => element.textContent?.trim() ?? '')
 }
 
 describe('상호작용 탭 — 자리', () => {
@@ -132,12 +126,7 @@ describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () =
     await openWithRule()
 
     const select = screen.getByLabelText('트리거') as HTMLSelectElement
-    expect([...select.options].map((option) => option.textContent)).toEqual([
-      '클릭',
-      '변경',
-      '선택',
-      '제출',
-    ])
+    expect([...select.options].map((option) => option.textContent)).toEqual(['클릭', '변경', '선택', '제출'])
   })
 
   it('액션 선택지가 상호작용 모델의 5종이다', async () => {
@@ -162,12 +151,7 @@ describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () =
     await openWithRule()
 
     const select = screen.getByLabelText('대상') as HTMLSelectElement
-    expect([...select.options].map((option) => option.textContent)).toEqual([
-      '— 대상을 고르세요 —',
-      '페이지',
-      '① 검색 버튼',
-      '② 목록',
-    ])
+    expect([...select.options].map((option) => option.textContent)).toEqual(['— 대상을 고르세요 —', '페이지', '① 검색 버튼', '② 목록'])
   })
 
   /**
@@ -255,9 +239,7 @@ describe('상호작용 탭 — 문장', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '규칙 1에 액션 추가' })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: '규칙 1에 액션 추가' }))
 
-    await waitFor(() =>
-      expect(sentences()).toContain('① 검색 버튼 클릭 시 아직 고르지 않은 대상이 숨겨집니다'),
-    )
+    await waitFor(() => expect(sentences()).toContain('① 검색 버튼 클릭 시 아직 고르지 않은 대상이 숨겨집니다'))
   })
 })
 
@@ -275,9 +257,7 @@ describe('상호작용 탭 — 편집 파이프라인', () => {
     fireEvent.click(screen.getByRole('button', { name: '상호작용 추가' }))
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(calls[0]!.ops).toEqual([
-      { op: 'add', path: '/root/children/0/interactions', value: [{ on: 'click', actions: [] }] },
-    ])
+    expect(calls[0]!.ops).toEqual([{ op: 'add', path: '/root/children/0/interactions', value: [{ on: 'click', actions: [] }] }])
   })
 
   it('규칙을 지우면 키째 사라진다', async () => {
@@ -305,9 +285,7 @@ describe('상호작용 탭 — 편집 파이프라인', () => {
       {
         op: 'replace',
         path: '/root/children/0/interactions',
-        value: [
-          { on: 'submit', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] },
-        ],
+        value: [{ on: 'submit', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
       },
     ])
   })
@@ -334,10 +312,7 @@ describe('상호작용 탭 — 편집 파이프라인', () => {
       version: 1,
       root: {
         ...DOC_WITH_RULE.root,
-        children: [
-          { ...DOC_WITH_RULE.root.children![0]!, interactions: value as never },
-          DOC_WITH_RULE.root.children![1]!,
-        ],
+        children: [{ ...DOC_WITH_RULE.root.children![0]!, interactions: value as never }, DOC_WITH_RULE.root.children![1]!],
       },
     }
     expect(validatePage(next).filter((issue) => issue.code === 'bad-document')).toEqual([])

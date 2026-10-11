@@ -53,12 +53,19 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
     if (member.status >= 300) throw new Error(`member ${member.status}`)
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return { P }
   }
 
-  async function openEditor(P: string, user: 'alice' | 'bob', viewport = { width: 1440, height: 900 }): Promise<{ page: Page; close: () => Promise<void>; patches: string[] }> {
+  async function openEditor(
+    P: string,
+    user: 'alice' | 'bob',
+    viewport = { width: 1440, height: 900 },
+  ): Promise<{ page: Page; close: () => Promise<void>; patches: string[] }> {
     const { context, page } = await stack.openTab(stack.users[user], { viewport })
     const patches: string[] = []
     page.on('websocket', (socket) => {
@@ -103,7 +110,11 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
       // 편집은 WS 프레임 하나 — `add /…/alias`.
       await expect.poll(() => a.patches.length).toBe(1)
       expect(JSON.parse(a.patches[0]!).ops).toEqual([{ op: 'add', path: '/root/children/0/alias', value: '머리 저장' }])
-      await poll('서버 문서의 별칭', async () => (await stack.request(alice, 'GET', P)).body.schema.root.children[0].alias, (v) => v === '머리 저장')
+      await poll(
+        '서버 문서의 별칭',
+        async () => (await stack.request(alice, 'GET', P)).body.schema.root.children[0].alias,
+        (v) => v === '머리 저장',
+      )
 
       // 남의 화면 — 트리 줄 · 상호작용 문장.
       await expect.poll(() => rowButton(b.page, 'n_save00000001').textContent()).toBe('Button (머리 저장) 저장')
@@ -113,7 +124,11 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
 
       // 되돌리기 한 번.
       await a.page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기', exact: true }).click()
-      await poll('되돌린 서버 문서', async () => (await stack.request(alice, 'GET', P)).body.schema.root.children[0].alias, (v) => v === undefined)
+      await poll(
+        '되돌린 서버 문서',
+        async () => (await stack.request(alice, 'GET', P)).body.schema.root.children[0].alias,
+        (v) => v === undefined,
+      )
       await expect.poll(() => rowButton(b.page, 'n_save00000001').textContent()).toBe('Button 저장')
       await expect.poll(() => sentence.textContent()).toBe('① 저장 버튼 클릭 시 ② 목록이 숨겨집니다')
       expect(a.patches).toHaveLength(2)
@@ -139,13 +154,18 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
       // 고른 노드의 조상을 사람이 접는다 — F1 은 저절로 다시 펴지 않는다.
       await rowButton(a.page, 'n_save00000002').click()
       await a.page.locator('[data-tree-id="n_card00000001"] > [data-tree-toggle]').click()
-      expect({ expanded: await expanded(), saveRows: await rowButton(a.page, 'n_save00000002').count() }).toEqual({ expanded: 'false', saveRows: 0 })
+      expect({ expanded: await expanded(), saveRows: await rowButton(a.page, 'n_save00000002').count() }).toEqual({
+        expanded: 'false',
+        saveRows: 0,
+      })
 
       await a.page.keyboard.press('F2')
       const input = a.page.locator('.wb-shell-region[aria-label="구조 트리"]').getByRole('textbox', { name: '별칭' })
       // 값으로 끝나게 읽는다 — 입력이 안 서면 `evaluate` 가 시간 초과로 죽어 무엇이 틀렸는지 안 남는다.
       await input.waitFor({ timeout: 3000 }).catch(() => {})
-      const owner = await input.evaluateAll((els) => els.map((el) => el.closest('li')?.querySelector(':scope > [data-tree-id]')?.getAttribute('data-tree-id')))
+      const owner = await input.evaluateAll((els) =>
+        els.map((el) => el.closest('li')?.querySelector(':scope > [data-tree-id]')?.getAttribute('data-tree-id')),
+      )
       const focused = await input.evaluateAll((els) => els.map((el) => el === document.activeElement))
       expect({ expanded: await expanded(), owner, focused }).toEqual({ expanded: 'true', owner: ['n_save00000002'], focused: [true] })
 
@@ -167,7 +187,11 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
         expanded: 'true',
       })
       await a.page.keyboard.press('Enter')
-      await poll('별칭이 서버에 닿는다', async () => (await call('GET', P)).body.schema.root.children[0].children[0].alias, (alias) => alias === '저장 단추')
+      await poll(
+        '별칭이 서버에 닿는다',
+        async () => (await call('GET', P)).body.schema.root.children[0].children[0].alias,
+        (alias) => alias === '저장 단추',
+      )
     } finally {
       await a.close()
     }
@@ -218,7 +242,11 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
       await expect.poll(() => a.page.locator('[data-tree-id="n_card00000003"] ~ ul [data-tree-id="n_save00000003"]').count()).toBe(0)
       await expect.poll(() => input.evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))).toEqual(['옮김 중'])
       await input.press('Enter')
-      await poll('옮긴 자리의 별칭', async () => (await call('GET', P)).body.schema.root.children[1]?.alias, (alias) => alias === '옮김 중')
+      await poll(
+        '옮긴 자리의 별칭',
+        async () => (await call('GET', P)).body.schema.root.children[1]?.alias,
+        (alias) => alias === '옮김 중',
+      )
     } finally {
       await a.close()
     }
@@ -245,7 +273,9 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
       if (done.status >= 300) throw new Error(`복원 ${done.status} ${JSON.stringify(done.body)}`)
     }
     const aliases = async () =>
-      JSON.stringify(((await call('GET', P)).body.schema.root.children as { id: string; alias?: string }[]).map((node) => [node.id, node.alias ?? null]))
+      JSON.stringify(
+        ((await call('GET', P)).body.schema.root.children as { id: string; alias?: string }[]).map((node) => [node.id, node.alias ?? null]),
+      )
     /** 입력을 열고 글을 친 채 복원을 건 뒤 «다시 불러오기» 를 누른다 — 누르기 전 입력 수와 누른 뒤 상태를 낸다. */
     async function typeThenRestore(snapshotId: string, typed: string) {
       const a = await openEditor(P, 'alice')
@@ -311,7 +341,10 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
     let at = 0
     for (const piece of pieces) {
       const start = text.indexOf(piece, at)
-      const xs = row.slice(start, start + piece.length).map((glyph) => glyph.x).filter((x) => !Number.isNaN(x))
+      const xs = row
+        .slice(start, start + piece.length)
+        .map((glyph) => glyph.x)
+        .filter((x) => !Number.isNaN(x))
       spans.push([Math.min(...xs), Math.max(...xs)])
       at = start + piece.length
     }
@@ -389,7 +422,12 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
       })
       expect(measured.docScroll).toBeLessThanOrEqual(0)
       for (const row of measured.rows) {
-        expect({ id: row.id, withinRegion: row.withinRegion, lines: row.lines, clipped: row.clipped }).toEqual({ id: row.id, withinRegion: true, lines: 1, clipped: true })
+        expect({ id: row.id, withinRegion: row.withinRegion, lines: row.lines, clipped: row.clipped }).toEqual({
+          id: row.id,
+          withinRegion: true,
+          lines: 1,
+          clipped: true,
+        })
       }
       // 판 카나리아 — 긴 별칭 줄은 정말 단추를 넘는다(안 넘으면 이 케이스는 잘림을 안 잰 것이다).
       expect(measured.rows.find((row) => row.id === 'n_long00000001')?.overflowsButton).toBe(true)

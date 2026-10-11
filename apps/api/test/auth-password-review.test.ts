@@ -17,7 +17,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { LOGIN_LIMIT } from '../src/auth/login-limit'
 import { resetPassword } from '../src/db/reset-password'
 import { isInstanceAdmin, setInstanceAdmin } from '../src/repos/users'
-import { authCookie, createProject, getTestDb, resetRealData, signup, testConfig, withApi, withProxiedRealApi, type SignedUpUser, type TestContext } from './helpers'
+import {
+  authCookie,
+  createProject,
+  getTestDb,
+  resetRealData,
+  signup,
+  testConfig,
+  withApi,
+  withProxiedRealApi,
+  type SignedUpUser,
+  type TestContext,
+} from './helpers'
 import { manifestOf, packed } from './theme-fixtures'
 
 const db = getTestDb()
@@ -32,13 +43,23 @@ async function adminOf(ctx: TestContext): Promise<SignedUpUser> {
 }
 
 async function anotherSession(ctx: TestContext, who: SignedUpUser): Promise<{ wb_session: string }> {
-  const res = await ctx.app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: who.user.email, password: who.password }, remoteAddress: '10.0.9.9' })
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: '/api/auth/login',
+    payload: { email: who.user.email, password: who.password },
+    remoteAddress: '10.0.9.9',
+  })
   expect(res.statusCode, res.body).toBe(200)
   return authCookie(res.cookies.find((cookie) => cookie.name === 'wb_session')!.value)
 }
 
 function changePassword(ctx: TestContext, cookie: { wb_session: string }, currentPassword: string) {
-  return ctx.app.inject({ method: 'POST', url: '/api/auth/password', cookies: cookie, payload: { currentPassword, newPassword: NEW_PASSWORD } })
+  return ctx.app.inject({
+    method: 'POST',
+    url: '/api/auth/password',
+    cookies: cookie,
+    payload: { currentPassword, newPassword: NEW_PASSWORD },
+  })
 }
 
 function upload(ctx: TestContext, cookie: { wb_session: string }, themeId: string) {
@@ -101,7 +122,11 @@ async function settledOrQueued(write: Promise<unknown>, holder: number, withinMs
 
 /** 끝난 뒤 같은 사람의 세션 수 · 비밀번호가 바뀌었는가. */
 async function sessionCount(userId: string): Promise<number> {
-  const row = await db.selectFrom('sessions').select((eb) => eb.fn.countAll<string>().as('n')).where('user_id', '=', userId).executeTakeFirstOrThrow()
+  const row = await db
+    .selectFrom('sessions')
+    .select((eb) => eb.fn.countAll<string>().as('n'))
+    .where('user_id', '=', userId)
+    .executeTakeFirstOrThrow()
   return Number(row.n)
 }
 
@@ -120,7 +145,8 @@ describe('비밀번호 바꾸기 · 재설정 × 다른 세션의 관리자 쓰�
 
   /** 관리자 쓰기가 남긴 것 — 업로드는 그 행이 있는가, 숨김은 숨겨졌는가. */
   async function adminWriteLanded(kind: AdminWriteKind): Promise<boolean> {
-    if (kind === 'upload') return (await db.selectFrom('theme_packages').select('theme_id').where('theme_id', '=', 'raced').executeTakeFirst()) !== undefined
+    if (kind === 'upload')
+      return (await db.selectFrom('theme_packages').select('theme_id').where('theme_id', '=', 'raced').executeTakeFirst()) !== undefined
     const row = await db.selectFrom('theme_packages').select('hidden_at').where('theme_id', '=', 'hideme').executeTakeFirstOrThrow()
     return row.hidden_at !== null
   }
@@ -164,7 +190,16 @@ describe('비밀번호 바꾸기 · 재설정 × 다른 세션의 관리자 쓰�
         const waited = await settledOrQueued(change, holder)
         hold.release()
         const [changed, res] = await Promise.all([change.catch((error: unknown) => `threw: ${String(error)}`), write])
-        console.log(`[order-before ${kind}/${writer}]`, changed, '| admin write', res.statusCode, '| waited', waited, '| sessions', await sessionCount(alice.user.id))
+        console.log(
+          `[order-before ${kind}/${writer}]`,
+          changed,
+          '| admin write',
+          res.statusCode,
+          '| waited',
+          waited,
+          '| sessions',
+          await sessionCount(alice.user.id),
+        )
         expect(changed).toBe(204)
         expect(res.statusCode, res.body).toBe(401)
         expect(waited).toBe('settled')
@@ -193,7 +228,16 @@ describe('비밀번호 바꾸기 · 재설정 × 다른 세션의 관리자 쓰�
         await waitQueued(holder, 'update "users"')
         hold.release()
         const [changed, res] = await Promise.all([change.catch((error: unknown) => `threw: ${String(error)}`), write])
-        console.log(`[order-after ${kind}/${writer}]`, changed, '| admin write', res.statusCode, '| took', Date.now() - started, 'ms | sessions', await sessionCount(alice.user.id))
+        console.log(
+          `[order-after ${kind}/${writer}]`,
+          changed,
+          '| admin write',
+          res.statusCode,
+          '| took',
+          Date.now() - started,
+          'ms | sessions',
+          await sessionCount(alice.user.id),
+        )
         expect(changed).toBe(204)
         expect(res.statusCode, res.body).toBe(kind === 'upload' ? 201 : 200)
         expect(await adminWriteLanded(kind)).toBe(true)
@@ -201,7 +245,6 @@ describe('비밀번호 바꾸기 · 재설정 × 다른 세션의 관리자 쓰�
       })
     })
   }
-
 
   /**
    * **고친 차례가 연 판의 나머지 쌍 — 사용자 행을 잡는 강등(`setInstanceAdmin` · 한 문장)과 세션 행을 지우는 로그아웃(한 문장).** 둘 다
@@ -308,7 +351,9 @@ describe('비밀번호 바꾸기 × 옛 비밀번호 로그인', () => {
 
   async function sessionOf(ctx: TestContext, res: { cookies: { name: string; value: string }[] }): Promise<number | null> {
     const cookie = res.cookies.find((c) => c.name === 'wb_session')?.value
-    return cookie === undefined ? null : (await ctx.app.inject({ method: 'GET', url: '/api/auth/me', cookies: authCookie(cookie) })).statusCode
+    return cookie === undefined
+      ? null
+      : (await ctx.app.inject({ method: 'GET', url: '/api/auth/me', cookies: authCookie(cookie) })).statusCode
   }
 
   /** 붙잡힌 백엔드 가운데 `fragment` 를 마지막으로 돈 것 — 로그인도 제 트랜잭션을 열고 쉬므로 하나를 골라낸다. */
@@ -357,7 +402,16 @@ describe('비밀번호 바꾸기 × 옛 비밀번호 로그인', () => {
       commitHold.release()
       const [pw, res] = await Promise.all([passwordChange, lateLogin])
       const me = await sessionOf(ctx, res)
-      console.log('[toctou-window] late login', res.statusCode, '| waited', waited, '| its /me', me, '| sessions', await sessionCount(alice.user.id))
+      console.log(
+        '[toctou-window] late login',
+        res.statusCode,
+        '| waited',
+        waited,
+        '| its /me',
+        me,
+        '| sessions',
+        await sessionCount(alice.user.id),
+      )
       expect(pw.statusCode, pw.body).toBe(204)
       expect(me ?? 401, '옛 비밀번호로 낸 세션이 바꾸기 뒤에 산다').toBe(401)
       expect(res.statusCode, res.body).toBe(401)
@@ -375,7 +429,7 @@ describe('비밀번호 바꾸기 × 옛 비밀번호 로그인', () => {
       expect((await resetPassword(db, alice.user.email, NEW_PASSWORD, testConfig().passwordScryptN)).kind).toBe('updated')
       hold.release()
       const res = await lateLogin
-      expect(await sessionOf(ctx, res) ?? 401).toBe(401)
+      expect((await sessionOf(ctx, res)) ?? 401).toBe(401)
       expect(res.statusCode, res.body).toBe(401)
       expect(await sessionCount(alice.user.id)).toBe(0)
     })
@@ -471,7 +525,12 @@ describe('비밀번호 바꾸기 — 한도 키와 성공', () => {
       const shouted = alice.user.email.toUpperCase()
       expect(shouted).not.toBe(alice.user.email)
       for (let i = 0; i < LOGIN_LIMIT.perAccount; i++) {
-        const res = await ctx.app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: shouted, password: WRONG }, remoteAddress: `10.1.0.${i + 1}` })
+        const res = await ctx.app.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          payload: { email: shouted, password: WRONG },
+          remoteAddress: `10.1.0.${i + 1}`,
+        })
         expect(res.statusCode, `${i + 1}번째`).toBe(401)
       }
       const res = await ctx.app.inject({
@@ -489,11 +548,22 @@ describe('비밀번호 바꾸기 — 한도 키와 성공', () => {
     await withApi(async (ctx) => {
       const alice = await signup(ctx)
       const send = (currentPassword: string, newPassword: string) =>
-        ctx.app.inject({ method: 'POST', url: '/api/auth/password', cookies: alice.cookie, payload: { currentPassword, newPassword }, remoteAddress: '10.2.0.1' })
+        ctx.app.inject({
+          method: 'POST',
+          url: '/api/auth/password',
+          cookies: alice.cookie,
+          payload: { currentPassword, newPassword },
+          remoteAddress: '10.2.0.1',
+        })
       for (let i = 0; i < LOGIN_LIMIT.perAccount - 1; i++) expect((await send(WRONG, NEW_PASSWORD)).statusCode).toBe(401)
       expect((await send(alice.password, NEW_PASSWORD)).statusCode).toBe(204)
       expect((await send(WRONG, 'anotherpassword1')).statusCode).toBe(401)
-      const res = await ctx.app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: alice.user.email, password: NEW_PASSWORD }, remoteAddress: '10.2.0.2' })
+      const res = await ctx.app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: alice.user.email, password: NEW_PASSWORD },
+        remoteAddress: '10.2.0.2',
+      })
       expect(res.statusCode, res.body).toBe(429)
     })
   })

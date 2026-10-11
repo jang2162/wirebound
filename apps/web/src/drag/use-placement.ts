@@ -152,7 +152,13 @@ const RegionsContext = createContext<RegionSlots | null>(null)
 
 /** 셸이 트리 · 캔버스를 함께 감싼다. 값은 바뀌어도 다시 그리지 않는 칸이다 — 읽는 것은 끄는 동안의 처리기다. */
 export function PlacementRegionsProvider(props: { children: ReactNode }): ReactElement {
-  const [slots] = useState<RegionSlots>(() => ({ tree: null, canvas: null, remeasured: new Set(), preview: null, previewListeners: new Set() }))
+  const [slots] = useState<RegionSlots>(() => ({
+    tree: null,
+    canvas: null,
+    remeasured: new Set(),
+    preview: null,
+    previewListeners: new Set(),
+  }))
   return createElement(RegionsContext.Provider, { value: slots }, props.children)
 }
 
@@ -208,7 +214,9 @@ export function useCanvasRemeasured(listener: () => void): void {
 /** 두 미리보기가 같은 판인가 — 같으면 다시 싣지 않는다(받는 캔버스가 다시 그리지 않게). */
 function samePreview(a: PlacementPreview, b: PlacementPreview): boolean {
   const placing =
-    a.placing.kind === 'new' ? b.placing.kind === 'new' && a.placing.type === b.placing.type : b.placing.kind === 'node' && a.placing.id === b.placing.id
+    a.placing.kind === 'new'
+      ? b.placing.kind === 'new' && a.placing.type === b.placing.type
+      : b.placing.kind === 'node' && a.placing.id === b.placing.id
   return (
     placing &&
     a.target.parentId === b.target.parentId &&
@@ -372,36 +380,49 @@ export function usePlacementDrop(input: {
       if (hit === null) return null
       return {
         ...hit.hint,
-        value: { placing, target: hit.hint.value, over: { overId: hit.overId, zone: hit.zone }, layout: VERTICAL, stage: now, region: 'tree' },
+        value: {
+          placing,
+          target: hit.hint.value,
+          over: { overId: hit.overId, zone: hit.zone },
+          layout: VERTICAL,
+          stage: now,
+          region: 'tree',
+        },
       }
     }
 
     const canvas = regions.canvas()
     if (canvas === null) return null
     const clipElement = scrollParent(canvas.frame.frameElement as HTMLElement | null)
-    const hit: CanvasHit | null = withoutPreview(canvas.frame.document as Document | undefined, () => hitAt(
-      canvas.frame,
-      canvas.zoom,
-      point as Point,
-      (id): HitNode | null => {
-        const node = findNodeSafely(document.root, id)
-        if (node === undefined) return null
-        return {
-          root: document.root?.id === id,
-          acceptsChildren: acceptsChildren(node),
-          empty: !Array.isArray(node.children) || node.children.length === 0,
-        }
-      },
-      clipElement === null ? null : rectOf(clipElement),
-      isPreviewId,
-    ))
+    const hit: CanvasHit | null = withoutPreview(canvas.frame.document as Document | undefined, () =>
+      hitAt(
+        canvas.frame,
+        canvas.zoom,
+        point as Point,
+        (id): HitNode | null => {
+          const node = findNodeSafely(document.root, id)
+          if (node === undefined) return null
+          return {
+            root: document.root?.id === id,
+            acceptsChildren: acceptsChildren(node),
+            empty: !Array.isArray(node.children) || node.children.length === 0,
+          }
+        },
+        clipElement === null ? null : rectOf(clipElement),
+        isPreviewId,
+      ),
+    )
     if (hit === null) return null
     // 숨긴 미리보기는 안 잡힌다 — 그래도 잡히면(숨기기 전에 선 요소) 노드로 읽지 않고 보인 자리 그대로다.
     if ('preview' in hit) return keep(shown, hit.rect, now)
     const over: PlacementDrop['over'] = 'pageEnd' in hit ? 'page-end' : { overId: hit.overId, zone: hit.zone }
     const target = verdict(document, placing, over)
     if (target === null) return null
-    return { value: { placing, target, over, layout: hit.layout, stage: now, region: 'canvas' }, rect: hit.rect, placement: target.placement }
+    return {
+      value: { placing, target, over, layout: hit.layout, stage: now, region: 'canvas' },
+      rect: hit.rect,
+      placement: target.placement,
+    }
   }
 
   const onDrop = (placing: Placing, drop: PlacementDrop): void => {

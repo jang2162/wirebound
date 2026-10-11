@@ -6,16 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { CASCADE_ID_LIMIT } from '../src/routes/menu'
-import {
-  addMember,
-  createMenuNode,
-  createPage,
-  createProject,
-  signup,
-  withApi,
-  type SignedUpUser,
-  type TestContext,
-} from './helpers'
+import { addMember, createMenuNode, createPage, createProject, signup, withApi, type SignedUpUser, type TestContext } from './helpers'
 
 interface Tree {
   owner: SignedUpUser
@@ -331,7 +322,10 @@ describe('메뉴 연쇄 삭제 — cascade', () => {
         expect(res.statusCode, `${key} ${n} ${res.body.slice(0, 200)}`).toBe(status)
       }
       // 두 목록이 다 넘쳐도 본문 상한(413)보다 앞에서 400 이다.
-      const both = await del(ctx, t, { cascade: true, expect: { menuIds: fill(CASCADE_ID_LIMIT + 1), pageIds: fill(CASCADE_ID_LIMIT + 1) } })
+      const both = await del(ctx, t, {
+        cascade: true,
+        expect: { menuIds: fill(CASCADE_ID_LIMIT + 1), pageIds: fill(CASCADE_ID_LIMIT + 1) },
+      })
       expect(both.statusCode, both.body.slice(0, 200)).toBe(400)
       expect(await menuIds(ctx, t.projectId)).toHaveLength(4)
     })

@@ -119,9 +119,7 @@ export class UnansweredEditError extends Error {
   readonly why: UnansweredCause
   constructor(why: UnansweredCause) {
     super(
-      why === 'renewed'
-        ? '연결을 다시 붙이느라 보낸 편집의 답을 받지 못했습니다'
-        : '실시간 연결이 끊겨 보낸 편집의 답을 받지 못했습니다',
+      why === 'renewed' ? '연결을 다시 붙이느라 보낸 편집의 답을 받지 못했습니다' : '실시간 연결이 끊겨 보낸 편집의 답을 받지 못했습니다',
     )
     this.name = 'UnansweredEditError'
     this.why = why

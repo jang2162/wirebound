@@ -54,7 +54,10 @@ const FIELD_ROLES: Readonly<Record<string, Readonly<Record<string, string>>>> = 
 
 export const FieldView = view(({ props, states }) => {
   const role = FIELD_ROLES[String(props.control)]
-  const aria = role === undefined ? {} : { 'aria-label': String(props.label), ...stateAria(states.filter((state) => state === 'required' || state === 'invalid')) }
+  const aria =
+    role === undefined
+      ? {}
+      : { 'aria-label': String(props.label), ...stateAria(states.filter((state) => state === 'required' || state === 'invalid')) }
   const rootless = role === undefined ? {} : { 'aria-required': undefined, 'aria-invalid': undefined }
   return (
     <Root as="div" data-wb-structure="outlined" {...rootless}>

@@ -1,15 +1,7 @@
 /**
  * 패턴 전개(`pattern/expand.ts`)를 잰다. 규격(`spec/patterns.ts`)은 전개를 하지 않는다.
  */
-import {
-  WbNodeSchema,
-  getComponent,
-  installCatalog,
-  listComponents,
-  validatePage,
-  type PageDocument,
-  type WbNode,
-} from '@wirebound/schema'
+import { WbNodeSchema, getComponent, installCatalog, listComponents, validatePage, type PageDocument, type WbNode } from '@wirebound/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { expandPattern } from '../src/pattern/expand'
 import type { ThemePattern } from '../src/spec/patterns'
@@ -35,9 +27,7 @@ const NOTICE: ThemePattern = {
       {
         type: 'SearchForm',
         props: { collapsed: true },
-        children: [
-          { type: 'Field', props: { label: '검색어', control: 'text' }, slot: 'keyword' },
-        ],
+        children: [{ type: 'Field', props: { label: '검색어', control: 'text' }, slot: 'keyword' }],
       },
     ],
   },
@@ -122,12 +112,7 @@ describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다
         if (typeof value === 'object' && value !== null) shared.push(`${def.type}.${prop}`)
       }
     }
-    expect(shared.sort()).toEqual([
-      'KeyValue.pairs',
-      'List.columns',
-      'Tabs.tabs',
-      'Tree.items',
-    ])
+    expect(shared.sort()).toEqual(['KeyValue.pairs', 'List.columns', 'Tabs.tabs', 'Tree.items'])
   })
 
   /**
@@ -183,8 +168,7 @@ describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다
   it('KeyValue.pairs는 배열 안에 객체가 든다 — 두 겹이 실재한다', () => {
     // **위 케이스의 넷 중 이것만 두 겹이다.** 아래 `두 겹 아래까지 끊긴다`가 지어낸
     // 모양으로 재는 축이 **카탈로그에 실제로 있다는 것**을 여기서 못박는다.
-    const pairs = (getComponent('KeyValue')!.props.safeParse({}) as { data: { pairs: unknown[] } })
-      .data.pairs
+    const pairs = (getComponent('KeyValue')!.props.safeParse({}) as { data: { pairs: unknown[] } }).data.pairs
     expect(Array.isArray(pairs)).toBe(true)
     expect(typeof pairs[0]).toBe('object')
   })
@@ -325,7 +309,10 @@ describe('expandPattern — 슬롯은 채우지 않고 어느 노드인지만 �
       slots: { title: 'text' },
       schema: {
         type: 'Section',
-        children: [{ type: 'Text', slot: 'title' }, { type: 'Text', slot: '지어낸이름' }],
+        children: [
+          { type: 'Text', slot: 'title' },
+          { type: 'Text', slot: '지어낸이름' },
+        ],
       },
     }
 
@@ -421,7 +408,10 @@ describe('expandPattern — 슬롯은 채우지 않고 어느 노드인지만 �
       slots: { title: 'text' },
       schema: {
         type: 'Section',
-        children: [{ type: 'Text', slot: 'title' }, { type: 'Text', slot: 'title' }],
+        children: [
+          { type: 'Text', slot: 'title' },
+          { type: 'Text', slot: 'title' },
+        ],
       },
     }
     const { expanded, issues } = expandPattern(twice, counter())
@@ -490,10 +480,7 @@ describe('expandPattern — 옮기는 필드', () => {
   })
 
   it('없는 필드는 만들지 않는다 — props·variant·children 키가 생기지 않는다', () => {
-    const { expanded } = expandPattern(
-      { name: '빈 노드', schema: { type: 'Section' } },
-      counter(),
-    )
+    const { expanded } = expandPattern({ name: '빈 노드', schema: { type: 'Section' } }, counter())
     expect(expanded!.nodes).toEqual([{ id: 'n_t0', type: 'Section' }])
   })
 

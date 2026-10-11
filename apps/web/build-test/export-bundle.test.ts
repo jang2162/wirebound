@@ -116,7 +116,13 @@ async function exportProject(stack: EditorStack, owner: Session): Promise<{ id: 
     if (response.status >= 300) throw new Error(`픽스처 ${what} ${response.status} ${JSON.stringify(response.body)}`)
     return response.body
   }
-  const project = ok(await call('POST', '/projects', { name: '내보내기 판', slug: `export-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }), '프로젝트')
+  const project = ok(
+    await call('POST', '/projects', {
+      name: '내보내기 판',
+      slug: `export-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    }),
+    '프로젝트',
+  )
   const menu = ok(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '관리자' }), '메뉴')
   const list = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '회원 목록' }), '목록')
   const detail = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '회원 상세' }), '상세')
@@ -127,8 +133,16 @@ async function exportProject(stack: EditorStack, owner: Session): Promise<{ id: 
       ops: [
         { op: 'add', path: '/root/children/0', value: { id: 'n_text000001', type: 'Text', props: { content: '목록 글' } } },
         { op: 'add', path: '/root/children/1', value: { id: 'n_card000001', type: 'Card', props: { title: '카드' } } },
-        { op: 'add', path: '/root/children/2', value: { id: 'n_go00000001', type: 'Button', props: { label: '상세로' }, interactions: click('page:관리자/회원 상세') } },
-        { op: 'add', path: '/root/children/3', value: { id: 'n_gone000001', type: 'Button', props: { label: '없는 곳' }, interactions: click('page:관리자/없는 페이지') } },
+        {
+          op: 'add',
+          path: '/root/children/2',
+          value: { id: 'n_go00000001', type: 'Button', props: { label: '상세로' }, interactions: click('page:관리자/회원 상세') },
+        },
+        {
+          op: 'add',
+          path: '/root/children/3',
+          value: { id: 'n_gone000001', type: 'Button', props: { label: '없는 곳' }, interactions: click('page:관리자/없는 페이지') },
+        },
       ],
     }),
     'ops 목록',
@@ -176,7 +190,13 @@ async function exportStateProject(stack: EditorStack, owner: Session): Promise<s
     if (response.status >= 300) throw new Error(`픽스처 ${what} ${response.status} ${JSON.stringify(response.body)}`)
     return response.body
   }
-  const project = ok(await call('POST', '/projects', { name: '상태 판', slug: `states-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }), '프로젝트')
+  const project = ok(
+    await call('POST', '/projects', {
+      name: '상태 판',
+      slug: `states-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    }),
+    '프로젝트',
+  )
   const menu = ok(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '관리자' }), '메뉴')
   const page = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '회원 목록' }), '페이지')
   const caseOf = (id: string, state: string, child: object) => ({ id, type: 'StateCase', props: { state }, children: [child] })
@@ -184,7 +204,14 @@ async function exportStateProject(stack: EditorStack, owner: Session): Promise<s
     await call('PATCH', `/projects/${project.id}/pages/${page.id}/ops`, {
       baseSeq: 0,
       ops: [
-        { op: 'add', path: '/viewStates', value: [{ id: 's_admin00001', name: '관리자' }, { id: 's_guest00001', name: '비로그인' }] },
+        {
+          op: 'add',
+          path: '/viewStates',
+          value: [
+            { id: 's_admin00001', name: '관리자' },
+            { id: 's_guest00001', name: '비로그인' },
+          ],
+        },
         { op: 'add', path: '/root/children/0', value: { id: 'n_title00001', type: 'Text', props: { content: '회원 목록 제목' } } },
         {
           op: 'add',
@@ -207,7 +234,10 @@ async function exportStateProject(stack: EditorStack, owner: Session): Promise<s
     }),
     'ops',
   )
-  ok(await call('POST', `/projects/${project.id}/pages/${page.id}/comments`, { nodeId: 'n_apprv00001', body: '관리자만 보는 단추' }), '코멘트')
+  ok(
+    await call('POST', `/projects/${project.id}/pages/${page.id}/comments`, { nodeId: 'n_apprv00001', body: '관리자만 보는 단추' }),
+    '코멘트',
+  )
   return project.id
 }
 
@@ -264,7 +294,9 @@ describe.skipIf(!전제.ok)('내보낸 번들을 파일로 연다', () => {
       expect(await page.evaluate(() => document.documentElement.getAttribute('data-wb-failed'))).toBeNull()
       expect(await page.locator('.wb-export-canvas', { hasText: '샘플 카드' }).count()).toBe(1)
       // 토큰 시트(`tokens.css`)가 테마의 기본값(`#e11d48`)을 이겼다 — 변수와, 그 변수로 그린 테두리의 계산값.
-      expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--wb-color-primary').trim())).toBe('#0a7d33')
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--wb-color-primary').trim())).toBe(
+        '#0a7d33',
+      )
       expect(await page.locator('.sample-card').evaluate((el) => getComputedStyle(el).borderTopColor)).toBe('rgb(10, 125, 51)')
       // 패키지 글꼴이 파일에서 실렸다.
       const fonts = await page.evaluate(async () => {

@@ -58,7 +58,11 @@ async function world(ctx: RealApiContext, beforeGone?: (made: { owner: SignedUpU
   const boraTab = await joinRoom(ctx.port, project.id, bora.cookie.wb_session)
   opened.push(ownerTab, boraTab)
   const rootOf = async (pageId: string): Promise<string> =>
-    ((await ctx.app.inject({ method: 'GET', url: `/api/projects/${project.id}/pages/${pageId}`, cookies: owner.cookie })).json() as { schema: { root: { id: string } } }).schema.root.id
+    (
+      (await ctx.app.inject({ method: 'GET', url: `/api/projects/${project.id}/pages/${pageId}`, cookies: owner.cookie })).json() as {
+        schema: { root: { id: string } }
+      }
+    ).schema.root.id
   const goneRoot = await rootOf(gone.id)
   const keepRoot = await rootOf(keep.id)
   // 보라가 지울 페이지 · 남는 페이지를 쥐고, 두 사람 다 목록에 둘이 보일 때까지 기다린다.
@@ -73,7 +77,11 @@ describe('지운 페이지의 잠금은 놓인다', () => {
     await withRealApi(async (ctx) => {
       const w = await world(ctx)
 
-      const res = await ctx.app.inject({ method: 'DELETE', url: `/api/projects/${w.project.id}/pages/${w.gone.id}`, cookies: w.owner.cookie })
+      const res = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/api/projects/${w.project.id}/pages/${w.gone.id}`,
+        cookies: w.owner.cookie,
+      })
       expect(res.statusCode).toBe(204)
 
       const list = await locksUntil(w.boraTab, (locks) => locks.length === 1, '지운 페이지의 잠금이 사라진다')
@@ -148,11 +156,20 @@ describe('지운 페이지의 잠금은 놓인다', () => {
     await withRealApi(async (ctx) => {
       let snapshotId = ''
       const w = await world(ctx, async ({ owner, projectId }) => {
-        const res = await ctx.app.inject({ method: 'POST', url: `/api/projects/${projectId}/snapshots`, cookies: owner.cookie, payload: { tag: '지울 페이지 전' } })
+        const res = await ctx.app.inject({
+          method: 'POST',
+          url: `/api/projects/${projectId}/snapshots`,
+          cookies: owner.cookie,
+          payload: { tag: '지울 페이지 전' },
+        })
         snapshotId = (res.json() as { id: string }).id
       })
 
-      const res = await ctx.app.inject({ method: 'POST', url: `/api/projects/${w.project.id}/snapshots/${snapshotId}/restore`, cookies: w.owner.cookie })
+      const res = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${w.project.id}/snapshots/${snapshotId}/restore`,
+        cookies: w.owner.cookie,
+      })
       expect(res.statusCode, res.body).toBe(200)
       // 놓기는 응답 전에 끝난다(라우트가 커밋 뒤 동기로 부른다) — 방송을 기다리기 전에 저장소의 값으로 잰다.
       expect(ctx.app.realtime.locks.liveIn(w.project.id).map((lock) => lock.pageId)).toEqual([w.keep.id])
@@ -173,8 +190,14 @@ describe('지운 페이지의 잠금은 놓인다', () => {
  */
 describe('답을 잃은 삭제 COMMIT 이 늦게 커밋돼도 잠금이 놓인다', () => {
   const slowCommit = async (db: RealApiContext['db']): Promise<() => Promise<void>> => {
-    await sql.raw(`create or replace function zz_slow_rev() returns trigger language plpgsql as $$ begin perform pg_sleep(3); return null; end $$`).execute(db)
-    await sql.raw(`create constraint trigger zz_slow_rev after insert or update on project_menu_revs deferrable initially deferred for each row execute function zz_slow_rev()`).execute(db)
+    await sql
+      .raw(`create or replace function zz_slow_rev() returns trigger language plpgsql as $$ begin perform pg_sleep(3); return null; end $$`)
+      .execute(db)
+    await sql
+      .raw(
+        `create constraint trigger zz_slow_rev after insert or update on project_menu_revs deferrable initially deferred for each row execute function zz_slow_rev()`,
+      )
+      .execute(db)
     return async () => {
       await sql`drop trigger if exists zz_slow_rev on project_menu_revs`.execute(db)
       await sql`drop function if exists zz_slow_rev()`.execute(db)
@@ -187,7 +210,11 @@ describe('답을 잃은 삭제 COMMIT 이 늦게 커밋돼도 잠금이 놓인�
       const restore = await slowCommit(ctx.db)
       try {
         ctx.proxy.halfCutOnQuery('commit')
-        const res = await ctx.app.inject({ method: 'DELETE', url: `/api/projects/${w.project.id}/pages/${w.gone.id}`, cookies: w.owner.cookie })
+        const res = await ctx.app.inject({
+          method: 'DELETE',
+          url: `/api/projects/${w.project.id}/pages/${w.gone.id}`,
+          cookies: w.owner.cookie,
+        })
         expect(ctx.proxy.fired).toBe(true)
         expect(res.statusCode).toBe(503)
         const list = await locksUntil(w.boraTab, (locks) => locks.length === 1, '늦게 커밋된 삭제가 그 페이지의 잠금을 놓는다')

@@ -161,12 +161,7 @@ describe('줄 행동을 열면 그 줄이 먼저 골라진다', () => {
 
     await waitFor(() => expect(api.updatePage).toHaveBeenCalled())
     // 바탕(`base`)도 그 페이지의 제목이다 — 열린 페이지의 것이면 서버가 «남이 바꿨다»로 거절한다(`api/page-meta.ts`).
-    expect(api.updatePage).toHaveBeenCalledWith(
-      'p-1',
-      'pg-detail',
-      { title: '회원 정보', base: { title: '회원 상세' } },
-      expect.anything(),
-    )
+    expect(api.updatePage).toHaveBeenCalledWith('p-1', 'pg-detail', { title: '회원 정보', base: { title: '회원 상세' } }, expect.anything())
     expect(currentPath()).toBe('/projects/p-1/pages/pg-list')
   })
 

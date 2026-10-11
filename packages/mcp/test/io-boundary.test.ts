@@ -149,11 +149,17 @@ describe('바깥 세계를 만지는 자리 — packages/mcp', () => {
       '  console.warn(`${name} 이 없다`)',
     ]
     for (const line of caught) {
-      expect(EFFECTFUL.some((pattern) => pattern.test(line)), line).toBe(true)
+      expect(
+        EFFECTFUL.some((pattern) => pattern.test(line)),
+        line,
+      ).toBe(true)
     }
     // **반대편.** 그물이 넓어지면 이름이 겹치는 것까지 잡는다.
     for (const line of ['await io.fetch(url, init)', 'const processed = 1', 'const consoleWidth = 80']) {
-      expect(EFFECTFUL.some((pattern) => pattern.test(line)), line).toBe(false)
+      expect(
+        EFFECTFUL.some((pattern) => pattern.test(line)),
+        line,
+      ).toBe(false)
     }
   })
 
@@ -164,8 +170,8 @@ describe('바깥 세계를 만지는 자리 — packages/mcp', () => {
       'import { parseArgs } from "util"',
       "import { createServer } from './server'",
       "import { Server } from '@modelcontextprotocol/sdk/server/index.js'",
-      "// `node:fs`를 부르는 자리는 하나여야 한다",
-      "/** `node:path`를 안 쓴다 */",
+      '// `node:fs`를 부르는 자리는 하나여야 한다',
+      '/** `node:path`를 안 쓴다 */',
     ]
     for (const line of ignored) {
       expect(line, line).not.toMatch(EFFECTFUL_SPECIFIER)

@@ -40,10 +40,7 @@ export function themePatterns(manifest: ThemeManifest): { entries: [string, Them
 /** 슬롯을 선언하지 않은 패턴의 표시. 빈칸으로 두면 목록이 잘린 것처럼 읽힌다. */
 const NO_SLOTS = '슬롯 없음'
 
-export function PatternPicker(props: {
-  onPick: (key: string, pattern: ThemePattern) => void
-  onCancel: () => void
-}): ReactElement {
+export function PatternPicker(props: { onPick: (key: string, pattern: ThemePattern) => void; onCancel: () => void }): ReactElement {
   const manifest = useProjectTheme().manifest ?? NO_THEME.manifest
   const { entries, broken } = useMemo(() => themePatterns(manifest), [manifest])
   const [picked, setPicked] = useState('')
@@ -84,11 +81,7 @@ export function PatternPicker(props: {
           </option>
         ))}
       </select>
-      <button
-        type="button"
-        className="wb-shell-picker-action"
-        onClick={() => props.onPick(current, selected[1])}
-      >
+      <button type="button" className="wb-shell-picker-action" onClick={() => props.onPick(current, selected[1])}>
         패턴 추가
       </button>
       <button type="button" className="wb-shell-picker-action" onClick={props.onCancel}>

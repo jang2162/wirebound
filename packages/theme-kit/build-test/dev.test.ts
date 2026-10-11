@@ -96,7 +96,9 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
 
   it('갤러리가 카탈로그를 그린다', async () => {
     const frame = await galleryFrame()
-    const kinds = await frame.evaluate(() => new Set([...document.querySelectorAll('[data-wb-component]')].map((el) => el.getAttribute('data-wb-component'))).size)
+    const kinds = await frame.evaluate(
+      () => new Set([...document.querySelectorAll('[data-wb-component]')].map((el) => el.getAttribute('data-wb-component'))).size,
+    )
     expect(kinds).toBe(19)
   })
 
@@ -112,32 +114,45 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
   it('뷰포트 프리셋 — 375 를 고르면 프레임이 375 폭이다', async () => {
     await page.selectOption('[data-wb-viewport]', '375')
     const frame = await galleryFrame()
-    await expect.poll(async () => {
-      const iframe = await page.$eval('iframe', (el) => el.getBoundingClientRect().width)
-      const inner = await frame.evaluate(() => window.innerWidth)
-      return [iframe, inner]
-    }).toEqual([375, 375])
+    await expect
+      .poll(async () => {
+        const iframe = await page.$eval('iframe', (el) => el.getBoundingClientRect().width)
+        const inner = await frame.evaluate(() => window.innerWidth)
+        return [iframe, inner]
+      })
+      .toEqual([375, 375])
     await page.selectOption('[data-wb-viewport]', '1280')
   })
 
   it('토큰 패널 — 주색을 바꾸면 프레임의 계산된 색이 바뀐다', async () => {
     await page.fill('[data-wb-token-input="color.primary"]', '#00ff00')
     const frame = await galleryFrame()
-    await expect.poll(() => frame.evaluate(() => getComputedStyle(document.querySelector('.sample-card')!).borderTopColor)).toBe('rgb(0, 255, 0)')
+    await expect
+      .poll(() => frame.evaluate(() => getComputedStyle(document.querySelector('.sample-card')!).borderTopColor))
+      .toBe('rgb(0, 255, 0)')
   })
 
   it('뷰 파일을 고치면 갤러리의 글자가 바뀐다 — 셸은 다시 안 실린다', async () => {
-    await page.evaluate(() => { (window as unknown as { __wbShellMark: number }).__wbShellMark = 1 })
+    await page.evaluate(() => {
+      ;(window as unknown as { __wbShellMark: number }).__wbShellMark = 1
+    })
     const file = join(root, 'src/index.tsx')
     writeFileSync(file, readFileSync(file, 'utf8').replace('샘플 카드', '고친 카드'))
-    await expect.poll(async () => {
-      const frame = await galleryFrame()
-      return frame.evaluate(() => document.querySelector('.sample-card-note')?.textContent ?? null).catch(() => null)
-    }, { timeout: 10_000 }).toBe('고친 카드')
+    await expect
+      .poll(
+        async () => {
+          const frame = await galleryFrame()
+          return frame.evaluate(() => document.querySelector('.sample-card-note')?.textContent ?? null).catch(() => null)
+        },
+        { timeout: 10_000 },
+      )
+      .toBe('고친 카드')
     expect(await page.evaluate(() => (window as unknown as { __wbShellMark?: number }).__wbShellMark)).toBe(1)
     // 프레임이 다시 섰어도 셸의 토큰 값을 다시 받는다.
     const frame = await galleryFrame()
-    await expect.poll(() => frame.evaluate(() => getComputedStyle(document.querySelector('.sample-card')!).borderTopColor)).toBe('rgb(0, 255, 0)')
+    await expect
+      .poll(() => frame.evaluate(() => getComputedStyle(document.querySelector('.sample-card')!).borderTopColor))
+      .toBe('rgb(0, 255, 0)')
   })
 
   it('설정을 틀리면 셸에 이슈가 선다', async () => {
@@ -156,7 +171,9 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
           socket.write(`GET ${path} HTTP/1.1\r\nHost: evil.example:${port}\r\nConnection: close\r\n\r\n`),
         )
         let reply = ''
-        socket.on('data', (chunk) => { reply += chunk })
+        socket.on('data', (chunk) => {
+          reply += chunk
+        })
         socket.on('end', () => done(reply.split('\r\n')[0]!.split(' ')[1]!))
         socket.on('error', fail)
       })
@@ -173,12 +190,21 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
           socket.write(`GET ${path} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`),
         )
         let reply = ''
-        socket.on('data', (chunk) => { reply += chunk })
+        socket.on('data', (chunk) => {
+          reply += chunk
+        })
         socket.on('end', () => done(reply.split('\r\n')[0]!.split(' ')[1]!))
         socket.on('error', fail)
       })
     const table: Record<string, Record<string, string>> = {}
-    for (const host of [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`, 'localhost', `sub.localhost:${port}`, `evil.example:${port}`]) {
+    for (const host of [
+      `localhost:${port}`,
+      `127.0.0.1:${port}`,
+      `[::1]:${port}`,
+      'localhost',
+      `sub.localhost:${port}`,
+      `evil.example:${port}`,
+    ]) {
       table[host] = {}
       for (const path of ['/', '/__wb/project', '/frame.html']) table[host]![path] = await status(host, path)
     }
@@ -217,7 +243,10 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
     cpSync(FIXTURE, project, { recursive: true })
     const entry = join(project, 'src/index.tsx')
     writeFileSync(entry, `import 'wb-probe-font/index.css'\n${readFileSync(entry, 'utf8')}`)
-    writeFileSync(join(project, 'src/theme.css'), `${readFileSync(join(project, 'src/theme.css'), 'utf8')}\n* { font-family: WbProbe, sans-serif; }\n`)
+    writeFileSync(
+      join(project, 'src/theme.css'),
+      `${readFileSync(join(project, 'src/theme.css'), 'utf8')}\n* { font-family: WbProbe, sans-serif; }\n`,
+    )
 
     const other = await kit.startDev({ root: project, port: await freePort() })
     const probe = await browser.newPage({ viewport: { width: 1280, height: 800 } })
@@ -229,8 +258,17 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
     try {
       await probe.goto(other.url)
       // 카나리아 — 갤러리가 서고, 패키지의 CSS 가 실려 글꼴을 부른다(이 판에서 글꼴 요청이 난다).
-      await expect.poll(() => probe.frames().find((f) => f.url().endsWith('/frame.html'))
-        ?.evaluate(() => document.querySelectorAll('[data-wb-gallery-item]').length).catch(() => 0) ?? 0, { timeout: 20_000 }).toBeGreaterThan(0)
+      await expect
+        .poll(
+          () =>
+            probe
+              .frames()
+              .find((f) => f.url().endsWith('/frame.html'))
+              ?.evaluate(() => document.querySelectorAll('[data-wb-gallery-item]').length)
+              .catch(() => 0) ?? 0,
+          { timeout: 20_000 },
+        )
+        .toBeGreaterThan(0)
       await expect.poll(() => statuses.has('probe.woff2'), { timeout: 10_000 }).toBe(true)
       expect(statuses.get('index.css')).toBe(200)
       expect(statuses.get('probe.woff2')).toBe(200)

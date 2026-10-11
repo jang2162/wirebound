@@ -35,9 +35,19 @@ const text = (id: string, content: string) => ({ id, type: 'Text', props: { cont
 
 /** Flex 가로 · Flex 세로 · Grid 3열 · 빈 Flex, 그리고 칸이 스크롤하게 글 스물. */
 const NODES = [
-  { id: 'n_flxr0000001', type: 'Flex', props: { direction: 'row' }, children: [text('n_r1', '가로 하나'), text('n_r2', '가로 둘'), text('n_r3', '가로 셋')] },
+  {
+    id: 'n_flxr0000001',
+    type: 'Flex',
+    props: { direction: 'row' },
+    children: [text('n_r1', '가로 하나'), text('n_r2', '가로 둘'), text('n_r3', '가로 셋')],
+  },
   { id: 'n_flxc0000001', type: 'Flex', props: { direction: 'column' }, children: [text('n_c1', '세로 하나'), text('n_c2', '세로 둘')] },
-  { id: 'n_grid0000001', type: 'Grid', props: { columns: 3 }, children: [text('n_g1', '칸 하나'), text('n_g2', '칸 둘'), text('n_g3', '칸 셋'), text('n_g4', '칸 넷')] },
+  {
+    id: 'n_grid0000001',
+    type: 'Grid',
+    props: { columns: 3 },
+    children: [text('n_g1', '칸 하나'), text('n_g2', '칸 둘'), text('n_g3', '칸 셋'), text('n_g4', '칸 넷')],
+  },
   { id: 'n_flxe0000001', type: 'Flex', props: { direction: 'row' }, children: [] },
   ...Array.from({ length: 20 }, (_, index) => text(`n_t${index}`, `채우는 글 ${index} — 캔버스를 세로로 길게 만든다`)),
 ]
@@ -168,14 +178,23 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
     expect(after).toEqual({ processes: 0, listeningPorts: [], databases: 0 })
   })
 
-  async function fixture(slug: string, theme: string, nodes: readonly unknown[] = NODES, tokens: Record<string, string> = {}): Promise<{ P: string }> {
+  async function fixture(
+    slug: string,
+    theme: string,
+    nodes: readonly unknown[] = NODES,
+    tokens: Record<string, string> = {},
+  ): Promise<{ P: string }> {
     const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
     const project = (await call('POST', '/projects', { name: 'F1 배치 선', slug: `${slug}-${Date.now().toString(36)}` })).body
-    if (theme !== 'system-admin' || Object.keys(tokens).length > 0) await putTheme(call, project.id, { themeId: theme, version: seededVersion(theme), tokens })
+    if (theme !== 'system-admin' || Object.keys(tokens).length > 0)
+      await putTheme(call, project.id, { themeId: theme, version: seededVersion(theme), tokens })
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' })).body
     const page = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body
     const P = `/projects/${project.id}/pages/${page.id}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, index) => ({ op: 'add', path: `/root/children/${index}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, index) => ({ op: 'add', path: `/root/children/${index}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return { P }
   }
@@ -187,9 +206,14 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
     return { page, close: () => context.close() }
   }
 
-  async function guides(page: Page, done: (value: Guides) => boolean = (value) => GUIDED.every((id) => value[id] !== undefined)): Promise<Guides> {
+  async function guides(
+    page: Page,
+    done: (value: Guides) => boolean = (value) => GUIDED.every((id) => value[id] !== undefined),
+  ): Promise<Guides> {
     // 다시 잼은 다음 프레임에 선다(레이아웃 이펙트 · iframe 의 `ResizeObserver`) — 판이 선 뒤 한 번 더 읽어 같은 값인지 본다.
-    return poll('배치 선', async () => (await page.evaluate(GUIDES)) as Guides, done, 5_000).catch(async () => (await page.evaluate(GUIDES)) as Guides)
+    return poll('배치 선', async () => (await page.evaluate(GUIDES)) as Guides, done, 5_000).catch(
+      async () => (await page.evaluate(GUIDES)) as Guides,
+    )
   }
 
   function worst(value: Guides): number {
@@ -198,7 +222,8 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
 
   async function zoomTo(page: Page, steps: number): Promise<void> {
     const name = steps < 0 ? '축소' : '확대'
-    for (let i = 0; i < Math.abs(steps); i += 1) await page.getByRole('group', { name: '줌' }).getByRole('button', { name, exact: true }).click()
+    for (let i = 0; i < Math.abs(steps); i += 1)
+      await page.getByRole('group', { name: '줌' }).getByRole('button', { name, exact: true }).click()
     await page.waitForTimeout(150)
   }
 
@@ -262,7 +287,12 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
       })
       expect(changed.status).toBeLessThan(300)
       const after = await guides(page, (value) => value['n_flxr0000001']?.label === '↓')
-      expect({ sameHeight: heightAfter === heightBefore, swapped: worst(afterSwap) <= 1, label: after['n_flxr0000001']?.label, off: worst(after) <= 1 }).toEqual({
+      expect({
+        sameHeight: heightAfter === heightBefore,
+        swapped: worst(afterSwap) <= 1,
+        label: after['n_flxr0000001']?.label,
+        off: worst(after) <= 1,
+      }).toEqual({
         sameHeight: true,
         swapped: true,
         label: '↓',
@@ -287,10 +317,17 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
       await page.mouse.down()
       await page.mouse.move(card.x + card.width / 2 + 10, card.y + 30, { steps: 3 })
       await page.mouse.move(target.x + 20, target.y + 3, { steps: 10 })
-      await poll('미리보기', () => page.evaluate(() => document.querySelector('[data-wb-preview]') !== null), (shown) => shown, 5_000)
+      await poll(
+        '미리보기',
+        () => page.evaluate(() => document.querySelector('[data-wb-preview]') !== null),
+        (shown) => shown,
+        5_000,
+      )
       const during = await guides(page, (value) => (value['n_flxr0000001']?.off ?? 99) <= 1)
       const previewGuides = await page.evaluate(() =>
-        [...document.querySelectorAll('[data-wb-guide-for]')].map((guide) => guide.getAttribute('data-wb-guide-for') ?? '').filter((id) => id.startsWith('wb:preview:')),
+        [...document.querySelectorAll('[data-wb-guide-for]')]
+          .map((guide) => guide.getAttribute('data-wb-guide-for') ?? '')
+          .filter((id) => id.startsWith('wb:preview:')),
       )
       const previewNodes = await canvasFrame(page).locator('[data-wb-id^="wb:preview:"]').count()
       // 가로 Flex 의 가운데 자식 위로 옮겨 미리보기를 그 Flex 안에 세운다 — 안쪽 선은 미리보기를 안 세어 진짜 자식 셋 사이의 둘이다.
@@ -306,7 +343,14 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
       const rowLines = await page.locator('[data-wb-guide-for="n_flxr0000001"] [data-wb-guide-line]').count()
       await page.keyboard.press('Escape')
       await page.mouse.up()
-      expect({ previewNodes: previewNodes > 0, previewInRow, rowLines, previewGuides, aligned: worst(during) <= 1, before: worst(before) <= 1 }).toEqual({
+      expect({
+        previewNodes: previewNodes > 0,
+        previewInRow,
+        rowLines,
+        previewGuides,
+        aligned: worst(during) <= 1,
+        before: worst(before) <= 1,
+      }).toEqual({
         previewNodes: true,
         previewInRow: 1,
         rowLines: 2,
@@ -364,7 +408,9 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
 
   async function lines(page: Page, override: typeof LINE_COUNTS = {}): Promise<Lines> {
     const done = (value: Lines) => Object.values(judge(value, override).counts).every((count) => count === 'ok')
-    return poll('안쪽 선', async () => (await page.evaluate(LINES)) as Lines, done, 5_000).catch(async () => (await page.evaluate(LINES)) as Lines)
+    return poll('안쪽 선', async () => (await page.evaluate(LINES)) as Lines, done, 5_000).catch(
+      async () => (await page.evaluate(LINES)) as Lines,
+    )
   }
 
   const allOk = Object.fromEntries(Object.keys(LINE_COUNTS).map((id) => [id, 'ok']))
@@ -374,59 +420,74 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
    * 남긴다) 뒤에 잰다. «간격 0» 판은 간격 단위 토큰을 0 으로 둔 관리 테마다 — 칸이 맞닿아 선이 경계에 서고, 맞닿은 두 상자를 한 묶음으로
    * 잇는 판정(`layout-guides.tsx` 의 `TOUCH`)이 무너지면 선이 빠진다.
    */
-  it.each([...THEMES.map((theme) => [theme, theme, {}] as const), ['system-admin · 간격 0', 'system-admin', { 'space.unit': '0px' }] as const])('%s — Grid 의 열 · 행 사이 · Flex 의 자식 사이 · 줄 사이에 선이 서고, 줌 · 칸 스크롤 · 뷰포트 폭 · 남의 편집 뒤에도 이웃 자식 사이 간격의 가운데와 1px 안이다', async (name, theme, tokens) => {
-    const { P } = await fixture(`lines-${theme}-${Object.keys(tokens).length}`, theme, LINE_NODES, tokens)
-    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
-    try {
-      await page.goto(P)
-      await canvasFrame(page).locator('[data-wb-id="n_fone"]').waitFor()
-      await page.getByRole('button', { name: '배치 선', exact: true }).click()
-      const at1 = await lines(page)
-      await zoomTo(page, -2)
-      const at05 = await lines(page)
-      await zoomTo(page, 4)
-      const at15 = await lines(page)
-      await page.evaluate(() => {
-        ;(document.querySelector('main.wb-shell-canvas') as HTMLElement).scrollTop = 400
-      })
-      const scrolledBy = await page.evaluate(() => (document.querySelector('main.wb-shell-canvas') as HTMLElement).scrollTop)
-      const scrolled = await lines(page)
-      await zoomTo(page, -2)
-      await page.getByLabel('뷰포트 폭').selectOption('375')
-      const narrow = await lines(page)
-      await page.getByLabel('뷰포트 폭').selectOption('1440')
-      await lines(page)
-      const removed = await stack.request(alice, 'PATCH', `${P}/ops`, {
-        baseSeq: (await stack.request(alice, 'GET', P)).body.headSeq as number,
-        ops: [{ op: 'remove', path: '/root/children/3/children/2' }],
-      })
-      expect(removed.status).toBeLessThan(300)
-      const remote = await lines(page, { n_frow: { x: 1, y: 0 } })
-      const judged = { 1: judge(at1), 0.5: judge(at05), 1.5: judge(at15), scrolled: judge(scrolled), 375: judge(narrow), remote: judge(remote, { n_frow: { x: 1, y: 0 } }) }
-      // eslint-disable-next-line no-console
-      console.log(
-        `[안쪽 선] ${name}: 줄바꿈 줄 1440=${at1['n_fwrap']?.rows} 375=${narrow['n_fwrap']?.rows} · 칸 사이 간격(가장 좁은 · px) ${JSON.stringify(
-          Object.fromEntries(Object.entries(at1).map(([id, v]) => [id, v.gap])),
-        )} · 차 최대 ${Object.entries(judged).map(([name, j]) => `${name}=${j.worst}`).join(' ')} · 수(세로/가로) ${JSON.stringify(
-          Object.fromEntries(Object.entries(at1).map(([id, v]) => [id, `${v.x.length}/${v.y.length}`])),
-        )}`,
-      )
-      const wrap = at1['n_fwrap']
-      expect({
-        wrapped: wrap !== undefined && wrap.rows >= 2 && wrap.rows < wrap.children,
-        scrolled: scrolledBy > 0,
-        counts: Object.values(judged).map((j) => j.counts),
-        offs: Object.values(judged).map((j) => j.worst <= 1),
-      }).toEqual({
-        wrapped: true,
-        scrolled: true,
-        counts: Object.values(judged).map(() => allOk),
-        offs: Object.values(judged).map(() => true),
-      })
-    } finally {
-      await context.close()
-    }
-  })
+  it.each([
+    ...THEMES.map((theme) => [theme, theme, {}] as const),
+    ['system-admin · 간격 0', 'system-admin', { 'space.unit': '0px' }] as const,
+  ])(
+    '%s — Grid 의 열 · 행 사이 · Flex 의 자식 사이 · 줄 사이에 선이 서고, 줌 · 칸 스크롤 · 뷰포트 폭 · 남의 편집 뒤에도 이웃 자식 사이 간격의 가운데와 1px 안이다',
+    async (name, theme, tokens) => {
+      const { P } = await fixture(`lines-${theme}-${Object.keys(tokens).length}`, theme, LINE_NODES, tokens)
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+      try {
+        await page.goto(P)
+        await canvasFrame(page).locator('[data-wb-id="n_fone"]').waitFor()
+        await page.getByRole('button', { name: '배치 선', exact: true }).click()
+        const at1 = await lines(page)
+        await zoomTo(page, -2)
+        const at05 = await lines(page)
+        await zoomTo(page, 4)
+        const at15 = await lines(page)
+        await page.evaluate(() => {
+          ;(document.querySelector('main.wb-shell-canvas') as HTMLElement).scrollTop = 400
+        })
+        const scrolledBy = await page.evaluate(() => (document.querySelector('main.wb-shell-canvas') as HTMLElement).scrollTop)
+        const scrolled = await lines(page)
+        await zoomTo(page, -2)
+        await page.getByLabel('뷰포트 폭').selectOption('375')
+        const narrow = await lines(page)
+        await page.getByLabel('뷰포트 폭').selectOption('1440')
+        await lines(page)
+        const removed = await stack.request(alice, 'PATCH', `${P}/ops`, {
+          baseSeq: (await stack.request(alice, 'GET', P)).body.headSeq as number,
+          ops: [{ op: 'remove', path: '/root/children/3/children/2' }],
+        })
+        expect(removed.status).toBeLessThan(300)
+        const remote = await lines(page, { n_frow: { x: 1, y: 0 } })
+        const judged = {
+          1: judge(at1),
+          0.5: judge(at05),
+          1.5: judge(at15),
+          scrolled: judge(scrolled),
+          375: judge(narrow),
+          remote: judge(remote, { n_frow: { x: 1, y: 0 } }),
+        }
+        // eslint-disable-next-line no-console
+        console.log(
+          `[안쪽 선] ${name}: 줄바꿈 줄 1440=${at1['n_fwrap']?.rows} 375=${narrow['n_fwrap']?.rows} · 칸 사이 간격(가장 좁은 · px) ${JSON.stringify(
+            Object.fromEntries(Object.entries(at1).map(([id, v]) => [id, v.gap])),
+          )} · 차 최대 ${Object.entries(judged)
+            .map(([name, j]) => `${name}=${j.worst}`)
+            .join(' ')} · 수(세로/가로) ${JSON.stringify(
+            Object.fromEntries(Object.entries(at1).map(([id, v]) => [id, `${v.x.length}/${v.y.length}`])),
+          )}`,
+        )
+        const wrap = at1['n_fwrap']
+        expect({
+          wrapped: wrap !== undefined && wrap.rows >= 2 && wrap.rows < wrap.children,
+          scrolled: scrolledBy > 0,
+          counts: Object.values(judged).map((j) => j.counts),
+          offs: Object.values(judged).map((j) => j.worst <= 1),
+        }).toEqual({
+          wrapped: true,
+          scrolled: true,
+          counts: Object.values(judged).map(() => allOk),
+          offs: Object.values(judged).map(() => true),
+        })
+      } finally {
+        await context.close()
+      }
+    },
+  )
 
   /**
    * **다시 잼 비용** — 자식 50 · 100 · 200 · 400 의 Grid(10열)에서 노드 하나의 판정(`guideOf` — 모서리 글 · 안쪽 선) 한 번의 시간(서른 번 묶음 다섯의 중앙값)과,
@@ -436,7 +497,12 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
    */
   it('자식 수백의 Grid — 선 수가 맞고, 다시 잼 한 번의 시간을 적는다', async () => {
     const SIZES = [50, 100, 200, 400]
-    const grid = (size: number) => ({ id: `n_big${size}`, type: 'Grid', props: { columns: 10 }, children: texts(`big${size}_`, size, (index) => `칸 ${index}`) })
+    const grid = (size: number) => ({
+      id: `n_big${size}`,
+      type: 'Grid',
+      props: { columns: 10 },
+      children: texts(`big${size}_`, size, (index) => `칸 ${index}`),
+    })
     const { P } = await fixture('lines-cost', 'system-admin', SIZES.map(grid))
     const { P: P200 } = await fixture('lines-cost-200', 'system-admin', [grid(200)])
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
@@ -446,10 +512,16 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
       await page.getByRole('button', { name: '배치 선', exact: true }).click()
       const counted = await poll(
         '200 판의 선',
-        () => page.evaluate(() => {
-          const guide = document.querySelector('[data-wb-guide-for="n_big200"]')
-          return guide === null ? null : { x: guide.querySelectorAll('[data-wb-guide-line="x"]').length, y: guide.querySelectorAll('[data-wb-guide-line="y"]').length }
-        }),
+        () =>
+          page.evaluate(() => {
+            const guide = document.querySelector('[data-wb-guide-for="n_big200"]')
+            return guide === null
+              ? null
+              : {
+                  x: guide.querySelectorAll('[data-wb-guide-line="x"]').length,
+                  y: guide.querySelectorAll('[data-wb-guide-line="y"]').length,
+                }
+          }),
         (value) => value !== null && value.x === 9 && value.y === 19,
         5_000,
       ).catch(() => null)
@@ -487,7 +559,9 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
           const runs: number[] = []
           for (let i = 0; i < 10; i += 1) {
             const name = i % 2 === 0 ? '확대' : '축소'
-            const button = [...document.querySelectorAll('[role="group"][aria-label="줌"] button')].find((el) => el.getAttribute('aria-label') === name || el.textContent === name) as HTMLElement
+            const button = [...document.querySelectorAll('[role="group"][aria-label="줌"] button')].find(
+              (el) => el.getAttribute('aria-label') === name || el.textContent === name,
+            ) as HTMLElement
             const started = performance.now()
             button.click()
             await new Promise((resolve) => setTimeout(resolve, 0))
@@ -500,7 +574,9 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
       await page.getByRole('button', { name: '배치 선', exact: true }).click()
       const off = await frame()
       // eslint-disable-next-line no-console
-      console.log(`[다시 잼] 판정 하나(중앙값 ms · 자식 수별) ${judged === null ? '운영 번들 — 건너뜀' : JSON.stringify(judged)} · 줌 한 단계 → 렌더 · 다시 잼 끝(자식 200 · 중앙값 ms) 켬 ${on} · 끔 ${off}`)
+      console.log(
+        `[다시 잼] 판정 하나(중앙값 ms · 자식 수별) ${judged === null ? '운영 번들 — 건너뜀' : JSON.stringify(judged)} · 줌 한 단계 → 렌더 · 다시 잼 끝(자식 200 · 중앙값 ms) 켬 ${on} · 끔 ${off}`,
+      )
       expect({ counted, judged: judged === null || Object.values(judged).every((ms) => ms >= 0), frames: on > 0 && off > 0 }).toEqual({
         counted: { x: 9, y: 19 },
         judged: true,
@@ -517,7 +593,8 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
    * 값이 바뀌면 이 케이스가 알린다.
    */
   it('기록 — 칸 걸침은 열 사이 선을 지우고 세로 Flex 줄바꿈은 높이가 정해진 판에서만 선다', async () => {
-    const six = (prefix: string) => Array.from({ length: 6 }, (_, index) => ({ id: `${prefix}${index}`, type: 'Text', props: { content: `칸 ${index}` } }))
+    const six = (prefix: string) =>
+      Array.from({ length: 6 }, (_, index) => ({ id: `${prefix}${index}`, type: 'Text', props: { content: `칸 ${index}` } }))
     const { P } = await fixture('lines-limits', 'system-admin', [
       { id: 'n_gridplain', type: 'Grid', props: { columns: 3 }, children: six('p') },
       { id: 'n_gridspan', type: 'Grid', props: { columns: 3 }, children: six('s') },
@@ -525,7 +602,8 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
       ...texts('limitsfill_', 12, (index) => `채움 ${index}`),
     ])
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
-    const read = () => page.evaluate(`(() => {
+    const read = () =>
+      page.evaluate(`(() => {
       const out = {}
       for (const guide of document.querySelectorAll('[data-wb-guide-for]')) {
         out[guide.getAttribute('data-wb-guide-for')] = guide.querySelectorAll('[data-wb-guide-line="x"]').length + '/' + guide.querySelectorAll('[data-wb-guide-line="y"]').length
@@ -536,14 +614,24 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id="n_gridplain"]').waitFor()
       await page.getByRole('button', { name: '배치 선', exact: true }).click()
-      const before = await poll('선', () => read() as Promise<Record<string, string>>, (value) => value['n_vwrap'] !== undefined, 5_000)
+      const before = await poll(
+        '선',
+        () => read() as Promise<Record<string, string>>,
+        (value) => value['n_vwrap'] !== undefined,
+        5_000,
+      )
       const frame = (await (await page.$('iframe.wb-shell-canvas-iframe'))!.contentFrame())!
       await frame.evaluate(() => {
         const style = document.createElement('style')
         style.textContent = '[data-wb-id="s1"]{grid-column: span 2}[data-wb-id="n_vwrap"]{height:90px !important}'
         document.head.appendChild(style)
       })
-      const after = await poll('걸침 · 높이 뒤의 선', () => read() as Promise<Record<string, string>>, (value) => value['n_gridspan'] === '1/2' && value['n_vwrap'] === '5/0', 5_000).catch(() => read())
+      const after = await poll(
+        '걸침 · 높이 뒤의 선',
+        () => read() as Promise<Record<string, string>>,
+        (value) => value['n_gridspan'] === '1/2' && value['n_vwrap'] === '5/0',
+        5_000,
+      ).catch(() => read())
       expect({ before, after }).toEqual({
         before: { n_gridplain: '2/1', n_gridspan: '2/1', n_vwrap: '0/5' },
         after: { n_gridplain: '2/1', n_gridspan: '1/2', n_vwrap: '5/0' },

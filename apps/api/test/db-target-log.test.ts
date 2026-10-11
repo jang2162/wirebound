@@ -23,9 +23,7 @@ import { SRC_ROOT, stripComments } from './source-census'
 
 describe('describeDatabaseTarget — 사람이 가를 만큼만 낸다', () => {
   it('호스트·포트·DB 이름을 낸다', () => {
-    expect(describeDatabaseTarget('postgres://wirebound:wirebound@127.0.0.1:5433/wirebound')).toBe(
-      '127.0.0.1:5433/wirebound',
-    )
+    expect(describeDatabaseTarget('postgres://wirebound:wirebound@127.0.0.1:5433/wirebound')).toBe('127.0.0.1:5433/wirebound')
   })
 
   it('워크트리마다 다른 DB 이름이 그 자리에서 갈린다 — 이 값 하나로 터미널 둘을 가른다', () => {
@@ -217,7 +215,9 @@ describe('migrate 가 시작할 때 대상 DB 를 말한다', () => {
   })
 
   it('`config.databaseUrl` 을 받는 자가 둘뿐이다 — 붙는 자와 가려서 찍는 자', () => {
-    const receivers = [...migrate.matchAll(/(\w+)\s*\(\s*(?:direction\s*,\s*)?config\s*\.\s*databaseUrl\s*[,)]/g)].map((match) => match[1]).sort()
+    const receivers = [...migrate.matchAll(/(\w+)\s*\(\s*(?:direction\s*,\s*)?config\s*\.\s*databaseUrl\s*[,)]/g)]
+      .map((match) => match[1])
+      .sort()
     expect(receivers).toEqual(['createPool', 'migrationTargetLine'])
     expect(migrate).not.toMatch(/\$\{\s*config\s*\.\s*databaseUrl\s*\}/)
   })

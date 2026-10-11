@@ -82,7 +82,14 @@ export function PasswordSection(): ReactElement {
           void change()
         }}
       >
-        <PasswordField id={ids.current} label="지금 비밀번호" autoComplete="current-password" value={current} busy={busy} onChange={setCurrent}>
+        <PasswordField
+          id={ids.current}
+          label="지금 비밀번호"
+          autoComplete="current-password"
+          value={current}
+          busy={busy}
+          onChange={setCurrent}
+        >
           {outcome.kind === 'wrong' && (
             <p className="wb-shell-settings-field-alert" role="alert">
               {WRONG}

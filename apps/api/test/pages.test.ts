@@ -14,16 +14,7 @@ import {
 } from '@wirebound/schema'
 import { withTransaction } from '../src/db/tx'
 import { ensureCatalog } from '../src/schema-setup'
-import {
-  addMember,
-  createMenuNode,
-  createPage,
-  createProject,
-  signup,
-  withApi,
-  type SignedUpUser,
-  type TestContext,
-} from './helpers'
+import { addMember, createMenuNode, createPage, createProject, signup, withApi, type SignedUpUser, type TestContext } from './helpers'
 
 /** 존재하지 않는(그리고 문법적으로 유효한) uuid. `menu.test.ts`와 같은 관례. */
 const NONEXISTENT_UUID = '00000000-0000-0000-0000-000000000000'
@@ -60,13 +51,7 @@ function docWithText(content = '안녕') {
 }
 
 /** `PUT .../schema` 한 번. 아래 revision 테스트들이 공유한다. */
-function putSchema(
-  ctx: TestContext,
-  projectId: string,
-  pageId: string,
-  cookie: { wb_session: string },
-  schema: unknown,
-) {
+function putSchema(ctx: TestContext, projectId: string, pageId: string, cookie: { wb_session: string }, schema: unknown) {
   return ctx.app.inject({
     method: 'PUT',
     url: `/api/projects/${projectId}/pages/${pageId}/schema`,
@@ -977,11 +962,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       })
       expect(getRes.json().schema).toEqual(originalSchema)
 
-      const row = await ctx.db
-        .selectFrom('pages')
-        .select(['schema', 'schema_version'])
-        .where('id', '=', page.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('pages').select(['schema', 'schema_version']).where('id', '=', page.id).executeTakeFirstOrThrow()
       expect(row.schema).toEqual(originalSchema)
       expect(row.schema_version).toBe(page.schemaVersion)
     })
@@ -1158,11 +1139,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         // 저장된 문서(응답이 아니라 DB 원본)에 inverse를 적용해 원본으로 돌아오는지
         // 본다 — 이것이 undo가 실제로 기대는 성질이다. 응답을 쓰면 라우트가 응답에
         // 실은 문서와 DB에 쓴 문서가 갈라져도 초록이다.
-        const stored = await ctx.db
-          .selectFrom('pages')
-          .select('schema')
-          .where('id', '=', page.id)
-          .executeTakeFirstOrThrow()
+        const stored = await ctx.db.selectFrom('pages').select('schema').where('id', '=', page.id).executeTakeFirstOrThrow()
         expect(stored.schema).not.toEqual(before)
         expect(applyOps(stored.schema as PageDocument, inverse ?? [])).toEqual(before)
       })
@@ -1542,9 +1519,7 @@ describe('메뉴 연동', () => {
       // `0004-pages` 마이그레이션의 `menu_node_id ... ON DELETE RESTRICT`가
       // 애플리케이션 검사 없이도 실제로 막아 서는지 확인한다. `withTransaction`으로
       // 감싸 이 의도된 위반이 `withApi`의 바깥 트랜잭션을 오염시키지 않게 한다.
-      await expect(
-        withTransaction(ctx.db, (trx) => trx.deleteFrom('menu_nodes').where('id', '=', menu.id).execute()),
-      ).rejects.toThrow()
+      await expect(withTransaction(ctx.db, (trx) => trx.deleteFrom('menu_nodes').where('id', '=', menu.id).execute())).rejects.toThrow()
 
       // 세이브포인트가 없다면 여기서부터 25P02로 실패한다 — 통과 자체가 증거다.
       const row = await ctx.db.selectFrom('menu_nodes').select('id').where('id', '=', menu.id).executeTakeFirst()

@@ -10,15 +10,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { COMMENT_BODY_MAX_LENGTH, COMMENT_BODY_MIN_LENGTH, type PageDocument } from '@wirebound/schema'
-import {
-  addMember,
-  createMenuNode,
-  createPage,
-  createProject,
-  signup,
-  withApi,
-  type TestContext,
-} from './helpers'
+import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
 /** 노드 셋을 가진 문서. 번호가 여럿 붙는 케이스가 필요로 한다. */
 function docWithThree(): PageDocument {
@@ -96,13 +88,7 @@ function markerOf(document: PageDocument, nodeId: string): number | undefined | 
   return found === undefined ? '없는 노드' : found.marker
 }
 
-async function postComment(
-  ctx: TestContext,
-  fx: Fixture,
-  nodeId: string,
-  body = '검색 조건은 AND 결합',
-  cookie = fx.cookie,
-) {
+async function postComment(ctx: TestContext, fx: Fixture, nodeId: string, body = '검색 조건은 AND 결합', cookie = fx.cookie) {
   return ctx.app.inject({ method: 'POST', url: commentsUrl(fx), cookies: cookie, payload: { nodeId, body } })
 }
 
@@ -826,9 +812,7 @@ describe('POST .../comments/renumber — 문서 순서대로', () => {
 
       expect(res.statusCode, res.body).toBe(200)
       // **한 patch다** — 노드 둘이 하나의 ops 배열에 담긴다.
-      expect(res.json().markerOps).toEqual([
-        { op: 'replace', path: '/root/children/0/marker', value: 1 },
-      ])
+      expect(res.json().markerOps).toEqual([{ op: 'replace', path: '/root/children/0/marker', value: 1 }])
       expect(res.json().seq).toBe(planted.json().seq + 1)
 
       const document = await readDoc(ctx, fx)

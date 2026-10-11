@@ -474,11 +474,7 @@ describe('DELETE /api/projects/:projectId/members/:userId', () => {
       })
       expect(res.statusCode).toBe(204)
 
-      const remaining = await ctx.db
-        .selectFrom('project_members')
-        .selectAll()
-        .where('project_id', '=', project.id)
-        .execute()
+      const remaining = await ctx.db.selectFrom('project_members').selectAll().where('project_id', '=', project.id).execute()
       expect(remaining).toHaveLength(1)
       expect(remaining[0]?.user_id).toBe(ownerB.user.id)
     })
@@ -588,11 +584,7 @@ describe('owner 불변식', () => {
       expect(res.statusCode).toBe(409)
 
       // 세이브포인트가 없다면 이 조회 자체가 25P02로 실패한다 — 통과 자체가 증거다.
-      const members = await ctx.db
-        .selectFrom('project_members')
-        .selectAll()
-        .where('project_id', '=', project.id)
-        .execute()
+      const members = await ctx.db.selectFrom('project_members').selectAll().where('project_id', '=', project.id).execute()
       expect(members).toHaveLength(1)
       expect(members[0]?.role).toBe('owner')
       expect(members[0]?.user_id).toBe(owner.user.id)

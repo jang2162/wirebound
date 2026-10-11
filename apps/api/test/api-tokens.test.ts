@@ -7,15 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { hashTokenValue } from '../src/auth/token-hash'
-import {
-  addMember,
-  createMenuNode,
-  createPage,
-  createProject,
-  signup,
-  withApi,
-  type TestContext,
-} from './helpers'
+import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
 /** 토큰을 발급받아 `Authorization` 헤더 한 벌로 만든다. */
 async function issueToken(
@@ -102,9 +94,7 @@ describe('토큰 발급 — 발급은 멤버 누구나', () => {
       })
 
       expect(res.statusCode).toBe(200)
-      expect(res.json()).toEqual([
-        { id: token.id, name: '이름 있는 토큰', createdAt: expect.any(String), lastUsedAt: null },
-      ])
+      expect(res.json()).toEqual([{ id: token.id, name: '이름 있는 토큰', createdAt: expect.any(String), lastUsedAt: null }])
       expect(res.body).not.toContain(token.value)
     })
   })
@@ -419,7 +409,12 @@ describe('토큰은 역할을 얼리지 않는다', () => {
       expect(removed.statusCode).toBe(204)
       // 자격이 없다 — 403(역할)도 404(멤버십)도 아니다.
       expect((await read(token.header)).statusCode).toBe(401)
-      const rows = await ctx.db.selectFrom('api_tokens').select('id').where('project_id', '=', project.id).where('user_id', '=', editor.user.id).execute()
+      const rows = await ctx.db
+        .selectFrom('api_tokens')
+        .select('id')
+        .where('project_id', '=', project.id)
+        .where('user_id', '=', editor.user.id)
+        .execute()
       expect(rows).toEqual([])
 
       await addMember(ctx, project.id, editor.user.id, 'editor')

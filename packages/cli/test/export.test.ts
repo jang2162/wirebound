@@ -8,12 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { strToU8, zipSync } from 'fflate'
 import { EXIT } from '../src/exit'
-import {
-  EXPORT_BUSY_RETRIES,
-  EXPORT_BUSY_WAIT_LIMIT_S,
-  SCREENLESS_HEADER,
-  SCREEN_FAILURES_HEADER,
-} from '../src/commands/export'
+import { EXPORT_BUSY_RETRIES, EXPORT_BUSY_WAIT_LIMIT_S, SCREENLESS_HEADER, SCREEN_FAILURES_HEADER } from '../src/commands/export'
 import { run } from '../src/run'
 import { createFakeIo, stub, type FakeIo, type StubResponse } from './fake-io'
 import { BUNDLE_FILES, BUNDLE_ROOT, bundleZip, singleFileZip } from './bundle-fixture'
@@ -76,11 +71,7 @@ describe('서버가 만든 zip을 받아 푼다', () => {
     const io = 준비()
     await run(['export', '-o', 'dist'], io)
 
-    expect(쓴것(io)).toEqual([
-      '/repo/dist/assets/theme.css',
-      '/repo/dist/index.html',
-      '/repo/dist/pages/관리자-회원-목록.html',
-    ])
+    expect(쓴것(io)).toEqual(['/repo/dist/assets/theme.css', '/repo/dist/index.html', '/repo/dist/pages/관리자-회원-목록.html'])
     expect(io.fs.has(`/repo/dist/${BUNDLE_ROOT}/index.html`)).toBe(false)
   })
 
@@ -113,11 +104,7 @@ describe('서버가 만든 zip을 받아 푼다', () => {
     const io = 준비(bundleZip({}, null))
     await run(['export', '-o', 'dist'], io)
 
-    expect(쓴것(io)).toEqual([
-      '/repo/dist/assets/theme.css',
-      '/repo/dist/index.html',
-      '/repo/dist/pages/관리자-회원-목록.html',
-    ])
+    expect(쓴것(io)).toEqual(['/repo/dist/assets/theme.css', '/repo/dist/index.html', '/repo/dist/pages/관리자-회원-목록.html'])
   })
 
   it('상대 경로는 현재 디렉터리 기준이다', async () => {
@@ -328,8 +315,7 @@ function pptx준비(options: { fileName?: string | null; files?: Record<string, 
   stub(io, 'GET', `/api/projects/${PROJECT}/export?format=pptx`, {
     status: 200,
     bytes: PPTX_BYTES,
-    headers:
-      fileName === null ? {} : { 'content-disposition': `attachment; filename="${fileName}"` },
+    headers: fileName === null ? {} : { 'content-disposition': `attachment; filename="${fileName}"` },
   })
   return io
 }
@@ -337,9 +323,7 @@ function pptx준비(options: { fileName?: string | null; files?: Record<string, 
 describe('--format pptx 는 파일 하나다', () => {
   it('형식을 그대로 실어 부른다', async () => {
     const io = pptx준비()
-    expect(await run(['export', '--format', 'pptx', '-o', 'dist'], io), io.stderr.join('\n')).toBe(
-      EXIT.ok,
-    )
+    expect(await run(['export', '--format', 'pptx', '-o', 'dist'], io), io.stderr.join('\n')).toBe(EXIT.ok)
     expect(io.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       `GET ${SERVER}/api/projects/${PROJECT}/export?format=pptx`,
     ])
@@ -449,7 +433,10 @@ describe('밀려 있으면 Retry-After 를 따라 다시 보낸다', () => {
 
   it(`${EXPORT_BUSY_WAIT_LIMIT_S}초보다 긴 Retry-After 는 따르지 않는다 · 503 이 아닌 거절도 다시 보내지 않는다`, async () => {
     const long = 준비()
-    stub(long, 'GET', `/api/projects/${PROJECT}/export?format=html`, { ...BUSY, headers: { 'retry-after': String(EXPORT_BUSY_WAIT_LIMIT_S + 1) } })
+    stub(long, 'GET', `/api/projects/${PROJECT}/export?format=html`, {
+      ...BUSY,
+      headers: { 'retry-after': String(EXPORT_BUSY_WAIT_LIMIT_S + 1) },
+    })
     expect(await run(['export', '-o', 'dist'], long)).toBe(EXIT.server)
     expect(long.requests).toHaveLength(1)
 

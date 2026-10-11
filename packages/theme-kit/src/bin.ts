@@ -47,7 +47,8 @@ async function main(argv: string[]): Promise<number> {
       options: { entry: { type: 'string' }, out: { type: 'string' }, widths: { type: 'string' }, browser: { type: 'string' } },
     })
     const widths = values.widths?.split(',').map((w) => Number(w.trim()))
-    if (widths !== undefined && widths.some((w) => !Number.isInteger(w) || w <= 0)) throw new Error(`--widths 는 쉼표로 가른 양의 정수입니다: ${values.widths}`)
+    if (widths !== undefined && widths.some((w) => !Number.isInteger(w) || w <= 0))
+      throw new Error(`--widths 는 쉼표로 가른 양의 정수입니다: ${values.widths}`)
     const outDir = values.out ?? 'shots'
     const report = await takeShots({ root: process.cwd(), entry: values.entry, outDir, widths, browserPath: values.browser })
     for (const w of report.widths) for (const png of w.pngs) console.log(`✓ ${join(outDir, png)}`)
@@ -58,7 +59,11 @@ async function main(argv: string[]): Promise<number> {
   }
   if (command === 'dev') {
     const { values } = parseArgs({ args: rest, options: { entry: { type: 'string' }, port: { type: 'string' } } })
-    const server = await startDev({ root: process.cwd(), entry: values.entry, port: values.port === undefined ? undefined : Number(values.port) })
+    const server = await startDev({
+      root: process.cwd(),
+      entry: values.entry,
+      port: values.port === undefined ? undefined : Number(values.port),
+    })
     console.log(`갤러리: ${server.url}`)
     // 서버가 떠 있는 동안 돌아오지 않는다 — Ctrl-C 로 끝낸다.
     return new Promise<number>((done) => {

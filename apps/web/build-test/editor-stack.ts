@@ -107,9 +107,7 @@ function withDatabase(url: string, database: string): string {
   return parsed.toString()
 }
 
-export type Prerequisite =
-  | { ok: true; executablePath: string | undefined; databaseUrl: string }
-  | { ok: false; reason: string }
+export type Prerequisite = { ok: true; executablePath: string | undefined; databaseUrl: string } | { ok: false; reason: string }
 
 /**
  * **건너뛸 전제를 실물로 정한다** — 경로가 있는지가 아니라 브라우저를 띄워 보고 DB 에 붙어 본다. 경로로 정하면 문서대로 세운
@@ -130,7 +128,9 @@ export async function editorStackPrerequisite(): Promise<Prerequisite> {
   if (executablePath === null) {
     return {
       ok: false,
-      reason: `브라우저를 띄우지 못했다 — ${chromeCandidates().map((path) => path ?? 'playwright-core 캐시').join(' · ')}(README 「넣는 법」 절)`,
+      reason: `브라우저를 띄우지 못했다 — ${chromeCandidates()
+        .map((path) => path ?? 'playwright-core 캐시')
+        .join(' · ')}(README 「넣는 법」 절)`,
     }
   }
   const databaseUrl = baseDatabaseUrl()
@@ -244,7 +244,10 @@ export interface EditorStack {
   /** api 에 직접 보낸다(`/api` 뒤의 경로). */
   request(session: Session, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }>
   /** 새 브라우저 컨텍스트에 `user` 로 로그인하고 탭 하나를 연다. `origin` 을 주면 그 주소(지연 프록시)로 연다. */
-  openTab(user: StackUser, options?: { viewport?: { width: number; height: number }; origin?: string }): Promise<{ context: BrowserContext; page: Page }>
+  openTab(
+    user: StackUser,
+    options?: { viewport?: { width: number; height: number }; origin?: string },
+  ): Promise<{ context: BrowserContext; page: Page }>
   /** 이 판의 DB 에 질의한다(따로 붙은 연결). */
   query<Row extends Record<string, unknown> = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<Row[]>
   /** 행 하나를 `FOR UPDATE` 로 쥔다 — 그 행을 쓰는 요청이 서버에서 줄 선다. */
@@ -431,7 +434,9 @@ export async function sweepStaleBrowserDatabases(
 ): Promise<{ dropped: string[]; kept: string[] }> {
   const now = options.now ?? Date.now()
   const alive = options.alive ?? pidAlive
-  const names = (await admin.query<{ datname: string }>("select datname from pg_database where datname like 'wb\\_browser\\_%' order by datname")).rows
+  const names = (
+    await admin.query<{ datname: string }>("select datname from pg_database where datname like 'wb\\_browser\\_%' order by datname")
+  ).rows
   const dropped: string[] = []
   const kept: string[] = []
   for (const { datname } of names) {
@@ -589,14 +594,19 @@ export async function startEditorStack(
     if (web.child.pid !== undefined) groups.push(web.child.pid)
     await waitUntil('웹 기동', web, async () => (await fetch(`${webUrl}/`)).ok, 60_000)
     // 프록시가 이 api 로 가는지 — 옆 워크트리의 api 에 붙으면 로그인이 401 로 갈린다(`config/api-proxy-target.ts`).
-    await waitUntil('웹 → api 프록시', web, async () => {
-      const response = await fetch(`${webUrl}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: users.alice.email, password: users.alice.password }),
-      })
-      return response.ok && cookieFrom(response).startsWith(`wb_browser_${apiPort}=`)
-    }, 30_000)
+    await waitUntil(
+      '웹 → api 프록시',
+      web,
+      async () => {
+        const response = await fetch(`${webUrl}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email: users.alice.email, password: users.alice.password }),
+        })
+        return response.ok && cookieFrom(response).startsWith(`wb_browser_${apiPort}=`)
+      },
+      30_000,
+    )
 
     db = new pg.Client({ connectionString: databaseUrl })
     await db.connect()
@@ -666,7 +676,12 @@ export async function startEditorStack(
         closers.push(release)
         return {
           async waitForWaiters(count = 1, timeoutMs = 10_000) {
-            await waitUntil(`행 ${id} 에 줄 선 요청 ${count}`, undefined, async () => (await chainedWaiters(stackDb, pid)) >= count, timeoutMs)
+            await waitUntil(
+              `행 ${id} 에 줄 선 요청 ${count}`,
+              undefined,
+              async () => (await chainedWaiters(stackDb, pid)) >= count,
+              timeoutMs,
+            )
           },
           release,
         }
@@ -910,7 +925,7 @@ async function chainedWaiters(db: pg.Client, rootPid: number): Promise<number> {
     )
   ).rows
   const chain = new Set([rootPid])
-  for (let grew = true; grew; ) {
+  for (let grew = true; grew;) {
     grew = false
     for (const row of rows) {
       if (!chain.has(row.pid) && row.blockers.some((blocker) => chain.has(blocker))) {

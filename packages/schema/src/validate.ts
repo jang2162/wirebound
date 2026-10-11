@@ -140,12 +140,7 @@ export interface ValidationIssue {
  * 이슈 하나를 만든다. **severity를 여기서 표에서 파생시킨다** — 호출자가 직접 고르면
  * 같은 코드가 자리마다 다른 severity를 달 수 있고, 그러면 표가 진실이 아니게 된다.
  */
-function makeIssue(
-  code: ValidationCode,
-  nodeId: string | null,
-  path: string,
-  message: string,
-): ValidationIssue {
+function makeIssue(code: ValidationCode, nodeId: string | null, path: string, message: string): ValidationIssue {
   return { code, severity: ISSUE_SEVERITY[code], nodeId, path, message }
 }
 
@@ -207,10 +202,7 @@ export function partitionIssues<T extends { severity: IssueSeverity }>(
  * 문장이 말해야 하는 것 둘: **적은 값이 버려진다**는 것과 **무엇이 대신 쓰이는가**.
  */
 export function ignoredVariantMessage(def: ComponentDef, variant: string): string {
-  return (
-    `${def.type}의 variant는 무시됩니다: ${variant} ` +
-    `(${def.type}은 ${def.variantFrom} prop에서 변형을 파생합니다)`
-  )
+  return `${def.type}의 variant는 무시됩니다: ${variant} ` + `(${def.type}은 ${def.variantFrom} prop에서 변형을 파생합니다)`
 }
 
 export function validatePage(doc: PageDocument): ValidationIssue[] {
@@ -244,7 +236,15 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
  */
 export function checkViewStateRemoval(before: { viewStates?: unknown }, after: PageDocument): ValidationIssue[] {
   const listed = (doc: { viewStates?: unknown }) =>
-    new Set(Array.isArray(doc.viewStates) ? doc.viewStates.flatMap((entry: unknown) => (entry !== null && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string' ? [(entry as { id: string }).id] : [])) : [])
+    new Set(
+      Array.isArray(doc.viewStates)
+        ? doc.viewStates.flatMap((entry: unknown) =>
+            entry !== null && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string'
+              ? [(entry as { id: string }).id]
+              : [],
+          )
+        : [],
+    )
   const now = listed(after)
   const removed = [...listed(before)].filter((id) => !now.has(id))
   if (removed.length === 0) return []
@@ -254,7 +254,12 @@ export function checkViewStateRemoval(before: { viewStates?: unknown }, after: P
     const state = node.type === 'StateCase' ? node.props?.state : undefined
     if (typeof state !== 'string' || !gone.has(state)) continue
     issues.push(
-      makeIssue('state-cases-left', node.id, path, `목록에서 뺀 상태를 가리키는 가지가 남아 있습니다: ${state} — 상태 삭제는 그 가지를 함께 지웁니다`),
+      makeIssue(
+        'state-cases-left',
+        node.id,
+        path,
+        `목록에서 뺀 상태를 가리키는 가지가 남아 있습니다: ${state} — 상태 삭제는 그 가지를 함께 지웁니다`,
+      ),
     )
   }
   return issues
@@ -267,9 +272,7 @@ export function validateLayout(doc: LayoutDocument): ValidationIssue[] {
   const issues = validateTree(doc.root)
   const slots = countSlots(doc.root)
   if (slots !== 1) {
-    issues.push(
-      makeIssue('slot-count', null, '/root', `레이아웃에는 Slot이 정확히 하나여야 합니다 (${slots}개 발견)`),
-    )
+    issues.push(makeIssue('slot-count', null, '/root', `레이아웃에는 Slot이 정확히 하나여야 합니다 (${slots}개 발견)`))
   }
   return issues
 }
@@ -418,9 +421,7 @@ function validateTree(root: WbNode): ValidationIssue[] {
      * 무엇이든 무시하므로 그 사실을 경고로 말한다.
      */
     if (node.variant !== undefined && def.variantFrom !== undefined) {
-      issues.push(
-        makeIssue('ignored-variant', node.id, `${path}/variant`, ignoredVariantMessage(def, node.variant)),
-      )
+      issues.push(makeIssue('ignored-variant', node.id, `${path}/variant`, ignoredVariantMessage(def, node.variant)))
     }
   }
 
@@ -469,11 +470,7 @@ function validateTree(root: WbNode): ValidationIssue[] {
  * 빈 페이지 타겟이 저장 경로에서 경고가 되기 시작한다. 런타임만 그것을 본다(그쪽은
  * *"눌렀는데 아무 일도 안 일어난다"*를 막아야 한다).
  */
-function checkInteractions(
-  node: WbNode,
-  path: string,
-  seen: ReadonlyMap<string, WbNode>,
-): ValidationIssue[] {
+function checkInteractions(node: WbNode, path: string, seen: ReadonlyMap<string, WbNode>): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   const interactions = node.interactions ?? []
 
@@ -485,14 +482,7 @@ function checkInteractions(
       const problem = checkNodeAction(seen, action)
       if (problem === null) continue
 
-      issues.push(
-        makeIssue(
-          problem.code,
-          node.id,
-          `${path}/interactions/${index}/actions/${actionIndex}`,
-          problem.message,
-        ),
-      )
+      issues.push(makeIssue(problem.code, node.id, `${path}/interactions/${index}/actions/${actionIndex}`, problem.message))
     }
   }
 

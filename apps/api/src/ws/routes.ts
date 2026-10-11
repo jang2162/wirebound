@@ -226,45 +226,46 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
               if (current()) releaseLocksOf(app, connection)
               return
           }
-        })().catch((error: unknown) => {
-          app.log.error({ err: error, projectId }, 'WS 프레임 처리 실패')
-          // **낸 사람에게 답한다.** 예상 밖 예외에 아무것도 안 내면 그 편집의 응답이 영영 안
-          // 오고, 클라이언트의 in-flight가 매달려 **다음 편집도 안 나간다**(펌프의 가드가 계속
-          // 서 있다 — `apps/web`의 `edit-channel.ts` 머리말이 그 부류를 적었다). REST 경로는
-          // 같은 예외에 500 봉투가 나가 복구가 돈다 — **두 진입점의 결말을 맞춘다.** DB 가 답하지 않았으면(COMMIT 답을 잃었을 수
-          // 있다) REST 와 같은 503 «모름»이다(`http/error-handler.ts`의 `dbUnreachableFailure`) — 500 은 «커밋 전»이라는 약속이다.
-          //
-          // **`lock`도 답한다** — 서버는 아무것도 안 쥐었는데 답이 없으면 화면은 쥔 줄 안다. 거절과 같은 답을 낸다(`ws/lock.ts`의
-          // 표 «DB 오류로 끝내지 못했다»). **이 프레임이 아직 마지막일 때만** — 뒤 프레임이 있으면 그것이 자기 답을 한다.
-          // `unlock`·`ping`은 답하지 않는다: `unlock`은 답 대신 놓고(아래), `pong`이 없으면 화면이 연결을 닫는다(닫힘이 놓는다).
-          //
-          // **끝내지 못한 `unlock`은 놓는다**(이 프레임이 아직 마지막일 때만) — 놓기는 자격이 필요 없는 일이다(연결 종료도 자격 없이
-          // 놓는다). 안 놓으면 화면이 놓은 자리의 배지가 TTL 까지 남아 남이 그 자리를 못 잡는다.
-          if (frame.type === 'unlock') {
-            if (current()) releaseLocksOf(app, connection)
-            return
-          }
-          if (frame.type !== 'patch' && frame.type !== 'lock') return
-          try {
-            if (frame.type === 'patch') {
-              push(patchErrorFrame(projectId, frame, error instanceof DbConnectionLostError ? dbUnreachableFailure(false) : internal()))
-            }
-            else if (current()) denyLock(app, connection, frame)
-          } catch (pushError: unknown) {
-            // 소켓이 이미 죽었으면 보낼 수 없다. 여기서 던지면 unhandled가 된다.
+        })()
+          .catch((error: unknown) => {
+            app.log.error({ err: error, projectId }, 'WS 프레임 처리 실패')
+            // **낸 사람에게 답한다.** 예상 밖 예외에 아무것도 안 내면 그 편집의 응답이 영영 안
+            // 오고, 클라이언트의 in-flight가 매달려 **다음 편집도 안 나간다**(펌프의 가드가 계속
+            // 서 있다 — `apps/web`의 `edit-channel.ts` 머리말이 그 부류를 적었다). REST 경로는
+            // 같은 예외에 500 봉투가 나가 복구가 돈다 — **두 진입점의 결말을 맞춘다.** DB 가 답하지 않았으면(COMMIT 답을 잃었을 수
+            // 있다) REST 와 같은 503 «모름»이다(`http/error-handler.ts`의 `dbUnreachableFailure`) — 500 은 «커밋 전»이라는 약속이다.
             //
-            // **이 안쪽 `catch`를 지워도 죽는 케이스가 없다.** 그것이 도는 판은 *"핸들러가
-            // 던졌고 **그 순간 소켓도 이미 죽어** `push`까지 던진다"*인데, 그 둘을 함께
-            // 만드는 케이스가 없다. `connection.ts`의 `stopped`·`ackEdit`의 접기 실패와 같은
-            // 부류다 — **지워도 되는 신호로 읽지 마라.** 지금 안 죽는 이유는 두 사건이 겹치는
-            // 판을 아무도 안 만들기 때문이지 겹칠 수 없어서가 아니다.
-            app.log.error({ err: pushError, projectId }, 'WS 실패 통지 실패')
-          }
-        }).finally(() => {
-          inflight -= 1
-          // 닫기로 한 연결의 마지막 답이 나갔다(`RoomConnection.closeWhenIdle`).
-          if (closeWhenIdle !== null && inflight === 0) socket.close(closeWhenIdle.code, closeWhenIdle.reason)
-        })
+            // **`lock`도 답한다** — 서버는 아무것도 안 쥐었는데 답이 없으면 화면은 쥔 줄 안다. 거절과 같은 답을 낸다(`ws/lock.ts`의
+            // 표 «DB 오류로 끝내지 못했다»). **이 프레임이 아직 마지막일 때만** — 뒤 프레임이 있으면 그것이 자기 답을 한다.
+            // `unlock`·`ping`은 답하지 않는다: `unlock`은 답 대신 놓고(아래), `pong`이 없으면 화면이 연결을 닫는다(닫힘이 놓는다).
+            //
+            // **끝내지 못한 `unlock`은 놓는다**(이 프레임이 아직 마지막일 때만) — 놓기는 자격이 필요 없는 일이다(연결 종료도 자격 없이
+            // 놓는다). 안 놓으면 화면이 놓은 자리의 배지가 TTL 까지 남아 남이 그 자리를 못 잡는다.
+            if (frame.type === 'unlock') {
+              if (current()) releaseLocksOf(app, connection)
+              return
+            }
+            if (frame.type !== 'patch' && frame.type !== 'lock') return
+            try {
+              if (frame.type === 'patch') {
+                push(patchErrorFrame(projectId, frame, error instanceof DbConnectionLostError ? dbUnreachableFailure(false) : internal()))
+              } else if (current()) denyLock(app, connection, frame)
+            } catch (pushError: unknown) {
+              // 소켓이 이미 죽었으면 보낼 수 없다. 여기서 던지면 unhandled가 된다.
+              //
+              // **이 안쪽 `catch`를 지워도 죽는 케이스가 없다.** 그것이 도는 판은 *"핸들러가
+              // 던졌고 **그 순간 소켓도 이미 죽어** `push`까지 던진다"*인데, 그 둘을 함께
+              // 만드는 케이스가 없다. `connection.ts`의 `stopped`·`ackEdit`의 접기 실패와 같은
+              // 부류다 — **지워도 되는 신호로 읽지 마라.** 지금 안 죽는 이유는 두 사건이 겹치는
+              // 판을 아무도 안 만들기 때문이지 겹칠 수 없어서가 아니다.
+              app.log.error({ err: pushError, projectId }, 'WS 실패 통지 실패')
+            }
+          })
+          .finally(() => {
+            inflight -= 1
+            // 닫기로 한 연결의 마지막 답이 나갔다(`RoomConnection.closeWhenIdle`).
+            if (closeWhenIdle !== null && inflight === 0) socket.close(closeWhenIdle.code, closeWhenIdle.reason)
+          })
       })
 
       socket.on('close', () => {

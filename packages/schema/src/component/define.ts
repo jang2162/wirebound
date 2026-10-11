@@ -2,14 +2,7 @@ import { z } from 'zod'
 import { COMPONENT_GROUPS, isComponentGroup, type ComponentGroup } from './group'
 
 /** 속성 패널이 자동 생성할 입력 컨트롤 종류 */
-export type EditorControl =
-  | 'text'
-  | 'textarea'
-  | 'number'
-  | 'switch'
-  | 'select'
-  | 'stringList'
-  | 'pairList'
+export type EditorControl = 'text' | 'textarea' | 'number' | 'switch' | 'select' | 'stringList' | 'pairList'
 
 export interface EditorField {
   prop: string
@@ -109,10 +102,7 @@ export function defineComponent(def: ComponentDef): ComponentDef {
   // 타입이 이미 막지만 `as`로 지나온 값·JSON에서 온 값은 여기서만 걸린다. 조용히 통과하면
   // 고르개가 그 컴포넌트를 **어느 그룹에도 못 넣어** 목록에서 통째로 사라진다.
   if (!isComponentGroup(def.group)) {
-    throw new Error(
-      `${type}: group이 갈래 목록에 없습니다: ${String(def.group)} ` +
-        `(${COMPONENT_GROUPS.join(' · ')})`,
-    )
+    throw new Error(`${type}: group이 갈래 목록에 없습니다: ${String(def.group)} ` + `(${COMPONENT_GROUPS.join(' · ')})`)
   }
 
   assertUnique(type, 'states', def.states)

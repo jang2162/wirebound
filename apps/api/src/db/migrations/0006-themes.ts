@@ -98,9 +98,7 @@ export const migration: Migration = {
       .addColumn('assets', 'json')
       .addColumn('created_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`now()`))
       .addColumn('updated_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`now()`))
-      .addUniqueConstraint('themes_project_slug_key', ['project_id', 'slug'], (builder) =>
-        builder.nullsNotDistinct(),
-      )
+      .addUniqueConstraint('themes_project_slug_key', ['project_id', 'slug'], (builder) => builder.nullsNotDistinct())
       .execute()
 
     // "이 프로젝트의 테마 목록"이 유일한 목록 조회다(`repos/themes.ts`의 `listThemes`).

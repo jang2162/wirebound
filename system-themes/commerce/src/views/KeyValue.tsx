@@ -14,11 +14,7 @@ export const KeyValueView = view((p) => {
   if (p.variant === 'table') return <TableKeyValue {...p} />
   const pairs = p.props.pairs as { key: string; value: string }[]
   return (
-    <Root
-      as="div"
-      data-wb-structure="cardGrid"
-      style={{ [nodeVar('keyvalue', 'columns')]: String(p.props.columns) } as CSSProperties}
-    >
+    <Root as="div" data-wb-structure="cardGrid" style={{ [nodeVar('keyvalue', 'columns')]: String(p.props.columns) } as CSSProperties}>
       {pairs.map((pair, index) => (
         <div key={`${pair.key}-${index}`} data-wb-part="row">
           <div data-wb-part="key">{pair.key}</div>

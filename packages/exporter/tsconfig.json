@@ -9,10 +9,5 @@
   },
   "include": ["src"],
   "exclude": ["src/browser"],
-  "references": [
-    { "path": "../schema" },
-    { "path": "../renderer" },
-    { "path": "../theme-sdk" },
-    { "path": "./tsconfig.runtime.json" }
-  ]
+  "references": [{ "path": "../schema" }, { "path": "../renderer" }, { "path": "../theme-sdk" }, { "path": "./tsconfig.runtime.json" }]
 }

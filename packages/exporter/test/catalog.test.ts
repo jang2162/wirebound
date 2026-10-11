@@ -28,13 +28,7 @@
  * 기대지 않고, vitest가 파일 단위로 모듈을 격리하므로 다른 파일에 새지 않는다.
  */
 import { NO_THEME, renderDocument } from '@wirebound/renderer'
-import {
-  installCatalog,
-  listComponents,
-  resetRegistry,
-  validatePage,
-  type PageDocument,
-} from '@wirebound/schema'
+import { installCatalog, listComponents, resetRegistry, validatePage, type PageDocument } from '@wirebound/schema'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { exportBundle } from '../src/bundle/index'
@@ -62,9 +56,7 @@ describe('설치 없이 부르면 무엇이 관찰되는가', () => {
   it('renderDocument를 맨손으로 부르면 노드마다 폴백이다', () => {
     empty()
     const errors: { nodeId: string; type: string; message: string }[] = []
-    const html = renderToStaticMarkup(
-      renderDocument(DOC, { theme: NO_THEME, onNodeError: (error) => errors.push(error) }),
-    )
+    const html = renderToStaticMarkup(renderDocument(DOC, { theme: NO_THEME, onNodeError: (error) => errors.push(error) }))
 
     expect(errors).toEqual([
       { nodeId: 'n_000000000002', type: 'List', message: '알 수 없는 컴포넌트 타입: List' },
@@ -150,11 +142,7 @@ describe('카탈로그가 없을 때 validatePage는 시끄럽다', () => {
    */
   it('설치 안 돼 있으면 노드마다 unknown-type을 낸다 — 조용하지 않다', () => {
     empty()
-    expect(codesOf()).toEqual([
-      'error unknown-type /root',
-      'error unknown-type /root/children/0',
-      'error unknown-type /root/children/1',
-    ])
+    expect(codesOf()).toEqual(['error unknown-type /root', 'error unknown-type /root/children/0', 'error unknown-type /root/children/1'])
   })
 
   /**

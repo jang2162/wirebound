@@ -332,12 +332,7 @@ function read<T>(held: Held, key: Slot<T>): T {
  * 마지막으로 연 페이지가 이 페이지면 비춰 둔 초안을 이어 받고, 아니면 빈 방문이다. 페이지를 안 연 자리
  * (`pageId`가 없다)는 읽지 않는다.
  */
-function fresh(
-  store: DraftStore | null,
-  writer: string | null,
-  projectId: string,
-  pageId: string | undefined,
-): Held {
+function fresh(store: DraftStore | null, writer: string | null, projectId: string, pageId: string | undefined): Held {
   const values = new Map<Slot<unknown>, unknown>()
   if (store !== null && writer !== null && pageId !== undefined) {
     for (const [name, raw] of Object.entries(store.recall(writer, projectId, pageId))) {
@@ -369,11 +364,7 @@ function apply<T>(current: T, update: SlotUpdate<T>): T {
  * 달라지지 않는다. 드는 자리는 `routes/editor.tsx`의 `RightPanel`이고, 그것이 **언마운트를
  * 고른 컴포넌트**다. 대가를 만든 자리가 대가를 문다.
  */
-export function PanelDraftsProvider(props: {
-  projectId: string
-  pageId: string | undefined
-  children: ReactNode
-}): ReactElement {
+export function PanelDraftsProvider(props: { projectId: string; pageId: string | undefined; children: ReactNode }): ReactElement {
   const { projectId, pageId } = props
   const ledger = useWriteLedger()
   const store = useDraftStore()
@@ -447,10 +438,7 @@ export function PanelDraftsProvider(props: {
   const host = useCallback((slot: string) => stand(hostedRef.current, slot), [])
 
   const [token] = useState(() => Symbol('panel-drafts'))
-  const receiver = useMemo<Receiver>(
-    () => ({ token, realm: 'page', accept, sees, draws, hosts }),
-    [token, accept, sees, draws, hosts],
-  )
+  const receiver = useMemo<Receiver>(() => ({ token, realm: 'page', accept, sees, draws, hosts }), [token, accept, sees, draws, hosts])
   const { receive } = ledger
   // **지금 떠 있는 provider 로 선다**(「잠금만은 그 페이지에 매단다」) — 내려간 provider 로 시작한 쓰기의 응답이 여기
   // 닿는다. **레이아웃 이펙트인 것이 요점이다** — 자식의 이펙트(조회 걸기)가 먼저 돌면 그 쓰기가

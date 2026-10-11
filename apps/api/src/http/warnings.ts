@@ -15,10 +15,7 @@
  *
  * **이슈 타입을 고정하지 않는다.** 봉투의 모양(`{ path, message, code, severity }`)만 보므로 여기서 좁힐 이유가 없다.
  */
-export function withWarnings<T extends object, I>(
-  body: T,
-  warnings: readonly I[],
-): T | (T & { warnings: I[] }) {
+export function withWarnings<T extends object, I>(body: T, warnings: readonly I[]): T | (T & { warnings: I[] }) {
   if (warnings.length === 0) return body
   return { ...body, warnings: [...warnings] }
 }

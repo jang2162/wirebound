@@ -132,10 +132,7 @@ const THROWING_DOC = pageDoc({
 const NO_PROPS_DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
-  children: [
-    { id: 'n-bare', type: 'Card' },
-    { id: 'n-null', type: 'Field', props: null } as never,
-  ],
+  children: [{ id: 'n-bare', type: 'Card' }, { id: 'n-null', type: 'Field', props: null } as never],
 })
 
 /**
@@ -151,15 +148,7 @@ const BROKEN_TYPE_DOC = pageDoc({
 })
 
 /** 위젯이 있는 control. */
-const WIDGET_CONTROLS: EditorControl[] = [
-  'text',
-  'textarea',
-  'number',
-  'switch',
-  'select',
-  'stringList',
-  'pairList',
-]
+const WIDGET_CONTROLS: EditorControl[] = ['text', 'textarea', 'number', 'switch', 'select', 'stringList', 'pairList']
 /**
  * 위젯이 없어 `formatValue`가 글자로만 그리는 control. **비어 있다** —
  * 위젯이 일곱을 전부 덮는다. 카탈로그에 여덟 번째가 생기면 아래 대조가 그것을 잡는다.
@@ -235,9 +224,7 @@ function propRows(): { label: string; value: string }[] {
 }
 
 function rowValue(row: Element): string {
-  const widget = row.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-    'input, textarea, select',
-  )
+  const widget = row.querySelector<HTMLInputElement | HTMLTextAreaElement>('input, textarea, select')
   if (widget === null) return row.querySelector('.wb-shell-prop-value')?.textContent ?? ''
   if (widget instanceof HTMLInputElement && widget.type === 'checkbox') {
     return widget.checked ? '켜짐' : '꺼짐'
@@ -338,12 +325,7 @@ describe('속성 패널', () => {
     select('KeyValue')
 
     const cells = [...panel().querySelectorAll<HTMLInputElement>('.wb-shell-list-cell')]
-    expect(cells.map((cell) => cell.value)).toEqual([
-      '가입일',
-      '2026-01-01',
-      '등급',
-      'VIP',
-    ])
+    expect(cells.map((cell) => cell.value)).toEqual(['가입일', '2026-01-01', '등급', 'VIP'])
     expect(within(panel()).queryByText(/\[object Object\]/)).toBeNull()
   })
 
@@ -461,10 +443,7 @@ describe('속성 패널', () => {
       pageDoc({
         id: 'n-root',
         type: 'Page',
-        children: [
-          null as unknown as WbNode,
-          { id: 'n-text', type: 'Text', props: { content: '살아 있다' } },
-        ],
+        children: [null as unknown as WbNode, { id: 'n-text', type: 'Text', props: { content: '살아 있다' } }],
       }),
     )
 
@@ -578,9 +557,7 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     fireEvent.blur(input)
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([
-      { op: 'replace', path: '/root/children/0/props/content', value: '새 내용' },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/content', value: '새 내용' }])
   })
 
   it('Enter로도 나간다', async () => {
@@ -593,9 +570,7 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([
-      { op: 'replace', path: '/root/children/2/props/items', value: 9 },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/2/props/items', value: 9 }])
   })
 
   it('타이핑만으로는 나가지 않는다', async () => {
@@ -639,9 +614,7 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
 
     await waitFor(() => expect(calls).toHaveLength(1))
     // `'5'`가 아니라 `5`다. 문자열로 나가면 서버의 카탈로그 검증이 422를 낸다.
-    expect(lastOps(calls)).toEqual([
-      { op: 'replace', path: '/root/children/2/props/items', value: 5 },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/2/props/items', value: 5 }])
   })
 
   it('수가 아닌 입력은 나가지 않는다', async () => {
@@ -681,9 +654,7 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     fireEvent.blur(input)
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([
-      { op: 'replace', path: '/root/children/0/props/content', value: '첫 줄\n둘째 줄' },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/content', value: '첫 줄\n둘째 줄' }])
   })
 
   it('textarea에서 Enter는 커밋이 아니라 줄바꿈이다', async () => {
@@ -865,9 +836,7 @@ describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전
   it('트리로 다른 노드를 누르면 원래 노드로 커밋된다 — 새 노드가 아니다', async () => {
     const { calls } = await typing()
 
-    clickAsBrowser(
-      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!,
-    )
+    clickAsBrowser(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[1]!)
     await waitFor(() => expect(calls).toHaveLength(1))
     // **경로가 첫 노드다.** 새 노드로 갔다면 `children/1`이다 — 그것이 더 나쁜 손실이다
     // (앞 노드에 친 글이 다른 노드의 값이 된다).
@@ -970,9 +939,7 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
 
     await waitFor(() => expect(calls).toHaveLength(1))
     // `'on'`이 아니라 `false`다. 체크박스의 폼 값을 그대로 보내는 구현을 잡는다.
-    expect(lastOps(calls)).toEqual([
-      { op: 'replace', path: '/root/children/0/props/required', value: false },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/required', value: false }])
   })
 
   it('값이 없던 prop을 켜면 true가 들어간다', async () => {
@@ -986,9 +953,7 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
     fireEvent.click(requireWidget('필수'))
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([
-      { op: 'add', path: '/root/children/1/props', value: { required: true } },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'add', path: '/root/children/1/props', value: { required: true } }])
   })
 
   it('select는 고른 값을 즉시 낸다', async () => {
@@ -999,9 +964,7 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
     fireEvent.change(requireWidget('역할'), { target: { value: 'h2' } })
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([
-      { op: 'replace', path: '/root/children/2/props/role', value: 'h2' },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/2/props/role', value: 'h2' }])
   })
 
   it('select의 선택지는 카탈로그의 options다', async () => {
@@ -1012,17 +975,7 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
 
     // `TextDef`의 `role` 필드가 선언한 그대로다. 손으로 적는 것은 카탈로그를 import해
     // 훑기만 해도 통과하는 단언을 만들지 않기 위해서다.
-    expect(options).toEqual([
-      'display',
-      'h1',
-      'h2',
-      'h3',
-      'h4',
-      'h5',
-      'h6',
-      'body',
-      'caption',
-    ])
+    expect(options).toEqual(['display', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'body', 'caption'])
   })
 
   it('options가 없는 select는 그리지 않는다', async () => {
@@ -1061,8 +1014,7 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
       getPageCalls += 1
       return pageDetail(pageId, SWITCH_DOC)
     }
-    const patchOps: ApiClient['patchOps'] = () =>
-      Promise.reject(new ApiError(409, 'conflict', '문서가 이미 바뀌었습니다'))
+    const patchOps: ApiClient['patchOps'] = () => Promise.reject(new ApiError(409, 'conflict', '문서가 이미 바뀌었습니다'))
 
     await openPage(SWITCH_DOC, { apiOverrides: { getPage, patchOps } })
 
@@ -1322,9 +1274,7 @@ describe('속성 패널 — 변형', () => {
 
     await waitFor(() => expect(calls).toHaveLength(1))
     // **`/props/variant`가 아니다.** 봉투 필드이므로 경로가 한 단계 위다.
-    expect(lastOps(calls)).toEqual([
-      { op: 'replace', path: '/root/children/0/variant', value: 'default' },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/variant', value: 'default' }])
   })
 
   it('없던 variant를 고르면 add가 나간다', async () => {
@@ -1336,9 +1286,7 @@ describe('속성 패널 — 변형', () => {
     fireEvent.change(requireWidget('변형'), { target: { value: 'featured' } })
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([
-      { op: 'add', path: '/root/children/1/variant', value: 'featured' },
-    ])
+    expect(lastOps(calls)).toEqual([{ op: 'add', path: '/root/children/1/variant', value: 'featured' }])
   })
 
   it('비우면 remove가 나간다 — replace null이 아니다', async () => {
@@ -1387,7 +1335,10 @@ describe('속성 패널 — 변형', () => {
           version: 1,
           root: { id: 'n_000000000001', type: 'Page', children: [{ id: 'n_000000000002', type, variant: option.id }] },
         })
-        expect(issues.filter((issue) => issue.code === 'ignored-variant'), `${type} ← ${option.id}`).toEqual([])
+        expect(
+          issues.filter((issue) => issue.code === 'ignored-variant'),
+          `${type} ← ${option.id}`,
+        ).toEqual([])
       }
     }
 

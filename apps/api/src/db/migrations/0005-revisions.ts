@@ -56,14 +56,13 @@ export const migration: Migration = {
 
     await db.schema.createIndex('revisions_page_seq_idx').on('revisions').columns(['page_id', 'seq']).unique().execute()
 
-    await db.schema
-      .createIndex('revisions_page_actor_seq_idx')
-      .on('revisions')
-      .columns(['page_id', 'actor_id', 'seq desc'])
-      .execute()
+    await db.schema.createIndex('revisions_page_actor_seq_idx').on('revisions').columns(['page_id', 'actor_id', 'seq desc']).execute()
 
     // 기존 행은 DEFAULT 0으로 채워진다 — "이력이 비어 있다"의 정의가 head_seq = 0이다.
-    await db.schema.alterTable('pages').addColumn('head_seq', 'bigint', (col) => col.notNull().defaultTo(0)).execute()
+    await db.schema
+      .alterTable('pages')
+      .addColumn('head_seq', 'bigint', (col) => col.notNull().defaultTo(0))
+      .execute()
   },
 
   // 인덱스는 테이블과 함께 사라지므로 따로 DROP하지 않는다. `pages.head_seq`는

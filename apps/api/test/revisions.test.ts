@@ -69,13 +69,7 @@ function opsUrl(fx: Fixture): string {
  * 계약을 어긴 본문(필드 누락, 선언 안 된 키, 없는 op 종류)을 보내야 하는데, 여기에
  * 타입을 붙이면 그 케이스들이 컴파일되지 않는다.
  */
-function patchOps(
-  ctx: TestContext,
-  fx: Fixture,
-  payload: unknown,
-  cookie: { wb_session: string } | undefined,
-  url = opsUrl(fx),
-) {
+function patchOps(ctx: TestContext, fx: Fixture, payload: unknown, cookie: { wb_session: string } | undefined, url = opsUrl(fx)) {
   return ctx.app.inject({ method: 'PATCH', url, cookies: cookie, payload: payload as never })
 }
 
@@ -191,9 +185,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
         fx,
         {
           baseSeq: 0,
-          ops: [
-            { op: 'add', path: '/root/children/0', value: { id: 'n_nul0000001', type: 'Text', props: { content: `a${NUL}b` } } },
-          ],
+          ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_nul0000001', type: 'Text', props: { content: `a${NUL}b` } } }],
         },
         fx.owner.cookie,
       )
@@ -264,12 +256,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
       // replace·move·test 다섯뿐). 파이프라인은 op 종류를 검사하지 않으므로 — applyOp의
       // switch가 아는 다섯 종류 밖이면 아무 분기도 타지 않고 문서를 그대로 돌려준다 —
       // 여기서 막지 않으면 "아무 일도 안 일어났는데 revision은 남는" 편집이 된다.
-      const res = await patchOps(
-        ctx,
-        fx,
-        { baseSeq: 0, ops: [{ op: 'copy', path: '/root/children/0', from: '/root' }] },
-        fx.owner.cookie,
-      )
+      const res = await patchOps(ctx, fx, { baseSeq: 0, ops: [{ op: 'copy', path: '/root/children/0', from: '/root' }] }, fx.owner.cookie)
 
       expect(res.statusCode, res.body).toBe(400)
     })
@@ -283,12 +270,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
       // 아니라 다른 코드로 나간다(파이프라인이 `DocumentEnvelopeSchema`의
       // strictObject 위반을 422로 잡는다) — 400을 못박아야 그 자리를 이 테스트가
       // 지킨다.
-      const res = await patchOps(
-        ctx,
-        fx,
-        { baseSeq: 0, ops: [{ op: 'add', path: '/meta', value: 2 }] },
-        fx.owner.cookie,
-      )
+      const res = await patchOps(ctx, fx, { baseSeq: 0, ops: [{ op: 'add', path: '/meta', value: 2 }] }, fx.owner.cookie)
 
       expect(res.statusCode, res.body).toBe(400)
     })
@@ -298,12 +280,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
 
-      const res = await patchOps(
-        ctx,
-        fx,
-        { baseSeq: 0, ops: [{ op: 'move', path: '/root/children/0', from: '/meta' }] },
-        fx.owner.cookie,
-      )
+      const res = await patchOps(ctx, fx, { baseSeq: 0, ops: [{ op: 'move', path: '/root/children/0', from: '/meta' }] }, fx.owner.cookie)
 
       expect(res.statusCode, res.body).toBe(400)
     })
@@ -316,12 +293,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
       // `/version`은 zod를 통과한다. 버전 변조를 막는
       // 것은 파이프라인 7단계(`after.version !== before.version` → `invalid`)이고,
       // 이 케이스가 그 자리를 못박는다 — 7단계를 지우면 여기가 200이 된다.
-      const res = await patchOps(
-        ctx,
-        fx,
-        { baseSeq: 0, ops: [{ op: 'replace', path: '/version', value: 2 }] },
-        fx.owner.cookie,
-      )
+      const res = await patchOps(ctx, fx, { baseSeq: 0, ops: [{ op: 'replace', path: '/version', value: 2 }] }, fx.owner.cookie)
 
       expect(res.statusCode, res.body).toBe(422)
       const error = res.json<{ error: { code: string; issues: { path: string }[] } }>().error
@@ -337,12 +309,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
       // `/version`이 zod를 통과하므로, `replace` 말고 `remove`·`move`도
       // 그 경로를 탈 수 있다. 둘 다 문서에서 `version`을 없애므로 여기서 막히지 않으면
       // 저장된 문서가 봉투를 잃는다.
-      const removed = await patchOps(
-        ctx,
-        fx,
-        { baseSeq: 0, ops: [{ op: 'remove', path: '/version' }] },
-        fx.owner.cookie,
-      )
+      const removed = await patchOps(ctx, fx, { baseSeq: 0, ops: [{ op: 'remove', path: '/version' }] }, fx.owner.cookie)
       expect(removed.statusCode, removed.body).toBe(422)
 
       const moved = await patchOps(
@@ -407,9 +374,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
                 id: 'n_null000001',
                 type: 'Text',
                 props: { content: '본문' },
-                interactions: [
-                  { on: 'click', actions: [{ type: 'setProp', target: 'n_null000001', prop: 'content', value: '이전' }] },
-                ],
+                interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_null000001', prop: 'content', value: '이전' }] }],
               },
             },
           ],
@@ -615,12 +580,7 @@ function getRevisions(ctx: TestContext, url: string, cookie: { wb_session: strin
  */
 async function editTimes(ctx: TestContext, fx: Fixture, count: number): Promise<void> {
   for (let index = 0; index < count; index += 1) {
-    const res = await patchOps(
-      ctx,
-      fx,
-      { baseSeq: index, ops: [textOp(`n_seed${String(index).padStart(6, '0')}`)] },
-      fx.owner.cookie,
-    )
+    const res = await patchOps(ctx, fx, { baseSeq: index, ops: [textOp(`n_seed${String(index).padStart(6, '0')}`)] }, fx.owner.cookie)
     if (res.statusCode !== 200) {
       throw new Error(`편집 픽스처가 실패했습니다 (status ${res.statusCode}): ${res.body}`)
     }
@@ -982,11 +942,7 @@ describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
 
-      const res = await getRevisions(
-        ctx,
-        `/api/projects/${fx.project.id}/pages/${NONEXISTENT_UUID}/revisions`,
-        fx.owner.cookie,
-      )
+      const res = await getRevisions(ctx, `/api/projects/${fx.project.id}/pages/${NONEXISTENT_UUID}/revisions`, fx.owner.cookie)
 
       expect(res.statusCode, res.body).toBe(404)
       expect(res.json().error.code).toBe('not-found')
@@ -1022,11 +978,7 @@ describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
       )
       expect(seeded.statusCode, seeded.body).toBe(200)
 
-      const res = await getRevisions(
-        ctx,
-        `/api/projects/${fx.project.id}/pages/${otherPage.id}/revisions`,
-        fx.owner.cookie,
-      )
+      const res = await getRevisions(ctx, `/api/projects/${fx.project.id}/pages/${otherPage.id}/revisions`, fx.owner.cookie)
 
       expect(res.statusCode, res.body).toBe(404)
       expect(res.json().error.code).toBe('not-found')

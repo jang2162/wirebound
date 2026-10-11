@@ -41,9 +41,7 @@ function 목록문서(): unknown {
           type: 'Button',
           marker: 1,
           props: { label: '검색' },
-          interactions: [
-            { on: 'click', actions: [{ type: 'setProp', target: 'list', prop: 'loading', value: true }] },
-          ],
+          interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'list', prop: 'loading', value: true }] }],
         },
         { id: 'list', type: 'List', marker: 2, props: {} },
       ],
@@ -119,10 +117,17 @@ export function page(
 export function 경고가_있는_프로젝트(): SnapshotPayload {
   const payload = snapshotPayload()
   payload.pages.push(
-    page('20000000-0000-4000-8000-000000000009', MENU_MEMBER, '경고', 9, {
-      version: 1,
-      root: { id: 'root', type: 'Page', children: [{ id: 'lonely', type: 'List' }] },
-    }, null),
+    page(
+      '20000000-0000-4000-8000-000000000009',
+      MENU_MEMBER,
+      '경고',
+      9,
+      {
+        version: 1,
+        root: { id: 'root', type: 'Page', children: [{ id: 'lonely', type: 'List' }] },
+      },
+      null,
+    ),
   )
   return payload
 }
@@ -137,40 +142,52 @@ export function 경고가_있는_프로젝트(): SnapshotPayload {
 export function 상태가_있는_프로젝트(): SnapshotPayload {
   const payload = snapshotPayload()
   payload.pages.push(
-    page('20000000-0000-4000-8000-00000000000a', MENU_MEMBER, '상태', 10, {
-      version: 1,
-      viewStates: [
-        { id: 's_admin', name: '관리자' },
-        { id: 's_guest', name: '비로그인' },
-      ],
-      root: {
-        id: 'st_root',
-        type: 'Page',
-        children: [
-          { id: 'st_title', type: 'Text', props: { content: '회원' } },
-          {
-            id: 'st_switch',
-            type: 'StateSwitch',
-            children: [
-              { id: 'st_case_d', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'st_view', type: 'Button', props: { label: '보기' } }] },
-              {
-                id: 'st_case_a',
-                type: 'StateCase',
-                props: { state: 's_admin' },
-                children: [
-                  {
-                    id: 'st_approve',
-                    type: 'Button',
-                    props: { label: '승인' },
-                    interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'st_title', value: false }] }],
-                  },
-                ],
-              },
-            ],
-          },
+    page(
+      '20000000-0000-4000-8000-00000000000a',
+      MENU_MEMBER,
+      '상태',
+      10,
+      {
+        version: 1,
+        viewStates: [
+          { id: 's_admin', name: '관리자' },
+          { id: 's_guest', name: '비로그인' },
         ],
+        root: {
+          id: 'st_root',
+          type: 'Page',
+          children: [
+            { id: 'st_title', type: 'Text', props: { content: '회원' } },
+            {
+              id: 'st_switch',
+              type: 'StateSwitch',
+              children: [
+                {
+                  id: 'st_case_d',
+                  type: 'StateCase',
+                  props: { state: 'default' },
+                  children: [{ id: 'st_view', type: 'Button', props: { label: '보기' } }],
+                },
+                {
+                  id: 'st_case_a',
+                  type: 'StateCase',
+                  props: { state: 's_admin' },
+                  children: [
+                    {
+                      id: 'st_approve',
+                      type: 'Button',
+                      props: { label: '승인' },
+                      interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'st_title', value: false }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
       },
-    }, null),
+      null,
+    ),
   )
   return payload
 }
@@ -179,10 +196,17 @@ export function 상태가_있는_프로젝트(): SnapshotPayload {
 export function 오류가_있는_프로젝트(): SnapshotPayload {
   const payload = snapshotPayload()
   payload.pages.push(
-    page('20000000-0000-4000-8000-00000000000e', MENU_MEMBER, '오류', 8, {
-      version: 1,
-      root: { id: 'bad', type: '없는컴포넌트' },
-    }, null),
+    page(
+      '20000000-0000-4000-8000-00000000000e',
+      MENU_MEMBER,
+      '오류',
+      8,
+      {
+        version: 1,
+        root: { id: 'bad', type: '없는컴포넌트' },
+      },
+      null,
+    ),
   )
   return payload
 }
@@ -215,15 +239,28 @@ export function projectThemeResponse(components?: Record<string, unknown>): Reco
 export function 테마에_없는_variant_프로젝트(): SnapshotPayload {
   const payload = snapshotPayload()
   payload.pages.push(
-    page('20000000-0000-4000-8000-00000000000a', MENU_MEMBER, '그리드', 10, {
-      version: 1,
-      root: { id: 'root', type: 'Page', children: [{ id: 'grid-list', type: 'List', variant: 'grid' }] },
-    }, null),
+    page(
+      '20000000-0000-4000-8000-00000000000a',
+      MENU_MEMBER,
+      '그리드',
+      10,
+      {
+        version: 1,
+        root: { id: 'root', type: 'Page', children: [{ id: 'grid-list', type: 'List', variant: 'grid' }] },
+      },
+      null,
+    ),
   )
   return payload
 }
 
 /** `List` 에 `table` · `cards` 를 선언한 테마. */
 export const LIST_VARIANTS = {
-  List: { variants: [{ id: 'table', label: '테이블' }, { id: 'cards', label: '카드' }], defaultVariant: 'table' },
+  List: {
+    variants: [
+      { id: 'table', label: '테이블' },
+      { id: 'cards', label: '카드' },
+    ],
+    defaultVariant: 'table',
+  },
 }

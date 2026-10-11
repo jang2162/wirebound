@@ -212,7 +212,16 @@ describe('남의 복원 배너 — 다시 읽기를 시작한 뒤 온 신호', (
     await waitFor(() => expect(view.getTree).toHaveBeenCalledTimes(2))
     view.push(restoredFrame('s-second'))
     // 보낸 편집의 답 — 이제 페이지 조회가 나간다(신호 뒤).
-    view.push({ type: 'patch-ack', projectId: PROJECT_ID, pageId: edit.pageId, clientOpId: edit.clientOpId, seq: 8, revisionId: 'rev-8', inverse: [], warnings: [] })
+    view.push({
+      type: 'patch-ack',
+      projectId: PROJECT_ID,
+      pageId: edit.pageId,
+      clientOpId: edit.clientOpId,
+      seq: 8,
+      revisionId: 'rev-8',
+      inverse: [],
+      warnings: [],
+    })
     await waitForNode('n-after')
 
     expect(banner()).toMatch(RESTORED_BANNER)
@@ -354,7 +363,12 @@ describe('내 복원 — 답을 잃은 판', () => {
     expect(banner()).toMatch(UNANSWERED)
     expect(banner()).not.toMatch(RESTORED_BANNER)
     // 팝오버도 그렇다고 말한다.
-    expect(screen.getAllByRole('alert').map((node) => node.textContent).join(' | ')).toMatch(/복원됐는지 알 수 없습니다/)
+    expect(
+      screen
+        .getAllByRole('alert')
+        .map((node) => node.textContent)
+        .join(' | '),
+    ).toMatch(/복원됐는지 알 수 없습니다/)
     // 스스로 다시 읽지 않는다 — 여는 조회 하나뿐이다.
     expect(view.getPage).toHaveBeenCalledTimes(1)
   })

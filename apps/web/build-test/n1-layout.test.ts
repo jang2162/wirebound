@@ -53,21 +53,26 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return P
   }
 
   async function open(P: string, viewport: { width: number; height: number }, side?: number) {
     const { context, page } = await stack.openTab(stack.users.alice, { viewport })
-    if (side !== undefined) await page.addInitScript((w) => localStorage.setItem('wirebound.editor.sidebar', JSON.stringify({ sideWidth: w })), side)
+    if (side !== undefined)
+      await page.addInitScript((w) => localStorage.setItem('wirebound.editor.sidebar', JSON.stringify({ sideWidth: w })), side)
     await page.goto(P)
     await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
     await page.locator('[data-tree-row]').first().waitFor({ state: 'attached' })
     return { page, close: () => context.close() }
   }
 
-  const rowButton = (page: Page, id: string) => page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"] button`).first()
+  const rowButton = (page: Page, id: string) =>
+    page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"] button`).first()
   const TEXTS = [0, 1, 2].map((at) => ({ id: `n_t${at}000000000`, type: 'Text', props: { content: `글 ${at}` } }))
 
   async function openPaletteAtMax(page: Page): Promise<void> {
@@ -124,7 +129,8 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
             rows.push(`${label}: ${JSON.stringify(v)}`)
             // 캔버스가 몫(240)을 못 지키면 판이 최소(220)에 있거나, 최소로는 셸이 넘쳐 판이 바닥(120) 위로 내려간 판이다(그 판의 셸은 안 넘친다).
             const atFloor = v.palette >= PALETTE_HEIGHT_FLOOR && v.palette < PALETTE_HEIGHT_MIN && v.overflow === 0
-            if (!(v.canvas >= CANVAS_MIN_HEIGHT || v.palette === PALETTE_HEIGHT_MIN || atFloor)) bad.push(`${label} 캔버스 ${v.canvas} · 판 ${v.palette}`)
+            if (!(v.canvas >= CANVAS_MIN_HEIGHT || v.palette === PALETTE_HEIGHT_MIN || atFloor))
+              bad.push(`${label} 캔버스 ${v.canvas} · 판 ${v.palette}`)
             if (v.overflow > 0) overflowing.push(label)
             measured[label] = [v.canvas, v.palette, v.footer]
           }
@@ -171,7 +177,10 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
 
   /** L-012 — 줌 4 곳에서 선택 외곽선 위쪽 줄을 찍어 가장 진한 픽셀의 R 값을 본다(강조색 #2f6fed 는 47, 흰 바탕은 255). */
   it('낮은 줌의 선택 외곽선 — 줌 7 · 25 · 50 · 100% 에서 강조색으로 보인다', async () => {
-    const P = await fixture('n1-outline', [0, 1, 2].map((at) => ({ id: `n_c${at}000000000`, type: 'Card', props: { title: `카드 ${at}` } })))
+    const P = await fixture(
+      'n1-outline',
+      [0, 1, 2].map((at) => ({ id: `n_c${at}000000000`, type: 'Card', props: { title: `카드 ${at}` } })),
+    )
     const darkest: Record<string, number> = {}
     const shoot = async (page: Page, name: string, zoomMax: number) => {
       const info = await page.evaluate(() => {
@@ -180,7 +189,12 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
         return { x: r.x, y: r.y, w: r.width, h: r.height, zoom: f.getBoundingClientRect().width / f.offsetWidth }
       })
       expect(info.zoom).toBeLessThan(zoomMax)
-      const clip = { x: Math.max(0, info.x - 12), y: Math.max(0, info.y - 12), width: Math.min(info.w + 24, 300), height: Math.min(info.h + 24, 120) }
+      const clip = {
+        x: Math.max(0, info.x - 12),
+        y: Math.max(0, info.y - 12),
+        width: Math.min(info.w + 24, 300),
+        height: Math.min(info.h + 24, 120),
+      }
       const px = decodePng(await page.screenshot({ clip }))
       const col = px.width >> 1
       let min = 255
@@ -249,12 +263,20 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
   /** L-043 — 우측 패널 폭 300 의 «대상» 라벨. 글자 노드 하나의 `Range` 줄 수로 센다. */
   it('상호작용 «대상» 라벨이 한 줄이다 — 긴 별칭 · 보통 이름', async () => {
     const P = await fixture('n1-label', [
-      { id: 'n_save00000001', type: 'Button', props: { label: '저장' }, interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_long00000001', value: false }] }] },
+      {
+        id: 'n_save00000001',
+        type: 'Button',
+        props: { label: '저장' },
+        interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_long00000001', value: false }] }],
+      },
       { id: 'n_long00000001', type: 'Card', alias: LONG_ALIAS },
       { id: 'n_norm00000001', type: 'Card', alias: '보통 이름' },
     ])
     const lines: Record<string, number> = {}
-    for (const [name, target] of [['긴', 'n_long00000001'], ['보통', 'n_norm00000001']] as const) {
+    for (const [name, target] of [
+      ['긴', 'n_long00000001'],
+      ['보통', 'n_norm00000001'],
+    ] as const) {
       const { page, close } = await open(P, { width: 1440, height: 900 })
       try {
         await rowButton(page, 'n_save00000001').click()
@@ -336,7 +358,11 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
     console.log(`[통지 프레임] ${JSON.stringify(seen)}`)
     for (const [name, log] of Object.entries(seen)) {
       // 카나리아 — 칸 크기가 실제로 한 번은 바뀌어 전달됐다. 전달된 값은 전부 최소다(중간 값이 없다).
-      expect({ name, delivered: log.length > 0, heights: [...new Set(log.map(([, h]) => h))] }).toEqual({ name, delivered: true, heights: [CANVAS_MIN_HEIGHT] })
+      expect({ name, delivered: log.length > 0, heights: [...new Set(log.map(([, h]) => h))] }).toEqual({
+        name,
+        delivered: true,
+        heights: [CANVAS_MIN_HEIGHT],
+      })
     }
   }, 120_000)
 
@@ -368,8 +394,24 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
   /** L-011 — 배치 선 꼬리표가 노드의 첫 자식 상자 위에 서지 않는다. */
   it('배치 선 꼬리표가 노드의 첫 자식 글을 덮지 않는다 — Flex · Grid', async () => {
     const P = await fixture('n1-tag', [
-      { id: 'n_flex00000001', type: 'Flex', props: { direction: 'row' }, children: [{ id: 'n_btn000000001', type: 'Button', props: { label: '저장' } }, { id: 'n_t2000000001', type: 'Text', props: { content: '둘' } }] },
-      { id: 'n_grid00000001', type: 'Grid', props: { columns: 2 }, children: [{ id: 'n_g1000000001', type: 'Text', props: { content: 'Grid 칸 1' } }, { id: 'n_g2000000001', type: 'Text', props: { content: '칸 2' } }] },
+      {
+        id: 'n_flex00000001',
+        type: 'Flex',
+        props: { direction: 'row' },
+        children: [
+          { id: 'n_btn000000001', type: 'Button', props: { label: '저장' } },
+          { id: 'n_t2000000001', type: 'Text', props: { content: '둘' } },
+        ],
+      },
+      {
+        id: 'n_grid00000001',
+        type: 'Grid',
+        props: { columns: 2 },
+        children: [
+          { id: 'n_g1000000001', type: 'Text', props: { content: 'Grid 칸 1' } },
+          { id: 'n_g2000000001', type: 'Text', props: { content: '칸 2' } },
+        ],
+      },
     ])
     const { page, close } = await open(P, { width: 1440, height: 900 })
     try {
@@ -381,7 +423,10 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
         const f = iframe.getBoundingClientRect()
         const scale = f.width / iframe.offsetWidth
         const out: Record<string, { overlap: number; tags: number }> = {}
-        for (const [guide, child] of [['n_flex00000001', 'n_btn000000001'], ['n_grid00000001', 'n_g1000000001']] as const) {
+        for (const [guide, child] of [
+          ['n_flex00000001', 'n_btn000000001'],
+          ['n_grid00000001', 'n_g1000000001'],
+        ] as const) {
           const tags = document.querySelectorAll(`.wb-shell-guide[data-wb-guide-for="${guide}"] .wb-shell-guide-tag`)
           const tag = tags[0]!.getBoundingClientRect()
           const c = iframe.contentDocument!.querySelector(`[data-wb-id="${child}"]`)!.getBoundingClientRect()
@@ -404,7 +449,10 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
     const P = await fixture('n1-handle', [{ id: 'n_tabs00000001', type: 'Tabs', props: { tabs: ['A', 'B'] } }, ...TEXTS])
     await call('POST', `${P}/comments`, { nodeId: 'n_t0000000000', body: '여기' })
     const seen: Record<string, unknown> = {}
-    for (const [width, side] of [[1440, 200], [1024, 200]] as const) {
+    for (const [width, side] of [
+      [1440, 200],
+      [1024, 200],
+    ] as const) {
       for (const id of ['n_tabs00000001', 'n_t0000000000']) {
         const { page, close } = await open(P, { width, height: 900 }, side)
         try {
@@ -415,8 +463,13 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
             const c = document.querySelector('.wb-shell-canvas')!.getBoundingClientRect()
             const h = document.querySelector('.wb-shell-canvas-handle')!.getBoundingClientRect()
             const mk = document.querySelector('.wb-shell-marker')?.getBoundingClientRect()
-            const inter = (a: DOMRect, b: DOMRect) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top))
-            return { inside: Math.round(inter(h, c)) === Math.round(h.width * h.height), markerOverlap: mk === undefined ? null : Math.round(inter(h, mk)) }
+            const inter = (a: DOMRect, b: DOMRect) =>
+              Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) *
+              Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top))
+            return {
+              inside: Math.round(inter(h, c)) === Math.round(h.width * h.height),
+              markerOverlap: mk === undefined ? null : Math.round(inter(h, mk)),
+            }
           })
         } finally {
           await close()
@@ -425,7 +478,8 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
     }
     // eslint-disable-next-line no-console
     console.log(`[손잡이] ${JSON.stringify(seen)}`)
-    for (const [name, value] of Object.entries(seen)) expect({ name, inside: (value as { inside: boolean }).inside }).toEqual({ name, inside: true })
+    for (const [name, value] of Object.entries(seen))
+      expect({ name, inside: (value as { inside: boolean }).inside }).toEqual({ name, inside: true })
   }, 120_000)
 
   /**
@@ -442,23 +496,35 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
         style.textContent = 'body{min-height:100vh}'
         d.head.appendChild(style)
       })
-      const height = () => page.evaluate(() => Math.round(document.querySelector('iframe.wb-shell-canvas-iframe')!.getBoundingClientRect().height))
+      const height = () =>
+        page.evaluate(() => Math.round(document.querySelector('iframe.wb-shell-canvas-iframe')!.getBoundingClientRect().height))
       const idle: number[] = []
       for (let i = 0; i < 5; i += 1) {
         await page.waitForTimeout(400)
         idle.push(await height())
       }
-      const many = Array.from({ length: 30 }, (_, i) => ({ op: 'add', path: `/root/children/${i + 1}`, value: { id: `n_m${String(i).padStart(11, '0')}`, type: 'Text', props: { content: `줄 ${i}` } } }))
+      const many = Array.from({ length: 30 }, (_, i) => ({
+        op: 'add',
+        path: `/root/children/${i + 1}`,
+        value: { id: `n_m${String(i).padStart(11, '0')}`, type: 'Text', props: { content: `줄 ${i}` } },
+      }))
       const baseSeq = async () => (await call('GET', P)).body.headSeq as number
       expect((await call('PATCH', `${P}/ops`, { baseSeq: await baseSeq(), ops: many })).status).toBe(200)
       await page.waitForTimeout(800)
       const grown = await height()
-      expect((await call('PATCH', `${P}/ops`, { baseSeq: await baseSeq(), ops: many.map(() => ({ op: 'remove', path: '/root/children/1' })) })).status).toBe(200)
+      expect(
+        (await call('PATCH', `${P}/ops`, { baseSeq: await baseSeq(), ops: many.map(() => ({ op: 'remove', path: '/root/children/1' })) }))
+          .status,
+      ).toBe(200)
       await page.waitForTimeout(800)
       const shrunk = await height()
       // eslint-disable-next-line no-console
       console.log(`[뷰포트 높이 테마] ${JSON.stringify({ idle, grown, shrunk })}`)
-      expect({ stable: new Set(idle).size === 1, grewWithContent: grown > idle[0]! + 400, shrankBack: shrunk === idle[0] }).toEqual({ stable: true, grewWithContent: true, shrankBack: true })
+      expect({ stable: new Set(idle).size === 1, grewWithContent: grown > idle[0]! + 400, shrankBack: shrunk === idle[0] }).toEqual({
+        stable: true,
+        grewWithContent: true,
+        shrankBack: true,
+      })
     } finally {
       await close()
     }

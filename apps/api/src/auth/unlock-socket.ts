@@ -192,10 +192,7 @@ function keyResult(clearance: KeyClearance): UnlockKeyResult {
 }
 
 /** 본문을 읽어 푼다. 답의 상태 코드와 본문을 준다 — 거절은 `{ message }` 다. */
-export function handleUnlock(
-  limiter: LoginLimiter,
-  raw: string,
-): { status: number; body: UnlockResponse | { message: string } } {
+export function handleUnlock(limiter: LoginLimiter, raw: string): { status: number; body: UnlockResponse | { message: string } } {
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
@@ -228,9 +225,7 @@ export function handleUnlock(
       ...(outcome.account === undefined || normalized === undefined
         ? {}
         : { account: { email: normalized, ...keyResult(outcome.account) } }),
-      ...(outcome.address === undefined || key === undefined
-        ? {}
-        : { address: { key, ...keyResult(outcome.address) } }),
+      ...(outcome.address === undefined || key === undefined ? {} : { address: { key, ...keyResult(outcome.address) } }),
     },
   }
 }
@@ -274,12 +269,8 @@ export function prepareUnlockSocket(
       if (status === 200) {
         // 이메일 · 주소는 안 적는다 — 로그인 라우트도 시도한 이메일을 로그에 안 남긴다. 무엇을 몇 건 걷었는지만.
         const result = body as UnlockResponse
-        const summary = (key: UnlockKeyResult | undefined) =>
-          key && { cleared: key.cleared, wasBlocked: key.blockedForSeconds !== null }
-        app.log.info(
-          { account: summary(result.account), address: summary(result.address) },
-          '로그인 막힘을 푸는 명령을 받았습니다',
-        )
+        const summary = (key: UnlockKeyResult | undefined) => key && { cleared: key.cleared, wasBlocked: key.blockedForSeconds !== null }
+        app.log.info({ account: summary(result.account), address: summary(result.address) }, '로그인 막힘을 푸는 명령을 받았습니다')
       }
       reply(response, status, body)
     })

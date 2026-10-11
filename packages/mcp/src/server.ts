@@ -23,12 +23,7 @@
  * 잡는 것은 프로토콜 층뿐이다.
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import {
-  CallToolRequestSchema,
-  ErrorCode,
-  ListToolsRequestSchema,
-  McpError,
-} from '@modelcontextprotocol/sdk/types.js'
+import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from '@modelcontextprotocol/sdk/types.js'
 import type { Io } from '@wirebound/cli/embed'
 import { HANDLERS } from './handlers'
 import { isToolFailure, toolFailure, type ToolOutcome } from './outcome'
@@ -135,10 +130,7 @@ function assertShape(tool: ToolSpec, key: string, schema: ToolArgSchema, value: 
     default: {
       const unchecked: never = schema
       // 타입이 막으므로 닿지 않는다. 표가 타입을 우회해 들어와도 검사 없이 지나가게 두지 않는다.
-      throw new McpError(
-        ErrorCode.InternalError,
-        `${tool.name}의 ${key}: 검사할 줄이 없는 모양입니다 (${JSON.stringify(unchecked)})`,
-      )
+      throw new McpError(ErrorCode.InternalError, `${tool.name}의 ${key}: 검사할 줄이 없는 모양입니다 (${JSON.stringify(unchecked)})`)
     }
   }
 }
@@ -148,10 +140,7 @@ function assertShape(tool: ToolSpec, key: string, schema: ToolArgSchema, value: 
  * 스모크(메모리 짝)이고, 그 둘이 같은 서버를 본다.
  */
 export function createServer(io: Io): Server {
-  const server = new Server(
-    { name: SERVER_NAME, version: SERVER_VERSION },
-    { capabilities: { tools: {} } },
-  )
+  const server = new Server({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { tools: {} } })
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: TOOLS.map((tool) => ({

@@ -554,8 +554,7 @@ export function groupComments(comments: readonly Comment[], document: PageDocume
       existing.comments.push(comment)
       continue
     }
-    const present: Group['present'] =
-      markers === null ? 'unknown' : markers.has(comment.nodeId) ? 'yes' : 'no'
+    const present: Group['present'] = markers === null ? 'unknown' : markers.has(comment.nodeId) ? 'yes' : 'no'
     groups.set(comment.nodeId, {
       nodeId: comment.nodeId,
       marker: present === 'yes' ? (markers?.get(comment.nodeId) ?? null) : null,
@@ -680,8 +679,7 @@ export function CommentPanel(props: {
         setState(answered(at, { status: 'ready', at, comments }))
         setRefreshing((prev) => (prev?.at === at ? null : prev))
       },
-      (caught: unknown) =>
-        setRefreshing((prev) => (prev?.at === at ? { at, failure: toFailure(caught, REFRESH_FAILED) } : prev)),
+      (caught: unknown) => setRefreshing((prev) => (prev?.at === at ? { at, failure: toFailure(caught, REFRESH_FAILED) } : prev)),
     )
   }
 
@@ -791,46 +789,47 @@ export function CommentPanel(props: {
       // 스토어에 얹은 뒤(장부의 `run`이 끝날 때)와 **판정으로 넘어갈 때**(`verify`가 처음 불릴 때 — 장부의 `CHECKING`) 가운데 먼저 오는 때다.
       // 판정은 «다시 확인»을 누를 때까지 끝나지 않을 수 있다 — 그동안 세면 머리가 안 움직인 409 마다 한도(3s)를 기다린다.
       const endMarkerWrite = store.beginMarkerWrite()
-      void busyLock.run<T, V>({
-        send: (signal) => op.send(api, openPageId, signal),
-        ...(op.uncertain === undefined ? {} : { uncertain: op.uncertain }),
-        verify: (signal) => {
-          endMarkerWrite()
-          return op.verify(api, openPageId, signal)
-        },
-        // **돌려주는 것은 칸에 그린 결말 그대로다** — 그리는 본문이 없는 동안 끝나면 장부가 이것을 남긴다(`write-ledger.tsx`의
-        // «떠나 있는 동안 끝난 실패» · «판정으로 끝난 쓰기도 전한다»). «이미 달렸고 그 뒤 고쳐졌다 · 지워졌다»
-        // (`keyVerdict`)는 실패가 아니라 `done`(다시 보낸 것이면 `verified`)으로 오고 `WriteNote`를 돌려준다 — 칸에는
-        // `LANDED_SINCE_NOTICE`로 그리고, 실패 칸(`WRITE_ERROR`)에는 안 쓴다.
-        settle: async (outcome, ownerLive) => {
-          try {
-            if (outcome.kind === 'failed') {
-              op.failed?.(openPageId)
-              throw outcome.caught
+      void busyLock
+        .run<T, V>({
+          send: (signal) => op.send(api, openPageId, signal),
+          ...(op.uncertain === undefined ? {} : { uncertain: op.uncertain }),
+          verify: (signal) => {
+            endMarkerWrite()
+            return op.verify(api, openPageId, signal)
+          },
+          // **돌려주는 것은 칸에 그린 결말 그대로다** — 그리는 본문이 없는 동안 끝나면 장부가 이것을 남긴다(`write-ledger.tsx`의
+          // «떠나 있는 동안 끝난 실패» · «판정으로 끝난 쓰기도 전한다»). «이미 달렸고 그 뒤 고쳐졌다 · 지워졌다»
+          // (`keyVerdict`)는 실패가 아니라 `done`(다시 보낸 것이면 `verified`)으로 오고 `WriteNote`를 돌려준다 — 칸에는
+          // `LANDED_SINCE_NOTICE`로 그리고, 실패 칸(`WRITE_ERROR`)에는 안 쓴다.
+          settle: async (outcome, ownerLive) => {
+            try {
+              if (outcome.kind === 'failed') {
+                op.failed?.(openPageId)
+                throw outcome.caught
+              }
+              if (outcome.kind === 'done') {
+                const said = await op.done(outcome.value, openPageId)
+                setWriteError(null)
+                return said ?? null
+              }
+              const said = await op.verified(outcome.verdict, ownerLive, openPageId)
+              setWriteError(said?.kind === 'note' ? null : said)
+              return said
+            } catch (caught) {
+              const failure = toFailure(caught, WRITE_FAILED)
+              setWriteError(failure)
+              return failure
             }
-            if (outcome.kind === 'done') {
-              const said = await op.done(outcome.value, openPageId)
-              setWriteError(null)
-              return said ?? null
-            }
-            const said = await op.verified(outcome.verdict, ownerLive, openPageId)
-            setWriteError(said?.kind === 'note' ? null : said)
-            return said
-          } catch (caught) {
-            const failure = toFailure(caught, WRITE_FAILED)
-            setWriteError(failure)
-            return failure
-          }
-        },
-        // 뒷일(`settle` — 답을 스토어에 얹는다)이 끝난 뒤다. 장부가 던져도 센 것을 남기지 않는다.
-      }).finally(endMarkerWrite)
+          },
+          // 뒷일(`settle` — 답을 스토어에 얹는다)이 끝난 뒤다. 장부가 던져도 센 것을 남기지 않는다.
+        })
+        .finally(endMarkerWrite)
     },
     [api, busy, busyLock, pageId, setWriteError, store],
   )
 
   /** 지금 문서에서 그 노드에 번호가 있는가. 문서를 못 읽었으면 «없다»로 본다 — 어긋남을 말하는 쪽이다. */
-  const numbered = (nodeId: string): boolean =>
-    document !== null && typeof markersOf(document).get(nodeId) === 'number'
+  const numbered = (nodeId: string): boolean => document !== null && typeof markersOf(document).get(nodeId) === 'number'
 
   const submit = (): void => {
     const nodeId = selectedNodeId
@@ -982,8 +981,7 @@ export function CommentPanel(props: {
     if (body === '') return
 
     perform({
-      send: (client, openPageId, signal) =>
-        client.updateComment(projectId, openPageId, commentId, { body }, { signal }),
+      send: (client, openPageId, signal) => client.updateComment(projectId, openPageId, commentId, { body }, { signal }),
       verify: async (client, openPageId, signal) => {
         const at = issue()
         const comments = await client.listComments(projectId, openPageId, { signal })
@@ -1092,11 +1090,7 @@ export function CommentPanel(props: {
           />
           {selectedNodeId === null && <p className="wb-shell-panel-notice">{many ? MANY_TARGETS : NO_TARGET}</p>}
           <div className="wb-shell-comment-actions">
-            <button
-              type="submit"
-              className="wb-shell-comment-submit"
-              disabled={selectedNodeId === null || busy || draft.trim() === ''}
-            >
+            <button type="submit" className="wb-shell-comment-submit" disabled={selectedNodeId === null || busy || draft.trim() === ''}>
               {shellIcon('comment', 14, 'wb-shell-icon-lead')}
               코멘트 달기
             </button>
@@ -1126,9 +1120,7 @@ export function CommentPanel(props: {
               <SignedOut />
             ) : (
               <p className="wb-shell-panel-notice" role="alert">
-                {refreshNotice.failure.message === REFRESH_FAILED
-                  ? REFRESH_FAILED
-                  : `${REFRESH_FAILED} — ${refreshNotice.failure.message}`}
+                {refreshNotice.failure.message === REFRESH_FAILED ? REFRESH_FAILED : `${REFRESH_FAILED} — ${refreshNotice.failure.message}`}
               </p>
             ))}
           {/* **실패가 아니라 어긋남이다** — 코멘트는 저장됐고 번호만 화면에 못 얹었다.
@@ -1171,7 +1163,7 @@ export function CommentPanel(props: {
               <h3 className="wb-shell-comment-group-title">
                 <span className="wb-shell-comment-marker">{group.marker ?? '–'}</span>{' '}
                 {/* **`'unknown'`을 `'no'`와 갈라 말한다**. 문서를 못 읽었을 뿐인데
-                    *"사라진 노드"*라고 적으면 화면이 거짓을 단언한다. */}
+                 *"사라진 노드"*라고 적으면 화면이 거짓을 단언한다. */}
                 {group.present === 'no'
                   ? `${MISSING_NODE} (${group.nodeId})`
                   : aliases?.get(group.nodeId) !== undefined
@@ -1203,12 +1195,7 @@ export function CommentPanel(props: {
                         >
                           저장
                         </button>
-                        <button
-                          type="button"
-                          className="wb-shell-comment-cancel"
-                          disabled={busy}
-                          onClick={() => setEditingId(null)}
-                        >
+                        <button type="button" className="wb-shell-comment-cancel" disabled={busy} onClick={() => setEditingId(null)}>
                           취소
                         </button>
                       </>

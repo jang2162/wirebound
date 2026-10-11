@@ -81,9 +81,7 @@ type Stage = 'onRequest' | 'preParsing' | 'preValidation' | 'preHandler'
  * `HEAD`는 Fastify 가 `GET`마다 같은 옵션으로 다는 것이라 `GET`과 함께 적는다.
  */
 const ALLOWED: Readonly<Record<string, readonly { stage: Stage; name: string; hook: unknown }[]>> = {
-  'POST /api/projects/:projectId/pages/:pageId/comments': [
-    { stage: 'preValidation', name: 'replayBeforeGuard', hook: replayBeforeGuard },
-  ],
+  'POST /api/projects/:projectId/pages/:pageId/comments': [{ stage: 'preValidation', name: 'replayBeforeGuard', hook: replayBeforeGuard }],
   'GET /api/projects/:projectId/ws': [{ stage: 'preHandler', name: 'requireSessionAuth', hook: requireSessionAuth }],
   'HEAD /api/projects/:projectId/ws': [{ stage: 'preHandler', name: 'requireSessionAuth', hook: requireSessionAuth }],
 }

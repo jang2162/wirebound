@@ -326,7 +326,10 @@ describe('표의 각 줄을 실제로 지나가 본다', () => {
           expect(frame.pageId, site.why).toBe(fx.pageId)
         } else {
           const quiet = await watcher.quiet()
-          expect(quiet.filter((frame) => frame.type === 'page-changed'), site.why).toEqual([])
+          expect(
+            quiet.filter((frame) => frame.type === 'page-changed'),
+            site.why,
+          ).toEqual([])
         }
 
         // **대조.** 이 연결이 살아 있고 이 룸에 있다는 것을 *"알린다"*가 확실한 편집으로
@@ -342,13 +345,7 @@ describe('표의 각 줄을 실제로 지나가 본다', () => {
   }
 })
 
-async function patchOps(
-  ctx: RealApiContext,
-  projectId: string,
-  who: SignedUpUser,
-  pageId: string,
-  ops: PatchOp[],
-): Promise<void> {
+async function patchOps(ctx: RealApiContext, projectId: string, who: SignedUpUser, pageId: string, ops: PatchOp[]): Promise<void> {
   const row = await db.selectFrom('pages').select('head_seq').where('id', '=', pageId).executeTakeFirstOrThrow()
   const res = await ctx.app.inject({
     method: 'PATCH',
@@ -429,13 +426,7 @@ async function fixture(ctx: RealApiContext): Promise<Fixture> {
   }
 }
 
-async function addComment(
-  ctx: RealApiContext,
-  projectId: string,
-  pageId: string,
-  who: SignedUpUser,
-  nodeId: string,
-): Promise<string> {
+async function addComment(ctx: RealApiContext, projectId: string, pageId: string, who: SignedUpUser, nodeId: string): Promise<string> {
   const res = await ctx.app.inject({
     method: 'POST',
     url: `/api/projects/${projectId}/pages/${pageId}/comments`,

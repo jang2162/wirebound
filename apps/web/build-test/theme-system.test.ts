@@ -51,14 +51,30 @@ function ok(response: { status: number; body: any }, what: string): any {
 }
 
 /** 프로젝트 하나 · 메뉴 하나 · 페이지들(제목 → 노드). 페이지 id 를 제목으로 낸다. */
-async function project(stack: EditorStack, owner: Session, pages: Record<string, unknown[]>): Promise<{ id: string; call: Call; pages: Record<string, string> }> {
+async function project(
+  stack: EditorStack,
+  owner: Session,
+  pages: Record<string, unknown[]>,
+): Promise<{ id: string; call: Call; pages: Record<string, string> }> {
   const call: Call = (method, path, body) => stack.request(owner, method, path, body)
-  const made = ok(await call('POST', '/projects', { name: '테마 고르기', slug: `sys-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }), '프로젝트')
+  const made = ok(
+    await call('POST', '/projects', {
+      name: '테마 고르기',
+      slug: `sys-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    }),
+    '프로젝트',
+  )
   const menu = ok(await call('POST', `/projects/${made.id}/menu`, { parentId: null, title: '화면' }), '메뉴')
   const ids: Record<string, string> = {}
   for (const [title, nodes] of Object.entries(pages)) {
     const page = ok(await call('POST', `/projects/${made.id}/pages`, { menuNodeId: menu.id, title }), title)
-    ok(await call('PATCH', `/projects/${made.id}/pages/${page.id}/ops`, { baseSeq: 0, ops: nodes.map((value, i) => ({ op: 'add', path: `/root/children/${i}`, value })) }), `ops ${title}`)
+    ok(
+      await call('PATCH', `/projects/${made.id}/pages/${page.id}/ops`, {
+        baseSeq: 0,
+        ops: nodes.map((value, i) => ({ op: 'add', path: `/root/children/${i}`, value })),
+      }),
+      `ops ${title}`,
+    )
     ids[title] = page.id
   }
   return { id: made.id, call, pages: ids }
@@ -89,7 +105,10 @@ async function confirmBox(page: Page): Promise<{ tokens: { kept: number; dropped
 }
 
 /** impact 응답을 확인 상자와 같은 꼴로. */
-function impactAsBox(impact: { tokens: { kept: number; dropped: number; defaulted: number }; variants: { title: string; count: number }[] }) {
+function impactAsBox(impact: {
+  tokens: { kept: number; dropped: number; defaulted: number }
+  variants: { title: string; count: number }[]
+}) {
   return { tokens: impact.tokens, variants: impact.variants.map((v) => `${v.title} — 없는 variant ${v.count}개`) }
 }
 
@@ -104,14 +123,21 @@ async function openCanvas(page: Page, projectId: string, pageId: string): Promis
   await page.goto(`/projects/${projectId}/pages/${pageId}`)
   const frame = (await (await page.waitForSelector('iframe.wb-shell-canvas-iframe')).contentFrame())!
   await frame.waitForSelector('[data-wb-id="m_btn"]', { state: 'attached' })
-  await frame.waitForFunction(() => [...document.querySelectorAll('link[data-wb-style="theme"]')].every((l) => (l as HTMLLinkElement).sheet !== null))
+  await frame.waitForFunction(() =>
+    [...document.querySelectorAll('link[data-wb-style="theme"]')].every((l) => (l as HTMLLinkElement).sheet !== null),
+  )
   return frame
 }
 
 const unpacked: string[] = []
 
 /** 내보낸 zip 을 풀어 `pages/<메뉴>-<제목>.html` 을 `file://` 로 열고 준비(`data-wb-ready`)를 기다린다. */
-async function openBundle(stack: EditorStack, session: Session, projectId: string, title: string): Promise<{ page: Page; close: () => Promise<void> }> {
+async function openBundle(
+  stack: EditorStack,
+  session: Session,
+  projectId: string,
+  title: string,
+): Promise<{ page: Page; close: () => Promise<void> }> {
   const response = await fetch(`${stack.apiUrl}/api/projects/${projectId}/export?format=html`, { headers: { cookie: session.cookie } })
   if (response.status !== 200) throw new Error(`내보내기 ${response.status}`)
   const dir = mkdtempSync(join(tmpdir(), 'wb-system-bundle-'))
@@ -146,7 +172,12 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
       화면: [
         { id: 'm_head', type: 'Text', props: { content: '주문 관리', role: 'h1' } },
         { id: 'm_btn', type: 'Button', variant: 'primary', props: { label: '주문 등록' } },
-        { id: 'm_card', type: 'Card', props: { title: '오늘 주문' }, children: [{ id: 'm_card_t', type: 'Text', props: { content: '128건' } }] },
+        {
+          id: 'm_card',
+          type: 'Card',
+          props: { title: '오늘 주문' },
+          children: [{ id: 'm_card_t', type: 'Text', props: { content: '128건' } }],
+        },
       ],
     })
     for (const themeId of ORDER) {
@@ -169,42 +200,51 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
     expect(new Set(expected.values()).size).toBe(5)
   })
 
-  it.each(ORDER)('%s — 설정 페이지에서 고르면 확인 상자가 impact 와 같고, 캔버스 · 번들이 그 테마로 선다', async (themeId) => {
-    const before = ok(await fixture.call('GET', `/projects/${fixture.id}/theme`), '바인딩')
-    expect(before.themeId).not.toBe(themeId)
-    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 1000 } })
-    try {
-      await page.goto(`/projects/${fixture.id}/settings`)
-      await page.getByRole('combobox', { name: '테마', exact: true }).selectOption(themeId)
-      const box = await confirmBox(page)
-      const impact = ok(await fixture.call('GET', `/projects/${fixture.id}/theme/impact?themeId=${themeId}&version=${seededVersion(themeId)}`), 'impact')
-      expect(box).toEqual(impactAsBox(impact))
-      await apply(page)
-      const saved = ok(await fixture.call('GET', `/projects/${fixture.id}/theme`), '바인딩')
-      expect({ themeId: saved.themeId, version: saved.version }).toEqual({ themeId, version: seededVersion(themeId) })
+  it.each(ORDER)(
+    '%s — 설정 페이지에서 고르면 확인 상자가 impact 와 같고, 캔버스 · 번들이 그 테마로 선다',
+    async (themeId) => {
+      const before = ok(await fixture.call('GET', `/projects/${fixture.id}/theme`), '바인딩')
+      expect(before.themeId).not.toBe(themeId)
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 1000 } })
+      try {
+        await page.goto(`/projects/${fixture.id}/settings`)
+        await page.getByRole('combobox', { name: '테마', exact: true }).selectOption(themeId)
+        const box = await confirmBox(page)
+        const impact = ok(
+          await fixture.call('GET', `/projects/${fixture.id}/theme/impact?themeId=${themeId}&version=${seededVersion(themeId)}`),
+          'impact',
+        )
+        expect(box).toEqual(impactAsBox(impact))
+        await apply(page)
+        const saved = ok(await fixture.call('GET', `/projects/${fixture.id}/theme`), '바인딩')
+        expect({ themeId: saved.themeId, version: saved.version }).toEqual({ themeId, version: seededVersion(themeId) })
 
-      const frame = await openCanvas(page, fixture.id, fixture.pages.화면!)
-      // 기다림이 끝나도 값으로 단언한다 — 시간 초과로 죽으면 무엇이 섰는지가 안 남는다.
-      const mark = () => frame.evaluate(`(${MARK})('')`) as Promise<string>
-      await poll('캔버스 표지', mark, (value) => value === expected.get(themeId)).catch(() => undefined)
-      expect(await mark(), `캔버스 — ${themeId}`).toBe(expected.get(themeId))
-    } finally {
-      await context.close()
-    }
+        const frame = await openCanvas(page, fixture.id, fixture.pages.화면!)
+        // 기다림이 끝나도 값으로 단언한다 — 시간 초과로 죽으면 무엇이 섰는지가 안 남는다.
+        const mark = () => frame.evaluate(`(${MARK})('')`) as Promise<string>
+        await poll('캔버스 표지', mark, (value) => value === expected.get(themeId)).catch(() => undefined)
+        expect(await mark(), `캔버스 — ${themeId}`).toBe(expected.get(themeId))
+      } finally {
+        await context.close()
+      }
 
-    const bundle = await openBundle(stack, alice, fixture.id, '화면')
-    try {
-      expect(await bundle.page.evaluate(() => document.documentElement.getAttribute('data-wb-failed'))).toBeNull()
-      expect(await bundle.page.evaluate(`(${MARK})('.wb-export-canvas ')`), `번들 — ${themeId}`).toBe(expected.get(themeId))
-    } finally {
-      await bundle.close()
-    }
-  }, 180_000)
+      const bundle = await openBundle(stack, alice, fixture.id, '화면')
+      try {
+        expect(await bundle.page.evaluate(() => document.documentElement.getAttribute('data-wb-failed'))).toBeNull()
+        expect(await bundle.page.evaluate(`(${MARK})('.wb-export-canvas ')`), `번들 — ${themeId}`).toBe(expected.get(themeId))
+      } finally {
+        await bundle.close()
+      }
+    },
+    180_000,
+  )
 
   it('system-admin@0.1.0 에 고정한 프로젝트를 지금 판으로 올린다 — 확인 상자의 토큰 이전 · 없는 variant 수가 impact 와 같다', async () => {
     const bytes = readFileSync(OLD_ADMIN)
     const sha256 = createHash('sha256').update(bytes).digest('hex')
-    expect(sha256, '얼린 0.1.0 이 사용자 DB 에 시딩된 판(체크섬 줄)과 같다').toBe(JSON.parse(readFileSync(ADMIN_CHECKSUMS, 'utf8'))['system-admin@0.1.0'])
+    expect(sha256, '얼린 0.1.0 이 사용자 DB 에 시딩된 판(체크섬 줄)과 같다').toBe(
+      JSON.parse(readFileSync(ADMIN_CHECKSUMS, 'utf8'))['system-admin@0.1.0'],
+    )
     const { files } = readWbtheme(new Uint8Array(bytes))
     const old = files!.manifest
     expect(`${old.id}@${old.version}`).toBe('system-admin@0.1.0')
@@ -228,7 +268,10 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
     const length = items.find(([, d]) => d.type === 'length')![0]
     const tokens = { [color]: '#ff5500', [length]: '12px' }
     const now = ok(await upgrade.call('GET', `/projects/${upgrade.id}/theme`), '바인딩')
-    ok(await upgrade.call('PUT', `/projects/${upgrade.id}/theme`, { themeId: 'system-admin', version: '0.1.0', tokens, rev: now.rev }), '0.1.0 고정')
+    ok(
+      await upgrade.call('PUT', `/projects/${upgrade.id}/theme`, { themeId: 'system-admin', version: '0.1.0', tokens, rev: now.rev }),
+      '0.1.0 고정',
+    )
 
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 1000 } })
     try {
@@ -237,7 +280,10 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
       await expect.poll(() => version.inputValue()).toBe('0.1.0')
       await version.selectOption(seededVersion('system-admin'))
       const box = await confirmBox(page)
-      const impact = ok(await upgrade.call('GET', `/projects/${upgrade.id}/theme/impact?themeId=system-admin&version=${seededVersion('system-admin')}`), 'impact')
+      const impact = ok(
+        await upgrade.call('GET', `/projects/${upgrade.id}/theme/impact?themeId=system-admin&version=${seededVersion('system-admin')}`),
+        'impact',
+      )
       expect(box).toEqual(impactAsBox(impact))
       // 카나리아 — 고친 토큰 둘이 이어지고, 심은 없는 variant 하나가 목록 페이지에만 선다.
       expect(box.tokens.kept).toBe(2)
@@ -247,6 +293,10 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
       await context.close()
     }
     const saved = ok(await upgrade.call('GET', `/projects/${upgrade.id}/theme`), '바인딩')
-    expect({ themeId: saved.themeId, version: saved.version, tokens: saved.tokens }).toEqual({ themeId: 'system-admin', version: seededVersion('system-admin'), tokens })
+    expect({ themeId: saved.themeId, version: saved.version, tokens: saved.tokens }).toEqual({
+      themeId: 'system-admin',
+      version: seededVersion('system-admin'),
+      tokens,
+    })
   }, 180_000)
 })

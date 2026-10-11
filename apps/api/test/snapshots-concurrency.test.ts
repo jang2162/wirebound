@@ -84,9 +84,7 @@ async function setup(ctx: TestContext): Promise<Fixture> {
  * (`Root plugin has already booted`) 등록이 픽스처보다 먼저여야 하는데, 훅이 필요로 하는
  * 값은 그 픽스처가 만든다.
  */
-async function withProbeApi(
-  fn: (ctx: TestContext, setInterrupt: (run: () => Promise<void>) => void) => Promise<void>,
-): Promise<void> {
+async function withProbeApi(fn: (ctx: TestContext, setInterrupt: (run: () => Promise<void>) => void) => Promise<void>): Promise<void> {
   let interrupt: (() => Promise<void>) | undefined
   await withRealApi(
     async (ctx) => {
@@ -180,11 +178,7 @@ describe('수집 도중 다른 커넥션이 커밋한다', () => {
       // 캡처 요청과 **무관한** 새 커넥션으로 읽는다. 보이면 커밋된 것이다.
       const rows = await db.selectFrom('comments').select('body').where('page_id', '=', fx.page.id).execute()
       expect(rows.map((row) => row.body)).toEqual(['끼어든 코멘트'])
-      const page = await db
-        .selectFrom('pages')
-        .select('head_seq')
-        .where('id', '=', fx.page.id)
-        .executeTakeFirstOrThrow()
+      const page = await db.selectFrom('pages').select('head_seq').where('id', '=', fx.page.id).executeTakeFirstOrThrow()
       expect(Number(page.head_seq)).toBe(1)
     })
   })
@@ -201,11 +195,7 @@ describe('수집 도중 다른 커넥션이 커밋한다', () => {
       const fx = await setup(ctx)
 
       // 1. 페이지를 읽는다(코멘트 전).
-      const before = await db
-        .selectFrom('pages')
-        .select(['head_seq', 'schema'])
-        .where('id', '=', fx.page.id)
-        .executeTakeFirstOrThrow()
+      const before = await db.selectFrom('pages').select(['head_seq', 'schema']).where('id', '=', fx.page.id).executeTakeFirstOrThrow()
 
       // 2. 다른 요청이 코멘트를 커밋한다.
       await addComment(ctx, fx, '끼어든 코멘트')
@@ -219,11 +209,7 @@ describe('수집 도중 다른 커넥션이 커밋한다', () => {
       expect(comments).toHaveLength(1)
 
       // **그 조합은 성립한 적이 없다** — 코멘트가 존재한 순간 번호는 이미 붙어 있었다(설계서 「페이지 스키마 노드」).
-      const after = await db
-        .selectFrom('pages')
-        .select(['head_seq', 'schema'])
-        .where('id', '=', fx.page.id)
-        .executeTakeFirstOrThrow()
+      const after = await db.selectFrom('pages').select(['head_seq', 'schema']).where('id', '=', fx.page.id).executeTakeFirstOrThrow()
       expect(Number(after.head_seq)).toBe(1)
       expect((after.schema as { root: { marker?: number } }).root.marker).toBe(1)
     })

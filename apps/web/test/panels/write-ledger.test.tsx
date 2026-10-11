@@ -241,12 +241,7 @@ function descriptionServer(
         }
         return read(pageId)
       }) as never,
-      updatePage: ((
-        _projectId: string,
-        pageId: string,
-        body: { description?: string | null; base?: unknown },
-        options?: WriteOptions,
-      ) => {
+      updatePage: ((_projectId: string, pageId: string, body: { description?: string | null; base?: unknown }, options?: WriteOptions) => {
         sent.push(body.description)
         bases.push(body.base)
         signals.push(options?.signal)
@@ -260,9 +255,7 @@ function descriptionServer(
         }
         return new Promise<PageDetail>((resolve, reject) => {
           if (options?.signal !== undefined && !(behavior.ignoreAbort ?? false)) {
-            options.signal.addEventListener('abort', () =>
-              reject(new DOMException('요청을 끊었다', 'AbortError')),
-            )
+            options.signal.addEventListener('abort', () => reject(new DOMException('요청을 끊었다', 'AbortError')))
           }
           let committed = false
           const commit = (): void => {
@@ -397,9 +390,7 @@ function commentServer(initial: Comment[] = []): {
       listComments: async () => {
         if (listsHeld) {
           const snapshot = [...rows]
-          return new Promise<Comment[]>((resolve, reject) =>
-            heldLists.push({ resolve: () => resolve(snapshot), reject }),
-          )
+          return new Promise<Comment[]>((resolve, reject) => heldLists.push({ resolve: () => resolve(snapshot), reject }))
         }
         return [...rows]
       },
@@ -746,9 +737,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     vi.useRealTimers()
 
     await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toBe(
-        '응답이 없어 서버를 다시 읽었더니 이 설명은 저장되지 않았습니다',
-      ),
+      expect(screen.getByRole('alert').textContent).toBe('응답이 없어 서버를 다시 읽었더니 이 설명은 저장되지 않았습니다'),
     )
     expect(box().disabled).toBe(false)
     expect(box().value).toBe('시간 넘긴 글')
@@ -839,9 +828,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     await advance(WRITE_DEADLINE_MS)
     vi.useRealTimers()
 
-    await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toBe('응답이 없고, 저장됐는지 확인하지도 못했습니다'),
-    )
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('응답이 없고, 저장됐는지 확인하지도 못했습니다'))
     // **풀지 않는다** — 모르는 채 풀면 둘째 저장이 나가 늦게 커밋될 수 있는 첫째와 겹친다(Q).
     expect(box().disabled).toBe(true)
     expect(saveButton().disabled).toBe(true)
@@ -869,9 +856,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
 
     await advance(WRITE_DEADLINE_MS)
     vi.useRealTimers()
-    await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toBe('응답이 없고, 저장됐는지 확인하지도 못했습니다'),
-    )
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('응답이 없고, 저장됐는지 확인하지도 못했습니다'))
 
     server.failReads(true, new ApiError(401, 'unauthenticated', '로그인이 필요합니다'))
     fireEvent.click(screen.getByRole('button', { name: '다시 확인' }))
@@ -984,9 +969,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     await advance(WRITE_DEADLINE_MS)
     vi.useRealTimers()
 
-    await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toBe('페이지가 이미 변경되었습니다 (요청 baseSeq 7, 현재 8)'),
-    )
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('페이지가 이미 변경되었습니다 (요청 baseSeq 7, 현재 8)'))
     expect(commentBox().value).toBe('시간 넘긴 코멘트')
     expect(commentBox().disabled).toBe(false)
     expect(server.rows()).toHaveLength(0)
@@ -1009,9 +992,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     vi.useRealTimers()
 
     // 첫 게시는 가짜 서버에 아직 붙잡혀 있다 — «안 달림»이라고 말하면 거짓이다.
-    await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toBe('응답이 없고, 반영됐는지 확인하지도 못했습니다'),
-    )
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('응답이 없고, 반영됐는지 확인하지도 못했습니다'))
     expect(commentBox().disabled).toBe(true)
     expect(server.rows()).toHaveLength(0)
 
@@ -1035,9 +1016,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     await advance(WRITE_DEADLINE_MS)
     vi.useRealTimers()
 
-    await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toBe('응답이 없고, 반영됐는지 확인하지도 못했습니다'),
-    )
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('응답이 없고, 반영됐는지 확인하지도 못했습니다'))
     expect(commentBox().disabled).toBe(true)
 
     fireEvent.click(screen.getByRole('button', { name: '다시 확인' }))
@@ -1070,9 +1049,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     const row = screen.getByText('지울 말').closest('li') as HTMLElement
     fireEvent.click(within(row).getByRole('button', { name: '삭제' }))
 
-    await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toBe('페이지가 이미 변경되었습니다 (요청 baseSeq 7, 현재 8)'),
-    )
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('페이지가 이미 변경되었습니다 (요청 baseSeq 7, 현재 8)'))
     await waitFor(() => expect(screen.queryByText('지울 말')).toBeNull())
     expect(screen.getByText('남을 말')).toBeTruthy()
   })
@@ -1794,9 +1771,7 @@ describe('쓰기가 끝나면 잠금이 풀린다 — 목록 다시 받기는 �
     await server.respond()
     await server.failHeldLists(new ApiError(0, 'internal', '서버에 연결하지 못했습니다'))
 
-    await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toBe('목록을 다시 불러오지 못했습니다 — 서버에 연결하지 못했습니다'),
-    )
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('목록을 다시 불러오지 못했습니다 — 서버에 연결하지 못했습니다'))
     // 다시 받기의 실패로 목록 자리를 통째로 «코멘트를 불러오지 못했습니다»로 바꾸면 이미 받은 목록이 사라진다.
     expect(screen.getByText('먼저 단 말')).toBeTruthy()
     expect(commentBox().disabled).toBe(false)
@@ -2156,9 +2131,7 @@ describe('S — 페이지를 떠나 있는 동안 끝난 실패는 돌아오면 
 
     toPage(PAGE_TITLE)
     await waitFor(() => expect(box().value).toBe('남의 글'))
-    expect(screen.getByRole('alert').textContent).toBe(
-      `${MISSED} — 다른 사람이 이 설명을 바꿨습니다 · 지금 저장된 설명: 남의 글`,
-    )
+    expect(screen.getByRole('alert').textContent).toBe(`${MISSED} — 다른 사람이 이 설명을 바꿨습니다 · 지금 저장된 설명: 남의 글`)
     expect(screen.queryByRole('button', { name: '내 글로 덮기' })).toBeNull()
   })
 
@@ -2192,9 +2165,7 @@ describe('S — 페이지를 떠나 있는 동안 끝난 실패는 돌아오면 
 
     toPage(PAGE_TITLE)
     await waitFor(() => expect(box().value).toBe('앞 글'))
-    expect(screen.getByRole('alert').textContent).toBe(
-      `${MISSED} — 지금 저장된 설명이 앞서 보낸 글과 같습니다 · 지금 저장된 설명: 앞 글`,
-    )
+    expect(screen.getByRole('alert').textContent).toBe(`${MISSED} — 지금 저장된 설명이 앞서 보낸 글과 같습니다 · 지금 저장된 설명: 앞 글`)
   })
 
   it('코멘트 — 옆 페이지에 가 있는 동안 삭제가 이유 없이 실패하면, 돌아온 가가 코멘트의 문장으로 말한다', async () => {
@@ -2384,7 +2355,7 @@ describe('판정으로 끝난 쓰기도 전한다 — 받는 자리가 그 결�
    * 두 번 서지 않게). 초안은 그대로다(같은 페이지라 버려지지 않았다) — 다시 저장하면 409 가 충돌 화면을 세운다.
    *
    * 혼자 죽는 변조: 남긴 결말이 서면 칸을 `IDLE` 대신 `keepConflict`로 둔다(충돌 화면이 남는다 — 그 자리는 마운트
- * 이펙트가 아니라 «남긴 결말이 설 때마다»의 이펙트다). 그 이펙트째 떼면 아래 «제자리에서 … 한 번만 말한다»와 **함께** 죽는다.
+   * 이펙트가 아니라 «남긴 결말이 설 때마다»의 이펙트다). 그 이펙트째 떼면 아래 «제자리에서 … 한 번만 말한다»와 **함께** 죽는다.
    */
   it('설명 — 다른 탭에 가 있는 동안 저장이 충돌로 끝나면 돌아온 탭은 말만 하고 충돌 화면은 세우지 않는다 · 초안은 그대로다', async () => {
     const server = descriptionServer('서버 값')

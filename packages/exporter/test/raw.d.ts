@@ -11,8 +11,5 @@ declare module '*.json?raw' {
 }
 
 interface ImportMeta {
-  glob(
-    pattern: string,
-    options: { query: '?raw'; eager: true; import: 'default' },
-  ): Record<string, string>
+  glob(pattern: string, options: { query: '?raw'; eager: true; import: 'default' }): Record<string, string>
 }

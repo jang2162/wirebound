@@ -239,7 +239,5 @@ describe('팝오버 닫기 — 캔버스 iframe 문서', () => {
  * `TS2344`). 재는 것이 `calls`뿐이므로 그 모양만 요구한다.
  */
 function kinds(spy: { mock: { calls: unknown[][] } }): string[] {
-  return spy.mock.calls
-    .map((call) => String(call[0]))
-    .filter((name) => name === 'mousedown' || name === 'keydown')
+  return spy.mock.calls.map((call) => String(call[0])).filter((name) => name === 'mousedown' || name === 'keydown')
 }

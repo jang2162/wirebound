@@ -118,7 +118,11 @@ describe('API 토큰 절', () => {
   })
 
   it('전부 폐기 — 확인 뒤 한 번 부르고 거둔 수를 말한다 · 목록이 빈다', async () => {
-    const { client, calls } = server([token(), token({ id: 't-2', name: '노트북' }), token({ id: 't-3', name: '떠난 곳', member: false, projectName: null })])
+    const { client, calls } = server([
+      token(),
+      token({ id: 't-2', name: '노트북' }),
+      token({ id: 't-3', name: '떠난 곳', member: false, projectName: null }),
+    ])
     renderWithProviders(<App />, { client, route: '/account' })
 
     fireEvent.click(await screen.findByRole('button', { name: '전부 폐기' }))

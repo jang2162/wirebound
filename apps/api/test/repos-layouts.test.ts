@@ -22,11 +22,7 @@ describe('기본 레이아웃 (0007)', () => {
       expect(layout!.projectId).toBe(project.id)
 
       // 프로젝트 쪽 컬럼도 실제로 채워졌는가 — 조인만 보면 조인이 다른 행을 집어도 통과한다.
-      const row = await ctx.db
-        .selectFrom('projects')
-        .select('default_layout_id')
-        .where('id', '=', project.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('projects').select('default_layout_id').where('id', '=', project.id).executeTakeFirstOrThrow()
       expect(row.default_layout_id).toBe(layout!.id)
     })
   })

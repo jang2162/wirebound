@@ -81,8 +81,7 @@ export function pptxFileName(projectSlug: string): string {
 }
 
 /** pptx 의 MIME. **`Content-Disposition`과 함께 이 한 자리에만 둔다.** */
-export const PPTX_CONTENT_TYPE =
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+export const PPTX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 
 /**
  * 파일들을 zip 하나로 묶는다. 모든 엔트리가 `rootDirectory` 밑에 들어간다.
@@ -117,14 +116,10 @@ export function zipParts(entries: readonly ZipEntry[]): Uint8Array {
 }
 
 /** **압축이 일어나는 유일한 자리.** 이름 짓는 규칙만 부르는 쪽이 준다. */
-function zipEntries(
-  entries: readonly ZipEntry[],
-  nameOf: (path: string) => string,
-): Uint8Array {
+function zipEntries(entries: readonly ZipEntry[], nameOf: (path: string) => string): Uint8Array {
   const tree: Record<string, Uint8Array> = {}
   for (const entry of entries) {
-    tree[nameOf(entry.path)] =
-      typeof entry.content === 'string' ? strToU8(entry.content) : entry.content
+    tree[nameOf(entry.path)] = typeof entry.content === 'string' ? strToU8(entry.content) : entry.content
   }
   return zipSync(tree, { level: 6 })
 }

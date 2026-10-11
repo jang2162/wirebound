@@ -114,9 +114,7 @@ const PAGES = [
             interactions: [
               {
                 on: 'click',
-                actions: [
-                  { type: 'setProp', target: 'n_000000000003', prop: 'loading', value: true },
-                ],
+                actions: [{ type: 'setProp', target: 'n_000000000003', prop: 'loading', value: true }],
               },
             ],
           },

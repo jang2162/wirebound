@@ -102,7 +102,10 @@ export async function registerRealtime(app: FastifyInstance, config: ApiConfig):
     rooms,
     locks,
     (error, connection) =>
-      app.log.warn({ err: error, projectId: connection.projectId, connectionId: connection.id }, '방송 — 권한을 재지 못해 한 연결을 건너뜀'),
+      app.log.warn(
+        { err: error, projectId: connection.projectId, connectionId: connection.id },
+        '방송 — 권한을 재지 못해 한 연결을 건너뜀',
+      ),
     // 방송이 회수한 연결 — 닫힘은 도는 프레임을 기다리므로 잠금 · 참가자는 여기서 거둔다(`broadcast.ts`의 «회수는 프레임 쪽 회수와 같은 순서다»).
     (connection) => {
       releaseLocksOf(app, connection)

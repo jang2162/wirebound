@@ -18,17 +18,7 @@ import type { PageDetail, PatchResult } from '../../src/api/types'
 import { useEditCommit } from '../../src/edit/use-edit-commit'
 import { EditorStore } from '../../src/store/editor-store'
 import { EditorStoreProvider } from '../../src/store/use-editor-store'
-import {
-  HEAD_SEQ,
-  PAGE_ID,
-  PAGE_ROUTE,
-  PROJECT_ID,
-  PROJECT_NAME,
-  openPage,
-  pageDetail,
-  pageDoc,
-  canvasQuery,
-} from '../editor-harness'
+import { HEAD_SEQ, PAGE_ID, PAGE_ROUTE, PROJECT_ID, PROJECT_NAME, openPage, pageDetail, pageDoc, canvasQuery } from '../editor-harness'
 import { currentPath } from '../helpers'
 
 const createdStores: EditorStore[] = []
@@ -156,13 +146,10 @@ async function openWithFailure(options: {
 }
 
 /** 실패를 만드는 손잡이들. 셋이 **같은 경로로** 수렴해야 한다. */
-const CONFLICT = (): Promise<PatchResult> =>
-  Promise.reject(new ApiError(409, 'conflict', SERVER_REASON))
+const CONFLICT = (): Promise<PatchResult> => Promise.reject(new ApiError(409, 'conflict', SERVER_REASON))
 const VALIDATION = (): Promise<PatchResult> =>
   Promise.reject(
-    new ApiError(422, 'validation-failed', SERVER_REASON, [
-      { path: '/root/children/0/props/content', message: '알 수 없는 prop' },
-    ]),
+    new ApiError(422, 'validation-failed', SERVER_REASON, [{ path: '/root/children/0/props/content', message: '알 수 없는 prop' }]),
   )
 /** `ApiError`가 아닌 값. `fetch`가 응답을 못 받으면 raw `TypeError`로 reject한다. */
 const NETWORK = (): Promise<PatchResult> => Promise.reject(new TypeError('Failed to fetch'))

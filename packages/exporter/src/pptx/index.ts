@@ -60,24 +60,11 @@
  */
 import type { PageDocument } from '@wirebound/schema'
 import { commentEntries, type BundleComment, type CommentEntry } from '../bundle/comments'
-import {
-  EMPTY_COMMENTS,
-  EMPTY_DESCRIPTION,
-  EMPTY_INTERACTIONS,
-  MARKER_WITHOUT_COMMENT,
-  panelLabel,
-} from '../labels'
+import { EMPTY_COMMENTS, EMPTY_DESCRIPTION, EMPTY_INTERACTIONS, MARKER_WITHOUT_COMMENT, panelLabel } from '../labels'
 import { installRegistries } from '../page'
 import { pageSentences } from '../sentences'
 import { NOTES_BOX, PANEL_BOX, SCREEN_BOX, TITLE_BOX, type Box } from './geometry'
-import {
-  extensionOf,
-  MEDIA_EXTENSIONS,
-  pptxPackage,
-  SLIDE_IMAGE_RID,
-  type PptxPart,
-  type SlideSource,
-} from './ooxml'
+import { extensionOf, MEDIA_EXTENSIONS, pptxPackage, SLIDE_IMAGE_RID, type PptxPart, type SlideSource } from './ooxml'
 import { image, notesXml, placeholder, pt, slideXml, textBox, type Line } from './slide'
 
 /** 슬라이드 하나가 될 페이지. */
@@ -188,8 +175,7 @@ export function exportPptx(options: ExportPptxOptions): ExportedPptx {
         }),
       ]),
       notes: notesXml(NOTES_BOX, noteLines(page, entries, sentences)),
-      media:
-        screen === null ? undefined : { fileName: mediaName(screen, index), bytes: screen.bytes },
+      media: screen === null ? undefined : { fileName: mediaName(screen, index), bytes: screen.bytes },
     }
   })
 
@@ -214,9 +200,7 @@ function panelTitleName(title: string): string {
 function mediaName(screen: PptxScreen, index: number): string {
   const extension = extensionOf(screen.fileName)
   if (!MEDIA_EXTENSIONS.includes(extension)) {
-    throw new Error(
-      `pptx 에 담을 수 없는 이미지 형식입니다: ${screen.fileName} (${MEDIA_EXTENSIONS.join('·')} 만 됩니다)`,
-    )
+    throw new Error(`pptx 에 담을 수 없는 이미지 형식입니다: ${screen.fileName} (${MEDIA_EXTENSIONS.join('·')} 만 됩니다)`)
   }
   return `image${index + 1}.${extension}`
 }
@@ -254,9 +238,7 @@ function commentLines(entries: readonly CommentEntry[]): Line[] {
       head,
       { text: entry.body, size: ENTRY_SIZE, indent: 1 },
       // **둘 다 없으면 줄 자체를 안 그린다** — 번들의 `CommentMeta`와 같은 규칙이다.
-      ...(meta.length === 0
-        ? []
-        : [{ text: meta.join(' · '), size: META_SIZE, color: META_COLOR, indent: 1 }]),
+      ...(meta.length === 0 ? [] : [{ text: meta.join(' · '), size: META_SIZE, color: META_COLOR, indent: 1 }]),
     ]
   })
 }
@@ -294,11 +276,7 @@ function panelLines(entries: readonly CommentEntry[], sentences: readonly string
  * **슬라이드에 실린 것을 전부 다시 싣고 페이지 설명을 더한다.** 슬라이드 쪽은 자리에
  * 맞춰 줄어들거나 잘리지만 노트는 스크롤되므로, 잘려도 여기 남는다.
  */
-function noteLines(
-  page: PptxPage,
-  entries: readonly CommentEntry[],
-  sentences: readonly string[],
-): Line[] {
+function noteLines(page: PptxPage, entries: readonly CommentEntry[], sentences: readonly string[]): Line[] {
   const description = page.description ?? null
   return [
     { text: page.title, size: NOTE_SIZE, bold: true },

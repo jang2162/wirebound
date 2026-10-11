@@ -152,11 +152,7 @@ describe('pageFileName — 유니코드 정규화', () => {
 
 describe('pageFileNames — 충돌을 결정적으로 푼다', () => {
   it('같은 제목 셋이 서로 다른 이름을 받는다', () => {
-    expect(pageFileNames(['회원 목록', '회원 목록', '회원 목록'])).toEqual([
-      '회원-목록.html',
-      '회원-목록-2.html',
-      '회원-목록-3.html',
-    ])
+    expect(pageFileNames(['회원 목록', '회원 목록', '회원 목록'])).toEqual(['회원-목록.html', '회원-목록-2.html', '회원-목록-3.html'])
   })
 
   it('위험한 문자를 접은 뒤에 같아진 것도 충돌로 본다', () => {
@@ -172,11 +168,7 @@ describe('pageFileNames — 충돌을 결정적으로 푼다', () => {
   })
 
   it('접미사가 이미 쓰인 이름과 또 부딪히면 다음 수로 간다', () => {
-    expect(pageFileNames(['목록', '목록-2', '목록'])).toEqual([
-      '목록.html',
-      '목록-2.html',
-      '목록-3.html',
-    ])
+    expect(pageFileNames(['목록', '목록-2', '목록'])).toEqual(['목록.html', '목록-2.html', '목록-3.html'])
   })
 
   it('접미사를 붙여도 바이트 상한을 넘지 않는다', () => {
@@ -198,9 +190,7 @@ describe('pageFileNames — 충돌을 결정적으로 푼다', () => {
 
 describe('bundleHref — 번들 안의 상대 링크', () => {
   it('index.html에서 페이지와 자산으로', () => {
-    expect(bundleHref('index.html', 'pages/회원-목록.html')).toBe(
-      'pages/%ED%9A%8C%EC%9B%90-%EB%AA%A9%EB%A1%9D.html',
-    )
+    expect(bundleHref('index.html', 'pages/회원-목록.html')).toBe('pages/%ED%9A%8C%EC%9B%90-%EB%AA%A9%EB%A1%9D.html')
     expect(bundleHref('index.html', 'assets/theme.css')).toBe('assets/theme.css')
   })
 

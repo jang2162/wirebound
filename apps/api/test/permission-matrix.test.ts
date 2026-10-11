@@ -42,20 +42,11 @@ interface Case {
    * `anonymous`에게는 주체가 없으므로 owner의 id가 온다. 그 행은 어차피 인증 훅에서
    * 끝나므로(401) 누구의 것인지가 결과를 바꾸지 않는다.
    */
-  setup?: (
-    ctx: TestContext,
-    projectId: string,
-    ownerCookie: { wb_session: string },
-    actorUserId: string,
-  ) => Promise<Record<string, string>>
+  setup?: (ctx: TestContext, projectId: string, ownerCookie: { wb_session: string }, actorUserId: string) => Promise<Record<string, string>>
 }
 
 /** ':nodeId'가 필요한 케이스(메뉴 수정·삭제)가 실행 전에 대상 메뉴 노드를 만든다. */
-const 메뉴하나 = async (
-  ctx: TestContext,
-  projectId: string,
-  ownerCookie: { wb_session: string },
-): Promise<Record<string, string>> => ({
+const 메뉴하나 = async (ctx: TestContext, projectId: string, ownerCookie: { wb_session: string }): Promise<Record<string, string>> => ({
   nodeId: (await createMenuNode(ctx, ownerCookie, projectId, { title: '대상 메뉴' })).id,
 })
 
@@ -65,22 +56,14 @@ const 메뉴하나 = async (
  * `addMember` 문서와 같은 이유: 픽스처가 검사 대상 API에 의존하면 그 API가
  * 깨졌을 때 무관한 테스트가 전부 무너진다.
  */
-const 멤버하나 = async (
-  ctx: TestContext,
-  projectId: string,
-  _ownerCookie: { wb_session: string },
-): Promise<Record<string, string>> => {
+const 멤버하나 = async (ctx: TestContext, projectId: string, _ownerCookie: { wb_session: string }): Promise<Record<string, string>> => {
   const target = await signup(ctx)
   await addMember(ctx, projectId, target.user.id, 'viewer')
   return { userId: target.user.id }
 }
 
 /** ':menuNodeId'가 필요한 케이스(페이지 생성)가 실행 전에 대상 메뉴 노드를 만든다. */
-const 페이지용메뉴 = async (
-  ctx: TestContext,
-  projectId: string,
-  ownerCookie: { wb_session: string },
-): Promise<Record<string, string>> => ({
+const 페이지용메뉴 = async (ctx: TestContext, projectId: string, ownerCookie: { wb_session: string }): Promise<Record<string, string>> => ({
   menuNodeId: (await createMenuNode(ctx, ownerCookie, projectId, { title: '페이지용 메뉴' })).id,
 })
 
@@ -91,22 +74,14 @@ const 페이지용메뉴 = async (
  * 사람이 푼 뒤에야 비었다는 것을 안다). 그러면 허용된 역할도 4xx를 받아 `허용`을
  * 못 보인다 — `스냅샷 복원`이 `setup`을 요구하는 것과 같은 자리다.
  */
-const 내보낼페이지 = async (
-  ctx: TestContext,
-  projectId: string,
-  ownerCookie: { wb_session: string },
-): Promise<Record<string, string>> => {
+const 내보낼페이지 = async (ctx: TestContext, projectId: string, ownerCookie: { wb_session: string }): Promise<Record<string, string>> => {
   const menu = await createMenuNode(ctx, ownerCookie, projectId, { title: '내보낼 메뉴' })
   await createPage(ctx, ownerCookie, projectId, menu.id, { title: '내보낼 페이지' })
   return {}
 }
 
 /** ':pageId'가 필요한 케이스(페이지 조회·수정·스키마 저장·삭제)가 실행 전에 대상 페이지를 만든다. */
-const 페이지하나 = async (
-  ctx: TestContext,
-  projectId: string,
-  ownerCookie: { wb_session: string },
-): Promise<Record<string, string>> => {
+const 페이지하나 = async (ctx: TestContext, projectId: string, ownerCookie: { wb_session: string }): Promise<Record<string, string>> => {
   const menu = await createMenuNode(ctx, ownerCookie, projectId, { title: '대상 메뉴' })
   const page = await createPage(ctx, ownerCookie, projectId, menu.id, { title: '대상 페이지' })
   return { pageId: page.id }
@@ -271,7 +246,13 @@ const CASES: Case[] = [
     allowed: ['owner', 'editor', 'viewer'],
   },
   { label: '멤버 목록', method: 'GET', url: '/api/projects/:projectId/members', allowed: ['owner', 'editor', 'viewer'] },
-  { label: '멤버 초대', method: 'POST', url: '/api/projects/:projectId/members', payload: { email: 'invitee@example.com', role: 'viewer' }, allowed: ['owner'] },
+  {
+    label: '멤버 초대',
+    method: 'POST',
+    url: '/api/projects/:projectId/members',
+    payload: { email: 'invitee@example.com', role: 'viewer' },
+    allowed: ['owner'],
+  },
   {
     label: '멤버 수정',
     method: 'PATCH',
@@ -583,7 +564,7 @@ const ACTORS: Actor[] = ['owner', 'editor', 'viewer', 'outsider', 'anonymous']
 /** 거부는 상태로 판별한다. 허용된 경우의 성공 상태는 케이스마다 다르므로 4xx가 아님만 본다. */
 function expectedRejection(actor: Actor): number {
   if (actor === 'anonymous') return 401
-  if (actor === 'outsider') return 404   // 프로젝트 존재를 숨긴다 (설계서 「권한 모델」)
+  if (actor === 'outsider') return 404 // 프로젝트 존재를 숨긴다 (설계서 「권한 모델」)
   return 403
 }
 
@@ -696,9 +677,7 @@ describe('권한 매트릭스 (역할 × 엔드포인트)', () => {
 
           // setup은 항상 owner 권한으로 돈다 — 어떤 actor가 실제로 호출하든
           // 대상 리소스는 미리 존재해야 한다.
-          const substitutions = testCase.setup
-            ? await testCase.setup(ctx, project.id, owner.cookie, actorUserId)
-            : {}
+          const substitutions = testCase.setup ? await testCase.setup(ctx, project.id, owner.cookie, actorUserId) : {}
           let url = testCase.url.replace(':projectId', project.id)
           for (const [key, value] of Object.entries(substitutions)) {
             url = url.replace(':' + key, value)

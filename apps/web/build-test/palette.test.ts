@@ -42,7 +42,12 @@ async function fixture(
   slug: string,
   nodes: unknown[],
   options: { bob?: boolean } = {},
-): Promise<{ P: string; projectId: string; pageId: string; call: (m: string, p: string, b?: unknown) => Promise<{ status: number; body: any }> }> {
+): Promise<{
+  P: string
+  projectId: string
+  pageId: string
+  call: (m: string, p: string, b?: unknown) => Promise<{ status: number; body: any }>
+}> {
   const call = (m: string, p: string, b?: unknown) => stack.request(owner, m, p, b)
   const project = (await call('POST', '/projects', { name: 'D2 목록', slug: `${slug}-${Date.now().toString(36)}` })).body
   const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' })).body
@@ -124,7 +129,11 @@ const THUMB_BUTTON = `(() => {
 })()`
 
 const texts = (count: number) =>
-  Array.from({ length: count }, (_, index) => ({ id: `n_t${index}`, type: 'Text', props: { content: `글 ${index} — 캔버스를 세로로 채운다` } }))
+  Array.from({ length: count }, (_, index) => ({
+    id: `n_t${index}`,
+    type: 'Text',
+    props: { content: `글 ${index} — 캔버스를 세로로 채운다` },
+  }))
 
 /** 셸 조각들의 높이(셸 · 머리 · 캔버스 칸 · 판 · 하단 바)와 셸의 세로 넘침. */
 async function heights(page: Page) {
@@ -273,10 +282,16 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       // 17 — 둘 수 있는 타입 전부(뿌리 타입 `Page` 는 `placeableGroups` 가 뺀다).
       expect(cards).toBeGreaterThanOrEqual(17)
       // 축소판이 읽힌다 — 판 기본 높이 · 창 1440×900 에서 표본 절반 넘게가 0.6 배 이상으로 선다(`PALETTE_HEIGHT_DEFAULT` 주석).
-      const sorted = Object.values(scales).filter((value): value is number => value !== null).sort((a, b) => a - b)
+      const sorted = Object.values(scales)
+        .filter((value): value is number => value !== null)
+        .sort((a, b) => a - b)
       expect(sorted[Math.floor(sorted.length / 2)]).toBeGreaterThanOrEqual(0.6)
       expect(Object.keys(shown).length).toBe(cards)
-      expect(Object.entries(shown).filter(([, ok]) => !ok).map(([type]) => type)).toEqual([])
+      expect(
+        Object.entries(shown)
+          .filter(([, ok]) => !ok)
+          .map(([type]) => type),
+      ).toEqual([])
     } finally {
       await context.close()
     }
@@ -293,13 +308,21 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       await canvasFrame(page).locator('[data-wb-id="n_t0"]').waitFor()
       await openPalette(page)
       await showOnly(page, 'Button')
-      const before = await poll('축소판 표지', async () => String(await page.evaluate(THUMB_BUTTON)), (value) => value === portalPrimary).catch(
+      const before = await poll(
+        '축소판 표지',
         async () => String(await page.evaluate(THUMB_BUTTON)),
-      )
-      await putTheme(project.call, project.projectId, { themeId: 'system-portal', version: seededVersion('system-portal'), tokens: { 'semantic.primary': '#00aa11' } })
-      const after = await poll('남의 저장을 따라간다', async () => String(await page.evaluate(THUMB_BUTTON)), (value) => value === 'rgb(0, 170, 17)').catch(
+        (value) => value === portalPrimary,
+      ).catch(async () => String(await page.evaluate(THUMB_BUTTON)))
+      await putTheme(project.call, project.projectId, {
+        themeId: 'system-portal',
+        version: seededVersion('system-portal'),
+        tokens: { 'semantic.primary': '#00aa11' },
+      })
+      const after = await poll(
+        '남의 저장을 따라간다',
         async () => String(await page.evaluate(THUMB_BUTTON)),
-      )
+        (value) => value === 'rgb(0, 170, 17)',
+      ).catch(async () => String(await page.evaluate(THUMB_BUTTON)))
       expect({ before, after }).toEqual({ before: portalPrimary, after: 'rgb(0, 170, 17)' })
     } finally {
       await context.close()
@@ -329,7 +352,11 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       expect(refused).toBeGreaterThanOrEqual(1)
       expect(sheets).toEqual(['style:base', 'style:tokens'])
       expect(Object.keys(shown ?? {}).length).toBeGreaterThan(0)
-      expect(Object.entries(shown ?? {}).filter(([, ok]) => !ok).map(([type]) => type)).toEqual([])
+      expect(
+        Object.entries(shown ?? {})
+          .filter(([, ok]) => !ok)
+          .map(([type]) => type),
+      ).toEqual([])
     } finally {
       await context.close()
     }
@@ -343,7 +370,11 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       await canvasFrame(page).locator('[data-wb-id="n_t0"]').waitFor()
       await openPalette(page)
       await showOnly(page, 'Button')
-      await poll('단추 표본', async () => String(await page.evaluate(THUMB_BUTTON)), (value) => value !== '단추 없음')
+      await poll(
+        '단추 표본',
+        async () => String(await page.evaluate(THUMB_BUTTON)),
+        (value) => value !== '단추 없음',
+      )
       // iframe 문서가 받는 클릭 · 포커스를 센다.
       await page.evaluate(`(() => {
         const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe').contentDocument
@@ -358,13 +389,10 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
         const b = iframe.contentDocument.querySelector('[data-wb-palette-thumb="Button"] [data-wb-component="Button"]').getBoundingClientRect()
         return { x: f.left + b.left + b.width / 2, y: f.top + b.top + b.height / 2 }
       })()`)) as { x: number; y: number }
-      const top = await page.evaluate(
-        ({ x, y }) => {
-          const el = document.elementFromPoint(x, y)
-          return el?.closest('[data-wb-palette-card]')?.getAttribute('data-wb-palette-card') ?? el?.tagName ?? null
-        },
-        center,
-      )
+      const top = await page.evaluate(({ x, y }) => {
+        const el = document.elementFromPoint(x, y)
+        return el?.closest('[data-wb-palette-card]')?.getAttribute('data-wb-palette-card') ?? el?.tagName ?? null
+      }, center)
       await page.mouse.click(center.x, center.y)
       // 카드 줄을 Tab 으로 지난다 — 판 안의 단추들 뒤 하단 바까지.
       await page.getByRole('separator', { name: '컴포넌트 목록 높이' }).focus()
@@ -372,10 +400,21 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       for (let i = 0; i < 40; i += 1) {
         await page.keyboard.press('Tab')
         // 축소판 iframe 만 센다 — Tab 이 한 바퀴 돌면 캔버스 iframe 에 닿는다(그것은 포커스를 받는 자리다).
-        visited.push(await page.evaluate(() => (document.activeElement?.classList.contains('wb-shell-palette-thumbs-iframe') === true ? 'THUMBS' : document.activeElement?.tagName) ?? ''))
+        visited.push(
+          await page.evaluate(
+            () =>
+              (document.activeElement?.classList.contains('wb-shell-palette-thumbs-iframe') === true
+                ? 'THUMBS'
+                : document.activeElement?.tagName) ?? '',
+          ),
+        )
       }
       const hits = await page.evaluate('window.__thumbHits')
-      expect({ top, hits, iframeFocused: visited.includes('THUMBS') }).toEqual({ top: 'Button', hits: { clicks: 0, focus: 0 }, iframeFocused: false })
+      expect({ top, hits, iframeFocused: visited.includes('THUMBS') }).toEqual({
+        top: 'Button',
+        hits: { clicks: 0, focus: 0 },
+        iframeFocused: false,
+      })
     } finally {
       await context.close()
     }
@@ -412,7 +451,9 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
     async function shape(P: string): Promise<unknown> {
       const walk = (node: { id: string; type: string; children?: unknown[] }, root: boolean): unknown => {
         const name = root ? 'n_root' : KNOWN.has(node.id) ? node.id : `+${node.type}`
-        return Array.isArray(node.children) && node.children.length > 0 ? { [name]: node.children.map((child) => walk(child as never, false)) } : name
+        return Array.isArray(node.children) && node.children.length > 0
+          ? { [name]: node.children.map((child) => walk(child as never, false)) }
+          : name
       }
       return walk((await stack.request(alice, 'GET', P)).body.schema.root, true)
     }
@@ -427,14 +468,20 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       for (const [index, nodes] of pages.entries()) {
         const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: `쪽${index + 1}` })).body.id
         const path = `/projects/${project.id}/pages/${pageId}`
-        const seeded = await call('PATCH', `${path}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+        const seeded = await call('PATCH', `${path}/ops`, {
+          baseSeq: 0,
+          ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+        })
         if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
         P.push(path)
       }
       return { P, projectId: project.id }
     }
 
-    async function openEditor(P: string, user: 'alice' | 'bob' = 'alice'): Promise<{ page: Page; close: () => Promise<void>; patches: string[] }> {
+    async function openEditor(
+      P: string,
+      user: 'alice' | 'bob' = 'alice',
+    ): Promise<{ page: Page; close: () => Promise<void>; patches: string[] }> {
       const { context, page } = await stack.openTab(stack.users[user], { viewport: { width: 1440, height: 900 } })
       const patches: string[] = []
       page.on('websocket', (socket) => {
@@ -516,15 +563,27 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
         const intoHint = await indicators(page)
         const tag = await page.locator('.wb-shell-palette-dragtag').textContent()
         await page.mouse.up()
-        const into = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL))
+        const into = await poll(
+          '서버 문서',
+          () => shape(P[0]!),
+          (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL),
+        )
         const firstNew = (await addedIds(P[0]!))[0]
-        const selectedAfterDrop = await poll('넣은 노드를 고른다', () => selectedId(page), (id) => id === firstNew).catch(() => selectedId(page))
+        const selectedAfterDrop = await poll(
+          '넣은 노드를 고른다',
+          () => selectedId(page),
+          (id) => id === firstNew,
+        ).catch(() => selectedId(page))
 
         await grabCard(page, 'Divider')
         await moveTo(page, await spotIn(page, 'n_intx', 0.5, 0.1))
         const beforeHint = await indicators(page)
         await page.mouse.up()
-        const before = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(into))
+        const before = await poll(
+          '서버 문서',
+          () => shape(P[0]!),
+          (v) => JSON.stringify(v) !== JSON.stringify(into),
+        )
 
         await grabCard(page, 'Divider')
         const last = await nodeBox(page, 'n_last')
@@ -532,20 +591,45 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
         await moveTo(page, { x: last.x + 200, y: last.y + last.height + 12 })
         const endHint = await indicators(page)
         await page.mouse.up()
-        const atEnd = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(before))
+        const atEnd = await poll(
+          '서버 문서',
+          () => shape(P[0]!),
+          (v) => JSON.stringify(v) !== JSON.stringify(before),
+        )
 
         await grabCard(page, 'Divider')
         const row = (await treeRow(page, 'n_card').boundingBox())!
         await moveTo(page, { x: row.x + 30, y: row.y + row.height / 2 })
         const rowHint = await indicators(page)
         await page.mouse.up()
-        const onRow = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(atEnd))
+        const onRow = await poll(
+          '서버 문서',
+          () => shape(P[0]!),
+          (v) => JSON.stringify(v) !== JSON.stringify(atEnd),
+        )
 
         const undo = page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' })
         for (let i = 0; i < 4; i += 1) await undo.click()
-        const undone = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) === JSON.stringify(ORIGINAL)).catch(() => shape(P[0]!))
+        const undone = await poll(
+          '서버 문서',
+          () => shape(P[0]!),
+          (v) => JSON.stringify(v) === JSON.stringify(ORIGINAL),
+        ).catch(() => shape(P[0]!))
 
-        expect({ intoHint, tag, into, selected: selectedAfterDrop === firstNew, beforeHint, before, endHint, atEnd, rowHint, onRow, undone, sent: patches.length }).toEqual({
+        expect({
+          intoHint,
+          tag,
+          into,
+          selected: selectedAfterDrop === firstNew,
+          beforeHint,
+          before,
+          endHint,
+          atEnd,
+          rowHint,
+          onRow,
+          undone,
+          sent: patches.length,
+        }).toEqual({
           intoHint: ['inside'],
           tag: '구분선',
           into: { n_root: ['n_text', { n_card: ['n_intx'] }, { n_empt: ['+Divider'] }, 'n_last'] },
@@ -606,7 +690,10 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
      * 너머»가 아니다. 판에서 캔버스로 올라가는 길에 칸 아래 끝 띠를 지나며 미는 몫(장부 N6)은 `[판에서 캔버스로]` 로그로 낸다.
      */
     it('판 위에서 카드를 쥐고 머뭇거려도 캔버스 칸이 안 밀린다 — 칸 아래 끝 띠 안에서는 민다', async () => {
-      const long: SeedNode[] = [...BASIC, ...Array.from({ length: 30 }, (_, i) => ({ id: `n_more${i}`, type: 'Text', props: { content: `더 ${i}` } }))]
+      const long: SeedNode[] = [
+        ...BASIC,
+        ...Array.from({ length: 30 }, (_, i) => ({ id: `n_more${i}`, type: 'Text', props: { content: `더 ${i}` } })),
+      ]
       const { P } = await seed('pal-edge', [long])
       const { page, close, patches } = await openEditor(P[0]!)
       try {
@@ -644,7 +731,10 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
      * 고치기 전 값: 띠에 80ms 머물면 56px · 250ms 136px · 600ms 312px 가 밀렸다. 이 케이스의 머묾(30 · 120ms)은 띠 안을 걸어 들어가는 시간(스텝 8 개)을 더해도 300ms 아래다.
      */
     it('판에서 올라오는 카드가 칸 아래 끝 띠를 지나가기만 하면 캔버스 칸이 안 밀린다 — 띠에 머물면 민다', async () => {
-      const long: SeedNode[] = [...BASIC, ...Array.from({ length: 30 }, (_, i) => ({ id: `n_more${i}`, type: 'Text', props: { content: `더 ${i}` } }))]
+      const long: SeedNode[] = [
+        ...BASIC,
+        ...Array.from({ length: 30 }, (_, i) => ({ id: `n_more${i}`, type: 'Text', props: { content: `더 ${i}` } })),
+      ]
       const { P } = await seed('pal-edge-pass', [long])
       const { page, close, patches } = await openEditor(P[0]!)
       try {
@@ -795,13 +885,21 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
         const sentAfterBody = patches.length
         await page.getByRole('button', { name: '구분선 넣기', exact: true }).focus()
         await page.keyboard.press('Enter')
-        const entered = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL))
+        const entered = await poll(
+          '서버 문서',
+          () => shape(P[0]!),
+          (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL),
+        )
         const sentAfterEnter = patches.length
 
         await grabCard(page, 'Divider')
         await moveTo(page, await spotIn(page, 'n_empt', 0.5, 0.5))
         await page.mouse.up()
-        const dropped = await poll('서버 문서', () => shape(P[0]!), (v) => JSON.stringify(v) !== JSON.stringify(entered))
+        const dropped = await poll(
+          '서버 문서',
+          () => shape(P[0]!),
+          (v) => JSON.stringify(v) !== JSON.stringify(entered),
+        )
         await page.waitForTimeout(500)
         expect({ sentAfterBody, entered, sentAfterEnter, dropped, sent: patches.length, final: await shape(P[0]!) }).toEqual({
           sentAfterBody: 0,

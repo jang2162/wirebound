@@ -41,7 +41,10 @@ describe.skipIf(!전제.ok)('N2 정보 통지 — 실브라우저', () => {
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return P
   }
@@ -87,7 +90,10 @@ describe.skipIf(!전제.ok)('N2 정보 통지 — 실브라우저', () => {
       const heights: number[] = []
       for (const nodes of [
         [{ id: 'n_zz0000000001', type: 'NoSuchType' }],
-        [{ id: 'n_zz0000000002', type: 'Text' }, { id: 'n_zz0000000002', type: 'Text' }],
+        [
+          { id: 'n_zz0000000002', type: 'Text' },
+          { id: 'n_zz0000000002', type: 'Text' },
+        ],
         [{ id: 'n_zz0000000003', type: 'Text', props: { content: 3 } }],
       ]) {
         await paste(page, envelope(nodes))
@@ -122,7 +128,11 @@ describe.skipIf(!전제.ok)('N2 정보 통지 — 실브라우저', () => {
       await page.locator('[data-tree-id="n_card00000001"] > button').first().click()
       await page.getByRole('button', { name: '좌측 패널 접기' }).click()
       const side = page.locator('.wb-shell-side')
-      await poll('좌측이 접힌다', async () => (await side.boundingBox())?.width ?? 0, (width) => width === 0)
+      await poll(
+        '좌측이 접힌다',
+        async () => (await side.boundingBox())?.width ?? 0,
+        (width) => width === 0,
+      )
 
       await page.keyboard.press('F2')
 
@@ -130,7 +140,10 @@ describe.skipIf(!전제.ok)('N2 정보 통지 — 실브라우저', () => {
       const input = page.locator('.wb-shell-region[aria-label="구조 트리"] li:has(> [data-tree-id="n_card00000001"]) input')
       await input.waitFor({ state: 'attached', timeout: 3000 })
       const box = await input.boundingBox()
-      expect({ folded: await side.evaluate((el) => el.classList.contains('wb-shell-folded')), visible: (box?.width ?? 0) > 0 && (box?.x ?? -1) >= 0 }).toEqual({
+      expect({
+        folded: await side.evaluate((el) => el.classList.contains('wb-shell-folded')),
+        visible: (box?.width ?? 0) > 0 && (box?.x ?? -1) >= 0,
+      }).toEqual({
         folded: false,
         visible: true,
       })
@@ -151,7 +164,11 @@ describe.skipIf(!전제.ok)('N2 정보 통지 — 실브라우저', () => {
       expect(await field.inputValue()).toBe('가'.repeat(60))
       expect(await field.getAttribute('placeholder')).toBe('60자까지')
       await field.press('Enter')
-      await poll('서버의 별칭', async () => (await call('GET', P)).body.schema.root.children[0].alias, (alias) => alias === '가'.repeat(60))
+      await poll(
+        '서버의 별칭',
+        async () => (await call('GET', P)).body.schema.root.children[0].alias,
+        (alias) => alias === '가'.repeat(60),
+      )
     } finally {
       await close()
     }

@@ -14,11 +14,19 @@ beforeAll(() => {
 })
 
 const ADMIN: ViewState = { id: 's_admin', name: '관리자' }
-const adminCase: WbNode = { id: 'c_a', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'b_a', type: 'Button', props: { label: '승인' } }] }
+const adminCase: WbNode = {
+  id: 'c_a',
+  type: 'StateCase',
+  props: { state: 's_admin' },
+  children: [{ id: 'b_a', type: 'Button', props: { label: '승인' } }],
+}
 const area: WbNode = {
   id: 'sw',
   type: 'StateSwitch',
-  children: [{ id: 'c_d', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'b_d', type: 'Button', props: { label: '보기' } }] }, adminCase],
+  children: [
+    { id: 'c_d', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'b_d', type: 'Button', props: { label: '보기' } }] },
+    adminCase,
+  ],
 }
 
 describe('봉투의 상태 목록', () => {
@@ -73,7 +81,12 @@ describe('뺀 가지 안의 가지', () => {
     id: 'sw_out',
     type: 'StateSwitch',
     children: [
-      { id: 'c_out_d', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'b_out_d', type: 'Button', props: { label: '보기' } }] },
+      {
+        id: 'c_out_d',
+        type: 'StateCase',
+        props: { state: 'default' },
+        children: [{ id: 'b_out_d', type: 'Button', props: { label: '보기' } }],
+      },
       {
         id: 'c_out_g',
         type: 'StateCase',
@@ -83,7 +96,12 @@ describe('뺀 가지 안의 가지', () => {
             id: 'sw_in',
             type: 'StateSwitch',
             children: [
-              { id: 'c_in_d', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'b_in_d', type: 'Button', props: { label: '안' } }] },
+              {
+                id: 'c_in_d',
+                type: 'StateCase',
+                props: { state: 'default' },
+                children: [{ id: 'b_in_d', type: 'Button', props: { label: '안' } }],
+              },
               inner('s_vip', 'vip'),
               inner('s_admin', 'adm'),
             ],

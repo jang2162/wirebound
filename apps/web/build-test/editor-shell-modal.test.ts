@@ -13,7 +13,16 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, canvasText, editorStackPrerequisite, isRestoreUrl, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import {
+  canvasFrame,
+  canvasText,
+  editorStackPrerequisite,
+  isRestoreUrl,
+  poll,
+  startEditorStack,
+  type EditorStack,
+  type Session,
+} from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -48,9 +57,11 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
     const { P } = await fixture(stack, alice, 'modal-canvas', 3)
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
     const patches: string[] = []
-    page.on('websocket', (ws) => ws.on('framesent', (frame) => {
-      if (String(frame.payload).includes('"patch"')) patches.push(String(frame.payload))
-    }))
+    page.on('websocket', (ws) =>
+      ws.on('framesent', (frame) => {
+        if (String(frame.payload).includes('"patch"')) patches.push(String(frame.payload))
+      }),
+    )
     try {
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id="n_text0000001"]').click()
@@ -63,16 +74,19 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
       const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName ?? null, point)
       await page.mouse.click(point.x, point.y)
       await page.waitForTimeout(300)
-      for (const key of ['Delete', 'Backspace', 'Control+z', 'Meta+z', 'Alt+ArrowUp', 'Alt+Shift+ArrowRight']) await page.keyboard.press(key)
+      for (const key of ['Delete', 'Backspace', 'Control+z', 'Meta+z', 'Alt+ArrowUp', 'Alt+Shift+ArrowRight'])
+        await page.keyboard.press(key)
       await page.waitForTimeout(300)
 
       expect(before.startsWith('글 1')).toBe(true)
-      expect({ hit, 상자: await page.locator('dialog[open]').count(), 선택: (await selected()).slice(0, 3), 편집: patches.length }).toEqual({
-        hit: 'DIALOG',
-        상자: 1,
-        선택: '글 1',
-        편집: 0,
-      })
+      expect({ hit, 상자: await page.locator('dialog[open]').count(), 선택: (await selected()).slice(0, 3), 편집: patches.length }).toEqual(
+        {
+          hit: 'DIALOG',
+          상자: 1,
+          선택: '글 1',
+          편집: 0,
+        },
+      )
     } finally {
       await context.close()
     }
@@ -102,12 +116,20 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
       await page.keyboard.press('Escape')
       await page.waitForTimeout(300)
       // 상자가 닫혔으면 칸도 없다 — 짧게 묻고 «없음»으로 적는다(30s 기다리지 않게).
-      const during = { 상자: await page.locator('dialog[open]').count(), 글: await tag.inputValue({ timeout: 1_000 }).catch(() => '칸 없음') }
+      const during = {
+        상자: await page.locator('dialog[open]').count(),
+        글: await tag.inputValue({ timeout: 1_000 }).catch(() => '칸 없음'),
+      }
       const seen = await page.evaluate(() => (window as unknown as { __seen: string[] }).__seen.slice())
 
       await cdp.send('Input.insertText', { text: '한' })
       await page.keyboard.press('Escape')
-      const after = await poll('조합 뒤 Escape 가 닫는다', () => page.locator('dialog[open]').count(), (count) => count === 0, 3_000).catch(() => 1)
+      const after = await poll(
+        '조합 뒤 Escape 가 닫는다',
+        () => page.locator('dialog[open]').count(),
+        (count) => count === 0,
+        3_000,
+      ).catch(() => 1)
 
       expect(seen).toEqual(['keydown Escape true', 'cancel'])
       expect({ during, after }).toEqual({ during: { 상자: 1, 글: '한' }, after: 0 })
@@ -133,16 +155,27 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
       await page.getByRole('button', { name: '되돌린다' }).click()
       await hold.waitForWaiters(1)
       await page.keyboard.press('Escape')
-      const closed = await poll('상자가 닫힌다', () => page.locator('dialog[open]').count(), (count) => count === 0, 5_000)
+      const closed = await poll(
+        '상자가 닫힌다',
+        () => page.locator('dialog[open]').count(),
+        (count) => count === 0,
+        5_000,
+      )
       const answered = page.waitForResponse((response) => isRestoreUrl(response.url()))
       await hold.release()
       released = true
       const status = (await answered).status()
-      await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor({ timeout: 10_000 }).catch(() => undefined)
+      await canvasFrame(page)
+        .locator('body', { hasText: '원문' })
+        .waitFor({ timeout: 10_000 })
+        .catch(() => undefined)
       await page.waitForTimeout(1_000)
 
       expect({ closed, status }).toEqual({ closed: 0, status: 200 })
-      expect({ 캔버스: (await canvasText(page)).trim(), 배너: await page.locator('.wb-shell-remote-alert').count() }).toEqual({ 캔버스: '원문', 배너: 0 })
+      expect({ 캔버스: (await canvasText(page)).trim(), 배너: await page.locator('.wb-shell-remote-alert').count() }).toEqual({
+        캔버스: '원문',
+        배너: 0,
+      })
     } finally {
       if (!released) await hold.release()
       await context.close()
@@ -280,7 +313,10 @@ async function restoreFixture(stack: EditorStack, owner: Session, slug: string):
   })
   if (seeded.status >= 300) throw new Error(`픽스처 ops ${seeded.status}`)
   created(await call('POST', `/projects/${project.id}/snapshots`, { tag: 'v1' }))
-  const changed = await call('PATCH', `${P}/ops`, { baseSeq: 1, ops: [{ op: 'replace', path: '/root/children/0/props/content', value: '바뀐 글' }] })
+  const changed = await call('PATCH', `${P}/ops`, {
+    baseSeq: 1,
+    ops: [{ op: 'replace', path: '/root/children/0/props/content', value: '바뀐 글' }],
+  })
   if (changed.status >= 300) throw new Error(`픽스처 ops ${changed.status}`)
   return { P, pageId: target.id }
 }

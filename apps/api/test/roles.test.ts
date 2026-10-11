@@ -5,11 +5,12 @@ import { withApi, signup } from './helpers'
 import { withTransaction, type DbHandle } from '../src/db/tx'
 
 async function seedProject(db: DbHandle, ownerId: string): Promise<string> {
-  const project = await db.insertInto('projects')
+  const project = await db
+    .insertInto('projects')
     .values({ name: '테스트 프로젝트', slug: `p-${ownerId.slice(0, 8)}`, description: null })
-    .returning('id').executeTakeFirstOrThrow()
-  await db.insertInto('project_members')
-    .values({ project_id: project.id, user_id: ownerId, role: 'owner' }).execute()
+    .returning('id')
+    .executeTakeFirstOrThrow()
+  await db.insertInto('project_members').values({ project_id: project.id, user_id: ownerId, role: 'owner' }).execute()
   return project.id
 }
 
@@ -20,9 +21,15 @@ describe('roleAtLeast', () => {
   })
 
   it.each<[ProjectRole, ProjectRole, boolean]>([
-    ['owner', 'owner', true], ['owner', 'editor', true], ['owner', 'viewer', true],
-    ['editor', 'owner', false], ['editor', 'editor', true], ['editor', 'viewer', true],
-    ['viewer', 'owner', false], ['viewer', 'editor', false], ['viewer', 'viewer', true],
+    ['owner', 'owner', true],
+    ['owner', 'editor', true],
+    ['owner', 'viewer', true],
+    ['editor', 'owner', false],
+    ['editor', 'editor', true],
+    ['editor', 'viewer', true],
+    ['viewer', 'owner', false],
+    ['viewer', 'editor', false],
+    ['viewer', 'viewer', true],
   ])('%s가 %s 이상인가 → %s', (actual, min, expected) => {
     expect(roleAtLeast(actual, min)).toBe(expected)
   })
@@ -61,11 +68,12 @@ describe('requireProjectRole', () => {
       const owner = await signup(ctx)
       const viewer = await signup(ctx)
       const projectId = await seedProject(ctx.db, owner.user.id)
-      await ctx.db.insertInto('project_members')
-        .values({ project_id: projectId, user_id: viewer.user.id, role: 'viewer' }).execute()
+      await ctx.db.insertInto('project_members').values({ project_id: projectId, user_id: viewer.user.id, role: 'viewer' }).execute()
 
-      await expect(requireProjectRole(ctx.db, projectId, viewer.user.id, 'editor'))
-        .rejects.toMatchObject({ status: 403, code: 'forbidden' })
+      await expect(requireProjectRole(ctx.db, projectId, viewer.user.id, 'editor')).rejects.toMatchObject({
+        status: 403,
+        code: 'forbidden',
+      })
     })
   })
 
@@ -75,17 +83,19 @@ describe('requireProjectRole', () => {
       const outsider = await signup(ctx)
       const projectId = await seedProject(ctx.db, owner.user.id)
 
-      await expect(requireProjectRole(ctx.db, projectId, outsider.user.id, 'viewer'))
-        .rejects.toMatchObject({ status: 404, code: 'not-found' })
+      await expect(requireProjectRole(ctx.db, projectId, outsider.user.id, 'viewer')).rejects.toMatchObject({
+        status: 404,
+        code: 'not-found',
+      })
     })
   })
 
   it('없는 프로젝트도 404이며 비멤버와 구분되지 않는다', async () => {
     await withApi(async (ctx) => {
       const { user } = await signup(ctx)
-      await expect(
-        requireProjectRole(ctx.db, '00000000-0000-0000-0000-000000000000', user.id, 'viewer'),
-      ).rejects.toMatchObject({ status: 404 })
+      await expect(requireProjectRole(ctx.db, '00000000-0000-0000-0000-000000000000', user.id, 'viewer')).rejects.toMatchObject({
+        status: 404,
+      })
     })
   })
 })
@@ -104,7 +114,8 @@ describe('role CHECK 제약', () => {
       // 제약이 실제로 걸렸다는 것까지 확인한다.
       await expect(
         withTransaction(ctx.db, (trx) =>
-          trx.insertInto('project_members')
+          trx
+            .insertInto('project_members')
             .values({ project_id: projectId, user_id: other.user.id, role: 'admin' as never })
             .execute(),
         ),
@@ -160,8 +171,7 @@ describe('projectGuard', () => {
       const owner = await signup(ctx)
       const viewer = await signup(ctx)
       const projectId = await seedProject(ctx.db, owner.user.id)
-      await ctx.db.insertInto('project_members')
-        .values({ project_id: projectId, user_id: viewer.user.id, role: 'viewer' }).execute()
+      await ctx.db.insertInto('project_members').values({ project_id: projectId, user_id: viewer.user.id, role: 'viewer' }).execute()
 
       const res = await ctx.app.inject({
         method: 'GET',

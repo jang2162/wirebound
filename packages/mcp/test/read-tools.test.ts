@@ -20,11 +20,7 @@ describe('list_pages — 다음 도구의 인자를 낸다', () => {
     const listing = (await callJson(harness(), 'list_pages')) as {
       pages: { path: string; title: string; menuPath: string[] }[]
     }
-    expect(listing.pages.map((p) => p.path)).toEqual([
-      '관리자/회원/목록',
-      '관리자/회원/상세',
-      '마케팅/랜딩',
-    ])
+    expect(listing.pages.map((p) => p.path)).toEqual(['관리자/회원/목록', '관리자/회원/상세', '마케팅/랜딩'])
     // **접두를 벗긴 모양이다** — 그대로 `get_page`에 다시 넣을 수 있어야 한다.
     for (const p of listing.pages) expect(p.path.startsWith('page:')).toBe(false)
     expect(listing.pages[0]!.menuPath).toEqual(['관리자', '회원'])
@@ -155,9 +151,7 @@ describe('get_page — 못 찾은 것과 둘 이상을 갈라 낸다', () => {
     expect(said.found).toBe(false)
     expect(said.reason).toBe('ambiguous')
     expect(said.matches).toHaveLength(2)
-    expect(said.matches.map((m) => m.id).sort()).toEqual(
-      [PAGE_DETAIL.replace(/2$/, '9'), PAGE_DETAIL.replace(/2$/, '8')].sort(),
-    )
+    expect(said.matches.map((m) => m.id).sort()).toEqual([PAGE_DETAIL.replace(/2$/, '9'), PAGE_DETAIL.replace(/2$/, '8')].sort())
   })
 
   it('제목만 주면 못 찾는다 — 그것이 조상을 붙이는 이유다', async () => {

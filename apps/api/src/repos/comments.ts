@@ -153,15 +153,8 @@ export async function listProjectComments(db: DbHandle, projectId: string): Prom
  * 남의 페이지의 코멘트 id를 실은 요청이 통하면 안 된다. id만으로 찾고 나서 비교하는 대신
  * 질의 조건에 두는 것은, 비교를 빠뜨린 판이 조용히 통과하기 때문이다.
  */
-export async function findCommentById(
-  db: DbHandle,
-  pageId: string,
-  commentId: string,
-): Promise<CommentRecord | null> {
-  const row = await selectComments(db)
-    .where('comments.page_id', '=', pageId)
-    .where('comments.id', '=', commentId)
-    .executeTakeFirst()
+export async function findCommentById(db: DbHandle, pageId: string, commentId: string): Promise<CommentRecord | null> {
+  const row = await selectComments(db).where('comments.page_id', '=', pageId).where('comments.id', '=', commentId).executeTakeFirst()
 
   return row ? toRecord(row as CommentRow) : null
 }
@@ -228,12 +221,7 @@ export async function findPostRevision(db: DbHandle, pageId: string, commentId: 
  * 그 사람이 그 키로 이 페이지에 단 게시가 **달렸다가 지워졌는가**(`0013-comment-tombstones`).
  * 범위는 `findCommentByIdempotencyKey`와 같다 — 남의 묘비는 이 조회에 안 걸린다.
  */
-export async function hasCommentTombstone(
-  db: DbHandle,
-  pageId: string,
-  authorId: string,
-  idempotencyKey: string,
-): Promise<boolean> {
+export async function hasCommentTombstone(db: DbHandle, pageId: string, authorId: string, idempotencyKey: string): Promise<boolean> {
   const row = await db
     .selectFrom('comment_tombstones')
     .select('comment_id')
@@ -343,12 +331,7 @@ export async function insertImportedComments(
  * `now()`를 쓰는데 여기는 `clock_timestamp()`다(0008의 주석과 같은 이유: 한 트랜잭션
  * 안에서 두 번 고치면 `now()`는 같은 값이라 "언제 고쳤나"가 사라진다).
  */
-export async function updateCommentBody(
-  db: DbHandle,
-  pageId: string,
-  commentId: string,
-  body: string,
-): Promise<CommentRecord | null> {
+export async function updateCommentBody(db: DbHandle, pageId: string, commentId: string, body: string): Promise<CommentRecord | null> {
   assertNoNulByte(body)
 
   const updated = await db
@@ -405,11 +388,7 @@ async function deleteAndBury(db: DbHandle, pageId: string, commentId: string | n
  * `delete-comment`) 둘 다 이 함수를 지난다. 페이지째 지우는 길은 `deletePageComments`가 같은 문장으로 묻는다.
  * 프로젝트 삭제의 CASCADE 는 묻지 않는다 — 묘비도 프로젝트와 함께 간다(`0014`).
  */
-export async function deleteComment(
-  db: DbHandle,
-  pageId: string,
-  commentId: string,
-): Promise<{ nodeId: string } | 'not-found'> {
+export async function deleteComment(db: DbHandle, pageId: string, commentId: string): Promise<{ nodeId: string } | 'not-found'> {
   const row = (await deleteAndBury(db, pageId, commentId))[0]
   return row ? { nodeId: row.node_id } : 'not-found'
 }
@@ -525,10 +504,7 @@ export async function insertCommentWithId(
  * `updateCommentBody`와 갈리는 지점은 `updated_at`이다 — 그쪽은 `clock_timestamp()`(지금)를
  * 쓰고 여기는 payload의 값(그때)을 쓴다. 복원은 *"그때의 사실"*을 되돌리는 일이다.
  */
-export async function writeCommentBody(
-  trx: DbHandle,
-  input: { id: string; pageId: string; body: string; updatedAt: Date },
-): Promise<void> {
+export async function writeCommentBody(trx: DbHandle, input: { id: string; pageId: string; body: string; updatedAt: Date }): Promise<void> {
   await trx
     .updateTable('comments')
     .set({ body: input.body, updated_at: input.updatedAt })

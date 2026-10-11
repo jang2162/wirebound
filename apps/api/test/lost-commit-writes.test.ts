@@ -69,7 +69,12 @@ async function fixture(ctx: ProxiedRealApi) {
 type Fixture = Awaited<ReturnType<typeof fixture>>
 
 async function post(ctx: ProxiedRealApi, fx: Fixture, nodeId: string): Promise<string> {
-  const res = await ctx.app.inject({ method: 'POST', url: `${fx.pageUrl}/comments`, cookies: fx.owner.cookie, payload: { nodeId, body: `${nodeId}의 말` } })
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: `${fx.pageUrl}/comments`,
+    cookies: fx.owner.cookie,
+    payload: { nodeId, body: `${nodeId}의 말` },
+  })
   expect(res.statusCode, res.body).toBe(201)
   return res.json().comment.id
 }
@@ -146,12 +151,21 @@ describe('COMMIT 답을 잃은 쓰기', () => {
   it('복원 — 커밋을 확인하면 200 이고 룸이 `restored` 를 받는다', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
-      const snap = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/snapshots`, cookies: fx.owner.cookie, payload: { tag: 'v1' } })
+      const snap = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.projectId}/snapshots`,
+        cookies: fx.owner.cookie,
+        payload: { tag: 'v1' },
+      })
       expect(snap.statusCode, snap.body).toBe(201)
       await post(ctx, fx, 'n_a')
       await fx.watcher.quiet()
       ctx.proxy.dropCommitReplyAfter('insert into "snapshots"')
-      const res = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/snapshots/${snap.json().id}/restore`, cookies: fx.owner.cookie })
+      const res = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.projectId}/snapshots/${snap.json().id}/restore`,
+        cookies: fx.owner.cookie,
+      })
       expect(ctx.proxy.fired).toBe(true)
       expect(res.statusCode, res.body).toBe(200)
       expect(res.json().safetySnapshot).toMatchObject({ id: expect.any(String) })

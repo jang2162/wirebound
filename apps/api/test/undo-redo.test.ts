@@ -138,9 +138,7 @@ async function threeEdits(ctx: TestContext, fx: Fixture): Promise<[EditResult, E
     { op: 'add', path: '/root/children/1', value: NODE_B },
   ])
   const e2 = await edit(ctx, fx, e1.seq, [{ op: 'replace', path: '/root/children/0/props/content', value: '고친 A' }])
-  const e3 = await edit(ctx, fx, e2.seq, [
-    { op: 'move', from: '/root/children/0/props/content', path: '/root/children/1/props/content' },
-  ])
+  const e3 = await edit(ctx, fx, e2.seq, [{ op: 'move', from: '/root/children/0/props/content', path: '/root/children/1/props/content' }])
   return [e1, e2, e3]
 }
 

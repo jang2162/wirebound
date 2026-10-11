@@ -50,9 +50,7 @@ describe('presetApply', () => {
     const result = presetApply(page(), [LIST], counter())
 
     expect(result.reason).toBeNull()
-    expect(result.apply!.ops).toEqual([
-      { op: 'replace', path: '/root/children', value: [{ ...LIST, id: 'n_new000000002' }] },
-    ])
+    expect(result.apply!.ops).toEqual([{ op: 'replace', path: '/root/children', value: [{ ...LIST, id: 'n_new000000002' }] }])
   })
 
   it('root 자체는 바꾸지 않는다 — id·type·props가 그 페이지의 것이다', () => {
@@ -100,12 +98,8 @@ describe('presetApply', () => {
     expect(applyOps(after, inverse)).toEqual(before)
 
     // **그 자리에 `replace`를 놓으면 던진다** — 갈래를 둔 이유가 값으로 남는다.
-    expect(() => applyOps(before, [{ op: 'replace', path: '/root/children', value: [] }])).toThrow(
-      /바꿀 키가 없습니다/,
-    )
-    expect(() => invertOps(before, [{ op: 'replace', path: '/root/children', value: [] }])).toThrow(
-      /바꿀 값을 찾을 수 없습니다/,
-    )
+    expect(() => applyOps(before, [{ op: 'replace', path: '/root/children', value: [] }])).toThrow(/바꿀 키가 없습니다/)
+    expect(() => invertOps(before, [{ op: 'replace', path: '/root/children', value: [] }])).toThrow(/바꿀 값을 찾을 수 없습니다/)
   })
 
   it('children 키가 있으면 replace이고, 그 역은 옛 children을 통째로 담는다', () => {
@@ -114,9 +108,7 @@ describe('presetApply', () => {
     const result = presetApply(before, [LIST], counter())
     const inverse = invertOps(before, result.apply!.ops)
 
-    expect(inverse).toEqual([
-      { op: 'replace', path: '/root/children', value: before.root.children },
-    ])
+    expect(inverse).toEqual([{ op: 'replace', path: '/root/children', value: before.root.children }])
   })
 
   it('노드 id를 새로 발급한다(설계서 「페이지 프리셋」)', () => {

@@ -13,7 +13,10 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const DOC = { version: 1, root: { id: 'root', type: 'Page', children: [{ id: 'n_t00000001', type: 'Text', props: { content: '글' } }] } } as never
+const DOC = {
+  version: 1,
+  root: { id: 'root', type: 'Page', children: [{ id: 'n_t00000001', type: 'Text', props: { content: '글' } }] },
+} as never
 const noop = (() => null) as unknown as View
 
 function themeWith(views: Record<string, View>): ThemeDefinition {

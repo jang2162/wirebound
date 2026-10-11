@@ -28,13 +28,7 @@
 import { request } from 'node:http'
 import { pathToFileURL } from 'node:url'
 import { loadConfig } from '../config'
-import {
-  privatePlaceProblem,
-  UNLOCK_ROUTE,
-  unlockSocketPlace,
-  type UnlockKeyResult,
-  type UnlockRequest,
-} from './unlock-socket'
+import { privatePlaceProblem, UNLOCK_ROUTE, unlockSocketPlace, type UnlockKeyResult, type UnlockRequest } from './unlock-socket'
 
 export interface UnlockLoginIo {
   log: (line: string) => void
@@ -124,7 +118,10 @@ function send(socketPath: string, body: UnlockRequest, timeoutMs: number): Promi
  * 터미널에 찍기 전에 제어 문자(C0 · DEL · C1)와 글자 방향을 뒤집는 문자를 `\u001b` 꼴로 바꾼다 — 답의 글자가 터미널을 조작하지 않게.
  */
 export function printable(text: string): string {
-  return text.replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)
+  return text.replace(
+    /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
+    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  )
 }
 
 /** 답 속 키 하나의 결과가 제 꼴인지 — 아니면 `undefined`. `label` 은 `email`(계정) · `key`(주소)다. */
@@ -132,7 +129,10 @@ function keyResultOf(value: unknown, label: 'email' | 'key'): (UnlockKeyResult &
   if (typeof value !== 'object' || value === null) return undefined
   const { cleared, blockedForSeconds, [label]: name } = value as Record<string, unknown>
   if (typeof name !== 'string' || typeof cleared !== 'number' || !Number.isSafeInteger(cleared) || cleared < 0) return undefined
-  if (blockedForSeconds !== null && !(typeof blockedForSeconds === 'number' && Number.isFinite(blockedForSeconds) && blockedForSeconds > 0)) {
+  if (
+    blockedForSeconds !== null &&
+    !(typeof blockedForSeconds === 'number' && Number.isFinite(blockedForSeconds) && blockedForSeconds > 0)
+  ) {
     return undefined
   }
   return { label: name, cleared, blockedForSeconds }

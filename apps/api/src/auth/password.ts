@@ -136,14 +136,7 @@ export async function hashPassword(password: string, params: ScryptParams = DEFA
   validateScryptParams(params)
   const salt = randomBytes(SALT_LENGTH)
   const derivedKey = await scrypt(password.normalize('NFC'), salt, KEY_LENGTH, params)
-  return [
-    FORMAT_PREFIX,
-    params.N,
-    params.r,
-    params.p,
-    salt.toString('base64url'),
-    derivedKey.toString('base64url'),
-  ].join('$')
+  return [FORMAT_PREFIX, params.N, params.r, params.p, salt.toString('base64url'), derivedKey.toString('base64url')].join('$')
 }
 
 /**

@@ -132,8 +132,8 @@ export function TokensSection(): ReactElement {
         API 토큰
       </h2>
       <p className="wb-shell-tokens-note">
-        이 계정으로 만든 토큰(<code>wireb login</code>) 전부입니다 — 멤버에서 빠진 프로젝트의 것도 보입니다. 비밀번호가 새었으면
-        전부 폐기하세요. 폐기한 토큰을 쓰던 CLI · 에이전트는 곧바로 로그인이 풀립니다.
+        이 계정으로 만든 토큰(<code>wireb login</code>) 전부입니다 — 멤버에서 빠진 프로젝트의 것도 보입니다. 비밀번호가 새었으면 전부
+        폐기하세요. 폐기한 토큰을 쓰던 CLI · 에이전트는 곧바로 로그인이 풀립니다.
       </p>
 
       {tokens.length > 0 && (
@@ -230,7 +230,12 @@ function TokenRow(props: {
           <button className="wb-shell-project-action" type="button" disabled={busy} onClick={props.onCancel}>
             취소
           </button>
-          <button className="wb-shell-project-danger wb-shell-tokens-confirm" type="button" disabled={busy} onClick={confirmClick(props.onConfirm)}>
+          <button
+            className="wb-shell-project-danger wb-shell-tokens-confirm"
+            type="button"
+            disabled={busy}
+            onClick={confirmClick(props.onConfirm)}
+          >
             {`${token.name} 폐기 확정`}
           </button>
         </>

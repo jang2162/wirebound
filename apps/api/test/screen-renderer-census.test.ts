@@ -42,8 +42,7 @@ describe('브라우저를 부르는 자리', () => {
 
   it('그 파일을 부르는 소스도 하나뿐이고 그것이 `main.ts` 다', () => {
     const callers = sourceFiles().filter(
-      (relative) =>
-        relative !== 'services/screen-render-chromium.ts' && sourceOf(relative).includes(FACTORY),
+      (relative) => relative !== 'services/screen-render-chromium.ts' && sourceOf(relative).includes(FACTORY),
     )
     expect(callers).toEqual(['main.ts'])
   })

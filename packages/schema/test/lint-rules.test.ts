@@ -7,10 +7,7 @@ import { LINT_RULES, lintRule } from '../src/lint/rules'
  * 조용하다. 다른 굵은 소제목이 나오면 그 뒤의 불릿은 세지 않는다.
  */
 function specLines(): { group: 'document' | 'theme'; text: string }[] {
-  const section = designDoc.slice(
-    designDoc.indexOf('### 12.4 lint 규칙'),
-    designDoc.indexOf('### 12.5 스킬'),
-  )
+  const section = designDoc.slice(designDoc.indexOf('### 12.4 lint 규칙'), designDoc.indexOf('### 12.5 스킬'))
   const found: { group: 'document' | 'theme'; text: string }[] = []
   let group: 'document' | 'theme' | null = null
   for (const line of section.split('\n')) {

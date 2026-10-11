@@ -119,10 +119,14 @@ describe('0019 — 테마 패키지 · 관리자 칸 · 바인딩', () => {
   it('왕복 — 0019 → 0018 → 0019', async () => {
     await migrateTo('0019-theme-packages')
     await migrateTo('0018-drop-json-themes')
-    const tables = await sql<{ n: string }>`select count(*) as n from information_schema.tables where table_name = 'theme_packages'`.execute(db)
+    const tables = await sql<{
+      n: string
+    }>`select count(*) as n from information_schema.tables where table_name = 'theme_packages'`.execute(db)
     const columns = await sql<{ name: string }>`
       select column_name as name from information_schema.columns
-      where (table_name = 'projects' and column_name like 'theme_%') or (table_name = 'users' and column_name = 'is_instance_admin')`.execute(db)
+      where (table_name = 'projects' and column_name like 'theme_%') or (table_name = 'users' and column_name = 'is_instance_admin')`.execute(
+      db,
+    )
     expect({ tables: Number(tables.rows[0]!.n), columns: columns.rows.length }).toEqual({ tables: 0, columns: 0 })
     await migrateTo('0019-theme-packages')
   })

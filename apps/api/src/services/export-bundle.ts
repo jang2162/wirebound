@@ -30,20 +30,8 @@
  * 그 편집이 실린 번들도 *"지금"*의 정직한 답이다. 필요해지면 캡처를 지나 스냅샷 번들을
  * 만드는 쪽이 옳다(위 「출처는 라이브 프로젝트다」 — 입력을 payload에서 읽는다).
  */
-import {
-  exportBundle,
-  type BundleFile,
-  type BundleNodeError,
-  type BundlePage,
-  type ExportedBundle,
-} from '@wirebound/exporter'
-import {
-  duplicateTargets,
-  isPageTargetAction,
-  walkNodes,
-  type PageDocument,
-  type TargetedPage,
-} from '@wirebound/schema'
+import { exportBundle, type BundleFile, type BundleNodeError, type BundlePage, type ExportedBundle } from '@wirebound/exporter'
+import { duplicateTargets, isPageTargetAction, walkNodes, type PageDocument, type TargetedPage } from '@wirebound/schema'
 import type { DbHandle } from '../db/tx'
 import { readExportRuntime } from './export-runtime'
 import { assembleExportSource, readExportRows, type ExportRows, type ExportSource } from './export-source'
@@ -170,10 +158,7 @@ export function projectBundle(rows: ExportRows, source: ExportSource): ExportedB
  * **빈 타겟은 세지 않는다.** 그것은 *"아직 안 골랐다"*이고 `schema`의 `checkPageAction`이
  * 이미 저작 화면에서 말한다 — 같은 사실을 두 화면이 말하면 문제가 둘인 줄 안다.
  */
-function brokenLinks(
-  ordered: readonly TargetedPage[],
-  documents: ReadonlyMap<string, PageDocument>,
-): BrokenLink[] {
+function brokenLinks(ordered: readonly TargetedPage[], documents: ReadonlyMap<string, PageDocument>): BrokenLink[] {
   const carriers = new Map<string, number>()
   for (const page of ordered) {
     carriers.set(page.target, (carriers.get(page.target) ?? 0) + 1)

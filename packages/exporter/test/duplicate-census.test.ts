@@ -36,21 +36,13 @@ import { fileURLToPath } from 'node:url'
 import * as schema from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { stripComments } from '@wirebound/test-support'
-import {
-  EMPTY_COMMENTS,
-  EMPTY_DESCRIPTION,
-  EMPTY_INTERACTIONS,
-  MARKER_WITHOUT_COMMENT,
-  PANEL_TABS,
-} from '../src/labels'
+import { EMPTY_COMMENTS, EMPTY_DESCRIPTION, EMPTY_INTERACTIONS, MARKER_WITHOUT_COMMENT, PANEL_TABS } from '../src/labels'
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url))
 
 function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   const found: string[] = []
-  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
-    a.name.localeCompare(b.name),
-  )) {
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
     const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
     if (entry.isDirectory()) found.push(...sourceFiles(join(dir, entry.name), relative))
     else if (/\.tsx?$/.test(entry.name)) found.push(relative)
@@ -60,9 +52,7 @@ function sourceFiles(dir: string = SRC, prefix = ''): string[] {
 
 const FILES = sourceFiles()
 /** **주석은 안 센다.** 이름을 설명하는 머리말이 위반으로 잡히면 아무도 머리말을 안 쓴다. */
-const BODIES = new Map(
-  FILES.map((relative) => [relative, stripComments(readFileSync(join(SRC, relative), 'utf8'))]),
-)
+const BODIES = new Map(FILES.map((relative) => [relative, stripComments(readFileSync(join(SRC, relative), 'utf8'))]))
 
 /**
  * 그 이름을 **부르는 자리** 전부. 파일 하나가 두 번 부르면 두 줄이다.
@@ -128,9 +118,7 @@ describe('만드는 자리가 하나다', () => {
    */
   it('표의 원시가 전부 실재한다 — 오타면 그 줄이 아무것도 안 지킨다', () => {
     for (const [name] of PRIMITIVES) {
-      const defined =
-        SCHEMA_EXPORTS.has(name) ||
-        [...BODIES.values()].some((body) => new RegExp(`function\\s+${name}\\s*[(<]`).test(body))
+      const defined = SCHEMA_EXPORTS.has(name) || [...BODIES.values()].some((body) => new RegExp(`function\\s+${name}\\s*[(<]`).test(body))
       expect(defined, name).toBe(true)
     }
   })

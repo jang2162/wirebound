@@ -63,7 +63,10 @@ describe.skipIf(!전제.ok)('구조 트리 줄 끌기의 끝 스크롤 — 실�
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: [...TEXTS, chain(0)].map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: [...TEXTS, chain(0)].map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
     const patches: string[] = []
@@ -87,7 +90,16 @@ describe.skipIf(!전제.ok)('구조 트리 줄 끌기의 끝 스크롤 — 실�
       let el: HTMLElement | null = document.querySelector(`${sel} [data-tree-row]`)!.parentElement
       while (el !== null && !['auto', 'scroll'].includes(getComputedStyle(el).overflowY)) el = el.parentElement
       const r = el!.getBoundingClientRect()
-      return { x: r.x, y: r.y, width: r.width, height: r.height, top: Math.round(el!.scrollTop), left: Math.round(el!.scrollLeft), overflowY: el!.scrollHeight - el!.clientHeight, overflowX: el!.scrollWidth - el!.clientWidth }
+      return {
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+        top: Math.round(el!.scrollTop),
+        left: Math.round(el!.scrollLeft),
+        overflowY: el!.scrollHeight - el!.clientHeight,
+        overflowX: el!.scrollWidth - el!.clientWidth,
+      }
     }, TREE)
 
   async function grab(page: Page, id: string): Promise<void> {
@@ -116,8 +128,15 @@ describe.skipIf(!전제.ok)('구조 트리 줄 끌기의 끝 스크롤 — 실�
       await page.keyboard.press('Escape')
       await page.mouse.up()
       // eslint-disable-next-line no-console
-      console.log(`[트리 끝 스크롤 세로] ${JSON.stringify({ overflowY: first.overflowY, down: down.top, up: up.top, outsideFrom, outside })}`)
-      expect({ overflows: first.overflowY > 400, pushedDown: down.top > 100, returned: up.top === 0, outsideStill: outside === outsideFrom }).toEqual({
+      console.log(
+        `[트리 끝 스크롤 세로] ${JSON.stringify({ overflowY: first.overflowY, down: down.top, up: up.top, outsideFrom, outside })}`,
+      )
+      expect({
+        overflows: first.overflowY > 400,
+        pushedDown: down.top > 100,
+        returned: up.top === 0,
+        outsideStill: outside === outsideFrom,
+      }).toEqual({
         overflows: true,
         pushedDown: true,
         returned: true,

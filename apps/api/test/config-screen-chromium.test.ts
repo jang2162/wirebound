@@ -27,9 +27,7 @@ describe('SCREEN_CHROMIUM_PATH', () => {
   })
 
   it('주면 그 문자열이 그대로 온다', () => {
-    expect(loadConfig({ ...BASE, SCREEN_CHROMIUM_PATH: '/usr/bin/chromium' }).screenChromiumPath).toBe(
-      '/usr/bin/chromium',
-    )
+    expect(loadConfig({ ...BASE, SCREEN_CHROMIUM_PATH: '/usr/bin/chromium' }).screenChromiumPath).toBe('/usr/bin/chromium')
   })
 
   /**
@@ -45,8 +43,6 @@ describe('SCREEN_CHROMIUM_PATH', () => {
 
   /** 공백만 든 값은 **경로다.** 눌러 주면 *"띄어쓰기로 시작하는 경로"*를 못 쓰게 된다. */
   it('공백을 눌러 주지 않는다 — 경로의 일부일 수 있다', () => {
-    expect(loadConfig({ ...BASE, SCREEN_CHROMIUM_PATH: ' /opt/chromium' }).screenChromiumPath).toBe(
-      ' /opt/chromium',
-    )
+    expect(loadConfig({ ...BASE, SCREEN_CHROMIUM_PATH: ' /opt/chromium' }).screenChromiumPath).toBe(' /opt/chromium')
   })
 })

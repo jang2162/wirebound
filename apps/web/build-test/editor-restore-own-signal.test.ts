@@ -69,7 +69,11 @@ describe.skipIf(!전제.ok)('연결 id 없이 나간 내 복원', () => {
     try {
       await page.goto(P)
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor()
-      await poll('소켓이 룸에 든다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← joined')))
+      await poll(
+        '소켓이 룸에 든다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('WS← joined')),
+      )
       await page.getByRole('button', { name: '더 보기', exact: true }).click()
       await page.getByRole('menuitem', { name: '스냅샷' }).click()
       await page.getByRole('button', { name: '이 상태로 되돌리기' }).click()
@@ -80,11 +84,21 @@ describe.skipIf(!전제.ok)('연결 id 없이 나간 내 복원', () => {
         await page.getByRole('button', { name: '되돌린다' }).click()
         await hold.waitForWaiters(1)
         // 다시 붙은 소켓이 룸에 들 때까지 복원을 세워 둔다 — 그래야 방송이 이 탭에 온다.
-        await poll('소켓이 다시 룸에 든다', async () => events.slice(), (lines) => lines.filter((line) => line.endsWith('WS← joined')).length >= 2, 10_000)
+        await poll(
+          '소켓이 다시 룸에 든다',
+          async () => events.slice(),
+          (lines) => lines.filter((line) => line.endsWith('WS← joined')).length >= 2,
+          10_000,
+        )
       } finally {
         await hold.release()
       }
-      await poll('내 복원의 신호가 온다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← restored')), 10_000)
+      await poll(
+        '내 복원의 신호가 온다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('WS← restored')),
+        10_000,
+      )
       await page.waitForTimeout(1_500)
       const notices = await page.locator('[role=status]').allTextContents()
       // eslint-disable-next-line no-console

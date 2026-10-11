@@ -265,11 +265,31 @@ describe('상태 목록 — 번호 자리를 상태 id 로 다시 짓는다', ()
 
   it('두 사람이 동시에 추가 — 끝에 넣기는 둘 다 남고, 없던 목록을 만드는 편집은 남이 먼저 만들었으면 못 얹는다(남의 목록을 덮는다)', () => {
     const listed = states([GA])
-    const theirs = applyOps(listed, addViewStateOps(listed, '다', () => 's_da')!)
-    expect(names(rebase(addViewStateOps(listed, '나', () => 's_na')!, theirs, listed)?.document)).toEqual(['가', '다', '나'])
+    const theirs = applyOps(
+      listed,
+      addViewStateOps(listed, '다', () => 's_da')!,
+    )
+    expect(
+      names(
+        rebase(
+          addViewStateOps(listed, '나', () => 's_na')!,
+          theirs,
+          listed,
+        )?.document,
+      ),
+    ).toEqual(['가', '다', '나'])
 
     const bare = states(undefined)
-    const created = applyOps(bare, addViewStateOps(bare, '다', () => 's_da')!)
-    expect(rebase(addViewStateOps(bare, '나', () => 's_na')!, created, bare)).toBeNull()
+    const created = applyOps(
+      bare,
+      addViewStateOps(bare, '다', () => 's_da')!,
+    )
+    expect(
+      rebase(
+        addViewStateOps(bare, '나', () => 's_na')!,
+        created,
+        bare,
+      ),
+    ).toBeNull()
   })
 })

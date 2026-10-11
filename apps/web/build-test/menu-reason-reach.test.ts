@@ -101,10 +101,13 @@ describe.skipIf(!전제.ok)('꺼진 항목의 이유 — 키보드만으로', ()
       await a.page.keyboard.press('Enter')
       const items = await poll(
         '메뉴가 열린다',
-        async () => a.page.getByRole('menuitem').evaluateAll((elements) => elements.map((element) => ({
-          text: element.textContent?.trim() ?? '',
-          off: element.getAttribute('aria-disabled'),
-        }))),
+        async () =>
+          a.page.getByRole('menuitem').evaluateAll((elements) =>
+            elements.map((element) => ({
+              text: element.textContent?.trim() ?? '',
+              off: element.getAttribute('aria-disabled'),
+            })),
+          ),
         (list) => list.length > 0,
       )
       const visited: NonNullable<Awaited<ReturnType<typeof focusedItem>>>[] = []

@@ -21,7 +21,17 @@ import type { PageDetail, TreeMenuNode } from '../../src/api/types'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import { createEditChannel } from '../../src/realtime/edit-channel'
-import { OTHER_PAGE_ID, OTHER_PAGE_TITLE, PAGE_ID, PROJECT_ID, nodeElement, openPage, pageDetail, pageDoc, waitForNode } from '../editor-harness'
+import {
+  OTHER_PAGE_ID,
+  OTHER_PAGE_TITLE,
+  PAGE_ID,
+  PROJECT_ID,
+  nodeElement,
+  openPage,
+  pageDetail,
+  pageDoc,
+  waitForNode,
+} from '../editor-harness'
 
 class FakeSocket implements RealtimeSocket {
   onopen: (() => void) | null = null
@@ -259,7 +269,15 @@ describe('늦은 변경 경보 — 신호의 시점', () => {
     const view = await mount()
 
     view.push(staleFrame())
-    view.push({ type: 'page-changed', projectId: PROJECT_ID, pageId: PAGE_ID, seq: 99, ops: [], warnings: [], actor: { type: 'user', label: '밥' } })
+    view.push({
+      type: 'page-changed',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      seq: 99,
+      ops: [],
+      warnings: [],
+      actor: { type: 'user', label: '밥' },
+    })
 
     expect(banner()).toMatch(LATE_ALERT)
     expect(banner()).not.toMatch(/받지 못한 변경/)

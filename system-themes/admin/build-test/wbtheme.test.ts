@@ -49,7 +49,9 @@ describe('system-admin .wbtheme', () => {
     expect(css.length).toBeGreaterThan(0)
     const items = Object.entries(MANIFEST.tokens.items)
     expect(items.length).toBeGreaterThan(0)
-    expect(items.filter(([key, decl]) => !css.includes(`--wb-${key.replaceAll('.', '-')}: ${decl.default};`)).map(([key]) => key)).toEqual([])
+    expect(items.filter(([key, decl]) => !css.includes(`--wb-${key.replaceAll('.', '-')}: ${decl.default};`)).map(([key]) => key)).toEqual(
+      [],
+    )
   })
 
   it('갤러리 칸 전부가 오류 없이 그려진다(jsdom)', () => {

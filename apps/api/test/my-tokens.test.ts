@@ -15,14 +15,7 @@
  * | 목록 라우트의 `requireAuth` · `requireSessionUser`를 뗌 | «세션으로만» — `token-route-census`는 가드가 없는 라우트를 «공개»로 읽어 안 죽는다 |
  */
 import { describe, expect, it } from 'vitest'
-import {
-  addMember,
-  createProject,
-  signup,
-  withApi,
-  type SignedUpUser,
-  type TestContext,
-} from './helpers'
+import { addMember, createProject, signup, withApi, type SignedUpUser, type TestContext } from './helpers'
 
 async function issueToken(ctx: TestContext, who: SignedUpUser, projectId: string, name: string) {
   const res = await ctx.app.inject({ method: 'POST', url: `/api/projects/${projectId}/tokens`, cookies: who.cookie, payload: { name } })
@@ -33,7 +26,11 @@ async function issueToken(ctx: TestContext, who: SignedUpUser, projectId: string
 
 /** 멤버 행만 지운다 — 토큰은 남는다(머리말). */
 async function dropMembership(ctx: TestContext, projectId: string, userId: string): Promise<void> {
-  const result = await ctx.db.deleteFrom('project_members').where('project_id', '=', projectId).where('user_id', '=', userId).executeTakeFirst()
+  const result = await ctx.db
+    .deleteFrom('project_members')
+    .where('project_id', '=', projectId)
+    .where('user_id', '=', userId)
+    .executeTakeFirst()
   if (result.numDeletedRows !== 1n) throw new Error('멤버 행을 못 지웠습니다')
 }
 
@@ -75,7 +72,12 @@ describe('내 토큰 목록 — 프로젝트를 가로지른다', () => {
       await addMember(ctx, project.id, bob.user.id, 'editor')
       const token = await issueToken(ctx, bob, project.id, '떠난 곳')
       await dropMembership(ctx, project.id, bob.user.id)
-      const renamed = await ctx.app.inject({ method: 'PATCH', url: `/api/projects/${project.id}`, cookies: alice.cookie, payload: { name: '빠진 뒤 지은 이름' } })
+      const renamed = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${project.id}`,
+        cookies: alice.cookie,
+        payload: { name: '빠진 뒤 지은 이름' },
+      })
       expect(renamed.statusCode, renamed.body).toBe(200)
 
       // 그 프로젝트 아래의 목록은 가드가 404 라 못 본다 — 이 목록이 있어야 하는 까닭.
@@ -85,7 +87,15 @@ describe('내 토큰 목록 — 프로젝트를 가로지른다', () => {
       const res = await ctx.app.inject({ method: 'GET', url: '/api/auth/tokens', cookies: bob.cookie })
       expect(res.statusCode, res.body).toBe(200)
       expect(res.json()).toEqual([
-        { id: token.id, name: '떠난 곳', createdAt: expect.any(String), lastUsedAt: null, projectId: project.id, projectName: null, member: false },
+        {
+          id: token.id,
+          name: '떠난 곳',
+          createdAt: expect.any(String),
+          lastUsedAt: null,
+          projectId: project.id,
+          projectName: null,
+          member: false,
+        },
       ])
       expect(res.body).not.toContain('빠진 뒤 지은 이름')
       expect(res.body).not.toContain('옛 이름')
@@ -128,7 +138,11 @@ describe('내 토큰 폐기 — 어느 프로젝트의 것이든', () => {
 
       const other = await ctx.app.inject({ method: 'DELETE', url: `/api/auth/tokens/${alices.id}`, cookies: bob.cookie })
       expect(other.statusCode).toBe(404)
-      const missing = await ctx.app.inject({ method: 'DELETE', url: '/api/auth/tokens/00000000-0000-4000-8000-000000000000', cookies: bob.cookie })
+      const missing = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/api/auth/tokens/00000000-0000-4000-8000-000000000000',
+        cookies: bob.cookie,
+      })
       expect(missing.statusCode).toBe(404)
       const malformed = await ctx.app.inject({ method: 'DELETE', url: '/api/auth/tokens/not-a-uuid', cookies: bob.cookie })
       expect(malformed.statusCode).toBe(400)

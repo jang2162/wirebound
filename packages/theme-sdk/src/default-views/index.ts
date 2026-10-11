@@ -14,11 +14,25 @@ import { EntryFormView, FieldView, inputCssBlocks, SearchFormView } from './inpu
 import { CardView, FlexView, GridView, PageView, SectionView, SlotView, structureCssBlocks, TabsView } from './structure'
 
 export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({
-  Page: PageView, Slot: SlotView, Section: SectionView, Flex: FlexView, Grid: GridView, Card: CardView, Tabs: TabsView,
-  List: ListView, Tree: TreeView, KeyValue: KeyValueView,
-  SearchForm: SearchFormView, EntryForm: EntryFormView, Field: FieldView,
-  Button: ButtonView, Link: LinkView,
-  Text: TextView, Media: MediaView, Divider: DividerView, Placeholder: PlaceholderView,
+  Page: PageView,
+  Slot: SlotView,
+  Section: SectionView,
+  Flex: FlexView,
+  Grid: GridView,
+  Card: CardView,
+  Tabs: TabsView,
+  List: ListView,
+  Tree: TreeView,
+  KeyValue: KeyValueView,
+  SearchForm: SearchFormView,
+  EntryForm: EntryFormView,
+  Field: FieldView,
+  Button: ButtonView,
+  Link: LinkView,
+  Text: TextView,
+  Media: MediaView,
+  Divider: DividerView,
+  Placeholder: PlaceholderView,
 })
 
 /**
@@ -35,5 +49,12 @@ const LONG_WORD_CSS = `[data-wb-component="Text"],
 
 /** 기본 뷰가 서기 위한 최소 CSS. 호스트는 테마 CSS 보다 **먼저** 싣는다 — 같은 특이도에서 테마가 이긴다. */
 export function defaultViewsCss(): string {
-  return [...structureCssBlocks(), ...dataCssBlocks(), ...inputCssBlocks(), ...actionCssBlocks(), ...documentCssBlocks(), LONG_WORD_CSS].join('\n')
+  return [
+    ...structureCssBlocks(),
+    ...dataCssBlocks(),
+    ...inputCssBlocks(),
+    ...actionCssBlocks(),
+    ...documentCssBlocks(),
+    LONG_WORD_CSS,
+  ].join('\n')
 }

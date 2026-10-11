@@ -55,7 +55,19 @@ async function scene(ctx: RealApiContext) {
     method: 'PUT',
     url: `/api/projects/${project.id}/pages/${page.id}/schema`,
     cookies: owner.cookie,
-    payload: { schema: { version: 1, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: {} }, { id: 'n_b', type: 'Text', props: {} }] } } },
+    payload: {
+      schema: {
+        version: 1,
+        root: {
+          id: 'n_root',
+          type: 'Page',
+          children: [
+            { id: 'n_a', type: 'Text', props: {} },
+            { id: 'n_b', type: 'Text', props: {} },
+          ],
+        },
+      },
+    },
   })
   expect(put.statusCode, put.body).toBe(200)
   const otherSession = await loginAgain(ctx, owner.user.email, owner.password)
@@ -138,16 +150,25 @@ describe('로그아웃', () => {
       try {
         await holding
         fx.leaving.send(
-          JSON.stringify({ type: 'patch', pageId: fx.page.id, clientOpId: 'op_out', baseSeq: 1, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }] }),
+          JSON.stringify({
+            type: 'patch',
+            pageId: fx.page.id,
+            clientOpId: 'op_out',
+            baseSeq: 1,
+            ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }],
+          }),
         )
         // 그 편집이 페이지 행에서 기다린다.
-        await vi.waitFor(async () => {
-          const { rows } = await sql<{ n: number }>`
+        await vi.waitFor(
+          async () => {
+            const { rows } = await sql<{ n: number }>`
             select count(*)::int as n from pg_stat_activity
              where pid <> pg_backend_pid() and datname = current_database() and wait_event_type = 'Lock'
           `.execute(db)
-          expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
-        }, { timeout: 5_000 })
+            expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
+          },
+          { timeout: 5_000 },
+        )
 
         const res = await ctx.app.inject({ method: 'POST', url: '/api/auth/logout', cookies: fx.owner.cookie })
         expect(res.statusCode, res.body).toBe(204)
@@ -192,15 +213,24 @@ describe('로그아웃', () => {
         try {
           await holding
           fx.leaving.send(
-            JSON.stringify({ type: 'patch', pageId: fx.page.id, clientOpId: 'op_out', baseSeq: 1, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }] }),
+            JSON.stringify({
+              type: 'patch',
+              pageId: fx.page.id,
+              clientOpId: 'op_out',
+              baseSeq: 1,
+              ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }],
+            }),
           )
-          await vi.waitFor(async () => {
-            const { rows } = await sql<{ n: number }>`
+          await vi.waitFor(
+            async () => {
+              const { rows } = await sql<{ n: number }>`
               select count(*)::int as n from pg_stat_activity
                where pid <> pg_backend_pid() and datname = current_database() and wait_event_type = 'Lock'
             `.execute(db)
-            expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
-          }, { timeout: 5_000 })
+              expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
+            },
+            { timeout: 5_000 },
+          )
 
           const res = await ctx.app.inject({ method: 'POST', url: '/api/auth/logout', cookies: fx.owner.cookie })
           expect(res.statusCode, res.body).toBe(204)

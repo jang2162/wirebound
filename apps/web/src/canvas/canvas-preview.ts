@@ -181,4 +181,3 @@ export function withoutPreview<T>(doc: Document | undefined, run: () => T): T {
     for (const { element, display } of hidden) element.style.display = display
   }
 }
-

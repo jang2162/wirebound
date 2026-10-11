@@ -113,9 +113,17 @@ describe('잠긴 서브트리를 안 건드리는 편집이 막힌다 — 같은
  */
 const Y: WbNode = { id: 'n_y', type: 'Text', props: {} }
 const CASES: { name: string; ops: PatchOp[]; touches: boolean }[] = [
-  { name: 'C1 앞 n_a 를 뒤 n_b 안으로(뺀 뒤 좌표)', touches: true, ops: [{ op: 'move', from: '/root/children/0', path: '/root/children/0/children/-' }] },
+  {
+    name: 'C1 앞 n_a 를 뒤 n_b 안으로(뺀 뒤 좌표)',
+    touches: true,
+    ops: [{ op: 'move', from: '/root/children/0', path: '/root/children/0/children/-' }],
+  },
   { name: 'C2 앞 n_a 를 n_b 뒤로', touches: false, ops: [{ op: 'move', from: '/root/children/0', path: '/root/children/1' }] },
-  { name: 'C3 뒤 n_c 를 앞 n_b 안으로', touches: true, ops: [{ op: 'move', from: '/root/children/2', path: '/root/children/1/children/-' }] },
+  {
+    name: 'C3 뒤 n_c 를 앞 n_b 안으로',
+    touches: true,
+    ops: [{ op: 'move', from: '/root/children/2', path: '/root/children/1/children/-' }],
+  },
   { name: 'C4 앞 n_a 를 끝으로', touches: false, ops: [{ op: 'move', from: '/root/children/0', path: '/root/children/-' }] },
   {
     name: 'C5 add 0 + n_b1(밀린 2/0) replace',
@@ -142,8 +150,16 @@ const CASES: { name: string; ops: PatchOp[]; touches: boolean }[] = [
     ],
   },
   { name: 'C8 n_b1 을 밖으로', touches: true, ops: [{ op: 'move', from: '/root/children/1/children/0', path: '/root/children/-' }] },
-  { name: 'C9 n_a1 을 n_b 안으로(다른 부모)', touches: true, ops: [{ op: 'move', from: '/root/children/0/children/0', path: '/root/children/1/children/-' }] },
-  { name: 'C10 앞 n_a 를 n_c 안으로(뺀 뒤 n_c 는 1)', touches: false, ops: [{ op: 'move', from: '/root/children/0', path: '/root/children/1/children/-' }] },
+  {
+    name: 'C9 n_a1 을 n_b 안으로(다른 부모)',
+    touches: true,
+    ops: [{ op: 'move', from: '/root/children/0/children/0', path: '/root/children/1/children/-' }],
+  },
+  {
+    name: 'C10 앞 n_a 를 n_c 안으로(뺀 뒤 n_c 는 1)',
+    touches: false,
+    ops: [{ op: 'move', from: '/root/children/0', path: '/root/children/1/children/-' }],
+  },
   {
     name: 'C12 remove n_a + remove 0(= n_b)',
     touches: true,
@@ -170,7 +186,11 @@ const CASES: { name: string; ops: PatchOp[]; touches: boolean }[] = [
     ],
   },
   { name: '배열 번호를 글자로 달리 씀(`01`) — 적용은 1 로 읽는다', touches: true, ops: [{ op: 'remove', path: '/root/children/01' }] },
-  { name: '배열 번호를 글자로 달리 씀(`1.0`) — 안쪽 번호', touches: true, ops: [{ op: 'replace', path: '/root/children/1.0/children/0/props', value: {} }] },
+  {
+    name: '배열 번호를 글자로 달리 씀(`1.0`) — 안쪽 번호',
+    touches: true,
+    ops: [{ op: 'replace', path: '/root/children/1.0/children/0/props', value: {} }],
+  },
   {
     name: '끝에 넣기(`-`)는 잠긴 자리를 안 민다',
     touches: false,

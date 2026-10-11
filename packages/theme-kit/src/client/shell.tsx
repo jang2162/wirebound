@@ -8,7 +8,12 @@ const VIEWPORT_PRESETS = [1920, 1440, 1280, 1024, 768, 375] as const
 
 type Values = Record<string, string | number>
 
-function TokenField(props: { name: string; decl: TokenDecl; value: string | number | undefined; onChange: (v: string | number | undefined) => void }): ReactElement {
+function TokenField(props: {
+  name: string
+  decl: TokenDecl
+  value: string | number | undefined
+  onChange: (v: string | number | undefined) => void
+}): ReactElement {
   const { name, decl } = props
   const shown = props.value ?? decl.default
   const common = { 'data-wb-token-input': name, 'aria-label': decl.label }
@@ -16,22 +21,39 @@ function TokenField(props: { name: string; decl: TokenDecl; value: string | numb
   if (decl.type === 'select') {
     control = (
       <select {...common} value={String(shown)} onChange={(e) => props.onChange(e.target.value)}>
-        {(decl.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
+        {(decl.options ?? []).map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
       </select>
     )
   } else if (decl.type === 'number') {
-    control = <input {...common} type="number" value={String(shown)} onChange={(e) => props.onChange(e.target.value === '' ? undefined : Number(e.target.value))} />
+    control = (
+      <input
+        {...common}
+        type="number"
+        value={String(shown)}
+        onChange={(e) => props.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+      />
+    )
   } else {
     control = <input {...common} type="text" value={String(shown)} onChange={(e) => props.onChange(e.target.value)} />
   }
   const hex = typeof shown === 'string' && /^#[0-9a-f]{6}$/i.test(shown) ? shown : '#000000'
   return (
     <label className="token">
-      <span className="token-label">{decl.label} <code>{name}</code></span>
+      <span className="token-label">
+        {decl.label} <code>{name}</code>
+      </span>
       <span className="token-controls">
-        {decl.type === 'color' && <input type="color" value={hex} aria-label={`${decl.label} 고르기`} onChange={(e) => props.onChange(e.target.value)} />}
+        {decl.type === 'color' && (
+          <input type="color" value={hex} aria-label={`${decl.label} 고르기`} onChange={(e) => props.onChange(e.target.value)} />
+        )}
         {control}
-        <button type="button" disabled={props.value === undefined} onClick={() => props.onChange(undefined)}>기본값</button>
+        <button type="button" disabled={props.value === undefined} onClick={() => props.onChange(undefined)}>
+          기본값
+        </button>
       </span>
     </label>
   )
@@ -51,7 +73,9 @@ function Shell(): ReactElement {
   }, [])
 
   useEffect(() => {
-    void fetch(PROJECT_PATH).then((r) => r.json() as Promise<ProjectState>).then(setProject)
+    void fetch(PROJECT_PATH)
+      .then((r) => r.json() as Promise<ProjectState>)
+      .then(setProject)
     const events = new EventSource(EVENTS_PATH)
     events.onmessage = (event) => setProject(JSON.parse(event.data as string) as ProjectState)
     return () => events.close()
@@ -85,19 +109,28 @@ function Shell(): ReactElement {
         <label>
           뷰포트{' '}
           <select data-wb-viewport="" value={width} onChange={(e) => setWidth(Number(e.target.value))}>
-            {VIEWPORT_PRESETS.map((w) => <option key={w} value={w}>{w}px</option>)}
+            {VIEWPORT_PRESETS.map((w) => (
+              <option key={w} value={w}>
+                {w}px
+              </option>
+            ))}
           </select>
         </label>
         <label>
-          <input data-wb-overlay="" type="checkbox" checked={overlay} onChange={(e) => setOverlay(e.target.checked)} /> 겹쳐 보기(포커스 · 마커)
+          <input data-wb-overlay="" type="checkbox" checked={overlay} onChange={(e) => setOverlay(e.target.checked)} /> 겹쳐 보기(포커스 ·
+          마커)
         </label>
-        <button type="button" disabled={Object.keys(values).length === 0} onClick={() => setValues({})}>전체 기본값</button>
+        <button type="button" disabled={Object.keys(values).length === 0} onClick={() => setValues({})}>
+          전체 기본값
+        </button>
       </header>
       <aside>
         {project.issues.length > 0 && (
           <ul data-wb-issues="" className="issues">
             {project.issues.map((i, n) => (
-              <li key={n} data-wb-issue-code={i.code}>✗ {i.code} <code>{i.path}</code> — {i.message}</li>
+              <li key={n} data-wb-issue-code={i.code}>
+                ✗ {i.code} <code>{i.path}</code> — {i.message}
+              </li>
             ))}
           </ul>
         )}

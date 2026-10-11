@@ -83,7 +83,9 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
 
   async function chooseRowItem(page: Page, id: string, title: string, item: string): Promise<void> {
     await row(page, id).locator('> button, > a').first().hover()
-    await row(page, id).getByRole('button', { name: `${title} 더 보기`, exact: true }).click()
+    await row(page, id)
+      .getByRole('button', { name: `${title} 더 보기`, exact: true })
+      .click()
     await page.getByRole('menuitem', { name: item, exact: true }).click()
   }
 
@@ -97,14 +99,24 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
     const item = page.getByRole('menuitem', { name: '삭제', exact: true })
     await item.hover()
     await page.evaluate(() => {
-      const target = [...document.querySelectorAll('[role="menuitem"]')].find((element) => element.textContent?.trim() === '삭제') as HTMLElement
+      const target = [...document.querySelectorAll('[role="menuitem"]')].find(
+        (element) => element.textContent?.trim() === '삭제',
+      ) as HTMLElement
       const rect = target.getBoundingClientRect()
       const note = document.createElement('div')
       note.id = 'wb-shot-note'
       note.textContent = `주석 — 이 항목의 title · aria-description: «${target.title}» / «${target.getAttribute('aria-description')}»`
       Object.assign(note.style, {
-        position: 'fixed', left: `${rect.left}px`, top: `${rect.bottom + 6}px`, zIndex: '2147483647', padding: '4px 8px',
-        background: '#ffffe1', border: '1px solid #767676', font: '12px system-ui', color: '#000', whiteSpace: 'nowrap',
+        position: 'fixed',
+        left: `${rect.left}px`,
+        top: `${rect.bottom + 6}px`,
+        zIndex: '2147483647',
+        padding: '4px 8px',
+        background: '#ffffe1',
+        border: '1px solid #767676',
+        font: '12px system-ui',
+        color: '#000',
+        whiteSpace: 'nowrap',
       })
       document.body.append(note)
     })
@@ -310,7 +322,14 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
         ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_text0000001', type: 'Text', props: { content: '처음' } } }],
       })
       if (seeded.status >= 300) throw new Error(`seed ${seeded.status}`)
-      return { projectId: project.id, member: member.id, grade: grade.id, p1: p1.id, p2: p2.id, P: `/projects/${project.id}/pages/${p1.id}` }
+      return {
+        projectId: project.id,
+        member: member.id,
+        grade: grade.id,
+        p1: p1.id,
+        p2: p2.id,
+        P: `/projects/${project.id}/pages/${p1.id}`,
+      }
     }
 
     async function remove(mode: 'page' | 'cascade', fx: Awaited<ReturnType<typeof receiver>>): Promise<number> {
@@ -342,8 +361,18 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
       return {
         path: new URL(page.url()).pathname.replace(/[0-9a-f-]{36}/g, '<id>'),
         alerts: (await page.getByRole('alert').allTextContents()).map((text) => text.trim()).filter((text) => text !== ''),
-        notices: (await page.locator('.wb-shell-footer-notices').innerText().catch(() => '')).trim(),
-        canvas: (await canvasFrame(page).locator('[data-wb-id]').allTextContents().catch(() => [] as string[])).join('|'),
+        notices: (
+          await page
+            .locator('.wb-shell-footer-notices')
+            .innerText()
+            .catch(() => '')
+        ).trim(),
+        canvas: (
+          await canvasFrame(page)
+            .locator('[data-wb-id]')
+            .allTextContents()
+            .catch(() => [] as string[])
+        ).join('|'),
         treeRows: await page.locator('.wb-shell-region[aria-label="메뉴·페이지 트리"] [data-tree-row]').count(),
       }
     }
@@ -356,7 +385,12 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
         const field = bob.page.getByLabel('내용', { exact: true })
         await field.fill('친 글')
         const status = await remove(mode, fx)
-        const settled = await poll('bob 의 캔버스가 «페이지가 사라짐»으로', () => seen(bob.page), (now) => now.alerts.length > 0, 5_000)
+        const settled = await poll(
+          'bob 의 캔버스가 «페이지가 사라짐»으로',
+          () => seen(bob.page),
+          (now) => now.alerts.length > 0,
+          5_000,
+        )
         await bob.page.waitForTimeout(300)
         if (mode === 'cascade') await shot(bob.page, '5-receiver-after-cascade')
         return {
@@ -380,9 +414,19 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
         await pageRow.getByRole('button', { name: '회원 목록 더 보기', exact: true }).click()
         await bob.page.getByRole('menuitem', { name: '이름 변경', exact: true }).waitFor()
         const status = await remove(mode, fx)
-        const after = await poll('줄이 빠진다', () => seen(bob.page), (now) => now.alerts.length > 0, 5_000)
+        const after = await poll(
+          '줄이 빠진다',
+          () => seen(bob.page),
+          (now) => now.alerts.length > 0,
+          5_000,
+        )
         await bob.page.waitForTimeout(300)
-        return { status, menuOpen: await bob.page.getByRole('menu').count(), pageRow: await pageRow.count(), after: { ...after, treeRows: null } }
+        return {
+          status,
+          menuOpen: await bob.page.getByRole('menu').count(),
+          pageRow: await pageRow.count(),
+          after: { ...after, treeRows: null },
+        }
       } finally {
         await bob.context.close()
       }
@@ -401,7 +445,13 @@ describe.skipIf(!전제.ok)('메뉴 연쇄 삭제 — 실브라우저', () => {
         afterDelete: { ...page.afterDelete, treeRows: null },
       })
       // 캔버스는 «대상을 찾을 수 없습니다» · 속성 칸의 친 글은 그 노드가 내려가며 하단 바가 말한다(`src/panels/property-panel.tsx`의 `DROPPED_DRAFT_NOTICE`).
-      expect({ alerts: page.afterDelete.alerts, fields: page.afterDelete.fields, canvas: page.afterDelete.canvas, frames: page.frames, patchError: page.patchError }).toEqual({
+      expect({
+        alerts: page.afterDelete.alerts,
+        fields: page.afterDelete.fields,
+        canvas: page.afterDelete.canvas,
+        frames: page.frames,
+        patchError: page.patchError,
+      }).toEqual({
         alerts: ['대상을 찾을 수 없습니다', '바뀐 선택 때문에 친 값을 쓰지 않았습니다'],
         fields: 0,
         canvas: '',

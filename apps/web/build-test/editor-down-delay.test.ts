@@ -74,9 +74,17 @@ describe.skipIf(!전제.ok)('서버 → 브라우저 지연으로 뒤집은 도�
       await page.goto(P)
       await canvasFrame(page).locator('body', { hasText: '나' }).waitFor()
       // 판이 섰는가 — 앨리스의 WS 가 지연 프록시를 지나 붙었다.
-      await poll('앨리스의 WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
+      await poll(
+        '앨리스의 WS 가 늦춰진 채 붙는다',
+        async () => delay.delayed(),
+        (n) => n >= 1,
+      )
       // 룸에 든 뒤에 게시한다 — 연결 id(`joined`)를 받기 전의 게시는 제 연결을 안 싣고 나가 방송이 제 탭에도 온다(다른 판이다).
-      await poll('앨리스가 룸에 든다', async () => log.lines.slice(), (lines) => lines.includes('WS← joined'))
+      await poll(
+        '앨리스가 룸에 든다',
+        async () => log.lines.slice(),
+        (lines) => lines.includes('WS← joined'),
+      )
       await page.locator('li button', { hasText: 'Text' }).nth(1).click()
       await page.getByRole('tab', { name: '코멘트' }).click()
       await page.locator('#wb-comment-draft').fill('앨리스의 코멘트')
@@ -88,7 +96,11 @@ describe.skipIf(!전제.ok)('서버 → 브라우저 지연으로 뒤집은 도�
       await page.getByRole('button', { name: '코멘트 달기' }).click()
       const response = await posted
       log.lines.push(`앨리스 게시 응답 ${response.status()} seq ${(await response.json()).seq}`)
-      await poll('밥의 번호 프레임이 늦게 닿는다', async () => log.lines.slice(), (lines) => lines.some((line) => line.startsWith('WS← page-changed')))
+      await poll(
+        '밥의 번호 프레임이 늦게 닿는다',
+        async () => log.lines.slice(),
+        (lines) => lines.some((line) => line.startsWith('WS← page-changed')),
+      )
 
       const after = await stable(page)
       const landed = await server(stack, alice, P)

@@ -71,17 +71,12 @@ export class WsProbe {
   static open(port: number, projectId: string, token?: string): WsProbe {
     const url = `ws://127.0.0.1:${port}/api/projects/${projectId}/ws`
     // `headers`는 표준 `WebSocket` 생성자에 없는 undici 확장이라 타입에 없다.
-    const socket = token
-      ? new WebSocket(url, { headers: { cookie: `wb_session=${token}` } } as never)
-      : new WebSocket(url)
+    const socket = token ? new WebSocket(url, { headers: { cookie: `wb_session=${token}` } } as never) : new WebSocket(url)
     return new WsProbe(socket)
   }
 
   /** 그 종류의 프레임을 **처음부터 훑어** 기다린다. 이미 와 있으면 그 자리에서 돌려준다. */
-  async waitFor<T extends ServerFrame['type']>(
-    type: T,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
-  ): Promise<Extract<ServerFrame, { type: T }>> {
+  async waitFor<T extends ServerFrame['type']>(type: T, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Extract<ServerFrame, { type: T }>> {
     const found = await this.#until(
       () => this.received.find((frame) => frame.type === type) as Extract<ServerFrame, { type: T }> | undefined,
       timeoutMs,

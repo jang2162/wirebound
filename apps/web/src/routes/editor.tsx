@@ -83,11 +83,7 @@ import {
 } from '../store/editor-store'
 import type { PendingEdit } from '../store/edit-queue'
 import { LOSS_RANK } from '../store/loss-notice'
-import {
-  EditorStoreProvider,
-  useEditorStore,
-  useEditorStoreInstance,
-} from '../store/use-editor-store'
+import { EditorStoreProvider, useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
 
 /** 서버가 이유를 주지 않은 실패에 쓸 문장. */
 const UNKNOWN_FAILURE = '프로젝트를 불러오지 못했습니다'
@@ -159,8 +155,7 @@ const ZOOM_OUT_FLOOR = ZOOM_STEP
  */
 function fitZoom(canvas: HTMLElement, viewportWidth: number): number | null {
   const style = getComputedStyle(canvas)
-  const usable =
-    canvas.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+  const usable = canvas.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
   if (!Number.isFinite(usable) || usable <= 0) return null
   return usable / viewportWidth
 }
@@ -224,7 +219,9 @@ const SENT_EDIT_WAIT_MS = 3_000
  */
 export function logoutLossNotice(sent: number, unsent: number, refused = 0): string | null {
   if (sent === 0 && unsent === 0 && refused === 0) return null
-  const parts = [refused > 0 ? `거절된 편집 ${refused}개` : '', unsent > 0 ? `보내지 않은 편집 ${unsent}개` : ''].filter((part) => part !== '')
+  const parts = [refused > 0 ? `거절된 편집 ${refused}개` : '', unsent > 0 ? `보내지 않은 편집 ${unsent}개` : ''].filter(
+    (part) => part !== '',
+  )
   const lost = parts.length === 0 ? '' : `${parts.join('와 ')}는 저장되지 않았습니다`
   if (sent === 0) return `로그아웃하며 ${lost} — 다시 로그인해 그 페이지를 확인하세요.`
   const tail = lost === '' ? '' : ` ${lost}.`
@@ -354,10 +351,7 @@ const PANEL_BODIES: Record<
  * 조회 상태. 성공과 실패를 판별 유니온으로 가른다 — `project === null`로 실패를 판정하면
  * 응답이 오기 전과 실패가 같은 값이 되어, 로딩 중에 오류 화면이 떴다 사라진다.
  */
-type LoadState =
-  | { status: 'loading' }
-  | { status: 'ready'; project: ProjectView }
-  | { status: 'failed'; failure: Failure }
+type LoadState = { status: 'loading' } | { status: 'ready'; project: ProjectView } | { status: 'failed'; failure: Failure }
 
 /**
  * 라우트가 잡는 컴포넌트. `/projects/:projectId`와 `/projects/:projectId/pages/:pageId`가
@@ -523,12 +517,7 @@ export function EditorShellRoute(): ReactElement {
             {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸째 한 번 깔고(셸의 머리 `…` 도 읽는다), 페이지를
                 옮기면 기본으로 돌아간다. */}
             <ViewStateProvider pageId={params.pageId}>
-              <EditorShell
-                project={state.project}
-                roleKnown={roleKnown}
-                pageId={params.pageId}
-                onMembership={onMembership}
-              />
+              <EditorShell project={state.project} roleKnown={roleKnown} pageId={params.pageId} onMembership={onMembership} />
             </ViewStateProvider>
           </PlacementRegionsProvider>
         </ProjectThemeProvider>
@@ -773,7 +762,10 @@ function EditorShell(props: {
    */
   const { logout, busy: loggingOut, failure: logoutFailure } = useLogout(settleEdits)
   /** 페이지 JSON 내보내기 앞의 기다림 — **열린 페이지만** 보낸 편집의 답을 기다린다(`panels/page-json-export.ts`). 다른 줄의 페이지는 그 편집과 무관하다. */
-  const settleBeforeExport = useCallback((pageId: string) => (pageId === props.pageId ? editsAnswered(store) : Promise.resolve()), [store, props.pageId])
+  const settleBeforeExport = useCallback(
+    (pageId: string) => (pageId === props.pageId ? editsAnswered(store) : Promise.resolve()),
+    [store, props.pageId],
+  )
   const sessionUser = useSessionUser()
   /**
    * 열린 대화 상자 — 스냅샷 · 내보내기. 한 번에 하나다(모달이다). 셋째 상자인 페이지 가져오기는 메뉴 트리가 연다 — 보내기 · 잠금이 트리의
@@ -822,7 +814,11 @@ function EditorShell(props: {
     // **별칭 입력이 선 줄**(`panels/alias-edit.tsx`) — 구조 트리가 그리고 에디터 단축키(F2)가 연다. 둘이 같은 값을 보게 셸이 한 번 깐다.
     <AliasEditProvider pageId={props.pageId}>
       {/* 접힌 쪽은 격자에서 트랙째 빠진다(`shell.css` 의 `.wb-shell-fold-side` · `.wb-shell-fold-panel`) — 상자는 DOM 에 남고 손잡이는 안 선다. */}
-      <div className={['wb-shell', layout.sideFolded ? 'wb-shell-fold-side' : '', layout.panelFolded ? 'wb-shell-fold-panel' : ''].filter(Boolean).join(' ')}>
+      <div
+        className={['wb-shell', layout.sideFolded ? 'wb-shell-fold-side' : '', layout.panelFolded ? 'wb-shell-fold-panel' : '']
+          .filter(Boolean)
+          .join(' ')}
+      >
         <header className="wb-shell-header">
           {/* **머리의 왼쪽은 *"어디에 있고 어디로 나가는가"*다.** 가운데 도구들 · 오른쪽 끝의 `…` 와 갈리는 축이
               이것이라, 둘을 한 묶음으로 싸서 `space-between`이 사이를 벌리지 못하게 한다.
@@ -861,7 +857,9 @@ function EditorShell(props: {
               **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
           <div className="wb-shell-head-tools">
             {/* **상태 전환기**(`shell/view-state-switcher.tsx`) — 두 모드 · 모든 역할에 선다(고르기는 읽기다). 상태 목록을 고치는 항목만 편집 모드 && `canEdit`. */}
-            {switcherInHead && <ViewStateSwitcher projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />}
+            {switcherInHead && (
+              <ViewStateSwitcher projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />
+            )}
             {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
             {/* **배치 선**(`canvas/layout-guides.tsx`) — 편집 모드에서만 선다(선을 그리는 것도 편집 모드뿐이다). 읽기 도구라 viewer 에게도 선다. */}
             {mode === 'edit' && <GuidesToggle />}
@@ -905,7 +903,9 @@ function EditorShell(props: {
             <ExportBody projectId={props.project.id} />
           </ShellDialog>
           {/* **상태 다루기 상자**(`shell/view-states-dialog.tsx`) — 머리 전환기 · 접힌 `…` 의 «상태 추가» · «상태 관리…»가 연다. 편집 모드 && `canEdit` 일 때만. */}
-          {props.pageId !== undefined && <ViewStatesDialog projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />}
+          {props.pageId !== undefined && (
+            <ViewStatesDialog projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />
+          )}
           {/* **에디터 단축키**(`shell/editor-keys.tsx`) — 호스트와 캔버스 문서에 리스너를 걸고, `?` 의 도움말 상자를 여기 그린다. 편집 명령은
               편집 모드 && `canEdit` 일 때만, 고르기 · 선택 이동 · 도움말은 늘 선다. */}
           <EditorKeys
@@ -991,11 +991,7 @@ function EditorShell(props: {
                 valueText={`메뉴·페이지 트리 ${Math.round(layout.regionRatio * 100)}%`}
                 onGrab={layout.grabRegionHeight}
                 onMove={layout.setRegionHeight}
-                onEdge={(edge) =>
-                  layout.setRegionRatio(
-                    edge === 'min' ? layout.regionRatioMin : 1 - layout.regionRatioMin,
-                  )
-                }
+                onEdge={(edge) => layout.setRegionRatio(edge === 'min' ? layout.regionRatioMin : 1 - layout.regionRatioMin)}
                 onReset={layout.resetRegionRatio}
               />
               <ShellRegion
@@ -1007,12 +1003,7 @@ function EditorShell(props: {
                 {/* `projectId`는 메뉴 트리와 같은 이유로 **조회해 온 프로젝트의 id**다.
                     구조 편집이 그것을 `PATCH /projects/:id/pages/:id/ops`의 경로로 쓴다. */}
                 {/* **트리는 viewer 도 본다**(읽기 — 노드를 골라 속성 · 코멘트를 본다). 줄 행동 · 끌어 놓기와 단축키만 `canEdit`으로 간다. */}
-                <StructureTree
-                  projectId={props.project.id}
-                  pageId={props.pageId}
-                  editable={canEdit}
-                  headSlot={structureHead}
-                />
+                <StructureTree projectId={props.project.id} pageId={props.pageId} editable={canEdit} headSlot={structureHead} />
               </ShellRegion>
             </>
           )}
@@ -1244,21 +1235,14 @@ function RightPanel(props: {
           «페이지 설명»과 코멘트 탭이 **같은 provider**를 쓴다 — 페이지가 바뀌면 버리는 일도
           그 한 자리에서 같은 값으로 한다. */}
       <PanelDraftsProvider projectId={props.projectId} pageId={props.pageId}>
-        <div
-          className="wb-shell-tabpanel"
-          role="tabpanel"
-          id={`wb-tabpanel-${tab}`}
-          aria-labelledby={`wb-tab-${tab}`}
-        >
+        <div className="wb-shell-tabpanel" role="tabpanel" id={`wb-tabpanel-${tab}`} aria-labelledby={`wb-tab-${tab}`}>
           {/* **복원하면 본문을 다시 세운다**(`key`). 코멘트 · 설명 본문은 마운트될 때 읽으므로 탭을 다녀오면 맞는데,
               복원은 탭을 안 바꾼다. 다시 세우는 것은 탭을 다녀온 것과 같은 길이다 — 친 글자 · 나가 있는 쓰기는 위
               provider 가 들고 있어 살아남고, 지난 쓰기의 통지는 마운트가 지운다(복원 앞의 일이다). 본문마다 신호를 받아
               다시 읽게 하지 않은 것은, 그러면 복원이 바꾸는 것을 읽는 본문이 늘 때마다 그 배선을 잊는 자리가 생기기 때문이다. */}
           {(() => {
             const Body = PANEL_BODIES[tab]
-            return (
-              <Body key={props.restoredToken} projectId={props.projectId} pageId={props.pageId} canEdit={props.canEdit} />
-            )
+            return <Body key={props.restoredToken} projectId={props.projectId} pageId={props.pageId} canEdit={props.canEdit} />
           })()}
         </div>
       </PanelDraftsProvider>
@@ -1328,11 +1312,7 @@ function ShellRegion(props: {
  * 자기 `useState`에 들면 캔버스·속성 패널·구조 트리가 각자 다른 사본을 보게
  * 된다.
  */
-type PageLoadState =
-  | { status: 'empty' }
-  | { status: 'loading' }
-  | { status: 'ready' }
-  | { status: 'failed'; failure: Failure }
+type PageLoadState = { status: 'empty' } | { status: 'loading' } | { status: 'ready' } | { status: 'failed'; failure: Failure }
 
 /**
  * 캔버스 프레임. 뷰포트 폭과 줌이 여기서 실제 치수가 되고, **열린 페이지의 문서를 받아
@@ -1920,34 +1900,38 @@ function CanvasFrame(props: {
       className="wb-shell-canvas-stage"
       style={{ width: `${viewportWidth * zoom}px`, ...(frameHeight === null ? {} : { height: `${frameHeight * zoom}px` }) }}
     >
-    <div
-      ref={frameRef}
-      className="wb-shell-canvas-frame"
-      // 폭은 프리셋 그대로, 줌은 그 위의 배율이다. 폭에 줌을 곱해 넣으면 "1280 폭에서
-      // 어떻게 보이는가"라는 뷰포트 프리셋의 뜻이 깨진다.
-      style={{ width: `${viewportWidth}px`, transform: `scale(${zoom})` }}
-    >
-      {state.status === 'empty' && <p>{NO_PAGE_NOTICE}</p>}
-      {state.status === 'loading' && <p role="status">페이지를 불러오는 중…</p>}
-      {/* 실패한 동안에는 그릴 문서가 없다. 이 상태로 들어오는 길은 조회뿐이고, 그
+      <div
+        ref={frameRef}
+        className="wb-shell-canvas-frame"
+        // 폭은 프리셋 그대로, 줌은 그 위의 배율이다. 폭에 줌을 곱해 넣으면 "1280 폭에서
+        // 어떻게 보이는가"라는 뷰포트 프리셋의 뜻이 깨진다.
+        style={{ width: `${viewportWidth}px`, transform: `scale(${zoom})` }}
+      >
+        {state.status === 'empty' && <p>{NO_PAGE_NOTICE}</p>}
+        {state.status === 'loading' && <p role="status">페이지를 불러오는 중…</p>}
+        {/* 실패한 동안에는 그릴 문서가 없다. 이 상태로 들어오는 길은 조회뿐이고, 그
           조회가 시작될 때 스토어의 문서를 비웠기 때문이다 — 앞 페이지의 문서를 오류 문장
           밑에 그리면 어느 페이지를 보고 있는지 알 수 없다. */}
-      {state.status === 'failed' &&
-        (state.failure.kind === 'signed-out' ? (
-          <SignedOut />
-        ) : (
-          <>
-            <p role="alert">{state.failure.message}</p>
-            <button type="button" onClick={() => setOpenAttempt((attempt) => attempt + 1)}>
-              다시 시도
-            </button>
-          </>
-        ))}
-      {/* 테마를 싣는 동안은 문서를 안 그린다 — 기본 뷰로 한 번 그렸다가 테마로 갈아 끼우면 캔버스가 한 번 튄다. 번들의 한도가
+        {state.status === 'failed' &&
+          (state.failure.kind === 'signed-out' ? (
+            <SignedOut />
+          ) : (
+            <>
+              <p role="alert">{state.failure.message}</p>
+              <button type="button" onClick={() => setOpenAttempt((attempt) => attempt + 1)}>
+                다시 시도
+              </button>
+            </>
+          ))}
+        {/* 테마를 싣는 동안은 문서를 안 그린다 — 기본 뷰로 한 번 그렸다가 테마로 갈아 끼우면 캔버스가 한 번 튄다. 번들의 한도가
           이 기다림을 끝낸다(`theme/bundle-loader.ts` 의 `BUNDLE_DEADLINE_MS`). */}
-      {state.status === 'ready' &&
-        (themeStatus === 'loading' ? <p role="status">테마를 불러오는 중…</p> : <Canvas projectId={projectId} pageId={pageId} editable={props.editable} />)}
-    </div>
+        {state.status === 'ready' &&
+          (themeStatus === 'loading' ? (
+            <p role="status">테마를 불러오는 중…</p>
+          ) : (
+            <Canvas projectId={projectId} pageId={pageId} editable={props.editable} />
+          ))}
+      </div>
     </div>
   )
 }
@@ -1961,20 +1945,10 @@ function ModeTools(): ReactElement {
     /* 두 상태 중 하나를 고르는 자리라 `aria-pressed`를 둘 다에 단다. 눌린 쪽만
        표시하면 보조 기술은 나머지 버튼이 토글인지 알 수 없다. */
     <div className="wb-shell-modes" role="group" aria-label="모드">
-      <button
-        type="button"
-        className="wb-shell-mode"
-        aria-pressed={mode === 'edit'}
-        onClick={() => store.setMode('edit')}
-      >
+      <button type="button" className="wb-shell-mode" aria-pressed={mode === 'edit'} onClick={() => store.setMode('edit')}>
         편집 모드
       </button>
-      <button
-        type="button"
-        className="wb-shell-mode"
-        aria-pressed={mode === 'view'}
-        onClick={() => store.setMode('view')}
-      >
+      <button type="button" className="wb-shell-mode" aria-pressed={mode === 'view'} onClick={() => store.setMode('view')}>
         뷰 모드
       </button>
     </div>
@@ -2052,33 +2026,15 @@ function CanvasTools(props: {
 
       {props.fold !== 'folded' && (
         <div className="wb-shell-zoom" role="group" aria-label="줌">
-          <button
-            type="button"
-            className="wb-shell-zoom-step"
-            aria-label="축소"
-            title="축소"
-            onClick={commands.zoomOut}
-          >
+          <button type="button" className="wb-shell-zoom-step" aria-label="축소" title="축소" onClick={commands.zoomOut}>
             {shellIcon('zoomOut', 16)}
           </button>
           <span className="wb-shell-zoom-value">{Math.round(zoom * 100)}%</span>
-          <button
-            type="button"
-            className="wb-shell-zoom-step"
-            aria-label="확대"
-            title="확대"
-            onClick={commands.zoomIn}
-          >
+          <button type="button" className="wb-shell-zoom-step" aria-label="확대" title="확대" onClick={commands.zoomIn}>
             {shellIcon('zoomIn', 16)}
           </button>
           {/* 누른 순간의 1회 계산 · 폭 기준(`useZoomCommands` 의 `fit`). */}
-          <button
-            type="button"
-            className="wb-shell-zoom-fit"
-            aria-label="화면 맞춤"
-            title="화면 맞춤"
-            onClick={commands.fit}
-          >
+          <button type="button" className="wb-shell-zoom-fit" aria-label="화면 맞춤" title="화면 맞춤" onClick={commands.fit}>
             {shellIcon('fitWidth', 16)}
           </button>
         </div>

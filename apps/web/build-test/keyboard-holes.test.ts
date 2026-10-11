@@ -33,7 +33,10 @@ const T = (id: string, content: string) => ({ id, type: 'Text', props: { content
 const C = (id: string, title: string, children: unknown[]) => ({ id, type: 'Card', props: { title }, children })
 
 /** `[카드[글 1, 글 2, 글 3], 글 4]`. */
-const NODES = () => [C('n_card0000001', '카드', [T('n_text0000001', '글 1'), T('n_text0000002', '글 2'), T('n_text0000003', '글 3')]), T('n_text0000004', '글 4')]
+const NODES = () => [
+  C('n_card0000001', '카드', [T('n_text0000001', '글 1'), T('n_text0000002', '글 2'), T('n_text0000003', '글 3')]),
+  T('n_text0000004', '글 4'),
+]
 const WHOLE = '카드[글 1,글 2,글 3],글 4'
 const WITHOUT_TEXT2 = '카드[글 1,글 3],글 4'
 
@@ -103,7 +106,10 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
     const member = await call('POST', `${P}/members`, { email: stack.users.bob.email, role: 'editor' })
     if (member.status >= 300) throw new Error(`멤버 ${member.status}`)
     const url = `${P}/pages/${ids['가1']}`
-    const seeded = await call('PATCH', `${url}/ops`, { baseSeq: 0, ops: NODES().map((value, index) => ({ op: 'add', path: `/root/children/${index}`, value })) })
+    const seeded = await call('PATCH', `${url}/ops`, {
+      baseSeq: 0,
+      ops: NODES().map((value, index) => ({ op: 'add', path: `/root/children/${index}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     const titles = Object.fromEntries(Object.entries(ids).map(([title, id]) => [id, title]))
     return { P, ids, titles, url }
@@ -125,8 +131,13 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
     const body = (await stack.request(alice, 'GET', `${fx.P}/tree`)).body
     type M = { title: string; sortOrder: number; pages: { title: string; sortOrder: number }[]; children: M[] }
     const order = <X extends { sortOrder: number }>(items: X[]) => [...items].sort((a, b) => a.sortOrder - b.sortOrder)
-    const text = (m: M): string => `${m.title}[${order(m.pages).map((p) => p.title).join(',')}|${order(m.children).map(text).join(',')}]`
-    return order(body.menu as M[]).map(text).join(',')
+    const text = (m: M): string =>
+      `${m.title}[${order(m.pages)
+        .map((p) => p.title)
+        .join(',')}|${order(m.children).map(text).join(',')}]`
+    return order(body.menu as M[])
+      .map(text)
+      .join(',')
   }
   const TREE_WHOLE = '가[가1,가2|다[다1|]],나[나1|]'
 
@@ -136,7 +147,8 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
       const response = await stack.request(alice, 'GET', url)
       const text = (node: { props?: Record<string, unknown>; children?: unknown[] }): string => {
         const label = String(node.props?.content ?? node.props?.title ?? '')
-        const children = Array.isArray(node.children) && node.children.length > 0 ? `[${node.children.map((c) => text(c as typeof node)).join(',')}]` : ''
+        const children =
+          Array.isArray(node.children) && node.children.length > 0 ? `[${node.children.map((c) => text(c as typeof node)).join(',')}]` : ''
         return label + children
       }
       return (response.body.schema.root.children ?? []).map(text).join(',')
@@ -152,7 +164,8 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
   }
 
   /** 메뉴 트리 줄의 줄 단추(메뉴) · 링크(페이지). */
-  const menuRow = (page: Page, id: string) => page.locator(`${TREE} [data-tree-row][data-tree-id="${id}"] > :is(button.wb-shell-tree-menu, a.wb-shell-tree-page)`)
+  const menuRow = (page: Page, id: string) =>
+    page.locator(`${TREE} [data-tree-row][data-tree-id="${id}"] > :is(button.wb-shell-tree-menu, a.wb-shell-tree-page)`)
 
   /** 포커스 받은 자리 — 메뉴 트리 줄이면 `제목`, 그 줄의 다른 단추면 `제목:이름`, 아니면 이름 · 역할 · 태그. */
   const focusOf = (page: Page, titles: Record<string, string> = {}) =>
@@ -167,21 +180,28 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
       const name = active.getAttribute('aria-label') ?? active.getAttribute('role') ?? (active.textContent?.trim() || active.localName)
       if (row !== null && row.closest('.wb-shell-region[aria-label="메뉴·페이지 트리"]') !== null) {
         const title = titles[id] ?? id
-        return active.classList.contains('wb-shell-tree-menu') || active.classList.contains('wb-shell-tree-page') ? title : `${title}:${name}`
+        return active.classList.contains('wb-shell-tree-menu') || active.classList.contains('wb-shell-tree-page')
+          ? title
+          : `${title}:${name}`
       }
       return name
     }, titles)
 
   /** 메뉴 트리의 고른 줄(`wb-shell-tree-row-picked`) — 제목. */
   const pickedRows = (page: Page, titles: Record<string, string>) =>
-    page.locator(`${TREE} .wb-shell-tree-row-picked`).evaluateAll((rows, titles) => rows.map((row) => titles[row.getAttribute('data-tree-id') ?? ''] ?? '?'), titles)
+    page
+      .locator(`${TREE} .wb-shell-tree-row-picked`)
+      .evaluateAll((rows, titles) => rows.map((row) => titles[row.getAttribute('data-tree-id') ?? ''] ?? '?'), titles)
 
   /** 열린 페이지(주소) — 제목. */
-  const openedPage = (page: Page, titles: Record<string, string>) => titles[new URL(page.url()).pathname.split('/').pop() ?? ''] ?? page.url()
+  const openedPage = (page: Page, titles: Record<string, string>) =>
+    titles[new URL(page.url()).pathname.split('/').pop() ?? ''] ?? page.url()
 
   /** 메뉴 트리 줄 — 화면 차례대로 제목. */
   const visibleRows = (page: Page, titles: Record<string, string>) =>
-    page.locator(`${TREE} [data-tree-row]`).evaluateAll((rows, titles) => rows.map((row) => titles[row.getAttribute('data-tree-id') ?? ''] ?? '?'), titles)
+    page
+      .locator(`${TREE} [data-tree-row]`)
+      .evaluateAll((rows, titles) => rows.map((row) => titles[row.getAttribute('data-tree-id') ?? ''] ?? '?'), titles)
 
   /** 구조 트리의 고른 노드 id. */
   const selectedNode = (page: Page) =>
@@ -250,7 +270,10 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
         await page.keyboard.press('ArrowDown')
         await page.keyboard.press('Enter')
         // 판이 섰다는 것만 기다린다 — 트리의 열린 줄 표지(`aria-current`)가 «가2»로 옮겼다. 고른 줄 · 포커스는 그 뒤 한 번 읽는다.
-        await page.locator(`${TREE} [data-tree-id="${fx.ids['가2']}"] > a[aria-current="page"]`).waitFor({ state: 'attached', timeout: 5_000 }).catch(() => {})
+        await page
+          .locator(`${TREE} [data-tree-id="${fx.ids['가2']}"] > a[aria-current="page"]`)
+          .waitFor({ state: 'attached', timeout: 5_000 })
+          .catch(() => {})
         steps['가2 에서 Enter'] = await state(page, fx)
         // eslint-disable-next-line no-console
         console.log(`[J4 메뉴 ↑ ↓] ${JSON.stringify(steps)}`)
@@ -311,7 +334,11 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
         const unfolded = await menuRow(page, fx.ids['다']!).getAttribute('aria-expanded')
         // eslint-disable-next-line no-console
         console.log(`[J4 메뉴 뷰 모드] ${JSON.stringify({ down, folded, unfolded })}`)
-        expect({ down, folded, unfolded }).toEqual({ down: { focus: '가2', picked: ['가2'], opened: '가1' }, folded: 'false', unfolded: 'true' })
+        expect({ down, folded, unfolded }).toEqual({
+          down: { focus: '가2', picked: ['가2'], opened: '가1' },
+          folded: 'false',
+          unfolded: 'true',
+        })
       } finally {
         await close()
       }
@@ -319,10 +346,36 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
 
     it('남의 바꿈으로 다시 받은 뒤 — 이름만 바뀌면 고른 줄 · 포커스가 그대로, 옮겨지면 새 자리에서 그대로, 지워지면 이웃 줄로 간다', async () => {
       const cases: [string, string, (fx: Fixture) => Promise<unknown>, (fx: Fixture, rows: string[]) => boolean][] = [
-        ['가2 이름 바꿈', '가2', (fx) => ok(stack.request(bob, 'PATCH', `${fx.P}/pages/${fx.ids['가2']}`, { title: '가2 고침' })), () => true],
-        ['다 를 나 밑으로 옮김', '다', (fx) => ok(stack.request(bob, 'PATCH', `${fx.P}/menu/${fx.ids['다']}`, { parentId: fx.ids['나'] })), (_fx, rows) => rows.indexOf('다') > rows.indexOf('나')],
-        ['가2 지움', '가2', (fx) => ok(stack.request(bob, 'DELETE', `${fx.P}/pages/${fx.ids['가2']}`)), (_fx, rows) => !rows.includes('가2')],
-        ['다 지움(하위째)', '다', (fx) => ok(stack.request(bob, 'DELETE', `${fx.P}/menu/${fx.ids['다']}`, { cascade: true, expect: { menuIds: [], pageIds: [fx.ids['다1']] } })), (_fx, rows) => !rows.includes('다')],
+        [
+          '가2 이름 바꿈',
+          '가2',
+          (fx) => ok(stack.request(bob, 'PATCH', `${fx.P}/pages/${fx.ids['가2']}`, { title: '가2 고침' })),
+          () => true,
+        ],
+        [
+          '다 를 나 밑으로 옮김',
+          '다',
+          (fx) => ok(stack.request(bob, 'PATCH', `${fx.P}/menu/${fx.ids['다']}`, { parentId: fx.ids['나'] })),
+          (_fx, rows) => rows.indexOf('다') > rows.indexOf('나'),
+        ],
+        [
+          '가2 지움',
+          '가2',
+          (fx) => ok(stack.request(bob, 'DELETE', `${fx.P}/pages/${fx.ids['가2']}`)),
+          (_fx, rows) => !rows.includes('가2'),
+        ],
+        [
+          '다 지움(하위째)',
+          '다',
+          (fx) =>
+            ok(
+              stack.request(bob, 'DELETE', `${fx.P}/menu/${fx.ids['다']}`, {
+                cascade: true,
+                expect: { menuIds: [], pageIds: [fx.ids['다1']] },
+              }),
+            ),
+          (_fx, rows) => !rows.includes('다'),
+        ],
       ]
       const results: Record<string, unknown> = {}
       for (const [name, target, act, arrived] of cases) {
@@ -335,7 +388,12 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
           await act(fx)
           // 이름이 바뀐 줄의 제목도 표에 싣는다.
           fx.titles[fx.ids['가2']!] = '가2'
-          await poll('다시 받는다', () => visibleRows(page, fx.titles), (rows) => arrived(fx, rows), 5_000)
+          await poll(
+            '다시 받는다',
+            () => visibleRows(page, fx.titles),
+            (rows) => arrived(fx, rows),
+            5_000,
+          )
           await sleep(300)
           results[name] = { reached, ...(await state(page, fx)) }
         } finally {
@@ -369,7 +427,14 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
             rows: Object.fromEntries(
               names.map((name) => {
                 const found = live.filter((node) => node.name?.value === name && ['button', 'link'].includes(node.role?.value))
-                return [name, found.map((node) => ({ role: node.role?.value, expanded: read(node, 'expanded') ?? null, pressed: read(node, 'pressed') ?? null }))]
+                return [
+                  name,
+                  found.map((node) => ({
+                    role: node.role?.value,
+                    expanded: read(node, 'expanded') ?? null,
+                    pressed: read(node, 'pressed') ?? null,
+                  })),
+                ]
               }),
             ),
             toggles: live.filter((node) => ['접기', '펴기'].includes(node.name?.value)).length,
@@ -416,7 +481,8 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
       const ways: [string, (page: Page) => Promise<void>][] = [
         [
           '캔버스 포커스',
-          (page) => page.evaluate(() => (document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement).contentWindow!.focus()),
+          (page) =>
+            page.evaluate(() => (document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement).contentWindow!.focus()),
         ],
         [
           '단추에서 Tab',
@@ -527,7 +593,13 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
       }
       // eslint-disable-next-line no-console
       console.log(`[J4 고르개 Delete] ${JSON.stringify(results)}`)
-      const kept = (extra: Record<string, unknown> = {}) => ({ inPicker: true, server: WHOLE, pickers: 1, selected: 'n_text0000002', ...extra })
+      const kept = (extra: Record<string, unknown> = {}) => ({
+        inPicker: true,
+        server: WHOLE,
+        pickers: 1,
+        selected: 'n_text0000002',
+        ...extra,
+      })
       expect(results).toEqual({
         '타입 · Delete': kept(),
         '타입 · Backspace': kept(),
@@ -568,24 +640,36 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
     it('Escape · «취소»로 닫으면 포커스가 고르개를 연 자리로 돌아온다', async () => {
       const cases: [string, (page: Page, fx: Fixture) => Promise<void>, (page: Page) => Promise<void>][] = [
         ['줄 + «아래 추가» · Escape', (page) => openPicker(page, '아래 추가'), (page) => page.keyboard.press('Escape')],
-        ['줄 + «아래 추가» · «취소» Enter', (page) => openPicker(page, '아래 추가'), async (page) => {
-          await page.locator('.wb-shell-picker').getByRole('button', { name: '취소', exact: true }).focus()
-          await page.keyboard.press('Enter')
-        }],
+        [
+          '줄 + «아래 추가» · «취소» Enter',
+          (page) => openPicker(page, '아래 추가'),
+          async (page) => {
+            await page.locator('.wb-shell-picker').getByRole('button', { name: '취소', exact: true }).focus()
+            await page.keyboard.press('Enter')
+          },
+        ],
         ['줄 + «패턴 넣기» · Escape', (page) => openPicker(page, '패턴 넣기'), (page) => page.keyboard.press('Escape')],
         ['머리 + «프리셋» · Escape', (page) => openPreset(page), (page) => page.keyboard.press('Escape')],
-        ['줄에서 Alt+Shift+I · Escape', async (page) => {
-          await nodeRow(page, 'n_text0000002').click()
-          await page.keyboard.press('Alt+Shift+KeyI')
-          await page.locator('.wb-shell-picker').waitFor()
-        }, (page) => page.keyboard.press('Escape')],
-        ['메뉴 트리 «옮기기» · «취소» Enter', async (page, fx) => {
-          await nodeRow(page, 'n_text0000002').click()
-          await openMove(page, fx)
-        }, async (page) => {
-          await page.locator('.wb-shell-menu-picker').getByRole('button', { name: '취소', exact: true }).focus()
-          await page.keyboard.press('Enter')
-        }],
+        [
+          '줄에서 Alt+Shift+I · Escape',
+          async (page) => {
+            await nodeRow(page, 'n_text0000002').click()
+            await page.keyboard.press('Alt+Shift+KeyI')
+            await page.locator('.wb-shell-picker').waitFor()
+          },
+          (page) => page.keyboard.press('Escape'),
+        ],
+        [
+          '메뉴 트리 «옮기기» · «취소» Enter',
+          async (page, fx) => {
+            await nodeRow(page, 'n_text0000002').click()
+            await openMove(page, fx)
+          },
+          async (page) => {
+            await page.locator('.wb-shell-menu-picker').getByRole('button', { name: '취소', exact: true }).focus()
+            await page.keyboard.press('Enter')
+          },
+        ],
       ]
       const results: Record<string, unknown> = {}
       for (const [name, place, shut] of cases) {
@@ -653,7 +737,12 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
           const left = { selected: await selectedNode(page), menus: await menus(page), focus: await focusOf(page) }
           await page.keyboard.press('Enter')
           await page.locator('[role="menu"]').waitFor()
-          results['닫힌 … · ← 뒤 Enter'] = { left, selected: await selectedNode(page), menus: await menus(page), server: await serverPage(fx.url) }
+          results['닫힌 … · ← 뒤 Enter'] = {
+            left,
+            selected: await selectedNode(page),
+            menus: await menus(page),
+            server: await serverPage(fx.url),
+          }
         } finally {
           await close()
         }
@@ -729,7 +818,20 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
         const arrived = await state(page, fx)
         await page.keyboard.press('Delete')
         await sleep(200)
-        const confirm = await page.locator('.wb-shell-tree-confirm').evaluateAll((all, titles) => all.map((one) => titles[one.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? one.parentElement?.previousElementSibling?.getAttribute('data-tree-id') ?? ''] ?? '?'), fx.titles)
+        const confirm = await page
+          .locator('.wb-shell-tree-confirm')
+          .evaluateAll(
+            (all, titles) =>
+              all.map(
+                (one) =>
+                  titles[
+                    one.closest('[data-tree-row]')?.getAttribute('data-tree-id') ??
+                      one.parentElement?.previousElementSibling?.getAttribute('data-tree-id') ??
+                      ''
+                  ] ?? '?',
+              ),
+            fx.titles,
+          )
         await page.keyboard.press('Escape')
         await menuRow(page, fx.ids['가2']!).focus()
         await page.keyboard.press('Home')
@@ -853,7 +955,12 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
           await focus(page)
           await page.keyboard.press('Escape')
           await sleep(200)
-          results[name] = { opener, movers: await page.locator('.wb-shell-menu-picker').count(), focus: await focusOf(page, fx.titles), server: await serverTree(fx) }
+          results[name] = {
+            opener,
+            movers: await page.locator('.wb-shell-menu-picker').count(),
+            focus: await focusOf(page, fx.titles),
+            server: await serverTree(fx),
+          }
         } finally {
           await close()
         }
@@ -873,12 +980,27 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
         await target.getByRole('button', { name: '나 추가', exact: true }).click()
         await page.getByRole('menuitem', { name: 'JSON 에서 가져오기…', exact: true }).click()
         await page.getByRole('dialog').waitFor()
-        await ok(stack.request(bob, 'DELETE', `${fx.P}/menu/${fx.ids['나']}`, { cascade: true, expect: { menuIds: [], pageIds: [fx.ids['나1']] } }))
-        await poll('트리에서 «나» 가 빠짐', () => visibleRows(page, fx.titles), (rows) => !rows.includes('나'), 5_000)
+        await ok(
+          stack.request(bob, 'DELETE', `${fx.P}/menu/${fx.ids['나']}`, {
+            cascade: true,
+            expect: { menuIds: [], pageIds: [fx.ids['나1']] },
+          }),
+        )
+        await poll(
+          '트리에서 «나» 가 빠짐',
+          () => visibleRows(page, fx.titles),
+          (rows) => !rows.includes('나'),
+          5_000,
+        )
         const open1 = await page.getByRole('dialog').count()
         await page.keyboard.press('Escape')
         await sleep(300)
-        const result = { dialogOpenAfterRemoteDelete: open1, dialogs: await page.getByRole('dialog').count(), focus: await focusOf(page, fx.titles), picked: await pickedRows(page, fx.titles) }
+        const result = {
+          dialogOpenAfterRemoteDelete: open1,
+          dialogs: await page.getByRole('dialog').count(),
+          focus: await focusOf(page, fx.titles),
+          picked: await pickedRows(page, fx.titles),
+        }
         // eslint-disable-next-line no-console
         console.log(`[N4 사라진 메뉴의 상자] ${JSON.stringify(result)}`)
         // 포커스는 고른 줄이다 — 남이 지운 «나» 를 고르고 있었으면 다시 받은 트리가 이웃 «다1» 을 골랐다(`panels/menu-tree.tsx` 의 `treeFocusFallback`).
@@ -905,7 +1027,12 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
           if (where === '탭') await page.locator('.wb-shell-tab').first().focus()
           const before = await state(page, fx)
           await ok(stack.request(bob, 'DELETE', `${fx.P}/pages/${fx.ids['나1']}`))
-          await poll('트리에서 «나1» 이 빠짐', () => visibleRows(page, fx.titles), (rows) => !rows.includes('나1'), 5_000)
+          await poll(
+            '트리에서 «나1» 이 빠짐',
+            () => visibleRows(page, fx.titles),
+            (rows) => !rows.includes('나1'),
+            5_000,
+          )
           await sleep(500)
           results[where] = { before, after: await state(page, fx) }
         } finally {
@@ -1012,11 +1139,16 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
           await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').waitFor()
           await sleep(600)
           const picked = () =>
-            page.locator('[data-tree-kind="node"]').evaluateAll((all) =>
-              all
-                .filter((one) => one.querySelector(':scope > button[aria-current="true"], :scope > button.wb-shell-structure-node-member') !== null)
-                .map((one) => one.getAttribute('data-tree-id')),
-            )
+            page
+              .locator('[data-tree-kind="node"]')
+              .evaluateAll((all) =>
+                all
+                  .filter(
+                    (one) =>
+                      one.querySelector(':scope > button[aria-current="true"], :scope > button.wb-shell-structure-node-member') !== null,
+                  )
+                  .map((one) => one.getAttribute('data-tree-id')),
+              )
           await nodeRow(page, variant.pick[0]!).click()
           for (const id of variant.pick.slice(1)) {
             await page.keyboard.down('ControlOrMeta')
@@ -1033,18 +1165,37 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
           }
           let bobStatus: number | null = null
           if (variant.reject) {
-            await poll('편집을 잡았다', async () => heldCount, (n) => n === 1, 5_000)
+            await poll(
+              '편집을 잡았다',
+              async () => heldCount,
+              (n) => n === 1,
+              5_000,
+            )
             if (variant.bob !== undefined) {
               // 내 선택의 잠금이 풀리는 사이의 423 은 다시 보낸다.
               for (let attempt = 0; attempt < 15 && bobStatus !== 200; attempt += 1) {
                 const now = await stack.request(bob, 'GET', fx.url)
-                const op = variant.bob === 'remove' ? { op: 'remove', path: '/root/children/0/children/0' } : { op: 'move', from: '/root/children/0/children/1', path: '/root/children/2' }
+                const op =
+                  variant.bob === 'remove'
+                    ? { op: 'remove', path: '/root/children/0/children/0' }
+                    : { op: 'move', from: '/root/children/0/children/1', path: '/root/children/2' }
                 bobStatus = (await stack.request(bob, 'PATCH', `${fx.url}/ops`, { baseSeq: now.body.headSeq, ops: [op] })).status
                 if (bobStatus !== 200) await sleep(300)
               }
               await sleep(500)
             }
-            held!.send(JSON.stringify({ type: 'patch-error', projectId, pageId: held!.frame.pageId, clientOpId: held!.frame.clientOpId, status: 423, code: 'locked', message: '밥님이 편집 중인 노드입니다', issues: [] }))
+            held!.send(
+              JSON.stringify({
+                type: 'patch-error',
+                projectId,
+                pageId: held!.frame.pageId,
+                clientOpId: held!.frame.clientOpId,
+                status: 423,
+                code: 'locked',
+                message: '밥님이 편집 중인 노드입니다',
+                issues: [],
+              }),
+            )
           }
           await sleep(1_500)
           results[name] = { before, held: heldCount, bob: bobStatus, after: await picked() }
@@ -1088,14 +1239,24 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
         const select = page.locator('select.wb-shell-control').first()
         await select.waitFor()
         await select.selectOption('h1')
-        await poll('첫 편집이 나감', async () => patches, (n) => n >= 1, 5_000)
+        await poll(
+          '첫 편집이 나감',
+          async () => patches,
+          (n) => n >= 1,
+          5_000,
+        )
         const first = patches
         // 같은 값의 change — Playwright 의 `selectOption` 은 값이 같아도 `input` · `change` 를 낸다.
         await select.selectOption('h1')
         await sleep(800)
         const same = patches
         await select.selectOption('h2')
-        await poll('다른 값은 나감', async () => patches, (n) => n > same, 5_000)
+        await poll(
+          '다른 값은 나감',
+          async () => patches,
+          (n) => n > same,
+          5_000,
+        )
         // eslint-disable-next-line no-console
         console.log(`[N4 같은 값의 change] ${JSON.stringify({ first, same, other: patches })}`)
         expect({ first, same, other: patches }).toEqual({ first: 1, same: 1, other: 2 })
@@ -1111,7 +1272,15 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
       const file = join(dir, 'dropped.wirebound-page.json')
       await writeFile(
         file,
-        JSON.stringify({ wireboundVersion: '1', page: { title: '놓은 파일', description: null }, schema: { version: 1, root: { id: 'file_root', type: 'Page', children: [{ id: 'file_text', type: 'Text', props: { content: '본문' } }] } }, comments: [] }),
+        JSON.stringify({
+          wireboundVersion: '1',
+          page: { title: '놓은 파일', description: null },
+          schema: {
+            version: 1,
+            root: { id: 'file_root', type: 'Page', children: [{ id: 'file_text', type: 'Text', props: { content: '본문' } }] },
+          },
+          comments: [],
+        }),
       )
       try {
         await page.goto(fx.url)
@@ -1146,8 +1315,18 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
         results['배경막'] = { tabs: context.pages().length, url: page.url() === url, dialogs: await dialog.count() }
         const zone = await centre('.wb-shell-pagejson-drop')
         await drop(zone.x, zone.y)
-        const preview = await poll('칸이 받음', () => dialog.getByRole('status').textContent(), (text) => (text ?? '').includes('놓은 파일'), 5_000).catch(() => 'no preview')
-        results['파일 칸'] = { tabs: context.pages().length, url: page.url() === url, dialogs: await dialog.count(), received: String(preview).includes('놓은 파일') }
+        const preview = await poll(
+          '칸이 받음',
+          () => dialog.getByRole('status').textContent(),
+          (text) => (text ?? '').includes('놓은 파일'),
+          5_000,
+        ).catch(() => 'no preview')
+        results['파일 칸'] = {
+          tabs: context.pages().length,
+          url: page.url() === url,
+          dialogs: await dialog.count(),
+          received: String(preview).includes('놓은 파일'),
+        }
         // eslint-disable-next-line no-console
         console.log(`[N4 파일 놓기] ${JSON.stringify(results)}`)
         expect(results).toEqual({

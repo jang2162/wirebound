@@ -174,10 +174,7 @@ interface PageVisit {
  * 내어쓰기는 그 역이라 같이 성립하지 않는다. 그래서 페이지를 다른 메뉴로 옮기는 길은
  * `reparent` 하나다.
  */
-export function treeAbilities(
-  menu: TreeMenuNode[] | null,
-  selection: TreeSelection | null,
-): TreeAbilities {
+export function treeAbilities(menu: TreeMenuNode[] | null, selection: TreeSelection | null): TreeAbilities {
   if (menu === null || selection === null) return NOTHING
 
   if (selection.kind === 'menu') {
@@ -272,10 +269,7 @@ export function previousMenuSibling(menu: TreeMenuNode[], menuId: string): TreeM
  * 부모의 자리를 주는 것은 내어쓴 노드가 부모의 **다음** 형제가 되기 때문이다 — 그 계산
  * (`index + 1`)은 호출자가 한다. 여기서는 자리만 알려 주고 `sortOrder`를 만들지 않는다.
  */
-export function menuOutdentTarget(
-  menu: TreeMenuNode[],
-  menuId: string,
-): { parentId: string | null; index: number } | null {
+export function menuOutdentTarget(menu: TreeMenuNode[], menuId: string): { parentId: string | null; index: number } | null {
   const visit = findMenu(menu, menuId, null)
   if (visit === null || visit.parentId === null) return null
 
@@ -315,11 +309,7 @@ export function flattenMenus(menu: TreeMenuNode[]): { id: string; path: string }
  * 형제 배열을 `byOrder`로 세운 뒤 자리를 세는 것이 요점이다 — 그래야 `index`가 화면이
  * 그리는 순서와 같다(`panels/menu-tree.tsx`도 같은 정렬을 쓴다).
  */
-function findMenu(
-  nodes: TreeMenuNode[],
-  menuId: string,
-  parentId: string | null,
-): MenuVisit | null {
+function findMenu(nodes: TreeMenuNode[], menuId: string, parentId: string | null): MenuVisit | null {
   const siblings = byOrder<TreeMenuNode>(nodes)
 
   for (const [index, node] of siblings.entries()) {
@@ -415,7 +405,5 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function byOrder<T extends { id: string; sortOrder: number }>(items: unknown): T[] {
   if (!Array.isArray(items)) return []
 
-  return items
-    .filter((item): item is T => isRecord(item) && typeof item['id'] === 'string')
-    .sort((a, b) => a.sortOrder - b.sortOrder)
+  return items.filter((item): item is T => isRecord(item) && typeof item['id'] === 'string').sort((a, b) => a.sortOrder - b.sortOrder)
 }

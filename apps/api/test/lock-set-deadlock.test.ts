@@ -19,7 +19,17 @@
  */
 import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { addMember, createMenuNode, createPage, createProject, getTestDb, resetRealData, signup, withRealApi, type RealApiContext } from './helpers'
+import {
+  addMember,
+  createMenuNode,
+  createPage,
+  createProject,
+  getTestDb,
+  resetRealData,
+  signup,
+  withRealApi,
+  type RealApiContext,
+} from './helpers'
 import { WsProbe, joinRoom } from './ws-client'
 
 beforeEach(resetRealData)
@@ -52,7 +62,13 @@ function holdPageRow(pageId: string): Promise<{ pid: number; release: () => Prom
       .execute(async (trx) => {
         const pid = (await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx)).rows[0]?.pid ?? 0
         await sql`select 1 from pages where id = ${pageId} for update`.execute(trx)
-        resolveHeld({ pid, release: async () => { free(); await done } })
+        resolveHeld({
+          pid,
+          release: async () => {
+            free()
+            await done
+          },
+        })
         await freed
       })
       .catch(rejectHeld)
@@ -106,11 +122,24 @@ async function fixture(ctx: RealApiContext): Promise<Fx> {
     } as never,
   })
   if (put.statusCode !== 200) throw new Error(`PUT 실패 (${put.statusCode}): ${put.body}`)
-  const snapshot = await ctx.app.inject({ method: 'POST', url: `/api/projects/${project.id}/snapshots`, cookies: owner.cookie, payload: { tag: 'base' } })
+  const snapshot = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${project.id}/snapshots`,
+    cookies: owner.cookie,
+    payload: { tag: 'base' },
+  })
   if (snapshot.statusCode !== 201) throw new Error(`스냅샷 실패 (${snapshot.statusCode}): ${snapshot.body}`)
   const holderTab = await joinRoom(ctx.port, project.id, holder.cookie.wb_session)
   opened.push(holderTab)
-  return { owner, holder, projectId: project.id, menuId: menu.id, pageId: page.id, holderTab, snapshotId: (snapshot.json() as { id: string }).id }
+  return {
+    owner,
+    holder,
+    projectId: project.id,
+    menuId: menu.id,
+    pageId: page.id,
+    holderTab,
+    snapshotId: (snapshot.json() as { id: string }).id,
+  }
 }
 
 interface Writer {
@@ -125,7 +154,11 @@ const WRITERS: Writer[] = [
     name: '편집 커밋(PATCH …/ops)',
     expect: 200,
     send: async (ctx, fx) => {
-      const head = ((await ctx.app.inject({ method: 'GET', url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`, cookies: fx.owner.cookie })).json() as { headSeq: number }).headSeq
+      const head = (
+        (
+          await ctx.app.inject({ method: 'GET', url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`, cookies: fx.owner.cookie })
+        ).json() as { headSeq: number }
+      ).headSeq
       return ctx.app.inject({
         method: 'PATCH',
         url: `/api/projects/${fx.projectId}/pages/${fx.pageId}/ops`,

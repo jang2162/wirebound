@@ -46,7 +46,8 @@ function resolvedConfig(): ComposeConfig | string {
     copyFileSync(join(DEPLOY, 'docker-compose.yml'), join(dir, 'docker-compose.yml'))
     writeFileSync(join(dir, '.env'), 'SITE_ADDRESS=wirebound.example.com\nPOSTGRES_PASSWORD=probe\n')
     const run = spawnSync('docker', ['compose', '-f', join(dir, 'docker-compose.yml'), 'config', '--format', 'json'], { encoding: 'utf8' })
-    if (run.error !== undefined || run.status !== 0) return `docker compose config 이 안 돈다: ${run.error?.message ?? run.stderr.trim().split('\n')[0]}`
+    if (run.error !== undefined || run.status !== 0)
+      return `docker compose config 이 안 돈다: ${run.error?.message ?? run.stderr.trim().split('\n')[0]}`
     return JSON.parse(run.stdout) as ComposeConfig
   } finally {
     rmSync(dir, { recursive: true, force: true })

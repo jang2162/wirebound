@@ -22,7 +22,16 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session, type ShownDrop } from './editor-stack'
+import {
+  canvasFrame,
+  editorStackPrerequisite,
+  poll,
+  shownDrops,
+  startEditorStack,
+  type EditorStack,
+  type Session,
+  type ShownDrop,
+} from './editor-stack'
 import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
@@ -76,7 +85,8 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
     if (member.status >= 300) throw new Error(`member ${member.status}`)
-    if (theme !== undefined) await putTheme(call, project.id, { themeId: `system-${theme}`, version: seededVersion(`system-${theme}`), tokens: {} })
+    if (theme !== undefined)
+      await putTheme(call, project.id, { themeId: `system-${theme}`, version: seededVersion(`system-${theme}`), tokens: {} })
     const P: string[] = []
     const pageIds: string[] = []
     for (const [index, nodes] of pages.entries()) {
@@ -96,7 +106,9 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
   /** 서버 문서의 모양 — id(자식) 차례. */
   async function serverIds(P: string): Promise<unknown> {
     const shape = (node: { id: string; children?: unknown[] }): unknown =>
-      Array.isArray(node.children) && node.children.length > 0 ? { [node.id]: node.children.map((child) => shape(child as never)) } : node.id
+      Array.isArray(node.children) && node.children.length > 0
+        ? { [node.id]: node.children.map((child) => shape(child as never)) }
+        : node.id
     return shape((await stack.request(alice, 'GET', P)).body.schema.root)
   }
 
@@ -191,20 +203,36 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
       await moveTo(page, await spotIn(page, 'n_empt', 0.5, 0.5))
       const intoHint = await indicators(page)
       await page.mouse.up()
-      const into = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(ORIGINAL))
+      const into = await poll(
+        '서버 문서',
+        () => shape(P[0]!),
+        (s) => JSON.stringify(s) !== JSON.stringify(ORIGINAL),
+      )
 
       await pick(page, 'n_divi')
       await grab(page)
       await moveTo(page, await spotIn(page, 'n_intx', 0.5, 0.1))
       const beforeHint = await indicators(page)
       await page.mouse.up()
-      const before = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(into))
+      const before = await poll(
+        '서버 문서',
+        () => shape(P[0]!),
+        (s) => JSON.stringify(s) !== JSON.stringify(into),
+      )
 
       const undo = page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' })
       await undo.click()
-      await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) === JSON.stringify(into))
+      await poll(
+        '서버 문서',
+        () => shape(P[0]!),
+        (s) => JSON.stringify(s) === JSON.stringify(into),
+      )
       await undo.click()
-      const undone = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) === JSON.stringify(ORIGINAL))
+      const undone = await poll(
+        '서버 문서',
+        () => shape(P[0]!),
+        (s) => JSON.stringify(s) === JSON.stringify(ORIGINAL),
+      )
 
       expect({
         intoHint: intoHint.map((h) => h.placement),
@@ -244,7 +272,9 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
   describe('끄는 중 남이 대상을 바꾼다', () => {
     /** alice 가 n_text 를 쥐고 빈 카드 위에서 «안» 표시를 세운 판. */
     // `here` 는 끌 때 쓴 점이다 — 놓을 자리가 서면 미리보기가 빈 카드를 키우므로 뒤에 다시 재면 다른 점이다(문턱 밖으로 «조금» 이 커진다).
-    async function armed(P: string): Promise<{ page: Page; close: () => Promise<void>; patches: string[]; armedHint: string[]; here: { x: number; y: number } }> {
+    async function armed(
+      P: string,
+    ): Promise<{ page: Page; close: () => Promise<void>; patches: string[]; armedHint: string[]; here: { x: number; y: number } }> {
       const tab = await openEditor(P)
       await pick(tab.page, 'n_text')
       const here = await spotIn(tab.page, 'n_empt', 0.5, 0.5)
@@ -285,7 +315,10 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
       try {
         const bob = await stack.login(stack.users.bob)
         const head = (await stack.request(bob, 'GET', P[0]!)).body.headSeq as number
-        const removed = await stack.request(bob, 'PATCH', `${P[0]!}/ops`, { baseSeq: head, ops: [{ op: 'remove', path: '/root/children/2' }] })
+        const removed = await stack.request(bob, 'PATCH', `${P[0]!}/ops`, {
+          baseSeq: head,
+          ops: [{ op: 'remove', path: '/root/children/2' }],
+        })
         if (removed.status >= 300) throw new Error(`remove ${removed.status}`)
         await canvasFrame(page).locator('[data-wb-id="n_empt"]').waitFor({ state: 'detached' })
         // 포인터가 멈춘 채 — 보인 자리가 무너졌으니 표시가 걷힌다(`use-placement.ts` 의 `live`).
@@ -357,7 +390,11 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
         await page.mouse.up()
         // 바뀔 때까지만 기다리고 자리는 아래에서 값으로 견준다 — 자리를 기다리면 틀린 자리가 시간 초과로만 죽는다.
         const seeded = { n_root: ['n_move', { n_grid: ['n_g1', 'n_g2', 'n_g3'] }, { n_form: ['n_f1', 'n_f2'] }] }
-        const first = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(seeded))
+        const first = await poll(
+          '서버 문서',
+          () => shape(P[0]!),
+          (s) => JSON.stringify(s) !== JSON.stringify(seeded),
+        )
 
         await pick(page, 'n_move')
         // 목표점은 끌기 전에 잰다 — 끄는 동안의 미리보기가 노드를 밀어도 판정은 미리보기를 뺀 배치로 잰다(`src/drag/use-placement.ts`).
@@ -369,7 +406,11 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
         await moveTo(page, g3)
         const beforeG3 = (await indicators(page)).map((h) => `${h.placement}:${h.axis}`)
         await page.mouse.up()
-        const second = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(first))
+        const second = await poll(
+          '서버 문서',
+          () => shape(P[0]!),
+          (s) => JSON.stringify(s) !== JSON.stringify(first),
+        )
 
         expect({ sheet, afterG1, first, beforeF1, beforeG3, second }).toEqual({
           sheet: 1,
@@ -416,7 +457,11 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
       props: { content: `줄 ${i}` },
     }))
     // 앞 채움 글 40 — 줌 0.5 에서도 문서가 칸보다 길어 칸을 굴릴 수 있게 한다(무대 높이가 줌을 따라 준다 — `src/routes/editor.tsx` 의 `CanvasFrame`).
-    const fillers: SeedNode[] = Array.from({ length: 40 }, (_, i) => ({ id: `n_f${String(i).padStart(2, '0')}`, type: 'Text', props: { content: `채움 ${i}` } }))
+    const fillers: SeedNode[] = Array.from({ length: 40 }, (_, i) => ({
+      id: `n_f${String(i).padStart(2, '0')}`,
+      type: 'Text',
+      props: { content: `채움 ${i}` },
+    }))
     const { P } = await fixture('zoom', [[...fillers, ...texts, { id: 'n_box', type: 'Card', props: { title: '상자' } }]])
     const { page, close, patches } = await openEditor(P[0]!)
     const rows: Record<string, unknown> = {}
@@ -434,7 +479,8 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
         const t21 = await nodeBox(page, 'n_t21')
         await page.keyboard.press('Escape')
         await page.mouse.up()
-        const within = (r: Box, b: Box) => r.x >= b.x - 1 && r.y >= b.y - 1 && r.x + r.width <= b.x + b.width + 1 && r.y + r.height <= b.y + b.height + 1
+        const within = (r: Box, b: Box) =>
+          r.x >= b.x - 1 && r.y >= b.y - 1 && r.x + r.width <= b.x + b.width + 1 && r.y + r.height <= b.y + b.height + 1
         rows[String(zoom)] = {
           scrolled: scrollTop > 0,
           // «안» — 미리보기가 그 상자의 자식으로 서고 그 상자 안에 그려진다.
@@ -518,7 +564,11 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
       await moveTo(page, await spotIn(page, 'n_empt', 0.5, 0.5))
       const backOnCanvas = (await indicators(page)).map((h) => `${h.kind}:${h.placement}`)
       await page.mouse.up()
-      const viaTree = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(ORIGINAL))
+      const viaTree = await poll(
+        '서버 문서',
+        () => shape(P[0]!),
+        (s) => JSON.stringify(s) !== JSON.stringify(ORIGINAL),
+      )
 
       await pick(page, 'n_text')
       await grab(page)
@@ -526,7 +576,11 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
       await moveTo(page, { x: divider.x + 30, y: divider.y + divider.height - 3 })
       const onRow = (await indicators(page)).map((h) => `${h.kind}:${h.placement}:${h.axis}`)
       await page.mouse.up()
-      const ontoRow = await poll('서버 문서', () => shape(P[0]!), (s) => JSON.stringify(s) !== JSON.stringify(viaTree))
+      const ontoRow = await poll(
+        '서버 문서',
+        () => shape(P[0]!),
+        (s) => JSON.stringify(s) !== JSON.stringify(viaTree),
+      )
 
       expect({
         overTree: overTree.map((h) => `${h.kind}:${h.placement}`),

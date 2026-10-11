@@ -58,11 +58,7 @@ export interface FileIo {
    * **메서드를 하나 더 두지 않는다.** 파일 시스템에서 이 둘은 인코딩만 다른 한 동작이고,
    * 자리를 둘로 두면 `io-boundary`가 세는 *"바깥을 만지는 자리"*가 늘어난다.
    */
-  write(
-    path: string,
-    content: string | Uint8Array,
-    options?: { mode?: number; dirMode?: number },
-  ): Promise<void>
+  write(path: string, content: string | Uint8Array, options?: { mode?: number; dirMode?: number }): Promise<void>
   /**
    * 그 경로에 **무엇이 있는가.** 없으면 `null`.
    *

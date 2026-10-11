@@ -59,11 +59,7 @@ export const PatchPath = z
   .max(2000, '경로가 너무 깁니다')
   .refine(
     (path) =>
-      path === '/root' ||
-      path.startsWith('/root/') ||
-      path === '/viewStates' ||
-      path.startsWith('/viewStates/') ||
-      path === '/version',
+      path === '/root' || path.startsWith('/root/') || path === '/viewStates' || path.startsWith('/viewStates/') || path === '/version',
     { message: '경로는 /root · /viewStates 아래이거나 /version이어야 합니다' },
   )
 

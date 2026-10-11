@@ -1,21 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { WbNode } from '../src/node'
-import {
-  collectNodeIds,
-  findNode,
-  findNodePath,
-  remapNodeIds,
-  walkNodes,
-} from '../src/tree'
+import { collectNodeIds, findNode, findNodePath, remapNodeIds, walkNodes } from '../src/tree'
 
 function sample(): WbNode {
   return {
     id: 'n_000000000001',
     type: 'Page',
     children: [
-      { id: 'n_000000000002', type: 'SearchForm', children: [
-        { id: 'n_000000000003', type: 'Field', props: { label: '아이디' } },
-      ] },
+      { id: 'n_000000000002', type: 'SearchForm', children: [{ id: 'n_000000000003', type: 'Field', props: { label: '아이디' } }] },
       { id: 'n_000000000004', type: 'List', props: { items: 10 } },
     ],
   }
@@ -24,22 +16,12 @@ function sample(): WbNode {
 describe('walkNodes', () => {
   it('깊이 우선으로 모든 노드를 방문한다', () => {
     const visited = [...walkNodes(sample())].map((v) => v.node.id)
-    expect(visited).toEqual([
-      'n_000000000001',
-      'n_000000000002',
-      'n_000000000003',
-      'n_000000000004',
-    ])
+    expect(visited).toEqual(['n_000000000001', 'n_000000000002', 'n_000000000003', 'n_000000000004'])
   })
 
   it('각 방문에 JSON Pointer 경로를 함께 준다', () => {
     const paths = [...walkNodes(sample())].map((v) => v.path)
-    expect(paths).toEqual([
-      '/root',
-      '/root/children/0',
-      '/root/children/0/children/0',
-      '/root/children/1',
-    ])
+    expect(paths).toEqual(['/root', '/root/children/0', '/root/children/0/children/0', '/root/children/1'])
   })
 
   it('루트가 아닌 노드는 부모와 인덱스를 준다', () => {
@@ -68,12 +50,7 @@ describe('findNode / findNodePath', () => {
 
 describe('collectNodeIds', () => {
   it('트리의 모든 id를 순서대로 모은다', () => {
-    expect(collectNodeIds(sample())).toEqual([
-      'n_000000000001',
-      'n_000000000002',
-      'n_000000000003',
-      'n_000000000004',
-    ])
+    expect(collectNodeIds(sample())).toEqual(['n_000000000001', 'n_000000000002', 'n_000000000003', 'n_000000000004'])
   })
 })
 
@@ -81,12 +58,7 @@ describe('remapNodeIds', () => {
   it('모든 노드에 새 id를 발급한다', () => {
     let counter = 0
     const { root } = remapNodeIds(sample(), () => `n_new${String(counter++).padStart(9, '0')}`)
-    expect(collectNodeIds(root)).toEqual([
-      'n_new000000000',
-      'n_new000000001',
-      'n_new000000002',
-      'n_new000000003',
-    ])
+    expect(collectNodeIds(root)).toEqual(['n_new000000000', 'n_new000000001', 'n_new000000002', 'n_new000000003'])
   })
 
   it('옛 id에서 새 id로의 매핑을 함께 준다', () => {
@@ -102,10 +74,7 @@ describe('remapNodeIds', () => {
       children: [{ id: 'constructor', type: 'Text' }],
     }
     let counter = 0
-    const { root, mapping } = remapNodeIds(
-      tree,
-      () => `n_new${String(counter++).padStart(9, '0')}`,
-    )
+    const { root, mapping } = remapNodeIds(tree, () => `n_new${String(counter++).padStart(9, '0')}`)
     expect(root.id).toBe('n_new000000000')
     expect(root.children![0]!.id).toBe('n_new000000001')
     expect(mapping.get('__proto__')).toBe('n_new000000000')
@@ -126,9 +95,7 @@ describe('remapNodeIds', () => {
         {
           id: 'n_000000000002',
           type: 'Button',
-          interactions: [
-            { on: 'click', actions: [{ type: 'setVisible', target: 'n_000000000003', value: false }] },
-          ],
+          interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_000000000003', value: false }] }],
         },
         { id: 'n_000000000003', type: 'List' },
       ],
@@ -173,9 +140,7 @@ describe('remapNodeIds', () => {
           interactions: [
             {
               on: 'click',
-              actions: [
-                { type: 'setProp', target: 'n_000000000002', prop: 'columns', value: { list: ['하나'] } },
-              ],
+              actions: [{ type: 'setProp', target: 'n_000000000002', prop: 'columns', value: { list: ['하나'] } }],
             },
           ],
         },
@@ -184,7 +149,7 @@ describe('remapNodeIds', () => {
 
     const { root } = remapNodeIds(tree, () => 'n_aaaaaaaaaaaa')
     const source = tree.children![0]!.interactions![0]!.actions[0]!
-    ;((source as { value: { list: string[] } }).value.list).push('둘')
+    ;(source as { value: { list: string[] } }).value.list.push('둘')
 
     const copied = root.children![0]!.interactions![0]!.actions[0]!
     expect((copied as { value: { list: string[] } }).value.list).toEqual(['하나'])

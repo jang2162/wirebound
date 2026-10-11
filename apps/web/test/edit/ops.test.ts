@@ -50,9 +50,7 @@ function withGrandchild(): PageDocument {
       {
         id: 'n_box',
         type: 'Container',
-        children: [
-          { id: 'n_deep', type: 'Text', props: { title: '옛 제목' } },
-        ],
+        children: [{ id: 'n_deep', type: 'Text', props: { title: '옛 제목' } }],
       },
     ],
   })
@@ -111,9 +109,7 @@ describe('propOps', () => {
     // 통째 `add`도 답이 아니다 — 그러면 아래 단언의 `other`가 지워진다.
     const document = withChild({ other: 1 })
 
-    expect(propOps(document, 'n_a', 'title', '새 제목')).toEqual([
-      { op: 'add', path: '/root/children/0/props/title', value: '새 제목' },
-    ])
+    expect(propOps(document, 'n_a', 'title', '새 제목')).toEqual([{ op: 'add', path: '/root/children/0/props/title', value: '새 제목' }])
   })
 
   it('없는 노드면 null이다', () => {
@@ -141,9 +137,7 @@ describe('propOps', () => {
     ]
 
     for (const { name, document, expected } of cases) {
-      expect(propsAfter(document, propOps(document, 'n_a', 'title', '새 제목'), [0]), name).toEqual(
-        expected,
-      )
+      expect(propsAfter(document, propOps(document, 'n_a', 'title', '새 제목'), [0]), name).toEqual(expected)
     }
   })
 
@@ -160,9 +154,7 @@ describe('propOps', () => {
     const document = withChild({ title: 'x' })
 
     for (const value of [true, 3, ['a', 'b'], null]) {
-      expect(propOps(document, 'n_a', 'flag', value)).toEqual([
-        { op: 'add', path: '/root/children/0/props/flag', value },
-      ])
+      expect(propOps(document, 'n_a', 'flag', value)).toEqual([{ op: 'add', path: '/root/children/0/props/flag', value }])
     }
   })
 
@@ -250,16 +242,13 @@ const NEW_NODE: WbNode = { id: 'n_new', type: 'Text' }
 
 describe('insertNodeOps', () => {
   it('루트의 자식으로 넣는다', () => {
-    expect(insertNodeOps(withSiblings(), 'n_root', 0, NEW_NODE)).toEqual([
-      { op: 'add', path: '/root/children/0', value: NEW_NODE },
-    ])
+    expect(insertNodeOps(withSiblings(), 'n_root', 0, NEW_NODE)).toEqual([{ op: 'add', path: '/root/children/0', value: NEW_NODE }])
   })
 
   it('중간 자리에 넣으면 뒤 형제가 밀린다', () => {
     const document = withSiblings()
 
-    expect(childIds(applied(document, insertNodeOps(document, 'n_root', 1, NEW_NODE)), 'n_root'))
-      .toEqual(['n_a', 'n_new', 'n_b', 'n_c'])
+    expect(childIds(applied(document, insertNodeOps(document, 'n_root', 1, NEW_NODE)), 'n_root')).toEqual(['n_a', 'n_new', 'n_b', 'n_c'])
   })
 
   it('끝에 넣는다', () => {
@@ -268,16 +257,13 @@ describe('insertNodeOps', () => {
     // 넷일 때 `배열 인덱스가 범위를 벗어납니다`로 던진다.
     const document = withSiblings()
 
-    expect(childIds(applied(document, insertNodeOps(document, 'n_root', 3, NEW_NODE)), 'n_root'))
-      .toEqual(['n_a', 'n_b', 'n_c', 'n_new'])
+    expect(childIds(applied(document, insertNodeOps(document, 'n_root', 3, NEW_NODE)), 'n_root')).toEqual(['n_a', 'n_b', 'n_c', 'n_new'])
   })
 
   it('깊이 중첩된 부모에도 넣는다', () => {
     const document = withSubtree()
 
-    expect(insertNodeOps(document, 'n_box', 1, NEW_NODE)).toEqual([
-      { op: 'add', path: '/root/children/0/children/1', value: NEW_NODE },
-    ])
+    expect(insertNodeOps(document, 'n_box', 1, NEW_NODE)).toEqual([{ op: 'add', path: '/root/children/0/children/1', value: NEW_NODE }])
   })
 
   it('없는 부모면 null이다', () => {
@@ -310,11 +296,8 @@ describe('insertNodeOps', () => {
       children: [{ id: 'n_empty', type: 'Card' }],
     })
 
-    expect(insertNodeOps(document, 'n_empty', 0, NEW_NODE)).toEqual([
-      { op: 'add', path: '/root/children/0/children', value: [NEW_NODE] },
-    ])
-    expect(childIds(applied(document, insertNodeOps(document, 'n_empty', 0, NEW_NODE)), 'n_empty'))
-      .toEqual(['n_new'])
+    expect(insertNodeOps(document, 'n_empty', 0, NEW_NODE)).toEqual([{ op: 'add', path: '/root/children/0/children', value: [NEW_NODE] }])
+    expect(childIds(applied(document, insertNodeOps(document, 'n_empty', 0, NEW_NODE)), 'n_empty')).toEqual(['n_new'])
   })
 
   it('children 키가 없는 부모에 0이 아닌 자리는 null이다', () => {
@@ -373,8 +356,7 @@ describe('removeNodeOps', () => {
     // 이것을 잊으면 다음 op이 다른 노드를 가리킨다.
     const document = withSiblings()
 
-    expect(childIds(applied(document, removeNodeOps(document, 'n_a')), 'n_root'))
-      .toEqual(['n_b', 'n_c'])
+    expect(childIds(applied(document, removeNodeOps(document, 'n_a')), 'n_root')).toEqual(['n_b', 'n_c'])
   })
 
   it('서버가 만들 inverse는 서브트리를 통째로 품은 add 하나다', () => {
@@ -406,8 +388,7 @@ describe('moveNodeOps', () => {
   it('같은 부모 안에서 앞으로 옮긴다', () => {
     const document = withSiblings()
 
-    expect(childIds(applied(document, moveNodeOps(document, 'n_c', 'n_root', 0)), 'n_root'))
-      .toEqual(['n_c', 'n_a', 'n_b'])
+    expect(childIds(applied(document, moveNodeOps(document, 'n_c', 'n_root', 0)), 'n_root')).toEqual(['n_c', 'n_a', 'n_b'])
   })
 
   it('같은 부모 안에서 뒤로 옮긴다', () => {
@@ -420,16 +401,14 @@ describe('moveNodeOps', () => {
     // 자연스럽게 나온다 — 호출자가 방향에 따라 보정을 나눠 쓰지 않아도 된다.
     const document = withSiblings()
 
-    expect(childIds(applied(document, moveNodeOps(document, 'n_a', 'n_root', 2)), 'n_root'))
-      .toEqual(['n_b', 'n_c', 'n_a'])
+    expect(childIds(applied(document, moveNodeOps(document, 'n_a', 'n_root', 2)), 'n_root')).toEqual(['n_b', 'n_c', 'n_a'])
   })
 
   it('한 칸 아래로는 index + 1이다', () => {
     // 위 계약이 툴바에서 쓰이는 모양이다. `n_a`가 0번이므로 1을 준다.
     const document = withSiblings()
 
-    expect(childIds(applied(document, moveNodeOps(document, 'n_a', 'n_root', 1)), 'n_root'))
-      .toEqual(['n_b', 'n_a', 'n_c'])
+    expect(childIds(applied(document, moveNodeOps(document, 'n_a', 'n_root', 1)), 'n_root')).toEqual(['n_b', 'n_a', 'n_c'])
   })
 
   it('다른 부모로 옮긴다', () => {
@@ -617,11 +596,9 @@ describe('moveNodeOps', () => {
 
     expect(moveNodeOps(document, 'n_box', 'n_1', 0)).toBeNull()
     // 그 op을 손으로 만들면 무엇이 되는지 — 아래가 위 문장의 근거다.
-    expect(() =>
-      applyOps(document, [
-        { op: 'move', from: '/root/children/0', path: '/root/children/0/children/0/children/0' },
-      ]),
-    ).toThrow(/경로를 찾을 수 없습니다/)
+    expect(() => applyOps(document, [{ op: 'move', from: '/root/children/0', path: '/root/children/0/children/0/children/0' }])).toThrow(
+      /경로를 찾을 수 없습니다/,
+    )
   })
 
   it('경로 기준을 한쪽으로 통일하면 둘 다 던진다', () => {
@@ -650,8 +627,7 @@ describe('moveNodeOps', () => {
       ]),
     ).toThrow(/경로를 찾을 수 없습니다/)
     // 갈라 쓰는 지금 구현만 지나간다.
-    expect(childIds(applied(document, moveNodeOps(document, 'n_lead', 'n_empty', 0)), 'n_empty'))
-      .toEqual(['n_lead'])
+    expect(childIds(applied(document, moveNodeOps(document, 'n_lead', 'n_empty', 0)), 'n_empty')).toEqual(['n_lead'])
   })
 
   it('inverse를 되적용하면 원래 문서로 돌아간다', () => {
@@ -766,9 +742,7 @@ describe('ops.ts의 방어선 — children 배열 안에 노드가 아닌 원소
     const document = afterNull()
 
     expect(propOps(document, 'n_root', 'x', 1)).not.toBeNull()
-    expect(moveNodeOps(document, 'n_a', 'n_root', 0)).toEqual([
-      { op: 'move', from: '/root/children/1', path: '/root/children/0' },
-    ])
+    expect(moveNodeOps(document, 'n_a', 'n_root', 0)).toEqual([{ op: 'move', from: '/root/children/1', path: '/root/children/0' }])
   })
 })
 
@@ -785,9 +759,7 @@ describe('variantOps', () => {
     return doc({
       id: 'n_root',
       type: 'Page',
-      children: [
-        { id: 'n_a', type: 'Card', props: { title: 'x' }, ...(variant === undefined ? {} : { variant }) },
-      ],
+      children: [{ id: 'n_a', type: 'Card', props: { title: 'x' }, ...(variant === undefined ? {} : { variant }) }],
     })
   }
 
@@ -800,16 +772,12 @@ describe('variantOps', () => {
   it('키가 없으면 add다', () => {
     // `replace`를 주면 `applyOps`가 `바꿀 키가 없습니다`로 던지고 낙관적 적용이 편집을 삼킨다
     // (`propOps`의 가운데 갈래와 같은 원인).
-    expect(variantOps(withVariant(), 'n_a', 'featured')).toEqual([
-      { op: 'add', path: '/root/children/0/variant', value: 'featured' },
-    ])
+    expect(variantOps(withVariant(), 'n_a', 'featured')).toEqual([{ op: 'add', path: '/root/children/0/variant', value: 'featured' }])
   })
 
   it('null이면 remove다 — replace null이 아니다', () => {
     // `WbNodeSchema.variant`가 `z.string().optional()`이라 `null`은 봉투 검증을 통과하지 못한다.
-    expect(variantOps(withVariant('featured'), 'n_a', null)).toEqual([
-      { op: 'remove', path: '/root/children/0/variant' },
-    ])
+    expect(variantOps(withVariant('featured'), 'n_a', null)).toEqual([{ op: 'remove', path: '/root/children/0/variant' }])
   })
 
   it('그 근거 — replace null인 문서가 실제로 거절된다', () => {
@@ -818,9 +786,7 @@ describe('variantOps', () => {
     // 편집을 막는다(`warning`이면 통과한다). 산문으로만 두면 아무도 다시 재지 않는다.
     //
     // **그 자리는 `400`이 아니다** — 검증 게이트가 막는 것은 422다.
-    const broken = applyOps(withVariant('default'), [
-      { op: 'replace', path: '/root/children/0/variant', value: null },
-    ])
+    const broken = applyOps(withVariant('default'), [{ op: 'replace', path: '/root/children/0/variant', value: null }])
 
     const issues = validatePage(broken)
     expect(issues.map((issue) => issue.code)).toEqual(['bad-document'])
@@ -857,9 +823,7 @@ describe('variantOps', () => {
     // 서버는 `packages/schema`의 `invertOps`를 그대로 쓰므로(`apps/api/src/services/
     // edit-pipeline.ts`) 여기서 잰 값이 서버가 낼 값이다.
     const bare = withVariant()
-    expect(invertOps(bare, variantOps(bare, 'n_a', 'featured') ?? [])).toEqual([
-      { op: 'remove', path: '/root/children/0/variant' },
-    ])
+    expect(invertOps(bare, variantOps(bare, 'n_a', 'featured') ?? [])).toEqual([{ op: 'remove', path: '/root/children/0/variant' }])
 
     const had = withVariant('default')
     expect(invertOps(had, variantOps(had, 'n_a', 'featured') ?? [])).toEqual([
@@ -867,9 +831,7 @@ describe('variantOps', () => {
     ])
 
     // 지우기의 역은 되살리기다 — 이것이 없으면 undo가 지운 변형을 못 돌려놓는다.
-    expect(invertOps(had, variantOps(had, 'n_a', null) ?? [])).toEqual([
-      { op: 'add', path: '/root/children/0/variant', value: 'default' },
-    ])
+    expect(invertOps(had, variantOps(had, 'n_a', null) ?? [])).toEqual([{ op: 'add', path: '/root/children/0/variant', value: 'default' }])
   })
 
   it('inverse를 되적용하면 원래 문서로 돌아간다', () => {
@@ -904,9 +866,7 @@ describe('interactionsOps', () => {
     return doc({
       id: 'n_root',
       type: 'Page',
-      children: [
-        { id: 'n_a', type: 'Button', props: { label: '가' }, ...(interactions === undefined ? {} : { interactions }) },
-      ],
+      children: [{ id: 'n_a', type: 'Button', props: { label: '가' }, ...(interactions === undefined ? {} : { interactions }) }],
     })
   }
 
@@ -933,9 +893,7 @@ describe('interactionsOps', () => {
    * `.optional()`이라 키가 없는 것이 정상 상태다.
    */
   it('빈 배열을 주면 키를 지운다', () => {
-    expect(interactionsOps(withInteractions([RULE]), 'n_a', [])).toEqual([
-      { op: 'remove', path: '/root/children/0/interactions' },
-    ])
+    expect(interactionsOps(withInteractions([RULE]), 'n_a', [])).toEqual([{ op: 'remove', path: '/root/children/0/interactions' }])
   })
 
   it('지울 것이 없으면 null이다', () => {

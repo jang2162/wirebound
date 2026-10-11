@@ -15,11 +15,15 @@ const say = (lost: PendingEdit[]): string => lossMessage([refusedLoss(conflict, 
 
 describe('거절 수습의 문장은 잃은 것이 되돌리기인지 말한다', () => {
   it('편집만이면 옛 문장 그대로', () => {
-    expect(say([edit('edit')])).toBe('페이지가 이미 변경되었습니다 (요청 baseSeq 2, 현재 3) — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다.')
+    expect(say([edit('edit')])).toBe(
+      '페이지가 이미 변경되었습니다 (요청 baseSeq 2, 현재 3) — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다.',
+    )
   })
 
   it('되돌리기만이면 «편집» 이라 말하지 않는다', () => {
-    expect(say([edit('undo')])).toBe('페이지가 이미 변경되었습니다 (요청 baseSeq 2, 현재 3) — 페이지를 서버 상태로 다시 불러왔고, 되돌리기 · 다시 실행 1개가 취소됐습니다.')
+    expect(say([edit('undo')])).toBe(
+      '페이지가 이미 변경되었습니다 (요청 baseSeq 2, 현재 3) — 페이지를 서버 상태로 다시 불러왔고, 되돌리기 · 다시 실행 1개가 취소됐습니다.',
+    )
     expect(say([edit('redo')])).toContain('되돌리기 · 다시 실행 1개')
   })
 
@@ -28,7 +32,10 @@ describe('거절 수습의 문장은 잃은 것이 되돌리기인지 말한다'
   })
 
   it('같은 열쇠의 조각을 합치면 수를 자리마다 더한다', () => {
-    const merged = mergeLoss([refusedLoss(conflict, conflict.message, [edit('edit')])], refusedLoss(conflict, conflict.message, [edit('undo')]))
+    const merged = mergeLoss(
+      [refusedLoss(conflict, conflict.message, [edit('edit')])],
+      refusedLoss(conflict, conflict.message, [edit('undo')]),
+    )
     expect(lossMessage(merged)).toContain('편집 1개 · 되돌리기 · 다시 실행 1개가 취소됐습니다')
   })
 })

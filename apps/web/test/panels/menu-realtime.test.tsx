@@ -106,7 +106,9 @@ async function mount(api: Partial<ApiClient> = {}) {
     /** `menu-changed` 하나를 밀어 넣는다. */
     frame(rev: number): void {
       act(() => {
-        last().onmessage?.({ data: JSON.stringify({ type: 'menu-changed', projectId: PROJECT_ID, rev, actor: { type: 'user', label: '밥' } }) })
+        last().onmessage?.({
+          data: JSON.stringify({ type: 'menu-changed', projectId: PROJECT_ID, rev, actor: { type: 'user', label: '밥' } }),
+        })
       })
     },
     /** 붙잡힌 `index` 번째 조회에 답한다. */
@@ -150,7 +152,10 @@ describe('신호와 판 번호', () => {
 
     view.frame(2)
     expect(view.readTree).toHaveBeenCalledTimes(2)
-    await view.answer(0, { menu: tree((menu) => menu.push({ id: 'mn-4', title: '배송관리', sortOrder: 2, pages: [], children: [] })), rev: 2 })
+    await view.answer(0, {
+      menu: tree((menu) => menu.push({ id: 'mn-4', title: '배송관리', sortOrder: 2, pages: [], children: [] })),
+      rev: 2,
+    })
     await within(region()).findByText('배송관리')
 
     // 받은 판(2)과 같거나 작은 번호 — 거꾸로 닿은 앞 프레임 · 내 쓰기의 신호.
@@ -289,7 +294,11 @@ describe('다시 받은 트리가 열린 것의 대상을 지우면', () => {
     view.frame(2)
     await view.answer(0, { menu: tree((menu) => menu[0]!.pages.push({ id: 'pg-new', title: '회원 등급', sortOrder: 2 })), rev: 2 })
     await within(box).findByText(CASCADE_CHANGED)
-    expect(within(box).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['회원 목록', '회원 상세', '회원 등급'])
+    expect(
+      within(box)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['회원 목록', '회원 상세', '회원 등급'])
   })
 
   it('연쇄 삭제 상자 — 이름만 바뀌면 같은 행이라 다시 세우지 않는다', async () => {

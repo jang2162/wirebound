@@ -141,10 +141,7 @@ describe('번들과 PPTX 가 같은 글자를 싣는다', () => {
 
     it(`노트도 같은 글자를 받는다 — ${page.title}`, () => {
       const 노트 = noteTexts(index)
-      for (const text of [
-        ...bundleTexts(index, 'comments'),
-        ...bundleTexts(index, 'interactions'),
-      ]) {
+      for (const text of [...bundleTexts(index, 'comments'), ...bundleTexts(index, 'interactions')]) {
         for (const segment of lines(text)) {
           expect(노트, `번들의 "${segment}"`).toContain(segment)
         }

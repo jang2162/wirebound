@@ -50,9 +50,7 @@ function entryPlugin(entry: string): Plugin {
     enforce: 'pre',
     resolveId: (id) => (id === ENTRY_ID ? `\0${ENTRY_ID}` : null),
     load: (id) =>
-      id === `\0${ENTRY_ID}`
-        ? `import def from ${JSON.stringify(entry)}; globalThis.${WB_RUNTIME_GLOBAL}.register(def);`
-        : null,
+      id === `\0${ENTRY_ID}` ? `import def from ${JSON.stringify(entry)}; globalThis.${WB_RUNTIME_GLOBAL}.register(def);` : null,
   }
 }
 
@@ -102,8 +100,7 @@ async function bundleTheme(project: LoadedProject): Promise<Bundled> {
           interop: 'auto',
           inlineDynamicImports: true,
           entryFileNames: 'theme.js',
-          assetFileNames: (info) =>
-            (info.names[0] ?? '').endsWith('.css') ? 'theme.css' : 'assets/[name]-[hash][extname]',
+          assetFileNames: (info) => ((info.names[0] ?? '').endsWith('.css') ? 'theme.css' : 'assets/[name]-[hash][extname]'),
         },
       },
     },

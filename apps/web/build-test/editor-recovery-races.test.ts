@@ -63,13 +63,22 @@ describe.skipIf(!전제.ok)('수습 · 재연결 · 다시 읽기의 겹침', ()
       await box.fill('앨리스가 친 글')
       expect(cut.blackhole(/\/ws[ ?]/)).toBeGreaterThanOrEqual(1)
       await box.evaluate((element) => (element as HTMLElement).blur())
-      await poll('편집 프레임이 나간다(서버에는 안 닿는다)', async () => log.lines.slice(), (lines) => lines.includes('WS→ patch 1쪽 baseSeq=1'))
+      await poll(
+        '편집 프레임이 나간다(서버에는 안 닿는다)',
+        async () => log.lines.slice(),
+        (lines) => lines.includes('WS→ patch 1쪽 baseSeq=1'),
+      )
 
       reads.arm()
       expect(cut.reset(/\/ws[ ?]/)).toBeGreaterThanOrEqual(1)
       await reads.held
       // 판이 섰는가 — 붙잡은 수습 조회 뒤에 재연결 조회가 읽혀 흘렀다.
-      await poll('재연결 조회가 흐른다', async () => log.lines.slice(), (lines) => lines.lastIndexOf('GET 흘림 head 1') > lines.indexOf('GET 읽힘 head 1 — 답 쥠'), 15_000)
+      await poll(
+        '재연결 조회가 흐른다',
+        async () => log.lines.slice(),
+        (lines) => lines.lastIndexOf('GET 흘림 head 1') > lines.indexOf('GET 읽힘 head 1 — 답 쥠'),
+        15_000,
+      )
       reads.release()
 
       const shown = await stable(page)
@@ -99,7 +108,10 @@ describe.skipIf(!전제.ok)('수습 · 재연결 · 다시 읽기의 겹침', ()
     const bob = await stack.login(stack.users.bob)
     const fx = await fixture(stack, alice, 'rebase-nav', {
       bob: 'editor',
-      first: [{ op: 'add', path: '/root/children/0', value: { id: 'n_zero000001', type: 'Divider', props: {} } }, text('n_one0000001', '1쪽 글', 1)],
+      first: [
+        { op: 'add', path: '/root/children/0', value: { id: 'n_zero000001', type: 'Divider', props: {} } },
+        text('n_one0000001', '1쪽 글', 1),
+      ],
       second: [text('n_two0000001', '2쪽 원문')],
     })
     const { context, page } = await stack.openTab(stack.users.alice)
@@ -121,7 +133,11 @@ describe.skipIf(!전제.ok)('수습 · 재연결 · 다시 읽기의 겹침', ()
       await first.release()
       expect((await bobs).status).toBe(200)
       await second.acquired
-      await poll('밥의 프레임이 닿는다(리베이스)', async () => log.lines.slice(), (lines) => lines.includes('WS← page-changed seq 2'))
+      await poll(
+        '밥의 프레임이 닿는다(리베이스)',
+        async () => log.lines.slice(),
+        (lines) => lines.includes('WS← page-changed seq 2'),
+      )
 
       await page.getByRole('link', { name: '둘째' }).click()
       const box = await selectFirstText(page, '2쪽 원문')
@@ -133,8 +149,15 @@ describe.skipIf(!전제.ok)('수습 · 재연결 · 다시 읽기의 겹침', ()
       expect(log.lines.filter((line) => line.startsWith('WS→'))).toEqual(['WS→ patch 1쪽 baseSeq=1'])
       await second.release()
 
-      await poll('1쪽 편집의 거절이 닿는다', async () => log.lines.slice(), (lines) => lines.includes('WS← patch-error status 409'))
-      const landed = await pollOrLast(() => server(stack, alice, fx.P2), (value) => value.head === 2)
+      await poll(
+        '1쪽 편집의 거절이 닿는다',
+        async () => log.lines.slice(),
+        (lines) => lines.includes('WS← patch-error status 409'),
+      )
+      const landed = await pollOrLast(
+        () => server(stack, alice, fx.P2),
+        (value) => value.head === 2,
+      )
       const shown = await stable(page)
       // eslint-disable-next-line no-console
       console.log(`[리베이스 뒤 이동] ${log.lines.join(' · ')} · 화면 ${JSON.stringify(shown)} · 서버 2쪽 ${JSON.stringify(landed)}`)
@@ -177,7 +200,11 @@ describe.skipIf(!전제.ok)('수습 · 재연결 · 다시 읽기의 겹침', ()
       await box.fill('창 안에서 친 글')
       await box.evaluate((element) => (element as HTMLElement).blur())
       // 판이 섰는가 — 그 편집의 ack 가 붙잡은 답보다 먼저 닿았다.
-      await poll('ack 가 창 안에 닿는다', async () => log.lines.slice(), (lines) => lines.includes('WS← patch-ack seq 2'))
+      await poll(
+        'ack 가 창 안에 닿는다',
+        async () => log.lines.slice(),
+        (lines) => lines.includes('WS← patch-ack seq 2'),
+      )
       reads.release()
 
       const shown = await stable(page)
@@ -270,7 +297,9 @@ function watch(page: Page, fx: Fixture): { lines: string[] } {
       const payload = String(frame.payload)
       if (!payload.includes('"patch"')) return
       const target = /"pageId":"([^"]+)"/.exec(payload)?.[1]
-      lines.push(`WS→ patch ${target === fx.first ? '1쪽' : target === fx.second ? '2쪽' : target} baseSeq=${/"baseSeq":(\d+)/.exec(payload)?.[1]}`)
+      lines.push(
+        `WS→ patch ${target === fx.first ? '1쪽' : target === fx.second ? '2쪽' : target} baseSeq=${/"baseSeq":(\d+)/.exec(payload)?.[1]}`,
+      )
     })
     ws.on('framereceived', (frame) => {
       const payload = String(frame.payload)

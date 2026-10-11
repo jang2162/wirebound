@@ -67,18 +67,35 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
       expect((await selected(page)).startsWith('글 2')).toBe(true)
-      await poll('WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
-      await poll('룸에 든다', async () => log.slice(), (lines) => lines.some((line) => line.includes('"joined"')))
+      await poll(
+        'WS 가 늦춰진 채 붙는다',
+        async () => delay.delayed(),
+        (n) => n >= 1,
+      )
+      await poll(
+        '룸에 든다',
+        async () => log.slice(),
+        (lines) => lines.some((line) => line.includes('"joined"')),
+      )
 
       await page.keyboard.press('Alt+ArrowUp')
-      const moved = await poll('Alt+↑ 가 서버에 닿는다', () => server(P), (s) => s.headSeq === 2)
+      const moved = await poll(
+        'Alt+↑ 가 서버에 닿는다',
+        () => server(P),
+        (s) => s.headSeq === 2,
+      )
       const pressedAt = Date.now() - T0
       await page.keyboard.press('ControlOrMeta+z')
       // 판 카나리아 — Cmd+Z 를 누른 때 ack 는 아직 안 왔다(늦춘 WS).
       expect(log.filter((line) => line.includes('patch-ack') && Number(line.split(' ')[0]) <= pressedAt)).toEqual([])
 
       // 서버에 되돌림이 닿거나(번호 3) 한도가 지날 때까지 — 값은 아래에서 단언한다.
-      const final = await poll('Cmd+Z 의 결과가 서버에 닿는다', () => server(P), (s) => s.headSeq >= 3, 8_000)
+      const final = await poll(
+        'Cmd+Z 의 결과가 서버에 닿는다',
+        () => server(P),
+        (s) => s.headSeq >= 3,
+        8_000,
+      )
       await page.waitForTimeout(DELAY_MS + 300)
       const after = await selected(page)
       expect(moved.ids).toEqual(['n_text0000002', 'n_text0000001', 'n_text0000003', 'n_field000001'])
@@ -93,7 +110,9 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
   })
 
   /** 늦춘 WS 로 에디터를 열고 둘째 글을 골라 룸에 든 뒤 `Alt+↑` 로 옮긴다 — 서버가 커밋한 것을 본 뒤(ack 는 아직)까지. */
-  async function movedWithAckPending(slug: string): Promise<{ P: string; page: Page; log: string[]; T0: number; close: () => Promise<void> }> {
+  async function movedWithAckPending(
+    slug: string,
+  ): Promise<{ P: string; page: Page; log: string[]; T0: number; close: () => Promise<void> }> {
     const { P } = await fixture(stack, alice, slug)
     const delay = await stack.startDownDelay(DELAY_MS)
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 }, origin: delay.origin })
@@ -102,15 +121,28 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
     page.on('websocket', (ws) => ws.on('framereceived', (frame) => log.push(`${Date.now() - T0} ${String(frame.payload).slice(0, 40)}`)))
     await page.goto(P)
     await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
-    await poll('WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
-    await poll('룸에 든다', async () => log.slice(), (lines) => lines.some((line) => line.includes('"joined"')))
+    await poll(
+      'WS 가 늦춰진 채 붙는다',
+      async () => delay.delayed(),
+      (n) => n >= 1,
+    )
+    await poll(
+      '룸에 든다',
+      async () => log.slice(),
+      (lines) => lines.some((line) => line.includes('"joined"')),
+    )
     await page.keyboard.press('Alt+ArrowUp')
-    await poll('Alt+↑ 가 서버에 닿는다', () => server(P), (s) => s.headSeq === 2)
+    await poll(
+      'Alt+↑ 가 서버에 닿는다',
+      () => server(P),
+      (s) => s.headSeq === 2,
+    )
     return { P, page, log, T0, close: () => context.close() }
   }
 
   /** 판 카나리아 — 누른 때 ack 는 아직 안 왔다(늦춘 WS). */
-  const noAckYet = (log: string[], T0: number): string[] => log.filter((line) => line.includes('patch-ack') && Number(line.split(' ')[0]) <= Date.now() - T0)
+  const noAckYet = (log: string[], T0: number): string[] =>
+    log.filter((line) => line.includes('patch-ack') && Number(line.split(' ')[0]) <= Date.now() - T0)
 
   it('누른 뒤 ack 전에 지운 노드는 되돌림에 되살아나지 않는다 — 미룬 되돌리기는 버려지고 지움만 서버에 간다', async () => {
     const t = await movedWithAckPending('undo-then-delete')
@@ -119,7 +151,12 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
       await t.page.keyboard.press('Delete')
       expect(noAckYet(t.log, t.T0)).toEqual([])
       // 지움이 서버에 닿을 때까지 — 값은 아래에서 단언한다.
-      await poll('Delete 가 서버에 닿는다', () => server(t.P), (s) => s.headSeq >= 3, 8_000)
+      await poll(
+        'Delete 가 서버에 닿는다',
+        () => server(t.P),
+        (s) => s.headSeq >= 3,
+        8_000,
+      )
       await t.page.waitForTimeout(DELAY_MS * 3)
       const final = await server(t.P)
       expect(final).toEqual({ ids: ['n_text0000001', 'n_text0000003', 'n_field000001'], headSeq: 3 })
@@ -135,7 +172,12 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
       await t.page.keyboard.press('ControlOrMeta+z')
       await t.page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기', exact: true }).click()
       expect(noAckYet(t.log, t.T0)).toEqual([])
-      await poll('되돌림이 서버에 닿는다', () => server(t.P), (s) => s.headSeq >= 3, 8_000)
+      await poll(
+        '되돌림이 서버에 닿는다',
+        () => server(t.P),
+        (s) => s.headSeq >= 3,
+        8_000,
+      )
       await t.page.waitForTimeout(DELAY_MS * 4)
       expect(await server(t.P)).toEqual({ ids: ['n_text0000001', 'n_text0000002', 'n_text0000003', 'n_field000001'], headSeq: 3 })
     } finally {
@@ -153,7 +195,12 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
       expect(noAckYet(t.log, t.T0)).toEqual([])
       // 다시 실행의 까닭은 정보 통지 한 칸이 말한다(`shell/info-notice.tsx`).
       expect(await t.page.locator('.wb-shell-info-notice').allTextContents()).toEqual([REDO_NOTICE])
-      await poll('되돌림이 서버에 닿는다', () => server(t.P), (s) => s.headSeq >= 3, 8_000)
+      await poll(
+        '되돌림이 서버에 닿는다',
+        () => server(t.P),
+        (s) => s.headSeq >= 3,
+        8_000,
+      )
       await t.page.waitForTimeout(DELAY_MS * 4)
       expect(await server(t.P)).toEqual({ ids: ['n_text0000001', 'n_text0000002', 'n_text0000003', 'n_field000001'], headSeq: 3 })
     } finally {
@@ -166,7 +213,12 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
     try {
       await t.page.keyboard.press('ControlOrMeta+z')
       // 되돌림이 서버에 닿았으나 그 ack(늦춘 WS)는 아직 — 이 틈이 큐에 나간 되돌림의 창이다.
-      await poll('되돌림이 서버에 닿는다', () => server(t.P), (s) => s.headSeq === 3, 8_000)
+      await poll(
+        '되돌림이 서버에 닿는다',
+        () => server(t.P),
+        (s) => s.headSeq === 3,
+        8_000,
+      )
       const acks = t.log.filter((line) => line.includes('patch-ack')).length
       await t.page.keyboard.press('ControlOrMeta+Shift+z')
       // 판 카나리아 — 누른 때 되돌림의 ack(둘째 patch-ack)는 아직 안 왔다.
@@ -211,7 +263,19 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
             if (patches === 1) {
               held += 1
               setTimeout(
-                () => route.send(JSON.stringify({ type: 'patch-error', projectId: P.split('/')[2], pageId: frame.pageId, clientOpId: frame.clientOpId, status: 422, code: 'validation-failed', message: 'rv', issues: [] })),
+                () =>
+                  route.send(
+                    JSON.stringify({
+                      type: 'patch-error',
+                      projectId: P.split('/')[2],
+                      pageId: frame.pageId,
+                      clientOpId: frame.clientOpId,
+                      status: 422,
+                      code: 'validation-failed',
+                      message: 'rv',
+                      issues: [],
+                    }),
+                  ),
                 1_200,
               )
               return
@@ -225,15 +289,28 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
       page.on('websocket', (ws) => ws.on('framereceived', (frame) => String(frame.payload).includes('"joined"') && joined.push('joined')))
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
-      await poll('WS 가 붙는다', async () => delay.delayed(), (n) => n >= 1)
+      await poll(
+        'WS 가 붙는다',
+        async () => delay.delayed(),
+        (n) => n >= 1,
+      )
       // 룸에 든 뒤에 누른다 — 그 전의 편집은 WS 가 안 열려 REST 로 나가 가로챈 프레임 수가 틀어진다.
-      await poll('룸에 든다', async () => joined.slice(), (lines) => lines.length >= 1)
+      await poll(
+        '룸에 든다',
+        async () => joined.slice(),
+        (lines) => lines.length >= 1,
+      )
       await page.keyboard.press('Alt+ArrowDown')
       await page.keyboard.press('Alt+ArrowDown')
       await page.keyboard.press('ControlOrMeta+z')
       await page.waitForTimeout(1_200 + DELAY_MS * 4)
       const alerts = (await page.locator('.wb-shell-edit-alert').allTextContents()).join(' | ')
-      expect({ patches, held, server: await server(P), alerts: { canceled: alerts.includes('편집 2개가 취소됐습니다'), unsaved: alerts.includes('되돌리려던 편집이 저장되지 않아') } }).toEqual({
+      expect({
+        patches,
+        held,
+        server: await server(P),
+        alerts: { canceled: alerts.includes('편집 2개가 취소됐습니다'), unsaved: alerts.includes('되돌리려던 편집이 저장되지 않아') },
+      }).toEqual({
         patches: 1,
         held: 1,
         server: { ids: ['n_text0000001', 'n_text0000002', 'n_text0000003', 'n_field000001'], headSeq: 1 },
@@ -256,8 +333,16 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
     try {
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
-      await poll('WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
-      await poll('룸에 든다', async () => log.slice(), (lines) => lines.some((line) => line.includes('"joined"')))
+      await poll(
+        'WS 가 늦춰진 채 붙는다',
+        async () => delay.delayed(),
+        (n) => n >= 1,
+      )
+      await poll(
+        '룸에 든다',
+        async () => log.slice(),
+        (lines) => lines.some((line) => line.includes('"joined"')),
+      )
       // A(둘째 글 ↓ 이동) 비행 · B(셋째 글 고침) · C(첫째 글 고침) 큐 — 누른 때의 마지막 편집은 C.
       await page.keyboard.press('Alt+ArrowDown')
       await canvasFrame(page).locator('[data-wb-id="n_text0000003"]').click()
@@ -271,7 +356,10 @@ describe.skipIf(!전제.ok)('ack 전의 Cmd+Z', () => {
       // 밥이 C 의 노드를 지워 리베이스가 C 를 버린다(ack 아닌 길로 큐를 떠난다).
       const head = (await stack.request(bob, 'GET', P)).body
       const index = (head.schema.root.children as { id: string }[]).findIndex((child) => child.id === 'n_text0000001')
-      const removed = await stack.request(bob, 'PATCH', `${P}/ops`, { baseSeq: head.headSeq, ops: [{ op: 'remove', path: `/root/children/${index}` }] })
+      const removed = await stack.request(bob, 'PATCH', `${P}/ops`, {
+        baseSeq: head.headSeq,
+        ops: [{ op: 'remove', path: `/root/children/${index}` }],
+      })
       expect(removed.status).toBeLessThan(300)
       await page.waitForTimeout(D * 8)
       // A 는 되돌려지지 않았다(둘째 글이 ↓ 이동한 채) — 되돌림 패치도 없다.

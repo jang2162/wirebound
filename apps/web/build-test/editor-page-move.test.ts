@@ -68,7 +68,9 @@ describe.skipIf(!전제.ok)('페이지를 옮긴 뒤의 편집', () => {
         const payload = String(frame.payload)
         if (!payload.includes('"patch"')) return
         const target = /"pageId":"([^"]+)"/.exec(payload)?.[1]
-        frames.push(`→ patch ${target === first.id ? '1쪽' : target === second.id ? '2쪽' : target} baseSeq=${/"baseSeq":(\d+)/.exec(payload)?.[1]}`)
+        frames.push(
+          `→ patch ${target === first.id ? '1쪽' : target === second.id ? '2쪽' : target} baseSeq=${/"baseSeq":(\d+)/.exec(payload)?.[1]}`,
+        )
       })
       ws.on('framereceived', (frame) => {
         const payload = String(frame.payload)
@@ -139,4 +141,3 @@ async function selectText(page: Page, content: string): Promise<void> {
   await page.locator('li button', { hasText: 'Text' }).first().click()
   await page.locator('.wb-shell-panel textarea').first().waitFor()
 }
-

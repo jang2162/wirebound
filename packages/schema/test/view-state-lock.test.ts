@@ -81,9 +81,7 @@ describe('/viewStates 편집 — 잠금 판정(고치기 전에도 초록인 성
   })
 
   it('포인터 판정 · 고르기 판정도 목록 경로를 노드와 겹치지 않게 본다', () => {
-    expect(
-      findLockConflict({ root: doc().root, locks: [lock('n_root')], pointers: ['/viewStates/0'], viewerUserId: 'u_me' }),
-    ).toBeNull()
+    expect(findLockConflict({ root: doc().root, locks: [lock('n_root')], pointers: ['/viewStates/0'], viewerUserId: 'u_me' })).toBeNull()
     expect(findLockConflict({ root: doc().root, locks: [lock('n_root')], pointers: ['/root'], viewerUserId: 'u_me' })?.nodeId).toBe(
       'n_root',
     )

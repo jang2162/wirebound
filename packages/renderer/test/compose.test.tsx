@@ -67,7 +67,11 @@ describe('renderComposed', () => {
   })
 
   it('테마를 레이아웃과 페이지 양쪽에 적용한다', () => {
-    const Text = view(({ props }) => <Root as="p" className="marked">{String(props.content)}</Root>)
+    const Text = view(({ props }) => (
+      <Root as="p" className="marked">
+        {String(props.content)}
+      </Root>
+    ))
     const theme = { manifest: NO_THEME.manifest, views: { Text } }
     const html = renderToStaticMarkup(renderComposed(layout, page, { theme }))
     // 레이아웃의 `Text` 하나 · 페이지의 `Text` 하나.

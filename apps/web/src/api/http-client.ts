@@ -417,11 +417,7 @@ function isExportPreview(value: unknown): boolean {
   }
 
   if (value['format'] === 'html') {
-    return (
-      Array.isArray(value['duplicateTargets']) &&
-      Array.isArray(value['brokenLinks']) &&
-      Array.isArray(value['errors'])
-    )
+    return Array.isArray(value['duplicateTargets']) && Array.isArray(value['brokenLinks']) && Array.isArray(value['errors'])
   }
 
   return false
@@ -497,8 +493,7 @@ const SHAPES = {
    * **그러므로 "무엇을 지키는가"를 미래형으로 적지 않는다.** 읽는 자리가 생기면 그때
    * 무엇을 읽는지 세어 이 표에 줄을 더한다.
    */
-  menuNode: (value) =>
-    isRecord(value) && typeof value['id'] === 'string' && typeof value['sortOrder'] === 'number',
+  menuNode: (value) => isRecord(value) && typeof value['id'] === 'string' && typeof value['sortOrder'] === 'number',
   /**
    * 페이지 하나. **소비자가 셋이고 읽는 필드가 서로 다르다** — 이 표는 그 합집합을 본다.
    *
@@ -608,11 +603,7 @@ const SHAPES = {
   revisionList: (value) =>
     isArrayOf(
       value,
-      (item) =>
-        isRecord(item) &&
-        typeof item['id'] === 'string' &&
-        typeof item['seq'] === 'number' &&
-        Array.isArray(item['inverse']),
+      (item) => isRecord(item) && typeof item['id'] === 'string' && typeof item['seq'] === 'number' && Array.isArray(item['inverse']),
     ),
   patchResult: (value) =>
     isRecord(value) &&
@@ -897,9 +888,7 @@ async function toApiError(response: Response): Promise<ApiError> {
  * 구분되기 때문이고, 이 함수가 없으면 그 조건을 둘 자리도 없어진다.
  */
 function definedOnly<T extends object>(body: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(body).filter(([, value]) => value !== undefined),
-  ) as Partial<T>
+  return Object.fromEntries(Object.entries(body).filter(([, value]) => value !== undefined)) as Partial<T>
 }
 
 /**
@@ -1031,26 +1020,14 @@ function declaredOnly<T extends object>(body: T, keys: Record<keyof T, true>): P
  * 바뀌면 여기가 컴파일 에러로 알려 준다. 값은 `true`뿐이고 쓰이는 것은 키 이름이다.
  */
 const BODY_KEYS = {
-  createProject: { name: true, slug: true, description: true } satisfies Record<
-    keyof Parameters<ApiClient['createProject']>[0],
-    true
-  >,
-  updateProject: { name: true, slug: true, description: true } satisfies Record<
-    keyof Parameters<ApiClient['updateProject']>[1],
-    true
-  >,
-  createMenu: { parentId: true, title: true } satisfies Record<
-    keyof Parameters<ApiClient['createMenu']>[1],
-    true
-  >,
+  createProject: { name: true, slug: true, description: true } satisfies Record<keyof Parameters<ApiClient['createProject']>[0], true>,
+  updateProject: { name: true, slug: true, description: true } satisfies Record<keyof Parameters<ApiClient['updateProject']>[1], true>,
+  createMenu: { parentId: true, title: true } satisfies Record<keyof Parameters<ApiClient['createMenu']>[1], true>,
   updateMenu: { title: true, parentId: true, sortOrder: true, base: true } satisfies Record<
     keyof Parameters<ApiClient['updateMenu']>[2],
     true
   >,
-  createPage: { menuNodeId: true, title: true } satisfies Record<
-    keyof Parameters<ApiClient['createPage']>[1],
-    true
-  >,
+  createPage: { menuNodeId: true, title: true } satisfies Record<keyof Parameters<ApiClient['createPage']>[1], true>,
   // **이 줄이 `description` 키를 막을 수 있는 두 자리 중 하나다**(다른 하나는
   // `ApiClient['updatePage']`의 시그니처) — 서버는 그 키를 받는다.
   //
@@ -1065,35 +1042,23 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['updatePage']>[2],
     true
   >,
-  patchOps: { baseSeq: true, ops: true, clientOpId: true } satisfies Record<
-    keyof Parameters<ApiClient['patchOps']>[2],
-    true
-  >,
+  patchOps: { baseSeq: true, ops: true, clientOpId: true } satisfies Record<keyof Parameters<ApiClient['patchOps']>[2], true>,
   // 페이지 가져오기. 서버의 `ImportPageBody`가 `z.strictObject`라 선언되지 않은 키는
   // 그 자체로 400이다. **`title`이 없으면 키를 만들지 않는 것이 요점이다** — `undefined`를
   // 실은 키는 `JSON.stringify`가 지워 주지만 그 우연에 기대지 않는다(`patchOps`와 같은 자리).
   // **`file` 안쪽은 걸러지지 않는다** — 그것은 봉투 하나이고, 그 안의 초과 키를 거부하는
   // 것은 `parsePageJson`(양쪽이 같이 쓰는 함수)의 일이다.
-  importPage: { menuNodeId: true, file: true, title: true } satisfies Record<
-    keyof Parameters<ApiClient['importPage']>[1],
-    true
-  >,
+  importPage: { menuNodeId: true, file: true, title: true } satisfies Record<keyof Parameters<ApiClient['importPage']>[1], true>,
   // 코멘트 쓰기 둘. 서버의 본문 스키마가 `z.strictObject`라 선언되지 않은 키는
   // 그 자체로 400이고, **`marker`가 그 자리다** — 번호를 정하는 것은 서버이므로
   // 코멘트 응답(`{ id, nodeId, body, authorId, authorName, … }`)을 그대로 되보내면
   // `id`·`authorId` 따위가 400을 부른다.
-  createComment: { nodeId: true, body: true, idempotencyKey: true } satisfies Record<
-    keyof Parameters<ApiClient['createComment']>[2],
-    true
-  >,
+  createComment: { nodeId: true, body: true, idempotencyKey: true } satisfies Record<keyof Parameters<ApiClient['createComment']>[2], true>,
   updateComment: { body: true } satisfies Record<keyof Parameters<ApiClient['updateComment']>[3], true>,
   // 스냅샷 생성. 서버의 `SnapshotBody`가 `z.strictObject`라 선언되지 않은 키는 그
   // 자체로 400이고, **`payload`가 그 자리다** — 생성 응답에 그 키가 실려 오므로 응답 객체를
   // 그대로 되보내는 실수가 실제로 있을 법하다.
-  createSnapshot: { tag: true, description: true } satisfies Record<
-    keyof Parameters<ApiClient['createSnapshot']>[1],
-    true
-  >,
+  createSnapshot: { tag: true, description: true } satisfies Record<keyof Parameters<ApiClient['createSnapshot']>[1], true>,
   // 프리셋 저장. 서버의 `PresetBody`가 `z.strictObject`라 선언되지 않은 키는 그
   // 자체로 400이고, **`id`·`source`·`nodes`가 그 자리다** — 목록 항목을 그대로 되보내는
   // 실수가 실제로 있을 법하다(`createSnapshot`이 같은 자리에서 같은 판단).
@@ -1174,12 +1139,7 @@ export function createHttpClient(
    * **보내고 실패를 `ApiError`로 옮기기까지** — 머리 · 쿠키 · 시간 제한 · 끊기 · 사람 바뀜을 여기 한 자리가 한다. 본문을 읽는
    * 것은 부른 쪽이다(`request`는 JSON, `downloadExport`는 바이트).
    */
-  async function send(
-    method: string,
-    path: string,
-    body?: unknown,
-    options?: SendOptions,
-  ): Promise<Response> {
+  async function send(method: string, path: string, body?: unknown, options?: SendOptions): Promise<Response> {
     return transmit(method, path, body === undefined ? undefined : { body: JSON.stringify(body), type: 'application/json' }, options)
   }
 
@@ -1262,13 +1222,7 @@ export function createHttpClient(
     return response
   }
 
-  async function request<T>(
-    method: string,
-    path: string,
-    shape: Shape,
-    body?: unknown,
-    options?: SendOptions,
-  ): Promise<T> {
+  async function request<T>(method: string, path: string, shape: Shape, body?: unknown, options?: SendOptions): Promise<T> {
     return shaped<T>(await send(method, path, body, options), shape)
   }
 
@@ -1296,21 +1250,16 @@ export function createHttpClient(
 
   const projectPath = (projectId: string): string => `/projects/${encodeURIComponent(projectId)}`
 
-  const pagePath = (projectId: string, pageId: string): string =>
-    `${projectPath(projectId)}/pages/${encodeURIComponent(pageId)}`
+  const pagePath = (projectId: string, pageId: string): string => `${projectPath(projectId)}/pages/${encodeURIComponent(pageId)}`
 
-  const menuPath = (projectId: string, nodeId: string): string =>
-    `${projectPath(projectId)}/menu/${encodeURIComponent(nodeId)}`
+  const menuPath = (projectId: string, nodeId: string): string => `${projectPath(projectId)}/menu/${encodeURIComponent(nodeId)}`
 
-  const commentsPath = (projectId: string, pageId: string): string =>
-    `${pagePath(projectId, pageId)}/comments`
+  const commentsPath = (projectId: string, pageId: string): string => `${pagePath(projectId, pageId)}/comments`
 
-  const packagePath = (ref: ThemeRef): string =>
-    `/theme-packages/${encodeURIComponent(ref.themeId)}/${encodeURIComponent(ref.version)}`
+  const packagePath = (ref: ThemeRef): string => `/theme-packages/${encodeURIComponent(ref.themeId)}/${encodeURIComponent(ref.version)}`
 
   return {
-    login: (email, password) =>
-      request<SessionUser>('POST', '/auth/login', SHAPES.sessionUser, { email, password }),
+    login: (email, password) => request<SessionUser>('POST', '/auth/login', SHAPES.sessionUser, { email, password }),
     logout: () => request<void>('POST', '/auth/logout', SHAPES.noBody),
     me: (options) => request<SessionUser>('GET', '/auth/me', SHAPES.sessionUser, undefined, options),
     listProjects: () => request<ProjectDetail[]>('GET', '/projects', SHAPES.projectList),
@@ -1327,8 +1276,7 @@ export function createHttpClient(
       request<ProjectMember>('PATCH', `${projectPath(projectId)}/members/${encodeURIComponent(userId)}`, SHAPES.member, { role }),
     removeMember: (projectId, userId) =>
       request<void>('DELETE', `${projectPath(projectId)}/members/${encodeURIComponent(userId)}`, SHAPES.noBody),
-    getProject: (projectId, options) =>
-      request<ProjectView>('GET', projectPath(projectId), SHAPES.projectView, undefined, options),
+    getProject: (projectId, options) => request<ProjectView>('GET', projectPath(projectId), SHAPES.projectView, undefined, options),
     // 아래 셋이 프로젝트 CRUD다. **생성 응답은 `ProjectDetail`이다** — `role`까지
     // 실려 온다(`api/types.ts`의 실측 표). 그래서 `SHAPES.projectDetail`을 그대로 지나는데,
     // 그 근거는 "모양이 같다"가 아니라 **`createProject`의 하중 `id`가 그 검사가 이미 보는
@@ -1337,12 +1285,7 @@ export function createHttpClient(
       // **선언된 키만 담는다**(`declaredOnly`). `description`을 주지 않으면 그 키를 만들지 않고,
       // 응답 객체처럼 `id`·`role`이 섞인 것을 넘겨도 그 둘이 나가지 않는다 — 나가면 서버가
       // 400을 낸다(그 머리말의 표).
-      request<ProjectDetail>(
-        'POST',
-        '/projects',
-        SHAPES.projectDetail,
-        declaredOnly(body, BODY_KEYS.createProject),
-      ),
+      request<ProjectDetail>('POST', '/projects', SHAPES.projectDetail, declaredOnly(body, BODY_KEYS.createProject)),
     // **`async`인 것이 요점이다** — `updateBody`가 빈 본문에서 던지는데, 동기 `throw`면
     // `await` 없이 `.catch`를 붙인 호출부가 잡지 못한다(`updateMenu`와 같은 자리).
     // **실측: `async`를 지우면 3 사망**(빈 본문 · undefined만 담긴 본문 · 동기 throw 케이스).
@@ -1365,18 +1308,11 @@ export function createHttpClient(
     // `body.menu`를 곧장 읽어도 던지지 않는다 — 검사 없이 읽으면 본문이 `null`일 때 raw
     // `TypeError`가 나고, 그것은 `ApiError`가 아니라 호출자의 분기를 빗나간다.
     getTree: async (projectId, options) => {
-      const body = await request<{ menu: TreeMenuNode[] }>(
-        'GET',
-        `${projectPath(projectId)}/tree`,
-        SHAPES.treeEnvelope,
-        undefined,
-        options,
-      )
+      const body = await request<{ menu: TreeMenuNode[] }>('GET', `${projectPath(projectId)}/tree`, SHAPES.treeEnvelope, undefined, options)
       return body.menu
     },
     // **봉투를 벗기지 않는다** — 판 번호가 트리와 함께 가야 받는 쪽이 낡은 답을 가른다(`TreeRead`).
-    readTree: (projectId, options) =>
-      request<TreeRead>('GET', `${projectPath(projectId)}/tree`, SHAPES.treeRead, undefined, options),
+    readTree: (projectId, options) => request<TreeRead>('GET', `${projectPath(projectId)}/tree`, SHAPES.treeRead, undefined, options),
     // 아래 여섯이 트리의 CRUD다. **생성·갱신 응답을 트리에 꽂지 않는다** — `MenuNode`에는
     // `pages`·`children`이 없고(`api/types.ts`), 서버가 `sort_order`를 재번호하므로
     // 부르는 쪽은 성공하면 `getTree`를 다시 부른다. 그래서 여기서 응답을 가공하지 않는다.
@@ -1384,12 +1320,7 @@ export function createHttpClient(
       // `parentId`는 `null`이어도 그대로 싣는다 — `null`은 "루트에 만든다"는 값이다.
       // `declaredOnly` 안의 `definedOnly`가 거르는 것은 `undefined`뿐이라 그 값은 살아남는다
       // (`updateMenu`의 `parentId: null` 케이스가 같은 성질을 지킨다).
-      request<MenuNode>(
-        'POST',
-        `${projectPath(projectId)}/menu`,
-        SHAPES.menuNode,
-        declaredOnly(body, BODY_KEYS.createMenu),
-      ),
+      request<MenuNode>('POST', `${projectPath(projectId)}/menu`, SHAPES.menuNode, declaredOnly(body, BODY_KEYS.createMenu)),
     // **`async`인 것이 요점이다** — `updateBody`가 빈 본문에서 던지는데, 동기 `throw`면
     // `await` 없이 `.catch`를 붙인 호출부가 잡지 못한다(`ApiClient`의 계약은 `Promise`다).
     updateMenu: async (projectId, nodeId, body, options) =>
@@ -1400,8 +1331,7 @@ export function createHttpClient(
         updateBody(declaredOnly(body, BODY_KEYS.updateMenu)),
         options,
       ),
-    deleteMenu: (projectId, nodeId) =>
-      request<void>('DELETE', menuPath(projectId, nodeId), SHAPES.noBody),
+    deleteMenu: (projectId, nodeId) => request<void>('DELETE', menuPath(projectId, nodeId), SHAPES.noBody),
     deleteMenuCascade: (projectId, nodeId, seen) =>
       request<MenuCascadeResult>('DELETE', menuPath(projectId, nodeId), SHAPES.menuCascade, {
         cascade: true,
@@ -1412,12 +1342,7 @@ export function createHttpClient(
       // 조회·생성·갱신 셋을 다 만든다(`apps/api/src/routes/pages.ts`). **그래서 같은 shape를
       // 쓰지만, 같은 모양이 곧 같은 하중은 아니다** — 이 자리가 새 필드(`id`)를 읽으므로
       // `SHAPES.pageDetail`의 표에 그 줄이 있다 — 그 구별을 놓치면 `id`가 검사 없이 주소로 간다.
-      request<PageDetail>(
-        'POST',
-        `${projectPath(projectId)}/pages`,
-        SHAPES.pageDetail,
-        declaredOnly(body, BODY_KEYS.createPage),
-      ),
+      request<PageDetail>('POST', `${projectPath(projectId)}/pages`, SHAPES.pageDetail, declaredOnly(body, BODY_KEYS.createPage)),
     // `updateMenu`와 같은 이유로 `async`다.
     updatePage: async (projectId, pageId, body, options) =>
       request<PageDetail>(
@@ -1427,8 +1352,7 @@ export function createHttpClient(
         updateBody(declaredOnly(body, BODY_KEYS.updatePage)),
         options,
       ),
-    deletePage: (projectId, pageId) =>
-      request<void>('DELETE', pagePath(projectId, pageId), SHAPES.noBody),
+    deletePage: (projectId, pageId) => request<void>('DELETE', pagePath(projectId, pageId), SHAPES.noBody),
     // `updateMenu`와 같은 이유로 `async`다.
     importPage: async (projectId, body) =>
       request<PageImported>(
@@ -1498,24 +1422,12 @@ export function createHttpClient(
     // **`:commentId` 자리와 겹치지 않는다** — 그쪽에 오는 메서드는 `PATCH`·`DELETE`뿐이라
     // 같은 메서드로 두 패턴이 맞붙는 자리가 없다(서버가 정적 세그먼트를 먼저 잡기도 한다).
     renumberComments: (projectId, pageId, options) =>
-      request<MarkerChange>(
-        'POST',
-        `${commentsPath(projectId, pageId)}/renumber`,
-        SHAPES.markerChange,
-        undefined,
-        options,
-      ),
+      request<MarkerChange>('POST', `${commentsPath(projectId, pageId)}/renumber`, SHAPES.markerChange, undefined, options),
     listPresets: (projectId, options) =>
       request<Preset[]>('GET', `${projectPath(projectId)}/presets`, SHAPES.presetList, undefined, options),
     createPreset: (projectId, body) =>
-      request<Preset>(
-        'POST',
-        `${projectPath(projectId)}/presets`,
-        SHAPES.preset,
-        declaredOnly(body, BODY_KEYS.createPreset),
-      ),
-    listSnapshots: (projectId) =>
-      request<SnapshotSummary[]>('GET', `${projectPath(projectId)}/snapshots`, SHAPES.snapshotList),
+      request<Preset>('POST', `${projectPath(projectId)}/presets`, SHAPES.preset, declaredOnly(body, BODY_KEYS.createPreset)),
+    listSnapshots: (projectId) => request<SnapshotSummary[]>('GET', `${projectPath(projectId)}/snapshots`, SHAPES.snapshotList),
     // **응답이 더 넓다(`payload`가 붙는다).** `SHAPES.snapshot`은 그것을 보지 않고 통과시킨다 —
     // 이 화면이 payload를 읽지 않기 때문이다(`api/client.ts`의 `createSnapshot` 주석).
     createSnapshot: (projectId, body) =>
@@ -1537,13 +1449,10 @@ export function createHttpClient(
       ),
     // **시간 제한을 안 건다** — PPTX 는 서버가 페이지를 한 장씩 그린다(`READ_DEADLINE_MS`의 «안 거는 읽기»).
     getExportPreview: (projectId, format, options) =>
-      request<ExportPreview>(
-        'GET',
-        `${projectPath(projectId)}/export/preview?format=${format}`,
-        SHAPES.exportPreview,
-        undefined,
-        { ...(options?.cancel === undefined ? {} : { cancel: options.cancel }), deadline: false },
-      ),
+      request<ExportPreview>('GET', `${projectPath(projectId)}/export/preview?format=${format}`, SHAPES.exportPreview, undefined, {
+        ...(options?.cancel === undefined ? {} : { cancel: options.cancel }),
+        deadline: false,
+      }),
     // **`html`에도 `?format=`을 붙인다.** 서버의 기본값이 `html`이라 생략해도 같은 것을
     // 받지만(`routes/export.ts`), 생략하는 가지를 두면 *"형식을 붙이는 길"*과 *"안 붙이는
     // 길"* 둘이 생기고 어느 쪽이 도는지는 주소를 눈으로 봐야 안다. 붙는 값은 `ExportFormat`
@@ -1604,8 +1513,7 @@ export function createHttpClient(
         undefined,
         options,
       ),
-    listThemePackages: (options) =>
-      request<ThemePackageSummary[]>('GET', '/theme-packages', SHAPES.themePackageList, undefined, options),
+    listThemePackages: (options) => request<ThemePackageSummary[]>('GET', '/theme-packages', SHAPES.themePackageList, undefined, options),
     getThemeManifest: (ref, options) =>
       request<ThemeManifest>('GET', `${packagePath(ref)}/manifest`, SHAPES.themeManifest, undefined, options),
     uploadThemePackage: async (file) =>

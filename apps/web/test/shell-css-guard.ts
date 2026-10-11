@@ -168,9 +168,7 @@ export function findViolations(css: string): Violation[] {
     // 걸리는 것은 상자가 아니라 그 **안쪽**이기 때문이다 — 그런 선택자는 이미 위에서 걸렸고,
     // 여기까지 세면 메시지가 "상자에 건 속성"이라고 잘못 말한다.
     const wrappers = selectors.filter(
-      (selector) =>
-        !hasCombinator(selector) &&
-        classNames(skeleton(selector)).some((name) => WRAPPERS.has(name)),
+      (selector) => !hasCombinator(selector) && classNames(skeleton(selector)).some((name) => WRAPPERS.has(name)),
     )
     if (wrappers.length > 0) checkWrapperBody(rule.body, wrappers.join(', '), violations)
   }
@@ -239,9 +237,7 @@ export function paletteRoots(css: string): Set<string> {
   const roots = new Set<string>()
   for (const rule of rules) {
     // 선언 이름이 `--wb-shell-`로 시작하는 것이 하나라도 있으면 그 선택자들이 화면 루트다.
-    const declares = splitTop(rule.body, ';').some((declaration) =>
-      declaration.trim().toLowerCase().startsWith(`--${PREFIX}-`),
-    )
+    const declares = splitTop(rule.body, ';').some((declaration) => declaration.trim().toLowerCase().startsWith(`--${PREFIX}-`))
     if (!declares) continue
 
     for (const selector of splitTop(rule.prelude, ',')) {
@@ -608,8 +604,7 @@ function checkSelector(selector: string, violations: Violation[]): void {
     violations.push({
       check: 'selector-combinator',
       selector: shown,
-      message:
-        '결합자(자손·자식·형제·전체)는 셸의 상자 안에 들어올 내용까지 겨냥한다 — 클래스를 직접 붙여라',
+      message: '결합자(자손·자식·형제·전체)는 셸의 상자 안에 들어올 내용까지 겨냥한다 — 클래스를 직접 붙여라',
     })
   }
 

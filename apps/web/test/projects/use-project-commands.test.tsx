@@ -48,9 +48,7 @@ function Probe(): ReactElement {
           : 'none'}
       </span>
       <span data-testid="form">{commands.form === null ? 'closed' : 'open'}</span>
-      <span data-testid="names">
-        {commands.state.status === 'ready' ? commands.state.projects.map((p) => p.name).join(',') : ''}
-      </span>
+      <span data-testid="names">{commands.state.status === 'ready' ? commands.state.projects.map((p) => p.name).join(',') : ''}</span>
     </div>
   )
 }

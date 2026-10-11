@@ -15,7 +15,11 @@ describe('편집이 구조 번호를 올리는 때', () => {
       const page = await createPage(ctx, owner.cookie, project.id, menu.id)
       const P = `/api/projects/${project.id}/pages/${page.id}`
       const seqs = async () => {
-        const row = await ctx.db.selectFrom('pages').select(['head_seq', 'structure_seq']).where('id', '=', page.id).executeTakeFirstOrThrow()
+        const row = await ctx.db
+          .selectFrom('pages')
+          .select(['head_seq', 'structure_seq'])
+          .where('id', '=', page.id)
+          .executeTakeFirstOrThrow()
         return { head: Number(row.head_seq), structure: Number(row.structure_seq) }
       }
       const edit = async (ops: unknown[]) => {

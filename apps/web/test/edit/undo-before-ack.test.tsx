@@ -65,8 +65,10 @@ const OLD_ENTRY: RevisionSummary = {
 }
 const INVERSE: PatchOp[] = [{ op: 'replace', path: '/root/children/0/props/content', value: '가' }]
 
-const undoButton = () => within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name: '되돌리기' })
-const redoButton = () => within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name: '다시 실행' })
+const undoButton = () =>
+  within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name: '되돌리기' })
+const redoButton = () =>
+  within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name: '다시 실행' })
 const contents = () =>
   canvasQueryAll('[data-wb-id^="n-"]')
     .filter((node) => node.getAttribute('data-wb-id') !== 'n-root')
@@ -102,10 +104,14 @@ async function stage(): Promise<{
   })
   act(() => sockets[0]?.onopen?.())
   await waitFor(() => expect(undoButton().disabled).toBe(false))
-  const patches = () => (sockets[0]?.sent ?? []).filter((f) => (f as { type?: string }).type === 'patch') as { ops: PatchOp[]; clientOpId: string }[]
-  const frame = (data: Record<string, unknown>) => act(() => sockets[0]?.onmessage?.({ data: JSON.stringify({ projectId: PROJECT_ID, pageId: PAGE_ID, warnings: [], ...data }) }))
+  const patches = () =>
+    (sockets[0]?.sent ?? []).filter((f) => (f as { type?: string }).type === 'patch') as { ops: PatchOp[]; clientOpId: string }[]
+  const frame = (data: Record<string, unknown>) =>
+    act(() => sockets[0]?.onmessage?.({ data: JSON.stringify({ projectId: PROJECT_ID, pageId: PAGE_ID, warnings: [], ...data }) }))
   const edit = async (index: number, value: string): Promise<void> => {
-    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[index]!)
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: structureRowName('Text') })[index]!,
+    )
     const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
     fireEvent.change(box, { target: { value } })
     fireEvent.blur(box)
@@ -118,9 +124,24 @@ async function stage(): Promise<{
     frame,
     edit,
     ack: (index, inverse) =>
-      frame({ type: 'patch-ack', clientOpId: patches()[index]?.clientOpId, seq: HEAD_SEQ + 1 + index, revisionId: `rev-${index}`, inverse }),
-    ackFirst: () => frame({ type: 'patch-ack', clientOpId: patches()[0]?.clientOpId, seq: HEAD_SEQ + 1, revisionId: 'rev-mine', inverse: INVERSE }),
-    failFirst: () => frame({ type: 'patch-error', clientOpId: patches()[0]?.clientOpId, status: 409, code: 'conflict', message: '페이지가 이미 변경되었습니다', issues: [] }),
+      frame({
+        type: 'patch-ack',
+        clientOpId: patches()[index]?.clientOpId,
+        seq: HEAD_SEQ + 1 + index,
+        revisionId: `rev-${index}`,
+        inverse,
+      }),
+    ackFirst: () =>
+      frame({ type: 'patch-ack', clientOpId: patches()[0]?.clientOpId, seq: HEAD_SEQ + 1, revisionId: 'rev-mine', inverse: INVERSE }),
+    failFirst: () =>
+      frame({
+        type: 'patch-error',
+        clientOpId: patches()[0]?.clientOpId,
+        status: 409,
+        code: 'conflict',
+        message: '페이지가 이미 변경되었습니다',
+        issues: [],
+      }),
   }
 }
 
@@ -135,8 +156,18 @@ const pressKey = (): void => {
   fireEvent.keyDown(document.body, { bubbles: true, key: 'z', code: 'KeyZ', ctrlKey: true })
 }
 
-const BOB_REMOVES_FIRST = { type: 'page-changed', seq: HEAD_SEQ + 1, ops: [{ op: 'remove', path: '/root/children/0' }], actor: { type: 'user', label: '밥' } }
-const BOB_REMOVES_SECOND = { type: 'page-changed', seq: HEAD_SEQ + 1, ops: [{ op: 'remove', path: '/root/children/1' }], actor: { type: 'user', label: '밥' } }
+const BOB_REMOVES_FIRST = {
+  type: 'page-changed',
+  seq: HEAD_SEQ + 1,
+  ops: [{ op: 'remove', path: '/root/children/0' }],
+  actor: { type: 'user', label: '밥' },
+}
+const BOB_REMOVES_SECOND = {
+  type: 'page-changed',
+  seq: HEAD_SEQ + 1,
+  ops: [{ op: 'remove', path: '/root/children/1' }],
+  actor: { type: 'user', label: '밥' },
+}
 const UNSAVED = '되돌리려던 편집이 저장되지 않아 되돌리지 않았습니다.'
 const LOST_SECOND = '다른 사람의 변경과 겹쳐 아직 저장되지 않은 편집 1개를 버렸습니다.'
 
@@ -163,7 +194,13 @@ describe('ack 전의 되돌리기', () => {
     s.ackFirst()
     await waitFor(() => expect(s.patches()).toHaveLength(2))
     // 되돌림의 ack 까지 받아야 둘째 누름이 있었다면 그 되돌림이 큐에서 나온다.
-    s.frame({ type: 'patch-ack', clientOpId: s.patches()[1]?.clientOpId, seq: HEAD_SEQ + 2, revisionId: 'rev-undo', inverse: [{ op: 'replace', path: '/root/children/0/props/content', value: '가 고침' }] })
+    s.frame({
+      type: 'patch-ack',
+      clientOpId: s.patches()[1]?.clientOpId,
+      seq: HEAD_SEQ + 2,
+      revisionId: 'rev-undo',
+      inverse: [{ op: 'replace', path: '/root/children/0/props/content', value: '가 고침' }],
+    })
     await act(async () => {})
     await act(async () => {})
     expect(s.patches()).toHaveLength(2)
@@ -349,7 +386,14 @@ describe('ack 전의 되돌리기', () => {
     s.ackFirst()
     await waitFor(() => expect(s.patches()).toHaveLength(2))
     // 둘째 편집을 서버가 거절한다 — 거절 수습의 말에 되돌리려던 편집 문장이 한 번 이어진다.
-    s.frame({ type: 'patch-error', clientOpId: s.patches()[1]?.clientOpId, status: 409, code: 'conflict', message: '페이지가 이미 변경되었습니다', issues: [] })
+    s.frame({
+      type: 'patch-error',
+      clientOpId: s.patches()[1]?.clientOpId,
+      status: 409,
+      code: 'conflict',
+      message: '페이지가 이미 변경되었습니다',
+      issues: [],
+    })
     await act(async () => {})
     await act(async () => {})
     expect(s.patches()).toHaveLength(2)
@@ -423,6 +467,12 @@ describe('ack 전의 되돌리기', () => {
     s.ack(5, set(0, '가 고침'))
     await waitFor(() => expect(s.patches()).toHaveLength(7))
     // 누른 차례(다시 실행 · 되돌리기 · 다시 실행)대로 셋이 나갔고 버려진 것이 없다.
-    expect({ values: s.patches().slice(4).map((p) => (p.ops[0] as { value?: string }).value), alert: alerts() }).toEqual({ values: ['가 고침', '가', '가 고침'], alert: '' })
+    expect({
+      values: s
+        .patches()
+        .slice(4)
+        .map((p) => (p.ops[0] as { value?: string }).value),
+      alert: alerts(),
+    }).toEqual({ values: ['가 고침', '가', '가 고침'], alert: '' })
   })
 })

@@ -46,12 +46,7 @@ export interface LintWhere {
  * 규칙이 자리마다 다른 severity를 달 수 있고, 그러면 표가 진실이 아니게 된다
  * (`validate.ts`의 `makeIssue`와 같은 이유다).
  */
-export function lintIssue(
-  rule: OwnSeverityRuleId,
-  where: LintWhere,
-  path: string,
-  message: string,
-): LintIssue {
+export function lintIssue(rule: OwnSeverityRuleId, where: LintWhere, path: string, message: string): LintIssue {
   const severity = requireRule(rule).severity
   if (severity === null) {
     throw new Error(`${rule}은 날라 온 이슈의 severity를 쓰는 규칙입니다 — relayLintIssue를 쓰세요`)

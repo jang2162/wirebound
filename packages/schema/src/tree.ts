@@ -64,10 +64,7 @@ export function collectNodeIds(root: WbNode): string[] {
  * 실릴 수 없고, **여기서 조용히 버리면 그 거부가 사라져** 사용자가 적은 것이 소리 없이
  * 없어진다. 그래서 계약의 범위를 선언된 키로 못박는다.
  */
-export function remapNodeIds(
-  root: WbNode,
-  generate: () => string = createNodeId,
-): { root: WbNode; mapping: Map<string, string> } {
+export function remapNodeIds(root: WbNode, generate: () => string = createNodeId): { root: WbNode; mapping: Map<string, string> } {
   // 일반 객체를 쓰면 id가 `__proto__`인 노드에서 프로토타입을 읽어 오므로 Map을 쓴다.
   const mapping = new Map<string, string>()
   for (const id of collectNodeIds(root)) {

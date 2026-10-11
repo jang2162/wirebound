@@ -69,7 +69,11 @@ describe.skipIf(!전제.ok)('되살린 페이지의 번호', () => {
       await page.goto(P)
       await canvasFrame(page).locator('body', { hasText: '다' }).waitFor()
       // 판이 섰는가 — 앨리스가 WS 로 붙어 있었고, 끊은 것이 그 연결이다.
-      await poll('앨리스의 WS 가 붙는다', async () => refusal.live(), (live) => live >= 1)
+      await poll(
+        '앨리스의 WS 가 붙는다',
+        async () => refusal.live(),
+        (live) => live >= 1,
+      )
       expect(refusal.refuse()).toBeGreaterThanOrEqual(1)
 
       expect((await call('DELETE', P)).status).toBe(204)
@@ -90,7 +94,11 @@ describe.skipIf(!전제.ok)('되살린 페이지의 번호', () => {
       await box.fill('앨리스 고침')
       await box.evaluate((element) => (element as HTMLElement).blur())
       // 판이 섰는가 — 편집이 REST 로 나갔다(WS 가 없다).
-      await poll('앨리스의 편집이 REST 로 나가 답을 받는다', async () => log.lines.slice(), (lines) => lines.some((line) => line.startsWith('REST←')))
+      await poll(
+        '앨리스의 편집이 REST 로 나가 답을 받는다',
+        async () => log.lines.slice(),
+        (lines) => lines.some((line) => line.startsWith('REST←')),
+      )
 
       const after = await stable(page)
       const landed = await server(stack, alice, P)
@@ -155,7 +163,11 @@ describe.skipIf(!전제.ok)('되살린 페이지의 번호', () => {
       await box.click()
       await box.fill('큰 번호 고침')
       await box.evaluate((element) => (element as HTMLElement).blur())
-      const edited = await poll('편집이 서버에 닿는다', () => server(stack, alice, P), (value) => value.head === floor + 1)
+      const edited = await poll(
+        '편집이 서버에 닿는다',
+        () => server(stack, alice, P),
+        (value) => value.head === floor + 1,
+      )
       expect(edited.content).toEqual(['가', '큰 번호 고침'])
       await canvasFrame(b.page).locator('body', { hasText: '큰 번호 고침' }).waitFor()
       // 앨리스의 ack 가 제 판을 머리로 두었다 — 낡음 · 거절 통지가 없다.
@@ -164,9 +176,17 @@ describe.skipIf(!전제.ok)('되살린 페이지의 번호', () => {
       await a.page.reload()
       await canvasFrame(a.page).locator('body', { hasText: '큰 번호 고침' }).waitFor()
       const undo = a.page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' })
-      await poll('새로고침으로 채운 되돌리기가 켜진다', async () => undo.isEnabled(), (enabled) => enabled)
+      await poll(
+        '새로고침으로 채운 되돌리기가 켜진다',
+        async () => undo.isEnabled(),
+        (enabled) => enabled,
+      )
       await undo.click()
-      const undone = await poll('되돌리기가 서버에 닿는다', () => server(stack, alice, P), (value) => value.head === floor + 2)
+      const undone = await poll(
+        '되돌리기가 서버에 닿는다',
+        () => server(stack, alice, P),
+        (value) => value.head === floor + 2,
+      )
       expect(undone.content).toEqual(['가', '나'])
       expect(await stable(a.page)).toEqual({ canvas: '가 나', notices: [] })
       expect((await stable(b.page)).canvas).toBe('가 나')
@@ -206,7 +226,13 @@ describe.skipIf(!전제.ok)('서버 이력으로 채운 되돌리기', () => {
     const text = (id: string, content: string) => ({ id, type: 'Text', props: { content } })
     // 앨리스의 revision 둘 — 1: «가» · «나»를 넣었다, 2: «나»를 «나 고침»으로 고쳤다(되돌리면 «나»).
     for (const [baseSeq, ops] of [
-      [0, [{ op: 'add', path: '/root/children/0', value: text('n_ga00000001', '가') }, { op: 'add', path: '/root/children/1', value: text('n_na00000001', '나') }]],
+      [
+        0,
+        [
+          { op: 'add', path: '/root/children/0', value: text('n_ga00000001', '가') },
+          { op: 'add', path: '/root/children/1', value: text('n_na00000001', '나') },
+        ],
+      ],
       [1, [{ op: 'replace', path: '/root/children/1/props/content', value: '나 고침' }]],
     ] as const) {
       const seeded = await call('PATCH', `${P}/ops`, { baseSeq, ops })
@@ -219,7 +245,11 @@ describe.skipIf(!전제.ok)('서버 이력으로 채운 되돌리기', () => {
       await canvasFrame(page).locator('body', { hasText: '나 고침' }).waitFor()
       const undo = page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' })
       // 새로고침으로 채운 스택이 섰다(세션 안에서 아무것도 안 고쳤다).
-      await poll('되돌리기가 켜진다', async () => undo.isEnabled(), (enabled) => enabled)
+      await poll(
+        '되돌리기가 켜진다',
+        async () => undo.isEnabled(),
+        (enabled) => enabled,
+      )
 
       const bobs = await stack.request(bob, 'PATCH', `${P}/ops`, {
         baseSeq: 2,
@@ -229,7 +259,11 @@ describe.skipIf(!전제.ok)('서버 이력으로 채운 되돌리기', () => {
       await canvasFrame(page).locator('body', { hasText: '밥' }).waitFor()
 
       await undo.click()
-      const landed = await poll('되돌리기가 서버에 닿는다', () => server(stack, alice, P), (value) => value.head === 4)
+      const landed = await poll(
+        '되돌리기가 서버에 닿는다',
+        () => server(stack, alice, P),
+        (value) => value.head === 4,
+      )
       const after = await stable(page)
       // eslint-disable-next-line no-console
       console.log(`[서버 이력 되돌리기] 서버 ${JSON.stringify(landed)} · 앨리스 ${JSON.stringify(after)}`)
@@ -255,7 +289,8 @@ async function server(stack: EditorStack, session: Session, path: string): Promi
 function watch(page: Page): { lines: string[] } {
   const lines: string[] = []
   page.on('request', (request) => {
-    if (request.method() === 'PATCH' && request.url().endsWith('/ops')) lines.push(`REST→ ${/"baseSeq":(\d+)/.exec(request.postData() ?? '')?.[0] ?? ''}`)
+    if (request.method() === 'PATCH' && request.url().endsWith('/ops'))
+      lines.push(`REST→ ${/"baseSeq":(\d+)/.exec(request.postData() ?? '')?.[0] ?? ''}`)
   })
   page.on('response', (response) => {
     if (response.request().method() === 'PATCH' && response.url().endsWith('/ops')) lines.push(`REST← ${response.status()}`)

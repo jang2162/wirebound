@@ -135,9 +135,13 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
       box.__repeats = 0
       const frame = document.querySelector<HTMLIFrameElement>('iframe.wb-shell-canvas-iframe')!
       for (const doc of [document, frame.contentDocument!]) {
-        doc.addEventListener('keydown', (event) => {
-          if (event.repeat) box.__repeats += 1
-        }, true)
+        doc.addEventListener(
+          'keydown',
+          (event) => {
+            if (event.repeat) box.__repeats += 1
+          },
+          true,
+        )
       }
     })
     return () => page.evaluate(() => (window as unknown as { __repeats: number }).__repeats)
@@ -173,7 +177,11 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
         if (where === 'canvas') await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
         else await row(page, 'n_text0000002').click()
         await page.keyboard.press('Delete')
-        await poll('첫 Delete 가 서버에 닿는다', () => server(P), (s) => s.headSeq === 2)
+        await poll(
+          '첫 Delete 가 서버에 닿는다',
+          () => server(P),
+          (s) => s.headSeq === 2,
+        )
         await page.keyboard.press('Delete')
         results.push({ where, ...(await settled(P)), selected: await selected(page) })
       } finally {
@@ -205,9 +213,16 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
   })
 
   it('H2 열린 줄 메뉴 안의 ← · → 는 선택을 안 옮긴다 — 그 메뉴의 «삭제»는 연 줄을 지운다', async () => {
-    const page0 = () => [T('n_text0000000', '글 0'), C('n_card0000001', '카드', [T('n_text0000001', '글 1'), T('n_text0000002', '글 2'), T('n_text0000003', '글 3')]), T('n_text0000004', '글 4')]
+    const page0 = () => [
+      T('n_text0000000', '글 0'),
+      C('n_card0000001', '카드', [T('n_text0000001', '글 1'), T('n_text0000002', '글 2'), T('n_text0000003', '글 3')]),
+      T('n_text0000004', '글 4'),
+    ]
     const results: unknown[] = []
-    for (const [rowId, key] of [['n_text0000002', 'ArrowLeft'], ['n_card0000001', 'ArrowRight']] as const) {
+    for (const [rowId, key] of [
+      ['n_text0000002', 'ArrowLeft'],
+      ['n_card0000001', 'ArrowRight'],
+    ] as const) {
       const { P } = await fixture(stack, alice, 'h2-menu', page0())
       const { page, close } = await open(P)
       try {
@@ -221,7 +236,11 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
         // 메뉴가 닫혔으면(선택이 옮아 `openWhile` 이 닫음) 누를 «삭제»가 없다 — 값으로 죽게 누르지 않는다.
         if (afterKey.menuOpen > 0) {
           await page.getByRole('menuitem', { name: '삭제', exact: true }).click()
-          await poll('«삭제»가 서버에 닿는다', () => server(P), (s) => s.headSeq === 2)
+          await poll(
+            '«삭제»가 서버에 닿는다',
+            () => server(P),
+            (s) => s.headSeq === 2,
+          )
         }
         results.push({ rowId, focusRole, afterKey, order: (await server(P)).order })
       } finally {
@@ -293,15 +312,27 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
         await page.keyboard.press('Delete')
       }
       await sleep(300)
-      const orientations = await page.locator('[role="separator"]').evaluateAll((all) => all.map((element) => element.getAttribute('aria-orientation')))
+      const orientations = await page
+        .locator('[role="separator"]')
+        .evaluateAll((all) => all.map((element) => element.getAttribute('aria-orientation')))
       // ↑ ↓ ← → 차례.
       const rowAxis = ['n_text0000001', 'n_text0000003', 'n_text0000002', 'n_text0000002']
       const columnAxis = ['n_text0000002', 'n_text0000002', 'n_card0000001', 'n_text0000002']
       expect({ orientations, moved, controls, server: await server(P) }).toEqual({
         orientations: ['horizontal', 'vertical', 'horizontal', 'vertical'],
-        moved: { '갈래 탭': rowAxis, '우측 패널 탭': rowAxis, '손잡이 0': columnAxis, '손잡이 1': rowAxis, '손잡이 2': columnAxis, '손잡이 3': rowAxis },
+        moved: {
+          '갈래 탭': rowAxis,
+          '우측 패널 탭': rowAxis,
+          '손잡이 0': columnAxis,
+          '손잡이 1': rowAxis,
+          '손잡이 2': columnAxis,
+          '손잡이 3': rowAxis,
+        },
         controls: { '트리 줄': 'n_text0000003', '줌 단추': 'n_text0000003' },
-        server: { order: ['n_card0000001', 'n_text0000001', 'n_text0000003', 'n_text0000004', 'n_text0000005', 'n_btn00000001'], headSeq: 2 },
+        server: {
+          order: ['n_card0000001', 'n_text0000001', 'n_text0000003', 'n_text0000004', 'n_text0000005', 'n_btn00000001'],
+          headSeq: 2,
+        },
       })
     } finally {
       await close()
@@ -327,7 +358,11 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
       await page.getByRole('button', { name: 'Page 더 보기', exact: true }).click()
       const l2Focus = await page.evaluate(() => {
         const active = document.activeElement
-        return { role: active?.getAttribute('role'), off: active?.getAttribute('aria-disabled'), described: (active?.getAttribute('aria-description') ?? '') !== '' }
+        return {
+          role: active?.getAttribute('role'),
+          off: active?.getAttribute('aria-disabled'),
+          described: (active?.getAttribute('aria-description') ?? '') !== '',
+        }
       })
       await page.keyboard.press('Escape')
       await sleep(150)
@@ -410,9 +445,15 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
       const typed = { value: await value(), dialogs: await page.locator('dialog[open]').count(), server: (await server(P)).headSeq }
 
       await canvasFrame(page).locator('[data-wb-id="n_btn00000001"]').click()
-      const focus = await page.evaluate(() => document.querySelector<HTMLIFrameElement>('iframe.wb-shell-canvas-iframe')!.contentDocument!.activeElement?.tagName)
+      const focus = await page.evaluate(
+        () => document.querySelector<HTMLIFrameElement>('iframe.wb-shell-canvas-iframe')!.contentDocument!.activeElement?.tagName,
+      )
       await page.keyboard.press('Delete')
-      const deleted = await poll('Button 노드의 Delete 가 서버에 닿는다', () => server(P), (s) => s.headSeq === 2)
+      const deleted = await poll(
+        'Button 노드의 Delete 가 서버에 닿는다',
+        () => server(P),
+        (s) => s.headSeq === 2,
+      )
 
       expect({ typed, focus, deleted: deleted.order.includes('n_btn00000001') }).toEqual({
         typed: { value: 'x?', dialogs: 0, server: 1 },
@@ -430,7 +471,9 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
   it('L4 붙이는 사이 페이지를 떠났으면 붙이지 않고 한 줄로 말한다 — 떠나 머묾 · 떠났다 돌아옴', async () => {
     const results: unknown[] = []
     for (const variant of ['stay', 'return'] as const) {
-      const button = B('n_btngo000001', '가기', { interactions: [{ on: 'click', actions: [{ type: 'navigate', target: 'page:메뉴/둘째' }] }] })
+      const button = B('n_btngo000001', '가기', {
+        interactions: [{ on: 'click', actions: [{ type: 'navigate', target: 'page:메뉴/둘째' }] }],
+      })
       const { P, P2 } = await fixture(stack, alice, `l4-${variant}`, [T('n_text0000001', '글 1'), T('n_text0000002', '글 2'), button])
       const { page, close } = await open(P)
       try {
@@ -545,7 +588,9 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
           canvasText: (frame.contentWindow!.getSelection()?.toString() ?? '').length > 0,
         }
       })
-      const members = await page.evaluate(() => [...document.querySelectorAll('[data-wb-member-id]')].map((element) => element.getAttribute('data-wb-member-id')).sort())
+      const members = await page.evaluate(() =>
+        [...document.querySelectorAll('[data-wb-member-id]')].map((element) => element.getAttribute('data-wb-member-id')).sort(),
+      )
       expect({ ...picked, selected: await selected(page), members }).toEqual({
         prevented: true,
         canvasText: false,

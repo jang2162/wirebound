@@ -156,7 +156,9 @@ describe.skipIf(!전제.ok)('트리 끌어 놓기 · 줄 행동 — 실브라우
     const { page, close } = await openEditor(P)
     try {
       const visibility = (id: string) =>
-        row(page, id).locator('.wb-shell-tree-row-actions').evaluate((el) => getComputedStyle(el).visibility)
+        row(page, id)
+          .locator('.wb-shell-tree-row-actions')
+          .evaluate((el) => getComputedStyle(el).visibility)
       // 열린 페이지(가1)가 고른 줄이다 — 그 줄만 보인다.
       await page.mouse.move(1000, 800)
       const idle = { 가1: await visibility(ids['가1']!), 나: await visibility(ids['나']!) }
@@ -188,7 +190,11 @@ describe.skipIf(!전제.ok)('트리 끌어 놓기 · 줄 행동 — 실브라우
       // 나2 의 위 띠 → 나1 · 가2 · 나2.
       await dropAt(page, await spot(page, ids['나2']!, 'top'))
 
-      const tree = await poll('서버 트리', () => serverTree(projectId), (menu) => menu.find((m) => m.title === '나')?.pages.length === 3)
+      const tree = await poll(
+        '서버 트리',
+        () => serverTree(projectId),
+        (menu) => menu.find((m) => m.title === '나')?.pages.length === 3,
+      )
       expect(titles(tree.find((m) => m.title === '나')!.pages)).toEqual(['나1', '가2', '나2'])
       expect(titles(tree.find((m) => m.title === '가')!.pages)).toEqual(['가1'])
       expect(writes).toEqual([`PATCH /api/projects/${projectId}/pages/${ids['가2']}`])
@@ -206,7 +212,11 @@ describe.skipIf(!전제.ok)('트리 끌어 놓기 · 줄 행동 — 실브라우
       await grab(page, ids['다']!)
       await dropAt(page, await spot(page, ids['나']!, 'middle'))
 
-      const tree = await poll('서버 트리', () => serverTree(projectId), (menu) => menu.length === 2)
+      const tree = await poll(
+        '서버 트리',
+        () => serverTree(projectId),
+        (menu) => menu.length === 2,
+      )
       expect(titles(tree)).toEqual(['가', '나'])
       expect(titles(tree.find((m) => m.title === '나')!.children)).toEqual(['다'])
     } finally {
@@ -257,7 +267,11 @@ describe.skipIf(!전제.ok)('트리 끌어 놓기 · 줄 행동 — 실브라우
       // 돌아와 가 메뉴 안(가운데 띠)에 놓는다.
       await dropAt(page, await spot(page, ids['가']!, 'middle'))
 
-      const tree = await poll('서버 트리', () => serverTree(projectId), (menu) => menu.find((m) => m.title === '가')?.pages.length === 3)
+      const tree = await poll(
+        '서버 트리',
+        () => serverTree(projectId),
+        (menu) => menu.find((m) => m.title === '가')?.pages.length === 3,
+      )
       expect(overCanvas).toEqual({ lifted: 1, hint: 0 })
       expect(titles(tree.find((m) => m.title === '가')!.pages)).toEqual(['가1', '가2', '나1'])
       expect(await page.locator('.wb-shell-tree-row-dragging').count()).toBe(0)
@@ -359,10 +373,18 @@ describe.skipIf(!전제.ok)('트리 끌어 놓기 · 줄 행동 — 실브라우
     try {
       await grabNode(page, 'n_divi0000001')
       await dropAt(page, await nodeSpot(page, 'n_card0000001', 'middle'))
-      const moved = await poll('서버 문서', () => serverShape(P), (shape) => JSON.stringify(shape) !== JSON.stringify(ORIGINAL))
+      const moved = await poll(
+        '서버 문서',
+        () => serverShape(P),
+        (shape) => JSON.stringify(shape) !== JSON.stringify(ORIGINAL),
+      )
 
       await page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' }).click()
-      const undone = await poll('서버 문서', () => serverShape(P), (shape) => JSON.stringify(shape) === JSON.stringify(ORIGINAL))
+      const undone = await poll(
+        '서버 문서',
+        () => serverShape(P),
+        (shape) => JSON.stringify(shape) === JSON.stringify(ORIGINAL),
+      )
 
       expect({ moved, undone, sent: patches.length }).toEqual({
         moved: { Page: ['Text', { Card: ['Text', 'Divider'] }] },
@@ -427,7 +449,11 @@ describe.skipIf(!전제.ok)('트리 끌어 놓기 · 줄 행동 — 실브라우
       // 표시를 먼저 단언한다 — 놓을 자리가 없는 판은 요청이 안 나가 아래 폴이 시간 초과로만 죽는다.
       expect(placements).toEqual(['after'])
 
-      const shape = await poll('서버 문서', () => serverShape(P), (next) => JSON.stringify(next) !== JSON.stringify(ORIGINAL))
+      const shape = await poll(
+        '서버 문서',
+        () => serverShape(P),
+        (next) => JSON.stringify(next) !== JSON.stringify(ORIGINAL),
+      )
       expect(shape).toEqual({ Page: [{ Card: ['Text'] }, 'Divider', 'Text'] })
     } finally {
       await close()

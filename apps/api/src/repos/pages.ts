@@ -308,11 +308,7 @@ export async function listPageRows(
   db: DbHandle,
   projectId: string,
 ): Promise<Array<{ id: string; menu_node_id: string; title: string; sort_order: number }>> {
-  return db
-    .selectFrom('pages')
-    .select(['id', 'menu_node_id', 'title', 'sort_order'])
-    .where('project_id', '=', projectId)
-    .execute()
+  return db.selectFrom('pages').select(['id', 'menu_node_id', 'title', 'sort_order']).where('project_id', '=', projectId).execute()
 }
 
 /**
@@ -361,12 +357,7 @@ export async function listPages(db: DbHandle, projectId: string): Promise<PageRe
  * `updated_at`도 그 자리에서 함께 갱신한다 — 어떤 필드가 바뀌었든(메뉴 이동·
  * 순서만 바뀐 경우 포함) 페이지가 갱신됐다는 사실은 같다.
  */
-export async function updatePage(
-  db: DbHandle,
-  projectId: string,
-  pageId: string,
-  patch: PagePatch,
-): Promise<PageRecord | null> {
+export async function updatePage(db: DbHandle, projectId: string, pageId: string, patch: PagePatch): Promise<PageRecord | null> {
   assertNoNulBytes(PAGE_TEXT, patch.title, patch.description)
   return withTransaction(db, async (trx) => {
     // **자리를 옮기면 트리 쓰기의 첫 잠금을 맨 먼저 잡는다**(`repos/projects.ts`의 `lockProjectTree`) — 지금 자리를 읽기
@@ -394,11 +385,7 @@ export async function updatePage(
       await closeGap(trx, current.menu_node_id, current.sort_order)
       await openGap(trx, newMenuNodeId, targetIndex)
 
-      await trx
-        .updateTable('pages')
-        .set({ menu_node_id: newMenuNodeId, sort_order: targetIndex })
-        .where('id', '=', pageId)
-        .execute()
+      await trx.updateTable('pages').set({ menu_node_id: newMenuNodeId, sort_order: targetIndex }).where('id', '=', pageId).execute()
     } else if (patch.sortOrder !== undefined) {
       const siblingCount = await countPagesInMenuNode(trx, current.menu_node_id)
       const targetIndex = Math.min(patch.sortOrder, siblingCount - 1)

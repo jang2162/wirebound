@@ -49,13 +49,7 @@ export {
   type PageSummary,
   type ProjectListing,
 } from './read/page'
-export {
-  countErrors,
-  lintReport,
-  type LintNoSuchPath,
-  type LintOutcome,
-  type LintReport,
-} from './read/lint'
+export { countErrors, lintReport, type LintNoSuchPath, type LintOutcome, type LintReport } from './read/lint'
 export { prepareCatalog } from './read/catalog'
 
 /**

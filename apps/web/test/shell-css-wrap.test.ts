@@ -138,9 +138,7 @@ describe('고르개의 말 한 줄은 공백 없는 토막에서도 감싼다', 
    */
   it('형제 칸도 같은 답이다 — 한쪽만 고치지 않는다', () => {
     expect(WRAPPING_BOXES.map((box) => box.className)).toHaveLength(2)
-    expect(overflowWrapOf('wb-shell-picker-desc')).toBe(
-      overflowWrapOf('wb-shell-picker-notice'),
-    )
+    expect(overflowWrapOf('wb-shell-picker-desc')).toBe(overflowWrapOf('wb-shell-picker-notice'))
     // **둘이 «없음»으로 같아지는 것을 막는다** — 그러면 이 케이스가 아무것도 안 잰다.
     // 선언이 아예 없을 때 jsdom이 내는 값은 `'normal'`이 아니라 **빈 문자열**이다(쟀다).
     expect(['', 'normal']).not.toContain(overflowWrapOf('wb-shell-picker-desc'))

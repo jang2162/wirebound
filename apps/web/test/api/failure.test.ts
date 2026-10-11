@@ -61,9 +61,7 @@ describe('toFailure', () => {
   it('세션이 끊긴 실패는 issues와 무관하게 signed-out이다', () => {
     // 갈래의 순서를 못박는다 — `unauthenticated`가 먼저다. 서버가 그 응답에 issues를 실어도
     // 화면은 문장이 아니라 로그인으로 가야 한다.
-    const error = new ApiError(401, 'unauthenticated', '로그인이 필요합니다', [
-      { path: '', message: '세션이 만료되었습니다' },
-    ])
+    const error = new ApiError(401, 'unauthenticated', '로그인이 필요합니다', [{ path: '', message: '세션이 만료되었습니다' }])
 
     expect(toFailure(error, UNKNOWN)).toEqual({ kind: 'signed-out' })
   })
@@ -101,22 +99,41 @@ describe('toFailure', () => {
   /** 화면 상태 422 — 서버 문장이 상태 id(`s_…`)를 싣는다. 코드로 사람 문장을 짓는다(`VIEW_STATE_SENTENCES`). */
   describe('화면 상태 422 는 코드로 사람 문장이 된다', () => {
     const cases: [string, string, string][] = [
-      ['state-cases-left', '목록에서 뺀 상태를 가리키는 가지가 남아 있습니다: s_abc123 — 상태 삭제는 그 가지를 함께 지웁니다', '그 상태로 만든 가지가 남아 있어 목록에서만 뺄 수 없습니다 — 상태 관리에서 지우세요'],
-      ['state-case-duplicate', '한 상태 영역에 같은 상태의 가지가 둘입니다: s_abc123', '한 상태 영역에 같은 상태의 가지가 둘이 될 수 없습니다'],
+      [
+        'state-cases-left',
+        '목록에서 뺀 상태를 가리키는 가지가 남아 있습니다: s_abc123 — 상태 삭제는 그 가지를 함께 지웁니다',
+        '그 상태로 만든 가지가 남아 있어 목록에서만 뺄 수 없습니다 — 상태 관리에서 지우세요',
+      ],
+      [
+        'state-case-duplicate',
+        '한 상태 영역에 같은 상태의 가지가 둘입니다: s_abc123',
+        '한 상태 영역에 같은 상태의 가지가 둘이 될 수 없습니다',
+      ],
       ['state-case-default', '상태 영역에는 기본 가지가 정확히 하나여야 합니다 (2개 발견)', '상태 영역에는 기본 가지가 하나여야 합니다'],
       ['state-case-outside', '상태 가지는 상태 영역 바로 아래에만 둘 수 있습니다', '상태 가지는 상태 영역 바로 아래에만 둘 수 있습니다'],
       ['state-switch-child', '상태 영역에는 상태 가지만 둘 수 있습니다 (현재: Text)', '상태 영역에는 상태 가지만 둘 수 있습니다'],
     ]
     it.each(cases)('%s', (code, server, shown) => {
-      const error = new ApiError(422, 'validation-failed', '검증 실패', [{ code, nodeId: 'n_c1', path: '/root/children/0', message: server }])
+      const error = new ApiError(422, 'validation-failed', '검증 실패', [
+        { code, nodeId: 'n_c1', path: '/root/children/0', message: server },
+      ])
       const failure = toFailure(error, UNKNOWN)
       expect(failure).toEqual({ kind: 'message', message: shown })
       expect(JSON.stringify(failure)).not.toMatch(/s_abc123|n_c1/)
     })
 
     it('가지마다 이슈가 하나여도 같은 문장은 한 번만 보이고, 다른 코드의 문장은 서버 것을 그대로 잇는다', () => {
-      const left = (id: string) => ({ code: 'state-cases-left', nodeId: id, path: '/root/children/0', message: `목록에서 뺀 상태를 가리키는 가지가 남아 있습니다: s_${id}` })
-      const error = new ApiError(422, 'validation-failed', '검증 실패', [left('n_c1'), left('n_c2'), { code: 'unknown-type', nodeId: 'n_x', path: '/root', message: '모르는 타입입니다' }])
+      const left = (id: string) => ({
+        code: 'state-cases-left',
+        nodeId: id,
+        path: '/root/children/0',
+        message: `목록에서 뺀 상태를 가리키는 가지가 남아 있습니다: s_${id}`,
+      })
+      const error = new ApiError(422, 'validation-failed', '검증 실패', [
+        left('n_c1'),
+        left('n_c2'),
+        { code: 'unknown-type', nodeId: 'n_x', path: '/root', message: '모르는 타입입니다' },
+      ])
       expect(toFailure(error, UNKNOWN)).toEqual({
         kind: 'message',
         message: '그 상태로 만든 가지가 남아 있어 목록에서만 뺄 수 없습니다 — 상태 관리에서 지우세요 · 모르는 타입입니다',

@@ -10,15 +10,7 @@ import { readWbtheme } from '@wirebound/themes'
 import { insertApiToken } from '../src/repos/api-tokens'
 import { insertThemePackage, setThemePackageHidden } from '../src/repos/theme-packages'
 import { setInstanceAdmin } from '../src/repos/users'
-import {
-  createProject,
-  resetRealData,
-  signup,
-  withApi,
-  withRealApi,
-  type SignedUpUser,
-  type TestContext,
-} from './helpers'
+import { createProject, resetRealData, signup, withApi, withRealApi, type SignedUpUser, type TestContext } from './helpers'
 import { manifestOf, packed } from './theme-fixtures'
 import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
@@ -228,13 +220,10 @@ describe('GET …/files/* — 원시 경로', () => {
 
   function rawGet(port: number, path: string, cookie: SignedUpUser['cookie']): Promise<number> {
     return new Promise((resolve, reject) => {
-      const req = request(
-        { host: '127.0.0.1', port, path, headers: { cookie: `wb_session=${cookie.wb_session}` } },
-        (res) => {
-          res.resume()
-          resolve(res.statusCode ?? 0)
-        },
-      )
+      const req = request({ host: '127.0.0.1', port, path, headers: { cookie: `wb_session=${cookie.wb_session}` } }, (res) => {
+        res.resume()
+        resolve(res.statusCode ?? 0)
+      })
       req.on('error', reject)
       req.end()
     })

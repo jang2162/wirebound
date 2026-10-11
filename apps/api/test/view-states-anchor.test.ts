@@ -38,7 +38,14 @@ async function board(ctx: RealApiContext, viewStates: Array<{ id: string; name: 
           children: [
             { id: 'n_c0', type: 'StateCase', props: { state: 'default' }, children: [] },
             ...(viewStates?.some((state) => state.id === ADMIN.id)
-              ? [{ id: 'n_c1', type: 'StateCase', props: { state: ADMIN.id }, children: [{ id: 'n_ok', type: 'Button', props: { label: '승인' } }] }]
+              ? [
+                  {
+                    id: 'n_c1',
+                    type: 'StateCase',
+                    props: { state: ADMIN.id },
+                    children: [{ id: 'n_ok', type: 'Button', props: { label: '승인' } }],
+                  },
+                ]
               : []),
           ],
         },
@@ -66,7 +73,11 @@ describe('상태 목록 편집은 그 자리의 id 를 함께 싣는다 — 겹�
     await withRealApi(async (ctx) => {
       const fx = await board(ctx, [ADMIN])
       const head = await fx.read()
-      const added = await fx.patch(fx.bora, head.headSeq, addViewStateOps(head.schema, '손님', () => 's_guest')!)
+      const added = await fx.patch(
+        fx.bora,
+        head.headSeq,
+        addViewStateOps(head.schema, '손님', () => 's_guest')!,
+      )
       expect(added.status, JSON.stringify(added.body)).toBe(200)
       // 다혜가 «손님»을 맨 앞으로 — 보라의 역연산(`remove /viewStates/1`)이 가리키던 자리에 «관리자»가 선다.
       expect((await fx.patch(fx.dahye, added.body.seq!, [{ op: 'move', from: '/viewStates/1', path: '/viewStates/0' }])).status).toBe(200)
@@ -85,9 +96,19 @@ describe('상태 목록 편집은 그 자리의 id 를 함께 싣는다 — 겹�
     await withRealApi(async (ctx) => {
       const fx = await board(ctx, [ADMIN])
       const head = await fx.read()
-      const added = await fx.patch(fx.bora, head.headSeq, addViewStateOps(head.schema, '손님', () => 's_guest')!)
+      const added = await fx.patch(
+        fx.bora,
+        head.headSeq,
+        addViewStateOps(head.schema, '손님', () => 's_guest')!,
+      )
       // 남의 편집이 목록 밖(노드)을 고친 판 — 판 번호는 오르지만 목록의 자리는 그대로다.
-      expect((await fx.patch(fx.dahye, added.body.seq!, [{ op: 'replace', path: '/root/children/0/children/1/children/0/props/label', value: '확인' }])).status).toBe(200)
+      expect(
+        (
+          await fx.patch(fx.dahye, added.body.seq!, [
+            { op: 'replace', path: '/root/children/0/children/1/children/0/props/label', value: '확인' },
+          ])
+        ).status,
+      ).toBe(200)
       const undo = await fx.resend(fx.bora, added.body.inverse!)
       expect(undo.status, JSON.stringify(undo.body)).toBe(200)
       expect((await fx.read()).schema.viewStates).toEqual([ADMIN])
@@ -148,15 +169,30 @@ describe('상태 목록 편집은 그 자리의 id 를 함께 싣는다 — 겹�
     await withRealApi(async (ctx) => {
       const fx = await board(ctx, undefined)
       const head = await fx.read()
-      const created = await fx.patch(fx.bora, head.headSeq, addViewStateOps(head.schema, '손님', () => 's_guest')!)
+      const created = await fx.patch(
+        fx.bora,
+        head.headSeq,
+        addViewStateOps(head.schema, '손님', () => 's_guest')!,
+      )
       expect(created.status, JSON.stringify(created.body)).toBe(200)
       const now = await fx.read()
-      expect((await fx.patch(fx.dahye, now.headSeq, addViewStateOps(now.schema, '직원', () => 's_staff')!)).status).toBe(200)
+      expect(
+        (
+          await fx.patch(
+            fx.dahye,
+            now.headSeq,
+            addViewStateOps(now.schema, '직원', () => 's_staff')!,
+          )
+        ).status,
+      ).toBe(200)
 
       const undo = await fx.resend(fx.bora, created.body.inverse!)
       expect({ status: undo.status, viewStates: (await fx.read()).schema.viewStates }).toEqual({
         status: 409,
-        viewStates: [{ id: 's_guest', name: '손님' }, { id: 's_staff', name: '직원' }],
+        viewStates: [
+          { id: 's_guest', name: '손님' },
+          { id: 's_staff', name: '직원' },
+        ],
       })
     })
   })

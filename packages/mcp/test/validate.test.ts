@@ -268,6 +268,8 @@ describe('알림(info)은 결함이 아니다', () => {
     const said = (await callJson(harness({ payload: 상태가_있는_프로젝트() }), 'validate')) as Report
     expect(said.failing).toBe(false)
     expect([said.errors, said.warnings, said.infos]).toEqual([0, 0, 1])
-    expect(said.issues.map((issue) => [issue.rule, issue.severity, issue.pagePath])).toEqual([['view-state-unused', 'info', '관리자/회원/상태']])
+    expect(said.issues.map((issue) => [issue.rule, issue.severity, issue.pagePath])).toEqual([
+      ['view-state-unused', 'info', '관리자/회원/상태'],
+    ])
   })
 })

@@ -48,7 +48,11 @@ function fixture(): PageDocument {
           children: [
             caseOf('n_c0', 'default', [
               button('n_view', '보기'),
-              { id: 'n_in', type: 'StateSwitch', children: [caseOf('n_i0', 'default', [button('n_deep', '깊이')]), caseOf('n_i1', 's_guest', [button('n_deep2', '깊이 2')])] },
+              {
+                id: 'n_in',
+                type: 'StateSwitch',
+                children: [caseOf('n_i0', 'default', [button('n_deep', '깊이')]), caseOf('n_i1', 's_guest', [button('n_deep2', '깊이 2')])],
+              },
             ]),
             caseOf('n_c1', 's_admin', [
               button('n_ok', '승인', { interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_view', value: true }] }] }),
@@ -82,14 +86,16 @@ describe('nodeViewState — 노드가 속한 상태', () => {
   })
 
   it('검증 전 문서를 견딘다', () => {
-    const odd = { root: { id: 'n_root', type: 'Page', children: [null, { id: 'n_c', type: 'StateCase', props: { state: 3 }, children: 'x' }] } }
+    const odd = {
+      root: { id: 'n_root', type: 'Page', children: [null, { id: 'n_c', type: 'StateCase', props: { state: 3 }, children: 'x' }] },
+    }
     expect(() => viewStateIndex(odd.root as unknown as WbNode)).not.toThrow()
     expect(nodeViewState(odd as never, 'n_c')).toBeNull()
   })
 })
 
 describe('이름에 상태를 붙인다', () => {
-  it('nodeDisplayName — 맥락이 있으면 «\'이름\'(상태 이름 상태)», 없으면 그대로', () => {
+  it("nodeDisplayName — 맥락이 있으면 «'이름'(상태 이름 상태)», 없으면 그대로", () => {
     const ok = findNode(fixture().root, 'n_ok')!
     expect(nodeDisplayName(ok)).toBe('승인 버튼')
     expect(nodeDisplayName(ok, { viewStateName: '관리자' })).toBe("'승인 버튼'(관리자 상태)")
@@ -108,7 +114,14 @@ describe('이름에 상태를 붙인다', () => {
   it('상태 영역이 없는 문서의 문장은 한 글자도 안 바뀐다', () => {
     const plain: PageDocument = {
       version: 1,
-      root: { id: 'n_root', type: 'Page', children: [button('n_a', '저장', { interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_b', value: false }] }] }), button('n_b', '취소')] },
+      root: {
+        id: 'n_root',
+        type: 'Page',
+        children: [
+          button('n_a', '저장', { interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_b', value: false }] }] }),
+          button('n_b', '취소'),
+        ],
+      },
     }
     expect(listInteractionSentences(plain).map((sentence) => sentence.text)).toEqual(['저장 버튼 클릭 시 취소 버튼이 숨겨집니다'])
   })
@@ -221,13 +234,23 @@ describe('붙여넣기 — 붙일 페이지에 없는 상태의 가지(Review Fo
   })
 
   it('기본 가지가 정확히 하나가 아닌 영역은 영역째 풀어 기본 가지(없으면 남은 첫 가지)의 내용을 둔다', () => {
-    const noDefault: WbNode = { id: 'n_x', type: 'StateSwitch', children: [caseOf('n_x1', 's_guest', [button('n_y', '와이')]), caseOf('n_x2', 's_admin', [])] }
+    const noDefault: WbNode = {
+      id: 'n_x',
+      type: 'StateSwitch',
+      children: [caseOf('n_x1', 's_guest', [button('n_y', '와이')]), caseOf('n_x2', 's_admin', [])],
+    }
     const r1 = prepareNodesForPaste([noDefault], { ...NONE, state: (id) => id === 's_guest' }, generate)
     expect(r1.droppedCases).toEqual([{ state: 's_admin', count: 1 }])
     expect(pasted(r1.nodes).root.children!.map((child) => child.props?.label)).toEqual(['와이'])
 
-    const twoDefaults: WbNode = { id: 'n_z', type: 'StateSwitch', children: [caseOf('n_z1', 'default', [button('n_z2', '첫')]), caseOf('n_z3', 'default', [button('n_z4', '둘')])] }
-    expect(pasted(prepareNodesForPaste([twoDefaults], NONE, generate).nodes).root.children!.map((child) => child.props?.label)).toEqual(['첫'])
+    const twoDefaults: WbNode = {
+      id: 'n_z',
+      type: 'StateSwitch',
+      children: [caseOf('n_z1', 'default', [button('n_z2', '첫')]), caseOf('n_z3', 'default', [button('n_z4', '둘')])],
+    }
+    expect(pasted(prepareNodesForPaste([twoDefaults], NONE, generate).nodes).root.children!.map((child) => child.props?.label)).toEqual([
+      '첫',
+    ])
 
     const empty: WbNode = { id: 'n_e', type: 'StateSwitch', children: [caseOf('n_e1', 's_admin', [])] }
     expect(prepareNodesForPaste([empty], { ...NONE, state: () => false }, generate).nodes).toEqual([])

@@ -44,13 +44,7 @@ import { exportPptx, type PptxPage, type PptxPart, type PptxScreen } from '@wire
 import type { DbHandle } from '../db/tx'
 import { projectBundle } from './export-bundle'
 import { assembleExportSource, readExportRows, type ExportRows } from './export-source'
-import {
-  errorLine,
-  screenFileName,
-  type ScreenBatch,
-  type ScreenJob,
-  type ScreenRenderer,
-} from './screen-render'
+import { errorLine, screenFileName, type ScreenBatch, type ScreenJob, type ScreenRenderer } from './screen-render'
 
 /** 화면 이미지를 못 그린 페이지 하나와 그 이유(머리말 「`screenless`와 실패를 가른다」). */
 export interface ScreenFailure {
@@ -91,15 +85,10 @@ export interface ExportProjectPptxOptions {
  * 프로젝트의 pptx 를 값으로 만든다 — **같은 스레드에서** 읽고 조립한다. 라우트는 이것을 안 부른다 — 읽기와 그리기만
  * 메인에서 하고 조립부터는 워커가 한다(`export-worker.ts`). 조립은 둘 다 `buildProjectPptx` 하나를 지난다.
  */
-export async function exportProjectPptx(
-  db: DbHandle,
-  projectId: string,
-  options?: ExportProjectPptxOptions,
-): Promise<ProjectPptx> {
+export async function exportProjectPptx(db: DbHandle, projectId: string, options?: ExportProjectPptxOptions): Promise<ProjectPptx> {
   const rows = await readExportRows(db, projectId)
   const renderer = options?.renderer
-  const screens: PptxScreenSource | undefined =
-    renderer === undefined ? undefined : { render: (job) => renderer.render(job) }
+  const screens: PptxScreenSource | undefined = renderer === undefined ? undefined : { render: (job) => renderer.render(job) }
   return buildProjectPptx(rows, screens)
 }
 
@@ -112,10 +101,7 @@ export interface PptxScreenSource {
 }
 
 /** 읽은 행으로 pptx 를 조립한다. **DB 를 모른다** — 워커에서도 같은 스레드에서도 이 함수 하나다. */
-export async function buildProjectPptx(
-  rows: ExportRows,
-  screenSource: PptxScreenSource | undefined,
-): Promise<ProjectPptx> {
+export async function buildProjectPptx(rows: ExportRows, screenSource: PptxScreenSource | undefined): Promise<ProjectPptx> {
   const source = assembleExportSource(rows)
   const { ordered, documentById, commentsById, descriptionById } = source
 
@@ -196,11 +182,7 @@ interface DrawnScreens {
  * **수집(`readExportRows` · `assembleExportSource`)은 여기 없다** — 화면과 무관하게 pptx 를 만드는 자리이고 도메인 에러를
  * 라우트가 상태 코드로 옮긴다(`routes/export.ts`의 `orFail`). 그 갈래는 이 `try`가 삼키지 않는다.
  */
-async function drawScreens(
-  pages: readonly PptxPage[],
-  source: PptxScreenSource | undefined,
-  job: () => ScreenJob,
-): Promise<DrawnScreens> {
+async function drawScreens(pages: readonly PptxPage[], source: PptxScreenSource | undefined, job: () => ScreenJob): Promise<DrawnScreens> {
   const empty: DrawnScreens = { screens: pages.map(() => null), failures: [], fontWarning: null }
   if (source === undefined || pages.length === 0) return empty
 

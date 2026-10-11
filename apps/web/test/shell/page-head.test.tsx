@@ -57,7 +57,9 @@ function head(): HTMLElement {
 
 function openMenu(): string[] {
   fireEvent.click(within(head()).getByRole('button', { name: '더 보기' }))
-  return within(openedMenu(head())).getAllByRole('menuitem').map((item) => item.textContent ?? '')
+  return within(openedMenu(head()))
+    .getAllByRole('menuitem')
+    .map((item) => item.textContent ?? '')
 }
 
 describe.each(SCREENS)('$screen 머리', (at) => {

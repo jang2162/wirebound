@@ -83,7 +83,11 @@ describe('다른 owner 의 강등 뒤에 선 멤버 쓰기는 그 뒤의 권한�
     const holding = new Promise<void>((resolve) => (held = resolve))
     const demotion = withTransaction(db, async (trx) => {
       // 요청한 사람이 없는 픽스처라 권한은 다시 보지 않는다 — 이 판이 재는 것은 뒤에 선 밥의 요청이다.
-      await updateMemberRole(trx, fx.project.id, fx.bob.user.id, 'editor', { tokenId: null, credential: async () => {}, role: async () => {} })
+      await updateMemberRole(trx, fx.project.id, fx.bob.user.id, 'editor', {
+        tokenId: null,
+        credential: async () => {},
+        role: async () => {},
+      })
       held()
       await gate
     })

@@ -18,7 +18,18 @@
  * 바꾸거나 «모든 가지 보기»를 끈 판도 같다. 뺄 때 위젯이 넘기는 초안은 그 노드에 안 쓴다(`panels/property-panel.tsx` 의 `useLeftoverCommit` ·
  * `panels/alias-edit.tsx` — 하단 바 `DROPPED_DRAFT_NOTICE`).
  */
-import { createContext, createElement, Fragment, useCallback, useContext, useLayoutEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react'
+import {
+  createContext,
+  createElement,
+  Fragment,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
 import type { ViewState } from '@wirebound/schema'
 import { hiddenNodeIds } from '../edit/view-state-fork'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -57,7 +68,11 @@ export function ViewStateProvider(props: { pageId: string | undefined; children:
     setDialog(null)
   }
   const value = useMemo(() => ({ chosen: current, setChosen, dialog, setDialog, allCases, setAllCases }), [current, dialog, allCases])
-  return createElement(ViewStateContext.Provider, { value }, createElement(Fragment, null, createElement(HiddenSelectionPrune, { pageId: props.pageId }), props.children))
+  return createElement(
+    ViewStateContext.Provider,
+    { value },
+    createElement(Fragment, null, createElement(HiddenSelectionPrune, { pageId: props.pageId }), props.children),
+  )
 }
 
 /**
@@ -84,7 +99,8 @@ function HiddenSelectionPrune(props: { pageId: string | undefined }): null {
 }
 
 /** 고른 노드가 지금 상태에서 안 보이게 되어 고른 것에서 뺐을 때의 정보 통지(`HiddenSelectionPrune`). */
-export const HIDDEN_SELECTION_NOTICE = '고른 노드가 지금 상태에서는 보이지 않아 선택에서 뺐습니다. «모든 가지 보기»를 켜면 다시 고를 수 있습니다.'
+export const HIDDEN_SELECTION_NOTICE =
+  '고른 노드가 지금 상태에서는 보이지 않아 선택에서 뺐습니다. «모든 가지 보기»를 켜면 다시 고를 수 있습니다.'
 
 export interface ViewStateChoice {
   /** 지금 상태의 id — 기본이면 `null`. 목록에 없으면 `null`(머리말). */

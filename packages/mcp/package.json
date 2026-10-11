@@ -16,7 +16,10 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "skill"],
+  "files": [
+    "dist",
+    "skill"
+  ],
   "scripts": {
     "build": "tsdown",
     "build:watch": "tsdown --watch"

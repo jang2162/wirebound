@@ -105,12 +105,7 @@ export function ProjectForm(props: {
       <button className="wb-shell-project-submit" type="submit" disabled={props.busy}>
         {props.submitLabel}
       </button>
-      <button
-        className="wb-shell-project-action"
-        type="button"
-        disabled={props.busy}
-        onClick={props.onCancel}
-      >
+      <button className="wb-shell-project-action" type="button" disabled={props.busy} onClick={props.onCancel}>
         취소
       </button>
     </form>

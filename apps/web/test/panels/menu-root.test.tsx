@@ -71,10 +71,7 @@ function stubs(menu: () => TreeMenuNode[], overrides: Partial<ApiClient> = {}) {
 }
 
 /** 셸과 트리가 **둘 다 그려질 때까지** 기다린다. 빈 트리의 닻은 빈 상태 문장이다. */
-async function open(
-  menu: () => TreeMenuNode[] = () => [],
-  overrides: Partial<ApiClient> = {},
-): Promise<ReturnType<typeof stubs>> {
+async function open(menu: () => TreeMenuNode[] = () => [], overrides: Partial<ApiClient> = {}): Promise<ReturnType<typeof stubs>> {
   const harness = stubs(menu, overrides)
   renderWithProviders(<App />, { client: harness.client, route: '/projects/p-1' })
   await screen.findByRole('heading', { name: PROJECT_NAME })
@@ -243,17 +240,14 @@ describe('빈 메뉴 트리 — 최상위 메뉴를 만드는 자리', () => {
    */
   it('조작이 나가 있는 동안 비활성이고, 끝나면 살아난다 — `run`을 지난다', async () => {
     const gate: { release: (() => void) | null } = { release: null }
-    const api = await open(
-      () => [],
-      {
-        createMenu: vi.fn(
-          () =>
-            new Promise<MenuNode>((resolve) => {
-              gate.release = () => resolve(CREATED)
-            }),
-        ),
-      },
-    )
+    const api = await open(() => [], {
+      createMenu: vi.fn(
+        () =>
+          new Promise<MenuNode>((resolve) => {
+            gate.release = () => resolve(CREATED)
+          }),
+      ),
+    })
 
     fireEvent.click(rootButton())
     typeAndEnter('관리자')
@@ -288,14 +282,11 @@ describe('빈 메뉴 트리 — 최상위 메뉴를 만드는 자리', () => {
    * 우회하는 판도 같은 이유로 둘을 함께 죽인다).
    */
   it('실패하면 서버 문장이 트리 안에 남고 트리를 다시 받지 않는다', async () => {
-    const api = await open(
-      () => [],
-      {
-        createMenu: vi.fn(async () => {
-          throw new ApiError(403, 'forbidden', '편집 권한이 없습니다')
-        }),
-      },
-    )
+    const api = await open(() => [], {
+      createMenu: vi.fn(async () => {
+        throw new ApiError(403, 'forbidden', '편집 권한이 없습니다')
+      }),
+    })
 
     fireEvent.click(rootButton())
     typeAndEnter('관리자')

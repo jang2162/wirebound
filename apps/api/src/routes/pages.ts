@@ -580,29 +580,34 @@ export function pageRoutes() {
       // `applyEdit`을 직접 부른다 — `test/lock-census.test.ts`가 그 둘을 별도 줄로 세면서
       // *"잠금을 안 본다"*고 판정한다. 여기 근거로 적으면 그 인구조사와 어긋난다.
       // **COMMIT 답을 잃으면 그 자리에서 확인한다** — `PATCH .../ops`와 같다(`services/lost-commit.ts`).
-      const settled = await runEditTransaction(app.db, pageId, async (trx) => {
-        // **판정은 이 트랜잭션 안에서 페이지 행을 잡고 한다**(`lock/check.ts`의 «판정은 페이지 행 안에서»). 막히면
-        // 던진다 — 아직 아무것도 안 썼다.
-        const blocked = await lockConflictError(app, trx, {
-          projectId,
-          pageId,
-          baseSeq: before.headSeq,
-          ops: putOps,
-          userId: currentUser.id,
-        })
-        if (blocked) throw blocked
-        const edited = await applyEdit(trx, {
-          projectId,
-          pageId,
-          baseSeq: before.headSeq,
-          ops: putOps,
-          actor: requestActor(request),
-        })
-        // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). `applyEdit`이 페이지를
-        // 잠갔다 — 그 대기 뒤의 역할로 판정한다. 던지면 이 트랜잭션째 되돌아간다.
-        if (edited.ok) await recheckProjectRole(trx, request)
-        return edited
-      }, pageStaleOnLateCommit(app, projectId, pageId))
+      const settled = await runEditTransaction(
+        app.db,
+        pageId,
+        async (trx) => {
+          // **판정은 이 트랜잭션 안에서 페이지 행을 잡고 한다**(`lock/check.ts`의 «판정은 페이지 행 안에서»). 막히면
+          // 던진다 — 아직 아무것도 안 썼다.
+          const blocked = await lockConflictError(app, trx, {
+            projectId,
+            pageId,
+            baseSeq: before.headSeq,
+            ops: putOps,
+            userId: currentUser.id,
+          })
+          if (blocked) throw blocked
+          const edited = await applyEdit(trx, {
+            projectId,
+            pageId,
+            baseSeq: before.headSeq,
+            ops: putOps,
+            actor: requestActor(request),
+          })
+          // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). `applyEdit`이 페이지를
+          // 잠갔다 — 그 대기 뒤의 역할로 판정한다. 던지면 이 트랜잭션째 되돌아간다.
+          if (edited.ok) await recheckProjectRole(trx, request)
+          return edited
+        },
+        pageStaleOnLateCommit(app, projectId, pageId),
+      )
       const outcome = settled.outcome
 
       if (!outcome.ok) {
@@ -614,15 +619,16 @@ export function pageRoutes() {
 
       // **커밋 뒤에 알린다.** 위 트랜잭션은 풀 핸들 위에서 자기 트랜잭션을 열고 닫으므로 이 줄에 도달한 시점에 이미
       // 커밋돼 있다. COMMIT 답을 잃고 확인한 판이면 그 revision 이 머리일 때만이다.
-      if (settled.broadcast) notifyPageChanged(app, {
-        projectId,
-        pageId,
-        seq: outcome.seq,
-        ops: replaceDocumentOps(before.schema, outcome.schema),
-        warnings: outcome.warnings,
-        actor: requestEventActor(request),
-        origin: broadcastOrigin(request),
-      })
+      if (settled.broadcast)
+        notifyPageChanged(app, {
+          projectId,
+          pageId,
+          seq: outcome.seq,
+          ops: replaceDocumentOps(before.schema, outcome.schema),
+          warnings: outcome.warnings,
+          actor: requestEventActor(request),
+          origin: broadcastOrigin(request),
+        })
 
       // 응답 형태는 바뀌지 않는다(페이지 객체 그대로). 바뀐 세 필드만 파이프라인
       // 결과로 덮어쓰고 나머지(제목·메뉴·순서)는 위에서 읽은 레코드를 쓴다 — 이
@@ -667,27 +673,32 @@ export function pageRoutes() {
       // 막힌다 — 안 막으면 설계서 「소프트 잠금」의 2차 방어가 접속 방식에 따라 갈린다.
       // **COMMIT 답을 잃으면 그 자리에서 확인한다**(`services/lost-commit.ts`) — 커밋됐으면 성공으로 답하고, 그 revision 이
       // 아직 머리일 때만 방송한다.
-      const settled = await runEditTransaction(app.db, pageId, async (trx) => {
-        // 판정은 이 트랜잭션 안 — `PUT .../schema`와 같은 자리 · 같은 까닭이다.
-        const blocked = await lockConflictError(app, trx, {
-          projectId,
-          pageId,
-          baseSeq: body.baseSeq,
-          ops: body.ops,
-          userId: currentUser.id,
-        })
-        if (blocked) throw blocked
-        const edited = await applyEdit(trx, {
-          projectId,
-          pageId,
-          baseSeq: body.baseSeq,
-          ops: body.ops,
-          actor: requestActor(request),
-        })
-        // **커밋 순간의 권한.** `PUT .../schema`와 같은 자리 · 같은 까닭이다.
-        if (edited.ok) await recheckProjectRole(trx, request)
-        return edited
-      }, pageStaleOnLateCommit(app, projectId, pageId))
+      const settled = await runEditTransaction(
+        app.db,
+        pageId,
+        async (trx) => {
+          // 판정은 이 트랜잭션 안 — `PUT .../schema`와 같은 자리 · 같은 까닭이다.
+          const blocked = await lockConflictError(app, trx, {
+            projectId,
+            pageId,
+            baseSeq: body.baseSeq,
+            ops: body.ops,
+            userId: currentUser.id,
+          })
+          if (blocked) throw blocked
+          const edited = await applyEdit(trx, {
+            projectId,
+            pageId,
+            baseSeq: body.baseSeq,
+            ops: body.ops,
+            actor: requestActor(request),
+          })
+          // **커밋 순간의 권한.** `PUT .../schema`와 같은 자리 · 같은 까닭이다.
+          if (edited.ok) await recheckProjectRole(trx, request)
+          return edited
+        },
+        pageStaleOnLateCommit(app, projectId, pageId),
+      )
       const outcome = settled.outcome
 
       if (!outcome.ok) {
@@ -697,19 +708,20 @@ export function pageRoutes() {
         request.log.warn({ pageId, seq: outcome.seq, broadcast: settled.broadcast }, 'COMMIT 답을 잃었지만 새 연결로 커밋을 확인했다')
       }
 
-      if (settled.broadcast) notifyPageChanged(app, {
-        projectId,
-        pageId,
-        seq: outcome.seq,
-        ops: body.ops,
-        warnings: outcome.warnings,
-        actor: requestEventActor(request),
-        origin: broadcastOrigin(request),
-        // **헤더가 없을 때의 두 번째 방벽이다.** 소켓이 아직 안 열려 발신자 제외가
-        // 성립하지 않으면 낸 사람이 자기 편집을 되받는데, 받는 쪽의 리베이스가 그것을 두 번
-        // 얹는다 — 이 값이 있으면 그 자리에서 건너뛴다(`ws/protocol.ts`의 그 필드).
-        ...(body.clientOpId !== undefined ? { clientOpId: body.clientOpId } : {}),
-      })
+      if (settled.broadcast)
+        notifyPageChanged(app, {
+          projectId,
+          pageId,
+          seq: outcome.seq,
+          ops: body.ops,
+          warnings: outcome.warnings,
+          actor: requestEventActor(request),
+          origin: broadcastOrigin(request),
+          // **헤더가 없을 때의 두 번째 방벽이다.** 소켓이 아직 안 열려 발신자 제외가
+          // 성립하지 않으면 낸 사람이 자기 편집을 되받는데, 받는 쪽의 리베이스가 그것을 두 번
+          // 얹는다 — 이 값이 있으면 그 자리에서 건너뛴다(`ws/protocol.ts`의 그 필드).
+          ...(body.clientOpId !== undefined ? { clientOpId: body.clientOpId } : {}),
+        })
 
       // 성공 결과의 `schema`(적용 후 문서 전체)는 응답에 싣지 않는다 — 클라이언트는
       // 같은 ops를 자기도 적용했으므로 문서를 이미 갖고 있다. 편집마다 문서 전체를
@@ -733,15 +745,21 @@ export function pageRoutes() {
       const { projectId, pageId } = parseParams(PageParams, request.params)
 
       let rev = 0
-      const result = await runTreeTransaction(app, projectId, request, async (trx) => {
-        const deleted = await deletePage(trx, projectId, pageId)
-        if (deleted === 'deleted') {
-          // **커밋 순간의 권한.** 위 DELETE 가 페이지 행 잠금에 선다.
-          await recheckProjectRole(trx, request)
-          rev = await bumpMenuRev(trx, projectId)
-        }
-        return deleted
-      }, (deleted) => (deleted === 'deleted' ? [pageId] : []))
+      const result = await runTreeTransaction(
+        app,
+        projectId,
+        request,
+        async (trx) => {
+          const deleted = await deletePage(trx, projectId, pageId)
+          if (deleted === 'deleted') {
+            // **커밋 순간의 권한.** 위 DELETE 가 페이지 행 잠금에 선다.
+            await recheckProjectRole(trx, request)
+            rev = await bumpMenuRev(trx, projectId)
+          }
+          return deleted
+        },
+        (deleted) => (deleted === 'deleted' ? [pageId] : []),
+      )
       if (result === 'not-found') {
         throw notFound()
       }

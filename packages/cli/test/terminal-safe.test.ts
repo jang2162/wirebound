@@ -30,7 +30,10 @@ async function pageGet(args: string[], payload = hostilePayload()): Promise<{ st
     cwd: '/repo',
     files: {
       '/repo/.wirebound.json': JSON.stringify({ server: SERVER, projectId: PROJECT }),
-      '/home/tester/.wirebound/credentials.json': JSON.stringify({ version: 1, credentials: [{ server: SERVER, projectId: PROJECT, token: 'RAW-TOKEN' }] }),
+      '/home/tester/.wirebound/credentials.json': JSON.stringify({
+        version: 1,
+        credentials: [{ server: SERVER, projectId: PROJECT, token: 'RAW-TOKEN' }],
+      }),
     },
   })
   stub(fake, 'GET', `/api/projects/${PROJECT}/snapshot`, { status: 200, body: payload })

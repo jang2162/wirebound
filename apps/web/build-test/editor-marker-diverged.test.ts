@@ -57,7 +57,8 @@ describe.skipIf(!전제.ok)('번호 어긋남 통지 — 실제 이력', () => {
       })
     })
     page.on('response', (response) => {
-      if (response.request().method() === 'DELETE' && response.url().includes('/comments')) lines.push(`${at()} DELETE 코멘트 ${response.status()}`)
+      if (response.request().method() === 'DELETE' && response.url().includes('/comments'))
+        lines.push(`${at()} DELETE 코멘트 ${response.status()}`)
     })
     try {
       await page.goto(fx.P1)
@@ -65,7 +66,11 @@ describe.skipIf(!전제.ok)('번호 어긋남 통지 — 실제 이력', () => {
       await page.getByRole('tab', { name: '코멘트' }).click()
       await page.locator('#wb-comment-draft').fill('번호를 붙일 코멘트')
       await page.getByRole('button', { name: '코멘트 달기' }).click()
-      await poll('번호가 붙는다', () => server(stack, alice, fx.P1), (value) => value.head === 2)
+      await poll(
+        '번호가 붙는다',
+        () => server(stack, alice, fx.P1),
+        (value) => value.head === 2,
+      )
       // 새로고침 — 되돌리기 스택이 서버 이력에서 선다(번호 추가의 inverse).
       await page.reload()
       await selectFirstText(page, '원문')
@@ -81,14 +86,21 @@ describe.skipIf(!전제.ok)('번호 어긋남 통지 — 실제 이력', () => {
       } finally {
         await hold.release()
       }
-      await poll('수습이 판을 싣는다', async () => lines.join(' · '), (value) => value.includes('patch-error'), 5_000)
+      await poll(
+        '수습이 판을 싣는다',
+        async () => lines.join(' · '),
+        (value) => value.includes('patch-error'),
+        5_000,
+      )
       await page.waitForTimeout(2_500)
       const final = await server(stack, alice, fx.P1)
       const markers = await page.locator('.wb-shell-marker').allTextContents()
       const shown = (await page.locator('.wb-shell-panel').allTextContents()).some((text) => text.includes(DIVERGED))
       const seen = await page.evaluate(() => (window as unknown as { __divergedSeen: number }).__divergedSeen)
       // eslint-disable-next-line no-console
-      console.log(`[번호 어긋남] ${lines.join(' · ')} · 서버 ${JSON.stringify(final)} · 캔버스 번호 ${JSON.stringify(markers)} · 통지 선 수 ${seen} · 끝 ${shown}`)
+      console.log(
+        `[번호 어긋남] ${lines.join(' · ')} · 서버 ${JSON.stringify(final)} · 캔버스 번호 ${JSON.stringify(markers)} · 통지 선 수 ${seen} · 끝 ${shown}`,
+      )
 
       // 판 카나리아 — 삭제가 먼저 커밋되고(200) 되돌리기가 409 를 받았고, 그 사이 어긋남 통지가 한 번 섰다.
       const order = ['DELETE 코멘트 200', 'WS← patch-error'].map((mark) => lines.findIndex((line) => line.includes(mark)))
@@ -127,13 +139,19 @@ async function fixture(stack: EditorStack, owner: Session, slug: string) {
   const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' })).body
   const first = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body
   const P1 = `/projects/${project.id}/pages/${first.id}`
-  const seeded = await call('PATCH', `${P1}/ops`, { baseSeq: 0, ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_one0000001', type: 'Text', props: { content: '원문' } } }] })
+  const seeded = await call('PATCH', `${P1}/ops`, {
+    baseSeq: 0,
+    ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_one0000001', type: 'Text', props: { content: '원문' } } }],
+  })
   if (seeded.status >= 300) throw new Error(`seed ${seeded.status}`)
   return { first: first.id as string, P1 }
 }
 async function server(stack: EditorStack, s: Session, path: string) {
   const page = (await stack.request(s, 'GET', path)).body
-  return { head: page.headSeq as number, content: (page.schema.root.children ?? []).map((c: any) => `${c.props?.content}${c.marker ? '#' + c.marker : ''}`) }
+  return {
+    head: page.headSeq as number,
+    content: (page.schema.root.children ?? []).map((c: any) => `${c.props?.content}${c.marker ? '#' + c.marker : ''}`),
+  }
 }
 async function selectFirstText(page: Page, content: string) {
   await canvasFrame(page).locator('body', { hasText: content }).waitFor()

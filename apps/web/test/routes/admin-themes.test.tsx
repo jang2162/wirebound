@@ -32,7 +32,10 @@ const PACKAGES: ThemePackageSummary[] = [
     name: 'Acme',
     description: null,
     latest: '1.0.0',
-    versions: [version('acme', '1.1.0', { hidden: true, uploadedBy: { id: 'u-1', name: '관리자님' } }), version('acme', '1.0.0', { uploadedBy: { id: 'u-1', name: '관리자님' } })],
+    versions: [
+      version('acme', '1.1.0', { hidden: true, uploadedBy: { id: 'u-1', name: '관리자님' } }),
+      version('acme', '1.0.0', { uploadedBy: { id: 'u-1', name: '관리자님' } }),
+    ],
   },
   { themeId: 'system-admin', name: '관리자', description: null, latest: '0.1.0', versions: [version('system-admin', '0.1.0')] },
 ]
@@ -41,7 +44,9 @@ function renderAdmin(user: SessionUser = ADMIN, overrides: Partial<ApiClient> = 
   const api = {
     listThemePackages: vi.fn(async () => PACKAGES),
     uploadThemePackage: vi.fn(async () => ({ themeId: 'acme', version: '2.0.0', name: 'Acme', sha256: 'ab', size: 10 })),
-    setThemePackageHidden: vi.fn(async (ref: { themeId: string; version: string }, hidden: boolean) => version(ref.themeId, ref.version, { hidden })),
+    setThemePackageHidden: vi.fn(async (ref: { themeId: string; version: string }, hidden: boolean) =>
+      version(ref.themeId, ref.version, { hidden }),
+    ),
     downloadThemeTemplate: vi.fn(async () => new Blob([Uint8Array.from([0x50, 0x4b])], { type: 'application/zip' })),
     ...overrides,
   }
@@ -115,10 +120,11 @@ describe('테마 관리 — 업로드', () => {
     await waitFor(() => theme('acme'))
     upload(wbtheme())
     const issues = await screen.findByRole('list', { name: '업로드를 거절한 까닭' })
-    expect(within(issues).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      'manifest.json:version — 판이 semver 가 아닙니다 (bad-version)',
-      'assets/x.exe — 허용하지 않는 파일입니다',
-    ])
+    expect(
+      within(issues)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['manifest.json:version — 판이 semver 가 아닙니다 (bad-version)', 'assets/x.exe — 허용하지 않는 파일입니다'])
   })
 
   it.each([

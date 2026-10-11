@@ -124,10 +124,7 @@ function overwrittenAt(doc: unknown, path: string): { value: unknown } | null {
  * RFC 6902의 move는 remove 후 add이므로 **값을 뺀 뒤** 문서(`afterRemove`)를 기준으로 잡는다.
  * 같은 배열이면 길이가 하나 줄어든 상태가, 다른 배열이면 원래 길이가 기준이다.
  */
-function resolveMoveTarget(
-  afterRemove: unknown,
-  op: { op: 'move'; from: string; path: string },
-): string {
+function resolveMoveTarget(afterRemove: unknown, op: { op: 'move'; from: string; path: string }): string {
   const tokens = parsePointer(op.path)
   if (tokens[tokens.length - 1] !== '-') return op.path
 

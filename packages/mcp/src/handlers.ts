@@ -173,10 +173,7 @@ const validate: ToolHandler = async (io, args) => {
  *
  * `null`을 내면 그 결과가 이미 만들어진 것이다(부르는 쪽이 그대로 돌려준다).
  */
-function resolvePage(
-  open: OpenProject,
-  args: Record<string, unknown>,
-): { pageId: string } | { outcome: ToolOutcome } {
+function resolvePage(open: OpenProject, args: Record<string, unknown>): { pageId: string } | { outcome: ToolOutcome } {
   const head = projectHead(open)
   const found = lookupPage(open.payload, path(args))
 

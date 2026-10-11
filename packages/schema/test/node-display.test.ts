@@ -47,7 +47,16 @@ describe('nodeSummary — 타입마다', () => {
     ['Tabs', { tabs: ['가', '나', '다', '라'] }, '가 · 나 · 다 · …'],
     ['Tabs', { tabs: [] }, null],
     ['List', { columns: ['이름', '이메일', '가입일', '상태'] }, '이름 · 이메일 · 가입일 · …'],
-    ['KeyValue', { pairs: [{ key: 'a', value: '1' }, { key: 'b', value: '2' }] }, '2쌍'],
+    [
+      'KeyValue',
+      {
+        pairs: [
+          { key: 'a', value: '1' },
+          { key: 'b', value: '2' },
+        ],
+      },
+      '2쌍',
+    ],
     ['Media', { kind: 'image', caption: '대표 사진' }, 'image · 대표 사진'],
     ['Media', { kind: 'chart' }, 'chart'],
     ['Divider', { direction: 'vertical' }, '세로'],
@@ -83,8 +92,27 @@ describe('nodeSummary — 타입마다', () => {
   it('표가 카탈로그 21종을 모두 덮는다 — 새 타입은 요약을 정하거나 없음을 정해야 한다', () => {
     // 표의 타입(위 케이스) 집합이 카탈로그와 같아야 한다 — 새 컴포넌트가 이 표에 오르지 않으면 여기서 걸린다.
     const covered = new Set([
-      'Flex', 'Grid', 'Button', 'Link', 'Placeholder', 'Field', 'Card', 'EntryForm', 'Text', 'Tabs', 'List',
-      'KeyValue', 'Media', 'Divider', 'Tree', 'Page', 'Slot', 'Section', 'SearchForm', 'StateSwitch', 'StateCase',
+      'Flex',
+      'Grid',
+      'Button',
+      'Link',
+      'Placeholder',
+      'Field',
+      'Card',
+      'EntryForm',
+      'Text',
+      'Tabs',
+      'List',
+      'KeyValue',
+      'Media',
+      'Divider',
+      'Tree',
+      'Page',
+      'Slot',
+      'Section',
+      'SearchForm',
+      'StateSwitch',
+      'StateCase',
     ])
     expect([...covered].sort()).toEqual([...CATALOG_TYPES].sort())
   })

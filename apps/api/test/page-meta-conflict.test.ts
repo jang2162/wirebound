@@ -158,7 +158,11 @@ describe('PATCH …/pages/:pageId — 고치기 전 값(base)', () => {
       const other = await createMenuNode(ctx, owner.cookie, project.id, { title: '다른 메뉴' })
       const message = '순서 · 메뉴 이동은 바탕(base)과 함께 보낼 수 없습니다 — 따로 보내십시오'
 
-      const reordered = await patch(ctx, project.id, page.id, owner.cookie, { title: '새 제목', sortOrder: 0, base: { title: '처음 제목' } })
+      const reordered = await patch(ctx, project.id, page.id, owner.cookie, {
+        title: '새 제목',
+        sortOrder: 0,
+        base: { title: '처음 제목' },
+      })
       expect(reordered.statusCode).toBe(400)
       expect(reordered.json().error.issues).toEqual([{ path: 'base', message }])
 

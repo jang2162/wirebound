@@ -5,7 +5,11 @@ import { adoptManifest, installRuntime, WB_RUNTIME_GLOBAL } from '@wirebound/the
 
 const def = Sdk.defineTheme({ manifest: { id: 't', name: 't', version: '1.0.0', sdk: '^1.0.0', tokens: { items: {} } }, views: {} })
 let handle: ReturnType<typeof installRuntime> | null = null
-afterEach(() => { handle?.uninstall(); handle = null; vi.restoreAllMocks() })
+afterEach(() => {
+  handle?.uninstall()
+  handle = null
+  vi.restoreAllMocks()
+})
 
 describe('installRuntime', () => {
   it('전역에 react · jsxRuntime · sdk · register 를 세운다 — sdk 는 이 패키지 자신이다', () => {
@@ -27,7 +31,8 @@ describe('installRuntime', () => {
     handle = installRuntime()
     const rt = (globalThis as any)[WB_RUNTIME_GLOBAL]
     const other = { ...def }
-    rt.register(def); rt.register(other)
+    rt.register(def)
+    rt.register(other)
     expect(handle.take()).toBe(other)
     expect(warn).toHaveBeenCalledTimes(1)
   })
@@ -63,12 +68,16 @@ describe('installRuntime', () => {
     expect(warn.mock.calls).toEqual([['테마 번들 스크립트 밖에서 온 등록을 버렸습니다']])
   })
   it('uninstall 은 전역을 걷는다', () => {
-    handle = installRuntime(); handle.uninstall(); handle = null
+    handle = installRuntime()
+    handle.uninstall()
+    handle = null
     expect(WB_RUNTIME_GLOBAL in globalThis).toBe(false)
   })
   it('일반 스크립트가 전역을 통해 등록한다 — theme.js 의 모양', () => {
     handle = installRuntime()
-    new Function(`globalThis.${WB_RUNTIME_GLOBAL}.register(globalThis.${WB_RUNTIME_GLOBAL}.sdk.defineTheme({ manifest: { id: 's', name: 's', version: '1.0.0', sdk: '^1.0.0', tokens: { items: {} } }, views: {} }))`)()
+    new Function(
+      `globalThis.${WB_RUNTIME_GLOBAL}.register(globalThis.${WB_RUNTIME_GLOBAL}.sdk.defineTheme({ manifest: { id: 's', name: 's', version: '1.0.0', sdk: '^1.0.0', tokens: { items: {} } }, views: {} }))`,
+    )()
     expect(handle.take()?.manifest.id).toBe('s')
   })
 })
@@ -85,7 +94,10 @@ describe('adoptManifest', () => {
   const views = { Text: () => null } as unknown as Sdk.ThemeDefinition['views']
 
   it('id · 판이 같으면 서버 manifest 를 끼운다 — 뷰는 번들 것, components 가 달라도 서버 것', () => {
-    const bundled = { manifest: { ...server, components: { Card: { variants: [{ id: 'plain', label: '보통' }], defaultVariant: 'plain' } } }, views }
+    const bundled = {
+      manifest: { ...server, components: { Card: { variants: [{ id: 'plain', label: '보통' }], defaultVariant: 'plain' } } },
+      views,
+    }
     const result = adoptManifest(bundled as Sdk.ThemeDefinition, server)
     expect(result).toEqual({ ok: true, definition: { manifest: server, views } })
     expect(result.ok && result.definition.manifest).toBe(server)

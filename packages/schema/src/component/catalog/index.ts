@@ -4,9 +4,7 @@ import { ButtonDef, LinkDef } from './action'
 import { KeyValueDef, ListDef, TreeDef } from './data'
 import { DividerDef, MediaDef, PlaceholderDef, TextDef } from './document'
 import { EntryFormDef, FieldDef, SearchFormDef } from './input'
-import {
-  CardDef, FlexDef, GridDef, PageDef, SectionDef, SlotDef, StateCaseDef, StateSwitchDef, TabsDef,
-} from './structure'
+import { CardDef, FlexDef, GridDef, PageDef, SectionDef, SlotDef, StateCaseDef, StateSwitchDef, TabsDef } from './structure'
 
 export * from './action'
 export * from './data'
@@ -20,11 +18,27 @@ export * from './structure'
  * 설치된 것을 보려면 `listComponents()`를 써라. 둘은 다른 질문이다.
  */
 export const CATALOG_DEFS: readonly ComponentDef[] = [
-  PageDef, SlotDef, SectionDef, FlexDef, GridDef, CardDef, TabsDef, StateSwitchDef, StateCaseDef,
-  ListDef, TreeDef, KeyValueDef,
-  SearchFormDef, EntryFormDef, FieldDef,
-  ButtonDef, LinkDef,
-  TextDef, MediaDef, DividerDef, PlaceholderDef,
+  PageDef,
+  SlotDef,
+  SectionDef,
+  FlexDef,
+  GridDef,
+  CardDef,
+  TabsDef,
+  StateSwitchDef,
+  StateCaseDef,
+  ListDef,
+  TreeDef,
+  KeyValueDef,
+  SearchFormDef,
+  EntryFormDef,
+  FieldDef,
+  ButtonDef,
+  LinkDef,
+  TextDef,
+  MediaDef,
+  DividerDef,
+  PlaceholderDef,
 ]
 
 export const CATALOG_TYPES: readonly string[] = CATALOG_DEFS.map((def) => def.type)

@@ -51,10 +51,15 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
     for (let m = 0; m < MENUS; m += 1) {
       const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: `메뉴 ${m + 1}` })).body.id as string
       menuIds.push(menu)
-      for (let p = 0; p < 2; p += 1) pageIds.push((await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu, title: `페이지 ${m + 1}-${p + 1}` })).body.id)
+      for (let p = 0; p < 2; p += 1)
+        pageIds.push((await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu, title: `페이지 ${m + 1}-${p + 1}` })).body.id)
     }
     const P = `/projects/${project.id}/pages/${pageIds[0]}`
-    const ops = Array.from({ length: NODES }, (_, i) => ({ op: 'add', path: `/root/children/${i}`, value: { id: nodeId(i), type: 'Text', props: { content: `글 ${i + 1}` } } }))
+    const ops = Array.from({ length: NODES }, (_, i) => ({
+      op: 'add',
+      path: `/root/children/${i}`,
+      value: { id: nodeId(i), type: 'Text', props: { content: `글 ${i + 1}` } },
+    }))
     const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return { projectId: project.id, P, menuIds, pageIds }
@@ -68,8 +73,10 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
     return { page, close: () => context.close() }
   }
 
-  const structureRow = (page: Page, id: string): Locator => page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"]`)
-  const menuRow = (page: Page, id: string): Locator => page.locator(`.wb-shell-region[aria-label="메뉴·페이지 트리"] [data-tree-row][data-tree-id="${id}"]`)
+  const structureRow = (page: Page, id: string): Locator =>
+    page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"]`)
+  const menuRow = (page: Page, id: string): Locator =>
+    page.locator(`.wb-shell-region[aria-label="메뉴·페이지 트리"] [data-tree-row][data-tree-id="${id}"]`)
 
   /**
    * 줄을 보이게 굴리고 그 줄의 행동 단추를 연다(여는 누름이 그 줄을 고른다 — `panels/tree-row-actions.tsx`). 줄 행동은 마우스가 올라온 줄에서
@@ -96,7 +103,12 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
     })
 
   const selectedRow = (page: Page): Promise<string | null> =>
-    page.evaluate(() => document.querySelector('.wb-shell-region[aria-label="구조 트리"] [data-tree-row].wb-shell-tree-row-picked')?.getAttribute('data-tree-id') ?? null)
+    page.evaluate(
+      () =>
+        document
+          .querySelector('.wb-shell-region[aria-label="구조 트리"] [data-tree-row].wb-shell-tree-row-picked')
+          ?.getAttribute('data-tree-id') ?? null,
+    )
 
   it('키 — 구조 트리 줄 `…`: ↓ 는 항목 사이 · ← 는 선택을 안 옮김 · Escape 는 닫고 단추로 · Delete 는 메뉴가 받는다', async () => {
     const { P } = await fixture('portal-keys')
@@ -116,9 +128,20 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
       await toggle.click()
       await page.getByRole('menu').waitFor()
       await page.keyboard.press('Delete')
-      const ids = await poll('Delete 가 서버에 닿거나 안 닿는다', () => serverIds(P), (list) => !list.includes(target), 3_000).catch(() => serverIds(P))
+      const ids = await poll(
+        'Delete 가 서버에 닿거나 안 닿는다',
+        () => serverIds(P),
+        (list) => !list.includes(target),
+        3_000,
+      ).catch(() => serverIds(P))
 
-      expect({ moved: first.length > 0 && second.length > 0 && second !== first, afterLeft, afterEscape, deleted: !ids.includes(target), menus: await page.getByRole('menu').count() }).toEqual({
+      expect({
+        moved: first.length > 0 && second.length > 0 && second !== first,
+        afterLeft,
+        afterEscape,
+        deleted: !ids.includes(target),
+        menus: await page.getByRole('menu').count(),
+      }).toEqual({
         moved: true,
         afterLeft: { selected: target, menus: 1 },
         afterEscape: { menus: 0, focus: toggleName, selected: target },
@@ -197,7 +220,12 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
       const afterDisabled = await page.getByRole('menu').count()
       // 위 줄을 누른다 — 목록은 아래로 열려 아래 줄들을 덮는다(덮인 줄은 사람도 못 누른다).
       await structureRow(page, nodeId(7)).locator('button').first().click()
-      expect({ disabledCount: disabledCount > 0, afterDisabled, menus: await page.getByRole('menu').count(), selected: await selectedRow(page) }).toEqual({
+      expect({
+        disabledCount: disabledCount > 0,
+        afterDisabled,
+        menus: await page.getByRole('menu').count(),
+        selected: await selectedRow(page),
+      }).toEqual({
         disabledCount: true,
         afterDisabled: 1,
         menus: 0,
@@ -272,7 +300,14 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
       await openRow(structureRow(page, last), /더 보기$/, 'end')
       results.blockLast = await page.locator('.wb-shell-action-menu-body').getAttribute('data-block')
       await page.getByRole('menuitem', { name: '삭제', exact: true }).click()
-      results.structureDelete = !(await poll('구조 «삭제»', () => serverIds(P), (list) => !list.includes(last), 5_000)).includes(last)
+      results.structureDelete = !(
+        await poll(
+          '구조 «삭제»',
+          () => serverIds(P),
+          (list) => !list.includes(last),
+          5_000,
+        )
+      ).includes(last)
 
       // 메뉴 트리 맨 아래 페이지 줄 `…` «삭제» → «정말 삭제합니까?» → 서버에서 빠진다(페이지가 든 메뉴의 «삭제»는 꺼져 있다).
       const doomed = pageIds[pageIds.length - 1]!
@@ -280,7 +315,10 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
       await openRow(menuRow(page, doomed), /더 보기$/, 'end')
       await page.getByRole('menuitem', { name: '삭제', exact: true }).click()
       await page.getByRole('button', { name: '정말 삭제합니까?' }).click()
-      const tree = async () => ((await call('GET', `/projects/${projectId}/tree`)).body.menu as { pages: { id: string }[] }[]).flatMap((menu) => menu.pages.map((one) => one.id))
+      const tree = async () =>
+        ((await call('GET', `/projects/${projectId}/tree`)).body.menu as { pages: { id: string }[] }[]).flatMap((menu) =>
+          menu.pages.map((one) => one.id),
+        )
       results.menuDelete = !(await poll('페이지 «삭제»', tree, (ids) => !ids.includes(doomed), 5_000)).includes(doomed)
 
       // 메뉴 트리 줄 `+` «페이지 추가» → 이름 칸이 선다.
@@ -292,7 +330,11 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
 
       // 구조 트리 머리 `+` «페이지에 추가» → 고르개가 선다.
       await page.waitForTimeout(600)
-      await page.locator('.wb-shell-region[aria-label="구조 트리"]').getByRole('button', { name: /추가$/ }).first().click()
+      await page
+        .locator('.wb-shell-region[aria-label="구조 트리"]')
+        .getByRole('button', { name: /추가$/ })
+        .first()
+        .click()
       await page.getByRole('menuitem', { name: '페이지에 추가', exact: true }).click()
       results.picker = (await page.locator('.wb-shell-region[aria-label="구조 트리"] [data-wb-holds-keys]').count()) > 0
       await page.keyboard.press('Escape')

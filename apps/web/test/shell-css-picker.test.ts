@@ -296,9 +296,7 @@ describe('고르개는 감싼다 — `flex-basis: 100%`와 `flex-wrap`의 짝', 
   it('3-b · `ONE_LINE`의 면제는 아직 필요한 것만 남는다', () => {
     // 면제는 조용히 낡는다 — 그 클래스가 flex 상자를 그만두거나 감싸기를 갖게 되면 이 줄은
     // 아무것도 면제하지 않으면서 "여기는 한 줄이 옳다"고 계속 말한다. 그 죽은 줄을 문다.
-    const stale = ONE_LINE.filter(
-      (entry) => !isFlexBox(entry.name) || resolvedWrap(entry.name) === 'wrap',
-    ).map((entry) => entry.name)
+    const stale = ONE_LINE.filter((entry) => !isFlexBox(entry.name) || resolvedWrap(entry.name) === 'wrap').map((entry) => entry.name)
 
     expect(stale).toEqual([])
   })

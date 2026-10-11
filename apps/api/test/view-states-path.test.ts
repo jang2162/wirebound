@@ -9,16 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { PatchOp } from '@wirebound/schema'
-import {
-  addMember,
-  createMenuNode,
-  createPage,
-  createProject,
-  resetRealData,
-  signup,
-  withRealApi,
-  type RealApiContext,
-} from './helpers'
+import { addMember, createMenuNode, createPage, createProject, resetRealData, signup, withRealApi, type RealApiContext } from './helpers'
 import { WsProbe, joinRoom, locksWith } from './ws-client'
 
 beforeEach(resetRealData)
@@ -44,7 +35,8 @@ async function answerOf(probe: WsProbe, clientOpId: string): Promise<Record<stri
   const deadline = Date.now() + 5_000
   while (Date.now() < deadline) {
     const frame = probe.received.find(
-      (entry) => (entry.type === 'patch-ack' || entry.type === 'patch-error') && (entry as { clientOpId?: string }).clientOpId === clientOpId,
+      (entry) =>
+        (entry.type === 'patch-ack' || entry.type === 'patch-error') && (entry as { clientOpId?: string }).clientOpId === clientOpId,
     )
     if (frame !== undefined) return frame as unknown as Record<string, unknown>
     if (probe.closeInfo !== null) return { type: 'closed', ...probe.closeInfo }
@@ -98,7 +90,10 @@ type Board = Awaited<ReturnType<typeof board>>
 
 async function patch(ctx: RealApiContext, fx: Board, who: Board['bora'], baseSeq: number, ops: PatchOp[]) {
   const res = await ctx.app.inject({ method: 'PATCH', url: `${fx.base}/ops`, cookies: who.cookie, payload: { baseSeq, ops } })
-  return { status: res.statusCode, body: res.json() as { seq?: number; inverse?: PatchOp[]; error?: { code?: string; issues?: unknown[] } } }
+  return {
+    status: res.statusCode,
+    body: res.json() as { seq?: number; inverse?: PatchOp[]; error?: { code?: string; issues?: unknown[] } },
+  }
 }
 
 async function saved(ctx: RealApiContext, fx: Board): Promise<{ viewStates?: unknown; root: { children?: Array<{ id: string }> } }> {
@@ -255,10 +250,14 @@ describe('상태 목록 — 잠금 판정(Review Focus 1)', () => {
       expect(doc.root.children?.map((child) => child.id)).toEqual(['n_a', 'n_b'])
 
       // 잡히지 않은 노드를 지우는 같은 꼴의 묶음은 지나간다 — 막은 것이 목록 편집이 아니라 노드 연산이다.
-      expect((await patch(ctx, fx, fx.bora, 1, [
-        { op: 'add', path: '/viewStates', value: [ADMIN] },
-        { op: 'remove', path: '/root/children/0' },
-      ])).status).toBe(200)
+      expect(
+        (
+          await patch(ctx, fx, fx.bora, 1, [
+            { op: 'add', path: '/viewStates', value: [ADMIN] },
+            { op: 'remove', path: '/root/children/0' },
+          ])
+        ).status,
+      ).toBe(200)
     })
   }, 30_000)
 })

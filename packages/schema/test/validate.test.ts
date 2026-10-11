@@ -1,14 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
 import type { LayoutDocument, PageDocument } from '../src/node'
-import {
-  ISSUE_SEVERITY,
-  assertValidLayout,
-  assertValidPage,
-  partitionIssues,
-  validateLayout,
-  validatePage,
-} from '../src/validate'
+import { ISSUE_SEVERITY, assertValidLayout, assertValidPage, partitionIssues, validateLayout, validatePage } from '../src/validate'
 
 beforeAll(() => {
   installCatalog()
@@ -39,9 +32,7 @@ describe('validatePage', () => {
       type: 'Page',
       children: [{ id: 'n_000000000002', type: 'Nope' }],
     })
-    expect(validatePage(doc)).toContainEqual(
-      expect.objectContaining({ code: 'unknown-type', nodeId: 'n_000000000002' }),
-    )
+    expect(validatePage(doc)).toContainEqual(expect.objectContaining({ code: 'unknown-type', nodeId: 'n_000000000002' }))
   })
 
   it('props가 스키마에 맞지 않으면 invalid-props', () => {
@@ -50,9 +41,7 @@ describe('validatePage', () => {
       type: 'Page',
       children: [{ id: 'n_000000000002', type: 'List', props: { items: -1 } }],
     })
-    expect(validatePage(doc)).toContainEqual(
-      expect.objectContaining({ code: 'invalid-props', nodeId: 'n_000000000002' }),
-    )
+    expect(validatePage(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-props', nodeId: 'n_000000000002' }))
   })
 
   it('자식을 담지 못하는 컴포넌트에 자식이 있으면 children-not-allowed', () => {
@@ -67,9 +56,7 @@ describe('validatePage', () => {
         },
       ],
     })
-    expect(validatePage(doc)).toContainEqual(
-      expect.objectContaining({ code: 'children-not-allowed', nodeId: 'n_000000000002' }),
-    )
+    expect(validatePage(doc)).toContainEqual(expect.objectContaining({ code: 'children-not-allowed', nodeId: 'n_000000000002' }))
   })
 
   it('id가 중복되면 duplicate-id', () => {
@@ -81,9 +68,7 @@ describe('validatePage', () => {
         { id: 'n_000000000002', type: 'Text' },
       ],
     })
-    expect(validatePage(doc)).toContainEqual(
-      expect.objectContaining({ code: 'duplicate-id', nodeId: 'n_000000000002' }),
-    )
+    expect(validatePage(doc)).toContainEqual(expect.objectContaining({ code: 'duplicate-id', nodeId: 'n_000000000002' }))
   })
 
   it('페이지에 Slot이 있으면 slot-count', () => {
@@ -102,7 +87,12 @@ describe('validatePage', () => {
       children: [
         { id: 'n_000000000002', type: 'List', alias: '회원 목록', props: { items: -1 } },
         { id: 'n_000000000003', type: 'List', props: { items: -1 } },
-        { id: 'n_000000000004', type: 'Divider', alias: '구분선', children: [{ id: 'n_000000000005', type: 'Text', props: { content: 'x' } }] },
+        {
+          id: 'n_000000000004',
+          type: 'Divider',
+          alias: '구분선',
+          children: [{ id: 'n_000000000005', type: 'Text', props: { content: 'x' } }],
+        },
       ],
     })
     const issues = validatePage(doc)
@@ -301,12 +291,7 @@ describe('ValidationIssue.severity', () => {
     const warnings = Object.entries(ISSUE_SEVERITY)
       .filter(([, severity]) => severity === 'warning')
       .map(([code]) => code)
-    expect(warnings).toEqual([
-      'ignored-variant',
-      'missing-interaction-target',
-      'invalid-interaction-target',
-      'invalid-interaction-prop',
-    ])
+    expect(warnings).toEqual(['ignored-variant', 'missing-interaction-target', 'invalid-interaction-target', 'invalid-interaction-prop'])
   })
 
   it('그 밖의 코드는 전부 error다', () => {

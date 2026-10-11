@@ -62,7 +62,9 @@ describe('metaConflict — 409 에서 그 칸의 지금 값을 읽는다', () =>
 
   it('다른 칸 · 다른 코드 · 코드 없는 409 · 409 가 아닌 것 · 지금 값이 없는 것은 충돌이 아니다', () => {
     expect(metaConflict(new ApiError(409, 'conflict', '…', [issue('title', '밥')]), 'description')).toBeNull()
-    expect(metaConflict(new ApiError(409, 'conflict', '…', [issue('description', '밥', 'idempotency-key-reused')]), 'description')).toBeNull()
+    expect(
+      metaConflict(new ApiError(409, 'conflict', '…', [issue('description', '밥', 'idempotency-key-reused')]), 'description'),
+    ).toBeNull()
     expect(metaConflict(new ApiError(409, 'conflict', '…'), 'description')).toBeNull()
     expect(metaConflict(new ApiError(403, 'forbidden', '…', [issue('description', '밥')]), 'description')).toBeNull()
     expect(metaConflict(new ApiError(409, 'conflict', '…', [issue('description', undefined)]), 'description')).toBeNull()

@@ -42,7 +42,8 @@ describe('POST /api/auth/login', () => {
     await withApi(async (ctx) => {
       await signup(ctx, 계정)
       const res = await ctx.app.inject({
-        method: 'POST', url: '/api/auth/login',
+        method: 'POST',
+        url: '/api/auth/login',
         payload: { email: 'signup@example.com', password: 'password1234' },
       })
       expect(res.statusCode).toBe(200)
@@ -59,7 +60,8 @@ describe('POST /api/auth/login', () => {
       await signup(ctx, 계정)
       await setInstanceAdmin(ctx.db, 'signup@example.com', true)
       const res = await ctx.app.inject({
-        method: 'POST', url: '/api/auth/login',
+        method: 'POST',
+        url: '/api/auth/login',
         payload: { email: 'signup@example.com', password: 'password1234' },
       })
       expect(res.statusCode).toBe(200)
@@ -71,7 +73,8 @@ describe('POST /api/auth/login', () => {
     await withApi(async (ctx) => {
       await signup(ctx, 계정)
       const res = await ctx.app.inject({
-        method: 'POST', url: '/api/auth/login',
+        method: 'POST',
+        url: '/api/auth/login',
         payload: { email: 'SIGNUP@example.COM', password: 'password1234' },
       })
       expect(res.statusCode).toBe(200)
@@ -85,7 +88,8 @@ describe('POST /api/auth/login', () => {
     await withApi(async (ctx) => {
       await signup(ctx, 계정)
       const res = await ctx.app.inject({
-        method: 'POST', url: '/api/auth/login',
+        method: 'POST',
+        url: '/api/auth/login',
         payload: { email: 'signup@example.com', password: 'password1234' },
       })
       const cookie = res.cookies.find((c) => c.name === 'wb_session')
@@ -98,7 +102,8 @@ describe('POST /api/auth/login', () => {
     await withApi(async (ctx) => {
       await signup(ctx, 계정)
       const res = await ctx.app.inject({
-        method: 'POST', url: '/api/auth/login',
+        method: 'POST',
+        url: '/api/auth/login',
         payload: { email: 'signup@example.com', password: 'password1234' },
       })
       expect(Object.keys(res.json()).sort()).toEqual(['email', 'id', 'isInstanceAdmin', 'name'])
@@ -136,7 +141,8 @@ describe('POST /api/auth/login', () => {
   it('선언되지 않은 키를 무시하지 않고 400을 낸다', async () => {
     await withApi(async ({ app }) => {
       const res = await app.inject({
-        method: 'POST', url: '/api/auth/login',
+        method: 'POST',
+        url: '/api/auth/login',
         payload: { email: 'signup@example.com', password: 'password1234', role: 'owner' },
       })
       expect(res.statusCode).toBe(400)
@@ -184,11 +190,13 @@ describe('POST /api/auth/logout', () => {
       // 픽스처가 세션 하나를 만들고(로그인), 아래 로그인 둘이 둘을 더한다 = 셋.
       await signup(ctx, 계정)
       const first = await ctx.app.inject({
-        method: 'POST', url: '/api/auth/login',
+        method: 'POST',
+        url: '/api/auth/login',
         payload: { email: 'signup@example.com', password: 'password1234' },
       })
       const second = await ctx.app.inject({
-        method: 'POST', url: '/api/auth/login',
+        method: 'POST',
+        url: '/api/auth/login',
         payload: { email: 'signup@example.com', password: 'password1234' },
       })
       const tokenA = first.cookies.find((c) => c.name === 'wb_session')!.value
@@ -224,7 +232,8 @@ describe('이미 있는 계정은 그대로 쓴다', () => {
       const { user } = await signup(ctx, 계정)
 
       const login = await ctx.app.inject({
-        method: 'POST', url: '/api/auth/login',
+        method: 'POST',
+        url: '/api/auth/login',
         payload: { email: 'signup@example.com', password: 'password1234' },
       })
       expect(login.statusCode).toBe(200)

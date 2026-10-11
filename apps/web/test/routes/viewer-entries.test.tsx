@@ -43,8 +43,24 @@ const DOC: PageDocument = pageDoc({
 
 /** 하나는 **내 글**이다(하네스의 사용자 `u-1`) — 작성자에게만 서는 «수정»이 역할을 보는지 재려고. */
 const COMMENTS: Comment[] = [
-  { id: 'c-1', nodeId: 'n-card', body: '카드 문구 확인', authorId: 'u-1', authorName: '테스터', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' },
-  { id: 'c-2', nodeId: 'n-btn', body: '버튼 위치', authorId: 'u-2', authorName: '밥', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' },
+  {
+    id: 'c-1',
+    nodeId: 'n-card',
+    body: '카드 문구 확인',
+    authorId: 'u-1',
+    authorName: '테스터',
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z',
+  },
+  {
+    id: 'c-2',
+    nodeId: 'n-btn',
+    body: '버튼 위치',
+    authorId: 'u-2',
+    authorName: '밥',
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z',
+  },
 ]
 
 /** 탭 하나의 저장소 — 새로고침은 같은 저장소 위에 새 문서다(`page-meta-conflict.test.tsx`의 것과 같은 작은 판). */
@@ -236,7 +252,12 @@ describe('viewer 의 에디터 — 새로고침에 되살아나는 칸', () => {
   it('코멘트 — 강등 뒤 새로고침에 되살린 수정 상자가 viewer 에게 안 서고 본문이 보인다. 다시 editor 면 고치던 글이 돌아온다', async () => {
     const session = new MemoryStorage()
     const shared = new MemoryStorage()
-    const withStore = { draftStore: openDraftStore(() => session, () => shared) }
+    const withStore = {
+      draftStore: openDraftStore(
+        () => session,
+        () => shared,
+      ),
+    }
     const editing = (): HTMLTextAreaElement | null =>
       within(screen.getByRole('tabpanel')).queryByRole('textbox', { name: '코멘트 수정' }) as HTMLTextAreaElement | null
 
@@ -249,7 +270,12 @@ describe('viewer 의 에디터 — 새로고침에 되살아나는 칸', () => {
     cleanup()
 
     // 강등 뒤 새로고침 — 같은 저장소 위에 새 문서.
-    await openAsViewer('새로 연 viewer', { draftStore: openDraftStore(() => session, () => shared) })
+    await openAsViewer('새로 연 viewer', {
+      draftStore: openDraftStore(
+        () => session,
+        () => shared,
+      ),
+    })
     pick('n-card')
     tab('코멘트')
     const panel = screen.getByRole('tabpanel')
@@ -261,12 +287,14 @@ describe('viewer 의 에디터 — 새로고침에 되살아나는 칸', () => {
 
     // 다시 editor — 고치던 글이 돌아온다.
     await openPage(DOC, {
-      draftStore: openDraftStore(() => session, () => shared),
+      draftStore: openDraftStore(
+        () => session,
+        () => shared,
+      ),
       apiOverrides: { getProject: async () => EDITOR, listComments: async () => COMMENTS },
     })
     pick('n-card')
     tab('코멘트')
     await waitFor(() => expect(editing()?.value).toBe('강등 전에 고치던 글'))
   })
-
 })

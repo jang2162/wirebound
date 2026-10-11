@@ -29,9 +29,7 @@ const DOCUMENT: PageDocument = {
         type: 'Button',
         props: { label: '검색' },
         marker: 1,
-        interactions: [
-          { on: 'click', actions: [{ type: 'setProp', target: 'n_000000000003', prop: 'loading', value: true }] },
-        ],
+        interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_000000000003', prop: 'loading', value: true }] }],
       },
       { id: 'n_000000000003', type: 'List', props: {}, marker: 2 },
     ],

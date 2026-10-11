@@ -35,7 +35,9 @@ function clip(type: 'copy' | 'cut' | 'paste', target: EventTarget, text?: string
   return { written: store.get('text/plain'), prevented: event.defaultPrevented }
 }
 
-function setup(options: { editable?: boolean; canvas?: Document | null; copy?: string | null; cut?: string | null; handles?: boolean } = {}) {
+function setup(
+  options: { editable?: boolean; canvas?: Document | null; copy?: string | null; cut?: string | null; handles?: boolean } = {},
+) {
   const log: string[] = []
   const hook = renderHook(
     (props: { editable: boolean }) =>

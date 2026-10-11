@@ -265,9 +265,7 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
   // 멤버십을 지우지 사용자를 지우지 않는다. 그래도 검사를 두는 이유: payload는 **users 표의
   // 지금 보장보다 오래 산다.** 그 경로가 생기는 날(또는 DB 복구·수동 삭제) 이 자리는
   // 500이 되는데, 그것은 *"사용자가 보낸 것 때문에 서버가 잘못했다고 말하는"* 형태다.
-  const newAuthorIds = [
-    ...new Set(steps.filter((step) => step.kind === 'create-comment').map((step) => step.comment.authorId)),
-  ]
+  const newAuthorIds = [...new Set(steps.filter((step) => step.kind === 'create-comment').map((step) => step.comment.authorId))]
   if (newAuthorIds.length > 0) {
     const found = await countExistingUsers(trx, newAuthorIds)
     const missing = newAuthorIds.filter((id) => !found.includes(id))

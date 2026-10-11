@@ -152,9 +152,7 @@ describe('prepareNodesForPaste', () => {
     expect(nodes[0]!.interactions![0]!.actions[0]!.target).toBe(nodes[1]!.id)
     expect(droppedActions).toBe(1) // src_text 는 붙이는 노드 밖이고 문서에도 없다
     expect(nodes.map((node) => node.id)).toEqual(['new_2', 'new_3'])
-    expect(nodes[0]!.interactions).toEqual([
-      { on: 'click', actions: [{ type: 'setVisible', target: 'new_3', value: true }] },
-    ])
+    expect(nodes[0]!.interactions).toEqual([{ on: 'click', actions: [{ type: 'setVisible', target: 'new_3', value: true }] }])
     // 임시 뿌리 몫 1 + 노드 둘.
     expect(ids.calls()).toBe(3)
   })
@@ -187,10 +185,7 @@ describe('prepareNodesForPaste', () => {
 
     const both = prepareNodesForPaste([BUTTON], ALL)
     expect(both.droppedActions).toBe(0)
-    expect(both.nodes[0]!.interactions![0]!.actions.map((action) => action.target)).toEqual([
-      'src_list',
-      'src_text',
-    ])
+    expect(both.nodes[0]!.interactions![0]!.actions.map((action) => action.target)).toEqual(['src_list', 'src_text'])
   })
 
   it('동작이 다 빠진 상호작용은 상호작용째 뺀다 — 남은 상호작용은 그대로', () => {

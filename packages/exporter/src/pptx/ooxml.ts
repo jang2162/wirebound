@@ -178,8 +178,7 @@ const CLR_MAP =
  * 설계서는 문서이지 발표 자료가 아니므로 바탕은 종이색이어야 하고,
  * **받는 쪽마다 다른 색이 나오는 것 자체가** 이 산출물이 피하려는 상태다.
  */
-const WHITE_BACKGROUND =
-  '<p:bg><p:bgPr><a:solidFill><a:schemeClr val="lt1"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>'
+const WHITE_BACKGROUND = '<p:bg><p:bgPr><a:solidFill><a:schemeClr val="lt1"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>'
 
 const SLIDE_MASTER_XML =
   XML_DECL +
@@ -202,12 +201,7 @@ const SLIDE_LAYOUT_XML =
   '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>' +
   '</p:sldLayout>'
 
-const NOTES_MASTER_XML =
-  XML_DECL +
-  `<p:notesMaster ${MAIN_NS}>` +
-  `<p:cSld>${EMPTY_SP_TREE}</p:cSld>` +
-  CLR_MAP +
-  '</p:notesMaster>'
+const NOTES_MASTER_XML = XML_DECL + `<p:notesMaster ${MAIN_NS}>` + `<p:cSld>${EMPTY_SP_TREE}</p:cSld>` + CLR_MAP + '</p:notesMaster>'
 
 /**
  * 파트 목록을 만든다. **슬라이드 순서가 그대로 발표 순서다.**
@@ -237,13 +231,9 @@ export function pptxPackage(slides: readonly SlideSource[]): PptxPart[] {
       XML_DECL +
       `<p:presentation ${MAIN_NS}>` +
       '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>' +
-      (notesMasterRid === null
-        ? ''
-        : `<p:notesMasterIdLst><p:notesMasterId r:id="${notesMasterRid}"/></p:notesMasterIdLst>`) +
+      (notesMasterRid === null ? '' : `<p:notesMasterIdLst><p:notesMasterId r:id="${notesMasterRid}"/></p:notesMasterIdLst>`) +
       '<p:sldIdLst>' +
-      slides
-        .map((_slide, index) => `<p:sldId id="${256 + index}" r:id="${slideRid(index)}"/>`)
-        .join('') +
+      slides.map((_slide, index) => `<p:sldId id="${256 + index}" r:id="${slideRid(index)}"/>`).join('') +
       '</p:sldIdLst>' +
       `<p:sldSz cx="${SLIDE_WIDTH}" cy="${SLIDE_HEIGHT}"/>` +
       `<p:notesSz cx="${NOTES_WIDTH}" cy="${NOTES_HEIGHT}"/>` +
@@ -254,12 +244,8 @@ export function pptxPackage(slides: readonly SlideSource[]): PptxPart[] {
     path: 'ppt/_rels/presentation.xml.rels',
     content: relationships([
       relationship('rId1', 'slideMaster', 'slideMasters/slideMaster1.xml'),
-      ...(notesMasterRid === null
-        ? []
-        : [relationship(notesMasterRid, 'notesMaster', 'notesMasters/notesMaster1.xml')]),
-      ...slides.map((_slide, index) =>
-        relationship(slideRid(index), 'slide', `slides/slide${index + 1}.xml`),
-      ),
+      ...(notesMasterRid === null ? [] : [relationship(notesMasterRid, 'notesMaster', 'notesMasters/notesMaster1.xml')]),
+      ...slides.map((_slide, index) => relationship(slideRid(index), 'slide', `slides/slide${index + 1}.xml`)),
     ]),
   })
 
@@ -275,9 +261,7 @@ export function pptxPackage(slides: readonly SlideSource[]): PptxPart[] {
   parts.push({ path: 'ppt/slideLayouts/slideLayout1.xml', content: SLIDE_LAYOUT_XML })
   parts.push({
     path: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
-    content: relationships([
-      relationship('rId1', 'slideMaster', '../slideMasters/slideMaster1.xml'),
-    ]),
+    content: relationships([relationship('rId1', 'slideMaster', '../slideMasters/slideMaster1.xml')]),
   })
 
   parts.push({ path: SLIDE_MASTER_THEME, content: THEME_XML })
@@ -302,12 +286,8 @@ export function pptxPackage(slides: readonly SlideSource[]): PptxPart[] {
       path: `ppt/slides/_rels/slide${number}.xml.rels`,
       content: relationships([
         relationship('rId1', 'slideLayout', '../slideLayouts/slideLayout1.xml'),
-        ...(slide.notes === undefined
-          ? []
-          : [relationship('rId2', 'notesSlide', `../notesSlides/notesSlide${number}.xml`)]),
-        ...(slide.media === undefined
-          ? []
-          : [relationship(SLIDE_IMAGE_RID, 'image', `../media/${slide.media.fileName}`)]),
+        ...(slide.notes === undefined ? [] : [relationship('rId2', 'notesSlide', `../notesSlides/notesSlide${number}.xml`)]),
+        ...(slide.media === undefined ? [] : [relationship(SLIDE_IMAGE_RID, 'image', `../media/${slide.media.fileName}`)]),
       ]),
     })
 

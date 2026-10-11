@@ -81,10 +81,7 @@ describe('가져오기 계획', () => {
     expect(plan.comments.map((comment) => comment.nodeId)).toEqual(['new_3', 'new_2'])
     // 옮긴 값이 결과 문서 안의 노드를 실제로 가리킨다.
     expect(plan.comments.every((comment) => ids.has(comment.nodeId))).toBe(true)
-    expect(plan.comments.map((comment) => comment.body)).toEqual([
-      '목록은 10개씩',
-      '검색 조건은 AND 결합',
-    ])
+    expect(plan.comments.map((comment) => comment.body)).toEqual(['목록은 10개씩', '검색 조건은 AND 결합'])
   })
 
   it('상호작용 target도 함께 옮겨지고, 트리 밖 참조는 그대로다', () => {
@@ -92,10 +89,7 @@ describe('가져오기 계획', () => {
     const form = plan.document.root.children?.[0]
     const actions = form?.interactions?.[0]?.actions ?? []
 
-    expect(actions.map((action) => ('target' in action ? action.target : null))).toEqual([
-      'new_3',
-      'page:other',
-    ])
+    expect(actions.map((action) => ('target' in action ? action.target : null))).toEqual(['new_3', 'page:other'])
   })
 
   it('번호는 문서에 그대로 살아 돌아온다', () => {
@@ -124,11 +118,7 @@ describe('가져오기 계획', () => {
   })
 
   it('파일의 트리에 없는 노드를 가리킨 코멘트는 버리지 않고 넣으며, 갈라 세운다', () => {
-    const plan = planPageImport(
-      DOCUMENT,
-      [...COMMENTS, { nodeId: 'file_gone', body: '지워진 노드에 붙어 있던 말' }],
-      counter(),
-    )
+    const plan = planPageImport(DOCUMENT, [...COMMENTS, { nodeId: 'file_gone', body: '지워진 노드에 붙어 있던 말' }], counter())
 
     // **본문이 사라지지 않는다.** 버리면 사용자가 적은 것이 소리 없이 없어진다.
     expect(plan.comments.map((comment) => comment.body)).toContain('지워진 노드에 붙어 있던 말')
@@ -173,9 +163,7 @@ describe('가져오기 계획', () => {
     const ids = idsOf(plan.document)
 
     expect(new Set(ids).size).toBeLessThan(ids.length)
-    expect(partitionIssues(validatePage(plan.document)).errors.map((issue) => issue.code)).toContain(
-      'duplicate-id',
-    )
+    expect(partitionIssues(validatePage(plan.document)).errors.map((issue) => issue.code)).toContain('duplicate-id')
   })
 
   it('D8 — 검증을 리매핑 전 문서로 하면 이슈가 파일의 id를 가리킨다', () => {
@@ -190,9 +178,7 @@ describe('가져오기 계획', () => {
 
     // 같은 이슈이고 같은 자리인데 **가리키는 id가 다르다.** 사용자에게 남는 것은 파일이므로
     // 파일의 id를 말해야 한다.
-    expect(after.map((issue) => `${issue.code} ${issue.path}`)).toEqual(
-      before.map((issue) => `${issue.code} ${issue.path}`),
-    )
+    expect(after.map((issue) => `${issue.code} ${issue.path}`)).toEqual(before.map((issue) => `${issue.code} ${issue.path}`))
     expect(before.map((issue) => issue.nodeId)).toContain('file_odd')
     expect(after.map((issue) => issue.nodeId)).not.toContain('file_odd')
   })
@@ -263,9 +249,7 @@ describe('가져오기 게이트 — 서버와 화면이 같은 함수를 부른
         root: {
           id: 'file_root',
           type: 'Page',
-          children: [
-            { id: 'file_field', type: 'Field', props: { label: '이름', control: 'text' }, variant: 'x' },
-          ],
+          children: [{ id: 'file_field', type: 'Field', props: { label: '이름', control: 'text' }, variant: 'x' }],
         },
       }),
     )
@@ -309,9 +293,7 @@ describe('가져오기 게이트 — 서버와 화면이 같은 함수를 부른
 
 describe('왕복 — 내보낸 것을 다시 가져오면', () => {
   it('id는 바뀌고 구조·본문·번호는 같다', () => {
-    const text = pageJsonText(
-      toPageJson({ page: { title: '회원 목록', description: null }, document: DOCUMENT, comments: COMMENTS }),
-    )
+    const text = pageJsonText(toPageJson({ page: { title: '회원 목록', description: null }, document: DOCUMENT, comments: COMMENTS }))
     const result = readPageJson(text)
     expect(result.status).toBe('read')
     if (result.status !== 'read') return

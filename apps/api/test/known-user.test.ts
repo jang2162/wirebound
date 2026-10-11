@@ -156,7 +156,10 @@ describe('WS 핸드셰이크 — 쿼리의 사용자가 쿠키의 사용자와 �
     const query =
       known === undefined
         ? ''
-        : `?${[known].flat().map((id) => `${KNOWN_USER_QUERY}=${encodeURIComponent(id)}`).join('&')}`
+        : `?${[known]
+            .flat()
+            .map((id) => `${KNOWN_USER_QUERY}=${encodeURIComponent(id)}`)
+            .join('&')}`
     const socket = new WebSocket(`ws://127.0.0.1:${port}/api/projects/${projectId}/ws${query}`, {
       headers: { cookie: `wb_session=${token}` },
     } as never)

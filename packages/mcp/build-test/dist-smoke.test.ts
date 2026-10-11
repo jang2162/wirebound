@@ -114,10 +114,7 @@ beforeAll(async () => {
   repo = mkdtempSync(join(tmpdir(), 'wireb-mcp-smoke-'))
   writeFileSync(join(repo, '.wirebound.json'), `${JSON.stringify({ server: origin, projectId: PROJECT }, null, 2)}\n`)
   credentials = join(repo, 'credentials.json')
-  writeFileSync(
-    credentials,
-    `${JSON.stringify({ version: 1, credentials: [{ server: origin, projectId: PROJECT, token: TOKEN }] })}\n`,
-  )
+  writeFileSync(credentials, `${JSON.stringify({ version: 1, credentials: [{ server: origin, projectId: PROJECT, token: TOKEN }] })}\n`)
 }, 300_000)
 
 afterAll(async () => {
@@ -213,13 +210,7 @@ describe('진짜 클라이언트가 붙어 도구를 부른다', () => {
     const client = await connect()
     try {
       const listed = await client.listTools()
-      expect(listed.tools.map((tool) => tool.name).sort()).toEqual([
-        'add_comment',
-        'get_page',
-        'list_pages',
-        'patch_page',
-        'validate',
-      ])
+      expect(listed.tools.map((tool) => tool.name).sort()).toEqual(['add_comment', 'get_page', 'list_pages', 'patch_page', 'validate'])
       // 인자 스키마가 프로토콜을 건너 그대로 왔는가.
       const get = listed.tools.find((tool) => tool.name === 'get_page')!
       expect((get.inputSchema as { required?: string[] }).required).toEqual(['path'])
@@ -238,9 +229,10 @@ describe('진짜 클라이언트가 붙어 도구를 부른다', () => {
       expect(listed.pages.map((p) => p.path)).toContain('관리자/회원/목록')
 
       // **목록이 낸 경로를 그대로 다음 도구에 넣는다** — 설계서 「스킬」의 흐름이 그 모양이다.
-      const got = JSON.parse(
-        text(await client.callTool({ name: 'get_page', arguments: { path: listed.pages[0]!.path } })),
-      ) as { found: boolean; page: { interactions: { text: string }[] } }
+      const got = JSON.parse(text(await client.callTool({ name: 'get_page', arguments: { path: listed.pages[0]!.path } }))) as {
+        found: boolean
+        page: { interactions: { text: string }[] }
+      }
       expect(got.found).toBe(true)
       // **한국어가 프로토콜을 건너 그대로 왔는가.** 카탈로그가 실제 프로세스에서도 섰는가.
       expect(got.page.interactions[0]!.text).toContain('로딩 상태')

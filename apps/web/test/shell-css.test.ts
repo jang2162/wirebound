@@ -127,9 +127,7 @@ describe('shell.css 누수 검사', () => {
   })
 
   it('@media 안의 위반도 잡는다', () => {
-    const violations = findViolations(
-      `${shellCss}\n@media (min-width: 800px) { .wb-shell-canvas-frame { font-weight: 700; } }\n`,
-    )
+    const violations = findViolations(`${shellCss}\n@media (min-width: 800px) { .wb-shell-canvas-frame { font-weight: 700; } }\n`)
     expect(violations.map((violation) => violation.check)).toContain('wrapper-property')
   })
 })

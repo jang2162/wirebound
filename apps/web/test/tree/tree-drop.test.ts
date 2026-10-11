@@ -114,7 +114,14 @@ it('트리에 없는 것 → null(남이 지운 뒤 다시 받기 전의 창) ·
   expect(menuDropTarget(tree(), menu('m-gone'), menu('m-a'), 'inside')).toBeNull()
   expect(menuDropTarget(tree(), page('p-1'), menu('m-gone'), 'inside')).toBeNull()
   expect(menuDropTarget(tree(), page('p-1'), page('p-gone'), 'after')).toBeNull()
-  expect(menuDropTarget([{ id: 'm-x', title: '깨짐', sortOrder: 0, pages: null, children: null } as unknown as TreeMenuNode], page('p-1'), menu('m-x'), 'inside')).toBeNull()
+  expect(
+    menuDropTarget(
+      [{ id: 'm-x', title: '깨짐', sortOrder: 0, pages: null, children: null } as unknown as TreeMenuNode],
+      page('p-1'),
+      menu('m-x'),
+      'inside',
+    ),
+  ).toBeNull()
 })
 
 describe('띠(dropZone)', () => {

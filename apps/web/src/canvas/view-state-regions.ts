@@ -99,7 +99,12 @@ export function childrenExtent(shown: WbNode, viewState: string | null, find: (i
  * 빈 가지의 자리표 자리 — `chain` 은 뿌리부터 그 영역 바로 위까지의 노드들이다. 영역 앞의 형제 가운데 그려진 것의 아래에(그것을 품은 요소의 폭으로 — 형제가
  * 좁아도 줄 하나를 쓴다), 없으면 영역을 품은 요소의 위에 선다. 투명 노드(영역 · 가지)는 요소가 없어 한 겹씩 올라간다. 그려진 요소가 하나도 없으면 `null`.
  */
-function emptyAnchor(switchNode: WbNode, chain: readonly WbNode[], viewState: string | null, find: (id: string) => Element | null): Rect | null {
+function emptyAnchor(
+  switchNode: WbNode,
+  chain: readonly WbNode[],
+  viewState: string | null,
+  find: (id: string) => Element | null,
+): Rect | null {
   let below: WbNode = switchNode
   for (let index = chain.length - 1; index >= 0; index -= 1) {
     const container = chain[index]!
@@ -184,7 +189,12 @@ export function regionMarks(rendered: PageDocument, viewState: string | null, fi
  * 합(표지와 같은 상자 · 빈 가지면 자리표), 가지는 **지금 그려진 가지**일 때만 그 가지의 자식 합이다(그려지지 않은 가지는 외곽선이 없다 — 그릴 것이 없다).
  * 영역 · 가지가 아니거나 못 잰 판은 `null`.
  */
-export function regionBoxOf(rendered: PageDocument, nodeId: string, viewState: string | null, find: (id: string) => Element | null): Rect | null {
+export function regionBoxOf(
+  rendered: PageDocument,
+  nodeId: string,
+  viewState: string | null,
+  find: (id: string) => Element | null,
+): Rect | null {
   for (const entry of visibleRegions(rendered.root, viewState)) {
     if (entry.switchNode.id === nodeId || entry.shown.id === nodeId) return regionRect(entry, viewState, find)?.rect ?? null
   }

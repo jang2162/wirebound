@@ -79,9 +79,7 @@ export function broadFixture(): PageDocument {
         {
           id: id(),
           type: 'SearchForm',
-          children: [
-            { id: id(), type: 'Field', props: { control: 'select', required: true, label: '등급' } },
-          ],
+          children: [{ id: id(), type: 'Field', props: { control: 'select', required: true, label: '등급' } }],
         },
         {
           id: id(),
@@ -133,8 +131,18 @@ export function stateFixture(): PageDocument {
           id: id(),
           type: 'StateSwitch',
           children: [
-            { id: id(), type: 'StateCase', props: { state: 'default' }, children: [{ id: id(), type: 'Button', props: { label: '보기' } }] },
-            { id: id(), type: 'StateCase', props: { state: 's_admin' }, children: [{ id: id(), type: 'Button', props: { label: '승인' } }] },
+            {
+              id: id(),
+              type: 'StateCase',
+              props: { state: 'default' },
+              children: [{ id: id(), type: 'Button', props: { label: '보기' } }],
+            },
+            {
+              id: id(),
+              type: 'StateCase',
+              props: { state: 's_admin' },
+              children: [{ id: id(), type: 'Button', props: { label: '승인' } }],
+            },
           ],
         },
       ],

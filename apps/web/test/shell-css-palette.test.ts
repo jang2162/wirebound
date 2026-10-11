@@ -232,7 +232,13 @@ describe('팔레트가 실제로 닿는가', () => {
   })
 
   it('대체값을 쓰는 `var(--x, …)`는 아직 없다', () => {
-    const withFallback = [...new Set(variableUses(shellCss).filter((use) => use.hasFallback).map((use) => use.name))]
+    const withFallback = [
+      ...new Set(
+        variableUses(shellCss)
+          .filter((use) => use.hasFallback)
+          .map((use) => use.name),
+      ),
+    ]
 
     expect(
       withFallback,
@@ -279,10 +285,7 @@ describe('팔레트가 실제로 닿는가', () => {
     })
 
     it('팔레트 없는 루트가 `var()`를 쓰기 시작하면 잡는다', () => {
-      const broken = shellCss.replace(
-        /(\.wb-shell-notice \{[^}]*?)color: #1d2530;/,
-        '$1color: var(--wb-shell-ink);',
-      )
+      const broken = shellCss.replace(/(\.wb-shell-notice \{[^}]*?)color: #1d2530;/, '$1color: var(--wb-shell-ink);')
       expect(broken).not.toBe(shellCss)
       expect(ruleBody(broken, 'wb-shell-notice') ?? '').toContain('var(--wb-shell-')
     })
@@ -352,10 +355,7 @@ describe('팔레트가 실제로 닿는가', () => {
 
     it('접두어 없는 변수를 감싸는 상자 밖에 선언하면 7번이 잡는다', () => {
       // `wrapper-variable`은 `WRAPPERS`만 보므로 이 자리를 안 문다(머리말).
-      const stray = shellCss.replace(
-        '.wb-shell-comment-marker {',
-        '.wb-shell-comment-marker {\n  --brand: red;',
-      )
+      const stray = shellCss.replace('.wb-shell-comment-marker {', '.wb-shell-comment-marker {\n  --brand: red;')
       expect(stray, '심을 자리가 사라졌다 — `.wb-shell-comment-marker` 규칙이 없어졌으면 다른 규칙으로 바꿔라').not.toBe(shellCss)
       expect([...declaredVariables(shellCss)].filter((n) => !n.startsWith('--wb-shell-'))).toEqual([])
       expect([...declaredVariables(stray)].filter((n) => !n.startsWith('--wb-shell-'))).toEqual(['--brand'])
@@ -367,9 +367,11 @@ describe('팔레트가 실제로 닿는가', () => {
       const fallback = shellCss.replace('var(--wb-shell-comment)', 'var(--wb-shell-nowhere, #d92d20)')
       expect(fallback, '심을 자리가 사라졌다 — 위 케이스와 같은 자리를 쓴다').not.toBe(shellCss)
       expect(missingNames(fallback)).toEqual([])
-      expect(variableUses(fallback).filter((use) => use.hasFallback).map((use) => use.name)).toEqual([
-        '--wb-shell-nowhere',
-      ])
+      expect(
+        variableUses(fallback)
+          .filter((use) => use.hasFallback)
+          .map((use) => use.name),
+      ).toEqual(['--wb-shell-nowhere'])
     })
   })
 })

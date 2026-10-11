@@ -91,7 +91,10 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
     if (member.status >= 300) throw new Error(`member ${member.status}`)
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return P
   }
@@ -126,7 +129,9 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
     return page.evaluate(() => {
       const doc = (document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement).contentDocument!
       const roots = Array.from(doc.querySelectorAll<HTMLElement>('[data-wb-id]')).filter(
-        (el) => (el.getAttribute('data-wb-id') ?? '').startsWith('wb:preview:') && !(el.parentElement?.closest('[data-wb-id]')?.getAttribute('data-wb-id') ?? '').startsWith('wb:preview:'),
+        (el) =>
+          (el.getAttribute('data-wb-id') ?? '').startsWith('wb:preview:') &&
+          !(el.parentElement?.closest('[data-wb-id]')?.getAttribute('data-wb-id') ?? '').startsWith('wb:preview:'),
       )
       return roots.length === 0 ? null : { opacity: getComputedStyle(roots[0]!).opacity, count: roots.length }
     })
@@ -168,12 +173,20 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
       await page.mouse.move(into.x, into.y, { steps: 8 })
       const inside = { drops: await shownDrops(page), look: await previewLook(page) }
       await page.mouse.move(front.x, front.y, { steps: 8 })
-      const before = { drops: await shownDrops(page), look: await previewLook(page), intxPushed: (await nodeBox(page, 'n_intx')).y - intxBefore.y }
+      const before = {
+        drops: await shownDrops(page),
+        look: await previewLook(page),
+        intxPushed: (await nodeBox(page, 'n_intx')).y - intxBefore.y,
+      }
       const during = { patches: patches.length, rows: await treeRows(page).count() }
       await page.keyboard.press('Escape')
       await page.mouse.up()
       await page.waitForTimeout(300)
-      const cancelled = { look: await previewLook(page), drops: (await shownDrops(page)).length, last: Math.abs((await nodeBox(page, 'n_last')).y - lastBefore.y) <= 0.5 }
+      const cancelled = {
+        look: await previewLook(page),
+        drops: (await shownDrops(page)).length,
+        last: Math.abs((await nodeBox(page, 'n_last')).y - lastBefore.y) <= 0.5,
+      }
 
       expect({
         inside: { at: inside.drops.map((d) => `${d.kind}:${d.at}`), look: inside.look },
@@ -224,13 +237,17 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
       await handle.waitFor()
       const h = (await handle.boundingBox())!
       /** 인라인 `outline` 이 걸린 노드 id 들과 그 값 — 걸린 것이 없으면 `[]`. */
-      const outlined = () => page.evaluate(() => {
-        const doc = (document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement).contentDocument!
-        return Array.from(doc.querySelectorAll<HTMLElement>('[data-wb-id]'))
-          .filter((el) => el.style.outline !== '')
-          .map((el) => `${el.getAttribute('data-wb-id')} ${el.style.outline} ${el.style.outlineOffset}`)
-      })
-      const previewBox = async () => (await shownDrops(page)).map((d) => `${d.kind}:${d.parent}[${d.prev}→${d.next}] ${d.rect.width === 0 && d.rect.height === 0 ? '숨음' : '보임'}`)
+      const outlined = () =>
+        page.evaluate(() => {
+          const doc = (document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement).contentDocument!
+          return Array.from(doc.querySelectorAll<HTMLElement>('[data-wb-id]'))
+            .filter((el) => el.style.outline !== '')
+            .map((el) => `${el.getAttribute('data-wb-id')} ${el.style.outline} ${el.style.outlineOffset}`)
+        })
+      const previewBox = async () =>
+        (await shownDrops(page)).map(
+          (d) => `${d.kind}:${d.parent}[${d.prev}→${d.next}] ${d.rect.width === 0 && d.rect.height === 0 ? '숨음' : '보임'}`,
+        )
 
       await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2)
       await page.mouse.down()
@@ -251,7 +268,10 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
       const cancelled = await outlined()
       expect({ visible, hidden, cancelled }).toEqual({
         visible: { shown: [expect.stringMatching(/보임$/)], outlined: [] },
-        hidden: { shown: ['preview:n_tabs[n_p0→n_p1] 숨음'], outlined: [expect.stringMatching(/^n_tabs rgb\(47, 111, 237\) solid 2px -2px$/)] },
+        hidden: {
+          shown: ['preview:n_tabs[n_p0→n_p1] 숨음'],
+          outlined: [expect.stringMatching(/^n_tabs rgb\(47, 111, 237\) solid 2px -2px$/)],
+        },
         cancelled: [],
       })
     } finally {
@@ -286,7 +306,10 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
       await page.mouse.up()
       const landed = await poll(
         '서버 문서',
-        async () => (await call('GET', P)).body.schema.root.children[1].children.map((c: { id: string; type: string }) => (c.id === 'n_intx' ? c.id : `+${c.type}`)),
+        async () =>
+          (await call('GET', P)).body.schema.root.children[1].children.map((c: { id: string; type: string }) =>
+            c.id === 'n_intx' ? c.id : `+${c.type}`,
+          ),
         (ids: string[]) => ids.length === 2,
       ).catch(async () => (await call('GET', P)).body.schema.root.children[1].children.map((c: { id: string }) => c.id))
       expect({ still, wiggle, shown, landed }).toEqual({
@@ -308,18 +331,26 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
       await page.mouse.click(textAt.x, textAt.y)
       const handle = page.locator('.wb-shell-canvas-handle')
       await handle.waitFor()
-      const outline = async () => page.evaluate(() => {
-        const el = document.querySelector('.wb-shell-selection')
-        if (el === null) return null
-        const r = el.getBoundingClientRect()
-        return { id: el.getAttribute('data-wb-selected-id'), x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }
-      })
-      const marker = async () => page.evaluate(() => {
-        const el = document.querySelector('[data-wb-marker-for="n_last"]')
-        if (el === null) return null
-        const r = el.getBoundingClientRect()
-        return { count: document.querySelectorAll('.wb-shell-marker').length, x: Math.round(r.x), y: Math.round(r.y) }
-      })
+      const outline = async () =>
+        page.evaluate(() => {
+          const el = document.querySelector('.wb-shell-selection')
+          if (el === null) return null
+          const r = el.getBoundingClientRect()
+          return {
+            id: el.getAttribute('data-wb-selected-id'),
+            x: Math.round(r.x),
+            y: Math.round(r.y),
+            w: Math.round(r.width),
+            h: Math.round(r.height),
+          }
+        })
+      const marker = async () =>
+        page.evaluate(() => {
+          const el = document.querySelector('[data-wb-marker-for="n_last"]')
+          if (el === null) return null
+          const r = el.getBoundingClientRect()
+          return { count: document.querySelectorAll('.wb-shell-marker').length, x: Math.round(r.x), y: Math.round(r.y) }
+        })
       const outlineBefore = await outline()
       const markerBefore = await marker()
       const into = await spotIn(page, 'n_empt', 0.5, 0.5)
@@ -339,7 +370,12 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
       await page.keyboard.press('Escape')
       await page.mouse.up()
       await page.waitForTimeout(300)
-      const after = { copy: (await nodeLook(page, 'wb:preview:n_text')).count, original: await nodeLook(page, 'n_text'), outline: await outline(), marker: await marker() }
+      const after = {
+        copy: (await nodeLook(page, 'wb:preview:n_text')).count,
+        original: await nodeLook(page, 'n_text'),
+        outline: await outline(),
+        marker: await marker(),
+      }
       expect({ during, after, sent: patches.length }).toEqual({
         during: {
           drops: ['preview:n_empt@0'],
@@ -362,7 +398,8 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
    * 남이 노드를 지워 문서가 준 판도 같은 측정이 줄인다(`src/canvas/canvas-iframe.tsx` 의 `contentHeight`).
    */
   it('iframe 은 끌기 뒤 끌기 전 높이로 — 끌다 취소하면 돌아오고, 남이 노드를 지우면 줄어든다', async () => {
-    const lines = (prefix: string) => Array.from({ length: 12 }, (_, i) => ({ id: `${prefix}${i}`, type: 'Text', props: { content: `${prefix} 글 ${i}` } }))
+    const lines = (prefix: string) =>
+      Array.from({ length: 12 }, (_, i) => ({ id: `${prefix}${i}`, type: 'Text', props: { content: `${prefix} 글 ${i}` } }))
     const P = await fixture('pv-shrink', [
       { id: 'n_big', type: 'Card', props: { title: '큰 카드' }, children: lines('n_b') },
       ...Array.from({ length: 4 }, (_, i) => ({ id: `n_z${i}`, type: 'Text', props: { content: `끝 글 ${i}` } })),
@@ -370,11 +407,13 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
     ])
     const { page, close, patches } = await openEditor(P, 'n_big2')
     try {
-      const heights = () => page.evaluate(() => {
-        const iframe = document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement
-        return { iframe: iframe.offsetHeight, content: Math.ceil(iframe.contentDocument!.documentElement.getBoundingClientRect().height) }
-      })
-      const settled = (until: (h: { iframe: number; content: number }) => boolean) => poll('iframe 높이', heights, until, 3000).catch(heights)
+      const heights = () =>
+        page.evaluate(() => {
+          const iframe = document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement
+          return { iframe: iframe.offsetHeight, content: Math.ceil(iframe.contentDocument!.documentElement.getBoundingClientRect().height) }
+        })
+      const settled = (until: (h: { iframe: number; content: number }) => boolean) =>
+        poll('iframe 높이', heights, until, 3000).catch(heights)
       const before = await settled((h) => h.iframe === Math.max(320, h.content))
       await page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="n_big"]').locator('button').first().click()
       const handle = page.locator('.wb-shell-canvas-handle')
@@ -385,7 +424,10 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
       await page.mouse.down()
       await page.mouse.move(h.x + h.width / 2 + 3, h.y + h.height / 2 + 8, { steps: 3 })
       await page.mouse.move(target.x, target.y, { steps: 6 })
-      const during = { drops: (await shownDrops(page)).map((d) => `${d.kind}:after ${d.prev}`), iframe: (await settled((now) => now.iframe > before.iframe)).iframe }
+      const during = {
+        drops: (await shownDrops(page)).map((d) => `${d.kind}:after ${d.prev}`),
+        iframe: (await settled((now) => now.iframe > before.iframe)).iframe,
+      }
       await page.keyboard.press('Escape')
       await page.mouse.up()
       const cancelled = await settled((now) => now.iframe === before.iframe)
@@ -393,7 +435,11 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
       const bob = await stack.login(stack.users.bob)
       const head = (await stack.request(bob, 'GET', P)).body.headSeq as number
       const removed = await stack.request(bob, 'PATCH', `${P}/ops`, { baseSeq: head, ops: [{ op: 'remove', path: '/root/children/5' }] })
-      await poll('둘째 큰 카드가 캔버스에서', async () => canvasFrame(page).locator('[data-wb-id="n_big2"]').count(), (n) => n === 0).catch(() => -1)
+      await poll(
+        '둘째 큰 카드가 캔버스에서',
+        async () => canvasFrame(page).locator('[data-wb-id="n_big2"]').count(),
+        (n) => n === 0,
+      ).catch(() => -1)
       const after = await settled((now) => now.iframe === Math.max(320, now.content))
       expect({
         before: before.iframe,
@@ -430,12 +476,20 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
         ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_bob', type: 'Text', props: { content: 'bob 의 글' } } }],
       })
       // 기다림은 값으로 끝낸다 — 안 서면 아래 단언이 `bob: 0` 으로 죽는다(시간 초과가 아니라).
-      await poll('bob 의 글이 캔버스에', async () => (await nodeLook(page, 'n_bob')).count, (n) => n > 0).catch(() => 0)
+      await poll(
+        'bob 의 글이 캔버스에',
+        async () => (await nodeLook(page, 'n_bob')).count,
+        (n) => n > 0,
+      ).catch(() => 0)
       await page.waitForTimeout(200)
       // 포인터를 지금 빈 카드 위로 옮긴다 — bob 의 글이 위에 서서 빈 카드가 밀렸다.
       const now = await spotIn(page, 'n_empt', 0.5, 0.5)
       await page.mouse.move(now.x, now.y, { steps: 4 })
-      const again = { drops: (await shownDrops(page)).map((d) => `${d.kind}:${d.at}`), bob: (await nodeLook(page, 'n_bob')).count, previews: (await previewLook(page))?.count ?? 0 }
+      const again = {
+        drops: (await shownDrops(page)).map((d) => `${d.kind}:${d.at}`),
+        bob: (await nodeLook(page, 'n_bob')).count,
+        previews: (await previewLook(page))?.count ?? 0,
+      }
       await page.keyboard.press('Escape')
       await page.mouse.up()
       expect({ armed, added: added.status, again }).toEqual({

@@ -265,11 +265,7 @@ describe('PATCH /api/projects/:projectId/menu/:nodeId — title', () => {
       expect(res.statusCode).toBe(200)
       expect(res.json().title).toBe('바뀐 제목')
 
-      const row = await ctx.db
-        .selectFrom('menu_nodes')
-        .select('title')
-        .where('id', '=', node.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('menu_nodes').select('title').where('id', '=', node.id).executeTakeFirstOrThrow()
       expect(row.title).toBe('바뀐 제목')
     })
   })
@@ -310,11 +306,7 @@ describe('PATCH /api/projects/:projectId/menu/:nodeId — parentId', () => {
       expect(res.statusCode).toBe(200)
       expect(res.json()).toMatchObject({ id: moving.id, parentId: target.id, sortOrder: 0 })
 
-      const row = await ctx.db
-        .selectFrom('menu_nodes')
-        .select('parent_id')
-        .where('id', '=', moving.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('menu_nodes').select('parent_id').where('id', '=', moving.id).executeTakeFirstOrThrow()
       expect(row.parent_id).toBe(target.id)
     })
   })
@@ -409,11 +401,7 @@ describe('PATCH /api/projects/:projectId/menu/:nodeId — parentId', () => {
       // 던져진다 — DB에는 실패한 문장 자체가 없으므로 이 확인은 세이브포인트
       // 증거가 아니다. 응답의 400과는 별개로, 요청이 parent_id를 실제로
       // 바꾸지 않았는지를 확인한다.
-      const row = await ctx.db
-        .selectFrom('menu_nodes')
-        .select('parent_id')
-        .where('id', '=', node.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('menu_nodes').select('parent_id').where('id', '=', node.id).executeTakeFirstOrThrow()
       expect(row.parent_id).toBeNull()
     })
   })
@@ -434,11 +422,7 @@ describe('PATCH /api/projects/:projectId/menu/:nodeId — parentId', () => {
       expect(res.statusCode).toBe(400)
       expect(res.json().error.message).toBe('메뉴를 자기 하위 메뉴로 옮길 수 없습니다')
 
-      const row = await ctx.db
-        .selectFrom('menu_nodes')
-        .select('parent_id')
-        .where('id', '=', root.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('menu_nodes').select('parent_id').where('id', '=', root.id).executeTakeFirstOrThrow()
       expect(row.parent_id).toBeNull()
     })
   })
@@ -463,11 +447,7 @@ describe('PATCH /api/projects/:projectId/menu/:nodeId — parentId', () => {
       expect(res.statusCode).toBe(400)
       expect(res.json().error.message).toBe('메뉴를 자기 하위 메뉴로 옮길 수 없습니다')
 
-      const row = await ctx.db
-        .selectFrom('menu_nodes')
-        .select('parent_id')
-        .where('id', '=', root.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('menu_nodes').select('parent_id').where('id', '=', root.id).executeTakeFirstOrThrow()
       expect(row.parent_id).toBeNull()
     })
   })
@@ -653,11 +633,7 @@ describe('DELETE /api/projects/:projectId/menu/:nodeId', () => {
       // 단계에서 던져진다 — DB에 실패한 문장 자체가 없으므로 이 확인은 세이브포인트
       // 증거가 아니다(세이브포인트가 실제로 필요한 경로는 이 파일의 "DB의 RESTRICT
       // 제약도..." 테스트 하나뿐이다). 부모·자식 행이 둘 다 그대로 남아 있는지만 확인한다.
-      const rows = await ctx.db
-        .selectFrom('menu_nodes')
-        .select('id')
-        .where('id', 'in', [root.id, child.id])
-        .execute()
+      const rows = await ctx.db.selectFrom('menu_nodes').select('id').where('id', 'in', [root.id, child.id]).execute()
       expect(rows).toHaveLength(2)
     })
   })
@@ -707,9 +683,7 @@ describe('DELETE /api/projects/:projectId/menu/:nodeId', () => {
       // 애플리케이션 검사 없이도 실제로 막아 서는지 확인한다 — DB가 두 번째
       // 방어선이다. `withTransaction`으로 감싸 이 의도된 위반이
       // `withApi`의 바깥 트랜잭션을 오염시키지 않게 한다.
-      await expect(
-        withTransaction(ctx.db, (trx) => trx.deleteFrom('menu_nodes').where('id', '=', root.id).execute()),
-      ).rejects.toThrow()
+      await expect(withTransaction(ctx.db, (trx) => trx.deleteFrom('menu_nodes').where('id', '=', root.id).execute())).rejects.toThrow()
 
       // 세이브포인트가 없다면 여기서부터 25P02로 실패한다 — 통과 자체가 증거다.
       const row = await ctx.db.selectFrom('menu_nodes').select('id').where('id', '=', root.id).executeTakeFirst()

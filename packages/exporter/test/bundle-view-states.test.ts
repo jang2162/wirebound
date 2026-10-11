@@ -37,7 +37,12 @@ const STATE_PAGE: PageDocument = {
         id: 'n_switch',
         type: 'StateSwitch',
         children: [
-          { id: 'n_case_d', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'n_view', type: 'Button', props: { label: '보기' } }] },
+          {
+            id: 'n_case_d',
+            type: 'StateCase',
+            props: { state: 'default' },
+            children: [{ id: 'n_view', type: 'Button', props: { label: '보기' } }],
+          },
           {
             id: 'n_case_a',
             type: 'StateCase',

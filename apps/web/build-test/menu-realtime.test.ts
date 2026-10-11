@@ -104,7 +104,10 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
   }
 
   async function openBob(url: string, origin?: string): Promise<BobTab> {
-    const { context, page } = await stack.openTab(stack.users.bob, { viewport: { width: 1440, height: 900 }, ...(origin === undefined ? {} : { origin }) })
+    const { context, page } = await stack.openTab(stack.users.bob, {
+      viewport: { width: 1440, height: 900 },
+      ...(origin === undefined ? {} : { origin }),
+    })
     const treeReads: number[] = []
     const frames: { rev: number; at: number }[] = []
     page.on('request', (request: Request) => {
@@ -163,21 +166,34 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
       )
       const renameStart = Date.now()
       await ok(call('PATCH', `${P}/menu/${fx.ids['다']}`, { title: '다 바뀜' }))
-      await poll('이름', () => titleOf(fx.ids['다']!), (title) => title.includes('다 바뀜'), ARRIVAL_LIMIT_MS + 2_000)
+      await poll(
+        '이름',
+        () => titleOf(fx.ids['다']!),
+        (title) => title.includes('다 바뀜'),
+        ARRIVAL_LIMIT_MS + 2_000,
+      )
       took['이름 바꾸기'] = Date.now() - renameStart
       took['옮기기'] = await arrival(
         bob,
         () => ok(call('PATCH', `${P}/menu/${fx.ids['다']}`, { sortOrder: 0 })),
         (ids) => ids.indexOf(fx.ids['다']!) >= 0 && ids.indexOf(fx.ids['다']!) < ids.indexOf(fx.ids['가']!),
       )
-      took['빈 메뉴 지우기'] = await arrival(bob, () => ok(call('DELETE', `${P}/menu/${made}`)), (ids) => !ids.includes(made))
+      took['빈 메뉴 지우기'] = await arrival(
+        bob,
+        () => ok(call('DELETE', `${P}/menu/${made}`)),
+        (ids) => !ids.includes(made),
+      )
       let pageMade = ''
       took['페이지 만들기'] = await arrival(
         bob,
         async () => (pageMade = created(await call('POST', `${P}/pages`, { menuNodeId: fx.ids['다'], title: '다1' })).id),
         (ids) => ids.includes(pageMade),
       )
-      took['페이지 지우기'] = await arrival(bob, () => ok(call('DELETE', `${P}/pages/${pageMade}`)), (ids) => !ids.includes(pageMade))
+      took['페이지 지우기'] = await arrival(
+        bob,
+        () => ok(call('DELETE', `${P}/pages/${pageMade}`)),
+        (ids) => !ids.includes(pageMade),
+      )
       took['연쇄 삭제'] = await arrival(
         bob,
         () => ok(call('DELETE', `${P}/menu/${fx.ids['나']}`, { cascade: true, expect: { menuIds: [], pageIds: [fx.ids['나1']] } })),
@@ -204,8 +220,16 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
       await target.getByRole('button', { name: '가2 더 보기', exact: true }).click()
       await bob.page.getByRole('menuitem', { name: '이름 변경', exact: true }).waitFor()
       await ok(call('DELETE', `${fx.P}/pages/${fx.ids['가2']}`))
-      await poll('줄이 빠진다', () => rowIds(bob.page), (ids) => !ids.includes(fx.ids['가2']!), ARRIVAL_LIMIT_MS)
-      expect({ menus: await bob.page.getByRole('menu').count(), alerts: await bob.page.getByRole('alert').allTextContents() }).toEqual({ menus: 0, alerts: [] })
+      await poll(
+        '줄이 빠진다',
+        () => rowIds(bob.page),
+        (ids) => !ids.includes(fx.ids['가2']!),
+        ARRIVAL_LIMIT_MS,
+      )
+      expect({ menus: await bob.page.getByRole('menu').count(), alerts: await bob.page.getByRole('alert').allTextContents() }).toEqual({
+        menus: 0,
+        alerts: [],
+      })
     } finally {
       await bob.close()
     }
@@ -222,7 +246,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
       const input = bob.page.getByLabel('이름', { exact: true })
       await input.fill('다 고침')
       await ok(call('DELETE', `${fx.P}/menu/${fx.ids['다']}`))
-      await poll('입력이 닫힌다', () => input.count(), (n) => n === 0, ARRIVAL_LIMIT_MS)
+      await poll(
+        '입력이 닫힌다',
+        () => input.count(),
+        (n) => n === 0,
+        ARRIVAL_LIMIT_MS,
+      )
       expect(await bob.page.getByRole('alert').allTextContents()).toContain(TREE_DRAFT_DROPPED)
     } finally {
       await bob.close()
@@ -244,7 +273,14 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
       .then((n) =>
         n === 0
           ? null
-          : row(page, id).evaluate((element) => element.closest('li')?.parentElement?.closest('li')?.querySelector(':scope > [data-tree-row]')?.getAttribute('data-tree-id') ?? ''),
+          : row(page, id).evaluate(
+              (element) =>
+                element
+                  .closest('li')
+                  ?.parentElement?.closest('li')
+                  ?.querySelector(':scope > [data-tree-row]')
+                  ?.getAttribute('data-tree-id') ?? '',
+            ),
       )
   }
 
@@ -309,7 +345,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
           // 입력을 열기 전에 접는다 — 입력이 열린 채 접기 단추를 누르면 blur 가 입력을 닫는다.
           // 펼침 단추는 `aria-hidden`이라 역할로 안 잡힌다(`panels/tree-fold.tsx`).
           await row(page, fx.ids['나']!).locator('[data-tree-toggle]').click()
-          await poll('나1 이 접힌다', () => rowIds(page), (ids) => !ids.includes(fx.ids['나1']!), ARRIVAL_LIMIT_MS)
+          await poll(
+            '나1 이 접힌다',
+            () => rowIds(page),
+            (ids) => !ids.includes(fx.ids['나1']!),
+            ARRIVAL_LIMIT_MS,
+          )
           await openRowAction(page, fx.ids['다']!, '다', '이름 변경')
         },
         move: (fx) => ok(call('PATCH', `${fx.P}/menu/${fx.ids['다']}`, { parentId: fx.ids['나'] })),
@@ -323,28 +364,39 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
       },
     ]
     for (const c of cases) {
-      it(c.name, async () => {
-        const fx = await fixture(`input-move-${cases.indexOf(c)}`)
-        const bob = await openBob(fx.url)
-        try {
-          await c.open(fx, bob.page)
-          const input = bob.page.getByLabel('이름', { exact: true })
-          await input.fill('친 글')
-          const frames = bob.frames.length
-          await rereadSettled(bob.page, () => c.move(fx))
-          const [moved, under] = c.moved(fx)
-          const after = { parent: await parentRow(bob.page, moved), ...(await inputState(bob.page)) }
-          await bob.page.keyboard.type('XY')
-          // 입력이 없으면(접힌 메뉴가 안 펴짐) 기다리지 않고 `null` — 단언이 값으로 죽게 한다.
-          const typedOn = (await input.count()) === 1 ? await input.inputValue() : null
-          // eslint-disable-next-line no-console
-          console.log('[메뉴 실시간] 입력 · 옮김', c.name, JSON.stringify({ after, typedOn }))
-          expect(bob.frames.length).toBe(frames + 1)
-          expect({ ...after, typedOn }).toEqual({ parent: under, count: 1, value: '친 글', focused: '이름', alerts: [], typedOn: '친 글XY' })
-        } finally {
-          await bob.close()
-        }
-      }, 60_000)
+      it(
+        c.name,
+        async () => {
+          const fx = await fixture(`input-move-${cases.indexOf(c)}`)
+          const bob = await openBob(fx.url)
+          try {
+            await c.open(fx, bob.page)
+            const input = bob.page.getByLabel('이름', { exact: true })
+            await input.fill('친 글')
+            const frames = bob.frames.length
+            await rereadSettled(bob.page, () => c.move(fx))
+            const [moved, under] = c.moved(fx)
+            const after = { parent: await parentRow(bob.page, moved), ...(await inputState(bob.page)) }
+            await bob.page.keyboard.type('XY')
+            // 입력이 없으면(접힌 메뉴가 안 펴짐) 기다리지 않고 `null` — 단언이 값으로 죽게 한다.
+            const typedOn = (await input.count()) === 1 ? await input.inputValue() : null
+            // eslint-disable-next-line no-console
+            console.log('[메뉴 실시간] 입력 · 옮김', c.name, JSON.stringify({ after, typedOn }))
+            expect(bob.frames.length).toBe(frames + 1)
+            expect({ ...after, typedOn }).toEqual({
+              parent: under,
+              count: 1,
+              value: '친 글',
+              focused: '이름',
+              alerts: [],
+              typedOn: '친 글XY',
+            })
+          } finally {
+            await bob.close()
+          }
+        },
+        60_000,
+      )
     }
   })
 
@@ -372,10 +424,18 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
       await ok(
         call('DELETE', `${fx.P}/menu/${fx.ids['가']}`, {
           cascade: true,
-          expect: { menuIds: [fx.ids['가-하위']], pageIds: [...sub.pages.map((p: { id: string }) => p.id), ...sub.children[0].pages.map((p: { id: string }) => p.id)] },
+          expect: {
+            menuIds: [fx.ids['가-하위']],
+            pageIds: [...sub.pages.map((p: { id: string }) => p.id), ...sub.children[0].pages.map((p: { id: string }) => p.id)],
+          },
         }),
       )
-      await poll('상자가 닫힌다', () => dialog.count(), (n) => n === 0, ARRIVAL_LIMIT_MS)
+      await poll(
+        '상자가 닫힌다',
+        () => dialog.count(),
+        (n) => n === 0,
+        ARRIVAL_LIMIT_MS,
+      )
       expect(await bob.page.getByRole('alert').allTextContents()).toContain('"가" 메뉴가 트리에서 사라져 삭제 상자를 닫았습니다')
     } finally {
       await bob.close()
@@ -392,7 +452,8 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
     const RECHECK = '새 목록 확인'
 
     /** 누른 뒤 그 판이 그려질 때까지 — 보냈으면 요청 이벤트가 이미 섰다. */
-    const settle = (page: Page) => page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))))
+    const settle = (page: Page) =>
+      page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))))
 
     interface Cascade {
       bob: BobTab
@@ -439,7 +500,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
         }),
         serverHas: async (title) => (await serverTitles()).includes(title),
         readsDone: async () => {
-          await poll('트리 조회가 끝난다', async () => bob.treeReads.length - base - readsEnded, (pending) => pending <= 0, ARRIVAL_LIMIT_MS)
+          await poll(
+            '트리 조회가 끝난다',
+            async () => bob.treeReads.length - base - readsEnded,
+            (pending) => pending <= 0,
+            ARRIVAL_LIMIT_MS,
+          )
           await settle(bob.page)
         },
       }
@@ -479,7 +545,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
         expect(first).toEqual({ button: CONFIRM, changed: 1, listed: ['가1', '가2', '방금 더한 페이지'], deletes: 0, kept: true })
 
         await c.dialog.getByRole('button', { name: CONFIRM, exact: true }).click()
-        await poll('서버에서 «가»가 사라진다', () => c.serverHas('가'), (has) => !has, ARRIVAL_LIMIT_MS)
+        await poll(
+          '서버에서 «가»가 사라진다',
+          () => c.serverHas('가'),
+          (has) => !has,
+          ARRIVAL_LIMIT_MS,
+        )
         expect({ deletes: c.deletes(), added: await c.serverHas('방금 더한 페이지') }).toEqual({ deletes: 1, added: false })
       } finally {
         await c.bob.close()
@@ -494,7 +565,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
         expect(await c.state()).toEqual({ button: RECHECK, changed: 1, listed: ['가1', '가2', '하나'] })
         await c.dialog.locator('.wb-shell-menu-delete-confirm').click()
         await settle(c.bob.page)
-        expect({ ...(await c.state()), deletes: c.deletes() }).toEqual({ button: CONFIRM, changed: 1, listed: ['가1', '가2', '하나'], deletes: 0 })
+        expect({ ...(await c.state()), deletes: c.deletes() }).toEqual({
+          button: CONFIRM,
+          changed: 1,
+          listed: ['가1', '가2', '하나'],
+          deletes: 0,
+        })
         await rereadSettled(c.bob.page, () => call('POST', `${fx.P}/pages`, { menuNodeId: fx.ids['가'], title: '둘' }))
         expect(await c.state()).toEqual({ button: RECHECK, changed: 1, listed: ['가1', '가2', '하나', '둘'] })
         // 더블클릭 — 첫 누름은 확인으로 소비되고, 둘째(`detail` 2)는 버린다.
@@ -508,7 +584,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
           kept: true,
         })
         await c.dialog.getByRole('button', { name: CONFIRM, exact: true }).click()
-        await poll('서버에서 «가»가 사라진다', () => c.serverHas('가'), (has) => !has, ARRIVAL_LIMIT_MS)
+        await poll(
+          '서버에서 «가»가 사라진다',
+          () => c.serverHas('가'),
+          (has) => !has,
+          ARRIVAL_LIMIT_MS,
+        )
         expect(await c.serverHas('둘')).toBe(false)
       } finally {
         await c.bob.close()
@@ -526,7 +607,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
         const first = { ...(await c.state()), deletes: c.deletes(), kept: await c.serverHas('방금 더한 페이지') }
         expect(first).toEqual({ button: CONFIRM, changed: 1, listed: ['가1', '가2', '방금 더한 페이지'], deletes: 0, kept: true })
         await c.bob.page.keyboard.press('Enter')
-        await poll('서버에서 «가»가 사라진다', () => c.serverHas('가'), (has) => !has, ARRIVAL_LIMIT_MS)
+        await poll(
+          '서버에서 «가»가 사라진다',
+          () => c.serverHas('가'),
+          (has) => !has,
+          ARRIVAL_LIMIT_MS,
+        )
         expect(c.deletes()).toBe(1)
       } finally {
         await c.bob.close()
@@ -549,7 +635,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
           kept: true,
         })
         await c.dialog.getByRole('button', { name: CONFIRM, exact: true }).click()
-        await poll('서버에서 «가»가 사라진다', () => c.serverHas('가'), (has) => !has, ARRIVAL_LIMIT_MS)
+        await poll(
+          '서버에서 «가»가 사라진다',
+          () => c.serverHas('가'),
+          (has) => !has,
+          ARRIVAL_LIMIT_MS,
+        )
       } finally {
         await c.bob.close()
       }
@@ -569,7 +660,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
         const added = created(await call('POST', `${fx.P}/pages`, { menuNodeId: fx.ids['가-하위'], title: '방금 더한 페이지' })).id
         await c.dialog.locator('.wb-shell-menu-delete-confirm').click()
         // 409 의 답 — 상자가 «바뀌었다»로 다시 선다(누르는 순간 닫혔다 답 뒤에 다시 선다).
-        await poll('409 뒤 다시 선 상자', () => c.dialog.getByText(CASCADE_CHANGED, { exact: true }).count(), (n) => n > 0, ARRIVAL_LIMIT_MS)
+        await poll(
+          '409 뒤 다시 선 상자',
+          () => c.dialog.getByText(CASCADE_CHANGED, { exact: true }).count(),
+          (n) => n > 0,
+          ARRIVAL_LIMIT_MS,
+        )
         expect({ ...(await c.state()), deletes: c.deletes(), signalYet: c.bob.frames.length > frames }).toEqual({
           button: RECHECK,
           changed: 1,
@@ -577,7 +673,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
           deletes: 1,
           signalYet: false,
         })
-        await poll('늦은 신호', async () => c.bob.frames.length, (n) => n > frames, 10_000)
+        await poll(
+          '늦은 신호',
+          async () => c.bob.frames.length,
+          (n) => n > frames,
+          10_000,
+        )
         // 신호가 낸 다시 받기가 있으면 그 답까지 — 409 뒤의 다시 받기가 이미 그 판을 받았으면 신호는 다시 받지 않는다.
         await settle(c.bob.page)
         await c.readsDone()
@@ -589,9 +690,19 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
         })
         await c.dialog.locator('.wb-shell-menu-delete-confirm').click()
         await settle(c.bob.page)
-        expect({ ...(await c.state()), deletes: c.deletes() }).toEqual({ button: CONFIRM, changed: 1, listed: ['가1', '가2', '방금 더한 페이지'], deletes: 1 })
+        expect({ ...(await c.state()), deletes: c.deletes() }).toEqual({
+          button: CONFIRM,
+          changed: 1,
+          listed: ['가1', '가2', '방금 더한 페이지'],
+          deletes: 1,
+        })
         await c.dialog.getByRole('button', { name: CONFIRM, exact: true }).click()
-        await poll('서버에서 «가»가 사라진다', () => c.serverHas('가'), (has) => !has, ARRIVAL_LIMIT_MS)
+        await poll(
+          '서버에서 «가»가 사라진다',
+          () => c.serverHas('가'),
+          (has) => !has,
+          ARRIVAL_LIMIT_MS,
+        )
         expect({ deletes: c.deletes(), added: (await call('GET', `${fx.P}/pages/${added}`)).status }).toEqual({ deletes: 2, added: 404 })
       } finally {
         await c.bob.close()
@@ -629,7 +740,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
       expect(cut).toBe(1)
       const start = Date.now()
       const made = created(await call('POST', `${fx.P}/menu`, { parentId: null, title: '끊긴 사이' })).id
-      await poll('다시 붙어 선다', () => rowIds(bob.page), (ids) => ids.includes(made), 10_000)
+      await poll(
+        '다시 붙어 선다',
+        () => rowIds(bob.page),
+        (ids) => ids.includes(made),
+        10_000,
+      )
       const took = Date.now() - start
       // eslint-disable-next-line no-console
       console.log('[메뉴 실시간] 재연결 뒤 선 시간(ms)', took, '받은 신호', JSON.stringify(bob.frames))
@@ -650,7 +766,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
     try {
       expect(await rowIds(bob.page)).toContain(extra)
       await ok(call('POST', `${fx.P}/snapshots/${snapshot.id}/restore`))
-      await poll('되돌아간 트리', () => rowIds(bob.page), (ids) => !ids.includes(extra), ARRIVAL_LIMIT_MS)
+      await poll(
+        '되돌아간 트리',
+        () => rowIds(bob.page),
+        (ids) => !ids.includes(extra),
+        ARRIVAL_LIMIT_MS,
+      )
       expect(await bob.page.getByText(/스냅샷이 복원됐습니다/).count()).toBeGreaterThan(0)
     } finally {
       await bob.close()
@@ -673,9 +794,18 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
         const input = bob.page.getByLabel('이름', { exact: true })
         await input.fill('bob 의 메뉴')
         await input.press('Enter')
-        await poll('신호', async () => bob.frames.length, (n) => n >= 1, 5_000)
+        await poll(
+          '신호',
+          async () => bob.frames.length,
+          (n) => n >= 1,
+          5_000,
+        )
         await bob.page.waitForTimeout(800)
-        return { reads: bob.treeReads.length - reads, frameAfter: bob.frames[0]!.at - sent, firstReadAfter: (bob.treeReads[reads] ?? 0) - sent }
+        return {
+          reads: bob.treeReads.length - reads,
+          frameAfter: bob.frames[0]!.at - sent,
+          firstReadAfter: (bob.treeReads[reads] ?? 0) - sent,
+        }
       } finally {
         await bob.close()
       }
@@ -704,13 +834,20 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
    * 단언은 성질이다 — 사라진 줄을 고른 채가 아니라 주소의 페이지가 선택이라 Delete 가 그 페이지의 삭제 확인을 건다(남의 지움만 있었던 판과 같다).
    */
   it('내 조작 뒤의 다시 받기가 남의 지움을 싣는 판 — 사라진 줄을 고른 채 남지 않아 Delete 가 주소의 페이지에 닿는다', async () => {
-    const confirmAfterDelete = async (own: boolean, slug: string): Promise<{ rows: number; pressed: number; confirm: number; delayed: number }> => {
+    const confirmAfterDelete = async (
+      own: boolean,
+      slug: string,
+    ): Promise<{ rows: number; pressed: number; confirm: number; delayed: number }> => {
       const fx = await fixture(slug)
       const delay = own ? await stack.startDownDelay(1_500) : null
       const bob = await openBob(fx.url, delay?.origin)
       try {
         await bob.page.locator(`${TREE} button.wb-shell-tree-menu`, { hasText: '다' }).first().click()
-        await poll('룸에 든 채 지연된다', async () => (delay === null ? 1 : delay.delayed()), (n) => n >= 1)
+        await poll(
+          '룸에 든 채 지연된다',
+          async () => (delay === null ? 1 : delay.delayed()),
+          (n) => n >= 1,
+        )
         await ok(call('DELETE', `${fx.P}/menu/${fx.ids['다']}`))
         if (own) {
           await bob.page.locator(`${TREE} .wb-shell-region-actions [aria-haspopup="menu"]`).click()
@@ -719,7 +856,12 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
           await input.fill('새 메뉴')
           await input.press('Enter')
         }
-        await poll('트리에서 «다» 가 사라진다', () => rowIds(bob.page), (ids) => !ids.includes(fx.ids['다']!), 5_000)
+        await poll(
+          '트리에서 «다» 가 사라진다',
+          () => rowIds(bob.page),
+          (ids) => !ids.includes(fx.ids['다']!),
+          5_000,
+        )
         // 지연된 신호가 닿을 때까지 — 신호가 닿아도 같은 값이어야 한다.
         await bob.page.waitForTimeout(own ? 2_200 : 600)
         await bob.page.locator(`${TREE} .wb-shell-region-actions button`).first().focus()
@@ -744,5 +886,4 @@ describe.skipIf(!전제.ok)('메뉴 트리 실시간 — 실브라우저', () =>
     expect({ confirm: own.confirm, pressed: own.pressed }).toEqual({ confirm: 1, pressed: 0 })
     expect(own.delayed).toBeGreaterThan(0)
   }, 90_000)
-
 })

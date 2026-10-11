@@ -53,9 +53,7 @@ describe('노드 루트의 속성', () => {
 
 describe('activeStates', () => {
   it('선언된 상태와 같은 이름의 prop이 true인 것만 고른다', () => {
-    expect(activeStates(ListDef, { selected: true, disabled: false, bogus: true })).toEqual([
-      'selected',
-    ])
+    expect(activeStates(ListDef, { selected: true, disabled: false, bogus: true })).toEqual(['selected'])
   })
 
   it('선언 순서를 지킨다', () => {
@@ -70,12 +68,8 @@ describe('variantFrom', () => {
   })
 
   it('Field의 control과 Divider의 direction도 같은 채널로 나온다', () => {
-    expect(rootAttrs({ id: 'n_000000000001', type: 'Field', props: { control: 'select' } })['data-wb-variant']).toBe(
-      'select',
-    )
-    expect(
-      rootAttrs({ id: 'n_000000000001', type: 'Divider', props: { direction: 'vertical' } })['data-wb-variant'],
-    ).toBe('vertical')
+    expect(rootAttrs({ id: 'n_000000000001', type: 'Field', props: { control: 'select' } })['data-wb-variant']).toBe('select')
+    expect(rootAttrs({ id: 'n_000000000001', type: 'Divider', props: { direction: 'vertical' } })['data-wb-variant']).toBe('vertical')
   })
 
   /**

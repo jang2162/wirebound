@@ -43,7 +43,13 @@ function itemTitle(theme: ThemeDefinition, item: GalleryItem): string {
  * 같은 이름을 칠하거나 우리 규칙이 작성자의 요소를 칠한다.
  */
 const ITEM_STYLE: CSSProperties = { position: 'relative', margin: '0 0 24px', padding: '12px', border: '1px dashed #cbd5e1' }
-const LABEL_STYLE: CSSProperties = { display: 'flex', gap: '8px', margin: '0 0 8px', font: '12px/1.4 system-ui, sans-serif', color: '#475569' }
+const LABEL_STYLE: CSSProperties = {
+  display: 'flex',
+  gap: '8px',
+  margin: '0 0 8px',
+  font: '12px/1.4 system-ui, sans-serif',
+  color: '#475569',
+}
 
 function GalleryEntry(props: { theme: ThemeDefinition; item: GalleryItem; showOverlay: boolean }): ReactElement {
   const stage = useRef<HTMLDivElement>(null)

@@ -137,11 +137,7 @@ function wiring(): Wiring {
   }
 }
 
-async function board(options?: {
-  serverDoc?: PageDocument
-  holdResync?: boolean
-  tabChannel?: TabChannel
-}): Promise<Board> {
+async function board(options?: { serverDoc?: PageDocument; holdResync?: boolean; tabChannel?: TabChannel }): Promise<Board> {
   const wired = wiring()
   let release = (): void => {}
   const held = new Promise<void>((resolve) => {
@@ -247,9 +243,7 @@ describe('다시 붙으면 다시 읽는다', () => {
    * **`board()`를 못 쓴다** — 그쪽은 `openPage()`로 페이지가 열린 주소에서 시작한다.
    */
   it('페이지를 안 연 채로 다시 붙어도, 그 뒤에 연 페이지는 한 번만 읽는다', async () => {
-    const getPage = vi.fn(async (_projectId: string, pageId: string) =>
-      pageDetail(pageId, doc(pageId === PAGE_ID ? 'n-first' : 'n-other')),
-    )
+    const getPage = vi.fn(async (_projectId: string, pageId: string) => pageDetail(pageId, doc(pageId === PAGE_ID ? 'n-first' : 'n-other')))
     const wired = wiring()
     renderEditor({ route: PROJECT_ROUTE, realtime: wired.setup, apiOverrides: { getPage } })
     await screen.findByRole('heading', { name: PROJECT_NAME })
@@ -376,9 +370,7 @@ describe('다시 붙으면 다시 읽는다', () => {
       },
     })
     // 스택이 채워지면 버튼이 살아난다. jest-dom을 안 쓰므로 속성을 직접 본다.
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: '되돌리기' }).hasAttribute('disabled')).toBe(false),
-    )
+    await waitFor(() => expect(screen.getByRole('button', { name: '되돌리기' }).hasAttribute('disabled')).toBe(false))
 
     act(() => {
       sockets[0]?.onopen?.()
@@ -523,8 +515,7 @@ describe('스스로 버린 소켓으로 답을 기다리던 편집', () => {
       ],
     })
 
-  const tool = (name: string): HTMLElement =>
-    treeTool(screen.getByRole('region', { name: '구조 트리' }), name)
+  const tool = (name: string): HTMLElement => treeTool(screen.getByRole('region', { name: '구조 트리' }), name)
 
   /**
    * 페이지를 열고 WS 로 편집 하나를 낸다 — 답(ack)은 안 온다(서버가 행 잠금에 쥔 판). `reload`가 재조회의 답이다.

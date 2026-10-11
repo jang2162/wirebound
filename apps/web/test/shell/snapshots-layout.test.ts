@@ -134,19 +134,13 @@ describe('스냅샷 목록이 좁은 팝오버에서 접힌다', () => {
    */
   describe('구분력 — 무너진 판을 만들면 갈린다', () => {
     it('줄에서 `flex-wrap`을 지우면 갈린다', () => {
-      const broken = shellCss.replace(
-        /(\.wb-shell-snapshots-row \{[^}]*?)\n  flex-wrap: wrap;/,
-        '$1',
-      )
+      const broken = shellCss.replace(/(\.wb-shell-snapshots-row \{[^}]*?)\n  flex-wrap: wrap;/, '$1')
       expect(broken, '심을 자리가 사라졌다').not.toBe(shellCss)
       expect(declarations(broken, 'wb-shell-snapshots-row')['flex-wrap']).toBeUndefined()
     })
 
     it('설명을 `flex: 1`로 두면 갈린다 — 그것이 11.3px을 만드는 값이다', () => {
-      const broken = shellCss.replace(
-        /(\.wb-shell-snapshots-desc \{)\n  flex: 1 0 100%;\n  min-width: 0;/,
-        '$1\n  flex: 1;',
-      )
+      const broken = shellCss.replace(/(\.wb-shell-snapshots-desc \{)\n  flex: 1 0 100%;\n  min-width: 0;/, '$1\n  flex: 1;')
       expect(broken, '심을 자리가 사라졌다').not.toBe(shellCss)
       const desc = declarations(broken, 'wb-shell-snapshots-desc')
       expect(takesWholeLine(desc)).toBe(false)

@@ -43,7 +43,11 @@ function themeOptions(packages: readonly ThemePackageSummary[], current: ThemeRe
     versions: pkg.versions.map((v) => {
       const pinned = pkg.themeId === current.themeId && v.version === current.version
       const tags = [...(pinned ? ['지금'] : []), ...(v.hidden ? ['숨김'] : [])]
-      return { version: v.version, label: tags.length === 0 ? v.version : `${v.version} (${tags.join(' · ')})`, disabled: v.hidden && !pinned }
+      return {
+        version: v.version,
+        label: tags.length === 0 ? v.version : `${v.version} (${tags.join(' · ')})`,
+        disabled: v.hidden && !pinned,
+      }
     }),
   }))
   let mine = themes.find((theme) => theme.themeId === current.themeId)

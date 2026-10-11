@@ -59,8 +59,7 @@ export async function runPull(io: Io, options: PullOptions): Promise<number> {
     token,
   })
 
-  const target =
-    options.out === undefined ? join(binding.root, DEFAULT_PULL_FILE) : resolveFrom(io.cwd, options.out)
+  const target = options.out === undefined ? join(binding.root, DEFAULT_PULL_FILE) : resolveFrom(io.cwd, options.out)
 
   // **받은 글자를 그대로 쓰지 않고 한 번 편다.** 사람이 열어 볼 파일이고 `git diff`가
   // 읽혀야 한다 — 서버는 한 줄로 보낸다. 파싱이 곧 봉투 검사이기도 하다.

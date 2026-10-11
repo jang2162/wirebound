@@ -169,7 +169,9 @@ describe('`embed`의 면 중 부르는 것이 허용 목록뿐이다', () => {
   })
 
   it('허용 목록의 이름은 실제로 쓰인다 — 죽은 허가가 남지 않는다', () => {
-    const sources = sourceFiles().map((file) => stripComments(readFileSync(join(SRC, file), 'utf8'))).join('\n')
+    const sources = sourceFiles()
+      .map((file) => stripComments(readFileSync(join(SRC, file), 'utf8')))
+      .join('\n')
     const unused = allowed.filter((name) => !new RegExp(`(?:^|[^\\w$])${name}(?:[^\\w$]|$)`).test(sources))
     expect(unused).toEqual([])
   })

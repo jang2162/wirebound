@@ -358,9 +358,7 @@ describe('막는 것은 **남의** 잠금이다', () => {
       await locksWith(holderTab, 'n_b')
 
       // `from`이 잠긴 `n_b` 안(`n_b1`), `path`는 밖(`n_a` 아래)이다.
-      const status = await patchOps(ctx, fx, [
-        { op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/children/-' },
-      ])
+      const status = await patchOps(ctx, fx, [{ op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/children/-' }])
 
       expect(status).toBe(LOCKED)
     })
@@ -408,11 +406,7 @@ describe('막는 것은 **남의** 잠금이다', () => {
       // **같은 기준**으로 문서를 올리므로(`migrateDocument`) 여기서 읽지 못하고 판정을
       // 건너뛴다 — 그러면 파이프라인이 자기 이름(`unsupported-version` → 400)으로 답한다.
       // 올리지 않고 저장된 문서를 그대로 보면 잠금이 먼저 걸려 **400이 423으로 바뀐다.**
-      const row = await db
-        .selectFrom('pages')
-        .select(['schema', 'head_seq'])
-        .where('id', '=', fx.pageId)
-        .executeTakeFirstOrThrow()
+      const row = await db.selectFrom('pages').select(['schema', 'head_seq']).where('id', '=', fx.pageId).executeTakeFirstOrThrow()
       await db
         .updateTable('pages')
         .set({ schema: JSON.stringify({ ...(row.schema as object), version: 99 }) as never })
@@ -602,13 +596,7 @@ async function fixture(ctx: RealApiContext): Promise<Fixture> {
   }
 }
 
-async function addComment(
-  ctx: RealApiContext,
-  projectId: string,
-  pageId: string,
-  who: SignedUpUser,
-  nodeId: string,
-): Promise<string> {
+async function addComment(ctx: RealApiContext, projectId: string, pageId: string, who: SignedUpUser, nodeId: string): Promise<string> {
   const res = await ctx.app.inject({
     method: 'POST',
     url: `/api/projects/${projectId}/pages/${pageId}/comments`,

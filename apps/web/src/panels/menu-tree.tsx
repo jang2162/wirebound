@@ -266,16 +266,17 @@ export function MenuTree(props: {
   useLayoutEffect(() => {
     const tree = treeRef.current
     const lost = focusedRow.current
-    if (tree !== null && lost !== null && !lost.element.isConnected && (document.activeElement === null || document.activeElement === document.body)) {
+    if (
+      tree !== null &&
+      lost !== null &&
+      !lost.element.isConnected &&
+      (document.activeElement === null || document.activeElement === document.body)
+    ) {
       const rows = shownRowsOf(tree)
       const shown = (row: TreeSelection): boolean => rows.some((one) => isPicked(one, row))
       // 고른 줄을 잃었으면 훅이 이미 이웃을 골랐다(`pickAfterGone`) — 같은 줄에 선다. 아니면 그 줄 자신(옮겨진 줄) · 보이는 이웃.
       const picked = commands.selection !== null && isPicked(commands.selection, lost.row) ? null : commands.selection
-      const target = shown(lost.row)
-        ? lost.row
-        : picked !== null && shown(picked)
-          ? picked
-          : neighborOf(shownRows.current, lost.row, shown)
+      const target = shown(lost.row) ? lost.row : picked !== null && shown(picked) ? picked : neighborOf(shownRows.current, lost.row, shown)
       if (target !== null) rowControl(tree, target)?.focus()
     }
     if (tree !== null) shownRows.current = shownRowsOf(tree)
@@ -296,12 +297,7 @@ export function MenuTree(props: {
       const over = row === null ? null : rowSelection(row)
       if (row === null || over === null) return null
       const box = row.getBoundingClientRect()
-      const target = menuDropTarget(
-        state.menu,
-        source,
-        over,
-        dropZone(point.y - box.top, box.height, over.kind === 'menu'),
-      )
+      const target = menuDropTarget(state.menu, source, over, dropZone(point.y - box.top, box.height, over.kind === 'menu'))
       if (target === null) return null
       return {
         value: target,
@@ -736,12 +732,7 @@ function MenuItem(props: {
         {/* 펼침 단추는 줄 단추 **뒤**에 두고 CSS 가 앞에 세운다(`./tree-fold.tsx` 머리말 «DOM 에서는 줄 단추 뒤다»). */}
         <TreeToggle foldable={foldable} folded={folded} onToggle={() => props.fold.toggle(node.id)} />
         {drag !== null && (
-          <TreeRowActions
-            name={node.title}
-            {...menuRowItems(commands, 'menu')}
-            onOpen={() => pick(commands, self)}
-            picked={picked}
-          />
+          <TreeRowActions name={node.title} {...menuRowItems(commands, 'menu')} onOpen={() => pick(commands, self)} picked={picked} />
         )}
       </TreeRow>
       {drag !== null && picked && <RowPanel commands={commands} at="row" />}
@@ -752,14 +743,7 @@ function MenuItem(props: {
               주석에 있다. */}
           {pages.map((page) => (
             <li key={page.id}>
-              <PageLink
-                page={page}
-                projectId={projectId}
-                pageId={pageId}
-                commands={commands}
-                drag={drag}
-                exporter={props.exporter}
-              />
+              <PageLink page={page} projectId={projectId} pageId={pageId} commands={commands} drag={drag} exporter={props.exporter} />
             </li>
           ))}
           {children.map((child) => (
@@ -852,9 +836,7 @@ function TreeRow(props: {
   const lifted = dragging !== undefined && dragging !== null && isPicked(dragging, props.self)
   return (
     <div
-      className={
-        'wb-shell-tree-row' + (props.picked ? ' wb-shell-tree-row-picked' : '') + (lifted ? ' wb-shell-tree-row-dragging' : '')
-      }
+      className={'wb-shell-tree-row' + (props.picked ? ' wb-shell-tree-row-picked' : '') + (lifted ? ' wb-shell-tree-row-dragging' : '')}
       data-tree-row=""
       data-tree-kind={props.self.kind}
       data-tree-id={props.self.id}
@@ -888,12 +870,7 @@ function RowPanel(props: { commands: TreeCommands; at: 'row' | 'bottom' }): Reac
   const here = (rooted: boolean): boolean => (props.at === 'bottom' ? rooted || !anchored : !rooted && anchored)
   const items = [
     commands.reparenting !== null && here(false) && (
-      <MenuPicker
-        key="reparent"
-        options={commands.reparenting}
-        onPick={commands.reparentTo}
-        onCancel={commands.cancelReparent}
-      />
+      <MenuPicker key="reparent" options={commands.reparenting} onPick={commands.reparentTo} onCancel={commands.cancelReparent} />
     ),
     commands.editing !== null && here(commands.editing.kind === 'new-root-menu') && (
       <TreeInput

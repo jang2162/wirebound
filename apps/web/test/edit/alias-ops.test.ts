@@ -70,13 +70,10 @@ describe('aliasOps', () => {
     'a\u202eb',
     'a\ud800b',
     '\u200b가',
-  ])(
-    '지은 연산을 적용한 노드는 봉투를 지난다 — %j',
-    (value) => {
-      const ops = aliasOps(doc(), 'n-1', value)
-      expect(ops).not.toBeNull()
-      const after = applyOps(doc(), ops!)
-      expect(WbNodeSchema.safeParse(after.root).success).toBe(true)
-    },
-  )
+  ])('지은 연산을 적용한 노드는 봉투를 지난다 — %j', (value) => {
+    const ops = aliasOps(doc(), 'n-1', value)
+    expect(ops).not.toBeNull()
+    const after = applyOps(doc(), ops!)
+    expect(WbNodeSchema.safeParse(after.root).success).toBe(true)
+  })
 })

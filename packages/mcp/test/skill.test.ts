@@ -96,12 +96,50 @@ describe('스킬의 도구 표가 실제 도구와 같다', () => {
       // 도구 이름
       ...TOOLS.map((tool) => tool.name),
       // 응답 필드 · 값 · 바깥 이름
-      'headSeq', 'capturedAt', 'found', 'reason', 'ambiguous', 'duplicatePaths', 'documentChanged',
-      'marker', 'failing', 'notes', 'outsideErrors', 'droppedProjectIssues', 'warnings', 'pagePath',
-      'isError', 'stale', 'locked', 'rejected', 'error', 'true', 'false', 'mcp', 'lint',
-      'nodes', 'id', 'wireb', 'init', 'login', 'skill', 'SKILL', 'wirebound',
+      'headSeq',
+      'capturedAt',
+      'found',
+      'reason',
+      'ambiguous',
+      'duplicatePaths',
+      'documentChanged',
+      'marker',
+      'failing',
+      'notes',
+      'outsideErrors',
+      'droppedProjectIssues',
+      'warnings',
+      'pagePath',
+      'isError',
+      'stale',
+      'locked',
+      'rejected',
+      'error',
+      'true',
+      'false',
+      'mcp',
+      'lint',
+      'nodes',
+      'id',
+      'wireb',
+      'init',
+      'login',
+      'skill',
+      'SKILL',
+      'wirebound',
       // 화면 상태의 꼴 — 노드 타입 · 문서 필드 · 연산 이름 · 등급 · 응답 필드
-      'StateSwitch', 'StateCase', 'viewStates', 'default', 'children', 'test', 'add', 'move', 'remove', 'warning', 'info', 'infos',
+      'StateSwitch',
+      'StateCase',
+      'viewStates',
+      'default',
+      'children',
+      'test',
+      'add',
+      'move',
+      'remove',
+      'warning',
+      'info',
+      'infos',
     ])
     const 후보 = backticked().filter((name) => !notArgs.has(name) && !name.includes('.'))
     // 분모가 0이면 아래가 공허하다 — 실제 인자 이름이 산문에 나온다.
@@ -235,9 +273,7 @@ describe('쓰기의 규칙 셋을 가르친다', () => {
 
 describe('스킬이 배포에 실린다', () => {
   it('`package.json` 의 `files` 가 `skill` 을 담는다 — dist 만 담으면 안 나간다', () => {
-    const manifest = JSON.parse(
-      readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
-    ) as { files: string[] }
+    const manifest = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')) as { files: string[] }
     expect(manifest.files).toContain('skill')
   })
 })

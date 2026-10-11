@@ -72,7 +72,9 @@ describe.skipIf(!전제.ok)('에디터 단축키 — 실브라우저', () => {
       return await page.locator('.wb-shell-panel textarea').first().inputValue({ timeout: 15_000 })
     } catch (error) {
       const frames = wsFrames.get(page) ?? []
-      throw new Error(`${(error as Error).message}\nWS 프레임(최근 ${Math.min(frames.length, 40)}/${frames.length}):\n${frames.slice(-40).join('\n')}`)
+      throw new Error(
+        `${(error as Error).message}\nWS 프레임(최근 ${Math.min(frames.length, 40)}/${frames.length}):\n${frames.slice(-40).join('\n')}`,
+      )
     }
   }
 
@@ -89,17 +91,34 @@ describe.skipIf(!전제.ok)('에디터 단축키 — 실브라우저', () => {
       expect((await selected(page)).startsWith('글 2')).toBe(true)
 
       await page.keyboard.press('Alt+ArrowUp')
-      const moved = await poll('Alt+↑ 가 서버에 닿는다', () => server(P), (s) => s.headSeq === 2)
+      const moved = await poll(
+        'Alt+↑ 가 서버에 닿는다',
+        () => server(P),
+        (s) => s.headSeq === 2,
+      )
       await page.keyboard.press('ControlOrMeta+z')
-      const undone = await poll('Cmd+Z 가 서버에 닿는다', () => server(P), (s) => s.headSeq === 3)
+      const undone = await poll(
+        'Cmd+Z 가 서버에 닿는다',
+        () => server(P),
+        (s) => s.headSeq === 3,
+      )
       await page.keyboard.press('ArrowDown')
       const next = await selected(page)
       await page.keyboard.press('Delete')
-      const deleted = await poll('Delete 가 서버에 닿는다', () => server(P), (s) => s.headSeq === 4)
+      const deleted = await poll(
+        'Delete 가 서버에 닿는다',
+        () => server(P),
+        (s) => s.headSeq === 4,
+      )
       await page.keyboard.press('Shift+Slash')
       const help = await page.getByRole('dialog', { name: '단축키' }).count()
       await page.keyboard.press('Escape')
-      const closed = await poll('Escape 가 닫는다', () => page.locator('dialog[open]').count(), (count) => count === 0, 3_000)
+      const closed = await poll(
+        'Escape 가 닫는다',
+        () => page.locator('dialog[open]').count(),
+        (count) => count === 0,
+        3_000,
+      )
 
       expect({ focus, platform: platform.length > 0 }).toEqual({ focus: 'IFRAME', platform: true })
       expect({

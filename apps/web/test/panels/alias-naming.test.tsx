@@ -31,8 +31,24 @@ function doc(): PageDocument {
 }
 
 const COMMENTS: Comment[] = [
-  { id: 'c-1', nodeId: 'n_list', body: '정렬', authorId: 'u-2', authorName: '보라', createdAt: '2026-10-04T00:00:00Z', updatedAt: '2026-10-04T00:00:00Z' },
-  { id: 'c-2', nodeId: 'n_plain', body: '문구', authorId: 'u-2', authorName: '보라', createdAt: '2026-10-04T00:00:00Z', updatedAt: '2026-10-04T00:00:00Z' },
+  {
+    id: 'c-1',
+    nodeId: 'n_list',
+    body: '정렬',
+    authorId: 'u-2',
+    authorName: '보라',
+    createdAt: '2026-10-04T00:00:00Z',
+    updatedAt: '2026-10-04T00:00:00Z',
+  },
+  {
+    id: 'c-2',
+    nodeId: 'n_plain',
+    body: '문구',
+    authorId: 'u-2',
+    authorName: '보라',
+    createdAt: '2026-10-04T00:00:00Z',
+    updatedAt: '2026-10-04T00:00:00Z',
+  },
 ]
 
 async function openTab(name: '상호작용' | '코멘트'): Promise<void> {

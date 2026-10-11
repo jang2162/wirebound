@@ -212,4 +212,3 @@ function copyNode(node: WbNode): WbNode {
   }
   return next
 }
-

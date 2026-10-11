@@ -35,7 +35,9 @@ describe('내보내기 런타임', () => {
 
   it('파일이 없으면 까닭(`pnpm build`)과 경로를 말하며 던진다', () => {
     const missing = join(tmpdir(), `wb-no-runtime-${process.pid}.js`)
-    expect(() => readExportRuntime(missing)).toThrow(`내보내기 런타임이 없습니다(${missing}) — 저장소 뿌리에서 \`pnpm build\` 를 먼저 돌립니다`)
+    expect(() => readExportRuntime(missing)).toThrow(
+      `내보내기 런타임이 없습니다(${missing}) — 저장소 뿌리에서 \`pnpm build\` 를 먼저 돌립니다`,
+    )
   })
 
   it('없는 자리를 주면 buildApp 이 기동을 멈춘다', async () => {

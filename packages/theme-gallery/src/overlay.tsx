@@ -43,18 +43,34 @@ export function GalleryOverlay(props: { stage: RefObject<HTMLDivElement | null>;
   if (measured === null) return null
   const { box, marker } = measured
   const boxStyle: CSSProperties = {
-    position: 'absolute', left: box.left, top: box.top, width: box.width, height: box.height,
-    outline: '2px solid #2563eb', outlineOffset: '1px', pointerEvents: 'none',
+    position: 'absolute',
+    left: box.left,
+    top: box.top,
+    width: box.width,
+    height: box.height,
+    outline: '2px solid #2563eb',
+    outlineOffset: '1px',
+    pointerEvents: 'none',
   }
   const markerStyle: CSSProperties = {
-    position: 'absolute', left: marker.x - MARKER_SIZE / 2, top: marker.y - MARKER_SIZE / 2, width: MARKER_SIZE, height: MARKER_SIZE,
-    borderRadius: '50%', background: '#f97316', color: '#fff', font: '10px/16px system-ui, sans-serif', textAlign: 'center',
+    position: 'absolute',
+    left: marker.x - MARKER_SIZE / 2,
+    top: marker.y - MARKER_SIZE / 2,
+    width: MARKER_SIZE,
+    height: MARKER_SIZE,
+    borderRadius: '50%',
+    background: '#f97316',
+    color: '#fff',
+    font: '10px/16px system-ui, sans-serif',
+    textAlign: 'center',
     pointerEvents: 'none',
   }
   return (
     <>
       <div data-wb-gallery-focus="" style={boxStyle} />
-      <div data-wb-gallery-marker="" style={markerStyle}>1</div>
+      <div data-wb-gallery-marker="" style={markerStyle}>
+        1
+      </div>
     </>
   )
 }

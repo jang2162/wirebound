@@ -24,9 +24,7 @@ const field = (id: string, label: string): WbNode => ({ id, type: 'Field', props
 /** 노드 하나를 Page 아래 그리고 그 노드의 루트를 돌려준다. 뷰가 던지면 폴백이 서므로 `data-wb-error` 도 함께 본다. */
 function draw(node: WbNode): Element {
   const doc = { version: 1, root: { id: 'page', type: 'Page', props: {}, children: [node] } } as never
-  const { container } = render(
-    <ThemeProvider value={{ tokens: {}, window }}>{renderDocument(doc, { theme: PORTAL_THEME })}</ThemeProvider>,
-  )
+  const { container } = render(<ThemeProvider value={{ tokens: {}, window }}>{renderDocument(doc, { theme: PORTAL_THEME })}</ThemeProvider>)
   expect(container.querySelector('[data-wb-error]')).toBeNull()
   const root = container.querySelector(`[data-wb-id="${node.id}"]`)
   if (root === null) throw new Error(`노드가 안 그려졌다: ${node.id}`)
@@ -65,10 +63,22 @@ describe('뷰를 쓴 컴포넌트는 옛 구조의 DOM 으로 그린다', () => 
   })
 
   it('KeyValue:definitionList — dl 안의 dt/dd 짝', () => {
-    const root = draw({ id: 'k', type: 'KeyValue', props: { pairs: [{ key: '작성일', value: '오늘' }, { key: '부서', value: '총무' }] } })
+    const root = draw({
+      id: 'k',
+      type: 'KeyValue',
+      props: {
+        pairs: [
+          { key: '작성일', value: '오늘' },
+          { key: '부서', value: '총무' },
+        ],
+      },
+    })
     expect(root.tagName).toBe('DL')
     expect(root.getAttribute('data-wb-structure')).toBe('definitionList')
-    expect(parts(root, 'row').map((row) => [...row.children].map((c) => c.tagName))).toEqual([['DT', 'DD'], ['DT', 'DD']])
+    expect(parts(root, 'row').map((row) => [...row.children].map((c) => c.tagName))).toEqual([
+      ['DT', 'DD'],
+      ['DT', 'DD'],
+    ])
   })
 
   it('SearchForm:collapsible — 펴지면 머리줄 · 필드 · 동작, 접히면 머리줄만', () => {
@@ -86,7 +96,11 @@ describe('뷰를 쓴 컴포넌트는 옛 구조의 DOM 으로 그린다', () => 
   it('EntryForm:sectioned — 최상위 자식 하나가 구획 하나', () => {
     const root = draw({ id: 'e', type: 'EntryForm', props: { title: '민원 신청' }, children: [field('e-a', '이름'), field('e-b', '내용')] })
     expect(root.getAttribute('data-wb-structure')).toBe('sectioned')
-    expect(parts(root, 'label').filter((el) => el.closest('[data-wb-id]') === root).map((el) => el.textContent)).toEqual(['민원 신청'])
+    expect(
+      parts(root, 'label')
+        .filter((el) => el.closest('[data-wb-id]') === root)
+        .map((el) => el.textContent),
+    ).toEqual(['민원 신청'])
     const sections = parts(root, 'section')
     expect(sections).toHaveLength(2)
     expect(sections.map((s) => s.querySelector('[data-wb-part="sectionTitle"]')!.textContent)).toEqual(['구획 1', '구획 2'])
@@ -136,7 +150,8 @@ describe('마커 · 외곽선은 뷰의 루트를 따른다', () => {
     const root = draw(node)
     expect(focusElement(root)).toBe(root)
     expect(root.hasAttribute('data-wb-marker')).toBe(false)
-    root.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 40, right: 310, bottom: 60, x: 10, y: 20, toJSON() {} }) as DOMRect
+    root.getBoundingClientRect = () =>
+      ({ left: 10, top: 20, width: 300, height: 40, right: 310, bottom: 60, x: 10, y: 20, toJSON() {} }) as DOMRect
     expect(markerPoint(root)).toEqual({ x: 10, y: 20 })
   })
 })

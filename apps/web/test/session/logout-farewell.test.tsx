@@ -31,13 +31,14 @@ function statusText(): string {
 
 /** 셸을 열고 구조 트리의 «아래로»를 낸다 — `answer`가 풀리기 전까지 답이 없다(REST). */
 async function editWaiting(options: { answer: Promise<never> | 'now' }) {
-  const patchOps = vi.fn(
-    (): Promise<PatchResult> =>
-      options.answer === 'now' ? Promise.resolve({ seq: 8, revisionId: 'rev-8', inverse: [], schemaVersion: 1 }) : options.answer,
+  const patchOps = vi.fn((): Promise<PatchResult> =>
+    options.answer === 'now' ? Promise.resolve({ seq: 8, revisionId: 'rev-8', inverse: [], schemaVersion: 1 }) : options.answer,
   )
   const login = vi.fn(async () => ({ id: 'u1', email: 'a@example.com', name: '홍길동' }))
   // 다시 로그인한 뒤 목록 조회가 401 이다 — 세션이 끊겨 로그인 화면으로 돌아간다(로그아웃이 아니다 — 남길 줄을 새로 안 정한다).
-  await openPage(pair(), { apiOverrides: { patchOps, logout: async () => {}, login, listProjects: async () => Promise.reject(unauthenticatedError()) } })
+  await openPage(pair(), {
+    apiOverrides: { patchOps, logout: async () => {}, login, listProjects: async () => Promise.reject(unauthenticatedError()) },
+  })
   const tree = screen.getByRole('region', { name: '구조 트리' })
   fireEvent.click(within(tree).getByRole('button', { name: structureRowName('Text') }))
   fireEvent.click(treeTool(tree, '아래로'))
@@ -169,7 +170,12 @@ describe('로그아웃을 기다리는 동안 버린 편집', () => {
   it('누르기 전에 시작한 수습이 한도 안에 못 끝나면 그 수습이 버린 편집을 말한다', async () => {
     const view = await editRefusedLater({ recoverHangs: true })
     await view.refuse()
-    expect(screen.queryAllByRole('alert').map((node) => node.textContent).join('')).toBe('')
+    expect(
+      screen
+        .queryAllByRole('alert')
+        .map((node) => node.textContent)
+        .join(''),
+    ).toBe('')
 
     const said = await logoutThrough(async () => {}, 0)
 
@@ -300,7 +306,9 @@ describe('logoutLossNotice', () => {
   })
 
   it('보낸 편집은 «모름», 안 보낸 편집은 «저장되지 않았다»로 센다', () => {
-    expect(logoutLossNotice(1, 0)).toBe('로그아웃 전에 보낸 편집 1개의 답을 받지 못해 서버에 반영됐는지 알 수 없습니다. 다시 로그인해 그 페이지를 확인하세요.')
+    expect(logoutLossNotice(1, 0)).toBe(
+      '로그아웃 전에 보낸 편집 1개의 답을 받지 못해 서버에 반영됐는지 알 수 없습니다. 다시 로그인해 그 페이지를 확인하세요.',
+    )
     expect(logoutLossNotice(1, 2)).toBe(
       '로그아웃 전에 보낸 편집 1개의 답을 받지 못해 서버에 반영됐는지 알 수 없습니다. 보내지 않은 편집 2개는 저장되지 않았습니다. 다시 로그인해 그 페이지를 확인하세요.',
     )

@@ -74,7 +74,8 @@ const MAC_CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome
  */
 async function launch(browserPath: string | undefined): Promise<Browser> {
   const { chromium } = await import('playwright-core')
-  const candidates: (string | undefined)[] = browserPath !== undefined ? [browserPath] : [...(existsSync(MAC_CHROME) ? [MAC_CHROME] : []), undefined]
+  const candidates: (string | undefined)[] =
+    browserPath !== undefined ? [browserPath] : [...(existsSync(MAC_CHROME) ? [MAC_CHROME] : []), undefined]
   const failures: string[] = []
   for (const candidate of candidates) {
     try {
@@ -170,10 +171,18 @@ function measure(): Omit<ShotWidthReport, 'width' | 'pngs' | 'pageHeight' | 'con
       high = Math.min(high, box.right)
     }
     if (reachable || (right <= high + 0.5 && left >= low - 0.5)) continue
-    overflow.push({ item: itemOf(parent), element: `${describe(parent)} "${content.slice(0, 24)}"`, left: Math.round(left), right: Math.round(right) })
+    overflow.push({
+      item: itemOf(parent),
+      element: `${describe(parent)} "${content.slice(0, 24)}"`,
+      left: Math.round(left),
+      right: Math.round(right),
+    })
   }
   return {
-    wbErrors: [...document.querySelectorAll('[data-wb-error]')].map((el) => ({ item: itemOf(el), message: el.getAttribute('data-wb-error') ?? '' })),
+    wbErrors: [...document.querySelectorAll('[data-wb-error]')].map((el) => ({
+      item: itemOf(el),
+      message: el.getAttribute('data-wb-error') ?? '',
+    })),
     overflow,
     pageScrollWidth: document.documentElement.scrollWidth,
     pageClientWidth: vw,

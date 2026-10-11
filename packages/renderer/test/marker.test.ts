@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { focusElement, markerPoint } from '@wirebound/renderer'
 
 function box(el: Element, left: number, top: number, width: number, height: number) {
-  el.getBoundingClientRect = () => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON() {} }) as DOMRect
+  el.getBoundingClientRect = () =>
+    ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON() {} }) as DOMRect
 }
 
 function node(html: string): Element {
@@ -14,8 +15,12 @@ function node(html: string): Element {
 
 describe('markerPoint', () => {
   const cases: [string, [number, number]][] = [
-    ['top-start', [10, 20]], ['top-end', [110, 20]], ['bottom-start', [10, 70]],
-    ['bottom-end', [110, 70]], ['start', [10, 45]], ['end', [110, 45]],
+    ['top-start', [10, 20]],
+    ['top-end', [110, 20]],
+    ['bottom-start', [10, 70]],
+    ['bottom-end', [110, 70]],
+    ['start', [10, 45]],
+    ['end', [110, 45]],
   ]
   for (const [placement, [x, y]] of cases) {
     it(placement, () => {

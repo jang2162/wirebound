@@ -507,10 +507,7 @@ describe('연결·참가·이탈', () => {
       track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
 
       const frames = await first.waitForCount('presence', 2)
-      expect(frames.at(-1)?.participants.map((participant) => participant.userId)).toEqual([
-        fx.owner.user.id,
-        fx.peer.user.id,
-      ])
+      expect(frames.at(-1)?.participants.map((participant) => participant.userId)).toEqual([fx.owner.user.id, fx.peer.user.id])
     })
   })
 
@@ -630,7 +627,10 @@ describe('보내기 직전에 권한을 다시 본다 (확인 지점 2)', () => 
         return announcePresence(projectId)
       }
 
-      await db.deleteFrom('sessions').where('user_id', 'in', [...revokedIds]).execute()
+      await db
+        .deleteFrom('sessions')
+        .where('user_id', 'in', [...revokedIds])
+        .execute()
       await editPage(ctx, fx, fx.owner)
 
       for (const tab of revokedTabs) expect((await tab.waitClosed()).code).toBe(4403)

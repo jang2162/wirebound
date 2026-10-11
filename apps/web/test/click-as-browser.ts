@@ -78,8 +78,7 @@ import { act, fireEvent } from '@testing-library/react'
  * 마우스로 포커스를 받는 요소. `tabindex="-1"`도 받는다(키보드로만 못 온다). 링크는 `href`가
  * 있어야 받는다.
  */
-const MOUSE_FOCUSABLE =
-  'a[href], button, input, select, textarea, [tabindex], [contenteditable=""], [contenteditable="true"]'
+const MOUSE_FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex], [contenteditable=""], [contenteditable="true"]'
 
 function isDisabled(element: Element): boolean {
   return (element as HTMLButtonElement).disabled === true || element.closest('fieldset:disabled') !== null

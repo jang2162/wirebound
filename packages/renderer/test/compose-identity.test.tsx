@@ -56,17 +56,14 @@ const layout: LayoutDocument = {
 
 describe('renderComposed와 renderDocument', () => {
   it('결과가 같지 않다', () => {
-    expect(renderToStaticMarkup(renderComposed(layout, page))).not.toBe(
-      renderToStaticMarkup(renderDocument(page)),
-    )
+    expect(renderToStaticMarkup(renderComposed(layout, page))).not.toBe(renderToStaticMarkup(renderDocument(page)))
   })
 
   it('합성은 노드 둘을 더 그린다 — 레이아웃 루트와 Slot', () => {
     const composed = renderToStaticMarkup(renderComposed(layout, page))
     const direct = renderToStaticMarkup(renderDocument(page))
 
-    const ids = (markup: string): string[] =>
-      [...markup.matchAll(/data-wb-id="([^"]+)"/g)].map((match) => match[1]!)
+    const ids = (markup: string): string[] => [...markup.matchAll(/data-wb-id="([^"]+)"/g)].map((match) => match[1]!)
 
     expect(ids(direct)).toEqual(['n_pageroot001', 'n_text00000001'])
     expect(ids(composed)).toEqual(['n_layoutroot1', 'n_slot00000001', 'n_pageroot001', 'n_text00000001'])
@@ -78,8 +75,7 @@ describe('renderComposed와 renderDocument', () => {
    * 맞는 엘리먼트가 **둘**이다. 여백·배경을 주는 테마면 그것이 중첩된다.
    */
   it('data-wb-component="Page"에 맞는 자리가 하나에서 둘로 는다', () => {
-    const count = (markup: string): number =>
-      [...markup.matchAll(/data-wb-component="Page"/g)].length
+    const count = (markup: string): number => [...markup.matchAll(/data-wb-component="Page"/g)].length
 
     expect(count(renderToStaticMarkup(renderDocument(page)))).toBe(1)
     expect(count(renderToStaticMarkup(renderComposed(layout, page)))).toBe(2)
@@ -92,9 +88,7 @@ describe('renderComposed와 renderDocument', () => {
   it('합성 DOM의 id 중 둘은 페이지 문서에 없다', () => {
     const composed = renderToStaticMarkup(renderComposed(layout, page))
     const inPage = new Set(['n_pageroot001', 'n_text00000001'])
-    const foreign = [...composed.matchAll(/data-wb-id="([^"]+)"/g)]
-      .map((match) => match[1]!)
-      .filter((id) => !inPage.has(id))
+    const foreign = [...composed.matchAll(/data-wb-id="([^"]+)"/g)].map((match) => match[1]!).filter((id) => !inPage.has(id))
 
     expect(foreign).toEqual(['n_layoutroot1', 'n_slot00000001'])
   })

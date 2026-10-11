@@ -61,16 +61,7 @@ import type { FastifyInstance } from 'fastify'
 import { withTransaction } from '../src/db/tx'
 import { lockProjectForRestore } from '../src/repos/snapshots'
 import { routeCensus } from './guarded-routes'
-import {
-  createMenuNode,
-  createPage,
-  createProject,
-  getTestDb,
-  resetRealData,
-  signup,
-  withRealApi,
-  type TestContext,
-} from './helpers'
+import { createMenuNode, createPage, createProject, getTestDb, resetRealData, signup, withRealApi, type TestContext } from './helpers'
 import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 const db = getTestDb()
@@ -471,10 +462,7 @@ async function fixture(app: FastifyInstance): Promise<Ids> {
 
   const invitee = await signup(ctx, { email: 'census-invitee@example.com' })
   const member = await signup(ctx)
-  await db
-    .insertInto('project_members')
-    .values({ project_id: project.id, user_id: member.user.id, role: 'viewer' })
-    .execute()
+  await db.insertInto('project_members').values({ project_id: project.id, user_id: member.user.id, role: 'viewer' }).execute()
 
   // **재번호가 실제로 쓰는 판.** 문서의 `marker`를 어긋난 값으로 심는다 — 프로덕션을
   // 고치지 않고 상태만 만든다(`snapshots.test.ts`가 raw SQL로 같은 일을 한다).
@@ -612,7 +600,11 @@ describe('표가 스스로 세는 것', () => {
    * 위 census 의 그 줄이 갖는다.
    */
   it('막히지 않는 줄의 목록이 고정돼 있다', () => {
-    expect(PROBES.filter((probe) => !probe.blocked).map((probe) => probe.route).sort()).toEqual([
+    expect(
+      PROBES.filter((probe) => !probe.blocked)
+        .map((probe) => probe.route)
+        .sort(),
+    ).toEqual([
       // **멤버 수정 · 삭제**는 `project_members`의 UPDATE · DELETE 라 부모 행을 안 잡는다. 복원은 멤버를 되돌리지 않고, **막히면
       // 안 되는 쪽이다** — 막히면 복원이 도는 동안 회수(강등 · 제외)가 서지 않는다(`repos/members.ts`의 `lockOwnerIds` 머리말).
       'DELETE /:projectId/members/:userId',

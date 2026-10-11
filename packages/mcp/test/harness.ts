@@ -59,10 +59,7 @@ export function harness(options: HarnessOptions = {}): FakeIo {
   const files: Record<string, string> = {}
 
   if (options.binding !== false) {
-    const raw =
-      typeof options.binding === 'object'
-        ? options.binding
-        : { server: SERVER, projectId: PROJECT }
+    const raw = typeof options.binding === 'object' ? options.binding : { server: SERVER, projectId: PROJECT }
     files['/repo/.wirebound.json'] = `${JSON.stringify(raw, null, 2)}\n`
   }
   if (options.token !== false) {
@@ -127,7 +124,13 @@ function 코멘트행(): unknown {
 /**
  * 쓰기 라우트 하나를 건다. **실패 문장은 `apps/api`가 실제로 내는 것을 옮긴다.**
  */
-function stubWrite(io: FakeIo, method: string, path: string, mode: WriteMode | 'existing-marker', ok: { status: number; body: unknown }): void {
+function stubWrite(
+  io: FakeIo,
+  method: string,
+  path: string,
+  mode: WriteMode | 'existing-marker',
+  ok: { status: number; body: unknown },
+): void {
   switch (mode) {
     case 'none':
       return

@@ -66,9 +66,7 @@ describe('states·variantFrom 도달성', () => {
     // 카나리아 — `variantFrom`을 가진 컴포넌트가 있어야 이 케이스가 무언가를 지킨다.
     // **정렬해서 비교한다** — `CATALOG_TYPES`의 순서는 이 성질과 무관하고, 순서에 매이면
     // 카탈로그를 재배치할 때 뜻 없는 실패가 난다.
-    expect(
-      [...CATALOG_TYPES.filter((type) => getComponent(type)?.variantFrom !== undefined)].sort(),
-    ).toEqual(['Divider', 'Field', 'Text'])
+    expect([...CATALOG_TYPES.filter((type) => getComponent(type)?.variantFrom !== undefined)].sort()).toEqual(['Divider', 'Field', 'Text'])
     expect(unreachable).toEqual([])
   })
 })

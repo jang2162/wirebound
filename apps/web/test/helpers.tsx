@@ -226,13 +226,10 @@ export function renderWithProviders(ui: ReactElement, options: RenderOptions = {
     </MemoryRouter>
   )
 
-  const stored =
-    options.draftStore === undefined ? routed : <DraftStoreProvider store={options.draftStore}>{routed}</DraftStoreProvider>
-  const tabbed =
-    options.tabChannel === undefined ? stored : <TabChannelProvider channel={options.tabChannel}>{stored}</TabChannelProvider>
+  const stored = options.draftStore === undefined ? routed : <DraftStoreProvider store={options.draftStore}>{routed}</DraftStoreProvider>
+  const tabbed = options.tabChannel === undefined ? stored : <TabChannelProvider channel={options.tabChannel}>{stored}</TabChannelProvider>
 
-  const live =
-    options.realtime === undefined ? tabbed : <RealtimeProvider setup={options.realtime}>{tabbed}</RealtimeProvider>
+  const live = options.realtime === undefined ? tabbed : <RealtimeProvider setup={options.realtime}>{tabbed}</RealtimeProvider>
   render(
     <ApiProvider client={options.client ?? fakeApi()}>
       <ThemeBundleProvider loader={options.bundleLoader ?? staticBundleLoader()}>
