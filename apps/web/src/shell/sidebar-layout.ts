@@ -219,7 +219,7 @@ export const REGION_MIN_HEIGHT = 72
  * 손잡이를 만져도 키우는 쪽은 저장값을 안 누른다: `storePaletteHeight`). 하단 바는
  * 셸이 다시 그리지 않아도 자라므로(통지는 제 부품이 그린다) `ResizeObserver` 로 다시 잰다. **재지 못하면**(레이아웃이 없는 jsdom · 첫 그림
  * 전) 창 높이에서 머리 · 하단 바 한 줄의 몫(`PALETTE_CHROME_RESERVE`)을 뗀 셈으로 간다. 하단 바가 창의 대부분을 먹는 판에서는 최대가
- * 최소로 주저앉아 캔버스 줄이 그 몫 아래로 준다 — 셸은 넘치지 않는다(`minmax(0, 1fr)`). 잰 값과 다시 재는 법은 `PALETTE_HEIGHT_DEFAULT` 의
+ * 최소로, 그래도 셸이 넘치면 바닥(`PALETTE_HEIGHT_FLOOR`)까지 주저앉아 캔버스 줄이 그 몫 아래로 준다. 잰 값과 다시 재는 법은 `PALETTE_HEIGHT_DEFAULT` 의
  * 주석 · `apps/web/build-test/palette-review.test.ts` «창 700 · 최대 판 · 통지 다섯».
  */
 
@@ -245,6 +245,13 @@ export const PALETTE_HEIGHT_DEFAULT = 340
  */
 export const PALETTE_HEIGHT_MIN = 220
 
+/**
+ * 하단 바가 창의 대부분을 먹는 판(창 500 · 통지 여덟)에서 판이 내려갈 수 있는 바닥(px) — 판 머리(60) + 카드 한 장의 윗부분(60)이다. 판은
+ * 스크롤 상자라 줄어도 카드가 사라지지 않지만, 최소(220)를 지키면 셸이 창을 넘어 하단 바(통지 · 단추)가 창 밖으로 사라진다 — 사라지는 쪽의
+ * 대가가 훨씬 크다(`paletteHeightMax`). 통지 칸에 `max-height` 를 거는 길은 «실패 통지가 접힌 칸에 가려진다» 로 거절됐다.
+ */
+export const PALETTE_HEIGHT_FLOOR = 120
+
 /** 판이 아무리 높아도 캔버스 칸에 남겨 두는 높이(px) — 캔버스 칸의 위 · 아래 여백(24 × 2)을 빼고 문서가 한 화면의 몇 줄은 보이는 선. */
 export const CANVAS_MIN_HEIGHT = 240
 
@@ -256,11 +263,16 @@ export const PALETTE_CHROME_RESERVE = 96
 
 /**
  * 판이 가질 수 있는 최대(px) — `room`(캔버스 · 판이 나눠 쓰는 잰 세로)이 있으면 그것에서, 없으면(0) 창 높이에서 셈한다(머리말 «하단 판의
- * 높이»). 최소보다 작아지지 않는다(`sideWidthMax` 와 같은 까닭).
+ * 높이»). **캔버스 몫(240)을 지키고도 최소(220)가 남으면 그 값이다. 아니면 최소(220)다 — 단 최소를 지키면 하단 바가 창 밖으로 밀려 셸이
+ * 넘치는 판에서는 판이 그만큼 내려가 남은 세로 전부(캔버스 줄은 0)가 되고, 바닥(`PALETTE_HEIGHT_FLOOR`)에서 멈춘다.** 캔버스 몫 240 은 그 판에서
+ * 어느 정책으로도 못 지킨다(머리 48 + 캔버스 240 + 판 바닥 120 + 하단 바 328 > 창 500). 캔버스 줄은 이미 최소가 지킬 수 없던 칸에서 0
+ * 까지 줄어 왔다(창 800×600 · 통지 여덟: 판 220 이 남은 세로를 다 쓴다) — 이 갈래는 그 줄이는 몫을 판이 대신 지는 것이다.
  */
 export function paletteHeightMax(windowHeight: number, room = 0): number {
   const space = room > 0 ? room : windowHeight - PALETTE_CHROME_RESERVE
-  return Math.max(PALETTE_HEIGHT_MIN, space - CANVAS_MIN_HEIGHT)
+  const keepCanvas = space - CANVAS_MIN_HEIGHT
+  if (keepCanvas >= PALETTE_HEIGHT_MIN) return keepCanvas
+  return clamp(space, PALETTE_HEIGHT_FLOOR, PALETTE_HEIGHT_MIN)
 }
 
 /**
@@ -632,7 +644,13 @@ export function useSidebarLayout(): SidebarLayout {
     const height = side.getBoundingClientRect().height
     if (!(height > 0)) return 0
     const gap = side.parentElement === null ? NaN : parseFloat(getComputedStyle(side.parentElement).rowGap)
-    return Math.max(0, height - footer.getBoundingClientRect().height - (Number.isFinite(gap) ? gap * 2 : 0))
+    // 셸이 넘치면 하단 바의 칸이 창 끝에서 눌려(통지 여덟 · 창 500: 328 → 229) 내용이 칸을 넘친다 — 눌린 칸을 재면 «남은 세로» 가 눌린 만큼 커져
+    // 판이 최소에 머물고 셸이 넘친 채 그대로 안정된다. 넘치는 동안은 내용의 높이(`scrollHeight` — 아래 여백은 안 든다)로 잰다. 안 넘칠 때는
+    // `scrollHeight` 가 정수라 쓰지 않는다(위 `measure` 의 0.5px 어긋남).
+    const rect = footer.getBoundingClientRect().height
+    const padding = parseFloat(getComputedStyle(footer).paddingBottom)
+    const need = footer.scrollHeight > footer.clientHeight ? Math.max(rect, footer.scrollHeight + (Number.isFinite(padding) ? padding : 0)) : rect
+    return Math.max(0, height - need - (Number.isFinite(gap) ? gap * 2 : 0))
   }, [])
 
   // 하단 바는 셸이 다시 그리지 않아도 자란다(통지는 제 부품이 그린다) — 바와 사이드바 상자의 크기가 바뀌면 다시 잰다. **관찰자 콜백 안에서는
@@ -743,7 +761,8 @@ export function useSidebarLayout(): SidebarLayout {
     paletteOpen: stored.paletteOpen === true,
     togglePalette: () => setStored((prev) => ({ ...prev, paletteOpen: prev.paletteOpen !== true })),
     paletteHeight,
-    paletteHeightMin: PALETTE_HEIGHT_MIN,
+    // 최대가 최소 아래로 내려간 판(바닥)에서는 손잡이의 범위도 최대까지다 — 최소가 최대 위면 `aria-valuemin` 이 `aria-valuemax` 를 넘는다.
+    paletteHeightMin: Math.min(PALETTE_HEIGHT_MIN, paletteMax),
     paletteHeightMax: paletteMax,
     grabPaletteHeight: () => paletteHeight,
     setPaletteHeight: (height) => setStored((prev) => ({ ...prev, paletteHeight: storePaletteHeight(prev.paletteHeight, height, paletteMax) })),

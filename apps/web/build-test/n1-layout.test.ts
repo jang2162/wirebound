@@ -4,7 +4,7 @@
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 창 크기 표 | 판이 최소(220) 위인데 캔버스 칸이 `CANVAS_MIN_HEIGHT` 아래다 · 하단 바가 창 밖이다 · 표 밖의 칸에서 셸이 넘친다(알려진 한 칸 — 창 800×500 · 통지 8) |
+ * | 창 크기 표 | 판이 최소(220) 위인데 캔버스 칸이 `CANVAS_MIN_HEIGHT` 아래다 · 하단 바가 창 밖이다 · 표 밖의 칸에서 셸이 넘친다 · 24 칸의 캔버스 / 판 / 하단 바가 표와 다르다 |
  * | 낮은 줌의 선택 외곽선 | 줌 7 · 25 · 50 · 100% 에서 외곽선 위쪽 줄의 가장 진한 픽셀이 강조색에 가깝지 않다(굵기가 줌을 따라 준다) |
  * | 통지 닫기 색 | 통지 닫기 `×` 가 대화 상자 닫기와 다른 색이다 |
  * | 상호작용 «대상» 라벨 | 라벨이 두 줄 이상으로 접힌다 |
@@ -16,7 +16,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { CANVAS_MIN_HEIGHT, PALETTE_HEIGHT_MIN } from '../src/shell/sidebar-layout'
+import { CANVAS_MIN_HEIGHT, PALETTE_HEIGHT_FLOOR, PALETTE_HEIGHT_MIN } from '../src/shell/sidebar-layout'
 import { canvasFrame, editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
 import { decodePng } from './png-pixels'
 
@@ -95,11 +95,12 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
     )
 
   /** L-038 — 창 폭 2 × 높이 4 × 통지 3 에서 캔버스 · 판 · 하단 바 · 셸 넘침을 잰다. */
-  it('창 크기 표 — 판이 최소 위면 캔버스 칸이 최소를 지키고 하단 바가 창 안이다(Q7 (다): 판 최소가 캔버스 몫보다 앞선다)', async () => {
+  it('창 크기 표 — 판이 최소 위면 캔버스 칸이 최소를 지키고 하단 바가 창 안이다(Q7 (다): 판 최소가 캔버스 몫보다 앞서고, 최소로도 셸이 넘치면 판이 바닥까지 내려간다)', async () => {
     const P = await fixture('n1-table', TEXTS)
     const rows: string[] = []
     const bad: string[] = []
     const overflowing: string[] = []
+    const measured: Record<string, number[]> = {}
     for (const width of [1440, 800]) {
       for (const height of [500, 600, 700, 900]) {
         const { page, close } = await open(P, { width, height })
@@ -121,8 +122,11 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
             })
             const label = `${width}×${height} 통지 ${count}`
             rows.push(`${label}: ${JSON.stringify(v)}`)
-            if (!(v.canvas >= CANVAS_MIN_HEIGHT || v.palette === PALETTE_HEIGHT_MIN)) bad.push(`${label} 캔버스 ${v.canvas} · 판 ${v.palette}`)
+            // 캔버스가 몫(240)을 못 지키면 판이 최소(220)에 있거나, 최소로는 셸이 넘쳐 판이 바닥(120) 위로 내려간 판이다(그 판의 셸은 안 넘친다).
+            const atFloor = v.palette >= PALETTE_HEIGHT_FLOOR && v.palette < PALETTE_HEIGHT_MIN && v.overflow === 0
+            if (!(v.canvas >= CANVAS_MIN_HEIGHT || v.palette === PALETTE_HEIGHT_MIN || atFloor)) bad.push(`${label} 캔버스 ${v.canvas} · 판 ${v.palette}`)
             if (v.overflow > 0) overflowing.push(label)
+            measured[label] = [v.canvas, v.palette, v.footer]
           }
         } finally {
           await close()
@@ -133,8 +137,36 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
     console.log(`[N1 창 크기 표]\n${rows.join('\n')}`)
     expect(rows).toHaveLength(24)
     expect(bad).toEqual([])
-    // 알려진 한 칸 — 하단 바(통지 여덟 · 229px)가 창 높이의 절반이다. 새 이월(통지 무리에 max-height 를 안 건다 — Q-N1-3).
-    expect(overflowing).toEqual(['800×500 통지 8'])
+    // 하단 바(통지 여덟 · 328px)가 창 높이의 대부분인 칸에서도 셸이 안 넘친다 — 판이 바닥(120) 위 121 까지 내려간다(캔버스 칸의 높이 48 은
+    // 칸의 여백이고 그 줄은 0 이다 — 판 뒤에 겹친다). 통지 무리에 max-height 를 안 건다(Q-N1-3). 나머지 23 칸은 바닥을 두기 전과 같은 값이다
+    // (캔버스 / 판 / 하단 바).
+    expect(overflowing).toEqual([])
+    expect(measured).toEqual({
+      '1440×500 통지 0': [189, 220, 40],
+      '1440×500 통지 1': [189, 220, 40],
+      '1440×500 통지 8': [61, 220, 168],
+      '1440×600 통지 0': [240, 269, 40],
+      '1440×600 통지 1': [240, 269, 40],
+      '1440×600 통지 8': [161, 220, 168],
+      '1440×700 통지 0': [240, 369, 40],
+      '1440×700 통지 1': [240, 369, 40],
+      '1440×700 통지 8': [240, 241, 168],
+      '1440×900 통지 0': [240, 569, 40],
+      '1440×900 통지 1': [240, 569, 40],
+      '1440×900 통지 8': [240, 441, 168],
+      '800×500 통지 0': [189, 220, 40],
+      '800×500 통지 1': [153, 220, 76],
+      '800×500 통지 8': [48, 121, 328],
+      '800×600 통지 0': [240, 269, 40],
+      '800×600 통지 1': [240, 233, 76],
+      '800×600 통지 8': [48, 220, 328],
+      '800×700 통지 0': [240, 369, 40],
+      '800×700 통지 1': [240, 333, 76],
+      '800×700 통지 8': [101, 220, 328],
+      '800×900 통지 0': [240, 569, 40],
+      '800×900 통지 1': [240, 533, 76],
+      '800×900 통지 8': [240, 281, 328],
+    })
   }, 180_000)
 
   /** L-012 — 줌 4 곳에서 선택 외곽선 위쪽 줄을 찍어 가장 진한 픽셀의 R 값을 본다(강조색 #2f6fed 는 47, 흰 바탕은 255). */
