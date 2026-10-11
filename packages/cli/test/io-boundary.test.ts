@@ -177,19 +177,19 @@ describe('바깥 세계를 만지는 자리', () => {
    * 표준출력을 만진다 — `--json`을 파이프로 받는 쪽이 그것에 섞이면 JSON이 아니게 된다.
    */
   it('전역을 직접 만지는 형태도 잡는다', () => {
-    const caught = [
-      'process.cwd()',
-      'process.env.HOME',
-      'await fetch(url)',
-      'console.log(line)',
-      'console.error(error)',
-    ]
+    const caught = ['process.cwd()', 'process.env.HOME', 'await fetch(url)', 'console.log(line)', 'console.error(error)']
     for (const line of caught) {
-      expect(EFFECTFUL.some((pattern) => pattern.test(line)), line).toBe(true)
+      expect(
+        EFFECTFUL.some((pattern) => pattern.test(line)),
+        line,
+      ).toBe(true)
     }
     // **반대편.** `io.fetch`는 허용하는 길이고, 이름이 겹치는 것은 안 잡는다.
     for (const line of ['await io.fetch(url, init)', 'const processed = 1', 'const consoleWidth = 80']) {
-      expect(EFFECTFUL.some((pattern) => pattern.test(line)), line).toBe(false)
+      expect(
+        EFFECTFUL.some((pattern) => pattern.test(line)),
+        line,
+      ).toBe(false)
     }
   })
 
@@ -206,8 +206,8 @@ describe('바깥 세계를 만지는 자리', () => {
       "import { join } from '../paths'",
       "import { runInit } from './commands/init'",
       // 주석의 언급(걷히기 전이어도 지정자 자리가 아니다).
-      "// `node:path`를 안 쓴다",
-      "/** `node:fs`를 부르는 자리는 하나여야 한다 */",
+      '// `node:path`를 안 쓴다',
+      '/** `node:fs`를 부르는 자리는 하나여야 한다 */',
     ]
     for (const line of ignored) {
       expect(line, line).not.toMatch(EFFECTFUL_SPECIFIER)

@@ -91,7 +91,10 @@ export async function themeProject(
   options: { bob?: boolean } = {},
 ): Promise<{ id: string; first: string; second: string; call: Call }> {
   const call: Call = (method, path, body) => stack.request(owner, method, path, body)
-  const project = created(await call('POST', '/projects', { name: '테마 판', slug: `theme-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }), '프로젝트')
+  const project = created(
+    await call('POST', '/projects', { name: '테마 판', slug: `theme-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }),
+    '프로젝트',
+  )
   const menu = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' }), '메뉴')
   const first = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' }), '첫째')
   const second = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '둘째' }), '둘째')
@@ -121,7 +124,11 @@ export function seededVersion(themeId: string): string {
 }
 
 /** 프로젝트 테마를 API 로 저장한다 — 지금 `rev` 를 읽어 싣는다. */
-export async function putTheme(call: Call, projectId: string, body: { themeId: string; version: string; tokens: Record<string, string | number> }): Promise<void> {
+export async function putTheme(
+  call: Call,
+  projectId: string,
+  body: { themeId: string; version: string; tokens: Record<string, string | number> },
+): Promise<void> {
   const now = await call('GET', `/projects/${projectId}/theme`)
   const saved = await call('PUT', `/projects/${projectId}/theme`, { ...body, rev: now.body.rev })
   if (saved.status !== 200) throw new Error(`테마 저장 ${saved.status} ${JSON.stringify(saved.body)}`)

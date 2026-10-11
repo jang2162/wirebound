@@ -23,7 +23,10 @@ export const migration: Migration = {
     await db.schema
       .alterTable('snapshots')
       .addColumn('kind', 'text', (col) =>
-        col.notNull().defaultTo('tag').check(sql`kind in ('tag', 'restore-safety', 'cascade-safety')`),
+        col
+          .notNull()
+          .defaultTo('tag')
+          .check(sql`kind in ('tag', 'restore-safety', 'cascade-safety')`),
       )
       .execute()
 

@@ -97,116 +97,123 @@ async function buildFixture(ctx: Parameters<Parameters<typeof withRealApi>[0]>[0
 }
 
 describe('하트비트 판정은 고른 수 × 남의 잠금 수로 늘지 않는다', () => {
-  it(`Text ${TEXTS} · 고른 ${SET} · 남의 잠금 ${(HOLDERS - 1) * SET + 1} — 하트비트 판정 · 루프 멈춤 · 남의 편집 왕복이 상한 안이다`, { timeout: 300_000 }, async () => {
-    await withRealApi(async (ctx) => {
-      const { holders, sera, project, page, texts, P, sets, tabs } = await buildFixture(ctx)
-      // 1) 보라(쥔 사람 0)의 하트비트 열 번 — 보낸 순간 → `hold`, 그 사이 이벤트 루프의 가장 긴 멈춤(끝에서 한 번 더 잰다).
-      const { locks } = ctx.app.realtime
-      const realHold = locks.hold
-      let holdAt = 0
-      let holds = 0
-      locks.hold = (claim, judgedAtStructureSeq) => {
-        holdAt = performance.now()
-        holds += 1
-        return realHold.call(locks, claim, judgedAtStructureSeq)
-      }
-      // 도장이 하트비트를 건너뛰게 했는가 — 건너뛴 수를 센다(0 이면 위 «문서를 안 읽는다» 를 안 잰 것이다).
-      const realIsJudged = locks.isJudged
-      let skipped = 0
-      locks.isJudged = (...args) => {
-        const result = realIsJudged.apply(locks, args)
-        if (result) skipped += 1
-        return result
-      }
-      // 첫 하트비트는 판정을 다시 한다 — 쥔 뒤 남의 잠금이 더 섰으니 «판정을 지난 그대로» 가 아니다(`lock/store.ts` 의 `isJudged`). 그 뒤의 열 번이
-      // 도장 덕에 문서를 안 읽는 값이다. 첫 번째는 재지 않고 도장이 찍히기를 기다린다.
-      {
-        holdAt = 0
-        tabs[0]!.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[0], lockId: 1000 }))
-        for (let t = 0; t < 6000 && holdAt === 0; t += 1) await sleep(10)
-        expect(holdAt, '워밍업 `hold`가 안 불렸다').not.toBe(0)
-        holds = 0
-        skipped = 0
-      }
-      const beats: number[] = []
-      let stall = 0
-      let lastTick = performance.now()
-      const ticker = setInterval(() => {
-        const now = performance.now()
-        stall = Math.max(stall, now - lastTick)
-        lastTick = now
-      }, 1)
-      try {
-        for (let n = 2; n < 12; n += 1) {
+  it(
+    `Text ${TEXTS} · 고른 ${SET} · 남의 잠금 ${(HOLDERS - 1) * SET + 1} — 하트비트 판정 · 루프 멈춤 · 남의 편집 왕복이 상한 안이다`,
+    { timeout: 300_000 },
+    async () => {
+      await withRealApi(async (ctx) => {
+        const { holders, sera, project, page, texts, P, sets, tabs } = await buildFixture(ctx)
+        // 1) 보라(쥔 사람 0)의 하트비트 열 번 — 보낸 순간 → `hold`, 그 사이 이벤트 루프의 가장 긴 멈춤(끝에서 한 번 더 잰다).
+        const { locks } = ctx.app.realtime
+        const realHold = locks.hold
+        let holdAt = 0
+        let holds = 0
+        locks.hold = (claim, judgedAtStructureSeq) => {
+          holdAt = performance.now()
+          holds += 1
+          return realHold.call(locks, claim, judgedAtStructureSeq)
+        }
+        // 도장이 하트비트를 건너뛰게 했는가 — 건너뛴 수를 센다(0 이면 위 «문서를 안 읽는다» 를 안 잰 것이다).
+        const realIsJudged = locks.isJudged
+        let skipped = 0
+        locks.isJudged = (...args) => {
+          const result = realIsJudged.apply(locks, args)
+          if (result) skipped += 1
+          return result
+        }
+        // 첫 하트비트는 판정을 다시 한다 — 쥔 뒤 남의 잠금이 더 섰으니 «판정을 지난 그대로» 가 아니다(`lock/store.ts` 의 `isJudged`). 그 뒤의 열 번이
+        // 도장 덕에 문서를 안 읽는 값이다. 첫 번째는 재지 않고 도장이 찍히기를 기다린다.
+        {
           holdAt = 0
-          const sentAt = performance.now()
-          tabs[0]!.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[0], lockId: n }))
-          const deadline = Date.now() + 60_000
-          while (holdAt === 0 && Date.now() < deadline) await sleep(1)
-          expect(holdAt, '`hold`가 안 불렸다').not.toBe(0)
-          beats.push(holdAt - sentAt)
-          await sleep(20)
+          tabs[0]!.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[0], lockId: 1000 }))
+          for (let t = 0; t < 6000 && holdAt === 0; t += 1) await sleep(10)
+          expect(holdAt, '워밍업 `hold`가 안 불렸다').not.toBe(0)
+          holds = 0
+          skipped = 0
         }
-      } finally {
-        clearInterval(ticker)
-        stall = Math.max(stall, performance.now() - lastTick)
-        locks.hold = realHold
-        locks.isJudged = realIsJudged
-      }
-      console.log('BEATS', JSON.stringify({ p50: p50(beats), max: max(beats), stall, holds, skipped }))
-      // 열 번 다 도장으로 건너뛴다 — 그 사이 남의 잠금이 안 바뀌었고 문서도 그대로다.
-      expect(skipped).toBe(10)
-      // **하트비트 단언을 여기서 한다** — 판정이 느린 판은 다음 단계(1s 주기의 하트비트 다섯)가 이벤트 루프를 채워 편집이 몇 분씩 서서
-      // 케이스가 값이 아니라 시간 초과로 죽는다. 카나리아: 판정이 실제로 돌았다(`hold` 열 번).
-      expect(holds).toBe(10)
-      expect(p50(beats)).toBeLessThan(HEARTBEAT_LIMIT_MS)
-      expect(max(beats)).toBeLessThan(HEARTBEAT_WORST_LIMIT_MS)
-      expect(stall).toBeLessThan(LOOP_STALL_LIMIT_MS)
+        const beats: number[] = []
+        let stall = 0
+        let lastTick = performance.now()
+        const ticker = setInterval(() => {
+          const now = performance.now()
+          stall = Math.max(stall, now - lastTick)
+          lastTick = now
+        }, 1)
+        try {
+          for (let n = 2; n < 12; n += 1) {
+            holdAt = 0
+            const sentAt = performance.now()
+            tabs[0]!.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[0], lockId: n }))
+            const deadline = Date.now() + 60_000
+            while (holdAt === 0 && Date.now() < deadline) await sleep(1)
+            expect(holdAt, '`hold`가 안 불렸다').not.toBe(0)
+            beats.push(holdAt - sentAt)
+            await sleep(20)
+          }
+        } finally {
+          clearInterval(ticker)
+          stall = Math.max(stall, performance.now() - lastTick)
+          locks.hold = realHold
+          locks.isJudged = realIsJudged
+        }
+        console.log('BEATS', JSON.stringify({ p50: p50(beats), max: max(beats), stall, holds, skipped }))
+        // 열 번 다 도장으로 건너뛴다 — 그 사이 남의 잠금이 안 바뀌었고 문서도 그대로다.
+        expect(skipped).toBe(10)
+        // **하트비트 단언을 여기서 한다** — 판정이 느린 판은 다음 단계(1s 주기의 하트비트 다섯)가 이벤트 루프를 채워 편집이 몇 분씩 서서
+        // 케이스가 값이 아니라 시간 초과로 죽는다. 카나리아: 판정이 실제로 돌았다(`hold` 열 번).
+        expect(holds).toBe(10)
+        expect(p50(beats)).toBeLessThan(HEARTBEAT_LIMIT_MS)
+        expect(max(beats)).toBeLessThan(HEARTBEAT_WORST_LIMIT_MS)
+        expect(stall).toBeLessThan(LOOP_STALL_LIMIT_MS)
 
-      // 2) 쥔 사람 다섯이 1s 마다 하트비트를 보내는 동안 세라의 편집 20 — 요청 왕복.
-      let on = true
-      let lockId = 100
-      let sent = 0
-      const loops = tabs.map(async (tab, k) => {
-        await sleep((1000 / HOLDERS) * k)
-        while (on) {
-          tab.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[k], lockId: ++lockId }))
-          sent += 1
-          await sleep(1000)
+        // 2) 쥔 사람 다섯이 1s 마다 하트비트를 보내는 동안 세라의 편집 20 — 요청 왕복.
+        let on = true
+        let lockId = 100
+        let sent = 0
+        const loops = tabs.map(async (tab, k) => {
+          await sleep((1000 / HOLDERS) * k)
+          while (on) {
+            tab.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[k], lockId: ++lockId }))
+            sent += 1
+            await sleep(1000)
+          }
+        })
+        const edits: number[] = []
+        const statuses: number[] = []
+        try {
+          let seq = Number((await ctx.app.inject({ method: 'GET', url: P, cookies: sera.cookie })).json().headSeq)
+          for (let i = 0; i < 20; i += 1) {
+            const t0 = performance.now()
+            const r = await ctx.app.inject({
+              method: 'PATCH',
+              url: `${P}/ops`,
+              cookies: sera.cookie,
+              payload: { baseSeq: seq, ops: [{ op: 'replace', path: `/root/children/${TEXTS}/props`, value: { content: `세라 ${i}` } }] },
+            })
+            edits.push(performance.now() - t0)
+            statuses.push(r.statusCode)
+            seq = Number(r.json().headSeq ?? seq + 1)
+            await sleep(50)
+          }
+        } finally {
+          on = false
+          await Promise.all(loops)
         }
+
+        const denied = tabs.reduce((n, tab) => n + tab.received.filter((f) => f.type === 'lock-denied').length, 0)
+        console.log('EDITS', JSON.stringify({ p50: p50(edits), max: max(edits), sent, denied }))
+        // 카나리아 — 하트비트 루프가 보냈다 · 겹침이 없어 다 받는다.
+        expect(sent).toBeGreaterThanOrEqual(HOLDERS)
+        expect(denied).toBe(0)
+        expect(
+          statuses.every((s) => s === 200),
+          JSON.stringify(statuses),
+        ).toBe(true)
+        expect(p50(edits)).toBeLessThan(EDIT_LIMIT_MS)
+        expect(max(edits)).toBeLessThan(EDIT_WORST_LIMIT_MS)
       })
-      const edits: number[] = []
-      const statuses: number[] = []
-      try {
-        let seq = Number((await ctx.app.inject({ method: 'GET', url: P, cookies: sera.cookie })).json().headSeq)
-        for (let i = 0; i < 20; i += 1) {
-          const t0 = performance.now()
-          const r = await ctx.app.inject({
-            method: 'PATCH',
-            url: `${P}/ops`,
-            cookies: sera.cookie,
-            payload: { baseSeq: seq, ops: [{ op: 'replace', path: `/root/children/${TEXTS}/props`, value: { content: `세라 ${i}` } }] },
-          })
-          edits.push(performance.now() - t0)
-          statuses.push(r.statusCode)
-          seq = Number(r.json().headSeq ?? seq + 1)
-          await sleep(50)
-        }
-      } finally {
-        on = false
-        await Promise.all(loops)
-      }
-
-      const denied = tabs.reduce((n, tab) => n + tab.received.filter((f) => f.type === 'lock-denied').length, 0)
-      console.log('EDITS', JSON.stringify({ p50: p50(edits), max: max(edits), sent, denied }))
-      // 카나리아 — 하트비트 루프가 보냈다 · 겹침이 없어 다 받는다.
-      expect(sent).toBeGreaterThanOrEqual(HOLDERS)
-      expect(denied).toBe(0)
-      expect(statuses.every((s) => s === 200), JSON.stringify(statuses)).toBe(true)
-      expect(p50(edits)).toBeLessThan(EDIT_LIMIT_MS)
-      expect(max(edits)).toBeLessThan(EDIT_WORST_LIMIT_MS)
-    })
-  })
+    },
+  )
 })
 
 /**
@@ -219,92 +226,111 @@ describe('하트비트 판정은 고른 수 × 남의 잠금 수로 늘지 않�
  * 다시 재는 법: 이 파일을 혼자 돌리면 `WEB BEATS` 줄에 두 판의 «보낸 순간 → `hold`» 가운데 값 · 건너뛴 수가 찍힌다.
  */
 describe('편집 직전의 하트비트(웹 흐름)', () => {
-  it(`Text ${TEXTS} · 고른 ${SET} · 남의 잠금 ${(HOLDERS - 1) * SET + 1} — props 만 고친 편집 뒤의 하트비트는 건너뛰고 구조를 바꾼 편집 뒤의 것은 다시 판정한다`, { timeout: 300_000 }, async () => {
-    await withRealApi(async (ctx) => {
-      const { holders, project, page, P, sets, tabs } = await buildFixture(ctx)
-      const { locks } = ctx.app.realtime
-      const realHold = locks.hold
-      const realIsJudged = locks.isJudged
-      let holdAt = 0
-      let holds = 0
-      let skipped = 0
-      locks.hold = (claim, stamp) => {
-        holdAt = performance.now()
-        holds += 1
-        return realHold.call(locks, claim, stamp)
-      }
-      locks.isJudged = (...args) => {
-        const result = realIsJudged.apply(locks, args)
-        if (result) skipped += 1
-        return result
-      }
-      let lockId = 5000
-      const beat = async (): Promise<number> => {
-        holdAt = 0
-        const sentAt = performance.now()
-        tabs[0]!.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[0], lockId: (lockId += 1) }))
-        const deadline = Date.now() + 60_000
-        while (holdAt === 0 && Date.now() < deadline) await sleep(1)
-        expect(holdAt, '`hold`가 안 불렸다').not.toBe(0)
-        return holdAt - sentAt
-      }
-      const headSeq = async (): Promise<number> =>
-        Number((await ctx.app.inject({ method: 'GET', url: P, cookies: holders[0]!.cookie })).json().headSeq)
-      /** 보라가 제 노드의 props 를 고친다 — 구조는 그대로다. */
-      const editProps = async (i: number): Promise<void> => {
-        const r = await ctx.app.inject({
-          method: 'PATCH',
-          url: `${P}/ops`,
-          cookies: holders[0]!.cookie,
-          payload: { baseSeq: await headSeq(), ops: [{ op: 'replace', path: '/root/children/1/props', value: { content: `보라 ${i}` } }] },
-        })
-        expect(r.statusCode).toBe(200)
-      }
-      try {
-        // 워밍업 — 도장을 찍는다(첫 하트비트는 남의 잠금이 더 선 뒤라 다시 판정한다).
-        await beat()
-
-        // 1) props 만 고친다 → 하트비트. 판정을 건너뛰어야 한다.
-        holds = 0
-        skipped = 0
-        const contentBeats: number[] = []
-        for (let i = 0; i < 10; i += 1) {
-          await editProps(i)
-          contentBeats.push(await beat())
+  it(
+    `Text ${TEXTS} · 고른 ${SET} · 남의 잠금 ${(HOLDERS - 1) * SET + 1} — props 만 고친 편집 뒤의 하트비트는 건너뛰고 구조를 바꾼 편집 뒤의 것은 다시 판정한다`,
+    { timeout: 300_000 },
+    async () => {
+      await withRealApi(async (ctx) => {
+        const { holders, project, page, P, sets, tabs } = await buildFixture(ctx)
+        const { locks } = ctx.app.realtime
+        const realHold = locks.hold
+        const realIsJudged = locks.isJudged
+        let holdAt = 0
+        let holds = 0
+        let skipped = 0
+        locks.hold = (claim, stamp) => {
+          holdAt = performance.now()
+          holds += 1
+          return realHold.call(locks, claim, stamp)
         }
-        const contentSkipped = skipped
-        const contentHolds = holds
-
-        // 2) 구조를 바꾼다(Text 를 보라의 집합 밖에 더한다) → 하트비트. 다시 판정해야 한다(카나리아 — 도장이 구조 변경을 놓치지 않는다).
-        holds = 0
-        skipped = 0
-        const structureBeats: number[] = []
-        for (let i = 0; i < 5; i += 1) {
+        locks.isJudged = (...args) => {
+          const result = realIsJudged.apply(locks, args)
+          if (result) skipped += 1
+          return result
+        }
+        let lockId = 5000
+        const beat = async (): Promise<number> => {
+          holdAt = 0
+          const sentAt = performance.now()
+          tabs[0]!.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeIds: sets[0], lockId: (lockId += 1) }))
+          const deadline = Date.now() + 60_000
+          while (holdAt === 0 && Date.now() < deadline) await sleep(1)
+          expect(holdAt, '`hold`가 안 불렸다').not.toBe(0)
+          return holdAt - sentAt
+        }
+        const headSeq = async (): Promise<number> =>
+          Number((await ctx.app.inject({ method: 'GET', url: P, cookies: holders[0]!.cookie })).json().headSeq)
+        /** 보라가 제 노드의 props 를 고친다 — 구조는 그대로다. */
+        const editProps = async (i: number): Promise<void> => {
           const r = await ctx.app.inject({
             method: 'PATCH',
             url: `${P}/ops`,
             cookies: holders[0]!.cookie,
             payload: {
               baseSeq: await headSeq(),
-              ops: [{ op: 'add', path: `/root/children/${TEXTS + 1}`, value: { id: `n_new${i}`, type: 'Text', props: { content: `새 ${i}` } } }],
+              ops: [{ op: 'replace', path: '/root/children/1/props', value: { content: `보라 ${i}` } }],
             },
           })
           expect(r.statusCode).toBe(200)
-          structureBeats.push(await beat())
         }
-        console.log(
-          'WEB BEATS',
-          JSON.stringify({ contentP50: p50(contentBeats), contentSkipped, contentHolds, structureP50: p50(structureBeats), structureSkipped: skipped }),
-        )
-        expect(contentHolds).toBe(10)
-        expect(contentSkipped).toBe(10)
-        expect(holds).toBe(5)
-        expect(skipped).toBe(0)
-        expect(project.id).toBeTruthy()
-      } finally {
-        locks.hold = realHold
-        locks.isJudged = realIsJudged
-      }
-    })
-  })
+        try {
+          // 워밍업 — 도장을 찍는다(첫 하트비트는 남의 잠금이 더 선 뒤라 다시 판정한다).
+          await beat()
+
+          // 1) props 만 고친다 → 하트비트. 판정을 건너뛰어야 한다.
+          holds = 0
+          skipped = 0
+          const contentBeats: number[] = []
+          for (let i = 0; i < 10; i += 1) {
+            await editProps(i)
+            contentBeats.push(await beat())
+          }
+          const contentSkipped = skipped
+          const contentHolds = holds
+
+          // 2) 구조를 바꾼다(Text 를 보라의 집합 밖에 더한다) → 하트비트. 다시 판정해야 한다(카나리아 — 도장이 구조 변경을 놓치지 않는다).
+          holds = 0
+          skipped = 0
+          const structureBeats: number[] = []
+          for (let i = 0; i < 5; i += 1) {
+            const r = await ctx.app.inject({
+              method: 'PATCH',
+              url: `${P}/ops`,
+              cookies: holders[0]!.cookie,
+              payload: {
+                baseSeq: await headSeq(),
+                ops: [
+                  {
+                    op: 'add',
+                    path: `/root/children/${TEXTS + 1}`,
+                    value: { id: `n_new${i}`, type: 'Text', props: { content: `새 ${i}` } },
+                  },
+                ],
+              },
+            })
+            expect(r.statusCode).toBe(200)
+            structureBeats.push(await beat())
+          }
+          console.log(
+            'WEB BEATS',
+            JSON.stringify({
+              contentP50: p50(contentBeats),
+              contentSkipped,
+              contentHolds,
+              structureP50: p50(structureBeats),
+              structureSkipped: skipped,
+            }),
+          )
+          expect(contentHolds).toBe(10)
+          expect(contentSkipped).toBe(10)
+          expect(holds).toBe(5)
+          expect(skipped).toBe(0)
+          expect(project.id).toBeTruthy()
+        } finally {
+          locks.hold = realHold
+          locks.isJudged = realIsJudged
+        }
+      })
+    },
+  )
 })

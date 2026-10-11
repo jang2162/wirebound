@@ -25,12 +25,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config'
 import { COMPOSE_DEFAULT_POSTGRES_PORT, portAgreementError } from '../src/db/port-agreement'
-import {
-  defaultTestDatabaseUrl,
-  resolvePostgresPort,
-  resolveTestDatabaseUrl,
-  resolveTestDatabaseUrlFrom,
-} from './test-database-url'
+import { defaultTestDatabaseUrl, resolvePostgresPort, resolveTestDatabaseUrl, resolveTestDatabaseUrlFrom } from './test-database-url'
 import { stripYamlComments } from './source-census'
 
 const 로컬 = (port: string, name = 'wirebound') => `postgres://wirebound:wirebound@127.0.0.1:${port}/${name}`
@@ -77,9 +72,7 @@ describe('규칙 — POSTGRES_PORT 와 접속 문자열의 포트가 같은가',
   })
 
   it('**다른 호스트는 안 잰다** — POSTGRES_PORT 는 이 기계에 여는 포트다', () => {
-    expect(
-      portAgreementError({ postgresPort: '5443', urls: { DATABASE_URL: 'postgres://u:p@db.example:5432/prod' } }),
-    ).toBeUndefined()
+    expect(portAgreementError({ postgresPort: '5443', urls: { DATABASE_URL: 'postgres://u:p@db.example:5432/prod' } })).toBeUndefined()
   })
 
   it('루프백의 여러 표기를 다 잰다 — localhost 로 적은 사람이 빠져나가면 안 된다', () => {
@@ -92,9 +85,7 @@ describe('규칙 — POSTGRES_PORT 와 접속 문자열의 포트가 같은가',
     expect(portAgreementError({ postgresPort: '5443', urls: { DATABASE_URL: 'postgres://u:p@127.0.0.1/x' } })).toContain(
       'DATABASE_URL → 127.0.0.1/x',
     )
-    expect(
-      portAgreementError({ postgresPort: '5432', urls: { DATABASE_URL: 'postgres://u:p@127.0.0.1/x' } }),
-    ).toBeUndefined()
+    expect(portAgreementError({ postgresPort: '5432', urls: { DATABASE_URL: 'postgres://u:p@127.0.0.1/x' } })).toBeUndefined()
   })
 
   it('해석 못 하는 값에는 이 자가 안 나선다 — 그 자리는 zod 가 든다', () => {
@@ -120,9 +111,7 @@ describe('배선 ① — 서버가 뜨기 전에 죽는가 (loadConfig)', () => 
   const 기본환경 = { NODE_ENV: 'test' as const }
 
   it('어긋나면 **던진다** — 조용히 뜨면 남의 DB 를 열어 놓고 "잘 떴다"고 읽는다', () => {
-    expect(() => loadConfig({ ...기본환경, DATABASE_URL: 로컬('5433'), POSTGRES_PORT: '5443' })).toThrow(
-      /POSTGRES_PORT=5443/,
-    )
+    expect(() => loadConfig({ ...기본환경, DATABASE_URL: 로컬('5433'), POSTGRES_PORT: '5443' })).toThrow(/POSTGRES_PORT=5443/)
   })
 
   it('맞으면 뜬다', () => {
@@ -187,9 +176,7 @@ describe('배선 ② — 스위트가 남의 판을 지우기 전에 죽는가 (
     // 무시되는데, 서버 쪽(`config.ts`)은 `--env-file-if-exists` 를 타서 **셸이 이긴다** —
     // 서버와 스위트가 서로 다른 값을 authoritative 로 삼는다. 이 파일이 막는
     // *"값이 두 자리에 있다"* 부류 그 자체다.
-    expect(resolvePostgresPort({ shellEnv: { POSTGRES_PORT: '5443' }, fileEnv: { POSTGRES_PORT: '5433' } })).toBe(
-      '5443',
-    )
+    expect(resolvePostgresPort({ shellEnv: { POSTGRES_PORT: '5443' }, fileEnv: { POSTGRES_PORT: '5433' } })).toBe('5443')
     writeFileSync(envFile, `POSTGRES_PORT=5433\nTEST_DATABASE_URL=${로컬('5443', 'wb_a_test')}\n`)
     // 파일이 이기면 5433 과 5443 이 어긋나 던진다. 셸이 이기면 조용하다 — **행동으로도 잰다.**
     expect(resolveTestDatabaseUrlFrom({ POSTGRES_PORT: '5443' }, envFile)).toBe(로컬('5443', 'wb_a_test'))
@@ -266,7 +253,8 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
   const COMPOSE = stripYamlComments(readFileSync(new URL('docker-compose.yml', REPO_ROOT), 'utf8'))
   const EXAMPLE = readFileSync(new URL('../.env.example', import.meta.url), 'utf8')
   const README = readFileSync(new URL('README.md', REPO_ROOT), 'utf8')
-  const CLAUDE = readFileSync(new URL('CLAUDE.md', REPO_ROOT), 'utf8')
+  // 지침의 소스다. `CLAUDE.md` 는 `ruler apply` 의 생성물(gitignore)이라 새 체크아웃 · `git archive` 에 없다.
+  const CLAUDE = readFileSync(new URL('.ruler/10-worktree.md', REPO_ROOT), 'utf8')
 
   it('자가 진짜 파일을 읽는다 — 빈 문자열이면 아래가 통째로 헛돈다', () => {
     // 읽은 원문이 빈 문자열이면 아래 단언이 헛돌며 초록이 된다 — 그 부류를 막는 카나리아다.
@@ -312,12 +300,12 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
     // 이 케이스가 없으면 `README.md` 「세우기 — 다섯 걸음」 절의 `up` 명령에서 `--env-file` 을
     // 지워도, 거기 적힌 기본 포트를 5432 로 바꿔도 **게이트가 전부 초록**이다. `.env.example` 은
     // 인구조사가 글자까지 지키는데 README 는 그 절차의 **소유자**다 — *"README 가 소유하고
-    // CLAUDE.md 가 가리킨다"*.
+    // `.ruler/10-worktree.md` 가 가리킨다"*.
     //
     // **재는 것은 산문이 아니라 명령과 수 둘뿐이다**(산문까지 못박으면 문장을 못 고치게 된다).
     for (const [이름, 원문] of [
       ['README.md', README],
-      ['CLAUDE.md', CLAUDE],
+      ['.ruler/10-worktree.md', CLAUDE],
     ] as const) {
       // `docker compose … up -d` 처럼 줄임표가 낀 **산문**은 뺀다 — 그것은 칠 명령이 아니다.
       // 운영 compose(`-f deploy/docker-compose.yml`)도 뺀다 — Postgres 포트를 바깥에 안 열고 `deploy/.env` 를 스스로 읽는다.
@@ -326,9 +314,7 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
         .filter((line) => /docker compose[^…\n]*\bup -d/.test(line) && !line.includes('-f deploy/docker-compose.yml'))
       expect(칠명령.length, `${이름} 에 칠 수 있는 up 명령이 있어야 한다`).toBeGreaterThan(0)
       for (const line of 칠명령) {
-        expect(line, `${이름}: 이 플래그를 잃으면 컨테이너가 기본 포트로 다시 만들어진다`).toContain(
-          '--env-file apps/api/.env',
-        )
+        expect(line, `${이름}: 이 플래그를 잃으면 컨테이너가 기본 포트로 다시 만들어진다`).toContain('--env-file apps/api/.env')
       }
     }
   })

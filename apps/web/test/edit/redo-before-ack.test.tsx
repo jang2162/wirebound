@@ -39,20 +39,31 @@ function server() {
     const inverse = invertOps(held, body.ops)
     held = applyOps(held, body.ops)
     seq += 1
-    const result: PatchResult = { seq, revisionId: `rev-${seq}`, inverse, schemaVersion: 1, ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }) }
+    const result: PatchResult = {
+      seq,
+      revisionId: `rev-${seq}`,
+      inverse,
+      schemaVersion: 1,
+      ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+    }
     return result
   }
   const getPage: ApiClient['getPage'] = async (_projectId, pageId) => ({ ...pageDetail(pageId, held), headSeq: seq })
   return { calls, release: () => release(), api: { patchOps, getPage } satisfies Partial<ApiClient> }
 }
 
-const history = (name: '되돌리기' | '다시 실행') => within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name })
+const history = (name: '되돌리기' | '다시 실행') =>
+  within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name })
 const redoKey = (): boolean => fireEvent.keyDown(document.body, { key: 'Z', code: 'KeyZ', ctrlKey: true, shiftKey: true })
 
 /** 정보 통지 한 칸(`shell/info-notice.tsx`)의 글. */
 const infoTexts = (): string[] =>
-  screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
-const rowOf = (type: string) => within(screen.getByRole('region', { name: '구조 트리' })).getByRole('button', { name: structureRowName(type) })
+  screen
+    .queryAllByRole('status')
+    .filter((element) => element.classList.contains('wb-shell-info-notice'))
+    .map((element) => element.textContent ?? '')
+const rowOf = (type: string) =>
+  within(screen.getByRole('region', { name: '구조 트리' })).getByRole('button', { name: structureRowName(type) })
 
 describe('다시 실행 키 — 되돌림의 ack 전', () => {
   it('되돌림이 큐에 있는 동안 누르면 이유를 말하고 아무것도 보내지 않는다 — 답이 닿으면 같은 키가 다시 실행한다', async () => {

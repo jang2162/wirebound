@@ -167,7 +167,16 @@ async function mount(options: { immediate?: (pageId: string) => PageDetail | und
     return sent[sent.length - 1]!
   }
   const ack = (patch: SentPatch, seq: number): void =>
-    push({ type: 'patch-ack', projectId: PROJECT_ID, pageId: patch.pageId, clientOpId: patch.clientOpId, seq, revisionId: `rev-${seq}`, inverse: [], warnings: [] })
+    push({
+      type: 'patch-ack',
+      projectId: PROJECT_ID,
+      pageId: patch.pageId,
+      clientOpId: patch.clientOpId,
+      seq,
+      revisionId: `rev-${seq}`,
+      inverse: [],
+      warnings: [],
+    })
   /** 거절한다 — 기본은 낡음(409). 서버 판이 그대로인 거절(423 잠금 등)은 `reason`으로 준다. */
   const refuse = (patch: SentPatch, reason: { status: number; code: string; message: string } = CONFLICT): void =>
     push({ type: 'patch-error', projectId: PROJECT_ID, pageId: patch.pageId, clientOpId: patch.clientOpId, ...reason, issues: [] })
@@ -192,7 +201,11 @@ const alertText = (): string =>
     .queryAllByRole('alert')
     .map((node) => node.textContent)
     .join(' | ')
-const statusText = (): string => screen.queryAllByRole('status').map((node) => node.textContent).join(' | ')
+const statusText = (): string =>
+  screen
+    .queryAllByRole('status')
+    .map((node) => node.textContent)
+    .join(' | ')
 
 afterEach(() => {
   vi.useRealTimers()
@@ -636,7 +649,9 @@ describe('편집 실패 수습보다 뒤에 시작한 조회가 먼저 실으면
 
     // 수습의 답은 옛 판이다(그 뒤 남이 Divider 를 넣었다) — 실리면 트리가 Text 하나가 된다.
     await act(async () => {
-      view.held[0]!.resolve(pageDetail(PAGE_ID, pageDoc({ id: 'n-root', type: 'Page', children: [{ id: 'n-a', type: 'Text', props: {} }] })))
+      view.held[0]!.resolve(
+        pageDetail(PAGE_ID, pageDoc({ id: 'n-root', type: 'Page', children: [{ id: 'n-a', type: 'Text', props: {} }] })),
+      )
     })
     await act(async () => {})
 

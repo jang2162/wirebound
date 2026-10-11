@@ -73,9 +73,11 @@ describe('로그 리다크션', () => {
 
     await withApi(
       async ({ app, db }) => {
-        const user = await db.insertInto('users')
+        const user = await db
+          .insertInto('users')
           .values({ email: 'logredact@example.com', name: '로그검증', password_hash: 'x' })
-          .returning('id').executeTakeFirstOrThrow()
+          .returning('id')
+          .executeTakeFirstOrThrow()
         const created = await createSession(db, user.id, 24)
         token = created.token
 
@@ -108,7 +110,8 @@ describe('로그 리다크션', () => {
       async (ctx) => {
         await signup(ctx, { email: 'logpw@example.com', name: '로그검증', password: marker })
         await ctx.app.inject({
-          method: 'POST', url: '/api/auth/login',
+          method: 'POST',
+          url: '/api/auth/login',
           payload: { email: 'logpw@example.com', password: marker },
         })
       },

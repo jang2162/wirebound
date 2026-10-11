@@ -8,7 +8,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack } from './editor-stack'
-import { canvasSheets, canvasVar, countThemeFiles, makeAdmin, putTheme, sampleCard, sampleTheme, themeProject, uploadRaw } from './theme-fixtures'
+import {
+  canvasSheets,
+  canvasVar,
+  countThemeFiles,
+  makeAdmin,
+  putTheme,
+  sampleCard,
+  sampleTheme,
+  themeProject,
+  uploadRaw,
+} from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -45,17 +55,29 @@ describe.skipIf(!전제.ok)('캔버스의 프로젝트 테마', () => {
     try {
       await page.goto(`/projects/${project.id}/pages/${project.first}`)
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor()
-      await poll('테마 시트가 선다', () => canvasSheets(page), (sheets) => sheets.length === 3)
+      await poll(
+        '테마 시트가 선다',
+        () => canvasSheets(page),
+        (sheets) => sheets.length === 3,
+      )
       expect(await canvasSheets(page)).toEqual(['style:base', 'link:theme', 'style:tokens'])
       expect(files.js()).toBe(1)
       expect(files.css()).toBeGreaterThanOrEqual(1)
       expect(files.lines[0]).toBe(`system-admin/${SYSTEM_ADMIN.version}/files/theme.js`)
       // 테마 시트가 실제로 먹었다 — theme.css 가 적는 변수가 캔버스에 선다.
-      await poll('테마 변수', () => canvasVar(page, COLOR.cssVar), (value) => value === ADMIN_PRIMARY)
+      await poll(
+        '테마 변수',
+        () => canvasVar(page, COLOR.cssVar),
+        (value) => value === ADMIN_PRIMARY,
+      )
 
       await page.getByRole('link', { name: '둘째' }).click()
       await canvasFrame(page).locator('body', { hasText: '둘째 글' }).waitFor()
-      await poll('새 iframe 에도 시트 셋', () => canvasSheets(page), (sheets) => sheets.length === 3)
+      await poll(
+        '새 iframe 에도 시트 셋',
+        () => canvasSheets(page),
+        (sheets) => sheets.length === 3,
+      )
       expect(await canvasSheets(page)).toEqual(['style:base', 'link:theme', 'style:tokens'])
       expect(files.js()).toBe(1)
     } finally {
@@ -71,7 +93,11 @@ describe.skipIf(!전제.ok)('캔버스의 프로젝트 테마', () => {
     try {
       await page.goto(`/projects/${project.id}/pages/${project.first}`)
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor()
-      await poll('테마 시트가 실린다', () => canvasSheets(page), (sheets) => sheets.includes('link:theme'))
+      await poll(
+        '테마 시트가 실린다',
+        () => canvasSheets(page),
+        (sheets) => sheets.includes('link:theme'),
+      )
       // link 가 실린 뒤에도(늦게 온 시트가 뒤에 겹쳐지지 않는다 — 차례는 요소의 차례다) 저장한 값이다.
       await page.waitForTimeout(500)
       expect(await canvasVar(page, COLOR.cssVar)).toBe('#123456')
@@ -91,13 +117,25 @@ describe.skipIf(!전제.ok)('캔버스의 프로젝트 테마', () => {
     try {
       await page.goto(`/projects/${project.id}/pages/${project.first}`)
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor()
-      await poll('테마 변수', () => canvasVar(page, COLOR.cssVar), (value) => value === ADMIN_PRIMARY)
+      await poll(
+        '테마 변수',
+        () => canvasVar(page, COLOR.cssVar),
+        (value) => value === ADMIN_PRIMARY,
+      )
       page.on('framenavigated', (frame) => {
         if (frame === page.mainFrame()) navigations += 1
       })
 
-      await putTheme(project.call, project.id, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [COLOR.key]: '#00aa11' } })
-      await poll('밥의 캔버스가 새 값', () => canvasVar(page, COLOR.cssVar), (value) => value === '#00aa11')
+      await putTheme(project.call, project.id, {
+        themeId: 'system-admin',
+        version: SYSTEM_ADMIN.version,
+        tokens: { [COLOR.key]: '#00aa11' },
+      })
+      await poll(
+        '밥의 캔버스가 새 값',
+        () => canvasVar(page, COLOR.cssVar),
+        (value) => value === '#00aa11',
+      )
       expect(navigations).toBe(0)
       expect(files.js()).toBe(1)
     } finally {
@@ -120,14 +158,34 @@ describe.skipIf(!전제.ok)('캔버스의 프로젝트 테마', () => {
     try {
       await page.goto(`/projects/${project.id}/pages/${project.first}`)
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor()
-      await poll('룸에 든다', async () => frames.slice(), (lines) => lines.includes('joined'))
-      await poll('테마 변수', () => canvasVar(page, COLOR.cssVar), (value) => value === ADMIN_PRIMARY)
+      await poll(
+        '룸에 든다',
+        async () => frames.slice(),
+        (lines) => lines.includes('joined'),
+      )
+      await poll(
+        '테마 변수',
+        () => canvasVar(page, COLOR.cssVar),
+        (value) => value === ADMIN_PRIMARY,
+      )
 
       // 끊고 곧바로 저장한다 — 첫 재연결(500ms 뒤)보다 먼저 방송이 나가 이 탭은 그 프레임을 못 받는다.
       expect(cut.reset(/\/ws[ ?]/)).toBeGreaterThanOrEqual(1)
-      await putTheme(project.call, project.id, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [COLOR.key]: '#abcdef' } })
-      await poll('다시 룸에 든다', async () => frames.slice(), (lines) => lines.filter((line) => line === 'joined').length >= 2)
-      await poll('따라잡는다', () => canvasVar(page, COLOR.cssVar), (value) => value === '#abcdef')
+      await putTheme(project.call, project.id, {
+        themeId: 'system-admin',
+        version: SYSTEM_ADMIN.version,
+        tokens: { [COLOR.key]: '#abcdef' },
+      })
+      await poll(
+        '다시 룸에 든다',
+        async () => frames.slice(),
+        (lines) => lines.filter((line) => line === 'joined').length >= 2,
+      )
+      await poll(
+        '따라잡는다',
+        () => canvasVar(page, COLOR.cssVar),
+        (value) => value === '#abcdef',
+      )
       // 판이 섰는가 — 저장의 프레임은 이 탭에 안 왔다(왔으면 따라잡기가 아니라 프레임이 푼 것이다).
       expect(frames.filter((line) => line === 'theme-changed')).toEqual([])
     } finally {
@@ -158,7 +216,11 @@ describe.skipIf(!전제.ok)('캔버스의 프로젝트 테마', () => {
 
       await page.unroute('**/files/theme.js')
       await page.getByRole('button', { name: '다시 불러오기' }).click()
-      await poll('테마 뷰로 선다', () => sampleCard(page), (drawn) => drawn)
+      await poll(
+        '테마 뷰로 선다',
+        () => sampleCard(page),
+        (drawn) => drawn,
+      )
       expect(await page.getByText(/테마를 불러오지 못해/).count()).toBe(0)
       expect(await canvasSheets(page)).toEqual(['style:base', 'link:theme', 'style:tokens'])
     } finally {

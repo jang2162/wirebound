@@ -50,11 +50,7 @@ export class LastOwnerError extends Error {
 }
 
 function isMemberPkViolation(error: unknown): boolean {
-  return (
-    error instanceof DatabaseError &&
-    error.code === UNIQUE_VIOLATION &&
-    error.constraint === PROJECT_MEMBERS_PK_CONSTRAINT
-  )
+  return error instanceof DatabaseError && error.code === UNIQUE_VIOLATION && error.constraint === PROJECT_MEMBERS_PK_CONSTRAINT
 }
 
 /**
@@ -254,11 +250,7 @@ export async function updateMemberRole(
       .returning('invited_at')
       .executeTakeFirstOrThrow()
 
-    const user = await trx
-      .selectFrom('users')
-      .select(['email', 'name'])
-      .where('id', '=', userId)
-      .executeTakeFirstOrThrow()
+    const user = await trx.selectFrom('users').select(['email', 'name']).where('id', '=', userId).executeTakeFirstOrThrow()
 
     return { userId, email: user.email, name: user.name, role, invitedAt: updated.invited_at }
   })
@@ -305,11 +297,7 @@ export async function removeMember(
       throw new LastOwnerError()
     }
 
-    await trx
-      .deleteFrom('project_members')
-      .where('project_id', '=', projectId)
-      .where('user_id', '=', userId)
-      .execute()
+    await trx.deleteFrom('project_members').where('project_id', '=', projectId).where('user_id', '=', userId).execute()
 
     // **멤버 행을 지운 뒤에 지운다** — 이 제거가 도는 사이 발급된 토큰까지(`deleteMemberTokens`의 머리말).
     await deleteMemberTokens(trx, projectId, userId)

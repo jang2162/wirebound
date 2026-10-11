@@ -158,9 +158,12 @@ describe('일괄 삭제 · 복제 · 복사 · 잘라내기 — 편집 하나 ·
     const srv = server()
     await openPage(doc(), { apiOverrides: srv.api })
     pick('n-a', 'n-c')
-    const more = within(screen.getByRole('region', { name: '구조 트리' }).querySelector<HTMLElement>('[data-tree-id="n-c"]')!).getByRole('button', {
-      name: 'Text 다 더 보기',
-    })
+    const more = within(screen.getByRole('region', { name: '구조 트리' }).querySelector<HTMLElement>('[data-tree-id="n-c"]')!).getByRole(
+      'button',
+      {
+        name: 'Text 다 더 보기',
+      },
+    )
     fireEvent.click(more)
     fireEvent.click(screen.getByRole('menuitem', { name: '삭제' }))
 
@@ -292,7 +295,10 @@ describe('하나일 때만 되는 것', () => {
       calls: srv.calls.length,
       picked: shellStore().getState().selectedNodeIds,
       alert: screen.queryAllByRole('alert').map((element) => element.textContent),
-      info: screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent),
+      info: screen
+        .queryAllByRole('status')
+        .filter((element) => element.classList.contains('wb-shell-info-notice'))
+        .map((element) => element.textContent),
     }).toEqual({ calls: 0, picked: ['n-b', 'n-c'], alert: [], info: [MULTI_KEY_NOTICE] })
   })
 })

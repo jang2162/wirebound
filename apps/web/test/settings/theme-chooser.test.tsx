@@ -55,7 +55,13 @@ const PACKAGES: ThemePackageSummary[] = [
 
 /** 관리자 응답 — 숨긴 판이 «숨김» 으로 실린다. 지금 고정한 0.1.0 도 숨겼다. */
 const ADMIN_PACKAGES: ThemePackageSummary[] = [
-  { themeId: 'acme', name: 'Acme', description: null, latest: '1.0.0', versions: [version('acme', '1.1.0', true), version('acme', '1.0.0')] },
+  {
+    themeId: 'acme',
+    name: 'Acme',
+    description: null,
+    latest: '1.0.0',
+    versions: [version('acme', '1.1.0', true), version('acme', '1.0.0')],
+  },
   {
     themeId: 'system-admin',
     name: '관리자',
@@ -234,7 +240,9 @@ describe('«테마» 절 — 고르개와 토큰 초안', () => {
     await waitFor(() => expect(within(section()).getByText('Acme acme@1.0.0')).toBeDefined())
     expect(draft('주색').value).toBe('#123456')
     expect(draft('새것').value).toBe('#ffffff')
-    expect(within(screen.getByRole('group', { name: '토큰' })).getByText('바꾼 판으로 옮기지 못한 토큰 2 개의 초안을 버렸습니다')).toBeDefined()
+    expect(
+      within(screen.getByRole('group', { name: '토큰' })).getByText('바꾼 판으로 옮기지 못한 토큰 2 개의 초안을 버렸습니다'),
+    ).toBeDefined()
   })
 
   it('고르개가 409 로 다시 읽어도 같은 판의 초안은 반쯤 친 값까지 남고, 초안이 없는 칸은 서버 값으로 선다', async () => {

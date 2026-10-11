@@ -161,10 +161,7 @@ describe('두 영역의 배분', () => {
   it('하한은 픽셀에서 나온다 — 창이 낮을수록 비율로는 커진다', () => {
     expect(regionRatioMin(MEASURED.shared)).toBeCloseTo(REGION_MIN_HEIGHT / MEASURED.shared, 10)
     // 창이 절반이면 같은 72px이 비율로는 두 배가 된다.
-    expect(regionRatioMin(MEASURED.shared / 2)).toBeCloseTo(
-      (REGION_MIN_HEIGHT * 2) / MEASURED.shared,
-      10,
-    )
+    expect(regionRatioMin(MEASURED.shared / 2)).toBeCloseTo((REGION_MIN_HEIGHT * 2) / MEASURED.shared, 10)
   })
 
   it('상자가 최소의 두 배보다 낮으면 하한과 상한이 0.5에서 만난다', () => {
@@ -267,7 +264,10 @@ describe('보존', () => {
   /** **옛 저장값**(우측 폭이 없던 판의 앱이 남긴 것) — 키가 없으면 우측은 기본값으로 그린다. 좌측 · 배분은 그대로 산다. */
   it('접힘은 불린만 읽는다 — 다른 값은 그 필드만 버린다', () => {
     const store = new Map<string, string>()
-    const storage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value) } as Storage
+    const storage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    } as Storage
     store.set(STORAGE_KEY, JSON.stringify({ sideFolded: true, panelFolded: 'yes', sideWidth: 300 }))
     expect(readLayout(storage)).toEqual({ sideFolded: true, sideWidth: 300 })
   })

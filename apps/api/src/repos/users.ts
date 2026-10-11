@@ -37,11 +37,7 @@ export class DuplicateEmailError extends Error {
 }
 
 function isEmailUniqueViolation(error: unknown): boolean {
-  return (
-    error instanceof DatabaseError &&
-    error.code === UNIQUE_VIOLATION &&
-    error.constraint === USERS_EMAIL_UNIQUE_CONSTRAINT
-  )
+  return error instanceof DatabaseError && error.code === UNIQUE_VIOLATION && error.constraint === USERS_EMAIL_UNIQUE_CONSTRAINT
 }
 
 /**
@@ -50,10 +46,7 @@ function isEmailUniqueViolation(error: unknown): boolean {
  * `resolveSession`은 반대로 해시를 절대 select하지 않는다 — 그쪽은 이미 인증된
  * 사용자를 다시 확인할 뿐 비밀번호를 검증할 필요가 없다.)
  */
-export async function findUserByEmail(
-  db: DbHandle,
-  email: string,
-): Promise<(UserRecord & { passwordHash: string }) | null> {
+export async function findUserByEmail(db: DbHandle, email: string): Promise<(UserRecord & { passwordHash: string }) | null> {
   const row = await db
     .selectFrom('users')
     .select(['id', 'email', 'name', 'password_hash as passwordHash'])
@@ -104,7 +97,12 @@ export async function insertUser(
  * 사람의 비밀번호 바꾸기 둘이 여기서 줄을 선다(차례의 까닭은 `routes/auth.ts` 의 `/password`).
  */
 export async function setPasswordHash(db: DbHandle, userId: string, passwordHash: string): Promise<boolean> {
-  const updated = await db.updateTable('users').set({ password_hash: passwordHash }).where('id', '=', userId).returning('id').executeTakeFirst()
+  const updated = await db
+    .updateTable('users')
+    .set({ password_hash: passwordHash })
+    .where('id', '=', userId)
+    .returning('id')
+    .executeTakeFirst()
   return updated !== undefined
 }
 
@@ -134,11 +132,7 @@ export async function countExistingUsers(db: DbHandle, ids: string[]): Promise<s
  * **바꾸는 것은 `UPDATE` 한 문장이다** — 그 행에 잠금을 잡아, 관리자 쓰기가 커밋 직전에 `FOR SHARE` 로 다시 읽는 것
  * (`auth/admin.ts` 의 `recheckInstanceAdmin`)과 줄을 선다. 강등이 먼저 커밋되면 그 쓰기는 거짓을 읽고 되돌아간다.
  */
-export async function setInstanceAdmin(
-  db: DbHandle,
-  email: string,
-  value: boolean,
-): Promise<'changed' | 'unchanged' | 'missing'> {
+export async function setInstanceAdmin(db: DbHandle, email: string, value: boolean): Promise<'changed' | 'unchanged' | 'missing'> {
   const changed = await db
     .updateTable('users')
     .set({ is_instance_admin: value })

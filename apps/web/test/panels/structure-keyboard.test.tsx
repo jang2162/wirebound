@@ -10,7 +10,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { PatchOp } from '@wirebound/schema'
-import type { ApiClient, } from '../../src/api/client'
+import type { ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
 import { HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
@@ -226,9 +226,7 @@ describe('구조 트리의 키보드 단축키', () => {
 
     fireEvent.keyDown(row('Card'), { key: 'ArrowUp', altKey: true })
 
-    await waitFor(() =>
-      expect(structureTypes()).toEqual(['Page', 'Card', 'Button', 'Text', 'Divider']),
-    )
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Card', 'Button', 'Text', 'Divider']))
   })
 
   it('Alt 없는 화살표는 순서를 바꾸지 않는다', async () => {
@@ -368,7 +366,9 @@ describe('구조 트리의 키보드 단축키', () => {
     select('Text')
 
     const inCard = (): boolean => {
-      const card = within(structureRegion()).getByRole('button', { name: structureRowName('Card') }).closest('li')
+      const card = within(structureRegion())
+        .getByRole('button', { name: structureRowName('Card') })
+        .closest('li')
       const text = within(structureRegion()).getByRole('button', { name: structureRowName('Text') })
       return card?.contains(text) ?? false
     }
@@ -385,10 +385,10 @@ describe('구조 트리의 키보드 단축키', () => {
 
     // **하지만 제자리가 아니다.** 원래는 `Link` **앞**이었는데 이제 뒤다 — 전위 순회로는
     // 세 상태가 전부 같아 보이므로(`Page, Card, Link, Text, Divider`) 형제 순서를 직접 본다.
-    const cardRow = within(structureRegion()).getByRole('button', { name: structureRowName('Card') }).closest('li')
-    const siblings = [...(cardRow?.querySelectorAll('.wb-shell-structure-node') ?? [])].map(
-      (row) => structureRowType(row),
-    )
+    const cardRow = within(structureRegion())
+      .getByRole('button', { name: structureRowName('Card') })
+      .closest('li')
+    const siblings = [...(cardRow?.querySelectorAll('.wb-shell-structure-node') ?? [])].map((row) => structureRowType(row))
     expect(siblings).toEqual(['Card', 'Link', 'Text'])
   })
 

@@ -370,9 +370,14 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         }
         if (touch) {
           // 끌기가 선 뒤의 스크롤 · 길게 누름 메뉴 · 글자 고르기를 막는다. `touchmove` 는 **누른 때부터** `passive: false` 로 건다(머리말).
-          listen(window, 'touchmove', (raw) => {
-            if (current.started && raw.cancelable) raw.preventDefault()
-          }, { passive: false })
+          listen(
+            window,
+            'touchmove',
+            (raw) => {
+              if (current.started && raw.cancelable) raw.preventDefault()
+            },
+            { passive: false },
+          )
           for (const type of ['contextmenu', 'selectstart']) {
             listen(window, type, (raw) => {
               if (current.started) raw.preventDefault()

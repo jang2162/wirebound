@@ -13,9 +13,7 @@ describe('키 순서는 지운다', () => {
   })
 
   it('중첩된 객체', () => {
-    expect(canonicalJson({ x: { version: 1, root: { id: 'n' } } })).toBe(
-      canonicalJson({ x: { root: { id: 'n' }, version: 1 } }),
-    )
+    expect(canonicalJson({ x: { version: 1, root: { id: 'n' } } })).toBe(canonicalJson({ x: { root: { id: 'n' }, version: 1 } }))
   })
 
   it('배열 안의 객체', () => {

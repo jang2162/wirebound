@@ -115,7 +115,9 @@ describe('트리 쓰기 둘이 동시에 와도 교착 없이 차례로 선다',
         const before = await pagesOf(b, menu.id)
         const first = before[0]!
         const last = before[5]!
-        expect(await both(send(b, 'PATCH', `/pages/${first}`, { sortOrder: 5 }), send(b, 'PATCH', `/pages/${last}`, { sortOrder: 0 }))).toEqual([200, 200])
+        expect(
+          await both(send(b, 'PATCH', `/pages/${first}`, { sortOrder: 5 }), send(b, 'PATCH', `/pages/${last}`, { sortOrder: 0 })),
+        ).toEqual([200, 200])
         // 어느 쪽이 먼저든 [last, 가운데 넷, first]다.
         expect(await pagesOf(b, menu.id)).toEqual([last, ...before.slice(1, 5), first])
       }
@@ -165,7 +167,9 @@ describe('트리 쓰기 둘이 동시에 와도 교착 없이 차례로 선다',
 
       for (let round = 0; round < ROUNDS; round += 1) {
         const before = await pagesOf(b, menu.id)
-        expect(await both(send(b, 'DELETE', `/pages/${before[1]}`), send(b, 'PATCH', `/pages/${before[5]}`, { sortOrder: 0 }))).toEqual([204, 200])
+        expect(await both(send(b, 'DELETE', `/pages/${before[1]}`), send(b, 'PATCH', `/pages/${before[5]}`, { sortOrder: 0 }))).toEqual([
+          204, 200,
+        ])
         expect(await pagesOf(b, menu.id)).toEqual([before[5], before[0], before[2], before[3], before[4]])
         await createPage(ctx, b.cookie, b.projectId, menu.id, { title: `채움${round}` })
       }
@@ -210,7 +214,9 @@ describe('트리 쓰기 둘이 동시에 와도 교착 없이 차례로 선다',
         const before = await menusOf(b, null)
         const first = before[0]!
         const last = before[5]!
-        expect(await both(send(b, 'PATCH', `/menu/${first}`, { sortOrder: 5 }), send(b, 'PATCH', `/menu/${last}`, { sortOrder: 0 }))).toEqual([200, 200])
+        expect(
+          await both(send(b, 'PATCH', `/menu/${first}`, { sortOrder: 5 }), send(b, 'PATCH', `/menu/${last}`, { sortOrder: 0 })),
+        ).toEqual([200, 200])
         expect(await menusOf(b, null)).toEqual([last, ...before.slice(1, 5), first])
       }
     })
@@ -257,7 +263,10 @@ describe('트리 쓰기 둘이 동시에 와도 교착 없이 차례로 선다',
       for (let round = 0; round < ROUNDS; round += 1) {
         const ga = await createMenuNode(ctx, b.cookie, b.projectId, { title: `가${round}` })
         const na = await createMenuNode(ctx, b.cookie, b.projectId, { title: `나${round}` })
-        const statuses = await both(send(b, 'PATCH', `/menu/${ga.id}`, { parentId: na.id }), send(b, 'PATCH', `/menu/${na.id}`, { parentId: ga.id }))
+        const statuses = await both(
+          send(b, 'PATCH', `/menu/${ga.id}`, { parentId: na.id }),
+          send(b, 'PATCH', `/menu/${na.id}`, { parentId: ga.id }),
+        )
         expect([...statuses].sort()).toEqual([200, 400])
         // 둘 중 하나는 여전히 루트다 — 고리면 둘 다 루트가 아니다.
         const roots = await menusOf(b, null)
@@ -281,7 +290,9 @@ describe('트리 쓰기 둘이 동시에 와도 교착 없이 차례로 선다',
 
       for (let round = 0; round < ROUNDS; round += 1) {
         const before = await menusOf(b, null)
-        expect(await both(send(b, 'DELETE', `/menu/${before[1]}`), send(b, 'PATCH', `/menu/${before[0]}`, { sortOrder: 5 }))).toEqual([204, 200])
+        expect(await both(send(b, 'DELETE', `/menu/${before[1]}`), send(b, 'PATCH', `/menu/${before[0]}`, { sortOrder: 5 }))).toEqual([
+          204, 200,
+        ])
         // 어느 쪽이 먼저든 [셋째–여섯째, 첫째]다(삭제가 먼저면 5 는 맨 뒤인 4 로 좁혀진다).
         expect(await menusOf(b, null)).toEqual([before[2], before[3], before[4], before[5], before[0]])
         await createMenuNode(ctx, b.cookie, b.projectId, { title: `채움${round}` })
@@ -299,7 +310,12 @@ describe('트리 쓰기 둘이 동시에 와도 교착 없이 차례로 선다',
       const b = await board(ctx)
 
       for (let round = 0; round < ROUNDS; round += 1) {
-        expect(await both(send(b, 'POST', '/menu', { parentId: null, title: `가${round}` }), send(b, 'POST', '/menu', { parentId: null, title: `나${round}` }))).toEqual([201, 201])
+        expect(
+          await both(
+            send(b, 'POST', '/menu', { parentId: null, title: `가${round}` }),
+            send(b, 'POST', '/menu', { parentId: null, title: `나${round}` }),
+          ),
+        ).toEqual([201, 201])
         expect(await menusOf(b, null)).toHaveLength(2 * (round + 1))
       }
     })

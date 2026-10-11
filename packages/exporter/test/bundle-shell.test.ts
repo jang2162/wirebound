@@ -4,12 +4,7 @@
  * DOM 없이 돈다 — CSS는 글자로 훑고 코멘트 줄은 순수 함수다. 셸이 **그린 것**을 재는 것은
  * `bundle.test.tsx`이고 그 파일만 jsdom을 쓴다.
  */
-import {
-  describeInteraction,
-  describeNode,
-  type PageDocument,
-  type WbNode,
-} from '@wirebound/schema'
+import { describeInteraction, describeNode, type PageDocument, type WbNode } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { commentEntries, MISSING_NODE_LABEL, type BundleComment } from '../src/bundle/comments'
 import { SHELL_CSS } from '../src/bundle/shell-css'
@@ -34,13 +29,7 @@ const PREFIX = 'wb-export'
  * 상자가 하나 늘면 **사람이 여기 더해야 한다** — 아래 카나리아가 이 목록이 실제로 시트의
  * 규칙에 걸리는지만 지킨다.
  */
-const WRAPPERS: readonly string[] = [
-  'html',
-  'body',
-  '.wb-export',
-  '.wb-export-mockup',
-  '.wb-export-canvas',
-]
+const WRAPPERS: readonly string[] = ['html', 'body', '.wb-export', '.wb-export-mockup', '.wb-export-canvas']
 
 /* ------------------------------------------------------------------ CSS 훑기 */
 
@@ -109,9 +98,7 @@ describe('셸 CSS — 문서에 못 닿는다', () => {
 
   it('클래스와 id가 전부 셸의 접두어로 시작한다', () => {
     const tokens = RULES.flatMap((rule) =>
-      rule.selectors.flatMap((selector) =>
-        (selector.match(/[.#][A-Za-z][\w-]*/gu) ?? []).map((token) => [selector, token] as const),
-      ),
+      rule.selectors.flatMap((selector) => (selector.match(/[.#][A-Za-z][\w-]*/gu) ?? []).map((token) => [selector, token] as const)),
     )
     // 카나리아. 정규식이 아무것도 못 집으면 아래 반복이 공허하게 통과한다.
     expect(tokens.length).toBeGreaterThan(20)
@@ -121,9 +108,7 @@ describe('셸 CSS — 문서에 못 닿는다', () => {
   })
 
   it('요소 셀렉터는 html·body뿐이다', () => {
-    const bare = RULES.flatMap((rule) => rule.selectors).filter(
-      (selector) => !/^[.#]/u.test(selector),
-    )
+    const bare = RULES.flatMap((rule) => rule.selectors).filter((selector) => !/^[.#]/u.test(selector))
     expect([...new Set(bare)].sort()).toEqual(['body', 'html'])
   })
 })
@@ -162,9 +147,7 @@ describe('셸 CSS — 감싸는 상자에 상속되는 속성을 걸지 않는�
 
   it('감싸는 상자를 실제로 찾는다', () => {
     // 카나리아. 이름이 바뀌어 하나도 못 찾으면 아래 검사가 공허해진다.
-    const found = RULES.filter((rule) =>
-      rule.selectors.some((selector) => WRAPPERS.includes(selector)),
-    )
+    const found = RULES.filter((rule) => rule.selectors.some((selector) => WRAPPERS.includes(selector)))
     expect(found.length).toBeGreaterThan(0)
     expect(found.flatMap((rule) => rule.selectors)).toContain('.wb-export-canvas')
   })
@@ -173,9 +156,7 @@ describe('셸 CSS — 감싸는 상자에 상속되는 속성을 걸지 않는�
     for (const rule of RULES) {
       if (!rule.selectors.some((selector) => WRAPPERS.includes(selector))) continue
       for (const property of rule.properties) {
-        expect(WRAPPER_PROPERTIES.has(property), `${rule.selectors.join(',')} → ${property}`).toBe(
-          true,
-        )
+        expect(WRAPPER_PROPERTIES.has(property), `${rule.selectors.join(',')} → ${property}`).toBe(true)
       }
     }
   })
@@ -329,20 +310,13 @@ describe('commentEntries — 번호와 코멘트를 맞춘다', () => {
   })
 
   it('문서 순서로 낸다 — 고아 코멘트가 뒤다', () => {
-    const page = documentOf([
-      node('n_000000000002', { marker: 2 }),
-      node('n_000000000003', { marker: 1 }),
-    ])
+    const page = documentOf([node('n_000000000002', { marker: 2 }), node('n_000000000003', { marker: 1 })])
     const entries = commentEntries(page, [
       { nodeId: 'n_000000000099', body: '고아' },
       { nodeId: 'n_000000000003', body: '둘째' },
       { nodeId: 'n_000000000002', body: '첫째' },
     ])
-    expect(entries.map((entry) => entry.nodeId)).toEqual([
-      'n_000000000002',
-      'n_000000000003',
-      'n_000000000099',
-    ])
+    expect(entries.map((entry) => entry.nodeId)).toEqual(['n_000000000002', 'n_000000000003', 'n_000000000099'])
   })
 
   it('한 노드에 여러 코멘트가 입력 순서로 붙는다', () => {
@@ -351,17 +325,12 @@ describe('commentEntries — 번호와 코멘트를 맞춘다', () => {
       { nodeId: 'n_000000000002', body: '먼저' },
       { nodeId: 'n_000000000002', body: '나중' },
     ])
-    expect(entries.map((entry) => (entry.kind === 'comment' ? entry.body : null))).toEqual([
-      '먼저',
-      '나중',
-    ])
+    expect(entries.map((entry) => (entry.kind === 'comment' ? entry.body : null))).toEqual(['먼저', '나중'])
   })
 
   it('작성자·시각은 온 것만 든다', () => {
     const page = documentOf([node('n_000000000002')])
-    const [entry] = commentEntries(page, [
-      { nodeId: 'n_000000000002', body: '본문', authorName: '장병현' },
-    ])
+    const [entry] = commentEntries(page, [{ nodeId: 'n_000000000002', body: '본문', authorName: '장병현' }])
     expect(entry).toMatchObject({ authorName: '장병현', createdAt: null })
   })
 

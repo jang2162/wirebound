@@ -50,16 +50,10 @@ export interface ActionProblem {
 }
 
 /** 타겟이 **이 문서의 노드**인 액션 셋. 렌더러가 실행하는 것도 이 셋이다. */
-export type NodeTargetAction = Extract<
-  InteractionAction,
-  { type: 'setProp' } | { type: 'setVisible' } | { type: 'switchTab' }
->
+export type NodeTargetAction = Extract<InteractionAction, { type: 'setProp' } | { type: 'setVisible' } | { type: 'switchTab' }>
 
 /** 타겟이 **페이지 경로**인 액션 둘. 렌더러 밖이다. */
-export type PageTargetAction = Extract<
-  InteractionAction,
-  { type: 'navigate' } | { type: 'openModal' }
->
+export type PageTargetAction = Extract<InteractionAction, { type: 'navigate' } | { type: 'openModal' }>
 
 /** 페이지 경로를 받는 둘인가. **판정을 한 곳에 둔다** — 두 소비자가 같은 선을 긋는다. */
 export function isPageTargetAction(action: InteractionAction): action is PageTargetAction {
@@ -73,10 +67,7 @@ export function isPageTargetAction(action: InteractionAction): action is PageTar
  * 어느 컴포넌트에도 없어서 *"이 노드가 숨겨질 수 있는가"*를 선언할 자리가
  * 설계서 「컴포넌트 정의 구조」에 없다. **없는 계약을 여기서 지어내지 않는다.**
  */
-export function checkNodeAction(
-  nodes: ReadonlyMap<string, WbNode>,
-  action: NodeTargetAction,
-): ActionProblem | null {
+export function checkNodeAction(nodes: ReadonlyMap<string, WbNode>, action: NodeTargetAction): ActionProblem | null {
   const target = nodes.get(action.target)
   if (target === undefined) {
     // **아직 안 고른 것과 사라진 것을 갈라 말한다.** 코드와 severity는 같지만(할 일이
@@ -86,9 +77,7 @@ export function checkNodeAction(
     const empty = action.target.trim().length === 0
     return {
       code: 'missing-interaction-target',
-      message: empty
-        ? `${action.type}의 타겟을 아직 고르지 않았습니다`
-        : `${action.type}의 타겟 노드가 문서에 없습니다: ${action.target}`,
+      message: empty ? `${action.type}의 타겟을 아직 고르지 않았습니다` : `${action.type}의 타겟 노드가 문서에 없습니다: ${action.target}`,
     }
   }
 
@@ -147,12 +136,7 @@ export function checkPageAction(action: PageTargetAction): ActionProblem | null 
  * **카탈로그에 없는 타입은 판정하지 않는다.** 대조할 계약이 없고, *"알 수 없는 타입"*은
  * `unknown-type`이 이미 말한다 — 같은 사실을 두 이슈로 말하면 사용자는 문제가 둘인 줄 안다.
  */
-function checkPropValue(
-  target: WbNode,
-  prop: string,
-  value: unknown,
-  label = `${target.type}.${prop}`,
-): ActionProblem | null {
+function checkPropValue(target: WbNode, prop: string, value: unknown, label = `${target.type}.${prop}`): ActionProblem | null {
   const def = getComponent(target.type)
   if (!def) return null
 
@@ -169,8 +153,6 @@ function checkPropValue(
 
   return {
     code: 'invalid-interaction-prop',
-    message: `${label}에 넣을 수 없는 값입니다: ${parsed.error.issues
-      .map((issue) => issue.message)
-      .join(', ')}`,
+    message: `${label}에 넣을 수 없는 값입니다: ${parsed.error.issues.map((issue) => issue.message).join(', ')}`,
   }
 }

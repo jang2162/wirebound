@@ -378,7 +378,14 @@ describe('끝 스크롤', () => {
     box.scrollLeft = 400
 
     press('가', 10, 100)
-    for (const [x, y] of [[10, 340], [10, -20], [260, 290], [260, 10], [-20, 150], [230, 150]] as const) {
+    for (const [x, y] of [
+      [10, 340],
+      [10, -20],
+      [260, 290],
+      [260, 10],
+      [-20, 150],
+      [230, 150],
+    ] as const) {
       moveTo(x, y)
       await act(async () => {
         await vi.advanceTimersByTimeAsync(300)

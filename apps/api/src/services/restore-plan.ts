@@ -67,13 +67,7 @@
  * | `invalid-document` | 만들 페이지의 문서가 카탈로그 검증에 걸린다 |
  * | `dangling-reference` | payload 안에서 참조가 끊겨 있다 — 그대로 쓰면 FK 위반으로 500이 된다 |
  */
-import {
-  CURRENT_DOCUMENT_VERSION,
-  partitionIssues,
-  validatePage,
-  type PageDocument,
-  type ValidationIssue,
-} from '@wirebound/schema'
+import { CURRENT_DOCUMENT_VERSION, partitionIssues, validatePage, type PageDocument, type ValidationIssue } from '@wirebound/schema'
 import { canonicalJson } from '../canonical-json'
 import type { SnapshotComment, SnapshotMenuNode, SnapshotPage, SnapshotPayload, SnapshotTheme } from '@wirebound/themes'
 

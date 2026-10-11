@@ -30,7 +30,10 @@ function themeDirs(): string[] {
 function artifactsOf(theme: string): string[] {
   const dist = join(DIR, theme, 'dist')
   if (!existsSync(dist)) return []
-  return readdirSync(dist).sort().filter((file) => file.endsWith('.wbtheme')).map((file) => join(dist, file))
+  return readdirSync(dist)
+    .sort()
+    .filter((file) => file.endsWith('.wbtheme'))
+    .map((file) => join(dist, file))
 }
 
 function tableOf(theme: string): Record<string, unknown> | null {

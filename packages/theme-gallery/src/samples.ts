@@ -21,7 +21,9 @@ const LONG_WORD = 'hong.gildong.very.long.account@examplecompany.co.kr'
  * 변형이 prop 에서 오므로 그 prop 을 바꾼 표본을 여럿 둔다. 표본은 스키마 검증을 지난다(`test/gallery.test.tsx`).
  */
 export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>> = {
-  Page: [{ label: 'Page — 자식 둘', node: { id: 'page', type: 'Page', props: {}, children: [child('p1', '첫 줄'), child('p2', '둘째 줄')] } }],
+  Page: [
+    { label: 'Page — 자식 둘', node: { id: 'page', type: 'Page', props: {}, children: [child('p1', '첫 줄'), child('p2', '둘째 줄')] } },
+  ],
   Slot: [{ label: 'Slot — 주입 없음', node: { id: 'slot', type: 'Slot', props: {} } }],
   Section: [
     { label: 'Section — 자식 하나', node: { id: 'sec', type: 'Section', props: {}, children: [child('s1')] } },
@@ -34,25 +36,60 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     },
     {
       label: 'Flex — 세로 · 가운데',
-      node: { id: 'flex2', type: 'Flex', props: { direction: 'column', align: 'center' }, children: [child('f1', '위'), child('f2', '아래')] },
+      node: {
+        id: 'flex2',
+        type: 'Flex',
+        props: { direction: 'column', align: 'center' },
+        children: [child('f1', '위'), child('f2', '아래')],
+      },
     },
   ],
-  Grid: [{ label: 'Grid — 3열', node: { id: 'grid', type: 'Grid', props: { columns: 3 }, children: [child('g1'), child('g2'), child('g3')] } }],
+  Grid: [
+    { label: 'Grid — 3열', node: { id: 'grid', type: 'Grid', props: { columns: 3 }, children: [child('g1'), child('g2'), child('g3')] } },
+  ],
   Card: [
-    { label: 'Card — 제목 · 부제', node: { id: 'card', type: 'Card', props: { title: '제목', subtitle: '부제' }, children: [child('c1')] } },
+    {
+      label: 'Card — 제목 · 부제',
+      node: { id: 'card', type: 'Card', props: { title: '제목', subtitle: '부제' }, children: [child('c1')] },
+    },
     { label: 'Card — 제목만', node: { id: 'card2', type: 'Card', props: { title: '제목' }, children: [child('c1')] } },
   ],
-  Tabs: [{ label: 'Tabs — 셋 · 둘째 활성', node: { id: 'tabs', type: 'Tabs', props: { tabs: ['가', '나', '다'], active: 1 }, children: [child('t1')] } }],
+  Tabs: [
+    {
+      label: 'Tabs — 셋 · 둘째 활성',
+      node: { id: 'tabs', type: 'Tabs', props: { tabs: ['가', '나', '다'], active: 1 }, children: [child('t1')] },
+    },
+  ],
   List: [
-    { label: 'List — 컬럼 셋', node: { id: 'list', type: 'List', props: { items: 3, columns: ['이름', '상태', '날짜'], pagination: true } } },
-    { label: 'List — 선택 · 비활성', node: { id: 'list2', type: 'List', props: { items: 2, columns: ['이름'], selectable: true, selected: true, disabled: true } } },
-    { label: 'List — 로딩 · 빈 목록', node: { id: 'list3', type: 'List', props: { items: 2, columns: ['이름'], loading: true, empty: true } } },
+    {
+      label: 'List — 컬럼 셋',
+      node: { id: 'list', type: 'List', props: { items: 3, columns: ['이름', '상태', '날짜'], pagination: true } },
+    },
+    {
+      label: 'List — 선택 · 비활성',
+      node: { id: 'list2', type: 'List', props: { items: 2, columns: ['이름'], selectable: true, selected: true, disabled: true } },
+    },
+    {
+      label: 'List — 로딩 · 빈 목록',
+      node: { id: 'list3', type: 'List', props: { items: 2, columns: ['이름'], loading: true, empty: true } },
+    },
   ],
   Tree: [{ label: 'Tree — 두 단계', node: { id: 'tree', type: 'Tree', props: { items: ['뿌리', '가지', '잎'], depth: 2 } } }],
   KeyValue: [
     {
       label: 'KeyValue — 쌍 셋 · 2열 · 긴 값',
-      node: { id: 'kv', type: 'KeyValue', props: { pairs: [{ key: '이름', value: '홍' }, { key: '나이', value: '3' }, { key: '이메일', value: LONG_WORD }], columns: 2 } },
+      node: {
+        id: 'kv',
+        type: 'KeyValue',
+        props: {
+          pairs: [
+            { key: '이름', value: '홍' },
+            { key: '나이', value: '3' },
+            { key: '이메일', value: LONG_WORD },
+          ],
+          columns: 2,
+        },
+      },
     },
   ],
   SearchForm: [
@@ -68,7 +105,15 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
         ],
       },
     },
-    { label: 'SearchForm — 접힘', node: { id: 'sf2', type: 'SearchForm', props: { collapsed: true }, children: [{ id: 'sf-c', type: 'Field', props: { label: '검색어' } }] } },
+    {
+      label: 'SearchForm — 접힘',
+      node: {
+        id: 'sf2',
+        type: 'SearchForm',
+        props: { collapsed: true },
+        children: [{ id: 'sf-c', type: 'Field', props: { label: '검색어' } }],
+      },
+    },
   ],
   EntryForm: [
     {
@@ -85,9 +130,15 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     },
   ],
   Field: [
-    { label: 'Field — 글 · 필수', node: { id: 'field', type: 'Field', props: { label: '이름', control: 'text', placeholder: '입력', required: true } } },
+    {
+      label: 'Field — 글 · 필수',
+      node: { id: 'field', type: 'Field', props: { label: '이름', control: 'text', placeholder: '입력', required: true } },
+    },
     { label: 'Field — 고르개 · 잘못됨', node: { id: 'field2', type: 'Field', props: { label: '상태', control: 'select', invalid: true } } },
-    { label: 'Field — 체크 · 비활성', node: { id: 'field3', type: 'Field', props: { label: '동의', control: 'checkbox', disabled: true } } },
+    {
+      label: 'Field — 체크 · 비활성',
+      node: { id: 'field3', type: 'Field', props: { label: '동의', control: 'checkbox', disabled: true } },
+    },
   ],
   Button: [
     { label: 'Button — 보통', node: { id: 'btn', type: 'Button', props: { label: '저장' } } },

@@ -116,7 +116,12 @@ interface CallSite {
 }
 
 async function send(ctx: RealApiContext, who: SignedUpUser, method: string, url: string, payload?: unknown): Promise<unknown> {
-  const res = await ctx.app.inject({ method: method as never, url, cookies: who.cookie, ...(payload === undefined ? {} : { payload: payload as never }) })
+  const res = await ctx.app.inject({
+    method: method as never,
+    url,
+    cookies: who.cookie,
+    ...(payload === undefined ? {} : { payload: payload as never }),
+  })
   if (res.statusCode >= 300) throw new Error(`${method} ${url} 실패 (${res.statusCode}): ${res.body}`)
   return res.body === '' ? null : res.json()
 }
@@ -280,7 +285,10 @@ describe('분모를 소스에서 만든다', () => {
     const inSource = treeTableWriters()
     // 카나리아 — 정규식 · 글롭이 어긋나면 빈 집합에서 아래가 조용히 통과한다.
     expect(inSource.size).toBeGreaterThanOrEqual(17)
-    expect({ 판정없음: [...inSource].filter((key) => !(key in WRITERS)), 소스에없음: Object.keys(WRITERS).filter((key) => !inSource.has(key)) }).toEqual({
+    expect({
+      판정없음: [...inSource].filter((key) => !(key in WRITERS)),
+      소스에없음: Object.keys(WRITERS).filter((key) => !inSource.has(key)),
+    }).toEqual({
       판정없음: [],
       소스에없음: [],
     })
@@ -289,7 +297,9 @@ describe('분모를 소스에서 만든다', () => {
   // 내부 함수라 다른 파일에서는 못 부른다 — 같은 이름의 내부 함수가 두 파일에 있어(`closeGap` …) 이름만으로 세면 서로를 부른 것으로 읽힌다.
   // 그래서 «그 이름의 `helper`를 둔 파일 밖에서 불리지 않는다»로 잰다.
   it('`helper` 는 제 파일 밖에서 불리지 않는다', () => {
-    const helpers = Object.entries(WRITERS).filter(([, verdict]) => verdict === 'helper').map(([key]) => key.split(':') as [string, string])
+    const helpers = Object.entries(WRITERS)
+      .filter(([, verdict]) => verdict === 'helper')
+      .map(([key]) => key.split(':') as [string, string])
     const strays: string[] = []
     for (const [, fn] of helpers) {
       const homes = new Set(helpers.filter(([, other]) => other === fn).map(([file]) => file))

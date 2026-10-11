@@ -63,7 +63,12 @@ describe.skipIf(!전제.ok)('답을 잃은 내 복원', () => {
     // **서버는 복원을 끝내고 브라우저는 그 답만 잃는다** — 그 신호가 닿은 뒤에 끊는다(신호가 답보다 먼저인 칸).
     await page.route('**/restore', async (route) => {
       const answer = await route.fetch()
-      await poll('신호가 먼저 닿는다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← restored')), 10_000)
+      await poll(
+        '신호가 먼저 닿는다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('WS← restored')),
+        10_000,
+      )
       events.push(`${at()} 복원 서버 답 ${answer.status()} · 브라우저에는 끊김`)
       await route.abort('connectionreset')
     })
@@ -76,12 +81,21 @@ describe.skipIf(!전제.ok)('답을 잃은 내 복원', () => {
     try {
       await page.goto(P)
       await canvasFrame(page).locator('body', { hasText: '바뀐 글' }).waitFor()
-      await poll('소켓이 룸에 든다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← joined')))
+      await poll(
+        '소켓이 룸에 든다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('WS← joined')),
+      )
       await page.getByRole('button', { name: '더 보기', exact: true }).click()
       await page.getByRole('menuitem', { name: '스냅샷' }).click()
       await page.getByRole('button', { name: '이 상태로 되돌리기' }).click()
       await page.getByRole('button', { name: '되돌린다' }).click()
-      await poll('복원이 서버에 닿는다', async () => events.slice(), (lines) => lines.some((line) => line.includes('복원 서버 답')), 10_000)
+      await poll(
+        '복원이 서버에 닿는다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.includes('복원 서버 답')),
+        10_000,
+      )
       await page.waitForTimeout(1_500)
 
       const after = { 서버: await server(), 캔버스: await canvas(), 배너: await banner() }
@@ -92,7 +106,9 @@ describe.skipIf(!전제.ok)('답을 잃은 내 복원', () => {
       // 판 카나리아 — 서버는 복원했고(원문) 이 탭은 답을 못 받아 옛 판이다. 신호는 답보다 먼저 닿았다.
       expect(after.서버).toBe('원문')
       expect(after.캔버스).toContain('바뀐 글')
-      expect(events.findIndex((line) => line.endsWith('WS← restored'))).toBeLessThan(events.findIndex((line) => line.includes('복원 서버 답')))
+      expect(events.findIndex((line) => line.endsWith('WS← restored'))).toBeLessThan(
+        events.findIndex((line) => line.includes('복원 서버 답')),
+      )
       // 성질 — 화면이 서버와 다르면 그렇다고 말한다(단추가 있다). 신호가 왔으니 «복원됐습니다»다 — «모른다»가 아니고, 누가 복원했는지는
       // 말하지 않는다(`shell/remote-alert.tsx`의 `OWN_RESTORE_NOTICE`).
       expect(after.배너).toBe(true)
@@ -101,10 +117,18 @@ describe.skipIf(!전제.ok)('답을 잃은 내 복원', () => {
 
       // 복원을 보낸 대화 상자를 닫는다 — 모달이 열린 동안 하단 바는 `inert`라 배너의 단추가 안 눌린다(상자의 문장이 그렇게 말한다).
       await page.keyboard.press('Escape')
-      await poll('스냅샷 대화 상자가 닫힌다', async () => page.getByRole('dialog').count(), (count) => count === 0, 5_000)
+      await poll(
+        '스냅샷 대화 상자가 닫힌다',
+        async () => page.getByRole('dialog').count(),
+        (count) => count === 0,
+        5_000,
+      )
       await page.locator('.wb-shell-remote-alert').getByRole('button', { name: '다시 불러오기' }).click()
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor({ timeout: 10_000 })
-      expect({ 캔버스: await canvas(), 배너: await banner() }).toEqual({ 캔버스: expect.stringContaining('원문') as unknown as string, 배너: false })
+      expect({ 캔버스: await canvas(), 배너: await banner() }).toEqual({
+        캔버스: expect.stringContaining('원문') as unknown as string,
+        배너: false,
+      })
     } finally {
       await context.close()
     }

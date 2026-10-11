@@ -399,7 +399,13 @@ describe('바꾸지 않는다 — 해시가 그대로이고 그렇다고 말한�
 
   it('이메일이 둘이면 이메일 하나만 받는다고 말한다 — 비밀번호를 받았다고 하지 않는다', async () => {
     const t = terminal([])
-    expect(await runResetPassword(['a@example.com', 'b@example.com'], { db: getTestDb(), databaseUrl: 'postgres://x', scryptN: TEST_SCRYPT_N }, t.io)).toBe(1)
+    expect(
+      await runResetPassword(
+        ['a@example.com', 'b@example.com'],
+        { db: getTestDb(), databaseUrl: 'postgres://x', scryptN: TEST_SCRYPT_N },
+        t.io,
+      ),
+    ).toBe(1)
     expect(t.err).toEqual([
       '사용법: pnpm --filter @wirebound/api reset-password <이메일>',
       '이메일은 한 번에 하나만 받습니다(받은 이메일 2개) — 아무것도 바꾸지 않았습니다.',
@@ -462,9 +468,7 @@ describe('DB 오류 — 스택 대신 무엇이 됐는지 말한다', () => {
       const db = ctx.db.withPlugin(failing((node) => node.kind === 'SelectQueryNode', 'query'))
       const t = terminal([`${NEW_PASSWORD}\r`, `${NEW_PASSWORD}\r`])
       expect(await runResetPassword(['me@example.com'], { ...target(ctx), db }, t.io)).toBe(1)
-      expect(t.err).toEqual([
-        'DB 에서 계정을 찾지 못했습니다(Connection terminated unexpectedly) — 아무것도 바꾸지 않았습니다.',
-      ])
+      expect(t.err).toEqual(['DB 에서 계정을 찾지 못했습니다(Connection terminated unexpectedly) — 아무것도 바꾸지 않았습니다.'])
       expect(t.questions()).toEqual([])
     })
   })

@@ -34,7 +34,13 @@ export function viewStateMenuItems(
   const manage = options.manage
   const label = (name: string): string => (options.prefixed ? `${VIEW_STATE_SWITCHER_LABEL}: ${name}` : name)
   return [
-    { key: 'view-state-default', label: label(viewStateName(choice.viewStates, 'default')), icon: ICONS.viewStates, checked: choice.state === null, onSelect: () => choice.choose(null) },
+    {
+      key: 'view-state-default',
+      label: label(viewStateName(choice.viewStates, 'default')),
+      icon: ICONS.viewStates,
+      checked: choice.state === null,
+      onSelect: () => choice.choose(null),
+    },
     ...choice.viewStates.map((entry) => ({
       key: `view-state-${entry.id}`,
       label: label(entry.name),

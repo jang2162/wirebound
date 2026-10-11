@@ -52,7 +52,8 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
     const response = await stack.request(alice, 'GET', P)
     const text = (node: { id?: string; props?: Record<string, unknown>; children?: unknown[] }): string => {
       const label = String(node.props?.content ?? node.props?.title ?? node.props?.label ?? node.id)
-      const children = Array.isArray(node.children) && node.children.length > 0 ? `[${node.children.map((c) => text(c as typeof node)).join(',')}]` : ''
+      const children =
+        Array.isArray(node.children) && node.children.length > 0 ? `[${node.children.map((c) => text(c as typeof node)).join(',')}]` : ''
       return label + children
     }
     return { shape: (response.body.schema.root.children ?? []).map(text).join(','), headSeq: response.body.headSeq }
@@ -118,7 +119,10 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
         async (_page, P) => {
           const now = await stack.request(bob, 'GET', P)
           const at = now.body.schema.root.children.findIndex((n: { id: string }) => n.id === 'n_card0000001')
-          const response = await stack.request(bob, 'PATCH', `${P}/ops`, { baseSeq: now.body.headSeq, ops: [{ op: 'remove', path: `/root/children/${at}` }] })
+          const response = await stack.request(bob, 'PATCH', `${P}/ops`, {
+            baseSeq: now.body.headSeq,
+            ops: [{ op: 'remove', path: `/root/children/${at}` }],
+          })
           if (response.status >= 300) throw new Error(`bob ${response.status}`)
           await sleep(800)
         },
@@ -131,7 +135,11 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
       try {
         await canvasFrame(page).locator('[data-wb-id="n_text0000000"]').click()
         await page.keyboard.press('ControlOrMeta+d')
-        await poll('머리말의 복제가 서버에 닿는다', () => shape(P), (s) => s.headSeq === 2)
+        await poll(
+          '머리말의 복제가 서버에 닿는다',
+          () => shape(P),
+          (s) => s.headSeq === 2,
+        )
         await canvasFrame(page).locator('[data-wb-id="n_text0000005"]').click()
         await page.keyboard.press('ControlOrMeta+c')
         await row(page, 'n_text0000004').click()
@@ -178,8 +186,21 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
       await page.locator('.wb-shell-picker').waitFor()
     }
     const spots: [string, (page: Page) => Promise<void>][] = [
-      ['S5b 고르개 연 `+` 토글 · Delete', async (page) => { await openAfter(page); await page.keyboard.press('Delete') }],
-      ['S5c 고르개 · 캔버스 «글 4» · Escape', async (page) => { await openAfter(page); await canvasFrame(page).locator('[data-wb-id="n_text0000004"]').click(); await page.keyboard.press('Escape') }],
+      [
+        'S5b 고르개 연 `+` 토글 · Delete',
+        async (page) => {
+          await openAfter(page)
+          await page.keyboard.press('Delete')
+        },
+      ],
+      [
+        'S5c 고르개 · 캔버스 «글 4» · Escape',
+        async (page) => {
+          await openAfter(page)
+          await canvasFrame(page).locator('[data-wb-id="n_text0000004"]').click()
+          await page.keyboard.press('Escape')
+        },
+      ],
       [
         'S5d 패턴 고르개 · 캔버스 «글 4» · ↓',
         async (page) => {
@@ -191,11 +212,46 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
           await page.keyboard.press('ArrowDown')
         },
       ],
-      ['S5f 고르개 · 줌 «확대» · Delete', async (page) => { await openAfter(page); await page.getByRole('button', { name: '확대', exact: true }).click(); await page.keyboard.press('Delete') }],
-      ['S8 우측 패널 탭 · ↓', async (page) => { await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click(); await page.getByRole('tab', { name: '상호작용' }).click(); await page.keyboard.press('ArrowDown') }],
-      ['S8 우측 패널 탭 · Escape', async (page) => { await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click(); await page.getByRole('tab', { name: '상호작용' }).click(); await page.keyboard.press('Escape') }],
-      ['S8 우측 패널 탭 · Delete', async (page) => { await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click(); await page.getByRole('tab', { name: '상호작용' }).click(); await page.keyboard.press('Delete') }],
-      ['고르개 «취소»에 포커스 · Escape', async (page) => { await openAfter(page); await page.locator('.wb-shell-picker button').last().focus(); await page.keyboard.press('Escape') }],
+      [
+        'S5f 고르개 · 줌 «확대» · Delete',
+        async (page) => {
+          await openAfter(page)
+          await page.getByRole('button', { name: '확대', exact: true }).click()
+          await page.keyboard.press('Delete')
+        },
+      ],
+      [
+        'S8 우측 패널 탭 · ↓',
+        async (page) => {
+          await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
+          await page.getByRole('tab', { name: '상호작용' }).click()
+          await page.keyboard.press('ArrowDown')
+        },
+      ],
+      [
+        'S8 우측 패널 탭 · Escape',
+        async (page) => {
+          await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
+          await page.getByRole('tab', { name: '상호작용' }).click()
+          await page.keyboard.press('Escape')
+        },
+      ],
+      [
+        'S8 우측 패널 탭 · Delete',
+        async (page) => {
+          await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
+          await page.getByRole('tab', { name: '상호작용' }).click()
+          await page.keyboard.press('Delete')
+        },
+      ],
+      [
+        '고르개 «취소»에 포커스 · Escape',
+        async (page) => {
+          await openAfter(page)
+          await page.locator('.wb-shell-picker button').last().focus()
+          await page.keyboard.press('Escape')
+        },
+      ],
     ]
     const results: Record<string, unknown> = {}
     for (const [name, act] of spots) {
@@ -225,15 +281,22 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
   /**
    * 페이지 대상 봉투(«가기» — `navigate` → «둘째»)의 붙이기는 페이지 목록(`GET …/tree`)을 읽은 뒤 붙는다 — 그 조회를 붙잡은 사이 같은 페이지를
    * 다시 싣는다. 다시 실은 판은 누른 때의 기준 노드(«글 1»)가 남아 있으면 그 뒤에 붙고, 붙이기는 기다리는 사이 선 통지(다시 싣기의 «되돌리기
- * 이력이 초기화됐습니다» · 수습의 «취소됐습니다»)를 치우지도 덮지도 않는다.
+   * 이력이 초기화됐습니다» · 수습의 «취소됐습니다»)를 치우지도 덮지도 않는다.
    * 판 카나리아: 붙잡은 조회 수 · V2 는 끊은 WS 수 · V5 · V6 은 가로챈 `patch` 프레임 수. 붙잡는 것은 그 주소의 조회 전부다 — 붙이기의 것 하나에 더해
    * V2 는 재연결의 트리 다시 받기 하나, V4b 는 복원의 `menu-changed`와 배너 단추의 다시 읽기가 트리를 하나씩 더 받는다(`src/tree/use-tree-commands.tsx`). V6 은 붙잡은 조회를 실패시킨다 — 붙이지 못했다는 말이 수습의
- * 통지 뒤에 잇는다(`EditorStore.tellLoss`).
+   * 통지 뒤에 잇는다(`EditorStore.tellLoss`).
    *
    * **편집 실패는 `page.routeWebSocket` 으로 세운다** — 편집은 WS `patch` 프레임으로 나가 `page.route` 로 `…/ops` 를 가로채면 아무것도 안 잡힌다.
    */
   it('R4 붙이는 사이 같은 페이지를 다시 실으면 누른 때의 기준 노드 뒤에 붙고 앞 통지를 덮지 않는다 — 재연결 · 복원 다시 불러오기 · 편집 실패 수습', async () => {
-    type Ctx = { page: Page; P: string; projectId: string; snapshotId: string; cut: Awaited<ReturnType<EditorStack['startCutProxy']>>; ws: { armed: boolean; failed: number } }
+    type Ctx = {
+      page: Page
+      P: string
+      projectId: string
+      snapshotId: string
+      cut: Awaited<ReturnType<EditorStack['startCutProxy']>>
+      ws: { armed: boolean; failed: number }
+    }
     /** 붙잡은 페이지 목록 조회를 끝에 실패시키는 판(V6 — 붙이지 못했다는 말이 앞 통지에 잇는다). */
     const failsTree = (name: string) => name.startsWith('V6')
     const patchFails = (name: string) => name.startsWith('V5') || name.startsWith('V6')
@@ -291,7 +354,9 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
     ]
     const results: unknown[] = []
     for (const [name, hold, act] of variants) {
-      const { P, projectId } = await fixture(stack, alice, 'r4', [T('n_text0000001', '글 1'), T('n_text0000002', '글 2'), GO()], { bob: true })
+      const { P, projectId } = await fixture(stack, alice, 'r4', [T('n_text0000001', '글 1'), T('n_text0000002', '글 2'), GO()], {
+        bob: true,
+      })
       const snapshot = await stack.request(alice, 'POST', `/projects/${projectId}/snapshots`, { tag: 'r4' })
       const cut = await stack.startCutProxy()
       const { page, close } = await open(P, cut.origin)
@@ -310,7 +375,18 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
               })()
               if (ws.armed && ws.failed === 0 && frame?.type === 'patch') {
                 ws.failed += 1
-                route.send(JSON.stringify({ type: 'patch-error', projectId, pageId: frame.pageId, clientOpId: frame.clientOpId, status: 422, code: 'validation-failed', message: 'r4', issues: [] }))
+                route.send(
+                  JSON.stringify({
+                    type: 'patch-error',
+                    projectId,
+                    pageId: frame.pageId,
+                    clientOpId: frame.clientOpId,
+                    status: 422,
+                    code: 'validation-failed',
+                    message: 'r4',
+                    issues: [],
+                  }),
+                )
                 return
               }
               server.send(message)
@@ -334,7 +410,13 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
         await page.keyboard.press('ControlOrMeta+v')
         const canary = await act({ page, P, projectId, snapshotId: snapshot.body.id, cut, ws })
         await sleep(hold + 1_500)
-        results.push({ name, held, canary, server: (await settled(P)).shape, alerts: await page.locator('.wb-shell-edit-alert').allTextContents() })
+        results.push({
+          name,
+          held,
+          canary,
+          server: (await settled(P)).shape,
+          alerts: await page.locator('.wb-shell-edit-alert').allTextContents(),
+        })
       } finally {
         await close()
         await cut.close()

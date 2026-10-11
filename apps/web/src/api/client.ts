@@ -146,11 +146,7 @@ export interface ApiClient {
    * 하이픈으로 시작하거나 끝날 수 없습니다"`. `a`×64는 201이다). **길이 초과에서는 그
    * 문장이 원인을 설명하지 못한다** — 화면이 그 한계를 안고 간다.
    */
-  createProject(body: {
-    name: string
-    slug: string
-    description?: string | null
-  }): Promise<ProjectDetail>
+  createProject(body: { name: string; slug: string; description?: string | null }): Promise<ProjectDetail>
   /**
    * 프로젝트의 이름·슬러그·설명을 고친다. **owner만 부를 수 있다** — 그보다 낮은 멤버는
    * 403, 멤버가 아니면 404다(실측은 `projects/project-actions.ts` 머리말에 있다).
@@ -166,10 +162,7 @@ export interface ApiClient {
    * `description: null`은 **"설명을 지운다"**이고 키가 없는 것("설명을 바꾸지 않는다")과
    * 다르다 — `updateMenu`의 `parentId: null`과 같은 자리다.
    */
-  updateProject(
-    projectId: string,
-    body: { name?: string; slug?: string; description?: string | null },
-  ): Promise<ProjectDetail>
+  updateProject(projectId: string, body: { name?: string; slug?: string; description?: string | null }): Promise<ProjectDetail>
   /**
    * 프로젝트를 지운다. **owner만 부를 수 있다.**
    *
@@ -332,10 +325,7 @@ export interface ApiClient {
    *
    * **어느 갈래에서 끊기든 아무것도 만들어지지 않는다** — 서버가 한 트랜잭션으로 묶는다.
    */
-  importPage(
-    projectId: string,
-    body: { menuNodeId: string; file: unknown; title?: string },
-  ): Promise<PageImported>
+  importPage(projectId: string, body: { menuNodeId: string; file: unknown; title?: string }): Promise<PageImported>
   getPage(projectId: string, pageId: string, options?: ReadOptions): Promise<PageDetail>
   /**
    * 편집 하나를 보낸다. **응답의 `seq`가 다음 호출의 `baseSeq`다**(`apps/api/README.md` 「편집
@@ -356,11 +346,7 @@ export interface ApiClient {
    * (호출부는 `test/api-consumers.test.ts`가 실행으로 센다). 위 문장은 **무엇이 무엇을 쓰는가**를 말하므로
    * 소비자가 생겨도 거짓이 되지 않는다.
    */
-  patchOps(
-    projectId: string,
-    pageId: string,
-    body: { baseSeq: number; ops: PatchOp[]; clientOpId?: string },
-  ): Promise<PatchResult>
+  patchOps(projectId: string, pageId: string, body: { baseSeq: number; ops: PatchOp[]; clientOpId?: string }): Promise<PatchResult>
   /**
    * 이 페이지에서 **내가** 만든 revision. 새로고침 뒤 undo 스택을 복원하는 데 쓴다. `inverse`만 싣는다(`RevisionInverse`).
    *
@@ -420,13 +406,7 @@ export interface ApiClient {
    *
    * **문서를 안 바꾸므로 `seq`가 없다.** 응답은 코멘트 하나뿐이다.
    */
-  updateComment(
-    projectId: string,
-    pageId: string,
-    commentId: string,
-    body: { body: string },
-    options?: WriteOptions,
-  ): Promise<Comment>
+  updateComment(projectId: string, pageId: string, commentId: string, body: { body: string }, options?: WriteOptions): Promise<Comment>
   /**
    * 코멘트를 지운다. **그 노드의 마지막이었으면 번호도 함께 사라진다**(설계서 「페이지 스키마 노드」의
    * *"없으면 코멘트 없음"*) — 그때 `markerOps`에 `remove`가 실려 온다.
@@ -528,11 +508,7 @@ export interface ApiClient {
    *
    * **시간 제한은 없고 `cancel`은 듣는다** — 패널이 닫히거나 다시 부르면 끊는다(`shell/export-panel.tsx`의 `load`).
    */
-  getExportPreview(
-    projectId: string,
-    format: ExportFormat,
-    options?: Pick<ReadOptions, 'cancel'>,
-  ): Promise<ExportPreview>
+  getExportPreview(projectId: string, format: ExportFormat, options?: Pick<ReadOptions, 'cancel'>): Promise<ExportPreview>
   /**
    * 파일(zip 또는 pptx)을 **받아 온다** — 화면이 저장은 따로 한다(`shell/export-panel.tsx`의 `DownloadButton`).
    *
@@ -687,14 +663,7 @@ export class ApiError extends Error {
    */
   readonly current: unknown
 
-  constructor(
-    status: number,
-    code: ApiErrorCode,
-    message: string,
-    issues?: ApiErrorIssue[],
-    enveloped = false,
-    current?: unknown,
-  ) {
+  constructor(status: number, code: ApiErrorCode, message: string, issues?: ApiErrorIssue[], enveloped = false, current?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status

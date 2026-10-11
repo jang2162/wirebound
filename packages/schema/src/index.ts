@@ -10,14 +10,7 @@ export type {
   ViewState,
   WbNode,
 } from './node'
-export {
-  DEFAULT_CASE,
-  NODE_ALIAS_MAX,
-  THEMELESS_TYPES,
-  VIEW_STATE_NAME_MAX,
-  VIEW_STATES_MAX,
-  createNodeId,
-} from './node'
+export { DEFAULT_CASE, NODE_ALIAS_MAX, THEMELESS_TYPES, VIEW_STATE_NAME_MAX, VIEW_STATES_MAX, createNodeId } from './node'
 
 export { replaceDocumentOps } from './document-ops'
 export { caseFor, nodeViewState, viewStateIndex, visibleTree } from './view-state'
@@ -45,13 +38,7 @@ export type { ComponentDef, EditorControl, EditorField } from './component/defin
 export { defineComponent } from './component/define'
 export type { ComponentGroup } from './component/group'
 export { COMPONENT_GROUP_LABELS, COMPONENT_GROUPS, isComponentGroup } from './component/group'
-export {
-  getComponent,
-  listComponents,
-  registerComponent,
-  requireComponent,
-  resetRegistry,
-} from './component/registry'
+export { getComponent, listComponents, registerComponent, requireComponent, resetRegistry } from './component/registry'
 
 export { CATALOG_TYPES, installCatalog } from './component/catalog/index'
 export * from './component/catalog/index'
@@ -63,14 +50,7 @@ export type { IssueSeverity, ValidationCode, ValidationIssue } from './validate'
 export { ISSUE_SEVERITY, ignoredVariantMessage, partitionIssues } from './validate'
 export { assertValidLayout, assertValidPage, checkViewStateRemoval, validateLayout, validatePage } from './validate'
 
-export {
-  DocumentEnvelopeSchema,
-  InteractionSchema,
-  NODE_ID_PATTERN,
-  PageEnvelopeSchema,
-  ViewStatesSchema,
-  WbNodeSchema,
-} from './envelope'
+export { DocumentEnvelopeSchema, InteractionSchema, NODE_ID_PATTERN, PageEnvelopeSchema, ViewStatesSchema, WbNodeSchema } from './envelope'
 
 // 설계서 「설계서 화면 구조」의 클립보드 — 노드 봉투 읽기 · 쓰기 · 붙일 노드 짓기. 편집 묶음의 연산 수 상한도 여기 산다
 // (서버 `OpsBody` 와 화면이 같은 값을 읽는다).
@@ -85,12 +65,7 @@ export {
 } from './clipboard'
 export type { DroppedCases } from './clipboard'
 
-export type {
-  ActionProblem,
-  InteractionIssueCode,
-  NodeTargetAction,
-  PageTargetAction,
-} from './interaction/check'
+export type { ActionProblem, InteractionIssueCode, NodeTargetAction, PageTargetAction } from './interaction/check'
 export { checkNodeAction, checkPageAction, isPageTargetAction } from './interaction/check'
 
 export type { ComponentNoun, InteractionSentence, NamingContext } from './interaction/describe'
@@ -104,19 +79,22 @@ export {
   namingContexts,
   nodeDisplayName,
 } from './interaction/describe'
-export { UNKNOWN_VIEW_STATE_NAME, aliasNote, caseStateName, viewStateName, nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
+export {
+  UNKNOWN_VIEW_STATE_NAME,
+  aliasNote,
+  caseStateName,
+  viewStateName,
+  nodeAlias,
+  nodeHeading,
+  nodeRowLabel,
+  nodeSummary,
+} from './display'
 export { hasRejectedAliasChar, isBlankAlias, tidyAlias } from './alias'
 export { SUMMARY_LIST_MAX, SUMMARY_TEXT_MAX } from './component/summary'
 
 // `wireb page get`과 설계서 「MCP 도구」의 `get_page`가 낼 것을 값으로. **CLI는 글자만
 // 만든다** — 무엇을 실을지는 이 함수가 정하고, `--json`이 그 값을 그대로 낸다.
-export type {
-  PageView,
-  PageViewComment,
-  PageViewCommentInput,
-  PageViewInput,
-  PageViewNode,
-} from './page-view'
+export type { PageView, PageViewComment, PageViewCommentInput, PageViewInput, PageViewNode } from './page-view'
 export { pageView } from './page-view'
 
 // 설계서 「모델」(상호작용)의 타겟 조립. **순수 함수라 여기 산다** — `apps/api`에 두면 순수 패키지가
@@ -144,14 +122,7 @@ export { invertOps } from './patch/inverse'
 export type { Migration } from './migrate'
 export { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument } from './migrate'
 
-export type {
-  PageJson,
-  PageJsonComment,
-  PageJsonFailure,
-  PageJsonIssue,
-  PageJsonPage,
-  PageJsonResult,
-} from './page-json/envelope'
+export type { PageJson, PageJsonComment, PageJsonFailure, PageJsonIssue, PageJsonPage, PageJsonResult } from './page-json/envelope'
 export {
   COMMENT_BODY_MAX_LENGTH,
   COMMENT_BODY_MIN_LENGTH,

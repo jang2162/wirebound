@@ -81,7 +81,10 @@ async function bootedTree(bundle: ReturnType<typeof exportBundle>, path: string)
 const MANY: [title: string, make: () => PageDocument][] = [
   ['넓게 덮는 문서', broadFixture],
   ['Slot을 든 문서', slotFixture],
-  ['버튼 하나', () => ({ version: 1, root: { id: 'n_p', type: 'Page', children: [{ id: 'n_b', type: 'Button', props: { label: '저장' } }] } })],
+  [
+    '버튼 하나',
+    () => ({ version: 1, root: { id: 'n_p', type: 'Page', children: [{ id: 'n_b', type: 'Button', props: { label: '저장' } }] } }),
+  ],
 ]
 
 const PATHS = ['pages/넓게-덮는-문서.html', 'pages/Slot을-든-문서.html', 'pages/버튼-하나.html']

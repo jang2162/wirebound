@@ -116,10 +116,7 @@ interface Spot {
 
 /** 같은 페이지의 같은 집합인가 — 차례는 안 본다. */
 const same = (a: Spot | null, pageId: string, nodeIds: readonly string[]): boolean =>
-  a !== null &&
-  a.pageId === pageId &&
-  a.nodeIds.length === nodeIds.length &&
-  nodeIds.every((id) => a.nodeIds.includes(id))
+  a !== null && a.pageId === pageId && a.nodeIds.length === nodeIds.length && nodeIds.every((id) => a.nodeIds.includes(id))
 
 export function createLockChannel(): LockChannel {
   let link: RealtimeLink | null = null

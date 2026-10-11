@@ -123,7 +123,12 @@ describe('여닫기', () => {
     const held = (element: Element, name = 'ArrowDown') => keyHeldByWidget({ key: name, target: element })
     expect([held(toggle()), held(toggle(), 'Delete')]).toEqual([false, false])
     fireEvent.click(toggle())
-    expect([held(toggle()), held(document.activeElement!), held(toggle(), 'Delete'), held(document.activeElement!, 'Backspace')]).toEqual([true, true, true, true])
+    expect([held(toggle()), held(document.activeElement!), held(toggle(), 'Delete'), held(document.activeElement!, 'Backspace')]).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ])
     key('Escape')
     expect([held(toggle()), held(toggle(), 'Delete')]).toEqual([false, false])
   })

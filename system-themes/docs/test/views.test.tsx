@@ -106,7 +106,12 @@ describe('Tree — 아코디언', () => {
 
 describe('KeyValue — 정의 목록', () => {
   it('<dl> 안에서 row 마다 <dt>/<dd> 짝이다', () => {
-    const root = draw('KeyValue', { pairs: [{ key: 'id', value: '문자열' }, { key: 'limit', value: '수' }] })
+    const root = draw('KeyValue', {
+      pairs: [
+        { key: 'id', value: '문자열' },
+        { key: 'limit', value: '수' },
+      ],
+    })
     expect(root.tagName).toBe('DL')
     expect(parts(root, 'row').map((row) => [row.children[0]!.tagName, row.children[1]!.tagName])).toEqual([
       ['DT', 'DD'],

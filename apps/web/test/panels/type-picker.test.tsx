@@ -131,10 +131,7 @@ function pick(type: string): void {
 }
 
 function undoButton(): HTMLButtonElement {
-  return within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>(
-    'button',
-    { name: '되돌리기' },
-  )
+  return within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name: '되돌리기' })
 }
 
 /**
@@ -148,9 +145,7 @@ function placeableTypes(): string[] {
       const node = createNode(def.type, () => 'n-probe')
       if (node === null) return false
       if (!validatePage({ version: 1, root: node }).some((issue) => issue.code === 'bad-root')) return false
-      return (
-        validatePage({ version: 1, root: { id: 'r', type: 'Page', children: [node] } }).length === 0
-      )
+      return validatePage({ version: 1, root: { id: 'r', type: 'Page', children: [node] } }).length === 0
     })
     .map((def) => def.type)
 }
@@ -214,17 +209,11 @@ describe('타입 목록과 노드 추가', () => {
     fireEvent.click(toolButton('안에 추가'))
 
     const groups = [...typeSelect().querySelectorAll('optgroup')]
-    const expected = COMPONENT_GROUPS.filter((group) =>
-      placeableTypes().some((type) => group === groupOf(type)),
-    )
-    expect(groups.map((group) => group.getAttribute('label'))).toEqual(
-      expected.map((group) => COMPONENT_GROUP_LABELS[group]),
-    )
+    const expected = COMPONENT_GROUPS.filter((group) => placeableTypes().some((type) => group === groupOf(type)))
+    expect(groups.map((group) => group.getAttribute('label'))).toEqual(expected.map((group) => COMPONENT_GROUP_LABELS[group]))
 
     // **어느 옵션도 그룹 밖에 있지 않다.** 하나라도 새면 그 타입은 목록에서 눈에 안 띈다.
-    expect(groups.flatMap((group) => [...group.querySelectorAll('option')]).length).toBe(
-      typeSelect().options.length,
-    )
+    expect(groups.flatMap((group) => [...group.querySelectorAll('option')]).length).toBe(typeSelect().options.length)
   })
 
   it('그룹 안은 한국어 이름순이다', async () => {
@@ -244,9 +233,7 @@ describe('타입 목록과 노드 추가', () => {
     for (const group of groups) {
       const types = [...group.querySelectorAll('option')].map((option) => option.value)
       const names = types.map((type) => labels.get(type)!)
-      expect(names, group.getAttribute('label') ?? '').toEqual(
-        names.slice().sort((a, b) => a.localeCompare(b, 'ko')),
-      )
+      expect(names, group.getAttribute('label') ?? '').toEqual(names.slice().sort((a, b) => a.localeCompare(b, 'ko')))
       // **양성 대조.** 두 순서가 어디서도 갈리지 않으면 위 단언은 영문 타입명순 구현도
       // 통과시킨다 — 그러면 «한국어 이름순»이라는 제목이 거짓이 된다.
       if (types.join() !== types.slice().sort().join()) differsFromTypeOrder += 1
@@ -310,7 +297,9 @@ describe('타입 목록과 노드 추가', () => {
     fireEvent.click(toolButton('안에 추가'))
 
     const many = new Set(
-      listComponents().filter((def) => def.children === 'many').map((def) => def.type),
+      listComponents()
+        .filter((def) => def.children === 'many')
+        .map((def) => def.type),
     )
     for (const option of typeSelect().options) {
       expect(option.textContent?.includes('담을 수 있음'), option.value).toBe(many.has(option.value))
@@ -324,11 +313,7 @@ describe('타입 목록과 노드 추가', () => {
     pick('Text')
 
     // `n-box`의 자식이 둘이 되고 새 노드가 뒤다.
-    await waitFor(() =>
-      expect(structureTypes()).toEqual([
-        'Page', 'Text', 'Card', 'Button', 'Text', 'Section', 'Divider',
-      ]),
-    )
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Text', 'Card', 'Button', 'Text', 'Section', 'Divider']))
   })
 
   it('아래 추가로 고르면 선택 노드의 다음 형제가 된다', async () => {
@@ -338,11 +323,7 @@ describe('타입 목록과 노드 추가', () => {
     pick('Link')
 
     // `n-box` **뒤**여야 한다 — 그 자식 뒤가 아니고 루트 끝도 아니다.
-    await waitFor(() =>
-      expect(structureTypes()).toEqual([
-        'Page', 'Text', 'Card', 'Button', 'Link', 'Section', 'Divider',
-      ]),
-    )
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Text', 'Card', 'Button', 'Link', 'Section', 'Divider']))
   })
 
   it('추가하면 add op이 나간다', async () => {
@@ -369,9 +350,7 @@ describe('타입 목록과 노드 추가', () => {
     pick('Text')
 
     await waitFor(() => expect(srv.calls).toHaveLength(1))
-    expect(srv.calls[0]?.ops).toEqual([
-      { op: 'add', path: '/root/children/2/children', value: expect.objectContaining({}) },
-    ])
+    expect(srv.calls[0]?.ops).toEqual([{ op: 'add', path: '/root/children/2/children', value: expect.objectContaining({}) }])
     // 값이 배열이어야 한다 — 노드 하나를 그대로 놓으면 `children`이 노드가 된다.
     expect(Array.isArray((srv.calls[0]?.ops[0] as { value: unknown }).value)).toBe(true)
   })
@@ -465,9 +444,7 @@ describe('타입 목록과 노드 추가', () => {
     select('Text')
 
     expect(isOff(toolButton('안에 추가'))).toBe(true)
-    expect(toolButton('안에 추가').title).toBe(
-      '자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다',
-    )
+    expect(toolButton('안에 추가').title).toBe('자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다')
   })
 
   it('루트는 아래 추가가 비활성이다', async () => {

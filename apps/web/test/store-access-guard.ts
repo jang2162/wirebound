@@ -68,11 +68,7 @@
 import { stripComments } from '@wirebound/test-support'
 
 /** 검사 이름. 어느 규칙이 물었는지가 실패 메시지와 심기 표에 그대로 나온다. */
-export type CheckName =
-  | 'selector-page-field'
-  | 'get-state-page-field'
-  | 'whole-state-selector'
-  | 'unreadable'
+export type CheckName = 'selector-page-field' | 'get-state-page-field' | 'whole-state-selector' | 'unreadable'
 
 export interface Violation {
   check: CheckName
@@ -251,8 +247,7 @@ function checkSelectors(code: string, violations: Violation[]): void {
       violations.push({
         check: 'whole-state-selector',
         snippet: normalize(selector),
-        message:
-          '상태 객체 전체를 고르면 페이지 필드를 어디서든 읽을 수 있어 대조가 무력해진다 — 필드 하나씩 골라라',
+        message: '상태 객체 전체를 고르면 페이지 필드를 어디서든 읽을 수 있어 대조가 무력해진다 — 필드 하나씩 골라라',
       })
     }
   }
@@ -303,9 +298,7 @@ function checkGetState(code: string, violations: Violation[]): void {
  * 받아 두면 페이지 필드를 관문 밖에서 읽을 수 있다.
  */
 function isWholeState(selector: string): boolean {
-  const match = /^\(?\s*([A-Za-z_$][\w$]*)\s*(?::[\s\S]*?)?\)?\s*=>\s*([A-Za-z_$][\w$]*)\s*$/.exec(
-    normalize(selector),
-  )
+  const match = /^\(?\s*([A-Za-z_$][\w$]*)\s*(?::[\s\S]*?)?\)?\s*=>\s*([A-Za-z_$][\w$]*)\s*$/.exec(normalize(selector))
   return match !== null && match[1] === match[2]
 }
 

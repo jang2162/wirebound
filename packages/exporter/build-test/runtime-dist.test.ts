@@ -130,7 +130,11 @@ describe('나가는 runtime.js 를 돌린다', () => {
     loadPage(pageData())
     await bootPage()
     const canvas = document.querySelector('.wb-export-canvas')!
-    expect([...canvas.querySelectorAll('[data-wb-id]')].map((node) => node.getAttribute('data-wb-id'))).toEqual(['n_root', 'n_btn', 'n_list'])
+    expect([...canvas.querySelectorAll('[data-wb-id]')].map((node) => node.getAttribute('data-wb-id'))).toEqual([
+      'n_root',
+      'n_btn',
+      'n_list',
+    ])
     expect(canvas.querySelector('[data-wb-id="n_btn"]')?.textContent).toBe('검색')
     expect(document.documentElement.hasAttribute('data-wb-ready')).toBe(true)
     expect(document.documentElement.hasAttribute('data-wb-failed')).toBe(false)
@@ -202,7 +206,13 @@ describe('받는 쪽이 받는 dist 로 지은 번들을 나가는 런타임으�
   }
 
   it('dist 가 번들의 파일 트리를 내고 런타임 글자를 그대로 싣는다', () => {
-    expect(files.map((file) => file.path)).toEqual(['index.html', 'pages/회원-목록.html', 'assets/shell.css', 'assets/views.css', 'assets/runtime.js'])
+    expect(files.map((file) => file.path)).toEqual([
+      'index.html',
+      'pages/회원-목록.html',
+      'assets/shell.css',
+      'assets/views.css',
+      'assets/runtime.js',
+    ])
     expect(fileAt('assets/runtime.js')).toBe(runtimeJs)
   })
 
@@ -215,7 +225,9 @@ describe('받는 쪽이 받는 dist 로 지은 번들을 나가는 런타임으�
     await bootPage()
     const canvas = document.querySelector('.wb-export-canvas')!
     expect(document.documentElement.hasAttribute('data-wb-ready')).toBe(true)
-    expect([...document.querySelectorAll('.wb-export-marker')].map((badge) => [badge.getAttribute('data-wb-marker-for'), badge.textContent])).toEqual([
+    expect(
+      [...document.querySelectorAll('.wb-export-marker')].map((badge) => [badge.getAttribute('data-wb-marker-for'), badge.textContent]),
+    ).toEqual([
       ['n_btn', '1'],
       ['n_list', '2'],
     ])
@@ -223,7 +235,9 @@ describe('받는 쪽이 받는 dist 로 지은 번들을 나가는 런타임으�
     // 런타임의 React 는 이벤트 뒤 다시 그리기를 다음 마이크로태스크에 한다.
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(canvas.querySelector('[data-wb-id="n_list"]')?.getAttribute('data-wb-state')).toBe('loading')
-    expect([...canvas.querySelectorAll('[data-wb-id="n_tabs"] [data-wb-part="tab"]')].map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'true'])
+    expect(
+      [...canvas.querySelectorAll('[data-wb-id="n_tabs"] [data-wb-part="tab"]')].map((tab) => tab.getAttribute('aria-selected')),
+    ).toEqual(['false', 'true'])
     expect(canvas.querySelector('[data-wb-id="n_card"]')).toBeNull()
   })
 

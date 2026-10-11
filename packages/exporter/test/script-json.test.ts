@@ -39,9 +39,7 @@ function embed(literal: string): Document {
 
 /** **분리자만 막는 스니펫.** 무엇을 놓치는지 값으로 들기 위해 둔다. */
 function oldSnippet(value: unknown): string {
-  return JSON.stringify(value)!
-    .replace(new RegExp(LINE_SEPARATOR, 'g'), '\\u2028')
-    .replace(new RegExp(PARAGRAPH_SEPARATOR, 'g'), '\\u2029')
+  return JSON.stringify(value)!.replace(new RegExp(LINE_SEPARATOR, 'g'), '\\u2028').replace(new RegExp(PARAGRAPH_SEPARATOR, 'g'), '\\u2029')
 }
 
 describe('분리자만 막는 스니펫이 무엇을 놓치나', () => {
@@ -95,16 +93,17 @@ describe('scriptJson이 스크립트를 끊지 않는다', () => {
    * **`<` 하나를 막으면 셋이 함께 닫힌다.** raw text 안에서 뜻을 갖는 자리가 그 셋이다.
    * 분모를 손으로 든다 — 구현에서 끌어오면 무엇을 빠뜨려도 기대값이 함께 준다.
    */
-  it.each([['종료 태그', CLOSING_TAG], ['여는 태그', '<scr' + 'ipt>'], ['주석 시작', '<!--']])(
-    '%s가 리터럴에 남지 않는다',
-    (_name, dangerous) => {
-      const literal = scriptJson({ note: '앞' + dangerous + '뒤' })
+  it.each([
+    ['종료 태그', CLOSING_TAG],
+    ['여는 태그', '<scr' + 'ipt>'],
+    ['주석 시작', '<!--'],
+  ])('%s가 리터럴에 남지 않는다', (_name, dangerous) => {
+    const literal = scriptJson({ note: '앞' + dangerous + '뒤' })
 
-      expect(literal).not.toContain(dangerous)
-      expect(literal).toContain('u003c')
-      expect((JSON.parse(literal) as { note: string }).note).toBe('앞' + dangerous + '뒤')
-    },
-  )
+    expect(literal).not.toContain(dangerous)
+    expect(literal).toContain('u003c')
+    expect((JSON.parse(literal) as { note: string }).note).toBe('앞' + dangerous + '뒤')
+  })
 })
 
 describe('바꾸지 않는 것 — 재서 안 바꾸기로 한 둘', () => {
@@ -147,10 +146,11 @@ describe('JSON이 아닌 값', () => {
    * **조용히 `null`로 바꾸지 않는다.** 부르는 쪽의 실수가 값의 변화로 위장되면 번들에
    * 실려 오래 산다.
    */
-  it.each([['undefined', undefined], ['함수', () => 1], ['심볼', Symbol('x')]])(
-    '%s를 주면 던진다',
-    (_name, value) => {
-      expect(() => scriptJson(value)).toThrow('JSON으로 만들 수 없는 값입니다')
-    },
-  )
+  it.each([
+    ['undefined', undefined],
+    ['함수', () => 1],
+    ['심볼', Symbol('x')],
+  ])('%s를 주면 던진다', (_name, value) => {
+    expect(() => scriptJson(value)).toThrow('JSON으로 만들 수 없는 값입니다')
+  })
 })

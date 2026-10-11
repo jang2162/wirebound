@@ -156,7 +156,12 @@ export function useRealtime(
             // `skipped`를 화면이 문장으로 바꾸는 것과 같은 배치다.
             // 앞 잃음을 덮지 않고 잇는다(`EditorStore.tellLoss`) — 버림이 거듭되면 수를 더한다.
             if (change.dropped.length > 0) {
-              store.tellLoss({ key: 'dropped', rank: LOSS_RANK.cancelled, counts: [change.dropped.length], render: ([count]) => droppedNotice(count ?? 0) })
+              store.tellLoss({
+                key: 'dropped',
+                rank: LOSS_RANK.cancelled,
+                counts: [change.dropped.length],
+                render: ([count]) => droppedNotice(count ?? 0),
+              })
             }
             break
           }

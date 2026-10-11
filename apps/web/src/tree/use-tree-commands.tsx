@@ -144,10 +144,7 @@ export interface TreeEditing {
  * 조회 상태. 성공과 실패를 판별 유니온으로 가른다 — `menu.length === 0`으로 판정하면
  * 응답이 오기 전과 "메뉴가 없는 프로젝트"와 실패가 전부 같은 값이 된다.
  */
-export type TreeLoadState =
-  | { status: 'loading' }
-  | { status: 'ready'; menu: TreeMenuNode[] }
-  | { status: 'failed'; failure: Failure }
+export type TreeLoadState = { status: 'loading' } | { status: 'ready'; menu: TreeMenuNode[] } | { status: 'failed'; failure: Failure }
 
 export interface TreeCommands {
   state: TreeLoadState
@@ -408,10 +405,7 @@ export function useTreeCommands(props: {
    * 변경이 나가 있는 채 에디터를 떠났다 오면 **새로 선 트리도 잠긴 채** 선다 — 이 인스턴스의 `inFlight`는 새것이라 모른다.
    */
   const ledger = useWriteLedger()
-  const renameTarget = useMemo<WriteTarget>(
-    () => ({ projectId, pageId: undefined, slot: RENAME_SLOT, realm: 'tree' }),
-    [projectId],
-  )
+  const renameTarget = useMemo<WriteTarget>(() => ({ projectId, pageId: undefined, slot: RENAME_SLOT, realm: 'tree' }), [projectId])
   const renameEntry = ledger.writes.get(writeKey(renameTarget))
   const renameLocked = renameEntry !== undefined
   const renameLock: PanelLock = {
@@ -447,8 +441,7 @@ export function useTreeCommands(props: {
    * 그래서 파생을 고르는 근거는 **잰 것이 아니라 형태다**: 상태가 하나 줄고, 주소와
    * 선택이 어긋날 수 있는 중간 상태 자체가 없다. 창의 크기는 재지 않았다.
    */
-  const selection: TreeSelection | null =
-    picked ?? (pageId !== undefined ? { kind: 'page', id: pageId } : null)
+  const selection: TreeSelection | null = picked ?? (pageId !== undefined ? { kind: 'page', id: pageId } : null)
 
   const menu = state.status === 'ready' ? state.menu : null
   const abilities = treeAbilities(menu, selection)
@@ -636,8 +629,7 @@ export function useTreeCommands(props: {
         // **늦게 낸 조회의 답만**(`newer`) — 이 트리의 마운트 조회가 배달된 값보다 먼저 났으면 그 조회의 답은 여기서 버려진다.
         const { at: readAt, state: next, rev } = update as TreeStateUpdate
         if (rev === undefined ? newer(readAt) : settles(readAt, rev)) setState(next)
-      }
-      else if (key === TREE_HANGING) {
+      } else if (key === TREE_HANGING) {
         const { item, titles } = update as HangingUpdate
         if (titles === null) hanging.current.delete(item)
         else hanging.current.set(item, titles)

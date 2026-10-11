@@ -83,9 +83,7 @@ export function ListControl(props: ListControlProps): ReactElement {
   // **수정 중인 한 칸만 로컬 state로 든다.** 목록 전체를 초안으로 들면 추가·삭제가
   // 즉시 커밋인 것과 어긋나 두 진실이 생긴다. 어느 칸을 고치는 중인지와 그 값만 기억하고,
   // 나머지는 문서를 그대로 비춘다.
-  const [draft, setDraft] = useState<{ index: number; part: 'key' | 'value'; text: string } | null>(
-    null,
-  )
+  const [draft, setDraft] = useState<{ index: number; part: 'key' | 'value'; text: string } | null>(null)
 
   function textOf(index: number, part: 'key' | 'value'): string {
     if (draft !== null && draft.index === index && draft.part === part) return draft.text
@@ -136,7 +134,12 @@ export function ListControl(props: ListControlProps): ReactElement {
 
   function removeItem(index: number): void {
     setDraft(null)
-    onCommit(toValue(items.filter((_, at) => at !== index), pairs))
+    onCommit(
+      toValue(
+        items.filter((_, at) => at !== index),
+        pairs,
+      ),
+    )
   }
 
   function cell(index: number, part: 'key' | 'value', label: string): ReactElement {

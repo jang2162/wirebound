@@ -90,7 +90,10 @@ function structureList(): HTMLElement | null {
 /** 구조 트리의 노드 줄. 순서는 화면에 그려진 순서 그대로다. */
 /** 정보 통지 한 칸(`shell/info-notice.tsx`)의 글. */
 function infoTexts(): string[] {
-  return screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
+  return screen
+    .queryAllByRole('status')
+    .filter((element) => element.classList.contains('wb-shell-info-notice'))
+    .map((element) => element.textContent ?? '')
 }
 
 function nodeRows(): HTMLElement[] {
@@ -120,13 +123,7 @@ describe('구조 트리', () => {
     await openPage(DOC)
 
     // 깊이 우선 전위 순회. 문서 순서 그대로여야 캔버스와 눈으로 대조할 수 있다.
-    expect(nodeRows().map((node) => structureRowType(node))).toEqual([
-      'Page',
-      'Flex',
-      'SearchForm',
-      'Field',
-      'List',
-    ])
+    expect(nodeRows().map((node) => structureRowType(node))).toEqual(['Page', 'Flex', 'SearchForm', 'Field', 'List'])
 
     // 순서만으로는 평평한 목록도 통과한다. 중첩까지 본다.
     const search = row('SearchForm').closest('li')
@@ -235,12 +232,7 @@ describe('구조 트리', () => {
       }),
     )
 
-    expect(nodeRows().map((node) => structureRowType(node))).toEqual([
-      'Page',
-      'Card',
-      'Text',
-      'Button',
-    ])
+    expect(nodeRows().map((node) => structureRowType(node))).toEqual(['Page', 'Card', 'Text', 'Button'])
   })
 
   it('노드를 누르면 선택된다', async () => {
@@ -329,10 +321,7 @@ describe('구조 트리', () => {
 
     // 그 줄은 **대신 쓸 이름으로 남는다.** 줄째 지워 버리면 캔버스에는 폴백이 그려져 있는데
     // 트리에서만 사라져 무엇이 깨졌는지 더 알기 어렵다(id 없는 노드와 같은 판단이다).
-    expect(nodeRows().map((node) => structureRowType(node))).toEqual([
-      'Page',
-      '(타입을 읽을 수 없는 노드)',
-    ])
+    expect(nodeRows().map((node) => structureRowType(node))).toEqual(['Page', '(타입을 읽을 수 없는 노드)'])
   })
 
   it('문서가 없으면 비어 있다', async () => {

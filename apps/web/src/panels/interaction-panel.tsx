@@ -248,9 +248,7 @@ function NodeRules(props: {
               className="wb-shell-select"
               disabled={disabled}
               value={interaction.on}
-              onChange={(event) =>
-                replaceAt(index, { ...interaction, on: event.target.value as InteractionTrigger })
-              }
+              onChange={(event) => replaceAt(index, { ...interaction, on: event.target.value as InteractionTrigger })}
             >
               {TRIGGERS.map((trigger) => (
                 <option key={trigger.value} value={trigger.value}>
@@ -521,12 +519,7 @@ function PropPicker(props: {
       {fields.length === 0 ? (
         // 타겟을 아직 안 골랐거나 카탈로그에 없는 타입이다. 목록을 만들 재료가 없으므로
         // 손으로 적게 두되, 그 값이 유효한지는 검증이 `invalid-interaction-prop`으로 말한다.
-        <TextField
-          label="속성"
-          value={props.prop}
-          disabled={props.disabled}
-          onCommit={(value) => props.onChange({ prop: value })}
-        />
+        <TextField label="속성" value={props.prop} disabled={props.disabled} onCommit={(value) => props.onChange({ prop: value })} />
       ) : (
         <label className="wb-shell-field wb-shell-field-oneline">
           속성
@@ -546,12 +539,7 @@ function PropPicker(props: {
         </label>
       )}
 
-      <ValueField
-        field={field}
-        value={props.value}
-        disabled={props.disabled}
-        onChange={(value) => props.onChange({ value })}
-      />
+      <ValueField field={field} value={props.value} disabled={props.disabled} onChange={(value) => props.onChange({ value })} />
     </>
   )
 }

@@ -57,10 +57,7 @@ async function readConfig(configPath: string): Promise<unknown> {
  * 작성자 프로젝트의 설정(`theme.config.ts` 의 default)을 적재하고 manifest 를 검증한다 — 업로드와 같은 함수
  * (`validateManifest`). 설정 · 진입 파일이 없거나 설정이 번들되지 않으면 던진다(manifest 의 이슈가 아니다).
  */
-export async function loadProject(
-  root: string,
-  entry?: string,
-): Promise<{ project: LoadedProject | null; issues: ManifestIssue[] }> {
+export async function loadProject(root: string, entry?: string): Promise<{ project: LoadedProject | null; issues: ManifestIssue[] }> {
   const rootAbs = resolve(root)
   const configPath = join(rootAbs, CONFIG_FILE)
   if (!existsSync(configPath)) throw new Error(`${CONFIG_FILE} 가 없습니다: ${configPath}`)

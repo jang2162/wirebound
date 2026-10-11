@@ -161,7 +161,10 @@ function aliasField(): HTMLInputElement {
 /** 구조 트리에 선 별칭 입력. 없으면 `null`. */
 /** 정보 통지 한 칸(`shell/info-notice.tsx`)의 글. */
 function infoTexts(): string[] {
-  return screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
+  return screen
+    .queryAllByRole('status')
+    .filter((element) => element.classList.contains('wb-shell-info-notice'))
+    .map((element) => element.textContent ?? '')
 }
 
 function treeInput(): HTMLInputElement | null {

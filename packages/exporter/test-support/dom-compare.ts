@@ -64,10 +64,7 @@ export function normalizeStyle(value: string, probe: HTMLElement): string {
   return text
 }
 
-type Item =
-  | { kind: 'element'; element: Element }
-  | { kind: 'text'; text: string }
-  | { kind: 'other'; label: string }
+type Item = { kind: 'element'; element: Element } | { kind: 'text'; text: string } | { kind: 'other'; label: string }
 
 /**
  * 자식을 견줄 단위로 편다. **이어 붙은 텍스트 노드를 한 덩이로 합친다.**

@@ -193,9 +193,7 @@ describe('undo / redo', () => {
     fireEvent.click(widget('필수'))
     await waitFor(() => expect(calls).toHaveLength(1))
     // 통째 `add`가 나갔다 — `props`가 없던 노드다.
-    expect(calls[0]?.ops).toEqual([
-      { op: 'add', path: '/root/children/0/props', value: { required: true } },
-    ])
+    expect(calls[0]?.ops).toEqual([{ op: 'add', path: '/root/children/0/props', value: { required: true } }])
 
     fireEvent.click(undoButton())
     await waitFor(() => expect(calls).toHaveLength(2))
@@ -428,9 +426,7 @@ describe('undo / redo', () => {
     )
     await act(async () => {})
 
-    expect(calls.map((call) => call.ops)).toEqual([
-      [{ op: 'replace', path: '/root/children/0/props/content', value: '앞 노드의 타이핑' }],
-    ])
+    expect(calls.map((call) => call.ops)).toEqual([[{ op: 'replace', path: '/root/children/0/props/content', value: '앞 노드의 타이핑' }]])
     expect(document.activeElement?.tagName).toBe('BODY')
     expect((widget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
   })

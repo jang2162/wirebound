@@ -92,11 +92,7 @@ export const migration: Migration = {
       .addColumn('updated_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`clock_timestamp()`))
       .execute()
 
-    await db.schema
-      .createIndex('comments_page_node_idx')
-      .on('comments')
-      .columns(['page_id', 'node_id'])
-      .execute()
+    await db.schema.createIndex('comments_page_node_idx').on('comments').columns(['page_id', 'node_id']).execute()
   },
 
   // 테이블을 지우면 그 인덱스도 함께 간다. 다른 테이블에 컬럼을 더하지 않았으므로

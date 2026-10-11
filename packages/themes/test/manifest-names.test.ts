@@ -13,9 +13,11 @@ const issuesOf = (json: string) => validateManifest(JSON.parse(`{${head},${json}
 
 describe('manifest 이름 입력', () => {
   it('같은 CSS 변수가 되는 두 번째 키를 token-var-collision 으로 가리킨다', () => {
-    expect(issuesOf('"tokens":{"items":{"a.b":{"type":"color","label":"1","default":"#111"},"a-b":{"type":"color","label":"2","default":"#222"}}}')).toEqual([
-      ['token-var-collision', 'tokens.items.a-b'],
-    ])
+    expect(
+      issuesOf(
+        '"tokens":{"items":{"a.b":{"type":"color","label":"1","default":"#111"},"a-b":{"type":"color","label":"2","default":"#222"}}}',
+      ),
+    ).toEqual([['token-var-collision', 'tokens.items.a-b']])
   })
 
   it('프로토타입 이름을 가리키는 참조는 «없는 토큰» 이다', () => {
@@ -27,7 +29,11 @@ describe('manifest 이름 입력', () => {
   it.each([
     ['tokens.items', '"tokens":{"items":{"__proto__":{"type":"color","label":"x","default":"#000"}}}', 'tokens.items.__proto__'],
     ['patterns', '"tokens":{"items":{}},"patterns":{"__proto__":{"name":"x","schema":{"type":"Nope"}}}', 'patterns.__proto__'],
-    ['깊은 자리', '"tokens":{"items":{}},"components":{"List":{"variants":[{"id":"a","label":"a","__proto__":{}}],"defaultVariant":"a"}}', 'components.List.variants.0.__proto__'],
+    [
+      '깊은 자리',
+      '"tokens":{"items":{}},"components":{"List":{"variants":[{"id":"a","label":"a","__proto__":{}}],"defaultVariant":"a"}}',
+      'components.List.variants.0.__proto__',
+    ],
   ])('%s 의 __proto__ 키를 모양 검사 전에 그 자리로 가리킨다', (_label, json, path) => {
     expect(issuesOf(json)).toEqual([['shape', path]])
   })

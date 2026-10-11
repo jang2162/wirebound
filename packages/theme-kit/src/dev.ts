@@ -107,7 +107,10 @@ export async function startDev(opts: { root: string; entry?: string; port?: numb
     // 의존 사전 번들 캐시는 작성자 프로젝트에 둔다 — 클라이언트 디렉터리는 설치된 패키지 안이다.
     cacheDir: join(root, 'node_modules', '.vite-wb-theme'),
     // react 새로 고침은 작성자 코드에만 — 미리 빌드한 클라이언트는 새로 고칠 컴포넌트가 아니다.
-    plugins: [react({ exclude: [/\/node_modules\//, new RegExp(`^${escapeRegExp(client)}`)] }), devPlugin({ root, entry, clientDir: client })],
+    plugins: [
+      react({ exclude: [/\/node_modules\//, new RegExp(`^${escapeRegExp(client)}`)] }),
+      devPlugin({ root, entry, clientDir: client }),
+    ],
     resolve: {
       alias: { 'virtual:wb-theme-entry': entry },
       // 작성자의 뷰 · 갤러리 클라이언트 · SDK 가 react 와 SDK 를 한 벌 나눠 쓰게(클라이언트 빌드가 둘을 밖에 둔 까닭).

@@ -19,8 +19,7 @@ describe('GET /api/projects/:projectId/snapshot — 행을 쓰지 않는다', ()
       const menu = await createMenuNode(ctx, owner.cookie, project.id, { title: '관리자' })
       await createPage(ctx, owner.cookie, project.id, menu.id, { title: '목록' })
 
-      const countRows = async (): Promise<number> =>
-        (await ctx.db.selectFrom('snapshots').select('id').execute()).length
+      const countRows = async (): Promise<number> => (await ctx.db.selectFrom('snapshots').select('id').execute()).length
 
       const before = await countRows()
       // **한 번으로 재지 않는다** — 한 번이면 *"부르면 하나 는다"*와 구분되지 않는 판이

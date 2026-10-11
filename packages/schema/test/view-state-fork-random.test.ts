@@ -37,7 +37,18 @@ function random(seed: number): () => number {
   }
 }
 
-const KINDS = ['props', 'add', 'remove', 'move', 'replaceNode', 'replaceNodeSameId', 'interaction', 'alias', 'addWithTargetInside', 'firstChild'] as const
+const KINDS = [
+  'props',
+  'add',
+  'remove',
+  'move',
+  'replaceNode',
+  'replaceNodeSameId',
+  'interaction',
+  'alias',
+  'addWithTargetInside',
+  'firstChild',
+] as const
 type Kind = (typeof KINDS)[number]
 
 interface Board {
@@ -48,7 +59,7 @@ interface Board {
 
 function boardOf(seed: number): Board | null {
   const rnd = random(seed)
-  const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]!
+  const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]!
   let next = 0
   const allIds: string[] = []
   const leaf = (): WbNode => {
@@ -96,7 +107,14 @@ function boardOf(seed: number): Board | null {
       type: 'Page',
       children: [
         ...head,
-        { id: 'n_sw', type: 'StateSwitch', children: [defaultCase, ...(rnd() < 0.5 ? [{ id: 'n_c1', type: 'StateCase', props: { state: 's_admin' }, children: adminKids }] : [])] },
+        {
+          id: 'n_sw',
+          type: 'StateSwitch',
+          children: [
+            defaultCase,
+            ...(rnd() < 0.5 ? [{ id: 'n_c1', type: 'StateCase', props: { state: 's_admin' }, children: adminKids }] : []),
+          ],
+        },
         ...tail,
       ],
     },
@@ -123,13 +141,18 @@ function boardOf(seed: number): Board | null {
     let op: PatchOp | null = null
     if (kind === 'props' && inside.length) {
       const v = pick(inside)
-      op = { op: 'replace', path: `${rel(v)}/props`, value: v.node.type === 'Text' ? { content: `X${i}` } : v.node.type === 'Button' ? { label: `Y${i}` } : {} }
+      op = {
+        op: 'replace',
+        path: `${rel(v)}/props`,
+        value: v.node.type === 'Text' ? { content: `X${i}` } : v.node.type === 'Button' ? { label: `Y${i}` } : {},
+      }
     } else if ((kind === 'add' || kind === 'addWithTargetInside') && containers.length) {
       const v = pick(containers.filter((c) => c.node.children !== undefined))
       if (v) {
         const len = v.node.children!.length
         const value: WbNode = { id: `e${seed}_${i}`, type: 'Text', props: { content: 'new' } }
-        if (kind === 'addWithTargetInside' && inside.length) value.interactions = [{ on: 'click', actions: [{ type: 'setVisible', target: pick(inside).node.id, value: false }] }]
+        if (kind === 'addWithTargetInside' && inside.length)
+          value.interactions = [{ on: 'click', actions: [{ type: 'setVisible', target: pick(inside).node.id, value: false }] }]
         op = { op: 'add', path: `${rel(v)}/children/${rnd() < 0.3 ? '-' : String(Math.floor(rnd() * (len + 1)))}`, value }
       }
     } else if (kind === 'firstChild' && base.children === undefined) {
@@ -153,7 +176,12 @@ function boardOf(seed: number): Board | null {
       op = { op: 'replace', path: rel(v), value }
     } else if (kind === 'interaction') {
       const buttons = inside.filter((x) => x.node.type === 'Button')
-      if (buttons.length) op = { op: 'add', path: `${rel(pick(buttons))}/interactions`, value: [{ on: 'click', actions: [{ type: 'setVisible', target: pick(allIds), value: true }] }] }
+      if (buttons.length)
+        op = {
+          op: 'add',
+          path: `${rel(pick(buttons))}/interactions`,
+          value: [{ on: 'click', actions: [{ type: 'setVisible', target: pick(allIds), value: true }] }],
+        }
     } else if (kind === 'alias' && inside.length) {
       op = { op: 'add', path: `${rel(pick(inside))}/alias`, value: '새 별칭' }
     }
@@ -171,7 +199,19 @@ function boardOf(seed: number): Board | null {
 
 describe('editInForkOps — 무작위 복사 + 편집', () => {
   it('기본 가지 = 깊은 복사 · 검증 오류 0 · 역연산 왕복 · 새 가지 = 바로 낸 편집 — 6000 시드', () => {
-    const tally = { boards: 0, nullResult: 0, multi: 0, moves: 0, nested: 0, replaced: 0, firstChild: 0, defaultChanged: 0, errors: 0, inverseBad: 0, shapeBad: 0 }
+    const tally = {
+      boards: 0,
+      nullResult: 0,
+      multi: 0,
+      moves: 0,
+      nested: 0,
+      replaced: 0,
+      firstChild: 0,
+      defaultChanged: 0,
+      errors: 0,
+      inverseBad: 0,
+      shapeBad: 0,
+    }
     const samples: string[] = []
     const note = (line: string) => {
       if (samples.length < 6) samples.push(line)
@@ -228,7 +268,14 @@ describe('editInForkOps — 무작위 복사 + 편집', () => {
       }
     }
     console.log(`editInForkOps 무작위 ${JSON.stringify(tally)}`)
-    expect({ nullResult: tally.nullResult, defaultChanged: tally.defaultChanged, errors: tally.errors, inverseBad: tally.inverseBad, shapeBad: tally.shapeBad, samples }).toEqual({
+    expect({
+      nullResult: tally.nullResult,
+      defaultChanged: tally.defaultChanged,
+      errors: tally.errors,
+      inverseBad: tally.inverseBad,
+      shapeBad: tally.shapeBad,
+      samples,
+    }).toEqual({
       nullResult: 0,
       defaultChanged: 0,
       errors: 0,

@@ -61,15 +61,20 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 실브라우저', () => {
       await page.goto(P)
       await canvasFrame(page).locator('button[data-wb-id]').waitFor()
       const shellButton = async () =>
-        page.locator('.wb-shell-mode').first().evaluate((el) => {
-          const style = getComputedStyle(el)
-          return `${style.backgroundColor} · ${style.borderTopLeftRadius}`
-        })
+        page
+          .locator('.wb-shell-mode')
+          .first()
+          .evaluate((el) => {
+            const style = getComputedStyle(el)
+            return `${style.backgroundColor} · ${style.borderTopLeftRadius}`
+          })
       const before = await shellButton()
       await appendToThemeSheet(page, 'button{border-radius:0 !important;background:rgb(1,2,3) !important}')
       // 카나리아 — 넣은 규칙이 iframe 안의 버튼은 칠한다. 테마 CSS 의 `transition` 이 있어 바로 읽으면 전이의 시작값이 나온다.
       const read = async () => ({
-        캔버스버튼: await canvasFrame(page).locator('button[data-wb-id]').evaluate((el) => getComputedStyle(el).backgroundColor),
+        캔버스버튼: await canvasFrame(page)
+          .locator('button[data-wb-id]')
+          .evaluate((el) => getComputedStyle(el).backgroundColor),
         셸버튼: await shellButton(),
       })
       const settled = await settle(read, (value) => value.캔버스버튼 === 'rgb(1, 2, 3)' || value.셸버튼 !== before)
@@ -96,12 +101,16 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 실브라우저', () => {
         })()`,
       })
       await page.goto(P)
-      const ys = (await (await page.waitForFunction(() => (window as unknown as { __wbStill?: number[] }).__wbStill)).jsonValue()) as number[]
+      const ys = (await (
+        await page.waitForFunction(() => (window as unknown as { __wbStill?: number[] }).__wbStill)
+      ).jsonValue()) as number[]
       // 판 카나리아 — 테마 시트가 실렸고 그 단추 규칙에 전이가 있다(없으면 미끄러질 까닭이 없어 아무것도 안 잰다).
-      const canary = await canvasFrame(page).locator('button[data-wb-id]').evaluate((el) => ({
-        sheet: (el.ownerDocument.querySelector('link[data-wb-style="theme"]') as HTMLLinkElement | null)?.sheet !== null,
-        transition: getComputedStyle(el).transitionDuration !== '0s',
-      }))
+      const canary = await canvasFrame(page)
+        .locator('button[data-wb-id]')
+        .evaluate((el) => ({
+          sheet: (el.ownerDocument.querySelector('link[data-wb-style="theme"]') as HTMLLinkElement | null)?.sheet !== null,
+          transition: getComputedStyle(el).transitionDuration !== '0s',
+        }))
       // 시트가 오기 전의 첫 프레임은 테마 없는 자리다 — 거기서 테마 자리로 **한 번에** 뛰어야 한다(중간값이 있으면 전이다).
       const positions = ys.filter((y, i) => i === 0 || y !== ys[i - 1])
       expect({ canary, stops: positions.length <= 2 ? 'at most one jump' : positions }).toEqual({
@@ -117,7 +126,10 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 실브라우저', () => {
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
       await appendToThemeSheet(page, '@media (max-width: 400px){ body{ --probe: narrow } }')
-      const probe = () => canvasFrame(page).locator('body').evaluate((body) => getComputedStyle(body).getPropertyValue('--probe').trim())
+      const probe = () =>
+        canvasFrame(page)
+          .locator('body')
+          .evaluate((body) => getComputedStyle(body).getPropertyValue('--probe').trim())
       const viewport = page.getByLabel('뷰포트 폭')
 
       await viewport.selectOption('375')
@@ -168,8 +180,12 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 실브라우저', () => {
       await canvasFrame(page).locator('[data-wb-id="n_text0000040"]').waitFor()
       const read = async () => ({
         iframe높이: await page.locator(IFRAME).evaluate((el) => (el as HTMLIFrameElement).clientHeight),
-        문서높이: await canvasFrame(page).locator('html').evaluate((html) => html.scrollHeight),
-        창높이: await canvasFrame(page).locator('html').evaluate(() => window.innerHeight),
+        문서높이: await canvasFrame(page)
+          .locator('html')
+          .evaluate((html) => html.scrollHeight),
+        창높이: await canvasFrame(page)
+          .locator('html')
+          .evaluate(() => window.innerHeight),
       })
       const settled = await poll('iframe 이 문서 높이를 따라간다', read, (value) => value.iframe높이 === value.문서높이)
       expect(settled.문서높이).toBeGreaterThan(320)

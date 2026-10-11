@@ -132,7 +132,16 @@ export function ProjectThemeProvider(props: { projectId: string; children: React
       commit(
         result.status === 'ok'
           ? { status: 'ready', ref, manifest, tokens, rev, definition: result.definition, bundled: true, failure: null }
-          : { status: 'bundle-failed', ref, manifest, tokens, rev, definition: { manifest, views: {} }, bundled: false, failure: result.reason },
+          : {
+              status: 'bundle-failed',
+              ref,
+              manifest,
+              tokens,
+              rev,
+              definition: { manifest, views: {} },
+              bundled: false,
+              failure: result.reason,
+            },
       )
     }
     if (wanted.current > current.current.rev) {

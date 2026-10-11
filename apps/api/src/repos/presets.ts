@@ -164,15 +164,8 @@ export async function listPresets(db: DbHandle, projectId: string): Promise<Pres
  * id만으로 찾고 나서 비교하는 대신 질의 조건에 두는 것은, 비교를 빠뜨린 판이 조용히
  * 통과하기 때문이다(`findSnapshotById`와 같다).
  */
-export async function findPresetById(
-  db: DbHandle,
-  projectId: string,
-  presetId: string,
-): Promise<PresetRecord | null> {
-  const row = await selectPresets(db)
-    .where('presets.project_id', '=', projectId)
-    .where('presets.id', '=', presetId)
-    .executeTakeFirst()
+export async function findPresetById(db: DbHandle, projectId: string, presetId: string): Promise<PresetRecord | null> {
+  const row = await selectPresets(db).where('presets.project_id', '=', projectId).where('presets.id', '=', presetId).executeTakeFirst()
 
   if (!row) return null
   return toRecord(row as PresetRow)
@@ -185,11 +178,7 @@ export async function findPresetById(
  * 규칙이다. 프리셋은 지울 수 있고, 그래서 이름에 유일 제약이 없다.
  */
 export async function deletePreset(db: DbHandle, projectId: string, presetId: string): Promise<boolean> {
-  const result = await db
-    .deleteFrom('presets')
-    .where('project_id', '=', projectId)
-    .where('id', '=', presetId)
-    .executeTakeFirst()
+  const result = await db.deleteFrom('presets').where('project_id', '=', projectId).where('id', '=', presetId).executeTakeFirst()
 
   return (result.numDeletedRows ?? 0n) > 0n
 }

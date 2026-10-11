@@ -18,7 +18,10 @@ const B = { id: 's_b', name: '나' }
 const C = { id: 's_c', name: '다' }
 
 function doc(viewStates?: ViewState[]): PageDocument {
-  const base: PageDocument = { version: 1, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_x', type: 'Text', props: { content: 'x' } }] } }
+  const base: PageDocument = {
+    version: 1,
+    root: { id: 'n_root', type: 'Page', children: [{ id: 'n_x', type: 'Text', props: { content: 'x' } }] },
+  }
   return viewStates === undefined ? base : { ...base, viewStates }
 }
 
@@ -46,7 +49,10 @@ describe('연산 `test`', () => {
 
   it('역은 없다 — 역 묶음에 안 실리고, 맞지 않으면 역도 던진다', () => {
     const before = doc([A])
-    const ops: PatchOp[] = [{ op: 'test', path: '/root/children/0/id', value: 'n_x' }, { op: 'remove', path: '/root/children/0' }]
+    const ops: PatchOp[] = [
+      { op: 'test', path: '/root/children/0/id', value: 'n_x' },
+      { op: 'remove', path: '/root/children/0' },
+    ]
     const inverse = invertOps(before, ops)
     expect(inverse).toEqual([{ op: 'add', path: '/root/children/0', value: before.root.children![0] }])
     expect(applyOps(applyOps(before, ops), inverse)).toEqual(before)
@@ -57,20 +63,60 @@ describe('연산 `test`', () => {
     const locks: NodeLock[] = [{ nodeId: 'n_x', userId: 'u_other', userName: '다혜' }]
     const ask = (ops: PatchOp[]) => lockConflictOfOps({ document: doc([A]), locks, ops, viewerUserId: 'u_me' })?.nodeId ?? null
     expect(ask([{ op: 'test', path: '/root/children/0/props/content', value: 'x' }])).toBeNull()
-    expect(ask([{ op: 'test', path: '/root/children/0/id', value: 'n_x' }, { op: 'remove', path: '/root/children/0' }])).toBe('n_x')
-    expect(ask([{ op: 'test', path: '/root/children/0/id', value: 'n_y' }, { op: 'remove', path: '/root/children/0' }])).toBeNull()
+    expect(
+      ask([
+        { op: 'test', path: '/root/children/0/id', value: 'n_x' },
+        { op: 'remove', path: '/root/children/0' },
+      ]),
+    ).toBe('n_x')
+    expect(
+      ask([
+        { op: 'test', path: '/root/children/0/id', value: 'n_y' },
+        { op: 'remove', path: '/root/children/0' },
+      ]),
+    ).toBeNull()
   })
 })
 
 describe('가드 표 — 연산마다 싣는 `test`', () => {
   const T = (path: string, value: unknown): PatchOp => ({ op: 'test', path, value })
   it.each<[string, PageDocument, PatchOp[], PatchOp[]]>([
-    ['항목 빼기', doc([A, B]), [{ op: 'remove', path: '/viewStates/1' }], [T('/viewStates/1/id', 's_b'), { op: 'remove', path: '/viewStates/1' }]],
-    ['항목 바꾸기', doc([A]), [{ op: 'replace', path: '/viewStates/0', value: C }], [T('/viewStates/0/id', 's_a'), { op: 'replace', path: '/viewStates/0', value: C }]],
-    ['항목 안 바꾸기', doc([A]), [{ op: 'replace', path: '/viewStates/0/name', value: '라' }], [T('/viewStates/0/id', 's_a'), { op: 'replace', path: '/viewStates/0/name', value: '라' }]],
-    ['항목 안 넣기(키)', doc([A]), [{ op: 'add', path: '/viewStates/0/name', value: '라' }], [T('/viewStates/0/id', 's_a'), { op: 'add', path: '/viewStates/0/name', value: '라' }]],
-    ['번호는 적용과 같은 규칙으로 읽는다(`01`)', doc([A, B]), [{ op: 'remove', path: '/viewStates/01' }], [T('/viewStates/1/id', 's_b'), { op: 'remove', path: '/viewStates/01' }]],
-    ['옮기기(순서)', doc([A, B]), [{ op: 'move', from: '/viewStates/1', path: '/viewStates/0' }], [T('/viewStates/1/id', 's_b'), { op: 'move', from: '/viewStates/1', path: '/viewStates/0' }]],
+    [
+      '항목 빼기',
+      doc([A, B]),
+      [{ op: 'remove', path: '/viewStates/1' }],
+      [T('/viewStates/1/id', 's_b'), { op: 'remove', path: '/viewStates/1' }],
+    ],
+    [
+      '항목 바꾸기',
+      doc([A]),
+      [{ op: 'replace', path: '/viewStates/0', value: C }],
+      [T('/viewStates/0/id', 's_a'), { op: 'replace', path: '/viewStates/0', value: C }],
+    ],
+    [
+      '항목 안 바꾸기',
+      doc([A]),
+      [{ op: 'replace', path: '/viewStates/0/name', value: '라' }],
+      [T('/viewStates/0/id', 's_a'), { op: 'replace', path: '/viewStates/0/name', value: '라' }],
+    ],
+    [
+      '항목 안 넣기(키)',
+      doc([A]),
+      [{ op: 'add', path: '/viewStates/0/name', value: '라' }],
+      [T('/viewStates/0/id', 's_a'), { op: 'add', path: '/viewStates/0/name', value: '라' }],
+    ],
+    [
+      '번호는 적용과 같은 규칙으로 읽는다(`01`)',
+      doc([A, B]),
+      [{ op: 'remove', path: '/viewStates/01' }],
+      [T('/viewStates/1/id', 's_b'), { op: 'remove', path: '/viewStates/01' }],
+    ],
+    [
+      '옮기기(순서)',
+      doc([A, B]),
+      [{ op: 'move', from: '/viewStates/1', path: '/viewStates/0' }],
+      [T('/viewStates/1/id', 's_b'), { op: 'move', from: '/viewStates/1', path: '/viewStates/0' }],
+    ],
     [
       '항목 안으로 옮겨 넣기 — 옮긴 뒤 문서의 번호로 그 move 뒤에',
       doc([A, B, C]),
@@ -80,8 +126,18 @@ describe('가드 표 — 연산마다 싣는 `test`', () => {
     ['끝에 넣기', doc([A]), [{ op: 'add', path: '/viewStates/-', value: B }], [{ op: 'add', path: '/viewStates/-', value: B }]],
     ['번호 자리에 넣기', doc([A]), [{ op: 'add', path: '/viewStates/0', value: B }], [{ op: 'add', path: '/viewStates/0', value: B }]],
     ['없는 목록 만들기', doc(), [{ op: 'add', path: '/viewStates', value: [A] }], [{ op: 'add', path: '/viewStates', value: [A] }]],
-    ['있는 목록 위 `add`(덮기)', doc([A]), [{ op: 'add', path: '/viewStates', value: [B] }], [T('/viewStates', [A]), { op: 'add', path: '/viewStates', value: [B] }]],
-    ['목록째 빼기', doc([A, B]), [{ op: 'remove', path: '/viewStates' }], [T('/viewStates', [A, B]), { op: 'remove', path: '/viewStates' }]],
+    [
+      '있는 목록 위 `add`(덮기)',
+      doc([A]),
+      [{ op: 'add', path: '/viewStates', value: [B] }],
+      [T('/viewStates', [A]), { op: 'add', path: '/viewStates', value: [B] }],
+    ],
+    [
+      '목록째 빼기',
+      doc([A, B]),
+      [{ op: 'remove', path: '/viewStates' }],
+      [T('/viewStates', [A, B]), { op: 'remove', path: '/viewStates' }],
+    ],
     [
       '목록째 덮어 옮겨 넣기',
       doc([A]),
@@ -91,8 +147,16 @@ describe('가드 표 — 연산마다 싣는 `test`', () => {
     [
       '뒤 연산의 `test`는 앞 연산을 얹은 문서에서 읽는다',
       doc([A, B]),
-      [{ op: 'remove', path: '/viewStates/0' }, { op: 'replace', path: '/viewStates/0/name', value: '라' }],
-      [T('/viewStates/0/id', 's_a'), { op: 'remove', path: '/viewStates/0' }, T('/viewStates/0/id', 's_b'), { op: 'replace', path: '/viewStates/0/name', value: '라' }],
+      [
+        { op: 'remove', path: '/viewStates/0' },
+        { op: 'replace', path: '/viewStates/0/name', value: '라' },
+      ],
+      [
+        T('/viewStates/0/id', 's_a'),
+        { op: 'remove', path: '/viewStates/0' },
+        T('/viewStates/0/id', 's_b'),
+        { op: 'replace', path: '/viewStates/0/name', value: '라' },
+      ],
     ],
     [
       '이미 실은 같은 `test`는 다시 싣지 않는다',
@@ -108,7 +172,10 @@ describe('가드 표 — 연산마다 싣는 `test`', () => {
   })
 
   it('적용이 실패하는 연산을 만나면 그 뒤는 그대로 둔다', () => {
-    const ops: PatchOp[] = [{ op: 'remove', path: '/viewStates/5' }, { op: 'remove', path: '/viewStates/0' }]
+    const ops: PatchOp[] = [
+      { op: 'remove', path: '/viewStates/5' },
+      { op: 'remove', path: '/viewStates/0' },
+    ]
     expect(guardViewStateOps(doc([A]), ops)).toEqual(ops)
   })
 })
@@ -120,7 +187,9 @@ describe('묶음을 짓는 함수 · 서버 역연산이 싣는다', () => {
     ['순서 바꾸기', moveViewStateOps(base, 's_b', 0)!],
     ['상태 삭제', removeViewStateOps(base, 's_b')!.ops],
   ])('%s — 목록의 고칠 자리 앞에 그 id', (_name, ops) => {
-    const at = ops.findIndex((op) => op.op !== 'test' && (op.path.startsWith('/viewStates/1') || (op.op === 'move' && op.from === '/viewStates/1')))
+    const at = ops.findIndex(
+      (op) => op.op !== 'test' && (op.path.startsWith('/viewStates/1') || (op.op === 'move' && op.from === '/viewStates/1')),
+    )
     expect(ops[at - 1]).toEqual({ op: 'test', path: '/viewStates/1/id', value: 's_b' })
   })
 
@@ -159,7 +228,7 @@ describe('무작위 겹친 판 — 남이 먼저 고친 목록에 내 묶음을 
     const broken: string[] = []
     for (let seed = 1; seed <= 4000; seed += 1) {
       const rand = random(seed)
-      const pick = <T,>(list: readonly T[]): T => list[Math.floor(rand() * list.length)]!
+      const pick = <T>(list: readonly T[]): T => list[Math.floor(rand() * list.length)]!
       const size = 2 + Math.floor(rand() * 5)
       const states: ViewState[] = Array.from({ length: size }, (_, i) => ({ id: `s_${i}`, name: `상태${i}` }))
       const target = pick(states).id
@@ -210,7 +279,8 @@ describe('무작위 겹친 판 — 남이 먼저 고친 목록에 내 묶음을 
       // 내 상태 밖의 상태는 남의 편집 뒤 그대로 — 빠지지도, 이름이 바뀌지도, 새로 서지도, 서로의 차례가 바뀌지도 않는다.
       const others = (d: PageDocument) => (d.viewStates ?? []).filter((s) => s.id !== mineId).map((s) => `${s.id}=${s.name}`)
       if (others(after).join() !== others(now).join()) {
-        if (broken.length < 5) broken.push(`seed ${seed} ${kind}: ${JSON.stringify(mine)} 남 ${JSON.stringify(theirs)} → ${others(after)} ≠ ${others(now)}`)
+        if (broken.length < 5)
+          broken.push(`seed ${seed} ${kind}: ${JSON.stringify(mine)} 남 ${JSON.stringify(theirs)} → ${others(after)} ≠ ${others(now)}`)
         else broken.push('…')
       }
     }

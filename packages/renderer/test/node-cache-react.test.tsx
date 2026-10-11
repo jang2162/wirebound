@@ -25,8 +25,10 @@ function countingTheme(): { theme: ThemeDefinition; drawn: Map<string, number> }
   return { theme: { manifest, views: { Text } }, drawn }
 }
 
-const texts = (count: number): WbNode[] => Array.from({ length: count }, (_, i) => ({ id: `n_${i}`, type: 'Text', props: { content: `글 ${i}` } }))
-const page = (children: WbNode[]): PageDocument => ({ version: 1, root: { id: 'n_root', type: 'Page', children } }) as unknown as PageDocument
+const texts = (count: number): WbNode[] =>
+  Array.from({ length: count }, (_, i) => ({ id: `n_${i}`, type: 'Text', props: { content: `글 ${i}` } }))
+const page = (children: WbNode[]): PageDocument =>
+  ({ version: 1, root: { id: 'n_root', type: 'Page', children } }) as unknown as PageDocument
 
 describe('다시 그릴 때 건드리지 않은 서브트리는 뷰를 다시 부르지 않는다', () => {
   it('노드 200 에서 한 자식만 새 객체면 그 자식만 다시 그린다', () => {

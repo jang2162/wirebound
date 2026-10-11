@@ -1,13 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { defineComponent } from '../../src/component/define'
-import {
-  getComponent,
-  listComponents,
-  registerComponent,
-  requireComponent,
-  resetRegistry,
-} from '../../src/component/registry'
+import { getComponent, listComponents, registerComponent, requireComponent, resetRegistry } from '../../src/component/registry'
 
 const Sample = defineComponent({
   type: 'Sample',
@@ -58,9 +52,7 @@ describe('컴포넌트 레지스트리', () => {
 
 describe('defineComponent', () => {
   it('상태 이름이 중복이면 던진다', () => {
-    expect(() =>
-      defineComponent({ ...Sample, type: 'Dup', states: ['disabled', 'disabled'] }),
-    ).toThrow('Dup: states에 중복이 있습니다')
+    expect(() => defineComponent({ ...Sample, type: 'Dup', states: ['disabled', 'disabled'] })).toThrow('Dup: states에 중복이 있습니다')
   })
 
   it('editor가 가리키는 prop이 스키마에 없으면 던진다', () => {
@@ -74,8 +66,6 @@ describe('defineComponent', () => {
   })
 
   it('states가 가리키는 prop이 스키마에 없으면 던진다', () => {
-    expect(() =>
-      defineComponent({ ...Sample, type: 'X', states: ['missing'] }),
-    ).toThrow('X: states와 같은 이름의 prop이 없습니다: missing')
+    expect(() => defineComponent({ ...Sample, type: 'X', states: ['missing'] })).toThrow('X: states와 같은 이름의 prop이 없습니다: missing')
   })
 })

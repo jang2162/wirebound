@@ -304,8 +304,7 @@ describe('지우는 길 전부 — 복원 · 페이지 · 프로젝트', () => {
     await withApi(async (ctx) => {
       // **`ctx.db`로 센다** — `withApi`는 케이스 전체가 트랜잭션 하나라 바깥 풀에서는 늘 0 이다(거짓 초록).
       const tombstones = async (projectId: string) =>
-        (await ctx.db.selectFrom('comment_tombstones').select('comment_id').where('project_id', '=', projectId).execute())
-          .length
+        (await ctx.db.selectFrom('comment_tombstones').select('comment_id').where('project_id', '=', projectId).execute()).length
       const fx = await setup(ctx)
       const first = await postKeyed(ctx, fx, '페이지와 함께 묻힐 말', 'key-1')
       expect(first.statusCode, first.body).toBe(201)

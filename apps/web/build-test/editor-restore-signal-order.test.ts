@@ -23,7 +23,17 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, isRestoreUrl, poll, startEditorStack, type EditorStack, type Session, type StackUser, canvasFrame, canvasText } from './editor-stack'
+import {
+  editorStackPrerequisite,
+  isRestoreUrl,
+  poll,
+  startEditorStack,
+  type EditorStack,
+  type Session,
+  type StackUser,
+  canvasFrame,
+  canvasText,
+} from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -62,14 +72,23 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
     // **답을 신호 뒤로 미룬다** — 서버는 끝냈고, 그 신호가 이 탭에 닿은 뒤에야 답을 건넨다.
     await page.route('**/restore', async (route) => {
       const answer = await route.fetch()
-      await poll('신호가 먼저 닿는다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← restored')), 10_000)
+      await poll(
+        '신호가 먼저 닿는다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('WS← restored')),
+        10_000,
+      )
       events.push(`${at()} 복원 답 ${answer.status()} 건넴`)
       await route.fulfill({ response: answer })
     })
     try {
       await page.goto(fx.P)
       await canvasFrame(page).locator('body', { hasText: '바뀐 글' }).waitFor()
-      await poll('소켓이 룸에 든다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← joined')))
+      await poll(
+        '소켓이 룸에 든다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('WS← joined')),
+      )
       await countBanners(page)
       await restore(page)
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor({ timeout: 10_000 })
@@ -95,12 +114,26 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
     try {
       await page.goto(fx.P)
       await canvasFrame(page).locator('body', { hasText: '바뀐 글' }).waitFor()
-      await poll('앨리스의 WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
-      await poll('소켓이 룸에 든다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← joined')), 10_000)
+      await poll(
+        '앨리스의 WS 가 늦춰진 채 붙는다',
+        async () => delay.delayed(),
+        (n) => n >= 1,
+      )
+      await poll(
+        '소켓이 룸에 든다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('WS← joined')),
+        10_000,
+      )
       await countBanners(page)
       await restore(page)
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor({ timeout: 10_000 })
-      await poll('신호가 늦게 닿는다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← restored')), 10_000)
+      await poll(
+        '신호가 늦게 닿는다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('WS← restored')),
+        10_000,
+      )
       await page.waitForTimeout(1_000)
       const seen = await bannersSeen(page)
       // eslint-disable-next-line no-console
@@ -144,15 +177,34 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
     try {
       await page.goto(fx.P)
       await canvasFrame(page).locator('body', { hasText: '바뀐 글' }).waitFor()
-      await poll('소켓이 룸에 든다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← joined')))
+      await poll(
+        '소켓이 룸에 든다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('WS← joined')),
+      )
       await restore(page)
-      await poll('답을 잃은 배너가 선다', async () => banner(page), (shown) => shown, 10_000)
+      await poll(
+        '답을 잃은 배너가 선다',
+        async () => banner(page),
+        (shown) => shown,
+        10_000,
+      )
 
       // 사람이 배너의 단추로 다시 읽는다 — 서버는 아직 복원 전이다(행을 쥐었다). 복원을 보낸 대화 상자를 먼저 닫는다(머리말).
       await page.keyboard.press('Escape')
-      await poll('스냅샷 대화 상자가 닫힌다', async () => page.locator('.wb-shell-snapshots-body').count(), (count) => count === 0, 5_000)
+      await poll(
+        '스냅샷 대화 상자가 닫힌다',
+        async () => page.locator('.wb-shell-snapshots-body').count(),
+        (count) => count === 0,
+        5_000,
+      )
       await page.locator('.wb-shell-remote-alert').getByRole('button', { name: '다시 불러오기' }).click()
-      await poll('배너가 걷힌다', async () => banner(page), (shown) => !shown, 10_000)
+      await poll(
+        '배너가 걷힌다',
+        async () => banner(page),
+        (shown) => !shown,
+        10_000,
+      )
       await page.waitForTimeout(500)
       const reread = { 서버: await server(stack, alice, fx.P), 캔버스: await canvas(page), 배너: await banner(page) }
 
@@ -163,7 +215,9 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       const after = { 서버: await server(stack, alice, fx.P), 캔버스: await canvas(page), 배너: await banner(page) }
       const statuses = await page.locator('[role=status]').allTextContents()
       // eslint-disable-next-line no-console
-      console.log(`[늦은 커밋] ${events.join(' · ')} · 다시 읽은 뒤 ${JSON.stringify(reread)} · 커밋 뒤 ${JSON.stringify(after)} · 상태줄 ${JSON.stringify(statuses)}`)
+      console.log(
+        `[늦은 커밋] ${events.join(' · ')} · 다시 읽은 뒤 ${JSON.stringify(reread)} · 커밋 뒤 ${JSON.stringify(after)} · 상태줄 ${JSON.stringify(statuses)}`,
+      )
 
       // 판 카나리아 — 다시 읽기는 복원 앞을 읽었고, 복원은 그 뒤에 커밋됐다.
       expect(reread).toEqual({ 서버: '바뀐 글', 캔버스: expect.stringContaining('바뀐 글') as unknown as string, 배너: false })
@@ -176,7 +230,10 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       await page.locator('.wb-shell-remote-alert').getByRole('button', { name: '다시 불러오기' }).click()
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor({ timeout: 10_000 })
       await page.waitForTimeout(500)
-      expect({ 캔버스: await canvas(page), 배너: await banner(page) }).toEqual({ 캔버스: expect.stringContaining('원문') as unknown as string, 배너: false })
+      expect({ 캔버스: await canvas(page), 배너: await banner(page) }).toEqual({
+        캔버스: expect.stringContaining('원문') as unknown as string,
+        배너: false,
+      })
     } finally {
       if (!released) await hold.release()
       await late?.catch(() => undefined)
@@ -207,7 +264,12 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       if (order === '신호가 먼저') {
         await page.route('**/restore', async (route) => {
           const answer = await route.fetch({ timeout: 60_000 })
-          await poll('신호가 먼저 닿는다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← restored')), 15_000)
+          await poll(
+            '신호가 먼저 닿는다',
+            async () => events.slice(),
+            (lines) => lines.some((line) => line.endsWith('WS← restored')),
+            15_000,
+          )
           events.push(`${at()} 복원 답 ${answer.status()} 건넴`)
           await route.fulfill({ response: answer })
         })
@@ -230,13 +292,25 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
 
         await hold.release()
         released = true
-        await poll('신호', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← restored')), 15_000)
-        await poll('답', async () => events.slice(), (lines) => lines.some((line) => line.includes('복원 답 200')), 15_000)
+        await poll(
+          '신호',
+          async () => events.slice(),
+          (lines) => lines.some((line) => line.endsWith('WS← restored')),
+          15_000,
+        )
+        await poll(
+          '답',
+          async () => events.slice(),
+          (lines) => lines.some((line) => line.includes('복원 답 200')),
+          15_000,
+        )
         await page.waitForTimeout(2_500)
         const after = { 서버: await server(stack, alice, fx.P), 캔버스: await canvas(page), 배너: await banner(page) }
         const statuses = await page.locator('[role=status]').allTextContents()
         // eslint-disable-next-line no-console
-        console.log(`[다른 프로젝트 · ${order}] ${events.join(' · ')} · 돌아온 뒤 ${JSON.stringify(back)} · 커밋 뒤 ${JSON.stringify(after)} · 상태줄 ${JSON.stringify(statuses)}`)
+        console.log(
+          `[다른 프로젝트 · ${order}] ${events.join(' · ')} · 돌아온 뒤 ${JSON.stringify(back)} · 커밋 뒤 ${JSON.stringify(after)} · 상태줄 ${JSON.stringify(statuses)}`,
+        )
 
         // 판 카나리아 — 돌아온 뒤에도 복원은 서버에 서 있었고, 행을 놓자 커밋됐다. 그 차례로 닿았다.
         expect(back).toEqual({ 서버: '바뀐 글', 배너: false })
@@ -282,12 +356,22 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       // 밥이 B 를 «셋째»가 없던 판으로 복원한다 — 앨리스에게는 남의 복원 배너.
       const restored = await stack.request(bob, 'POST', `/projects/${b.projectId}/snapshots/${b.snapshotId}/restore`)
       if (restored.status !== 200) throw new Error(`밥의 복원 ${restored.status}`)
-      await poll('남의 복원 배너', async () => banner(page), (shown) => shown, 10_000)
+      await poll(
+        '남의 복원 배너',
+        async () => banner(page),
+        (shown) => shown,
+        10_000,
+      )
 
       // A 의 복원을 놓는다 — 그 답이 B 에 선 탭에 온다(내려간 셸의 콜백).
       await hold.release()
       released = true
-      await poll('A 의 답', async () => events.slice(), (lines) => lines.some((line) => line.includes('복원 답 200')), 15_000)
+      await poll(
+        'A 의 답',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.includes('복원 답 200')),
+        15_000,
+      )
       await page.waitForTimeout(500)
       events.push(`${at()} 둘째로 옮김`)
       await page.getByRole('link', { name: '둘째' }).click()
@@ -337,13 +421,21 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       await canvasFrame(page).locator('body', { hasText: '바뀐 글' }).waitFor()
       await joinedAtLeast(events, 1)
       await restore(page)
-      await poll('복원이 붙잡힌다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('복원 붙잡음')))
+      await poll(
+        '복원이 붙잡힌다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('복원 붙잡음')),
+      )
       await travel(page, other.P)
       await canvasFrame(page).locator('body', { hasText: '바뀐 글' }).waitFor()
       await joinedAtLeast(events, 2)
       await countBanners(page)
       cut?.()
-      await poll('끊었다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('복원 끊음')))
+      await poll(
+        '끊었다',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('복원 끊음')),
+      )
       await page.waitForTimeout(1_500)
       const seen = await bannersSeen(page)
       const statuses = await page.locator('[role=status]').allTextContents()
@@ -390,8 +482,17 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       await page.getByRole('menuitem', { name: '스냅샷' }).click()
       await page.locator('li.wb-shell-snapshots-row', { hasText: 'v1' }).getByRole('button', { name: '이 상태로 되돌리기' }).click()
       await page.getByRole('button', { name: '되돌린다' }).click()
-      await poll('앨리스 복원이 서버에서 끝남', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('답 붙잡음')), 15_000)
-      await poll('앨리스 신호', async () => events.filter((line) => line.endsWith('WS← restored')).length, (n) => n >= 1)
+      await poll(
+        '앨리스 복원이 서버에서 끝남',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('답 붙잡음')),
+        15_000,
+      )
+      await poll(
+        '앨리스 신호',
+        async () => events.filter((line) => line.endsWith('WS← restored')).length,
+        (n) => n >= 1,
+      )
 
       // 밥이 앨리스의 복원 id 를 실어 v2(«바뀐 글»)로 복원한다.
       const snapshots = await stack.request(bob, 'GET', `/projects/${fx.projectId}/snapshots`)
@@ -401,7 +502,11 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
         headers: { cookie: bob.cookie, 'x-wb-restore-id': restoreId ?? '' },
       })
       events.push(`${at()} 밥 복원 ${mimic.status}`)
-      await poll('밥 신호', async () => events.filter((line) => line.endsWith('WS← restored')).length, (n) => n >= 2)
+      await poll(
+        '밥 신호',
+        async () => events.filter((line) => line.endsWith('WS← restored')).length,
+        (n) => n >= 2,
+      )
       const bobSignal = Date.now()
       await page.waitForTimeout(2_000)
       const early = { 배너: await banner(page), 선_수: await bannersSeen(page) }
@@ -414,7 +519,9 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       await page.waitForTimeout(1_000)
       const after = { 서버: await server(stack, alice, fx.P), 캔버스: await canvas(page), 배너: await banner(page) }
       // eslint-disable-next-line no-console
-      console.log(`[흉내 · 매달린 답] ${events.join(' · ')} · 2s ${JSON.stringify(early)} · ${BEYOND_WAIT_MS}ms ${JSON.stringify(hung)} · 답 뒤 ${JSON.stringify(after)}`)
+      console.log(
+        `[흉내 · 매달린 답] ${events.join(' · ')} · 2s ${JSON.stringify(early)} · ${BEYOND_WAIT_MS}ms ${JSON.stringify(hung)} · 답 뒤 ${JSON.stringify(after)}`,
+      )
 
       // 판 카나리아 — 밥의 신호는 앨리스의 답까지 미뤄졌다(2s 에 배너 없음), 서버는 밥의 판이고 캔버스는 아직 옛 글이다.
       expect(early).toEqual({ 배너: false, 선_수: 0 })
@@ -452,14 +559,29 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       await joinedAtLeast(events, 1)
       await countBanners(page)
       await restore(page)
-      await poll('신호', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← restored')), 10_000)
+      await poll(
+        '신호',
+        async () => events.slice(),
+        (lines) => lines.some((line) => line.endsWith('WS← restored')),
+        10_000,
+      )
       await page.waitForTimeout(BEYOND_WAIT_MS)
       const hung = { 배너: await banner(page) }
       answer?.()
       await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor({ timeout: 10_000 })
-      await poll('배너가 걷힌다', async () => banner(page), (shown) => !shown, 10_000)
+      await poll(
+        '배너가 걷힌다',
+        async () => banner(page),
+        (shown) => !shown,
+        10_000,
+      )
       await page.waitForTimeout(500)
-      const after = { 서버: await server(stack, alice, fx.P), 캔버스: await canvas(page), 배너: await banner(page), 선_수: await bannersSeen(page) }
+      const after = {
+        서버: await server(stack, alice, fx.P),
+        캔버스: await canvas(page),
+        배너: await banner(page),
+        선_수: await bannersSeen(page),
+      }
       // eslint-disable-next-line no-console
       console.log(`[한도보다 늦은 답] ${events.join(' · ')} · ${BEYOND_WAIT_MS}ms ${JSON.stringify(hung)} · 답 뒤 ${JSON.stringify(after)}`)
 
@@ -483,7 +605,12 @@ async function travel(page: Page, to: string): Promise<void> {
 
 /** 소켓이 룸에 든 수가 `count` 이상이 될 때까지 — 프로젝트를 옮길 때마다 새 룸에 든다. */
 async function joinedAtLeast(lines: string[], count: number): Promise<void> {
-  await poll(`룸에 ${count}번 든다`, async () => lines.filter((line) => line.endsWith('WS← joined')).length, (n) => n >= count, 10_000)
+  await poll(
+    `룸에 ${count}번 든다`,
+    async () => lines.filter((line) => line.endsWith('WS← joined')).length,
+    (n) => n >= count,
+    10_000,
+  )
 }
 
 /**
@@ -519,7 +646,12 @@ async function otherProject(
 }
 
 /** `원문`을 스냅샷 v1 에 얼리고 `바뀐 글`로 고친 페이지. `third`면 그 판을 v2 에 얼리고 `셋째 글`로 한 번 더 고친다. */
-async function fixture(stack: EditorStack, owner: Session, slug: string, third = false): Promise<{ P: string; pageId: string; projectId: string }> {
+async function fixture(
+  stack: EditorStack,
+  owner: Session,
+  slug: string,
+  third = false,
+): Promise<{ P: string; pageId: string; projectId: string }> {
   const call = (method: string, path: string, body?: unknown) => stack.request(owner, method, path, body)
   const project = created(await call('POST', '/projects', { name: '복원 차례', slug: `${slug}-${Date.now().toString(36)}` }))
   const menu = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' }))

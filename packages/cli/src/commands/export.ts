@@ -132,8 +132,7 @@ export async function runExport(io: Io, options: ExportOptions): Promise<number>
     token: access.token,
   })
 
-  const files =
-    format === 'pptx' ? [singleFile(response)] : stripCommonRoot(readArchive(response.bytes))
+  const files = format === 'pptx' ? [singleFile(response)] : stripCommonRoot(readArchive(response.bytes))
   if (files.length === 0) throw serverError('번들이 비어 있습니다')
 
   // **사람이 친 경로는 사람이 서 있는 곳에서 읽힌다**(`pull`과 같은 규칙).
@@ -206,7 +205,9 @@ function warnMissingScreens(io: Io, response: ApiBytesResponse): void {
   const failed = count(SCREEN_FAILURES_HEADER)
   const skipped = count(SCREENLESS_HEADER)
   if (failed > 0) {
-    io.err(`경고: 화면 이미지 ${failed}장을 그리지 못해 그 슬라이드에는 글자만 실렸습니다. 이유는 웹의 내보내기 창에서 PPTX 를 고르면 보입니다`)
+    io.err(
+      `경고: 화면 이미지 ${failed}장을 그리지 못해 그 슬라이드에는 글자만 실렸습니다. 이유는 웹의 내보내기 창에서 PPTX 를 고르면 보입니다`,
+    )
   }
   if (skipped > 0) {
     io.err(`경고: 서버가 화면 이미지를 그리지 않아 ${skipped}장이 글자만 실렸습니다`)

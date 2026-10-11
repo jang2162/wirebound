@@ -31,10 +31,7 @@ export const MediaView = view(({ props }) => {
   const glyph = MEDIA_GLYPH[String(props.kind)]
   return (
     <Root as="figure" data-wb-structure="image">
-      <div
-        data-wb-part="frame"
-        style={{ [nodeVar('media', 'ratio')]: String(props.ratio) } as CSSProperties}
-      >
+      <div data-wb-part="frame" style={{ [nodeVar('media', 'ratio')]: String(props.ratio) } as CSSProperties}>
         {glyph === undefined ? null : (
           <span data-wb-part="glyph" aria-hidden="true">
             {glyph}
@@ -50,11 +47,7 @@ export const DividerView = view(() => <Root as="hr" data-wb-structure="default" 
 
 export const PlaceholderView = view(({ props }) => (
   // 길이 단위를 여기서 붙인다 — CSS 가 `calc(var(…) * 1px)` 로 붙이면 테마가 `300px` 을 줄 때 무효한 값이 된다.
-  <Root
-    as="div"
-    data-wb-structure="default"
-    style={{ [nodeVar('placeholder', 'height')]: `${props.height as number}px` } as CSSProperties}
-  >
+  <Root as="div" data-wb-structure="default" style={{ [nodeVar('placeholder', 'height')]: `${props.height as number}px` } as CSSProperties}>
     {String(props.label)}
   </Root>
 ))

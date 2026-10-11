@@ -76,11 +76,7 @@ function layoutOf(holder: Holder): SidebarLayout {
  * jsdom이 0만 내주기 때문이고, `clientHeight`를 따로 심는 것은 그 둘이 갈리는 케이스가
  * 있기 때문이다(브라우저에서 851 vs 850.5).
  */
-function attach<T extends HTMLElement>(
-  target: RefObject<T | null>,
-  height: number,
-  clientHeight?: number,
-): (el: T | null) => void {
+function attach<T extends HTMLElement>(target: RefObject<T | null>, height: number, clientHeight?: number): (el: T | null) => void {
   return (el) => {
     if (el !== null) {
       const rect = {
@@ -117,15 +113,11 @@ function Probe(props: { screen: Screen; out: Holder }): ReactElement {
       ref={attach(layout.sideRef, screen.sideHeight, screen.clientHeight)}
       style={{
         rowGap: `${screen.rowGap}px`,
-        ...(screen.sidePadding === undefined
-          ? {}
-          : { paddingTop: `${screen.sidePadding}px`, paddingBottom: `${screen.sidePadding}px` }),
+        ...(screen.sidePadding === undefined ? {} : { paddingTop: `${screen.sidePadding}px`, paddingBottom: `${screen.sidePadding}px` }),
       }}
     >
       <section style={pad} />
-      {screen.resizerHeight !== null && (
-        <div ref={attach(layout.regionResizerRef, screen.resizerHeight)} />
-      )}
+      {screen.resizerHeight !== null && <div ref={attach(layout.regionResizerRef, screen.resizerHeight)} />}
       <section style={pad} />
     </nav>
   )

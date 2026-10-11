@@ -27,13 +27,7 @@ import type { NodeLockView } from '../realtime/protocol'
 import { anchorOps, rebaseAnchored, sameOps, type AnchoredOp } from './anchored-ops'
 import { LOSS_RANK, lossMessage, mergeLoss, type LossPart } from './loss-notice'
 import { normalizeSelection, sameSelection, type NormalizedSelection } from './selection-set'
-import {
-  ackPending,
-  clearPending,
-  nextPending,
-  type EditKind,
-  type PendingEdit,
-} from './edit-queue'
+import { ackPending, clearPending, nextPending, type EditKind, type PendingEdit } from './edit-queue'
 
 /** 편집 모드. `view`는 편집 도구를 감추고 결과만 보여 준다. */
 export type EditorMode = 'edit' | 'view'
@@ -618,7 +612,11 @@ function once<T>(make: () => T): () => T {
  * 높은 번호부터 얹는다. 빠진 번호가 있거나 얹다가 던지면 그 아래는 `null`이다. 지은 문서를 들고 있다가 더 낮은 번호를 물으면 거기서 잇는다
  * — 되돌리기 스택은 번호가 내려가는 순서로 소비된다. 더 높은 번호를 물으면 `head`에서 다시 걷는다.
  */
-function historyDocuments(head: PageDocument, headSeq: number, inverses: ReadonlyMap<number, PatchOp[]>): (seq: number) => PageDocument | null {
+function historyDocuments(
+  head: PageDocument,
+  headSeq: number,
+  inverses: ReadonlyMap<number, PatchOp[]>,
+): (seq: number) => PageDocument | null {
   let document: PageDocument | null = head
   let at = headSeq
   return (seq) => {
@@ -1004,9 +1002,7 @@ export class EditorStore {
   #replayWindow(pageId: string, ticket: number): void {
     const { baseDocument, headSeq } = this.#state
     if (baseDocument === null) return
-    const changes = this.#windowChanges
-      .filter((change) => change.pageId === pageId && change.begun >= ticket)
-      .sort((a, b) => a.seq - b.seq)
+    const changes = this.#windowChanges.filter((change) => change.pageId === pageId && change.begun >= ticket).sort((a, b) => a.seq - b.seq)
     let document = baseDocument
     let seq = headSeq
     let stale: RemoteStale['reason'] | null = null
@@ -1155,7 +1151,11 @@ export class EditorStore {
       else added.unknown += 1
     }
     const total = this.#discarded
-    this.#discarded = { unknown: total.unknown + added.unknown, refused: total.refused + added.refused, unsent: total.unsent + added.unsent }
+    this.#discarded = {
+      unknown: total.unknown + added.unknown,
+      refused: total.refused + added.refused,
+      unsent: total.unsent + added.unsent,
+    }
     return added
   }
 
@@ -1370,7 +1370,9 @@ export class EditorStore {
       return { ids: sameSelection(kept.ids, selectedNodeIds) ? selectedNodeIds : kept.ids, anchor: kept.anchor }
     }
     const rootId = document.root.id
-    return this.#blocksSelection(pageId, document, rootId) === null ? { ids: [rootId], anchor: rootId } : { ids: NO_SELECTION, anchor: null }
+    return this.#blocksSelection(pageId, document, rootId) === null
+      ? { ids: [rootId], anchor: rootId }
+      : { ids: NO_SELECTION, anchor: null }
   }
 
   /**
@@ -1432,7 +1434,13 @@ export class EditorStore {
     return behind
   }
 
-  #deferral: { cancel: () => void; watch: string | null; kind: 'undo' | 'redo' | null; acked: boolean; behind: (() => void) | null } | null = null
+  #deferral: {
+    cancel: () => void
+    watch: string | null
+    kind: 'undo' | 'redo' | null
+    acked: boolean
+    behind: (() => void) | null
+  } | null = null
 
   /**
    * **새로고침으로 채울 되돌리기의 판** — 판을 실은 바로 뒤에 부른다(`routes/editor.tsx`의 `restoreUndo`). 목록 답을 실을 때
@@ -1563,21 +1571,25 @@ export class EditorStore {
     }
     if (walk.restorable.length === 0) return 'none'
     this.#undoRestoredEpoch = point.epoch
-    const history: RestoredHistory = { epoch: point.epoch, headSeq: walk.headSeq, lowest: walk.lowest, inverses: walk.inverses, walked: false }
+    const history: RestoredHistory = {
+      epoch: point.epoch,
+      headSeq: walk.headSeq,
+      lowest: walk.lowest,
+      inverses: walk.inverses,
+      walked: false,
+    }
     this.#restoredHistory = history
     const recordedAt = historyDocuments(walk.head, walk.headSeq, walk.inverses)
-    const restored = walk.restorable.map(
-      (revision): RevisionRef => ({
-        revisionId: revision.revisionId,
-        inverse: revision.inverse,
-        anchorOnUse: once(() => {
-          // 되짚기 시작 — 그 뒤로는 더 받지 않는다(`undoHistoryNeed`). 받지 못한 번호 아래의 항목은 못 짓고 누를 때 건너뛴다.
-          history.walked = true
-          const recorded = recordedAt(revision.seq)
-          return recorded === null ? null : anchorOps(recorded, revision.inverse)
-        }),
+    const restored = walk.restorable.map((revision): RevisionRef => ({
+      revisionId: revision.revisionId,
+      inverse: revision.inverse,
+      anchorOnUse: once(() => {
+        // 되짚기 시작 — 그 뒤로는 더 받지 않는다(`undoHistoryNeed`). 받지 못한 번호 아래의 항목은 못 짓고 누를 때 건너뛴다.
+        history.walked = true
+        const recorded = recordedAt(revision.seq)
+        return recorded === null ? null : anchorOps(recorded, revision.inverse)
       }),
-    )
+    }))
     this.#apply({ undoStack: [...restored.reverse(), ...this.#state.undoStack] })
     return 'restored'
   }
@@ -1722,10 +1734,7 @@ export class EditorStore {
    * 편집이 ack된 뒤라면) 값이 **내려간다.** 서버가 아무것도 안 바꿨으면 클라이언트도
    * 아무것도 안 바꾸는 것이 맞는다.
    */
-  readonly applyMarkerChange = (
-    pageId: string,
-    change: { seq: number; markerOps: PatchOp[] },
-  ): MarkerChangeResult => {
+  readonly applyMarkerChange = (pageId: string, change: { seq: number; markerOps: PatchOp[] }): MarkerChangeResult => {
     const { openPageId, document, baseDocument, headSeq } = this.#state
     // 다른 페이지로 옮긴 뒤 도착한 응답이다. 여기서 `headSeq`를 건드리면 새 페이지의
     // 편집이 남의 revision 번호 위에서 만들어진다(`ackEdit`의 늦은 ack 가드와 같은 자리).
@@ -2327,12 +2336,7 @@ export class EditorStore {
    * 문서와 큐를 한 번에 옮긴다. `applyEdit`·`startUndo`·`startRedo`가 공유한다 —
    * 셋이 각자 `#apply`를 부르면 "낙관 적용과 큐 삽입이 함께 일어난다"가 세 벌이 된다.
    */
-  #enqueue(
-    document: PageDocument,
-    ops: PatchOp[],
-    kind: EditKind,
-    extra: Partial<EditorState>,
-  ): string {
+  #enqueue(document: PageDocument, ops: PatchOp[], kind: EditKind, extra: Partial<EditorState>): string {
     const clientOpId = this.#nextOpId()
     // **만든 문서에서 노드 id 로 붙잡는다** — 리베이스가 그 id 의 자리로 경로를 다시 짓는다(`anchored-ops.ts`). 만든 문서는 지금 `document`다
     // (낙관 적용 전) — 이 편집의 ops 는 그 위에서 지어졌다.
@@ -2450,8 +2454,7 @@ export class EditorStore {
       // 훅(`edit/use-edit-commit.tsx`의 `step`)은 `blocked`를 보고 펌프를 안 밟으므로,
       // **문서는 되돌아간 채 남고 요청은 나가지 않으며 잠금이 풀린 뒤 다시 눌러도 그 항목은
       // 이미 없다.** 되돌아갔다가 재조회로 복귀하는 깜빡임은 그보다 나은 판이다.
-      const blocked =
-        openPageId === null ? null : this.#editConflict(openPageId, document, ops)
+      const blocked = openPageId === null ? null : this.#editConflict(openPageId, document, ops)
       if (blocked !== null) {
         // **건너뛴 것만 버리고 막힌 것은 남긴다.** `stack`은 이미 건너뛴 만큼 좁혀져 있고
         // 그 맨 위가 막힌 항목이다 — 잠금이 풀리면 다음 누름이 바로 그것을 집는다.
@@ -2594,15 +2597,12 @@ export class EditorStore {
       undoStack: undone ? undoStack : [...undoStack, ref],
       redoStack: undone ? [...redoStack, ref] : redoStack,
       // 둘 다 비어 있으면 참조를 유지한다(위 `NO_WARNINGS`).
-      editWarnings:
-        warnings.length === 0 && this.#state.editWarnings.length === 0
-          ? this.#state.editWarnings
-          : warnings,
+      editWarnings: warnings.length === 0 && this.#state.editWarnings.length === 0 ? this.#state.editWarnings : warnings,
     })
     // 내 편집이 기다리던 번호의 사이 revision 이었을 수 있다 — 그 프레임은 내게 안 온다(`applyMarkerChange`의 «그래서 기다렸다가 …»).
     this.#settleWaitingMarkers()
     // 서버가 이 번호로 기록한 ops 는 보낸 그것이다(`markSent`).
-    this.#noteWindow(this.#state.openPageId, result.seq, clientOpId === this.#sentOpId ? this.#sentOps : head?.ops ?? null)
+    this.#noteWindow(this.#state.openPageId, result.seq, clientOpId === this.#sentOpId ? this.#sentOps : (head?.ops ?? null))
   }
 
   /**
@@ -2856,9 +2856,7 @@ export class EditorStore {
       this.selectNode(toId)
       return { capped: 0 }
     }
-    const range = visibleOrder
-      .slice(Math.min(from, to), Math.max(from, to) + 1)
-      .filter((id) => this.selectionBlockedBy(id) === null)
+    const range = visibleOrder.slice(Math.min(from, to), Math.max(from, to) + 1).filter((id) => this.selectionBlockedBy(id) === null)
     const next = normalizeSelection(document.root, this.#withoutRoot(document, range), toId, 'outer')
     this.#setSelection(next)
     return { capped: next.capped }
@@ -3137,7 +3135,12 @@ export class EditorStore {
     let next = this.#withSelection(update)
     // **고른 것이 바뀌면 정보 통지를 걷는다** — «여럿을 고른 판입니다 …» 같은 말은 그 고름에 대한 말이라, 하나로 다시 골라도 남으면 낡은 말이다. 같은 갱신이
     // 새 통지를 함께 싣거나(`infoNotice` 가 든 갱신) 목록이 같으면 건드리지 않는다.
-    if (next.selectedNodeIds !== undefined && !('infoNotice' in next) && this.#state.infoNotice !== null && !sameSelection(next.selectedNodeIds, this.#state.selectedNodeIds)) {
+    if (
+      next.selectedNodeIds !== undefined &&
+      !('infoNotice' in next) &&
+      this.#state.infoNotice !== null &&
+      !sameSelection(next.selectedNodeIds, this.#state.selectedNodeIds)
+    ) {
       next = { ...next, infoNotice: null }
     }
     let changed = false

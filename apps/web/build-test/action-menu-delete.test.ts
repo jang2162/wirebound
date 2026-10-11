@@ -91,7 +91,10 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' })).body
     const first = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body
     const P = `/projects/${project.id}/pages/${first.id}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: PAGE().map((value, index) => ({ op: 'add', path: `/root/children/${index}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: PAGE().map((value, index) => ({ op: 'add', path: `/root/children/${index}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return { P }
   }
@@ -165,7 +168,14 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
     }
     // eslint-disable-next-line no-console
     console.log(`[메뉴 Delete] 줄 … ${JSON.stringify(results)}`)
-    const kept = (focus: string, extra: Record<string, unknown> = {}) => ({ focus, order: WHOLE, headSeq: 1, menus: 1, selected: 'n_text0000002', ...extra })
+    const kept = (focus: string, extra: Record<string, unknown> = {}) => ({
+      focus,
+      order: WHOLE,
+      headSeq: 1,
+      menus: 1,
+      selected: 'n_text0000002',
+      ...extra,
+    })
     expect(results).toEqual({
       '첫 항목 Delete': kept('menuitem'),
       '첫 항목 Backspace': kept('menuitem'),
@@ -217,14 +227,21 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
         const focus = await focusOf(page)
         await page.keyboard.press(key)
         await sleep(200)
-        results[key] = { focus, confirms: await page.locator('.wb-shell-tree-confirm').count(), menus: await page.locator('[role="menu"]').count() }
+        results[key] = {
+          focus,
+          confirms: await page.locator('.wb-shell-tree-confirm').count(),
+          menus: await page.locator('[role="menu"]').count(),
+        }
       } finally {
         await close()
       }
     }
     // eslint-disable-next-line no-console
     console.log(`[메뉴 Delete] 메뉴 트리 ${JSON.stringify(results)}`)
-    expect(results).toEqual({ Delete: { focus: 'menuitem', confirms: 0, menus: 1 }, Backspace: { focus: 'menuitem', confirms: 0, menus: 1 } })
+    expect(results).toEqual({
+      Delete: { focus: 'menuitem', confirms: 0, menus: 1 },
+      Backspace: { focus: 'menuitem', confirms: 0, menus: 1 },
+    })
   })
 
   it('닫힌 뒤의 Delete 는 지금처럼 고른 노드를 지운다 — Escape 로 닫음 · 캔버스를 눌러 닫음 · 메뉴를 연 채 캔버스로 포커스만 옮김', async () => {
@@ -234,7 +251,8 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
       ['캔버스 누름', (page) => canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()],
       [
         '캔버스 포커스',
-        (page) => page.evaluate(() => (document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement).contentWindow!.focus()),
+        (page) =>
+          page.evaluate(() => (document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement).contentWindow!.focus()),
       ],
     ]
     for (const [name, leave] of ways) {
@@ -256,7 +274,14 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
     }
     // eslint-disable-next-line no-console
     console.log(`[메뉴 Delete] 닫힌 뒤 ${JSON.stringify(results)}`)
-    const removed = (menusBefore: number, focus: string) => ({ menusBefore, focus, order: WITHOUT_TEXT2, headSeq: 2, menus: 0, selected: null })
+    const removed = (menusBefore: number, focus: string) => ({
+      menusBefore,
+      focus,
+      order: WITHOUT_TEXT2,
+      headSeq: 2,
+      menus: 0,
+      selected: null,
+    })
     expect(results).toEqual({
       Escape: removed(0, 'menu'),
       '캔버스 누름': removed(0, 'iframe'),

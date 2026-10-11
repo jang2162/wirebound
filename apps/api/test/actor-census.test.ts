@@ -91,7 +91,7 @@ const ACTOR_SITES: ActorSite[] = [
     file: 'routes/pages.ts',
     label: 'POST .../pages/import — 가져오기가 만든 첫 문서',
     origin: 'request',
-    why: '토큰으로도 가져올 수 있다(`projectGuard(\'editor\')`뿐이다). `authorId`는 따로 사람이다 — `comments.author_id`가 `users(id)`에 FK를 건다',
+    why: "토큰으로도 가져올 수 있다(`projectGuard('editor')`뿐이다). `authorId`는 따로 사람이다 — `comments.author_id`가 `users(id)`에 FK를 건다",
   },
   {
     file: 'routes/pages.ts',
@@ -248,7 +248,8 @@ const ACTOR_SITES: ActorSite[] = [
     label: '`theme-changed` 프레임의 actor 선언',
     origin: 'type',
     why: '값을 만들지 않는다. 위와 같은 유니온을 든다',
-  },  {
+  },
+  {
     file: 'routes/menu.ts',
     label: 'POST …/menu 의 menu-changed',
     origin: 'request-event',
@@ -360,9 +361,7 @@ function tableByFile(): Map<string, Map<ActorOrigin, number>> {
 }
 
 function flatten(counted: Map<string, Map<ActorOrigin, number>>): string[] {
-  return [...counted]
-    .flatMap(([file, byOrigin]) => [...byOrigin].map(([origin, count]) => `${file} ${origin} ${count}`))
-    .sort()
+  return [...counted].flatMap(([file, byOrigin]) => [...byOrigin].map(([origin, count]) => `${file} ${origin} ${count}`)).sort()
 }
 
 describe('actor 를 만드는 자리를 소스에서 센다', () => {
@@ -517,11 +516,7 @@ async function projectState(fx: Fixture): Promise<{
   children: number
 }> {
   const snapshots = await db.selectFrom('snapshots').select('id').where('project_id', '=', fx.projectId).execute()
-  const page = await db
-    .selectFrom('pages')
-    .select(['head_seq', 'schema'])
-    .where('id', '=', fx.pageId)
-    .executeTakeFirstOrThrow()
+  const page = await db.selectFrom('pages').select(['head_seq', 'schema']).where('id', '=', fx.pageId).executeTakeFirstOrThrow()
   const root = (page.schema as { root?: { children?: unknown[] } }).root
   return {
     snapshots: snapshots.length,
@@ -541,9 +536,7 @@ async function patchOps(
   const res = await ctx.app.inject({
     method: 'PATCH',
     url: `/api/projects/${fx.projectId}/pages/${fx.pageId}/ops`,
-    ...(auth === 'session'
-      ? { cookies: fx.owner.cookie, headers }
-      : { headers: { authorization: `Bearer ${fx.token}`, ...headers } }),
+    ...(auth === 'session' ? { cookies: fx.owner.cookie, headers } : { headers: { authorization: `Bearer ${fx.token}`, ...headers } }),
     payload: { baseSeq: await headSeqOf(fx.pageId), ops: addNode() },
   })
   return { statusCode: res.statusCode, body: res.body }

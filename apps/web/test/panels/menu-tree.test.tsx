@@ -24,13 +24,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import type { EditorStore } from '../../src/store/editor-store'
-import {
-  currentPath,
-  expiringSession,
-  fakeApi,
-  renderWithProviders,
-  unauthenticatedError,
-} from '../helpers'
+import { currentPath, expiringSession, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
 import { isOff, queryRowAction, treeTool } from './tree-row'
 
 /**
@@ -147,16 +141,7 @@ function tree(): TreeMenuNode[] {
 }
 
 /** 화면에 나와야 하는 순서. 메뉴는 자기 페이지를 먼저, 그다음 자식 메뉴를 품는다. */
-const EXPECTED_ROWS = [
-  '회원관리',
-  '회원 목록',
-  '회원 상세',
-  '권한',
-  '권한 관리',
-  '등급',
-  '등급 정책',
-  '주문관리',
-]
+const EXPECTED_ROWS = ['회원관리', '회원 목록', '회원 상세', '권한', '권한 관리', '등급', '등급 정책', '주문관리']
 
 function pageDetail(id: string, title: string, headSeq: number, rootId: string): PageDetail {
   return {
@@ -213,11 +198,7 @@ function Back(): ReactElement {
  * 테스트가 놓아야 할 때만 쓴다 — 넘기지 않으면 다른 케이스의 DOM은 한 글자도 달라지지
  * 않는다.
  */
-function renderEditor(
-  overrides: Partial<ApiClient> = {},
-  route = '/projects/p-1',
-  extra?: ReactNode,
-): void {
+function renderEditor(overrides: Partial<ApiClient> = {}, route = '/projects/p-1', extra?: ReactNode): void {
   renderWithProviders(
     <>
       <App />
@@ -242,11 +223,7 @@ function renderEditor(
 }
 
 /** 셸과 트리가 **둘 다 성공 대역으로** 그려질 때까지 기다린다. */
-async function openEditor(
-  overrides: Partial<ApiClient> = {},
-  route = '/projects/p-1',
-  extra?: ReactNode,
-): Promise<void> {
+async function openEditor(overrides: Partial<ApiClient> = {}, route = '/projects/p-1', extra?: ReactNode): Promise<void> {
   renderEditor(overrides, route, extra)
   await screen.findByRole('heading', { name: PROJECT_NAME })
   await screen.findByText('회원관리')
@@ -663,10 +640,7 @@ describe('메뉴·페이지 트리', () => {
   it('페이지 조회가 세션 끊김이면 로그인 화면으로 보낸다', async () => {
     // 위 `페이지 조회에 실패하면…`과 짝이다 — 그쪽은 캔버스 자리에 서버 문장을
     // 남기고, 세션 끊김만 화면을 통째로 바꾼다.
-    renderEditor(
-      { me: expiringSession(USER), getPage: async () => Promise.reject(unauthenticatedError()) },
-      '/projects/p-1/pages/pg-list',
-    )
+    renderEditor({ me: expiringSession(USER), getPage: async () => Promise.reject(unauthenticatedError()) }, '/projects/p-1/pages/pg-list')
 
     await waitFor(() => {
       expect(currentPath()).toBe('/login')
@@ -675,10 +649,7 @@ describe('메뉴·페이지 트리', () => {
   })
 
   it('페이지 조회에 실패하면 트리는 남고 캔버스 자리에만 에러가 뜬다', async () => {
-    await openEditor(
-      { getPage: async () => Promise.reject(new ApiError(404, 'not-found', PAGE_MESSAGE)) },
-      '/projects/p-1/pages/pg-list',
-    )
+    await openEditor({ getPage: async () => Promise.reject(new ApiError(404, 'not-found', PAGE_MESSAGE)) }, '/projects/p-1/pages/pg-list')
 
     await screen.findByText(PAGE_MESSAGE)
     // 에러가 뜨는 자리는 캔버스다.
@@ -735,7 +706,7 @@ describe('메뉴 트리 선택', () => {
   /** 툴바. 트리 region 안에 있다. */
   function toolbar(): HTMLElement {
     // 옛 «메뉴 편집» 툴바 자리 — 줄 행동 · 줄 아래 입력이 트리 영역 안에 선다(`./tree-row.ts`).
-  return treeRegion()
+    return treeRegion()
   }
 
   function tool(name: string): HTMLElement {

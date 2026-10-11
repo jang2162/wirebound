@@ -51,15 +51,7 @@ describe('읽는 것', () => {
       PATCH_ERROR,
     ].map((frame) => parseServerFrame(JSON.stringify(frame))?.type)
 
-    expect(read).toEqual([
-      'joined',
-      'presence',
-      'page-changed',
-      'restored',
-      'pong',
-      'patch-ack',
-      'patch-error',
-    ])
+    expect(read).toEqual(['joined', 'presence', 'page-changed', 'restored', 'pong', 'patch-ack', 'patch-error'])
   })
 
   it('theme-changed 의 값을 그대로 옮긴다 — 토큰 값이 글자 · 수가 아니면 프레임을 버린다', () => {
@@ -123,9 +115,7 @@ describe('읽는 것', () => {
   })
 
   it('joined에서 role은 읽지 않는다 — 역할 판정은 한 자리다', () => {
-    const frame = parseServerFrame(
-      JSON.stringify({ type: 'joined', projectId: 'p', connectionId: 'wsc_1', userId: 'u', role: 'owner' }),
-    )
+    const frame = parseServerFrame(JSON.stringify({ type: 'joined', projectId: 'p', connectionId: 'wsc_1', userId: 'u', role: 'owner' }))
 
     expect(frame).toEqual({ type: 'joined', projectId: 'p', connectionId: 'wsc_1', userId: 'u' })
   })
@@ -150,15 +140,12 @@ describe('안 읽는 것', () => {
    * **필드마다 하나씩 뺀 판을 만든다.** 하나로 뭉뚱그리면 어느 필드 검사를 지워도
    * 케이스가 살아남는다.
    */
-  it.each(['projectId', 'pageId', 'seq', 'ops', 'warnings', 'actor'])(
-    'page-changed에서 %s가 없으면 null이다',
-    (missing) => {
-      const broken: Record<string, unknown> = { ...PAGE_CHANGED }
-      delete broken[missing]
+  it.each(['projectId', 'pageId', 'seq', 'ops', 'warnings', 'actor'])('page-changed에서 %s가 없으면 null이다', (missing) => {
+    const broken: Record<string, unknown> = { ...PAGE_CHANGED }
+    delete broken[missing]
 
-      expect(parseServerFrame(JSON.stringify(broken))).toBeNull()
-    },
-  )
+    expect(parseServerFrame(JSON.stringify(broken))).toBeNull()
+  })
 
   it('seq가 문자열이면 null이다 — 타입도 본다', () => {
     expect(parseServerFrame(JSON.stringify({ ...PAGE_CHANGED, seq: '7' }))).toBeNull()
@@ -243,7 +230,9 @@ describe('잠금 프레임 (설계서 「소프트 잠금」)', () => {
 
   /** 혼자 죽는 변조: 거절을 읽을 때 `nodeIds`를 안 본다(어느 노드의 거절인지 모르는 프레임이 잠금 통로에 닿는다). */
   it('거절(`lock-denied`)은 받지 않은 노드들을 싣고 온다 — 없거나 비었거나 글자가 아닌 것이 섞이면 버린다', () => {
-    expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', nodeIds: ['n_b', 'n_c'], lockId: 3 }))).toEqual({
+    expect(
+      parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', nodeIds: ['n_b', 'n_c'], lockId: 3 })),
+    ).toEqual({
       type: 'lock-denied',
       projectId: 'p',
       pageId: 'g',
@@ -252,7 +241,9 @@ describe('잠금 프레임 (설계서 「소프트 잠금」)', () => {
     })
     expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', lockId: 3 }))).toBeNull()
     expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', nodeIds: [], lockId: 3 }))).toBeNull()
-    expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', nodeIds: ['n_b', 4], lockId: 3 }))).toBeNull()
+    expect(
+      parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', nodeIds: ['n_b', 4], lockId: 3 })),
+    ).toBeNull()
     // 옛 모양(`nodeId` 하나)은 서버가 더 내지 않는다 — 읽지 않는다.
     expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', nodeId: 'n_b', lockId: 3 }))).toBeNull()
   })

@@ -60,8 +60,16 @@ describe.skipIf(!전제.ok)('늦게 커밋된 편집의 경보', () => {
       ])
       // 두 탭이 룸에 들었다 — 그 뒤에 보낸다(판 만들기).
       await Promise.all([
-        poll('앨리스가 룸에 든다', async () => aliceLog.slice(), (lines) => lines.includes('WS← joined')),
-        poll('밥이 룸에 든다', async () => bobLog.slice(), (lines) => lines.includes('WS← joined')),
+        poll(
+          '앨리스가 룸에 든다',
+          async () => aliceLog.slice(),
+          (lines) => lines.includes('WS← joined'),
+        ),
+        poll(
+          '밥이 룸에 든다',
+          async () => bobLog.slice(),
+          (lines) => lines.includes('WS← joined'),
+        ),
       ])
 
       await stack.query(
@@ -78,12 +86,27 @@ describe.skipIf(!전제.ok)('늦게 커밋된 편집의 경보', () => {
         await box.evaluate((element) => (element as HTMLElement).blur())
 
         // 판이 섰는가 — 앨리스는 503 «모름»을 받았고 DB 연결이 끊겼다.
-        await poll('앨리스가 503 을 받는다', async () => aliceLog.slice(), (lines) => lines.includes('WS← patch-error 503'), 15_000)
+        await poll(
+          '앨리스가 503 을 받는다',
+          async () => aliceLog.slice(),
+          (lines) => lines.includes('WS← patch-error 503'),
+          15_000,
+        )
         expect(stack.dbHalfCut!.fired).toBe(true)
 
         await Promise.all([
-          poll('밥이 page-stale 을 받는다', async () => bobLog.slice(), (lines) => lines.includes('WS← page-stale'), 20_000),
-          poll('앨리스가 page-stale 을 받는다', async () => aliceLog.slice(), (lines) => lines.includes('WS← page-stale'), 20_000),
+          poll(
+            '밥이 page-stale 을 받는다',
+            async () => bobLog.slice(),
+            (lines) => lines.includes('WS← page-stale'),
+            20_000,
+          ),
+          poll(
+            '앨리스가 page-stale 을 받는다',
+            async () => aliceLog.slice(),
+            (lines) => lines.includes('WS← page-stale'),
+            20_000,
+          ),
         ])
         const landed = await server(stack, alice, fx.P)
         expect(landed).toEqual({ head: 2, content: ['앨리스가 친 글'] })
@@ -113,7 +136,9 @@ describe.skipIf(!전제.ok)('늦게 커밋된 편집의 경보', () => {
 
         const shown = { 밥: await canvasText(bobTab.page), 앨리스: await canvasText(aliceTab.page) }
         // eslint-disable-next-line no-console
-        console.log(`[늦은 커밋] 밥 ${bobLog.join(' · ')} · 앨리스 ${aliceLog.join(' · ')} · 서버 ${JSON.stringify(landed)} · 다시 읽은 뒤 ${JSON.stringify(shown)}`)
+        console.log(
+          `[늦은 커밋] 밥 ${bobLog.join(' · ')} · 앨리스 ${aliceLog.join(' · ')} · 서버 ${JSON.stringify(landed)} · 다시 읽은 뒤 ${JSON.stringify(shown)}`,
+        )
         expect(shown.밥).toContain('앨리스가 친 글')
         expect(shown.앨리스).toContain('앨리스가 친 글')
         expect(await server(stack, alice, fx.P)).toEqual(landed)

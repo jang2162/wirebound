@@ -68,7 +68,11 @@ async function fixture(ctx: RealApiContext): Promise<Fx> {
   await addMember(ctx, p, bob.user.id, 'editor')
   const values = { A: randomTokenValue(), D: randomTokenValue(), B: randomTokenValue() }
   // 넣는 순서가 heap 순서다(머리말 «판 세우기»).
-  for (const [key, projectId] of [['B', p], ['D', q], ['A', p]] as const) {
+  for (const [key, projectId] of [
+    ['B', p],
+    ['D', q],
+    ['A', p],
+  ] as const) {
     await db
       .insertInto('api_tokens')
       .values({ id: ID[key], project_id: projectId, user_id: bob.user.id, token_hash: hashTokenValue(values[key]), name: key })

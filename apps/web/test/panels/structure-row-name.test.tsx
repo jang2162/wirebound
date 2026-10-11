@@ -39,7 +39,13 @@ function server(): { calls: PatchOp[][]; api: Partial<ApiClient> } {
     const inverse = invertOps(held, body.ops)
     held = applyOps(held, body.ops)
     seq += 1
-    const result: PatchResult = { seq, revisionId: `rev-${seq}`, inverse, schemaVersion: 1, ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }) }
+    const result: PatchResult = {
+      seq,
+      revisionId: `rev-${seq}`,
+      inverse,
+      schemaVersion: 1,
+      ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+    }
     return result
   }
   return { calls, api: { patchOps } }

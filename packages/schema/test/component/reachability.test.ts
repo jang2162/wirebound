@@ -91,9 +91,7 @@ describe('defineComponent — states의 도달성', () => {
   })
 
   it('states가 비면 던지지 않는다', () => {
-    expect(() =>
-      defineComponent({ ...base, props: z.strictObject({}), editor: [], states: [] }),
-    ).not.toThrow()
+    expect(() => defineComponent({ ...base, props: z.strictObject({}), editor: [], states: [] })).not.toThrow()
   })
 })
 

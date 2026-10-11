@@ -47,7 +47,9 @@ function paste(text: string): void {
   document.body.dispatchEvent(event)
 }
 
-const stillThere: TreeMenuNode[] = [{ id: 'mn-1', title: '회원관리', sortOrder: 1, pages: [{ id: PAGE_ID, title: '회원 목록', sortOrder: 1 }], children: [] }]
+const stillThere: TreeMenuNode[] = [
+  { id: 'mn-1', title: '회원관리', sortOrder: 1, pages: [{ id: PAGE_ID, title: '회원 목록', sortOrder: 1 }], children: [] },
+]
 const gone: TreeMenuNode[] = [{ id: 'mn-1', title: '회원관리', sortOrder: 1, pages: [], children: [] }]
 
 async function pasteWhileTreeIsRead(answer: TreeMenuNode[]): Promise<string[]> {
@@ -55,7 +57,7 @@ async function pasteWhileTreeIsRead(answer: TreeMenuNode[]): Promise<string[]> {
   const held = new Promise<TreeMenuNode[]>((resolve) => {
     release = resolve
   })
-  await openPage(doc(), { apiOverrides: { getTree: async () => (await held) } })
+  await openPage(doc(), { apiOverrides: { getTree: async () => await held } })
   const store = createdStores.at(-1) as EditorStore
   paste(writeNodesEnvelope([GO], 1))
   // 읽는 사이 복원이 판을 비운다(`clearPage({ restoreReread: true })`) 다음 목록이 답한다.

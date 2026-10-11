@@ -380,10 +380,7 @@ export interface WriteTarget {
  *   (`attempt` — `caught`는 그 401 이다). 결과는 모르지만 세션이 끝났다 — 칸은 그것을 `toFailure`로 읽어 로그인 화면으로 간다.
  * - `'verified'` — 시간 안에 응답이 없어 **다시 읽어 판정했다.** 판정의 모양은 칸이 정한다.
  */
-export type WriteOutcome<T, V> =
-  | { kind: 'done'; value: T }
-  | { kind: 'failed'; caught: unknown }
-  | { kind: 'verified'; verdict: V }
+export type WriteOutcome<T, V> = { kind: 'done'; value: T } | { kind: 'failed'; caught: unknown } | { kind: 'verified'; verdict: V }
 
 export interface TrackedWrite<T, V> {
   /** 요청을 보낸다. **`signal`을 요청에 싣는다** — 시간이 지나면 끊는다. */
@@ -642,10 +639,13 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
     [put, note, invalidate],
   )
 
-  const dismiss = useCallback((target: WriteTarget) => {
-    const at = liveRef.current?.epoch
-    if (at !== undefined) note(at, writeKey(target), null)
-  }, [note])
+  const dismiss = useCallback(
+    (target: WriteTarget) => {
+      const at = liveRef.current?.epoch
+      if (at !== undefined) note(at, writeKey(target), null)
+    },
+    [note],
+  )
 
   const receive = useCallback((receiver: Receiver) => {
     const receivers = receiversRef.current

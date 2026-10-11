@@ -103,7 +103,9 @@ export function createScriptBundleLoader(host: Document = document, deadlineMs: 
       script.addEventListener('load', () => {
         // 늦게 돈 스크립트여도 등록은 비운다(머리말 «등록은 load 이벤트 안에서 곧바로» · «그 load 를 낸 스크립트의 등록만»).
         const definition = runtime.take(script)
-        settle(definition === null ? { status: 'failed', reason: `테마 번들이 등록하지 않았습니다(${name})` } : { status: 'ok', definition })
+        settle(
+          definition === null ? { status: 'failed', reason: `테마 번들이 등록하지 않았습니다(${name})` } : { status: 'ok', definition },
+        )
       })
       script.addEventListener('error', () => settle({ status: 'failed', reason: `테마 번들을 받지 못했습니다(${name})` }))
       const timer = setTimeout(

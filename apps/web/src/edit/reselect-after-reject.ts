@@ -24,14 +24,19 @@ export function reselectAfterReject(store: EditorStore, removed: { nodes: readon
   const picked = start.selectedNodeId
   const stop = store.subscribe(() => {
     const now = store.getState()
-    const sameSelection = now.selectedNodeId === picked && now.selectedNodeIds.length === set.length && now.selectedNodeIds.every((id, at) => id === set[at])
+    const sameSelection =
+      now.selectedNodeId === picked && now.selectedNodeIds.length === set.length && now.selectedNodeIds.every((id, at) => id === set[at])
     if (now.openPageId !== pageId || !sameSelection) return stop()
     if (now.documentLoads === loads) return
     stop()
     const doc = now.document
     // 남이 그 사이 노드를 지웠거나 다른 부모로 옮겼으면(돌아온 자리가 지울 때의 부모가 아니면) 돌려줄 노드가 없다 — 비운 채로 둔다.
     if (doc !== null && removed.nodes.every((node) => nodeSpot(doc, node.id)?.parentId === node.parentId)) {
-      store.selectMany(removed.nodes.map((node) => node.id), 'replace', removed.anchor ?? undefined)
+      store.selectMany(
+        removed.nodes.map((node) => node.id),
+        'replace',
+        removed.anchor ?? undefined,
+      )
     }
   })
 }

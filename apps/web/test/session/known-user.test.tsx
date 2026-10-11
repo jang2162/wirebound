@@ -53,7 +53,11 @@ describe('HTTP 클라이언트 — 이 탭이 아는 사용자를 싣고, 거절
       json(409, { error: { code: 'conflict', message, issues: [{ path: 'session', code: SESSION_USER_CHANGED, message }] } }),
       json(409, { error: { code: 'conflict', message: '페이지가 이미 변경되었습니다' } }),
     ]
-    const client = createHttpClient(async () => responses.shift() as Response, () => undefined, holder)
+    const client = createHttpClient(
+      async () => responses.shift() as Response,
+      () => undefined,
+      holder,
+    )
     const first = await client.getProject('p1').catch((caught: unknown) => caught)
     expect(first).toBeInstanceOf(ApiError)
     expect((first as ApiError).message).toBe(message)

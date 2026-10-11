@@ -245,10 +245,7 @@ describe('targetedPages', () => {
         '뿌리',
         0,
         [],
-        [
-          menu('m3', '둘째', 1, [{ id: 'p2', title: 'B', sortOrder: 0 }]),
-          menu('m2', '첫째', 0, [{ id: 'p1', title: 'A', sortOrder: 0 }]),
-        ],
+        [menu('m3', '둘째', 1, [{ id: 'p2', title: 'B', sortOrder: 0 }]), menu('m2', '첫째', 0, [{ id: 'p1', title: 'A', sortOrder: 0 }])],
       ),
     ]
     expect(targetedPages(평평하게(tree)).map((page) => page.id)).toEqual(['p1', 'p2'])

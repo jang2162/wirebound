@@ -313,7 +313,10 @@ function alertTexts(): string[] {
 
 /** 정보 통지 한 칸(`shell/info-notice.tsx` — `role="status"`)의 글. 실패 자리(`alert`)와 갈라 읽는다. */
 function infoTexts(): string[] {
-  return screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
+  return screen
+    .queryAllByRole('status')
+    .filter((element) => element.classList.contains('wb-shell-info-notice'))
+    .map((element) => element.textContent ?? '')
 }
 
 /** 서버에 닿은 편집을 적용한 문서의 뿌리 자식 타입들 — 화면이 아니라 서버 문서로 본다. */
@@ -330,7 +333,9 @@ describe('클립보드 · 복제 — 셸', () => {
     fireEvent.click(row('Card'))
     const copied = clip('copy', document.body)
     expect(copied.prevented).toBe(true)
-    expect(readNodesEnvelope(copied.written!)).toEqual({ nodes: [{ id: 'n-box', type: 'Card', children: [{ id: 'n-1', type: 'Button' }] }] })
+    expect(readNodesEnvelope(copied.written!)).toEqual({
+      nodes: [{ id: 'n-box', type: 'Card', children: [{ id: 'n-1', type: 'Button' }] }],
+    })
 
     fireEvent.click(row('Page'))
     expect(clip('copy', document.body)).toEqual({ written: undefined, prevented: false })
@@ -353,7 +358,11 @@ describe('클립보드 · 복제 — 셸', () => {
     expect(pasted.children![0]!.id).not.toBe('n-1')
     expect(structureTypes()).toEqual(['Page', 'Text', 'Card', 'Button', 'Card', 'Button', 'Divider'])
     expect(structureRegion().querySelectorAll('[aria-current="true"]')).toHaveLength(1)
-    expect(within(structureRegion()).getAllByRole('button', { name: structureRowName('Card') })[0]!.getAttribute('aria-current')).toBe('true')
+    expect(
+      within(structureRegion())
+        .getAllByRole('button', { name: structureRowName('Card') })[0]!
+        .getAttribute('aria-current'),
+    ).toBe('true')
 
     await undoOnceRestores(srv, 1)
   })
@@ -383,7 +392,19 @@ describe('클립보드 · 복제 — 셸', () => {
     await waitFor(() => expect(infoTexts()).toEqual([`${PASTE_REJECTED_HEAD} 알 수 없는 컴포넌트 타입: NoSuchType`]))
     expect(alertTexts()).toEqual([])
     // 같은 종류의 정보 통지는 쌓지 않고 바꿔 끼운다.
-    expect(clip('paste', document.body, writeNodesEnvelope([{ id: 'y', type: 'Text' }, { id: 'y', type: 'Text' }] as WbNode[], 1)).prevented).toBe(true)
+    expect(
+      clip(
+        'paste',
+        document.body,
+        writeNodesEnvelope(
+          [
+            { id: 'y', type: 'Text' },
+            { id: 'y', type: 'Text' },
+          ] as WbNode[],
+          1,
+        ),
+      ).prevented,
+    ).toBe(true)
     await waitFor(() => expect(infoTexts()).toHaveLength(1))
     expect(infoTexts()[0]).not.toContain('NoSuchType')
     expect(srv.calls).toHaveLength(0)
@@ -510,7 +531,11 @@ describe('클립보드 · 복제 — 셸', () => {
     expect(srv.calls[0]).toHaveLength(1)
     expect(srv.calls[0]![0]).toMatchObject({ op: 'add', path: '/root/children/2' })
     expect(structureTypes()).toEqual(['Page', 'Text', 'Card', 'Button', 'Card', 'Button', 'Divider'])
-    expect(within(structureRegion()).getAllByRole('button', { name: structureRowName('Card') })[1]!.getAttribute('aria-current')).toBe('true')
+    expect(
+      within(structureRegion())
+        .getAllByRole('button', { name: structureRowName('Card') })[1]!
+        .getAttribute('aria-current'),
+    ).toBe('true')
 
     await undoOnceRestores(srv, 1)
   })

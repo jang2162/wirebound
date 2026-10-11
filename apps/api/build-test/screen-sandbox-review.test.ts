@@ -67,7 +67,10 @@ async function pageClass(): Promise<{ evaluate: Page['evaluate'] }> {
 }
 
 const doc = (): PageDocument =>
-  ({ version: 1, root: { id: 'n_p', type: 'Page', children: [{ id: 'n_t', type: 'Text', props: { content: '한글 본문' } }] } }) as unknown as PageDocument
+  ({
+    version: 1,
+    root: { id: 'n_p', type: 'Page', children: [{ id: 'n_t', type: 'Text', props: { content: '한글 본문' } }] },
+  }) as unknown as PageDocument
 
 describe.skipIf(!있다)('내보내기 화면 샌드박스', () => {
   /**
@@ -213,7 +216,10 @@ const CLOSE_HOLD_MS = 2500
 async function contextClass(): Promise<{ addInitScript: BrowserContext['addInitScript']; close: BrowserContext['close'] }> {
   const probe = await chromium.launch(LAUNCH)
   try {
-    return Object.getPrototypeOf(await probe.newContext()) as { addInitScript: BrowserContext['addInitScript']; close: BrowserContext['close'] }
+    return Object.getPrototypeOf(await probe.newContext()) as {
+      addInitScript: BrowserContext['addInitScript']
+      close: BrowserContext['close']
+    }
   } finally {
     await probe.close()
   }
@@ -256,7 +262,13 @@ async function drawWith(harness: Harness, job: ReturnType<typeof jobOf>, timeout
   const originalInit = contextProto.addInitScript
   const originalClose = contextProto.close
   contextProto.addInitScript = function (this: BrowserContext, script, arg) {
-    if (harness.dropPageLayer === true && typeof script === 'object' && script !== null && 'content' in script && script.content === NO_SOCKETS_INIT) {
+    if (
+      harness.dropPageLayer === true &&
+      typeof script === 'object' &&
+      script !== null &&
+      'content' in script &&
+      script.content === NO_SOCKETS_INIT
+    ) {
       counts.dropped += 1
       return Promise.resolve()
     }
@@ -318,13 +330,17 @@ const GRID: { channel: string; place: Place; form: keyof typeof HOSTS }[] = [
     { channel: 'wt', place, form: 'ip' as const },
   ]),
   ...WORKERS.flatMap((place) => [
-    ...(place === 'shared' ? ['ws', 'sse', 'fetch'] : ['ws']).flatMap((channel) => (['ip', 'name'] as const).map((form) => ({ channel, place, form }))),
+    ...(place === 'shared' ? ['ws', 'sse', 'fetch'] : ['ws']).flatMap((channel) =>
+      (['ip', 'name'] as const).map((form) => ({ channel, place, form })),
+    ),
     { channel: 'wt', place, form: 'ip' as const },
   ]),
 ]
 const key = (cell: (typeof GRID)[number]) => `${cell.channel}/${cell.place}/${cell.form}`
 const ALL = GRID.map(key).sort()
-const IN_WORKERS = GRID.filter((cell) => cell.place === 'worker' || cell.place === 'shared').map(key).sort()
+const IN_WORKERS = GRID.filter((cell) => cell.place === 'worker' || cell.place === 'shared')
+  .map(key)
+  .sort()
 
 /** 테마 코드 한 조각을 그 자리에서 돌린다. */
 function placed(place: Place, code: string): string {
@@ -396,23 +412,39 @@ describe.skipIf(!있다)('테마 코드의 소켓 — 브라우저 겹(주) · �
   it.each([
     { name: '온전', harness: {}, expected: [] as string[], stripped: 0, dropped: 0 },
     { name: '페이지 겹 없이', harness: { dropPageLayer: true }, expected: [], stripped: 0, dropped: 1 },
-    { name: '페이지 겹 · 프록시 없이', harness: { dropPageLayer: true, strip: [PROXY_SERVER!, PROXY_LOOPBACK!] }, expected: [], stripped: 2, dropped: 1 },
-    { name: '페이지 겹 · 이름 풀이 막기 없이', harness: { dropPageLayer: true, strip: [HOST_RULES!] }, expected: [], stripped: 1, dropped: 1 },
+    {
+      name: '페이지 겹 · 프록시 없이',
+      harness: { dropPageLayer: true, strip: [PROXY_SERVER!, PROXY_LOOPBACK!] },
+      expected: [],
+      stripped: 2,
+      dropped: 1,
+    },
+    {
+      name: '페이지 겹 · 이름 풀이 막기 없이',
+      harness: { dropPageLayer: true, strip: [HOST_RULES!] },
+      expected: [],
+      stripped: 1,
+      dropped: 1,
+    },
     { name: '브라우저 겹 없이', harness: { strip: EVERY_BROWSER_ARG }, expected: IN_WORKERS, stripped: 4, dropped: 0 },
     { name: '겹 없음(카나리아)', harness: { dropPageLayer: true, strip: EVERY_BROWSER_ARG }, expected: ALL, stripped: 4, dropped: 1 },
-  ])('격자 — $name', async ({ harness, expected, stripped, dropped }) => {
-    const grid = await gridListeners()
-    try {
-      const run = await drawWith(harness, jobOf(bundled('grid', doc(), inlineTheme({ id: 'socket-grid', before: grid.before }))))
-      expect(run.batch.results.map((result) => (result.ok ? 'ok' : result.reason))).toEqual(['ok'])
-      expect({ stripped: run.stripped, dropped: run.dropped }).toEqual({ stripped, dropped })
-      expect(grid.opened()).toEqual(expected)
-      // 이 칸들은 요청 가로채기가 못 보는 길이다 — 끊은 주소에 격자의 포트가 하나도 없다.
-      expect(run.aborted.filter((url) => grid.ports.some((port) => url.includes(`:${port}/`)))).toEqual([])
-    } finally {
-      grid.close()
-    }
-  }, 60_000)
+  ])(
+    '격자 — $name',
+    async ({ harness, expected, stripped, dropped }) => {
+      const grid = await gridListeners()
+      try {
+        const run = await drawWith(harness, jobOf(bundled('grid', doc(), inlineTheme({ id: 'socket-grid', before: grid.before }))))
+        expect(run.batch.results.map((result) => (result.ok ? 'ok' : result.reason))).toEqual(['ok'])
+        expect({ stripped: run.stripped, dropped: run.dropped }).toEqual({ stripped, dropped })
+        expect(grid.opened()).toEqual(expected)
+        // 이 칸들은 요청 가로채기가 못 보는 길이다 — 끊은 주소에 격자의 포트가 하나도 없다.
+        expect(run.aborted.filter((url) => grid.ports.some((port) => url.includes(`:${port}/`)))).toEqual([])
+      } finally {
+        grid.close()
+      }
+    },
+    60_000,
+  )
 
   /**
    * **페이지 겹은 문서마다 선다** — 최상위 · about:blank iframe · `window.open` 창에서 소켓 생성자 다섯이 없다. 테마 코드가 남은 것을
@@ -436,10 +468,14 @@ describe.skipIf(!있다)('테마 코드의 소켓 — 브라우저 겹(주) · �
       harness: { dropPageLayer: true },
       expected: `소켓 생성자: ${DOCUMENTS.flatMap((where) => NAMES.map((n) => `${where}:${n}`)).join(' ')}`,
     },
-  ])('페이지 겹이 문서 · iframe · 창에서 생성자를 지운다 — $name', async ({ harness, expected }) => {
-    const run = await drawWith(harness, jobOf(bundled('page-layer', doc(), inlineTheme({ id: 'page-layer', before: report }))))
-    expect(run.batch.results.map((result) => (result.ok ? 'ok' : result.reason))).toEqual([expected])
-  }, 60_000)
+  ])(
+    '페이지 겹이 문서 · iframe · 창에서 생성자를 지운다 — $name',
+    async ({ harness, expected }) => {
+      const run = await drawWith(harness, jobOf(bundled('page-layer', doc(), inlineTheme({ id: 'page-layer', before: report }))))
+      expect(run.batch.results.map((result) => (result.ok ? 'ok' : result.reason))).toEqual([expected])
+    },
+    60_000,
+  )
 
   /**
    * **테마 코드가 고른 이름을 브라우저가 풀지 않는다** — 소켓이 안 열려도 이름을 푸는 것 자체가 바깥으로 나가는 DNS 질의다(이름에 실은
@@ -462,21 +498,34 @@ describe.skipIf(!있다)('테마 코드의 소켓 — 브라우저 겹(주) · �
       harness: { dropPageLayer: true, strip: EVERY_BROWSER_ARG } as Harness,
       expected: (names: string[]) => expect(names).toEqual(expect.arrayContaining(['sharedfetch', 'sharedws', 'workerws', 'ws'])),
     },
-  ])('테마 코드가 고른 이름을 풀지 않는다(NetLog) — $name', async ({ harness, expected }) => {
-    const dir = mkdtempSync(join(tmpdir(), 'wb-netlog-'))
-    try {
-      const netLog = join(dir, 'net.json')
-      const run = await drawWith({ ...harness, netLog }, jobOf(bundled('dns', doc(), inlineTheme({ id: 'dns', before: DNS_BEFORE }))))
-      expect(run.batch.results.map((result) => (result.ok ? 'ok' : result.reason))).toEqual(['ok'])
-      const log = JSON.parse(readFileSync(netLog, 'utf8')) as { constants: { logEventTypes: Record<string, number> }; events: { type: number; params?: unknown }[] }
-      const types = new Map(Object.entries(log.constants.logEventTypes).map(([name, id]) => [id, name]))
-      const resolverEvents = log.events.filter((event) => types.get(event.type)?.startsWith('HOST_RESOLVER'))
-      // 판이 NetLog 를 읽고 있다 — 이름 풀이 사건 자체가 0 이면 쓰는 길이 끊긴 것이다(가짜 origin 도 풀지 않으므로 온전한 판의 사건 수가 적다).
-      expect(log.events.length).toBeGreaterThan(0)
-      const names = [...new Set(resolverEvents.flatMap((event) => [...JSON.stringify(event.params ?? {}).matchAll(/wbdns-([a-z]+)\.example/g)].map((m) => m[1]!)))].sort()
-      expected(names)
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
-  }, 60_000)
+  ])(
+    '테마 코드가 고른 이름을 풀지 않는다(NetLog) — $name',
+    async ({ harness, expected }) => {
+      const dir = mkdtempSync(join(tmpdir(), 'wb-netlog-'))
+      try {
+        const netLog = join(dir, 'net.json')
+        const run = await drawWith({ ...harness, netLog }, jobOf(bundled('dns', doc(), inlineTheme({ id: 'dns', before: DNS_BEFORE }))))
+        expect(run.batch.results.map((result) => (result.ok ? 'ok' : result.reason))).toEqual(['ok'])
+        const log = JSON.parse(readFileSync(netLog, 'utf8')) as {
+          constants: { logEventTypes: Record<string, number> }
+          events: { type: number; params?: unknown }[]
+        }
+        const types = new Map(Object.entries(log.constants.logEventTypes).map(([name, id]) => [id, name]))
+        const resolverEvents = log.events.filter((event) => types.get(event.type)?.startsWith('HOST_RESOLVER'))
+        // 판이 NetLog 를 읽고 있다 — 이름 풀이 사건 자체가 0 이면 쓰는 길이 끊긴 것이다(가짜 origin 도 풀지 않으므로 온전한 판의 사건 수가 적다).
+        expect(log.events.length).toBeGreaterThan(0)
+        const names = [
+          ...new Set(
+            resolverEvents.flatMap((event) =>
+              [...JSON.stringify(event.params ?? {}).matchAll(/wbdns-([a-z]+)\.example/g)].map((m) => m[1]!),
+            ),
+          ),
+        ].sort()
+        expected(names)
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    },
+    60_000,
+  )
 })

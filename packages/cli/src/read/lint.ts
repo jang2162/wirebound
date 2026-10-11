@@ -39,13 +39,7 @@
  * 하나이고 그 함수는 `.wirebound.json`만 읽는다 — **세션이 정규식을 주는 길이 없다.**
  * 근거는 `packages/mcp/src/tools.ts`의 머리말에 있다.
  */
-import {
-  filterLintIssues,
-  matchPageTargets,
-  pageTargetPath,
-  type LintConfig,
-  type LintIssue,
-} from '@wirebound/schema'
+import { filterLintIssues, matchPageTargets, pageTargetPath, type LintConfig, type LintIssue } from '@wirebound/schema'
 import { lintProject, snapshotToLintInput, type SnapshotLintNote, type SnapshotPayload } from '@wirebound/themes'
 import type { LintTheme } from '../project'
 import { prepareCatalog } from './catalog'

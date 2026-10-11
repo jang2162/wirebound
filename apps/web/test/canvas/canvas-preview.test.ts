@@ -46,21 +46,36 @@ function shape(node: WbNode): unknown {
 describe('previewDocument — 새 타입', () => {
   it('그 부모의 그 차례에 새 노드를 끼운다 · 스토어 문서는 그대로다', () => {
     const before = JSON.stringify(DOC)
-    const out = previewDocument(DOC, { placing: { kind: 'new', type: 'Divider' }, target: { parentId: 'n-box', index: 1, placement: 'after' } })
+    const out = previewDocument(DOC, {
+      placing: { kind: 'new', type: 'Divider' },
+      target: { parentId: 'n-box', index: 1, placement: 'after' },
+    })
     expect(shape(out!.root as WbNode)).toEqual({ 'n-root': ['n-a', { 'n-box': ['n-in1', '*Divider(new)', 'n-in2'] }, 'n-b'] })
     expect(JSON.stringify(DOC)).toBe(before)
   })
 
   it('자식이 없는 부모 · 페이지 끝', () => {
-    const empty = previewDocument(DOC, { placing: { kind: 'new', type: 'Divider' }, target: { parentId: 'n-a', index: 0, placement: 'inside' } })
+    const empty = previewDocument(DOC, {
+      placing: { kind: 'new', type: 'Divider' },
+      target: { parentId: 'n-a', index: 0, placement: 'inside' },
+    })
     expect(shape(empty!.root as WbNode)).toEqual({ 'n-root': [{ 'n-a': ['*Divider(new)'] }, { 'n-box': ['n-in1', 'n-in2'] }, 'n-b'] })
-    const end = previewDocument(DOC, { placing: { kind: 'new', type: 'Divider' }, target: { parentId: 'n-root', index: 3, placement: 'inside' } })
+    const end = previewDocument(DOC, {
+      placing: { kind: 'new', type: 'Divider' },
+      target: { parentId: 'n-root', index: 3, placement: 'inside' },
+    })
     expect(shape(end!.root as WbNode)).toEqual({ 'n-root': ['n-a', { 'n-box': ['n-in1', 'n-in2'] }, 'n-b', '*Divider(new)'] })
   })
 
   it('같은 입력이면 같은 미리보기 id 다 — 다시 그릴 때 React 가 같은 요소로 잇는다', () => {
-    const a = previewDocument(DOC, { placing: { kind: 'new', type: 'Divider' }, target: { parentId: 'n-root', index: 0, placement: 'before' } })
-    const b = previewDocument(DOC, { placing: { kind: 'new', type: 'Divider' }, target: { parentId: 'n-box', index: 2, placement: 'inside' } })
+    const a = previewDocument(DOC, {
+      placing: { kind: 'new', type: 'Divider' },
+      target: { parentId: 'n-root', index: 0, placement: 'before' },
+    })
+    const b = previewDocument(DOC, {
+      placing: { kind: 'new', type: 'Divider' },
+      target: { parentId: 'n-box', index: 2, placement: 'inside' },
+    })
     const idOf = (doc: PageDocument | null) => JSON.stringify(doc).match(/"(wb:preview:[^"]+)"/)?.[1]
     expect(idOf(a)).toBe(idOf(b))
     expect(isPreviewId(idOf(a)!)).toBe(true)
@@ -75,29 +90,43 @@ describe('previewDocument — 노드 객체 공유(L-009)', () => {
   it('끼운 길(뿌리 · 부모)만 새 객체고 나머지 노드는 스토어 문서의 그 객체다', () => {
     const root = DOC.root as WbNode
     const [a, box, b] = root.children as WbNode[]
-    const out = previewDocument(DOC, { placing: { kind: 'new', type: 'Divider' }, target: { parentId: 'n-box', index: 1, placement: 'after' } })!
+    const out = previewDocument(DOC, {
+      placing: { kind: 'new', type: 'Divider' },
+      target: { parentId: 'n-box', index: 1, placement: 'after' },
+    })!
     const outRoot = out.root as WbNode
     const [outA, outBox, outB] = outRoot.children as WbNode[]
     expect({
       rootIsNew: outRoot !== root,
       boxIsNew: outBox !== box,
       untouchedSiblingsShared: outA === a && outB === b,
-      boxChildrenShared: (outBox!.children as WbNode[])[0] === (box!.children as WbNode[])[0] && (outBox!.children as WbNode[])[2] === (box!.children as WbNode[])[1],
+      boxChildrenShared:
+        (outBox!.children as WbNode[])[0] === (box!.children as WbNode[])[0] &&
+        (outBox!.children as WbNode[])[2] === (box!.children as WbNode[])[1],
     }).toEqual({ rootIsNew: true, boxIsNew: true, untouchedSiblingsShared: true, boxChildrenShared: true })
   })
 
   it('옮기기도 같다 — 옮기는 노드의 원본과 길 밖의 형제가 그 객체다', () => {
     const root = DOC.root as WbNode
     const [a, box, b] = root.children as WbNode[]
-    const out = previewDocument(DOC, { placing: { kind: 'node', id: 'n-a' }, target: { parentId: 'n-root', index: 2, placement: 'after' } })!
+    const out = previewDocument(DOC, {
+      placing: { kind: 'node', id: 'n-a' },
+      target: { parentId: 'n-root', index: 2, placement: 'after' },
+    })!
     const outChildren = (out.root as WbNode).children as WbNode[]
-    expect({ original: outChildren[0] === a, untouched: outChildren[1] === box && outChildren[2] === b }).toEqual({ original: true, untouched: true })
+    expect({ original: outChildren[0] === a, untouched: outChildren[1] === box && outChildren[2] === b }).toEqual({
+      original: true,
+      untouched: true,
+    })
   })
 })
 
 describe('previewDocument — 옮기기', () => {
   it('사본을 새 자리에 끼우고 원본은 제자리에 둔다 — 사본의 id 는 서브트리 전부 미리보기 id 다', () => {
-    const out = previewDocument(DOC, { placing: { kind: 'node', id: 'n-box' }, target: { parentId: 'n-root', index: 2, placement: 'after' } })
+    const out = previewDocument(DOC, {
+      placing: { kind: 'node', id: 'n-box' },
+      target: { parentId: 'n-root', index: 2, placement: 'after' },
+    })
     expect(shape(out!.root as WbNode)).toEqual({
       'n-root': ['n-a', { 'n-box': ['n-in1', 'n-in2'] }, 'n-b', { '*Card(n-box)': ['*Text(n-in1)', '*Text(n-in2)'] }],
     })
@@ -105,9 +134,15 @@ describe('previewDocument — 옮기기', () => {
 
   // 판정의 `index` 는 «옮긴 뒤 그 부모 안 차례»다(`edit/structure-drop.ts` 머리말) — 원본이 남은 문서에서는 같은 부모의 뒤쪽이면 하나 민다.
   it('같은 부모 안에서 뒤로 — 판정의 «옮긴 뒤 차례»를 원본이 남은 문서의 차례로 바꾼다', () => {
-    const back = previewDocument(DOC, { placing: { kind: 'node', id: 'n-a' }, target: { parentId: 'n-root', index: 1, placement: 'after' } })
+    const back = previewDocument(DOC, {
+      placing: { kind: 'node', id: 'n-a' },
+      target: { parentId: 'n-root', index: 1, placement: 'after' },
+    })
     expect(shape(back!.root as WbNode)).toEqual({ 'n-root': ['n-a', { 'n-box': ['n-in1', 'n-in2'] }, '*Text(n-a)', 'n-b'] })
-    const front = previewDocument(DOC, { placing: { kind: 'node', id: 'n-b' }, target: { parentId: 'n-root', index: 0, placement: 'before' } })
+    const front = previewDocument(DOC, {
+      placing: { kind: 'node', id: 'n-b' },
+      target: { parentId: 'n-root', index: 0, placement: 'before' },
+    })
     expect(shape(front!.root as WbNode)).toEqual({ 'n-root': ['*Text(n-b)', 'n-a', { 'n-box': ['n-in1', 'n-in2'] }, 'n-b'] })
   })
 
@@ -119,9 +154,15 @@ describe('previewDocument — 옮기기', () => {
 
 describe('previewDocument — 못 끼우면 null', () => {
   it('부모가 문서에 없다 · 옮길 노드가 없다 · 카탈로그에 없는 타입', () => {
-    expect(previewDocument(DOC, { placing: { kind: 'new', type: 'Divider' }, target: { parentId: 'n-gone', index: 0, placement: 'inside' } })).toBeNull()
-    expect(previewDocument(DOC, { placing: { kind: 'node', id: 'n-gone' }, target: { parentId: 'n-root', index: 0, placement: 'before' } })).toBeNull()
-    expect(previewDocument(DOC, { placing: { kind: 'new', type: 'NoSuch' }, target: { parentId: 'n-root', index: 0, placement: 'before' } })).toBeNull()
+    expect(
+      previewDocument(DOC, { placing: { kind: 'new', type: 'Divider' }, target: { parentId: 'n-gone', index: 0, placement: 'inside' } }),
+    ).toBeNull()
+    expect(
+      previewDocument(DOC, { placing: { kind: 'node', id: 'n-gone' }, target: { parentId: 'n-root', index: 0, placement: 'before' } }),
+    ).toBeNull()
+    expect(
+      previewDocument(DOC, { placing: { kind: 'new', type: 'NoSuch' }, target: { parentId: 'n-root', index: 0, placement: 'before' } }),
+    ).toBeNull()
   })
 })
 

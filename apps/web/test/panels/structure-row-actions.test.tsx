@@ -111,11 +111,11 @@ describe('줄 행동의 항목 — spec 「트리」 표', () => {
 
     fireEvent.click(toggle)
     const list = document.getElementById(toggle.getAttribute('aria-controls') ?? '')!
-    expect(within(list).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-      '페이지에 추가',
-      '패턴 넣기',
-      '프리셋',
-    ])
+    expect(
+      within(list)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['페이지에 추가', '패턴 넣기', '프리셋'])
   })
 })
 
@@ -140,7 +140,10 @@ describe('줄 행동을 열면 그 줄이 먼저 골라진다 · 고르개는 �
     // 고르개는 Card 줄의 항목(li) 안 · 자식 목록 앞이다.
     const item = row('Card').parentElement!
     expect(item.contains(picker)).toBe(true)
-    expect(picker.compareDocumentPosition(within(item).getByRole('button', { name: structureRowName('Button') })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(
+      picker.compareDocumentPosition(within(item).getByRole('button', { name: structureRowName('Button') })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
 
     fireEvent.click(within(picker).getByRole('button', { name: '추가' }))
 
@@ -243,5 +246,4 @@ describe('끌어 놓기 — 내는 편집(jsdom · 가짜 자리)', () => {
 
     expect(srv.calls).toEqual([])
   })
-
 })

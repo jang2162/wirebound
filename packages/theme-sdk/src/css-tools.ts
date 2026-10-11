@@ -21,12 +21,7 @@ export function componentRule(type: string, structure: string, declarations: str
 }
 
 /** 조각 규칙. `structures` 를 주면 `:where()` 로 감싸 특이도 (0,2,0) 을 지키며 구조를 가린다. */
-export function partRule(
-  type: string,
-  part: string,
-  declarations: string[],
-  structures?: readonly string[],
-): string {
+export function partRule(type: string, part: string, declarations: string[], structures?: readonly string[]): string {
   const scope =
     structures === undefined || structures.length === 0
       ? ''

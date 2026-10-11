@@ -189,10 +189,14 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
       await page.waitForTimeout(300)
       const after = await farewell(page)
       // eslint-disable-next-line no-console
-      console.log(`[다른 탭의 다음 사람] 앨리스 줄 ${JSON.stringify(own)} · ${seen.join(' · ')} · 밥 로그아웃 뒤 탭1 줄 ${JSON.stringify(after)}`)
+      console.log(
+        `[다른 탭의 다음 사람] 앨리스 줄 ${JSON.stringify(own)} · ${seen.join(' · ')} · 밥 로그아웃 뒤 탭1 줄 ${JSON.stringify(after)}`,
+      )
 
       // 판 카나리아 — 앨리스의 줄이 섰고 탭1 이 밥이 됐다가 로그인 화면으로 돌아왔다.
-      expect(own).toBe('로그아웃 전에 보낸 편집 1개의 답을 받지 못해 서버에 반영됐는지 알 수 없습니다. 다시 로그인해 그 페이지를 확인하세요.')
+      expect(own).toBe(
+        '로그아웃 전에 보낸 편집 1개의 답을 받지 못해 서버에 반영됐는지 알 수 없습니다. 다시 로그인해 그 페이지를 확인하세요.',
+      )
       expect(seen).toEqual(['밥 로그인 뒤 탭1 /'])
       expect(after).toBe('')
     } finally {

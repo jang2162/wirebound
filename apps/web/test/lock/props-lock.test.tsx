@@ -76,13 +76,7 @@
  * 열이, 훅이 언제나 «잠금 없음»을 답하면 열하나가 죽는다.
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import {
-  listComponents,
-  lockConflictOfOps,
-  type EditorControl,
-  type PageDocument,
-  type PatchOp,
-} from '@wirebound/schema'
+import { listComponents, lockConflictOfOps, type EditorControl, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
@@ -542,8 +536,7 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
     select('List')
     await settle()
 
-    const cell = (): HTMLInputElement =>
-      within(panel()).getByRole<HTMLInputElement>('textbox', { name: '컬럼 1번째 항목' })
+    const cell = (): HTMLInputElement => within(panel()).getByRole<HTMLInputElement>('textbox', { name: '컬럼 1번째 항목' })
     fireEvent.change(cell(), { target: { value: '새 컬럼' } })
     view.lock([foreign('n-list')])
     await settle()

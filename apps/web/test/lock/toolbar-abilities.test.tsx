@@ -53,13 +53,7 @@
  * 센다). 여기서는 그 판정을 **대역의 재료로** 쓸 뿐이라 화면 쪽 판정이 늘지 않는다.
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import {
-  BUILTIN_PRESETS,
-  lockConflictOfOps,
-  writeNodesEnvelope,
-  type PageDocument,
-  type PatchOp,
-} from '@wirebound/schema'
+import { BUILTIN_PRESETS, lockConflictOfOps, writeNodesEnvelope, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
@@ -72,16 +66,7 @@ import { createEditChannel } from '../../src/realtime/edit-channel'
 import { createLockChannel } from '../../src/realtime/lock-channel'
 import type { NodeLockView, ServerFrame } from '../../src/realtime/protocol'
 import type { EditorStore } from '../../src/store/editor-store'
-import {
-  HEAD_SEQ,
-  OTHER_PAGE_TITLE,
-  PAGE_ID,
-  PROJECT_ID,
-  deselect,
-  openPage,
-  pageDetail,
-  pageDoc,
-} from '../editor-harness'
+import { HEAD_SEQ, OTHER_PAGE_TITLE, PAGE_ID, PROJECT_ID, deselect, openPage, pageDetail, pageDoc } from '../editor-harness'
 import { isOff, reasonOf, rowReason, rowReasons, treeTool, structureRowName } from '../panels/tree-row'
 import { installPointerEvents } from '../pointer-events'
 
@@ -111,7 +96,6 @@ function shellStore(): EditorStore {
   if (store === undefined) throw new Error('셸이 EditorStore를 만들지 않았습니다')
   return store as EditorStore
 }
-
 
 /**
  * **패턴 목록이 비지 않게 셸이 읽는 바인딩의 manifest 에 패턴 하나를 싣는다** — 목록이 비면 고르개가 «패턴이 없습니다» 로 서서,
@@ -382,7 +366,10 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
     fireEvent.click(treeTool(toolbar(), '안에 추가'))
     fireEvent.click(await screen.findByRole('button', { name: '추가' }))
     await settle()
-    expect({ status: view.status, paths: view.calls.map((call) => call.ops.map((op) => op.path)) }).toEqual({ status: [200], paths: [['/root/children/3']] })
+    expect({ status: view.status, paths: view.calls.map((call) => call.ops.map((op) => op.path)) }).toEqual({
+      status: [200],
+      paths: [['/root/children/3']],
+    })
   })
 
   /**
@@ -715,10 +702,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
     const view = await board()
     select('Card')
     fireEvent.click(toolButton('안에 추가'))
-    const typeSelect = () =>
-      within(screen.getByRole('group', { name: '타입 고르기' })).getByRole<HTMLSelectElement>(
-        'combobox',
-      )
+    const typeSelect = () => within(screen.getByRole('group', { name: '타입 고르기' })).getByRole<HTMLSelectElement>('combobox')
     await screen.findByRole('group', { name: '타입 고르기' })
 
     const initial = typeSelect().value
@@ -733,9 +717,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
 
     expect(typeSelect().value).toBe(initial)
     // **설명 줄도 함께 되돌아간다** — 그 줄은 고른 타입에서 나온다.
-    const desc = screen
-      .getByRole('group', { name: '타입 고르기' })
-      .querySelector('.wb-shell-picker-desc')
+    const desc = screen.getByRole('group', { name: '타입 고르기' }).querySelector('.wb-shell-picker-desc')
     expect(desc?.textContent).toContain(initial)
   })
 
@@ -795,7 +777,9 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
     view.lock([foreign('n-box')])
 
     const rowBox = (type: string): HTMLElement =>
-      within(structureRegion()).getByRole('button', { name: structureRowName(type) }).closest<HTMLElement>('[data-tree-row]')!
+      within(structureRegion())
+        .getByRole('button', { name: structureRowName(type) })
+        .closest<HTMLElement>('[data-tree-row]')!
     expect(rowBox('Card').querySelector('.wb-shell-tree-row-actions')).toBeNull()
     expect(rowBox('Text').querySelector('.wb-shell-tree-row-actions')).not.toBeNull()
 
@@ -821,7 +805,9 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
     select('Card')
     view.lock([foreign('n-1')])
 
-    const card = within(structureRegion()).getByRole('button', { name: structureRowName('Card') }).closest<HTMLElement>('[data-tree-row]')!
+    const card = within(structureRegion())
+      .getByRole('button', { name: structureRowName('Card') })
+      .closest<HTMLElement>('[data-tree-row]')!
     expect(card.classList.contains('wb-shell-tree-row-picked')).toBe(true)
     expect(card.querySelector('.wb-shell-tree-row-actions')).not.toBeNull()
     expect(live()).toEqual(['안에 추가'])
@@ -888,9 +874,7 @@ describe('막다른 길이 아니다 — 구조 편집만 얼고 셸은 산다',
 
     view.lock([foreign('n-a'), foreign('n-box'), foreign('n-c')])
 
-    const modes = within(screen.getByRole('group', { name: '모드' })).getAllByRole<HTMLButtonElement>(
-      'button',
-    )
+    const modes = within(screen.getByRole('group', { name: '모드' })).getAllByRole<HTMLButtonElement>('button')
     expect(modes.map((button) => button.disabled)).toEqual([false, false])
     // 좌측 메뉴 트리의 다른 페이지로 갈 수 있다 — 잠금은 이 페이지의 것이다.
     expect(screen.getByRole('link', { name: OTHER_PAGE_TITLE })).toBeTruthy()

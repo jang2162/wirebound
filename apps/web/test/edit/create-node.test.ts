@@ -6,14 +6,7 @@
  * 컴포넌트가 늘면 거기서 죽는다(속성 패널 테스트가 `listComponents()`로 control 일곱을
  * 대조하는 것과 같은 방식).
  */
-import {
-  THEMELESS_TYPES,
-  listComponents,
-  validatePage,
-  type PageDocument,
-  type ValidationIssue,
-  type WbNode,
-} from '@wirebound/schema'
+import { THEMELESS_TYPES, listComponents, validatePage, type PageDocument, type ValidationIssue, type WbNode } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import '../../src/catalog-setup'
 import { createNode } from '../../src/edit/create-node'

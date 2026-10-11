@@ -4,14 +4,7 @@ export const PACKAGE_NAME = '@wirebound/themes'
 export type { ThemeIssue, ThemeIssueCode } from './issue'
 
 export type { PatternNode, SlotType, ThemePattern } from './spec/patterns'
-export {
-  PATTERN_CATEGORIES,
-  PatternNodeSchema,
-  PatternSchema,
-  PatternsSchema,
-  SLOT_TYPES,
-  checkPatterns,
-} from './spec/patterns'
+export { PATTERN_CATEGORIES, PatternNodeSchema, PatternSchema, PatternsSchema, SLOT_TYPES, checkPatterns } from './spec/patterns'
 
 // 패턴 전개(설계서 「patterns — 테마가 소유한 구성 레시피」). 부르는 곳은 `apps/web`이다.
 // **`apps/web`이 아니라 여기 두는 것은** 패턴 삽입이 에이전트가 할 일이기도 해서다
@@ -25,14 +18,7 @@ export { lintProject } from './lint/index'
 
 // 스냅샷 payload 규격과 lint 입력 변환. **패키지에 두는 이유:** api·CLI(`wireb pull`·
 // `wireb lint`)·MCP가 같은 모양을 읽는다 — 패키지에 없으면 셋이 모양을 각자 선언한다.
-export type {
-  SnapshotComment,
-  SnapshotLayout,
-  SnapshotMenuNode,
-  SnapshotPage,
-  SnapshotPayload,
-  SnapshotTheme,
-} from './snapshot/payload'
+export type { SnapshotComment, SnapshotLayout, SnapshotMenuNode, SnapshotPage, SnapshotPayload, SnapshotTheme } from './snapshot/payload'
 export { SNAPSHOT_PAYLOAD_VERSION, SNAPSHOT_RESOURCES, SnapshotPayloadSchema } from './snapshot/payload'
 export type { SnapshotLintNote, SnapshotLintNoteKind, SnapshotLintPlan } from './snapshot/lint-input'
 export { snapshotToLintInput } from './snapshot/lint-input'

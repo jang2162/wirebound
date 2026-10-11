@@ -138,7 +138,11 @@ describe('못 놓는 자리', () => {
       expect(structureDropTarget(odd, adding('Divider'), 'n-bt', zone, free)).toBeNull()
     }
     // 그 단추 자신의 앞 · 뒤는 뿌리 안이라 된다.
-    expect(structureDropTarget(odd, adding('Divider'), 'n-btn', 'after', free)).toEqual({ parentId: 'n-root', index: 2, placement: 'after' })
+    expect(structureDropTarget(odd, adding('Divider'), 'n-btn', 'after', free)).toEqual({
+      parentId: 'n-root',
+      index: 2,
+      placement: 'after',
+    })
   })
 
   it('뿌리 앞 · 뒤 → null(뿌리는 형제가 없다) · 뿌리 안은 된다', () => {
@@ -177,7 +181,11 @@ describe('남이 잡은 자리 — 낼 편집이 부딪치는 잠금', () => {
     // (C2 리뷰 발견 1 의 «막힌다» 쪽).
     const blocked = lockOn('n-box')
     expect(blocked(moveNodeOps(doc(), 'n-a', 'n-root', 1)!)).toBeNull()
-    expect(structureDropTarget(doc(), moving('n-a'), 'n-c', 'before', blocked)).toEqual({ parentId: 'n-root', index: 1, placement: 'before' })
+    expect(structureDropTarget(doc(), moving('n-a'), 'n-c', 'before', blocked)).toEqual({
+      parentId: 'n-root',
+      index: 1,
+      placement: 'before',
+    })
   })
 
   it('편집이 부딪치지 않으면 선다 — 잠긴 노드의 옆 부모에 넣는 것은 된다', () => {
@@ -190,7 +198,7 @@ describe('남이 잡은 자리 — 낼 편집이 부딪치는 잠금', () => {
   })
 })
 
-describe('새 타입을 놓는다(`kind: \'new\'`)', () => {
+describe("새 타입을 놓는다(`kind: 'new'`)", () => {
   it('컨테이너 안 → 마지막 자식 · 잎 앞 · 뒤 → 그 형제 자리(자기 몫을 당기지 않는다)', () => {
     expect(structureDropTarget(doc(), adding('Text'), 'n-box', 'inside', free)).toEqual({
       parentId: 'n-box',

@@ -5,8 +5,5 @@
  * `test/contract-attrs.test.ts`가 `src/` 원문을 훑는 데 쓴다.
  */
 interface ImportMeta {
-  glob(
-    pattern: string,
-    options: { query: '?raw'; eager: true; import: 'default' },
-  ): Record<string, string>
+  glob(pattern: string, options: { query: '?raw'; eager: true; import: 'default' }): Record<string, string>
 }

@@ -3,6 +3,9 @@
 #   cp deploy/.env.example deploy/.env     # 값을 채운다 — compose 가 이 파일 옆의 .env 를 스스로 읽는다
 #   docker compose -f deploy/docker-compose.yml up -d --build
 #
+# **Komodo 로 올릴 때는** Stack 의 Run Directory 를 `deploy` 로 둔다 — Komodo 가 Stack Environment 를 이 디렉터리의 `.env` 로
+# 써서 위와 같은 자리에 놓는다. Stack 설정 표는 `docs/guides/deploy-komodo.md`, 환경 변수의 키와 뜻은 `.env.example` 이 갖는다.
+#
 # **개발용 `../docker-compose.yml` 과 다른 프로젝트다** — 프로젝트 이름을 아래 `name` 으로 고정한다. 개발용은 디렉터리
 # 이름이 프로젝트 이름이라(README 「워크트리를 여럿 띄울 때」) 저장소 뿌리의 개발 볼륨이 `wirebound_wirebound-pgdata` 다.
 # 이름을 디렉터리에 맡기면 이 파일의 볼륨이 `deploy_…` 로 지어져 저장소를 옮기거나 디렉터리 이름을 바꾸는 순간 빈 DB 로 뜬다.
@@ -13,6 +16,8 @@ x-api-image: &api-image
   build:
     context: ..
     target: api
+  # 레지스트리 이미지가 아니다 — pull 을 건너뛰고 `up` 마다 저장소 코드로 짓는다(Komodo 의 Deploy 가 pull 을 먼저 부른다).
+  pull_policy: build
 
 services:
   postgres:
@@ -84,6 +89,7 @@ services:
     build:
       context: ..
       target: web
+    pull_policy: build
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?deploy/.env 에 SITE_ADDRESS 를 적는다}
     ports:

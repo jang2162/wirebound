@@ -36,7 +36,9 @@ interface Doc {
 }
 const text = (id: string, content: string): SeedNode => ({ id, type: 'Text', props: { content } })
 const texts = (count: number): SeedNode[] =>
-  Array.from({ length: count }, (_, index) => text(`n_text${String(index + 1).padStart(7, '0')}`, `글 ${index + 1} — 캔버스를 세로로 채운다`))
+  Array.from({ length: count }, (_, index) =>
+    text(`n_text${String(index + 1).padStart(7, '0')}`, `글 ${index + 1} — 캔버스를 세로로 채운다`),
+  )
 
 /**
  * **가로로 넓은 페이지** — 맨 위 글 하나(끌 것)와 4열 × 2행 그리드. 프리셋 1920 · 줌 1 · 창 1440 이면 칸(쓰는 폭 812)에 첫 열과 둘째 열의 앞만
@@ -74,7 +76,10 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' })).body
     const page = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body
     const P = `/projects/${project.id}/pages/${page.id}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return P
   }
@@ -102,7 +107,11 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
         for (const width of [1440, 1024, 900, 836, 700]) {
           await page.setViewportSize({ width, height: 800 })
           // 창 폭이 바뀐 뒤 셸이 `resize` 를 받아 다시 그릴 때까지 — 창 값만 기다리면 앞 창의 폭을 읽는다(두 프레임을 넘긴다).
-          await poll('창이 바뀐다', () => page.evaluate(() => window.innerWidth), (value) => value === width)
+          await poll(
+            '창이 바뀐다',
+            () => page.evaluate(() => window.innerWidth),
+            (value) => value === width,
+          )
           const open1 = await settled(page)
           // 누른 뒤 한 번 그린 값을 읽는다 — 기다림의 끝 조건에 재는 값을 넣으면 그 값이 틀린 판이 값이 아니라 시간 초과로 죽는다.
           await page.getByRole('button', { name: '좌측 패널 접기', exact: true }).click()
@@ -147,7 +156,12 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
         open: [side, 300, open1],
         sideFolded: [0, 300, width - 8 - 300, ['우측 패널 폭']],
         // 우측만 접으면 좌측의 예산이 창 − 8 − 480 이라 좌측 264 가 그 아래 창(752 미만)에서 조인다.
-        panelFolded: [Math.max(200, Math.min(264, width - 8 - 480)), 0, width - 8 - Math.max(200, Math.min(264, width - 8 - 480)), ['사이드바 폭']],
+        panelFolded: [
+          Math.max(200, Math.min(264, width - 8 - 480)),
+          0,
+          width - 8 - Math.max(200, Math.min(264, width - 8 - 480)),
+          ['사이드바 폭'],
+        ],
         bothFolded: [width, []],
         reloaded: [0, 0, width, { side: true, panel: true }],
         back: [side, 300, open1],
@@ -173,7 +187,11 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
         for (const preset of [1920, 1440, 1280, 375]) {
           await page.getByLabel('뷰포트 폭').selectOption(String(preset))
           await pressFit(page)
-          const m = await poll('맞춘 줌이 무대에 실린다', () => canvasState(page), (value) => value.settled && value.presetWidth === preset)
+          const m = await poll(
+            '맞춘 줌이 무대에 실린다',
+            () => canvasState(page),
+            (value) => value.settled && value.presetWidth === preset,
+          )
           zooms.push(`${width}·${preset} ${(m.zoom * 100).toFixed(1)}%`)
           over[`${width}·${preset}`] = m.overX
         }
@@ -197,7 +215,16 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
     try {
       await page.getByLabel('뷰포트 폭').selectOption('1920')
       // 배율은 프레임의 그려진 폭 ÷ 레이아웃 폭(`canvasState`) — 표시 글(반올림)이 아니라 값으로 견준다.
-      const zoom = async () => Math.round((await poll('줌이 무대에 실린다', () => canvasState(page), (value) => value.settled)).zoom * 1000) / 1000
+      const zoom = async () =>
+        Math.round(
+          (
+            await poll(
+              '줌이 무대에 실린다',
+              () => canvasState(page),
+              (value) => value.settled,
+            )
+          ).zoom * 1000,
+        ) / 1000
       const press = async (name: string) => {
         await page.getByRole('button', { name, exact: true }).click()
         return zoom()
@@ -207,7 +234,12 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
       const outAtFit = await press('축소')
       const inAtFit = [await press('확대'), await press('확대')]
       // 맞춘 배율 = (칸 384 − 안쪽 여백 48) ÷ 1920 = 0.175.
-      expect({ steps, fitted, outAtFit, inAtFit }).toEqual({ steps: [0.75, 0.5, 0.25, 0.25], fitted: 0.175, outAtFit: 0.175, inAtFit: [0.25, 0.5] })
+      expect({ steps, fitted, outAtFit, inAtFit }).toEqual({
+        steps: [0.75, 0.5, 0.25, 0.25],
+        fitted: 0.175,
+        outAtFit: 0.175,
+        inAtFit: [0.25, 0.5],
+      })
     } finally {
       await close()
     }
@@ -224,11 +256,18 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
       await canvasFrame(page).locator('[data-wb-id="n_text0000040"]').waitFor()
       const rows: Record<string, { gap: number; overY: number }> = {}
       const measure = async (label: string) => {
-        const m = await poll('무대 높이가 줌을 따른다', () => canvasState(page), (value) => value.settled)
+        const m = await poll(
+          '무대 높이가 줌을 따른다',
+          () => canvasState(page),
+          (value) => value.settled,
+        )
         rows[label] = { gap: m.gapY, overY: m.overY }
       }
       await measure('1')
-      for (const [label, clicks] of [['0.5', 2], ['0.25', 1]] as const) {
+      for (const [label, clicks] of [
+        ['0.5', 2],
+        ['0.25', 1],
+      ] as const) {
         for (let i = 0; i < clicks; i += 1) await page.getByRole('button', { name: '축소', exact: true }).click()
         await measure(label)
       }
@@ -263,7 +302,11 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
       try {
         await page.getByLabel('뷰포트 폭').selectOption('1920')
         await pressFit(page)
-        await poll('맞춘 줌', () => canvasState(page), (value) => value.settled && value.zoom < 0.25)
+        await poll(
+          '맞춘 줌',
+          () => canvasState(page),
+          (value) => value.settled && value.zoom < 0.25,
+        )
         await page.getByRole('button', { name: '배치 선', exact: true }).click()
         await page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="n_r2"] button').first().click()
         await page.locator('.wb-shell-selection[data-wb-selected-id="n_r2"]').waitFor()
@@ -315,7 +358,11 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
     async function openWide(P: string) {
       const tab = await open(P, { width: 1440, height: 900 })
       await tab.page.getByLabel('뷰포트 폭').selectOption('1920')
-      await poll('넓은 문서', () => canvasState(tab.page), (value) => value.settled && value.presetWidth === 1920)
+      await poll(
+        '넓은 문서',
+        () => canvasState(tab.page),
+        (value) => value.settled && value.presetWidth === 1920,
+      )
       return tab
     }
 
@@ -330,8 +377,19 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
       const start = await scrollLeft(page)
       await page.mouse.move(x, y ?? pane.y + pane.height / 2, { steps: 6 })
       await arrived?.()
-      const target = side === 'right' ? await page.evaluate(() => { const c = document.querySelector('.wb-shell-canvas') as HTMLElement; return c.scrollWidth - c.clientWidth }) : 0
-      await poll('칸이 끝까지 밀린다', () => scrollLeft(page), (value) => Math.abs(value - target) < 1, 4_000).catch(() => undefined)
+      const target =
+        side === 'right'
+          ? await page.evaluate(() => {
+              const c = document.querySelector('.wb-shell-canvas') as HTMLElement
+              return c.scrollWidth - c.clientWidth
+            })
+          : 0
+      await poll(
+        '칸이 끝까지 밀린다',
+        () => scrollLeft(page),
+        (value) => Math.abs(value - target) < 1,
+        4_000,
+      ).catch(() => undefined)
       return (await scrollLeft(page)) - start
     }
 
@@ -522,13 +580,16 @@ async function widths(page: Page) {
   return page.evaluate(() => {
     const width = (selector: string) => Math.round(document.querySelector(selector)!.getBoundingClientRect().width)
     const shell = document.querySelector('.wb-shell') as HTMLElement
-    const folded = (name: string) => document.querySelector(`.wb-shell-fold-toggle[aria-label^="${name}"]`)?.getAttribute('aria-expanded') === 'false'
+    const folded = (name: string) =>
+      document.querySelector(`.wb-shell-fold-toggle[aria-label^="${name}"]`)?.getAttribute('aria-expanded') === 'false'
     return {
       window: window.innerWidth,
       side: width('.wb-shell-side'),
       panel: width('.wb-shell-panel'),
       canvas: width('.wb-shell-canvas'),
-      handles: [...document.querySelectorAll('[role="separator"][aria-orientation="vertical"]')].map((element) => element.getAttribute('aria-label')),
+      handles: [...document.querySelectorAll('[role="separator"][aria-orientation="vertical"]')].map((element) =>
+        element.getAttribute('aria-label'),
+      ),
       folded: { side: folded('좌측'), panel: folded('우측') },
       shellOverflow: shell.scrollWidth - shell.clientWidth,
     }

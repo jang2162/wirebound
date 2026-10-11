@@ -65,7 +65,10 @@ function fixture(): PageDocument {
           id: 'n_sw',
           type: 'StateSwitch',
           children: [
-            caseOf('n_c0', 'default', [text('n_d', { marker: 2 }), text('n_e', { interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_d', value: true }] }] })]),
+            caseOf('n_c0', 'default', [
+              text('n_d', { marker: 2 }),
+              text('n_e', { interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_d', value: true }] }] }),
+            ]),
             caseOf('n_c1', 's_admin', [text('n_f')]),
           ],
         },
@@ -212,15 +215,33 @@ describe('forkCaseOps · editInForkOps — 복사 + 편집(Review Focus 2)', () 
     ['순서 바꾸기', [{ op: 'move', from: '/root/children/4/children/0/children/1', path: '/root/children/4/children/0/children/0' }]],
     [
       '상호작용 대상을 가지 안 노드로',
-      [{ op: 'replace', path: '/root/children/4/children/0/children/1/interactions/0/actions/0', value: { type: 'setVisible', target: 'n_e', value: false } }],
+      [
+        {
+          op: 'replace',
+          path: '/root/children/4/children/0/children/1/interactions/0/actions/0',
+          value: { type: 'setVisible', target: 'n_e', value: false },
+        },
+      ],
     ],
     // 값 안의 노드 id · 번호(K1 리뷰 R3) — 안 옮기면 복사 가지에 기본 가지와 같은 id 가 서서 `duplicate-id`, 번호가 둘.
-    ['노드 통째 바꾸기 — 같은 id · 번호 든 값', [{ op: 'replace', path: '/root/children/4/children/0/children/0', value: text('n_d', { marker: 2, props: { content: '바꿈' } }) }]],
+    [
+      '노드 통째 바꾸기 — 같은 id · 번호 든 값',
+      [{ op: 'replace', path: '/root/children/4/children/0/children/0', value: text('n_d', { marker: 2, props: { content: '바꿈' } }) }],
+    ],
     [
       '노드 통째 바꾸기 — 새 id · 복사된 노드를 가리키는 값',
-      [{ op: 'replace', path: '/root/children/4/children/0/children/1', value: text('n_z', { interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_d', value: true }] }] }) }],
+      [
+        {
+          op: 'replace',
+          path: '/root/children/4/children/0/children/1',
+          value: text('n_z', { interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_d', value: true }] }] }),
+        },
+      ],
     ],
-    ['상호작용 대상 글자 하나 바꾸기', [{ op: 'replace', path: '/root/children/4/children/0/children/1/interactions/0/actions/0/target', value: 'n_e' }]],
+    [
+      '상호작용 대상 글자 하나 바꾸기',
+      [{ op: 'replace', path: '/root/children/4/children/0/children/1/interactions/0/actions/0/target', value: 'n_e' }],
+    ],
   ]
 
   it.each(EDITS)('%s — 기본 가지는 그대로이고 새 가지에 편집이 선다 · 되돌리기 한 번', (_label, edit) => {
@@ -234,14 +255,35 @@ describe('forkCaseOps · editInForkOps — 복사 + 편집(Review Focus 2)', () 
     const direct = findNode(applyOps(before, edit).root, 'n_c0')!
     const copy = findNode(after.root, 'n_sw')!.children![2]!
     const back = new Map([...result.remap].map(([from, to]) => [to, from]))
-    const restored = JSON.parse(JSON.stringify(copy), (key, value) => (typeof value === 'string' && (key === 'id' || key === 'target') ? (back.get(value) ?? value) : value))
+    const restored = JSON.parse(JSON.stringify(copy), (key, value) =>
+      typeof value === 'string' && (key === 'id' || key === 'target') ? (back.get(value) ?? value) : value,
+    )
     expect({ ...restored, props: direct.props }).toEqual(stripMarkersDeep(direct))
   })
 
   it('값 안의 상호작용 대상이 복사된 노드면 복사를 가리킨다 — 기본 가지의 노드를 가리키지 않는다', () => {
     const edit: PatchOp[] = [
-      { op: 'replace', path: '/root/children/4/children/0/children/1/interactions/0/actions/0', value: { type: 'setVisible', target: 'n_e', value: false } },
-      { op: 'add', path: '/root/children/4/children/0/children/-', value: { ...text('n_y'), interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_d', value: true }, { type: 'setVisible', target: 'n_head', value: true }] }] } },
+      {
+        op: 'replace',
+        path: '/root/children/4/children/0/children/1/interactions/0/actions/0',
+        value: { type: 'setVisible', target: 'n_e', value: false },
+      },
+      {
+        op: 'add',
+        path: '/root/children/4/children/0/children/-',
+        value: {
+          ...text('n_y'),
+          interactions: [
+            {
+              on: 'click',
+              actions: [
+                { type: 'setVisible', target: 'n_d', value: true },
+                { type: 'setVisible', target: 'n_head', value: true },
+              ],
+            },
+          ],
+        },
+      },
     ]
     const result = editInForkOps(fixture(), 'n_sw', 's_guest', edit, ids())!
     const copy = findNode(applyOps(fixture(), result.ops).root, 'n_sw')!.children![2]!
@@ -251,7 +293,9 @@ describe('forkCaseOps · editInForkOps — 복사 + 편집(Review Focus 2)', () 
   })
 
   it('글자 하나짜리 대상 값(`replace …/target`)도 복사를 가리킨다 — 그 자리의 열쇠로 가른다', () => {
-    const edit: PatchOp[] = [{ op: 'replace', path: '/root/children/4/children/0/children/1/interactions/0/actions/0/target', value: 'n_d' }]
+    const edit: PatchOp[] = [
+      { op: 'replace', path: '/root/children/4/children/0/children/1/interactions/0/actions/0/target', value: 'n_d' },
+    ]
     const result = editInForkOps(fixture(), 'n_sw', 's_guest', edit, ids())!
     expect(result.ops.at(-1)).toEqual({
       op: 'replace',
@@ -294,7 +338,11 @@ describe('상태 목록 편집 — 추가 · 이름 · 순서', () => {
   it('추가 — 목록이 없으면 만들고, 있으면 끝에 더한다 · 이름은 앞뒤 공백을 걷는다', () => {
     const empty: PageDocument = { version: 1, root: { id: 'n_root', type: 'Page', children: [] } }
     expect(applied(empty, addViewStateOps(empty, '  관리자 ', ids('s_'))!).viewStates).toEqual([{ id: 's_1', name: '관리자' }])
-    expect(applied(fixture(), addViewStateOps(fixture(), '편집자', ids('s_'))!).viewStates).toEqual([ADMIN, GUEST, { id: 's_1', name: '편집자' }])
+    expect(applied(fixture(), addViewStateOps(fixture(), '편집자', ids('s_'))!).viewStates).toEqual([
+      ADMIN,
+      GUEST,
+      { id: 's_1', name: '편집자' },
+    ])
   })
 
   it.each([
@@ -316,7 +364,10 @@ describe('상태 목록 편집 — 추가 · 이름 · 순서', () => {
   })
 
   it('이름 바꾸기 — id 는 그대로다', () => {
-    expect(applied(fixture(), renameViewStateOps(fixture(), 's_guest', ' 손님 ')!).viewStates).toEqual([ADMIN, { id: 's_guest', name: '손님' }])
+    expect(applied(fixture(), renameViewStateOps(fixture(), 's_guest', ' 손님 ')!).viewStates).toEqual([
+      ADMIN,
+      { id: 's_guest', name: '손님' },
+    ])
   })
 
   it.each([
@@ -348,7 +399,9 @@ describe('removeViewStateOps — 상태 삭제(Review Focus 4)', () => {
   /** 지운 뒤 문서에서 사라진 id 집합 — 함수가 말한 집합과 견줄 오라클. */
   function vanished(before: PageDocument, after: PageDocument): string[] {
     const left = new Set(collectNodeIds(after.root))
-    return collectNodeIds(before.root).filter((id) => !left.has(id)).sort()
+    return collectNodeIds(before.root)
+      .filter((id) => !left.has(id))
+      .sort()
   }
 
   it('그 상태의 가지를 모두 지우고 목록에서 뺀다 — 말한 id 집합 = 실제로 사라진 집합', () => {
@@ -372,7 +425,12 @@ describe('removeViewStateOps — 상태 삭제(Review Focus 4)', () => {
     before.root.children!.push({
       id: 'n_sw2',
       type: 'StateSwitch',
-      children: [caseOf('n_k0', 'default', [{ ...inner, id: 'n_in2', children: [caseOf('n_m0', 'default', []), caseOf('n_m1', 's_admin', [text('n_m')])] }]), caseOf('n_k1', 's_guest', [])],
+      children: [
+        caseOf('n_k0', 'default', [
+          { ...inner, id: 'n_in2', children: [caseOf('n_m0', 'default', []), caseOf('n_m1', 's_admin', [text('n_m')])] },
+        ]),
+        caseOf('n_k1', 's_guest', []),
+      ],
     })
     const result = removeViewStateOps(before, 's_admin')!
     const after = applied(before, result.ops)
@@ -404,7 +462,7 @@ describe('removeViewStateOps — 상태 삭제(Review Focus 4)', () => {
 
   it('무작위 문서 — 상태마다 지운 뒤 검증 오류 0 · 역연산 왕복 · 말한 집합 = 사라진 집합', () => {
     let seed = 7
-    const random = (): number => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31)
+    const random = (): number => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31
     const STATES = ['s_1', 's_2', 's_3']
     let boards = 0
     let nested = 0
@@ -424,7 +482,11 @@ describe('removeViewStateOps — 상태 삭제(Review Focus 4)', () => {
           }
           return text(id())
         })
-      const before: PageDocument = { version: 1, viewStates: STATES.map((state) => ({ id: state, name: state })), root: { id: 'n_root', type: 'Page', children: grow(0) } }
+      const before: PageDocument = {
+        version: 1,
+        viewStates: STATES.map((state) => ({ id: state, name: state })),
+        root: { id: 'n_root', type: 'Page', children: grow(0) },
+      }
       expect(partitionIssues(validatePage(before)).errors).toEqual([])
       for (const state of STATES) {
         const result = removeViewStateOps(before, state)!

@@ -20,8 +20,5 @@ declare module '*.json?raw' {
  * (`packages/themes/test/raw.d.ts`가 선례다).
  */
 interface ImportMeta {
-  glob(
-    pattern: string,
-    options: { query: '?raw'; eager: true; import: 'default' },
-  ): Record<string, string>
+  glob(pattern: string, options: { query: '?raw'; eager: true; import: 'default' }): Record<string, string>
 }

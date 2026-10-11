@@ -60,9 +60,7 @@ function three(markerOf: Partial<Record<'a' | 'b' | 'c', number>>): WbNode {
 /** 코멘트 탭으로 옮긴다. 기본 탭은 속성이다. */
 async function openCommentTab(): Promise<void> {
   fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
-  await waitFor(() =>
-    expect(screen.getByRole('tab', { name: '코멘트' }).getAttribute('aria-selected')).toBe('true'),
-  )
+  await waitFor(() => expect(screen.getByRole('tab', { name: '코멘트' }).getAttribute('aria-selected')).toBe('true'))
 }
 
 /** 지금 그려진 무리의 머리글. 순서가 그대로 배열 순서다. */
@@ -119,11 +117,7 @@ describe('코멘트 탭 — 자리', () => {
   it('편집 모드의 탭이 셋이다', async () => {
     await openPage(pageDoc(three({})), { apiOverrides: { listComments: async () => [] } })
 
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
-      '속성',
-      '코멘트',
-      '상호작용',
-    ])
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['속성', '코멘트', '상호작용'])
   })
 })
 
@@ -148,19 +142,13 @@ describe('코멘트 탭 — 번호는 문서에서 온다', () => {
   it('같은 노드의 코멘트가 한 무리로 모이고 단 순서를 지킨다', async () => {
     await openPage(pageDoc(three({ a: 1 })), {
       apiOverrides: {
-        listComments: async () => [
-          comment({ id: 'c1', nodeId: 'n_a', body: '첫째' }),
-          comment({ id: 'c2', nodeId: 'n_a', body: '둘째' }),
-        ],
+        listComments: async () => [comment({ id: 'c1', nodeId: 'n_a', body: '첫째' }), comment({ id: 'c2', nodeId: 'n_a', body: '둘째' })],
       },
     })
     await openCommentTab()
 
     await waitFor(() => expect(groupTitles()).toEqual(['1 n_a']))
-    expect([...document.body.querySelectorAll('.wb-shell-comment-body')].map((el) => el.textContent)).toEqual([
-      '첫째',
-      '둘째',
-    ])
+    expect([...document.body.querySelectorAll('.wb-shell-comment-body')].map((el) => el.textContent)).toEqual(['첫째', '둘째'])
   })
 
   it('번호 없는 노드와 사라진 노드를 뒤로 보내고 갈라 말한다', async () => {
@@ -186,10 +174,7 @@ describe('코멘트 탭 — 번호는 문서에서 온다', () => {
   it('고른 노드의 무리에 표시가 붙는다', async () => {
     await openPage(pageDoc(three({ a: 1, c: 2 })), {
       apiOverrides: {
-        listComments: async () => [
-          comment({ id: 'c1', nodeId: 'n_a', body: '가' }),
-          comment({ id: 'c2', nodeId: 'n_c', body: '다' }),
-        ],
+        listComments: async () => [comment({ id: 'c1', nodeId: 'n_a', body: '가' }), comment({ id: 'c2', nodeId: 'n_c', body: '다' })],
       },
     })
     await openCommentTab()
@@ -396,9 +381,7 @@ describe('문서를 못 읽었을 때 — "모른다"를 "없다"로 접지 않�
   it('번호를 못 보이는 이유를 화면이 말한다', async () => {
     await openWithoutDocument([comment({ id: 'c1', nodeId: 'n_a', body: '말' })])
 
-    await waitFor(() =>
-      expect(screen.getByText('문서를 읽지 못해 번호를 보일 수 없습니다')).toBeTruthy(),
-    )
+    await waitFor(() => expect(screen.getByText('문서를 읽지 못해 번호를 보일 수 없습니다')).toBeTruthy())
     // 코멘트 자체는 그대로 보인다 — 번호만 못 붙일 뿐이다.
     expect(screen.getByText('말')).toBeTruthy()
   })
@@ -435,11 +418,7 @@ describe('문서에 얹지 못했을 때 — 버리지 않고 말한다', () => 
     fireEvent.change(screen.getByLabelText('새 코멘트'), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
 
-    await waitFor(() =>
-      expect(
-        screen.getByText('번호를 화면에 반영하지 못했습니다 — 새로고침하면 맞춰집니다'),
-      ).toBeTruthy(),
-    )
+    await waitFor(() => expect(screen.getByText('번호를 화면에 반영하지 못했습니다 — 새로고침하면 맞춰집니다')).toBeTruthy())
     // **실패가 아니다** — 코멘트는 저장됐다. 그래서 `alert`가 아니라 `status`다.
     expect(screen.queryByRole('alert')).toBeNull()
     expect(canvasMarkers()).toEqual({})
@@ -524,9 +503,7 @@ function toPropsTab(): void {
 
 /** 메뉴 트리에서 페이지를 **누른다** — 사용자가 하듯. */
 function toPage(title: string): void {
-  fireEvent.click(
-    within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: title }),
-  )
+  fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: title }))
 }
 
 /**
@@ -832,8 +809,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
     await openPage(pageDoc(three({ a: 1 })), {
       docs: { [OTHER_PAGE_ID]: pageDoc(three({})) },
       apiOverrides: {
-        listComments: async (_projectId, pageId) =>
-          pageId === PAGE_ID ? [comment({ id: 'c1', nodeId: 'n_a', body: '옛 말' })] : [],
+        listComments: async (_projectId, pageId) => (pageId === PAGE_ID ? [comment({ id: 'c1', nodeId: 'n_a', body: '옛 말' })] : []),
       },
     })
     await openCommentTab()

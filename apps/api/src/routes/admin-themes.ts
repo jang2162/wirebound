@@ -47,62 +47,60 @@ export function adminThemeRoutes(config: ApiConfig) {
         done(null, body),
       )
 
-      zipOnly.post(
-        '/theme-packages',
-        { preHandler: app.requireAuth, bodyLimit: WBTHEME_LIMITS.zipBytes },
-        async (request, reply) => {
-          const userId = await requireInstanceAdmin(app.db, request)
-          if (!Buffer.isBuffer(request.body)) {
-            throw badRequest('본문에 .wbtheme(zip) 바이트를 싣습니다')
-          }
-          const bytes = request.body
+      zipOnly.post('/theme-packages', { preHandler: app.requireAuth, bodyLimit: WBTHEME_LIMITS.zipBytes }, async (request, reply) => {
+        const userId = await requireInstanceAdmin(app.db, request)
+        if (!Buffer.isBuffer(request.body)) {
+          throw badRequest('본문에 .wbtheme(zip) 바이트를 싣습니다')
+        }
+        const bytes = request.body
 
-          // 코드는 실행하지 않는다 — 크기 · 경로 · 허용 목록 · 링크 · manifest 를 읽기만 한다(`readWbtheme`).
-          const { files, issues } = readWbtheme(bytes)
-          if (files === null) {
-            throw validationFailed(
-              REJECTED,
-              issues.map((issue): ApiErrorIssue => ({
-                code: issue.code,
-                path: issue.path,
-                message: issue.message,
-                ...(issue.manifestCode === undefined ? {} : { manifestCode: issue.manifestCode }),
-              })),
-            )
-          }
-          const { manifest } = files
-          if (manifest.id.startsWith(SYSTEM_THEME_PREFIX)) {
-            throw validationFailed(REJECTED, [
-              { code: 'reserved-id', path: 'manifest.json:id', message: `\`${SYSTEM_THEME_PREFIX}\` 로 시작하는 id 는 시스템 테마의 것입니다` },
-            ])
-          }
-          if (!satisfiesSdk(manifest.sdk, SDK_VERSION)) {
-            throw validationFailed(REJECTED, [
-              {
-                code: 'sdk-incompatible',
-                path: 'manifest.json:sdk',
-                message: `호스트 SDK ${SDK_VERSION} 이 manifest 의 sdk 범위(${manifest.sdk}) 밖입니다`,
-              },
-            ])
-          }
+        // 코드는 실행하지 않는다 — 크기 · 경로 · 허용 목록 · 링크 · manifest 를 읽기만 한다(`readWbtheme`).
+        const { files, issues } = readWbtheme(bytes)
+        if (files === null) {
+          throw validationFailed(
+            REJECTED,
+            issues.map((issue): ApiErrorIssue => ({
+              code: issue.code,
+              path: issue.path,
+              message: issue.message,
+              ...(issue.manifestCode === undefined ? {} : { manifestCode: issue.manifestCode }),
+            })),
+          )
+        }
+        const { manifest } = files
+        if (manifest.id.startsWith(SYSTEM_THEME_PREFIX)) {
+          throw validationFailed(REJECTED, [
+            {
+              code: 'reserved-id',
+              path: 'manifest.json:id',
+              message: `\`${SYSTEM_THEME_PREFIX}\` 로 시작하는 id 는 시스템 테마의 것입니다`,
+            },
+          ])
+        }
+        if (!satisfiesSdk(manifest.sdk, SDK_VERSION)) {
+          throw validationFailed(REJECTED, [
+            {
+              code: 'sdk-incompatible',
+              path: 'manifest.json:sdk',
+              message: `호스트 SDK ${SDK_VERSION} 이 manifest 의 sdk 범위(${manifest.sdk}) 밖입니다`,
+            },
+          ])
+        }
 
-          const sha256 = createHash('sha256').update(bytes).digest('hex')
-          const row = await withTransaction(app.db, async (trx) => {
-            let inserted
-            try {
-              inserted = await insertThemePackage(trx, { manifest, bytes, sha256, uploadedBy: userId })
-            } catch (error) {
-              if (error instanceof DuplicatePackageError) throw conflict(error.message)
-              throw error
-            }
-            await recheckInstanceAdmin(trx, request)
-            return inserted
-          })
-          return reply
-            .status(201)
-            .send({ themeId: row.themeId, version: row.version, name: row.name, sha256: row.sha256, size: row.size })
-        },
-      )
+        const sha256 = createHash('sha256').update(bytes).digest('hex')
+        const row = await withTransaction(app.db, async (trx) => {
+          let inserted
+          try {
+            inserted = await insertThemePackage(trx, { manifest, bytes, sha256, uploadedBy: userId })
+          } catch (error) {
+            if (error instanceof DuplicatePackageError) throw conflict(error.message)
+            throw error
+          }
+          await recheckInstanceAdmin(trx, request)
+          return inserted
+        })
+        return reply.status(201).send({ themeId: row.themeId, version: row.version, name: row.name, sha256: row.sha256, size: row.size })
+      })
     })
 
     /** 숨김 · 되살림. 숨긴 판은 새로 고를 수 없고 이미 고정한 프로젝트 · 스냅샷은 그대로 쓴다(spec 「버전과 숨김」). */

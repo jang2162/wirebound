@@ -8,7 +8,9 @@ import { createDb, createPool } from '../src/db/client'
 import { startFaultProxy } from './pg-fault-proxy'
 import { TEST_DATABASE_URL } from './helpers'
 
-async function withProxy(fn: (ctx: { proxy: Awaited<ReturnType<typeof startFaultProxy>>; db: ReturnType<typeof createDb> }) => Promise<void>) {
+async function withProxy(
+  fn: (ctx: { proxy: Awaited<ReturnType<typeof startFaultProxy>>; db: ReturnType<typeof createDb> }) => Promise<void>,
+) {
   const proxy = await startFaultProxy(TEST_DATABASE_URL)
   const db = createDb(createPool(proxy.url, () => undefined))
   try {

@@ -1,15 +1,15 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import {
-  createSession, destroySession, destroyUserSessions, hashSessionToken, resolveSession,
-} from '../src/auth/session'
+import { createSession, destroySession, destroyUserSessions, hashSessionToken, resolveSession } from '../src/auth/session'
 import { withApi } from './helpers'
 import type { DbHandle } from '../src/db/tx'
 
 async function seedUser(db: DbHandle, email = 'sess@example.com'): Promise<string> {
-  const row = await db.insertInto('users')
+  const row = await db
+    .insertInto('users')
     .values({ email, name: '세션사용자', password_hash: 'x' })
-    .returning('id').executeTakeFirstOrThrow()
+    .returning('id')
+    .executeTakeFirstOrThrow()
   return row.id
 }
 
@@ -81,7 +81,8 @@ describe('resolveSession', () => {
     await withApi(async ({ db }) => {
       const userId = await seedUser(db)
       const { token } = await createSession(db, userId, 24)
-      await db.updateTable('sessions')
+      await db
+        .updateTable('sessions')
         .set({ expires_at: new Date(Date.now() - 1000) })
         .where('id', '=', hashSessionToken(token))
         .execute()
@@ -94,13 +95,11 @@ describe('resolveSession', () => {
       const userId = await seedUser(db)
       const { token } = await createSession(db, userId, 24)
       const past = new Date(Date.now() - 60_000)
-      await db.updateTable('sessions').set({ last_seen_at: past })
-        .where('id', '=', hashSessionToken(token)).execute()
+      await db.updateTable('sessions').set({ last_seen_at: past }).where('id', '=', hashSessionToken(token)).execute()
 
       await resolveSession(db, token)
 
-      const row = await db.selectFrom('sessions').select('last_seen_at')
-        .where('id', '=', hashSessionToken(token)).executeTakeFirstOrThrow()
+      const row = await db.selectFrom('sessions').select('last_seen_at').where('id', '=', hashSessionToken(token)).executeTakeFirstOrThrow()
       expect(row.last_seen_at.getTime()).toBeGreaterThan(past.getTime())
     })
   })
@@ -180,9 +179,7 @@ describe('인증 훅', () => {
       // 25P02 함정). 이 트랜잭션 위의 모든 이후 쿼리가 내용과 무관하게 실패하는
       // 상태가 되므로, resolveSession의 SELECT도 예외 없이 던진다.
       await expect(
-        db.insertInto('users')
-          .values({ email: 'crash@example.com', name: '중복', password_hash: 'y' })
-          .execute(),
+        db.insertInto('users').values({ email: 'crash@example.com', name: '중복', password_hash: 'y' }).execute(),
       ).rejects.toThrow()
 
       const res = await app.inject({ method: 'GET', url: '/__me', cookies: { wb_session: token } })

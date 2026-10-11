@@ -49,7 +49,13 @@ function server(initial: PageDocument) {
     const inverse = invertOps(held, body.ops)
     held = applyOps(held, body.ops)
     seq += 1
-    const result: PatchResult = { seq, revisionId: `rev-${seq}`, inverse, schemaVersion: 1, ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }) }
+    const result: PatchResult = {
+      seq,
+      revisionId: `rev-${seq}`,
+      inverse,
+      schemaVersion: 1,
+      ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+    }
     return result
   }
   const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
@@ -77,7 +83,10 @@ function alertTexts(): string[] {
 
 /** 정보 통지 한 칸(`shell/info-notice.tsx` — `role="status"`)의 글. 실패 자리(`alert`)와 갈라 읽는다. */
 function infoTexts(): string[] {
-  return screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
+  return screen
+    .queryAllByRole('status')
+    .filter((element) => element.classList.contains('wb-shell-info-notice'))
+    .map((element) => element.textContent ?? '')
 }
 
 /** 붙인 뒤 서버 문서 — 검증 오류가 없어야 한다. */
@@ -99,13 +108,25 @@ describe('붙일 페이지에 없는 상태의 가지를 빼고 말한다', () =
     const area: WbNode = {
       id: 'sw',
       type: 'StateSwitch',
-      children: [caseOf('c-d', 'default', [button('b-d', '보기')]), caseOf('c-a', 's_admin', [button('b-a', '승인')]), caseOf('c-g', 's_guest', [button('b-g', '로그인')])],
+      children: [
+        caseOf('c-d', 'default', [button('b-d', '보기')]),
+        caseOf('c-a', 's_admin', [button('b-a', '승인')]),
+        caseOf('c-g', 's_guest', [button('b-g', '로그인')]),
+      ],
     }
     const { srv, pasted } = await pasteInto(target(), writeNodesEnvelope([area], 1, [ADMIN, GUEST]))
     expect(pasted.type).toBe('StateSwitch')
     expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default'])
     await waitFor(() =>
-      expect(infoTexts()).toEqual([droppedCasesNotice([{ state: 's_admin', count: 1 }, { state: 's_guest', count: 1 }], [ADMIN, GUEST])]),
+      expect(infoTexts()).toEqual([
+        droppedCasesNotice(
+          [
+            { state: 's_admin', count: 1 },
+            { state: 's_guest', count: 1 },
+          ],
+          [ADMIN, GUEST],
+        ),
+      ]),
     )
     expect(alertTexts()).toEqual([])
     expect(infoTexts()[0]).toBe('상태 "관리자" 가지 1개를 뺐습니다. 상태 "비로그인" 가지 1개를 뺐습니다.')
@@ -122,8 +143,16 @@ describe('붙일 페이지에 없는 상태의 가지를 빼고 말한다', () =
   })
 
   it('영역 안 영역 — 붙일 페이지에 있는 상태(같은 id)는 남기고 없는 상태만 뺀다 · 검증 오류 0', async () => {
-    const inner: WbNode = { id: 'in', type: 'StateSwitch', children: [caseOf('ic-d', 'default', [button('ib-d', '안 기본')]), caseOf('ic-g', 's_guest', [button('ib-g', '안 비로그인')])] }
-    const outer: WbNode = { id: 'out', type: 'StateSwitch', children: [caseOf('oc-d', 'default', [inner]), caseOf('oc-a', 's_admin', [button('ob-a', '승인')])] }
+    const inner: WbNode = {
+      id: 'in',
+      type: 'StateSwitch',
+      children: [caseOf('ic-d', 'default', [button('ib-d', '안 기본')]), caseOf('ic-g', 's_guest', [button('ib-g', '안 비로그인')])],
+    }
+    const outer: WbNode = {
+      id: 'out',
+      type: 'StateSwitch',
+      children: [caseOf('oc-d', 'default', [inner]), caseOf('oc-a', 's_admin', [button('ob-a', '승인')])],
+    }
     const { srv, pasted } = await pasteInto(target([ADMIN]), writeNodesEnvelope([outer], 1, [ADMIN, GUEST]))
     expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default', 's_admin'])
     expect(pasted.children![0]!.children![0]!.children!.map((child) => child.props?.state)).toEqual(['default'])
@@ -146,7 +175,11 @@ describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(프리
     const area: WbNode = {
       id: 'sw',
       type: 'StateSwitch',
-      children: [caseOf('c-d', 'default', [button('b-d', '보기')]), caseOf('c-a', 's_admin', [button('b-a', '승인')]), caseOf('c-g', 's_guest', [button('b-g', '로그인')])],
+      children: [
+        caseOf('c-d', 'default', [button('b-d', '보기')]),
+        caseOf('c-a', 's_admin', [button('b-a', '승인')]),
+        caseOf('c-g', 's_guest', [button('b-g', '로그인')]),
+      ],
     }
     const { srv, pasted } = await pasteInto(target([OTHER_ADMIN]), writeNodesEnvelope([area], 1, [ADMIN, GUEST]))
     expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default', 's_page_admin'])
@@ -155,14 +188,25 @@ describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(프리
   })
 
   it('이름이 글자 그대로 같을 때만 맞춘다 — 대소문자 · 다른 글자는 다른 상태다', async () => {
-    const area: WbNode = { id: 'sw', type: 'StateSwitch', children: [caseOf('c-d', 'default', []), caseOf('c-a', 's_a', [button('b-a', '승인')])] }
-    const { pasted } = await pasteInto(target([{ id: 's_page_a', name: 'Admin' }]), writeNodesEnvelope([area], 1, [{ id: 's_a', name: 'admin' }]))
+    const area: WbNode = {
+      id: 'sw',
+      type: 'StateSwitch',
+      children: [caseOf('c-d', 'default', []), caseOf('c-a', 's_a', [button('b-a', '승인')])],
+    }
+    const { pasted } = await pasteInto(
+      target([{ id: 's_page_a', name: 'Admin' }]),
+      writeNodesEnvelope([area], 1, [{ id: 's_a', name: 'admin' }]),
+    )
     expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default'])
     await waitFor(() => expect(infoTexts()).toEqual(['상태 "admin" 가지 1개를 뺐습니다.']))
   })
 
   it('같은 id 는 이름이 달라도 그대로다(같은 페이지 · 이름을 고친 복사)', async () => {
-    const area: WbNode = { id: 'sw', type: 'StateSwitch', children: [caseOf('c-d', 'default', []), caseOf('c-a', 's_admin', [button('b-a', '승인')])] }
+    const area: WbNode = {
+      id: 'sw',
+      type: 'StateSwitch',
+      children: [caseOf('c-d', 'default', []), caseOf('c-a', 's_admin', [button('b-a', '승인')])],
+    }
     const { pasted } = await pasteInto(target([{ id: 's_admin', name: '운영자' }]), writeNodesEnvelope([area], 1, [ADMIN]))
     expect(pasted.children!.map((child) => child.props?.state)).toEqual(['default', 's_admin'])
     await new Promise((resolve) => setTimeout(resolve, 20))
@@ -172,7 +216,11 @@ describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(프리
 
 describe('복사가 출처의 상태 목록을 싣는다', () => {
   it('상태가 있는 페이지에서 고른 영역의 봉투에 목록이 실린다', async () => {
-    const area: WbNode = { id: 'sw', type: 'StateSwitch', children: [caseOf('c-d', 'default', [button('b-d', '보기')]), caseOf('c-a', 's_admin', [])] }
+    const area: WbNode = {
+      id: 'sw',
+      type: 'StateSwitch',
+      children: [caseOf('c-d', 'default', [button('b-d', '보기')]), caseOf('c-a', 's_admin', [])],
+    }
     const doc = { ...pageDoc({ id: 'n-root', type: 'Page', children: [area] }), viewStates: [ADMIN] }
     await openPage(doc, { apiOverrides: server(doc).api })
     const region = screen.getByRole('region', { name: '구조 트리' })

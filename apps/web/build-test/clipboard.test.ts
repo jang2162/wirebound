@@ -83,10 +83,21 @@ describe.skipIf(!전제.ok)('클립보드 — 실브라우저', () => {
       await second.goto(other.P)
       await canvasFrame(second).locator('[data-wb-id]').first().waitFor()
       // 고른 것은 뿌리(페이지를 연 그대로) — 붙이기는 루트 끝이다.
-      await canvasFrame(second).locator('body').click({ position: { x: 5, y: 5 } })
+      await canvasFrame(second)
+        .locator('body')
+        .click({ position: { x: 5, y: 5 } })
       await second.keyboard.press('ControlOrMeta+v')
-      const pasted = await poll('붙인 노드가 서버에 닿는다', () => children(other.P), (nodes) => nodes.length === 2)
-      const notice = await poll('뺀 수를 말한다', () => alerts(second), (texts) => texts.length > 0, 5_000)
+      const pasted = await poll(
+        '붙인 노드가 서버에 닿는다',
+        () => children(other.P),
+        (nodes) => nodes.length === 2,
+      )
+      const notice = await poll(
+        '뺀 수를 말한다',
+        () => alerts(second),
+        (texts) => texts.length > 0,
+        5_000,
+      )
 
       expect({ readWithoutPermission: readWithoutPermission.startsWith('rejected'), copied, copies }).toEqual({
         readWithoutPermission: true,
@@ -116,8 +127,17 @@ describe.skipIf(!전제.ok)('클립보드 — 실브라우저', () => {
       await page.goto(source.P2)
       await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
       await page.keyboard.press('ControlOrMeta+v')
-      const pasted = await poll('붙인 노드가 서버에 닿는다', () => children(source.P2), (nodes) => nodes.length === 2)
-      const notice = await poll('뺀 수를 말한다', () => alerts(page), (texts) => texts.length > 0, 5_000)
+      const pasted = await poll(
+        '붙인 노드가 서버에 닿는다',
+        () => children(source.P2),
+        (nodes) => nodes.length === 2,
+      )
+      const notice = await poll(
+        '뺀 수를 말한다',
+        () => alerts(page),
+        (texts) => texts.length > 0,
+        5_000,
+      )
 
       expect(pasted[1]!.interactions).toEqual([{ on: 'click', actions: [{ type: 'navigate', target: 'page:메뉴/둘째' }] }])
       expect(notice).toEqual(['상호작용 동작 1개는 대상이 없어 빼고 붙였습니다.'])
@@ -133,7 +153,12 @@ describe.skipIf(!전제.ok)('클립보드 — 실브라우저', () => {
  */
 async function sourceProject(stack: EditorStack, owner: Session): Promise<{ P1: string; P2: string }> {
   const call = (method: string, path: string, body?: unknown) => stack.request(owner, method, path, body)
-  const project = created(await call('POST', '/projects', { name: 'E1 클립보드', slug: `clip-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}` }))
+  const project = created(
+    await call('POST', '/projects', {
+      name: 'E1 클립보드',
+      slug: `clip-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    }),
+  )
   const menu = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' }))
   const first = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' }))
   const second = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '둘째' }))
@@ -162,7 +187,12 @@ async function sourceProject(stack: EditorStack, owner: Session): Promise<{ P1: 
 
 async function plainProject(stack: EditorStack, owner: Session, menuTitle: string, pageTitle: string): Promise<{ P: string }> {
   const call = (method: string, path: string, body?: unknown) => stack.request(owner, method, path, body)
-  const project = created(await call('POST', '/projects', { name: 'E1 받는 곳', slug: `clip-to-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}` }))
+  const project = created(
+    await call('POST', '/projects', {
+      name: 'E1 받는 곳',
+      slug: `clip-to-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    }),
+  )
   const menu = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: menuTitle }))
   const page = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: pageTitle }))
   const P = `/projects/${project.id}/pages/${page.id}`

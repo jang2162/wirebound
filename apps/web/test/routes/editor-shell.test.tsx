@@ -19,13 +19,7 @@ import type { ProjectView, SessionUser } from '../../src/api/types'
 import type { EditorStore } from '../../src/store/editor-store'
 import { ThemeBundleProvider } from '../../src/theme/bundle-context'
 import { staticBundleLoader } from '../theme-loader'
-import {
-  currentPath,
-  expiringSession,
-  fakeApi,
-  renderWithProviders,
-  unauthenticatedError,
-} from '../helpers'
+import { currentPath, expiringSession, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
 
 /**
  * 셸이 만든 `EditorStore` 인스턴스를 손에 쥐는 장치.
@@ -123,9 +117,7 @@ async function openShell(): Promise<void> {
  * 역할로는 잡히지 않는다. 클래스가 바뀌면 여기서 `null`이 되어 요란하게 깨진다.
  */
 function canvasFrame(): HTMLElement {
-  const frame = screen
-    .getByRole('main', { name: '캔버스' })
-    .querySelector<HTMLElement>('.wb-shell-canvas-frame')
+  const frame = screen.getByRole('main', { name: '캔버스' }).querySelector<HTMLElement>('.wb-shell-canvas-frame')
   if (frame === null) throw new Error('캔버스 프레임을 찾지 못했습니다')
   return frame
 }
@@ -262,14 +254,11 @@ describe('에디터 셸', () => {
     // **`within(select)`로 좁힌다.** 문서 전체의 `option`을 훑으면 다른 `<select>`의
     // 선택지까지 섞인다 — 이 케이스가 재려는 것은 **이 `<select>`의 선택지**이지
     // 화면에 있는 모든 선택지가 아니다.
-    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual([
-      '1920px',
-      '1440px',
-      '1280px',
-      '1024px',
-      '768px',
-      '375px',
-    ])
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['1920px', '1440px', '1280px', '1024px', '768px', '375px'])
     // 스토어의 초기 폭. 양성 대조로도 쓴다 — 처음부터 375였다면 아래가 무의미하다.
     expect(select.value).toBe('1280')
     expect(canvasFrame().style.width).toBe('1280px')
@@ -486,8 +475,7 @@ describe('프로젝트 전환', () => {
       <ApiProvider
         client={fakeApi({
           me: async () => USER,
-          getProject: (id) =>
-            id === 'p-1' ? Promise.resolve(project({ id, name: '일번 설계서' })) : pending,
+          getProject: (id) => (id === 'p-1' ? Promise.resolve(project({ id, name: '일번 설계서' })) : pending),
         })}
       >
         <ThemeBundleProvider loader={staticBundleLoader()}>

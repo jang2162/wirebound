@@ -240,10 +240,7 @@ const DATABASE_URL_MESSAGE = 'DATABASE_URL이 필요합니다'
  * 경우)에서는 정작 이 메시지를 보지 못한다. undefined를 빈 문자열로 미리
  * 치환해 두 경우 모두 같은 `.min()` 검사 하나로 수렴시킨다.
  */
-const RequiredDatabaseUrl = z.preprocess(
-  (value) => (value === undefined ? '' : value),
-  z.string().min(1, DATABASE_URL_MESSAGE),
-)
+const RequiredDatabaseUrl = z.preprocess((value) => (value === undefined ? '' : value), z.string().min(1, DATABASE_URL_MESSAGE))
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -335,10 +332,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     // **빈 문자열은 "안 줬다"와 같은 뜻이다.** `.env.example`이 주석으로 든 줄을 사람이
     // 주석만 풀고 값을 안 채우는 자리이고, 그대로 넘기면 `executablePath: ''`가 되어
     // *"Executable doesn't exist at "*라는 끝이 잘린 문장이 나온다.
-    screenChromiumPath:
-      data.SCREEN_CHROMIUM_PATH === undefined || data.SCREEN_CHROMIUM_PATH === ''
-        ? undefined
-        : data.SCREEN_CHROMIUM_PATH,
+    screenChromiumPath: data.SCREEN_CHROMIUM_PATH === undefined || data.SCREEN_CHROMIUM_PATH === '' ? undefined : data.SCREEN_CHROMIUM_PATH,
     dbTimeLimits: {
       idleInTransactionMs: data.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS,
       poolWaitMs: data.DB_POOL_WAIT_TIMEOUT_MS,

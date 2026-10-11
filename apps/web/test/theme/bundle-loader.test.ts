@@ -178,7 +178,10 @@ describe('withServerManifest', () => {
   const views = { Text: () => null } as unknown as ThemeDefinition['views']
 
   it('components 만 다르면 서버 manifest 를 끼운다 — 뷰는 번들 것', () => {
-    const bundled = { manifest: { ...server, components: { Card: { variants: [{ id: 'plain', label: '보통' }], defaultVariant: 'plain' } } }, views } as ThemeDefinition
+    const bundled = {
+      manifest: { ...server, components: { Card: { variants: [{ id: 'plain', label: '보통' }], defaultVariant: 'plain' } } },
+      views,
+    } as ThemeDefinition
     const result = withServerManifest({ status: 'ok', definition: bundled }, server)
     expect(result).toEqual({ status: 'ok', definition: { manifest: server, views } })
     expect(result.status === 'ok' && result.definition.manifest).toBe(server)

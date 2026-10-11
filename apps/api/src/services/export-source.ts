@@ -50,7 +50,10 @@ export class EmptyProjectError extends Error {
  * 그럴듯한 한 장**이 남에게 전달되고, 그것이 이 저장소가 막는 부류다.
  */
 export class UnsupportedDocumentError extends Error {
-  constructor(readonly pageTitle: string, readonly reason: string) {
+  constructor(
+    readonly pageTitle: string,
+    readonly reason: string,
+  ) {
     super(`"${pageTitle}" 페이지의 문서를 이 서버가 처리할 수 없습니다: ${reason}`)
     this.name = 'UnsupportedDocumentError'
   }
@@ -169,9 +172,7 @@ export function assembleExportSource(rows: ExportRows): ExportSource {
    * 된다. 그러므로 이 갈래는 *"실제로는 닿지 않는 것"*이 아니라 **닿는 것**이고 케이스가 든다.
    */
   if (ordered.length !== pageRecords.length) {
-    throw new Error(
-      `메뉴 트리가 페이지를 잃었습니다: 페이지 ${pageRecords.length}장 중 ${ordered.length}장만 트리에 있습니다`,
-    )
+    throw new Error(`메뉴 트리가 페이지를 잃었습니다: 페이지 ${pageRecords.length}장 중 ${ordered.length}장만 트리에 있습니다`)
   }
 
   return {
@@ -188,10 +189,7 @@ export function assembleExportSource(rows: ExportRows): ExportSource {
  * `listPages`는 마이그레이션하지 않고 DB에 있는 그대로 낸다(그 함수의 머리말 — 캡처가
  * 그것을 요구한다). 내보내기는 **그리는** 쪽이므로 `GET .../pages/:id`와 같이 올려야 한다.
  */
-function documentsByPageId(
-  records: readonly PageRecord[],
-  ordered: readonly TargetedPage[],
-): Map<string, PageDocument> {
+function documentsByPageId(records: readonly PageRecord[], ordered: readonly TargetedPage[]): Map<string, PageDocument> {
   const byId = new Map(records.map((record) => [record.id, record]))
   const documents = new Map<string, PageDocument>()
   for (const page of ordered) {
@@ -200,10 +198,7 @@ function documentsByPageId(
       documents.set(page.id, migrateDocument(record.schema))
     } catch (error) {
       // 이름은 **번들 이름**이다 — `errors[].title`·미리보기의 `pages[].title`과 한 벌이다.
-      throw new UnsupportedDocumentError(
-        page.bundleTitle,
-        error instanceof Error ? error.message : String(error),
-      )
+      throw new UnsupportedDocumentError(page.bundleTitle, error instanceof Error ? error.message : String(error))
     }
   }
   return documents

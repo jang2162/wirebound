@@ -27,12 +27,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { describe, expect, it } from 'vitest'
 import type { ApiClient } from '../../src/api/client'
 import { ApiError } from '../../src/api/client'
-import type {
-  ExportFormat,
-  ExportPreview,
-  HtmlExportPreview,
-  PptxExportPreview,
-} from '../../src/api/types'
+import type { ExportFormat, ExportPreview, HtmlExportPreview, PptxExportPreview } from '../../src/api/types'
 import { PROJECT_ID, chooseFromShellMenu, openPage, pageDoc } from '../editor-harness'
 import { currentPath, expiringSession } from '../helpers'
 
@@ -120,12 +115,9 @@ const pptx어긋난: PptxExportPreview = {
  */
 const 늦은실패 = '앞 형식을 만들지 못했습니다'
 
-function api(
-  preview: ExportPreview | ((format: ExportFormat) => Promise<ExportPreview>),
-): Partial<ApiClient> {
+function api(preview: ExportPreview | ((format: ExportFormat) => Promise<ExportPreview>)): Partial<ApiClient> {
   return {
-    getExportPreview:
-      typeof preview === 'function' ? (_projectId, format) => preview(format) : async () => preview,
+    getExportPreview: typeof preview === 'function' ? (_projectId, format) => preview(format) : async () => preview,
     // 받은 형식을 바이트에 싣는다 — 형식을 무시하면 *"pptx를 보고 zip을 받는"* 상태를 케이스가 못 잡는다.
     downloadExport: async (_projectId, format) => new Blob([format]),
   }
@@ -325,9 +317,7 @@ describe('내보내기 화면', () => {
 
     it('어긋난 것이 있어도 내려받을 수는 있다', async () => {
       const panel = await open(api(어긋난))
-      expect(
-        await within(panel).findByRole('button', { name: /내려받기$/ }),
-      ).toBeTruthy()
+      expect(await within(panel).findByRole('button', { name: /내려받기$/ })).toBeTruthy()
     })
 
     /**
@@ -348,10 +338,7 @@ describe('내보내기 화면', () => {
         throw new ApiError(409, 'conflict', '내보낼 페이지가 없습니다')
       }),
     )
-    expect(await within(panel).findByRole('alert')).toHaveProperty(
-      'textContent',
-      '내보낼 페이지가 없습니다',
-    )
+    expect(await within(panel).findByRole('alert')).toHaveProperty('textContent', '내보낼 페이지가 없습니다')
   })
 
   /**
@@ -427,9 +414,7 @@ describe('내보내기 화면', () => {
       const panel = await openPptx(api(형식별(깨끗한, pptx깨끗한)))
 
       expect(within(panel).getByRole('button', { name: 'PPTX' }).getAttribute('aria-pressed')).toBe('true')
-      expect(within(panel).getByRole('button', { name: 'HTML 번들' }).getAttribute('aria-pressed')).toBe(
-        'false',
-      )
+      expect(within(panel).getByRole('button', { name: 'HTML 번들' }).getAttribute('aria-pressed')).toBe('false')
     })
 
     it('닫았다 열면 HTML 번들로 돌아온다', async () => {
@@ -451,9 +436,7 @@ describe('내보내기 화면', () => {
       const 다시 = await screen.findByRole('group', { name: '내보내기' })
       await within(다시).findByRole('region', { name: '페이지 경로' })
       expect(부른것[부른것.length - 1]).toBe('html')
-      expect(within(다시).getByRole('button', { name: 'HTML 번들' }).getAttribute('aria-pressed')).toBe(
-        'true',
-      )
+      expect(within(다시).getByRole('button', { name: 'HTML 번들' }).getAttribute('aria-pressed')).toBe('true')
     })
   })
 
@@ -496,11 +479,7 @@ describe('내보내기 화면', () => {
     it('경고 셋이 내려받기 링크보다 앞에 있다', async () => {
       const panel = await openPptx(api(형식별(깨끗한, pptx어긋난)))
 
-      경고가링크보다앞(panel, [
-        '글꼴 경고',
-        '화면 이미지가 없는 페이지',
-        '화면 이미지를 그리다 실패한 페이지',
-      ])
+      경고가링크보다앞(panel, ['글꼴 경고', '화면 이미지가 없는 페이지', '화면 이미지를 그리다 실패한 페이지'])
     })
 
     /**
@@ -581,9 +560,7 @@ describe('내보내기 화면', () => {
 
       expect(within(panel).queryByRole('region', { name: '슬라이드에 실릴 페이지' })).toBeNull()
       expect(within(panel).getByRole('region', { name: '페이지 경로' })).toBeTruthy()
-      expect(within(panel).getByRole('button', { name: 'HTML 번들' }).getAttribute('aria-pressed')).toBe(
-        'true',
-      )
+      expect(within(panel).getByRole('button', { name: 'HTML 번들' }).getAttribute('aria-pressed')).toBe('true')
     })
 
     /**
@@ -611,9 +588,7 @@ describe('내보내기 화면', () => {
       expect(within(panel).queryByRole('region', { name: '페이지 경로' })).toBeNull()
       expect(within(panel).getByRole('region', { name: '슬라이드에 실릴 페이지' })).toBeTruthy()
       expect(within(panel).getByRole('button', { name: /\.pptx 내려받기$/ })).toBeTruthy()
-      expect(within(panel).getByRole('button', { name: 'PPTX' }).getAttribute('aria-pressed')).toBe(
-        'true',
-      )
+      expect(within(panel).getByRole('button', { name: 'PPTX' }).getAttribute('aria-pressed')).toBe('true')
     })
 
     /**
@@ -828,9 +803,7 @@ describe('내보내기 화면', () => {
       const downloadExport: ApiClient['downloadExport'] = (_projectId, _format, options) =>
         new Promise<Blob>((_resolve, reject) => {
           if (options?.cancel !== undefined) 신호.push(options.cancel)
-          options?.cancel?.addEventListener('abort', () =>
-            reject(new ApiError(0, 'internal', '떠난 화면의 조회를 끊었습니다')),
-          )
+          options?.cancel?.addEventListener('abort', () => reject(new ApiError(0, 'internal', '떠난 화면의 조회를 끊었습니다')))
         })
       return { overrides: { ...api(깨끗한), downloadExport }, 신호 }
     }

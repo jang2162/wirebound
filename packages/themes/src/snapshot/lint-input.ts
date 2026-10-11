@@ -71,9 +71,7 @@ export interface SnapshotLintPlan {
 export function snapshotToLintInput(payload: SnapshotPayload, config?: LintConfig): SnapshotLintPlan {
   const notes: SnapshotLintNote[] = []
 
-  const targets = new Map(
-    targetedPages({ menu: payload.menu, pages: payload.pages }).map((page) => [page.id, page.target]),
-  )
+  const targets = new Map(targetedPages({ menu: payload.menu, pages: payload.pages }).map((page) => [page.id, page.target]))
 
   const menu: LintMenuNode[] = payload.menu.map((node) => ({
     id: node.id,
@@ -115,12 +113,7 @@ export function snapshotToLintInput(payload: SnapshotPayload, config?: LintConfi
  * `migrateDocument`는 문서의 `version`을 보고 판정한다 — payload의 `schemaVersion`은 DB
  * 컬럼의 사본이라 여기서 다시 읽지 않는다. 둘이 갈리면 검사가 보는 것은 문서 쪽이다.
  */
-function currentDocument(
-  document: PageDocument,
-  pageId: string,
-  title: string,
-  notes: SnapshotLintNote[],
-): PageDocument {
+function currentDocument(document: PageDocument, pageId: string, title: string, notes: SnapshotLintNote[]): PageDocument {
   try {
     return migrateDocument(document)
   } catch (error) {

@@ -118,9 +118,16 @@ describe('받는 사람', () => {
       const fx = await fixture(ctx)
       const mine = await join(ctx, fx.projectId, fx.editor)
       const joined = await mine.waitFor('joined')
-      const res = await inject(ctx, fx.editor, 'POST', `/api/projects/${fx.projectId}/menu`, { parentId: null, title: '내 메뉴' }, {
-        'x-wb-connection-id': joined.connectionId,
-      })
+      const res = await inject(
+        ctx,
+        fx.editor,
+        'POST',
+        `/api/projects/${fx.projectId}/menu`,
+        { parentId: null, title: '내 메뉴' },
+        {
+          'x-wb-connection-id': joined.connectionId,
+        },
+      )
       expect(res.statusCode).toBe(201)
       const frame = await mine.waitFor('menu-changed')
       expect(frame).toEqual({
@@ -205,7 +212,10 @@ describe('번호', () => {
       const fx = await fixture(ctx)
       const from = await treeRev(ctx, fx)
       const hold = ctx.proxy.holdQuery('commit')
-      const rename = inject(ctx, fx.owner, 'PATCH', `/api/projects/${fx.projectId}/menu/${fx.menuId}`, { title: '바꾼 이름', base: { title: '회원관리' } })
+      const rename = inject(ctx, fx.owner, 'PATCH', `/api/projects/${fx.projectId}/menu/${fx.menuId}`, {
+        title: '바꾼 이름',
+        base: { title: '회원관리' },
+      })
       await hold.held
       const page = inject(ctx, fx.owner, 'POST', `/api/projects/${fx.projectId}/pages`, { menuNodeId: fx.menuId, title: '뒤에 온 페이지' })
       try {
@@ -258,7 +268,10 @@ describe('잠금 — 번호 줄이 고리에 안 낀다(교착 0)', () => {
       const other = await createMenuNode(ctx, fx.owner.cookie, fx.projectId, { title: '옆 메뉴' })
       const deadlocks = await deadlockCount()
       const hold = ctx.proxy.holdQuery(RENAME_WRITE)
-      const rename = inject(ctx, fx.owner, 'PATCH', `/api/projects/${fx.projectId}/menu/${fx.menuId}`, { title: '바꾼 이름', base: { title: '회원관리' } })
+      const rename = inject(ctx, fx.owner, 'PATCH', `/api/projects/${fx.projectId}/menu/${fx.menuId}`, {
+        title: '바꾼 이름',
+        base: { title: '회원관리' },
+      })
       await hold.held
       const move = inject(ctx, fx.editor, 'PATCH', `/api/projects/${fx.projectId}/menu/${fx.menuId}`, { parentId: other.id })
       let removal
@@ -286,7 +299,10 @@ describe('잠금 — 번호 줄이 고리에 안 낀다(교착 0)', () => {
       await db.deleteFrom('project_menu_revs').where('project_id', '=', fx.projectId).execute()
       const deadlocks = await deadlockCount()
       const hold = ctx.proxy.holdQuery(RENAME_WRITE)
-      const rename = inject(ctx, fx.owner, 'PATCH', `/api/projects/${fx.projectId}/menu/${fx.menuId}`, { title: '바꾼 이름', base: { title: '회원관리' } })
+      const rename = inject(ctx, fx.owner, 'PATCH', `/api/projects/${fx.projectId}/menu/${fx.menuId}`, {
+        title: '바꾼 이름',
+        base: { title: '회원관리' },
+      })
       await hold.held
       const removal = inject(ctx, fx.owner, 'DELETE', `/api/projects/${fx.projectId}`)
       try {
@@ -313,8 +329,7 @@ describe('답을 잃은 쓰기', () => {
   const LOST = 'insert into "project_menu_revs"'
   /** 무장한 뒤 보낸다 — 제 픽스처를 세우는 쓰기는 그 뒤에 부른다. */
   const armed =
-    (send: (ctx: ProxiedRealApi, fx: Fx, P: string) => Promise<{ statusCode: number }>) =>
-    (ctx: ProxiedRealApi, fx: Fx, P: string) => {
+    (send: (ctx: ProxiedRealApi, fx: Fx, P: string) => Promise<{ statusCode: number }>) => (ctx: ProxiedRealApi, fx: Fx, P: string) => {
       ctx.proxy.dropCommitReplyAfter(LOST)
       return send(ctx, fx, P)
     }
@@ -323,10 +338,15 @@ describe('답을 잃은 쓰기', () => {
     status?: number
     send: (ctx: ProxiedRealApi, fx: Fx, P: string) => Promise<{ statusCode: number }>
   }[] = [
-    { label: 'POST …/menu', send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'POST', `${P}/menu`, { parentId: null, title: '잃은 메뉴' })) },
+    {
+      label: 'POST …/menu',
+      send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'POST', `${P}/menu`, { parentId: null, title: '잃은 메뉴' })),
+    },
     {
       label: 'PATCH …/menu/:id — 이름',
-      send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'PATCH', `${P}/menu/${fx.menuId}`, { title: '잃은 이름', base: { title: '회원관리' } })),
+      send: armed((ctx, fx, P) =>
+        inject(ctx, fx.owner, 'PATCH', `${P}/menu/${fx.menuId}`, { title: '잃은 이름', base: { title: '회원관리' } }),
+      ),
     },
     {
       label: 'PATCH …/menu/:id — 자리',
@@ -346,9 +366,14 @@ describe('답을 잃은 쓰기', () => {
     },
     {
       label: 'DELETE …/menu/:id — 연쇄 삭제',
-      send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'DELETE', `${P}/menu/${fx.menuId}`, { cascade: true, expect: { menuIds: [], pageIds: [fx.pageId] } })),
+      send: armed((ctx, fx, P) =>
+        inject(ctx, fx.owner, 'DELETE', `${P}/menu/${fx.menuId}`, { cascade: true, expect: { menuIds: [], pageIds: [fx.pageId] } }),
+      ),
     },
-    { label: 'POST …/pages', send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'POST', `${P}/pages`, { menuNodeId: fx.menuId, title: '잃은 페이지' })) },
+    {
+      label: 'POST …/pages',
+      send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'POST', `${P}/pages`, { menuNodeId: fx.menuId, title: '잃은 페이지' })),
+    },
     {
       label: 'POST …/pages/import',
       send: armed((ctx, fx, P) =>
@@ -363,7 +388,10 @@ describe('답을 잃은 쓰기', () => {
         }),
       ),
     },
-    { label: 'PATCH …/pages/:id', send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'PATCH', `${P}/pages/${fx.pageId}`, { title: '잃은 제목' })) },
+    {
+      label: 'PATCH …/pages/:id',
+      send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'PATCH', `${P}/pages/${fx.pageId}`, { title: '잃은 제목' })),
+    },
     { label: 'DELETE …/pages/:id', send: armed((ctx, fx, P) => inject(ctx, fx.owner, 'DELETE', `${P}/pages/${fx.pageId}`)) },
     {
       label: '복원(대조군 — 커밋을 확인한다)',
@@ -377,24 +405,28 @@ describe('답을 잃은 쓰기', () => {
     },
   ]
   for (const write of writes) {
-    it(write.label, async () => {
-      await withProxiedRealApi(async (ctx) => {
-        const fx = await fixture(ctx)
-        const P = `/api/projects/${fx.projectId}`
-        const watcher = await join(ctx, fx.projectId, fx.viewer)
-        await watcher.waitFor('joined')
-        // 무장은 `send` 가 제 픽스처를 다 세운 뒤에 건다(`armed`) — 픽스처의 쓰기가 무장을 먹으면 판이 안 선다.
-        const res = await write.send(ctx, fx, P)
-        expect(ctx.proxy.fired).toBe(true)
-        const after = await treeRev(ctx, fx)
-        await watcher.quiet()
-        const revs = watcher.received.filter((frame) => frame.type === 'menu-changed').map((frame) => (frame as { rev: number }).rev)
-        // 받은 신호의 마지막이 지금 번호다 — 앞의 것은 `send` 안에서 세운 픽스처의 신호다. 커밋을 확인했으니 답은 성공이다(2xx — 쓰기마다 코드가 다르다).
-        expect(res.statusCode, `${write.label} 의 답`).toBeGreaterThanOrEqual(200)
-        expect(res.statusCode, `${write.label} 의 답`).toBeLessThan(300)
-        expect(revs.at(-1) ?? null).toBe(after)
-      })
-    }, 30_000)
+    it(
+      write.label,
+      async () => {
+        await withProxiedRealApi(async (ctx) => {
+          const fx = await fixture(ctx)
+          const P = `/api/projects/${fx.projectId}`
+          const watcher = await join(ctx, fx.projectId, fx.viewer)
+          await watcher.waitFor('joined')
+          // 무장은 `send` 가 제 픽스처를 다 세운 뒤에 건다(`armed`) — 픽스처의 쓰기가 무장을 먹으면 판이 안 선다.
+          const res = await write.send(ctx, fx, P)
+          expect(ctx.proxy.fired).toBe(true)
+          const after = await treeRev(ctx, fx)
+          await watcher.quiet()
+          const revs = watcher.received.filter((frame) => frame.type === 'menu-changed').map((frame) => (frame as { rev: number }).rev)
+          // 받은 신호의 마지막이 지금 번호다 — 앞의 것은 `send` 안에서 세운 픽스처의 신호다. 커밋을 확인했으니 답은 성공이다(2xx — 쓰기마다 코드가 다르다).
+          expect(res.statusCode, `${write.label} 의 답`).toBeGreaterThanOrEqual(200)
+          expect(res.statusCode, `${write.label} 의 답`).toBeLessThan(300)
+          expect(revs.at(-1) ?? null).toBe(after)
+        })
+      },
+      30_000,
+    )
   }
 
   /**
@@ -408,8 +440,16 @@ describe('답을 잃은 쓰기', () => {
       const watcher = await join(ctx, fx.projectId, fx.viewer)
       await watcher.waitFor('joined')
       const from = await treeRev(ctx, fx)
-      await sql.raw(`create or replace function zz_slow_rev() returns trigger language plpgsql as $$ begin perform pg_sleep(3); return null; end $$`).execute(db)
-      await sql.raw(`create constraint trigger zz_slow_rev after insert or update on project_menu_revs deferrable initially deferred for each row execute function zz_slow_rev()`).execute(db)
+      await sql
+        .raw(
+          `create or replace function zz_slow_rev() returns trigger language plpgsql as $$ begin perform pg_sleep(3); return null; end $$`,
+        )
+        .execute(db)
+      await sql
+        .raw(
+          `create constraint trigger zz_slow_rev after insert or update on project_menu_revs deferrable initially deferred for each row execute function zz_slow_rev()`,
+        )
+        .execute(db)
       try {
         ctx.proxy.halfCutOnQuery('commit')
         const res = await inject(ctx, fx.owner, 'POST', `/api/projects/${fx.projectId}/menu`, { parentId: null, title: '늦게 커밋될 메뉴' })
@@ -422,7 +462,12 @@ describe('답을 잃은 쓰기', () => {
         }
         const after = await treeRev(ctx, fx)
         expect(after).toBeGreaterThan(from)
-        expect(watcher.received.filter((frame) => frame.type === 'menu-changed').map((frame) => frame.rev).at(-1) ?? null).toBe(after)
+        expect(
+          watcher.received
+            .filter((frame) => frame.type === 'menu-changed')
+            .map((frame) => frame.rev)
+            .at(-1) ?? null,
+        ).toBe(after)
       } finally {
         await sql`drop trigger if exists zz_slow_rev on project_menu_revs`.execute(db)
         await sql`drop function if exists zz_slow_rev()`.execute(db)

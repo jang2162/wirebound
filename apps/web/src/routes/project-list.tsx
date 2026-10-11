@@ -43,23 +43,13 @@ export function ProjectListRoute(): ReactElement {
       {/* **여는 버튼도 잠근다.** 실제로 막는 것은 훅의 `inFlight`이고, 이 `disabled`는
           그것을 화면에 보이게 한다 — 여는 쪽 하나라도 빠지면 그 버튼은 눌리는 것처럼 보이는데
           조용히 아무 일도 안 한다. */}
-      <button
-        className="wb-shell-project-create"
-        type="button"
-        disabled={commands.busy}
-        onClick={commands.openCreate}
-      >
+      <button className="wb-shell-project-create" type="button" disabled={commands.busy} onClick={commands.openCreate}>
         새 프로젝트
       </button>
 
       {/* 만들기 폼은 목록 **위**에 연다. */}
       {commands.form !== null && (
-        <ProjectForm
-          submitLabel="만들기"
-          busy={commands.busy}
-          onSubmit={commands.submitForm}
-          onCancel={commands.closeForm}
-        />
+        <ProjectForm submitLabel="만들기" busy={commands.busy} onSubmit={commands.submitForm} onCancel={commands.closeForm} />
       )}
 
       {/* **조작 실패는 조회 실패와 다른 자리에 낸다**. 둘이 한 자리에 나오면 목록을
@@ -107,9 +97,7 @@ function ProjectRow(props: { project: ProjectDetail }): ReactElement {
       <Link className="wb-shell-project-name" to={`/projects/${project.id}`}>
         {project.name}
       </Link>
-      {project.description !== null && (
-        <p className="wb-shell-project-desc">{project.description}</p>
-      )}
+      {project.description !== null && <p className="wb-shell-project-desc">{project.description}</p>}
 
       {/* **설정은 모든 멤버에게 있다** — owner 가 아니면 설정 페이지가 읽기로만 보인다(지금 테마 · 토큰을 볼 수 있다).
           글자는 «설정» 하나이고 줄마다 갈리는 이름은 `aria-label` 이 싣는다. */}

@@ -117,11 +117,7 @@ const NOTHING: StructureAbilities = {
  * 자식을 받나"*), 패턴은 애초에 판정을 지나지 않는 조작이다. **잠금이 패턴에도 걸려야
  * 하는지는 이 함수가 답할 물음이 아니다** — 그 조작에는 끌 `ability`가 없다.
  */
-export function structureAbilities(
-  document: PageDocument | null,
-  nodeId: string | null,
-  lock: NodeLock | null = null,
-): StructureAbilities {
+export function structureAbilities(document: PageDocument | null, nodeId: string | null, lock: NodeLock | null = null): StructureAbilities {
   if (document === null || nodeId === null) return NOTHING
   // **남이 잠근 자리에서는 전부 `false`다**(위 머리말의 마지막 절). 잠금을 **판정하지
   // 않고** 판정의 결과를 받는 것이 요점이다 — 그 판정은 스토어의 `lockedBy` 하나가 한다.

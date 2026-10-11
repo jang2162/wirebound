@@ -47,7 +47,8 @@ describe('isolateBidi', () => {
 })
 
 describe('이름이 이어 붙는 자리', () => {
-  const button = (id: string, label: string, extra: Partial<WbNode> = {}): WbNode => ({ id, type: 'Button', props: { label }, ...extra }) as WbNode
+  const button = (id: string, label: string, extra: Partial<WbNode> = {}): WbNode =>
+    ({ id, type: 'Button', props: { label }, ...extra }) as WbNode
 
   it('요약 읽개 — 제어 글자가 든 이름만 감싼다 · 자른 뒤에 감싼다', () => {
     expect(oneLine(`a${RLO}b`)).toBe(`${FSI}a${RLO}b${PDI}`)
@@ -78,7 +79,9 @@ describe('이름이 이어 붙는 자리', () => {
     const document = { version: 1, root: { id: 'page', type: 'Page', children: [source, tabs] } } as unknown as PageDocument
     const sentence = (action: object) => describeInteraction(document, source, { on: 'click', actions: [action] } as never)
     // 탭 이름 · `setProp` 의 글 값 · 페이지 경로(메뉴 · 페이지 제목 몫).
-    expect(sentence({ type: 'switchTab', target: 'n_tabs00000001', tab: 0 })).toBe(`① ${FSI}a${RLO}b${PDI} 버튼 클릭 시 ② 탭이 "${FSI}x${RLO}y${PDI}" 탭으로 바뀝니다`)
+    expect(sentence({ type: 'switchTab', target: 'n_tabs00000001', tab: 0 })).toBe(
+      `① ${FSI}a${RLO}b${PDI} 버튼 클릭 시 ② 탭이 "${FSI}x${RLO}y${PDI}" 탭으로 바뀝니다`,
+    )
     expect(sentence({ type: 'setProp', target: 'n_src000000001', prop: 'label', value: `c${RLO}d` })).toContain(`"${FSI}c${RLO}d${PDI}"`)
     expect(sentence({ type: 'setProp', target: 'n_src000000001', prop: 'label', value: '보통' })).toContain('"보통"')
     expect(sentence({ type: 'navigate', target: `page:관리${RLO}자/목록` })).toContain(`${FSI}관리${RLO}자/목록${PDI} 페이지`)

@@ -124,7 +124,13 @@ describe.skipIf(!전제.ok)('A4 리뷰', () => {
    * load 를 낸 스크립트의 등록만»). 판정: 등록하지 않은 번들은 실패로 알린다.
    */
   it('늦게 등록한 번들의 정의를 다음 번들이 제 것으로 받지 않는다', async () => {
-    await upload(remake(base, { id: 'late', version: '1.0.0', js: (js) => js.replace('"샘플 카드"', '"늦은 카드"').replace(REGISTER, `setTimeout(()=>${REGISTER},0)`) }))
+    await upload(
+      remake(base, {
+        id: 'late',
+        version: '1.0.0',
+        js: (js) => js.replace('"샘플 카드"', '"늦은 카드"').replace(REGISTER, `setTimeout(()=>${REGISTER},0)`),
+      }),
+    )
     await upload(remake(base, { id: 'silent', version: '1.0.0', js: (js) => js.replace(REGISTER, 'void s') }))
     const project = await themeProject(stack, alice)
     await putTheme(project.call, project.id, { themeId: 'late', version: '1.0.0', tokens: {} })
@@ -162,7 +168,10 @@ describe.skipIf(!전제.ok)('A4 리뷰', () => {
         id: 'drift',
         version: '1.0.0',
         // 서버 manifest 에만 `huge` — 번들의 manifest 는 plain · loud 그대로다.
-        manifest: (m) => ({ ...m, components: { Card: { variants: [...m.components.Card.variants, { id: 'huge', label: '아주 큼' }], defaultVariant: 'plain' } } }),
+        manifest: (m) => ({
+          ...m,
+          components: { Card: { variants: [...m.components.Card.variants, { id: 'huge', label: '아주 큼' }], defaultVariant: 'plain' } },
+        }),
       }),
     )
     const project = await themeProject(stack, alice)
@@ -179,7 +188,10 @@ describe.skipIf(!전제.ok)('A4 리뷰', () => {
       await canvasFrame(page).locator('[data-wb-id="n_card000001"]').click()
       const panel = page.getByRole('combobox', { name: '변형' })
       await panel.waitFor()
-      const drawn = await inCanvas(page, () => document.querySelector('[data-wb-id="n_card000001"]')?.getAttribute('data-wb-variant') ?? null)
+      const drawn = await inCanvas(
+        page,
+        () => document.querySelector('[data-wb-id="n_card000001"]')?.getAttribute('data-wb-variant') ?? null,
+      )
       expect({ panel: await panel.inputValue(), drawn }).toEqual({ panel: 'huge', drawn: 'huge' })
     } finally {
       await context.close()
@@ -193,7 +205,9 @@ describe.skipIf(!전제.ok)('A4 리뷰', () => {
    * `!important` 전이(`@layer t { … }`)도 같은 값이다 — 앞에 선언된 층이 이긴다.
    */
   it('층 밖 !important 전이를 실은 테마 CSS 가 늦게 실려도 노드가 미끄러지지 않는다', async () => {
-    await upload(remake(base, { id: 'loud-css', version: '1.0.0', css: '.sample-card{padding:60px !important;transition:padding 1s !important}' }))
+    await upload(
+      remake(base, { id: 'loud-css', version: '1.0.0', css: '.sample-card{padding:60px !important;transition:padding 1s !important}' }),
+    )
     const project = await themeProject(stack, alice)
     await putTheme(project.call, project.id, { themeId: 'loud-css', version: '1.0.0', tokens: {} })
     const { context, page } = await stack.openTab(stack.users.alice)
@@ -205,24 +219,30 @@ describe.skipIf(!전제.ok)('A4 리뷰', () => {
     try {
       await page.goto(`/projects/${project.id}/pages/${project.first}`)
       await canvasFrame(page).locator('.sample-card').waitFor()
-      const heights = (await inCanvas(page, () =>
-        new Promise<number[]>((resolve) => {
-          const out: number[] = []
-          const t0 = performance.now()
-          const step = () => {
-            const el = document.querySelector('.sample-card')
-            out.push(el === null ? -1 : Math.round(el.getBoundingClientRect().height * 10) / 10)
-            if (performance.now() - t0 < 2500) requestAnimationFrame(step)
-            else resolve(out)
-          }
-          requestAnimationFrame(step)
-        }),
+      const heights = (await inCanvas(
+        page,
+        () =>
+          new Promise<number[]>((resolve) => {
+            const out: number[] = []
+            const t0 = performance.now()
+            const step = () => {
+              const el = document.querySelector('.sample-card')
+              out.push(el === null ? -1 : Math.round(el.getBoundingClientRect().height * 10) / 10)
+              if (performance.now() - t0 < 2500) requestAnimationFrame(step)
+              else resolve(out)
+            }
+            requestAnimationFrame(step)
+          }),
       ))!
       const runs = heights.filter((h, i) => i === 0 || h !== heights[i - 1])
       // 카나리아: 시트가 실렸고(padding 60px) 멈춤이 걷혀 전이가 되살아났다.
       const after = await inCanvas(page, () => {
         const el = document.querySelector('.sample-card')!
-        return { padding: getComputedStyle(el).paddingTop, duration: getComputedStyle(el).transitionDuration, hold: document.querySelector('style[data-wb-hold]') !== null }
+        return {
+          padding: getComputedStyle(el).paddingTop,
+          duration: getComputedStyle(el).transitionDuration,
+          hold: document.querySelector('style[data-wb-hold]') !== null,
+        }
       })
       expect(after).toEqual({ padding: '60px', duration: '1s', hold: false })
       expect(runs.length, `자리 ${runs.join(', ')}`).toBeLessThanOrEqual(2)

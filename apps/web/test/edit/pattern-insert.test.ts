@@ -3,13 +3,7 @@
  * 순수 함수이고, 화면을 지나는 흐름은 `../panels/structure-pattern.test.tsx`가 잰다.
  */
 import { describe, expect, it } from 'vitest'
-import {
-  applyOps,
-  getComponent,
-  validatePage,
-  type PageDocument,
-  type WbNode,
-} from '@wirebound/schema'
+import { applyOps, getComponent, validatePage, type PageDocument, type WbNode } from '@wirebound/schema'
 import { patternInsert } from '../../src/edit/pattern-insert'
 import '../../src/catalog-setup'
 
@@ -75,12 +69,7 @@ describe('꽂는 자리', () => {
     const before = doc()
     const { insert } = patternInsert(before, null, expanded([ONE()]))
     expect(insert).not.toBeNull()
-    expect(childIds(applied(before, insert!.ops), 'n-root')).toEqual([
-      'n-a',
-      'n-box',
-      'n-empty',
-      'n-new',
-    ])
+    expect(childIds(applied(before, insert!.ops), 'n-root')).toEqual(['n-a', 'n-box', 'n-empty', 'n-new'])
   })
 
   it('선택 노드가 자식을 받으면 그 자식 끝이다', () => {
@@ -101,12 +90,7 @@ describe('꽂는 자리', () => {
     const before = doc()
     const { insert } = patternInsert(before, 'n-a', expanded([ONE()]))
     expect(insert).not.toBeNull()
-    expect(childIds(applied(before, insert!.ops), 'n-root')).toEqual([
-      'n-a',
-      'n-new',
-      'n-box',
-      'n-empty',
-    ])
+    expect(childIds(applied(before, insert!.ops), 'n-root')).toEqual(['n-a', 'n-new', 'n-box', 'n-empty'])
   })
 
   it('선택 노드가 문서에 없으면 만들지 않는다 — root로 흘리지 않는다', () => {
@@ -207,22 +191,14 @@ describe('꽂은 뒤 선택이 어디로 가는가', () => {
   it('슬롯이 꽂히지 않은 노드를 가리키면 첫 노드로 떨어진다', () => {
     // 전개가 그런 매핑을 내지 않지만(케이스가 고정한다), 여기서 가정하지 않는다 —
     // `selectId`는 반드시 **꽂은 노드 중 하나**여야 선택이 사라지지 않는다.
-    const { insert } = patternInsert(
-      doc(),
-      'n-box',
-      expanded([ONE()], [['title', 'n-트리밖']]),
-    )
+    const { insert } = patternInsert(doc(), 'n-box', expanded([ONE()], [['title', 'n-트리밖']]))
     expect(insert!.selectId).toBe('n-new')
   })
 })
 
 describe('패턴이 잘못됐다와 내가 잘못 눌렀다를 가른다', () => {
   it('카탈로그에 없는 타입을 담은 패턴은 꽂지 않는다', () => {
-    const { insert, reason, issues } = patternInsert(
-      doc(),
-      'n-box',
-      expanded([{ id: 'n-x', type: '없는타입' }]),
-    )
+    const { insert, reason, issues } = patternInsert(doc(), 'n-box', expanded([{ id: 'n-x', type: '없는타입' }]))
     expect(insert).toBeNull()
     expect(reason).toBe('invalid')
     expect(issues.map((entry) => entry.code)).toEqual(['unknown-type'])

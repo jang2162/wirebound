@@ -36,7 +36,10 @@ function legacyHash(raw: string): string {
 
 async function seedLegacy(ctx: TestContext, raw: string): Promise<string> {
   const email = nextEmail()
-  await ctx.db.insertInto('users').values({ email, name: '옛 해시', password_hash: legacyHash(raw) }).execute()
+  await ctx.db
+    .insertInto('users')
+    .values({ email, name: '옛 해시', password_hash: legacyHash(raw) })
+    .execute()
   return email
 }
 
@@ -68,7 +71,9 @@ describe('비밀번호 NFC', () => {
   it('재설정 명령으로 정한 꼴과 다른 꼴로 쳐도 로그인된다', async () => {
     await withApi(async (ctx) => {
       const email = nextEmail()
-      expect((await seedUser(ctx.db, { email, name: '재설정', password: 'password1234' }, testConfig().passwordScryptN)).kind).toBe('created')
+      expect((await seedUser(ctx.db, { email, name: '재설정', password: 'password1234' }, testConfig().passwordScryptN)).kind).toBe(
+        'created',
+      )
       expect((await resetPassword(ctx.db, email, NFD, testConfig().passwordScryptN)).kind).toBe('updated')
       expect([await login(ctx, email, NFC), await login(ctx, email, NFD)]).toEqual([200, 200])
     })
@@ -126,7 +131,8 @@ describe('비밀번호 NFC', () => {
       const direct = await hashPassword(NFD, { N: testConfig().passwordScryptN, r: 8, p: 1 })
       for (const encoded of [row.password_hash, direct]) {
         const [, n, r, p, salt, key] = encoded.split('$')
-        const of = (raw: string) => scryptSync(raw, Buffer.from(salt!, 'base64url'), 32, { N: Number(n), r: Number(r), p: Number(p) }).toString('base64url')
+        const of = (raw: string) =>
+          scryptSync(raw, Buffer.from(salt!, 'base64url'), 32, { N: Number(n), r: Number(r), p: Number(p) }).toString('base64url')
         expect(key).toBe(of(NFC))
         expect(key).not.toBe(of(NFD))
       }
@@ -142,7 +148,9 @@ describe('비밀번호 NFC', () => {
       const short = '한글비번1'.normalize('NFD')
       expect(short.length).toBeGreaterThanOrEqual(8)
       expect(short.normalize('NFC').length).toBeLessThan(8)
-      await expect(seedUser(ctx.db, { email: nextEmail(), name: '짧음', password: short }, testConfig().passwordScryptN)).rejects.toThrow(SeedUserError)
+      await expect(seedUser(ctx.db, { email: nextEmail(), name: '짧음', password: short }, testConfig().passwordScryptN)).rejects.toThrow(
+        SeedUserError,
+      )
       await expect(resetPassword(ctx.db, nextEmail(), short, testConfig().passwordScryptN)).rejects.toThrow(ResetPasswordError)
     })
   })

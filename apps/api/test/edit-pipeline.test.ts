@@ -158,9 +158,7 @@ describe('applyEdit', () => {
       // (마이그레이션 0004: 그냥 `integer NOT NULL`). 그래서 두 값을 일부러 갈라
       // 둘 수 있다 — 마이그레이션이 실제로 버전을 올리기 시작했을 때 벌어질 상황을
       // 미리 만드는 것이다.
-      await withTransaction(ctx.db, (trx) =>
-        trx.updateTable('pages').set({ schema_version: 7 }).where('id', '=', fx.page.id).execute(),
-      )
+      await withTransaction(ctx.db, (trx) => trx.updateTable('pages').set({ schema_version: 7 }).where('id', '=', fx.page.id).execute())
 
       const outcome = await applyEdit(ctx.db, {
         projectId: fx.project.id,
@@ -179,11 +177,7 @@ describe('applyEdit', () => {
       // 응답값뿐 아니라 저장까지 본다 — `writePageSchemaAtSeq`에 넘기는 버전도 같은
       // 곳에서 나와야 한다. 컬럼이 7로 남으면 그 다음 GET부터 응답의 `schemaVersion`이
       // 문서 `version`과 어긋난다.
-      const row = await ctx.db
-        .selectFrom('pages')
-        .select('schema_version')
-        .where('id', '=', fx.page.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('pages').select('schema_version').where('id', '=', fx.page.id).executeTakeFirstOrThrow()
       expect(row.schema_version).toBe(CURRENT_DOCUMENT_VERSION)
     })
   })
@@ -202,11 +196,7 @@ describe('applyEdit', () => {
       })
       if (!outcome.ok) throw new Error(`편집이 실패했습니다: ${JSON.stringify(outcome)}`)
 
-      const rows = await ctx.db
-        .selectFrom('revisions')
-        .select(['id', 'ops', 'inverse'])
-        .where('page_id', '=', fx.page.id)
-        .execute()
+      const rows = await ctx.db.selectFrom('revisions').select(['id', 'ops', 'inverse']).where('page_id', '=', fx.page.id).execute()
 
       expect(rows).toHaveLength(1)
       expect(rows[0]?.id).toBe(outcome.revisionId)
@@ -416,11 +406,7 @@ describe('applyEdit', () => {
       const fx = await setup(ctx)
       const edit1 = await seed(ctx, fx)
 
-      const before = await ctx.db
-        .selectFrom('pages')
-        .select(['head_seq', 'schema'])
-        .where('id', '=', fx.page.id)
-        .executeTakeFirstOrThrow()
+      const before = await ctx.db.selectFrom('pages').select(['head_seq', 'schema']).where('id', '=', fx.page.id).executeTakeFirstOrThrow()
 
       const outcome = await applyEdit(ctx.db, {
         projectId: fx.project.id,
@@ -431,11 +417,7 @@ describe('applyEdit', () => {
       })
       expect(outcome.ok).toBe(false)
 
-      const after = await ctx.db
-        .selectFrom('pages')
-        .select(['head_seq', 'schema'])
-        .where('id', '=', fx.page.id)
-        .executeTakeFirstOrThrow()
+      const after = await ctx.db.selectFrom('pages').select(['head_seq', 'schema']).where('id', '=', fx.page.id).executeTakeFirstOrThrow()
 
       expect(Number(after.head_seq)).toBe(Number(before.head_seq))
       expect(after.schema).toEqual(before.schema)
@@ -552,11 +534,7 @@ describe('applyEdit', () => {
       const fx = await setup(ctx)
       const edit1 = await seed(ctx, fx)
 
-      const before = await ctx.db
-        .selectFrom('pages')
-        .select(['head_seq', 'schema'])
-        .where('id', '=', fx.page.id)
-        .executeTakeFirstOrThrow()
+      const before = await ctx.db.selectFrom('pages').select(['head_seq', 'schema']).where('id', '=', fx.page.id).executeTakeFirstOrThrow()
 
       const outcome = await applyEdit(ctx.db, {
         projectId: fx.project.id,
@@ -567,11 +545,7 @@ describe('applyEdit', () => {
       })
       expect(outcome.ok).toBe(false)
 
-      const after = await ctx.db
-        .selectFrom('pages')
-        .select(['head_seq', 'schema'])
-        .where('id', '=', fx.page.id)
-        .executeTakeFirstOrThrow()
+      const after = await ctx.db.selectFrom('pages').select(['head_seq', 'schema']).where('id', '=', fx.page.id).executeTakeFirstOrThrow()
 
       expect(Number(after.head_seq)).toBe(Number(before.head_seq))
       expect(after.schema).toEqual(before.schema)

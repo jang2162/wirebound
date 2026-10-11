@@ -5,14 +5,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { CATALOG_TYPES, installCatalog } from '../src/component/catalog/index'
 import { DocumentEnvelopeSchema, PageEnvelopeSchema } from '../src/envelope'
-import {
-  DEFAULT_CASE,
-  THEMELESS_TYPES,
-  VIEW_STATE_NAME_MAX,
-  VIEW_STATES_MAX,
-  type PageDocument,
-  type WbNode,
-} from '../src/index'
+import { DEFAULT_CASE, THEMELESS_TYPES, VIEW_STATE_NAME_MAX, VIEW_STATES_MAX, type PageDocument, type WbNode } from '../src/index'
 import { checkViewStateRemoval, partitionIssues, validateLayout, validatePage } from '../src/validate'
 
 beforeAll(() => {
@@ -68,8 +61,20 @@ describe('viewStates — 상태 목록', () => {
     ['이름에 줄바꿈', [{ id: 's_1', name: '관리\n자' }]],
     ['이름에 방향 제어 글자', [{ id: 's_1', name: '관리\u202e자' }]],
     ['이름에 폭 없는 글자뿐', [{ id: 's_1', name: '\u200b' }]],
-    ['이름이 겹친다', [{ id: 's_1', name: '관리자' }, { id: 's_2', name: '관리자' }]],
-    ['id 가 겹친다', [{ id: 's_1', name: '관리자' }, { id: 's_1', name: '손님' }]],
+    [
+      '이름이 겹친다',
+      [
+        { id: 's_1', name: '관리자' },
+        { id: 's_2', name: '관리자' },
+      ],
+    ],
+    [
+      'id 가 겹친다',
+      [
+        { id: 's_1', name: '관리자' },
+        { id: 's_1', name: '손님' },
+      ],
+    ],
     ['21개', Array.from({ length: 21 }, (_, i) => ({ id: `s_${i}`, name: `상태 ${i}` }))],
     ['id 가 문자열이 아니다', [{ id: 7, name: '관리자' }]],
     ['id 가 노드 id 규칙 밖', [{ id: 's 1', name: '관리자' }]],
@@ -139,10 +144,7 @@ describe('상태 영역 — StateSwitch · StateCase', () => {
   })
 
   it('한 상태에 가지가 둘이면 state-case-duplicate', () => {
-    const doc = page(
-      [switchOf('n_sw', [caseOf('n_c0', DEFAULT_CASE), caseOf('n_c1', ADMIN.id), caseOf('n_c2', ADMIN.id)])],
-      [ADMIN],
-    )
+    const doc = page([switchOf('n_sw', [caseOf('n_c0', DEFAULT_CASE), caseOf('n_c1', ADMIN.id), caseOf('n_c2', ADMIN.id)])], [ADMIN])
     expect(validatePage(doc)).toContainEqual(
       expect.objectContaining({ code: 'state-case-duplicate', severity: 'error', nodeId: 'n_c2', path: '/root/children/0/children/2' }),
     )
@@ -211,12 +213,21 @@ describe('상태 목록 이슈의 노드 — 노드는 `root` 아래에만 있�
 describe('checkViewStateRemoval — 편집이 목록에서 뺀 상태의 가지가 남음', () => {
   const tree = [switchOf('n_sw', [caseOf('n_c0', DEFAULT_CASE), caseOf('n_c1', 's_admin', [text('n_ok')]), caseOf('n_c2', 's_guest')])]
   const before = page(tree, [ADMIN, GUEST])
-  const left = (after: PageDocument) => checkViewStateRemoval(before, after).map((issue) => `${issue.code} ${issue.severity} ${issue.nodeId} ${issue.path}`)
+  const left = (after: PageDocument) =>
+    checkViewStateRemoval(before, after).map((issue) => `${issue.code} ${issue.severity} ${issue.nodeId} ${issue.path}`)
 
   it.each<[string, PageDocument, string[]]>([
     ['하나를 빼면 그 상태의 가지마다', page(tree, [GUEST]), ['state-cases-left error n_c1 /root/children/0/children/1']],
-    ['목록째 빼면 모든 상태의 가지', page(tree), ['state-cases-left error n_c1 /root/children/0/children/1', 'state-cases-left error n_c2 /root/children/0/children/2']],
-    ['id 를 바꾸면 옛 id 의 가지', page(tree, [{ id: 's_root', name: '관리자' }, GUEST]), ['state-cases-left error n_c1 /root/children/0/children/1']],
+    [
+      '목록째 빼면 모든 상태의 가지',
+      page(tree),
+      ['state-cases-left error n_c1 /root/children/0/children/1', 'state-cases-left error n_c2 /root/children/0/children/2'],
+    ],
+    [
+      'id 를 바꾸면 옛 id 의 가지',
+      page(tree, [{ id: 's_root', name: '관리자' }, GUEST]),
+      ['state-cases-left error n_c1 /root/children/0/children/1'],
+    ],
     ['가지도 함께 지우면 없음', page([switchOf('n_sw', [caseOf('n_c0', DEFAULT_CASE), caseOf('n_c2', 's_guest')])], [GUEST]), []],
     ['이름 · 순서만 바꾸면 없음', page(tree, [GUEST, { id: 's_admin', name: '운영자' }]), []],
     ['상태를 더하면 없음', page(tree, [ADMIN, GUEST, { id: 's_new', name: '새' }]), []],

@@ -139,10 +139,7 @@ function expectRevokedNotRefused(probe: WsProbe): void {
 }
 
 /** `patch` 프레임 하나를 보낸다. */
-function sendPatch(
-  probe: WsProbe,
-  input: { pageId: string; baseSeq: number; ops: PatchOp[]; clientOpId: string },
-): void {
+function sendPatch(probe: WsProbe, input: { pageId: string; baseSeq: number; ops: PatchOp[]; clientOpId: string }): void {
   probe.send(JSON.stringify({ type: 'patch', ...input }))
 }
 
@@ -227,11 +224,7 @@ describe('patch 프레임에는 editor 이상이 필요하다', () => {
       const probe = track(await joinRoom(ctx.port, fx.project.id, fx.editor.cookie.wb_session))
       await settleJoin(probe)
 
-      await db
-        .deleteFrom('project_members')
-        .where('project_id', '=', fx.project.id)
-        .where('user_id', '=', fx.editor.user.id)
-        .execute()
+      await db.deleteFrom('project_members').where('project_id', '=', fx.project.id).where('user_id', '=', fx.editor.user.id).execute()
       sendPatch(probe, {
         pageId: fx.page.id,
         baseSeq: await headSeqOf(fx.page.id),
@@ -292,9 +285,7 @@ describe('프레임 규격은 REST 본문에서 온다', () => {
       const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
       const before = await headSeqOf(fx.page.id)
 
-      probe.send(
-        JSON.stringify({ type: 'patch', pageId: fx.page.id, baseSeq: before, ops: addNode('n_no_id') }),
-      )
+      probe.send(JSON.stringify({ type: 'patch', pageId: fx.page.id, baseSeq: before, ops: addNode('n_no_id') }))
 
       expect((await probe.waitClosed()).code).toBe(4400)
       expect(await headSeqOf(fx.page.id)).toBe(before)

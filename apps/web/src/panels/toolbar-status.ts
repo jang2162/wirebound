@@ -205,9 +205,7 @@ export function lockedSelectionStatus(userName: string): string {
  * 빠졌다). 이름은 `locks` 목록에서 읽고, 아직 모르면 이름 없이 말한다.
  */
 export function deniedSelectionNotice(userNames: readonly string[]): string {
-  return userNames.length === 0
-    ? '다른 사람이 편집 중이라 고를 수 없습니다'
-    : `${userNames.join(' · ')}님이 편집 중이라 고를 수 없습니다`
+  return userNames.length === 0 ? '다른 사람이 편집 중이라 고를 수 없습니다' : `${userNames.join(' · ')}님이 편집 중이라 고를 수 없습니다`
 }
 
 /**

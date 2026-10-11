@@ -7,8 +7,17 @@ import { validateManifest } from '../manifest/schema'
 export const WBTHEME_LIMITS = { zipBytes: 10_485_760, unzippedBytes: 52_428_800, entries: 500 } as const
 
 export type WbthemeIssueCode =
-  | 'too-large' | 'too-many-entries' | 'unzipped-too-large' | 'bad-path' | 'not-allowed' | 'symlink'
-  | 'missing-manifest' | 'missing-theme-js' | 'bad-json' | 'manifest' | 'bad-zip'
+  | 'too-large'
+  | 'too-many-entries'
+  | 'unzipped-too-large'
+  | 'bad-path'
+  | 'not-allowed'
+  | 'symlink'
+  | 'missing-manifest'
+  | 'missing-theme-js'
+  | 'bad-json'
+  | 'manifest'
+  | 'bad-zip'
 
 export interface WbthemeIssue {
   code: WbthemeIssueCode
@@ -302,4 +311,3 @@ function inflateBounded(bytes: Uint8Array, offset: number, size: number, origina
   }
   return written === originalSize ? out : out.subarray(0, written)
 }
-

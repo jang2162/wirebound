@@ -17,11 +17,7 @@ import * as inputModule from '../../src/component/catalog/input'
 import * as structureModule from '../../src/component/catalog/structure'
 import { CATALOG_DEFS } from '../../src/component/catalog/index'
 import type { ComponentDef } from '../../src/component/define'
-import {
-  COMPONENT_GROUPS,
-  COMPONENT_GROUP_LABELS,
-  isComponentGroup,
-} from '../../src/component/group'
+import { COMPONENT_GROUPS, COMPONENT_GROUP_LABELS, isComponentGroup } from '../../src/component/group'
 
 /**
  * 파일 → 그 파일이 선언해야 할 갈래. **이 표만이 손으로 적은 것이고, 그 항목 수가
@@ -39,35 +35,37 @@ const FILES = [
 /** 모듈이 내보내는 `ComponentDef`들. 다른 것을 내보내면 무시한다. */
 function defsOf(module: Record<string, unknown>): ComponentDef[] {
   return Object.values(module).filter(
-    (value): value is ComponentDef =>
-      typeof value === 'object' && value !== null && 'type' in value && 'group' in value,
+    (value): value is ComponentDef => typeof value === 'object' && value !== null && 'type' in value && 'group' in value,
   )
 }
 
 describe('갈래 선언과 카탈로그 파일', () => {
-  it.each(FILES.map((entry) => [entry.file, entry] as const))(
-    '%s 이 내보내는 def은 전부 그 파일의 갈래를 선언한다',
-    (_file, entry) => {
-      const defs = defsOf(entry.module)
-      expect(defs.length).toBeGreaterThan(0)
-      for (const def of defs) {
-        expect(def.group, def.type).toBe(entry.group)
-      }
-    },
-  )
+  it.each(FILES.map((entry) => [entry.file, entry] as const))('%s 이 내보내는 def은 전부 그 파일의 갈래를 선언한다', (_file, entry) => {
+    const defs = defsOf(entry.module)
+    expect(defs.length).toBeGreaterThan(0)
+    for (const def of defs) {
+      expect(def.group, def.type).toBe(entry.group)
+    }
+  })
 
   it('갈래마다 파일이 하나씩 있다', () => {
     // 갈래를 더하고 파일을 안 만들면(또는 그 반대) 위 검사가 그 갈래를 통째로 못 본다.
-    expect(FILES.map((entry) => entry.group).slice().sort()).toEqual(
-      [...COMPONENT_GROUPS].sort(),
-    )
+    expect(
+      FILES.map((entry) => entry.group)
+        .slice()
+        .sort(),
+    ).toEqual([...COMPONENT_GROUPS].sort())
   })
 
   it('카탈로그 전체가 다섯 파일에 남김없이 들어 있다', () => {
     // **`CATALOG_DEFS`에는 있는데 어느 모듈에도 없는 def**을 잡는다. 그런 것이 생기면
     // 위 파일별 검사가 그것을 지나친다.
     const inFiles = FILES.flatMap((entry) => defsOf(entry.module)).map((def) => def.type)
-    expect(inFiles.slice().sort()).toEqual(CATALOG_DEFS.map((def) => def.type).slice().sort())
+    expect(inFiles.slice().sort()).toEqual(
+      CATALOG_DEFS.map((def) => def.type)
+        .slice()
+        .sort(),
+    )
   })
 
   it('모든 갈래에 이름이 있다', () => {

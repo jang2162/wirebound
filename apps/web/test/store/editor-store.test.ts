@@ -15,13 +15,7 @@
  * 토큰을 찾는다(파일 끝 줄 주석으로도 먹힌다 — 실측). 산문에 한 번 더 적으면
  * 맨 윗줄을 지워도 환경이 그대로라, 아래 첫 테스트가 그 사고를 잡지 못한다.
  */
-import {
-  applyOps,
-  CURRENT_DOCUMENT_VERSION,
-  type PageDocument,
-  type PatchOp,
-  type ValidationIssue,
-} from '@wirebound/schema'
+import { applyOps, CURRENT_DOCUMENT_VERSION, type PageDocument, type PatchOp, type ValidationIssue } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
 import { EditorStore, MARKER_FRAME_WAIT_MS, VIEWPORT_PRESETS, type ViewportWidth } from '../../src/store/editor-store'
 
@@ -438,14 +432,10 @@ describe('EditorStore', () => {
 })
 
 /** 편집 하나. 내용은 `applyEdit`이 실제로 적용할 수 있는 것이어야 한다. */
-const TITLE_OPS: PatchOp[] = [
-  { op: 'add', path: '/root/props', value: { title: '새 제목' } },
-]
+const TITLE_OPS: PatchOp[] = [{ op: 'add', path: '/root/props', value: { title: '새 제목' } }]
 
 /** `applyOps`가 던지는 ops. 없는 경로다 — *"클라이언트가 만든 잘못된 ops"*의 신호를 만드는 값이다. */
-const BROKEN_OPS: PatchOp[] = [
-  { op: 'replace', path: '/root/children/9/props/title', value: 'x' },
-]
+const BROKEN_OPS: PatchOp[] = [{ op: 'replace', path: '/root/children/9/props/title', value: 'x' }]
 
 /**
  * 서버가 준 ack. `inverse`는 서버가 만든 것이다(설계서 「정방향 흐름」).
@@ -496,7 +486,10 @@ describe('EditorStore의 편집 상태', () => {
     const store = new EditorStore({ nextOpId: idSequence() })
     store.loadPage(
       'pg-1',
-      { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_root', type: 'Container', children: [{ id: 'n_a', type: 'Text', props: { x: 0 } }] } },
+      {
+        version: CURRENT_DOCUMENT_VERSION,
+        root: { id: 'n_root', type: 'Container', children: [{ id: 'n_a', type: 'Text', props: { x: 0 } }] },
+      },
       7,
     )
     return store
@@ -519,9 +512,7 @@ describe('EditorStore의 편집 상태', () => {
     expect(store.getState().document?.root.props).toEqual({ title: '새 제목' })
     // `kind`는 ack가 어느 스택에 쌓을지를 가르는 표시다.
     // 붙잡은 경로(`anchored`)는 모양을 여기서 안 잰다 — `anchored-ops.test.ts`가 잰다.
-    expect(store.getState().pending).toMatchObject([
-      { clientOpId: 'op-1', ops: TITLE_OPS, baseSeq: 7, kind: 'edit' },
-    ])
+    expect(store.getState().pending).toMatchObject([{ clientOpId: 'op-1', ops: TITLE_OPS, baseSeq: 7, kind: 'edit' }])
     // `headSeq`는 ack 전까지 그대로다 — 그것을 여기서 올리면 다음 편집이 아직 없는
     // revision을 `baseSeq`로 쓴다.
     expect(store.getState().headSeq).toBe(7)
@@ -565,9 +556,7 @@ describe('EditorStore의 편집 상태', () => {
     expect(store.getState().headSeq).toBe(8)
     expect(store.getState().pending).toEqual([])
     // **`inverse`는 서버가 준 그대로 쌓인다**(설계서 「정방향 흐름」). 클라이언트가 계산하지 않는다.
-    expect(store.getState().undoStack).toMatchObject([
-      { revisionId: 'rev-8', inverse: [{ op: 'remove', path: '/root/props' }] },
-    ])
+    expect(store.getState().undoStack).toMatchObject([{ revisionId: 'rev-8', inverse: [{ op: 'remove', path: '/root/props' }] }])
   })
 
   /**
@@ -838,9 +827,7 @@ describe('EditorStore의 편집 상태', () => {
 
     // 최신 것이 먼저 되돌아간다.
     expect(store.getState().document?.root.props).toEqual({ title: '최신' })
-    expect(store.getState().pending[0]?.ops).toEqual([
-      { op: 'add', path: '/root/props', value: { title: '최신' } },
-    ])
+    expect(store.getState().pending[0]?.ops).toEqual([{ op: 'add', path: '/root/props', value: { title: '최신' } }])
   })
 
   /**
@@ -1016,9 +1003,9 @@ describe('EditorStore의 마커 반영', () => {
 
     // **`'diverged'`다 — 화면이 이것을 말해야 한다.** 서버에는 번호가 있는데
     // 내 문서에는 없는 상태이고, 조용히 넘기면 아무도 그 어긋남을 모른다.
-    expect(
-      store.applyMarkerChange('pg-1', { seq: 8, markerOps: [{ op: 'add', path: '/root/children/9/marker', value: 1 }] }),
-    ).toBe('diverged')
+    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: [{ op: 'add', path: '/root/children/9/marker', value: 1 }] })).toBe(
+      'diverged',
+    )
     expect(store.getState().headSeq).toBe(7)
     expect(store.getState().document).toBe(before)
   })
@@ -1491,7 +1478,11 @@ describe('내가 누구인지 모를 때', () => {
 
   function locked(): EditorStore {
     const store = new EditorStore()
-    store.loadPage('pg-1', { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: {} }] } }, 7)
+    store.loadPage(
+      'pg-1',
+      { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: {} }] } },
+      7,
+    )
     store.setLocks([LOCK])
     return store
   }
@@ -1595,7 +1586,12 @@ describe('서버 이력으로 채운 되돌리기', () => {
     ])
 
     expect(store.getState().undoStack).toHaveLength(1)
-    expect(store.startUndo()).toEqual({ clientOpId: null, skipped: 0, blocked: null, history: { beforeSeq: 8, limit: 1, epoch: expect.any(Number) } })
+    expect(store.startUndo()).toEqual({
+      clientOpId: null,
+      skipped: 0,
+      blocked: null,
+      history: { beforeSeq: 8, limit: 1, epoch: expect.any(Number) },
+    })
     expect(store.getState().undoStack).toHaveLength(1)
     expect(store.startUndo({ historyLoaded: true })).toEqual({ clientOpId: null, skipped: 1, blocked: null })
     expect(contents(store)).toEqual(['밥', '가', '나'])
@@ -1605,7 +1601,9 @@ describe('서버 이력으로 채운 되돌리기', () => {
   it('사이에 낀 남의 revision 을 받으면 그것으로 되짚어 제 노드를 되돌린다', () => {
     const store = new EditorStore({ nextOpId: idSequence() })
     store.loadPage('pg-1', page(text('n_bob', '밥'), text('n_ga', '가'), text('n_na', '나')), 7)
-    const mine = [{ revisionId: 'rev-6', seq: 6, inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }] as PatchOp[] }]
+    const mine = [
+      { revisionId: 'rev-6', seq: 6, inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }] as PatchOp[] },
+    ]
     const point = store.undoRestorePoint()
     if (point === null) throw new Error('판이 없다')
 
@@ -1614,7 +1612,9 @@ describe('서버 이력으로 채운 되돌리기', () => {
     const need = store.undoHistoryNeed()
     expect(need).toEqual({ beforeSeq: 8, limit: 1, epoch: point.epoch })
     if (need === null) throw new Error('조회가 없다')
-    expect(store.supplyUndoHistory(need, [{ revisionId: 'rev-7', seq: 7, inverse: [{ op: 'remove', path: '/root/children/0' }] }])).toBe(true)
+    expect(store.supplyUndoHistory(need, [{ revisionId: 'rev-7', seq: 7, inverse: [{ op: 'remove', path: '/root/children/0' }] }])).toBe(
+      true,
+    )
     expect(store.undoHistoryNeed()).toBeNull()
 
     expect(store.startUndo().skipped).toBe(0)
@@ -1640,7 +1640,9 @@ describe('새로고침 되돌리기의 입구 × 출처', () => {
     root: { id: 'n_root', type: 'Container', children },
   })
   const contents = (store: EditorStore) => store.getState().document?.root.children?.map((child) => child.props?.content)
-  const MINE = [{ revisionId: 'rev-7', seq: 7, inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }] as PatchOp[] }]
+  const MINE = [
+    { revisionId: 'rev-7', seq: 7, inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }] as PatchOp[] },
+  ]
   /** 밥이 맨 앞에 넣은 프레임(8)과 그 `inverse` — 되짚기 조회가 받는 것. */
   const BOB = {
     frame: { seq: 8, ops: [{ op: 'add', path: '/root/children/0', value: text('n_bob', '밥') }] as PatchOp[], warnings: [] },
@@ -1659,7 +1661,10 @@ describe('새로고침 되돌리기의 입구 × 출처', () => {
    * 부르는 쪽이 하는 대로 누른다 — 여는 조회(`routes/editor.tsx`의 `restoreUndo`)는 목록만 싣고, 되돌리기(`edit/use-edit-commit.tsx`의
    * `loadUndoHistory`)가 누를 때 빠진 구간을 받아 넘긴 뒤 되돌린다. `server`가 그 구간을 답한다. 물은 구간을 돌려준다.
    */
-  function undoLikeHook(store: EditorStore, server: readonly { revisionId: string; seq: number; inverse: PatchOp[] }[]): { beforeSeq: number; limit: number }[] {
+  function undoLikeHook(
+    store: EditorStore,
+    server: readonly { revisionId: string; seq: number; inverse: PatchOp[] }[],
+  ): { beforeSeq: number; limit: number }[] {
     const asked: { beforeSeq: number; limit: number }[] = []
     for (let round = 0; round < 3; round += 1) {
       const need = store.undoHistoryNeed()
@@ -1710,8 +1715,14 @@ describe('새로고침 되돌리기의 입구 × 출처', () => {
 
   /** 다시 싣는 입구는 모두 `loadPage`다 — 재연결 재조회 · 복원 재조회 · 편집 실패 수습. 떠남은 `clearPage` 뒤 다시 여는 `loadPage`다. */
   const RELOADS: readonly { name: string; run: (store: EditorStore) => void }[] = [
-    { name: '다시 싣기(재연결 · 복원 · 수습 — 같은 판)', run: (store) => void store.loadPage('pg-1', page(text('n_ga', '가'), text('n_na', '나')), 7) },
-    { name: '다시 싣기(판이 움직였다)', run: (store) => void store.loadPage('pg-1', page(text('n_bob', '밥'), text('n_ga', '가'), text('n_na', '나')), 8) },
+    {
+      name: '다시 싣기(재연결 · 복원 · 수습 — 같은 판)',
+      run: (store) => void store.loadPage('pg-1', page(text('n_ga', '가'), text('n_na', '나')), 7),
+    },
+    {
+      name: '다시 싣기(판이 움직였다)',
+      run: (store) => void store.loadPage('pg-1', page(text('n_bob', '밥'), text('n_ga', '가'), text('n_na', '나')), 8),
+    },
     {
       name: '떠났다 돌아옴',
       run: (store) => {
@@ -1774,7 +1785,9 @@ describe('새로고침 되돌리기의 입구 × 출처', () => {
   it('바탕이 서버와 갈라졌으면 목록 답을 싣지 않는다 — 갭이면 싣는다', () => {
     const diverged = opened()
     const gap = opened()
-    expect(diverged.store.applyRemoteChange('pg-1', { seq: 8, ops: [{ op: 'remove', path: '/root/children/5' }], warnings: [] }).result).toBe('diverged')
+    expect(
+      diverged.store.applyRemoteChange('pg-1', { seq: 8, ops: [{ op: 'remove', path: '/root/children/5' }], warnings: [] }).result,
+    ).toBe('diverged')
     expect(gap.store.applyRemoteChange('pg-1', { ...BOB.frame, seq: 9 }).result).toBe('gap')
 
     const outcome = {
@@ -1782,7 +1795,11 @@ describe('새로고침 되돌리기의 입구 × 출처', () => {
       gap: gap.store.restoreUndoStack(MINE, { point: gap.point }),
     }
 
-    expect({ outcome, stacks: [diverged.store.getState().undoStack.length, gap.store.getState().undoStack.length], undo: diverged.store.startUndo().clientOpId }).toEqual({
+    expect({
+      outcome,
+      stacks: [diverged.store.getState().undoStack.length, gap.store.getState().undoStack.length],
+      undo: diverged.store.startUndo().clientOpId,
+    }).toEqual({
       outcome: { diverged: 'none', gap: 'restored' },
       stacks: [0, 1],
       undo: null,
@@ -1821,6 +1838,10 @@ describe('새로고침 되돌리기의 입구 × 출처', () => {
     const atOpen = reads.count
     store.startUndo()
 
-    expect({ atOpen, stack: store.getState().undoStack.length, top: contents(store) }).toEqual({ atOpen: 0, stack: 1, top: ['가', '옛 나'] })
+    expect({ atOpen, stack: store.getState().undoStack.length, top: contents(store) }).toEqual({
+      atOpen: 0,
+      stack: 1,
+      top: ['가', '옛 나'],
+    })
   })
 })

@@ -90,13 +90,15 @@ interface Board {
 }
 
 function mount(options?: { realtime?: boolean }): Board {
-  const store = new EditorStore({ nextOpId: (() => {
-    let issued = 0
-    return () => {
-      issued += 1
-      return `op_${issued}`
-    }
-  })() })
+  const store = new EditorStore({
+    nextOpId: (() => {
+      let issued = 0
+      return () => {
+        issued += 1
+        return `op_${issued}`
+      }
+    })(),
+  })
   store.loadPage(PAGE_ID, doc(), HEAD_SEQ)
 
   const sockets: FakeSocket[] = []
@@ -174,9 +176,7 @@ function mount(options?: { realtime?: boolean }): Board {
       })
     },
     patchFrames: () =>
-      (sockets.at(-1)?.sent ?? [])
-        .map((raw) => JSON.parse(raw) as Record<string, unknown>)
-        .filter((frame) => frame.type === 'patch'),
+      (sockets.at(-1)?.sent ?? []).map((raw) => JSON.parse(raw) as Record<string, unknown>).filter((frame) => frame.type === 'patch'),
   }
 }
 
@@ -216,9 +216,7 @@ describe('WS가 붙어 있으면 편집이 그리로 나간다', () => {
     expect(board.store.getState().pending).toEqual([])
     expect(board.store.getState().headSeq).toBe(HEAD_SEQ + 1)
     // 서버가 준 `inverse`가 undo 스택에 그대로 실린다(설계서 「정방향 흐름」).
-    expect(board.store.getState().undoStack).toMatchObject([
-      { revisionId: `rev_${HEAD_SEQ + 1}`, inverse: contentOps('옛 내용') },
-    ])
+    expect(board.store.getState().undoStack).toMatchObject([{ revisionId: `rev_${HEAD_SEQ + 1}`, inverse: contentOps('옛 내용') }])
   })
 
   /**
@@ -384,9 +382,9 @@ describe('리베이스한 편집을 다시 낸다', () => {
     // 재조회로 수렴하고, 사용자는 서버가 준 이유를 그대로 듣는다.
     expect(board.getPage).toHaveBeenCalled()
     expect(board.store.getState().editFailure?.kind).toBe('message')
-    expect(
-      board.store.getState().editFailure?.kind === 'message' ? board.store.getState().editFailure : null,
-    ).toMatchObject({ message: expect.stringContaining('보라님이 편집 중인 영역입니다') })
+    expect(board.store.getState().editFailure?.kind === 'message' ? board.store.getState().editFailure : null).toMatchObject({
+      message: expect.stringContaining('보라님이 편집 중인 영역입니다'),
+    })
   })
 
   it('다시 낸 것이 ack되면 내 편집이 남의 편집 위에 저장된다', async () => {
@@ -643,8 +641,7 @@ describe('결과를 모르는 실패는 «취소됐다»고 하지 않는다', (
    * «답을 기다리던 편집은 반영됐는지 모른다고 말한다»가 잰다.
    */
   const RELOADED =
-    '페이지를 서버 상태로 다시 불러왔지만, 그 뒤에 반영되면 화면에 나타나지 않을 수 있습니다. ' +
-    '새로고침해 서버 상태를 확인하세요.'
+    '페이지를 서버 상태로 다시 불러왔지만, 그 뒤에 반영되면 화면에 나타나지 않을 수 있습니다. ' + '새로고침해 서버 상태를 확인하세요.'
 
   it('답을 기다리던 편집의 연결이 끊기면 «반영됐는지 모른다» — 안 보낸 것이 없으면 «취소»가 없다', async () => {
     const board = mount()

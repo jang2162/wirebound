@@ -205,11 +205,7 @@ export function bundleHref(from: string, to: string): string {
   const fromDirectory = from.split('/').slice(0, -1)
   const toSegments = to.split('/')
   let shared = 0
-  while (
-    shared < fromDirectory.length &&
-    shared < toSegments.length - 1 &&
-    fromDirectory[shared] === toSegments[shared]
-  ) {
+  while (shared < fromDirectory.length && shared < toSegments.length - 1 && fromDirectory[shared] === toSegments[shared]) {
     shared += 1
   }
   const up = Array.from({ length: fromDirectory.length - shared }, () => '..')

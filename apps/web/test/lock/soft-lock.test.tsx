@@ -27,16 +27,7 @@ import { createEditChannel } from '../../src/realtime/edit-channel'
 import { createLockChannel } from '../../src/realtime/lock-channel'
 import type { NodeLockView, ServerFrame } from '../../src/realtime/protocol'
 import type { EditorStore } from '../../src/store/editor-store'
-import {
-  OTHER_PAGE_ID,
-  OTHER_PAGE_TITLE,
-  PAGE_ID,
-  PROJECT_ID,
-  deselect,
-  openPage,
-  pageDoc,
-  waitForNode,
-} from '../editor-harness'
+import { OTHER_PAGE_ID, OTHER_PAGE_TITLE, PAGE_ID, PROJECT_ID, deselect, openPage, pageDoc, waitForNode } from '../editor-harness'
 import { rowReason, rowReasons, treeTool, structureRowName } from '../panels/tree-row'
 
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
@@ -478,9 +469,7 @@ describe('하트비트 — 편집 중 갱신 (설계서 「소프트 잠금」)'
     // 구조 편집 하나 — 화면의 버튼으로 낸다. 어느 편집이든 전송 루프를 지나가면 하트비트가
     // 함께 나간다.
     // 메뉴 트리에도 같은 이름의 항목이 있으므로 구조 트리 영역으로 좁힌다.
-    fireEvent.click(
-      treeTool(screen.getByRole('region', { name: '구조 트리' }), '위로'),
-    )
+    fireEvent.click(treeTool(screen.getByRole('region', { name: '구조 트리' }), '위로'))
     await act(async () => {})
 
     expect(view.lockFrames().length).toBeGreaterThan(before)
@@ -573,9 +562,7 @@ describe('꺼진 항목의 이유 — 잠긴 조상의 이유는 배지가 아�
     expect(rootRow?.querySelector(':scope > .wb-shell-structure-lock')).toBeNull()
     // 대조: 잠긴 노드 자신의 줄에는 붙어 있다.
     const lockedRow = treeButton('Section').closest('li')
-    expect(lockedRow?.querySelector(':scope > .wb-shell-structure-lock')?.textContent).toBe(
-      '보라 편집 중',
-    )
+    expect(lockedRow?.querySelector(':scope > .wb-shell-structure-lock')?.textContent).toBe('보라 편집 중')
   })
 
   it('그 이유가 고른 줄의 꺼진 항목에 온다 — 이름과 함께', async () => {
@@ -649,9 +636,7 @@ describe('꺼진 항목의 이유 — 잠긴 조상의 이유는 배지가 아�
     // **여기서는 자기 줄에 붙는다.** 위 `사고의 모양` 케이스가 `toBeNull()`을 요구하는
     // 바로 그 자리다 — 둘을 갈라 놓지 않으면 *"배지는 늘 없다"*는 거짓이 남는다.
     const rootRow = root.closest('li')
-    expect(rootRow?.querySelector(':scope > .wb-shell-structure-lock')?.textContent).toBe(
-      '보라 편집 중',
-    )
+    expect(rootRow?.querySelector(':scope > .wb-shell-structure-lock')?.textContent).toBe('보라 편집 중')
     // 문장은 «조상» 경우(`그 이유가 고른 줄의 꺼진 항목에 온다`)와 **글자까지 같다.**
     expect(rowReason(structureRegion(), '삭제')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
     // 루트 «자신» 이 잠기면 뿌리 끝에 넣는 편집도 부딪친다 — `안에 추가`는 «넣는 편집» 의 문장을 든다(`edit/add-abilities.ts`).
@@ -738,7 +723,10 @@ describe('여러 노드 선택의 잠금', () => {
 
     view.push({ type: 'lock-denied', projectId: PROJECT_ID, pageId: PAGE_ID, nodeIds: ['n-a', 'n-b'], lockId: lastLockId(view) })
 
-    expect({ ids: view.store.getState().selectedNodeIds, notice: view.store.getState().editFailure }).toEqual({ ids: ['n-a', 'n-b'], notice: null })
+    expect({ ids: view.store.getState().selectedNodeIds, notice: view.store.getState().editFailure }).toEqual({
+      ids: ['n-a', 'n-b'],
+      notice: null,
+    })
   })
 
   it('옛 차례의 거절은 버린다 — 그 뒤에 보낸 집합의 답이 아니다', async () => {

@@ -62,7 +62,11 @@ it('메뉴 500 · 페이지 2000 — 신호 크기 · 방송 한 번 · 다시 �
         head_seq: 0,
       })),
     )
-    for (let at = 0; at < pages.length; at += 500) await db.insertInto('pages').values(pages.slice(at, at + 500)).execute()
+    for (let at = 0; at < pages.length; at += 500)
+      await db
+        .insertInto('pages')
+        .values(pages.slice(at, at + 500))
+        .execute()
     expect({ menus: menus.length, pages: pages.length }).toEqual({ menus: 500, pages: 2000 })
 
     const viewers = await Promise.all(Array.from({ length: ROOM }, () => signup(ctx)))

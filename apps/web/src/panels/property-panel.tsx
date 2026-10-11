@@ -225,8 +225,7 @@ export function PropertyPanel(props: {
 
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 낙관적
   // 패치가 문서를 갈아 끼울 때 패널만 옛 노드를 들고 있게 된다.
-  const node =
-    doc !== null && selectedNodeId !== null ? findNodeSafely(doc.root, selectedNodeId) : undefined
+  const node = doc !== null && selectedNodeId !== null ? findNodeSafely(doc.root, selectedNodeId) : undefined
 
   /**
    * **이 패널의 판정 단위는 «고른 노드»다.**
@@ -483,9 +482,7 @@ function BulkProperties(props: {
   onRemoved: () => void
 }): ReactElement {
   const { document } = props
-  const nodes = props.nodeIds
-    .map((id) => findNodeSafely(document.root, id))
-    .filter((node): node is WbNode => node !== undefined)
+  const nodes = props.nodeIds.map((id) => findNodeSafely(document.root, id)).filter((node): node is WbNode => node !== undefined)
   const lock = nodes.map((node) => props.lockOf(node.id)).find((found) => found !== null) ?? null
   const blocked = lock !== null || !props.canEdit
   const notice = blockedNotice(props.canEdit, lock)
@@ -597,7 +594,9 @@ function BulkProperties(props: {
                         mixed={mixed}
                         disabled={blocked}
                         onCommit={(next) => commitEach((running, nodeId) => propOps(running, nodeId, field.prop, next))}
-                        onLeave={(next) => props.leave(props.nodeIds, type, (running, nodeId) => propOps(running, nodeId, field.prop, next))}
+                        onLeave={(next) =>
+                          props.leave(props.nodeIds, type, (running, nodeId) => propOps(running, nodeId, field.prop, next))
+                        }
                       />
                     )}
                   </dd>
@@ -758,12 +757,7 @@ function PropControl(props: {
  * **variant 는 렌더러가 그리는 그 함수로 구한다**(`resolveVariant`) — 선언 밖이거나 없으면 `defaultVariant` 다. 패널이 따로
  * 판정하면 캔버스와 갈려, 캔버스에 없는 속성을 내민다.
  */
-export function visibleFields(
-  def: ComponentDef,
-  node: WbNode,
-  props: Record<string, unknown>,
-  manifest: ThemeManifest,
-): EditorField[] {
+export function visibleFields(def: ComponentDef, node: WbNode, props: Record<string, unknown>, manifest: ThemeManifest): EditorField[] {
   const variant = resolveVariant(def, node, props, manifest)
   const hidden = new Set(manifest.components?.[def.type]?.variants.find((v) => v.id === variant)?.hideProps ?? [])
   return def.editor.filter((field) => !hidden.has(field.prop))

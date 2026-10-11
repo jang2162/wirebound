@@ -18,9 +18,7 @@ const BUTTON: WbNode = {
   type: 'Button',
   props: { label: '검색' },
   marker: 1,
-  interactions: [
-    { on: 'click', actions: [{ type: 'setProp', target: 'n_000000000003', prop: 'loading', value: true }] },
-  ],
+  interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_000000000003', prop: 'loading', value: true }] }],
 }
 
 const LIST: WbNode = { id: 'n_000000000003', type: 'List', props: {}, marker: 2 }
@@ -35,9 +33,7 @@ const PAGES: PptxPage[] = [
     title: '관리자 · 회원 · 목록',
     document: documentOf([BUTTON, LIST]),
     description: '회원을 조건으로 찾는 화면',
-    comments: [
-      { nodeId: 'n_000000000002', body: '검색 조건은 AND 결합', authorName: '장', createdAt: '2026-08-17' },
-    ],
+    comments: [{ nodeId: 'n_000000000002', body: '검색 조건은 AND 결합', authorName: '장', createdAt: '2026-08-17' }],
   },
   { title: '관리자 · 회원 · 상세', document: documentOf([LIST]), comments: [] },
   {
@@ -60,11 +56,9 @@ const PAGES: PptxPage[] = [
  * 계약을 못 믿는다.
  */
 const PNG_1X1 = Uint8Array.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
-  0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
-  0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
-  0x42, 0x60, 0x82,
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+  0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01,
+  0x00, 0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 ])
 
 /* --------------------------------------------------------------------- 자 */
@@ -98,9 +92,7 @@ describe('exportPptx — 페이지마다 슬라이드 한 장', () => {
 
   it('페이지 수와 슬라이드 수가 같다', () => {
     const { parts } = exportPptx({ pages: PAGES })
-    expect(parts.filter((part) => /^ppt\/slides\/slide\d+\.xml$/.test(part.path))).toHaveLength(
-      PAGES.length,
-    )
+    expect(parts.filter((part) => /^ppt\/slides\/slide\d+\.xml$/.test(part.path))).toHaveLength(PAGES.length)
   })
 
   it('슬라이드 순서가 페이지 순서다 — 제목으로 잰다', () => {
@@ -158,9 +150,7 @@ describe('exportPptx — 페이지마다 슬라이드 한 장', () => {
 describe('노트가 전문을 받는다', () => {
   it('슬라이드마다 노트가 하나씩 있다', () => {
     const { parts } = exportPptx({ pages: PAGES })
-    expect(parts.filter((part) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(part.path))).toHaveLength(
-      PAGES.length,
-    )
+    expect(parts.filter((part) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(part.path))).toHaveLength(PAGES.length)
   })
 
   it('슬라이드에 실린 것이 노트에도 전부 있다 — 이중 적재', () => {
@@ -206,10 +196,7 @@ describe('이미지 자리', () => {
 
   it('진짜 PNG 바이트를 넣으면 매체 파트로 실린다 — 바이트가 그대로다', () => {
     const { parts, screenless } = exportPptx({
-      pages: [
-        { ...PAGES[0]!, screen: { fileName: '화면.png', bytes: PNG_1X1, width: 1600, height: 900 } },
-        PAGES[1]!,
-      ],
+      pages: [{ ...PAGES[0]!, screen: { fileName: '화면.png', bytes: PNG_1X1, width: 1600, height: 900 } }, PAGES[1]!],
     })
     const media = parts.filter((part) => part.path.startsWith('ppt/media/'))
     expect(media.map((part) => part.path)).toEqual(['ppt/media/image1.png'])
@@ -325,8 +312,7 @@ describe('여러 줄 코멘트', () => {
         },
       ],
     })
-    const 센다 = (parts: readonly PptxPart[]): number =>
-      findAll(slide(parts, 1), 'a:p').length
+    const 센다 = (parts: readonly PptxPart[]): number => findAll(slide(parts, 1), 'a:p').length
     // 본문이 셋으로 갈리므로 문단이 **정확히 둘** 는다.
     expect(센다(여러줄.parts) - 센다(한줄.parts)).toBe(2)
   })
@@ -424,9 +410,15 @@ describe('별칭 — PPTX 산출물로 잰다(L-126)', () => {
 
   it('상호작용 문장 · 코멘트 줄이 별칭으로 노드를 부른다 — 슬라이드와 노트 모두', () => {
     const { parts } = exportPptx({ pages: [{ title: '별칭', document: ALIASED, comments: [{ nodeId: 'n_list', body: '정렬' }] }] })
-    for (const [label, root] of [['슬라이드', slide(parts, 1)], ['노트', notes(parts, 1)]] as const) {
+    for (const [label, root] of [
+      ['슬라이드', slide(parts, 1)],
+      ['노트', notes(parts, 1)],
+    ] as const) {
       const lines = texts(root)
-      expect(lines.some((line) => line.includes('저장 버튼 클릭 시') && line.includes('회원 목록이 숨겨집니다')), `${label}: ${lines.join(' | ')}`).toBe(true)
+      expect(
+        lines.some((line) => line.includes('저장 버튼 클릭 시') && line.includes('회원 목록이 숨겨집니다')),
+        `${label}: ${lines.join(' | ')}`,
+      ).toBe(true)
       expect(lines, label).toContain('② 회원 목록')
     }
   })
@@ -459,7 +451,12 @@ describe('화면 상태가 있는 페이지 — PPTX 는 기본 상태만 찍는
           id: 'n_sw',
           type: 'StateSwitch',
           children: [
-            { id: 'n_cd', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'n_view', type: 'Button', props: { label: '보기' }, marker: 1 }] },
+            {
+              id: 'n_cd',
+              type: 'StateCase',
+              props: { state: 'default' },
+              children: [{ id: 'n_view', type: 'Button', props: { label: '보기' }, marker: 1 }],
+            },
             {
               id: 'n_ca',
               type: 'StateCase',

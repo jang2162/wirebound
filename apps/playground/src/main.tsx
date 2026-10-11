@@ -25,6 +25,4 @@ if (issues.length > 0) {
 const container = document.getElementById('root')
 if (!container) throw new Error('#root를 찾을 수 없습니다')
 
-createRoot(container).render(
-  <StrictMode>{renderComposed(sampleLayout, samplePage, { theme: ADMIN_V0 })}</StrictMode>,
-)
+createRoot(container).render(<StrictMode>{renderComposed(sampleLayout, samplePage, { theme: ADMIN_V0 })}</StrictMode>)

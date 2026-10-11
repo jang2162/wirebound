@@ -43,9 +43,7 @@ describe('타겟 존재', () => {
 
   it('setVisible의 타겟이 문서에 없으면 missing-interaction-target', () => {
     const doc = pageWith({ on: 'click', actions: [{ type: 'setVisible', target: 'n_deadbeef', value: false }] })
-    expect(interactionIssues(doc)).toContainEqual(
-      expect.objectContaining({ code: 'missing-interaction-target', nodeId: SOURCE }),
-    )
+    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'missing-interaction-target', nodeId: SOURCE }))
   })
 
   it('setProp의 타겟이 문서에 없으면 missing-interaction-target', () => {
@@ -53,16 +51,12 @@ describe('타겟 존재', () => {
       on: 'click',
       actions: [{ type: 'setProp', target: 'n_deadbeef', prop: 'loading', value: true }],
     })
-    expect(interactionIssues(doc)).toContainEqual(
-      expect.objectContaining({ code: 'missing-interaction-target' }),
-    )
+    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'missing-interaction-target' }))
   })
 
   it('switchTab의 타겟이 문서에 없으면 missing-interaction-target', () => {
     const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: 'n_deadbeef', tab: 1 }] })
-    expect(interactionIssues(doc)).toContainEqual(
-      expect.objectContaining({ code: 'missing-interaction-target' }),
-    )
+    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'missing-interaction-target' }))
   })
 
   /**
@@ -161,9 +155,7 @@ describe('대상 종류', () => {
 
   it('switchTab의 타겟이 Tabs가 아니면 invalid-interaction-target', () => {
     const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: 1 }] }, 'List')
-    expect(interactionIssues(doc)).toContainEqual(
-      expect.objectContaining({ code: 'invalid-interaction-target' }),
-    )
+    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-target' }))
   })
 
   it('메시지가 무엇이 와야 하는지와 무엇이 왔는지를 말한다', () => {
@@ -184,16 +176,12 @@ describe('대상 종류', () => {
    */
   it('switchTab의 탭 번호가 음수면 invalid-interaction-prop', () => {
     const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: -3 }] }, 'Tabs')
-    expect(interactionIssues(doc)).toContainEqual(
-      expect.objectContaining({ code: 'invalid-interaction-prop' }),
-    )
+    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-prop' }))
   })
 
   it('탭 번호가 정수가 아니어도 잡는다', () => {
     const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: 1.5 }] }, 'Tabs')
-    expect(interactionIssues(doc)).toContainEqual(
-      expect.objectContaining({ code: 'invalid-interaction-prop' }),
-    )
+    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-prop' }))
   })
 
   it('메시지가 탭 번호에 대한 것임을 말한다', () => {
@@ -207,11 +195,7 @@ describe('대상 종류', () => {
    */
   it('prop 자리와 액션 자리가 같은 값에 같은 판정을 낸다', () => {
     for (const tab of [-3, 1.5]) {
-      const asProp = pageWith(
-        { on: 'click', actions: [{ type: 'setVisible', target: TARGET, value: true }] },
-        'Tabs',
-        { active: tab },
-      )
+      const asProp = pageWith({ on: 'click', actions: [{ type: 'setVisible', target: TARGET, value: true }] }, 'Tabs', { active: tab })
       const asAction = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab }] }, 'Tabs')
       // prop 자리: invalid-props(error) · 액션 자리: invalid-interaction-prop(warning)
       expect(validatePage(asProp).some((issue) => issue.code === 'invalid-props')).toBe(true)
@@ -252,9 +236,7 @@ describe('prop 유효성', () => {
       on: 'click',
       actions: [{ type: 'setProp', target: TARGET, prop: '없는프롭', value: true }],
     })
-    expect(interactionIssues(doc)).toContainEqual(
-      expect.objectContaining({ code: 'invalid-interaction-prop' }),
-    )
+    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-prop' }))
   })
 
   it('값이 그 prop의 타입이 아니면 invalid-interaction-prop', () => {
@@ -262,9 +244,7 @@ describe('prop 유효성', () => {
       on: 'click',
       actions: [{ type: 'setProp', target: TARGET, prop: 'loading', value: '참' }],
     })
-    expect(interactionIssues(doc)).toContainEqual(
-      expect.objectContaining({ code: 'invalid-interaction-prop' }),
-    )
+    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-prop' }))
   })
 
   /** 값 검사는 **그 prop 하나만** 떼어 본다 — 다른 prop이 없다고 실패하면 안 된다. */
@@ -281,9 +261,7 @@ describe('prop 유효성', () => {
       on: 'click',
       actions: [{ type: 'setProp', target: TARGET, prop: 'items', value: -1 }],
     })
-    expect(interactionIssues(doc)).toContainEqual(
-      expect.objectContaining({ code: 'invalid-interaction-prop' }),
-    )
+    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-prop' }))
   })
 
   /**
@@ -291,10 +269,7 @@ describe('prop 유효성', () => {
    * 상호작용 쪽에서 같은 사실을 한 번 더 말하지 않는다.
    */
   it('카탈로그에 없는 타입이 타겟이면 prop을 판정하지 않는다', () => {
-    const doc = pageWith(
-      { on: 'click', actions: [{ type: 'setProp', target: TARGET, prop: '무엇이든', value: 1 }] },
-      'Nope',
-    )
+    const doc = pageWith({ on: 'click', actions: [{ type: 'setProp', target: TARGET, prop: '무엇이든', value: 1 }] }, 'Nope')
     expect(interactionIssues(doc)).toEqual([])
   })
 

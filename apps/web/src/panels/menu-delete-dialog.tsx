@@ -57,7 +57,8 @@ export const CASCADE_SAFETY_NOTE = '지우기 직전 상태를 스냅샷으로 �
  * 지울 페이지가 있을 때만 더하는 한 줄 — 밖에서 이 페이지들로 가는 링크(`navigate` · `openModal`)가 끊긴다. 상자는 다른 페이지의 설계를 읽지 않아 어느 링크인지는
  * 못 말한다(그 목록은 `wireb lint` · MCP lint 의 `page-target-missing` 이 낸다) — 있을 수 있다는 것과 찾는 길만 말한다.
  */
-export const CASCADE_LINK_NOTE = '다른 페이지에서 이 페이지들로 가는 링크(이동 · 모달 열기)가 있으면 끊깁니다 — wireb lint 로 찾을 수 있습니다.'
+export const CASCADE_LINK_NOTE =
+  '다른 페이지에서 이 페이지들로 가는 링크(이동 · 모달 열기)가 있으면 끊깁니다 — wireb lint 로 찾을 수 있습니다.'
 export const CASCADE_CHANGED = '목록이 바뀌었습니다 — 다시 확인하세요.'
 /** 목록이 바뀐 뒤 확인 단추의 글 — 누르면 «모두 삭제»로 돌아간다. */
 export const CASCADE_RECHECK = '새 목록 확인'
@@ -70,7 +71,11 @@ export function MenuDeleteDialog(props: { commands: TreeCommands; focusFallback?
   return <OpenMenuDeleteDialog commands={props.commands} target={target} focusFallback={props.focusFallback} />
 }
 
-function OpenMenuDeleteDialog(props: { commands: TreeCommands; target: RemoveTarget; focusFallback: (() => HTMLElement | null) | undefined }): ReactElement {
+function OpenMenuDeleteDialog(props: {
+  commands: TreeCommands
+  target: RemoveTarget
+  focusFallback: (() => HTMLElement | null) | undefined
+}): ReactElement {
   const { commands, target } = props
   const sentenceId = useId()
   const warningId = useId()
@@ -84,7 +89,13 @@ function OpenMenuDeleteDialog(props: { commands: TreeCommands; target: RemoveTar
   const why = subtree === null ? CASCADE_GONE : commands.busy ? CASCADE_BUSY : null
 
   return (
-    <ShellDialog open title={MENU_DELETE_TITLE} onClose={commands.closeRemoving} describedBy={describedBy} focusFallback={props.focusFallback}>
+    <ShellDialog
+      open
+      title={MENU_DELETE_TITLE}
+      onClose={commands.closeRemoving}
+      describedBy={describedBy}
+      focusFallback={props.focusFallback}
+    >
       <div className="wb-shell-menu-delete-body">
         {target.changed && (
           <p className="wb-shell-menu-delete-changed" role="status">

@@ -90,7 +90,7 @@ const USERS = ['u_me', 'u_bora', 'u_dahye', 'u_sera']
  */
 function board(seed: number): Board {
   const rnd = random(seed)
-  const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]!
+  const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]!
   const shape = pick(['deep', 'wide', 'bushy', 'tiny'] as const)
   const limit = shape === 'tiny' ? 1 + Math.floor(rnd() * 6) : 10 + Math.floor(rnd() * 70)
   const maxKids = shape === 'deep' ? 2 : shape === 'wide' ? 12 : 4
@@ -131,7 +131,18 @@ function kindOf(pathOf: (nodeId: string) => string | undefined, nodeId: string, 
 describe('selectionConflicts — 옛 판정(노드마다 따로)과 같은 답', () => {
   // 4000 판의 옛 판정 대조라 혼자 1.9s — 기본 한도(5s)로는 붐비는 판에서 시간 초과로 빨강이다(옛 판정은 느린 쪽이 정답을 재는 기준이라 줄일 수 없다).
   it('무작위 트리 × 무작위 잠금 4000 판에서 노드마다 같은 잠금을 낸다', { timeout: 60_000 }, () => {
-    const tally = { boards: 0, nodes: 0, blocked: 0, free: 0, self: 0, inside: 0, contains: 0, duplicateIds: 0, ghostLocks: 0, firstOfMany: 0 }
+    const tally = {
+      boards: 0,
+      nodes: 0,
+      blocked: 0,
+      free: 0,
+      self: 0,
+      inside: 0,
+      contains: 0,
+      duplicateIds: 0,
+      ghostLocks: 0,
+      firstOfMany: 0,
+    }
     for (let seed = 1; seed <= 4000; seed += 1) {
       const { root, locks, ask } = board(seed)
       const viewer = USERS[seed % USERS.length]!

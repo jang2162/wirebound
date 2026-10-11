@@ -15,12 +15,7 @@ import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../src/api/client'
 import { toFailure } from '../../src/api/failure'
 import type { RealtimeLink } from '../../src/realtime/connection'
-import {
-  createEditChannel,
-  EditNotSentError,
-  UnansweredEditError,
-  type EditChannel,
-} from '../../src/realtime/edit-channel'
+import { createEditChannel, EditNotSentError, UnansweredEditError, type EditChannel } from '../../src/realtime/edit-channel'
 import type { ServerFrame } from '../../src/realtime/protocol'
 
 const OPS: PatchOp[] = [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }]

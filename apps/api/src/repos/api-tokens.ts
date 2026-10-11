@@ -71,10 +71,7 @@ export interface IssuedApiToken {
  * 걸려 있어 (천문학적으로 드물게) 충돌하면 유니크 위반이 나는데, 감싸지 않으면 그 실패가
  * 이 호출을 둘러싼 트랜잭션(테스트 하네스 포함) 전체를 오염시킨다.
  */
-export async function insertApiToken(
-  db: DbHandle,
-  input: { projectId: string; userId: string; name: string },
-): Promise<IssuedApiToken> {
+export async function insertApiToken(db: DbHandle, input: { projectId: string; userId: string; name: string }): Promise<IssuedApiToken> {
   const value = randomTokenValue()
 
   const record = await withTransaction(db, async (trx) => {
@@ -122,12 +119,7 @@ export async function listApiTokens(db: DbHandle, projectId: string, userId: str
  * id로 찾고 나서 비교하는 대신 질의 조건에 두는 것은 비교를 빠뜨린 판이 조용히 통과하기
  * 때문이다(`findPresetById`·`findSnapshotById`와 같다).
  */
-export async function deleteApiToken(
-  db: DbHandle,
-  projectId: string,
-  userId: string,
-  tokenId: string,
-): Promise<boolean> {
+export async function deleteApiToken(db: DbHandle, projectId: string, userId: string, tokenId: string): Promise<boolean> {
   const result = await db
     .deleteFrom('api_tokens')
     .where('project_id', '=', projectId)
@@ -238,7 +230,9 @@ export async function lockMemberTokens(trx: DbHandle, projectId: string, userId:
     .selectFrom('api_tokens')
     .select('id')
     .where('project_id', '=', projectId)
-    .where((eb) => (requestTokenId === null ? eb('user_id', '=', userId) : eb.or([eb('user_id', '=', userId), eb('id', '=', requestTokenId)])))
+    .where((eb) =>
+      requestTokenId === null ? eb('user_id', '=', userId) : eb.or([eb('user_id', '=', userId), eb('id', '=', requestTokenId)]),
+    )
     .orderBy('id')
     .forUpdate()
     .execute()

@@ -29,15 +29,7 @@ import { describe, expect, it } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
 import { exportProjectBundle, EmptyProjectError } from '../src/services/export-bundle'
 import { readExportRuntime } from '../src/services/export-runtime'
-import {
-  addMember,
-  createMenuNode,
-  createPage,
-  createProject,
-  signup,
-  withApi,
-  type TestContext,
-} from './helpers'
+import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 /** 페이지 하나의 문서를 통째로 갈아 끼운다. `PUT .../schema`를 실제로 지난다. */
@@ -82,12 +74,7 @@ async function addComment(
  * 문서 하나. `rootId`·`buttonId`가 페이지마다 달라야 **코멘트가 옆 페이지로 붙는 것**을
  * 잴 수 있다 — 같은 id를 쓰면 남의 코멘트가 붙어도 노드를 찾아 그럴듯하게 그려진다.
  */
-function doc(
-  rootId: string,
-  buttonId: string,
-  label: string,
-  navigateTo?: string,
-): PageDocument {
+function doc(rootId: string, buttonId: string, label: string, navigateTo?: string): PageDocument {
   return {
     version: 1,
     root: {
@@ -98,9 +85,7 @@ function doc(
           id: buttonId,
           type: 'Button',
           props: { label },
-          ...(navigateTo === undefined
-            ? {}
-            : { interactions: [{ on: 'click', actions: [{ type: 'navigate', target: navigateTo }] }] }),
+          ...(navigateTo === undefined ? {} : { interactions: [{ on: 'click', actions: [{ type: 'navigate', target: navigateTo }] }] }),
         },
       ],
     },
@@ -187,20 +172,8 @@ async function 설계서(ctx: TestContext, name: string, slug: string): Promise<
   const 랜딩 = await createPage(ctx, cookie, projectId, 마케팅.id, { title: '랜딩' })
 
   await putSchema(ctx, cookie, projectId, 대시보드.id, doc('n_dash', 'n_dash_btn', `${slug} 대시보드 버튼`))
-  await putSchema(
-    ctx,
-    cookie,
-    projectId,
-    목록.id,
-    doc('n_list', 'n_list_btn', `${slug} 목록 버튼`, 'page:관리자/회원/상세'),
-  )
-  await putSchema(
-    ctx,
-    cookie,
-    projectId,
-    상세.id,
-    doc('n_detail', 'n_detail_btn', `${slug} 상세 버튼`, 'page:없는/페이지'),
-  )
+  await putSchema(ctx, cookie, projectId, 목록.id, doc('n_list', 'n_list_btn', `${slug} 목록 버튼`, 'page:관리자/회원/상세'))
+  await putSchema(ctx, cookie, projectId, 상세.id, doc('n_detail', 'n_detail_btn', `${slug} 상세 버튼`, 'page:없는/페이지'))
   await putSchema(ctx, cookie, projectId, 랜딩.id, doc('n_land', 'n_land_btn', `${slug} 랜딩 버튼`))
 
   await addComment(ctx, cookie, projectId, 목록.id, 'n_list_btn', `${slug} 목록 코멘트 하나`)
@@ -237,9 +210,7 @@ function pageHrefs(content: string | Uint8Array): Record<string, string | null> 
  * `<li class="wb-export-entry" data-wb-marker-for="<노드 id>" …>` 안의 라벨·본문·메타를
  * 꺼낸다. 상호작용 탭도 같은 클래스를 쓰지만 `data-wb-interaction-for`라 안 걸린다.
  */
-function commentEntries(
-  content: string,
-): { nodeId: string; label: string; body: string | null; meta: string | null }[] {
+function commentEntries(content: string): { nodeId: string; label: string; body: string | null; meta: string | null }[] {
   const entries: { nodeId: string; label: string; body: string | null; meta: string | null }[] = []
   const re = /<li class="wb-export-entry" data-wb-marker-for="([^"]*)"[^>]*>(.*?)<\/li>/gs
   for (const match of content.matchAll(re)) {
@@ -259,12 +230,7 @@ function commentEntries(
  * **422로 막으므로** 그 길로는 못 만든다. 그래서 `pages.schema`에 직접 심는다 —
  * **카탈로그에서 컴포넌트가 빠지는 날 실제로 생기는 상태**이고, 그 갈래가 이 값으로 닿는다.
  */
-async function 그리지못할노드를심는다(
-  ctx: TestContext,
-  pageId: string,
-  nodeId: string,
-  type: string,
-): Promise<void> {
+async function 그리지못할노드를심는다(ctx: TestContext, pageId: string, nodeId: string, type: string): Promise<void> {
   await ctx.db
     .updateTable('pages')
     .set({
@@ -320,12 +286,7 @@ describe('exportProjectBundle', () => {
       const fixture = await 설계서(ctx, '설계서 하나', 'one')
       const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
 
-      expect(bundle.pages.map((page) => page.title)).toEqual([
-        '관리자 대시보드',
-        '관리자 회원 목록',
-        '관리자 회원 상세',
-        '마케팅 랜딩',
-      ])
+      expect(bundle.pages.map((page) => page.title)).toEqual(['관리자 대시보드', '관리자 회원 목록', '관리자 회원 상세', '마케팅 랜딩'])
     })
   })
 
@@ -377,10 +338,7 @@ describe('exportProjectBundle', () => {
       const bundle = await exportProjectBundle(ctx.db, project.id)
 
       // 파일 이름이 자리 순서 접미사(`-2`)로 갈리는 것이 아니라 **이름 자체로** 갈린다.
-      expect(pageFiles(bundle.files).map((file) => file.path)).toEqual([
-        'pages/관리자-회원-목록.html',
-        'pages/관리자-권한-목록.html',
-      ])
+      expect(pageFiles(bundle.files).map((file) => file.path)).toEqual(['pages/관리자-회원-목록.html', 'pages/관리자-권한-목록.html'])
       expect(bundle.duplicateTargets).toEqual([])
     })
   })
@@ -401,10 +359,7 @@ describe('exportProjectBundle', () => {
       const bundle = await exportProjectBundle(ctx.db, project.id)
 
       expect(bundle.duplicateTargets).toEqual(['page:관리자/목록'])
-      expect(pageFiles(bundle.files).map((file) => file.path)).toEqual([
-        'pages/관리자-목록.html',
-        'pages/관리자-목록-2.html',
-      ])
+      expect(pageFiles(bundle.files).map((file) => file.path)).toEqual(['pages/관리자-목록.html', 'pages/관리자-목록-2.html'])
     })
   })
 
@@ -529,9 +484,7 @@ describe('exportProjectBundle', () => {
         const entry = entries.find((line) => line.body === comment.body)
         expect(entry, comment.body).toBeDefined()
         expect(entry!.nodeId, `${comment.body}가 붙은 노드`).toBe(comment.nodeId)
-        expect(entry!.meta, `${comment.body}의 작성자·시각`).toBe(
-          `${comment.authorName} · ${comment.createdAt}`,
-        )
+        expect(entry!.meta, `${comment.body}의 작성자·시각`).toBe(`${comment.authorName} · ${comment.createdAt}`)
       }
 
       // 붙을 노드를 못 찾은 코멘트가 하나도 없다(`MISSING_NODE_LABEL`).
@@ -550,7 +503,10 @@ describe('exportProjectBundle', () => {
 
       const bundle = await exportProjectBundle(ctx.db, 하나.projectId)
       // 런타임(`assets/runtime.js`)은 프로젝트와 무관한 빌드 산출물이라 뺀다 — 줄인 글자에 `two` 가 우연히 있다.
-      const 전문 = bundle.files.filter((file) => file.path !== 'assets/runtime.js').map((file) => file.content).join('\n')
+      const 전문 = bundle.files
+        .filter((file) => file.path !== 'assets/runtime.js')
+        .map((file) => file.content)
+        .join('\n')
 
       expect(전문).toContain('one 목록 버튼')
       expect(전문).not.toContain('two')
@@ -604,20 +560,10 @@ describe('exportProjectBundle', () => {
       const 하나 = await 설계서(ctx, '설계서 하나', 'one')
       const 둘 = await 설계서(ctx, '설계서 둘', 'two')
 
-      const 남의메뉴 = await ctx.db
-        .selectFrom('menu_nodes')
-        .select('id')
-        .where('project_id', '=', 둘.projectId)
-        .executeTakeFirstOrThrow()
-      await ctx.db
-        .updateTable('pages')
-        .set({ menu_node_id: 남의메뉴.id })
-        .where('id', '=', 하나.pageIds.목록!)
-        .execute()
+      const 남의메뉴 = await ctx.db.selectFrom('menu_nodes').select('id').where('project_id', '=', 둘.projectId).executeTakeFirstOrThrow()
+      await ctx.db.updateTable('pages').set({ menu_node_id: 남의메뉴.id }).where('id', '=', 하나.pageIds.목록!).execute()
 
-      await expect(exportProjectBundle(ctx.db, 하나.projectId)).rejects.toThrow(
-        /메뉴 트리가 페이지를 잃었습니다/,
-      )
+      await expect(exportProjectBundle(ctx.db, 하나.projectId)).rejects.toThrow(/메뉴 트리가 페이지를 잃었습니다/)
     })
   })
 
@@ -659,9 +605,7 @@ describe('exportProjectBundle', () => {
         const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
 
         // `from`도 **번들 이름**이다 — 화면이 한 페이지를 한 이름으로 부른다.
-        expect(bundle.brokenLinks).toEqual([
-          { target: 'page:없는/페이지', reason: 'missing', from: ['관리자 회원 상세'] },
-        ])
+        expect(bundle.brokenLinks).toEqual([{ target: 'page:없는/페이지', reason: 'missing', from: ['관리자 회원 상세'] }])
       })
     })
 

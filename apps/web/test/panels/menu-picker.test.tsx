@@ -27,7 +27,12 @@ function Host(props: { onCancel: () => void; onPick: (id: string) => void }) {
 }
 
 /** 연 자리(`opener`)에 포커스를 둔 채 목록을 그린다. */
-function mount(): { opener: HTMLButtonElement; other: HTMLButtonElement; onCancel: ReturnType<typeof vi.fn>; onPick: ReturnType<typeof vi.fn> } {
+function mount(): {
+  opener: HTMLButtonElement
+  other: HTMLButtonElement
+  onCancel: ReturnType<typeof vi.fn>
+  onPick: ReturnType<typeof vi.fn>
+} {
   const opener = document.body.appendChild(document.createElement('button'))
   opener.textContent = '연 자리'
   const other = document.body.appendChild(document.createElement('button'))
@@ -48,7 +53,11 @@ describe('옮기기 목록이 내려갈 때', () => {
     const cancel = screen.getByRole('button', { name: '취소' })
     cancel.focus()
     fireEvent.click(cancel)
-    expect({ called: onCancel.mock.calls.length, focus: document.activeElement === opener, listed: screen.queryByRole('button', { name: '취소' }) }).toEqual({ called: 1, focus: true, listed: null })
+    expect({
+      called: onCancel.mock.calls.length,
+      focus: document.activeElement === opener,
+      listed: screen.queryByRole('button', { name: '취소' }),
+    }).toEqual({ called: 1, focus: true, listed: null })
   })
 
   it('목록 안의 Escape 도 내리고 연 자리로 돌려준다 — 고르는 칸 · «취소» 모두', () => {
@@ -57,7 +66,11 @@ describe('옮기기 목록이 내려갈 때', () => {
       const element = target === '취소' ? screen.getByRole('button', { name: '취소' }) : screen.getByRole('combobox')
       element.focus()
       fireEvent.keyDown(element, { key: 'Escape' })
-      expect({ target, called: onCancel.mock.calls.length, focus: document.activeElement === opener }).toEqual({ target, called: 1, focus: true })
+      expect({ target, called: onCancel.mock.calls.length, focus: document.activeElement === opener }).toEqual({
+        target,
+        called: 1,
+        focus: true,
+      })
       document.body.replaceChildren()
     }
   })
@@ -67,7 +80,10 @@ describe('옮기기 목록이 내려갈 때', () => {
     const select = screen.getByRole('combobox')
     select.focus()
     fireEvent.keyDown(select, { key: 'Escape', isComposing: true })
-    expect({ called: onCancel.mock.calls.length, listed: screen.queryByRole('button', { name: '취소' }) !== null }).toEqual({ called: 0, listed: true })
+    expect({ called: onCancel.mock.calls.length, listed: screen.queryByRole('button', { name: '취소' }) !== null }).toEqual({
+      called: 0,
+      listed: true,
+    })
   })
 
   it('메뉴를 고르면 내리고 포커스가 목록 안이었으면 연 자리로 돌려준다', () => {

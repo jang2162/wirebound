@@ -122,7 +122,11 @@ const EMPTY: PageDocument = { version: 1, root: { id: 'n_000000000001', type: 'P
 
 /** 번들 페이지 한 장의 HTML. 런타임은 글자만 둔다 — 여기서 재는 것은 HTML 의 모양이다. */
 function pageHtml(document_: PageDocument, title = 'ㄱ', lang?: string): string {
-  const bundle = exportBundle({ pages: [{ title, document: document_ }], runtimeJs: '/* runtime */', ...(lang === undefined ? {} : { lang }) })
+  const bundle = exportBundle({
+    pages: [{ title, document: document_ }],
+    runtimeJs: '/* runtime */',
+    ...(lang === undefined ? {} : { lang }),
+  })
   return String(bundle.files.find((file) => file.path === bundle.pagePaths[0])!.content)
 }
 

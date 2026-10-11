@@ -318,7 +318,6 @@ describe('하트비트는 목록을 흔들지 않는다', () => {
   }, 30_000)
 })
 
-
 /**
  * **서버가 획득을 거절한다**(`ws/lock.ts`의 표). 판정은 설계서 「소프트 잠금」의 «선택 = 서브트리 claim» 그대로이고 화면의 1차
  * 방어와 같은 함수다(`lock/check.ts`의 `selectionVerdict`).
@@ -680,7 +679,13 @@ describe('편집 커밋과 잠금 획득은 페이지 행에 줄 선다', () => 
       ctx.app.realtime.locks.liveIn(fx.project.id).some((lock) => lock.userId === fx.dahye.user.id)
     const moveCIntoB = async (): Promise<void> =>
       boraTab.send(
-        JSON.stringify({ type: 'patch', pageId: fx.page.id, baseSeq: await headSeq(fx.page.id), ops: MOVE_C_INTO_B, clientOpId: 'op-indent' }),
+        JSON.stringify({
+          type: 'patch',
+          pageId: fx.page.id,
+          baseSeq: await headSeq(fx.page.id),
+          ops: MOVE_C_INTO_B,
+          clientOpId: 'op-indent',
+        }),
       )
     const held = (): string[] =>
       ctx.app.realtime.locks
@@ -761,15 +766,16 @@ describe('편집 커밋과 잠금 획득은 페이지 행에 줄 선다', () => 
       const fx = await board(ctx)
       const boraTab = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
       const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
-      const dahyeHeld = (): boolean =>
-        ctx.app.realtime.locks.liveIn(fx.project.id).some((lock) => lock.userId === fx.dahye.user.id)
+      const dahyeHeld = (): boolean => ctx.app.realtime.locks.liveIn(fx.project.id).some((lock) => lock.userId === fx.dahye.user.id)
       const door = holdInTransaction((trx) =>
         sql`select 1 from project_members where project_id = ${fx.project.id} and user_id = ${fx.bora.user.id} for update`.execute(trx),
       )
       await door.acquired
 
       const editB1 = [{ op: 'replace', path: '/root/children/1/children/0/props', value: {} }]
-      boraTab.send(JSON.stringify({ type: 'patch', pageId: fx.page.id, baseSeq: await headSeq(fx.page.id), ops: editB1, clientOpId: 'op-b1' }))
+      boraTab.send(
+        JSON.stringify({ type: 'patch', pageId: fx.page.id, baseSeq: await headSeq(fx.page.id), ops: editB1, clientOpId: 'op-b1' }),
+      )
       await until('편집이 커밋 직전에 선다', async () => (await lockWaiters()) >= 1)
       dahyeTab.send(lockFrame(fx.page.id, 'n_b1'))
       await until('다혜의 lock 이 줄에 서거나 선다', async () => dahyeHeld() || (await lockWaiters()) >= 2)
@@ -828,8 +834,7 @@ describe('`lock`의 줄과 실패의 답', () => {
 
   const lockWithId = (pageId: string, nodeId: string, lockId: number): string => JSON.stringify({ type: 'lock', pageId, nodeId, lockId })
   const denials = (probe: WsProbe): ServerFrame[] => probe.received.filter((frame) => frame.type === 'lock-denied')
-  const nodesOf = (ctx: RealApiContext, projectId: string): string[] =>
-    ctx.app.realtime.locks.liveIn(projectId).map((lock) => lock.nodeId)
+  const nodesOf = (ctx: RealApiContext, projectId: string): string[] => ctx.app.realtime.locks.liveIn(projectId).map((lock) => lock.nodeId)
 
   /**
    * 행이 쥐인 동안 한 연결이 다섯 번 고른다. 기다리는 트랜잭션은 하나고, 풀리면 **마지막** 선택만 선다. 혼자 죽는 변조: 줄이 도는 중에도
@@ -899,7 +904,9 @@ describe('`lock`의 줄과 실패의 답', () => {
       }
       dahyeTab.send(lockWithId(fx.page.id, 'n_b', 2))
       await until('자격 확인에서 끝내지 못한 `lock`에 답이 온다', () => denials(dahyeTab).length === 1)
-      expect(denials(dahyeTab)).toEqual([{ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeIds: ['n_b'], lockId: 2 }])
+      expect(denials(dahyeTab)).toEqual([
+        { type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeIds: ['n_b'], lockId: 2 },
+      ])
       expect(await locksEmpty(watcher)).toEqual([])
 
       dahyeTab.send(lockWithId(fx.page.id, 'n_c', 3))
@@ -915,7 +922,13 @@ describe('`lock`의 줄과 실패의 답', () => {
       }
       dahyeTab.send(lockWithId(fx.page.id, 'n_b1', 4))
       await until('트랜잭션 안에서 끝내지 못한 `lock`에 답이 온다', () => denials(dahyeTab).length === 2)
-      expect(denials(dahyeTab)[1]).toEqual({ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeIds: ['n_b1'], lockId: 4 })
+      expect(denials(dahyeTab)[1]).toEqual({
+        type: 'lock-denied',
+        projectId: fx.project.id,
+        pageId: fx.page.id,
+        nodeIds: ['n_b1'],
+        lockId: 4,
+      })
       expect(failVerdict).toBe(false)
       await until('앞서 쥔 `n_c`가 놓인다', () => nodesOf(ctx, fx.project.id).length === 0)
     })
@@ -982,7 +995,9 @@ describe('`lock`의 줄과 실패의 답', () => {
 
       expect(deniedWhileHeld).toBe(true)
       expect(waitersAfter).toBe(0)
-      expect(denials(dahyeTab)).toEqual([{ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeIds: ['n_a'], lockId: 2 }])
+      expect(denials(dahyeTab)).toEqual([
+        { type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeIds: ['n_a'], lockId: 2 },
+      ])
       expect(await locksEmpty(watcher)).toEqual([])
       expect(failures.mock.calls.filter(([, message]) => message === 'WS 프레임 처리 실패')).toEqual([])
     })

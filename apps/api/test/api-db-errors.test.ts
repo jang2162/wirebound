@@ -161,7 +161,7 @@ describe('WS patch 도 결과를 모르는 실패는 503 이다 — REST 와 같
   })
 })
 
-describe('COMMIT 에 서버의 답이 아닌 거절이 오면 503 이다 — 표지(연결의 `\'error\'`)가 없어도', () => {
+describe("COMMIT 에 서버의 답이 아닌 거절이 오면 503 이다 — 표지(연결의 `'error'`)가 없어도", () => {
   it('게시의 COMMIT 이 클라이언트 쪽 시간 제한으로 거절되면 503 이다 — 커밋은 됐고(1행) 같은 키로 다시 보내면 재생된다', async () => {
     // 절차 — COMMIT 을 서버 안에서 걸리게 하는 지연 제약 트리거 + `query_timeout`. `createPool`은 그 설정을
     // 거절하므로 **만든 뒤 풀에 넣는다**(COMMIT 줄만 잰다 — `db-connection-loss.test.ts`의 머리말). 값: COMMIT 1.3s ·

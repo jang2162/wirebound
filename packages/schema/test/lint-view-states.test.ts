@@ -42,16 +42,18 @@ const GUEST: ViewState = { id: 's_guest', name: '비로그인' }
 
 describe('view-state-unknown — 목록에 없는 상태를 가리키는 가지', () => {
   it('목록에 없는 상태의 가지 하나에 경고 하나 — 자리는 그 가지', () => {
-    const issues = lint(doc([switchOf('n_sw', [caseOf('n_d', 'default'), caseOf('n_a', 's_admin'), caseOf('n_x', 's_gone')])], [ADMIN])).filter(
-      (issue) => issue.rule === 'view-state-unknown',
-    )
+    const issues = lint(
+      doc([switchOf('n_sw', [caseOf('n_d', 'default'), caseOf('n_a', 's_admin'), caseOf('n_x', 's_gone')])], [ADMIN]),
+    ).filter((issue) => issue.rule === 'view-state-unknown')
     expect(issues).toHaveLength(1)
     expect(issues[0]).toMatchObject({ severity: 'warning', pageId: 'pg1', nodeId: 'n_x', path: '/root/children/0/children/2' })
     expect(issues[0]!.message).toContain('s_gone')
   })
 
   it('목록이 없는 페이지의 가지도 — 기본 가지는 늘 있다', () => {
-    const issues = lint(doc([switchOf('n_sw', [caseOf('n_d', 'default'), caseOf('n_x', 's_gone')])])).filter((issue) => issue.rule === 'view-state-unknown')
+    const issues = lint(doc([switchOf('n_sw', [caseOf('n_d', 'default'), caseOf('n_x', 's_gone')])])).filter(
+      (issue) => issue.rule === 'view-state-unknown',
+    )
     expect(issues.map((issue) => issue.nodeId)).toEqual(['n_x'])
   })
 
@@ -100,7 +102,9 @@ describe('view-state-nested — 상태 영역 안의 상태 영역', () => {
 
 describe('규칙 표', () => {
   it('셋이 설계서 규칙이고 등급이 경고 · 정보 · 정보다', () => {
-    expect(['view-state-unknown', 'view-state-unused', 'view-state-nested'].map((id) => [id, lintRule(id)?.group, lintRule(id)?.severity])).toEqual([
+    expect(
+      ['view-state-unknown', 'view-state-unused', 'view-state-nested'].map((id) => [id, lintRule(id)?.group, lintRule(id)?.severity]),
+    ).toEqual([
       ['view-state-unknown', 'document', 'warning'],
       ['view-state-unused', 'document', 'info'],
       ['view-state-nested', 'document', 'info'],

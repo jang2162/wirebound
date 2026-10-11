@@ -252,12 +252,10 @@ export type PageJsonResult =
   | { status: 'failed'; reason: PageJsonFailure; message: string; issues: PageJsonIssue[] }
 
 const EMPTY_MESSAGE = '내용이 비어 있습니다.'
-const NOT_ENVELOPE_MESSAGE =
-  'wirebound가 내보낸 페이지 파일이 아닙니다 — 파일 이름이 .wirebound-page.json인지 확인하세요.'
+const NOT_ENVELOPE_MESSAGE = 'wirebound가 내보낸 페이지 파일이 아닙니다 — 파일 이름이 .wirebound-page.json인지 확인하세요.'
 const BAD_SHAPE_MESSAGE = '페이지 JSON의 모양이 규격과 다릅니다'
 /** `marker` 거부 — 이 한 갈래만 문장을 따로 짓는다. 그 값이 **갈 자리가 있기** 때문이다(위 «번호는 노드가 든다» 절). */
-const COMMENT_MARKER_MESSAGE =
-  'comments[]에는 marker를 싣지 않습니다 — 번호는 schema 안의 노드가 듭니다.'
+const COMMENT_MARKER_MESSAGE = 'comments[]에는 marker를 싣지 않습니다 — 번호는 schema 안의 노드가 듭니다.'
 
 /**
  * 글자 한 벌에서 봉투를 읽는다. **던지지 않는다.**
@@ -337,11 +335,7 @@ export function parsePageJson(parsed: unknown): PageJsonResult {
  * **`layoutRef`를 만들지 않는다**(위 «`layoutRef`는 받되 쓰지 않는다» 절). **`description`은 받은 그대로 싣는다** — `null`은
  * *"설명 없음"*이라는 값이고 키가 없는 것과 다르다(`updateMenu`의 `parentId: null`과 같은 자리).
  */
-export function toPageJson(input: {
-  page: PageJsonPage
-  document: PageDocument
-  comments: readonly PageJsonComment[]
-}): PageJson {
+export function toPageJson(input: { page: PageJsonPage; document: PageDocument; comments: readonly PageJsonComment[] }): PageJson {
   return {
     wireboundVersion: WIREBOUND_PAGE_VERSION,
     page: input.page,

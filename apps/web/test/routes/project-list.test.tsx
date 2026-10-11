@@ -4,14 +4,7 @@ import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectDetail, SessionUser } from '../../src/api/types'
 import { openedMenu } from '../opened-menu'
-import {
-  currentPath,
-  expiringSession,
-  fakeApi,
-  renderWithProviders,
-  tabHub,
-  unauthenticatedError,
-} from '../helpers'
+import { currentPath, expiringSession, fakeApi, renderWithProviders, tabHub, unauthenticatedError } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -197,7 +190,9 @@ describe('목록 머리의 `…`', () => {
 
   function openMenu(): string[] {
     fireEvent.click(within(head()).getByRole('button', { name: '더 보기' }))
-    return within(openedMenu(head())).getAllByRole('menuitem').map((item) => item.textContent ?? '')
+    return within(openedMenu(head()))
+      .getAllByRole('menuitem')
+      .map((item) => item.textContent ?? '')
   }
 
   it('계정 설정 · 로그아웃 — 메뉴 머리에 이름. 옛 계정 묶음과 «테마 관리» 링크는 없다', async () => {

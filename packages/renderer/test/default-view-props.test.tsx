@@ -51,7 +51,11 @@ describe('List — selectable · empty · loading', () => {
   it('selectable — 머리와 행마다 맨 앞에 체크 칸 · 쪽 번호 칸이 그만큼 넓다', () => {
     const el = draw({ ...plain, props: { ...plain.props, selectable: true } })
     expect(Array.from(el.querySelectorAll('tr')).map((tr) => tr.firstElementChild?.getAttribute('data-wb-cell') ?? null)).toEqual([
-      'check', 'check', 'check', 'check', null,
+      'check',
+      'check',
+      'check',
+      'check',
+      null,
     ])
     expect(parts(el, 'checkbox')).toHaveLength(4)
     expect(parts(el, 'pagination')[0]!.getAttribute('colspan')).toBe('3')
@@ -83,7 +87,13 @@ describe('KeyValue — columns', () => {
 
   it('columns 쌍씩 한 행 — 모자란 마지막 행은 빈 칸 하나가 나머지 폭을 덮는다', () => {
     const el = draw({ id: 'kv', type: 'KeyValue', props: { pairs, columns: 2 } })
-    expect(Array.from(el.querySelectorAll('tr')).map((tr) => Array.from(tr.children).map((cell) => `${cell.getAttribute('data-wb-part')}:${cell.textContent}:${cell.getAttribute('colspan') ?? 1}`))).toEqual([
+    expect(
+      Array.from(el.querySelectorAll('tr')).map((tr) =>
+        Array.from(tr.children).map(
+          (cell) => `${cell.getAttribute('data-wb-part')}:${cell.textContent}:${cell.getAttribute('colspan') ?? 1}`,
+        ),
+      ),
+    ).toEqual([
       ['key:이름:1', 'value:홍:1', 'key:나이:1', 'value:3:1'],
       ['key:부서:1', 'value:개발:1', 'filler::2'],
     ])

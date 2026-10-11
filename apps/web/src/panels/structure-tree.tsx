@@ -271,8 +271,8 @@ export function StructureTree(props: {
     const change = command
       ? store.toggleSelect(nodeId)
       : event.shiftKey
-          ? store.selectRange(nodeId, visibleNodeOrder(shown, fold.collapsed))
-          : null
+        ? store.selectRange(nodeId, visibleNodeOrder(shown, fold.collapsed))
+        : null
     if (change === null) store.selectNode(nodeId)
     else if (change.capped > 0) store.setEditFailure({ kind: 'message', message: selectionCapNotice() })
   }
@@ -282,8 +282,7 @@ export function StructureTree(props: {
    * **고르개가 설 줄** — 고른 줄, 고른 것이 없거나 문서에 없으면 뿌리 줄. 패턴 · 프리셋은 고른 것 없이도 열리므로(뿌리 `+`) 붙을 줄이
    * 있어야 한다 — 페이지 통째의 조작이라 뿌리 줄 아래다.
    */
-  const anchorId =
-    selectedNodeId !== null && findNodeSafely(doc.root, selectedNodeId) !== undefined ? selectedNodeId : rootId
+  const anchorId = selectedNodeId !== null && findNodeSafely(doc.root, selectedNodeId) !== undefined ? selectedNodeId : rootId
   /** 뿌리의 판정 — 뿌리 `+`의 «페이지에 추가»가 뿌리를 골라 «안에 추가»를 열므로 그 판정을 먼저 본다(잠기면 뿌리를 못 고른다). */
   const rootLock = rootId === null ? null : lockOf(rootId)
   const rootAbilities = structureAbilities(doc, rootId, rootLock)
@@ -312,103 +311,99 @@ export function StructureTree(props: {
 
   return (
     <>
-    {/* **고르개 단축키가 이 상자에 붙는다 — 전역이 아니다**(고르개가 이 트리의 상태라서 — `TREE_SHORTCUTS` 머리말). 스타일이 없는
+      {/* **고르개 단축키가 이 상자에 붙는다 — 전역이 아니다**(고르개가 이 트리의 상태라서 — `TREE_SHORTCUTS` 머리말). 스타일이 없는
         상자라 클래스도 붙이지 않는다. */}
-    <div onKeyDown={handleKeyDown}>
-      <ul className="wb-shell-structure" ref={treeRef}>
-        <StructureNode
-          node={shown}
-          // 상태 가지 줄의 요약이 그 상태 이름을 읽는 목록 — 검증 전 문서라 배열이 아니면 없는 것으로 본다.
-          viewStates={Array.isArray(doc.viewStates) ? doc.viewStates : undefined}
-          switches={switches}
-          hidden={hidden}
-          selectedNodeId={selectedNodeId}
-          selected={selectedSet}
-          selection={selectedNodeIds.join(',')}
-          onSelect={pick}
-          // 판정의 자리는 위 `lockOf` 선언이 갖는다 — 줄과 꺼진 항목의 이유가 **같은 값**을 쓴다.
-          lockOf={lockOf}
-          blockedOf={store.selectionBlockedBy}
-          fold={fold}
-          row={
-            props.editable
-              ? { commands, drag, rootId, anchorId, picker, select: store.selectNode, alias }
-              : null
-          }
-        />
-      </ul>
-      {props.editable && <DropIndicator hint={drag.hint} />}
-      {props.headSlot !== undefined &&
-        props.headSlot !== null &&
-        createPortal(
-          <>
-            {/* **모두 접기 · 모두 펴기** — 고르기와 같은 읽기라 고칠 수 없어도 선다. 모두 접어도 뿌리는 편 채다 — 뿌리는 하나라 접으면 줄 하나만
+      <div onKeyDown={handleKeyDown}>
+        <ul className="wb-shell-structure" ref={treeRef}>
+          <StructureNode
+            node={shown}
+            // 상태 가지 줄의 요약이 그 상태 이름을 읽는 목록 — 검증 전 문서라 배열이 아니면 없는 것으로 본다.
+            viewStates={Array.isArray(doc.viewStates) ? doc.viewStates : undefined}
+            switches={switches}
+            hidden={hidden}
+            selectedNodeId={selectedNodeId}
+            selected={selectedSet}
+            selection={selectedNodeIds.join(',')}
+            onSelect={pick}
+            // 판정의 자리는 위 `lockOf` 선언이 갖는다 — 줄과 꺼진 항목의 이유가 **같은 값**을 쓴다.
+            lockOf={lockOf}
+            blockedOf={store.selectionBlockedBy}
+            fold={fold}
+            row={props.editable ? { commands, drag, rootId, anchorId, picker, select: store.selectNode, alias } : null}
+          />
+        </ul>
+        {props.editable && <DropIndicator hint={drag.hint} />}
+        {props.headSlot !== undefined &&
+          props.headSlot !== null &&
+          createPortal(
+            <>
+              {/* **모두 접기 · 모두 펴기** — 고르기와 같은 읽기라 고칠 수 없어도 선다. 모두 접어도 뿌리는 편 채다 — 뿌리는 하나라 접으면 줄 하나만
                 남는다(맨 위 갈래가 보이는 것이 «모두 접은» 트리다). */}
-            <TreeFoldButtons onCollapse={() => fold.collapse(foldableIds(shown, rootId))} onExpand={fold.expandAll} />
-            {/* **모든 가지 보기** — 상태 영역이 있는 페이지에만 선다. 읽기라 고칠 수 없어도 선다. */}
-            {hasSwitch && (
-              <button
-                type="button"
-                className="wb-shell-tree-fold"
-                aria-label={ALL_CASES_LABEL}
-                title={ALL_CASES_LABEL}
-                aria-pressed={allCases}
-                onClick={() => setAllCases((on) => !on)}
-              >
-                {shellIcon('allCases', 14)}
-              </button>
-            )}
-            {props.editable && (
-              // **뿌리 `+`** — 페이지 통째에 더하는 셋. «페이지에 추가»는 뿌리를 골라 «안에 추가»를 연다(spec 「툴바 대신 노드별 `+` · `…`」).
-              // 패턴은 고른 것을 풀고 연다 — 고른 것이 없으면 뿌리의 자식 끝에 꽂는다(`edit/pattern-insert.ts`).
-              <ActionMenu
-                label="구조 트리에 추가"
-                icon={ICONS.add}
-                compact
-                items={[
-                  {
-                    key: 'page',
-                    label: '페이지에 추가',
-                    icon: ICONS.addInside,
-                    disabled: !rootAbilities.addInside,
-                    title: rootAddReason,
-                    description: rootAddReason,
-                    onSelect: () => {
-                      if (rootId === null) return
-                      store.selectNode(rootId)
-                      commands.openAdd('inside')
+              <TreeFoldButtons onCollapse={() => fold.collapse(foldableIds(shown, rootId))} onExpand={fold.expandAll} />
+              {/* **모든 가지 보기** — 상태 영역이 있는 페이지에만 선다. 읽기라 고칠 수 없어도 선다. */}
+              {hasSwitch && (
+                <button
+                  type="button"
+                  className="wb-shell-tree-fold"
+                  aria-label={ALL_CASES_LABEL}
+                  title={ALL_CASES_LABEL}
+                  aria-pressed={allCases}
+                  onClick={() => setAllCases((on) => !on)}
+                >
+                  {shellIcon('allCases', 14)}
+                </button>
+              )}
+              {props.editable && (
+                // **뿌리 `+`** — 페이지 통째에 더하는 셋. «페이지에 추가»는 뿌리를 골라 «안에 추가»를 연다(spec 「툴바 대신 노드별 `+` · `…`」).
+                // 패턴은 고른 것을 풀고 연다 — 고른 것이 없으면 뿌리의 자식 끝에 꽂는다(`edit/pattern-insert.ts`).
+                <ActionMenu
+                  label="구조 트리에 추가"
+                  icon={ICONS.add}
+                  compact
+                  items={[
+                    {
+                      key: 'page',
+                      label: '페이지에 추가',
+                      icon: ICONS.addInside,
+                      disabled: !rootAbilities.addInside,
+                      title: rootAddReason,
+                      description: rootAddReason,
+                      onSelect: () => {
+                        if (rootId === null) return
+                        store.selectNode(rootId)
+                        commands.openAdd('inside')
+                      },
                     },
-                  },
-                  {
-                    key: 'pattern',
-                    label: '패턴 넣기',
-                    icon: ICONS.pattern,
-                    disabled: typeof doc.root?.id !== 'string' || lockOf(doc.root.id) !== null,
-                    title: rootPatternReason,
-                    description: rootPatternReason,
-                    onSelect: () => {
-                      store.selectNode(null)
-                      commands.openAdd('pattern')
+                    {
+                      key: 'pattern',
+                      label: '패턴 넣기',
+                      icon: ICONS.pattern,
+                      disabled: typeof doc.root?.id !== 'string' || lockOf(doc.root.id) !== null,
+                      title: rootPatternReason,
+                      description: rootPatternReason,
+                      onSelect: () => {
+                        store.selectNode(null)
+                        commands.openAdd('pattern')
+                      },
                     },
-                  },
-                  {
-                    key: 'preset',
-                    label: '프리셋',
-                    icon: ICONS.preset,
-                    disabled: commands.presetLocked,
-                    title: commands.why.preset,
-                    description: commands.why.preset,
-                    onSelect: () => commands.openAdd('preset'),
-                  },
-                ]}
-              />
-            )}
-          </>,
-          props.headSlot,
-        )}
-    </div>
-    {/* **«상태 나누기 풀기» 확인**(`./unsplit-dialog.tsx`) — 단축키 상자의 형제다(상자 단추의 키가 트리의 단축키로 버블되지 않게). */}
-    {props.editable && <UnsplitDialog commands={commands.viewState} />}
+                    {
+                      key: 'preset',
+                      label: '프리셋',
+                      icon: ICONS.preset,
+                      disabled: commands.presetLocked,
+                      title: commands.why.preset,
+                      description: commands.why.preset,
+                      onSelect: () => commands.openAdd('preset'),
+                    },
+                  ]}
+                />
+              )}
+            </>,
+            props.headSlot,
+          )}
+      </div>
+      {/* **«상태 나누기 풀기» 확인**(`./unsplit-dialog.tsx`) — 단축키 상자의 형제다(상자 단추의 키가 트리의 단축키로 버블되지 않게). */}
+      {props.editable && <UnsplitDialog commands={commands.viewState} />}
     </>
   )
 }
@@ -460,7 +455,8 @@ export const ALL_CASES_LABEL = '모든 가지 보기'
  */
 function stateSwitches(root: unknown): ReadonlyMap<string, WbNode> {
   const found = new Map<string, WbNode>()
-  for (const visit of walkSafely(root)) if (visit.node.type === 'StateSwitch' && typeof visit.node.id === 'string') found.set(visit.node.id, visit.node)
+  for (const visit of walkSafely(root))
+    if (visit.node.type === 'StateSwitch' && typeof visit.node.id === 'string') found.set(visit.node.id, visit.node)
   return found
 }
 
@@ -540,7 +536,10 @@ function StructureNode(props: {
     hiddenBlocker !== null &&
     node.type === 'StateSwitch' &&
     (props.switches.get(node.id)?.children ?? []).some(
-      (kase) => isSelectable(kase) && !children.some((shown) => isSelectable(shown) && shown.id === kase.id) && findNodeSafely(kase, hiddenBlocker.nodeId) !== undefined,
+      (kase) =>
+        isSelectable(kase) &&
+        !children.some((shown) => isSelectable(shown) && shown.id === kase.id) &&
+        findNodeSafely(kase, hiddenBlocker.nodeId) !== undefined,
     )
 
   /**
@@ -578,9 +577,7 @@ function StructureNode(props: {
         // **줄 상자** — 줄 단추와 `+` · `…`가 한 줄에 서고, 끌기가 찾을 표지(`data-tree-row` · id)를 단다(메뉴 트리의 `TreeRow`와 같은
         // 꼴 · 같은 CSS — 서는 조건은 `panels/tree-row-actions.tsx` 머리말).
         <div
-          className={
-            'wb-shell-tree-row' + (picked ? ' wb-shell-tree-row-picked' : '') + (lifted ? ' wb-shell-tree-row-dragging' : '')
-          }
+          className={'wb-shell-tree-row' + (picked ? ' wb-shell-tree-row-picked' : '') + (lifted ? ' wb-shell-tree-row-dragging' : '')}
           data-tree-row=""
           data-tree-kind="node"
           data-tree-id={node.id}
@@ -654,9 +651,7 @@ function StructureNode(props: {
           오히려 안 보인다. **이름은 잠금이 직접 나른다**(`realtime/protocol.ts`의
           `NodeLockView`) — 참가자 목록에서 찾으면 그 목록이 낡은 한 프레임 동안 배지가
           조용히 사라진다. */}
-      {lock !== null && lock.nodeId === node.id && (
-        <span className="wb-shell-structure-lock">{lock.userName} 편집 중</span>
-      )}
+      {lock !== null && lock.nodeId === node.id && <span className="wb-shell-structure-lock">{lock.userName} 편집 중</span>}
       {holdsHiddenLock && (
         <span className="wb-shell-structure-lock" title={hiddenLockNotice(hiddenBlocker!.userName)}>
           {hiddenBlocker!.userName} 편집 중 · 다른 가지

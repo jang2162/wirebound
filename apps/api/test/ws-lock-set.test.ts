@@ -373,42 +373,46 @@ describe('하트비트', () => {
   it.each([
     { first: 'dahye', denied: [['n_c']], held: ['보라:n_a', '다혜:n_b'] },
     { first: 'bora', denied: [['n_a']], held: ['다혜:n_b', '다혜:n_c'] },
-  ] as const)('복원이 두 사람의 잠금을 조상/자손으로 만들면 먼저 하트비트를 보낸 쪽($first)이 겹친 노드를 거절받는다', async (row) => {
-    await withRealApi(async (ctx) => {
-      const fx = await board(ctx)
-      const snapshotId = await snapshotWithCInsideA(ctx, fx)
-      const boraTab = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
-      const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
-      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.onlooker.cookie.wb_session))
-      boraTab.send(setFrame(fx.page.id, ['n_a'], 1))
-      dahyeTab.send(setFrame(fx.page.id, ['n_c', 'n_b'], 1))
-      await locksUntil(watcher, (list) => list.length === 3, '셋')
+  ] as const)(
+    '복원이 두 사람의 잠금을 조상/자손으로 만들면 먼저 하트비트를 보낸 쪽($first)이 겹친 노드를 거절받는다',
+    async (row) => {
+      await withRealApi(async (ctx) => {
+        const fx = await board(ctx)
+        const snapshotId = await snapshotWithCInsideA(ctx, fx)
+        const boraTab = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
+        const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
+        const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.onlooker.cookie.wb_session))
+        boraTab.send(setFrame(fx.page.id, ['n_a'], 1))
+        dahyeTab.send(setFrame(fx.page.id, ['n_c', 'n_b'], 1))
+        await locksUntil(watcher, (list) => list.length === 3, '셋')
 
-      await restore(ctx, fx, snapshotId)
-      // 카나리아 — 복원이 겹침을 만들었다(복원은 잠금을 안 본다).
-      expect(overlapping(ctx, fx)).toBe(true)
+        await restore(ctx, fx, snapshotId)
+        // 카나리아 — 복원이 겹침을 만들었다(복원은 잠금을 안 본다).
+        expect(overlapping(ctx, fx)).toBe(true)
 
-      const [firstTab, secondTab] = row.first === 'dahye' ? [dahyeTab, boraTab] : [boraTab, dahyeTab]
-      const [firstSet, secondSet] = row.first === 'dahye' ? [['n_c', 'n_b'], ['n_a']] : [['n_a'], ['n_c', 'n_b']]
-      firstTab.send(setFrame(fx.page.id, firstSet, 2))
-      await deniedWithin(firstTab, 3_000)
-      secondTab.send(setFrame(fx.page.id, secondSet, 2))
-      await secondTab.quiet()
+        const [firstTab, secondTab] = row.first === 'dahye' ? [dahyeTab, boraTab] : [boraTab, dahyeTab]
+        const [firstSet, secondSet] = row.first === 'dahye' ? [['n_c', 'n_b'], ['n_a']] : [['n_a'], ['n_c', 'n_b']]
+        firstTab.send(setFrame(fx.page.id, firstSet, 2))
+        await deniedWithin(firstTab, 3_000)
+        secondTab.send(setFrame(fx.page.id, secondSet, 2))
+        await secondTab.quiet()
 
-      const names = { [fx.bora.user.name]: '보라', [fx.dahye.user.name]: '다혜' }
-      expect({
-        overlapping: overlapping(ctx, fx),
-        firstDenied: denials(firstTab).map((frame) => frame.nodeIds),
-        secondDenied: denials(secondTab).length,
-        held: held(ctx, fx.project.id)
-          .map((line) => {
-            const [name, node] = line.split(':')
-            return `${names[name!]}:${node}`
-          })
-          .sort(),
-      }).toEqual({ overlapping: false, firstDenied: row.denied, secondDenied: 0, held: [...row.held].sort() })
-    })
-  }, 30_000)
+        const names = { [fx.bora.user.name]: '보라', [fx.dahye.user.name]: '다혜' }
+        expect({
+          overlapping: overlapping(ctx, fx),
+          firstDenied: denials(firstTab).map((frame) => frame.nodeIds),
+          secondDenied: denials(secondTab).length,
+          held: held(ctx, fx.project.id)
+            .map((line) => {
+              const [name, node] = line.split(':')
+              return `${names[name!]}:${node}`
+            })
+            .sort(),
+        }).toEqual({ overlapping: false, firstDenied: row.denied, secondDenied: 0, held: [...row.held].sort() })
+      })
+    },
+    30_000,
+  )
 })
 
 describe('하트비트의 경주', () => {
@@ -663,14 +667,18 @@ describe('편집 커밋과 집합 획득', () => {
       let doorHeld = (): void => {}
       const doorAcquired = new Promise<void>((resolve) => (doorHeld = resolve))
       const door = db.transaction().execute(async (trx) => {
-        await sql`select 1 from project_members where project_id = ${fx.project.id} and user_id = ${fx.bora.user.id} for update`.execute(trx)
+        await sql`select 1 from project_members where project_id = ${fx.project.id} and user_id = ${fx.bora.user.id} for update`.execute(
+          trx,
+        )
         doorHeld()
         await doorFreed
       })
       await doorAcquired
 
       const moveCIntoB = [{ op: 'move', from: '/root/children/2', path: '/root/children/1/children/-' }]
-      boraTab.send(JSON.stringify({ type: 'patch', pageId: fx.page.id, baseSeq: await headSeq(fx.page.id), ops: moveCIntoB, clientOpId: 'op-in' }))
+      boraTab.send(
+        JSON.stringify({ type: 'patch', pageId: fx.page.id, baseSeq: await headSeq(fx.page.id), ops: moveCIntoB, clientOpId: 'op-in' }),
+      )
       const dahyeSettled = (): boolean =>
         dahyeTab.received.some((frame) => frame.type === 'lock-denied') ||
         ctx.app.realtime.locks.liveIn(fx.project.id).some((lock) => lock.userId === fx.dahye.user.id)
@@ -709,7 +717,11 @@ describe('2차 방어', () => {
       const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.onlooker.cookie.wb_session))
       dahyeTab.send(setFrame(fx.page.id, ['n_a', 'n_b']))
       await locksUntil(watcher, (list) => list.length === 2, '둘')
-      const page = await getTestDb().selectFrom('pages').select(['head_seq', 'schema']).where('id', '=', fx.page.id).executeTakeFirstOrThrow()
+      const page = await getTestDb()
+        .selectFrom('pages')
+        .select(['head_seq', 'schema'])
+        .where('id', '=', fx.page.id)
+        .executeTakeFirstOrThrow()
 
       const response = await ctx.app.inject({
         method: 'PATCH',
@@ -725,7 +737,11 @@ describe('2차 방어', () => {
       })
 
       expect(response.statusCode).toBe(423)
-      const after = await getTestDb().selectFrom('pages').select(['head_seq', 'schema']).where('id', '=', fx.page.id).executeTakeFirstOrThrow()
+      const after = await getTestDb()
+        .selectFrom('pages')
+        .select(['head_seq', 'schema'])
+        .where('id', '=', fx.page.id)
+        .executeTakeFirstOrThrow()
       expect(Number(after.head_seq)).toBe(Number(page.head_seq))
       expect(after.schema).toEqual(page.schema)
     })

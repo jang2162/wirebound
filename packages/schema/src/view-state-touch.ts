@@ -72,7 +72,8 @@ function guardsOf(root: unknown, viewState: string | null, allCases: boolean): M
     const switchId = typeof node.id === 'string' ? node.id : ''
     kids.forEach((kid, index) => {
       if (record(kid) === null) return
-      if (shownPath && index === shown && own === -1 && viewState !== null) guards.set(kid as object, { why: 'dimmed', switchNode: node, switchId })
+      if (shownPath && index === shown && own === -1 && viewState !== null)
+        guards.set(kid as object, { why: 'dimmed', switchNode: node, switchId })
       else if (shownPath && index !== shown && !allCases) guards.set(kid as object, { why: 'hidden', switchNode: node, switchId })
       else visit(kid, shownPath && index === shown)
     })

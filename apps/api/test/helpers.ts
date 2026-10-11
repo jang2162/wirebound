@@ -216,10 +216,7 @@ export async function resetRealData(): Promise<void> {
  * 청소는 호출자가 `resetRealData`를 `beforeEach`·`afterEach`에 걸어 한다 — 하네스가
  * 스스로 지우면 한 케이스가 하네스를 두 번 여는 시나리오(연결 둘)에서 중간에 판이 지워진다.
  */
-export async function withRealApi(
-  fn: (ctx: RealApiContext) => Promise<void>,
-  options?: WithRealApiOptions,
-): Promise<void> {
+export async function withRealApi(fn: (ctx: RealApiContext) => Promise<void>, options?: WithRealApiOptions): Promise<void> {
   const db = getTestDb()
   const app = await buildApp({ db, config: options?.config ?? testConfig(), loggerStream: options?.loggerStream })
   if (options?.register) {
@@ -399,16 +396,8 @@ export async function createProject(
  * 초대 API(`POST .../members`)를 거치지 않고 DB에 직접 쓴다 — 픽스처가 검사 대상 API에
  * 의존하면 그 API가 깨졌을 때 무관한 테스트가 전부 무너진다.
  */
-export async function addMember(
-  ctx: TestContext,
-  projectId: string,
-  userId: string,
-  role: ProjectRole,
-): Promise<void> {
-  await ctx.db
-    .insertInto('project_members')
-    .values({ project_id: projectId, user_id: userId, role })
-    .execute()
+export async function addMember(ctx: TestContext, projectId: string, userId: string, role: ProjectRole): Promise<void> {
+  await ctx.db.insertInto('project_members').values({ project_id: projectId, user_id: userId, role }).execute()
 }
 
 export interface CreatedMenuNode {

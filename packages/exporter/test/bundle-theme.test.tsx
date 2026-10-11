@@ -112,7 +112,9 @@ describe('테마를 실은 번들의 파일', () => {
   it('theme.css 가 없는 패키지는 그 파일도 link 도 없다', () => {
     const plain = bundle(theme({ themeCss: null }))
     expect(plain.files.map((file) => file.path)).not.toContain('assets/theme/theme.css')
-    const links = [...parse(fileAt(plain, 'pages/회원-목록.html') as string).head.querySelectorAll('link')].map((link) => link.getAttribute('href'))
+    const links = [...parse(fileAt(plain, 'pages/회원-목록.html') as string).head.querySelectorAll('link')].map((link) =>
+      link.getAttribute('href'),
+    )
     expect(links).toEqual(['../assets/shell.css', '../assets/views.css', '../assets/tokens.css'])
   })
 
@@ -165,7 +167,7 @@ function runThemeScript(definition: ThemeDefinition): void {
   const descriptor = Object.getOwnPropertyDescriptor(document, 'currentScript')
   Object.defineProperty(document, 'currentScript', { configurable: true, get: () => script })
   try {
-    ;((window as unknown as Record<string, WbRuntime>)[WB_RUNTIME_GLOBAL]!).register(definition)
+    ;(window as unknown as Record<string, WbRuntime>)[WB_RUNTIME_GLOBAL]!.register(definition)
   } finally {
     if (descriptor === undefined) delete (document as unknown as Record<string, unknown>)['currentScript']
     else Object.defineProperty(document, 'currentScript', descriptor)
@@ -224,7 +226,7 @@ describe('런타임이 번들의 테마로 그린다', () => {
   it('테마 스크립트 밖에서 온 등록은 받지 않는다', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     load(bundle())
-    ;((window as unknown as Record<string, WbRuntime>)[WB_RUNTIME_GLOBAL]!).register(markedTheme())
+    ;(window as unknown as Record<string, WbRuntime>)[WB_RUNTIME_GLOBAL]!.register(markedTheme())
     await run()
     expect(document.documentElement.getAttribute('data-wb-failed')).toBe('테마 번들이 등록하지 않았습니다(marked@0.0.0)')
   })
@@ -233,7 +235,9 @@ describe('런타임이 번들의 테마로 그린다', () => {
     load(bundle())
     runThemeScript(defineTheme({ manifest: { ...markedTheme().manifest, version: '9.9.9' }, views: {} }))
     await run()
-    expect(document.documentElement.getAttribute('data-wb-failed')).toBe('테마 번들이 다른 테마를 등록했습니다(marked@0.0.0 — 번들은 marked@9.9.9)')
+    expect(document.documentElement.getAttribute('data-wb-failed')).toBe(
+      '테마 번들이 다른 테마를 등록했습니다(marked@0.0.0 — 번들은 marked@9.9.9)',
+    )
   })
 
   it('뷰가 던지면 그 노드 id 와 함께 실패를 적는다 — 준비 신호는 선다', async () => {

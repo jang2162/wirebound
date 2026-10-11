@@ -25,15 +25,7 @@
 import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { LOST_COMMIT_LATE_POLL_MS, LOST_COMMIT_PROBE_MS } from '../src/services/lost-commit'
-import {
-  createProject,
-  getTestDb,
-  resetRealData,
-  signup,
-  withProxiedRealApi,
-  type ProxiedRealApi,
-  type SignedUpUser,
-} from './helpers'
+import { createProject, getTestDb, resetRealData, signup, withProxiedRealApi, type ProxiedRealApi, type SignedUpUser } from './helpers'
 import { WsProbe, joinRoom } from './ws-client'
 
 const db = getTestDb()
@@ -73,7 +65,12 @@ const held = (ctx: ProxiedRealApi) => ctx.pool.totalCount - ctx.pool.idleCount
 async function lostWrites(ctx: ProxiedRealApi, w: World, n: number): Promise<void> {
   for (let i = 0; i < n; i += 1) {
     ctx.proxy.halfCutOnQuery('commit')
-    const res = await ctx.app.inject({ method: 'POST', url: `/api/projects/${w.projectId}/menu`, cookies: w.owner.cookie, payload: { parentId: null, title: `잃은 메뉴 ${i}` } })
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/projects/${w.projectId}/menu`,
+      cookies: w.owner.cookie,
+      payload: { parentId: null, title: `잃은 메뉴 ${i}` },
+    })
     expect(ctx.proxy.fired, '반쪽 끊기가 쐈다').toBe(true)
     expect(res.statusCode, `잃은 쓰기 ${i} 의 답`).toBe(503)
   }
@@ -99,7 +96,10 @@ describe('늦은 커밋 지켜보기 — 확인 질의가 답을 못 받는 판'
       }
       // `probedInWindow` 는 카나리아 — 그 창에 지켜보기가 실제로 물었다(안 지켜보면 칸도 0 이라 칸 단언이 아무것도 안 잰다).
       const probedInWindow = swallow.count - probesBefore
-      expect({ heldAtMostOne: maxHeld <= 1, probedInWindow: probedInWindow > 0 }, `쥔 칸 최대 ${maxHeld} · 창 안의 묻기 ${probedInWindow}`).toEqual({
+      expect(
+        { heldAtMostOne: maxHeld <= 1, probedInWindow: probedInWindow > 0 },
+        `쥔 칸 최대 ${maxHeld} · 창 안의 묻기 ${probedInWindow}`,
+      ).toEqual({
         heldAtMostOne: true,
         probedInWindow: true,
       })
@@ -107,13 +107,20 @@ describe('늦은 커밋 지켜보기 — 확인 질의가 답을 못 받는 판'
       const t0 = performance.now()
       const otherGet = await ctx.app.inject({ method: 'GET', url: `/api/projects/${w.otherProjectId}/tree`, cookies: w.other.cookie })
       const otherMs = performance.now() - t0
-      expect({ status: otherGet.statusCode, fast: otherMs < 1_000 }, `남의 프로젝트 GET(${Math.round(otherMs)}ms)`).toEqual({ status: 200, fast: true })
+      expect({ status: otherGet.statusCode, fast: otherMs < 1_000 }, `남의 프로젝트 GET(${Math.round(otherMs)}ms)`).toEqual({
+        status: 200,
+        fast: true,
+      })
 
       // 묻기를 막던 조건이 풀린다 — 그 커밋들의 신호가 곧 와야 한다.
       const committed = await sql<{ n: number }>`select count(*)::int as n from menu_nodes where project_id = ${w.projectId}`.execute(db)
       expect(committed.rows[0]!.n, '잃은 쓰기는 전부 커밋됐다').toBe(10)
-      const rev = (await ctx.app.inject({ method: 'GET', url: `/api/projects/${w.projectId}/tree`, cookies: w.owner.cookie })).json().rev as number
-      expect(room.received.some((frame) => frame.type === 'menu-changed'), '조건이 풀리기 전의 신호').toBe(false)
+      const rev = (await ctx.app.inject({ method: 'GET', url: `/api/projects/${w.projectId}/tree`, cookies: w.owner.cookie })).json()
+        .rev as number
+      expect(
+        room.received.some((frame) => frame.type === 'menu-changed'),
+        '조건이 풀리기 전의 신호',
+      ).toBe(false)
       swallow.stop()
       const s0 = Date.now()
       const deadline = s0 + 5_000
@@ -122,7 +129,10 @@ describe('늦은 커밋 지켜보기 — 확인 질의가 답을 못 받는 판'
       }
       const signalMs = Date.now() - s0
       expect(
-        room.received.filter((frame) => frame.type === 'menu-changed').map((frame) => frame.rev).at(-1) ?? null,
+        room.received
+          .filter((frame) => frame.type === 'menu-changed')
+          .map((frame) => frame.rev)
+          .at(-1) ?? null,
         `조건이 풀린 뒤 ${signalMs}ms 안의 마지막 신호`,
       ).toBe(rev)
     })

@@ -54,9 +54,7 @@ describe('미리보기 판정 (화면 없이)', () => {
   })
 
   it('문서 버전·카탈로그·중복 id 셋을 막는다 — 서버가 거절하는 그 셋이다', () => {
-    const badVersion = previewPageJson(
-      text(file({ schema: { version: 999, root: { id: 'file_root', type: 'Page' } } })),
-    )
+    const badVersion = previewPageJson(text(file({ schema: { version: 999, root: { id: 'file_root', type: 'Page' } } })))
     const badType = previewPageJson(
       text(
         file({
@@ -99,9 +97,7 @@ describe('미리보기 판정 (화면 없이)', () => {
             root: {
               id: 'file_root',
               type: 'Page',
-              children: [
-                { id: 'file_field', type: 'Field', props: { label: '이름', control: 'text' }, variant: 'x' },
-              ],
+              children: [{ id: 'file_field', type: 'Field', props: { label: '이름', control: 'text' }, variant: 'x' }],
             },
           },
           comments: [],

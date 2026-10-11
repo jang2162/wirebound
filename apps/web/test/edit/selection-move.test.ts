@@ -20,7 +20,14 @@ const ROOT: WbNode = {
   type: 'Page',
   children: [
     { id: 'a', type: 'Text' },
-    { id: 'box', type: 'Card', children: [{ id: 'b1', type: 'Text' }, { id: 'b2', type: 'Text' }] },
+    {
+      id: 'box',
+      type: 'Card',
+      children: [
+        { id: 'b1', type: 'Text' },
+        { id: 'b2', type: 'Text' },
+      ],
+    },
     { id: 'c', type: 'Divider' },
   ],
 }

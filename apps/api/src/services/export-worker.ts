@@ -480,19 +480,11 @@ export class ExportWorkerPool {
     return admission
   }
 
-  async runHtml(
-    rows: ExportRows,
-    spec: Extract<ExportJobSpec, { kind: 'html' }>,
-    options?: ExportRunOptions,
-  ): Promise<HtmlJobResult> {
+  async runHtml(rows: ExportRows, spec: Extract<ExportJobSpec, { kind: 'html' }>, options?: ExportRunOptions): Promise<HtmlJobResult> {
     return (await this.run(rows, spec, options)) as HtmlJobResult
   }
 
-  async runPptx(
-    rows: ExportRows,
-    spec: Extract<ExportJobSpec, { kind: 'pptx' }>,
-    options?: ExportRunOptions,
-  ): Promise<PptxJobResult> {
+  async runPptx(rows: ExportRows, spec: Extract<ExportJobSpec, { kind: 'pptx' }>, options?: ExportRunOptions): Promise<PptxJobResult> {
     return (await this.run(rows, spec, options)) as PptxJobResult
   }
 

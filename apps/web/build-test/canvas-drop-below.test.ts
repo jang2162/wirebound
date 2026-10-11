@@ -53,7 +53,11 @@ const SHORT: SeedNode[] = [
   { id: 'n_last', type: 'Text', props: { content: '끝' } },
 ]
 /** 글 마흔 — 문서가 칸보다 길다(바탕이 안 보인다). */
-const LONG: SeedNode[] = Array.from({ length: 40 }, (_, index) => ({ id: `n_t${index}`, type: 'Text', props: { content: `글 ${index} — 캔버스를 세로로 채운다` } }))
+const LONG: SeedNode[] = Array.from({ length: 40 }, (_, index) => ({
+  id: `n_t${index}`,
+  type: 'Text',
+  props: { content: `글 ${index} — 캔버스를 세로로 채운다` },
+}))
 const KNOWN = new Set([...SHORT.map((node) => node.id), 'n_intx', ...LONG.map((node) => node.id)])
 
 describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저', () => {
@@ -80,15 +84,22 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
     if (member.status >= 300) throw new Error(`member ${member.status}`)
-    if (theme !== undefined) await putTheme(call, project.id, { themeId: `system-${theme}`, version: seededVersion(`system-${theme}`), tokens: {} })
+    if (theme !== undefined)
+      await putTheme(call, project.id, { themeId: `system-${theme}`, version: seededVersion(`system-${theme}`), tokens: {} })
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return P
   }
 
-  async function openEditor(P: string, user: 'alice' | 'bob' = 'alice'): Promise<{ page: Page; close: () => Promise<void>; patches: string[] }> {
+  async function openEditor(
+    P: string,
+    user: 'alice' | 'bob' = 'alice',
+  ): Promise<{ page: Page; close: () => Promise<void>; patches: string[] }> {
     const { context, page } = await stack.openTab(stack.users[user], { viewport: { width: 1440, height: 900 } })
     const patches: string[] = []
     page.on('websocket', (socket) => {
@@ -108,7 +119,12 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
       const plain = (r: DOMRect) => ({ x: r.x, y: r.y, width: r.width, height: r.height })
       const cell = document.querySelector('.wb-shell-canvas') as HTMLElement
       const frame = document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLElement
-      return { cell: plain(cell.getBoundingClientRect()), frame: plain(frame.getBoundingClientRect()), scrollTop: cell.scrollTop, scrollMax: cell.scrollHeight - cell.clientHeight }
+      return {
+        cell: plain(cell.getBoundingClientRect()),
+        frame: plain(frame.getBoundingClientRect()),
+        scrollTop: cell.scrollTop,
+        scrollMax: cell.scrollHeight - cell.clientHeight,
+      }
     })
   }
 
@@ -153,7 +169,9 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
 
   /** 지금 보인 놓을 자리 — `띠 · 부모가 뿌리인가 · 바로 앞 · 바로 뒤`. 없으면 `[]`. */
   async function shown(page: Page, rootId: string): Promise<string[]> {
-    return (await shownDrops(page)).map((drop) => `${drop.kind}:${drop.placement} ${drop.parent === rootId ? '뿌리' : drop.parent} ${drop.prev}→${drop.next}`)
+    return (await shownDrops(page)).map(
+      (drop) => `${drop.kind}:${drop.placement} ${drop.parent === rootId ? '뿌리' : drop.parent} ${drop.prev}→${drop.next}`,
+    )
   }
 
   const rootIdOf = async (P: string): Promise<string> => (await call('GET', P)).body.schema.root.id as string
@@ -184,27 +202,60 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
       const midHint = await shown(page, rootId)
       const tag = await page.locator('.wb-shell-palette-dragtag').textContent()
       await page.mouse.up()
-      const mid = await poll('서버 문서', () => order(P), (v) => v.length === 4).catch(() => order(P))
+      const mid = await poll(
+        '서버 문서',
+        () => order(P),
+        (v) => v.length === 4,
+      ).catch(() => order(P))
       const added = ((await call('GET', P)).body.schema.root.children as { id: string }[]).at(-1)?.id
-      const selected = await poll('넣은 노드를 고른다', () => selectedId(page), (id) => id === added, 3000).catch(() => selectedId(page))
+      const selected = await poll(
+        '넣은 노드를 고른다',
+        () => selectedId(page),
+        (id) => id === added,
+        3000,
+      ).catch(() => selectedId(page))
 
       // 칸 아래 끝 띠(끝 스크롤 자리 — 민 것이 없어 안 밀린다) 안.
       await grabCard(page, 'Button')
       await moveTo(page, { x, y: b.cell.y + b.cell.height - 10 })
       const bandHint = await shown(page, rootId)
       await page.mouse.up()
-      const band = await poll('서버 문서', () => order(P), (v) => v.length === 5).catch(() => order(P))
+      const band = await poll(
+        '서버 문서',
+        () => order(P),
+        (v) => v.length === 5,
+      ).catch(() => order(P))
 
       // 문서가 칸보다 좁은 판(프리셋 375) — 문서의 가로 범위 밖 · 문서 아래끝보다 밑(왼쪽 아래 모서리).
       await page.getByLabel('뷰포트 폭').selectOption('375')
-      const narrow = await poll('프리셋이 실린다', () => boxes(page), (v) => Math.abs(v.frame.width - 375) < 1)
+      const narrow = await poll(
+        '프리셋이 실린다',
+        () => boxes(page),
+        (v) => Math.abs(v.frame.width - 375) < 1,
+      )
       await grabCard(page, 'Link')
       await moveTo(page, { x: narrow.cell.x + (narrow.frame.x - narrow.cell.x) / 2, y: narrow.frame.y + narrow.frame.height + 30 })
       const cornerHint = await shown(page, rootId)
       await page.mouse.up()
-      const corner = await poll('서버 문서', () => order(P), (v) => v.length === 6).catch(() => order(P))
+      const corner = await poll(
+        '서버 문서',
+        () => order(P),
+        (v) => v.length === 6,
+      ).catch(() => order(P))
 
-      expect({ gap: gap > 80, frameLeftGap: narrow.frame.x - narrow.cell.x > 80, midHint, tag, mid, selected: selected === added, bandHint, band, cornerHint, corner, sent: patches.length }).toEqual({
+      expect({
+        gap: gap > 80,
+        frameLeftGap: narrow.frame.x - narrow.cell.x > 80,
+        midHint,
+        tag,
+        mid,
+        selected: selected === added,
+        bandHint,
+        band,
+        cornerHint,
+        corner,
+        sent: patches.length,
+      }).toEqual({
         gap: true,
         frameLeftGap: true,
         midHint: [`preview:inside 뿌리 n_last→null`],
@@ -237,7 +288,11 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
       await moveTo(page, below)
       const moveHint = await shown(page, rootId)
       await page.mouse.up()
-      const moved = await poll('서버 문서', () => order(P), (v) => v.at(-1) === 'n_text').catch(() => order(P))
+      const moved = await poll(
+        '서버 문서',
+        () => order(P),
+        (v) => v.at(-1) === 'n_text',
+      ).catch(() => order(P))
 
       // 이제 끝 노드인 n_text 를 다시 그 바탕에 — 제자리다.
       await page.locator('.wb-shell-canvas-handle').waitFor()
@@ -267,7 +322,11 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
     try {
       await openPalette(page)
       await page.getByLabel('뷰포트 폭').selectOption('375')
-      const b = await poll('프리셋이 실린다', () => boxes(page), (v) => Math.abs(v.frame.width - 375) < 1)
+      const b = await poll(
+        '프리셋이 실린다',
+        () => boxes(page),
+        (v) => Math.abs(v.frame.width - 375) < 1,
+      )
       const midY = b.frame.y + b.frame.height / 2
       const spots = {
         left: { x: b.cell.x + (b.frame.x - b.cell.x) / 2, y: midY },
@@ -279,7 +338,10 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
         await grabCard(page, 'Divider')
         await moveTo(page, at)
         // 끌기는 서 있다(이름표) — 자리만 없다.
-        hints[name] = [...(await shown(page, rootId)), (await page.locator('.wb-shell-palette-dragtag').count()) === 1 ? '이름표' : '이름표 없음']
+        hints[name] = [
+          ...(await shown(page, rootId)),
+          (await page.locator('.wb-shell-palette-dragtag').count()) === 1 ? '이름표' : '이름표 없음',
+        ]
         await page.mouse.up()
         await page.waitForTimeout(300)
       }
@@ -288,7 +350,11 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
       await moveTo(page, { x: b.frame.x + b.frame.width / 2, y: b.frame.y + b.frame.height - 20 })
       const insideHint = await shown(page, rootId)
       await page.mouse.up()
-      const after = await poll('서버 문서', () => order(P), (v) => v.length === 4).catch(() => order(P))
+      const after = await poll(
+        '서버 문서',
+        () => order(P),
+        (v) => v.length === 4,
+      ).catch(() => order(P))
 
       expect({ room: [b.frame.x - b.cell.x > 80, b.frame.y - b.cell.y >= 12], hints, insideHint, after, sent: patches.length }).toEqual({
         room: [true, true],
@@ -322,18 +388,25 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
       await moveTo(page, { x: b.cell.x + b.cell.width / 2, y: over.box.y + over.box.height * 0.15 })
       const drops = await shownDrops(page)
       await page.mouse.up()
-      const after = await poll('서버 문서', () => order(P), (v) => v.length === 41).catch(() => order(P))
+      const after = await poll(
+        '서버 문서',
+        () => order(P),
+        (v) => v.length === 41,
+      ).catch(() => order(P))
       expect({
         // 판 카나리아 — 문서 iframe 이 칸 아래끝을 넘는다(바탕이 안 보인다).
         frameCoversCell: b.frame.y + b.frame.height > b.cell.y + b.cell.height,
         hint: drops.map((drop) => ({ kind: drop.kind, placement: drop.placement, root: drop.parent === rootId, next: drop.next })),
         // 끝 스크롤이 칸을 조금 밀어 포인터 밑 글이 겨눈 글이 아닐 수 있다 — 보인 자리의 다음 노드 앞에 들어갔는지로 잰다.
-        placedBeforeShownNext: drops.length === 1 && drops[0]!.next !== null && after.indexOf('+Divider') === after.indexOf(drops[0]!.next) - 1,
+        placedBeforeShownNext:
+          drops.length === 1 && drops[0]!.next !== null && after.indexOf('+Divider') === after.indexOf(drops[0]!.next) - 1,
         notAtEnd: after.at(-1),
         sent: patches.length,
       }).toEqual({
         frameCoversCell: true,
-        hint: [{ kind: 'preview', placement: expect.stringMatching(/^(before|after)$/), root: true, next: expect.stringMatching(/^n_t\d+$/) }],
+        hint: [
+          { kind: 'preview', placement: expect.stringMatching(/^(before|after)$/), root: true, next: expect.stringMatching(/^n_t\d+$/) },
+        ],
         placedBeforeShownNext: true,
         notAtEnd: 'n_t39',
         sent: 1,
@@ -353,13 +426,21 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
         const cell = document.querySelector('.wb-shell-canvas') as HTMLElement
         cell.scrollTop = cell.scrollHeight
       })
-      const b = await poll('칸이 끝까지 밀린다', () => boxes(page), (v) => v.scrollMax > 0 && Math.abs(v.scrollTop - v.scrollMax) < 1)
+      const b = await poll(
+        '칸이 끝까지 밀린다',
+        () => boxes(page),
+        (v) => v.scrollMax > 0 && Math.abs(v.scrollTop - v.scrollMax) < 1,
+      )
       const margin = b.cell.y + b.cell.height - (b.frame.y + b.frame.height)
       await grabCard(page, 'Divider')
       await moveTo(page, { x: b.cell.x + b.cell.width / 2, y: b.frame.y + b.frame.height + margin / 2 })
       const hint = await shown(page, rootId)
       await page.mouse.up()
-      const after = await poll('서버 문서', () => order(P), (v) => v.length === 41).catch(() => order(P))
+      const after = await poll(
+        '서버 문서',
+        () => order(P),
+        (v) => v.length === 41,
+      ).catch(() => order(P))
       expect({ margin: margin >= 12, hint, last: after.at(-1), count: after.length, sent: patches.length }).toEqual({
         margin: true,
         hint: ['preview:inside 뿌리 n_t39→null'],
@@ -405,7 +486,10 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
       }
       const gapHeights = [1, 2, 3, 4].map((i) => boxesById[`n_g${i + 1}`]!.y - (boxesById[`n_g${i}`]!.y + boxesById[`n_g${i}`]!.height))
       await page.mouse.up()
-      expect({ gapsExist: gapHeights.every((h) => h >= 8), pairs: samples.map((sample) => `${sample.gap} ${sample.shown.join()}`) }).toEqual({
+      expect({
+        gapsExist: gapHeights.every((h) => h >= 8),
+        pairs: samples.map((sample) => `${sample.gap} ${sample.shown.join()}`),
+      }).toEqual({
         gapsExist: true,
         pairs: [1, 2, 3, 4].flatMap((i) => [0, 1, 2].map(() => `n_g${i}~n_g${i + 1} n_g${i}→n_g${i + 1}`)),
       })
@@ -423,14 +507,25 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
     const { page, close } = await openEditor(P)
     try {
       await page.getByLabel('뷰포트 폭').selectOption('375')
-      await poll('프리셋이 실린다', () => boxes(page), (v) => Math.abs(v.frame.width - 375) < 1)
+      await poll(
+        '프리셋이 실린다',
+        () => boxes(page),
+        (v) => Math.abs(v.frame.width - 375) < 1,
+      )
       const at = async () => {
         const b = await boxes(page)
         const last = await nodeBox(page, 'n_t39')
-        return { left: Math.round(b.frame.x - b.cell.x), right: Math.round(b.cell.x + b.cell.width - b.frame.x - b.frame.width), top: Math.round(b.frame.y - b.cell.y), pageEndBelowCell: Math.round(last.y - (b.cell.y + b.cell.height)), scrolls: b.scrollMax > 0 }
+        return {
+          left: Math.round(b.frame.x - b.cell.x),
+          right: Math.round(b.cell.x + b.cell.width - b.frame.x - b.frame.width),
+          top: Math.round(b.frame.y - b.cell.y),
+          pageEndBelowCell: Math.round(last.y - (b.cell.y + b.cell.height)),
+          scrolls: b.scrollMax > 0,
+        }
       }
       const full = await at()
-      for (let i = 0; i < 2; i += 1) await page.getByRole('group', { name: '줌' }).getByRole('button', { name: '축소', exact: true }).click()
+      for (let i = 0; i < 2; i += 1)
+        await page.getByRole('group', { name: '줌' }).getByRole('button', { name: '축소', exact: true }).click()
       await page.waitForTimeout(300)
       const half = await at()
       // eslint-disable-next-line no-console

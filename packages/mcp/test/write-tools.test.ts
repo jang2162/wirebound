@@ -163,12 +163,14 @@ describe('patch_page — 423 은 넷째 갈래다', () => {
   })
 
   it('두 문장이 **글자가 다르다** — 같아지면 여기가 죽는다', async () => {
-    const 낡음 = JSON.parse(
-      (await callTool(harness({ patch: 'stale' }), 'patch_page', { path: PATH, baseSeq: 0, ops: OPS })).text,
-    ) as { next: string; reason: string }
-    const 잠김 = JSON.parse(
-      (await callTool(harness({ patch: 'locked' }), 'patch_page', { path: PATH, baseSeq: 0, ops: OPS })).text,
-    ) as { next: string; reason: string }
+    const 낡음 = JSON.parse((await callTool(harness({ patch: 'stale' }), 'patch_page', { path: PATH, baseSeq: 0, ops: OPS })).text) as {
+      next: string
+      reason: string
+    }
+    const 잠김 = JSON.parse((await callTool(harness({ patch: 'locked' }), 'patch_page', { path: PATH, baseSeq: 0, ops: OPS })).text) as {
+      next: string
+      reason: string
+    }
 
     expect(잠김.next).not.toBe(낡음.next)
     expect(잠김.reason).not.toBe(낡음.reason)
@@ -216,12 +218,8 @@ describe('patch_page — 못 찾은 것과 둘 이상은 결과다', () => {
 
   it('둘 이상이면 하나를 고르지 않는다 — 어느 것을 고쳤는지 아무도 모르게 된다', async () => {
     const 겹침 = snapshotPayload()
-    겹침.pages.push(
-      page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 1, root: { id: 'r', type: 'Page' } }, null),
-    )
-    겹침.pages.push(
-      page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 1, root: { id: 'r', type: 'Page' } }, null),
-    )
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 1, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 1, root: { id: 'r', type: 'Page' } }, null))
 
     const io = harness({ payload: 겹침 })
     const outcome = await callTool(io, 'patch_page', { path: '관리자/목록', baseSeq: 0, ops: OPS })
@@ -339,9 +337,7 @@ describe('인자 검사 — 수와 배열도 표에서 나온다', () => {
   })
 
   it('`baseSeq` 가 정수가 아니어도 마찬가지다', async () => {
-    await expect(
-      callTool(harness(), 'patch_page', { path: PATH, baseSeq: 1.5, ops: OPS }),
-    ).rejects.toMatchObject({ code: -32602 })
+    await expect(callTool(harness(), 'patch_page', { path: PATH, baseSeq: 1.5, ops: OPS })).rejects.toMatchObject({ code: -32602 })
   })
 
   it('음수 `baseSeq` 도 막는다 — 그런 revision 은 없다', async () => {
@@ -351,9 +347,9 @@ describe('인자 검사 — 수와 배열도 표에서 나온다', () => {
   })
 
   it('`ops` 가 배열이 아니면 JSON-RPC 오류다', async () => {
-    await expect(
-      callTool(harness(), 'patch_page', { path: PATH, baseSeq: 0, ops: { op: 'remove' } }),
-    ).rejects.toMatchObject({ code: -32602 })
+    await expect(callTool(harness(), 'patch_page', { path: PATH, baseSeq: 0, ops: { op: 'remove' } })).rejects.toMatchObject({
+      code: -32602,
+    })
   })
 
   it('셋 중 하나라도 빠지면 JSON-RPC 오류다', async () => {

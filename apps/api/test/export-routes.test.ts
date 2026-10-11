@@ -47,9 +47,7 @@ function doc(rootId: string, buttonId: string, label: string, navigateTo?: strin
           id: buttonId,
           type: 'Button',
           props: { label },
-          ...(navigateTo === undefined
-            ? {}
-            : { interactions: [{ on: 'click', actions: [{ type: 'navigate', target: navigateTo }] }] }),
+          ...(navigateTo === undefined ? {} : { interactions: [{ on: 'click', actions: [{ type: 'navigate', target: navigateTo }] }] }),
         },
       ],
     },
@@ -138,9 +136,7 @@ describe('GET /:projectId/export/preview', () => {
         cookies: fixture.cookie,
       })
 
-      expect(res.json().brokenLinks).toEqual([
-        { target: 'page:없는/것', reason: 'missing', from: ['관리자 회원 상세'] },
-      ])
+      expect(res.json().brokenLinks).toEqual([{ target: 'page:없는/것', reason: 'missing', from: ['관리자 회원 상세'] }])
     })
   })
 
@@ -325,7 +321,9 @@ describe('GET /:projectId/export', () => {
       })
 
       const files = unzipSync(new Uint8Array(res.rawPayload))
-      const 전문 = Object.values(files).map((bytes) => strFromU8(bytes)).join('\n')
+      const 전문 = Object.values(files)
+        .map((bytes) => strFromU8(bytes))
+        .join('\n')
       expect(전문).toContain('one 목록')
       expect(전문).not.toContain('two 목록')
     })

@@ -100,12 +100,7 @@
 import { useEffect, useRef } from 'react'
 import { useLockChannel } from './context'
 import { useSessionUser } from '../session/session-context'
-import {
-  useEditorStore,
-  useEditorStoreInstance,
-  useOpenDocument,
-  useOpenPage,
-} from '../store/use-editor-store'
+import { useEditorStore, useEditorStoreInstance, useOpenDocument, useOpenPage } from '../store/use-editor-store'
 
 export function useNodeLock(pageId: string | undefined, canHold: boolean): void {
   const store = useEditorStoreInstance()

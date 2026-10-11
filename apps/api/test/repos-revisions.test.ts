@@ -241,11 +241,7 @@ describe('repos/revisions', () => {
       const menu = await createMenuNode(ctx, owner.cookie, project.id)
       const page = await createPage(ctx, owner.cookie, project.id, menu.id)
 
-      const before = await ctx.db
-        .selectFrom('pages')
-        .select(['updated_at'])
-        .where('id', '=', page.id)
-        .executeTakeFirstOrThrow()
+      const before = await ctx.db.selectFrom('pages').select(['updated_at']).where('id', '=', page.id).executeTakeFirstOrThrow()
 
       const newSchema: PageDocument = {
         version: 2,
@@ -278,11 +274,7 @@ describe('repos/revisions', () => {
       const newSchema: PageDocument = { version: 1, root: { id: 'n_root000002', type: 'Page', children: [] } }
       await writePageSchemaAtSeq(ctx.db, page.id, newSchema, 1, 1, 1)
 
-      const after = await ctx.db
-        .selectFrom('pages')
-        .select(['title', 'menu_node_id'])
-        .where('id', '=', page.id)
-        .executeTakeFirstOrThrow()
+      const after = await ctx.db.selectFrom('pages').select(['title', 'menu_node_id']).where('id', '=', page.id).executeTakeFirstOrThrow()
 
       expect(after.title).toBe('원래 제목')
       expect(after.menu_node_id).toBe(menu.id)

@@ -50,7 +50,11 @@ describe.skipIf(!전제.ok)('트리 줄 접기 — 실브라우저', () => {
     const project = (await call('POST', '/projects', { name: 'F1 접기', slug: `${slug}-${Date.now().toString(36)}` })).body
     const ids: Record<string, string> = {}
     for (const title of ['가', '나']) ids[title] = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title })).body.id
-    for (const [title, menu] of [['가1', '가'], ['가2', '가'], ['나1', '나']] as const) {
+    for (const [title, menu] of [
+      ['가1', '가'],
+      ['가2', '가'],
+      ['나1', '나'],
+    ] as const) {
       ids[title] = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: ids[menu], title })).body.id
     }
     const P = `/projects/${project.id}/pages/${ids['가1']}`
@@ -129,7 +133,11 @@ describe.skipIf(!전제.ok)('트리 줄 접기 — 실브라우저', () => {
       const held = await nodeRow(page, 'n_intx0000001').count()
       await page.mouse.move(card.x, card.y + 2)
       await page.mouse.up()
-      const moved = await poll('서버 문서', () => serverShape(P), (shape) => JSON.stringify(shape).includes('"Card":["Text","Divider"]'))
+      const moved = await poll(
+        '서버 문서',
+        () => serverShape(P),
+        (shape) => JSON.stringify(shape).includes('"Card":["Text","Divider"]'),
+      )
 
       expect({ brief, held, moved }).toEqual({ brief: 0, held: 1, moved: { Page: ['Text', { Card: ['Text', 'Divider'] }] } })
     } finally {
@@ -147,7 +155,11 @@ describe.skipIf(!전제.ok)('트리 줄 접기 — 실브라우저', () => {
       const card = await middle(nodeRow(page, 'n_card0000001'))
       await page.mouse.move(card.x, card.y, { steps: 4 })
       await page.mouse.up()
-      const moved = await poll('서버 문서', () => serverShape(P), (shape) => JSON.stringify(shape).includes('"Card":["Text","Text"]'))
+      const moved = await poll(
+        '서버 문서',
+        () => serverShape(P),
+        (shape) => JSON.stringify(shape).includes('"Card":["Text","Text"]'),
+      )
       // 놓은 자리는 그 안 끝 — 앞의 Text 는 원래 안에 있던 것이다(id 로 가른다).
       const card0 = (await stack.request(alice, 'GET', P)).body.schema.root.children[0] as { id: string; children: { id: string }[] }
       expect({ moved, inside: card0.children.map((child) => child.id) }).toEqual({
@@ -205,7 +217,12 @@ describe.skipIf(!전제.ok)('트리 줄 접기 — 실브라우저', () => {
       await nodeRow(page, 'n_intx0000001').waitFor({ state: 'detached' })
       await canvasFrame(page).locator('[data-wb-id="n_intx0000001"]').click()
       // 값으로 끝낸다 — 안 펴지면 시간 초과가 아니라 0 이 남는다.
-      const shown = await poll('조상이 펴짐', () => nodeRow(page, 'n_intx0000001').count(), (count) => count > 0, 3_000).catch(() => 0)
+      const shown = await poll(
+        '조상이 펴짐',
+        () => nodeRow(page, 'n_intx0000001').count(),
+        (count) => count > 0,
+        3_000,
+      ).catch(() => 0)
       const current = await nodeRow(page, 'n_intx0000001').locator('button[aria-current="true"]').count()
       expect({ shown, current }).toEqual({ shown: 1, current: 1 })
     } finally {

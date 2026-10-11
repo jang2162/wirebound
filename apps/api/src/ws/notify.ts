@@ -105,7 +105,11 @@ export function notifyPageStale(app: FastifyInstance, input: { projectId: string
  * 답을 잃은 쓰기(편집 · 게시)의 COMMIT 이 한도 뒤에 커밋되면 `page-stale`을 내게 하는 지켜보기 인자 — `runEditTransaction` ·
  * `runRevisionTransaction`의 `late`에 그대로 넘긴다. **서버가 지은 값(프로젝트 · 페이지 id)만 싣는다.**
  */
-export function pageStaleOnLateCommit(app: FastifyInstance, projectId: string, pageId: string): { watch: LateCommitWatch; onCommit: () => void } {
+export function pageStaleOnLateCommit(
+  app: FastifyInstance,
+  projectId: string,
+  pageId: string,
+): { watch: LateCommitWatch; onCommit: () => void } {
   return { watch: app.lateCommits, onCommit: () => notifyPageStale(app, { projectId, pageId }) }
 }
 

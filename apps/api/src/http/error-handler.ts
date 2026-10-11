@@ -111,10 +111,7 @@ export function registerErrorHandler(app: FastifyInstance): void {
       // 이미 하나 있다"*가 양쪽을 잰다). 우리 상한을 새로 두지 않는 것은
       // 이미 상한이 하나 있고 그것이 **우리 코드에 닿기 전에** 끊기 때문이다 — 두 벌이 되면
       // 어느 쪽이 끊었는지가 응답에서 갈리지 않는다.
-      const message =
-        statusCode === ERROR_STATUS_PAYLOAD_TOO_LARGE
-          ? '요청 본문이 너무 큽니다'
-          : '요청 형식이 올바르지 않습니다'
+      const message = statusCode === ERROR_STATUS_PAYLOAD_TOO_LARGE ? '요청 본문이 너무 큽니다' : '요청 형식이 올바르지 않습니다'
       send(reply, statusCode, { code: 'bad-request', message })
       return
     }

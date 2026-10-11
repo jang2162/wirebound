@@ -100,11 +100,7 @@ describe('POST /api/projects', () => {
 
       // 실패한 두 번째 시도가 owner 멤버 행을 추가로 남기지 않았다 — 프로젝트
       // 삽입과 멤버 삽입이 정말로 한 단위(세이브포인트 하나)로 롤백됐는지 확인한다.
-      const members = await ctx.db
-        .selectFrom('project_members')
-        .selectAll()
-        .where('project_id', '=', projectId)
-        .execute()
+      const members = await ctx.db.selectFrom('project_members').selectAll().where('project_id', '=', projectId).execute()
       expect(members).toHaveLength(1)
     })
   })
@@ -253,11 +249,7 @@ describe('PATCH /api/projects/:projectId', () => {
       expect(res.statusCode).toBe(200)
       expect(res.json().name).toBe('바뀐 이름')
 
-      const row = await ctx.db
-        .selectFrom('projects')
-        .select('name')
-        .where('id', '=', project.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('projects').select('name').where('id', '=', project.id).executeTakeFirstOrThrow()
       expect(row.name).toBe('바뀐 이름')
     })
   })
@@ -328,18 +320,10 @@ describe('PATCH /api/projects/:projectId', () => {
 
       // 세이브포인트가 없다면 여기서부터 25P02로 실패한다 — 통과 자체가 증거다.
       // slug가 실제로 바뀌지 않았는지도 함께 확인한다(부분 갱신 방지).
-      const row = await ctx.db
-        .selectFrom('projects')
-        .select('slug')
-        .where('id', '=', projectB.id)
-        .executeTakeFirstOrThrow()
+      const row = await ctx.db.selectFrom('projects').select('slug').where('id', '=', projectB.id).executeTakeFirstOrThrow()
       expect(row.slug).toBe('slug-b-patch')
 
-      const stillA = await ctx.db
-        .selectFrom('projects')
-        .select('slug')
-        .where('id', '=', projectA.id)
-        .executeTakeFirstOrThrow()
+      const stillA = await ctx.db.selectFrom('projects').select('slug').where('id', '=', projectA.id).executeTakeFirstOrThrow()
       expect(stillA.slug).toBe('slug-a-patch')
     })
   })
@@ -427,11 +411,7 @@ describe('DELETE /api/projects/:projectId', () => {
       })
       expect(res.statusCode).toBe(204)
 
-      const members = await ctx.db
-        .selectFrom('project_members')
-        .selectAll()
-        .where('project_id', '=', project.id)
-        .execute()
+      const members = await ctx.db.selectFrom('project_members').selectAll().where('project_id', '=', project.id).execute()
       expect(members).toHaveLength(0)
     })
   })
@@ -464,11 +444,7 @@ describe('DELETE /api/projects/:projectId', () => {
       })
       expect(res.statusCode).toBe(204)
 
-      const menuNodes = await ctx.db
-        .selectFrom('menu_nodes')
-        .selectAll()
-        .where('project_id', '=', project.id)
-        .execute()
+      const menuNodes = await ctx.db.selectFrom('menu_nodes').selectAll().where('project_id', '=', project.id).execute()
       expect(menuNodes).toHaveLength(0)
 
       const pages = await ctx.db.selectFrom('pages').selectAll().where('project_id', '=', project.id).execute()

@@ -45,7 +45,12 @@ const NODES = [
     type: 'StateSwitch',
     props: {},
     children: [
-      { id: 'n_cd', type: 'StateCase', props: { state: 'default' }, children: [text('n_dt', '기본 글'), text('n_dt2', '기본 둘'), text('n_dt3', '기본 셋')] },
+      {
+        id: 'n_cd',
+        type: 'StateCase',
+        props: { state: 'default' },
+        children: [text('n_dt', '기본 글'), text('n_dt2', '기본 둘'), text('n_dt3', '기본 셋')],
+      },
       { id: 'n_ca', type: 'StateCase', props: { state: ADMIN.id }, children: [text('n_at', '관리자 글')] },
     ],
   },
@@ -85,7 +90,10 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
     const P = `/projects/${project.id}/pages/${pageId}`
     const seeded = await call('PATCH', `${P}/ops`, {
       baseSeq: 0,
-      ops: [{ op: 'add', path: '/viewStates', value: [ADMIN, GUEST] }, ...NODES.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value }))],
+      ops: [
+        { op: 'add', path: '/viewStates', value: [ADMIN, GUEST] },
+        ...NODES.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+      ],
     })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return P
@@ -124,7 +132,11 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
     return { headSeq: body.headSeq as number, root: body.schema.root }
   }
   const findId = (node: { id: string; children?: unknown[] }, id: string): unknown =>
-    node.id === id ? node : ((node.children ?? []) as { id: string; children?: unknown[] }[]).map((child) => findId(child, id)).find((found) => found !== undefined)
+    node.id === id
+      ? node
+      : ((node.children ?? []) as { id: string; children?: unknown[] }[])
+          .map((child) => findId(child, id))
+          .find((found) => found !== undefined)
   const defaultBranch = async (P: string) => JSON.stringify(findId((await server(P)).root, 'n_cd'))
   const ids = async (P: string): Promise<string[]> => {
     const out: string[] = []
@@ -136,13 +148,24 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
     return out
   }
   /** 서버에 닿기를 기다린다 — 안 닿으면 `null`(거절 판). */
-  const landed = (P: string, after: number, ms = 2_000) => poll('서버에 닿음', () => server(P), (value) => value.headSeq > after, ms).catch(() => null)
+  const landed = (P: string, after: number, ms = 2_000) =>
+    poll(
+      '서버에 닿음',
+      () => server(P),
+      (value) => value.headSeq > after,
+      ms,
+    ).catch(() => null)
   const treeRow = (page: Page, id: string) => page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"]`)
-  const pickRow = (page: Page, id: string, add = false) => treeRow(page, id).locator('.wb-shell-structure-node').click(add ? { modifiers: ['Meta'] } : undefined)
+  const pickRow = (page: Page, id: string, add = false) =>
+    treeRow(page, id)
+      .locator('.wb-shell-structure-node')
+      .click(add ? { modifiers: ['Meta'] } : undefined)
   const picked = (page: Page) =>
-    page.locator('.wb-shell-region[aria-label="구조 트리"] [aria-current="true"], .wb-shell-region[aria-label="구조 트리"] .wb-shell-structure-node-member').evaluateAll((els) =>
-      els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''),
-    )
+    page
+      .locator(
+        '.wb-shell-region[aria-label="구조 트리"] [aria-current="true"], .wb-shell-region[aria-label="구조 트리"] .wb-shell-structure-node-member',
+      )
+      .evaluateAll((els) => els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''))
   const notices = (page: Page) => page.locator('.wb-shell-footer [role="alert"], .wb-shell-footer [role="status"]').allTextContents()
   const panelText = (page: Page) => page.locator('.wb-shell-panel textarea').first()
   const allCases = async (page: Page) => {
@@ -167,7 +190,12 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
       const canary = await act(tab.page)
       await landed(P, head)
       await frames(tab.page)
-      return { canary, frames: ops(tab.patches.slice(sent)), defaultSame: before === (await defaultBranch(P)), notices: await notices(tab.page) }
+      return {
+        canary,
+        frames: ops(tab.patches.slice(sent)),
+        defaultSame: before === (await defaultBranch(P)),
+        notices: await notices(tab.page),
+      }
     } finally {
       await tab.close()
     }
@@ -253,7 +281,12 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
    * H2 판 — alice(손님)가 흐린 노드를 고르고 `during` 을 한 채, bob(손님)이 흐린 `n_dt3` 를 고쳐 손님 가지를 먼저 만든다. bob 의 글이 alice 캔버스에
    * 서면(판이 섰다) `after` 를 하고 값을 읽는다.
    */
-  async function hiddenAfterFork(slug: string, pick: string[], during: (page: Page) => Promise<void>, after: (page: Page) => Promise<void> = async () => {}) {
+  async function hiddenAfterFork(
+    slug: string,
+    pick: string[],
+    during: (page: Page) => Promise<void>,
+    after: (page: Page) => Promise<void> = async () => {},
+  ) {
     const P = await fixture(slug)
     const a = await openTab(P)
     const b = await openTab(P, 'bob')
@@ -294,7 +327,15 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
 
   it('H2 고른 채 — 남이 가지를 먼저 만들어 고른 흐린 노드가 숨으면 고른 것에서 빠지고 속성 패널이 빈다', async () => {
     const result = await hiddenAfterFork('h2-pick', ['n_dt'], async () => {})
-    expect(result).toEqual({ forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [HIDDEN_SELECTION_NOTICE], aliasInput: 0 })
+    expect(result).toEqual({
+      forked: true,
+      picked: [],
+      panel: true,
+      frames: [],
+      defaultSame: true,
+      notices: [HIDDEN_SELECTION_NOTICE],
+      aliasInput: 0,
+    })
   })
 
   it('H2 속성 칸 친 중 — 친 글은 숨은 노드에 안 쓰고 떠남을 말한다', async () => {
@@ -310,7 +351,15 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
         if ((await panelText(page).count()) > 0) await panelText(page).evaluate((element) => (element as HTMLElement).blur())
       },
     )
-    expect(result).toEqual({ forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE], aliasInput: 0 })
+    expect(result).toEqual({
+      forked: true,
+      picked: [],
+      panel: true,
+      frames: [],
+      defaultSame: true,
+      notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE],
+      aliasInput: 0,
+    })
   })
 
   it('H2 트리 이름 입력 중 · F2 중 — 입력이 닫히고 친 별칭을 안 쓰며 떠남을 말한다 · «모든 가지 보기»를 켜도 묻지 않은 입력이 안 선다', async () => {
@@ -321,11 +370,37 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
     const showAll = async (page: Page) => {
       await allCases(page)
     }
-    const dbl = await hiddenAfterFork('h2-alias-dbl', ['n_dt'], typeAlias((page) => treeRow(page, 'n_dt').locator('.wb-shell-structure-node').dblclick()), showAll)
-    const f2 = await hiddenAfterFork('h2-alias-f2', ['n_dt'], typeAlias((page) => page.keyboard.press('F2')), showAll)
+    const dbl = await hiddenAfterFork(
+      'h2-alias-dbl',
+      ['n_dt'],
+      typeAlias((page) => treeRow(page, 'n_dt').locator('.wb-shell-structure-node').dblclick()),
+      showAll,
+    )
+    const f2 = await hiddenAfterFork(
+      'h2-alias-f2',
+      ['n_dt'],
+      typeAlias((page) => page.keyboard.press('F2')),
+      showAll,
+    )
     expect([dbl, f2]).toEqual([
-      { forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE], aliasInput: 0 },
-      { forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE], aliasInput: 0 },
+      {
+        forked: true,
+        picked: [],
+        panel: true,
+        frames: [],
+        defaultSame: true,
+        notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE],
+        aliasInput: 0,
+      },
+      {
+        forked: true,
+        picked: [],
+        panel: true,
+        frames: [],
+        defaultSame: true,
+        notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE],
+        aliasInput: 0,
+      },
     ])
   })
 
@@ -341,7 +416,15 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
         if ((await panelText(page).count()) > 0) await panelText(page).evaluate((element) => (element as HTMLElement).blur())
       },
     )
-    expect(result).toEqual({ forked: true, picked: [], panel: true, frames: [], defaultSame: true, notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE], aliasInput: 0 })
+    expect(result).toEqual({
+      forked: true,
+      picked: [],
+      panel: true,
+      frames: [],
+      defaultSame: true,
+      notices: [DROPPED_DRAFT, HIDDEN_SELECTION_NOTICE],
+      aliasInput: 0,
+    })
   })
 
   /**
@@ -354,24 +437,42 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
     try {
       await pickRow(a.page, 'n_sw')
       await a.page.waitForTimeout(600)
-      await treeRow(a.page, 'n_sw').getByRole('button', { name: /더 보기$/ }).click()
+      await treeRow(a.page, 'n_sw')
+        .getByRole('button', { name: /더 보기$/ })
+        .click()
       await a.page.getByRole('menuitem', { name: '상태 나누기 풀기', exact: true }).click()
       const box = a.page.getByRole('dialog')
       // 상자가 닫혔으면(누름이 보냈다) 그렇다고 값으로 낸다 — 없는 요소를 기다리면 시간 초과로 죽는다.
-      const look = async () => (await box.count()) === 0 ? { gone: true } : ({
-        sentence: (await box.locator('.wb-shell-view-states-sentence').textContent()) ?? '',
-        ids: (await box.locator('[data-node-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id') ?? ''))).sort(),
-        changed: await box.locator('.wb-shell-view-states-changed').count(),
-        button: (await box.locator('.wb-shell-view-states-danger').textContent()) ?? '',
-      })
+      const look = async () =>
+        (await box.count()) === 0
+          ? { gone: true }
+          : {
+              sentence: (await box.locator('.wb-shell-view-states-sentence').textContent()) ?? '',
+              ids: (
+                await box.locator('[data-node-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id') ?? ''))
+              ).sort(),
+              changed: await box.locator('.wb-shell-view-states-changed').count(),
+              button: (await box.locator('.wb-shell-view-states-danger').textContent()) ?? '',
+            }
       const opened = await look()
       let head = (await server(P)).headSeq
       const other = await call('PATCH', `${P}/ops`, {
         baseSeq: head,
-        ops: [{ op: 'add', path: '/root/children/1/children/-', value: { id: 'n_cg', type: 'StateCase', props: { state: GUEST.id }, children: [text('n_gt', '손님 글')] } }],
+        ops: [
+          {
+            op: 'add',
+            path: '/root/children/1/children/-',
+            value: { id: 'n_cg', type: 'StateCase', props: { state: GUEST.id }, children: [text('n_gt', '손님 글')] },
+          },
+        ],
       })
       // 판이 섰다 — 다른 탭의 편집이 서버에 들고(200) 그 프레임이 alice 탭에 닿았다.
-      await poll('alice 에 닿음', async () => a.received.some((frame) => frame.includes('n_cg')), (value) => value, 5_000)
+      await poll(
+        'alice 에 닿음',
+        async () => a.received.some((frame) => frame.includes('n_cg')),
+        (value) => value,
+        5_000,
+      )
       await frames(a.page)
       const reopened = await look()
       const sent = a.patches.length
@@ -398,7 +499,12 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
       }).toEqual({
         other: 200,
         opened: { sentence: '기본 가지만 남기고 가지 1개(관리자)의 내용이 함께 삭제됩니다.', ids: ['n_at'], changed: 0, button: '풀기' },
-        reopened: { sentence: '기본 가지만 남기고 가지 2개(관리자 · 손님)의 내용이 함께 삭제됩니다.', ids: ['n_at', 'n_gt'], changed: 1, button: '새 목록 확인' },
+        reopened: {
+          sentence: '기본 가지만 남기고 가지 2개(관리자 · 손님)의 내용이 함께 삭제됩니다.',
+          ids: ['n_at', 'n_gt'],
+          changed: 1,
+          button: '새 목록 확인',
+        },
         firstPress: { frames: 0, button: '풀기' },
         gone: ['n_at', 'n_ca', 'n_cd', 'n_cg', 'n_gt', 'n_sw'],
       })
@@ -413,7 +519,9 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
     try {
       await pickRow(a.page, 'n_sw')
       await a.page.waitForTimeout(600)
-      await treeRow(a.page, 'n_sw').getByRole('button', { name: /더 보기$/ }).click()
+      await treeRow(a.page, 'n_sw')
+        .getByRole('button', { name: /더 보기$/ })
+        .click()
       await a.page.getByRole('menuitem', { name: '상태 나누기 풀기', exact: true }).click()
       const box = a.page.getByRole('dialog')
       const head = (await server(P)).headSeq
@@ -424,7 +532,12 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
           { op: 'add', path: '/root/children/1/children/1/children/0', value: text('n_at2', '관리자 새 글') },
         ],
       })
-      await poll('alice 에 닿음', async () => a.received.some((frame) => frame.includes('n_at2')), (value) => value, 5_000)
+      await poll(
+        'alice 에 닿음',
+        async () => a.received.some((frame) => frame.includes('n_at2')),
+        (value) => value,
+        5_000,
+      )
       await frames(a.page)
       expect({
         other: other.status,
@@ -529,7 +642,9 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
       await choose(tab.page, GUEST.name)
       await pickRow(tab.page, 'n_sw')
       await tab.page.waitForTimeout(600)
-      await treeRow(tab.page, 'n_sw').getByRole('button', { name: /더 보기$/ }).click()
+      await treeRow(tab.page, 'n_sw')
+        .getByRole('button', { name: /더 보기$/ })
+        .click()
       await tab.page.getByRole('menuitem', { name: '상태 나누기 풀기', exact: true }).click()
       const head = (await server(P)).headSeq
       await tab.page.getByRole('dialog').locator('.wb-shell-view-states-danger').click()
@@ -552,7 +667,12 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — K2 리뷰 판(실브라우
       await choose(b.page, ADMIN.name)
       await pickRow(b.page, 'n_at')
       // 판이 섰다 — alice 의 영역 줄이 꺼진다(잠금이 닿았다).
-      await poll('잠금이 닿음', () => treeRow(a.page, 'n_sw').locator('.wb-shell-structure-node').isDisabled(), (value) => value, 5_000)
+      await poll(
+        '잠금이 닿음',
+        () => treeRow(a.page, 'n_sw').locator('.wb-shell-structure-node').isDisabled(),
+        (value) => value,
+        5_000,
+      )
       const row = treeRow(a.page, 'n_sw')
       expect({
         title: await row.locator('.wb-shell-structure-node').getAttribute('title'),

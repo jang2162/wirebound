@@ -83,28 +83,28 @@ export function StateRegionBadges(props: {
             style={{ left: region.left, top: region.top, width: region.width, height: region.height }}
           >
             <div className="wb-shell-state-badge" data-wb-state-badge-for={region.nodeId} style={{ transform: `scale(${1 / zoom})` }}>
-            <ActionMenu
-              label={regions.length === 1 ? STATE_BADGE_LABEL : `${STATE_BADGE_LABEL} ${index + 1}`}
-              icon={ICONS.viewStates}
-              text={STATE_BADGE_LABEL}
-              fullText
-              tag
-              compact
-              items={(region.node.children ?? []).flatMap((child) => {
-                const state: unknown = child?.type === 'StateCase' ? child.props?.state : undefined
-                if (typeof state !== 'string') return []
-                if (state !== DEFAULT_CASE && !choice.viewStates.some((entry) => entry.id === state)) return []
-                return [
-                  {
-                    key: `case-${child.id}`,
-                    label: viewStateName(choice.viewStates, state),
-                    icon: ICONS.viewStates,
-                    checked: shown === child,
-                    onSelect: () => choice.choose(state === DEFAULT_CASE ? null : state),
-                  },
-                ]
-              })}
-            />
+              <ActionMenu
+                label={regions.length === 1 ? STATE_BADGE_LABEL : `${STATE_BADGE_LABEL} ${index + 1}`}
+                icon={ICONS.viewStates}
+                text={STATE_BADGE_LABEL}
+                fullText
+                tag
+                compact
+                items={(region.node.children ?? []).flatMap((child) => {
+                  const state: unknown = child?.type === 'StateCase' ? child.props?.state : undefined
+                  if (typeof state !== 'string') return []
+                  if (state !== DEFAULT_CASE && !choice.viewStates.some((entry) => entry.id === state)) return []
+                  return [
+                    {
+                      key: `case-${child.id}`,
+                      label: viewStateName(choice.viewStates, state),
+                      icon: ICONS.viewStates,
+                      checked: shown === child,
+                      onSelect: () => choice.choose(state === DEFAULT_CASE ? null : state),
+                    },
+                  ]
+                })}
+              />
             </div>
           </div>
         )
@@ -122,15 +122,18 @@ function collectSwitches(node: unknown, into: Map<string, WbNode>): void {
 }
 
 function sameRegions(a: readonly Region[], b: readonly Region[]): boolean {
-  return a.length === b.length && a.every((item, index) => {
-    const other = b[index]!
-    return (
-      item.nodeId === other.nodeId &&
-      item.left === other.left &&
-      item.top === other.top &&
-      item.width === other.width &&
-      item.height === other.height &&
-      item.node === other.node
-    )
-  })
+  return (
+    a.length === b.length &&
+    a.every((item, index) => {
+      const other = b[index]!
+      return (
+        item.nodeId === other.nodeId &&
+        item.left === other.left &&
+        item.top === other.top &&
+        item.width === other.width &&
+        item.height === other.height &&
+        item.node === other.node
+      )
+    })
+  )
 }

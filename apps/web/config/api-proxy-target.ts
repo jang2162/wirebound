@@ -52,8 +52,7 @@ export function resolveApiPort(sources: ApiProxySources = {}): string {
   if (!/^\d+$/.test(chosen)) {
     const where = fromShell === undefined ? 'apps/api/.env의 PORT' : '셸 환경변수 PORT'
     throw new Error(
-      `${where}이 숫자가 아닙니다: ${JSON.stringify(chosen)}\n` +
-        'apps/api도 같은 값을 거부하므로 에디터만 기본값으로 뜨게 두지 않는다.',
+      `${where}이 숫자가 아닙니다: ${JSON.stringify(chosen)}\n` + 'apps/api도 같은 값을 거부하므로 에디터만 기본값으로 뜨게 두지 않는다.',
     )
   }
   return chosen

@@ -580,11 +580,7 @@ function usePageDescription(
   const replace = (description: string | null): void => {
     const at = issue()
     setState((prev) =>
-      prev.status === 'ready'
-        ? { ...prev, at, description }
-        : prev.status === 'loading'
-          ? { ...prev, known: { at, description } }
-          : prev,
+      prev.status === 'ready' ? { ...prev, at, description } : prev.status === 'loading' ? { ...prev, known: { at, description } } : prev,
     )
   }
 
@@ -718,12 +714,20 @@ export function PageDescriptionPanel(props: {
     return <p className="wb-shell-panel-notice">{NO_PAGE}</p>
   }
   if (state.status === 'loading') {
-    return <p className="wb-shell-panel-notice" role="status">불러오는 중…</p>
+    return (
+      <p className="wb-shell-panel-notice" role="status">
+        불러오는 중…
+      </p>
+    )
   }
   if (state.status === 'failed') {
     // 세션이 끊겼으면 오류 문장이 아니라 로그인이다 — 조회 실패 자리들과 같은 규칙이다.
     if (state.failure.kind === 'signed-out') return <SignedOut />
-    return <p className="wb-shell-panel-notice" role="alert">{state.failure.message}</p>
+    return (
+      <p className="wb-shell-panel-notice" role="alert">
+        {state.failure.message}
+      </p>
+    )
   }
 
   // **viewer 는 읽는다**(머리말 «viewer 에게는 읽기 전용이다»). 상자·단추가 없으므로 초안·통지도 그리지 않는다 — **장부가 남긴 결말만은
@@ -805,13 +809,19 @@ export function PageDescriptionPanel(props: {
       </form>
       <PendingNotice lock={saving} checking={CHECKING} unknown={UNKNOWN} />
       {save.status === 'saved' && (
-        <p className="wb-shell-page-description-saved" role="status">{SAVED}</p>
+        <p className="wb-shell-page-description-saved" role="status">
+          {SAVED}
+        </p>
       )}
       {save.status === 'matched' && (
-        <p className="wb-shell-page-description-saved" role="status">{MATCHED}</p>
+        <p className="wb-shell-page-description-saved" role="status">
+          {MATCHED}
+        </p>
       )}
       {save.status === 'same' && (
-        <p className="wb-shell-page-description-saved" role="status">{SAME}</p>
+        <p className="wb-shell-page-description-saved" role="status">
+          {SAME}
+        </p>
       )}
       {save.status === 'conflict' && (
         <MetaConflict
@@ -826,7 +836,9 @@ export function PageDescriptionPanel(props: {
       )}
       {saveFailure !== null && (
         // 서버 문장 그대로다(`api/failure.tsx`) — 400의 상한 문장·403의 권한 문장이 여기 온다.
-        <p className="wb-shell-page-description-error" role="alert">{saveFailure.message}</p>
+        <p className="wb-shell-page-description-error" role="alert">
+          {saveFailure.message}
+        </p>
       )}
     </>
   )

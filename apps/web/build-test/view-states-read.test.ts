@@ -31,7 +31,12 @@ const text = (id: string, content: string) => ({ id, type: 'Text', props: { cont
 const NODES = [
   text('n_out', '영역 밖 글'),
   // 누르면 캔버스 위에 런타임 알림 줄이 선다(없는 대상) — iframe 이 아래로 밀린 판에서 표지가 따라가는지 잰다.
-  { id: 'n_bad', type: 'Button', props: { label: '없는 대상' }, interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_missing', value: false }] }] },
+  {
+    id: 'n_bad',
+    type: 'Button',
+    props: { label: '없는 대상' },
+    interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_missing', value: false }] }],
+  },
   {
     id: 'n_sw',
     type: 'StateSwitch',
@@ -79,7 +84,10 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
     const P = `/projects/${project.id}/pages/${pageId}`
     const seeded = await call('PATCH', `${P}/ops`, {
       baseSeq: 0,
-      ops: [{ op: 'add', path: '/viewStates', value: [ADMIN, GUEST] }, ...NODES.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value }))],
+      ops: [
+        { op: 'add', path: '/viewStates', value: [ADMIN, GUEST] },
+        ...NODES.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+      ],
     })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return { P, P2: `/projects/${project.id}/pages/${page2Id}` }
@@ -102,7 +110,12 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
 
   const switcher = (page: Page) => page.getByRole('button', { name: /^화면 상태:/ })
   const badge = (page: Page) => page.getByRole('button', { name: /^상태에 따라 다름/ })
-  const canvasIds = async (page: Page) => (await canvasFrame(page).locator('[data-wb-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))).slice(1)
+  const canvasIds = async (page: Page) =>
+    (
+      await canvasFrame(page)
+        .locator('[data-wb-id]')
+        .evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))
+    ).slice(1)
   /**
    * 메뉴의 항목을 고르고 닫힌 것을 기다린다. 같은 자리를 곧 다시 누르는 판이 있어 `DOUBLE_CLICK_MS`(500ms — `shell/action-menu.tsx`)를 넘겨
    * 돌아온다 — 안 넘기면 다음 누름이 더블클릭의 둘째로 삼켜진다.
@@ -126,14 +139,19 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
   const frames = (page: Page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   /** 캔버스에 선 노드 id(뿌리 뺌) · 머리 전환기 이름 · 주소의 질의. */
   async function shown(page: Page): Promise<{ canvas: string[]; head: string; search: string }> {
-    const canvas = await canvasFrame(page).locator('[data-wb-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))
+    const canvas = await canvasFrame(page)
+      .locator('[data-wb-id]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))
     return { canvas: canvas.slice(1), head: (await switcher(page).getAttribute('aria-label')) ?? '', search: new URL(page.url()).search }
   }
 
   it('viewer 가 ?state= 주소로 열면 그 상태로 서고, 없는 id 는 기본이다', async () => {
     const { P } = await fixture('vs-read-addr')
     const seen: Record<string, unknown> = {}
-    for (const [label, query] of [['관리자', '?state=s_admin'], ['없는 id', '?state=s_nope']] as const) {
+    for (const [label, query] of [
+      ['관리자', '?state=s_admin'],
+      ['없는 id', '?state=s_nope'],
+    ] as const) {
       const tab = await openTab(`${P}${query}`, 'bob')
       try {
         await frames(tab.page)
@@ -170,8 +188,18 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
         const inner = iframe.contentDocument!.querySelector('[data-wb-id="n_dt"]')!.getBoundingClientRect()
         const holder = document.querySelector('[data-wb-state-badge-for="n_sw"]')!.getBoundingClientRect()
         const frameBox = document.querySelector('[data-wb-state-region-for="n_sw"]')!.getBoundingClientRect()
-        const region = [outer.left + inner.left * scale, outer.top + inner.top * scale, outer.left + inner.right * scale, outer.top + inner.bottom * scale]
-        return { region, badge: [holder.left, holder.bottom], frame: [frameBox.left, frameBox.top, frameBox.right, frameBox.bottom], iframeTop: outer.top }
+        const region = [
+          outer.left + inner.left * scale,
+          outer.top + inner.top * scale,
+          outer.left + inner.right * scale,
+          outer.top + inner.bottom * scale,
+        ]
+        return {
+          region,
+          badge: [holder.left, holder.bottom],
+          frame: [frameBox.left, frameBox.top, frameBox.right, frameBox.bottom],
+          iframeTop: outer.top,
+        }
       })
       expect(Math.abs(place.badge[0]! - (place.region[0]! - 1))).toBeLessThanOrEqual(1)
       expect(Math.abs(place.badge[1]! - place.region[1]!)).toBeLessThanOrEqual(1)
@@ -246,17 +274,24 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
       type: 'StateSwitch',
       children: [{ id: 'n_cd2', type: 'StateCase', props: { state: 'default' }, children: [text('n_dt2', '안쪽 기본 글')] }],
     }
-    const put = await call('PATCH', `${P}/ops`, { baseSeq: head, ops: [{ op: 'add', path: '/root/children/2/children/1/children/-', value: nested }] })
+    const put = await call('PATCH', `${P}/ops`, {
+      baseSeq: head,
+      ops: [{ op: 'add', path: '/root/children/2/children/1/children/-', value: nested }],
+    })
     if (put.status !== 200) throw new Error(`중첩 ${put.status} ${JSON.stringify(put.body)}`)
     const tab = await openTab(P)
     try {
       await tab.page.getByRole('button', { name: '뷰 모드' }).click()
       await badge(tab.page).first().waitFor()
       await frames(tab.page)
-      const defaults = await tab.page.locator('[data-wb-state-badge-for]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-state-badge-for')))
+      const defaults = await tab.page
+        .locator('[data-wb-state-badge-for]')
+        .evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-state-badge-for')))
       await badge(tab.page).click()
       await pick(tab.page, '관리자')
-      const admin = await tab.page.locator('[data-wb-state-badge-for]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-state-badge-for')))
+      const admin = await tab.page
+        .locator('[data-wb-state-badge-for]')
+        .evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-state-badge-for')))
       expect({ defaults, admin }).toEqual({ defaults: ['n_sw'], admin: ['n_sw', 'n_sw2'] })
     } finally {
       await tab.close()
@@ -273,7 +308,11 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
   it('영역 표지 자리 — 창 폭 1440 · 900 · 375 · 줌 · 캔버스 스크롤에서 어느 노드도 안 가린다', async () => {
     const { P } = await fixture('vs-read-badge-cover')
     const seen: Record<string, unknown> = {}
-    for (const [label, viewport] of [['1440', VIEWPORT], ['900', { width: 900, height: 700 }], ['375', { width: 375, height: 700 }]] as const) {
+    for (const [label, viewport] of [
+      ['1440', VIEWPORT],
+      ['900', { width: 900, height: 700 }],
+      ['375', { width: 375, height: 700 }],
+    ] as const) {
       const tab = await openTab(P, 'alice', viewport)
       try {
         await tab.page.getByRole('button', { name: '뷰 모드' }).click()
@@ -287,15 +326,26 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
             const holder = document.querySelector('[data-wb-state-badge-for="n_sw"]')!.getBoundingClientRect()
             const nodes = [...iframe.contentDocument!.querySelectorAll('[data-wb-id]')].slice(1).map((el) => {
               const r = el.getBoundingClientRect()
-              return { id: el.getAttribute('data-wb-id')!, left: outer.left + r.left * scale, top: outer.top + r.top * scale, right: outer.left + r.right * scale, bottom: outer.top + r.bottom * scale }
+              return {
+                id: el.getAttribute('data-wb-id')!,
+                left: outer.left + r.left * scale,
+                top: outer.top + r.top * scale,
+                right: outer.left + r.right * scale,
+                bottom: outer.top + r.bottom * scale,
+              }
             })
             const overlap = (n: { left: number; top: number; right: number; bottom: number }) =>
-              Math.max(0, Math.min(holder.right, n.right) - Math.max(holder.left, n.left)) * Math.max(0, Math.min(holder.bottom, n.bottom) - Math.max(holder.top, n.top))
+              Math.max(0, Math.min(holder.right, n.right) - Math.max(holder.left, n.left)) *
+              Math.max(0, Math.min(holder.bottom, n.bottom) - Math.max(holder.top, n.top))
             const covered = nodes.filter((n) => overlap(n) > 0).map((n) => [n.id, Math.round(overlap(n))])
             const first = nodes.find((n) => n.id === 'n_dt')!
             const above = nodes.find((n) => n.id === 'n_bad')!
             // 영역 첫 줄의 왼쪽 끝 · 가운데 — 표지가 위에 서면 elementFromPoint 가 표지다.
-            const probes = [[first.left + 3, first.top + 3], [first.left + 60, first.top + 3], [first.left + 3, (first.top + first.bottom) / 2]]
+            const probes = [
+              [first.left + 3, first.top + 3],
+              [first.left + 60, first.top + 3],
+              [first.left + 3, (first.top + first.bottom) / 2],
+            ]
             const hit = probes.map(([x, y]) => document.elementFromPoint(x!, y!)?.closest('[data-wb-state-badge-for]') !== null)
             const frameBox = document.querySelector('.wb-shell-canvas')?.getBoundingClientRect() ?? outer
             return {
@@ -334,7 +384,10 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
     type Seen = { covered: [string, number][]; firstLineUnderBadge: boolean[]; badgeSize: number[]; gapAbove: number; inCanvas: boolean }
     const measured = Object.entries(seen).flatMap(([where, value]) => (typeof value === 'string' ? [] : [[where, value as Seen] as const]))
     // 판 카나리아 — 줌 단추 없는 창(375)이 «없음»으로 적혔고, 잰 판이 열 가까이다.
-    expect({ measured: measured.length, noZoom: Object.values(seen).filter((value) => typeof value === 'string').length }).toEqual({ measured: 10, noZoom: 1 })
+    expect({ measured: measured.length, noZoom: Object.values(seen).filter((value) => typeof value === 'string').length }).toEqual({
+      measured: 10,
+      noZoom: 1,
+    })
     const verdict = Object.fromEntries(
       measured.map(([where, row]) => [
         where,
@@ -342,14 +395,19 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
           // 영역 안 노드 · 첫 줄 왼쪽 끝은 어느 판에서도 안 가린다.
           coversRegion: row.covered.some(([id]) => id !== 'n_bad') || row.firstLineUnderBadge.includes(true),
           // 위 형제와의 간격이 표지 높이 이상이면 아무것도 안 가린다 — 모자라면 그 간격만큼 위 형제의 아래끝을 가린다(꼬리표와 같다).
-          coversAboveOnlyWhenTight: (row.covered.length > 0) === (row.gapAbove < row.badgeSize[1]!),
+          coversAboveOnlyWhenTight: row.covered.length > 0 === row.gapAbove < row.badgeSize[1]!,
           size: row.badgeSize,
           // 창 375 는 캔버스 칸이 48px 라 표지(113px)가 칸 밖으로 나가는 것이 이 자리 몫이 아니다(안쪽에 둔 옛 자리도 같은 왼쪽 끝이다).
           inCanvas: where.startsWith('375') ? null : row.inCanvas,
         },
       ]),
     )
-    const same = (where: string) => ({ coversRegion: false, coversAboveOnlyWhenTight: true, size: [113, 18], inCanvas: where.startsWith('375') ? null : true })
+    const same = (where: string) => ({
+      coversRegion: false,
+      coversAboveOnlyWhenTight: true,
+      size: [113, 18],
+      inCanvas: where.startsWith('375') ? null : true,
+    })
     expect(verdict).toEqual(Object.fromEntries(measured.map(([where]) => [where, same(where)])))
     // 판 카나리아 — 위 형제가 빠듯한 판(간격 < 표지 높이)과 넉넉한 판이 둘 다 있다(그래야 «빠듯할 때만 가린다»가 양쪽을 잰다).
     const gaps = measured.map(([, row]) => row.gapAbove)
@@ -383,9 +441,21 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
       seen['… 로 관리자'] = await read()
       expect({ seen, patches: tab.patches.length }).toEqual({
         seen: {
-          열림: { inHead: 0, folded: ['화면 상태: 관리자'], badge: ['관리자'], canvas: ['n_out', 'n_bad', 'n_at'], search: '?state=s_admin' },
+          열림: {
+            inHead: 0,
+            folded: ['화면 상태: 관리자'],
+            badge: ['관리자'],
+            canvas: ['n_out', 'n_bad', 'n_at'],
+            search: '?state=s_admin',
+          },
           '표지로 기본': { inHead: 0, folded: ['화면 상태: 기본'], badge: ['기본'], canvas: ['n_out', 'n_bad', 'n_dt'], search: '' },
-          '… 로 관리자': { inHead: 0, folded: ['화면 상태: 관리자'], badge: ['관리자'], canvas: ['n_out', 'n_bad', 'n_at'], search: '?state=s_admin' },
+          '… 로 관리자': {
+            inHead: 0,
+            folded: ['화면 상태: 관리자'],
+            badge: ['관리자'],
+            canvas: ['n_out', 'n_bad', 'n_at'],
+            search: '?state=s_admin',
+          },
         },
         patches: 0,
       })
@@ -398,8 +468,12 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
     const { P } = await fixture('vs-read-pick')
     const tab = await openTab(P)
     const tree = tab.page.locator('.wb-shell-region[aria-label="구조 트리"]')
-    const picked = () => tree.locator('[aria-current="true"], .wb-shell-structure-node-member').evaluateAll((els) => els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''))
-    const panelEmpty = async () => (await tab.page.locator('.wb-shell-panel').first().textContent())?.includes('노드를 고르면 속성이 보입니다') ?? false
+    const picked = () =>
+      tree
+        .locator('[aria-current="true"], .wb-shell-structure-node-member')
+        .evaluateAll((els) => els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''))
+    const panelEmpty = async () =>
+      (await tab.page.locator('.wb-shell-panel').first().textContent())?.includes('노드를 고르면 속성이 보입니다') ?? false
     try {
       await tree.locator('[data-tree-row][data-tree-id="n_dt"] .wb-shell-structure-node').click()
       await frames(tab.page)
@@ -417,7 +491,12 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
       expect({
         before,
         inView,
-        after: { picked: await picked(), panelEmpty: await panelEmpty(), head: await switcher(tab.page).getAttribute('aria-label'), search: new URL(tab.page.url()).search },
+        after: {
+          picked: await picked(),
+          panelEmpty: await panelEmpty(),
+          head: await switcher(tab.page).getAttribute('aria-label'),
+          search: new URL(tab.page.url()).search,
+        },
         patches: tab.patches.length,
       }).toEqual({
         before: { picked: ['n_dt'], panelEmpty: false },
@@ -436,7 +515,12 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
     const tab = await openTab(P)
     try {
       // 첫 페이지에서 영역 안 노드를 골라 복사하지 않고, 영역째를 봉투로 싣는다 — 봉투는 출처 목록을 든다.
-      const envelope = JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [NODES.find((node) => node.type === 'StateSwitch')], viewStates: [ADMIN, GUEST] })
+      const envelope = JSON.stringify({
+        wirebound: 'nodes',
+        version: 1,
+        nodes: [NODES.find((node) => node.type === 'StateSwitch')],
+        viewStates: [ADMIN, GUEST],
+      })
       await tab.page.goto(P2)
       await canvasFrame(tab.page).locator('[data-wb-id]').first().waitFor({ state: 'attached' })
       await tab.page.evaluate((text) => {
@@ -449,7 +533,9 @@ describe.skipIf(!전제.ok)('화면 상태 읽기 — 실브라우저', () => {
       await shot(tab.page, 'k3-paste-notice.png')
       expect(await notice.innerText()).toContain('상태 "관리자" 가지 1개를 뺐습니다.')
       await frames(tab.page)
-      const ids = await canvasFrame(tab.page).locator('[data-wb-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))
+      const ids = await canvasFrame(tab.page)
+        .locator('[data-wb-id]')
+        .evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))
       // 기본 가지의 글만 붙었다(새 id) — 관리자 글은 없다.
       expect(await canvasFrame(tab.page).locator('body').innerText()).toContain('기본 글')
       expect(await canvasFrame(tab.page).locator('body').innerText()).not.toContain('관리자 글')

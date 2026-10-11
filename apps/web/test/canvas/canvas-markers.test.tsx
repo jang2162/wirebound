@@ -86,9 +86,7 @@ describe('캔버스 번호 마커', () => {
     await openPage(pageDoc(three({ a: 2 })))
 
     await waitFor(() => expect(markers()).toEqual({ n_a: '2' }))
-    expect(document.body.querySelector('[data-wb-marker-for="n_a"]')?.getAttribute('title')).toBe(
-      '코멘트 2번',
-    )
+    expect(document.body.querySelector('[data-wb-marker-for="n_a"]')?.getAttribute('title')).toBe('코멘트 2번')
   })
 
   it('정수가 아닌 marker는 그리지 않는다', async () => {

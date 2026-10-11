@@ -48,9 +48,23 @@ class FakeSocket implements RealtimeSocket {
 }
 
 const pair = (): PageDocument =>
-  pageDoc({ id: 'n-root', type: 'Page', children: [{ id: 'n-a', type: 'Text', props: {} }, { id: 'n-b', type: 'Divider', props: {} }] })
+  pageDoc({
+    id: 'n-root',
+    type: 'Page',
+    children: [
+      { id: 'n-a', type: 'Text', props: {} },
+      { id: 'n-b', type: 'Divider', props: {} },
+    ],
+  })
 const swapped = (): PageDocument =>
-  pageDoc({ id: 'n-root', type: 'Page', children: [{ id: 'n-b', type: 'Divider', props: {} }, { id: 'n-a', type: 'Text', props: {} }] })
+  pageDoc({
+    id: 'n-root',
+    type: 'Page',
+    children: [
+      { id: 'n-b', type: 'Divider', props: {} },
+      { id: 'n-a', type: 'Text', props: {} },
+    ],
+  })
 const withButton = (): PageDocument =>
   pageDoc({
     id: 'n-root',
@@ -409,7 +423,9 @@ describe('합친 통지 — 같은 틀은 수를 더하고, 참이 아니게 되
   it('같은 까닭의 두 거절은 문장이 달라도 한 문장으로 수를 더한다 — 늘어놓지 않는다', async () => {
     const text = await twoRefusals({ status: 409, code: 'conflict', message: '페이지가 이미 변경되었습니다 (요청 baseSeq 9, 현재 10)' })
 
-    expect(text).toBe('페이지가 이미 변경되었습니다 (요청 baseSeq 9, 현재 10) — 페이지를 서버 상태로 다시 불러왔고, 편집 2개가 취소됐습니다.')
+    expect(text).toBe(
+      '페이지가 이미 변경되었습니다 (요청 baseSeq 9, 현재 10) — 페이지를 서버 상태로 다시 불러왔고, 편집 2개가 취소됐습니다.',
+    )
   })
 
   /**

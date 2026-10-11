@@ -26,7 +26,8 @@ export function decodePng(png: Buffer): Pixels {
       height = body.readUInt32BE(4)
       const depth = body[8]
       const color = body[9]
-      if (depth !== 8 || (color !== 2 && color !== 6) || body[12] !== 0) throw new Error(`지원하지 않는 PNG 꼴: depth ${depth} color ${color} interlace ${body[12]}`)
+      if (depth !== 8 || (color !== 2 && color !== 6) || body[12] !== 0)
+        throw new Error(`지원하지 않는 PNG 꼴: depth ${depth} color ${color} interlace ${body[12]}`)
       channels = color === 6 ? 4 : 3
     } else if (type === 'IDAT') data.push(body)
     offset += 12 + length

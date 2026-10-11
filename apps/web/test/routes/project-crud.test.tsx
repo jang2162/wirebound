@@ -36,12 +36,14 @@ interface Harness {
  * 목록 화면을 띄운다. `listProjects`는 호출마다 다음 목록을 낸다 — 재조회를 세려면
  * 두 번째 호출이 구별돼야 한다.
  */
-function renderCrud(options: {
-  lists?: ProjectDetail[][]
-  createProject?: ApiClient['createProject']
-  updateProject?: ApiClient['updateProject']
-  deleteProject?: ApiClient['deleteProject']
-} = {}): Harness {
+function renderCrud(
+  options: {
+    lists?: ProjectDetail[][]
+    createProject?: ApiClient['createProject']
+    updateProject?: ApiClient['updateProject']
+    deleteProject?: ApiClient['deleteProject']
+  } = {},
+): Harness {
   const lists = options.lists ?? [[project()]]
   let call = 0
   const listProjects = vi.fn(async () => {
@@ -353,9 +355,7 @@ describe('통합 — 한 화면에서 이어서', () => {
     await screen.findByText('내 프로젝트')
 
     const stops = (): number =>
-      screen.queryAllByRole('button').length +
-      screen.queryAllByRole('textbox').length +
-      screen.queryAllByRole('link').length
+      screen.queryAllByRole('button').length + screen.queryAllByRole('textbox').length + screen.queryAllByRole('link').length
 
     // 닫힌 상태: 링크 2(이름 · 설정) + 새 프로젝트 1 + **머리의 `…` 1**(계정 설정 · 로그아웃이 그 뒤다) = 4.
     // 줄의 삭제는 설정 페이지의 위험 구역으로 옮겨 갔다(`settings/danger-section.tsx`).

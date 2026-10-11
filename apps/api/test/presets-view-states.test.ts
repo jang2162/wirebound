@@ -23,7 +23,9 @@ async function fixture(ctx: TestContext) {
   const post = (payload: Record<string, unknown>) =>
     ctx.app.inject({ method: 'POST', url: `/api/projects/${project.id}/presets`, cookies: owner.cookie, payload })
   const list = async () =>
-    (await ctx.app.inject({ method: 'GET', url: `/api/projects/${project.id}/presets`, cookies: owner.cookie })).json() as Array<Record<string, unknown>>
+    (await ctx.app.inject({ method: 'GET', url: `/api/projects/${project.id}/presets`, cookies: owner.cookie })).json() as Array<
+      Record<string, unknown>
+    >
   return { post, list }
 }
 

@@ -153,7 +153,9 @@ describe('설정 페이지 — «일반»', () => {
 
 describe('설정으로 가는 길', () => {
   it.each(['owner', 'editor', 'viewer'] as const)('에디터 머리의 `…` 에 «프로젝트 설정» 링크가 있다 — %s', async (role) => {
-    await openPage(docWithText('t1', '안'), { apiOverrides: { getProject: async () => project(role, { id: PROJECT_ID, name: PROJECT_NAME }) } })
+    await openPage(docWithText('t1', '안'), {
+      apiOverrides: { getProject: async () => project(role, { id: PROJECT_ID, name: PROJECT_NAME }) },
+    })
     fireEvent.click(screen.getByRole('button', { name: SHELL_MENU }))
     const link = screen.getByRole('menuitem', { name: '프로젝트 설정' })
     expect(link.getAttribute('href')).toBe(`/projects/${PROJECT_ID}/settings`)

@@ -19,7 +19,9 @@ describe('Root', () => {
   it('as 태그로 그리고 노드 속성을 편다', () => {
     const { value, markRootRendered } = bind()
     const { container } = render(
-      <NodeContext.Provider value={value}><Root as="table" className="t" /></NodeContext.Provider>,
+      <NodeContext.Provider value={value}>
+        <Root as="table" className="t" />
+      </NodeContext.Provider>,
     )
     const el = container.firstElementChild!
     expect(el.tagName).toBe('TABLE')
@@ -32,7 +34,9 @@ describe('Root', () => {
   it('테마가 넘긴 data-wb-id 는 노드 것에 진다', () => {
     const { value } = bind()
     const { container } = render(
-      <NodeContext.Provider value={value}><Root data-wb-id="가짜" /></NodeContext.Provider>,
+      <NodeContext.Provider value={value}>
+        <Root data-wb-id="가짜" />
+      </NodeContext.Provider>,
     )
     expect(container.firstElementChild!.getAttribute('data-wb-id')).toBe('n1')
   })
@@ -51,7 +55,11 @@ describe('Root', () => {
 
   it('marker 가 없으면 두 속성 다 없다', () => {
     const { value } = bind()
-    const { container } = render(<NodeContext.Provider value={value}><Root /></NodeContext.Provider>)
+    const { container } = render(
+      <NodeContext.Provider value={value}>
+        <Root />
+      </NodeContext.Provider>,
+    )
     expect(container.firstElementChild!.hasAttribute('data-wb-marker')).toBe(false)
     expect(container.firstElementChild!.hasAttribute('data-wb-marker-offset')).toBe(false)
   })
@@ -66,16 +74,36 @@ describe('prop 표지 · 상태의 접근성 속성(view → Root)', () => {
   /** 노드 `n1` 의 바인딩 아래 `view()` 로 짠 뷰를 그린다. */
   function drawView(V: ReturnType<typeof view>, props: Partial<ViewProps>, nodeId = 'n1') {
     const { value } = bind({ 'data-wb-id': nodeId, 'data-wb-component': props.type ?? 'Section' })
-    const full: ViewProps = { nodeId: 'n1', type: 'Section', props: {}, states: [], variant: undefined, children: null, slot: null, ...props }
-    return render(<NodeContext.Provider value={value}><V {...full} /></NodeContext.Provider>).container.firstElementChild!
+    const full: ViewProps = {
+      nodeId: 'n1',
+      type: 'Section',
+      props: {},
+      states: [],
+      variant: undefined,
+      children: null,
+      slot: null,
+      ...props,
+    }
+    return render(
+      <NodeContext.Provider value={value}>
+        <V {...full} />
+      </NodeContext.Provider>,
+    ).container.firstElementChild!
   }
 
   it('view 로 짠 뷰의 Root 가 표지 · 접근성 속성을 편다', () => {
     const V = view(() => <Root as="section" />)
     const el = drawView(V, { type: 'Section', props: { compact: true } })
     expect(el.getAttribute('data-wb-compact')).toBe('')
-    const field = drawView(view(() => <Root />), { type: 'Field', props: {}, states: ['required', 'invalid'] })
-    expect([field.getAttribute('aria-required'), field.getAttribute('aria-invalid'), field.hasAttribute('aria-disabled')]).toEqual(['true', 'true', false])
+    const field = drawView(
+      view(() => <Root />),
+      { type: 'Field', props: {}, states: ['required', 'invalid'] },
+    )
+    expect([field.getAttribute('aria-required'), field.getAttribute('aria-invalid'), field.hasAttribute('aria-disabled')]).toEqual([
+      'true',
+      'true',
+      false,
+    ])
   })
 
   it('표지는 테마가 넘긴 같은 이름을 이긴다 · 접근성 속성은 테마가 덮는다', () => {
@@ -91,7 +119,9 @@ describe('prop 표지 · 상태의 접근성 속성(view → Root)', () => {
     const { value } = bind({ 'data-wb-id': 'n2' })
     const Outer = view(() => (
       <Root as="section">
-        <NodeContext.Provider value={value}><Inner /></NodeContext.Provider>
+        <NodeContext.Provider value={value}>
+          <Inner />
+        </NodeContext.Provider>
       </Root>
     ))
     const outer = drawView(Outer, { type: 'Section', props: { compact: true }, states: ['disabled'] })
@@ -103,7 +133,11 @@ describe('prop 표지 · 상태의 접근성 속성(view → Root)', () => {
 
 describe('Focus', () => {
   it('자식을 감싸지 않고 data-wb-focus 를 더한다', () => {
-    const { container } = render(<Focus><table className="x" /></Focus>)
+    const { container } = render(
+      <Focus>
+        <table className="x" />
+      </Focus>,
+    )
     const el = container.firstElementChild!
     expect(el.tagName).toBe('TABLE')
     expect(el.hasAttribute('data-wb-focus')).toBe(true)
@@ -119,15 +153,25 @@ describe('Focus', () => {
 describe('useToken · useWindow', () => {
   it('프로바이더의 값을 읽는다', () => {
     const seen: unknown[] = []
-    function Probe() { seen.push(useToken('density'), useToken('없음'), useWindow()); return null }
+    function Probe() {
+      seen.push(useToken('density'), useToken('없음'), useWindow())
+      return null
+    }
     const fake = {} as Window
-    render(<ThemeProvider value={{ tokens: { density: 'compact' }, window: fake }}><Probe /></ThemeProvider>)
+    render(
+      <ThemeProvider value={{ tokens: { density: 'compact' }, window: fake }}>
+        <Probe />
+      </ThemeProvider>,
+    )
     expect(seen).toEqual(['compact', undefined, fake])
   })
 
   it('프로바이더가 없으면 토큰은 없고 창은 전역 창이다', () => {
     const seen: unknown[] = []
-    function Probe() { seen.push(useToken('density'), useWindow()); return null }
+    function Probe() {
+      seen.push(useToken('density'), useWindow())
+      return null
+    }
     render(<Probe />)
     expect(seen).toEqual([undefined, window])
   })

@@ -141,9 +141,7 @@ async function viaAgent(ctx: RealApiContext, fx: Board, ops: PatchOp[]): Promise
 async function viaSocket(fx: Board, ops: PatchOp[]): Promise<number> {
   fx.dahyeTab.send(JSON.stringify({ type: 'patch', pageId: fx.page.id, baseSeq: await headSeq(fx.page.id), ops, clientOpId: 'op-shift' }))
   const answered = (): ServerFrame | undefined =>
-    fx.dahyeTab.received.find(
-      (frame) => (frame.type === 'patch-ack' || frame.type === 'patch-error') && frame.clientOpId === 'op-shift',
-    )
+    fx.dahyeTab.received.find((frame) => (frame.type === 'patch-ack' || frame.type === 'patch-error') && frame.clientOpId === 'op-shift')
   const deadline = Date.now() + 5_000
   while (answered() === undefined) {
     if (Date.now() > deadline) throw new Error('WS patch 의 답이 5s 안에 안 왔다')
@@ -285,12 +283,23 @@ describe('좁은 반증 — 번호 꼴 · 실패하는 묶음 · op 종류가 �
   it.each<[string, unknown[], number]>([
     ['잠긴 `n_b`를 재기만 함 — 맞는 값', [{ op: 'test', path: '/root/children/1/id', value: 'n_b' }], 200],
     ['잠긴 `n_b`를 재기만 함 — 틀린 값', [{ op: 'test', path: '/root/children/1/id', value: 'n_x' }], 409],
-    ['재고 지움', [{ op: 'test', path: '/root/children/1/id', value: 'n_b' }, { op: 'remove', path: '/root/children/1' }], 423],
-  ])('MCP(토큰) — `test` %s', async (_name, ops, expected) => {
-    await withRealApi(async (ctx) => {
-      const fx = await board(ctx)
-      const status = await viaAgent(ctx, fx, ops as never)
-      expect({ status, b: await childrenOfB(fx.page.id) }).toEqual({ status: expected, b: ['n_b1', 'n_b2'] })
-    })
-  }, 30_000)
+    [
+      '재고 지움',
+      [
+        { op: 'test', path: '/root/children/1/id', value: 'n_b' },
+        { op: 'remove', path: '/root/children/1' },
+      ],
+      423,
+    ],
+  ])(
+    'MCP(토큰) — `test` %s',
+    async (_name, ops, expected) => {
+      await withRealApi(async (ctx) => {
+        const fx = await board(ctx)
+        const status = await viaAgent(ctx, fx, ops as never)
+        expect({ status, b: await childrenOfB(fx.page.id) }).toEqual({ status: expected, b: ['n_b1', 'n_b2'] })
+      })
+    },
+    30_000,
+  )
 })

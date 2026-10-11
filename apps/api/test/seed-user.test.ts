@@ -17,14 +17,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { DisplayName, LoginPassword, NewPassword } from '../src/auth/credentials'
 import { migrateToLatest } from '../src/db/migrate'
-import {
-  describeSeedOutcome,
-  readSeedUserEnv,
-  runSeedStep,
-  SeedUserError,
-  seedUser,
-  seedUserFromEnv,
-} from '../src/db/seed-user'
+import { describeSeedOutcome, readSeedUserEnv, runSeedStep, SeedUserError, seedUser, seedUserFromEnv } from '../src/db/seed-user'
 import { withTransaction } from '../src/db/tx'
 import { DuplicateEmailError, insertUser } from '../src/repos/users'
 import { getTestDb, withApi } from './helpers'
@@ -69,22 +62,16 @@ describe('환경변수 읽기', () => {
   })
 
   it('이메일을 소문자로 정규화한다', () => {
-    expect(readSeedUserEnv({ SEED_USER_EMAIL: 'Admin@Example.COM', SEED_USER_PASSWORD: 'password1234' })?.email).toBe(
-      'admin@example.com',
-    )
+    expect(readSeedUserEnv({ SEED_USER_EMAIL: 'Admin@Example.COM', SEED_USER_PASSWORD: 'password1234' })?.email).toBe('admin@example.com')
   })
 
   it('이름을 안 주면 이메일의 로컬 파트를 쓴다', () => {
-    expect(readSeedUserEnv({ SEED_USER_EMAIL: 'Admin@Example.com', SEED_USER_PASSWORD: 'password1234' })?.name).toBe(
-      'admin',
-    )
+    expect(readSeedUserEnv({ SEED_USER_EMAIL: 'Admin@Example.com', SEED_USER_PASSWORD: 'password1234' })?.name).toBe('admin')
   })
 
   it('로컬 파트가 80자를 넘으면 자르지 않고 죽는다 — 사람이 안 정한 이름을 남기지 않는다', () => {
     const long = `${'a'.repeat(81)}@example.com`
-    expect(() => readSeedUserEnv({ SEED_USER_EMAIL: long, SEED_USER_PASSWORD: 'password1234' })).toThrow(
-      /SEED_USER_NAME/,
-    )
+    expect(() => readSeedUserEnv({ SEED_USER_EMAIL: long, SEED_USER_PASSWORD: 'password1234' })).toThrow(/SEED_USER_NAME/)
   })
 
   it.each([
@@ -144,11 +131,7 @@ describe('시딩 — 없으면 만들고 이미 있으면 그대로 둔다', () 
       const before = await passwordHashOf(db, 'seed@example.com')
 
       // 두 번째 `migrate`가 다른 비밀번호·다른 이름을 들고 왔다.
-      const outcome = await seedUser(
-        db,
-        { email: 'Seed@Example.com', name: '나중이름', password: 'secondpassword' },
-        TEST_SCRYPT_N,
-      )
+      const outcome = await seedUser(db, { email: 'Seed@Example.com', name: '나중이름', password: 'secondpassword' }, TEST_SCRYPT_N)
       expect(outcome).toEqual({ kind: 'already-exists', email: 'seed@example.com' })
 
       // 해시가 그대로다 — 그리고 그것이 무슨 뜻인지는 로그인이 말한다.
@@ -194,9 +177,7 @@ describe('시딩 — 없으면 만들고 이미 있으면 그대로 둔다', () 
       await seedUser(db, { email: 'seed@example.com', name: '시딩계정', password: 'password1234' }, TEST_SCRYPT_N)
 
       await expect(
-        withTransaction(db, (trx) =>
-          insertUser(trx, { email: 'seed@example.com', name: '두번째', passwordHash: 'scrypt$fake' }),
-        ),
+        withTransaction(db, (trx) => insertUser(trx, { email: 'seed@example.com', name: '두번째', passwordHash: 'scrypt$fake' })),
       ).rejects.toBeInstanceOf(DuplicateEmailError)
 
       // 세이브포인트가 없다면 이 조회가 25P02로 죽는다 — 통과 자체가 증거다.
@@ -206,9 +187,9 @@ describe('시딩 — 없으면 만들고 이미 있으면 그대로 둔다', () 
 
   it('환경변수를 안 지나는 호출자도 같은 게이트를 지난다', async () => {
     await withApi(async ({ db }) => {
-      await expect(
-        seedUser(db, { email: 'a@example.com', name: '짧은비번', password: '1234567' }, TEST_SCRYPT_N),
-      ).rejects.toBeInstanceOf(SeedUserError)
+      await expect(seedUser(db, { email: 'a@example.com', name: '짧은비번', password: '1234567' }, TEST_SCRYPT_N)).rejects.toBeInstanceOf(
+        SeedUserError,
+      )
       expect(await db.selectFrom('users').selectAll().execute()).toHaveLength(0)
     })
   })
@@ -245,12 +226,7 @@ describe('셋 다 말한다 · 비밀번호는 안 말한다', () => {
   it('만든 갈래의 출력에 비밀번호가 없다', async () => {
     await withApi(async ({ db }) => {
       const sink = collect()
-      await runSeedStep(
-        db,
-        { SEED_USER_EMAIL: 'seed@example.com', SEED_USER_PASSWORD: PASSWORD },
-        TEST_SCRYPT_N,
-        sink.report,
-      )
+      await runSeedStep(db, { SEED_USER_EMAIL: 'seed@example.com', SEED_USER_PASSWORD: PASSWORD }, TEST_SCRYPT_N, sink.report)
       expect(sink.text()).toContain('seed@example.com') // 출력이 실제로 있었는지부터 — 공허한 통과 방지
       expect(sink.text()).not.toContain(PASSWORD)
     })
@@ -352,9 +328,7 @@ describe('시딩한 계정은 로그인된다', () => {
 
       // 시딩됐으면 200, 안 됐으면 400(본문 검증) — 어느 쪽이든 **"만들어졌는데 못 쓰는"**
       // 조합(시딩 성공 + 로그인 400)이 나오면 안 된다.
-      expect({ seeded, login: login.statusCode }).toEqual(
-        seeded ? { seeded: true, login: 200 } : { seeded: false, login: 400 },
-      )
+      expect({ seeded, login: login.statusCode }).toEqual(seeded ? { seeded: true, login: 200 } : { seeded: false, login: 400 })
     })
   })
 
@@ -396,11 +370,7 @@ describe('시딩은 마이그레이션이 아니다', () => {
     }
 
     expect(await db.selectFrom('users').select('id').execute()).toHaveLength(before.length)
-    const seeded = await db
-      .selectFrom('users')
-      .select('id')
-      .where('email', '=', 'never-seeded-by-migrator@example.com')
-      .execute()
+    const seeded = await db.selectFrom('users').select('id').where('email', '=', 'never-seeded-by-migrator@example.com').execute()
     expect(seeded).toEqual([])
   })
 })

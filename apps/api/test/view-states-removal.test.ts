@@ -36,7 +36,12 @@ const SCHEMA = {
         type: 'StateSwitch',
         children: [
           { id: 'n_c0', type: 'StateCase', props: { state: 'default' }, children: [] },
-          { id: 'n_c1', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'n_ok', type: 'Button', props: { label: '승인' } }] },
+          {
+            id: 'n_c1',
+            type: 'StateCase',
+            props: { state: 's_admin' },
+            children: [{ id: 'n_ok', type: 'Button', props: { label: '승인' } }],
+          },
         ],
       },
     ],
@@ -59,12 +64,23 @@ async function board(ctx: RealApiContext, schema: unknown = SCHEMA) {
     return res.json() as { schema: PageDocument; headSeq: number }
   }
   const patch = async (ops: PatchOp[]) => {
-    const res = await ctx.app.inject({ method: 'PATCH', url: `${base}/ops`, cookies: bora.cookie, payload: { baseSeq: (await read()).headSeq, ops } })
-    return { status: res.statusCode, body: res.json() as { error?: { code?: string; issues?: Array<{ code: string; nodeId: string | null; path: string }> } } }
+    const res = await ctx.app.inject({
+      method: 'PATCH',
+      url: `${base}/ops`,
+      cookies: bora.cookie,
+      payload: { baseSeq: (await read()).headSeq, ops },
+    })
+    return {
+      status: res.statusCode,
+      body: res.json() as { error?: { code?: string; issues?: Array<{ code: string; nodeId: string | null; path: string }> } },
+    }
   }
   const putSchema = async (next: unknown) => {
     const res = await ctx.app.inject({ method: 'PUT', url: `${base}/schema`, cookies: bora.cookie, payload: { schema: next } as never })
-    return { status: res.statusCode, body: res.json() as { error?: { code?: string; issues?: Array<{ code: string; nodeId: string | null; path: string }> } } }
+    return {
+      status: res.statusCode,
+      body: res.json() as { error?: { code?: string; issues?: Array<{ code: string; nodeId: string | null; path: string }> } },
+    }
   }
   return { bora, dahye, project, page, read, patch, putSchema }
 }
@@ -98,12 +114,21 @@ describe('가지가 남은 상태를 목록에서만 빼는 편집 — 저장 �
     ['상태 id 바꾸기', [{ op: 'replace', path: '/viewStates/0/id', value: 's_other' }]],
     ['목록째 빼기', [{ op: 'remove', path: '/viewStates' }]],
     ['목록째 바꾸기', [{ op: 'replace', path: '/viewStates', value: [GUEST] }]],
-    ['빼고 같은 이름으로 다시 더하기', [{ op: 'remove', path: '/viewStates/0' }, { op: 'add', path: '/viewStates/-', value: { id: 's_new', name: '관리자' } }]],
+    [
+      '빼고 같은 이름으로 다시 더하기',
+      [
+        { op: 'remove', path: '/viewStates/0' },
+        { op: 'add', path: '/viewStates/-', value: { id: 's_new', name: '관리자' } },
+      ],
+    ],
   ])('%s도 422', async (_name, ops) => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const res = await fx.patch(ops)
-      expect({ status: res.status, issues: issueCodes(res.body) }).toEqual({ status: 422, issues: ['state-cases-left n_c1 /root/children/0/children/1'] })
+      expect({ status: res.status, issues: issueCodes(res.body) }).toEqual({
+        status: 422,
+        issues: ['state-cases-left n_c1 /root/children/0/children/1'],
+      })
     })
   })
 
@@ -111,7 +136,10 @@ describe('가지가 남은 상태를 목록에서만 빼는 편집 — 저장 �
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const res = await fx.putSchema({ ...SCHEMA, viewStates: [GUEST] })
-      expect({ status: res.status, issues: issueCodes(res.body) }).toEqual({ status: 422, issues: ['state-cases-left n_c1 /root/children/0/children/1'] })
+      expect({ status: res.status, issues: issueCodes(res.body) }).toEqual({
+        status: 422,
+        issues: ['state-cases-left n_c1 /root/children/0/children/1'],
+      })
     })
   })
 
@@ -128,7 +156,9 @@ describe('가지가 남은 상태를 목록에서만 빼는 편집 — 저장 �
     await withRealApi(async (ctx) => {
       // 처음부터 목록에 없는 상태의 가지 — 목록에서 뺀 것이 아니라 들어올 때 받는다.
       const fx = await board(ctx, { ...SCHEMA, viewStates: [GUEST] })
-      expect((await fx.patch([{ op: 'replace', path: '/root/children/0/children/1/children/0/props/label', value: '확인' }])).status).toBe(200)
+      expect((await fx.patch([{ op: 'replace', path: '/root/children/0/children/1/children/0/props/label', value: '확인' }])).status).toBe(
+        200,
+      )
       expect((await fx.patch([{ op: 'remove', path: '/viewStates/0' }])).status).toBe(200)
     })
   })

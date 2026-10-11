@@ -75,7 +75,10 @@ export function inlineTheme(options: {
   assets?: [string, Uint8Array][]
 }): BundleTheme {
   const manifest = manifestOf(options.id ?? 'inline')
-  const register = options.register === false ? '' : `rt.register(rt.sdk.defineTheme({ manifest: ${JSON.stringify(manifest)}, views: ${options.views ?? '{}'} }))`
+  const register =
+    options.register === false
+      ? ''
+      : `rt.register(rt.sdk.defineTheme({ manifest: ${JSON.stringify(manifest)}, views: ${options.views ?? '{}'} }))`
   return {
     ref: { themeId: manifest.id, version: manifest.version },
     manifest,
@@ -119,7 +122,8 @@ export function countColor(png: Uint8Array, rgb: [number, number, number]): numb
       width = view.getUint32(offset + 8)
       height = view.getUint32(offset + 12)
       const [depth, colorType, , , interlace] = data.subarray(8, 13)
-      if (depth !== 8 || interlace !== 0 || (colorType !== 2 && colorType !== 6)) throw new Error(`읽지 못하는 PNG 꼴: ${depth}/${colorType}/${interlace}`)
+      if (depth !== 8 || interlace !== 0 || (colorType !== 2 && colorType !== 6))
+        throw new Error(`읽지 못하는 PNG 꼴: ${depth}/${colorType}/${interlace}`)
       channels = colorType === 6 ? 4 : 3
     } else if (type === 'IDAT') idat.push(data)
     offset += 12 + length

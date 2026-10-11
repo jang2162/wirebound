@@ -20,7 +20,12 @@ if (!전제.ok) {
 }
 
 const text = (id: string, content: string) => ({ id, type: 'Text', props: { content } })
-const grid = (size: number) => ({ id: `n_big${size}`, type: 'Grid', props: { columns: 10 }, children: Array.from({ length: size }, (_, i) => text(`big${size}_${i}`, `칸 ${i}`)) })
+const grid = (size: number) => ({
+  id: `n_big${size}`,
+  type: 'Grid',
+  props: { columns: 10 },
+  children: Array.from({ length: size }, (_, i) => text(`big${size}_${i}`, `칸 ${i}`)),
+})
 
 describe.skipIf(!전제.ok)('계산 비용 — 실브라우저', () => {
   let stack: EditorStack
@@ -51,7 +56,10 @@ describe.skipIf(!전제.ok)('계산 비용 — 실브라우저', () => {
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' })).body
     const page = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body
     const P = `/projects/${project.id}/pages/${page.id}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, index) => ({ op: 'add', path: `/root/children/${index}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, index) => ({ op: 'add', path: `/root/children/${index}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return { P, projectId: project.id }
   }
@@ -104,10 +112,14 @@ describe.skipIf(!전제.ok)('계산 비용 — 실브라우저', () => {
         return out
       })(${JSON.stringify(SIZES)})`)) as Record<number, { ms: number; over: string | null }> | null
       // eslint-disable-next-line no-console
-      console.log(`[판정 비용] canvasHitAt 한 번(중앙값 ms · Grid 자식 수별) ${judged === null ? '운영 번들 — 건너뜀' : JSON.stringify(Object.fromEntries(Object.entries(judged).map(([size, v]) => [size, v.ms])))}`)
-      expect(judged === null ? 'skipped' : Object.entries(judged).map(([size, v]) => `${size}:${v.over?.startsWith(`big${size}_`) === true}:${v.ms >= 0}`)).toEqual(
-        judged === null ? 'skipped' : SIZES.map((size) => `${size}:true:true`),
+      console.log(
+        `[판정 비용] canvasHitAt 한 번(중앙값 ms · Grid 자식 수별) ${judged === null ? '운영 번들 — 건너뜀' : JSON.stringify(Object.fromEntries(Object.entries(judged).map(([size, v]) => [size, v.ms])))}`,
       )
+      expect(
+        judged === null
+          ? 'skipped'
+          : Object.entries(judged).map(([size, v]) => `${size}:${v.over?.startsWith(`big${size}_`) === true}:${v.ms >= 0}`),
+      ).toEqual(judged === null ? 'skipped' : SIZES.map((size) => `${size}:true:true`))
     } finally {
       await close()
     }
@@ -122,10 +134,16 @@ describe.skipIf(!전제.ok)('계산 비용 — 실브라우저', () => {
       await page.getByRole('button', { name: '배치 선', exact: true }).click()
       const counted = await poll(
         '3000 판의 선',
-        () => page.evaluate(() => {
-          const guide = document.querySelector('[data-wb-guide-for="n_big3000"]')
-          return guide === null ? null : { x: guide.querySelectorAll('[data-wb-guide-line="x"]').length, y: guide.querySelectorAll('[data-wb-guide-line="y"]').length }
-        }),
+        () =>
+          page.evaluate(() => {
+            const guide = document.querySelector('[data-wb-guide-for="n_big3000"]')
+            return guide === null
+              ? null
+              : {
+                  x: guide.querySelectorAll('[data-wb-guide-line="x"]').length,
+                  y: guide.querySelectorAll('[data-wb-guide-line="y"]').length,
+                }
+          }),
         (value) => value !== null && value.x === 9 && value.y === 299,
         20_000,
       ).catch(() => null)
@@ -154,8 +172,13 @@ describe.skipIf(!전제.ok)('계산 비용 — 실브라우저', () => {
         return out
       })(${JSON.stringify(SIZES.map(grid))})`)) as Record<number, number> | null
       // eslint-disable-next-line no-console
-      console.log(`[배치 선 수천] 판정 하나(중앙값 ms · 자식 수별) ${judged === null ? '운영 번들 — 건너뜀' : JSON.stringify(judged)} · 배치 선을 켠 뒤 3000 판의 선이 서기까지 ${firstDrawMs}ms`)
-      expect({ counted, judged: judged === null || Object.values(judged).every((ms) => ms >= 0) }).toEqual({ counted: { x: 9, y: 299 }, judged: true })
+      console.log(
+        `[배치 선 수천] 판정 하나(중앙값 ms · 자식 수별) ${judged === null ? '운영 번들 — 건너뜀' : JSON.stringify(judged)} · 배치 선을 켠 뒤 3000 판의 선이 서기까지 ${firstDrawMs}ms`,
+      )
+      expect({ counted, judged: judged === null || Object.values(judged).every((ms) => ms >= 0) }).toEqual({
+        counted: { x: 9, y: 299 },
+        judged: true,
+      })
     } finally {
       await close()
     }
@@ -224,7 +247,11 @@ describe.skipIf(!전제.ok)('계산 비용 — 실브라우저', () => {
       await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill('Button')
       await page.locator('[data-wb-palette-card="Button"]').waitFor()
       const colorOf = `(() => { const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe')?.contentDocument; const b = doc?.querySelector('[data-wb-palette-thumb="Button"] [data-wb-component="Button"]'); return b == null ? '' : getComputedStyle(b).backgroundColor })()`
-      await poll('단추 표본', async () => String(await page.evaluate(colorOf)), (value) => value !== '')
+      await poll(
+        '단추 표본',
+        async () => String(await page.evaluate(colorOf)),
+        (value) => value !== '',
+      )
       const before = String(await page.evaluate(colorOf))
       await page.evaluate('window.__long.length = 0')
       await page.evaluate(`(() => {
@@ -239,12 +266,29 @@ describe.skipIf(!전제.ok)('계산 비용 — 실브라우저', () => {
         requestAnimationFrame(tick)
       })()`)
       const color = (await call('GET', `/projects/${projectId}/theme`)).body
-      const saved = await call('PUT', `/projects/${projectId}/theme`, { themeId: 'system-admin', version: seededVersion('system-admin'), rev: color.rev, tokens: { 'semantic.primary': brand } })
-      const changed = await poll('표본 색이 바뀐다', () => page.evaluate('window.__changed'), (value) => typeof value === 'number', 8000).catch(() => null)
+      const saved = await call('PUT', `/projects/${projectId}/theme`, {
+        themeId: 'system-admin',
+        version: seededVersion('system-admin'),
+        rev: color.rev,
+        tokens: { 'semantic.primary': brand },
+      })
+      const changed = await poll(
+        '표본 색이 바뀐다',
+        () => page.evaluate('window.__changed'),
+        (value) => typeof value === 'number',
+        8000,
+      ).catch(() => null)
       const long = (await page.evaluate('window.__long')) as number[]
       // eslint-disable-next-line no-console
-      console.log(`[축소판 비용] 갈래마다 표본이 다 서기까지 ${JSON.stringify(opened)} · 닫았다 다시 연 첫 그림 ${JSON.stringify(reopened)} · 남이 토큰 저장(${saved.status}) → 표본 색이 바뀌기까지 ${changed}ms · 긴 작업 ${JSON.stringify(long)} · 색 ${before}`)
-      expect({ saved: saved.status, changed: typeof changed === 'number', opened: Object.keys(opened).length > 0, reopenedCards: (reopened as { cards: number }).cards > 0 }).toEqual({
+      console.log(
+        `[축소판 비용] 갈래마다 표본이 다 서기까지 ${JSON.stringify(opened)} · 닫았다 다시 연 첫 그림 ${JSON.stringify(reopened)} · 남이 토큰 저장(${saved.status}) → 표본 색이 바뀌기까지 ${changed}ms · 긴 작업 ${JSON.stringify(long)} · 색 ${before}`,
+      )
+      expect({
+        saved: saved.status,
+        changed: typeof changed === 'number',
+        opened: Object.keys(opened).length > 0,
+        reopenedCards: (reopened as { cards: number }).cards > 0,
+      }).toEqual({
         saved: 200,
         changed: true,
         opened: true,

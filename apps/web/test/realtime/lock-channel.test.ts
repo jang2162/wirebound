@@ -258,7 +258,10 @@ describe('잡지 않은 선택', () => {
  */
 describe('집합', () => {
   const sentIds = (link: { sent: string[] }): string[][] =>
-    link.sent.map((raw) => JSON.parse(raw) as { type: string; nodeIds?: string[] }).filter((frame) => frame.type === 'lock').map((frame) => frame.nodeIds ?? [])
+    link.sent
+      .map((raw) => JSON.parse(raw) as { type: string; nodeIds?: string[] })
+      .filter((frame) => frame.type === 'lock')
+      .map((frame) => frame.nodeIds ?? [])
 
   it('집합을 한 프레임에 싣고, 차례만 다른 같은 집합은 안 보내고, 바뀌면 보낸다', () => {
     const link = fakeLink()
@@ -269,7 +272,10 @@ describe('집합', () => {
     channel.hold('pg-1', ['n-b', 'n-a'])
     channel.hold('pg-1', ['n-a', 'n-b', 'n-c'])
 
-    expect(sentIds(link)).toEqual([['n-a', 'n-b'], ['n-a', 'n-b', 'n-c']])
+    expect(sentIds(link)).toEqual([
+      ['n-a', 'n-b'],
+      ['n-a', 'n-b', 'n-c'],
+    ])
   })
 
   /** 혼자 죽는 변조: 일부 거절도 집합째 «잡지 않은 선택»으로 옮긴다(돌려주는 것이 없다 · 하트비트가 거절된 노드까지 싣는다). */
@@ -285,7 +291,11 @@ describe('집합', () => {
     // 선택이 남은 둘로 바뀌어 오는 `hold`는 같은 집합이라 안 보낸다.
     channel.hold('pg-1', ['n-a', 'n-c'])
 
-    expect(sentIds(link)).toEqual([['n-a', 'n-b', 'n-c'], ['n-a', 'n-c'], ['n-a', 'n-c']])
+    expect(sentIds(link)).toEqual([
+      ['n-a', 'n-b', 'n-c'],
+      ['n-a', 'n-c'],
+      ['n-a', 'n-c'],
+    ])
   })
 
   /** 혼자 죽는 변조: 전부 거절도 일부처럼 돌려준다(부르는 쪽이 선택을 비운다). */
@@ -299,7 +309,10 @@ describe('집합', () => {
     channel.reannounce()
     channel.refresh()
 
-    expect(sentIds(link)).toEqual([['n-a', 'n-b'], ['n-a', 'n-b']])
+    expect(sentIds(link)).toEqual([
+      ['n-a', 'n-b'],
+      ['n-a', 'n-b'],
+    ])
   })
 
   it('잡은 집합 밖의 노드만 실린 거절은 버린다', () => {

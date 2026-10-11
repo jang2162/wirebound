@@ -8,16 +8,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { WIREBOUND_PAGE_VERSION, applyOps, removeViewStateOps, type PageDocument, type PatchOp } from '@wirebound/schema'
-import {
-  addMember,
-  createMenuNode,
-  createPage,
-  createProject,
-  resetRealData,
-  signup,
-  withRealApi,
-  type RealApiContext,
-} from './helpers'
+import { addMember, createMenuNode, createPage, createProject, resetRealData, signup, withRealApi, type RealApiContext } from './helpers'
 import { WsProbe, joinRoom, locksWith } from './ws-client'
 
 beforeEach(resetRealData)
@@ -52,8 +43,18 @@ function statefulDoc(): PageDocument {
           id: 'n_sw',
           type: 'StateSwitch',
           children: [
-            { id: 'n_c0', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'n_view', type: 'Button', props: { label: '보기' } }] },
-            { id: 'n_c1', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'n_ok', type: 'Button', props: { label: '승인' } }] },
+            {
+              id: 'n_c0',
+              type: 'StateCase',
+              props: { state: 'default' },
+              children: [{ id: 'n_view', type: 'Button', props: { label: '보기' } }],
+            },
+            {
+              id: 'n_c1',
+              type: 'StateCase',
+              props: { state: 's_admin' },
+              children: [{ id: 'n_ok', type: 'Button', props: { label: '승인' } }],
+            },
           ],
         },
       ],
@@ -135,8 +136,16 @@ describe('PUT …/schema — 통째 교체가 상태 목록을 싣는다', () =>
 
   it.each<[string, (doc: PageDocument) => void, string]>([
     ['기본 가지 없음', (doc) => doc.root.children![1]!.children!.shift(), 'state-case-default'],
-    ['같은 상태 가지 둘', (doc) => doc.root.children![1]!.children!.push({ id: 'n_c2', type: 'StateCase', props: { state: 's_admin' }, children: [] }), 'state-case-duplicate'],
-    ['가지가 영역 밖', (doc) => doc.root.children!.push({ id: 'n_c3', type: 'StateCase', props: { state: 'default' }, children: [] }), 'state-case-outside'],
+    [
+      '같은 상태 가지 둘',
+      (doc) => doc.root.children![1]!.children!.push({ id: 'n_c2', type: 'StateCase', props: { state: 's_admin' }, children: [] }),
+      'state-case-duplicate',
+    ],
+    [
+      '가지가 영역 밖',
+      (doc) => doc.root.children!.push({ id: 'n_c3', type: 'StateCase', props: { state: 'default' }, children: [] }),
+      'state-case-outside',
+    ],
     ['영역 아래 다른 타입', (doc) => doc.root.children![1]!.children!.push({ id: 'n_t', type: 'Text', props: {} }), 'state-switch-child'],
   ])('구조를 어긴 영역(%s)은 422 이고 저장되지 않는다', async (_label, twist, code) => {
     await withRealApi(async (ctx) => {
@@ -159,7 +168,10 @@ describe('페이지 JSON — 내보낸 파일 · 가져오기가 상태 목록�
         method: 'POST',
         url: `/api/projects/${fx.project.id}/pages/import`,
         cookies: fx.owner.cookie,
-        payload: { menuNodeId: fx.menu.id, file: { wireboundVersion: WIREBOUND_PAGE_VERSION, page: { title: '상태 페이지' }, schema: statefulDoc(), comments: [] } } as never,
+        payload: {
+          menuNodeId: fx.menu.id,
+          file: { wireboundVersion: WIREBOUND_PAGE_VERSION, page: { title: '상태 페이지' }, schema: statefulDoc(), comments: [] },
+        } as never,
       })
       expect(res.statusCode, res.body).toBe(201)
       const pageId = (res.json() as { page: { id: string } }).page.id
@@ -180,7 +192,10 @@ describe('페이지 JSON — 내보낸 파일 · 가져오기가 상태 목록�
         method: 'POST',
         url: `/api/projects/${fx.project.id}/pages/import`,
         cookies: fx.owner.cookie,
-        payload: { menuNodeId: fx.menu.id, file: { wireboundVersion: WIREBOUND_PAGE_VERSION, page: { title: '나쁜 파일' }, schema: doc, comments: [] } } as never,
+        payload: {
+          menuNodeId: fx.menu.id,
+          file: { wireboundVersion: WIREBOUND_PAGE_VERSION, page: { title: '나쁜 파일' }, schema: doc, comments: [] },
+        } as never,
       })
       expect(res.statusCode, res.body).toBe(400)
       const rows = await ctx.db.selectFrom('pages').select('id').where('project_id', '=', fx.project.id).execute()
@@ -194,12 +209,21 @@ describe('스냅샷 복원이 상태 목록을 되돌린다', () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const snap = async (tag: string): Promise<string> => {
-        const res = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.project.id}/snapshots`, cookies: fx.owner.cookie, payload: { tag } })
+        const res = await ctx.app.inject({
+          method: 'POST',
+          url: `/api/projects/${fx.project.id}/snapshots`,
+          cookies: fx.owner.cookie,
+          payload: { tag },
+        })
         expect(res.statusCode, res.body).toBe(201)
         return (res.json() as { id: string }).id
       }
       const restore = async (id: string) => {
-        const res = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.project.id}/snapshots/${id}/restore`, cookies: fx.owner.cookie })
+        const res = await ctx.app.inject({
+          method: 'POST',
+          url: `/api/projects/${fx.project.id}/snapshots/${id}/restore`,
+          cookies: fx.owner.cookie,
+        })
         expect(res.statusCode, res.body).toBe(200)
       }
       const plain = await snap('목록 없음')
@@ -208,7 +232,12 @@ describe('스냅샷 복원이 상태 목록을 되돌린다', () => {
 
       const now = await read(ctx, fx)
       const { ops } = removeViewStateOps(now.schema, 's_admin')!
-      const removed = await ctx.app.inject({ method: 'PATCH', url: `${fx.base}/ops`, cookies: fx.owner.cookie, payload: { baseSeq: now.headSeq, ops } })
+      const removed = await ctx.app.inject({
+        method: 'PATCH',
+        url: `${fx.base}/ops`,
+        cookies: fx.owner.cookie,
+        payload: { baseSeq: now.headSeq, ops },
+      })
       expect(removed.statusCode, removed.body).toBe(200)
       expect((await read(ctx, fx)).schema.viewStates).toEqual([GUEST])
 
@@ -236,7 +265,12 @@ describe('상태 삭제의 연쇄 — WS 편집 하나', () => {
       expect(JSON.stringify(after)).not.toContain('n_ok')
       expect(result.removedNodeIds.sort()).toEqual(['n_c1', 'n_ok'])
 
-      const undo = await ctx.app.inject({ method: 'PATCH', url: `${fx.base}/ops`, cookies: fx.owner.cookie, payload: { baseSeq: ack.seq, ops: ack.inverse } })
+      const undo = await ctx.app.inject({
+        method: 'PATCH',
+        url: `${fx.base}/ops`,
+        cookies: fx.owner.cookie,
+        payload: { baseSeq: ack.seq, ops: ack.inverse },
+      })
       expect(undo.statusCode, undo.body).toBe(200)
       expect((await read(ctx, fx)).schema).toEqual(statefulDoc())
     })
@@ -252,13 +286,23 @@ describe('상태 삭제의 연쇄 — WS 편집 하나', () => {
 
       const now = await read(ctx, fx)
       const { ops } = removeViewStateOps(now.schema, 's_admin')!
-      const blocked = await ctx.app.inject({ method: 'PATCH', url: `${fx.base}/ops`, cookies: fx.owner.cookie, payload: { baseSeq: now.headSeq, ops } })
+      const blocked = await ctx.app.inject({
+        method: 'PATCH',
+        url: `${fx.base}/ops`,
+        cookies: fx.owner.cookie,
+        payload: { baseSeq: now.headSeq, ops },
+      })
       expect(blocked.statusCode, blocked.body).toBe(423)
       expect((await read(ctx, fx)).schema).toEqual(statefulDoc())
 
       peerTab.send(JSON.stringify({ type: 'lock', pageId: fx.page.id, nodeId: 'n_view' }))
       await locksWith(peerTab, 'n_view')
-      const passed = await ctx.app.inject({ method: 'PATCH', url: `${fx.base}/ops`, cookies: fx.owner.cookie, payload: { baseSeq: now.headSeq, ops } })
+      const passed = await ctx.app.inject({
+        method: 'PATCH',
+        url: `${fx.base}/ops`,
+        cookies: fx.owner.cookie,
+        payload: { baseSeq: now.headSeq, ops },
+      })
       expect(passed.statusCode, passed.body).toBe(200)
     })
   }, 30_000)

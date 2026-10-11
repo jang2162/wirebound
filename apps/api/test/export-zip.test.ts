@@ -16,14 +16,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { strFromU8, unzipSync } from 'fflate'
-import {
-  PPTX_CONTENT_TYPE,
-  bundleFileName,
-  bundleRootDirectory,
-  pptxFileName,
-  zipBundle,
-  zipParts,
-} from '../src/services/export-zip'
+import { PPTX_CONTENT_TYPE, bundleFileName, bundleRootDirectory, pptxFileName, zipBundle, zipParts } from '../src/services/export-zip'
 
 /** 서로 다른 글자를 담은 엔트리 넷. **하나짜리로 재지 않는다.** */
 const FILES = [
@@ -50,9 +43,7 @@ describe('zipBundle', () => {
 
   it('넣은 것만 담는다 — 더도 덜도 아니다', () => {
     const zipped = zipBundle(FILES, 'wirebound-export-one')
-    expect(Object.keys(unzipSync(zipped)).sort()).toEqual(
-      FILES.map((file) => `wirebound-export-one/${file.path}`).sort(),
-    )
+    expect(Object.keys(unzipSync(zipped)).sort()).toEqual(FILES.map((file) => `wirebound-export-one/${file.path}`).sort())
   })
 
   /**
@@ -106,8 +97,7 @@ describe('zipBundle', () => {
     const 페이지수 = 40
     const 트리 = Array.from(
       { length: 페이지수 },
-      (_, index) =>
-        `<li class="wb-export-nav-item"><a href="관리자-회원-페이지-${index}.html">관리자 회원 페이지 ${index}</a></li>`,
+      (_, index) => `<li class="wb-export-nav-item"><a href="관리자-회원-페이지-${index}.html">관리자 회원 페이지 ${index}</a></li>`,
     ).join('')
     const 반복 = Array.from({ length: 페이지수 }, (_, index) => ({
       path: `pages/관리자-회원-페이지-${index}.html`,
@@ -225,8 +215,6 @@ describe('pptxFileName', () => {
 
   /** **MIME 을 한 자리에만 둔다** — 두 벌이면 헤더와 문서가 갈린다. */
   it('pptx 의 MIME 이 OOXML 프레젠테이션이다', () => {
-    expect(PPTX_CONTENT_TYPE).toBe(
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    )
+    expect(PPTX_CONTENT_TYPE).toBe('application/vnd.openxmlformats-officedocument.presentationml.presentation')
   })
 })

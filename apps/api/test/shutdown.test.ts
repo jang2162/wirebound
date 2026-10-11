@@ -16,7 +16,12 @@ import { closeOnSignals, launchedByTsxCli, SHUTDOWN_SIGNALS, type TerminalProbe 
 import { SRC_ROOT, stripComments } from './source-census'
 
 /** tsx CLI 가 띄운 자식의 `execArgv` 꼴(`«깔린 tsx»`가 실물로 잰다). */
-const TSX_CLI_ARGV = ['--require', '/app/node_modules/.pnpm/tsx@4/node_modules/tsx/dist/preflight.cjs', '--import', 'file:///app/node_modules/tsx/dist/loader.mjs']
+const TSX_CLI_ARGV = [
+  '--require',
+  '/app/node_modules/.pnpm/tsx@4/node_modules/tsx/dist/preflight.cjs',
+  '--import',
+  'file:///app/node_modules/tsx/dist/loader.mjs',
+]
 
 class FakeProcess extends EventEmitter {
   exits: number[] = []

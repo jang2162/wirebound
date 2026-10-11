@@ -48,7 +48,15 @@ const SAMPLE = manifestOf('sample', '1.0.0', {
       'radius.md': { type: 'number', label: '모서리', default: 4 },
     },
   },
-  components: { Button: { variants: [{ id: 'solid', label: '채움' }, { id: 'ghost', label: '빈' }], defaultVariant: 'solid' } },
+  components: {
+    Button: {
+      variants: [
+        { id: 'solid', label: '채움' },
+        { id: 'ghost', label: '빈' },
+      ],
+      defaultVariant: 'solid',
+    },
+  },
 })
 
 interface Fixture {
@@ -118,7 +126,11 @@ describe('PUT …/theme', () => {
       })
       expect(res.statusCode, res.body).toBe(200)
       expect(res.json()).toMatchObject({ themeId: 'system-admin', version: V, tokens: { [C]: '#123456' }, rev: 1 })
-      const row = await ctx.db.selectFrom('projects').select(['theme_tokens', 'theme_rev']).where('id', '=', fx.projectId).executeTakeFirstOrThrow()
+      const row = await ctx.db
+        .selectFrom('projects')
+        .select(['theme_tokens', 'theme_rev'])
+        .where('id', '=', fx.projectId)
+        .executeTakeFirstOrThrow()
       expect(row).toEqual({ theme_tokens: { [C]: '#123456' }, theme_rev: 1 })
     })
   })
@@ -157,7 +169,13 @@ describe('PUT …/theme', () => {
       await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: V, tokens: { [C]: '#111111' }, rev: 0 })
       const moved = await put(ctx, fx, fx.owner, { themeId: 'sample', version: '1.0.0', tokens: { 'color.accent': '#00ff00' }, rev: 1 })
       expect(moved.statusCode, moved.body).toBe(200)
-      expect(moved.json()).toMatchObject({ themeId: 'sample', version: '1.0.0', tokens: { 'color.accent': '#00ff00' }, rev: 2, latest: '1.0.0' })
+      expect(moved.json()).toMatchObject({
+        themeId: 'sample',
+        version: '1.0.0',
+        tokens: { 'color.accent': '#00ff00' },
+        rev: 2,
+        latest: '1.0.0',
+      })
       expect(moved.json().manifest.id).toBe('sample')
     })
   })
@@ -238,7 +256,10 @@ describe('PUT …/theme', () => {
 
     it('값 하나는 200 자까지 — 201 자는 422 token-too-long', async () => {
       await withApi(async (ctx) => {
-        await store(ctx, manifestOf('fonty', '1.0.0', { tokens: { items: { 'font.body': { type: 'font', label: '본문', default: 'serif' } } } }))
+        await store(
+          ctx,
+          manifestOf('fonty', '1.0.0', { tokens: { items: { 'font.body': { type: 'font', label: '본문', default: 'serif' } } } }),
+        )
         const fx = await fixture(ctx)
         const at = `F${'x'.repeat(199)}`
         const ok = await put(ctx, fx, fx.owner, { themeId: 'fonty', version: '1.0.0', tokens: { 'font.body': at }, rev: 0 })
@@ -314,7 +335,11 @@ describe('두 owner 의 동시 저장', () => {
       const a = await pendingA
       expect(a.statusCode, a.body).toBe(409)
       expect(a.json().current).toMatchObject({ tokens: { [C]: '#bbbbbb' }, rev: 1 })
-      const row = await ctx.db.selectFrom('projects').select(['theme_tokens', 'theme_rev']).where('id', '=', fx.projectId).executeTakeFirstOrThrow()
+      const row = await ctx.db
+        .selectFrom('projects')
+        .select(['theme_tokens', 'theme_rev'])
+        .where('id', '=', fx.projectId)
+        .executeTakeFirstOrThrow()
       expect(row).toEqual({ theme_tokens: { [C]: '#bbbbbb' }, theme_rev: 1 })
     })
   })
@@ -382,7 +407,11 @@ describe('GET …/theme/impact', () => {
       .set({ schema: doc([button('b1', 'primary'), { id: 's1', type: 'Section', children: [button('b2', 'primary'), button('b3')] }]) })
       .where('id', '=', first.id)
       .execute()
-    await ctx.db.updateTable('pages').set({ schema: doc([button('b4', 'primary')]) }).where('id', '=', second.id).execute()
+    await ctx.db
+      .updateTable('pages')
+      .set({ schema: doc([button('b4', 'primary')]) })
+      .where('id', '=', second.id)
+      .execute()
     return { first, second }
   }
 

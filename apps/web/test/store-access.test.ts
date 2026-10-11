@@ -20,12 +20,7 @@
  * 이 표에 없는 형태가 안전하다는 뜻이 아니다.
  */
 import { describe, expect, it } from 'vitest'
-import {
-  findViolations,
-  isExempt,
-  scanSources,
-  type CheckName,
-} from './store-access-guard'
+import { findViolations, isExempt, scanSources, type CheckName } from './store-access-guard'
 
 /**
  * `apps/web/src`의 소스 전문. **`?raw`로 원문을 그대로 읽는다** — vite가 파일 내용을
@@ -121,9 +116,7 @@ describe('스토어 페이지 상태 우회 검사', () => {
     // 걷고 검사하면 위반이 나온다.
     const source = SOURCES['../src/store/use-editor-store.tsx']
     expect(source).toContain('export function useOpenDocument')
-    expect(findViolations(source ?? '').map((violation) => violation.check)).toContain(
-      'selector-page-field',
-    )
+    expect(findViolations(source ?? '').map((violation) => violation.check)).toContain('selector-page-field')
   })
 
   it('제외 파일 둘을 실제로 걸러 낸다', () => {
@@ -132,10 +125,7 @@ describe('스토어 페이지 상태 우회 검사', () => {
     // 그때 이 케이스가 "제외가 문제"라고 먼저 말한다.
     const exempt = Object.keys(SOURCES).filter((path) => isExempt(path))
 
-    expect([...exempt].sort()).toEqual([
-      '../src/store/editor-store.ts',
-      '../src/store/use-editor-store.tsx',
-    ])
+    expect([...exempt].sort()).toEqual(['../src/store/editor-store.ts', '../src/store/use-editor-store.tsx'])
   })
 
   it('지금 트리에는 우회가 없다', () => {
@@ -189,12 +179,8 @@ describe('스토어 페이지 상태 우회 검사', () => {
     // 구조 분해). 자리마다 문장을 따로 조립하므로 **셋을 각각 봐야 한다**: 둘만 보면 구조
     // 분해 자리의 메시지는 조용히 되돌아갈 수 있다(그 자리만 관문을 가리키지 않는 문장으로
     // 바꾸면 아래 둘째 단언만 죽는다).
-    expect(findViolations('const s = store.getState().headSeq')[0]?.message).toContain(
-      'src/store/use-editor-store.tsx',
-    )
-    expect(findViolations('const { headSeq } = store.getState()')[0]?.message).toContain(
-      'src/store/use-editor-store.tsx',
-    )
+    expect(findViolations('const s = store.getState().headSeq')[0]?.message).toContain('src/store/use-editor-store.tsx')
+    expect(findViolations('const { headSeq } = store.getState()')[0]?.message).toContain('src/store/use-editor-store.tsx')
   })
 
   it('알려진 오탐 — 이름만 보는 판정의 대가다', () => {
@@ -209,14 +195,12 @@ describe('스토어 페이지 상태 우회 검사', () => {
     //
     // **이 케이스가 죽는 것은 검사를 좁혔다는 뜻이다.** 그때는 그 사각이 생기지 않았는지
     // 함께 재라.
-    for (const selector of [
-      '(s) => s.undoStack.at(-1)?.document',
-      '(s) => s.pending.some((p) => p.headSeq < base)',
-    ]) {
+    for (const selector of ['(s) => s.undoStack.at(-1)?.document', '(s) => s.pending.some((p) => p.headSeq < base)']) {
       const violations = findViolations(`useEditorStore(store, ${selector})`)
-      expect(violations.map((violation) => violation.check), selector).toEqual([
-        'selector-page-field',
-      ])
+      expect(
+        violations.map((violation) => violation.check),
+        selector,
+      ).toEqual(['selector-page-field'])
     }
   })
 })

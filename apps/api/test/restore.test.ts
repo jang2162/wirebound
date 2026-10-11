@@ -18,15 +18,7 @@ import { listSnapshots } from '../src/repos/snapshots'
 import { UNKNOWN_SEQ_FLOOR } from '../src/repos/pages'
 import { SAFETY_TAG_PREFIX, restoreActorLabel, restoreSnapshot } from '../src/services/restore'
 import { ensureCatalog } from '../src/schema-setup'
-import {
-  addMember,
-  createMenuNode,
-  createPage,
-  createProject,
-  signup,
-  withApi,
-  type TestContext,
-} from './helpers'
+import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
 beforeEach(() => {
   ensureCatalog()
@@ -536,9 +528,9 @@ describe('코멘트', () => {
       // **동시에 만족하는 불변량**이라 선택을 고정하지 못한다.
       //
       // **그래서 값 자체를 본다.** 복원된 `created_at`이 payload의 그 값이어야 한다.
-      const payload = (
-        await ctx.db.selectFrom('snapshots').select('payload').where('id', '=', id).executeTakeFirstOrThrow()
-      ).payload as { comments: Array<{ id: string; createdAt: string }> }
+      const payload = (await ctx.db.selectFrom('snapshots').select('payload').where('id', '=', id).executeTakeFirstOrThrow()).payload as {
+        comments: Array<{ id: string; createdAt: string }>
+      }
       const wantById = new Map(payload.comments.map((entry) => [entry.id, entry.createdAt]))
       expect(rows.map((row) => row.created_at.toISOString())).toEqual(rows.map((row) => wantById.get(row.id)))
     })
@@ -599,11 +591,7 @@ describe('FK 순서가 DB에서도 참인가', () => {
       const res = await restore(ctx, fx, id)
 
       expect(res.statusCode).toBe(200)
-      const rows = await ctx.db
-        .selectFrom('menu_nodes')
-        .select(['id', 'parent_id'])
-        .where('project_id', '=', fx.project.id)
-        .execute()
+      const rows = await ctx.db.selectFrom('menu_nodes').select(['id', 'parent_id']).where('project_id', '=', fx.project.id).execute()
       expect(rows.map((row) => row.id).sort()).toEqual([fx.menu.id, child.id].sort())
       expect(rows.find((row) => row.id === child.id)?.parent_id).toBeNull()
     })

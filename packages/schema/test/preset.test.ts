@@ -53,11 +53,7 @@ describe('내장 프리셋', () => {
   it('설계서 페이지 프리셋 절이 든 셋이 키로 있다', () => {
     // 「페이지 프리셋」이 든 이름 셋. **수를 적지 않고 키를 적는다** —
     // 하나가 사라지거나 이름이 바뀌면 이 배열이 그것을 말한다.
-    expect(BUILTIN_PRESETS.map((preset) => preset.key)).toEqual([
-      'search-list',
-      'detail',
-      'entry-form',
-    ])
+    expect(BUILTIN_PRESETS.map((preset) => preset.key)).toEqual(['search-list', 'detail', 'entry-form'])
   })
 
   it('키가 서로 다르다', () => {

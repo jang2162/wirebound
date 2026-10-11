@@ -13,7 +13,10 @@ import { sql } from 'kysely'
  */
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {
-    await db.schema.alterTable('pages').addColumn('structure_seq', 'bigint', (col) => col.notNull().defaultTo(0)).execute()
+    await db.schema
+      .alterTable('pages')
+      .addColumn('structure_seq', 'bigint', (col) => col.notNull().defaultTo(0))
+      .execute()
     await sql`update pages set structure_seq = head_seq`.execute(db)
   },
 

@@ -73,9 +73,7 @@ describe('네 자원을 담는다', () => {
 
       const payload = captured(await captureSnapshot(ctx.db, fx.project.id))
 
-      expect(Object.keys(payload).sort()).toEqual(
-        ['capturedAt', 'payloadVersion', ...SNAPSHOT_RESOURCES].sort(),
-      )
+      expect(Object.keys(payload).sort()).toEqual(['capturedAt', 'payloadVersion', ...SNAPSHOT_RESOURCES].sort())
     })
   })
 

@@ -67,56 +67,57 @@ export function patchErrorFrame(
 }
 
 /** `patch` 하나를 처리하고 **낸 사람에게 돌려줄 프레임**을 낸다. */
-export async function handlePatchFrame(
-  app: FastifyInstance,
-  connection: RoomConnection,
-  frame: PatchFrame,
-): Promise<ServerFrame> {
+export async function handlePatchFrame(app: FastifyInstance, connection: RoomConnection, frame: PatchFrame): Promise<ServerFrame> {
   let settled
   try {
     // **COMMIT 답을 잃으면 그 자리에서 확인한다** — REST 와 같은 함수다(`services/lost-commit.ts`).
-    settled = await runEditTransaction(app.db, frame.pageId, async (trx) => {
-      // **설계서 「정방향 흐름」의 순서다** — 권한 확인(`ws/routes.ts`)이 이미 지났고, 적용 전에 잠금을 본다. **판정은 이 트랜잭션 안에서
-      // 페이지 행을 잡고 한다** — 커밋까지 그 행을 쥐므로 판정 뒤 커밋 전에 겹치는 잠금이 서지 못한다(`lock/check.ts`의
-      // «판정은 페이지 행 안에서»). 소유자는 **사람**이므로 같은 사람의 다른 탭이 잡은 것에는 막히지 않는다.
-      // 막히면 던진다 — 아직 아무것도 안 썼고, 아래 `catch`가 423 프레임으로 옮긴다.
-      const blocked = await lockConflictError(app, trx, {
-        projectId: connection.projectId,
-        pageId: frame.pageId,
-        baseSeq: frame.baseSeq,
-        ops: frame.ops,
-        userId: connection.userId,
-      })
-      if (blocked !== null) throw blocked
-      const edited = await applyEdit(trx, {
-        projectId: connection.projectId,
-        pageId: frame.pageId,
-        baseSeq: frame.baseSeq,
-        ops: frame.ops,
-        // **actor는 연결이 든다.** 핸드셰이크가 세션 쿠키로 정한 값이고(설계서 「권한 모델」 — REST와 WS의 인증
-        // 경로가 하나다), 프레임이 실어 온 값이 아니다.
-        //
-        // **`auth/actor.ts`의 `requestActor`를 안 쓴다 — 여기에는 요청이 없다.** 그리고 쓸
-        // 이유도 없다: **WS는 쿠키만이다**(「권한 모델」 · `ws/routes.ts`의 `requireSessionAuth`가 토큰이
-        // 실린 핸드셰이크를 401로 끊는다). 토큰이 이 자리에 닿을 수 없으므로 언제나 `'user'`가
-        // 맞고, `test/actor-census.test.ts`가 그 판정을 표에 한 줄로 든다.
-        actor: { type: 'user', id: connection.userId, label: connection.userName },
-      })
-      // **커밋 순간의 권한 · 자격** — REST 와 같은 함수다(`auth/roles.ts`의 `recheckAtCommit`). 프레임을 받을 때의
-      // 확인(`ws/routes.ts`의 `stillAllowed`)은 잠금 **밖**이다 — `applyEdit`이 페이지 잠금에 선 동안 강등되거나
-      // 로그아웃하면 그 확인은 낡는다. 최소 역할은 프레임 수신과 같은 표의 값, 스코프는 없고 자격은 연결이 든 세션이다
-      // (WS 는 쿠키만이다).
-      if (edited.ok) {
-        await recheckAtCommit(trx, {
+    settled = await runEditTransaction(
+      app.db,
+      frame.pageId,
+      async (trx) => {
+        // **설계서 「정방향 흐름」의 순서다** — 권한 확인(`ws/routes.ts`)이 이미 지났고, 적용 전에 잠금을 본다. **판정은 이 트랜잭션 안에서
+        // 페이지 행을 잡고 한다** — 커밋까지 그 행을 쥐므로 판정 뒤 커밋 전에 겹치는 잠금이 서지 못한다(`lock/check.ts`의
+        // «판정은 페이지 행 안에서»). 소유자는 **사람**이므로 같은 사람의 다른 탭이 잡은 것에는 막히지 않는다.
+        // 막히면 던진다 — 아직 아무것도 안 썼고, 아래 `catch`가 423 프레임으로 옮긴다.
+        const blocked = await lockConflictError(app, trx, {
           projectId: connection.projectId,
+          pageId: frame.pageId,
+          baseSeq: frame.baseSeq,
+          ops: frame.ops,
           userId: connection.userId,
-          min: MIN_ROLE_FOR_FRAME.patch,
-          scopeProjectId: null,
-          credential: { kind: 'session', id: connection.sessionId },
         })
-      }
-      return edited
-    }, pageStaleOnLateCommit(app, connection.projectId, frame.pageId))
+        if (blocked !== null) throw blocked
+        const edited = await applyEdit(trx, {
+          projectId: connection.projectId,
+          pageId: frame.pageId,
+          baseSeq: frame.baseSeq,
+          ops: frame.ops,
+          // **actor는 연결이 든다.** 핸드셰이크가 세션 쿠키로 정한 값이고(설계서 「권한 모델」 — REST와 WS의 인증
+          // 경로가 하나다), 프레임이 실어 온 값이 아니다.
+          //
+          // **`auth/actor.ts`의 `requestActor`를 안 쓴다 — 여기에는 요청이 없다.** 그리고 쓸
+          // 이유도 없다: **WS는 쿠키만이다**(「권한 모델」 · `ws/routes.ts`의 `requireSessionAuth`가 토큰이
+          // 실린 핸드셰이크를 401로 끊는다). 토큰이 이 자리에 닿을 수 없으므로 언제나 `'user'`가
+          // 맞고, `test/actor-census.test.ts`가 그 판정을 표에 한 줄로 든다.
+          actor: { type: 'user', id: connection.userId, label: connection.userName },
+        })
+        // **커밋 순간의 권한 · 자격** — REST 와 같은 함수다(`auth/roles.ts`의 `recheckAtCommit`). 프레임을 받을 때의
+        // 확인(`ws/routes.ts`의 `stillAllowed`)은 잠금 **밖**이다 — `applyEdit`이 페이지 잠금에 선 동안 강등되거나
+        // 로그아웃하면 그 확인은 낡는다. 최소 역할은 프레임 수신과 같은 표의 값, 스코프는 없고 자격은 연결이 든 세션이다
+        // (WS 는 쿠키만이다).
+        if (edited.ok) {
+          await recheckAtCommit(trx, {
+            projectId: connection.projectId,
+            userId: connection.userId,
+            min: MIN_ROLE_FOR_FRAME.patch,
+            scopeProjectId: null,
+            credential: { kind: 'session', id: connection.sessionId },
+          })
+        }
+        return edited
+      },
+      pageStaleOnLateCommit(app, connection.projectId, frame.pageId),
+    )
   } catch (error) {
     // 잠금 충돌(423)과 재확인의 거절은 REST 봉투와 같은 값으로 낸 사람에게 돌려준다. 그 밖의 예외는 그대로 던진다 —
     // `ws/routes.ts`의 `catch`가 500 프레임으로 답한다.
@@ -132,24 +133,25 @@ export async function handlePatchFrame(
     app.log.warn({ pageId: frame.pageId, seq: outcome.seq, broadcast: settled.broadcast }, 'COMMIT 답을 잃었지만 새 연결로 커밋을 확인했다')
   }
 
-  if (settled.broadcast) notifyPageChanged(app, {
-    projectId: connection.projectId,
-    pageId: frame.pageId,
-    seq: outcome.seq,
-    ops: frame.ops,
-    warnings: outcome.warnings,
-    actor: { type: 'user', label: connection.userName },
-    origin: { connectionId: connection.id, sessionId: connection.sessionId },
-    // 이 경로에서는 연결이 곧 발신자라 제외가 언제나 성립한다. 그래도 싣는 것은 **프레임의
-    // 모양을 진입점에 따라 가르지 않기 위해서**다 — 받는 쪽이 어느 경로로 만들어진
-    // 프레임인지 알 필요가 없어야 한다.
-    //
-    // **그래서 이 줄을 지워도 죽는 케이스가 없다.** 이 값을 관측할 연결이 없다 — 되받는
-    // 사람이 없으므로 아무도 그것을 읽지 않는다. **지워도 되는 신호로 읽지 마라:** 발신자
-    // 제외가 성립하지 않는 경로(`routes/pages.ts`의 REST)는 같은 값을 싣고 그쪽은 케이스가
-    // 있다. 두 진입점이 같은 프레임을 내는 것이 이 줄의 이유다.
-    clientOpId: frame.clientOpId,
-  })
+  if (settled.broadcast)
+    notifyPageChanged(app, {
+      projectId: connection.projectId,
+      pageId: frame.pageId,
+      seq: outcome.seq,
+      ops: frame.ops,
+      warnings: outcome.warnings,
+      actor: { type: 'user', label: connection.userName },
+      origin: { connectionId: connection.id, sessionId: connection.sessionId },
+      // 이 경로에서는 연결이 곧 발신자라 제외가 언제나 성립한다. 그래도 싣는 것은 **프레임의
+      // 모양을 진입점에 따라 가르지 않기 위해서**다 — 받는 쪽이 어느 경로로 만들어진
+      // 프레임인지 알 필요가 없어야 한다.
+      //
+      // **그래서 이 줄을 지워도 죽는 케이스가 없다.** 이 값을 관측할 연결이 없다 — 되받는
+      // 사람이 없으므로 아무도 그것을 읽지 않는다. **지워도 되는 신호로 읽지 마라:** 발신자
+      // 제외가 성립하지 않는 경로(`routes/pages.ts`의 REST)는 같은 값을 싣고 그쪽은 케이스가
+      // 있다. 두 진입점이 같은 프레임을 내는 것이 이 줄의 이유다.
+      clientOpId: frame.clientOpId,
+    })
 
   return {
     type: 'patch-ack',

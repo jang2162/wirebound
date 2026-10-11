@@ -40,10 +40,9 @@ describe('nodesInRect', () => {
   })
 
   it('크기가 0 인 상자(그려지지 않은 노드)는 안 든다', () => {
-    expect(nodesInRect({ left: 0, top: 0, right: 600, bottom: 600 }, [...nodes, { id: 'empty', parentId: 'root', box: box(300, 300, 0, 0) }])).toEqual([
-      'card',
-      'text',
-    ])
+    expect(
+      nodesInRect({ left: 0, top: 0, right: 600, bottom: 600 }, [...nodes, { id: 'empty', parentId: 'root', box: box(300, 300, 0, 0) }]),
+    ).toEqual(['card', 'text'])
   })
 })
 
@@ -62,6 +61,11 @@ describe('좌표', () => {
   })
 
   it('문서 사각형을 표면 상자로 — 표면의 iframe 자리를 더한다(줌은 표면이 이미 진다)', () => {
-    expect(toSurfaceRect({ left: 10, top: 20, right: 60, bottom: 30 }, { left: 5, top: 7 })).toEqual({ left: 15, top: 27, width: 50, height: 10 })
+    expect(toSurfaceRect({ left: 10, top: 20, right: 60, bottom: 30 }, { left: 5, top: 7 })).toEqual({
+      left: 15,
+      top: 27,
+      width: 50,
+      height: 10,
+    })
   })
 })

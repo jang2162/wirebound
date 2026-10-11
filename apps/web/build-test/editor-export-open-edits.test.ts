@@ -58,7 +58,9 @@ describe.skipIf(!전제.ok)('열린 페이지의 JSON 내보내기와 보낸 편
         await new Promise((resolve) => setTimeout(resolve, 300))
         await hold.release()
         const download = await downloading
-        const file = JSON.parse(await readFile((await download.path())!, 'utf8')) as { schema: { root: { children?: { props?: { content?: string } }[] } } }
+        const file = JSON.parse(await readFile((await download.path())!, 'utf8')) as {
+          schema: { root: { children?: { props?: { content?: string } }[] } }
+        }
         const exported = (file.schema.root.children ?? []).map((child) => child.props?.content)
         // eslint-disable-next-line no-console
         console.log(`[열린 페이지 내보내기] 파일 ${JSON.stringify(exported)}`)

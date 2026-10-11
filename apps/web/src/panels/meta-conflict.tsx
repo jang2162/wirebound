@@ -80,15 +80,36 @@ export function MetaConflict(props: {
       <p className="wb-shell-meta-conflict-theirs">{shown(what, theirs)}</p>
       <div className="wb-shell-meta-conflict-actions">
         {props.onOverwrite === undefined ? (
-          <button type="button" className="wb-shell-meta-conflict-button" aria-disabled={off || undefined} title={reason} aria-description={reason} onClick={unless(props.onDiscard)}>
+          <button
+            type="button"
+            className="wb-shell-meta-conflict-button"
+            aria-disabled={off || undefined}
+            title={reason}
+            aria-description={reason}
+            onClick={unless(props.onDiscard)}
+          >
             확인
           </button>
         ) : (
           <>
-            <button type="button" className="wb-shell-meta-conflict-button" aria-disabled={off || undefined} title={reason} aria-description={reason} onClick={unless(props.onOverwrite)}>
+            <button
+              type="button"
+              className="wb-shell-meta-conflict-button"
+              aria-disabled={off || undefined}
+              title={reason}
+              aria-description={reason}
+              onClick={unless(props.onOverwrite)}
+            >
               {late ? '지금 글로 덮기' : '내 글로 덮기'}
             </button>
-            <button type="button" className="wb-shell-meta-conflict-button" aria-disabled={off || undefined} title={reason} aria-description={reason} onClick={unless(props.onDiscard)}>
+            <button
+              type="button"
+              className="wb-shell-meta-conflict-button"
+              aria-disabled={off || undefined}
+              title={reason}
+              aria-description={reason}
+              onClick={unless(props.onDiscard)}
+            >
               {late ? '앞서 보낸 글로 두기' : '내 글 버리기'}
             </button>
           </>

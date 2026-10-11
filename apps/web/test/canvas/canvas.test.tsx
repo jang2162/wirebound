@@ -353,7 +353,13 @@ describe('캔버스', () => {
       apiOverrides: {
         patchOps: async (_projectId, _pageId, body) => {
           seq += 1
-          return { seq, revisionId: `rev-${seq}`, inverse: [], schemaVersion: 1, ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }) }
+          return {
+            seq,
+            revisionId: `rev-${seq}`,
+            inverse: [],
+            schemaVersion: 1,
+            ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+          }
         },
       },
     })
@@ -464,9 +470,7 @@ describe('캔버스', () => {
     const stale = commits.filter(
       (commit) =>
         commit.path === OTHER_PAGE_ROUTE &&
-        (commit.canvasRootId === 'n-root' ||
-          commit.structureTypes.includes('Flex') ||
-          commit.panelTitle === 'List'),
+        (commit.canvasRootId === 'n-root' || commit.structureTypes.includes('Flex') || commit.panelTitle === 'List'),
     )
     expect(stale).toEqual([])
   })

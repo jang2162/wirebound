@@ -275,9 +275,7 @@ export async function waitForNode(nodeId: string): Promise<HTMLElement> {
 
 /** 캔버스 프레임. 뷰포트 폭·줌이 실제 치수로 이어졌는지 보는 자리다. */
 export function canvasFrame(): HTMLElement {
-  const frame = screen
-    .getByRole('main', { name: '캔버스' })
-    .querySelector<HTMLElement>('.wb-shell-canvas-frame')
+  const frame = screen.getByRole('main', { name: '캔버스' }).querySelector<HTMLElement>('.wb-shell-canvas-frame')
   if (frame === null) throw new Error('캔버스 프레임을 찾지 못했습니다')
   return frame
 }
@@ -331,9 +329,7 @@ export function structureTypes(): string[] {
   const region = document.body.querySelector('.wb-shell-structure')
   if (region === null) return []
   // 줄 글은 `타입 (별칭) 요약`이다 — 타입만 읽는다(`./panels/tree-row.ts` 의 `structureRowType`).
-  return [...region.querySelectorAll('.wb-shell-structure-node, .wb-shell-structure-broken')].map(
-    (row) => structureRowType(row) ?? '',
-  )
+  return [...region.querySelectorAll('.wb-shell-structure-node, .wb-shell-structure-broken')].map((row) => structureRowType(row) ?? '')
 }
 
 /** 속성 패널의 머리(선택 노드의 타입). 고른 것이 없으면 `null`이다. */

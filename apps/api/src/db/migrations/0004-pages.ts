@@ -42,11 +42,7 @@ export const migration: Migration = {
       .addColumn('updated_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`now()`))
       .execute()
 
-    await db.schema
-      .createIndex('pages_project_menu_sort_idx')
-      .on('pages')
-      .columns(['project_id', 'menu_node_id', 'sort_order'])
-      .execute()
+    await db.schema.createIndex('pages_project_menu_sort_idx').on('pages').columns(['project_id', 'menu_node_id', 'sort_order']).execute()
   },
 
   // 인덱스는 테이블과 함께 자동으로 사라지므로 따로 DROP하지 않는다. `revisions`가

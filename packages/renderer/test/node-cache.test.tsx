@@ -22,7 +22,8 @@ beforeAll(() => {
 })
 
 const text = (id: string, content: string): WbNode => ({ id, type: 'Text', props: { content } })
-const page = (...children: WbNode[]): PageDocument => ({ version: 1, root: { id: 'n_root', type: 'Page', children } }) as unknown as PageDocument
+const page = (...children: WbNode[]): PageDocument =>
+  ({ version: 1, root: { id: 'n_root', type: 'Page', children } }) as unknown as PageDocument
 
 /** 뿌리 엘리먼트가 든 자식 엘리먼트들 — `renderNodeIn` 이 각 자식을 `<Fragment key>` 로 감싸므로 한 겹 벗긴다. */
 function childElements(root: ReactElement): ReactElement[] {

@@ -38,11 +38,7 @@ export const MISSING_DATABASE_SQLSTATE = '3D000'
  * **나가는 값에 자격 문자열이 없다.** 이름만 `describeDatabaseTarget`을 지나 뽑는다.
  */
 export function missingDatabaseHint(error: unknown, databaseUrl: string): string | undefined {
-  if (
-    typeof error !== 'object' ||
-    error === null ||
-    (error as { code?: unknown }).code !== MISSING_DATABASE_SQLSTATE
-  ) {
+  if (typeof error !== 'object' || error === null || (error as { code?: unknown }).code !== MISSING_DATABASE_SQLSTATE) {
     return undefined
   }
   return [

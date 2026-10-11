@@ -35,11 +35,20 @@ const THEMES = ['system-admin', 'system-commerce', 'system-docs', 'system-portal
 /** 끊을 자리가 없는 긴 낱말 — 관리자 화면의 이메일 · 주소는 흔히 이 꼴이다. */
 const LONG_EMAIL = 'hong.gildong.very.long.account@example-company.co.kr'
 
-const text = (id: string, content: string, role?: string) => ({ id, type: 'Text', props: role === undefined ? { content } : { content, role } })
+const text = (id: string, content: string, role?: string) => ({
+  id,
+  type: 'Text',
+  props: role === undefined ? { content } : { content, role },
+})
 
 /** 관리자 목록 — 폼(SearchForm) 뒤에 노드가 이어진다. variant 는 달지 않는다(테마의 `defaultVariant` 로 선다). */
 const LIST_NODES = [
-  { id: 'a_sec', type: 'Section', props: {}, children: [text('a_h1', '회원 관리', 'h1'), text('a_lead', '가입한 회원을 찾고 상태를 바꿉니다.')] },
+  {
+    id: 'a_sec',
+    type: 'Section',
+    props: {},
+    children: [text('a_h1', '회원 관리', 'h1'), text('a_lead', '가입한 회원을 찾고 상태를 바꿉니다.')],
+  },
   {
     id: 'a_search',
     type: 'SearchForm',
@@ -60,16 +69,37 @@ const DETAIL_NODES = [
   {
     id: 'b_kv',
     type: 'KeyValue',
-    props: { columns: 2, pairs: [{ key: '이름', value: '홍길동' }, { key: '이메일', value: LONG_EMAIL }, { key: '주소', value: '서울특별시 강남구 테헤란로 123 12층' }, { key: '등급', value: 'VIP' }] },
+    props: {
+      columns: 2,
+      pairs: [
+        { key: '이름', value: '홍길동' },
+        { key: '이메일', value: LONG_EMAIL },
+        { key: '주소', value: '서울특별시 강남구 테헤란로 123 12층' },
+        { key: '등급', value: 'VIP' },
+      ],
+    },
   },
-  { id: 'b_form', type: 'EntryForm', props: { title: '회원 정보 수정' }, children: [{ id: 'b_f1', type: 'Field', props: { label: '이름', required: true } }, { id: 'b_f2', type: 'Field', props: { label: '메모', control: 'textarea' } }] },
+  {
+    id: 'b_form',
+    type: 'EntryForm',
+    props: { title: '회원 정보 수정' },
+    children: [
+      { id: 'b_f1', type: 'Field', props: { label: '이름', required: true } },
+      { id: 'b_f2', type: 'Field', props: { label: '메모', control: 'textarea' } },
+    ],
+  },
   { id: 'b_card', type: 'Card', props: { title: '상담 메모' }, children: [text('b_memo', '배송 지연 문의 — 부분 환불 처리.')] },
   { id: 'b_save', type: 'Button', variant: 'primary', props: { label: '저장' } },
 ]
 
 /** 세로 구분선 둘 — 가로 Flex 안 하나 · 블록 부모(Page) 바로 밑 하나. 갤러리 표본(`Divider — 세로`)은 뒤의 꼴이다. */
 const DIVIDER_NODES = [
-  { id: 'd_bar', type: 'Flex', props: { align: 'center' }, children: [text('d_l', '왼쪽'), { id: 'd_in', type: 'Divider', props: { direction: 'vertical' } }, text('d_r', '오른쪽')] },
+  {
+    id: 'd_bar',
+    type: 'Flex',
+    props: { align: 'center' },
+    children: [text('d_l', '왼쪽'), { id: 'd_in', type: 'Divider', props: { direction: 'vertical' } }, text('d_r', '오른쪽')],
+  },
   { id: 'd_root', type: 'Divider', props: { direction: 'vertical' } },
   text('d_after', '아래 글'),
 ]
@@ -88,7 +118,13 @@ async function reviewProject(stack: EditorStack, owner: Session): Promise<Fixtur
     if (r.status >= 300) throw new Error(`픽스처 ${what} ${r.status} ${JSON.stringify(r.body)}`)
     return r.body
   }
-  const project = ok(await call('POST', '/projects', { name: '회원 관리 설계서', slug: `sysrv-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }), '프로젝트')
+  const project = ok(
+    await call('POST', '/projects', {
+      name: '회원 관리 설계서',
+      slug: `sysrv-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    }),
+    '프로젝트',
+  )
   const menu = ok(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '관리자' }), '메뉴')
   const pages: Record<string, string> = {}
   for (const [key, title, nodes] of [
@@ -97,11 +133,19 @@ async function reviewProject(stack: EditorStack, owner: Session): Promise<Fixtur
     ['divider', '구분선', DIVIDER_NODES],
   ] as const) {
     const page = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title }), title)
-    ok(await call('PATCH', `/projects/${project.id}/pages/${page.id}/ops`, { baseSeq: 0, ops: nodes.map((value, i) => ({ op: 'add', path: `/root/children/${i}`, value })) }), `ops ${title}`)
+    ok(
+      await call('PATCH', `/projects/${project.id}/pages/${page.id}/ops`, {
+        baseSeq: 0,
+        ops: nodes.map((value, i) => ({ op: 'add', path: `/root/children/${i}`, value })),
+      }),
+      `ops ${title}`,
+    )
     pages[key] = page.id
   }
-  for (const nodeId of ['a_search', 'a_list', 'a_card']) ok(await call('POST', `/projects/${project.id}/pages/${pages.list}/comments`, { nodeId, body: '코멘트' }), '코멘트')
-  for (const nodeId of ['b_kv', 'b_form', 'b_card']) ok(await call('POST', `/projects/${project.id}/pages/${pages.detail}/comments`, { nodeId, body: '코멘트' }), '코멘트')
+  for (const nodeId of ['a_search', 'a_list', 'a_card'])
+    ok(await call('POST', `/projects/${project.id}/pages/${pages.list}/comments`, { nodeId, body: '코멘트' }), '코멘트')
+  for (const nodeId of ['b_kv', 'b_form', 'b_card'])
+    ok(await call('POST', `/projects/${project.id}/pages/${pages.detail}/comments`, { nodeId, body: '코멘트' }), '코멘트')
   return { id: project.id, call, pages: pages as Fixture['pages'] }
 }
 
@@ -142,12 +186,19 @@ async function openBundlePage(stack: EditorStack, file: string, width: number): 
 }
 
 /** 에디터에서 그 페이지를 열고 캔버스 iframe 을 낸다 — 테마 시트가 실린 뒤. */
-async function openCanvas(page: Page, projectId: string, pageId: string, anchor: string): Promise<{ iframe: import('playwright-core').ElementHandle; frame: Frame }> {
+async function openCanvas(
+  page: Page,
+  projectId: string,
+  pageId: string,
+  anchor: string,
+): Promise<{ iframe: import('playwright-core').ElementHandle; frame: Frame }> {
   await page.goto(`/projects/${projectId}/pages/${pageId}`)
   const iframe = await page.waitForSelector('iframe.wb-shell-canvas-iframe')
   const frame = (await iframe.contentFrame())!
   await frame.waitForSelector(`[data-wb-id="${anchor}"]`, { state: 'attached' })
-  await frame.waitForFunction(() => [...document.querySelectorAll('link[data-wb-style="theme"]')].every((l) => (l as HTMLLinkElement).sheet !== null))
+  await frame.waitForFunction(() =>
+    [...document.querySelectorAll('link[data-wb-style="theme"]')].every((l) => (l as HTMLLinkElement).sheet !== null),
+  )
   await frame.evaluate(() => document.fonts.ready.then(() => undefined))
   return { iframe, frame }
 }
@@ -178,9 +229,28 @@ const TEXT_PAST_ROOT = `(scope) => {
 
 /** 미리보기 문서의 요소마다 계산 스타일 — 상자 좌표는 넣지 않는다(자라는 요소가 좌표를 흔든다). */
 const STYLE_PROPS = [
-  'color', 'backgroundColor', 'backgroundImage', 'borderTopColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderTopLeftRadius',
-  'borderBottomRightRadius', 'boxShadow', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'paddingTop', 'paddingLeft',
-  'marginTop', 'rowGap', 'columnGap', 'maxWidth', 'gridTemplateColumns',
+  'color',
+  'backgroundColor',
+  'backgroundImage',
+  'borderTopColor',
+  'borderBottomColor',
+  'borderLeftColor',
+  'borderTopWidth',
+  'borderTopLeftRadius',
+  'borderBottomRightRadius',
+  'boxShadow',
+  'fontFamily',
+  'fontSize',
+  'fontWeight',
+  'lineHeight',
+  'letterSpacing',
+  'paddingTop',
+  'paddingLeft',
+  'marginTop',
+  'rowGap',
+  'columnGap',
+  'maxWidth',
+  'gridTemplateColumns',
 ]
 const STYLE_SNAPSHOT = `(props) => [...document.body.querySelectorAll('*')].map((el) => [null, '::before', '::after'].map((p) => { const cs = getComputedStyle(el, p); return p && (cs.content === 'none' || cs.content === 'normal') ? '' : props.map((k) => cs[k]).join('|') }).join('#'))`
 
@@ -224,45 +294,60 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 캔버스 · 번들 · 
    * 세로 Divider 의 `min-height: 100%` 는 높이가 정해지지 않은 부모에서 표준 모드면 0(번들 · PPTX 에서 선이 안 보임)이고, 캔버스
    * iframe(quirks 모드 — 아래 «캔버스 = 번들») 에서는 뷰포트(= iframe) 높이가 되어 iframe 이 문서 높이를 따라 자라는 고리가 선다.
    */
-  it.each(THEMES)('%s — 세로 Divider 가 캔버스를 키우지 않고 번들에서 보인다', async (themeId) => {
-    await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
-    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 900 } })
-    let heights: number[]
-    try {
-      const { iframe } = await openCanvas(page, fixture.id, fixture.pages.divider, 'd_after')
-      const height = () => iframe.evaluate((el) => Math.round((el as HTMLIFrameElement).getBoundingClientRect().height))
-      await page.waitForTimeout(500)
-      const first = await height()
-      await page.waitForTimeout(2000)
-      heights = [first, await height()]
-    } finally {
-      await context.close()
-    }
-    const files = await bundleFiles(stack, alice, fixture.id)
-    const bundle = await openBundlePage(stack, files['구분선']!, 1280)
-    let drawn: number[]
-    try {
-      drawn = await bundle.page.evaluate(() => ['d_in', 'd_root'].map((id) => Math.round(document.querySelector(`[data-wb-id="${id}"]`)!.getBoundingClientRect().height)))
-    } finally {
-      await bundle.context.close()
-    }
-    expect({ canvasGrowth: heights[1]! - heights[0]!, bundleDividerVisible: drawn.map((h) => h > 0) }, `캔버스 iframe 높이 ${heights.join(' → ')} · 번들 Divider 높이 ${drawn.join(' · ')}`).toEqual({
-      canvasGrowth: 0,
-      bundleDividerVisible: [true, true],
-    })
-  }, 120_000)
+  it.each(THEMES)(
+    '%s — 세로 Divider 가 캔버스를 키우지 않고 번들에서 보인다',
+    async (themeId) => {
+      await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 900 } })
+      let heights: number[]
+      try {
+        const { iframe } = await openCanvas(page, fixture.id, fixture.pages.divider, 'd_after')
+        const height = () => iframe.evaluate((el) => Math.round((el as HTMLIFrameElement).getBoundingClientRect().height))
+        await page.waitForTimeout(500)
+        const first = await height()
+        await page.waitForTimeout(2000)
+        heights = [first, await height()]
+      } finally {
+        await context.close()
+      }
+      const files = await bundleFiles(stack, alice, fixture.id)
+      const bundle = await openBundlePage(stack, files['구분선']!, 1280)
+      let drawn: number[]
+      try {
+        drawn = await bundle.page.evaluate(() =>
+          ['d_in', 'd_root'].map((id) => Math.round(document.querySelector(`[data-wb-id="${id}"]`)!.getBoundingClientRect().height)),
+        )
+      } finally {
+        await bundle.context.close()
+      }
+      expect(
+        { canvasGrowth: heights[1]! - heights[0]!, bundleDividerVisible: drawn.map((h) => h > 0) },
+        `캔버스 iframe 높이 ${heights.join(' → ')} · 번들 Divider 높이 ${drawn.join(' · ')}`,
+      ).toEqual({
+        canvasGrowth: 0,
+        bundleDividerVisible: [true, true],
+      })
+    },
+    120_000,
+  )
 
-  it.each(THEMES)('%s — 문서 폭 390 에서 글자가 문서 밖으로 안 나간다(번들)', async (themeId) => {
-    await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
-    const files = await bundleFiles(stack, alice, fixture.id)
-    const { context, page } = await openBundlePage(stack, files['회원-상세']!, 390)
-    try {
-      expect(await page.evaluate(() => document.querySelector('.wb-export-canvas [data-wb-id]')!.getBoundingClientRect().width)).toBeCloseTo(390, 0)
-      expect(await page.evaluate(`(${TEXT_PAST_ROOT})('.wb-export-canvas ')`)).toEqual([])
-    } finally {
-      await context.close()
-    }
-  }, 120_000)
+  it.each(THEMES)(
+    '%s — 문서 폭 390 에서 글자가 문서 밖으로 안 나간다(번들)',
+    async (themeId) => {
+      await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
+      const files = await bundleFiles(stack, alice, fixture.id)
+      const { context, page } = await openBundlePage(stack, files['회원-상세']!, 390)
+      try {
+        expect(
+          await page.evaluate(() => document.querySelector('.wb-export-canvas [data-wb-id]')!.getBoundingClientRect().width),
+        ).toBeCloseTo(390, 0)
+        expect(await page.evaluate(`(${TEXT_PAST_ROOT})('.wb-export-canvas ')`)).toEqual([])
+      } finally {
+        await context.close()
+      }
+    },
+    120_000,
+  )
 
   /**
    * 캔버스 iframe 은 `about:blank` 이 이미 `body` 를 가져 doctype 을 안 쓰고 quirks 모드(`BackCompat`)로 선다
@@ -292,59 +377,76 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 캔버스 · 번들 · 
       await bundle.context.close()
     }
     expect(Object.keys(canvas).length).toBeGreaterThan(5)
-    const apart = Object.keys(canvas).filter((id) => Math.abs(canvas[id]! - exported[id]!) > 1).map((id) => `${id} ${canvas[id]} 대 ${exported[id]}`)
+    const apart = Object.keys(canvas)
+      .filter((id) => Math.abs(canvas[id]! - exported[id]!) > 1)
+      .map((id) => `${id} ${canvas[id]} 대 ${exported[id]}`)
     expect(apart, `캔버스 문서 모드 ${mode}`).toEqual([])
   }, 120_000)
 
-  it.each(THEMES)('%s — PPTX 화면 이미지가 720 폭을 넘지 않는다(번호 마커 포함)', async (themeId) => {
-    await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
-    const preview = await fixture.call('GET', `/projects/${fixture.id}/export/preview?format=pptx`)
-    expect({ screenless: preview.body.screenless, screenFailures: preview.body.screenFailures }).toEqual({ screenless: [], screenFailures: [] })
-    const response = await fetch(`${stack.apiUrl}/api/projects/${fixture.id}/export?format=pptx`, { headers: { cookie: alice.cookie } })
-    const entries = unzipSync(new Uint8Array(await response.arrayBuffer()))
-    const widths = Object.entries(entries)
-      .filter(([path]) => path.startsWith('ppt/media/') && path.endsWith('.png'))
-      .map(([, bytes]) => new DataView(bytes.buffer, bytes.byteOffset).getUint32(16))
-    expect(widths.length).toBe(3)
-    // 그리는 자는 720 CSS px 를 기기 배율 2 로 찍는다 — 넘친 장은 그 폭보다 넓게 찍힌다(`screen-render-chromium.ts` 의 `PAGE_SIZE`).
-    expect(widths.filter((w) => w > 1440)).toEqual([])
-  }, 120_000)
+  it.each(THEMES)(
+    '%s — PPTX 화면 이미지가 720 폭을 넘지 않는다(번호 마커 포함)',
+    async (themeId) => {
+      await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
+      const preview = await fixture.call('GET', `/projects/${fixture.id}/export/preview?format=pptx`)
+      expect({ screenless: preview.body.screenless, screenFailures: preview.body.screenFailures }).toEqual({
+        screenless: [],
+        screenFailures: [],
+      })
+      const response = await fetch(`${stack.apiUrl}/api/projects/${fixture.id}/export?format=pptx`, { headers: { cookie: alice.cookie } })
+      const entries = unzipSync(new Uint8Array(await response.arrayBuffer()))
+      const widths = Object.entries(entries)
+        .filter(([path]) => path.startsWith('ppt/media/') && path.endsWith('.png'))
+        .map(([, bytes]) => new DataView(bytes.buffer, bytes.byteOffset).getUint32(16))
+      expect(widths.length).toBe(3)
+      // 그리는 자는 720 CSS px 를 기기 배율 2 로 찍는다 — 넘친 장은 그 폭보다 넓게 찍힌다(`screen-render-chromium.ts` 의 `PAGE_SIZE`).
+      expect(widths.filter((w) => w > 1440)).toEqual([])
+    },
+    120_000,
+  )
 
-  it.each(THEMES)('%s — 토큰 칸마다 값을 바꾸면 미리보기의 계산 스타일이 바뀐다', async (themeId) => {
-    await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
-    const manifest = (await fixture.call('GET', `/projects/${fixture.id}/theme`)).body.manifest
-    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 1000 } })
-    const silent: string[] = []
-    try {
-      await page.goto(`/projects/${fixture.id}/settings`)
-      const form = page.getByRole('group', { name: '토큰' })
-      await form.locator('fieldset').first().waitFor()
-      const handle = await page.waitForSelector('.wb-shell-settings-preview iframe')
-      const frame = (await handle.contentFrame())!
-      await frame.waitForSelector('[data-wb-gallery-item]')
-      await frame.evaluate(() => document.fonts.ready.then(() => undefined))
-      const snapshot = async (): Promise<string[]> => (await frame.evaluate(`(${STYLE_SNAPSHOT})(${JSON.stringify(STYLE_PROPS)})`)) as string[]
-      for (const [key, decl] of Object.entries<any>(manifest.tokens.items)) {
-        const next = otherValue(decl.type, decl.default, decl.options)
-        const cssVar = `--wb-${key.replace(/\./g, '-')}`
-        const field = form.getByLabel(decl.label, { exact: true })
-        const before = await snapshot()
-        if (decl.type === 'select') await field.selectOption(String(next))
-        else if (decl.type === 'length' && /^-?[\d.]+[a-z%]+$/.test(String(decl.default))) await field.fill(String(next).replace(/[a-z%]+$/, ''))
-        else await field.fill(String(next))
-        // 미리보기의 토큰 시트가 새 값을 실은 뒤에 잰다 — 안 실렸으면 이 칸은 잰 것이 아니다.
-        await expect
-          .poll(() => frame.evaluate((v) => getComputedStyle(document.documentElement).getPropertyValue(v).replace(/\s/g, ''), cssVar), { timeout: 5000 })
-          .toBe(String(next).replace(/\s/g, ''))
-        await page.waitForTimeout(150)
-        const after = await snapshot()
-        if (!after.some((row, i) => row !== before[i])) silent.push(`${key}(${decl.label})`)
-        await field.locator('xpath=ancestor::div[@class="wb-shell-settings-token"]').getByRole('button', { name: '기본값으로' }).click()
+  it.each(THEMES)(
+    '%s — 토큰 칸마다 값을 바꾸면 미리보기의 계산 스타일이 바뀐다',
+    async (themeId) => {
+      await putTheme(fixture.call, fixture.id, { themeId, version: seededVersion(themeId), tokens: {} })
+      const manifest = (await fixture.call('GET', `/projects/${fixture.id}/theme`)).body.manifest
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 1000 } })
+      const silent: string[] = []
+      try {
+        await page.goto(`/projects/${fixture.id}/settings`)
+        const form = page.getByRole('group', { name: '토큰' })
+        await form.locator('fieldset').first().waitFor()
+        const handle = await page.waitForSelector('.wb-shell-settings-preview iframe')
+        const frame = (await handle.contentFrame())!
+        await frame.waitForSelector('[data-wb-gallery-item]')
+        await frame.evaluate(() => document.fonts.ready.then(() => undefined))
+        const snapshot = async (): Promise<string[]> =>
+          (await frame.evaluate(`(${STYLE_SNAPSHOT})(${JSON.stringify(STYLE_PROPS)})`)) as string[]
+        for (const [key, decl] of Object.entries<any>(manifest.tokens.items)) {
+          const next = otherValue(decl.type, decl.default, decl.options)
+          const cssVar = `--wb-${key.replace(/\./g, '-')}`
+          const field = form.getByLabel(decl.label, { exact: true })
+          const before = await snapshot()
+          if (decl.type === 'select') await field.selectOption(String(next))
+          else if (decl.type === 'length' && /^-?[\d.]+[a-z%]+$/.test(String(decl.default)))
+            await field.fill(String(next).replace(/[a-z%]+$/, ''))
+          else await field.fill(String(next))
+          // 미리보기의 토큰 시트가 새 값을 실은 뒤에 잰다 — 안 실렸으면 이 칸은 잰 것이 아니다.
+          await expect
+            .poll(() => frame.evaluate((v) => getComputedStyle(document.documentElement).getPropertyValue(v).replace(/\s/g, ''), cssVar), {
+              timeout: 5000,
+            })
+            .toBe(String(next).replace(/\s/g, ''))
+          await page.waitForTimeout(150)
+          const after = await snapshot()
+          if (!after.some((row, i) => row !== before[i])) silent.push(`${key}(${decl.label})`)
+          await field.locator('xpath=ancestor::div[@class="wb-shell-settings-token"]').getByRole('button', { name: '기본값으로' }).click()
+        }
+      } finally {
+        await context.close()
       }
-    } finally {
-      await context.close()
-    }
-    expect(Object.keys(manifest.tokens.items).length).toBeGreaterThan(10)
-    expect(silent).toEqual([])
-  }, 240_000)
+      expect(Object.keys(manifest.tokens.items).length).toBeGreaterThan(10)
+      expect(silent).toEqual([])
+    },
+    240_000,
+  )
 })

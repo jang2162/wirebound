@@ -113,9 +113,7 @@ function expandNode(
 
   if (template.slot !== undefined) {
     if (!declared.has(template.slot)) {
-      issues.push(
-        issue('unknown-slot', path, `slots에 선언되지 않은 슬롯입니다: ${template.slot}`),
-      )
+      issues.push(issue('unknown-slot', path, `slots에 선언되지 않은 슬롯입니다: ${template.slot}`))
     } else if (!slots.has(template.slot)) {
       // **처음 만난 노드가 이긴다.** 한 슬롯 이름을 노드 둘이 쓰는 것을 `checkPatterns`가
       // 막지 않으므로(그쪽 주석) 전개가 어느 쪽을 고를지 정해야 한다. 규격에 없는 선택이라

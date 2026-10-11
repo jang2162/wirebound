@@ -9,9 +9,7 @@ export const TextDef = defineComponent({
   group: 'document',
   props: z.strictObject({
     content: z.string().default('텍스트'),
-    role: z
-      .enum(['display', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'body', 'caption'])
-      .default('body'),
+    role: z.enum(['display', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'body', 'caption']).default('body'),
   }),
   editor: [
     { prop: 'content', control: 'textarea', label: '내용' },
@@ -56,9 +54,7 @@ export const DividerDef = defineComponent({
   props: z.strictObject({
     direction: z.enum(['horizontal', 'vertical']).default('horizontal'),
   }),
-  editor: [
-    { prop: 'direction', control: 'select', label: '방향', options: ['horizontal', 'vertical'] },
-  ],
+  editor: [{ prop: 'direction', control: 'select', label: '방향', options: ['horizontal', 'vertical'] }],
   variantFrom: 'direction',
   summary: (props) => axisWord(props.direction),
   states: [],

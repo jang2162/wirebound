@@ -113,7 +113,13 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
     }
     if (definition === null) {
       const message = loadError ?? 'theme.js 가 테마를 등록하지 않았습니다'
-      return { items: 0, errors: [{ type: '', variant: undefined, label: '', message, source: 'bundle' }], unusedTokens, undeclaredVariantsUsedByPatterns, focusables: [] }
+      return {
+        items: 0,
+        errors: [{ type: '', variant: undefined, label: '', message, source: 'bundle' }],
+        unusedTokens,
+        undeclaredVariantsUsedByPatterns,
+        focusables: [],
+      }
     }
     const viewKeyErrors = findBadViewKeys(definition)
     const theme: ThemeDefinition = { ...definition, manifest }
@@ -178,7 +184,9 @@ function focusReceivers(container: Element): Element[] {
 }
 
 function openingTag(element: Element): string {
-  const attributes = [...element.attributes].filter((attribute) => attribute.name === 'tabindex' || attribute.name === 'role' || attribute.name === 'controls')
+  const attributes = [...element.attributes].filter(
+    (attribute) => attribute.name === 'tabindex' || attribute.name === 'role' || attribute.name === 'controls',
+  )
   return `<${element.localName}${attributes.map((attribute) => ` ${attribute.name}${attribute.value === '' ? '' : `="${attribute.value}"`}`).join('')}>`
 }
 
@@ -188,7 +196,13 @@ function openingTag(element: Element): string {
  * `install` 된 카탈로그에서 읽으므로 `installCatalog()` 뒤에 부른다.
  */
 function findBadViewKeys(definition: ThemeDefinition): ThemeCheckError[] {
-  return unusedViewKeys(definition.views).map(({ key, message }) => ({ type: key, variant: undefined, label: '', message, source: 'bundle' }))
+  return unusedViewKeys(definition.views).map(({ key, message }) => ({
+    type: key,
+    variant: undefined,
+    label: '',
+    message,
+    source: 'bundle',
+  }))
 }
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -215,7 +229,7 @@ function findUnusedTokens(files: WbthemeFiles): string[] {
   const usesKey = (key: string) => new RegExp(`(['"\`])${escape(key)}\\1(?!\\s*:)`).test(js)
   const used = new Set(keys.filter((key) => usesVar(text, key) || usesKey(key)))
   // 기본값의 가리킴을 끝까지 따라간다.
-  for (let grew = true; grew; ) {
+  for (let grew = true; grew;) {
     grew = false
     for (const key of keys) {
       if (used.has(key)) continue
@@ -241,7 +255,8 @@ function findUndeclaredPatternVariants(manifest: ThemeManifest): UndeclaredPatte
       const declared = manifest.components?.[node.type]?.variants.some((v) => v.id === node.variant) ?? false
       if (!declared) found.push({ pattern, path, type: node.type, variant: node.variant })
     }
-    if (Array.isArray(node.children)) node.children.forEach((child, index) => visit(pattern, child as PatternNodeLike, `${path}.children.${index}`))
+    if (Array.isArray(node.children))
+      node.children.forEach((child, index) => visit(pattern, child as PatternNodeLike, `${path}.children.${index}`))
   }
   for (const [name, pattern] of Object.entries(manifest.patterns ?? {})) {
     const schema = (pattern as { schema?: unknown } | null)?.schema
@@ -257,10 +272,12 @@ function findUndeclaredPatternVariants(manifest: ThemeManifest): UndeclaredPatte
 export function formatCheckReport(report: ThemeCheckReport): { ok: boolean; lines: string[] } {
   const lines: string[] = [`갤러리 칸 ${report.items} 개`]
   for (const error of report.errors) {
-    const at = error.source === 'bundle' ? '번들' : `${error.type}${error.variant === undefined ? '' : ` · ${error.variant}`} — ${error.label}`
+    const at =
+      error.source === 'bundle' ? '번들' : `${error.type}${error.variant === undefined ? '' : ` · ${error.variant}`} — ${error.label}`
     lines.push(`✗ [${error.source}] ${at}: ${error.message}`)
   }
-  for (const key of report.unusedTokens) lines.push(`✗ 안 쓰는 토큰: ${key} — theme.css · 뷰 어디서도 var(${tokenVar(key)}) · useToken 으로 안 읽는다`)
+  for (const key of report.unusedTokens)
+    lines.push(`✗ 안 쓰는 토큰: ${key} — theme.css · 뷰 어디서도 var(${tokenVar(key)}) · useToken 으로 안 읽는다`)
   for (const found of report.undeclaredVariantsUsedByPatterns) {
     lines.push(`✗ 패턴 ${found.pattern} 의 ${found.path}: ${found.type} 의 variant "${found.variant}" 는 components 에 없다`)
   }
@@ -273,6 +290,10 @@ export function formatCheckReport(report: ThemeCheckReport): { ok: boolean; line
     lines.push(`⚠ 포커스 받는 요소 ${key} (${cells} 칸) — 캔버스에서 누른 뒤 단축키 · 노드 복사가 안 섭니다. 단추 · 링크만 쓰세요`)
   }
   const ok = report.errors.length === 0 && report.unusedTokens.length === 0 && report.undeclaredVariantsUsedByPatterns.length === 0
-  lines.push(ok ? '✓ 오류 없음' : `✗ 오류 ${report.errors.length} · 안 쓰는 토큰 ${report.unusedTokens.length} · 선언 밖 variant ${report.undeclaredVariantsUsedByPatterns.length}`)
+  lines.push(
+    ok
+      ? '✓ 오류 없음'
+      : `✗ 오류 ${report.errors.length} · 안 쓰는 토큰 ${report.unusedTokens.length} · 선언 밖 variant ${report.undeclaredVariantsUsedByPatterns.length}`,
+  )
   return { ok, lines }
 }

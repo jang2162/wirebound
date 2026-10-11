@@ -36,7 +36,12 @@ export function checkBindingTokens(
   const withinLength: Record<string, string | number> = {}
   for (const [key, value] of Object.entries(tokens)) {
     if (typeof value === 'string' && value.length > TOKEN_VALUE_MAX) {
-      issues.push({ code: 'token-too-long', path: `tokens.${key}`, key, message: `토큰 값은 ${TOKEN_VALUE_MAX} 글자까지입니다(${value.length})` })
+      issues.push({
+        code: 'token-too-long',
+        path: `tokens.${key}`,
+        key,
+        message: `토큰 값은 ${TOKEN_VALUE_MAX} 글자까지입니다(${value.length})`,
+      })
     } else {
       withinLength[key] = value
     }
@@ -50,12 +55,15 @@ export function checkBindingTokens(
   }
 
   const items = manifest.tokens.items
-  const kept = Object.fromEntries(
-    Object.entries(withinLength).filter(([key, value]) => !bad.has(key) && value !== items[key]!.default),
-  )
+  const kept = Object.fromEntries(Object.entries(withinLength).filter(([key, value]) => !bad.has(key) && value !== items[key]!.default))
   const bytes = Buffer.byteLength(JSON.stringify(kept), 'utf8')
   if (bytes > TOKENS_JSON_MAX) {
-    issues.push({ code: 'token-too-large', path: 'tokens', key: null, message: `토큰 전체는 ${TOKENS_JSON_MAX} 바이트까지입니다(${bytes})` })
+    issues.push({
+      code: 'token-too-large',
+      path: 'tokens',
+      key: null,
+      message: `토큰 전체는 ${TOKENS_JSON_MAX} 바이트까지입니다(${bytes})`,
+    })
     return { tokens: {}, issues }
   }
   return { tokens: kept, issues }

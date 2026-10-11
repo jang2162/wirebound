@@ -14,9 +14,7 @@ import type { ScreenPage, ScreenResult } from './screen-render'
  * 어떤 산출물을 만들지. `zipRoot`·`zip`이 없으면 **압축하지 않는다** — 미리보기가 그것이다. `screens`가 거짓이면 pptx 의
  * 화면을 그리지 않는다(메인에 그리는 자가 없다).
  */
-export type ExportJobSpec =
-  | { kind: 'html'; zipRoot: string | null }
-  | { kind: 'pptx'; screens: boolean; zip: boolean }
+export type ExportJobSpec = { kind: 'html'; zipRoot: string | null } | { kind: 'pptx'; screens: boolean; zip: boolean }
 
 export type HtmlJobResult = {
   kind: 'html'

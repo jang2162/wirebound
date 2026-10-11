@@ -12,7 +12,17 @@
  * 목록 없이 저장된 프리셋의 가지는 페이지에 없는 상태면 뺀다(붙이기와 같은 `prepareNodesForPaste`). 뺀 결과 · 적용한 문서는 검증 오류가
  * 없다. 셸의 통지 문장은 붙이기와 같은 `droppedCasesNotice` 다.
  */
-import { applyOps, installCatalog, invertOps, partitionIssues, validatePage, VIEW_STATES_MAX, type PageDocument, type ViewState, type WbNode } from '@wirebound/schema'
+import {
+  applyOps,
+  installCatalog,
+  invertOps,
+  partitionIssues,
+  validatePage,
+  VIEW_STATES_MAX,
+  type PageDocument,
+  type ViewState,
+  type WbNode,
+} from '@wirebound/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { presetApply } from '../../src/edit/preset-apply'
 
@@ -41,7 +51,10 @@ function preset(): WbNode[] {
 }
 
 function page(viewStates?: ViewState[]): PageDocument {
-  const doc: PageDocument = { version: 1, root: { id: 'root', type: 'Page', children: [{ id: 'old', type: 'Text', props: { content: '옛것' } }] } }
+  const doc: PageDocument = {
+    version: 1,
+    root: { id: 'root', type: 'Page', children: [{ id: 'old', type: 'Text', props: { content: '옛것' } }] },
+  }
   return viewStates === undefined ? doc : { ...doc, viewStates }
 }
 

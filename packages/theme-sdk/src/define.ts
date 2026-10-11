@@ -17,9 +17,7 @@ export function defineManifest(manifest: ThemeManifest): ThemeManifest {
   return manifest
 }
 
-export function view<P extends Record<string, unknown> = Record<string, unknown>>(
-  render: (props: ViewProps<P>) => ReactElement,
-): View {
+export function view<P extends Record<string, unknown> = Record<string, unknown>>(render: (props: ViewProps<P>) => ReactElement): View {
   // 노드의 입력을 문맥으로 내린다 — `Root` 가 그것으로 prop 표지를 편다(`./marks.ts`).
   const component = (props: ViewProps) =>
     createElement(

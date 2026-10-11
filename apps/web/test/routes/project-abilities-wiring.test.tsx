@@ -28,7 +28,12 @@ vi.mock('../../src/projects/project-actions', async (importOriginal) => {
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 const PROJECT: ProjectView = {
-  id: 'p-1', name: '관리자 콘솔', slug: 'ac', description: null, role: 'owner', themeRev: 0,
+  id: 'p-1',
+  name: '관리자 콘솔',
+  slug: 'ac',
+  description: null,
+  role: 'owner',
+  themeRev: 0,
 }
 
 async function renderList(next: { rename: boolean; remove: boolean }): Promise<void> {
@@ -103,7 +108,10 @@ describe('판정과 화면의 배선', () => {
     expect(screen.getByLabelText('삭제하려면 프로젝트 이름을 입력하세요')).toBeDefined()
   })
 
-  for (const next of [{ rename: true, remove: true }, { rename: false, remove: true }]) {
+  for (const next of [
+    { rename: true, remove: true },
+    { rename: false, remove: true },
+  ]) {
     it(`목록 줄은 remove 가 열려도 삭제를 그리지 않는다 — ${JSON.stringify(next)}`, async () => {
       await renderList(next)
       expect(has('관리자 콘솔 삭제')).toBe(false)

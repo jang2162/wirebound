@@ -127,7 +127,14 @@ describe('브라우저가 끊으면 개발 프록시가 api 쪽 연결도 끊는
       req.on('data', (chunk: string) => {
         body += chunk
       })
-      const sighting: Sighting = { req, res, ended, get body() { return body } }
+      const sighting: Sighting = {
+        req,
+        res,
+        ended,
+        get body() {
+          return body
+        },
+      }
       seen.push(sighting)
       waiting.get(url)?.(sighting)
       if (url === SLOW_URL) {

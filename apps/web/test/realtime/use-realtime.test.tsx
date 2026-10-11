@@ -235,9 +235,7 @@ describe('프레임이 스토어에 닿는다', () => {
     const board = mount()
     let opId: string | null = null
     act(() => {
-      opId = board.store.applyEdit([
-        { op: 'add', path: '/root/children/-', value: { id: 'n_mine', type: 'Container' } },
-      ])
+      opId = board.store.applyEdit([{ op: 'add', path: '/root/children/-', value: { id: 'n_mine', type: 'Container' } }])
     })
 
     board.push({
@@ -276,7 +274,6 @@ describe('프레임이 스토어에 닿는다', () => {
     expect(board.store.getState().headSeq).toBe(4)
     expect(screen.getByRole('status').textContent).toBe('받지 못한 변경이 있어 화면이 최신이 아닙니다. 새로고침하면 맞춰집니다.')
   })
-
 
   /**
    * **끊긴 적이 없는데 끊겼다고 말하지 않는다.** 복원 프레임 뒤에 오는 첫

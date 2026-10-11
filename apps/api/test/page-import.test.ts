@@ -85,7 +85,13 @@ describe('페이지 JSON 가져오기', () => {
 
       expect(res.statusCode, res.body).toBe(201)
       const body = res.json() as {
-        page: { id: string; title: string; description: string | null; schema: { root: { children: { type: string; marker?: number; id: string }[] } }; headSeq: number }
+        page: {
+          id: string
+          title: string
+          description: string | null
+          schema: { root: { children: { type: string; marker?: number; id: string }[] } }
+          headSeq: number
+        }
       }
       expect(body.page.title).toBe('가져온 회원 목록')
       expect(body.page.description).toBe('남의 프로젝트에서 온 페이지')
@@ -121,11 +127,7 @@ describe('페이지 JSON 가져오기', () => {
       expect(res.statusCode, res.body).toBe(201)
       const pageId = (res.json() as { page: { id: string } }).page.id
 
-      const revisions = await ctx.db
-        .selectFrom('revisions')
-        .select(['seq', 'actor_type'])
-        .where('page_id', '=', pageId)
-        .execute()
+      const revisions = await ctx.db.selectFrom('revisions').select(['seq', 'actor_type']).where('page_id', '=', pageId).execute()
 
       expect(revisions.map((row) => Number(row.seq))).toEqual([1])
       expect(revisions.map((row) => row.actor_type)).toEqual(['user'])
@@ -181,9 +183,7 @@ describe('페이지 JSON 가져오기', () => {
       expect(res.statusCode, res.body).toBe(201)
       expect((res.json() as { comments: unknown }).comments).toEqual({ inserted: 2, dangling: 1 })
       // 본문이 사라지지 않는다.
-      expect((await commentRows(ctx, fx.projectId)).map((row) => row.body)).toContain(
-        '지워진 노드에 붙어 있던 말',
-      )
+      expect((await commentRows(ctx, fx.projectId)).map((row) => row.body)).toContain('지워진 노드에 붙어 있던 말')
     })
   })
 

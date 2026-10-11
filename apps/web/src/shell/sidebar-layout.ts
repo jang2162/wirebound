@@ -410,12 +410,7 @@ export interface RegionMetrics {
 export function regionInset(region: Element | null): number {
   if (region === null) return 0
   const style = getComputedStyle(region)
-  const parts = [
-    style.paddingTop,
-    style.paddingBottom,
-    style.borderTopWidth,
-    style.borderBottomWidth,
-  ].map((value) => parseFloat(value))
+  const parts = [style.paddingTop, style.paddingBottom, style.borderTopWidth, style.borderBottomWidth].map((value) => parseFloat(value))
   return parts.reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0)
 }
 
@@ -649,7 +644,8 @@ export function useSidebarLayout(): SidebarLayout {
     // `scrollHeight` 가 정수라 쓰지 않는다(위 `measure` 의 0.5px 어긋남).
     const rect = footer.getBoundingClientRect().height
     const padding = parseFloat(getComputedStyle(footer).paddingBottom)
-    const need = footer.scrollHeight > footer.clientHeight ? Math.max(rect, footer.scrollHeight + (Number.isFinite(padding) ? padding : 0)) : rect
+    const need =
+      footer.scrollHeight > footer.clientHeight ? Math.max(rect, footer.scrollHeight + (Number.isFinite(padding) ? padding : 0)) : rect
     return Math.max(0, height - need - (Number.isFinite(gap) ? gap * 2 : 0))
   }, [])
 
@@ -734,15 +730,13 @@ export function useSidebarLayout(): SidebarLayout {
     sideWidthMax: sideWidthMax(shellWidth, panelWidth, folds),
     grabSideWidth: () => sideWidth,
     // 싣는 자리의 클램프는 **상대의 화면 폭**을 뺀다 — 저장값이 아니다. 조여진 상대를 기준으로 잘라야 손잡이가 화면에 보인 끝에서 멈춘다.
-    setSideWidth: (width) =>
-      setStored((prev) => ({ ...prev, sideWidth: clampSideWidth(width, shellWidth, panelWidth, folds) })),
+    setSideWidth: (width) => setStored((prev) => ({ ...prev, sideWidth: clampSideWidth(width, shellWidth, panelWidth, folds) })),
     resetSideWidth: () => setStored((prev) => ({ ...prev, sideWidth: SIDE_WIDTH_DEFAULT })),
     panelWidth,
     panelWidthMin: PANEL_WIDTH_MIN,
     panelWidthMax: panelWidthMax(shellWidth, sideWidth, folds),
     grabPanelWidth: () => panelWidth,
-    setPanelWidth: (width) =>
-      setStored((prev) => ({ ...prev, panelWidth: clampPanelWidth(width, shellWidth, sideWidth, folds) })),
+    setPanelWidth: (width) => setStored((prev) => ({ ...prev, panelWidth: clampPanelWidth(width, shellWidth, sideWidth, folds) })),
     resetPanelWidth: () => setStored((prev) => ({ ...prev, panelWidth: PANEL_WIDTH_DEFAULT })),
     regionRatio,
     regionRatioMin: regionRatioMin(metrics.shared),
@@ -755,8 +749,7 @@ export function useSidebarLayout(): SidebarLayout {
       if (!(shared > 0)) return
       setStored((prev) => ({ ...prev, regionRatio: clampRegionRatio(height / shared, shared) }))
     },
-    setRegionRatio: (ratio) =>
-      setStored((prev) => ({ ...prev, regionRatio: clampRegionRatio(ratio, metrics.shared) })),
+    setRegionRatio: (ratio) => setStored((prev) => ({ ...prev, regionRatio: clampRegionRatio(ratio, metrics.shared) })),
     resetRegionRatio: () => setStored((prev) => ({ ...prev, regionRatio: REGION_RATIO_DEFAULT })),
     paletteOpen: stored.paletteOpen === true,
     togglePalette: () => setStored((prev) => ({ ...prev, paletteOpen: prev.paletteOpen !== true })),
@@ -765,7 +758,8 @@ export function useSidebarLayout(): SidebarLayout {
     paletteHeightMin: Math.min(PALETTE_HEIGHT_MIN, paletteMax),
     paletteHeightMax: paletteMax,
     grabPaletteHeight: () => paletteHeight,
-    setPaletteHeight: (height) => setStored((prev) => ({ ...prev, paletteHeight: storePaletteHeight(prev.paletteHeight, height, paletteMax) })),
+    setPaletteHeight: (height) =>
+      setStored((prev) => ({ ...prev, paletteHeight: storePaletteHeight(prev.paletteHeight, height, paletteMax) })),
     resetPaletteHeight: () => setStored((prev) => ({ ...prev, paletteHeight: PALETTE_HEIGHT_DEFAULT })),
   }
 }

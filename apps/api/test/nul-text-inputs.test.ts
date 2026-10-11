@@ -50,7 +50,13 @@ interface Case {
 }
 
 const CASES: Case[] = [
-  { name: 'POST /projects name', method: 'POST', url: () => '/api/projects', payload: () => ({ name: `이${NUL}름`, slug: 'nul-name' }), what: '프로젝트 이름·설명' },
+  {
+    name: 'POST /projects name',
+    method: 'POST',
+    url: () => '/api/projects',
+    payload: () => ({ name: `이${NUL}름`, slug: 'nul-name' }),
+    what: '프로젝트 이름·설명',
+  },
   {
     name: 'POST /projects description',
     method: 'POST',
@@ -58,7 +64,13 @@ const CASES: Case[] = [
     payload: () => ({ name: '이름', slug: 'nul-description', description: `설${NUL}명` }),
     what: '프로젝트 이름·설명',
   },
-  { name: 'PATCH /projects/:id name', method: 'PATCH', url: (w) => `/api/projects/${w.projectId}`, payload: () => ({ name: `이${NUL}름` }), what: '프로젝트 이름·설명' },
+  {
+    name: 'PATCH /projects/:id name',
+    method: 'PATCH',
+    url: (w) => `/api/projects/${w.projectId}`,
+    payload: () => ({ name: `이${NUL}름` }),
+    what: '프로젝트 이름·설명',
+  },
   {
     name: 'PATCH /projects/:id description',
     method: 'PATCH',

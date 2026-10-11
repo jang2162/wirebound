@@ -87,12 +87,20 @@ async function open(overrides: Partial<ApiClient> = {}, route = '/projects/p-1')
   renderWithProviders(<App />, { client, route })
   await screen.findByRole('heading', { name: PROJECT_NAME })
   await screen.findByText('회원관리')
-  return { client, getTree: (overrides.getTree as typeof getTree | undefined) ?? getTree, deleteMenu, deleteMenuCascade: (overrides.deleteMenuCascade as typeof deleteMenuCascade | undefined) ?? deleteMenuCascade }
+  return {
+    client,
+    getTree: (overrides.getTree as typeof getTree | undefined) ?? getTree,
+    deleteMenu,
+    deleteMenuCascade: (overrides.deleteMenuCascade as typeof deleteMenuCascade | undefined) ?? deleteMenuCascade,
+  }
 }
 
 /** 정보 통지 한 칸(`shell/info-notice.tsx`)의 글. */
 function infoTexts(): string[] {
-  return screen.queryAllByRole('status').filter((element) => element.classList.contains('wb-shell-info-notice')).map((element) => element.textContent ?? '')
+  return screen
+    .queryAllByRole('status')
+    .filter((element) => element.classList.contains('wb-shell-info-notice'))
+    .map((element) => element.textContent ?? '')
 }
 
 function region(): HTMLElement {
@@ -129,7 +137,11 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     expect(within(box).getByText('"회원관리" 메뉴와 하위 메뉴 1개 · 페이지 3개가 함께 삭제됩니다')).toBeDefined()
     expect(within(box).getByText('페이지 3개와 그 안의 설계가 모두 삭제됩니다')).toBeDefined()
     // 트리가 그리는 차례 — 메뉴마다 페이지 먼저, 그다음 하위 메뉴.
-    expect(within(box).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['회원 화면 1', '회원 화면 2', '권한 화면 1'])
+    expect(
+      within(box)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['회원 화면 1', '회원 화면 2', '권한 화면 1'])
     expect(within(box).getByText(CASCADE_SAFETY_NOTE)).toBeDefined()
     // 지울 페이지가 있으면 밖에서 오는 링크가 끊긴다는 한 줄(L-113 a).
     expect(within(box).getByText(CASCADE_LINK_NOTE)).toBeDefined()
@@ -169,7 +181,9 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
   it(`페이지가 ${PAGE_PREVIEW_LIMIT}개를 넘으면 앞 ${PAGE_PREVIEW_LIMIT}개와 «외 N개»`, async () => {
     await open({ getTree: vi.fn(async () => tree(pages(8))) })
     askDelete('회원관리')
-    const items = within(dialog()).getAllByRole('listitem').map((item) => item.textContent)
+    const items = within(dialog())
+      .getAllByRole('listitem')
+      .map((item) => item.textContent)
     expect(items).toEqual(['회원 화면 1', '회원 화면 2', '회원 화면 3', '회원 화면 4', '회원 화면 5', '외 4개'])
   })
 
@@ -214,9 +228,13 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
 
   /** 서버가 «목록이 바뀌었다»로 돌려보낸 409 — `subtree`가 지금 목록이다(apps/api README «메뉴 연쇄 삭제»). */
   function changed(subtree: unknown): ApiError {
-    return new ApiError(409, 'conflict', '그 사이 하위 메뉴나 페이지가 바뀌었습니다', [
-      { path: 'expect', code: 'menu-subtree-changed', message: '바뀜', subtree },
-    ], true)
+    return new ApiError(
+      409,
+      'conflict',
+      '그 사이 하위 메뉴나 페이지가 바뀌었습니다',
+      [{ path: 'expect', code: 'menu-subtree-changed', message: '바뀜', subtree }],
+      true,
+    )
   }
 
   /** 남이 «회원 화면 2»를 빼고 «새 결제 화면(bob)»을 넣은 판 — 수(메뉴 1 · 페이지 3)는 처음과 같다. */
@@ -250,7 +268,11 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     const box = await screen.findByRole('dialog', { name: MENU_DELETE_TITLE })
     expect(within(box).getByText(CASCADE_CHANGED)).toBeDefined()
     expect(within(box).getByText('"회원관리" 메뉴와 하위 메뉴 1개 · 페이지 3개가 함께 삭제됩니다')).toBeDefined()
-    expect(within(box).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['회원 화면 1', '새 결제 화면(bob)', '권한 화면 1'])
+    expect(
+      within(box)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['회원 화면 1', '새 결제 화면(bob)', '권한 화면 1'])
     // 트리의 실패 줄에는 서지 않는다 — 상자가 그 말을 한다.
     expect(within(region()).queryByRole('alert')).toBeNull()
 
@@ -259,8 +281,14 @@ describe('하위가 있는 메뉴의 삭제 — 확인 상자', () => {
     expect(deleteMenuCascade).toHaveBeenCalledTimes(1)
     fireEvent.click(within(box).getByRole('button', { name: MENU_DELETE_CONFIRM }))
     await waitFor(() => expect(deleteMenuCascade).toHaveBeenCalledTimes(2))
-    expect(deleteMenuCascade).toHaveBeenNthCalledWith(1, 'p-1', 'm-member', { menuIds: ['m-auth'], pageIds: ['pg-m-0', 'pg-m-1', 'pg-a-0'] })
-    expect(deleteMenuCascade).toHaveBeenNthCalledWith(2, 'p-1', 'm-member', { menuIds: ['m-auth'], pageIds: ['pg-m-0', 'pg-bob', 'pg-a-0'] })
+    expect(deleteMenuCascade).toHaveBeenNthCalledWith(1, 'p-1', 'm-member', {
+      menuIds: ['m-auth'],
+      pageIds: ['pg-m-0', 'pg-m-1', 'pg-a-0'],
+    })
+    expect(deleteMenuCascade).toHaveBeenNthCalledWith(2, 'p-1', 'm-member', {
+      menuIds: ['m-auth'],
+      pageIds: ['pg-m-0', 'pg-bob', 'pg-a-0'],
+    })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: MENU_DELETE_TITLE })).toBeNull())
   })
 

@@ -91,10 +91,18 @@ describe.skipIf(!전제.ok)('에디터 셸 가로 배치 — 실브라우저', (
       const wide = await widths(page)
 
       await page.setViewportSize({ width: 1024, height: 768 })
-      const narrow = await poll('두 폭이 조여진다', () => widths(page), (value) => value.panel === 300)
+      const narrow = await poll(
+        '두 폭이 조여진다',
+        () => widths(page),
+        (value) => value.panel === 300,
+      )
 
       await page.setViewportSize({ width: 1440, height: 900 })
-      const back = await poll('두 폭이 돌아온다', () => widths(page), (value) => value.panel === 500)
+      const back = await poll(
+        '두 폭이 돌아온다',
+        () => widths(page),
+        (value) => value.panel === 500,
+      )
       const stored = await page.evaluate((key) => localStorage.getItem(key), LAYOUT_KEY)
 
       expect({ wide, narrow, back, stored: JSON.parse(stored ?? '{}') }).toEqual({
@@ -152,7 +160,12 @@ describe.skipIf(!전제.ok)('에디터 셸 가로 배치 — 실브라우저', (
         }
       })
 
-      expect({ count: seen.count, visible: seen.visible, barInWindow: seen.barInWindow, canvasShrank: seen.canvasAfter < canvasBefore }).toEqual({
+      expect({
+        count: seen.count,
+        visible: seen.visible,
+        barInWindow: seen.barInWindow,
+        canvasShrank: seen.canvasAfter < canvasBefore,
+      }).toEqual({
         count: 2,
         visible: [true, true],
         barInWindow: true,
@@ -173,7 +186,10 @@ describe.skipIf(!전제.ok)('에디터 셸 가로 배치 — 실브라우저', (
     const { P } = await fixture(stack, alice, 'fit', 40)
     const cells: string[] = []
     const phantom: string[] = []
-    for (const window of [{ width: 1440, height: 900 }, { width: 1280, height: 800 }]) {
+    for (const window of [
+      { width: 1440, height: 900 },
+      { width: 1280, height: 800 },
+    ]) {
       for (const side of ['기본', '최대'] as const) {
         const { context, page } = await stack.openTab(stack.users.alice, { viewport: window })
         try {
@@ -292,7 +308,11 @@ async function fixture(
   const ops = Array.from({ length: count }, (_, index) => ({
     op: 'add',
     path: `/root/children/${index}`,
-    value: { id: `n_text${String(index + 1).padStart(7, '0')}`, type: 'Text', props: { content: `글 ${index + 1} — 캔버스를 세로로 채운다` } },
+    value: {
+      id: `n_text${String(index + 1).padStart(7, '0')}`,
+      type: 'Text',
+      props: { content: `글 ${index + 1} — 캔버스를 세로로 채운다` },
+    },
   }))
   const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops })
   if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)

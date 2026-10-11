@@ -170,10 +170,7 @@ export function worktreeEnvError(envFilePath: string, shellEnv: Record<string, s
  * `test-database-url.test.ts`의 임시 파일 케이스가 그것을 문다. `helpers.ts`에 남은
  * 한 줄은 인구조사가 못박는다.
  */
-export function resolveTestDatabaseUrlFrom(
-  shellEnv: Record<string, string | undefined>,
-  envFileUrl: URL | string = API_ENV_URL,
-): string {
+export function resolveTestDatabaseUrlFrom(shellEnv: Record<string, string | undefined>, envFileUrl: URL | string = API_ENV_URL): string {
   const sources: TestDatabaseUrlSources = { shellEnv, fileEnv: readApiEnvFile(envFileUrl) }
   const testDatabaseUrl = resolveTestDatabaseUrl(sources)
   // **여기서 멈추는 것이 요점이다.** 어긋난 채로 돌면 스위트가 *남의 컨테이너*의 판을

@@ -38,10 +38,7 @@ export interface LintIssueFilter {
 }
 
 /** 거르개를 통과한 이슈들. **순서를 바꾸지 않는다.** */
-export function filterLintIssues(
-  issues: readonly LintIssue[],
-  filter: LintIssueFilter = {},
-): LintIssue[] {
+export function filterLintIssues(issues: readonly LintIssue[], filter: LintIssueFilter = {}): LintIssue[] {
   if (filter.pageIds === undefined) return [...issues]
   const wanted = new Set(filter.pageIds)
   return issues.filter((issue) => issue.pageId !== null && wanted.has(issue.pageId))

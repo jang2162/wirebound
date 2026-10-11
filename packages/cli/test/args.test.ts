@@ -47,7 +47,7 @@ describe('종료 코드는 값으로 나온다', () => {
     expect(io.stderr.join('\n')).toContain("Unknown option '--nope'")
     expect(io.stderr.join('\n')).toContain('사용법: wireb <명령>')
     // `parseArgs`가 다는 *"`--` 뒤에 두라"*는 조언은 이 CLI와 무관하다 — 걷는다.
-    expect(io.stderr.join('\n')).not.toContain("place it at the end")
+    expect(io.stderr.join('\n')).not.toContain('place it at the end')
   })
 
   it('쓰임말이 명령을 하나도 빠뜨리지 않는다 — 분모를 표에서 만든다', () => {

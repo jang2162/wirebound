@@ -108,10 +108,7 @@ function stubs(overrides: Partial<ApiClient> = {}) {
 }
 
 /** 셸과 트리가 **둘 다 성공 대역으로** 그려질 때까지 기다린다. */
-async function open(
-  overrides: Partial<ApiClient> = {},
-  route = '/projects/p-1',
-): Promise<ReturnType<typeof stubs>> {
+async function open(overrides: Partial<ApiClient> = {}, route = '/projects/p-1'): Promise<ReturnType<typeof stubs>> {
   const harness = stubs(overrides)
   renderWithProviders(<App />, { client: harness.client, route })
   await screen.findByRole('heading', { name: PROJECT_NAME })
@@ -175,9 +172,7 @@ describe('메뉴·페이지 만들기', () => {
     typeAndEnter('사용자')
 
     await waitFor(() => expect(api.createMenu).toHaveBeenCalledTimes(1))
-    await waitFor(() =>
-      expect(within(toolbar()).queryByRole('textbox', { name: '이름' })).toBeNull(),
-    )
+    await waitFor(() => expect(within(toolbar()).queryByRole('textbox', { name: '이름' })).toBeNull())
   })
 
   it('Esc는 취소다', async () => {
@@ -306,7 +301,12 @@ describe('이름 변경', () => {
 
     await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
     // **바탕도 실린다** — 메뉴도 페이지와 같다. 넷째는 장부의 끊는 신호다.
-    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-member', { title: '회원', base: { title: '회원관리' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(api.updateMenu).toHaveBeenCalledWith(
+      'p-1',
+      'm-member',
+      { title: '회원', base: { title: '회원관리' } },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(api.updatePage).not.toHaveBeenCalled()
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
   })
@@ -319,7 +319,12 @@ describe('이름 변경', () => {
 
     await waitFor(() => expect(api.updatePage).toHaveBeenCalledTimes(1))
     // **바탕도 실린다** — 입력이 열릴 때의 제목이다(판정 축은 서버의 `apps/api/test/page-meta-conflict.test.ts`).
-    expect(api.updatePage).toHaveBeenCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '회원 목록' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(api.updatePage).toHaveBeenCalledWith(
+      'p-1',
+      'pg-list',
+      { title: '목록', base: { title: '회원 목록' } },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(api.updateMenu).not.toHaveBeenCalled()
   })
 
@@ -356,7 +361,12 @@ describe('이름 변경', () => {
     typeAndEnter('회원관리')
 
     await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
-    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-member', { title: '회원관리', base: { title: '회원관리' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(api.updateMenu).toHaveBeenCalledWith(
+      'p-1',
+      'm-member',
+      { title: '회원관리', base: { title: '회원관리' } },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
   })
 
   it('빈 문자열이면 나가지 않는다', async () => {
@@ -789,7 +799,11 @@ function regionParagraphs(): string[] {
 }
 
 /** 옛 이유 줄이 무리 전체를 한 문장으로 말하던 문장들 — 이제 어느 자리에도 서지 않는다. */
-const LINE_SENTENCES = ['메뉴나 페이지를 고르면 편집할 수 있습니다', '페이지라 하위 추가·계층 이동이 안 됩니다', '형제가 없어 순서를 바꿀 수 없습니다']
+const LINE_SENTENCES = [
+  '메뉴나 페이지를 고르면 편집할 수 있습니다',
+  '페이지라 하위 추가·계층 이동이 안 됩니다',
+  '형제가 없어 순서를 바꿀 수 없습니다',
+]
 
 /** `updateMenu`를 붙들어 조작 하나를 나가 있게 한다(`busy`). 놓으면 푼다. */
 function heldUpdate(): { updateMenu: ApiClient['updateMenu']; release: () => void } {
@@ -924,7 +938,12 @@ describe('이름 변경 — 페이지 제목의 충돌', () => {
 
     await waitFor(() => expect(conflictNotice()).not.toBeNull())
     expect(within(conflictNotice()!).getByText('밥의 제목')).toBeTruthy()
-    expect(updatePage).toHaveBeenCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '회원 목록' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(updatePage).toHaveBeenCalledWith(
+      'p-1',
+      'pg-list',
+      { title: '목록', base: { title: '회원 목록' } },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
     // 실패 문장(서버 문장)으로 서지 않는다 — 충돌은 고를 것이 있는 화면이다.
     expect(within(treeRegion()).queryByText(CHANGED)).toBeNull()
@@ -939,7 +958,12 @@ describe('이름 변경 — 페이지 제목의 충돌', () => {
     fireEvent.click(within(conflictNotice()!).getByRole('button', { name: '내 글로 덮기' }))
 
     await waitFor(() => expect(updatePage).toHaveBeenCalledTimes(2))
-    expect(updatePage).toHaveBeenLastCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '밥의 제목' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(updatePage).toHaveBeenLastCalledWith(
+      'p-1',
+      'pg-list',
+      { title: '목록', base: { title: '밥의 제목' } },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     await waitFor(() => expect(conflictNotice()).toBeNull())
   })
 
@@ -998,7 +1022,12 @@ describe('이름 변경 — 메뉴 제목의 충돌', () => {
 
     await waitFor(() => expect(conflictNotice()).not.toBeNull())
     expect(within(conflictNotice()!).getByText('밥의 메뉴')).toBeTruthy()
-    expect(updateMenu).toHaveBeenCalledWith('p-1', 'm-member', { title: '회원', base: { title: '회원관리' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(updateMenu).toHaveBeenCalledWith(
+      'p-1',
+      'm-member',
+      { title: '회원', base: { title: '회원관리' } },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(within(treeRegion()).queryByText(CHANGED)).toBeNull()
   })
 
@@ -1019,7 +1048,12 @@ describe('이름 변경 — 메뉴 제목의 충돌', () => {
     fireEvent.click(within(conflictNotice()!).getByRole('button', { name: '내 글로 덮기' }))
 
     await waitFor(() => expect(updateMenu).toHaveBeenCalledTimes(2))
-    expect(updateMenu).toHaveBeenLastCalledWith('p-1', 'm-member', { title: '회원', base: { title: '밥의 메뉴' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(updateMenu).toHaveBeenLastCalledWith(
+      'p-1',
+      'm-member',
+      { title: '회원', base: { title: '밥의 메뉴' } },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(api.updatePage).not.toHaveBeenCalled()
     await waitFor(() => expect(conflictNotice()).toBeNull())
   })
@@ -1047,7 +1081,8 @@ describe('이름 변경 — 시간 제한 · «모름» · 떠나 있는 동안'
       ['m-member', '회원관리'],
       ['pg-list', '회원 목록'],
     ])
-    const held: { id: string; title: string; resolve: (value: never) => void; reject: (reason: unknown) => void; signal?: AbortSignal }[] = []
+    const held: { id: string; title: string; resolve: (value: never) => void; reject: (reason: unknown) => void; signal?: AbortSignal }[] =
+      []
     let reads: 'ok' | 'fail' = 'ok'
     let readError: unknown = new ApiError(500, 'internal', '서버 오류가 발생했습니다', [], true)
     const readSignals: (AbortSignal | undefined)[] = []
@@ -1372,7 +1407,9 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
     const before = treeRegion()
     fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
     fireEvent.click(await until(() => screen.queryByRole('link', { name: PROJECT_NAME })))
-    await until(() => (screen.queryByRole('region', { name: '메뉴·페이지 트리' }) === null ? null : within(treeRegion()).queryByText(/회원관리|밥의 메뉴/)))
+    await until(() =>
+      screen.queryByRole('region', { name: '메뉴·페이지 트리' }) === null ? null : within(treeRegion()).queryByText(/회원관리|밥의 메뉴/),
+    )
     // 셸째 새로 섰다 — 앞의 트리 영역은 문서에 없다.
     expect(before.isConnected).toBe(false)
   }
@@ -1468,7 +1505,9 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
       ...server.overrides,
       getProject: async (id: string) => (id === 'p-2' ? OTHER : PROJECT),
       getTree: (async (projectId: string, options?: Parameters<ApiClient['getTree']>[1]) =>
-        projectId === 'p-2' ? [{ id: 'm-b', title: '비 메뉴', sortOrder: 0, pages: [], children: [] }] : getTree(projectId, options)) as ApiClient['getTree'],
+        projectId === 'p-2'
+          ? [{ id: 'm-b', title: '비 메뉴', sortOrder: 0, pages: [], children: [] }]
+          : getTree(projectId, options)) as ApiClient['getTree'],
     })
     function GoTo(props: { to: string; label: string }): ReactElement {
       const navigate = useNavigate()
@@ -1552,7 +1591,9 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
     vi.useRealTimers()
     fireEvent.click(screen.getByRole('link', { name: PROJECT_NAME }))
     await waitFor(() => expect(menuButton('회원관리')).toBeTruthy())
-    expect(alertText()).toBe('이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다 — 응답이 없어 서버를 다시 읽었더니 이름이 바뀌지 않았습니다')
+    expect(alertText()).toBe(
+      '이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다 — 응답이 없어 서버를 다시 읽었더니 이름이 바뀌지 않았습니다',
+    )
   })
 
   /**

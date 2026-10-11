@@ -67,7 +67,11 @@ describe('판정 — 머리말의 표', () => {
   })
   it('빠진 것이 전부 마지막 것 뒤면 뒤처졌다 — 이름은 kysely 처럼 코드 단위로 견준다', () => {
     // kysely 가 올리는 순서(`sort()` — 코드 단위)에서는 '0002-B' 가 '0002-a' 앞이다. 로캘 비교(`localeCompare`)는 거꾸로라 두 판이 뒤집힌다.
-    expect(schemaVerdict(['0001-a', '0002-a'], ['0001-a', '0002-a', '0002-B'])).toEqual({ kind: 'unordered', stranded: ['0002-B'], later: ['0002-a'] })
+    expect(schemaVerdict(['0001-a', '0002-a'], ['0001-a', '0002-a', '0002-B'])).toEqual({
+      kind: 'unordered',
+      stranded: ['0002-B'],
+      later: ['0002-a'],
+    })
     expect(schemaVerdict(['0001-a', '0002-B'], ['0001-a', '0002-a', '0002-B'])).toEqual({ kind: 'behind', pending: ['0002-a'] })
   })
   it('둘 다면 갈라졌다', () => {
@@ -97,7 +101,9 @@ describe('말 — 멈출지 · 경고할지', () => {
     expect(text).not.toContain('secret-pass')
   })
   it('갈라졌으면 멈춘다', () => {
-    expect(describeSchemaVerdict({ kind: 'diverged', pending: ['0003-c'], unknown: ['0009-z'] }, URL)).toEqual({ stop: expect.stringContaining('0009-z') })
+    expect(describeSchemaVerdict({ kind: 'diverged', pending: ['0003-c'], unknown: ['0009-z'] }, URL)).toEqual({
+      stop: expect.stringContaining('0009-z'),
+    })
   })
   it('빈 DB 는 빈 DB 의 말 그대로 멈춘다', () => {
     expect(describeSchemaVerdict({ kind: 'empty' }, URL)).toEqual({ stop: emptySchemaHint(0, URL) })
@@ -114,7 +120,11 @@ describe('올린 시각의 순서 — kysely 가 읽는 순서', () => {
     expect(timestampOrderSlip([at('0001-a', '2026-01-01T00:00:00.000Z'), at('0002-b', '2026-01-01T00:00:00.001Z')])).toBeNull()
   })
   it('뒤 이름이 앞 시각이면 처음 갈리는 자리를 든다', () => {
-    const rows = [at('0001-a', '2026-01-01T00:00:00.000Z'), at('0002-b', '2026-01-01T00:00:00.001Z'), at('0003-c', '2000-01-01T00:00:00.000Z')]
+    const rows = [
+      at('0001-a', '2026-01-01T00:00:00.000Z'),
+      at('0002-b', '2026-01-01T00:00:00.001Z'),
+      at('0003-c', '2000-01-01T00:00:00.000Z'),
+    ]
     expect(timestampOrderSlip(rows)).toEqual({ index: 0, byTime: '0003-c', byName: '0001-a' })
   })
   it('시각 글자가 같으면 kysely 처럼 이름을 localeCompare 로 가른다 — 코드 단위 순과 갈리는 이름이면 어긋남이다', () => {

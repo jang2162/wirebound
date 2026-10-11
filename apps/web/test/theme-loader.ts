@@ -55,7 +55,14 @@ export function staticBundleLoader(map: Record<string, StaticBundle> = { [refKey
 
 /** 기본 하네스가 `getProjectTheme` 으로 주는 바인딩 — 새 프로젝트가 서는 판 그대로다. */
 export function adminThemeView(tokens: Record<string, string | number> = {}, rev = 0): ProjectThemeView {
-  return { themeId: ADMIN_REF.themeId, version: ADMIN_REF.version, tokens, rev, manifest: ADMIN_FIXTURE.manifest, latest: ADMIN_REF.version }
+  return {
+    themeId: ADMIN_REF.themeId,
+    version: ADMIN_REF.version,
+    tokens,
+    rev,
+    manifest: ADMIN_FIXTURE.manifest,
+    latest: ADMIN_REF.version,
+  }
 }
 
 /**

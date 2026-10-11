@@ -30,9 +30,6 @@ export function readExportRuntime(path?: string): string {
     held.set(at, text)
     return text
   } catch (error) {
-    throw new Error(
-      `내보내기 런타임이 없습니다(${at}) — 저장소 뿌리에서 \`pnpm build\` 를 먼저 돌립니다`,
-      { cause: error },
-    )
+    throw new Error(`내보내기 런타임이 없습니다(${at}) — 저장소 뿌리에서 \`pnpm build\` 를 먼저 돌립니다`, { cause: error })
   }
 }

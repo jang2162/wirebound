@@ -107,9 +107,7 @@ export async function findToken(io: Io, server: string, projectId: string): Prom
  */
 export async function saveToken(io: Io, entry: CredentialEntry): Promise<string> {
   const store = await readStore(io)
-  const credentials = store.credentials.filter(
-    (existing) => !(existing.server === entry.server && existing.projectId === entry.projectId),
-  )
+  const credentials = store.credentials.filter((existing) => !(existing.server === entry.server && existing.projectId === entry.projectId))
   credentials.push(entry)
 
   const path = credentialsPath(io)

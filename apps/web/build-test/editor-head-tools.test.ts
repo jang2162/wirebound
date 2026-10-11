@@ -39,8 +39,12 @@ async function shape(page: Page): Promise<Shape> {
     const head = document.querySelector('.wb-shell-header')!
     const footer = document.querySelector('.wb-shell-footer')!
     const name = (element: Element): string =>
-      element.getAttribute('aria-label') ?? (element.closest('label')?.textContent?.trim().split(/\s/)[0] ?? element.textContent?.trim() ?? '')
-    const controls = (box: Element): Element[] => [...box.querySelectorAll('button, select, a')].filter((element) => (element as HTMLElement).offsetParent !== null)
+      element.getAttribute('aria-label') ??
+      element.closest('label')?.textContent?.trim().split(/\s/)[0] ??
+      element.textContent?.trim() ??
+      ''
+    const controls = (box: Element): Element[] =>
+      [...box.querySelectorAll('button, select, a')].filter((element) => (element as HTMLElement).offsetParent !== null)
     const box = head.getBoundingClientRect()
     let right = box.right
     for (const element of controls(head)) right = Math.max(right, element.getBoundingClientRect().right)
@@ -85,7 +89,10 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' })).body.id
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu, title: '첫째' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
-    await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_text0000001', type: 'Text', props: { content: '글' } } }] })
+    await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_text0000001', type: 'Text', props: { content: '글' } } }],
+    })
     return P
   }
 
@@ -234,7 +241,14 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
             zoom: s.headControls.includes('축소'),
             divider: await page.locator('.wb-shell-header .wb-shell-head-divider').count(),
           }
-          expected[`${width} ${mode}`] = { head: 48, overflow: 0, label: width >= 1099, switcher: width >= 965, zoom: width >= 878, divider: width >= 878 ? 1 : 0 }
+          expected[`${width} ${mode}`] = {
+            head: 48,
+            overflow: 0,
+            label: width >= 1099,
+            switcher: width >= 965,
+            zoom: width >= 878,
+            divider: width >= 878 ? 1 : 0,
+          }
         }
       } finally {
         await close()

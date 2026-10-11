@@ -40,6 +40,8 @@ export function packed(
     manifest,
     themeJs: files.themeJs ?? ';',
     themeCss: files.themeCss ?? null,
-    assets: new Map(Object.entries(files.assets ?? {}).map(([name, body]) => [name, typeof body === 'string' ? encoder.encode(body) : body])),
+    assets: new Map(
+      Object.entries(files.assets ?? {}).map(([name, body]) => [name, typeof body === 'string' ? encoder.encode(body) : body]),
+    ),
   })
 }

@@ -52,7 +52,15 @@ async function driver(page: Page, kind: Kind): Promise<Driver> {
   const cdp: CDPSession = await page.context().newCDPSession(page)
   if (kind === 'pen') {
     const send = async (type: string, at: Pt, buttons: number, button: string): Promise<void> => {
-      await cdp.send('Input.dispatchMouseEvent', { type, x: at.x, y: at.y, button, buttons, clickCount: type === 'mouseMoved' ? 0 : 1, pointerType: 'pen' } as never)
+      await cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x: at.x,
+        y: at.y,
+        button,
+        buttons,
+        clickCount: type === 'mouseMoved' ? 0 : 1,
+        pointerType: 'pen',
+      } as never)
     }
     let pressed = false
     return {
@@ -118,7 +126,12 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
     const project = (await call('POST', '/projects', { name: 'M3 펜 · 터치', slug: `${slug}-${Date.now().toString(36)}` })).body
     const ids: Record<string, string> = {}
     for (const title of ['가', '나']) ids[title] = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title })).body.id
-    for (const [title, menu] of [['가1', '가'], ['가2', '가'], ['나1', '나'], ['나2', '나']] as const) {
+    for (const [title, menu] of [
+      ['가1', '가'],
+      ['가2', '가'],
+      ['나1', '나'],
+      ['나2', '나'],
+    ] as const) {
       ids[title] = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: ids[menu], title })).body.id
     }
     const P = `/projects/${project.id}/pages/${ids['가1']}`
@@ -126,7 +139,16 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
       baseSeq: 0,
       ops: [
         { op: 'add', path: '/root/children/0', value: { id: 'n_text', type: 'Text', props: { content: '글' } } },
-        { op: 'add', path: '/root/children/1', value: { id: 'n_card', type: 'Card', props: { title: '카드' }, children: [{ id: 'n_intx', type: 'Text', props: { content: '안' } }] } },
+        {
+          op: 'add',
+          path: '/root/children/1',
+          value: {
+            id: 'n_card',
+            type: 'Card',
+            props: { title: '카드' },
+            children: [{ id: 'n_intx', type: 'Text', props: { content: '안' } }],
+          },
+        },
         { op: 'add', path: '/root/children/2', value: { id: 'n_divi', type: 'Divider' } },
       ],
     })
@@ -147,7 +169,9 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
     if (kind === 'touch') {
       // 터치 화면이 있는 컨텍스트 — `maxTouchPoints` 가 서고 터치 입력이 `touch` 포인터로 간다.
       context = await stack.browser.newContext({ baseURL: stack.webUrl, viewport: { width: 1440, height: 900 }, hasTouch: true })
-      const login = await context.request.post(`${stack.webUrl}/api/auth/login`, { data: { email: stack.users.alice.email, password: stack.users.alice.password } })
+      const login = await context.request.post(`${stack.webUrl}/api/auth/login`, {
+        data: { email: stack.users.alice.email, password: stack.users.alice.password },
+      })
       if (!login.ok()) throw new Error(`browser login ${login.status()}`)
       page = await context.newPage()
     } else {
@@ -157,7 +181,8 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
     }
     const writes: string[] = []
     page.on('request', (request) => {
-      if (request.method() !== 'GET' && /\/api\/projects\/[^/]+\/(menu|pages)\//.test(request.url())) writes.push(`${request.method()} ${new URL(request.url()).pathname}`)
+      if (request.method() !== 'GET' && /\/api\/projects\/[^/]+\/(menu|pages)\//.test(request.url()))
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`)
     })
     // 구조 편집은 WS 프레임(`patch`)으로 나간다 — 보낸 프레임을 센다.
     const patches: string[] = []
@@ -213,7 +238,10 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
     await sleep(150)
   }
 
-  const center = (box: { x: number; y: number; width: number; height: number }): Pt => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 })
+  const center = (box: { x: number; y: number; width: number; height: number }): Pt => ({
+    x: box.x + box.width / 2,
+    y: box.y + box.height / 2,
+  })
 
   /** 캔버스 노드 위 `fy`(0 ~ 1)의 점 — 노드의 위 15% 는 «그 노드 앞» 이다. */
   async function nodePoint(page: Page, id: string, fy: number): Promise<Pt> {
@@ -234,8 +262,10 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
     await page.getByRole('region', { name: '컴포넌트 목록' }).waitFor()
   }
 
-  const structureRow = (page: Page, id: string) => page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"]`)
-  const menuRow = (page: Page, id: string) => page.locator(`.wb-shell-region[aria-label="메뉴·페이지 트리"] [data-tree-row][data-tree-id="${id}"]`)
+  const structureRow = (page: Page, id: string) =>
+    page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"]`)
+  const menuRow = (page: Page, id: string) =>
+    page.locator(`.wb-shell-region[aria-label="메뉴·페이지 트리"] [data-tree-row][data-tree-id="${id}"]`)
 
   /** 줄 상자의 가운데 왼쪽(줄 단추 위) · 위 띠. */
   async function rowPoint(row: ReturnType<typeof structureRow>, zone: 'middle' | 'top'): Promise<Pt> {
@@ -244,7 +274,10 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
   }
 
   async function stuck(page: Page): Promise<{ tag: number; lifted: number }> {
-    return { tag: await page.locator('.wb-shell-palette-dragtag').count(), lifted: await page.locator('.wb-shell-tree-row-dragging').count() }
+    return {
+      tag: await page.locator('.wb-shell-palette-dragtag').count(),
+      lifted: await page.locator('.wb-shell-tree-row-dragging').count(),
+    }
   }
 
   const KINDS: Kind[] = ['mouse', 'pen', 'touch']
@@ -263,9 +296,19 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
         await card.waitFor()
         await instrument(page)
         await drag(page, kind, center((await card.boundingBox())!), [await nodePoint(page, 'n_text', 0.1)])
-        const added = await poll('서버 문서', () => order(P), (v) => v.length === 4, 3000).catch(() => order(P))
+        const added = await poll(
+          '서버 문서',
+          () => order(P),
+          (v) => v.length === 4,
+          3000,
+        ).catch(() => order(P))
         const scrolled = await page.locator('.wb-shell-palette-cards').evaluate((el) => el.scrollTop)
-        expect({ order: added, ...(await stuck(page)), ...(await counts(page)), scrolled }).toEqual({ order: ['+Divider', 'n_text', 'n_card', 'n_divi'], ...CLEAN, ...HOST_ENDED, scrolled: 0 })
+        expect({ order: added, ...(await stuck(page)), ...(await counts(page)), scrolled }).toEqual({
+          order: ['+Divider', 'n_text', 'n_card', 'n_divi'],
+          ...CLEAN,
+          ...HOST_ENDED,
+          scrolled: 0,
+        })
       } finally {
         await context.close()
       }
@@ -286,8 +329,17 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
         if (kind === 'touch') expect(touchAction).toBe('none')
         // 손잡이는 곧바로 끈다(터치도 길게 누르지 않는다).
         await drag(page, kind, center((await handle.boundingBox())!), [await nodePoint(page, 'n_text', 0.1)], { hold: false })
-        const moved = await poll('서버 문서', () => order(P), (v) => v[0] === 'n_card', 3000).catch(() => order(P))
-        expect({ order: moved, ...(await stuck(page)), ...(await counts(page)) }).toEqual({ order: ['n_card', 'n_text', 'n_divi'], ...CLEAN, ...HOST_ENDED })
+        const moved = await poll(
+          '서버 문서',
+          () => order(P),
+          (v) => v[0] === 'n_card',
+          3000,
+        ).catch(() => order(P))
+        expect({ order: moved, ...(await stuck(page)), ...(await counts(page)) }).toEqual({
+          order: ['n_card', 'n_text', 'n_divi'],
+          ...CLEAN,
+          ...HOST_ENDED,
+        })
       } finally {
         await context.close()
       }
@@ -302,9 +354,20 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
         await drag(page, kind, await rowPoint(structureRow(page, 'n_divi'), 'middle'), [await nodePoint(page, 'n_text', 0.1)])
         const first = { sent: patches.length, order: await order(P), ...(await stuck(page)), ...(await counts(page)) }
         // 둘째 끌기 — 끝나지 않은 끌기가 남았으면 이 누름은 무시된다.
-        await drag(page, kind, await rowPoint(structureRow(page, 'n_divi'), 'middle'), [await rowPoint(structureRow(page, 'n_text'), 'top')])
-        const moved = await poll('서버 문서', () => order(P), (v) => v[0] === 'n_divi', 3000).catch(() => order(P))
-        expect({ first, order: moved, sent: patches.length }).toEqual({ first: { sent: 0, order: ['n_text', 'n_card', 'n_divi'], ...CLEAN, ...HOST_ENDED }, order: ['n_divi', 'n_text', 'n_card'], sent: 1 })
+        await drag(page, kind, await rowPoint(structureRow(page, 'n_divi'), 'middle'), [
+          await rowPoint(structureRow(page, 'n_text'), 'top'),
+        ])
+        const moved = await poll(
+          '서버 문서',
+          () => order(P),
+          (v) => v[0] === 'n_divi',
+          3000,
+        ).catch(() => order(P))
+        expect({ first, order: moved, sent: patches.length }).toEqual({
+          first: { sent: 0, order: ['n_text', 'n_card', 'n_divi'], ...CLEAN, ...HOST_ENDED },
+          order: ['n_divi', 'n_text', 'n_card'],
+          sent: 1,
+        })
       } finally {
         await context.close()
       }
@@ -322,12 +385,23 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
         await drag(page, kind, await rowPoint(menuRow(page, ids['가2']!), 'middle'), [await rowPoint(menuRow(page, ids['나2']!), 'top')])
         const tree = (await poll(
           '서버 트리',
-          async () => (await call('GET', `/projects/${projectId}/tree`)).body.menu as { title: string; pages: { title: string; sortOrder: number }[] }[],
+          async () =>
+            (await call('GET', `/projects/${projectId}/tree`)).body.menu as {
+              title: string
+              pages: { title: string; sortOrder: number }[]
+            }[],
           (menu) => menu.find((m) => m.title === '나')?.pages.length === 3,
           3000,
-        ).catch(async () => (await call('GET', `/projects/${projectId}/tree`)).body.menu)) as { title: string; pages: { title: string; sortOrder: number }[] }[]
+        ).catch(async () => (await call('GET', `/projects/${projectId}/tree`)).body.menu)) as {
+          title: string
+          pages: { title: string; sortOrder: number }[]
+        }[]
         const pages = [...tree.find((m) => m.title === '나')!.pages].sort((a, b) => a.sortOrder - b.sortOrder).map((p) => p.title)
-        expect({ first, pages, writes: writes.length }).toEqual({ first: { writes: 0, ...CLEAN, ...HOST_ENDED }, pages: ['나1', '가2', '나2'], writes: 1 })
+        expect({ first, pages, writes: writes.length }).toEqual({
+          first: { writes: 0, ...CLEAN, ...HOST_ENDED },
+          pages: ['나1', '가2', '나2'],
+          writes: 1,
+        })
       } finally {
         await context.close()
       }
@@ -344,7 +418,8 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
         await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill('Divider')
         const card = page.locator('[data-wb-palette-card="Divider"]')
         await card.waitFor()
-        const reads = () => page.evaluate(() => ({ iframe: getComputedStyle(document.querySelector('iframe.wb-shell-canvas-iframe')!).pointerEvents }))
+        const reads = () =>
+          page.evaluate(() => ({ iframe: getComputedStyle(document.querySelector('iframe.wb-shell-canvas-iframe')!).pointerEvents }))
         const idle = await reads()
         const d = await driver(page, kind)
         const from = center((await card.boundingBox())!)
@@ -359,7 +434,9 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
         // 끝난 뒤 캔버스 위 누름이 고르기로 간다.
         const text = await nodePoint(page, 'n_text', 0.5)
         await page.mouse.click(text.x, text.y)
-        const selected = await page.evaluate(() => document.querySelector('.wb-shell-selection')?.getAttribute('data-wb-selected-id') ?? null)
+        const selected = await page.evaluate(
+          () => document.querySelector('.wb-shell-selection')?.getAttribute('data-wb-selected-id') ?? null,
+        )
         expect({ kind, idle, pressed, over, done, selected }).toEqual({
           kind,
           idle: { iframe: 'auto' },
@@ -392,7 +469,11 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
       await d.up(from)
       await sleep(200)
       const scrolled = await page.locator('.wb-shell-palette-cards').evaluate((el) => el.scrollTop)
-      expect({ scrolled: scrolled > 0, order: await order(P), ...(await stuck(page)) }).toEqual({ scrolled: true, order: ['n_text', 'n_card', 'n_divi'], ...CLEAN })
+      expect({ scrolled: scrolled > 0, order: await order(P), ...(await stuck(page)) }).toEqual({
+        scrolled: true,
+        order: ['n_text', 'n_card', 'n_divi'],
+        ...CLEAN,
+      })
     } finally {
       await context.close()
     }
@@ -421,7 +502,16 @@ describe.skipIf(!전제.ok)('끌기 — 마우스 · 펜 · 터치 × 입구 —
       )
       await d.up(from)
       await sleep(200)
-      expect({ holding, prevented, order: await order(P), ...(await stuck(page)), ...(await counts(page)) }).toEqual({ holding: { tag: 1, lifted: 0 }, prevented: [true, true], order: ['n_text', 'n_card', 'n_divi'], ...CLEAN, hostUp: 1, hostCancel: 0, frameMove: 0, frameUp: 0 })
+      expect({ holding, prevented, order: await order(P), ...(await stuck(page)), ...(await counts(page)) }).toEqual({
+        holding: { tag: 1, lifted: 0 },
+        prevented: [true, true],
+        order: ['n_text', 'n_card', 'n_divi'],
+        ...CLEAN,
+        hostUp: 1,
+        hostCancel: 0,
+        frameMove: 0,
+        frameUp: 0,
+      })
     } finally {
       await context.close()
     }

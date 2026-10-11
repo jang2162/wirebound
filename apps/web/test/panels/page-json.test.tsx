@@ -18,14 +18,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { WIREBOUND_PAGE_VERSION, type PageJson } from '@wirebound/schema'
 import type { ApiClient } from '../../src/api/client'
-import type {
-  Comment,
-  PageDetail,
-  PageImported,
-  ProjectView,
-  SessionUser,
-  TreeMenuNode,
-} from '../../src/api/types'
+import type { Comment, PageDetail, PageImported, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import { ApiError } from '../../src/api/client'
 import { fakeApi, renderWithProviders } from '../helpers'
@@ -98,9 +91,7 @@ function imported(patch: Partial<PageImported> = {}): PageImported {
 
 function stubs(overrides: Partial<ApiClient> = {}) {
   const getTree = vi.fn(async () => tree())
-  const getPage = vi.fn(async (_p: string, pageId: string) =>
-    pageDetail(pageId, pageId === 'pg-detail' ? '회원 상세' : '회원 목록'),
-  )
+  const getPage = vi.fn(async (_p: string, pageId: string) => pageDetail(pageId, pageId === 'pg-detail' ? '회원 상세' : '회원 목록'))
   const listComments = vi.fn(async () => [COMMENT])
   const importPage = vi.fn(async () => imported())
   const deleteMenu = vi.fn(async () => undefined)
@@ -297,7 +288,11 @@ describe('여는 길 — 메뉴 줄 `+` · 대상 메뉴', () => {
     openImport()
 
     expect(within(dialog()).getByLabelText('페이지 파일')).toBeDefined()
-    expect(within(dialog()).getByRole('button', { name: /JSON 직접 붙여 넣기/ }).getAttribute('aria-expanded')).toBe('false')
+    expect(
+      within(dialog())
+        .getByRole('button', { name: /JSON 직접 붙여 넣기/ })
+        .getAttribute('aria-expanded'),
+    ).toBe('false')
     // **붙여 넣기 칸은 펴기 전에는 DOM 에 없다** — 파일이 주된 길이다.
     expect(within(dialog()).queryByRole('textbox', { name: '페이지 JSON' })).toBeNull()
     expect(titleInput().placeholder).toBe('비우면 파일의 제목을 씁니다')

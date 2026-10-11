@@ -30,7 +30,10 @@ const message = (store: EditorStore): string | null => {
 describe('조각을 합친다', () => {
   it('같은 열쇠는 자리마다 수를 더하고, 세기는 큰 쪽이다', () => {
     // 앞 조각이 «모름»을 셌고 뒤 조각은 안 보낸 것만 센다(재연결 재조회가 두 번 버린 판) — 합친 수에 «모름»이 있으니 앞에 선다.
-    const merged = mergeLoss([{ ...counted('버림', LOSS_RANK.unknown, 1), counts: [1, 0] }], { ...counted('버림', LOSS_RANK.cancelled, 0), counts: [0, 5] })
+    const merged = mergeLoss([{ ...counted('버림', LOSS_RANK.unknown, 1), counts: [1, 0] }], {
+      ...counted('버림', LOSS_RANK.cancelled, 0),
+      counts: [0, 5],
+    })
 
     expect(merged).toHaveLength(1)
     expect(merged[0]!.counts).toEqual([1, 5])
@@ -38,10 +41,12 @@ describe('조각을 합친다', () => {
   })
 
   it('수가 없는 조각은 뒤에 온 문장이 선다', () => {
-    const merged = mergeLoss(
-      [{ key: '떠남', rank: LOSS_RANK.cancelled, counts: [], render: () => '앞 떠남.' }],
-      { key: '떠남', rank: LOSS_RANK.cancelled, counts: [], render: () => '뒤 떠남.' },
-    )
+    const merged = mergeLoss([{ key: '떠남', rank: LOSS_RANK.cancelled, counts: [], render: () => '앞 떠남.' }], {
+      key: '떠남',
+      rank: LOSS_RANK.cancelled,
+      counts: [],
+      render: () => '뒤 떠남.',
+    })
 
     expect(lossMessage(merged)).toBe('뒤 떠남.')
   })
@@ -104,7 +109,13 @@ describe('스토어가 조각을 드는 수명', () => {
   it('«화면에 남은 편집»의 조각은 판을 다시 실으면 걷고, 나머지 조각은 남긴다', () => {
     const store = opened()
     store.tellLoss(counted('버림', LOSS_RANK.cancelled, 1))
-    store.tellLoss({ key: '못 읽음', rank: LOSS_RANK.cancelled, counts: [], render: () => '화면에 남아 있는 편집은 저장되지 않았습니다.', untilLoad: true })
+    store.tellLoss({
+      key: '못 읽음',
+      rank: LOSS_RANK.cancelled,
+      counts: [],
+      render: () => '화면에 남아 있는 편집은 저장되지 않았습니다.',
+      untilLoad: true,
+    })
     // 판 카나리아 — 둘이 이어 섰다.
     expect(message(store)).toBe('버림 1개. 화면에 남아 있는 편집은 저장되지 않았습니다.')
 

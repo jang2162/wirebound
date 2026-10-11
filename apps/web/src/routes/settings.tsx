@@ -78,7 +78,9 @@ export function SettingsRoute(): ReactElement {
           key={state.project.id}
           project={state.project}
           // 응답에는 `themeRev` 가 없다(`ProjectDetail`) — 쥔 값을 잇는다.
-          onSaved={(updated) => setState((prev) => (prev.status === 'ready' ? { status: 'ready', project: { ...prev.project, ...updated } } : prev))}
+          onSaved={(updated) =>
+            setState((prev) => (prev.status === 'ready' ? { status: 'ready', project: { ...prev.project, ...updated } } : prev))
+          }
         />
       )}
       {state.status === 'ready' && <ThemeSection key={`theme-${state.project.id}`} project={state.project} />}

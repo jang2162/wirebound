@@ -18,13 +18,28 @@ function bigDocument(prefix: string): PageDocument {
     root: {
       id: `${prefix}_root`,
       type: 'Page',
-      children: Array.from({ length: 7000 }, (_, i) => ({ id: `${prefix}_${i}`, type: 'Text', props: { content: `가나다라마바사아자차카타파하 ${i}` } })),
+      children: Array.from({ length: 7000 }, (_, i) => ({
+        id: `${prefix}_${i}`,
+        type: 'Text',
+        props: { content: `가나다라마바사아자차카타파하 ${i}` },
+      })),
     },
   }
 }
 
-async function putSchema(ctx: TestContext, cookie: { wb_session: string }, projectId: string, pageId: string, schema: PageDocument): Promise<void> {
-  const res = await ctx.app.inject({ method: 'PUT', url: `/api/projects/${projectId}/pages/${pageId}/schema`, cookies: cookie, payload: { schema } })
+async function putSchema(
+  ctx: TestContext,
+  cookie: { wb_session: string },
+  projectId: string,
+  pageId: string,
+  schema: PageDocument,
+): Promise<void> {
+  const res = await ctx.app.inject({
+    method: 'PUT',
+    url: `/api/projects/${projectId}/pages/${pageId}/schema`,
+    cookies: cookie,
+    payload: { schema },
+  })
   if (res.statusCode !== 200) throw new Error(`putSchema 픽스처가 실패했습니다 (status ${res.statusCode}): ${res.body}`)
 }
 

@@ -20,7 +20,10 @@ const TMP = join(KIT, '.tmp')
 /** 띄워지는 첫 후보의 경로. `null` 이면 못 띄운다 — 까닭은 `skipReason`. */
 async function launchablePath(): Promise<{ path: string | null; skipReason: string }> {
   const fromShell = process.env.EDITOR_BROWSER_PATH
-  const candidates = fromShell !== undefined && fromShell !== '' ? [fromShell] : ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', chromium.executablePath()]
+  const candidates =
+    fromShell !== undefined && fromShell !== ''
+      ? [fromShell]
+      : ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', chromium.executablePath()]
   const failures: string[] = []
   for (const candidate of candidates) {
     try {
@@ -76,7 +79,16 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
 
   it('system-admin 을 두 폭으로 찍는다 — 폭마다 전체 페이지 PNG · report.json 에 콘솔 오류 · 폴백 0', () => {
     const dir = join(out, 'admin')
-    const { status, out: printed } = shots(join(repoRoot, 'system-themes/admin'), ['--entry', 'src/theme.tsx', '--out', dir, '--widths', '390,1280', '--browser', browser.path!])
+    const { status, out: printed } = shots(join(repoRoot, 'system-themes/admin'), [
+      '--entry',
+      'src/theme.tsx',
+      '--out',
+      dir,
+      '--widths',
+      '390,1280',
+      '--browser',
+      browser.path!,
+    ])
     const report = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as Report
     expect(report.theme.id).toBe('system-admin')
     expect(report.widths.map((w) => w.width)).toEqual([390, 1280])
@@ -103,10 +115,7 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
     const entry = join(root, 'src/index.tsx')
     writeFileSync(
       entry,
-      readFileSync(entry, 'utf8').replace(
-        'views: { Card }',
-        "views: { Card, Tabs: view(() => { throw new Error('탭이 터졌다') }) }",
-      ),
+      readFileSync(entry, 'utf8').replace('views: { Card }', "views: { Card, Tabs: view(() => { throw new Error('탭이 터졌다') }) }"),
     )
     const dir = join(out, 'fixture')
     const { status, out: printed } = shots(root, ['--out', dir, '--widths', '390', '--browser', browser.path!])
@@ -147,14 +156,30 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
     expect(w!.pageScrollWidth).toBe(w!.pageClientWidth)
     expect(w!.overflow.length, printed).toBeGreaterThan(0)
     // 요소 상자는 하나도 안 넘친다 — 적힌 것은 전부 글자 노드다.
-    expect(w!.overflow.every((entry) => entry.element.includes(' "')), printed).toBe(true)
-    expect(w!.overflow.some((entry) => entry.item?.startsWith('Text/') && entry.element.includes('"문의 hong.gildong')), printed).toBe(true)
-    expect(w!.overflow.some((entry) => entry.item?.startsWith('KeyValue/') && entry.element.includes('"hong.gildong')), printed).toBe(true)
+    expect(
+      w!.overflow.every((entry) => entry.element.includes(' "')),
+      printed,
+    ).toBe(true)
+    expect(
+      w!.overflow.some((entry) => entry.item?.startsWith('Text/') && entry.element.includes('"문의 hong.gildong')),
+      printed,
+    ).toBe(true)
+    expect(
+      w!.overflow.some((entry) => entry.item?.startsWith('KeyValue/') && entry.element.includes('"hong.gildong')),
+      printed,
+    ).toBe(true)
   })
 
   it('Chromium 을 못 띄우면 까닭과 고치는 법을 말하고 1 로 끝난다 — 아무것도 안 쓴다', () => {
     const dir = join(out, 'nope')
-    const { status, out: printed } = shots(join(repoRoot, 'system-themes/admin'), ['--entry', 'src/theme.tsx', '--out', dir, '--browser', '/nope/chrome'])
+    const { status, out: printed } = shots(join(repoRoot, 'system-themes/admin'), [
+      '--entry',
+      'src/theme.tsx',
+      '--out',
+      dir,
+      '--browser',
+      '/nope/chrome',
+    ])
     expect(status).toBe(1)
     expect(printed).toContain('Chromium 을 띄우지 못했습니다')
     expect(printed).toContain('/nope/chrome')

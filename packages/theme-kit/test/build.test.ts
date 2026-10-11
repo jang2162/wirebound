@@ -12,7 +12,10 @@ const FIXTURE = new URL('./fixtures/sample-theme/', import.meta.url).pathname
  * 해석 실패로 죽는다.
  */
 const TMP = new URL('../.tmp/', import.meta.url).pathname
-beforeAll(() => { installCatalog(); mkdirSync(TMP, { recursive: true }) })
+beforeAll(() => {
+  installCatalog()
+  mkdirSync(TMP, { recursive: true })
+})
 afterAll(() => rmSync(TMP, { recursive: true, force: true }))
 
 function copyFixture(): string {
@@ -52,8 +55,8 @@ describe('buildTheme', () => {
   it('빌드한 theme.js 에 theme-sdk · react 가 묶이지 않는다', async () => {
     const { file } = await buildTheme({ root: copyFixture() })
     const js = readWbtheme(new Uint8Array(readFileSync(file))).files!.themeJs
-    expect(js).not.toContain('Root 는 뷰 안에서만')          // theme-sdk 소스의 문장
-    expect(js).not.toContain('react.production')            // react 번들의 흔적
+    expect(js).not.toContain('Root 는 뷰 안에서만') // theme-sdk 소스의 문장
+    expect(js).not.toContain('react.production') // react 번들의 흔적
     expect(js.length).toBeLessThan(20_000)
   }, 60_000)
 
@@ -68,7 +71,10 @@ describe('buildTheme', () => {
 
   it('manifest 가 틀리면 이유를 항목별로 던지고 파일을 만들지 않는다', async () => {
     const root = copyFixture()
-    writeFileSync(join(root, 'theme.config.ts'), readFileSync(join(root, 'theme.config.ts'), 'utf8').replace("version: '1.0.0'", "version: '1.0'"))
+    writeFileSync(
+      join(root, 'theme.config.ts'),
+      readFileSync(join(root, 'theme.config.ts'), 'utf8').replace("version: '1.0.0'", "version: '1.0'"),
+    )
     const error = await buildTheme({ root }).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(BuildError)
     expect((error as BuildError).issues.map((i) => i.code)).toContain('bad-version')

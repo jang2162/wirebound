@@ -25,14 +25,7 @@
  * > 지나고(`previewPageJson`의 표), **그래도 서버만 아는 것 넷이 남는다** — 그것을 화면이
  * > 말한다(`SERVER_ONLY`). 단언을 줄이고 남는 것을 적는다.
  */
-import {
-  collectNodeIds,
-  gatePageImport,
-  partitionIssues,
-  readPageJson,
-  type PageJson,
-  type ValidationIssue,
-} from '@wirebound/schema'
+import { collectNodeIds, gatePageImport, partitionIssues, readPageJson, type PageJson, type ValidationIssue } from '@wirebound/schema'
 // **카탈로그가 실려 있어야 `validatePage`가 참말을 한다.** import만으로 설치된다
 // (`catalog-setup.ts`의 머리말) — 안 싣고 부르면 모든 타입이 *"없는 타입"*이 되어
 // **미리보기가 멀쩡한 파일을 전부 막는다.**

@@ -73,8 +73,7 @@ describe('system-docs manifest', () => {
 
   /** 줄 목록 · 정의 목록은 열을 읽지 않는다 — 속성 패널이 그 칸을 감춘다. 표 모양은 읽으므로 감추지 않는다. */
   it('열을 안 읽는 variant 는 columns 를 감춘다', () => {
-    const hidden = (type: string, id: string) =>
-      manifest.components?.[type]?.variants.find((v) => v.id === id)?.hideProps ?? []
+    const hidden = (type: string, id: string) => manifest.components?.[type]?.variants.find((v) => v.id === id)?.hideProps ?? []
     expect(hidden('List', 'default')).toEqual(['columns'])
     expect(hidden('List', 'compact')).toEqual(['columns'])
     expect(hidden('List', 'table')).toEqual([])

@@ -93,7 +93,11 @@ describe('캡처', () => {
       if (outcome.kind !== 'captured') throw new Error(outcome.kind)
       expect(SNAPSHOT_PAYLOAD_VERSION).toBe(3)
       expect(outcome.payload.payloadVersion).toBe(3)
-      expect(outcome.payload.theme).toEqual({ themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [SYSTEM_ADMIN.color.key]: '#123456' } })
+      expect(outcome.payload.theme).toEqual({
+        themeId: 'system-admin',
+        version: SYSTEM_ADMIN.version,
+        tokens: { [SYSTEM_ADMIN.color.key]: '#123456' },
+      })
     })
   })
 
@@ -102,7 +106,11 @@ describe('캡처', () => {
       const fx = await fixture(ctx)
       const outcome = await captureSnapshot(ctx.db, fx.projectId, {
         afterPages: async () => {
-          await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [SYSTEM_ADMIN.color.key]: '#654321' } })
+          await putTheme(ctx, fx, {
+            themeId: 'system-admin',
+            version: SYSTEM_ADMIN.version,
+            tokens: { [SYSTEM_ADMIN.color.key]: '#654321' },
+          })
         },
       })
       expect(outcome.kind).toBe('fingerprint-mismatch')
@@ -115,7 +123,11 @@ describe('캡처', () => {
       await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [SYSTEM_ADMIN.color.key]: '#111111' } })
       const outcome = await captureSnapshot(ctx.db, fx.projectId, {
         afterPages: async () => {
-          await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [SYSTEM_ADMIN.color.key]: '#222222' } })
+          await putTheme(ctx, fx, {
+            themeId: 'system-admin',
+            version: SYSTEM_ADMIN.version,
+            tokens: { [SYSTEM_ADMIN.color.key]: '#222222' },
+          })
         },
       })
       expect(outcome.kind).toBe('fingerprint-mismatch')
@@ -203,7 +215,9 @@ describe('복원 — 판 3 토큰이 그 판의 manifest 를 못 지나면', () 
   })
 
   async function tamper(ctx: TestContext, snapshotId: string, theme: object) {
-    await sql`update snapshots set payload = jsonb_set(payload, '{theme}', ${JSON.stringify(theme)}::jsonb) where id = ${snapshotId}`.execute(ctx.db)
+    await sql`update snapshots set payload = jsonb_set(payload, '{theme}', ${JSON.stringify(theme)}::jsonb) where id = ${snapshotId}`.execute(
+      ctx.db,
+    )
   }
 
   it('이슈가 난 키(없는 키 · 한도 밖 · 문법 밖)만 버리고 나머지를 쓴다', async () => {
@@ -263,7 +277,11 @@ describe('복원 — 판 3 토큰이 그 판의 manifest 를 못 지나면', () 
     await withApi(async (ctx) => {
       await store(ctx, MULTI)
       const fx = await fixture(ctx)
-      await putTheme(ctx, fx, { themeId: 'multi', version: '1.0.0', tokens: { 'color.a': '#000000', 'font.body': '"Noto Sans KR", serif' } })
+      await putTheme(ctx, fx, {
+        themeId: 'multi',
+        version: '1.0.0',
+        tokens: { 'color.a': '#000000', 'font.body': '"Noto Sans KR", serif' },
+      })
       const snapshotId = await snapshot(ctx, fx, '그대로')
       const outcome = await restoreSnapshot(ctx.db, { projectId: fx.projectId, snapshotId, actorId: fx.owner.user.id })
       if (outcome.kind !== 'restored') throw new Error(outcome.kind)
@@ -295,7 +313,9 @@ describe('복원 — 판 2(테마 없음)', () => {
       await store(ctx, SAMPLE)
       const fx = await fixture(ctx)
       const snapshotId = await snapshot(ctx, fx, '판 2')
-      await sql`update snapshots set payload = (payload - 'theme') || '{"payloadVersion": 2}'::jsonb where id = ${snapshotId}`.execute(ctx.db)
+      await sql`update snapshots set payload = (payload - 'theme') || '{"payloadVersion": 2}'::jsonb where id = ${snapshotId}`.execute(
+        ctx.db,
+      )
       await putTheme(ctx, fx, { themeId: 'sample', version: '1.0.0', tokens: { 'color.accent': '#000000' } })
       const before = await binding(ctx, fx)
 
@@ -338,7 +358,9 @@ describe('복원의 방송', () => {
     await withRealApi(async (ctx) => {
       const fx = await fixture(ctx)
       const snapshotId = await snapshot(ctx, fx, '판 2 방송')
-      await sql`update snapshots set payload = (payload - 'theme') || '{"payloadVersion": 2}'::jsonb where id = ${snapshotId}`.execute(ctx.db)
+      await sql`update snapshots set payload = (payload - 'theme') || '{"payloadVersion": 2}'::jsonb where id = ${snapshotId}`.execute(
+        ctx.db,
+      )
       const watcher = await joinRoom(ctx.port, fx.projectId, fx.owner.cookie.wb_session)
       opened.push(watcher)
       expect((await restore(ctx, fx, snapshotId)).statusCode).toBe(200)

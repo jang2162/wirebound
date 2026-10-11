@@ -198,10 +198,7 @@ function overwrittenAt(doc: unknown, path: string): { value: unknown } | null {
   return { value: (parent as Record<string, unknown>)[key] }
 }
 
-function resolveMoveTarget(
-  afterRemove: unknown,
-  op: { op: 'move'; from: string; path: string },
-): string {
+function resolveMoveTarget(afterRemove: unknown, op: { op: 'move'; from: string; path: string }): string {
   const tokens = parsePointer(op.path)
   if (tokens[tokens.length - 1] !== '-') return op.path
 

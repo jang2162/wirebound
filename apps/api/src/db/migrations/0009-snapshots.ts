@@ -85,12 +85,7 @@ export const migration: Migration = {
       .addColumn('created_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`now()`))
       .execute()
 
-    await db.schema
-      .createIndex('snapshots_project_tag_key')
-      .on('snapshots')
-      .columns(['project_id', 'tag'])
-      .unique()
-      .execute()
+    await db.schema.createIndex('snapshots_project_tag_key').on('snapshots').columns(['project_id', 'tag']).unique().execute()
   },
 
   // 테이블을 지우면 그 인덱스도 함께 간다. 다른 테이블에 컬럼을 더하지 않았으므로

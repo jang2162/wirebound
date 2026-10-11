@@ -44,7 +44,8 @@ const DOC = docWithText('t1', '안녕')
 
 function sheets(): string[] {
   return [...canvasDocument().head.querySelectorAll('[data-wb-style]')].map(
-    (el) => `${el.tagName.toLowerCase()}:${el.getAttribute('data-wb-style')}${el.getAttribute('href') === null ? '' : `=${el.getAttribute('href')}`}`,
+    (el) =>
+      `${el.tagName.toLowerCase()}:${el.getAttribute('data-wb-style')}${el.getAttribute('href') === null ? '' : `=${el.getAttribute('href')}`}`,
   )
 }
 
@@ -211,7 +212,9 @@ describe('에디터의 프로젝트 테마', () => {
     const read = () => ({ alert: document.querySelector('.wb-shell-theme-alert')?.textContent ?? null, marker: themeMarker() })
     await waitFor(() => expect(read().alert !== null || read().marker !== null).toBe(true))
     expect(read()).toEqual({
-      alert: expect.stringContaining(`테마 번들이 다른 테마를 등록했습니다(system-admin@0.1.0 — 번들은 acme@${ADMIN_FIXTURE.manifest.version})`),
+      alert: expect.stringContaining(
+        `테마 번들이 다른 테마를 등록했습니다(system-admin@0.1.0 — 번들은 acme@${ADMIN_FIXTURE.manifest.version})`,
+      ),
       marker: null,
     })
     expect(sheets()).toEqual(['style:base', 'style:tokens'])
@@ -220,7 +223,13 @@ describe('에디터의 프로젝트 테마', () => {
   it('번들의 manifest 가 components 만 다르면 알림 없이 서버 manifest 로 variant 를 푼다 — 뷰는 번들 것', async () => {
     const button = ADMIN_FIXTURE.manifest.components!['Button']!
     // 서버 manifest 에만 `huge` — 번들(ADMIN)은 ADMIN_FIXTURE 의 manifest 를 실었다.
-    const server = { ...ADMIN_FIXTURE.manifest, components: { ...ADMIN_FIXTURE.manifest.components, Button: { ...button, variants: [...button.variants, { id: 'huge', label: '아주 큼' }] } } }
+    const server = {
+      ...ADMIN_FIXTURE.manifest,
+      components: {
+        ...ADMIN_FIXTURE.manifest.components,
+        Button: { ...button, variants: [...button.variants, { id: 'huge', label: '아주 큼' }] },
+      },
+    }
     const doc = pageDoc({
       id: 'root',
       type: 'Page',

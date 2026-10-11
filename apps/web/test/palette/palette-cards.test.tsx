@@ -224,12 +224,20 @@ describe('카드 몸통은 끌기 전용이다', () => {
     fireEvent.click(body.querySelector('[data-wb-palette-window]')!)
     fireEvent.click(body.querySelector('.wb-shell-palette-label')!)
     await act(async () => {})
-    expect({ sent, notice: notice(), selected: shellStore().getState().selectedNodeId }).toEqual({ sent: [], notice: '', selected: 'n-text' })
+    expect({ sent, notice: notice(), selected: shellStore().getState().selectedNodeId }).toEqual({
+      sent: [],
+      notice: '',
+      selected: 'n-text',
+    })
   })
 
   it('«넣기» 단추는 카드마다 하나 — 이름이 «<한국어 이름> 넣기» 다', async () => {
     await openWithPalette()
-    const names = cards().map((element) => within(element).getAllByRole('button').map((button) => button.getAttribute('aria-label')))
+    const names = cards().map((element) =>
+      within(element)
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label')),
+    )
     expect(names).toEqual(cardTypes().map((type) => [`${getComponent(type)!.label} 넣기`]))
   })
 })
@@ -298,7 +306,10 @@ describe('«넣기» 단추 — 계획 D6 의 표', () => {
     await act(async () => shellStore().setLocks([{ pageId: PAGE_ID, nodeId: 'n-in', userId: 'u-bora', userName: '보라' }]))
     search('Divider')
     await clickCard('Divider')
-    expect({ path: sent.length === 1 ? added(sent).path : null, notice: notice() }).toEqual({ path: '/root/children/1/children/1', notice: '' })
+    expect({ path: sent.length === 1 ? added(sent).path : null, notice: notice() }).toEqual({
+      path: '/root/children/1/children/1',
+      notice: '',
+    })
   })
 
   it('고른 컨테이너를 남이 잡았다 → 넣지 않음 · 잠금 문장(판정이 막는다)', async () => {
@@ -346,7 +357,12 @@ describe('«넣기» 단추 — 계획 D6 의 표', () => {
     await act(async () => shellStore().setLocks([]))
     await select('n-text')
     const back = { selected: shellStore().getState().selectedNodeId, notice: notice() }
-    expect({ refused, moved, back, sent }).toEqual({ refused: lockedSelectionStatus('보라'), moved: '', back: { selected: 'n-text', notice: '' }, sent: [] })
+    expect({ refused, moved, back, sent }).toEqual({
+      refused: lockedSelectionStatus('보라'),
+      moved: '',
+      back: { selected: 'n-text', notice: '' },
+      sent: [],
+    })
   })
 
   // L-021 — 더블클릭 · 연달아 친 Enter(`click` 의 `detail` 0) 의 둘째는 첫 넣기가 이미 한 일이다(머리말 «카드»).

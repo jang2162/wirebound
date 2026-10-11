@@ -41,7 +41,7 @@ echo "exit=$?"
 
 function docker(args: string[]): { status: number | null; stdout: string; stderr: string } {
   const out = spawnSync('docker', args, { encoding: 'utf8', timeout: 60_000 })
-  return { status: out.status, stdout: out.stdout ?? '', stderr: out.stderr ?? (out.error?.message ?? '') }
+  return { status: out.status, stdout: out.stdout ?? '', stderr: out.stderr ?? out.error?.message ?? '' }
 }
 
 /** 파일들을 넣은 tmpfs 컨테이너를 돌리고 출력을 낸다 — 컨테이너는 늘 지운다. */
@@ -64,8 +64,13 @@ function runInContainer(files: Record<string, string>, mode: 'probe' | 'run'): {
 /** 판이 서는가 — 실물로 잰다(머리말 «건너뛰는 전제는 실물이다»). */
 function prerequisite(): { ok: true } | { ok: false; reason: string } {
   const probe = runInContainer({}, 'probe')
-  if (probe.status !== 0) return { ok: false, reason: `${IMAGE} 로 tmpfs 컨테이너를 못 띄웠다(종료 ${probe.status}): ${(probe.stderr || probe.stdout).trim().split('\n')[0]}` }
-  if (probe.stdout !== 'zero ok\none ENOSPC\n') return { ok: false, reason: `tmpfs 가 «0 바이트는 되고 1 바이트는 ENOSPC» 판이 아니다: ${JSON.stringify(probe.stdout)}` }
+  if (probe.status !== 0)
+    return {
+      ok: false,
+      reason: `${IMAGE} 로 tmpfs 컨테이너를 못 띄웠다(종료 ${probe.status}): ${(probe.stderr || probe.stdout).trim().split('\n')[0]}`,
+    }
+  if (probe.stdout !== 'zero ok\none ENOSPC\n')
+    return { ok: false, reason: `tmpfs 가 «0 바이트는 되고 1 바이트는 ENOSPC» 판이 아니다: ${JSON.stringify(probe.stdout)}` }
   return { ok: true }
 }
 

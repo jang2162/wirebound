@@ -53,9 +53,7 @@ describe('GET /:projectId/presets', () => {
       expect(res.statusCode).toBe(200)
       const body = res.json() as { id: string; source: string; name: string }[]
       // **수를 적지 않는다** — 내장 목록에서 만든다. 프리셋이 늘거나 줄면 이 배열이 따라간다.
-      expect(body.map((entry) => entry.id)).toEqual(
-        BUILTIN_PRESETS.map((preset) => `builtin:${preset.key}`),
-      )
+      expect(body.map((entry) => entry.id)).toEqual(BUILTIN_PRESETS.map((preset) => `builtin:${preset.key}`))
       expect(new Set(body.map((entry) => entry.source))).toEqual(new Set(['builtin']))
     })
   })
@@ -138,15 +136,11 @@ describe('POST /:projectId/presets', () => {
 
       const res = await post(ctx, fx, {
         name: '번호 달린 페이지',
-        schema: [
-          { id: 'a', type: 'Card', marker: 1, children: [{ id: 'b', type: 'List', marker: 2 }] },
-        ],
+        schema: [{ id: 'a', type: 'Card', marker: 1, children: [{ id: 'b', type: 'List', marker: 2 }] }],
       })
 
       expect(res.statusCode).toBe(201)
-      expect((res.json() as { nodes: WbNode[] }).nodes).toEqual([
-        { id: 'a', type: 'Card', children: [{ id: 'b', type: 'List' }] },
-      ])
+      expect((res.json() as { nodes: WbNode[] }).nodes).toEqual([{ id: 'a', type: 'Card', children: [{ id: 'b', type: 'List' }] }])
       // 응답만이 아니라 **저장된 것**에 없어야 한다.
       const stored = await listPresets(ctx.db, fx.project.id)
       expect(stored[0]!.nodes[0]!.marker).toBeUndefined()
@@ -253,8 +247,7 @@ describe('POST /:projectId/presets', () => {
       expect((await post(ctx, fx, { name: `이름${NUL}`, schema: [] })).statusCode).toBe(400)
       expect((await post(ctx, fx, { name: '설명', description: `설명${NUL}`, schema: [] })).statusCode).toBe(400)
       expect(
-        (await post(ctx, fx, { name: '노드', schema: [{ id: 'a', type: 'List', props: { columns: [`가${NUL}`] } }] }))
-          .statusCode,
+        (await post(ctx, fx, { name: '노드', schema: [{ id: 'a', type: 'List', props: { columns: [`가${NUL}`] } }] })).statusCode,
       ).toBe(400)
     })
   })
@@ -414,12 +407,9 @@ describe('marker 규칙의 자리가 하나다', () => {
   it('두 형태를 실제로 알아본다 — 정규식이 아무것도 못 찾는 판을 막는다', () => {
     // **저장소의 소스가 아니라 표본으로 잰다.** 소스로 재면 그 소스가 바뀔 때 무엇이
     // 깨졌는지(형태를 못 알아보는가, 자리가 늘었는가) 갈리지 않는다.
-    const samples = ["await insertPreset(db, input)", "db.insertInto('presets').values(row)"]
+    const samples = ['await insertPreset(db, input)', "db.insertInto('presets').values(row)"]
 
-    expect(samples.map((sample) => WRITE_FORMS.some(({ pattern }) => pattern.test(sample)))).toEqual([
-      true,
-      true,
-    ])
+    expect(samples.map((sample) => WRITE_FORMS.some(({ pattern }) => pattern.test(sample)))).toEqual([true, true])
   })
 
   it('프리셋을 쓰는 자리가 라우트 하나다 — 늘면 marker 규칙을 다시 판정해야 한다', () => {

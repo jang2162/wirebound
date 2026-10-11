@@ -57,9 +57,7 @@ export interface ScreenPage {
 }
 
 /** 그린 결과 하나. **실패가 예외가 아니라 이 유니온의 한쪽이다**(머리말 「실패는 값이다」). */
-export type ScreenResult =
-  | { ok: true; bytes: Uint8Array; width: number; height: number }
-  | { ok: false; reason: string }
+export type ScreenResult = { ok: true; bytes: Uint8Array; width: number; height: number } | { ok: false; reason: string }
 
 export interface ScreenBatch {
   /** **`ScreenJob.pages` 와 같은 길이·같은 순서다.** 부르는 쪽이 인덱스로 짝짓는다. */
@@ -92,8 +90,7 @@ export interface ScreenRenderer {
  * **글자를 한 자리에만 둔다** — 미리보기가 말하는 것과 실패 이유가 갈리면 화면과 파일이
  * 다른 말을 한다.
  */
-export const NO_KOREAN_FONT =
-  '이 서버에 한글 글꼴이 없어 화면 이미지를 그리지 않았습니다'
+export const NO_KOREAN_FONT = '이 서버에 한글 글꼴이 없어 화면 이미지를 그리지 않았습니다'
 
 /**
  * 두부 물음이 **브라우저에서 걷어 온 날 값**.
@@ -210,7 +207,5 @@ export function readPngSize(bytes: Uint8Array): { width: number; height: number 
 }
 
 function readUint32(bytes: Uint8Array, offset: number): number {
-  return (
-    (bytes[offset]! << 24) | (bytes[offset + 1]! << 16) | (bytes[offset + 2]! << 8) | bytes[offset + 3]!
-  ) >>> 0
+  return ((bytes[offset]! << 24) | (bytes[offset + 1]! << 16) | (bytes[offset + 2]! << 8) | bytes[offset + 3]!) >>> 0
 }

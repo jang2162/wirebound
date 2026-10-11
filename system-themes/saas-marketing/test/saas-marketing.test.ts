@@ -132,7 +132,12 @@ describe('system-saas-marketing 뷰', () => {
 
   it('List — 카드 셋은 카드 그리드, table 은 기본 뷰의 표다', () => {
     const c = draw(
-      ['cards', 'featured', 'compact', 'table'].map((variant) => ({ id: variant, type: 'List', variant, props: { items: 4, pagination: true } })),
+      ['cards', 'featured', 'compact', 'table'].map((variant) => ({
+        id: variant,
+        type: 'List',
+        variant,
+        props: { items: 4, pagination: true },
+      })),
     )
     for (const variant of ['cards', 'featured', 'compact']) {
       const el = node(c, variant)
@@ -166,7 +171,10 @@ describe('system-saas-marketing 뷰', () => {
   })
 
   it('KeyValue — tiles 는 노드의 열 수를 변수로 나르고, table 은 기본 뷰다', () => {
-    const pairs = [{ key: '가동률', value: '99.9%' }, { key: '고객', value: '1,200' }]
+    const pairs = [
+      { key: '가동률', value: '99.9%' },
+      { key: '고객', value: '1,200' },
+    ]
     const c = draw([
       { id: 't', type: 'KeyValue', variant: 'tiles', props: { pairs, columns: 3 } },
       { id: 'b', type: 'KeyValue', variant: 'table', props: { pairs, columns: 3 } },

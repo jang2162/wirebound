@@ -17,12 +17,7 @@ function markup(element: ReturnType<typeof renderNode>): string {
  */
 function errorMessages(html: string): string[] {
   return [...html.matchAll(/data-wb-error="([^"]*)"/g)].map((m) =>
-    m[1]!
-      .replaceAll('&quot;', '"')
-      .replaceAll('&#x27;', "'")
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .replaceAll('&amp;', '&'),
+    m[1]!.replaceAll('&quot;', '"').replaceAll('&#x27;', "'").replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&'),
   )
 }
 
@@ -236,9 +231,7 @@ describe('모양이 깨진 노드', () => {
 
     // 노드 자신은 멀쩡하므로 폴백이 아니라 제 뷰로 그려진다. 자식만 없다.
     expect(errorMessages(html)).toEqual([])
-    expect(html).toBe(
-      '<div data-wb-structure="default" data-wb-id="n_000000000001" data-wb-component="Page"></div>',
-    )
+    expect(html).toBe('<div data-wb-structure="default" data-wb-id="n_000000000001" data-wb-component="Page"></div>')
   })
 
   it('children 배열의 null 원소는 그 자리만 폴백이 된다', () => {

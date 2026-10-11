@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { defineTheme, SDK_VERSION, view, type ThemeManifest } from '@wirebound/theme-sdk'
 
 const manifest: ThemeManifest = {
-  id: 'sample', name: '샘플', version: '0.1.0', sdk: '^1.0.0',
+  id: 'sample',
+  name: '샘플',
+  version: '0.1.0',
+  sdk: '^1.0.0',
   tokens: { items: { 'semantic.primary': { type: 'color', label: '주색', default: '#2563eb' } } },
 }
 

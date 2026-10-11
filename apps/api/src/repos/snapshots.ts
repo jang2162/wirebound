@@ -287,11 +287,7 @@ export async function listSnapshots(db: DbHandle, projectId: string): Promise<Sn
  * 남의 프로젝트의 스냅샷 id를 실은 요청이 통하면 안 된다. id만으로 찾고 나서 비교하는 대신
  * 질의 조건에 두는 것은, 비교를 빠뜨린 판이 조용히 통과하기 때문이다(`findCommentById`와 같다).
  */
-export async function findSnapshotById(
-  db: DbHandle,
-  projectId: string,
-  snapshotId: string,
-): Promise<SnapshotDetail | null> {
+export async function findSnapshotById(db: DbHandle, projectId: string, snapshotId: string): Promise<SnapshotDetail | null> {
   const row = await selectSnapshots(db)
     .select('snapshots.payload')
     .where('snapshots.project_id', '=', projectId)
@@ -390,10 +386,7 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  * `projects` 의 바인딩 칸 넷(토큰은 해시로)이다. `theme_rev` 만 담으면 «바인딩이 바뀌면 번호가 오른다»는 다른 파일의 불변식
  * (`repos/projects.ts`의 `updateProjectTheme` · `restoreProjectTheme`)에 기대게 된다 — 페이지 문서를 해시로 담는 것과 같은 판정이다.
  */
-export async function readCaptureFingerprint(
-  db: DbHandle,
-  projectId: string,
-): Promise<{ fingerprint: string; at: Date }> {
+export async function readCaptureFingerprint(db: DbHandle, projectId: string): Promise<{ fingerprint: string; at: Date }> {
   const row = await sql<{ fingerprint: string; at: Date }>`
     select clock_timestamp() as at, json_build_object(
       'menu_nodes', (

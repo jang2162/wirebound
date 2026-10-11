@@ -44,7 +44,10 @@ export const migration: Migration = {
     await sql`
       update comment_tombstones t set project_id = p.project_id from pages p where p.id = t.page_id
     `.execute(db)
-    await db.schema.alterTable('comment_tombstones').alterColumn('project_id', (col) => col.setNotNull()).execute()
+    await db.schema
+      .alterTable('comment_tombstones')
+      .alterColumn('project_id', (col) => col.setNotNull())
+      .execute()
     await db.schema.alterTable('comment_tombstones').dropConstraint('comment_tombstones_page_id_fkey').execute()
     // 프로젝트 삭제의 CASCADE 가 이 칸으로 찾는다 — 색인이 없으면 프로젝트 하나를 지울 때마다 표 전체를 훑는다.
     await db.schema.createIndex('comment_tombstones_project_idx').on('comment_tombstones').column('project_id').execute()

@@ -47,12 +47,7 @@ export function dropZone(offset: number, height: number, acceptsInside: boolean)
   return 'inside'
 }
 
-export function menuDropTarget(
-  menu: TreeMenuNode[],
-  dragged: TreeSelection,
-  over: TreeSelection,
-  zone: DropZone,
-): MenuDrop | null {
+export function menuDropTarget(menu: TreeMenuNode[], dragged: TreeSelection, over: TreeSelection, zone: DropZone): MenuDrop | null {
   if (dragged.kind === over.kind && dragged.id === over.id) return null
   const from = treeSpot(menu, dragged)
   if (from === null) return null

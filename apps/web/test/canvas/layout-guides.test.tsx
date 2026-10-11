@@ -41,7 +41,10 @@ describe('배치 선', () => {
     fireEvent.click(toggle()!)
     expect(toggle()?.getAttribute('aria-pressed')).toBe('true')
     expect(guides()).toEqual(['n-row', 'n-grid'])
-    expect([...document.querySelectorAll('[data-wb-guide-for]')].map((guide) => guide.getAttribute('data-wb-guide-kind'))).toEqual(['flex', 'grid'])
+    expect([...document.querySelectorAll('[data-wb-guide-for]')].map((guide) => guide.getAttribute('data-wb-guide-kind'))).toEqual([
+      'flex',
+      'grid',
+    ])
     // 셸 겹이다 — 캔버스 문서(iframe)에는 아무것도 안 넣는다.
     const frame = document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement
     expect(frame.contentDocument?.querySelectorAll('[data-wb-guide-for], .wb-shell-guide')).toHaveLength(0)

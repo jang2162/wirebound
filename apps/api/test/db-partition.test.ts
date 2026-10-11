@@ -181,7 +181,9 @@ describe('고아 백엔드 — 서버 쪽 idle_in_transaction_session_timeout', 
 
   it('트랜잭션 안에서 시간 제한보다 오래 쉬면 서버가 그 세션을 끝낸다 — 그 거절은 «연결을 잃었다»(503 쪽)이고 커밋은 0 이다', async () => {
     const logged: unknown[] = []
-    const db = createDb(createPool(TEST_DATABASE_URL, (error) => logged.push(error), { ...DEFAULT_DB_TIME_LIMITS, idleInTransactionMs: 300 }))
+    const db = createDb(
+      createPool(TEST_DATABASE_URL, (error) => logged.push(error), { ...DEFAULT_DB_TIME_LIMITS, idleInTransactionMs: 300 }),
+    )
     const admin = getTestDb()
     await sql`create table zz_idle_kill (v text)`.execute(admin)
     try {
@@ -352,7 +354,9 @@ describe('기동 점검 — 실은 idle 제한이 걸렸는가', () => {
       expect(failure).toBeInstanceOf(Error)
       const { message, cause } = failure as Error & { cause?: { code?: string } }
       // 첫 줄에 — 무엇이(그 인자) · 무엇을 하라(0 · ignore_startup_parameters). 원문(08P01)은 cause 에 둔다.
-      expect(message).toMatch(new RegExp(`^DB 앞단.*기동 인자 ${IDLE} 을 거절.*DB_IDLE_IN_TRANSACTION_TIMEOUT_MS=0.*ignore_startup_parameters`))
+      expect(message).toMatch(
+        new RegExp(`^DB 앞단.*기동 인자 ${IDLE} 을 거절.*DB_IDLE_IN_TRANSACTION_TIMEOUT_MS=0.*ignore_startup_parameters`),
+      )
       expect(cause?.code).toBe('08P01')
       expect(warned).toEqual([])
 
@@ -484,7 +488,10 @@ describe('방송 — 한 연결의 권한을 못 재면 그 연결만 건너뛴�
         void Promise.all(held.splice(0)).then((clients) => clients.forEach((client) => client.release()))
       })
 
-      const sent = await within(broadcaster.send(project.id, { type: 'pong' }).catch((error: unknown) => error), 5000)
+      const sent = await within(
+        broadcaster.send(project.id, { type: 'pong' }).catch((error: unknown) => error),
+        5000,
+      )
       expect(sent).toBe(5)
       expect(received).toEqual(['c0', 'c1', 'c3', 'c4', 'c5'])
       // 못 잰 연결은 받지도 닫히지도 않는다 — 회수가 확인된 것이 아니다.

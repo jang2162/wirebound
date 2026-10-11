@@ -106,10 +106,7 @@ const SnapshotParams = z.object({ projectId: z.uuid(), snapshotId: z.uuid() })
  * `z.strictObject`라 선언되지 않은 키는 그 자체로 400이다(`routes/projects.ts`와 같은 관례).
  */
 const SnapshotBody = z.strictObject({
-  tag: z
-    .string()
-    .min(1, '태그를 입력하세요')
-    .max(60, '태그는 60자 이하여야 합니다'),
+  tag: z.string().min(1, '태그를 입력하세요').max(60, '태그는 60자 이하여야 합니다'),
   description: z.string().max(2000, '설명은 2000자 이하여야 합니다').nullable().optional(),
 })
 
@@ -298,81 +295,80 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
      * 핸들러가 하는 일은 그 결과를 HTTP로 옮기는 것 하나다 — 위 오류 표가 곧 아래
      * `restoreOutcomeToApiError`다.
      */
-    app.post(
-      '/:projectId/snapshots/:snapshotId/restore',
-      { preHandler: projectGuard('owner') },
-      async (request) => {
-        const { projectId, snapshotId } = parseParams(SnapshotParams, request.params)
+    app.post('/:projectId/snapshots/:snapshotId/restore', { preHandler: projectGuard('owner') }, async (request) => {
+      const { projectId, snapshotId } = parseParams(SnapshotParams, request.params)
 
-        // `projectGuard('owner')`가 이미 인증을 요구하므로 여기 도달했다면 `currentUser`는
-        // 있다. `as`로 좁히지 않는 이유는 생성 핸들러와 같다 — 아래에서 `.id`를 반드시 읽으므로
-        // 가드가 빠지는 순간 `as` 버전은 미인증 요청에 `null` 역참조로 500을 낸다.
-        const currentUser = request.currentUser
-        if (!currentUser) {
-          throw unauthenticated()
-        }
+      // `projectGuard('owner')`가 이미 인증을 요구하므로 여기 도달했다면 `currentUser`는
+      // 있다. `as`로 좁히지 않는 이유는 생성 핸들러와 같다 — 아래에서 `.id`를 반드시 읽으므로
+      // 가드가 빠지는 순간 `as` 버전은 미인증 요청에 `null` 역참조로 500을 낸다.
+      const currentUser = request.currentUser
+      if (!currentUser) {
+        throw unauthenticated()
+      }
 
-        // **COMMIT 답을 잃으면 그 트랜잭션이 커밋됐는지 새 연결로 확인한다**(`services/lost-commit.ts`) — 커밋됐으면 성공이다.
-        // `restored`는 페이지의 `seq`를 싣지 않고 받는 쪽이 다시 읽게 하는 프레임이라 머리를 보지 않고 보낸다.
-        let menuRev = 0
-        const { result: outcome } = await runConfirmedTransaction(
-          app.db,
-          async (trx) => {
-            const restored = await restoreSnapshot(trx, { projectId, snapshotId, actorId: currentUser.id })
-            if (restored.kind === 'restored') {
-              // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원은 프로젝트의 페이지를
-              // 전부 잠근다(`lockProjectForRestore`) — 그 대기 뒤의 역할로 판정한다. 던지면 복원째 되돌아간다
-              // (`restoreSnapshot`의 트랜잭션은 이 안의 세이브포인트가 된다).
-              await recheckProjectRole(trx, request)
-              // **트리 판 번호는 맨 끝이다**(`repos/menu.ts`의 `bumpMenuRev`). 메뉴 · 페이지가 그대로인 복원도 올린다 — 판 2 · 3 의 복원은
-              // 페이지를 지우고 되살리며, 무엇이 바뀌었는지 가려 올리면 한 갈래를 빠뜨린 판이 조용히 낡는다.
-              menuRev = await bumpMenuRev(trx, projectId)
-            }
-            return restored
-          },
-          async (restored) => (restored.kind === 'restored' ? true : null),
-        )
-        if (outcome.kind !== 'restored') {
-          throw restoreOutcomeToApiError(outcome)
-        }
+      // **COMMIT 답을 잃으면 그 트랜잭션이 커밋됐는지 새 연결로 확인한다**(`services/lost-commit.ts`) — 커밋됐으면 성공이다.
+      // `restored`는 페이지의 `seq`를 싣지 않고 받는 쪽이 다시 읽게 하는 프레임이라 머리를 보지 않고 보낸다.
+      let menuRev = 0
+      const { result: outcome } = await runConfirmedTransaction(
+        app.db,
+        async (trx) => {
+          const restored = await restoreSnapshot(trx, { projectId, snapshotId, actorId: currentUser.id })
+          if (restored.kind === 'restored') {
+            // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원은 프로젝트의 페이지를
+            // 전부 잠근다(`lockProjectForRestore`) — 그 대기 뒤의 역할로 판정한다. 던지면 복원째 되돌아간다
+            // (`restoreSnapshot`의 트랜잭션은 이 안의 세이브포인트가 된다).
+            await recheckProjectRole(trx, request)
+            // **트리 판 번호는 맨 끝이다**(`repos/menu.ts`의 `bumpMenuRev`). 메뉴 · 페이지가 그대로인 복원도 올린다 — 판 2 · 3 의 복원은
+            // 페이지를 지우고 되살리며, 무엇이 바뀌었는지 가려 올리면 한 갈래를 빠뜨린 판이 조용히 낡는다.
+            menuRev = await bumpMenuRev(trx, projectId)
+          }
+          return restored
+        },
+        async (restored) => (restored.kind === 'restored' ? true : null),
+      )
+      if (outcome.kind !== 'restored') {
+        throw restoreOutcomeToApiError(outcome)
+      }
 
-        // **복원을 룸에 알린다.** 복원은 세 자원(메뉴·페이지·코멘트)을 한꺼번에 바꾸므로, 알리지 않으면
-        // 다른 접속자는 낡은 문서 위에서 편집하다 `stale` 409를 받고 화면은 왜인지 말할
-        // 수단이 없다. **커밋 뒤**다 — `restoreSnapshot`이 자기
-        // 트랜잭션을 닫고 돌아온 뒤에 알린다.
-        notifyRestored(app, {
+      // **복원을 룸에 알린다.** 복원은 세 자원(메뉴·페이지·코멘트)을 한꺼번에 바꾸므로, 알리지 않으면
+      // 다른 접속자는 낡은 문서 위에서 편집하다 `stale` 409를 받고 화면은 왜인지 말할
+      // 수단이 없다. **커밋 뒤**다 — `restoreSnapshot`이 자기
+      // 트랜잭션을 닫고 돌아온 뒤에 알린다.
+      notifyRestored(app, {
+        projectId,
+        snapshotId,
+        safetySnapshotId: outcome.result.safety.id,
+        actor: requestEventActor(request),
+        clientRestoreId: clientRestoreId(request),
+      })
+      // **트리도 알린다** — `restored`는 사람이 배너의 단추를 눌러야 다시 읽는다(`apps/web`의 `shell/remote-alert.tsx`). 트리가 그때까지
+      // 옛 판이면 그 위에서 내는 트리 쓰기(끌기 · 연쇄 상자)가 옛 차례 · 옛 목록으로 선다.
+      notifyMenuChanged(app, { projectId, rev: menuRev, actor: requestEventActor(request) })
+      // 판에 없어 지운 페이지의 잠금 — 페이지 삭제 · 연쇄 삭제와 같다(`ws/lock.ts`의 `releaseLocksOnPages`).
+      releaseLocksOnPages(app, projectId, outcome.result.deletedPageIds)
+      // **판 3 은 테마 바인딩도 되돌렸다** — 값이 같아도 `theme_rev` 가 올랐으므로 늘 알린다(spec 「스냅샷」). 캔버스는 `restored` 로
+      // 문서를 다시 읽고, 테마는 이 프레임으로 다시 싣는다 — 둘이 따로 오는 것은 받는 자리가 다르기 때문이다(`ws/protocol.ts`).
+      const theme = outcome.result.theme
+      if (theme !== null && theme.themeId !== null && theme.version !== null) {
+        notifyThemeChanged(app, {
           projectId,
-          snapshotId,
-          safetySnapshotId: outcome.result.safety.id,
+          themeId: theme.themeId,
+          version: theme.version,
+          tokens: theme.tokens,
+          rev: theme.rev,
           actor: requestEventActor(request),
-          clientRestoreId: clientRestoreId(request),
         })
-        // **트리도 알린다** — `restored`는 사람이 배너의 단추를 눌러야 다시 읽는다(`apps/web`의 `shell/remote-alert.tsx`). 트리가 그때까지
-        // 옛 판이면 그 위에서 내는 트리 쓰기(끌기 · 연쇄 상자)가 옛 차례 · 옛 목록으로 선다.
-        notifyMenuChanged(app, { projectId, rev: menuRev, actor: requestEventActor(request) })
-        // 판에 없어 지운 페이지의 잠금 — 페이지 삭제 · 연쇄 삭제와 같다(`ws/lock.ts`의 `releaseLocksOnPages`).
-        releaseLocksOnPages(app, projectId, outcome.result.deletedPageIds)
-        // **판 3 은 테마 바인딩도 되돌렸다** — 값이 같아도 `theme_rev` 가 올랐으므로 늘 알린다(spec 「스냅샷」). 캔버스는 `restored` 로
-        // 문서를 다시 읽고, 테마는 이 프레임으로 다시 싣는다 — 둘이 따로 오는 것은 받는 자리가 다르기 때문이다(`ws/protocol.ts`).
-        const theme = outcome.result.theme
-        if (theme !== null && theme.themeId !== null && theme.version !== null) {
-          notifyThemeChanged(app, {
-            projectId,
-            themeId: theme.themeId,
-            version: theme.version,
-            tokens: theme.tokens,
-            rev: theme.rev,
-            actor: requestEventActor(request),
-          })
-        }
+      }
 
-        const dropped = outcome.result.droppedThemeTokens
-        if (dropped.length > 0) {
-          request.log.warn({ projectId, snapshotId, droppedThemeTokens: dropped }, `복원: 판의 manifest 를 못 지난 테마 토큰 ${dropped.length} 개를 버렸습니다(기본값으로 선다)`)
-        }
-        return toRestoreResponse(outcome.result)
-      },
-    )
+      const dropped = outcome.result.droppedThemeTokens
+      if (dropped.length > 0) {
+        request.log.warn(
+          { projectId, snapshotId, droppedThemeTokens: dropped },
+          `복원: 판의 manifest 를 못 지난 테마 토큰 ${dropped.length} 개를 버렸습니다(기본값으로 선다)`,
+        )
+      }
+      return toRestoreResponse(outcome.result)
+    })
   }
 }
 
@@ -398,9 +394,7 @@ function restoreOutcomeToApiError(outcome: Exclude<RestoreOutcome, { kind: 'rest
     case 'not-found':
       return notFound('스냅샷을 찾을 수 없습니다')
     case 'payload-version':
-      return badRequest(
-        `이 서버가 읽을 수 없는 스냅샷 형식입니다 (형식 ${outcome.payloadVersion}, 지원 ${outcome.supported})`,
-      )
+      return badRequest(`이 서버가 읽을 수 없는 스냅샷 형식입니다 (형식 ${outcome.payloadVersion}, 지원 ${outcome.supported})`)
     case 'fingerprint-mismatch':
       // 생성 쪽의 같은 갈래와 **문장을 맞춘다** — 사용자가 할 일이 같다(그대로 다시 보낸다).
       return conflict('복원하는 동안 프로젝트가 바뀌었습니다. 다시 시도해 주세요')

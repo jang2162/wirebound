@@ -39,11 +39,7 @@ const FORBIDDEN =
  * *"어느 자리에서만 필요한가"*를 판단할 일이 없어진다.
  */
 export function xmlText(value: string): string {
-  return value
-    .replace(FORBIDDEN, '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
+  return value.replace(FORBIDDEN, '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 }
 
 /** 속성 값. 텍스트가 거르는 것에 더해 따옴표 둘을 거른다 — **속성은 `"`로 감싼다.** */

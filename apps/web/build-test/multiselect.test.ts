@@ -63,7 +63,10 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
     if (member.status >= 300) throw new Error(`member ${member.status}`)
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return P
   }
@@ -78,7 +81,10 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
   }
 
   async function openTab(P: string, user: 'alice' | 'bob' = 'alice', origin?: string) {
-    const { context, page } = await stack.openTab(stack.users[user], { viewport: { width: 1440, height: 900 }, ...(origin === undefined ? {} : { origin }) })
+    const { context, page } = await stack.openTab(stack.users[user], {
+      viewport: { width: 1440, height: 900 },
+      ...(origin === undefined ? {} : { origin }),
+    })
     const received: string[] = []
     page.on('websocket', (socket) => {
       socket.on('framereceived', (frame) => {
@@ -191,7 +197,11 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
     const b = await openTab(P, 'bob')
     try {
       await narrow(a.page)
-      await poll('alice 의 WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
+      await poll(
+        'alice 의 WS 가 늦춰진 채 붙는다',
+        async () => delay.delayed(),
+        (n) => n >= 1,
+      )
       await a.page.waitForTimeout(3000)
       await row(b.page, id(2)).click()
       await b.page.waitForTimeout(300)
@@ -199,7 +209,12 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       const to = await nodeBox(a.page, id(3))
       await marquee(a.page, from, to)
       const right = await picked(a.page)
-      await poll('거절이 alice 에게 닿는다', async () => a.received.filter((kind) => kind === 'lock-denied').length, (n) => n >= 1, 10_000)
+      await poll(
+        '거절이 alice 에게 닿는다',
+        async () => a.received.filter((kind) => kind === 'lock-denied').length,
+        (n) => n >= 1,
+        10_000,
+      )
       await a.page.waitForTimeout(300)
       // 서버가 나머지 둘은 쥐었다 — bob 화면(늦추지 않은 WS)에 alice 의 배지 둘이 선다. 화면 값만으로는 서버가 집합째 거절한 판과 안 갈린다.
       const bobBadges = await poll(
@@ -207,12 +222,20 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         () =>
           b.page.evaluate(() =>
             // 배지는 줄(`[data-tree-id]`)의 형제다 — 같은 `li` 안의 줄에서 id 를 읽는다.
-            [...document.querySelectorAll('.wb-shell-structure-lock')].map((badge) => badge.parentElement?.querySelector(':scope > [data-tree-id]')?.getAttribute('data-tree-id') ?? '').sort(),
+            [...document.querySelectorAll('.wb-shell-structure-lock')]
+              .map((badge) => badge.parentElement?.querySelector(':scope > [data-tree-id]')?.getAttribute('data-tree-id') ?? '')
+              .sort(),
           ),
         (ids) => ids.length >= 2,
         5000,
       ).catch((error: Error) => error.message)
-      expect({ delayed: delay.delayed() > 0, right: right.all, after: await picked(a.page), alerts: await alerts(a.page), bobBadges }).toEqual({
+      expect({
+        delayed: delay.delayed() > 0,
+        right: right.all,
+        after: await picked(a.page),
+        alerts: await alerts(a.page),
+        bobBadges,
+      }).toEqual({
         delayed: true,
         right: [id(1), id(2), id(3)],
         after: { anchor: id(3), all: [id(1), id(3)] },
@@ -242,7 +265,10 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
     const projectId = P.split('/')[2]!
     const snapshot = (await call('POST', `/projects/${projectId}/snapshots`, { tag: 'x-in-a' })).body
     const head = (await call('GET', P)).body.headSeq
-    const flat = await call('PATCH', `${P}/ops`, { baseSeq: head, ops: [{ op: 'move', from: '/root/children/0/children/1', path: '/root/children/1' }] })
+    const flat = await call('PATCH', `${P}/ops`, {
+      baseSeq: head,
+      ops: [{ op: 'move', from: '/root/children/0/children/1', path: '/root/children/1' }],
+    })
     if (flat.status >= 300) throw new Error(`flat ${flat.status}`)
     const a = await openTab(P)
     const b = await openTab(P, 'bob')
@@ -258,7 +284,12 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       const restored = await call('POST', `/projects/${projectId}/snapshots/${snapshot.id}/restore`)
       await b.page.waitForTimeout(500)
       await row(b.page, 'n_c').click({ modifiers: ['ControlOrMeta'] })
-      await poll('거절이 bob 에게 닿는다', async () => b.received.filter((kind) => kind === 'lock-denied').length, (n) => n >= 1, 5000).catch(() => 0)
+      await poll(
+        '거절이 bob 에게 닿는다',
+        async () => b.received.filter((kind) => kind === 'lock-denied').length,
+        (n) => n >= 1,
+        5000,
+      ).catch(() => 0)
       await b.page.waitForTimeout(300)
       const alertsOfBob = await alerts(b.page)
       expect({
@@ -288,7 +319,11 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       const shown = { value: await field.inputValue(), placeholder: await field.getAttribute('placeholder') }
       await field.fill('같게')
       await field.press('Tab')
-      await poll('서버에 닿는다', () => server(P), (now) => now.headSeq > before.headSeq)
+      await poll(
+        '서버에 닿는다',
+        () => server(P),
+        (now) => now.headSeq > before.headSeq,
+      )
       const bobSees = await poll(
         'bob 화면에 둘 다',
         () => canvasFrame(b.page).locator('[data-wb-id]').allTextContents(),
@@ -298,8 +333,19 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       // 포커스가 속성 패널의 다음 칸(입력 표면)이면 Cmd+Z 는 그 칸의 것이다 — 트리 줄로 옮긴 뒤 누른다.
       await row(a.page, id(1)).click()
       await a.page.keyboard.press('ControlOrMeta+z')
-      const undone = await poll('되돌림이 닿는다', () => server(P), (now) => now.headSeq > changed.headSeq)
-      expect({ shown, revisions: changed.headSeq - before.headSeq, changed: changed.children, bob: bobSees.length > 0, undone: undone.children, undoRevisions: undone.headSeq - changed.headSeq }).toEqual({
+      const undone = await poll(
+        '되돌림이 닿는다',
+        () => server(P),
+        (now) => now.headSeq > changed.headSeq,
+      )
+      expect({
+        shown,
+        revisions: changed.headSeq - before.headSeq,
+        changed: changed.children,
+        bob: bobSees.length > 0,
+        undone: undone.children,
+        undoRevisions: undone.headSeq - changed.headSeq,
+      }).toEqual({
         shown: { value: '', placeholder: '여러 값' },
         revisions: 1,
         changed: [`${id(0)}:같게`, `${id(1)}:줄 1`, `${id(2)}:같게`],
@@ -322,10 +368,23 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       await row(a.page, id(3)).click({ modifiers: ['ControlOrMeta'] })
       await row(a.page, id(4)).click({ modifiers: ['ControlOrMeta'] })
       await a.page.keyboard.press('Delete')
-      const removed = await poll('지움이 닿는다', () => server(P), (now) => now.headSeq > before.headSeq)
+      const removed = await poll(
+        '지움이 닿는다',
+        () => server(P),
+        (now) => now.headSeq > before.headSeq,
+      )
       await a.page.keyboard.press('ControlOrMeta+z')
-      const undone = await poll('되돌림이 닿는다', () => server(P), (now) => now.headSeq > removed.headSeq)
-      expect({ removed: removed.children, revisions: removed.headSeq - before.headSeq, undone: undone.children, undoRevisions: undone.headSeq - removed.headSeq }).toEqual({
+      const undone = await poll(
+        '되돌림이 닿는다',
+        () => server(P),
+        (now) => now.headSeq > removed.headSeq,
+      )
+      expect({
+        removed: removed.children,
+        revisions: removed.headSeq - before.headSeq,
+        undone: undone.children,
+        undoRevisions: undone.headSeq - removed.headSeq,
+      }).toEqual({
         removed: [`${id(0)}:줄 0`, `${id(2)}:줄 2`],
         revisions: 1,
         undone: before.children,
@@ -362,7 +421,11 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       const b = await openTab(P, 'bob')
       try {
         await narrow(a.page)
-        await poll('alice 의 WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
+        await poll(
+          'alice 의 WS 가 늦춰진 채 붙는다',
+          async () => delay.delayed(),
+          (n) => n >= 1,
+        )
         await a.page.waitForTimeout(3000)
         const before = await server(P)
         await row(b.page, id(2)).click()
@@ -370,9 +433,25 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         await marquee(a.page, await nodeBox(a.page, id(1)), await nodeBox(a.page, id(3)))
         await content(a.page).fill('새 글')
         const typed = await content(a.page).inputValue()
-        await poll('거절이 alice 에게 닿는다', async () => a.received.filter((kind) => kind === 'lock-denied').length, (n) => n >= 1, 10_000)
-        const after = await poll('친 글이 서버에 닿는다', () => server(P), (now) => now.headSeq > before.headSeq, 5000).catch(() => server(P))
-        expect({ delayed: delay.delayed() > 0, typed, children: after.children, revisions: after.headSeq - before.headSeq, alerts: await alerts(a.page) }).toEqual({
+        await poll(
+          '거절이 alice 에게 닿는다',
+          async () => a.received.filter((kind) => kind === 'lock-denied').length,
+          (n) => n >= 1,
+          10_000,
+        )
+        const after = await poll(
+          '친 글이 서버에 닿는다',
+          () => server(P),
+          (now) => now.headSeq > before.headSeq,
+          5000,
+        ).catch(() => server(P))
+        expect({
+          delayed: delay.delayed() > 0,
+          typed,
+          children: after.children,
+          revisions: after.headSeq - before.headSeq,
+          alerts: await alerts(a.page),
+        }).toEqual({
           delayed: true,
           typed: '새 글',
           children: [`${id(0)}:줄 0`, `${id(1)}:새 글`, `${id(2)}:줄 2`, `${id(3)}:새 글`, `${id(4)}:줄 4`],
@@ -395,8 +474,17 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         await content(a.page).fill('일괄 글')
         const before = await server(P)
         await otherTab(P, [{ op: 'remove', path: '/root/children/1' }])
-        await poll('고른 것이 하나로 준다', () => picked(a.page), (now) => now.all.length === 1)
-        const after = await poll('친 글이 서버에 닿는다', () => server(P), (now) => now.headSeq > before.headSeq + 1, 5000).catch(() => server(P))
+        await poll(
+          '고른 것이 하나로 준다',
+          () => picked(a.page),
+          (now) => now.all.length === 1,
+        )
+        const after = await poll(
+          '친 글이 서버에 닿는다',
+          () => server(P),
+          (now) => now.headSeq > before.headSeq + 1,
+          5000,
+        ).catch(() => server(P))
         expect({ children: after.children, revisions: after.headSeq - before.headSeq, alerts: await alerts(a.page) }).toEqual({
           children: [`${id(0)}:일괄 글`, `${id(2)}:줄 2`],
           // 지움 하나 + 친 글 하나.
@@ -418,7 +506,11 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         await a.page.getByLabel('제목', { exact: true }).fill('같은 제목')
         const before = await server(P)
         await otherTab(P, [{ op: 'move', from: '/root/children/1', path: '/root/children/0/children/-' }])
-        await poll('고른 것이 바깥 카드 하나로 준다', () => picked(a.page), (now) => now.all.length === 1)
+        await poll(
+          '고른 것이 바깥 카드 하나로 준다',
+          () => picked(a.page),
+          (now) => now.all.length === 1,
+        )
         const titles = async () => {
           const body = (await call('GET', P)).body
           const outer = body.schema.root.children[0]
@@ -445,7 +537,12 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         await content(a.page).fill('클릭 전 글')
         const before = await server(P)
         await row(a.page, id(2)).click({ modifiers: ['ControlOrMeta'] })
-        const after = await poll('친 글이 서버에 닿는다', () => server(P), (now) => now.headSeq > before.headSeq, 5000).catch(() => server(P))
+        const after = await poll(
+          '친 글이 서버에 닿는다',
+          () => server(P),
+          (now) => now.headSeq > before.headSeq,
+          5000,
+        ).catch(() => server(P))
         await a.page.waitForTimeout(300)
         const settled = await server(P)
         expect({ picked: (await picked(a.page)).all, children: after.children, revisions: settled.headSeq - before.headSeq }).toEqual({
@@ -473,7 +570,11 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         retyped.root.children[0] = { id: id(0), type: 'Card', props: { title: '카드' }, children: [] }
         const put = await call('PUT', `${P}/schema`, { schema: retyped })
         if (put.status >= 300) throw new Error(`PUT ${put.status} ${JSON.stringify(put.body)}`)
-        await poll('제목 칸이 선다', () => a.page.getByLabel('제목', { exact: true }).count(), (n) => n === 1)
+        await poll(
+          '제목 칸이 선다',
+          () => a.page.getByLabel('제목', { exact: true }).count(),
+          (n) => n === 1,
+        )
         await a.page.waitForTimeout(500)
         const after = (await call('GET', P)).body
         expect({
@@ -496,7 +597,11 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         await content(a.page).fill('하나 글')
         const before = await server(P)
         await otherTab(P, [{ op: 'remove', path: '/root/children/0' }])
-        await poll('고른 것이 빈다', () => picked(a.page), (now) => now.all.length === 0)
+        await poll(
+          '고른 것이 빈다',
+          () => picked(a.page),
+          (now) => now.all.length === 0,
+        )
         await a.page.waitForTimeout(500)
         const after = await server(P)
         expect({ children: after.children, revisions: after.headSeq - before.headSeq, alerts: await alerts(a.page) }).toEqual({
@@ -526,7 +631,11 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       const P2 = `/projects/${projectId}/pages/${second}`
       const seeded = await call('PATCH', `${P2}/ops`, {
         baseSeq: 0,
-        ops: TEXTS(3).map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value: { ...value, props: { content: `둘째 ${at}` } } })),
+        ops: TEXTS(3).map((value, at) => ({
+          op: 'add',
+          path: `/root/children/${at}`,
+          value: { ...value, props: { content: `둘째 ${at}` } },
+        })),
       })
       if (seeded.status >= 300) throw new Error(`둘째 페이지 ${seeded.status}`)
       const a = await openTab(P)
@@ -534,24 +643,35 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         // 기록에 다음 페이지를 쌓는다 — 메뉴 링크로 갔다가 «뒤로».
         await a.page.getByRole('link', { name: '쪽2', exact: true }).click()
         await a.page.waitForURL(`**${P2}`)
-        await canvasFrame(a.page).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        await canvasFrame(a.page)
+          .locator(`[data-wb-id="${id(0)}"]`)
+          .waitFor()
         await a.page.goBack()
         await a.page.waitForURL(`**${P}`)
-        await canvasFrame(a.page).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        await canvasFrame(a.page)
+          .locator(`[data-wb-id="${id(0)}"]`)
+          .waitFor()
         await a.page.waitForTimeout(400)
         const before = { A: await server(P), B: await server(P2) }
         await row(a.page, id(picks[0]!)).click()
         for (const n of picks.slice(1)) await row(a.page, id(n)).click({ modifiers: ['ControlOrMeta'] })
         await content(a.page).fill('앞 페이지 글')
-        const typed = { value: await content(a.page).inputValue(), focused: await content(a.page).evaluate((el) => el === document.activeElement) }
+        const typed = {
+          value: await content(a.page).inputValue(),
+          focused: await content(a.page).evaluate((el) => el === document.activeElement),
+        }
         await a.page.goForward()
         await a.page.waitForURL(`**${P2}`)
-        await canvasFrame(a.page).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        await canvasFrame(a.page)
+          .locator(`[data-wb-id="${id(0)}"]`)
+          .waitFor()
         await a.page.waitForTimeout(800)
         const there = { A: await server(P), B: await server(P2), alerts: await alerts(a.page) }
         await a.page.goBack()
         await a.page.waitForURL(`**${P}`)
-        await canvasFrame(a.page).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        await canvasFrame(a.page)
+          .locator(`[data-wb-id="${id(0)}"]`)
+          .waitFor()
         await a.page.waitForTimeout(500)
         expect({
           typed,
@@ -588,10 +708,18 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         const before = await server(P)
         await row(a.page, id(0)).click()
         await content(a.page).fill('떠나며 친 글')
-        const typed = { value: await content(a.page).inputValue(), focused: await content(a.page).evaluate((el) => el === document.activeElement) }
+        const typed = {
+          value: await content(a.page).inputValue(),
+          focused: await content(a.page).evaluate((el) => el === document.activeElement),
+        }
         await a.page.getByRole('link', { name: '프로젝트 목록', exact: true }).click()
         await a.page.waitForURL((url) => url.pathname === '/')
-        await poll('친 글이 서버에 닿는다', () => server(P), (now) => now.headSeq > before.headSeq, 5_000)
+        await poll(
+          '친 글이 서버에 닿는다',
+          () => server(P),
+          (now) => now.headSeq > before.headSeq,
+          5_000,
+        )
         const after = await server(P)
         expect({
           typed,
@@ -612,28 +740,46 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       const P = await fixture('draft-signed-out', TEXTS(3))
       const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
       const writes: string[] = []
-      page.on('websocket', (socket) => socket.on('framesent', (frame) => String(frame.payload).includes('"type":"patch"') && writes.push('ws patch')))
-      page.on('request', (request) => request.method() === 'PATCH' && request.url().includes('/ops') && writes.push(`REST ${request.method()}`))
+      page.on('websocket', (socket) =>
+        socket.on('framesent', (frame) => String(frame.payload).includes('"type":"patch"') && writes.push('ws patch')),
+      )
+      page.on(
+        'request',
+        (request) => request.method() === 'PATCH' && request.url().includes('/ops') && writes.push(`REST ${request.method()}`),
+      )
       const signOuts: string[] = []
       try {
         await page.goto(P)
-        await canvasFrame(page).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        await canvasFrame(page)
+          .locator(`[data-wb-id="${id(0)}"]`)
+          .waitFor()
         const before = await server(P)
         await row(page, id(0)).click()
         await row(page, id(1)).click({ modifiers: ['ControlOrMeta'] })
         await content(page).fill('로그아웃 전 글')
         const typed = await content(page).inputValue()
         const other = await context.newPage()
-        other.on('request', (request) => request.method() !== 'GET' && request.url().includes('/auth/') && signOuts.push(new URL(request.url()).pathname))
+        other.on(
+          'request',
+          (request) => request.method() !== 'GET' && request.url().includes('/auth/') && signOuts.push(new URL(request.url()).pathname),
+        )
         await other.goto(P)
-        await canvasFrame(other).locator(`[data-wb-id="${id(0)}"]`).waitFor()
+        await canvasFrame(other)
+          .locator(`[data-wb-id="${id(0)}"]`)
+          .waitFor()
         await other.getByRole('button', { name: '더 보기', exact: true }).click()
         await other.getByRole('menuitem', { name: '로그아웃' }).click()
         await other.waitForURL('**/login**', { timeout: 10_000 })
         await page.waitForURL('**/login**', { timeout: 10_000 })
         await page.waitForTimeout(1000)
         const after = await server(P)
-        expect({ typed, signedOut: signOuts.length > 0, writes, revisions: after.headSeq - before.headSeq, children: after.children }).toEqual({
+        expect({
+          typed,
+          signedOut: signOuts.length > 0,
+          writes,
+          revisions: after.headSeq - before.headSeq,
+          children: after.children,
+        }).toEqual({
           typed: '로그아웃 전 글',
           signedOut: true,
           writes: [],
@@ -695,7 +841,12 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         const frame = document.querySelector<HTMLIFrameElement>('iframe.wb-shell-canvas-iframe')!
         const top = frame.getBoundingClientRect().top
         const nodes = [...frame.contentDocument!.querySelectorAll('[data-wb-id]')]
-        return nodes.map((node) => node.getAttribute('data-wb-id')).find((nodeId, index) => nodeId!.startsWith('n_t') && top + nodes[index]!.getBoundingClientRect().bottom > canvas.bottom) ?? null
+        return (
+          nodes
+            .map((node) => node.getAttribute('data-wb-id'))
+            .find((nodeId, index) => nodeId!.startsWith('n_t') && top + nodes[index]!.getBoundingClientRect().bottom > canvas.bottom) ??
+          null
+        )
       })
       await a.page.mouse.move(start.x - 3, start.y - 3)
       await a.page.mouse.down()
@@ -721,7 +872,9 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
    * 카나리아: 누른 점의 `elementFromPoint` 가 iframe(문서 안)이다.
    */
   it('사각형 — 캔버스 문서 안에서 시작해도 서고 뗀 뒤의 클릭이 선택을 안 바꾼다', async () => {
-    const P = await fixture('marquee-inside', [{ id: 'n_card', type: 'Card', props: { title: '카드' }, children: [T(id(0), '안 0'), T(id(1), '안 1')] }])
+    const P = await fixture('marquee-inside', [
+      { id: 'n_card', type: 'Card', props: { title: '카드' }, children: [T(id(0), '안 0'), T(id(1), '안 1')] },
+    ])
     const a = await openTab(P)
     try {
       await narrow(a.page)
@@ -769,9 +922,23 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
         await a.page.waitForTimeout(150)
         return (await picked(a.page)).all
       }
-      const six = await wobble(id(4), [[3, 0], [6, 0]])
-      const ten = await wobble(id(3), [[5, 2], [10, 0]])
-      const trackpad = await wobble(id(1), [[1, 0], [2, 1], [3, 2], [2, 3], [3, 3], [1, 2], [2, 2]])
+      const six = await wobble(id(4), [
+        [3, 0],
+        [6, 0],
+      ])
+      const ten = await wobble(id(3), [
+        [5, 2],
+        [10, 0],
+      ])
+      const trackpad = await wobble(id(1), [
+        [1, 0],
+        [2, 1],
+        [3, 2],
+        [2, 3],
+        [3, 3],
+        [1, 2],
+        [2, 2],
+      ])
 
       const card = await nodeBox(a.page, id(0))
       const pane = { x: card.x - 20, y: card.y + card.height / 2 }

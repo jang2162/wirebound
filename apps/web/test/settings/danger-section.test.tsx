@@ -19,7 +19,9 @@ function project(role: ProjectRole = 'owner', name = '내 프로젝트'): Projec
   return { id: 'p-own', name, slug: 'mine', description: null, role, themeRev: 0 }
 }
 
-function renderSettings(options: { role?: ProjectRole; name?: string; deleteProject?: ApiClient['deleteProject']; lists?: ProjectDetail[][] } = {}) {
+function renderSettings(
+  options: { role?: ProjectRole; name?: string; deleteProject?: ApiClient['deleteProject']; lists?: ProjectDetail[][] } = {},
+) {
   const deleteProject = vi.fn(options.deleteProject ?? (async () => undefined))
   const lists = options.lists ?? [[]]
   let call = 0

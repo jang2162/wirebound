@@ -19,10 +19,7 @@ import { TOOLS, findTool } from '../src/tools'
 
 /** 「MCP 도구」의 표에서 `| 도구 | 용도 |` 줄을 읽는다. */
 function specTools(): { name: string; use: string }[] {
-  const section = designDoc.slice(
-    designDoc.indexOf('### 12.2 MCP 도구'),
-    designDoc.indexOf('### 12.3 CLI'),
-  )
+  const section = designDoc.slice(designDoc.indexOf('### 12.2 MCP 도구'), designDoc.indexOf('### 12.3 CLI'))
   const found: { name: string; use: string }[] = []
   for (const line of section.split('\n')) {
     const match = /^\|\s*`([a-z_]+)`\s*\|\s*(.+?)\s*\|$/.exec(line.trim())
@@ -36,20 +33,12 @@ describe('도구 표가 설계서 「MCP 도구」를 센다', () => {
 
   it('설계 문서에서 도구 줄을 실제로 읽는다', () => {
     // 파서가 어긋나면 **빈 집합에서 아래가 조용히 통과한다.**
-    expect(spec.map((tool) => tool.name)).toEqual([
-      'list_pages',
-      'get_page',
-      'patch_page',
-      'add_comment',
-      'validate',
-    ])
+    expect(spec.map((tool) => tool.name)).toEqual(['list_pages', 'get_page', 'patch_page', 'add_comment', 'validate'])
   })
 
   it('「MCP 도구」의 다섯을 빠짐없이 덮는다 — 이름도 용도도 문서에서 온다', () => {
     // **수를 여기 적지 않는다.** 문서가 든 줄이 곧 기대값이고 **순서까지 같다.**
-    expect(TOOLS.map((tool) => ({ name: tool.name, use: tool.spec }))).toEqual(
-      spec.map((tool) => ({ name: tool.name, use: tool.use })),
-    )
+    expect(TOOLS.map((tool) => ({ name: tool.name, use: tool.spec }))).toEqual(spec.map((tool) => ({ name: tool.name, use: tool.use })))
   })
 
   it('쓰기 둘이 실재한다 — 표가 다시 좁아지면 죽는다', () => {

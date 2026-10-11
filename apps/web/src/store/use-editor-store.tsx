@@ -26,14 +26,7 @@
  * 있으면 Provider 없이 스토어를 직접 쥐고 하는 테스트가 불가능해진다. 화면이 컨텍스트의
  * 스토어를 원하면 `useEditorStoreInstance()`로 꺼내 넘긴다.
  */
-import {
-  createContext,
-  useContext,
-  useMemo,
-  useSyncExternalStore,
-  type ReactElement,
-  type ReactNode,
-} from 'react'
+import { createContext, useContext, useMemo, useSyncExternalStore, type ReactElement, type ReactNode } from 'react'
 import type { PageDocument } from '@wirebound/schema'
 import type { EditorState, EditorStore } from './editor-store'
 
@@ -112,10 +105,7 @@ export function useOpenPage(pageId: string | undefined): OpenPage | null {
   // 남아 반환 타입이 `null`을 품게 되고, 그러면 쓰는 쪽이 대조를 한 번 더 하게 된다.
   const openDocument = openPageId !== null && openPageId === pageId ? document : null
 
-  return useMemo(
-    () => (openDocument === null ? null : { document: openDocument, headSeq }),
-    [openDocument, headSeq],
-  )
+  return useMemo(() => (openDocument === null ? null : { document: openDocument, headSeq }), [openDocument, headSeq])
 }
 
 /**

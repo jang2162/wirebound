@@ -34,12 +34,7 @@ function titles(items: readonly { title: string; sortOrder: number }[]): string[
   return [...items].sort((a, b) => a.sortOrder - b.sortOrder).map((item) => item.title)
 }
 
-async function patch(
-  ctx: TestContext,
-  cookie: { wb_session: string },
-  url: string,
-  payload: Record<string, unknown>,
-): Promise<void> {
+async function patch(ctx: TestContext, cookie: { wb_session: string }, url: string, payload: Record<string, unknown>): Promise<void> {
   const res = await ctx.app.inject({ method: 'PATCH', url, cookies: cookie, payload })
   expect(res.statusCode).toBe(200)
 }

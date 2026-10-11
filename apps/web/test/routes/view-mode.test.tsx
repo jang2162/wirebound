@@ -24,15 +24,7 @@
  */
 import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import {
-  deselect,
-  openPage,
-  pageDetail,
-  pageDoc,
-  PROJECT_NAME,
-  PROJECT_ROUTE,
-  renderEditor,
-} from '../editor-harness'
+import { deselect, openPage, pageDetail, pageDoc, PROJECT_NAME, PROJECT_ROUTE, renderEditor } from '../editor-harness'
 import { chooseRowAction, rowAction, rowNamed } from '../panels/tree-row'
 
 const DOC = pageDoc({
@@ -120,9 +112,7 @@ describe('설계서 「설계서 화면 구조」 — 모드를 바꿀 때 보�
 
     toView()
 
-    expect(screen.getByRole('tab', { name: '페이지 설명' }).getAttribute('aria-selected')).toBe(
-      'true',
-    )
+    expect(screen.getByRole('tab', { name: '페이지 설명' }).getAttribute('aria-selected')).toBe('true')
   })
 
   it('되돌아오면 앞서 보던 탭이 되살아난다', async () => {
@@ -130,9 +120,7 @@ describe('설계서 「설계서 화면 구조」 — 모드를 바꿀 때 보�
     // "속성을 보고 있었다"는 사실까지 지우지 않는다.
     await openPage(DOC, { apiOverrides: withDescription(null) })
     toView()
-    expect(screen.getByRole('tab', { name: '페이지 설명' }).getAttribute('aria-selected')).toBe(
-      'true',
-    )
+    expect(screen.getByRole('tab', { name: '페이지 설명' }).getAttribute('aria-selected')).toBe('true')
 
     toEdit()
 

@@ -150,15 +150,7 @@ describe('성공 응답이 계약을 어기면 — http-client 층', () => {
       // 그것이 그대로 스택에 실려 undo가 `ops`로 보내다 죽는다.
       name: 'listMyRevisions',
       call: (api) => api.listMyRevisions('p-1', 'pg-1'),
-      bodies: [
-        null,
-        {},
-        'x',
-        [{}],
-        [{ ...REVISION, id: 1 }],
-        [{ ...REVISION, inverse: 'x' }],
-        [{ ...REVISION, inverse: null }],
-      ],
+      bodies: [null, {}, 'x', [{}], [{ ...REVISION, id: 1 }], [{ ...REVISION, inverse: 'x' }], [{ ...REVISION, inverse: null }]],
     },
     {
       // `seq`가 다음 요청의 `baseSeq`이고 `inverse`가 undo가 되보낼 ops다. 둘 중 하나라도
@@ -181,19 +173,16 @@ describe('성공 응답이 계약을 어기면 — http-client 층', () => {
 
   describe('ApiError로 바꾼다', () => {
     for (const { name, call, bodies } of BROKEN) {
-      it.each(bodies.map((body, index) => ({ name, body, index })))(
-        `${name} ← $index: $body`,
-        async ({ body }) => {
-          const error = asApiError(await call(client({ '': body })).catch((caught: unknown) => caught))
+      it.each(bodies.map((body, index) => ({ name, body, index })))(`${name} ← $index: $body`, async ({ body }) => {
+        const error = asApiError(await call(client({ '': body })).catch((caught: unknown) => caught))
 
-          // **`ApiError`인 것이 요점이다.** 호출자는 `err instanceof ApiError`로 분기하므로
-          // (`api/failure.tsx`), raw `TypeError`가 새면 그 분기가 통째로 빗나간다.
-          expect(error.code).toBe('internal')
-          expect(error.message).toBe(UNREADABLE)
-          // 응답은 왔고 성공이었다. 연결 실패(0)와 섞이지 않아야 로그에서 갈라 볼 수 있다.
-          expect(error.status).toBe(200)
-        },
-      )
+        // **`ApiError`인 것이 요점이다.** 호출자는 `err instanceof ApiError`로 분기하므로
+        // (`api/failure.tsx`), raw `TypeError`가 새면 그 분기가 통째로 빗나간다.
+        expect(error.code).toBe('internal')
+        expect(error.message).toBe(UNREADABLE)
+        // 응답은 왔고 성공이었다. 연결 실패(0)와 섞이지 않아야 로그에서 갈라 볼 수 있다.
+        expect(error.status).toBe(200)
+      })
     }
   })
 

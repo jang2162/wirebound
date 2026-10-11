@@ -1,14 +1,6 @@
 import { z } from 'zod'
 import { hasRejectedAliasChar, isBlankAlias } from './alias'
-import {
-  DEFAULT_CASE,
-  NODE_ALIAS_MAX,
-  VIEW_STATE_NAME_MAX,
-  VIEW_STATES_MAX,
-  type Interaction,
-  type ViewState,
-  type WbNode,
-} from './node'
+import { DEFAULT_CASE, NODE_ALIAS_MAX, VIEW_STATE_NAME_MAX, VIEW_STATES_MAX, type Interaction, type ViewState, type WbNode } from './node'
 
 /**
  * 노드 id로 허용하는 문자 집합.

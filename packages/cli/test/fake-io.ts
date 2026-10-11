@@ -230,10 +230,7 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
       return typeof found === 'string' ? found : new TextDecoder().decode(found)
     },
     textEntries: () =>
-      [...fs.entries()].map(([path, content]) => [
-        path,
-        typeof content === 'string' ? content : new TextDecoder().decode(content),
-      ]),
+      [...fs.entries()].map(([path, content]) => [path, typeof content === 'string' ? content : new TextDecoder().decode(content)]),
     modes,
     stdout,
     stderr,

@@ -54,7 +54,10 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
         await page.click(toggle)
         const opened = await page.locator(body).count()
         await clickClearOfPopover(await docNode(page, 'n_text0000002'))
-        const closed = await settle(() => page.locator(body).count(), (count) => count === 0)
+        const closed = await settle(
+          () => page.locator(body).count(),
+          (count) => count === 0,
+        )
         expect({ opened, afterCanvasClick: closed }).toEqual({ opened: 1, afterCanvasClick: 0 })
       })
     })
@@ -71,7 +74,10 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
         await button.focus()
         const focusedInCanvas = await button.evaluate((el) => el.ownerDocument.activeElement === el)
         await page.keyboard.press('Escape')
-        const closed = await settle(() => page.locator(body).count(), (count) => count === 0)
+        const closed = await settle(
+          () => page.locator(body).count(),
+          (count) => count === 0,
+        )
         expect({ opened, focusedInCanvas, afterEscape: closed }).toEqual({ opened: 1, focusedInCanvas: true, afterEscape: 0 })
       })
     })
@@ -99,7 +105,10 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
       )
       const stillOpen = await page.locator('.wb-shell-action-menu-body').count()
       await clickClearOfPopover(await docNode(page, 'n_text0000002'))
-      const closed = await settle(() => page.locator('.wb-shell-action-menu-body').count(), (count) => count === 0)
+      const closed = await settle(
+        () => page.locator('.wb-shell-action-menu-body').count(),
+        (count) => count === 0,
+      )
       expect({ opened, swapped, stillOpen, afterCanvasClick: closed }).toEqual({
         opened: 1,
         swapped: { iframes: 1, old: 0 },
@@ -132,7 +141,11 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
       // 놓은 뒤의 움직임은 폭을 바꾸지 않는다 — `pointerup` 을 못 받았으면 드래그가 붙은 채 남아 손잡이 쪽으로 돌아오는 포인터가 폭을 끈다.
       await page.mouse.move(x - 60, y, { steps: 3 })
       const afterRelease = await settle(width, (value) => value !== dragged, 500)
-      expect({ start, dragged, afterRelease }, `놓은 자리: ${underPointer}`).toEqual({ start, dragged: start + 150, afterRelease: start + 150 })
+      expect({ start, dragged, afterRelease }, `놓은 자리: ${underPointer}`).toEqual({
+        start,
+        dragged: start + 150,
+        afterRelease: start + 150,
+      })
     })
   })
 
@@ -142,7 +155,11 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
       await page.goto(P)
       const text = await docNode(page, 'n_text0000001')
       await text.waitFor()
-      const outlineId = () => page.locator('.wb-shell-selection').getAttribute('data-wb-selected-id', { timeout: 500 }).catch(() => null)
+      const outlineId = () =>
+        page
+          .locator('.wb-shell-selection')
+          .getAttribute('data-wb-selected-id', { timeout: 500 })
+          .catch(() => null)
       const notices = () => page.locator('.wb-shell-canvas-runtime').count()
       const frameBox = await page.locator('.wb-shell-canvas-frame').boundingBox()
       if (frameBox === null) throw new Error('프레임 상자를 못 쟀다')

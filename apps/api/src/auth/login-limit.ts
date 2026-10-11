@@ -285,7 +285,10 @@ export function addressKey(address: string): string | undefined {
   if (groups === undefined) return undefined
   const embedded = embeddedIPv4(groups)
   if (embedded !== undefined) return embedded
-  return `${groups.slice(0, 4).map((group) => group.toString(16)).join(':')}::/64`
+  return `${groups
+    .slice(0, 4)
+    .map((group) => group.toString(16))
+    .join(':')}::/64`
 }
 
 /**

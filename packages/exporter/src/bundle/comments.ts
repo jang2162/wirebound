@@ -86,10 +86,7 @@ function markerOf(node: WbNode): number | null {
  * 문서에 있는 노드가 먼저고, 고아 코멘트가 뒤다 — 그것들은 문서에 자리가 없으므로
  * **입력 순서**말고 줄 세울 근거가 없다. 같은 노드에 달린 코멘트끼리도 입력 순서다.
  */
-export function commentEntries(
-  page: PageDocument,
-  comments: readonly BundleComment[],
-): CommentEntry[] {
+export function commentEntries(page: PageDocument, comments: readonly BundleComment[]): CommentEntry[] {
   const byNode = new Map<string, BundleComment[]>()
   for (const comment of comments) {
     const list = byNode.get(comment.nodeId)
@@ -125,12 +122,7 @@ export function commentEntries(
   return entries
 }
 
-function commentLine(
-  nodeId: string,
-  label: string,
-  marker: number | null,
-  comment: BundleComment,
-): CommentEntry {
+function commentLine(nodeId: string, label: string, marker: number | null, comment: BundleComment): CommentEntry {
   return {
     kind: 'comment',
     nodeId,

@@ -118,7 +118,8 @@ describe.skipIf(!전제.ok)('행동 메뉴 자리 — 실브라우저', () => {
     for (let m = 0; m < MENUS; m += 1) {
       const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: `메뉴 ${m + 1}` })).body.id as string
       menuIds.push(menu)
-      for (let p = 0; p < 2; p += 1) pageIds.push((await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu, title: `페이지 ${m + 1}-${p + 1}` })).body.id)
+      for (let p = 0; p < 2; p += 1)
+        pageIds.push((await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu, title: `페이지 ${m + 1}-${p + 1}` })).body.id)
     }
     const P = `/projects/${project.id}/pages/${pageIds[0]}`
     const ops = Array.from({ length: NODES }, (_, i) => ({
@@ -178,7 +179,11 @@ describe.skipIf(!전제.ok)('행동 메뉴 자리 — 실브라우저', () => {
     {
       label: '구조 트리 머리 +',
       open: async (page) => {
-        await page.locator('.wb-shell-region[aria-label="구조 트리"]').getByRole('button', { name: /추가$/ }).first().click()
+        await page
+          .locator('.wb-shell-region[aria-label="구조 트리"]')
+          .getByRole('button', { name: /추가$/ })
+          .first()
+          .click()
         await page.getByRole('menu').waitFor()
       },
     },

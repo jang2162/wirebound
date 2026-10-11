@@ -80,7 +80,10 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     const P = `/projects/${project.id}/pages/${pageId}`
     const seeded = await call('PATCH', `${P}/ops`, {
       baseSeq: 0,
-      ops: [{ op: 'add', path: '/viewStates', value: [ADMIN, GUEST] }, ...[...NODES, ...extra].map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value }))],
+      ops: [
+        { op: 'add', path: '/viewStates', value: [ADMIN, GUEST] },
+        ...[...NODES, ...extra].map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+      ],
     })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return { P, P2: `/projects/${project.id}/pages/${page2Id}`, pageId, page2Id }
@@ -121,8 +124,12 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
   }
   /** 캔버스에 선 노드 id · 구조 트리 줄 id — 둘 다 문서 차례이고 뿌리(서버가 짓는 id · 맨 앞)는 뺀다. */
   async function shown(page: Page): Promise<{ canvas: string[]; tree: string[]; head: string }> {
-    const canvas = await canvasFrame(page).locator('[data-wb-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))
-    const tree = await page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-row]').evaluateAll((els) => els.map((el) => el.getAttribute('data-tree-id') ?? ''))
+    const canvas = await canvasFrame(page)
+      .locator('[data-wb-id]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))
+    const tree = await page
+      .locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-row]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-tree-id') ?? ''))
     const head = (await switcher(page).getAttribute('aria-label')) ?? ''
     return { canvas: canvas.slice(1), tree: tree.slice(1), head }
   }
@@ -170,7 +177,8 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     try {
       await choose(tab.page, '관리자')
       // 페이지 줄의 줄 단추는 링크다 — 줄 상자의 첫 자식(`./action-menu-delete.test.ts` 와 같은 찾기).
-      const menuRow = (id: string) => tab.page.locator(`.wb-shell-region[aria-label="메뉴·페이지 트리"] [data-tree-row][data-tree-id="${id}"] > :first-child`)
+      const menuRow = (id: string) =>
+        tab.page.locator(`.wb-shell-region[aria-label="메뉴·페이지 트리"] [data-tree-row][data-tree-id="${id}"] > :first-child`)
       await menuRow(page2Id).click()
       await tab.page.waitForURL(`**/pages/${page2Id}`)
       // 둘째 페이지(빈 페이지)가 캔버스에 선 뒤 — 첫 페이지의 노드가 걷혔다.
@@ -206,7 +214,11 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
         await menu.click()
         checked = await tab.page.getByRole('menuitemradio', { checked: true }).allTextContents()
       }
-      const canvas = (await canvasFrame(tab.page).locator('[data-wb-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))).slice(1)
+      const canvas = (
+        await canvasFrame(tab.page)
+          .locator('[data-wb-id]')
+          .evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))
+      ).slice(1)
       expect({ inHead, radios, checked, canvas }).toEqual({
         inHead: 0,
         radios: ['화면 상태: 기본', '화면 상태: 관리자', '화면 상태: 손님'],
@@ -258,13 +270,23 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       for (const child of (node.children ?? []) as { id: string; children?: unknown[] }[]) walk(child, false)
     }
     walk(body.schema.root, true)
-    return { states: ((body.schema.viewStates ?? []) as { name: string }[]).map((state) => state.name), ids, headSeq: body.headSeq as number }
+    return {
+      states: ((body.schema.viewStates ?? []) as { name: string }[]).map((state) => state.name),
+      ids,
+      headSeq: body.headSeq as number,
+    }
   }
   /**
    * 서버 머리 번호가 `after` 를 넘을 때까지 — 보낸 편집이 닿았다는 것만 기다린다(재는 값은 그 뒤 `server`). 3s 안에 안 닿으면 던지지 않고
    * 돌아온다 — 안 보낸 판은 뒤의 단언이 서버 값으로 죽는다(시간 초과로 죽지 않게).
    */
-  const landed = (P: string, after: number) => poll('서버에 닿음', () => server(P), (value) => value.headSeq > after, 3_000).catch(() => null)
+  const landed = (P: string, after: number) =>
+    poll(
+      '서버에 닿음',
+      () => server(P),
+      (value) => value.headSeq > after,
+      3_000,
+    ).catch(() => null)
   const dialog = (page: Page) => page.getByRole('dialog')
   /**
    * 전환기의 «상태 추가» · «상태 관리…»로 상자를 연다. 같은 자리의 메뉴 항목을 다시 누르는 판이라 앞 누름에서 `DOUBLE_CLICK_MS`(500ms)를 넘겨
@@ -310,12 +332,23 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       await dialog(tab.page).getByRole('button', { name: '추가' }).click()
       await landed(P, start.headSeq)
       await frames(tab.page)
-      const added = { server: (await server(P)).states, head: await switcher(tab.page).getAttribute('aria-label'), dialogs: await dialog(tab.page).count() }
+      const added = {
+        server: (await server(P)).states,
+        head: await switcher(tab.page).getAttribute('aria-label'),
+        dialogs: await dialog(tab.page).count(),
+      }
       const head = (await server(P)).headSeq
       await undo(tab.page)
       await landed(P, head)
       await frames(tab.page)
-      expect({ duplicate, long, refusedSent, added, undone: (await server(P)).states, headAfterUndo: await switcher(tab.page).getAttribute('aria-label') }).toEqual({
+      expect({
+        duplicate,
+        long,
+        refusedSent,
+        added,
+        undone: (await server(P)).states,
+        headAfterUndo: await switcher(tab.page).getAttribute('aria-label'),
+      }).toEqual({
         duplicate: '같은 이름의 상태가 있습니다',
         long: '이름은 30자까지입니다',
         refusedSent: 0,
@@ -354,10 +387,25 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       await undo(tab.page)
       await landed(P, after.headSeq)
       const restored = await server(P)
-      expect({ renamed, moved, shape, removed, afterStates: after.states, restoredStates: restored.states, restoredIds: restored.ids }).toEqual({
+      expect({
+        renamed,
+        moved,
+        shape,
+        removed,
+        afterStates: after.states,
+        restoredStates: restored.states,
+        restoredIds: restored.ids,
+      }).toEqual({
         renamed: ['관리자', '방문자'],
         moved: ['방문자', '관리자'],
-        shape: { sentence: '"관리자" 상태를 지웁니다. 가지 1개의 내용이 함께 삭제됩니다.', ids: ['n_at'], button: '삭제', disabled: null, reason: null, changed: 0 },
+        shape: {
+          sentence: '"관리자" 상태를 지웁니다. 가지 1개의 내용이 함께 삭제됩니다.',
+          ids: ['n_at'],
+          button: '삭제',
+          disabled: null,
+          reason: null,
+          changed: 0,
+        },
         removed: ['n_ca', 'n_at'],
         afterStates: ['방문자'],
         restoredStates: ['방문자', '관리자'],
@@ -378,7 +426,13 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       const head = (await server(P)).headSeq
       const added = await stack.request(bob, 'PATCH', `${P}/ops`, {
         baseSeq: head,
-        ops: [{ op: 'add', path: '/root/children/1/children/2', value: { id: 'n_cg', type: 'StateCase', props: { state: GUEST.id }, children: [text('n_gt', '손님 글')] } }],
+        ops: [
+          {
+            op: 'add',
+            path: '/root/children/1/children/2',
+            value: { id: 'n_cg', type: 'StateCase', props: { state: GUEST.id }, children: [text('n_gt', '손님 글')] },
+          },
+        ],
       })
       expect(added.status).toBe(200)
       // 남의 편집이 이 탭에 닿은 것 — 구조 트리의 영역 줄 요약이 «가지 3»이 된다(재는 것은 그 뒤 상자의 모양이다).
@@ -392,12 +446,33 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       await tab.page.waitForTimeout(600)
       const beforeSecond = await server(P)
       // 첫 누름이 보냈으면(상자가 닫힘) 둘째는 없다 — 값(`afterFirst`)으로 죽는다.
-      if ((await dialog(tab.page).locator('.wb-shell-view-states-danger').count()) > 0) await dialog(tab.page).locator('.wb-shell-view-states-danger').click()
+      if ((await dialog(tab.page).locator('.wb-shell-view-states-danger').count()) > 0)
+        await dialog(tab.page).locator('.wb-shell-view-states-danger').click()
       await landed(P, beforeSecond.headSeq)
       const after = await server(P)
-      expect({ opened, changed, afterFirst, removed: beforeSecond.ids.filter((id) => !after.ids.includes(id)), states: after.states }).toEqual({
-        opened: { sentence: '"손님" 상태를 지웁니다. 이 상태의 가지는 없습니다.', ids: [], button: '삭제', disabled: null, reason: null, changed: 0 },
-        changed: { sentence: '"손님" 상태를 지웁니다. 가지 1개의 내용이 함께 삭제됩니다.', ids: ['n_gt'], button: '새 목록 확인', disabled: null, reason: null, changed: 1 },
+      expect({
+        opened,
+        changed,
+        afterFirst,
+        removed: beforeSecond.ids.filter((id) => !after.ids.includes(id)),
+        states: after.states,
+      }).toEqual({
+        opened: {
+          sentence: '"손님" 상태를 지웁니다. 이 상태의 가지는 없습니다.',
+          ids: [],
+          button: '삭제',
+          disabled: null,
+          reason: null,
+          changed: 0,
+        },
+        changed: {
+          sentence: '"손님" 상태를 지웁니다. 가지 1개의 내용이 함께 삭제됩니다.',
+          ids: ['n_gt'],
+          button: '새 목록 확인',
+          disabled: null,
+          reason: null,
+          changed: 1,
+        },
         afterFirst: { sent: 0, button: '삭제' },
         removed: ['n_cg', 'n_gt'],
         states: ['관리자'],
@@ -445,7 +520,13 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       // 꺼진 단추(`aria-disabled`)도 누름은 받는다 — playwright 는 그것을 «안 켜짐»으로 기다리므로 힘으로 누른다.
       await dialog(tab.page).locator('.wb-shell-view-states-danger').click({ force: true })
       await tab.page.waitForTimeout(600)
-      expect({ added, renamed, blocked, sentOnClick: tab.patches.length - sent, headSame: (await server(P)).headSeq === beforeClick }).toEqual({
+      expect({
+        added,
+        renamed,
+        blocked,
+        sentOnClick: tab.patches.length - sent,
+        headSame: (await server(P)).headSeq === beforeClick,
+      }).toEqual({
         added: ['관리자', '손님', '직원'],
         renamed: ['관리자', '방문자', '직원'],
         blocked: {
@@ -467,7 +548,11 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
 
   /** 남의 편집(`page-changed`)이 이 탭에 닿을 때까지 — 받은 프레임의 수가 `after` 를 넘는다. */
   async function remoteArrived(received: string[], after: number): Promise<void> {
-    await poll('남의 편집이 닿음', async () => received.filter((kind) => kind === 'page-changed').length, (count) => count > after)
+    await poll(
+      '남의 편집이 닿음',
+      async () => received.filter((kind) => kind === 'page-changed').length,
+      (count) => count > after,
+    )
   }
 
   it('남이 순서를 바꾼 뒤 «상태 추가» 되돌리기는 내가 더한 상태만 뺀다 — 남의 상태를 안 뺀다(K1 R1 의 화면 몫)', async () => {
@@ -514,14 +599,24 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       const seen = tab.received.filter((kind) => kind === 'page-changed').length
       const cased = await stack.request(bob, 'PATCH', `${P}/ops`, {
         baseSeq: body.headSeq,
-        ops: [{ op: 'add', path: '/root/children/1/children/2', value: { id: 'n_cs', type: 'StateCase', props: { state: staff.id }, children: [text('n_st', '직원 글')] } }],
+        ops: [
+          {
+            op: 'add',
+            path: '/root/children/1/children/2',
+            value: { id: 'n_cs', type: 'StateCase', props: { state: staff.id }, children: [text('n_st', '직원 글')] },
+          },
+        ],
       })
       expect(cased.status).toBe(200)
       await remoteArrived(tab.received, seen)
       const before = await server(P)
       const errors = tab.received.filter((kind) => kind === 'patch-error').length
       await undo(tab.page)
-      await poll('되돌리기의 답', async () => tab.received.filter((kind) => kind === 'patch-error').length, (count) => count > errors)
+      await poll(
+        '되돌리기의 답',
+        async () => tab.received.filter((kind) => kind === 'patch-error').length,
+        (count) => count > errors,
+      )
       await tab.page.waitForTimeout(800)
       const after = await server(P)
       const notices = await tab.page.locator('.wb-shell-footer [role="alert"], .wb-shell-footer [role="status"]').allTextContents()
@@ -538,7 +633,9 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
         states: ['관리자', '손님', '직원'],
         ids: before.ids,
         headSame: true,
-        notices: ['그 상태로 만든 가지가 남아 있어 목록에서만 뺄 수 없습니다 — 상태 관리에서 지우세요 — 페이지를 서버 상태로 다시 불러왔고, 되돌리기 · 다시 실행 1개가 취소됐습니다.'],
+        notices: [
+          '그 상태로 만든 가지가 남아 있어 목록에서만 뺄 수 없습니다 — 상태 관리에서 지우세요 — 페이지를 서버 상태로 다시 불러왔고, 되돌리기 · 다시 실행 1개가 취소됐습니다.',
+        ],
       })
     } finally {
       await tab.close()
@@ -551,7 +648,12 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
   async function serverShape(P: string): Promise<unknown> {
     const body = (await stack.request(alice, 'GET', P)).body
     const shape = (node: { id: string; type: string; props?: { state?: string; content?: string }; children?: unknown[] }): unknown => {
-      const name = node.type === 'StateCase' ? `${node.id}(${node.props?.state})` : node.type === 'Text' ? `${node.id}:${node.props?.content}` : node.id
+      const name =
+        node.type === 'StateCase'
+          ? `${node.id}(${node.props?.state})`
+          : node.type === 'Text'
+            ? `${node.id}:${node.props?.content}`
+            : node.id
       const kids = (node.children ?? []) as (typeof node)[]
       return kids.length === 0 ? name : { [name]: kids.map(shape) }
     }
@@ -560,17 +662,29 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
   const treeRow = (page: Page, id: string) => page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"]`)
   const pickRow = (page: Page, id: string) => treeRow(page, id).locator('.wb-shell-structure-node').click()
   /** 고른 줄의 `…` · `+` 를 열어 항목을 읽는다 — 이름 · 꺼짐 · 까닭. */
-  async function rowMenu(page: Page, id: string, which: '더 보기' | '추가'): Promise<{ label: string; disabled: boolean; reason: string | null }[]> {
+  async function rowMenu(
+    page: Page,
+    id: string,
+    which: '더 보기' | '추가',
+  ): Promise<{ label: string; disabled: boolean; reason: string | null }[]> {
     await page.waitForTimeout(600)
-    await treeRow(page, id).getByRole('button', { name: new RegExp(`${which}$`) }).click()
+    await treeRow(page, id)
+      .getByRole('button', { name: new RegExp(`${which}$`) })
+      .click()
     const items = await page.locator('[role="menu"] [role="menuitem"]').evaluateAll((els) =>
-      els.map((el) => ({ label: el.textContent ?? '', disabled: el.getAttribute('aria-disabled') === 'true', reason: el.getAttribute('title') })),
+      els.map((el) => ({
+        label: el.textContent ?? '',
+        disabled: el.getAttribute('aria-disabled') === 'true',
+        reason: el.getAttribute('title'),
+      })),
     )
     return items
   }
   async function rowCommand(page: Page, id: string, label: string): Promise<void> {
     await page.waitForTimeout(600)
-    await treeRow(page, id).getByRole('button', { name: /더 보기$/ }).click()
+    await treeRow(page, id)
+      .getByRole('button', { name: /더 보기$/ })
+      .click()
     await page.getByRole('menuitem', { name: label, exact: true }).click()
   }
 
@@ -596,7 +710,11 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       const splitAdmin = await serverShape(P)
       // 서버가 지은 새 id(`n_` + 12 hex)는 «NEW»로 — 모양만 견준다.
       const norm = (value: unknown) => JSON.parse(JSON.stringify(value).replace(/n_[0-9a-f]{12}/g, 'NEW'))
-      expect({ splitDefault: norm(splitDefault), undone: JSON.stringify(undone) === JSON.stringify(original), splitAdmin: norm(splitAdmin) }).toEqual({
+      expect({
+        splitDefault: norm(splitDefault),
+        undone: JSON.stringify(undone) === JSON.stringify(original),
+        splitAdmin: norm(splitAdmin),
+      }).toEqual({
         splitDefault: [{ NEW: [{ 'NEW(default)': ['n_out:영역 밖 글'] }] }, original[1]],
         undone: true,
         splitAdmin: [{ NEW: [{ 'NEW(default)': ['n_out:영역 밖 글'] }, { [`NEW(${ADMIN.id})`]: ['NEW:영역 밖 글'] }] }, original[1]],
@@ -611,12 +729,16 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     const tab = await openTab(P)
     try {
       await pickRow(tab.page, 'n_out')
-      await treeRow(tab.page, 'n_x').locator('.wb-shell-structure-node').click({ modifiers: ['Meta'] })
+      await treeRow(tab.page, 'n_x')
+        .locator('.wb-shell-structure-node')
+        .click({ modifiers: ['Meta'] })
       // 줄 행동은 기준 노드(마지막에 누른 줄)에 선다.
       const apart = (await rowMenu(tab.page, 'n_x', '더 보기')).find((item) => item.label === '상태별로 나누기')
       await tab.page.keyboard.press('Escape')
       await pickRow(tab.page, 'n_x')
-      await treeRow(tab.page, 'n_y').locator('.wb-shell-structure-node').click({ modifiers: ['Meta'] })
+      await treeRow(tab.page, 'n_y')
+        .locator('.wb-shell-structure-node')
+        .click({ modifiers: ['Meta'] })
       const together = (await rowMenu(tab.page, 'n_y', '더 보기')).find((item) => item.label === '상태별로 나누기')
       expect({ apart, together }).toEqual({
         apart: { label: '상태별로 나누기', disabled: true, reason: '같은 부모의 이어진 형제만 한 영역으로 나눌 수 있습니다' },
@@ -644,7 +766,9 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       const forked = await serverShape(P)
       const frames1 = tab.patches.length - sent
       const picked = (
-        await tab.page.locator('.wb-shell-region[aria-label="구조 트리"] [aria-current="true"]').evaluateAll((els) => els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''))
+        await tab.page
+          .locator('.wb-shell-region[aria-label="구조 트리"] [aria-current="true"]')
+          .evaluateAll((els) => els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''))
       ).join(',')
       const canvas = (await shown(tab.page)).canvas
       // 칸을 떠나며 낸 «복사 + 편집» 뒤 위젯의 정리가 같은 초안을 한 번 더 넘긴다 — 복사 id 표(`forkedId` · `rememberFork`)가 그것을 복사로 돌려 «이미 그 값»으로 걸러야
@@ -664,10 +788,12 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
         guestText: guestText?.replace(/^n_[0-9a-f]{12}:/, 'NEW:'),
         pickedIsCopy: picked !== 'n_dt' && guestText?.startsWith(`${picked}:`),
         canvasHasCopy: canvas.length === 2 && canvas[0] === 'n_out' && canvas[1] !== 'n_dt',
-        undone: JSON.stringify(undone) === JSON.stringify([
-          'n_out:영역 밖 글',
-          { n_sw: [{ 'n_cd(default)': ['n_dt:기본 글'] }, { [`n_ca(${ADMIN.id})`]: ['n_at:관리자 글'] }] },
-        ]),
+        undone:
+          JSON.stringify(undone) ===
+          JSON.stringify([
+            'n_out:영역 밖 글',
+            { n_sw: [{ 'n_cd(default)': ['n_dt:기본 글'] }, { [`n_ca(${ADMIN.id})`]: ['n_at:관리자 글'] }] },
+          ]),
         guestCaseNew: guestCase !== null && guestCase !== 'n_cd',
         alerts,
       }).toEqual({
@@ -701,7 +827,9 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
           : {
               title: await dialog(tab.page).getByRole('heading').first().textContent(),
               sentence: await dialog(tab.page).locator('.wb-shell-view-states-sentence').textContent(),
-              ids: await dialog(tab.page).locator('[data-node-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id'))),
+              ids: await dialog(tab.page)
+                .locator('[data-node-id]')
+                .evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id'))),
             }
       if (asked !== null) await dialog(tab.page).getByRole('button', { name: '풀기', exact: true }).click()
       await landed(P, head)
@@ -725,14 +853,18 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     try {
       await tab.page.getByRole('button', { name: '모든 가지 보기', exact: true }).click()
       await pickRow(tab.page, 'n_cd')
-      const defaultRow = (await rowMenu(tab.page, 'n_cd', '더 보기')).filter((item) => ['이 상태 가지 지우기(기본으로 돌아감)', '삭제'].includes(item.label))
+      const defaultRow = (await rowMenu(tab.page, 'n_cd', '더 보기')).filter((item) =>
+        ['이 상태 가지 지우기(기본으로 돌아감)', '삭제'].includes(item.label),
+      )
       await tab.page.keyboard.press('Escape')
       await pickRow(tab.page, 'n_ca')
       const head = (await server(P)).headSeq
       await rowCommand(tab.page, 'n_ca', '이 상태 가지 지우기(기본으로 돌아감)')
       await landed(P, head)
       expect({ defaultRow, after: await serverShape(P) }).toEqual({
-        defaultRow: [{ label: '삭제', disabled: true, reason: '기본 가지는 지울 수 없습니다 — 영역째 지우거나 «상태 나누기 풀기»를 쓰세요' }],
+        defaultRow: [
+          { label: '삭제', disabled: true, reason: '기본 가지는 지울 수 없습니다 — 영역째 지우거나 «상태 나누기 풀기»를 쓰세요' },
+        ],
         after: ['n_out:영역 밖 글', { n_sw: [{ 'n_cd(default)': ['n_dt:기본 글'] }] }],
       })
     } finally {
@@ -762,7 +894,13 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       const indicator = await tab.page.locator('.wb-shell-drop-indicator, [data-drop-indicator]').count()
       await tab.page.mouse.up()
       await tab.page.waitForTimeout(600)
-      expect({ regionAdd, caseAdd, indicator, sent: tab.patches.length - sent, headSame: (await server(P)).headSeq === before.headSeq }).toEqual({
+      expect({
+        regionAdd,
+        caseAdd,
+        indicator,
+        sent: tab.patches.length - sent,
+        headSame: (await server(P)).headSeq === before.headSeq,
+      }).toEqual({
         regionAdd: { label: '안에 추가', disabled: true, reason: '상태 영역 안에는 가지만 섭니다 — 가지를 고르고 그 안에 추가하세요' },
         caseAdd: { label: '아래 추가', disabled: true, reason: '가지 곁에는 노드를 둘 수 없습니다 — 상태 영역을 고르고 아래 추가하세요' },
         indicator: 0,
@@ -791,12 +929,17 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       await box.evaluate((element) => (element as HTMLElement).blur())
       await landed(P, head)
       // alice 의 선택이 복사로 옮겨 잠금이 풀린 것 — bob 의 n_dt 배지가 걷힌다. 3s 안에 안 걷히면 기다리지 않고 값(`freeForBob`)으로 죽는다.
-      await other.page.locator('[data-tree-row][data-tree-id="n_dt"] ~ .wb-shell-structure-lock').waitFor({ state: 'detached', timeout: 3_000 }).catch(() => undefined)
+      await other.page
+        .locator('[data-tree-row][data-tree-id="n_dt"] ~ .wb-shell-structure-lock')
+        .waitFor({ state: 'detached', timeout: 3_000 })
+        .catch(() => undefined)
       const freeForBob = !(await treeRow(other.page, 'n_dt').locator('.wb-shell-structure-node').isDisabled())
       if (freeForBob) await pickRow(other.page, 'n_dt')
       await frames(other.page)
       const bobPicked = (
-        await other.page.locator('.wb-shell-region[aria-label="구조 트리"] [aria-current="true"]').evaluateAll((els) => els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''))
+        await other.page
+          .locator('.wb-shell-region[aria-label="구조 트리"] [aria-current="true"]')
+          .evaluateAll((els) => els.map((el) => el.closest('[data-tree-row]')?.getAttribute('data-tree-id') ?? ''))
       ).join(',')
       expect({ blockedForBob, freeForBob, bobPicked, defaultText: JSON.stringify(await serverShape(P)).includes('n_dt:기본 글') }).toEqual({
         blockedForBob: true,
@@ -838,7 +981,12 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
           b = Math.max(b, f.top + c.bottom * zoom)
         }
         const diff = Math.max(Math.abs(r.left - l), Math.abs(r.top - t), Math.abs(r.right - rr), Math.abs(r.bottom - b))
-        return { label: mark.getAttribute('data-wb-region'), dimmed: mark.classList.contains('wb-shell-region-mark-dimmed'), diff: Math.round(diff * 100) / 100, inDocument }
+        return {
+          label: mark.getAttribute('data-wb-region'),
+          dimmed: mark.classList.contains('wb-shell-region-mark-dimmed'),
+          diff: Math.round(diff * 100) / 100,
+          inDocument,
+        }
       },
       { switchId, kidIds },
     )
@@ -862,7 +1010,9 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       }
       seen['줌 0.75'] = fits(await markOf(tab.page, 'n_sw', ['n_dt']))
       await tab.page.locator('.wb-shell-canvas').evaluate((el) => {
-        const scroller = [el, ...el.querySelectorAll('*')].find((node) => node.scrollHeight > node.clientHeight + 10 && getComputedStyle(node).overflowY !== 'visible')
+        const scroller = [el, ...el.querySelectorAll('*')].find(
+          (node) => node.scrollHeight > node.clientHeight + 10 && getComputedStyle(node).overflowY !== 'visible',
+        )
         if (scroller !== undefined) scroller.scrollTop = 120
       })
       await frames(tab.page)
@@ -873,7 +1023,11 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       const pushed = await stack.request(bob, 'PATCH', `${P}/ops`, {
         baseSeq: body.headSeq,
         ops: [
-          { op: 'add', path: '/root/children/1/children/0/children/-', value: text('n_dt2', '기본 가지의 둘째 글 — 첫째보다 길게 늘여 오른끝이 다르다') },
+          {
+            op: 'add',
+            path: '/root/children/1/children/0/children/-',
+            value: text('n_dt2', '기본 가지의 둘째 글 — 첫째보다 길게 늘여 오른끝이 다르다'),
+          },
           { op: 'add', path: '/root/children/0', value: text('n_p1', '밀어 내는 글 하나') },
           { op: 'add', path: '/root/children/0', value: text('n_p2', '밀어 내는 글 둘') },
         ],
@@ -939,7 +1093,10 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
           rr = Math.max(rr, f.left + c.right * zoom)
           b = Math.max(b, f.top + c.bottom * zoom)
         }
-        const diff = kidIds.length === 0 ? null : Math.round(Math.max(Math.abs(r.left - l), Math.abs(r.top - t), Math.abs(r.right - rr), Math.abs(r.bottom - b)) * 100) / 100
+        const diff =
+          kidIds.length === 0
+            ? null
+            : Math.round(Math.max(Math.abs(r.left - l), Math.abs(r.top - t), Math.abs(r.right - rr), Math.abs(r.bottom - b)) * 100) / 100
         const outline = Math.round(parseFloat(getComputedStyle(box).outlineWidth) * zoom * 100) / 100
         return { diff, outline, height: Math.round(r.height / zoom), zoom: Math.round(zoom * 100) / 100, top: r.top, bottom: r.bottom }
       },
@@ -947,7 +1104,12 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     )
   }
   const near = (value: { diff: number | null; outline: number } | null) =>
-    value === null ? null : { diff: value.diff === null ? null : value.diff <= 1 ? '≤1' : value.diff, outline: Math.abs(value.outline - 2) <= 0.05 ? '2px' : value.outline }
+    value === null
+      ? null
+      : {
+          diff: value.diff === null ? null : value.diff <= 1 ? '≤1' : value.diff,
+          outline: Math.abs(value.outline - 2) <= 0.05 ? '2px' : value.outline,
+        }
 
   it('영역 · 가지 줄을 고르면 캔버스에 외곽선이 선다 — 상자는 보이는 가지의 자식 합 · 굵기는 일반 노드와 같은 줌 규칙 · 그려지지 않은 가지는 없다', async () => {
     const { P } = await fixture('vs-outline')
@@ -1008,7 +1170,12 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     props: {},
     children: [
       { id: 'n_szd', type: 'StateCase', props: { state: 'default' }, children: [text('n_sz1', '기본 글')] },
-      { id: 'n_sza', type: 'StateCase', props: { state: ADMIN.id }, children: [text('n_sz2', '관리자 글 하나'), text('n_sz3', '관리자 글 둘'), text('n_sz4', '관리자 글 셋')] },
+      {
+        id: 'n_sza',
+        type: 'StateCase',
+        props: { state: ADMIN.id },
+        children: [text('n_sz2', '관리자 글 하나'), text('n_sz3', '관리자 글 둘'), text('n_sz4', '관리자 글 셋')],
+      },
     ],
   }
 
@@ -1050,7 +1217,9 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     try {
       const seen: Record<string, unknown> = {}
       const docBottom = () =>
-        canvasFrame(tab.page).locator('[data-wb-id="n_dt"]').evaluate((el) => Math.round(el.getBoundingClientRect().bottom * 100) / 100)
+        canvasFrame(tab.page)
+          .locator('[data-wb-id="n_dt"]')
+          .evaluate((el) => Math.round(el.getBoundingClientRect().bottom * 100) / 100)
       const before = await docBottom()
       const placeholder = tab.page.locator('.wb-shell-region-mark[data-wb-region-for="n_sw0"] [data-wb-region-empty]')
       seen['자리표 글'] = (await placeholder.count()) === 0 ? null : await placeholder.textContent()
@@ -1062,7 +1231,8 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       await pickRow(tab.page, 'n_sw0')
       await frames(tab.page)
       const outline = await overlayBox(tab.page, '.wb-shell-selection[data-wb-selected-id="n_sw0"]', [])
-      seen['외곽선이 자리표 상자'] = outline !== null && mark !== null ? Math.abs(outline.top - mark.top) <= 1 && Math.abs(outline.bottom - mark.bottom) <= 1 : null
+      seen['외곽선이 자리표 상자'] =
+        outline !== null && mark !== null ? Math.abs(outline.top - mark.top) <= 1 && Math.abs(outline.bottom - mark.bottom) <= 1 : null
       seen['외곽선 굵기'] = outline === null ? null : Math.abs(outline.outline - 2) <= 0.05 ? '2px' : outline.outline
       seen['문서가 안 밀림'] = (await docBottom()) === before
       seen['문서 안 자리표'] = await canvasFrame(tab.page).locator('[data-wb-region-empty]').count()

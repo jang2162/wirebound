@@ -212,15 +212,24 @@ describe('바뀌는 순간의 잠금과 연결', () => {
       try {
         await holding
         targetTab.send(
-          JSON.stringify({ type: 'patch', pageId: fx.page.id, clientOpId: 'op_gone', baseSeq: 1, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }] }),
+          JSON.stringify({
+            type: 'patch',
+            pageId: fx.page.id,
+            clientOpId: 'op_gone',
+            baseSeq: 1,
+            ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }],
+          }),
         )
-        await vi.waitFor(async () => {
-          const { rows } = await sql<{ n: number }>`
+        await vi.waitFor(
+          async () => {
+            const { rows } = await sql<{ n: number }>`
             select count(*)::int as n from pg_stat_activity
              where pid <> pg_backend_pid() and datname = current_database() and wait_event_type = 'Lock'
           `.execute(db)
-          expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
-        }, { timeout: 5_000 })
+            expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
+          },
+          { timeout: 5_000 },
+        )
 
         expect(await remove(ctx, fx, fx.target.user.id)).toBe(204)
         await targetTab.waitFor('membership-changed')
@@ -270,15 +279,24 @@ describe('바뀌는 순간의 잠금과 연결', () => {
       try {
         await holding
         targetTab.send(
-          JSON.stringify({ type: 'patch', pageId: fx.page.id, clientOpId: 'op_locked_gone', baseSeq: 1, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_y', type: 'Text', props: {} } }] }),
+          JSON.stringify({
+            type: 'patch',
+            pageId: fx.page.id,
+            clientOpId: 'op_locked_gone',
+            baseSeq: 1,
+            ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_y', type: 'Text', props: {} } }],
+          }),
         )
-        await vi.waitFor(async () => {
-          const { rows } = await sql<{ n: number }>`
+        await vi.waitFor(
+          async () => {
+            const { rows } = await sql<{ n: number }>`
             select count(*)::int as n from pg_stat_activity
              where pid <> pg_backend_pid() and datname = current_database() and wait_event_type = 'Lock'
           `.execute(db)
-          expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
-        }, { timeout: 5_000 })
+            expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
+          },
+          { timeout: 5_000 },
+        )
 
         expect(await remove(ctx, fx, fx.target.user.id)).toBe(204)
         await targetTab.waitFor('membership-changed')
@@ -357,9 +375,7 @@ describe('자격을 본 뒤 hold 전에 끼는 강등', () => {
       expect(locks.liveIn(fx.project.id)).toEqual([])
       // 버린 자리는 목록에 한 번도 안 선다. («비어 있지 않은 목록이 하나»로 재면 안 된다 — 목록은 보내는 순간 지어지므로
       // (`ws/broadcast.ts`) 늦게 닿은 참가 알림도 대조 판의 `n_card`를 실어 그 수가 흔들린다.)
-      expect(
-        ownerTab.received.filter((frame) => frame.type === 'locks' && frame.locks.some((lock) => lock.nodeId === 'n_btn')),
-      ).toEqual([])
+      expect(ownerTab.received.filter((frame) => frame.type === 'locks' && frame.locks.some((lock) => lock.nodeId === 'n_btn'))).toEqual([])
       // **버린 것을 낸 쪽에 말한다** — 조용히 버리면 그 화면은 쥔 줄 안다. 대조 판(첫 `lock`)에는
       // 거절이 없다.
       expect(targetTab.received.filter((frame) => frame.type === 'lock-denied')).toEqual([

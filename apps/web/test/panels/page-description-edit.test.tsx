@@ -14,14 +14,7 @@ import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { ApiError } from '../../src/api/client'
 import type { ApiClient } from '../../src/api/client'
 import type { PageDetail } from '../../src/api/types'
-import {
-  openPage,
-  OTHER_PAGE_ID,
-  OTHER_PAGE_TITLE,
-  PAGE_ID,
-  pageDetail,
-  pageDoc,
-} from '../editor-harness'
+import { openPage, OTHER_PAGE_ID, OTHER_PAGE_TITLE, PAGE_ID, pageDetail, pageDoc } from '../editor-harness'
 import '../../src/catalog-setup'
 
 const ROOT_ID = 'n-root'
@@ -111,9 +104,7 @@ const PAGE_TITLE = '회원 목록'
 
 /** 메뉴 트리에서 그 페이지로 옮긴다 — **사용자가 하듯** 누른다. */
 function toPage(title: string): void {
-  fireEvent.click(
-    within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: title }),
-  )
+  fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: title }))
 }
 
 function toOtherPage(): void {
@@ -278,9 +269,7 @@ describe('상한은 `@wirebound/schema`가 소유한다', () => {
     // 그래서 *"상한 초과 400을 브라우저에서 봤다"*는 보고는 **값을 프로그램으로 심어야만**
     // 재현된다. 그래도 400 갈래를 화면이 받는 것은 붙여넣기·미래의 상한 변경에 대한
     // 방어이고, 그 문장을 옮기는 규칙은 `api/failure.tsx`가 갖는다.
-    expect((await findBox()).getAttribute('maxlength')).toBe(
-      String(PAGE_DESCRIPTION_MAX_LENGTH),
-    )
+    expect((await findBox()).getAttribute('maxlength')).toBe(String(PAGE_DESCRIPTION_MAX_LENGTH))
   })
 
   it('글자 수를 그 상수와 함께 보인다', async () => {
@@ -391,9 +380,7 @@ describe('페이지를 바꾸면 앞 페이지의 것을 버린다', () => {
 
     type('막힐 글')
     fireEvent.click(saveButton())
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      '이 작업을 수행할 권한이 없습니다',
-    )
+    expect((await screen.findByRole('alert')).textContent).toBe('이 작업을 수행할 권한이 없습니다')
 
     toOtherPage()
     await screen.findByRole('heading', { name: OTHER_PAGE_TITLE })
@@ -447,9 +434,7 @@ describe('탭·모드를 오가도 저장하지 않은 초안이 남는다', () 
     // 저장 버튼은 꺼져 있고 누를 수가 없다. 보내지는 것까지 본다.
     expect(saveButton().disabled).toBe(false)
     fireEvent.click(saveButton())
-    await waitFor(() =>
-      expect(api.bodies).toEqual([{ description: '아직 저장 안 한 초안', base: { description: '서버에 있는 설명' } }]),
-    )
+    await waitFor(() => expect(api.bodies).toEqual([{ description: '아직 저장 안 한 초안', base: { description: '서버에 있는 설명' } }]))
     expect(api.pages).toEqual([PAGE_ID])
   })
 
@@ -472,9 +457,7 @@ describe('탭·모드를 오가도 저장하지 않은 초안이 남는다', () 
     expect(box().value).toBe('모드를 오갈 초안')
     expect(saveButton().disabled).toBe(false)
     fireEvent.click(saveButton())
-    await waitFor(() =>
-      expect(api.bodies).toEqual([{ description: '모드를 오갈 초안', base: { description: '서버에 있는 설명' } }]),
-    )
+    await waitFor(() => expect(api.bodies).toEqual([{ description: '모드를 오갈 초안', base: { description: '서버에 있는 설명' } }]))
     expect(api.pages).toEqual([PAGE_ID])
   })
 })

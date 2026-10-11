@@ -95,8 +95,7 @@ export const TOOLS: readonly ToolSpec[] = [
   {
     name: 'get_page',
     description:
-      '페이지 하나의 스키마 문서·노드 개요·코멘트·상호작용 문장을 돌려줍니다. ' +
-      '경로가 없거나 둘 이상이면 후보를 함께 말합니다.',
+      '페이지 하나의 스키마 문서·노드 개요·코멘트·상호작용 문장을 돌려줍니다. ' + '경로가 없거나 둘 이상이면 후보를 함께 말합니다.',
     inputSchema: { type: 'object', properties: { path: PATH_ARG }, required: ['path'], additionalProperties: false },
     spec: '페이지 스키마 + 코멘트 + 상호작용 문장 조회',
   },

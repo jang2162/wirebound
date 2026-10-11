@@ -8,10 +8,5 @@
     "composite": true
   },
   "include": ["src/browser", "src/page-data.ts"],
-  "references": [
-    { "path": "../schema" },
-    { "path": "../renderer" },
-    { "path": "../theme-sdk" },
-    { "path": "../themes" }
-  ]
+  "references": [{ "path": "../schema" }, { "path": "../renderer" }, { "path": "../theme-sdk" }, { "path": "../themes" }]
 }

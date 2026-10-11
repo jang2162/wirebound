@@ -138,10 +138,7 @@ export function patternInsert(
  * 없다"*와 다른 상태이고, 조용히 다른 곳에 꽂으면 사용자가 가리킨 적 없는 자리에 노드가
  * 생긴다.
  */
-function insertSpot(
-  document: PageDocument,
-  selectedNodeId: string | null,
-): { parentId: string; index: number } | null {
+function insertSpot(document: PageDocument, selectedNodeId: string | null): { parentId: string; index: number } | null {
   if (selectedNodeId === null) {
     const rootId = document.root?.id
     if (typeof rootId !== 'string') return null

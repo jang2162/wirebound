@@ -162,11 +162,7 @@ export interface InteractionSentence {
  * `source`는 그 상호작용이 걸린 노드다. `document`는 **타겟을 찾기 위해** 받는다 —
  * 타겟의 타입을 알아야 이름과 prop 라벨이 나온다.
  */
-export function describeInteraction(
-  document: AnyDocument,
-  source: WbNode,
-  interaction: Interaction,
-): string {
+export function describeInteraction(document: AnyDocument, source: WbNode, interaction: Interaction): string {
   return sentenceOf(nodeIndex(document), source, interaction)
 }
 
@@ -223,11 +219,7 @@ export function namingContexts(document: AnyDocument): Map<string, NamingContext
   return naming
 }
 
-function sentenceOf(
-  index: NodeIndex,
-  source: WbNode,
-  interaction: Interaction,
-): string {
+function sentenceOf(index: NodeIndex, source: WbNode, interaction: Interaction): string {
   const trigger = `${nodeName(source, index.naming.get(source.id))} ${TRIGGER_VERBS[interaction.on] ?? interaction.on} 시`
   const actions = interaction.actions ?? []
   if (actions.length === 0) return `${trigger} 아무 일도 일어나지 않습니다`

@@ -34,12 +34,15 @@ async function world(ctx: TestContext) {
   const menu = await createMenuNode(ctx, owner.cookie, project.id, { title: '메뉴' })
   const page = await createPage(ctx, owner.cookie, project.id, menu.id, { title: '제목' })
   const P = `/api/projects/${project.id}`
-  const head = async () => ((await ctx.app.inject({ method: 'GET', url: `${P}/pages/${page.id}`, cookies: owner.cookie })).json() as { headSeq: number }).headSeq
+  const head = async () =>
+    ((await ctx.app.inject({ method: 'GET', url: `${P}/pages/${page.id}`, cookies: owner.cookie })).json() as { headSeq: number }).headSeq
   return { owner, project, page, P, head }
 }
 
 const badSurrogate = { error: { code: 'bad-request', message: '문서에 짝 없는 서로게이트 글자를 포함할 수 없습니다' } }
-const addText = (content: string) => [{ op: 'add', path: '/root/children/-', value: { id: 'n_surrogate', type: 'Text', props: { content } } }]
+const addText = (content: string) => [
+  { op: 'add', path: '/root/children/-', value: { id: 'n_surrogate', type: 'Text', props: { content } } },
+]
 
 describe('판정', () => {
   it('외짝은 값 · 키 · 중첩 어디서든 잡고, 짝을 이룬 것(이모지)은 안 잡는다', () => {
@@ -61,7 +64,12 @@ describe('jsonb 로 가는 입구의 외짝은 400 이고 아무것도 안 바�
       const w = await world(ctx)
       const before = await w.head()
 
-      const res = await ctx.app.inject({ method: 'PATCH', url: `${w.P}/pages/${w.page.id}/ops`, cookies: w.owner.cookie, payload: { baseSeq: before, ops: addText(`a${HIGH}b`) } })
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `${w.P}/pages/${w.page.id}/ops`,
+        cookies: w.owner.cookie,
+        payload: { baseSeq: before, ops: addText(`a${HIGH}b`) },
+      })
 
       expect(res.statusCode, res.body).toBe(400)
       expect(res.json()).toEqual(badSurrogate)
@@ -76,7 +84,9 @@ describe('jsonb 로 가는 입구의 외짝은 400 이고 아무것도 안 바�
       try {
         const before = await w.head()
 
-        probe.send(JSON.stringify({ type: 'patch', pageId: w.page.id, clientOpId: 'op_surrogate', baseSeq: before, ops: addText(`a${HIGH}b`) }))
+        probe.send(
+          JSON.stringify({ type: 'patch', pageId: w.page.id, clientOpId: 'op_surrogate', baseSeq: before, ops: addText(`a${HIGH}b`) }),
+        )
 
         const error = await probe.waitFor('patch-error')
         expect(error.status).toBe(400)
@@ -92,9 +102,17 @@ describe('jsonb 로 가는 입구의 외짝은 400 이고 아무것도 안 바�
     await withApi(async (ctx) => {
       const w = await world(ctx)
       const before = await w.head()
-      const schema = { version: 1, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_y', type: 'Text', props: { content: `a${LOW}b` } }] } }
+      const schema = {
+        version: 1,
+        root: { id: 'n_root', type: 'Page', children: [{ id: 'n_y', type: 'Text', props: { content: `a${LOW}b` } }] },
+      }
 
-      const res = await ctx.app.inject({ method: 'PUT', url: `${w.P}/pages/${w.page.id}/schema`, cookies: w.owner.cookie, payload: { schema } })
+      const res = await ctx.app.inject({
+        method: 'PUT',
+        url: `${w.P}/pages/${w.page.id}/schema`,
+        cookies: w.owner.cookie,
+        payload: { schema },
+      })
 
       expect(res.statusCode, res.body).toBe(400)
       expect(res.json()).toEqual(badSurrogate)
@@ -123,7 +141,12 @@ describe('jsonb 로 가는 입구의 외짝은 400 이고 아무것도 안 바�
     await withApi(async (ctx) => {
       const w = await world(ctx)
 
-      const res = await ctx.app.inject({ method: 'PATCH', url: `${w.P}/pages/${w.page.id}/ops`, cookies: w.owner.cookie, payload: { baseSeq: await w.head(), ops: addText('😀 정상') } })
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `${w.P}/pages/${w.page.id}/ops`,
+        cookies: w.owner.cookie,
+        payload: { baseSeq: await w.head(), ops: addText('😀 정상') },
+      })
 
       expect(res.statusCode, res.body).toBe(200)
     })

@@ -9,7 +9,14 @@ import { structureDropTarget } from '../../src/edit/structure-drop'
 import { moveNodeOps } from '../../src/edit/ops'
 import { duplicateOps, removeManyOps } from '../../src/edit/paste-ops'
 import { FORK_REFUSED, HIDDEN_REFUSED, planViewStateEdit } from '../../src/edit/view-state-fork'
-import { removeCasePlan, splitPlan, SPLIT_CASE_REASON, SPLIT_ROOT_REASON, SPLIT_SIBLINGS_REASON, unsplitPlan } from '../../src/edit/view-state-actions'
+import {
+  removeCasePlan,
+  splitPlan,
+  SPLIT_CASE_REASON,
+  SPLIT_ROOT_REASON,
+  SPLIT_SIBLINGS_REASON,
+  unsplitPlan,
+} from '../../src/edit/view-state-actions'
 import '../../src/catalog-setup'
 
 const text = (id: string, content: string): WbNode => ({ id, type: 'Text', props: { content } })
@@ -27,7 +34,11 @@ function doc(): PageDocument {
     root: {
       id: 'n_root',
       type: 'Page',
-      children: [text('n_out', '밖'), sw('n_sw', [kase('n_cd', 'default', [text('n_dt', '기본')]), kase('n_ca', 's_admin', [text('n_at', '관리자')])]), text('n_tail', '끝')],
+      children: [
+        text('n_out', '밖'),
+        sw('n_sw', [kase('n_cd', 'default', [text('n_dt', '기본')]), kase('n_ca', 's_admin', [text('n_at', '관리자')])]),
+        text('n_tail', '끝'),
+      ],
     },
   }
 }
@@ -40,7 +51,9 @@ describe('planViewStateEdit — 흐린 기본 가지 안을 고친 편집', () =
 
   it('기본 상태의 기본 가지 · 영역 밖 편집은 그대로다', () => {
     expect(planViewStateEdit(doc(), setDefaultText, null, newId)).toEqual({ kind: 'plain' })
-    expect(planViewStateEdit(doc(), [{ op: 'replace', path: '/root/children/0/props/content', value: '바뀜' }], 's_guest', newId)).toEqual({ kind: 'plain' })
+    expect(planViewStateEdit(doc(), [{ op: 'replace', path: '/root/children/0/props/content', value: '바뀜' }], 's_guest', newId)).toEqual({
+      kind: 'plain',
+    })
   })
 
   it('안 보이는 가지 안을 고치면 보내지 않는다 — «모든 가지 보기»를 켰으면 그대로다(K2 리뷰 H2)', () => {
@@ -49,7 +62,10 @@ describe('planViewStateEdit — 흐린 기본 가지 안을 고친 편집', () =
       adminHidesDefault: planViewStateEdit(doc(), setDefaultText, 's_admin', newId),
       defaultHidesAdmin: planViewStateEdit(doc(), setAdminText, null, newId),
       guestHidesAdmin: planViewStateEdit(doc(), setAdminText, 's_guest', newId),
-      allCases: [planViewStateEdit(doc(), setDefaultText, 's_admin', newId, true), planViewStateEdit(doc(), setAdminText, null, newId, true)],
+      allCases: [
+        planViewStateEdit(doc(), setDefaultText, 's_admin', newId, true),
+        planViewStateEdit(doc(), setAdminText, null, newId, true),
+      ],
     }).toEqual({
       adminHidesDefault: { kind: 'refused', reason: HIDDEN_REFUSED },
       defaultHidesAdmin: { kind: 'refused', reason: HIDDEN_REFUSED },
@@ -74,7 +90,13 @@ describe('planViewStateEdit — 흐린 기본 가지 안을 고친 편집', () =
         if (ops === null) return [name, 'ops null']
         // 묶음이 실제로 앞 형제를 먼저 민다 — 포인터가 «뺀 뒤» 좌표다(판 카나리아).
         const first = ops[0]!
-        return [name, { shifts: first.op === 'remove' || first.op === 'move' ? first.op === 'move' ? first.from : first.path : first.path, plan: planViewStateEdit(d, ops, 's_guest', newId).kind }]
+        return [
+          name,
+          {
+            shifts: first.op === 'remove' || first.op === 'move' ? (first.op === 'move' ? first.from : first.path) : first.path,
+            plan: planViewStateEdit(d, ops, 's_guest', newId).kind,
+          },
+        ]
       }),
     )
     expect(verdicts).toEqual({
@@ -87,7 +109,10 @@ describe('planViewStateEdit — 흐린 기본 가지 안을 고친 편집', () =
 
   it('영역째 다루는 묶음(풀기)은 평범한 편집이다 — 흐린 · 안 보이는 기본 가지를 영역 밖으로 꺼내도(K2 리뷰 L2)', () => {
     const ops = unsplitStatesOps(doc(), 'n_sw')!
-    expect([planViewStateEdit(doc(), ops, 's_guest', newId), planViewStateEdit(doc(), ops, 's_admin', newId)]).toEqual([{ kind: 'plain' }, { kind: 'plain' }])
+    expect([planViewStateEdit(doc(), ops, 's_guest', newId), planViewStateEdit(doc(), ops, 's_admin', newId)]).toEqual([
+      { kind: 'plain' },
+      { kind: 'plain' },
+    ])
     expect(findNode(applyOps(doc(), ops).root, 'n_sw')).toBeUndefined()
   })
 
@@ -99,7 +124,11 @@ describe('planViewStateEdit — 흐린 기본 가지 안을 고친 편집', () =
     const cases = after.root.children![1]!.children!
     expect({
       default: cases[0],
-      guest: { state: cases[2]!.props!.state, text: cases[2]!.children![0]!.props!.content, newText: cases[2]!.children![0]!.id !== 'n_dt' },
+      guest: {
+        state: cases[2]!.props!.state,
+        text: cases[2]!.children![0]!.props!.content,
+        newText: cases[2]!.children![0]!.id !== 'n_dt',
+      },
       remapsText: plan.remap.get('n_dt') === cases[2]!.children![0]!.id,
       issues: validatePage(after).filter((issue) => issue.severity === 'error'),
     }).toEqual({
@@ -113,7 +142,9 @@ describe('planViewStateEdit — 흐린 기본 가지 안을 고친 편집', () =
   it('영역 안과 밖을 함께 · 가지 자신의 필드를 고치면 보내지 않는다', () => {
     const mixed: PatchOp[] = [...setDefaultText, { op: 'replace', path: '/root/children/0/props/content', value: '밖도' }]
     expect(planViewStateEdit(doc(), mixed, 's_guest', newId)).toEqual({ kind: 'refused', reason: FORK_REFUSED })
-    expect(planViewStateEdit(doc(), [{ op: 'replace', path: '/root/children/1/children/0/props/state', value: 's_guest' }], 's_guest', newId)).toEqual({
+    expect(
+      planViewStateEdit(doc(), [{ op: 'replace', path: '/root/children/1/children/0/props/state', value: 's_guest' }], 's_guest', newId),
+    ).toEqual({
       kind: 'refused',
       reason: FORK_REFUSED,
     })
@@ -126,14 +157,22 @@ describe('planViewStateEdit — 흐린 기본 가지 안을 고친 편집', () =
   it('흐린 영역이 둘이면 둘을 함께 고친 편집은 보내지 않는다', () => {
     const two = doc()
     two.root.children!.push(sw('n_sw2', [kase('n_cd2', 'default', [text('n_dt2', '둘째')])]))
-    const both: PatchOp[] = [...setDefaultText, { op: 'replace', path: '/root/children/3/children/0/children/0/props/content', value: '둘' }]
+    const both: PatchOp[] = [
+      ...setDefaultText,
+      { op: 'replace', path: '/root/children/3/children/0/children/0/props/content', value: '둘' },
+    ]
     expect(planViewStateEdit(two, both, 's_guest', newId)).toEqual({ kind: 'refused', reason: FORK_REFUSED })
   })
 
   it('겹친 영역 — 바깥 영역이 흐리면 바깥 것을 복사한다(안쪽 영역은 복사 안에 선다)', () => {
     const nested = doc()
     nested.root.children![1]!.children![0]!.children!.push(sw('n_inner', [kase('n_ic', 'default', [text('n_it', '안')])]))
-    const plan = planViewStateEdit(nested, [{ op: 'replace', path: '/root/children/1/children/0/children/1/children/0/children/0/props/content', value: '안 바뀜' }], 's_guest', newId)
+    const plan = planViewStateEdit(
+      nested,
+      [{ op: 'replace', path: '/root/children/1/children/0/children/1/children/0/children/0/props/content', value: '안 바뀜' }],
+      's_guest',
+      newId,
+    )
     expect(plan.kind === 'fork' ? plan.switchId : plan.kind).toBe('n_sw')
   })
 })

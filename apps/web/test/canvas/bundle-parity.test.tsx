@@ -66,9 +66,7 @@ describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
     const document_ = make()
     await openPage(document_)
 
-    expect(describeTree(bundleDocumentRoot(document_))).toEqual(
-      describeTree(canvasDocumentRoot()),
-    )
+    expect(describeTree(bundleDocumentRoot(document_))).toEqual(describeTree(canvasDocumentRoot()))
   })
 
   /**
@@ -78,9 +76,7 @@ describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
     await openPage(broadFixture())
 
     const canvasNode = canvasDocument().querySelector<HTMLElement>('[data-wb-component="Tree"] > [data-wb-part="node"]')
-    const bundleNode = bundleDocumentRoot(broadFixture()).querySelector<HTMLElement>(
-      '[data-wb-component="Tree"] > [data-wb-part="node"]',
-    )
+    const bundleNode = bundleDocumentRoot(broadFixture()).querySelector<HTMLElement>('[data-wb-component="Tree"] > [data-wb-part="node"]')
     // 선언으로 견준다 — 적는 꼴이 아니라 선언이 계약이다(두 쪽 다 클라이언트 렌더라 오늘은 원문도 같다).
     const declarations = (node: HTMLElement | null | undefined) =>
       node === null || node === undefined ? null : Array.from(node.style, (name) => `${name}=${node.style.getPropertyValue(name).trim()}`)

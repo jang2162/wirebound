@@ -13,7 +13,10 @@ const head = { id: 'acme', name: 'ACME', version: '1.0.0', sdk: '^1.0.0' }
 const defaultCodes = (type: 'font' | 'shadow', value: string) =>
   validateManifest({ ...head, tokens: { items: { t: { type, label: 't', default: value } } } }).issues.map((i) => i.code)
 const valueCodes = (type: 'font' | 'shadow', value: string) => {
-  const { manifest } = validateManifest({ ...head, tokens: { items: { t: { type, label: 't', default: type === 'font' ? 'serif' : 'none' } } } })
+  const { manifest } = validateManifest({
+    ...head,
+    tokens: { items: { t: { type, label: 't', default: type === 'font' ? 'serif' : 'none' } } },
+  })
   return tokensCss(manifest!, { t: value }).issues.map((i) => i.code)
 }
 
@@ -26,8 +29,23 @@ const FONT_OK = [
   '"Font, with comma", monospace',
 ]
 const FONT_BAD = [
-  'Arial /*', 'Arial (', 'Arial [', 'Arial "', "Arial '", 'Arial \\', 'Arial )', 'Arial;', 'Arial !important',
-  'url(http://example.test/f)', 'var(--wb-a)', '"a</style><script>"', '"a\\"b"', 'Arial,', ', Arial', '', '   ',
+  'Arial /*',
+  'Arial (',
+  'Arial [',
+  'Arial "',
+  "Arial '",
+  'Arial \\',
+  'Arial )',
+  'Arial;',
+  'Arial !important',
+  'url(http://example.test/f)',
+  'var(--wb-a)',
+  '"a</style><script>"',
+  '"a\\"b"',
+  'Arial,',
+  ', Arial',
+  '',
+  '   ',
 ]
 const SHADOW_OK = [
   'none',
@@ -38,11 +56,25 @@ const SHADOW_OK = [
   '-1px 0 0 0 hsl(210 40% 50%)',
 ]
 const SHADOW_BAD = [
-  '0 0 1px red /*', '0 0 1px rgb(0', '0 0 1px rgb(0 0 0))', '1px red', '0 0 0 0 0 red', 'red blue 0 0', 'inset inset 0 0',
-  '0 red 0', 'image-set("http://example.test/s" 1x)', 'url(x) 0 0', '0 0 var(--wb-a)', '0 0 1px rgb(0 0 calc(1))',
-  '0 0 1px red,', 'none, 0 0 1px red', '0 0 1px red; color: blue', '',
+  '0 0 1px red /*',
+  '0 0 1px rgb(0',
+  '0 0 1px rgb(0 0 0))',
+  '1px red',
+  '0 0 0 0 0 red',
+  'red blue 0 0',
+  'inset inset 0 0',
+  '0 red 0',
+  'image-set("http://example.test/s" 1x)',
+  'url(x) 0 0',
+  '0 0 var(--wb-a)',
+  '0 0 1px rgb(0 0 calc(1))',
+  '0 0 1px red,',
+  'none, 0 0 1px red',
+  '0 0 1px red; color: blue',
+  '',
   // 짝은 맞지만 그림자 낱말이 아닌 괄호 블록 · 괄호 안에 글자가 든 색 함수.
-  '0 0 1px (red)', '0 0 1px rgb(0 0 0 / none)',
+  '0 0 1px (red)',
+  '0 0 1px rgb(0 0 0 / none)',
 ]
 
 describe('font 토큰 값', () => {
@@ -69,7 +101,9 @@ describe('shadow 토큰 값', () => {
 
 describe('color 토큰 값 — 색 함수의 괄호 안', () => {
   it.each(['rgb(1 2 3 / a)', 'rgb(var(--x))', 'hsl(120deg 50% 50%)'])('%j 를 거절한다', (value) => {
-    expect(validateManifest({ ...head, tokens: { items: { c: { type: 'color', label: 'c', default: value } } } }).issues.map((i) => i.code)).toEqual(['token-default-type'])
+    expect(
+      validateManifest({ ...head, tokens: { items: { c: { type: 'color', label: 'c', default: value } } } }).issues.map((i) => i.code),
+    ).toEqual(['token-default-type'])
   })
   it.each(['rgb(15 23 42 / 0.1)', 'rgba(0,0,0,.5)', 'hsl(210 40% 50%)'])('%j 를 받는다', (value) => {
     expect(validateManifest({ ...head, tokens: { items: { c: { type: 'color', label: 'c', default: value } } } }).issues).toEqual([])
@@ -90,10 +124,11 @@ describe('length 토큰 값 — 앞 점 소수', () => {
     expect(validateManifest({ ...head, tokens: { items: { l: { type: 'length', label: 'l', default: value } } } }).issues).toEqual([])
   })
   it.each(['.rem', '5.rem', '..5rem', '.5REM'])('%j 를 거절한다', (value) => {
-    expect(validateManifest({ ...head, tokens: { items: { l: { type: 'length', label: 'l', default: value } } } }).issues.map((i) => i.code)).toEqual(['token-default-type'])
+    expect(
+      validateManifest({ ...head, tokens: { items: { l: { type: 'length', label: 'l', default: value } } } }).issues.map((i) => i.code),
+    ).toEqual(['token-default-type'])
   })
 })
-
 
 describe('토큰 값의 글자 — 모든 문자열 타입에서 token-value-char', () => {
   // 받은 값은 api 의 `json` 칸에 들어가고 스냅샷 payload(`jsonb`)는 NUL · 짝 없는 서로게이트를 거절한다 — 그 프로젝트의 스냅샷 ·
@@ -112,10 +147,7 @@ describe('토큰 값의 글자 — 모든 문자열 타입에서 token-value-cha
     ...head,
     tokens: {
       items: {
-        t:
-          type === 'select'
-            ? { type, label, options: ['a', value], default: value }
-            : { type, label, default: value },
+        t: type === 'select' ? { type, label, options: ['a', value], default: value } : { type, label, default: value },
       },
     },
   })

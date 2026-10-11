@@ -289,13 +289,10 @@ function RestoreNotice(props: { tag: string; result: RestoreResult }): ReactElem
   return (
     <div className="wb-shell-snapshots-restored" role="status">
       <p className="wb-shell-snapshots-restored-line">
-        {props.tag}(으)로 되돌렸습니다. 페이지 {pages.schemaChanged}개가 바뀌고 {pages.schemaUnchanged}개는
-        그대로입니다.
+        {props.tag}(으)로 되돌렸습니다. 페이지 {pages.schemaChanged}개가 바뀌고 {pages.schemaUnchanged}개는 그대로입니다.
       </p>
       {/* **되돌리려면 이것** — 서버가 복원 직전 상태를 자동으로 얼려 준다. */}
-      <p className="wb-shell-snapshots-restored-line">
-        되돌리기 전 상태는 “{props.result.safetySnapshot.tag}”에 저장했습니다.
-      </p>
+      <p className="wb-shell-snapshots-restored-line">되돌리기 전 상태는 “{props.result.safetySnapshot.tag}”에 저장했습니다.</p>
     </div>
   )
 }

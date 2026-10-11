@@ -187,11 +187,7 @@ function validateInput(input: SeedUserInput): SeedUserInput {
 }
 
 /** 환경변수를 읽어 시딩한다. **없으면 건너뛴다.** */
-export async function seedUserFromEnv(
-  db: DbHandle,
-  env: NodeJS.ProcessEnv,
-  scryptN: number,
-): Promise<SeedUserOutcome> {
+export async function seedUserFromEnv(db: DbHandle, env: NodeJS.ProcessEnv, scryptN: number): Promise<SeedUserOutcome> {
   const input = readSeedUserEnv(env)
   if (input === undefined) {
     return { kind: 'skipped' }
@@ -234,12 +230,7 @@ export interface SeedReporter {
  * 스키마가 이미 최신인 자리라, 그냥 *"실패"*라고만 하면 사람이 마이그레이션을 다시
  * 돌려야 하는지 알 수 없다.
  */
-export async function runSeedStep(
-  db: DbHandle,
-  env: NodeJS.ProcessEnv,
-  scryptN: number,
-  report: SeedReporter,
-): Promise<boolean> {
+export async function runSeedStep(db: DbHandle, env: NodeJS.ProcessEnv, scryptN: number, report: SeedReporter): Promise<boolean> {
   try {
     report.log(describeSeedOutcome(await seedUserFromEnv(db, env, scryptN)))
     return true

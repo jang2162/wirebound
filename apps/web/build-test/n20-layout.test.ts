@@ -86,7 +86,10 @@ describe.skipIf(!전제.ok)('N20 레이아웃 값 — 실브라우저', () => {
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id
     const P = `/projects/${project.id}/pages/${pageId}`
-    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })) })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     return P
   }
@@ -207,7 +210,10 @@ describe.skipIf(!전제.ok)('N20 레이아웃 값 — 실브라우저', () => {
   }, 120_000)
 
   it('L-237 줌별 선택 외곽선 화면 굵기 — 계산값 × 겹의 배율 · 찍은 픽셀의 연속 수', async () => {
-    const P = await fixture('n20-outline', [0, 1, 2].map((at) => ({ id: `n_c${at}000000000`, type: 'Card', props: { title: `카드 ${at}` } })))
+    const P = await fixture(
+      'n20-outline',
+      [0, 1, 2].map((at) => ({ id: `n_c${at}000000000`, type: 'Card', props: { title: `카드 ${at}` } })),
+    )
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 800 } })
     const seen: Record<string, unknown> = {}
     try {
@@ -235,7 +241,12 @@ describe.skipIf(!전제.ok)('N20 레이아웃 값 — 실브라우저', () => {
             css: parseFloat(getComputedStyle(sel).outlineWidth),
           }
         })
-        const clip = { x: Math.max(0, info.x - 12), y: Math.max(0, info.y - 12), width: Math.min(info.w + 24, 300), height: Math.min(info.h + 24, 120) }
+        const clip = {
+          x: Math.max(0, info.x - 12),
+          y: Math.max(0, info.y - 12),
+          width: Math.min(info.w + 24, 300),
+          height: Math.min(info.h + 24, 120),
+        }
         const px = decodePng(await page.screenshot({ clip }))
         const col = px.width >> 1
         let run = 0
@@ -246,7 +257,13 @@ describe.skipIf(!전제.ok)('N20 레이아웃 값 — 실브라우저', () => {
             best = Math.max(best, run)
           } else run = 0
         }
-        seen[name] = { zoom: Math.round(info.zoom * 100) / 100, layer: Math.round(info.layer * 100) / 100, cssPx: Math.round(info.css * 100) / 100, screenPx: Math.round(info.css * info.layer * 100) / 100, darkRun: best }
+        seen[name] = {
+          zoom: Math.round(info.zoom * 100) / 100,
+          layer: Math.round(info.layer * 100) / 100,
+          cssPx: Math.round(info.css * 100) / 100,
+          screenPx: Math.round(info.css * info.layer * 100) / 100,
+          darkRun: best,
+        }
       }
     } finally {
       await context.close()
@@ -294,20 +311,36 @@ describe.skipIf(!전제.ok)('N20 레이아웃 값 — 실브라우저', () => {
         await page.goto(P)
         await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor()
         await page.waitForTimeout(800)
-        const height = () => page.evaluate(() => Math.round(document.querySelector('iframe.wb-shell-canvas-iframe')!.getBoundingClientRect().height))
-        const cardBox = () => canvasFrame(page).locator('.sample-card').first().evaluate((el) => Math.round(el.getBoundingClientRect().height))
+        const height = () =>
+          page.evaluate(() => Math.round(document.querySelector('iframe.wb-shell-canvas-iframe')!.getBoundingClientRect().height))
+        const cardBox = () =>
+          canvasFrame(page)
+            .locator('.sample-card')
+            .first()
+            .evaluate((el) => Math.round(el.getBoundingClientRect().height))
         const idle: number[] = []
         for (let i = 0; i < 5; i += 1) {
           await page.waitForTimeout(400)
           idle.push(await height())
         }
         const card = await cardBox()
-        const many = Array.from({ length: 30 }, (_, i) => ({ op: 'add', path: `/root/children/${i + 2}`, value: { id: `n_m${String(i).padStart(11, '0')}`, type: 'Text', props: { content: `줄 ${i}` } } }))
+        const many = Array.from({ length: 30 }, (_, i) => ({
+          op: 'add',
+          path: `/root/children/${i + 2}`,
+          value: { id: `n_m${String(i).padStart(11, '0')}`, type: 'Text', props: { content: `줄 ${i}` } },
+        }))
         const baseSeq = async () => (await project.call('GET', P.replace('/projects', '/projects'))).body.headSeq as number
         expect((await project.call('PATCH', `${P}/ops`, { baseSeq: await baseSeq(), ops: many })).status).toBe(200)
         await page.waitForTimeout(800)
         const grown = await height()
-        expect((await project.call('PATCH', `${P}/ops`, { baseSeq: await baseSeq(), ops: many.map(() => ({ op: 'remove', path: '/root/children/2' })) })).status).toBe(200)
+        expect(
+          (
+            await project.call('PATCH', `${P}/ops`, {
+              baseSeq: await baseSeq(),
+              ops: many.map(() => ({ op: 'remove', path: '/root/children/2' })),
+            })
+          ).status,
+        ).toBe(200)
         await page.waitForTimeout(800)
         const shrunk = await height()
         const after: number[] = []
@@ -316,7 +349,12 @@ describe.skipIf(!전제.ok)('N20 레이아웃 값 — 실브라우저', () => {
           after.push(await height())
         }
         seen[theme.id] = { idle, card, grown, shrunk, after }
-        expect({ id: theme.id, stable: new Set(idle).size === 1, shrankBack: shrunk === idle[0], stableAfter: new Set(after).size === 1 }).toEqual({ id: theme.id, stable: true, shrankBack: true, stableAfter: true })
+        expect({
+          id: theme.id,
+          stable: new Set(idle).size === 1,
+          shrankBack: shrunk === idle[0],
+          stableAfter: new Set(after).size === 1,
+        }).toEqual({ id: theme.id, stable: true, shrankBack: true, stableAfter: true })
       } finally {
         await context.close()
       }

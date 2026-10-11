@@ -304,11 +304,21 @@ export function ActionMenu(props: {
   }
 
   return (
-    <div className="wb-shell-action-menu" ref={rootRef} data-wb-holds-keys={open ? 'menu' : undefined} onBlur={open ? closeWhenFocusLeaves : undefined}>
+    <div
+      className="wb-shell-action-menu"
+      ref={rootRef}
+      data-wb-holds-keys={open ? 'menu' : undefined}
+      onBlur={open ? closeWhenFocusLeaves : undefined}
+    >
       <button
         type="button"
         ref={toggleRef}
-        className={['wb-shell-action-menu-toggle', props.compact === true ? 'wb-shell-action-menu-compact' : '', props.text !== undefined ? 'wb-shell-action-menu-valued' : '', props.tag === true ? 'wb-shell-action-menu-tag' : '']
+        className={[
+          'wb-shell-action-menu-toggle',
+          props.compact === true ? 'wb-shell-action-menu-compact' : '',
+          props.text !== undefined ? 'wb-shell-action-menu-valued' : '',
+          props.tag === true ? 'wb-shell-action-menu-tag' : '',
+        ]
           .filter(Boolean)
           .join(' ')}
         aria-label={props.label}
@@ -320,7 +330,19 @@ export function ActionMenu(props: {
         onKeyDown={onToggleKeyDown}
       >
         <ToggleIcon icon={props.icon ?? ICONS.more} compact={props.compact === true} />
-        {props.text !== undefined && <span className={['wb-shell-action-menu-text', props.fullText === true ? 'wb-shell-action-menu-text-full' : '', props.tag === true ? 'wb-shell-action-menu-text-tag' : ''].filter(Boolean).join(' ')}>{props.text}</span>}
+        {props.text !== undefined && (
+          <span
+            className={[
+              'wb-shell-action-menu-text',
+              props.fullText === true ? 'wb-shell-action-menu-text-full' : '',
+              props.tag === true ? 'wb-shell-action-menu-text-tag' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            {props.text}
+          </span>
+        )}
       </button>
       {open &&
         createPortal(
@@ -360,7 +382,9 @@ export function ActionMenu(props: {
                       role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
                       aria-checked={item.checked}
                       tabIndex={-1}
-                      className={item.danger === true ? 'wb-shell-action-menu-item wb-shell-action-menu-danger' : 'wb-shell-action-menu-item'}
+                      className={
+                        item.danger === true ? 'wb-shell-action-menu-item wb-shell-action-menu-danger' : 'wb-shell-action-menu-item'
+                      }
                       aria-disabled={item.disabled === true ? true : undefined}
                       title={item.title}
                       aria-description={item.description}

@@ -50,7 +50,12 @@ async function anotherSession(ctx: TestContext, who: SignedUpUser): Promise<{ wb
 }
 
 async function issueToken(ctx: TestContext, who: SignedUpUser, projectId: string) {
-  const res = await ctx.app.inject({ method: 'POST', url: `/api/projects/${projectId}/tokens`, cookies: who.cookie, payload: { name: 'CI' } })
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${projectId}/tokens`,
+    cookies: who.cookie,
+    payload: { name: 'CI' },
+  })
   expect(res.statusCode, res.body).toBe(201)
   return { authorization: `Bearer ${(res.json() as { value: string }).value}` }
 }
@@ -100,7 +105,11 @@ describe('비밀번호 바꾸기', () => {
       const res = await changePassword(ctx, alice.cookie, { currentPassword: WRONG, newPassword: NEW_PASSWORD })
       expect(res.statusCode, res.body).toBe(401)
       expect(res.json()).toMatchObject({
-        error: { code: 'unauthenticated', message: '이메일 또는 비밀번호가 올바르지 않습니다', issues: [{ path: 'currentPassword', code: 'wrong-password' }] },
+        error: {
+          code: 'unauthenticated',
+          message: '이메일 또는 비밀번호가 올바르지 않습니다',
+          issues: [{ path: 'currentPassword', code: 'wrong-password' }],
+        },
       })
       expect((await me(ctx, alice.cookie)).statusCode).toBe(200)
       expect((await me(ctx, second)).statusCode).toBe(200)
@@ -120,7 +129,11 @@ describe('비밀번호 바꾸기', () => {
 
   it('로그인하지 않았으면 401 이다', async () => {
     await withApi(async (ctx) => {
-      const res = await ctx.app.inject({ method: 'POST', url: '/api/auth/password', payload: { currentPassword: 'password1234', newPassword: NEW_PASSWORD } })
+      const res = await ctx.app.inject({
+        method: 'POST',
+        url: '/api/auth/password',
+        payload: { currentPassword: 'password1234', newPassword: NEW_PASSWORD },
+      })
       expect(res.statusCode).toBe(401)
     })
   })

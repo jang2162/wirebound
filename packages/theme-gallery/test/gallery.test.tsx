@@ -7,11 +7,32 @@ import { GALLERY_SAMPLES, galleryItems, ThemeGallery } from '@wirebound/theme-ga
 
 beforeAll(() => installCatalog())
 // 이 저장소는 vitest `globals` 를 켜지 않아 RTL 이 스스로 정리를 걸지 못한다(`apps/web/test/setup.ts`).
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 /** 테마가 그리는 타입 — 상태 영역 둘(`THEMELESS_TYPES`)은 렌더러가 가지만 고르는 투명 노드라 갤러리에 칸이 없다. */
-const themed = (): string[] => listComponents().map((d) => d.type).filter((type) => !THEMELESS_TYPES.includes(type)).sort()
-const manifest = { id: 't', name: 't', version: '1.0.0', sdk: '^1.0.0', tokens: { items: {} },
-  components: { List: { variants: [{ id: 'table', label: '표' }, { id: 'cards', label: '카드' }], defaultVariant: 'table' } } }
+const themed = (): string[] =>
+  listComponents()
+    .map((d) => d.type)
+    .filter((type) => !THEMELESS_TYPES.includes(type))
+    .sort()
+const manifest = {
+  id: 't',
+  name: 't',
+  version: '1.0.0',
+  sdk: '^1.0.0',
+  tokens: { items: {} },
+  components: {
+    List: {
+      variants: [
+        { id: 'table', label: '표' },
+        { id: 'cards', label: '카드' },
+      ],
+      defaultVariant: 'table',
+    },
+  },
+}
 
 describe('갤러리', () => {
   it('표본이 카탈로그 전부를 덮는다 — 테마가 안 그리는 구조는 빼고', () => {
@@ -50,7 +71,9 @@ describe('갤러리', () => {
   })
   it('뷰 하나가 던져도 다른 항목은 그린다', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const List = view(() => { throw new Error('boom') })
+    const List = view(() => {
+      throw new Error('boom')
+    })
     const { container } = render(<ThemeGallery theme={defineTheme({ manifest, views: { List } })} tokens={{}} />)
     expect(container.querySelector('[data-wb-error]')).not.toBeNull()
     expect(container.querySelector('[data-wb-component="Button"]')).not.toBeNull()

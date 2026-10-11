@@ -21,9 +21,7 @@ const 문서: PageDocument = {
         type: 'Button',
         marker: 1,
         props: { label: '검색' },
-        interactions: [
-          { on: 'click', actions: [{ type: 'setProp', target: 'list', prop: 'loading', value: true }] },
-        ],
+        interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'list', prop: 'loading', value: true }] }],
       },
       { id: 'card', type: 'Card', props: { title: '요약' }, children: [{ id: 'list', type: 'List', marker: 2 }] },
     ],
@@ -63,9 +61,7 @@ describe('무엇을 싣는가', () => {
   })
 
   it('상호작용 문장을 다시 짜지 않는다 — `listInteractionSentences`의 것이다', () => {
-    expect(view().interactions.map((sentence) => sentence.text)).toEqual([
-      '① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다',
-    ])
+    expect(view().interactions.map((sentence) => sentence.text)).toEqual(['① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다'])
   })
 
   it('문서를 그대로 든다 — `--json`이 이것을 낸다', () => {

@@ -103,9 +103,7 @@ export function requestClientKind(request: FastifyRequest): ClientKind | null {
   const raw = request.headers[CLIENT_KIND_HEADER]
   if (raw === undefined) return null
   if (typeof raw !== 'string' || !(CLIENT_KINDS as readonly string[]).includes(raw)) {
-    throw badRequest(
-      `${CLIENT_KIND_HEADER} 헤더는 ${CLIENT_KINDS.join(' 또는 ')} 여야 합니다: ${JSON.stringify(raw)}`,
-    )
+    throw badRequest(`${CLIENT_KIND_HEADER} 헤더는 ${CLIENT_KINDS.join(' 또는 ')} 여야 합니다: ${JSON.stringify(raw)}`)
   }
   return raw as ClientKind
 }

@@ -53,7 +53,8 @@ describe.skipIf(!전제.ok)('토큰 폐기 확인', () => {
     expect(after).toEqual({ processes: 0, listeningPorts: [], databases: 0 })
   })
 
-  const count = async () => Number((await stack.query<{ n: string }>('select count(*) as n from api_tokens where user_id = $1', [userId]))[0]!.n)
+  const count = async () =>
+    Number((await stack.query<{ n: string }>('select count(*) as n from api_tokens where user_id = $1', [userId]))[0]!.n)
 
   /** 폭 하나의 탭 — 로그인은 한 번이다. `load` 가 토큰을 줄 둘로 되돌리고 `/account` 를 다시 싣는다. DELETE 요청을 센다.
    * 토큰 절은 계정 설정의 맨 아래 절이라 절 머리를 창 위로 올린다 — 좌표로 누르는 판이 창 밖을 누르지 않게. */

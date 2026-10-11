@@ -57,14 +57,7 @@
  * 편집은 `lockConflictOfOps(ops)` — 연산마다 좌표를 맞춘다 — 이고, 선택은 집합 전부를 `selectionConflicts` 한 번에 넣는다(문서를 한 번 돈다 —
  * 그 함수의 머리말 «문서를 한 번만 돈다»). 둘은 같은 겹침(한쪽이 다른 쪽의 조상)으로 잰다(`@wirebound/schema`의 `lock.ts`).
  */
-import {
-  lockConflictOfOps,
-  locksAgainst,
-  migrateDocument,
-  selectionConflicts,
-  type PatchOp,
-  type WbNode,
-} from '@wirebound/schema'
+import { lockConflictOfOps, locksAgainst, migrateDocument, selectionConflicts, type PatchOp, type WbNode } from '@wirebound/schema'
 import type { FastifyInstance } from 'fastify'
 import type { DbHandle } from '../db/tx'
 import { locked, type ApiError } from '../errors'
@@ -166,11 +159,7 @@ export type SelectionVerdict = { held: string[] } | 'needs-document'
  * 자세). **문서가 없거나 읽을 수 없으면(`root === null`) 막지 않는다** — 부딪칠 경로가 없다(`selectionConflicts`의 «가리키는
  * 노드가 문서에 없는 잠금은 아무것도 막지 못한다»와 같은 방향이다).
  */
-export function selectionVerdict(
-  app: FastifyInstance,
-  input: SelectionCheckInput,
-  root: WbNode | null | undefined,
-): SelectionVerdict {
+export function selectionVerdict(app: FastifyInstance, input: SelectionCheckInput, root: WbNode | null | undefined): SelectionVerdict {
   if (input.nodeIds.length === 0) return { held: [] }
   const onPage = onPageOf(app, input)
   if (locksAgainst(onPage, input.userId).length === 0) return { held: [] }

@@ -55,7 +55,11 @@ describe.skipIf(!전제.ok)('페이지를 여는 조회의 창', () => {
       })
       expect(bobs.status).toBe(200)
       // 판이 섰는가 — 밥의 프레임이 붙잡은 답보다 먼저 닿았다.
-      await poll('밥의 프레임이 여는 창 안에 닿는다', async () => log.lines.slice(), (lines) => lines.some((line) => line.includes('WS← page-changed seq 2')))
+      await poll(
+        '밥의 프레임이 여는 창 안에 닿는다',
+        async () => log.lines.slice(),
+        (lines) => lines.some((line) => line.includes('WS← page-changed seq 2')),
+      )
       held.release()
 
       const opened = await stable(page)
@@ -65,7 +69,11 @@ describe.skipIf(!전제.ok)('페이지를 여는 조회의 창', () => {
       })
 
       await editFirstText(page, '1쪽 원문', '앨리스 다음 편집')
-      const landed = await poll('다음 편집이 서버에 닿는다', () => server(stack, alice, fx.P1), (value) => value.head === 3)
+      const landed = await poll(
+        '다음 편집이 서버에 닿는다',
+        () => server(stack, alice, fx.P1),
+        (value) => value.head === 3,
+      )
       const settled = await stable(page)
       // eslint-disable-next-line no-console
       console.log(`[여는 창 · 남의 프레임] ${log.lines.join(' · ')} · 서버 ${JSON.stringify(landed)}`)
@@ -101,7 +109,11 @@ describe.skipIf(!전제.ok)('페이지를 여는 조회의 창', () => {
       await page.getByRole('link', { name: '첫째' }).click()
       await held.read
       await hold.release()
-      await poll('1쪽 편집의 ack 가 여는 창 안에 닿는다', async () => log.lines.slice(), (lines) => lines.some((line) => line.includes('WS← patch-ack seq 2')))
+      await poll(
+        '1쪽 편집의 ack 가 여는 창 안에 닿는다',
+        async () => log.lines.slice(),
+        (lines) => lines.some((line) => line.includes('WS← patch-ack seq 2')),
+      )
       held.release()
 
       const opened = await stable(page)
@@ -112,7 +124,11 @@ describe.skipIf(!전제.ok)('페이지를 여는 조회의 창', () => {
       expect(await server(stack, alice, fx.P1)).toEqual({ head: 2, content: ['떠나며 낸 글'] })
 
       await editFirstText(page, '떠나며 낸 글', '돌아와 낸 글')
-      const landed = await poll('다음 편집이 서버에 닿는다', () => server(stack, alice, fx.P1), (value) => value.head === 3)
+      const landed = await poll(
+        '다음 편집이 서버에 닿는다',
+        () => server(stack, alice, fx.P1),
+        (value) => value.head === 3,
+      )
       const settled = await stable(page)
       // eslint-disable-next-line no-console
       console.log(`[여는 창 · 내 ack] ${log.lines.join(' · ')} · 서버 ${JSON.stringify(landed)}`)
@@ -161,12 +177,17 @@ describe.skipIf(!전제.ok)('페이지를 여는 조회의 창', () => {
 
       await page.getByRole('tab', { name: '속성' }).click()
       await editFirstText(page, '1쪽 원문', '돌아와 낸 글')
-      const landed = await poll('다음 편집이 서버에 닿는다', () => server(stack, alice, fx.P1), (value) => value.head === 3, 5_000).catch(
-        async () => server(stack, alice, fx.P1),
-      )
+      const landed = await poll(
+        '다음 편집이 서버에 닿는다',
+        () => server(stack, alice, fx.P1),
+        (value) => value.head === 3,
+        5_000,
+      ).catch(async () => server(stack, alice, fx.P1))
       const settled = await stable(page)
       // eslint-disable-next-line no-console
-      console.log(`[여는 창 · 번호 응답] ${log.lines.join(' · ')} · 서버 ${JSON.stringify(landed)} · 통지 ${JSON.stringify(settled.notices)}`)
+      console.log(
+        `[여는 창 · 번호 응답] ${log.lines.join(' · ')} · 서버 ${JSON.stringify(landed)} · 통지 ${JSON.stringify(settled.notices)}`,
+      )
       expect({ 서버: landed, 통지: settled.notices }).toEqual({ 서버: { head: 3, content: ['돌아와 낸 글'] }, 통지: [] })
       expect(log.lines.filter((line) => line.includes('WS→ patch'))).toEqual(['WS→ patch 1쪽 baseSeq=2'])
     } finally {
@@ -221,12 +242,15 @@ function watch(page: Page, fx: Fixture): { lines: string[] } {
       const payload = String(frame.payload)
       if (!payload.includes('"patch"')) return
       const target = /"pageId":"([^"]+)"/.exec(payload)?.[1]
-      lines.push(`WS→ patch ${target === fx.first ? '1쪽' : target === fx.second ? '2쪽' : target} baseSeq=${/"baseSeq":(\d+)/.exec(payload)?.[1]}`)
+      lines.push(
+        `WS→ patch ${target === fx.first ? '1쪽' : target === fx.second ? '2쪽' : target} baseSeq=${/"baseSeq":(\d+)/.exec(payload)?.[1]}`,
+      )
     })
     ws.on('framereceived', (frame) => {
       const payload = String(frame.payload)
       const kind = /"type":"(patch-ack|patch-error|page-changed)"/.exec(payload)?.[1]
-      if (kind !== undefined) lines.push(`WS← ${kind} ${/"(seq|status)":(\d+)/.exec(payload)?.[0]?.replace(/"|:/g, (c) => (c === ':' ? ' ' : '')) ?? ''}`)
+      if (kind !== undefined)
+        lines.push(`WS← ${kind} ${/"(seq|status)":(\d+)/.exec(payload)?.[0]?.replace(/"|:/g, (c) => (c === ':' ? ' ' : '')) ?? ''}`)
     })
   })
   return { lines }

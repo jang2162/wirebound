@@ -132,25 +132,20 @@ export function PaletteThumbs(props: {
   const types = useMemo(() => props.slots.map((slot) => slot.type), [props.slots])
 
   return (
-    <div
-      className="wb-shell-palette-thumbs"
-      inert
-      aria-hidden="true"
-      style={{ width: props.width, height: props.height }}
-    >
-        <CanvasIframe
-          styles={sheets}
-          width={props.width}
-          onFrame={setFrame}
-          onResize={remeasure}
-          className="wb-shell-palette-thumbs-iframe"
-          title="컴포넌트 축소판"
-        >
-          {(f) => (
-            <ThemeProvider value={{ tokens, window: f.window }}>
-              {/* **문서가 트랙만큼은 길다** — iframe 은 문서 높이로 자라는데(`canvas/canvas-iframe.tsx`) 표본은 옮김(`transform`) 전 자리로
+    <div className="wb-shell-palette-thumbs" inert aria-hidden="true" style={{ width: props.width, height: props.height }}>
+      <CanvasIframe
+        styles={sheets}
+        width={props.width}
+        onFrame={setFrame}
+        onResize={remeasure}
+        className="wb-shell-palette-thumbs-iframe"
+        title="컴포넌트 축소판"
+      >
+        {(f) => (
+          <ThemeProvider value={{ tokens, window: f.window }}>
+            {/* **문서가 트랙만큼은 길다** — iframe 은 문서 높이로 자라는데(`canvas/canvas-iframe.tsx`) 표본은 옮김(`transform`) 전 자리로
                   쌓여 그 높이를 정한다. 카드가 여러 줄로 감싸여 트랙이 쌓인 표본보다 길면 아래 줄 카드의 표본이 iframe 밖으로 옮겨져 잘린다. */}
-              <div style={{ minHeight: props.height }}>
+            <div style={{ minHeight: props.height }}>
               {types.map((type) => {
                 const sample = thumbSample(type)
                 if (sample === null) return null
@@ -165,10 +160,10 @@ export function PaletteThumbs(props: {
                   </div>
                 )
               })}
-              </div>
-            </ThemeProvider>
-          )}
-        </CanvasIframe>
+            </div>
+          </ThemeProvider>
+        )}
+      </CanvasIframe>
     </div>
   )
 }

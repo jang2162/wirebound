@@ -36,23 +36,13 @@ import {
 import type { ExportJobSpec } from '../src/services/export-worker-protocol'
 import { bundleRootDirectory, zipBundle, zipParts } from '../src/services/export-zip'
 import type { ScreenBatch, ScreenJob, ScreenRenderer } from '../src/services/screen-render'
-import {
-  addMember,
-  createMenuNode,
-  createPage,
-  createProject,
-  signup,
-  withApi,
-  type TestContext,
-} from './helpers'
+import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
 /** 진짜 1×1 PNG 바이트. `test/export-pptx-screens.test.ts`가 같은 것을 든다. */
 const PNG_1X1 = Uint8Array.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
-  0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
-  0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
-  0x42, 0x60, 0x82,
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+  0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01,
+  0x00, 0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 ])
 
 const HTML_NO_ZIP: Extract<ExportJobSpec, { kind: 'html' }> = { kind: 'html', zipRoot: null }
@@ -100,13 +90,36 @@ function differingEntries(got: [string, Uint8Array][], want: [string, Uint8Array
   return got.filter(([, bytes], index) => Buffer.compare(Buffer.from(bytes), Buffer.from(want[index]![1])) !== 0).map(([name]) => name)
 }
 
-async function putSchema(ctx: TestContext, cookie: { wb_session: string }, projectId: string, pageId: string, schema: PageDocument): Promise<void> {
-  const res = await ctx.app.inject({ method: 'PUT', url: `/api/projects/${projectId}/pages/${pageId}/schema`, cookies: cookie, payload: { schema } })
+async function putSchema(
+  ctx: TestContext,
+  cookie: { wb_session: string },
+  projectId: string,
+  pageId: string,
+  schema: PageDocument,
+): Promise<void> {
+  const res = await ctx.app.inject({
+    method: 'PUT',
+    url: `/api/projects/${projectId}/pages/${pageId}/schema`,
+    cookies: cookie,
+    payload: { schema },
+  })
   if (res.statusCode !== 200) throw new Error(`putSchema 픽스처가 실패했습니다 (status ${res.statusCode}): ${res.body}`)
 }
 
-async function addComment(ctx: TestContext, cookie: { wb_session: string }, projectId: string, pageId: string, nodeId: string, body: string): Promise<void> {
-  const res = await ctx.app.inject({ method: 'POST', url: `/api/projects/${projectId}/pages/${pageId}/comments`, cookies: cookie, payload: { nodeId, body } })
+async function addComment(
+  ctx: TestContext,
+  cookie: { wb_session: string },
+  projectId: string,
+  pageId: string,
+  nodeId: string,
+  body: string,
+): Promise<void> {
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${projectId}/pages/${pageId}/comments`,
+    cookies: cookie,
+    payload: { nodeId, body },
+  })
   if (res.statusCode !== 201) throw new Error(`addComment 픽스처가 실패했습니다 (status ${res.statusCode}): ${res.body}`)
 }
 
@@ -116,7 +129,14 @@ function button(rootId: string, buttonId: string, label: string, navigateTo: str
     root: {
       id: rootId,
       type: 'Page',
-      children: [{ id: buttonId, type: 'Button', props: { label }, interactions: [{ on: 'click', actions: [{ type: 'navigate', target: navigateTo }] }] }],
+      children: [
+        {
+          id: buttonId,
+          type: 'Button',
+          props: { label },
+          interactions: [{ on: 'click', actions: [{ type: 'navigate', target: navigateTo }] }],
+        },
+      ],
     },
   }
 }
@@ -195,7 +215,11 @@ describe('워커가 낸 것은 같은 스레드에서 낸 것과 같다', () => 
       expect(got.map(([, bytes]) => strFromU8(bytes)).join('\n')).toContain('"type":"Button"')
       expect(got.map(([, bytes]) => strFromU8(bytes)).join('\n')).toContain('목록 코멘트 둘')
 
-      const preview = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: fixture.cookie })
+      const preview = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${fixture.projectId}/export/preview`,
+        cookies: fixture.cookie,
+      })
       expect(preview.statusCode).toBe(200)
       const body = preview.json()
       expect(body.pages).toEqual(reference.pages)
@@ -215,7 +239,11 @@ describe('워커가 낸 것은 같은 스레드에서 낸 것과 같다', () => 
         const inThread = new SizedRenderer()
         const reference = await exportProjectPptx(ctx.db, fixture.projectId, { renderer: inThread })
 
-        const res = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export?format=pptx`, cookies: fixture.cookie })
+        const res = await ctx.app.inject({
+          method: 'GET',
+          url: `/api/projects/${fixture.projectId}/export?format=pptx`,
+          cookies: fixture.cookie,
+        })
         expect(res.statusCode).toBe(200)
         const got = entries(new Uint8Array(res.rawPayload))
         const want = entries(zipParts(reference.parts))
@@ -228,7 +256,11 @@ describe('워커가 낸 것은 같은 스레드에서 낸 것과 같다', () => 
         expect(inThread.last().pages.map((page) => page.title)).toEqual(reference.pages.map((page) => page.title))
         expect(inThread.last().pages.every((page) => inThread.last().files.has(page.path))).toBe(true)
 
-        const preview = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`, cookies: fixture.cookie })
+        const preview = await ctx.app.inject({
+          method: 'GET',
+          url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`,
+          cookies: fixture.cookie,
+        })
         const body = preview.json()
         expect(body.pages).toEqual(reference.pages)
         expect(body.screenless).toEqual(reference.screenless)
@@ -316,7 +348,6 @@ describe('풀', () => {
     await expect(Promise.all([first, second])).resolves.toHaveLength(2)
     expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0, drawSlots: 0 })
   }, 60_000)
-
 })
 
 describe('끊김', () => {
@@ -437,10 +468,7 @@ function countRenderAsks(): { readonly count: number; restore(): void } {
 
 /** `ms` 안에 안 끝나면 거절한다 — 줄에 선 채 안 끝나는 것을 «시간 초과»가 아니라 값으로 본다. */
 function within<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${ms}ms 안에 안 끝났습니다`)), ms)),
-  ])
+  return Promise.race([promise, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${ms}ms 안에 안 끝났습니다`)), ms))])
 }
 
 describe('칸이 둘이다 — CPU 와 그리기', () => {
@@ -539,7 +567,9 @@ describe('칸이 둘이다 — CPU 와 그리기', () => {
     const renderer = new HeldRenderer()
     try {
       const gone = new AbortController()
-      const first = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render, signal: gone.signal }).catch((error: unknown) => error)
+      const first = pool
+        .runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render, signal: gone.signal })
+        .catch((error: unknown) => error)
       await vi.waitFor(() => expect(renderer.started).toBe(1), { timeout: 30_000 })
       gone.abort()
       expect(await first).toBeInstanceOf(ExportAbortedError)
@@ -567,7 +597,9 @@ describe('칸이 둘이다 — CPU 와 그리기', () => {
     try {
       expect(pool.stats.drawSlots).toBe(0)
       const gone = new AbortController()
-      const cut = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render, signal: gone.signal }).catch((error: unknown) => error)
+      const cut = pool
+        .runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render, signal: gone.signal })
+        .catch((error: unknown) => error)
       const kept = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render })
       await vi.waitFor(() => expect(renderer.started).toBe(2), { timeout: 30_000 })
       expect(pool.stats.drawSlots).toBe(2)
@@ -790,7 +822,11 @@ describe('줄은 길이로 묶는다', () => {
           let busy!: Awaited<ReturnType<typeof ctx.app.inject>>
           await vi.waitFor(
             async () => {
-              busy = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: fixture.cookie })
+              busy = await ctx.app.inject({
+                method: 'GET',
+                url: `/api/projects/${fixture.projectId}/export/preview`,
+                cookies: fixture.cookie,
+              })
               expect(busy.statusCode).toBe(503)
             },
             { timeout: 30_000 },
@@ -824,12 +860,20 @@ describe('줄은 길이로 묶는다', () => {
           const fixture = await 설계서(ctx, 'worker-busy-before-read')
           const empty = await createProject(ctx, fixture.cookie, { name: '빈 설계서', slug: 'worker-busy-empty' })
           // 한가할 때는 409 다 — 이 프로젝트의 읽기가 정말 던진다.
-          const idle = await ctx.app.inject({ method: 'GET', url: `/api/projects/${empty.id}/export/preview?format=pptx`, cookies: fixture.cookie })
+          const idle = await ctx.app.inject({
+            method: 'GET',
+            url: `/api/projects/${empty.id}/export/preview?format=pptx`,
+            cookies: fixture.cookie,
+          })
           expect(idle.statusCode).toBe(409)
 
           const people = await 채울사람들(ctx, fixture.projectId)
           const filling = Array.from({ length: EXPORT_JOB_LIMIT }, (_, i) =>
-            ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`, cookies: people[i % people.length]! }),
+            ctx.app.inject({
+              method: 'GET',
+              url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`,
+              cookies: people[i % people.length]!,
+            }),
           )
           await vi.waitFor(() => expect(renderer.started).toBe(EXPORT_RENDER_LIMIT), { timeout: 30_000 })
           // 채우는 요청들이 아직 가드를 지나는 중이면 이 요청이 들어가 읽는다 — 한도가 찰 때까지 다시 본다.
@@ -934,19 +978,32 @@ describe('한 사람이 줄을 다 쥐지 않는다', () => {
           const fixture = await 설계서(ctx, 'worker-person')
           const other = await signup(ctx)
           await addMember(ctx, fixture.projectId, other.user.id, 'viewer')
-          const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fixture.projectId}/tokens`, cookies: fixture.cookie, payload: { name: '내 토큰' } })
+          const issued = await ctx.app.inject({
+            method: 'POST',
+            url: `/api/projects/${fixture.projectId}/tokens`,
+            cookies: fixture.cookie,
+            payload: { name: '내 토큰' },
+          })
           expect(issued.statusCode).toBe(201)
           const token = (issued.json() as { value: string }).value
 
           // 한 사람이 둘을 띄운다(탭 둘) — 둘 다 그리는 중이다.
           const url = `/api/projects/${fixture.projectId}/export/preview?format=pptx`
-          const mine = Array.from({ length: EXPORT_PERSON_JOB_LIMIT }, () => ctx.app.inject({ method: 'GET', url, cookies: fixture.cookie }))
+          const mine = Array.from({ length: EXPORT_PERSON_JOB_LIMIT }, () =>
+            ctx.app.inject({ method: 'GET', url, cookies: fixture.cookie }),
+          )
           await vi.waitFor(() => expect(renderer.started).toBe(EXPORT_PERSON_JOB_LIMIT), { timeout: 30_000 })
 
-          const third = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: fixture.cookie })
+          const third = await ctx.app.inject({
+            method: 'GET',
+            url: `/api/projects/${fixture.projectId}/export/preview`,
+            cookies: fixture.cookie,
+          })
           expect(third.statusCode).toBe(503)
           expect(third.headers['retry-after']).toBe(String(EXPORT_RETRY_AFTER_S))
-          expect(third.json()).toEqual({ error: { code: 'internal', message: '내 내보내기가 이미 돌고 있습니다 — 앞의 것이 끝난 뒤 다시 시도하세요' } })
+          expect(third.json()).toEqual({
+            error: { code: 'internal', message: '내 내보내기가 이미 돌고 있습니다 — 앞의 것이 끝난 뒤 다시 시도하세요' },
+          })
 
           const byToken = await ctx.app.inject({
             method: 'GET',
@@ -956,13 +1013,21 @@ describe('한 사람이 줄을 다 쥐지 않는다', () => {
           expect(byToken.statusCode).toBe(503)
           expect((byToken.json() as { error: { message: string } }).error.message).toMatch(/^내 내보내기/)
 
-          const others = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: other.cookie })
+          const others = await ctx.app.inject({
+            method: 'GET',
+            url: `/api/projects/${fixture.projectId}/export/preview`,
+            cookies: other.cookie,
+          })
           expect(others.statusCode).toBe(200)
 
           renderer.releaseAll()
           expect((await Promise.all(mine)).map((res) => res.statusCode)).toEqual(mine.map(() => 200))
           // 앞의 것이 끝나면 다시 된다.
-          const again = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: fixture.cookie })
+          const again = await ctx.app.inject({
+            method: 'GET',
+            url: `/api/projects/${fixture.projectId}/export/preview`,
+            cookies: fixture.cookie,
+          })
           expect(again.statusCode).toBe(200)
         },
         { screenRenderer: { render: renderer.render } },
@@ -975,7 +1040,16 @@ describe('한 사람이 줄을 다 쥐지 않는다', () => {
 
 describe('workerExecArgv', () => {
   it('메인의 --conditions 만 이어받고 tsx 로더를 싣는다', () => {
-    const argv = workerExecArgv(['--require', '/x/preflight.cjs', '--conditions', 'development', '-C', 'node', '--conditions=custom', '--inspect'])
+    const argv = workerExecArgv([
+      '--require',
+      '/x/preflight.cjs',
+      '--conditions',
+      'development',
+      '-C',
+      'node',
+      '--conditions=custom',
+      '--inspect',
+    ])
     expect(argv.slice(0, 5)).toEqual(['--conditions', 'development', '--conditions', 'node', '--conditions=custom'])
     expect(argv[5]).toBe('--import')
     expect(argv[6]).toMatch(/^file:.*\/tsx\/.*esm/)

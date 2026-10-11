@@ -37,7 +37,12 @@ function caseState(node: unknown): string | null {
 }
 
 /** 고른 노드(들)를 상태 영역으로 감싸는 묶음 — 지금 상태가 기본이 아니면 그 상태의 가지도 기본 가지의 복사로 함께. */
-export function splitPlan(doc: PageDocument, nodeIds: readonly string[], viewState: string | null, newId: () => string = createNodeId): Plan {
+export function splitPlan(
+  doc: PageDocument,
+  nodeIds: readonly string[],
+  viewState: string | null,
+  newId: () => string = createNodeId,
+): Plan {
   if (nodeIds.length === 0) return { reason: SPLIT_PICK_REASON }
   const rootId: unknown = doc.root?.id
   if (nodeIds.some((id) => id === rootId)) return { reason: SPLIT_ROOT_REASON }

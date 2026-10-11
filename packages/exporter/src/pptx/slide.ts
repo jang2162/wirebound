@@ -57,12 +57,7 @@ export function pt(points: number): number {
 
 /** 도형 하나의 `a:xfrm`. */
 function transform(box: Box): string {
-  return (
-    '<a:xfrm>' +
-    `<a:off x="${box.x}" y="${box.y}"/>` +
-    `<a:ext cx="${box.width}" cy="${box.height}"/>` +
-    '</a:xfrm>'
-  )
+  return '<a:xfrm>' + `<a:off x="${box.x}" y="${box.y}"/>` + `<a:ext cx="${box.width}" cy="${box.height}"/>` + '</a:xfrm>'
 }
 
 /**
@@ -77,9 +72,7 @@ function transform(box: Box): string {
 export function paragraphs(line: Line): Line[] {
   const segments = line.text.replace(/\r\n?/g, '\n').split('\n')
   if (segments.length === 1) return [line]
-  return segments.map((text, index) =>
-    index === 0 ? { ...line, text } : { ...line, text, spaceBefore: undefined },
-  )
+  return segments.map((text, index) => (index === 0 ? { ...line, text } : { ...line, text, spaceBefore: undefined }))
 }
 
 function paragraph(line: Line): string {
@@ -87,10 +80,7 @@ function paragraph(line: Line): string {
   if (line.indent !== undefined && line.indent > 0) {
     properties.push(`marL="${line.indent * 8 * POINT}" indent="0"`)
   }
-  const spacing =
-    line.spaceBefore === undefined
-      ? ''
-      : `<a:spcBef><a:spcPts val="${line.spaceBefore}"/></a:spcBef>`
+  const spacing = line.spaceBefore === undefined ? '' : `<a:spcBef><a:spcPts val="${line.spaceBefore}"/></a:spcBef>`
   const run: string[] = [`sz="${line.size}"`, 'lang="ko-KR" dirty="0"']
   if (line.bold === true) run.push('b="1"')
   const fill = line.color === undefined ? '' : `<a:solidFill><a:srgbClr val="${xmlAttr(line.color)}"/></a:solidFill>`
@@ -100,12 +90,7 @@ function paragraph(line: Line): string {
   // 실으면 PowerPoint가 글자 없는 토막을 들고 있게 된다 — 문단만 두면 빈 줄 그대로다.
   if (line.text.length === 0) return `<a:p>${pPr}</a:p>`
 
-  return (
-    '<a:p>' +
-    pPr +
-    `<a:r><a:rPr ${run.join(' ')}>${fill}</a:rPr><a:t>${xmlText(line.text)}</a:t></a:r>` +
-    '</a:p>'
-  )
+  return '<a:p>' + pPr + `<a:r><a:rPr ${run.join(' ')}>${fill}</a:rPr><a:t>${xmlText(line.text)}</a:t></a:r>` + '</a:p>'
 }
 
 /** `Line` 목록을 문단 글자로. **`paragraphs()`를 지나는 유일한 목이다**(위 머리말). */
@@ -120,12 +105,7 @@ function bodyOf(lines: readonly Line[]): string {
  * **`normAutofit`을 쓴다** — 넘치는 글을 PowerPoint가 줄여서 담는다. 그래도 넘치면
  * 잘리고, **잘려도 사라지지 않게 하는 것이 노트의 몫이다.**
  */
-export function textBox(options: {
-  id: number
-  name: string
-  box: Box
-  lines: readonly Line[]
-}): string {
+export function textBox(options: { id: number; name: string; box: Box; lines: readonly Line[] }): string {
   return (
     '<p:sp>' +
     `<p:nvSpPr><p:cNvPr id="${options.id}" name="${xmlAttr(options.name)}"/>` +
@@ -146,12 +126,7 @@ export function textBox(options: {
  * **빈 자리로 두지 않는다** — 아무것도 없으면 읽는 사람이 *"이미지가 원래 없는 형식"*으로
  * 읽고, 그러면 화면을 그리는 쪽이 그 자리를 채웠는지 아닌지도 눈으로 구분되지 않는다.
  */
-export function placeholder(options: {
-  id: number
-  box: Box
-  text: string
-  size: number
-}): string {
+export function placeholder(options: { id: number; box: Box; text: string; size: number }): string {
   return (
     '<p:sp>' +
     `<p:nvSpPr><p:cNvPr id="${options.id}" name="화면 자리"/>` +
@@ -175,12 +150,7 @@ export function placeholder(options: {
  * 그림 하나. **바이트는 여기 없다** — `r:embed`가 관계를 가리키고 그 관계와 매체 파트는
  * `ooxml.ts`가 만든다(`SLIDE_IMAGE_RID`).
  */
-export function image(options: {
-  id: number
-  name: string
-  relationshipId: string
-  box: Box
-}): string {
+export function image(options: { id: number; name: string; relationshipId: string; box: Box }): string {
   return (
     '<p:pic>' +
     `<p:nvPicPr><p:cNvPr id="${options.id}" name="${xmlAttr(options.name)}"/>` +

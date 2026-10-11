@@ -106,10 +106,7 @@ describe('POST /:projectId/snapshots', () => {
       // `signup`부터 요청을 보내므로, 훅이 그때는 아직 없는 값을 봐야 한다. 그래서 훅을
       // 참조로 늦게 채운다.
       let interrupt: (() => Promise<void>) | undefined
-      await ctx.app.register(
-        snapshotRoutes({ captureHooks: { afterPages: async () => interrupt?.() } }),
-        { prefix: '/probe/projects' },
-      )
+      await ctx.app.register(snapshotRoutes({ captureHooks: { afterPages: async () => interrupt?.() } }), { prefix: '/probe/projects' })
 
       const fx = await fixture(ctx)
       interrupt = async () => {
@@ -309,11 +306,13 @@ describe('삭제 없는 태그', () => {
    */
   it('owner 가드는 복원 하나에만 걸려 있다', () => {
     const code = stripComments(SOURCE)
-    const guarded = [...code.matchAll(/app\s*\.\s*(get|post|patch|put|delete)\s*\(\s*'([^']+)'\s*,\s*\{\s*preHandler:\s*projectGuard\s*\(\s*'(\w+)'\s*\)/g)]
+    const guarded = [
+      ...code.matchAll(
+        /app\s*\.\s*(get|post|patch|put|delete)\s*\(\s*'([^']+)'\s*,\s*\{\s*preHandler:\s*projectGuard\s*\(\s*'(\w+)'\s*\)/g,
+      ),
+    ]
 
-    expect(guarded.filter((match) => match[3] === 'owner').map((match) => match[2])).toEqual([
-      '/:projectId/snapshots/:snapshotId/restore',
-    ])
+    expect(guarded.filter((match) => match[3] === 'owner').map((match) => match[2])).toEqual(['/:projectId/snapshots/:snapshotId/restore'])
   })
 
   /**

@@ -56,9 +56,7 @@ export async function requireProject(io: Io): Promise<ProjectAccess> {
   const binding = await requireBinding(io)
   const token = await findToken(io, binding.server, binding.projectId)
   if (token === null) {
-    throw configError(
-      `${binding.server} 의 프로젝트 ${binding.projectId} 에 쓸 자격이 없습니다. \`wireb login\`을 먼저 실행하세요`,
-    )
+    throw configError(`${binding.server} 의 프로젝트 ${binding.projectId} 에 쓸 자격이 없습니다. \`wireb login\`을 먼저 실행하세요`)
   }
   return { binding, token }
 }

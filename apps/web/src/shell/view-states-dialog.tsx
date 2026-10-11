@@ -64,7 +64,9 @@ export function nameProblem(viewStates: readonly ViewState[], name: string, exce
 }
 
 export function removeSentence(name: string, cases: number): string {
-  return cases === 0 ? `"${name}" 상태를 지웁니다. 이 상태의 가지는 없습니다.` : `"${name}" 상태를 지웁니다. 가지 ${cases}개의 내용이 함께 삭제됩니다.`
+  return cases === 0
+    ? `"${name}" 상태를 지웁니다. 이 상태의 가지는 없습니다.`
+    : `"${name}" 상태를 지웁니다. 가지 ${cases}개의 내용이 함께 삭제됩니다.`
 }
 
 /** 상태 삭제가 지우는 것 — 확인 상자가 보이는 것과 보내는 것이 이 하나에서 나온다. 검증 전 문서에서 걷기가 던지면 `null`. */
@@ -169,7 +171,12 @@ function OpenViewStatesDialog(props: {
     setRemoving({ stateId: removing.stateId, key: pending.key, changed: true, recheck: true })
   }
   const blocker = pending === null ? null : store.editBlockedBy(pending.ops)
-  const removeWhy = pending === null ? '이 상태가 목록에 없습니다 — 다른 사람이 먼저 지웠을 수 있습니다.' : blocker !== null ? `${blocker.userName}님이 편집 중인 노드가 있어 함께 지울 수 없습니다` : null
+  const removeWhy =
+    pending === null
+      ? '이 상태가 목록에 없습니다 — 다른 사람이 먼저 지웠을 수 있습니다.'
+      : blocker !== null
+        ? `${blocker.userName}님이 편집 중인 노드가 있어 함께 지울 수 없습니다`
+        : null
 
   function confirmRemove(): void {
     if (removing === null) return
@@ -278,7 +285,9 @@ function OpenViewStatesDialog(props: {
   return (
     <ShellDialog open title={MANAGE_STATES_TITLE} onClose={props.onClose}>
       <div className="wb-shell-view-states-body">
-        <p className="wb-shell-view-states-note">기본 상태는 늘 있습니다. 상태마다 다르게 그릴 영역은 구조 트리 줄 `…` 의 «상태별로 나누기»로 정합니다.</p>
+        <p className="wb-shell-view-states-note">
+          기본 상태는 늘 있습니다. 상태마다 다르게 그릴 영역은 구조 트리 줄 `…` 의 «상태별로 나누기»로 정합니다.
+        </p>
         {viewStates.length === 0 ? (
           <p className="wb-shell-view-states-empty">아직 상태가 없습니다.</p>
         ) : (
@@ -310,14 +319,23 @@ function OpenViewStatesDialog(props: {
                 ) : (
                   <>
                     <span className="wb-shell-view-states-name">{state.name}</span>
-                    <RowButton label={`${state.name} 위로`} icon="moveUp" disabled={index === 0} onClick={() => history.commitOps(moveViewStateOps(doc, state.id, index - 1))} />
+                    <RowButton
+                      label={`${state.name} 위로`}
+                      icon="moveUp"
+                      disabled={index === 0}
+                      onClick={() => history.commitOps(moveViewStateOps(doc, state.id, index - 1))}
+                    />
                     <RowButton
                       label={`${state.name} 아래로`}
                       icon="moveDown"
                       disabled={index === viewStates.length - 1}
                       onClick={() => history.commitOps(moveViewStateOps(doc, state.id, index + 1))}
                     />
-                    <RowButton label={`${state.name} 이름 바꾸기`} icon="rename" onClick={() => setRenaming({ id: state.id, value: state.name, problem: null })} />
+                    <RowButton
+                      label={`${state.name} 이름 바꾸기`}
+                      icon="rename"
+                      onClick={() => setRenaming({ id: state.id, value: state.name, problem: null })}
+                    />
                     <RowButton
                       label={`${state.name} 삭제`}
                       icon="remove"
@@ -339,7 +357,12 @@ function OpenViewStatesDialog(props: {
 }
 
 /** 줄의 아이콘 단추 — 이름 = `title` = 아이콘을 얹기 전의 글(`shell/icons.ts` 머리말). */
-function RowButton(props: { label: string; icon: 'moveUp' | 'moveDown' | 'rename' | 'remove'; disabled?: boolean; onClick: () => void }): ReactElement {
+function RowButton(props: {
+  label: string
+  icon: 'moveUp' | 'moveDown' | 'rename' | 'remove'
+  disabled?: boolean
+  onClick: () => void
+}): ReactElement {
   return (
     <button
       type="button"

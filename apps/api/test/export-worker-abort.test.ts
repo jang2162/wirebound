@@ -6,16 +6,7 @@
 import { Writable } from 'node:stream'
 import type { PageDocument } from '@wirebound/schema'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  createMenuNode,
-  createPage,
-  createProject,
-  resetRealData,
-  signup,
-  testConfig,
-  withRealApi,
-  type TestContext,
-} from './helpers'
+import { createMenuNode, createPage, createProject, resetRealData, signup, testConfig, withRealApi, type TestContext } from './helpers'
 
 beforeEach(resetRealData)
 afterEach(resetRealData)
@@ -36,8 +27,19 @@ function bigDocument(prefix: string): PageDocument {
   }
 }
 
-async function putSchema(ctx: TestContext, cookie: { wb_session: string }, projectId: string, pageId: string, schema: PageDocument): Promise<void> {
-  const res = await ctx.app.inject({ method: 'PUT', url: `/api/projects/${projectId}/pages/${pageId}/schema`, cookies: cookie, payload: { schema } })
+async function putSchema(
+  ctx: TestContext,
+  cookie: { wb_session: string },
+  projectId: string,
+  pageId: string,
+  schema: PageDocument,
+): Promise<void> {
+  const res = await ctx.app.inject({
+    method: 'PUT',
+    url: `/api/projects/${projectId}/pages/${pageId}/schema`,
+    cookies: cookie,
+    payload: { schema },
+  })
   if (res.statusCode !== 200) throw new Error(`putSchema 픽스처가 실패했습니다 (status ${res.statusCode}): ${res.body}`)
 }
 
@@ -90,30 +92,27 @@ describe('요청이 끊기면 (진짜 포트)', () => {
 
   it('일을 버리고 답하지 않는다 — «처리되지 않은 예외»로 적지 않는다', async () => {
     const { lines, options } = captureLogs()
-    await withRealApi(
-      async (ctx) => {
-        const { port } = ctx
-        const user = await signup(ctx)
-        const project = await createProject(ctx, user.cookie, { name: '끊김', slug: 'worker-abort' })
-        const menu = await createMenuNode(ctx, user.cookie, project.id, { title: '메뉴' })
-        for (let index = 0; index < 12; index++) {
-          const page = await createPage(ctx, user.cookie, project.id, menu.id, { title: `p${index}` })
-          await putSchema(ctx, user.cookie, project.id, page.id, bigDocument(`p${index}`))
-        }
+    await withRealApi(async (ctx) => {
+      const { port } = ctx
+      const user = await signup(ctx)
+      const project = await createProject(ctx, user.cookie, { name: '끊김', slug: 'worker-abort' })
+      const menu = await createMenuNode(ctx, user.cookie, project.id, { title: '메뉴' })
+      for (let index = 0; index < 12; index++) {
+        const page = await createPage(ctx, user.cookie, project.id, menu.id, { title: `p${index}` })
+        await putSchema(ctx, user.cookie, project.id, page.id, bigDocument(`p${index}`))
+      }
 
-        const controller = new AbortController()
-        const request = fetch(`http://127.0.0.1:${port}/api/projects/${project.id}/export`, {
-          headers: { cookie: `wb_session=${user.cookie.wb_session}` },
-          signal: controller.signal,
-        }).catch((error: unknown) => error)
-        await new Promise((resolve) => setTimeout(resolve, 300))
-        controller.abort()
-        expect(await request).toBeInstanceOf(Error)
+      const controller = new AbortController()
+      const request = fetch(`http://127.0.0.1:${port}/api/projects/${project.id}/export`, {
+        headers: { cookie: `wb_session=${user.cookie.wb_session}` },
+        signal: controller.signal,
+      }).catch((error: unknown) => error)
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      controller.abort()
+      expect(await request).toBeInstanceOf(Error)
 
-        await vi.waitFor(() => expect(lines.join('')).toContain('요청이 끊겨 내보내기를 멈췄다'), { timeout: 20_000 })
-        expect(lines.join('')).not.toContain('처리되지 않은 예외')
-      },
-      options,
-    )
+      await vi.waitFor(() => expect(lines.join('')).toContain('요청이 끊겨 내보내기를 멈췄다'), { timeout: 20_000 })
+      expect(lines.join('')).not.toContain('처리되지 않은 예외')
+    }, options)
   }, 60_000)
 })

@@ -179,15 +179,24 @@ describe('세션 행을 지우면 권한이 회수된다', () => {
       try {
         await holding
         probe.send(
-          JSON.stringify({ type: 'patch', pageId: page.id, clientOpId: 'op_held', baseSeq: 1, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }] }),
+          JSON.stringify({
+            type: 'patch',
+            pageId: page.id,
+            clientOpId: 'op_held',
+            baseSeq: 1,
+            ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }],
+          }),
         )
-        await vi.waitFor(async () => {
-          const { rows } = await sql<{ n: number }>`
+        await vi.waitFor(
+          async () => {
+            const { rows } = await sql<{ n: number }>`
             select count(*)::int as n from pg_stat_activity
              where pid <> pg_backend_pid() and datname = current_database() and wait_event_type = 'Lock'
           `.execute(db)
-          expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
-        }, { timeout: 5_000 })
+            expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
+          },
+          { timeout: 5_000 },
+        )
 
         await deleteSessions(ctx, owner.user.id)
         probe.send(JSON.stringify({ type: 'ping' }))
@@ -242,15 +251,24 @@ describe('세션 행을 지우면 권한이 회수된다', () => {
       try {
         await holding
         probe.send(
-          JSON.stringify({ type: 'patch', pageId: page.id, clientOpId: 'op_held_b', baseSeq: 1, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }] }),
+          JSON.stringify({
+            type: 'patch',
+            pageId: page.id,
+            clientOpId: 'op_held_b',
+            baseSeq: 1,
+            ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }],
+          }),
         )
-        await vi.waitFor(async () => {
-          const { rows } = await sql<{ n: number }>`
+        await vi.waitFor(
+          async () => {
+            const { rows } = await sql<{ n: number }>`
             select count(*)::int as n from pg_stat_activity
              where pid <> pg_backend_pid() and datname = current_database() and wait_event_type = 'Lock'
           `.execute(db)
-          expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
-        }, { timeout: 5_000 })
+            expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
+          },
+          { timeout: 5_000 },
+        )
 
         await deleteSessions(ctx, owner.user.id)
         // 남(peer)이 탭을 하나 더 열어 방송(presence)을 일으킨다 — 그 방송이 세션 없는 연결을 회수한다. 회수된 쪽은 아무것도
@@ -258,10 +276,16 @@ describe('세션 행을 지우면 권한이 회수된다', () => {
         const started = Date.now()
         track(await joinRoom(ctx.port, project.id, peer.cookie.wb_session))
         await locksUntil(watcher, (list) => list.length === 0, 'n_a 풀림')
-        await vi.waitFor(() => {
-          const last = watcher.received.filter((frame) => frame.type === 'presence').at(-1)
-          expect(last?.type === 'presence' && last.participants.map((participant) => participant.userId)).toEqual([peer.user.id, peer.user.id])
-        }, { timeout: 1_000 })
+        await vi.waitFor(
+          () => {
+            const last = watcher.received.filter((frame) => frame.type === 'presence').at(-1)
+            expect(last?.type === 'presence' && last.participants.map((participant) => participant.userId)).toEqual([
+              peer.user.id,
+              peer.user.id,
+            ])
+          },
+          { timeout: 1_000 },
+        )
         expect(Date.now() - started).toBeLessThan(1_000)
         expect(probe.closeInfo).toBeNull()
       } finally {
@@ -298,11 +322,7 @@ describe('세션 행을 지우면 권한이 회수된다', () => {
       await addMember(ctx, project.id, viewer.user.id, 'viewer')
       const probe = track(await joinRoom(ctx.port, project.id, viewer.cookie.wb_session))
 
-      await db
-        .deleteFrom('project_members')
-        .where('project_id', '=', project.id)
-        .where('user_id', '=', viewer.user.id)
-        .execute()
+      await db.deleteFrom('project_members').where('project_id', '=', project.id).where('user_id', '=', viewer.user.id).execute()
       probe.send(JSON.stringify({ type: 'ping' }))
 
       const closed = await probe.waitClosed()

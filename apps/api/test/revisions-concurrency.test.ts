@@ -249,12 +249,7 @@ describe('편집 seq 채번의 동시성', () => {
         release = resolve
       })
       const otherEditor = db.transaction().execute(async (trx) => {
-        await trx
-          .selectFrom('pages')
-          .select('head_seq')
-          .where('id', '=', fx.page.id)
-          .forUpdate()
-          .executeTakeFirstOrThrow()
+        await trx.selectFrom('pages').select('head_seq').where('id', '=', fx.page.id).forUpdate().executeTakeFirstOrThrow()
         await trx
           .insertInto('revisions')
           .values({

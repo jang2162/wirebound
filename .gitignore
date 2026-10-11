@@ -15,3 +15,18 @@ dist/
 !.env.example
 # `wb-theme shots` 의 기본 출력(`--out` 을 안 주면 패키지 안 `shots/`).
 shots/
+# 에이전트 전달 문서와 세션 스크래치(공용 지침 `base` 세팅)
+.superpowers/
+# Playwright MCP 페이지 스냅샷과 스크린샷(공용 지침 `browseros-neo` 세팅)
+/.playwright-mcp/
+# codegraph 인덱스 — 체크아웃마다 만든다(`codegraph init`)
+/.codegraph/
+# Komodo 서버에서 직접 쓰는 덮어쓰기 파일(docs/guides/deploy-komodo.md) — 서버마다 다르고 커밋하지 않는다
+/deploy/compose.server.yaml
+
+
+# START Ruler Generated Files
+/.claude/skills
+/.mcp.json
+/CLAUDE.md
+# END Ruler Generated Files

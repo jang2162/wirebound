@@ -195,7 +195,13 @@ async function bothOrders(
   /** 판을 세운 뒤 · 행을 쥐기 전에 부른다(복원할 스냅샷 찍기). */
   prepare?: (b: Board) => Promise<void>,
 ): Promise<void> {
-  await bothOrdersOf(label, table, [other], (b, order, cascadeAnswer, [otherAnswer]) => check(b, order, cascadeAnswer, otherAnswer!), prepare)
+  await bothOrdersOf(
+    label,
+    table,
+    [other],
+    (b, order, cascadeAnswer, [otherAnswer]) => check(b, order, cascadeAnswer, otherAnswer!),
+    prepare,
+  )
 }
 
 /** `bothOrders`의 상대 쓰기 여럿 판 — `others`는 그 차례로 줄에 서고, 연쇄는 그 앞이나 뒤에 선다. */
@@ -218,7 +224,10 @@ async function bothOrdersOf(
         const cascadeAnswer = order === 'cascade-first' ? answers[0]! : answers[answers.length - 1]!
         const otherAnswers = order === 'cascade-first' ? answers.slice(1) : answers.slice(0, -1)
         // 교착의 희생자는 500 이다.
-        expect(answers.map((answer) => answer.statusCode), `${label} · ${order} · ${answers.map((answer) => answer.body).join(' · ')}`).not.toContain(500)
+        expect(
+          answers.map((answer) => answer.statusCode),
+          `${label} · ${order} · ${answers.map((answer) => answer.body).join(' · ')}`,
+        ).not.toContain(500)
         await check(b, order, cascadeAnswer, otherAnswers)
       }
     }
@@ -315,10 +324,7 @@ describe('메뉴 연쇄 삭제와 겹친 트리 쓰기 — 프로젝트 행에�
     await bothOrdersOf(
       '메뉴 하나 밖 + 하나 안',
       (b) => ['projects', b.projectId],
-      [
-        (b) => send(b, 'PATCH', `/menu/${b.sub}`, { parentId: null }),
-        (b) => send(b, 'PATCH', `/menu/${b.spare}`, { parentId: b.target }),
-      ],
+      [(b) => send(b, 'PATCH', `/menu/${b.sub}`, { parentId: null }), (b) => send(b, 'PATCH', `/menu/${b.spare}`, { parentId: b.target })],
       async (b, order, deleted, [out, into]) => {
         if (order === 'other-first') {
           expect(out!.statusCode, out!.body).toBe(200)
@@ -416,7 +422,12 @@ describe('메뉴 연쇄 삭제와 겹친 트리 쓰기 — 프로젝트 행에�
         const b = await board(ctx)
         const remove = () => send(b, 'DELETE', `/menu/${b.spare}`)
         const add = () => send(b, 'POST', '/pages', { menuNodeId: b.spare, title: '끼어든 페이지' })
-        const [first, second] = await queued('projects', b.projectId, order === 'delete-first' ? [remove, add] : [add, remove], `대조군 · ${order}`)
+        const [first, second] = await queued(
+          'projects',
+          b.projectId,
+          order === 'delete-first' ? [remove, add] : [add, remove],
+          `대조군 · ${order}`,
+        )
         if (order === 'delete-first') expect([first!.statusCode, second!.statusCode]).toEqual([204, 404])
         else expect([first!.statusCode, second!.statusCode]).toEqual([201, 409])
       }
@@ -472,7 +483,10 @@ describe('안전망 상한 — 지우는 연쇄와 겹친 복원 · 프로젝트
             },
           )
           const [deleted, restored] = order === 'cascade-first' ? answers : [answers[1]!, answers[0]!]
-          expect(answers.map((answer) => answer.statusCode), `${label} · ${answers.map((answer) => answer.body).join(' · ')}`).not.toContain(500)
+          expect(
+            answers.map((answer) => answer.statusCode),
+            `${label} · ${answers.map((answer) => answer.body).join(' · ')}`,
+          ).not.toContain(500)
           expect(freeWhileLined, label).toBe(true)
           expect(deleted!.statusCode, deleted!.body).toBe(200)
           if (order === 'cascade-first') {

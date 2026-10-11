@@ -70,7 +70,8 @@ describe.skipIf(!전제.ok)('편집 둘 사이의 코멘트 게시', () => {
         })
       }
       page.on('response', (response) => {
-        if (response.request().method() === 'POST' && response.url().includes('/comments')) lines.push(`${at()} POST 코멘트 ${response.status()}`)
+        if (response.request().method() === 'POST' && response.url().includes('/comments'))
+          lines.push(`${at()} POST 코멘트 ${response.status()}`)
       })
       try {
         await page.goto(fx.P1)
@@ -94,9 +95,12 @@ describe.skipIf(!전제.ok)('편집 둘 사이의 코멘트 게시', () => {
         } finally {
           await hold.release()
         }
-        const final = await poll('B 가 서버에 선다', () => server(stack, alice, fx.P1), (value) => value.head >= 4, 8_000).catch(() =>
-          server(stack, alice, fx.P1),
-        )
+        const final = await poll(
+          'B 가 서버에 선다',
+          () => server(stack, alice, fx.P1),
+          (value) => value.head >= 4,
+          8_000,
+        ).catch(() => server(stack, alice, fx.P1))
         await page.waitForTimeout(500)
         const alerts = await page.locator('[role=alert]').allTextContents()
         // eslint-disable-next-line no-console
@@ -154,7 +158,12 @@ describe.skipIf(!전제.ok)('편집 둘 사이의 코멘트 게시', () => {
       } finally {
         await hold.release()
       }
-      await poll('B 의 409', async () => lines.join(' · '), (value) => value.includes('patch-error'), 5_000)
+      await poll(
+        'B 의 409',
+        async () => lines.join(' · '),
+        (value) => value.includes('patch-error'),
+        5_000,
+      )
       await page.waitForTimeout(100)
       lines.push(`${at()} 둘째로 옮김`)
       await page.getByRole('link', { name: '둘째' }).click()
@@ -255,7 +264,14 @@ describe.skipIf(!전제.ok)('편집 둘 사이의 코멘트 게시', () => {
       console.log(`[사이 게시 · 로그아웃] ${lines.join(' · ')} · 서버 ${JSON.stringify(final)} · 한 줄 ${JSON.stringify(said)}`)
 
       // 판 카나리아 — B 의 409 · 로그아웃 요청(한도 뒤) · 게시 응답 · B 를 다시 냄 · 그 ack 가 이 순서로 났다.
-      const marks = ['WS← patch-error', '로그아웃 누름', 'POST logout 붙잡음', 'POST 코멘트 응답 풂', 'WS→ patch baseSeq=3', 'POST logout 보냄']
+      const marks = [
+        'WS← patch-error',
+        '로그아웃 누름',
+        'POST logout 붙잡음',
+        'POST 코멘트 응답 풂',
+        'WS→ patch baseSeq=3',
+        'POST logout 보냄',
+      ]
       const order = marks.map((mark) => lines.findIndex((line) => line.includes(mark)))
       expect(order.every((index) => index >= 0)).toBe(true)
       expect(order.slice(2).every((index, i) => index > order[i + 1]!)).toBe(true)
@@ -279,13 +295,19 @@ async function fixture(stack: EditorStack, owner: Session, slug: string) {
   // 떠날 곳 — 트리의 «둘째» 링크로 옮긴다.
   await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '둘째' })
   const P1 = `/projects/${project.id}/pages/${first.id}`
-  const seeded = await call('PATCH', `${P1}/ops`, { baseSeq: 0, ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_one0000001', type: 'Text', props: { content: '원문' } } }] })
+  const seeded = await call('PATCH', `${P1}/ops`, {
+    baseSeq: 0,
+    ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_one0000001', type: 'Text', props: { content: '원문' } } }],
+  })
   if (seeded.status >= 300) throw new Error(`seed ${seeded.status}`)
   return { first: first.id as string, P1 }
 }
 async function server(stack: EditorStack, s: Session, path: string) {
   const page = (await stack.request(s, 'GET', path)).body
-  return { head: page.headSeq as number, content: (page.schema.root.children ?? []).map((c: any) => `${c.props?.content}${c.marker ? '#' + c.marker : ''}`) }
+  return {
+    head: page.headSeq as number,
+    content: (page.schema.root.children ?? []).map((c: any) => `${c.props?.content}${c.marker ? '#' + c.marker : ''}`),
+  }
 }
 async function selectFirstText(page: Page, content: string) {
   await canvasFrame(page).locator('body', { hasText: content }).waitFor()

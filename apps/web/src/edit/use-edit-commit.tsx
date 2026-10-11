@@ -20,7 +20,14 @@ import type { RevisionInverse } from '../api/types'
 import { useEditChannel, useLockChannel } from '../realtime/context'
 import { EditNotSentError, UnansweredEditError, type EditChannel, type UnansweredCause } from '../realtime/edit-channel'
 import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
-import { MARKER_FRAME_WAIT_MS, type EditFailure, type EditStatus, type RestoredRevision, type UndoAttempt, type UndoHistoryNeed } from '../store/editor-store'
+import {
+  MARKER_FRAME_WAIT_MS,
+  type EditFailure,
+  type EditStatus,
+  type RestoredRevision,
+  type UndoAttempt,
+  type UndoHistoryNeed,
+} from '../store/editor-store'
 import type { PendingEdit } from '../store/edit-queue'
 import { LOSS_RANK, type LossPart } from '../store/loss-notice'
 import { useAllCases, useViewState } from '../shell/use-view-state'
@@ -52,8 +59,7 @@ const RECOVER_UNKNOWN_FAILURE = '편집에 실패한 뒤 페이지를 다시 불
  *
  * **우리 쪽 문장에만 붙인다.** 서버 문장을 고치지 않는 경계(`api/failure.tsx`)는 그대로다.
  */
-const UNRECOVERED_NOTICE =
-  '화면에 남아 있는 편집은 저장되지 않았습니다. 새로고침해 서버 상태를 확인하세요.'
+const UNRECOVERED_NOTICE = '화면에 남아 있는 편집은 저장되지 않았습니다. 새로고침해 서버 상태를 확인하세요.'
 
 /**
  * **실시간 연결이 열려 있는가** — 편집을 WS 로 낼지(`pump`) 가른다. 결과를 모르는 편집이 뒤늦게 커밋되면 화면에 저절로
@@ -96,17 +102,8 @@ function lateCommitArrives(why: UnansweredCause | null, channel: EditChannel | n
  * @param outcome 다시 불러왔으면 `cancelled`(그러며 버린 **안 보낸** 편집 수), 다시 불러오지도 못했으면 `reason`(그 까닭).
  * @param sent 답을 못 받은 편집 수 — 한 수습에 하나지만 합친 통지는 여럿을 센다(`store/loss-notice.ts`).
  */
-function unknownNotice(
-  why: UnansweredCause | null,
-  outcome: { cancelled: number; live: boolean } | { reason: string },
-  sent = 1,
-): string {
-  const lead =
-    why === 'renewed'
-      ? '다른 탭에서 다시 로그인해 실시간 연결을 새로 붙이느라 '
-      : why === 'lost'
-        ? '실시간 연결이 끊겨 '
-        : ''
+function unknownNotice(why: UnansweredCause | null, outcome: { cancelled: number; live: boolean } | { reason: string }, sent = 1): string {
+  const lead = why === 'renewed' ? '다른 탭에서 다시 로그인해 실시간 연결을 새로 붙이느라 ' : why === 'lost' ? '실시간 연결이 끊겨 ' : ''
   const head = `${lead}보낸 편집${sent > 1 ? ` ${sent}개` : ''}의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 없습니다.`
   if ('reason' in outcome) return `${head} ${outcome.reason} — 새로고침해 서버 상태를 확인하세요.`
   const tail = outcome.cancelled > 0 ? ` 아직 보내지 않은 편집 ${outcome.cancelled}개는 취소됐습니다.` : ''
@@ -222,7 +219,10 @@ export function refusedLoss(caught: unknown, message: string, lost: readonly Pen
     // 일이 아니라 다른 편집이 취소된 것으로 읽힌다. 되돌리기가 없으면 문장은 옛 그대로다.
     counts: [lost.filter((edit) => edit.kind === 'edit').length, lost.filter((edit) => edit.kind !== 'edit').length],
     render: ([edits, history]) => {
-      const what = [...((edits ?? 0) > 0 || (history ?? 0) === 0 ? [`편집 ${edits ?? 0}개`] : []), ...((history ?? 0) > 0 ? [`되돌리기 · 다시 실행 ${history}개`] : [])]
+      const what = [
+        ...((edits ?? 0) > 0 || (history ?? 0) === 0 ? [`편집 ${edits ?? 0}개`] : []),
+        ...((history ?? 0) > 0 ? [`되돌리기 · 다시 실행 ${history}개`] : []),
+      ]
       return `${message} — 페이지를 서버 상태로 다시 불러왔고, ${what.join(' · ')}가 취소됐습니다.`
     },
   }
@@ -272,7 +272,8 @@ const UNDO_UNSAVED = '되돌리려던 편집이 저장되지 않아 되돌리지
  * 비워 되돌릴 것이 없다(`afterAck` 의 `boardEpoch`). 말없이 버리면 누른 키가 아무것도 안 한 것으로 남는다. 한 줄은 바뀐 새 화면 위에 서므로 «이전 화면에서» 라고
  * 밝힌다 — 새 화면의 되돌리기로 읽히지 않게(떠난 페이지의 이름은 편집 스토어가 안 갖는다 — 트리의 것이다).
  */
-const undoBoardChanged = (kind: 'undo' | 'redo'): string => `화면이 바뀌어 이전 화면에서 미뤄 둔 ${kind === 'undo' ? '되돌리기는' : '다시 실행은'} 하지 않았습니다.`
+const undoBoardChanged = (kind: 'undo' | 'redo'): string =>
+  `화면이 바뀌어 이전 화면에서 미뤄 둔 ${kind === 'undo' ? '되돌리기는' : '다시 실행은'} 하지 않았습니다.`
 /** 한도 문장은 한 조각이다 — 두 번 눌러도 한 문장이다. 거두는 것은 마지막 누름만 한다(`afterAck` · `expirySeq`). */
 const ACK_WAIT_KEY = 'undo-ack-wait'
 /** 한도 문장을 낸 누름의 차례 — 앞 누름의 구독이 뒤 누름의 문장을 거두지 않게 한다. */
@@ -487,9 +488,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         // 것이라 버리지 않는다. 실패의 통지만 한다(판은 다시 실렸다).
         if (store.pageLoadSuperseded(ticket)) {
           store.tellLoss(
-            unknown
-              ? unknownLoss(why, dropped.length - 1, lateCommitArrives(why, channel))
-              : refusedLoss(caught, failure.message, dropped),
+            unknown ? unknownLoss(why, dropped.length - 1, lateCommitArrives(why, channel)) : refusedLoss(caught, failure.message, dropped),
           )
           return
         }
@@ -499,10 +498,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         store.failEdits()
         // **여기서 다시 재조회하지 않는다.** 서버가 계속 실패하는 동안 요청이 쌓인다 —
         // 세션 확인에 자동 재시도를 두지 않은 것과 같은 판단이다.
-        const recoverFailure = toFailure(
-          recoverCaught,
-          unknown ? UNANSWERED_RECOVER_FAILURE : RECOVER_UNKNOWN_FAILURE,
-        )
+        const recoverFailure = toFailure(recoverCaught, unknown ? UNANSWERED_RECOVER_FAILURE : RECOVER_UNKNOWN_FAILURE)
         if (recoverFailure.kind === 'signed-out') {
           // 세션이 끊긴 것은 여기서 말하지 않는다 — `EditAlert`이 `<SignedOut />`으로
           // 화면을 갈아 끼우므로 남아 있는 화면 자체가 없다.
@@ -607,10 +603,9 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           // **갈리는 것은 전송뿐이다.** 두 경로가 같은 `applyEdit`을 지나고(`ws/patch.ts`),
           // 같은 모양의 실패를 내며(`patch-error`가 REST 봉투를 그대로 싣는다), 여기 아래의
           // `ackEdit`·`recover`도 같은 것을 받는다.
-          const result =
-            realtimeOpen(channel)
-              ? await channel.send({ pageId: target, ...request })
-              : await api.patchOps(project, target, request)
+          const result = realtimeOpen(channel)
+            ? await channel.send({ pageId: target, ...request })
+            : await api.patchOps(project, target, request)
           // **응답의 `warnings`가 여기로 함께 들어간다.** 서버는 응답에 그것을 싣는다 —
           // 여기서 넘기지 않으면 **읽는 코드가 0건**이 되어 경고가 아무 데도 안 남는다.
           // 스토어가 ack와 **함께** 싣는 것이 요점이다 — 늦게 도착한
@@ -727,7 +722,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const settle = useCallback(
     (attempt: UndoAttempt, carried: number, pressed?: EditFailure | null): void => {
       // 되짚기 이력을 기다린 뒤면(`pressed` — 누른 때의 통지) 그 사이 선 잃음을 지키며 말한다(`sayAfterWait`).
-      const say = (failure: EditFailure | null): void => (pressed === undefined ? store.setEditFailure(failure) : sayAfterWait(pressed, failure))
+      const say = (failure: EditFailure | null): void =>
+        pressed === undefined ? store.setEditFailure(failure) : sayAfterWait(pressed, failure)
       // 앞서 같은 누름이 건너뛴 것(`carried` — 되짚기 이력을 받기 전에 버린 세션 항목)도 함께 센다.
       const skipped = carried + attempt.skipped
       // **잠금이 먼저다.** 건너뛴 것이 함께 있어도 사용자가 지금 답을 기다리는 물음은
@@ -803,7 +799,10 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
             if (!store.undoHistoryLive(first)) return
             const failure = toFailure(caught, UNDO_HISTORY_FAILURE)
             const head = skipped > 0 ? `${skippedHead(skipped)} ` : ''
-            sayAfterWait(pressed, failure.kind === 'signed-out' ? failure : { kind: 'message', message: `${head}${failure.message} — ${UNDO_HISTORY_NOTICE}` })
+            sayAfterWait(
+              pressed,
+              failure.kind === 'signed-out' ? failure : { kind: 'message', message: `${head}${failure.message} — ${UNDO_HISTORY_NOTICE}` },
+            )
             return
           }
           if (!store.supplyUndoHistory(asked, more)) return
@@ -869,7 +868,9 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         if (store.boardEpoch() !== epoch) {
           finish()
           // 구독은 스토어가 바뀌는 중에 불린다 — 말은 그 바깥에서 낸다. 판이 갈린 뒤의 통지라 비운 판이 지우지 않는다.
-          queueMicrotask(() => store.tellLoss({ key: 'undo-board-changed', rank: LOSS_RANK.history, counts: [], render: () => undoBoardChanged(kind) }))
+          queueMicrotask(() =>
+            store.tellLoss({ key: 'undo-board-changed', rank: LOSS_RANK.history, counts: [], render: () => undoBoardChanged(kind) }),
+          )
           return
         }
         if (pressedAhead()) return

@@ -47,7 +47,10 @@ describe('경계 — themes가 무엇을 보지 않는가', () => {
   it('tsconfig가 DOM을 들이지 않는다', () => {
     // 이 설정이 실제로 막는 것은 양방향으로 잰다 — `src`에 `document`를 심으면 `pnpm typecheck`가
     // TS2584이고 `lib`에 DOM을 되넣으면 같은 줄이 통과한다. 여기서는 그 설정이 그대로인지만 본다.
-    for (const [name, raw] of [['tsconfig.json', tsconfigJson], ['tsconfig.test.json', tsconfigTestJson]] as const) {
+    for (const [name, raw] of [
+      ['tsconfig.json', tsconfigJson],
+      ['tsconfig.test.json', tsconfigTestJson],
+    ] as const) {
       const parsed = JSON.parse(raw) as { compilerOptions: { lib: string[]; types: string[] } }
       expect(parsed.compilerOptions.lib, name).toEqual(['ES2022'])
       expect(parsed.compilerOptions.types, name).toEqual([])
@@ -64,20 +67,36 @@ describe('공개 표면이 계약이다', () => {
     'PACKAGE_NAME',
     // 패턴(설계서 「patterns — 테마가 소유한 구성 레시피」). 규격 · 검증 · 전개. `apps/web`의 패턴 고르개와 삽입 경로가 부른다 —
     // CLI·MCP가 부르려면 패키지에 있어야 한다(설계서 「LLM 연계 (P9)」).
-    'PatternSchema', 'PatternsSchema', 'PatternNodeSchema',
-    'PATTERN_CATEGORIES', 'SLOT_TYPES',
-    'checkPatterns', 'expandPattern',
+    'PatternSchema',
+    'PatternsSchema',
+    'PatternNodeSchema',
+    'PATTERN_CATEGORIES',
+    'SLOT_TYPES',
+    'checkPatterns',
+    'expandPattern',
     // 설계서 「lint 규칙」의 lint. 웹·CLI·MCP 셋이 이 이름을 부른다.
     'lintProject',
     // 스냅샷 payload 규격과 lint 입력 변환. **`apps/api`가 아니라 여기 둔다** — api·CLI(`wireb pull`·`wireb lint`)·MCP가
     // 같은 모양을 읽는다. `wireb lint`와 MCP `validate`가 같은 변환을 부른다.
-    'SNAPSHOT_PAYLOAD_VERSION', 'SNAPSHOT_RESOURCES', 'SnapshotPayloadSchema', 'snapshotToLintInput',
+    'SNAPSHOT_PAYLOAD_VERSION',
+    'SNAPSHOT_RESOURCES',
+    'SnapshotPayloadSchema',
+    'snapshotToLintInput',
     // 테마 manifest 규격 · 검증 · semver 부분집합. 빌드(`wb-theme build`) · 업로드 · 호스트가 같은 함수를 부른다.
-    'ManifestSchema', 'validateManifest', 'compareVersions', 'satisfiesSdk', 'VERSION_PATTERN', 'SDK_RANGE_PATTERN',
+    'ManifestSchema',
+    'validateManifest',
+    'compareVersions',
+    'satisfiesSdk',
+    'VERSION_PATTERN',
+    'SDK_RANGE_PATTERN',
     // `.wbtheme` 읽기 · 쓰기. 빌드 · 업로드 · 시딩 · 호스트가 같은 읽기로 검증한다.
-    'readWbtheme', 'packWbtheme', 'WBTHEME_LIMITS',
+    'readWbtheme',
+    'packWbtheme',
+    'WBTHEME_LIMITS',
     // 토큰 → CSS 변수 · 푼 값. 갤러리 · 캔버스 · 내보내기가 같은 함수로 짓는다.
-    'tokensCss', 'tokenValues', 'tokenVar',
+    'tokensCss',
+    'tokenValues',
+    'tokenVar',
     // 테마를 바꿀 때 토큰 잇기. 설정 화면의 본문과 api 의 impact 수가 같은 함수를 부른다.
     'migrateTokens',
   ].sort()

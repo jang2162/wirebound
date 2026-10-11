@@ -106,7 +106,12 @@ describe('마커', () => {
     expect(calls.length).toBeGreaterThan(0)
     expect(new Set(calls)).toEqual(new Set(['n_card']))
     const badge = canvas.querySelector<HTMLElement>('.wb-export-marker')!
-    expect([badge.getAttribute('data-wb-marker-for'), badge.textContent, badge.style.left, badge.style.top]).toEqual(['n_card', '1', '31px', '7px'])
+    expect([badge.getAttribute('data-wb-marker-for'), badge.textContent, badge.style.left, badge.style.top]).toEqual([
+      'n_card',
+      '1',
+      '31px',
+      '7px',
+    ])
   })
 
   it('다시 재라면(remeasure) 다시 부른다', () => {
@@ -124,7 +129,12 @@ describe('마커', () => {
         id: 'n_root',
         type: 'Page',
         children: [
-          { id: 'n_btn', type: 'Button', props: { label: '숨김' }, interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_card', value: false }] }] },
+          {
+            id: 'n_btn',
+            type: 'Button',
+            props: { label: '숨김' },
+            interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_card', value: false }] }],
+          },
           { id: 'n_card', type: 'Card', props: { title: '회원' } },
         ],
       } as WbNode,
@@ -182,7 +192,9 @@ describe('상태가 많아도 폭주하지 않는다', () => {
       type: 'Button',
       props: { label: `b${index}` },
       // 앞 여섯은 카드마다 제목을, 뒤 여섯은 부제를 쓴다.
-      interactions: [{ on: 'click', actions: [{ type: 'setProp', target: `n_c${index % 6}`, prop: props[Math.floor(index / 6)]!, value: `v${index}` }] }],
+      interactions: [
+        { on: 'click', actions: [{ type: 'setProp', target: `n_c${index % 6}`, prop: props[Math.floor(index / 6)]!, value: `v${index}` }] },
+      ],
     }))
     const cards: WbNode[] = Array.from({ length: 6 }, (_, index) => ({ id: `n_c${index}`, type: 'Card', props: { title: `c${index}` } }))
     const doc: PageDocument = { version: 1, root: { id: 'n_root', type: 'Page', children: [...buttons, ...cards] } as WbNode }
@@ -227,7 +239,12 @@ describe('상태를 바꿔도 상호작용 겹은 남는다 — 에디터 캔버
                 },
               ],
             },
-            { id: 'n_case_a', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'n_adm', type: 'Button', props: { label: '승인' } }] },
+            {
+              id: 'n_case_a',
+              type: 'StateCase',
+              props: { state: 's_admin' },
+              children: [{ id: 'n_adm', type: 'Button', props: { label: '승인' } }],
+            },
           ],
         },
       ],
@@ -242,7 +259,10 @@ describe('상태를 바꿔도 상호작용 겹은 남는다 — 에디터 캔버
     expect(title()).toBe(false)
     act(() => mounted!.setViewState('s_admin'))
     // 판 카나리아 — 상태가 실제로 바뀌었다(관리자 가지의 버튼이 서고 기본 가지의 버튼은 없다).
-    expect([canvas.querySelector('[data-wb-id="n_adm"]') !== null, canvas.querySelector('[data-wb-id="n_hide"]') !== null]).toEqual([true, false])
+    expect([canvas.querySelector('[data-wb-id="n_adm"]') !== null, canvas.querySelector('[data-wb-id="n_hide"]') !== null]).toEqual([
+      true,
+      false,
+    ])
     expect(title()).toBe(false)
     act(() => mounted!.setViewState(null))
     expect(title()).toBe(false)

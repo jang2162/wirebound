@@ -227,9 +227,7 @@ describe('프리셋 고르개 — 기본 상태', () => {
 
     await openPicker()
 
-    const options = within(screen.getByLabelText('프리셋') as HTMLSelectElement).getAllByRole(
-      'option',
-    )
+    const options = within(screen.getByLabelText('프리셋') as HTMLSelectElement).getAllByRole('option')
     // **수를 적지 않는다** — 내장 목록에서 만든다.
     expect(options).toHaveLength(BUILTIN_PRESETS.length)
     expect(options[0]!.textContent).toContain(BUILTIN_PRESETS[0]!.name)
@@ -333,11 +331,7 @@ describe('적용 — 덮는 것을 먼저 말한다', () => {
    */
   it('root를 가리키는 코멘트와 이미 고아인 코멘트를 세지 않는다', async () => {
     const backend = server({
-      comments: [
-        comment('n-a', 'c1'),
-        comment('n-root', 'c2'),
-        comment('사라진노드', 'c3'),
-      ],
+      comments: [comment('n-a', 'c1'), comment('n-root', 'c2'), comment('사라진노드', 'c3')],
     })
     await openPage(doc(), { apiOverrides: backend.api })
 
@@ -585,9 +579,7 @@ describe('적용 — 코멘트는 남는다', () => {
     })
 
     fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
-    await waitFor(() =>
-      expect(screen.getByRole('tab', { name: '코멘트' }).getAttribute('aria-selected')).toBe('true'),
-    )
+    await waitFor(() => expect(screen.getByRole('tab', { name: '코멘트' }).getAttribute('aria-selected')).toBe('true'))
 
     // **본문이 그대로 있다** — 행은 서버에 남고 문서에서만 사라진다.
     const titles = [...document.body.querySelectorAll('.wb-shell-comment-group-title')].map(
@@ -786,7 +778,10 @@ describe('화면 상태', () => {
   const stateArea = (states: string[]) => ({
     id: 'p_sw',
     type: 'StateSwitch',
-    children: [{ id: 'p_cd', type: 'StateCase', props: { state: 'default' }, children: [] }, ...states.map((state, index) => ({ id: `p_c${index}`, type: 'StateCase', props: { state }, children: [] }))],
+    children: [
+      { id: 'p_cd', type: 'StateCase', props: { state: 'default' }, children: [] },
+      ...states.map((state, index) => ({ id: `p_c${index}`, type: 'StateCase', props: { state }, children: [] })),
+    ],
   })
 
   it('저장이 페이지의 상태 목록을 함께 보낸다', async () => {

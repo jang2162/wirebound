@@ -48,7 +48,9 @@ docker compose ps                                 # healthy 가 될 때까지 �
 docker compose port postgres 5432                 # 포트를 찍어야 한다 — `no port …` · 종료 1 이면
                                                   # 포트 없이 뜬 것이다 → 「컨테이너를 못 찾는다」 ⓑ
 
-# 3. 워크스페이스를 설치한다
+# 3. 런타임을 맞추고(mise — Node · pnpm 판은 mise.toml) 워크스페이스를 설치한다. mise 가 없으면 첫 줄을 건너뛴다
+#    설치가 Git 훅(lefthook)을 걸고 에이전트 지침(CLAUDE.md — `ruler apply`)을 만든다
+mise trust && mise install
 pnpm install
 
 # 4. packages/* 를 빌드한다 — 건너뛰지 마라
@@ -208,7 +210,7 @@ git 워크트리를 여럿 두고 각자 서버를 띄우면 **부딪히는 자�
 **데이터가 완전히 별개다.** 새 볼륨이므로 **처음에는 비어 있다**(그것이 정상이다 — 「띄우기」 절의
 `마이그레이션 0건` 문장이 그것을 말한다).
 
-**워크트리를 *만드는* 규칙은 [`CLAUDE.md`](CLAUDE.md)가 소유한다**(위치·이름·브랜치 —
+**워크트리를 *만드는* 규칙은 공용 지침 `base` 스택 「워크트리를 만들 때」가 소유한다**(위치·이름·브랜치 —
 `git worktree add -b <브랜치> .worktrees/<이름>`). 아래는 **만든 뒤**의 순서다.
 `<이름>` 자리에 워크트리 이름을, `<포트>` 자리에 **다른 워크트리가 안 쓰는 수**를 넣는다.
 
@@ -1100,6 +1102,8 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 
 ### 10.1 올리기 — `deploy/`
 
+**Komodo 로 올리면** Stack 설정 표와 Komodo 에서만 다른 것(비밀 참조 등)은 [`docs/guides/deploy-komodo.md`](docs/guides/deploy-komodo.md) 가 갖는다 — 아래와 같은 compose · 같은 `deploy/.env` 를 쓴다. 환경 변수의 키와 뜻은 `deploy/.env.example` 이 갖는다.
+
 ```bash
 # 저장소 뿌리에서
 cp deploy/.env.example deploy/.env      # SITE_ADDRESS · POSTGRES_PASSWORD · SEED_USER_* 를 채운다
@@ -1296,6 +1300,11 @@ docker compose -f deploy/docker-compose.yml exec api node --import tsx src/auth/
   11번째부터 429(맞는 비밀번호도) → 이 명령(`창 안의 시도 10건을 지웠습니다`) → 200 이다. 그 컨테이너 · 그 사용자로 친다(「api 가 필요로 하는 것」).
 - **사람을 더 만들려면** `docker compose -f deploy/docker-compose.yml run --rm -e SEED_USER_EMAIL=… -e SEED_USER_PASSWORD=… migrate` — 시딩은 이미 있는 이메일을
   그대로 두므로 값을 바꿔 다시 돌리면 계정이 하나 는다(쟀다). 비밀번호가 셸 기록에 남는다 — 곧 위 재설정으로 바꾼다.
+- **저장소 밖에서 칠 때**(배포 도구가 다른 자리에 clone 했거나 compose 파일이 없는 자리)는 `-f deploy/docker-compose.yml` 대신
+  `-p wirebound-prod` 를 붙인다 — 운영 compose 가 프로젝트 이름을 고정하므로 위치와 상관없이 떠 있는 같은 컨테이너에 닿는다
+  (`exec` · `logs` · `ps` 부류). `up` · `run --rm … migrate` 처럼 compose 파일이 필요한 명령은 `deploy/` 가 있는 자리에서 `-f` 로 친다 —
+  `-p` 만 주면 `no configuration file provided` 로 멈춘다. 다시 재는 법: compose 파일이 없는 디렉터리에서
+  `docker compose -p wirebound-prod exec -T postgres true` 의 종료 코드(0)와 같은 자리의 `docker compose -p wirebound-prod run --rm migrate` 의 오류.
 - 올리는 동안 WS 는 끊겼다 다시 붙는다(에디터가 스스로) — api 가 바뀌는 몇 초 동안 앞단은 502 를 낸다. 코드가 모르는 마이그레이션이
   올라간 DB 로 옛 이미지를 띄우면(되돌리기) 경고 한 줄을 찍고 뜬다(「api 가 필요로 하는 것」).
 
@@ -1367,7 +1376,7 @@ docker compose -f deploy/docker-compose.yml -p wb-measure down -v
 |---|---|
 | **API 를 부른다** — 엔드포인트·에러 형식·권한·응답 형태 | [`apps/api/README.md`](apps/api/README.md) |
 | **에이전트에게 설계서를 읽힌다** | [`packages/mcp/skill/SKILL.md`](packages/mcp/skill/SKILL.md) |
-| **저장소 규칙**(워크트리·커밋·병렬 작업) | [`CLAUDE.md`](CLAUDE.md) |
+| **저장소 규칙**(워크트리·커밋·병렬 작업) | [`.ruler/`](.ruler/) — 에이전트 지침의 소스. `CLAUDE.md` 는 `pnpm exec ruler apply` 가 만드는 생성물이고, 공용 지침은 `guideline` CLI 가 받는다(`.ruler/guideline.md`) |
 | **무엇이 왜 그렇게 서 있나** | `docs/superpowers/plans/` — 계획과 이월 장부. **시점 기록이다** — 지금 참인 규칙은 이 문서들과 설계 규격이 말한다 |
 | **설계 규격** | `docs/superpowers/specs/2026-08-03-wirebound-design.md` |
 

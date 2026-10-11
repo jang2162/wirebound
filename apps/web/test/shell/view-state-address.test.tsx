@@ -30,8 +30,18 @@ function doc(extra: PageDocument['root'][] = []): PageDocument {
           id: 'n-sw',
           type: 'StateSwitch',
           children: [
-            { id: 'n-cd', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'n-view', type: 'Button', props: { label: '보기' } }] },
-            { id: 'n-ca', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'n-approve', type: 'Button', props: { label: '승인' } }] },
+            {
+              id: 'n-cd',
+              type: 'StateCase',
+              props: { state: 'default' },
+              children: [{ id: 'n-view', type: 'Button', props: { label: '보기' } }],
+            },
+            {
+              id: 'n-ca',
+              type: 'StateCase',
+              props: { state: 's_admin' },
+              children: [{ id: 'n-approve', type: 'Button', props: { label: '승인' } }],
+            },
             ...extra,
           ],
         },
@@ -123,7 +133,17 @@ describe('영역 표지 — 뷰 모드', () => {
     const proto = (canvasDocument().defaultView as unknown as { Element: typeof Element }).Element.prototype
     vi.spyOn(proto, 'getBoundingClientRect').mockImplementation(function (this: Element) {
       const sized = this.hasAttribute('data-wb-id')
-      return { left: 8, top: 8, right: sized ? 128 : 8, bottom: sized ? 28 : 8, width: sized ? 120 : 0, height: sized ? 20 : 0, x: 8, y: 8, toJSON: () => ({}) } as DOMRect
+      return {
+        left: 8,
+        top: 8,
+        right: sized ? 128 : 8,
+        bottom: sized ? 28 : 8,
+        width: sized ? 120 : 0,
+        height: sized ? 20 : 0,
+        x: 8,
+        y: 8,
+        toJSON: () => ({}),
+      } as DOMRect
     })
   }
   afterEach(() => vi.restoreAllMocks())
@@ -157,7 +177,17 @@ describe('영역 표지 — 뷰 모드', () => {
   })
 
   it('목록에 없는 상태의 가지는 목록에 안 싣는다 — 고를 수 없다', async () => {
-    await open(PAGE_ROUTE, doc([{ id: 'n-cx', type: 'StateCase', props: { state: 's_gone' }, children: [{ id: 'n-gone', type: 'Text', props: { content: '사라진' } }] }]))
+    await open(
+      PAGE_ROUTE,
+      doc([
+        {
+          id: 'n-cx',
+          type: 'StateCase',
+          props: { state: 's_gone' },
+          children: [{ id: 'n-gone', type: 'Text', props: { content: '사라진' } }],
+        },
+      ]),
+    )
     await sizeCanvas()
     toView()
     await waitFor(() => expect(badge()).not.toBeNull())

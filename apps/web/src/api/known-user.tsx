@@ -28,11 +28,7 @@ export const SESSION_USER_CHANGED = 'session-user-changed'
 
 /** 그 실패가 «쿠키의 사람이 바뀌었다»인가. */
 export function isSessionUserChanged(caught: unknown): boolean {
-  return (
-    caught instanceof ApiError &&
-    caught.code === 'conflict' &&
-    caught.issues.some((issue) => issue.code === SESSION_USER_CHANGED)
-  )
+  return caught instanceof ApiError && caught.code === 'conflict' && caught.issues.some((issue) => issue.code === SESSION_USER_CHANGED)
 }
 
 export interface KnownUserHolder {

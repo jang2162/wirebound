@@ -129,14 +129,26 @@ describe('PATCH …/menu/:nodeId — 고치기 전 제목(base)', () => {
       const other = await createMenuNode(ctx, owner.cookie, project.id, { title: '다른 메뉴' })
       const message = '순서 · 부모 이동은 바탕(base)과 함께 보낼 수 없습니다 — 따로 보내십시오'
 
-      const reordered = await patch(ctx, project.id, menu.id, owner.cookie, { title: '새 제목', sortOrder: 1, base: { title: '처음 제목' } })
+      const reordered = await patch(ctx, project.id, menu.id, owner.cookie, {
+        title: '새 제목',
+        sortOrder: 1,
+        base: { title: '처음 제목' },
+      })
       expect(reordered.statusCode).toBe(400)
       expect(reordered.json().error.issues).toEqual([{ path: 'base', message }])
-      const moved = await patch(ctx, project.id, menu.id, owner.cookie, { title: '새 제목', parentId: other.id, base: { title: '처음 제목' } })
+      const moved = await patch(ctx, project.id, menu.id, owner.cookie, {
+        title: '새 제목',
+        parentId: other.id,
+        base: { title: '처음 제목' },
+      })
       expect(moved.statusCode).toBe(400)
       expect(moved.json().error.issues).toEqual([{ path: 'base', message }])
 
-      const row = await ctx.db.selectFrom('menu_nodes').select(['title', 'parent_id', 'sort_order']).where('id', '=', menu.id).executeTakeFirstOrThrow()
+      const row = await ctx.db
+        .selectFrom('menu_nodes')
+        .select(['title', 'parent_id', 'sort_order'])
+        .where('id', '=', menu.id)
+        .executeTakeFirstOrThrow()
       expect(row).toEqual({ title: '처음 제목', parent_id: null, sort_order: 0 })
     })
   })

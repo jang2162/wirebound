@@ -177,7 +177,9 @@ describe('워크트리에서 테스트 DB 가 최상위 컨테이너로 떨어�
 
   it('셸이 TEST_DATABASE_URL 을 주면 지나간다 — CI 와 컨테이너를 일부러 함께 쓰는 사람의 길이다', () => {
     expect(resolveTestDatabaseUrlFrom({ TEST_DATABASE_URL: B }, checkout('main/.worktrees/wt-d', 'worktree'))).toBe(B)
-    expect(resolveTestDatabaseUrlFrom({ TEST_DATABASE_URL: B }, checkout('main/.worktrees/wt-e', 'worktree', 'POSTGRES_PORT=5433\n'))).toBe(B)
+    expect(resolveTestDatabaseUrlFrom({ TEST_DATABASE_URL: B }, checkout('main/.worktrees/wt-e', 'worktree', 'POSTGRES_PORT=5433\n'))).toBe(
+      B,
+    )
   })
 
   it('자기 포트를 적은 .env 는 그 값을 읽는다', () => {

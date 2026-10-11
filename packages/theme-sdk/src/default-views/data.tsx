@@ -74,11 +74,7 @@ export const TreeView = view(({ props }) => {
   return (
     <Root as="ul" data-wb-structure="indent">
       {items.map((label, index) => (
-        <li
-          key={`${label}-${index}`}
-          data-wb-part="node"
-          style={{ [nodeVar('tree', 'level')]: String(index % depth) } as CSSProperties}
-        >
+        <li key={`${label}-${index}`} data-wb-part="node" style={{ [nodeVar('tree', 'level')]: String(index % depth) } as CSSProperties}>
           <span data-wb-part="toggle">▸</span>
           <span data-wb-part="label">{label}</span>
         </li>
@@ -117,12 +113,7 @@ export const KeyValueView = view(({ props }) => {
 
 export function dataCssBlocks(): string[] {
   return [
-    partRule(
-      'Tree',
-      'node',
-      [`padding-left: calc(var(${nodeVar('tree', 'level')}, 0) * var(${TREE_INDENT_VAR}, 16px));`],
-      ['indent'],
-    ),
+    partRule('Tree', 'node', [`padding-left: calc(var(${nodeVar('tree', 'level')}, 0) * var(${TREE_INDENT_VAR}, 16px));`], ['indent']),
     // 체크 칸 · 막대 · 빈 줄의 최소 모양 — 빈 `span` 은 크기가 없어 테마가 없으면 안 보인다.
     zeroRule('[data-wb-component="List"] [data-wb-part="checkbox"]', [
       'display: inline-block;',

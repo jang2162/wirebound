@@ -171,71 +171,79 @@ describe.skipIf(!전제.ok)('컴포넌트 목록 줄바꿈 — 실브라우저',
     { width: 900, height: 700, maxRows: null, cardWidth: 264 },
     // 판이 카드보다 좁다 — 카드 폭이 판에 맞게 준다(`max-width: 100%` — 높이는 그대로).
     { width: 700, height: 700, maxRows: null, cardWidth: -1 },
-  ])('창 $width×$height — 카드가 판 폭에 맞춰 여러 줄로 감싸이고, 판 높이를 바꿔도 카드 크기는 그대로 · 축소판은 카드 창에 맞는다', async (size) => {
-    const { P } = await fixture(`wrap-${size.width}`)
-    const { page, close } = await open(P, size)
-    try {
-      await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill('e')
-      const base = await cards(page)
-      const tops = [...new Set(base.map((card) => card.top))]
-      const perRow = tops.map((top) => base.filter((card) => card.top === top).length)
-      const atDefault = { height: await page.evaluate(() => Math.round(document.querySelector('.wb-shell-palette')!.getBoundingClientRect().height)), rows: await wholeRows(page) }
-      const scroll = await overflow(page)
+  ])(
+    '창 $width×$height — 카드가 판 폭에 맞춰 여러 줄로 감싸이고, 판 높이를 바꿔도 카드 크기는 그대로 · 축소판은 카드 창에 맞는다',
+    async (size) => {
+      const { P } = await fixture(`wrap-${size.width}`)
+      const { page, close } = await open(P, size)
+      try {
+        await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill('e')
+        const base = await cards(page)
+        const tops = [...new Set(base.map((card) => card.top))]
+        const perRow = tops.map((top) => base.filter((card) => card.top === top).length)
+        const atDefault = {
+          height: await page.evaluate(() => Math.round(document.querySelector('.wb-shell-palette')!.getBoundingClientRect().height)),
+          rows: await wholeRows(page),
+        }
+        const scroll = await overflow(page)
 
-      const off: string[] = []
-      let centre = 0
-      for (const at of ['start', 'middle', 'end'] as const) {
-        await scrollTo(page, at)
-        const list = await cards(page)
-        off.push(...list.filter((card) => !card.inside).map((card) => `${card.type}@${at}`))
-        centre = Math.max(centre, worst(list))
+        const off: string[] = []
+        let centre = 0
+        for (const at of ['start', 'middle', 'end'] as const) {
+          await scrollTo(page, at)
+          const list = await cards(page)
+          off.push(...list.filter((card) => !card.inside).map((card) => `${card.type}@${at}`))
+          centre = Math.max(centre, worst(list))
+        }
+
+        const maxHeight = await paletteHeight(page, 'End')
+        const atMax = { height: maxHeight, rows: await wholeRows(page), sizes: sizesOf(await cards(page)) }
+        const minHeight = await paletteHeight(page, 'Home')
+        const atMin = { height: minHeight, sizes: sizesOf(await cards(page)) }
+
+        // 검색으로 카드 수가 바뀐 판 — 다시 맞는다.
+        await paletteHeight(page, 'End')
+        await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill('a')
+        const searched = await cards(page)
+        const tall = Object.fromEntries(
+          base.filter((card) => card.type === 'KeyValue' || card.type === 'Media').map((card) => [card.type, card.scale]),
+        )
+        const scales = base.map((card) => card.scale ?? 0).sort((a, b) => a - b)
+        // eslint-disable-next-line no-console
+        console.log(
+          `[목록 줄바꿈] 창 ${size.width}×${size.height}: 카드 ${base.length} · 줄마다 ${JSON.stringify(perRow)} · 기본 ${JSON.stringify(atDefault)} · 최대 ${JSON.stringify(atMax)} · 최소 ${JSON.stringify(atMin)} · 중심 차 최대 ${centre} · 검색 «a» ${searched.length}장 차 ${worst(searched)} · 줄임 비 가운데 ${scales[Math.floor(scales.length / 2)]} · 세로로 긴 표본 ${JSON.stringify(tall)}`,
+        )
+
+        expect({
+          rows: tops.length > 1,
+          sizes: sizesOf(base),
+          overflowX: scroll.x,
+          scrolls: scroll.y > 0 || atMax.rows >= tops.length,
+          notFewerWhenTaller: atMax.rows >= atDefault.rows,
+          maxRows: size.maxRows === null ? null : atMax.rows,
+          maxSizes: atMax.sizes,
+          minSizes: atMin.sizes,
+          off,
+          centre: centre <= 1,
+          searched: searched.length > 0 && searched.length !== base.length && searched.every((card) => card.inside) && worst(searched) <= 1,
+        }).toEqual({
+          rows: true,
+          sizes: [size.cardWidth, 200],
+          overflowX: 0,
+          scrolls: true,
+          notFewerWhenTaller: true,
+          maxRows: size.maxRows,
+          maxSizes: [size.cardWidth, 200],
+          minSizes: [size.cardWidth, 200],
+          off: [],
+          centre: true,
+          searched: true,
+        })
+      } finally {
+        await close()
       }
-
-      const maxHeight = await paletteHeight(page, 'End')
-      const atMax = { height: maxHeight, rows: await wholeRows(page), sizes: sizesOf(await cards(page)) }
-      const minHeight = await paletteHeight(page, 'Home')
-      const atMin = { height: minHeight, sizes: sizesOf(await cards(page)) }
-
-      // 검색으로 카드 수가 바뀐 판 — 다시 맞는다.
-      await paletteHeight(page, 'End')
-      await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill('a')
-      const searched = await cards(page)
-      const tall = Object.fromEntries(base.filter((card) => card.type === 'KeyValue' || card.type === 'Media').map((card) => [card.type, card.scale]))
-      const scales = base.map((card) => card.scale ?? 0).sort((a, b) => a - b)
-      // eslint-disable-next-line no-console
-      console.log(
-        `[목록 줄바꿈] 창 ${size.width}×${size.height}: 카드 ${base.length} · 줄마다 ${JSON.stringify(perRow)} · 기본 ${JSON.stringify(atDefault)} · 최대 ${JSON.stringify(atMax)} · 최소 ${JSON.stringify(atMin)} · 중심 차 최대 ${centre} · 검색 «a» ${searched.length}장 차 ${worst(searched)} · 줄임 비 가운데 ${scales[Math.floor(scales.length / 2)]} · 세로로 긴 표본 ${JSON.stringify(tall)}`,
-      )
-
-      expect({
-        rows: tops.length > 1,
-        sizes: sizesOf(base),
-        overflowX: scroll.x,
-        scrolls: scroll.y > 0 || atMax.rows >= tops.length,
-        notFewerWhenTaller: atMax.rows >= atDefault.rows,
-        maxRows: size.maxRows === null ? null : atMax.rows,
-        maxSizes: atMax.sizes,
-        minSizes: atMin.sizes,
-        off,
-        centre: centre <= 1,
-        searched: searched.length > 0 && searched.length !== base.length && searched.every((card) => card.inside) && worst(searched) <= 1,
-      }).toEqual({
-        rows: true,
-        sizes: [size.cardWidth, 200],
-        overflowX: 0,
-        scrolls: true,
-        notFewerWhenTaller: true,
-        maxRows: size.maxRows,
-        maxSizes: [size.cardWidth, 200],
-        minSizes: [size.cardWidth, 200],
-        off: [],
-        centre: true,
-        searched: true,
-      })
-    } finally {
-      await close()
-    }
-  })
+    },
+  )
 
   it('끝까지 민 판의 아래 줄 카드 — «넣기»가 넣고, 끌어 캔버스에 놓아도 넣는다', async () => {
     const { P } = await fixture('wrap-bottom')
@@ -246,7 +254,12 @@ describe.skipIf(!전제.ok)('컴포넌트 목록 줄바꿈 — 실브라우저',
       const cardsBox = (await page.locator('.wb-shell-palette-cards').boundingBox())!
       await page.mouse.move(cardsBox.x + cardsBox.width / 2, cardsBox.y + cardsBox.height / 2)
       await page.mouse.wheel(0, 400)
-      const wheeled = await poll('휠로 밀림', () => page.evaluate(() => document.querySelector('.wb-shell-palette-cards')!.scrollTop), (top) => top > 0, 2_000).catch(() => 0)
+      const wheeled = await poll(
+        '휠로 밀림',
+        () => page.evaluate(() => document.querySelector('.wb-shell-palette-cards')!.scrollTop),
+        (top) => top > 0,
+        2_000,
+      ).catch(() => 0)
       await scrollTo(page, 'end')
       const list = await cards(page)
       const bottom = Math.max(...list.map((card) => card.top))
@@ -254,7 +267,10 @@ describe.skipIf(!전제.ok)('컴포넌트 목록 줄바꿈 — 실브라우저',
       const first = list.filter((card) => card.top === bottom)[0]!
       expect(bottom).toBeGreaterThan(0)
 
-      await page.locator(`[data-wb-palette-card="${last.type}"]`).getByRole('button', { name: / 넣기$/ }).click()
+      await page
+        .locator(`[data-wb-palette-card="${last.type}"]`)
+        .getByRole('button', { name: / 넣기$/ })
+        .click()
       const added = await poll(
         '넣은 노드',
         async () => ((await stack.request(alice, 'GET', P)).body.schema.root.children as { type: string }[]).map((node) => node.type),

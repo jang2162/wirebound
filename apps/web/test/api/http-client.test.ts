@@ -10,14 +10,7 @@ import type { PatchOp } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiErrorCode } from '../../src/api/client'
 import { createHttpClient } from '../../src/api/http-client'
-import type {
-  MenuNode,
-  PageDetail,
-  PageImported,
-  ProjectDetail,
-  SessionUser,
-  TreeMenuNode,
-} from '../../src/api/types'
+import type { MenuNode, PageDetail, PageImported, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { stripComments } from '../store-access-guard'
 
 interface RecordedCall {
@@ -131,7 +124,10 @@ const pageImported: PageImported = { page, comments: { inserted: 2, dangling: 1 
 
 /** `POST /menu`·`PATCH /menu/:nodeId`의 응답. 트리 노드와 달리 `pages`·`children`이 없다. */
 const menuNode: MenuNode = { id: 'm1', projectId: 'p1', parentId: null, title: '회원관리', sortOrder: 0 }
-const cascadeResult = { deleted: { menus: 1, pages: 2 }, safetySnapshot: { id: 's1', tag: '메뉴 "회원관리" 삭제 전 2026-10-05T00:00:00.000Z' } }
+const cascadeResult = {
+  deleted: { menus: 1, pages: 2 },
+  safetySnapshot: { id: 's1', tag: '메뉴 "회원관리" 삭제 전 2026-10-05T00:00:00.000Z' },
+}
 
 /** 코멘트 하나. `marker`가 **없는 것이 요점이다** — 번호는 노드의 값이다(설계서 「페이지 스키마 노드」). */
 const comment = {
@@ -257,13 +253,45 @@ const ENDPOINTS: Array<{
   { client: 'logout', url: '/api/auth/logout', method: 'POST', body: null, call: (c) => c.logout() },
   { client: 'me', url: '/api/auth/me', method: 'GET', body: user, call: (c) => c.me() },
   { client: 'listProjects', url: '/api/projects', method: 'GET', body: [project], call: (c) => c.listProjects() },
-  { client: 'listMyTokens', url: '/api/auth/tokens', method: 'GET', body: [{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }], call: (c) => c.listMyTokens() },
+  {
+    client: 'listMyTokens',
+    url: '/api/auth/tokens',
+    method: 'GET',
+    body: [
+      { id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false },
+    ],
+    call: (c) => c.listMyTokens(),
+  },
   { client: 'revokeMyToken', url: '/api/auth/tokens/t1', method: 'DELETE', body: null, call: (c) => c.revokeMyToken('t1') },
   { client: 'revokeAllMyTokens', url: '/api/auth/tokens', method: 'DELETE', body: { revoked: 2 }, call: (c) => c.revokeAllMyTokens() },
-  { client: 'changePassword', url: '/api/auth/password', method: 'POST', body: null, call: (c) => c.changePassword('password1234', 'newpassword5678') },
-  { client: 'listMembers', url: '/api/projects/p1/members', method: 'GET', body: [{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }], call: (c) => c.listMembers('p1') },
-  { client: 'addMember', url: '/api/projects/p1/members', method: 'POST', body: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, call: (c) => c.addMember('p1', 'b@b.c', 'editor') },
-  { client: 'updateMemberRole', url: '/api/projects/p1/members/u2', method: 'PATCH', body: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, call: (c) => c.updateMemberRole('p1', 'u2', 'viewer') },
+  {
+    client: 'changePassword',
+    url: '/api/auth/password',
+    method: 'POST',
+    body: null,
+    call: (c) => c.changePassword('password1234', 'newpassword5678'),
+  },
+  {
+    client: 'listMembers',
+    url: '/api/projects/p1/members',
+    method: 'GET',
+    body: [{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }],
+    call: (c) => c.listMembers('p1'),
+  },
+  {
+    client: 'addMember',
+    url: '/api/projects/p1/members',
+    method: 'POST',
+    body: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' },
+    call: (c) => c.addMember('p1', 'b@b.c', 'editor'),
+  },
+  {
+    client: 'updateMemberRole',
+    url: '/api/projects/p1/members/u2',
+    method: 'PATCH',
+    body: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' },
+    call: (c) => c.updateMemberRole('p1', 'u2', 'viewer'),
+  },
   { client: 'removeMember', url: '/api/projects/p1/members/u2', method: 'DELETE', body: null, call: (c) => c.removeMember('p1', 'u2') },
   { client: 'getProject', url: '/api/projects/p1', method: 'GET', body: projectView, call: (c) => c.getProject('p1') },
   { client: 'getTree', url: '/api/projects/p1/tree', method: 'GET', body: { menu: [] }, call: (c) => c.getTree('p1') },
@@ -559,11 +587,41 @@ const SHAPE_CASES: Array<{
   { shape: 'projectView', broken: { ...project, themeRev: '3' }, ok: projectView, call: (c) => c.getProject('p1') },
   { shape: 'projectList', broken: [{ ...project, id: '' }], ok: [project], call: (c) => c.listProjects() },
   // 폐기 주소가 되는 `id`는 빈 문자열까지 막는다 — 그 밖의 칸은 모양만 본다.
-  { shape: 'myTokens', broken: [{ ...{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }, id: '' }], ok: [{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }], call: (c) => c.listMyTokens() },
+  {
+    shape: 'myTokens',
+    broken: [
+      {
+        ...{
+          id: 't1',
+          name: 'CI',
+          createdAt: '2026-09-01T00:00:00.000Z',
+          lastUsedAt: null,
+          projectId: 'p1',
+          projectName: null,
+          member: false,
+        },
+        id: '',
+      },
+    ],
+    ok: [
+      { id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false },
+    ],
+    call: (c) => c.listMyTokens(),
+  },
   { shape: 'revokedCount', broken: { revoked: '2' }, ok: { revoked: 2 }, call: (c) => c.revokeAllMyTokens() },
   // 역할 바꾸기 · 제외의 주소가 되는 `userId` 는 빈 문자열까지 막는다.
-  { shape: 'members', broken: [{ ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, userId: '' }], ok: [{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }], call: (c) => c.listMembers('p1') },
-  { shape: 'member', broken: { ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, name: null }, ok: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, call: (c) => c.addMember('p1', 'b@b.c', 'editor') },
+  {
+    shape: 'members',
+    broken: [{ ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, userId: '' }],
+    ok: [{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }],
+    call: (c) => c.listMembers('p1'),
+  },
+  {
+    shape: 'member',
+    broken: { ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, name: null },
+    ok: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' },
+    call: (c) => c.addMember('p1', 'b@b.c', 'editor'),
+  },
   { shape: 'treeEnvelope', broken: { menu: null }, ok: { menu: [treeNode] }, call: (c) => c.getTree('p1') },
   // 번호가 없거나 정수가 아니면 낡음을 가를 수 없다 — 실패로 본다.
   { shape: 'treeRead', broken: { menu: [treeNode], rev: 1.5 }, ok: { menu: [treeNode], rev: 0 }, call: (c) => c.readTree('p1') },
@@ -781,10 +839,7 @@ describe('표의 완전성', () => {
   })
 
   it('ApiClient의 모든 메서드가 경로·메서드 표에 있다', () => {
-    const registered = new Set([
-      ...ENDPOINTS.map((endpoint) => endpoint.client),
-      ...METHODS_WITHOUT_REQUEST,
-    ])
+    const registered = new Set([...ENDPOINTS.map((endpoint) => endpoint.client), ...METHODS_WITHOUT_REQUEST])
 
     expect(declaredMethods().filter((method) => !registered.has(method))).toEqual([])
   })
@@ -805,11 +860,7 @@ describe('표의 완전성', () => {
   it('응답 모양 케이스에 SHAPES가 선언하지 않은 이름이 없다', () => {
     const declared = new Set(declaredShapes())
 
-    expect(
-      [...SHAPE_CASES.map((c) => c.shape), ...SHAPES_WITHOUT_BROKEN_CASE].filter(
-        (shape) => !declared.has(shape),
-      ),
-    ).toEqual([])
+    expect([...SHAPE_CASES.map((c) => c.shape), ...SHAPES_WITHOUT_BROKEN_CASE].filter((shape) => !declared.has(shape))).toEqual([])
   })
 })
 
@@ -872,7 +923,11 @@ describe('downloadExport', () => {
       [409, 'conflict', '내보낼 페이지가 없습니다'],
     ] as const) {
       const stub = stubFetch(jsonResponse(status, { error: { code, message } }))
-      const error = asApiError(await createHttpClient(stub.fetchImpl).downloadExport('p1', 'html').catch((e: unknown) => e))
+      const error = asApiError(
+        await createHttpClient(stub.fetchImpl)
+          .downloadExport('p1', 'html')
+          .catch((e: unknown) => e),
+      )
       expect([error.status, error.code, error.message]).toEqual([status, code, message])
     }
   })
@@ -888,7 +943,11 @@ describe('downloadExport', () => {
 
   it('200 이어도 파일 형식이 아니면 끊는다 — 프록시가 빠진 개발 서버의 index.html 을 파일로 저장하지 않는다', async () => {
     const stub = stubFetch(htmlResponse(200))
-    const error = asApiError(await createHttpClient(stub.fetchImpl).downloadExport('p1', 'html').catch((e: unknown) => e))
+    const error = asApiError(
+      await createHttpClient(stub.fetchImpl)
+        .downloadExport('p1', 'html')
+        .catch((e: unknown) => e),
+    )
     expect(error.message).toBe('서버 응답을 이해할 수 없습니다')
   })
 
@@ -896,7 +955,9 @@ describe('downloadExport', () => {
     const cancel = new AbortController()
     const fetchImpl: typeof fetch = (_input, init) =>
       new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))))
-    const pending = createHttpClient(fetchImpl).downloadExport('p1', 'html', { cancel: cancel.signal }).catch((e: unknown) => e)
+    const pending = createHttpClient(fetchImpl)
+      .downloadExport('p1', 'html', { cancel: cancel.signal })
+      .catch((e: unknown) => e)
     cancel.abort()
     expect(asApiError(await pending).message).toBe('떠난 화면의 조회를 끊었습니다')
   })
@@ -950,12 +1011,14 @@ describe('createHttpClient', () => {
   // **갈래를 나눠 둔 것은 구분력 때문이다** — 한 `it`에 묶으면 `isTreePage`를 고쳐도
   // `isProjectDetail`을 고쳐도 "1 사망"으로 같아 보여 어느 검사가 무엇을 지키는지 드러나지 않는다.
   it('트리의 페이지 id가 빈 문자열이면 ApiError를 던진다', async () => {
-    const menu = [
-      { id: 'm1', title: '메뉴', sortOrder: 0, pages: [{ id: '', title: '목록', sortOrder: 0 }], children: [] },
-    ]
+    const menu = [{ id: 'm1', title: '메뉴', sortOrder: 0, pages: [{ id: '', title: '목록', sortOrder: 0 }], children: [] }]
     const stub = stubFetch(jsonResponse(200, { menu }))
 
-    const error = asApiError(await createHttpClient(stub.fetchImpl).getTree('p1').catch((e: unknown) => e))
+    const error = asApiError(
+      await createHttpClient(stub.fetchImpl)
+        .getTree('p1')
+        .catch((e: unknown) => e),
+    )
 
     expect(error.code).toBe('internal')
   })
@@ -963,7 +1026,11 @@ describe('createHttpClient', () => {
   it('프로젝트 id가 빈 문자열이면 ApiError를 던진다', async () => {
     const stub = stubFetch(jsonResponse(200, { ...project, id: '' }))
 
-    const error = asApiError(await createHttpClient(stub.fetchImpl).getProject('p1').catch((e: unknown) => e))
+    const error = asApiError(
+      await createHttpClient(stub.fetchImpl)
+        .getProject('p1')
+        .catch((e: unknown) => e),
+    )
 
     expect(error.code).toBe('internal')
   })
@@ -972,7 +1039,11 @@ describe('createHttpClient', () => {
     // 목록과 상세가 같은 `isProjectDetail`을 지나지만 부르는 자리가 달라 따로 본다.
     const stub = stubFetch(jsonResponse(200, [{ ...project, id: '' }]))
 
-    const error = asApiError(await createHttpClient(stub.fetchImpl).listProjects().catch((e: unknown) => e))
+    const error = asApiError(
+      await createHttpClient(stub.fetchImpl)
+        .listProjects()
+        .catch((e: unknown) => e),
+    )
 
     expect(error.code).toBe('internal')
   })
@@ -1005,7 +1076,9 @@ describe('createHttpClient', () => {
       const stub = stubFetch(jsonResponse(200, [{ ...project, description }]))
 
       const error = asApiError(
-        await createHttpClient(stub.fetchImpl).listProjects().catch((e: unknown) => e),
+        await createHttpClient(stub.fetchImpl)
+          .listProjects()
+          .catch((e: unknown) => e),
       )
 
       expect(error.code, JSON.stringify(description)).toBe('internal')
@@ -1020,7 +1093,9 @@ describe('createHttpClient', () => {
     const stub = stubFetch(jsonResponse(200, [withoutDescription]))
 
     const error = asApiError(
-      await createHttpClient(stub.fetchImpl).listProjects().catch((e: unknown) => e),
+      await createHttpClient(stub.fetchImpl)
+        .listProjects()
+        .catch((e: unknown) => e),
     )
 
     expect(error.code).toBe('internal')
@@ -1051,10 +1126,7 @@ describe('createHttpClient', () => {
 
     for (const patch of passing) {
       const stub = stubFetch(jsonResponse(200, [{ ...project, ...patch }]))
-      await expect(
-        createHttpClient(stub.fetchImpl).listProjects(),
-        JSON.stringify(patch),
-      ).resolves.toHaveLength(1)
+      await expect(createHttpClient(stub.fetchImpl).listProjects(), JSON.stringify(patch)).resolves.toHaveLength(1)
     }
   })
 
@@ -1062,10 +1134,7 @@ describe('createHttpClient', () => {
     // 음성 대조. 위 검사가 좁으므로 정상값이 막히지 않는지 따로 본다.
     for (const description of [null, '', '   ', 'ㄱ'.repeat(2000), '줄\n바꿈']) {
       const stub = stubFetch(jsonResponse(200, [{ ...project, description }]))
-      await expect(
-        createHttpClient(stub.fetchImpl).listProjects(),
-        String(description),
-      ).resolves.toHaveLength(1)
+      await expect(createHttpClient(stub.fetchImpl).listProjects(), String(description)).resolves.toHaveLength(1)
     }
   })
 
@@ -1108,8 +1177,16 @@ describe('createHttpClient', () => {
     // **안 받으면 키가 없다** — 위 `credentials` 주석처럼 기존 케이스가 `init`을 통째로 단언한다.
     const writes: [string, (client: ReturnType<typeof createHttpClient>, signal?: AbortSignal) => Promise<unknown>, () => Response][] = [
       ['updatePage', (c, signal) => c.updatePage('p1', 'pg1', { description: '가' }, signal && { signal }), () => jsonResponse(200, page)],
-      ['createComment', (c, signal) => c.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' }, signal && { signal }), () => jsonResponse(201, commentCreated)],
-      ['updateComment', (c, signal) => c.updateComment('p1', 'pg1', 'c1', { body: '가' }, signal && { signal }), () => jsonResponse(200, comment)],
+      [
+        'createComment',
+        (c, signal) => c.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' }, signal && { signal }),
+        () => jsonResponse(201, commentCreated),
+      ],
+      [
+        'updateComment',
+        (c, signal) => c.updateComment('p1', 'pg1', 'c1', { body: '가' }, signal && { signal }),
+        () => jsonResponse(200, comment),
+      ],
       ['deleteComment', (c, signal) => c.deleteComment('p1', 'pg1', 'c1', signal && { signal }), () => jsonResponse(200, markerChange)],
       ['renumberComments', (c, signal) => c.renumberComments('p1', 'pg1', signal && { signal }), () => jsonResponse(200, markerChange)],
     ]
@@ -1196,9 +1273,7 @@ describe('createHttpClient', () => {
   })
 
   it('에러 봉투를 ApiError로 바꾼다', async () => {
-    const stub = stubFetch(
-      jsonResponse(401, { error: { code: 'unauthenticated', message: '로그인이 필요합니다' } }),
-    )
+    const stub = stubFetch(jsonResponse(401, { error: { code: 'unauthenticated', message: '로그인이 필요합니다' } }))
     const client = createHttpClient(stub.fetchImpl)
 
     const error = asApiError(await client.me().catch((e: unknown) => e))
@@ -1211,9 +1286,7 @@ describe('createHttpClient', () => {
 
   it('issues가 있으면 그대로 싣는다', async () => {
     const issues = [{ code: 'unknown-type', nodeId: 'n_1', path: '/root/children/0', message: '알 수 없는 타입' }]
-    const stub = stubFetch(
-      jsonResponse(422, { error: { code: 'validation-failed', message: '검증 실패', issues } }),
-    )
+    const stub = stubFetch(jsonResponse(422, { error: { code: 'validation-failed', message: '검증 실패', issues } }))
     const client = createHttpClient(stub.fetchImpl)
 
     const error = asApiError(await client.getPage('p1', 'pg1').catch((e: unknown) => e))
@@ -1236,12 +1309,20 @@ describe('createHttpClient', () => {
     // 같은 500 이라도 **누가 냈는지**가 게시의 결과를 아는지를 가른다(`panels/comment-panel.tsx`의
     // `knownRejection`). Vite 개발 프록시는 api 가 요청을 쥔 채 죽으면 `500 text/plain` 빈 본문을 준다.
     const own = stubFetch(jsonResponse(500, { error: { code: 'internal', message: '서버 오류가 발생했습니다' } }))
-    const ownError = asApiError(await createHttpClient(own.fetchImpl).listComments('p1', 'pg1').catch((e: unknown) => e))
+    const ownError = asApiError(
+      await createHttpClient(own.fetchImpl)
+        .listComments('p1', 'pg1')
+        .catch((e: unknown) => e),
+    )
     expect(ownError.status).toBe(500)
     expect(ownError.enveloped).toBe(true)
 
     const proxy = stubFetch(new Response('', { status: 500, headers: { 'content-type': 'text/plain' } }))
-    const proxyError = asApiError(await createHttpClient(proxy.fetchImpl).listComments('p1', 'pg1').catch((e: unknown) => e))
+    const proxyError = asApiError(
+      await createHttpClient(proxy.fetchImpl)
+        .listComments('p1', 'pg1')
+        .catch((e: unknown) => e),
+    )
     expect(proxyError.status).toBe(500)
     expect(proxyError.enveloped).toBe(false)
 
@@ -1347,10 +1428,7 @@ describe('createHttpClient', () => {
     current = 'wsc_2'
     await client.me()
 
-    expect(stub.calls.map((call) => (call.init?.headers as Record<string, string>)['x-wb-connection-id'])).toEqual([
-      'wsc_1',
-      'wsc_2',
-    ])
+    expect(stub.calls.map((call) => (call.init?.headers as Record<string, string>)['x-wb-connection-id'])).toEqual(['wsc_1', 'wsc_2'])
   })
 
   it('쓰기가 낸 연결을 주면 그것이 나간다 — 지금 연결이 아니다(게시의 같은 키 재전송)', async () => {
@@ -1362,10 +1440,7 @@ describe('createHttpClient', () => {
     await client.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' }, { connectionId: 'wsc_old' })
     await client.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' })
 
-    expect(stub.calls.map((call) => (call.init?.headers as Record<string, string>)['x-wb-connection-id'])).toEqual([
-      'wsc_old',
-      'wsc_new',
-    ])
+    expect(stub.calls.map((call) => (call.init?.headers as Record<string, string>)['x-wb-connection-id'])).toEqual(['wsc_old', 'wsc_new'])
   })
 
   /**
@@ -1478,9 +1553,7 @@ describe('createHttpClient', () => {
   it('프로토타입에 있는 이름은 code가 아니다', async () => {
     // `'toString' in API_ERROR_CODES`는 `true`다. 목록을 `in`으로 보면 이 문자열이
     // 계약의 코드인 척 그대로 실려, 화면의 `switch`가 어느 갈래에도 닿지 않는 값을 받는다.
-    const stub = stubFetch(
-      jsonResponse(500, { error: { code: 'toString', message: '이상한 코드' } }),
-    )
+    const stub = stubFetch(jsonResponse(500, { error: { code: 'toString', message: '이상한 코드' } }))
     const client = createHttpClient(stub.fetchImpl)
 
     const error = asApiError(await client.me().catch((e: unknown) => e))
@@ -1571,18 +1644,12 @@ describe('patchOps', () => {
   it('warnings가 배열이 아니면 막는다 — 없는 것은 통과시킨다', async () => {
     const client = (body: unknown) => createHttpClient(stubFetch(jsonResponse(200, body)).fetchImpl)
 
-    await expect(
-      client({ ...patchResult, warnings: { nope: 1 } }).patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS }),
-    ).rejects.toThrow()
+    await expect(client({ ...patchResult, warnings: { nope: 1 } }).patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS })).rejects.toThrow()
 
     // 양성 대조 둘: 키가 없는 응답(서버가 경고 없을 때 내는 모양)과 배열인 응답.
-    await expect(
-      client(patchResult).patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS }),
-    ).resolves.toEqual(patchResult)
+    await expect(client(patchResult).patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS })).resolves.toEqual(patchResult)
     const withWarnings = { ...patchResult, warnings: [{ code: 'missing-interaction-target' }] }
-    await expect(
-      client(withWarnings).patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS }),
-    ).resolves.toEqual(withWarnings)
+    await expect(client(withWarnings).patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS })).resolves.toEqual(withWarnings)
   })
 
   it('응답의 seq와 inverse를 그대로 낸다', async () => {
@@ -1601,31 +1668,21 @@ describe('patchOps', () => {
   it('baseSeq 불일치는 conflict 코드로 온다', async () => {
     // 서버는 리베이스를 시도하지 않고 곧바로 409를 낸다(README). 화면은 그것을 재조회로
     // 수렴시킨다.
-    const stub = stubFetch(
-      jsonResponse(409, { error: { code: 'conflict', message: '문서가 이미 바뀌었습니다' } }),
-    )
+    const stub = stubFetch(jsonResponse(409, { error: { code: 'conflict', message: '문서가 이미 바뀌었습니다' } }))
     const client = createHttpClient(stub.fetchImpl)
 
-    const error = asApiError(
-      await client.patchOps('p-1', 'pg-1', { baseSeq: 3, ops: OPS }).catch((e: unknown) => e),
-    )
+    const error = asApiError(await client.patchOps('p-1', 'pg-1', { baseSeq: 3, ops: OPS }).catch((e: unknown) => e))
 
     expect(error.code).toBe('conflict')
     expect(error.status).toBe(409)
   })
 
   it('카탈로그 위반은 validation-failed와 issues를 싣는다', async () => {
-    const issues = [
-      { code: 'unknown-prop', nodeId: 'n_1', path: '/root/children/0/props/nope', message: '알 수 없는 prop' },
-    ]
-    const stub = stubFetch(
-      jsonResponse(422, { error: { code: 'validation-failed', message: '검증 실패', issues } }),
-    )
+    const issues = [{ code: 'unknown-prop', nodeId: 'n_1', path: '/root/children/0/props/nope', message: '알 수 없는 prop' }]
+    const stub = stubFetch(jsonResponse(422, { error: { code: 'validation-failed', message: '검증 실패', issues } }))
     const client = createHttpClient(stub.fetchImpl)
 
-    const error = asApiError(
-      await client.patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS }).catch((e: unknown) => e),
-    )
+    const error = asApiError(await client.patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS }).catch((e: unknown) => e))
 
     expect(error.code).toBe('validation-failed')
     expect(error.issues).toHaveLength(1)
@@ -1804,9 +1861,7 @@ describe('메뉴 CRUD', () => {
     const client = createHttpClient(stub.fetchImpl)
 
     const error = asApiError(
-      await client
-        .updateMenu('p1', 'm1', { title: undefined, parentId: undefined, sortOrder: undefined })
-        .catch((e: unknown) => e),
+      await client.updateMenu('p1', 'm1', { title: undefined, parentId: undefined, sortOrder: undefined }).catch((e: unknown) => e),
     )
 
     expect(error.code).toBe('bad-request')
@@ -1854,9 +1909,7 @@ describe('메뉴 CRUD', () => {
     const stub = stubFetch(jsonResponse(201, { projectId: 'p1', parentId: null, title: '가', sortOrder: 0 }))
     const client = createHttpClient(stub.fetchImpl)
 
-    const error = asApiError(
-      await client.createMenu('p1', { parentId: null, title: '가' }).catch((e: unknown) => e),
-    )
+    const error = asApiError(await client.createMenu('p1', { parentId: null, title: '가' }).catch((e: unknown) => e))
 
     expect(error.code).toBe('internal')
   })
@@ -1869,9 +1922,7 @@ describe('메뉴 CRUD', () => {
     const client = createHttpClient(stub.fetchImpl)
 
     const error = asApiError(
-      await client
-        .updateMenu('p1', 'm1', { id: 'm1', projectId: 'p1' } as unknown as { title?: string })
-        .catch((e: unknown) => e),
+      await client.updateMenu('p1', 'm1', { id: 'm1', projectId: 'p1' } as unknown as { title?: string }).catch((e: unknown) => e),
     )
 
     expect(error.code).toBe('bad-request')
@@ -2021,9 +2072,7 @@ describe('페이지 CRUD', () => {
     const stub = stubFetch(jsonResponse(201, { ...page, headSeq: '0' }))
     const client = createHttpClient(stub.fetchImpl)
 
-    const error = asApiError(
-      await client.createPage('p1', { menuNodeId: 'm1', title: '목록' }).catch((e: unknown) => e),
-    )
+    const error = asApiError(await client.createPage('p1', { menuNodeId: 'm1', title: '목록' }).catch((e: unknown) => e))
 
     expect(error.code).toBe('internal')
   })
@@ -2039,20 +2088,13 @@ describe('페이지 CRUD', () => {
     // **빈 문자열이 가장 나쁘다** — 진짜 `<App />`을 그 주소로 렌더하면 `innerHTML`이
     // 0자이고 `.wb-shell`이 없다(`app.tsx`에 `*` 라우트가 없어 아무 라우트도 안 잡힌다).
     const { id: _dropped, ...withoutId } = page
-    const broken: unknown[] = [
-      withoutId,
-      { ...page, id: 42 },
-      { ...page, id: null },
-      { ...page, id: '' },
-    ]
+    const broken: unknown[] = [withoutId, { ...page, id: 42 }, { ...page, id: null }, { ...page, id: '' }]
 
     for (const body of broken) {
       const stub = stubFetch(jsonResponse(201, body))
       const client = createHttpClient(stub.fetchImpl)
 
-      const error = asApiError(
-        await client.createPage('p1', { menuNodeId: 'm1', title: '목록' }).catch((e: unknown) => e),
-      )
+      const error = asApiError(await client.createPage('p1', { menuNodeId: 'm1', title: '목록' }).catch((e: unknown) => e))
 
       expect(error.code, JSON.stringify(body)).toBe('internal')
     }
@@ -2065,9 +2107,7 @@ describe('페이지 CRUD', () => {
     const client = createHttpClient(stub.fetchImpl)
 
     const error = asApiError(
-      await client
-        .updatePage('p1', 'pg1', { id: 'pg1', headSeq: 3 } as unknown as { title?: string })
-        .catch((e: unknown) => e),
+      await client.updatePage('p1', 'pg1', { id: 'pg1', headSeq: 3 } as unknown as { title?: string }).catch((e: unknown) => e),
     )
 
     expect(error.code).toBe('bad-request')
@@ -2251,9 +2291,7 @@ describe('프로젝트 CRUD', () => {
     const client = createHttpClient(stub.fetchImpl)
 
     const error = asApiError(
-      await client
-        .updateProject('p1', { id: 'p1', role: 'owner' } as unknown as { name?: string })
-        .catch((e: unknown) => e),
+      await client.updateProject('p1', { id: 'p1', role: 'owner' } as unknown as { name?: string }).catch((e: unknown) => e),
     )
 
     expect(error.code).toBe('bad-request')
@@ -2293,9 +2331,7 @@ describe('프로젝트 CRUD', () => {
       const stub = stubFetch(jsonResponse(201, body))
       const client = createHttpClient(stub.fetchImpl)
 
-      const error = asApiError(
-        await client.createProject({ name: '가', slug: 'ga' }).catch((e: unknown) => e),
-      )
+      const error = asApiError(await client.createProject({ name: '가', slug: 'ga' }).catch((e: unknown) => e))
 
       expect(error.code, JSON.stringify(body)).toBe('internal')
     }
@@ -2356,9 +2392,7 @@ describe('프로젝트 CRUD', () => {
     const client = createHttpClient(stub.fetchImpl)
 
     const error = asApiError(
-      await client
-        .updateProject('p1', { name: undefined, slug: undefined, description: undefined })
-        .catch((e: unknown) => e),
+      await client.updateProject('p1', { name: undefined, slug: undefined, description: undefined }).catch((e: unknown) => e),
     )
 
     expect(error.code).toBe('bad-request')
@@ -2447,10 +2481,12 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
     vi.useFakeTimers()
     try {
       const stub = hangingFetch('hang', 'hang')
-      const settled = createHttpClient(stub.fetchImpl).me().then(
-        () => 'resolved',
-        (caught: unknown) => caught,
-      )
+      const settled = createHttpClient(stub.fetchImpl)
+        .me()
+        .then(
+          () => 'resolved',
+          (caught: unknown) => caught,
+        )
       await vi.advanceTimersByTimeAsync(DEADLINE * 2)
 
       const caught = await settled
@@ -2509,10 +2545,12 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
     vi.useFakeTimers()
     try {
       const stub = slowBodyFetch(page, DEADLINE * 2.5)
-      const settled = createHttpClient(stub.fetchImpl).getPage('p1', 'pg1').then(
-        (value) => value,
-        (caught: unknown) => caught,
-      )
+      const settled = createHttpClient(stub.fetchImpl)
+        .getPage('p1', 'pg1')
+        .then(
+          (value) => value,
+          (caught: unknown) => caught,
+        )
       await vi.advanceTimersByTimeAsync(DEADLINE * 3)
 
       expect(await settled).toEqual(page)
@@ -2533,7 +2571,10 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
       const beforeLeave = new AbortController()
       const first = createHttpClient(before.fetchImpl)
         .getPage('p1', 'pg1', { cancel: beforeLeave.signal })
-        .then(() => 'resolved', (caught: unknown) => caught)
+        .then(
+          () => 'resolved',
+          (caught: unknown) => caught,
+        )
       await vi.advanceTimersByTimeAsync(1_000)
       beforeLeave.abort()
       await vi.advanceTimersByTimeAsync(0)
@@ -2545,7 +2586,10 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
       const duringLeave = new AbortController()
       const second = createHttpClient(during.fetchImpl)
         .getPage('p1', 'pg1', { cancel: duringLeave.signal })
-        .then(() => 'resolved', (caught: unknown) => caught)
+        .then(
+          () => 'resolved',
+          (caught: unknown) => caught,
+        )
       // 머리는 왔고 본문이 내려오는 중이다 — 시간 제한과 엮이지 않게 10초 안에서 떠난다(그 축은 위 케이스의 것이다).
       await vi.advanceTimersByTimeAsync(1_000)
       expect(during.calls[0]?.init?.signal?.aborted).toBe(false)
@@ -2566,7 +2610,10 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
       const leave = new AbortController()
       const settled = createHttpClient(stub.fetchImpl)
         .getPage('p1', 'pg1', { cancel: leave.signal })
-        .then(() => 'resolved', (caught: unknown) => caught)
+        .then(
+          () => 'resolved',
+          (caught: unknown) => caught,
+        )
       await vi.advanceTimersByTimeAsync(1_000)
       leave.abort()
       await vi.advanceTimersByTimeAsync(DEADLINE * 3)
@@ -2611,7 +2658,10 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
       const leave = new AbortController()
       const settled = createHttpClient(stub.fetchImpl)
         .getExportPreview('p1', 'pptx', { cancel: leave.signal })
-        .then(() => 'resolved', (caught: unknown) => caught)
+        .then(
+          () => 'resolved',
+          (caught: unknown) => caught,
+        )
       await vi.advanceTimersByTimeAsync(60_000)
       expect(stub.calls[0]?.init?.signal?.aborted).toBe(false)
 

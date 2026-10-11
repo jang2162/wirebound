@@ -106,13 +106,7 @@ export class HasChildrenError extends Error {
   }
 }
 
-function toRecord(row: {
-  id: string
-  project_id: string
-  parent_id: string | null
-  title: string
-  sort_order: number
-}): MenuNodeRecord {
+function toRecord(row: { id: string; project_id: string; parent_id: string | null; title: string; sort_order: number }): MenuNodeRecord {
   return {
     id: row.id,
     projectId: row.project_id,
@@ -220,12 +214,7 @@ async function reorderWithinSiblings(
  *   CTE(`WITH RECURSIVE`) 한 번으로 확인한다 — 애플리케이션에서 트리를 올려 받아
  *   순회하면 왕복이 늘고 동시 이동과 경합한다.
  */
-async function assertParentValid(
-  trx: DbHandle,
-  projectId: string,
-  parentId: string,
-  excludeNodeId?: string,
-): Promise<void> {
+async function assertParentValid(trx: DbHandle, projectId: string, parentId: string, excludeNodeId?: string): Promise<void> {
   if (excludeNodeId !== undefined && parentId === excludeNodeId) {
     throw new SelfParentError()
   }
@@ -262,11 +251,7 @@ async function assertParentValid(
  * 지킨다.
  */
 export async function listMenuRows(db: DbHandle, projectId: string): Promise<MenuRow[]> {
-  return db
-    .selectFrom('menu_nodes')
-    .select(['id', 'parent_id', 'title', 'sort_order'])
-    .where('project_id', '=', projectId)
-    .execute()
+  return db.selectFrom('menu_nodes').select(['id', 'parent_id', 'title', 'sort_order']).where('project_id', '=', projectId).execute()
 }
 
 /**
@@ -451,11 +436,7 @@ export async function updateMenuNode(
       await closeGap(trx, projectId, current.parent_id, current.sort_order)
       await openGap(trx, projectId, newParentId, targetIndex)
 
-      await trx
-        .updateTable('menu_nodes')
-        .set({ parent_id: newParentId, sort_order: targetIndex })
-        .where('id', '=', nodeId)
-        .execute()
+      await trx.updateTable('menu_nodes').set({ parent_id: newParentId, sort_order: targetIndex }).where('id', '=', nodeId).execute()
     } else if (patch.sortOrder !== undefined) {
       const siblingCount = await countSiblings(trx, projectId, current.parent_id)
       const targetIndex = Math.min(patch.sortOrder, siblingCount - 1)

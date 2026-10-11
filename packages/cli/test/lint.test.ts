@@ -143,10 +143,17 @@ describe('[경로]는 출력 거르개다 — 입력을 좁히지 않는다', ()
   it('그 페이지의 것만 남는다', async () => {
     const 둘 = 경고가_있는_프로젝트()
     둘.pages.push(
-      page('20000000-0000-4000-8000-00000000000a', MENU_MEMBER, '경고둘', 10, {
-        version: 1,
-        root: { id: 'root', type: 'Page', children: [{ id: 'lonely2', type: 'List' }] },
-      }, null),
+      page(
+        '20000000-0000-4000-8000-00000000000a',
+        MENU_MEMBER,
+        '경고둘',
+        10,
+        {
+          version: 1,
+          root: { id: 'root', type: 'Page', children: [{ id: 'lonely2', type: 'List' }] },
+        },
+        null,
+      ),
     )
 
     const io = 준비(둘)
@@ -339,7 +346,10 @@ describe('테마 규칙 — 현재 테마에 없는 variant', () => {
 
   it('테마를 아직 고정하지 않았으면 그렇다고 말한다', async () => {
     const io = 준비()
-    stub(io, 'GET', `/api/projects/${PROJECT}/theme`, { status: 200, body: { ...projectThemeResponse(), themeId: null, version: null, manifest: null } })
+    stub(io, 'GET', `/api/projects/${PROJECT}/theme`, {
+      status: 200,
+      body: { ...projectThemeResponse(), themeId: null, version: null, manifest: null },
+    })
     expect(await run(['lint'], io)).toBe(EXIT.ok)
     expect(io.stdout.join('\n')).toContain('프로젝트가 아직 테마를 고정하지 않았습니다')
   })

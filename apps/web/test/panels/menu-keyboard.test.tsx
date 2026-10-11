@@ -71,7 +71,13 @@ function stubs(overrides: Partial<ApiClient> = {}) {
   const updateMenu = vi.fn(async (): Promise<MenuNode> => ({ id: 'm-grade', projectId: 'p-1', parentId: null, title: 'x', sortOrder: 0 }))
   const updatePage = vi.fn(async () => pageDetail('pg-list', '회원 목록'))
   const deleteMenu = vi.fn(async () => undefined)
-  const createMenu = vi.fn(async (): Promise<MenuNode> => ({ id: 'm-new', projectId: 'p-1', parentId: 'm-member', title: '새', sortOrder: 0 }))
+  const createMenu = vi.fn(async (): Promise<MenuNode> => ({
+    id: 'm-new',
+    projectId: 'p-1',
+    parentId: 'm-member',
+    title: '새',
+    sortOrder: 0,
+  }))
 
   const client = fakeApi({
     me: async () => USER,
@@ -312,7 +318,12 @@ describe('통합', () => {
     fireEvent.keyDown(rename, { key: 'Enter' })
     await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
     // 메뉴도 바탕을 싣고 장부의 끊는 신호를 받는다.
-    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-grade', { title: '등급 정책', base: { title: '등급' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(api.updateMenu).toHaveBeenCalledWith(
+      'p-1',
+      'm-grade',
+      { title: '등급 정책', base: { title: '등급' } },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
 
     // 옮기기(순서)
     fireEvent.click(tool('위로'))
@@ -413,24 +424,21 @@ describe('뷰 모드에서는 단축키가 듣지 않는다', () => {
     return within(toolbar()).queryByRole('button', { name: '정말 삭제합니까?' }) !== null
   }
 
-  it.each(SHORTCUT_KEYS)(
-    '편집 모드에서 $name 가 조작을 낸다 — 양성 대조',
-    async ({ init, arms }) => {
-      // **이것이 없으면 표에서 키를 아예 지운 판도 아래 음성 케이스를 통과한다.**
-      const api = await open()
-      fireEvent.click(menuButton('등급'))
+  it.each(SHORTCUT_KEYS)('편집 모드에서 $name 가 조작을 낸다 — 양성 대조', async ({ init, arms }) => {
+    // **이것이 없으면 표에서 키를 아예 지운 판도 아래 음성 케이스를 통과한다.**
+    const api = await open()
+    fireEvent.click(menuButton('등급'))
 
-      fireEvent.keyDown(keyTarget(), init)
+    fireEvent.keyDown(keyTarget(), init)
 
-      if (arms === 'request') {
-        await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
-      } else {
-        // 삭제는 요청을 내지 않는다 — 한 번 더 눌러야 나간다.
-        expect(confirmArmed()).toBe(true)
-        expect(api.deleteMenu).not.toHaveBeenCalled()
-      }
-    },
-  )
+    if (arms === 'request') {
+      await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
+    } else {
+      // 삭제는 요청을 내지 않는다 — 한 번 더 눌러야 나간다.
+      expect(confirmArmed()).toBe(true)
+      expect(api.deleteMenu).not.toHaveBeenCalled()
+    }
+  })
 
   it.each(SHORTCUT_KEYS)('뷰 모드에서 $name 가 아무것도 하지 않는다', async ({ init }) => {
     const api = await open()
@@ -467,9 +475,7 @@ describe('뷰 모드에서는 단축키가 듣지 않는다', () => {
     const source = stripComments(MENU_TREE_SOURCE)
     const declared = (source.match(/event\s*\.\s*key\s*===\s*'/g) ?? []).length
 
-    expect(declared, `SHORTCUTS의 조합 수가 바뀌었다: 표 ${declared} vs 케이스 ${SHORTCUT_KEYS.length}`).toBe(
-      SHORTCUT_KEYS.length,
-    )
+    expect(declared, `SHORTCUTS의 조합 수가 바뀌었다: 표 ${declared} vs 케이스 ${SHORTCUT_KEYS.length}`).toBe(SHORTCUT_KEYS.length)
   })
 })
 
@@ -517,7 +523,11 @@ describe('줄 옮기기 · 접고 펴기 — 읽는 키', () => {
       const next = document.activeElement?.textContent
       menuButton('회원관리').focus()
       fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' })
-      expect({ folded, next, unfolded: menuButton('회원관리').getAttribute('aria-expanded') }).toEqual({ folded: 'false', next: '주문관리', unfolded: 'true' })
+      expect({ folded, next, unfolded: menuButton('회원관리').getAttribute('aria-expanded') }).toEqual({
+        folded: 'false',
+        next: '주문관리',
+        unfolded: 'true',
+      })
     })
   }
 

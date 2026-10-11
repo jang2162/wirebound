@@ -172,9 +172,11 @@ function refuseClientSideQueryTimeout(databaseUrl: string): void {
  * 값은 한 자리(`DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`)에서만 온다. `?options=-c …`는 막지 않는다 — 기동 인자가 그것보다 늦게 적용돼 이긴다.
  */
 function refuseUrlLevelIdleTimeout(databaseUrl: string): void {
-  const resolved = (new Client({ connectionString: databaseUrl }) as unknown as {
-    connectionParameters?: { idle_in_transaction_session_timeout?: unknown }
-  }).connectionParameters
+  const resolved = (
+    new Client({ connectionString: databaseUrl }) as unknown as {
+      connectionParameters?: { idle_in_transaction_session_timeout?: unknown }
+    }
+  ).connectionParameters
   // pg 의 기본값은 `false`다(`pg/lib/defaults.js`) — 그것이 «안 줬다». `?…=0`은 문자열 `'0'`이라 걸린다.
   const fromUrl = resolved?.idle_in_transaction_session_timeout
   if (fromUrl !== undefined && fromUrl !== false) {

@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { tokensCss, tokenValues, tokenVar } from '@wirebound/themes'
 
-const M = { id: 'a', name: 'a', version: '1.0.0', sdk: '^1.0.0', tokens: { items: {
-  'color.primary': { type: 'color', label: 'p', default: '#2563eb' },
-  'color.hover': { type: 'color', label: 'h', default: '{color.primary}' },
-  gap: { type: 'number', label: 'g', default: 4 },
-} } } as const
+const M = {
+  id: 'a',
+  name: 'a',
+  version: '1.0.0',
+  sdk: '^1.0.0',
+  tokens: {
+    items: {
+      'color.primary': { type: 'color', label: 'p', default: '#2563eb' },
+      'color.hover': { type: 'color', label: 'h', default: '{color.primary}' },
+      gap: { type: 'number', label: 'g', default: 4 },
+    },
+  },
+} as const
 
 describe('tokensCss', () => {
   it('기본값을 :root 한 블록으로, 참조는 var()', () => {

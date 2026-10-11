@@ -19,17 +19,11 @@ describe('lintProject', () => {
   it('설정은 여기로 지나간다', () => {
     const project = {
       menu: [{ id: 'm1', parentId: null, title: '관리자' }],
-      pages: [
-        { id: 'pg1', menuNodeId: 'm1', title: 'bad_name', target: 'page:관리자/bad_name', document: doc([]) },
-      ],
+      pages: [{ id: 'pg1', menuNodeId: 'm1', title: 'bad_name', target: 'page:관리자/bad_name', document: doc([]) }],
       comments: [],
     }
     expect(lintProject({ project }).some((issue) => issue.rule === 'naming')).toBe(false)
-    expect(
-      lintProject({ project, config: { naming: { page: '^[가-힣 ]+$' } } }).some(
-        (issue) => issue.rule === 'naming',
-      ),
-    ).toBe(true)
+    expect(lintProject({ project, config: { naming: { page: '^[가-힣 ]+$' } } }).some((issue) => issue.rule === 'naming')).toBe(true)
   })
 
   it('빈 프로젝트는 이슈를 내지 않는다', () => {
@@ -46,9 +40,7 @@ describe('lintProject', () => {
     const issues = lintProject({
       project: {
         menu: [{ id: 'm1', parentId: null, title: '관리자' }],
-        pages: [
-          { id: 'pg1', menuNodeId: 'm1', title: '목록', target: 'page:관리자/목록', document: brokenPage },
-        ],
+        pages: [{ id: 'pg1', menuNodeId: 'm1', title: '목록', target: 'page:관리자/목록', document: brokenPage }],
         comments: [],
       },
     })

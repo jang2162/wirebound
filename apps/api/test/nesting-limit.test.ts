@@ -33,7 +33,9 @@ function chainJson(depth: number): string {
 function chain(depth: number, leaf: 'text' | 'section' = 'text'): unknown {
   uniq += 1
   let node: Record<string, unknown> =
-    leaf === 'text' ? { id: `n_leaf_${uniq}`, type: 'Text', props: { content: 'x' } } : { id: `n_leaf_${uniq}`, type: 'Section', children: [] }
+    leaf === 'text'
+      ? { id: `n_leaf_${uniq}`, type: 'Text', props: { content: 'x' } }
+      : { id: `n_leaf_${uniq}`, type: 'Section', children: [] }
   for (let i = 0; i < depth; i += 1) node = { id: `n_${uniq}_${i}`, type: 'Section', children: [node] }
   return node
 }
@@ -44,14 +46,24 @@ async function world(ctx: TestContext) {
   const menu = await createMenuNode(ctx, owner.cookie, project.id, { title: '메뉴' })
   const page = await createPage(ctx, owner.cookie, project.id, menu.id, { title: '제목' })
   const P = `/api/projects/${project.id}`
-  const head = async () => ((await ctx.app.inject({ method: 'GET', url: `${P}/pages/${page.id}`, cookies: owner.cookie })).json() as { headSeq: number }).headSeq
+  const head = async () =>
+    ((await ctx.app.inject({ method: 'GET', url: `${P}/pages/${page.id}`, cookies: owner.cookie })).json() as { headSeq: number }).headSeq
   const patch = async (value: unknown, path = '/root/children/-') =>
-    ctx.app.inject({ method: 'PATCH', url: `${P}/pages/${page.id}/ops`, cookies: owner.cookie, payload: { baseSeq: await head(), ops: [{ op: 'add', path, value }] } })
+    ctx.app.inject({
+      method: 'PATCH',
+      url: `${P}/pages/${page.id}/ops`,
+      cookies: owner.cookie,
+      payload: { baseSeq: await head(), ops: [{ op: 'add', path, value }] },
+    })
   /** 값을 이미 JSON 글자로 가진 편집(깊은 사슬). */
   const raw = (method: 'PATCH' | 'PUT' | 'POST', url: string, json: string) =>
     ctx.app.inject({ method, url, cookies: owner.cookie, headers: { 'content-type': 'application/json' }, payload: json })
   const patchJson = async (valueJson: string) =>
-    raw('PATCH', `${P}/pages/${page.id}/ops`, `{"baseSeq":${await head()},"ops":[{"op":"add","path":"/root/children/-","value":${valueJson}}]}`)
+    raw(
+      'PATCH',
+      `${P}/pages/${page.id}/ops`,
+      `{"baseSeq":${await head()},"ops":[{"op":"add","path":"/root/children/-","value":${valueJson}}]}`,
+    )
   return { owner, project, page, P, head, patch, raw, patchJson }
 }
 
@@ -75,7 +87,11 @@ describe('입구 — 깊이가 한도를 넘으면 400 이고 아무것도 안 �
     await withApi(async (ctx) => {
       const w = await world(ctx)
       const before = await w.head()
-      const res = await w.raw('PUT', `${w.P}/pages/${w.page.id}/schema`, `{"schema":{"version":1,"root":{"id":"n_root","type":"Page","children":[${chainJson(depth)}]}}}`)
+      const res = await w.raw(
+        'PUT',
+        `${w.P}/pages/${w.page.id}/schema`,
+        `{"schema":{"version":1,"root":{"id":"n_root","type":"Page","children":[${chainJson(depth)}]}}}`,
+      )
 
       expect({ status: res.statusCode, body: res.json(), head: await w.head() }).toEqual({ status: 400, body: FIXED, head: before })
     })
@@ -104,7 +120,11 @@ describe('입구 — 깊이가 한도를 넘으면 400 이고 아무것도 안 �
         )
 
         const error = await probe.waitFor('patch-error')
-        expect({ status: error.status, clientOpId: error.clientOpId, head: await w.head() }).toEqual({ status: 400, clientOpId: 'op_deep', head: before })
+        expect({ status: error.status, clientOpId: error.clientOpId, head: await w.head() }).toEqual({
+          status: 400,
+          clientOpId: 'op_deep',
+          head: before,
+        })
       } finally {
         probe.close()
       }

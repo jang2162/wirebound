@@ -1,11 +1,6 @@
 import { installCatalog, validatePage } from '@wirebound/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
-import {
-  PATTERN_CATEGORIES,
-  PatternsSchema,
-  SLOT_TYPES,
-  checkPatterns,
-} from '../src/spec/patterns'
+import { PATTERN_CATEGORIES, PatternsSchema, SLOT_TYPES, checkPatterns } from '../src/spec/patterns'
 
 const codes = (issues: { code: string }[]) => issues.map((i) => i.code).sort()
 
@@ -65,16 +60,12 @@ describe('PatternsSchema', () => {
   })
 
   it('name·schema가 필수다', () => {
-    expect(PatternsSchema.safeParse({ 'hero.split': { schema: { type: 'Section' } } }).success)
-      .toBe(false)
+    expect(PatternsSchema.safeParse({ 'hero.split': { schema: { type: 'Section' } } }).success).toBe(false)
     expect(PatternsSchema.safeParse({ 'hero.split': { name: '가' } }).success).toBe(false)
   })
 
   it('slots는 선택이다 — 슬롯 없는 패턴이 있다', () => {
-    expect(
-      PatternsSchema.safeParse({ 'footer.simple': { name: '가', schema: { type: 'Section' } } })
-        .success,
-    ).toBe(true)
+    expect(PatternsSchema.safeParse({ 'footer.simple': { name: '가', schema: { type: 'Section' } } }).success).toBe(true)
   })
 
   it('slots의 값은 슬롯 타입이어야 한다', () => {
@@ -116,9 +107,7 @@ describe('checkPatterns — 이름 (「patterns — 테마가 소유한 구성 �
     expect(check({ 'hero.split': HERO_SPLIT }).issues).toEqual([])
     for (const name of ['hero', 'hero.split.wide', 'hero.', '.split', '']) {
       const spec = { ...HERO_SPLIT }
-      expect(codes(check({ [name]: spec }).issues), JSON.stringify(name)).toContain(
-        'bad-pattern-name',
-      )
+      expect(codes(check({ [name]: spec }).issues), JSON.stringify(name)).toContain('bad-pattern-name')
     }
   })
 
@@ -129,8 +118,7 @@ describe('checkPatterns — 이름 (「patterns — 테마가 소유한 구성 �
       }).issues
       expect(issues, category).toEqual([])
     }
-    expect(codes(check({ 'banner.x': { name: '가', schema: { type: 'Section' } } }).issues))
-      .toEqual(['bad-pattern-name'])
+    expect(codes(check({ 'banner.x': { name: '가', schema: { type: 'Section' } } }).issues)).toEqual(['bad-pattern-name'])
   })
 })
 
@@ -182,12 +170,8 @@ describe('checkPatterns — schema 조각과 카탈로그 대조', () => {
   it('props를 카탈로그의 zod로 검증한다', () => {
     // 판정: 카탈로그가 단일 진실이다(설계서 「핵심 원칙」). 여기서 안 보면 잘못된 패턴이 전개 시점까지 간다.
     expect(check(wrap({ type: 'Grid', props: { columns: 2 } })).issues).toEqual([])
-    expect(codes(check(wrap({ type: 'Grid', props: { columns: 0 } })).issues)).toEqual([
-      'bad-pattern-node',
-    ])
-    expect(codes(check(wrap({ type: 'Grid', props: { gap: 'space.10' } })).issues)).toEqual([
-      'bad-pattern-node',
-    ])
+    expect(codes(check(wrap({ type: 'Grid', props: { columns: 0 } })).issues)).toEqual(['bad-pattern-node'])
+    expect(codes(check(wrap({ type: 'Grid', props: { gap: 'space.10' } })).issues)).toEqual(['bad-pattern-node'])
   })
 
   it('variant의 값은 보지 않는다 — 고를 수 있는 변형은 테마 manifest 가 선언한다', () => {
@@ -196,16 +180,12 @@ describe('checkPatterns — schema 조각과 카탈로그 대조', () => {
   })
 
   it('자식을 담을 수 없는 컴포넌트에 자식을 두면 이슈다', () => {
-    expect(codes(check(wrap({ type: 'Text', children: [{ type: 'Text' }] })).issues)).toEqual([
-      'bad-pattern-node',
-    ])
+    expect(codes(check(wrap({ type: 'Text', children: [{ type: 'Text' }] })).issues)).toEqual(['bad-pattern-node'])
   })
 
   it('Slot은 패턴에 둘 수 없다', () => {
     // 패턴은 페이지에 전개되는데, `validatePage`가 페이지 안의 Slot을 이슈로 낸다(실측).
-    expect(codes(check(wrap({ type: 'Section', children: [{ type: 'Slot' }] })).issues)).toEqual([
-      'bad-pattern-node',
-    ])
+    expect(codes(check(wrap({ type: 'Section', children: [{ type: 'Slot' }] })).issues)).toEqual(['bad-pattern-node'])
   })
 
   it('이슈에 어느 노드인지가 실린다', () => {
@@ -214,9 +194,7 @@ describe('checkPatterns — schema 조각과 카탈로그 대조', () => {
   })
 
   it('첫 이슈에서 멈추지 않는다', () => {
-    const { issues } = check(
-      wrap({ type: 'Carousel', children: [{ type: 'Slot' }] }),
-    )
+    const { issues } = check(wrap({ type: 'Carousel', children: [{ type: 'Slot' }] }))
     expect(issues.length).toBeGreaterThanOrEqual(2)
   })
 })

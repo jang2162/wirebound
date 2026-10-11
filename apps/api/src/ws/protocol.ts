@@ -314,12 +314,7 @@ const LockFrame = z
  */
 const UnlockFrame = z.strictObject({ type: z.literal('unlock') })
 
-const ClientFrameSchema = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('ping') }),
-  PatchFrame,
-  LockFrame,
-  UnlockFrame,
-])
+const ClientFrameSchema = z.discriminatedUnion('type', [z.strictObject({ type: z.literal('ping') }), PatchFrame, LockFrame, UnlockFrame])
 
 type ParsedClientFrame = z.infer<typeof ClientFrameSchema>
 

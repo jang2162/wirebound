@@ -31,12 +31,7 @@ import type { ProjectDetail } from '../api/types'
 /** 무엇이 함께 사라지는지. **수를 적지 않고 부류로 적는다**(위 머리말). */
 const CASCADE_NOTICE = '메뉴·페이지·편집 이력과 멤버가 함께 사라집니다. 되돌릴 수 없습니다.'
 
-export function DeleteConfirm(props: {
-  project: ProjectDetail
-  busy: boolean
-  onConfirm: () => void
-  onCancel: () => void
-}): ReactElement {
+export function DeleteConfirm(props: { project: ProjectDetail; busy: boolean; onConfirm: () => void; onCancel: () => void }): ReactElement {
   const [typed, setTyped] = useState('')
   const box = useRef<HTMLInputElement>(null)
 
@@ -79,12 +74,7 @@ export function DeleteConfirm(props: {
       >
         삭제 확정
       </button>
-      <button
-        className="wb-shell-project-action"
-        type="button"
-        disabled={props.busy}
-        onClick={props.onCancel}
-      >
+      <button className="wb-shell-project-action" type="button" disabled={props.busy} onClick={props.onCancel}>
         삭제 취소
       </button>
     </div>

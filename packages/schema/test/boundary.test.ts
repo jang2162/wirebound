@@ -35,8 +35,7 @@ describe('경계 — schema가 무엇을 보지 않는가', () => {
    * 것. 이름을 그냥 언급하는 주석(`index.ts`가 *"테마 규칙은 `@wirebound/themes`"*라고
    * 적는다)까지 잡으면 케이스가 문서를 막게 된다.
    */
-  const FORBIDDEN_SPECIFIER =
-    /(?:^|[^\w$])(?:from|import|require)\s*\(?\s*['"](?:@wirebound\/(?:themes|renderer)|react(?:\/[\w./-]*)?)['"]/
+  const FORBIDDEN_SPECIFIER = /(?:^|[^\w$])(?:from|import|require)\s*\(?\s*['"](?:@wirebound\/(?:themes|renderer)|react(?:\/[\w./-]*)?)['"]/
 
   it('themes도 renderer도 react도 import하지 않는다 — 인용부호·부수효과·동적 전부', () => {
     for (const [path, source] of Object.entries(sources)) {

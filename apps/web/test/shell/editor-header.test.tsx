@@ -85,13 +85,11 @@ describe('`…` 메뉴', () => {
     await open(role)
     fireEvent.click(within(header()).getByRole('button', { name: SHELL_MENU }))
     const menu = within(openedMenu(header())).getByRole('menu')
-    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-      '계정 설정',
-      '프로젝트 설정',
-      '스냅샷',
-      '프로젝트 내보내기',
-      '로그아웃',
-    ])
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['계정 설정', '프로젝트 설정', '스냅샷', '프로젝트 내보내기', '로그아웃'])
     // 하네스의 로그인한 사람.
     expect(within(openedMenu(header())).getByText('테스터')).toBeTruthy()
   })

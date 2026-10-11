@@ -60,9 +60,7 @@ describe('분모가 헛돌지 않는다 — 카나리아', () => {
   it('**주석을 실제로 걷는다** — 안 걷으면 아래 표가 통째로 무의미하다', () => {
     // `insertUser` 를 **주석으로만** 언급하는 파일이 있다. 그것들이 호출자로 세어지면
     // 안 된다 — 아래 단언이 *"언급한 파일 > 호출자"*로 그 차이를 잰다.
-    const mentionedAnywhere = sourceFiles().filter((relative) =>
-      readFileSync(join(SRC_ROOT, relative), 'utf8').includes('insertUser'),
-    )
+    const mentionedAnywhere = sourceFiles().filter((relative) => readFileSync(join(SRC_ROOT, relative), 'utf8').includes('insertUser'))
     expect(mentionedAnywhere.length).toBeGreaterThan(Object.keys(callSites('insertUser')).length)
   })
 })
@@ -317,9 +315,7 @@ describe('테스트가 쓰는 `signup` 은 전부 픽스처의 것이다', () =>
 
   /** 픽스처가 아닌 `signup` 을 쓰는 자리 — `파일:줄`. */
   function strayUses(sources: Map<string, string>): string[] {
-    return [...signupUses(sources)].flatMap(([name, uses]) =>
-      uses.filter((use) => !use.fixture).map((use) => `${name}:${use.line}`),
-    )
+    return [...signupUses(sources)].flatMap(([name, uses]) => uses.filter((use) => !use.fixture).map((use) => `${name}:${use.line}`))
   }
 
   const REAL = new Map(testFiles.map((name) => [name, readFileSync(join(TEST_ROOT, name), 'utf8')]))

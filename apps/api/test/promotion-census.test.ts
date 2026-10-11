@@ -29,10 +29,7 @@ import { SRC_ROOT, sourceFiles, stripComments } from './source-census'
 
 /** 주석을 걷은 `apps/api/src`의 소스 전부. 파일 이름과 함께 든다. */
 function strippedSources(): [string, string][] {
-  return sourceFiles().map((relative) => [
-    relative,
-    stripComments(readFileSync(join(SRC_ROOT, relative), 'utf8')),
-  ])
+  return sourceFiles().map((relative) => [relative, stripComments(readFileSync(join(SRC_ROOT, relative), 'utf8'))])
 }
 
 /**
@@ -56,8 +53,7 @@ const PAGE_TARGET_LITERAL = /['"`]page:/
  * 그것들은 payload 규격이 아니다 — DB 행과 HTTP 본문이다. `Snapshot\w*`로 넓히면 그
  * 다섯이 걸려 술어가 승격과 무관한 것을 막는다.
  */
-const PAYLOAD_DECLARATION =
-  /\b(?:interface|type|const)\s+Snapshot(?:Payload|MenuNode|Page|Layout|Comment)\w*\s*(?:[={:<]|extends\b)/
+const PAYLOAD_DECLARATION = /\b(?:interface|type|const)\s+Snapshot(?:Payload|MenuNode|Page|Layout|Comment)\w*\s*(?:[={:<]|extends\b)/
 
 describe('승격이 두 벌로 갈리지 않는다', () => {
   it('훑을 소스를 실제로 읽는다', () => {
@@ -97,7 +93,7 @@ describe('승격이 두 벌로 갈리지 않는다', () => {
     for (const line of [
       "export const PAGE_TARGET_PREFIX = 'page:'",
       'const prefix = "page:"',
-      "return `page:${path}`",
+      'return `page:${path}`',
       "if (target.startsWith('page:')) return target.slice(5)",
     ]) {
       expect(line, line).toMatch(PAGE_TARGET_LITERAL)

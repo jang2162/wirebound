@@ -42,7 +42,12 @@ function names(style: CSSStyleDeclaration): string[] {
 function declarations(): { selector: string; property: string; value: string; priority: string }[] {
   return rules().flatMap((rule) =>
     names(rule.style).map((property) => {
-      return { selector: rule.selector, property, value: rule.style.getPropertyValue(property), priority: rule.style.getPropertyPriority(property) }
+      return {
+        selector: rule.selector,
+        property,
+        value: rule.style.getPropertyValue(property),
+        priority: rule.style.getPropertyPriority(property),
+      }
     }),
   )
 }
@@ -142,7 +147,9 @@ describe('system-admin CSS', () => {
   /** 점 찍힌 맨 이름(`semantic.primary`)이 값에 남으면 브라우저가 그 선언을 버린다 — 토큰은 `var(--wb-…)` 로만 가리킨다. */
   it('선언 값에 var() 밖의 점 찍힌 맨 이름이 없다', () => {
     const bare = /(?<![-\w.(])([A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)+)(?![-\w.])/g
-    const hits = declarations().flatMap((d) => [...d.value.replace(/"[^"]*"/g, '').matchAll(bare)].map((m) => `${d.selector} { ${d.property}: ${d.value} }`))
+    const hits = declarations().flatMap((d) =>
+      [...d.value.replace(/"[^"]*"/g, '').matchAll(bare)].map((m) => `${d.selector} { ${d.property}: ${d.value} }`),
+    )
     expect(hits).toEqual([])
   })
 
@@ -158,16 +165,17 @@ describe('system-admin CSS', () => {
   it('max-width 를 거는 규칙마다 margin-left · margin-right 가 auto', () => {
     const bounded = rules().filter((rule) => rule.style.getPropertyValue('max-width') !== '')
     expect(bounded.length).toBeGreaterThan(0)
-    expect(bounded.map((rule) => [rule.selector, rule.style.getPropertyValue('margin-left'), rule.style.getPropertyValue('margin-right')])).toEqual(
-      bounded.map((rule) => [rule.selector, 'auto', 'auto']),
-    )
+    expect(
+      bounded.map((rule) => [rule.selector, rule.style.getPropertyValue('margin-left'), rule.style.getPropertyValue('margin-right')]),
+    ).toEqual(bounded.map((rule) => [rule.selector, 'auto', 'auto']))
   })
 
   /** 간격은 전부 `space.unit` 의 배수다 — 토큰 하나(«간격 단위»)로 밀도가 바뀐다. 상수로 적은 칸이 하나라도 있으면 그 칸만 안 따라온다. */
   it('--wb-space-N 은 전부 --wb-space-unit × N', () => {
     const spaces = [...ROOT_VARS()].filter(([name]) => /^--wb-space-\d+$/.test(name))
     expect(spaces.length).toBeGreaterThan(4)
-    for (const [name, value] of spaces) expect(value.replace(/\s+/g, ' '), name).toBe(`calc(var(--wb-space-unit) * ${name.slice('--wb-space-'.length)})`)
+    for (const [name, value] of spaces)
+      expect(value.replace(/\s+/g, ' '), name).toBe(`calc(var(--wb-space-unit) * ${name.slice('--wb-space-'.length)})`)
   })
 
   /** 세로 구분선은 높이가 정해지지 않은 부모 안에서도 보인다 — `min-height` 를 백분율로 두면 그 부모에서 0 이 된다. */
@@ -201,8 +209,11 @@ describe('system-admin CSS', () => {
 
     const form = document.createElement('form')
     form.setAttribute('data-wb-component', 'EntryForm')
-    form.innerHTML = '<div data-wb-part="label">가입</div><div data-wb-part="row"><div data-wb-component="Field"><label data-wb-part="label">이름</label></div></div>'
-    const titleRules = rules().filter((rule) => rule.style.getPropertyValue('border-bottom') !== '' || rule.style.getPropertyValue('border-bottom-style') !== '')
+    form.innerHTML =
+      '<div data-wb-part="label">가입</div><div data-wb-part="row"><div data-wb-component="Field"><label data-wb-part="label">이름</label></div></div>'
+    const titleRules = rules().filter(
+      (rule) => rule.style.getPropertyValue('border-bottom') !== '' || rule.style.getPropertyValue('border-bottom-style') !== '',
+    )
     const fieldLabel = form.querySelector('label')!
     const title = form.firstElementChild!
     expect(titleRules.filter((rule) => rule.media === null && title.matches(rule.selector)).length).toBeGreaterThan(0)

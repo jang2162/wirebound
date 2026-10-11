@@ -44,7 +44,15 @@ describe('checkTheme', () => {
   it('던지는 뷰는 그 컴포넌트의 칸마다 폴백 오류로 선다 — 다른 컴포넌트는 깨끗하다', async () => {
     const manifest: ThemeManifest = {
       ...BASE,
-      components: { Button: { variants: [{ id: 'primary', label: '주' }, { id: 'ghost', label: '투명' }], defaultVariant: 'primary' } },
+      components: {
+        Button: {
+          variants: [
+            { id: 'primary', label: '주' },
+            { id: 'ghost', label: '투명' },
+          ],
+          defaultVariant: 'primary',
+        },
+      },
     }
     const report = await checkTheme(files(manifest, { views: `{ Button: () => { throw new Error('단추가 터졌다') } }` }))
     const fallbacks = report.errors.filter((error) => error.source === 'fallback')
@@ -79,7 +87,11 @@ describe('checkTheme', () => {
     })
     const { ok, lines } = formatCheckReport(report)
     expect(ok).toBe(true)
-    expect(lines.filter((line) => line.startsWith('⚠')).some((line) => line.includes('Card') && line.includes('<div tabindex="0">') && line.includes('칸)'))).toBe(true)
+    expect(
+      lines
+        .filter((line) => line.startsWith('⚠'))
+        .some((line) => line.includes('Card') && line.includes('<div tabindex="0">') && line.includes('칸)')),
+    ).toBe(true)
     expect(lines.at(-1)).toBe('✓ 오류 없음')
   })
 
@@ -96,7 +108,9 @@ describe('checkTheme', () => {
       ['StateSwitch', 'bundle', expect.stringContaining('그리지 않는')],
     ])
     expect(report.items).toBeGreaterThan(0)
-    expect(formatCheckReport(report).lines).toContain('✗ [bundle] 번들: views.StateSwitch 는 테마가 그리지 않는 타입의 뷰입니다 — 렌더러가 직접 다뤄 쓰이지 않습니다')
+    expect(formatCheckReport(report).lines).toContain(
+      '✗ [bundle] 번들: views.StateSwitch 는 테마가 그리지 않는 타입의 뷰입니다 — 렌더러가 직접 다뤄 쓰이지 않습니다',
+    )
   })
 
   it('카탈로그에 없는 타입의 뷰 키는 오류로 선다 — 있는 타입의 뷰 키는 깨끗하다', async () => {
@@ -110,7 +124,9 @@ describe('checkTheme', () => {
   it('번들이 등록하지 않으면 오류 하나로 끝난다', async () => {
     const report = await checkTheme(files(BASE, { themeJs: ';' }))
     expect(report.items).toBe(0)
-    expect(report.errors).toEqual([expect.objectContaining({ type: '', source: 'bundle', message: expect.stringContaining('등록하지 않았습니다') })])
+    expect(report.errors).toEqual([
+      expect.objectContaining({ type: '', source: 'bundle', message: expect.stringContaining('등록하지 않았습니다') }),
+    ])
   })
 
   it('패턴이 선언 안 한 variant 를 쓰면 센다 — 선언한 것은 안 센다', async () => {
@@ -120,7 +136,14 @@ describe('checkTheme', () => {
       patterns: {
         'hero.split': {
           name: '나눈 히어로',
-          schema: { type: 'Section', variant: 'wide', children: [{ type: 'Button', props: { label: '가' }, variant: 'primary' }, { type: 'Button', props: { label: '나' }, variant: 'huge' }] },
+          schema: {
+            type: 'Section',
+            variant: 'wide',
+            children: [
+              { type: 'Button', props: { label: '가' }, variant: 'primary' },
+              { type: 'Button', props: { label: '나' }, variant: 'huge' },
+            ],
+          },
         },
       },
     }
@@ -150,7 +173,8 @@ describe('checkTheme', () => {
     }
     const report = await checkTheme(
       files(manifest, {
-        themeCss: ':root{--wb-color-unused:#444444;--wb-color-css-prefix:#555555}\n.a{color:var(--wb-color-css);border-color:var( --wb-color-alias )}',
+        themeCss:
+          ':root{--wb-color-unused:#444444;--wb-color-css-prefix:#555555}\n.a{color:var(--wb-color-css);border-color:var( --wb-color-alias )}',
         views: `{ Text: (props) => h(Root, null, String(useToken('color.view'))) }`,
       }),
     )

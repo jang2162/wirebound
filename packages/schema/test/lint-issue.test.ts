@@ -29,11 +29,7 @@ describe('lint 이슈를 만드는 자리', () => {
     )
     expect(relayed.severity).toBe('warning')
 
-    const asError = relayLintIssue(
-      'document-invalid',
-      { pageId: 'p1' },
-      { severity: 'error', path: '/root', message: '봉투가 깨졌습니다' },
-    )
+    const asError = relayLintIssue('document-invalid', { pageId: 'p1' }, { severity: 'error', path: '/root', message: '봉투가 깨졌습니다' })
     expect(asError.severity).toBe('error')
     expect(asError.nodeId).toBeNull()
   })

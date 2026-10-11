@@ -19,9 +19,7 @@ import { NOTES_BOX, TITLE_BOX } from '../src/pptx/geometry'
 const TITLES = ['관리자 · 회원 · 목록', '관리자 · 회원 · 상세', '마케팅 · 랜딩']
 
 function slide(title: string): string {
-  return slideXml([
-    textBox({ id: 2, name: '제목', box: TITLE_BOX, lines: [{ text: title, size: pt(24), bold: true }] }),
-  ])
+  return slideXml([textBox({ id: 2, name: '제목', box: TITLE_BOX, lines: [{ text: title, size: pt(24), bold: true }] })])
 }
 
 /**
@@ -57,9 +55,7 @@ function textOfPart(parts: readonly PptxPart[], path: string): string {
 function targetsOf(parts: readonly PptxPart[], relsPath: string): string[] {
   const document = parseXml(textOfPart(parts, relsPath))
   const base = relsPath.slice(0, relsPath.lastIndexOf('_rels/'))
-  return findAll(document, 'Relationship').map((relationship) =>
-    normalize(base + relationship.attributes.Target!),
-  )
+  return findAll(document, 'Relationship').map((relationship) => normalize(base + relationship.attributes.Target!))
 }
 
 /** `a/b/../c` 를 `a/c` 로. 관계의 타겟이 `../` 를 쓰므로 파트 경로와 맞대려면 필요하다. */
@@ -119,12 +115,8 @@ describe('pptx 패키지', () => {
   it('모든 파트가 콘텐츠 타입을 갖는다 — Default 아니면 Override', () => {
     const parts = build({ notes: true })
     const types = contentTypeDocument(parts)
-    const defaults = new Set(
-      findAll(types, 'Default').map((node) => node.attributes.Extension!.toLowerCase()),
-    )
-    const overrides = new Set(
-      findAll(types, 'Override').map((node) => node.attributes.PartName!.replace(/^\//, '')),
-    )
+    const defaults = new Set(findAll(types, 'Default').map((node) => node.attributes.Extension!.toLowerCase()))
+    const overrides = new Set(findAll(types, 'Override').map((node) => node.attributes.PartName!.replace(/^\//, '')))
     const uncovered = parts
       .map((part) => part.path)
       .filter((path) => path !== '[Content_Types].xml')
@@ -140,29 +132,17 @@ describe('pptx 패키지', () => {
 
   it('프레젠테이션 파트는 Override 를 갖는다 — Default 로는 안 열린다', () => {
     const parts = build({ notes: true })
-    const overrides = new Set(
-      findAll(contentTypeDocument(parts), 'Override').map((node) =>
-        node.attributes.PartName!.replace(/^\//, ''),
-      ),
-    )
+    const overrides = new Set(findAll(contentTypeDocument(parts), 'Override').map((node) => node.attributes.PartName!.replace(/^\//, '')))
     const needsOverride = parts
       .map((part) => part.path)
-      .filter(
-        (path) =>
-          path.endsWith('.xml') &&
-          !path.includes('/_rels/') &&
-          path !== '[Content_Types].xml' &&
-          path.startsWith('ppt/'),
-      )
+      .filter((path) => path.endsWith('.xml') && !path.includes('/_rels/') && path !== '[Content_Types].xml' && path.startsWith('ppt/'))
     expect(needsOverride.filter((path) => !overrides.has(path))).toEqual([])
   })
 
   it('Override 가 없는 파트를 가리키지 않는다 — 반대 방향', () => {
     const parts = build({ notes: true })
     const paths = new Set(parts.map((part) => part.path))
-    const overrides = findAll(contentTypeDocument(parts), 'Override').map((node) =>
-      node.attributes.PartName!.replace(/^\//, ''),
-    )
+    const overrides = findAll(contentTypeDocument(parts), 'Override').map((node) => node.attributes.PartName!.replace(/^\//, ''))
     expect(overrides.filter((path) => !paths.has(path))).toEqual([])
   })
 
@@ -171,18 +151,14 @@ describe('pptx 패키지', () => {
     const presentation = parseXml(textOfPart(parts, 'ppt/presentation.xml'))
     const ids = findAll(presentation, 'p:sldId')
     expect(ids).toHaveLength(TITLES.length)
-    expect(parts.filter((part) => /^ppt\/slides\/slide\d+\.xml$/.test(part.path))).toHaveLength(
-      TITLES.length,
-    )
+    expect(parts.filter((part) => /^ppt\/slides\/slide\d+\.xml$/.test(part.path))).toHaveLength(TITLES.length)
   })
 
   it('sldIdLst 의 r:id 가 presentation 관계의 슬라이드를 순서대로 가리킨다', () => {
     const parts = build()
     const presentation = parseXml(textOfPart(parts, 'ppt/presentation.xml'))
     const rels = parseXml(textOfPart(parts, 'ppt/_rels/presentation.xml.rels'))
-    const byId = new Map(
-      findAll(rels, 'Relationship').map((node) => [node.attributes.Id!, node.attributes.Target!]),
-    )
+    const byId = new Map(findAll(rels, 'Relationship').map((node) => [node.attributes.Id!, node.attributes.Target!]))
     const targets = findAll(presentation, 'p:sldId').map((node) => byId.get(node.attributes['r:id']!))
     expect(targets).toEqual(TITLES.map((_title, index) => `slides/slide${index + 1}.xml`))
   })
@@ -203,9 +179,7 @@ describe('pptx 패키지', () => {
 
   it('노트가 있으면 노트 마스터가 서고 슬라이드마다 노트가 물린다', () => {
     const parts = build({ notes: true })
-    expect(parts.filter((part) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(part.path))).toHaveLength(
-      TITLES.length,
-    )
+    expect(parts.filter((part) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(part.path))).toHaveLength(TITLES.length)
     expect(textOfPart(parts, 'ppt/presentation.xml')).toContain('notesMasterIdLst')
     for (let index = 1; index <= TITLES.length; index += 1) {
       const targets = targetsOf(parts, `ppt/notesSlides/_rels/notesSlide${index}.xml.rels`)
@@ -248,9 +222,7 @@ describe('파일이 열리는 조건', () => {
    */
   it('마스터마다 테마 파트가 하나다 — 두 마스터가 같은 것을 가리키지 않는다', () => {
     const parts = build({ notes: true })
-    const masters = parts
-      .map((part) => part.path)
-      .filter((path) => /^ppt\/(?:slide|notes)Masters\/_rels\/\w+\.xml\.rels$/.test(path))
+    const masters = parts.map((part) => part.path).filter((path) => /^ppt\/(?:slide|notes)Masters\/_rels\/\w+\.xml\.rels$/.test(path))
     expect(masters.length).toBeGreaterThan(1)
 
     const themes = masters.map((rels) => {
@@ -264,11 +236,7 @@ describe('파일이 열리는 조건', () => {
   /** 테마 파트가 여럿이어도 **전부** `Override` 를 받는다 — 하나라도 빠지면 안 열린다. */
   it('테마 파트가 전부 콘텐츠 타입을 갖는다', () => {
     const parts = build({ notes: true })
-    const overrides = new Set(
-      findAll(contentTypeDocument(parts), 'Override').map((node) =>
-        node.attributes.PartName!.replace(/^\//, ''),
-      ),
-    )
+    const overrides = new Set(findAll(contentTypeDocument(parts), 'Override').map((node) => node.attributes.PartName!.replace(/^\//, '')))
     const themes = parts.map((part) => part.path).filter((path) => path.startsWith('ppt/theme/'))
     expect(themes.length).toBeGreaterThan(1)
     expect(themes.filter((path) => !overrides.has(path))).toEqual([])
@@ -280,16 +248,12 @@ describe('파일이 열리는 조건', () => {
    */
   it('슬라이드마다 레이아웃 관계가 정확히 하나다', () => {
     const parts = build({ notes: true, media: true })
-    const slides = parts
-      .map((part) => part.path)
-      .filter((path) => /^ppt\/slides\/slide\d+\.xml$/.test(path))
+    const slides = parts.map((part) => part.path).filter((path) => /^ppt\/slides\/slide\d+\.xml$/.test(path))
     expect(slides).toHaveLength(TITLES.length)
 
     for (const path of slides) {
       const rels = path.replace('ppt/slides/', 'ppt/slides/_rels/') + '.rels'
-      const layouts = targetsOf(parts, rels).filter((target) =>
-        target.startsWith('ppt/slideLayouts/'),
-      )
+      const layouts = targetsOf(parts, rels).filter((target) => target.startsWith('ppt/slideLayouts/'))
       expect(layouts, `${rels} 의 레이아웃 관계`).toHaveLength(1)
     }
   })
@@ -303,9 +267,7 @@ describe('파일이 열리는 조건', () => {
     const parts = build({ notes: true, media: true })
     const presentation = parseXml(textOfPart(parts, 'ppt/presentation.xml'))
     const declared = new Set(
-      findAll(parseXml(textOfPart(parts, 'ppt/_rels/presentation.xml.rels')), 'Relationship').map(
-        (node) => node.attributes.Id!,
-      ),
+      findAll(parseXml(textOfPart(parts, 'ppt/_rels/presentation.xml.rels')), 'Relationship').map((node) => node.attributes.Id!),
     )
 
     const used = collectRelationshipIds(presentation)
@@ -321,9 +283,7 @@ describe('파일이 열리는 조건', () => {
     for (const part of parts) {
       if (!/^ppt\/(?:slides|notesSlides)\/\w+\.xml$/.test(part.path)) continue
       const rels = part.path.replace(/\/(\w+\.xml)$/, '/_rels/$1.rels')
-      const declared = new Set(
-        findAll(parseXml(textOfPart(parts, rels)), 'Relationship').map((node) => node.attributes.Id!),
-      )
+      const declared = new Set(findAll(parseXml(textOfPart(parts, rels)), 'Relationship').map((node) => node.attributes.Id!))
       for (const id of collectRelationshipIds(parseXml(part.content as string))) {
         if (!declared.has(id)) dangling.push(`${part.path} → ${id}`)
       }
@@ -341,11 +301,7 @@ describe('파일이 열리는 조건', () => {
     // 카나리아 — 표본에 매체가 없으면 아래가 공허하게 통과한다.
     expect(media.length).toBeGreaterThan(0)
 
-    const defaults = new Set(
-      findAll(contentTypeDocument(parts), 'Default').map((node) =>
-        node.attributes.Extension!.toLowerCase(),
-      ),
-    )
+    const defaults = new Set(findAll(contentTypeDocument(parts), 'Default').map((node) => node.attributes.Extension!.toLowerCase()))
     for (const path of media) {
       const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
       expect(defaults, `${path} 의 Default`).toContain(extension)

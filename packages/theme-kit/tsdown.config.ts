@@ -13,5 +13,15 @@ export default defineConfig({
   // 렌더러 · 갤러리도 그렇다. 설치로 받는 것(`package.json` 의 dependencies · peerDependencies)과 Node 내장만 밖에 둔다. SDK 는 작성자
   // 프로젝트의 것 한 벌을 쓴다.
   noExternal: [/^@wirebound\/(schema|themes|renderer|theme-gallery)(\/|$)/],
-  external: ['vite', '@vitejs/plugin-react', 'esbuild', 'fflate', 'zod', 'jsdom', /^react(-dom)?(\/|$)/, /^node:/, /^@wirebound\/theme-sdk(\/|$)/],
+  external: [
+    'vite',
+    '@vitejs/plugin-react',
+    'esbuild',
+    'fflate',
+    'zod',
+    'jsdom',
+    /^react(-dom)?(\/|$)/,
+    /^node:/,
+    /^@wirebound\/theme-sdk(\/|$)/,
+  ],
 })

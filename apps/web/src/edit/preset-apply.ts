@@ -284,15 +284,17 @@ export function presetFailureNotice(result: Omit<PresetApplyResult, 'droppedCase
   if (result.reason === null) return ''
   if (result.reason === 'no-root') return BROKEN_DOCUMENT_NOTICE
   const head = result.reason === 'broken-page' ? BROKEN_PAGE_NOTICE : BROKEN_PRESET_NOTICE
-  return withReasons(head, result.issues.map((issue) => issue.message))
+  return withReasons(
+    head,
+    result.issues.map((issue) => issue.message),
+  )
 }
 
 /**
  * *"문서가 깨졌다"* — 사용자가 할 일이 **프리셋을 고치는 것이 아니다.** 그래서 아래와
  * 갈라 적는다(패턴 삽입이 세운 구분과 같은 축이다).
  */
-const BROKEN_DOCUMENT_NOTICE =
-  '이 페이지의 문서를 읽지 못해 프리셋을 놓을 수 없습니다. 새로고침해 서버 상태를 확인하세요.'
+const BROKEN_DOCUMENT_NOTICE = '이 페이지의 문서를 읽지 못해 프리셋을 놓을 수 없습니다. 새로고침해 서버 상태를 확인하세요.'
 
 /** *"프리셋이 잘못됐다"* — 뒤에 이유가 붙는다. 없으면 안 붙는다(위 머리말). */
 const BROKEN_PRESET_NOTICE = '프리셋을 놓지 못했습니다'

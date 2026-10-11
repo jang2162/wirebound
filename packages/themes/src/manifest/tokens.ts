@@ -195,7 +195,12 @@ export function checkTokens(items: Readonly<Record<string, TokenDecl>>): Manifes
     const name = tokenVar(key)
     const first = byVar.get(name)
     if (first === undefined) byVar.set(name, key)
-    else issues.push({ code: 'token-var-collision', path: `tokens.items.${key}`, message: `토큰 ${first} 와 ${key} 가 같은 CSS 변수 ${name} 이 됩니다` })
+    else
+      issues.push({
+        code: 'token-var-collision',
+        path: `tokens.items.${key}`,
+        message: `토큰 ${first} 와 ${key} 가 같은 CSS 변수 ${name} 이 됩니다`,
+      })
   }
 
   // 참조는 토큰마다 하나(기본값)라 사슬을 따라가면 된다. 한 고리를 고리의 토큰 수만큼 말하지 않게 한 번만 낸다.
@@ -233,16 +238,14 @@ type TokenValues = Readonly<Record<string, string | number>>
  * 토큰마다 쓸 값 — 받은 값이 그 타입의 검증을 지나면 그것, 아니면 선언의 기본값. 버린 값은 이슈로 돌려준다.
  * 기본값이 참조면 참조 그대로 둔다(`tokensCss` 는 `var()` 로, `tokenValues` 는 따라가서 푼다).
  */
-function effectiveValues(
-  manifest: ThemeManifest,
-  values: TokenValues,
-): { chosen: Map<string, string | number>; issues: ManifestIssue[] } {
+function effectiveValues(manifest: ThemeManifest, values: TokenValues): { chosen: Map<string, string | number>; issues: ManifestIssue[] } {
   const items = manifest.tokens.items
   const issues: ManifestIssue[] = []
   const chosen = new Map<string, string | number>()
 
   for (const key of Object.keys(values)) {
-    if (!Object.hasOwn(items, key)) issues.push({ code: 'unknown-token', path: `values.${key}`, message: `선언에 없는 토큰 ${key} 의 값을 버립니다` })
+    if (!Object.hasOwn(items, key))
+      issues.push({ code: 'unknown-token', path: `values.${key}`, message: `선언에 없는 토큰 ${key} 의 값을 버립니다` })
   }
   for (const [key, decl] of Object.entries(items)) {
     // `in` 은 프로토타입을 본다 — 선언한 `toString` 에 값을 안 줘도 «받은 값» 이 되어 거짓 이슈가 났다.

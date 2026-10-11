@@ -21,11 +21,9 @@ import { createMenuNode, createPage, createProject, signup, withApi, type TestCo
 
 /** 진짜 1×1 PNG 바이트. `packages/exporter/test/pptx.test.ts`가 같은 것을 든다. */
 const PNG_1X1 = Uint8Array.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
-  0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
-  0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
-  0x42, 0x60, 0x82,
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+  0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01,
+  0x00, 0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 ])
 
 /**
@@ -35,9 +33,7 @@ const PNG_1X1 = Uint8Array.from([
 class FakeRenderer implements ScreenRenderer {
   readonly seen: ScreenJob[] = []
 
-  constructor(
-    private readonly reply: (requests: ScreenJob['pages']) => ScreenBatch,
-  ) {}
+  constructor(private readonly reply: (requests: ScreenJob['pages']) => ScreenBatch) {}
 
   async render(job: ScreenJob): Promise<ScreenBatch> {
     this.seen.push(job)
@@ -227,11 +223,7 @@ describe('화면 이미지 — 전부 성공', () => {
         const fixture = await 설계서(ctx, 'screens-all')
         const entries = await download(ctx, fixture)
 
-        expect(mediaPaths(entries)).toEqual([
-          'ppt/media/image1.png',
-          'ppt/media/image2.png',
-          'ppt/media/image3.png',
-        ])
+        expect(mediaPaths(entries)).toEqual(['ppt/media/image1.png', 'ppt/media/image2.png', 'ppt/media/image3.png'])
         expect(entries['ppt/media/image1.png']).toEqual(PNG_1X1)
       },
       { screenRenderer: renderer },
@@ -296,9 +288,7 @@ describe('화면 이미지 — 일부 실패', () => {
         const fixture = await 설계서(ctx, 'screens-partial-preview')
         const body = await preview(ctx, fixture)
 
-        expect(body.screenFailures).toEqual([
-          { title: fixture.titles[1], reason: '페이지가 응답하지 않습니다' },
-        ])
+        expect(body.screenFailures).toEqual([{ title: fixture.titles[1], reason: '페이지가 응답하지 않습니다' }])
         /** **접히지 않는다** — 실패한 것은 *"아직 아무도 안 만들었다"*가 아니다. */
         expect(body.screenless).toEqual([])
       },
@@ -321,9 +311,7 @@ describe('화면 이미지 — 전부 실패', () => {
         expect(slideText(entries, 1)).toContain('화면 이미지가 실리지 않았습니다')
 
         const body = await preview(ctx, fixture)
-        expect((body.screenFailures as { title: string }[]).map((item) => item.title)).toEqual(
-          fixture.titles,
-        )
+        expect((body.screenFailures as { title: string }[]).map((item) => item.title)).toEqual(fixture.titles)
         expect(body.screenless).toEqual([])
       },
       { screenRenderer: renderer },
@@ -395,9 +383,7 @@ describe('못 읽은 화소를 계약에 넣지 않는다', () => {
         expect(slideText(entries, 1)).toContain('화면 이미지가 실리지 않았습니다')
 
         const body = await preview(ctx, fixture)
-        expect((body.screenFailures as { title: string }[]).map((item) => item.title)).toEqual([
-          fixture.titles[0],
-        ])
+        expect((body.screenFailures as { title: string }[]).map((item) => item.title)).toEqual([fixture.titles[0]])
       },
       { screenRenderer: renderer },
     )
@@ -409,7 +395,9 @@ describe('무엇을 그리라고 넘기나', () => {
   async function htmlZip(ctx: TestContext, fixture: Fixture): Promise<Map<string, Uint8Array>> {
     const res = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export`, cookies: fixture.cookie })
     if (res.statusCode !== 200) throw new Error(`내려받기 실패 (${res.statusCode}): ${res.body}`)
-    return new Map(Object.entries(unzipSync(new Uint8Array(res.rawPayload))).map(([name, bytes]) => [name.slice(name.indexOf('/') + 1), bytes]))
+    return new Map(
+      Object.entries(unzipSync(new Uint8Array(res.rawPayload))).map(([name, bytes]) => [name.slice(name.indexOf('/') + 1), bytes]),
+    )
   }
 
   /**

@@ -246,7 +246,13 @@ describe('설명 — 되살린 초안은 제 바탕을 든다', () => {
     const shared = new MemoryStorage()
     const server = metaServer(START)
 
-    await openPage(DOC, { apiOverrides: server.overrides, draftStore: openDraftStore(() => session, () => shared) })
+    await openPage(DOC, {
+      apiOverrides: server.overrides,
+      draftStore: openDraftStore(
+        () => session,
+        () => shared,
+      ),
+    })
     toView()
     await waitFor(() => expect(box().value).toBe(START))
     type('앨리스의 초안')
@@ -254,7 +260,13 @@ describe('설명 — 되살린 초안은 제 바탕을 든다', () => {
     // 밥이 저장하고, 앨리스가 새로고침한다 — 같은 탭의 저장소 위에 새 문서.
     server.overwrite('밥의 글')
     cleanup()
-    await openPage(DOC, { apiOverrides: server.overrides, draftStore: openDraftStore(() => session, () => shared) })
+    await openPage(DOC, {
+      apiOverrides: server.overrides,
+      draftStore: openDraftStore(
+        () => session,
+        () => shared,
+      ),
+    })
     toView()
     await waitFor(() => expect(box().value).toBe('앨리스의 초안'))
 

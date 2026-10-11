@@ -27,12 +27,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createLoginLimiter, LOGIN_LIMIT, type LoginLimiter } from '../src/auth/login-limit'
 import { printable, runUnlockLogin } from '../src/auth/unlock-login'
-import {
-  prepareUnlockSocket,
-  unlockSocketBase,
-  unlockSocketPath,
-  UnlockSocketRefused,
-} from '../src/auth/unlock-socket'
+import { prepareUnlockSocket, unlockSocketBase, unlockSocketPath, UnlockSocketRefused } from '../src/auth/unlock-socket'
 import { signup, withApi, type TestContext } from './helpers'
 
 const { perAccount, perAddress, windowMs } = LOGIN_LIMIT
@@ -103,10 +98,7 @@ function login(ctx: TestContext, email: string, password: string, remoteAddress 
 }
 
 /** DB 없이 입구만 세운 앱 — 로그인 제한기만 단다. */
-async function bareApp(
-  limiter: LoginLimiter,
-  options: { path?: string; requestTimeoutMs?: number } = {},
-): Promise<FastifyInstance> {
+async function bareApp(limiter: LoginLimiter, options: { path?: string; requestTimeoutMs?: number } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false })
   app.decorate('loginLimiter', limiter)
   await prepareUnlockSocket(app, { requestTimeoutMs: options.requestTimeoutMs }).open(options.path ?? socketPath, dir)
@@ -293,7 +285,9 @@ describe('입구에 닿지 못하는 갈래', () => {
     await new Promise<void>((resolve) => silent.listen(socketPath, resolve))
     try {
       const hung = await unlock(['a@example.com'], { timeoutMs: 200 })
-      expect(hung.err).toEqual(['api 가 답하지 않았습니다(200ms 안에 답이 없습니다) — 풀렸는지 모릅니다. 다시 친다(여러 번 쳐도 결과가 같다).'])
+      expect(hung.err).toEqual([
+        'api 가 답하지 않았습니다(200ms 안에 답이 없습니다) — 풀렸는지 모릅니다. 다시 친다(여러 번 쳐도 결과가 같다).',
+      ])
     } finally {
       // 멈춘 연결은 명령이 끊었다 — 닫기가 기다릴 연결이 없다.
       await new Promise<void>((resolve) => silent.close(() => resolve()))
@@ -583,7 +577,10 @@ describe('명령은 답을 믿지 않고 찍는다', () => {
       [['a@example.com'], JSON.stringify({ account: { cleared: 1, blockedForSeconds: null } })],
       [['a@example.com'], JSON.stringify({ account: { email: 'a@example.com', cleared: -1, blockedForSeconds: null } })],
       [['a@example.com'], JSON.stringify({ account: { email: 'a@example.com', cleared: 1, blockedForSeconds: 'soon' } })],
-      [['a@example.com', '--address', '10.0.0.1'], JSON.stringify({ account: { email: 'a@example.com', cleared: 1, blockedForSeconds: null } })],
+      [
+        ['a@example.com', '--address', '10.0.0.1'],
+        JSON.stringify({ account: { email: 'a@example.com', cleared: 1, blockedForSeconds: null } }),
+      ],
       [['--address', '10.0.0.1'], JSON.stringify({ account: { email: 'a@example.com', cleared: 1, blockedForSeconds: null } })],
     ]
     for (const [args, body] of answers) {

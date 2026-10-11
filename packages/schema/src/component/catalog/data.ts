@@ -69,9 +69,7 @@ export const KeyValueDef = defineComponent({
   description: '항목 이름과 값을 짝지어 보인다. 상세 화면에 쓴다.',
   group: 'data',
   props: z.strictObject({
-    pairs: z
-      .array(z.strictObject({ key: z.string(), value: z.string() }))
-      .default([{ key: '항목', value: '값' }]),
+    pairs: z.array(z.strictObject({ key: z.string(), value: z.string() })).default([{ key: '항목', value: '값' }]),
     columns: z.number().int().min(1).max(4).default(1),
   }),
   editor: [

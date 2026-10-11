@@ -191,7 +191,11 @@ describe('여럿을 한 번에 — `selectMany`', () => {
       PAGE,
       {
         version: CURRENT_DOCUMENT_VERSION,
-        root: { id: 'root', type: 'Page', children: Array.from({ length: 203 }, (_, index) => ({ id: `n${index}`, type: 'Text', props: {} })) },
+        root: {
+          id: 'root',
+          type: 'Page',
+          children: Array.from({ length: 203 }, (_, index) => ({ id: `n${index}`, type: 'Text', props: {} })),
+        },
       },
       1,
     )
@@ -217,7 +221,11 @@ describe('문서가 바뀌면 목록이 따라간다', () => {
     const store = opened()
     store.selectNode('a')
     store.toggleSelect('c')
-    store.applyRemoteChange(PAGE, { seq: 2, ops: [{ op: 'move', from: '/root/children/2', path: '/root/children/0/children/-' }], warnings: [] })
+    store.applyRemoteChange(PAGE, {
+      seq: 2,
+      ops: [{ op: 'move', from: '/root/children/2', path: '/root/children/0/children/-' }],
+      warnings: [],
+    })
     expect(picked(store)).toEqual({ ids: ['a'], anchor: 'a' })
   })
 
@@ -226,7 +234,11 @@ describe('문서가 바뀌면 목록이 따라간다', () => {
     store.applyEdit([{ op: 'add', path: '/root/children/-', value: { id: 'd', type: 'Text', props: {} } }])
     store.selectNode('d')
     store.toggleSelect('a')
-    store.ackEdit(store.getState().pending[0]!.clientOpId, { seq: 2, revisionId: 'rev-2', inverse: [{ op: 'remove', path: '/root/children/3' }] })
+    store.ackEdit(store.getState().pending[0]!.clientOpId, {
+      seq: 2,
+      revisionId: 'rev-2',
+      inverse: [{ op: 'remove', path: '/root/children/3' }],
+    })
     store.startUndo()
     expect(picked(store)).toEqual({ ids: ['a'], anchor: 'a' })
   })

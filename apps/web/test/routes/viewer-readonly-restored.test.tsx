@@ -16,24 +16,31 @@ describe('viewer 는 에디터에서 쓰기를 내지 않는다', () => {
    * 게시를 다시 보낸다(그 밖에서는 editor 의 기존 케이스 하나가 함께 죽는다 — `comment-panel.test.tsx`의 «탭·페이지를 오가도
    * 쓰던 말이 제자리에 있다» 묶음의 «… 잠금이 남는다»).
    */
-  it(
-    '저장소에 editor 때의 초안 칸 다섯을 둔 채 viewer 로 다시 열어 훑어도 HTTP 쓰기 0 · WS 쓰기 프레임 0',
-    async () => {
-      const session = new MemoryStorage()
-      const shared = new MemoryStorage()
-      await fillDraftsAsEditor(openDraftStore(() => session, () => shared))
-      expect(storedSlots(session)).toEqual(RESTORED_SLOTS)
-      cleanup()
-      // 새로고침 — 같은 저장소 위에 새 문서. 칸은 그대로 있어야 이 판이 무언가를 잰다.
-      expect(storedSlots(session)).toEqual(RESTORED_SLOTS)
+  it('저장소에 editor 때의 초안 칸 다섯을 둔 채 viewer 로 다시 열어 훑어도 HTTP 쓰기 0 · WS 쓰기 프레임 0', async () => {
+    const session = new MemoryStorage()
+    const shared = new MemoryStorage()
+    await fillDraftsAsEditor(
+      openDraftStore(
+        () => session,
+        () => shared,
+      ),
+    )
+    expect(storedSlots(session)).toEqual(RESTORED_SLOTS)
+    cleanup()
+    // 새로고침 — 같은 저장소 위에 새 문서. 칸은 그대로 있어야 이 판이 무언가를 잰다.
+    expect(storedSlots(session)).toEqual(RESTORED_SLOTS)
 
-      const wire = await sweepEditor('viewer', openDraftStore(() => session, () => shared))
-      expect(wire.unrouted).toEqual([])
-      expect({ http: [...new Set(wire.http)].sort(), frames: [...new Set(wire.frames)].sort() }).toEqual({
-        http: [],
-        frames: [],
-      })
-    },
-    300_000,
-  )
+    const wire = await sweepEditor(
+      'viewer',
+      openDraftStore(
+        () => session,
+        () => shared,
+      ),
+    )
+    expect(wire.unrouted).toEqual([])
+    expect({ http: [...new Set(wire.http)].sort(), frames: [...new Set(wire.frames)].sort() }).toEqual({
+      http: [],
+      frames: [],
+    })
+  }, 300_000)
 })

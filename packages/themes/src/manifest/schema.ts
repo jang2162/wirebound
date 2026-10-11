@@ -6,9 +6,19 @@ import { SDK_RANGE_PATTERN, VERSION_PATTERN } from './semver'
 import { checkTokens } from './tokens'
 
 export type ManifestIssueCode =
-  | 'shape' | 'bad-version' | 'bad-sdk-range'
-  | 'unknown-token-ref' | 'token-ref-type' | 'token-ref-cycle' | 'token-default-type' | 'token-select-default'
-  | 'unknown-component' | 'variant-from-component' | 'duplicate-variant' | 'default-variant-missing' | 'unknown-hide-prop'
+  | 'shape'
+  | 'bad-version'
+  | 'bad-sdk-range'
+  | 'unknown-token-ref'
+  | 'token-ref-type'
+  | 'token-ref-cycle'
+  | 'token-default-type'
+  | 'token-select-default'
+  | 'unknown-component'
+  | 'variant-from-component'
+  | 'duplicate-variant'
+  | 'default-variant-missing'
+  | 'unknown-hide-prop'
   | 'pattern'
   /** 테마가 그리지 않는 카탈로그 타입(`THEMELESS_TYPES` — 상태 영역)을 선언했다. 렌더러가 그 노드를 직접 다뤄 선언이 닿을 데가 없다. */
   | 'themeless-component'
@@ -58,9 +68,7 @@ export const ManifestSchema = z.strictObject({
     groups: z.array(z.strictObject({ id: z.string().min(1), label: z.string().min(1) })).optional(),
     items: z.record(z.string().regex(TOKEN_KEY), TokenDeclSchema),
   }),
-  components: z
-    .record(z.string(), z.strictObject({ variants: z.array(VariantDeclSchema).min(1), defaultVariant: z.string() }))
-    .optional(),
+  components: z.record(z.string(), z.strictObject({ variants: z.array(VariantDeclSchema).min(1), defaultVariant: z.string() })).optional(),
   patterns: z.record(z.string(), z.unknown()).optional(),
 }) satisfies z.ZodType<ThemeManifest>
 

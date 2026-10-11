@@ -10,13 +10,7 @@ import { type IncomingMessage, createServer as createHttpServer, type Server } f
 import { type AddressInfo, connect as netConnect } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { parseEnv } from 'node:util'
-import {
-  type ProxyOptions,
-  type ResolvedConfig,
-  createServer as createViteServer,
-  resolveConfig,
-  type ViteDevServer,
-} from 'vite'
+import { type ProxyOptions, type ResolvedConfig, createServer as createViteServer, resolveConfig, type ViteDevServer } from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DEFAULT_API_PORT, resolveApiPort, resolveApiProxyTarget } from '../config/api-proxy-target'
 // `?raw`는 vite가 파일 원문을 문자열로 넣어 준다 — `shell-css.test.ts`·`store-access.test.ts`와
@@ -279,10 +273,7 @@ describe('배선이 가리키는 자리', () => {
     const saved = process.env.PORT
     delete process.env.PORT
     try {
-      const config = await resolveConfig(
-        { root: WEB_ROOT, configFile: WEB_CONFIG_FILE, logLevel: 'silent' },
-        'serve',
-      )
+      const config = await resolveConfig({ root: WEB_ROOT, configFile: WEB_CONFIG_FILE, logLevel: 'silent' }, 'serve')
       configFileDependencies = config.configFileDependencies.map(posix)
     } finally {
       if (saved !== undefined) {
@@ -451,10 +442,7 @@ describe('규칙이 낸 값이 그대로 대상이 된다 — 값 대 값', () =
    */
   function apiEnvFile(): Record<string, string | undefined> {
     try {
-      return parseEnv(readFileSync(new URL('../../api/.env', import.meta.url), 'utf8')) as Record<
-        string,
-        string | undefined
-      >
+      return parseEnv(readFileSync(new URL('../../api/.env', import.meta.url), 'utf8')) as Record<string, string | undefined>
     } catch {
       return {}
     }
@@ -481,10 +469,7 @@ describe('규칙이 낸 값이 그대로 대상이 된다 — 값 대 값', () =
       process.env.PORT = shellPort
     }
     try {
-      return await resolveConfig(
-        { root: WEB_ROOT, configFile: WEB_CONFIG_FILE, logLevel: 'silent' },
-        'serve',
-      )
+      return await resolveConfig({ root: WEB_ROOT, configFile: WEB_CONFIG_FILE, logLevel: 'silent' }, 'serve')
     } finally {
       if (saved === undefined) {
         delete process.env.PORT
@@ -718,9 +703,7 @@ describe('프록시 대상은 규칙이 정한 포트로 간다 — 라이브', 
    * 케이스와 아래가 **함께** 죽고, 그때 이쪽 메시지가 «어느 수로 갔는지»를 말한다.
    */
   it('카나리아 — 심은 포트가 그대로 대상이 됐다', () => {
-    expect(viteServer.config.configFile?.replace(/\\/g, '/')).toMatch(
-      /apps\/web\/vite\.config\.ts$/,
-    )
+    expect(viteServer.config.configFile?.replace(/\\/g, '/')).toMatch(/apps\/web\/vite\.config\.ts$/)
     // 문자열 축약형(`'/api': 'http://…'`)이면 여기서 걸린다.
     expect(configuredEntry).toBeDefined()
     // **수를 여기 박지 않는다** — 규칙이 그 수를 내고, 심은 것은 임시 포트다.

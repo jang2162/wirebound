@@ -35,11 +35,7 @@ const USAGE = '사용법: pnpm --filter @wirebound/api admin grant <이메일> |
 const NOTHING_CHANGED = '아무것도 바꾸지 않았습니다.'
 
 /** 명령 한 번 — 종료 코드를 돌려준다. 대상 DB 를 먼저 말한다(워크트리마다 DB 가 갈린다 — `db/describe-target.ts`). */
-export async function runAdmin(
-  rawArgs: readonly string[],
-  target: { db: DbHandle; databaseUrl: string },
-  io: AdminIo,
-): Promise<number> {
+export async function runAdmin(rawArgs: readonly string[], target: { db: DbHandle; databaseUrl: string }, io: AdminIo): Promise<number> {
   // `pnpm … admin -- grant <이메일>` 처럼 pnpm 인자 관습으로 붙인 `--` 는 인자가 아니다.
   const args = rawArgs[0] === '--' ? rawArgs.slice(1) : rawArgs
   const [verb, ...rest] = args

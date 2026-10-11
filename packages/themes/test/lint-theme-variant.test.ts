@@ -18,7 +18,13 @@ const MANIFEST = {
   sdk: '^1.0.0',
   tokens: { items: {} },
   components: {
-    List: { variants: [{ id: 'table', label: '테이블' }, { id: 'cards', label: '카드' }], defaultVariant: 'table' },
+    List: {
+      variants: [
+        { id: 'table', label: '테이블' },
+        { id: 'cards', label: '카드' },
+      ],
+      defaultVariant: 'table',
+    },
   },
 } as ThemeManifest
 
@@ -50,15 +56,20 @@ describe('theme-variant', () => {
   })
 
   it('안쪽 노드도 센다', () => {
-    const issues = themeIssues(
-      [{ id: 'sec', type: 'Section', children: [{ id: 'inner', type: 'List', variant: 'grid' }] }],
-      MANIFEST,
-    )
+    const issues = themeIssues([{ id: 'sec', type: 'Section', children: [{ id: 'inner', type: 'List', variant: 'grid' }] }], MANIFEST)
     expect(issues.map((issue) => [issue.nodeId, issue.path])).toEqual([['inner', '/root/children/0/children/0/variant']])
   })
 
   it('선언 안의 variant · variant 없는 노드는 없음', () => {
-    expect(themeIssues([{ id: 'a', type: 'List', variant: 'cards' }, { id: 'b', type: 'List' }], MANIFEST)).toEqual([])
+    expect(
+      themeIssues(
+        [
+          { id: 'a', type: 'List', variant: 'cards' },
+          { id: 'b', type: 'List' },
+        ],
+        MANIFEST,
+      ),
+    ).toEqual([])
   })
 
   it('선언이 없는 컴포넌트의 variant 는 없음 — 선언이 없으면 모든 값이 통과한다', () => {
@@ -67,7 +78,10 @@ describe('theme-variant', () => {
 
   it('variantFrom 컴포넌트는 보지 않는다', () => {
     // `Text` 는 `role` prop 에서 변형을 짓는다 — manifest 가 그 컴포넌트에 variants 를 선언할 수 없다(검증이 막는다).
-    const forced = { ...MANIFEST, components: { ...MANIFEST.components, Text: { variants: [{ id: 'x', label: 'x' }], defaultVariant: 'x' } } }
+    const forced = {
+      ...MANIFEST,
+      components: { ...MANIFEST.components, Text: { variants: [{ id: 'x', label: 'x' }], defaultVariant: 'x' } },
+    }
     expect(themeIssues([{ id: 't', type: 'Text', variant: 'other', props: { content: '글' } }], forced as ThemeManifest)).toEqual([])
   })
 

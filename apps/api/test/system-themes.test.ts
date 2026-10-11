@@ -129,7 +129,9 @@ describe('seedSystemThemes', () => {
 
   it('sdk 범위 밖이면 던진다', async () => {
     const dir = artifactDir([{ manifest: manifest('system-future', '1.0.0', '^2.0.0') }])
-    await expect(seedSystemThemes(db, dir)).rejects.toThrow(`호스트 SDK ${SDK_VERSION} 과 맞지 않습니다: system-future@1.0.0 의 sdk 는 ^2.0.0`)
+    await expect(seedSystemThemes(db, dir)).rejects.toThrow(
+      `호스트 SDK ${SDK_VERSION} 과 맞지 않습니다: system-future@1.0.0 의 sdk 는 ^2.0.0`,
+    )
   })
 
   it('산출물이 하나도 없으면 던지고 `pnpm build` 를 말한다', async () => {
@@ -149,7 +151,11 @@ describe('backfillProjectThemes', () => {
   }
 
   async function bindingOf(id: string) {
-    return db.selectFrom('projects').select(['theme_id', 'theme_version', 'theme_tokens', 'theme_rev']).where('id', '=', id).executeTakeFirstOrThrow()
+    return db
+      .selectFrom('projects')
+      .select(['theme_id', 'theme_version', 'theme_tokens', 'theme_rev'])
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow()
   }
 
   it('테마가 빈 프로젝트를 system-admin 의 최신(semver)으로 채운다 — 숨긴 판은 최신에서 빠진다', async () => {
@@ -196,7 +202,9 @@ describe('기동', () => {
   it('buildApp 이 다섯을 시딩하고 새 프로젝트가 system-admin 의 지금 판에 고정된다', async () => {
     const app = await buildApp({ db, config: { ...testConfig(), databaseUrl: url } })
     try {
-      expect((await db.selectFrom('theme_packages').select('theme_id').orderBy('theme_id').execute()).map((row) => row.theme_id)).toEqual(REPO_THEME_IDS)
+      expect((await db.selectFrom('theme_packages').select('theme_id').orderBy('theme_id').execute()).map((row) => row.theme_id)).toEqual(
+        REPO_THEME_IDS,
+      )
       const owner = await signup({ app, db })
       const project = await createProject({ app, db }, owner.cookie)
       const row = await db

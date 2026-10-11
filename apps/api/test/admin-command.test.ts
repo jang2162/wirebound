@@ -176,9 +176,7 @@ describe('시딩의 SEED_USER_ADMIN', () => {
       const outcome = await seedUserFromEnv(ctx.db, { ...BASE, SEED_USER_ADMIN: '1' }, TEST_SCRYPT_N)
       expect(outcome).toEqual({ kind: 'already-exists', email: 'seed@example.com', adminNotChanged: true })
       expect(await adminFlag(ctx, 'seed@example.com')).toBe(false)
-      expect(describeSeedOutcome(outcome)).toContain(
-        '관리자로 만들려면 `pnpm --filter @wirebound/api admin grant seed@example.com`',
-      )
+      expect(describeSeedOutcome(outcome)).toContain('관리자로 만들려면 `pnpm --filter @wirebound/api admin grant seed@example.com`')
     })
   })
 

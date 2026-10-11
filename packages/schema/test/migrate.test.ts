@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  CURRENT_DOCUMENT_VERSION,
-  MIGRATIONS,
-  migrateDocument,
-  type Migration,
-} from '../src/migrate'
+import { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument, type Migration } from '../src/migrate'
 import type { PageDocument } from '../src/node'
 
 function doc(version: number): PageDocument {

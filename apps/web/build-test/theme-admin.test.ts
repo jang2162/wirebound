@@ -46,13 +46,19 @@ describe.skipIf(!전제.ok)('관리자 화면에서 올리고 설정에서 바�
       await a.page.getByRole('button', { name: '더 보기', exact: true }).click()
       await a.page.getByRole('menuitem', { name: '테마 관리' }).click()
       await a.page.getByRole('heading', { name: '테마 관리' }).waitFor()
-      await a.page.getByLabel('테마 패키지 올리기').setInputFiles({ name: 'sample-1.0.0.wbtheme', mimeType: '', buffer: Buffer.from(bytes) })
+      await a.page
+        .getByLabel('테마 패키지 올리기')
+        .setInputFiles({ name: 'sample-1.0.0.wbtheme', mimeType: '', buffer: Buffer.from(bytes) })
       await a.page.getByText('sample@1.0.0 을 올렸습니다').waitFor()
       await a.page.getByRole('region', { name: 'sample' }).waitFor()
 
       await b.page.goto(`/projects/${project.id}/pages/${project.first}`)
       await canvasFrame(b.page).locator('body', { hasText: '원문' }).waitFor()
-      await poll('bob 이 system-admin 을 싣는다', async () => bobFiles.js(), (count) => count === 1)
+      await poll(
+        'bob 이 system-admin 을 싣는다',
+        async () => bobFiles.js(),
+        (count) => count === 1,
+      )
       expect(await sampleCard(b.page)).toBe(false)
 
       await a.page.goto(`/projects/${project.id}/settings`)
@@ -64,7 +70,11 @@ describe.skipIf(!전제.ok)('관리자 화면에서 올리고 설정에서 바�
       await confirm.getByRole('button', { name: '바꾸기' }).click()
       await section.getByText('샘플 sample@1.0.0').waitFor()
 
-      await poll('bob 의 캔버스가 샘플 카드로', () => sampleCard(b.page), (drawn) => drawn)
+      await poll(
+        'bob 의 캔버스가 샘플 카드로',
+        () => sampleCard(b.page),
+        (drawn) => drawn,
+      )
       expect(bobFiles.lines.filter((line) => line.endsWith('theme.js'))).toEqual([
         `system-admin/${SYSTEM_ADMIN.version}/files/theme.js`,
         'sample/1.0.0/files/theme.js',

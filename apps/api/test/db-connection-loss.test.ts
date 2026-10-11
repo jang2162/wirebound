@@ -310,7 +310,7 @@ describe('서버의 답이 아닌 거절 — COMMIT 이면 «모름», 트랜잭
     }
   })
 
-  it('COMMIT 이 서버의 답 없이 거절되면(클라이언트 쪽 시간 제한) «잃었다»다 — `\'error\'` 표지가 없어도 · 커밋은 됐다', async () => {
+  it("COMMIT 이 서버의 답 없이 거절되면(클라이언트 쪽 시간 제한) «잃었다»다 — `'error'` 표지가 없어도 · 커밋은 됐다", async () => {
     // COMMIT 이 서버 안에서 1.3s — 타이머(1.0s)가 COMMIT 을 거절하고, 뒤따른 ROLLBACK 은 COMMIT 이 끝난 뒤(1.3s) 서버에 가서
     // 답을 받는다(그 타이머는 2.0s). 그래서 Kysely 가 던지는 것은 **COMMIT 의** 거절이다.
     await createSlowCommitTable(1.3)
@@ -371,9 +371,7 @@ describe('서버의 답이 아닌 거절 — COMMIT 이면 «모름», 트랜잭
       expect(first).not.toBeInstanceOf(DbConnectionLostError)
 
       await settle(1200) // 앞 INSERT 가 서버에서 끝난 뒤(1s)에 빌린다 — 그 연결이 풀에 있었다면 «트랜잭션 안»이다
-      expect(await settleTransaction(db, (trx) => sql`insert into zz_mid_tx values (${'다음 줄'})`.execute(trx))).toBe(
-        'resolved',
-      )
+      expect(await settleTransaction(db, (trx) => sql`insert into zz_mid_tx values (${'다음 줄'})`.execute(trx))).toBe('resolved')
       expect(await committedRows('zz_mid_tx')).toEqual(['다음 줄'])
       expect(uncaught).toEqual([])
     } finally {

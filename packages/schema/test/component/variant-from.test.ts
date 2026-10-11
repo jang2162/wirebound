@@ -75,8 +75,6 @@ describe('defineComponent의 variantFrom 검사', () => {
   })
 
   it('variantFrom이 없으면 아무것도 요구하지 않는다', () => {
-    expect(() =>
-      defineComponent({ ...base, props: z.strictObject({}) }),
-    ).not.toThrow()
+    expect(() => defineComponent({ ...base, props: z.strictObject({}) })).not.toThrow()
   })
 })

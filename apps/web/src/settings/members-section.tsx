@@ -210,7 +210,13 @@ function AskButton(props: { ask: string; asking: boolean; busy: boolean; onToggl
   )
 }
 
-function RoleSelect(props: { id?: string; label?: string; value: ProjectRole; busy: boolean; onChange: (role: ProjectRole) => void }): ReactElement {
+function RoleSelect(props: {
+  id?: string
+  label?: string
+  value: ProjectRole
+  busy: boolean
+  onChange: (role: ProjectRole) => void
+}): ReactElement {
   return (
     <select
       className="wb-shell-members-role"

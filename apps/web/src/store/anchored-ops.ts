@@ -137,10 +137,7 @@ export function anchorOps(document: PageDocument, ops: readonly PatchOp[]): Anch
  * 붙잡은 ops 를 `document` 위에서 경로를 다시 지어 얹는다. 지은 ops 와 얹은 문서를 돌려준다. **못 얹으면 `null`** — 경로의 노드가 없거나 ·
  * 전제가 바뀌었거나 · `applyOps`가 던졌다.
  */
-export function rebaseAnchored(
-  document: PageDocument,
-  anchored: readonly AnchoredOp[],
-): { ops: PatchOp[]; document: PageDocument } | null {
+export function rebaseAnchored(document: PageDocument, anchored: readonly AnchoredOp[]): { ops: PatchOp[]; document: PageDocument } | null {
   const ops: PatchOp[] = []
   let current = document
   for (const entry of anchored) {
@@ -240,7 +237,8 @@ function resolveAnchor(document: PageDocument, anchor: Anchor): string | null {
   if (anchor.kind === 'state' || anchor.kind === 'stateSlot') {
     const list: unknown = document.viewStates
     if (!Array.isArray(list)) return null
-    if (anchor.kind === 'stateSlot') return `/viewStates/${anchor.index === '-' ? '-' : slotIndex(list, { ...anchor, index: anchor.index })}`
+    if (anchor.kind === 'stateSlot')
+      return `/viewStates/${anchor.index === '-' ? '-' : slotIndex(list, { ...anchor, index: anchor.index })}`
     const index = list.findIndex((entry) => isNodeLike(entry) && entry.id === anchor.id)
     return index === -1 ? null : formatPointer(['viewStates', String(index), ...anchor.rest])
   }

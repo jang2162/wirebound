@@ -168,9 +168,7 @@ async function projectState({ projectId, bob }: Pick<Fx, 'projectId' | 'bob'>) {
     project,
     pages,
     menu: await db.selectFrom('menu_nodes').selectAll().where('project_id', '=', projectId).orderBy('id').execute(),
-    comments: await inPages(() =>
-      db.selectFrom('comments').selectAll().where('page_id', 'in', pageIds).orderBy('id').execute(),
-    ),
+    comments: await inPages(() => db.selectFrom('comments').selectAll().where('page_id', 'in', pageIds).orderBy('id').execute()),
     revisions: await inPages(() =>
       db.selectFrom('revisions').select(['id', 'page_id', 'seq']).where('page_id', 'in', pageIds).orderBy('id').execute(),
     ),
@@ -184,12 +182,7 @@ async function projectState({ projectId, bob }: Pick<Fx, 'projectId' | 'bob'>) {
       .orderBy('user_id')
       .execute(),
     presets: await db.selectFrom('presets').selectAll().where('project_id', '=', projectId).orderBy('id').execute(),
-    tokens: await db
-      .selectFrom('api_tokens')
-      .select(['id', 'user_id', 'name'])
-      .where('project_id', '=', projectId)
-      .orderBy('id')
-      .execute(),
+    tokens: await db.selectFrom('api_tokens').select(['id', 'user_id', 'name']).where('project_id', '=', projectId).orderBy('id').execute(),
   }
 }
 
@@ -264,8 +257,7 @@ const PROBES: Probe[] = [
     label: '페이지 메타 수정',
     bobRole: 'editor',
     lockPage: (fx) => fx.pageId,
-    fire: async (ctx, fx) =>
-      fireRest(ctx, fx, 'PATCH', `/api/projects/${fx.projectId}/pages/${fx.pageId}`, { title: '밥이 바꾼 제목' }),
+    fire: async (ctx, fx) => fireRest(ctx, fx, 'PATCH', `/api/projects/${fx.projectId}/pages/${fx.pageId}`, { title: '밥이 바꾼 제목' }),
     okStatus: 200,
   },
   {
@@ -333,8 +325,7 @@ const PROBES: Probe[] = [
     label: '코멘트 삭제 (마지막이라 번호도 지운다)',
     bobRole: 'editor',
     lockPage: (fx) => fx.pageId,
-    fire: async (ctx, fx) =>
-      fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/pages/${fx.pageId}/comments/${fx.bobCommentId}`),
+    fire: async (ctx, fx) => fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/pages/${fx.pageId}/comments/${fx.bobCommentId}`),
     okStatus: 200,
   },
   {
@@ -355,8 +346,7 @@ const PROBES: Probe[] = [
     label: '코멘트 재번호 (바꿀 번호가 있다)',
     bobRole: 'editor',
     lockPage: (fx) => fx.misnumberedPageId,
-    fire: async (ctx, fx) =>
-      fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/pages/${fx.misnumberedPageId}/comments/renumber`),
+    fire: async (ctx, fx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/pages/${fx.misnumberedPageId}/comments/renumber`),
     okStatus: 200,
   },
   {
@@ -364,8 +354,7 @@ const PROBES: Probe[] = [
     label: '스냅샷 복원 (owner)',
     bobRole: 'owner',
     lockPage: (fx) => fx.pageId,
-    fire: async (ctx, fx) =>
-      fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/snapshots/${fx.snapshotId}/restore`),
+    fire: async (ctx, fx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/snapshots/${fx.snapshotId}/restore`),
     okStatus: 200,
   },
   {
@@ -496,7 +485,9 @@ async function demote(ctx: RealApiContext, fx: Fx, bobRole: BobRole, kind: Demot
   if (kind === 'expire') {
     // **세션의 수명이 잠금을 기다리는 동안 다한다** — 만료 시각을 곧(200ms 뒤)으로 당기고 그 시각이 지날 때까지 기다린다. 쓰기의
     // 트랜잭션은 그보다 **먼저** 열렸다 — 그 트랜잭션의 `now()`로 보면 아직 산 세션이다. 답할 상태 코드가 없는 일이라 0 이다.
-    await sql`update sessions set expires_at = clock_timestamp() + interval '200 milliseconds' where user_id = ${fx.bob.user.id}`.execute(db)
+    await sql`update sessions set expires_at = clock_timestamp() + interval '200 milliseconds' where user_id = ${fx.bob.user.id}`.execute(
+      db,
+    )
     await new Promise((resolve) => setTimeout(resolve, 400))
     return 0
   }
@@ -510,7 +501,8 @@ async function demote(ctx: RealApiContext, fx: Fx, bobRole: BobRole, kind: Demot
       .where('project_id', '=', fx.projectId)
       .where('user_id', '=', fx.bob.user.id)
       .executeTakeFirstOrThrow()
-    return (await ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/tokens/${token.id}`, cookies: fx.bob.cookie })).statusCode
+    return (await ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/tokens/${token.id}`, cookies: fx.bob.cookie }))
+      .statusCode
   }
   const res = await ctx.app.inject(
     kind === 'role'
@@ -685,7 +677,6 @@ const TOKEN_PROBE: Probe = {
  * 판이 소유한다.
  */
 describe('토큰 요청도 커밋 순간의 권한으로 판정한다', () => {
-
   it('대조 — 강등이 없으면 토큰의 편집이 커밋된다', async () => {
     await withRealApi(async (ctx) => {
       const outcome = await runHeld(ctx, TOKEN_PROBE, null)
@@ -820,10 +811,12 @@ describe('프리셋 삭제 — 가드와 커밋 사이의 강등도 커밋 순�
     })
     expect(made.statusCode, made.body).toBe(201)
     const presetId = (made.json() as { id: string }).id
-    await sql.raw(
-      `create function zz_slow_preset_delete() returns trigger language plpgsql as $$ begin perform pg_sleep(1); return old; end $$`,
-    ).execute(db)
-    await sql`create trigger zz_slow_preset_delete before delete on presets for each row execute function zz_slow_preset_delete()`.execute(db)
+    await sql
+      .raw(`create function zz_slow_preset_delete() returns trigger language plpgsql as $$ begin perform pg_sleep(1); return old; end $$`)
+      .execute(db)
+    await sql`create trigger zz_slow_preset_delete before delete on presets for each row execute function zz_slow_preset_delete()`.execute(
+      db,
+    )
     try {
       const removal = fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/presets/${presetId}`)
       // 트리거의 잠에 든 것을 본다 — 가드는 이미 지났다. `query`로 찾지 않는다: 그 칸은 최상위 문장(`delete from presets …`)이라
@@ -1026,7 +1019,11 @@ describe('동시 역할 변경 — 재확인이 멤버 행을 FOR SHARE 로 잡�
     let updated = false
     const holder = withTransaction(db, async (trx) => {
       // 요청한 사람이 없는 픽스처라 권한은 다시 보지 않는다 — 이 판이 재는 것은 강등이 커밋 전인 동안의 남의 쓰기다.
-      const member = await updateMemberRole(trx, fx.projectId, fx.bob.user.id, 'viewer', { tokenId: null, credential: async () => {}, role: async () => {} })
+      const member = await updateMemberRole(trx, fx.projectId, fx.bob.user.id, 'viewer', {
+        tokenId: null,
+        credential: async () => {},
+        role: async () => {},
+      })
       if (member?.role !== 'viewer') throw new Error('역할 변경 픽스처 실패')
       updated = true
       if (!(await decision)) throw new RollbackRoleChange()
@@ -1496,7 +1493,8 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
     {
       label: 'E5 — 스냅샷 생성',
       bobRole: 'editor' as const,
-      fire: (ctx: RealApiContext, fx: ProjectFx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/snapshots`, { tag: '밥의 스냅샷' }),
+      fire: (ctx: RealApiContext, fx: ProjectFx) =>
+        fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/snapshots`, { tag: '밥의 스냅샷' }),
     },
     {
       label: 'E6 — 멤버 초대',
@@ -1513,7 +1511,8 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
     {
       label: 'E9 — API 토큰 발급',
       bobRole: 'editor' as const,
-      fire: (ctx: RealApiContext, fx: ProjectFx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/tokens`, { name: '밥의 토큰' }),
+      fire: (ctx: RealApiContext, fx: ProjectFx) =>
+        fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/tokens`, { name: '밥의 토큰' }),
     },
   ]) {
     it(`${probe.label}: 삭제의 CASCADE 가 멤버 행을 쥔 채 서 있을 때 쏘면 — 삭제 204 · 쓰기는 봉투 있는 404 · 교착 0`, async () => {
@@ -1580,7 +1579,14 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
     if (posted.statusCode !== 201) throw new Error(`코멘트 픽스처 실패: ${posted.body}`)
     const commentId = (posted.json() as { comment: { id: string } }).comment.id
     const base = `/api/projects/${project.id}`
-    return { alice, bob, carol, projectId: project.id, pageUrl: `${base}/pages/${page.id}`, commentUrl: `${base}/pages/${page.id}/comments/${commentId}` }
+    return {
+      alice,
+      bob,
+      carol,
+      projectId: project.id,
+      pageUrl: `${base}/pages/${page.id}`,
+      commentUrl: `${base}/pages/${page.id}/comments/${commentId}`,
+    }
   }
 
   for (const scenario of [
@@ -1629,7 +1635,13 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
             fired[step === 'edit' ? 'edit' : 'other'] =
               step === 'edit'
                 ? track(ctx.app.inject({ method: 'PATCH', url: fx.commentUrl, cookies: fx.bob.cookie, payload: { body: '밥이 고친 말' } }))
-                : track(ctx.app.inject({ method: 'DELETE', url: step === 'delete-page' ? fx.pageUrl : fx.commentUrl, cookies: fx.carol.cookie }))
+                : track(
+                    ctx.app.inject({
+                      method: 'DELETE',
+                      url: step === 'delete-page' ? fx.pageUrl : fx.commentUrl,
+                      cookies: fx.carol.cookie,
+                    }),
+                  )
             await waitForLockWaiter(index + 2)
           }
         } finally {
@@ -1661,7 +1673,12 @@ async function tokenFixture(ctx: RealApiContext, bobRole: 'editor' | 'owner') {
   const page = await createPage(ctx, alice.cookie, project.id, menu.id, { title: '페이지' })
   const tokens: string[] = []
   for (const name of ['첫 토큰', '둘째 토큰']) {
-    const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${project.id}/tokens`, cookies: bob.cookie, payload: { name } })
+    const issued = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/projects/${project.id}/tokens`,
+      cookies: bob.cookie,
+      payload: { name },
+    })
     expect(issued.statusCode, issued.body).toBe(201)
     tokens.push((issued.json() as { value: string }).value)
   }
@@ -1681,7 +1698,12 @@ async function setTokenId(projectId: string, userId: string, name: string, id: s
 }
 
 async function roleOf(projectId: string, userId: string): Promise<string | null> {
-  const row = await db.selectFrom('project_members').select('role').where('project_id', '=', projectId).where('user_id', '=', userId).executeTakeFirst()
+  const row = await db
+    .selectFrom('project_members')
+    .select('role')
+    .where('project_id', '=', projectId)
+    .where('user_id', '=', userId)
+    .executeTakeFirst()
   return row?.role ?? null
 }
 
@@ -1753,7 +1775,9 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
       let removal: Fired | undefined
       let write: Fired | undefined
       try {
-        removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }))
+        removal = track(
+          ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }),
+        )
         await roleRecheck.held
         write = track(
           ctx.app.inject({
@@ -1788,9 +1812,12 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
           await lockOwnerIds(trx, fx.projectId)
         })
         await door.acquired
-        const fireDeletion = () => track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}`, cookies: fx.alice.cookie }))
+        const fireDeletion = () =>
+          track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}`, cookies: fx.alice.cookie }))
         const fireRemoval = () =>
-          track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }))
+          track(
+            ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }),
+          )
         let deletion: Fired | undefined
         let removal: Fired | undefined
         try {
@@ -1825,9 +1852,16 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
       let removal: Fired | undefined
       let issued: Awaited<ReturnType<typeof ctx.app.inject>> | undefined
       try {
-        removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }))
+        removal = track(
+          ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }),
+        )
         await ownerLock.held
-        issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/tokens`, cookies: fx.bob.cookie, payload: { name: '늦은 토큰' } })
+        issued = await ctx.app.inject({
+          method: 'POST',
+          url: `/api/projects/${fx.projectId}/tokens`,
+          cookies: fx.bob.cookie,
+          payload: { name: '늦은 토큰' },
+        })
       } finally {
         ownerLock.release()
       }
@@ -1851,9 +1885,16 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
       const fx = await tokenFixture(ctx, 'editor')
       const deadlocksBefore = await deadlockCount()
       const ownerLock = ctx.proxy.holdQuery(OWNER_LOCK)
-      const removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }))
+      const removal = track(
+        ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }),
+      )
       await ownerLock.held
-      const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/tokens`, cookies: fx.bob.cookie, payload: { name: '늦은 토큰' } })
+      const issued = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.projectId}/tokens`,
+        cookies: fx.bob.cookie,
+        payload: { name: '늦은 토큰' },
+      })
       expect(issued.statusCode, issued.body).toBe(201)
       // 새 토큰의 쓰기를 재확인 한가운데 — 토큰 행 `KEY SHARE`를 쥐고 제 멤버 행 `SHARE` 앞 — 에 세운다.
       const memberShare = ctx.proxy.holdQuery(MEMBER_SHARE)
@@ -1896,13 +1937,22 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
   describe('남은 토큰의 주인을 다시 넣으면', () => {
     async function leaveLateToken(ctx: ProxiedRealApi, fx: Awaited<ReturnType<typeof tokenFixture>>): Promise<string> {
       const ownerLock = ctx.proxy.holdQuery(OWNER_LOCK)
-      const removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }))
+      const removal = track(
+        ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }),
+      )
       await ownerLock.held
-      const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/tokens`, cookies: fx.bob.cookie, payload: { name: '늦은 토큰' } })
+      const issued = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.projectId}/tokens`,
+        cookies: fx.bob.cookie,
+        payload: { name: '늦은 토큰' },
+      })
       expect(issued.statusCode, issued.body).toBe(201)
       const late = `Bearer ${(issued.json() as { value: string }).value}`
       const memberShare = ctx.proxy.holdQuery(MEMBER_SHARE)
-      const write = track(ctx.app.inject({ method: 'PATCH', url: opsUrl(fx), headers: { authorization: late }, payload: addOps(fx.pageId, 'n_late') }))
+      const write = track(
+        ctx.app.inject({ method: 'PATCH', url: opsUrl(fx), headers: { authorization: late }, payload: addOps(fx.pageId, 'n_late') }),
+      )
       await memberShare.held
       ownerLock.release()
       expect((await removal.promise).status).toBe(204)
@@ -1913,17 +1963,36 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
       return late
     }
     const opsUrl = (fx: { projectId: string; pageId: string }) => `/api/projects/${fx.projectId}/pages/${fx.pageId}/ops`
-    const addOps = (_pageId: string, id: string) => ({ baseSeq: 0, ops: [{ op: 'add', path: '/root/children/-', value: { id, type: 'Text', props: {} } }] })
+    const addOps = (_pageId: string, id: string) => ({
+      baseSeq: 0,
+      ops: [{ op: 'add', path: '/root/children/-', value: { id, type: 'Text', props: {} } }],
+    })
     const readd = (ctx: ProxiedRealApi, fx: Awaited<ReturnType<typeof tokenFixture>>) =>
-      track(ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/members`, cookies: fx.alice.cookie, payload: { email: fx.bob.user.email, role: 'editor' } }))
+      track(
+        ctx.app.inject({
+          method: 'POST',
+          url: `/api/projects/${fx.projectId}/members`,
+          cookies: fx.alice.cookie,
+          payload: { email: fx.bob.user.email, role: 'editor' },
+        }),
+      )
 
     it('그 토큰은 401 · 행 0 — 되살아나지 않는다', async () => {
       await withProxiedRealApi(async (ctx) => {
         const fx = await tokenFixture(ctx, 'editor')
         const late = await leaveLateToken(ctx, fx)
         expect((await readd(ctx, fx).promise).status).toBe(201)
-        const read = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`, headers: { authorization: late } })
-        const write = await ctx.app.inject({ method: 'PATCH', url: opsUrl(fx), headers: { authorization: late }, payload: addOps(fx.pageId, 'n_back') })
+        const read = await ctx.app.inject({
+          method: 'GET',
+          url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`,
+          headers: { authorization: late },
+        })
+        const write = await ctx.app.inject({
+          method: 'PATCH',
+          url: opsUrl(fx),
+          headers: { authorization: late },
+          payload: addOps(fx.pageId, 'n_back'),
+        })
         expect([read.statusCode, write.statusCode]).toEqual([401, 401])
         expect(await headSeqOf(fx.pageId)).toBe(0)
         expect(await bobTokenRows(fx.projectId, fx.bob.user.id)).toBe(0)
@@ -1936,7 +2005,9 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
         const late = await leaveLateToken(ctx, fx)
         const deadlocksBefore = await deadlockCount()
         const guard = ctx.proxy.holdQuery(GUARD_MEMBERSHIP)
-        const write = track(ctx.app.inject({ method: 'PATCH', url: opsUrl(fx), headers: { authorization: late }, payload: addOps(fx.pageId, 'n_mid') }))
+        const write = track(
+          ctx.app.inject({ method: 'PATCH', url: opsUrl(fx), headers: { authorization: late }, payload: addOps(fx.pageId, 'n_mid') }),
+        )
         await guard.held
         const inserted = await readd(ctx, fx).promise
         guard.release()
@@ -1956,7 +2027,9 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
         const insert = ctx.proxy.holdQuery('insert into "project_members"')
         const added = readd(ctx, fx)
         await insert.held
-        const write = track(ctx.app.inject({ method: 'PATCH', url: opsUrl(fx), headers: { authorization: late }, payload: addOps(fx.pageId, 'n_after') }))
+        const write = track(
+          ctx.app.inject({ method: 'PATCH', url: opsUrl(fx), headers: { authorization: late }, payload: addOps(fx.pageId, 'n_after') }),
+        )
         await settledOrQueued(write)
         // 판이 섰는가 — 쓰기가 끝나지 않고 지운 토큰 행 줄에 섰다.
         expect(write.done()).toBe(false)
@@ -1985,7 +2058,14 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
  */
 describe('이미 멤버인 사람을 다시 넣으면 — 토큰 행을 잡지 않는다', () => {
   const invite = (ctx: RealApiContext, fx: { projectId: string; alice: SignedUpUser }, email: string) =>
-    track(ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/members`, cookies: fx.alice.cookie, payload: { email, role: 'editor' } }))
+    track(
+      ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.projectId}/members`,
+        cookies: fx.alice.cookie,
+        payload: { email, role: 'editor' },
+      }),
+    )
 
   it('토큰 요청이 먼저 — 그 요청이 토큰 행을 쥔 채 서 있어도 다시 넣기는 곧바로 409 · 그 요청은 제 차례에 200 · 교착 0', async () => {
     await withRealApi(async (ctx) => {
@@ -2034,7 +2114,13 @@ describe('이미 멤버인 사람을 다시 넣으면 — 토큰 행을 잡지 �
       let read: Fired | undefined
       try {
         await Promise.race([insert.held.catch(() => undefined), readd.promise])
-        read = track(ctx.app.inject({ method: 'GET', url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`, headers: { authorization: fx.bobToken } }))
+        read = track(
+          ctx.app.inject({
+            method: 'GET',
+            url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`,
+            headers: { authorization: fx.bobToken },
+          }),
+        )
         settled = await settlesWithin(read, 1_000)
       } finally {
         insert.release()
@@ -2151,7 +2237,9 @@ describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼�
       const fx = await tokenFixture(ctx, 'owner')
       const deadlocksBefore = await deadlockCount()
       const { changed, rivalled: removed } = await roleChangeAgainst(ctx, fx, () =>
-        track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie })),
+        track(
+          ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }),
+        ),
       )
 
       expect(await deadlockCount()).toBe(deadlocksBefore)
@@ -2180,7 +2268,12 @@ describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼�
   it('토큰으로 남을 빼는 중에 프로젝트를 지우면(요청의 토큰 id 가 더 작은 판): 교착 0', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await tokenFixture(ctx, 'owner')
-      const carolToken = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/tokens`, cookies: fx.carol.cookie, payload: { name: '캐럴 토큰' } })
+      const carolToken = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.projectId}/tokens`,
+        cookies: fx.carol.cookie,
+        payload: { name: '캐럴 토큰' },
+      })
       expect(carolToken.statusCode, carolToken.body).toBe(201)
       // 삭제는 토큰 행을 id 순으로 잡는다. 밥(요청)의 토큰이 캐럴(빠지는 사람)의 것보다 앞이어야 삭제가 밥의 것을 쥔 채 캐럴의
       // 것에 선다 — 반대 순서면 삭제가 첫 행에서 아무것도 안 쥐고 서서 어느 판이든 고리가 없다.
@@ -2193,7 +2286,11 @@ describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼�
       let deletion: Fired | undefined
       try {
         removal = track(
-          ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.carol.user.id}`, headers: { authorization: fx.bobToken } }),
+          ctx.app.inject({
+            method: 'DELETE',
+            url: `/api/projects/${fx.projectId}/members/${fx.carol.user.id}`,
+            headers: { authorization: fx.bobToken },
+          }),
         )
         await recheck.held
         deletion = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}`, cookies: fx.alice.cookie }))
@@ -2212,7 +2309,12 @@ describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼�
   it('owner 둘이 토큰으로 서로를 빼면: 교착 0 · 먼저 잡은 쪽 204 · 다른 쪽 401', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await tokenFixture(ctx, 'owner')
-      const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/tokens`, cookies: fx.alice.cookie, payload: { name: '앨리스 토큰' } })
+      const issued = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.projectId}/tokens`,
+        cookies: fx.alice.cookie,
+        payload: { name: '앨리스 토큰' },
+      })
       expect(issued.statusCode, issued.body).toBe(201)
       const aliceToken = `Bearer ${(issued.json() as { value: string }).value}`
       await setTokenId(fx.projectId, fx.alice.user.id, '앨리스 토큰', '00000000-0000-4000-8000-000000000001')
@@ -2227,12 +2329,20 @@ describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼�
       let aliceRecheck: { held: Promise<void>; release: () => void } | undefined
       try {
         bobRemoval = track(
-          ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.alice.user.id}`, headers: { authorization: fx.bobToken } }),
+          ctx.app.inject({
+            method: 'DELETE',
+            url: `/api/projects/${fx.projectId}/members/${fx.alice.user.id}`,
+            headers: { authorization: fx.bobToken },
+          }),
         )
         await bobLock.held
         aliceRecheck = ctx.proxy.holdQuery(TOKEN_RECHECK)
         aliceRemoval = track(
-          ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, headers: { authorization: aliceToken } }),
+          ctx.app.inject({
+            method: 'DELETE',
+            url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`,
+            headers: { authorization: aliceToken },
+          }),
         )
         await aliceRecheck.held
         bobLock.release()
@@ -2263,7 +2373,12 @@ describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼�
 
       expect(left.statusCode, left.body).toBe(204)
       expect(await roleOf(fx.projectId, fx.bob.user.id)).toBeNull()
-      const rows = await db.selectFrom('api_tokens').select('id').where('project_id', '=', fx.projectId).where('user_id', '=', fx.bob.user.id).execute()
+      const rows = await db
+        .selectFrom('api_tokens')
+        .select('id')
+        .where('project_id', '=', fx.projectId)
+        .where('user_id', '=', fx.bob.user.id)
+        .execute()
       expect(rows).toHaveLength(0)
     })
   }, 60_000)
@@ -2382,7 +2497,10 @@ const PROJECT_PROBES: ProjectProbe[] = [
     demotion: 'role',
     holders: ['restore', 'tree'],
     fire: (ctx, fx) =>
-      fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/menu/${fx.spareMenuId}`, { cascade: true, expect: { menuIds: [], pageIds: [] } }),
+      fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/menu/${fx.spareMenuId}`, {
+        cascade: true,
+        expect: { menuIds: [], pageIds: [] },
+      }),
     okStatus: 200,
   },
   {
@@ -2391,8 +2509,7 @@ const PROJECT_PROBES: ProjectProbe[] = [
     bobRole: 'editor',
     demotion: 'role',
     holders: ['restore', 'tree'],
-    fire: (ctx, fx) =>
-      fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/pages`, { menuNodeId: fx.menuId, title: '밥의 페이지' }),
+    fire: (ctx, fx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/pages`, { menuNodeId: fx.menuId, title: '밥의 페이지' }),
     okStatus: 201,
   },
   {
@@ -2462,8 +2579,7 @@ const PROJECT_PROBES: ProjectProbe[] = [
     bobRole: 'owner',
     demotion: 'role',
     holders: ['restore'],
-    fire: (ctx, fx) =>
-      fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/members`, { email: fx.inviteeEmail, role: 'viewer' }),
+    fire: (ctx, fx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/members`, { email: fx.inviteeEmail, role: 'viewer' }),
     okStatus: 201,
   },
   {
@@ -2502,8 +2618,7 @@ const PROJECT_PROBES: ProjectProbe[] = [
     bobRole: 'editor',
     demotion: 'role',
     holders: ['restore'],
-    fire: (ctx, fx) =>
-      fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/pages/${fx.pageId}/comments/${fx.bobCommentId}`),
+    fire: (ctx, fx) => fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/pages/${fx.pageId}/comments/${fx.bobCommentId}`),
     okStatus: 200,
   },
   {

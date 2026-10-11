@@ -48,7 +48,8 @@ export async function createSession(db: DbHandle, userId: string, ttlHours: numb
   const expiresAt = new Date(Date.now() + ttlHours * 3600_000)
 
   await withTransaction(db, async (trx) => {
-    await trx.insertInto('sessions')
+    await trx
+      .insertInto('sessions')
       .values({ id: hashSessionToken(token), user_id: userId, expires_at: expiresAt })
       .execute()
   })
@@ -130,11 +131,7 @@ export async function resolveSession(db: DbHandle, token: string): Promise<Sessi
     return null
   }
 
-  const touched = await db.updateTable('sessions')
-    .set({ last_seen_at: new Date() })
-    .where('id', '=', id)
-    .returning('id')
-    .executeTakeFirst()
+  const touched = await db.updateTable('sessions').set({ last_seen_at: new Date() }).where('id', '=', id).returning('id').executeTakeFirst()
   if (!touched) {
     return null
   }

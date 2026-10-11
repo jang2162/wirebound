@@ -72,7 +72,12 @@ export function clampPoints(previous: string, next: string, max: number): string
   // 짝의 앞 절반(high surrogate)에서 멈췄으면 한 칸 물린다 — 글자를 반으로 가르지 않는다.
   if (head > 0 && /[\ud800-\udbff]/.test(next[head - 1]!)) head -= 1
   let tail = 0
-  while (tail < previous.length - head && tail < next.length - head && previous[previous.length - 1 - tail] === next[next.length - 1 - tail]) tail += 1
+  while (
+    tail < previous.length - head &&
+    tail < next.length - head &&
+    previous[previous.length - 1 - tail] === next[next.length - 1 - tail]
+  )
+    tail += 1
   if (tail > 0 && /[\udc00-\udfff]/.test(next[next.length - tail]!)) tail -= 1
   const before = next.slice(0, head)
   const after = tail === 0 ? '' : next.slice(next.length - tail)
@@ -147,7 +152,11 @@ export function TextControl(props: TextControlProps): ReactElement {
     id,
     disabled,
     className: 'wb-shell-control',
-    ...(props.mixed === true ? { placeholder: MIXED_PLACEHOLDER } : props.placeholder === undefined ? {} : { placeholder: props.placeholder, title: props.placeholder }),
+    ...(props.mixed === true
+      ? { placeholder: MIXED_PLACEHOLDER }
+      : props.placeholder === undefined
+        ? {}
+        : { placeholder: props.placeholder, title: props.placeholder }),
     ...(props.maxLength === undefined ? {} : { maxLength: props.maxLength * 2 }),
     value: draft,
     onChange: (event: { target: { value: string } }) => {

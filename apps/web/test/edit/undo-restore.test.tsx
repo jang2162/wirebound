@@ -11,14 +11,7 @@ import { describe, expect, it } from 'vitest'
 import type { PatchOp } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PatchResult, RevisionSummary } from '../../src/api/types'
-import {
-  OTHER_PAGE_ID,
-  PAGE_ID,
-  PROJECT_NAME,
-  openPage,
-  pageDoc,
-  canvasQuery,
-} from '../editor-harness'
+import { OTHER_PAGE_ID, PAGE_ID, PROJECT_NAME, openPage, pageDoc, canvasQuery } from '../editor-harness'
 import '../../src/catalog-setup'
 
 const TEXT_ID = 'n-text'
@@ -125,9 +118,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
     fireEvent.click(undoButton())
 
     await waitFor(() => expect(h.patchCalls).toHaveLength(1))
-    expect(h.patchCalls[0]?.ops).toEqual([
-      { op: 'replace', path: '/root/children/0/props/content', value: '최신 되돌림' },
-    ])
+    expect(h.patchCalls[0]?.ops).toEqual([{ op: 'replace', path: '/root/children/0/props/content', value: '최신 되돌림' }])
   })
 
   it('복원한 항목을 undo할 수 있다', async () => {
@@ -214,8 +205,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
       revisionCalls.push(pageId)
       return [revision(7, OLD_TEXT)]
     }
-    const patchOps: ApiClient['patchOps'] = () =>
-      Promise.reject(new ApiError(409, 'conflict', '충돌 [T11]'))
+    const patchOps: ApiClient['patchOps'] = () => Promise.reject(new ApiError(409, 'conflict', '충돌 [T11]'))
     const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
       getPageCalls += 1
       const { pageDetail } = await import('../editor-harness')

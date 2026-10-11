@@ -39,29 +39,19 @@ describe('defineComponent — 사람이 읽을 축', () => {
   })
 
   it('description이 비어 있으면 던진다', () => {
-    expect(() => defineComponent({ ...base, description: '' })).toThrow(
-      'description가 비어 있습니다',
-    )
+    expect(() => defineComponent({ ...base, description: '' })).toThrow('description가 비어 있습니다')
   })
 
   it('줄바꿈이 든 말은 던진다', () => {
     // `<option>`은 줄바꿈을 공백으로 접어 조용히 넘어가고, 설명 줄은 반대로 상자를
     // 세로로 민다 — 어느 쪽이든 적은 사람이 본 모양과 화면이 갈린다. 상한만으로는 안 막힌다.
-    expect(() => defineComponent({ ...base, label: '두\n줄' })).toThrow(
-      'label는 한 줄이어야 합니다',
-    )
-    expect(() => defineComponent({ ...base, description: '앞.\n뒤.' })).toThrow(
-      'description는 한 줄이어야 합니다',
-    )
+    expect(() => defineComponent({ ...base, label: '두\n줄' })).toThrow('label는 한 줄이어야 합니다')
+    expect(() => defineComponent({ ...base, description: '앞.\n뒤.' })).toThrow('description는 한 줄이어야 합니다')
   })
 
   it('상한을 넘으면 던진다', () => {
-    expect(() => defineComponent({ ...base, label: '가'.repeat(13) })).toThrow(
-      'label가 12자를 넘습니다 (13자)',
-    )
-    expect(() => defineComponent({ ...base, description: '가'.repeat(61) })).toThrow(
-      'description가 60자를 넘습니다 (61자)',
-    )
+    expect(() => defineComponent({ ...base, label: '가'.repeat(13) })).toThrow('label가 12자를 넘습니다 (13자)')
+    expect(() => defineComponent({ ...base, description: '가'.repeat(61) })).toThrow('description가 60자를 넘습니다 (61자)')
     // 경계는 통과한다 — 상한이 «넘으면»이지 «닿으면»이 아니다.
     expect(() => defineComponent({ ...base, label: '가'.repeat(12) })).not.toThrow()
     expect(() => defineComponent({ ...base, description: '가'.repeat(60) })).not.toThrow()
@@ -70,9 +60,9 @@ describe('defineComponent — 사람이 읽을 축', () => {
   it('갈래 목록 밖의 group은 던진다', () => {
     // 타입이 이미 막지만 `as`로 지나온 값·JSON에서 온 값은 여기서만 걸린다. 조용히
     // 통과하면 고르개가 그 컴포넌트를 어느 그룹에도 못 넣어 목록에서 통째로 사라진다.
-    expect(() =>
-      defineComponent({ ...base, group: 'layout' as unknown as typeof base.group }),
-    ).toThrow('group이 갈래 목록에 없습니다: layout')
+    expect(() => defineComponent({ ...base, group: 'layout' as unknown as typeof base.group })).toThrow(
+      'group이 갈래 목록에 없습니다: layout',
+    )
   })
 })
 
@@ -82,9 +72,7 @@ describe('registerComponent — 이름 겹침', () => {
     // 갈리는데 화면의 글자가 같으면 사용자가 어느 쪽을 골랐는지 알 수 없다.
     resetRegistry()
     registerComponent(defineComponent({ ...base, type: 'A' }))
-    expect(() => registerComponent(defineComponent({ ...base, type: 'B' }))).toThrow(
-      '이미 쓰이는 컴포넌트 이름: 티 (A · B)',
-    )
+    expect(() => registerComponent(defineComponent({ ...base, type: 'B' }))).toThrow('이미 쓰이는 컴포넌트 이름: 티 (A · B)')
     resetRegistry()
   })
 
@@ -128,7 +116,9 @@ describe('COMPONENT_NOUNS는 카탈로그에서 유도된다', () => {
     // 표가 그 폴백을 적고 있다(*"이름이 없으면 → 영문 타입 이름을 쓴다"*). 유도가 한
     // 항목을 빠뜨리는 형태가 그것이고, 값 대조만으로는 «없는 키»가 안 보인다.
     expect(Object.keys(COMPONENT_NOUNS).slice().sort()).toEqual(
-      CATALOG_DEFS.map((def) => def.type).slice().sort(),
+      CATALOG_DEFS.map((def) => def.type)
+        .slice()
+        .sort(),
     )
   })
 

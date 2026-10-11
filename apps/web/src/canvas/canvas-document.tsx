@@ -10,15 +10,7 @@
  *
  * 공급자 밖이면 `null` 이다(캔버스가 없는 화면 · 최소 숙주 테스트).
  */
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useLayoutEffect,
-  useState,
-  type ReactElement,
-  type ReactNode,
-} from 'react'
+import { createContext, useCallback, useContext, useLayoutEffect, useState, type ReactElement, type ReactNode } from 'react'
 
 interface Publish {
   show: (doc: Document) => void

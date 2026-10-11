@@ -46,7 +46,11 @@ function upload(ctx: TestContext, cookie: SignedUpUser['cookie'] | undefined, bo
 }
 
 async function packageRows(ctx: TestContext) {
-  return ctx.db.selectFrom('theme_packages').select(['theme_id', 'version', 'uploaded_by', 'hidden_at']).where('theme_id', 'not like', 'system-%').execute()
+  return ctx.db
+    .selectFrom('theme_packages')
+    .select(['theme_id', 'version', 'uploaded_by', 'hidden_at'])
+    .where('theme_id', 'not like', 'system-%')
+    .execute()
 }
 
 describe('업로드 — 누가', () => {
@@ -199,7 +203,12 @@ describe('숨김', () => {
 
       const hidden = await hide(true)
       expect(hidden.statusCode, hidden.body).toBe(200)
-      expect(hidden.json()).toMatchObject({ themeId: 'sample', version: '1.0.0', hidden: true, uploadedBy: { id: admin.user.id, name: admin.user.name } })
+      expect(hidden.json()).toMatchObject({
+        themeId: 'sample',
+        version: '1.0.0',
+        hidden: true,
+        uploadedBy: { id: admin.user.id, name: admin.user.name },
+      })
       expect((await packageRows(ctx))[0]!.hidden_at).not.toBeNull()
 
       const shown = await hide(false)
