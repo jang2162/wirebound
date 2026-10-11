@@ -48,7 +48,9 @@ docker compose ps                                 # healthy 가 될 때까지 �
 docker compose port postgres 5432                 # 포트를 찍어야 한다 — `no port …` · 종료 1 이면
                                                   # 포트 없이 뜬 것이다 → 「컨테이너를 못 찾는다」 ⓑ
 
-# 3. 워크스페이스를 설치한다
+# 3. 런타임을 맞추고(mise — Node · pnpm 판은 mise.toml) 워크스페이스를 설치한다. mise 가 없으면 첫 줄을 건너뛴다
+#    설치가 Git 훅(lefthook)을 걸고 에이전트 지침(CLAUDE.md — `ruler apply`)을 만든다
+mise trust && mise install
 pnpm install
 
 # 4. packages/* 를 빌드한다 — 건너뛰지 마라
@@ -1099,6 +1101,8 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 4 CPU · 8GB · Docker 29.2.1 · Compose 5.1.4)이고 **운영 서버에서 돌려 본 적은 없다**(아래 「이 절이 안 잰 것 · 알려진 한계」).
 
 ### 10.1 올리기 — `deploy/`
+
+**Komodo 로 올리면** Stack 설정 · 환경 변수 표는 [`docs/guides/deploy-komodo.md`](docs/guides/deploy-komodo.md) 가 갖는다 — 아래 손 절차와 같은 compose 를 쓴다.
 
 ```bash
 # 저장소 뿌리에서

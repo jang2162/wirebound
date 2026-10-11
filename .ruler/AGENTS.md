@@ -36,4 +36,6 @@ pnpm install
 pnpm test                 # 전체 워크스페이스 테스트 (루트 vitest.config.ts)
 pnpm typecheck
 pnpm vitest run <경로>    # 단일 파일 테스트
+pnpm fmt                  # oxfmt — 설정은 .oxfmtrc.json (JS · TS · JSON 만)
+pnpm lint                 # oxlint
 ```

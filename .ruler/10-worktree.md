@@ -15,11 +15,14 @@
 
 새 워크트리는 빈 체크아웃이다. 빌드·테스트 전에 그 워크트리를 대상으로 돌린다.
 
+Orca 로 만들면 `orca.yaml` 의 셋업이 아래 앞 둘(런타임 · 설치)과 빌드를 대신 돌린다 — 그래도 맞았는지 잰다(`orca-worker` 스킬 「셋업 훅이 무엇을 했는지 믿지 말고 잰다」). `git worktree add` 로 만들면 lefthook 의 `post-checkout` 이 런타임 · 설치를 돌린다.
+
 ```bash
-pnpm -C .worktrees/feat-<작업명> install    # node_modules 는 워크트리마다 따로 필요하다
+(cd .worktrees/feat-<작업명> && mise trust && mise install)  # 런타임 먼저 — 경로마다 신뢰가 따로다
+pnpm -C .worktrees/feat-<작업명> install    # node_modules 는 워크트리마다 따로 필요하다 · prepare 가 훅 설치와 ruler apply 를 한다
 pnpm -C .worktrees/feat-<작업명> build      # packages/* 의 dist 생성 — tsx로 도는 api가 이것을 본다
 pnpm -C .worktrees/feat-<작업명> typecheck  # 컴파일 확인 겸 캐시 예열
-pnpm -C .worktrees/feat-<작업명> exec ruler apply  # CLAUDE.md · .mcp.json · .claude/skills — 생성물이라 체크아웃에 없다
+pnpm -C .worktrees/feat-<작업명> exec ruler apply  # install 의 prepare 가 이미 돌린다 — install 을 --ignore-scripts 로 했을 때만
 ```
 
 `cd`로 들어가지 말고 `-C`(git이면 `-C`, pnpm이면 `-C`/`--dir`)로 대상을 지정한다. **메인 세션의 셸은 작업 디렉터리가 유지되므로** 한 번 들어가면 이후 명령이 최상위인 줄 알고 워크트리에서 돌거나 그 반대가 된다.

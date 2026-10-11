@@ -14,11 +14,18 @@
     "test:build": "pnpm test:build:serial; s=$?; pnpm test:browser; b=$?; [ $s -ne 0 ] && exit $s; exit $b",
     "test:build:serial": "vitest run --project build",
     "test:browser": "vitest run -c vitest.browser.config.ts",
-    "typecheck": "tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json system-themes/*/tsconfig*.json"
+    "typecheck": "tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json system-themes/*/tsconfig*.json",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint",
+    "prepare": "if git rev-parse --git-dir >/dev/null 2>&1; then lefthook install && ruler apply; fi"
   },
   "devDependencies": {
     "@intellectronica/ruler": "0.3.44",
     "jsdom": "^25.0.0",
+    "lefthook": "2.2.1",
+    "oxfmt": "0.72.0",
+    "oxlint": "1.87.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

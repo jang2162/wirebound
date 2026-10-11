@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 140,
+  "semi": false,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "**/*.md",
+    "**/*.css",
+    "**/*.html",
+    "pnpm-lock.yaml",
+    "guideline-lock.json",
+    "guideline.json",
+    "docs/guideline/**",
+    ".ruler/**"
+  ]
+}

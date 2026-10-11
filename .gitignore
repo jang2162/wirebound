@@ -19,6 +19,10 @@ shots/
 .superpowers/
 # Playwright MCP 페이지 스냅샷과 스크린샷(공용 지침 `browseros-neo` 세팅)
 /.playwright-mcp/
+# codegraph 인덱스 — 체크아웃마다 만든다(`codegraph init`)
+/.codegraph/
+# Komodo 서버에서 직접 쓰는 덮어쓰기 파일(docs/guides/deploy-komodo.md) — 서버마다 다르고 커밋하지 않는다
+/deploy/compose.server.yaml
 
 
 # START Ruler Generated Files
