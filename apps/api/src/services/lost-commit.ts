@@ -18,8 +18,9 @@
  * | 커밋됐고 그 revision 이 지금 머리다 | 성공(원래 결과 그대로) | 한다 |
  * | 커밋됐는데 머리가 더 나아갔다 | 성공 | **안 한다** — 룸은 뒤의 `seq`에서 이미 이것을 놓친 줄 안다(`gap`). 늦게 온 옛 번호를 웹은 «다음 번호»로 얹어 뒤 revision 이 빠진 화면을 최신으로 둔다(`routes/comments.ts`의 `rebroadcastPostRevision`과 같은 조건) |
  * | **커밋 안 됐다**(`aborted`) | 봉투 있는 500 «반영되지 않았다»(`DB_WRITE_NOT_APPLIED_MESSAGE`) — 웹은 그것을 «커밋 전»으로 읽는다(`apps/web`의 `refusedBeforeCommit`) | 안 한다 |
- * | 한도(`LOST_COMMIT_PROBE_MS`) 안에 결말이 안 났다 | 원래 오류(503 «모름») | 번호 프레임은 **안 한다**. 그 뒤 `LOST_COMMIT_LATE_MS` 안에 커밋되면 **번호 없는 `page-stale`**(아래 «늦게 커밋된 편집 · 게시») |
- * | 확인이 실패했다 · 커밋됐는데 머리를 못 읽었다 | 원래 오류(503 «모름») | 안 한다 |
+ * | 한도(`LOST_COMMIT_PROBE_MS`) 안에 결말이 안 났다 | 원래 오류(503 «모름») | 번호 프레임은 **안 한다**. 그 뒤 `LOST_COMMIT_LATE_MS` 안에 커밋되면 **늦은 커밋의 신호**(아래 «늦게 커밋된 편집 · 게시 · 복원») |
+ * | 커밋됐는데 번호를 모른다(확인이 «모름»인 게시 · 머리를 한도 안에 못 읽음) | 원래 오류(503 «모름») | 번호 프레임은 **안 한다**. 그 자리에서 늦은 커밋과 **같은 신호**(`late.onCommit` — 게시는 `page-stale`) |
+ * | 확인 질의를 묻지 못했다 | 원래 오류(503 «모름») | 안 한다 |
  *
  * **커밋이 끝날 때까지 본다.** 끊긴 연결의 COMMIT 이 서버에서 아직 돌면 `in progress`다 — 간격을 `LOST_COMMIT_POLL_MS`에서
  * `LOST_COMMIT_POLL_MAX_MS`까지 늘려 가며 다시 묻고 한도에서 멈춘다(잃은 COMMIT 여럿이 한꺼번에 돌 때 묻는 질의가 풀을 덜 채운다 —
@@ -40,17 +41,23 @@
  * **편집 밖의 쓰기도 같은 표를 쓴다** — revision 을 남기는 `PUT .../schema` · 코멘트 삭제 · 재번호는 `runRevisionTransaction`,
  * 복원은 `runConfirmedTransaction`(`restored` 프레임은 `seq`를 안 실어 머리를 보지 않는다 — 커밋이면 방송한다). **게시는 커밋돼도
  * «모름»을 낸다** — 웹이 같은 멱등 키로 다시 보내고 재생이 번호 프레임을 다시 보낸다(`routes/comments.ts`의 `runWrite`). 두 길이 한
- * 게시의 성공을 저마다 판정하지 않게 한다. 커밋 안 됐으면(`aborted`) 게시도 봉투 500 이다 — 웹이 «확정 안 달림»으로 읽는 것이 참이다.
+ * 게시의 성공을 저마다 판정하지 않게 한다. 그 «모름»에도 `page-stale`은 간다(위 표의 «커밋됐는데 번호를 모른다») — 같은 키로 다시 보내지 않는
+ * 클라이언트의 게시가 남의 화면을 조용히 낡히지 않게. 웹의 재생이 번호 프레임을 더하면 받는 쪽에 경보 하나가 남는다(프레임은 낡음을 안 푼다 —
+ * 대가는 «다시 불러오기» 하나). 커밋 안 됐으면(`aborted`) 게시도 봉투 500 이다 — 웹이 «확정 안 달림»으로 읽는 것이 참이다.
  * 첫 보내기의 말이다 — 같은 키로 다시 보낸 것은 재생 갈래에서 이 500 이 날 수 있고(앞 게시는 달려 있다), 웹은 그 칸을 «모름»으로
  * 읽는다(`apps/web`의 `knownRejection`).
  *
- * **늦게 커밋된 편집 · 게시** — 한도 안에 결말이 안 난 판은 응답 뒤에도 `LOST_COMMIT_LATE_MS`까지 지켜본다(`LateCommitWatch`). 커밋되면 **번호를
- * 안 싣는 `page-stale { pageId }`**를 룸 전체에(낸 연결도) 보낸다(`ws/notify.ts`의 `pageStaleOnLateCommit`). **그 revision 의 `page-changed`를
- * 늦게 내지 않는다** — 그 사이 더 나아간 머리가 있으면 받는 쪽이 옛 `seq`를 «다음 번호»로 얹어 뒤 revision 이 빠진 화면을 최신으로 둔다. 받는
- * 쪽(`apps/web`)은 얹을 것 없이 «그 페이지를 다시 읽어라»만 안다. 트리 쓰기(`services/tree-write.ts`)는 번호가 `menu-changed`의 `rev`라 지금 번호를
- * 읽어 그대로 늦게 낸다 — 이 둘은 신호의 성질이 다르다.
+ * **늦게 커밋된 편집 · 게시 · 복원** — 한도 안에 결말이 안 난 판은 응답 뒤에도 `LOST_COMMIT_LATE_MS`까지 지켜본다(`LateCommitWatch`). 커밋되면 `late.onCommit`
+ * 이 그 쓰기의 **늦은 신호**를 낸다. 편집 · 게시는 **번호를 안 싣는 `page-stale { pageId }`**를 룸 전체에(낸 연결도) 보낸다(`ws/notify.ts`의
+ * `pageStaleOnLateCommit`). **그 revision 의 `page-changed`를 늦게 내지 않는다** — 그 사이 더 나아간 머리가 있으면 받는 쪽이 옛 `seq`를 «다음 번호»로 얹어
+ * 뒤 revision 이 빠진 화면을 최신으로 둔다. 받는 쪽(`apps/web`)은 얹을 것 없이 «그 페이지를 다시 읽어라»만 안다. 트리 쓰기(`services/tree-write.ts`)는 번호가
+ * `menu-changed`의 `rev`라 지금 번호를 읽어 그대로 늦게 낸다. **복원은 제때 커밋과 같은 꼬리를 그대로 늦게 낸다**(`routes/snapshots.ts`의 `announceRestore` —
+ * `restored` · `menu-changed` · 지운 페이지 잠금 놓기 · `theme-changed`) — `restored`는 `seq`를 안 실어 늦어도 받는 쪽의 번호 이음이 안 틀어지고, `menu-changed` ·
+ * `theme-changed`는 트랜잭션 안에서 지은 번호를 실어 받는 쪽이 이미 더 새 판이면 넘긴다. `page-stale`은 복원에 안 쓴다 — 페이지 하나만 다시 읽는 단추라
+ * 메뉴 · 코멘트 · 테마를 함께 바꾸는 복원에 쓰면 거짓이 된다.
  *
- * 잰 값은 `test/edit-lost-commit.test.ts` · `test/lost-commit-writes.test.ts`(TCP 프록시가 COMMIT 답을 끊는다) · `test/late-commit-stale.test.ts`(늦은 커밋).
+ * 잰 값은 `test/edit-lost-commit.test.ts` · `test/lost-commit-writes.test.ts`(TCP 프록시가 COMMIT 답을 끊는다) · `test/late-commit-stale.test.ts`(늦은 커밋 ·
+ * 번호를 모르는 게시).
  */
 import { sql } from 'kysely'
 import { readWithin } from '../db/client'
@@ -133,7 +140,8 @@ export interface Settled<T> {
  * 확인할 것이 없는 결과(문서를 안 바꾼 쓰기)도 `null`이다 — 그 쓰기는 방송할 것이 없고, 커밋됐는지 가를 행도 없다.
  *
  * **`late`** — 한도 안에 결말이 안 난 판(503 «모름»)을 **응답 뒤에도** `late.watch` 로 지켜보다 커밋됐으면 `late.onCommit` 을 부른다(응답은
- * 붙잡지 않는다 — `createLateCommitWatch`). 안 주면 한도 뒤에 커밋된 쓰기는 방송이 빠진다.
+ * 붙잡지 않는다 — `createLateCommitWatch`). 커밋은 확인됐는데 `confirm`이 «모름»(`null`)이면 응답 자리에서 곧바로 부른다 — 둘 다 «커밋됐는데 번호
+ * 프레임이 없다»는 같은 판이다. 안 주면 그 쓰기는 방송이 빠진다.
  */
 export async function runConfirmedTransaction<T>(
   db: DbHandle,
@@ -163,7 +171,16 @@ export async function runConfirmedTransaction<T>(
       throw error
     }
     const broadcast = await confirm(body.result, deadline)
-    if (broadcast === null) throw error
+    if (broadcast === null) {
+      // **커밋은 확인됐는데 방송할 번호를 모른다**(게시처럼 확인이 «모름»인 쓰기 · 머리를 한도 안에 못 읽음) — 503 «모름»을 내되, 늦은 커밋과 같은 번호 없는
+      // 신호를 **그 자리에서** 낸다(머리말의 표). 안 내면 커밋된 쓰기의 방송이 통째로 빠진다 — 같은 키로 다시 보내지 않는 클라이언트(MCP · CLI)의 게시는
+      // 남의 화면이 다음 변경의 `seq` 건너뜀까지 낡는다. 실패는 삼킨다(지켜보기와 같다) — 응답은 이미 정해졌다.
+      if (late !== undefined)
+        await Promise.resolve()
+          .then(() => late.onCommit(body.result))
+          .catch(() => {})
+      throw error
+    }
     return { result: body.result, broadcast, confirmedAfterLoss: true }
   }
 }

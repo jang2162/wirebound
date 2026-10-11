@@ -7,7 +7,9 @@
  * (`halfCutOnQuery`) — 커밋은 되는데 응답은 503 «모름»이다.
  *
  * **입구 × 값의 출처.** 편집은 `PATCH …/ops` · WS `patch` · `PUT …/schema`, 게시는 코멘트 `POST` · `DELETE` · `renumber` — `runEditTransaction` · `runRevisionTransaction`을
- * 부르는 자리 전부다. 복원은 `page-stale`을 내지 않는다 — 복원이 바꾸는 것은 페이지 하나가 아니라서 이 신호의 단추(그 페이지만 다시 읽는다)가 거짓이 된다.
+ * 부르는 자리 전부다. 복원은 `page-stale`을 내지 않는다 — 복원이 바꾸는 것은 페이지 하나가 아니라서 이 신호의 단추(그 페이지만 다시 읽는다)가 거짓이 된다. 대신
+ * **제때 커밋과 같은 꼬리를 늦게 낸다**(`routes/snapshots.ts`의 `announceRestore` — 아래 «늦게 커밋된 복원»). **한도 안에 커밋이 확인됐는데 번호를 모르는 게시**(확인이
+ * «모름» — `dropCommitReplyAfter`)는 503 응답 자리에서 같은 `page-stale`을 낸다(아래 «번호를 모르는 쓰기»).
  *
  * **변조와 죽는 케이스**(백업 → 한 곳 치환 → 이 파일만 → `cmp` 복원):
  *
@@ -20,6 +22,9 @@
  * | 같은 모양으로 `PUT …/schema` · `ws/patch.ts` · 코멘트 `runWrite` | 각각의 입구 케이스 **혼자** |
  * | 늦은 커밋이 `page-changed`도 낸다(번호 프레임을 늦게 보낸다) | 「번호 이음 프레임은 안 나간다」 |
  * | 제때 커밋에도 `page-stale`을 낸다 | 「제때 커밋은 안 낸다」 |
+ * | 복원 라우트가 `late`를 안 넘긴다 | 「늦게 커밋된 복원」 둘 — `restored` `[]` |
+ * | `announceRestore`가 `menu-changed` · 잠금 놓기 · `theme-changed` 가운데 하나를 뺀다 | 그 프레임의 단언 **혼자**(`[]` · `'프레임 없음'`) |
+ * | `runConfirmedTransaction`이 확인됐는데 «모름»인 판에 `late.onCommit`을 안 부른다 | 「번호를 모르는 쓰기」 **혼자** |
  */
 import { sql } from 'kysely'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -37,7 +42,8 @@ import {
   type ProxiedRealApi,
 } from './helpers'
 import type { WsProbe } from './ws-client'
-import { joinRoom } from './ws-client'
+import { joinRoom, locksWith } from './ws-client'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 
 afterEach(async () => {
   await resetRealData()
@@ -73,9 +79,57 @@ async function slowCommit<T>(pageId: string, ms: number, run: () => Promise<T>):
   }
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 async function headSeq(pageId: string): Promise<number> {
   const { rows } = await sql<{ seq: number }>`select head_seq::int as seq from pages where id = ${pageId}`.execute(getTestDb())
   return rows[0]!.seq
+}
+
+/** 그 프로젝트의 스냅샷 수 — 복원이 커밋되면 안전망 스냅샷이 하나 선다. */
+async function snapshotCount(projectId: string): Promise<number> {
+  const { rows } = await sql<{ n: number }>`select count(*)::int as n from snapshots where project_id = ${projectId}`.execute(getTestDb())
+  return rows[0]!.n
+}
+
+/** 가장 새 스냅샷의 id — 복원 뒤에는 그 복원의 안전망 스냅샷이다(`repos/snapshots.ts`의 정렬과 같은 `created_at` 내림차순). */
+async function newestSnapshotId(projectId: string): Promise<string> {
+  const { rows } = await sql<{
+    id: string
+  }>`select id from snapshots where project_id = ${projectId} order by created_at desc limit 1`.execute(getTestDb())
+  return rows[0]!.id
+}
+
+/** 지금 메뉴 트리 판 번호(`project_menu_revs`) — 복원 꼬리의 `menu-changed`가 싣는 값이다. */
+async function menuRev(projectId: string): Promise<number> {
+  const { rows } = await sql<{ rev: number }>`select rev::int as rev from project_menu_revs where project_id = ${projectId}`.execute(
+    getTestDb(),
+  )
+  return rows[0]!.rev
+}
+
+/** 지금 테마 바인딩 판 번호(`projects.theme_rev`). */
+async function themeRev(projectId: string): Promise<number> {
+  const { rows } = await sql<{ rev: number }>`select theme_rev::int as rev from projects where id = ${projectId}`.execute(getTestDb())
+  return rows[0]!.rev
+}
+
+const ofType = <T extends ServerFrame['type']>(frames: readonly ServerFrame[], type: T): Extract<ServerFrame, { type: T }>[] =>
+  frames.filter((frame): frame is Extract<ServerFrame, { type: T }> => frame.type === type)
+
+/**
+ * `mark` 뒤에 온 그 종류의 프레임이 `count` 개가 될 때까지 짧게 기다리고 그 목록을 돌려준다 — **던지지 않는다**(`expectStale`과 같은 까닭: 안 오면 부르는 쪽의
+ * `toEqual`이 값으로 죽는다). 지켜보기 간격(`LOST_COMMIT_LATE_POLL_MS`)보다 넉넉한 창이다.
+ */
+async function framesSince<T extends ServerFrame['type']>(
+  probe: WsProbe,
+  mark: number,
+  type: T,
+  count: number,
+): Promise<Extract<ServerFrame, { type: T }>[]> {
+  const until = Date.now() + 4_000
+  while (ofType(probe.received.slice(mark), type).length < count && Date.now() < until) await sleep(50)
+  return ofType(probe.received.slice(mark), type)
 }
 
 /** 노드 둘이 든 페이지 · 낸 사람(방에 붙음) · 지켜보는 사람(방에 붙음) · 같은 프로젝트의 viewer · 다른 프로젝트의 구경꾼. */
@@ -142,8 +196,6 @@ async function lateWrite(ctx: ProxiedRealApi, fx: Fixture, run: () => Promise<nu
     return { status, before }
   })
 }
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** 그 페이지의 머리가 `seq` 가 될 때까지 — 늦은 커밋이 닿았는지를 DB 의 값으로 기다린다(프레임을 기다리지 않는다). */
 async function committed(fx: Fixture, seq: number): Promise<void> {
@@ -445,6 +497,189 @@ describe('page-stale 이 안 나가는 판 — 대조군', () => {
         await sql`drop trigger if exists zz_slow_fail on revisions`.execute(db)
         await sql`drop function if exists zz_slow_fail()`.execute(db)
       }
+    })
+  }, 40_000)
+})
+
+/**
+ * 복원 판 — 테마를 묶고 스냅샷을 뜬 뒤, 판에 없는 페이지를 하나 더 만들어 지켜보는 사람이 그 노드를 잠그고(복원 꼬리가 놓는다), 복원이 되돌릴
+ * 편집을 하나 낸다(그 페이지의 revision 이 서야 커밋 늦춤 트리거가 돈다 — `slowCommit`).
+ */
+async function restoreFixture(ctx: ProxiedRealApi) {
+  const fx = await fixture(ctx)
+  // 테마 바인딩 — 판 3 복원이 꼬리에 `theme-changed`를 싣는 조건(`services/restore.ts`의 `RestoreResult.theme`).
+  const bound = await ctx.app.inject({
+    method: 'PUT',
+    url: `/api/projects/${fx.projectId}/theme`,
+    cookies: fx.owner.cookie,
+    payload: {
+      themeId: 'system-admin',
+      version: SYSTEM_ADMIN.version,
+      tokens: { [SYSTEM_ADMIN.color.key]: '#123456' },
+      rev: await themeRev(fx.projectId),
+    },
+  })
+  expect(bound.statusCode, bound.body).toBe(200)
+  const snap = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${fx.projectId}/snapshots`,
+    cookies: fx.owner.cookie,
+    payload: { tag: 'v1' },
+  })
+  expect(snap.statusCode, snap.body).toBe(201)
+  const snapshotId = snap.json().id as string
+  // 판에 없는 페이지 — 복원이 지운다. 지켜보는 사람(editor)이 그 노드를 잠근다.
+  const extraMenu = await createMenuNode(ctx, fx.owner.cookie, fx.projectId)
+  const gone = await createPage(ctx, fx.owner.cookie, fx.projectId, extraMenu.id)
+  const goneRoot = (gone.schema as { root: { id: string } }).root.id
+  fx.watcher.send(JSON.stringify({ type: 'lock', pageId: gone.id, nodeId: goneRoot }))
+  await locksWith(fx.watcher, goneRoot)
+  // 복원이 되돌릴 편집.
+  const edited = await ctx.app.inject({
+    method: 'PATCH',
+    url: fx.opsUrl,
+    cookies: fx.owner.cookie,
+    payload: { baseSeq: await headSeq(fx.pageId), ops: addText('n_after') },
+  })
+  expect(edited.statusCode, edited.body).toBe(200)
+  await fx.watcher.waitFor('page-changed')
+  await fx.watcher.quiet()
+  await fx.author.quiet()
+  return { ...fx, snapshotId, gonePageId: gone.id, goneRoot }
+}
+
+type RestoreFixture = Awaited<ReturnType<typeof restoreFixture>>
+
+const restoreUrl = (fx: RestoreFixture, snapshotId = fx.snapshotId) => `/api/projects/${fx.projectId}/snapshots/${snapshotId}/restore`
+
+describe('늦게 커밋된 복원 — 제때 커밋과 같은 꼬리를 늦게 낸다', () => {
+  it('복원 — 503 «모름» 뒤 커밋되면 restored · menu-changed · 지운 페이지 잠금 놓기 · theme-changed 가 나가고 page-stale 은 없다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await restoreFixture(ctx)
+      const mark = fx.watcher.received.length
+      const authorMark = fx.author.received.length
+      const snapshotsBefore = await snapshotCount(fx.projectId)
+      const { status, before } = await lateWrite(ctx, fx, async () => {
+        const res = await ctx.app.inject({
+          method: 'POST',
+          url: restoreUrl(fx),
+          cookies: fx.owner.cookie,
+          headers: { 'x-wb-restore-id': 'r_late' },
+        })
+        return res.statusCode
+      })
+      expect(status).toBe(503)
+      // 커밋됐다 — 복원의 revision 이 머리에 섰고 안전망 스냅샷이 하나 늘었다.
+      await committed(fx, before + 1)
+      expect(await snapshotCount(fx.projectId)).toBe(snapshotsBefore + 1)
+      const actor = { type: 'user', label: fx.owner.user.name }
+
+      expect(await framesSince(fx.watcher, mark, 'restored', 1)).toEqual([
+        {
+          type: 'restored',
+          projectId: fx.projectId,
+          snapshotId: fx.snapshotId,
+          safetySnapshotId: await newestSnapshotId(fx.projectId),
+          actor,
+          clientRestoreId: 'r_late',
+        },
+      ])
+      expect(await framesSince(fx.watcher, mark, 'menu-changed', 1)).toEqual([
+        { type: 'menu-changed', projectId: fx.projectId, rev: await menuRev(fx.projectId), actor },
+      ])
+      expect(await framesSince(fx.watcher, mark, 'theme-changed', 1)).toMatchObject([
+        {
+          type: 'theme-changed',
+          projectId: fx.projectId,
+          themeId: 'system-admin',
+          version: SYSTEM_ADMIN.version,
+          rev: await themeRev(fx.projectId),
+          actor,
+        },
+      ])
+      // 지운 페이지의 잠금을 놓았다 — 지켜보는 사람이 쥐던 하나가 목록에서 빠진다.
+      const locks = await framesSince(fx.watcher, mark, 'locks', 1)
+      expect(locks.at(-1)?.locks ?? '프레임 없음').toEqual([])
+      // 낸 사람의 연결도 받는다.
+      expect(await framesSince(fx.author, authorMark, 'restored', 1)).toMatchObject([
+        { snapshotId: fx.snapshotId, clientRestoreId: 'r_late' },
+      ])
+      // 복원은 `page-stale`을 안 낸다 — 페이지 하나가 아니다.
+      expect(pageStale(fx.watcher.received.slice(mark))).toEqual([])
+    })
+  }, 40_000)
+
+  /**
+   * 전제 (c) — 늦은 복원 뒤에 다른 복원이 먼저 커밋되면 늦은 꼬리는 제 트랜잭션의 옛 번호(`menuRev` · `theme.rev`)를 싣는다. 받는 쪽은 번호로 넘긴다
+   * (`apps/web`의 `use-tree-commands.tsx` · `theme/project-theme.tsx`). 두 꼬리의 차례는 지켜보기 간격에 달려 정해지지 않는다 — 집합으로 견준다.
+   */
+  it('늦은 복원 뒤 다른 복원이 먼저 커밋되면 — 꼬리 둘이 저마다의 번호로 나간다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await restoreFixture(ctx)
+      const snap2 = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.projectId}/snapshots`,
+        cookies: fx.owner.cookie,
+        payload: { tag: 'v2' },
+      })
+      expect(snap2.statusCode, snap2.body).toBe(201)
+      const mark = fx.watcher.received.length
+      const menuBefore = await menuRev(fx.projectId)
+      const themeBefore = await themeRev(fx.projectId)
+      const { status, before } = await lateWrite(ctx, fx, async () => {
+        const res = await ctx.app.inject({ method: 'POST', url: restoreUrl(fx), cookies: fx.owner.cookie })
+        return res.statusCode
+      })
+      expect(status).toBe(503)
+      // 늦은 복원이 프로젝트 행을 쥔 채 커밋을 기다린다 — 둘째 복원은 그 뒤에 줄 서 제때 커밋된다.
+      const second = await ctx.app.inject({ method: 'POST', url: restoreUrl(fx, snap2.json().id as string), cookies: fx.owner.cookie })
+      expect(second.statusCode, second.body).toBe(200)
+      await committed(fx, before + 2)
+      const restored = await framesSince(fx.watcher, mark, 'restored', 2)
+      const menus = await framesSince(fx.watcher, mark, 'menu-changed', 2)
+      const themes = await framesSince(fx.watcher, mark, 'theme-changed', 2)
+      // eslint-disable-next-line no-console
+      console.log(
+        `[전제 c] restored ${restored.map((f) => (f.snapshotId === fx.snapshotId ? 'v1(늦음)' : 'v2')).join(' → ')} · menu-changed rev ${menus.map((f) => f.rev).join(' → ')} · theme-changed rev ${themes.map((f) => f.rev).join(' → ')}`,
+      )
+      expect(restored.map((frame) => frame.snapshotId).sort()).toEqual([fx.snapshotId, snap2.json().id].sort())
+      expect(menus.map((frame) => frame.rev).sort((a, b) => a - b)).toEqual([menuBefore + 1, menuBefore + 2])
+      expect(themes.map((frame) => frame.rev).sort((a, b) => a - b)).toEqual([themeBefore + 1, themeBefore + 2])
+      expect(await menuRev(fx.projectId)).toBe(menuBefore + 2)
+    })
+  }, 40_000)
+})
+
+describe('한도 안에 커밋이 확인됐는데 번호를 모르는 쓰기 — page-stale 을 그 자리에서', () => {
+  /**
+   * 게시는 확인이 «모름»이다(`routes/comments.ts`의 `runWrite` — `revisionOf`를 안 준다). 커밋 답만 잃으면 결말은 한도 안에 `committed`인데 번호 프레임을
+   * 못 내므로 503 «모름» 그 자리에서 `page-stale`을 낸다. 웹은 같은 키로 다시 보내 재생이 번호 프레임을 더한다 — 두 프레임이 다 간다.
+   */
+  it('코멘트 게시 — COMMIT 답만 잃어 503 «모름»이면 응답 자리에서 page-stale 이 나가고, 같은 키의 재생은 번호 프레임을 더한다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await fx.watcher.quiet()
+      const mark = fx.watcher.received.length
+      const before = await headSeq(fx.pageId)
+      ctx.proxy.dropCommitReplyAfter('insert into "revisions"')
+      const payload = { nodeId: 'n_a', body: '말', idempotencyKey: 'k_unknown' }
+      const first = await ctx.app.inject({ method: 'POST', url: `${fx.pageUrl}/comments`, cookies: fx.owner.cookie, payload })
+      const answered = Date.now()
+      expect(ctx.proxy.fired).toBe(true)
+      expect(first.statusCode, first.body).toBe(503)
+      // 커밋은 됐다 — 한도 안에 확인된 판이라 지켜보기를 안 탄다.
+      expect(await headSeq(fx.pageId)).toBe(before + 1)
+      const stale = await framesSince(fx.watcher, mark, 'page-stale', 1)
+      // eslint-disable-next-line no-console
+      console.log(`[게시 «모름»] page-stale 이 응답 뒤 ${Date.now() - answered}ms 안에 ${stale.length}개`)
+      expect(stale).toEqual([{ type: 'page-stale', projectId: fx.projectId, pageId: fx.pageId }])
+      expect(pageChanged(fx.watcher.received.slice(mark))).toEqual([])
+
+      // 웹의 판정 — 같은 키로 다시 보내면 재생이 앞 게시의 번호 프레임을 다시 보낸다(`rebroadcastPostRevision`). 신호는 하나 그대로다.
+      const replay = await ctx.app.inject({ method: 'POST', url: `${fx.pageUrl}/comments`, cookies: fx.owner.cookie, payload })
+      expect(replay.statusCode, replay.body).toBe(200)
+      expect(await framesSince(fx.watcher, mark, 'page-changed', 1)).toMatchObject([{ seq: before + 1 }])
+      expect(pageStale(fx.watcher.received.slice(mark))).toHaveLength(1)
     })
   }, 40_000)
 })
