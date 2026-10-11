@@ -1001,6 +1001,49 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     }
   })
 
+  /** 두 상태의 가지 높이가 다른 영역 — 기본은 글 하나, 관리자는 글 셋. */
+  const SIZED_AREA = {
+    id: 'n_sz',
+    type: 'StateSwitch',
+    props: {},
+    children: [
+      { id: 'n_szd', type: 'StateCase', props: { state: 'default' }, children: [text('n_sz1', '기본 글')] },
+      { id: 'n_sza', type: 'StateCase', props: { state: ADMIN.id }, children: [text('n_sz2', '관리자 글 하나'), text('n_sz3', '관리자 글 둘'), text('n_sz4', '관리자 글 셋')] },
+    ],
+  }
+
+  /**
+   * **같은 영역을 고른 채 상태만 바꾸면 외곽선이 새 상자로 옮겨 온다**(`canvas.tsx` 의 선택 외곽선 이펙트 의존에 `viewState` — L-265). 위 «영역 · 가지 줄을
+   * 고르면» 은 상태를 바꾼 뒤 다시 고르므로 의존에서 `viewState` 를 떼도 초록이다. 여기는 **다시 고르지 않는다** — 영역을 고른 채 머리 전환기만 눌러
+   * 외곽선이 옛 상태의 상자(글 하나 높이)에 남지 않고 보이는 가지의 자식 합(글 셋)을 따라가는지 잰다.
+   *
+   * **의존의 `viewState` 하나만 떼면 이 케이스는 안 죽는다** — 상태가 바뀌어 문서가 자라면 iframe 이 다시 재서 `measureTick` 이 같은 일을 한다. `viewState` 와
+   * `measureTick` 을 함께 떼야 죽는다(차 72.78px · `grew: false`). 둘 가운데 하나만 남은 의존은 이 케이스로 가르지 못한다.
+   */
+  it('영역을 고른 채 상태만 바꾸면 외곽선이 새 상자로 옮겨 온다 — 두 상태의 가지 높이가 다른 영역(L-265)', async () => {
+    const { P } = await fixture('vs-resize', [SIZED_AREA])
+    const tab = await openTab(P)
+    try {
+      const sel = '.wb-shell-selection[data-wb-selected-id="n_sz"]'
+      await pickRow(tab.page, 'n_sz')
+      await frames(tab.page)
+      const before = await overlayBox(tab.page, sel, ['n_sz1'])
+      await choose(tab.page, '관리자')
+      await frames(tab.page)
+      const after = await overlayBox(tab.page, sel, ['n_sz2', 'n_sz3', 'n_sz4'])
+      expect({
+        // 판 카나리아 — 두 상태의 상자 높이가 다르다(같으면 옛 상자에 남아도 못 잡는다).
+        grew: before !== null && after !== null && after.height > before.height,
+        before: before === null ? null : near(before),
+        // 가르는 값 — 외곽선이 새 가지의 합(관리자 글 셋)을 감싼다. 옛 상자에 남으면 차가 글 둘 높이다.
+        after: after === null ? null : near(after),
+        selectedStill: await tab.page.locator(sel).count(),
+      }).toEqual({ grew: true, before: { diff: '≤1', outline: '2px' }, after: { diff: '≤1', outline: '2px' }, selectedStill: 1 })
+    } finally {
+      await tab.close()
+    }
+  })
+
   it('빈 가지의 영역 — «여기 비어 있음» 자리표가 앞 형제 아래에 서고(문서를 안 민다) · 고르면 그 상자에 외곽선이 선다 · 가지에 글이 있는 상태에서는 자리표가 없다', async () => {
     const { P } = await fixture('vs-empty', [EMPTY_AREA])
     const tab = await openTab(P)

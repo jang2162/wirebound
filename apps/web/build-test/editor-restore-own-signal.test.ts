@@ -7,7 +7,7 @@
  * 행을 쥐어 복원을 세운 채 소켓이 다시 붙기를 기다렸다가 놓는다.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, canvasFrame } from './editor-stack'
+import { editorStackPrerequisite, isRestoreUrl, poll, startEditorStack, type EditorStack, canvasFrame } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -58,13 +58,13 @@ describe.skipIf(!전제.ok)('연결 id 없이 나간 내 복원', () => {
       })
     })
     page.on('request', (request) => {
-      if (request.method() === 'POST' && request.url().includes('/restore')) {
+      if (request.method() === 'POST' && isRestoreUrl(request.url())) {
         events.push(`${at()} POST restore 연결id=${request.headers()['x-wb-connection-id'] === undefined ? '없음' : '있음'}`)
       }
       if (request.method() === 'GET' && request.url().endsWith(`/api${P}`)) events.push(`${at()} GET page`)
     })
     page.on('response', (response) => {
-      if (response.url().includes('/restore')) events.push(`${at()} 복원 응답 ${response.status()}`)
+      if (isRestoreUrl(response.url())) events.push(`${at()} 복원 응답 ${response.status()}`)
     })
     try {
       await page.goto(P)

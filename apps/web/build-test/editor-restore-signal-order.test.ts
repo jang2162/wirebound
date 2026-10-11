@@ -23,7 +23,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session, type StackUser, canvasFrame, canvasText } from './editor-stack'
+import { editorStackPrerequisite, isRestoreUrl, poll, startEditorStack, type EditorStack, type Session, type StackUser, canvasFrame, canvasText } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -559,7 +559,7 @@ function watch(page: Page): { lines: string[]; at(): number } {
     })
   })
   page.on('response', (response) => {
-    if (response.url().includes('/restore')) lines.push(`${at()} 복원 답 ${response.status()}`)
+    if (isRestoreUrl(response.url())) lines.push(`${at()} 복원 답 ${response.status()}`)
   })
   page.on('request', (request) => {
     if (request.method() === 'GET' && /\/api\/projects\/[^/]+\/pages\/[^/?]+$/.test(request.url())) lines.push(`${at()} GET page`)

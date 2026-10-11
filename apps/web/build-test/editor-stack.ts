@@ -1006,6 +1006,75 @@ export async function poll<T>(what: string, read: () => Promise<T>, done: (value
 }
 
 /**
+ * 스냅샷 복원 요청의 주소(`POST /api/projects/:id/snapshots/:id/restore`)인가.
+ *
+ * 부분 글자(`includes('/restore')`)로 가르면 dev 서버가 내는 소스 모듈(`/src/…/restore-….ts`)의 응답이 복원 답으로 센다 —
+ * `apps/web/src` 에 `restore` 가 든 새 파일이 늘 때마다 가짜 요청이 끼어 순서 단언이 죽는다.
+ */
+export function isRestoreUrl(url: string): boolean {
+  return /\/api\/projects\/[^/]+\/snapshots\/[^/]+\/restore(?:[?#]|$)/.test(url)
+}
+
+/** `delayServerFrames` 가 돌려주는 것 — 늦춘 프레임 수(판이 섰는지의 카나리아)와 이 탭이 서버로 보낸 프레임의 종류 차례. */
+export interface FrameDelay {
+  /** 지금까지 늦춘 프레임 수. 0 이면 늦출 프레임이 안 와 판이 안 선 것이다. */
+  delayed(): number
+  /** 이 탭이 서버로 보낸 프레임의 `type` 차례(`patch` · `lock` …). */
+  sent(): string[]
+  /**
+   * **페이지에 건넨** 프레임의 `type` 과 시각(`Date.now()`) 차례 — 늦춘 것은 늦춘 뒤의 시각이다. `page.on('websocket')` 의 `framereceived` 는
+   * 가로챈 소켓에서는 서버에서 **온** 시각이라 늦춤이 안 보인다.
+   */
+  delivered(): { type: string; at: number }[]
+}
+
+/**
+ * **서버 → 브라우저 프레임 가운데 `kinds` 의 `type` 인 것만** `ms` 늦춘다 — 나머지 프레임은 그대로 지나, 늦춘 프레임이 뒤따르는 프레임에
+ * 추월당한다. `startDownDelay` 는 같은 연결의 바이트를 전부 늦춰 두 프레임의 **차례**를 못 뒤집는다(`patch-ack` 와 `membership-changed` 가
+ * 1 ~ 28ms 로 붙어 와 «ack 뒤에 강등» 이 늘 그 차례다). 늦춘 프레임은 늦추는 동안 새 프레임이 와도 제 시각에 나간다.
+ *
+ * `page.goto` **앞에** 건다 — 소켓은 페이지가 열릴 때 붙는다. 이 탭의 `/ws` 연결에만 닿는다(다른 탭 · vite HMR 소켓은 그대로).
+ */
+export async function delayServerFrames(page: Page, kinds: readonly string[], ms: number): Promise<FrameDelay> {
+  let delayedFrames = 0
+  const sent: string[] = []
+  const delivered: { type: string; at: number }[] = []
+  const typeOf = (message: string | Buffer): string => {
+    try {
+      const frame = JSON.parse(typeof message === 'string' ? message : message.toString()) as { type?: unknown }
+      return typeof frame.type === 'string' ? frame.type : ''
+    } catch {
+      return ''
+    }
+  }
+  await page.routeWebSocket(/\/ws(?:[?#]|$)/, (route) => {
+    const server = route.connectToServer()
+    route.onMessage((message) => {
+      sent.push(typeOf(message))
+      server.send(message)
+    })
+    server.onMessage((message) => {
+      const type = typeOf(message)
+      if (!kinds.includes(type)) {
+        delivered.push({ type, at: Date.now() })
+        route.send(message)
+        return
+      }
+      delayedFrames += 1
+      setTimeout(() => {
+        try {
+          delivered.push({ type, at: Date.now() })
+          route.send(message)
+        } catch {
+          // 탭이 닫힌 뒤에 닿은 늦은 프레임이다.
+        }
+      }, ms)
+    })
+  })
+  return { delayed: () => delayedFrames, sent: () => sent.slice(), delivered: () => delivered.slice() }
+}
+
+/**
  * **캔버스 문서가 그려지는 iframe**(`src/canvas/canvas-iframe.tsx`). 문서의 글자 · 노드는 여기 안에 있다 — 호스트의
  * `.wb-shell-canvas-frame` 의 `innerText` · `hasText` 는 iframe 안의 글자를 담지 않는다. 선택 외곽선 · 번호 마커 · 배너는
  * 호스트 문서 그대로다.
