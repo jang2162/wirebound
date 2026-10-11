@@ -291,6 +291,9 @@ describe('COMMIT 답을 잃은 편집', () => {
     const pool = createPool(proxy.url, () => undefined)
     const db = createDb(pool)
     const app = await buildApp({ db, config: testConfig() })
+    // **늦은 커밋 지켜보기를 먼저 걷는다**(`services/lost-commit.ts`의 `createLateCommitWatch`) — 한도를 넘긴 편집은 응답 뒤에도 커밋을 지켜보며 풀 칸 하나를 쓴다(그 몫은
+    // `test/late-commit-watch.test.ts`가 잰다). 이 케이스가 재는 것은 «확인 질의의 연결이 응답 뒤에 풀을 떠났는가»라 지켜보기의 칸이 섞이면 안 된다.
+    app.lateCommits.stop()
     const held: { release: () => void }[] = []
     try {
       const ctx = { app, db }
