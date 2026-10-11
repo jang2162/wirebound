@@ -403,7 +403,9 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   // 되짚기 이력을 받는 동안은 둘 다 꺼진다(`undo`의 `loadUndoHistory`) — 누른 것은 받은 뒤 한 번 되돌린다. **다시 실행도 끄는 까닭**: 받는
   // 동안 다시 실행이 맨 위에 세션 편집을 올리면 받은 뒤 그 되돌리기를 말없이 버린다(맨 위 비교). 받는 창은 조회 한 번이고 다시 실행 스택은
   // 그대로라, 받은 뒤 누르면 된다 — 막히는 것은 그 창 안의 누름뿐이다.
-  const canUndo = useEditorStore(store, (s) => s.undoStack.length > 0 && !s.undoHistoryLoading)
+  // **스택을 먹일 내 편집이 큐에 있으면 스택이 비어도 켠다**(`afterAck` 가 그 ack 까지 미룬다) — 스택만 보면 그 페이지의 내 첫 편집(새로고침으로 채운
+  // 항목이 없는 판)을 ack 전에 되돌린 누름이 단추 · 키 가드(`shell/editor-keys.tsx`)에 말없이 버려진다(`build-test/n27-undo-first-edit.test.ts`).
+  const canUndo = useEditorStore(store, (s) => (s.undoStack.length > 0 || store.awaitsStackAck('undo')) && !s.undoHistoryLoading)
   const canRedo = useEditorStore(store, (s) => s.redoStack.length > 0 && !s.undoHistoryLoading)
 
   /**

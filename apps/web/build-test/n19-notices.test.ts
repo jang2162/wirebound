@@ -451,8 +451,7 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
     const project = (await mk('/projects', { name: 'N25', slug: `n25-r11-${Date.now().toString(36)}` })).id as string
     const menu = (await mk(`/projects/${project}/menu`, { parentId: null, title: '메뉴' })).id as string
     const first = (await mk(`/projects/${project}/pages`, { menuNodeId: menu, title: '첫째' })).id as string
-    // 강등당하는 쪽은 alice(프로젝트를 만든 owner) 다 — bob 의 탭에서는 미룬 되돌리기가 강등이 없어도 나가지 않아(대조군) 가르는 것이 없다.
-    // bob 을 owner 로 더해 alice 를 강등하게 한다.
+    // 강등당하는 쪽은 alice(프로젝트를 만든 owner) 다 — bob 을 owner 로 더해 alice 를 강등하게 한다.
     await mk(`/projects/${project}/members`, { email: stack.users.bob.email, role: 'owner' })
     const bob = await stack.login(stack.users.bob)
     const members = (await stack.request(bob, 'GET', `/projects/${project}/members`)).body as { userId: string; email: string }[]
