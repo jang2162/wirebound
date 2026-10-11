@@ -20,6 +20,7 @@ import {
   HANDLES_WIDTH,
   CANVAS_MIN_HEIGHT,
   PALETTE_HEIGHT_DEFAULT,
+  PALETTE_HEIGHT_FLOOR,
   PALETTE_HEIGHT_MIN,
   PANEL_WIDTH_DEFAULT,
   PANEL_WIDTH_MIN,
@@ -415,9 +416,29 @@ describe('하단 판의 높이', () => {
     expect(fitPaletteHeight(PALETTE_HEIGHT_MIN - 10, 900)).toBe(PALETTE_HEIGHT_MIN)
   })
 
-  it('창이 아주 낮으면 최대가 최소로 주저앉는다 — 뒤집히지 않는다', () => {
-    expect(paletteHeightMax(200)).toBe(PALETTE_HEIGHT_MIN)
-    expect(fitPaletteHeight(PALETTE_HEIGHT_DEFAULT, 200)).toBe(PALETTE_HEIGHT_MIN)
+  it('창이 아주 낮으면 최대가 바닥(120)까지 주저앉는다 — 바닥 아래로는 안 간다', () => {
+    expect(paletteHeightMax(200)).toBe(PALETTE_HEIGHT_FLOOR)
+    expect(fitPaletteHeight(PALETTE_HEIGHT_DEFAULT, 200)).toBe(PALETTE_HEIGHT_FLOOR)
+    expect(paletteHeightMax(10, 0.5)).toBe(PALETTE_HEIGHT_FLOOR)
+  })
+
+  it('캔버스 몫을 지킬 수 없는 세로에서는 판이 남은 세로 전부로 내려간다 — 최소(220)와 바닥(120) 사이', () => {
+    // 800×500 · 통지 여덟: 판 + 캔버스가 나눠 쓰는 세로 121(창 500 − 머리 49 − 하단 바 328 − 여백 2) → 판 121 · 캔버스 줄 0.
+    expect(paletteHeightMax(500, 121)).toBe(121)
+    expect(fitPaletteHeight(PALETTE_HEIGHT_MIN, 500, 121)).toBe(121)
+    // 남은 세로가 최소 이상이면 최소다 — 창 800×600 · 통지 여덟(221)과 통지 하나(373)는 바닥 없이 쓰던 값 그대로다.
+    expect(paletteHeightMax(600, 221)).toBe(PALETTE_HEIGHT_MIN)
+    expect(paletteHeightMax(500, 373)).toBe(PALETTE_HEIGHT_MIN)
+    // 바닥 아래로는 안 간다.
+    expect(paletteHeightMax(500, 100)).toBe(PALETTE_HEIGHT_FLOOR)
+    expect(paletteHeightMax(500, 119)).toBe(PALETTE_HEIGHT_FLOOR)
+    expect(paletteHeightMax(500, 120)).toBe(PALETTE_HEIGHT_FLOOR)
+    // 캔버스 몫(240)을 지키고 최소가 남는 세로는 그대로다(경계: 460 → 220 · 461 → 221).
+    expect(paletteHeightMax(700, 460)).toBe(PALETTE_HEIGHT_MIN)
+    expect(paletteHeightMax(700, 461)).toBe(221)
+    // 손잡이는 바닥 쪽에서도 뒤집히지 않는다 — 최대(121)에 닿은 청은 더 큰 기억을 안 누르고, 기억이 작으면 최대를 저장한다.
+    expect(storePaletteHeight(300, 90, 121)).toBe(300)
+    expect(storePaletteHeight(100, 5000, 121)).toBe(121)
   })
 
   it('캔버스 · 판이 나눠 쓰는 세로를 재면 최대는 그것에서 캔버스 몫을 뗀다 — 못 재면(0) 창에서 셈한다', () => {

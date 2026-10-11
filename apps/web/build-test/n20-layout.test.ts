@@ -5,7 +5,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | L-007 축소판 값 — 폭 셋 × 탭 다섯 | 카드가 17 보다 적다 · 줄임 비를 못 읽은 카드가 있다(표본이 안 섰다) · 축소판 iframe 폭이 카드 판(트랙) 폭과 다르다 |
- * | L-233 셸 세로 몫 — 창 800×500 · 통지 8 | 판 최소에서 셸이 안 넘친다(알려진 값 — 넘침이 0 이 되면 그 값을 읽는 자리를 다시 본다) · 칸의 높이를 못 읽는다 |
+ * | L-233 셸 세로 몫 — 창 800×500 · 통지 8 | 셸이 넘친다 · 판 121 · 하단 바 328 이 아니다 · 판 안 카드가 사라지거나(칸 0) 스크롤이 안 선다 · 칸의 높이를 못 읽는다 |
  * | L-237 줌별 외곽선 화면 굵기 | 줌 100 · 75 · 50 · 25% 중 하나라도 외곽선을 못 읽는다 |
  * | L-234 사용자 테마의 뷰포트 단위 | 올린 `.wbtheme`(`vh` 를 `body` · 카드 상자에 건 판)로 열면 캔버스 iframe 이 가만히 있어도 자란다 · 문서가 줄어도 안 준다 |
  *
@@ -137,7 +137,7 @@ describe.skipIf(!전제.ok)('N20 레이아웃 값 — 실브라우저', () => {
 
   const NOTICE = (i: number) => `통지 ${i + 1} — 남이 이 페이지를 바꿔 화면이 낡았습니다. 다시 불러오면 서버의 판으로 돌아갑니다.`
 
-  it('L-233 셸 세로 몫 — 창 800×500 · 통지 8 · 판 최소에서 칸마다 높이', async () => {
+  it('L-233 셸 세로 몫 — 창 800×500 · 통지 8 · 판이 바닥으로 내려간 칸마다 높이', async () => {
     const P = await fixture('n20-room', TEXTS)
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 800, height: 500 } })
     try {
@@ -176,6 +176,11 @@ describe.skipIf(!전제.ok)('N20 레이아웃 값 — 실브라우저', () => {
           palette: h('.wb-shell-palette'),
           paletteHead: h('.wb-shell-palette-head'),
           paletteCards: cards === null ? null : Math.round(cards.clientHeight),
+          cardsScroll: cards === null ? null : Math.round(cards.scrollHeight),
+          cardTop: (() => {
+            const card = document.querySelector('[data-wb-palette-card]')
+            return card === null || cards === null ? null : Math.round(card.getBoundingClientRect().top - cards.getBoundingClientRect().top)
+          })(),
           card: h('[data-wb-palette-card]'),
           footer: h('.wb-shell-footer'),
           notices: h('.wb-shell-footer-notices'),
@@ -184,7 +189,18 @@ describe.skipIf(!전제.ok)('N20 레이아웃 값 — 실브라우저', () => {
       // eslint-disable-next-line no-console
       console.log(`[N20 세로 몫] 800×500 · 통지 8 · 판 최소: ${JSON.stringify(v)}`)
       expect(Object.values(v).filter((value) => value === null)).toEqual([])
-      expect(v.shellOverflow).toBeGreaterThan(0)
+      // 판이 바닥(120) 위 121 까지 내려가 셸이 안 넘친다 — 하단 바 328 · 캔버스 칸 48(여백 · 그 줄은 0 이라 판 뒤에 겹친다) · 판 머리 60 +
+      // 카드 칸 55(카드 한 장이 사라지지 않고 스크롤된다).
+      expect(v.shellOverflow).toBe(0)
+      expect(v.palette).toBe(121)
+      expect(v.canvas).toBe(48)
+      expect(v.footer).toBe(328)
+      expect(v.paletteCards!).toBeGreaterThan(0)
+      expect(v.paletteCards!).toBeLessThan(v.card!)
+      // 카드는 칸 안에 있고(맨 위가 칸 위) 칸의 내용이 칸보다 길어 스크롤된다.
+      expect(v.cardTop!).toBeGreaterThanOrEqual(0)
+      expect(v.cardTop!).toBeLessThan(v.paletteCards!)
+      expect(v.cardsScroll!).toBeGreaterThan(v.paletteCards!)
     } finally {
       await context.close()
     }
