@@ -1081,6 +1081,7 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 
 - **이펙트 · 마운트 순서를 바꾼 트랙은** `EDITOR_STACK_BUNDLE=build pnpm test:browser`(운영 번들)도 돈다.
 - **한 기계에서 전량 게이트는 동시에 둘까지만 띄운다** — 영역 게이트는 셈에 안 든다. 게이트 체인은 `nice -n 10` 아래에서 돌려 기계가 굼뜨지 않게 한다.
+- **실브라우저 파일 하나만 돌릴 때는 `pnpm vitest run -c vitest.browser.config.ts <경로>` 다** — `--project build <경로>` 는 `No test files found` 로 끝난다(`build` 프로젝트의 `include` 는 `apps/web/build-test` 에서 `export-bundle.test.ts` 만 줍는다). 어느 쪽이든 «통과» 를 읽기 전에 실행 수를 본다 — 앞의 명령은 `Test Files  1 passed` · `Tests  <케이스 수> passed` 를 찍고 뒤의 명령은 0 건에 종료 1 이다(`apps/web/build-test/editor-late-commit.test.ts` 로 재면 1 파일 · 1 케이스).
 
 > **브라우저가 없을 때 `test:build`가 찍는 줄은 「넣는 법」 절의 명령을 권한다.** 그 스모크
 > (`apps/api/build-test/screen-chromium.test.ts`)는 **브라우저를 실제로 띄워 보고** 안 뜨면 건너뛴다 — `--only-shell` 만
