@@ -1006,6 +1006,16 @@ export async function poll<T>(what: string, read: () => Promise<T>, done: (value
 }
 
 /**
+ * 스냅샷 복원 요청의 주소(`POST /api/projects/:id/snapshots/:id/restore`)인가.
+ *
+ * 부분 글자(`includes('/restore')`)로 가르면 dev 서버가 내는 소스 모듈(`/src/…/restore-….ts`)의 응답이 복원 답으로 센다 —
+ * `apps/web/src` 에 `restore` 가 든 새 파일이 늘 때마다 가짜 요청이 끼어 순서 단언이 죽는다.
+ */
+export function isRestoreUrl(url: string): boolean {
+  return /\/api\/projects\/[^/]+\/snapshots\/[^/]+\/restore(?:[?#]|$)/.test(url)
+}
+
+/**
  * **캔버스 문서가 그려지는 iframe**(`src/canvas/canvas-iframe.tsx`). 문서의 글자 · 노드는 여기 안에 있다 — 호스트의
  * `.wb-shell-canvas-frame` 의 `innerText` · `hasText` 는 iframe 안의 글자를 담지 않는다. 선택 외곽선 · 번호 마커 · 배너는
  * 호스트 문서 그대로다.

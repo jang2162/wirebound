@@ -13,7 +13,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, canvasText, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { canvasFrame, canvasText, editorStackPrerequisite, isRestoreUrl, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -134,7 +134,7 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
       await hold.waitForWaiters(1)
       await page.keyboard.press('Escape')
       const closed = await poll('상자가 닫힌다', () => page.locator('dialog[open]').count(), (count) => count === 0, 5_000)
-      const answered = page.waitForResponse((response) => response.url().includes('/restore'))
+      const answered = page.waitForResponse((response) => isRestoreUrl(response.url()))
       await hold.release()
       released = true
       const status = (await answered).status()
