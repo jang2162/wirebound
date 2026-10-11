@@ -17,7 +17,7 @@
     "test:build:serial": "vitest run --project build",
     "test:browser": "vitest run -c vitest.browser.config.ts",
     "typecheck": "tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json system-themes/*/tsconfig*.json",
-    "fmt": "oxfmt",
+    "fmt": "oxfmt && oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
     "prepare": "if git rev-parse --git-dir >/dev/null 2>&1; then lefthook install && ruler apply; fi"

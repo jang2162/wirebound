@@ -5,7 +5,8 @@ pre-commit:
   jobs:
     - name: fmt
       glob: '*.{js,mjs,cjs,ts,tsx,mts,cts,json}'
-      run: pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files}
+      # 두 판 — oxfmt 0.72 는 `page.locator(…).evaluateAll(…)` 사슬을 첫 판 뒤 한 번 더 감싼다(한 판이면 pre-push 의 `--check` 가 빨강). 셋째 판은 아무것도 안 바꾼다.
+      run: pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files} && pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
     - name: lint
       glob: '*.{js,mjs,cjs,ts,tsx,mts,cts}'
