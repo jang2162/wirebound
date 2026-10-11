@@ -208,7 +208,7 @@ git 워크트리를 여럿 두고 각자 서버를 띄우면 **부딪히는 자�
 **데이터가 완전히 별개다.** 새 볼륨이므로 **처음에는 비어 있다**(그것이 정상이다 — 「띄우기」 절의
 `마이그레이션 0건` 문장이 그것을 말한다).
 
-**워크트리를 *만드는* 규칙은 [`CLAUDE.md`](CLAUDE.md)가 소유한다**(위치·이름·브랜치 —
+**워크트리를 *만드는* 규칙은 공용 지침 `base` 스택 「워크트리를 만들 때」가 소유한다**(위치·이름·브랜치 —
 `git worktree add -b <브랜치> .worktrees/<이름>`). 아래는 **만든 뒤**의 순서다.
 `<이름>` 자리에 워크트리 이름을, `<포트>` 자리에 **다른 워크트리가 안 쓰는 수**를 넣는다.
 
@@ -1367,7 +1367,7 @@ docker compose -f deploy/docker-compose.yml -p wb-measure down -v
 |---|---|
 | **API 를 부른다** — 엔드포인트·에러 형식·권한·응답 형태 | [`apps/api/README.md`](apps/api/README.md) |
 | **에이전트에게 설계서를 읽힌다** | [`packages/mcp/skill/SKILL.md`](packages/mcp/skill/SKILL.md) |
-| **저장소 규칙**(워크트리·커밋·병렬 작업) | [`CLAUDE.md`](CLAUDE.md) |
+| **저장소 규칙**(워크트리·커밋·병렬 작업) | [`.ruler/`](.ruler/) — 에이전트 지침의 소스. `CLAUDE.md` 는 `pnpm exec ruler apply` 가 만드는 생성물이고, 공용 지침은 `guideline` CLI 가 받는다(`.ruler/guideline.md`) |
 | **무엇이 왜 그렇게 서 있나** | `docs/superpowers/plans/` — 계획과 이월 장부. **시점 기록이다** — 지금 참인 규칙은 이 문서들과 설계 규격이 말한다 |
 | **설계 규격** | `docs/superpowers/specs/2026-08-03-wirebound-design.md` |
 

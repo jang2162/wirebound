@@ -266,7 +266,8 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
   const COMPOSE = stripYamlComments(readFileSync(new URL('docker-compose.yml', REPO_ROOT), 'utf8'))
   const EXAMPLE = readFileSync(new URL('../.env.example', import.meta.url), 'utf8')
   const README = readFileSync(new URL('README.md', REPO_ROOT), 'utf8')
-  const CLAUDE = readFileSync(new URL('CLAUDE.md', REPO_ROOT), 'utf8')
+  // 지침의 소스다. `CLAUDE.md` 는 `ruler apply` 의 생성물(gitignore)이라 새 체크아웃 · `git archive` 에 없다.
+  const CLAUDE = readFileSync(new URL('.ruler/10-worktree.md', REPO_ROOT), 'utf8')
 
   it('자가 진짜 파일을 읽는다 — 빈 문자열이면 아래가 통째로 헛돈다', () => {
     // 읽은 원문이 빈 문자열이면 아래 단언이 헛돌며 초록이 된다 — 그 부류를 막는 카나리아다.
@@ -312,12 +313,12 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
     // 이 케이스가 없으면 `README.md` 「세우기 — 다섯 걸음」 절의 `up` 명령에서 `--env-file` 을
     // 지워도, 거기 적힌 기본 포트를 5432 로 바꿔도 **게이트가 전부 초록**이다. `.env.example` 은
     // 인구조사가 글자까지 지키는데 README 는 그 절차의 **소유자**다 — *"README 가 소유하고
-    // CLAUDE.md 가 가리킨다"*.
+    // `.ruler/10-worktree.md` 가 가리킨다"*.
     //
     // **재는 것은 산문이 아니라 명령과 수 둘뿐이다**(산문까지 못박으면 문장을 못 고치게 된다).
     for (const [이름, 원문] of [
       ['README.md', README],
-      ['CLAUDE.md', CLAUDE],
+      ['.ruler/10-worktree.md', CLAUDE],
     ] as const) {
       // `docker compose … up -d` 처럼 줄임표가 낀 **산문**은 뺀다 — 그것은 칠 명령이 아니다.
       // 운영 compose(`-f deploy/docker-compose.yml`)도 뺀다 — Postgres 포트를 바깥에 안 열고 `deploy/.env` 를 스스로 읽는다.

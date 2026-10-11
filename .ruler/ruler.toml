@@ -1,0 +1,27 @@
+# 에이전트 지침의 소스는 .ruler/ 다. CLAUDE.md · .mcp.json · .claude/skills/ 는 생성물이다(pnpm exec ruler apply).
+default_agents = ["claude"]
+
+[mcp]
+enabled = true
+merge_strategy = "merge"
+
+[gitignore]
+enabled = true
+
+[backup]
+enabled = false
+
+[mcp_servers.codegraph]
+type = "stdio"
+command = "npx"
+args = ["-y", "@colbymchenry/codegraph", "serve", "--mcp"]
+
+[mcp_servers.context7]
+type = "stdio"
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+
+[mcp_servers.playwright-neo]
+type = "stdio"
+command = "npx"
+args = ["-y", "@playwright/mcp@latest", "--cdp-endpoint", "http://127.0.0.1:9110"]

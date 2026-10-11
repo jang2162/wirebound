@@ -17,6 +17,7 @@
     "typecheck": "tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json system-themes/*/tsconfig*.json"
   },
   "devDependencies": {
+    "@intellectronica/ruler": "0.3.44",
     "jsdom": "^25.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
