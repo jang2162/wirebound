@@ -12,6 +12,8 @@
  * | 신호 앞에 시작한 재연결 재조회가 신호 뒤에 답함 | 경보가 남는다 — 그 조회는 늦은 커밋 앞을 읽었을 수 있다 |
  * | 신호 뒤 재연결 재조회가 같은 판을 받음 | 경보가 풀린다 |
  * | 복원 낡음이 서 있음 | 늦은 경보가 덮지 않는다 — 복원 단추는 전부 다시 읽는다 |
+ * | 신호의 `seq` 힌트가 지금 판(`HEAD_SEQ`) 이하 | 안 선다 — 다시 읽지도 않는다 |
+ * | 힌트가 지금 판보다 앞섬 · 힌트 없음 | 선다 — 힌트는 번호를 안 얹으므로 판은 그대로다 |
  */
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import type { PageDocument } from '@wirebound/schema'
@@ -24,6 +26,7 @@ import { createEditChannel } from '../../src/realtime/edit-channel'
 import {
   OTHER_PAGE_ID,
   OTHER_PAGE_TITLE,
+  HEAD_SEQ,
   PAGE_ID,
   PROJECT_ID,
   nodeElement,
@@ -59,7 +62,12 @@ const TREE: TreeMenuNode[] = [
   },
 ]
 
-const staleFrame = (pageId: string = PAGE_ID) => ({ type: 'page-stale', projectId: PROJECT_ID, pageId })
+const staleFrame = (pageId: string = PAGE_ID, seq?: number) => ({
+  type: 'page-stale',
+  projectId: PROJECT_ID,
+  pageId,
+  ...(seq === undefined ? {} : { seq }),
+})
 const RESTORED_FRAME = { type: 'restored', projectId: PROJECT_ID, snapshotId: 's1', actor: { type: 'user', label: '밥' } }
 
 const LATE_ALERT = /늦게 반영된 변경/
@@ -251,6 +259,44 @@ describe('늦은 변경 경보', () => {
     // 판이 실리면 그 줄은 거짓이라 걷힌다(`untilLoad`).
     expect(screen.queryByRole('alert')).toBeNull()
     expect(banner()).not.toMatch(LATE_ALERT)
+  })
+})
+
+describe('늦은 변경 경보 — seq 힌트', () => {
+  /**
+   * 신호가 revision 의 `seq` 를 힌트로 실으면 받는 쪽은 **이미 그 번호 이상의 판을 읽었을 때** 경보를 안 세운다. 이 셸은 `HEAD_SEQ` 판을 읽어 열렸다(`pageDetail`).
+   * 힌트는 비교에만 쓴다 — 판을 안 바꾸고 다시 읽지도 않는다. 이 케이스가 프레임 → 소켓 → 스토어의 이음(`use-realtime`)을 함께 잠근다.
+   */
+  it('힌트가 지금 판의 번호 이하면 경보가 안 선다 — 다시 읽지도 않는다', async () => {
+    const view = await mount({ after: async (pageId) => pageDetail(pageId, doc('n-after')) })
+    const node = nodeElement('n-before')
+
+    view.push(staleFrame(PAGE_ID, HEAD_SEQ))
+    view.push(staleFrame(PAGE_ID, HEAD_SEQ - 1))
+
+    expect(banner()).not.toMatch(LATE_ALERT)
+    expect(screen.queryByRole('button', { name: '다시 불러오기' })).toBeNull()
+    expect(view.getPage).toHaveBeenCalledTimes(1)
+    expect(nodeElement('n-before')).toBe(node)
+  })
+
+  it('힌트가 지금 판보다 앞서면 경보가 선다 — 번호를 얹지 않으므로 판은 그대로다', async () => {
+    const view = await mount({ after: async (pageId) => pageDetail(pageId, doc('n-after')) })
+    const node = nodeElement('n-before')
+
+    view.push(staleFrame(PAGE_ID, HEAD_SEQ + 1))
+
+    expect(banner()).toMatch(LATE_ALERT)
+    expect(view.getPage).toHaveBeenCalledTimes(1)
+    expect(nodeElement('n-before')).toBe(node)
+  })
+
+  it('힌트 없는 신호(번호를 모르는 게시)는 지금처럼 경보를 세운다', async () => {
+    const view = await mount()
+
+    view.push(staleFrame())
+
+    expect(banner()).toMatch(LATE_ALERT)
   })
 })
 

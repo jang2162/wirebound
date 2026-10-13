@@ -60,7 +60,7 @@ export interface EventActor {
  * | `presence` | 누가 들어오거나 나갈 때, **룸 전체에** |
  * | `page-changed` | `applyEdit`이 성공했을 때 |
  * | `restored` | 스냅샷 복원이 성공했을 때 |
- * | `page-stale` | 답을 잃은 편집 · 게시의 COMMIT 이 확인 한도를 넘겨 **늦게** 커밋됐을 때, **룸 전체에**(낸 연결도) — 번호를 안 싣는다 |
+ * | `page-stale` | 답을 잃은 편집 · 게시의 COMMIT 이 확인 한도를 넘겨 **늦게** 커밋됐을 때, **룸 전체에**(낸 연결도) — 번호 프레임이 아니다. 그 revision 의 `seq` 를 **힌트로만** 싣는다(있을 때) |
  * | `pong` | `ping`에 대한 답. 클라이언트가 연결이 살아 있는지 재는 유일한 수단이다 |
  * | `patch-ack` | **낸 사람에게만.** `patch` 프레임이 성공했다(설계서 「정방향 흐름」의 *"[본인] ack(seq) 수신"*) |
  * | `patch-error` | **낸 사람에게만.** `patch` 프레임이 실패했다 |
@@ -149,11 +149,15 @@ export type ServerFrame =
    * 받는 쪽이 «다음 번호»로 얹어 뒤 revision 이 빠진 화면을 최신으로 둔다(`services/lost-commit.ts`의 표). 그래서 **번호를 안 싣는다** —
    * 받는 쪽은 얹을 것이 없고 그 페이지가 낡았다고만 안다(`apps/web`의 `EditorStore.markPageStale`).
    *
+   * **`seq`는 힌트다 — 비교에만 쓴다.** 그 쓰기가 남긴 revision 의 번호이고, 번호를 모르는 쓰기(게시 — `revisionOf` 가 «모름»)는 안 싣는다. 받는 쪽은
+   * `seq <= headSeq`(이미 그 revision 을 품은 판을 읽었다)면 경보를 안 세우고, 그 밖에는 지금처럼 세운다. **번호를 얹는 데 쓰지 않는다** — 이 프레임은
+   * «다음 번호»가 아니라 `page-changed` 의 이음에 끼지 않는다(늦은 옛 `seq` 를 얹으면 뒤 revision 이 빠진 화면이 최신으로 선다).
+   *
    * **`actor`도 안 싣는다** — 읽는 자가 없다. **낸 사람의 연결도 받는다**(`restored`와 같은 판정) — 답을 잃은 낸 탭은 서버가 썼는지
    * 모르고, 그 탭의 다시 읽기보다 커밋이 늦으면 이 신호만이 화면이 낡았다는 것을 안다. **여러 번 올 수 있다**(늦은 커밋마다 하나) — 받는
    * 쪽은 멱등이다.
    */
-  | { type: 'page-stale'; projectId: string; pageId: string }
+  | { type: 'page-stale'; projectId: string; pageId: string; seq?: number }
   | {
       type: 'restored'
       projectId: string

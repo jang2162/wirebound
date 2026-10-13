@@ -2058,15 +2058,22 @@ export class EditorStore {
    *
    * **열린 페이지일 때만 낡음을 세운다 · 여는 중인 페이지는 적기만 한다**(`#lateAt`). 다른 페이지의 신호는 버린다(그 페이지는 다음에 열 때 읽는다).
    * 멱등이다 — 이미 서 있으면 아무것도 안 한다(`#markStale`). **낸 사람의 탭도 받는다**: 그 탭의 다시 읽기가 커밋보다 먼저 읽었으면(수습의 조회) 이 신호만이
-   * 낡았다는 것을 안다 — 읽은 뒤에 시작한 판을 이미 실었으면 거짓 경보다(읽는 순간 신호가 이미 닿은 줄은 알 수 없다 — 번호가 없다). 대가는 경보 하나와 다시 읽기 하나다.
+   * 낡았다는 것을 안다 — 읽은 뒤에 시작한 판을 이미 실었으면 거짓 경보인데, 신호가 그 revision 의 `seq` 를 힌트로 실으면(`seq <= headSeq`) 세우지 않는다. 힌트가 없는 신호(게시 — 번호를
+   * 모른다)는 그 판을 가를 수 없어 대가가 경보 하나와 다시 읽기 하나로 남는다.
    */
-  readonly markPageStale = (pageId: string): void => {
+  readonly markPageStale = (pageId: string, seq?: number): void => {
     const opened = this.#state.openPageId === pageId
     if (!opened && this.#openingPageId !== pageId) return
+    // **`#lateAt` 은 힌트가 있어도 적는다** — 신호보다 앞에 시작해 아직 안 돌아온 조회는 그 커밋 앞을 읽었을 수 있고(헤드가 `seq` 보다 낮은 판), 그 판이 늦게 실리면 낡음을 남겨야 한다.
     this.#lateAt.delete(pageId)
     this.#lateAt.set(pageId, this.#pageLoadsBegun)
     if (this.#lateAt.size > LATE_PAGES_LIMIT) this.#lateAt.delete(this.#lateAt.keys().next().value as string)
-    if (opened) this.#markStale('late')
+    if (!opened) return
+    // **`seq` 힌트는 비교에만 쓴다 — 얹지 않는다**(`headSeq` · 문서를 안 건드린다). 지금 든 판이 이미 그 번호 이상이면 그 revision 을 품은 판이라(번호는 그 페이지에서
+    // 커밋 순서대로 오르고 `headSeq` 는 연속 번호나 서버 판을 통째로 읽은 자리에서만 오른다) 이 신호로 낡은 것이 없다 — 경보를 안 세운다. 힌트가 없거나(게시 — 번호를 모른다)
+    // 지금 판보다 앞서면 지금처럼 세운다.
+    if (seq !== undefined && seq <= this.#state.headSeq) return
+    this.#markStale('late')
   }
 
   /**
