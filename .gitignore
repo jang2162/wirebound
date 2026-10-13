@@ -23,6 +23,8 @@ shots/
 /.codegraph/
 # Komodo 서버에서 직접 쓰는 덮어쓰기 파일(docs/guides/deploy-komodo.md) — 서버마다 다르고 커밋하지 않는다
 /deploy/compose.server.yaml
+# Orca 개인용 이슈 명령(공용 지침 `orca` 세팅)
+/.orca/issue-command
 
 
 # START Ruler Generated Files
