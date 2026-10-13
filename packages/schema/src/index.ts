@@ -48,7 +48,14 @@ export { BUILTIN_PRESETS, stripMarkers } from './preset/builtin'
 
 export type { IssueSeverity, ValidationCode, ValidationIssue } from './validate'
 export { ISSUE_SEVERITY, ignoredVariantMessage, partitionIssues } from './validate'
-export { assertValidLayout, assertValidPage, checkViewStateRemoval, validateLayout, validatePage } from './validate'
+export {
+  assertValidLayout,
+  assertValidPage,
+  checkViewStateRemoval,
+  excuseStandingNestedPages,
+  validateLayout,
+  validatePage,
+} from './validate'
 
 export { DocumentEnvelopeSchema, InteractionSchema, NODE_ID_PATTERN, PageEnvelopeSchema, ViewStatesSchema, WbNodeSchema } from './envelope'
 

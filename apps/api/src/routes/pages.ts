@@ -502,8 +502,12 @@ export function pageRoutes() {
       // 그 반대가 된다.
       //
       // 거부할 때 `issues`에는 **경고까지 전부** 싣는다(파이프라인과 같다).
+      //
+      // **`nested-page`는 여기서 거절하지 않는다** — 저장된 문서에 이미 서 있던 중첩 `Page`인지는 편집 전 문서를 봐야 알고, 파이프라인
+      // 6단계가 그것을 본다(`excuseStandingNestedPages`). 여기서 막으면 옛 문서를 그대로 다시 올리는 통째 교체가 422 다. 새로 넣는 중첩은
+      // 파이프라인이 같은 422 로 막는다.
       const issues = validatePage(migrated)
-      if (partitionIssues(issues).errors.length > 0) {
+      if (partitionIssues(issues.filter((issue) => issue.code !== 'nested-page')).errors.length > 0) {
         throw validationFailed('스키마 검증에 실패했습니다', issues)
       }
 
