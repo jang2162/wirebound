@@ -53,6 +53,7 @@
  * **문서 옆 · 위의 바탕은 못 놓는 자리로 남긴다** — 놓다 마는 자리가 칸 안에 하나는 있어야 하고(Escape 말고), 문서가 칸보다 좁고 긴 판에서는
  * 옆 바탕의 페이지 끝이 화면 밖이라 미리보기 없이 놓이게 된다. 아래 바탕은 문서 끝이 보일 때만 드러나므로 미리보기가 늘 보인다.
  */
+import type { DropMiss } from '../drag/drag-debug'
 import { dropZone, type DropZone } from '../tree/tree-drop'
 
 export interface Rect {
@@ -191,6 +192,8 @@ export function siblingRects(parent: Element, self: Element, view: Window): Rect
  * **배치 미리보기 위면 `{ preview: true }` 다**(`isPreview` — `./canvas-preview.ts` 의 id 머리) — 미리보기는 문서의 노드가 아니라 그 위의
  * 그림이라 대상도 · 그 부모의 «안» 도 아니다. 판정은 미리보기를 숨기고 재므로(`drag/use-placement.ts` 머리말 «판정은 미리보기를 뺀
  * 배치로») 보통은 안 잡힌다 — 잡히면 부르는 쪽이 보인 자리를 그대로 둔다.
+ *
+ * `why` 를 주면 `null` 의 까닭을 한 번 부른다 — 끌기 진단 줄(`drag/drag-debug.ts`)에만 쓰고 답은 안 바꾼다. 꺼진 판은 안 준다.
  */
 export function canvasHitAt(
   frame: Window,
@@ -199,14 +202,24 @@ export function canvasHitAt(
   node: (id: string) => HitNode | null,
   clip: Rect | null,
   isPreview: (id: string) => boolean = () => false,
+  why?: (reason: DropMiss) => void,
 ): CanvasHit | null {
   const element = frame.frameElement
-  if (element === null) return null
+  if (element === null) {
+    why?.('no-frame-element')
+    return null
+  }
   const frameRect = plain(element.getBoundingClientRect())
-  if (clip !== null && !inside(hostPoint, clip)) return null
+  if (clip !== null && !inside(hostPoint, clip)) {
+    why?.('outside-canvas')
+    return null
+  }
   const doc = frame.document
   if (!inside(hostPoint, frameRect)) {
-    if (clip === null || hostPoint.y < frameRect.top + frameRect.height) return null
+    if (clip === null || hostPoint.y < frameRect.top + frameRect.height) {
+      why?.(clip === null ? 'outside-canvas' : 'beside-or-above-document')
+      return null
+    }
     return pageEndHit(firstNodeElement(doc, node) ?? doc.body, frameRect, zoom)
   }
 
