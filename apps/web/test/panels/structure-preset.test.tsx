@@ -680,7 +680,7 @@ describe('저장', () => {
       createPreset: async (_projectId, body) => {
         sent.push(body.schema)
         throw new ApiError(422, 'validation-failed', '프리셋을 저장할 수 없습니다', [
-          { code: 'nested-page', severity: 'error', nodeId: 'n-old', path: '/schema/1', message: issue },
+          { code: 'nested-page', nodeId: 'n-old', path: '/schema/1', message: issue },
         ])
       },
     }
