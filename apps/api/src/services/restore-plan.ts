@@ -67,7 +67,14 @@
  * | `invalid-document` | 만들 페이지의 문서가 카탈로그 검증에 걸린다 |
  * | `dangling-reference` | payload 안에서 참조가 끊겨 있다 — 그대로 쓰면 FK 위반으로 500이 된다 |
  */
-import { CURRENT_DOCUMENT_VERSION, partitionIssues, validatePage, type PageDocument, type ValidationIssue } from '@wirebound/schema'
+import {
+  CURRENT_DOCUMENT_VERSION,
+  excuseStandingNestedPages,
+  partitionIssues,
+  validatePage,
+  type PageDocument,
+  type ValidationIssue,
+} from '@wirebound/schema'
 import { canonicalJson } from '../canonical-json'
 import type { SnapshotComment, SnapshotMenuNode, SnapshotPage, SnapshotPayload, SnapshotTheme } from '@wirebound/themes'
 
@@ -334,7 +341,11 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
     switch (writeByPage.get(page.id)) {
       case 'create': {
         // 만들어지는 문서는 아무도 검증하지 않는 유일한 쓰기다(머리말) — 여기서 본다.
-        const { errors } = partitionIssues(validatePage(page.schema))
+        //
+        // **문서 안의 중첩 `Page`는 거절 사유로 세지 않는다**(`excuseStandingNestedPages`에 그 문서 자신을 «편집 전»으로 준다). payload 는
+        // 서버가 저장된 행에서 지은 것이라(스냅샷을 올리는 입구가 없다) 그 중첩은 규칙을 들이기 전에 저장돼 있던 것이고, 되살린 뒤의 편집도
+        // 같은 장치로 막히지 않는다. 살아남는 페이지의 다시 쓰기(`rewrite`)는 검증하지 않는다.
+        const { errors } = partitionIssues(excuseStandingNestedPages(page.schema, validatePage(page.schema)))
         if (errors.length > 0) {
           return { kind: 'invalid-document', pageId: page.id, title: page.title, issues: errors }
         }

@@ -81,6 +81,7 @@ export const VALIDATION_RULE: Record<ValidationCode, RelayRuleId> = {
   'ignored-variant': 'document-invalid',
   'duplicate-id': 'document-invalid',
   'bad-root': 'document-invalid',
+  'nested-page': 'document-invalid',
   'slot-count': 'document-invalid',
   'bad-document': 'document-invalid',
   'state-case-default': 'document-invalid',

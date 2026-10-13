@@ -140,8 +140,7 @@ export interface PickableGroup {
  * 넣어 이슈가 없는 것만 남긴다 — 이름 목록을 손으로 두는 것보다 정확하고, 카탈로그가
  * 늘어도 여기가 스스로 따라간다(머리말 «갈래와 이름은 카탈로그가 갖는다»와 같은 근거).
  *
- * **뿌리가 될 수 있는 타입도 뺀다.** 안에 두면 검증은 지나지만(`validatePage` 가 `Page` 안 `Page` 를 안 막는다) 한 장이 뿌리를 둘 갖게 된다. 그
- * 타입은 **그 노드를 뿌리로 세워 `bad-root` 가 안 나는 것**으로 가른다 — 이름이 아니라 검증의 뿌리 규칙이다(지금 `Page` 하나).
+ * **뿌리 타입(`Page`)도 같은 검증이 뺀다** — 뿌리 밖의 `Page` 는 `nested-page` 오류다. 이름으로 따로 빼지 않는다.
  *
  * **갈래를 데이터에서 모은 뒤 순서만 준다.** `COMPONENT_GROUPS`를 훑어 각 갈래의 타입을
  * 담으면 목록에 없는 갈래를 가진 타입이 **조용히 사라진다**. 반대로 하면 그 상태에서도
@@ -158,7 +157,6 @@ export function placeableGroups(): PickableGroup[] {
       root: { id: 'n-probe-root', type: 'Page', children: [node] },
     }
     if (validatePage(probe).length > 0) continue
-    if (!validatePage({ version: 1, root: node }).some((issue) => issue.code === 'bad-root')) continue
 
     const bucket = buckets.get(def.group) ?? []
     bucket.push({

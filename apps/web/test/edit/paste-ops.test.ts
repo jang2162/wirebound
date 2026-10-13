@@ -128,6 +128,25 @@ describe('pasteOps', () => {
     expect('ops' in pasteOps(alreadyBroken, null, [P1])).toBe(true)
   })
 
+  it('옛 문서의 중첩 Page 앞에 붙여도 붙는다 — 경로가 밀린 그 Page 는 새 오류가 아니다 · 새로 붙이는 Page 는 막는다', () => {
+    const standing: PageDocument = {
+      version: 1,
+      root: {
+        id: 'root',
+        type: 'Page',
+        children: [
+          { id: 'a', type: 'Text' },
+          { id: 'old', type: 'Page' },
+        ],
+      },
+    }
+    // `a` 뒤에 붙이면 `old` 가 `/root/children/1` → `/root/children/2` 로 밀린다.
+    expect(idsUnder(applied(standing, pasteOps(standing, 'a', [P1])), 'root')).toEqual(['a', 'p1', 'old'])
+
+    const fresh = pasteOps(standing, null, [{ id: 'p-page', type: 'Page' }])
+    expect('reason' in fresh && fresh.reason).toContain('Page는 루트에만 둘 수 있습니다')
+  })
+
   it('되돌리기 하나로 통째로 돌아온다 — 역연산이 붙이기 전 문서를 낸다', () => {
     const edit = pasteOps(doc(), 'a', [P1, P2, P3])
     if ('reason' in edit) throw new Error(edit.reason)

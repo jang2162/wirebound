@@ -17,7 +17,7 @@
  * 3. `input.baseSeq !== headSeq`면 `stale` — 현재 `headSeq`를 함께 돌려준다.
  * 4. `invertOps(before, ops)` → `PatchError`면 `patch-failed`.
  * 5. `applyOps(before, ops)` → `PatchError`면 `patch-failed`.
- * 6. `validatePage(after)` → **`error` 이슈가 있으면** `invalid`. 경고만 있으면 통과하고
+ * 6. `validatePage(after)` → **`error` 이슈가 있으면** `invalid`(편집 전 문서에 이미 선 중첩 `Page`의 `nested-page`는 빼고 센다). 경고만 있으면 통과하고
  *    성공 결과의 `warnings`에 실린다. 봉투가 맞으면 `checkViewStateRemoval(before, after)`(편집이 목록에서 뺀
  *    상태의 가지가 남음 — 오류)를 함께 싣는다.
  * 7. `after.version !== before.version`이면 `invalid` — `ops`가 `/version`을 직접
@@ -79,6 +79,7 @@ import {
   ISSUE_SEVERITY,
   applyOps,
   checkViewStateRemoval,
+  excuseStandingNestedPages,
   invertOps,
   migrateDocument,
   partitionIssues,
@@ -201,7 +202,10 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
     //
     // **편집이 목록에서 뺀 상태의 가지도 여기서 막는다**(`checkViewStateRemoval` — 편집 전후를 봐야 «뺐다»를 안다). 봉투가 깨진 판은
     // `validatePage`가 `bad-document`만 내고 트리를 안 걷는다 — 그 판에는 부르지 않는다.
-    const documentIssues = validatePage(after)
+    //
+    // **편집 전 문서에 이미 서 있던 중첩 `Page`는 거절 사유로 세지 않는다**(`excuseStandingNestedPages` — 노드 id 로 가른다). 규칙을 들이기
+    // 전에 저장된 문서가 그 중첩과 무관한 편집까지 422 로 막히지 않고, 새로 넣는 중첩만 막힌다.
+    const documentIssues = excuseStandingNestedPages(before, validatePage(after))
     const issues = documentIssues.some((issue) => issue.code === 'bad-document')
       ? documentIssues
       : [...documentIssues, ...checkViewStateRemoval(before, after)]

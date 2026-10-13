@@ -21,6 +21,11 @@ export type ValidationCode =
   | 'ignored-variant'
   | 'duplicate-id'
   | 'bad-root'
+  /**
+   * 뿌리가 아닌 자리에 `Page`가 섰다 — 깊이와 상관없다. `Page`는 페이지당 하나인 뿌리 노드다(설계서 「컴포넌트 카탈로그」). 노드는 그
+   * `Page`다. 이 규칙을 들이기 전에 저장된 문서에 이미 선 중첩 `Page`는 저장 경계가 거절 사유로 세지 않는다(`excuseStandingNestedPages`).
+   */
+  | 'nested-page'
   | 'slot-count'
   | 'bad-document'
   /**
@@ -115,6 +120,7 @@ export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'ignored-variant': 'warning',
   'duplicate-id': 'error',
   'bad-root': 'error',
+  'nested-page': 'error',
   'slot-count': 'error',
   'bad-document': 'error',
   'missing-interaction-target': 'warning',
@@ -215,6 +221,25 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
     issues.push(makeIssue('slot-count', null, '/root', `페이지에는 Slot을 둘 수 없습니다 (${slots}개 발견)`))
   }
   return issues
+}
+
+/**
+ * **편집 전 문서에 이미 서 있던 중첩 `Page`의 `nested-page`를 걷는다** — 저장 경계(`apps/api`의 `services/edit-pipeline.ts` 6단계 · 웹의
+ * 붙이기 판정)가 편집 뒤 이슈에 건다. 규칙을 들이기 전에 저장된 문서가 그 중첩과 **무관한** 편집(다른 노드의 글자)까지 422 로 막히지 않게
+ * 하고, 새로 넣는 것만 막는다.
+ *
+ * **노드 id 로 가른다 — 경로가 아니다.** 앞 형제를 넣거나 빼는 편집은 그 `Page`의 경로를 밀어, 경로로 가르면 무관한 편집이 «새로 넣었다»가
+ * 된다. id 는 한 문서 안에서 겹치지 않으므로(`duplicate-id`) 걷히는 중첩 `Page`의 수는 편집 전 수를 넘지 못한다 — 옮기기 · 고치기는 되고
+ * 늘리기는 안 된다. 편집 전 문서의 봉투가 깨졌으면 걷을 것이 없다(트리를 못 걷는다).
+ *
+ * `nested-page`가 없으면 편집 전 문서를 검증하지 않는다 — 평소 편집에는 비용이 없다.
+ */
+export function excuseStandingNestedPages<T extends ValidationIssue>(before: PageDocument, issues: readonly T[]): T[] {
+  if (!issues.some((issue) => issue.code === 'nested-page')) return [...issues]
+  const standing = new Set(
+    validatePage(before).flatMap((issue) => (issue.code === 'nested-page' && issue.nodeId !== null ? [issue.nodeId] : [])),
+  )
+  return issues.filter((issue) => !(issue.code === 'nested-page' && issue.nodeId !== null && standing.has(issue.nodeId)))
 }
 
 /**
@@ -377,6 +402,9 @@ function validateTree(root: WbNode): ValidationIssue[] {
   }
 
   for (const { node, path, parent } of walkNodes(root)) {
+    if (node.type === 'Page' && parent !== null) {
+      issues.push(makeIssue('nested-page', node.id, path, 'Page는 루트에만 둘 수 있습니다 — 페이지 안에 Page를 넣을 수 없습니다'))
+    }
     issues.push(...checkStateRegion(node, path, parent))
     if (seen.has(node.id)) {
       issues.push(makeIssue('duplicate-id', node.id, path, `id가 중복됩니다: ${node.id}`))

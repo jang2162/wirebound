@@ -13,6 +13,7 @@
 import {
   MAX_OPS_PER_EDIT,
   applyOps,
+  excuseStandingNestedPages,
   isPageTargetAction,
   partitionIssues,
   prepareNodesForPaste,
@@ -69,7 +70,10 @@ function insertMany(document: PageDocument, parentId: string, index: number, nod
   }
 
   const before = new Set(partitionIssues(validatePage(document)).errors.map((issue) => `${issue.code}|${issue.path}`))
-  const added = partitionIssues(validatePage(running)).errors.filter((issue) => !before.has(`${issue.code}|${issue.path}`))
+  // 이미 서 있던 중첩 `Page`는 경로가 밀려도(앞에 붙인 판) 새 오류가 아니다 — 서버 6단계와 같은 장치로 id 로 가른다.
+  const added = excuseStandingNestedPages(document, partitionIssues(validatePage(running)).errors).filter(
+    (issue) => !before.has(`${issue.code}|${issue.path}`),
+  )
   if (added.length > 0) return { reason: invalidNotice(added.map((issue) => issue.message)) }
 
   return { ops, insertedIds: nodes.map((node) => node.id) }

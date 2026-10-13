@@ -171,9 +171,12 @@ function checkNode(node: PatternNode, path: string, declared: ReadonlySet<string
   }
 
   // 패턴은 페이지에 전개되므로, 페이지가 받지 못하는 것은 여기서 막는다.
-  // `validatePage`가 페이지 안의 `Slot`을 이슈로 낸다(실측). 반대로 중첩 `Page`는
-  // `validatePage`가 통과시키므로(같은 실측) 여기서도 막지 않는다 — 단일 진실보다
-  // 엄격해지지 않는다.
+  // `validatePage`가 페이지 안의 `Slot`을 이슈로 낸다(실측).
+  //
+  // **`Page`는 여기서 막지 않는다** — 페이지 안의 `Page`도 `validatePage`의 오류(`nested-page`)지만, 이 검사는 저장된 테마
+  // 패키지를 다시 읽는 자리(내보내기의 `readWbtheme` — `apps/api`의 `services/export-source.ts`)에서도 돌아, 여기서 조이면
+  // `Page`가 든 패턴을 실은 옛 패키지의 내보내기가 깨진다. 넣는 순간은 에디터의 삽입 판정(`apps/web`의 `edit/pattern-insert.ts` —
+  // 전개한 노드를 페이지 프로브의 자식으로 검증한다)과 저장 경계가 막는다.
   if (node.type === 'Slot') {
     issues.push(issue('bad-pattern-node', path, '패턴에는 Slot을 둘 수 없습니다'))
   }
