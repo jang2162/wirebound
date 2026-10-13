@@ -660,6 +660,40 @@ describe('저장', () => {
 
     await screen.findByText('이름은 60자 이하여야 합니다')
   })
+
+  it('옛 문서(페이지 안에 Page)에서 저장하면 서버의 422 이슈 문장을 보인다 — 봉투가 아니라', async () => {
+    // 대역의 본문은 `apps/api` 의 `routes/presets.ts` 가 내는 것과 같은 꼴이다(`apps/api/test/nested-page-entries.test.ts` 가 서버 쪽을 잰다).
+    const issue =
+      '프리셋에 Page를 담을 수 없습니다 — 적용하면 페이지 안의 Page가 됩니다. 이 페이지 안의 Page를 지우거나 그 안의 노드를 밖으로 옮긴 뒤 저장하세요'
+    const old = pageDoc({
+      id: 'n-root',
+      type: 'Page',
+      children: [
+        { id: 'n-a', type: 'Text' },
+        { id: 'n-old', type: 'Page', children: [{ id: 'n-in', type: 'Text' }] },
+      ],
+    })
+    const backend = server({ document: old })
+    const sent: unknown[] = []
+    const failing: Partial<ApiClient> = {
+      ...backend.api,
+      createPreset: async (_projectId, body) => {
+        sent.push(body.schema)
+        throw new ApiError(422, 'validation-failed', '프리셋을 저장할 수 없습니다', [
+          { code: 'nested-page', nodeId: 'n-old', path: '/schema/1', message: issue },
+        ])
+      },
+    }
+    await openPage(old, { apiOverrides: failing })
+
+    await openPicker()
+    fireEvent.change(screen.getByLabelText('프리셋 이름'), { target: { value: '옛 화면' } })
+    fireEvent.click(pickerButton('현재 페이지를 프리셋으로 저장'))
+
+    await screen.findByText(issue)
+    expect(sent).toHaveLength(1)
+    expect(screen.queryByText('프리셋을 저장할 수 없습니다')).toBeNull()
+  })
 })
 
 /**

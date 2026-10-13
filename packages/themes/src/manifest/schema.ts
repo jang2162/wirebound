@@ -1,7 +1,7 @@
 import { THEMELESS_TYPES, getComponent, getKoreanErrorMap, installCatalog } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { z } from 'zod'
-import { checkPatterns, PatternsSchema } from '../spec/patterns'
+import { checkNewPatterns, checkPatterns, PatternsSchema } from '../spec/patterns'
 import { SDK_RANGE_PATTERN, VERSION_PATTERN } from './semver'
 import { checkTokens } from './tokens'
 
@@ -113,6 +113,19 @@ export function validateManifest(raw: unknown): { manifest: ThemeManifest | null
   if (manifest.patterns !== undefined) issues.push(...checkManifestPatterns(manifest.patterns))
 
   return { manifest: issues.length === 0 ? manifest : null, issues }
+}
+
+/**
+ * **새로 들이는 manifest 에만 거는 검사** — `validateManifest` 를 지난 manifest 에 업로드 · `wb-theme build` 가 더 묻는다(`readNewWbtheme`).
+ * 지금은 `Page` 가 든 패턴(`checkNewPatterns`) 하나다. `validateManifest` 에 넣지 않는 까닭은 그 함수가 저장된 패키지를 다시 읽는 자리
+ * (내보내기 · 시딩 · CLI lint)에서도 돌기 때문이다 — 거기서 조이면 이미 받은 패키지가 다시 읽기에서 깨진다.
+ */
+export function newManifestIssues(manifest: ThemeManifest): ManifestIssue[] {
+  if (manifest.patterns === undefined) return []
+  const parsed = PatternsSchema.safeParse(manifest.patterns)
+  // 모양은 `validateManifest` 가 이미 봤다 — 못 읽으면 그쪽이 이슈를 냈다.
+  if (!parsed.success) return []
+  return checkNewPatterns(parsed.data).issues.map((i) => ({ code: 'pattern' as const, path: i.path, message: i.message }))
 }
 
 /**

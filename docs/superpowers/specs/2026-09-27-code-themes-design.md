@@ -222,7 +222,7 @@ theme_packages(theme_id text, version text, name text, description text,
 
 1. zip 크기 · 풀린 크기 · 항목 수 상한.
 2. 항목 경로 — 절대 경로 · `..` · 심볼릭 링크 거부. 대소문자 · 유니코드 정규화(NFC)만 다른 두 파일도 거부한다 — 대소문자를 무시하는 파일시스템에 풀면 한 파일이 된다. 허용 목록: `manifest.json` · `theme.js` · `theme.css` · `assets/**`(`png` · `jpg` · `jpeg` · `gif` · `webp` · `svg` · `woff` · `woff2` · `ttf` · `otf`).
-3. `manifest.json` 이 manifest zod 규격을 통과한다(「manifest」의 표) — 코드 `manifest`, 원래 코드는 `manifestCode`.
+3. `manifest.json` 이 manifest zod 규격을 통과한다(「manifest」의 표) — 코드 `manifest`, 원래 코드는 `manifestCode`. 새로 들이는 패키지(업로드 · `wb-theme build`)는 패턴에 `Page` 가 없어야 한다(맨 위 · 깊이 무관 — 패턴은 페이지 뿌리 아래에 전개되어 페이지 안의 `Page` 가 된다) — `manifestCode: pattern`. 저장된 패키지를 다시 읽는 자리(내보내기 · 시딩 · CLI lint 가 받는 manifest)는 이 검사를 안 한다 — 그 판을 받던 패키지가 다시 읽기에서 깨지지 않는다.
 4. 호스트 SDK 판이 `sdk` 범위 안이다 — 밖이면 `sdk-incompatible`.
 5. `id` 가 `system-` 으로 시작하지 않는다 — 시작하면 `reserved-id`.
 6. 같은 `id@version` 이 있으면 409.

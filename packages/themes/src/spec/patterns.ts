@@ -142,6 +142,25 @@ export function checkPatterns(patterns: Record<string, ThemePattern>): { issues:
   return { issues }
 }
 
+/**
+ * **새로 들이는 패키지에만 거는 패턴 검사** — `Page`가 든 패턴. 패턴은 페이지 뿌리 아래에 전개되므로 그 안의 `Page`는 맨 위든 깊든
+ * 페이지 안의 `Page`(`nested-page`)가 되어 넣을 수 없다 — 고르개에 못 넣는 패턴이 선다.
+ *
+ * `checkPatterns`와 가른 까닭: 그쪽은 저장된 패키지를 다시 읽는 자리(내보내기 · 시딩 · CLI lint)에서도 돈다. 여기서 막으면 그 판을
+ * 받던 옛 패키지가 다시 읽기에서 깨진다. 부르는 자리는 `readNewWbtheme`(업로드 · `wb-theme build`) 하나다.
+ */
+export function checkNewPatterns(patterns: Record<string, ThemePattern>): { issues: ThemeIssue[] } {
+  const issues: ThemeIssue[] = []
+  const visit = (node: PatternNode, path: string): void => {
+    if (node.type === 'Page') {
+      issues.push(issue('bad-pattern-node', path, '패턴에는 Page를 둘 수 없습니다 — 넣으면 페이지 안의 Page가 됩니다'))
+    }
+    node.children?.forEach((child, index) => visit(child, `${path}.children.${index}`))
+  }
+  for (const [name, pattern] of Object.entries(patterns)) visit(pattern.schema, `patterns.${name}.schema`)
+  return { issues }
+}
+
 function checkNode(node: PatternNode, path: string, declared: ReadonlySet<string>, used: Set<string>, issues: ThemeIssue[]): void {
   if (node.slot !== undefined) {
     // 한 슬롯 이름을 노드 둘이 쓰는 것을 막지 않는다 — 「patterns」가 그 경우를 말하지 않았다.
@@ -174,9 +193,9 @@ function checkNode(node: PatternNode, path: string, declared: ReadonlySet<string
   // `validatePage`가 페이지 안의 `Slot`을 이슈로 낸다(실측).
   //
   // **`Page`는 여기서 막지 않는다** — 페이지 안의 `Page`도 `validatePage`의 오류(`nested-page`)지만, 이 검사는 저장된 테마
-  // 패키지를 다시 읽는 자리(내보내기의 `readWbtheme` — `apps/api`의 `services/export-source.ts`)에서도 돌아, 여기서 조이면
-  // `Page`가 든 패턴을 실은 옛 패키지의 내보내기가 깨진다. 넣는 순간은 에디터의 삽입 판정(`apps/web`의 `edit/pattern-insert.ts` —
-  // 전개한 노드를 페이지 프로브의 자식으로 검증한다)과 저장 경계가 막는다.
+  // 패키지를 다시 읽는 자리(내보내기의 `readWbtheme` — `apps/api`의 `services/export-source.ts` · CLI lint 가 받는 manifest)에서도
+  // 돌아, 여기서 조이면 `Page`가 든 패턴을 실은 옛 패키지의 내보내기가 깨진다. 새 패키지는 아래 `checkNewPatterns`가 막는다(업로드 ·
+  // `wb-theme build`). 넣는 순간은 에디터의 삽입 판정(`apps/web`의 `edit/pattern-insert.ts`)이 막는다.
   if (node.type === 'Slot') {
     issues.push(issue('bad-pattern-node', path, '패턴에는 Slot을 둘 수 없습니다'))
   }

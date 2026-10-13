@@ -16,7 +16,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { SDK_VERSION } from '@wirebound/theme-sdk/version'
-import { readWbtheme, satisfiesSdk, WBTHEME_LIMITS } from '@wirebound/themes'
+import { readNewWbtheme, satisfiesSdk, WBTHEME_LIMITS } from '@wirebound/themes'
 import { recheckInstanceAdmin, requireInstanceAdmin } from '../auth/admin'
 import type { ApiConfig } from '../config'
 import { withTransaction } from '../db/tx'
@@ -54,8 +54,9 @@ export function adminThemeRoutes(config: ApiConfig) {
         }
         const bytes = request.body
 
-        // 코드는 실행하지 않는다 — 크기 · 경로 · 허용 목록 · 링크 · manifest 를 읽기만 한다(`readWbtheme`).
-        const { files, issues } = readWbtheme(bytes)
+        // 코드는 실행하지 않는다 — 크기 · 경로 · 허용 목록 · 링크 · manifest 를 읽기만 한다. 새로 들이는 패키지라 `readNewWbtheme` 이다
+        // (`Page` 가 든 패턴도 거절한다) — 저장된 패키지를 다시 읽는 내보내기는 `readWbtheme` 이라 그 판을 받던 옛 패키지가 안 깨진다.
+        const { files, issues } = readNewWbtheme(bytes)
         if (files === null) {
           throw validationFailed(
             REJECTED,

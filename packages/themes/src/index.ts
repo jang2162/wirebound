@@ -38,6 +38,7 @@ export type { TokenMigration } from './manifest/migrate'
 export { migrateTokens } from './manifest/migrate'
 
 // `.wbtheme` 읽기 · 쓰기(spec 「`.wbtheme` 파일」 · 「업로드 검증」). 빌드가 쓰고, 업로드 · 시딩 · 호스트가 같은 읽기로 검증한다.
+// 새로 들이는 입구(업로드 · `wb-theme build`)는 `readNewWbtheme` — 저장된 패키지를 다시 읽는 자리는 `readWbtheme`.
 export type { WbthemeFiles, WbthemeIssue, WbthemeIssueCode } from './wbtheme/read'
-export { readWbtheme, WBTHEME_LIMITS } from './wbtheme/read'
+export { readNewWbtheme, readWbtheme, WBTHEME_LIMITS } from './wbtheme/read'
 export { packWbtheme } from './wbtheme/pack'

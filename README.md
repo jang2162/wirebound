@@ -433,11 +433,15 @@ echo "$비밀번호" | wireb login --email me@example.com
 
 | 코드 | 뜻 |
 |---|---|
-| **0** | 정상. **`lint`는 결함이 있어도 0 이다** — 결함이 있는 것은 오류가 아니다 |
+| **0** | 정상. **`lint`는 `warning` 만 있으면 0 이다** — 저장을 막지 않는 결함이다 |
 | **2** | 설정·자격이 없다 → `wireb init` 또는 `wireb login` |
 | **3** | 서버가 거절했다(권한·잠금·검증) |
 | **4** | 서버에 못 닿았다 — **같은 주소의 서버가 죽었을 때**다. `.wirebound.json`의 `server`를 **다른 주소로 바꾸면 4가 아니라 2**가 나온다: 자격이 `(server, projectId)`에 매여 있어 네트워크를 타기 전에 끊긴다 |
-| **10** | `lint --fail-on warning`에 걸렸다 (이 기계에서 쟀다) |
+| **10** | `lint` 가 `error` 를 하나 이상 찾았다(`--fail-on warning` 이면 `warning` 도) |
+
+**`lint` 의 `document-invalid` · «Page는 루트에만 둘 수 있습니다»** 는 그 규칙 전에 저장된 페이지(안에 `Page` 가 선 문서)다 — 줄이
+페이지 경로와 그 `Page` 의 노드 id 를 짚는다. 그 `Page` 안의 노드를 밖으로 옮기고 그 `Page` 를 지우면 사라진다(에디터에서 편집은
+막히지 않는다). MCP `validate` 는 같은 것을 `failing: true` · `issues[].nodeId` 로 낸다.
 
 ---
 
