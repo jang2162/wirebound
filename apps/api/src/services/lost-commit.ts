@@ -20,6 +20,7 @@
  * | **커밋 안 됐다**(`aborted`) | 봉투 있는 500 «반영되지 않았다»(`DB_WRITE_NOT_APPLIED_MESSAGE`) — 웹은 그것을 «커밋 전»으로 읽는다(`apps/web`의 `refusedBeforeCommit`) | 안 한다 |
  * | 한도(`LOST_COMMIT_PROBE_MS`) 안에 결말이 안 났다 | 원래 오류(503 «모름») | 번호 프레임은 **안 한다**. 그 뒤 `LOST_COMMIT_LATE_MS` 안에 커밋되면 **늦은 커밋의 신호**(아래 «늦게 커밋된 편집 · 게시 · 복원») |
  * | 커밋됐는데 번호를 모른다(확인이 «모름»인 게시 · 머리를 한도 안에 못 읽음) | 원래 오류(503 «모름») | 번호 프레임은 **안 한다**. 그 자리에서 늦은 커밋과 **같은 신호**(`late.onCommit` — 게시는 `page-stale`) |
+ * | 커밋됐고 **문서를 안 바꿨다**(`NO_REVISION` — 마지막이 아닌 코멘트 삭제 · 바꿀 것 없는 재번호) | 원래 오류(503 «모름» — 응답 계약은 그대로) | **신호도 안 한다** — 알릴 revision 이 없다. 위 «모름» 갈래와 가르는 것이 이것이다(둘 다 `confirm` 이 번호를 못 내지만 «없음»은 안 낡고 «모름»은 낡았을 수 있다) |
  * | 확인 질의를 묻지 못했다 | 원래 오류(503 «모름») | 안 한다 |
  *
  * **커밋이 끝날 때까지 본다.** 끊긴 연결의 COMMIT 이 서버에서 아직 돌면 `in progress`다 — 간격을 `LOST_COMMIT_POLL_MS`에서
@@ -66,6 +67,12 @@ import { withTransaction, type DbHandle } from '../db/tx'
 import { internal } from '../errors'
 import { findRevisionCommitWithin } from '../repos/revisions'
 import type { EditOutcome } from './edit-pipeline'
+
+/**
+ * `confirm` · `revisionOf` 가 «커밋됐다면 revision 이 없다»를 내는 값 — 문서를 안 바꾼 쓰기다. `null`(«모름» — 커밋됐다면 번호를 모르는 revision 이 있을 수 있다)과 다르다.
+ * 머리말의 표.
+ */
+export const NO_REVISION = 'no-revision' as const
 
 /** 확인을 기다리는 한도 — 머리말 «확인의 시간 한도». */
 export const LOST_COMMIT_PROBE_MS = 1_000
@@ -136,8 +143,8 @@ export interface Settled<T> {
  * 트랜잭션을 돌리고, COMMIT 답을 잃었으면 `confirm`으로 확인한다 — 머리말의 표를 쓰기의 모양과 떼어 둔 것이다.
  *
  * `confirm`은 본문의 결과(끝까지 돈 것)와 확인의 마감(결말을 묻고 남은 몫)을 받아 **방송해도 되는가**를 낸다. `null`이면 «모름»이다
- * — 원래 오류를 그대로 던진다.
- * 확인할 것이 없는 결과(문서를 안 바꾼 쓰기)도 `null`이다 — 그 쓰기는 방송할 것이 없고, 커밋됐는지 가를 행도 없다.
+ * — 원래 오류를 그대로 던지되 `late.onCommit` 을 그 자리에서 부른다(커밋은 확인됐는데 번호를 모른다). 문서를 안 바꾼 쓰기(`NO_REVISION`)의 신호를 거르는 자리는 이 함수가 아니라
+ * `runRevisionTransaction` 이 넘기는 `onCommit` 이다 — 응답 자리와 지켜보기가 같은 `onCommit` 을 부르므로 그 한 곳이 두 갈래를 함께 거른다.
  *
  * **`late`** — 한도 안에 결말이 안 난 판(503 «모름»)을 **응답 뒤에도** `late.watch` 로 지켜보다 커밋됐으면 `late.onCommit` 을 부른다(응답은
  * 붙잡지 않는다 — `createLateCommitWatch`). 커밋은 확인됐는데 `confirm`이 «모름»(`null`)이면 응답 자리에서 곧바로 부른다 — 둘 다 «커밋됐는데 번호
@@ -280,13 +287,14 @@ export interface WrittenRevision {
 
 /**
  * revision 을 남기는 쓰기의 확인 — 그 revision 이 보이면 커밋됐다. 방송은 그것이 지금 머리일 때만이다(머리말의 표).
- * `revisionOf`가 `null`을 내면(revision 을 안 남긴 결과) «모름» 그대로다.
+ * `revisionOf`가 `null`을 내면 «모름»이다(게시 — 커밋됐다면 번호 프레임이 빠진 revision 이 있을 수 있다). **`NO_REVISION`을 내면 «문서를 안 바꿨다»** —
+ * 커밋이 확인돼도 알릴 것이 없다(머리말의 표).
  */
 export async function runRevisionTransaction<T>(
   db: DbHandle,
   pageId: string,
   fn: (trx: DbHandle) => Promise<T>,
-  revisionOf: (result: T) => WrittenRevision | null,
+  revisionOf: (result: T) => WrittenRevision | typeof NO_REVISION | null,
   /**
    * 한도 뒤에 커밋되면 부른다(`pageStaleOnLateCommit`). **필수다** — 새 호출자가 빠뜨리면 컴파일이 막는다(빠뜨린 입구는 늦은 커밋에 남의 화면이 조용히 낡는다).
    * 일부러 안 내는 입구면 `null`을 넘기고 그 까닭을 호출 자리에 적는다.
@@ -298,21 +306,37 @@ export async function runRevisionTransaction<T>(
     fn,
     async (result, deadline) => {
       const revision = revisionOf(result)
-      if (revision === null) return null
+      // `NO_REVISION` 은 여기서 «모름»과 같게 읽는다 — 응답은 어느 쪽이든 503 이고, 둘을 가르는 것은 아래 `onCommit` 의 신호다(머리말의 표).
+      if (revision === null || revision === NO_REVISION) return null
       const left = deadline - Date.now()
       if (left <= 0) return null
       const seen = await findRevisionCommitWithin(db, pageId, revision.revisionId, left)
       if (seen === null || !seen.committed) return null
       return seen.headSeq === revision.seq
     },
-    late === null ? undefined : { watch: late.watch, onCommit: late.onCommit },
+    // **문서를 안 바꾼 결과면 신호를 안 낸다**(`NO_REVISION`) — 알릴 revision 이 없다. 응답 자리의 «번호를 모른다» 갈래와 한도를 넘겨 지켜보는 갈래가 둘 다 이 `onCommit` 을
+    // 부르므로 이 한 곳이 둘을 함께 거른다. revision 을 남긴 결과면 그 `seq` 를 **힌트로** 넘긴다(`LateCommitSignal.onCommit`) — 이 트랜잭션이 쓴 값이고 커밋은 확인됐다.
+    late === null
+      ? undefined
+      : {
+          watch: late.watch,
+          onCommit: (result) => {
+            const revision = revisionOf(result)
+            if (revision === NO_REVISION) return undefined
+            return late.onCommit(revision === null ? null : { seq: revision.seq })
+          },
+        },
   )
 }
 
-/** 늦은 커밋 지켜보기에 넘기는 신호 — 결과를 안 읽는다(번호가 없는 신호다). */
+/**
+ * 늦은 커밋 지켜보기에 넘기는 신호. `onCommit` 은 그 쓰기가 남긴 revision 의 `seq` 를 **힌트로** 받는다 — 게시처럼 `revisionOf` 가 «모름»(`null`)인 쓰기는 `null` 이다.
+ * 힌트는 `page-stale` 프레임에 실려(`ws/notify.ts`) 받는 쪽이 «이미 그 번호 이상의 판을 읽었다»를 알아보는 **비교에만** 쓰인다 — 번호를 얹는 데 쓰지 않는다
+ * (늦은 옛 번호 프레임이 일으키던 이음 오염으로 돌아간다).
+ */
 export interface LateCommitSignal {
   watch: LateCommitWatch
-  onCommit: () => Promise<void> | void
+  onCommit: (revision: { seq: number } | null) => Promise<void> | void
 }
 
 /**

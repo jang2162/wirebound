@@ -152,6 +152,95 @@ describe('늦은 변경 낡음이 풀리는 때', () => {
   })
 })
 
+describe('seq 힌트 — 비교에만 쓴다', () => {
+  /**
+   * 서버가 신호에 그 revision 의 `seq` 를 힌트로 싣는다(`apps/api/src/ws/protocol.ts`). 받는 쪽은 `seq <= headSeq`(이미 그 revision 을 품은 판)면 경보를 안 세운다.
+   * **번호를 얹는 데 쓰지 않는다** — 늦은 옛 번호 프레임이 뒤 revision 이 빠진 화면을 최신으로 두던 이음 오염으로 돌아가면 안 된다. 이 스토어는 4 번 판에서 열린다.
+   * `headSeq` 가 오르는 자리(`loadPage` · 연속 번호의 프레임 · 번호 응답 · 내 ack · 고아 ack · 다시 읽은 판 위의 창)는 모두 그 번호 이하의 커밋된 내용을 품은 판에서만 오른다.
+   */
+  it('힌트가 지금 판의 번호 이하면 경보가 안 선다 — 구독자도 안 깨우고 판(문서 · 바탕 · 번호)을 안 건드린다', () => {
+    const { store, seen } = opened()
+    const before = store.getState()
+
+    store.markPageStale('page_1', 4)
+    store.markPageStale('page_1', 3)
+    store.markPageStale('page_1', 0)
+
+    expect(store.getState().remoteStale).toBeNull()
+    expect(seen).toEqual([])
+    expect(store.getState().headSeq).toBe(4)
+    expect(store.getState().document).toBe(before.document)
+    expect(store.getState().baseDocument).toBe(before.baseDocument)
+  })
+
+  it('힌트가 지금 판보다 앞서면(`headSeq + 1`) 경보가 선다 — 번호도 문서도 안 얹는다', () => {
+    const { store } = opened()
+    const before = store.getState()
+
+    store.markPageStale('page_1', 5)
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'late' })
+    // 비교에만 쓴다 — 힌트의 번호로 `headSeq` 를 올리지도 문서를 바꾸지도 않는다.
+    expect(store.getState().headSeq).toBe(4)
+    expect(store.getState().document).toBe(before.document)
+    expect(store.getState().baseDocument).toBe(before.baseDocument)
+  })
+
+  it('힌트가 없는 신호(번호를 모르는 게시)는 지금처럼 경보를 세운다', () => {
+    const { store } = opened()
+
+    store.markPageStale('page_1', undefined)
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'late' })
+  })
+
+  it('판을 다시 읽어 힌트의 번호에 닿은 탭은 경보가 안 선다 — 거짓 경보가 줄어드는 판', () => {
+    const { store } = opened()
+    // 늦게 커밋된 revision(5)을 신호보다 먼저 읽은 탭 — 그 판을 실었다.
+    reload(store, 'page_1', 5)
+
+    store.markPageStale('page_1', 5)
+
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  it('번호 프레임이 구멍(5)을 건너뛰어 와도 `headSeq` 는 그 구멍을 넘지 않는다 — 5 의 힌트는 참 경보를 세운다', () => {
+    const { store } = opened()
+    // 늦게 커밋된 5 의 프레임은 안 나갔고 그 뒤 6 의 프레임이 온다 — 이음이 안 맞아 얹히지 않는다(갭).
+    store.applyRemoteChange('page_1', { seq: 6, ops: [], warnings: [] })
+    expect(store.getState().headSeq).toBe(4)
+
+    store.markPageStale('page_1', 5)
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'late' })
+    expect(store.getState().headSeq).toBe(4)
+  })
+
+  it('경보를 안 세워도 신호의 시점은 적는다 — 신호 앞에 시작한 조회가 더 옛 판(힌트보다 낮은 번호)을 싣고 돌아오면 낡음이 선다', () => {
+    const { store } = opened()
+    // 5 번 판을 읽은 탭 — 이어서 신호(힌트 5)가 오고, 그 앞에 시작한 옛 조회(4 번 판)가 늦게 돌아온다.
+    reload(store, 'page_1', 5)
+    const before = store.beginPageLoad('page_1')
+    store.markPageStale('page_1', 5)
+    expect(store.getState().remoteStale).toBeNull()
+
+    store.settlePageLoad(before)
+    store.loadPage('page_1', doc(), 4, before)
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'late' })
+  })
+
+  it('복원 낡음이 서 있으면 힌트와 상관없이 그대로다', () => {
+    const { store } = opened()
+    store.markRestored({})
+
+    store.markPageStale('page_1', 5)
+    store.markPageStale('page_1', 1)
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
+  })
+})
+
 describe('여는 중인 페이지', () => {
   it('열린 페이지가 아니면 낡음은 안 서지만, 여는 조회가 신호 앞에 시작했으면 그 판에 낡음이 선다', () => {
     const store = new EditorStore()

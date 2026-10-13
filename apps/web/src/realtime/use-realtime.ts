@@ -8,7 +8,7 @@
  * |---|---|
  * | `joined` | 연결 id를 홀더에 넣는다 — REST로 나가는 편집이 그것을 헤더로 실어 **자기 편집을 되받지 않는다**(설계서 「LLM 편집 경로」의 MCP 경로가 남는다) |
  * | `page-changed` | `store.applyRemoteChange` — 얹거나, **내 pending 위에 리베이스하거나**, 갈라졌다고 말한다 |
- * | `page-stale` | `store.markPageStale` — 그 페이지가 서버에서 바뀌었는데 번호 프레임은 안 온다. 얹을 `ops`가 없다 |
+ * | `page-stale` | `store.markPageStale` — 그 페이지가 서버에서 바뀌었는데 번호 프레임은 안 온다. 얹을 `ops`가 없다. `seq` 는 힌트라 비교에만 쓴다 |
  * | `restored` | `store.markRestored` — 판이 통째로 갈렸다. 얹을 `ops`가 없다 |
  * | `patch-ack`·`patch-error` | 채널에 넘긴다 — 내가 낸 편집의 답이다 |
  * | `locks` | `store.setLocks` — 설계서 「소프트 잠금」의 배지와 선택 차단이 이 목록 위에 선다. **잠금 통로는 이 목록을 안 본다** — 내 `lock`이 섰는지는 서버가 거절로 말한다(아래 줄) |
@@ -166,7 +166,7 @@ export function useRealtime(
             break
           }
           case 'page-stale':
-            store.markPageStale(frame.pageId)
+            store.markPageStale(frame.pageId, frame.seq)
             break
           case 'restored':
             store.markRestored(frame)

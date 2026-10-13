@@ -88,9 +88,9 @@ export type ServerFrame =
   /**
    * **그 페이지가 서버에서 바뀌었는데 그 변경의 `page-changed`는 안 온다 — 다시 읽어라**(서버 `ws/protocol.ts`의 그 갈래). 번호도 `ops`도 안
    * 온다 — 늦게 커밋된 편집 · 게시의 번호 프레임을 늦게 내면 받는 쪽이 «다음 번호»로 얹어 뒤 revision 이 빠진 화면을 최신으로 둔다. 받는 자리는
-   * `EditorStore.markPageStale`이다.
+   * `EditorStore.markPageStale`이다. **`seq`는 힌트다 — 비교에만 쓴다**(`seq <= headSeq`면 이미 읽은 판이라 경보를 안 세운다). 번호를 얹는 데 쓰지 않는다.
    */
-  | { type: 'page-stale'; projectId: string; pageId: string }
+  | { type: 'page-stale'; projectId: string; pageId: string; seq?: number }
   | {
       type: 'restored'
       projectId: string
@@ -308,7 +308,15 @@ export function parseServerFrame(raw: string): ServerFrame | null {
         : null
     case 'page-stale':
       // 모르는 필드는 안 옮긴다(서버가 나중에 더한 값이 이 갈래를 깨지 않는다) — 페이지 id 가 없으면 어느 페이지가 낡았는지 모른다.
-      return str(value.projectId) && str(value.pageId) ? { type: 'page-stale', projectId: value.projectId, pageId: value.pageId } : null
+      // `seq` 힌트는 음이 아닌 정수일 때만 옮긴다 — 어긋난 값이 프레임을 버리게 하지 않는다(힌트가 없는 신호로 읽는다 = 경보는 지금처럼 선다).
+      return str(value.projectId) && str(value.pageId)
+        ? {
+            type: 'page-stale',
+            projectId: value.projectId,
+            pageId: value.pageId,
+            ...(typeof value.seq === 'number' && Number.isInteger(value.seq) && value.seq >= 0 ? { seq: value.seq } : {}),
+          }
+        : null
     case 'membership-changed':
       return str(value.projectId) ? { type: 'membership-changed', projectId: value.projectId } : null
     case 'menu-changed':

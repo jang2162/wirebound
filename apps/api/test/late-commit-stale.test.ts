@@ -1,7 +1,7 @@
 /**
  * ⚠️ 이 파일은 테스트 DB에 **실제로 커밋한다.** `helpers.ts`의 `withProxiedRealApi`를 쓴다.
  *
- * **한도(`LOST_COMMIT_PROBE_MS`)를 넘겨 늦게 커밋된 편집 · 게시는 번호 없는 `page-stale { pageId }`를 룸에 낸다**(`services/lost-commit.ts`의 «늦게 커밋된
+ * **한도(`LOST_COMMIT_PROBE_MS`)를 넘겨 늦게 커밋된 편집 · 게시는 번호 프레임이 아닌 `page-stale { pageId, seq? }`를 룸에 낸다 — `seq` 는 그 revision 의 번호 힌트(번호를 모르는 게시는 없다)**(`services/lost-commit.ts`의 «늦게 커밋된
  * 편집 · 게시» · `ws/notify.ts`의 `pageStaleOnLateCommit`). 그 revision 의 `page-changed`는 늦게 내지 않는다 — 그 사이 더 나아간 머리가 있으면 받는 쪽이 옛 `seq`를
  * «다음 번호»로 얹어 뒤 revision 이 빠진 화면을 최신으로 둔다. COMMIT 은 `DEFERRABLE INITIALLY DEFERRED` 제약 트리거의 `pg_sleep`으로 늦추고 api 쪽 연결만 끊는다
  * (`halfCutOnQuery`) — 커밋은 되는데 응답은 503 «모름»이다.
@@ -25,6 +25,9 @@
  * | 복원 라우트가 `late`를 안 넘긴다 | 「늦게 커밋된 복원」 둘 — `restored` `[]` |
  * | `announceRestore`가 `menu-changed` · 잠금 놓기 · `theme-changed` 가운데 하나를 뺀다 | 그 프레임의 단언 **혼자**(`[]` · `'프레임 없음'`) |
  * | `runConfirmedTransaction`이 확인됐는데 «모름»인 판에 `late.onCommit`을 안 부른다 | 「번호를 모르는 쓰기」 **혼자** |
+ * | `markerRevision` 이 문서를 안 바꾼 결과에 `NO_REVISION` 대신 `null`(«모름»)을 낸다(갈래를 다시 합친다) | 「문서를 안 바꾼 쓰기」 둘(한도 안 · 한도 넘김) |
+ * | `runRevisionTransaction` 이 넘기는 `onCommit` 이 `NO_REVISION` 을 안 거른다 | 「문서를 안 바꾼 쓰기」 둘 — 응답 자리 · 지켜보기가 같은 `onCommit` 을 부른다 |
+ * | 지켜보기 `onCommit` 이 힌트를 안 싣는다(`late.onCommit(null)`) · 틀린 번호를 싣는다 | `expectStale` 을 부르는 케이스 전부(`seq` 가 빠진 · 어긋난 프레임) · 게시 케이스는 산다(힌트가 원래 없다) |
  */
 import { sql } from 'kysely'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -208,17 +211,24 @@ async function committed(fx: Fixture, seq: number): Promise<void> {
  * **프레임을 던지는 기다림으로 기다리지 않는다** — 신호가 안 오는 고장이 «프레임이 N 개까지 차지 않았습니다» 시간 초과로 죽으면 단언 값이 아니다. 커밋은 DB 의 값으로 기다리고
  * (`committed`), 그 뒤 지켜보기가 낼 몫만 짧게 기다린 다음 프레임 목록을 견준다 — 안 오면 `[]` 와 견준 값 차이로 죽는다.
  */
-async function expectStale(fx: Fixture, probe: WsProbe, before: number, count = 1): Promise<void> {
+async function expectStale(fx: Fixture, probe: WsProbe, before: number, count = 1, hint: 'seq' | 'none' = 'seq'): Promise<void> {
   await committed(fx, before + count)
   const until = Date.now() + 4_000
   while (pageStale(probe.received).length < count && Date.now() < until) await sleep(50)
-  expect(pageStale(probe.received)).toEqual(
-    Array.from({ length: count }, () => ({ type: 'page-stale', projectId: fx.projectId, pageId: fx.pageId })),
+  // 힌트(`seq`)는 그 쓰기가 남긴 revision 의 번호다 — 번호를 모르는 쓰기(게시)는 안 싣는다. 번호순으로 견준다(늦은 커밋 둘의 신호 차례는 지켜보기가 정한다).
+  const received = [...pageStale(probe.received)].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
+  expect(received).toEqual(
+    Array.from({ length: count }, (_, index) => ({
+      type: 'page-stale',
+      projectId: fx.projectId,
+      pageId: fx.pageId,
+      ...(hint === 'seq' ? { seq: before + index + 1 } : {}),
+    })),
   )
 }
 
 describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () => {
-  it('PATCH …/ops — 503 «모름» 뒤 커밋되면 지켜보는 사람이 page-stale 을 받는다 · 프레임은 번호 · actor 없이 그 셋뿐이다', async () => {
+  it('PATCH …/ops — 503 «모름» 뒤 커밋되면 지켜보는 사람이 page-stale 을 받는다 · 프레임은 actor 없이 그 revision 의 seq 힌트까지 넷뿐이다', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
       await fx.watcher.quiet()
@@ -340,7 +350,7 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
         return res.statusCode
       })
       expect(status).toBe(503)
-      await expectStale(fx, fx.watcher, before)
+      await expectStale(fx, fx.watcher, before, 1, 'none')
     })
   }, 40_000)
 
@@ -680,6 +690,103 @@ describe('한도 안에 커밋이 확인됐는데 번호를 모르는 쓰기 —
       expect(replay.statusCode, replay.body).toBe(200)
       expect(await framesSince(fx.watcher, mark, 'page-changed', 1)).toMatchObject([{ seq: before + 1 }])
       expect(pageStale(fx.watcher.received.slice(mark))).toHaveLength(1)
+    })
+  }, 40_000)
+})
+
+describe('한도 안에 커밋이 확인됐고 문서를 안 바꾼 쓰기 — page-stale 이 없다', () => {
+  /**
+   * 마지막이 아닌 코멘트 삭제는 문서를 안 바꾼다(revision 이 안 선다) — 커밋이 한도 안에 확인되면 «번호 프레임이 없는 revision» 자체가 없어 알릴 것이 없다.
+   * 응답은 그대로 503 «모름»이다(응답 계약은 안 바꾼다). **게시와 가르는 것**: 게시는 `revisionOf` 를 안 줘 «모름»(`null`)이고, 이 삭제는 «revision 없음»(`NO_REVISION`)이다.
+   */
+  it('마지막이 아닌 코멘트 삭제 — COMMIT 답만 잃어도 page-stale 은 없고 응답은 503 · 삭제는 커밋됐다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const ids: string[] = []
+      for (const body of ['첫째', '둘째']) {
+        const posted = await ctx.app.inject({
+          method: 'POST',
+          url: `${fx.pageUrl}/comments`,
+          cookies: fx.owner.cookie,
+          payload: { nodeId: 'n_a', body },
+        })
+        expect(posted.statusCode, posted.body).toBe(201)
+        ids.push(posted.json().comment.id as string)
+      }
+      await fx.watcher.quiet()
+      const mark = fx.watcher.received.length
+      const before = await headSeq(fx.pageId)
+      ctx.proxy.dropCommitReplyAfter('delete from comments')
+      const res = await ctx.app.inject({ method: 'DELETE', url: `${fx.pageUrl}/comments/${ids[0]}`, cookies: fx.owner.cookie })
+      expect(ctx.proxy.fired).toBe(true)
+      expect(res.statusCode, res.body).toBe(503)
+      // 삭제는 커밋됐고(행이 없다) 문서는 안 바뀌었다(머리 그대로).
+      const { rows } = await sql<{ n: number }>`select count(*)::int as n from comments where page_id = ${fx.pageId}`.execute(getTestDb())
+      expect(rows[0]!.n).toBe(1)
+      expect(await headSeq(fx.pageId)).toBe(before)
+      // 지켜보기가 낼 몫(500ms 간격)보다 넉넉히 기다린 뒤 견준다 — 안 올 신호라 던지지 않는 기다림이다.
+      await fx.watcher.quiet(2_000)
+      const frames = fx.watcher.received.slice(mark)
+      expect(pageStale(frames)).toEqual([])
+      expect(pageChanged(frames)).toEqual([])
+    })
+  }, 40_000)
+
+  /**
+   * 같은 쓰기가 **한도를 넘겨** 늦게 커밋되는 판 — 지켜보기(`LateCommitWatch`)가 커밋을 알아본다. 문서를 안 바꿨으니 이쪽도 알릴 것이 없다(`runRevisionTransaction` 이
+   * `NO_REVISION` 인 결과의 `onCommit` 을 걸러낸다). 늦춤은 `revisions` 가 아니라 **지우는 `comments` 행**에 건다 — 이 쓰기는 revision 을 안 남긴다.
+   */
+  it('마지막이 아닌 코멘트 삭제 — 한도를 넘겨 늦게 커밋돼도 page-stale 은 없다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const ids: string[] = []
+      for (const body of ['첫째', '둘째']) {
+        const posted = await ctx.app.inject({
+          method: 'POST',
+          url: `${fx.pageUrl}/comments`,
+          cookies: fx.owner.cookie,
+          payload: { nodeId: 'n_a', body },
+        })
+        expect(posted.statusCode, posted.body).toBe(201)
+        ids.push(posted.json().comment.id as string)
+      }
+      await fx.watcher.quiet()
+      const mark = fx.watcher.received.length
+      const before = await headSeq(fx.pageId)
+      const db = getTestDb()
+      await sql
+        .raw(
+          `create or replace function zz_slow_delete() returns trigger language plpgsql as $$ begin perform pg_sleep(${LATE_COMMIT_MS / 1000}); return null; end $$`,
+        )
+        .execute(db)
+      await sql
+        .raw(
+          `create constraint trigger zz_slow_delete after delete on comments deferrable initially deferred for each row when (old.page_id = '${fx.pageId}') execute function zz_slow_delete()`,
+        )
+        .execute(db)
+      try {
+        ctx.proxy.halfCutOnQuery('commit')
+        const res = await ctx.app.inject({ method: 'DELETE', url: `${fx.pageUrl}/comments/${ids[0]}`, cookies: fx.owner.cookie })
+        expect(ctx.proxy.fired).toBe(true)
+        expect(res.statusCode, res.body).toBe(503)
+        // 커밋은 DB 의 값으로 기다린다(프레임을 기다리지 않는다) — 행이 하나 남으면 늦은 커밋이 닿았다.
+        await vi.waitFor(
+          async () => {
+            const { rows } = await sql<{ n: number }>`select count(*)::int as n from comments where page_id = ${fx.pageId}`.execute(db)
+            expect(rows[0]!.n).toBe(1)
+          },
+          { timeout: STALE_WAIT_MS, interval: 50 },
+        )
+        // 지켜보기가 낼 몫(500ms 간격)보다 넉넉히 기다린 뒤 견준다.
+        await fx.watcher.quiet(2_500)
+        const frames = fx.watcher.received.slice(mark)
+        expect(pageStale(frames)).toEqual([])
+        expect(pageChanged(frames)).toEqual([])
+        expect(await headSeq(fx.pageId)).toBe(before)
+      } finally {
+        await sql`drop trigger if exists zz_slow_delete on comments`.execute(db)
+        await sql`drop function if exists zz_slow_delete()`.execute(db)
+      }
     })
   }, 40_000)
 })

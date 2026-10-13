@@ -163,7 +163,7 @@ import {
 import { findPageById, lockPageForEdit, lockPageShared } from '../repos/pages'
 import { lockProjectShared } from '../repos/projects'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
-import { runRevisionTransaction, type Settled, type WrittenRevision } from '../services/lost-commit'
+import { NO_REVISION, runRevisionTransaction, type Settled, type WrittenRevision } from '../services/lost-commit'
 import { broadcastOrigin, notifyPageChanged, pageStaleOnLateCommit } from '../ws/notify'
 
 /**
@@ -308,7 +308,7 @@ async function runWrite<T>(
   projectId: string,
   pageId: string,
   fn: (trx: DbHandle) => Promise<T>,
-  revisionOf: (result: T) => WrittenRevision | null = () => null,
+  revisionOf: (result: T) => WrittenRevision | typeof NO_REVISION | null = () => null,
 ): Promise<Settled<T>> {
   try {
     // **한도 뒤에 커밋된 쓰기는 번호 없는 `page-stale`을 낸다**(`services/lost-commit.ts`의 «늦게 커밋된 편집 · 게시») — 쓰기 셋 모두다.
@@ -320,9 +320,12 @@ async function runWrite<T>(
   }
 }
 
-/** 문서를 바꾼 코멘트 쓰기의 revision — COMMIT 답을 잃었을 때 확인이 찾는다(`runWrite`). */
-function markerRevision(result: { seq: number; revisionId?: string } | 'not-found'): WrittenRevision | null {
-  return result === 'not-found' || result.revisionId === undefined ? null : { revisionId: result.revisionId, seq: result.seq }
+/**
+ * 문서를 바꾼 코멘트 쓰기의 revision — COMMIT 답을 잃었을 때 확인이 찾는다(`runWrite`). **문서를 안 바꿨으면 `NO_REVISION`이다**(마지막이 아닌 코멘트 삭제 ·
+ * 바꿀 것 없는 재번호 · 없는 코멘트) — 알릴 revision 이 없어 `page-stale`도 안 낸다. `null`(«모름»)은 게시의 기본값만이다(`runWrite`의 기본 인자).
+ */
+function markerRevision(result: { seq: number; revisionId?: string } | 'not-found'): WrittenRevision | typeof NO_REVISION {
+  return result === 'not-found' || result.revisionId === undefined ? NO_REVISION : { revisionId: result.revisionId, seq: result.seq }
 }
 
 const PageParams = z.object({ projectId: z.uuid(), pageId: z.uuid() })
