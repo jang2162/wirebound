@@ -26,8 +26,7 @@
  * | `announceRestore`가 `menu-changed` · 잠금 놓기 · `theme-changed` 가운데 하나를 뺀다 | 그 프레임의 단언 **혼자**(`[]` · `'프레임 없음'`) |
  * | `runConfirmedTransaction`이 확인됐는데 «모름»인 판에 `late.onCommit`을 안 부른다 | 「번호를 모르는 쓰기」 **혼자** |
  * | `markerRevision` 이 문서를 안 바꾼 결과에 `NO_REVISION` 대신 `null`(«모름»)을 낸다(갈래를 다시 합친다) | 「문서를 안 바꾼 쓰기」 둘(한도 안 · 한도 넘김) |
- * | `runConfirmedTransaction` 이 `NO_REVISION` 에서도 신호를 낸다(`null` 갈래로 흘린다) | 「문서를 안 바꾼 쓰기」 한도 안 판 **혼자** |
- * | `runRevisionTransaction` 의 지켜보기 `onCommit` 이 `NO_REVISION` 을 안 거른다 | 「문서를 안 바꾼 쓰기」 한도 넘김 판 **혼자** |
+ * | `runRevisionTransaction` 이 넘기는 `onCommit` 이 `NO_REVISION` 을 안 거른다 | 「문서를 안 바꾼 쓰기」 둘 — 응답 자리 · 지켜보기가 같은 `onCommit` 을 부른다 |
  * | 지켜보기 `onCommit` 이 힌트를 안 싣는다(`late.onCommit(null)`) · 틀린 번호를 싣는다 | `expectStale` 을 부르는 케이스 전부(`seq` 가 빠진 · 어긋난 프레임) · 게시 케이스는 산다(힌트가 원래 없다) |
  */
 import { sql } from 'kysely'
