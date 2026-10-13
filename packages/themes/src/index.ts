@@ -4,15 +4,7 @@ export const PACKAGE_NAME = '@wirebound/themes'
 export type { ThemeIssue, ThemeIssueCode } from './issue'
 
 export type { PatternNode, SlotType, ThemePattern } from './spec/patterns'
-export {
-  PATTERN_CATEGORIES,
-  PatternNodeSchema,
-  PatternSchema,
-  PatternsSchema,
-  SLOT_TYPES,
-  checkNewPatterns,
-  checkPatterns,
-} from './spec/patterns'
+export { PATTERN_CATEGORIES, PatternNodeSchema, PatternSchema, PatternsSchema, SLOT_TYPES, checkPatterns } from './spec/patterns'
 
 // 패턴 전개(설계서 「patterns — 테마가 소유한 구성 레시피」). 부르는 곳은 `apps/web`이다.
 // **`apps/web`이 아니라 여기 두는 것은** 패턴 삽입이 에이전트가 할 일이기도 해서다
@@ -37,7 +29,7 @@ export type { ManifestIssue, ManifestIssueCode } from './manifest/schema'
 // manifest 의 모양은 SDK 가 선언한다(`defineManifest` 가 작성자에게 같은 타입을 준다). 검증을 부르는 쪽(api)이 SDK 에 의존하지 않고
 // 그 이름을 쓰게 여기서 다시 낸다 — 타입뿐이라 react 를 끌어오지 않는다.
 export type { ThemeManifest } from '@wirebound/theme-sdk'
-export { ManifestSchema, newManifestIssues, validateManifest } from './manifest/schema'
+export { ManifestSchema, validateManifest } from './manifest/schema'
 export { compareVersions, SDK_RANGE_PATTERN, satisfiesSdk, VERSION_PATTERN } from './manifest/semver'
 // 토큰 → CSS 변수(spec 「토큰이 화면에 닿는 길」). kit dev 의 갤러리 · 캔버스 · 내보내기가 같은 함수로 `:root` 를 짓는다.
 export { tokensCss, tokenValues, tokenVar } from './manifest/tokens'
@@ -46,6 +38,7 @@ export type { TokenMigration } from './manifest/migrate'
 export { migrateTokens } from './manifest/migrate'
 
 // `.wbtheme` 읽기 · 쓰기(spec 「`.wbtheme` 파일」 · 「업로드 검증」). 빌드가 쓰고, 업로드 · 시딩 · 호스트가 같은 읽기로 검증한다.
+// 새로 들이는 입구(업로드 · `wb-theme build`)는 `readNewWbtheme` — 저장된 패키지를 다시 읽는 자리는 `readWbtheme`.
 export type { WbthemeFiles, WbthemeIssue, WbthemeIssueCode } from './wbtheme/read'
 export { readNewWbtheme, readWbtheme, WBTHEME_LIMITS } from './wbtheme/read'
 export { packWbtheme } from './wbtheme/pack'

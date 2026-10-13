@@ -91,6 +91,8 @@ describe('공개 표면이 계약이다', () => {
     'SDK_RANGE_PATTERN',
     // `.wbtheme` 읽기 · 쓰기. 빌드 · 업로드 · 시딩 · 호스트가 같은 읽기로 검증한다.
     'readWbtheme',
+    // 새로 들이는 입구(업로드 · `wb-theme build`)의 읽기 — 다시 읽기에는 없는 검사(`Page` 가 든 패턴)를 더한다.
+    'readNewWbtheme',
     'packWbtheme',
     'WBTHEME_LIMITS',
     // 토큰 → CSS 변수 · 푼 값. 갤러리 · 캔버스 · 내보내기가 같은 함수로 짓는다.

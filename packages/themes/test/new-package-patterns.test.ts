@@ -4,15 +4,8 @@
  */
 import { installCatalog } from '@wirebound/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
-import {
-  checkNewPatterns,
-  checkPatterns,
-  packWbtheme,
-  readNewWbtheme,
-  readWbtheme,
-  validateManifest,
-  type ThemeManifest,
-} from '../src/index'
+import { packWbtheme, readNewWbtheme, readWbtheme, validateManifest, type ThemeManifest } from '../src/index'
+import { checkNewPatterns, checkPatterns } from '../src/spec/patterns'
 
 beforeAll(() => {
   installCatalog()
