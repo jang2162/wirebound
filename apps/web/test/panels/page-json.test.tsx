@@ -16,7 +16,7 @@
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { WIREBOUND_PAGE_VERSION, type PageJson } from '@wirebound/schema'
+import { pageJsonText, toPageJson, WIREBOUND_PAGE_VERSION, type PageJson } from '@wirebound/schema'
 import type { ApiClient } from '../../src/api/client'
 import type { Comment, PageDetail, PageImported, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
@@ -413,6 +413,37 @@ describe('미리보기가 서버와 같은 게이트를 지난다', () => {
     expect(within(dialog()).getByRole('alert')).toBeDefined()
     // 사용자에게 남는 것은 파일뿐이므로 파일에서 찾을 수 있는 id여야 한다.
     expect(dialog().textContent).toContain('file_odd')
+    expect(importButton().disabled).toBe(true)
+  })
+
+  it('옛 문서(페이지 안에 Page)를 내보낸 파일 — 막고, 고칠 노드의 자리 · id · 까닭을 한 줄로 보인다', async () => {
+    // 내보내기(`edit/page-export.ts`)와 같은 두 함수로 짓는다 — 옛 문서는 규칙을 들이기 전에 저장된 것이다.
+    const text = pageJsonText(
+      toPageJson({
+        page: { title: '옛 페이지' },
+        document: {
+          version: 1,
+          root: {
+            id: 'n_oldroot0001',
+            type: 'Page',
+            children: [
+              { id: 'n_oldtext0001', type: 'Text', props: { content: '바깥' } },
+              { id: 'n_oldnested01', type: 'Page', children: [{ id: 'n_oldinside01', type: 'Text', props: { content: '안쪽' } }] },
+            ],
+          },
+        },
+        comments: [],
+      }),
+    )
+    await open()
+    paste(text)
+
+    expect(within(dialog()).getByRole('alert').textContent).toBe('이 문서는 페이지로 서지 않습니다 — 파일의 아래 자리를 고치세요.')
+    expect(
+      within(dialog())
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['/root/children/1 n_oldnested01 Page는 루트에만 둘 수 있습니다 — 페이지 안에 Page를 넣을 수 없습니다'])
     expect(importButton().disabled).toBe(true)
   })
 

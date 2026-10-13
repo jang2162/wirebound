@@ -243,6 +243,18 @@ export function excuseStandingNestedPages<T extends ValidationIssue>(before: Pag
 }
 
 /**
+ * **노드 묶음을 페이지 뿌리의 자식으로 놓으면 설 `nested-page`** — 프리셋 저장(`apps/api` 의 `routes/presets.ts`)이 새 프리셋에 건다.
+ * 프리셋은 적용하면 뿌리의 자식이 되므로 맨 위 `Page`도 센다. 판정은 `validateTree` 의 것 그대로이고(빈 뿌리 `Page` 아래에 놓아 본다)
+ * `nested-page` 만 낸다 — 다른 카탈로그 판정은 적용 때 결과 문서 전체로 한다. 경로는 묶음 기준이다(`/1/children/0`).
+ */
+export function nestedPagesUnderRoot(nodes: readonly WbNode[]): ValidationIssue[] {
+  const probe: WbNode = { id: 'n_nestedprobe', type: 'Page', children: [...nodes] }
+  return validateTree(probe)
+    .filter((issue) => issue.code === 'nested-page')
+    .map((issue) => ({ ...issue, path: issue.path.slice('/root/children'.length) }))
+}
+
+/**
  * **편집이 목록에서 뺀 상태의 가지가 남았는가**(`state-cases-left`) — 저장 경계(`apps/api`의 `services/edit-pipeline.ts` 6단계)가 편집 전
  * 문서 `before`와 적용 뒤 문서 `after`로 부른다. «뺀 상태»는 `before`의 목록에 있고 `after`의 목록에 없는 id 다(빼기 · id 바꾸기 · 목록째
  * 빼거나 갈아 끼우기). 그 상태를 가리키는 `StateCase`가 `after`에 남았으면 가지마다 이슈 하나.

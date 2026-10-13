@@ -359,7 +359,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | code | 뜻 |
 |---|---|
 | `too-large` · `too-many-entries` · `unzipped-too-large` · `bad-path` · `not-allowed` · `symlink` · `missing-manifest` · `missing-theme-js` · `bad-json` · `bad-zip` | `.wbtheme` 읽기가 거절했다(`@wirebound/themes`의 `readWbtheme` — 풀기 전에 본다). 코드는 실행하지 않는다 |
-| `manifest` | manifest 규격 위반. `manifestCode` 가 `validateManifest` 의 원래 코드(`bad-version` · `unknown-token-ref` · …)를 든다 |
+| `manifest` | manifest 규격 위반. `manifestCode` 가 `validateManifest` 의 원래 코드(`bad-version` · `unknown-token-ref` · …)를 든다. **새 패키지만** 더 보는 것 — `Page` 가 든 패턴(`manifestCode: pattern` · `path` 가 그 노드, `@wirebound/themes` 의 `readNewWbtheme`) — 은 저장된 패키지를 다시 읽는 내보내기 · 시딩에서는 안 본다 |
 | `reserved-id` | `id` 가 `system-` 로 시작한다 — 시스템 테마의 것이다 |
 | `sdk-incompatible` | 호스트 SDK 판이 manifest 의 `sdk` 범위 밖이다 |
 
@@ -1313,7 +1313,11 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 - **노드 `id`는 저장 시점 그대로 담는다.** 재발급은 **적용**이 한다(설계서 「페이지 프리셋」). 저장에서
   재발급하면 같은 프리셋을 두 번 적용했을 때 두 페이지가 같은 id를 갖는다.
 - **카탈로그 검증을 하지 않는다.** *"이것을 페이지에 놓을 수 있는가"*는 **적용 시점에
-  결과 문서 전체로** 판정한다. 여기서 보는 것은 봉투(`WbNodeSchema`)뿐이다.
+  결과 문서 전체로** 판정한다. 여기서 보는 것은 봉투(`WbNodeSchema`)와 `Page` 하나다.
+- **`Page`가 든 프리셋은 422 `nested-page`다**(맨 위 · 깊이 무관 — 적용하면 뿌리의 자식이 된다). 노드마다 이슈 하나(`nodeId` ·
+  `path` = `/schema/…`)이고 문장이 «이 페이지 안의 Page를 지우거나 그 안의 노드를 밖으로 옮긴 뒤 저장하세요»라고 말한다 — 웹
+  «프리셋으로 저장»이 그 문장을 그대로 보인다. 이 거절은 그 규칙 전에 저장된 페이지(안에 `Page`가 선 문서)에서 저장할 때만 선다.
+  이미 저장된 `Page` 프리셋의 목록 · 삭제는 막지 않는다.
 - **빈 배열이 유효한 본문이다.** 빈 프리셋은 *"치우기"*라는 정상 조작이 된다.
 
 #### 이름에 유일 제약이 없다 — 스냅샷 태그와 갈린다

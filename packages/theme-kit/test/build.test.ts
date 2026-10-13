@@ -80,4 +80,18 @@ describe('buildTheme', () => {
     expect((error as BuildError).issues.map((i) => i.code)).toContain('bad-version')
     expect(existsSync(join(root, 'dist'))).toBe(false)
   }, 60_000)
+
+  it('Page 가 든 패턴은 업로드와 같은 읽기(readNewWbtheme)로 거절하고 파일을 만들지 않는다', async () => {
+    const root = copyFixture()
+    const patterns =
+      "patterns: { 'content.page': { name: '페이지째', schema: { type: 'Page', children: [{ type: 'Text', props: { content: '안' } }] } } },"
+    writeFileSync(
+      join(root, 'theme.config.ts'),
+      readFileSync(join(root, 'theme.config.ts'), 'utf8').replace("sdk: '^1.0.0',", `sdk: '^1.0.0',\n  ${patterns}`),
+    )
+    const error = await buildTheme({ root }).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(BuildError)
+    expect((error as BuildError).issues.map((i) => [i.code, i.path])).toEqual([['manifest', 'manifest.json:patterns.content.page.schema']])
+    expect(existsSync(join(root, 'dist'))).toBe(false)
+  }, 60_000)
 })

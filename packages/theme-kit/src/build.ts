@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path'
 import react from '@vitejs/plugin-react'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { WB_RUNTIME_GLOBAL } from '@wirebound/theme-sdk/runtime'
-import { packWbtheme, readWbtheme } from '@wirebound/themes'
+import { packWbtheme, readNewWbtheme } from '@wirebound/themes'
 import { build as viteBuild, type Plugin } from 'vite'
 import { loadProject, type LoadedProject } from './config'
 
@@ -132,8 +132,9 @@ export async function buildTheme(opts: { root: string; entry?: string; outDir?: 
   if (project === null) throw new BuildError(issues)
   const { themeJs, themeCss, assets } = await bundleTheme(project)
   const bytes = packWbtheme({ manifest: project.manifest, themeJs, themeCss, assets })
-  // 빌드가 허용 밖의 자산(`.js` 청크 · 모르는 확장자)을 냈으면 여기서 걸린다 — 업로드에서 처음 알게 하지 않는다.
-  const check = readWbtheme(bytes)
+  // 빌드가 허용 밖의 자산(`.js` 청크 · 모르는 확장자)을 냈으면 여기서 걸린다 — 업로드에서 처음 알게 하지 않는다. 업로드와 같은
+  // 새 패키지의 읽기(`readNewWbtheme` — `Page` 가 든 패턴도 거절)다.
+  const check = readNewWbtheme(bytes)
   if (check.files === null) throw new BuildError(check.issues)
   const outDir = resolve(project.root, opts.outDir ?? 'dist')
   mkdirSync(outDir, { recursive: true })

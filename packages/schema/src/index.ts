@@ -53,6 +53,7 @@ export {
   assertValidPage,
   checkViewStateRemoval,
   excuseStandingNestedPages,
+  nestedPagesUnderRoot,
   validateLayout,
   validatePage,
 } from './validate'

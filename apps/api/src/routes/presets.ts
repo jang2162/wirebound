@@ -50,8 +50,12 @@
  * **카탈로그 검증은 여기서 하지 않는다.** 프리셋은 문서가 아니라 `WbNode[]`이고, *"이것을
  * 페이지에 놓을 수 있는가"*는 **적용 시점에 결과 문서 전체로** 판정한다. 여기에 게이트를
  * 하나 더 두면 같은 물음에 답하는 자리가 둘이 되고, 둘은 언젠가 갈린다 — 화면이 서버보다
- * 엄격해지는 부류의 반대편 형태다. 여기서 보는 것은 **봉투**뿐이다
- * (`WbNodeSchema` — 노드의 모양과 선언되지 않은 키).
+ * 엄격해지는 부류의 반대편 형태다. 여기서 보는 것은 **봉투**(`WbNodeSchema` — 노드의 모양과
+ * 선언되지 않은 키)와 **`Page` 하나**다.
+ *
+ * **`Page`만은 저장에서 막는다**(`nestedPagesUnderRoot` — 422 `nested-page`). 프리셋은 적용하면 뿌리의 자식이 되므로 그 안의 `Page`는
+ * 맨 위든 깊든 어느 페이지에도 놓을 수 없다 — 저장되면 적용 때마다 `invalid`인 프리셋이 남는다. 다른 카탈로그 판정(알 수 없는 타입 ·
+ * props)은 지금처럼 적용 때 본다 — 여기 더하면 지금 받던 프리셋이 거절된다. 이미 저장된 `Page` 프리셋의 목록 · 삭제는 막지 않는다.
  *
  * ---
  *
@@ -60,6 +64,7 @@
  * | 상황 | 상태 | 어디서 |
  * |---|---|---|
  * | 이름 길이 위반·설명 길이 위반·노드 봉투 위반 | **400** | 본문 zod(`PresetBody`) |
+| 노드에 `Page`(맨 위 포함) | **422** `nested-page` · 노드마다 이슈(`path` = `/schema/…`) | `nestedPagesUnderRoot` |
  * | NUL(U+0000) | **400** | 아래 `containsNulByte`(라우트) · `PresetNulByteError`(repo, 마지막 방벽) |
  * | 없는 프리셋 / 남의 프로젝트의 프리셋 삭제 | **404** | `deletePreset`이 `projectId`를 함께 받는다(존재를 숨긴다) |
  * | 내장 프리셋 id로 삭제 | **400** | 경로 zod(`z.uuid()`) |
@@ -68,11 +73,11 @@
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { BUILTIN_PRESETS, ViewStatesSchema, WbNodeSchema, stripMarkers, type PagePreset } from '@wirebound/schema'
+import { BUILTIN_PRESETS, ViewStatesSchema, WbNodeSchema, nestedPagesUnderRoot, stripMarkers, type PagePreset } from '@wirebound/schema'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsLoneSurrogate, containsNulByte } from '../db/nul-guard'
 import { withTransaction } from '../db/tx'
-import { badRequest, notFound, unauthenticated } from '../errors'
+import { badRequest, notFound, unauthenticated, validationFailed } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import { PresetNulByteError, deletePreset, insertPreset, listPresets, type PresetRecord } from '../repos/presets'
 import { lockProjectShared } from '../repos/projects'
@@ -85,6 +90,14 @@ const PresetParams = z.object({ projectId: z.uuid(), presetId: z.uuid() })
  * 가려낼 수 있고, 경로 zod가 이 값을 400으로 끊는다.
  */
 const BUILTIN_ID_PREFIX = 'builtin:'
+
+/**
+ * 프리셋 안의 `Page`를 거절하는 문장. 웹 «프리셋으로 저장»이 이 문장을 그대로 보인다(`apps/web` 의 `api/failure.tsx` 의 `reason`) —
+ * 그 단추를 누른 사람은 지금 페이지를 저장한 것이라 «이 페이지 안의 Page» 를 고치면 된다고 말한다. 이 거절은 그 규칙을 들이기 전에
+ * 저장된 문서(페이지 안에 `Page`가 선 문서)에서만 선다 — 지금 입구로는 그 문서를 못 만든다.
+ */
+const PRESET_PAGE_MESSAGE =
+  '프리셋에 Page를 담을 수 없습니다 — 적용하면 페이지 안의 Page가 됩니다. 이 페이지 안의 Page를 지우거나 그 안의 노드를 밖으로 옮긴 뒤 저장하세요'
 
 /**
  * 이름은 **이름이므로 짧다** — `snapshots.tag`와 같은 1~60자다. 설명은 0~2000자로
@@ -187,6 +200,21 @@ export function presetRoutes() {
       // 짝 없는 서로게이트는 `schema`·`viewStates`(jsonb)에서 500 이다 — 이름·설명(텍스트 칸)은 U+FFFD 로 바뀌어 죽지 않는다.
       if (containsLoneSurrogate(body.schema) || containsLoneSurrogate(body.viewStates ?? null)) {
         throw badRequest('프리셋에 짝 없는 서로게이트 글자를 포함할 수 없습니다')
+      }
+
+      // 프리셋 안의 `Page` — 적용하면 페이지 안의 `Page`가 된다(머리말 「저장은 `marker`를 버린다」 끝 문단).
+      const nested = nestedPagesUnderRoot(body.schema)
+      if (nested.length > 0) {
+        throw validationFailed(
+          '프리셋을 저장할 수 없습니다',
+          nested.map((issue) => ({
+            code: issue.code,
+            severity: issue.severity,
+            nodeId: issue.nodeId,
+            path: `/schema${issue.path}`,
+            message: PRESET_PAGE_MESSAGE,
+          })),
+        )
       }
 
       // `projectGuard('editor')`가 이미 인증을 요구하므로 여기 도달했다면 `currentUser`는
