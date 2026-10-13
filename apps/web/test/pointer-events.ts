@@ -19,7 +19,8 @@
  * `MouseEvent`의 것이고, **`pointerId`만 더한다**(끌기 장치가 시작한 포인터의 이벤트만 듣는다 —
  * `src/drag/use-pointer-drag.ts` «시작한 포인터만 듣는다»). 안 더하면 모든 이벤트의 `pointerId`가
  * `undefined`로 같아 «다른 포인터»를 흉내 낼 수 없고 그 가드를 뗀 변조가 산다. 값은 브라우저와 같게
- * init 의 것 · 없으면 0 이다. `pressure` 같은 나머지 포인터 고유 필드는 쓰지 않으므로 흉내 내지 않는다
+ * init 의 것 · 없으면 0 이다. `pointerType` 도 더한다 — 끌기 장치가 터치를 가르고 끌기 진단 줄(`src/drag/drag-debug.ts`)이
+ * 그 값을 적는다. 없으면 브라우저처럼 `''` 이다. `pressure` 같은 나머지 포인터 고유 필드는 쓰지 않으므로 흉내 내지 않는다
  * — 흉내 낸 값이 브라우저의 값과 다르면 그 자체가 거짓 초록의 자리가 된다.
  *
  * **`setup.ts`가 아니라 부르는 파일이 켠다.** 전역으로 켜면 포인터를 안 쓰는 파일까지
@@ -29,10 +30,12 @@
 /** `MouseEvent`로 흉내 낸 `PointerEvent`. 브라우저에는 진짜가 있으므로 여기서만 쓴다. */
 class FakePointerEvent extends MouseEvent {
   readonly pointerId: number
+  readonly pointerType: string
 
   constructor(type: string, init: PointerEventInit = {}) {
     super(type, init)
     this.pointerId = init.pointerId ?? 0
+    this.pointerType = init.pointerType ?? ''
   }
 }
 

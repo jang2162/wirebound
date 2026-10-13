@@ -31,6 +31,7 @@
  */
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { COMPONENT_GROUP_LABELS, type ComponentGroup } from '@wirebound/schema'
+import { dragDebug, round } from '../drag/drag-debug'
 import { DropIndicator } from '../drag/drop-indicator'
 import { useCanvasRemeasured, usePlacementDrop, usePublishPlacementPreview, type PlacementDrop } from '../drag/use-placement'
 import { usePointerDrag, type DragPoint } from '../drag/use-pointer-drag'
@@ -331,12 +332,35 @@ function PaletteCards(props: {
       </div>
       <DropIndicator hint={hint?.value.region === 'tree' ? hint : null} layout={hint?.value.layout} />
       {dragged !== undefined && pointer !== null && (
-        <div className="wb-shell-palette-dragtag" aria-hidden="true" style={{ left: pointer.x + 14, top: pointer.y + 14 }}>
+        <div
+          ref={logTagShown}
+          className="wb-shell-palette-dragtag"
+          aria-hidden="true"
+          style={{ left: pointer.x + 14, top: pointer.y + 14 }}
+        >
           {dragged.label}
         </div>
       )}
     </div>
   )
+}
+
+/**
+ * 이름표가 섰다 — 끌기 진단 줄(`drag/drag-debug.ts`)의 `tag` 한 줄(누름마다 한 번 — 개발 판의 `StrictMode` 는 ref 를 두 번 부른다). 꺼진 판은 아무것도
+ * 안 짓는다. 상자를 적는 것은 «이름표조차 안 선다» 와 «섰는데 안 보인다(크기 0 · 화면 밖)» 를 가르려는 것이다.
+ */
+function logTagShown(element: HTMLDivElement | null): void {
+  if (element === null) return
+  const debug = dragDebug()
+  if (debug === null) return
+  const box = element.getBoundingClientRect()
+  debug.once('tag', {
+    label: element.textContent ?? '',
+    left: round(box.left),
+    top: round(box.top),
+    width: round(box.width),
+    height: round(box.height),
+  })
 }
 
 /** 하단 바의 «컴포넌트» 토글. 판이 서는 조건과 같은 조건으로 셸이 그린다. */

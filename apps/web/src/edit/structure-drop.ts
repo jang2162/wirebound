@@ -31,8 +31,11 @@
  * 표본(`PROBE_ID`)이다 — 잠금은 경로로 가르므로 id 가 답을 바꾸지 않는다. 놓을 때 보내는 노드는 부르는 쪽이 `createNode`로 짓는다.
  *
  * **제자리면 `null`이다** — 보낼 편집이 없다.
+ *
+ * **`why` 를 주면 `null` 의 까닭을 한 번 부른다** — 끌기 진단 줄(`drag/drag-debug.ts`)에만 쓰고 답은 안 바꾼다. 꺼진 판은 안 준다.
  */
 import type { NodeLock, PageDocument, PatchOp, WbNode } from '@wirebound/schema'
+import type { DropMiss } from '../drag/drag-debug'
 import type { DropZone } from '../tree/tree-drop'
 import { createNode } from './create-node'
 import { insertNodeOps, moveNodeOps } from './ops'
@@ -58,48 +61,57 @@ export function structureDropTarget(
   overId: string,
   zone: DropZone,
   blockedBy: (ops: readonly PatchOp[]) => NodeLock | null,
+  why?: (reason: DropMiss) => void,
 ): StructureDrop | null {
   const over = findVisit(document, overId)
-  if (over === null) return null
+  if (over === null) return miss(why, 'target-not-in-document')
 
   let parentId: unknown
   let insertAt: number
   if (zone === 'inside') {
-    if (!acceptsChildren(over.node)) return null
+    if (!acceptsChildren(over.node)) return miss(why, 'not-container')
     parentId = over.node.id
     insertAt = Array.isArray(over.node.children) ? over.node.children.length : 0
   } else {
-    if (over.parent === null) return null
+    if (over.parent === null) return miss(why, 'root-has-no-siblings')
     // 형제 자리는 부모 «안» 이다 — 부모가 자식을 안 받으면(검증 전 문서 · 카탈로그가 바뀐 옛 문서) 못 놓는다.
-    if (!acceptsChildren(over.parent)) return null
+    if (!acceptsChildren(over.parent)) return miss(why, 'parent-not-container')
     parentId = over.parent.id
     insertAt = zone === 'before' ? over.index : over.index + 1
   }
-  if (typeof parentId !== 'string') return null
+  if (typeof parentId !== 'string') return miss(why, 'target-not-in-document')
 
   if (placing.kind === 'new') {
     const probe = createNode(placing.type, () => PROBE_ID)
-    if (probe === null) return null
+    if (probe === null) return miss(why, 'unknown-type')
     const ops = insertNodeOps(document, parentId, insertAt, probe)
-    if (ops === null || blockedBy(ops) !== null) return null
+    if (ops === null) return miss(why, 'ops-unbuildable')
+    if (blockedBy(ops) !== null) return miss(why, 'locked')
     return { parentId, index: insertAt, placement: zone }
   }
 
   const draggedId = placing.id
-  if (draggedId === overId) return null
+  if (draggedId === overId) return miss(why, 'self')
   const dragged = findVisit(document, draggedId)
-  if (dragged === null || dragged.parent === null) return null
+  if (dragged === null || dragged.parent === null) return miss(why, 'target-not-in-document')
   // 가지는 끌어 옮기지 않는다 — 영역 밖은 `state-case-outside`, 영역 안 차례는 뜻이 없다(`structure-actions.ts` 의 `regionRules`).
-  if (dragged.node.type === 'StateCase') return null
-  if (contains(dragged.node, overId)) return null
+  if (dragged.node.type === 'StateCase') return miss(why, 'state-case')
+  if (contains(dragged.node, overId)) return miss(why, 'into-own-subtree')
 
   const sameParent = parentId === dragged.parent.id
   const index = sameParent && dragged.index < insertAt ? insertAt - 1 : insertAt
-  if (sameParent && index === dragged.index) return null
+  if (sameParent && index === dragged.index) return miss(why, 'same-place')
 
   const ops = moveNodeOps(document, draggedId, parentId, index)
-  if (ops === null || blockedBy(ops) !== null) return null
+  if (ops === null) return miss(why, 'ops-unbuildable')
+  if (blockedBy(ops) !== null) return miss(why, 'locked')
   return { parentId, index, placement: zone }
+}
+
+/** `null` 을 내며 그 까닭을 진단 줄에 알린다(`why` 가 없으면 — 꺼진 판 — 알리지 않는다). */
+function miss(why: ((reason: DropMiss) => void) | undefined, reason: DropMiss): null {
+  why?.(reason)
+  return null
 }
 
 /**
@@ -110,10 +122,11 @@ export function pageEndTarget(
   document: PageDocument,
   placing: Placing,
   blockedBy: (ops: readonly PatchOp[]) => NodeLock | null,
+  why?: (reason: DropMiss) => void,
 ): StructureDrop | null {
   const rootId: unknown = document.root?.id
-  if (typeof rootId !== 'string') return null
-  return structureDropTarget(document, placing, rootId, 'inside', blockedBy)
+  if (typeof rootId !== 'string') return miss(why, 'no-root')
+  return structureDropTarget(document, placing, rootId, 'inside', blockedBy, why)
 }
 
 /**

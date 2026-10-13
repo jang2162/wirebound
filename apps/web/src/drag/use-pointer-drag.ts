@@ -92,6 +92,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { useCanvasDocument } from '../canvas/canvas-document'
+import { describeElement, dragDebug, round } from './drag-debug'
 
 /** 이만큼(px) 넘게 움직여야 끌기다. 그 안은 클릭(선택)이다. */
 export const DRAG_THRESHOLD = 4
@@ -205,6 +206,9 @@ interface Gesture<S, D> {
   teardown: () => void
 }
 
+/** 누름이 끝난 까닭 — 진단 줄(`./drag-debug.ts`)의 `end why=` 값. */
+type EndWhy = 'click' | 'touch-scroll' | 'release' | 'pointercancel' | 'escape' | 'unmount'
+
 export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): PointerDrag<S, D> {
   const [dragging, setDragging] = useState<S | null>(null)
   const [hint, setHint] = useState<DropHint<D> | null>(null)
@@ -214,11 +218,12 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
   const latest = useRef({ options, canvasDocument })
   latest.current = { options, canvasDocument }
 
-  /** 끝낸다 — 리스너 · 타이머를 걷고 표시를 지운다. 끌기가 섰던 누름이면 뒤따를 클릭을 삼킨다(머리말). */
-  const finish = useCallback((): void => {
+  /** 끝낸다 — 리스너 · 타이머를 걷고 표시를 지운다. 끌기가 섰던 누름이면 뒤따를 클릭을 삼킨다(머리말). `why` 는 진단 줄에만 쓴다. */
+  const finish = useCallback((why: EndWhy): void => {
     const current = gesture.current
     if (current === null) return
     gesture.current = null
+    dragDebug()?.line('end', { why, started: current.started })
     current.teardown()
     if (current.started) swallowNextClick()
     setDragging(null)
@@ -226,12 +231,23 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
   }, [])
 
   // 끄는 중에 내려가면 걷는다 — 리스너가 남으면 다음 누름이 옛 콜백을 부른다.
-  useEffect(() => finish, [finish])
+  useEffect(() => () => finish('unmount'), [finish])
 
   const bind = useCallback(
     (source: S) => ({
       onPointerDown: (event: ReactPointerEvent<HTMLElement>): void => {
-        if (event.button !== 0 || gesture.current !== null) return
+        // 진단 줄(`./drag-debug.ts`) — 꺼지면 `null` 이라 `debug?.…` 의 인자도 안 짓는다.
+        const debug = dragDebug()
+        if (event.button !== 0 || gesture.current !== null) {
+          debug?.line('press-ignored', {
+            why: event.button !== 0 ? 'button' : 'busy',
+            pointer: event.pointerType,
+            id: event.pointerId,
+            button: event.button,
+            held: gesture.current?.pointerId,
+          })
+          return
+        }
         const element = event.currentTarget
         const point = { x: event.clientX, y: event.clientY }
         const listening: { target: EventTarget; type: string; listener: EventListener; options: AddEventListenerOptions }[] = []
@@ -272,6 +288,16 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
           },
         }
         gesture.current = current
+        debug?.line('press', {
+          pointer: event.pointerType,
+          id: event.pointerId,
+          button: event.button,
+          x: round(point.x),
+          y: round(point.y),
+          el: describeElement(element),
+          'frames-held': iframeHolds,
+          hold: holdToStart ? TOUCH_HOLD_MS : undefined,
+        })
 
         const ask = (at: DragPoint): DropHint<D> | null => latest.current.options.onOver(source, at)
         const show = (next: DropHint<D> | null): void => {
@@ -291,22 +317,38 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
             const far = Math.hypot(at.x - current.start.x, at.y - current.start.y)
             if (holdToStart) {
               // 길게 누르기 전의 움직임은 스크롤이다(머리말 «터치는 길게 눌러 끈다») — 이 누름을 놓아 준다.
-              if (far > TOUCH_HOLD_SLOP) finish()
+              if (far > TOUCH_HOLD_SLOP) finish('touch-scroll')
               return
             }
             if (far <= DRAG_THRESHOLD) return
-            begin()
+            begin('threshold')
           }
           show(ask(at))
         }
 
         /** 끌기가 선다 — 붙잡기는 끌기가 선 뒤다(머리말 «누를 때 붙잡지 않는다»). */
-        const begin = (): void => {
+        const begin = (via: 'threshold' | 'touch-hold'): void => {
           current.started = true
           // 끌기를 시작한 자리가 끝 스크롤 상자 안이면 그 상자의 띠는 처음부터 «안에서 간 것» 이다(트리 줄 · 캔버스 손잡이).
           const startBox = latest.current.options.scrollContainer?.() ?? null
           if (startBox !== null && withinBox(startBox.getBoundingClientRect(), current.start)) current.settled = startBox
-          if (typeof element.setPointerCapture === 'function') element.setPointerCapture(current.pointerId)
+          let capture: 'absent' | 'set' | 'threw' = 'absent'
+          if (typeof element.setPointerCapture === 'function') {
+            try {
+              element.setPointerCapture(current.pointerId)
+              capture = 'set'
+            } catch (error) {
+              // 진단 줄만 남기고 그대로 던진다 — 동작은 안 바꾼다.
+              debug?.line('start', { via, capture: 'threw', error: error instanceof Error ? error.name : String(error) })
+              throw error
+            }
+          }
+          debug?.line('start', {
+            via,
+            dist: round(Math.hypot(current.last.x - current.start.x, current.last.y - current.start.y)),
+            capture,
+            has: typeof element.hasPointerCapture === 'function' ? element.hasPointerCapture(current.pointerId) : undefined,
+          })
           setDragging(() => source)
           timer = setInterval(edgeScroll, EDGE_TICK)
         }
@@ -315,19 +357,29 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
           if (!mine(raw)) return
           const released = raw as PointerEvent
           if (!current.started) {
-            finish()
+            finish('click')
             return
           }
           // 뗀 좌표로 다시 묻는다 — 마지막 move 와 뗌 사이에 자리가 바뀔 수 있다.
           const at = { x: released.clientX, y: released.clientY }
           const landed = ask(at)
           const shown = current.shown
-          finish()
-          if (landed === null) return
-          // 놓는 답은 보인 답이다 — 포인터가 거의 안 움직였는데 답이 다르면 그 밑이 바뀐 것이다(머리말).
           const same = latest.current.options.sameDrop
           const still = Math.hypot(at.x - current.last.x, at.y - current.last.y) <= DRAG_THRESHOLD
-          if (same !== undefined && still && (shown === null || !same(shown.value, landed.value))) return
+          debug?.line('release', {
+            x: round(at.x),
+            y: round(at.y),
+            landed: landed !== null,
+            shown: shown !== null,
+            still,
+          })
+          finish('release')
+          if (landed === null) return
+          // 놓는 답은 보인 답이다 — 포인터가 거의 안 움직였는데 답이 다르면 그 밑이 바뀐 것이다(머리말).
+          if (same !== undefined && still && (shown === null || !same(shown.value, landed.value))) {
+            debug?.line('drop-refused', { why: 'not-shown' })
+            return
+          }
           latest.current.options.onDrop(source, landed.value)
         }
 
@@ -335,7 +387,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
           const pressed = raw as KeyboardEvent
           if (pressed.key !== 'Escape' || !current.started) return
           pressed.preventDefault()
-          finish()
+          finish('escape')
         }
 
         const edgeScroll = (): void => {
@@ -364,7 +416,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         if (holdToStart) {
           holdTimer = setTimeout(() => {
             holdTimer = null
-            begin()
+            begin('touch-hold')
             show(ask(current.last))
           }, TOUCH_HOLD_MS)
         }
@@ -388,8 +440,18 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         listen(window, 'pointerup', up)
         // 포인터를 잃은 것(창 밖 · 기기 분리 · 기본 DnD)도 끝이다 — 안 걷으면 다음 클릭이 끌기처럼 보인다.
         listen(window, 'pointercancel', (raw) => {
-          if (mine(raw)) finish()
+          if (mine(raw)) finish('pointercancel')
         })
+        if (debug !== null) {
+          // 진단 전용 — 캡처를 얻고 잃는 것과 창을 잃는 것을 적는다. 동작은 안 바꾼다(켠 판에만 건다).
+          listen(element, 'gotpointercapture', (raw) => {
+            if (mine(raw)) debug.line('capture-got')
+          })
+          listen(element, 'lostpointercapture', (raw) => {
+            if (mine(raw)) debug.line('capture-lost', { started: current.started })
+          })
+          listen(window, 'blur', () => debug.line('window-blur', { started: current.started }))
+        }
         // **capture 로 받는다** — 끄는 중의 Escape 는 취소이지 선택 해제가 아니다. 에디터 단축키는 문서의 버블에서 Escape 를 선택 해제로
         // 받고 이미 막힌(`defaultPrevented`) 키는 안 본다(`edit/editor-shortcuts.ts` 의 `shortcutsBlocked`) — 창의 버블은 문서보다 늦어
         // 여기서 막아도 해제가 먼저 돈다(Chrome: 손잡이 끌기를 Escape 로 취소하면 외곽선 · 손잡이가 사라졌다 — `build-test/canvas-preview.test.ts`).

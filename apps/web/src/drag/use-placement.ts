@@ -77,6 +77,12 @@
  * 옮기면 트리 줄을 캔버스에도 놓을 수 있다. 옮기지 않은 까닭: 트리 줄 끌기의 판(제자리 · 자손 · 잠긴 줄 · 끈 뒤 클릭 삼킴 — C 의 실브라우저
  * 판 `build-test/tree-drag*.test.ts`)이 이미 서 있고, 옮기면 그 판을 «캔버스로도 간다» 는 새 갈래와 함께 다시 재야 한다. 캔버스에서 옮기는
  * 길은 손잡이가 갖는다.
+ *
+ * ## 놓을 자리가 없는 까닭은 진단 줄에만 쓴다
+ *
+ * 끌기 진단(`./drag-debug.ts`)을 켜면 `onOver` 가 답이 바뀔 때마다 `over` 한 줄을 내고, 답이 `null` 이면 **왜** `null` 인지(`DropMiss`)를 함께
+ * 적는다 — 이 층의 갈림(판이 바뀜 · 무너진 자리 · 캔버스 없음)과 그 밑의 `canvasHitAt` · `structureDropTarget` 이 `why` 로 알린 것 가운데 먼저
+ * 온 것이다. 꺼진 판은 `why` 를 안 넘겨 아무것도 안 짓는다. 답 자체는 켜도 꺼도 같다.
  */
 import {
   createContext,
@@ -100,6 +106,7 @@ import { structureTreeHint } from '../panels/structure-tree-hint'
 import { openDocumentNow, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 import type { DropZone } from '../tree/tree-drop'
+import { dragDebug, round, type DragDebug, type DropMiss } from './drag-debug'
 import { hoverRow } from './hover-open'
 import { DRAG_THRESHOLD, elementAt, scrollParent, type DragPoint, type DropHint } from './use-pointer-drag'
 
@@ -272,6 +279,42 @@ export function usePlacementPreview(): PlacementPreview | null {
 
 const VERTICAL: Layout = { axis: 'y', reversed: false }
 
+/** `null` 의 까닭을 받는 것 — 진단을 켰을 때만 있다(머리말 «놓을 자리가 없는 까닭»). */
+type Why = ((reason: DropMiss) => void) | undefined
+
+/** `null` 을 내며 그 까닭을 알린다. */
+function miss(why: Why, reason: DropMiss): null {
+  why?.(reason)
+  return null
+}
+
+/** 놓기가 편집 없이 끝났다 — `drop result=refused` 한 줄. 판정이 알린 까닭이 있으면 그것, 없으면 이 층의 갈림(`fallback`). */
+function logRefused(debug: DragDebug | null, reason: DropMiss | null, fallback: DropMiss | 'commit-refused' | 'unknown'): void {
+  debug?.line('drop', { result: 'refused', why: reason ?? fallback })
+}
+
+/** 놓을 자리의 답을 `over` 한 줄로 — 같은 답이면 다시 안 낸다(`DragDebug.over`). 좌표는 서명에 안 넣는다(매 프레임이 아니라 바뀔 때만). */
+function logOver(debug: DragDebug, hint: DropHint<PlacementDrop> | null, reason: DropMiss | null, point: DragPoint): void {
+  if (hint === null) {
+    const why = reason ?? 'unknown'
+    debug.over(`none:${why}`, { result: 'none', why, x: round(point.x), y: round(point.y) })
+    return
+  }
+  const { region, target, over } = hint.value
+  const overId = over === 'page-end' ? 'page-end' : over.overId
+  const zone = over === 'page-end' ? undefined : over.zone
+  debug.over(`${region}:${target.parentId}:${target.index}:${target.placement}:${overId}:${zone ?? ''}`, {
+    result: region,
+    parent: target.parentId,
+    index: target.index,
+    placement: target.placement,
+    over: overId,
+    zone,
+    x: round(point.x),
+    y: round(point.y),
+  })
+}
+
 /** 상자 안인가 — 스크롤 상자가 있으면 그것으로 자른다(밀려난 줄은 다른 칸 밑에 깔려 있다). */
 function withinRegion(element: HTMLElement, point: DragPoint): boolean {
   const boxes = [element.getBoundingClientRect()]
@@ -323,11 +366,11 @@ export function usePlacementDrop(input: {
   const stageNow = (): Stage => ({ pageId: input.pageId, frame: regions.canvas()?.frame ?? null })
   const sameStage = (a: Stage, b: Stage): boolean => a.pageId === b.pageId && a.frame === b.frame
 
-  /** 대상 · 띠를 판정에 묻는다 — 표시 때와 놓을 때가 같은 길이다. */
-  const verdict = (doc: Parameters<typeof structureDropTarget>[0], placing: Placing, over: PlacementDrop['over']) =>
+  /** 대상 · 띠를 판정에 묻는다 — 표시 때와 놓을 때가 같은 길이다. `why` 는 진단 줄에만(머리말 «놓을 자리가 없는 까닭»). */
+  const verdict = (doc: Parameters<typeof structureDropTarget>[0], placing: Placing, over: PlacementDrop['over'], why?: Why) =>
     over === 'page-end'
-      ? pageEndTarget(doc, placing, store.editBlockedBy)
-      : structureDropTarget(doc, placing, over.overId, over.zone, store.editBlockedBy)
+      ? pageEndTarget(doc, placing, store.editBlockedBy, why)
+      : structureDropTarget(doc, placing, over.overId, over.zone, store.editBlockedBy, why)
 
   /** 보인 자리가 지금 문서 · 잠금에서도 같은 답인가(머리말 «보인 자리에만 놓는다»). */
   const holds = (shown: PlacementDrop): boolean => {
@@ -337,47 +380,64 @@ export function usePlacementDrop(input: {
   }
 
   const onOver = (placing: Placing, point: DragPoint): DropHint<PlacementDrop> | null => {
+    const debug = dragDebug()
+    if (debug === null) return overAt(placing, point, undefined)
+    let reason: DropMiss | null = null
+    const hint = overAt(placing, point, (next) => {
+      reason ??= next
+    })
+    logOver(debug, hint, reason, point)
+    return hint
+  }
+
+  const overAt = (placing: Placing, point: DragPoint, why: Why): DropHint<PlacementDrop> | null => {
     const now = stageNow()
     let gesture = gestures.get(placing)
     if (gesture === undefined) {
       gesture = { stage: now, last: null, collapsedAt: null }
       gestures.set(placing, gesture)
     }
-    if (!sameStage(gesture.stage, now)) return null
+    if (!sameStage(gesture.stage, now)) return miss(why, 'stage-changed')
     const near = (at: DragPoint): boolean => Math.hypot(point.x - at.x, point.y - at.y) <= DRAG_THRESHOLD
     // 무너진 자리에서 문턱 밖으로 나가기 전에는 아무 자리도 내지 않는다 — 조금 움직였다 떼도(머리말 «둘째 겹»).
     if (gesture.collapsedAt !== null) {
-      if (near(gesture.collapsedAt)) return null
+      if (near(gesture.collapsedAt)) return miss(why, 'collapsed')
       gesture.collapsedAt = null
     }
     const last = gesture.last
     if (last !== null && last.shown !== null && near(last.point) && !holds(last.shown)) {
       gesture.collapsedAt = last.point
       gesture.last = null
-      return null
+      return miss(why, 'collapsed')
     }
-    const hint = placeAt(placing, point, now, last?.shown ?? null)
+    const hint = placeAt(placing, point, now, last?.shown ?? null, why)
     gesture.last = { point, shown: hint?.value ?? null }
     return hint
   }
 
   /** 보인 자리를 그대로 낸다 — 지금 문서로 다시 판정해 서면(숨긴 미리보기가 잡힌 판 — 머리말 «판정은 미리보기를 뺀 배치로»). */
-  const keep = (shown: PlacementDrop | null, rect: Rect, now: Stage): DropHint<PlacementDrop> | null => {
-    if (shown === null || document === null || !sameStage(shown.stage, now)) return null
+  const keep = (shown: PlacementDrop | null, rect: Rect, now: Stage, why: Why): DropHint<PlacementDrop> | null => {
+    if (shown === null || document === null || !sameStage(shown.stage, now)) return miss(why, 'preview-gone')
     const target = verdict(document, shown.placing, shown.over)
-    if (target === null || !sameDrop(target, shown.target)) return null
+    if (target === null || !sameDrop(target, shown.target)) return miss(why, 'preview-gone')
     return { value: { ...shown, target }, rect, placement: target.placement }
   }
 
-  const placeAt = (placing: Placing, point: DragPoint, now: Stage, shown: PlacementDrop | null): DropHint<PlacementDrop> | null => {
-    if (document === null) return null
+  const placeAt = (
+    placing: Placing,
+    point: DragPoint,
+    now: Stage,
+    shown: PlacementDrop | null,
+    why: Why,
+  ): DropHint<PlacementDrop> | null => {
+    if (document === null) return miss(why, 'no-document')
 
     const tree = regions.tree()
     // 접힌 줄 위에 머물면 편다(`./hover-open.ts`) — 트리 밖이면 잰 것을 걷는다.
     hoverRow(tree !== null && withinRegion(tree, point) ? elementAt(tree, '[data-tree-row]', point) : null)
     if (tree !== null && withinRegion(tree, point)) {
       const hit = structureTreeHint(tree, document, placing, point, store.editBlockedBy)
-      if (hit === null) return null
+      if (hit === null) return miss(why, 'tree-miss')
       return {
         ...hit.hint,
         value: {
@@ -392,7 +452,7 @@ export function usePlacementDrop(input: {
     }
 
     const canvas = regions.canvas()
-    if (canvas === null) return null
+    if (canvas === null) return miss(why, 'no-canvas')
     const clipElement = scrollParent(canvas.frame.frameElement as HTMLElement | null)
     const hit: CanvasHit | null = withoutPreview(canvas.frame.document as Document | undefined, () =>
       hitAt(
@@ -410,13 +470,14 @@ export function usePlacementDrop(input: {
         },
         clipElement === null ? null : rectOf(clipElement),
         isPreviewId,
+        why,
       ),
     )
     if (hit === null) return null
     // 숨긴 미리보기는 안 잡힌다 — 그래도 잡히면(숨기기 전에 선 요소) 노드로 읽지 않고 보인 자리 그대로다.
-    if ('preview' in hit) return keep(shown, hit.rect, now)
+    if ('preview' in hit) return keep(shown, hit.rect, now, why)
     const over: PlacementDrop['over'] = 'pageEnd' in hit ? 'page-end' : { overId: hit.overId, zone: hit.zone }
-    const target = verdict(document, placing, over)
+    const target = verdict(document, placing, over, why)
     if (target === null) return null
     return {
       value: { placing, target, over, layout: hit.layout, stage: now, region: 'canvas' },
@@ -427,15 +488,32 @@ export function usePlacementDrop(input: {
 
   const onDrop = (placing: Placing, drop: PlacementDrop): void => {
     gestures.delete(placing)
-    if (input.pageId === undefined || !sameStage(drop.stage, stageNow())) return
+    const debug = dragDebug()
+    let reason: DropMiss | null = null
+    const why: Why =
+      debug === null
+        ? undefined
+        : (next) => {
+            reason ??= next
+          }
+    if (input.pageId === undefined) return logRefused(debug, reason, 'no-document')
+    if (!sameStage(drop.stage, stageNow())) return logRefused(debug, reason, 'stage-changed')
     const doc = openDocumentNow(store, input.pageId)
-    if (doc === null) return
-    const target = verdict(doc, placing, drop.over)
-    if (target === null) return
+    if (doc === null) return logRefused(debug, reason, 'no-document')
+    const target = verdict(doc, placing, drop.over, why)
+    if (target === null) return logRefused(debug, reason, 'unknown')
     const node = placing.kind === 'new' ? createNode(placing.type) : null
-    if (placing.kind === 'new' && node === null) return
+    if (placing.kind === 'new' && node === null) return logRefused(debug, reason, 'unknown-type')
     const ops = dropOps(doc, placing, target, node ?? undefined)
-    if (commitOps(ops) && node !== null) store.selectNode(node.id)
+    const committed = commitOps(ops)
+    if (!committed) return logRefused(debug, reason, 'commit-refused')
+    debug?.line('drop', {
+      result: 'committed',
+      parent: target.parentId,
+      index: target.index,
+      placing: placing.kind === 'new' ? `new:${placing.type}` : `node:${placing.id}`,
+    })
+    if (node !== null) store.selectNode(node.id)
   }
 
   const live = (hint: DropHint<PlacementDrop> | null): DropHint<PlacementDrop> | null =>
