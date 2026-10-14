@@ -144,13 +144,14 @@ const RESTORE_UNANSWERED = '복원됐는지 알 수 없습니다. 이 상자를 
  */
 const RELOAD_FAILURE_PREFIX = '저장은 됐지만 목록을 갱신하지 못했습니다'
 /** 목록을 다시 받게 한 까닭 — 목록 재조회가 실패했을 때 앞머리가 이것으로 갈린다(`RELOAD_FAILURE_PREFIXES`). */
-type ReloadCause = 'saved' | 'snapshot-gone'
+type ReloadCause = 'saved' | 'restored' | 'snapshot-gone'
 /**
- * **재조회의 실패 앞머리는 그 재조회를 부른 일의 말이어야 한다.** «저장은 됐지만 …» 은 성공한 쓰기(저장 · 복원) 뒤에만 참이다 — 지워진 안전망의 404 뒤에는 저장도 복원도 안 됐으니
- * «목록을 다시 받지 못했습니다» 다(그 404 에 «저장은 됐지만» 이 붙으면 아무것도 안 했는데 됐다고 말한다).
+ * **재조회의 실패 앞머리는 그 재조회를 부른 일의 말이어야 한다.** «저장은 됐지만 …» 은 저장 뒤에만 참이다 — 복원은 저장이 아니니 «복원은 됐지만 …» 이고, 지워진 안전망의 404 뒤에는 저장도
+ * 복원도 안 됐으니 «목록을 다시 받지 못했습니다» 다(그 404 에 «… 됐지만» 이 붙으면 아무것도 안 했는데 됐다고 말한다).
  */
 const RELOAD_FAILURE_PREFIXES: Record<ReloadCause, string> = {
   saved: RELOAD_FAILURE_PREFIX,
+  restored: '복원은 됐지만 목록을 갱신하지 못했습니다',
   'snapshot-gone': '목록을 다시 받지 못했습니다',
 }
 
@@ -322,7 +323,7 @@ function RestoreNotice(props: { tag: string; result: RestoreResult }): ReactElem
 function SnapshotsScreen(props: {
   project: ProjectDetail
   snapshots: SnapshotSummary[]
-  /** 저장은 됐는데 목록만 못 받았을 때의 서버 문장. 없으면 `null`. */
+  /** 저장 · 복원은 됐는데 목록만 못 받았을 때의 서버 문장. 없으면 `null`. */
   reloadFailure: string | null
   /** `reloadFailure` 의 앞머리를 가르는 값(`RELOAD_FAILURE_PREFIXES`). */
   reloadCause: ReloadCause
@@ -363,7 +364,7 @@ function SnapshotsScreen(props: {
       const result = await api.restoreSnapshot(props.project.id, snapshot.id, { clientRestoreId })
       setNotice({ kind: 'restored', tag: snapshot.tag, result })
       // **성공했을 때만** 목록을 다시 받는다. 프로젝트가 바뀌었고 안전망 스냅샷이 하나 생겼다.
-      props.onSaved('saved')
+      props.onSaved('restored')
       /**
        * **셸에도 알린다 — 에디터 위에 떠서 지는 몫이다**(머리말). 별도 라우트면 되돌리고
        * 설계서로 돌아오는 길에 셸이 자연히 다시 읽히지만, 대화 상자는 에디터 **위에** 뜨므로

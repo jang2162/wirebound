@@ -3,7 +3,7 @@
  *
  * 판: 스냅샷 상자를 연 채 다른 길(REST)로 프로젝트를 지우거나 이 사람을 멤버에서 뺀다. 그 뒤 «되돌리기» 는 가드의 404 «프로젝트를 찾을 수 없습니다» 다 — 서버가 «스냅샷 없음»
  * (`snapshot-gone`)은 멤버에게만 내므로 이 404 는 그 코드가 아니다. 성질: 그 404 는 서버 문장 그대로 서고, «이미 지워졌습니다 · 목록을 다시 받았습니다» 가 아니며, 목록을 다시
- * 받지 않는다(그래서 «저장은 됐지만 …» 앞머리도 붙지 않는다). 지워진 안전망(`snapshot-gone`)은 `n36-snapshot-gone.test.ts` 가 든다.
+ * 받지 않는다(그래서 «저장은 됐지만 …» · «복원은 됐지만 …» 앞머리도 붙지 않는다). 지워진 안전망(`snapshot-gone`)은 `n36-snapshot-gone.test.ts` 가 든다.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Page } from 'playwright-core'
@@ -68,10 +68,10 @@ describe.skipIf(!전제.ok)('복원 404 가르기', () => {
     const alert = shown.알림.join(' | ')
     // 카나리아 — 복원 요청이 실제로 나갔다.
     expect(shown.restorePosted).toBe(true)
-    // 성질 — 서버 문장 그대로(가드의 404), 지워진 안전망의 문장이 아니고, 목록을 다시 받지 않고, 저장의 앞머리가 안 붙는다.
+    // 성질 — 서버 문장 그대로(가드의 404), 지워진 안전망의 문장이 아니고, 목록을 다시 받지 않고, 저장 · 복원의 앞머리가 안 붙는다.
     expect(alert).toContain('프로젝트를 찾을 수 없습니다')
     expect(alert).not.toContain('이미 지워졌습니다')
-    expect(alert).not.toContain('저장은 됐지만')
+    expect(alert).not.toContain('됐지만')
     expect(shown.목록조회).toBe(0)
     expect(shown.행.후).toBe(shown.행.전)
   }
