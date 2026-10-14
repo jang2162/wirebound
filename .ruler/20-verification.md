@@ -71,6 +71,7 @@
 - 단어 경계가 든 식은 `git grep -E` 로 세지 않는다(`-P` 를 쓴다). 두 방법으로 셀 때는 **경계의 뜻을 같게 맞추고**(파이썬이면 유니코드 기본값), 수가 갈리면 갈린 줄을 열어 본다.
 - **문자열 속이나 주석 밖을 셀 때는 줄 머리로 주석을 거르지 말고 파서로 센다** — 템플릿 문자열 안의 CSS 주석(`/* … */`)이 줄 머리 거르개에게는 주석으로 보여 통째로 빠진다(②의 한 꼴).
 - **화면 넘침은 요소 상자로만 세지 않는다** — 끊을 자리 없는 낱말은 제 요소 상자 안에 선 채 글자만 넘치고(`overflow-wrap: normal`), `overflow: hidden` 조상은 넘친 글자를 잘라 숨겨 문서 `scrollWidth` 에도 안 뜬다. 글자 노드의 `Range.getClientRects()` 오른끝으로 잰다(`apps/web/build-test/theme-system-review.test.ts` 의 `TEXT_PAST_ROOT`). 넘침을 보일 표본 낱말에는 하이픈을 넣지 않는다 — 브라우저가 하이픈 뒤에서 줄을 바꿔 넘침이 사라진다.
+- **«접히지 않는다» 는 «보인다» 가 아니다** — 통지 · 알림을 숨기지 않는 설계는 접힘(`scrollHeight`)만이 아니라 **창 안에 닿는지**(`scrollIntoView` 뒤 창 안 · 실브라우저)도 잰다. 그릇이 `overflow: visible` 인 채 창을 넘으면 접힘 0 이어도 마지막 항목이 닿을 길이 없다(`apps/web/build-test/n36-notice-floor.test.ts`)
 - **글자가 몇 줄인지는 글자 노드 하나의 `Range.getClientRects()` 서로 다른 `top` 수로 센다** — 요소의 `getClientRects()` 는 블록 상자 하나를 내 접힘을 0 으로 세고, 컨트롤을 품은 요소의 범위는 그 컨트롤의 상자가 섞여 거짓 두 줄을 낸다.
 - **카탈로그 타입 목록은 `CATALOG_TYPES` 로 읽는다** — `@wirebound/schema` 를 Node 에서 바로 적재하면 `listComponents()` 는 `installCatalog` 를 부르기 전이라 빈 배열이고, 그 목록을 도는 탐침은 아무것도 안 재고 오류 없이 끝난다.
 - **하드코딩된 개수 하한 단언(`카드 ≥ 18`)은 분모를 바꾸는 변경에서 `git grep` 으로 같이 센다** — 카탈로그 타입 수를 쓰는 build-test 가 있다(`apps/web/build-test/palette.test.ts`).
