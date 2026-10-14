@@ -114,6 +114,7 @@
  */
 import { useEffect, useState, type FormEvent, type ReactElement } from 'react'
 import { useApi } from '../api/context'
+import { ApiError } from '../api/client'
 import { SignedOut, refusedBeforeCommit, toFailure, type Failure } from '../api/failure'
 import type { ProjectDetail, RestoreResult, SnapshotSummary } from '../api/types'
 import { projectAbilities } from '../projects/project-actions'
@@ -126,6 +127,11 @@ const FAILURE_TITLE = '스냅샷을 열지 못했습니다'
 const SAVE_FAILURE = '스냅샷을 저장하지 못했습니다'
 /** 복원이 이유 없이 실패했을 때. **저장과 다른 문장이다** — 무엇이 실패했는지가 다르다. */
 const RESTORE_FAILURE = '복원하지 못했습니다'
+/**
+ * **복원이 404 면 그 스냅샷은 서버에 없다** — 연쇄 삭제의 안전망이 상한(`CASCADE_SAFETY_KEEP`)을 넘어 지워졌다(상자를 연 채 남이 연쇄를 더했다). 서버 문장
+ * «스냅샷을 찾을 수 없습니다» 만으로는 줄이 왜 남아 있는지 말하지 않아, 목록을 다시 받는다는 것과 까닭을 함께 적는다.
+ */
+const SNAPSHOT_GONE = '이 스냅샷은 이미 지워졌습니다. 목록을 다시 받았습니다.'
 /**
  * 복원의 답을 잃었을 때 서버 문장 뒤에 붙인다(`runRestore`) — 복원됐을 수 있다. **상자를 닫으라고 말한다** — 대화 상자는 모달이라 열린 동안
  * 하단 바(셸이 세운 «다시 불러오기» 배너)가 `inert`다(`shell/shell-dialog.tsx`).
@@ -352,13 +358,16 @@ function SnapshotsScreen(props: {
       const failure = toFailure(caught, RESTORE_FAILURE)
       // 저장 쪽과 같은 판단이다 — 세션이 끊긴 것은 다음 조회가 `SignedOut`으로 보낸다.
       // 그 밖에는 **서버 문장을 그대로 그린다**: 409 넷과 400 셋을 화면은 `code`로 가를 수 없다.
-      const message = failure.kind === 'signed-out' ? RESTORE_FAILURE : failure.message
+      // **404 면 줄이 지워진 것이다** — 목록을 다시 받아 그 줄을 뺀다(`onSaved` 가 목록 재조회다). 404 가 아닌 거절(권한 · 잠금)과 «모름»(503 · 끊김)은 줄이 남는다.
+      const gone = caught instanceof ApiError && caught.status === 404
+      const message = failure.kind === 'signed-out' ? RESTORE_FAILURE : gone ? SNAPSHOT_GONE : failure.message
       // **커밋 전에 거절됐는지 모르면 복원됐을 수 있다**(`refusedBeforeCommit`) — 답만 잃었으면 서버는 복원했거나 아직 하는 중이다.
       // 셸이 «복원됐는지 모릅니다 — 다시 불러오기»를 세우고(그 신호가 뒤에 오면 다시 세운다), 여기서도 그렇다고 말한다.
       const unanswered = failure.kind !== 'signed-out' && !refusedBeforeCommit(caught)
       setNotice({ kind: 'error', message: unanswered ? `${message} — ${RESTORE_UNANSWERED}` : message })
       if (unanswered) props.onRestoreUnanswered(clientRestoreId)
       else props.onRestoreRefused(clientRestoreId)
+      if (gone) props.onSaved()
     } finally {
       setRestoring(null)
     }

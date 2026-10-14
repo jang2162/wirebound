@@ -57,6 +57,7 @@ import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
 import { guideOf, useLayoutGuides, type Guide, type GuideLine } from './layout-guides'
+import { useTagStack } from './region-tag-stack'
 import { EMPTY_BRANCH_LABEL, regionBoxOf, regionMarks, type RegionMark } from './view-state-regions'
 import { StateRegionBadges } from './state-badges'
 import { useCanvasMarquee } from './use-canvas-marquee'
@@ -512,6 +513,9 @@ export function Canvas(props: {
     }))
     setRegions((prev) => (sameRegions(prev, next) ? prev : next))
   }, [mode, viewState, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  // 영역이 영역의 직계 자식이면 꼬리표가 같은 자리에 겹쳐 선다 — 깊이마다 한 줄씩 아래로 쌓는다(`./region-tag-stack.ts`).
+  const regionAnchors = useMemo(() => regions.map((item) => ({ id: item.switchId, left: item.box.left, top: item.box.top })), [regions])
+  const regionStack = useTagStack(regionAnchors, zoom)
 
   /**
    * **다시 잰 판** — 위 두 측정 이펙트와 같은 의존이 바뀔 때마다 새 값이다. 손잡이가 끄는 중이면 이 값이 바뀔 때 마지막 좌표로 다시
@@ -630,7 +634,11 @@ export function Canvas(props: {
           data-wb-region={item.label}
           style={{ left: item.box.left, top: item.box.top, width: item.box.width, height: item.box.height, borderWidth: 1 / zoom }}
         >
-          <span className="wb-shell-region-tag" style={{ transform: `scale(${1 / zoom})` }}>
+          <span
+            ref={regionStack.bind(item.switchId)}
+            className="wb-shell-region-tag"
+            style={{ transform: `scale(${1 / zoom})`, translate: regionStack.shift(item.switchId) }}
+          >
             {item.label}
           </span>
           {item.empty && (

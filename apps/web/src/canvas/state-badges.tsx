@@ -12,13 +12,14 @@
  *   판은 기본 가지를 그리므로 «기본»이 고른 항목이다(`caseFor`).
  * - 측정은 외곽선 · 마커 · 배치 선과 같은 때 다시 한다(`layoutKey` — `canvas.tsx`). 단추의 크기는 줌을 걷어 화면에서 늘 같다.
  */
-import { useLayoutEffect, useState, type ReactElement, type RefObject } from 'react'
+import { useLayoutEffect, useMemo, useState, type ReactElement, type RefObject } from 'react'
 import { DEFAULT_CASE, caseFor, viewStateName, visibleTree, type PageDocument, type WbNode } from '@wirebound/schema'
 import { ActionMenu } from '../shell/action-menu'
 import { ICONS } from '../shell/icons'
 import { useViewState } from '../shell/use-view-state'
 import { findNodeElement, frameOffset } from './canvas'
 import type { CanvasFrame } from './canvas-iframe'
+import { useTagStack } from './region-tag-stack'
 import { childrenExtent } from './view-state-regions'
 
 /** 표지의 보이는 글이자 접근 이름의 머리. */
@@ -70,6 +71,10 @@ export function StateRegionBadges(props: {
     setRegions((prev) => (sameRegions(prev, next) ? prev : next))
   }, [doc, frame, zoom, layoutKey, choice.state, props.surfaceRef])
 
+  // 영역이 영역의 직계 자식이면 표지가 같은 자리에 겹쳐 선다 — 깊이마다 한 줄씩 아래로 쌓는다(`./region-tag-stack.ts`).
+  const anchors = useMemo(() => regions.map((region) => ({ id: region.nodeId, left: region.left, top: region.top })), [regions])
+  const stack = useTagStack(anchors, zoom)
+
   if (regions.length === 0) return null
   return (
     <>
@@ -82,7 +87,12 @@ export function StateRegionBadges(props: {
             data-wb-state-region-for={region.nodeId}
             style={{ left: region.left, top: region.top, width: region.width, height: region.height }}
           >
-            <div className="wb-shell-state-badge" data-wb-state-badge-for={region.nodeId} style={{ transform: `scale(${1 / zoom})` }}>
+            <div
+              ref={stack.bind(region.nodeId)}
+              className="wb-shell-state-badge"
+              data-wb-state-badge-for={region.nodeId}
+              style={{ transform: `scale(${1 / zoom})`, translate: stack.shift(region.nodeId) }}
+            >
               <ActionMenu
                 label={regions.length === 1 ? STATE_BADGE_LABEL : `${STATE_BADGE_LABEL} ${index + 1}`}
                 icon={ICONS.viewStates}

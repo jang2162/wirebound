@@ -646,7 +646,9 @@ export function useSidebarLayout(): SidebarLayout {
     const padding = parseFloat(getComputedStyle(footer).paddingBottom)
     const need =
       footer.scrollHeight > footer.clientHeight ? Math.max(rect, footer.scrollHeight + (Number.isFinite(padding) ? padding : 0)) : rect
-    return Math.max(0, height - need - (Number.isFinite(gap) ? gap * 2 : 0))
+    // **잰 값이 0 이하여도 0 을 돌려주지 않는다** — 0 은 «못 쟀다»(`paletteHeightMax` 의 `room`)라 창 높이로 셈하는 갈래로 가, 하단 바가 창을 다 먹는 판(창 800×320 ·
+    // 통지 여덟)에서 판이 바닥(120)이 아니라 220 에 섰다. 1 은 «잰 세로가 없다» — 판이 바닥으로 간다.
+    return Math.max(1, height - need - (Number.isFinite(gap) ? gap * 2 : 0))
   }, [])
 
   // 하단 바는 셸이 다시 그리지 않아도 자란다(통지는 제 부품이 그린다) — 바와 사이드바 상자의 크기가 바뀌면 다시 잰다. **관찰자 콜백 안에서는
