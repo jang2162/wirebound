@@ -471,7 +471,10 @@ describe('떠나며 버린 편집의 수', () => {
     await leaveWithQueue()
     expect(alertText()).toBe(LEFT_UNSENT)
 
-    fireEvent.click(screen.getByRole('button', { name: '통지 닫기' }))
+    const close = screen.getByRole('button', { name: '통지 닫기' })
+    // 아이콘만 남은 단추의 `title` — 마우스 사용자가 읽는 이름이다(`shell/icons.ts` 머리말: `aria-label` = `title`). `icon-census` 는 이 판을 못 세운다(떠남 통지는 보내지 않은 편집을 두고 떠나야 선다 — L-141).
+    expect(close.getAttribute('title')).toBe('통지 닫기')
+    fireEvent.click(close)
 
     expect(alertText()).toBe('')
     expect(screen.queryByRole('button', { name: '통지 닫기' })).toBeNull()
