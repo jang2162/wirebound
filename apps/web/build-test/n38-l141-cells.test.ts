@@ -5,7 +5,7 @@
  * |---|---|
  * | 끄는 중 사각형이 안 서는 것 | 손잡이 · 카드를 끄는 동안 칸의 여백 · 노드 · 빈 자리를 지나도 사각형(`[data-wb-marquee]`)이 0 · 빈 자리를 눌러 끌면 1(카나리아) |
  * | 원본이 남의 편집으로 다시 그려지는 판 | 끄는 중 같은 사람의 다른 연결이 원본을 고쳐도 원본 요소는 그대로이고 흐림이 유지되며(`opacity` 인라인) 놓은 뒤 인라인 `opacity` 가 0 개 |
- * | `onLeave` 의 Chrome 대조 | 글 칸 · 목록 칸에 친 채 떠나는 네 길(다른 줄 · 캔버스 빈 자리 · 뷰 모드 · 다른 탭)이 모두 커밋 1건이고 서버에 친 값이 있다 |
+ * | `onLeave` 의 Chrome 대조 | 글 칸 · 목록 칸에 친 채 떠나는 네 길(다른 줄 · 캔버스 빈 자리 · 뷰 모드 · 다른 탭)이 모두 커밋 1건이고 서버에 친 값이 있다 — **blur 가 나는 길이다**(아래 케이스 머리말) |
  * | 일부 거절이 줄 메뉴를 닫는 판 | 늦게 닿은 `lock-denied` 가 고른 목록을 줄이면 열린 줄 `…` 메뉴가 닫힌다 |
  * | «보내지 않은 편집» 이 있는 받는 쪽 | 보낸 편집의 답을 못 받은 채 남이 열린 페이지를 지우면 한도(`SENT_EDIT_WAIT_MS` 3s) 뒤 «열어 둔 페이지가 지워졌습니다 … 편집 1개가 취소됐습니다» |
  * | 사라짐에서 서버 판을 싣는 갈래 | 트리가 열린 페이지를 잃었는데 서버에는 있고 판이 다르면(낡은 트리 · 늦춘 `page-changed`) 서버 판을 싣는다 — 사라짐으로 가지 않는다 |
@@ -215,6 +215,9 @@ describe.skipIf(!전제.ok)('L-141 — 이 기계에서 잰 칸', () => {
   /**
    * 칸 «`onLeave` 의 Chrome 대조»(`test/click-as-browser.ts` 머리말 — «그 커밋 수는 Chrome 에 다시 대지 않았다»). 위젯 둘(글 칸 · 목록 칸) × 떠나는 길 넷에서 커밋 1건이고 서버에 친 값이 있다.
    * 입력 중 패치 0 은 카나리아 — 치는 동안은 아무것도 안 나간다(blur · 떠남에서 나간다).
+   *
+   * **이 네 길은 blur 가 나는 길이다**(변조 «`onLeave` 를 안 부름» 이 이 케이스를 안 죽인다 — blur 가 먼저 커밋해 `onLeave` 가 넘길 초안이 없다). `onLeave` 자신(포커스가 안 옮겨 간 채 위젯이 내려가는 길 —
+   * 다른 탭의 지움 · 일부 거절 · Cmd+클릭)은 `./multiselect.test.ts` 의 «칸에 친 채 고른 것이 바뀐다» 케이스들이 Chrome 에서 잰다.
    */
   it('칸 «onLeave» — 글 칸 · 목록 칸에 친 채 떠나는 네 길이 모두 커밋 1건이다', async () => {
     const P = await fixture('l141-leave', [{ id: 'n_l', type: 'List', props: { columns: ['가', '나'], items: 2 } }])
@@ -327,12 +330,15 @@ describe.skipIf(!전제.ok)('L-141 — 이 기계에서 잰 칸', () => {
         .click()
       const opened = await a.page.getByRole('menu').count()
       const deniedWhenOpened = received.filter((kind) => kind === 'lock-denied').length
+      // 끝 조건은 «거절이 닿았다» 까지다 — 메뉴가 닫혔는가는 그 뒤에 값으로 읽는다(닫힘을 기다리면 안 닫는 변조가 시간 초과로 죽어 값이 안 남는다).
       await poll(
-        '메뉴가 닫힌다',
-        async () => a.page.getByRole('menu').count(),
-        (n) => n === 0,
+        '거절이 닿는다',
+        async () => received.filter((kind) => kind === 'lock-denied').length,
+        (n) => n >= 1,
         10_000,
       )
+      await a.page.waitForTimeout(600)
+      const menusAfter = await a.page.getByRole('menu').count()
       const deniedWhenClosed = received.filter((kind) => kind === 'lock-denied').length
       const picked = await a.page.evaluate(() =>
         [...document.querySelectorAll('[data-wb-selected-id],[data-wb-member-id]')]
@@ -341,9 +347,10 @@ describe.skipIf(!전제.ok)('L-141 — 이 기계에서 잰 칸', () => {
       )
       const alerts = await a.page.getByRole('alert').allTextContents()
       // eslint-disable-next-line no-console
-      console.log(`[일부 거절 · 줄 메뉴] ${JSON.stringify({ opened, deniedWhenOpened, deniedWhenClosed, picked, alerts })}`)
+      console.log(`[일부 거절 · 줄 메뉴] ${JSON.stringify({ opened, deniedWhenOpened, deniedWhenClosed, menusAfter, picked, alerts })}`)
       expect({ delayed: delay.delayed() > 0, opened, deniedWhenOpened }).toEqual({ delayed: true, opened: 1, deniedWhenOpened: 0 })
       expect(deniedWhenClosed).toBeGreaterThanOrEqual(1)
+      expect(menusAfter).toBe(0)
       expect(picked).toEqual(['n_t01', 'n_t03'])
       expect(alerts).toEqual([`${stack.users.bob.name}님이 편집 중이라 고를 수 없습니다`])
     } finally {
@@ -388,10 +395,11 @@ describe.skipIf(!전제.ok)('L-141 — 이 기계에서 잰 칸', () => {
       const deleted = await call('DELETE', `/projects/${projectId}/pages/${pageId}`)
       await page.waitForTimeout(1500)
       const early = await page.getByRole('alert').allTextContents()
+      // 끝 조건은 «판이 비워졌다» 까지다 — 통지 문장은 그 뒤에 값으로 읽는다.
       await poll(
-        '한도 뒤 사라짐 통지가 선다',
-        async () => (await page.getByRole('alert').allTextContents()).join(' | '),
-        (shown) => shown.includes('열어 둔 페이지가 지워졌습니다'),
+        '한도 뒤 판이 비워진다',
+        async () => page.locator('body').innerText(),
+        (shown) => shown.includes('열린 페이지가 없습니다'),
         10_000,
       )
       const alerts = await page.getByRole('alert').allTextContents()
@@ -442,16 +450,19 @@ describe.skipIf(!전제.ok)('L-141 — 이 기계에서 잰 칸', () => {
         ops: [{ op: 'replace', path: '/root/children/0/props/content', value: '앨리스가 바꿈' }],
       })
       await call('POST', `/projects/${projectId}/menu`, { parentId: null, title: '새 메뉴' })
-      const text = await poll(
-        '서버 판이 캔버스에 선다',
-        async () =>
-          (await canvasFrame(page)
-            .locator('[data-wb-id="n_t00"]')
-            .textContent()
-            .catch(() => '')) ?? '',
-        (shown) => shown === '앨리스가 바꿈',
+      // 끝 조건은 «낡은 트리가 나갔다» 까지다 — 서버 판이 섰는가는 잠깐 뒤에 값으로 읽는다.
+      await poll(
+        '낡은 트리가 나간다',
+        async () => staleServed,
+        (n) => n >= 1,
         10_000,
       )
+      await page.waitForTimeout(2500)
+      const text =
+        (await canvasFrame(page)
+          .locator('[data-wb-id="n_t00"]')
+          .textContent()
+          .catch(() => '')) ?? ''
       const alerts = await page.getByRole('alert').allTextContents()
       const delivered = delay.delivered().map((frame) => frame.type)
       // eslint-disable-next-line no-console
