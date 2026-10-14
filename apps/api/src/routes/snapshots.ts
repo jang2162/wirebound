@@ -313,11 +313,15 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
         app.db,
         async (trx): Promise<RestoreBody> => {
           const restored = await restoreSnapshot(trx, { projectId, snapshotId, actorId: currentUser.id })
-          if (restored.kind !== 'restored') return { restored, menuRev: 0 }
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원은 프로젝트의 페이지를
           // 전부 잠근다(`lockProjectForRestore`) — 그 대기 뒤의 역할로 판정한다. 던지면 복원째 되돌아간다
           // (`restoreSnapshot`의 트랜잭션은 이 안의 세이브포인트가 된다).
+          //
+          // **실패 갈래도 여기를 지난다** — 앞에서 돌아가면 기다리는 사이 빠지거나 내려간 사람이 프로젝트 안의 사실(«그 스냅샷이 없다»
+          // `snapshot-gone` · 형식 · 레이아웃 수 …)을 받는다. 실패면 세이브포인트가 이미 복원 잠금을 놓았으므로 여기서 잡는 것은 자격
+          // 행 → 멤버 행 뿐이다(성공 갈래의 뒤쪽과 같은 차례). 잰 값은 `test/restore-404-code.test.ts`의 «가드 뒤에 빠진 사람».
           await recheckProjectRole(trx, request)
+          if (restored.kind !== 'restored') return { restored, menuRev: 0 }
           // **트리 판 번호는 맨 끝이다**(`repos/menu.ts`의 `bumpMenuRev`). 메뉴 · 페이지가 그대로인 복원도 올린다 — 판 2 · 3 의 복원은
           // 페이지를 지우고 되살리며, 무엇이 바뀌었는지 가려 올리면 한 갈래를 빠뜨린 판이 조용히 낡는다.
           return { restored, menuRev: await bumpMenuRev(trx, projectId) }
