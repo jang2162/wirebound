@@ -557,6 +557,8 @@ export type ApiErrorCode =
   | 'unauthenticated'
   | 'forbidden'
   | 'not-found'
+  /** 복원의 «스냅샷 없음»(404) — 멤버에게만 온다. 프로젝트가 없거나 멤버가 아닌 404 는 `not-found` 다(`shell/snapshots-panel.tsx`). */
+  | 'snapshot-gone'
   | 'conflict'
   /**
    * 소프트 잠금 충돌(「소프트 잠금」 · 423). **`conflict`와 갈라 둔다** —

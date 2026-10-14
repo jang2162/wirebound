@@ -411,10 +411,11 @@ describe('복원', () => {
   })
 
   /**
-   * **404 는 그 스냅샷이 서버에 없다는 뜻이다**(L-287) — 상자를 연 채 남의 연쇄 삭제가 상한을 넘겨 가장 오래된 안전망을 지웠다. 목록을 다시 받아 그 줄을 빼고
-   * 까닭을 말한다. 404 가 아닌 실패는 줄이 남는다(위 케이스 · 아래 표). 실브라우저 판은 `build-test/n36-snapshot-gone.test.ts`.
+   * **서버가 «스냅샷 없음»(`snapshot-gone`)이라 말하면 그 스냅샷은 서버에 없다**(L-287) — 상자를 연 채 남의 연쇄 삭제가 상한을 넘겨 가장 오래된 안전망을 지웠다. 목록을 다시 받아
+   * 그 줄을 빼고 까닭을 말한다. 같은 404 라도 `not-found`(프로젝트 없음 · 멤버 아님 — L-312)와 404 가 아닌 실패는 줄이 남는다(아래 표). 실브라우저 판은
+   * `build-test/n36-snapshot-gone.test.ts` · `build-test/n38-restore-404.test.ts`.
    */
-  it('404 면 목록을 다시 받아 지워진 줄을 빼고 까닭을 말한다', async () => {
+  it('snapshot-gone 이면 목록을 다시 받아 지워진 줄을 빼고 까닭을 말한다', async () => {
     let calls = 0
     const list = vi.fn(async () => {
       calls += 1
@@ -425,7 +426,7 @@ describe('복원', () => {
       getProject: async () => project('owner'),
       listSnapshots: list,
       restoreSnapshot: async () => {
-        throw new ApiError(404, 'not-found', '스냅샷을 찾을 수 없습니다')
+        throw new ApiError(404, 'snapshot-gone', '스냅샷을 찾을 수 없습니다')
       },
     })
 
@@ -443,6 +444,7 @@ describe('복원', () => {
   })
 
   it.each([
+    [404, 'not-found', '프로젝트를 찾을 수 없습니다'],
     [403, 'forbidden', '이 작업을 할 권한이 없습니다'],
     [409, 'conflict', '지금은 복원할 수 없습니다'],
     [503, 'internal', '서버가 바쁩니다'],
@@ -463,6 +465,34 @@ describe('복원', () => {
     await screen.findByText(new RegExp(message))
     expect(list).toHaveBeenCalledTimes(1)
     expect(screen.getByText('v1')).toBeTruthy()
+    // 줄이 지워졌다는 말이 아니다 — 지워진 안전망의 문장이 나가지 않는다(404 `not-found` 도 그렇다).
+    expect(screen.getByRole('alert').textContent).not.toContain('이미 지워졌습니다')
+  })
+
+  /**
+   * **지워진 안전망의 재조회가 실패하면 그 앞머리는 «저장은 됐지만» 이 아니다**(L-312) — 저장도 복원도 안 했다. 서버가 프로젝트가 없다고 답하는 판(`getProject` 404)에서 `snapshot-gone` 이
+   * 오는 일은 없지만, 재조회가 실패하는 길(503 · 끊김)은 있다.
+   */
+  it('snapshot-gone 뒤 목록 재조회가 실패하면 앞머리가 «저장은 됐지만» 이 아니다', async () => {
+    let calls = 0
+    const client = panelApi({
+      me: async () => user,
+      getProject: async () => project('owner'),
+      listSnapshots: async () => {
+        calls += 1
+        if (calls > 1) throw new ApiError(503, 'internal', '데이터베이스와의 연결이 끊겨 불러오지 못했습니다')
+        return [snapshot()]
+      },
+      restoreSnapshot: async () => {
+        throw new ApiError(404, 'snapshot-gone', '스냅샷을 찾을 수 없습니다')
+      },
+    })
+
+    await openConfirm(client)
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+
+    await waitFor(() => expect(screen.getByText(/목록을 다시 받지 못했습니다: 데이터베이스와의 연결이 끊겨/)).toBeTruthy())
+    expect(screen.queryByText(/저장은 됐지만/)).toBeNull()
   })
 
   /**

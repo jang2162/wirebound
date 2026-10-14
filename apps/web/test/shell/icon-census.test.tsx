@@ -14,7 +14,7 @@
  * ## 이 자가 안 그리는 자리
  *
  * - **떠남 통지의 «통지 닫기»**(`src/shell/edit-alert.tsx`) — 보내지 않은 편집을 두고 페이지를 떠나야 서는 판이라 여기서 세우지 않는다.
- *   이름은 `test/edit/reload-sent-edits.test.tsx` «떠남의 통지는 닫는 단추로 닫는다»가 이름으로 찾는다. `title` 은 아무도 안 잰다.
+ *   이름 · `title` 은 `test/edit/reload-sent-edits.test.tsx` «떠남의 통지는 닫는 단추로 닫는다»가 잰다(`title` 을 `aria-label` 과 같은 값으로).
  * - **역할 · 판에 따라만 서는 단추** — 여기 세운 판(owner · 편집 모드 · 내 코멘트 하나)에 없는 것은 안 센다.
  */
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'

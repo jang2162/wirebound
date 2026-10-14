@@ -181,6 +181,7 @@ const API_ERROR_CODES: Record<ApiErrorCode, true> = {
   unauthenticated: true,
   forbidden: true,
   'not-found': true,
+  'snapshot-gone': true,
   conflict: true,
   locked: true,
   'validation-failed': true,

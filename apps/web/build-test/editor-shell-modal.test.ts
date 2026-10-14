@@ -219,6 +219,7 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
           return hit !== null && (hit === element || element.contains(hit))
         }
         const bar = document.querySelector('.wb-shell-footer')!.getBoundingClientRect()
+        // L-141 — 이 선택자는 페이지 JSON 통지(가져온 결과 · 내보내기 실패)를 못 센다: 그 통지는 `role` 이 없는 줄 상자(`.wb-shell-pagejson-notice-row`) 안에 `role` 을 둔다(`panels/page-json-notices.tsx`). 이 판에는 그 통지가 안 서 수는 안 바뀐다 — 그 통지를 싣는 판은 이 선택자로 세지 않는다.
         const notices = [...document.querySelectorAll('.wb-shell-footer-notices > [role]')]
         return {
           count: notices.length,

@@ -491,7 +491,10 @@ describe('안전망 상한 — 지우는 연쇄와 겹친 복원 · 프로젝트
           expect(deleted!.statusCode, deleted!.body).toBe(200)
           if (order === 'cascade-first') {
             expect(restored!.statusCode, restored!.body).toBe(404)
-            expect((JSON.parse(restored!.body) as { error: { message: string } }).error.message).toBe('스냅샷을 찾을 수 없습니다')
+            expect((JSON.parse(restored!.body) as { error: { code: string; message: string } }).error).toEqual({
+              code: 'snapshot-gone',
+              message: '스냅샷을 찾을 수 없습니다',
+            })
           } else {
             expect(restored!.statusCode, restored!.body).toBe(200)
           }

@@ -7,7 +7,8 @@
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 쓰는 자리 × 창 셋 | 구조 트리 맨 아래 줄 `…` · 스크롤한 트리 가운데 줄 `…` · 메뉴 트리 줄 `+` · 구조 트리 머리 `+` · 셸 `…` 의 목록이 잘리거나 덮인다 |
+ * | 쓰는 자리 × 창 셋 | 구조 트리 맨 아래 줄 `…` · 스크롤한 트리 가운데 줄 `…` · 메뉴 트리 줄 `+` · 메뉴 트리 맨 아래 줄 `…` · 구조 트리 머리 `+` · 메뉴 트리 머리 `+` · 셸 `…` 의 목록이 잘리거나 덮인다 |
+ * | 셸 밖 화면 머리 `…` × 창 셋 | 프로젝트 목록 · 계정 설정 · 테마 관리 화면의 머리 `…`(`shell/page-head.tsx`)의 목록이 잘리거나 덮인다(L-141 — 셸 밖의 같은 부품) |
  */
 import type { Locator, Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -177,6 +178,21 @@ describe.skipIf(!전제.ok)('행동 메뉴 자리 — 실브라우저', () => {
       open: (page, { menuIds }) => openRowMenu(menuRow(page, menuIds[MENUS - 1]!), 'end', /추가$/),
     },
     {
+      label: '메뉴 트리 맨 아래 메뉴 줄 …',
+      open: (page, { menuIds }) => openRowMenu(menuRow(page, menuIds[MENUS - 1]!), 'end', /더 보기$/),
+    },
+    {
+      label: '메뉴 트리 머리 +',
+      open: async (page) => {
+        await page
+          .locator('.wb-shell-region[aria-label="메뉴·페이지 트리"]')
+          .getByRole('button', { name: /추가$/ })
+          .first()
+          .click()
+        await page.getByRole('menu').waitFor()
+      },
+    },
+    {
       label: '구조 트리 머리 +',
       open: async (page) => {
         await page
@@ -221,6 +237,42 @@ describe.skipIf(!전제.ok)('행동 메뉴 자리 — 실브라우저', () => {
       }
     } finally {
       await close()
+    }
+  })
+
+  /**
+   * 셸 밖 화면의 머리 `…`(`shell/page-head.tsx`) — 같은 부품이 프로젝트 목록 · 계정 설정 · 테마 관리 머리에 선다. 판은 같다(`sight`): 목록이 창 안에 다 들고 항목이 안 덮인다.
+   * 카나리아: 목록이 열려 항목이 있다(`items > 0`).
+   */
+  it.each(WINDOWS)('창 $width×$height — 셸 밖 화면의 머리 …의 목록이 잘리지도 덮이지도 않는다', async (viewport) => {
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport })
+    try {
+      const seen: Record<string, Sight> = {}
+      for (const [label, path] of [
+        ['프로젝트 목록', '/'],
+        ['계정 설정', '/account'],
+        ['테마 관리', '/admin/themes'],
+      ] as const) {
+        await page.goto(path)
+        await page.locator('.wb-shell-project-head').waitFor()
+        await page.locator('.wb-shell-project-head').getByRole('button', { name: '더 보기', exact: true }).click()
+        await page.getByRole('menu').waitFor()
+        seen[label] = await sight(page)
+        await page.keyboard.press('Escape')
+        await page.getByRole('menu').waitFor({ state: 'detached' })
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[셸 밖 머리 … ${viewport.width}×${viewport.height}]`, JSON.stringify(seen))
+      for (const [label, value] of Object.entries(seen)) {
+        expect({ label, clipped: value.clipped, covered: value.covered, any: value.items > 0 }).toEqual({
+          label,
+          clipped: NONE,
+          covered: 0,
+          any: true,
+        })
+      }
+    } finally {
+      await context.close()
     }
   })
 })
