@@ -379,6 +379,10 @@
   box-sizing: border-box;
   min-height: 40px;
   padding: 6px 12px;
+  /* **바가 창에 안 들어가는 칸에서만 바 자체가 세로로 스크롤된다** — 판이 바닥(`PALETTE_HEIGHT_FLOOR`)까지 줄어도 하단 바(통지 여덟 · 창 400)가 창보다 높은 판이다.
+     그릇만 스크롤하고 통지 무리에는 `max-height` 를 걸지 않는다(통지는 접히지 않는다 · 안 넘치는 칸은 스크롤이 없다). 이 값이 없으면 셸이 창을 넘고 마지막(실패)
+     통지가 창 밖에 서서 닿을 길이 없다. 새 통지는 보이는 자리로 스크롤된다(`shell/shell-footer.tsx`). */
+  overflow-y: auto;
   background: var(--wb-shell-chrome);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 13px;

@@ -411,6 +411,61 @@ describe('복원', () => {
   })
 
   /**
+   * **404 는 그 스냅샷이 서버에 없다는 뜻이다**(L-287) — 상자를 연 채 남의 연쇄 삭제가 상한을 넘겨 가장 오래된 안전망을 지웠다. 목록을 다시 받아 그 줄을 빼고
+   * 까닭을 말한다. 404 가 아닌 실패는 줄이 남는다(위 케이스 · 아래 표). 실브라우저 판은 `build-test/n36-snapshot-gone.test.ts`.
+   */
+  it('404 면 목록을 다시 받아 지워진 줄을 빼고 까닭을 말한다', async () => {
+    let calls = 0
+    const list = vi.fn(async () => {
+      calls += 1
+      return calls === 1 ? [snapshot(), snapshot({ id: 's2', tag: 'v2' })] : [snapshot({ id: 's2', tag: 'v2' })]
+    })
+    const client = panelApi({
+      me: async () => user,
+      getProject: async () => project('owner'),
+      listSnapshots: list,
+      restoreSnapshot: async () => {
+        throw new ApiError(404, 'not-found', '스냅샷을 찾을 수 없습니다')
+      },
+    })
+
+    await openPanel(client)
+    await screen.findByText('v1')
+    fireEvent.click(screen.getAllByRole('button', { name: '이 상태로 되돌리기' })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByText('v1')).toBeNull())
+    expect(screen.getByText('v2')).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toContain('이미 지워졌습니다')
+    // 서버가 커밋 전에 거절했다 — «복원됐는지 알 수 없습니다» 가 아니다.
+    expect(screen.getByRole('alert').textContent).not.toContain('알 수 없습니다')
+  })
+
+  it.each([
+    [403, 'forbidden', '이 작업을 할 권한이 없습니다'],
+    [409, 'conflict', '지금은 복원할 수 없습니다'],
+    [503, 'internal', '서버가 바쁩니다'],
+  ] as const)('%i 는 줄을 남기고 목록을 다시 받지 않는다', async (status, code, message) => {
+    const list = vi.fn(async () => [snapshot()])
+    const client = panelApi({
+      me: async () => user,
+      getProject: async () => project('owner'),
+      listSnapshots: list,
+      restoreSnapshot: async () => {
+        throw new ApiError(status, code, message)
+      },
+    })
+
+    await openConfirm(client)
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+
+    await screen.findByText(new RegExp(message))
+    expect(list).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('v1')).toBeTruthy()
+  })
+
+  /**
    * **`저장은 됐는데 목록만 못 받았을 때`와 같은 부류이고, 복원은 그 부류가 더 위험하다.**
    * 사용자가 실패한 줄 알고 다시 누르면 이미 되돌아간 상태 위에 **안전망 스냅샷이 하나 더
    * 쌓이고, 스냅샷은 지울 수 없다**(설계서 「스냅샷」).
