@@ -470,10 +470,10 @@ describe('복원', () => {
   })
 
   /**
-   * **지워진 안전망의 재조회가 실패하면 그 앞머리는 «저장은 됐지만» 이 아니다**(L-312) — 저장도 복원도 안 했다. 서버가 프로젝트가 없다고 답하는 판(`getProject` 404)에서 `snapshot-gone` 이
+   * **지워진 안전망의 재조회가 실패하면 그 앞머리는 «저장은 됐지만» · «복원은 됐지만» 이 아니다**(L-312 · N39) — 저장도 복원도 안 했다. 서버가 프로젝트가 없다고 답하는 판(`getProject` 404)에서 `snapshot-gone` 이
    * 오는 일은 없지만, 재조회가 실패하는 길(503 · 끊김)은 있다.
    */
-  it('snapshot-gone 뒤 목록 재조회가 실패하면 앞머리가 «저장은 됐지만» 이 아니다', async () => {
+  it('snapshot-gone 뒤 목록 재조회가 실패하면 앞머리가 «… 됐지만» 이 아니다', async () => {
     let calls = 0
     const client = panelApi({
       me: async () => user,
@@ -492,7 +492,7 @@ describe('복원', () => {
     fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
 
     await waitFor(() => expect(screen.getByText(/목록을 다시 받지 못했습니다: 데이터베이스와의 연결이 끊겨/)).toBeTruthy())
-    expect(screen.queryByText(/저장은 됐지만/)).toBeNull()
+    expect(screen.queryByText(/됐지만/)).toBeNull()
   })
 
   /**
@@ -519,7 +519,9 @@ describe('복원', () => {
     // 성공 알림과 재조회 실패가 **나란히** 선다 — 하나가 다른 하나를 지우지 않는다.
     const status = await screen.findByRole('status')
     expect(status.textContent).toContain('되돌렸습니다')
-    await waitFor(() => expect(screen.getByText(/저장은 됐지만 목록을 갱신하지 못했습니다/)).toBeTruthy())
+    // **앞머리는 복원의 말이다**(N39) — 복원은 저장이 아니다. 저장 갈래의 문장은 아래 «저장은 됐는데 목록만 못 받았을 때» 가 잠근다.
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('복원은 됐지만 목록을 갱신하지 못했습니다: 서버 오류가 발생했습니다')
     // 화면이 갈아엎히지 않았다 — 목록이 그대로 있다.
     expect(screen.getByText('v1')).toBeTruthy()
   })
