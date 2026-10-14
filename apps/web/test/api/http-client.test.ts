@@ -1533,6 +1533,7 @@ describe('createHttpClient', () => {
       unauthenticated: true,
       forbidden: true,
       'not-found': true,
+      'snapshot-gone': true,
       conflict: true,
       locked: true,
       'validation-failed': true,

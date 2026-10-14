@@ -77,7 +77,7 @@ import { requestEventActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction } from '../db/tx'
-import { ApiError, badRequest, conflict, notFound, unauthenticated, validationFailed } from '../errors'
+import { ApiError, badRequest, conflict, notFound, snapshotGone, unauthenticated, validationFailed } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
 import {
@@ -415,7 +415,8 @@ function toRestoreResponse(result: RestoreResult) {
 function restoreOutcomeToApiError(outcome: Exclude<RestoreOutcome, { kind: 'restored' }>) {
   switch (outcome.kind) {
     case 'not-found':
-      return notFound('스냅샷을 찾을 수 없습니다')
+      // **가드(`projectGuard('owner')`)를 지난 멤버에게만 나가는 코드다** — 프로젝트가 없거나 멤버가 아니면 가드가 `not-found` 로 먼저 끝낸다(웹이 둘을 갈라 읽는다).
+      return snapshotGone('스냅샷을 찾을 수 없습니다')
     case 'payload-version':
       return badRequest(`이 서버가 읽을 수 없는 스냅샷 형식입니다 (형식 ${outcome.payloadVersion}, 지원 ${outcome.supported})`)
     case 'fingerprint-mismatch':

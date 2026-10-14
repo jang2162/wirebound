@@ -143,6 +143,16 @@ const RESTORE_UNANSWERED = '복원됐는지 알 수 없습니다. 이 상자를 
  * 없으므로(설계서 「스냅샷」) 그 태그는 영영 그 이름이다(위 머리말 «저장은 성공했는데 …»).
  */
 const RELOAD_FAILURE_PREFIX = '저장은 됐지만 목록을 갱신하지 못했습니다'
+/** 목록을 다시 받게 한 까닭 — 목록 재조회가 실패했을 때 앞머리가 이것으로 갈린다(`RELOAD_FAILURE_PREFIXES`). */
+type ReloadCause = 'saved' | 'snapshot-gone'
+/**
+ * **재조회의 실패 앞머리는 그 재조회를 부른 일의 말이어야 한다.** «저장은 됐지만 …» 은 성공한 쓰기(저장 · 복원) 뒤에만 참이다 — 지워진 안전망의 404 뒤에는 저장도 복원도 안 됐으니
+ * «목록을 다시 받지 못했습니다» 다(그 404 에 «저장은 됐지만» 이 붙으면 아무것도 안 했는데 됐다고 말한다).
+ */
+const RELOAD_FAILURE_PREFIXES: Record<ReloadCause, string> = {
+  saved: RELOAD_FAILURE_PREFIX,
+  'snapshot-gone': '목록을 다시 받지 못했습니다',
+}
 
 /**
  * 조회 상태. 성공·실패를 판별 유니온으로 가르는 까닭 — `null`로 실패를 판정하면 응답 전과 실패가 같은 값이 되어 로딩 중에 오류 화면이
@@ -204,6 +214,8 @@ export function SnapshotsBody(props: {
    * 위 머리말의 일곱째가 이 상태의 존재 이유다.
    */
   const [reloadFailure, setReloadFailure] = useState<string | null>(null)
+  /** 마지막으로 목록을 다시 받게 한 일 — 재조회가 실패하면 그 일의 말로 앞머리를 단다. */
+  const [reloadCause, setReloadCause] = useState<ReloadCause>('saved')
 
   useEffect(() => {
     // 응답이 오기 전에 화면이 바뀌면 결과를 버린다(이 저장소의 조회들이 쓰는 형식).
@@ -272,7 +284,11 @@ export function SnapshotsBody(props: {
           project={state.project}
           snapshots={state.snapshots}
           reloadFailure={reloadFailure}
-          onSaved={() => setReloadToken((token) => token + 1)}
+          reloadCause={reloadCause}
+          onSaved={(cause) => {
+            setReloadCause(cause)
+            setReloadToken((token) => token + 1)
+          }}
           onRestoreSent={props.onRestoreSent}
           onRestored={props.onRestored}
           onRestoreRefused={props.onRestoreRefused}
@@ -308,7 +324,10 @@ function SnapshotsScreen(props: {
   snapshots: SnapshotSummary[]
   /** 저장은 됐는데 목록만 못 받았을 때의 서버 문장. 없으면 `null`. */
   reloadFailure: string | null
-  onSaved: () => void
+  /** `reloadFailure` 의 앞머리를 가르는 값(`RELOAD_FAILURE_PREFIXES`). */
+  reloadCause: ReloadCause
+  /** 목록을 다시 받는다 — 무엇 때문인지를 적는다. */
+  onSaved: (cause: ReloadCause) => void
   /** 복원을 보낸다(`SnapshotsBody`의 같은 이름). */
   onRestoreSent: (clientRestoreId: string) => void
   /** 복원이 성공했다. **`onSaved`와 갈라 둔다** — 아래 `runRestore`의 주석. */
@@ -344,7 +363,7 @@ function SnapshotsScreen(props: {
       const result = await api.restoreSnapshot(props.project.id, snapshot.id, { clientRestoreId })
       setNotice({ kind: 'restored', tag: snapshot.tag, result })
       // **성공했을 때만** 목록을 다시 받는다. 프로젝트가 바뀌었고 안전망 스냅샷이 하나 생겼다.
-      props.onSaved()
+      props.onSaved('saved')
       /**
        * **셸에도 알린다 — 에디터 위에 떠서 지는 몫이다**(머리말). 별도 라우트면 되돌리고
        * 설계서로 돌아오는 길에 셸이 자연히 다시 읽히지만, 대화 상자는 에디터 **위에** 뜨므로
@@ -358,8 +377,10 @@ function SnapshotsScreen(props: {
       const failure = toFailure(caught, RESTORE_FAILURE)
       // 저장 쪽과 같은 판단이다 — 세션이 끊긴 것은 다음 조회가 `SignedOut`으로 보낸다.
       // 그 밖에는 **서버 문장을 그대로 그린다**: 409 넷과 400 셋을 화면은 `code`로 가를 수 없다.
-      // **404 면 줄이 지워진 것이다** — 목록을 다시 받아 그 줄을 뺀다(`onSaved` 가 목록 재조회다). 404 가 아닌 거절(권한 · 잠금)과 «모름»(503 · 끊김)은 줄이 남는다.
-      const gone = caught instanceof ApiError && caught.status === 404
+      // **서버가 «스냅샷 없음»(`snapshot-gone`)이라 말했을 때만 줄이 지워진 것이다** — 목록을 다시 받아 그 줄을 뺀다(`onSaved` 가 목록 재조회다). 같은 404 라도 `not-found`(프로젝트가 없거나
+      // 이 사람이 멤버가 아님 — 가드가 둘을 못 가르게 숨긴다)는 그 줄이 지워졌다는 말이 아니다: 서버 문장 «프로젝트를 찾을 수 없습니다» 를 그대로 그리고 목록을 다시 받지 않는다. 그 밖의 거절
+      // (권한 · 잠금)과 «모름»(503 · 끊김)도 줄이 남는다.
+      const gone = caught instanceof ApiError && caught.code === 'snapshot-gone'
       const message = failure.kind === 'signed-out' ? RESTORE_FAILURE : gone ? SNAPSHOT_GONE : failure.message
       // **커밋 전에 거절됐는지 모르면 복원됐을 수 있다**(`refusedBeforeCommit`) — 답만 잃었으면 서버는 복원했거나 아직 하는 중이다.
       // 셸이 «복원됐는지 모릅니다 — 다시 불러오기»를 세우고(그 신호가 뒤에 오면 다시 세운다), 여기서도 그렇다고 말한다.
@@ -367,7 +388,7 @@ function SnapshotsScreen(props: {
       setNotice({ kind: 'error', message: unanswered ? `${message} — ${RESTORE_UNANSWERED}` : message })
       if (unanswered) props.onRestoreUnanswered(clientRestoreId)
       else props.onRestoreRefused(clientRestoreId)
-      if (gone) props.onSaved()
+      if (gone) props.onSaved('snapshot-gone')
     } finally {
       setRestoring(null)
     }
@@ -392,7 +413,7 @@ function SnapshotsScreen(props: {
       // **성공했을 때만** 폼을 비우고 목록을 다시 받는다.
       setTag('')
       setDescription('')
-      props.onSaved()
+      props.onSaved('saved')
     } catch (caught) {
       const failure = toFailure(caught, SAVE_FAILURE)
       // 세션이 끊긴 것은 이 화면이 다룰 일이 아니다 — 다음 조회가 `SignedOut`으로 보낸다.
@@ -460,7 +481,7 @@ function SnapshotsScreen(props: {
             갱신 실패는 **서로 다른 사실**이고, 하나로 접으면 둘 중 하나가 사라진다. */}
         {props.reloadFailure === null ? null : (
           <p className="wb-shell-snapshots-error" role="alert">
-            {RELOAD_FAILURE_PREFIX}: {props.reloadFailure}
+            {RELOAD_FAILURE_PREFIXES[props.reloadCause]}: {props.reloadFailure}
           </p>
         )}
       </section>

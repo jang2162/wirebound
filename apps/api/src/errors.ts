@@ -7,6 +7,7 @@ export type ApiErrorCode =
   | 'unauthenticated'
   | 'forbidden'
   | 'not-found'
+  | 'snapshot-gone'
   | 'conflict'
   | 'locked'
   | 'validation-failed'
@@ -18,6 +19,13 @@ export const ERROR_STATUS: Record<ApiErrorCode, number> = {
   unauthenticated: 401,
   forbidden: 403,
   'not-found': 404,
+  /**
+   * **스냅샷이 없다 — 프로젝트의 멤버(owner)에게만 내는 404.** 복원 라우트(`POST …/snapshots/:snapshotId/restore`)가 그 프로젝트에서 그 스냅샷을 못 찾았을 때다
+   * (연쇄 삭제 안전망이 상한을 넘어 지워졌다). **`not-found` 와 상태 숫자가 같다 — 갈라 두는 까닭은 화면이다**: 웹의 스냅샷 상자는 이 코드일 때만 «이미 지워졌다 · 목록을 다시
+   * 받는다» 를 하고, 프로젝트가 없거나 멤버가 아닌 404(`not-found` — 가드가 내 존재를 숨긴다)는 목록을 다시 받지 않는다.
+   * **비멤버에게는 절대 이 코드가 나가지 않는다** — 가드(`projectGuard`)가 핸들러 앞에서 `not-found` 로 끝내므로, 이 코드가 «스냅샷이 있는지» 를 비멤버에게 알리지 못한다.
+   */
+  'snapshot-gone': 404,
   conflict: 409,
   /**
    * 소프트 잠금 충돌(설계서 「소프트 잠금」의 2차 방어). **`409`로 내지 않는다** — 근거는
@@ -117,6 +125,11 @@ export function forbidden(message = '권한이 없습니다'): ApiError {
 
 export function notFound(message = '대상을 찾을 수 없습니다'): ApiError {
   return new ApiError('not-found', message)
+}
+
+/** 복원 라우트의 «스냅샷 없음». **가드를 지난 멤버에게만 난다** — 뜻은 `ERROR_STATUS` 의 `snapshot-gone`. */
+export function snapshotGone(message: string): ApiError {
+  return new ApiError('snapshot-gone', message)
 }
 
 export function conflict(message: string, issues?: ApiErrorIssue[]): ApiError {

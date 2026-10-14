@@ -64,7 +64,7 @@ describe('연쇄 삭제의 안전망 스냅샷 상한', () => {
           cookies: b.owner.cookie,
         })
         expect(restore.statusCode, restore.body).toBe(404)
-        expect(restore.json().error.message).toBe('스냅샷을 찾을 수 없습니다')
+        expect(restore.json().error).toEqual({ code: 'snapshot-gone', message: '스냅샷을 찾을 수 없습니다' })
       }
     })
   })
