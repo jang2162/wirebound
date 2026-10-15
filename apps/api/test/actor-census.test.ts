@@ -169,7 +169,7 @@ function classify(head: string): ActorOrigin {
   const call = head.replace(/\s+/g, '')
   if (call === 'requestActor(') return 'request'
   if (head === '{') return 'literal'
-  // 대문자로 시작하면 타입 이름이다(`RevisionActor`·`EventActor`). 값이 아니다.
+  // 대문자로 시작하면 타입 이름이다(`RevisionActor`). 값이 아니다.
   return /^[A-Z]/.test(head) ? 'type' : 'passthrough'
 }
 
