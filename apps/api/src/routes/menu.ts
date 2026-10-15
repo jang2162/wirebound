@@ -282,7 +282,15 @@ export function menuRoutes() {
       let rev = 0
       try {
         result = await runTreeTransaction(app, projectId, request, async (trx) => {
-          const deleted = await deleteMenuNode(trx, projectId, nodeId)
+          let deleted
+          try {
+            deleted = await deleteMenuNode(trx, projectId, nodeId)
+          } catch (error) {
+            // **«하위가 있다»(409)도 재확인한다** — 프로젝트 행을 기다린 사이 빠지거나 내려간 사람이 그 사실을 받으면 가드 응답과 갈린다.
+            // `deleteMenuNode` 의 세이브포인트가 이미 되돌렸으므로 이 트랜잭션은 살아 있다.
+            if (error instanceof HasChildrenError) await recheckProjectRole(trx, request)
+            throw error
+          }
           if (deleted === 'deleted') {
             // **커밋 순간의 권한** — 생성과 같은 자리다(트리 쓰기의 첫 잠금 뒤).
             await recheckProjectRole(trx, request)

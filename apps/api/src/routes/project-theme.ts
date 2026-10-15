@@ -108,7 +108,9 @@ export function projectThemeRoutes() {
 
       const saved = await withTransaction(app.db, async (trx) => {
         const updated = await updateProjectTheme(trx, projectId, { themeId: body.themeId, version: body.version, tokens }, body.rev)
-        if (updated !== null) await recheckProjectRole(trx, request)
+        // **커밋 순간의 권한 — 0 행(남이 먼저 저장했다)도 재확인한다.** 갱신이 행 잠금을 기다린 사이 빠지거나 내려간 사람이 아래 409 의
+        // `current`(지금 테마 · 판 · 토큰 · rev)를 받으면 처음부터 그 자리였던 사람의 가드 응답과 갈린다. 던지면 이 트랜잭션째 되돌아간다.
+        await recheckProjectRole(trx, request)
         return updated
       })
       if (saved === null) {

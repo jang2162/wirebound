@@ -86,7 +86,20 @@ export async function handlePatchFrame(app: FastifyInstance, connection: RoomCon
           ops: frame.ops,
           userId: connection.userId,
         })
-        if (blocked !== null) throw blocked
+        // **실패 갈래도 재확인한다** — 423 은 잠금을 쥔 멤버의 이름을 싣는다. 프레임을 받을 때의 확인(`stillAllowed`)은 이미 지났으므로,
+        // 페이지 행에 줄 선 사이 빠진 사람의 연결이 이름을 받는다(아래 `recheckAtCommit` 이 낸 거절과 같은 프레임이어야 한다).
+        const recheck = () =>
+          recheckAtCommit(trx, {
+            projectId: connection.projectId,
+            userId: connection.userId,
+            min: MIN_ROLE_FOR_FRAME.patch,
+            scopeProjectId: null,
+            credential: { kind: 'session', id: connection.sessionId },
+          })
+        if (blocked !== null) {
+          await recheck()
+          throw blocked
+        }
         const edited = await applyEdit(trx, {
           projectId: connection.projectId,
           pageId: frame.pageId,
@@ -104,16 +117,8 @@ export async function handlePatchFrame(app: FastifyInstance, connection: RoomCon
         // **커밋 순간의 권한 · 자격** — REST 와 같은 함수다(`auth/roles.ts`의 `recheckAtCommit`). 프레임을 받을 때의
         // 확인(`ws/routes.ts`의 `stillAllowed`)은 잠금 **밖**이다 — `applyEdit`이 페이지 잠금에 선 동안 강등되거나
         // 로그아웃하면 그 확인은 낡는다. 최소 역할은 프레임 수신과 같은 표의 값, 스코프는 없고 자격은 연결이 든 세션이다
-        // (WS 는 쿠키만이다).
-        if (edited.ok) {
-          await recheckAtCommit(trx, {
-            projectId: connection.projectId,
-            userId: connection.userId,
-            min: MIN_ROLE_FOR_FRAME.patch,
-            scopeProjectId: null,
-            credential: { kind: 'session', id: connection.sessionId },
-          })
-        }
+        // (WS 는 쿠키만이다). **성공 · 실패 갈래 모두다** — 실패(409 `stale` 의 머리 번호 · 422 issues)도 프로젝트 안의 사실이다.
+        await recheck()
         return edited
       },
       pageStaleOnLateCommit(app, connection.projectId, frame.pageId),
