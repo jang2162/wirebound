@@ -160,13 +160,11 @@ const BOB_REMOVES_FIRST = {
   type: 'page-changed',
   seq: HEAD_SEQ + 1,
   ops: [{ op: 'remove', path: '/root/children/0' }],
-  actor: { type: 'user', label: '밥' },
 }
 const BOB_REMOVES_SECOND = {
   type: 'page-changed',
   seq: HEAD_SEQ + 1,
   ops: [{ op: 'remove', path: '/root/children/1' }],
-  actor: { type: 'user', label: '밥' },
 }
 const UNSAVED = '되돌리려던 편집이 저장되지 않아 되돌리지 않았습니다.'
 const LOST_SECOND = '다른 사람의 변경과 겹쳐 아직 저장되지 않은 편집 1개를 버렸습니다.'

@@ -317,7 +317,6 @@ describe('리베이스한 편집을 다시 낸다', () => {
       seq: HEAD_SEQ + 1,
       ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_theirs', type: 'Text', props: {} } }],
       warnings: [],
-      actor: { type: 'user', label: '남' },
     })
     // 그 사이 떠 있던 내 프레임은 낡은 `baseSeq`로 갔으므로 409다.
     board.push({
@@ -363,7 +362,6 @@ describe('리베이스한 편집을 다시 낸다', () => {
       seq: HEAD_SEQ + 1,
       ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_theirs', type: 'Text', props: {} } }],
       warnings: [],
-      actor: { type: 'user', label: '남' },
     })
     board.push({
       type: 'patch-error',
@@ -397,7 +395,6 @@ describe('리베이스한 편집을 다시 낸다', () => {
       seq: HEAD_SEQ + 1,
       ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_theirs', type: 'Text', props: {} } }],
       warnings: [],
-      actor: { type: 'user', label: '남' },
     })
     board.push({
       type: 'patch-error',
@@ -437,7 +434,6 @@ describe('리베이스한 편집을 다시 낸다', () => {
       seq: HEAD_SEQ + 1,
       ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_theirs', type: 'Text', props: { content: '남의 글' } } }],
       warnings: [],
-      actor: { type: 'user', label: '남' },
     })
     board.push({
       type: 'patch-error',
@@ -524,7 +520,6 @@ describe('리베이스한 편집을 다시 낸다', () => {
       seq: HEAD_SEQ + 1,
       ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_theirs', type: 'Text', props: {} } }],
       warnings: [],
-      actor: { type: 'user', label: '남' },
     })
 
     await act(async () => {})
@@ -563,7 +558,6 @@ describe('리베이스한 편집을 다시 낸다', () => {
       seq: HEAD_SEQ + 1,
       ops: [{ op: 'remove', path: '/root/children/1' }],
       warnings: [],
-      actor: { type: 'user', label: '남' },
     })
     expect(board.store.getState().pending.map((edit) => edit.clientOpId)).toEqual(['op_2'])
 

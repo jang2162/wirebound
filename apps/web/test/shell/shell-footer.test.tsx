@@ -141,7 +141,7 @@ describe('통지는 하단 바에 선다', () => {
     await openPage(PAIR, { realtime: rt.realtime, apiOverrides: { getProject: async () => project(role) } })
     rt.open()
 
-    rt.deliver({ type: 'restored', projectId: PROJECT_ID, snapshotId: 's1', actor: { type: 'user', label: '밥' } })
+    rt.deliver({ type: 'restored', projectId: PROJECT_ID, snapshotId: 's1' })
     role = 'viewer'
     rt.deliver({ type: 'membership-changed', projectId: PROJECT_ID })
     await waitFor(() => expect(notices(footer()).join(' | ')).toContain('편집 권한이 없어져'))

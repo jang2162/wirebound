@@ -22,8 +22,8 @@ const WEB_PROTOCOL = fileURLToPath(new URL('../../src/realtime/protocol.ts', imp
 /**
  * 어떤 선언 **안에서만** `type: '…'`을 센다.
  *
- * **범위를 좁히는 것이 요점이다** — 파일 전체를 훑으면 `EventActor`의
- * `type: 'user' | 'mcp'`가 프레임 이름으로 세어진다(그것 하나 때문에 양쪽이 안 맞는다).
+ * **범위를 좁히는 것이 요점이다** — 파일 전체를 훑으면 웹 `ClientFrame`의
+ * `type: 'patch'` 같은 보내는 프레임 이름이 받는 프레임 이름으로 세어진다(그것 때문에 양쪽이 안 맞는다).
  * 주석은 먼저 걷는다 — 머리말이 프레임 이름을 인용한다.
  */
 function typesIn(path: string, declaration: string): string[] {

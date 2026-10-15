@@ -113,7 +113,6 @@ const PAGE_CHANGED = {
   seq: 5,
   ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_remote', type: 'Container' } }],
   warnings: [],
-  actor: { type: 'user', label: '홍길동' },
 }
 
 describe('붙는 자리', () => {
@@ -174,7 +173,6 @@ describe('프레임이 스토어에 닿는다', () => {
       type: 'restored',
       projectId: 'project_1',
       snapshotId: 's1',
-      actor: { type: 'user', label: '홍길동' },
     })
 
     expect(board.store.getState().headSeq).toBe(4)
@@ -288,7 +286,6 @@ describe('프레임이 스토어에 닿는다', () => {
       type: 'restored',
       projectId: 'project_1',
       snapshotId: 's1',
-      actor: { type: 'user', label: '홍길동' },
     })
     board.push({ ...PAGE_CHANGED, seq: 9 })
 

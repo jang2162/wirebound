@@ -74,7 +74,7 @@ const swapped = (): PageDocument =>
     ],
   })
 
-const RESTORED = { type: 'restored', projectId: PROJECT_ID, snapshotId: 's1', actor: { type: 'user', label: '밥' } } as const
+const RESTORED = { type: 'restored', projectId: PROJECT_ID, snapshotId: 's1' } as const
 
 /** 밥이 끝에 `Heading`을 넣은 revision 의 프레임. */
 const BOB_ADDS = (seq: number, pageId: string = PAGE_ID) =>
@@ -85,7 +85,6 @@ const BOB_ADDS = (seq: number, pageId: string = PAGE_ID) =>
     seq,
     ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n-bob', type: 'Heading', props: {} } }],
     warnings: [],
-    actor: { type: 'user', label: '밥' },
   }) as const
 /** 서버가 밥의 `Heading`을 커밋한 판. */
 const withHeading = (): PageDocument =>
@@ -542,7 +541,6 @@ describe('겹친 두 조회 — 늦게 온 옛 판이 새 판을 덮지 않는�
       seq: HEAD_SEQ + 1,
       ops: [{ op: 'move', from: '/root/children/0', path: '/root/children/1' }],
       warnings: [],
-      actor: { type: 'user', label: '밥' },
     })
     expect(structureTypes()).toEqual(['Page', 'Divider', 'Text'])
     await act(async () => {
@@ -762,7 +760,6 @@ describe('편집 실패 수습은 그 편집이 나간 큐만 비운다', () => 
       seq: HEAD_SEQ + 1,
       ops: [{ op: 'remove', path: '/root/children/0' }],
       warnings: [],
-      actor: { type: 'user', label: '밥' },
     })
     await act(async () => {})
     expect(alertText()).toBe('다른 사람의 변경과 겹쳐 아직 저장되지 않은 편집 1개를 버렸습니다.')

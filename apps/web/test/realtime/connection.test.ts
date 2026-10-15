@@ -117,7 +117,6 @@ describe('붙고 받는다', () => {
         seq: 3,
         ops: [],
         warnings: [],
-        actor: { type: 'user', label: '홍길동' },
       }),
     })
 
@@ -130,7 +129,6 @@ describe('붙고 받는다', () => {
         seq: 3,
         ops: [],
         warnings: [],
-        actor: { type: 'user', label: '홍길동' },
       },
     ])
   })

@@ -108,7 +108,6 @@ async function rebaseDropped() {
     seq: HEAD_SEQ + 1,
     ops: [{ op: 'remove', path: '/root/children/0' }],
     warnings: [],
-    actor: { type: 'user', label: '밥' },
   })
   await act(async () => {})
   expect(alertText()).toContain('편집 1개를 버렸습니다')
@@ -180,7 +179,6 @@ describe('리베이스가 버린 나간 편집의 거절', () => {
       seq: HEAD_SEQ + 1,
       ops: [{ op: 'remove', path: '/root/children/0' }],
       warnings: [],
-      actor: { type: 'user', label: '밥' },
     })
     await act(async () => {})
     expect(alertText()).toContain('편집 1개를 버렸습니다')

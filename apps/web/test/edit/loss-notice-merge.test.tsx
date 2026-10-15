@@ -88,7 +88,7 @@ const triple = (): PageDocument =>
     ],
   })
 
-const RESTORED = { type: 'restored', projectId: PROJECT_ID, snapshotId: 's1', actor: { type: 'user', label: '밥' } } as const
+const RESTORED = { type: 'restored', projectId: PROJECT_ID, snapshotId: 's1' } as const
 const CONFLICT = { status: 409, code: 'conflict', message: '페이지가 이미 변경되었습니다' }
 
 /** 밥이 첫째 자식을 지운 revision 의 프레임 — 그 자리를 건드린 내 안 보낸 편집은 리베이스에서 버려진다. */
@@ -100,7 +100,6 @@ const BOB_REMOVES_FIRST = (seq: number, pageId: string) =>
     seq,
     ops: [{ op: 'remove', path: '/root/children/0' }],
     warnings: [],
-    actor: { type: 'user', label: '밥' },
   }) as const
 
 interface SentPatch {

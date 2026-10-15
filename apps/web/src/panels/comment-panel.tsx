@@ -313,10 +313,8 @@ function keyVerdict(caught: unknown): KeyVerdict | null {
  * 끝»으로 가는 것은 위 표 아래).
  *
  * **«api 가 낸 500 은 커밋 전이다»의 근거는 코드다**(`apps/api/src/routes/comments.ts`의 게시 핸들러). 커밋
- * (`runWrite`가 끝난 것) 뒤에 도는 것은 셋이다: `notifyMarkerChange` — 방송은 `async`인 `broadcast.send`이고
- * 실패를 `.catch`로 삼킨다(`ws/notify.ts`) · 그 인자의 `requestEventActor` — 번호를 붙이는 갈래에서는 이미
- * 트랜잭션 **안에서** 같은 요청으로 `requestActor`를 불렀다(같은 값이라 여기서 새로 던질 길이 없다), 번호가
- * 있던 갈래는 `markerOps`가 비어 이 호출 전에 돌아간다 · 응답 객체 — 문자열·수뿐이라 직렬화가 던지지 않는다.
+ * (`runWrite`가 끝난 것) 뒤에 도는 것은 둘이다: `notifyMarkerChange` — 방송은 `async`인 `broadcast.send`이고
+ * 실패를 `.catch`로 삼킨다(`ws/notify.ts`) · 응답 객체 — 문자열·수뿐이라 직렬화가 던지지 않는다.
  * 핸들러 뒤에 도는 훅(`onSend`·`onResponse`)은 없다(`addHook`은 `onRoute`·`onRequest`뿐).
  *
  * **그런데 브라우저가 받은 500 이 늘 api 의 것은 아니다.** Vite 개발 프록시는 api 가 요청을 쥔 채 죽으면

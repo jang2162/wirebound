@@ -123,7 +123,6 @@ async function board(): Promise<Board> {
         seq,
         ops,
         warnings: [],
-        actor: { type: 'user', label: '나(다른 탭)' },
       }
       act(() => {
         sockets.at(-1)?.onmessage?.({ data: JSON.stringify(frame) })
