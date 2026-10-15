@@ -597,7 +597,12 @@ export function pageRoutes() {
             ops: putOps,
             userId: currentUser.id,
           })
-          if (blocked) throw blocked
+          if (blocked) {
+            // **실패 갈래도 재확인한다**(`auth/roles.ts`의 `recheckProjectRole`) — 423 은 잠금을 쥔 멤버의 **이름**을 싣는다. 페이지 행을 기다리는 사이
+            // 빠지거나 내려간 사람이 그 이름을 받으면 처음부터 그 자리였던 사람의 가드 응답과 갈린다. 아래 `applyEdit` 실패(409 · 422)도 같다.
+            await recheckProjectRole(trx, request)
+            throw blocked
+          }
           const edited = await applyEdit(trx, {
             projectId,
             pageId,
@@ -606,8 +611,9 @@ export function pageRoutes() {
             actor: requestActor(request),
           })
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). `applyEdit`이 페이지를
-          // 잠갔다 — 그 대기 뒤의 역할로 판정한다. 던지면 이 트랜잭션째 되돌아간다.
-          if (edited.ok) await recheckProjectRole(trx, request)
+          // 잠갔다 — 그 대기 뒤의 역할로 판정한다. 던지면 이 트랜잭션째 되돌아간다. **성공 · 실패 갈래 모두다** — 실패(409 `stale` 의 머리 번호 ·
+          // 422 issues)도 프로젝트 안의 사실이라, 빠진 사람이 받으면 가드 응답과 갈린다.
+          await recheckProjectRole(trx, request)
           return edited
         },
         pageStaleOnLateCommit(app, projectId, pageId),
@@ -689,7 +695,11 @@ export function pageRoutes() {
             ops: body.ops,
             userId: currentUser.id,
           })
-          if (blocked) throw blocked
+          if (blocked) {
+            // 실패 갈래도 재확인한다 — `PUT .../schema`와 같은 자리 · 같은 까닭이다(423 이 잠금을 쥔 멤버의 이름을 싣는다).
+            await recheckProjectRole(trx, request)
+            throw blocked
+          }
           const edited = await applyEdit(trx, {
             projectId,
             pageId,
@@ -697,8 +707,8 @@ export function pageRoutes() {
             ops: body.ops,
             actor: requestActor(request),
           })
-          // **커밋 순간의 권한.** `PUT .../schema`와 같은 자리 · 같은 까닭이다.
-          if (edited.ok) await recheckProjectRole(trx, request)
+          // **커밋 순간의 권한.** `PUT .../schema`와 같은 자리 · 같은 까닭이다 — 성공 · 실패 갈래 모두.
+          await recheckProjectRole(trx, request)
           return edited
         },
         pageStaleOnLateCommit(app, projectId, pageId),

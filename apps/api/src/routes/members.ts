@@ -69,7 +69,15 @@ export function memberRoutes() {
           // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`). 삽입의 FK 도 같은 `KEY SHARE`를 걸지만
           // 그것은 프로젝트 삭제 뒤에 섰다가 깨면 23503 — 봉투 없는 500 이다. 먼저 잡으면 0 행 → 404.
           await lockProjectShared(trx, projectId)
-          const inserted = await insertMember(trx, projectId, user, body.role)
+          let inserted
+          try {
+            inserted = await insertMember(trx, projectId, user, body.role)
+          } catch (error) {
+            // **«이미 멤버다»(409)도 재확인한다** — 프로젝트 행을 기다린 사이 빠지거나 내려간 사람이 그 사실을 받으면 가드 응답과 갈린다.
+            // 중복은 `insertMember` 의 세이브포인트가 이미 되돌렸으므로 이 트랜잭션은 살아 있다.
+            if (error instanceof DuplicateMemberError) await recheckProjectRole(trx, request)
+            throw error
+          }
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 삽입의 FK 가 프로젝트 행에 거는
           // `KEY SHARE`가 복원 · 프로젝트 삭제의 `FOR UPDATE` 뒤에 섰을 수 있다 — 그 사이 owner 에서 내려갔으면 403 이다.
           await recheckProjectRole(trx, request)

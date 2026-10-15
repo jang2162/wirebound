@@ -270,6 +270,86 @@ describe('가드 뒤에 빠진 사람 — 실패 갈래도 재확인한다', () 
     },
     30_000,
   )
+
+  /**
+   * **자격(세션 · 토큰)이 기다리는 사이 죽은 복원은 가드의 401 과 같은 응답을 받는다**(N39-N2). 재확인의 앞 절(`recheckAtCommit` — 자격 행
+   * `FOR KEY SHARE` 가 멤버 행보다 먼저)이 실패 갈래에서도 돈다. 문으로 쓰는 것은 세션 · 토큰 행이 아니라 복원의 첫 잠금 앞의 질의다 —
+   * 그 행을 쥐면 요청이 인증에서 서서 재려던 자리까지 안 간다. 견주는 것은 **죽은 자격으로 처음부터 보낸** 같은 요청의 가드 응답이다.
+   */
+  type Dying = 'session' | 'token'
+
+  async function restoreWith(
+    ctx: ProxiedRealApi,
+    auth: { cookie: { wb_session: string } } | { bearer: string },
+    projectId: string,
+    snapshotId: string,
+  ) {
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/projects/${projectId}/snapshots/${snapshotId}/restore`,
+      ...('cookie' in auth ? { cookies: auth.cookie } : { headers: { authorization: auth.bearer } }),
+    })
+    const headers = Object.fromEntries(Object.entries(res.headers).filter(([name]) => !VOLATILE_HEADERS.has(name)))
+    return {
+      status: res.statusCode,
+      body: res.body,
+      headers,
+      volatile: Object.keys(res.headers).filter((name) => VOLATILE_HEADERS.has(name)),
+    }
+  }
+
+  it.each([
+    { dying: 'session' as Dying, name: '실패 갈래(not-found)', success: false },
+    { dying: 'session' as Dying, name: '성공 갈래', success: true },
+    { dying: 'token' as Dying, name: '실패 갈래(not-found)', success: false },
+    { dying: 'token' as Dying, name: '성공 갈래', success: true },
+  ])(
+    '$dying 이 죽음 · $name — 가드의 401 과 같은 응답',
+    async ({ dying, success }) => {
+      await withProxiedRealApi(async (ctx) => {
+        const b = await board(ctx)
+        const snapshotId = success ? b.snapshotId : randomUUID()
+        let auth: { cookie: { wb_session: string } } | { bearer: string } = { cookie: b.bob.cookie }
+        let tokenId = ''
+        if (dying === 'token') {
+          const issued = await ctx.app.inject({
+            method: 'POST',
+            url: `/api/projects/${b.projectId}/tokens`,
+            cookies: b.bob.cookie,
+            payload: { name: '밥의 토큰' },
+          })
+          expect(issued.statusCode, issued.body).toBe(201)
+          tokenId = (issued.json() as { id: string }).id
+          auth = { bearer: `Bearer ${(issued.json() as { value: string }).value}` }
+        }
+
+        // 카나리아 — 자격이 살아 있을 때 이 요청은 그 갈래에 닿는다(성공 갈래는 상태를 바꾸므로 보내지 않는다).
+        if (!success) {
+          const alive = await restoreWith(ctx, auth, b.projectId, snapshotId)
+          expect(alive.status, alive.body).toBe(404)
+          expect(JSON.parse(alive.body).error.code).toBe('snapshot-gone')
+        }
+
+        const hold = ctx.proxy.holdQuery(PROJECT_ROW_LOCK)
+        const pending = restoreWith(ctx, auth, b.projectId, snapshotId)
+        await hold.held
+        const killed =
+          dying === 'session'
+            ? await ctx.app.inject({ method: 'POST', url: '/api/auth/logout', cookies: b.bob.cookie })
+            : await ctx.app.inject({ method: 'DELETE', url: `/api/projects/${b.projectId}/tokens/${tokenId}`, cookies: b.bob.cookie })
+        expect(killed.statusCode, killed.body).toBe(204)
+        hold.release()
+        const held = await pending
+
+        // 죽은 자격으로 처음부터 보낸 같은 요청 — 가드의 401.
+        const guard = await restoreWith(ctx, auth, b.projectId, snapshotId)
+        expect(guard.status, guard.body).toBe(401)
+        expect(guard.volatile).toEqual(['date'])
+        expect(held).toEqual(guard)
+      })
+    },
+    30_000,
+  )
 })
 
 /** 다른 연결에서 그 행을 지금 잡을 수 있는가(`NOWAIT` — 쥔 사람이 있으면 `55P03`). 문장 하나라 끝나면 놓는다. */

@@ -2049,7 +2049,9 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
  * 요청을 기다리고, 잡은 동안은 그 토큰의 요청(인증의 `last_used_at` 갱신)을 세웠다.
  *
  * - **토큰 요청이 먼저** — owner 밥이 **토큰으로** 캐럴의 역할을 바꾸는 쓰기를 owner 행 줄에 세운다(토큰 행 `KEY SHARE`를 첫 잠금으로
- *   쥔 채다 — `OwnerRecheck` «잠금 순서»). 그 사이 앨리스가 밥을 다시 넣는다.
+ *   쥔 채다 — `OwnerRecheck` «잠금 순서»). 그 사이 앨리스가 밥을 다시 넣는다. **다시 넣기의 409 도 성공 갈래처럼 재확인의 멤버 행(`FOR SHARE`)에서
+ *   owner 행을 기다린다**(N41 — 빠진 사람에게 «이미 멤버다» 를 안 알리려고 409 갈래에도 재확인을 둔다). 그래서 «곧바로 끝난다»가 아니라 «토큰 행에서
+ *   기다리지 않는다» 를 잰다.
  * - **다시 넣기가 먼저** — 다시 넣기를 멤버 행 삽입 앞에 세우고(고치기 전에는 그 자리가 토큰 행을 쥔 뒤다) 밥의 토큰으로 읽는다.
  *
  * **먼저 읽는 것이 여는 판 — 없는 걸 본 뒤 넣는 사이 다른 초대가 끼는 판.** 읽기는 잠그지 않으므로 새 잠금이 없다. 끼어든 초대는
@@ -2067,7 +2069,7 @@ describe('이미 멤버인 사람을 다시 넣으면 — 토큰 행을 잡지 �
       }),
     )
 
-  it('토큰 요청이 먼저 — 그 요청이 토큰 행을 쥔 채 서 있어도 다시 넣기는 곧바로 409 · 그 요청은 제 차례에 200 · 교착 0', async () => {
+  it('토큰 요청이 먼저 — 그 요청이 토큰 행을 쥔 채 서 있어도 다시 넣기는 토큰 행에서 안 기다린다(재확인의 멤버 행 줄에 선다) · 409 · 그 요청은 제 차례에 200 · 교착 0', async () => {
     await withRealApi(async (ctx) => {
       const fx = await tokenFixture(ctx, 'owner')
       const deadlocksBefore = await deadlockCount()
@@ -2077,6 +2079,8 @@ describe('이미 멤버인 사람을 다시 넣으면 — 토큰 행을 잡지 �
       let change: Fired | undefined
       let readd: Fired | undefined
       let settled = false
+      let waitingQueries: string[] = []
+      let blockedOnOwners = 0
       try {
         await owners.acquired
         change = track(
@@ -2091,14 +2095,28 @@ describe('이미 멤버인 사람을 다시 넣으면 — 토큰 행을 잡지 �
         // 판이 섰는가 — 역할 변경이 owner 행 줄에 섰다.
         expect(change.done()).toBe(false)
         readd = invite(ctx, fx, fx.bob.user.email)
+        // **«이미 멤버다» 409 도 커밋 순간의 권한을 다시 본다**(N41 — `routes/members.ts`). 앨리스(owner)의 재확인이 멤버 행 `FOR SHARE` 를
+        // 잡으므로, owner 행 전부를 쥔 이 판에서 다시 넣기는 **owner 행에 줄 선다** — 성공 갈래(새 멤버 초대)가 원래부터 서던 줄이다(고치기 전
+        // 기대는 «1s 안에 곧바로 409» 였다). 그래서 «끝난다»가 아니라 **«토큰 행에서 기다리지 않는다»** 를 잰다: 잠금을 기다리는 백엔드 가운데
+        // `api_tokens` 를 담은 질의가 없다(옛 결함 — `deleteStaleMemberTokens` 가 그 행에서 기다렸다 — 은 그 질의가 대기자로 보인다).
         settled = await settlesWithin(readd, 1_000)
+        const waiting = await sql<{ query: string; blocked: boolean }>`
+          select a.query, cardinality(pg_blocking_pids(a.pid)) > 0 as blocked from pg_stat_activity a
+           where a.datname = current_database() and a.pid <> pg_backend_pid() and a.wait_event_type = 'Lock'`.execute(db)
+        waitingQueries = waiting.rows.map((row) => row.query)
+        blockedOnOwners = waiting.rows.filter((row) => row.blocked && row.query.includes('for share')).length
       } finally {
         await owners.release()
       }
       const [changed, readded] = await Promise.all([change.promise, readd.promise])
       expect(await deadlockCount()).toBe(deadlocksBefore)
       expect([readded.status, changed.status]).toEqual([409, 200])
-      expect(settled).toBe(true)
+      // 성질 — 대기자 가운데 토큰 행을 기다리는 것은 없다(옛 결함에서는 그 질의가 보인다).
+      expect(waitingQueries.filter((query) => query.includes('api_tokens'))).toEqual([])
+      // 카나리아 — 판이 섰다: 다시 넣기가 재확인의 멤버 행(`FOR SHARE`)에서 owner 행을 쥔 쪽에 막혀 줄 서 있다(`pg_blocking_pids`) — 이것이
+      // «settled 가 false» 의 까닭이다. 안 서면 위 성질은 아무것도 안 잰 것이다.
+      expect(blockedOnOwners).toBeGreaterThanOrEqual(1)
+      expect(settled).toBe(false)
       expect(await roleOf(fx.projectId, fx.carol.user.id)).toBe('viewer')
     })
   }, 60_000)

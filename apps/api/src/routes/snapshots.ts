@@ -191,13 +191,21 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
           // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`). 삽입의 FK 도 같은 `KEY SHARE`를 걸지만
           // 그것은 프로젝트 삭제 뒤에 섰다가 깨면 23503 — 봉투 없는 500 이다. 먼저 잡으면 0 행 → 404.
           await lockProjectShared(trx, projectId)
-          const inserted = await insertSnapshot(trx, {
-            projectId,
-            tag: body.tag,
-            description: body.description ?? null,
-            payload: outcome.payload,
-            createdBy: currentUser.id,
-          })
+          let inserted
+          try {
+            inserted = await insertSnapshot(trx, {
+              projectId,
+              tag: body.tag,
+              description: body.description ?? null,
+              payload: outcome.payload,
+              createdBy: currentUser.id,
+            })
+          } catch (error) {
+            // **«같은 태그가 있다»(409)도 재확인한다** — 삽입이 유니크 인덱스를 기다린 사이 빠지거나 내려간 사람이 그 사실을 받으면 가드
+            // 응답과 갈린다. 위반은 `insertSnapshot` 의 세이브포인트가 이미 되돌렸으므로 이 트랜잭션은 살아 있다.
+            if (isUniqueViolation(error)) await recheckProjectRole(trx, request)
+            throw error
+          }
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 삽입의 FK 가 프로젝트 행에 거는
           // `KEY SHARE`가 복원 · 프로젝트 삭제의 `FOR UPDATE` 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다. 캡처는
           // 이 트랜잭션 밖이다(위 머리말) — 재확인은 쓰는 자리에만 선다.
