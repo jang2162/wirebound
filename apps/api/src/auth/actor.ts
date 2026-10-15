@@ -50,10 +50,11 @@
  * `requestActor`. **앞엣것이 이 절을 참으로 만든다** — 프로젝트 라우트는 핸들러 본문이
  * 돌기 전에 이미 헤더를 지났다.
  *
- * 검사가 아래 하나뿐이면 조작 뒤에 `requestActor`를 부르는 라우트가 뚫린다. 대부분의 쓰기
- * 라우트는 `applyEdit` **앞에서** 부르지만 **복원은** 커밋한 뒤에 프레임 actor를 만든다 —
- * 거기서 400이 나면 **400을 받은 클라이언트 몰래 프로젝트가 통째로 되돌아간다.** *"실패했다고
- * 말하는데 조작은 일어났다"* 부류다.
+ * 검사가 아래 하나뿐이면 조작 뒤에 `requestActor`를 부르는 라우트가 뚫린다 — 거기서 400이
+ * 나면 **400을 받은 클라이언트 몰래 조작이 일어난다.** *"실패했다고 말하는데 조작은 일어났다"*
+ * 부류다. 지금 쓰기 라우트는 모두 revision 을 만드는 자리(조작 앞)에서 부르지만 그 순서는 라우트마다
+ * 손으로 지키는 것이다. 그리고 **복원은 `requestActor`를 아예 안 부른다**(`services/restore.ts`의
+ * 사건 라벨) — 복원에 실린 모르는 헤더가 400 이 되는 것은 가드 덕이다(`test/actor-census.test.ts` 「언제」).
  *
  * **여기 검사를 남겨 두는 이유:** 술어가 두 벌이 되면 안 되고, `projectGuard`가 없는
  * 자리에서 누가 `requestActor`를 부르면 그때는 여기가 유일한 방벽이다.
@@ -68,7 +69,6 @@
 import type { FastifyRequest } from 'fastify'
 import { badRequest, unauthenticated } from '../errors'
 import type { RevisionActor } from '../repos/revisions'
-import type { EventActor } from '../ws/protocol'
 
 /**
  * 클라이언트가 자기 종류를 말하는 헤더. **글자를 한 자리에 둔다** — 훅과 케이스와
@@ -131,15 +131,4 @@ export function requestActor(request: FastifyRequest): RevisionActor {
     id: request.tokenActor.tokenId,
     label: request.tokenActor.tokenName,
   }
-}
-
-/**
- * 룸에 흐르는 프레임이 나르는 actor(`page-changed`·`restored`).
- *
- * **`revisions`의 actor와 같은 물음에 답한다** — *"지금 이걸 누가 했나"*. 그래서 같은
- * 함수에서 만들고 `id`만 뺀다(프레임은 그것을 안 나른다).
- */
-export function requestEventActor(request: FastifyRequest): EventActor {
-  const actor = requestActor(request)
-  return { type: actor.type, label: actor.label }
 }

@@ -138,7 +138,7 @@ import {
   type ValidationIssue,
   type WbNode,
 } from '@wirebound/schema'
-import { requestActor, requestClientKind, requestEventActor } from '../auth/actor'
+import { requestActor, requestClientKind } from '../auth/actor'
 import { outOfTokenScope, projectGuard, recheckProjectRole, requireProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
@@ -224,9 +224,6 @@ function notifyMarkerChange(
     seq: result.seq,
     ops: result.markerOps,
     warnings: result.warnings,
-    // **actor는 요청이 정한다.** 사람 이름을 인자로 받으면
-    // 에이전트가 단 코멘트의 프레임이 사람이 단 것과 구별되지 않는다.
-    actor: requestEventActor(request),
     origin: broadcastOrigin(request),
   })
 }
@@ -265,7 +262,7 @@ async function passesPostGuardNow(request: FastifyRequest, projectId: string, us
  * 받는 쪽은 자기 `headSeq` 이하의 프레임을 건너뛴다(`apps/web/src/store/editor-store.ts`의 `applyRemoteChange`).
  *
  * **발신 연결을 빼지 않는다** — 쓴 사람의 화면도 그 프레임을 못 받았다(앞 요청의 방송이 났어도 그 연결은 빠졌고, 재생 응답의
- * `markerOps`는 빈 배열이다 — `replayOf`). actor 는 revision 에 적힌 값이고 경고는 싣지 않는다(revision 이 경고를 안 든다).
+ * `markerOps`는 빈 배열이다 — `replayOf`). 경고는 싣지 않는다(revision 이 경고를 안 든다).
  *
  * **그 revision 이 지금 페이지의 머리일 때만 보낸다**(`pageHeadSeq === seq`). 뒤에 revision 이 더 있으면 그것의 방송이 이미
  * 나갔거나 나가는 중이다 — 이 번호 프레임을 놓친 연결은 그 `seq`가 건너뛰는 것을 보고 이미 `gap`이다(다시 읽기를 기다린다).
@@ -291,7 +288,6 @@ async function rebroadcastPostRevision(app: FastifyInstance, projectId: string, 
     seq: revision.seq,
     ops: revision.ops,
     warnings: NO_WARNINGS,
-    actor: { type: revision.actorType, label: revision.actorLabel },
   })
 }
 

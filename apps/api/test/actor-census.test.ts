@@ -23,6 +23,10 @@
  * 4. **언제** — 헤더 검사가 조작보다 **먼저** 서는가. **분모가 다르다** —
  *    「분모」 절의 표는 소스의 `actor:` 자리를 세고, 「언제」 절은 **Fastify가 아는 라우트 목록**을 센다.
  *    앞엣것은 *"그 자리를 지나는가"*를, 뒤엣것은 *"언제 지나는가"*를 본다.
+ *
+ * **세는 것은 기록(`revisions.actor_*`)으로 가는 자리뿐이다.** 방송 프레임은 actor 를 싣지 않는다(`src/ws/protocol.ts`의
+ * `ServerFrame` 머리말) — 그 성질은 `frame-no-actor.test.ts`가 프레임 종류 × 입구마다 값으로 잰다. 여기 분모는 그것을 거든다:
+ * 프레임 입력에 `actor:`를 다시 실으면 표에 없는 자리로 죽는다.
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -45,18 +49,11 @@ import {
   type TestContext,
 } from './helpers'
 import { sourceFiles, stripComments, SRC_ROOT } from './source-census'
-import { WsProbe, joinRoom } from './ws-client'
 
 const db = getTestDb()
 
 beforeEach(resetRealData)
 afterEach(resetRealData)
-
-const opened: WsProbe[] = []
-afterEach(() => {
-  for (const probe of opened) probe.close()
-  opened.length = 0
-})
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. 분모 — `actor:`를 실은 자리 전부
@@ -68,7 +65,6 @@ afterEach(() => {
  * | 값 | 소스의 모양 |
  * |---|---|
  * | `request` | `requestActor(request)` — `revisions`에 남는다 |
- * | `request-event` | `requestEventActor(request)` — 룸 프레임이 나른다 |
  * | `literal` | `{ type: '…', … }` — 요청을 안 본다. **판정이 필요하다** |
  * | `passthrough` | 인자로 받은 것을 그대로 넘긴다 |
  * | `type` | 타입 선언(`actor: RevisionActor`). 값을 만들지 않는다 |
@@ -76,7 +72,7 @@ afterEach(() => {
  * **선언도 센다.** 버리면 술어가 *"대문자로 시작하면 무시"*가 되어, `actor: Actor.of(io)`
  * 같은 새 모양이 조용히 빠진다 — 분모에서 빠진 자리는 아무도 못 본다.
  */
-type ActorOrigin = 'request' | 'request-event' | 'literal' | 'passthrough' | 'type'
+type ActorOrigin = 'request' | 'literal' | 'passthrough' | 'type'
 
 interface ActorSite {
   file: string
@@ -101,33 +97,9 @@ const ACTOR_SITES: ActorSite[] = [
   },
   {
     file: 'routes/pages.ts',
-    label: 'PUT .../schema 의 page-changed',
-    origin: 'request-event',
-    why: '화면이 *"이건 에이전트가 고친 것"*을 실시간으로 본다(설계서 「LLM 편집 경로」의 *"구분 표시된다"*)',
-  },
-  {
-    file: 'routes/pages.ts',
     label: 'PATCH .../ops — MCP `patch_page`가 오는 자리',
     origin: 'request',
     why: '**에이전트의 편집이 들어오는 길이다.** 설계서 「LLM 편집 경로」가 *"그 뒤 파이프라인(검증 → revision → 브로드캐스트)은 완전히 같다"*고 적었고, 갈리는 것은 actor 하나다',
-  },
-  {
-    file: 'routes/pages.ts',
-    label: 'PATCH .../ops 의 page-changed',
-    origin: 'request-event',
-    why: '위와 같다 — 이력과 프레임이 같은 답을 해야 화면과 `GET .../revisions`가 안 갈린다',
-  },
-  {
-    file: 'routes/comments.ts',
-    label: 'notifyMarkerChange — 코멘트 셋이 공유하는 알림',
-    origin: 'request-event',
-    why: 'MCP `add_comment`가 이 길로 온다. 사람 이름을 인자로 받으면 에이전트의 코멘트가 사람 것과 구별되지 않는다',
-  },
-  {
-    file: 'routes/comments.ts',
-    label: 'rebroadcastPostRevision — 재생이 다시 보내는 앞 게시의 번호 프레임',
-    origin: 'literal',
-    why: '**revision 에 적힌 actor 를 옮긴다** — 이 프레임은 앞 게시가 만든 revision 을 다시 나르는 것이라, 재생한 요청이 아니라 그 revision 을 낸 쪽(사람 · MCP · CLI)이 «누가 했나»의 답이다. 요청으로 만들면 같은 revision 을 두 요청이 다른 actor 로 보낼 수 있다',
   },
   {
     file: 'routes/comments.ts',
@@ -148,24 +120,6 @@ const ACTOR_SITES: ActorSite[] = [
     why: '위와 같다. 재번호는 문서 전체의 marker를 손보므로 revision이 남고, 그 revision의 주인이 누구인지가 갈린다',
   },
   {
-    file: 'routes/snapshots.ts',
-    label: '복원의 restored 프레임',
-    origin: 'request-event',
-    why: '**프레임은 *"누가 지금 이걸 했나"*를 든다.** 아래 `services/restore.ts`의 revision actor와 답이 다른 것이 판정이다 — 그쪽은 *"무슨 사건인가"*를 든다',
-  },
-  {
-    file: 'routes/snapshots.ts',
-    label: '판 3 복원의 theme-changed 프레임',
-    origin: 'request-event',
-    why: '위 restored 프레임과 같은 판정이다 — 같은 복원을 낸 사람이다. 바인딩은 revision 을 안 남기므로 `복원: <태그>` 사건 라벨이 설 자리가 없다',
-  },
-  {
-    file: 'routes/project-theme.ts',
-    label: '테마 바인딩 저장의 theme-changed 프레임',
-    origin: 'request-event',
-    why: '**프레임은 *"누가 지금 이걸 했나"*를 든다.** 바인딩 저장은 revision 을 안 남긴다 — 이 프레임이 그 저장의 «누가»가 닿는 유일한 자리다. 토큰(`:projectId` 라우트)으로도 부를 수 있어 `mcp` · `cli` 가 올 수 있다',
-  },
-  {
     file: 'services/page-import.ts',
     label: '가져오기가 파이프라인에 넘기는 actor',
     origin: 'passthrough',
@@ -182,12 +136,6 @@ const ACTOR_SITES: ActorSite[] = [
     label: 'patch 프레임이 만드는 revision',
     origin: 'literal',
     why: '**WS는 쿠키만이다**(`ws/routes.ts`의 `requireSessionAuth`). 토큰이 핸드셰이크를 못 지나므로 이 자리에 올 수 있는 자격은 세션 하나이고, 그때 답은 언제나 `user`다. 그리고 여기에는 `FastifyRequest`가 없다',
-  },
-  {
-    file: 'ws/patch.ts',
-    label: 'patch 프레임의 page-changed',
-    origin: 'literal',
-    why: '위와 같다 — 이 자리에 올 수 있는 자격이 세션 하나뿐이므로 답이 언제나 `user`다',
   },
   {
     file: 'repos/revisions.ts',
@@ -213,121 +161,12 @@ const ACTOR_SITES: ActorSite[] = [
     origin: 'type',
     why: '값을 만들지 않는다. 라우트가 만든 것을 받는 자리다',
   },
-  {
-    file: 'ws/notify.ts',
-    label: '`PageChangedInput.actor` 선언',
-    origin: 'type',
-    why: '값을 만들지 않는다. 프레임 입력의 모양이다',
-  },
-  {
-    file: 'ws/notify.ts',
-    label: '`RestoredInput.actor` 선언',
-    origin: 'type',
-    why: '값을 만들지 않는다. 프레임 입력의 모양이다',
-  },
-  {
-    file: 'ws/protocol.ts',
-    label: '`page-changed` 프레임의 actor 선언',
-    origin: 'type',
-    why: '값을 만들지 않는다. **`EventActor`가 여기서 셋(`user|mcp|cli`)으로 넓어졌다** — 웹의 거울은 `type: string`이라 안 갈린다(쟀다)',
-  },
-  {
-    file: 'ws/protocol.ts',
-    label: '`restored` 프레임의 actor 선언',
-    origin: 'type',
-    why: '값을 만들지 않는다. 위와 같은 유니온을 든다',
-  },
-  {
-    file: 'ws/notify.ts',
-    label: '`ThemeChangedInput.actor` 선언',
-    origin: 'type',
-    why: '값을 만들지 않는다. 프레임 입력의 모양이다',
-  },
-  {
-    file: 'ws/protocol.ts',
-    label: '`theme-changed` 프레임의 actor 선언',
-    origin: 'type',
-    why: '값을 만들지 않는다. 위와 같은 유니온을 든다',
-  },
-  {
-    file: 'routes/menu.ts',
-    label: 'POST …/menu 의 menu-changed',
-    origin: 'request-event',
-    why: '**트리 쓰기의 `menu-changed` 프레임** — 요청이 정한 사람을 룸에 싣는다(`ws/notify.ts`의 `notifyMenuChanged`). 프레임만 나르고 revision 은 안 만든다',
-  },
-  {
-    file: 'routes/menu.ts',
-    label: 'PATCH …/menu/:id 의 menu-changed',
-    origin: 'request-event',
-    why: '**트리 쓰기의 `menu-changed` 프레임** — 요청이 정한 사람을 룸에 싣는다(`ws/notify.ts`의 `notifyMenuChanged`). 프레임만 나르고 revision 은 안 만든다',
-  },
-  {
-    file: 'routes/menu.ts',
-    label: 'DELETE …/menu/:id — 연쇄 갈래 의 menu-changed',
-    origin: 'request-event',
-    why: '**트리 쓰기의 `menu-changed` 프레임** — 요청이 정한 사람을 룸에 싣는다(`ws/notify.ts`의 `notifyMenuChanged`). 프레임만 나르고 revision 은 안 만든다',
-  },
-  {
-    file: 'routes/menu.ts',
-    label: 'DELETE …/menu/:id — 본문 없는 갈래 의 menu-changed',
-    origin: 'request-event',
-    why: '**트리 쓰기의 `menu-changed` 프레임** — 요청이 정한 사람을 룸에 싣는다(`ws/notify.ts`의 `notifyMenuChanged`). 프레임만 나르고 revision 은 안 만든다',
-  },
-  {
-    file: 'routes/pages.ts',
-    label: 'POST …/pages 의 menu-changed',
-    origin: 'request-event',
-    why: '**트리 쓰기의 `menu-changed` 프레임** — 요청이 정한 사람을 룸에 싣는다(`ws/notify.ts`의 `notifyMenuChanged`). 프레임만 나르고 revision 은 안 만든다',
-  },
-  {
-    file: 'routes/pages.ts',
-    label: 'POST …/pages/import 의 menu-changed',
-    origin: 'request-event',
-    why: '**트리 쓰기의 `menu-changed` 프레임** — 요청이 정한 사람을 룸에 싣는다(`ws/notify.ts`의 `notifyMenuChanged`). 프레임만 나르고 revision 은 안 만든다',
-  },
-  {
-    file: 'routes/pages.ts',
-    label: 'PATCH …/pages/:id(트리에 보이는 칸) 의 menu-changed',
-    origin: 'request-event',
-    why: '**트리 쓰기의 `menu-changed` 프레임** — 요청이 정한 사람을 룸에 싣는다(`ws/notify.ts`의 `notifyMenuChanged`). 프레임만 나르고 revision 은 안 만든다',
-  },
-  {
-    file: 'routes/pages.ts',
-    label: 'DELETE …/pages/:id 의 menu-changed',
-    origin: 'request-event',
-    why: '**트리 쓰기의 `menu-changed` 프레임** — 요청이 정한 사람을 룸에 싣는다(`ws/notify.ts`의 `notifyMenuChanged`). 프레임만 나르고 revision 은 안 만든다',
-  },
-  {
-    file: 'services/tree-write.ts',
-    label: 'COMMIT 답을 잃은 트리 쓰기의 menu-changed',
-    origin: 'request-event',
-    why: '**커밋을 확인한 뒤 지금 번호로 낸 `menu-changed` 프레임** — 위 트리 쓰기와 같은 요청의 사람을 싣는다(`runTreeTransaction`). 프레임만 나르고 revision 은 안 만든다',
-  },
-  {
-    file: 'routes/snapshots.ts',
-    label: '복원의 menu-changed 프레임',
-    origin: 'request-event',
-    why: '**트리 쓰기의 `menu-changed` 프레임** — 요청이 정한 사람을 룸에 싣는다(`ws/notify.ts`의 `notifyMenuChanged`). 프레임만 나르고 revision 은 안 만든다',
-  },
-  {
-    file: 'ws/notify.ts',
-    label: '`MenuChangedInput.actor` 선언',
-    origin: 'type',
-    why: '값을 만들지 않는다. 프레임 입력의 모양이다',
-  },
-  {
-    file: 'ws/protocol.ts',
-    label: '`menu-changed` 프레임의 actor 선언',
-    origin: 'type',
-    why: '값을 만들지 않는다. 위와 같은 유니온을 든다',
-  },
 ]
 
 /** `actor:` 뒤에 오는 첫 조각 하나를 갈래로. **표와 케이스가 같은 술어를 쓴다.** */
 function classify(head: string): ActorOrigin {
   // 이름과 `(` 사이의 공백을 걷고 비교한다 — 걷은 주석 자리가 공백으로 남는다(`stripComments`).
   const call = head.replace(/\s+/g, '')
-  if (call === 'requestEventActor(') return 'request-event'
   if (call === 'requestActor(') return 'request'
   if (head === '{') return 'literal'
   // 대문자로 시작하면 타입 이름이다(`RevisionActor`·`EventActor`). 값이 아니다.
@@ -339,7 +178,7 @@ function actorSitesByFile(): Map<string, Map<ActorOrigin, number>> {
   const found = new Map<string, Map<ActorOrigin, number>>()
   for (const relative of sourceFiles()) {
     const source = stripComments(readFileSync(`${SRC_ROOT}/${relative}`, 'utf8'))
-    for (const match of source.matchAll(/\bactor:\s*(requestEventActor\s*\(|requestActor\s*\(|\{|[A-Za-z_$][\w$.]*)/g)) {
+    for (const match of source.matchAll(/\bactor:\s*(requestActor\s*\(|\{|[A-Za-z_$][\w$.]*)/g)) {
       const head = match[1]!
       const origin: ActorOrigin = classify(head)
       const byOrigin = found.get(relative) ?? new Map<ActorOrigin, number>()
@@ -381,21 +220,19 @@ describe('actor 를 만드는 자리를 소스에서 센다', () => {
   })
 
   it('네 갈래가 모두 비어 있지 않다 — 한쪽으로 쏠리면 위가 공허해진다', () => {
-    for (const origin of ['request', 'request-event', 'literal', 'passthrough', 'type'] as const) {
+    for (const origin of ['request', 'literal', 'passthrough', 'type'] as const) {
       expect(ACTOR_SITES.filter((site) => site.origin === origin).length, origin).toBeGreaterThan(0)
     }
   })
 
   it('술어가 실제로 가른다 — 반대편', () => {
-    const shapes = /\bactor:\s*(requestEventActor\s*\(|requestActor\s*\(|\{|[A-Za-z_$][\w$.]*)/g
+    const shapes = /\bactor:\s*(requestActor\s*\(|\{|[A-Za-z_$][\w$.]*)/g
     const read = (line: string): string | undefined => [...line.matchAll(shapes)][0]?.[1]
     expect(read("actor: { type: 'user', id, label }")).toBe('{')
     expect(read('actor: requestActor(request),')).toBe('requestActor(')
-    expect(read('actor: requestEventActor(request),')).toBe('requestEventActor(')
     expect(read('actor: input.actor,')).toBe('input.actor')
     expect(classify('{')).toBe('literal')
     expect(classify('requestActor(')).toBe('request')
-    expect(classify('requestEventActor(')).toBe('request-event')
     expect(classify('RevisionActor')).toBe('type')
     expect(classify('input.actor')).toBe('passthrough')
   })
@@ -728,23 +565,6 @@ describe('`revisions.actor_*` 에 실제로 무엇이 들어가나', () => {
       expect(mineTypes).toEqual(['user'])
       // 분모가 0이면 위가 공허하다 — 이력에는 둘 다 있다.
       expect(allTypes).toEqual(['mcp', 'user'])
-    })
-  }, 30_000)
-
-  /**
-   * **화면이 *"이건 에이전트가 고친 것"*을 실시간으로 본다**(설계서 「LLM 편집 경로」).
-   */
-  it('`page-changed` 프레임의 actor 도 도구다 — 프레임과 이력이 같은 답을 한다', async () => {
-    await withRealApi(async (ctx) => {
-      const fx = await fixture(ctx)
-      const watcher = await joinRoom(ctx.port, fx.projectId, fx.owner.cookie.wb_session)
-      opened.push(watcher)
-
-      const res = await patchOps(ctx, fx, 'token', { [CLIENT_KIND_HEADER]: 'mcp' })
-      expect(res.statusCode, res.body).toBe(200)
-
-      const frame = await watcher.waitFor('page-changed')
-      expect(frame.actor).toEqual({ type: 'mcp', label: fx.tokenName })
     })
   }, 30_000)
 

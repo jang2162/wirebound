@@ -597,7 +597,8 @@ describe('WS로 들어온 편집도 룸에 나간다', () => {
       await sendBroadcastPatch(watcher, fx)
 
       const frame = await author.waitFor('page-changed')
-      expect(frame.actor.label).toBe(fx.editor.user.name)
+      expect(frame.pageId).toBe(fx.page.id)
+      expect(frame.seq).toBe(await headSeqOf(fx.page.id))
     })
   })
 

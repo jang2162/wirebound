@@ -63,7 +63,7 @@ import {
   validatePage,
   type PatchOp,
 } from '@wirebound/schema'
-import { requestActor, requestEventActor } from '../auth/actor'
+import { requestActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsLoneSurrogate, containsNulByte } from '../db/nul-guard'
 import { badRequest, conflict, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
@@ -297,7 +297,7 @@ export function pageRoutes() {
 
       let written
       try {
-        written = await runTreeTransaction(app, projectId, request, async (trx) => {
+        written = await runTreeTransaction(app, projectId, async (trx) => {
           let inserted
           try {
             inserted = await insertPage(trx, projectId, {
@@ -326,7 +326,7 @@ export function pageRoutes() {
         throw error
       }
 
-      notifyMenuChanged(app, { projectId, rev: written.rev, actor: requestEventActor(request) })
+      notifyMenuChanged(app, { projectId, rev: written.rev })
       reply.code(201)
       return toResponse(written.page)
     })
@@ -368,7 +368,7 @@ export function pageRoutes() {
       }
 
       let rev = 0
-      const outcome = await runTreeTransaction(app, projectId, request, async (trx) => {
+      const outcome = await runTreeTransaction(app, projectId, async (trx) => {
         const imported = await importPage(trx, {
           projectId,
           menuNodeId: body.menuNodeId,
@@ -389,7 +389,7 @@ export function pageRoutes() {
       if (outcome.kind !== 'imported') {
         throw pageImportOutcomeToApiError(outcome)
       }
-      notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
+      notifyMenuChanged(app, { projectId, rev })
 
       reply.code(201)
       return withWarnings(
@@ -442,7 +442,7 @@ export function pageRoutes() {
       const touchesTree = patch.title !== undefined || patch.menuNodeId !== undefined || patch.sortOrder !== undefined
       let written
       try {
-        written = await runTreeTransaction(app, projectId, request, async (trx) => {
+        written = await runTreeTransaction(app, projectId, async (trx) => {
           const bump = async (updated: PageRecord | null) =>
             updated === null ? null : { page: updated, rev: touchesTree ? await bumpMenuRev(trx, projectId) : null }
           if (base !== undefined) {
@@ -488,7 +488,7 @@ export function pageRoutes() {
       if (written === null) {
         throw notFound()
       }
-      if (written.rev !== null) notifyMenuChanged(app, { projectId, rev: written.rev, actor: requestEventActor(request) })
+      if (written.rev !== null) notifyMenuChanged(app, { projectId, rev: written.rev })
       return toResponse(written.page)
     })
 
@@ -651,7 +651,6 @@ export function pageRoutes() {
           seq: outcome.seq,
           ops: replaceDocumentOps(before.schema, outcome.schema),
           warnings: outcome.warnings,
-          actor: requestEventActor(request),
           origin: broadcastOrigin(request),
         })
 
@@ -744,7 +743,6 @@ export function pageRoutes() {
           seq: outcome.seq,
           ops: body.ops,
           warnings: outcome.warnings,
-          actor: requestEventActor(request),
           origin: broadcastOrigin(request),
           // **헤더가 없을 때의 두 번째 방벽이다.** 소켓이 아직 안 열려 발신자 제외가
           // 성립하지 않으면 낸 사람이 자기 편집을 되받는데, 받는 쪽의 리베이스가 그것을 두 번
@@ -777,7 +775,6 @@ export function pageRoutes() {
       const result = await runTreeTransaction(
         app,
         projectId,
-        request,
         async (trx) => {
           const deleted = await deletePage(trx, projectId, pageId)
           // **커밋 순간의 권한.** 위 DELETE 가 페이지 행 잠금에 선다. **«이미 없다»(404)도 지난다** — 트리 잠금을 기다린 사이 지워졌다는 사실이다.
@@ -790,7 +787,7 @@ export function pageRoutes() {
       if (result === 'not-found') {
         throw notFound()
       }
-      notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
+      notifyMenuChanged(app, { projectId, rev })
       reply.code(204).send()
     })
   }

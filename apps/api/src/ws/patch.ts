@@ -145,7 +145,6 @@ export async function handlePatchFrame(app: FastifyInstance, connection: RoomCon
       seq: outcome.seq,
       ops: frame.ops,
       warnings: outcome.warnings,
-      actor: { type: 'user', label: connection.userName },
       origin: { connectionId: connection.id, sessionId: connection.sessionId },
       // 이 경로에서는 연결이 곧 발신자라 제외가 언제나 성립한다. 그래도 싣는 것은 **프레임의
       // 모양을 진입점에 따라 가르지 않기 위해서**다 — 받는 쪽이 어느 경로로 만들어진

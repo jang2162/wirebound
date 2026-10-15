@@ -17,7 +17,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import type { ThemeManifest } from '@wirebound/themes'
-import { requestEventActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import type { DbHandle } from '../db/tx'
 import { withTransaction } from '../db/tx'
@@ -125,7 +124,6 @@ export function projectThemeRoutes() {
         version: body.version,
         tokens: saved.tokens,
         rev: saved.rev,
-        actor: requestEventActor(request),
       })
       return themeView(app.db, saved, target.manifest)
     })

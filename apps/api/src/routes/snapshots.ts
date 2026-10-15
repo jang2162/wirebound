@@ -73,7 +73,6 @@
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { z } from 'zod'
-import { requestEventActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction } from '../db/tx'
@@ -392,10 +391,9 @@ function announceRestore(app: FastifyInstance, request: FastifyRequest, projectI
     projectId,
     snapshotId,
     safetySnapshotId: result.safety.id,
-    actor: requestEventActor(request),
     clientRestoreId: clientRestoreId(request),
   })
-  notifyMenuChanged(app, { projectId, rev: body.menuRev, actor: requestEventActor(request) })
+  notifyMenuChanged(app, { projectId, rev: body.menuRev })
   releaseLocksOnPages(app, projectId, result.deletedPageIds)
   const theme = result.theme
   if (theme !== null && theme.themeId !== null && theme.version !== null) {
@@ -405,7 +403,6 @@ function announceRestore(app: FastifyInstance, request: FastifyRequest, projectI
       version: theme.version,
       tokens: theme.tokens,
       rev: theme.rev,
-      actor: requestEventActor(request),
     })
   }
 }

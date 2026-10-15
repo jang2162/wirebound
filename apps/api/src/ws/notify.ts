@@ -27,7 +27,7 @@ import type { ProjectRole } from '../db/types'
 import type { LateCommitWatch } from '../services/lost-commit'
 import type { BroadcastOrigin } from './broadcast'
 import { releaseLocksOf } from './lock'
-import { MIN_ROLE_FOR_FRAME, WS_CLOSE, type EventActor, type ServerFrame } from './protocol'
+import { MIN_ROLE_FOR_FRAME, WS_CLOSE, type ServerFrame } from './protocol'
 
 /**
  * 편집을 낸 클라이언트가 자기 WebSocket 연결을 가리키는 헤더.
@@ -65,7 +65,6 @@ export interface PageChangedInput {
   seq: number
   ops: PatchOp[]
   warnings: ValidationIssue[]
-  actor: EventActor
   /** 방송에서 뺄 발신 연결(`broadcastOrigin`). 없으면 아무도 안 뺀다. */
   origin?: BroadcastOrigin
   /**
@@ -139,7 +138,6 @@ export interface RestoredInput {
   snapshotId: string
   /** 그 복원이 만든 안전망 스냅샷(`protocol.ts`의 그 필드). */
   safetySnapshotId: string
-  actor: EventActor
   /** 낸 탭이 붙인 복원 id(`clientRestoreId`). **있을 때만 프레임에 실린다.** */
   clientRestoreId?: string
 }
@@ -173,7 +171,6 @@ export interface MenuChangedInput {
   projectId: string
   /** 그 쓰기가 올린 메뉴 트리 판 번호(`repos/menu.ts`의 `bumpMenuRev`). */
   rev: number
-  actor: EventActor
 }
 
 /**
@@ -197,7 +194,6 @@ export interface ThemeChangedInput {
   version: string
   tokens: Record<string, string | number>
   rev: number
-  actor: EventActor
 }
 
 /**

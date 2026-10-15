@@ -582,7 +582,6 @@ describe('늦게 커밋된 복원 — 제때 커밋과 같은 꼬리를 늦게 �
       // 커밋됐다 — 복원의 revision 이 머리에 섰고 안전망 스냅샷이 하나 늘었다.
       await committed(fx, before + 1)
       expect(await snapshotCount(fx.projectId)).toBe(snapshotsBefore + 1)
-      const actor = { type: 'user', label: fx.owner.user.name }
 
       expect(await framesSince(fx.watcher, mark, 'restored', 1)).toEqual([
         {
@@ -590,12 +589,11 @@ describe('늦게 커밋된 복원 — 제때 커밋과 같은 꼬리를 늦게 �
           projectId: fx.projectId,
           snapshotId: fx.snapshotId,
           safetySnapshotId: await newestSnapshotId(fx.projectId),
-          actor,
           clientRestoreId: 'r_late',
         },
       ])
       expect(await framesSince(fx.watcher, mark, 'menu-changed', 1)).toEqual([
-        { type: 'menu-changed', projectId: fx.projectId, rev: await menuRev(fx.projectId), actor },
+        { type: 'menu-changed', projectId: fx.projectId, rev: await menuRev(fx.projectId) },
       ])
       expect(await framesSince(fx.watcher, mark, 'theme-changed', 1)).toMatchObject([
         {
@@ -604,7 +602,6 @@ describe('늦게 커밋된 복원 — 제때 커밋과 같은 꼬리를 늦게 �
           themeId: 'system-admin',
           version: SYSTEM_ADMIN.version,
           rev: await themeRev(fx.projectId),
-          actor,
         },
       ])
       // 지운 페이지의 잠금을 놓았다 — 지켜보는 사람이 쥐던 하나가 목록에서 빠진다.

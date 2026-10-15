@@ -375,7 +375,6 @@ describe('방송 — theme-changed', () => {
           version: V,
           tokens: { [C]: '#123456' },
           rev: 1,
-          actor: { type: 'user', label: fx.owner.user.name },
         })
       }
     })
