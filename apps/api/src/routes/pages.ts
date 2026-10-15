@@ -298,13 +298,21 @@ export function pageRoutes() {
       let written
       try {
         written = await runTreeTransaction(app, projectId, request, async (trx) => {
-          const inserted = await insertPage(trx, projectId, {
-            menuNodeId: body.menuNodeId,
-            title: body.title,
-            description: body.description ?? null,
-            schema: { version: CURRENT_DOCUMENT_VERSION, root: { id: createNodeId(), type: 'Page', children: [] } },
-            schemaVersion: CURRENT_DOCUMENT_VERSION,
-          })
+          let inserted
+          try {
+            inserted = await insertPage(trx, projectId, {
+              menuNodeId: body.menuNodeId,
+              title: body.title,
+              description: body.description ?? null,
+              schema: { version: CURRENT_DOCUMENT_VERSION, root: { id: createNodeId(), type: 'Page', children: [] } },
+              schemaVersion: CURRENT_DOCUMENT_VERSION,
+            })
+          } catch (error) {
+            // **«그 메뉴가 없다»(404)도 재확인한다** — 트리 잠금을 기다린 사이 빠지거나 내려간 사람이 그 사실을 받으면 가드 응답과 갈린다.
+            // `insertPage` 의 세이브포인트가 이미 되돌렸으므로 이 트랜잭션은 살아 있다.
+            if (error instanceof MenuNodeNotFoundError) await recheckProjectRole(trx, request)
+            throw error
+          }
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 트리 쓰기의 첫 잠금(프로젝트 행)이
           // 복원 · 프로젝트 삭제 · 다른 트리 쓰기 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
           await recheckProjectRole(trx, request)
@@ -372,11 +380,10 @@ export function pageRoutes() {
           authorId: currentUser.id,
         })
         // **커밋 순간의 권한.** 생성과 같은 자리다 — `insertPage`의 트리 쓰기 첫 잠금 뒤. 실패한 가져오기는
-        // 제 세이브포인트를 이미 되돌렸다(`importPage`) — 쓴 것이 없으니 재확인하지 않는다.
-        if (imported.kind === 'imported') {
-          await recheckProjectRole(trx, request)
-          rev = await bumpMenuRev(trx, projectId)
-        }
+        // 제 세이브포인트를 이미 되돌렸다(`importPage`) — 쓴 것이 없으니 재확인하지 않는다. **«그 메뉴가 없다»(404)만은 한다** — 그것은 트리
+        // 잠금을 기다린 사이 일어난 프로젝트 안의 사실이다(나머지 실패는 파일에서 오는 것이라 가드 앞 검증과 같은 값이다).
+        if (imported.kind === 'imported' || imported.kind === 'menu-not-found') await recheckProjectRole(trx, request)
+        if (imported.kind === 'imported') rev = await bumpMenuRev(trx, projectId)
         return imported
       })
       if (outcome.kind !== 'imported') {
@@ -440,9 +447,10 @@ export function pageRoutes() {
             updated === null ? null : { page: updated, rev: touchesTree ? await bumpMenuRev(trx, projectId) : null }
           if (base !== undefined) {
             const current = await lockPageMeta(trx, projectId, pageId)
-            if (!current) return null
-            // **커밋 순간의 권한** — 비교보다 먼저다(위 머리말).
+            // **커밋 순간의 권한** — 비교보다 먼저다(위 머리말). **«페이지가 없다»(404)보다도 먼저다** — 행을 기다린 사이 빠지거나 내려간
+            // 사람이 «지워졌다»를 받으면 가드 응답과 갈린다.
             await recheckProjectRole(trx, request)
+            if (!current) return null
             const stale = staleMetaFields(base, current)
             if (stale.length > 0) {
               throw conflict(
@@ -457,10 +465,17 @@ export function pageRoutes() {
             }
             return bump(await updatePage(trx, projectId, pageId, patch))
           }
-          const updated = await updatePage(trx, projectId, pageId, patch)
+          let updated
+          try {
+            updated = await updatePage(trx, projectId, pageId, patch)
+          } catch (error) {
+            // **«옮길 메뉴가 없다»(404)도 재확인한다** — 트리 잠금을 기다린 사이 빠지거나 내려간 사람이 그 사실을 받으면 가드 응답과 갈린다.
+            if (error instanceof MenuNodeNotFoundError) await recheckProjectRole(trx, request)
+            throw error
+          }
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 위 UPDATE 가 페이지 행
-          // 잠금에 선다 — 그 대기 뒤의 역할로 판정한다.
-          if (updated) await recheckProjectRole(trx, request)
+          // 잠금에 선다 — 그 대기 뒤의 역할로 판정한다. **«페이지가 없다»(404)도 지난다**(`null` 이어도) — 기다린 사이 지워졌다는 사실이다.
+          await recheckProjectRole(trx, request)
           return bump(updated)
         })
       } catch (error) {
@@ -765,11 +780,9 @@ export function pageRoutes() {
         request,
         async (trx) => {
           const deleted = await deletePage(trx, projectId, pageId)
-          if (deleted === 'deleted') {
-            // **커밋 순간의 권한.** 위 DELETE 가 페이지 행 잠금에 선다.
-            await recheckProjectRole(trx, request)
-            rev = await bumpMenuRev(trx, projectId)
-          }
+          // **커밋 순간의 권한.** 위 DELETE 가 페이지 행 잠금에 선다. **«이미 없다»(404)도 지난다** — 트리 잠금을 기다린 사이 지워졌다는 사실이다.
+          await recheckProjectRole(trx, request)
+          if (deleted === 'deleted') rev = await bumpMenuRev(trx, projectId)
           return deleted
         },
         (deleted) => (deleted === 'deleted' ? [pageId] : []),

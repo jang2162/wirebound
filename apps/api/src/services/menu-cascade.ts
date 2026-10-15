@@ -8,8 +8,8 @@
  *    까닭은 3 의 캡처다: 지문(`readCaptureFingerprint`)이 프로젝트 전체를 보므로 서브트리 밖의 편집 하나가 캡처를 깨뜨린다 — 바쁜
  *    프로젝트에서 삭제가 «다시 시도하십시오»로 되풀이된다. 복원과 같은 잠금을 쥐면 그 판단(무엇이 막히고 무엇이 안 막히나)도 복원의
  *    것을 그대로 받는다(`repos/snapshots.ts`의 `lockProjectForRestore` 머리말 · `test/restore-lock-census.test.ts`).
- * 2. `readMenuSubtree` — 없으면 `not-found`. 그 뒤 **권한 재확인**(`recheck`) — 목록을 견주기 **전**이다. 잠금을 기다리는 동안 멤버에서
- *    빠진 사람에게 지금 목록을 409 로 흘리지 않는다(`routes/menu.ts`의 `PATCH` 머리말 «재확인이 견줌보다 먼저다»와 같은 까닭).
+ * 2. `readMenuSubtree` → **권한 재확인**(`recheck`) → 없으면 `not-found`. 재확인이 «없다»(404)보다도 목록을 견주기보다도 **먼저**다. 잠금을 기다리는 동안 멤버에서
+ *    빠진 사람에게 «지워졌다»(404)나 지금 목록(409)을 흘리지 않는다(`routes/menu.ts`의 `PATCH` 머리말 «재확인이 견줌보다 먼저다»와 같은 까닭).
  * 3. 화면이 본 **id 집합**(밑의 메뉴 · 페이지)과 견준다 — 다르면 `subtree-changed`(지금 목록을 싣는다). **여기까지 아무것도 쓰지 않는다.**
  *    수로 견주지 않는 까닭: 남이 하나 빼고 하나 넣으면 수가 같아, 사람이 본 적 없는 페이지를 지우고 본 페이지를 남긴다. 이름만 바뀐 판은
  *    같은 행이라 지나간다(상자의 이름이 낡았을 뿐 지우는 것은 본 그 행이다).
@@ -113,8 +113,9 @@ export async function deleteMenuCascade(
 ): Promise<MenuCascadeOutcome> {
   await lockProjectForRestore(trx, input.projectId)
   const subtree = await readMenuSubtree(trx, input.projectId, input.nodeId)
-  if (subtree === null) return { kind: 'not-found' }
+  // **재확인이 «메뉴가 없다»(404)보다 먼저다** — 잠금을 기다린 사이 빠지거나 내려간 사람이 «지워졌다»를 받으면 가드 응답과 갈린다.
   await input.recheck()
+  if (subtree === null) return { kind: 'not-found' }
 
   if (!sameIds(input.seen.menuIds, subtree.descendantIds) || !sameIds(input.seen.pageIds, subtree.pageIds)) {
     return { kind: 'subtree-changed', subtree: { title: subtree.title, ...subtree.listing } }

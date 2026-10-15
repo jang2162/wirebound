@@ -179,6 +179,9 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
 
       const outcome = await captureSnapshot(app.db, projectId, options?.captureHooks)
       if (outcome.kind === 'fingerprint-mismatch') {
+        // **«뜨는 동안 프로젝트가 바뀌었다»(409)도 재확인한다** — 캡처(프로젝트 전부를 읽는다 — 길이는 크기에 비례한다)가 도는 사이 빠지거나
+        // 내려간 사람이 «누가 고쳤다»를 받으면 가드 응답과 갈린다. 캡처는 트랜잭션 밖이라 읽기뿐인 트랜잭션 하나로 본다(쓴 것이 없다).
+        await withTransaction(app.db, (trx) => recheckProjectRole(trx, request))
         // **재시도 루프를 넣지 않는다** — `PUT .../schema`가 같은 자리에서 같은 판단을
         // 한다. 문장이 태그 중복과 달라야 화면이 *"다시 시도한다"*와 *"이름을 바꾼다"*를
         // 가를 수 있다(위 오류 표).
