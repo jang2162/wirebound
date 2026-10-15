@@ -11,9 +11,9 @@
  * revision 을 남기는 판은 여기서도 이력에 토큰 이름이 남았는지 함께 본다 — 토큰 이름이 그 판에 실제로 있었다는 카나리아다(없으면
  * «프레임에 토큰 이름이 없다»가 늘 참이다).
  *
- * 재지 않는 입구: 답을 잃은 쓰기의 늦은 꼬리(`services/tree-write.ts` · `routes/snapshots.ts`의 `announceRestore` 늦은 길)는 제때 길과 같은
- * `notify*`를 부르고 그 입력 타입에 `actor`가 없다 — 값은 `late-commit-stale.test.ts`의 «늦게 커밋된 복원» · `menu-changed.test.ts`의
- * «답을 잃은 쓰기»가 프레임을 `toEqual`로 견준다.
+ * 답을 잃은 트리 쓰기의 신호(`services/tree-write.ts` — 새 연결로 커밋을 확인한 뒤 낸다)도 한 판이다. 복원의 늦은 꼬리
+ * (`routes/snapshots.ts`의 `announceRestore` 늦은 길)는 제때 길과 같은 함수라 여기서 따로 세우지 않는다 — `late-commit-stale.test.ts`의
+ * «늦게 커밋된 복원»이 그 프레임을 `toEqual`로 견준다.
  */
 import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -28,6 +28,7 @@ import {
   getTestDb,
   resetRealData,
   signup,
+  withProxiedRealApi,
   withRealApi,
   type RealApiContext,
   type SignedUpUser,
@@ -222,6 +223,28 @@ describe('menu-changed 는 actor 를 싣지 않는다', () => {
       expect(page.statusCode, page.body).toBe(201)
 
       const frames = await fx.viewer.waitForCount('menu-changed', 2)
+      expect(frames).toHaveLength(2)
+      for (const frame of frames) expectNoActor(frame)
+    })
+  }, 30_000)
+
+  it('COMMIT 답을 잃은 트리 쓰기가 커밋을 확인하고 낸 신호(토큰 · mcp)', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      ctx.proxy.dropCommitReplyAfter('insert into "project_menu_revs"')
+      const res = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.projectId}/menu`,
+        headers: fx.agent,
+        payload: { parentId: null, title: '답을 잃은 메뉴' },
+      })
+      expect(ctx.proxy.fired).toBe(true)
+      expect(res.statusCode, res.body).toBe(201)
+
+      await fx.viewer.waitFor('menu-changed')
+      await fx.viewer.quiet()
+      const frames = fx.viewer.received.filter((frame) => frame.type === 'menu-changed')
+      // 확인한 쪽(`runTreeTransaction`)과 라우트가 하나씩 낸다 — 둘 다 본다.
       expect(frames).toHaveLength(2)
       for (const frame of frames) expectNoActor(frame)
     })
