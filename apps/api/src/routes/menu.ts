@@ -14,7 +14,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { samePageMeta } from '@wirebound/schema'
-import { requestEventActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { badRequest, conflict, notFound, unauthenticated } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
@@ -140,7 +139,7 @@ export function menuRoutes() {
 
       let written
       try {
-        written = await runTreeTransaction(app, projectId, request, async (trx) => {
+        written = await runTreeTransaction(app, projectId, async (trx) => {
           let inserted
           try {
             inserted = await insertMenuNode(trx, projectId, { parentId: body.parentId ?? null, title: body.title })
@@ -163,7 +162,7 @@ export function menuRoutes() {
         throw error
       }
 
-      notifyMenuChanged(app, { projectId, rev: written.rev, actor: requestEventActor(request) })
+      notifyMenuChanged(app, { projectId, rev: written.rev })
       reply.code(201)
       return written.node
     })
@@ -190,7 +189,7 @@ export function menuRoutes() {
 
       let written
       try {
-        written = await runTreeTransaction(app, projectId, request, async (trx) => {
+        written = await runTreeTransaction(app, projectId, async (trx) => {
           if (base !== undefined) {
             const current = await lockMenuTitle(trx, projectId, nodeId)
             // **커밋 순간의 권한** — 비교보다 먼저다(위 머리말). **«메뉴가 없다»(404)보다도 먼저다** — 행을 기다린 사이 빠지거나 내려간
@@ -234,7 +233,7 @@ export function menuRoutes() {
       if (written === null) {
         throw notFound()
       }
-      notifyMenuChanged(app, { projectId, rev: written.rev, actor: requestEventActor(request) })
+      notifyMenuChanged(app, { projectId, rev: written.rev })
       return written.node
     })
 
@@ -264,7 +263,6 @@ export function menuRoutes() {
           outcome = await runTreeTransaction(
             app,
             projectId,
-            request,
             async (trx) => {
               const settled = await deleteMenuCascade(trx, {
                 projectId,
@@ -293,14 +291,14 @@ export function menuRoutes() {
             { path: 'expect', code: MENU_SUBTREE_CHANGED, message: MENU_SUBTREE_CHANGED_MESSAGE, subtree: outcome.subtree },
           ])
         }
-        notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
+        notifyMenuChanged(app, { projectId, rev })
         return { deleted: outcome.deleted, safetySnapshot: outcome.safety }
       }
 
       let result
       let rev = 0
       try {
-        result = await runTreeTransaction(app, projectId, request, async (trx) => {
+        result = await runTreeTransaction(app, projectId, async (trx) => {
           let deleted
           try {
             deleted = await deleteMenuNode(trx, projectId, nodeId)
@@ -325,7 +323,7 @@ export function menuRoutes() {
       if (result === 'not-found') {
         throw notFound()
       }
-      notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
+      notifyMenuChanged(app, { projectId, rev })
       reply.code(204).send()
     })
   }

@@ -24,11 +24,6 @@ export interface Participant {
   userName: string
 }
 
-export interface EventActor {
-  type: string
-  label: string
-}
-
 /**
  * 살아 있는 잠금 하나(설계서 「소프트 잠금」). **서버의 `LiveLock`의 거울이다.**
  *
@@ -77,7 +72,6 @@ export type ServerFrame =
       seq: number
       ops: PatchOp[]
       warnings: ValidationIssue[]
-      actor: EventActor
       /**
        * 낸 사람이 붙인 id. **있을 때만 온다.** 이것이 내 pending에 있으면 그 프레임은
        * **내가 낸 편집이 되돌아온 것**이고, 리베이스가 그것을 얹으면 같은 편집이 두 번
@@ -95,7 +89,6 @@ export type ServerFrame =
       type: 'restored'
       projectId: string
       snapshotId: string
-      actor: EventActor
       /**
        * 그 복원이 만든 안전망 스냅샷의 id. **있을 때만 온다.** 답을 받은 내 복원의 것이면 그 신호는 내 복원이 되돌아온 것이다 — 복원의 방송은
        * 낸 연결도 빼지 않는다(서버 `ws/notify.ts`의 `notifyRestored`). 스토어가 알아보고 넘긴다(`EditorStore.markRestored`).
@@ -128,7 +121,6 @@ export type ServerFrame =
       version: string
       tokens: Record<string, string | number>
       rev: number
-      actor: EventActor
     }
   | { type: 'pong' }
   | {
@@ -231,6 +223,9 @@ function isLockView(value: unknown): value is NodeLockView {
  * 필드를 **하나하나 본다.** `as ServerFrame`로 넘기면 `seq`가 없는 `page-changed`가
  * `undefined`로 흘러 들어가 `headSeq`를 `undefined`로 만든다 — 그 어긋남은 조용하고,
  * 다음 편집이 400을 받을 때까지 아무도 모른다.
+ *
+ * **선언에 없는 필드는 옮기지 않고, 있다고 프레임을 버리지도 않는다.** 옛 서버는 `page-changed` · `restored` · `theme-changed` ·
+ * `menu-changed`에 `actor`(낸 사람 · 토큰 이름)를 실었다 — 읽는 자리가 없어 이 파서도 안 옮긴다. 실려 와도 같은 프레임으로 읽는다.
  */
 export function parseServerFrame(raw: string): ServerFrame | null {
   let value: unknown
@@ -279,8 +274,7 @@ export function parseServerFrame(raw: string): ServerFrame | null {
         str(value.pageId) &&
         typeof value.seq === 'number' &&
         Array.isArray(value.ops) &&
-        Array.isArray(value.warnings) &&
-        isRecord(value.actor)
+        Array.isArray(value.warnings)
         ? {
             type: 'page-changed',
             projectId: value.projectId,
@@ -288,19 +282,17 @@ export function parseServerFrame(raw: string): ServerFrame | null {
             seq: value.seq,
             ops: value.ops as PatchOp[],
             warnings: value.warnings as ValidationIssue[],
-            actor: value.actor as unknown as EventActor,
             // **없으면 키 자체를 안 만든다** — `undefined`를 담아 두면 스토어의 대조가
             // *"id 없는 pending"*과 우연히 맞을 여지가 생긴다.
             ...(str(value.clientOpId) ? { clientOpId: value.clientOpId } : {}),
           }
         : null
     case 'restored':
-      return str(value.projectId) && str(value.snapshotId) && isRecord(value.actor)
+      return str(value.projectId) && str(value.snapshotId)
         ? {
             type: 'restored',
             projectId: value.projectId,
             snapshotId: value.snapshotId,
-            actor: value.actor as unknown as EventActor,
             // 없으면 키를 안 만든다 — `page-changed`의 `clientOpId`와 같다.
             ...(str(value.safetySnapshotId) ? { safetySnapshotId: value.safetySnapshotId } : {}),
             ...(str(value.clientRestoreId) ? { clientRestoreId: value.clientRestoreId } : {}),
@@ -320,7 +312,7 @@ export function parseServerFrame(raw: string): ServerFrame | null {
     case 'membership-changed':
       return str(value.projectId) ? { type: 'membership-changed', projectId: value.projectId } : null
     case 'menu-changed':
-      // 번호가 정수가 아니면 버린다 — 그 번호가 «이미 받은 판인가»를 가른다. `actor`는 읽는 자리가 없어 안 옮긴다.
+      // 번호가 정수가 아니면 버린다 — 그 번호가 «이미 받은 판인가»를 가른다.
       return str(value.projectId) && typeof value.rev === 'number' && Number.isSafeInteger(value.rev)
         ? { type: 'menu-changed', projectId: value.projectId, rev: value.rev }
         : null
@@ -331,8 +323,7 @@ export function parseServerFrame(raw: string): ServerFrame | null {
         str(value.version) &&
         typeof value.rev === 'number' &&
         isRecord(value.tokens) &&
-        Object.values(value.tokens).every((token) => typeof token === 'string' || typeof token === 'number') &&
-        isRecord(value.actor)
+        Object.values(value.tokens).every((token) => typeof token === 'string' || typeof token === 'number')
         ? {
             type: 'theme-changed',
             projectId: value.projectId,
@@ -340,7 +331,6 @@ export function parseServerFrame(raw: string): ServerFrame | null {
             version: value.version,
             tokens: value.tokens as Record<string, string | number>,
             rev: value.rev,
-            actor: value.actor as unknown as EventActor,
           }
         : null
     case 'pong':

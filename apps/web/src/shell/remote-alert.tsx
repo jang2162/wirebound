@@ -47,8 +47,8 @@ import { useEditorStore, useEditorStoreInstance } from '../store/use-editor-stor
 /**
  * **`'restored'`의 문장은 누가 복원했는지 말하지 않는다.** 이 탭이 받는 신호로는 남의 복원인지 내 복원인지 가를 수 없는 판이 있다 — 알아보는
  * 목록(`EditorStore`의 `#restoresInFlight` · `#lostRestores`)을 벗어난 내 복원(셸이 내려갔다 다시 섬 · 미룬 신호의 한도가 지남 · 같은 사람의
- * 다른 탭)은 남의 복원과 같은 신호고, 복원 id 는 룸의 모두에게 보여 흉내 낼 수 있다(`RestoreSignal`). 프레임의 `actor`는 이름뿐이라 사람을
- * 가르지 못한다. «다른 사람이 …»라고 하면 그 판들에서 거짓이다(`test/shell/restore-banner-words.test.tsx`).
+ * 다른 탭)은 남의 복원과 같은 신호고, 복원 id 는 룸의 모두에게 보여 흉내 낼 수 있다(`RestoreSignal`). 프레임은 누가 했는지 싣지 않는다.
+ * «다른 사람이 …»라고 하면 그 판들에서 거짓이다(`test/shell/restore-banner-words.test.tsx`).
  */
 const NOTICE: Record<RemoteStale['reason'], string> = {
   gap: '받지 못한 변경이 있어 화면이 최신이 아닙니다. 새로고침하면 맞춰집니다.',

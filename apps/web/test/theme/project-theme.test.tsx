@@ -58,7 +58,7 @@ function themeMarker(): string | null {
 }
 
 function frame(rev: number, tokens: Record<string, string | number>, ref = ADMIN_REF): Record<string, unknown> {
-  return { type: 'theme-changed', projectId: PROJECT_ID, ...ref, tokens, rev, actor: { type: 'user', id: 'u-2', label: '밥' } }
+  return { type: 'theme-changed', projectId: PROJECT_ID, ...ref, tokens, rev }
 }
 
 afterEach(() => vi.useRealTimers())

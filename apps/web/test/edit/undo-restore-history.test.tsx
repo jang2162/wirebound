@@ -186,7 +186,6 @@ describe('새로고침 되돌리기가 끊긴 자리를 받아 되짚는다', ()
           seq: HEAD_SEQ + 1,
           ops: [{ op: 'add', path: '/root/children/0', value: text('n-bob', '밥') }],
           warnings: [],
-          actor: { type: 'user', label: '밥' },
         }),
       })
     })
@@ -229,7 +228,6 @@ describe('새로고침 되돌리기가 끊긴 자리를 받아 되짚는다', ()
             seq,
             ops: [{ op: 'add', path: '/root/children/0', value: text(id, content) }],
             warnings: [],
-            actor: { type: 'user', label: '밥' },
           }),
         })
       })
@@ -553,7 +551,6 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
       type: 'page-changed',
       seq: HEAD_SEQ + 2,
       ops: [{ op: 'remove', path: '/root/children/1' }],
-      actor: { type: 'user', label: '밥' },
     })
     await waitFor(() => expect(contents()).toEqual(['밥', '나']))
     return () =>
@@ -796,7 +793,6 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
           seq: HEAD_SEQ + 1,
           ops: [{ op: 'remove', path: '/root/children/0' }],
           warnings: [],
-          actor: { type: 'user', label: '밥' },
         }),
       })
     })
@@ -862,7 +858,6 @@ describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
           seq: HEAD_SEQ + 1,
           ops: [{ op: 'remove', path: '/root/children/0' }],
           warnings: [],
-          actor: { type: 'user', label: '밥' },
         }),
       })
     })

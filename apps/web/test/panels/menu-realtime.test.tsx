@@ -107,7 +107,7 @@ async function mount(api: Partial<ApiClient> = {}) {
     frame(rev: number): void {
       act(() => {
         last().onmessage?.({
-          data: JSON.stringify({ type: 'menu-changed', projectId: PROJECT_ID, rev, actor: { type: 'user', label: '밥' } }),
+          data: JSON.stringify({ type: 'menu-changed', projectId: PROJECT_ID, rev }),
         })
       })
     },

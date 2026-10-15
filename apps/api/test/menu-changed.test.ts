@@ -134,7 +134,6 @@ describe('받는 사람', () => {
         type: 'menu-changed',
         projectId: fx.projectId,
         rev: await treeRev(ctx, fx),
-        actor: { type: 'user', label: fx.editor.user.name },
       })
     })
   })

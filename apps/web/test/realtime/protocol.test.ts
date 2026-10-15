@@ -14,7 +14,6 @@ const PAGE_CHANGED = {
   seq: 7,
   ops: [{ op: 'remove', path: '/root/children/0' }],
   warnings: [],
-  actor: { type: 'user', label: '홍길동' },
 }
 
 const PATCH_ACK = {
@@ -45,7 +44,7 @@ describe('읽는 것', () => {
       { type: 'joined', projectId: 'p', connectionId: 'wsc_1', userId: 'u', role: 'owner' },
       { type: 'presence', projectId: 'p', participants: [{ connectionId: 'wsc_1', userId: 'u', userName: '홍' }] },
       PAGE_CHANGED,
-      { type: 'restored', projectId: 'p', snapshotId: 's', actor: { type: 'user', label: '홍길동' } },
+      { type: 'restored', projectId: 'p', snapshotId: 's' },
       { type: 'pong' },
       PATCH_ACK,
       PATCH_ERROR,
@@ -62,7 +61,6 @@ describe('읽는 것', () => {
       version: '1.0.0',
       tokens: { 'color.accent': '#e11d48', 'radius.md': 4 },
       rev: 3,
-      actor: { type: 'user', label: '홍길동' },
     }
     expect(parseServerFrame(JSON.stringify(frame))).toEqual(frame)
     expect(parseServerFrame(JSON.stringify({ ...frame, tokens: { 'color.accent': { evil: true } } }))).toBeNull()
@@ -72,10 +70,31 @@ describe('읽는 것', () => {
   })
 
   it('restored 의 안전망 스냅샷 id 를 옮긴다 — 글자가 아니면 키를 안 만든다', () => {
-    const base = { type: 'restored', projectId: 'p', snapshotId: 's', actor: { type: 'user', label: '홍길동' } }
+    const base = { type: 'restored', projectId: 'p', snapshotId: 's' }
 
     expect(parseServerFrame(JSON.stringify({ ...base, safetySnapshotId: 's9' }))).toEqual({ ...base, safetySnapshotId: 's9' })
     expect(parseServerFrame(JSON.stringify({ ...base, safetySnapshotId: 9 }))).toEqual(base)
+  })
+
+  /**
+   * **서버는 방송 프레임에 `actor`(낸 사람 · 토큰 이름)를 안 싣는다**(서버 `ws/protocol.ts`의 `ServerFrame` 머리말). 그래서 파서는
+   * `actor` 없는 프레임을 읽어야 하고, 옛 서버가 실어 보낸 `actor`는 꼴이 무엇이든 프레임을 버리지 않고 옮기지도 않는다 — 읽는 자리가 없다.
+   */
+  it.each([
+    ['page-changed', PAGE_CHANGED],
+    ['restored', { type: 'restored', projectId: 'p', snapshotId: 's' }],
+    [
+      'theme-changed',
+      { type: 'theme-changed', projectId: 'p', themeId: 'sample', version: '1.0.0', tokens: { 'color.accent': '#e11d48' }, rev: 3 },
+    ],
+    ['menu-changed', { type: 'menu-changed', projectId: 'p', rev: 4 }],
+  ])('%s 는 actor 없이 읽고 · 옛 서버의 actor 는 프레임을 안 버리고 안 옮긴다', (_type, frame) => {
+    expect(parseServerFrame(JSON.stringify(frame))).toEqual(frame)
+    for (const actor of [{ type: 'mcp', label: '내 에이전트 자격' }, 'cli', null]) {
+      const parsed = parseServerFrame(JSON.stringify({ ...frame, actor }))
+      expect(parsed).toEqual(frame)
+      expect(parsed).not.toHaveProperty('actor')
+    }
   })
 
   it('page-stale 은 프로젝트 · 페이지 id 와 seq 힌트만 옮긴다 — 모르는 필드(actor)는 버리고, 페이지 id 가 없으면 프레임을 버린다', () => {
@@ -152,7 +171,7 @@ describe('안 읽는 것', () => {
    * **필드마다 하나씩 뺀 판을 만든다.** 하나로 뭉뚱그리면 어느 필드 검사를 지워도
    * 케이스가 살아남는다.
    */
-  it.each(['projectId', 'pageId', 'seq', 'ops', 'warnings', 'actor'])('page-changed에서 %s가 없으면 null이다', (missing) => {
+  it.each(['projectId', 'pageId', 'seq', 'ops', 'warnings'])('page-changed에서 %s가 없으면 null이다', (missing) => {
     const broken: Record<string, unknown> = { ...PAGE_CHANGED }
     delete broken[missing]
 

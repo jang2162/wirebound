@@ -68,7 +68,7 @@ const staleFrame = (pageId: string = PAGE_ID, seq?: number) => ({
   pageId,
   ...(seq === undefined ? {} : { seq }),
 })
-const RESTORED_FRAME = { type: 'restored', projectId: PROJECT_ID, snapshotId: 's1', actor: { type: 'user', label: '밥' } }
+const RESTORED_FRAME = { type: 'restored', projectId: PROJECT_ID, snapshotId: 's1' }
 
 const LATE_ALERT = /늦게 반영된 변경/
 const RESTORED_ALERT = /스냅샷이 복원됐습니다/
@@ -351,7 +351,6 @@ describe('늦은 변경 경보 — 신호의 시점', () => {
       seq: 99,
       ops: [],
       warnings: [],
-      actor: { type: 'user', label: '밥' },
     })
 
     expect(banner()).toMatch(LATE_ALERT)

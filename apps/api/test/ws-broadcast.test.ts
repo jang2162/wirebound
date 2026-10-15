@@ -176,7 +176,6 @@ describe('룸 하나가 프로젝트 하나다', () => {
       expect(frame.pageId).toBe(fx.page.id)
       expect(frame.seq).toBe(edit.seq)
       expect(frame.ops).toHaveLength(1)
-      expect(frame.actor.label).toBe(fx.owner.user.name)
     })
   })
 

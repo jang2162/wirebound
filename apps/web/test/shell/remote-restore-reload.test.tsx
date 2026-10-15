@@ -44,7 +44,6 @@ const RESTORED_FRAME = {
   type: 'restored',
   projectId: PROJECT_ID,
   snapshotId: 's1',
-  actor: { type: 'user', label: '밥' },
 } as const
 
 function wiring(): { setup: RealtimeSetup; sockets: FakeSocket[] } {
@@ -205,7 +204,6 @@ describe('남의 복원 배너의 «다시 불러오기»', () => {
       seq: 40,
       ops: [],
       warnings: [],
-      actor: { type: 'user', label: '밥' },
     })
     expect(screen.getByRole('status').textContent).toContain('스냅샷이 복원됐습니다')
 

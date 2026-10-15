@@ -75,7 +75,6 @@ const restoredFrame = (safety?: string) => ({
   type: 'restored',
   projectId: PROJECT_ID,
   snapshotId: 's1',
-  actor: { type: 'user', label: '밥' },
   ...(safety === undefined ? {} : { safetySnapshotId: safety }),
 })
 

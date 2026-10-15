@@ -29,8 +29,7 @@
  *
  * 잰 값은 `test/menu-changed.test.ts` «답을 잃은 쓰기»(`pg-fault-proxy`가 번호 문장 뒤의 COMMIT 답을 끊는다).
  */
-import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { requestEventActor } from '../auth/actor'
+import type { FastifyInstance } from 'fastify'
 import type { DbHandle } from '../db/tx'
 import { readMenuRevWithin } from '../repos/menu'
 import { releaseLocksOnPages } from '../ws/lock'
@@ -40,7 +39,6 @@ import { LOST_COMMIT_PROBE_MS, runConfirmedTransaction } from './lost-commit'
 export async function runTreeTransaction<T>(
   app: FastifyInstance,
   projectId: string,
-  request: FastifyRequest,
   fn: (trx: DbHandle) => Promise<T>,
   /** 이 쓰기가 지운 페이지 id — 커밋이 확인된 뒤(제때든 늦게든) 그 잠금을 놓는다. 안 지웠으면 빈 목록. 안 주면 놓을 것이 없는 쓰기다. */
   goneOf?: (result: T) => readonly string[],
@@ -51,7 +49,7 @@ export async function runTreeTransaction<T>(
   }
   const signal = async (ms: number): Promise<void> => {
     const rev = await readMenuRevWithin(app.db, projectId, ms)
-    if (rev !== null) notifyMenuChanged(app, { projectId, rev, actor: requestEventActor(request) })
+    if (rev !== null) notifyMenuChanged(app, { projectId, rev })
   }
   const { result } = await runConfirmedTransaction(
     app.db,

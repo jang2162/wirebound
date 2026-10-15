@@ -511,7 +511,7 @@ undo도 새 revision으로 append되므로 다른 사람 화면과 절대 어긋
 
 ### 7.4 LLM 편집 경로
 
-MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이프라인(검증 → revision → 브로드캐스트)은 완전히 같다. 에이전트가 고친 내용이 열려 있는 사람 화면에 즉시 나타나고, `actor_type='mcp'`, `actor_label='<토큰명>'`으로 구분 표시된다.
+MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이프라인(검증 → revision → 브로드캐스트)은 완전히 같다. 에이전트가 고친 내용이 열려 있는 사람 화면에 즉시 나타나고, revision 에 `actor_type='mcp'`, `actor_label='<토큰명>'`으로 구분해 남는다(이력이 그것을 나른다). 실시간 방송 프레임은 누가 했는지를 싣지 않는다 — 룸의 viewer 까지 가는데 읽는 자리가 없고, 사람 이름은 접속자 목록이 이미 나르므로 실으면 새로 가는 것은 토큰 이름뿐이다.
 
 에이전트는 노드 잠금을 걸지 않는다. 대신 patch에 `baseSeq`를 반드시 포함하며, 불일치 시 409를 받고 재조회 후 재시도한다.
 

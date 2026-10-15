@@ -378,7 +378,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | 글자 | 문자열 값에 C0 제어 글자(U+0000–U+001F — 탭 · 줄바꿈 포함) · U+007F · 짝 없는 서로게이트가 있으면 422 `token-value-char`(타입 검사보다 먼저). 스냅샷 payload(`jsonb`)가 NUL · 짝 없는 서로게이트를 못 받아, 받으면 그 프로젝트의 스냅샷 · 복원이 막힌다. manifest 기본값도 같은 검사를 지난다(업로드 422 `manifest` · `manifestCode: token-value-char`) |
 | 한도 | 값 하나 200 글자(UTF-16) — 넘으면 422 `token-too-long`. 뺀 뒤의 JSON 16 KB(UTF-8) — 넘으면 422 `token-too-large` |
 | 권한 | owner. 커밋 직전에 역할 · 자격을 다시 본다(강등과 겹친 저장은 403) |
-| 방송 | 커밋 뒤 `theme-changed { themeId, version, tokens, rev, actor }` 를 룸 전체에(낸 연결도) |
+| 방송 | 커밋 뒤 `theme-changed { themeId, version, tokens, rev }` 를 룸 전체에(낸 연결도) |
 
 **스냅샷 payload 판 3** 이 바인딩을 얼린다(`theme: { themeId, version, tokens } | null`). 판 3 복원은 바인딩 · 토큰을 되돌리고 값이 같아도
 `rev` 를 올려 `restored` 에 더해 `theme-changed` 를 보낸다. 판 2 이하는 payload 에 `theme` 가 있어도 바인딩을 건드리지 않는다. 판 3 의
@@ -652,8 +652,9 @@ x-wb-client: cli | mcp
   **Fastify가 아는 라우트 목록**을 분모로 그것을 전수로 잰다.
 - **`:projectId` 밖 라우트는 이 검사를 안 지난다**(`/api/auth/*`·`/health`). 가드가 없는
   자리이고, 그 라우트들은 `actor`를 만들지 않는다.
-- **`page-changed`·`restored` 프레임의 `actor`도 같은 값이다** — 화면이 *"이건
-  에이전트가 고친 것"*을 실시간으로 본다(설계서 「LLM 편집 경로」).
+- **방송 프레임은 actor 를 싣지 않는다** — 룸의 viewer 까지 가는데 읽는 자리가 없고, 실으면
+  새로 가는 것은 토큰 이름뿐이다(사람 이름은 `presence`가 나른다). «누가 했나»는 revision 과 이력
+  응답이 든다. 잰 값은 `test/frame-no-actor.test.ts`(프레임 종류 × 입구마다).
 - **예외 둘.** WS의 `patch` 프레임은 언제나 `user`다(**WS는 쿠키만이다** — 위 표).
   복원이 만드는 revision도 `user` + `복원: <태그>`다 — 그 actor는 *"누가 고쳤나"*가 아니라
   *"무슨 사건인가"*를 든다. 판정과 근거는 `test/actor-census.test.ts`의 표에 한 줄씩
@@ -887,7 +888,7 @@ ops를 적용하고 `headSeq`를 `seq`로 맞춘다 — **문서를 통째로 �
 |---|---|
 | 같은 (페이지, **작성자**, 키)면 앞 행을 **200** 으로 돌려준다 | 작성자를 빼면 남이 내 키를 실어 **내 행을 제 게시의 결과로** 받는다 — 멱등이 아니라 남의 것을 받는 길이다 |
 | 재생은 문서를 안 바꾼다 — `markerOps: []` · `seq`는 지금의 `head_seq` | 번호가 두 번 오르면 안 된다. 받는 쪽은 빈 `markerOps`면 아무것도 안 건드린다 |
-| 재생은 앞 게시가 번호를 붙이며 만든 revision 을 **룸 전체에 `page-changed`로 다시 보낸다** — 발신 연결도 빼지 않는다. 앞 게시가 번호를 새로 붙이지 않았거나, **그 revision 이 지금 페이지의 머리(`head_seq`)가 아니거나, 가드 앞 재생인데 그 사람이 지금 게시의 가드를 못 지나면** 아무것도 안 보낸다 | COMMIT 답을 잃은 게시는 커밋됐는데 503 으로 끝나 그 방송을 못 한다 — 재생마저 안 보내면 그 프레임은 아무 연결에도 안 가고, 남의 화면은 다음 변경의 `seq`가 건너뛸 때 «연결이 끊긴 사이…»를 띄운다(원인이 틀린 문장). 재생은 앞 게시가 방송했는지 모르므로 다시 보낸다 — 받는 쪽은 `seq`가 제 `headSeq` 이하인 프레임을 건너뛴다. **뒤에 revision 이 더 있으면 안 보낸다** — 그 번호 프레임을 놓친 연결은 뒤의 `seq`가 건너뛰는 것을 보고 이미 `gap`(다시 읽기 대기)이고, 받는 쪽은 옛 `seq`를 «다음 번호»로 얹어 `gap`을 풀어 뒤의 revision 이 빠진 화면을 최신으로 둔다. 머리를 읽은 뒤 남의 편집이 커밋되면 두 방송이 연결마다 앞서거니 뒤서거니 할 수 있다 — 두 방송이 겹치면 늘 있는 성질이다. **권한을 잃은 사람의 재생은 200 이지만 프레임을 안 낸다** — 프레임을 내는 것은 룸에 쓰는 일이다(안 보면 멤버에서 빠진 사람이 재생마다 룸에 프레임을 낸다). 잠금 안 재생은 가드를 이미 지났다. COMMIT 답을 잃은 사람이 재생 전에 권한까지 잃으면 그 번호 프레임은 아무 데도 안 가고 룸은 다음 프레임에서 `gap`으로 안다 — 두 사건이 겹쳐야 서는 판이라 그렇게 둔다. 프레임은 revision 의 `seq` · `ops` · actor 를 싣고 `warnings`는 빈 배열 · `clientOpId`는 없다. 게시와 revision 을 잇는 칸은 `comments.revision_seq`(`src/db/migrations/0015-comment-revision-seq.ts`). 잰 값은 `test/comment-replay-broadcast.test.ts` |
+| 재생은 앞 게시가 번호를 붙이며 만든 revision 을 **룸 전체에 `page-changed`로 다시 보낸다** — 발신 연결도 빼지 않는다. 앞 게시가 번호를 새로 붙이지 않았거나, **그 revision 이 지금 페이지의 머리(`head_seq`)가 아니거나, 가드 앞 재생인데 그 사람이 지금 게시의 가드를 못 지나면** 아무것도 안 보낸다 | COMMIT 답을 잃은 게시는 커밋됐는데 503 으로 끝나 그 방송을 못 한다 — 재생마저 안 보내면 그 프레임은 아무 연결에도 안 가고, 남의 화면은 다음 변경의 `seq`가 건너뛸 때 «연결이 끊긴 사이…»를 띄운다(원인이 틀린 문장). 재생은 앞 게시가 방송했는지 모르므로 다시 보낸다 — 받는 쪽은 `seq`가 제 `headSeq` 이하인 프레임을 건너뛴다. **뒤에 revision 이 더 있으면 안 보낸다** — 그 번호 프레임을 놓친 연결은 뒤의 `seq`가 건너뛰는 것을 보고 이미 `gap`(다시 읽기 대기)이고, 받는 쪽은 옛 `seq`를 «다음 번호»로 얹어 `gap`을 풀어 뒤의 revision 이 빠진 화면을 최신으로 둔다. 머리를 읽은 뒤 남의 편집이 커밋되면 두 방송이 연결마다 앞서거니 뒤서거니 할 수 있다 — 두 방송이 겹치면 늘 있는 성질이다. **권한을 잃은 사람의 재생은 200 이지만 프레임을 안 낸다** — 프레임을 내는 것은 룸에 쓰는 일이다(안 보면 멤버에서 빠진 사람이 재생마다 룸에 프레임을 낸다). 잠금 안 재생은 가드를 이미 지났다. COMMIT 답을 잃은 사람이 재생 전에 권한까지 잃으면 그 번호 프레임은 아무 데도 안 가고 룸은 다음 프레임에서 `gap`으로 안다 — 두 사건이 겹쳐야 서는 판이라 그렇게 둔다. 프레임은 revision 의 `seq` · `ops` 를 싣고 `warnings`는 빈 배열 · `clientOpId`는 없다. 게시와 revision 을 잇는 칸은 `comments.revision_seq`(`src/db/migrations/0015-comment-revision-seq.ts`). 잰 값은 `test/comment-replay-broadcast.test.ts` |
 | 재생의 `marker`는 그 노드의 **지금** 번호, 없으면 `null` | 첫 게시 뒤 노드가 지워졌어도 게시는 있다 — 그래서 **노드를 보기 전에** 키를 본다 |
 | 같은 키에 **다른 `nodeId`·`body`**면 **409** | 앞 행을 돌려주면 새 글이 조용히 버려지고, 새 행을 만들면 한 키 아래 게시가 둘이 된다 |
 | 키를 **잠금 안에서 한 번 더** 본다 | 같은 키가 동시에 오면 둘 다 가드 앞 확인을 지나(아직 커밋 전이다) 페이지 행에 줄을 선다. 뒤의 요청이 잠근 뒤 키를 안 보면 같은 키로 둘째 행을 넣으려다 유일 색인에 걸려 500 이다 |
@@ -1464,11 +1465,11 @@ COMMIT 앞에 받아 둔 xid 의 `pg_xact_status`다(쓰기마다 왕복 하나�
 |---|---|---|
 | `joined` | 붙은 직후, **그 연결에게만** | `projectId` · `connectionId` · `userId` · `role` |
 | `presence` | 누가 들어오거나 나갈 때, 룸 전체에 | `projectId` · `participants[{ connectionId, userId, userName }]` |
-| `page-changed` | `applyEdit`이 성공했을 때 | `projectId` · `pageId` · `seq` · `ops` · `warnings` · `actor` |
-| `page-stale` | 답을 잃은 편집 · 게시의 COMMIT 이 확인 한도(1초)를 넘겨 **늦게** 커밋됐을 때 · 한도 안에 커밋이 확인됐는데 번호를 모를 때(게시), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `pageId` · (있으면) `seq` — **`actor`는 안 싣는다.** `seq`는 그 쓰기가 남긴 revision 의 번호 **힌트**(번호를 모르는 게시는 없다)이고 받는 쪽은 `seq <= headSeq`일 때 경보를 안 세우는 비교에만 쓴다 — 번호를 얹지 않는다. 받는 쪽은 그 페이지가 낡았다고만 안다(열린 페이지면 «다시 불러오기» 경보) |
-| `restored` | 스냅샷 복원이 성공했을 때(답을 잃은 복원이 한도 뒤에 커밋되면 그때 — `menu-changed` · 잠금 놓기 · `theme-changed`와 함께 늦게), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `snapshotId` · `safetySnapshotId` · `actor` · (요청이 실어 왔으면) `clientRestoreId` |
-| `theme-changed` | 테마 바인딩 저장 · 판 3 복원이 커밋됐을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `themeId` · `version` · `tokens` · `rev` · `actor` — 받는 쪽은 자기가 든 `rev` 보다 크지 않으면 버린다 |
-| `menu-changed` | 메뉴 · 페이지 트리를 바꾸는 쓰기가 커밋됐을 때(아래 «트리 쓰기»), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `rev`(그 쓰기가 올린 메뉴 트리 판 번호) · `actor` — 트리는 안 싣는다. 받는 쪽은 자기가 든 트리의 `rev` 보다 크면 `GET …/tree`로 다시 받는다 |
+| `page-changed` | `applyEdit`이 성공했을 때 | `projectId` · `pageId` · `seq` · `ops` · `warnings` |
+| `page-stale` | 답을 잃은 편집 · 게시의 COMMIT 이 확인 한도(1초)를 넘겨 **늦게** 커밋됐을 때 · 한도 안에 커밋이 확인됐는데 번호를 모를 때(게시), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `pageId` · (있으면) `seq` — `seq`는 그 쓰기가 남긴 revision 의 번호 **힌트**(번호를 모르는 게시는 없다)이고 받는 쪽은 `seq <= headSeq`일 때 경보를 안 세우는 비교에만 쓴다 — 번호를 얹지 않는다. 받는 쪽은 그 페이지가 낡았다고만 안다(열린 페이지면 «다시 불러오기» 경보) |
+| `restored` | 스냅샷 복원이 성공했을 때(답을 잃은 복원이 한도 뒤에 커밋되면 그때 — `menu-changed` · 잠금 놓기 · `theme-changed`와 함께 늦게), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `snapshotId` · `safetySnapshotId` · (요청이 실어 왔으면) `clientRestoreId` |
+| `theme-changed` | 테마 바인딩 저장 · 판 3 복원이 커밋됐을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `themeId` · `version` · `tokens` · `rev` — 받는 쪽은 자기가 든 `rev` 보다 크지 않으면 버린다 |
+| `menu-changed` | 메뉴 · 페이지 트리를 바꾸는 쓰기가 커밋됐을 때(아래 «트리 쓰기»), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `rev`(그 쓰기가 올린 메뉴 트리 판 번호) — 트리는 안 싣는다. 받는 쪽은 자기가 든 트리의 `rev` 보다 크면 `GET …/tree`로 다시 받는다 |
 | `patch-ack` | `patch` 프레임이 성공했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `seq` · `revisionId` · `inverse` · `warnings` |
 | `patch-error` | `patch` 프레임이 실패했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `status` · `code` · `message` · `issues` — **REST 에러 봉투와 같은 값이다** |
 | `locks` | 잠금이 바뀌었을 때와 **누가 들어올 때**, 룸 전체에 | `projectId` · `locks[{ pageId, nodeId, userId, userName }]` |

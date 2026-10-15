@@ -38,20 +38,6 @@ export interface Participant {
 }
 
 /**
- * 변경을 일으킨 사람. `revisions.actor_*`와 같은 값이다(설계서 「LLM 편집 경로」의 `mcp` 표시가 이 자리를 쓴다).
- *
- * **`RevisionActorType`과 같은 셋이다.** `wireb`도 자기 종류를 말하므로
- * `'cli'`가 실제로 이 자리에 온다 — 좁게 두면 CLI가
- * 낸 편집의 프레임이 컴파일에서 막힌다.
- *
- * **웹의 거울은 `type: string`이라 여기를 넓혀도 안 갈린다**(`apps/web/src/realtime/protocol.ts`). `protocol-parity.test.ts`는 `ServerFrame` 선언 안만 세므로 이 선언을 안 본다.
- */
-export interface EventActor {
-  type: 'user' | 'mcp' | 'cli'
-  label: string
-}
-
-/**
  * 서버 → 클라이언트.
  *
  * | `type` | 언제 |
@@ -68,6 +54,10 @@ export interface EventActor {
  * | `lock-denied` | **낸 사람에게만.** `lock` 프레임의 노드 가운데 받지 않은 것이 있다 — 겹치는 자리를 남이 쥐고 있다(`ws/lock.ts`) |
  * | `membership-changed` | 그 사람의 역할이 바뀌었거나 멤버에서 빠졌을 때, **그 사람의 연결에만**(`ws/notify.ts`) |
  * | `theme-changed` | 프로젝트의 테마 바인딩 · 토큰이 저장됐거나 판 3 스냅샷이 복원됐을 때, **룸 전체에**(낸 연결도) |
+ *
+ * **방송 프레임은 누가 했는지(사람 이름 · 토큰 이름)를 싣지 않는다.** 룸의 viewer 까지 가는데 읽는 자리가 없다 — 사람 이름은
+ * `presence`가 이미 나르고, 프레임에 실으면 새로 가는 것은 토큰 이름뿐이다. «누가 했나»는 `revisions.actor_*`가 기록으로 들고
+ * 이력 응답(`routes/revisions.ts`)이 멤버에게 나른다. 잠그는 케이스는 `test/frame-no-actor.test.ts`다.
  */
 export type ServerFrame =
   | { type: 'joined'; projectId: string; connectionId: string; userId: string; role: ProjectRole }
@@ -127,7 +117,6 @@ export type ServerFrame =
        * REST 응답만 경고를 나르면 사용자가 보는 것이 접속 방식에 따라 갈린다.
        */
       warnings: ValidationIssue[]
-      actor: EventActor
       /**
        * **낸 사람이 붙인 id. 있을 때만 실린다**(REST 본문이나 `patch` 프레임에 있었을 때).
        *
@@ -153,7 +142,7 @@ export type ServerFrame =
    * `seq <= headSeq`(이미 그 revision 을 품은 판을 읽었다)면 경보를 안 세우고, 그 밖에는 지금처럼 세운다. **번호를 얹는 데 쓰지 않는다** — 이 프레임은
    * «다음 번호»가 아니라 `page-changed` 의 이음에 끼지 않는다(늦은 옛 `seq` 를 얹으면 뒤 revision 이 빠진 화면이 최신으로 선다).
    *
-   * **`actor`도 안 싣는다** — 읽는 자가 없다. **낸 사람의 연결도 받는다**(`restored`와 같은 판정) — 답을 잃은 낸 탭은 서버가 썼는지
+   * **낸 사람의 연결도 받는다**(`restored`와 같은 판정) — 답을 잃은 낸 탭은 서버가 썼는지
    * 모르고, 그 탭의 다시 읽기보다 커밋이 늦으면 이 신호만이 화면이 낡았다는 것을 안다. **여러 번 올 수 있다**(늦은 커밋마다 하나) — 받는
    * 쪽은 멱등이다.
    */
@@ -162,7 +151,6 @@ export type ServerFrame =
       type: 'restored'
       projectId: string
       snapshotId: string
-      actor: EventActor
       /**
        * 그 복원이 만든 안전망 스냅샷의 id — 복원 응답의 `safetySnapshot.id`와 같다. **낸 사람이 답을 받은 자기 복원을 알아보는 수단이다** —
        * 복원의 방송은 낸 연결도 빼지 않으므로(`notify.ts`의 `notifyRestored`) 낸 탭이 늘 되받는다. 서버가 지어 복원마다 새로 나므로 겹치지
@@ -198,7 +186,7 @@ export type ServerFrame =
    * **낸 사람의 연결도 받는다 · 연결 id 를 싣지 않는다** — `restored`와 같은 판정(`notify.ts`의 `notifyMenuChanged`). 낸 탭은 제 쓰기의
    * 판을 `rev`로 알아보고 넘긴다 — 서버가 지은 값이라 흉내 낼 수 없다.
    */
-  | { type: 'menu-changed'; projectId: string; rev: number; actor: EventActor }
+  | { type: 'menu-changed'; projectId: string; rev: number }
   /**
    * **프로젝트의 테마가 바뀌었다** — 바인딩(`id@version`)이나 토큰 값. 받는 캔버스는 번들이 바뀌었으면 다시 싣고, 토큰만 바뀌었으면
    * CSS 변수 · `useToken` 값만 바꾼다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「실시간」). 값을 통째로 싣는다 —
@@ -214,7 +202,6 @@ export type ServerFrame =
       tokens: Record<string, string | number>
       /** 바뀐 뒤의 `theme_rev`. 받는 쪽은 자기가 든 값보다 크지 않으면 버린다. */
       rev: number
-      actor: EventActor
     }
   | { type: 'pong' }
   | {

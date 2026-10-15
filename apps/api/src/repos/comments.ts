@@ -34,7 +34,6 @@ import type { PatchOp } from '@wirebound/schema'
 import { assertLocking } from '../db/locking'
 import { containsNulByte } from '../db/nul-guard'
 import type { DbHandle } from '../db/tx'
-import type { RevisionActorType } from '../db/types'
 
 export interface CommentRecord {
   id: string
@@ -184,8 +183,6 @@ export async function findCommentByIdempotencyKey(
 export interface PostRevision {
   seq: number
   ops: PatchOp[]
-  actorType: RevisionActorType
-  actorLabel: string
   /** 같은 문장에서 읽은 그 페이지의 지금 `head_seq` — 뒤에 revision 이 더 있는지(`seq`보다 큰지) 가른다. */
   pageHeadSeq: number
 }
@@ -201,7 +198,7 @@ export async function findPostRevision(db: DbHandle, pageId: string, commentId: 
       join.onRef('revisions.page_id', '=', 'comments.page_id').onRef('revisions.seq', '=', 'comments.revision_seq'),
     )
     .innerJoin('pages', 'pages.id', 'comments.page_id')
-    .select(['revisions.seq', 'revisions.ops', 'revisions.actor_type', 'revisions.actor_label', 'pages.head_seq'])
+    .select(['revisions.seq', 'revisions.ops', 'pages.head_seq'])
     .where('comments.page_id', '=', pageId)
     .where('comments.id', '=', commentId)
     .executeTakeFirst()
@@ -210,8 +207,6 @@ export async function findPostRevision(db: DbHandle, pageId: string, commentId: 
     ? {
         seq: Number(row.seq),
         ops: row.ops,
-        actorType: row.actor_type,
-        actorLabel: row.actor_label,
         pageHeadSeq: Number(row.head_seq),
       }
     : null

@@ -40,6 +40,10 @@ export interface FaultProxy {
    * 끝났으면 다음 요청을 보내기 전에 `release()` 로 칸을 푼다 — 안 풀면 무장한 칸이 `heldWithinMs` 까지 남아 다음 요청의 같은 글자
    * 질의를 붙잡는다. 푼 칸도 다음 같은 글자 질의 하나에 쏴지고 사라지지만 붙잡지 않고 곧바로 넘긴다(`project-theme-review.test.ts`
    * «숨긴 판을 다시 고르는 경주»).
+   *
+   * **붙잡힌 질의는 칸을 비운다** — 칸은 질의 하나를 붙잡는 순간 비므로(놓기 전에도) `held` 가 선 뒤에는 다른 글자로 둘째 `holdQuery` 를
+   * 걸 수 있다. 한 요청의 서로 다른 두 질의 사이에서 판을 바꾸는 케이스(`n41-failure-recheck.test.ts` 의 N43 잠금 순서 — 첫 잠금 질의에서
+   * 붙잡고 대상을 지운 뒤 재확인의 멤버 행 질의를 붙잡아 놓고 첫 것을 푼다)가 쓴다.
    */
   holdQuery(fragment: string, heldWithinMs?: number): { held: Promise<void>; release: () => void }
   /**
