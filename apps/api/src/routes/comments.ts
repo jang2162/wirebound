@@ -668,7 +668,11 @@ export function commentRoutes() {
           // 안 보면 이 요청이 같은 키로 둘째 행을 넣으려다 유일 색인에 걸려 **500** 이다(같은 게시를 두 번
           // 보낸 사람이 «모름»을 듣는다). 페이지 행을 잠갔으므로 같은 페이지의 게시는 여기서 한 줄로 선다.
           const locked = await lockPageForEdit(trx, projectId, pageId)
-          if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' }, 0)
+          if (locked === null) {
+            // **«페이지가 사라졌다»(404)도 재확인한다** — 페이지 행을 기다린 사이 빠지거나 내려간 사람이 그 사실을 받으면 가드 응답과 갈린다.
+            await recheckProjectRole(trx, request)
+            throw new EditRollback({ ok: false, reason: 'not-found' }, 0)
+          }
           if (key !== undefined) {
             const existing = await findCommentByIdempotencyKey(trx, pageId, currentUser.id, key)
             if (existing !== null) return { replay: replayOf(existing, body, migrateDocument(locked.schema), locked.headSeq) }
@@ -794,11 +798,13 @@ export function commentRoutes() {
           // `lockProjectShared`). 페이지 행이 그다음인 것은 코멘트 행을 지우는 두 쓰기(코멘트 · 페이지 삭제)와 같은 줄에 서기
           // 위해서다(`repos/pages.ts`의 `lockPageShared` — 둘이 코멘트 행 · 멤버 행을 반대 순서로 잡는다).
           await lockProjectShared(trx, projectId)
-          if (!(await lockPageShared(trx, projectId, pageId))) return null
+          const pageLocked = await lockPageShared(trx, projectId, pageId)
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 · 같은 페이지의
           // 쓰기 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다. 이 뒤의 대기(같은 코멘트 행)는 멤버 행을 `FOR SHARE`로
-          // 쥔 채라 그 사이의 강등은 이 쓰기의 커밋을 기다린다 — 판정이 커밋 순간의 것으로 남는다.
+          // 쥔 채라 그 사이의 강등은 이 쓰기의 커밋을 기다린다 — 판정이 커밋 순간의 것으로 남는다. **«페이지가 사라졌다»(404)보다 먼저다**
+          // — 기다린 사이 빠지거나 내려간 사람이 그 사실을 받으면 가드 응답과 갈린다.
           await recheckProjectRole(trx, request)
+          if (!pageLocked) return null
           return updateCommentBody(trx, pageId, commentId, body.body)
         })
       } catch (error) {
@@ -846,9 +852,10 @@ export function commentRoutes() {
           // 고리가 된다(`test/comment-tombstone.test.ts`의 «코멘트 삭제 ∥ 복원»).
           await lockProjectForBurial(trx, projectId)
           const locked = await lockPageForEdit(trx, projectId, pageId)
-          if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' }, 0)
-          // **커밋 순간의 권한.** 잠금 대기 뒤의 역할로 판정한다 — 게시와 같은 자리다.
+          // **커밋 순간의 권한.** 잠금 대기 뒤의 역할로 판정한다 — 게시와 같은 자리다. **«페이지가 사라졌다»(404)보다 먼저다** — 기다린 사이
+          // 빠지거나 내려간 사람이 그 사실을 받으면 가드 응답과 갈린다.
           await recheckProjectRole(trx, request)
+          if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' }, 0)
 
           // **삭제와 세기가 같은 트랜잭션 안이다.** 나누면 그 사이에 들어온 새 코멘트를
           // 못 보고 번호를 지워, *"코멘트는 있는데 번호가 없는 노드"*가 만들어진다.
@@ -923,7 +930,11 @@ export function commentRoutes() {
         pageId,
         async (trx) => {
           const locked = await lockPageForEdit(trx, projectId, pageId)
-          if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' }, 0)
+          if (locked === null) {
+            // **«페이지가 사라졌다»(404)도 재확인한다** — 아래 «아무것도 안 쓴다» 갈래와 달리 이 갈래는 남의 삭제를 기다린 끝에 나간다.
+            await recheckProjectRole(trx, request)
+            throw new EditRollback({ ok: false, reason: 'not-found' }, 0)
+          }
           // **잠근 문서로 센다**(머리말 「번호는 잠근 뒤의 문서로 센다」) — 잠그기 전에 읽은 문서로 세면 그 사이 남의
           // 편집이 커밋됐을 때 까닭 없이 409 다.
           const ops = renumberOps(lockedDocument(locked.schema))

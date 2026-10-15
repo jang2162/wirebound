@@ -141,7 +141,15 @@ export function menuRoutes() {
       let written
       try {
         written = await runTreeTransaction(app, projectId, request, async (trx) => {
-          const inserted = await insertMenuNode(trx, projectId, { parentId: body.parentId ?? null, title: body.title })
+          let inserted
+          try {
+            inserted = await insertMenuNode(trx, projectId, { parentId: body.parentId ?? null, title: body.title })
+          } catch (error) {
+            // **«부모가 없다»(404)도 재확인한다** — 트리 잠금을 기다린 사이 빠지거나 내려간 사람이 그 사실을 받으면 가드 응답과 갈린다.
+            // `insertMenuNode` 의 세이브포인트가 이미 되돌렸으므로 이 트랜잭션은 살아 있다.
+            if (error instanceof ParentNotFoundError) await recheckProjectRole(trx, request)
+            throw error
+          }
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 트리 쓰기의 첫 잠금(프로젝트 행)이
           // 복원 · 프로젝트 삭제 · 다른 트리 쓰기 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
           await recheckProjectRole(trx, request)
@@ -185,9 +193,10 @@ export function menuRoutes() {
         written = await runTreeTransaction(app, projectId, request, async (trx) => {
           if (base !== undefined) {
             const current = await lockMenuTitle(trx, projectId, nodeId)
-            if (current === null) return null
-            // **커밋 순간의 권한** — 비교보다 먼저다(위 머리말).
+            // **커밋 순간의 권한** — 비교보다 먼저다(위 머리말). **«메뉴가 없다»(404)보다도 먼저다** — 행을 기다린 사이 빠지거나 내려간
+            // 사람이 «지워졌다»를 받으면 가드 응답과 갈린다.
             await recheckProjectRole(trx, request)
+            if (current === null) return null
             if (base.title !== undefined && !samePageMeta(base.title, current)) {
               throw conflict(MENU_TITLE_CHANGED_MESSAGE, [
                 { path: 'title', code: MENU_TITLE_CHANGED, message: MENU_TITLE_CHANGED_MESSAGE, current },
@@ -196,10 +205,20 @@ export function menuRoutes() {
             const renamed = await updateMenuNode(trx, projectId, nodeId, patch)
             return renamed === null ? null : { node: renamed, rev: await bumpMenuRev(trx, projectId) }
           }
-          const updated = await updateMenuNode(trx, projectId, nodeId, patch)
-          if (updated === null) return null
-          // **커밋 순간의 권한** — 자리 옮기기는 트리 쓰기의 첫 잠금(프로젝트 행)을 기다릴 수 있다.
+          let updated
+          try {
+            updated = await updateMenuNode(trx, projectId, nodeId, patch)
+          } catch (error) {
+            // **«새 부모가 없다»(404) · «새 부모가 자기 자손이다»(400)도 재확인한다** — 트리 잠금을 기다린 사이 빠지거나 내려간 사람이
+            // 트리의 사실을 받으면 가드 응답과 갈린다. `updateMenuNode` 의 세이브포인트가 이미 되돌렸으므로 이 트랜잭션은 살아 있다.
+            if (error instanceof ParentNotFoundError || error instanceof SelfParentError || error instanceof DescendantParentError) {
+              await recheckProjectRole(trx, request)
+            }
+            throw error
+          }
+          // **커밋 순간의 권한** — 자리 옮기기는 트리 쓰기의 첫 잠금(프로젝트 행)을 기다릴 수 있다. **«메뉴가 없다»(404)도 지난다**(`null` 이어도).
           await recheckProjectRole(trx, request)
+          if (updated === null) return null
           return { node: updated, rev: await bumpMenuRev(trx, projectId) }
         })
       } catch (error) {
@@ -291,11 +310,9 @@ export function menuRoutes() {
             if (error instanceof HasChildrenError) await recheckProjectRole(trx, request)
             throw error
           }
-          if (deleted === 'deleted') {
-            // **커밋 순간의 권한** — 생성과 같은 자리다(트리 쓰기의 첫 잠금 뒤).
-            await recheckProjectRole(trx, request)
-            rev = await bumpMenuRev(trx, projectId)
-          }
+          // **커밋 순간의 권한** — 생성과 같은 자리다(트리 쓰기의 첫 잠금 뒤). **«이미 없다»(404)도 지난다** — 기다린 사이 지워졌다는 사실이다.
+          await recheckProjectRole(trx, request)
+          if (deleted === 'deleted') rev = await bumpMenuRev(trx, projectId)
           return deleted
         })
       } catch (error) {

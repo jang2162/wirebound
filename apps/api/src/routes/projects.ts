@@ -117,7 +117,8 @@ export function projectRoutes() {
           const updated = await updateProject(trx, projectId, body)
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). `UPDATE projects`가 복원 · 프로젝트 삭제의
           // `FOR UPDATE`와 트리 쓰기의 첫 잠금(`FOR NO KEY UPDATE`) 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
-          if (updated) await recheckProjectRole(trx, request)
+          // **«프로젝트가 지워졌다»(404)도 지난다**(`null` 이어도) — 지워졌으면 멤버 행도 사라져 가드와 같은 404 로 끝난다.
+          await recheckProjectRole(trx, request)
           return updated
         })
       } catch (error) {
