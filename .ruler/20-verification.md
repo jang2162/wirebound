@@ -76,3 +76,4 @@
 - **글자가 몇 줄인지는 글자 노드 하나의 `Range.getClientRects()` 서로 다른 `top` 수로 센다** — 요소의 `getClientRects()` 는 블록 상자 하나를 내 접힘을 0 으로 세고, 컨트롤을 품은 요소의 범위는 그 컨트롤의 상자가 섞여 거짓 두 줄을 낸다.
 - **카탈로그 타입 목록은 `CATALOG_TYPES` 로 읽는다** — `@wirebound/schema` 를 Node 에서 바로 적재하면 `listComponents()` 는 `installCatalog` 를 부르기 전이라 빈 배열이고, 그 목록을 도는 탐침은 아무것도 안 재고 오류 없이 끝난다.
 - **하드코딩된 개수 하한 단언(`카드 ≥ 18`)은 분모를 바꾸는 변경에서 `git grep` 으로 같이 센다** — 카탈로그 타입 수를 쓰는 build-test 가 있다(`apps/web/build-test/palette.test.ts`).
+- **걷을 자리 · 고칠 자리를 셀 때는 꼴을 좁힌 식이 아니라 그 낱말 전부를 세고 갈래로 나눈다** — 꼴을 좁힌 식(`actor: (requestEventActor|\{ type: revision)`)은 같은 성질의 다른 꼴(`actor: { type: 'user', … }`)을 오류 없이 빼고, 그 수가 장부에 «N 줄» 로 남아 다음 차수가 그대로 받는다(WS `patch` 의 프레임 `actor` 리터럴이 «17 줄» 에 없었다).
