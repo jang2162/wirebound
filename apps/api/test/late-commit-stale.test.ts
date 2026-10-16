@@ -28,6 +28,13 @@
  * | `markerRevision` 이 문서를 안 바꾼 결과에 `NO_REVISION` 대신 `null`(«모름»)을 낸다(갈래를 다시 합친다) | 「문서를 안 바꾼 쓰기」 둘(한도 안 · 한도 넘김) |
  * | `runRevisionTransaction` 이 넘기는 `onCommit` 이 `NO_REVISION` 을 안 거른다 | 「문서를 안 바꾼 쓰기」 둘 — 응답 자리 · 지켜보기가 같은 `onCommit` 을 부른다 |
  * | 지켜보기 `onCommit` 이 힌트를 안 싣는다(`late.onCommit(null)`) · 틀린 번호를 싣는다 | `expectStale` 을 부르는 케이스 전부(`seq` 가 빠진 · 어긋난 프레임) · 게시 케이스는 산다(힌트가 원래 없다) |
+ * | `ws/broadcast.ts` 의 `stillAllowed` 가 늘 참이다 | 「늦은 복원 · … 삭제」 둘 **만** — 닫힘 `null` · `restored` · `menu-changed` · `theme-changed` 각 1 |
+ * | `deliver` 가 자격 없는 연결을 건너뛰기만 하고 안 닫는다 | 「늦은 복원 · … 삭제」 둘 **만** — 닫힘 `null` · 프레임은 `[]` 그대로 |
+ * | `announceRestore` 가 잠금 놓기를 뺀다 | 「복원 — 503 …」 · 「둘째 복원이 되살린 페이지의 잠금」(빠지는 `locks` 가 `'프레임 없음'`) |
+ * | `lock/store.ts` 가 `releasePages` 로 놓인 연결의 다음 `hold` 를 안 받는다 · 받되 `changed` 를 거짓으로 낸다 | 「둘째 복원이 되살린 페이지의 잠금」 **혼자** — 하트비트 뒤 `'프레임 없음'` |
+ *
+ * 하트비트의 되잡기는 첫 잡기와 같은 길이라(`ws/lock.ts`의 `settle`) 그 길의 알림을 통째로 떼면 판 만들기(`restoreFixture` 의 `locksWith`)부터 선다 —
+ * 그래서 되잡기의 변조는 «`releasePages` 로 놓인 연결»에만 건다.
  */
 import { sql } from 'kysely'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -653,6 +660,170 @@ describe('늦게 커밋된 복원 — 제때 커밋과 같은 꼬리를 늦게 �
       expect(menus.map((frame) => frame.rev).sort((a, b) => a - b)).toEqual([menuBefore + 1, menuBefore + 2])
       expect(themes.map((frame) => frame.rev).sort((a, b) => a - b)).toEqual([themeBefore + 1, themeBefore + 2])
       expect(await menuRev(fx.projectId)).toBe(menuBefore + 2)
+    })
+  }, 40_000)
+})
+
+/**
+ * 늦은 커밋 지켜보기의 묻기(`createLateCommitWatch` — `unnest` 로 묶은 `pg_xact_status(x)`)에만 맞는 조각. 요청 안의 확인(`settleTransaction`의
+ * `pg_xact_status($1::xid8)`)에는 안 맞는다 — 503 «모름»은 그대로 나고 늦은 꼬리만 삼키는 동안 미뤄진다.
+ */
+const LATE_PROBE = 'pg_xact_status(x)'
+
+/** COMMIT 안에서 잠든(`slowCommit`의 `pg_sleep`) 백엔드 — 그 pid 와 xid8(`pg_xact_status`가 받는 꼴 · 지금 세대의 xid). */
+async function sleepingCommit(): Promise<{ pid: number; xid: string }> {
+  const db = getTestDb()
+  let found: { pid: number; xid: string } | undefined
+  await vi.waitFor(
+    async () => {
+      const { rows } = await sql<{ pid: number; xid: string | null }>`
+        select pid, backend_xid::text as xid from pg_stat_activity
+        where wait_event = 'PgSleep' and pid <> pg_backend_pid() and datname = current_database()
+      `.execute(db)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!.xid).not.toBeNull()
+      found = { pid: rows[0]!.pid, xid: rows[0]!.xid! }
+    },
+    { timeout: 5_000, interval: 20 },
+  )
+  const { rows } = await sql<{ xid: string }>`
+    select (((pg_snapshot_xmax(pg_current_snapshot())::text::bigint >> 32) << 32) + ${found!.xid}::bigint)::text as xid
+  `.execute(db)
+  return { pid: found!.pid, xid: rows[0]!.xid }
+}
+
+async function xactStatus(xid: string): Promise<string | null> {
+  const { rows } = await sql<{ status: string | null }>`select pg_xact_status(${xid}::xid8) as status`.execute(getTestDb())
+  return rows[0]!.status
+}
+
+async function rowCount(table: 'projects' | 'pages', id: string): Promise<number> {
+  const { rows } = await sql<{ n: number }>`select count(*)::int as n from ${sql.table(table)} where id = ${id}`.execute(getTestDb())
+  return rows[0]!.n
+}
+
+/**
+ * L-292 전제 (c) 의 두 판 — 늦은 복원 뒤에 프로젝트가 지워지는 판과, 둘째 복원이 되살린 페이지의 잠금을 늦은 꼬리가 놓는 판. **늦은 꼬리의 차례는
+ * 지켜보기의 묻기를 삼켜(`swallowQueries(LATE_PROBE)`) 붙잡는다** — 시간이 아니라 질의로 판을 세우고, 판이 선 뒤 `stop()`으로 꼬리를 보낸다.
+ */
+describe('늦은 복원 뒤의 두 판 — 프로젝트 삭제 · 되살린 페이지의 잠금', () => {
+  /**
+   * 프로젝트 삭제는 룸에 아무것도 안 보낸다(`routes/projects.ts`) — 지운 뒤 처음 나가는 방송이 늦은 꼬리다. 그 방송은 연결마다 자격을 다시 보고
+   * (`ws/broadcast.ts`의 `stillAllowed`) 멤버가 사라진 연결을 4403 으로 닫는다. 그래서 꼬리를 풀기 전에는 구경꾼이 열려 있어야 한다(카나리아).
+   *
+   * - **커밋 전에 줄 선 삭제** — 복원이 COMMIT 안에서 자는 동안 삭제를 보낸다. 삭제는 복원이 쥔 프로젝트 행에 줄 선다(`pg_blocking_pids`).
+   * - **커밋과 꼬리 사이의 삭제** — 복원의 커밋을 xid 로 확인한 뒤(꼬리는 묻기를 삼키는 중) 삭제를 보낸다.
+   */
+  for (const when of ['커밋 전에 줄 선 삭제', '커밋과 꼬리 사이의 삭제'] as const) {
+    it(`늦은 복원 · ${when} — 구경꾼은 4403 으로 닫히고 restored 를 0 개 받는다`, async () => {
+      await withProxiedRealApi(async (ctx) => {
+        const fx = await restoreFixture(ctx)
+        const mark = fx.watcher.received.length
+        const gate = ctx.proxy.swallowQueries(LATE_PROBE)
+        const remove = () =>
+          ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}`, cookies: fx.owner.cookie }).then((res) => res.statusCode)
+        let deleted: Promise<number> | undefined
+        let restoreXid = ''
+        // 삭제가 줄 설 틈을 넉넉히 둔다 — 503 은 한도(1s) 뒤에 나고 COMMIT 은 그 뒤로도 잔다.
+        await slowCommit(fx.pageId, LATE_COMMIT_MS + 2_000, async () => {
+          ctx.proxy.halfCutOnQuery('commit')
+          const res = await ctx.app.inject({ method: 'POST', url: restoreUrl(fx), cookies: fx.owner.cookie })
+          expect(ctx.proxy.fired).toBe(true)
+          expect(res.statusCode).toBe(503)
+          const sleeping = await sleepingCommit()
+          restoreXid = sleeping.xid
+          if (when === '커밋 전에 줄 선 삭제') {
+            deleted = remove()
+            // 삭제가 복원의 백엔드 뒤에 줄 섰다 — 그때 복원은 아직 커밋 전이다.
+            await vi.waitFor(
+              async () => {
+                const { rows } = await sql<{ n: number }>`
+                  select count(*)::int as n from pg_stat_activity
+                  where pid <> pg_backend_pid() and ${sleeping.pid}::int = any(pg_blocking_pids(pid))
+                `.execute(getTestDb())
+                expect(rows[0]!.n).toBe(1)
+              },
+              { timeout: 5_000, interval: 20 },
+            )
+            expect(await xactStatus(restoreXid)).toBe('in progress')
+          }
+        })
+        // 복원이 커밋됐다(되돌려지지 않았다) — 꼬리는 아직이다(지켜보기의 묻기를 삼키는 중).
+        await vi.waitFor(async () => expect(await xactStatus(restoreXid)).toBe('committed'), { timeout: STALE_WAIT_MS, interval: 50 })
+        if (when === '커밋과 꼬리 사이의 삭제') deleted = remove()
+        // 삭제가 커밋됐다.
+        expect(await deleted).toBe(204)
+        expect(await rowCount('projects', fx.projectId)).toBe(0)
+        // 판이 섰다 — 지켜보기는 물으려 했고(삼킨 수) 구경꾼은 아직 열려 있다(닫는 것이 꼬리여야 한다).
+        expect(gate.count).toBeGreaterThan(0)
+        expect(fx.watcher.closeInfo).toBeNull()
+
+        gate.stop()
+        // 꼬리를 기다린다 — 닫힘이나 `restored` 가 올 때까지(던지지 않는다 · 안 오면 아래 `toEqual`이 값으로 죽는다).
+        const until = Date.now() + 4_000
+        while (fx.watcher.closeInfo === null && ofType(fx.watcher.received.slice(mark), 'restored').length === 0 && Date.now() < until)
+          await sleep(50)
+        // 꼬리의 나머지 프레임(`menu-changed` · 잠금 놓기 · `theme-changed`)이 닿을 몫.
+        await sleep(300)
+        const frames = fx.watcher.received.slice(mark)
+        expect({
+          close: fx.watcher.closeInfo?.code ?? null,
+          restored: ofType(frames, 'restored'),
+          menu: ofType(frames, 'menu-changed'),
+          theme: ofType(frames, 'theme-changed'),
+        }).toEqual({ close: 4403, restored: [], menu: [], theme: [] })
+      })
+    }, 40_000)
+  }
+
+  /**
+   * 늦은 복원(판 v1 — 그 페이지가 없다)이 그 페이지를 지우고, 그 뒤에 줄 선 둘째 복원(판 v2 — 그 페이지가 있다)이 같은 id 로 되살린다. 늦은 꼬리는
+   * 제 트랜잭션이 지운 페이지(`deletedPageIds`)의 잠금을 놓으므로 되살아난 페이지에서 쥔 잠금도 놓는다. 쥔 쪽의 다음 하트비트(같은 집합)가 되잡는다
+   * (`ws/lock.ts`의 `handleLockFrame` — 지운 페이지가 아니면 판정하고 잡는다).
+   */
+  it('둘째 복원이 되살린 페이지의 잠금 — 늦은 꼬리가 목록에서 빼고 쥔 쪽의 다음 하트비트가 되살린다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await restoreFixture(ctx)
+      const snap2 = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.projectId}/snapshots`,
+        cookies: fx.owner.cookie,
+        payload: { tag: 'v2' },
+      })
+      expect(snap2.statusCode, snap2.body).toBe(201)
+      const snap2Id = snap2.json().id as string
+      const gate = ctx.proxy.swallowQueries(LATE_PROBE)
+      const { status, before } = await lateWrite(ctx, fx, async () => {
+        const res = await ctx.app.inject({ method: 'POST', url: restoreUrl(fx), cookies: fx.owner.cookie })
+        return res.statusCode
+      })
+      expect(status).toBe(503)
+      // 늦은 복원이 커밋됐다 — 그 페이지가 없다.
+      await committed(fx, before + 1)
+      expect(await rowCount('pages', fx.gonePageId)).toBe(0)
+      const mark = fx.watcher.received.length
+      const second = await ctx.app.inject({ method: 'POST', url: restoreUrl(fx, snap2Id), cookies: fx.owner.cookie })
+      expect(second.statusCode, second.body).toBe(200)
+      await committed(fx, before + 2)
+      // 되살렸다 — 같은 id 의 페이지 행이 다시 섰다.
+      expect(await rowCount('pages', fx.gonePageId)).toBe(1)
+      // 판이 섰다 — 둘째 꼬리는 나갔고(그 `restored`) 늦은 꼬리는 아직이다(묻기를 삼키는 중) · 잠금은 목록에 그대로다.
+      expect((await framesSince(fx.watcher, mark, 'restored', 1)).map((frame) => frame.snapshotId)).toEqual([snap2Id])
+      expect(gate.count).toBeGreaterThan(0)
+      const held = (locks: readonly { pageId: string; nodeId: string }[] | undefined) =>
+        locks?.map((lock) => [lock.pageId, lock.nodeId]) ?? '프레임 없음'
+      expect(held(ofType(fx.watcher.received, 'locks').at(-1)?.locks)).toEqual([[fx.gonePageId, fx.goneRoot]])
+
+      const tail = fx.watcher.received.length
+      gate.stop()
+      // 늦은 꼬리 — 그 `restored`가 오고 잠금이 목록에서 빠진다.
+      expect((await framesSince(fx.watcher, tail, 'restored', 1)).map((frame) => frame.snapshotId)).toEqual([fx.snapshotId])
+      expect(held((await framesSince(fx.watcher, tail, 'locks', 1)).at(-1)?.locks)).toEqual([])
+
+      // 다음 하트비트 — 쥔 쪽이 같은 집합을 다시 보낸다.
+      const beat = fx.watcher.received.length
+      fx.watcher.send(JSON.stringify({ type: 'lock', pageId: fx.gonePageId, nodeId: fx.goneRoot }))
+      expect(held((await framesSince(fx.watcher, beat, 'locks', 1)).at(-1)?.locks)).toEqual([[fx.gonePageId, fx.goneRoot]])
     })
   }, 40_000)
 })
