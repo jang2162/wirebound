@@ -45,6 +45,15 @@ const DOC: PageDocument = pageDoc({
   ],
 })
 
+/**
+ * 화면째 세는 두 케이스(에디터 한 판 + 셸 밖 화면 넷을 그리고 메뉴를 스물 몇 개 연다)의 시간 한도. 기본 5s 는 붐빌 때 값 단언 없이 «시간 초과» 로만 빨강이었다(L-298 —
+ * N27 전량 한 판에서 두 케이스). 잰 값(이 기계 15코어): 혼자 0.25 ~ 1.0s(첫 케이스가 에디터 모듈을 처음 적재하는 판이 가장 느리다), web 전량 한 판 0.72 ~ 0.98s, 코어의
+ * 두 배(30개)로 CPU 를 붙든 판 1.4s 까지. 5s 는 그 3.5 ~ 20배라 한도에 닿으려면 기계가 멈추다시피 해야 한다 — 20s(api 프로젝트의 `testTimeout` 과 같은 값)는 재는 값의
+ * 14배이고, 멈춘 케이스가 20s 뒤 «시간 초과» 로 보이는 것은 다른 web 케이스의 멈춤 감지(5s)에 영향이 없다. 시간이 드는 곳은 에디터 판 하나다(케이스 시간의 65 ~ 90% — `editorButtons`
+ * 0.37 ~ 1.2s, 셸 밖 화면 넷 합 0.03 ~ 0.3s). 두 케이스가 그 판을 따로 그려 셀 것이 서로 다르므로(단추 이름 · 메뉴 항목) 덜 세는 길이 없다 — 한 케이스에 몰면 그 케이스의 시간이 두 배다.
+ */
+const CENSUS_TIMEOUT_MS = 20_000
+
 /** 하나는 내 글(하네스의 사용자 `u-1`)이라 «수정»도 선다. */
 const COMMENTS: Comment[] = [
   {
@@ -267,54 +276,62 @@ function noticeButtons(): IconOnly[] {
 }
 
 describe('아이콘만 남은 단추는 이름과 title 을 가진다', () => {
-  it('에디터 · 셸 밖 화면 넷 · 하단 바 통지 — 이름 · title 이 빈 것이 없다', async () => {
-    const all: IconOnly[] = []
-    const editor = await editorButtons()
-    all.push(...editor.found)
-    cleanup()
-    const perScreen: Record<string, number> = { 에디터: editor.found.length }
-    for (const at of OUTSIDE) {
-      const { found } = await outsideScreen(at)
-      perScreen[at.screen] = found.length
-      all.push(...found)
+  it(
+    '에디터 · 셸 밖 화면 넷 · 하단 바 통지 — 이름 · title 이 빈 것이 없다',
+    async () => {
+      const all: IconOnly[] = []
+      const editor = await editorButtons()
+      all.push(...editor.found)
       cleanup()
-    }
-    const notices = noticeButtons()
-    perScreen['통지'] = notices.length
-    all.push(...notices)
+      const perScreen: Record<string, number> = { 에디터: editor.found.length }
+      for (const at of OUTSIDE) {
+        const { found } = await outsideScreen(at)
+        perScreen[at.screen] = found.length
+        all.push(...found)
+        cleanup()
+      }
+      const notices = noticeButtons()
+      perScreen['통지'] = notices.length
+      all.push(...notices)
 
-    expect(unnamed(all)).toEqual([])
-    // 카나리아 — 판이 섰다: 꼭 나올 이름이 다 나왔고, 화면마다 센 수가 있다(셸 밖 화면은 머리의 `…` 하나씩).
-    const names = new Set(all.map((button) => button.name))
-    expect(ICON_ONLY.filter((name) => !names.has(name))).toEqual([])
-    expect(perScreen).toEqual({
-      에디터: expect.any(Number),
-      '프로젝트 목록': expect.any(Number),
-      '프로젝트 설정': expect.any(Number),
-      '계정 설정': expect.any(Number),
-      '테마 관리': expect.any(Number),
-      통지: 2,
-    })
-    for (const [where, count] of Object.entries(perScreen)) expect({ where, enough: count >= 1 }).toEqual({ where, enough: true })
-  })
+      expect(unnamed(all)).toEqual([])
+      // 카나리아 — 판이 섰다: 꼭 나올 이름이 다 나왔고, 화면마다 센 수가 있다(셸 밖 화면은 머리의 `…` 하나씩).
+      const names = new Set(all.map((button) => button.name))
+      expect(ICON_ONLY.filter((name) => !names.has(name))).toEqual([])
+      expect(perScreen).toEqual({
+        에디터: expect.any(Number),
+        '프로젝트 목록': expect.any(Number),
+        '프로젝트 설정': expect.any(Number),
+        '계정 설정': expect.any(Number),
+        '테마 관리': expect.any(Number),
+        통지: 2,
+      })
+      for (const [where, count] of Object.entries(perScreen)) expect({ where, enough: count >= 1 }).toEqual({ where, enough: true })
+    },
+    CENSUS_TIMEOUT_MS,
+  )
 })
 
 describe('행동 메뉴 항목은 모두 아이콘을 받는다', () => {
-  it('에디터 · 셸 밖 화면의 메뉴를 전부 열어 — 아이콘 없는 항목이 없다', async () => {
-    const entries: MenuEntry[] = []
-    entries.push(...(await editorButtons()).menus)
-    cleanup()
-    for (const at of OUTSIDE) {
-      entries.push(...(await outsideScreen(at)).menus)
+  it(
+    '에디터 · 셸 밖 화면의 메뉴를 전부 열어 — 아이콘 없는 항목이 없다',
+    async () => {
+      const entries: MenuEntry[] = []
+      entries.push(...(await editorButtons()).menus)
       cleanup()
-    }
+      for (const at of OUTSIDE) {
+        entries.push(...(await outsideScreen(at)).menus)
+        cleanup()
+      }
 
-    expect(entries.filter((entry) => !entry.icon && !WITHOUT_ICON.includes(entry.item))).toEqual([])
-    // 카나리아 — 메뉴가 열렸다: 꼭 나올 항목이 다 나왔다.
-    const items = new Set(entries.map((entry) => entry.item))
-    expect(MENU_ITEMS.filter((item) => !items.has(item))).toEqual([])
-    expect(entries.length).toBeGreaterThanOrEqual(MENU_ITEMS.length)
-  })
+      expect(entries.filter((entry) => !entry.icon && !WITHOUT_ICON.includes(entry.item))).toEqual([])
+      // 카나리아 — 메뉴가 열렸다: 꼭 나올 항목이 다 나왔다.
+      const items = new Set(entries.map((entry) => entry.item))
+      expect(MENU_ITEMS.filter((item) => !items.has(item))).toEqual([])
+      expect(entries.length).toBeGreaterThanOrEqual(MENU_ITEMS.length)
+    },
+    CENSUS_TIMEOUT_MS,
+  )
 })
 
 /** `src` 의 `.ts` · `.tsx` 원문 — `?raw` 라 실행되지 않는다(`test/shell-css-coverage.test.ts` 의 `RAW` 와 같은 기전). */
