@@ -342,15 +342,33 @@ describe('시딩한 계정은 로그인된다', () => {
 describe('시딩은 마이그레이션이 아니다', () => {
   const MIGRATIONS_DIR = fileURLToPath(new URL('../src/db/migrations/', import.meta.url))
 
+  /**
+   * **옛 행을 새 표로 옮기는 마이그레이션은 행을 넣는다** — 계정이 아니라 그 표의 행이다. 파일 이름과 그 파일이 넣을 수 있는 표 하나를 적고,
+   * 그 파일의 삽입이 전부 그 표인지(그리고 계정 · 시딩 글자가 없는지)를 잰다. `0024-modules` 는 `presets` 행마다 모듈 하나를 짓는다.
+   */
+  const DATA_MOVES: Record<string, string> = { '0024-modules.ts': 'modules' }
+
+  function onlyInsertsInto(source: string, table: string): boolean {
+    if (/insertInto\(|seed-user|seedUser/i.test(source)) return false
+    const targets = [...source.matchAll(/INSERT\s+INTO\s+([a-z_]+)/gi)].map((match) => match[1]!.toLowerCase())
+    return targets.length > 0 && targets.every((target) => target === table)
+  }
+
   it('마이그레이션 파일 어디에도 행 삽입이 없다 — `migrate:down` 이 계정을 데려가지 않는다', () => {
     const files = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.ts') && name !== 'index.ts')
     expect(files.length).toBeGreaterThan(5) // 분모가 헛돌면 아래 단언이 공허하다
 
     const offenders = files.filter((name) => {
       const source = readFileSync(join(MIGRATIONS_DIR, name), 'utf8')
+      if (name in DATA_MOVES) return !onlyInsertsInto(source, DATA_MOVES[name]!)
       return /insertInto\(|INSERT\s+INTO|seed-user|seedUser/i.test(source)
     })
     expect(offenders).toEqual([])
+    // 허락한 파일이 실제로 있고 그 표의 삽입을 든다 — 이름이 바뀌어 허락이 헛돌면 여기서 죽는다.
+    for (const [name, table] of Object.entries(DATA_MOVES)) {
+      expect(files, name).toContain(name)
+      expect(onlyInsertsInto(readFileSync(join(MIGRATIONS_DIR, name), 'utf8'), table), name).toBe(true)
+    }
   })
 
   it('`migrateToLatest` 는 환경변수가 있어도 계정을 안 만든다 — 부르는 자는 CLI 다', async () => {
