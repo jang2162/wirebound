@@ -73,7 +73,7 @@ const CENSUS: Record<string, Record<string, Cell>> = {
     pairs: { route: 'text', alt: [{ key: '이름', value: '홍' }] },
     columns: { route: 'markup', alt: 2 },
   },
-  SearchForm: { collapsed: { route: 'mark', alt: true } },
+  SearchForm: { collapsed: { route: 'mark', alt: true }, columns: { route: 'var', alt: 3 } },
   EntryForm: { title: { route: 'text', alt: '제목' } },
   Field: {
     label: { route: 'text', alt: '이름' },

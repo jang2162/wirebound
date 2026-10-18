@@ -26,13 +26,15 @@
  */
 import { forkedId, hiddenNodeIds } from '../edit/view-state-fork'
 import { useLayoutEffect, useRef, useState, type ReactElement } from 'react'
-import { NO_THEME, resolveVariant } from '@wirebound/renderer'
+import { NO_THEME, resolveVariant, weightRoom } from '@wirebound/renderer'
 import {
   applyOps,
   getComponent,
   NODE_ALIAS_MAX,
   nodeAlias,
   nodeHeading,
+  WEIGHT_MAX,
+  WEIGHT_MIN,
   type ComponentDef,
   type EditorField,
   type NodeLock,
@@ -47,8 +49,8 @@ import { useEditCommit, type EditCommit } from '../edit/use-edit-commit'
 // 던지고(`edit/safe-walk.ts` 머리말의 실측), 이 패널은 오류 경계 밖이라 그 예외가 셸을
 // 통째로 지운다. 실측: 그 문서에서 **노드를 고르는 순간** `.wb-shell`이 DOM에서 사라진다 —
 // 열기만 할 때는 여기까지 오지 않아 살아 있다.
-import { findNodeSafely } from '../edit/safe-walk'
-import { aliasOps, propOps, variantOps } from '../edit/ops'
+import { findNodeSafely, walkSafely } from '../edit/safe-walk'
+import { aliasOps, propOps, variantOps, weightOps } from '../edit/ops'
 import { removeManyOps } from '../edit/paste-ops'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
@@ -379,6 +381,22 @@ export function PropertyPanel(props: {
             />
           </dd>
         </div>
+        {/* **몫은 별칭 바로 아래다** — 별칭처럼 노드 봉투의 필드이고, 부모가 몫을 읽을 때만 선다(`weightRoom` — 렌더러가 몫을 싣는 판정과 같다). */}
+        {doc !== null && weightRoom(...weightParentOf(doc, node.id)) !== undefined && (
+          <WeightField
+            key={node.id}
+            value={node.weight}
+            disabled={blocked}
+            onCommit={(weight) => {
+              if (blocked || doc === null) return
+              const ops = weightOps(doc, node.id, weight)
+              if (ops !== null) commitOps(ops)
+            }}
+            onLeave={(weight) =>
+              commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) => weightOps(running, nodeId, weight))
+            }
+          />
+        )}
       </dl>
       {fields.length === 0 && variantField === null ? (
         // `Page`·`Slot`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
@@ -430,6 +448,7 @@ export function PropertyPanel(props: {
                     field={field}
                     value={readProp(node, field.prop)}
                     disabled={blocked}
+                    clearable={clearableProp(def, field.prop)}
                     onCommit={(value) => {
                       if (!blocked) commitProp(node.id, field.prop, value)
                     }}
@@ -447,6 +466,89 @@ export function PropertyPanel(props: {
         </>
       )}
     </>
+  )
+}
+
+/** «몫» 칸의 까닭 — 1 ~ 12 정수 밖을 친 채 떠났다. 보내지 않는다(서버가 422 로 거절할 값이다). */
+export const WEIGHT_RANGE_NOTICE = `몫은 ${WEIGHT_MIN} ~ ${WEIGHT_MAX} 의 정수입니다 — 보내지 않았습니다`
+
+/**
+ * «몫» 칸. 카탈로그의 `editor` 가 아니라 패널이 정한다 — 몫은 props 가 아니라 노드 봉투의 필드다(별칭과 같은 층). `prop` 값은 입력의 id 를 짓는 데만
+ * 쓴다. 글 칸(`text`)인 까닭: 수 칸은 비운 것을 커밋하지 않는데 몫은 비우면 지운다.
+ */
+const WEIGHT_FIELD: EditorField = { prop: 'node-weight', control: 'text', label: '몫' }
+
+/** 친 글 → 몫. 빈 글이면 `null`(지운다), 1 ~ 12 정수가 아니면 `undefined`(안 보낸다). `1e1` · `+3` · `3.0` 같은 수 표기는 받지 않는다. */
+function parseWeight(text: string): number | null | undefined {
+  const trimmed = text.trim()
+  if (trimmed === '') return null
+  if (!/^\d+$/.test(trimmed)) return undefined
+  const value = Number(trimmed)
+  return value >= WEIGHT_MIN && value <= WEIGHT_MAX ? value : undefined
+}
+
+/**
+ * 몫을 읽는 부모 — 렌더러가 몫을 싣는 판정(`weightRoom`)의 입력. 상태 영역 · 가지(`StateSwitch` · `StateCase`)는 요소를 안 남기므로 건너 그 위를 본다
+ * (렌더러도 그 둘에서 자리를 그대로 넘긴다). 부모가 없으면(뿌리 · 문서에 없음) 아무 자리도 아닌 입력을 낸다.
+ */
+function weightParentOf(doc: PageDocument, nodeId: string): [string, WbNode['props']] {
+  const chain: WbNode[] = []
+  for (const visit of walkSafely(doc.root)) {
+    while (chain.length > 0 && chain.at(-1) !== visit.parent) chain.pop()
+    if (visit.node.id === nodeId) {
+      const parent = [...chain].reverse().find((node) => node.type !== 'StateSwitch' && node.type !== 'StateCase')
+      return parent === undefined ? ['', undefined] : [String(parent.type), parent.props]
+    }
+    chain.push(visit.node)
+  }
+  return ['', undefined]
+}
+
+/** 기본값이 없는 prop 인가 — 안 적으면 파싱한 값에도 없다. 그 prop 의 수 칸은 비워 «안 정한» 판으로 되돌릴 수 있다. */
+function clearableProp(def: ComponentDef, prop: string): boolean {
+  const schema = (def.props as unknown as { shape?: Record<string, { safeParse(value: unknown): { success: boolean; data?: unknown } }> })
+    .shape?.[prop]
+  if (schema === undefined) return false
+  const parsed = schema.safeParse(undefined)
+  return parsed.success && parsed.data === undefined
+}
+
+/** «몫» 칸 한 줄. 범위 밖을 친 채 떠나면 안 보내고 칸 아래에 까닭을 말한다 — 바른 값을 보내거나 노드가 바뀌면(`key`) 걷힌다. */
+function WeightField(props: {
+  value: unknown
+  disabled: boolean
+  onCommit: (weight: number | null) => void
+  onLeave: (weight: number | null) => void
+}): ReactElement {
+  const [invalid, setInvalid] = useState(false)
+  const id = controlId(WEIGHT_FIELD.prop)
+  return (
+    <div className="wb-shell-prop" data-wb-node-weight="">
+      <dt className="wb-shell-prop-label">
+        <label id={`${id}-label`} htmlFor={id}>
+          {WEIGHT_FIELD.label}
+        </label>
+      </dt>
+      <dd className="wb-shell-prop-value">
+        <TextControl
+          field={WEIGHT_FIELD}
+          value={typeof props.value === 'number' ? props.value : ''}
+          id={id}
+          placeholder={`${WEIGHT_MIN} ~ ${WEIGHT_MAX}`}
+          disabled={props.disabled}
+          onCommit={(text) => {
+            const weight = parseWeight(String(text))
+            setInvalid(weight === undefined)
+            if (weight !== undefined) props.onCommit(weight)
+          }}
+          onLeave={(text) => {
+            const weight = parseWeight(String(text))
+            if (weight !== undefined) props.onLeave(weight)
+          }}
+        />
+        {invalid && <p className="wb-shell-prop-why">{WEIGHT_RANGE_NOTICE}</p>}
+      </dd>
+    </div>
   )
 }
 
@@ -723,13 +825,28 @@ function PropControl(props: {
   mixed?: boolean
   /** 초안을 든 위젯(글 · 수 · 목록)이 칸을 떠나지 않은 채 내려간다 — `useLeftoverCommit`. 바로 커밋하는 위젯(켬/끔 · 고르개)은 초안이 없다. */
   onLeave?: (value: unknown) => void
+  /** 기본값이 없는 수 prop 인가(`clearableProp`) — 비우면 `undefined` 를 커밋한다(`propOps` 가 그 prop 을 지운다). */
+  clearable?: boolean
 }): ReactElement {
-  const { field, value, disabled, onCommit, onLeave } = props
+  const { field, value, disabled, onLeave } = props
   const id = controlId(field.prop)
   const mixed = props.mixed === true
+  // 비운 수 칸(`''`)은 «그 prop 을 지운다»(`undefined`)로 옮긴다 — `clearable` 인 칸만 빈 글을 낸다.
+  const onCommit = (next: unknown) => props.onCommit(next === '' ? undefined : next)
 
   if (field.control === 'text' || field.control === 'textarea' || field.control === 'number') {
-    return <TextControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} mixed={mixed} onLeave={onLeave} />
+    return (
+      <TextControl
+        field={field}
+        value={value}
+        id={id}
+        disabled={disabled}
+        onCommit={onCommit}
+        mixed={mixed}
+        clearable={props.clearable === true && field.control === 'number'}
+        onLeave={onLeave === undefined ? undefined : (next) => onLeave(next === '' ? undefined : next)}
+      />
+    )
   }
 
   if (field.control === 'switch') {

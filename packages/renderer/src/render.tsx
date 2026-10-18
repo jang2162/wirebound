@@ -3,6 +3,8 @@ import {
   caseFor,
   getComponent,
   getKoreanErrorMap,
+  WEIGHT_MAX,
+  WEIGHT_MIN,
   type AnyDocument,
   type InteractionTrigger,
   type WbNode,
@@ -119,6 +121,42 @@ export interface NodeRenderError {
   message: string
 }
 
+/**
+ * **부모가 자식의 몫(`WbNode.weight`)을 읽는 법**(정본 설계서 「페이지 스키마 노드」의 몫). `flex` — 몫 그대로(`flex: <몫>`). `span` — 차지할
+ * 칸 수라 부모 열 수로 자른다. 없음 — 그 부모 안에서 몫은 아무 일도 안 한다(값은 노드에 남는다).
+ *
+ * **자르기를 렌더러가 하는 까닭:** CSS `span min(var(몫), var(열 수))` 는 Chrome 에서 서지만 열 수를 상속으로만 읽는다 — 자식이 `Grid` 면 제
+ * 뷰가 같은 변수에 제 열 수를 실어 부모 열 수가 아니라 제 열 수로 잘린다(넘치면 암묵 열이 생겨 격자가 넓어진다). 부모를 아는 곳은 여기다.
+ */
+export type WeightRoom = { kind: 'flex' } | { kind: 'span'; columns: number }
+
+const FLEX_ROOM: WeightRoom = { kind: 'flex' }
+
+/**
+ * 이 타입의 노드가 자식에게 주는 몫의 자리. `Grid` 는 늘 열 수가 있고(기본값 2), `SearchForm` 은 열을 정한 판만이다. 없으면 그 부모 안에서 몫은 아무
+ * 일도 안 한다. **속성 패널이 «몫» 칸을 보일지도 이것으로 가른다**(`apps/web/src/panels/property-panel.tsx`) — 판정이 두 벌이면 칸이 서는데 화면이
+ * 안 바뀌는 부모가 생긴다.
+ */
+export function weightRoom(type: string, props: WbNode['props']): WeightRoom | undefined {
+  if (type === 'Flex') return FLEX_ROOM
+  if (type !== 'Grid' && type !== 'SearchForm') return undefined
+  // 열 수는 카탈로그가 정한 모양 · 기본값으로 읽는다 — 못 읽으면(검증 실패) 이 노드는 폴백이라 자식의 몫이 서지 않는다.
+  const parsed = getComponent(type)?.props.safeParse(props ?? {})
+  const columns = parsed?.success === true ? (parsed.data as { columns?: unknown }).columns : undefined
+  return typeof columns === 'number' ? { kind: 'span', columns } : undefined
+}
+
+function roomKey(room: WeightRoom | undefined): string {
+  return room === undefined ? '' : room.kind === 'flex' ? 'flex' : `span${room.columns}`
+}
+
+/** 이 자리에서 실을 몫. 모양이 틀린 몫(낙관적 패치가 지난 문서 — `shapeError` 머리말)은 없는 것으로 친다. */
+function weightIn(room: WeightRoom | undefined, weight: unknown): number | undefined {
+  if (room === undefined) return undefined
+  if (typeof weight !== 'number' || !Number.isInteger(weight) || weight < WEIGHT_MIN || weight > WEIGHT_MAX) return undefined
+  return room.kind === 'flex' ? weight : Math.min(weight, room.columns)
+}
+
 /** 노드에서 문자열 하나를 읽는다. 문자열이 아니면 빈 문자열이다(모양 가드가 흡수한 노드). */
 function readString(value: unknown): string {
   return typeof value === 'string' ? value : ''
@@ -173,26 +211,31 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
  * *"이 액션의 타겟이 무엇인가"*가 호출자마다 갈린다 — 「HTML 정적 번들」의 *"렌더러가 하나뿐이라
  * 결과가 어긋날 수 없다"*가 그 자리에서 깨진다.
  */
-function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): ReactElement {
-  const cache = nodeCacheFor(node, options)
-  if (cache === null) return renderNodeUncached(root, node, options)
+function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions, room?: WeightRoom): ReactElement {
+  const cache = nodeCacheFor(node, options, room)
+  if (cache === null) return renderNodeUncached(root, node, options, room)
   const hit = cache.get(node)
   if (hit !== undefined) return hit
   let failed = false
-  const element = renderNodeUncached(root, node, {
-    ...options,
-    onNodeError: (error) => {
-      failed = true
-      options.onNodeError?.(error)
+  const element = renderNodeUncached(
+    root,
+    node,
+    {
+      ...options,
+      onNodeError: (error) => {
+        failed = true
+        options.onNodeError?.(error)
+      },
     },
-  })
+    room,
+  )
   // **오류가 난 서브트리는 기억하지 않는다** — 오류는 `onNodeError` 로 말해야 하므로 다시 그려야 하고, 폴백은 카탈로그 설치 같은 렌더러 밖의 상태에도 기대
   // (`getComponent` — 설치 전에 그린 폴백이 설치 뒤에도 남으면 안 된다). 오류 없는 서브트리만 재사용하면 `onNodeError` 를 다시 흉내 낼 일도 없다.
   if (!failed) cache.set(node, element)
   return element
 }
 
-/** 테마 → 화면 상태 → 노드 객체 → 그린 엘리먼트. 키가 약해서 문서 · 테마가 버려지면 함께 사라진다. */
+/** 테마 → 화면 상태 · 몫의 자리 → 노드 객체 → 그린 엘리먼트. 키가 약해서 문서 · 테마가 버려지면 함께 사라진다. */
 const NODE_CACHE = new WeakMap<object, Map<string, WeakMap<object, ReactElement>>>()
 
 /**
@@ -205,8 +248,11 @@ const NODE_CACHE = new WeakMap<object, Map<string, WeakMap<object, ReactElement>
  * (`renderNodeIn`).
  *
  * **노드 객체를 제자리에서 고치지 마라** — 고치면 캐시가 옛 모양을 돌려준다. 문서는 불변으로 다룬다(스토어의 편집은 새 객체를 만든다).
+ *
+ * **부모가 정한 몫의 자리(`WeightRoom`)도 열쇠다** — 같은 노드라도 부모 `Grid` 의 열 수가 바뀌면 실을 몫이 달라지는데, 부모만 새 객체가 되고
+ * 이 노드는 그 객체 그대로다.
  */
-function nodeCacheFor(node: unknown, options: RenderOptions): WeakMap<object, ReactElement> | null {
+function nodeCacheFor(node: unknown, options: RenderOptions, room: WeightRoom | undefined): WeakMap<object, ReactElement> | null {
   if (options.interaction !== undefined || options.slot !== undefined) return null
   if (typeof node !== 'object' || node === null) return null
   const theme: object = options.theme ?? NO_THEME
@@ -215,7 +261,8 @@ function nodeCacheFor(node: unknown, options: RenderOptions): WeakMap<object, Re
     byState = new Map()
     NODE_CACHE.set(theme, byState)
   }
-  const stateKey = options.viewState ?? ''
+  // 상태 id 는 노드 id 규칙이라 줄바꿈이 없다 — 몫의 자리와 섞이지 않는다.
+  const stateKey = `${options.viewState ?? ''}\n${roomKey(room)}`
   let byNode = byState.get(stateKey)
   if (byNode === undefined) {
     byNode = new WeakMap()
@@ -224,8 +271,8 @@ function nodeCacheFor(node: unknown, options: RenderOptions): WeakMap<object, Re
   return byNode
 }
 
-function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions): ReactElement {
-  const raw = node as unknown as { id?: unknown; type?: unknown; children?: unknown } | null
+function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions, room: WeightRoom | undefined): ReactElement {
+  const raw = node as unknown as { id?: unknown; type?: unknown; props?: unknown; children?: unknown } | null
   const nodeId = readString(raw?.id)
 
   // **숨긴 노드는 자식까지 함께 사라진다**(`setVisible { value: false }`). 자식을 그리기
@@ -242,12 +289,15 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions):
   // 뷰가 `data-wb-id`를 달아 선택 외곽선 · 마커가 그대로 선다.
   if (raw?.type === 'StateSwitch' && shapeError(node) === null) {
     const picked = caseFor(node, options.viewState ?? null)
-    if (picked !== null) return renderNodeIn(root, picked, options)
+    // 영역 · 가지는 요소를 안 남기므로 가지 안 노드의 부모는 영역의 부모다 — 몫의 자리를 그대로 넘긴다.
+    if (picked !== null) return renderNodeIn(root, picked, options, room)
     options.onNodeError?.({ nodeId, type: 'StateSwitch', message: '상태 영역에 그릴 기본 가지가 없습니다' })
     return <></>
   }
 
   const rawChildren = raw?.children
+  const type = readString(raw?.type)
+  const isCase = type === 'StateCase' && shapeError(node) === null
 
   // 자식을 먼저 그린다. 이 노드가 실패해도 자식은 폴백 안에 그대로 들어간다 —
   // 부모를 못 그리는 것과 자식을 못 그리는 것은 별개다.
@@ -255,13 +305,16 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions):
   // `children`이 배열이 아니면 자식 없음으로 다룬다(그냥 `.map`을 부르면 TypeError다).
   // 배열 원소가 노드가 아니면 재귀 호출의 모양 가드가 그 자리에 폴백을 그린다.
   const childNodes: unknown[] = Array.isArray(rawChildren) ? rawChildren : []
+  // 가지(`StateCase`)는 요소를 안 남기므로 제 자리를 자식에게 그대로 넘긴다.
+  const childRoom = isCase ? room : weightRoom(type, overlayProps(options.interaction?.overlay, nodeId, raw?.props as WbNode['props']))
   const children: ReactNode =
     childNodes.length > 0
-      ? childNodes.map((child, index) => <Fragment key={childKey(child, index)}>{renderNodeIn(root, child as WbNode, options)}</Fragment>)
+      ? childNodes.map((child, index) => (
+          <Fragment key={childKey(child, index)}>{renderNodeIn(root, child as WbNode, options, childRoom)}</Fragment>
+        ))
       : null
 
-  const type = readString(raw?.type)
-  if (type === 'StateCase' && shapeError(node) === null) return <>{children}</>
+  if (isCase) return <>{children}</>
 
   const fallback = (message: string): ReactElement => {
     options.onNodeError?.({ nodeId, type, message })
@@ -317,6 +370,8 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions):
     // **꺼져 있으면 속성 객체 그대로 넘어간다** — 끈 렌더는 상호작용이 없는 렌더와 한 글자도 달라서는 안 된다.
     attrs: options.interaction === undefined ? attrs : { ...attrs, ...handlersFor(root, node, options) },
   }
+  const weight = weightIn(room, node.weight)
+  if (weight !== undefined) binding.weight = weight
   return (
     <ViewHost
       key={node.id}

@@ -1,4 +1,4 @@
-import { getComponent, getKoreanErrorMap, ignoredVariantMessage } from '@wirebound/schema'
+import { WEIGHT_MAX, WEIGHT_MIN, getComponent, getKoreanErrorMap, ignoredVariantMessage } from '@wirebound/schema'
 import { z } from 'zod'
 import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
@@ -62,6 +62,8 @@ export interface PatternNode {
   type: string
   props?: Record<string, unknown>
   variant?: string
+  /** 노드 몫 — `WbNode.weight` 와 같은 규칙이고 전개된 노드로 그대로 간다. */
+  weight?: number
   slot?: string
   children?: PatternNode[]
 }
@@ -84,6 +86,7 @@ export const PatternNodeSchema: z.ZodType<PatternNode> = z.strictObject({
   type: z.string().min(1),
   props: z.record(z.string(), z.unknown()).optional(),
   variant: z.string().optional(),
+  weight: z.int().min(WEIGHT_MIN).max(WEIGHT_MAX).optional(),
   slot: z.string().min(1).optional(),
   get children() {
     return z.array(PatternNodeSchema).optional()

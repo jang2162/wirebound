@@ -43,6 +43,11 @@ export interface TextControlProps {
    * 것이 바뀌었다). 값은 `onCommit`이 받았을 값이다(같은 규칙 — 안 바뀌었거나 수가 아니면 안 부른다).
    */
   onLeave?: (value: string | number) => void
+  /**
+   * 수 칸을 비우면 빈 글(`''`)을 커밋한다 — 기본값이 없는 prop(`SearchForm.columns`)을 «안 정한» 판으로 되돌리는 길이다. 안 주면 지금처럼 빈 수
+   * 칸은 커밋하지 않는다(지우기만 해도 0 이 들어가지 않게 — 아래 `pending`).
+   */
+  clearable?: boolean
 }
 
 /** 값이 갈리는 칸의 자리표(일괄 편집). 고르개 · 켬/끔 칸도 같은 글자를 쓴다. */
@@ -123,7 +128,7 @@ export function TextControl(props: TextControlProps): ReactElement {
     if (isNumber) {
       // `Number('')`은 `0`이고 `Number('abc')`는 `NaN`이다. 앞은 "지우기만 해도 0이 들어가는"
       // 형태이고 뒤는 서버가 422를 낼 값이라, 둘 다 보내지 않고 입력만 남긴다.
-      if (draft.trim() === '') return null
+      if (draft.trim() === '') return props.clearable === true ? '' : null
       const parsed = Number(draft)
       return Number.isFinite(parsed) ? parsed : null
     }

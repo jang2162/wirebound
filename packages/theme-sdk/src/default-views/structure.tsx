@@ -1,6 +1,6 @@
 /** **구조 그룹 기본 뷰.** `Page`·`Slot`·`Section`·`Flex`·`Grid`·`Card`·`Tabs`. 옮긴 규칙은 `./index.ts` 머리말. */
 import type { CSSProperties } from 'react'
-import { componentRule, nodeVar, partRule, zeroRule } from '../css-tools'
+import { componentRule, nodeVar, partRule, WEIGHT_VAR, zeroRule } from '../css-tools'
 import { view } from '../define'
 import { Root } from '../root'
 
@@ -106,5 +106,15 @@ export function structureCssBlocks(): string[] {
     // 좁은 여백(`compact`). 테마는 제 여백 규칙을 `[data-wb-compact]` 로 덮는다 — 이 둘은 테마가 없는 판의 모양이다.
     zeroRule('[data-wb-component="Section"]', ['padding-block: 24px;']),
     zeroRule('[data-wb-component="Section"][data-wb-compact]', ['padding-block: 8px;']),
+    // **노드 몫**(`WbNode.weight` — `Root` 가 `--wb-node-weight` 로 싣는다). 셋 다 특이도 0 이라 테마가 같은 속성을 걸면 테마가 이긴다.
+    // ① 상속을 끊는다 — 커스텀 프로퍼티는 자손에 물려져, 몫을 준 `Card` 안의 `Flex` 자식이 그 몫을 받아 함께 늘어난다. 모든 노드 뿌리에서
+    //    초기화하고(`initial` 은 «값 없음» 이라 아래 `var()` 가 기본값으로 간다) 몫이 있는 노드만 인라인으로 싣는다(인라인이 이긴다).
+    zeroRule('[data-wb-id]', [`${WEIGHT_VAR}: initial;`]),
+    // ② `Flex` — 몫이 있으면 `flex: <몫>`(= `<몫> 1 0%`). 바탕 폭을 0 으로 두어야 형제의 폭이 몫의 비가 된다 — `flex-grow` 만 바꾸면 남는
+    //    폭만 나눠, 내용 · `width: 100%`(표) 가 다른 형제끼리는 비가 안 선다. 몫이 없으면 flex 항목의 기본값(`0 1 auto`) 그대로다.
+    zeroRule('[data-wb-component="Flex"] > *', [`flex: var(${WEIGHT_VAR}, 0 1 auto);`]),
+    // ③ `Grid` — 몫이 차지할 칸 수다. 부모 열 수로 자른 값을 렌더러가 싣는다(`packages/renderer/src/render.tsx` 의 `weightRoom`) — CSS 의
+    //    `span min(몫, 열 수)` 는 열 수를 상속으로만 읽어, 자식이 `Grid` 면 제 열 수로 잘린다.
+    zeroRule('[data-wb-component="Grid"] > *', [`grid-column: span var(${WEIGHT_VAR}, 1);`]),
   ]
 }

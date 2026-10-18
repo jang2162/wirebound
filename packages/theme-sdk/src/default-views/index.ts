@@ -11,6 +11,7 @@ import { actionCssBlocks, ButtonView, LinkView } from './action'
 import { dataCssBlocks, KeyValueView, ListView, TreeView } from './data'
 import { DividerView, documentCssBlocks, MediaView, PlaceholderView, TextView } from './document'
 import { EntryFormView, FieldView, inputCssBlocks, SearchFormView } from './input'
+export { SEARCHFORM_COLUMNS_VAR, searchFormFieldsAttrs } from './input'
 import { CardView, FlexView, GridView, PageView, SectionView, SlotView, structureCssBlocks, TabsView } from './structure'
 
 export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({

@@ -10,7 +10,17 @@
  * 던지지 않는 것도 같은 이유다 — 이 함수들은 렌더 도중에도 불릴 수 있고, 속성 패널과
  * 구조 트리는 오류 경계 밖이라 던지면 셸 전체가 흰 화면이 된다.
  */
-import { applyOps, getByPointer, tidyAlias, type Interaction, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import {
+  applyOps,
+  getByPointer,
+  tidyAlias,
+  WEIGHT_MAX,
+  WEIGHT_MIN,
+  type Interaction,
+  type PageDocument,
+  type PatchOp,
+  type WbNode,
+} from '@wirebound/schema'
 // **schema의 `findNodePath`·`findNode`·`walkNodes`를 쓰지 않는다.** 셋 다 `walkNodes`를
 // 지나고 그것이 `children` 배열 안의 `null` 원소에서 던진다 — 이 파일의 계약("던지지
 // 않는다")이 거기서 깨진다(`./safe-walk.ts` 머리말에 실측).
@@ -53,6 +63,13 @@ export function propOps(document: PageDocument, nodeId: string, prop: string, va
 
   const propsPath = `${nodePath}/props`
   const props = getByPointer(document, propsPath)
+
+  // **`undefined` 는 «그 prop 을 지운다» 다** — 기본값이 없는 prop(`SearchForm.columns`)을 «안 정한» 판으로 되돌리는 길이다. 문서 봉투가
+  // `undefined` 값을 받지 않으므로 다른 뜻과 안 겹친다. 키가 없으면 지울 것이 없다(`null`).
+  if (value === undefined) {
+    if (typeof props !== 'object' || props === null || Array.isArray(props) || !Object.hasOwn(props, prop)) return null
+    return [{ op: 'remove', path: `${propsPath}/${escapeToken(prop)}` }]
+  }
 
   // `props`가 아예 없으면 통째로 넣는다. `getByPointer`는 없는 키에 `undefined`를 주므로
   // 값이 `undefined`인 키와 구분되지 않지만, 문서 봉투가 그런 키를 허용하지 않는다.
@@ -143,6 +160,25 @@ export function aliasOps(document: PageDocument, nodeId: string, alias: string |
   if (next === '') return has ? [{ op: 'remove', path }] : null
   if (has && node.alias === next) return null
   return has ? [{ op: 'replace', path, value: next }] : [{ op: 'add', path, value: next }]
+}
+
+/**
+ * 노드의 몫(`weight` — 정수 `WEIGHT_MIN` ~ `WEIGHT_MAX`)을 바꾸는 op. `aliasOps` 와 같은 층(노드 봉투의 필드)이고 갈래도 같다 — 키가 있으면
+ * `replace`, 없으면 `add`, `null` 이면 `remove`(없으면 지울 것이 없어 `null`), 지금과 같으면 `null`. 범위는 부르는 쪽(속성 패널)이 먼저 본다 —
+ * 범위 밖 값은 서버가 422 로 거절할 값이라 여기 오면 `null` 이다.
+ */
+export function weightOps(document: PageDocument, nodeId: string, weight: number | null): PatchOp[] | null {
+  const nodePath = findNodePathSafely(document.root, nodeId)
+  if (nodePath === undefined) return null
+  const node = findNodeSafely(document.root, nodeId)
+  if (node === undefined) return null
+
+  const path = `${nodePath}/weight`
+  const has = Object.hasOwn(node, 'weight')
+  if (weight === null) return has ? [{ op: 'remove', path }] : null
+  if (!Number.isInteger(weight) || weight < WEIGHT_MIN || weight > WEIGHT_MAX) return null
+  if (has && node.weight === weight) return null
+  return has ? [{ op: 'replace', path, value: weight }] : [{ op: 'add', path, value: weight }]
 }
 
 /**
