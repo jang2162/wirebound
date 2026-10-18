@@ -70,8 +70,8 @@ const OLD_STRUCTURE = {
 describe('system-saas-marketing manifest', () => {
   it('id · 판 · sdk 범위', () => {
     expect(MANIFEST.id).toBe('system-saas-marketing')
-    expect(MANIFEST.version).toBe('1.1.0')
-    expect(MANIFEST.sdk).toBe('^1.1.0')
+    expect(MANIFEST.version).toBe('1.2.0')
+    expect(MANIFEST.sdk).toBe('^1.2.0')
   })
 
   it('components 선언은 카탈로그의 이름만 쓴다', () => {

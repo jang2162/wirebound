@@ -22,7 +22,7 @@ import { join } from 'node:path'
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
-import { exportBundle, layoutProject, openBundlePage, stripViewsCssRules, type Call } from './layout-bundle'
+import { cssMentions, exportBundle, layoutProject, openBundlePage, stripCssRules, type Call } from './layout-bundle'
 import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
@@ -274,7 +274,8 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 노드 몫이 폭을 �
       let boxes: { now: Record<string, Box>; before: Record<string, Box> }
       try {
         // 카나리아 — 몫 규칙(상속 끊기 · Flex · Grid)을 걷었는가. 0 이면 두 판이 같은 CSS 다.
-        expect(stripViewsCssRules(before, '--wb-node-weight')).toBeGreaterThan(0)
+        expect(stripCssRules(before, 'assets/views.css', '--wb-node-weight')).toBeGreaterThan(0)
+        expect(cssMentions(before, 'assets/views.css', '--wb-node-weight')).toBe(0)
         const read = async (file: string) => {
           const { context, page } = await openBundlePage(stack, file, { viewport: { width: 1980, height: 1400 }, docWidth: 1280 })
           try {
@@ -294,7 +295,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 노드 몫이 폭을 �
       })
       // 카나리아 — 판이 섰다(노드가 다 그려졌고 몫 변수가 하나도 없다).
       expect(Object.keys(boxes.now).length).toBe(ids(PLAIN).length)
-      expect(Object.values(boxes.now).filter((box) => box.weightVar !== '')).toEqual([])
+      expect.soft(Object.values(boxes.now).filter((box) => box.weightVar !== '')).toEqual([])
       expect(differs, `${themeId} ${JSON.stringify(differs.map((id) => [id, boxes.now[id], boxes.before[id]]))}`).toEqual([])
     },
     180_000,

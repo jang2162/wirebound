@@ -12,8 +12,8 @@ export const MANIFEST: ThemeManifest = {
   id: 'system-docs',
   name: '문서',
   description: '문서 사이트 테마. 좁은 읽기 폭과 넓은 행간, 좌측 내비와 코드·정의 목록 중심.',
-  version: '1.1.0',
-  sdk: '^1.1.0',
+  version: '1.2.0',
+  sdk: '^1.2.0',
   tokens: {
     groups: [
       { id: 'color', label: '색' },

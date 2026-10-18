@@ -14,8 +14,8 @@ export const MANIFEST: ThemeManifest = {
   id: 'system-commerce',
   name: '커머스',
   description: '상품 목록·상세 중심의 쇼핑몰 테마. 이미지가 먼저 오고 가격과 구매 액션이 강조된다.',
-  version: '1.1.0',
-  sdk: '^1.1.0',
+  version: '1.2.0',
+  sdk: '^1.2.0',
   tokens: {
     groups: [
       { id: 'color', label: '색' },

@@ -64,6 +64,35 @@ describe('부모가 정하는 몫', () => {
     expect(weights(doc, 'top', 'a', 'b', 'fd')).toEqual(['', '', '', ''])
   })
 
+  it('열을 정한 SearchForm 안 — 열 수로 자른다(3열에 5 → 3)', () => {
+    const form: WbNode = {
+      id: 'sf',
+      type: 'SearchForm',
+      props: { columns: 3 },
+      children: [
+        { id: 'a', type: 'Field', weight: 5 },
+        { id: 'b', type: 'Field', weight: 2 },
+      ],
+    }
+    expect(weights(page(form), 'a', 'b')).toEqual(['3', '2'])
+  })
+
+  it('열을 정한 SearchForm 의 fields 조각에 «정했다» 속성과 열 수 변수가 선다 · 안 정했으면 둘 다 없다', () => {
+    const { container } = render(
+      <>
+        {renderDocument(
+          page({ id: 'on', type: 'SearchForm', props: { columns: 3 }, children: [] }, { id: 'off', type: 'SearchForm', children: [] }),
+        )}
+      </>,
+    )
+    const fields = (id: string) => container.querySelector<HTMLElement>(`[data-wb-id="${id}"] > [data-wb-part="fields"]`)!
+    expect([fields('on').getAttribute('data-wb-columns'), fields('on').style.getPropertyValue('--wb-node-searchform-columns')]).toEqual([
+      '3',
+      '3',
+    ])
+    expect([fields('off').hasAttribute('data-wb-columns'), fields('off').hasAttribute('style')]).toEqual([false, false])
+  })
+
   it('몫을 준 Card 안의 Flex 자식은 Card 의 몫이 아니라 제 몫을 싣는다', () => {
     const card: WbNode = { id: 'card', type: 'Card', weight: 2, children: [{ id: 'f', type: 'Flex', children: [text('a'), text('b', 1)] }] }
     expect(weights(page({ id: 'row', type: 'Flex', children: [card] }), 'card', 'a', 'b')).toEqual(['2', '', '1'])

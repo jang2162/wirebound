@@ -70,31 +70,50 @@ export async function exportBundle(stack: EditorStack, owner: Session, projectId
 }
 
 /**
- * 번들의 기본 뷰 CSS(`assets/views.css`)에서 `needle` 을 품은 규칙을 걷어 다시 쓴다 — 그 규칙이 없는 판을 같은 번들로 세운다. 걷은 규칙 수를
- * 돌려준다(0 이면 아무것도 안 걷은 것이다). `views.css` 는 SDK `css-tools` 의 `rule()` 이 지은 꼴(`셀렉터 {\n  선언\n}`)이라 블록으로 가를 수 있다.
+ * 번들의 CSS 파일 하나(`suffix` 로 끝나는 경로 — `assets/views.css` · `assets/theme/theme.css`)에서 `needle` 이 든 규칙(셀렉터든 선언이든)을 걷어 다시 쓴다 —
+ * 그 규칙이 없는 판을 같은 번들로 세운다. 걷은 규칙 수를 돌려준다(0 이면 아무것도 안 걷었다).
+ *
+ * **안쪽 규칙(`셀렉터 { 선언 }` — 본문에 중괄호가 없는 것)만 본다** — `@media` 안의 규칙도 그 꼴이라 함께 걷히고, 비게 된 `@media {}` 는 남아도 아무
+ * 일도 안 한다. 줄인 CSS(테마 빌드 산출물)와 펼친 CSS(`css-tools` 의 `rule()`)를 같은 식으로 읽는다. **틀리면 덜 걷는 쪽은 거짓 초록이다** — 부르는
+ * 쪽이 걷은 뒤 그 파일에 `needle` 이 안 남았는지를 함께 본다(`cssMentions`).
  */
-export function stripViewsCssRules(bundle: UnpackedBundle, needle: string): number {
-  const found = (readdirSync(bundle.dir, { recursive: true }) as string[]).filter((path) => path.endsWith('assets/views.css'))
-  if (found.length !== 1) throw new Error(`번들의 views.css 가 하나가 아니다: ${found.join(', ')}`)
-  const file = join(bundle.dir, found[0]!)
-  const blocks = readFileSync(file, 'utf8').split(/(?<=\n\})\n/)
-  const kept = blocks.filter((block) => !block.includes(needle))
-  writeFileSync(file, kept.join('\n'))
-  return blocks.length - kept.length
+export function stripCssRules(bundle: UnpackedBundle, suffix: string, needle: string): number {
+  const file = bundleFile(bundle, suffix)
+  let removed = 0
+  const next = readFileSync(file, 'utf8').replace(/[^{};]*\{[^{}]*\}/g, (rule) => {
+    if (!rule.includes(needle)) return rule
+    removed += 1
+    return ''
+  })
+  writeFileSync(file, next)
+  return removed
+}
+
+/** 번들의 CSS 파일에 `needle` 이 몇 번 나오나 — 걷은 뒤의 카나리아. */
+export function cssMentions(bundle: UnpackedBundle, suffix: string, needle: string): number {
+  return readFileSync(bundleFile(bundle, suffix), 'utf8').split(needle).length - 1
+}
+
+function bundleFile(bundle: UnpackedBundle, suffix: string): string {
+  const found = (readdirSync(bundle.dir, { recursive: true }) as string[]).filter((path) => path.endsWith(suffix))
+  if (found.length !== 1) throw new Error(`번들에 ${suffix} 가 하나가 아니다: ${found.join(', ')}`)
+  return join(bundle.dir, found[0]!)
 }
 
 /**
- * 번들 페이지를 연다. `docWidth` 를 주면 문서 뿌리의 폭이 그 값이 되게 창 폭을 맞춘다(뷰어는 좌 · 우 칸을 갖는다 — `theme-prop-marks.test.ts`).
+ * 번들 페이지를 연다. `screen` 이면 화면 모드(아래)로 연다. `docWidth` 를 주면 문서 뿌리의 폭이 그 값이 되게 창 폭을 맞춘다(뷰어는 좌 · 우 칸을 갖는다 — `theme-prop-marks.test.ts`).
  * 안 주면 `viewport` 그대로다.
  */
 export async function openBundlePage(
   stack: EditorStack,
   file: string,
-  options: { viewport: { width: number; height: number }; docWidth?: number },
+  options: { viewport: { width: number; height: number }; docWidth?: number; screen?: boolean },
 ): Promise<{ context: BrowserContext; page: Page }> {
   const context = await stack.browser.newContext({ viewport: options.viewport })
   const page = await context.newPage()
-  await page.goto(pathToFileURL(file).href)
+  // `#wb-screen` — 셸을 숨기고 문서 폭이 창 폭 그대로인 판(`packages/exporter/src/bundle/shell-css.ts` 「화면 모드」). 번들의 문서는 iframe 이 아니라
+  // 테마의 좁은 창 media 가 **창** 폭을 본다 — 셸이 서면 창 390 에서 문서 칸이 0 으로 눌린다.
+  await page.goto(pathToFileURL(file).href + (options.screen === true ? '#wb-screen' : ''))
   await page.waitForSelector('html[data-wb-ready]', { state: 'attached', timeout: 15_000 })
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   const want = options.docWidth
