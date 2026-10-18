@@ -1377,6 +1377,45 @@
   visibility: hidden;
 }
 
+/* 페이지를 안 고른 캔버스의 빈 상태(`routes/editor.tsx` 의 `EmptyCanvas`) — 무대(프레임) 대신 칸에 서는 형제라 문서를 감싸는 상자가
+   아니다(글꼴 · 색을 걸어도 문서에 안 닿는다). 칸의 안쪽 높이를 다 쓰고 가운데에 그림 · 제목 · 보조 글을 세운다. 재는 자:
+   `build-test/v4-settings-ui.test.ts` 의 «빈 캔버스». */
+.wb-shell-canvas-empty {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 100%;
+  padding: 24px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  text-align: center;
+  color: var(--wb-shell-muted);
+}
+
+/* 그림은 옅은 원 안에 — 빈 상태의 눈이 먼저 가는 자리. */
+.wb-shell-canvas-empty-icon {
+  box-sizing: content-box;
+  padding: 16px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--wb-shell-accent);
+}
+
+.wb-shell-canvas-empty-title {
+  margin: 8px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-canvas-empty-hint {
+  margin: 0;
+  font-size: 13px;
+}
+
 /* 선택 아웃라인. 문서 노드 위에 겹쳐 그리되 **노드를 건드리지 않는다**(머리말의 «문서 옆에 그리는 셸의 장치는 여기 규칙을 그대로 따른다»).
    자리는 자바스크립트가 인라인 style로 넣는다 — 노드마다 달라지는 값이라 CSS로 쓸 수 없다. */
 /* 외곽선은 줌 받는 겹 안에 있어 2px 가 줌만큼 준다(7% 에서 0.14px — 거의 안 보임). 굵기 · 간격은 캔버스가 `1 / zoom` 으로 인라인에 싣는다(배치 선과
