@@ -27,7 +27,6 @@
  * 메뉴의 옮기기(소속 메뉴 고르기는 페이지의 것이다 — 메뉴의 부모는 끌어 놓기 · 들여쓰기 · 내어쓰기가 바꾼다). 늘 꺼진 항목은
  * 읽을 때마다 같은 «못 한다»를 한 번 더 말할 뿐이다.
  */
-import { REMOVE_CASE_LABEL, SPLIT_LABEL, UNSPLIT_LABEL } from '../edit/view-state-actions'
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useState, type ReactElement } from 'react'
 import type { StructureAbilities } from '../edit/structure-actions'
@@ -143,6 +142,8 @@ export function menuRowItems(
   commands: TreeCommands,
   kind: 'menu' | 'page',
   exportEntry?: PageExportEntry,
+  /** 페이지 줄의 «상태 추가»(`./state-rows.tsx` 의 `addStateItem`) — 이름 변경 뒤에 선다. 트리 판정과 무관하다(문서의 편집이다). */
+  addState?: ActionMenuItem,
 ): { add?: ActionMenuItem[]; more: ActionMenuItem[] } {
   const item = (key: keyof TreeAbilities, label: string, icon: LucideIcon, onSelect: () => void, danger = false): ActionMenuItem =>
     menuItem(commands, key, { label, onSelect, danger, icon })
@@ -166,7 +167,17 @@ export function menuRowItems(
               description: exportEntry.busy ? EXPORT_BUSY_REASON : undefined,
             },
           ]
-    return { more: [rename, item('reparent', '옮기기', ICONS.reparent, commands.openReparent), up, down, ...exported, remove] }
+    return {
+      more: [
+        rename,
+        ...(addState === undefined ? [] : [addState]),
+        item('reparent', '옮기기', ICONS.reparent, commands.openReparent),
+        up,
+        down,
+        ...exported,
+        remove,
+      ],
+    }
   }
   return {
     add: [
@@ -257,43 +268,6 @@ export function structureRowItems(
       item('moveDown', '아래로', ICONS.moveDown, commands.moveDown),
       item('indent', '들여쓰기', ICONS.indent, commands.indent),
       item('outdent', '내어쓰기', ICONS.outdent, commands.outdent),
-      // 상태 명령(`edit/view-state-actions.ts`) — 나누기는 늘 서고(끈 까닭과 함께), 풀기 · 가지 지우기는 그 줄이 영역 · 기본 아닌 가지일 때만.
-      {
-        key: 'split-states',
-        label: SPLIT_LABEL,
-        icon: ICONS.splitStates,
-        onSelect: commands.viewState.split,
-        disabled: commands.viewState.splitWhy !== undefined,
-        title: commands.viewState.splitWhy,
-        description: commands.viewState.splitWhy,
-      },
-      ...(commands.viewState.canUnsplit
-        ? [
-            {
-              key: 'unsplit-states',
-              label: UNSPLIT_LABEL,
-              icon: ICONS.unsplitStates,
-              onSelect: commands.viewState.askUnsplit,
-              disabled: commands.viewState.unsplitWhy !== undefined,
-              title: commands.viewState.unsplitWhy,
-              description: commands.viewState.unsplitWhy,
-            },
-          ]
-        : []),
-      ...(commands.viewState.canRemoveCase
-        ? [
-            {
-              key: 'remove-case',
-              label: REMOVE_CASE_LABEL,
-              icon: ICONS.remove,
-              onSelect: commands.viewState.removeCase,
-              disabled: commands.viewState.removeCaseWhy !== undefined,
-              title: commands.viewState.removeCaseWhy,
-              description: commands.viewState.removeCaseWhy,
-              danger: true,
-            },
-          ]
-        : []),
       item('remove', '삭제', ICONS.remove, commands.remove, true),
     ],
   }

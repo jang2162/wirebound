@@ -41,8 +41,9 @@ import {
   PASTE_GONE_NOTICE,
   PASTE_LEFT_NOTICE,
   PASTE_PAGES_FAILURE,
+  clearedOnlyNotice,
   droppedActionsNotice,
-  droppedCasesNotice,
+  droppedStatesNotice,
   duplicateOps,
   hasPageTargets,
   menuHasPage,
@@ -50,7 +51,7 @@ import {
   pasteOps,
   type NodeEdit,
 } from '../edit/paste-ops'
-import { renameCaseStates, renameStatesByName } from '../edit/paste-states'
+import { renameStatesByName, renameVisibilityStates } from '../edit/paste-states'
 import { findNodeSafely } from '../edit/safe-walk'
 import { ancestorIds, foldStep, moveSelection, siblingIds } from '../edit/selection-move'
 import { useClipboard } from '../edit/use-clipboard'
@@ -60,7 +61,7 @@ import { useAliasEdit } from '../panels/alias-edit'
 import { lockedNotice } from '../panels/property-panel'
 import { useStructureCommands } from '../panels/structure-toolbar'
 import { lockedSelectionStatus, selectionCapNotice } from '../panels/toolbar-status'
-import { MULTI_WHY_DISABLED, regionRulesAt } from '../edit/structure-actions'
+import { MULTI_WHY_DISABLED } from '../edit/structure-actions'
 import type { EditFailure } from '../store/editor-store'
 import { LOSS_RANK } from '../store/loss-notice'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -143,22 +144,6 @@ export function EditorKeys(props: {
     return false
   }
 
-  /**
-   * 지울 수 없는 까닭이 **자리 규칙**(기본 가지 · 영역 안 가지 규칙 — `regionRulesAt`)이면 키를 친 사람에게 말한다. 끈 항목에만 까닭이 있던 자리다
-   * (줄 `…` 의 «삭제» 는 `title` 이 말한다). 남의 잠금 · 루트 · 고른 것 없음은 말하지 않는다 — 앞의 둘은 `selectedLockedByOther` 와 브라우저의
-   * 기본 동작이 맡는다.
-   */
-  const saySpotReason = (): void => {
-    if (doc === null) return
-    for (const nodeId of selectedNodeIds) {
-      const reason = regionRulesAt(doc, nodeId).remove
-      if (reason !== undefined) {
-        info(reason)
-        return
-      }
-    }
-  }
-
   /** 고른 노드들의 봉투 — 문서 차례(목록이 이미 그 차례다). 고른 것이 없거나 루트면 `null` — 브라우저의 복사가 그대로다. */
   const copySelected = (): string | null => {
     if (doc === null || selectedNodeIds.length === 0 || selectedNodeIds.includes(doc.root?.id)) return null
@@ -198,11 +183,11 @@ export function EditorKeys(props: {
         ? say
         : (message: string) => (store.getState().editFailure !== pressed && store.showsLoss() ? tellPasteLoss(message) : say(message))
     const at = anchor !== null && findNodeSafely(document.root, anchor) !== undefined ? anchor : null
-    // 붙이는 페이지에 같은 이름의 상태가 있으면 가지를 그 id 로 옮기고(`edit/paste-states.ts` 의 `renameStatesByName`), 없는 이름의 가지는 뺀다
-    // (설계서 「설계서 화면 구조」 클립보드 · 화면 상태).
+    // 붙이는 페이지에 같은 이름의 상태가 있으면 보임을 그 id 로 옮기고(`edit/paste-states.ts` 의 `renameStatesByName`), 없는 이름의 상태는 보임에서
+    // 뺀다(설계서 「설계서 화면 구조」 클립보드 · 화면 상태).
     const states = new Set((Array.isArray(document.viewStates) ? document.viewStates : []).map((state) => state.id))
     const rename = renameStatesByName(document.viewStates, sourceStates)
-    const prepared = prepareNodesForPaste(rename.size === 0 ? nodes : nodes.map((node) => renameCaseStates(node, rename)), {
+    const prepared = prepareNodesForPaste(rename.size === 0 ? nodes : nodes.map((node) => renameVisibilityStates(node, rename)), {
       node: (id) => findNodeSafely(document.root, id) !== undefined,
       page: (target) => pages !== null && matchPageTargets(pages, target).length > 0,
       state: (id) => states.has(id),
@@ -217,7 +202,8 @@ export function EditorKeys(props: {
     const commitOps = (ops: Parameters<typeof history.commitOps>[0]): boolean => live.current.commitOps(ops, { pressed })
     if (!commitInsert(pasteOps(document, at, prepared.nodes), commitOps, tell)) return
     const dropped = [
-      ...(prepared.droppedCases.length > 0 ? [droppedCasesNotice(prepared.droppedCases, sourceStates)] : []),
+      ...(prepared.droppedStates.length > 0 ? [droppedStatesNotice(prepared.droppedStates, sourceStates)] : []),
+      ...(prepared.clearedOnly > 0 ? [clearedOnlyNotice(prepared.clearedOnly)] : []),
       ...(prepared.droppedActions > 0 ? [droppedActionsNotice(prepared.droppedActions)] : []),
     ]
     // **붙이기는 성공했다** — 뺀 것은 정보 통지 자리다(실패 자리의 `role="alert"` 는 «붙이지 못했다» 를 말한다). 앞 잃음의 통지는 건드리지 않는다.
@@ -269,7 +255,7 @@ export function EditorKeys(props: {
    */
   const cut = (): string | null => {
     if (!commands.abilities.remove) {
-      if (!selectedLockedByOther()) saySpotReason()
+      selectedLockedByOther()
       return null
     }
     const text = copySelected()
@@ -297,7 +283,6 @@ export function EditorKeys(props: {
       // (Chrome · `build-test/editor-shortcuts-review.test.ts` «H1»). 누른 채의 반복은 리스너가 거른다(`Shortcut.repeat`).
       case 'delete':
         if (commands.abilities.remove) commands.remove('none')
-        else saySpotReason()
         return
       case 'moveUp':
         if (manyPicked()) return

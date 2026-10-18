@@ -76,7 +76,7 @@
 | `unknown-type` | 놓을 자리 판정 | 카드의 타입으로 노드를 못 짓는다 |
 | `ops-unbuildable` | 놓을 자리 판정 | 편집을 못 짓는다(차례 · 부모 경로) |
 | `target-not-in-document` · `no-root` | 놓을 자리 판정 | 대상 · 뿌리가 문서에 없다 |
-| `self` · `state-case` · `into-own-subtree` · `same-place` | 놓을 자리 판정 | 노드를 옮길 때만(캔버스 손잡이) — 자기 자신 · 상태 가지 · 자기 자손 · 제자리 |
+| `self` · `into-own-subtree` · `same-place` | 놓을 자리 판정 | 노드를 옮길 때만(캔버스 손잡이) — 자기 자신 · 자기 자손 · 제자리 |
 | `commit-refused` | 놓기 | 편집 전송 길이 받지 않았다 |
 | `unknown` | — | 까닭을 알리지 않은 `null`(이 표에 없는 길 — 그 자체가 단서다) |
 

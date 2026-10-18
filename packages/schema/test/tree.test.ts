@@ -55,6 +55,14 @@ describe('collectNodeIds', () => {
 })
 
 describe('remapNodeIds', () => {
+  it('상태 보임을 남기고 입력과 배열을 공유하지 않는다', () => {
+    const source: WbNode = { id: 'a', type: 'Card', visibility: { mode: 'only', states: ['s1'] } }
+    const { root } = remapNodeIds(source, () => 'n_b')
+    expect(root.visibility).toEqual({ mode: 'only', states: ['s1'] })
+    source.visibility!.states.push('s2')
+    expect(root.visibility!.states).toEqual(['s1'])
+  })
+
   it('모든 노드에 새 id를 발급한다', () => {
     let counter = 0
     const { root } = remapNodeIds(sample(), () => `n_new${String(counter++).padStart(9, '0')}`)
@@ -245,6 +253,26 @@ describe('stripMarkers', () => {
 
     const copied = stripped[0]!.interactions![0]!.actions[0]! as { value: { list: string[] } }
     expect(copied.value.list).toEqual(['하나'])
+  })
+
+  /**
+   * 붙여넣기 · 복제가 이 복사를 지난다 — 보임을 버리면 같은 페이지에 복제한 노드가 숨기던 상태에서 보이고, 붙여넣기의 이름 맞춤
+   * (`prepareNodesForPaste`)이 맞출 보임이 이미 없다. 보임을 걷는 것은 모듈 저장(`moduleNodesForSave`)이 따로 한다.
+   */
+  it('상태 보임을 옮기고 공유하지 않는다', () => {
+    const nodes: WbNode[] = [
+      {
+        id: 'a',
+        type: 'Card',
+        visibility: { mode: 'only', states: ['s1'] },
+        children: [{ id: 'b', type: 'Text', visibility: { mode: 'except', states: ['s2'] } }],
+      },
+    ]
+    const stripped = stripMarkers(nodes)
+    expect(stripped[0]!.visibility).toEqual({ mode: 'only', states: ['s1'] })
+    expect(stripped[0]!.children![0]!.visibility).toEqual({ mode: 'except', states: ['s2'] })
+    nodes[0]!.visibility!.states.push('s3')
+    expect(stripped[0]!.visibility!.states).toEqual(['s1'])
   })
 
   /**

@@ -117,27 +117,18 @@ function allTreeItems(): string[] {
 }
 
 describe('줄 행동의 항목 — spec 「트리」 표', () => {
-  it('노드 줄: `+` 없음, `…` 별칭 바꾸기 · 모듈로 저장… · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 상태별로 나누기 · 삭제', async () => {
+  it('노드 줄: `+` 없음, `…` 별칭 바꾸기 · 모듈로 저장… · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제', async () => {
     await openPage(doc(), { apiOverrides: server().api })
 
     expect(rowToggle(row('Card'), '+')).toBeNull()
-    expect(itemsOf(row('Card'), '…')).toEqual([
-      '별칭 바꾸기',
-      '모듈로 저장…',
-      '위로',
-      '아래로',
-      '들여쓰기',
-      '내어쓰기',
-      '상태별로 나누기',
-      '삭제',
-    ])
+    expect(itemsOf(row('Card'), '…')).toEqual(['별칭 바꾸기', '모듈로 저장…', '위로', '아래로', '들여쓰기', '내어쓰기', '삭제'])
   })
 
   it('뿌리 줄: `+` 없음, `…` 에 «모듈로 저장…» 없음 · 제목 줄에 뿌리 `+` 가 없다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
 
     expect(rowToggle(row('Page'), '+')).toBeNull()
-    expect(itemsOf(row('Page'), '…')).toEqual(['별칭 바꾸기', '위로', '아래로', '들여쓰기', '내어쓰기', '상태별로 나누기', '삭제'])
+    expect(itemsOf(row('Page'), '…')).toEqual(['별칭 바꾸기', '위로', '아래로', '들여쓰기', '내어쓰기', '삭제'])
     expect(structureRegion().querySelector('.wb-shell-region-head [aria-haspopup="menu"]')).toBeNull()
   })
 

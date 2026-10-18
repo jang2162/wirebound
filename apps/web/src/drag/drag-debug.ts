@@ -52,7 +52,6 @@ export type DropMiss =
   | 'ops-unbuildable'
   | 'locked'
   | 'self'
-  | 'state-case'
   | 'into-own-subtree'
   | 'same-place'
 

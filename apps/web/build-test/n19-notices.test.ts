@@ -4,8 +4,6 @@
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | L-244 영역이 영역의 직계 자식 | 뷰 모드 표지의 상자가 편집 모드 표지의 상자와 갈린다(바깥 영역에 표지가 안 서거나 안쪽 상자만 잰다) |
- * | L-245 머리 전환기로 선택이 빠짐 | 사람이 상태를 바꿔 선택이 빠지는 판에 통지가 안 서거나 문장이 그 판에 안 맞는다 |
  * | L-246 상태 이름의 방향 제어 글자 | 서버가 상태 이름의 방향 제어 글자를 받는다(그러면 `'…'(… 상태)` 문장에 격리 없이 든다) |
  * | L-247 열린 페이지가 함께 지워짐 | 연쇄 상자를 닫으며 남긴 한 줄이 «사라짐» 확인의 `clearPage` 에 같이 치워진다 |
  * | L-248 미룬 되돌리기 뒤 페이지 이동 | 한 줄이 새 페이지 위에서 «이전 화면에서» 라고 밝히지 않는다 · 미룬 되돌림이 새 판에 나간다 |
@@ -13,9 +11,7 @@
  * | L-113 (c) 이름만 바뀐 연쇄 상자 | 목록이 바뀐 뒤(409 목록을 쥔 판) 남이 바꾼 이름이 상자에 안 보인다 |
  * | L-241 별칭 칸의 이모지 | 칸이 이모지를 UTF-16 으로 세어 30개에서 멈춘다 · 서버 별칭이 60 코드 포인트가 아니다 |
  */
-import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { HIDDEN_SELECTION_NOTICE } from '../src/shell/use-view-state'
 import {
   canvasFrame,
   delayServerFrames,
@@ -72,70 +68,6 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
     return { page, close: () => context.close() }
   }
 
-  const frames = (page: Page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
-
-  it('영역이 영역의 직계 자식인 문서 — 뷰 모드 표지의 상자가 편집 모드 표지의 상자와 같다', async () => {
-    const P = await fixture('n19-nested-region', [
-      text('n_out', '영역 밖 글'),
-      {
-        id: 'n_sw',
-        type: 'StateSwitch',
-        children: [
-          {
-            id: 'n_cd',
-            type: 'StateCase',
-            props: { state: 'default' },
-            children: [
-              {
-                id: 'n_in',
-                type: 'StateSwitch',
-                children: [{ id: 'n_cdi', type: 'StateCase', props: { state: 'default' }, children: [text('n_dt', '안쪽 글')] }],
-              },
-            ],
-          },
-        ],
-      },
-    ])
-    const { page, close } = await open(P)
-    try {
-      await frames(page)
-      const edit = await page.evaluate(() =>
-        [...document.querySelectorAll('[data-wb-region-for]')].map((el) => {
-          const box = (el as HTMLElement).getBoundingClientRect()
-          return [
-            el.getAttribute('data-wb-region-for'),
-            Math.round(box.left),
-            Math.round(box.top),
-            Math.round(box.width),
-            Math.round(box.height),
-          ]
-        }),
-      )
-      await page.getByRole('button', { name: '뷰 모드' }).click()
-      await page.waitForTimeout(300)
-      await frames(page)
-      const view = await page.evaluate(() =>
-        [...document.querySelectorAll('[data-wb-state-region-for]')].map((el) => {
-          const box = (el as HTMLElement).getBoundingClientRect()
-          return [
-            el.getAttribute('data-wb-state-region-for'),
-            Math.round(box.left),
-            Math.round(box.top),
-            Math.round(box.width),
-            Math.round(box.height),
-          ]
-        }),
-      )
-      expect(view).toEqual(edit)
-      // 두 영역의 상자가 같아 표지 둘이 같은 자리에 겹쳐 선다(편집 모드의 꼬리표 둘도 같다) — 표지가 영역마다 하나씩 서는 것만 잠근다.
-      expect(
-        await page.locator('[data-wb-state-badge-for]').evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-state-badge-for'))),
-      ).toEqual(['n_sw', 'n_in'])
-    } finally {
-      await close()
-    }
-  }, 120_000)
-
   it('L-246 — 상태 이름의 방향 제어 글자는 입구(서버의 상태 목록 규칙)가 막는다 — 화면 문장에 이르지 않는다', async () => {
     const P = await fixture('n19-bidi-state', [text('n_out', '글')], [{ id: 's_ok', name: '관리자' }])
     const head = (await call('GET', P)).body.headSeq as number
@@ -151,40 +83,6 @@ describe.skipIf(!전제.ok)('N19 화면 상태 · 통지 — 실브라우저', (
       seen[label] = res.status
     }
     expect(seen).toEqual({ addList: 422, replaceName: 422, replaceAll: 422 })
-  }, 60_000)
-
-  it('L-245 — 사람이 머리 전환기로 상태를 바꿔 선택이 빠지는 판에도 같은 통지가 선다(문장은 그 판에도 참이다)', async () => {
-    const ADMIN = { id: 's_admin', name: '관리자' }
-    const P = await fixture(
-      'n19-prune',
-      [
-        text('n_out', '글'),
-        {
-          id: 'n_sw',
-          type: 'StateSwitch',
-          children: [
-            { id: 'n_cd', type: 'StateCase', props: { state: 'default' }, children: [text('n_dt', '기본 글')] },
-            { id: 'n_ca', type: 'StateCase', props: { state: ADMIN.id }, children: [text('n_at', '관리자 글')] },
-          ],
-        },
-      ],
-      [ADMIN],
-    )
-    const { page, close } = await open(P)
-    try {
-      await page.locator('[data-tree-id="n_dt"] > button').first().click()
-      await frames(page)
-      const before = await page.locator('.wb-shell-info-notice').allTextContents()
-      await page.getByRole('button', { name: /^화면 상태:/ }).click()
-      await page.getByRole('menuitemradio', { name: '관리자', exact: true }).click()
-      await page.waitForTimeout(500)
-      await frames(page)
-      const after = await page.locator('.wb-shell-info-notice').allTextContents()
-      const selected = await page.locator('[data-tree-id][aria-selected="true"], [data-tree-id][data-selected="true"]').count()
-      expect({ before, after, selected }).toEqual({ before: [], after: [HIDDEN_SELECTION_NOTICE], selected: 0 })
-    } finally {
-      await close()
-    }
   }, 60_000)
 
   it('L-247 — 열린 페이지가 함께 지워져도 연쇄 상자를 닫으며 남긴 한 줄이 캔버스의 «대상을 찾을 수 없습니다» 뒤에도 남는다', async () => {

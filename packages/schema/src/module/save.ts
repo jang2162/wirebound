@@ -6,6 +6,7 @@
  * | 걷는 것 | 까닭 |
  * |---|---|
  * | `marker` | 그 번호를 가리키는 코멘트 행은 저장한 페이지에 매달려 있다 — 따라가면 아무 데도 닿지 않는 번호다 |
+| `visibility` | 상태는 페이지마다 따로다 — 모듈에는 상태가 없어, 넣은 노드는 넣는 페이지의 모든 상태에서 보인다(지금 고른 상태와 무관) |
  * | 묶음 밖 노드를 겨냥하는 액션 | 넣는 페이지에 그 노드가 없다. 붙여넣기(`prepareNodesForPaste`)와 같은 거름이다 |
  *
  * **페이지를 겨냥하는 액션(`navigate` · `openModal`)과 빈 대상은 남긴다** — 모듈은 프로젝트 단위라 그 페이지는 넣는 페이지에서도
@@ -30,7 +31,7 @@ export interface ModuleNodes {
 }
 
 /**
- * 모듈에 담을 노드 — `marker` 를 걷고 묶음 밖 노드를 겨냥하는 액션을 뺀다(머리말 표). 액션이 다 빠진 상호작용은 상호작용째 빠지고,
+ * 모듈에 담을 노드 — `marker` · `visibility` 를 걷고 묶음 밖 노드를 겨냥하는 액션을 뺀다(머리말 표). 액션이 다 빠진 상호작용은 상호작용째 빠지고,
  * 상호작용이 다 빠진 노드는 `interactions` 키가 없다(붙여넣기의 거름과 같은 꼴).
  *
  * **입력을 바꾸지 않고 입력과 값을 공유하지 않는다** — 깊은 복사는 `stripMarkers` 의 계약이다(그 머리말).
@@ -47,6 +48,7 @@ export function moduleNodesForSave(nodes: readonly WbNode[]): ModuleNodes {
   }
 
   const filter = (node: WbNode): WbNode => {
+    delete node.visibility
     if (node.interactions !== undefined) {
       const interactions: Interaction[] = []
       for (const interaction of node.interactions) {

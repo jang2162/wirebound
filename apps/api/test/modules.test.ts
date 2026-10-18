@@ -3,7 +3,7 @@
  *
  * 권한 세 등급은 `permission-matrix.test.ts`가 전수로 친다(그 파일의 완전성 검사가 `src/routes/`를 훑어 새 라우트를 강제로 표에 올린다).
  * 가드와 커밋 사이 · 프로젝트 삭제와의 잠금은 `guard-in-lock.test.ts`(«모듈 삭제 · 이름 바꾸기 — 가드와 커밋 사이» · «E15»)가 잰다.
- * 여기서 재는 것은 **내용**이다: 목록의 차례 · 저장이 `marker` 와 묶음 밖 액션을 걷고 id 를 그대로 담는가 · 무엇이 **어디서** 막히는가.
+ * 여기서 재는 것은 **내용**이다: 목록의 차례 · 저장이 `marker` · 상태 보임 · 묶음 밖 액션을 걷고 id 를 그대로 담는가 · 무엇이 **어디서** 막히는가.
  */
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -139,6 +139,28 @@ describe('POST /:projectId/modules', () => {
       expect(body.nodes).toEqual([{ id: 'a', type: 'Card', children: [{ id: 'b', type: 'List' }] }])
       const stored = await listModules(ctx.db, fx.project.id)
       expect(JSON.stringify(stored[0]!.nodes)).not.toContain('marker')
+    })
+  })
+
+  /**
+   * **상태 보임을 서버도 걷는다**(Review Focus 5 · 설계 spec 「B3. 모듈」) — 화면을 지나지 않는 본문이 보임을 실은 판이다. 모듈에는 상태가
+   * 없어 넣은 노드는 넣는 페이지의 모든 상태에서 보여야 한다.
+   */
+  it('상태 보임을 걷는다 — 트리 어디에 있든 · 저장된 것에도 없다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const body = await made(ctx, fx, '보임 달린 묶음', [
+        {
+          id: 'a',
+          type: 'Card',
+          visibility: { mode: 'only', states: ['s_admin'] },
+          children: [{ id: 'b', type: 'List', visibility: { mode: 'except', states: ['s_guest'] } }],
+        },
+      ])
+
+      expect(body.nodes).toEqual([{ id: 'a', type: 'Card', children: [{ id: 'b', type: 'List' }] }])
+      const stored = await listModules(ctx.db, fx.project.id)
+      expect(JSON.stringify(stored[0]!.nodes)).not.toContain('visibility')
     })
   })
 

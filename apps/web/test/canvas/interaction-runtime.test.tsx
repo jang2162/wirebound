@@ -658,30 +658,13 @@ describe('화면 상태를 바꿔도 시연은 남는다 — 번들과 같은 �
         children: [
           { id: 'n-title', type: 'Text', props: { content: '제목' } },
           {
-            id: 'n-sw',
-            type: 'StateSwitch',
-            children: [
-              {
-                id: 'n-cd',
-                type: 'StateCase',
-                props: { state: 'default' },
-                children: [
-                  {
-                    id: 'n-hide',
-                    type: 'Button',
-                    props: { label: '숨김' },
-                    interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n-title', value: false }] }],
-                  },
-                ],
-              },
-              {
-                id: 'n-ca',
-                type: 'StateCase',
-                props: { state: 's_admin' },
-                children: [{ id: 'n-adm', type: 'Button', props: { label: '승인' } }],
-              },
-            ],
+            id: 'n-hide',
+            type: 'Button',
+            props: { label: '숨김' },
+            visibility: { mode: 'except', states: ['s_admin'] },
+            interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n-title', value: false }] }],
           },
+          { id: 'n-adm', type: 'Button', props: { label: '승인' }, visibility: { mode: 'only', states: ['s_admin'] } },
         ],
       }),
       viewStates: [{ id: 's_admin', name: '관리자' }],

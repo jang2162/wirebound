@@ -157,6 +157,8 @@ export interface ActionMenuItem {
   icon?: LucideIcon
   /** 하나를 고르는 무리의 항목 — 주면 `menuitemradio` 이고 참이 지금 고른 것이다(머리말 «하나를 고르는 항목»). */
   checked?: boolean
+  /** 트리의 깊이 — 주면 글자 앞에 깊이만큼 들여 쓴다(머리 상태 전환기의 하위 상태). 들여쓰기는 빈 자리라 접근 이름에 안 든다. */
+  depth?: number
 }
 
 export function ActionMenu(props: {
@@ -415,14 +417,27 @@ function ToggleIcon(props: { icon: LucideIcon; compact: boolean }): ReactElement
 /** 항목의 글자 — 아이콘이 있으면 그 앞에 선다(머리말 «항목의 아이콘»). */
 function ItemLabel(props: { item: ActionMenuItem }): ReactElement {
   const Icon = props.item.icon
-  if (Icon === undefined) return <>{props.item.label}</>
+  const depth = props.item.depth ?? 0
+  const indent =
+    depth > 0 ? <span className="wb-shell-action-menu-indent" style={{ width: depth * MENU_INDENT_PX }} aria-hidden="true" /> : null
+  if (Icon === undefined)
+    return (
+      <>
+        {indent}
+        {props.item.label}
+      </>
+    )
   return (
     <>
+      {indent}
       <Icon className="wb-shell-action-menu-icon" size={14} strokeWidth={2} aria-hidden="true" />
       {props.item.label}
     </>
   )
 }
+
+/** 항목 들여쓰기 한 단의 폭(px). */
+const MENU_INDENT_PX = 12
 
 /**
  * `targets` 에서 다음 `DOUBLE_CLICK_MS` 안에 `at`(호스트 창 좌표)에서 `DOUBLE_CLICK_SLOP` 안에 오는 `click` 하나를 붙잡는 단계에서 막는다

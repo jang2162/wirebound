@@ -44,11 +44,11 @@ describe('placeableGroups', () => {
     expect(placeable().length).toBeGreaterThan(0)
   })
 
-  it('페이지에 둘 수 없는 타입은 목록에 없다 — 뿌리 · 레이아웃 전용 · 홀로 못 서는 상태 영역', () => {
+  it('페이지에 둘 수 없는 타입은 목록에 없다 — 뿌리 · 레이아웃 전용', () => {
     const blocked = listComponents()
       .map((def) => def.type)
       .filter((type) => !placeableTypes().includes(type))
-    expect(blocked).toEqual(['Page', 'Slot', 'StateSwitch', 'StateCase'])
+    expect(blocked).toEqual(['Page', 'Slot'])
     for (const type of blocked) expect(placeable(), type).not.toContain(type)
   })
 

@@ -158,47 +158,40 @@ describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () =
    * **패널 머리 · 접근 이름 · 대상 고르개는 문장과 같은 이름이다** — 상태 가지 안 노드는 그 상태를 붙인다(K1 리뷰 R4). 안 붙이면 고르개의
    * «검색 버튼» 둘(기본 · 관리자)이 같은 글이 된다.
    */
-  it('상태 가지 안 노드는 패널 머리 · 대상 고르개에서 그 상태를 붙인다', async () => {
+  it('`only` 보임의 노드는 패널 머리 · 대상 고르개에서 그 상태를 붙인다 — 여럿은 잇고 · `except` 는 안 붙인다', async () => {
     await openPage({
       ...pageDoc({
         id: 'n-root',
         type: 'Page',
         children: [
+          { id: 'n-list', type: 'List', visibility: { mode: 'except', states: ['s_guest'] } },
           {
-            id: 'n-sw',
-            type: 'StateSwitch',
-            children: [
-              { id: 'n-c0', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'n-list', type: 'List' }] },
-              {
-                id: 'n-c1',
-                type: 'StateCase',
-                props: { state: 's_admin' },
-                children: [
-                  {
-                    id: 'n-btn',
-                    type: 'Button',
-                    props: { label: '검색' },
-                    interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
-                  },
-                ],
-              },
-            ],
+            id: 'n-btn',
+            type: 'Button',
+            props: { label: '검색' },
+            visibility: { mode: 'only', states: ['s_admin'] },
+            interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
           },
+          { id: 'n-ok', type: 'Button', props: { label: '승인' }, visibility: { mode: 'only', states: ['s_admin', 's_guest'] } },
         ],
       }),
-      viewStates: [{ id: 's_admin', name: '관리자' }],
+      viewStates: [
+        { id: 's_admin', name: '관리자' },
+        { id: 's_guest', name: '손님' },
+      ],
     })
     await openInteractionTab()
-    // 관리자 가지는 기본 보기에서 접혀 있다 — 구조 트리 줄로 고르려고 «모든 가지 보기»를 켠다.
-    fireEvent.click(screen.getByRole('button', { name: '모든 가지 보기' }))
-    selectNode('Button')
+    // 숨은 노드도 구조 트리 줄로 고른다(흐리게 선다) — 지금 상태(기본)에서 «검색»은 숨어 있다. 버튼이 둘이라 첫 줄을 고른다.
+    const list = document.body.querySelector<HTMLElement>('.wb-shell-structure-list')!
+    fireEvent.click(within(list).getAllByRole('button', { name: structureRowName('Button') })[0]!)
 
     const section = screen.getByRole('region', { name: "'검색 버튼'(관리자 상태)의 상호작용" })
     expect(within(section).getByRole('heading', { level: 3 }).textContent).toBe("'검색 버튼'(관리자 상태)")
     const select = screen.getByLabelText('대상') as HTMLSelectElement
     const labels = [...select.options].map((option) => option.textContent)
     expect(labels).toContain("'검색 버튼'(관리자 상태)")
-    expect(labels).toContain("'목록'(기본 상태)")
+    expect(labels).toContain("'승인 버튼'(관리자 · 손님 상태)")
+    expect(labels).toContain('목록')
   })
 
   /** **`setProp`의 속성도 목록이다** — 카탈로그의 `editor`에서 온다(속성 패널과 같은 출처). */

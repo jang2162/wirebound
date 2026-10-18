@@ -12,7 +12,6 @@ import type { PageDetail, PatchResult } from '../../src/api/types'
 import { readNodesEnvelope, writeNodesEnvelope, type WbNode } from '@wirebound/schema'
 import { CLIPBOARD_SHORTCUT_LINES, EDITOR_SHORTCUTS, platformOf } from '../../src/edit/editor-shortcuts'
 import { droppedActionsNotice } from '../../src/edit/paste-ops'
-import { DEFAULT_CASE_REMOVE_REASON } from '../../src/edit/structure-actions'
 import { PASTE_REJECTED_HEAD } from '../../src/shell/editor-keys'
 import { HEAD_SEQ, canvasDocument, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
@@ -492,43 +491,29 @@ describe('클립보드 · 복제 — 셸', () => {
   })
 
   /**
-   * Q17 · L-078 — 기본 가지는 지울 수 없다(`regionRules`). 줄 `…` 의 «삭제» 는 `title` 이 까닭을 말하지만 키로 친 사람에게는 말이 없었다.
-   * 지금은 Delete · Cmd+X 가 정보 통지로 말한다 — 편집 0 · 봉투 0.
+   * **복제 사본은 원본의 상태 보임을 그대로 든다** — 같은 페이지라 상태가 같다(`edit/paste-ops.ts` 의 `duplicateOps`). 복사가 지나는
+   * `stripMarkers` 가 보임을 빠뜨리면 사본이 숨기던 상태에서 보인다(고치기 전 판 — V3 보고 Task 4).
    */
-  const REGION_DOC = () =>
-    pageDoc({
-      id: 'n-root',
-      type: 'Page',
-      children: [
-        {
-          id: 'sw',
-          type: 'StateSwitch',
-          children: [{ id: 'c-d', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'b-d', type: 'Button' }] }],
-        },
-      ],
+  it('Ctrl+D 사본은 원본의 상태 보임을 든다', async () => {
+    const VISIBLE_DOC = () => ({
+      ...pageDoc({
+        id: 'n-root',
+        type: 'Page',
+        children: [{ id: 'b-a', type: 'Button', visibility: { mode: 'only' as const, states: ['s_admin'] } }],
+      }),
+      viewStates: [{ id: 's_admin', name: '관리자' }],
     })
+    const srv = server(VISIBLE_DOC())
+    await openPage(VISIBLE_DOC(), { apiOverrides: srv.api })
+    fireEvent.click(row('Button'))
+    fireEvent.keyDown(document.body, ctrl('d'))
 
-  async function openOnDefaultCase() {
-    const srv = server(REGION_DOC())
-    await openPage(REGION_DOC(), { apiOverrides: srv.api })
-    fireEvent.click(structureRegion().querySelector<HTMLElement>('[data-tree-id="c-d"] > .wb-shell-structure-node')!)
-    return srv
-  }
-
-  it('기본 가지에서 Delete 는 안 지우고 까닭을 정보 통지로 말한다', async () => {
-    const srv = await openOnDefaultCase()
-    fireEvent.keyDown(document.body, { key: 'Delete', code: 'Delete' })
-    await waitFor(() => expect(infoTexts()).toEqual([DEFAULT_CASE_REMOVE_REASON]))
-    expect(alertTexts()).toEqual([])
-    expect(srv.calls).toHaveLength(0)
-  })
-
-  it('기본 가지에서 Cut 은 봉투를 안 싣고 안 지우고 같은 까닭을 말한다(브라우저의 잘라내기가 그대로다)', async () => {
-    const srv = await openOnDefaultCase()
-    expect(clip('cut', document.body)).toEqual({ written: undefined, prevented: false })
-    await waitFor(() => expect(infoTexts()).toEqual([DEFAULT_CASE_REMOVE_REASON]))
-    expect(alertTexts()).toEqual([])
-    expect(srv.calls).toHaveLength(0)
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    expect(srv.calls[0]![0]).toMatchObject({
+      op: 'add',
+      path: '/root/children/1',
+      value: { visibility: { mode: 'only', states: ['s_admin'] } },
+    })
   })
 
   it('루트를 고른 잘라내기는 아무것도 안 싣고 안 지운다', async () => {

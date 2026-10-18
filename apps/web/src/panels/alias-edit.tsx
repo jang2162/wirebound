@@ -7,9 +7,8 @@
  *
  * **상자가 없으면 그 컴포넌트 안의 상태로 물러선다** — 구조 트리만 띄운 판도 더블클릭 · `…` 로 연다(F2 만 셸 밖에서 안 닿는다).
  *
- * **입력은 노드 id 에 매인다 — 그 노드가 문서에서 빠지거나 지금 상태에서 안 보이게 되면 상자를 닫는다.** 안 보이게 되는 길은 남이 같은 영역에
- * 지금 상태의 가지를 먼저 만든 판이다(고르던 흐린 노드가 숨은 기본 가지가 된다 — `edit/view-state-fork.ts` 의 `hiddenNodeIds` · K2 리뷰 H2).
- * 그 줄은 트리에서 사라지고 입력은 열린 채 남아, «모든 가지 보기»를 켜거나 가지가 지워지면 묻지 않은 입력이 다시 섰다. 빠지는 길은 같은 사람의 다른 탭 · 같은 계정의 에이전트 · 복원이다(남은
+ * **입력은 노드 id 에 매인다 — 그 노드가 문서에서 빠지면 상자를 닫는다.** 지금 상태에서 숨은 노드는 빠진 것이 아니다 — 구조 트리가 흐리게
+ * 그리고 고칠 수 있다(설계 spec `2026-10-18-modules-states-layout-design.md` 「C3」). 빠지는 길은 같은 사람의 다른 탭 · 같은 계정의 에이전트 · 복원이다(남은
  * 고른 노드를 못 지운다 — 423). 닫지 않으면 입력은 그 줄과 함께 말없이 내려가 친 글이 사라지고, 같은 id 가 되살아나는 순간(되돌리기 · 다른
  * 탭) 묻지 않은 입력이 다시 서며 포커스를 가져간다. 친 글이 있었으면 하단 바에 속성 칸과 같은 한 줄(`DROPPED_DRAFT_NOTICE`)을 세운다 —
  * 잃음 통지가 서 있으면 덮지 않는다. 판정은 지금 주소의 문서로 한다(구조 트리가 안 그려진 판에서도 상자는 산다 — F2 는 상태만 연다).
@@ -20,7 +19,6 @@
 import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { findNodeSafely } from '../edit/safe-walk'
 import { useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import { useHiddenNodes } from '../shell/use-view-state'
 import { DROPPED_DRAFT_NOTICE } from './property-panel'
 
 export interface AliasEdit {
@@ -52,17 +50,16 @@ function useAliasEditState(pageId: string | undefined): AliasEdit {
   const store = useEditorStoreInstance()
   // 지금 주소의 문서 — 다른 페이지로 옮겨 간 판도 «빠졌다»로 읽는다(`store/use-editor-store.tsx` 의 `useOpenDocument`).
   const document = useOpenDocument(pageId)
-  const hidden = useHiddenNodes(pageId)
   const [nodeId, setNodeId] = useState<string | null>(null)
   const typed = useRef<string | null>(null)
   // 노드가 빠진 그 커밋에서 닫는다 — 다음 문서(되살림)가 들기 전에.
   useLayoutEffect(() => {
     if (nodeId === null) return
-    if (document !== null && findNodeSafely(document.root, nodeId) !== undefined && !hidden.has(nodeId)) return
+    if (document !== null && findNodeSafely(document.root, nodeId) !== undefined) return
     setNodeId(null)
     if (typed.current !== null && !store.showsLoss()) store.setEditFailure({ kind: 'message', message: DROPPED_DRAFT_NOTICE })
     typed.current = null
-  }, [document, nodeId, store, hidden])
+  }, [document, nodeId, store])
   return useMemo(
     () => ({
       nodeId,

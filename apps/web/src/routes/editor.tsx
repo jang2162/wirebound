@@ -45,8 +45,7 @@ import { AliasEditProvider } from '../panels/alias-edit'
 import { StructureTree } from '../panels/structure-tree'
 import { leftUnsentNotice, restoredRevisions, useEditCommit } from '../edit/use-edit-commit'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
-import { ViewStateProvider, useManageDialog, useViewState } from '../shell/use-view-state'
-import { ViewStatesDialog } from '../shell/view-states-dialog'
+import { ViewStateProvider, useViewState } from '../shell/use-view-state'
 import { ViewStateSwitcher, viewStateMenuItems } from '../shell/view-state-switcher'
 import { useViewStateAddress } from '../shell/view-state-address'
 import { BrandLink } from '../shell/brand-link'
@@ -795,7 +794,6 @@ function EditorShell(props: {
   /** 상태 전환기가 머리에 서는가 — `tight` · `folded` 면 `…` 로 접힌다(`shell/head-fold.ts`). */
   const switcherInHead = fold === 'wide' || fold === 'short'
   const viewStateChoice = useViewState(props.pageId)
-  const manageDialog = useManageDialog()
   // 주소 `?state=` — 열 때 읽고 뷰 모드 · viewer 에서 쓴다(`shell/view-state-address.ts`).
   useViewStateAddress(props.pageId, mode === 'view' || !canEdit)
   /** `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. 접힌 머리의 줌이 맨 앞에, 접힌 상태 전환기가 그다음에 선다. */
@@ -809,9 +807,7 @@ function EditorShell(props: {
           { key: 'zoom-fit', label: '화면 맞춤', icon: ICONS.fitWidth, onSelect: zoomCommands.fit },
         ]
       : []),
-    ...(!switcherInHead && props.pageId !== undefined
-      ? viewStateMenuItems(viewStateChoice, { prefixed: true, ...(mode === 'edit' && canEdit ? { manage: manageDialog.open } : {}) })
-      : []),
+    ...(!switcherInHead && props.pageId !== undefined ? viewStateMenuItems(viewStateChoice, { prefixed: true }) : []),
     { key: 'account', label: '계정 설정', icon: ICONS.account, to: '/account' },
     { key: 'settings', label: '프로젝트 설정', icon: ICONS.projectSettings, to: `/projects/${props.project.id}/settings` },
     { key: 'snapshots', label: '스냅샷', icon: ICONS.snapshots, onSelect: () => setDialog('snapshots') },
@@ -866,10 +862,8 @@ function EditorShell(props: {
 
               **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
           <div className="wb-shell-head-tools">
-            {/* **상태 전환기**(`shell/view-state-switcher.tsx`) — 두 모드 · 모든 역할에 선다(고르기는 읽기다). 상태 목록을 고치는 항목만 편집 모드 && `canEdit`. */}
-            {switcherInHead && (
-              <ViewStateSwitcher projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />
-            )}
+            {/* **상태 전환기**(`shell/view-state-switcher.tsx`) — 두 모드 · 모든 역할에 선다(고르기는 읽기다). 상태를 다루는 것은 메뉴 트리의 상태 줄이다. */}
+            {switcherInHead && <ViewStateSwitcher projectId={props.project.id} pageId={props.pageId} />}
             {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
             {/* **배치 선**(`canvas/layout-guides.tsx`) — 편집 모드에서만 선다(선을 그리는 것도 편집 모드뿐이다). 읽기 도구라 viewer 에게도 선다. */}
             {mode === 'edit' && <GuidesToggle />}
@@ -912,10 +906,6 @@ function EditorShell(props: {
           <ShellDialog open={dialog === 'export'} title="프로젝트 내보내기" onClose={() => setDialog(null)}>
             <ExportBody projectId={props.project.id} />
           </ShellDialog>
-          {/* **상태 다루기 상자**(`shell/view-states-dialog.tsx`) — 머리 전환기 · 접힌 `…` 의 «상태 추가» · «상태 관리…»가 연다. 편집 모드 && `canEdit` 일 때만. */}
-          {props.pageId !== undefined && (
-            <ViewStatesDialog projectId={props.project.id} pageId={props.pageId} editable={mode === 'edit' && canEdit} />
-          )}
           {/* **에디터 단축키**(`shell/editor-keys.tsx`) — 호스트와 캔버스 문서에 리스너를 걸고, `?` 의 도움말 상자를 여기 그린다. 편집 명령은
               편집 모드 && `canEdit` 일 때만, 고르기 · 선택 이동 · 도움말은 늘 선다. */}
           <EditorKeys

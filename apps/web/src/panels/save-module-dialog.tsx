@@ -5,8 +5,7 @@
  * | 담는 것 | 규칙 |
  * |---|---|
  * | 고른 노드들 | 문서 차례 · 조상과 자손을 함께 골랐으면 조상만(복사와 같은 정규화) · 뿌리는 뺀다 — `moduleSelection` |
- * | 걷는 것 | `marker` · 묶음 밖 노드를 겨냥하는 액션(`@wirebound/schema` 의 `moduleNodesForSave` — 서버도 같은 함수로 다시 걷는다). 뺀 수를 상자가 말한다 |
- * | 상태 영역 | 그대로 담는다 — 넣을 때 넣는 페이지에 없는 상태의 가지를 뺀다(`palette/module-insert.ts`) |
+ * | 걷는 것 | `marker` · 상태 보임(`visibility` — 모듈에는 상태가 없다) · 묶음 밖 노드를 겨냥하는 액션(`@wirebound/schema` 의 `moduleNodesForSave` — 서버도 같은 함수로 다시 걷는다). 뺀 액션 수를 상자가 말한다 |
  *
  * **담을 노드는 연 순간의 문서로 정한다** — 상자를 연 뒤 남이 그 노드를 고쳐도 담는 것은 연 순간의 모양이다(상자가 노드 수 · 뺀 수를 그 모양으로
  * 말했다). 저장은 문서를 바꾸지 않는 쓰기라 잠금 · 되돌리기와 무관하다.
@@ -14,7 +13,7 @@
  * 이름은 1 ~ 60자(`MODULE_NAME_MAX` — 서버와 같은 값)이고 앞뒤 공백을 뗀다. 저장하면 상자를 닫고 하단 판 «모듈» 탭이 목록을 다시 읽는다
  * (`announceModulesChanged`). 서버가 거절하면(422 `nested-page` · 400) 그 문장을 상자 안에 세운다.
  *
- * **상자는 구조 트리의 키 상자 밖에 선다**(`panels/unsplit-dialog.tsx` 와 같은 자리 — 상자 단추의 키가 뒤 트리의 단축키로 버블되지 않게).
+ * **상자는 구조 트리의 키 상자 밖에 선다**(`shell/shell-dialog.tsx` 머리말 «상자 안의 키는 React 트리를 따라 버블된다» — 상자 단추의 키가 뒤 트리의 단축키로 버블되지 않게).
  */
 import { useId, useState, type ReactElement } from 'react'
 import { MODULE_NAME_MAX, moduleNodesForSave, type PageDocument, type WbNode } from '@wirebound/schema'

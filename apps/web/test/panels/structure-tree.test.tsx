@@ -4,7 +4,7 @@
  *
  * 캔버스 테스트와 같은 이유로 `<App />`을 라우트째로 렌더한다 — `../editor-harness` 머리말.
  */
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WbNode } from '@wirebound/schema'
 import type { EditorStore } from '../../src/store/editor-store'
@@ -19,7 +19,7 @@ import {
   selectionOutline,
   waitForNode,
 } from '../editor-harness'
-import { HIDDEN_SELECTION_NOTICE } from '../../src/shell/use-view-state'
+import { HIDDEN_IN_STATE_LABEL } from '../../src/panels/structure-tree'
 import { structureRowName, structureRowType } from './tree-row'
 
 /**
@@ -154,68 +154,61 @@ describe('구조 트리', () => {
     expect(nodeRows().map((node) => structureRowType(node))).toEqual(['Page', 'Text'])
   })
 
-  it('상태 가지 줄의 요약은 페이지 목록의 상태 이름이다 — 목록에 있는 상태를 «목록에 없는 상태»로 읽지 않는다(K1 리뷰 R4)', async () => {
+  /**
+   * **지금 상태에서 숨은 노드도 줄로 선다 — 흐리게 · «이 상태에서 숨김» 표지 · 고를 수 있다**(설계 spec «C3»). 표지는 그 노드 자신의 보임으로
+   * 숨은 줄에만 서고(조상이 숨어 함께 숨은 자손은 흐리기만) · 접근 이름이 아니라 설명(`aria-description`)에 든다.
+   */
+  it('지금 상태에서 숨은 노드는 흐리게 서고 표지를 단다 — 고를 수 있고, 상태를 바꾸면 걷힌다', async () => {
     await openPage({
       ...pageDoc({
         id: 'n-root',
         type: 'Page',
         children: [
-          {
-            id: 'n-sw',
-            type: 'StateSwitch',
-            children: [
-              { id: 'n-c0', type: 'StateCase', props: { state: 'default' }, children: [] },
-              { id: 'n-c1', type: 'StateCase', props: { state: 's_admin' }, children: [] },
-              { id: 'n-c2', type: 'StateCase', props: { state: 's_gone' }, children: [] },
-            ],
-          },
+          { id: 'n-card', type: 'Card', visibility: { mode: 'only', states: ['s_admin'] }, children: [{ id: 'n-text', type: 'Text' }] },
+          { id: 'n-btn', type: 'Button' },
         ],
       }),
       viewStates: [{ id: 's_admin', name: '관리자' }],
     })
-    // 기본 보기는 지금 상태(기본)의 가지만 편다 — 가지 줄 셋을 다 읽으려고 «모든 가지 보기»를 켠다.
-    fireEvent.click(screen.getByRole('button', { name: '모든 가지 보기' }))
+    const dimmed = (): (string | null)[] =>
+      nodeRows()
+        .filter((node) => node.classList.contains('wb-shell-structure-node-hidden'))
+        .map((node) => structureRowType(node))
+    const marks = (): number => structureList()!.querySelectorAll('.wb-shell-structure-hidden').length
 
-    const caseRows = nodeRows().filter((node) => structureRowType(node) === 'StateCase')
-    expect(caseRows.map((node) => node.getAttribute('aria-label') ?? node.textContent)).toEqual([
-      'StateCase 기본',
-      'StateCase 관리자',
-      'StateCase 목록에 없는 상태',
-    ])
+    expect(nodeRows().map((node) => structureRowType(node))).toEqual(['Page', 'Card', 'Text', 'Button'])
+    expect(dimmed()).toEqual(['Card', 'Text'])
+    expect(marks()).toBe(1)
+    expect(row('Card').getAttribute('aria-description')).toBe(HIDDEN_IN_STATE_LABEL)
+
+    fireEvent.click(row('Card'))
+    expect(shellStore().getState().selectedNodeIds).toEqual(['n-card'])
+
+    fireEvent.click(screen.getByRole('button', { name: /^화면 상태:/ }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: '관리자' }))
+    await waitFor(() => expect(dimmed()).toEqual([]))
+    expect(marks()).toBe(0)
   })
 
-  /**
-   * L-076 · Q15 — 흐린(지금 상태 밖) 가지의 노드를 «모든 가지 보기»로 고른 뒤 그 보기를 끄면 고른 것이 숨어 선택 · 속성 패널이 조용히 비었다.
-   * 지금은 정보 통지가 까닭을 한 줄로 말한다 — 혼자 죽는 변조: `HiddenSelectionPrune` 의 `setInfoNotice` 를 뗀다.
-   */
-  it('흐린 가지의 노드를 고른 채 «모든 가지 보기»를 끄면 선택에서 빼고 까닭을 정보 통지로 말한다', async () => {
+  /** 옛 판은 숨은 노드를 고른 채 상태를 바꾸면 선택에서 뺐다 — 지금은 숨은 노드도 고르고 고친다(노드는 하나다). */
+  it('고른 노드가 상태를 바꿔 숨어도 고른 것은 그대로다 — 통지도 없다', async () => {
     await openPage({
       ...pageDoc({
         id: 'n-root',
         type: 'Page',
-        children: [
-          {
-            id: 'n-sw',
-            type: 'StateSwitch',
-            children: [
-              { id: 'n-c0', type: 'StateCase', props: { state: 'default' }, children: [] },
-              { id: 'n-c1', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'n-btn', type: 'Button' }] },
-            ],
-          },
-        ],
+        children: [{ id: 'n-btn', type: 'Button', visibility: { mode: 'except', states: ['s_admin'] } }],
       }),
       viewStates: [{ id: 's_admin', name: '관리자' }],
     })
-    fireEvent.click(screen.getByRole('button', { name: '모든 가지 보기' }))
     fireEvent.click(row('Button'))
     expect(shellStore().getState().selectedNodeIds).toEqual(['n-btn'])
+
+    fireEvent.click(screen.getByRole('button', { name: /^화면 상태:/ }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: '관리자' }))
+    await waitFor(() => expect(row('Button').classList.contains('wb-shell-structure-node-hidden')).toBe(true))
+
+    expect(shellStore().getState().selectedNodeIds).toEqual(['n-btn'])
     expect(infoTexts()).toEqual([])
-
-    fireEvent.click(screen.getByRole('button', { name: '모든 가지 보기' }))
-
-    expect(shellStore().getState().selectedNodeIds).toEqual([])
-    expect(infoTexts()).toEqual([HIDDEN_SELECTION_NOTICE])
-    expect(screen.queryAllByRole('alert')).toEqual([])
   })
 
   it('노드 타입을 보여준다', async () => {

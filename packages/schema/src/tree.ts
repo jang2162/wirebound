@@ -78,6 +78,8 @@ function rewrite(node: WbNode, mapping: Map<string, string>): WbNode {
 
   // `props`는 봉투가 내용을 정하지 않는 임의 JSON이다 — 얕게 옮기면 입력과 같은 객체가 된다.
   if (node.props !== undefined) next.props = cloneJsonValue(node.props)
+  // 보임의 `states` 도 배열이라 얕게 두면 입력과 같은 배열이 된다.
+  if (node.visibility !== undefined) next.visibility = { mode: node.visibility.mode, states: [...node.visibility.states] }
 
   if (node.interactions) {
     next.interactions = node.interactions.map((interaction) => ({
@@ -129,6 +131,8 @@ function copyNode(node: WbNode): WbNode {
   if (node.props !== undefined) next.props = cloneJsonValue(node.props)
   if (node.variant !== undefined) next.variant = node.variant
   if (node.weight !== undefined) next.weight = node.weight
+  // 보임은 옮긴다 — 붙여넣기 · 복제가 이 복사를 지난다. 걷는 것은 모듈 저장(`module/save.ts`)의 몫이다.
+  if (node.visibility !== undefined) next.visibility = { mode: node.visibility.mode, states: [...node.visibility.states] }
   if (node.interactions !== undefined) {
     next.interactions = node.interactions.map((interaction) => ({
       on: interaction.on,
