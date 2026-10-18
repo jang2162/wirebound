@@ -1,0 +1,506 @@
+{
+  "home@1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 0,
+    "sections": []
+  },
+  "account@1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 3,
+    "sections": [
+      {
+        "title": "내 정보",
+        "top": 86,
+        "height": 130
+      },
+      {
+        "title": "비밀번호 바꾸기",
+        "top": 232,
+        "height": 281
+      },
+      {
+        "title": "API 토큰",
+        "top": 529,
+        "height": 145
+      }
+    ]
+  },
+  "settings@1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "scrollHeight": 900,
+    "buttons": 28,
+    "inputs": 39,
+    "sections": [
+      {
+        "title": "일반",
+        "top": 119,
+        "height": 297
+      },
+      {
+        "title": "일반",
+        "top": 119,
+        "height": 281
+      },
+      {
+        "title": "테마",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "테마",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      }
+    ]
+  },
+  "settings-theme@1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "scrollHeight": 1604,
+    "buttons": 28,
+    "inputs": 39,
+    "sections": [
+      {
+        "title": "일반",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "일반",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "테마",
+        "top": 119,
+        "height": 1445
+      },
+      {
+        "title": "테마",
+        "top": 119,
+        "height": 1429
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      }
+    ]
+  },
+  "admin-themes@1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "scrollHeight": 1272,
+    "buttons": 10,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "샘플 (sample)",
+        "top": 156,
+        "height": 1076
+      }
+    ]
+  },
+  "editor-empty@1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "scrollHeight": 900,
+    "buttons": 24,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "메뉴·페이지 트리",
+        "top": 49,
+        "height": 422
+      },
+      {
+        "title": "구조 트리",
+        "top": 479,
+        "height": 422
+      },
+      {
+        "title": "",
+        "top": 100,
+        "height": 16
+      }
+    ]
+  },
+  "home@900": {
+    "scrollWidth": 900,
+    "clientWidth": 900,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 0,
+    "sections": []
+  },
+  "account@900": {
+    "scrollWidth": 900,
+    "clientWidth": 900,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 3,
+    "sections": [
+      {
+        "title": "내 정보",
+        "top": 86,
+        "height": 130
+      },
+      {
+        "title": "비밀번호 바꾸기",
+        "top": 232,
+        "height": 281
+      },
+      {
+        "title": "API 토큰",
+        "top": 529,
+        "height": 145
+      }
+    ]
+  },
+  "settings@900": {
+    "scrollWidth": 900,
+    "clientWidth": 900,
+    "scrollHeight": 900,
+    "buttons": 28,
+    "inputs": 39,
+    "sections": [
+      {
+        "title": "일반",
+        "top": 119,
+        "height": 297
+      },
+      {
+        "title": "일반",
+        "top": 119,
+        "height": 281
+      },
+      {
+        "title": "테마",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "테마",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      }
+    ]
+  },
+  "settings-theme@900": {
+    "scrollWidth": 900,
+    "clientWidth": 900,
+    "scrollHeight": 2168,
+    "buttons": 28,
+    "inputs": 39,
+    "sections": [
+      {
+        "title": "일반",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "일반",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "테마",
+        "top": 119,
+        "height": 2009
+      },
+      {
+        "title": "테마",
+        "top": 119,
+        "height": 1993
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      }
+    ]
+  },
+  "admin-themes@900": {
+    "scrollWidth": 900,
+    "clientWidth": 900,
+    "scrollHeight": 944,
+    "buttons": 10,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "샘플 (sample)",
+        "top": 156,
+        "height": 748
+      }
+    ]
+  },
+  "editor-empty@900": {
+    "scrollWidth": 900,
+    "clientWidth": 900,
+    "scrollHeight": 900,
+    "buttons": 24,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "메뉴·페이지 트리",
+        "top": 49,
+        "height": 422
+      },
+      {
+        "title": "구조 트리",
+        "top": 479,
+        "height": 422
+      },
+      {
+        "title": "",
+        "top": 100,
+        "height": 16
+      }
+    ]
+  },
+  "home@700": {
+    "scrollWidth": 700,
+    "clientWidth": 700,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 0,
+    "sections": []
+  },
+  "account@700": {
+    "scrollWidth": 700,
+    "clientWidth": 700,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 3,
+    "sections": [
+      {
+        "title": "내 정보",
+        "top": 86,
+        "height": 130
+      },
+      {
+        "title": "비밀번호 바꾸기",
+        "top": 232,
+        "height": 281
+      },
+      {
+        "title": "API 토큰",
+        "top": 529,
+        "height": 145
+      }
+    ]
+  },
+  "settings@700": {
+    "scrollWidth": 700,
+    "clientWidth": 700,
+    "scrollHeight": 900,
+    "buttons": 28,
+    "inputs": 39,
+    "sections": [
+      {
+        "title": "일반",
+        "top": 173,
+        "height": 297
+      },
+      {
+        "title": "일반",
+        "top": 173,
+        "height": 281
+      },
+      {
+        "title": "테마",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "테마",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      }
+    ]
+  },
+  "settings-theme@700": {
+    "scrollWidth": 700,
+    "clientWidth": 700,
+    "scrollHeight": 2222,
+    "buttons": 28,
+    "inputs": 39,
+    "sections": [
+      {
+        "title": "일반",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "일반",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "테마",
+        "top": 173,
+        "height": 2009
+      },
+      {
+        "title": "테마",
+        "top": 173,
+        "height": 1993
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "멤버",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      },
+      {
+        "title": "위험 구역",
+        "top": 0,
+        "height": 0
+      }
+    ]
+  },
+  "admin-themes@700": {
+    "scrollWidth": 700,
+    "clientWidth": 700,
+    "scrollHeight": 1292,
+    "buttons": 10,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "샘플 (sample)",
+        "top": 504,
+        "height": 748
+      }
+    ]
+  },
+  "editor-empty@700": {
+    "scrollWidth": 700,
+    "clientWidth": 700,
+    "scrollHeight": 900,
+    "buttons": 21,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "메뉴·페이지 트리",
+        "top": 49,
+        "height": 422
+      },
+      {
+        "title": "구조 트리",
+        "top": 479,
+        "height": 422
+      },
+      {
+        "title": "",
+        "top": 100,
+        "height": 16
+      }
+    ]
+  }
+}
