@@ -2692,11 +2692,11 @@
 }
 
 /* 새 프로젝트. 이 화면에서 새로 만드는 동작이 하나뿐이라 색을 갖는다 — 코멘트 탭의
-   `코멘트 달기`와 같은 판단이다. `+` 그림과 글이 한 줄이다. */
+   `코멘트 달기`와 같은 판단이다. `+` 그림과 글이 한 줄이다(그림 뒤 여백은 `.wb-shell-icon-lead` 의 것 + `gap`). */
 .wb-shell-project-create {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   appearance: none;
   border: 1px solid var(--wb-shell-accent);
   border-radius: 4px;
@@ -4113,7 +4113,6 @@
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
 }
 
 /* ── 프로젝트 설정(`routes/settings.tsx`) ─────────────────────────────────────────────────
@@ -4163,7 +4162,7 @@
   appearance: none;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   border: 0;
   border-radius: 6px;
   padding: 8px 12px;
@@ -4619,7 +4618,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   border: 1px solid var(--wb-shell-accent);
   border-radius: 4px;
   padding: 5px 12px;
@@ -4661,7 +4660,7 @@
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   margin-left: auto;
   border: 1px solid var(--wb-shell-line);
   border-radius: 4px;
@@ -4795,7 +4794,6 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 4px;
   border: 1px solid var(--wb-shell-line);
   border-radius: 4px;
   padding: 3px 8px;

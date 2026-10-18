@@ -189,7 +189,7 @@ function SettingsTabs(props: { danger: boolean; children: Record<SectionKey, Rea
             tabIndex={section.key === selected ? 0 : -1}
             onClick={() => choose(section.key, false)}
           >
-            {shellIcon(section.icon, 16)}
+            {shellIcon(section.icon, 16, 'wb-shell-icon-lead')}
             {section.label}
           </button>
         ))}

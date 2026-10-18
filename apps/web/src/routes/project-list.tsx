@@ -52,7 +52,7 @@ export function ProjectListRoute(): ReactElement {
           {state.status === 'ready' && state.projects.length > 0 ? `프로젝트 ${state.projects.length}개` : ''}
         </span>
         <button className="wb-shell-project-create" type="button" disabled={commands.busy} onClick={commands.openCreate}>
-          {shellIcon('add', 16)}
+          {shellIcon('add', 16, 'wb-shell-icon-lead')}
           새 프로젝트
         </button>
       </div>
@@ -120,7 +120,7 @@ function ProjectRow(props: { project: ProjectDetail }): ReactElement {
         {/* **설정은 모든 멤버에게 있다** — owner 가 아니면 설정 페이지가 읽기로만 보인다(지금 테마 · 토큰을 볼 수 있다).
             글자는 «설정» 하나이고 카드마다 갈리는 이름은 `aria-label` 이 싣는다. */}
         <Link className="wb-shell-project-settings" to={`/projects/${project.id}/settings`} aria-label={`${project.name} 설정`}>
-          {shellIcon('projectSettings', 14)}
+          {shellIcon('projectSettings', 14, 'wb-shell-icon-lead')}
           설정
         </Link>
       </div>

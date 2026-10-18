@@ -207,7 +207,7 @@ export function AdminThemesRoute(): ReactElement {
           {/* 도구 줄 — 올리기(파일 칸은 눈에서만 감추고 라벨이 단추 꼴이다 — 접근 이름은 라벨 글 그대로) · 템플릿 받기. */}
           <div className="wb-shell-admin-tools">
             <label className="wb-shell-admin-upload" aria-disabled={busy}>
-              {shellIcon('uploadTheme', 16)}
+              {shellIcon('uploadTheme', 16, 'wb-shell-icon-lead')}
               테마 패키지 올리기
               <input
                 className="wb-shell-admin-file"
@@ -224,7 +224,7 @@ export function AdminThemesRoute(): ReactElement {
             </label>
             <span className="wb-shell-admin-hint">.wbtheme · 10 MB 까지</span>
             <button className="wb-shell-admin-template" type="button" disabled={busy} onClick={() => void template()}>
-              {shellIcon('themeTemplate', 16)}
+              {shellIcon('themeTemplate', 16, 'wb-shell-icon-lead')}
               스타터 템플릿 받기
             </button>
           </div>
@@ -339,7 +339,7 @@ function ThemeDetail(props: {
               aria-label={`${row.themeId}@${row.version} 미리보기`}
               onClick={() => props.onPreview(row.version)}
             >
-              {shellIcon('preview', 14)}
+              {shellIcon('preview', 14, 'wb-shell-icon-lead')}
               미리보기
             </button>
             <button
