@@ -18,8 +18,7 @@
  */
 import { isPageTargetAction } from '../interaction/check'
 import type { Interaction, InteractionAction, WbNode } from '../node'
-import { stripMarkers } from '../preset/builtin'
-import { collectNodeIds } from '../tree'
+import { collectNodeIds, stripMarkers } from '../tree'
 
 /** 모듈 이름의 글자 수 상한(스냅샷 태그와 같은 1 ~ 60자). 서버의 본문 검사와 화면의 이름 칸이 이 값을 읽는다. */
 export const MODULE_NAME_MAX = 60

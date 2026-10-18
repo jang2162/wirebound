@@ -10,7 +10,7 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
-  BUILTIN_PRESETS,
+  BUILTIN_MODULES,
   CURRENT_DOCUMENT_VERSION,
   applyOps,
   installCatalog,
@@ -70,12 +70,12 @@ describe('presetApply', () => {
       { id: 'n_c00000000001', type: 'List' },
     ])
 
-    const result = presetApply(before, BUILTIN_PRESETS[0]!.nodes, counter())
+    const result = presetApply(before, BUILTIN_MODULES[0]!.nodes, counter())
     // 편집 파이프라인과 **같은 순서**로 돈다 — invertOps가 더 엄격하다.
     const inverse = invertOps(before, result.apply!.ops)
     const after = applyOps(before, result.apply!.ops)
 
-    expect(after.root.children).toHaveLength(BUILTIN_PRESETS[0]!.nodes.length)
+    expect(after.root.children).toHaveLength(BUILTIN_MODULES[0]!.nodes.length)
     // **되돌리는 것이 편집 하나다.** 역도 op 하나이고, 그것 하나로 문서가 통째로 돌아온다.
     expect(inverse).toHaveLength(1)
     expect(applyOps(after, inverse)).toEqual(before)
@@ -300,7 +300,7 @@ describe('presetApply', () => {
   })
 
   it('내장 3종이 전부 빈 페이지에 놓인다', () => {
-    for (const preset of BUILTIN_PRESETS) {
+    for (const preset of BUILTIN_MODULES) {
       const before = page([])
       const result = presetApply(before, preset.nodes, counter())
 

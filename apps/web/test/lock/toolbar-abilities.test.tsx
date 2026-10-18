@@ -53,7 +53,7 @@
  * 센다). 여기서는 그 판정을 **대역의 재료로** 쓸 뿐이라 화면 쪽 판정이 늘지 않는다.
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { BUILTIN_PRESETS, lockConflictOfOps, writeNodesEnvelope, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { BUILTIN_MODULES, lockConflictOfOps, writeNodesEnvelope, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
@@ -235,11 +235,11 @@ async function board(): Promise<Board> {
   // 고르개 안에서 삼켜져 *"목록이 비었다"*로 위장된다 — 그러면 이 파일의 대조 케이스가
   // 잠금 때문이 아니라 목록이 없어서 통과한다. 패턴 목록은 캔버스 테마의 manifest 가 준다(파일 머리의 목).
   const listPresets: ApiClient['listPresets'] = async () =>
-    BUILTIN_PRESETS.map((preset) => ({
+    BUILTIN_MODULES.map((preset) => ({
       id: `builtin:${preset.key}`,
       source: 'builtin' as const,
       name: preset.name,
-      description: preset.description,
+      description: null,
       nodes: [...preset.nodes],
     }))
   const listComments: ApiClient['listComments'] = async () => []

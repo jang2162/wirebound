@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WbNode } from '../src/node'
-import { collectNodeIds, findNode, findNodePath, remapNodeIds, walkNodes } from '../src/tree'
+import { collectNodeIds, findNode, findNodePath, remapNodeIds, stripMarkers, walkNodes } from '../src/tree'
 
 function sample(): WbNode {
   return {
@@ -170,5 +170,92 @@ describe('remapNodeIds', () => {
     const { root } = remapNodeIds(tree, () => 'n_aaaaaaaaaaaa')
     const action = root.children![0]!.interactions![0]!.actions[0]!
     expect(action.type === 'navigate' && action.target).toBe('page:관리자/회원/상세')
+  })
+})
+
+/** 이 트리에 `marker`가 하나라도 있는가. */
+function hasMarker(nodes: readonly WbNode[]): boolean {
+  return nodes.some((root) => [...walkNodes(root)].some((visit) => visit.node.marker !== undefined))
+}
+
+describe('stripMarkers', () => {
+  it('트리 어디에 있든 marker를 버린다', () => {
+    const nodes: WbNode[] = [
+      {
+        id: 'a',
+        type: 'Card',
+        marker: 1,
+        children: [{ id: 'b', type: 'Text', marker: 2, props: { text: '값' } }],
+      },
+    ]
+    const stripped = stripMarkers(nodes)
+    expect(hasMarker(stripped)).toBe(false)
+    // 원본은 건드리지 않는다 — 부르는 쪽이 들고 있는 문서다.
+    expect(hasMarker(nodes)).toBe(true)
+  })
+
+  it('marker 말고는 그대로 두고 상호작용도 남긴다', () => {
+    const nodes: WbNode[] = [
+      {
+        id: 'a',
+        type: 'Button',
+        props: { label: '저장' },
+        variant: 'primary',
+        marker: 3,
+        interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'b', value: true }] }],
+        children: [],
+      },
+    ]
+    expect(stripMarkers(nodes)).toEqual([
+      {
+        id: 'a',
+        type: 'Button',
+        props: { label: '저장' },
+        variant: 'primary',
+        interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'b', value: true }] }],
+        children: [],
+      },
+    ])
+  })
+
+  it('값을 공유하지 않는다 — 뒤에 원본을 고쳐도 담은 것이 그대로다', () => {
+    const nodes: WbNode[] = [{ id: 'a', type: 'List', props: { columns: ['하나'] } }]
+    const stripped = stripMarkers(nodes)
+    ;(nodes[0]!.props!['columns'] as string[]).push('둘')
+    expect(stripped[0]!.props!['columns']).toEqual(['하나'])
+  })
+
+  it('상호작용 액션의 value도 공유하지 않는다', () => {
+    const nodes: WbNode[] = [
+      {
+        id: 'a',
+        type: 'Button',
+        interactions: [
+          {
+            on: 'click',
+            actions: [{ type: 'setProp', target: 'b', prop: 'columns', value: { list: ['하나'] } }],
+          },
+        ],
+      },
+    ]
+
+    const stripped = stripMarkers(nodes)
+    const source = nodes[0]!.interactions![0]!.actions[0]! as { value: { list: string[] } }
+    source.value.list.push('둘')
+
+    const copied = stripped[0]!.interactions![0]!.actions[0]! as { value: { list: string[] } }
+    expect(copied.value.list).toEqual(['하나'])
+  })
+
+  /**
+   * **`structuredClone`을 쓰지 않은 이유를 값으로 고정한다.** 함수를 담은
+   * props에서 `structuredClone`은 `DOMException`을 던진다 — 저장 경계 **앞**에서 던지면
+   * 사용자는 왜 저장이 안 되는지 듣지 못한다. 여기서는 그 자리가 조용히 비고, 무엇이
+   * 잘못됐는지는 저장 경계의 카탈로그 검증이 말한다.
+   */
+  it('함수를 담은 props에서 던지지 않는다', () => {
+    const nodes: WbNode[] = [{ id: 'a', type: 'Text', props: { text: () => 1 } }]
+    expect(() => stripMarkers(nodes)).not.toThrow()
+    expect(stripMarkers(nodes)[0]!.props).toEqual({})
   })
 })

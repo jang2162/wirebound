@@ -9,7 +9,7 @@
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { BUILTIN_PRESETS, applyOps, invertOps, partitionIssues, validatePage, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { BUILTIN_MODULES, applyOps, invertOps, partitionIssues, validatePage, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { Comment, PageDetail, PatchResult, Preset } from '../../src/api/types'
 import { droppedCasesNotice } from '../../src/edit/paste-ops'
@@ -135,11 +135,11 @@ function server(
     }
     // 서버가 내장을 먼저 낸다 — 그 순서가 계약이므로 대역도 그렇게 낸다.
     return [
-      ...BUILTIN_PRESETS.map((preset) => ({
+      ...BUILTIN_MODULES.map((preset) => ({
         id: `builtin:${preset.key}`,
         source: 'builtin' as const,
         name: preset.name,
-        description: preset.description,
+        description: null,
         nodes: [...preset.nodes],
       })),
       ...state.presets,
@@ -229,8 +229,8 @@ describe('프리셋 고르개 — 기본 상태', () => {
 
     const options = within(screen.getByLabelText('프리셋') as HTMLSelectElement).getAllByRole('option')
     // **수를 적지 않는다** — 내장 목록에서 만든다.
-    expect(options).toHaveLength(BUILTIN_PRESETS.length)
-    expect(options[0]!.textContent).toContain(BUILTIN_PRESETS[0]!.name)
+    expect(options).toHaveLength(BUILTIN_MODULES.length)
+    expect(options[0]!.textContent).toContain(BUILTIN_MODULES[0]!.name)
   })
 
   it('내장과 프로젝트 것을 갈라 말한다 — 이름이 겹칠 수 있다', async () => {
@@ -242,7 +242,7 @@ describe('프리셋 고르개 — 기본 상태', () => {
     const labels = within(screen.getByLabelText('프리셋') as HTMLSelectElement)
       .getAllByRole('option')
       .map((option) => option.textContent)
-    expect(labels.filter((label) => label?.includes('(내장)'))).toHaveLength(BUILTIN_PRESETS.length)
+    expect(labels.filter((label) => label?.includes('(내장)'))).toHaveLength(BUILTIN_MODULES.length)
     expect(labels.filter((label) => label?.includes('(프로젝트)'))).toHaveLength(1)
   })
 
