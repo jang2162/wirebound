@@ -5,7 +5,7 @@
  *
  * 구현은 `http-client.ts`(실제 서버)와 각 화면 테스트의 가짜 두 부류다.
  */
-import type { PatchOp, ViewState, WbNode } from '@wirebound/schema'
+import type { PatchOp, WbNode } from '@wirebound/schema'
 import type {
   Comment,
   ExportFormat,

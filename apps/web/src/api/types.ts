@@ -9,7 +9,7 @@
  * 예외는 `PageDetail.schema`다. 문서 스키마는 서버가 아니라 `@wirebound/schema`가
  * 소유하는 단일 진실이므로 그 타입을 그대로 쓴다.
  */
-import type { PageDocument, PatchOp, ValidationIssue, ViewState, WbNode } from '@wirebound/schema'
+import type { PageDocument, PatchOp, ValidationIssue, WbNode } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 
 /** 프로젝트 멤버의 역할. `owner` > `editor` > `viewer`(README "권한(역할)"). */
