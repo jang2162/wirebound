@@ -27,6 +27,7 @@ import type {
   PageImported,
   PatchResult,
   Preset,
+  ProjectModule,
   ProjectDetail,
   ProjectThemeView,
   ProjectView,
@@ -678,6 +679,10 @@ const SHAPES = {
    * 비운다) 어긋나도 던지지 않는다 — `snapshot`·`comment`가 `createdAt`에 대해 같은
    * 판단을 했다: *"가설적인 경로에 가드를 달고 살아 있는 경로를 열어 두지 않는다."*
    */
+  /** `{ module }` — 모듈 하나(읽기 · 저장 · 이름 바꾸기). `nodes` 는 넣기에 그대로 들어가고 `id` 는 이름 바꾸기 · 삭제 경로에 실린다. */
+  moduleEnvelope: (value) => isRecord(value) && isModule(value['module']),
+  /** `{ modules }` — 프로젝트 모듈 목록. */
+  moduleListEnvelope: (value) => isRecord(value) && isArrayOf(value['modules'], isModule),
   preset: isPreset,
   presetList: (value) => isArrayOf(value, isPreset),
   restoreResult: isRestoreResult,
@@ -803,6 +808,18 @@ function isSnapshot(value: unknown): boolean {
     (typeof value['description'] === 'string' || value['description'] === null) &&
     typeof value['createdByName'] === 'string' &&
     typeof value['payloadBytes'] === 'number'
+  )
+}
+
+/** 모듈 하나의 모양 — 카드가 그리는 이름 · 수와 넣기가 쓰는 노드 · 경로에 실리는 id. */
+function isModule(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    value['id'] !== '' &&
+    typeof value['name'] === 'string' &&
+    Array.isArray(value['nodes']) &&
+    typeof value['nodeCount'] === 'number'
   )
 }
 
@@ -1067,6 +1084,10 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['createPreset']>[1],
     true
   >,
+  // 모듈 저장 · 이름 바꾸기. 서버의 `ModuleBody` · `RenameBody` 가 `z.strictObject` 라 선언되지 않은 키는 그 자체로 400 이고, **`id` · `nodeCount` ·
+  // `createdBy` 가 그 자리다** — 응답 객체를 고쳐 되보내는 실수가 실제로 있을 법하다(`createSnapshot` 이 같은 자리에서 같은 판단).
+  createModule: { name: true, nodes: true } satisfies Record<keyof Parameters<ApiClient['createModule']>[1], true>,
+  renameModule: { name: true } satisfies Record<keyof Parameters<ApiClient['renameModule']>[2], true>,
   // 테마 저장. 서버의 `ThemeBody` 가 `z.strictObject` 라 선언되지 않은 키는 그 자체로 400 이고, **`manifest` · `latest` 가 그 자리다** —
   // GET 응답(`ProjectThemeView`)을 고쳐 되보내는 실수가 실제로 있을 법하다.
   putProjectTheme: { themeId: true, version: true, tokens: true, rev: true } satisfies Record<
@@ -1254,6 +1275,8 @@ export function createHttpClient(
   const pagePath = (projectId: string, pageId: string): string => `${projectPath(projectId)}/pages/${encodeURIComponent(pageId)}`
 
   const menuPath = (projectId: string, nodeId: string): string => `${projectPath(projectId)}/menu/${encodeURIComponent(nodeId)}`
+  const modulesPath = (projectId: string): string => `${projectPath(projectId)}/modules`
+  const modulePath = (projectId: string, moduleId: string): string => `${modulesPath(projectId)}/${encodeURIComponent(moduleId)}`
 
   const commentsPath = (projectId: string, pageId: string): string => `${pagePath(projectId, pageId)}/comments`
 
@@ -1428,6 +1451,30 @@ export function createHttpClient(
       request<Preset[]>('GET', `${projectPath(projectId)}/presets`, SHAPES.presetList, undefined, options),
     createPreset: (projectId, body) =>
       request<Preset>('POST', `${projectPath(projectId)}/presets`, SHAPES.preset, declaredOnly(body, BODY_KEYS.createPreset)),
+    // `{ modules }` · `{ module }` 봉투를 여기서 벗긴다 — `getTree` 와 같은 자리다(봉투가 계약대로인 것은 `request` 가 이미 확인했다).
+    listModules: async (projectId, options) =>
+      (await request<{ modules: ProjectModule[] }>('GET', modulesPath(projectId), SHAPES.moduleListEnvelope, undefined, options)).modules,
+    getModule: async (projectId, moduleId, options) =>
+      (await request<{ module: ProjectModule }>('GET', modulePath(projectId, moduleId), SHAPES.moduleEnvelope, undefined, options)).module,
+    createModule: async (projectId, body) =>
+      (
+        await request<{ module: ProjectModule }>(
+          'POST',
+          modulesPath(projectId),
+          SHAPES.moduleEnvelope,
+          declaredOnly(body, BODY_KEYS.createModule),
+        )
+      ).module,
+    renameModule: async (projectId, moduleId, body) =>
+      (
+        await request<{ module: ProjectModule }>(
+          'PATCH',
+          modulePath(projectId, moduleId),
+          SHAPES.moduleEnvelope,
+          declaredOnly(body, BODY_KEYS.renameModule),
+        )
+      ).module,
+    deleteModule: (projectId, moduleId) => request<void>('DELETE', modulePath(projectId, moduleId), SHAPES.noBody),
     listSnapshots: (projectId) => request<SnapshotSummary[]>('GET', `${projectPath(projectId)}/snapshots`, SHAPES.snapshotList),
     // **응답이 더 넓다(`payload`가 붙는다).** `SHAPES.snapshot`은 그것을 보지 않고 통과시킨다 —
     // 이 화면이 payload를 읽지 않기 때문이다(`api/client.ts`의 `createSnapshot` 주석).

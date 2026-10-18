@@ -49,8 +49,16 @@ export interface StructureDrop {
   placement: DropZone
 }
 
-/** 끄는 것 — 옮길 노드(구조 트리 줄 · 캔버스 손잡이) 또는 넣을 새 타입(컴포넌트 목록 카드). */
-export type Placing = { kind: 'node'; id: string } | { kind: 'new'; type: string }
+/**
+ * 끄는 것 — 옮길 노드(구조 트리 줄 · 캔버스 손잡이) · 넣을 새 타입(컴포넌트 목록 카드) · 넣을 모듈 묶음(«모듈» 탭 카드 — `palette/module-tab.tsx`).
+ *
+ * 모듈의 `nodes` 는 **미리보기 · 판정의 표본**이다 — 놓을 때 넣는 노드는 부르는 쪽이 다시 짓는다(프로젝트 모듈은 서버에서 다시 읽고, 테마 패턴은
+ * 다시 전개한다 — `palette/module-insert.ts`). `key` 는 카드를 가르는 값이다(`project:<id>` · `builtin:<키>` · `pattern:<키>`).
+ */
+export type Placing =
+  | { kind: 'node'; id: string }
+  | { kind: 'new'; type: string }
+  | { kind: 'module'; key: string; nodes: readonly WbNode[] }
 
 /** 넣기 판정에 싣는 노드의 id — 보내지 않는다(머리말 «남이 잡은 자리면»). */
 const PROBE_ID = 'drop-probe'
@@ -81,8 +89,8 @@ export function structureDropTarget(
   }
   if (typeof parentId !== 'string') return miss(why, 'target-not-in-document')
 
-  if (placing.kind === 'new') {
-    const probe = createNode(placing.type, () => PROBE_ID)
+  if (placing.kind === 'new' || placing.kind === 'module') {
+    const probe = probeNode(placing)
     if (probe === null) return miss(why, 'unknown-type')
     const ops = insertNodeOps(document, parentId, insertAt, probe)
     if (ops === null) return miss(why, 'ops-unbuildable')
@@ -106,6 +114,16 @@ export function structureDropTarget(
   if (ops === null) return miss(why, 'ops-unbuildable')
   if (blockedBy(ops) !== null) return miss(why, 'locked')
   return { parentId, index, placement: zone }
+}
+
+/**
+ * 넣기 판정에 싣는 표본 노드 — 새 타입은 그 타입, 모듈은 첫 노드의 타입(잠금은 경로로 가르므로 무엇을 싣든 답이 같다 — 머리말 «남이 잡은 자리면»).
+ * 빈 모듈 · 모르는 타입이면 `null`.
+ */
+export function probeNode(placing: Exclude<Placing, { kind: 'node' }>, id = PROBE_ID): WbNode | null {
+  if (placing.kind === 'new') return createNode(placing.type, () => id)
+  const first = placing.nodes[0]
+  return first === undefined ? null : { id, type: first.type }
 }
 
 /** `null` 을 내며 그 까닭을 진단 줄에 알린다(`why` 가 없으면 — 꺼진 판 — 알리지 않는다). */
@@ -148,10 +166,12 @@ export function sameDrop(a: StructureDrop, b: StructureDrop): boolean {
 
 /**
  * 판정이 준 자리(`drop`)로 낼 편집. 옮기기는 `moveNodeOps`, 넣기는 `insertNodeOps` 에 부르는 쪽이 지은 `node` 를 싣는다 — 그 id 가
- * 보낸 뒤 고를 노드다. 새 타입인데 노드가 없거나 타입이 다르면 `null`이다(판정한 것과 다른 것을 넣지 않는다).
+ * 보낸 뒤 고를 노드다. 새 타입인데 노드가 없거나 타입이 다르면 `null`이다(판정한 것과 다른 것을 넣지 않는다). **모듈은 `null`이다** — 그
+ * 편집은 넣을 노드를 다시 지은 뒤 `palette/module-insert.ts` 가 짓는다(`Placing` 머리말).
  */
 export function dropOps(document: PageDocument, placing: Placing, drop: StructureDrop, node?: WbNode): PatchOp[] | null {
   if (placing.kind === 'node') return moveNodeOps(document, placing.id, drop.parentId, drop.index)
+  if (placing.kind === 'module') return null
   if (node === undefined || node.type !== placing.type) return null
   return insertNodeOps(document, drop.parentId, drop.index, node)
 }

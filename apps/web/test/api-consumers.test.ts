@@ -77,6 +77,11 @@ const METHODS = [
   'restoreSnapshot',
   'listPresets',
   'createPreset',
+  'listModules',
+  'getModule',
+  'createModule',
+  'renameModule',
+  'deleteModule',
   'getExportPreview',
   'downloadExport',
   'getProjectTheme',
@@ -150,9 +155,9 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   updateProject: ['../src/settings/general-section.tsx'],
   // 설정 페이지의 «위험 구역» 하나다 — 목록 줄의 삭제는 없다(`routes/project-list.tsx` 머리말).
   deleteProject: ['../src/settings/danger-section.tsx'],
-  // 붙여넣기가 봉투의 페이지 대상(`page:…`)이 지금 프로젝트에 있는지 가늠한다(`shell/editor-keys.tsx` 의 `paste` — 메뉴 · 페이지의 `id` ·
+  // 붙여넣기 · 모듈 넣기가 노드의 페이지 대상(`page:…`)이 지금 프로젝트에 있는지 가늠한다(`shell/editor-keys.tsx` 의 `paste` · `palette/module-tab.tsx` — 메뉴 · 페이지의 `id` ·
   // `title` · `sortOrder` · `pages` · `children` 을 읽는다). 판 번호는 안 쓴다.
-  getTree: ['../src/shell/editor-keys.tsx'],
+  getTree: ['../src/palette/module-tab.tsx', '../src/shell/editor-keys.tsx'],
   // 메뉴 트리가 트리를 그리고 판 번호로 겹친 조회의 낡은 답 · 이미 받은 판의 `menu-changed`를 가른다.
   readTree: ['../src/tree/use-tree-commands.tsx'],
   createMenu: ['../src/tree/use-tree-commands.tsx'],
@@ -230,6 +235,12 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 확인하지 않은 채 남는다(`getSnapshot`이 같은 자리에서 같은 판단).
   listPresets: ['../src/panels/preset-picker.tsx'],
   createPreset: ['../src/panels/preset-picker.tsx'],
+  // 하단 판 «모듈» 탭 하나다 — 목록 · 넣기 직전의 다시 읽기(`nodes`) · 카드의 이름 바꾸기 · 삭제(`id` 를 경로에 싣는다 — `SHAPES.moduleEnvelope`).
+  listModules: ['../src/palette/module-tab.tsx'],
+  getModule: ['../src/palette/module-tab.tsx'],
+  createModule: [],
+  renameModule: ['../src/palette/module-tab.tsx'],
+  deleteModule: ['../src/palette/module-tab.tsx'],
   // 내보내기. 둘 다 같은 한 화면이 부른다 — 미리보기가 무엇이 실릴지 말하고
   // 그 다음에 앵커가 zip을 받는다.
   getExportPreview: ['../src/shell/export-panel.tsx'],

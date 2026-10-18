@@ -21,6 +21,7 @@ import type {
   PatchResult,
   Preset,
   ProjectDetail,
+  ProjectModule,
   ProjectThemeView,
   ProjectView,
   RevisionInverse,
@@ -453,6 +454,22 @@ export interface ApiClient {
     projectId: string,
     body: { name: string; description?: string | null; schema: WbNode[]; viewStates?: ViewState[] },
   ): Promise<Preset>
+  /**
+   * **이 프로젝트의 모듈 전부** — 최근 것이 먼저다(서버의 계약 — 여기서 다시 정렬하지 않는다). 내장 «기본 모듈»은 없다(`BUILTIN_MODULES` 를 화면이
+   * 직접 읽는다). viewer 도 읽는다.
+   */
+  listModules(projectId: string, options?: ReadOptions): Promise<ProjectModule[]>
+  /** 모듈 하나 — 넣기 직전에 다시 읽는다. 남이 지웠으면 404(«이 모듈은 지워졌습니다»). */
+  getModule(projectId: string, moduleId: string, options?: ReadOptions): Promise<ProjectModule>
+  /**
+   * **고른 노드를 모듈로 남긴다** — `nodes` 는 1개 이상. `marker` · 묶음 밖 노드를 겨냥하는 액션은 서버도 걷는다(화면의 «모듈로 저장…» 상자가 먼저
+   * 걷어 뺀 수를 말한다 — `moduleNodesForSave`). 이름 1~60자 밖 · `Page` 가 든 노드는 400 · 422. editor 이상.
+   */
+  createModule(projectId: string, body: { name: string; nodes: WbNode[] }): Promise<ProjectModule>
+  /** 이름만 바꾼다(모듈에서 고칠 수 있는 것은 이름 하나다). 없으면 404. editor 이상. */
+  renameModule(projectId: string, moduleId: string, body: { name: string }): Promise<ProjectModule>
+  /** 지운다. 없으면 404. editor 이상. */
+  deleteModule(projectId: string, moduleId: string): Promise<void>
   listSnapshots(projectId: string): Promise<SnapshotSummary[]>
   /**
    * **지금 상태를 태그 하나로 얼린다.** 「권한 모델」이 **editor**에게 연 자리다 — 테마 고르기가

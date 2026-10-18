@@ -175,6 +175,17 @@ const preset = {
   nodes: [{ id: 'sl_list', type: 'List' }],
 }
 
+/** 모듈 하나 — 서버가 실제로 내는 모양(api README «모듈 응답 형태»). */
+const projectModule = {
+  id: 'm1',
+  name: '내 모듈',
+  nodes: [{ id: 'a', type: 'List' }],
+  nodeCount: 1,
+  createdBy: 'u1',
+  createdAt: '2026-10-19T00:00:00.000Z',
+  updatedAt: '2026-10-19T00:00:00.000Z',
+}
+
 /**
  * 복원 결과. **화면이 읽는 것만 담지 않는다** — 서버가 실제로 내는 모양 그대로여야
  * `ok` 판이 *"과도 차단을 재는 자리"*가 된다.
@@ -476,6 +487,42 @@ const ENDPOINTS: Array<{
     body: preset,
     call: (c) => c.createPreset('p1', { name: '내 프리셋', schema: [{ id: 'a', type: 'List' }] }),
   },
+  // **모듈 다섯.** 프로젝트 아래에 산다(페이지를 건너 다니는 묶음이다). 목록 · 하나 · 저장 · 이름 응답은 봉투(`{ modules }` · `{ module }`)다.
+  {
+    client: 'listModules',
+    url: '/api/projects/p1/modules',
+    method: 'GET',
+    body: { modules: [projectModule] },
+    call: (c) => c.listModules('p1'),
+  },
+  {
+    client: 'getModule',
+    url: '/api/projects/p1/modules/m1',
+    method: 'GET',
+    body: { module: projectModule },
+    call: (c) => c.getModule('p1', 'm1'),
+  },
+  {
+    client: 'createModule',
+    url: '/api/projects/p1/modules',
+    method: 'POST',
+    body: { module: projectModule },
+    call: (c) => c.createModule('p1', { name: '내 모듈', nodes: [{ id: 'a', type: 'List' }] }),
+  },
+  {
+    client: 'renameModule',
+    url: '/api/projects/p1/modules/m1',
+    method: 'PATCH',
+    body: { module: projectModule },
+    call: (c) => c.renameModule('p1', 'm1', { name: '새 이름' }),
+  },
+  {
+    client: 'deleteModule',
+    url: '/api/projects/p1/modules/m1',
+    method: 'DELETE',
+    body: null,
+    call: (c) => c.deleteModule('p1', 'm1'),
+  },
   // **복원은 `:snapshotId` 아래의 정적 세그먼트다** — `GET .../snapshots/:id`(상세)와
   // 한 칸 차이인데 그쪽은 `ApiClient`에 없다(payload를 읽는 것은 서버다).
   {
@@ -722,6 +769,21 @@ const SHAPE_CASES: Array<{
     broken: [{ ...preset, id: '' }],
     ok: [preset],
     call: (c) => c.listPresets('p1'),
+  },
+  // --- 모듈. ---
+  // **`nodes` 가 배열이 아니면 막는다** — 그 값이 넣기(`moduleInsertOps`)에 그대로 들어간다. **`id` 가 빈 문자열이면 막는다** — 이름 바꾸기 · 삭제의 경로와
+  // React 목록의 `key` 다.
+  {
+    shape: 'moduleEnvelope',
+    broken: { module: { ...projectModule, nodes: null } },
+    ok: { module: projectModule },
+    call: (c) => c.getModule('p1', 'm1'),
+  },
+  {
+    shape: 'moduleListEnvelope',
+    broken: { modules: [{ ...projectModule, id: '' }] },
+    ok: { modules: [projectModule] },
+    call: (c) => c.listModules('p1'),
   },
   // --- 복원. ---
   // **`summary.pages`가 객체가 아니면 막는다** — 결과 알림이 그 안의 수를 읽으려고 풀어 헤치므로

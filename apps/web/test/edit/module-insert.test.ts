@@ -1,0 +1,175 @@
+/**
+ * **모듈 묶음을 넣는 편집**(`src/palette/module-insert.ts`)과 그 자리(`src/palette/palette-add.ts` 의 `paletteAddTarget` — 모듈 `Placing`).
+ *
+ * 문서로 직접 잰다 — 화면 흐름(다시 읽기 · 404 · 고름)은 `../palette/module-tab.test.tsx`.
+ */
+import { applyOps, invertOps, partitionIssues, validatePage, type PageDocument, type WbNode } from '@wirebound/schema'
+import { describe, expect, it } from 'vitest'
+import type { Placing, StructureDrop } from '../../src/edit/structure-drop'
+import { moduleDroppedNotice, moduleInsertOps } from '../../src/palette/module-insert'
+import { paletteAddTarget } from '../../src/palette/palette-add'
+import { STRUCTURE_WHY_DISABLED } from '../../src/panels/tree-row-actions'
+import '../../src/catalog-setup'
+
+/**
+ * ```
+ * n-root (Page)
+ * ├ n-text (Text)
+ * └ n-box  (Card)
+ *    └ n-in (Text)
+ * ```
+ */
+function doc(extra: Partial<PageDocument> = {}): PageDocument {
+  return {
+    version: 1,
+    ...extra,
+    root: {
+      id: 'n-root',
+      type: 'Page',
+      children: [
+        { id: 'n-text', type: 'Text', props: { content: '글' } },
+        { id: 'n-box', type: 'Card', children: [{ id: 'n-in', type: 'Text' }] },
+      ],
+    },
+  }
+}
+
+const NODES: WbNode[] = [
+  {
+    id: 'm_open',
+    type: 'Button',
+    props: { label: '열기' },
+    interactions: [
+      {
+        on: 'click',
+        actions: [
+          { type: 'setVisible', target: 'm_close', value: false },
+          { type: 'setVisible', target: 'n-text', value: true },
+          { type: 'setVisible', target: 'n_elsewhere', value: true },
+          { type: 'navigate', target: 'page:/없는 메뉴/없는 페이지' },
+        ],
+      },
+    ],
+  },
+  { id: 'm_close', type: 'Button', props: { label: '닫기' } },
+]
+
+const PLACING: Extract<Placing, { kind: 'module' }> = { kind: 'module', key: 'project:m-1', nodes: NODES }
+
+function counter(): () => string {
+  let next = 0
+  return () => `n_new${String((next += 1)).padStart(9, '0')}`
+}
+
+function target(document: PageDocument, selectedNodeId: string | null): StructureDrop {
+  const verdict = paletteAddTarget({ document, selectedNodeId, placing: PLACING, blockedBy: () => null, lockedBy: () => null })
+  if (!verdict.ok) throw new Error(verdict.reason)
+  return verdict.target
+}
+
+const NO_PAGES = (): boolean => false
+
+describe('자리 — 컴포넌트 카드와 같은 표', () => {
+  it('고른 것 없음 · 뿌리 → 페이지 끝 · 컨테이너 → 그 안 끝 · 잎 → 바로 뒤', () => {
+    const d = doc()
+    expect([target(d, null), target(d, 'n-root'), target(d, 'n-box'), target(d, 'n-text')].map((t) => [t.parentId, t.index])).toEqual([
+      ['n-root', 2],
+      ['n-root', 2],
+      ['n-box', 1],
+      ['n-root', 1],
+    ])
+  })
+
+  it('빈 묶음은 자리를 못 낸다', () => {
+    const verdict = paletteAddTarget({
+      document: doc(),
+      selectedNodeId: null,
+      placing: { kind: 'module', key: 'k', nodes: [] },
+      blockedBy: () => null,
+      lockedBy: () => null,
+    })
+    expect(verdict.ok).toBe(false)
+  })
+})
+
+describe('moduleInsertOps', () => {
+  it('편집 하나가 노드를 차례로 넣는다 · 새 id · 넣은 노드 전부를 고른다 · 결과 문서가 검증을 지난다', () => {
+    const before = doc()
+    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, target(before, 'n-text'), NO_PAGES, counter())
+    if ('reason' in edit) throw new Error(edit.reason)
+    const after = applyOps(before, edit.ops)
+    // 첫 id 는 임시 뿌리가 받아 간다(`prepareNodesForPaste` 머리말).
+    expect(after.root.children!.map((node) => node.id)).toEqual(['n-text', 'n_new000000002', 'n_new000000003', 'n-box'])
+    expect(edit.insertedIds).toEqual(['n_new000000002', 'n_new000000003'])
+    expect(edit.selectIds).toEqual(edit.insertedIds)
+    expect(partitionIssues(validatePage(after)).errors).toEqual([])
+  })
+
+  it('되돌리기(역연산 한 묶음)로 넣기 전 문서', () => {
+    const before = doc()
+    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, target(before, null), NO_PAGES, counter())
+    if ('reason' in edit) throw new Error(edit.reason)
+    const inverse = invertOps(before, edit.ops)
+    expect(applyOps(applyOps(before, edit.ops), inverse)).toEqual(before)
+  })
+
+  it('넣는 페이지에 없는 노드 · 페이지를 겨냥한 액션을 빼고 센다 — 묶음 안은 새 id 를 따라가고 페이지에 있는 노드는 남는다', () => {
+    const before = doc()
+    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, target(before, null), NO_PAGES, counter())
+    if ('reason' in edit) throw new Error(edit.reason)
+    const open = applyOps(before, edit.ops).root.children![2]!
+    expect(open.interactions![0]!.actions.map((action) => action.target)).toEqual(['n_new000000003', 'n-text'])
+    expect(edit.droppedActions).toBe(2)
+    expect(moduleDroppedNotice(edit)).toBe('상호작용 동작 2개는 대상이 없어 빼고 넣었습니다.')
+  })
+
+  it('넣는 페이지의 목록에 없는 상태의 가지를 뺀다 — 지금 고른 상태와 무관하다', () => {
+    const region: WbNode = {
+      id: 'm_sw',
+      type: 'StateSwitch',
+      children: [
+        { id: 'm_c0', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'm_t0', type: 'Text' }] },
+        { id: 'm_c1', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'm_t1', type: 'Text' }] },
+        { id: 'm_c2', type: 'StateCase', props: { state: 's_gone' }, children: [{ id: 'm_t2', type: 'Text' }] },
+      ],
+    }
+    const before = doc({ viewStates: [{ id: 's_admin', name: '관리자' }] })
+    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: [region] }, target(before, null), NO_PAGES, counter())
+    if ('reason' in edit) throw new Error(edit.reason)
+    const placed = applyOps(before, edit.ops).root.children![2]!
+    expect(placed.children!.map((child) => child.props?.['state'])).toEqual(['default', 's_admin'])
+    expect(edit.droppedCases).toEqual([{ state: 's_gone', count: 1 }])
+  })
+
+  it('패턴은 그대로 넣고 첫 슬롯 노드를 고른다', () => {
+    const before = doc()
+    const expanded = {
+      nodes: [{ id: 'p_sec', type: 'Section', children: [{ id: 'p_title', type: 'Text' }] }],
+      slots: new Map([['title', 'p_title']]),
+    }
+    const edit = moduleInsertOps(before, { kind: 'pattern', expanded }, target(before, null), NO_PAGES)
+    if ('reason' in edit) throw new Error(edit.reason)
+    expect(edit.insertedIds).toEqual(['p_sec'])
+    expect(edit.selectIds).toEqual(['p_title'])
+  })
+
+  it('자식을 안 받는 부모 자리면 까닭 — «안에 추가» 가 꺼진 설명', () => {
+    const before = doc()
+    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, { parentId: 'n-text', index: 0, placement: 'inside' }, NO_PAGES)
+    expect(edit).toEqual({ reason: STRUCTURE_WHY_DISABLED.addInside })
+  })
+
+  it('넣으면 문서가 저장될 수 없는 묶음(Page 가 든 옮긴 옛 모듈)은 까닭', () => {
+    const before = doc()
+    const nested: WbNode[] = [{ id: 'm_page', type: 'Page', children: [] }]
+    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: nested }, target(before, null), NO_PAGES, counter())
+    expect('reason' in edit).toBe(true)
+  })
+
+  it('입력 묶음을 바꾸지 않는다(기본 모듈은 모듈 상수다)', () => {
+    const before = doc()
+    const copy = structuredClone(NODES)
+    moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, target(before, null), NO_PAGES, counter())
+    expect(NODES).toEqual(copy)
+  })
+})

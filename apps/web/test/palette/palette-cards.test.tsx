@@ -133,7 +133,7 @@ afterEach(() => localStorage.clear())
 describe('갈래 탭', () => {
   it('탭 차례가 카탈로그 갈래 차례이고, 첫 탭이 골라져 그 갈래의 카드만 선다', async () => {
     await openWithPalette()
-    const tabs = within(palette()).getAllByRole('tab')
+    const tabs = within(within(palette()).getByRole('tablist', { name: '갈래' })).getAllByRole('tab')
     const expected = COMPONENT_GROUPS.map((group) => COMPONENT_GROUP_LABELS[group])
     expect(tabs.map((tab) => tab.textContent)).toEqual(expected)
     expect(tabs[0]?.getAttribute('aria-selected')).toBe('true')

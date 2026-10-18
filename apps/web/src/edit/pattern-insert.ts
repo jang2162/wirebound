@@ -160,12 +160,12 @@ function insertSpot(document: PageDocument, selectedNodeId: string | null): { pa
 }
 
 /**
- * 꽂은 뒤 고를 노드의 id. **첫 슬롯 노드, 없으면 전개된 첫 노드.**
+ * 꽂은 뒤 고를 노드의 id. **첫 슬롯 노드, 없으면 전개된 첫 노드.** 하단 판 «모듈» 탭의 테마 패턴 넣기도 이것으로 고른다(`palette/module-insert.ts`).
  *
  * *"첫"*은 `slots` 맵의 순회 순서이고, 그것은 `expandPattern`이 **전위 순회로** 넣은
  * 순서다 — 사용자가 트리에서 위에서부터 보는 순서와 같다.
  */
-function selectId(expanded: ExpandedNodes): string {
+export function selectId(expanded: ExpandedNodes): string {
   const first = expanded.nodes[0]!.id
   const placed = new Set<string>()
   const collect = (node: WbNode): void => {

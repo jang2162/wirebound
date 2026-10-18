@@ -10,6 +10,7 @@
  * |---|---|
  * | 새 타입(목록 카드) | 보인 자리에 `{ id, type }` 노드 하나 — 넣을 때와 같은 꼴(`edit/create-node.ts`) |
  * | 노드(손잡이) | 그 노드 서브트리의 사본을 보인 자리에 — 원본은 제자리에 두고 화면에서 흐리게 한다(`applyPreviewLook`) |
+ * | 모듈(«모듈» 탭 카드) | 묶음의 노드들(카드의 표본 — `edit/structure-drop.ts` 의 `Placing`)의 사본을 보인 자리에 차례로 |
  *
  * ## 미리보기 노드는 id 머리로 가른다
  *
@@ -69,12 +70,24 @@ function locate(root: WbNode, id: string): { node: WbNode; parent: WbNode | null
   return null
 }
 
-/** `parentId` 의 자식 `index` 자리에 `inserted` 를 끼운 사본 — 지나는 길의 노드만 새 객체다. */
-function withInserted(node: WbNode, parentId: string, index: number, inserted: WbNode): WbNode | null {
+/** 모듈 묶음의 `index` 째 노드 사본의 id 머리 — 묶음 안 노드 id 는 문서 노드와 겹칠 수 있어(같은 페이지에서 저장한 모듈) 차례를 함께 싣는다. */
+function modulePrefix(index: number): string {
+  return `${PREVIEW_ID_PREFIX}m${index}:`
+}
+
+/** 노드 서브트리를 미리보기 id 로 베낀다 — 머리를 준다. */
+function prefixedCopy(node: WbNode, prefix: string): WbNode {
+  const copy: WbNode = { ...node, id: `${prefix}${node.id}` }
+  if (Array.isArray(node.children)) copy.children = node.children.map((child) => prefixedCopy(child as WbNode, prefix))
+  return copy
+}
+
+/** `parentId` 의 자식 `index` 자리에 `inserted` 를 차례로 끼운 사본 — 지나는 길의 노드만 새 객체다. */
+function withInserted(node: WbNode, parentId: string, index: number, inserted: readonly WbNode[]): WbNode | null {
   const children = Array.isArray(node.children) ? node.children : []
   if (node.id === parentId) {
     const at = Math.max(0, Math.min(index, children.length))
-    return { ...node, children: [...children.slice(0, at), inserted, ...children.slice(at)] }
+    return { ...node, children: [...children.slice(0, at), ...inserted, ...children.slice(at)] }
   }
   for (let i = 0; i < children.length; i += 1) {
     const child = children[i]
@@ -96,16 +109,19 @@ export function previewDocument(document: PageDocument, preview: PlacementPrevie
   const root = document.root as WbNode | undefined
   if (root === undefined || root === null) return null
   const { placing, target } = preview
-  let inserted: WbNode
+  let inserted: WbNode[]
   let index = target.index
   if (placing.kind === 'new') {
     if (getComponent(placing.type) === undefined) return null
-    inserted = { id: `${PREVIEW_ID_PREFIX}0`, type: placing.type }
+    inserted = [{ id: `${PREVIEW_ID_PREFIX}0`, type: placing.type }]
+  } else if (placing.kind === 'module') {
+    if (placing.nodes.length === 0) return null
+    inserted = placing.nodes.map((node, at) => prefixedCopy(node, modulePrefix(at)))
   } else {
     const moving = locate(root, placing.id)
     if (moving === null || moving.parent === null) return null
     if (moving.parent.id === target.parentId && moving.index <= index) index += 1
-    inserted = previewCopy(moving.node)
+    inserted = [previewCopy(moving.node)]
   }
   const next = withInserted(root, target.parentId, index, inserted)
   return next === null ? null : { ...document, root: next }
@@ -137,9 +153,16 @@ export function applyPreviewLook(doc: Document, preview: PlacementPreview, accen
     touched.push({ element, opacity: element.style.opacity })
     element.style.opacity = opacity
   }
-  const insertedId = preview.placing.kind === 'new' ? `${PREVIEW_ID_PREFIX}0` : `${PREVIEW_ID_PREFIX}${preview.placing.id}`
-  const inserted = elementOf(doc, insertedId)
-  dim(inserted, PREVIEW_OPACITY)
+  const { placing } = preview
+  const insertedIds =
+    placing.kind === 'new'
+      ? [`${PREVIEW_ID_PREFIX}0`]
+      : placing.kind === 'module'
+        ? placing.nodes.map((node, at) => `${modulePrefix(at)}${node.id}`)
+        : [`${PREVIEW_ID_PREFIX}${placing.id}`]
+  const roots = insertedIds.map((id) => elementOf(doc, id))
+  for (const root of roots) dim(root, PREVIEW_OPACITY)
+  const inserted = roots[0] ?? null
   if (preview.placing.kind === 'node') dim(elementOf(doc, preview.placing.id), MOVING_OPACITY)
 
   let outlined: { element: HTMLElement; outline: string; offset: string } | null = null

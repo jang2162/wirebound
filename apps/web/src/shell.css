@@ -653,6 +653,129 @@
   text-overflow: ellipsis;
 }
 
+/* ── 하단 판의 «모듈» 탭(`palette/module-tab.tsx`) ── 위층 탭 줄(`.wb-shell-palette-views`)은 갈래 탭과 같은 말투이고 갈래 탭과 사이를 띄운다.
+   묶음 셋(프로젝트 모듈 · 기본 모듈 · 테마 패턴)이 세로로 서고 묶음마다 카드가 줄을 바꿔 감싸인다. 카드는 축소판이 없어 컴포넌트 카드보다 작다. */
+.wb-shell-palette-views {
+  padding-right: 10px;
+  border-right: 1px solid var(--wb-shell-line);
+}
+
+.wb-shell-module-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.wb-shell-module-group {
+  min-width: 0;
+}
+
+.wb-shell-module-group-head {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-module-empty {
+  margin: 0;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-module-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 카드 — 이름 · 둘째 줄(노드 수 · 패턴 범주) · 오른쪽 위 단추 줄. 몸통은 끌기 전용이다(컴포넌트 카드와 같은 근거). 긴 이름은 줄임표로 자른다. */
+.wb-shell-module-card {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 220px;
+  max-width: 100%;
+  min-height: 56px;
+  padding: 8px 10px;
+  padding-right: 84px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  background: #fff;
+  cursor: grab;
+  user-select: none;
+}
+
+.wb-shell-module-card:hover,
+.wb-shell-module-card:focus-within {
+  border-color: var(--wb-shell-accent);
+  box-shadow: 0 0 0 1px var(--wb-shell-accent);
+}
+
+.wb-shell-module-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-shell-module-detail {
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-module-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 4px;
+}
+
+/* 단추 줄의 아이콘 단추 — «넣기» 단추(`.wb-shell-palette-add`)의 모양을 쓰고 자리만 줄을 따른다. */
+.wb-shell-module-action {
+  position: static;
+}
+
+/* 이름 바꾸기 · 삭제 확인 — 카드 안의 한 줄(칸 + 글 단추). */
+.wb-shell-module-edit {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  background: #fff;
+}
+
+.wb-shell-module-name-input {
+  width: 120px;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.wb-shell-module-name-input[aria-invalid='true'] {
+  border-color: var(--wb-shell-comment);
+}
+
+.wb-shell-module-text-action {
+  padding: 2px 6px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+.wb-shell-module-text-action:disabled {
+  cursor: default;
+  color: var(--wb-shell-muted);
+}
+
 /* 하단 바의 «컴포넌트» 토글. 셸의 다른 단추(`.wb-shell-zoom-step`)와 같은 테두리 · 모서리다. 열린 판은 강조색 테두리다. */
 .wb-shell-palette-toggle {
   appearance: none;

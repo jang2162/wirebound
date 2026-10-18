@@ -95,6 +95,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
+import type { PageDocument } from '@wirebound/schema'
 import { canvasHitAt, type CanvasHit, type HitNode, type Layout, type Point, type Rect } from '../canvas/canvas-drop'
 import { isPreviewId, withoutPreview, type PlacementPreview } from '../canvas/canvas-preview'
 import { createNode } from '../edit/create-node'
@@ -223,7 +224,9 @@ function samePreview(a: PlacementPreview, b: PlacementPreview): boolean {
   const placing =
     a.placing.kind === 'new'
       ? b.placing.kind === 'new' && a.placing.type === b.placing.type
-      : b.placing.kind === 'node' && a.placing.id === b.placing.id
+      : a.placing.kind === 'module'
+        ? b.placing.kind === 'module' && a.placing.key === b.placing.key
+        : b.placing.kind === 'node' && a.placing.id === b.placing.id
   return (
     placing &&
     a.target.parentId === b.target.parentId &&
@@ -349,6 +352,12 @@ export function usePlacementDrop(input: {
   regions?: Regions
   /** 캔버스 판정을 주입한다(테스트 — jsdom 에 레이아웃이 없다). */
   canvasHit?: typeof canvasHitAt
+  /**
+   * 모듈 카드를 놓았다 — 넣을 노드를 다시 지은 뒤(서버에서 다시 읽기 · 패턴 다시 전개) 넣는 것은 부르는 쪽이다(`palette/module-tab.tsx`). `verdict` 는
+   * 놓은 대상 · 띠를 **그때의 문서**로 다시 묻는 함수다 — 다시 짓는 사이 남이 고쳤을 수 있다(머리말 «보인 자리에만 놓는다»의 «놓기» 겹과 같은 물음).
+   * 없으면 모듈 카드의 놓기는 편집 0 이다.
+   */
+  onModuleDrop?: (placing: Extract<Placing, { kind: 'module' }>, verdict: (doc: PageDocument) => StructureDrop | null) => void
 }): Placement {
   const store = useEditorStoreInstance()
   const document = useOpenDocument(input.pageId)
@@ -498,6 +507,12 @@ export function usePlacementDrop(input: {
           }
     if (input.pageId === undefined) return logRefused(debug, reason, 'no-document')
     if (!sameStage(drop.stage, stageNow())) return logRefused(debug, reason, 'stage-changed')
+    if (placing.kind === 'module') {
+      if (input.onModuleDrop === undefined) return logRefused(debug, reason, 'unknown')
+      debug?.line('drop', { result: 'deferred', placing: `module:${placing.key}` })
+      input.onModuleDrop(placing, (now) => verdict(now, placing, drop.over))
+      return
+    }
     const doc = openDocumentNow(store, input.pageId)
     if (doc === null) return logRefused(debug, reason, 'no-document')
     const target = verdict(doc, placing, drop.over, why)

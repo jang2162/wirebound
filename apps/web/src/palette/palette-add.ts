@@ -1,5 +1,5 @@
 /**
- * **카드 «넣기» 단추(Enter)로 넣는 자리** — 고른 노드에 따라 새 노드를 어디에 넣는가(spec `docs/superpowers/specs/2026-10-01-component-drag-design.md`
+ * **카드 «넣기» 단추(Enter)로 넣는 자리** — 고른 노드에 따라 새 노드(«컴포넌트» 탭) · 모듈 묶음(«모듈» 탭 — `./module-tab.tsx`)을 어디에 넣는가(spec `docs/superpowers/specs/2026-10-01-component-drag-design.md`
  * 「끌기와 클릭」 · 계획 D6 — 카드 몸통의 누름은 넣지 않고 단추가 이 자리를 쓴다 · `./component-palette.tsx` 머리말 «카드»). 자리의 판정은
  * 끌어 놓기와 같은 함수다(`edit/structure-drop.ts` 의 `structureDropTarget` · `pageEndTarget`) — 단추는 «어느 대상의 어느 띠» 를 고를 뿐이다.
  *
@@ -27,11 +27,10 @@
  * **순수 함수이고 던지지 않는다**(`edit/structure-drop.ts` 와 같은 층).
  */
 import type { NodeLock, PageDocument, PatchOp } from '@wirebound/schema'
-import { createNode } from '../edit/create-node'
 import { insertNodeOps } from '../edit/ops'
 import { findNodeSafely } from '../edit/safe-walk'
 import { acceptsChildren, nodeSpot } from '../edit/structure-actions'
-import { pageEndTarget, structureDropTarget, type Placing, type StructureDrop } from '../edit/structure-drop'
+import { pageEndTarget, probeNode, structureDropTarget, type Placing, type StructureDrop } from '../edit/structure-drop'
 import { lockedNotice } from '../panels/property-panel'
 import { lockedSelectionStatus, NOT_IN_DOCUMENT_STATUS } from '../panels/toolbar-status'
 import { STRUCTURE_WHY_DISABLED } from '../panels/tree-row-actions'
@@ -41,14 +40,14 @@ export type PaletteAdd = { ok: true; target: StructureDrop } | { ok: false; reas
 export function paletteAddTarget(input: {
   document: PageDocument
   selectedNodeId: string | null
-  type: string
+  /** 넣을 것 — 새 타입 · 모듈 묶음. 노드 옮기기(`'node'`)는 단추 넣기가 아니다. */
+  placing: Exclude<Placing, { kind: 'node' }>
   /** 지을 편집이 부딪히는 남의 잠금(스토어의 `editBlockedBy`). */
   blockedBy: (ops: readonly PatchOp[]) => NodeLock | null
   /** 그 노드를 막는 남의 잠금(스토어의 `lockedBy`). */
   lockedBy: (nodeId: string) => NodeLock | null
 }): PaletteAdd {
-  const { document, selectedNodeId: selected } = input
-  const placing: Placing = { kind: 'new', type: input.type }
+  const { document, selectedNodeId: selected, placing } = input
   const rootId: unknown = document.root?.id
   const atEnd = selected === null || selected === rootId
   const node = atEnd ? undefined : findNodeSafely(document.root, selected)
@@ -80,7 +79,7 @@ export function paletteAddTarget(input: {
         : afterSlot(document, selected)
   if (slot === null) return { ok: false, reason: NOT_IN_DOCUMENT_STATUS }
   if (!acceptsChildren(findNodeSafely(document.root, slot.parentId))) return { ok: false, reason: STRUCTURE_WHY_DISABLED.addInside }
-  const probe = createNode(input.type, () => 'palette-probe')
+  const probe = probeNode(placing, 'palette-probe')
   const ops = probe === null ? null : insertNodeOps(document, slot.parentId, slot.index, probe)
   const blocker = ops === null ? null : input.blockedBy(ops)
   if (blocker !== null) return { ok: false, reason: lockedNotice(blocker.userName) }

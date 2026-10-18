@@ -51,12 +51,12 @@ function invalidNotice(messages: readonly string[]): string {
 }
 
 /**
- * 노드들을 `parentId` 의 `index` 부터 차례로 넣는 묶음. 넣은 뒤 문서가 검증(`error`)을 못 지나면 `reason`.
+ * 노드들을 `parentId` 의 `index` 부터 차례로 넣는 묶음. 넣은 뒤 문서가 검증(`error`)을 못 지나면 `reason`. 붙이기와 모듈 넣기(`palette/module-insert.ts`)가 쓴다.
  *
  * **판정은 결과 문서로 한다** — 붙이는 노드가 이미 저장될 수 있는 것인지(봉투 검증은 읽을 때 지났다)보다 «이 자리에 넣고 나서도 문서가 저장될
  * 수 있는가»가 물음이다. 다만 넣기 전 문서가 이미 `error` 를 내면 그것은 붙이기 탓이 아니므로 넣기 전에 없던 이슈만 센다.
  */
-function insertMany(document: PageDocument, parentId: string, index: number, nodes: readonly WbNode[]): NodeEdit {
+export function insertMany(document: PageDocument, parentId: string, index: number, nodes: readonly WbNode[]): NodeEdit {
   if (!acceptsChildren(findNodeSafely(document.root, parentId))) return { reason: STRUCTURE_WHY_DISABLED.addInside }
   if (nodes.length > MAX_OPS_PER_EDIT) return { reason: tooManyOpsNotice(nodes.length) }
 
