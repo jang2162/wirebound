@@ -68,7 +68,7 @@ function server(myRole: ProjectRole, others: ProjectMember[] = [member('u-2', '�
 }
 
 async function open(client: ApiClient): Promise<HTMLElement> {
-  renderWithProviders(<App />, { client, route: '/projects/p-1/settings' })
+  renderWithProviders(<App />, { client, route: '/projects/p-1/settings?section=members' })
   const section = await screen.findByRole('region', { name: '멤버' })
   await within(section).findByText('u-2@example.com')
   return section
@@ -185,7 +185,8 @@ describe('멤버 절 — 나를 바꾸면 설정 페이지가 권한을 다시 �
     fireEvent.change(within(row(section, '테스터')).getByLabelText('테스터의 역할'), { target: { value: 'editor' } })
     await waitFor(() => expect(within(screen.getByRole('region', { name: '멤버' })).queryByRole('button', { name: '초대' })).toBeNull())
     expect(calls.getProject).toBe(2)
-    // «일반» 칸도 읽기 전용이 된다 — 같은 역할에서 판정한다.
+    // «일반» 칸도 읽기 전용이 된다 — 같은 역할에서 판정한다(절은 탭 판 안이라 탭을 옮겨 본다).
+    fireEvent.click(screen.getByRole('tab', { name: '일반' }))
     expect(within(screen.getByRole('region', { name: '일반' })).queryByRole('button', { name: '저장' })).toBeNull()
   })
 

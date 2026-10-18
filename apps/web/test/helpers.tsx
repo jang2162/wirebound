@@ -135,7 +135,12 @@ const LOCATION_PROBE = 'location-probe'
  */
 function LocationProbe(): ReactElement {
   const location = useLocation()
-  return <span data-testid={LOCATION_PROBE}>{location.pathname}</span>
+  // 질의는 속성에 싣는다 — 글(`currentPath()`)은 경로만이라 기존 단언이 그대로 선다.
+  return (
+    <span data-testid={LOCATION_PROBE} data-search={location.search}>
+      {location.pathname}
+    </span>
+  )
 }
 
 export interface RenderOptions {
@@ -242,4 +247,9 @@ export function renderWithProviders(ui: ReactElement, options: RenderOptions = {
 /** 지금 라우터 위치의 경로. `renderWithProviders`로 렌더한 뒤에만 쓸 수 있다. */
 export function currentPath(): string {
   return screen.getByTestId(LOCATION_PROBE).textContent ?? ''
+}
+
+/** 지금 라우터 위치의 질의(`?…` — 없으면 빈 글). `renderWithProviders`로 렌더한 뒤에만 쓸 수 있다. */
+export function currentSearch(): string {
+  return screen.getByTestId(LOCATION_PROBE).getAttribute('data-search') ?? ''
 }

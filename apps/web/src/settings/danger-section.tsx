@@ -16,6 +16,14 @@ import { DeleteConfirm } from './delete-confirm'
 
 const DELETE_FAILURE = '프로젝트를 지우지 못했습니다'
 
+/**
+ * 이 절이 서는가 — 설정 페이지의 절 목차가 «위험 구역» 탭을 둘지 이것으로 정한다(`routes/settings.tsx`). 판정은 아래 절과 같은
+ * `projectAbilities(…).remove` 하나다 — 목차가 따로 판정하면 탭과 절이 갈린다.
+ */
+export function dangerShown(project: ProjectView): boolean {
+  return projectAbilities(project.role).remove
+}
+
 export function DangerSection(props: { project: ProjectView }): ReactElement | null {
   const api = useApi()
   const navigate = useNavigate()
@@ -25,7 +33,7 @@ export function DangerSection(props: { project: ProjectView }): ReactElement | n
   const [failure, setFailure] = useState<Failure | null>(null)
   const heading = useId()
 
-  if (!projectAbilities(project.role).remove) return null
+  if (!dangerShown(project)) return null
   if (failure !== null && failure.kind === 'signed-out') return <SignedOut />
 
   async function remove(): Promise<void> {

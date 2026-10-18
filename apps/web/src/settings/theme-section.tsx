@@ -1,5 +1,7 @@
 /**
- * 설정 페이지의 **«테마»** 절 — 지금 고정한 `id@버전` · 고르기(`theme-chooser.tsx`) · 토큰 편집(`token-editor.tsx`).
+ * 설정 페이지의 **«테마»** 절 — 위에서부터 **지금 테마 요약 카드**(이름 · `id@버전` · 새 버전 · 기본값과 다른 토큰 수) · **«테마 바꾸기»**
+ * (`theme-chooser.tsx` — owner 만) · **«토큰»**(`token-editor.tsx` — 폼과 미리보기). 미리보기 상자는 창 높이에 묶여 안에서 스크롤한다
+ * (`shell.css` 의 `.wb-shell-settings-preview`) — 그래서 절의 길이가 갤러리가 아니라 폼의 길이다.
  *
  * 절이 바인딩(`GET …/theme`)을 쥐고 두 자식이 그 값에서 시작한다. 한쪽이 저장하면(200) 그 응답이 곧 새 바인딩이고, 409 면 서버 값으로
  * 다시 읽는다 — 설정 페이지는 `theme-changed` 를 듣지 않는다(열어 둔 설정 페이지가 남의 저장을 곧바로 따라가는 것은 이 절의 일이 아니다 —
@@ -14,6 +16,7 @@ import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
 import type { ProjectThemeView, ProjectView } from '../api/types'
 import { projectAbilities } from '../projects/project-actions'
+import { shellIcon } from '../shell/icons'
 import { ThemeChooser } from './theme-chooser'
 import { TokenEditor } from './token-editor'
 
@@ -78,7 +81,10 @@ export function ThemeSection(props: { project: ProjectView }): ReactElement {
         <>
           <CurrentTheme view={state.view} />
           {canChoose && state.view.themeId !== null && state.view.version !== null && (
-            <ThemeChooser projectId={projectId} view={state.view} onSaved={saved} onStale={() => void reload()} />
+            <div className="wb-shell-settings-block">
+              <h3 className="wb-shell-settings-subtitle">테마 바꾸기</h3>
+              <ThemeChooser projectId={projectId} view={state.view} onSaved={saved} onStale={() => void reload()} />
+            </div>
           )}
           {state.view.themeId !== null && state.view.version !== null && state.view.manifest !== null && (
             <TokenEditor projectId={projectId} view={state.view} canEdit={canChoose} onSaved={saved} onStale={() => void reload()} />
@@ -89,17 +95,30 @@ export function ThemeSection(props: { project: ProjectView }): ReactElement {
   )
 }
 
-/** 지금 값 — `이름 id@버전`, 같은 테마에 더 높은 숨기지 않은 판이 있으면 «새 버전». */
+/**
+ * 지금 값 — 요약 카드. 첫 줄은 `이름 id@버전` 한 글이다(글자로 찾는 자리가 그 요소의 제 글 노드를 본다 — 둘로 가르면 못 찾는다 ·
+ * `test/settings/theme-chooser.test.tsx`).
+ * 같은 테마에 더 높은 숨기지 않은 판이 있으면 «새 버전», manifest 가 있으면 기본값과 다른 토큰 수(저장된 토큰은 기본값을 뺀 것이다 —
+ * `token-editor.tsx` 머리말 «저장은 기본값과 같은 값을 뺀 초안»).
+ */
 function CurrentTheme(props: { view: ProjectThemeView }): ReactElement {
   const { view } = props
   if (view.themeId === null || view.version === null) {
     return <p className="wb-shell-settings-current">고정된 테마가 없습니다 — 서버가 다음 기동에 시스템 테마로 채웁니다</p>
   }
   const newer = view.latest !== null && compareVersions(view.latest, view.version) > 0
+  const total = view.manifest === null ? null : Object.keys(view.manifest.tokens.items).length
+  const changed = Object.keys(view.tokens).length
   return (
-    <p className="wb-shell-settings-current">
-      <span>{`${view.manifest?.name ?? view.themeId} ${view.themeId}@${view.version}`}</span>
-      {newer && <span className="wb-shell-settings-newer">{`새 버전 ${view.latest}`}</span>}
-    </p>
+    <div className="wb-shell-settings-summary" role="group" aria-label="지금 테마">
+      {shellIcon('themes', 20, 'wb-shell-settings-summary-icon')}
+      <div className="wb-shell-settings-summary-body">
+        <p className="wb-shell-settings-current">{`${view.manifest?.name ?? view.themeId} ${view.themeId}@${view.version}`}</p>
+        <p className="wb-shell-settings-summary-meta">
+          {total === null ? `바꾼 토큰 ${changed}개` : `바꾼 토큰 ${changed} / ${total}개`}
+          {newer && <span className="wb-shell-settings-newer">{`새 버전 ${view.latest}`}</span>}
+        </p>
+      </div>
+    </div>
   )
 }

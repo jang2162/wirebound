@@ -4141,6 +4141,82 @@
   margin: 0 0 16px;
 }
 
+/* 절 목차와 판(`routes/settings.tsx` 머리말 «절 목차») — 왼쪽 세로 탭 200px | 판. 창이 좁으면(< 900px) 탭이 위 가로 줄로 올라간다. */
+.wb-shell-settings-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+/* 세로 탭 목록. 판이 길어도(«테마») 탭이 창 안에 남게 붙인다. */
+.wb-shell-settings-tabs {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 탭 하나 — 그림 · 글. 고른 탭은 옅은 강조 바탕과 강조색 글(`aria-selected`). */
+.wb-shell-settings-tab {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: transparent;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.wb-shell-settings-tab:hover {
+  background: var(--wb-shell-chrome);
+}
+
+/* 키보드 초점 — 마우스 표시(위)와 갈라 테두리로. */
+.wb-shell-settings-tab:focus-visible {
+  outline: 2px solid var(--wb-shell-accent);
+  outline-offset: -2px;
+}
+
+/* «위험 구역» 탭 — 글이 오류 색이다(되돌릴 수 없는 것을 담는 판). 고르면 아래 고른 꼴이 이긴다(특정도가 높다). */
+.wb-shell-settings-tab-danger {
+  color: #b42318;
+}
+
+.wb-shell-settings-tab[aria-selected='true'] {
+  background: #eaf1fe;
+  font-weight: 600;
+  color: var(--wb-shell-accent);
+}
+
+/* 판 하나 — 고른 것만 보인다(`hidden`). 격자 칸 안에서 줄어들 수 있게 `min-width: 0`. */
+.wb-shell-settings-panel {
+  min-width: 0;
+}
+
+@media (max-width: 899px) {
+  .wb-shell-settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  /* 가로 줄 — 넘치면 줄 안에서 민다(창은 가로로 안 넘친다). */
+  .wb-shell-settings-tabs {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--wb-shell-line);
+    padding-bottom: 4px;
+  }
+}
+
 /* 절 하나 — 카드(테두리 · 모서리 · 안쪽 여백). 계정 설정은 셋을 위아래로 쌓고, 프로젝트 설정은 탭 판마다 하나를 담는다. */
 .wb-shell-settings-section {
   margin: 0 0 16px;
@@ -4279,17 +4355,68 @@
   overflow-wrap: anywhere;
 }
 
-/* «테마» 절의 지금 값 — `이름 id@버전` 과 «새 버전» 표시. */
+/* «테마» 절의 지금 값 — 요약 카드 첫 줄(`이름 id@버전`). 고정된 테마가 없을 때는 이 줄 혼자 선다. */
 .wb-shell-settings-current {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* 지금 테마 요약 카드(`settings/theme-section.tsx` 의 `CurrentTheme`) — 그림 | 이름 줄 · 보조 줄. */
+.wb-shell-settings-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 24px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-settings-summary-icon {
+  flex: none;
+  box-sizing: content-box;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--wb-shell-accent);
+}
+
+.wb-shell-settings-summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wb-shell-settings-summary-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 0 0 12px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--wb-shell-muted);
 }
 
+/* «새 버전» 표지 — 알약 꼴. */
 .wb-shell-settings-newer {
+  border-radius: 999px;
+  padding: 0 8px;
+  background: #eaf1fe;
   font-size: 12px;
   color: var(--wb-shell-accent);
+}
+
+/* 절 안의 작은 묶음(«테마 바꾸기») — 제목(`-subtitle`) 밑에 내용. 아래 «토큰» 과 선으로 가른다. */
+.wb-shell-settings-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 24px;
+  border-bottom: 1px solid var(--wb-shell-line);
+  padding-bottom: 8px;
 }
 
 /* 테마 · 판 고르개 — 칸 둘을 가로로 두고 확인은 그 밑 줄 전부를 쓴다. */
@@ -4369,19 +4496,20 @@
   font-weight: 600;
 }
 
-/* 토큰 무리 하나(manifest 의 `tokens.groups` — 없으면 «기타»). `<fieldset>` 의 기본 테두리 · 여백을 지운다. */
+/* 토큰 무리 하나(manifest 의 `tokens.groups` — 없으면 «기타») — 작은 카드. `<fieldset>` 의 기본 테두리 · 여백을 셸 값으로 바꾼다
+   (이름표 `<legend>` 는 테두리 위에 걸린다). */
 .wb-shell-settings-token-group {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin: 0;
-  border: 0;
-  border-top: 1px solid var(--wb-shell-line);
-  padding: 8px 0 0;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 8px;
+  padding: 8px 12px 12px;
 }
 
 .wb-shell-settings-legend {
-  padding: 0;
+  padding: 0 4px;
   font-size: 12px;
   font-weight: 600;
   color: var(--wb-shell-muted);
@@ -4432,10 +4560,37 @@
   font-size: 13px;
 }
 
-/* 미리보기 상자(`settings/theme-preview.tsx`) — 갤러리 iframe 을 감싼다. **문서를 감싸는 상자라 상속 속성을 걸지 않는다**
-   (`test/shell-css-guard.ts` 의 `WRAPPERS`) — iframe 이 상속을 끊지만 규칙은 캔버스 상자와 같게 둔다. 좁은 창에서는 스크롤한다. */
+/* 미리보기의 틀(`settings/theme-preview.tsx` — 프로젝트 설정 · 테마 관리가 함께 쓴다). **높이를 창 높이에 묶는다** — 갤러리(카탈로그
+   전부 × variant)는 1만 px 을 넘어, 묶지 않으면 그 길이가 곧 화면의 길이였다. 폼 옆에 설 때는 창에 붙어(`sticky`) 폼을 내려도
+   따라온다. 높이 · 테두리를 안쪽 상자(아래)가 아니라 이 틀이 갖는 것은 안쪽이 문서를 감싸는 상자라 그 속성들을 걸 수 없기 때문이다
+   (`test/shell-css-guard.ts` 의 `WRAPPER_PROPERTIES`). 안쪽이 줄어들며(`min-height: 0`) 스크롤한다. */
+.wb-shell-settings-preview-frame {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: 0;
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 8px;
+}
+
+/* 좁은 창에서 폼 밑으로 쌓이면 창 높이의 60% 로 줄이고 붙지 않는다 — 미리보기가 창을 다 덮으면 그 위 · 아래 폼에 닿을 길이 상자 안
+   스크롤뿐이다(코디네이터 답 · 2026-10-19). 쌓이는 문턱은 `.wb-shell-settings-tokens` 의 것과 같다. */
+@media (max-width: 959px) {
+  .wb-shell-settings-preview-frame {
+    position: static;
+    max-height: 60vh;
+  }
+}
+
+/* 미리보기 상자 — 갤러리 iframe 을 감싼다. **문서를 감싸는 상자라 상속 속성을 걸지 않는다**(`test/shell-css-guard.ts` 의 `WRAPPERS`) —
+   iframe 이 상속을 끊지만 규칙은 캔버스 상자와 같게 둔다. 틀(위) 안에서 줄어들어 스크롤한다. */
 .wb-shell-settings-preview {
   min-width: 0;
+  min-height: 0;
   overflow: auto;
   padding: 12px;
   background: var(--wb-shell-chrome);

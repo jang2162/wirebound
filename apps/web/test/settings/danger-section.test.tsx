@@ -36,7 +36,7 @@ function renderSettings(
       listProjects,
       deleteProject,
     }),
-    route: '/projects/p-own/settings',
+    route: '/projects/p-own/settings?section=danger',
   })
   return { deleteProject, listProjects }
 }
@@ -53,19 +53,25 @@ const type = (value: string): void => {
 }
 
 describe('위험 구역 — 누구에게', () => {
-  it('owner 에게만 선다 — 페이지 맨 아래 절이다', async () => {
+  it('owner 에게만 선다 — 절 목차의 마지막 탭이고 주소(`?section=danger`)로 열린다', async () => {
     renderSettings()
     const section = await screen.findByRole('region', { name: '위험 구역' })
-    const sections = screen.getAllByRole('region')
-    expect(sections[sections.length - 1]).toBe(section)
+    const tabs = screen.getAllByRole('tab')
+    const last = tabs[tabs.length - 1]!
+    expect(last.textContent).toBe('위험 구역')
+    expect(last.getAttribute('aria-selected')).toBe('true')
+    expect(section.closest('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe(last.id)
   })
 
   for (const role of ['editor', 'viewer'] as const) {
     it(`${role} 에게는 절째 없다`, async () => {
+      // 주소가 `?section=danger` 여도 그 절이 없으니 «일반» 으로 선다.
       renderSettings({ role })
-      await screen.findByRole('region', { name: '멤버' })
-      expect(screen.queryByRole('region', { name: '위험 구역' })).toBeNull()
-      expect(screen.queryByRole('button', { name: '프로젝트 삭제' })).toBeNull()
+      await screen.findByRole('region', { name: '일반' })
+      expect(screen.queryByRole('tab', { name: '위험 구역' })).toBeNull()
+      // 숨은 판까지 — 탭만 빼고 절을 남겨 두지 않는다.
+      expect(screen.queryByRole('region', { name: '위험 구역', hidden: true })).toBeNull()
+      expect(screen.queryByRole('button', { name: '프로젝트 삭제', hidden: true })).toBeNull()
     })
   }
 })
