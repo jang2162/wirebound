@@ -65,7 +65,7 @@ interface Board {
   pageId: string
   rootId: string
   bobRole: BobRole
-  /** 시나리오의 `setup` 이 만든 것(곁 메뉴 · 코멘트 · 프리셋 id 등) — `send` · `race` 가 읽는다. */
+  /** 시나리오의 `setup` 이 만든 것(곁 메뉴 · 코멘트 · 모듈 id 등) — `send` · `race` 가 읽는다. */
   ids: Record<string, string>
 }
 
@@ -367,7 +367,7 @@ async function inject(ctx: ProxiedRealApi, b: Board, cookie: Cookie, method: 'PO
 
 /**
  * **N43(L-322) — 404 · 400 줄.** 대상이 «사라졌다 · 없다» 는 실패도 재확인 앞에서 나가면 가드를 지난 뒤 빠진 사람이 **그 프로젝트 안의 사실**(페이지 ·
- * 메뉴 · 코멘트 · 프리셋이 지워졌다 · 하위 메뉴다)을 받는다. 판은 위와 같다 — 쓰기를 첫 잠금 질의에서 붙잡고, 그 사이 앨리스가 대상을 지우고 밥을
+ * 메뉴 · 코멘트 · 모듈이 지워졌다 · 하위 메뉴다)을 받는다. 판은 위와 같다 — 쓰기를 첫 잠금 질의에서 붙잡고, 그 사이 앨리스가 대상을 지우고 밥을
  * 빼거나 내린 뒤 놓는다. 대조(멤버 그대로)는 그 갈래의 응답을 실제로 받는다.
  */
 const N43_SCENARIOS: Scenario[] = [
@@ -554,17 +554,36 @@ const N43_SCENARIOS: Scenario[] = [
       snap(await inject(ctx, b, cookie, 'DELETE', `menu/${b.ids.spare}`, { cascade: true, expect: { menuIds: [], pageIds: [] } })),
   },
   {
-    name: 'DELETE …/presets/:id · 404 (프리셋이 이미 사라졌다)',
+    name: 'DELETE …/modules/:id · 404 (모듈이 이미 사라졌다)',
     bobRole: 'editor',
-    hold: 'delete from "presets"',
+    hold: 'delete from "modules"',
     asMember: { status: 404, code: 'not-found' },
     setup: async (ctx, b) => {
-      const made = await inject(ctx, b, b.alice.cookie, 'POST', 'presets', { name: '앨리스의 프리셋', schema: [] })
+      const made = await inject(ctx, b, b.alice.cookie, 'POST', 'modules', {
+        name: '앨리스의 모듈',
+        nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }],
+      })
       await ok(made, 201)
-      b.ids.presetId = (made.json() as { id: string }).id
+      b.ids.moduleId = (made.json() as { module: { id: string } }).module.id
     },
-    race: (ctx, b) => aliceDeletes(ctx, b, `presets/${b.ids.presetId}`),
-    send: async (ctx, cookie, b) => snap(await inject(ctx, b, cookie, 'DELETE', `presets/${b.ids.presetId}`)),
+    race: (ctx, b) => aliceDeletes(ctx, b, `modules/${b.ids.moduleId}`),
+    send: async (ctx, cookie, b) => snap(await inject(ctx, b, cookie, 'DELETE', `modules/${b.ids.moduleId}`)),
+  },
+  {
+    name: 'PATCH …/modules/:id · 404 (모듈이 이미 사라졌다)',
+    bobRole: 'editor',
+    hold: 'update "modules"',
+    asMember: { status: 404, code: 'not-found' },
+    setup: async (ctx, b) => {
+      const made = await inject(ctx, b, b.alice.cookie, 'POST', 'modules', {
+        name: '앨리스의 모듈',
+        nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }],
+      })
+      await ok(made, 201)
+      b.ids.moduleId = (made.json() as { module: { id: string } }).module.id
+    },
+    race: (ctx, b) => aliceDeletes(ctx, b, `modules/${b.ids.moduleId}`),
+    send: async (ctx, cookie, b) => snap(await inject(ctx, b, cookie, 'PATCH', `modules/${b.ids.moduleId}`, { name: '밥이 바꾼 이름' })),
   },
   {
     // L-323 — 캡처(페이지 · 코멘트 전부를 읽는다)가 도는 사이 남이 커밋하면 «뜨는 동안 프로젝트가 바뀌었습니다» 409 다. 캡처는 트랜잭션 앞이고 길이는 프로젝트 크기에 비례한다.
@@ -877,10 +896,16 @@ describe('실패 갈래의 재확인 자리 — 대상이 사라진 판의 잠�
       success: { projectRowFree: false, pageRowFree: false, status: 200 },
     },
     {
-      name: 'DELETE …/presets/:id · 404',
-      scenario: 'DELETE …/presets/:id · 404',
+      name: 'DELETE …/modules/:id · 404',
+      scenario: 'DELETE …/modules/:id · 404',
       failure: { projectRowFree: true, pageRowFree: true, status: 404 },
       success: { projectRowFree: true, pageRowFree: true, status: 204 },
+    },
+    {
+      name: 'PATCH …/modules/:id · 404',
+      scenario: 'PATCH …/modules/:id · 404',
+      failure: { projectRowFree: true, pageRowFree: true, status: 404 },
+      success: { projectRowFree: true, pageRowFree: true, status: 200 },
     },
     {
       name: 'POST …/snapshots · 409 (뜨는',

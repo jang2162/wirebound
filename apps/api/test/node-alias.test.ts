@@ -214,13 +214,13 @@ describe('노드 별칭 — 받지 않는 글자는 입구 다섯 모두 거절'
       })
       expect(imported.statusCode, imported.body).toBe(400)
 
-      const preset = await ctx.app.inject({
+      const saved = await ctx.app.inject({
         method: 'POST',
-        url: `/api/projects/${fx.projectId}/presets`,
+        url: `/api/projects/${fx.projectId}/modules`,
         cookies: fx.owner.cookie,
-        payload: { name: '별칭 묶음', schema: [node] } as never,
+        payload: { name: '별칭 묶음', nodes: [node] } as never,
       })
-      expect(preset.statusCode, preset.body).toBe(400)
+      expect(saved.statusCode, saved.body).toBe(400)
     })
   })
 })

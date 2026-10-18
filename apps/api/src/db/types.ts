@@ -1,5 +1,5 @@
 import type { ColumnType, Generated, JSONColumnType } from 'kysely'
-import type { LayoutDocument, PageDocument, PatchOp, ViewState, WbNode } from '@wirebound/schema'
+import type { LayoutDocument, PageDocument, PatchOp, WbNode } from '@wirebound/schema'
 import type { SnapshotPayload, ThemeManifest } from '@wirebound/themes'
 
 /**
@@ -262,28 +262,18 @@ export interface SnapshotsTable {
 export type SnapshotKind = 'tag' | 'restore-safety' | 'cascade-safety'
 
 /**
- * 페이지 프리셋(`0010-presets`). 설계서 「페이지 프리셋」의 *"프로젝트가 소유한 페이지 통째 템플릿"*이다.
+ * 모듈(`0024-modules`). 설계 spec `2026-10-18-modules-states-layout-design.md` 「B3. 모듈」 — 프로젝트의 모든 페이지에 넣는 노드 묶음이다.
  *
- * `schema`는 `JSONColumnType<WbNode[]>` — `PagesTable.schema`와 **같은 비대칭**이다:
- * 삽입 시엔 `JSON.stringify`한 문자열, 조회 시엔 파싱된 배열.
- *
- * **담기는 것이 `PageDocument`가 아니라 `WbNode[]`인 것이 이 테이블의 규격이다** —
- * 적용이 root의 `children`만 바꾸므로 봉투는 프리셋의 것이 아니다.
- *
- * **`name`에 유일 제약이 없다** — `snapshots.tag`와 갈리는 자리이고 근거는 0010의
- * 주석에 있다. `description`은 `NULL`이면 적지 않은 것이다.
+ * `nodes`는 `JSONColumnType<WbNode[]>` — `PagesTable.schema`와 **같은 비대칭**이다: 삽입 시엔 `JSON.stringify`한 문자열, 조회 시엔 파싱된 배열.
+ * **`name`에 유일 제약이 없다**(근거는 0024 머리말). `updated_at`은 이름 바꾸기가 고친다.
  */
-export interface PresetsTable {
+export interface ModulesTable {
   id: Generated<string>
   project_id: string
   name: string
-  description: string | null
-  schema: JSONColumnType<WbNode[]>
-  /** 저장한 페이지의 화면 상태 목록(`0021-preset-view-states`). `NULL` 이면 목록 없이 저장한 것. */
-  view_states: ColumnType<ViewState[] | null, string | null, string | null>
+  nodes: JSONColumnType<WbNode[]>
   created_by: string
   created_at: Generated<Date>
-  /** 이 값을 바꾸는 경로가 없다(수정 라우트가 없다). 근거는 0010의 주석에 있다. */
   updated_at: Generated<Date>
 }
 
@@ -343,7 +333,7 @@ export interface Database {
   page_seq_floors: PageSeqFloorsTable
   project_menu_revs: ProjectMenuRevsTable
   snapshots: SnapshotsTable
-  presets: PresetsTable
+  modules: ModulesTable
   api_tokens: ApiTokensTable
   theme_packages: ThemePackagesTable
 }

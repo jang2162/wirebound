@@ -13,9 +13,9 @@ import { commentRoutes } from './routes/comments'
 import { exportRoutes } from './routes/export'
 import { healthRoutes } from './routes/health'
 import { memberRoutes } from './routes/members'
+import { moduleRoutes } from './routes/modules'
 import { menuRoutes } from './routes/menu'
 import { pageRoutes } from './routes/pages'
-import { presetRoutes } from './routes/presets'
 import { projectThemeRoutes } from './routes/project-theme'
 import { projectRoutes } from './routes/projects'
 import { revisionRoutes } from './routes/revisions'
@@ -72,7 +72,7 @@ export interface BuildAppOptions {
    * 새 라우트를 놓치는 것과 같은 꼴이다.
    *
    * **Fastify가 아는 목록을 쓴다.** `printRoutes()`는 라딕스 트리를 사람이 읽는 글자로
-   * 그리는 것이라(`/pages` 와 `/presets` 가 공통 접두 `/p` 아래로 갈라지는 식으로 마디가 쪼개진다) 그것을
+   * 그리는 것이라(`/members` 와 `/modules` 가 공통 접두 `/m` 아래로 갈라지는 식으로 마디가 쪼개진다) 그것을
    * 되파싱하면 자가 대상보다 약해진다. `onRoute` 훅은 Fastify가 라우트를 등록할 때마다
    * 부르므로 **경로 패턴과 preHandler 목록을 그대로** 준다.
    *
@@ -237,7 +237,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.addHook('onClose', async () => app.lateCommits.stop())
   closeConnectionsAfterReplyWhileClosing(app)
   registerErrorHandler(app)
-  // **본문의 중첩이 한도를 넘으면 라우트에 닿기 전에 400 이다**(`services/nesting.ts`) — PUT · 가져오기 · 프리셋 · REST ops 가 모두 같은 자리를 지난다. 파일(Buffer)은 안 본다.
+  // **본문의 중첩이 한도를 넘으면 라우트에 닿기 전에 400 이다**(`services/nesting.ts`) — PUT · 가져오기 · 모듈 · REST ops 가 모두 같은 자리를 지난다. 파일(Buffer)은 안 본다.
   app.addHook('preValidation', async (request) => {
     const body: unknown = request.body
     if (body !== null && typeof body === 'object' && !Buffer.isBuffer(body) && jsonNestingExceeds(body)) throw badRequest(TOO_DEEP_MESSAGE)
@@ -262,9 +262,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 스냅샷도 프로젝트 아래에 산다(`/:projectId/snapshots`). **인자 없이 부른다** — 그
   // 팩토리의 `captureHooks`는 테스트 전용 이음매다(`routes/snapshots.ts`의 머리말).
   await app.register(snapshotRoutes(), { prefix: '/api/projects' })
-  // 프리셋도 프로젝트 아래에 산다(`/:projectId/presets`) — 프리셋은 프로젝트가 소유한다
-  // (설계서 「페이지 프리셋」). 내장 프리셋은 `@wirebound/schema`에 있고 목록이 그것을 함께 낸다.
-  await app.register(presetRoutes(), { prefix: '/api/projects' })
+  // 모듈도 프로젝트 아래에 산다(`/:projectId/modules`) — 모듈은 프로젝트가 소유한다(설계서 「모듈」). 내장 모듈(«기본 모듈»)은
+  // `@wirebound/schema`에 있고 화면이 직접 읽는다.
+  await app.register(moduleRoutes(), { prefix: '/api/projects' })
   // 내보내기도 프로젝트 아래에 산다(`/:projectId/export`). **URL에 파일 이름이 없다** —
   // 파일 이름은 안정한 열쇠가 아니라 페이지를 하나 더하면 번호가 밀린다.
   await app.register(exportRoutes({ screenRenderer, renderLimit: config.exportRenderLimit }), { prefix: '/api/projects' })

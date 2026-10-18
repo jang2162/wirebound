@@ -84,7 +84,7 @@ interface Ids {
   snapshotId: string
   nodeId: string
   commentId: string
-  presetId: string
+  moduleId: string
   tokenId: string
   otherUserId: string
   memberUserId: string
@@ -344,34 +344,44 @@ const PROBES: Probe[] = [
     blocked: false,
   },
   {
-    // **프리셋 쓰기 둘** — *"프리셋 쓰기가 복원 중에 어떻게 되는가"*를 여기서 잰다.
+    // **모듈 쓰기 셋** — *"모듈 쓰기가 복원 중에 어떻게 되는가"*를 여기서 잰다.
     //
-    // **막힌다.** `presets.project_id`가 `projects(id)`를
+    // **막힌다.** `modules.project_id`가 `projects(id)`를
     // 참조하므로 삽입이 그 행에 `FOR KEY SHARE`를 걸고 그것이 `FOR UPDATE`와 충돌한다.
-    // **복원이 프리셋 행을 쓰지 않는데도 막히는 것**이라 부수 효과다.
-    route: 'POST /:projectId/presets',
-    label: '프리셋 저장 — 복원은 프리셋을 되돌리지 않지만 `project_id` FK 때문에 막힌다',
+    // **복원이 모듈 행을 쓰지 않는데도 막히는 것**이라 부수 효과다. 라우트도 삽입 앞에서 같은 `KEY SHARE`를 먼저 잡는다(`lockProjectShared`).
+    route: 'POST /:projectId/modules',
+    label: '모듈 저장 — 복원은 모듈을 되돌리지 않지만 `project_id` FK 때문에 막힌다',
     method: 'POST',
-    url: (ids) => `/api/projects/${ids.projectId}/presets`,
-    payload: () => ({ name: '끼어든 프리셋', schema: [] }),
+    url: (ids) => `/api/projects/${ids.projectId}/modules`,
+    payload: () => ({ name: '끼어든 모듈', nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }] }),
     restoreWrites: false,
     blocked: true,
   },
   {
+    // **안 막힌다.** FK 열을 안 바꾸는 UPDATE 는 부모 행의 FK 검사를 부르지 않는다. **복원이 모듈을 되돌리지 않으므로 해롭지 않다.**
+    route: 'PATCH /:projectId/modules/:moduleId',
+    label: '모듈 이름 바꾸기 — FK 열을 안 바꾸는 UPDATE 라 부모를 잡지 않는다',
+    method: 'PATCH',
+    url: (ids) => `/api/projects/${ids.projectId}/modules/${ids.moduleId}`,
+    payload: () => ({ name: '바꾼 이름' }),
+    restoreWrites: false,
+    blocked: false,
+  },
+  {
     // **안 막힌다.** 자식 행을 지우는 것은 부모 행의
-    // FK 검사를 부르지 않는다. **복원이 프리셋을 되돌리지 않으므로 해롭지 않다** —
-    // 복원 도중 지운 프리셋은 복원 뒤에도 없는 것이 맞다.
-    route: 'DELETE /:projectId/presets/:presetId',
-    label: '프리셋 삭제 — 자식 행 삭제라 부모를 잡지 않는다',
+    // FK 검사를 부르지 않는다. **복원이 모듈을 되돌리지 않으므로 해롭지 않다** —
+    // 복원 도중 지운 모듈은 복원 뒤에도 없는 것이 맞다.
+    route: 'DELETE /:projectId/modules/:moduleId',
+    label: '모듈 삭제 — 자식 행 삭제라 부모를 잡지 않는다',
     method: 'DELETE',
-    url: (ids) => `/api/projects/${ids.projectId}/presets/${ids.presetId}`,
+    url: (ids) => `/api/projects/${ids.projectId}/modules/${ids.moduleId}`,
     restoreWrites: false,
     blocked: false,
   },
   {
     // **API 토큰 쓰기 둘.**
     //
-    // **막힌다 — `POST .../presets`와 같은 이유다.**
+    // **막힌다 — `POST .../modules`와 같은 이유다.**
     // `api_tokens.project_id`가 `projects(id)`를 참조하므로 삽입이 그 행에
     // `FOR KEY SHARE`를 걸고 그것이 `FOR UPDATE`와 충돌한다. **복원이 토큰 행을
     // 쓰지 않는데도 막히는 것**이라 부수 효과다.
@@ -384,7 +394,7 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
-    // **안 막힌다 — `DELETE .../presets`와 같은 이유다.** 자식 행을 지우는 것은 부모 행의
+    // **안 막힌다 — `DELETE .../modules`와 같은 이유다.** 자식 행을 지우는 것은 부모 행의
     // FK 검사를 부르지 않는다. **복원이 토큰을 되돌리지 않으므로 해롭지 않다** —
     // 오히려 막히면 안 되는 쪽이다: 폐기는 자격을 거두는 조작이라 복원이 도는 동안
     // 기다려야 할 이유가 없다.
@@ -444,13 +454,13 @@ async function fixture(app: FastifyInstance): Promise<Ids> {
   })
   if (commentRes.statusCode !== 201) throw new Error(`코멘트 픽스처 실패: ${commentRes.body}`)
 
-  const presetRes = await app.inject({
+  const moduleRes = await app.inject({
     method: 'POST',
-    url: `/api/projects/${project.id}/presets`,
+    url: `/api/projects/${project.id}/modules`,
     cookies: owner.cookie,
-    payload: { name: '대상 프리셋', schema: [] },
+    payload: { name: '대상 모듈', nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }] },
   })
-  if (presetRes.statusCode !== 201) throw new Error(`프리셋 픽스처 실패: ${presetRes.body}`)
+  if (moduleRes.statusCode !== 201) throw new Error(`모듈 픽스처 실패: ${moduleRes.body}`)
 
   const tokenRes = await app.inject({
     method: 'POST',
@@ -492,7 +502,7 @@ async function fixture(app: FastifyInstance): Promise<Ids> {
     snapshotId: (snapshotRes.json() as { id: string }).id,
     nodeId,
     commentId: (commentRes.json() as { comment: { id: string } }).comment.id,
-    presetId: (presetRes.json() as { id: string }).id,
+    moduleId: (moduleRes.json() as { module: { id: string } }).module.id,
     tokenId: (tokenRes.json() as { id: string }).id,
     otherUserId: invitee.user.id,
     memberUserId: member.user.id,
@@ -608,14 +618,15 @@ describe('표가 스스로 세는 것', () => {
       // **멤버 수정 · 삭제**는 `project_members`의 UPDATE · DELETE 라 부모 행을 안 잡는다. 복원은 멤버를 되돌리지 않고, **막히면
       // 안 되는 쪽이다** — 막히면 복원이 도는 동안 회수(강등 · 제외)가 서지 않는다(`repos/members.ts`의 `lockOwnerIds` 머리말).
       'DELETE /:projectId/members/:userId',
-      // **프리셋 삭제**는 자식 행 삭제라 부모를 잡지 않는다 —
-      // 복원이 프리셋을 되돌리지 않으므로(payload에 프리셋 절이 없다) 해롭지 않다.
-      'DELETE /:projectId/presets/:presetId',
+      // **모듈 삭제 · 이름 바꾸기**는 자식 행 삭제 · FK 열을 안 바꾸는 UPDATE 라 부모를 잡지 않는다 —
+      // 복원이 모듈을 되돌리지 않으므로(payload에 모듈 절이 없다) 해롭지 않다.
+      'DELETE /:projectId/modules/:moduleId',
       // **토큰 폐기**도 자식 행 삭제라 부모를 잡지 않는다.
       // 복원이 토큰을 되돌리지 않으므로 해롭지 않고, **오히려 막히면 안 되는 쪽이다** —
       // 폐기는 자격을 거두는 조작이라 복원이 도는 동안 기다려야 할 이유가 없다.
       'DELETE /:projectId/tokens/:tokenId',
       'PATCH /:projectId/members/:userId',
+      'PATCH /:projectId/modules/:moduleId',
       // **바꿀 번호가 없는 재번호**는 아무것도 쓰지 않는다 — 바꿀 번호가 있는 갈래는 막힌다(위 census 의 두 줄).
       'POST /:projectId/pages/:pageId/comments/renumber',
     ])

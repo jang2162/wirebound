@@ -306,7 +306,7 @@ export async function lockProjectTree(trx: DbHandle, projectId: string): Promise
 
 /**
  * **자기 행만 쓰는 쓰기의 첫 잠금** — 프로젝트 행을 `FOR KEY SHARE`로 잡는다. 부르는 자리: 코멘트 수정(`routes/comments.ts`
- * — 코멘트 행) · FK 삽입 넷(스냅샷 · 초대 · 프리셋 · 토큰 생성).
+ * — 코멘트 행) · FK 삽입 넷(스냅샷 · 초대 · 모듈 · 토큰 생성).
  *
  * **FK 삽입 넷은 권한이 아니라 봉투 때문이다.** 삽입의 FK 도 같은 `KEY SHARE`를 걸지만 그것은 프로젝트 삭제 뒤에 섰다가
  * 깨면 23503 — 봉투 없는 500 이다. 이것으로 먼저 잡으면 0 행 → 404(트리 쓰기와 같은 답).

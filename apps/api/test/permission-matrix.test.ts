@@ -3,7 +3,7 @@ import type { preHandlerHookHandler } from 'fastify'
 import { projectGuard, roleAtLeast } from '../src/auth/roles'
 import type { ProjectRole } from '../src/db/types'
 import { insertApiToken } from '../src/repos/api-tokens'
-import { insertPreset } from '../src/repos/presets'
+import { insertModule } from '../src/repos/modules'
 import { insertSnapshot } from '../src/repos/snapshots'
 import { captureSnapshot } from '../src/services/snapshot-capture'
 import { SNAPSHOT_PAYLOAD_VERSION } from '@wirebound/themes'
@@ -161,15 +161,9 @@ const 스냅샷하나 = async (
 })
 
 /**
- * ':presetId'가 필요한 케이스(프리셋 삭제)가 실행 전에 대상 프리셋을 만든다.
- *
- * **API가 아니라 repo로 넣는다** — `스냅샷하나`와 같은 이유다: 픽스처가 검사 대상
- * API(`POST .../presets`)에 의존하면 그쪽이 깨졌을 때 삭제 행까지 함께 무너진다.
- */
-/**
  * ':tokenId'가 필요한 케이스(토큰 폐기)가 실행 전에 **그 주체의** 토큰을 만든다.
  *
- * **API가 아니라 repo로 넣는다** — `프리셋하나`·`스냅샷하나`와 같은 이유다.
+ * **API가 아니라 repo로 넣는다** — `모듈하나`·`스냅샷하나`와 같은 이유다.
  */
 const 토큰하나 = async (
   ctx: TestContext,
@@ -180,18 +174,23 @@ const 토큰하나 = async (
   tokenId: (await insertApiToken(ctx.db, { projectId, userId: actorUserId, name: '지울 토큰' })).record.id,
 })
 
-const 프리셋하나 = async (
+/**
+ * ':moduleId'가 필요한 케이스(모듈 이름 바꾸기 · 삭제)가 실행 전에 대상 모듈을 만든다.
+ *
+ * **API가 아니라 repo로 넣는다** — `스냅샷하나`와 같은 이유다: 픽스처가 검사 대상
+ * API(`POST .../modules`)에 의존하면 그쪽이 깨졌을 때 이름 · 삭제 행까지 함께 무너진다.
+ */
+const 모듈하나 = async (
   ctx: TestContext,
   projectId: string,
   _ownerCookie: { wb_session: string },
   actorUserId: string,
 ): Promise<Record<string, string>> => ({
-  presetId: (
-    await insertPreset(ctx.db, {
+  moduleId: (
+    await insertModule(ctx.db, {
       projectId,
-      name: '대상 프리셋',
-      description: null,
-      nodes: [],
+      name: '대상 모듈',
+      nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }],
       createdBy: actorUserId,
     })
   ).id,
@@ -466,31 +465,45 @@ const CASES: Case[] = [
     setup: 복원할스냅샷,
   },
   {
-    // **설계서 「권한 모델」의 표에 프리셋이 없다.** 등급의 근거는
-    // `routes/presets.ts`의 머리말에 있다 — editor의 *"페이지 편집"*을 돕는 도구이지
+    // **설계서 「권한 모델」의 표에 모듈이 없다.** 등급의 근거는
+    // `routes/modules.ts`의 머리말에 있다 — editor의 *"페이지 편집"*을 돕는 도구이지
     // 레이아웃처럼 프로젝트 전체 외형을 한 번에 바꾸는 것이 아니다.
-    label: '프리셋 목록',
+    label: '모듈 목록',
     method: 'GET',
-    url: '/api/projects/:projectId/presets',
+    url: '/api/projects/:projectId/modules',
     allowed: ['owner', 'editor', 'viewer'],
   },
   {
-    // **빈 배열을 보내는 것이 유효한 본문이다**(빈 페이지도 프리셋이 된다).
-    // 이 행이 재는 것은 역할 판정이므로 내용이 가벼운 편이 낫다.
-    label: '프리셋 저장',
+    label: '모듈 하나',
+    method: 'GET',
+    url: '/api/projects/:projectId/modules/:moduleId',
+    allowed: ['owner', 'editor', 'viewer'],
+    setup: 모듈하나,
+  },
+  {
+    // 이 행이 재는 것은 역할 판정이므로 내용이 가벼운 편이 낫다(노드 하나).
+    label: '모듈 저장',
     method: 'POST',
-    url: '/api/projects/:projectId/presets',
-    payload: { name: '대상', schema: [] },
+    url: '/api/projects/:projectId/modules',
+    payload: { name: '대상', nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }] },
     allowed: ['owner', 'editor'],
   },
   {
     // **`setup`이 필요하다** — 없는 id로 치면 허용된 역할도 404를 받아 `허용`을 못
     // 보인다(`스냅샷 복원`과 같은 자리).
-    label: '프리셋 삭제',
-    method: 'DELETE',
-    url: '/api/projects/:projectId/presets/:presetId',
+    label: '모듈 이름 바꾸기',
+    method: 'PATCH',
+    url: '/api/projects/:projectId/modules/:moduleId',
+    payload: { name: '새 이름' },
     allowed: ['owner', 'editor'],
-    setup: 프리셋하나,
+    setup: 모듈하나,
+  },
+  {
+    label: '모듈 삭제',
+    method: 'DELETE',
+    url: '/api/projects/:projectId/modules/:moduleId',
+    allowed: ['owner', 'editor'],
+    setup: 모듈하나,
   },
   {
     // **내보내기는 viewer다.** 번들은 viewer가 화면에서 볼 수 있는 것을 파일로

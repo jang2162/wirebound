@@ -43,7 +43,7 @@ const CLEARED_TABLES = [
   'layouts',
   'comments',
   'snapshots',
-  'presets',
+  'modules',
   'project_menu_revs',
 ] as const
 
@@ -71,7 +71,10 @@ async function fillEveryTable(ctx: TestContext): Promise<void> {
   // 코멘트가 `revisions`도 함께 채운다 — 번호를 붙이는 편집이 revision을 남긴다.
   await post(`/api/projects/${project.id}/pages/${page.id}/comments`, { nodeId, body: '청소 대상' })
   await post(`/api/projects/${project.id}/snapshots`, { tag: 'v1' })
-  await post(`/api/projects/${project.id}/presets`, { name: '청소 대상 프리셋', schema: [] })
+  await post(`/api/projects/${project.id}/modules`, {
+    name: '청소 대상 모듈',
+    nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }],
+  })
 }
 
 describe('실커밋 하네스의 청소', () => {

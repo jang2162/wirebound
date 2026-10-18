@@ -6,16 +6,16 @@
  * |---|---|---|
  * | 테마 업로드 `POST /api/admin/theme-packages` | `Page` 가 든 패턴은 422 · 행 0 | — |
  * | 내보내기가 저장된 패키지를 다시 읽는다(`services/export-source.ts`) | — | 200 · 그 테마로 내보낸다(경고 없음) |
- * | 프리셋 저장 `POST …/presets` | `Page` 가 든 프리셋(맨 위 포함)은 422 · 행 0 | 목록 200 · 삭제 204 |
+ * | 모듈 저장 `POST …/modules` | `Page` 가 든 모듈(맨 위 포함)은 422 · 행 0 | 목록 200 · 이름 200 · 삭제 204 |
  * | 페이지 JSON 가져오기 `POST …/pages/import` | 옛 문서를 내보낸 파일은 422 — 이슈가 그 노드의 id · 경로를 짚는다 | — |
  *
- * 옛 패키지 · 옛 프리셋은 저장소 함수 · SQL 로 심는다 — 지금의 입구로는 만들 수 없다(그것이 이 규칙이다).
+ * 옛 패키지 · 옛 모듈은 저장소 함수 · SQL 로 심는다 — 지금의 입구로는 만들 수 없다(그것이 이 규칙이다).
  */
 import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { toPageJson, type PageDocument, type WbNode } from '@wirebound/schema'
 import { readWbtheme, type ThemeManifest } from '@wirebound/themes'
-import { insertPreset } from '../src/repos/presets'
+import { insertModule } from '../src/repos/modules'
 import { insertThemePackage } from '../src/repos/theme-packages'
 import { setInstanceAdmin } from '../src/repos/users'
 import { ensureCatalog } from '../src/schema-setup'
@@ -128,88 +128,90 @@ describe('이미 저장된 테마 패키지 — Page 가 든 패턴', () => {
   })
 })
 
-describe('프리셋 저장 — Page 가 든 노드', () => {
+describe('모듈 저장 — Page 가 든 노드', () => {
   async function fixture(ctx: TestContext) {
     const owner = await signup(ctx)
     const project = await createProject(ctx, owner.cookie)
     return { owner, project }
   }
 
-  function post(ctx: TestContext, fx: Awaited<ReturnType<typeof fixture>>, schema: WbNode[]) {
+  function post(ctx: TestContext, fx: Awaited<ReturnType<typeof fixture>>, nodes: WbNode[]) {
     return ctx.app.inject({
       method: 'POST',
-      url: `/api/projects/${fx.project.id}/presets`,
+      url: `/api/projects/${fx.project.id}/modules`,
       cookies: fx.owner.cookie,
-      payload: { name: '프리셋', schema },
+      payload: { name: '모듈', nodes },
     })
   }
 
-  async function presetRows(ctx: TestContext, projectId: string) {
-    return ctx.db.selectFrom('presets').select('id').where('project_id', '=', projectId).execute()
+  async function moduleRows(ctx: TestContext, projectId: string) {
+    return ctx.db.selectFrom('modules').select('id').where('project_id', '=', projectId).execute()
   }
 
-  it('맨 위 Page 는 422 nested-page — 적용하면 뿌리의 자식이 된다', async () => {
+  it('맨 위 Page 는 422 nested-page — 넣으면 페이지 안의 Page 가 된다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const res = await post(ctx, fx, [
-        { id: 'n_presettext1', type: 'Text', props: { content: '앞' } },
-        { id: 'n_presetpage1', type: 'Page', children: [] },
+        { id: 'n_moduletext1', type: 'Text', props: { content: '앞' } },
+        { id: 'n_modulepage1', type: 'Page', children: [] },
       ])
       expect(res.statusCode, res.body).toBe(422)
       expect(issuesOf(res.body).map((issue) => [issue.code, issue.nodeId, issue.path])).toEqual([
-        ['nested-page', 'n_presetpage1', '/schema/1'],
+        ['nested-page', 'n_modulepage1', '/nodes/1'],
       ])
-      // 웹 «프리셋으로 저장» 이 이 문장을 그대로 보인다(`apps/web/test/panels/structure-preset.test.tsx` 의 «옛 문서 …에서 저장하면»).
+      // 웹 «모듈로 저장…» 상자가 이 문장을 그대로 보인다(`apps/web/test/panels/save-module.test.tsx` 의 «서버가 거절하면»).
       expect(issuesOf(res.body)[0]!.message).toBe(
-        '프리셋에 Page를 담을 수 없습니다 — 적용하면 페이지 안의 Page가 됩니다. 이 페이지 안의 Page를 지우거나 그 안의 노드를 밖으로 옮긴 뒤 저장하세요',
+        '모듈에 Page를 담을 수 없습니다 — 넣으면 페이지 안의 Page가 됩니다. Page를 빼고 고른 뒤 저장하세요',
       )
-      expect(await presetRows(ctx, fx.project.id)).toEqual([])
+      expect(await moduleRows(ctx, fx.project.id)).toEqual([])
     })
   })
 
   it('깊은 Page 도 422 — 그 노드의 id · 자리', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
-      const res = await post(ctx, fx, [{ id: 'n_presetsect1', type: 'Section', children: [{ id: 'n_presetpage2', type: 'Page' }] }])
+      const res = await post(ctx, fx, [{ id: 'n_modulesect1', type: 'Section', children: [{ id: 'n_modulepage2', type: 'Page' }] }])
       expect(res.statusCode, res.body).toBe(422)
       expect(issuesOf(res.body).map((issue) => [issue.code, issue.nodeId, issue.path])).toEqual([
-        ['nested-page', 'n_presetpage2', '/schema/0/children/0'],
+        ['nested-page', 'n_modulepage2', '/nodes/0/children/0'],
       ])
-      expect(await presetRows(ctx, fx.project.id)).toEqual([])
+      expect(await moduleRows(ctx, fx.project.id)).toEqual([])
     })
   })
 
-  it('Page 가 없으면 받는다 — 카탈로그 위반(알 수 없는 타입)도 지금처럼 받는다(대조군)', async () => {
+  it('Page 가 없으면 받는다 — 카탈로그 위반(알 수 없는 타입)도 받는다(대조군 · 넣을 때 결과 문서로 본다)', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const res = await post(ctx, fx, [
-        { id: 'n_presettext2', type: 'Text', props: { content: '글' } },
-        { id: 'n_presetodd01', type: '없는타입' },
+        { id: 'n_moduletext2', type: 'Text', props: { content: '글' } },
+        { id: 'n_moduleodd01', type: '없는타입' },
       ])
       expect(res.statusCode, res.body).toBe(201)
     })
   })
 
-  it('이미 저장된 Page 프리셋은 목록에 오고 지울 수 있다', async () => {
+  it('이미 저장된 Page 모듈(옮긴 옛 프리셋)은 목록에 오고 이름을 바꾸고 지울 수 있다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
-      const old = await insertPreset(ctx.db, {
+      const old = await insertModule(ctx.db, {
         projectId: fx.project.id,
-        name: '옛 프리셋',
-        description: null,
-        nodes: [{ id: 'n_oldpreset01', type: 'Page', children: [{ id: 'n_oldpreset02', type: 'Text', props: { content: '안' } }] }],
-        viewStates: [],
+        name: '옛 모듈',
+        nodes: [{ id: 'n_oldmodule01', type: 'Page', children: [{ id: 'n_oldmodule02', type: 'Text', props: { content: '안' } }] }],
         createdBy: fx.owner.user.id,
       })
-      const listed = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fx.project.id}/presets`, cookies: fx.owner.cookie })
+      const url = `/api/projects/${fx.project.id}/modules`
+      const listed = await ctx.app.inject({ method: 'GET', url, cookies: fx.owner.cookie })
       expect(listed.statusCode).toBe(200)
-      expect((listed.json() as { id: string }[]).map((preset) => preset.id)).toContain(old.id)
+      expect((listed.json() as { modules: { id: string }[] }).modules.map((entry) => entry.id)).toContain(old.id)
 
-      const gone = await ctx.app.inject({
-        method: 'DELETE',
-        url: `/api/projects/${fx.project.id}/presets/${old.id}`,
+      const renamed = await ctx.app.inject({
+        method: 'PATCH',
+        url: `${url}/${old.id}`,
         cookies: fx.owner.cookie,
+        payload: { name: '새 이름' },
       })
+      expect(renamed.statusCode, renamed.body).toBe(200)
+      const gone = await ctx.app.inject({ method: 'DELETE', url: `${url}/${old.id}`, cookies: fx.owner.cookie })
       expect(gone.statusCode).toBe(204)
     })
   })

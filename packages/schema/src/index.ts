@@ -46,6 +46,9 @@ export * from './component/catalog/index'
 export type { PagePreset } from './preset/builtin'
 export { BUILTIN_PRESETS, stripMarkers } from './preset/builtin'
 
+export type { ModuleNodes } from './module/save'
+export { MODULE_NAME_MAX, countModuleNodes, moduleNodesForSave } from './module/save'
+
 export type { IssueSeverity, ValidationCode, ValidationIssue } from './validate'
 export { ISSUE_SEVERITY, ignoredVariantMessage, partitionIssues } from './validate'
 export {

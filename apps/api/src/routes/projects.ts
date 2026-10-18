@@ -13,7 +13,7 @@ import { lockProjectTokens } from '../repos/api-tokens'
 import { lockOwnerIds } from '../repos/members'
 import { lockProjectMenuNodes } from '../repos/menu'
 import { lockProjectPages } from '../repos/pages'
-import { lockProjectPresets } from '../repos/presets'
+import { lockProjectModules } from '../repos/modules'
 import { conflict, notFound, unauthenticated } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import {
@@ -178,11 +178,11 @@ export function projectRoutes() {
         // 쓰기는 재확인을 지나 커밋한다(삭제가 먼저 잡았으면 제목 쓰기가 기다렸다가 0 행 → 404). 재는 자는
         // `test/guard-in-lock.test.ts`의 «메뉴 제목 쓰기가 메뉴 행을 쥔 채».
         //
-        // **프리셋 행도 같은 까닭으로 메뉴 뒤 · owner 행 앞이다**(`repos/presets.ts`의 `lockProjectPresets`). 프리셋 삭제도 «프리셋 행
-        // (`DELETE`) → 재확인»이다(`routes/presets.ts`). 재확인을 `DELETE` 앞으로 옮기는 길은 고르지 않았다 — 그 판은 CASCADE 가
-        // 멤버 행을 프리셋보다 **먼저** 지우는 데에 기대는데, CASCADE 는 FK 트리거 **이름**(`RI_ConstraintTrigger_a_<oid>`의 글자 순)
-        // 순으로 돈다. oid 가 자릿수를 넘거나 멤버 FK 를 다시 만들면 프리셋이 먼저 지워지고, 그때 «재확인을 지나 `DELETE` 앞»에
-        // 선 프리셋 삭제와 고리를 만든다. 여기서 먼저 잡으면 CASCADE 순서와 무관하다. 재는 자는 `test/guard-in-lock.test.ts`의 «E15».
+        // **모듈 행도 같은 까닭으로 메뉴 뒤 · owner 행 앞이다**(`repos/modules.ts`의 `lockProjectModules`). 모듈 이름 바꾸기 · 삭제도 «모듈 행
+        // (`UPDATE` · `DELETE`) → 재확인»이다(`routes/modules.ts`). 재확인을 `DELETE` 앞으로 옮기는 길은 고르지 않았다 — 그 판은 CASCADE 가
+        // 멤버 행을 모듈보다 **먼저** 지우는 데에 기대는데, CASCADE 는 FK 트리거 **이름**(`RI_ConstraintTrigger_a_<oid>`의 글자 순)
+        // 순으로 돈다. oid 가 자릿수를 넘거나 멤버 FK 를 다시 만들면 모듈이 먼저 지워지고, 그때 «재확인을 지나 `DELETE` 앞»에
+        // 선 모듈 삭제와 고리를 만든다. 여기서 먼저 잡으면 CASCADE 순서와 무관하다. 재는 자는 `test/guard-in-lock.test.ts`의 «E15».
         //
         // **토큰 행도 owner 행 앞이다**(`repos/api-tokens.ts`의 `lockProjectTokens` — id 순). 멤버 쓰기는 «토큰 행 → owner 행»이다
         // (`repos/members.ts`의 `OwnerRecheck` «잠금 순서» — 제거는 빠지는 사람 · 요청의 토큰을 id 순으로, 역할 변경은 요청의 토큰을
@@ -191,7 +191,7 @@ export function projectRoutes() {
         await lockProjectRow(trx, projectId)
         await lockProjectPages(trx, projectId)
         await lockProjectMenuNodes(trx, projectId)
-        await lockProjectPresets(trx, projectId)
+        await lockProjectModules(trx, projectId)
         await lockProjectTokens(trx, projectId)
         await lockOwnerIds(trx, projectId)
         await recheckProjectRole(trx, request)
