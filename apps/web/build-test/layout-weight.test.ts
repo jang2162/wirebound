@@ -15,13 +15,14 @@
  * **Flex 의 비는 내용 상자로 잰다** — 몫은 «남는 폭» 을 나눈다(정본 설계서 「페이지 스키마 노드」). 바탕 폭이 0 이어도 안 여백 · 테두리는 항목마다
  * 따로 붙어(flex 의 바탕 크기는 그 아래로 안 내려간다) 테두리 상자의 비는 여백만큼 1 : 2 에서 벗어난다 — docs 의 `Card` 가 433 : 831(여백 35)이었다.
  *
- * `WB_LAYOUT_WEIGHT_SHOTS=<디렉터리>` 를 주면 창 1440 에서 Flex 1 : 2 · Grid 칸을 테마마다 한 장씩 남긴다(`<테마>-flex.png` · `<테마>-grid.png`).
+ * `WB_LAYOUT_WEIGHT_SHOTS=<디렉터리>` 를 주면 창 1440 에서 Flex 1 : 2 · Grid 칸을 테마마다 한 장씩 남기고(`<테마>-flex.png` · `<테마>-grid.png`), 에디터에서
+ * Flex 자식을 고른 속성 패널을 한 장 남긴다(`panel-weight.png` — 그 판만 도는 케이스라 변수가 없으면 건너뛴다).
  */
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { canvasFrame, editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
 import { cssMentions, exportBundle, layoutProject, openBundlePage, stripCssRules, type Call } from './layout-bundle'
 import { putTheme, seededVersion } from './theme-fixtures'
 
@@ -147,12 +148,13 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 노드 몫이 폭을 �
   let alice: Session
   let call: Call
   let projectId: string
+  let pageIds: Record<string, string>
 
   beforeAll(async () => {
     if (!전제.ok) return
     stack = await startEditorStack(전제)
     alice = await stack.login(stack.users.alice)
-    ;({ projectId, call } = await layoutProject(stack, alice, '배치', { 몫: WEIGHTED, 몫없음: PLAIN }))
+    ;({ projectId, call, pageIds } = await layoutProject(stack, alice, '배치', { 몫: WEIGHTED, 몫없음: PLAIN }))
     if (SHOTS !== undefined) mkdirSync(SHOTS, { recursive: true })
   }, 180_000)
 
@@ -297,6 +299,26 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 노드 몫이 폭을 �
       expect(Object.keys(boxes.now).length).toBe(ids(PLAIN).length)
       expect.soft(Object.values(boxes.now).filter((box) => box.weightVar !== '')).toEqual([])
       expect(differs, `${themeId} ${JSON.stringify(differs.map((id) => [id, boxes.now[id], boxes.before[id]]))}`).toEqual([])
+    },
+    180_000,
+  )
+  it.skipIf(SHOTS === undefined)(
+    '스크린숏 — 에디터에서 Flex 자식을 고른 속성 패널의 «몫» 칸',
+    async () => {
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+      try {
+        await page.goto(`/projects/${projectId}/pages/${pageIds['몫']}`)
+        await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
+        await page.locator('[data-tree-id="fx_b"] > button.wb-shell-structure-node').click()
+        const panel = page.getByRole('complementary', { name: '우측 패널' })
+        const field = panel.getByRole('textbox', { name: '몫', exact: true })
+        await field.waitFor()
+        expect(await field.inputValue()).toBe('2')
+        await panel.screenshot({ path: join(SHOTS!, 'panel-weight.png') })
+        await page.screenshot({ path: join(SHOTS!, 'editor-weight.png') })
+      } finally {
+        await context.close()
+      }
     },
     180_000,
   )

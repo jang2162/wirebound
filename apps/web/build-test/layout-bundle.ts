@@ -26,15 +26,17 @@ export async function layoutProject(
   owner: Session,
   menu: string,
   pages: Record<string, unknown[]>,
-): Promise<{ projectId: string; call: Call }> {
+): Promise<{ projectId: string; call: Call; pageIds: Record<string, string> }> {
   const call: Call = (method, path, body) => stack.request(owner, method, path, body)
   const project = ok(
     await call('POST', '/projects', { name: '배치', slug: `layout-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }),
     '프로젝트',
   )
   const menuNode = ok(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: menu }), '메뉴')
+  const pageIds: Record<string, string> = {}
   for (const [title, nodes] of Object.entries(pages)) {
     const page = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menuNode.id, title }), title)
+    pageIds[title] = page.id
     ok(
       await call('PATCH', `/projects/${project.id}/pages/${page.id}/ops`, {
         baseSeq: 0,
@@ -43,7 +45,7 @@ export async function layoutProject(
       `ops ${title}`,
     )
   }
-  return { projectId: project.id, call }
+  return { projectId: project.id, call, pageIds }
 }
 
 /** 내보낸 번들을 풀어 둔 자리와 페이지 파일(«메뉴-제목» → 경로). `dispose` 가 지운다. */
