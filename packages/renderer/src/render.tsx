@@ -128,12 +128,16 @@ export interface NodeRenderError {
  * **자르기를 렌더러가 하는 까닭:** CSS `span min(var(몫), var(열 수))` 는 Chrome 에서 서지만 열 수를 상속으로만 읽는다 — 자식이 `Grid` 면 제
  * 뷰가 같은 변수에 제 열 수를 실어 부모 열 수가 아니라 제 열 수로 잘린다(넘치면 암묵 열이 생겨 격자가 넓어진다). 부모를 아는 곳은 여기다.
  */
-type WeightRoom = { kind: 'flex' } | { kind: 'span'; columns: number }
+export type WeightRoom = { kind: 'flex' } | { kind: 'span'; columns: number }
 
 const FLEX_ROOM: WeightRoom = { kind: 'flex' }
 
-/** 이 타입의 노드가 자식에게 주는 몫의 자리. `Grid` 는 늘 열 수가 있고(기본값 2), `SearchForm` 은 열을 정한 판만이다. */
-function weightRoom(type: string, props: WbNode['props']): WeightRoom | undefined {
+/**
+ * 이 타입의 노드가 자식에게 주는 몫의 자리. `Grid` 는 늘 열 수가 있고(기본값 2), `SearchForm` 은 열을 정한 판만이다. 없으면 그 부모 안에서 몫은 아무
+ * 일도 안 한다. **속성 패널이 «몫» 칸을 보일지도 이것으로 가른다**(`apps/web/src/panels/property-panel.tsx`) — 판정이 두 벌이면 칸이 서는데 화면이
+ * 안 바뀌는 부모가 생긴다.
+ */
+export function weightRoom(type: string, props: WbNode['props']): WeightRoom | undefined {
   if (type === 'Flex') return FLEX_ROOM
   if (type !== 'Grid' && type !== 'SearchForm') return undefined
   // 열 수는 카탈로그가 정한 모양 · 기본값으로 읽는다 — 못 읽으면(검증 실패) 이 노드는 폴백이라 자식의 몫이 서지 않는다.
