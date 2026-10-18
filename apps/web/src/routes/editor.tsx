@@ -89,8 +89,10 @@ import { EditorStoreProvider, useEditorStore, useEditorStoreInstance } from '../
 const UNKNOWN_FAILURE = '프로젝트를 불러오지 못했습니다'
 /** 조회 실패 화면의 제목. **프로젝트 이름과 겹치면 안 된다** — 아래 주석 참고. */
 const FAILURE_TITLE = '설계서를 열지 못했습니다'
-/** 아직 페이지를 고르지 않은 캔버스의 안내. */
+/** 아직 페이지를 고르지 않은 캔버스의 안내 — 빈 상태 상자의 제목(`EmptyCanvas`). */
 const NO_PAGE_NOTICE = '왼쪽 트리에서 페이지를 고르세요'
+/** 그 밑의 보조 글. */
+const NO_PAGE_HINT = '메뉴 아래의 페이지를 누르면 여기에 그려집니다'
 /** 페이지 조회가 이유 없이 실패했을 때의 문장. 프로젝트 쪽(`UNKNOWN_FAILURE`)과 다르다. */
 const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
 
@@ -1910,46 +1912,63 @@ function CanvasFrame(props: {
   }, [api, projectId, pageId, store, applyServerPage, tellLost, goneCheck])
 
   return (
-    /* **무대 — 보이는 크기(프리셋 × 줌 · 프레임 높이 × 줌)짜리 상자.** 가운데 정렬과 칸의 넘침이 이 크기로 선다(`fitZoom` 머리말 «가운데
+    <>
+      {/* 페이지를 안 고른 판은 프레임(프리셋 폭 · 줌 · 흰 바탕) 대신 **칸 가운데의 빈 상태 상자**다 — 프레임 안에 두면 셸 글꼴이 안 닿고
+          줌 · 프리셋 폭을 따라 칸 밖으로 잘린다. 무대는 그 동안 `hidden` 으로 DOM 에 남긴다 — 프레임 높이를 재는 이펙트(위 `frameRef`)가
+          마운트 때 한 번 걸리므로 빼면 페이지를 연 뒤에 높이를 못 잰다. */}
+      {state.status === 'empty' && <EmptyCanvas />}
+      {/* **무대 — 보이는 크기(프리셋 × 줌 · 프레임 높이 × 줌)짜리 상자.** 가운데 정렬과 칸의 넘침이 이 크기로 선다(`fitZoom` 머리말 «가운데
        정렬은 보이는 폭으로 한다»). 안의 프레임은 `transform` 이 걸려 변환 뒤 상자로만 넘침에 든다 — 무대 높이를 안 걸면 무대가 프레임의 변환
        전 높이로 서서, 줌이 1 보다 작을 때 칸 아래에 그 차만큼 빈 세로 스크롤이 선다(Chrome · 창 1440 · 글 40 줄 · 줌 50%: 칸의 세로 넘침이
-       줌 100% 와 같은 709). */
-    <div
-      className="wb-shell-canvas-stage"
-      style={{ width: `${viewportWidth * zoom}px`, ...(frameHeight === null ? {} : { height: `${frameHeight * zoom}px` }) }}
-    >
+       줌 100% 와 같은 709). */}
       <div
-        ref={frameRef}
-        className="wb-shell-canvas-frame"
-        // 폭은 프리셋 그대로, 줌은 그 위의 배율이다. 폭에 줌을 곱해 넣으면 "1280 폭에서
-        // 어떻게 보이는가"라는 뷰포트 프리셋의 뜻이 깨진다.
-        style={{ width: `${viewportWidth}px`, transform: `scale(${zoom})` }}
+        className="wb-shell-canvas-stage"
+        hidden={state.status === 'empty'}
+        style={{ width: `${viewportWidth * zoom}px`, ...(frameHeight === null ? {} : { height: `${frameHeight * zoom}px` }) }}
       >
-        {state.status === 'empty' && <p>{NO_PAGE_NOTICE}</p>}
-        {state.status === 'loading' && <p role="status">페이지를 불러오는 중…</p>}
-        {/* 실패한 동안에는 그릴 문서가 없다. 이 상태로 들어오는 길은 조회뿐이고, 그
+        <div
+          ref={frameRef}
+          className="wb-shell-canvas-frame"
+          // 폭은 프리셋 그대로, 줌은 그 위의 배율이다. 폭에 줌을 곱해 넣으면 "1280 폭에서
+          // 어떻게 보이는가"라는 뷰포트 프리셋의 뜻이 깨진다.
+          style={{ width: `${viewportWidth}px`, transform: `scale(${zoom})` }}
+        >
+          {state.status === 'loading' && <p role="status">페이지를 불러오는 중…</p>}
+          {/* 실패한 동안에는 그릴 문서가 없다. 이 상태로 들어오는 길은 조회뿐이고, 그
           조회가 시작될 때 스토어의 문서를 비웠기 때문이다 — 앞 페이지의 문서를 오류 문장
           밑에 그리면 어느 페이지를 보고 있는지 알 수 없다. */}
-        {state.status === 'failed' &&
-          (state.failure.kind === 'signed-out' ? (
-            <SignedOut />
-          ) : (
-            <>
-              <p role="alert">{state.failure.message}</p>
-              <button type="button" onClick={() => setOpenAttempt((attempt) => attempt + 1)}>
-                다시 시도
-              </button>
-            </>
-          ))}
-        {/* 테마를 싣는 동안은 문서를 안 그린다 — 기본 뷰로 한 번 그렸다가 테마로 갈아 끼우면 캔버스가 한 번 튄다. 번들의 한도가
+          {state.status === 'failed' &&
+            (state.failure.kind === 'signed-out' ? (
+              <SignedOut />
+            ) : (
+              <>
+                <p role="alert">{state.failure.message}</p>
+                <button type="button" onClick={() => setOpenAttempt((attempt) => attempt + 1)}>
+                  다시 시도
+                </button>
+              </>
+            ))}
+          {/* 테마를 싣는 동안은 문서를 안 그린다 — 기본 뷰로 한 번 그렸다가 테마로 갈아 끼우면 캔버스가 한 번 튄다. 번들의 한도가
           이 기다림을 끝낸다(`theme/bundle-loader.ts` 의 `BUNDLE_DEADLINE_MS`). */}
-        {state.status === 'ready' &&
-          (themeStatus === 'loading' ? (
-            <p role="status">테마를 불러오는 중…</p>
-          ) : (
-            <Canvas projectId={projectId} pageId={pageId} editable={props.editable} />
-          ))}
+          {state.status === 'ready' &&
+            (themeStatus === 'loading' ? (
+              <p role="status">테마를 불러오는 중…</p>
+            ) : (
+              <Canvas projectId={projectId} pageId={pageId} editable={props.editable} />
+            ))}
+        </div>
       </div>
+    </>
+  )
+}
+
+/** 페이지를 안 고른 캔버스의 빈 상태 — 그림 · 제목 · 보조 글. 칸(`.wb-shell-canvas`) 가운데에 선다. */
+function EmptyCanvas(): ReactElement {
+  return (
+    <div className="wb-shell-canvas-empty">
+      {shellIcon('pickPage', 32, 'wb-shell-canvas-empty-icon')}
+      <p className="wb-shell-canvas-empty-title">{NO_PAGE_NOTICE}</p>
+      <p className="wb-shell-canvas-empty-hint">{NO_PAGE_HINT}</p>
     </div>
   )
 }

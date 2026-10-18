@@ -425,6 +425,13 @@
   color: var(--wb-semantic-text);
 }
 
+/* 열을 정한 조회 폼(`SearchForm.columns` — `fields` 조각의 `data-wb-columns`) — 필드를 그 수의 같은 폭 칸으로 깐다. 열을 안 정한 판은 위 규칙
+   그대로다. 필드의 몫(`weight`)은 차지할 칸 수다(SDK 기본 CSS 가 `grid-column` 을 건다). */
+[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] {
+  display: grid;
+  grid-template-columns: repeat(var(--wb-node-searchform-columns, 1), minmax(0, 1fr));
+}
+
 /*
  * 라벨과 컨트롤의 짝은 폼이 아니라 자식 `Field` 안에 있다 — 라벨을 위로 올리는 것은 `Field` 의 `flex-direction` 이다. 그래서 `Field` 는
  * 폼 밖에서도 라벨이 위이고(`labelTop` 이 기본), `labelLeft` 폼만 제 안의 필드를 가로로 눕힌다.
@@ -751,5 +758,12 @@
   [data-wb-component="EntryForm"][data-wb-variant="labelLeft"] [data-wb-component="Field"] {
     flex-direction: column;
     align-items: stretch;
+  }
+  /* 열을 정한 조회 폼도 한 줄에 필드 하나 — 몫(칸 수)을 걷어 한 칸으로 쌓는다. */
+  [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > * {
+    grid-column: auto;
   }
 }

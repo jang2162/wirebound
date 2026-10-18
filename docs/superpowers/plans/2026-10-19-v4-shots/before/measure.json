@@ -1,0 +1,374 @@
+{
+  "home@1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 0,
+    "sections": []
+  },
+  "account@1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 3,
+    "sections": [
+      {
+        "title": "내 정보",
+        "top": 86,
+        "height": 145
+      },
+      {
+        "title": "비밀번호 바꾸기",
+        "top": 231,
+        "height": 272
+      },
+      {
+        "title": "API 토큰",
+        "top": 503,
+        "height": 120
+      }
+    ]
+  },
+  "settings@1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "scrollHeight": 10930,
+    "buttons": 24,
+    "inputs": 39,
+    "sections": [
+      {
+        "title": "일반",
+        "top": 119,
+        "height": 272
+      },
+      {
+        "title": "테마",
+        "top": 391,
+        "height": 10143
+      },
+      {
+        "title": "멤버",
+        "top": 10534,
+        "height": 261
+      },
+      {
+        "title": "위험 구역",
+        "top": 10795,
+        "height": 95
+      }
+    ]
+  },
+  "admin-themes@1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "scrollHeight": 900,
+    "buttons": 8,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "샘플 (sample)",
+        "top": 126,
+        "height": 103
+      },
+      {
+        "title": "관리자 (system-admin)",
+        "top": 245,
+        "height": 103
+      },
+      {
+        "title": "커머스 (system-commerce)",
+        "top": 364,
+        "height": 103
+      },
+      {
+        "title": "문서 (system-docs)",
+        "top": 483,
+        "height": 103
+      },
+      {
+        "title": "포털 (system-portal)",
+        "top": 602,
+        "height": 103
+      },
+      {
+        "title": "마케팅 (system-saas-marketing)",
+        "top": 721,
+        "height": 103
+      }
+    ]
+  },
+  "editor-empty@1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "scrollHeight": 900,
+    "buttons": 24,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "메뉴·페이지 트리",
+        "top": 49,
+        "height": 422
+      },
+      {
+        "title": "구조 트리",
+        "top": 479,
+        "height": 422
+      },
+      {
+        "title": "",
+        "top": 100,
+        "height": 16
+      }
+    ]
+  },
+  "home@900": {
+    "scrollWidth": 900,
+    "clientWidth": 900,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 0,
+    "sections": []
+  },
+  "account@900": {
+    "scrollWidth": 900,
+    "clientWidth": 900,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 3,
+    "sections": [
+      {
+        "title": "내 정보",
+        "top": 86,
+        "height": 145
+      },
+      {
+        "title": "비밀번호 바꾸기",
+        "top": 231,
+        "height": 272
+      },
+      {
+        "title": "API 토큰",
+        "top": 503,
+        "height": 136
+      }
+    ]
+  },
+  "settings@900": {
+    "scrollWidth": 900,
+    "clientWidth": 900,
+    "scrollHeight": 12028,
+    "buttons": 24,
+    "inputs": 39,
+    "sections": [
+      {
+        "title": "일반",
+        "top": 119,
+        "height": 272
+      },
+      {
+        "title": "테마",
+        "top": 391,
+        "height": 11241
+      },
+      {
+        "title": "멤버",
+        "top": 11632,
+        "height": 261
+      },
+      {
+        "title": "위험 구역",
+        "top": 11893,
+        "height": 95
+      }
+    ]
+  },
+  "admin-themes@900": {
+    "scrollWidth": 900,
+    "clientWidth": 900,
+    "scrollHeight": 900,
+    "buttons": 8,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "샘플 (sample)",
+        "top": 126,
+        "height": 103
+      },
+      {
+        "title": "관리자 (system-admin)",
+        "top": 245,
+        "height": 103
+      },
+      {
+        "title": "커머스 (system-commerce)",
+        "top": 364,
+        "height": 103
+      },
+      {
+        "title": "문서 (system-docs)",
+        "top": 483,
+        "height": 103
+      },
+      {
+        "title": "포털 (system-portal)",
+        "top": 602,
+        "height": 103
+      },
+      {
+        "title": "마케팅 (system-saas-marketing)",
+        "top": 721,
+        "height": 103
+      }
+    ]
+  },
+  "editor-empty@900": {
+    "scrollWidth": 900,
+    "clientWidth": 900,
+    "scrollHeight": 900,
+    "buttons": 24,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "메뉴·페이지 트리",
+        "top": 49,
+        "height": 422
+      },
+      {
+        "title": "구조 트리",
+        "top": 479,
+        "height": 422
+      },
+      {
+        "title": "",
+        "top": 100,
+        "height": 16
+      }
+    ]
+  },
+  "home@700": {
+    "scrollWidth": 700,
+    "clientWidth": 700,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 0,
+    "sections": []
+  },
+  "account@700": {
+    "scrollWidth": 700,
+    "clientWidth": 700,
+    "scrollHeight": 900,
+    "buttons": 2,
+    "inputs": 3,
+    "sections": [
+      {
+        "title": "내 정보",
+        "top": 86,
+        "height": 145
+      },
+      {
+        "title": "비밀번호 바꾸기",
+        "top": 231,
+        "height": 272
+      },
+      {
+        "title": "API 토큰",
+        "top": 503,
+        "height": 136
+      }
+    ]
+  },
+  "settings@700": {
+    "scrollWidth": 700,
+    "clientWidth": 700,
+    "scrollHeight": 12028,
+    "buttons": 24,
+    "inputs": 39,
+    "sections": [
+      {
+        "title": "일반",
+        "top": 119,
+        "height": 272
+      },
+      {
+        "title": "테마",
+        "top": 391,
+        "height": 11241
+      },
+      {
+        "title": "멤버",
+        "top": 11632,
+        "height": 261
+      },
+      {
+        "title": "위험 구역",
+        "top": 11893,
+        "height": 95
+      }
+    ]
+  },
+  "admin-themes@700": {
+    "scrollWidth": 700,
+    "clientWidth": 700,
+    "scrollHeight": 900,
+    "buttons": 8,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "샘플 (sample)",
+        "top": 126,
+        "height": 103
+      },
+      {
+        "title": "관리자 (system-admin)",
+        "top": 245,
+        "height": 103
+      },
+      {
+        "title": "커머스 (system-commerce)",
+        "top": 364,
+        "height": 103
+      },
+      {
+        "title": "문서 (system-docs)",
+        "top": 483,
+        "height": 103
+      },
+      {
+        "title": "포털 (system-portal)",
+        "top": 602,
+        "height": 103
+      },
+      {
+        "title": "마케팅 (system-saas-marketing)",
+        "top": 721,
+        "height": 103
+      }
+    ]
+  },
+  "editor-empty@700": {
+    "scrollWidth": 700,
+    "clientWidth": 700,
+    "scrollHeight": 900,
+    "buttons": 21,
+    "inputs": 1,
+    "sections": [
+      {
+        "title": "메뉴·페이지 트리",
+        "top": 49,
+        "height": 422
+      },
+      {
+        "title": "구조 트리",
+        "top": 479,
+        "height": 422
+      },
+      {
+        "title": "",
+        "top": 100,
+        "height": 16
+      }
+    ]
+  }
+}

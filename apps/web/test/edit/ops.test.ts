@@ -25,7 +25,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 beforeAll(() => {
   installCatalog()
 })
-import { insertNodeOps, interactionsOps, moveNodeOps, propOps, removeNodeOps, variantOps } from '../../src/edit/ops'
+import { insertNodeOps, interactionsOps, moveNodeOps, propOps, removeNodeOps, variantOps, weightOps } from '../../src/edit/ops'
 
 function doc(root: WbNode): PageDocument {
   return { version: 1, root }
@@ -928,5 +928,51 @@ describe('interactionsOps', () => {
       const inverse = invertOps(document, ops)
       expect(applyOps(applyOps(document, ops), inverse)).toEqual(document)
     }
+  })
+})
+
+describe('weightOps — 노드 몫', () => {
+  const doc = (weight?: number): PageDocument =>
+    ({
+      version: 1,
+      root: { id: 'r', type: 'Page', children: [{ id: 'a', type: 'Card', ...(weight === undefined ? {} : { weight }) }] },
+    }) as PageDocument
+
+  it.each([
+    ['키가 없다 · 수', undefined, 3, [{ op: 'add', path: '/root/children/0/weight', value: 3 }]],
+    ['키가 있다 · 다른 수', 2, 3, [{ op: 'replace', path: '/root/children/0/weight', value: 3 }]],
+    ['키가 있다 · null', 2, null, [{ op: 'remove', path: '/root/children/0/weight' }]],
+    ['키가 없다 · null', undefined, null, null],
+    ['같은 수', 3, 3, null],
+    ['범위 밖(13)', undefined, 13, null],
+    ['범위 밖(0)', undefined, 0, null],
+    ['정수 아님', undefined, 1.5, null],
+  ])('%s', (_label, now, next, expected) => {
+    expect(weightOps(doc(now), 'a', next)).toEqual(expected)
+  })
+
+  it('문서에 없는 노드면 null', () => {
+    expect(weightOps(doc(), 'nope', 3)).toBeNull()
+  })
+})
+
+describe('propOps — undefined 는 그 prop 을 지운다', () => {
+  const doc = (props?: Record<string, unknown>): PageDocument =>
+    ({
+      version: 1,
+      root: { id: 'r', type: 'Page', children: [{ id: 'f', type: 'SearchForm', ...(props === undefined ? {} : { props }) }] },
+    }) as PageDocument
+
+  it('키가 있으면 remove', () => {
+    expect(propOps(doc({ columns: 3, collapsed: true }), 'f', 'columns', undefined)).toEqual([
+      { op: 'remove', path: '/root/children/0/props/columns' },
+    ])
+  })
+
+  it.each([
+    ['props 는 있고 키가 없다', { collapsed: true }],
+    ['props 가 없다', undefined],
+  ])('%s → null', (_label, props) => {
+    expect(propOps(doc(props), 'f', 'columns', undefined)).toBeNull()
   })
 })

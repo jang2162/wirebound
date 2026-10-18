@@ -96,7 +96,7 @@ export function expandPattern(
  * 베끼면 `slot`이 그대로 따라가 `WbNodeSchema`(strictObject)가 죽고, 밀반입된 `marker`·
  * `interactions`도 함께 실린다.
  *
- * `props`·`variant`·`children`은 **없으면 키를 만들지 않는다.** `createNode`가 같은 판단을
+ * `props`·`variant`·`weight`·`children`은 **없으면 키를 만들지 않는다.** `createNode`가 같은 판단을
  * 적어 뒀다 — 문서에 값이 **없는 것**이 곧 *"카탈로그를 따른다"*는 뜻이다.
  */
 function expandNode(
@@ -155,6 +155,7 @@ function expandNode(
    */
   if (template.props !== undefined) node.props = structuredClone(template.props)
   if (template.variant !== undefined) node.variant = template.variant
+  if (template.weight !== undefined) node.weight = template.weight
   if (template.children !== undefined) {
     node.children = template.children.map((child, index) =>
       expandNode(child, `${path}.children.${index}`, generate, declared, slots, issues),

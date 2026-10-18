@@ -128,6 +128,7 @@ function copyNode(node: WbNode): WbNode {
   if (node.alias !== undefined) next.alias = node.alias
   if (node.props !== undefined) next.props = cloneJsonValue(node.props)
   if (node.variant !== undefined) next.variant = node.variant
+  if (node.weight !== undefined) next.weight = node.weight
   if (node.interactions !== undefined) {
     next.interactions = node.interactions.map((interaction) => ({
       on: interaction.on,

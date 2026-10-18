@@ -6,7 +6,9 @@
  * 그대로 앞에 서고 뒤에 붙은 것이 전환기 규칙(`.wb-export-state`)뿐이다. `assets/runtime.js` 는 호출자가 넘기는 글자라 여기서 재지 않는다.
  *
  * **해시는 화면 상태를 번들에 싣기 전 소스로 지었다** — 셸 · 데이터 모양을 일부러 바꾸면 그 값을 새로 짓는다(`WB_PRINT_DIGEST=1` 로 돌려 찍은 값을 옮긴다).
- * 그때는 상태 없는 페이지에서 무엇이 바뀌었는지 그 커밋이 말해야 한다.
+ * 그때는 상태 없는 페이지에서 무엇이 바뀌었는지 그 커밋이 말해야 한다. `assets/views.css` 는 노드 몫(`WbNode.weight`)의 기본 규칙 셋과 열을 정한
+ * 조회 폼(`[data-wb-columns]`)의 규칙 둘을 더하며 새로 지었다 — 몫 · 열이 없는 노드에는 안 닿는 특이도 0 규칙이다(`apps/web/build-test/layout-weight.test.ts`
+ * «몫이 없는 문서» · `searchform-columns.test.ts` «열을 안 정한 조회 폼»).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -52,7 +54,7 @@ const BEFORE = {
     'pages/슬롯.html': '681f803bd957006e',
     'pages/글.html': '84b26fe335a70579',
     'pages/깨진-문서.html': '887683844a0a5cb9',
-    'assets/views.css': '57255a65bf3dc798',
+    'assets/views.css': '8c52f1c23901a4b7',
   },
   themed: {
     'index.html': 'e61f7db03415ae1f',
@@ -60,7 +62,7 @@ const BEFORE = {
     'pages/슬롯.html': '27f2f0b80889417c',
     'pages/글.html': '8a1e77b21772c0f0',
     'pages/깨진-문서.html': '0579d7f72b4430c0',
-    'assets/views.css': '57255a65bf3dc798',
+    'assets/views.css': '8c52f1c23901a4b7',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',

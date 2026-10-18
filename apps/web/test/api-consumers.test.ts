@@ -242,7 +242,8 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   getThemeImpact: ['../src/settings/theme-chooser.tsx'],
   // 고르개의 목록(숨긴 판은 관리자에게만 «숨김» 으로) · 관리자 화면의 판 목록.
   listThemePackages: ['../src/settings/theme-chooser.tsx', '../src/routes/admin-themes.tsx'],
-  getThemeManifest: ['../src/settings/theme-chooser.tsx'],
+  // 바꿀 판의 확인 · 관리자 화면의 판 미리보기(`AdminPreview`).
+  getThemeManifest: ['../src/settings/theme-chooser.tsx', '../src/routes/admin-themes.tsx'],
   // 관리자 셋 — 관리자 화면 하나에서만 불린다(`routes/admin-themes.tsx`).
   uploadThemePackage: ['../src/routes/admin-themes.tsx'],
   setThemePackageHidden: ['../src/routes/admin-themes.tsx'],

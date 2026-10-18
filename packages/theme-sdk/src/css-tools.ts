@@ -12,6 +12,12 @@ export function nodeVar(component: string, prop: string): string {
   return `${NODE_VAR_PREFIX}${component}-${prop}`
 }
 
+/**
+ * 노드 몫을 나르는 변수. `Root` 가 몫이 있는 노드의 뿌리에 인라인으로 싣고, 기본 CSS(`structureCssBlocks`)가 `Flex` · `Grid` 의 자식에서 읽는다.
+ * `nodeVar` 꼴(`--wb-node-<컴포넌트>-<prop>`)이 아닌 까닭: 컴포넌트 prop 이 아니라 모든 노드의 필드다.
+ */
+export const WEIGHT_VAR = `${NODE_VAR_PREFIX}weight`
+
 /** 트리 들여쓰기 한 단계의 폭. **이름이 테마의 손잡이다** — 바꾸면 테마 CSS 가 내는 값이 조용히 안 닿는다. */
 export const TREE_INDENT_VAR = '--wb-tree-indent'
 

@@ -10,7 +10,16 @@ export type {
   ViewState,
   WbNode,
 } from './node'
-export { DEFAULT_CASE, NODE_ALIAS_MAX, THEMELESS_TYPES, VIEW_STATE_NAME_MAX, VIEW_STATES_MAX, createNodeId } from './node'
+export {
+  DEFAULT_CASE,
+  NODE_ALIAS_MAX,
+  THEMELESS_TYPES,
+  VIEW_STATE_NAME_MAX,
+  VIEW_STATES_MAX,
+  WEIGHT_MAX,
+  WEIGHT_MIN,
+  createNodeId,
+} from './node'
 
 export { replaceDocumentOps } from './document-ops'
 export { caseFor, nodeViewState, viewStateIndex, visibleTree } from './view-state'

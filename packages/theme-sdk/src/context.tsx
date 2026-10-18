@@ -3,6 +3,12 @@ import { createContext, useContext, type ReactElement, type ReactNode, type Synt
 export interface NodeBinding {
   /** 루트에 펼 것 — `data-wb-*` 속성(문자열)과, 상호작용 런타임이 켜졌으면 `onClick`·`onChange`·`onSubmit`. */
   attrs: Readonly<Record<string, string | ((event: SyntheticEvent) => void) | undefined>>
+  /**
+   * 부모 안에서의 몫 — 렌더러가 부모를 보고 정한 값이다(`Flex` 면 노드의 `weight` 그대로, `Grid` · 열을 정한 `SearchForm` 이면 부모 열 수로
+   * 자른 칸 수, 그 밖이면 없음). `Root` 가 `--wb-node-weight` 로 싣는다. 속성(`data-wb-*`)이 아니라 값으로 넘기는 까닭은 렌더러의
+   * `render.tsx` 머리말(노드 속성 계약을 넓히지 않는다).
+   */
+  weight?: number
   /** 렌더러의 `ViewHost` 가 «Root 가 그려졌나» 를 보는 통로. */
   markRootRendered: () => void
 }

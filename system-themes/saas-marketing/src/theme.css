@@ -488,6 +488,13 @@
   font-weight: var(--wb-typography-h5-fontWeight);
 }
 
+/* 열을 정한 조회 폼(`SearchForm.columns` — `fields` 조각의 `data-wb-columns`) — 필드를 그 수의 같은 폭 칸으로 깐다. 열을 안 정한 판은 위 규칙
+   그대로다. 필드의 몫(`weight`)은 차지할 칸 수다(SDK 기본 CSS 가 `grid-column` 을 건다). */
+[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] {
+  display: grid;
+  grid-template-columns: repeat(var(--wb-node-searchform-columns, 1), minmax(0, 1fr));
+}
+
 /* 문의 · 데모 신청 폼 — 라벨이 컨트롤 위에 서서 한 열로 흐른다(옛 구조 `labelTop`). */
 [data-wb-component="EntryForm"] {
   display: grid;
@@ -793,5 +800,12 @@
   /* 가장 큰 제목도 제 토큰에서 줄인다(기본값 64px → 48px) — 다른 역할의 토큰(`h1`)을 빌리면 이 폭 아래에서 제 칸이 안 듣는다. */
   [data-wb-component="Text"][data-wb-variant="display"] {
     font-size: calc(var(--wb-typography-display-fontSize) * 0.75);
+  }
+  /* 열을 정한 조회 폼도 한 줄에 필드 하나 — 몫(칸 수)을 걷어 한 칸으로 쌓는다. */
+  [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > * {
+    grid-column: auto;
   }
 }

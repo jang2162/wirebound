@@ -9,8 +9,8 @@ const manifest = DOCS_THEME.manifest
 describe('system-docs manifest', () => {
   it('id · 판 · sdk 범위', () => {
     expect(manifest.id).toBe('system-docs')
-    expect(manifest.version).toBe('1.1.0')
-    expect(manifest.sdk).toBe('^1.1.0')
+    expect(manifest.version).toBe('1.2.0')
+    expect(manifest.sdk).toBe('^1.2.0')
   })
 
   /** 토큰 폼이 수십 칸이 되지 않게 사람이 고칠 만한 것만 낸다 — 나머지는 `theme.css` 의 상수다. */

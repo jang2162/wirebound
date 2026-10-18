@@ -10,8 +10,14 @@ export const SearchFormDef = defineComponent({
   group: 'input',
   props: z.strictObject({
     collapsed: z.boolean().default(false),
+    // **기본값이 없다** — 없으면 테마마다의 지금 배치(필드가 옆으로 서고 넘치면 접힌다)다. 정하면 필드를 그 수의 같은 폭 칸으로 깔고, 필드의
+    // 몫(`WbNode.weight`)이 차지할 칸 수다. 상한은 `KeyValue.columns` 와 같다.
+    columns: z.number().int().min(1).max(4).optional(),
   }),
-  editor: [{ prop: 'collapsed', control: 'switch', label: '접힌 상태' }],
+  editor: [
+    { prop: 'collapsed', control: 'switch', label: '접힌 상태' },
+    { prop: 'columns', control: 'number', label: '열 수' },
+  ],
   states: [],
   children: 'many',
 })

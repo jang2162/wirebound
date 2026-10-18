@@ -34,11 +34,13 @@ import {
   CircleUser,
   CircleX,
   Download,
+  Eye,
   Ellipsis,
   FileDown,
   FilePlus,
   FileUp,
   FolderInput,
+  FolderOpen,
   FolderPlus,
   GripVertical,
   History,
@@ -49,12 +51,14 @@ import {
   ListOrdered,
   LogOut,
   MessageSquarePlus,
+  MousePointerClick,
   MoveHorizontal,
   PanelLeft,
   PanelRight,
   PackagePlus,
   Palette,
   Pencil,
+  PackageOpen,
   Plus,
   Redo2,
   Settings,
@@ -63,6 +67,8 @@ import {
   Trash2,
   TriangleAlert,
   Undo2,
+  Upload,
+  Users,
   Ungroup,
   X,
   ZoomIn,
@@ -139,6 +145,18 @@ export const ICONS = {
   unsplitStates: Ungroup,
   /** 구조 트리의 상태 영역 가지를 전부 편다 — «모든 가지 보기»(트리 머리). */
   allCases: ListTree,
+  /** 빈 캔버스 안내(`routes/editor.tsx` 의 `EmptyCanvas`) — 트리에서 페이지를 누르라는 그림. */
+  pickPage: MousePointerClick,
+  /** 빈 프로젝트 목록의 그림(`routes/project-list.tsx`). */
+  noProjects: FolderOpen,
+  /** 프로젝트 설정의 «멤버» 탭(`routes/settings.tsx`). */
+  members: Users,
+  /** 테마 관리 «테마 패키지 올리기»(`routes/admin-themes.tsx`). */
+  uploadTheme: Upload,
+  /** 테마 관리 «스타터 템플릿 받기». */
+  themeTemplate: PackageOpen,
+  /** 테마 관리 판 줄의 «미리보기». */
+  preview: Eye,
 } as const satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof ICONS

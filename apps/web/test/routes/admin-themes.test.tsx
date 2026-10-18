@@ -1,5 +1,7 @@
 /**
- * **테마 관리**(`routes/admin-themes.tsx`) — 인스턴스 관리자의 업로드 · 숨김 · 템플릿과 목록 머리의 링크.
+ * **테마 관리**(`routes/admin-themes.tsx`) — 인스턴스 관리자의 업로드 · 숨김 · 템플릿과 목록 머리의 링크, 목록 + 상세 + 미리보기의 고르기
+ * (주소 `?theme=` · `?version=`). 미리보기가 그 테마로 그려지는지는 실브라우저 판(`build-test/v4-settings-ui.test.ts`)이 잰다 — 여기는 고른
+ * 판의 manifest 를 읽고 그 판을 번들 로더에 싣는지(설정 미리보기와 같은 길)를 센다.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { WBTHEME_LIMITS } from '@wirebound/themes'
@@ -7,7 +9,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { SessionUser, ThemePackageSummary, ThemePackageVersion } from '../../src/api/types'
-import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
+import { currentPath, currentSearch, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
+import { ADMIN_FIXTURE } from '../admin-theme'
+import { staticBundleLoader, type StaticBundleLoader } from '../theme-loader'
 
 const ADMIN: SessionUser = { id: 'u-1', email: 'admin@example.com', name: '관리자님', isInstanceAdmin: true }
 const MEMBER: SessionUser = { id: 'u-2', email: 'me@example.com', name: '멤버', isInstanceAdmin: false }
@@ -40,8 +44,17 @@ const PACKAGES: ThemePackageSummary[] = [
   { themeId: 'system-admin', name: '관리자', description: null, latest: '0.1.0', versions: [version('system-admin', '0.1.0')] },
 ]
 
-function renderAdmin(user: SessionUser = ADMIN, overrides: Partial<ApiClient> = {}) {
+function renderAdmin(
+  user: SessionUser = ADMIN,
+  overrides: Partial<ApiClient> = {},
+  options: { route?: string; loader?: StaticBundleLoader } = {},
+) {
   const api = {
+    getThemeManifest: vi.fn(async (ref: { themeId: string; version: string }) => ({
+      ...ADMIN_FIXTURE.manifest,
+      id: ref.themeId,
+      version: ref.version,
+    })),
     listThemePackages: vi.fn(async () => PACKAGES),
     uploadThemePackage: vi.fn(async () => ({ themeId: 'acme', version: '2.0.0', name: 'Acme', sha256: 'ab', size: 10 })),
     setThemePackageHidden: vi.fn(async (ref: { themeId: string; version: string }, hidden: boolean) =>
@@ -50,7 +63,11 @@ function renderAdmin(user: SessionUser = ADMIN, overrides: Partial<ApiClient> = 
     downloadThemeTemplate: vi.fn(async () => new Blob([Uint8Array.from([0x50, 0x4b])], { type: 'application/zip' })),
     ...overrides,
   }
-  renderWithProviders(<App />, { client: fakeApi({ me: async () => user, listProjects: async () => [], ...api }), route: '/admin/themes' })
+  renderWithProviders(<App />, {
+    client: fakeApi({ me: async () => user, listProjects: async () => [], ...api }),
+    route: options.route ?? '/admin/themes',
+    ...(options.loader === undefined ? {} : { bundleLoader: options.loader }),
+  })
   return api
 }
 
@@ -75,6 +92,9 @@ describe('테마 관리 — 목록', () => {
     expect(rows[0]!.textContent).toContain('관리자님')
     expect(within(rows[0]!).getByRole('button', { name: 'acme@1.1.0 되살림' })).toBeDefined()
     expect(within(rows[1]!).getByRole('button', { name: 'acme@1.0.0 숨김' })).toBeDefined()
+    // 상세는 고른 테마 하나다 — 목록에서 고른다.
+    expect(screen.queryByRole('region', { name: 'system-admin' })).toBeNull()
+    fireEvent.click(within(screen.getByRole('list', { name: '테마 목록' })).getByRole('button', { name: /^관리자/ }))
     expect(within(theme('system-admin')).getByRole('listitem').textContent).toContain('시스템')
   })
 
@@ -214,5 +234,83 @@ describe('프로젝트 목록 머리 `…` 의 «테마 관리»', () => {
     await screen.findByRole('menuitem', { name: '테마 관리' })
     // `/me` 를 다시 부르지 않고 선다 — 첫 세션 확인 한 번뿐이다.
     expect(me).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('테마 관리 — 목록 · 상세 · 미리보기', () => {
+  const list = (): HTMLElement => screen.getByRole('list', { name: '테마 목록' })
+  const current = (): string[] =>
+    within(list())
+      .getAllByRole('button')
+      .filter((button) => button.getAttribute('aria-current') === 'true')
+      .map((button) => button.textContent ?? '')
+
+  it('목록은 테마마다 이름 · id · 판 수 · 숨긴 판 수 — 처음에는 첫 테마를 고르고 그 latest 를 미리 본다', async () => {
+    const api = renderAdmin()
+    await waitFor(() => theme('acme'))
+    expect(
+      within(list())
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Acmeacme · 2판 · 숨김 1', '관리자system-admin · 1판'])
+    expect(current()).toEqual(['Acmeacme · 2판 · 숨김 1'])
+    // latest 는 숨기지 않은 판의 최대(1.0.0)다 — 숨긴 1.1.0 이 위에 있어도.
+    expect(within(theme('acme')).getByRole('button', { name: 'acme@1.0.0 미리보기' }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(theme('acme')).getByRole('button', { name: 'acme@1.1.0 미리보기' }).getAttribute('aria-pressed')).toBe('false')
+    await waitFor(() => expect(api.getThemeManifest).toHaveBeenCalledWith({ themeId: 'acme', version: '1.0.0' }, expect.anything()))
+    within(theme('acme')).getByRole('heading', { name: '미리보기 — acme@1.0.0' })
+  })
+
+  it('주소의 ?theme= · ?version= 으로 열면 그 테마 · 그 판(숨긴 판도)이다', async () => {
+    const loader = staticBundleLoader()
+    const api = renderAdmin(ADMIN, {}, { route: '/admin/themes?theme=acme&version=1.1.0', loader })
+    await waitFor(() => theme('acme'))
+    expect(within(theme('acme')).getByRole('button', { name: 'acme@1.1.0 미리보기' }).getAttribute('aria-pressed')).toBe('true')
+    await waitFor(() => expect(api.getThemeManifest).toHaveBeenCalledWith({ themeId: 'acme', version: '1.1.0' }, expect.anything()))
+    // 미리보기는 설정 미리보기와 같은 부품 — 같은 번들 로더로 그 판을 싣는다.
+    await waitFor(() => expect(loader.calls).toContain('acme@1.1.0'))
+    within(theme('acme')).getByRole('region', { name: '미리보기' })
+  })
+
+  it('모르는 테마 · 판이면 첫 테마 · 그 latest 로 선다', async () => {
+    renderAdmin(ADMIN, {}, { route: '/admin/themes?theme=nope&version=9.9.9' })
+    await waitFor(() => theme('acme'))
+    expect(within(theme('acme')).getByRole('button', { name: 'acme@1.0.0 미리보기' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('목록에서 고르면 주소가 그 테마 · latest 로 바뀌고 상세가 갈린다 · 판의 «미리보기» 는 판만 바꾼다', async () => {
+    const api = renderAdmin()
+    await waitFor(() => theme('acme'))
+    fireEvent.click(within(list()).getByRole('button', { name: /^관리자/ }))
+    expect(Object.fromEntries(new URLSearchParams(currentSearch()))).toEqual({ theme: 'system-admin', version: '0.1.0' })
+    expect(current()).toEqual(['관리자system-admin · 1판'])
+    expect(screen.queryByRole('region', { name: 'acme' })).toBeNull()
+    await waitFor(() => expect(api.getThemeManifest).toHaveBeenCalledWith({ themeId: 'system-admin', version: '0.1.0' }, expect.anything()))
+
+    fireEvent.click(within(list()).getByRole('button', { name: /^Acme/ }))
+    fireEvent.click(within(theme('acme')).getByRole('button', { name: 'acme@1.1.0 미리보기' }))
+    expect(Object.fromEntries(new URLSearchParams(currentSearch()))).toEqual({ theme: 'acme', version: '1.1.0' })
+    within(theme('acme')).getByRole('heading', { name: '미리보기 — acme@1.1.0' })
+  })
+
+  it('manifest 를 못 읽으면 미리보기 자리에 서버 문장 — 판 줄 · 숨김은 그대로 선다', async () => {
+    renderAdmin(ADMIN, {
+      getThemeManifest: vi.fn(async () => {
+        throw new ApiError(404, 'not-found', '테마 판을 찾을 수 없습니다')
+      }),
+    })
+    await within(await waitFor(() => theme('acme'))).findByText('테마 판을 찾을 수 없습니다')
+    within(theme('acme')).getByRole('button', { name: 'acme@1.0.0 숨김' })
+  })
+
+  it('올리기가 성공하면 올린 판을 고른다', async () => {
+    renderAdmin()
+    await waitFor(() => theme('acme'))
+    fireEvent.click(within(list()).getByRole('button', { name: /^관리자/ }))
+    upload(wbtheme())
+    await screen.findByText('acme@2.0.0 을 올렸습니다')
+    await waitFor(() => expect(Object.fromEntries(new URLSearchParams(currentSearch()))).toEqual({ theme: 'acme', version: '2.0.0' }))
+    // 목록(가짜)에 2.0.0 이 없으니 판은 latest 로 서지만 테마는 올린 테마다.
+    theme('acme')
   })
 })

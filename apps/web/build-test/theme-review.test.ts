@@ -81,7 +81,7 @@ describe.skipIf(!전제.ok)('A4 리뷰', () => {
     await putTheme(project.call, project.id, { themeId: 'sample', version: '1.0.0', tokens: {} })
     const { context, page } = await stack.openTab(stack.users.alice)
     try {
-      await page.goto(`/projects/${project.id}/settings`)
+      await page.goto(`/projects/${project.id}/settings?section=theme`)
       const section = page.getByRole('region', { name: '테마' })
       const primary = page.getByRole('group', { name: '토큰' }).getByLabel('주색', { exact: true })
       await primary.fill('#ff5500')
@@ -102,7 +102,7 @@ describe.skipIf(!전제.ok)('A4 리뷰', () => {
     await putTheme(project.call, project.id, { themeId: 'sample', version: '1.0.0', tokens: {} })
     const { context, page } = await stack.openTab(stack.users.alice)
     try {
-      await page.goto(`/projects/${project.id}/settings`)
+      await page.goto(`/projects/${project.id}/settings?section=theme`)
       const section = page.getByRole('region', { name: '테마' })
       const primary = page.getByRole('group', { name: '토큰' }).getByLabel('주색', { exact: true })
       await primary.fill('#ff5500')
