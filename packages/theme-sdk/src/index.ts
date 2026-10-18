@@ -16,4 +16,4 @@ export { NodeContext, ThemeProvider, useToken, useWindow, ViewNodeContext } from
 export { markAttr, MARKED_PROPS, propMarks, STATE_ARIA, stateAria, type MarkKind } from './marks'
 export { Focus, markerAttrs, Root } from './root'
 export { DEFAULT_VIEWS, defaultViewsCss } from './default-views/index'
-export { NODE_VAR_PREFIX, nodeVar, TREE_INDENT_VAR } from './css-tools'
+export { NODE_VAR_PREFIX, nodeVar, TREE_INDENT_VAR, WEIGHT_VAR } from './css-tools'

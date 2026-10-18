@@ -28,6 +28,12 @@ export interface WbNode {
   alias?: string
   props?: Record<string, unknown>
   variant?: string
+  /**
+   * 부모 안에서의 몫 — 정수 `WEIGHT_MIN` ~ `WEIGHT_MAX`. 부모가 `Flex` 면 남는 폭을 몫대로 나누고(`flex-grow`), `Grid` · 열을 정한
+   * `SearchForm` 이면 차지할 칸 수다(부모 열 수로 자른다). 그 밖의 부모에서는 아무 일도 없고 값만 남는다. 없으면 테마 · 기본 배치 그대로다.
+   * 카탈로그 prop 이 아니라 노드 필드인 까닭은 정본 설계서 「페이지 스키마 노드」.
+   */
+  weight?: number
   marker?: number
   interactions?: Interaction[]
   children?: WbNode[]
@@ -35,6 +41,10 @@ export interface WbNode {
 
 /** 별칭 글자 수의 상한(코드 포인트로 센다). */
 export const NODE_ALIAS_MAX = 60
+
+/** 노드 몫(`WbNode.weight`)의 범위. 12 는 격자 열 수의 상한(`Grid.columns`)과 같다. */
+export const WEIGHT_MIN = 1
+export const WEIGHT_MAX = 12
 
 declare const documentKind: unique symbol
 

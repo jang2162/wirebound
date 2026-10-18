@@ -4,7 +4,7 @@
 import { WbNodeSchema, getComponent, installCatalog, listComponents, validatePage, type PageDocument, type WbNode } from '@wirebound/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { expandPattern } from '../src/pattern/expand'
-import type { ThemePattern } from '../src/spec/patterns'
+import { PatternNodeSchema, type ThemePattern } from '../src/spec/patterns'
 
 beforeAll(() => {
   installCatalog()
@@ -502,5 +502,28 @@ describe('전개한 패턴이 문서에 들어간다', () => {
     }
     const found = validatePage(document)
     expect(found, found.map((entry) => `${entry.path} ${entry.message}`).join(' | ')).toEqual([])
+  })
+})
+
+describe('몫(weight)은 템플릿에서 전개된 노드로 간다', () => {
+  const COLUMNS: ThemePattern = {
+    name: '둘로 나눈 줄',
+    schema: { type: 'Flex', children: [{ type: 'Card', weight: 1 }, { type: 'Card', weight: 2 }, { type: 'Text' }] },
+  }
+
+  it('전개된 노드가 템플릿의 몫을 갖고, 몫이 없는 노드에는 키가 없다', () => {
+    const { expanded, issues } = expandPattern(COLUMNS, counter())
+    expect(issues).toEqual([])
+    const children = expanded!.nodes[0]!.children!
+    expect(children.map((child) => child.weight)).toEqual([1, 2, undefined])
+    expect('weight' in children[2]!).toBe(false)
+  })
+
+  it.each([0, 13, 1.5, '2'])('규격은 범위 밖 몫 %s 를 받지 않는다', (weight) => {
+    expect(PatternNodeSchema.safeParse({ type: 'Card', weight }).success).toBe(false)
+  })
+
+  it('규격은 1 ~ 12 의 몫을 받는다', () => {
+    expect(PatternNodeSchema.safeParse({ type: 'Card', weight: 12 }).success).toBe(true)
   })
 })
