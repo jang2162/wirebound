@@ -125,22 +125,15 @@ export const LINT_RULES = [
   },
   {
     id: 'view-state-unknown',
-    spec: '목록에 없는 화면 상태를 가리키는 상태 가지 — 경고',
+    spec: '목록에 없는 화면 상태를 가리키는 노드 보임 — 경고',
     group: 'document',
     owner: 'schema',
-    // 그 가지는 그려지지 않는다(렌더러) — 설계한 화면이 아무 상태에서도 안 보인다. 문서는 그대로 선다.
+    // 그 상태는 고를 수 없다 — 보임이 설계한 화면이 아무 상태에서도 안 선다. 문서는 그대로 선다(저장 경계는 편집이 새로 만든 것을 막는다).
     severity: 'warning',
   },
   {
     id: 'view-state-unused',
-    spec: '쓰이지 않는 화면 상태(가지가 하나도 없음) — 정보',
-    group: 'document',
-    owner: 'schema',
-    severity: 'info',
-  },
-  {
-    id: 'view-state-nested',
-    spec: '상태 영역 안의 상태 영역 — 정보',
+    spec: '쓰이지 않는 화면 상태(그 상태 · 하위 상태를 가리키는 보임이 없음) — 정보',
     group: 'document',
     owner: 'schema',
     severity: 'info',

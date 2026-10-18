@@ -516,7 +516,7 @@ describe('applyEdit', () => {
         projectId: fx.project.id,
         pageId: fx.page.id,
         baseSeq: edit1.seq,
-        ops: [{ op: 'replace', path: '/version', value: 2 }],
+        ops: [{ op: 'replace', path: '/version', value: CURRENT_DOCUMENT_VERSION + 1 }],
         actor: actorFor(fx.owner.user),
       })
 
@@ -540,7 +540,7 @@ describe('applyEdit', () => {
         projectId: fx.project.id,
         pageId: fx.page.id,
         baseSeq: edit1.seq,
-        ops: [{ op: 'replace', path: '/version', value: 2 }],
+        ops: [{ op: 'replace', path: '/version', value: CURRENT_DOCUMENT_VERSION + 1 }],
         actor: actorFor(fx.owner.user),
       })
       expect(outcome.ok).toBe(false)

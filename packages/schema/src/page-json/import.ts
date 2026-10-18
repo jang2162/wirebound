@@ -148,7 +148,7 @@ export function planPageImport(document: PageDocument, comments: readonly PageJs
   })
 
   return {
-    // 상태 목록은 그대로 싣는다 — 상태 id 는 페이지 안의 이름이라 새 페이지에서 겹칠 것이 없고, 가지(`StateCase.props.state`)가 그 id 를
+    // 상태 목록은 그대로 싣는다 — 상태 id 는 페이지 안의 이름이라 새 페이지에서 겹칠 것이 없고, 노드 보임(`visibility.states`)이 그 id 를
     // 가리킨다(노드 id 와 달리 다시 짓지 않는다).
     document:
       document.viewStates === undefined

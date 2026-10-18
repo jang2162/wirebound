@@ -4,7 +4,7 @@ import { ButtonDef, LinkDef } from './action'
 import { KeyValueDef, ListDef, TreeDef } from './data'
 import { DividerDef, MediaDef, PlaceholderDef, TextDef } from './document'
 import { EntryFormDef, FieldDef, SearchFormDef } from './input'
-import { CardDef, FlexDef, GridDef, PageDef, SectionDef, SlotDef, StateCaseDef, StateSwitchDef, TabsDef } from './structure'
+import { CardDef, FlexDef, GridDef, PageDef, SectionDef, SlotDef, TabsDef } from './structure'
 
 export * from './action'
 export * from './data'
@@ -25,8 +25,6 @@ export const CATALOG_DEFS: readonly ComponentDef[] = [
   GridDef,
   CardDef,
   TabsDef,
-  StateSwitchDef,
-  StateCaseDef,
   ListDef,
   TreeDef,
   KeyValueDef,

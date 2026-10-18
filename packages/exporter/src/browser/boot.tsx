@@ -14,7 +14,7 @@
  * 못 고르므로 여기서 먼저 기본으로 접는다.
  */
 import { NO_THEME } from '@wirebound/renderer'
-import { DEFAULT_CASE, type PageDocument } from '@wirebound/schema'
+import { DEFAULT_VIEW_STATE, type PageDocument } from '@wirebound/schema'
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import { adoptManifest, type RuntimeHandle } from '@wirebound/theme-sdk/runtime'
 import { tokenValues } from '@wirebound/themes'
@@ -95,7 +95,7 @@ export async function boot(env: BootEnv): Promise<BootResult> {
       standing: failures,
       ...(env.navigate === undefined ? {} : { navigate: env.navigate }),
     })
-    const unwire = wireStateSwitch(win, mount, states)
+    const unwire = wireStatePicker(win, mount, states)
     const unmount = mount.unmount
     mount.unmount = () => {
       unwire()
@@ -139,11 +139,11 @@ function stateFromHash(hash: string, ids: ReadonlySet<string>): string | null {
  * 셸의 전환기(상태 목록이 있는 페이지만 싣는다)와 주소 해시를 마운트에 잇는다. 전환기가 없으면 아무것도 안 건다. 건 것을 거두는 함수를
  * 낸다 — 마운트를 내리면 함께 거둔다(케이스가 한 창에서 여러 번 세운다).
  */
-function wireStateSwitch(win: Window, mount: ExportMount, ids: ReadonlySet<string>): () => void {
+function wireStatePicker(win: Window, mount: ExportMount, ids: ReadonlySet<string>): () => void {
   const found = win.document.getElementById(STATE_SELECT_ID)
   if (found === null || found.tagName !== 'SELECT') return () => {}
   const select = found as HTMLSelectElement
-  select.value = stateFromHash(win.location.hash, ids) ?? DEFAULT_CASE
+  select.value = stateFromHash(win.location.hash, ids) ?? DEFAULT_VIEW_STATE
   const onChange = (): void => {
     const state = ids.has(select.value) ? select.value : null
     mount.setViewState(state)
@@ -156,7 +156,7 @@ function wireStateSwitch(win: Window, mount: ExportMount, ids: ReadonlySet<strin
   }
   const onHash = (): void => {
     const state = stateFromHash(win.location.hash, ids)
-    select.value = state ?? DEFAULT_CASE
+    select.value = state ?? DEFAULT_VIEW_STATE
     mount.setViewState(state)
   }
   select.addEventListener('change', onChange)

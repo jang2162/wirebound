@@ -29,10 +29,11 @@
  */
 import { checkPageAction, isPageTargetAction } from '../interaction/check'
 import { nodeDisplayName } from '../interaction/describe'
-import { DEFAULT_CASE, type PageDocument, type WbNode } from '../node'
+import type { PageDocument, WbNode } from '../node'
 import { walkNodes } from '../tree'
 import type { ValidationCode, ValidationIssue } from '../validate'
-import { validatePage } from '../validate'
+import { unknownVisibilityStates, validatePage } from '../validate'
+import { stateDescendants } from '../visibility'
 import { lintIssue, relayLintIssue, type LintIssue } from './issue'
 import type { LintConfig, LintPage, LintProject } from './input'
 import type { RelayRuleId } from './rules'
@@ -84,10 +85,6 @@ export const VALIDATION_RULE: Record<ValidationCode, RelayRuleId> = {
   'nested-page': 'document-invalid',
   'slot-count': 'document-invalid',
   'bad-document': 'document-invalid',
-  'state-case-default': 'document-invalid',
-  'state-case-duplicate': 'document-invalid',
-  'state-case-outside': 'document-invalid',
-  'state-switch-child': 'document-invalid',
   // 저장 경계만 낸다(`checkViewStateRemoval` — 편집 전후를 본다). lint 는 저장된 문서 하나를 보므로 이 코드를 받지 않는다 — 표의 칸은
   // `Record`가 요구해 둔다.
   'state-cases-left': 'document-invalid',
@@ -220,47 +217,32 @@ function pageTargetIssues(node: WbNode, path: string, where: { pageId: string },
 }
 
 /**
- * 화면 상태 셋(설계서 「lint 규칙」의 상태 줄). 상태 id 는 문서의 목록(`viewStates`)이 정한다 — 목록이 없으면 기본만 있다.
+ * 화면 상태 둘(설계서 「lint 규칙」의 상태 줄). 상태 id 는 문서의 목록(`viewStates`)이 정한다 — 목록이 없으면 기본만 있다.
  *
- * - `view-state-unknown` — 기본이 아니고 목록에 없는 상태의 가지. 그 가지는 아무 상태에서도 안 그려진다(렌더러 `caseFor`).
- * - `view-state-unused` — 가지가 하나도 없는 상태. 자리는 목록의 그 항목(`/viewStates/<i>`) — 노드가 없다.
- * - `view-state-nested` — 상태 영역 안의 상태 영역. 자리는 안쪽 영역. 허용되는 모양이라 알리기만 한다.
- *
- * 순회는 `walkNodes` 의 전위 차례라 조상 영역이 먼저 온다 — 안쪽 영역은 지나온 영역 경로를 접두로 갖는다.
+ * - `view-state-unknown` — 노드 보임이 목록에 없는 상태를 가리킨다(`unknownVisibilityStates`). 그 상태는 고를 수 없어 보임이 설계한 화면이
+ *   아무 상태에서도 안 선다. 자리는 그 노드의 `visibility`. 저장 경계는 편집이 새로 만든 것을 막으므로 가져온 문서에서 선다.
+ * - `view-state-unused` — 그 상태도 그 하위 상태도 어느 보임도 안 가리킨다(상태를 골라도 화면이 부모 상태 · 기본과 같다). 자리는 목록의 그
+ *   항목(`/viewStates/<i>`) — 노드가 없다.
  */
 function viewStateIssues(document: PageDocument, where: { pageId: string }): LintIssue[] {
   const issues: LintIssue[] = []
   const list = Array.isArray(document.viewStates) ? document.viewStates : []
-  const listed = new Set(list.map((state) => state?.id).filter((id): id is string => typeof id === 'string'))
-  const used = new Set<string>()
-  const switches: string[] = []
-
-  for (const { node, path } of walkNodes(document.root)) {
-    if (node.type === 'StateSwitch') {
-      if (switches.some((outer) => path.startsWith(`${outer}/`))) {
-        issues.push(lintIssue('view-state-nested', { ...where, nodeId: node.id }, path, '상태 영역 안에 상태 영역이 있습니다'))
-      }
-      switches.push(path)
-    }
-    if (node.type !== 'StateCase') continue
-    const state: unknown = node.props?.state
-    if (typeof state !== 'string' || state === DEFAULT_CASE) continue
-    used.add(state)
-    if (!listed.has(state)) {
-      issues.push(
-        lintIssue(
-          'view-state-unknown',
-          { ...where, nodeId: node.id },
-          path,
-          `상태 가지가 페이지의 상태 목록에 없는 상태를 가리킵니다: ${state} — 이 가지는 어느 상태에서도 그려지지 않습니다`,
-        ),
-      )
-    }
+  for (const { nodeId, path, states } of unknownVisibilityStates(document)) {
+    issues.push(
+      lintIssue(
+        'view-state-unknown',
+        { ...where, nodeId },
+        path,
+        `상태 보임이 페이지의 상태 목록에 없는 상태를 가리킵니다: ${states.join(', ')}`,
+      ),
+    )
   }
-
+  const used = new Set<string>()
+  for (const { node } of walkNodes(document.root)) for (const state of node.visibility?.states ?? []) used.add(state)
   for (const [index, state] of list.entries()) {
-    if (typeof state?.id !== 'string' || used.has(state.id)) continue
-    issues.push(lintIssue('view-state-unused', where, `/viewStates/${index}`, `상태 "${state.name}" 에는 가지가 하나도 없습니다`))
+    if (typeof state?.id !== 'string') continue
+    if (used.has(state.id) || stateDescendants(list, state.id).some((id) => used.has(id))) continue
+    issues.push(lintIssue('view-state-unused', where, `/viewStates/${index}`, `상태 "${state.name}" 을 가리키는 보임이 없습니다`))
   }
   return issues
 }

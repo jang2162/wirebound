@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CURRENT_DOCUMENT_VERSION } from '@wirebound/schema'
 import { buildMenuTree, type MenuRow, type PageRow, type TreeMenuNode } from '../src/services/menu-tree'
 import { addMember, createMenuNode, createPage, createProject, signup, withApi } from './helpers'
 
@@ -307,7 +308,7 @@ describe('완료 판정: 한 줄기 시나리오', () => {
       // 5. editor가 실제 컴포넌트가 든 스키마를 PUT 한다 (SearchForm + List) — 빈
       // Page 하나만 넣으면 카탈로그 게이트를 진짜로 통과시키는지 검증하지 못한다.
       const schema = {
-        version: 1,
+        version: CURRENT_DOCUMENT_VERSION,
         root: {
           id: 'n_root',
           type: 'Page',

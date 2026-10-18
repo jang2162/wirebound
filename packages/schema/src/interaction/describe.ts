@@ -57,10 +57,9 @@ import { CATALOG_DEFS } from '../component/catalog/index'
 import { getComponent } from '../component/registry'
 import { isolateBidi } from '../bidi'
 import { nodeAlias, viewStateName } from '../display'
-import type { AnyDocument, Interaction, InteractionAction, InteractionTrigger, WbNode } from '../node'
+import type { AnyDocument, Interaction, InteractionAction, InteractionTrigger, ViewState, WbNode } from '../node'
 import { pageTargetPath } from '../page-target'
 import { walkNodes } from '../tree'
-import { viewStateIndex } from '../view-state'
 
 /** 컴포넌트를 문장에서 부르는 이름과, 그 앞에 붙일 라벨을 담은 prop. */
 export interface ComponentNoun {
@@ -167,8 +166,8 @@ export function describeInteraction(document: AnyDocument, source: WbNode, inter
 }
 
 /**
- * 노드를 부르는 이름에 붙일 상태 — 상태 영역의 가지 안 노드만(`viewStateIndex`), 이름은 그 문서의 목록에서. 영역 밖 노드는 없다.
- * 레이아웃에는 목록이 없어 그 안 가지는 «목록에 없는 상태»로 읽힌다.
+ * 노드를 부르는 이름에 붙일 상태 — 그 노드 자신 또는 가장 가까운 조상의 보임이 `only` 일 때만(`namingContexts`), 이름은 그 문서의 목록에서
+ * 상태 차례대로 ` · ` 로 잇는다(«관리자 · 손님»). `except` · 보임 없음은 붙이지 않는다.
  */
 export interface NamingContext {
   viewStateName?: string
@@ -208,14 +207,29 @@ function nodeIndex(document: AnyDocument): NodeIndex {
 }
 
 /**
- * 문서의 노드 id → 이름 짓기 맥락(`NamingContext` — 속한 상태의 이름). 상태 영역 밖 노드는 없다(`get`이 `undefined` — 이름이 한 글자도 안
+ * 문서의 노드 id → 이름 짓기 맥락(`NamingContext` — 보이는 상태의 이름). `only` 보임 밖 노드는 없다(`get`이 `undefined` — 이름이 한 글자도 안
  * 바뀐다). **노드를 이름으로 부르는 자리(문장 · 읽기 `pageView` · 화면의 패널 머리 · 대상 고르개 · 번들 코멘트)가 이것을 넘긴다** — 한 자리가
  * 안 넘기면 같은 노드가 자리마다 다른 이름으로 불린다(K1 리뷰 R4).
  */
 export function namingContexts(document: AnyDocument): Map<string, NamingContext> {
-  const states = (document as { viewStates?: { id: string; name: string }[] }).viewStates
+  const states = (document as { viewStates?: ViewState[] }).viewStates
   const naming = new Map<string, NamingContext>()
-  for (const [id, state] of viewStateIndex(document.root)) naming.set(id, { viewStateName: viewStateName(states, state) })
+  // 가장 가까운 보임이 그 노드의 이름을 정한다 — `only [관리자]` 카드 안의 버튼도 관리자 화면에만 있다.
+  const visit = (node: unknown, inherited: NamingContext | undefined): void => {
+    if (node === null || typeof node !== 'object') return
+    const { id, visibility, children } = node as { id?: unknown; visibility?: unknown; children?: unknown }
+    let own = inherited
+    if (visibility !== null && typeof visibility === 'object') {
+      const { mode, states: chosen } = visibility as { mode?: unknown; states?: unknown }
+      own =
+        mode === 'only' && Array.isArray(chosen) && chosen.length > 0
+          ? { viewStateName: chosen.map((state) => viewStateName(states, String(state))).join(' · ') }
+          : undefined
+    }
+    if (own !== undefined && typeof id === 'string' && !naming.has(id)) naming.set(id, own)
+    if (Array.isArray(children)) for (const child of children) visit(child, own)
+  }
+  visit(document.root, undefined)
   return naming
 }
 

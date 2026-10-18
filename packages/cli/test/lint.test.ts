@@ -98,7 +98,7 @@ describe('종료 코드', () => {
     const io = 준비(상태가_있는_프로젝트())
     expect(await run(['lint', '--fail-on', 'warning'], io), io.stderr.join('\n')).toBe(EXIT.ok)
     const out = io.stdout.join('\n')
-    expect(out).toContain('info\t관리자/회원/상태\tview-state-unused\t상태 "비로그인" 에는 가지가 하나도 없습니다')
+    expect(out).toContain('info\t관리자/회원/상태\tview-state-unused\t상태 "비로그인" 을 가리키는 보임이 없습니다')
     expect(out).toContain('결함 없음 (info 1건)')
     expect(out).not.toMatch(/결함 \d+건/)
   })

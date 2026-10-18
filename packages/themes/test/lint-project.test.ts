@@ -90,39 +90,19 @@ describe('표 전체가 이 한 자리에서 돈다', () => {
             },
           },
           { id: 'pg2', menuNodeId: '없는메뉴', title: '떠 있는', target: 'page:떠 있는', document: doc([]) },
-          // 화면 상태 셋 — 목록 밖 상태의 가지 · 쓰이지 않는 상태 · 영역 안 영역.
+          // 화면 상태 둘 — 목록 밖 상태를 가리키는 보임 · 쓰이지 않는 상태.
           {
             id: 'pg3',
             menuNodeId: 'm1',
             title: '상태',
             target: 'page:관리자/상태',
             document: {
-              version: 1,
+              version: 2,
               viewStates: [{ id: 's_unused', name: '안씀' }],
               root: {
                 id: nid(),
                 type: 'Page',
-                children: [
-                  {
-                    id: nid(),
-                    type: 'StateSwitch',
-                    children: [
-                      {
-                        id: nid(),
-                        type: 'StateCase',
-                        props: { state: 'default' },
-                        children: [
-                          {
-                            id: nid(),
-                            type: 'StateSwitch',
-                            children: [{ id: nid(), type: 'StateCase', props: { state: 'default' } }],
-                          },
-                        ],
-                      },
-                      { id: nid(), type: 'StateCase', props: { state: 's_gone' } },
-                    ],
-                  },
-                ],
+                children: [{ id: nid(), type: 'Text', props: { content: '밖' }, visibility: { mode: 'only', states: ['s_gone'] } }],
               },
             },
           },

@@ -438,40 +438,23 @@ describe('별칭 — PPTX 산출물로 잰다(L-126)', () => {
 describe('화면 상태가 있는 페이지 — PPTX 는 기본 상태만 찍는다(L-120 · 사용자 결정 Q23)', () => {
   /**
    * 한 장이 페이지 하나다 — 상태마다 장을 내지 않는다. 화면 이미지는 호출자가 그린 한 장이고(`screen`), 이 함수는 상태를 모른다. 코멘트 · 상호작용
-   * 글은 번들과 같은 함수가 짓는다(상태 가지 안 노드의 이름에 상태가 붙는다 — 설계서 «내보내기»). 값으로 적는다 — 슬라이드 수 = 페이지 수.
+   * 글은 번들과 같은 함수가 짓는다(`only` 보임 노드의 이름에 상태가 붙는다 — 설계서 «내보내기»). 값으로 적는다 — 슬라이드 수 = 페이지 수.
    */
   const STATED: PageDocument = {
-    version: 1,
+    version: 2,
     viewStates: [{ id: 's_admin', name: '관리자' }],
     root: {
       id: 'n_root',
       type: 'Page',
       children: [
+        { id: 'n_view', type: 'Button', props: { label: '보기' }, marker: 1, visibility: { mode: 'except', states: ['s_admin'] } },
         {
-          id: 'n_sw',
-          type: 'StateSwitch',
-          children: [
-            {
-              id: 'n_cd',
-              type: 'StateCase',
-              props: { state: 'default' },
-              children: [{ id: 'n_view', type: 'Button', props: { label: '보기' }, marker: 1 }],
-            },
-            {
-              id: 'n_ca',
-              type: 'StateCase',
-              props: { state: 's_admin' },
-              children: [
-                {
-                  id: 'n_approve',
-                  type: 'Button',
-                  props: { label: '승인' },
-                  marker: 2,
-                  interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_view', value: false }] }],
-                },
-              ],
-            },
-          ],
+          id: 'n_approve',
+          type: 'Button',
+          props: { label: '승인' },
+          marker: 2,
+          visibility: { mode: 'only', states: ['s_admin'] },
+          interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_view', value: false }] }],
         },
       ],
     } as WbNode,
@@ -483,7 +466,7 @@ describe('화면 상태가 있는 페이지 — PPTX 는 기본 상태만 찍는
     })
     const slides = parts.filter((part) => /^ppt\/slides\/slide\d+\.xml$/.test(part.path))
     expect(slides).toHaveLength(1)
-    // 코멘트 · 상호작용 글은 상태마다 갈리지 않는다 — 관리자 가지 안 노드의 이름에 상태가 붙는다.
+    // 코멘트 · 상호작용 글은 상태마다 갈리지 않는다 — 관리자에서만 보이는 노드의 이름에 상태가 붙는다.
     const lines = texts(slide(parts, 1))
     expect(lines).toContain('권한 확인')
     expect(lines.some((line) => line.includes('(관리자 상태)'))).toBe(true)

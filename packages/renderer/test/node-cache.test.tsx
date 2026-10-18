@@ -78,10 +78,29 @@ describe('테마 · 화면 상태가 다르면 다른 엘리먼트다', () => {
     expect(renderNode(node, { theme: otherTheme })).toBe(renderNode(node, { theme: otherTheme }))
   })
 
-  it('화면 상태가 다르면 다른 엘리먼트다', () => {
+  it('화면 상태의 조상 줄이 다르면 다른 엘리먼트다 — 목록 밖 상태는 기본과 같은 열쇠', () => {
     const node = text('n_a', '가')
-    expect(renderNode(node, { viewState: 'state-a' })).not.toBe(renderNode(node, { viewState: 'state-b' }))
-    expect(renderNode(node, { viewState: 'state-a' })).toBe(renderNode(node, { viewState: 'state-a' }))
+    const viewStates = [
+      { id: 'state-a', name: '가' },
+      { id: 'state-b', name: '나' },
+    ]
+    expect(renderNode(node, { viewState: 'state-a', viewStates })).not.toBe(renderNode(node, { viewState: 'state-b', viewStates }))
+    expect(renderNode(node, { viewState: 'state-a', viewStates })).toBe(
+      renderNode(node, { viewState: 'state-a', viewStates: [...viewStates] }),
+    )
+    expect(renderNode(node, { viewState: 'state-gone', viewStates })).toBe(renderNode(node, { viewStates }))
+  })
+
+  it('목록에서 부모를 바꾸면 같은 상태 id 도 다른 엘리먼트다 — 물려받기가 바뀐다', () => {
+    const node = text('n_a', '가')
+    const flat = [
+      { id: 'state-a', name: '가' },
+      { id: 'state-b', name: '나' },
+    ]
+    const nested = [flat[0]!, { ...flat[1]!, parent: 'state-a' }]
+    expect(renderNode(node, { viewState: 'state-b', viewStates: flat })).not.toBe(
+      renderNode(node, { viewState: 'state-b', viewStates: nested }),
+    )
   })
 })
 

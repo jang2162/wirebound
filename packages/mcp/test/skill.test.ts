@@ -127,10 +127,14 @@ describe('스킬의 도구 표가 실제 도구와 같다', () => {
       'skill',
       'SKILL',
       'wirebound',
-      // 화면 상태의 꼴 — 노드 타입 · 문서 필드 · 연산 이름 · 등급 · 응답 필드
-      'StateSwitch',
-      'StateCase',
+      // 화면 상태의 꼴 — 문서 필드 · 보임의 모양 · 연산 이름 · 등급 · 응답 필드
       'viewStates',
+      'visibility',
+      'parent',
+      'only',
+      'except',
+      'states',
+      'replace',
       'default',
       'children',
       'test',

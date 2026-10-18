@@ -91,25 +91,24 @@ describe('코멘트가 붙은 노드를 이름으로 부른다', () => {
   })
 })
 
-describe('화면 상태 — 목록과 가지마다 상태 이름', () => {
+describe('화면 상태 — 목록과 노드마다 보임', () => {
   const 상태문서: PageDocument = {
-    version: 1,
+    version: 2,
     viewStates: [
       { id: 's_admin', name: '관리자' },
-      { id: 's_guest', name: '비로그인' },
+      { id: 's_super', name: '최고', parent: 's_admin' },
     ],
     root: {
       id: 'r',
       type: 'Page',
       children: [
         { id: 't', type: 'Text', props: { content: '밖' } },
+        { id: 'v', type: 'Button', props: { label: '보기' }, visibility: { mode: 'except', states: ['s_admin'] } },
         {
-          id: 'sw',
-          type: 'StateSwitch',
-          children: [
-            { id: 'cd', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'v', type: 'Button', props: { label: '보기' } }] },
-            { id: 'ca', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'a', type: 'Button', props: { label: '승인' } }] },
-          ],
+          id: 'box',
+          type: 'Card',
+          visibility: { mode: 'only', states: ['s_admin'] },
+          children: [{ id: 'a', type: 'Button', props: { label: '승인' } }],
         },
       ],
     },
@@ -117,18 +116,24 @@ describe('화면 상태 — 목록과 가지마다 상태 이름', () => {
   const 읽음 = () =>
     pageView({ id: 'p', title: '상태', description: null, target: 'page:상태', menuPath: [], document: 상태문서, comments: [] })
 
-  it('목록을 그대로 싣는다 — 목록이 없는 문서는 빈 목록이다', () => {
+  it('목록을 그대로 싣는다(parent 포함) — 목록이 없는 문서는 빈 목록이다', () => {
     expect(읽음().viewStates).toEqual(상태문서.viewStates)
     expect(view().viewStates).toEqual([])
   })
 
-  it('가지와 그 안 노드가 속한 상태(id · 이름)를 싣고, 영역 밖 노드는 그 키가 없다', () => {
+  it('노드 자신의 보임을 그대로 싣고, 보임이 없는 노드는 그 키가 없다', () => {
     const byId = new Map(읽음().nodes.map((node) => [node.id, node]))
-    expect(byId.get('ca')!.viewState).toEqual({ id: 's_admin', name: '관리자' })
-    expect(byId.get('a')!.viewState).toEqual({ id: 's_admin', name: '관리자' })
-    expect(byId.get('cd')!.viewState).toEqual({ id: 'default', name: '기본' })
-    expect(byId.get('v')!.viewState).toEqual({ id: 'default', name: '기본' })
-    expect('viewState' in byId.get('t')!).toBe(false)
-    expect('viewState' in byId.get('sw')!).toBe(false)
+    expect(byId.get('v')!.visibility).toEqual({ mode: 'except', states: ['s_admin'] })
+    expect(byId.get('box')!.visibility).toEqual({ mode: 'only', states: ['s_admin'] })
+    expect('visibility' in byId.get('a')!).toBe(false)
+    expect('visibility' in byId.get('t')!).toBe(false)
+    expect(byId.get('a')!).not.toHaveProperty('viewState')
+  })
+
+  it('이름은 가장 가까운 only 보임의 상태를 붙인다 — except 는 붙이지 않는다', () => {
+    const byId = new Map(읽음().nodes.map((node) => [node.id, node]))
+    expect(byId.get('a')!.name).toContain('(관리자 상태)')
+    expect(byId.get('box')!.name).toContain('(관리자 상태)')
+    expect(byId.get('v')!.name).not.toContain('상태)')
   })
 })

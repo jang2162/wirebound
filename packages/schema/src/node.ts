@@ -105,16 +105,6 @@ export const VIEW_STATE_NAME_MAX = 30
 /** 한 페이지의 상태 수 상한. */
 export const VIEW_STATES_MAX = 20
 
-/** 기본 가지의 `StateCase.props.state`. 상태 id 로 쓸 수 없다(봉투가 거절한다). */
-export const DEFAULT_CASE = 'default'
-
-/**
- * 테마가 그리지 않는 카탈로그 타입 — 렌더러가 직접 다루는 투명 노드다(`StateSwitch`는 가지 하나를, `StateCase`는 자식만 그린다).
- * 테마 manifest 는 이 타입을 선언할 수 없고(`unknown-component` 와 같은 결 — `packages/themes`의 `checkComponents`) 테마 갤러리 ·
- * SDK 기본 뷰 · 컴포넌트 팔레트에 서지 않는다. 카탈로그 전부를 도는 인구조사는 이 목록으로 그 둘을 가른다.
- */
-export const THEMELESS_TYPES: readonly string[] = ['StateSwitch', 'StateCase']
-
 /** 레이아웃 문서. Slot 노드를 정확히 하나 품는다 (설계서 「레이아웃」). */
 export interface LayoutDocument {
   version: number

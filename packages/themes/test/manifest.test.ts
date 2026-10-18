@@ -108,15 +108,15 @@ describe('validateManifest', () => {
       }),
     ],
     [
-      '테마가 안 그리는 구조',
-      'themeless-component',
+      '걷은 상태 영역 — 카탈로그에 없다',
+      'unknown-component',
       edit((m) => {
         m.components.StateSwitch = m.components.List
       }),
     ],
     [
-      '테마가 안 그리는 가지',
-      'themeless-component',
+      '걷은 상태 가지 — 카탈로그에 없다',
+      'unknown-component',
       edit((m) => {
         m.components.StateCase = m.components.List
       }),

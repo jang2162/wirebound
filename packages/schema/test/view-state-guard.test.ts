@@ -19,7 +19,7 @@ const C = { id: 's_c', name: '다' }
 
 function doc(viewStates?: ViewState[]): PageDocument {
   const base: PageDocument = {
-    version: 1,
+    version: 2,
     root: { id: 'n_root', type: 'Page', children: [{ id: 'n_x', type: 'Text', props: { content: 'x' } }] },
   }
   return viewStates === undefined ? base : { ...base, viewStates }
@@ -194,14 +194,14 @@ describe('묶음을 짓는 함수 · 서버 역연산이 싣는다', () => {
   })
 
   it('상태 추가는 싣지 않는다 — 넣는 자리는 남의 것을 안 가리킨다', () => {
-    expect(addViewStateOps(base, '라', () => 's_d')).toEqual([{ op: 'add', path: '/viewStates/-', value: { id: 's_d', name: '라' } }])
+    expect(addViewStateOps(base, '라', null, () => 's_d')).toEqual([{ op: 'add', path: '/viewStates/-', value: { id: 's_d', name: '라' } }])
   })
 
   it.each<[string, PatchOp[], PatchOp]>([
-    ['상태 추가', addViewStateOps(base, '라', () => 's_d')!, { op: 'test', path: '/viewStates/2/id', value: 's_d' }],
+    ['상태 추가', addViewStateOps(base, '라', null, () => 's_d')!, { op: 'test', path: '/viewStates/2/id', value: 's_d' }],
     ['이름 바꾸기', renameViewStateOps(base, 's_b', '라')!, { op: 'test', path: '/viewStates/1/id', value: 's_b' }],
     ['순서 바꾸기', moveViewStateOps(base, 's_b', 0)!, { op: 'test', path: '/viewStates/0/id', value: 's_b' }],
-    ['목록 만들기', addViewStateOps(doc(), '가', () => 's_a')!, { op: 'test', path: '/viewStates', value: [A] }],
+    ['목록 만들기', addViewStateOps(doc(), '가', null, () => 's_a')!, { op: 'test', path: '/viewStates', value: [A] }],
   ])('%s의 역연산 — 첫 연산이 그 자리의 test · 왕복하면 원래 문서', (_name, ops, guard) => {
     const before = ops[0]!.path === '/viewStates' ? doc() : base
     const inverse = invertOps(before, ops)
@@ -243,7 +243,7 @@ describe('무작위 겹친 판 — 남이 먼저 고친 목록에 내 묶음을 
       else {
         const forward =
           kind === 'undo-add'
-            ? addViewStateOps(base, '더한 상태', () => 's_new')!
+            ? addViewStateOps(base, '더한 상태', null, () => 's_new')!
             : kind === 'undo-rename'
               ? renameViewStateOps(base, target, '바꾼 이름')!
               : kind === 'undo-move'

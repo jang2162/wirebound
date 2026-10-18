@@ -15,7 +15,7 @@ import { isBlankAlias } from './alias'
 import { isolateBidi } from './bidi'
 import { CATALOG_DEFS } from './component/catalog/index'
 import type { ComponentDef } from './component/define'
-import { DEFAULT_CASE, type ViewState, type WbNode } from './node'
+import { DEFAULT_VIEW_STATE, type ViewState, type WbNode } from './node'
 
 const DEFS: ReadonlyMap<string, ComponentDef> = new Map(CATALOG_DEFS.map((def) => [def.type, def]))
 
@@ -32,24 +32,15 @@ export function nodeAlias(node: WbNode): string | null {
   return alias.trim()
 }
 
-/** 목록에 없는 상태를 가리키는 가지의 이름. 그 가지는 그려지지 않는다(렌더러 · lint). */
+/** 목록에 없는 상태의 이름 — 보임이 목록 밖 상태를 가리킬 때(lint · 가져온 문서) 문장이 쓴다. */
 export const UNKNOWN_VIEW_STATE_NAME = '목록에 없는 상태'
 
 /**
- * 상태 가지가 가리키는 상태의 이름 — 기본 가지는 «기본», 목록(`viewStates` — 그 가지가 든 페이지의 것)에 없거나 `state`가 문자열이
- * 아니면 `UNKNOWN_VIEW_STATE_NAME`.
- */
-export function caseStateName(node: WbNode, viewStates?: readonly ViewState[]): string {
-  const state = isRecord(node.props) ? node.props.state : undefined
-  return typeof state === 'string' ? viewStateName(viewStates, state) : UNKNOWN_VIEW_STATE_NAME
-}
-
-/**
- * 상태 id 의 이름 — 기본(`default`)은 «기본», 목록에 없으면 `UNKNOWN_VIEW_STATE_NAME`. 화면은 검증 전 문서로도 부른다(구조 트리 · 상호작용
- * 패널 — 오류 경계 밖) — 목록이 배열이 아니거나 항목이 객체가 아니어도 던지지 않는다.
+ * 상태 id 의 이름 — 기본(`DEFAULT_VIEW_STATE`)은 «기본», 목록에 없으면 `UNKNOWN_VIEW_STATE_NAME`. 화면은 검증 전 문서로도 부른다(구조 트리 ·
+ * 속성 패널 — 오류 경계 밖) — 목록이 배열이 아니거나 항목이 객체가 아니어도 던지지 않는다.
  */
 export function viewStateName(viewStates: readonly ViewState[] | undefined, state: string): string {
-  if (state === DEFAULT_CASE) return '기본'
+  if (state === DEFAULT_VIEW_STATE) return '기본'
   if (!Array.isArray(viewStates)) return UNKNOWN_VIEW_STATE_NAME
   const name = viewStates.find((entry: unknown) => isRecord(entry) && entry.id === state)?.name
   return typeof name === 'string' ? name : UNKNOWN_VIEW_STATE_NAME
@@ -61,10 +52,8 @@ export function viewStateName(viewStates: readonly ViewState[] | undefined, stat
  * props 는 기본값을 채워 넘긴다(`Flex` 에 `direction` 이 없어도 `가로`). 규격에 안 맞으면 원본을 넘기고, `summary` 의
  * 읽개(`component/summary.ts`)가 틀린 값을 `null` 로 읽는다.
  */
-export function nodeSummary(node: WbNode, viewStates?: readonly ViewState[]): string | null {
+export function nodeSummary(node: WbNode): string | null {
   if (typeof node.type !== 'string') return null
-  if (node.type === 'StateSwitch') return `가지 ${Array.isArray(node.children) ? node.children.length : 0}`
-  if (node.type === 'StateCase') return caseStateName(node, viewStates)
   const def = DEFS.get(node.type)
   if (def?.summary === undefined) return null
   const raw = isRecord(node.props) ? node.props : {}
@@ -90,13 +79,10 @@ export function nodeHeading(node: WbNode): string {
   return alias === null ? type : `${type} (${alias})`
 }
 
-/**
- * `타입 (별칭) 요약` — 구조 트리 줄 · MCP 의 `rowLabel`. 별칭 · 요약이 없으면 그 조각을 생략한다. `viewStates`는 상태 가지의 요약
- * (상태 이름)에만 쓴다 — 그 노드가 든 페이지의 목록을 넘긴다.
- */
-export function nodeRowLabel(node: WbNode, viewStates?: readonly ViewState[]): string {
+/** `타입 (별칭) 요약` — 구조 트리 줄 · MCP 의 `rowLabel`. 별칭 · 요약이 없으면 그 조각을 생략한다. */
+export function nodeRowLabel(node: WbNode): string {
   const heading = nodeHeading(node)
-  const summary = nodeSummary(node, viewStates)
+  const summary = nodeSummary(node)
   return summary === null ? heading : `${heading} ${summary}`
 }
 

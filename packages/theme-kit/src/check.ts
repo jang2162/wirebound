@@ -191,8 +191,8 @@ function openingTag(element: Element): string {
 }
 
 /**
- * **뷰 키가 읽히는 자리가 없는 것** — 렌더러는 `views[노드 타입]` 만 읽는다. 상태 영역(`THEMELESS_TYPES`)은 렌더러가 직접 다뤄 뷰를 안 부르고,
- * 카탈로그에 없는 키는 부를 노드가 없다. 둘 다 조용히 버려져 «뷰를 짰는데 안 쓰인다» 로만 나타난다(manifest 는 같은 선언을 거절한다).
+ * **뷰 키가 읽히는 자리가 없는 것** — 렌더러는 `views[노드 타입]` 만 읽는다. 카탈로그에 없는 키는 부를 노드가 없어 조용히 버려지고 «뷰를
+ * 짰는데 안 쓰인다» 로만 나타난다(manifest 는 같은 선언을 거절한다).
  * `install` 된 카탈로그에서 읽으므로 `installCatalog()` 뒤에 부른다.
  */
 function findBadViewKeys(definition: ThemeDefinition): ThemeCheckError[] {

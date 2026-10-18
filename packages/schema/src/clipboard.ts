@@ -7,18 +7,19 @@
  * 봉투:
  *
  * ```jsonc
- * { "wirebound": "nodes", "version": 1, "nodes": [ … ], "viewStates": [ … ] }   // version — 문서 봉투의 version(마이그레이션 진입점)
+ * { "wirebound": "nodes", "version": 2, "nodes": [ … ], "viewStates": [ … ] }   // version — 문서 봉투의 version(마이그레이션 진입점)
  * ```
  *
  * `viewStates` 는 노드를 꺼낸 페이지의 화면 상태 목록이다 — 목록이 있을 때만 싣는다(없는 페이지의 봉투는 그 키가 없는 옛 글자 그대로).
- * 상태 id 는 페이지 안의 이름이라 다른 페이지에서는 뜻이 없다 — 붙이는 쪽이 뺀 가지를 **출처의 이름으로** 말하는 데만 쓴다(«상태
- * "관리자" 가지 1개를 뺐습니다»). 가지를 남길지는 붙이는 페이지의 목록으로 가른다(`prepareNodesForPaste` 의 `keep.state`).
+ * 상태 id 는 페이지 안의 이름이라 다른 페이지에서는 뜻이 없다 — 붙이는 쪽이 노드 보임의 상태를 **이름으로** 붙일 페이지의 상태에 맞추고
+ * (`apps/web` 의 `edit/paste-states.ts`), 못 맞춘 것을 출처의 이름으로 말한다(«상태 "관리자" 보임 1곳을 뺐습니다»). 판 1 봉투는 이 목록을
+ * 실은 채 판 2 로 옮긴다 — 목록 없이 옮기면 상태 가지가 «목록 밖»으로 읽혀 버려진다(`migrate-document.ts`).
  */
 import { z } from 'zod'
 import { DocumentEnvelopeSchema, ViewStatesSchema } from './envelope'
 import { isPageTargetAction } from './interaction/check'
 import { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument, type Migration } from './migrate'
-import { DEFAULT_CASE, type Interaction, type InteractionAction, type PageDocument, type ViewState, type WbNode } from './node'
+import { DEFAULT_VIEW_STATE, type Interaction, type InteractionAction, type PageDocument, type ViewState, type WbNode } from './node'
 import { collectNodeIds, remapNodeIds } from './tree'
 import { partitionIssues, validatePage } from './validate'
 
@@ -51,8 +52,10 @@ const NodesEnvelopeSchema = z.strictObject({
  */
 const WRAPPER_ID = 'wb-clipboard-wrapper'
 
-function wrap(nodes: readonly WbNode[], version: number): PageDocument {
-  return { version, root: { id: WRAPPER_ID, type: 'Page', children: [...nodes] } }
+function wrap(nodes: readonly WbNode[], version: number, viewStates?: readonly ViewState[]): PageDocument {
+  const doc: PageDocument = { version, root: { id: WRAPPER_ID, type: 'Page', children: [...nodes] } }
+  if (viewStates !== undefined) doc.viewStates = [...viewStates]
+  return doc
 }
 
 /**
@@ -79,8 +82,7 @@ export type NodesEnvelopeRead =
  *   자식을 못 담는 타입에 자식) → `rejected` — 화면이 «붙이지 않았다» 와 까닭을 말한다. `warning`(끊긴 상호작용 대상)은 막지 않는다 —
  *   편집 파이프라인도 막지 않고, 끊긴 대상은 `prepareNodesForPaste` 가 다룬다.
  *
- * - **맨 위에 선 상태 가지는 받는다**(영역 없이 가지만 고른 복사) — 임시 뿌리 아래라 `state-case-outside` 가 서지만 붙이기가 그
- *   내용으로 푼다(`prepareNodesForPaste`). 맨 위가 아닌 자리의 영역 밖 가지는 여전히 오류다.
+ * - 판 1 봉투의 상태 영역 · 가지(영역 없이 가지만 고른 복사 포함)는 출처의 목록으로 판 2 의 보임이 된다(머리말).
  * - `viewStates` 는 문서 봉투의 목록 규칙(`ViewStatesSchema`)을 지나야 한다 — 어기면 `rejected`.
  *
  * **「이 판에 없는 타입」도 `rejected` 다** — 봉투는 타입 이름을 담고 카탈로그는 이 판이 아는 것만 안다(`validatePage` 의 `unknown-type`).
@@ -107,18 +109,14 @@ export function inspectNodesEnvelope(
 
   let document: PageDocument
   try {
-    document = migrateDocument(wrap(envelope.data.nodes as WbNode[], envelope.data.version), migrations, target)
+    document = migrateDocument(wrap(envelope.data.nodes as WbNode[], envelope.data.version, envelope.data.viewStates), migrations, target)
   } catch {
     return { kind: 'rejected', reason: '이 판이 읽을 수 없는 버전입니다.' }
   }
 
-  const checked = DocumentEnvelopeSchema.safeParse(document)
+  const checked = DocumentEnvelopeSchema.safeParse({ version: document.version, root: document.root })
   if (!checked.success) return { kind: 'rejected', reason: '노드의 모양이 맞지 않습니다.' }
-  const top = new Set((checked.data.root.children ?? []).map((node) => node.id))
-  const errors = partitionIssues(validatePage(checked.data)).errors.filter(
-    (issue) => !(issue.code === 'state-case-outside' && issue.nodeId !== null && top.has(issue.nodeId)),
-  )
-  const first = errors[0]
+  const first = partitionIssues(validatePage(checked.data)).errors[0]
   if (first !== undefined) return { kind: 'rejected', reason: first.message }
 
   const nodes = checked.data.root.children ?? []
@@ -137,8 +135,8 @@ export function readNodesEnvelope(
 }
 
 /**
- * 붙일 노드를 짓는다 — id 를 새로 짓고, 붙이는 노드 밖을 가리키는 동작 가운데 붙이는 문서에서 대상이 없는 것을 뺀다.
- * 프리셋 적용(`apps/web/src/edit/preset-apply.ts`) · 붙여넣기 · 복제가 이 함수 하나를 쓴다.
+ * 붙일 노드를 짓는다 — id 를 새로 짓고, 붙이는 노드 밖을 가리키는 동작 가운데 붙이는 문서에서 대상이 없는 것을 빼고, 상태 보임을 붙일
+ * 페이지의 상태에 맞춘다. 모듈 넣기 · 붙여넣기 · 복제가 이 함수 하나를 쓴다.
  *
  * **노드들을 임시 뿌리 하나에 담아 한 번에 id 를 새로 짓는다.** 노드마다 따로 `remapNodeIds` 를 부르면 형제를
  * 가리키던 상호작용 `target` 이 리매핑 밖이 되어 **옛 id 로 남는다** — 문서에 없는 노드를 가리키고 `validatePage` 가
@@ -157,6 +155,10 @@ export function readNodesEnvelope(
  * 뺀 동작은 `droppedActions` 로 센다. **동작이 다 빠진 상호작용은 상호작용째 빼고**, 그래서 상호작용이 하나도 안 남으면
  * `interactions` 키도 걷는다. 처음부터 동작이 없던 상호작용은 건드리지 않는다 — 사용자가 짓다 만 것이다.
  *
+ * **상태 보임**(`keep.state` — 붙일 페이지에 그 상태가 있다 · 없으면 모든 상태를 남긴다): 보임의 상태 가운데 `keep.state` 가 거짓인 것을
+ * 빼고 상태마다 센다(`droppedStates` — 기본은 늘 남는다). 다 빠진 보임은 걷는다 — `only` 가 비면 그 노드는 모든 상태에서 보이게 되므로
+ * 따로 센다(`clearedOnly` — 화면이 «보임을 걷었다»고 말한다). `except` 가 비면 원래 보이던 곳에서 그대로 보인다.
+ *
  * **입력을 바꾸지 않고 입력과 값을 공유하지 않는다** — 거르기는 새 객체를 짓고, `props` · `setProp.value` 의 깊은 복사는
  * `remapNodeIds` 의 계약이다(그 머리말).
  */
@@ -164,10 +166,12 @@ export function prepareNodesForPaste(
   nodes: readonly WbNode[],
   keep: { node: (id: string) => boolean; page: (target: string) => boolean; state?: (id: string) => boolean },
   generate?: () => string,
-): { nodes: WbNode[]; droppedActions: number; droppedCases: DroppedCases[] } {
-  const pruned = pruneStateCases(nodes, keep.state ?? (() => true))
-  const inside = new Set(pruned.nodes.flatMap((node) => collectNodeIds(node)))
+): { nodes: WbNode[]; droppedActions: number; droppedStates: DroppedStates[]; clearedOnly: number } {
+  const inside = new Set(nodes.flatMap((node) => collectNodeIds(node)))
+  const keepState = keep.state ?? (() => true)
+  const counts = new Map<string, number>()
   let droppedActions = 0
+  let clearedOnly = 0
 
   const keepAction = (action: InteractionAction): boolean => {
     if (action.target.trim() === '') return true
@@ -189,63 +193,33 @@ export function prepareNodesForPaste(
       if (interactions.length > 0 || node.interactions.length === 0) next.interactions = interactions
       else delete next.interactions
     }
+    if (node.visibility) {
+      const states = node.visibility.states.filter((state) => {
+        if (state === DEFAULT_VIEW_STATE || keepState(state)) return true
+        counts.set(state, (counts.get(state) ?? 0) + 1)
+        return false
+      })
+      if (states.length > 0) next.visibility = { mode: node.visibility.mode, states }
+      else {
+        delete next.visibility
+        if (node.visibility.mode === 'only') clearedOnly += 1
+      }
+    }
     if (node.children) next.children = node.children.map(filter)
     return next
   }
 
-  const remapped = remapNodeIds(wrap(pruned.nodes.map(filter), CURRENT_DOCUMENT_VERSION).root, generate)
-  return { nodes: remapped.root.children ?? [], droppedActions, droppedCases: pruned.dropped }
+  const remapped = remapNodeIds(wrap(nodes.map(filter), CURRENT_DOCUMENT_VERSION).root, generate)
+  return {
+    nodes: remapped.root.children ?? [],
+    droppedActions,
+    droppedStates: [...counts].map(([state, count]) => ({ state, count })),
+    clearedOnly,
+  }
 }
 
-/** 붙여넣기가 뺀 상태 가지 — 상태 id 마다 수. 통지(«상태 "X" 가지 N개를 뺐습니다»)는 상태 이름을 아는 화면이 짓는다. */
-export interface DroppedCases {
+/** 붙여넣기가 보임에서 뺀 상태 — 상태 id 마다 그 상태를 뺀 노드 수. 통지(«상태 "X" 보임 N곳을 뺐습니다»)는 상태 이름을 아는 화면이 짓는다. */
+export interface DroppedStates {
   state: string
   count: number
-}
-
-/**
- * 붙일 노드의 상태 가지를 붙일 페이지에 맞춘다(설계 spec 「페이지 JSON · 프리셋 · 붙여넣기」).
- *
- * - 상태 영역 안의 가지 가운데 기본이 아니고 `keepState`가 거짓인 상태(붙일 페이지에 없는 상태)의 가지를 뺀다 — 상태마다 센다.
- * - 그 뒤 기본 가지가 정확히 하나가 아닌 영역은 **영역째 풀어** 그 자리에 기본 가지의 내용을 둔다(기본 가지가 없으면 남은 첫 가지의 내용,
- *   가지가 없으면 아무것도). 기본 가지는 빼지 않으므로 검증을 지난 노드에서는 이 갈래가 서지 않는다 — 검증 전 노드(복제 · 프리셋)도
- *   «기본 가지 정확히 하나»를 깨지 않게 한다.
- * - 붙일 노드의 맨 위에 선 가지(영역 없이 가지만 고른 판)는 그 내용으로 푼다 — 가지는 영역 밖에 설 수 없다(`state-case-outside`).
- *
- * 뺀 가지 **안에 든** 가지도 상태마다 센다 — 붙일 페이지에 있는 상태의 가지는 «상태가 없어서» 빠진 것이 아니라 세지 않는다.
- *
- * 뺀 가지 안 노드는 상호작용 거르기의 «붙이는 노드» 집합에 들지 않는다 — 그 노드를 가리키던 동작은 밖을 가리키는 동작으로 다뤄진다.
- */
-function pruneStateCases(nodes: readonly WbNode[], keepState: (id: string) => boolean): { nodes: WbNode[]; dropped: DroppedCases[] } {
-  const counts = new Map<string, number>()
-  const count = (state: string): void => void counts.set(state, (counts.get(state) ?? 0) + 1)
-  /** 뺀 가지 안에 든 가지 — 붙일 페이지에 없는 상태의 것도 그 상태 이름으로 센다(바깥 가지만 세면 안쪽 가지의 이름이 통지에 안 선다). */
-  const countInside = (node: WbNode): void => {
-    for (const child of Array.isArray(node.children) ? node.children : []) {
-      if (typeof child !== 'object' || child === null) continue
-      const state = child.type === 'StateCase' ? child.props?.state : undefined
-      if (typeof state === 'string' && state !== DEFAULT_CASE && !keepState(state)) count(state)
-      countInside(child)
-    }
-  }
-  const visit = (node: WbNode): WbNode[] => {
-    if (node.type === 'StateSwitch' && Array.isArray(node.children)) {
-      const cases = node.children.filter((child) => {
-        const state = child?.type === 'StateCase' ? child.props?.state : undefined
-        if (typeof state !== 'string' || state === DEFAULT_CASE || keepState(state)) return true
-        count(state)
-        countInside(child)
-        return false
-      })
-      const defaults = cases.filter((child) => child?.type === 'StateCase' && child.props?.state === DEFAULT_CASE)
-      if (defaults.length !== 1) {
-        const content = defaults[0] ?? cases.find((child) => child?.type === 'StateCase')
-        return (content?.children ?? []).flatMap(visit)
-      }
-      return [{ ...node, children: cases.flatMap(visit) }]
-    }
-    return [Array.isArray(node.children) ? { ...node, children: node.children.flatMap(visit) } : node]
-  }
-  const top = nodes.flatMap((node) => (node.type === 'StateCase' ? (node.children ?? []) : [node]))
-  return { nodes: top.flatMap(visit), dropped: [...counts].map(([state, count]) => ({ state, count })) }
 }

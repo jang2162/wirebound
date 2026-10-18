@@ -21,43 +21,30 @@ beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
 
-/** 관리자 · 비로그인 두 상태. 영역 하나 — 기본은 «보기», 관리자는 «승인»(상호작용 · 코멘트가 달림), 비로그인 가지는 없다(기본으로 그린다). */
+/**
+ * 상태 셋 — 비로그인 · 로그인 > 관리자(목록에서는 관리자가 앞이다 — 고르개는 트리 차례로 선다). 기본은 «보기»(관리자 · 로그인에서 숨김),
+ * 관리자는 «승인»(상호작용 · 코멘트가 달림). 비로그인은 그 상태에 쓴 노드가 없다(기본과 같이 «보기»).
+ */
 const STATE_PAGE: PageDocument = {
-  version: 1,
+  version: 2,
   viewStates: [
-    { id: 's_admin', name: '관리자' },
+    { id: 's_admin', name: '관리자', parent: 's_login' },
     { id: 's_guest', name: '비로그인' },
+    { id: 's_login', name: '로그인' },
   ],
   root: {
     id: 'n_root',
     type: 'Page',
     children: [
       { id: 'n_title', type: 'Text', props: { content: '회원 목록' } },
+      { id: 'n_view', type: 'Button', props: { label: '보기' }, visibility: { mode: 'except', states: ['s_login'] } },
       {
-        id: 'n_switch',
-        type: 'StateSwitch',
-        children: [
-          {
-            id: 'n_case_d',
-            type: 'StateCase',
-            props: { state: 'default' },
-            children: [{ id: 'n_view', type: 'Button', props: { label: '보기' } }],
-          },
-          {
-            id: 'n_case_a',
-            type: 'StateCase',
-            props: { state: 's_admin' },
-            children: [
-              {
-                id: 'n_approve',
-                type: 'Button',
-                props: { label: '승인' },
-                marker: 1,
-                interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_title', value: false }] }],
-              },
-            ],
-          },
-        ],
+        id: 'n_approve',
+        type: 'Button',
+        props: { label: '승인' },
+        marker: 1,
+        visibility: { mode: 'only', states: ['s_admin'] },
+        interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_title', value: false }] }],
       },
     ],
   },
@@ -115,13 +102,14 @@ afterEach(() => {
 })
 
 describe('셸 — 상태가 있는 페이지', () => {
-  it('전환기가 기본 + 목록 차례의 상태를 싣고, 이름표가 붙는다', () => {
+  it('전환기가 기본 + 트리 차례의 상태를 싣고(하위 상태는 들여 쓴다), 이름표가 붙는다', () => {
     load()
     const options = [...select().options].map((option) => [option.value, option.textContent])
     expect(options).toEqual([
       ['default', '기본'],
-      ['s_admin', '관리자'],
       ['s_guest', '비로그인'],
+      ['s_login', '로그인'],
+      ['s_admin', '\u00a0\u00a0관리자'],
     ])
     expect(select().value).toBe('default')
     const label = document.querySelector('label[for="wb-export-state"]')
@@ -139,7 +127,7 @@ describe('셸 — 상태가 있는 페이지', () => {
 })
 
 describe('런타임 — 고른 상태로 그린다', () => {
-  it('처음은 기본 가지 · 관리자를 고르면 관리자 가지 · 주소 해시가 따라간다', async () => {
+  it('처음은 기본 · 관리자를 고르면 관리자의 노드 · 주소 해시가 따라간다', async () => {
     load()
     await run()
     expect(canvasText()).toContain('보기')
@@ -151,9 +139,14 @@ describe('런타임 — 고른 상태로 그린다', () => {
     expect(window.location.hash).toBe('#state=s_admin')
 
     choose('s_guest')
-    // 비로그인 가지가 없다 — 기본을 그린다.
+    // 비로그인에 쓴 노드가 없다 — 기본과 같다.
     expect(canvasText()).toContain('보기')
     expect(window.location.hash).toBe('#state=s_guest')
+
+    choose('s_login')
+    // 로그인은 «보기»를 숨기고(except) «승인»은 관리자에서만이다.
+    expect(canvasText()).not.toContain('보기')
+    expect(canvasText()).not.toContain('승인')
 
     choose('default')
     expect(canvasText()).toContain('보기')
@@ -188,7 +181,7 @@ describe('런타임 — 고른 상태로 그린다', () => {
     expect(canvasText()).toContain('승인')
   })
 
-  it('상태를 바꾸면 그 상태의 상호작용이 돈다 — 관리자 가지의 단추가 제목을 숨긴다', async () => {
+  it('상태를 바꾸면 그 상태의 상호작용이 돈다 — 관리자의 단추가 제목을 숨긴다', async () => {
     load()
     await run()
     choose('s_admin')
