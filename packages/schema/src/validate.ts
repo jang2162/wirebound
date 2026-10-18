@@ -3,7 +3,7 @@ import { checkNodeAction, isPageTargetAction } from './interaction/check'
 import { getComponent } from './component/registry'
 import { aliasNote } from './display'
 import { DocumentEnvelopeSchema, NODE_ID_PATTERN, PageEnvelopeSchema } from './envelope'
-import { DEFAULT_CASE, type LayoutDocument, type PageDocument, type WbNode } from './node'
+import { DEFAULT_CASE, DEFAULT_VIEW_STATE, type LayoutDocument, type PageDocument, type WbNode } from './node'
 import { walkNodes } from './tree'
 import { getKoreanErrorMap } from './locale'
 
@@ -216,6 +216,10 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
   if (envelopeIssues.length > 0) return envelopeIssues
 
   const issues = validateTree(doc.root)
+  // 뿌리가 숨으면 그 상태의 화면이 통째로 빈다 — 보임은 뿌리 아래 노드에만 둔다(속성 패널도 뿌리에는 칸을 안 세운다).
+  if (doc.root.visibility !== undefined) {
+    issues.push(makeIssue('bad-root', doc.root.id, '/root/visibility', '페이지 뿌리에는 상태 보임을 둘 수 없습니다'))
+  }
   const slots = countSlots(doc.root)
   if (slots > 0) {
     issues.push(makeIssue('slot-count', null, '/root', `페이지에는 Slot을 둘 수 없습니다 (${slots}개 발견)`))
@@ -300,6 +304,21 @@ export function checkViewStateRemoval(before: { viewStates?: unknown }, after: P
     )
   }
   return issues
+}
+
+/**
+ * **목록 밖 상태를 가리키는 보임** — 노드마다 보임의 `states` 중 페이지 목록에 없고 `DEFAULT_VIEW_STATE` 도 아닌 것(문서 차례). 문서 하나에서는
+ * lint 경고(`view-state-unknown`)이고, 편집이 새로 만든 것은 저장 경계가 막는다(`checkViewStateRemoval`). 봉투가 깨진 문서는 부르지 않는다.
+ */
+export function unknownVisibilityStates(doc: PageDocument): { nodeId: string; path: string; states: string[] }[] {
+  const known = new Set((doc.viewStates ?? []).map((state) => state.id))
+  known.add(DEFAULT_VIEW_STATE)
+  const out: { nodeId: string; path: string; states: string[] }[] = []
+  for (const { node, path } of walkNodes(doc.root)) {
+    const states = (node.visibility?.states ?? []).filter((state) => !known.has(state))
+    if (states.length > 0) out.push({ nodeId: node.id, path: `${path}/visibility`, states })
+  }
+  return out
 }
 
 export function validateLayout(doc: LayoutDocument): ValidationIssue[] {
