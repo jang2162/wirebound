@@ -266,7 +266,7 @@ describe('에디터 단축키 — 셸', () => {
     expect(selectedType()).toBe('Card')
   })
 
-  it('? 가 단축키 목록을 연다 — 표 · 클립보드 세 줄 · 구조 트리 줄, 열린 동안 Delete 는 안 서고 Escape 로 닫힌다', async () => {
+  it('? 가 단축키 목록을 연다 — 표 · 클립보드 세 줄, 열린 동안 Delete 는 안 서고 Escape 로 닫힌다', async () => {
     const srv = server()
     await openPage(doc(), { apiOverrides: srv.api })
     fireEvent.click(row('Card'))
@@ -279,10 +279,10 @@ describe('에디터 단축키 — 셸', () => {
     expect(rows).toEqual([
       ...EDITOR_SHORTCUTS.map((shortcut) => [shortcut.keys('other'), shortcut.label]),
       ...CLIPBOARD_SHORTCUT_LINES.map((line) => [line.keys('other'), line.label]),
-      ['Alt+Shift+I', '패턴 넣기'],
-      ['Alt+Shift+P', '프리셋'],
     ])
     expect(rows[0]).toEqual(['Ctrl+Z', '되돌리기'])
+    // 구조 트리의 넣기 단축키(Alt+Shift+I · P)는 걷었다 — 도움말에도 없다.
+    expect(rows.filter(([keys]) => keys === 'Alt+Shift+I' || keys === 'Alt+Shift+P')).toEqual([])
 
     fireEvent.keyDown(within(dialog).getByRole('button', { name: '닫기' }), { key: 'Delete' })
     fireEvent.keyDown(document.body, { key: 'Delete' })
@@ -291,6 +291,25 @@ describe('에디터 단축키 — 셸', () => {
 
     fireEvent.keyDown(dialog, { key: 'Escape' })
     expect(screen.queryByRole('dialog', { name: '단축키' })).toBeNull()
+    expect(selectedType()).toBe('Card')
+  })
+
+  // 옛 구조 트리의 고르개 단축키(Alt+Shift+I «패턴 넣기» · Alt+Shift+P «프리셋»)는 걷었다 — 줄에서 쳐도 편집 · 상자 · 키 가로채기가 없다.
+  it('Alt+Shift+I · Alt+Shift+P 는 아무것도 안 한다 — 편집 0 · 상자 0 · 키를 안 가로챈다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    fireEvent.click(row('Card'))
+
+    const prevented = [
+      { code: 'KeyI', key: 'I' },
+      { code: 'KeyP', key: 'P' },
+    ].map((key) => !fireEvent.keyDown(row('Card'), { ...key, altKey: true, shiftKey: true }))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(prevented).toEqual([false, false])
+    expect(screen.queryAllByRole('dialog')).toEqual([])
+    expect(srv.calls).toHaveLength(0)
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
     expect(selectedType()).toBe('Card')
   })
 })

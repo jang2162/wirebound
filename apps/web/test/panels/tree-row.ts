@@ -11,7 +11,7 @@
 import { fireEvent, within } from '@testing-library/react'
 
 /** `+` 에 드는 항목 — 나머지는 `…`에 있다. */
-const ADD_ITEMS = new Set(['하위 메뉴', '페이지 추가', 'JSON 에서 가져오기…', '안에 추가', '아래 추가', '패턴 넣기', '프리셋'])
+const ADD_ITEMS = new Set(['하위 메뉴', '페이지 추가', 'JSON 에서 가져오기…'])
 
 /** 그 영역의 고른 줄. 없으면 던진다 — 고른 것이 없으면 줄 행동도 없다. */
 export function pickedRow(region: HTMLElement): HTMLElement {
@@ -107,8 +107,8 @@ export function rowNamed(region: HTMLElement, title: string): HTMLElement {
 /** 줄 아래에 서는 단추 — 삭제 확인(«정말 삭제합니까?»). 줄 행동이 아니라 트리 영역의 단추다. */
 const PANEL_BUTTONS = new Set(['정말 삭제합니까?'])
 
-/** 제목 줄의 뿌리 `+`에만 있는 항목 — 페이지 통째에 더하는 것. */
-const ROOT_ITEMS = new Set(['프리셋', '페이지에 추가', '최상위 메뉴 추가'])
+/** 제목 줄의 뿌리 `+`에만 있는 항목 — 메뉴 트리의 최상위에 더하는 것(구조 트리에는 뿌리 `+` 가 없다 — 넣기는 하단 판이 한다). */
+const ROOT_ITEMS = new Set(['최상위 메뉴 추가'])
 
 /** 영역 제목 줄의 뿌리 `+`에서 항목 하나 — 닫혀 있으면 연다. */
 export function rootAction(region: HTMLElement, name: string): HTMLElement {
@@ -121,13 +121,11 @@ export function rootAction(region: HTMLElement, name: string): HTMLElement {
 }
 
 /**
- * 옛 툴바의 `tool(name)` 자리 — 줄 아래 단추면 그 단추, 뿌리 `+`의 항목이면 그것, 아니면 고른 줄의 행동 항목. **고른 줄이 없는데
- * «패턴 넣기»를 물으면 뿌리 `+`의 것이다** — 옛 툴바의 «패턴 넣기»가 선택 없이 뿌리 끝에 꽂던 그 조작이다.
+ * 옛 툴바의 `tool(name)` 자리 — 줄 아래 단추면 그 단추, 뿌리 `+`의 항목이면 그것, 아니면 고른 줄의 행동 항목.
  */
 export function treeTool(region: HTMLElement, name: string): HTMLElement {
   if (PANEL_BUTTONS.has(name)) return within(region).getByRole('button', { name })
   if (ROOT_ITEMS.has(name)) return rootAction(region, name)
-  if (name === '패턴 넣기' && region.querySelector('.wb-shell-tree-row-picked') === null) return rootAction(region, name)
   return rowAction(region, name)
 }
 

@@ -16,7 +16,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
 import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
-import { isOff, queryRowAction, reasonOf, rowReason, rowReasons, treeTool, structureRowName, structureRowType } from './tree-row'
+import { isOff, rowReason, rowReasons, treeTool, structureRowName, structureRowType } from './tree-row'
 
 /**
  * 타입이 전부 다른 문서. **이름으로 노드를 고를 수 있어야** 순서가 바뀐 뒤에도 같은
@@ -129,8 +129,8 @@ function undoButton(): HTMLButtonElement {
   return within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name: '되돌리기' })
 }
 
-/** 툴바 버튼의 이름. 늘어나면 `버튼이 전부 비활성이다`가 새 버튼도 함께 본다. */
-const BUTTONS = ['안에 추가', '아래 추가', '삭제', '위로', '아래로', '들여쓰기', '내어쓰기']
+/** 판정(`structureAbilities`)에 매인 줄 `…` 항목의 이름. 늘어나면 `버튼이 전부 비활성이다`가 새 항목도 함께 본다. «안에 추가» · «아래 추가»는 걷었다(넣기는 하단 판). */
+const BUTTONS = ['삭제', '위로', '아래로', '들여쓰기', '내어쓰기']
 
 /**
  * `childType` 줄이 `parentType` 줄 **안에** 그려져 있는가.
@@ -161,7 +161,7 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
     // 판정 일곱이 전부 꺼지는 상태(`structureAbilities`의 `NOTHING`) — 줄 행동으로는 그 상태의 항목에 닿지 않는다. 그 판정이 서는
     // 입구는 단축키다(`./structure-keyboard.test.tsx`). 꺼진 항목의 이유는 고른 줄의 항목이 든다(아래 «꺼진 항목의 이유»).
     expect(structureRegion().querySelectorAll('.wb-shell-tree-row-picked')).toHaveLength(0)
-    expect(BUTTONS).toHaveLength(7)
+    expect(BUTTONS).toHaveLength(5)
   })
 
   it('비활성인 버튼이 왜 비활성인지 말한다', async () => {
@@ -626,13 +626,10 @@ function regionParagraphs(): string[] {
 
 describe('구조 툴바 — 꺼진 항목의 이유', () => {
   it('페이지를 열면 루트의 꺼진 항목이 각자 이유를 든다 — 켜진 항목은 안 든다', async () => {
-    // 여는 순간이 곧 루트를 고른 상태다(`#selectionFor`). 도구 일곱 중 여섯이 꺼지는 자리다.
+    // 여는 순간이 곧 루트를 고른 상태다(`#selectionFor`). 별칭 말고는 다 꺼지는 자리다(뿌리 줄에는 «모듈로 저장…»이 없다).
     await openPage(doc(), { apiOverrides: server().api })
 
     expect(rowReasons(toolbar())).toEqual({
-      '안에 추가': null,
-      '아래 추가': '루트가 아닌 노드를 고르세요',
-      '패턴 넣기': null,
       '별칭 바꾸기': null,
       위로: '앞에 형제가 있는 노드를 고르세요',
       아래로: '뒤에 형제가 있는 노드를 고르세요',
@@ -647,19 +644,20 @@ describe('구조 툴바 — 꺼진 항목의 이유', () => {
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')
 
-    expect(rowReason(toolbar(), '안에 추가')).toBeNull()
+    expect(rowReason(toolbar(), '별칭 바꾸기')).toBeNull()
+    expect(rowReason(toolbar(), '모듈로 저장…')).toBeNull()
     expect(rowReason(toolbar(), '삭제')).toBeNull()
     expect(rowReason(toolbar(), '내어쓰기')).toBe('부모가 루트가 아니어야 합니다')
   })
 
   it('선택을 옮기면 이유가 따라 바뀐다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
-    expect(rowReason(toolbar(), '안에 추가')).toBeNull()
+    expect(rowReason(toolbar(), '삭제')).toBe('루트가 아닌 노드를 고르세요')
 
-    // `Text`는 자식을 담지 못한다 — 그 이유는 «안에 추가»의 것이고 «위로»는 제 조건(맏이)을 말한다.
+    // `Text`는 루트가 아니라 «삭제»가 켜지고 «위로»는 제 조건(맏이)을 말한다.
     select('Text')
 
-    expect(rowReason(toolbar(), '안에 추가')).toBe('자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다')
+    expect(rowReason(toolbar(), '삭제')).toBeNull()
     expect(rowReason(toolbar(), '위로')).toBe('앞에 형제가 있는 노드를 고르세요')
   })
 
@@ -676,13 +674,12 @@ describe('구조 툴바 — 꺼진 항목의 이유', () => {
     expect(said).toEqual([])
   })
 
-  it('선택을 풀면 고른 줄이 없고 뿌리 `+`의 셋은 켜져 이유가 없다', async () => {
-    // 선택이 없으면 고른 줄이 없어 판정에 매인 항목에 닿을 길이 없다. 뿌리 `+`의 셋은 선택 없이도 되는 조작이라 «고르라»고 하지 않는다.
+  it('선택을 풀면 고른 줄이 없고 이유 줄도 서지 않는다', async () => {
+    // 선택이 없으면 고른 줄이 없어 판정에 매인 항목에 닿을 길이 없다(뿌리 `+` 는 걷었다 — 넣기는 하단 판이 한다).
     await openPage(doc(), { apiOverrides: server().api })
     deselect()
 
     expect(toolbar().querySelectorAll('.wb-shell-tree-row-picked')).toHaveLength(0)
-    expect(['페이지에 추가', '패턴 넣기', '프리셋'].map((name) => reasonOf(toolButton(name)))).toEqual([null, null, null])
     expect(regionParagraphs().filter((text) => LINE_SENTENCES.some((sentence) => text.includes(sentence)))).toEqual([])
   })
 })

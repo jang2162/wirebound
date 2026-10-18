@@ -9,7 +9,7 @@
  * | Tab · Shift+Tab | Tab 이 단추 다음 자리로 안 간다 · Shift+Tab 이 단추에 안 선다 |
  * | 바깥 누름 | 다른 줄을 한 번 눌러 메뉴가 닫히고 그 줄이 골라지지 않는다 |
  * | 스크롤 · 창 크기 | 칸을 굴리면 목록이 단추를 안 따라간다 · 단추가 칸 밖으로 나가도 목록이 남는다 · 닫힌 뒤 칸이 되굴려진다 · 창을 좁히면 목록이 창 밖이다 |
- * | 항목 고르기 | 자리마다 항목을 눌러 그 일이 안 일어난다(구조 «삭제» · 메뉴 «삭제» 확인 · 메뉴 `+` «페이지 추가» · 구조 머리 `+` «페이지에 추가» · 셸 `…` «스냅샷» · 목록 머리 `…` «계정 설정») |
+ * | 항목 고르기 | 자리마다 항목을 눌러 그 일이 안 일어난다(구조 «삭제» · 메뉴 «삭제» 확인 · 메뉴 `+` «페이지 추가» · 구조 줄 `…` «모듈로 저장…» · 셸 `…` «스냅샷» · 목록 머리 `…` «계정 설정») |
  */
 import type { Locator, Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -328,15 +328,11 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
       results.pageInput = await page.locator('.wb-shell-region[aria-label="메뉴·페이지 트리"] .wb-shell-tree-input').count()
       await page.keyboard.press('Escape')
 
-      // 구조 트리 머리 `+` «페이지에 추가» → 고르개가 선다.
+      // 구조 트리 줄 `…` «모듈로 저장…» → 대화 상자가 선다(구조 트리 머리 `+` 는 걷었다 — 넣기는 하단 판이 한다).
       await page.waitForTimeout(600)
-      await page
-        .locator('.wb-shell-region[aria-label="구조 트리"]')
-        .getByRole('button', { name: /추가$/ })
-        .first()
-        .click()
-      await page.getByRole('menuitem', { name: '페이지에 추가', exact: true }).click()
-      results.picker = (await page.locator('.wb-shell-region[aria-label="구조 트리"] [data-wb-holds-keys]').count()) > 0
+      await openRow(structureRow(page, nodeId(0)), /더 보기$/)
+      await page.getByRole('menuitem', { name: '모듈로 저장…', exact: true }).click()
+      results.saveModule = await page.getByRole('dialog', { name: '모듈로 저장…' }).count()
       await page.keyboard.press('Escape')
 
       // 셸 `…` «스냅샷» → 대화 상자.
@@ -358,7 +354,7 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
         structureDelete: true,
         menuDelete: true,
         pageInput: 1,
-        picker: true,
+        saveModule: 1,
         snapshots: 1,
         account: '/account',
       })

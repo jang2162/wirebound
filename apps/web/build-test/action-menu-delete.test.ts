@@ -6,7 +6,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 구조 트리 줄 `…` — 첫 항목 · 둘째 항목 · 단추에 포커스 | 메뉴가 열린 채 친 Delete · Backspace · 1s 누름이 고른 노드를 지운다 |
- * | 구조 트리 줄 `+` · 구조 트리 머리 · 셸 머리 `…` | 같은 판정이 그 메뉴들에서 안 선다 |
+ * | 셸 머리 `…` | 같은 판정이 그 메뉴에서 안 선다(구조 트리 줄 `+` · 머리 `+` 는 걷었다) |
  * | 메뉴 트리 줄 `…` | 메뉴 목록의 키가 React 트리를 따라 메뉴 트리 상자의 단축키(`panels/menu-tree.tsx` 의 `handleKeyDown`)에 닿아 삭제 확인을 건다 |
  * | 메뉴를 닫은 뒤 · 캔버스를 눌러 닫힌 뒤 · 캔버스로 포커스만 옮겨 닫힌 뒤 | 닫힌 메뉴의 Delete 가 고른 노드를 안 지운다(막는 것이 메뉴 밖까지 샌다) · 포커스가 떠난 메뉴가 열린 채 남는다 |
  *
@@ -114,7 +114,8 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
 
   const row = (page: Page, id: string) => page.locator(`[data-tree-id="${id}"] > button.wb-shell-structure-node`)
   /** 그 줄의 `+`(0) · `…`(1). */
-  const rowMenu = (page: Page, id: string, which: 0 | 1) => page.locator(`[data-tree-id="${id}"] button[aria-haspopup="menu"]`).nth(which)
+  /** 구조 트리 줄의 `…`(줄 행동은 `…` 하나다 — `+` 는 걷었다). */
+  const rowMore = (page: Page, id: string) => page.locator(`[data-tree-id="${id}"] button[aria-haspopup="menu"][aria-label$=" 더 보기"]`)
 
   /** 포커스 받은 요소의 역할 · 이름 — 판 카나리아(키가 그 자리에서 났다). */
   const focusOf = (page: Page) =>
@@ -147,8 +148,8 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
       ['첫 항목 Backspace', async () => {}, (page) => page.keyboard.press('Backspace')],
       ['첫 항목 누름', async () => {}, (page) => hold(page, DELETE)],
       ['둘째 항목 Delete', (page) => page.keyboard.press('ArrowDown'), (page) => page.keyboard.press('Delete')],
-      ['단추 Delete', (page) => rowMenu(page, 'n_text0000002', 1).focus(), (page) => page.keyboard.press('Delete')],
-      ['단추 Backspace', (page) => rowMenu(page, 'n_text0000002', 1).focus(), (page) => page.keyboard.press('Backspace')],
+      ['단추 Delete', (page) => rowMore(page, 'n_text0000002').focus(), (page) => page.keyboard.press('Delete')],
+      ['단추 Backspace', (page) => rowMore(page, 'n_text0000002').focus(), (page) => page.keyboard.press('Backspace')],
     ]
     const results: Record<string, unknown> = {}
     for (const [name, place, press] of cases) {
@@ -156,7 +157,7 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
       const { page, close } = await open(P)
       try {
         await row(page, 'n_text0000002').click()
-        await rowMenu(page, 'n_text0000002', 1).click()
+        await rowMore(page, 'n_text0000002').click()
         await page.locator('[role="menu"]').waitFor()
         await place(page)
         const focus = await focusOf(page)
@@ -186,10 +187,8 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
     })
   })
 
-  it('구조 트리 줄 `+` · 구조 트리 머리 · 셸 머리 `…` — 열린 동안 Delete 는 노드를 안 지운다', async () => {
+  it('셸 머리 `…` — 열린 동안 Delete 는 노드를 안 지운다', async () => {
     const menus: [string, (page: Page) => ReturnType<Page['locator']>][] = [
-      ['줄 +', (page) => rowMenu(page, 'n_text0000002', 0)],
-      ['구조 트리 머리', (page) => page.getByRole('button', { name: '구조 트리에 추가', exact: true })],
       ['셸 머리 …', (page) => page.locator('header.wb-shell-header').getByRole('button', { name: '더 보기', exact: true })],
     ]
     const results: Record<string, unknown> = {}
@@ -210,7 +209,7 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
     // eslint-disable-next-line no-console
     console.log(`[메뉴 Delete] 다른 메뉴 ${JSON.stringify(results)}`)
     const kept = { focus: 'menuitem', order: WHOLE, headSeq: 1, menus: 1, selected: 'n_text0000002' }
-    expect(results).toEqual({ '줄 +': kept, '구조 트리 머리': kept, '셸 머리 …': kept })
+    expect(results).toEqual({ '셸 머리 …': kept })
   })
 
   it('메뉴 트리 줄 `…` — 열린 동안 Delete · Backspace 는 메뉴 트리의 삭제 확인도 안 건다', async () => {
@@ -260,7 +259,7 @@ describe.skipIf(!전제.ok)('열린 행동 메뉴의 Delete · Backspace — 실
       const { page, close } = await open(P)
       try {
         await row(page, 'n_text0000002').click()
-        await rowMenu(page, 'n_text0000002', 1).click()
+        await rowMore(page, 'n_text0000002').click()
         await page.locator('[role="menu"]').waitFor()
         await leave(page)
         await sleep(100)

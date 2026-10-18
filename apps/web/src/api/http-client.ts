@@ -26,7 +26,6 @@ import type {
   PageDetail,
   PageImported,
   PatchResult,
-  Preset,
   ProjectModule,
   ProjectDetail,
   ProjectThemeView,
@@ -112,7 +111,7 @@ const UNREACHABLE = '서버에 연결하지 못했습니다'
  * N=7 둘 다). **받은 신호(`signal` — 판정용 다시 읽기)와는 다른
  * 키다** — 그쪽은 부른 쪽이 시간을 재고, 이쪽은 시간을 여기서 잰다(두 시계가 한 요청을 다투지 않는다).
  *
- * **끊는 자리 — 조회 이펙트 전부**: 페이지 · 설명 · 코멘트 · 프리셋 · 테마(`theme/project-theme.tsx` · 설정 페이지) · 되돌리기 이력 + **셸의
+ * **끊는 자리 — 조회 이펙트 전부**: 페이지 · 설명 · 코멘트 · 모듈 · 테마(`theme/project-theme.tsx` · 설정 페이지) · 되돌리기 이력 + **셸의
  * 프로젝트**(`routes/editor.tsx` — 첫 조회 · 역할 다시 읽기) · **트리**(`tree/use-tree-commands.tsx` — 마운트 · 복원 신호 · 조작 뒤)
  * · **세션 확인**(`session/session-context.tsx`의 `me`) · **편집 수습의 페이지**(`edit/use-edit-commit.tsx` — «떠남»은 스토어가 그
  * 페이지를 더는 열고 있지 않은 것). 끊지 않으면(Chrome · 조회를 4s 붙잡고 1s 에 목록으로) 프로젝트 · 트리 조회가 4.1s 에
@@ -666,25 +665,22 @@ const SHAPES = {
   snapshot: isSnapshot,
   snapshotList: (value) => isArrayOf(value, isSnapshot),
   /**
-   * 프리셋 하나. **읽는 자리가 무엇을 하는지로 무엇을 볼지 정한다** —
-   * `test/api-consumers.test.ts`가 그 자리를 실행으로 센다.
+   * 모듈 둘. **읽는 자리가 무엇을 하는지로 무엇을 볼지 정한다** — `test/api-consumers.test.ts`가 그 자리를 실행으로 센다.
    *
    * | 필드 | 화면이 무엇을 하는가 | 어긋나면 |
    * |---|---|---|
-   * | `id`(빈 문자열 금지) | **`<option>`의 값이자 React 목록의 `key`** | 빈 값이면 고른 것을 되찾지 못해 목록이 첫 항목으로 되돌아간다 |
-   * | `name` | 그대로 그려진다 | React가 객체를 그리다 렌더 도중 던진다(고르개는 오류 경계 밖이다) |
-   * | `nodes` | **`presetApply`에 그대로 들어간다** | 배열이 아니면 그 함수가 `[...nodes]`에서 던진다 |
+   * | `id`(빈 문자열 금지) | React 목록의 `key` · 이름 바꾸기 · 삭제 · 다시 읽기의 경로 | 빈 값이면 `…/modules/` 로 가 목록을 지운다 |
+   * | `name` | 그대로 그려진다 | React가 객체를 그리다 렌더 도중 던진다 |
+   * | `nodes` | **넣기(`moduleInsertOps`)에 그대로 들어간다** | 배열이 아니면 노드 거름이 던진다 |
+   * | `nodeCount` | 카드의 «노드 N개» | 수가 아니면 글이 깨진다 |
    *
-   * **`description`·`source`는 보지 않는다.** 둘 다 그리기만 하고(`null`이면 자리를
-   * 비운다) 어긋나도 던지지 않는다 — `snapshot`·`comment`가 `createdAt`에 대해 같은
-   * 판단을 했다: *"가설적인 경로에 가드를 달고 살아 있는 경로를 열어 두지 않는다."*
+   * **`createdBy` · `createdAt` · `updatedAt` 은 보지 않는다** — 화면이 안 읽는다(*"가설적인 경로에 가드를 달고 살아 있는 경로를 열어 두지
+   * 않는다"*).
    */
   /** `{ module }` — 모듈 하나(읽기 · 저장 · 이름 바꾸기). `nodes` 는 넣기에 그대로 들어가고 `id` 는 이름 바꾸기 · 삭제 경로에 실린다. */
   moduleEnvelope: (value) => isRecord(value) && isModule(value['module']),
   /** `{ modules }` — 프로젝트 모듈 목록. */
   moduleListEnvelope: (value) => isRecord(value) && isArrayOf(value['modules'], isModule),
-  preset: isPreset,
-  presetList: (value) => isArrayOf(value, isPreset),
   restoreResult: isRestoreResult,
   exportPreview: isExportPreview,
   /**
@@ -820,17 +816,6 @@ function isModule(value: unknown): boolean {
     typeof value['name'] === 'string' &&
     Array.isArray(value['nodes']) &&
     typeof value['nodeCount'] === 'number'
-  )
-}
-
-/** 프리셋 하나의 모양. 목록·생성이 같은 것을 쓴다 — 서버의 응답 두 벌이 같은 키를 낸다. */
-function isPreset(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    typeof value['id'] === 'string' &&
-    value['id'] !== '' &&
-    typeof value['name'] === 'string' &&
-    Array.isArray(value['nodes'])
   )
 }
 
@@ -1077,13 +1062,6 @@ const BODY_KEYS = {
   // 자체로 400이고, **`payload`가 그 자리다** — 생성 응답에 그 키가 실려 오므로 응답 객체를
   // 그대로 되보내는 실수가 실제로 있을 법하다.
   createSnapshot: { tag: true, description: true } satisfies Record<keyof Parameters<ApiClient['createSnapshot']>[1], true>,
-  // 프리셋 저장. 서버의 `PresetBody`가 `z.strictObject`라 선언되지 않은 키는 그
-  // 자체로 400이고, **`id`·`source`·`nodes`가 그 자리다** — 목록 항목을 그대로 되보내는
-  // 실수가 실제로 있을 법하다(`createSnapshot`이 같은 자리에서 같은 판단).
-  createPreset: { name: true, description: true, schema: true, viewStates: true } satisfies Record<
-    keyof Parameters<ApiClient['createPreset']>[1],
-    true
-  >,
   // 모듈 저장 · 이름 바꾸기. 서버의 `ModuleBody` · `RenameBody` 가 `z.strictObject` 라 선언되지 않은 키는 그 자체로 400 이고, **`id` · `nodeCount` ·
   // `createdBy` 가 그 자리다** — 응답 객체를 고쳐 되보내는 실수가 실제로 있을 법하다(`createSnapshot` 이 같은 자리에서 같은 판단).
   createModule: { name: true, nodes: true } satisfies Record<keyof Parameters<ApiClient['createModule']>[1], true>,
@@ -1447,10 +1425,6 @@ export function createHttpClient(
     // 같은 메서드로 두 패턴이 맞붙는 자리가 없다(서버가 정적 세그먼트를 먼저 잡기도 한다).
     renumberComments: (projectId, pageId, options) =>
       request<MarkerChange>('POST', `${commentsPath(projectId, pageId)}/renumber`, SHAPES.markerChange, undefined, options),
-    listPresets: (projectId, options) =>
-      request<Preset[]>('GET', `${projectPath(projectId)}/presets`, SHAPES.presetList, undefined, options),
-    createPreset: (projectId, body) =>
-      request<Preset>('POST', `${projectPath(projectId)}/presets`, SHAPES.preset, declaredOnly(body, BODY_KEYS.createPreset)),
     // `{ modules }` · `{ module }` 봉투를 여기서 벗긴다 — `getTree` 와 같은 자리다(봉투가 계약대로인 것은 `request` 가 이미 확인했다).
     listModules: async (projectId, options) =>
       (await request<{ modules: ProjectModule[] }>('GET', modulesPath(projectId), SHAPES.moduleListEnvelope, undefined, options)).modules,

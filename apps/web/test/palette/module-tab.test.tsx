@@ -15,6 +15,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PatchResult, ProjectModule } from '../../src/api/types'
 import { PALETTE_VIEW_KEY } from '../../src/palette/component-palette'
 import { MODULE_GONE_NOTICE, NO_PROJECT_MODULES } from '../../src/palette/module-tab'
+import { BROKEN_NOTICE, EMPTY_NOTICE } from '../../src/palette/theme-patterns'
 import { lockedNotice } from '../../src/panels/property-panel'
 import { EditorStore } from '../../src/store/editor-store'
 import { ADMIN_FIXTURE } from '../admin-theme'
@@ -96,7 +97,8 @@ interface Server {
 }
 
 /** 편집을 받아 문서를 진행시키고 모듈 목록 · 하나를 내는 대역. */
-function server(initial: ProjectModule[] = []): Server {
+/** `theme` 은 저장소 테마 manifest 에 얹을 칸 — 빈 객체면 저장소 테마 그대로(패턴 없음)다. */
+function server(initial: ProjectModule[] = [], theme: { patterns?: unknown } = { patterns: PATTERNS }): Server {
   const sent: PatchOp[][] = []
   const calls = { list: 0, get: [] as string[] }
   const modules = [...initial]
@@ -128,7 +130,7 @@ function server(initial: ProjectModule[] = []): Server {
   }
   const getProjectTheme: ApiClient['getProjectTheme'] = async () => ({
     ...adminThemeView(),
-    manifest: { ...ADMIN_FIXTURE.manifest, patterns: PATTERNS } as ThemeManifest,
+    manifest: { ...ADMIN_FIXTURE.manifest, ...theme } as ThemeManifest,
   })
   return { sent, held: () => held, calls, modules, api: { patchOps, listModules, getModule, getProjectTheme } }
 }
@@ -227,6 +229,21 @@ describe('묶음 셋', () => {
         .map((button) => button.getAttribute('aria-label')),
     ).toEqual(BUILTIN_MODULES.map((entry) => `${entry.name} 넣기`))
     expect(within(group('테마 패턴')).getByText('공지 묶음')).not.toBeNull()
+  })
+
+  // 패턴이 없는 테마가 정상이고(`system-admin` 첫 판), 없음과 고장을 사람이 갈라야 한다 — 두 문장이 다르다(옛 패턴 고르개의 케이스를 옮겼다).
+  it('테마에 패턴이 없으면 «테마 패턴» 묶음이 «없다»고 말한다', async () => {
+    await openWithPalette(server([], {}))
+    await openModules()
+    expect(within(group('테마 패턴')).getByText(EMPTY_NOTICE)).not.toBeNull()
+  })
+
+  it('테마의 패턴 선언이 규격을 못 지나면 «읽지 못했다»고 말한다 — «없다»와 다른 문장', async () => {
+    await openWithPalette(server([], { patterns: { 'hero.x': { name: '' } } }))
+    await openModules()
+    expect(within(group('테마 패턴')).getByText(BROKEN_NOTICE)).not.toBeNull()
+    expect(within(group('테마 패턴')).queryByText(EMPTY_NOTICE)).toBeNull()
+    expect(BROKEN_NOTICE).not.toBe(EMPTY_NOTICE)
   })
 
   it('프로젝트 모듈이 없으면 «모듈로 저장» 안내 한 줄', async () => {

@@ -55,7 +55,7 @@ export function moduleInsertOps(
   generate?: () => string,
 ): ModuleInsert | { reason: string } {
   if (bundle.kind === 'pattern') {
-    const edit = insertMany(document, target.parentId, target.index, bundle.expanded.nodes)
+    const edit = insertMany(document, target.parentId, target.index, bundle.expanded.nodes, '넣지')
     if ('reason' in edit) return edit
     return { ...edit, selectIds: [selectId(bundle.expanded)], droppedActions: 0, droppedCases: [] }
   }
@@ -65,7 +65,7 @@ export function moduleInsertOps(
     { node: (id) => findNodeSafely(document.root, id) !== undefined, page: keepPage, state: (id) => states.has(id) },
     generate,
   )
-  const edit = insertMany(document, target.parentId, target.index, prepared.nodes)
+  const edit = insertMany(document, target.parentId, target.index, prepared.nodes, '넣지')
   if ('reason' in edit) return edit
   return { ...edit, selectIds: edit.insertedIds, droppedActions: prepared.droppedActions, droppedCases: prepared.droppedCases }
 }

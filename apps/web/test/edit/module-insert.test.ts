@@ -153,7 +153,7 @@ describe('moduleInsertOps', () => {
     expect(edit.selectIds).toEqual(['p_title'])
   })
 
-  it('자식을 안 받는 부모 자리면 까닭 — «안에 추가» 가 꺼진 설명', () => {
+  it('자식을 안 받는 부모 자리면 까닭 — `addInside` 판정의 설명', () => {
     const before = doc()
     const edit = moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, { parentId: 'n-text', index: 0, placement: 'inside' }, NO_PAGES)
     expect(edit).toEqual({ reason: STRUCTURE_WHY_DISABLED.addInside })
@@ -163,7 +163,8 @@ describe('moduleInsertOps', () => {
     const before = doc()
     const nested: WbNode[] = [{ id: 'm_page', type: 'Page', children: [] }]
     const edit = moduleInsertOps(before, { kind: 'nodes', nodes: nested }, target(before, null), NO_PAGES, counter())
-    expect('reason' in edit).toBe(true)
+    // 문장의 동사는 넣기의 것이다(붙여넣기와 같은 `insertMany` 를 지나지만 «붙이지»가 아니다).
+    expect(edit).toEqual({ reason: '넣지 못했습니다: Page는 루트에만 둘 수 있습니다 — 페이지 안에 Page를 넣을 수 없습니다' })
   })
 
   it('입력 묶음을 바꾸지 않는다(기본 모듈은 모듈 상수다)', () => {

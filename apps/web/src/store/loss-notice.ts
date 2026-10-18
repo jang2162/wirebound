@@ -13,7 +13,7 @@
  * **세기로 줄 세운다**(`LOSS_RANK`) — 반영됐는지 모르는 것(다시 확인해야 한다)이 앞, 저장되지 않은 것, 되돌리기 이력만 잃은 것이 뒤다.
  * 세션이 끊긴 통지(`signed-out`)는 조각이 아니다 — 그 통지는 셸을 로그인으로 보내고, 뒤에 온 잃음이 그것을 덮지 않는다(`tellLoss`).
  *
- * **조각이 아닌 통지(`EditorStore.setEditFailure`)는 앞 조각을 통째로 치운다** — 새 편집 · 되돌리기 · 패턴 · 프리셋처럼 사람이 방금 누른
+ * **조각이 아닌 통지(`EditorStore.setEditFailure`)는 앞 조각을 통째로 치운다** — 새 편집 · 되돌리기 · 붙이기처럼 사람이 방금 누른
  * 동작의 결과라서다. 그러니 **비동기로 오는 약한 통지**(잃은 편집은 없고 되돌리기 이력만 못 실었다 — 세기 `history`)를 `setEditFailure`로
  * 세우면 그 사이 선 잃음 조각을 지운다. 그런 통지는 `tellLoss`에 `LOSS_RANK.history`로 싣는다 — 앞 잃음 뒤에 이어지고 세기 순으로 맨
  * 끝에 선다. 사람이 누른 동작의 통지까지 덮지 않으려면 `overOther: false`를 준다(`routes/editor.tsx`의 `UNDO_RESTORE_DROPPED_NOTICE`).

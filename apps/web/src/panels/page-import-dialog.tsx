@@ -262,8 +262,7 @@ function PreviewCard(props: { preview: Preview; warningsOpen: boolean; onToggleW
 
   return (
     <div className="wb-shell-pagejson-card wb-shell-pagejson-card-ready">
-      {/* **`role="status"`이지 `alert`이 아니다** — 읽은 것을 말하는 자리이지 실패 통지가 아니다(`preset-picker.tsx`가 확인 문장에 대해
-          같은 판단을 적었다). */}
+      {/* **`role="status"`이지 `alert`이 아니다** — 읽은 것을 말하는 자리이지 실패 통지가 아니다. */}
       <p className="wb-shell-pagejson-card-head" role="status">
         <ICONS.succeeded className="wb-shell-pagejson-icon-ok" size={16} strokeWidth={2} aria-hidden="true" />
         <span>

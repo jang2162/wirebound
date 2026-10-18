@@ -487,7 +487,7 @@ describe('페이지를 옮길 때', () => {
    * ```
    *
    * **두 페이지의 노드 id가 겹치면 남의 화면에 없는 노드의 배지가 한 프레임 뜬다** — 그런
-   * 문서는 가져오기·프리셋이 만든다(`POST .../pages/import`가 파일의 id를 그대로 쓴다).
+   * 문서는 가져오기가 만든다(`POST .../pages/import`가 파일의 id를 그대로 쓴다).
    * 다음 커밋에 스스로 풀리지만, 그동안 **남의 선택을 막는다.**
    */
   it('새 주소에 **앞 페이지의 노드로** 잠금이 나가지 않는다', async () => {
@@ -537,7 +537,7 @@ describe('놓는다', () => {
  * **왜 배지를 루트에도 붙이지 않나.** 그러면 잠금 하나가 배지 둘을 만들고(잠긴 노드와 그 조상 전부), 위 묶음이 잰 *"이름이 하나"*가
  * 무너진다. 꺼진 항목의 이유는 **고른 줄 하나**의 항목에만 실리므로 그 성질을 건드리지 않는다.
  *
- * **대조 항목은 «안에 추가»다** — 루트에서 잠금 없이는 켜져 있어(이유 `null`) 잠금만이 그것을 끈다. «삭제»는 루트라 늘 꺼져 있어 «무엇이
+ * **대조 항목은 «별칭 바꾸기»다** — 루트에서 잠금 없이는 켜져 있어(이유 `null`) 잠금만이 그것을 끈다. «삭제»는 루트라 늘 꺼져 있어 «무엇이
  * 지금 꺼진 까닭인가»를 가른다(잠금이 오면 잠금, 없으면 «루트가 아닌 노드를 고르세요»).
  */
 function structureRegion(): HTMLElement {
@@ -567,13 +567,13 @@ describe('꺼진 항목의 이유 — 잠긴 조상의 이유는 배지가 아�
 
   it('그 이유가 고른 줄의 꺼진 항목에 온다 — 이름과 함께', async () => {
     const view = await board()
-    expect(rowReason(structureRegion(), '안에 추가')).toBeNull()
+    expect(rowReason(structureRegion(), '별칭 바꾸기')).toBeNull()
     expect(rowReason(structureRegion(), '삭제')).toBe('루트가 아닌 노드를 고르세요')
 
     view.push(locksFrame([foreign('n-b')]))
 
-    // `안에 추가`는 뿌리 끝에 넣는 편집이 잠긴 자손과 안 부딪혀 산다(`edit/add-abilities.ts`) — 이유가 없다. 나머지는 이름과 함께 잠금을 말한다.
-    expect(rowReason(structureRegion(), '안에 추가')).toBeNull()
+    // 별칭도 루트 노드를 바꾸는 편집이라 잠긴 자손과 부딪친다 — 잠금 없이 켜져 있던 항목을 잠금이 끈다.
+    expect(rowReason(structureRegion(), '별칭 바꾸기')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
     expect(rowReason(structureRegion(), '삭제')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
@@ -585,11 +585,10 @@ describe('꺼진 항목의 이유 — 잠긴 조상의 이유는 배지가 아�
     fireEvent.click(treeButtonAt('Text', 0))
 
     expect(view.store.getState().selectedNodeId).toBe('n-a')
-    expect(rowReason(structureRegion(), '안에 추가')).toBe('자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다')
-    // 잠금을 말하는 이유는 하나뿐이다 — `n-a` 의 **바로 뒤 형제**(`n-b`)가 잠겨 «아래 추가» 가 넣는 편집의 충돌로 꺼진다. 고른 노드의 잠금(`고를 수도 …`)은 없다.
-    expect(Object.entries(rowReasons(structureRegion())).filter(([, reason]) => reason?.includes('보라') === true)).toEqual([
-      ['아래 추가', '보라님이 편집 중이라 바꿀 수 없습니다'],
-    ])
+    expect(rowReason(structureRegion(), '별칭 바꾸기')).toBeNull()
+    // 잠금을 말하는 항목이 하나도 없다 — 고른 노드도 그 자리를 바꾸는 편집도 잠긴 서브트리(`n-b`)에 안 닿는다. (뒤 형제의 잠금에 부딪히던
+    // «아래 추가»는 걷었다 — 넣기는 하단 판이 한다.)
+    expect(Object.entries(rowReasons(structureRegion())).filter(([, reason]) => reason?.includes('보라') === true)).toEqual([])
   })
 
   it('내 잠금은 꺼진 항목의 이유에도 안 뜬다', async () => {
@@ -597,7 +596,7 @@ describe('꺼진 항목의 이유 — 잠긴 조상의 이유는 배지가 아�
 
     view.push(locksFrame([foreign('n-b', { userId: ME, userName: '테스터' })]))
 
-    expect(rowReason(structureRegion(), '안에 추가')).toBeNull()
+    expect(rowReason(structureRegion(), '별칭 바꾸기')).toBeNull()
     expect(rowReason(structureRegion(), '삭제')).toBe('루트가 아닌 노드를 고르세요')
   })
 
@@ -609,7 +608,7 @@ describe('꺼진 항목의 이유 — 잠긴 조상의 이유는 배지가 아�
     view.push(locksFrame([]))
 
     expect(rowReason(structureRegion(), '삭제')).toBe('루트가 아닌 노드를 고르세요')
-    expect(rowReason(structureRegion(), '안에 추가')).toBeNull()
+    expect(rowReason(structureRegion(), '별칭 바꾸기')).toBeNull()
   })
 
   /**
@@ -639,8 +638,7 @@ describe('꺼진 항목의 이유 — 잠긴 조상의 이유는 배지가 아�
     expect(rootRow?.querySelector(':scope > .wb-shell-structure-lock')?.textContent).toBe('보라 편집 중')
     // 문장은 «조상» 경우(`그 이유가 고른 줄의 꺼진 항목에 온다`)와 **글자까지 같다.**
     expect(rowReason(structureRegion(), '삭제')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
-    // 루트 «자신» 이 잠기면 뿌리 끝에 넣는 편집도 부딪친다 — `안에 추가`는 «넣는 편집» 의 문장을 든다(`edit/add-abilities.ts`).
-    expect(rowReason(structureRegion(), '안에 추가')).toBe('보라님이 편집 중이라 바꿀 수 없습니다')
+    expect(rowReason(structureRegion(), '별칭 바꾸기')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
   it('사람이 둘이면 부딪치는 쪽의 이름이 온다', async () => {

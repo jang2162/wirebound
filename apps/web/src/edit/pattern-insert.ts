@@ -80,7 +80,7 @@ export function patternInsert(
   if (nodes.length === 0) return { insert: null, reason: 'empty', issues: [] }
 
   /**
-   * **판정은 전개된 노드만 담은 프로브로 한다** — `TypePicker.placeableTypes`가 하는 것과
+   * **판정은 전개된 노드만 담은 프로브로 한다** — `palette/placeable.ts` 의 `placeableGroups`가 하는 것과
    * 같은 형태다. 문서 전체를 검증하면 **이미 깨진 문서에서 멀쩡한 패턴도 막힌다**:
    * 알 수 없는 타입의 노드가 하나 있으면 `validatePage`가 그 문서에 `error`를 내는데,
    * 그것을 0으로 만드는 길은 그 노드를 지우는 것뿐이고(`structure-actions.ts`의 실측)

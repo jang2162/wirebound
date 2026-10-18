@@ -25,7 +25,6 @@
 import {
   ArrowDown,
   ArrowUp,
-  BetweenHorizontalEnd,
   Blocks,
   ChevronDown,
   ChevronRight,
@@ -34,7 +33,6 @@ import {
   CircleCheck,
   CircleUser,
   CircleX,
-  CornerDownRight,
   Download,
   Ellipsis,
   FileDown,
@@ -45,7 +43,6 @@ import {
   GripVertical,
   History,
   Layers,
-  LayoutTemplate,
   ListTree,
   ListIndentDecrease,
   ListIndentIncrease,
@@ -55,6 +52,7 @@ import {
   MoveHorizontal,
   PanelLeft,
   PanelRight,
+  PackagePlus,
   Palette,
   Pencil,
   Plus,
@@ -62,7 +60,6 @@ import {
   Settings,
   Split,
   SquareDashed,
-  Stamp,
   Trash2,
   TriangleAlert,
   Undo2,
@@ -112,12 +109,8 @@ export const ICONS = {
   /** 메뉴를 만든다 — «하위 메뉴» · «최상위 메뉴 추가». */
   addMenu: FolderPlus,
   addPage: FilePlus,
-  /** 노드를 고른 것의 자식으로 — «안에 추가» · 뿌리의 «페이지에 추가». */
-  addInside: CornerDownRight,
-  /** 노드를 고른 것의 다음 형제로 — «아래 추가». */
-  addAfter: BetweenHorizontalEnd,
-  pattern: LayoutTemplate,
-  preset: Stamp,
+  /** 고른 노드를 모듈로 남긴다 — 구조 트리 줄 `…` 의 «모듈로 저장…»(`panels/save-module-dialog.tsx`). */
+  saveModule: PackagePlus,
   importJson: FileUp,
   exportJson: FileDown,
   account: CircleUser,

@@ -167,7 +167,7 @@ describe('붙일 페이지에 없는 상태의 가지를 빼고 말한다', () =
   })
 })
 
-describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(프리셋과 같은 자)', () => {
+describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(`edit/paste-states.ts`)', () => {
   /** 붙일 페이지의 «관리자»는 출처와 id 가 다르다. */
   const OTHER_ADMIN: ViewState = { id: 's_page_admin', name: '관리자' }
 

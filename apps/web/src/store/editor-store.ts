@@ -1313,7 +1313,7 @@ export class EditorStore {
    * ## 페이지를 여는 경로 — 루트를 고른다
    *
    * 여기서 `null`을 놓으면 **페이지를 연 직후가 항상 죽은 화면**이다.
-   * 브라우저에서 잰 값: 구조 편집 도구 9개 중 7개가 꺼지고(`안에 추가`의 `title`이
+   * 브라우저에서 잰 값(옛 구조 도구모음 판): 구조 편집 도구 9개 중 7개가 꺼지고(`안에 추가`의 `title`이
    * *"자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다"*, `아래 추가`·`삭제`가
    * *"루트가 아닌 노드를 고르세요"*), 속성 패널은 *"노드를 고르면 속성이 보입니다"*만 그린다.
    * 사용자는 아무 안내 없이 트리에서 루트를 한 번 눌러야 시작할 수 있다 — **클릭 한 번으로
@@ -1323,7 +1323,7 @@ export class EditorStore {
    *
    * `loadPage`를 지나는 길은 셋이고(페이지 열기 · 재연결/복원 재조회 · 편집 실패 복구)
    * **뒤의 둘은 사용자가 아무것도 안 했는데 돈다.** 그때 선택을 루트로 옮기면 편집하던
-   * 사람의 자리를 뺏는다 — 속성 패널이 다른 노드를 그리고 다음 `안에 추가`가 엉뚱한 자리에
+   * 사람의 자리를 뺏는다 — 속성 패널이 다른 노드를 그리고 다음 넣기(하단 판)가 엉뚱한 자리에
    * 꽂힌다. 그래서 그 갈래는 들고 있던 선택을 그대로 둔다.
    *
    * **가르는 값은 `openPageId`와 문서다.** 화면은 **여는 경로에서만** 조회를 시작하며
@@ -2688,7 +2688,7 @@ export class EditorStore {
   #infoKept: string | null = null
 
   /**
-   * **잃음을 말한다 — 앞 잃음을 덮지 않고 잇는다**(`store/loss-notice.ts`). 지금 통지가 잃음의 조각이 아니면(되돌리기 · 프리셋 · 없음) 새로
+   * **잃음을 말한다 — 앞 잃음을 덮지 않고 잇는다**(`store/loss-notice.ts`). 지금 통지가 잃음의 조각이 아니면(되돌리기 · 붙이기 · 없음) 새로
    * 시작한다. **세션이 끊긴 통지는 덮지 않는다** — 그 통지는 셸을 로그인으로 보내는 중이고, 뒤에 온 잃음이 덮으면 끊긴 세션 위에 편집 화면이
    * 남는다.
    *
@@ -2700,7 +2700,7 @@ export class EditorStore {
     const { editFailure } = this.#state
     if (editFailure?.kind === 'signed-out') return
     const shown = this.#shownLoss()
-    // **`overOther: false`면 조각이 아닌 통지 위에는 세우지 않는다** — 사람이 방금 누른 동작의 결과(되돌리기 · 프리셋)를 비동기로 온 약한
+    // **`overOther: false`면 조각이 아닌 통지 위에는 세우지 않는다** — 사람이 방금 누른 동작의 결과(되돌리기 · 붙이기)를 비동기로 온 약한
     // 조각(`LOSS_RANK.history`)이 덮지 않는다. 앞 조각이 있으면 잇고, 비어 있으면 세운다(`routes/editor.tsx`의 `UNDO_RESTORE_DROPPED_NOTICE`).
     if (options.overOther === false && editFailure !== null && shown.length === 0) return
     this.#apply({ editFailure: this.#composeLoss(mergeLoss(shown, part)) })

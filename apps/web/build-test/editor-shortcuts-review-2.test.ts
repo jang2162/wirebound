@@ -5,7 +5,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | R1 열린 줄 메뉴 | 메뉴가 열린 채 선택이 옮으면(Cmd+V · Cmd+D · 캔버스 ↓) 그 메뉴의 «삭제»가 연 줄이 아니라 새 노드를 지운다 |
- * | R2 · R3 죽은 자리 | 고르개가 선 동안 · 우측 패널 탭을 누른 뒤 Delete · ↓ · Escape 가 아무것도 안 한다 · 고르개 안의 Escape 가 고르개를 안 닫는다 |
+ * | R3 죽은 자리 | 우측 패널 탭을 누른 뒤 Delete · ↓ · Escape 가 아무것도 안 한다 |
  * | R4 같은 페이지 다시 싣기 | 붙이는 사이 같은 페이지를 다시 실은 판(재연결 · 복원 다시 불러오기 · 편집 실패 수습)의 붙이기를 «옮겨»로 버리고 앞 통지를 덮는다 |
  *
  * 서버 문서(`GET …/pages/:id`)로 단언한다.
@@ -86,9 +86,9 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
     })
   const row = (page: Page, id: string) => page.locator(`[data-tree-id="${id}"] > button.wb-shell-structure-node`)
   /** 그 줄의 `+`(0) · `…`(1). */
-  const rowMenu = (page: Page, id: string, which: 0 | 1) => page.locator(`[data-tree-id="${id}"] button[aria-haspopup="menu"]`).nth(which)
+  /** 구조 트리 줄의 `…`(줄 행동은 `…` 하나다). */
+  const rowMore = (page: Page, id: string) => page.locator(`[data-tree-id="${id}"] button[aria-haspopup="menu"][aria-label$=" 더 보기"]`)
   const item = (page: Page, name: string) => page.getByRole('menuitem', { name, exact: true })
-  const pickers = (page: Page) => page.locator('.wb-shell-picker').count()
 
   /**
    * 줄 «글 4»의 `…` 를 연 채 길 하나 → 메뉴가 남았으면 그 메뉴의 «삭제». 머리말: «글 0» Cmd+D(되돌릴 편집) · «글 5» Cmd+C(봉투).
@@ -143,7 +143,7 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
         await canvasFrame(page).locator('[data-wb-id="n_text0000005"]').click()
         await page.keyboard.press('ControlOrMeta+c')
         await row(page, 'n_text0000004').click()
-        await rowMenu(page, 'n_text0000004', 1).click()
+        await rowMore(page, 'n_text0000004').click()
         // 판 카나리아 — 메뉴가 열렸고 포커스가 그 항목이다.
         const focusRole = await page.evaluate(() => document.activeElement?.getAttribute('role'))
         await act(page, P)
@@ -169,57 +169,17 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
   })
 
   /**
-   * 반증 «항목 1» 의 죽은 자리 — 고르개(«아래 추가» · «패턴 넣기»)가 선 동안 고르개 밖의 키와 우측 패널 탭을 누른 뒤의 키. 칸마다 새 탭.
-   * 고르개 표지는 포커스가 고르개 안일 때만 키를 쥐고, 고르개 안의 Escape 는 고르개를 닫는다(`cancelAdd`).
+   * 반증 «항목 1» 의 죽은 자리 — 우측 패널 탭을 누른 뒤의 키. 칸마다 새 탭. (고르개가 선 동안의 판은 구조 트리의 고르개를 걷으며 함께 걷었다 —
+   * 넣기는 하단 판이 한다.)
    */
-  it('R2 · R3 고르개가 선 동안 고르개 밖 · 우측 패널 탭에서 Delete · ↓ · Escape 가 선다 — 고르개 안의 Escape 는 고르개만 닫는다', async () => {
+  it('R3 우측 패널 탭을 누른 뒤 Delete · ↓ · Escape 가 선다', async () => {
     const nodes = () => [
       T('n_text0000000', '글 0'),
       C('n_card0000001', '카드', [T('n_text0000001', '글 1'), T('n_text0000002', '글 2'), T('n_text0000003', '글 3')]),
       T('n_text0000004', '글 4'),
       B('n_btn00000001', '단추'),
     ]
-    const openAfter = async (page: Page) => {
-      await row(page, 'n_text0000002').click()
-      await rowMenu(page, 'n_text0000002', 0).click()
-      await item(page, '아래 추가').click()
-      await page.locator('.wb-shell-picker').waitFor()
-    }
     const spots: [string, (page: Page) => Promise<void>][] = [
-      [
-        'S5b 고르개 연 `+` 토글 · Delete',
-        async (page) => {
-          await openAfter(page)
-          await page.keyboard.press('Delete')
-        },
-      ],
-      [
-        'S5c 고르개 · 캔버스 «글 4» · Escape',
-        async (page) => {
-          await openAfter(page)
-          await canvasFrame(page).locator('[data-wb-id="n_text0000004"]').click()
-          await page.keyboard.press('Escape')
-        },
-      ],
-      [
-        'S5d 패턴 고르개 · 캔버스 «글 4» · ↓',
-        async (page) => {
-          await row(page, 'n_text0000002').click()
-          await rowMenu(page, 'n_text0000002', 0).click()
-          await item(page, '패턴 넣기').click()
-          await sleep(300)
-          await canvasFrame(page).locator('[data-wb-id="n_text0000004"]').click()
-          await page.keyboard.press('ArrowDown')
-        },
-      ],
-      [
-        'S5f 고르개 · 줌 «확대» · Delete',
-        async (page) => {
-          await openAfter(page)
-          await page.getByRole('button', { name: '확대', exact: true }).click()
-          await page.keyboard.press('Delete')
-        },
-      ],
       [
         'S8 우측 패널 탭 · ↓',
         async (page) => {
@@ -244,14 +204,6 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
           await page.keyboard.press('Delete')
         },
       ],
-      [
-        '고르개 «취소»에 포커스 · Escape',
-        async (page) => {
-          await openAfter(page)
-          await page.locator('.wb-shell-picker button').last().focus()
-          await page.keyboard.press('Escape')
-        },
-      ],
     ]
     const results: Record<string, unknown> = {}
     for (const [name, act] of spots) {
@@ -260,21 +212,16 @@ describe.skipIf(!전제.ok)('E1 좁은 반증 대응 — 실브라우저', () =>
       try {
         await act(page)
         await sleep(400)
-        results[name] = { selected: await selected(page), pickers: await pickers(page), server: (await settled(P)).shape }
+        results[name] = { selected: await selected(page), server: (await settled(P)).shape }
       } finally {
         await close()
       }
     }
     const all = '글 0,카드[글 1,글 2,글 3],글 4,단추'
     expect(results).toEqual({
-      'S5b 고르개 연 `+` 토글 · Delete': { selected: null, pickers: 0, server: '글 0,카드[글 1,글 3],글 4,단추' },
-      'S5c 고르개 · 캔버스 «글 4» · Escape': { selected: null, pickers: 0, server: all },
-      'S5d 패턴 고르개 · 캔버스 «글 4» · ↓': { selected: 'n_btn00000001', pickers: 1, server: all },
-      'S5f 고르개 · 줌 «확대» · Delete': { selected: null, pickers: 0, server: '글 0,카드[글 1,글 3],글 4,단추' },
-      'S8 우측 패널 탭 · ↓': { selected: 'n_text0000003', pickers: 0, server: all },
-      'S8 우측 패널 탭 · Escape': { selected: null, pickers: 0, server: all },
-      'S8 우측 패널 탭 · Delete': { selected: null, pickers: 0, server: '글 0,카드[글 1,글 3],글 4,단추' },
-      '고르개 «취소»에 포커스 · Escape': { selected: 'n_text0000002', pickers: 0, server: all },
+      'S8 우측 패널 탭 · ↓': { selected: 'n_text0000003', server: all },
+      'S8 우측 패널 탭 · Escape': { selected: null, server: all },
+      'S8 우측 패널 탭 · Delete': { selected: null, server: '글 0,카드[글 1,글 3],글 4,단추' },
     })
   })
 

@@ -19,7 +19,6 @@ import type {
   PageDetail,
   PageImported,
   PatchResult,
-  Preset,
   ProjectDetail,
   ProjectModule,
   ProjectThemeView,
@@ -433,27 +432,6 @@ export interface ApiClient {
    *
    * `viewer`도 읽는다 — 막는 것은 생성 하나다(「권한 모델」).
    */
-  /**
-   * **이 프로젝트에서 고를 수 있는 프리셋 전부**(설계서 「페이지 프리셋」). 내장 3종이 먼저 오고
-   * 프로젝트 프리셋이 만든 순서대로 뒤에 붙는다 — **순서가 서버의 계약이므로 여기서 다시
-   * 정렬하지 않는다**(스냅샷 목록과 같은 판단).
-   *
-   * **프로젝트 프리셋이 하나도 없는 것이 기본 상태다.** 그때도 응답이 비지 않는다.
-   */
-  listPresets(projectId: string, options?: ReadOptions): Promise<Preset[]>
-  /**
-   * **지금 페이지를 프리셋으로 남긴다**(「페이지 프리셋」). `nodes`는 root의 `children`이지 문서
-   * 봉투가 아니다.
-   *
-   * **`marker`는 서버가 버린다** — 화면이 미리 지우지 않는 것은 그 규칙의 자리가
-   * 하나여야 하기 때문이다. 응답의 `nodes`에는 이미 없다.
-   *
-   * 이름 1~60자·설명 0~2000자 밖은 400이고, **이름 중복은 오류가 아니다.**
-   */
-  createPreset(
-    projectId: string,
-    body: { name: string; description?: string | null; schema: WbNode[]; viewStates?: ViewState[] },
-  ): Promise<Preset>
   /**
    * **이 프로젝트의 모듈 전부** — 최근 것이 먼저다(서버의 계약 — 여기서 다시 정렬하지 않는다). 내장 «기본 모듈»은 없다(`BUILTIN_MODULES` 를 화면이
    * 직접 읽는다). viewer 도 읽는다.

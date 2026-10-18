@@ -45,18 +45,28 @@ export function tooManyOpsNotice(count: number): string {
 /** 자리를 못 찾았다 — 고른 노드의 부모가 깨진 문서. */
 export const NO_PASTE_SPOT = '붙일 자리를 찾지 못했습니다. 다른 노드를 고르세요.'
 
-/** 결과 문서가 저장될 수 없다 — 이유를 잇는다(`edit/preset-apply.ts` 의 `withReasons` 와 같은 꼴). */
-function invalidNotice(messages: readonly string[]): string {
-  return messages.length === 0 ? '붙이지 못했습니다.' : `붙이지 못했습니다: ${messages.join(' / ')}`
+/** 결과 문서가 저장될 수 없다 — 이유를 잇는다(비면 구분자도 없다 — 콜론 뒤가 빈 문장이 서지 않게). 동사는 부르는 몸짓의 것이다. */
+function invalidNotice(messages: readonly string[], verb: InsertVerb): string {
+  return messages.length === 0 ? `${verb} 못했습니다.` : `${verb} 못했습니다: ${messages.join(' / ')}`
 }
 
+/** 거절 문장의 동사 — 붙이기는 «붙이지», 하단 판의 모듈 넣기는 «넣지». */
+export type InsertVerb = '붙이지' | '넣지'
+
 /**
- * 노드들을 `parentId` 의 `index` 부터 차례로 넣는 묶음. 넣은 뒤 문서가 검증(`error`)을 못 지나면 `reason`. 붙이기와 모듈 넣기(`palette/module-insert.ts`)가 쓴다.
+ * 노드들을 `parentId` 의 `index` 부터 차례로 넣는 묶음. 넣은 뒤 문서가 검증(`error`)을 못 지나면 `reason`. 붙이기와 모듈 넣기(`palette/module-insert.ts` —
+ * `verb` 가 «넣지»)가 쓴다.
  *
  * **판정은 결과 문서로 한다** — 붙이는 노드가 이미 저장될 수 있는 것인지(봉투 검증은 읽을 때 지났다)보다 «이 자리에 넣고 나서도 문서가 저장될
  * 수 있는가»가 물음이다. 다만 넣기 전 문서가 이미 `error` 를 내면 그것은 붙이기 탓이 아니므로 넣기 전에 없던 이슈만 센다.
  */
-export function insertMany(document: PageDocument, parentId: string, index: number, nodes: readonly WbNode[]): NodeEdit {
+export function insertMany(
+  document: PageDocument,
+  parentId: string,
+  index: number,
+  nodes: readonly WbNode[],
+  verb: InsertVerb = '붙이지',
+): NodeEdit {
   if (!acceptsChildren(findNodeSafely(document.root, parentId))) return { reason: STRUCTURE_WHY_DISABLED.addInside }
   if (nodes.length > MAX_OPS_PER_EDIT) return { reason: tooManyOpsNotice(nodes.length) }
 
@@ -74,7 +84,13 @@ export function insertMany(document: PageDocument, parentId: string, index: numb
   const added = excuseStandingNestedPages(document, partitionIssues(validatePage(running)).errors).filter(
     (issue) => !before.has(`${issue.code}|${issue.path}`),
   )
-  if (added.length > 0) return { reason: invalidNotice(added.map((issue) => issue.message)) }
+  if (added.length > 0)
+    return {
+      reason: invalidNotice(
+        added.map((issue) => issue.message),
+        verb,
+      ),
+    }
 
   return { ops, insertedIds: nodes.map((node) => node.id) }
 }
@@ -106,7 +122,7 @@ export function pasteOps(document: PageDocument, anchorId: string | null, nodes:
  * 사본의 id 재발급은 붙이기와 같은 함수(`prepareNodesForPaste`)이고 keep 은 늘 참이다 — 같은 문서 안이라 사본 밖을 가리키던 대상(같은 페이지의
  * 대화 상자를 여는 단추)은 그대로 맞다. 사본 안을 가리키던 대상은 사본을 따라간다.
  *
- * 루트 · 문서에 없는 노드는 `reason`(`+` 의 «아래 추가» 가 꺼졌을 때의 설명 — 루트 뒤에는 형제가 설 수 없다). 상태 가지는 그 줄의 «아래 추가»를
+ * 루트 · 문서에 없는 노드는 `reason`(`addAfter` 판정의 설명 — 루트 뒤에는 형제가 설 수 없다). 상태 가지는 그 줄의 «아래 추가»를
  * 끈 까닭(`regionRules`)이다.
  */
 export function duplicateOps(document: PageDocument, nodeIds: readonly string[], generate?: () => string): NodeEdit {

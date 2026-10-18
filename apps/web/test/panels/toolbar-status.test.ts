@@ -25,7 +25,6 @@
 import { describe, expect, it } from 'vitest'
 import type { NodeLock, PageDocument, WbNode } from '@wirebound/schema'
 import type { TreeMenuNode } from '../../src/api/types'
-import { addAbilitiesUnderLock } from '../../src/edit/add-abilities'
 import { MULTI_WHY_DISABLED, selectionAbilities, structureAbilities, type StructureAbilities } from '../../src/edit/structure-actions'
 import { treeAbilities, type TreeAbilities, type TreeSelection } from '../../src/tree/tree-actions'
 import {
@@ -35,9 +34,7 @@ import {
   menuItemReason,
   MISSING_IN_TREE_REASON,
   NOT_IN_DOCUMENT_STATUS,
-  patternReason,
   PICK_NODE_REASON,
-  presetReason,
   structureItemReason,
   type StructureReasonInput,
 } from '../../src/panels/toolbar-status'
@@ -98,15 +95,9 @@ function one(nodeId: string | null, lock: NodeLock | null = null, pageLock: Node
   }
 }
 
-/**
- * 하나 고른 판의 진짜 판정 — `useStructureCommands` 가 `structureAbilities` 위에 «안에 추가» · «아래 추가» 의 잠금(`edit/add-abilities.ts` — 넣는
- * 편집이 부딪히나)을 얹는 그대로다. 남의 잠금이 편집에 안 부딪히는 판(`blockedBy` 가 늘 `null`)이라 «안에 추가» 는 고른 노드의 잠금과 무관하다.
- */
+/** 하나 고른 판의 진짜 판정 — `useStructureCommands` 가 쓰는 `structureAbilities` 그대로다(잠기면 판정이 `NOTHING`). */
 function realAbilities(document: PageDocument, nodeId: string | null, lock: NodeLock | null): StructureAbilities {
-  const base = structureAbilities(document, nodeId, lock)
-  if (nodeId === null) return base
-  const adds = addAbilitiesUnderLock(document, nodeId, lock, () => null)
-  return { ...base, addInside: adds.addInside, addAfter: adds.addAfter }
+  return structureAbilities(document, nodeId, lock)
 }
 
 /** 여럿을 고른 상태의 입력 — 기준 노드는 마지막 것이다. `anyLock` 은 기준 노드 밖에서 남이 잡은 것. */
@@ -154,10 +145,10 @@ describe('구조 — 켜진 항목에는 이유가 없다', () => {
 
 describe('구조 — 항목 하나의 이유는 그 항목의 것이다', () => {
   /**
-   * **무리의 이유를 엉뚱한 항목에 붙이지 않는다.** 잎이 «자식을 담지 못한다»는 «안에 추가»의 이유이지 «위로»의 이유가 아니다 — 무리 전체를
+   * **무리의 이유를 엉뚱한 항목에 붙이지 않는다.** 잎이 «자식을 담지 못한다»는 `addInside`의 이유이지 «위로»의 이유가 아니다 — 무리 전체를
    * 한 문장으로 말하던 줄의 사다리를 항목마다 붙이면 그렇게 된다.
    */
-  it('잎의 «안에 추가»는 타입을, «위로»는 형제를 말한다', () => {
+  it('잎의 `addInside`는 타입을, «위로»는 형제를 말한다', () => {
     expect(structureItemReason(one('n-a'), 'addInside')).toBe(STRUCTURE_WHY_DISABLED.addInside)
     expect(structureItemReason(one('n-a'), 'moveUp')).toBe(STRUCTURE_WHY_DISABLED.moveUp)
   })
@@ -172,7 +163,7 @@ describe('구조 — 항목 하나의 이유는 그 항목의 것이다', () => 
   })
 
   /** 뿌리가 못 하는 것은 **자리** 때문이다 — 꺼진 여섯이 각자의 문장(«루트가 아닌 노드를 고르세요» 등)을 든다. */
-  it('루트는 꺼진 여섯이 각자의 조건을 말하고 «안에 추가»는 켜져 있다', () => {
+  it('루트는 꺼진 여섯이 각자의 조건을 말하고 `addInside`는 켜져 있다', () => {
     const got = reasons(one('n-root'))
     expect(got.addInside).toBeUndefined()
     expect(got.remove).toBe('루트가 아닌 노드를 고르세요')
@@ -199,12 +190,10 @@ describe('구조 — 항목 하나의 이유는 그 항목의 것이다', () => 
 describe('구조 — 잠금이 차례의 맨 위다(고른 것이 있을 때)', () => {
   /**
    * **배지가 안 붙는 자리다.** 잠긴 노드 자신에게는 트리 줄에 *"보라 편집 중"* 배지가 붙지만 막히는 것은 그 서브트리 전체다 — 자동 선택된
-   * 루트가 늘 그 조상이다. 루트가 원래 못 하는 여섯도 지금 꺼진 까닭은 잠금이다(`안에 추가`가 잠금으로 함께 꺼진다).
+   * 루트가 늘 그 조상이다. 루트가 원래 못 하는 여섯도 지금 꺼진 까닭은 잠금이다(원래 켜진 `addInside` 도 잠금으로 함께 꺼진다).
    */
-  it('루트가 남의 잠금에 막히면 «안에 추가» 만 켜지고 — 남의 잠금이 편집에 안 부딪힌다 — 여섯은 이름과 함께 잠금을 말한다', () => {
-    expect(reasons(one('n-root', BORA))).toEqual(
-      Object.fromEntries(KEYS.map((key) => [key, key === 'addInside' ? undefined : lockedSelectionStatus('보라')])),
-    )
+  it('루트가 남의 잠금에 막히면 일곱 다 이름과 함께 잠금을 말한다', () => {
+    expect(reasons(one('n-root', BORA))).toEqual(Object.fromEntries(KEYS.map((key) => [key, lockedSelectionStatus('보라')])))
   })
 
   /**
@@ -229,8 +218,8 @@ describe('구조 — 잠금이 차례의 맨 위다(고른 것이 있을 때)', 
 })
 
 /**
- * **«안 골랐다» 칸이 둘로 갈린다.** 고른 것이 없어도 쓸 수 있는 조작이 둘이고(`패턴 넣기` · `프리셋`) 그 둘은 페이지에 남의 잠금이 하나라도
- * 있으면 함께 꺼진다 — 그때 «고르면 편집할 수 있습니다»는 고를 줄이 하나도 없는 판에서도 고르라고 말한다.
+ * **«안 골랐다» 칸이 둘로 갈린다.** 페이지에 남의 잠금이 하나라도 있으면 «고르면 편집할 수 있습니다»는 고를 줄이 하나도 없는 판에서도 고르라고
+ * 말한다 — 그 판은 원인을 말한다.
  */
 describe('구조 — 안 골랐을 때', () => {
   it('안 골랐으면 고르라고 말한다', () => {
@@ -275,20 +264,7 @@ describe('구조 — 여럿을 고른 판', () => {
   })
 })
 
-describe('구조 — 판정 키가 없는 셋(패턴 · 프리셋 · 별칭)', () => {
-  it('패턴 · 프리셋은 막은 잠금의 이름을 말한다 — 고르라고 하지 않는다', () => {
-    for (const reason of [patternReason(BORA), presetReason(BORA)]) {
-      expect(reason).toContain('보라')
-      expect(reason).not.toContain('고르')
-    }
-    // 둘은 다른 까닭을 말한다 — 패턴은 꽂힐 자리, 프리셋은 페이지 통째다.
-    expect(patternReason(BORA)).not.toBe(presetReason(BORA))
-  })
-
-  it('잠금이 없으면 패턴 · 프리셋은 이유가 없다', () => {
-    expect([patternReason(null), presetReason(null)]).toEqual([undefined, undefined])
-  })
-
+describe('구조 — 판정 키가 없는 별칭', () => {
   it('별칭은 잠금 · 여럿 · 없음 · 안 골랐음을 가른다', () => {
     expect(aliasReason(one('n-a', BORA))).toBe(lockedSelectionStatus('보라'))
     expect(aliasReason(many(['n-a', 'n-c']))).toBe(MULTI_WHY_DISABLED)
@@ -370,8 +346,6 @@ describe('문장의 꼴', () => {
       ...Object.values(reasons(one('n-root', BORA))),
       ...Object.values(reasons(one('n-gone'))),
       ...Object.values(reasons(many(['n-a', 'n-c'], BORA))),
-      patternReason(BORA),
-      presetReason(BORA),
       menuReason(null, 'rename', true),
       menuReason({ kind: 'menu', id: 'mn-gone' }, 'rename'),
     ].filter((sentence): sentence is string => sentence !== undefined)

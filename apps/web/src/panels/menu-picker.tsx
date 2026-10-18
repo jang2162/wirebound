@@ -1,8 +1,7 @@
 /**
  * 페이지의 소속 메뉴를 고르는 목록. 툴바의 `옮기기`가 연다.
  *
- * **`<select>`를 고른 근거는 잰 것이다** — `TypePicker`가 Tab 정지점으로 갈랐던 것과 같은
- * 축이지만 수가 다르다. 그쪽은 타입 수가 **카탈로그로 정해지고**, 여기 목록의 길이는
+ * **`<select>`를 고른 근거는 잰 것이다** — 목록의 길이가
  * **프로젝트의 메뉴 수**라 상한이 없다: 버튼 목록이면 정지점이 그 수만큼 늘고 트리가 자랄수록
  * 키보드 사용자의 비용이 커진다. `<select>`는 그 수와 무관하게 1이다.
  * `닫혀 있을 때 목록이 DOM에 없다`가 그 수를 실제로 센다(열면 2 — `<select>`와 `취소`).
@@ -52,7 +51,7 @@ export function MenuPicker(props: {
       <label className="wb-shell-menu-picker-label">
         소속 메뉴
         {/* **값을 들지 않는다.** 고르는 순간 요청이 나가고 목록이 닫히므로 중간 상태가
-            없다 — `TypePicker`와 같은 형태다. */}
+            없다. */}
         <select
           className="wb-shell-menu-picker-select"
           value={NONE}

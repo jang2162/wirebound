@@ -66,8 +66,6 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     importPage: notStubbed('importPage'),
     getPage: notStubbed('getPage'),
     patchOps: notStubbed('patchOps'),
-    listPresets: notStubbed('listPresets'),
-    createPreset: notStubbed('createPreset'),
     listModules: notStubbed('listModules'),
     getModule: notStubbed('getModule'),
     createModule: notStubbed('createModule'),

@@ -142,7 +142,7 @@ describe('projectAbilities', () => {
 
   it('ProjectRole 유니온의 모든 값이 대조표에 있고, 열리는 역할은 하나다', () => {
     // **분모를 손으로 적지 않는다** — `EXPECTED`가 `Record<ProjectRole, …>`이므로 이 순회의
-    // 범위가 곧 유니온이다(`panels/type-picker.test.tsx`가 `listComponents()`로 분모를
+    // 범위가 곧 유니온이다(`palette/placeable.test.ts`가 `listComponents()`로 분모를
     // 계산하는 것과 같은 근거).
     for (const [role, abilities] of Object.entries(EXPECTED)) {
       expect(projectAbilities(role as ProjectRole), role).toEqual(abilities)

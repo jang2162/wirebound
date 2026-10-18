@@ -14,7 +14,7 @@
  *
  * ## 목록 — 갈래 탭 · 이름 검색 · 카드
  *
- * 카드는 `+` 의 타입 고르개와 같은 목록이다(`panels/type-picker.tsx` 의 `placeableGroups` — 페이지에 둘 수 있는 타입 · 갈래 차례 · 갈래 안은
+ * 카드는 페이지에 둘 수 있는 타입의 목록이다(`./placeable.ts` 의 `placeableGroups` — 페이지에 둘 수 있는 타입 · 갈래 차례 · 갈래 안은
  * 한국어 이름 차례). 탭이 갈래를 고르고, 검색어가 있으면 갈래를 가리지 않고 한국어 이름 · 영문 타입에 그 글이 든 카드만 선다(대소문자 무시 ·
  * 둘 다 NFC 로 맞춰 견준다 — 자모로 풀어 쓴 입력(NFD)도 같은 이름이다).
  *
@@ -44,7 +44,7 @@ import { usePointerDrag, type DragPoint } from '../drag/use-pointer-drag'
 import { createNode } from '../edit/create-node'
 import { dropOps, type Placing } from '../edit/structure-drop'
 import { useEditCommit } from '../edit/use-edit-commit'
-import { placeableGroups, type PickableGroup, type PickableType } from '../panels/type-picker'
+import { placeableGroups, type PickableGroup, type PickableType } from './placeable'
 import { ShellResizer } from '../shell/shell-resizer'
 import { shellIcon } from '../shell/icons'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'

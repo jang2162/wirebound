@@ -1,7 +1,7 @@
 /**
- * **구조 트리의 줄 행동 · 뿌리 `+` · 끌어 놓기**(`src/panels/structure-tree.tsx` · `src/panels/tree-row-actions.tsx` ·
+ * **구조 트리의 줄 행동 · 끌어 놓기**(`src/panels/structure-tree.tsx` · `src/panels/tree-row-actions.tsx` ·
  * `src/edit/structure-drop.ts`) — jsdom 판. 옛 툴바 케이스를 줄 행동으로 옮긴 판은 `./structure-toolbar.test.tsx` 등이 갖고, 여기는
- * 줄 행동에서 새로 생긴 성질을 잰다: 항목의 차례 · 여는 줄이 먼저 골라진다 · 고르개가 그 줄 아래 선다 · 뿌리 `+` · 끌어 놓기가 내는 편집.
+ * 줄 행동에서 새로 생긴 성질을 잰다: 항목의 차례 · 걷은 넣기 입구가 없다 · 여는 줄이 먼저 골라진다 · 끌어 놓기가 내는 편집.
  *
  * 끌기는 줄 상자에 가짜 자리를 준다(`./menu-row-actions.test.tsx`와 같은 꼴). 잠금이 걸린 끌기는 `../lock/toolbar-abilities.test.tsx`,
  * 실브라우저 판은 `build-test/tree-drag.test.ts`가 잰다.
@@ -11,10 +11,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { PatchOp } from '@wirebound/schema'
 import type { ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
-import { deselect, HEAD_SEQ, openPage, pageDoc, structureTypes } from '../editor-harness'
+import { HEAD_SEQ, openPage, pageDoc, structureTypes } from '../editor-harness'
 import { installPointerEvents } from '../pointer-events'
 import '../../src/catalog-setup'
-import { isOff, pickedRow, rootAction, rowAction, rowToggle, structureRowName, structureRowType } from './tree-row'
+import { isOff, pickedRow, rowAction, rowToggle, structureRowName, structureRowType } from './tree-row'
 
 beforeAll(installPointerEvents)
 afterEach(() => {
@@ -96,30 +96,63 @@ function itemsOf(box: HTMLElement, which: '+' | '…'): string[] {
     .map((item) => item.textContent ?? '')
 }
 
+/** 걷은 넣기 입구의 이름 — 하단 판(컴포넌트 · 모듈 탭)이 넣기를 한다(설계 spec 「B1」). */
+const REMOVED_ENTRANCES = ['안에 추가', '아래 추가', '페이지에 추가', '패턴 넣기', '프리셋']
+
+/** 구조 트리 영역의 행동 메뉴 단추를 전부 열어 항목 이름을 모은다(닫고 나온다). */
+function allTreeItems(): string[] {
+  const names: string[] = []
+  for (const toggle of structureRegion().querySelectorAll<HTMLButtonElement>('[aria-haspopup="menu"]')) {
+    if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
+    const list = document.getElementById(toggle.getAttribute('aria-controls') ?? '')
+    if (list === null) throw new Error('목록이 없다')
+    names.push(
+      ...within(list)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent ?? ''),
+    )
+    fireEvent.click(toggle)
+  }
+  return names
+}
+
 describe('줄 행동의 항목 — spec 「트리」 표', () => {
-  it('노드 줄: `+` 안에 추가 · 아래 추가 · 패턴 넣기, `…` 별칭 바꾸기 · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 상태별로 나누기 · 삭제', async () => {
+  it('노드 줄: `+` 없음, `…` 별칭 바꾸기 · 모듈로 저장… · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 상태별로 나누기 · 삭제', async () => {
     await openPage(doc(), { apiOverrides: server().api })
 
-    expect(itemsOf(row('Card'), '+')).toEqual(['안에 추가', '아래 추가', '패턴 넣기'])
-    expect(itemsOf(row('Card'), '…')).toEqual(['별칭 바꾸기', '위로', '아래로', '들여쓰기', '내어쓰기', '상태별로 나누기', '삭제'])
+    expect(rowToggle(row('Card'), '+')).toBeNull()
+    expect(itemsOf(row('Card'), '…')).toEqual([
+      '별칭 바꾸기',
+      '모듈로 저장…',
+      '위로',
+      '아래로',
+      '들여쓰기',
+      '내어쓰기',
+      '상태별로 나누기',
+      '삭제',
+    ])
   })
 
-  it('뿌리 `+`(제목 줄): 페이지에 추가 · 패턴 넣기 · 프리셋', async () => {
+  it('뿌리 줄: `+` 없음, `…` 에 «모듈로 저장…» 없음 · 제목 줄에 뿌리 `+` 가 없다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
-    const toggle = within(structureRegion()).getByRole('button', { name: '구조 트리에 추가' })
-    expect(toggle.closest('.wb-shell-region-head')).not.toBeNull()
 
-    fireEvent.click(toggle)
-    const list = document.getElementById(toggle.getAttribute('aria-controls') ?? '')!
-    expect(
-      within(list)
-        .getAllByRole('menuitem')
-        .map((item) => item.textContent),
-    ).toEqual(['페이지에 추가', '패턴 넣기', '프리셋'])
+    expect(rowToggle(row('Page'), '+')).toBeNull()
+    expect(itemsOf(row('Page'), '…')).toEqual(['별칭 바꾸기', '위로', '아래로', '들여쓰기', '내어쓰기', '상태별로 나누기', '삭제'])
+    expect(structureRegion().querySelector('.wb-shell-region-head [aria-haspopup="menu"]')).toBeNull()
+  })
+
+  it('트리 어디에도 걷은 넣기 입구가 없다 — 줄마다 메뉴를 열어 접근 이름으로 센다', async () => {
+    await openPage(doc(), { apiOverrides: server().api })
+
+    const names = allTreeItems()
+    // 카나리아 — 줄 여섯(뿌리 + 다섯)의 `…` 가 다 열렸다(줄마다 «삭제» 하나).
+    expect(names.filter((name) => name === '삭제')).toHaveLength(6)
+    expect(names.filter((name) => REMOVED_ENTRANCES.includes(name))).toEqual([])
+    for (const name of REMOVED_ENTRANCES) expect(within(structureRegion()).queryAllByRole('button', { name })).toEqual([])
   })
 })
 
-describe('줄 행동을 열면 그 줄이 먼저 골라진다 · 고르개는 그 줄 아래', () => {
+describe('줄 행동을 열면 그 줄이 먼저 골라진다', () => {
   it('다른 줄의 `…`를 열면 그 줄이 골라지고 항목은 그 줄의 판정이다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
     // 루트가 골라져 시작한다 — 루트의 `위로`는 꺼져 있다.
@@ -129,52 +162,6 @@ describe('줄 행동을 열면 그 줄이 먼저 골라진다 · 고르개는 �
 
     expect(pickedRow(structureRegion())).toBe(row('Divider'))
     expect(isOff(item)).toBe(false)
-  })
-
-  it('`안에 추가` → 타입 고르개가 그 줄(li) 바로 아래 선다 · 고르면 그 안 끝에 들어간다', async () => {
-    const srv = server()
-    await openPage(doc(), { apiOverrides: srv.api })
-
-    fireEvent.click(rowAction(structureRegion(), '안에 추가', row('Card')))
-    const picker = within(structureRegion()).getByRole('group', { name: '타입 고르기' })
-    // 고르개는 Card 줄의 항목(li) 안 · 자식 목록 앞이다.
-    const item = row('Card').parentElement!
-    expect(item.contains(picker)).toBe(true)
-    expect(
-      picker.compareDocumentPosition(within(item).getByRole('button', { name: structureRowName('Button') })) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-
-    fireEvent.click(within(picker).getByRole('button', { name: '추가' }))
-
-    await waitFor(() => expect(srv.calls).toHaveLength(1))
-    expect(srv.calls[0]?.[0]).toMatchObject({ op: 'add', path: '/root/children/1/children/2' })
-  })
-
-  it('뿌리 `+`의 «페이지에 추가» → 뿌리를 골라 그 아래 고르개 → 뿌리 끝에 들어간다', async () => {
-    const srv = server()
-    await openPage(doc(), { apiOverrides: srv.api })
-    fireEvent.click(row('Card').querySelector('button')!)
-
-    fireEvent.click(rootAction(structureRegion(), '페이지에 추가'))
-
-    expect(pickedRow(structureRegion())).toBe(row('Page'))
-    const picker = within(structureRegion()).getByRole('group', { name: '타입 고르기' })
-    expect(row('Page').parentElement!.contains(picker)).toBe(true)
-    fireEvent.click(within(picker).getByRole('button', { name: '추가' }))
-
-    await waitFor(() => expect(srv.calls).toHaveLength(1))
-    expect(srv.calls[0]?.[0]).toMatchObject({ op: 'add', path: '/root/children/3' })
-  })
-
-  it('고른 것이 없으면 패턴 · 프리셋 고르개는 뿌리 줄 아래 선다', async () => {
-    await openPage(doc(), { apiOverrides: server().api })
-    deselect()
-
-    fireEvent.click(rootAction(structureRegion(), '프리셋'))
-
-    const picker = await within(structureRegion()).findByRole('group', { name: '프리셋 고르기' })
-    expect(row('Page').parentElement!.contains(picker)).toBe(true)
   })
 })
 

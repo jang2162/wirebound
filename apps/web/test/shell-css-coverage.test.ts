@@ -130,7 +130,7 @@ const NOT_SEEN: { label: string; source: string }[] = [
  */
 const ALLOWED: { label: string; source: string }[] = [
   {
-    // **이 넷이 진짜로 저장소에 있는 형태다**(`preset-picker`·`pattern-picker`·`type-picker`).
+    // **이것이 저장소에 있는 형태다**(라벨이 `htmlFor`로 가리키는 입력의 id — 지금은 `useId` 로 지어 `wb-shell-` 머리가 없다).
     // `shell.css`가 id 선택자를 금지하므로 여기에 규칙이 있으면 오히려 틀린 것이다.
     label: '`id`·`htmlFor`로 쓰는 이름은 클래스가 아니다',
     source: `<label htmlFor="wb-shell-preset-name" /><select id="wb-shell-preset-name" />`,
@@ -171,11 +171,11 @@ const ALLOWED: { label: string; source: string }[] = [
   // 지켜지는지를 본다. 재는 대상이 `=` 결정이 아니라 **닻의 좁기**다.
   {
     label: '[닻] JSX 속성 뒤에 `htmlFor` 로 온 `wb-shell-…` 이름은 클래스가 아니다',
-    source: `<label className="wb-shell-picker-label" htmlFor="wb-shell-preset-name">이름</label>`,
+    source: `<label className="wb-shell-module-dialog-label" htmlFor="wb-shell-module-save-name">이름</label>`,
   },
   {
     label: '[닻] `id` 가 앞에 와도 클래스로 세지 않는다',
-    source: `<select id="wb-shell-picker-type" className="wb-shell-picker-select" />`,
+    source: `<input id="wb-shell-module-save-input" className="wb-shell-module-dialog-input" />`,
   },
   {
     // 타입 자리(`routes/editor.tsx`·`shell/shell-resizer.tsx`)에 실재하는 형태.

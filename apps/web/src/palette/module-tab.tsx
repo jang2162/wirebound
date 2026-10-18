@@ -8,7 +8,7 @@
  * |---|---|---|
  * | 프로젝트 모듈 | 서버(`GET …/modules` — 탭을 열 때 · 저장 · 이름 · 삭제 뒤에 다시 읽는다. 방송은 없다) | 이름 · 노드 수 · «넣기» · «이름 바꾸기» · «삭제» |
  * | 기본 모듈 | `@wirebound/schema` 의 `BUILTIN_MODULES`(읽기 전용) | 이름 · 노드 수 · «넣기» |
- * | 테마 패턴 | 캔버스가 그리는 테마의 manifest `patterns`(읽기 전용 — `panels/pattern-picker.tsx` 의 `themePatterns`) | 이름 · 범주 · «넣기» |
+ * | 테마 패턴 | 캔버스가 그리는 테마의 manifest `patterns`(읽기 전용 — `./theme-patterns.ts` 의 `themePatterns`) | 이름 · 범주 · «넣기» |
  *
  * 프로젝트 모듈이 하나도 없으면 «구조 트리에서 노드를 골라 '모듈로 저장'» 한 줄이 선다. 판은 편집할 수 있는 사람(editor 이상 · 편집 모드)에게만
  * 서므로(셸 — `routes/editor.tsx`) 이름 바꾸기 · 삭제를 다시 가리지 않는다.
@@ -41,7 +41,6 @@ import { hasPageTargets, pageTargetsOf } from '../edit/paste-ops'
 import type { ExpandedNodes } from '../edit/pattern-insert'
 import type { Placing, StructureDrop } from '../edit/structure-drop'
 import { useEditCommit } from '../edit/use-edit-commit'
-import { themePatterns } from '../panels/pattern-picker'
 import { lockedNotice } from '../panels/property-panel'
 import { DOUBLE_CLICK_MS, DOUBLE_CLICK_SLOP } from '../shell/action-menu'
 import { shellIcon } from '../shell/icons'
@@ -49,6 +48,7 @@ import { openDocumentNow, useEditorStoreInstance } from '../store/use-editor-sto
 import { useProjectTheme } from '../theme/project-theme'
 import { moduleDroppedNotice, moduleInsertOps, type ModuleBundle } from './module-insert'
 import { paletteAddTarget } from './palette-add'
+import { EMPTY_NOTICE, themePatterns } from './theme-patterns'
 
 /** 프로젝트 모듈이 없을 때의 안내 한 줄. */
 export const NO_PROJECT_MODULES = "구조 트리에서 노드를 골라 '모듈로 저장'하면 여기에 섭니다"
@@ -91,7 +91,7 @@ function searchable(text: string): string {
   return text.normalize('NFC').toLowerCase()
 }
 
-/** 패턴 키의 범주(`<범주>.<변형>` 의 앞 — `panels/pattern-picker.tsx` 의 `optionLabel` 과 같은 읽기). */
+/** 패턴 키의 범주 — 설계서 「patterns — 테마가 소유한 구성 레시피」가 패턴 이름을 `<범주>.<변형>` 으로 정했다. 표시일 뿐이다(판정은 `checkPatterns`). */
 function patternCategory(key: string): string {
   return key.includes('.') ? key.slice(0, key.indexOf('.')) : key
 }
@@ -189,7 +189,7 @@ export function ModuleTab(props: {
         {
           label: '테마 패턴',
           cards: patternCards.filter(matches),
-          empty: patterns.broken ?? (patterns.entries.length === 0 ? '이 테마에는 패턴이 없습니다' : '맞는 패턴이 없습니다'),
+          empty: patterns.broken ?? (patterns.entries.length === 0 ? EMPTY_NOTICE : '맞는 패턴이 없습니다'),
           editable: false,
         },
       ]}
