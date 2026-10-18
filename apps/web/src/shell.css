@@ -2485,12 +2485,17 @@
 
 /* 프로젝트 목록의 인라인 폼. 목록 화면은 셸 밖이지만 클래스 접두어는
    `wb-shell-`로 맞춘다 — `test/shell-css.test.ts`가 그 접두어를 기계로 지킨다. */
+/* 만들기 폼(`projects/project-form.tsx`) — 카드 꼴로 목록 위에 연다. */
 .wb-shell-project-form {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: flex-end;
-  margin: 0.75rem 0;
+  margin: 0 0 16px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--wb-shell-chrome);
 }
 
 .wb-shell-project-field {
@@ -2568,9 +2573,130 @@
   letter-spacing: -0.01em;
 }
 
+/* 홈(프로젝트 목록)의 폭 — 카드 격자가 셋까지 선다. 루트는 `.wb-shell-project-list`(팔레트 · 글꼴)이고 같은 특정도라 이 규칙이 뒤에 있어야 이긴다. */
+.wb-shell-home {
+  max-width: 960px;
+}
+
+/* 머리 아래 줄 — 왼쪽 수 · 오른쪽 «새 프로젝트». */
+.wb-shell-home-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 0 0 16px;
+}
+
+.wb-shell-home-count {
+  font-size: 13px;
+  color: var(--wb-shell-muted);
+}
+
+/* 카드 격자 — 칸 하나가 260px 아래로 안 준다(창 700 에서 둘 · 좁으면 하나). `<ul>` 의 UA 표식 · 여백을 지운다. */
+.wb-shell-home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 카드 하나 — 이름 · 설명 · 아래 줄(슬러그 · «설정»). 아래 줄은 `margin-top: auto` 로 카드 바닥에 붙어 줄마다 같은 높이에 선다. */
+.wb-shell-home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 132px;
+  box-sizing: border-box;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 8px;
+  padding: 16px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.wb-shell-home-card:hover {
+  border-color: var(--wb-shell-accent);
+}
+
+/* 이름 — 링크라 밑줄을 지운다. 끊을 자리 없는 긴 이름도 카드 안에서 접힌다. */
+.wb-shell-home-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--wb-shell-ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-home-name:hover {
+  color: var(--wb-shell-accent);
+}
+
+/* 설명 — 두 줄까지(넘치면 말줄임). */
+.wb-shell-home-desc {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--wb-shell-muted);
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-home-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.wb-shell-home-slug {
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 빈 목록 — 점선 상자 가운데에 그림 · 안내 · 보조 글. */
+.wb-shell-home-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: 1px dashed var(--wb-shell-line);
+  border-radius: 8px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.wb-shell-home-empty-icon {
+  box-sizing: content-box;
+  padding: 14px;
+  border-radius: 50%;
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-accent);
+}
+
+.wb-shell-home-empty-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--wb-shell-muted);
+}
+
 /* 새 프로젝트. 이 화면에서 새로 만드는 동작이 하나뿐이라 색을 갖는다 — 코멘트 탭의
-   `코멘트 달기`와 같은 판단이다. */
+   `코멘트 달기`와 같은 판단이다. `+` 그림과 글이 한 줄이다. */
 .wb-shell-project-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   appearance: none;
   border: 1px solid var(--wb-shell-accent);
   border-radius: 4px;
@@ -3985,6 +4111,9 @@
   color: var(--wb-shell-accent);
   text-decoration: none;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* ── 프로젝트 설정(`routes/settings.tsx`) ─────────────────────────────────────────────────
