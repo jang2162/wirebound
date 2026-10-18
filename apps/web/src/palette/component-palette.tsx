@@ -6,9 +6,15 @@
  * «하단 판의 높이»)으로 이 부품을 그리거나 안 그린다. 여기는 그 높이를 위쪽 손잡이(`ShellResizer` · `orientation="horizontal"`)로 나른다 —
  * 위로 끌면 판이 커지므로 `reversed` 다.
  *
+ * ## 위층 탭 — «컴포넌트 | 모듈»
+ *
+ * 판 머리의 첫 탭 줄이 판의 내용을 고른다 — «컴포넌트»(아래 갈래 탭 · 검색 · 카드)와 «모듈»(`./module-tab.tsx`). 하단 바의 여는 단추는 하나다.
+ * **마지막에 고른 탭은 브라우저 저장소에 기억한다**(사람 · 탭마다 — `localStorage` 의 `PALETTE_VIEW_KEY`). 읽기 · 쓰기가 던지면(사생활 창 · 막힌
+ * 저장소) 기억 없이 «컴포넌트»로 선다 — 기억은 편의다. 검색 칸은 탭마다 따로다(한쪽의 검색어가 다른 쪽을 거르지 않는다).
+ *
  * ## 목록 — 갈래 탭 · 이름 검색 · 카드
  *
- * 카드는 `+` 의 타입 고르개와 같은 목록이다(`panels/type-picker.tsx` 의 `placeableGroups` — 페이지에 둘 수 있는 타입 · 갈래 차례 · 갈래 안은
+ * 카드는 페이지에 둘 수 있는 타입의 목록이다(`./placeable.ts` 의 `placeableGroups` — 페이지에 둘 수 있는 타입 · 갈래 차례 · 갈래 안은
  * 한국어 이름 차례). 탭이 갈래를 고르고, 검색어가 있으면 갈래를 가리지 않고 한국어 이름 · 영문 타입에 그 글이 든 카드만 선다(대소문자 무시 ·
  * 둘 다 NFC 로 맞춰 견준다 — 자모로 풀어 쓴 입력(NFD)도 같은 이름이다).
  *
@@ -29,7 +35,7 @@
  * - **이름은 «추가»가 아니라 «넣기»다** — 구조 트리 줄의 `+` 가 `<이름> 추가`(`panels/tree-row-actions.tsx`)라, playwright 의
  *   `getByRole(…, { name })`(부분 일치)이 «버튼 추가» 하나로 두 단추를 함께 잡는다.
  */
-import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { COMPONENT_GROUP_LABELS, type ComponentGroup } from '@wirebound/schema'
 import { dragDebug, round } from '../drag/drag-debug'
 import { DropIndicator } from '../drag/drop-indicator'
@@ -38,16 +44,46 @@ import { usePointerDrag, type DragPoint } from '../drag/use-pointer-drag'
 import { createNode } from '../edit/create-node'
 import { dropOps, type Placing } from '../edit/structure-drop'
 import { useEditCommit } from '../edit/use-edit-commit'
-import { placeableGroups, type PickableGroup, type PickableType } from '../panels/type-picker'
+import { placeableGroups, type PickableGroup, type PickableType } from './placeable'
 import { ShellResizer } from '../shell/shell-resizer'
 import { shellIcon } from '../shell/icons'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
+import { ModuleTab } from './module-tab'
 import { paletteAddTarget } from './palette-add'
 import { DOUBLE_CLICK_MS, DOUBLE_CLICK_SLOP } from '../shell/action-menu'
 import { PaletteThumbs, type ThumbSlot } from './palette-thumbs'
 
 /** 판의 id — 하단 바의 토글이 `aria-controls` 로 가리킨다. */
 export const PALETTE_ID = 'wb-shell-palette'
+
+/** 판의 위층 탭 — 머리말 «위층 탭». */
+export type PaletteView = 'components' | 'modules'
+
+/** 마지막에 고른 위층 탭을 기억하는 저장소 열쇠. */
+export const PALETTE_VIEW_KEY = 'wb.palette.view'
+
+const VIEWS: readonly { view: PaletteView; label: string }[] = [
+  { view: 'components', label: '컴포넌트' },
+  { view: 'modules', label: '모듈' },
+]
+
+/** 기억한 탭 — 못 읽으면(던짐 · 없음 · 모르는 값) «컴포넌트». */
+export function readPaletteView(): PaletteView {
+  try {
+    return window.localStorage.getItem(PALETTE_VIEW_KEY) === 'modules' ? 'modules' : 'components'
+  } catch {
+    return 'components'
+  }
+}
+
+/** 고른 탭을 적는다 — 던지면 안 적는다(기억은 편의다). */
+function writePaletteView(view: PaletteView): void {
+  try {
+    window.localStorage.setItem(PALETTE_VIEW_KEY, view)
+  } catch {
+    // 막힌 저장소 — 이 판의 고름은 그대로 서고 다음 판에 기억하지 않는다.
+  }
+}
 
 export function ComponentPalette(props: {
   projectId: string
@@ -106,14 +142,83 @@ export function rovingStep(key: string, index: number, count: number): number | 
 function PaletteBody(props: { projectId: string; pageId: string | undefined }): ReactElement {
   // 카탈로그는 실행 중에 안 바뀐다 — 고르개와 같이 한 번만 센다.
   const groups = useMemo(placeableGroups, [])
+  const [view, setView] = useState<PaletteView>(readPaletteView)
   const [group, setGroup] = useState<string>(() => groups[0]?.group ?? '')
   const [query, setQuery] = useState('')
+  const [moduleQuery, setModuleQuery] = useState('')
   const store = useEditorStoreInstance()
   const selected = useEditorStore(store, (s) => s.selectedNodeId)
-  /** 거절 문장과 그것을 세운 판(머리말 «카드»). */
-  const [notice, setNotice] = useState<{ text: string; pageId: string | undefined; selected: string | null } | null>(null)
-  if (notice !== null && (notice.pageId !== props.pageId || notice.selected !== selected)) setNotice(null)
+  /** 거절 문장과 그것을 세운 판(머리말 «카드»). 위층 탭을 바꾸면 걷는다. */
+  const [notice, setNotice] = useState<{ text: string; pageId: string | undefined; selected: string | null; view: PaletteView } | null>(
+    null,
+  )
+  if (notice !== null && (notice.pageId !== props.pageId || notice.selected !== selected || notice.view !== view)) setNotice(null)
   const tabRefs = useRef(new Map<string, HTMLButtonElement>())
+  const viewRefs = useRef(new Map<PaletteView, HTMLButtonElement>())
+  const onNotice = useCallback(
+    (text: string) => setNotice(text === '' ? null : { text, pageId: props.pageId, selected: store.getState().selectedNodeId, view }),
+    [props.pageId, store, view],
+  )
+
+  const pickView = (next: PaletteView): void => {
+    setView(next)
+    writePaletteView(next)
+  }
+  const moveView = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
+    const next = rovingStep(event.key, index, VIEWS.length)
+    if (next === null) return
+    event.preventDefault()
+    const target = VIEWS[next]!
+    pickView(target.view)
+    viewRefs.current.get(target.view)?.focus()
+  }
+  const viewTabs = (
+    <div className="wb-shell-palette-tabs wb-shell-palette-views" role="tablist" aria-label="목록 종류">
+      {VIEWS.map((entry, index) => (
+        <button
+          key={entry.view}
+          ref={(element) => {
+            if (element === null) viewRefs.current.delete(entry.view)
+            else viewRefs.current.set(entry.view, element)
+          }}
+          type="button"
+          role="tab"
+          className="wb-shell-palette-tab"
+          aria-selected={entry.view === view}
+          tabIndex={entry.view === view ? 0 : -1}
+          onClick={() => pickView(entry.view)}
+          onKeyDown={(event) => moveView(event, index)}
+        >
+          {entry.label}
+        </button>
+      ))}
+    </div>
+  )
+  const noticeLine = (
+    <p className="wb-shell-palette-notice" role="status" data-wb-palette-notice="">
+      {notice?.text ?? ''}
+    </p>
+  )
+
+  if (view === 'modules') {
+    return (
+      <>
+        <div className="wb-shell-palette-head">
+          {viewTabs}
+          <input
+            type="search"
+            className="wb-shell-palette-search"
+            aria-label="모듈 찾기"
+            placeholder="이름으로 찾기"
+            value={moduleQuery}
+            onChange={(event) => setModuleQuery(event.target.value)}
+          />
+          {noticeLine}
+        </div>
+        <ModuleTab projectId={props.projectId} pageId={props.pageId} onNotice={onNotice} query={moduleQuery} />
+      </>
+    )
+  }
 
   const types = query.trim() === '' ? (groups.find((entry) => entry.group === group)?.types ?? []) : matching(groups, query)
 
@@ -130,6 +235,7 @@ function PaletteBody(props: { projectId: string; pageId: string | undefined }): 
   return (
     <>
       <div className="wb-shell-palette-head">
+        {viewTabs}
         <div className="wb-shell-palette-tabs" role="tablist" aria-label="갈래">
           {groups.map((entry, index) => (
             <button
@@ -158,16 +264,9 @@ function PaletteBody(props: { projectId: string; pageId: string | undefined }): 
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <p className="wb-shell-palette-notice" role="status" data-wb-palette-notice="">
-          {notice?.text ?? ''}
-        </p>
+        {noticeLine}
       </div>
-      <PaletteCards
-        projectId={props.projectId}
-        pageId={props.pageId}
-        types={types}
-        onNotice={(text) => setNotice(text === '' ? null : { text, pageId: props.pageId, selected: store.getState().selectedNodeId })}
-      />
+      <PaletteCards projectId={props.projectId} pageId={props.pageId} types={types} onNotice={onNotice} />
     </>
   )
 }
@@ -262,10 +361,11 @@ function PaletteCards(props: {
     if (repeatsLastAdd(type, event)) return
     const document = openDocumentNow(store, props.pageId)
     if (document === null) return
+    const placing: Placing = { kind: 'new', type }
     const verdict = paletteAddTarget({
       document,
       selectedNodeId: store.getState().selectedNodeId,
-      type,
+      placing,
       blockedBy: store.editBlockedBy,
       lockedBy: store.lockedBy,
     })
@@ -274,7 +374,6 @@ function PaletteCards(props: {
       return
     }
     props.onNotice('')
-    const placing: Placing = { kind: 'new', type }
     const node = createNode(type)
     if (node === null) return
     if (commitOps(dropOps(document, placing, verdict.target, node))) {

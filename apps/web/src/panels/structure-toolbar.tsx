@@ -1,50 +1,24 @@
 /**
- * 구조 트리의 **조작 묶음**(`useStructureCommands`)과 **고르개 자리**(`StructurePicker`). 조작의 입구는 트리 줄의 `+` · `…`
- * (`panels/tree-row-actions.tsx`) · 트리 제목 줄의 뿌리 `+` · 끌어 놓기 · 키보드 단축키(에디터 단축키 `shell/editor-keys.tsx` · 트리 상자의
- * 고르개 단축키 `panels/structure-tree.tsx`의 `TREE_SHORTCUTS`)다 —
- * 전부 이 파일의 명령을 부른다. 파일 이름의 «툴바»는 그 입구들이 한 줄 툴바였던 자리의 이름이다.
+ * 구조 트리의 **조작 묶음**(`useStructureCommands`). 조작의 입구는 트리 줄의 `…`(`panels/tree-row-actions.tsx`) · 끌어 놓기 · 키보드 단축키(에디터
+ * 단축키 `shell/editor-keys.tsx`)다 — 전부 이 파일의 명령을 부른다. 파일 이름의 «툴바»는 그 입구들이 한 줄 툴바였던 자리의 이름이다.
  *
- * **조작이 두 부류다.**
+ * **노드를 넣는 입구는 여기 없다** — 넣기는 하단 판(컴포넌트 · 모듈 카드 — `palette/`)과 붙여넣기 · 복제가 한다(설계 spec
+ * `2026-10-18-modules-states-layout-design.md` 「B1」). 그 둘이 쓰는 판정(`StructureAbilities.addInside` · `addAfter`)은 판정 표에 남는다.
  *
- * | 부류 | 무엇 | 판정 |
- * |---|---|---|
- * | 선택 노드 하나에 작동하는 것 | 추가·삭제·순서·계층 | `structureAbilities`가 정하고 항목의 끔이 따라간다 |
- * | **선택이 없어도 되는 것** | `패턴 넣기` · `프리셋` | **판정이 없다** — 걸 `ability`가 없어 `patternLocked` · `presetLocked`만 본다 |
+ * **판정은 여기 없다.** 무엇을 할 수 있는지는 `edit/structure-actions.ts`의 `structureAbilities`가 정하고, 이 파일은 그 결과를 줄 행동에 넘길
+ * 뿐이다. 판정이 컴포넌트 안으로 들어오면 케이스가 화면을 지나야만 재지고, 단축키가 자기 조건을 따로 갖게 된다.
  *
- * 뒤 부류가 판정을 갖지 않는 까닭은 각각 — 패턴은 선택이 없으면 root의 자식 끝에 꽂고,
- * 프리셋은 페이지 통째라 자리를 아예 고르지 않는다. 단축키 쪽도 같은 성질을 지나므로
- * 그 표에서 둘은 `StructureAbilities`가 아니라 `patternLocked`·`presetLocked`를 본다
- * (`panels/structure-tree.tsx`의 `TREE_SHORTCUTS`).
+ * **이 파일은 오류 경계 밖이다** — 구조 트리와 같은 자리다(`panels/node-shape.ts` 머리말). 던지면 셸 전체가 흰 화면이므로, 여기서 부르는 것들은
+ * 값으로 답해야 한다.
  *
- * **판정은 여기 없다.** 무엇을 할 수 있는지는 `edit/structure-actions.ts`의
- * `structureAbilities`가 정하고, 이 파일은 그 결과를 줄 행동에 넘길 뿐이다.
- * 판정이 컴포넌트 안으로 들어오면 케이스가 화면을 지나야만 재지고, 단축키가
- * 자기 조건을 따로 갖게 된다.
- *
- * **고르개에는 타이핑하는 칸이 있다**(프리셋 이름). 고르개는 트리 줄 아래 · 키 핸들러가 붙은 상자 안에 서므로, 거기서 난 키가
- * 구조 조작으로 새지 않게 하는 규칙이 그 상자에 있다 — `structure-tree.tsx`의 `isTypingSurface`이고, 그것이 없으면 이름 칸의
- * `Backspace`가 노드를 지운다.
- *
- * **이 파일은 오류 경계 밖이다** — 구조 트리와 같은 자리다(`panels/node-shape.ts`
- * 머리말). 던지면 셸 전체가 흰 화면이므로, 여기서 부르는 것들은 값으로 답해야 한다.
- *
- * **"깨진 문서에도 던지지 않는다"의 전제는 이것이다:** `structureAbilities`·`nodeSpot`·`ops`
- * 생성기 넷이 전부 `walkSafely`(`edit/safe-walk.ts`)를 지나고, 그것이 노드가 아닌 값을
- * 순회에서 뺀다. `@wirebound/schema`의 `walkNodes`를 여기서 다시 쓰면 그 전제가 깨진다 —
- * `children` 배열 안의 `null` 원소 같은 것에서 던진다.
- *
- * **완전하다고는 적지 않는다** — 잰 것은 그 반례 부류(배열 원소가 노드가 아닌 경우)와
- * 몇 가지 깨진 형태까지다.
+ * **"깨진 문서에도 던지지 않는다"의 전제는 이것이다:** `structureAbilities`·`nodeSpot`·`ops` 생성기가 전부 `walkSafely`(`edit/safe-walk.ts`)를
+ * 지나고, 그것이 노드가 아닌 값을 순회에서 뺀다. `@wirebound/schema`의 `walkNodes`를 여기서 다시 쓰면 그 전제가 깨진다 — `children` 배열 안의
+ * `null` 원소 같은 것에서 던진다. **완전하다고는 적지 않는다** — 잰 것은 그 반례 부류(배열 원소가 노드가 아닌 경우)와 몇 가지 깨진 형태까지다.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
-import type { NodeLock, PatchOp, ViewState, WbNode } from '@wirebound/schema'
-import { expandPattern, type ThemePattern } from '@wirebound/themes'
-import { addAbilitiesUnderLock } from '../edit/add-abilities'
+import { useEffect, useState } from 'react'
+import type { NodeLock, PatchOp } from '@wirebound/schema'
 import { useEditCommit } from '../edit/use-edit-commit'
-import { createNode } from '../edit/create-node'
-import { aliasOps, insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops'
-import { patternInsert } from '../edit/pattern-insert'
-import { presetApply, presetFailureNotice } from '../edit/preset-apply'
+import { aliasOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { reselectAfterReject } from '../edit/reselect-after-reject'
 import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, regionRulesAt, selectionAbilities, type StructureAbilities } from '../edit/structure-actions'
@@ -58,12 +32,9 @@ import {
   type UnsplitShown,
 } from '../edit/view-state-actions'
 import { useViewState } from '../shell/use-view-state'
-import { droppedCasesNotice, removeManyOps } from '../edit/paste-ops'
+import { removeManyOps } from '../edit/paste-ops'
 import type { StructureDrop } from '../edit/structure-drop'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import { PatternPicker } from './pattern-picker'
-import { PresetPicker } from './preset-picker'
-import { TypePicker } from './type-picker'
 import { lockedNotice } from './property-panel'
 import { lockedSelectionStatus, structureWhy, type StructureReasonInput, type StructureWhy } from './toolbar-status'
 
@@ -80,30 +51,6 @@ import { lockedSelectionStatus, structureWhy, type StructureReasonInput, type St
  */
 export interface StructureCommands {
   abilities: StructureAbilities
-  /**
-   * `패턴 넣기`가 남의 잠금에 막혔는가.
-   *
-   * **`abilities`에 키를 만들지 않는다**(`panels/structure-tree.tsx`의
-   * `TREE_SHORTCUTS` 주석) — `structureAbilities`는 선택이 없으면 `NOTHING`을 내는데 패턴은
-   * **선택이 없어도 되는 조작**이라, 그 표에 넣으면 정확히 그 상태에서만 죽는다.
-   *
-   * **대신 «꽂힐 자리»의 잠금을 지난다.** 패턴이 꽂히는 자리는 고른 노드가 정하고
-   * (`edit/pattern-insert.ts`의 `insertSpot`), 고른 것이 없으면 **루트의 자식 끝**이다.
-   * 그래서 이 값은 선택이 있으면 `selectedLock`, 없으면 `pageLock`이다 — **일곱과 같은
-   * 규칙이다**(*"고를 수 없는 자리는 바꿀 수 없다"*). 잠금을 지나지 않으면 잠긴 노드를 고른 채
-   * 누를 때 `add …/children/2`가 나가 **423**을 받고, 낙관적 적용이 붙었다 사라지며
-   * *"편집 1개가 취소됐습니다"*가 뜬다(실측) — `structureAbilities`가 없애려는 바로 그 모양이다.
-   */
-  patternLocked: boolean
-  /**
-   * `프리셋`이 남의 잠금에 막혔는가. **잠금이 하나라도 있으면 참이다**(`pageLock`).
-   *
-   * 패턴과 갈리는 이유: 프리셋의 op은 `replace /root/children` **하나**이고
-   * (`edit/preset-apply.ts`) 그 포인터는 문서 안 모든 노드의 조상이다. 그래서 이 페이지에
-   * 남의 잠금이 하나라도 살아 있으면 **언제나** 부딪친다 — 과차단이 아니라 서버 판정과
-   * 같은 값이다(실측: `replace /root/children` → **423**).
-   */
-  presetLocked: boolean
   /**
    * 꺼진 항목마다의 이유 — 줄 행동이 꺼진 항목의 `title` · `aria-description`으로 싣는다(`./tree-row-actions.tsx`). 켜진 항목은 `undefined`다.
    *
@@ -122,29 +69,6 @@ export interface StructureCommands {
   indent: () => void
   outdent: () => void
   /**
-   * 고르개를 연다. 실제 추가는 `pick`(타입)·`pickPattern`(패턴)이 한다.
-   *
-   * **`'pattern'`이 `'inside'`·`'after'`와 같은 상태에 있는 것이 의도다** — 고르개 둘이
-   * 동시에 열리면 좁은 좌측 패널에 목록 두 개가 쌓이고, 어느 쪽 `추가`를 눌렀는지가
-   * 흐려진다. 상태가 하나면 그 경우가 성립하지 않는다.
-   */
-  openAdd: (where: OpenPicker) => void
-  /** 고르개가 열려 있으면 무엇을 고르는 중인지. 닫혀 있으면 `null`. */
-  adding: OpenPicker | null
-  pick: (type: string) => void
-  /**
-   * 고른 패턴을 전개해 꽂는다. **자리 규칙과 검증은 `edit/pattern-insert.ts`가 갖는다** —
-   * 판정이 컴포넌트 안으로 들어오면 케이스가 화면을 지나야만 재진다(판정을 `structureAbilities`에 두는 것과 같은 이유).
-   */
-  pickPattern: (key: string, pattern: ThemePattern) => void
-  /**
-   * 고른 프리셋을 놓는다. **자리 규칙이 없다** — 페이지 통째라 답이
-   * *"어디에 꽂나"*가 아니라 *"무엇을 치우고 놓나"*다. 판정과 op 만들기는
-   * `edit/preset-apply.ts`가 갖는다(`pickPattern`과 같은 이유).
-   */
-  applyPreset: (nodes: WbNode[], viewStates: readonly ViewState[]) => void
-  cancelAdd: () => void
-  /**
    * **끌어 놓은 자리로 옮긴다**(`edit/structure-drop.ts`의 `structureDropTarget`이 준 자리). 선택이 아니라 끈 노드에 대해 돈다 —
    * 끌기는 줄을 고르지 않는다(`drag/use-pointer-drag.ts` «끈 뒤의 클릭을 삼킨다»). 편집은 `moveNodeOps` 하나 — 위로 · 들여쓰기가
    * 내는 것과 같은 종류다(spec 「드래그로 옮기기」 — 드래그만의 새 편집 종류를 만들지 않는다).
@@ -152,8 +76,8 @@ export interface StructureCommands {
   dropTo: (nodeId: string, target: StructureDrop) => void
   /**
    * 별칭을 고칠 수 없는가 — 하나를 고르지 않았거나(여럿 · 없음) · 고른 노드가 문서에 없거나 · 남이 잡았다(`selectedLock`). 줄 `…`
-   * «별칭 바꾸기»의 끔 · 더블클릭 · F2 가 같은 값을 지난다. `abilities`에 키를 두지 않는 까닭은 `patternLocked`와 같다 — 그 표는
-   * 구조(자리)의 판정이고 별칭은 자리와 무관하다.
+   * «별칭 바꾸기»의 끔 · 더블클릭 · F2 가 같은 값을 지난다. `abilities`에 키를 두지 않는 까닭은 그 표가 구조(자리)의 판정이고 별칭은 자리와
+   * 무관하기 때문이다.
    */
   aliasLocked: boolean
   /**
@@ -197,126 +121,6 @@ export interface ViewStateCommands {
   removeCase: () => void
 }
 
-/**
- * 열려 있는 고르개. **넷이 한 상태에 있는 것이 의도다** — 고르개 둘이 동시에 열리면 좁은
- * 좌측 패널에 목록이 쌓이고 어느 쪽 버튼을 눌렀는지가 흐려진다(`openAdd`의 주석과 같은
- * 근거).
- */
-export type OpenPicker = 'inside' | 'after' | 'pattern' | 'preset'
-
-/**
- * **지금 그려도 되는 고르개.** 닫혀 있거나 **그 조작이 지금 막혔으면** `null`이다.
- *
- * # 왜 «열려 있는가»와 «그려도 되는가»를 가르나
- *
- * 고르개를 연 **뒤에** 조건이 바뀔 수 있다 — 남이 그 자리를 잠그는 것이 그 창이다.
- * 목록을 그대로 남겨 두면 사용자가 그 안의 `추가`를 눌러 편집을 내고, **회색으로 만든
- * 버튼을 우회한다.** 실측(패턴): 잠긴 노드를 고른 채 목록을 열어 두고 잠금이 도착한 뒤
- * 꽂으면 `add …/children/2`가 나가 **423**을 받고 낙관적 적용이 붙었다 사라진다.
- * **타입 고르개도 같은 값이다** — `안에 추가`로 연 뒤 잠금이 오면 목록이 남고,
- * 거기서 고르면 같은 포인터로 같은 423을 받는다.
- *
- * # 셋이 한 자리에 있는 것이 요점이다
- *
- * 조건은 고르개마다 다르다(아래 표). 그것을 렌더에 흩어 두면 **닫아야 할 창이 셋인데
- * 닫힌 것은 둘**인 상태가 생긴다. 여기 한 자리에 두면
- * 고르개가 늘 때 그 자리가 보인다.
- *
- * | 고르개 | 그려도 되는 조건 | 그 조건이 잠금을 어떻게 보나 |
- * |---|---|---|
- * | `'inside'` | `abilities.addInside` | `edit/add-abilities.ts` — 넣는 편집이 남의 잠금에 부딪히나 |
- * | `'after'` | `abilities.addAfter` | 같음 — 고른 노드의 잠금도 먼저 본다 |
- * | `'pattern'` | `!patternLocked` | 꽂힐 자리의 잠금(고른 노드 · 없으면 루트) |
- * | `'preset'` | `!presetLocked` | 페이지에 남의 잠금이 하나라도 |
- *
- * # `adding`은 비우지 않는다 — 그리고 고르개 «안»은 **한 칸만** 살아남는다
- *
- * 조건이 풀리면 **어느 고르개가 열려 있었는지**가 그대로 돌아온다(`adding`을 비우지
- * 않는 것이 그것이다). **그 안에서 고르던 것은 대부분 안 돌아온다** — 조건이 거짓인 동안
- * 컴포넌트가 DOM에서 빠지므로 그 `useState`가 함께 사라진다. **예외가 하나 있다:
- * 프리셋 이름칸의 글자는 `StructureTree`가 들어서 살아남는다**(아래 «두 축»).
- *
- * **«잠깐 잠긴 사이에 사용자가 고르던 것을 잃지 않는다»고 적지 않는다 — 거짓이다.** 셋을 열어
- * 놓고 잠금을 오갔다 오게 해 재면(`test/lock/toolbar-abilities.test.tsx`가 이 표를 케이스로 든다):
- *
- * | 고르개 | 잠금 전 | 잠금이 풀린 뒤 |
- * |---|---|---|
- * | 타입 | `Flex`를 골랐다 · 설명 줄도 그 타입 | **`Grid`**(목록 첫 항목) · 설명 줄도 함께 되돌아간다 |
- * | 프리셋 | 이름칸에 `회원 목록 기본`을 쳤다 · `builtin:detail`을 골랐다 | **이름칸은 그대로 있다** · 고른 것은 **`builtin:search-list`**(첫 항목) |
- * | 패턴 | — | 잰 테마의 패턴이 하나뿐이라 갈리는 값이 안 나온다 |
- *
- * **이름칸을 트리가 들지 않으면 표의 가운뎃줄이 *"이름칸이 빈다"*가 된다.** 사용자가 «친» 글자가
- * 사라지는 것이 셋 중 가장 나쁜 손실이다.
- *
- * # 두 축을 가른다 — **친 글자는 살리고, 고른 것은 되돌아간다**
- *
- * 1. **이름칸은 살린다.** 그 문자열 하나만 `StructureTree`가 들고 `PresetPicker`에
- *    내려 준다(고르개가 빠져 있는 동안에도 트리는 그대로 마운트돼 있다).
- *
- *    **근거: 친 글자는 사용자 자신의 것이고 문서와 무관해 낡을 수가 없다.** 아래 «쓰지
- *    않는 근거»가 말하는 «낡는다»가 이 축에는 아예 성립하지 않는다. 그리고 **비용이 없다** —
- *    뷰 컴포넌트가 문자열 하나를 드는 것이라 **명령 층은 폼을 안 들고**, 목록은 그대로
- *    DOM에서 빠지므로 **위 «왜 가르나»의 우회로(목록으로 회색 버튼을 우회)도 안 열린다.**
- *    실패 방향이 안 바뀐다(그 케이스의 `expect(view.calls).toEqual([])`가 그대로 참이다).
- * 2. **«타입»과 «고른 프리셋»은 되돌아간다 — 그대로 둔다.** 그 둘은 사용자가 친 것이
- *    아니라 **«지금 꽂을 수 있는 것»에서 고른 것**이고, 잠금이 오간 뒤 그 목록이 같다는
- *    보장이 없다. 초기값으로 돌아가는 것이 방어 가능한 실패다. 그리고 이쪽은 **싼 길이
- *    실증되지 않았다** — 살리려면 목록을 DOM에 남기거나(위 우회로) 고르개의
- *    상태를 더 들어야 한다. 값이 작고 위험이 크다.
- *
- * # 축 2를 살리지 않는 근거 — **길은 둘이 아니라 셋이다**
- *
- * *"상태를 살리는 길은 둘인데 하나는 위 우회로를 다시 열고 다른 하나는 명령 층이 폼을 들게
- * 된다"*는 틀은 **셋째 길**(위 1번)을 빠뜨린다. *"안전한 실패를 안전하지 않은 실패로 바꾼다"*는
- * 진단은 **그 길에는 해당하지 않는다.**
- *
- * 그래서 아래 근거는 **축 2에 대해서만** 선다:
- *
- * 1. **실패 방향을 바꾸게 된다.** 지금 잃는 것은 «고르던 자리»뿐이고 **틀린 편집은 한
- *    건도 안 나간다**(그것이 이 함수가 존재하는 이유다 — 위의 실측 423). 축 2를 살리는
- *    길은 목록을 DOM에 남기거나 고르개의 상태를 끌어올리는 것인데, 앞엣것은 위
- *    우회로를 다시 연다. **안전한 실패를 고치려다 안전하지 않은 실패가 가능한 설계로
- *    바꾸지 않는다.**
- * 2. 이 창은 **남이 내 편집 자리를 잡았다 놓는 동안**만 열린다.
- *
- * # 쓰지 않는 근거 — **«잠금이 풀렸으면 고르던 것이 낡는다»는 전제가 거짓이다**
- *
- * *"잠금이 풀렸다는 것은 남이 그 사이에 **편집을 끝냈다**는 뜻이라 프리셋의 덮어쓰기 확인 수와
- * 고른 자리의 카탈로그 제약이 낡는다"*는 잃는 것을 정당화하는 근거로 쓰지 않는다.
- *
- * **잠금은 «편집»이 아니라 «선택»으로 잡힌다.** `realtime/use-node-lock.ts`의 이펙트가
- * `selectedNodeId`가 바뀔 때마다 `channel.hold(pageId, holdId)`를 보낸다 — 남이 노드를
- * 눌러 보고 다른 데를 누르면 **편집 0건으로 잠금이 오갔다 온다.** 그 판에서는 낡는 것이
- * 하나도 없다. **`test/lock/toolbar-abilities.test.tsx`의 두 케이스가 정확히 그 판이다**
- * (`view.lock([foreign]) → view.lock([])`, 문서는 한 바이트도 안 바뀐다).
- *
- * 편집이 실제로 있었던 판에서 그 말이 참인 것은 맞지만, **잃는 것을 정당화하는 근거로는
- * 서지 않는다.** 낡을 수 있는 것은 «고른 자리»(카탈로그 제약)와 «확인 수»뿐인데 둘 다
- * 눈앞의 목록에서 다시 고르면 되고, 확인 수는 고르개가 다시 뜰 때 어차피 새로 조회된다.
- * 그리고 **가장 나쁜 손실인 «친 글자»는 문서와 무관해 어느 판에서도 안 낡는다.**
- *
- * 판단은 앞 절의 두 근거만으로 선다.
- *
- * `test/lock/toolbar-abilities.test.tsx`가 위 표를 케이스로 든다 — **축 둘이 각각 한
- * 케이스다.** 판단이 바뀌면 그 케이스와 이 절을 함께 고쳐야 한다.
- *
- * **판정을 새로 짓지 않는다** — 넷 다 `useStructureCommands`가 이미 낸 값을 읽을 뿐이다.
- */
-export function visiblePicker(commands: StructureCommands): OpenPicker | null {
-  switch (commands.adding) {
-    case 'inside':
-      return commands.abilities.addInside ? 'inside' : null
-    case 'after':
-      return commands.abilities.addAfter ? 'after' : null
-    case 'pattern':
-      return commands.patternLocked ? null : 'pattern'
-    case 'preset':
-      return commands.presetLocked ? null : 'preset'
-    default:
-      return null
-  }
-}
-
 export function useStructureCommands(props: {
   projectId: string
   pageId: string | undefined
@@ -342,12 +146,9 @@ export function useStructureCommands(props: {
    */
   selectedLock: NodeLock | null
   /**
-   * **이 페이지에 남의 잠금이 하나라도 있는가** — `store.lockedBy(document.root.id)`가 낸
-   * 값이다. 루트는 문서 안 모든 노드의 조상이므로 그 물음이 곧 *"살아 있는 남의 잠금이
-   * 있나"*이고, **판정을 새로 짓지 않고** 같은 `lockedBy` 한 벌로 답한다.
-   *
-   * 이것을 쓰는 것은 판정 밖의 둘뿐이다 — `프리셋`은 언제나, `패턴 넣기`는 **고른 것이
-   * 없을 때**(그때 꽂힐 자리의 부모가 루트다). 일곱은 `selectedLock`만 본다.
+   * **이 페이지에 남의 잠금이 하나라도 있는가** — `store.lockedBy(document.root.id)`가 낸 값이다. 루트는 문서 안 모든 노드의 조상이므로 그 물음이
+   * 곧 *"살아 있는 남의 잠금이 있나"*이고, **판정을 새로 짓지 않고** 같은 `lockedBy` 한 벌로 답한다. 쓰는 자리는 꺼진 항목의 이유 하나다
+   * (`./toolbar-status.ts` 머리말 «안 골랐다 칸»).
    */
   pageLock: NodeLock | null
 }): StructureCommands {
@@ -377,165 +178,7 @@ export function useStructureCommands(props: {
   const otherLock = many ? (selectedNodeIds.map((id) => store.lockedBy(id)).find((lock) => lock !== null) ?? null) : null
   const removable = many && document !== null && removeManyOps(document, selectedNodeIds) !== null
   const selectionBased = selectionAbilities(document, selectedNodeIds, selectedNodeId, props.selectedLock, otherLock !== null, removable)
-  // «안에 추가» · «아래 추가» 는 고른 노드의 잠금이 아니라 **넣는 편집이 부딪히나** 로 가른다(카드 «넣기» 와 같은 물음 — `edit/add-abilities.ts`).
-  const adds =
-    document === null || selectedNodeId === null
-      ? null
-      : addAbilitiesUnderLock(document, selectedNodeId, props.selectedLock, store.editBlockedBy)
-  const abilities = adds === null ? selectionBased : { ...selectionBased, addInside: adds.addInside, addAfter: adds.addAfter }
-  // **판정 밖의 둘도 잠금을 지난다.** 어느 잠금을 지나는지는 각각의 필드 주석에 있다 —
-  // 여기서 하는 것은 고르기뿐이고 판정은 스토어의 `lockedBy`가 이미 했다.
-  const patternLock = selectedNodeId === null ? props.pageLock : props.selectedLock
-  const patternLocked = patternLock !== null
-  const presetLocked = props.pageLock !== null
-  /** 고르개가 열려 있으면 무엇을 고르는 중인지. 닫혀 있으면 `null`이다. */
-  const [adding, setAdding] = useState<OpenPicker | null>(null)
-
-  /**
-   * **선택이 비면 고른 노드 곁의 고르개(`'inside'` · `'after'`)를 걷는다.** 그 둘은 고른 노드에 매여(`visiblePicker` — `abilities` 가 선택을
-   * 본다) 선택이 비면 감춰질 뿐이라, 걷지 않으면 다음에 고른 노드 곁에 다시 선다(Chrome — 트리 줄의 Escape · 키보드 삭제가 선택을 비운 판).
-   * 잠금으로 꺼진 판은 걷지 않는다(위 `visiblePicker` 머리말 «`adding`은 비우지 않는다») — 그쪽은 같은 노드가 다시 풀리는 판이다. 패턴 ·
-   * 프리셋은 고른 것 없이도 서므로 남긴다.
-   */
-  useEffect(() => {
-    if (selectedNodeId === null) setAdding((open) => (open === 'inside' || open === 'after' ? null : open))
-  }, [selectedNodeId])
-
-  /**
-   * 고른 타입으로 새 노드를 만들어 넣는다. 편집이 실제로 들어갔을 때만 선택을 옮긴다.
-   *
-   * **이 반환값 검사는 지워도 죽는 케이스가 없다.** 무조건 옮기도록 바꿔도 이 파일의 케이스가
-   * 하나도 죽지 않는다. 앞의 가드들이 여전히 덮기 때문이다: `createNode`가 받는 타입은
-   * **목록이 카탈로그에서 만든 것**이라 `null`이 될 수 없고, `insertNodeOps`가 받는
-   * 부모·인덱스는 `structureAbilities`·`nodeSpot`을 지난 값이다.
-   *
-   * 그래도 남긴다. `routes/editor.tsx`의 `ready` 게이트와 같은 자리다 — **지금 통과하는
-   * 이유가 "위의 성질이 지켜지고 있어서"이므로**, 그 성질이 깨지는 날 이것이 마지막
-   * 방벽이다. **닫는 케이스를 만들 수 없다**: 화면에서 `commitOps`를 `false`로 만들려면
-   * 비활성인 버튼을 눌러야 하는데 그 경로가 없다.
-   *
-   * 목록은 **성패와 무관하게 닫는다.** 열어 둔 채로 두면 실패했을 때 같은 편집을 다시
-   * 내게 되고, 그것도 같은 이유로 실패한다.
-   */
-  function addNode(type: string): void {
-    setAdding(null)
-    // **`adding`이 `'pattern'`이면 여기 오지 않는다** — 그때 그려지는 것은 `PatternPicker`
-    // 이고 이 함수는 `TypePicker.onPick`에만 걸려 있다. 그래도 자리를 좁혀 두는 것은
-    // 아래 두 갈래가 `'inside' | 'after'`를 전제하기 때문이다.
-    if (document === null || selectedNodeId === null) return
-    if (adding !== 'inside' && adding !== 'after') return
-
-    const node = createNode(type)
-    if (node === null) return
-
-    const ops = adding === 'inside' ? insertInside(selectedNodeId, node) : insertAfter(selectedNodeId, node)
-
-    // 고르개를 연 뒤 남이 그 자리를 잡았을 수 있다(고르개는 `visiblePicker` 가 걷지만 누름이 먼저 올 수 있다) — 보내기 전에 서버와 같은 물음을 한 번 더.
-    const blocker = ops === null ? null : store.editBlockedBy(ops)
-    if (blocker !== null) {
-      store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
-      return
-    }
-    if (commitOps(ops)) store.selectNode(node.id)
-  }
-
-  /**
-   * 고른 패턴을 전개해 꽂는다.
-   *
-   * **실패 갈래가 셋이고 각각 다른 것을 말한다** — *"패턴이 잘못됐다"*와
-   * *"내가 잘못 눌렀다"*를 가른다. 어느 갈래에서도 **편집을 만들지 않으므로 되돌릴
-   * 문서가 없다**: 화면의 문서는 손대지 않은 그대로이고 알림만 남는다.
-   *
-   * | 갈래 | 문장이 말하는 것 | 되돌리는 것 |
-   * |---|---|---|
-   * | 전개 실패(선언 안 된 슬롯) | 패턴이 잘못됐다 — 테마를 고쳐야 한다 | 없음(편집 0건) |
-   * | `'invalid'`·`'empty'` | 같음 | 없음 |
-   * | `'no-spot'` | 고른 자리에 못 꽂는다 — 다른 노드를 고른다 | 없음 |
-   *
-   * **서버가 거절하는 갈래는 여기 없다.** 그것은 `commitOps`가 `true`를 낸 뒤의 일이고
-   * (`use-edit-commit.tsx`의 `recover`), 그때는 재조회가 문서를 서버 상태로 놓고 선택도
-   * `null`로 재설정한다 — 케이스가 그 값을 고정한다.
-   *
-   * **알림은 편집 실패와 같은 `role="alert"` 하나를 쓴다.** 자리를 나누면 그 하나뿐인
-   * 통지 규칙이 흩어진다(`use-edit-commit.tsx`의 `skippedNotice`가 같은 판단을 적는다).
-   */
-  function addPattern(key: string, pattern: ThemePattern): void {
-    setAdding(null)
-    if (document === null) return
-
-    const { expanded, issues } = expandPattern(pattern)
-    if (expanded === null) {
-      store.setEditFailure({
-        kind: 'message',
-        message: `${brokenPattern(pattern, key)} ${issues.map((entry) => entry.message).join(' / ')}`,
-      })
-      return
-    }
-
-    const attempt = patternInsert(document, selectedNodeId, expanded)
-    if (attempt.insert === null) {
-      store.setEditFailure({
-        kind: 'message',
-        message:
-          attempt.reason === 'no-spot'
-            ? NO_SPOT_NOTICE
-            : `${brokenPattern(pattern, key)} ${attempt.issues.map((entry) => entry.message).join(' / ')}`,
-      })
-      return
-    }
-
-    // **여기부터는 평범한 편집이다** — undo·낙관적 적용·경고 표시가 그대로 따라온다.
-    if (commitOps(attempt.insert.ops)) store.selectNode(attempt.insert.selectId)
-  }
-
-  /**
-   * 고른 프리셋을 놓는다.
-   *
-   * **`addPattern`과 갈리는 것 셋.** 자리를 고르지 않고(페이지 통째다), 판정을 결과 문서
-   * 전체로 하며, **선택을 비울 수 있다** — 빈 프리셋은 놓을 노드가 없으므로 고를
-   * 것도 없다(그때 선택을 그대로 두면 사라진 노드를 가리킨다).
-   *
-   * | 갈래 | 문장이 말하는 것 | 되돌리는 것 |
-   * |---|---|---|
-   * | `'no-root'` | 문서를 읽지 못했다 — 새로고침 | 없음(편집 0건) |
-   * | `'invalid'` | 프리셋이 잘못됐다 — 프리셋을 고친다 | 없음(편집 0건) |
-   * | 성공 | — | **undo 하나가 페이지 전체를 되돌린다** |
-   *
-   * **문장은 순수 함수가 만든다**(`presetFailureNotice`) — 컴포넌트 안에서 만들면
-   * *"콜론 뒤가 빈 문장"* 같은 결함이 화면을 지나야만 도달해 케이스를 쓸 수 없다.
-   */
-  function applyPreset(nodes: WbNode[], viewStates: readonly ViewState[]): void {
-    setAdding(null)
-    if (document === null) return
-
-    const attempt = presetApply(document, nodes, undefined, viewStates)
-    if (attempt.apply === null) {
-      store.setEditFailure({ kind: 'message', message: presetFailureNotice(attempt) })
-      return
-    }
-
-    // **여기부터는 평범한 편집이다** — undo·낙관적 적용·경고 표시가 그대로 따라온다.
-    if (!commitOps(attempt.apply.ops)) return
-    store.selectNode(attempt.apply.selectId)
-    // 페이지 목록에 못 더한 상태(20개 한도) · 목록 없이 저장된 프리셋의 외래 가지를 뺐으면 붙이기와 같은 문장으로 말한다.
-    if (attempt.droppedCases.length > 0)
-      store.setEditFailure({ kind: 'message', message: droppedCasesNotice(attempt.droppedCases, viewStates) })
-  }
-
-  /** 선택 노드의 **마지막 자식**으로. `children`이 없으면 0이고 `insertNodeOps`가 배열째 만든다. */
-  function insertInside(nodeId: string, node: ReturnType<typeof createNode>) {
-    if (document === null || node === null) return null
-    const parent = findNodeSafely(document.root, nodeId)
-    return insertNodeOps(document, nodeId, parent?.children?.length ?? 0, node)
-  }
-
-  /** 선택 노드의 **다음 형제**로. `moveNodeOps`의 계약과 같은 자리 계산이다. */
-  function insertAfter(nodeId: string, node: ReturnType<typeof createNode>) {
-    if (document === null || node === null) return null
-    const spot = nodeSpot(document, nodeId)
-    if (spot === null) return null
-    return insertNodeOps(document, spot.parentId, spot.index + 1, node)
-  }
+  const abilities = selectionBased
 
   /**
    * 선택 노드를 지운다. **지운 뒤 선택을 부모로 옮긴다**(`selectAfter` 가 `'none'` 이면 비운다 — `StructureCommands.remove`).
@@ -564,9 +207,8 @@ export function useStructureCommands(props: {
    *   `편집이 실패해도 툴바가 옮긴 선택은 남는다 — 두 경로가 갈리지 않는다`가 그 값을
    *   고정한다.
    *
-   * `addNode`의 같은 검사도 지워도 죽는 케이스가 없다(이유는 그 주석). 남기는 근거는
-   * `routes/editor.tsx`의 `ready` 게이트와 같은 것이다: 지금 통과하는 이유가 위의
-   * 성질이 지켜지고 있어서이므로, 그것이 깨지는 날 이 검사가 마지막 방벽이다.
+   * 남기는 근거는 `routes/editor.tsx`의 `ready` 게이트와 같은 것이다: 지금 통과하는 이유가 위의 성질이 지켜지고 있어서이므로, 그것이 깨지는 날
+   * 이 검사가 마지막 방벽이다.
    */
   function removeSelected(selectAfter: 'parent' | 'none' = 'parent'): void {
     if (document === null || selectedNodeId === null) return
@@ -776,23 +418,17 @@ export function useStructureCommands(props: {
     lock: props.selectedLock,
     count: selectedNodeIds.length,
     anyLock: otherLock,
-    // **`presetLocked`를 끄는 그 값 그대로다.** 고른 것이 없을 때 아홉이 다 회색인 이유가 이것뿐이라, 이유가 이 값을 못 보면
-    // *"고르면 편집할 수 있습니다"*를 고를 줄이 없는 판에서도 말한다(`./toolbar-status.ts` 머리말 «안 골랐다 칸»).
+    // 고른 것이 없을 때 항목이 다 회색인 까닭이 페이지 잠금이면 그것을 말한다 — 이 값을 못 보면 *"고르면 편집할 수 있습니다"*를 고를 줄이 없는
+    // 판에서도 말한다(`./toolbar-status.ts` 머리말 «안 골랐다 칸»).
     pageLock: props.pageLock,
     abilities,
     region: regionRulesAt(document, selectedNodeId),
-    addBlocked: {
-      ...(adds?.insideBlockedBy == null ? {} : { addInside: lockedNotice(adds.insideBlockedBy.userName) }),
-      ...(adds?.afterBlockedBy == null ? {} : { addAfter: lockedNotice(adds.afterBlockedBy.userName) }),
-    },
   }
 
   return {
     viewState: viewStateCommands,
     abilities,
-    patternLocked,
-    presetLocked,
-    why: structureWhy(reasonInput, { patternLock, presetLock: props.pageLock, aliasLocked }),
+    why: structureWhy(reasonInput, { aliasLocked }),
     remove: removeSelected,
     moveUp: () => moveSelected(-1),
     moveDown: () => moveSelected(1),
@@ -802,12 +438,6 @@ export function useStructureCommands(props: {
     },
     indent: indentSelected,
     outdent: outdentSelected,
-    openAdd: setAdding,
-    adding,
-    pick: addNode,
-    pickPattern: addPattern,
-    applyPreset,
-    cancelAdd: () => setAdding(null),
     aliasLocked,
     renameAlias: (nodeId, alias) => {
       if (document === null) return
@@ -821,109 +451,4 @@ export function useStructureCommands(props: {
       commitOps(ops)
     },
   }
-}
-
-/**
- * *"이 패턴을 못 쓴다"*의 머리말. **패턴 이름과 키를 둘 다 말한다** — 이름은 사용자가
- * 목록에서 본 것이고, 키는 테마의 manifest 에서 그 자리를 찾을 때 필요하다.
- *
- * **구분자를 두는 것은 뒤에 붙는 이슈 문장이 마침표로 끝나지 않기 때문이다** —
- * `use-edit-commit.tsx`가 서버 문장에 대해 잰 것과 같은 부류다.
- */
-function brokenPattern(pattern: ThemePattern, key: string): string {
-  return `패턴을 꽂지 못했습니다 — ${pattern.name}(${key}). 테마의 패턴을 고쳐야 합니다:`
-}
-
-/**
- * 자리를 못 찾은 갈래. **위 문장과 갈라 적는다** — 이쪽은 테마가 아니라 **고른
- * 자리**의 문제이므로 사용자가 할 일이 다르다.
- */
-const NO_SPOT_NOTICE = '고른 자리에는 패턴을 꽂을 수 없습니다. 다른 노드를 고르세요.'
-
-/**
- * **고르개 자리** — 지금 그려도 되는 고르개(`visiblePicker`) 하나를 그린다. 트리가 고른 줄 바로 아래에 이것을 세운다
- * (spec 「툴바 대신 노드별 `+` · `…`」 — 고르개가 그 줄 곁에 뜬다). 판정도 조작도 갖지 않는다.
- *
- * **닫혀 있을 때는 DOM에 없다** — 남겨 두면 Tab 순서에 정지점이 그대로 남는다. 프리셋 이름칸의 글자는 이 부품이 아니라 부르는 쪽
- * (`StructureTree`)이 든다 — 이것은 잠금이 오가는 동안 DOM 에서 빠진다(`visiblePicker` 머리말 «두 축»).
- *
- * **`projectId`를 받는 것은 프리셋 고르개 때문이다.** 프리셋은 프로젝트에 살고(설계서 「페이지 프리셋」), 그 조회는
- * 고르개가 열렸을 때만 일어난다 — `PresetPicker`가 닫혀 있을 때 DOM에 없기 때문이다.
- */
-export function StructurePicker(props: {
-  commands: StructureCommands
-  projectId: string
-  /** 코멘트 수를 세는 대상. 프리셋 고르개가 쓴다. */
-  pageId: string | undefined
-  /**
-   * 지금 페이지의 root `children`. *"현재 페이지를 프리셋으로 저장"*이 담는 것이고,
-   * **문서 봉투가 아니다**. 문서를 못 읽었으면 `null`이다.
-   */
-  currentNodes: readonly WbNode[] | null
-  /** 지금 페이지의 화면 상태 목록 — 프리셋 저장이 함께 담는다. */
-  currentViewStates: readonly ViewState[]
-  presetName: string
-  onPresetNameChange: (name: string) => void
-}): ReactElement | null {
-  /** 지금 그려도 되는 고르개. 열려 있어도 그 조작이 막혔으면 `null`이다. */
-  const picker = visiblePicker(props.commands)
-  if (picker === null) return null
-  return <PickerBox {...props} picker={picker} />
-}
-
-/**
- * 선 고르개의 상자 — 고르개가 설 때 마운트된다. **고르개가 내려가면(Escape · «취소» · 항목을 고름) 고르개를 연 자리로 포커스를 돌려준다** — 안 돌려주면
- * 포커스를 쥔 고르개 단추가 사라져 `body` 로 떨어지고, 키보드 사람이 트리를 처음부터 다시 찾아간다(Chrome · `build-test/keyboard-holes.test.ts`
- * «5»). 연 자리는 **고르개가 처음 그려질 때의 포커스**다 — 줄 · 머리 `+` 의 항목을 고르면 행동 메뉴가 포커스를 그 `+` 로 돌려준 뒤 고르개를
- * 열고(`shell/action-menu.tsx` 머리말 «고르면 먼저 닫고 돌려준 뒤 부른다»), Alt+Shift+I · P 는 줄 단추에서 연다. 포커스가 고르개 밖이면(캔버스를
- * 누른 뒤 · 고르개 안에 들어간 적 없음) 옮기지 않는다 — 사람이 둔 자리를 뺏지 않는다.
- */
-function PickerBox(props: Parameters<typeof StructurePicker>[0] & { picker: OpenPicker }): ReactElement {
-  const { commands, picker } = props
-  const box = useRef<HTMLDivElement>(null)
-  const [opener] = useState(() => {
-    const active = document.activeElement
-    return active instanceof HTMLElement && active !== document.body ? active : null
-  })
-  const cancel = commands.cancelAdd
-  // **고르개가 내려갈 때 포커스가 그 안이면 연 자리로 돌려준다** — Escape · «취소» · 항목을 고른 뒤(넣기 · 패턴 · 프리셋 적용) · 남이 고른 노드를
-  // 지워 고르개가 감춰질 때가 한 길이다. 정리는 DOM 에서 빠지기 전에 돌아 포커스를 쥔 단추가 아직 `activeElement` 다.
-  useLayoutEffect(() => {
-    const element = box.current
-    return () => {
-      if (element?.contains(document.activeElement) === true && opener?.isConnected === true) opener.focus()
-    }
-  }, [opener])
-  return (
-    // 고르개는 자기 줄을 요구한다(`flex-basis: 100%` — `test/shell-css-picker.test.ts`) — 감싸는 flex 상자가 이것이다.
-    // `data-wb-holds-keys` — 포커스가 고르개 안이면 화살표 · Escape · Delete · Backspace 는 에디터 단축키가 안 받는다(`edit/editor-shortcuts.ts` 의
-    // `keyHeldByWidget`) — 고르개 안의 Delete 가 넣을 자리인 고른 노드를 지우지 않게.
-    // **고르개 안의 Escape 는 고르개를 닫는다**(«취소»와 같다) — 단축키에 넘기면 선택을 풀어 고르개가 감춰질 뿐 `adding` 이 남았다. 조합 중의
-    // Escape 는 조합의 키다(프리셋 이름 칸).
-    <div
-      ref={box}
-      className="wb-shell-tree-panel"
-      data-wb-holds-keys=""
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape' || event.nativeEvent.isComposing || event.defaultPrevented) return
-        event.preventDefault()
-        cancel()
-      }}
-    >
-      {(picker === 'inside' || picker === 'after') && <TypePicker onPick={commands.pick} onCancel={cancel} />}
-      {picker === 'pattern' && <PatternPicker onPick={commands.pickPattern} onCancel={cancel} />}
-      {picker === 'preset' && (
-        <PresetPicker
-          projectId={props.projectId}
-          pageId={props.pageId}
-          currentNodes={props.currentNodes}
-          currentViewStates={props.currentViewStates}
-          name={props.presetName}
-          onNameChange={props.onPresetNameChange}
-          onApply={commands.applyPreset}
-          onCancel={cancel}
-        />
-      )}
-    </div>
-  )
 }

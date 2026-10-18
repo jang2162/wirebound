@@ -80,7 +80,7 @@ export function patternInsert(
   if (nodes.length === 0) return { insert: null, reason: 'empty', issues: [] }
 
   /**
-   * **판정은 전개된 노드만 담은 프로브로 한다** — `TypePicker.placeableTypes`가 하는 것과
+   * **판정은 전개된 노드만 담은 프로브로 한다** — `palette/placeable.ts` 의 `placeableGroups`가 하는 것과
    * 같은 형태다. 문서 전체를 검증하면 **이미 깨진 문서에서 멀쩡한 패턴도 막힌다**:
    * 알 수 없는 타입의 노드가 하나 있으면 `validatePage`가 그 문서에 `error`를 내는데,
    * 그것을 0으로 만드는 길은 그 노드를 지우는 것뿐이고(`structure-actions.ts`의 실측)
@@ -160,12 +160,12 @@ function insertSpot(document: PageDocument, selectedNodeId: string | null): { pa
 }
 
 /**
- * 꽂은 뒤 고를 노드의 id. **첫 슬롯 노드, 없으면 전개된 첫 노드.**
+ * 꽂은 뒤 고를 노드의 id. **첫 슬롯 노드, 없으면 전개된 첫 노드.** 하단 판 «모듈» 탭의 테마 패턴 넣기도 이것으로 고른다(`palette/module-insert.ts`).
  *
  * *"첫"*은 `slots` 맵의 순회 순서이고, 그것은 `expandPattern`이 **전위 순회로** 넣은
  * 순서다 — 사용자가 트리에서 위에서부터 보는 순서와 같다.
  */
-function selectId(expanded: ExpandedNodes): string {
+export function selectId(expanded: ExpandedNodes): string {
   const first = expanded.nodes[0]!.id
   const placed = new Set<string>()
   const collect = (node: WbNode): void => {

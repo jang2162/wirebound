@@ -16,30 +16,13 @@
  *
  * # 그래서 이 파일이 재는 것
  *
- * > **잠긴 자리에서는 도구 아홉이 전부 꺼지고, 버튼으로도 단축키로도 서버에 아무것도
+ * > **잠긴 자리에서는 판정에 매인 줄 항목이 전부 꺼지고, 버튼으로도 단축키로도 서버에 아무것도
  * > 나가지 않는다. 잠긴 서브트리 «밖»은 그대로다.**
  *
  * 뒤 문장이 없으면 *"잠금이 있으면 무조건 끈다"*와 구별되지 않는다.
  *
- * # 아홉인 까닭 — 판정 밖의 둘
- *
- * `structureAbilities`가 내는 판정은 일곱이고, `패턴 넣기`·`프리셋`은 **걸 `ability`가
- * 없다.** 그 둘이 잠금을 안 보면 **그대로 423을 낸다:** 잠긴 노드를 고른 채 패턴을 꽂으면
- * `add …/children/2`가 나가 423을 받고 낙관적 적용이 붙었다 사라진다. 하필 그때 꺼진 항목들은
- * *"고를 수도 **바꿀 수도** 없습니다"* 라고 말하고 있고, 그 문장을 읽은 사용자가 같은 메뉴에서 **화살표로 처음 닿는 것이 그 둘**이다
- * (화살표는 켠 항목에만 선다 — `shell/action-menu.tsx`).
- *
- * **그래서 그 둘은 «꽂힐 자리»의 잠금을 지난다** — 판정에 키를 만들지 않은 이유는 그대로다
- * (`panels/structure-tree.tsx`의 `TREE_SHORTCUTS`). 둘이 지나는 잠금이 **서로 다른 것**이
- * 이 파일에서 값으로 갈린다:
- *
- * | 조작 | 지나는 잠금 | 왜 |
- * |---|---|---|
- * | `패턴 넣기` | 고른 노드(고른 것이 없으면 루트) | 꽂히는 자리를 선택이 정한다 |
- * | `프리셋` | **페이지에 남의 잠금이 하나라도** | op이 `replace /root/children` 하나라 언제나 부딪친다 |
- *
- * 아래 `잠기지 않은 잎을 고르면 패턴만 살아난다`가 그 갈림을 한 자리에서 고정한다 —
- * 그 케이스가 없으면 둘을 같은 값으로 묶어도 안 죽는다.
+ * **넣기는 이 파일 밖이다.** 구조 트리의 넣기 입구(«안에 추가» · «아래 추가» · «패턴 넣기» · «프리셋» · 고르개 · Alt+Shift+I/P)는 걷었고
+ * (넣기는 하단 판이 한다 — 설계 spec 「B1」), 잠긴 자리의 넣기는 하단 판의 케이스(`build-test/palette-review.test.ts` · `../palette/module-tab.test.tsx`)가 잰다.
  *
  * # 서버 대역이 진짜 판정을 든다
  *
@@ -53,21 +36,18 @@
  * 센다). 여기서는 그 판정을 **대역의 재료로** 쓸 뿐이라 화면 쪽 판정이 늘지 않는다.
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { BUILTIN_PRESETS, lockConflictOfOps, writeNodesEnvelope, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { lockConflictOfOps, writeNodesEnvelope, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
-import { ADMIN_FIXTURE } from '../admin-theme'
-import type { ThemeManifest } from '@wirebound/theme-sdk'
-import { adminThemeView } from '../theme-loader'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import { createEditChannel } from '../../src/realtime/edit-channel'
 import { createLockChannel } from '../../src/realtime/lock-channel'
 import type { NodeLockView, ServerFrame } from '../../src/realtime/protocol'
 import type { EditorStore } from '../../src/store/editor-store'
-import { HEAD_SEQ, OTHER_PAGE_TITLE, PAGE_ID, PROJECT_ID, deselect, openPage, pageDetail, pageDoc } from '../editor-harness'
-import { isOff, reasonOf, rowReason, rowReasons, treeTool, structureRowName } from '../panels/tree-row'
+import { HEAD_SEQ, OTHER_PAGE_TITLE, PAGE_ID, PROJECT_ID, openPage, pageDetail, pageDoc } from '../editor-harness'
+import { isOff, rowReason, rowReasons, treeTool, structureRowName } from '../panels/tree-row'
 import { installPointerEvents } from '../pointer-events'
 
 beforeAll(installPointerEvents)
@@ -95,17 +75,6 @@ function shellStore(): EditorStore {
   const store = createdStores.at(-1)
   if (store === undefined) throw new Error('셸이 EditorStore를 만들지 않았습니다')
   return store as EditorStore
-}
-
-/**
- * **패턴 목록이 비지 않게 셸이 읽는 바인딩의 manifest 에 패턴 하나를 싣는다** — 목록이 비면 고르개가 «패턴이 없습니다» 로 서서,
- * 대조 케이스가 잠금 때문이 아니라 목록이 없어서 통과할 수 있다. 가짜가 닿았는지는 `themeReads` 로 센다.
- */
-const patternTheme = { themeReads: 0 }
-const getProjectTheme: ApiClient['getProjectTheme'] = async () => {
-  patternTheme.themeReads += 1
-  const patterns = { 'hero.plain': { name: '민 히어로', schema: { type: 'Section' } } }
-  return { ...adminThemeView(), manifest: { ...ADMIN_FIXTURE.manifest, patterns } as ThemeManifest }
 }
 
 /** 하네스의 사용자 id. `editor-harness.tsx`의 `USER`와 같은 값이다. */
@@ -231,22 +200,11 @@ async function board(): Promise<Board> {
     },
   }
 
-  // **프리셋 고르개가 목록을 조회한다.** 스텁하지 않으면 `notStubbed`가 던지고, 그 예외는
-  // 고르개 안에서 삼켜져 *"목록이 비었다"*로 위장된다 — 그러면 이 파일의 대조 케이스가
-  // 잠금 때문이 아니라 목록이 없어서 통과한다. 패턴 목록은 캔버스 테마의 manifest 가 준다(파일 머리의 목).
-  const listPresets: ApiClient['listPresets'] = async () =>
-    BUILTIN_PRESETS.map((preset) => ({
-      id: `builtin:${preset.key}`,
-      source: 'builtin' as const,
-      name: preset.name,
-      description: preset.description,
-      nodes: [...preset.nodes],
-    }))
   const listComments: ApiClient['listComments'] = async () => []
 
   await openPage(doc(), {
     realtime: setup,
-    apiOverrides: { patchOps, getPage, listPresets, listComments, getProjectTheme },
+    apiOverrides: { patchOps, getPage, listComments },
   })
 
   return {
@@ -276,31 +234,19 @@ function toolbar(): HTMLElement {
   return structureRegion()
 }
 
-/** `structureAbilities`를 지나는 버튼 일곱. 늘어나면 아래 케이스가 새 버튼도 함께 본다. */
-const TOOLS = ['안에 추가', '아래 추가', '삭제', '위로', '아래로', '들여쓰기', '내어쓰기']
+/** `structureAbilities`를 지나는 줄 `…` 항목 다섯. 늘어나면 아래 케이스가 새 항목도 함께 본다. */
+const TOOLS = ['삭제', '위로', '아래로', '들여쓰기', '내어쓰기']
 
 function toolButton(name: string): HTMLElement {
   return treeTool(toolbar(), name)
 }
 
 /**
- * 지금 켜져 있는 도구들. **판정 밖의 둘은 여기 없다** — 아래 `gates`가 그것을 본다. 고른 줄이 없으면 줄 행동이 없어 켜진 것도 없다
- * (옛 툴바의 «일곱이 다 꺼졌다»와 같은 값 — 판정이 `NOTHING`이다).
+ * 지금 켜져 있는 항목들. 고른 줄이 없으면 줄 행동이 없어 켜진 것도 없다(판정이 `NOTHING`이다).
  */
 function live(): string[] {
   if (structureRegion().querySelector('.wb-shell-tree-row-picked') === null) return []
   return TOOLS.filter((name) => !isOff(toolButton(name)))
-}
-
-/**
- * 판정 밖의 둘이 지금 켜져 있는가. **둘을 한 값으로 읽는 것이 요점이다** — 이 파일이
- * 재려는 것 하나가 *"둘이 서로 다른 잠금을 지난다"*이므로 그 갈림이 한 줄에 보여야 한다.
- */
-function gates(): { pattern: boolean; preset: boolean } {
-  return {
-    pattern: !isOff(toolButton('패턴 넣기')),
-    preset: !isOff(toolButton('프리셋')),
-  }
 }
 
 /** 트리에서 노드 하나를 고른다. 줄 이름이 타입이다. */
@@ -336,57 +282,19 @@ async function settle(): Promise<void> {
 }
 
 describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
-  it('셸의 테마 읽기가 닿는다 — 패턴 목록이 빈 판이 아니다', async () => {
-    patternTheme.themeReads = 0
-    await board()
-    expect(patternTheme.themeReads).toBe(1)
-  })
-
   /**
-   * **이것이 도구가 새는 흔한 상태다 — 그리고 `안에 추가` 하나는 서버가 받는다.** 페이지를 열면 루트가 자동 선택되고, 남이 그 페이지의
-   * 아무 노드나 잡으면 루트가 그 조상이라 `lockedBy(root)`가 그 잠금을 낸다. 그때 켜져 있는 것은 `안에 추가` **하나**(루트라 나머지 여섯은
-   * 원래 꺼진다)이고, 그것을 누르면 `add /root/children/3`이 나가 **서버가 통과시킨다**(대역이 `lockConflictOfOps` 를 그대로 돈다).
-   *
-   * 도구가 고른 노드(뿌리)의 잠금을 보고 꺼 버리면 서버가 받는 편집을 화면이 막는다 — 하단 판 카드의 «넣기» 는 같은 판에서 페이지 끝에 넣는다
-   * (`palette/palette-add.ts` 머리말, `build-test/palette-review.test.ts` «페이지를 연 그대로(뿌리 선택)»). 그래서 `안에 추가` 는 고른 노드의 잠금이
-   * 아니라 **넣는 편집이 남의 잠금에 부딪히나**로 가른다(`edit/add-abilities.ts`). 판정 밖의 둘(패턴 · 프리셋)은 그대로 꺼진다.
+   * **페이지를 열면 루트가 골라지고, 남이 그 페이지의 아무 노드나 잡으면 루트가 그 조상이라 잠긴다** — 이것이 도구가 새는 흔한 상태다. 루트의
+   * 줄 항목은 자리(루트)로 원래 꺼져 있어, 잠금이 새는지는 비루트에서 갈린다: 켜져 있던 셋(`삭제`·`위로`·`아래로`)이 그냥 두면 423을 받는다.
    */
-  it('루트가 선택된 채 남이 자손을 잠가도 `안에 추가`는 산다 — 서버가 받는 편집이다 · 판정 밖의 둘은 꺼진다', async () => {
-    const view = await board()
-    expect(view.store.getState().selectedNodeId).toBe('n-root')
-    expect(live()).toEqual(['안에 추가'])
-
-    view.lock([foreign('n-1')])
-
-    expect(live()).toEqual(['안에 추가'])
-    // **판정 밖의 둘은 함께 꺼진다.** 그러지 않으면 *"바꿀 수도"* 를 말하는 문장이 거짓이다.
-    expect(gates()).toEqual({ pattern: false, preset: false })
-    expect(reason('안에 추가')).toBeNull()
-
-    fireEvent.click(treeTool(toolbar(), '안에 추가'))
-    fireEvent.click(await screen.findByRole('button', { name: '추가' }))
-    await settle()
-    expect({ status: view.status, paths: view.calls.map((call) => call.ops.map((op) => op.path)) }).toEqual({
-      status: [200],
-      paths: [['/root/children/3']],
-    })
-  })
-
-  /**
-   * **비루트는 꺼지는 것이 다섯이라 값이 다르다.** 그 다섯 중 셋(`삭제`·`위로`·`아래로`)은 그냥 두면 423을 받아 꺼지고, `아래 추가`는 고른 노드를
-   * 남이 잡았으면(자손의 잠금도 센다) 카드 «넣기» 와 같이 꺼진다. **`안에 추가`는 산다** — 컨테이너 안 끝에 넣는 편집은 잠긴 자식을 안 건드려
-   * 서버가 받는다(`edit/add-abilities.ts`).
-   */
-  it('비루트가 선택된 채 그 자식이 잠기면 넷이 꺼지고 `안에 추가`만 남는다', async () => {
+  it('비루트가 선택된 채 그 자식이 잠기면 켜져 있던 셋이 꺼지고 이름과 함께 이유를 든다', async () => {
     const view = await board()
     select('Card')
-    expect(live()).toEqual(['안에 추가', '아래 추가', '삭제', '위로', '아래로'])
+    expect(live()).toEqual(['삭제', '위로', '아래로'])
 
     view.lock([foreign('n-1')])
 
-    expect(live()).toEqual(['안에 추가'])
-    expect(gates()).toEqual({ pattern: false, preset: false })
-    expect(reason('아래 추가')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+    expect(live()).toEqual([])
+    expect(reason('삭제')).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
   it('고른 노드 «자신»이 잠겨도 같다 — 조상·자손·자기 셋이 한 판정이다', async () => {
@@ -396,7 +304,6 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
     view.lock([foreign('n-box')])
 
     expect(live()).toEqual([])
-    expect(gates()).toEqual({ pattern: false, preset: false })
   })
 
   /**
@@ -410,110 +317,20 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
     select('Text')
 
     expect(view.store.getState().selectedNodeId).toBe('n-a')
-    // `n-a`는 잎이라 `안에 추가`·`들여쓰기`가 원래 꺼진다(앞 형제 `없음` · 자식 불가). **`아래 추가`도 꺼진다 — 잠금이 «바로 뒤 형제»(`n-box`)의 안에 있어
-    // 그 자리에 넣는 편집이 부딪힌다**(서버가 423 으로 거절하는 편집 — 카드 «넣기» 가 같은 판에서 세우는 문장과 같다).
+    // `n-a`는 맏이라 `위로`·`들여쓰기`가 원래 꺼진다(앞 형제 없음) · 부모가 루트라 `내어쓰기`도. 잠금을 말하는 항목은 없다.
     expect(live()).toEqual(['삭제', '아래로'])
-    expect(reason('안에 추가')).toBe('자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다')
-    expect(reason('아래 추가')).toBe('보라님이 편집 중이라 바꿀 수 없습니다')
-  })
-
-  /** 잠금에서 먼 잎은 `아래 추가`가 그대로 산다 — 위 케이스의 «바로 뒤 형제» 가 이 꺼짐의 조건이다. */
-  it('잠금에서 먼 잎(`n-c`)의 `아래 추가`는 산다 — 바로 뒤 형제의 잠금만 막는다', async () => {
-    const view = await board()
-    view.lock([foreign('n-1')])
-
-    select('Divider')
-
-    expect(view.store.getState().selectedNodeId).toBe('n-c')
-    expect(live()).toContain('아래 추가')
-    expect(reason('아래 추가')).toBeNull()
     expect(namedReasons()).toBe(0)
-  })
-
-  /**
-   * **둘이 같은 잠금을 지나지 않는다는 것이 이 케이스의 전부다.**
-   *
-   * 고른 `n-a`는 잠긴 서브트리 밖이라 패턴이 꽂힐 자리에 남의 잠금이 없다 — 그래서 켜져
-   * 있다. 프리셋은 다르다: op이 `replace /root/children` 하나라 **잠긴 `n-1`을 통째로
-   * 지운다.** 서버가 그것을 423으로 거절하는 것을 대역이 그대로 잰다(아래 묶음).
-   *
-   * **이 케이스가 없으면 둘을 한 값으로 묶어도 안 죽는다** — 그리고 그렇게 묶은 구현은
-   * 남이 아무 노드나 잡는 동안 **패턴 삽입을 페이지 통째로 얼린다.**
-   */
-  it('잠기지 않은 잎을 고르면 패턴만 살아난다 — 둘이 지나는 잠금이 다르다', async () => {
-    const view = await board()
-    view.lock([foreign('n-1')])
-
-    select('Text')
-
-    expect(gates()).toEqual({ pattern: true, preset: false })
-  })
-
-  /**
-   * **선택이 없어도 되는 조작이지만 «자리»는 있다** — 그때 꽂히는 곳이 루트의 자식 끝이다
-   * (`edit/pattern-insert.ts`의 `insertSpot`). 루트는 문서 안 모든 노드의 조상이라 남의
-   * 잠금이 하나라도 있으면 고를 수 없고, 그래서 그 자리도 바꿀 수 없다 — `안에 추가`를
-   * 루트에서 막는 것과 **같은 op 모양**(`add /root/children/N`)이므로 같은 답이어야 한다.
-   *
-   * **서버는 이것을 통과시킨다**(실측: `add /root/children/3` → 200). 그래도 막는 것은
-   * `edit/structure-actions.ts`의 머리말이 적은 것과 같은 근거다 — 여기서 열어 두면
-   * *"선택을 풀면 되는"* 탈출구가 생기고, 그것은 **어떻게 그 자리에 도착했는지가 할 수
-   * 있는 것을 정하는** 바로 그 모양이다.
-   */
-  it('고른 것이 없어도 페이지에 잠금이 있으면 둘 다 꺼진다', async () => {
-    const view = await board()
-    view.lock([foreign('n-1')])
-
-    deselect()
-
-    expect(view.store.getState().selectedNodeId).toBeNull()
-    expect(gates()).toEqual({ pattern: false, preset: false })
-  })
-
-  /**
-   * **아홉이 다 회색이면 꺼진 항목이 그 이유를 말해야 한다.** 고른 것이 없으면 고른 줄이 없어 남는 것이 뿌리 `+`의 셋(페이지에 추가 ·
-   * 패턴 넣기 · 프리셋)이고, 셋 다 남의 잠금으로 꺼진다 — 그 이유가 잠금을 모르는 문장(*"트리에서 노드를 고르면 편집할 수 있습니다"*)이면
-   * 지금 켜진 도구가 하나도 없다는 것과 그 원인이 남의 잠금이라는 것을 빠뜨린다.
-   *
-   * **여기서만 재지는 자리다.** 이 케이스가 잠그는 것은 **배선**이다 — `useStructureCommands`가 `프리셋`을 끄는 데 쓰는 `pageLock`을 그
-   * 이유에도 넘기는가(`why.preset`) · 뿌리 `+`가 뿌리의 잠금을 이유로 싣는가. 안 넘기면 순수 함수 케이스는 전부 초록인 채 화면만 잠금을
-   * 모르는 문장으로 돌아간다.
-   *
-   * **문안을 글자로 다시 적지 않는다.** 그 자는 `../panels/toolbar-status.test.ts`가 소유한다. 여기서 재는 축은 둘이다: **잠금 소유자가 그
-   * 이유에 실렸는가**와 **잠금을 모르는 문장이 아닌가.**
-   */
-  it('그때 뿌리 `+`의 꺼진 셋이 이름과 함께 이유를 든다', async () => {
-    const view = await board()
-    view.lock([foreign('n-1')])
-
-    deselect()
-
-    // 전제를 값으로 못박는다 — 아홉이 다 회색인 것이 이 이유가 서는 근거다.
-    expect(live()).toEqual([])
-    expect(gates()).toEqual({ pattern: false, preset: false })
-    const reasons = ['페이지에 추가', '패턴 넣기', '프리셋'].map((name) => reasonOf(toolButton(name)))
-    expect(reasons.filter((text) => text?.includes('보라') !== true)).toEqual([])
-    expect(reasons).not.toContain('트리에서 노드를 고르면 편집할 수 있습니다')
-  })
-
-  it('대조 — 잠금이 없으면 고른 것이 없어도 둘 다 켜져 있다', async () => {
-    await board()
-
-    deselect()
-
-    expect(gates()).toEqual({ pattern: true, preset: true })
   })
 
   it('잠금이 풀리면 도구가 돌아온다', async () => {
     const view = await board()
     select('Card')
     view.lock([foreign('n-1')])
-    expect(live()).toEqual(['안에 추가'])
+    expect(live()).toEqual([])
 
     view.lock([])
 
-    expect(live()).toEqual(['안에 추가', '아래 추가', '삭제', '위로', '아래로'])
-    expect(gates()).toEqual({ pattern: true, preset: true })
+    expect(live()).toEqual(['삭제', '위로', '아래로'])
     expect(namedReasons()).toBe(0)
   })
 
@@ -523,9 +340,7 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
 
     view.lock([{ ...foreign('n-1'), userId: ME, userName: '테스터' }])
 
-    expect(live()).toEqual(['안에 추가', '아래 추가', '삭제', '위로', '아래로'])
-    // 프리셋까지 함께 본다 — `pageLock`도 같은 소유자 판정을 지나야 한다.
-    expect(gates()).toEqual({ pattern: true, preset: true })
+    expect(live()).toEqual(['삭제', '위로', '아래로'])
   })
 })
 
@@ -578,197 +393,6 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
   })
 
   /**
-   * **판정 밖의 둘도 단축키를 갖는다**(`Alt`+`Shift`+`I`·`P`). 단축키 표가 그 둘의 판정
-   * 자리를 `null`로 두면 `null`이 *"지날 것이 없다"*를 뜻해 **잠금도 안 본다.** 그래서 표가
-   * 불린을 내는 함수를 들고 그 둘도 자기 값을 갖는다(`panels/structure-tree.tsx`의
-   * `TREE_SHORTCUTS`).
-   *
-   * **잠금이 풀린 «뒤»를 봐야 이 케이스가 산다.** 잠긴 동안 목록이 없는 것만 보면 단축키
-   * 게이트를 빼도 **아무것도 안 죽는다**: 아래 `고르개가 열린 뒤에 잠금이 오면` 케이스가 세운 렌더
-   * 게이트가 그 창을 이미 덮고 있어, 단축키가 `adding`을 세워도 화면에는 안 보인다.
-   * 갈리는 것은 **잠금이 풀린 다음**이다 — 막지 않았으면 그때 목록이 **뒤늦게 튀어나온다.**
-   * (단축키 게이트를 `() => false`로 바꿔 두 형태를 나란히 재면 갈린다.)
-   */
-  it('잠긴 자리에서 누른 패턴·프리셋 단축키는 잠금이 풀려도 목록을 열지 않는다', async () => {
-    const view = await board()
-    select('Card')
-    view.lock([foreign('n-box')])
-
-    const card = row('Card')
-    fireEvent.keyDown(card, { code: 'KeyI', altKey: true, shiftKey: true })
-    fireEvent.keyDown(card, { code: 'KeyP', altKey: true, shiftKey: true })
-    await settle()
-    expect(screen.queryByRole('group', { name: '패턴 고르기' })).toBeNull()
-    expect(screen.queryByRole('group', { name: '프리셋 고르기' })).toBeNull()
-
-    // **여기가 갈리는 자리다.** 눌린 것이 기억돼 있었으면 지금 목록이 뜬다.
-    view.lock([])
-
-    expect(screen.queryByRole('group', { name: '패턴 고르기' })).toBeNull()
-    expect(screen.queryByRole('group', { name: '프리셋 고르기' })).toBeNull()
-    expect(view.calls).toEqual([])
-  })
-
-  it('대조 — 잠기지 않은 자리에서는 같은 단축키가 패턴 고르개를 연다', async () => {
-    const view = await board()
-    view.lock([foreign('n-1')])
-    select('Text')
-
-    fireEvent.keyDown(row('Text'), { code: 'KeyI', altKey: true, shiftKey: true })
-
-    expect(await screen.findByRole('group', { name: '패턴 고르기' })).toBeTruthy()
-    // 프리셋은 같은 판에서도 안 열린다 — 둘이 지나는 잠금이 다르다.
-    fireEvent.keyDown(row('Text'), { code: 'KeyP', altKey: true, shiftKey: true })
-    expect(screen.queryByRole('group', { name: '프리셋 고르기' })).toBeNull()
-    expect(view.calls).toEqual([])
-  })
-
-  /**
-   * **버튼을 끄는 것만으로는 안 닫히는 창이 있다.** 고르개를 연 **뒤에** 잠금이 도착하면
-   * 목록이 그대로 남고, 거기서 `추가`를 누르면 편집이 나간다 — 회색으로 만든 버튼을
-   * 우회하는 길이다. 그래서 고르개도 같은 값으로 그린다
-   * (`panels/structure-toolbar.tsx`의 `visiblePicker`).
-   *
-   * **고르개 넷을 다 태운다.** 조건이 넷 다 다르므로(그 함수의 표) 하나만 재면 나머지가
-   * 조용히 열려 있어도 안 죽는다.
-   */
-  it('패턴 고르개 — 열린 뒤에 잠금이 오면 목록이 사라진다', async () => {
-    const view = await board()
-    select('Card')
-    fireEvent.click(toolButton('패턴 넣기'))
-    expect(await screen.findByRole('group', { name: '패턴 고르기' })).toBeTruthy()
-
-    view.lock([foreign('n-box')])
-
-    expect(screen.queryByRole('group', { name: '패턴 고르기' })).toBeNull()
-    expect(view.calls).toEqual([])
-  })
-
-  it('프리셋 고르개도 같다 — 잠금이 하나라도 오면 사라진다', async () => {
-    const view = await board()
-    fireEvent.click(toolButton('프리셋'))
-    expect(await screen.findByRole('group', { name: '프리셋 고르기' })).toBeTruthy()
-
-    // 프리셋은 페이지 통째라 **어느 노드가 잠기든** 부딪친다 — 고른 것과 무관하다.
-    view.lock([foreign('n-1')])
-
-    expect(screen.queryByRole('group', { name: '프리셋 고르기' })).toBeNull()
-    expect(view.calls).toEqual([])
-  })
-
-  /**
-   * **타입 고르개는 여는 버튼이 막혀도 창이 남는다.** `안에 추가`·`아래 추가`가 여는 것이라
-   * **여는 버튼은 잠금에 막히지만**, 연 뒤에 잠금이 오는 창이 있다 — 고르개를 같은 값으로
-   * 그리지 않으면 그때 목록에서 고른 것이 `add /root/children/1/children/2`로 나가
-   * **423 + "편집 1개가 취소됐습니다"**를 받는다.
-   *
-   * **잠금이 풀리면 목록이 돌아오는 것도 함께 잰다.** `adding`을 비우지 않는 것이 판단이고,
-   * 비우는 구현과 여기서 갈린다. **돌아오는 것은 «어느 고르개가 열려 있었는지»뿐이다** —
-   * 그 안에서 고르던 것은 함께 돌아오지 않는다(아래 두 케이스가 그 값을 든다).
-   */
-  it('타입 고르개도 같다 — 사라지고, 잠금이 풀리면 돌아온다', async () => {
-    const view = await board()
-    select('Card')
-    fireEvent.click(toolButton('안에 추가'))
-    expect(await screen.findByRole('group', { name: '타입 고르기' })).toBeTruthy()
-
-    view.lock([foreign('n-box')])
-    expect(screen.queryByRole('group', { name: '타입 고르기' })).toBeNull()
-    expect(view.calls).toEqual([])
-
-    view.lock([])
-
-    expect(screen.getByRole('group', { name: '타입 고르기' })).toBeTruthy()
-  })
-
-  /**
-   * **여기서부터 둘은 잠금이 오갔다 온 뒤에 무엇이 남는지를 못박는다.**
-   * 답이 서로 다르고, **그 갈림 자체가 판단이다.**
-   *
-   * | 무엇 | 잠금이 풀린 뒤 | 왜 |
-   * |---|---|---|
-   * | 고른 타입 · 고른 프리셋 | **되돌아간다** | «지금 꽂을 수 있는 것»에서 고른 값이라 초기화가 방어 가능하다 |
-   * | 이름칸에 **친** 글자 | **그대로 있다** | 사용자 자신의 것이고 문서와 무관해 낡을 수가 없다 |
-   *
-   * *"잠깐 잠긴 사이에 사용자가 고르던 것을 잃지 않는다"*는 **그냥 두면 둘 다에 대해
-   * 거짓이다** — 조건이 거짓인 동안 컴포넌트가 DOM에서 빠지므로 그 `useState`가 함께
-   * 사라진다. 아랫줄이 살아남는 것은 그 문자열 하나를 `StructureTree`가 들기 때문이다.
-   *
-   * **근거는 `panels/structure-toolbar.tsx`의 `visiblePicker` 머리말이 갖는다** —
-   * 두 축을 왜 갈랐는지가 거기 있다. 판단이 다시 바뀌면 이 두 케이스와 그 머리말을
-   * **함께** 고쳐야 한다: 한쪽만 고치면 다시 말과 코드가 갈린다.
-   */
-  it('잠금이 오갔다 오면 타입 고르개의 고른 타입이 초깃값으로 되돌아간다', async () => {
-    const view = await board()
-    select('Card')
-    fireEvent.click(toolButton('안에 추가'))
-    const typeSelect = () => within(screen.getByRole('group', { name: '타입 고르기' })).getByRole<HTMLSelectElement>('combobox')
-    await screen.findByRole('group', { name: '타입 고르기' })
-
-    const initial = typeSelect().value
-    const other = [...typeSelect().options].map((option) => option.value).find((v) => v !== initial)
-    // **전제를 값으로 못박는다.** 목록에 둘 이상 없으면 아래가 아무것도 재지 못한다.
-    expect(other).toBeDefined()
-    fireEvent.change(typeSelect(), { target: { value: other! } })
-    expect(typeSelect().value).toBe(other)
-
-    view.lock([foreign('n-box')])
-    view.lock([])
-
-    expect(typeSelect().value).toBe(initial)
-    // **설명 줄도 함께 되돌아간다** — 그 줄은 고른 타입에서 나온다.
-    const desc = screen.getByRole('group', { name: '타입 고르기' }).querySelector('.wb-shell-picker-desc')
-    expect(desc?.textContent).toContain(initial)
-  })
-
-  /**
-   * **친 글자는 살아남는다 — 위 케이스와 반대다.** 타입·프리셋 목록은 눈앞에 다시 있지만
-   * 이름칸의 글자는 사용자가 **친** 것이라 다시 쳐 줄 사람이 없다. 그래서 그 문자열
-   * 하나만 `StructureTree`가 들고 `PresetPicker`에 내려 준다.
-   *
-   * **함께 잰다: «살렸다»가 «목록을 DOM에 남겼다»가 아니라는 것.** 잠긴 동안 고르개는
-   * 그대로 사라져야 하고(회색 버튼을 우회하는 길 — 위 «패턴 고르개» 케이스의 머리말), 서버로는
-   * 여전히 아무것도 안 나가야 한다. 그 셋이 다 참일 때만 글자를 살리는 것이 **실패 방향을
-   * 안 바꾼 것**이다.
-   */
-  it('프리셋 고르개가 사라졌다 와도 이름칸에 친 글자는 남는다', async () => {
-    const view = await board()
-    fireEvent.click(toolButton('프리셋'))
-    const group = () => screen.getByRole('group', { name: '프리셋 고르기' })
-    const nameInput = () => group().querySelector<HTMLInputElement>('.wb-shell-picker-input')!
-    await screen.findByRole('group', { name: '프리셋 고르기' })
-
-    fireEvent.change(nameInput(), { target: { value: '회원 목록 기본' } })
-    expect(nameInput().value).toBe('회원 목록 기본')
-
-    view.lock([foreign('n-1')])
-    // **잠긴 동안에는 고르개가 DOM 에 없다** — 살린 것은 문자열 하나이지 목록이 아니다.
-    expect(screen.queryByRole('group', { name: '프리셋 고르기' })).toBeNull()
-    view.lock([])
-    await settle()
-
-    expect(nameInput().value).toBe('회원 목록 기본')
-    // **서버로는 여전히 아무것도 안 나갔다** — 실패 방향이 안 바뀌었다는 값이다.
-    expect(view.calls).toEqual([])
-  })
-
-  /**
-   * **`아래 추가`가 여는 것도 같은 목록이지만 조건이 다르다**(`addAfter` — 루트가 아닌
-   * 노드면 참이다). 하나만 재면 두 키 중 한쪽만 본 구현이 안 죽는다.
-   */
-  it('`아래 추가`로 연 목록도 사라진다 — 조건이 두 키다', async () => {
-    const view = await board()
-    select('Card')
-    fireEvent.click(toolButton('아래 추가'))
-    expect(await screen.findByRole('group', { name: '타입 고르기' })).toBeTruthy()
-
-    view.lock([foreign('n-box')])
-
-    expect(screen.queryByRole('group', { name: '타입 고르기' })).toBeNull()
-    expect(view.calls).toEqual([])
-  })
-
-  /**
    * **남이 잡은 줄은 줄 행동도 끌기도 없다**(`panels/structure-tree.tsx`의 `StructureNode` — `open`). 고르기가 막힌 줄의 `…`를 열면 그
    * 줄을 못 골라 목록이 앞 선택의 명령으로 선다. 끌기는 그 노드를 뽑는 편집이 잠금에 부딪치는 판이다. 대조로 잠기지 않은 형제는 둘 다 있다.
    */
@@ -810,7 +434,7 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
       .closest<HTMLElement>('[data-tree-row]')!
     expect(card.classList.contains('wb-shell-tree-row-picked')).toBe(true)
     expect(card.querySelector('.wb-shell-tree-row-actions')).not.toBeNull()
-    expect(live()).toEqual(['안에 추가'])
+    expect(live()).toEqual([])
 
     const handle = card.querySelector<HTMLElement>('.wb-shell-structure-node')!
     fireEvent.pointerDown(handle, { button: 0, clientX: 10, clientY: 10, pointerId: 1 })
@@ -841,32 +465,28 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
 })
 
 /**
- * **아홉이 다 꺼지는 자리 — 사용자가 갇히는가.**
+ * **판정이 다 꺼지는 자리 — 사용자가 갇히는가.**
  *
- * 판정 밖의 둘까지 막으면 *"남의 잠금이 그 페이지의 모든 자리를 덮은"* 문서에서 구조
- * 도구모음이 통째로 죽는다. **그것은 잠금의 뜻 그대로이지만**, 화면이 그 상태에서 정말로
+ * *"남의 잠금이 그 페이지의 모든 자리를 덮은"* 문서에서는 구조 트리의 줄 항목이 통째로 죽는다. **그것은 잠금의 뜻 그대로이지만**, 화면이 그 상태에서 정말로
  * 아무 데도 못 가면 그것은 고장이다. 그래서 **남는 길을 값으로 고정한다.**
  *
  * 여기서 재는 것은 *"구조 편집이 죽어도 셸은 산다"*이지 그 길들의 동작이 아니다 — 뷰 모드와
  * 페이지 이동은 각자의 케이스가 갖는다.
  */
 describe('막다른 길이 아니다 — 구조 편집만 얼고 셸은 산다', () => {
-  it('페이지의 모든 자리가 잠기면 트리 줄이 전부 꺼지고 도구는 `안에 추가` 하나만 남는다', async () => {
+  it('페이지의 모든 자리가 잠기면 트리 줄이 전부 꺼진다', async () => {
     const view = await board()
 
     view.lock([foreign('n-a'), foreign('n-box'), foreign('n-c')])
 
-    // 뿌리 끝에 넣는 편집은 어느 자식의 잠금과도 안 부딪혀 서버가 받는다 — `안에 추가` 하나가 남는다(`edit/add-abilities.ts`).
-    expect(live()).toEqual(['안에 추가'])
-    expect(gates()).toEqual({ pattern: false, preset: false })
-    // 트리 줄도 전부 꺼진다 — 고를 수 있는 노드가 하나도 없다. 줄 행동 · 뿌리 `+`의 단추(행동 메뉴를 여는 것)는 줄이 아니다 —
-    // 그 안의 항목이 꺼진 것은 위 `live` · `gates`가 잰다. 머리의 «모두 접기» · «모두 펴기»도 줄이 아니다 — 접기는 고르기와 같은 읽기라
+    expect(live()).toEqual([])
+    // 트리 줄도 전부 꺼진다 — 고를 수 있는 노드가 하나도 없다. 줄 행동의 단추(행동 메뉴를 여는 것)는 줄이 아니다 —
+    // 그 안의 항목이 꺼진 것은 위 `live`가 잰다. 머리의 «모두 접기» · «모두 펴기»도 줄이 아니다 — 접기는 고르기와 같은 읽기라
     // 잠금에 안 꺼진다(`src/panels/tree-fold.tsx`).
     const rows = within(structureRegion())
       .getAllByRole<HTMLButtonElement>('button')
       .filter((button) => button.getAttribute('aria-haspopup') !== 'menu' && !button.classList.contains('wb-shell-tree-fold'))
     expect(rows.filter((button) => !button.disabled)).toEqual([])
-    expect(reason('안에 추가')).toBeNull()
   })
 
   it('그래도 뷰 모드와 다른 페이지는 남는다 — 이유는 꺼진 항목이 이름과 함께 말한다', async () => {

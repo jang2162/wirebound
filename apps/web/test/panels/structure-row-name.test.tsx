@@ -87,11 +87,11 @@ describe('구조 트리 줄 — `타입 (별칭) 요약`', () => {
     expect(isolated('n-sec')).toEqual([])
   })
 
-  it('줄 행동의 이름은 줄 글 전체다 — 라벨이 «추가»인 Button 줄과 그 줄의 `+` 가 갈린다', async () => {
+  // 구조 트리 줄의 행동은 `…` 하나다(`+` 는 걷었다 — 넣기는 하단 판이 한다). 라벨이 «추가»인 줄은 메뉴 트리 `+` 의 이름 꼴(`… 추가`)과도 갈린다.
+  it('줄 행동의 이름은 줄 글 전체다 — 라벨이 «추가»인 Button 줄과 그 줄의 `…` 가 갈린다', async () => {
     await openPage(doc())
     expect(within(region()).getAllByRole('button', { name: 'Button 추가' })).toEqual([rowButton('n-save')])
     const row = rowButton('n-save').closest<HTMLElement>('[data-tree-row]')!
-    expect(within(row).getByRole('button', { name: 'Button 추가 추가' }).getAttribute('aria-haspopup')).toBe('menu')
     expect(within(row).getByRole('button', { name: 'Button 추가 더 보기' }).getAttribute('aria-haspopup')).toBe('menu')
   })
 

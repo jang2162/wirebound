@@ -38,7 +38,7 @@ export { viewStateTouch } from './view-state-touch'
 export { guardViewStateOps } from './view-state-guard'
 
 export type { NodeVisit } from './tree'
-export { collectNodeIds, findNode, findNodePath, remapNodeIds, walkNodes } from './tree'
+export { collectNodeIds, findNode, findNodePath, remapNodeIds, stripMarkers, walkNodes } from './tree'
 
 export type { LockConflictInput, NodeLock, OpsLockConflictInput, SelectionConflictInput } from './lock'
 export { findLockConflict, lockConflictOfOps, locksAgainst, selectionConflicts } from './lock'
@@ -52,8 +52,11 @@ export { getComponent, listComponents, registerComponent, requireComponent, rese
 export { CATALOG_TYPES, installCatalog } from './component/catalog/index'
 export * from './component/catalog/index'
 
-export type { PagePreset } from './preset/builtin'
-export { BUILTIN_PRESETS, stripMarkers } from './preset/builtin'
+export type { BuiltinModule } from './module/builtin'
+export { BUILTIN_MODULES } from './module/builtin'
+
+export type { ModuleNodes } from './module/save'
+export { MODULE_NAME_MAX, countModuleNodes, moduleNodesForSave } from './module/save'
 
 export type { IssueSeverity, ValidationCode, ValidationIssue } from './validate'
 export { ISSUE_SEVERITY, ignoredVariantMessage, partitionIssues } from './validate'

@@ -75,8 +75,11 @@ const METHODS = [
   'listSnapshots',
   'createSnapshot',
   'restoreSnapshot',
-  'listPresets',
-  'createPreset',
+  'listModules',
+  'getModule',
+  'createModule',
+  'renameModule',
+  'deleteModule',
   'getExportPreview',
   'downloadExport',
   'getProjectTheme',
@@ -150,9 +153,9 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   updateProject: ['../src/settings/general-section.tsx'],
   // 설정 페이지의 «위험 구역» 하나다 — 목록 줄의 삭제는 없다(`routes/project-list.tsx` 머리말).
   deleteProject: ['../src/settings/danger-section.tsx'],
-  // 붙여넣기가 봉투의 페이지 대상(`page:…`)이 지금 프로젝트에 있는지 가늠한다(`shell/editor-keys.tsx` 의 `paste` — 메뉴 · 페이지의 `id` ·
+  // 붙여넣기 · 모듈 넣기가 노드의 페이지 대상(`page:…`)이 지금 프로젝트에 있는지 가늠한다(`shell/editor-keys.tsx` 의 `paste` · `palette/module-tab.tsx` — 메뉴 · 페이지의 `id` ·
   // `title` · `sortOrder` · `pages` · `children` 을 읽는다). 판 번호는 안 쓴다.
-  getTree: ['../src/shell/editor-keys.tsx'],
+  getTree: ['../src/palette/module-tab.tsx', '../src/shell/editor-keys.tsx'],
   // 메뉴 트리가 트리를 그리고 판 번호로 겹친 조회의 낡은 답 · 이미 받은 판의 `menu-changed`를 가른다.
   readTree: ['../src/tree/use-tree-commands.tsx'],
   createMenu: ['../src/tree/use-tree-commands.tsx'],
@@ -195,14 +198,12 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // **문서의 `marker`**에서 나온다 — 그래야 내보낸 HTML 번들(설계서 「HTML 정적 번들」)도
   // 같은 것을 그린다.
   //
-  // **`listComments`의 둘째·셋째 소비자는 그 규칙을 어기지 않는다.** 규칙이 막는 것은
-  // *"번호와 본문을 잇는 자리가 둘이 되는 것"*이다. 프리셋 고르개는 적용 전에 *"코멘트 몇
-  // 개가 고아가 되는가"*를 **세기만 한다** — 노드를 찾지도, `marker`를 읽지도, 코멘트를
-  // 만들거나 지우지도 않는다. 페이지 JSON 내보내기는 파일의 `comments` 절을 채우려고
+  // **`listComments`의 둘째 소비자는 그 규칙을 어기지 않는다.** 규칙이 막는 것은
+  // *"번호와 본문을 잇는 자리가 둘이 되는 것"*이다. 페이지 JSON 내보내기는 파일의 `comments` 절을 채우려고
   // 부르고 `nodeId`·`body`만 실어 낸다 — 번호를 읽지도 잇지도 않는다(번호는 `schema` 안의
-  // 노드가 나른다 — 설계서 「페이지 JSON」). 넷째 소비자가 생기면 이 줄이 먼저 죽는다 —
+  // 노드가 나른다 — 설계서 「페이지 JSON」). 셋째 소비자가 생기면 이 줄이 먼저 죽는다 —
   // 그때 그것이 번호와 본문을 잇는지 본다.
-  listComments: ['../src/panels/comment-panel.tsx', '../src/panels/preset-picker.tsx', '../src/panels/page-json-export.ts'],
+  listComments: ['../src/panels/comment-panel.tsx', '../src/panels/page-json-export.ts'],
   createComment: ['../src/panels/comment-panel.tsx'],
   updateComment: ['../src/panels/comment-panel.tsx'],
   deleteComment: ['../src/panels/comment-panel.tsx'],
@@ -220,16 +221,13 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   listSnapshots: ['../src/shell/snapshots-panel.tsx'],
   createSnapshot: ['../src/shell/snapshots-panel.tsx'],
   restoreSnapshot: ['../src/shell/snapshots-panel.tsx'],
-  // 프리셋 둘. **둘 다 고르개 하나에서만 불린다** — 고를 목록과 저장이 한 자리에
-  // 있는 것이 그 화면의 꼴이고, **이 줄이 그것을 실행으로 지킨다:** 툴바나 셸이 직접 프리셋을
-  // 부르기 시작하면 여기가 죽는다.
-  //
-  // **`deletePreset`이 목록에 아예 없는 것이 요점이다.** 서버에는 그 라우트가 있지만
-  // (*"프리셋은 지울 수 있다"*는 규칙이라 이름에 유일 제약이 없다) 화면에 지우는 자리가
-  // 없다 — 부르는 자리가 없는 메서드를 두면 그 응답의 shape가 무엇을 지키는지 아무도
-  // 확인하지 않은 채 남는다(`getSnapshot`이 같은 자리에서 같은 판단).
-  listPresets: ['../src/panels/preset-picker.tsx'],
-  createPreset: ['../src/panels/preset-picker.tsx'],
+  // 하단 판 «모듈» 탭 하나다 — 목록 · 넣기 직전의 다시 읽기(`nodes`) · 카드의 이름 바꾸기 · 삭제(`id` 를 경로에 싣는다 — `SHAPES.moduleEnvelope`).
+  listModules: ['../src/palette/module-tab.tsx'],
+  getModule: ['../src/palette/module-tab.tsx'],
+  // «모듈로 저장…» 상자 하나다 — 응답의 `module` 은 읽지 않는다(성공하면 탭이 목록을 다시 읽는다 — `announceModulesChanged`).
+  createModule: ['../src/panels/save-module-dialog.tsx'],
+  renameModule: ['../src/palette/module-tab.tsx'],
+  deleteModule: ['../src/palette/module-tab.tsx'],
   // 내보내기. 둘 다 같은 한 화면이 부른다 — 미리보기가 무엇이 실릴지 말하고
   // 그 다음에 앵커가 zip을 받는다.
   getExportPreview: ['../src/shell/export-panel.tsx'],

@@ -220,7 +220,7 @@ describe('duplicateOps', () => {
     expect(after.root.children![1]).not.toHaveProperty('marker')
   })
 
-  it('루트 · 문서에 없는 노드는 `+` 의 «아래 추가» 문장', () => {
+  it('루트 · 문서에 없는 노드는 `addAfter` 판정의 문장', () => {
     expect(duplicateOps(doc(), ['root'])).toEqual({ reason: STRUCTURE_WHY_DISABLED.addAfter })
     expect(duplicateOps(doc(), ['gone'])).toEqual({ reason: STRUCTURE_WHY_DISABLED.addAfter })
   })

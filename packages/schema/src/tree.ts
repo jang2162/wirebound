@@ -45,7 +45,7 @@ export function collectNodeIds(root: WbNode): string[] {
 }
 
 /**
- * 트리 전체에 새 id를 발급한다. 가져오기·프리셋 적용에서 쓴다(패턴 전개는 **안 쓴다** —
+ * 트리 전체에 새 id를 발급한다. 가져오기·모듈 넣기 · 붙여넣기에서 쓴다(패턴 전개는 **안 쓴다** —
  * `PatternNode`에 옛 id도 `interactions`도 없어 리매핑할 대상 자체가 없다).
  * 트리 안을 가리키던 상호작용 target도 함께 바꾸고, 트리 밖 참조(`page:...`)는 그대로 둔다.
  *
@@ -55,7 +55,7 @@ export function collectNodeIds(root: WbNode): string[] {
  *
  * 그것이 계약이다. `{ ...node }`로 노드만 새로 만들면 `props`와 상호작용 액션의 `value`가
  * **입력과 같은 객체**로 남는다 — 그러면 결과 문서를 고칠 때 원본이 함께 바뀐다. 입력이
- * 오래 사는 객체일 때(내장 프리셋 같은 모듈 상수, 초안 스토어) 그 공유가 프로세스 수명
+ * 오래 사는 객체일 때(기본 모듈 같은 모듈 상수, 초안 스토어) 그 공유가 프로세스 수명
  * 내내 남는다. `expandPattern`의 공유와 같은 부류이고, *"무관한 테스트가 순서에 따라
  * 깨진다"*로 나타난다.
  *
@@ -97,5 +97,51 @@ function rewrite(node: WbNode, mapping: Map<string, string>): WbNode {
     next.children = node.children.map((child) => rewrite(child, mapping))
   }
 
+  return next
+}
+
+/**
+ * 노드에서 `marker`(코멘트 번호)를 버린 사본 — 모듈 저장(`module/save.ts`) · 붙여넣기 · 복제 · 상태 가지 복사가 쓴다.
+ *
+ * **노드를 페이지 밖으로 나르는 자리가 이 함수를 지나야 한다.** 번호를 든 채 나르면 그것을 가리키는 코멘트 행이 없다 — 코멘트는
+ * `page_id`·`node_id`로 매달려 있으므로, 번호만 따라가면 **아무 데도 닿지 않는 번호**가 된다.
+ *
+ * **`marker`만 지운다.** `interactions`는 남긴다 — 트리 안을 가리키는 `target`은
+ * `remapNodeIds`가 함께 바꾼다. 묶음 밖을 가리키는 것을 거르는 것은 부르는 쪽이다(모듈 저장은 `moduleNodesForSave`, 붙여넣기는
+ * `prepareNodesForPaste`).
+ *
+ * **깊은 복사를 겸한다.** 저장 경계가 받은 값을 그대로 들고 있으면 부르는 쪽이 나중에
+ * 그 트리를 만졌을 때 저장된 것이 함께 바뀐다 — `expandPattern`이 `structuredClone`으로
+ * 닫는 것과 같은 부류다. 임의 JSON을 복사하는 규칙은 `./clone.ts` 하나가
+ * 갖는다(`structuredClone`을 왜 안 쓰는지도 거기 있다).
+ *
+ * **`WbNode`가 아닌 키는 옮기지 않는다.** `remapNodeIds`가 `{ ...node }`로 그것을 남기는
+ * 것과 갈리는 자리다 — 이쪽은 **저장할 값을 만드는 함수**라 선언되지 않은 키를 담으면
+ * 봉투가 거부할 값을 DB에 넣게 된다.
+ */
+export function stripMarkers(nodes: readonly WbNode[]): WbNode[] {
+  return nodes.map((node) => copyNode(node))
+}
+
+function copyNode(node: WbNode): WbNode {
+  const next: WbNode = { id: node.id, type: node.type }
+  if (node.alias !== undefined) next.alias = node.alias
+  if (node.props !== undefined) next.props = cloneJsonValue(node.props)
+  if (node.variant !== undefined) next.variant = node.variant
+  if (node.weight !== undefined) next.weight = node.weight
+  if (node.interactions !== undefined) {
+    next.interactions = node.interactions.map((interaction) => ({
+      on: interaction.on,
+      actions: interaction.actions.map((action) => {
+        const copied = { ...action }
+        // `props`와 같은 이유로 깊이 복사한다(`../clone.ts`) — 얕게 두면 `value`의 객체를 저장된 것과 공유한다.
+        if ('value' in copied) copied.value = cloneJsonValue(copied.value)
+        return copied
+      }),
+    }))
+  }
+  if (node.children !== undefined) {
+    next.children = node.children.map((child) => copyNode(child))
+  }
   return next
 }

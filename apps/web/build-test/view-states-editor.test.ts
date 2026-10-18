@@ -12,7 +12,7 @@
  * | 되돌리기 · 리베이스 | 남이 순서를 바꾼 뒤 «상태 추가» 되돌리기가 남의 상태를 뺀다 · 가지가 생긴 상태의 되돌리기가 상태 · 가지를 잃는다 |
  * | 나누기 · 풀기 · 가지 지우기 | 묶음 모양이 다르다 · 관리자 상태의 나누기가 그 가지를 안 만든다 · 이어지지 않은 형제에 켜져 있다 · 풀기가 안 묻는다 · 되돌리기 한 번에 안 돌아온다 |
  * | 흐린 가지 안 편집 | 기본 가지가 바뀐다 · 편집이 두 프레임이다 · 고른 것이 복사로 안 옮긴다 · 되돌리기 한 번에 가지째 안 빠진다 · 두 사람의 잠금이 그 노드에 안 걸린다 |
- * | 자리 규칙 | 영역의 «안에 추가» · 가지의 «아래 추가»가 켜져 있다 · 가지 줄을 영역 밖에 끌어 놓으면 옮긴다 |
+ * | 자리 규칙 | 가지의 «들여쓰기» · «내어쓰기»가 켜져 있다 · 가지 줄을 영역 밖에 끌어 놓으면 옮긴다 |
  * | 표지 | 꼬리표 · 흐림이 상태와 다르다 · 상자가 보이는 가지의 자식 합에서 1px 넘게 어긋난다(줌 · 스크롤 · 남의 편집 뒤) · 문서 안에 표지가 들어간다 · 뷰 모드에 남는다 |
  *
  * **못 재는 것:** 표지 상자에 iframe 의 표면 안 자리를 더하는 셈(`src/canvas/canvas.tsx` 의 상태 영역 표지 이펙트 — `frameOffset`)을 떼도 «표지»는
@@ -872,15 +872,16 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
     }
   })
 
-  it('영역 · 가지의 자리 규칙 — 영역의 «안에 추가» · 가지의 «아래 추가»가 까닭과 함께 꺼지고, 가지 줄을 영역 밖에 끌어 놓아도 안 옮긴다', async () => {
+  // 영역 · 가지의 «넣기» 자리 규칙(옛 줄 `+` 의 «안에 추가» · «아래 추가»)은 그 항목과 함께 걷었다 — 가지 곁 넣기의 까닭은 붙여넣기 · 복제가
+  // 말한다(`./view-states-review.test.ts` «L1 · L3»). 여기는 남은 줄 항목(`…` 의 계층)과 끌기로 잰다.
+  it('영역 · 가지의 자리 규칙 — 가지의 «들여쓰기» · «내어쓰기»가 까닭과 함께 꺼지고, 가지 줄을 영역 밖에 끌어 놓아도 안 옮긴다', async () => {
     const { P } = await fixture('vs-rules')
     const tab = await openTab(P)
     try {
-      await pickRow(tab.page, 'n_sw')
-      const regionAdd = (await rowMenu(tab.page, 'n_sw', '추가')).find((item) => item.label === '안에 추가')
-      await tab.page.keyboard.press('Escape')
       await pickRow(tab.page, 'n_cd')
-      const caseAdd = (await rowMenu(tab.page, 'n_cd', '추가')).find((item) => item.label === '아래 추가')
+      const caseMoves = (await rowMenu(tab.page, 'n_cd', '더 보기')).filter(
+        (item) => item.label === '들여쓰기' || item.label === '내어쓰기',
+      )
       await tab.page.keyboard.press('Escape')
       // 가지 줄을 끌어 영역 밖 글(n_out) 위에 놓는다.
       const from = (await treeRow(tab.page, 'n_cd').locator('.wb-shell-structure-node').boundingBox())!
@@ -895,14 +896,15 @@ describe.skipIf(!전제.ok)('화면 상태 편집 — 실브라우저', () => {
       await tab.page.mouse.up()
       await tab.page.waitForTimeout(600)
       expect({
-        regionAdd,
-        caseAdd,
+        caseMoves,
         indicator,
         sent: tab.patches.length - sent,
         headSame: (await server(P)).headSeq === before.headSeq,
       }).toEqual({
-        regionAdd: { label: '안에 추가', disabled: true, reason: '상태 영역 안에는 가지만 섭니다 — 가지를 고르고 그 안에 추가하세요' },
-        caseAdd: { label: '아래 추가', disabled: true, reason: '가지 곁에는 노드를 둘 수 없습니다 — 상태 영역을 고르고 아래 추가하세요' },
+        caseMoves: [
+          { label: '들여쓰기', disabled: true, reason: '가지는 그 상태 영역 밖으로 옮길 수 없습니다' },
+          { label: '내어쓰기', disabled: true, reason: '가지는 그 상태 영역 밖으로 옮길 수 없습니다' },
+        ],
         indicator: 0,
         sent: 0,
         headSame: true,

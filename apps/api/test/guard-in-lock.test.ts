@@ -30,7 +30,7 @@
  * # 잠금 순서 — 재확인이 연 교착
  *
  * 프로젝트 삭제는 재확인을 위해 기다릴 것을 먼저 잡으므로 잠금 순서가 있다. 아래 `잠금 순서` 절이 그 순서가
- * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 삭제가 owner 행을 멤버 쓰기와 같은 순서로 재확인 앞에서 잡는지를 한 판(E12)으로, 메뉴 행을 owner 행 앞에서 잡아 메뉴 제목 쓰기와 고리를 안 만드는지를 세 판(E13)으로, 프리셋 행을 같은 자리에서 잡아 프리셋 삭제와 고리를 안 만드는지를 두 판(E15)으로, 삭제가 쥔 행에 선 바탕 없는 제목 쓰기가 404 인지를 두 판(E14)으로, 프로젝트 행을 `KEY SHARE`로 먼저 잡는 쓰기(`lockProjectShared`)가
+ * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 삭제가 owner 행을 멤버 쓰기와 같은 순서로 재확인 앞에서 잡는지를 한 판(E12)으로, 메뉴 행을 owner 행 앞에서 잡아 메뉴 제목 쓰기와 고리를 안 만드는지를 세 판(E13)으로, 모듈 행을 같은 자리에서 잡아 모듈 이름 바꾸기 · 삭제와 고리를 안 만드는지를 여덟 판(E15 — 쓰기 둘 × 역할 둘 × 차례 둘)으로, 삭제가 쥔 행에 선 바탕 없는 제목 쓰기가 404 인지를 두 판(E14)으로, 프로젝트 행을 `KEY SHARE`로 먼저 잡는 쓰기(`lockProjectShared`)가
  * 삭제의 CASCADE 와 고리를 안 만드는지(프로젝트 행 → 자기 행 → 멤버 행)를 다섯 판(E4 · E5 · E6 · E8 · E9)으로, 코멘트 수정이 코멘트 행을
  * 지우는 두 쓰기 · 역할 변경과 3자 고리를 안 만드는지(프로젝트 행 → 페이지 행 → 멤버 행 → 코멘트 행)를 두 판(F3 · F3′)으로 잰다.
  */
@@ -181,7 +181,7 @@ async function projectState({ projectId, bob }: Pick<Fx, 'projectId' | 'bob'>) {
       .where('user_id', '!=', bob.user.id)
       .orderBy('user_id')
       .execute(),
-    presets: await db.selectFrom('presets').selectAll().where('project_id', '=', projectId).orderBy('id').execute(),
+    modules: await db.selectFrom('modules').selectAll().where('project_id', '=', projectId).orderBy('id').execute(),
     tokens: await db.selectFrom('api_tokens').select(['id', 'user_id', 'name']).where('project_id', '=', projectId).orderBy('id').execute(),
   }
 }
@@ -795,31 +795,34 @@ describe('자격이 잠금을 기다리는 동안 죽으면 401 — 커밋 순�
 })
 
 /**
- * **잠금에 안 서는 쓰기도 가드와 커밋 사이가 있다 — 프리셋 삭제.** 이 쓰기는 기다리는 잠금이 없어(아래 «분모»의 `NOT_LOCKED`)
- * 가드와 `DELETE` 사이는 수 ms 다. 그 사이 강등 · 제외가 커밋되면 가드의 옛 판정으로 지운다 — viewer 가 된 사람이 프리셋을
- * 지운다. 그 틈을 매번 서게 하려고 `BEFORE DELETE` 트리거가 1s 를 끼운다(행은 이미 잡혔다). 재확인은 `DELETE` 뒤 같은
- * 트랜잭션에서 돈다(`routes/presets.ts`). 혼자 죽는 변조: 그 재확인 한 줄을 뗀다.
+ * **잠금에 안 서는 쓰기도 가드와 커밋 사이가 있다 — 모듈 이름 바꾸기 · 삭제.** 이 둘은 기다리는 잠금이 없어(아래 «분모»의
+ * `NOT_LOCKED`) 가드와 `UPDATE` · `DELETE` 사이는 수 ms 다. 그 사이 강등 · 제외가 커밋되면 가드의 옛 판정으로 쓴다 — viewer 가 된 사람이
+ * 모듈을 지우거나 이름을 바꾼다. 그 틈을 매번 서게 하려고 `BEFORE UPDATE OR DELETE` 트리거가 1s 를 끼운다(행은 이미 잡혔다). 재확인은
+ * 쓰기 뒤 같은 트랜잭션에서 돈다(`routes/modules.ts`). 혼자 죽는 변조: 그 라우트의 재확인 한 줄을 뗀다(삭제 · 이름이 각각).
  */
-describe('프리셋 삭제 — 가드와 커밋 사이의 강등도 커밋 순간에 본다', () => {
-  async function presetDeleteRace(ctx: RealApiContext, demotion: Demotion | null) {
+describe('모듈 삭제 · 이름 바꾸기 — 가드와 커밋 사이의 강등도 커밋 순간에 본다', () => {
+  async function moduleWriteRace(ctx: RealApiContext, write: 'delete' | 'rename', demotion: Demotion | null) {
     const fx = await fixture(ctx, 'editor')
     const made = await ctx.app.inject({
       method: 'POST',
-      url: `/api/projects/${fx.projectId}/presets`,
+      url: `/api/projects/${fx.projectId}/modules`,
       cookies: fx.alice.cookie,
-      payload: { name: '앨리스의 프리셋', schema: [] },
+      payload: { name: '앨리스의 모듈', nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }] },
     })
     expect(made.statusCode, made.body).toBe(201)
-    const presetId = (made.json() as { id: string }).id
+    const moduleId = (made.json() as { module: { id: string } }).module.id
     await sql
-      .raw(`create function zz_slow_preset_delete() returns trigger language plpgsql as $$ begin perform pg_sleep(1); return old; end $$`)
+      .raw(
+        `create function zz_slow_module_write() returns trigger language plpgsql as $$ begin perform pg_sleep(1); if tg_op = 'DELETE' then return old; end if; return new; end $$`,
+      )
       .execute(db)
-    await sql`create trigger zz_slow_preset_delete before delete on presets for each row execute function zz_slow_preset_delete()`.execute(
+    await sql`create trigger zz_slow_module_write before update or delete on modules for each row execute function zz_slow_module_write()`.execute(
       db,
     )
     try {
-      const removal = fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/presets/${presetId}`)
-      // 트리거의 잠에 든 것을 본다 — 가드는 이미 지났다. `query`로 찾지 않는다: 그 칸은 최상위 문장(`delete from presets …`)이라
+      const url = `/api/projects/${fx.projectId}/modules/${moduleId}`
+      const fired = write === 'delete' ? fireRest(ctx, fx, 'DELETE', url) : fireRest(ctx, fx, 'PATCH', url, { name: '밥이 바꾼 이름' })
+      // 트리거의 잠에 든 것을 본다 — 가드는 이미 지났다. `query`로 찾지 않는다: 그 칸은 최상위 문장(`delete from modules …`)이라
       // 트리거 안의 글자가 안 보이고, 찾는 글자를 담은 이 조회문 자신에 걸려 잠든 쓰기가 없어도 1 을 센다. 잠은 `wait_event`로 본다.
       const deadline = Date.now() + 5_000
       for (;;) {
@@ -828,33 +831,50 @@ describe('프리셋 삭제 — 가드와 커밋 사이의 강등도 커밋 순�
            where datname = current_database() and wait_event = 'PgSleep' and pid <> pg_backend_pid()
         `.execute(db)
         if ((rows[0]?.n ?? 0) >= 1) break
-        if (Date.now() > deadline) throw new Error('삭제가 트리거에 서지 않았다 — 판이 서지 않았다')
+        if (Date.now() > deadline) throw new Error('쓰기가 트리거에 서지 않았다 — 판이 서지 않았다')
         await new Promise((resolve) => setTimeout(resolve, 10))
       }
       const demoted = demotion === null ? null : await demote(ctx, fx, 'editor', demotion)
-      const res = await removal.promise
-      const left = await db.selectFrom('presets').select('id').where('id', '=', presetId).execute()
-      return { res, demoted, left: left.length }
+      const res = await fired.promise
+      const left = await db.selectFrom('modules').select('name').where('id', '=', moduleId).execute()
+      return { res, demoted, left: left.map((row) => row.name) }
     } finally {
-      await sql`drop trigger if exists zz_slow_preset_delete on presets`.execute(db)
-      await sql`drop function if exists zz_slow_preset_delete()`.execute(db)
+      await sql`drop trigger if exists zz_slow_module_write on modules`.execute(db)
+      await sql`drop function if exists zz_slow_module_write()`.execute(db)
     }
   }
 
   it('대조 — 강등이 없으면 지운다(204 · 행 0)', async () => {
     await withRealApi(async (ctx) => {
-      const { res, left } = await presetDeleteRace(ctx, null)
+      const { res, left } = await moduleWriteRace(ctx, 'delete', null)
       expect(res.status, res.body).toBe(204)
-      expect(left).toBe(0)
+      expect(left).toEqual([])
     })
   }, 60_000)
 
-  it('가드 뒤 · 커밋 전에 viewer 로 내려가면 403 — 프리셋이 남는다', async () => {
+  it('삭제 — 가드 뒤 · 커밋 전에 viewer 로 내려가면 403 — 모듈이 남는다', async () => {
     await withRealApi(async (ctx) => {
-      const { res, demoted, left } = await presetDeleteRace(ctx, 'role')
+      const { res, demoted, left } = await moduleWriteRace(ctx, 'delete', 'role')
       expect(demoted).toBe(200)
       expect(res.status, res.body).toBe(REFUSED.role)
-      expect(left).toBe(1)
+      expect(left).toEqual(['앨리스의 모듈'])
+    })
+  }, 60_000)
+
+  it('대조 — 강등이 없으면 이름을 바꾼다(200)', async () => {
+    await withRealApi(async (ctx) => {
+      const { res, left } = await moduleWriteRace(ctx, 'rename', null)
+      expect(res.status, res.body).toBe(200)
+      expect(left).toEqual(['밥이 바꾼 이름'])
+    })
+  }, 60_000)
+
+  it('이름 바꾸기 — 가드 뒤 · 커밋 전에 viewer 로 내려가면 403 — 이름이 그대로다', async () => {
+    await withRealApi(async (ctx) => {
+      const { res, demoted, left } = await moduleWriteRace(ctx, 'rename', 'role')
+      expect(demoted).toBe(200)
+      expect(res.status, res.body).toBe(REFUSED.role)
+      expect(left).toEqual(['앨리스의 모듈'])
     })
   }, 60_000)
 })
@@ -1376,69 +1396,90 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
   }
 
   /**
-   * **E15 — 프리셋 삭제가 프리셋 행을 쥔 채 재확인에 서 있을 때 프로젝트 삭제.** 프리셋 삭제는 프로젝트 행을 안 잡고 «프리셋 행
-   * (`DELETE`) → 재확인(자기 멤버 행 `FOR SHARE`)» 순이다(`routes/presets.ts`) — E13 의 메뉴 제목 쓰기와 같은 모양이다. 판을 세우는
-   * 문도 E13 과 같다: 쓰는 사람의 멤버 행을 쥔 채 삭제를 먼저(그 행에 선다), 프리셋 삭제를 다음에 세우고 푼다. 삭제가 프리셋 행을
-   * owner 행 **앞에서** 잡으면(`routes/projects.ts` — `lockProjectPresets`) 프리셋 삭제가 그 행에서 삭제를 기다렸다가 0 행 → 404 다.
+   * **E15 — 모듈 쓰기(이름 바꾸기 · 삭제)가 모듈 행을 쥔 채 재확인에 서 있을 때 프로젝트 삭제.** 모듈 쓰기는 프로젝트 행을 안 잡고 «모듈 행
+   * (`UPDATE` · `DELETE`) → 재확인(자기 멤버 행 `FOR SHARE`)» 순이다(`routes/modules.ts`) — E13 의 메뉴 제목 쓰기와 같은 모양이다. 판을
+   * 세우는 문도 E13 과 같다: 쓰는 사람의 멤버 행을 쥔 채 두 쓰기를 차례로 세우고(둘 다 줄에 선 것을 `waitForLockWaiter`로 본다) 푼다.
+   *
+   * | 차례 | 기대 |
+   * |---|---|
+   * | 삭제 먼저 · 모듈 쓰기 다음 | 삭제가 모듈 행을 owner 행 **앞에서** 잡아(`routes/projects.ts` — `lockProjectModules`) 모듈 쓰기가 그 행에서 삭제를 기다렸다가 0 행 → 404 |
+   * | 모듈 쓰기 먼저 · 삭제 다음(뒤집은 판) | 삭제가 `lockProjectModules`에서 모듈 쓰기를 기다린다 — 모듈 쓰기가 재확인을 지나 커밋(204 · 200)한 뒤 삭제 204 |
    *
    * | 변조(`routes/projects.ts`) | 죽는 것 |
    * |---|---|
-   * | 삭제가 `lockProjectPresets`를 안 부른다 | 둘 다 — 교착 +1 · 한쪽 500 |
-   * | `lockProjectPresets`를 `lockOwnerIds` **뒤로** | **owner 판 혼자** — owner 는 `lockOwnerIds`에서 이미 잡혀 있어 그 뒤의 프리셋 대기가 고리를 닫는다. editor 는 CASCADE 에서 잡히므로 그 앞이면 된다 |
+   * | 삭제가 `lockProjectModules`를 안 부른다 | 둘 다 — 교착 +1 · 한쪽 500 |
+   * | `lockProjectModules`를 `lockOwnerIds` **뒤로** | **owner 판 혼자** — owner 는 `lockOwnerIds`에서 이미 잡혀 있어 그 뒤의 모듈 대기가 고리를 닫는다. editor 는 CASCADE 에서 잡히므로 그 앞이면 된다 |
    *
    * editor 판은 혼자 죽는 변조가 없다 — 그 판이 따로 재는 것은 쓰는 사람이 CASCADE 에서 잡히는 자리인데, 그 자리보다 늦게 잡는
    * 변조는 owner 판의 자리(`lockOwnerIds`)보다도 늦다. 잠금 자리의 축은 owner 판이 소유한다.
    *
-   * 재확인을 `DELETE` **앞**으로 옮기는 길은 이 판에서는 초록이지만 고르지 않았다 — 그 까닭은 삭제 주석(CASCADE 순서).
+   * 재확인을 쓰기 **앞**으로 옮기는 길은 이 판에서는 초록이지만 고르지 않았다 — 그 까닭은 삭제 주석(CASCADE 순서).
    */
   for (const probe of [
-    { label: 'owner', writer: 'bob' as const },
-    { label: 'editor', writer: 'carol' as const },
+    { label: 'owner · 삭제', writer: 'bob' as const, write: 'delete' as const },
+    { label: 'editor · 삭제', writer: 'carol' as const, write: 'delete' as const },
+    { label: 'owner · 이름', writer: 'bob' as const, write: 'rename' as const },
+    { label: 'editor · 이름', writer: 'carol' as const, write: 'rename' as const },
   ]) {
-    it(`E15 — 프리셋 삭제(${probe.label})가 프리셋 행을 쥔 채 재확인에 섰을 때 삭제: 삭제 204 · 프리셋 삭제 404 · 교착 0`, async () => {
-      await withRealApi(async (ctx) => {
-        const alice = await signup(ctx)
-        const bob = await signup(ctx)
-        const carol = await signup(ctx)
-        const project = await createProject(ctx, alice.cookie)
-        await addMember(ctx, project.id, bob.user.id, 'owner')
-        await addMember(ctx, project.id, carol.user.id, 'editor')
-        const menu = await createMenuNode(ctx, alice.cookie, project.id, { title: '메뉴' })
-        await createPage(ctx, alice.cookie, project.id, menu.id, { title: '페이지' })
-        const writer = probe.writer === 'bob' ? bob : carol
-        const made = await ctx.app.inject({
-          method: 'POST',
-          url: `/api/projects/${project.id}/presets`,
-          cookies: writer.cookie,
-          payload: { name: '지울 프리셋', schema: [] },
-        })
-        expect(made.statusCode, made.body).toBe(201)
-        const presetId = (made.json() as { id: string }).id
+    for (const order of ['project-first', 'module-first'] as const) {
+      const expected = order === 'project-first' ? '모듈 쓰기 404' : `모듈 쓰기 ${probe.write === 'delete' ? 204 : 200}`
+      it(`E15 — 모듈 ${probe.label}(${order === 'project-first' ? '삭제 먼저' : '모듈 쓰기 먼저'}): 삭제 204 · ${expected} · 교착 0`, async () => {
+        await withRealApi(async (ctx) => {
+          const alice = await signup(ctx)
+          const bob = await signup(ctx)
+          const carol = await signup(ctx)
+          const project = await createProject(ctx, alice.cookie)
+          await addMember(ctx, project.id, bob.user.id, 'owner')
+          await addMember(ctx, project.id, carol.user.id, 'editor')
+          const menu = await createMenuNode(ctx, alice.cookie, project.id, { title: '메뉴' })
+          await createPage(ctx, alice.cookie, project.id, menu.id, { title: '페이지' })
+          const writer = probe.writer === 'bob' ? bob : carol
+          const made = await ctx.app.inject({
+            method: 'POST',
+            url: `/api/projects/${project.id}/modules`,
+            cookies: writer.cookie,
+            payload: { name: '쓸 모듈', nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }] },
+          })
+          expect(made.statusCode, made.body).toBe(201)
+          const moduleId = (made.json() as { module: { id: string } }).module.id
+          const moduleWrite = () =>
+            track(
+              ctx.app.inject({
+                method: probe.write === 'delete' ? 'DELETE' : 'PATCH',
+                url: `/api/projects/${project.id}/modules/${moduleId}`,
+                cookies: writer.cookie,
+                ...(probe.write === 'rename' ? { payload: { name: '바꾼 이름' } } : {}),
+              }),
+            )
+          const projectRemoval = () =>
+            track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${project.id}`, cookies: alice.cookie }))
 
-        const deadlocksBefore = await deadlockCount()
-        const door = queueLock(async (trx) => {
-          await sql`select 1 from project_members where project_id = ${project.id} and user_id = ${writer.user.id} for update`.execute(trx)
-        })
-        await door.acquired
-        let removal: Fired | undefined
-        let presetRemoval: Fired | undefined
-        try {
-          removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${project.id}`, cookies: alice.cookie }))
-          await waitForLockWaiter(1)
-          presetRemoval = track(
-            ctx.app.inject({ method: 'DELETE', url: `/api/projects/${project.id}/presets/${presetId}`, cookies: writer.cookie }),
-          )
-          await waitForLockWaiter(2)
-        } finally {
-          await door.release()
-        }
-        const [removed, presetRemoved] = await Promise.all([removal.promise, presetRemoval.promise])
+          const deadlocksBefore = await deadlockCount()
+          const door = queueLock(async (trx) => {
+            await sql`select 1 from project_members where project_id = ${project.id} and user_id = ${writer.user.id} for update`.execute(
+              trx,
+            )
+          })
+          await door.acquired
+          let first: Fired | undefined
+          let second: Fired | undefined
+          try {
+            first = order === 'project-first' ? projectRemoval() : moduleWrite()
+            await waitForLockWaiter(1)
+            second = order === 'project-first' ? moduleWrite() : projectRemoval()
+            await waitForLockWaiter(2)
+          } finally {
+            await door.release()
+          }
+          const [a, b] = await Promise.all([first.promise, second.promise])
+          const [removed, written] = order === 'project-first' ? [a, b] : [b, a]
 
-        expect(await deadlockCount()).toBe(deadlocksBefore)
-        expect(removed.status, removed.body).toBe(204)
-        expect(presetRemoved.status, presetRemoved.body).toBe(404)
-      })
-    }, 60_000)
+          expect(await deadlockCount()).toBe(deadlocksBefore)
+          expect(removed.status, removed.body).toBe(204)
+          expect(written.status, written.body).toBe(order === 'project-first' ? 404 : probe.write === 'delete' ? 204 : 200)
+        })
+      }, 60_000)
+    }
   }
 
   /**
@@ -1485,7 +1526,7 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
   }
 
   /**
-   * E5 · E6 · E8 · E9 — FK 삽입 넷(스냅샷 · 초대 · 프리셋 · 토큰 생성). 권한이 아니라 **봉투**의 판이다: 삽입의 FK 가 프로젝트
+   * E5 · E6 · E8 · E9 — FK 삽입 넷(스냅샷 · 초대 · 모듈 · 토큰 생성). 권한이 아니라 **봉투**의 판이다: 삽입의 FK 가 프로젝트
    * 행에 거는 `KEY SHARE`만으로는 삭제의 `FOR UPDATE` 뒤에 섰다가 깨어나 23503 — 봉투 없는 500 이 된다.
    * 트랜잭션 맨 앞의 `lockProjectShared`가 0 행을 보고 404 로 옮긴다. 판은 E4 와 같다.
    */
@@ -1503,10 +1544,13 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
         fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/members`, { email: fx.inviteeEmail, role: 'viewer' }),
     },
     {
-      label: 'E8 — 프리셋 저장',
+      label: 'E8 — 모듈 저장',
       bobRole: 'editor' as const,
       fire: (ctx: RealApiContext, fx: ProjectFx) =>
-        fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/presets`, { name: '밥의 프리셋', schema: [] }),
+        fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/modules`, {
+          name: '밥의 모듈',
+          nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }],
+        }),
     },
     {
       label: 'E9 — API 토큰 발급',
@@ -2416,7 +2460,7 @@ describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼�
  * | 메뉴 생성 · 자리 옮기기 · 삭제 · 페이지 생성 · 자리 옮기기 · 삭제 · 가져오기 | 자기의 `lockProjectTree`(프로젝트 행) | 선다 |
  * | 프로젝트 수정 | `UPDATE projects`(프로젝트 행) | 선다 |
  * | 복원 · 프로젝트 삭제 | 자기의 `lockProjectRow`(프로젝트 행 `FOR UPDATE`) | 선다 |
- * | 스냅샷 · 초대 · 프리셋 · 토큰 생성 | 자기의 `lockProjectShared`(`INSERT`의 FK 가 부모 행에 거는 `KEY SHARE`와 모드는 같다 — 먼저 잡아 두면 삭제 뒤에 깰 때 500 이 아니라 404 다) | 안 선다(`KEY SHARE`는 `NO KEY UPDATE`와 안 부딪힌다) |
+ * | 스냅샷 · 초대 · 모듈 · 토큰 생성 | 자기의 `lockProjectShared`(`INSERT`의 FK 가 부모 행에 거는 `KEY SHARE`와 모드는 같다 — 먼저 잡아 두면 삭제 뒤에 깰 때 500 이 아니라 404 다) | 안 선다(`KEY SHARE`는 `NO KEY UPDATE`와 안 부딪힌다) |
  * | 코멘트 수정 | 자기의 `lockProjectShared`(프로젝트 행 `KEY SHARE` — 자기 행(코멘트)보다 먼저) | 안 선다 |
  * | 코멘트 삭제 | 자기의 `lockProjectForBurial`(프로젝트 행 `KEY SHARE`) | 안 선다 |
  *
@@ -2424,7 +2468,7 @@ describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼�
  * 쓰기는 전부 위 «복원» 열에 있다.
  *
  * **재확인이 없으면** 메뉴 생성 · 삭제 · 페이지 생성 · 가져오기 · 프로젝트 수정(두 잠금 모두) · 스냅샷 · 초대 ·
- * 프리셋 · 토큰 생성 · 코멘트 수정이 강등 **뒤에** 옛 권한으로 커밋한다(201 · 200 · 204 — 토큰은 멤버에서 빠진 뒤
+ * 모듈 · 토큰 생성 · 코멘트 수정이 강등 **뒤에** 옛 권한으로 커밋한다(201 · 200 · 204 — 토큰은 멤버에서 빠진 뒤
  * 원문까지 내준다). 메뉴 · 페이지 자리 옮기기 · 페이지 · 코멘트 삭제 · 복원 · 프로젝트 삭제의 재확인 축은 위 `PROBES` 와
  * `menu-title-conflict.test.ts`가 소유하고, 이 표는 «프로젝트 잠금 뒤에서도 선다»를 센다.
  *
@@ -2601,12 +2645,16 @@ const PROJECT_PROBES: ProjectProbe[] = [
     okStatus: 201,
   },
   {
-    route: 'POST /api/projects/:projectId/presets',
-    label: '프리셋 저장',
+    route: 'POST /api/projects/:projectId/modules',
+    label: '모듈 저장',
     bobRole: 'editor',
     demotion: 'role',
     holders: ['restore'],
-    fire: (ctx, fx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/presets`, { name: '밥의 프리셋', schema: [] }),
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/modules`, {
+        name: '밥의 모듈',
+        nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }],
+      }),
     okStatus: 201,
   },
   {
@@ -2725,8 +2773,8 @@ describe('프로젝트 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로
  * **잴 때는 쥔 자의 쓰기까지 쥔다 — 잠금 함수만으로는 모자란다**(쥔 자의 쓰기가 거는 잠금이 빠진다). 재는 판(700ms 창):
  * 진짜 복원(`restoreSnapshot` — 메뉴 · 제목 · 코멘트를 실제로 쓴다) · 진짜 트리 쓰기(`deletePage` — 코멘트 달린 페이지 + `insertMenuNode`) · 진짜 프로젝트
  * 삭제(`deleteProject`까지 — CASCADE)를 커밋 전에 쥔다. 복원 · 트리 뒤에서 아래 목록은 **전부 안 선다.** 프로젝트 삭제
- * 뒤에서는 멤버 수정 · 삭제 · 프리셋 · 토큰 삭제가 **선다**(CASCADE 가 그 행을 쥔다) — 풀리면 행이 없어 **404 · 아무것도 커밋 안 됨**이라 권한 판정의 자리가 아니다(그
- * 사이의 강등도 같은 멤버 행에서 선다). «쓰이는 대상»의 판은 없다 — 멤버 · 프리셋 · 토큰 행은 어느 FK 도 가리키지 않는다.
+ * 뒤에서는 멤버 수정 · 삭제 · 모듈 이름 · 삭제 · 토큰 삭제가 **선다**(CASCADE 가 그 행을 쥔다) — 풀리면 행이 없어 **404 · 아무것도 커밋 안 됨**이라 권한 판정의 자리가 아니다(그
+ * 사이의 강등도 같은 멤버 행에서 선다). «쓰이는 대상»의 판은 없다 — 멤버 · 모듈 · 토큰 행은 어느 FK 도 가리키지 않는다.
  *
  * **못 재는 것**: 플러그인의 `addHook`으로 단 훅이 잠금에 서는 쓰기 — 라우트가 아니라 분모에 안 든다(지금은 없다 ·
  * `pre-guard-hook-census.test.ts`의 «못 재는 것»과 같은 부류). 라우트 **밖**의 쓰기 경로(예: 서버가 스스로 도는 작업)도
@@ -2743,8 +2791,10 @@ const NOT_LOCKED: Record<string, string> = {
     '멤버 행 — FK 열을 안 바꾸는 UPDATE 는 프로젝트 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404)',
   'DELETE /api/projects/:projectId/members/:userId':
     '멤버 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404)',
-  'DELETE /api/projects/:projectId/presets/:presetId':
-    '프리셋 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제가 CASCADE 전에 쥔 프리셋 행에는 서지만 404 — «E15»). 가드와 커밋 사이는 재확인한다 — 위 «프리셋 삭제 — 가드와 커밋 사이»',
+  'PATCH /api/projects/:projectId/modules/:moduleId':
+    '모듈 행 — FK 열을 안 바꾸는 UPDATE 는 프로젝트 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제가 CASCADE 전에 쥔 모듈 행에는 서지만 404 — «E15»). 가드와 커밋 사이는 재확인한다 — 위 «모듈 삭제 · 이름 바꾸기 — 가드와 커밋 사이»',
+  'DELETE /api/projects/:projectId/modules/:moduleId':
+    '모듈 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제가 CASCADE 전에 쥔 모듈 행에는 서지만 404 — «E15»). 가드와 커밋 사이는 재확인한다 — 위 «모듈 삭제 · 이름 바꾸기 — 가드와 커밋 사이»',
   'DELETE /api/projects/:projectId/tokens/:tokenId':
     '토큰 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제가 CASCADE 전에 쥔 토큰 행에는 서지만 404 — `lockProjectTokens`). 재확인하지 않는다 — 지우는 것은 자기 토큰뿐(`deleteApiToken`의 `user_id`)이고 권한을 줄이는 쓰기다. 걸면 강등 · 로그아웃 직후의 폐기가 롤백돼 거두려던 자격이 남는다',
   'DELETE /api/auth/tokens/:tokenId':

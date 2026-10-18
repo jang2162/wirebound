@@ -9,7 +9,7 @@
  * 예외는 `PageDetail.schema`다. 문서 스키마는 서버가 아니라 `@wirebound/schema`가
  * 소유하는 단일 진실이므로 그 타입을 그대로 쓴다.
  */
-import type { PageDocument, PatchOp, ValidationIssue, ViewState, WbNode } from '@wirebound/schema'
+import type { PageDocument, PatchOp, ValidationIssue, WbNode } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 
 /** 프로젝트 멤버의 역할. `owner` > `editor` > `viewer`(README "권한(역할)"). */
@@ -364,29 +364,20 @@ export interface CommentCreated extends MarkerChange {
  * 설계서 「열린 질문」의 스냅샷 보관 정책을 닫을 관측이다. 상한은 없다.
  */
 /**
- * 이 프로젝트에서 **고를 수 있는** 프리셋 하나(설계서 「페이지 프리셋」). 목록이 내장과 프로젝트
- * 것을 함께 내고 `source`가 그 둘을 가른다.
+ * 프로젝트 모듈 하나(정본 설계서 「모듈」 · api README «모듈 응답 형태») — 구조 트리에서 고른 노드를 «모듈로 저장…» 한 묶음이다. 하단 판 «모듈» 탭의
+ * «프로젝트 모듈» 묶음이 그린다. 내장 «기본 모듈»은 이 타입이 아니다(`@wirebound/schema` 의 `BuiltinModule`).
  *
- * **`nodes`가 목록에 실려 온다.** 스냅샷의 `payload`와 갈리는 자리다 — 크기가 페이지
- * 하나의 트리라 목록이 이미 나르는 것과 같고, 고른 직후 적용하는 화면이 그것을 반드시
- * 쓴다(빼면 왕복이 하나 늘고 그 실패 갈래가 하나 더 생긴다).
- *
- * **문서 봉투가 아니라 root의 `children`이다** — 적용이 root를 바꾸지 않는다.
- *
- * 서버는 `source === 'project'`인 항목에 `createdBy`·`createdByName`·`createdAt`도
- * 싣지만(api README) **이 타입은 그것을 담지 않는다** — 고르개가 읽지 않는 값이다.
+ * **`nodes` 는 문서 봉투가 아니다** — 넣으면 고른 자리의 형제가 될 노드들이고, 서버가 저장할 때 `marker` · 묶음 밖 액션을 걷었다.
  */
-export interface Preset {
+export interface ProjectModule {
   id: string
-  source: 'builtin' | 'project'
   name: string
-  description: string | null
   nodes: WbNode[]
-  /**
-   * 저장한 페이지의 화면 상태 목록 — 노드의 상태 가지가 가리킨다. 서버는 늘 싣지만(없으면 빈 목록) 이 칸 전의 서버는 안 실으므로 없을 수
-   * 있다 — 그때는 목록 없이 저장된 프리셋과 같다(적용이 페이지에 없는 상태의 가지를 뺀다).
-   */
-  viewStates?: ViewState[]
+  /** `nodes` 의 노드 수(자손까지) — 카드의 «노드 N개». */
+  nodeCount: number
+  createdBy: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface SnapshotSummary {

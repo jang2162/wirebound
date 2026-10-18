@@ -8,7 +8,7 @@
  * | H1 Cmd+D 누름 | 복제가 키 반복을 받는다 — 1s 누름에 사본 열 몇 개 |
  * | H2 열린 줄 메뉴의 ← → | 메뉴 안의 화살표가 선택을 옮기고 그 메뉴의 «삭제»가 옮겨 간 노드를 지운다 |
  * | H2 위젯이 쓰는 키 | 탭 · 손잡이에 포커스가 있어도 그 위젯이 쓰는 축의 화살표를 단축키가 받는다 · 안 쓰는 축의 화살표와 Delete 를 위젯이 먹는다 |
- * | L2 · L3 Escape | 열린 팝오버 · 고르개 안의 Escape 가 선택을 푼다 · 고르개 안의 Escape 가 고르개를 안 닫는다 · 줄의 Escape 뒤 고르개(`adding`)가 다음 선택에 다시 선다 |
+ * | L2 Escape | 열린 팝오버 안의 Escape 가 선택을 푼다(구조 트리의 고르개를 재던 L3 은 고르개와 함께 걷었다) |
  * | L1 닫힌 shadow 입력 | 캔버스의 포커스 받은 요소를 표면으로 안 본다 — 그 칸의 Backspace 가 노드를 지운다 |
  * | L4 붙이는 사이 떠남 | 페이지 목록을 읽는 사이 떠났다 돌아온 판을 id 로 «안 떠났다»로 읽고 붙인다 · 떠나 머물면 말없이 사라진다 |
  * | L5 굴림 | 화살표로 옮긴 선택이 화면 밖에 남는다 |
@@ -19,7 +19,7 @@
  *
  * **열린 줄 메뉴의 ← → 는 두 겹이 막는다** — 포커스가 `menuitem` 안이라는 역할 판정과 열린 메뉴 상자의 표지(`data-wb-holds-keys`)다. 한 겹씩
  * 떼면 이 케이스는 초록이다. 둘 다 떼면 ← 가 선택을 옮기고 메뉴는 닫힌다(`shell/action-menu.tsx` 의 `openWhile` — 그것은
- * `./editor-shortcuts-review-2.test.ts` «R1» 이 잰다). 메뉴 표지는 «L2 · L3» 의 «Page 더 보기» 판이 혼자 잰다.
+ * `./editor-shortcuts-review-2.test.ts` «R1» 이 잰다). 메뉴 표지는 «L2» 의 «Page 더 보기» 판이 혼자 잰다.
  *
  * 서버 문서(`GET …/pages/:id`)로 단언한다.
  */
@@ -107,7 +107,8 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
 
   const row = (page: Page, id: string) => page.locator(`[data-tree-id="${id}"] > button.wb-shell-structure-node`)
   /** 그 줄의 `+`(0) · `…`(1). */
-  const rowMenu = (page: Page, id: string, which: 0 | 1) => page.locator(`[data-tree-id="${id}"] button[aria-haspopup="menu"]`).nth(which)
+  /** 구조 트리 줄의 `…`(줄 행동은 `…` 하나다). */
+  const rowMore = (page: Page, id: string) => page.locator(`[data-tree-id="${id}"] button[aria-haspopup="menu"][aria-label$=" 더 보기"]`)
 
   /**
    * 키를 누르고 있는다 — CDP 로 첫 `rawKeyDown` 뒤 400ms 부터 33ms 간격 `autoRepeat`(브라우저의 키 반복 꼴), 1s. 돌려주는 값은 낸 keydown 수.
@@ -227,7 +228,7 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
       const { page, close } = await open(P)
       try {
         await row(page, rowId).click()
-        await rowMenu(page, rowId, 1).click()
+        await rowMore(page, rowId).click()
         // 판 카나리아 — 메뉴가 열렸고 포커스가 그 메뉴의 항목이다.
         const focusRole = await page.evaluate(() => document.activeElement?.getAttribute('role'))
         await page.keyboard.press(key)
@@ -276,7 +277,8 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
       await page.locator('.wb-shell-palette-toggle').click()
       await page.locator('.wb-shell-palette-tab').first().waitFor()
       const widgets: [string, () => Promise<void>][] = [
-        ['갈래 탭', () => page.locator('.wb-shell-palette-tab[aria-selected="true"]').focus()],
+        // 판 맨 위의 «목록 종류» 탭도 같은 클래스다 — «갈래» 탭 줄 안에서 찾는다.
+        ['갈래 탭', () => page.getByRole('tablist', { name: '갈래' }).locator('[aria-selected="true"]').focus()],
         ['우측 패널 탭', () => page.locator('.wb-shell-tab').first().focus()],
         ['손잡이 0', () => page.locator('[role="separator"]').nth(0).focus()],
         ['손잡이 1', () => page.locator('[role="separator"]').nth(1).focus()],
@@ -339,7 +341,7 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
     }
   })
 
-  it('L2 · L3 열린 팝오버 · 고르개 안의 Escape 는 선택을 안 푼다(고르개는 닫는다) — 고르개가 선 채 트리 줄의 Escape 는 고르개도 걷는다', async () => {
+  it('L2 열린 팝오버 안의 Escape 는 선택을 안 푼다', async () => {
     const { P, rootId } = await fixture(stack, alice, 'l2-l3', CARD_PAGE())
     const { page, close } = await open(P)
     try {
@@ -372,40 +374,10 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
         selected: await selected(page),
         back: await page.evaluate(() => document.activeElement?.getAttribute('aria-label')),
       }
-      // bob 이 나가면 잠금이 풀린다 — 아래 L3 이 그 노드를 고른다.
       await bob.context.close()
-      await page.locator('[data-tree-id="n_text0000002"] ~ .wb-shell-structure-lock').waitFor({ state: 'detached' })
 
-      // L3 — 타입 고르개의 «취소»에 포커스. 고르개 안의 Escape 는 고르개를 닫는다(`cancelAdd`) — 선택은 그대로다.
-      const openPicker = async () => {
-        await row(page, 'n_text0000002').click()
-        await rowMenu(page, 'n_text0000002', 0).click()
-        await page.getByRole('menuitem', { name: '아래 추가', exact: true }).click()
-        await page.locator('.wb-shell-picker').waitFor()
-      }
-      await openPicker()
-      await page.locator('.wb-shell-picker button').last().focus()
-      await page.keyboard.press('Escape')
-      await sleep(150)
-      const l3 = { selected: await selected(page), picker: await page.locator('.wb-shell-picker').count() }
-
-      // 트리 줄은 단축키가 서는 자리다 — Escape 가 선택을 풀고, 고르개(`adding`)도 함께 걷혀 다음 선택에 다시 서지 않는다. 다시 여는 «아래 추가»는
-      // 앞 누름과 같은 자리라 더블클릭 간격을 넘겨 누른다(`shell/action-menu.tsx` 의 `DOUBLE_CLICK_MS` — 둘째 누름으로 보고 삼킨다).
-      await sleep(600)
-      await openPicker()
-      await row(page, 'n_text0000002').focus()
-      await page.keyboard.press('Escape')
-      await sleep(150)
-      const fromRow = { selected: await selected(page), picker: await page.locator('.wb-shell-picker').count() }
-      await row(page, 'n_text0000004').click()
-      await sleep(150)
-      const reselect = { selected: await selected(page), picker: await page.locator('.wb-shell-picker').count() }
-
-      expect({ l2, l3, fromRow, reselect }).toEqual({
+      expect({ l2 }).toEqual({
         l2: { focus: { role: 'menuitem', off: 'true', described: true }, menus: 0, selected: rootId, back: 'Page 더 보기' },
-        l3: { selected: 'n_text0000002', picker: 0 },
-        fromRow: { selected: null, picker: 0 },
-        reselect: { selected: 'n_text0000004', picker: 0 },
       })
     } finally {
       await close()

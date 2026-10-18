@@ -7,7 +7,7 @@ import { installCatalog, resetRegistry } from '../src/index'
 import { WEIGHT_MAX, WEIGHT_MIN, type WbNode } from '../src/node'
 import { WbNodeSchema } from '../src/envelope'
 import { prepareNodesForPaste, readNodesEnvelope, writeNodesEnvelope } from '../src/clipboard'
-import { stripMarkers } from '../src/preset/builtin'
+import { stripMarkers } from '../src/tree'
 import { remapNodeIds } from '../src/tree'
 
 beforeAll(() => {

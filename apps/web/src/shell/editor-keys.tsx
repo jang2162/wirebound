@@ -50,7 +50,7 @@ import {
   pasteOps,
   type NodeEdit,
 } from '../edit/paste-ops'
-import { renameCaseStates, renameStatesByName } from '../edit/preset-apply'
+import { renameCaseStates, renameStatesByName } from '../edit/paste-states'
 import { findNodeSafely } from '../edit/safe-walk'
 import { ancestorIds, foldStep, moveSelection, siblingIds } from '../edit/selection-move'
 import { useClipboard } from '../edit/use-clipboard'
@@ -99,7 +99,7 @@ export function EditorKeys(props: {
   const [platform] = useState(() => platformOf(navigator))
   const canvasDocument = useCanvasDocument()
 
-  /** 알림 — 편집 실패와 같은 하단 바 한 자리(`EditAlert`). 패턴 넣기 · 프리셋의 실패와 같은 통로다. */
+  /** 알림 — 편집 실패와 같은 하단 바 한 자리(`EditAlert`). */
   const say = (message: string): void => store.setEditFailure({ kind: 'message', message })
   /** 정보 통지 — 실패가 아닌 한 줄(`shell/info-notice.tsx`). 키가 아무것도 안 한 까닭 · 붙이며 뺀 것을 말하는 자리다. */
   const info = (message: string): void => store.setInfoNotice(message)
@@ -198,7 +198,7 @@ export function EditorKeys(props: {
         ? say
         : (message: string) => (store.getState().editFailure !== pressed && store.showsLoss() ? tellPasteLoss(message) : say(message))
     const at = anchor !== null && findNodeSafely(document.root, anchor) !== undefined ? anchor : null
-    // 붙이는 페이지에 같은 이름의 상태가 있으면 가지를 그 id 로 옮기고(프리셋과 같은 자 — `renameStatesByName`), 없는 이름의 가지는 뺀다
+    // 붙이는 페이지에 같은 이름의 상태가 있으면 가지를 그 id 로 옮기고(`edit/paste-states.ts` 의 `renameStatesByName`), 없는 이름의 가지는 뺀다
     // (설계서 「설계서 화면 구조」 클립보드 · 화면 상태).
     const states = new Set((Array.isArray(document.viewStates) ? document.viewStates : []).map((state) => state.id))
     const rename = renameStatesByName(document.viewStates, sourceStates)

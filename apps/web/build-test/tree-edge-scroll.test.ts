@@ -8,7 +8,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 아래 · 위 끝 띠 | 아래 끝 띠에 0.5s 대도 안 민다(잰 값 224 ~ 256px) · 위 끝 띠에 대도 안 돌아온다 · 상자 밖에서도 민다 |
- * | 오른 · 왼 끝 띠 | 가로로 넘친 트리에서 오른 끝 띠가 가로로 안 민다(잰 값 30px = 넘친 만큼) · 왼 끝 띠가 안 돌아온다 |
+ * | 오른 · 왼 끝 띠 | 가로로 넘친 트리에서 오른 끝 띠가 가로로 안 민다(잰 값 48px = 넘친 만큼) · 왼 끝 띠가 안 돌아온다 |
  * | 민 뒤 놓기 | 민 뒤 놓은 자리가 보인 줄(밀린 줄) 곁이 아니라 옛 좌표의 줄로 간다 |
  */
 import type { Page } from 'playwright-core'
@@ -31,12 +31,12 @@ interface SeedNode {
   children?: SeedNode[]
 }
 const TEXTS: SeedNode[] = Array.from({ length: 50 }, (_, i) => ({ id: `n_t${i}`, type: 'Text', props: { content: `글 ${i}` } }))
-/** 카드 사슬 — 깊이 0 ~ 9, 끝은 잎. 안쪽 줄의 들여쓰기가 트리를 가로로 넘기게 한다. */
+/** 카드 사슬 — 깊이 0 ~ 13, 끝은 잎. 안쪽 줄의 들여쓰기가 트리를 가로로 넘기게 한다(줄 행동이 `…` 하나라 줄이 좁아 깊이 9 로는 안 넘친다). */
 const chain = (depth: number): SeedNode => ({
   id: `n_d${depth}`,
   type: 'Card',
   props: { title: `깊이 ${depth} 의 아주 긴 카드 제목입니다` },
-  children: depth < 9 ? [chain(depth + 1)] : [{ id: 'n_leaf', type: 'Text', props: { content: '잎' } }],
+  children: depth < 13 ? [chain(depth + 1)] : [{ id: 'n_leaf', type: 'Text', props: { content: '잎' } }],
 })
 
 describe.skipIf(!전제.ok)('구조 트리 줄 끌기의 끝 스크롤 — 실브라우저', () => {
@@ -102,9 +102,10 @@ describe.skipIf(!전제.ok)('구조 트리 줄 끌기의 끝 스크롤 — 실�
       }
     }, TREE)
 
+  /** 줄 단추(`.wb-shell-structure-node`)의 왼쪽을 눌러 끈다 — 깊은 줄은 상자가 좁아(깊이 9 에서 56px) 줄 상자의 x + 30 이 줄 행동(`…`) 자리에 닿는다. */
   async function grab(page: Page, id: string): Promise<void> {
-    const box = (await page.locator(`${TREE} [data-tree-row][data-tree-id="${id}"]`).boundingBox())!
-    await page.mouse.move(box.x + 30, box.y + box.height / 2)
+    const box = (await page.locator(`${TREE} [data-tree-row][data-tree-id="${id}"] .wb-shell-structure-node`).boundingBox())!
+    await page.mouse.move(box.x + Math.min(30, box.width / 2), box.y + box.height / 2)
     await page.mouse.down()
     await page.mouse.move(box.x + 33, box.y + box.height / 2 + 6, { steps: 3 })
   }

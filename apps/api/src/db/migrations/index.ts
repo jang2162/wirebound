@@ -22,6 +22,7 @@ import { migration as m0020 } from './0020-project-menu-revs'
 import { migration as m0021 } from './0021-preset-view-states'
 import { migration as m0022 } from './0022-snapshot-kind'
 import { migration as m0023 } from './0023-pages-structure-seq'
+import { migration as m0024 } from './0024-modules'
 
 /**
  * 정적 마이그레이션 레지스트리.
@@ -59,6 +60,7 @@ export const MIGRATIONS: Record<string, Migration> = {
   '0021-preset-view-states': m0021,
   '0022-snapshot-kind': m0022,
   '0023-pages-structure-seq': m0023,
+  '0024-modules': m0024,
 }
 
 export const migrationProvider: MigrationProvider = {

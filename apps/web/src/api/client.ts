@@ -5,7 +5,7 @@
  *
  * 구현은 `http-client.ts`(실제 서버)와 각 화면 테스트의 가짜 두 부류다.
  */
-import type { PatchOp, ViewState, WbNode } from '@wirebound/schema'
+import type { PatchOp, WbNode } from '@wirebound/schema'
 import type {
   Comment,
   ExportFormat,
@@ -19,8 +19,8 @@ import type {
   PageDetail,
   PageImported,
   PatchResult,
-  Preset,
   ProjectDetail,
+  ProjectModule,
   ProjectThemeView,
   ProjectView,
   RevisionInverse,
@@ -433,26 +433,21 @@ export interface ApiClient {
    * `viewer`도 읽는다 — 막는 것은 생성 하나다(「권한 모델」).
    */
   /**
-   * **이 프로젝트에서 고를 수 있는 프리셋 전부**(설계서 「페이지 프리셋」). 내장 3종이 먼저 오고
-   * 프로젝트 프리셋이 만든 순서대로 뒤에 붙는다 — **순서가 서버의 계약이므로 여기서 다시
-   * 정렬하지 않는다**(스냅샷 목록과 같은 판단).
-   *
-   * **프로젝트 프리셋이 하나도 없는 것이 기본 상태다.** 그때도 응답이 비지 않는다.
+   * **이 프로젝트의 모듈 전부** — 최근 것이 먼저다(서버의 계약 — 여기서 다시 정렬하지 않는다). 내장 «기본 모듈»은 없다(`BUILTIN_MODULES` 를 화면이
+   * 직접 읽는다). viewer 도 읽는다.
    */
-  listPresets(projectId: string, options?: ReadOptions): Promise<Preset[]>
+  listModules(projectId: string, options?: ReadOptions): Promise<ProjectModule[]>
+  /** 모듈 하나 — 넣기 직전에 다시 읽는다. 남이 지웠으면 404(«이 모듈은 지워졌습니다»). */
+  getModule(projectId: string, moduleId: string, options?: ReadOptions): Promise<ProjectModule>
   /**
-   * **지금 페이지를 프리셋으로 남긴다**(「페이지 프리셋」). `nodes`는 root의 `children`이지 문서
-   * 봉투가 아니다.
-   *
-   * **`marker`는 서버가 버린다** — 화면이 미리 지우지 않는 것은 그 규칙의 자리가
-   * 하나여야 하기 때문이다. 응답의 `nodes`에는 이미 없다.
-   *
-   * 이름 1~60자·설명 0~2000자 밖은 400이고, **이름 중복은 오류가 아니다.**
+   * **고른 노드를 모듈로 남긴다** — `nodes` 는 1개 이상. `marker` · 묶음 밖 노드를 겨냥하는 액션은 서버도 걷는다(화면의 «모듈로 저장…» 상자가 먼저
+   * 걷어 뺀 수를 말한다 — `moduleNodesForSave`). 이름 1~60자 밖 · `Page` 가 든 노드는 400 · 422. editor 이상.
    */
-  createPreset(
-    projectId: string,
-    body: { name: string; description?: string | null; schema: WbNode[]; viewStates?: ViewState[] },
-  ): Promise<Preset>
+  createModule(projectId: string, body: { name: string; nodes: WbNode[] }): Promise<ProjectModule>
+  /** 이름만 바꾼다(모듈에서 고칠 수 있는 것은 이름 하나다). 없으면 404. editor 이상. */
+  renameModule(projectId: string, moduleId: string, body: { name: string }): Promise<ProjectModule>
+  /** 지운다. 없으면 404. editor 이상. */
+  deleteModule(projectId: string, moduleId: string): Promise<void>
   listSnapshots(projectId: string): Promise<SnapshotSummary[]>
   /**
    * **지금 상태를 태그 하나로 얼린다.** 「권한 모델」이 **editor**에게 연 자리다 — 테마 고르기가

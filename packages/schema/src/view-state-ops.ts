@@ -14,8 +14,7 @@ import { isBlankAlias, hasRejectedAliasChar } from './alias'
 import { DEFAULT_CASE, VIEW_STATE_NAME_MAX, VIEW_STATES_MAX, type PageDocument, type WbNode } from './node'
 import { formatPointer, parsePointer } from './patch/pointer'
 import type { PatchOp } from './patch/types'
-import { stripMarkers } from './preset/builtin'
-import { remapNodeIds, walkNodes } from './tree'
+import { remapNodeIds, stripMarkers, walkNodes } from './tree'
 import { guardViewStateOps } from './view-state-guard'
 
 interface Placed {

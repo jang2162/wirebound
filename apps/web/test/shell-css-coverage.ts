@@ -62,10 +62,9 @@
  *   (검산: `grep -rnE '(const|let|var) +className *=' apps/web/src --include='*.ts' --include='*.tsx'`).
  *
  * - **`id`·`htmlFor`로 쓰는 `wb-shell-…` 이름.** 이것은 못 보는 것이 아니라 **보면 안 되는
- *   것**이다. `wb-shell-preset-picker`·`wb-shell-preset-name`·`wb-shell-pattern-picker`·
- *   `wb-shell-picker-type` 넷이 그 형태이고(라벨이 `htmlFor`로 가리키는 입력의 id),
+ *   것**이다. 라벨이 `htmlFor`로 가리키는 입력의 id 가 그 형태이고(옛 고르개 넷이 그랬다 — 걷었다),
  *   `shell.css`는 id 선택자를 금지하므로 이들에 규칙이 있으면 **오히려 틀린 것이다.** 닻을
- *   `className`으로 좁힌 것이 이 넷을 자동으로 거른다.
+ *   `className`으로 좁힌 것이 그것을 자동으로 거른다.
  *
  * - **`shell.css` 밖의 스타일.** 인라인 `style`, 캔버스 iframe 이 그 문서의 head 에
  *   붙이는 시트는 읽지 않는다. `shell-css-guard.ts` 머리말이 그 목록을 갖는다.

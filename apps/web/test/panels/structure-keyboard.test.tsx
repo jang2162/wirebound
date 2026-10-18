@@ -146,15 +146,16 @@ describe('구조 트리의 키보드 단축키', () => {
    * **`<select>`가 그 부류의 첫 자리다.** `Alt`+`↑`는 브라우저에서 목록을 여는 조합이라
    * 사용자는 **고르려고** 누르는데, 문서에서는 노드가 움직인다.
    */
-  it('고르개에서 친 키가 구조 조작으로 새지 않는다', async () => {
+  // 트리 상자 안에 서는 입력은 줄 아래의 별칭 칸이다(타입 고르개는 걷었다 — 넣기는 하단 판이 한다).
+  it('줄 아래 입력(별칭)에서 친 키가 구조 조작으로 새지 않는다', async () => {
     const srv = server()
     await openPage(doc(), { apiOverrides: srv.api })
     select('Card')
-    fireEvent.click(toolButton('안에 추가'))
-    const picker = await screen.findByLabelText('타입')
+    fireEvent.click(toolButton('별칭 바꾸기'))
+    const input = await within(structureRegion()).findByRole('textbox', { name: '별칭' })
 
-    fireEvent.keyDown(picker, { key: 'ArrowUp', altKey: true })
-    fireEvent.keyDown(picker, { key: 'Delete' })
+    fireEvent.keyDown(input, { key: 'ArrowUp', altKey: true })
+    fireEvent.keyDown(input, { key: 'Delete' })
 
     expect(structureTypes()).toEqual(INITIAL_TYPES)
     expect(srv.calls).toHaveLength(0)

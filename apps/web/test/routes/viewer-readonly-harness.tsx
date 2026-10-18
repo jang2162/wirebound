@@ -171,7 +171,7 @@ function reads(role: ProjectRole): Record<string, unknown> {
     [`${project}/pages/${OTHER_PAGE_ID}/revisions`]: [],
     [`${project}/pages/${PAGE_ID}/comments`]: COMMENTS,
     [`${project}/pages/${OTHER_PAGE_ID}/comments`]: COMMENTS,
-    [`${project}/presets`]: [],
+    [`${project}/modules`]: { modules: [] },
     [`${project}/snapshots`]: SNAPSHOTS,
     // 셸이 읽는 테마 바인딩 — 번들은 시험용 로더가 준다(`helpers.tsx`의 `bundleLoader`).
     [`${project}/theme`]: adminThemeView(),
@@ -456,7 +456,7 @@ function tier(el: Element): number {
  * 순서로 고르므로 머리의 «닫기»가 몸체보다 먼저 눌려 그 안(스냅샷 폼 · 복원)에 한 번도 못 닿는다. 상자는 키 훑기의 Escape 가 닫는다.
  *
  * **행동 메뉴(머리의 `…` · 트리 제목 줄의 뿌리 `+` · 메뉴 줄의 `+`)는 항목이 다 눌릴 때까지 다시 연다**(`sweepControls`) — 항목 하나를
- * 고르면 목록이 닫혀, 한 번만 열면 뒤 항목(뿌리 `+`의 «프리셋» · `…`의 «프로젝트 내보내기» · 줄 `+`의 «JSON 에서 가져오기…»)에 영영 못
+ * 고르면 목록이 닫혀, 한 번만 열면 뒤 항목(`…`의 «프로젝트 내보내기» · 줄 `+`의 «JSON 에서 가져오기…»)에 영영 못
  * 닿는다. **트리 줄의 `…`는 한 번씩만 연다** — 그 단추가 여는 순간 줄을 골라 선택을 옮기기 때문이다(`sweepControls`의 주석). 그래서 한 줄의
  * `…` 뒤 항목은 이 훑기의 사각이다 — 그 명령(위로 · 삭제 …)은 같은 줄의 다른 판 · 단축키가 닿고, 입구 칸(`REACH`)은 요청의 모양으로 센다.
  *
@@ -502,8 +502,8 @@ async function sweepControls(serial: number): Promise<number> {
       if (leaves(el) || switchesMode(el) || closesDialog(el)) continue
       const key = keyOf(el)
       if (!appeared.has(key)) appeared.set(key, step)
-      // **메뉴 단추는 항목이 다 눌릴 때까지 다시 연다** — 항목 하나를 고르면 목록이 닫혀, 한 번만 열면 뒤 항목(뿌리 `+`의 «프리셋» ·
-      // `…`의 «프로젝트 내보내기» · 메뉴 줄 `+`의 «JSON 에서 가져오기…»)에 영영 못 닿는다. 열린 동안은 다시 누르지 않는다(누르면 닫힌다).
+      // **메뉴 단추는 항목이 다 눌릴 때까지 다시 연다** — 항목 하나를 고르면 목록이 닫혀, 한 번만 열면 뒤 항목(머리 `…`의
+      // «프로젝트 내보내기» · 메뉴 줄 `+`의 «JSON 에서 가져오기…»)에 영영 못 닿는다. 열린 동안은 다시 누르지 않는다(누르면 닫힌다).
       // **트리 줄의 `…`는 빼고** — 그 단추도 열 때 그 줄을 골라 선택을 옮기고, 항목(위로 · 삭제 …)은 한 번씩 열린 판과 단축키가 닿는다.
       // 메뉴 줄 `+`는 다시 연다 — 그 항목이 연 입구(이름 칸 · 가져오기 상자)는 그 줄을 대상으로 서므로 선택을 옮겨도 잃는 것이 없고,
       // 셋째 항목(가져오기)이 다른 길로는 안 닿는다(`REACH`의 «페이지 가져오기»).
@@ -688,7 +688,7 @@ export const REACH: { name: string; hit: (wire: Wire) => boolean }[] = [
     name: '코멘트 재번호',
     hit: (w) => w.writes.some((r) => r.method === 'POST' && same(commentRoute(r) ?? [], ['renumber'])),
   },
-  { name: '프리셋 저장', hit: (w) => w.writes.some((r) => r.method === 'POST' && same(route(r), ['presets'])) },
+  { name: '모듈 저장', hit: (w) => w.writes.some((r) => r.method === 'POST' && same(route(r), ['modules'])) },
   { name: '속성(패치)', hit: (w) => w.frames.includes('patch props') },
   { name: '상호작용(패치)', hit: (w) => w.frames.includes('patch interactions') },
   { name: '구조 편집(패치)', hit: (w) => w.frames.includes('patch structure') },

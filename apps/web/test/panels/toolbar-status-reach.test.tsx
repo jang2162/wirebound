@@ -28,14 +28,12 @@ import { cleanup, fireEvent, render, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { NodeLock, PageDocument, WbNode } from '@wirebound/schema'
 import type { TreeMenuNode } from '../../src/api/types'
-import { addAbilitiesUnderLock } from '../../src/edit/add-abilities'
 import { findNodeSafely } from '../../src/edit/safe-walk'
 import { structureAbilities } from '../../src/edit/structure-actions'
 import { SPLIT_PICK_REASON, SPLIT_ROOT_REASON } from '../../src/edit/view-state-actions'
 import type { ActionMenuItem } from '../../src/shell/action-menu'
 import { treeAbilities, type TreeSelection } from '../../src/tree/tree-actions'
 import type { TreeCommands } from '../../src/tree/use-tree-commands'
-import { lockedNotice } from '../../src/panels/property-panel'
 import type { StructureCommands } from '../../src/panels/structure-toolbar'
 import {
   BUSY_REASON,
@@ -116,20 +114,11 @@ function structureCommands(input: { selectedNodeId: string | null; lock?: NodeLo
   const lock = input.lock ?? null
   // **잠금을 판정에도 넘긴다** — 화면에서 그 둘은 같은 값을 지난다(`useStructureCommands`). 하네스의 `lock` 하나가 훅의 두 값
   // (`selectedLock` · `pageLock`)을 대신한다 — 화면에서 `selectedLock`이 있으면 `pageLock`도 반드시 있다(루트가 모든 노드의 조상이다).
-  const base = structureAbilities(document, selectedNodeId, lock)
-  // «안에 추가» · «아래 추가» 는 `useStructureCommands` 가 `structureAbilities` 위에 얹는 그대로(`edit/add-abilities.ts`) — 넣는 편집이 남의 잠금에 부딪히나.
-  // 이 판에는 스토어가 없어 «부딪힘» 을 «잠금이 고른 노드 자신에 있다» 로 대신한다(그 노드 안 · 뒤에 넣는 편집은 어느 쪽이든 부딪힌다).
-  const adds =
-    selectedNodeId === null
-      ? null
-      : addAbilitiesUnderLock(document, selectedNodeId, lock, () => (lock !== null && lock.nodeId === selectedNodeId ? lock : null))
-  const abilities = adds === null ? base : { ...base, addInside: adds.addInside, addAfter: adds.addAfter }
+  const abilities = structureAbilities(document, selectedNodeId, lock)
   // 훅의 `aliasLocked`와 같은 조건 — 하나를 골랐고 · 문서에 있고 · 남이 안 잡았을 때만 켠다.
   const aliasLocked = lock !== null || selectedNodeId === null || findNodeSafely(document.root, selectedNodeId) === undefined
   return {
     abilities,
-    patternLocked: lock !== null,
-    presetLocked: lock !== null,
     why: structureWhy(
       {
         selectedNodeId,
@@ -137,21 +126,14 @@ function structureCommands(input: { selectedNodeId: string | null; lock?: NodeLo
         lock,
         pageLock: lock,
         abilities,
-        addBlocked: adds?.insideBlockedBy == null ? {} : { addInside: lockedNotice(adds.insideBlockedBy.userName) },
       },
-      { patternLock: lock, presetLock: lock, aliasLocked },
+      { aliasLocked },
     ),
     remove: unused,
     moveUp: unused,
     moveDown: unused,
     indent: unused,
     outdent: unused,
-    openAdd: unused,
-    adding: null,
-    pick: unused,
-    pickPattern: unused,
-    applyPreset: unused,
-    cancelAdd: unused,
     dropTo: unused,
     aliasLocked,
     renameAlias: unused,
@@ -267,11 +249,11 @@ function readItems(container: HTMLElement): { items: Drawn[]; reach: number; rea
  *
  * | 상태 | 대표 항목 | 이유 |
  * |---|---|---|
- * | 구조 · 안 골랐다 | 안에 추가 | «트리에서 노드를 고르면 …» |
+ * | 구조 · 안 골랐다 | 삭제 | «트리에서 노드를 고르면 …» |
  * | 구조 · 남이 잠갔다 | 삭제 | «보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다» |
  * | 구조 · 루트다 | 삭제 | «루트가 아닌 노드를 고르세요» |
  * | 구조 · 문서에 없다 | 삭제 | «고른 노드가 문서에 없습니다» |
- * | 구조 · 자식을 못 담는다 | 안에 추가 | `STRUCTURE_WHY_DISABLED.addInside` |
+ * | 구조 · 앞 형제가 자식을 못 담는다 | 들여쓰기 | `STRUCTURE_WHY_DISABLED.indent` |
  * | 구조 · 형제가 없다 | 위로 | `STRUCTURE_WHY_DISABLED.moveUp` |
  * | 메뉴 · 보내는 중 | 이름 변경 | «조작을 보내는 중입니다» |
  * | 메뉴 · 안 골랐다 | 이름 변경 | `MENU_WHY_DISABLED.rename` |
@@ -286,7 +268,7 @@ const STATES: { name: string; open: () => HTMLElement; item: string; reason: str
   {
     name: '구조 · 안 골랐다',
     open: () => draw(structureRowItems(structureCommands({ selectedNodeId: null }), unused)),
-    item: '안에 추가',
+    item: '삭제',
     reason: PICK_NODE_REASON,
   },
   {
@@ -308,10 +290,10 @@ const STATES: { name: string; open: () => HTMLElement; item: string; reason: str
     reason: NOT_IN_DOCUMENT_STATUS,
   },
   {
-    name: '구조 · 자식을 못 담는다',
-    open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-a' }), unused)),
-    item: '안에 추가',
-    reason: STRUCTURE_WHY_DISABLED.addInside,
+    name: '구조 · 앞 형제가 자식을 못 담는다',
+    open: () => draw(structureRowItems(structureCommands({ selectedNodeId: 'n-box' }), unused)),
+    item: '들여쓰기',
+    reason: STRUCTURE_WHY_DISABLED.indent,
   },
   {
     name: '구조 · 형제가 없다',
@@ -383,27 +365,18 @@ describe('키보드가 화살표로 이유에 닿는다 — 열두 상태 전부
 
 /**
  * **잠금이 판정을 끈다** — 같은 노드를 잠금 없이 열어 대조한다. 그러지 않으면 *"루트라 어차피 꺼진다"*와 구별되지 않는다 — 루트에서 켜져
- * 있는 것은 `안에 추가` · `패턴 넣기`이고, 그것이 잠금으로 꺼지고 **잠금을 말하는 것**이 여기서 재는 전부다.
+ * 있는 것은 `별칭 바꾸기`이고, 그것이 잠금으로 꺼지고 **잠금을 말하는 것**이 여기서 재는 전부다.
  */
 describe('잠금이 판정을 끈다', () => {
-  it('잠기지 않은 루트에서는 `안에 추가` · `패턴 넣기`가 켜져 있고 이유가 없다 — 대조', () => {
+  it('잠기지 않은 루트에서는 `별칭 바꾸기`가 켜져 있고 이유가 없다 — 대조', () => {
     const { items } = readItems(draw(structureRowItems(structureCommands({ selectedNodeId: 'n-root' }), unused)))
-    expect(items.filter((drawn) => ['안에 추가', '아래 추가', '패턴 넣기'].includes(drawn.label))).toEqual([
-      { label: '안에 추가', off: false, reason: null },
-      { label: '아래 추가', off: true, reason: STRUCTURE_WHY_DISABLED.addAfter },
-      { label: '패턴 넣기', off: false, reason: null },
-    ])
+    expect(items.filter((drawn) => !drawn.off)).toEqual([{ label: '별칭 바꾸기', off: false, reason: null }])
+    expect(items.find((drawn) => drawn.label === '삭제')?.reason).toBe(STRUCTURE_WHY_DISABLED.remove)
   })
 
-  it('잠기면 판정 밖의 패턴 · 별칭까지 꺼지고 전부 잠근 사람을 말한다 — `안에 추가` 만 산다(넣는 편집이 안 부딪힌다)', () => {
+  it('잠기면 판정 밖의 별칭까지 꺼지고 전부 잠근 사람을 말한다', () => {
     const { items } = readItems(draw(structureRowItems(structureCommands({ selectedNodeId: 'n-root', lock: LOCK }), unused)))
-    expect(items.filter((drawn) => !drawn.off).map((drawn) => drawn.label)).toEqual(['안에 추가'])
-    expect(items.filter((drawn) => drawn.off && !(drawn.reason ?? '').includes('보라'))).toEqual([])
-  })
-
-  it('잠금이 고른 노드 자신에 있으면 `안에 추가` 도 꺼지고 «넣는 편집» 의 문장을 든다', () => {
-    const { items } = readItems(draw(structureRowItems(structureCommands({ selectedNodeId: 'n-a', lock: LOCK }), unused)))
     expect(items.filter((drawn) => !drawn.off)).toEqual([])
-    expect(items.find((drawn) => drawn.label === '아래 추가')?.reason).toBe(lockedSelectionStatus('보라'))
+    expect(items.filter((drawn) => drawn.off && !(drawn.reason ?? '').includes('보라'))).toEqual([])
   })
 })

@@ -1,6 +1,7 @@
 /**
  * **트리 줄의 `+` · `…`** — 두 트리의 툴바를 대신하는 줄 행동(설계서 spec `docs/superpowers/specs/2026-09-30-editor-shell-design.md`
- * 「툴바 대신 노드별 `+` · `…`」). 둘 다 행동 메뉴(`shell/action-menu.tsx`)다.
+ * 「툴바 대신 노드별 `+` · `…`」). 둘 다 행동 메뉴(`shell/action-menu.tsx`)다. **구조 트리 줄에는 `+`가 없다** — 노드를 넣는 입구는 하단 판이다
+ * (설계 spec `2026-10-18-modules-states-layout-design.md` 「B1」). `+`는 메뉴 트리 줄의 것이다.
  *
  * ## 누르면 먼저 그 줄을 고른다
  *
@@ -192,7 +193,8 @@ export function menuRowItems(
 /**
  * 구조 트리 항목이 꺼졌을 때의 설명 — `MENU_WHY_DISABLED`와 같은 규칙(조건을 그대로 옮긴다 · 그보다 먼저 서는 원인 — 잠금 · 고른 것 없음 ·
  * 여럿 · 문서에 없음 — 은 `./toolbar-status.ts` 의 `structureItemReason`이 이 표 위에 세운다). 컴포넌트 목록 카드의 «넣기» 단추가 «자식을 안
- * 받는 자리» 에서 `addInside` 문장을 그대로 쓴다(`palette/palette-add.ts`).
+ * 받는 자리» 에서 `addInside` 문장을 그대로 쓴다(`palette/palette-add.ts`). «안에 추가» · «아래 추가» 항목은 걷었다 — 판정(`addInside` ·
+ * `addAfter`)과 그 문장은 하단 판의 넣기 · 붙여넣기 · 복제가 쓴다.
  */
 export const STRUCTURE_WHY_DISABLED: Record<keyof StructureAbilities, string> = {
   // **조건 둘을 다 말한다.** `acceptsChildren`은 카탈로그의 `many` 여부만이 아니라
@@ -207,13 +209,18 @@ export const STRUCTURE_WHY_DISABLED: Record<keyof StructureAbilities, string> = 
   outdent: '부모가 루트가 아니어야 합니다',
 }
 
+/** 구조 트리 줄 `…` 의 «모듈로 저장…» 항목 이름. */
+export const SAVE_MODULE_LABEL = '모듈로 저장…'
+
 /**
- * 구조 트리 줄의 `+` · `…` 항목(spec 「트리」 표 — `+` 안에 추가 · 아래 추가, `…` 별칭 바꾸기 · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제).
+ * 구조 트리 줄의 `…` 항목(spec 「트리」 표 — `…` 별칭 바꾸기 · 모듈로 저장… · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제). `+`는 없다(머리말).
  *
- * **`+`에 «패턴 넣기»를 함께 둔다** — 패턴은 고른 줄을 자리로 삼는 추가라(`edit/pattern-insert.ts`) 그 줄의 `+`가 제자리다. 잠금으로만
- * 꺼지고 그 잠금을 말한다(`patternLocked` · `why.pattern`). **뿌리 줄도 같은 항목을 끈 채 둔다** — 뿌리가 못 하는 것(아래 추가 ·
- * 삭제 · 순서 · 계층)은 **종류가 아니라 자리** 때문이라, 끈 항목의 이유(«루트가 아닌 노드를 고르세요»)가 할 말이 있다(머리말의 «뺀다»는
- * 종류가 결코 못 하는 항목 — 페이지의 계층 · 메뉴의 옮기기 — 에만 쓴다).
+ * **«모듈로 저장…»은 뿌리 줄에 없다** — 뿌리는 모듈에 담을 수 없다(설계 spec 「B3」 — 저장되는 것은 고른 노드들이고, 뿌리는 그 페이지의 것이다).
+ * 그 줄의 종류가 결코 못 하는 항목이라 끄지 않고 뺀다(머리말 «늘 못 하는 항목은 뺀다»). 고른 것은 문서 읽기라 잠금과 무관하다 — 남이 잡은
+ * 노드도 담는다(편집이 아니다). 상자는 `./save-module-dialog.tsx`.
+ *
+ * **뿌리 줄도 다른 항목을 끈 채 둔다** — 뿌리가 못 하는 것(삭제 · 순서 · 계층)은 **종류가 아니라 자리** 때문이라, 끈 항목의 이유(«루트가 아닌
+ * 노드를 고르세요»)가 할 말이 있다.
  *
  * 꺼진 항목의 이유는 명령 묶음이 지어 둔 것(`commands.why` — `./toolbar-status.ts`)을 `title` 과 `aria-description` 에 같은 문장으로 싣는다.
  */
@@ -221,7 +228,9 @@ export function structureRowItems(
   commands: StructureCommands,
   /** «별칭 바꾸기» — 그 줄 아래에 별칭 입력을 연다(`./alias-edit.tsx`). 끔은 `commands.aliasLocked`. */
   openAlias: () => void,
-): { add: ActionMenuItem[]; more: ActionMenuItem[] } {
+  /** «모듈로 저장…» — 고른 노드들로 상자를 연다. 없으면(뿌리 줄) 항목을 뺀다. */
+  saveModule?: () => void,
+): { more: ActionMenuItem[] } {
   const item = (key: keyof StructureAbilities, label: string, icon: LucideIcon, onSelect: () => void, danger = false): ActionMenuItem => ({
     key,
     label,
@@ -232,21 +241,7 @@ export function structureRowItems(
     danger,
     icon,
   })
-  const add = [
-    item('addInside', '안에 추가', ICONS.addInside, () => commands.openAdd('inside')),
-    item('addAfter', '아래 추가', ICONS.addAfter, () => commands.openAdd('after')),
-    {
-      key: 'pattern',
-      label: '패턴 넣기',
-      icon: ICONS.pattern,
-      onSelect: () => commands.openAdd('pattern'),
-      disabled: commands.patternLocked,
-      title: commands.why.pattern,
-      description: commands.why.pattern,
-    },
-  ]
   return {
-    add,
     more: [
       {
         key: 'alias',
@@ -257,6 +252,7 @@ export function structureRowItems(
         title: commands.why.alias,
         description: commands.why.alias,
       },
+      ...(saveModule === undefined ? [] : [{ key: 'save-module', label: SAVE_MODULE_LABEL, icon: ICONS.saveModule, onSelect: saveModule }]),
       item('moveUp', '위로', ICONS.moveUp, commands.moveUp),
       item('moveDown', '아래로', ICONS.moveDown, commands.moveDown),
       item('indent', '들여쓰기', ICONS.indent, commands.indent),

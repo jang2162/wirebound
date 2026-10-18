@@ -10,7 +10,7 @@
  *
  * | 변조 | 다른 네 자 |
  * |---|---|
- * | **이미 표에 있는** 라우트(프리셋 목록 `GET`)에 가드 앞 훅(`x-probe`가 있으면 200)을 단다 | **넷 다 통과** — 값 분모 둘(`permission-matrix` · `restore-lock-census` — `guarded-routes.ts`)은 라우트 집합과 최소 역할만 보고, `onRoute` 자 둘(`token-route-census` · `actor-census`)은 라우트는 보지만 픽스처가 `x-probe`를 안 실어 훅이 안 답한다 |
+ * | **이미 표에 있는** 라우트(모듈 목록 `GET`)에 가드 앞 훅(`x-probe`가 있으면 200)을 단다 | **넷 다 통과** — 값 분모 둘(`permission-matrix` · `restore-lock-census` — `guarded-routes.ts`)은 라우트 집합과 최소 역할만 보고, `onRoute` 자 둘(`token-route-census` · `actor-census`)은 라우트는 보지만 픽스처가 `x-probe`를 안 실어 훅이 안 답한다 |
  * | **새** 라우트 + 같은 훅 | 값 분모 둘이 죽는다 — 훅이 아니라 **표에 없는 라우트**라서다. 사람이 표에 한 줄 더하면 초록이 되고 훅은 여전히 안 본다 |
  *
  * 행동으로 재는 자(매트릭스)도 이것을 못 잡는다 — 가드 앞 훅은 «조건이 맞을 때만 답한다»는 모양이라 픽스처가 그

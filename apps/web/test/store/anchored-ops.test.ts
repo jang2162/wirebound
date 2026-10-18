@@ -197,7 +197,7 @@ describe('전제가 바뀐 op 은 얹지 않는다', () => {
     expect(rebase(ops, target, source)).toBeNull()
   })
 
-  it('자식 줄을 통째로 갈아 끼우는 편집(프리셋)은 그 사이 자식 줄이 바뀌었으면 못 얹는다', () => {
+  it('자식 줄을 통째로 갈아 끼우는 편집은 그 사이 자식 줄이 바뀌었으면 못 얹는다', () => {
     const ops: PatchOp[] = [{ op: 'replace', path: '/root/children', value: [text('preset')] }]
     expect(rebase(ops, FRONT_ADDED)).toBeNull()
     // 음성 대조: 자식 줄은 그대로이고 글만 바뀌었으면 얹는다.

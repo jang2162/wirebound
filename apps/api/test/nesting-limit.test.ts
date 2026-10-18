@@ -6,10 +6,10 @@
  *
  * | 입구 | 무엇을 보나 | 어디서 |
  * |---|---|---|
- * | HTTP 본문(PUT · 가져오기 · 프리셋 · REST ops …) | JSON 중첩 `MAX_JSON_NESTING` | `preValidation` 훅(`app.ts`) |
+ * | HTTP 본문(PUT · 가져오기 · 모듈 · REST ops …) | JSON 중첩 `MAX_JSON_NESTING` | `preValidation` 훅(`app.ts`) |
  * | 편집 파이프라인(WS `patch` · REST ops · 복원 …) | `ops` 의 JSON 중첩 | `applyEdit` 4단계 앞 |
  *
- * **REST ops 케이스는 두 겹이 함께 막는다 — 한 겹씩 떼면 초록이다**(훅만 떼도 파이프라인이, 파이프라인만 떼도 훅이 막는다). 둘을 함께 떼면 REST ops 3000 · 8000 · 350 단계가 500 · 500 · 200 이고 PUT · 프리셋 · WS `patch` 도 같이 죽는다.
+ * **REST ops 케이스는 두 겹이 함께 막는다 — 한 겹씩 떼면 초록이다**(훅만 떼도 파이프라인이, 파이프라인만 떼도 훅이 막는다). 둘을 함께 떼면 REST ops 3000 · 8000 · 350 단계가 500 · 500 · 200 이고 PUT · 모듈 · WS `patch` 도 같이 죽는다.
  *
  * **편집 뒤 문서의 깊이는 따로 안 본다** — 한도 안의 편집을 되풀이해도 경로 길이 한도(`http/patch-ops.ts` 2000 글자)가 쌓임을 멈춘다(맨 아래 케이스 — `services/nesting.ts` 머리말).
  */
@@ -97,14 +97,14 @@ describe('입구 — 깊이가 한도를 넘으면 400 이고 아무것도 안 �
     })
   })
 
-  it('POST …/presets — schema 가 깊다', async () => {
+  it('POST …/modules — nodes 가 깊다', async () => {
     await withApi(async (ctx) => {
       const w = await world(ctx)
 
-      const res = await w.raw('POST', `${w.P}/presets`, `{"name":"프리셋","schema":[${chainJson(3000)}]}`)
+      const res = await w.raw('POST', `${w.P}/modules`, `{"name":"모듈","nodes":[${chainJson(3000)}]}`)
 
       expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 400, body: FIXED })
-      expect(await ctx.db.selectFrom('presets').select('id').execute()).toEqual([])
+      expect(await ctx.db.selectFrom('modules').select('id').execute()).toEqual([])
     })
   })
 

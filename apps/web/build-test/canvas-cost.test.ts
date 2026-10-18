@@ -218,11 +218,12 @@ describe.skipIf(!전제.ok)('계산 비용 — 실브라우저', () => {
       const opened: Record<string, unknown> = {}
       await toggle.click()
       await page.getByRole('region', { name: '컴포넌트 목록' }).waitFor()
-      const tabs = await page.getByRole('tab').allInnerTexts()
+      // 갈래 탭만 — 판 맨 위의 «목록 종류» 탭(«컴포넌트» · «모듈»)도 `role="tab"` 이다.
+      const tabs = await page.getByRole('tablist', { name: '갈래' }).getByRole('tab').allInnerTexts()
       for (const tab of tabs) {
         // 누른 순간부터 잰다 — 누름 · 그림 · 표본 자리 맞추기가 다 든 시간이다.
         const measured = await page.evaluate(`(async () => {
-          const button = [...document.querySelectorAll('[role="tab"]')].find((el) => el.textContent === ${JSON.stringify(tab)})
+          const button = [...document.querySelectorAll('[role="tablist"][aria-label="갈래"] [role="tab"]')].find((el) => el.textContent === ${JSON.stringify(tab)})
           const started = performance.now()
           button.click()
           // 다시 그리기 전의 옛 카드가 «다 섰다» 로 읽히지 않게 두 프레임을 먼저 보낸다.

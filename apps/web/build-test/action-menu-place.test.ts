@@ -7,27 +7,25 @@
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 쓰는 자리 × 창 셋 | 구조 트리 맨 아래 줄 `…` · 스크롤한 트리 가운데 줄 `…` · 메뉴 트리 줄 `+` · 메뉴 트리 맨 아래 줄 `…` · 구조 트리 머리 `+` · 메뉴 트리 머리 `+` · 셸 `…` 의 목록이 잘리거나 덮인다 |
+ * | 쓰는 자리 × 창 셋 | 구조 트리 맨 아래 줄 `…` · 스크롤한 트리 가운데 줄 `…` · 메뉴 트리 줄 `+` · 메뉴 트리 맨 아래 줄 `…` · 메뉴 트리 머리 `+` · 셸 `…` 의 목록이 잘리거나 덮인다 |
  * | 셸 밖 화면 머리 `…` × 창 셋 | 프로젝트 목록 · 계정 설정 · 테마 관리 화면의 머리 `…`(`shell/page-head.tsx`)의 목록이 잘리거나 덮인다(L-141 — 셸 밖의 같은 부품) |
  * | 머리 상태 전환기 · 영역 표지 × 창 셋 | 머리 `[기본 ▾]`(`shell/view-state-switcher.tsx`)와 뷰 모드의 «상태에 따라 다름» 표지(`canvas/state-badges.tsx`)의 목록이 잘리거나 덮인다(L-319). 좁은 창은 전환기가 셸 `…` 로 접혀(`shell/head-fold.ts`) 그 항목을 셸 `…` 목록에서 잰다 |
  *
  * ## `ActionMenu` 를 쓰는 자리 전부(L-319)
  *
- * `git grep -n '<ActionMenu' -- apps/web/src` — 단추가 목록을 여는 JSX 는 **여덟**(일곱 파일 · `tree-row-actions.tsx` 가 둘)이고, L-319 전에는 **둘**(`canvas/state-badges.tsx` ·
- * `shell/view-state-switcher.tsx`)이 이 행렬 밖이었다. 지금은 여덟이 모두 들었다(`test/shell/action-menu.test.tsx` · `popover-side.test.tsx` 의 `ActionMenu` 는 단위 테스트의 쓰임이라 뺐다).
+ * `git grep -n '<ActionMenu' -- apps/web/src` — 단추가 목록을 여는 JSX 는 **일곱**(여섯 파일 · `tree-row-actions.tsx` 가 둘 — 구조 트리 머리 `+` 는 걷었다)이고, L-319 전에는 **둘**(`canvas/state-badges.tsx` ·
+ * `shell/view-state-switcher.tsx`)이 이 행렬 밖이었다. 지금은 일곱이 모두 들었다(`test/shell/action-menu.test.tsx` · `popover-side.test.tsx` 의 `ActionMenu` 는 단위 테스트의 쓰임이라 뺐다).
  *
  * | JSX | 파일 | 이 파일의 케이스 |
  * |---|---|---|
  * | 줄 `+` · `…` (둘) | `panels/tree-row-actions.tsx`(`TreeRowActions` — 구조 트리 줄 · 메뉴 트리의 메뉴 줄 · 페이지 줄이 부른다) | 쓰는 자리 «구조 트리 맨 아래 줄 …» · «스크롤한 구조 트리 가운데 줄 …» · «메뉴 트리 맨 아래 메뉴 줄 +» · «메뉴 트리 맨 아래 메뉴 줄 …» |
- * | 구조 트리 머리 `+` | `panels/structure-tree.tsx` | «구조 트리 머리 +» |
  * | 메뉴 트리 머리 `+` | `panels/menu-tree.tsx` | «메뉴 트리 머리 +» |
  * | 셸 머리 `…` | `routes/editor.tsx` | «셸 …» |
  * | 셸 밖 화면 머리 `…` | `shell/page-head.tsx` | «셸 밖 화면의 머리 …» |
  * | 머리 상태 전환기 | `shell/view-state-switcher.tsx` | **«머리 상태 전환기 · 영역 표지»**(L-319) |
  * | 뷰 모드 영역 표지 | `canvas/state-badges.tsx` | 같은 케이스 |
  *
- * **이 표가 재지 않는 것 — `TreeRowActions` 인스턴스.** 같은 JSX 라도 줄마다 자리가 다르다. 행렬에 든 줄은 구조 트리 `…`(맨 아래 · 스크롤한 가운데) · 메뉴 트리의 메뉴 줄 `+` · `…` 뿐이고, **구조 트리 줄의
- * `+` · 메뉴 트리 페이지 줄의 `+` · `…`(`panels/menu-tree.tsx` 의 둘째 `TreeRowActions`)는 안 든다.
+ * **이 표가 재지 않는 것 — `TreeRowActions` 인스턴스.** 같은 JSX 라도 줄마다 자리가 다르다. 행렬에 든 줄은 구조 트리 `…`(맨 아래 · 스크롤한 가운데) · 메뉴 트리의 메뉴 줄 `+` · `…` 뿐이고, **메뉴 트리 페이지 줄의 `…`(`panels/menu-tree.tsx` 의 둘째 `TreeRowActions`)는 안 든다.
  */
 import type { Locator, Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -206,17 +204,6 @@ describe.skipIf(!전제.ok)('행동 메뉴 자리 — 실브라우저', () => {
       open: async (page) => {
         await page
           .locator('.wb-shell-region[aria-label="메뉴·페이지 트리"]')
-          .getByRole('button', { name: /추가$/ })
-          .first()
-          .click()
-        await page.getByRole('menu').waitFor()
-      },
-    },
-    {
-      label: '구조 트리 머리 +',
-      open: async (page) => {
-        await page
-          .locator('.wb-shell-region[aria-label="구조 트리"]')
           .getByRole('button', { name: /추가$/ })
           .first()
           .click()

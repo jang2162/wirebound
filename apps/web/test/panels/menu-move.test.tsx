@@ -394,9 +394,8 @@ describe('페이지의 소속 메뉴 고르기', () => {
   })
 
   it('닫혀 있을 때 목록이 DOM에 없다', async () => {
-    // 남기면 Tab 순서에 정지점이 그대로 남는다(`StructurePicker`가 `TypePicker`에 쓴 것과
-    // 같은 근거). **`<select>`를 고른 근거도 이 수다** — 버튼 목록이면 정지점이 메뉴 수만큼
-    // 늘고 그 수에 상한이 없다(`TypePicker`는 카탈로그가 정한 수로 고정이다).
+    // 남기면 Tab 순서에 정지점이 그대로 남는다. **`<select>`를 고른 근거도 이 수다** — 버튼 목록이면 정지점이 메뉴 수만큼
+    // 늘고 그 수에 상한이 없다.
     await open({}, '/projects/p-1/pages/pg-detail')
 
     const closed = tabStops()

@@ -93,8 +93,8 @@ export async function insertApiToken(db: DbHandle, input: { projectId: string; u
 }
 
 /**
- * 그 프로젝트에서 **그 사용자가 만든** 토큰 전부. 오래된 것이 먼저다(`listPresets`와 같은
- * 이유 — *"내가 어제 만든 것"*의 자리가 움직이지 않는다).
+ * 그 프로젝트에서 **그 사용자가 만든** 토큰 전부. 오래된 것이 먼저다 — *"내가 어제 만든 것"*의 자리가
+ * 움직이지 않는다.
  *
  * **`userId`로 거르는 것이 계약이다**(`routes/tokens.ts`의 «목록·폐기는 자기 것만 본다» 절). 프로젝트 단위로 열면
  * viewer가 owner의 토큰 목록을 보고 지울 수 있다.
@@ -117,7 +117,7 @@ export async function listApiTokens(db: DbHandle, projectId: string, userId: str
  *
  * **`projectId`·`userId`를 조건에 함께 둔다** — 남의 토큰 id를 실은 요청이 통하면 안 된다.
  * id로 찾고 나서 비교하는 대신 질의 조건에 두는 것은 비교를 빠뜨린 판이 조용히 통과하기
- * 때문이다(`findPresetById`·`findSnapshotById`와 같다).
+ * 때문이다(`findSnapshotById`와 같다).
  */
 export async function deleteApiToken(db: DbHandle, projectId: string, userId: string, tokenId: string): Promise<boolean> {
   const result = await db
@@ -290,7 +290,7 @@ export async function deleteStaleMemberTokens(trx: DbHandle, projectId: string, 
 
 /**
  * 프로젝트의 토큰 행 전부를 id 순으로 `FOR UPDATE`로 잠근다. **부르는 자리는 프로젝트 삭제 하나다**(`routes/projects.ts` —
- * 멤버 제거의 `lockMemberTokens`와 고리를 만들지 않으려고 CASCADE 보다 먼저 잡는다). `lockProjectPresets`와 같은 모양이다.
+ * 멤버 제거의 `lockMemberTokens`와 고리를 만들지 않으려고 CASCADE 보다 먼저 잡는다). `lockProjectModules`와 같은 모양이다.
  */
 export async function lockProjectTokens(trx: DbHandle, projectId: string): Promise<void> {
   assertLocking(trx, 'lockProjectTokens')

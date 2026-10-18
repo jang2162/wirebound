@@ -365,7 +365,8 @@ describe('통합', () => {
 
     // **그동안 구조 편집 쪽은 살아 있다** — 같은 화면의 다른 region이다.
     const structure = screen.getByRole('region', { name: '구조 트리' })
-    expect(within(structure).getByRole('button', { name: 'Page 추가' })).toBeDefined()
+    // 뿌리 줄의 행동은 `…` 하나다(`+` 는 걷었다 — 넣기는 하단 판이 한다).
+    expect(within(structure).getByRole('button', { name: 'Page 더 보기' })).toBeDefined()
 
     gate.release?.()
     await waitFor(() => expect(isOff(tool('아래로'))).toBe(false))

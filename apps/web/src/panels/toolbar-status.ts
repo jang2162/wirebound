@@ -33,12 +33,10 @@
  *
  * ## «안 골랐다» 칸이 둘로 갈린다 — 페이지 잠금
  *
- * 고른 것이 없어도 쓸 수 있는 조작이 둘이고(`패턴 넣기` · `프리셋`), 그 둘은 **페이지에 남의 잠금이 하나라도 있으면 함께 꺼진다**
- * (`panels/structure-toolbar.tsx`의 `patternLocked` · `presetLocked`). 그때 «고르면 편집할 수 있습니다»는 페이지 전체가 잠겨 고를 줄이 하나도
- * 없는 판에서도 고르라고 말한다. 그래서 안 고른 판에 페이지 잠금이 있으면 원인(남이 편집 중)을 말한다.
+ * 안 고른 판에 페이지에 남의 잠금이 있으면(`pageLock`) «고르면 편집할 수 있습니다»는 페이지 전체가 잠겨 고를 줄이 하나도 없는 판에서도 고르라고
+ * 말한다. 그래서 그 판에서는 원인(남이 편집 중)을 말한다.
  *
- * **패턴 · 프리셋 · 별칭은 판정 키가 없다** — 각자 잠금(별칭은 선택의 개수 · 있음까지)으로만 꺼지므로 그 까닭만 말한다. 패턴 · 프리셋은 선택이
- * 없어도 되는 조작이라 «노드를 고르면 …»을 붙이지 않는다 — 붙이면 없는 전제조건을 만든다.
+ * **별칭은 판정 키가 없다** — 선택의 개수 · 있음 · 잠금으로만 꺼지므로 그 까닭만 말한다(`aliasReason`).
  *
  * # 판정을 두 벌로 만들지 않는다
  *
@@ -88,18 +86,13 @@ export interface StructureReasonInput {
   /** 고른 노드를 막는 **남의** 잠금(`store.lockedBy`). 없으면 `null`. */
   lock: NodeLock | null
   /**
-   * **이 페이지에 남의 잠금이 하나라도 있는가** — `store.lockedBy(document.root.id)`가 낸 것이고, `useStructureCommands`가 `프리셋`을 끄는 데
-   * 쓰는 그 값 그대로다. 쓰이는 자리는 **고른 것이 없을 때뿐**이다(머리말 «안 골랐다 칸») — 고른 것이 있으면 `lock`과 항목의 조건이 답한다.
+   * **이 페이지에 남의 잠금이 하나라도 있는가** — `store.lockedBy(document.root.id)`가 낸 것이다. 쓰이는 자리는 **고른 것이 없을 때뿐**이다
+   * (머리말 «안 골랐다 칸») — 고른 것이 있으면 `lock`과 항목의 조건이 답한다.
    */
   pageLock: NodeLock | null
   abilities: StructureAbilities
   /** 상태 영역의 자리 규칙이 끈 항목과 까닭(`edit/structure-actions.ts` 의 `regionRules`) — 표(`STRUCTURE_WHY_DISABLED`)보다 먼저 말한다. */
   region?: RegionBlocked
-  /**
-   * «안에 추가» · «아래 추가» 를 **넣는 편집이 남의 잠금에 부딪혀** 끈 문장(`edit/add-abilities.ts`) — 카드 «넣기» 가 같은 판에서 세우는 문장과 같다
-   * (`panels/property-panel.tsx` 의 `lockedNotice`). 있으면 아래 모든 칸보다 먼저 말한다.
-   */
-  addBlocked?: { addInside?: string; addAfter?: string }
 }
 
 /**
@@ -110,8 +103,6 @@ export interface StructureReasonInput {
  */
 export function structureItemReason(input: StructureReasonInput, key: keyof StructureAbilities): string | undefined {
   if (input.abilities[key]) return undefined
-  const blockedEdit = key === 'addInside' || key === 'addAfter' ? input.addBlocked?.[key] : undefined
-  if (blockedEdit !== undefined) return blockedEdit
   if (input.selectedNodeId === null) {
     return input.pageLock === null ? PICK_NODE_REASON : `${input.pageLock.userName}님이 편집 중이라 지금은 쓸 수 있는 도구가 없습니다`
   }
@@ -122,23 +113,13 @@ export function structureItemReason(input: StructureReasonInput, key: keyof Stru
     }
     if (MULTI_DISABLED.has(key)) return MULTI_WHY_DISABLED
   }
-  // 루트가 아닌데 «아래 추가» · «삭제»가 함께 꺼졌으면 그 노드가 문서에 없다 — 찾은 비루트 노드는 둘이 언제나 참이다(`structureAbilities`).
+  // 루트가 아닌데 `addAfter` · `remove`가 함께 꺼졌으면 그 노드가 문서에 없다 — 찾은 비루트 노드는 둘이 언제나 참이다(`structureAbilities`).
   // 루트는 둘이 늘 꺼져 있으므로 이 칸에서 뺀다 — 고른 노드는 있고 그것이 루트다.
-  // 상태 영역 규칙이 끈 항목은 그 까닭을 — 아래 «문서에 없다» 칸보다 먼저다(가지는 «아래 추가» · 기본 가지는 «삭제»가 함께 꺼져 그 칸과 같은 값이다).
+  // 상태 영역 규칙이 끈 항목은 그 까닭을 — 아래 «문서에 없다» 칸보다 먼저다(가지는 `addAfter` · 기본 가지는 `remove`가 함께 꺼져 그 칸과 같은 값이다).
   const region = input.region?.[key]
   if (region !== undefined) return region
   if (!input.isRoot && !input.abilities.addAfter && !input.abilities.remove) return NOT_IN_DOCUMENT_STATUS
   return STRUCTURE_WHY_DISABLED[key]
-}
-
-/** 패턴 넣기가 꺼졌을 때 — 꽂힐 자리를 막은 잠금(`patternLocked` 의 잠금). 잠금이 없으면 `undefined`다. */
-export function patternReason(lock: NodeLock | null): string | undefined {
-  return lock === null ? undefined : `${lock.userName}님이 편집 중이라 패턴을 넣을 수 없습니다`
-}
-
-/** 프리셋이 꺼졌을 때 — 페이지에 남의 잠금이 하나라도 있다(`presetLocked`). 프리셋은 페이지 통째를 바꾼다. */
-export function presetReason(lock: NodeLock | null): string | undefined {
-  return lock === null ? undefined : `${lock.userName}님이 편집 중인 노드가 있어 프리셋을 놓을 수 없습니다`
 }
 
 /**
@@ -167,17 +148,11 @@ export function menuItemReason(
   return MENU_WHY_DISABLED[key]
 }
 
-/** 꺼진 항목의 이유 — 판정 일곱과 판정 키가 없는 셋(패턴 · 프리셋 · 별칭). 켜진 항목은 `undefined`다. */
-export type StructureWhy = { readonly [K in keyof StructureAbilities | 'pattern' | 'preset' | 'alias']?: string }
+/** 꺼진 항목의 이유 — 판정 일곱과 판정 키가 없는 별칭. 켜진 항목은 `undefined`다. */
+export type StructureWhy = { readonly [K in keyof StructureAbilities | 'alias']?: string }
 
-/**
- * 구조 트리 줄 행동이 싣는 이유 전부(`StructureCommands.why`). 판정 키가 없는 셋은 각자 끈 값을 받는다 — 패턴은 꽂힐 자리의 잠금,
- * 프리셋은 페이지 잠금(`panels/structure-toolbar.tsx`의 `patternLocked` · `presetLocked`), 별칭은 `aliasLocked`.
- */
-export function structureWhy(
-  input: StructureReasonInput,
-  gates: { patternLock: NodeLock | null; presetLock: NodeLock | null; aliasLocked: boolean },
-): StructureWhy {
+/** 구조 트리 줄 행동이 싣는 이유 전부(`StructureCommands.why`). 판정 키가 없는 별칭은 끈 값(`aliasLocked`)을 받는다. */
+export function structureWhy(input: StructureReasonInput, gates: { aliasLocked: boolean }): StructureWhy {
   return {
     addInside: structureItemReason(input, 'addInside'),
     addAfter: structureItemReason(input, 'addAfter'),
@@ -186,8 +161,6 @@ export function structureWhy(
     moveDown: structureItemReason(input, 'moveDown'),
     indent: structureItemReason(input, 'indent'),
     outdent: structureItemReason(input, 'outdent'),
-    pattern: patternReason(gates.patternLock),
-    preset: presetReason(gates.presetLock),
     alias: gates.aliasLocked ? aliasReason(input) : undefined,
   }
 }

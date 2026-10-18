@@ -61,7 +61,7 @@ function hasLoneSurrogate(text: string): boolean {
  * 문서 트리 안 어딘가의 문자열(값 · 객체 키)에 **짝 없는 서로게이트**가 있는지 훑는다 — `containsNulByte` 와 같은 모양의 훑기다.
  * `JSON.stringify` 는 외짝을 이스케이프 글자로 그대로 내보내고 Postgres 의 `::jsonb` 캐스팅이 `22P02`(invalid input syntax for type
  * json)로 죽어 **500** 이 된다. 텍스트 칸(`text`)에는 `pg` 가 UTF-8 로 옮기며 U+FFFD 로 바꿔 쓰므로 죽지 않는다 — 이 함수가 지키는 것은
- * **jsonb 로 가는 입구**(편집 ops · 문서 · 프리셋 · 스냅샷)다.
+ * **jsonb 로 가는 입구**(편집 ops · 문서 · 모듈 · 스냅샷)다.
  */
 export function containsLoneSurrogate(value: unknown): boolean {
   if (typeof value === 'string') return hasLoneSurrogate(value)
@@ -92,13 +92,13 @@ export function containsLoneSurrogate(value: unknown): boolean {
  * | `POST …/pages/import` | `title`(본문 · 파일) · `description`(파일) |
  *
  * 자기 자리에서 막는 것: 코멘트 본문(`repos/comments.ts`) · 토큰 이름(`routes/tokens.ts`) ·
- * 프리셋(`repos/presets.ts`) · 스냅샷 태그·설명(`repos/snapshots.ts`) · 문서
+ * 모듈(`repos/modules.ts`) · 스냅샷 태그·설명(`repos/snapshots.ts`) · 문서
  * (`PUT .../schema` · 편집 파이프라인 8단계). **닿지 않는 것**: 로그인·초대의 이메일(zod 의 이메일 형식이 400) ·
  * 로그인 비밀번호(해시와 비교할 뿐 저장하지 않는다 — 401) · 슬러그(정규식) · 멱등 키(정규식) · 쿠키·토큰
  * (해시만 질의에 실린다) · 경로의 id(uuid).
  *
  * **막는 자리는 저장소의 쓰기 함수다** — 라우트가 아니라. 가져오기 · 생성 · 수정이 **같은 `insertPage`·
- * `updatePage`를 지나므로** 판정이 한 벌이 된다(가져오기가 앞에서 따로 보지 않는다). 코멘트·프리셋·스냅샷의
+ * `updatePage`를 지나므로** 판정이 한 벌이 된다(가져오기가 앞에서 따로 보지 않는다). 코멘트·모듈·스냅샷의
  * «마지막 방벽»과 같은 층이다.
  */
 export class NulByteError extends Error {
