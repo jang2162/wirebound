@@ -111,6 +111,9 @@ describe('설정 절 목차 — 키보드', () => {
     fireEvent.keyDown(list, { key: 'ArrowUp' })
     expect(selectedTab()).toBe('위험 구역')
     expect(document.activeElement).toBe(screen.getByRole('tab', { name: '위험 구역' }))
+    // 끝에서 ↓ 는 처음으로 돈다.
+    fireEvent.keyDown(list, { key: 'ArrowDown' })
+    expect(selectedTab()).toBe('일반')
   })
 
   it('→ ← 도 옮긴다(좁은 창의 가로 줄) · Home · End 는 처음 · 끝', async () => {
