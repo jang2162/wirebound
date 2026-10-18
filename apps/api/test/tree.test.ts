@@ -79,8 +79,8 @@ describe('buildMenuTree (순수 함수, DB 없이)', () => {
     const result = buildMenuTree(nodes, pages)
 
     expect(result[0]?.pages).toEqual([
-      { id: 'p1', title: '하나', sortOrder: 0 },
-      { id: 'p2', title: '둘', sortOrder: 1 },
+      { id: 'p1', title: '하나', sortOrder: 0, viewStates: [] },
+      { id: 'p2', title: '둘', sortOrder: 1, viewStates: [] },
     ])
   })
 
@@ -184,15 +184,15 @@ describe('GET /api/projects/:projectId/tree', () => {
             title: '회원관리',
             sortOrder: 0,
             pages: [
-              { id: p1.id, title: '목록', sortOrder: 0 },
-              { id: p2.id, title: '상세', sortOrder: 1 },
+              { id: p1.id, title: '목록', sortOrder: 0, viewStates: [] },
+              { id: p2.id, title: '상세', sortOrder: 1, viewStates: [] },
             ],
             children: [
               {
                 id: child.id,
                 title: '권한',
                 sortOrder: 0,
-                pages: [{ id: p3.id, title: '권한 목록', sortOrder: 0 }],
+                pages: [{ id: p3.id, title: '권한 목록', sortOrder: 0, viewStates: [] }],
                 children: [],
               },
             ],
@@ -272,8 +272,50 @@ describe('GET /api/projects/:projectId/tree', () => {
       const page = body.menu[0]?.pages[0]
       expect(page).toBeDefined()
       // schema가 없다는 것만으로는 "혹시 다른 이름으로 새는가"를 못 잡는다 — 페이지
-      // 응답의 키 집합 전체를 고정해, id·title·sortOrder 외에는 아무것도 없음을 본다.
-      expect(Object.keys(page as object).sort()).toEqual(['id', 'sortOrder', 'title'])
+      // 응답의 키 집합 전체를 고정해, id·title·sortOrder · viewStates(상태 목록 — 메뉴 트리의 상태 줄) 외에는 아무것도 없음을 본다.
+      expect(Object.keys(page as object).sort()).toEqual(['id', 'sortOrder', 'title', 'viewStates'])
+    })
+  })
+
+  it('페이지마다 문서의 상태 목록(parent 포함)을 싣는다 — 상태 없는 페이지는 [] · 모양이 틀린 항목은 뺀다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const menu = await createMenuNode(ctx, owner.cookie, project.id, { title: '메뉴' })
+      const stated = await createPage(ctx, owner.cookie, project.id, menu.id, { title: '상태' })
+      await createPage(ctx, owner.cookie, project.id, menu.id, { title: '빈' })
+      const states = [
+        { id: 's_login', name: '로그인' },
+        { id: 's_admin', name: '관리자', parent: 's_login' },
+      ]
+      const put = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/projects/${project.id}/pages/${stated.id}/schema`,
+        cookies: owner.cookie,
+        payload: { schema: { version: CURRENT_DOCUMENT_VERSION, viewStates: states, root: { id: 'n_root', type: 'Page', children: [] } } },
+      })
+      expect(put.statusCode, put.body).toBe(200)
+
+      const read = async () =>
+        ((await ctx.app.inject({ method: 'GET', url: `/api/projects/${project.id}/tree`, cookies: owner.cookie })).json() as TreeResponse)
+          .menu[0]!.pages
+      expect((await read()).map((page) => [page.title, page.viewStates])).toEqual([
+        ['상태', states],
+        ['빈', []],
+      ])
+      // 저장 경계를 안 지난 행(손으로 넣은 판) — 배열이 아닌 목록 · 모양이 틀린 항목.
+      await ctx.db
+        .updateTable('pages')
+        .set({
+          schema: JSON.stringify({
+            version: 2,
+            viewStates: [{ id: 's_ok', name: '됨' }, { id: 7 }, 'x'],
+            root: { id: 'r', type: 'Page' },
+          }) as never,
+        })
+        .where('id', '=', stated.id)
+        .execute()
+      expect((await read())[0]!.viewStates).toEqual([{ id: 's_ok', name: '됨' }])
     })
   })
 })
@@ -350,7 +392,7 @@ describe('완료 판정: 한 줄기 시나리오', () => {
                 id: childMenu.id,
                 title: '권한',
                 sortOrder: 0,
-                pages: [{ id: page.id, title: '권한 목록', sortOrder: 0 }],
+                pages: [{ id: page.id, title: '권한 목록', sortOrder: 0, viewStates: [] }],
                 children: [],
               },
             ],

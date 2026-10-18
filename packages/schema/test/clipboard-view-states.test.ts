@@ -14,7 +14,6 @@ beforeAll(() => {
 })
 
 const ADMIN: ViewState = { id: 's_admin', name: '관리자' }
-const GUEST: ViewState = { id: 's_guest', name: '손님' }
 
 /** 판 1 의 상태 영역 — 기본 «보기» · 관리자 «승인». */
 const area: WbNode = {
