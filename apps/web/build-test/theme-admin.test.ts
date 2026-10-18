@@ -61,7 +61,7 @@ describe.skipIf(!전제.ok)('관리자 화면에서 올리고 설정에서 바�
       )
       expect(await sampleCard(b.page)).toBe(false)
 
-      await a.page.goto(`/projects/${project.id}/settings`)
+      await a.page.goto(`/projects/${project.id}/settings?section=theme`)
       const section = a.page.getByRole('region', { name: '테마' })
       await section.getByLabel('테마', { exact: true }).selectOption('sample')
       const confirm = section.getByRole('group', { name: '테마 바꾸기 확인' })

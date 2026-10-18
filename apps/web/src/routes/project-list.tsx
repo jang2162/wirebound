@@ -11,11 +11,14 @@ import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
 import { ProjectForm } from '../projects/project-form'
 import { useProjectCommands } from '../projects/use-project-commands'
+import { shellIcon } from '../shell/icons'
 import { PageHead } from '../shell/page-head'
 import type { ProjectDetail } from '../api/types'
 
-/** 조회가 성공했는데 결과가 비어 있을 때의 안내. */
+/** 조회가 성공했는데 결과가 비어 있을 때의 안내 — 빈 상태 상자의 제목. */
 const EMPTY_NOTICE = '참여 중인 프로젝트가 없습니다'
+/** 그 밑의 보조 글. */
+const EMPTY_HINT = '새 프로젝트를 만들어 시작하세요'
 
 export function ProjectListRoute(): ReactElement {
   const commands = useProjectCommands()
@@ -31,7 +34,7 @@ export function ProjectListRoute(): ReactElement {
     // 그 셋이 이 화면 안에서 열리므로 접두어가 갈리면 한 화면이 두 어휘로 쪼개진다.
     // 셸 밖의 라우트지만 스타일은 `src/shell.css` 한 파일에 있고 `wb-shell-` 접두어를
     // `test/shell-css.test.ts`가 기계로 지킨다.
-    <main className="wb-shell-project-list">
+    <main className="wb-shell-project-list wb-shell-home">
       {/* **여기에도 앱에서 나가는 길이 있어야 한다.** 에디터 머리에만 두면 프로젝트를 하나
           열지 않고는 로그아웃할 수 없다. 머리 오른쪽 끝의 `…` 가 계정 설정 · (관리자) 테마 관리 · 로그아웃을 든다 — 셸 밖 화면이 함께 쓰는
           머리(`shell/page-head.tsx`)다. 로고는 없다 — 로고가 가는 곳이 이 화면이다. 세션 통지(전환 · 로그아웃 실패)는 그 머리 아래 한 줄이다.
@@ -43,9 +46,16 @@ export function ProjectListRoute(): ReactElement {
       {/* **여는 버튼도 잠근다.** 실제로 막는 것은 훅의 `inFlight`이고, 이 `disabled`는
           그것을 화면에 보이게 한다 — 여는 쪽 하나라도 빠지면 그 버튼은 눌리는 것처럼 보이는데
           조용히 아무 일도 안 한다. */}
-      <button className="wb-shell-project-create" type="button" disabled={commands.busy} onClick={commands.openCreate}>
-        새 프로젝트
-      </button>
+      {/* 머리 아래 줄 — 왼쪽 수 · 오른쪽 «새 프로젝트». 수는 목록을 받은 뒤에만 선다(불러오는 중 · 실패 · 빈 목록에는 말할 수가 없다). */}
+      <div className="wb-shell-home-bar">
+        <span className="wb-shell-home-count">
+          {state.status === 'ready' && state.projects.length > 0 ? `프로젝트 ${state.projects.length}개` : ''}
+        </span>
+        <button className="wb-shell-project-create" type="button" disabled={commands.busy} onClick={commands.openCreate}>
+          {shellIcon('add', 16, 'wb-shell-icon-lead')}
+          새 프로젝트
+        </button>
+      </div>
 
       {/* 만들기 폼은 목록 **위**에 연다. */}
       {commands.form !== null && (
@@ -72,9 +82,13 @@ export function ProjectListRoute(): ReactElement {
       )}
       {state.status === 'ready' &&
         (state.projects.length === 0 ? (
-          <p className="wb-shell-project-notice">{EMPTY_NOTICE}</p>
+          <div className="wb-shell-home-empty">
+            {shellIcon('noProjects', 32, 'wb-shell-home-empty-icon')}
+            <p className="wb-shell-project-notice">{EMPTY_NOTICE}</p>
+            <p className="wb-shell-home-empty-hint">{EMPTY_HINT}</p>
+          </div>
         ) : (
-          <ul className="wb-shell-project-items">
+          <ul className="wb-shell-home-grid">
             {state.projects.map((project) => (
               <ProjectRow key={project.id} project={project} />
             ))}
@@ -85,25 +99,31 @@ export function ProjectListRoute(): ReactElement {
 }
 
 /**
- * 목록의 한 줄 — 이름(에디터로) · 설명 · «설정». **역할로 가르는 것이 없다** — 줄마다 같은 둘이다(설정 페이지가 역할대로 열고 닫는다).
+ * 목록의 카드 하나 — 이름(에디터로) · 설명 · 아래 줄에 슬러그와 «설정». **역할로 가르는 것이 없다** — 카드마다 같은 둘이다(설정 페이지가
+ * 역할대로 열고 닫는다). 역할 표지도 두지 않는다 — `.role` 을 읽는 자리는 판정 함수를 지나야 한다(`test/role-access.test.ts`).
  */
 function ProjectRow(props: { project: ProjectDetail }): ReactElement {
   const { project } = props
 
   return (
-    <li className="wb-shell-project-item">
+    <li className="wb-shell-home-card">
       {/* 버튼이 아니라 링크인 것은 주소가 있는 이동이기 때문이다 — 새 탭으로 열거나
-          주소를 공유할 수 있어야 한다. */}
-      <Link className="wb-shell-project-name" to={`/projects/${project.id}`}>
+          주소를 공유할 수 있어야 한다. 카드 전체를 링크로 만들지 않는다 — 안의 «설정» 링크와 겹친다. */}
+      <Link className="wb-shell-home-name" to={`/projects/${project.id}`}>
         {project.name}
       </Link>
-      {project.description !== null && <p className="wb-shell-project-desc">{project.description}</p>}
+      {/* 설명이 없으면 자리째 없다 — 카드 안의 `<p>` 는 이것 하나다(`test/routes/project-list.test.tsx` «설명이 없는 프로젝트도»). */}
+      {project.description !== null && <p className="wb-shell-home-desc">{project.description}</p>}
 
-      {/* **설정은 모든 멤버에게 있다** — owner 가 아니면 설정 페이지가 읽기로만 보인다(지금 테마 · 토큰을 볼 수 있다).
-          글자는 «설정» 하나이고 줄마다 갈리는 이름은 `aria-label` 이 싣는다. */}
-      <Link className="wb-shell-project-settings" to={`/projects/${project.id}/settings`} aria-label={`${project.name} 설정`}>
-        설정
-      </Link>
+      <div className="wb-shell-home-foot">
+        <span className="wb-shell-home-slug">{project.slug}</span>
+        {/* **설정은 모든 멤버에게 있다** — owner 가 아니면 설정 페이지가 읽기로만 보인다(지금 테마 · 토큰을 볼 수 있다).
+            글자는 «설정» 하나이고 카드마다 갈리는 이름은 `aria-label` 이 싣는다. */}
+        <Link className="wb-shell-project-settings" to={`/projects/${project.id}/settings`} aria-label={`${project.name} 설정`}>
+          {shellIcon('projectSettings', 14, 'wb-shell-icon-lead')}
+          설정
+        </Link>
+      </div>
     </li>
   )
 }

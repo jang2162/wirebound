@@ -88,7 +88,7 @@ function renderTheme(role: ProjectRole = 'owner', overrides: Partial<ApiClient> 
       getProject: async () => ({ id: 'p-1', name: '관리자 콘솔', slug: 'admin', description: null, role, themeRev: 4 }),
       ...api,
     }),
-    route: '/projects/p-1/settings',
+    route: '/projects/p-1/settings?section=theme',
   })
   return api
 }

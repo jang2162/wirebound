@@ -207,7 +207,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
       expect(before.themeId).not.toBe(themeId)
       const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 1000 } })
       try {
-        await page.goto(`/projects/${fixture.id}/settings`)
+        await page.goto(`/projects/${fixture.id}/settings?section=theme`)
         await page.getByRole('combobox', { name: '테마', exact: true }).selectOption(themeId)
         const box = await confirmBox(page)
         const impact = ok(
@@ -275,7 +275,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
 
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 1000 } })
     try {
-      await page.goto(`/projects/${upgrade.id}/settings`)
+      await page.goto(`/projects/${upgrade.id}/settings?section=theme`)
       const version = page.getByRole('combobox', { name: '버전', exact: true })
       await expect.poll(() => version.inputValue()).toBe('0.1.0')
       await version.selectOption(seededVersion('system-admin'))

@@ -63,7 +63,7 @@ describe.skipIf(!전제.ok)('설정 페이지의 토큰 편집', () => {
         if (frame === b.page.mainFrame()) bobNavigations += 1
       })
 
-      await a.page.goto(`/projects/${project.id}/settings`)
+      await a.page.goto(`/projects/${project.id}/settings?section=theme`)
       const primary = a.page.getByRole('group', { name: '토큰' }).getByLabel(COLOR.label, { exact: true })
       await primary.waitFor()
       await poll(
@@ -105,7 +105,7 @@ describe.skipIf(!전제.ok)('설정 페이지의 토큰 편집', () => {
     const project = await themeProject(stack, alice)
     const { context, page } = await stack.openTab(stack.users.alice)
     try {
-      await page.goto(`/projects/${project.id}/settings`)
+      await page.goto(`/projects/${project.id}/settings?section=theme`)
       const primary = page.getByRole('group', { name: '토큰' }).getByLabel(COLOR.label, { exact: true })
       await primary.waitFor()
       await poll(

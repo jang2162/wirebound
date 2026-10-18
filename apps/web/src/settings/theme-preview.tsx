@@ -58,22 +58,25 @@ export function ThemePreview(props: {
   const ready = bundle !== null && bundle.key === key
 
   return (
-    <div className="wb-shell-settings-preview" role="region" aria-label="미리보기">
-      {!ready && (
-        <p className="wb-shell-project-notice" role="status">
-          미리보기를 불러오는 중…
-        </p>
-      )}
-      {ready && bundle.failure !== null && (
-        <p className="wb-shell-project-notice" role="status">
-          {`테마를 불러오지 못해 기본 모양으로 보입니다 — ${bundle.failure}`}
-        </p>
-      )}
-      {ready && (
-        <CanvasIframe styles={sheets} width={PREVIEW_WIDTH}>
-          {(frame) => <ThemeGallery theme={bundle.definition} tokens={values} window={frame.window} />}
-        </CanvasIframe>
-      )}
+    // 틀이 높이를 창에 묶고 안쪽 상자가 스크롤한다(`shell.css` 의 `.wb-shell-settings-preview-frame`).
+    <div className="wb-shell-settings-preview-frame">
+      <div className="wb-shell-settings-preview" role="region" aria-label="미리보기">
+        {!ready && (
+          <p className="wb-shell-project-notice" role="status">
+            미리보기를 불러오는 중…
+          </p>
+        )}
+        {ready && bundle.failure !== null && (
+          <p className="wb-shell-project-notice" role="status">
+            {`테마를 불러오지 못해 기본 모양으로 보입니다 — ${bundle.failure}`}
+          </p>
+        )}
+        {ready && (
+          <CanvasIframe styles={sheets} width={PREVIEW_WIDTH}>
+            {(frame) => <ThemeGallery theme={bundle.definition} tokens={values} window={frame.window} />}
+          </CanvasIframe>
+        )}
+      </div>
     </div>
   )
 }

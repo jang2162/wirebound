@@ -73,8 +73,18 @@ function generalOpen(): boolean {
   return editable
 }
 
-/** 설정 «위험 구역» 이 섰는가 — 절과 그 단추가 함께 있다. */
+/**
+ * 설정 «위험 구역» 이 섰는가 — 절 목차에 그 탭이 있고, 누르면 절과 그 단추가 함께 선다. 탭이 없으면 숨은 판에도 절이 없다.
+ * (절은 탭 판 안에 산다 — `routes/settings.tsx` 머리말 «절 목차». «일반» 을 먼저 재고 이것을 부른다 — 탭을 옮긴다.)
+ */
 function dangerOpen(): boolean {
+  const tab = screen.queryByRole('tab', { name: '위험 구역' })
+  if (tab === null) {
+    expect(screen.queryByRole('region', { name: '위험 구역', hidden: true })).toBeNull()
+    expect(has('프로젝트 삭제')).toBe(false)
+    return false
+  }
+  fireEvent.click(tab)
   const section = screen.queryByRole('region', { name: '위험 구역' })
   expect(section !== null).toBe(has('프로젝트 삭제'))
   return section !== null
@@ -90,7 +100,6 @@ describe('판정과 화면의 배선', () => {
   it('remove만 열리면 설정 «일반» 은 읽기 전용이고 «위험 구역» 이 선다', async () => {
     await renderSettings({ rename: false, remove: true })
     expect(generalOpen()).toBe(false)
-    expect(await screen.findByRole('region', { name: '위험 구역' })).toBeDefined()
     expect(dangerOpen()).toBe(true)
   })
 
@@ -104,6 +113,7 @@ describe('판정과 화면의 배선', () => {
   it('remove만 열렸을 때 삭제 확인까지 닿는다', async () => {
     // 절이 있는 것과 그것이 삭제 경로를 여는 것은 다르다.
     await renderSettings({ rename: false, remove: true })
+    fireEvent.click(screen.getByRole('tab', { name: '위험 구역' }))
     fireEvent.click(screen.getByRole('button', { name: '프로젝트 삭제' }))
     expect(screen.getByLabelText('삭제하려면 프로젝트 이름을 입력하세요')).toBeDefined()
   })

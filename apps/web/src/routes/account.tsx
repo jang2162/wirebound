@@ -3,7 +3,7 @@
  *
  * 절은 셋이다 — **내 정보**(이름 · 이메일 — 읽기만 · 세션 문맥의 `me` 값), **비밀번호 바꾸기**(`account/password-section.tsx`),
  * **API 토큰**(`account/tokens-section.tsx`). 옛 주소 `/tokens` 는 여기로 넘어온다(`app.tsx`). 화면 루트는 설정 페이지와 같은
- * `.wb-shell-settings` 다 — 절 · 칸의 꼴을 함께 쓴다.
+ * `.wb-shell-settings` 다 — 절(카드) · 칸의 꼴을 함께 쓴다. 폭만 `.wb-shell-account` 가 좁힌다(절 하나짜리 폼이라 설정 페이지 폭이면 칸이 휑하다).
  */
 import { useId, type ReactElement } from 'react'
 import { PasswordSection } from '../account/password-section'
@@ -13,7 +13,7 @@ import { PageHead } from '../shell/page-head'
 
 export function AccountRoute(): ReactElement {
   return (
-    <main className="wb-shell-settings">
+    <main className="wb-shell-settings wb-shell-account">
       {/* 머리 — 로고(프로젝트 목록으로) · 제목 · `…`(`shell/page-head.tsx`). */}
       <PageHead title="계정 설정" brand />
       <ProfileSection />
@@ -32,14 +32,17 @@ function ProfileSection(): ReactElement {
       <h2 className="wb-shell-settings-section-title" id={heading}>
         내 정보
       </h2>
-      <div className="wb-shell-settings-field">
-        <span className="wb-shell-settings-label">이름</span>
-        <span className="wb-shell-account-value">{user?.name ?? ''}</span>
-      </div>
-      <div className="wb-shell-settings-field">
-        <span className="wb-shell-settings-label">이메일</span>
-        <span className="wb-shell-account-value">{user?.email ?? ''}</span>
-      </div>
+      {/* 라벨 | 값 두 칸 줄. 줄 사이는 목록의 `gap`(16px)이 연다 — 칸을 그냥 쌓으면 «이름» 의 값 바로 밑에 «이메일» 라벨이 붙는다. */}
+      <dl className="wb-shell-account-profile">
+        <div className="wb-shell-account-row">
+          <dt className="wb-shell-account-label">이름</dt>
+          <dd className="wb-shell-account-value">{user?.name ?? ''}</dd>
+        </div>
+        <div className="wb-shell-account-row">
+          <dt className="wb-shell-account-label">이메일</dt>
+          <dd className="wb-shell-account-value">{user?.email ?? ''}</dd>
+        </div>
+      </dl>
     </section>
   )
 }
