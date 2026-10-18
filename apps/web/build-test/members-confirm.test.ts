@@ -78,7 +78,7 @@ describe.skipIf(!전제.ok)('멤버 제외 확인', () => {
           })
           if (added.status !== 201) throw new Error(`픽스처 member ${added.status}`)
         }
-        await page.goto(`/projects/${projectId}/settings`)
+        await page.goto(`/projects/${projectId}/settings?section=members`)
         await page.getByRole('button', { name: `${name} 제외`, exact: true }).waitFor()
         await page.getByRole('region', { name: '멤버' }).evaluate((section) => section.scrollIntoView({ block: 'start' }))
         deletes = []

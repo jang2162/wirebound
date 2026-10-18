@@ -412,7 +412,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 캔버스 · 번들 · 
       const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 1000 } })
       const silent: string[] = []
       try {
-        await page.goto(`/projects/${fixture.id}/settings`)
+        await page.goto(`/projects/${fixture.id}/settings?section=theme`)
         const form = page.getByRole('group', { name: '토큰' })
         await form.locator('fieldset').first().waitFor()
         const handle = await page.waitForSelector('.wb-shell-settings-preview iframe')
