@@ -1051,10 +1051,13 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
    * 페이지 줄이면 그 페이지로 옮겨 가며 고른 것이 풀려 삭제 확인이 사라진다. 행동 메뉴가 포인터로 고른 뒤 같은 자리의 둘째 누름 하나를
    * 삼킨다(`shell/action-menu.tsx` «포인터로 고른 뒤 …»). 위 표의 «나2»는 목록이 트리 끝 아래로 떠 밑에 누를 것이 없어 이 성질을 못 잰다 —
    * 그래서 목록이 아래 줄들 위에 뜨는 «가1»의 `…`로 잰다. 판 카나리아: 누르기 전 «삭제» 가운데 밑(목록을 닫은 뒤의 `elementFromPoint`)이
-   * 트리의 줄이다.
+   * 트리의 줄이다. 페이지 `…` 는 «상태 추가»까지 실어 «삭제»가 공용 픽스처의 마지막 줄(«다») 바로 밑에 떨어지므로 이 판에만 메뉴 «라»를
+   * 더한다 — 공용 픽스처에 더하면 위 «나2» 표의 «밑에 누를 것이 없다»가 깨진다.
    */
   it('삭제 항목의 둘째 누름이 그 밑 줄을 누르지 않는다 — 목록이 아래 줄들 위에 뜨는 줄(값)', async () => {
-    const { P, ids } = await menuFixture('del-over-rows')
+    const { projectId, P, ids } = await menuFixture('del-over-rows')
+    const extra = await stack.request(alice, 'POST', `/projects/${projectId}/menu`, { parentId: null, title: '라' })
+    if (extra.status >= 300) throw new Error(`menu ${extra.status}`)
     const tab = await openEditor(P)
     try {
       const { page } = tab
