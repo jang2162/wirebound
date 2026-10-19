@@ -278,6 +278,16 @@ describe('화면 상태', () => {
     expect(out).toContain("'승인 버튼'(관리자 상태)")
   })
 
+  /** 줄은 트리 차례다 — 하위 상태는 목록에서 뒤에 있어도 그 부모 바로 뒤에 «부모 > 하위» 로 선다(설계 spec «C5»). */
+  it('하위 상태가 있으면 줄이 트리 차례 · «부모 > 하위» 꼴이다', async () => {
+    const payload = 상태가_있는_프로젝트()
+    const states = payload.pages.at(-1)!.schema as unknown as { viewStates: { id: string; name: string; parent?: string }[] }
+    states.viewStates.push({ id: 's_ops', name: '운영', parent: 's_admin' })
+    const io = 준비(payload)
+    expect(await run(['page', 'get', '관리자/회원/상태'], io)).toBe(EXIT.ok)
+    expect(io.stdout.join('\n')).toContain('  화면 상태: 기본 · 관리자 · 관리자 > 운영 · 비로그인')
+  })
+
   it('상태가 없는 페이지에는 그 줄이 없다', async () => {
     const io = 준비()
     await run(['page', 'get', '관리자/회원/목록'], io)
