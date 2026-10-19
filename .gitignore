@@ -21,8 +21,8 @@ shots/
 /.playwright-mcp/
 # codegraph 인덱스 — 체크아웃마다 만든다(`codegraph init`)
 /.codegraph/
-# Komodo 서버에서 직접 쓰는 덮어쓰기 파일(docs/guides/deploy-komodo.md) — 서버마다 다르고 커밋하지 않는다
-/deploy/compose.server.yaml
+# 서버마다 쓰는 배포 compose 의 덮어쓰기 파일(docs/guides/deploy-docker.md) — 서버마다 다르고 커밋하지 않는다
+/compose.override.yaml
 # Orca 개인용 이슈 명령(공용 지침 `orca` 세팅)
 /.orca/issue-command
 
