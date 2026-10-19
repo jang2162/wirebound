@@ -25,6 +25,7 @@ import { nodeRowLabel, removeViewStateOps, walkNodes, type PageDocument, type Pa
 import { useEditCommit } from '../edit/use-edit-commit'
 import { ShellDialog } from '../shell/shell-dialog'
 import { useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { useLockedBy } from '../store/use-locked-by'
 
 export const REMOVE_STATE_TITLE = '상태 삭제'
 export const STATES_CHANGED = '목록이 바뀌었습니다 — 다시 확인하세요.'
@@ -116,6 +117,9 @@ function OpenRemoveStateDialog(props: {
   focusFallback?: () => HTMLElement | null
 }): ReactElement {
   const store = useEditorStoreInstance()
+  // **잠금 목록을 구독한다** — «삭제»의 끔(`editBlockedBy`)은 렌더 중에 묻는데 그 함수는 참조가 안 바뀐다. 안 구독하면 남이 지울 노드를 놓아도
+  // 상자가 다시 안 그려져 «삭제»가 꺼진 채 남았다(`build-test/state-tree.test.ts` «두 사람»).
+  useLockedBy()
   const { commitOps } = useEditCommit({ projectId: props.projectId, pageId: props.target.pageId })
   const sentenceId = useId()
   const pending = removal(props.doc, props.target.stateId)

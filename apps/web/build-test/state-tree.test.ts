@@ -1,0 +1,456 @@
+/**
+ * **상태 트리 · 노드별 보임을 실브라우저로 잰다**(설계 spec `docs/superpowers/specs/2026-10-18-modules-states-layout-design.md` 「C」 · 계획 V3 Task 4
+ * Step 3). jsdom 은 배치 · 실제 WS · 두 사람의 잠금 · 주소창이 없어 아래 값을 못 잰다.
+ *
+ * | 케이스 | 무엇이 거짓이면 죽나 |
+ * |---|---|
+ * | 상태마다 캔버스 | 고른 상태에서 캔버스에 선 노드 집합이 보임 판정(물려받기 · `only` · `except` · `default`)과 다르다 · 구조 트리가 숨은 노드를 안 그리거나 안 흐린다 · 고르기가 편집을 낸다 |
+ * | 메뉴 트리 상태 줄 | 트리 차례 · 깊이로 안 선다 · 누르면 그 상태가 안 골라진다 · 다른 페이지의 줄이 `?state=` 로 안 연다 |
+ * | 패널 «상태 보임» | 고친 보임이 서버 · 캔버스에 안 닿는다 |
+ * | 상태 삭제 · 두 사람 | 지울 노드를 남이 잡았는데 «삭제»가 켜져 있다 · 놓은 뒤에도 꺼져 있다 · 서버가 상자가 말한 것과 다르게 바뀐다 · 되돌리기 한 번에 서버가 안 돌아온다 |
+ * | 연 뒤 바뀐 집합 | 다른 탭이 그 상태에 보임을 걸었는데 상자가 다시 안 서거나 첫 누름에 보낸다 |
+ * | 남의 상태 추가 | 열린 페이지에 남이 더한 상태가 새로고침 없이 메뉴 트리 · 전환기에 안 선다 |
+ * | 주소 · viewer | viewer 가 `?state=` 로 연 상태로 안 선다 · 상태 줄 `…` 가 viewer 에게 선다 · 뷰 모드에서 고른 상태가 주소에 안 실린다 |
+ */
+import type { Page } from 'playwright-core'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+
+const 전제 = await editorStackPrerequisite()
+if (!전제.ok) {
+  // eslint-disable-next-line no-console
+  console.log(`[에디터 실브라우저 판] 건너뛴다 — ${전제.reason}`)
+}
+
+const LOGIN = { id: 's_login', name: '로그인' }
+const ADMIN = { id: 's_admin', name: '관리자', parent: 's_login' }
+const GUEST = { id: 's_guest', name: '손님' }
+
+const text = (id: string, content: string, visibility?: { mode: 'only' | 'except'; states: string[] }) => ({
+  id,
+  type: 'Text',
+  props: { content },
+  ...(visibility === undefined ? {} : { visibility }),
+})
+
+/** 노드 다섯 — 모두 · 로그인에서만(관리자가 물려받는다) · 관리자에서만 · 손님 빼고 · 기본에서만. */
+const NODES = [
+  text('n_all', '모두'),
+  text('n_login', '로그인 글', { mode: 'only', states: ['s_login'] }),
+  text('n_admin', '관리자 글', { mode: 'only', states: ['s_admin'] }),
+  text('n_noguest', '손님 빼고', { mode: 'except', states: ['s_guest'] }),
+  text('n_default', '기본 글', { mode: 'only', states: ['default'] }),
+]
+
+/** 상태마다 캔버스에 서야 하는 노드 — 보임 판정(`isVisibleIn`)을 손으로 적은 표. */
+const EXPECTED: Record<string, string[]> = {
+  기본: ['n_all', 'n_noguest', 'n_default'],
+  로그인: ['n_all', 'n_login', 'n_noguest'],
+  관리자: ['n_all', 'n_login', 'n_admin', 'n_noguest'],
+  손님: ['n_all'],
+}
+
+describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우저', () => {
+  let stack: EditorStack
+  let alice: Session
+  let bob: Session
+
+  beforeAll(async () => {
+    if (!전제.ok) return
+    stack = await startEditorStack(전제)
+    alice = await stack.login(stack.users.alice)
+    bob = await stack.login(stack.users.bob)
+  })
+
+  afterAll(async () => {
+    if (stack === undefined) return
+    const { before, after } = await stack.close()
+    expect(before.processes).toBeGreaterThan(0)
+    expect(after).toEqual({ processes: 0, listeningPorts: [], databases: 0 })
+  })
+
+  const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
+
+  /** 프로젝트 · 메뉴 · 페이지 둘(둘째에 상태 «검토» 하나). 첫 페이지에 상태 트리와 노드 다섯. bob 의 역할을 정한다. */
+  async function fixture(slug: string, bobRole: 'editor' | 'viewer' = 'editor') {
+    const project = (await call('POST', '/projects', { name: '상태 트리', slug: `${slug}-${Date.now().toString(36)}` })).body
+    const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
+    const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: bobRole })
+    if (member.status >= 300) throw new Error(`member ${member.status}`)
+    const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body.id as string
+    const page2Id = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '둘째' })).body.id as string
+    const P = `/projects/${project.id}/pages/${pageId}`
+    const P2 = `/projects/${project.id}/pages/${page2Id}`
+    const seed = async (path: string, ops: unknown[]) => {
+      const seeded = await call('PATCH', `${path}/ops`, { baseSeq: 0, ops })
+      if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
+    }
+    await seed(P, [
+      { op: 'add', path: '/viewStates', value: [LOGIN, ADMIN, GUEST] },
+      ...NODES.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+    ])
+    await seed(P2, [
+      { op: 'add', path: '/viewStates', value: [{ id: 's_review', name: '검토' }] },
+      { op: 'add', path: '/root/children/0', value: text('n_review', '검토 글', { mode: 'only', states: ['s_review'] }) },
+    ])
+    return { P, P2, pageId, page2Id }
+  }
+
+  /** 서버의 문서. */
+  async function serverDoc(P: string): Promise<{ schema: any; headSeq: number }> {
+    return (await call('GET', P)).body
+  }
+
+  async function openTab(path: string, user: 'alice' | 'bob' = 'alice', viewport = { width: 1440, height: 900 }) {
+    const { context, page } = await stack.openTab(stack.users[user], { viewport })
+    const patches: string[] = []
+    page.on('websocket', (socket) => {
+      socket.on('framesent', (frame) => {
+        const payload = typeof frame.payload === 'string' ? frame.payload : frame.payload.toString()
+        if (payload.includes('"type":"patch"')) patches.push(payload)
+      })
+    })
+    await page.goto(path)
+    await canvasFrame(page).locator('[data-wb-id]').first().waitFor({ state: 'attached' })
+    return { page, patches, close: () => context.close() }
+  }
+
+  const frames = (page: Page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  const switcherName = async (page: Page) => (await page.getByRole('button', { name: /^화면 상태:/ }).getAttribute('aria-label')) ?? ''
+
+  /** 캔버스에 선 노드 id(뿌리 뺌) · 구조 트리 줄 id(뿌리 뺌) · 흐린 줄 id. */
+  async function shown(page: Page): Promise<{ canvas: string[]; tree: string[]; dimmed: string[] }> {
+    const canvas = await canvasFrame(page)
+      .locator('[data-wb-id]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-wb-id') ?? ''))
+    const rows = page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-row]')
+    const tree = await rows.evaluateAll((els) => els.map((el) => el.getAttribute('data-tree-id') ?? ''))
+    const dimmed = await rows.evaluateAll((els) =>
+      els.filter((el) => el.querySelector('.wb-shell-structure-node-hidden') !== null).map((el) => el.getAttribute('data-tree-id') ?? ''),
+    )
+    return { canvas: canvas.slice(1), tree: tree.slice(1), dimmed }
+  }
+
+  /** 메뉴 트리의 상태 줄 — 이름 · 깊이 · 켜짐. */
+  async function stateRows(page: Page, pageTitle: string) {
+    return page.locator(`ul[aria-label="${pageTitle} 화면 상태"] [data-state-row]`).evaluateAll((rows) =>
+      rows.map((row) => {
+        const link = row.querySelector('.wb-shell-tree-state')!
+        return [link.textContent ?? '', (row as HTMLElement).style.paddingLeft, link.getAttribute('aria-current') === 'true']
+      }),
+    )
+  }
+
+  /** 구조 트리에서 그 노드 줄의 잠금 배지(«○○ 편집 중» — 줄 상자의 형제다). */
+  const lockBadge = (page: Page, nodeId: string) =>
+    page.locator(`.wb-shell-region[aria-label="구조 트리"] li:has(> [data-tree-id="${nodeId}"]) > .wb-shell-structure-lock`)
+
+  const stateLink = (page: Page, id: string) => page.locator(`[data-state-row][data-state-id="${id}"] .wb-shell-tree-state`)
+
+  /** 상태 줄 `…` 의 항목을 고른다 — 줄 행동은 줄에 마우스가 올라와야 보인다(`shell.css` 의 `.wb-shell-tree-state-row`). */
+  async function stateItem(page: Page, id: string, name: string, item: string): Promise<void> {
+    await stateLink(page, id).hover()
+    await page.getByRole('button', { name: `상태 ${name} 더 보기`, exact: true }).click()
+    await page.getByRole('menuitem', { name: item, exact: true }).click()
+  }
+
+  it('상태마다 캔버스에 선 노드가 보임 판정과 같고, 구조 트리는 모두 그리며 숨은 노드를 흐린다 — 상태 줄로 고른다 · 편집 0', async () => {
+    const { P } = await fixture('st-canvas')
+    const tab = await openTab(P)
+    try {
+      expect(await stateRows(tab.page, '첫째')).toEqual([
+        ['로그인', '0px', false],
+        ['관리자', '12px', false],
+        ['손님', '0px', false],
+      ])
+      const seen: Record<string, Awaited<ReturnType<typeof shown>> & { head: string; current: unknown }> = {}
+      seen['기본'] = { ...(await shown(tab.page)), head: await switcherName(tab.page), current: null }
+      for (const [id, name] of [
+        ['s_login', '로그인'],
+        ['s_admin', '관리자'],
+        ['s_guest', '손님'],
+      ] as const) {
+        await stateLink(tab.page, id).click()
+        await poll(
+          `${name} 고름`,
+          () => switcherName(tab.page),
+          (head) => head === `화면 상태: ${name}`,
+        )
+        await frames(tab.page)
+        const current = (await stateRows(tab.page, '첫째')).filter((row) => row[2]).map((row) => row[0])
+        seen[name] = { ...(await shown(tab.page)), head: await switcherName(tab.page), current }
+      }
+      // eslint-disable-next-line no-console
+      console.log('[상태마다]', JSON.stringify(seen))
+      const all = NODES.map((node) => node.id)
+      for (const name of Object.keys(EXPECTED)) {
+        expect({ name, canvas: seen[name]!.canvas, tree: seen[name]!.tree, dimmed: seen[name]!.dimmed }).toEqual({
+          name,
+          canvas: EXPECTED[name],
+          tree: all,
+          dimmed: all.filter((id) => !EXPECTED[name]!.includes(id)),
+        })
+      }
+      expect(['로그인', '관리자', '손님'].map((name) => seen[name]!.current)).toEqual([['로그인'], ['관리자'], ['손님']])
+      expect(tab.patches).toEqual([])
+      // 열린 페이지의 상태 줄은 주소를 안 옮긴다(편집 모드의 주소는 페이지를 가리킨다).
+      expect(new URL(tab.page.url()).search).toBe('')
+    } finally {
+      await tab.close()
+    }
+  }, 90_000)
+
+  it('다른 페이지의 상태 줄은 그 페이지를 `?state=` 로 연다 — 머리 · 캔버스가 그 상태다', async () => {
+    const { P, page2Id } = await fixture('st-other')
+    const tab = await openTab(P)
+    try {
+      expect(await stateRows(tab.page, '둘째')).toEqual([['검토', '0px', false]])
+      await stateLink(tab.page, 's_review').click()
+      await poll(
+        '둘째 · 검토',
+        async () => new URL(tab.page.url()),
+        (url) => url.pathname.endsWith(page2Id) && url.search === '?state=s_review',
+      )
+      await poll(
+        '검토 고름',
+        () => switcherName(tab.page),
+        (head) => head === '화면 상태: 검토',
+      )
+      await canvasFrame(tab.page).locator('[data-wb-id="n_review"]').waitFor({ state: 'attached' })
+      expect((await shown(tab.page)).canvas).toEqual(['n_review'])
+      expect(await stateRows(tab.page, '둘째')).toEqual([['검토', '0px', true]])
+    } finally {
+      await tab.close()
+    }
+  }, 60_000)
+
+  it('패널 «상태 보임» — 손님 상태에서 «이 상태에서만»을 고르면 서버에 그 보임이 서고, 기본으로 가면 캔버스에서 빠진다', async () => {
+    const { P } = await fixture('st-panel')
+    const tab = await openTab(P)
+    try {
+      await stateLink(tab.page, 's_guest').click()
+      await poll(
+        '손님',
+        () => switcherName(tab.page),
+        (head) => head === '화면 상태: 손님',
+      )
+      await tab.page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-id="n_all"] > .wb-shell-structure-node').click()
+      await tab.page.locator('[data-wb-node-visibility] select').selectOption('only')
+      const server = await poll(
+        '서버 보임',
+        () => serverDoc(P),
+        (doc) => doc.schema.root.children[0].visibility !== undefined,
+      )
+      expect(server.schema.root.children[0].visibility).toEqual({ mode: 'only', states: ['s_guest'] })
+      expect((await shown(tab.page)).canvas).toContain('n_all')
+
+      await tab.page.getByRole('button', { name: /^화면 상태:/ }).click()
+      await tab.page.getByRole('menuitemradio', { name: '기본', exact: true }).click()
+      await poll(
+        '기본',
+        () => switcherName(tab.page),
+        (head) => head === '화면 상태: 기본',
+      )
+      await frames(tab.page)
+      expect((await shown(tab.page)).canvas).toEqual(['n_noguest', 'n_default'])
+    } finally {
+      await tab.close()
+    }
+  }, 60_000)
+
+  it('두 사람 — bob 이 지울 노드를 잡으면 «삭제»가 까닭과 함께 꺼지고, 놓으면 켜진다 · 지우면 서버가 상자대로 바뀌고 되돌리기 한 번에 돌아온다', async () => {
+    const { P } = await fixture('st-remove')
+    const before = await serverDoc(P)
+    const alicePage = await openTab(P)
+    const bobPage = await openTab(P, 'bob')
+    try {
+      // bob 이 관리자 글을 고른다(잠금). alice 는 «로그인»(하위 «관리자») 삭제를 묻는다 — 관리자 글이 함께 지워진다.
+      await bobPage.page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-id="n_admin"] > .wb-shell-structure-node').click()
+      await lockBadge(alicePage.page, 'n_admin').waitFor()
+      await stateItem(alicePage.page, 's_login', '로그인', '삭제')
+      const dialog = alicePage.page.getByRole('dialog', { name: '상태 삭제' })
+      await dialog.waitFor()
+      const danger = dialog.locator('.wb-shell-view-states-danger')
+      const sentences = await dialog.locator('.wb-shell-view-states-sentence').allTextContents()
+      const removed = await dialog.locator('[data-node-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id')))
+      expect({ sentences, removed }).toEqual({
+        sentences: ['"로그인" 상태와 하위 상태 1개(관리자)를 지웁니다.', '노드 2개가 함께 삭제됩니다.'],
+        removed: ['n_login', 'n_admin'],
+      })
+      expect({ off: await danger.getAttribute('aria-disabled'), why: await danger.getAttribute('aria-description') }).toEqual({
+        off: 'true',
+        why: expect.stringContaining('편집 중인 노드가 있어 함께 지울 수 없습니다'),
+      })
+
+      // bob 이 다른 노드로 옮기면 잠금이 풀리고 «삭제»가 켜진다.
+      await bobPage.page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-id="n_all"] > .wb-shell-structure-node').click()
+      // 판이 섰다 — alice 의 화면에서 잠금이 «모두»로 옮겼다(배지). 그 뒤 두 프레임을 그린 «삭제»의 값을 단언한다(기다림에 넣지 않는다).
+      await lockBadge(alicePage.page, 'n_all').waitFor()
+      await poll(
+        'n_admin 잠금 풀림',
+        () => lockBadge(alicePage.page, 'n_admin').count(),
+        (count) => count === 0,
+      )
+      await frames(alicePage.page)
+      expect({ off: await danger.getAttribute('aria-disabled'), why: await danger.getAttribute('aria-description') }).toEqual({
+        off: null,
+        why: null,
+      })
+      await danger.click()
+      const after = await poll(
+        '서버 삭제',
+        () => serverDoc(P),
+        (doc) => (doc.schema.viewStates ?? []).length === 1,
+      )
+      expect({
+        states: after.schema.viewStates,
+        nodes: after.schema.root.children.map((node: { id: string }) => node.id),
+      }).toEqual({ states: [GUEST], nodes: ['n_all', 'n_noguest', 'n_default'] })
+      await poll(
+        '상태 줄',
+        () => stateRows(alicePage.page, '첫째'),
+        (rows) => rows.length === 1,
+      )
+
+      // 되돌리기 한 번 — 상태 · 노드 · 보임이 함께 돌아온다(편집 하나). 포커스를 메뉴 트리 밖(구조 트리 — bob 이 안 잡은 줄)에 둔다 — 메뉴 트리
+      // 상자는 에디터 단축키를 안 받는다(`data-wb-own-shortcuts`).
+      await alicePage.page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-id="n_noguest"] > .wb-shell-structure-node').click()
+      await alicePage.page.keyboard.press('ControlOrMeta+z')
+      const restored = await poll(
+        '서버 되돌림',
+        () => serverDoc(P),
+        (doc) => (doc.schema.viewStates ?? []).length === 3,
+      )
+      expect({ states: restored.schema.viewStates, root: restored.schema.root }).toEqual({
+        states: before.schema.viewStates,
+        root: before.schema.root,
+      })
+    } finally {
+      await alicePage.close()
+      await bobPage.close()
+    }
+  }, 90_000)
+
+  it('연 뒤 다른 탭이 그 상태에 보임을 걸면 상자가 새 집합으로 다시 서고 첫 누름은 안 보낸다 — 지운 것 = 보인 것', async () => {
+    const { P } = await fixture('st-restand')
+    const tab = await openTab(P)
+    try {
+      await stateItem(tab.page, 's_guest', '손님', '삭제')
+      const dialog = tab.page.getByRole('dialog', { name: '상태 삭제' })
+      await dialog.waitFor()
+      const removed = () => dialog.locator('[data-node-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id')))
+      expect(await removed()).toEqual([])
+      // 판 카나리아 — `…` 를 연 누름이 그 줄(손님)을 골랐다(`state-rows.tsx` 의 `onOpen`).
+      expect(await switcherName(tab.page)).toBe('화면 상태: 손님')
+
+      // 같은 사람의 다른 탭(REST)이 «손님 빼고»를 손님에서만 보이게 한다 — 그 상태를 지우면 «손님 빼고»가 함께 지워진다(연 뒤에는 보임을 걷을
+      // 노드였다). `…` 를 연 누름이 손님을 골랐다 — 손님 화면에서 그 노드가 보이게 된다.
+      const head = (await serverDoc(P)).headSeq
+      const res = await call('PATCH', `${P}/ops`, {
+        baseSeq: head,
+        ops: [{ op: 'replace', path: '/root/children/3/visibility', value: { mode: 'only', states: ['s_guest'] } }],
+      })
+      expect(res.status).toBe(200)
+      // 판이 섰다 — 남의 편집이 alice 의 문서에 닿았다(손님 화면에서 «손님 빼고»가 보여 구조 트리 줄의 흐림이 걷힌다). 상자의 값은 그 뒤 두 프레임에
+      // 단언한다.
+      await poll(
+        '남의 편집 닿음',
+        async () => (await shown(tab.page)).dimmed,
+        (dimmed) => !dimmed.includes('n_noguest'),
+      )
+      await frames(tab.page)
+      const danger = dialog.locator('.wb-shell-view-states-danger')
+      expect({
+        changed: await dialog.getByRole('status').allTextContents(),
+        removed: await removed(),
+        button: await danger.textContent(),
+      }).toEqual({ changed: ['목록이 바뀌었습니다 — 다시 확인하세요.'], removed: ['n_noguest'], button: '새 목록 확인' })
+
+      await danger.click()
+      await tab.page.waitForTimeout(600)
+      expect((await serverDoc(P)).schema.viewStates).toHaveLength(3)
+      expect(await danger.textContent()).toBe('삭제')
+
+      await danger.click()
+      const after = await poll(
+        '서버 삭제',
+        () => serverDoc(P),
+        (doc) => (doc.schema.viewStates ?? []).length === 2,
+      )
+      expect(after.schema.root.children.map((node: { id: string }) => node.id)).toEqual(['n_all', 'n_login', 'n_admin', 'n_default'])
+    } finally {
+      await tab.close()
+    }
+  }, 60_000)
+
+  it('남이 열린 페이지에 상태를 더하면 새로고침 없이 메뉴 트리 · 전환기에 선다', async () => {
+    const { P } = await fixture('st-live')
+    const tab = await openTab(P)
+    try {
+      const head = (await serverDoc(P)).headSeq
+      const res = await stack.request(bob, 'PATCH', `${P}/ops`, {
+        baseSeq: head,
+        ops: [
+          { op: 'add', path: '/viewStates/-', value: { id: 's_new', name: '새 상태', parent: 's_guest' } },
+          { op: 'add', path: '/root/children/0/visibility', value: { mode: 'only', states: ['s_new'] } },
+        ],
+      })
+      expect(res.status).toBe(200)
+      // 판이 섰다 — 같은 편집이 «모두»를 새 상태에서만 보이게 해 기본 화면의 캔버스에서 빠진다(캔버스는 열린 문서로 그린다). 상태 줄은 그 뒤에 단언한다.
+      await poll(
+        '남의 편집 닿음',
+        async () => (await shown(tab.page)).canvas,
+        (canvas) => !canvas.includes('n_all'),
+      )
+      await frames(tab.page)
+      expect(await stateRows(tab.page, '첫째')).toEqual([
+        ['로그인', '0px', false],
+        ['관리자', '12px', false],
+        ['손님', '0px', false],
+        ['새 상태', '12px', false],
+      ])
+      await tab.page.getByRole('button', { name: /^화면 상태:/ }).click()
+      expect(await tab.page.getByRole('menuitemradio').allTextContents()).toEqual(['기본', '로그인', '관리자', '손님', '새 상태'])
+    } finally {
+      await tab.close()
+    }
+  }, 60_000)
+
+  it('viewer 가 `?state=` 로 열면 그 상태로 서고 상태 줄 `…` 가 없다 · 뷰 모드에서 고른 상태가 주소에 실린다', async () => {
+    const { P } = await fixture('st-viewer', 'viewer')
+    const viewer = await openTab(`${P}?state=s_admin`, 'bob')
+    try {
+      await poll(
+        '관리자',
+        () => switcherName(viewer.page),
+        (head) => head === '화면 상태: 관리자',
+      )
+      await frames(viewer.page)
+      expect((await shown(viewer.page)).canvas).toEqual(EXPECTED['관리자'])
+      await stateLink(viewer.page, 's_admin').hover()
+      expect(await viewer.page.getByRole('button', { name: '상태 관리자 더 보기', exact: true }).count()).toBe(0)
+      await stateLink(viewer.page, 's_guest').click()
+      await poll(
+        '주소',
+        async () => new URL(viewer.page.url()).search,
+        (search) => search === '?state=s_guest',
+      )
+    } finally {
+      await viewer.close()
+    }
+
+    const tab = await openTab(P)
+    try {
+      await tab.page.getByRole('button', { name: '뷰 모드' }).click()
+      await stateLink(tab.page, 's_login').click()
+      await poll(
+        '주소',
+        async () => new URL(tab.page.url()).search,
+        (search) => search === '?state=s_login',
+      )
+      expect(await tab.page.getByRole('button', { name: '상태 로그인 더 보기', exact: true }).count()).toBe(0)
+    } finally {
+      await tab.close()
+    }
+  }, 60_000)
+})
