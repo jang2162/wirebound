@@ -22,8 +22,10 @@ system-themes/*     저장소 테마 다섯(admin · commerce · docs · portal 
 packages/exporter   HTML 정적 번들 (후속: PPTX)
 packages/cli        wireb
 packages/mcp        MCP 서버
+packages/test-support 케이스 공용 도우미(stripComments · 시딩되는 system-admin 의 판과 토큰)
 apps/web            설계서 에디터
 apps/api            REST + WebSocket
+apps/playground     렌더러 + system-admin 표본 화면(셸 · iframe 없이 vite 로 띄운다)
 Dockerfile · deploy/ 운영 이미지 · 단일 서버 compose (README 「배포하려면」)
 ```
 
@@ -36,6 +38,6 @@ pnpm install
 pnpm test                 # 전체 워크스페이스 테스트 (루트 vitest.config.ts)
 pnpm typecheck
 pnpm vitest run <경로>    # 단일 파일 테스트
-pnpm fmt                  # oxfmt — 설정은 .oxfmtrc.json (JS · TS · JSON 만)
+pnpm fmt                  # oxfmt — 설정은 .oxfmtrc.json (JS · TS · JSON · YAML · TOML — md · css · html 은 뺀다)
 pnpm lint                 # oxlint
 ```
