@@ -1,8 +1,8 @@
 /**
  * **배포 compose(뿌리 `compose.yaml`)와 입구 설정(`docker/web/Caddyfile`)의 값이 api 의 값과 맞물리는가** — 이미지를 짓거나 띄우지 않는다.
  *
- * 이미지 빌드 · 기동은 게이트에 안 넣는다(빌드 2분 안팎 · api 이미지 1.8GB — `docs/guides/deploy-docker.md` 「다시 재는 법」이 손
- * 절차다). 여기서 재는 것은 **그 절차가 잰 값이 서로 어긋나면 조용히 무너지는 자리**와 **앱만 올린다는 구성의 기본값**이다:
+ * 이미지 빌드 · 기동은 게이트에 안 넣는다(시간과 크기는 `docs/guides/deploy-docker.md` 「잰 값」, 손 절차는 같은 문서 「다시 재는
+ * 법」). 여기서 재는 것은 **그 절차가 잰 값이 서로 어긋나면 조용히 무너지는 자리**와 **앱만 올린다는 구성의 기본값**이다:
  *
  * | 무엇 | 어긋나면 |
  * |---|---|
@@ -13,6 +13,7 @@
  * | 바깥 포트는 입구의 HTTP 하나 | Postgres · api 가 바깥에 열리거나, 걷은 443 이 남는다 |
  * | 입구가 TLS 를 끝내지 않는다 | 각자의 프록시가 맡을 인증서 발급이 입구에서 돌고 그 볼륨이 남는다 |
  * | 입구가 믿는 앞단의 기본값은 «아무도» · 고른 클라이언트 주소 하나로 새로 적는다 | 클라이언트가 지어 적은 `X-Forwarded-For` 가 api 에 닿는다 |
+ * | 배포 값(`WIREBOUND_DEPLOY`)이 없는 자리의 `down` 이 멈춘다 | 아무 체크아웃 뿌리의 맨 `docker compose down -v` 가 그 기계의 운영 볼륨을 지운다 |
  *
  * **값으로 잰다** — compose 는 `docker compose config`(보간 · 기본값을 푼 값), Caddyfile 은 그 이미지의 `caddy adapt`(Caddy 가 읽은
  * JSON)를 읽는다. 글자로 읽으면 주석에 남긴 옛 줄 · 같은 뜻의 다른 꼴이 자를 속인다.
@@ -61,7 +62,7 @@ function resolvedConfig(): ComposeConfig {
   const dir = mkdtempSync(join(tmpdir(), 'wb-deploy-compose-'))
   try {
     copyFileSync(join(ROOT, 'compose.yaml'), join(dir, 'compose.yaml'))
-    writeFileSync(join(dir, '.env'), 'POSTGRES_PASSWORD=probe\n')
+    writeFileSync(join(dir, '.env'), 'WIREBOUND_DEPLOY=1\nPOSTGRES_PASSWORD=probe\n')
     const run = spawnSync('docker', ['compose', '-f', join(dir, 'compose.yaml'), 'config', '--format', 'json'], { encoding: 'utf8' })
     if (run.error !== undefined || run.status !== 0)
       throw new Error(`docker compose config 이 실패한다: ${run.error?.message ?? run.stderr.trim()}`)
@@ -223,6 +224,25 @@ describe.skipIf(skip)('배포 compose 의 값', () => {
   it('입구가 쥐는 상류 keep-alive 가 api 의 keepAliveTimeout(72s)보다 짧다', () => {
     const idle = apiProxy(caddy!).transport?.keep_alive?.idle_timeout ?? Number.POSITIVE_INFINITY
     expect(idle / 1e9).toBeLessThan(72)
+  })
+
+  it('배포 값이 없는 자리에서는 `down -v` 도 멈춘다 — 셸에 `POSTGRES_PASSWORD` 가 있어도', () => {
+    // 프로젝트 이름은 파일의 `name` 에서 와야 한다 — `-p` · `COMPOSE_PROJECT_NAME` 을 주면 compose 의 `down` 은 파일을 못 풀어도 그 이름의
+    // 라벨로 내린다(그 판은 그 이름만 닿는다). 이 케이스는 운영 이름을 시험용 이름으로 바꾼 사본을 `--dry-run` 으로 친다 — 가드를 뗀
+    // 변조에서도 아무것도 안 지운다.
+    const dir = mkdtempSync(join(tmpdir(), 'wb-deploy-guard-'))
+    try {
+      const source = readFileSync(join(ROOT, 'compose.yaml'), 'utf8')
+      expect(source.match(/^name: wirebound-prod$/gm)).toHaveLength(1)
+      writeFileSync(join(dir, 'compose.yaml'), source.replace(/^name: wirebound-prod$/m, 'name: wb-deploy-guard-probe'))
+      const env: NodeJS.ProcessEnv = { ...process.env, POSTGRES_PASSWORD: 'probe' }
+      delete env.WIREBOUND_DEPLOY
+      delete env.COMPOSE_PROJECT_NAME
+      const run = spawnSync('docker', ['compose', '-f', join(dir, 'compose.yaml'), '--dry-run', 'down', '-v'], { encoding: 'utf8', env })
+      expect([run.status, /WIREBOUND_DEPLOY/.test(run.stderr)]).toEqual([1, true])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('시딩 비밀번호는 api 의 환경에 안 남는다', () => {

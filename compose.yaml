@@ -10,6 +10,10 @@
 # 프로젝트 이름을 고정한다 — 볼륨이 `wirebound-prod_pgdata` 다. 디렉터리에 맡기면 clone 자리 · 디렉터리 이름이 바뀌는 순간 빈 DB 로 뜬다.
 name: wirebound-prod
 
+# **배포 값(`.env`)을 둔 자리에서만 돈다** — `down` 도 이 줄을 보간한다. 이름이 고정이라 어느 체크아웃의 뿌리에서 친 맨 `docker compose down -v`
+# 도 이 기계의 운영 볼륨에 닿는다 — `env_file` 은 `down` 에서 안 읽히고 `POSTGRES_PASSWORD` 는 셸에 있을 수 있어, 그 둘로는 못 막는다.
+x-deploy-guard: ${WIREBOUND_DEPLOY:?.env 에 WIREBOUND_DEPLOY=1 을 적은 배포 자리에서만 친다 — 개발 DB 는 pnpm db up -d}
+
 x-api-image: &api-image
   image: wirebound-api:${WIREBOUND_TAG:-local}
   build:
