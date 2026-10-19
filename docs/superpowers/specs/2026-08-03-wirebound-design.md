@@ -900,7 +900,7 @@ wireb init                         .wirebound.json 생성
 wireb pull                         프로젝트 스냅샷을 로컬 JSON으로 (읽기 전용)
 wireb page get <경로> [--json]     페이지 조회
 wireb lint [경로]                  규칙 검증
-wireb export --format html -o dir  정적 번들 생성
+wireb export --format html|pptx -o dir  정적 번들 · PPTX 파일 생성
 ```
 
 터미널로 나가는 글(`--json` 포함)은 라벨 · 제목 · 코멘트 본문처럼 설계서를 고치는 누구나 넣을 수 있는 글을 싣는다 — `\n` · `\t` 를 뺀 C0 · DEL · C1(`U+009B` 는 CSI) · 줄 · 문단 구분 · 방향 제어 글자를 `\uXXXX` 글로 바꿔 낸다(`packages/cli/src/terminal-safe.ts` — `--json` 은 읽은 값이 같다). 파일에 쓰는 바이트는 안 바뀐다.
@@ -964,7 +964,7 @@ wireb export --format html -o dir  정적 번들 생성
 
 ```ts
 migrations = [
-  { from: 1, to: 2, migrate: (doc) => { /* List.rows 기본값 도입 */ } },
+  { from: 1, to: 2, migrate: (doc) => liftStateRegions(doc).doc },  // 상태 영역 → 노드 보임(§4.3 «문서 판 2»)
 ]
 ```
 
@@ -1022,7 +1022,7 @@ patch/inverse 왕복 테스트가 가장 중요하다. undo, 스냅샷 복원, M
 | **P4** | 테마 — 코드 테마 차수 A1 ~ A6(`docs/superpowers/specs/2026-09-27-code-themes-design.md` 「진행 단계」): 뷰 SDK · iframe 캔버스(A1), `.wbtheme` · 작성자 도구(A2), 업로드 · 버전 · 프로젝트 바인딩(A3), 테마 선택 · 토큰 편집 화면(A4), 내보내기(A5), 시스템 테마 5종(A6) | 관리자 외 사이트 형태를 테마로 그리고, 테마를 코드로 짜서 올린다 |
 | **P5** | 코멘트/번호 마커 + 상호작용 규칙 + 뷰 모드 | 설계서로서 완성된다 |
 | **P6** | 스냅샷 태그/복원 | 버전을 관리한다 |
-| **P7** | 페이지 프리셋 + 테마 패턴 삽입 + JSON 가져오기/내보내기 | 반복 작업이 빨라진다 |
+| **P7** | 모듈 + 테마 패턴 삽입 + JSON 가져오기/내보내기 | 반복 작업이 빨라진다 |
 | **P8** | HTML 정적 번들 내보내기 | **MVP 릴리스** — 설계서를 배포한다 |
 | **P9** | `wireb` CLI + MCP + 스킬 + `.wirebound.json` + lint | 에이전트가 설계서를 읽고 구현한다 |
 | **P10** | PPTX 내보내기 (렌더 이미지 방식) | 보고용 산출물을 만든다 |
