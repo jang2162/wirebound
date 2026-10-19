@@ -92,7 +92,7 @@ sha256 이 macOS 빌드와 같은 `5ff20aed…` 였다(`docs/superpowers/plans/2
 
 ### 이 서버가 env 를 읽는 방식
 
-`dev`·`start`·`migrate`·`migrate:down`·`reset-password`·`unlock-login` 스크립트가 전부 `tsx`에
+`dev`·`start`·`migrate`·`migrate:down`·`reset-password`·`admin`·`unlock-login` 스크립트가 전부 `tsx`에
 `--env-file-if-exists=.env`를 붙여 실행하므로(`apps/api/package.json` — 그 플래그는 Node 22.9 부터이고 이 저장소의 하한은 그보다 높다),
 `apps/api/.env`가 있으면 자동으로 읽는다 — 이 프로젝트는 `dotenv` 같은 별도 패키지를
 쓰지 않는다.
@@ -313,7 +313,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/members/:userId` | DELETE | owner | — | 204(마지막 owner 제거는 409) |
 | `/api/projects/:projectId/menu` | GET | viewer | — | 200 메뉴 트리(중첩 배열, `pages` 없음) |
 | `/api/projects/:projectId/menu` | POST | editor | `{ parentId?, title }` | 201 `{ id, projectId, parentId, title, sortOrder }` — **트리 응답과 다른 모양이다**(`children`·`pages`가 없다) |
-| `/api/projects/:projectId/menu/:nodeId` | PATCH | editor | `{ title?, parentId?, sortOrder? }`(하나 이상) | 200 `{ id, projectId, parentId, title, sortOrder }`(POST와 같은 키) |
+| `/api/projects/:projectId/menu/:nodeId` | PATCH | editor | `{ title?, parentId?, sortOrder?, base? }`(`base` 밖 하나 이상) — **`base`는 고치기 전 제목**(`{ title }` — 규칙은 페이지의 바탕과 같다, 아래 «페이지 메타의 충돌 모델». 자리 옮기기와 한 본문이면 400) | 200 `{ id, projectId, parentId, title, sortOrder }`(POST와 같은 키) · **409** `menu-title-changed`(바탕이 지금 제목과 다르다) |
 | `/api/projects/:projectId/menu/:nodeId` | DELETE | editor | — 또는 `{ cascade: true, expect: { menuIds, pageIds } }` | 본문 없음: 204(자식 메뉴·페이지가 있으면 409). 연쇄: 200 `{ deleted: { menus, pages }, safetySnapshot: { id, tag } }` · id 집합이 다르면 **409** `menu-subtree-changed`(아래 «메뉴 연쇄 삭제») |
 | `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 기본 스키마는 빈 `Page`다 |
 | `/api/projects/:projectId/pages/import` | POST | editor | `{ menuNodeId, file, title? }` | 201 `{ page, comments: { inserted, dangling }, ignoredLayoutRef?, warnings? }` — **페이지 JSON(설계서 「페이지 JSON」)으로 새 페이지를 만든다**(아래 "페이지 JSON 가져오기"). 봉투 위반·모르는 버전·NUL 400, 메뉴 없음 404, 카탈로그 **오류** 422 |
@@ -328,7 +328,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages/:pageId/comments/:commentId` | PATCH | editor | `{ body }` | 200 코멘트. **작성자만 고칠 수 있다 — 남의 것은 403.** 문서를 안 바꾸므로 `seq`가 없다 |
 | `/api/projects/:projectId/pages/:pageId/comments/:commentId` | DELETE | editor | — | 200 `{ seq, markerOps }`(**204가 아니다** — 문서 변화를 실어야 한다). **그 노드의 마지막이면 `marker`도 지운다.** 남의 코멘트도 지울 수 있다. 그 사이 남이 고쳤어도 409 가 아니다 — 지울 번호는 잠근 뒤의 문서로 센다(아래 "코멘트와 번호") |
 | `/api/projects/:projectId/pages/:pageId/comments/renumber` | POST | editor | — | 200 `{ seq, markerOps }` — 문서 순서대로 1부터 재번호(설계서 「설계서 화면 구조」). **한 revision이다.** 바꿀 것이 없으면 `markerOps: []`이고 revision도 안 쌓인다. 그 사이 남이 고쳤어도 409 가 아니다 — 잠근 뒤의 문서를 매긴다 |
-| `/api/projects/:projectId/tree` | GET | viewer | — | 200 `{ menu }` — 메뉴 트리 + 각 노드의 `pages`(스키마는 싣지 않는다) |
+| `/api/projects/:projectId/tree` | GET | viewer | — | 200 `{ rev, menu }` — 메뉴 트리 판 번호 + 메뉴 트리 + 각 노드의 `pages`(스키마는 싣지 않는다 — 아래 "트리 응답 형태") |
 | `/api/projects/:projectId/snapshot` | GET | viewer | — | 200 **프로젝트 payload 그 자체**(아래 "읽기 전용 프로젝트 덤프"). **행을 쓰지 않는다.** 수집 도중 프로젝트가 바뀌면 409 |
 | `/api/projects/:projectId/snapshots` | POST | **editor** | `{ tag, description? }` | 201 스냅샷(아래 "스냅샷 응답 형태"). **지금 상태를 태그 하나로 얼린다**(설계서 「스냅샷」). 태그 중복 409, 수집 도중 프로젝트가 바뀌면 409(**문장이 다르다**), NUL 400, 태그 1~60자·설명 0~2000자 밖은 400 |
 | `/api/projects/:projectId/snapshots` | GET | viewer | — | 200 스냅샷 배열(`created_at` 내림차순, 동률은 `tag` 오름차순). **`payload`가 없다** — 크기(`payloadBytes`)만 실린다 |
@@ -339,7 +339,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/modules` | POST | **editor** | `{ name, nodes: WbNode[] }` | 201 `{ module }`. `nodes` 는 1개 이상 — 넣으면 고른 자리의 형제가 될 것이다. `marker` 와 **묶음 밖 노드를 겨냥하는 액션은 저장하며 걷는다**. 이름 1~60자 밖 · 노드 0개 · 노드 봉투 위반 · 선언되지 않은 키 · NUL · 짝 없는 서로게이트(이름 · 노드)는 400, `Page` 가 든 노드는 422 `nested-page`. **이름 중복은 오류가 아니다** |
 | `/api/projects/:projectId/modules/:moduleId` | PATCH | **editor** | `{ name }` | 200 `{ module }` — **이름만 바꾼다**(내용을 바꾸려면 새로 저장하고 옛것을 지운다). 이름 규칙은 저장과 같다. 없는 id · 남의 프로젝트의 id 는 404 |
 | `/api/projects/:projectId/modules/:moduleId` | DELETE | **editor** | — | 204. 없는 id · 남의 프로젝트의 id 는 404, uuid 가 아닌 id 는 400 |
-| `/api/projects/:projectId/export/preview` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — **내려받기 전에 화면이 말할 것**(아래 "내보내기"). **형식마다 답이 다르다**: html은 `{ format, pages, duplicateTargets, brokenLinks, errors, themeId, fileName }`, pptx는 `{ format, pages, screenless, screenFailures, fontWarning, fileName }`. 페이지가 없으면 409, 모르는 형식은 400, 내보내기가 밀려 있으면 503 + `Retry-After` |
+| `/api/projects/:projectId/export/preview` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — **내려받기 전에 화면이 말할 것**(아래 "내보내기"). **형식마다 답이 다르다**: html은 `{ format, pages, duplicateTargets, brokenLinks, errors, themeId, themeWarning, fileName }`, pptx는 `{ format, pages, screenless, screenFailures, fontWarning, fileName }`. 페이지가 없으면 409, 모르는 형식은 400, 내보내기가 밀려 있으면 503 + `Retry-After` |
 | `/api/projects/:projectId/export` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — html이면 `application/zip`(설계서 「HTML 정적 번들」), pptx면 `application/vnd.openxmlformats-officedocument.presentationml.presentation`(설계서 「로드맵」). 이름은 `Content-Disposition`에만 있다. 페이지가 없으면 409, 모르는 형식은 400, 내보내기가 밀려 있으면 503 + `Retry-After` |
 | `/api/projects/:projectId/ws` | GET(업그레이드) | viewer | — | **101** — WebSocket. 아래 "실시간(WebSocket)" 참고. 업그레이드가 아닌 평범한 GET에도 같은 가드가 먼저 돈다(비멤버 404) |
 | `/api/projects/:projectId/tokens` | POST | viewer | `{ name }`(1~60자) | 201 `{ id, name, createdAt, lastUsedAt, value }` — **`value`(원문)가 실리는 유일한 응답이다.** 아래 "API 토큰". 토큰으로 부르면 403 |
@@ -1267,7 +1267,7 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 #### 캡처는 자기가 본 것이 한 시점인지 확인한다
 
 수집 **전후로 지문을 읽어** 다르면 409다. 지문은 payload에 실릴 내용 자체이고
-(`readCaptureFingerprint`), 네 테이블을 덮는다. **재시도 루프는 없다** —
+(`readCaptureFingerprint`), 네 테이블과 프로젝트의 테마 바인딩(위 «테마는 참조로 얼린다»)을 덮는다. **재시도 루프는 없다** —
 `PUT .../schema`가 `stale`에서 한 판단과 같다.
 
 **지문이 개수 + `max(updated_at)` 꼴이 아니라 내용인 까닭:** `menu_nodes`에는 `updated_at` 컬럼이 아예 없어
@@ -1439,7 +1439,7 @@ COMMIT 앞에 받아 둔 xid 의 `pg_xact_status`다(쓰기마다 왕복 하나�
 `mine=true`는 `actorType`이 `user`이고 `actorId`가 호출자인 revision만 고른다(생략하면
 그 페이지의 이력 전체). `limit`은 1~200이고 기본값은 50이다 — 벗어나면 400이다.
 **선언하지 않은 쿼리 키는 그 자체로 400이다**(본문 스키마와 같은 `z.strictObject` 관례).
-`?_=1` 같은 캐시 버스터도 거부되므로 이 두 키 외에는 아무것도 붙이지 않는다.
+`?_=1` 같은 캐시 버스터도 거부되므로 선언한 네 키(`mine` · `limit` · `beforeSeq` · `fields`) 외에는 아무것도 붙이지 않는다.
 
 **`PUT .../schema`는 복구 경로가 아니다.** 이 서버가 아는 버전보다 높은 문서가 저장돼
 있으면 `GET`·`PATCH .../ops`·`PUT .../schema` 세 경로가 전부 400이다(파이프라인이
@@ -1475,6 +1475,7 @@ COMMIT 앞에 받아 둔 xid 의 `pg_xact_status`다(쓰기마다 왕복 하나�
 | `patch-error` | `patch` 프레임이 실패했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `status` · `code` · `message` · `issues` — **REST 에러 봉투와 같은 값이다** |
 | `locks` | 잠금이 바뀌었을 때와 **누가 들어올 때**, 룸 전체에 | `projectId` · `locks[{ pageId, nodeId, userId, userName }]` |
 | `lock-denied` | `lock` 프레임의 노드 가운데 받지 않은 것이 있을 때, **낸 사람에게만**(아래 «소프트 잠금») | `projectId` · `pageId` · `nodeIds`(받지 않은 것만) · (`lock`이 실어 왔으면) `lockId` |
+| `membership-changed` | 그 사람의 역할이 바뀌었거나 멤버에서 빠졌을 때, **그 사람의 연결에만** | `projectId` — 역할 값은 싣지 않는다. 받는 쪽은 `GET /api/projects/:projectId`를 다시 읽는다(빠졌으면 404). 잠금을 쥘 수 없게 된 변경이면 서버가 그 연결의 잠금을 놓는다 — 이 프레임으로 연결을 닫지는 않는다(`src/ws/notify.ts`의 `notifyMembershipChanged`) |
 | `pong` | `ping`에 대한 답 | — |
 
 **클라이언트 → 서버**
