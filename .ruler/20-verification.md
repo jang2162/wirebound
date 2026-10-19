@@ -23,9 +23,9 @@
 - **Why:** 빈 글자와 견주는 단언(`toContain(css.slice(0, 200))`)은 `toContain('')` 이 되어 늘 참이다 — system-admin build-test 가 그렇게 아무것도 안 쟀다.
 - **How to apply:** build-test 에서 소스 CSS 가 필요하면 `readFileSync` 로 읽고 `length > 0` 카나리아를 함께 둔다. 빌드된 `theme.css` 는 줄인 글자라 소스와 글자로 견주지 않는다 — 토큰 기본값(`--wb-<키>: <값>;`)처럼 뜻이 같은 조각으로 잰다.
 
-## `apps/*`·`packages/*` 바로 밑에 `tsconfig*.json` 을 새로 두지 않는다
+## `apps/*`·`packages/*`·`system-themes/*` 바로 밑에 `tsconfig*.json` 을 새로 두지 않는다
 
-루트 `pnpm typecheck` 는 `tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json` 이다 — **그 글롭에 걸리는 파일은 전부 빌드된다.**
+루트 `pnpm typecheck` 는 `tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json system-themes/*/tsconfig*.json` 이다 — **그 글롭에 걸리는 파일은 전부 빌드된다.**
 
 - **Why:** 도구가 읽으려고 둔 설정(워커 로더용 tsconfig 등)이 그 이름이면 `pnpm typecheck` 가 그것까지 `tsc --build` 하고, `outDir` 이 없으면 **소스 옆에 `.js`·`.d.ts`·`.map` 을 수백 개 흘린다.** `git status` 에 뜨지만 수백 줄에 묻힌다.
 - **How to apply:** 타입검사 · 빌드용이 아닌 tsconfig 는 그 글롭에 안 걸리는 이름(예: `export-worker.tsconfig.json`)으로 두고 `noEmit` 을 건다.
@@ -77,7 +77,7 @@
 - **«접히지 않는다» 는 «보인다» 가 아니다** — 통지 · 알림을 숨기지 않는 설계는 접힘(`scrollHeight`)만이 아니라 **창 안에 닿는지**(`scrollIntoView` 뒤 창 안 · 실브라우저)도 잰다. 그릇이 `overflow: visible` 인 채 창을 넘으면 접힘 0 이어도 마지막 항목이 닿을 길이 없다(`apps/web/build-test/n36-notice-floor.test.ts`)
 - **글자가 몇 줄인지는 글자 노드 하나의 `Range.getClientRects()` 서로 다른 `top` 수로 센다** — 요소의 `getClientRects()` 는 블록 상자 하나를 내 접힘을 0 으로 세고, 컨트롤을 품은 요소의 범위는 그 컨트롤의 상자가 섞여 거짓 두 줄을 낸다.
 - **카탈로그 타입 목록은 `CATALOG_TYPES` 로 읽는다** — `@wirebound/schema` 를 Node 에서 바로 적재하면 `listComponents()` 는 `installCatalog` 를 부르기 전이라 빈 배열이고, 그 목록을 도는 탐침은 아무것도 안 재고 오류 없이 끝난다.
-- **하드코딩된 개수 하한 단언(`카드 ≥ 18`)은 분모를 바꾸는 변경에서 `git grep` 으로 같이 센다** — 카탈로그 타입 수를 쓰는 build-test 가 있다(`apps/web/build-test/palette.test.ts`).
+- **하드코딩된 개수 하한 단언(`카드 ≥ 17`)은 분모를 바꾸는 변경에서 `git grep` 으로 같이 센다** — 카탈로그 타입 수를 쓰는 build-test 가 있다(`apps/web/build-test/palette.test.ts`).
 - **걷을 자리 · 고칠 자리를 셀 때는 꼴을 좁힌 식이 아니라 그 낱말 전부를 세고 갈래로 나눈다** — 꼴을 좁힌 식(`actor: (requestEventActor|\{ type: revision)`)은 같은 성질의 다른 꼴(`actor: { type: 'user', … }`)을 오류 없이 빼고, 그 수가 장부에 «N 줄» 로 남아 다음 차수가 그대로 받는다(WS `patch` 의 프레임 `actor` 리터럴이 «17 줄» 에 없었다).
 - **마이그레이션을 새로 두면 마이그레이션 디렉터리를 글자로 세는 자(`apps/api/test/seed-user.test.ts` «행 삽입이 없다» 등 — `git grep -lE 'MIGRATIONS_DIR|db/migrations' apps/api/test`)를 그 트랙 게이트에 넣는다** — 데이터 옮기기의 `insert` 가 계정 시딩으로 세진다.
 - **«걷혔나» 를 세는 식은 부분 문자열이 아니라 낱말 단위로도 센다** — 걷은 이름이 새로 지은 더 긴 이름의 조각이면(`StateSwitch` ⊂ `ViewStateSwitcher`) 글자 조각으로 센 수가 0 이 아니어서 걷힌 것이 «남았다» 로 읽힌다. `git grep -nwF <이름>` 또는 `-P '\b<이름>\b'` 수를 함께 적고 갈리면 갈린 줄을 연다.
