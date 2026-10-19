@@ -45,7 +45,7 @@ Komodo 는 Stack Environment 를 `deploy/.env` 로 써서 `docker compose --env-
 
 ## 서버에서 운영 명령을 칠 때
 
-README 「백업 · 올리기 · 비밀번호」 절의 명령을 그대로 쓴다. 저장소가 Komodo 의 clone 디렉터리에 있으므로 그 절의 «저장소 밖에서 칠 때»
+README 「백업 · 올리기(업그레이드) · 비밀번호」 절의 명령을 그대로 쓴다. 저장소가 Komodo 의 clone 디렉터리에 있으므로 그 절의 «저장소 밖에서 칠 때»
 꼴(`-p wirebound-prod`)로 친다.
 
 ## 서버 덮어쓰기 파일
