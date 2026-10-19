@@ -17,8 +17,9 @@ scripts:
     pnpm install --frozen-lockfile
     pnpm build
     npx -y @colbymchenry/codegraph init || echo "codegraph init 실패: 인덱스 없이 진행"
-  # 이 워크트리가 띄운 compose 프로젝트(컨테이너 · 볼륨)만 내린다 — 프로젝트 이름이 디렉터리 이름이라 다른 체크아웃은 안 닿는다.
+  # 이 워크트리가 띄운 개발 DB(컨테이너 · 볼륨)만 내린다 — 프로젝트 이름이 그 워크트리 디렉터리 이름이라(`--project-directory`)
+  # 다른 체크아웃은 안 닿는다. 뿌리의 `.env`(배포 값)는 안 읽는다(`--env-file /dev/null`) — 내리는 데 값이 필요 없다.
   archive: |
-    if [ "$ORCA_WORKTREE_PATH" != "$ORCA_ROOT_PATH" ] && [ -f "$ORCA_WORKTREE_PATH/docker-compose.yml" ]; then
-      (cd "$ORCA_WORKTREE_PATH" && docker compose down --volumes) || true
+    if [ "$ORCA_WORKTREE_PATH" != "$ORCA_ROOT_PATH" ] && [ -f "$ORCA_WORKTREE_PATH/docker/dev/compose.yaml" ]; then
+      (cd "$ORCA_WORKTREE_PATH" && WIREBOUND_DEV_DB=1 docker compose --project-directory . -f docker/dev/compose.yaml --env-file /dev/null down --volumes) || true
     fi

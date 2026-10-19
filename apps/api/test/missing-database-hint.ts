@@ -17,10 +17,10 @@ import { describeDatabaseTarget } from '../src/db/describe-target'
  */
 
 /**
- * **컨테이너를 이름으로 부르지 않는다.** `docker-compose.yml`이 `container_name`을 고정하지
- * 않으므로 컨테이너 이름은 워크트리마다 `<프로젝트>-postgres-1` 이고 프로젝트 이름은 디렉터리
+ * **컨테이너를 이름으로 부르지 않는다.** 개발 compose(`docker/dev/compose.yaml`)가 `container_name`을 고정하지
+ * 않으므로 컨테이너 이름은 워크트리마다 `<프로젝트>-postgres-1` 이고 프로젝트 이름은 체크아웃 디렉터리
  * 이름이다 — 고정 이름(`docker exec wirebound-postgres …` 류)을 권하면 그 이름이 없어 실패한다.
- * `docker compose exec` 는 그 이름을 몰라도 되고, **자기 디렉터리의 컨테이너**를
+ * `pnpm db exec`(루트 `package.json` 의 `db`)는 그 이름을 몰라도 되고, **자기 체크아웃의 컨테이너**를
  * 고르므로 *"옆 워크트리의 DB 를 만들어 놓고 왜 안 되지"* 가 안 생긴다.
  *
  * 그래서 이 줄은 **저장소나 워크트리 루트에서** 쳐야 한다. 컨테이너를 공유하기로 한
@@ -44,7 +44,7 @@ export function missingDatabaseHint(error: unknown, databaseUrl: string): string
   return [
     `테스트 DB "${databaseName(databaseUrl)}" 가 없습니다.`,
     '컨테이너 안에서 한 줄로 만든다 — 저장소(또는 워크트리) 루트에서:',
-    `  docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE ${databaseName(databaseUrl)};'`,
+    `  pnpm db exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE ${databaseName(databaseUrl)};'`,
     'TEST_DATABASE_URL 은 셸 → apps/api/.env → 기본값 순서로 정해진다.',
   ].join('\n')
 }

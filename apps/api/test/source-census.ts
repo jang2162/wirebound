@@ -24,7 +24,7 @@ export const SRC_ROOT = fileURLToPath(new URL('../src', import.meta.url))
 export { stripComments }
 
 /**
- * YAML 의 주석(`#`)을 걷는다. **`docker-compose.yml` 을 재는 자가 쓴다.**
+ * YAML 의 주석(`#`)을 걷는다. **개발 compose(`docker/dev/compose.yaml`)를 재는 자가 쓴다.**
  *
  * 왜 필요한가: 인구조사가 주석을 안 걷으면 **옳은 줄을 주석에 남기고 아래에서 뒤집는
  * 우회**가 통째로 지나간다. compose 파일은 주석이 길어서 그 함정이 더 크다.

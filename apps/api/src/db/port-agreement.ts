@@ -24,7 +24,7 @@ import { describeDatabaseTarget } from './describe-target'
  */
 
 /**
- * `docker-compose.yml` 의 `${POSTGRES_PORT:-5433}` 이 쓰는 기본값.
+ * 개발 compose(`docker/dev/compose.yaml`)의 `${POSTGRES_PORT:-5433}` 이 쓰는 기본값.
  *
  * **`.env.example` 의 접속 문자열도 이 수를 든다** — 아무것도 안 바꾼 사람의 서버가 그대로
  * 도는 것은 그 둘이 같기 때문이다. 셋 중 하나가 움직이면 `port-agreement.test.ts`
