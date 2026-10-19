@@ -107,7 +107,10 @@ export const ListView = view(({ props, variant, states, children }) => {
 
 - `color` — `#rgb` · `#rrggbb` · `#rrggbbaa` · `rgb()` · `rgba()` · `hsl()` · CSS 색 이름.
 - `length` — `0` 또는 수 + `px` · `rem` · `em` · `%` · `vh` · `vw`.
-- `number` — 수. `font` · `shadow` — 비지 않은 글자, `;` `{` `}` `<` 없이.
+- `number` — 수.
+- `font` — 쉼표로 가른 글꼴 이름 목록. 이름 하나는 글자 · 숫자 · `_` · `-` 로 된 낱말(공백으로 이어도 된다)이거나 짝이 맞는
+  따옴표 문자열(안에 따옴표 · `\` · 줄바꿈 · `<` 없이)이다.
+- `shadow` — `none`, 또는 쉼표로 가른 그림자 목록. 그림자 하나는 `inset` 하나까지 · 길이 2 ~ 4 개(이어서) · 색 하나까지다.
 - `select` — `options` 를 함께 적고(`select` 에만) 기본값은 그 안에서.
 - 기본값은 같은 타입 토큰의 **참조**여도 된다: `"{color.primary}"`. 없는 키 · 타입이 다른 키 · 도는 참조(`a → b → a`)는 거부된다.
 

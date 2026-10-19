@@ -49,7 +49,7 @@ docker compose port postgres 5432                 # 포트를 찍어야 한다 �
                                                   # 포트 없이 뜬 것이다 → 「컨테이너를 못 찾는다」 ⓑ
 
 # 3. 런타임을 맞추고(mise — Node · pnpm 판은 mise.toml) 워크스페이스를 설치한다. mise 가 없으면 첫 줄을 건너뛴다
-#    설치가 Git 훅(lefthook)을 걸고 에이전트 지침(CLAUDE.md — `ruler apply`)을 만든다
+#    설치가 Git 훅(lefthook)을 걸고 에이전트 지침(AGENTS.md — `ruler apply`)을 만든다
 mise trust && mise install
 pnpm install
 
@@ -83,7 +83,7 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 | 걸음 | 시간 | 관측 |
 |---|---|---|
 | `pnpm install` | **1.2초** | 패키지 수는 명령의 끝 줄이 말한다. **pnpm 스토어가 이미 따뜻한 기계다** — 처음 받는 기계는 내려받는 시간이 더 든다. `wireb` 관련 `WARN` 둘이 나오는데 **정상이다**(「`pnpm install`이 `wireb` 때문에 경고를 낸다」) |
-| `pnpm build` | **4.2초** | `packages/*` 여섯의 `dist` |
+| `pnpm build` | **4.2초** | `packages/*` 의 `dist` 와 `system-themes/*` 의 `.wbtheme` |
 | `migrate` | **1.5초** | 빈 DB 에 마이그레이션 전부(`ls apps/api/src/db/migrations/0*.ts \| wc -l` 개)를 올린 값이다. **시딩은 안 켠 값이다** — 켜면 scrypt 해시 한 번이 더 든다 |
 
 다시 재려면 각 걸음 앞에 `time` 을 붙인다.
@@ -350,9 +350,9 @@ curl -b /tmp/wb.txt -X POST $B/api/projects -H 'content-type: application/json' 
 ```
 wireb init --server <주소> --project <id>    .wirebound.json 생성 (네트워크를 타지 않는다)
 wireb login --email <메일> [--name <꼬리표>]  토큰 발급 및 저장
-wireb pull [-o <파일>]                       프로젝트 스냅샷을 로컬 JSON 으로 (읽기 전용)
-wireb export --format html|pptx -o <dir>    번들 또는 pptx 를 그 디렉터리에
-wireb lint [경로] [--fail-on warning]        규칙 검증 (결함이 있으면 코드 10)
+wireb pull [-o <파일>]                       프로젝트 스냅샷을 로컬 JSON으로 (읽기 전용)
+wireb export --format html|pptx -o <dir>    정적 HTML 번들(파일 여럿) 또는 pptx 파일 하나를 그 디렉터리에
+wireb lint [경로] [--fail-on warning]        설계서의 결함 검사 (결함이 있으면 코드 10)
 wireb page get <경로> [--json]               페이지 하나를 스키마·코멘트·상호작용 문장으로
 ```
 
@@ -360,7 +360,7 @@ wireb page get <경로> [--json]               페이지 하나를 스키마·�
 
 **`wireb`·`wireb-mcp`는 `node_modules/.bin`에 들어오지 않는다.** 두 패키지가 `private`이라
 npm 에 안 나가고, 루트 `package.json`이 그것들을 의존으로 갖지 않기 때문이다. (이 기계에서
-쟀다 — 설치 뒤 루트 `.bin`에 있는 것은 `tsc`·`tsserver`·`vitest` 셋뿐이고, `pnpm exec wireb`
+쟀다 — 설치 뒤 루트 `.bin`에 있는 것은 루트 `devDependencies` 의 도구(`lefthook`·`oxfmt`·`oxlint`·`ruler`·`tsc`·`tsserver`·`vitest`)뿐이고, `pnpm exec wireb`
 는 `Command "wireb" not found`다.)
 
 **길 ㉮ — 저장소 안에서 (설치할 것이 없다)**
@@ -434,10 +434,12 @@ echo "$비밀번호" | wireb login --email me@example.com
 | 코드 | 뜻 |
 |---|---|
 | **0** | 정상. **`lint`는 `warning` 만 있으면 0 이다** — 저장을 막지 않는 결함이다 |
+| **1** | 명령을 잘못 썼다(모르는 명령 · 인자) — 쓰임말을 읽고 다시 친다 |
 | **2** | 설정·자격이 없다 → `wireb init` 또는 `wireb login` |
 | **3** | 서버가 거절했다(권한·잠금·검증) |
 | **4** | 서버에 못 닿았다 — **같은 주소의 서버가 죽었을 때**다. `.wirebound.json`의 `server`를 **다른 주소로 바꾸면 4가 아니라 2**가 나온다: 자격이 `(server, projectId)`에 매여 있어 네트워크를 타기 전에 끊긴다 |
 | **10** | `lint` 가 `error` 를 하나 이상 찾았다(`--fail-on warning` 이면 `warning` 도) |
+| **70** | 버그다 — 사용자가 고칠 수 없다(`packages/cli/src/exit.ts` 의 `EXIT`) |
 
 **`lint` 의 `document-invalid` · «Page는 루트에만 둘 수 있습니다»** 는 그 규칙 전에 저장된 페이지(안에 `Page` 가 선 문서)다 — 줄이
 페이지 경로와 그 `Page` 의 노드 id 를 짚는다. 그 `Page` 안의 노드를 밖으로 옮기고 그 `Page` 를 지우면 사라진다(에디터에서 편집은
@@ -488,9 +490,9 @@ WARN  Failed to create bin at …/packages/mcp/node_modules/.bin/wireb.
 반드시 난다.**
 
 **같은 자리에 이상해 보이는 줄이 하나 더 있다** — `The following dependencies have build scripts
-that were ignored: esbuild`. `WARN`이 아니고 **정상이다**(pnpm 10 이 빌드 스크립트를 기본으로
-막는다). `esbuild`는 플랫폼별 바이너리를 의존으로 받으므로 그 스크립트가 없어도 돌아간다 —
-게이트 넷이 그것을 증명한다.
+that were ignored: esbuild, lefthook`. `WARN`이 아니고 **정상이다**(pnpm 10 이 빌드 스크립트를 기본으로
+막는다). 둘 다 플랫폼별 바이너리를 의존으로 받으므로 그 스크립트가 없어도 돌아간다 —
+게이트 넷과 Git 훅(`lefthook`)이 그것을 증명한다.
 
 **조치.** 없다 — `pnpm build`가 그 파일을 만든다. **다만 링크는 그때 안 생긴다**(pnpm 이
 설치를 다시 돌지 않는다). `wireb`를 이름으로 부르려면 「부르는 길이 둘이고」 절의 ㉮·㉯를 쓴다.
@@ -809,7 +811,8 @@ pnpm --filter @wirebound/api unlock-login me@example.com
 
 ### 6.7 비밀번호를 잊었다
 
-**화면에도 API 에도 비밀번호를 바꾸는 길이 없다.** 서버에 손이 닿는 사람이 명령 하나로 바꾼다 — **그 서버가 읽는
+**잊은 비밀번호를 되찾는 길은 화면에도 API 에도 없다** — «계정 설정»의 «비밀번호 바꾸기»(`POST /api/auth/password`)는 지금
+비밀번호를 알아야 한다. 서버에 손이 닿는 사람이 명령 하나로 바꾼다 — **그 서버가 읽는
 `apps/api/.env` 가 있는 루트**(그 서버를 띄운 저장소나 워크트리)에서 친다. 명령은 그 `.env` 의 `DATABASE_URL` 로 붙고,
 첫 줄에 어느 DB 인지 말한다.
 
@@ -1053,7 +1056,7 @@ SCREEN_CHROMIUM_PATH=/usr/bin/chromium
 ```bash
 pnpm test          # 규격·값·인구조사.  Postgres 가 필요하다 (브라우저는 안 띄운다)
 pnpm typecheck     # 컴파일
-pnpm build         # packages/* 의 dist
+pnpm build         # packages/* 의 dist · system-themes/* 의 .wbtheme
 pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브라우저 · 운영 compose 의 값 (없으면 건너뛴다). 아래 둘을 차례로 돈다
 pnpm test:build:serial  # 그 가운데 파일을 차례로 도는 갈래 — 루트 vitest 의 build 프로젝트(실브라우저 에디터 판은 빠진다)
 pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만, 파일 병렬 — apps/web/build-test (Postgres · 브라우저가 없으면 건너뛴다)
@@ -1092,7 +1095,7 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 
 - **이펙트 · 마운트 순서를 바꾼 트랙은** `EDITOR_STACK_BUNDLE=build pnpm test:browser`(운영 번들)도 돈다.
 - **한 기계에서 전량 게이트는 동시에 둘까지만 띄운다** — 영역 게이트는 셈에 안 든다. 게이트 체인은 `nice -n 10` 아래에서 돌려 기계가 굼뜨지 않게 한다.
-- **실브라우저 파일 하나만 돌릴 때는 `pnpm vitest run -c vitest.browser.config.ts <경로>` 다** — `--project build <경로>` 는 `No test files found` 로 끝난다(`build` 프로젝트의 `include` 는 `apps/web/build-test` 에서 `export-bundle.test.ts` 만 줍는다). 어느 쪽이든 «통과» 를 읽기 전에 실행 수를 본다 — 앞의 명령은 `Test Files  1 passed` · `Tests  <케이스 수> passed` 를 찍고 뒤의 명령은 0 건에 종료 1 이다(`apps/web/build-test/editor-late-commit.test.ts` 로 재면 1 파일 · 1 케이스).
+- **실브라우저 파일 하나만 돌릴 때는 `pnpm vitest run -c vitest.browser.config.ts <경로>` 다** — `--project build <경로>` 는 `No test files found` 로 끝난다(`build` 프로젝트의 `include` 는 `apps/web/build-test` 에서 `export-bundle.test.ts` 만 줍는다). 어느 쪽이든 «통과» 를 읽기 전에 실행 수를 본다 — 앞의 명령은 `Test Files  1 passed` · `Tests  <케이스 수> passed` 를 찍고 뒤의 명령은 0 건에 종료 1 이다(`apps/web/build-test/editor-late-commit.test.ts` 로 재면 1 파일 · 2 케이스).
 
 > **브라우저가 없을 때 `test:build`가 찍는 줄은 「넣는 법」 절의 명령을 권한다.** 그 스모크
 > (`apps/api/build-test/screen-chromium.test.ts`)는 **브라우저를 실제로 띄워 보고** 안 뜨면 건너뛴다 — `--only-shell` 만
@@ -1141,7 +1144,7 @@ docker compose -f deploy/docker-compose.yml up -d --build
 | 단계 | 결과 |
 |---|---|
 | 빌드 | 캐시 없이(`build --no-cache --pull`) **151s**. 이미지 api **1.81GB** · web **86MB** |
-| `up -d --build`(이미지 캐시) | postgres healthy → migrate 종료 0(마이그레이션 17건 · 계정 시딩) → api healthy → web. 42s |
+| `up -d --build`(이미지 캐시) | postgres healthy → migrate 종료 0(마이그레이션 전부 · 계정 시딩) → api healthy → web. 42s |
 | 에디터 로그인 화면으로 로그인 | 200 · 쿠키 `Secure` · `HttpOnly` |
 | 두 탭이 같은 페이지를 연다 | `wss://…/api/projects/<id>/ws` 가 붙고 `joined` · `presence` · `locks` |
 | 한 탭의 속성 패널에서 글을 고친다 | 다른 탭이 `page-changed` 를 받고 **33ms** 에 화면에 선다 · 서버 판이 같다 |
@@ -1385,23 +1388,28 @@ docker compose -f deploy/docker-compose.yml -p wb-measure down -v
 |---|---|
 | **API 를 부른다** — 엔드포인트·에러 형식·권한·응답 형태 | [`apps/api/README.md`](apps/api/README.md) |
 | **에이전트에게 설계서를 읽힌다** | [`packages/mcp/skill/SKILL.md`](packages/mcp/skill/SKILL.md) |
-| **저장소 규칙**(워크트리·커밋·병렬 작업) | [`.ruler/`](.ruler/) — 에이전트 지침의 소스. `CLAUDE.md` 는 `pnpm exec ruler apply` 가 만드는 생성물이고, 공용 지침은 `guideline` CLI 가 받는다(`.ruler/guideline.md`) |
+| **저장소 규칙**(워크트리·커밋·병렬 작업) | [`.ruler/`](.ruler/) — 에이전트 지침의 소스. `AGENTS.md` 는 `pnpm exec ruler apply` 가 만드는 생성물이고, 공용 지침은 `guideline` CLI 가 받는다(`.ruler/guideline.md`) |
 | **무엇이 왜 그렇게 서 있나** | `docs/superpowers/plans/` — 계획과 이월 장부. **시점 기록이다** — 지금 참인 규칙은 이 문서들과 설계 규격이 말한다 |
 | **설계 규격** | `docs/superpowers/specs/2026-08-03-wirebound-design.md` |
 
 ### 저장소 배치
 
 ```
-packages/schema     노드 타입·컴포넌트 카탈로그·검증·JSON Patch   ← 단일 진실
-packages/renderer   스키마 → React 렌더링 (headless)
-packages/themes     테마 규격·검증·CSS 컴파일
-packages/exporter   HTML 정적 번들 · PPTX
-packages/cli        wireb
-packages/mcp        MCP 서버 · 스킬
-apps/web            설계서 에디터
-apps/api            REST + WebSocket
-Dockerfile          운영 이미지 둘(api · web)
-deploy/             운영 compose · Caddyfile — 「배포하려면」
+packages/schema        노드 타입·컴포넌트 카탈로그·검증·JSON Patch   ← 단일 진실
+packages/theme-sdk     테마 뷰 계약 · SDK 기본 뷰
+packages/renderer      스키마 → React 렌더링 — 노드마다 «테마 뷰 → 기본 뷰»
+packages/themes        테마 manifest 검증 · 토큰 CSS · .wbtheme 읽기 · 쓰기
+packages/theme-gallery 카탈로그 × variant 표본 갤러리
+packages/theme-kit     테마 작성 도구 wb-theme — dev · build · 스타터 템플릿
+packages/test-support  여러 패키지의 케이스가 함께 쓰는 도구(제품 표면이 아니다)
+packages/exporter      HTML 정적 번들 · PPTX
+packages/cli           wireb
+packages/mcp           MCP 서버 · 스킬
+system-themes/*        저장소 테마 다섯 — pnpm build 가 .wbtheme 로 내고 api 가 기동 때 넣는다
+apps/web               설계서 에디터
+apps/api               REST + WebSocket
+Dockerfile             운영 이미지 둘(api · web)
+deploy/                운영 compose · Caddyfile — 「배포하려면」
 ```
 
 의존 방향은 한 방향이다: `schema` ← `renderer` ← 나머지.
