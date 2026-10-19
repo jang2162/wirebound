@@ -1,4 +1,4 @@
-# 에이전트 지침의 소스는 .ruler/ 다. CLAUDE.md · .mcp.json · .claude/skills/ 는 생성물이다(pnpm exec ruler apply).
+# 에이전트 지침의 소스는 .ruler/ 다. AGENTS.md · .mcp.json · .claude/skills/ 는 생성물이다(pnpm exec ruler apply).
 default_agents = ["claude"]
 
 [mcp]
