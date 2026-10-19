@@ -34,7 +34,7 @@ pnpm -C .worktrees/feat-<작업명> exec ruler apply  # install 의 prepare 가 
 - **`@wirebound/schema` 를 고친 뒤의 웹 타입 검사는 루트 `pnpm typecheck`(`tsc --build`)로 한다** — `pnpm -C apps/web exec tsc --noEmit` 은 프로젝트 참조 때문에 다시 빌드한 패키지의 새 `export` 를 못 봐 «없는 이름» 오류를 낸다.
 - gitignore 대상인 로컬 설정은 따라오지 않는다. `.env`·`.env.*`가 전부 무시되므로 `apps/api/.env`를 최상위에서 복사하거나 `apps/api/.env.example`에서 만든다. **api 를 띄우지 않는 워크트리도 만든다** — `pnpm test` 전량은 api 스위트가 DB 에 붙는다. 워크트리(체크아웃 뿌리의 `.git` 이 파일)에서 테스트 DB 가 compose 기본 포트(최상위 컨테이너)를 가리키면 — `.env` 가 없거나 최상위 값을 그대로 복사했으면 — 스위트가 멈춘다(`apps/api/test/test-database-url.ts` 의 `worktreeEnvError`). DB 가 필요 없는 트랙이라 `.env` 를 안 만들면 브리프의 게이트를 `pnpm test --project '!api'` 로 적는다.
 - **그 `.env`의 값 다섯을 그 워크트리 것으로 바꾼다** — `POSTGRES_PORT` · `DATABASE_URL` · `TEST_DATABASE_URL` · `PORT` · `SESSION_COOKIE_NAME`(포트를 붙인다 — 쿠키는 포트를 가르지 않아 한 브라우저로 워크트리에 로그인하면 같은 호스트의 다른 체크아웃 세션을 덮는다). **절차와 그 값을 안 가르면 무엇이 보이는지는 `README.md` 「워크트리를 여럿 띄울 때」 절이 소유한다** — 여기 두 벌로 적지 않는다. 요지만: **워크트리마다 자기 컨테이너를 띄운다**(컨테이너·볼륨·포트·데이터가 전부 갈린다), 에디터의 프록시 대상은 `PORT`를 자동으로 따라가므로 손댈 곳이 없다.
-- **Postgres 컨테이너는 워크트리마다 띄운다.** `docker-compose.yml`이 컨테이너 이름을 고정하지 않고 호스트 포트를 `POSTGRES_PORT`에서 받으므로, compose가 **디렉터리 이름을 프로젝트 이름으로 쓰는 것**이 격리 기전이 된다(컨테이너·볼륨이 그 이름을 따라간다). 그래서 **`-C` 로는 안 되고 그 워크트리 디렉터리에서 쳐야 한다 — 어디서 치느냐가 곧 어느 컨테이너냐다**: `docker compose --env-file apps/api/.env up -d`. 메인 세션이 안 띄웠으면 워커가 자기 것을 띄운다(이제 그 컨테이너는 그 워크트리의 것이지 공유 자원이 아니다). **띄운 뒤 `docker compose port postgres 5432` 가 그 포트를 찍는지 본다** — 포트 충돌 뒤 다시 친 `up` 은 종료 0 · healthy 인데 포트 없이 뜨고, 그때 `DATABASE_URL` 은 포트를 쥔 **다른 컨테이너의 DB** 에 닿는다. 종료 1 이면 포트 없이 뜬 것이다. **그때 어긋나면 무엇이 보이는지는 `README.md` 「워크트리를 여럿 띄울 때」 절과 `README.md` 「컨테이너를 못 찾는다 / 포트가 이미 잡혀 있다」 절이 소유한다** — 여기 옮겨 적지 않는다.
+- **Postgres 컨테이너는 워크트리마다 띄운다 — `pnpm db …` 로.** 개발 compose(`docker/dev/compose.yaml`)가 컨테이너 이름을 고정하지 않고 호스트 포트를 `POSTGRES_PORT`에서 받으며, 루트 `package.json` 의 `db` 스크립트가 `--project-directory .` 로 **체크아웃 디렉터리 이름을 프로젝트 이름으로** 쓰게 한다 — 그것이 격리 기전이다(컨테이너·볼륨이 그 이름을 따라간다). 그래서 **어느 체크아웃의 스크립트를 부르느냐가 곧 어느 컨테이너냐다** — `pnpm -C .worktrees/feat-<작업명> db up -d` 로 대상을 지정해도 된다. 그 파일을 `pnpm db` 밖에서 부르면(`docker compose -f docker/dev/compose.yaml …`) 프로젝트 이름이 모든 체크아웃에서 `dev` 하나가 되므로 파일이 멈춘다. **뿌리에서 맨 `docker compose …` 는 배포 compose(`compose.yaml`)다** — 개발 DB 명령이 아니다. 메인 세션이 안 띄웠으면 워커가 자기 것을 띄운다(이제 그 컨테이너는 그 워크트리의 것이지 공유 자원이 아니다). **띄운 뒤 `pnpm db port postgres 5432` 가 그 포트를 찍는지 본다** — 포트 충돌 뒤 다시 친 `up` 은 종료 0 · healthy 인데 포트 없이 뜨고, 그때 `DATABASE_URL` 은 포트를 쥔 **다른 컨테이너의 DB** 에 닿는다. 종료 1 이면 포트 없이 뜬 것이다. **그때 어긋나면 무엇이 보이는지는 `README.md` 「워크트리를 여럿 띄울 때」 절과 `README.md` 「컨테이너를 못 찾는다 / 포트가 이미 잡혀 있다」 절이 소유한다** — 여기 옮겨 적지 않는다.
 
 이 세팅은 워커를 띄우기 전에 메인 세션이 해 둔다. 워커가 첫 실행에서 빌드 누락으로 헤매는 시간을 없앤다. 이것은 아래 "메인 세션은 디스패치·판정·병합만 한다"를 어기는 것이 아니라 그 규칙이 말하는 **작업 공간 생성**의 일부다 — 워커가 아직 없어 덮어쓸 작업이 없고, 대상이 부트스트랩 명령과 `.env` 복사로 한정된다. 소스 파일은 여기서 건드리지 않는다. **워커를 띄운 순간 이 예외도 끝난다** — 이후 빌드가 다시 필요해지면 워커에게 시킨다.
 
@@ -82,18 +82,18 @@ pnpm -C .worktrees/feat-<작업명> exec ruler apply  # install 의 prepare 가 
 작업이 병합되거나 폐기되면 정리한다.
 
 ```bash
-# 1. 그 워크트리의 컨테이너와 볼륨을 먼저 지운다 — 그 디렉터리에서
-docker compose down
+# 1. 그 워크트리의 컨테이너와 볼륨을 먼저 지운다 — 그 워크트리의 스크립트로
+pnpm -C .worktrees/<워크트리명> db down
 docker volume rm <워크트리명>_wirebound-pgdata     # 그 워크트리의 데이터. 확인하고 지운다
 
 # 2. 워크트리를 지운다
 git worktree remove .worktrees/<워크트리명>
 ```
 
-- **컨테이너·볼륨을 먼저 지운다.** 워크트리를 지우면 `docker-compose.yml` 이 사라져 `docker compose down` 이 그 프로젝트를 못 찾는다 — 컨테이너와 볼륨이 이름만 남아 떠돈다(`README.md` 「컨테이너를 못 찾는다 / 포트가 이미 잡혀 있다」 절 — `docker volume ls` 에서 지워진 워크트리 이름이 붙은 볼륨이 그것이다).
+- **컨테이너·볼륨을 먼저 지운다.** 워크트리를 지우면 `docker/dev/compose.yaml` · `package.json` 이 사라져 `pnpm db down` 이 그 프로젝트를 못 찾는다 — 컨테이너와 볼륨이 이름만 남아 떠돈다(`README.md` 「컨테이너를 못 찾는다 / 포트가 이미 잡혀 있다」 절 — `docker volume ls` 에서 지워진 워크트리 이름이 붙은 볼륨이 그것이다).
 - **볼륨 이름을 확인하고 지운다**(`docker volume ls`). 사용자의 설계서가 든 볼륨과 이름이 한 글자 다를 뿐이다.
 - 그 워크트리에 붙어 있는 Orca 터미널이 있으면 먼저 종료한다. 세션이 살아 있으면 제거가 실패하거나 지워진 경로에서 도는 좀비 세션이 남는다.
-- **워커가 띄운 dev 서버가 남아 있는지 본다.** 컨테이너·볼륨과 달리 이것은 `docker compose down` 이 안 지운다. api 를 띄운 워커·리뷰어가 저마다 `tsx watch` 를 남기고, 상류 컨테이너가 사라져도 supervisor 는 안 죽는다. 워크트리를 지우면 **지워진 경로에서 도는 좀비**가 된다.
+- **워커가 띄운 dev 서버가 남아 있는지 본다.** 컨테이너·볼륨과 달리 이것은 `pnpm db down` 이 안 지운다. api 를 띄운 워커·리뷰어가 저마다 `tsx watch` 를 남기고, 상류 컨테이너가 사라져도 supervisor 는 안 죽는다. 워크트리를 지우면 **지워진 경로에서 도는 좀비**가 된다.
 
   ```bash
   ps -eo pid,etime,command | grep '<워크트리명>' | grep -v grep   # 경로로 확인하고
