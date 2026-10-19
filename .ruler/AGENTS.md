@@ -19,7 +19,7 @@ packages/themes     manifest 검증 · 토큰 CSS · .wbtheme 읽기 · 쓰기 �
 packages/theme-gallery 카탈로그 × variant 표본 갤러리(kit dev 가 그린다)
 packages/theme-kit  테마 작성 도구 wb-theme — dev · build · 스타터 템플릿(pack-template)
 system-themes/*     저장소 테마 다섯(admin · commerce · docs · portal · saas-marketing — id 는 system-<이름>) — pnpm build 가 .wbtheme 로 낸다 · api 가 기동 때 시딩한다 · 판마다 sha256 을 `system-themes/<이름>/checksums.json` 에 적는다(테마마다 제 표)
-packages/exporter   HTML 정적 번들 (후속: PPTX)
+packages/exporter   HTML 정적 번들 · PPTX
 packages/cli        wireb
 packages/mcp        MCP 서버
 packages/test-support 케이스 공용 도우미(stripComments · 시딩되는 system-admin 의 판과 토큰)

@@ -81,3 +81,4 @@
 - **걷을 자리 · 고칠 자리를 셀 때는 꼴을 좁힌 식이 아니라 그 낱말 전부를 세고 갈래로 나눈다** — 꼴을 좁힌 식(`actor: (requestEventActor|\{ type: revision)`)은 같은 성질의 다른 꼴(`actor: { type: 'user', … }`)을 오류 없이 빼고, 그 수가 장부에 «N 줄» 로 남아 다음 차수가 그대로 받는다(WS `patch` 의 프레임 `actor` 리터럴이 «17 줄» 에 없었다).
 - **마이그레이션을 새로 두면 마이그레이션 디렉터리를 글자로 세는 자(`apps/api/test/seed-user.test.ts` «행 삽입이 없다» 등 — `git grep -lE 'MIGRATIONS_DIR|db/migrations' apps/api/test`)를 그 트랙 게이트에 넣는다** — 데이터 옮기기의 `insert` 가 계정 시딩으로 세진다.
 - **«걷혔나» 를 세는 식은 부분 문자열이 아니라 낱말 단위로도 센다** — 걷은 이름이 새로 지은 더 긴 이름의 조각이면(`StateSwitch` ⊂ `ViewStateSwitcher`) 글자 조각으로 센 수가 0 이 아니어서 걷힌 것이 «남았다» 로 읽힌다. `git grep -nwF <이름>` 또는 `-P '\b<이름>\b'` 수를 함께 적고 갈리면 갈린 줄을 연다.
+- **`git grep` 의 경로 인자에 `*` 를 쓰면 그 글롭이 파일 경로 전체에 맞아야 한다** — `-- 'packages/*/src'` 는 그 아래 파일을 하나도 안 골라 0 건을 오류 없이 낸다. 디렉터리 아래를 고르려면 `'packages/*/src/**'` 나 글롭 없는 `packages` 를 쓴다. 0 이 나오면 글롭 없는 경로로 한 번 더 센다.
