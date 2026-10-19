@@ -26,7 +26,8 @@ packages/test-support 케이스 공용 도우미(stripComments · 시딩되는 s
 apps/web            설계서 에디터
 apps/api            REST + WebSocket
 apps/playground     렌더러 + system-admin 표본 화면(셸 · iframe 없이 vite 로 띄운다)
-Dockerfile · deploy/ 운영 이미지 · 단일 서버 compose (README 「배포하려면」)
+Dockerfile · compose.yaml 배포 이미지 · 단일 서버 compose — 앱만, 프록시는 서버마다 compose.override.yaml (docs/guides/deploy-docker.md)
+docker/web · docker/dev 입구(web)의 Caddyfile · 개발 Postgres compose(pnpm db …)
 ```
 
 의존 방향은 한 방향이다: `schema` ← `renderer` ← 나머지. `packages/test-support` 는 `system-themes/*` 패키지에 기대지 않는다 — `renderer` 의 케이스가 test-support 에 기대고 시스템 테마는 renderer 에 기대어, 고리가 되면 `pnpm build` 의 차례가 깨진다(테마가 kit 보다 먼저 빌드되어 `wb-theme` 을 못 찾는다). `schema`는 zod 외의 런타임 의존을 갖지 않으며 브라우저와 Node 양쪽에서 동작해야 한다.

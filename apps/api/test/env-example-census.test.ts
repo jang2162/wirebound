@@ -88,10 +88,10 @@ describe('.env.example 이 무엇을 드나', () => {
     expect(EXAMPLE).not.toMatch(/^#POSTGRES_PORT=/m)
   })
 
-  it('compose 를 부르는 한 줄이 이 파일 안에 있다 — 플래그를 빼면 기본 포트로 되돌아간다', () => {
-    // `docker compose` 는 이 파일을 스스로 못 찾는다(프로젝트 디렉터리의 `.env` 만 본다).
-    // 그 사실이 이 파일의 존재 이유를 바꾸므로 템플릿이 그 명령을 들고 있어야 한다.
-    expect(EXAMPLE).toContain('docker compose --env-file apps/api/.env up -d')
+  it('개발 DB 를 부르는 한 줄이 이 파일 안에 있다 — 그 스크립트가 이 파일을 compose 에 준다', () => {
+    // `docker compose` 는 이 파일을 스스로 못 찾는다(프로젝트 디렉터리의 `.env` 만 본다) — 루트 `package.json` 의 `db` 가
+    // `--env-file` 로 준다. 그 사실이 이 파일의 존재 이유를 바꾸므로 템플릿이 그 명령을 들고 있어야 한다.
+    expect(EXAMPLE).toContain('pnpm db up -d')
   })
 
   it('`TEST_DATABASE_URL` 은 **주석 처리된 채로** 있다 — 절차가 "주석을 푼다"이다', () => {

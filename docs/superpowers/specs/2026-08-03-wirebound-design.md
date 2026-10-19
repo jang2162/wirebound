@@ -63,7 +63,7 @@
 | 비밀번호 | `node:crypto`의 scrypt (파라미터를 해시 문자열에 동봉) | 네이티브 의존 없이 OWASP 권장 KDF를 쓴다. 파라미터 동봉으로 나중에 비용을 올려도 기존 해시가 유효하다 |
 | 패키지 배포 | `schema`·`renderer`를 tsdown으로 빌드, `exports`는 `dist` | §3.3의 "Node와 브라우저 양쪽에서 동작"을 번들러 없이 만족시킨다. 개발·테스트는 `development` 조건으로 소스를 직접 본다 |
 | 테스트 DB | Docker Compose Postgres + 테스트별 트랜잭션 롤백 | §14의 권한 매트릭스·통합 테스트가 실제 Postgres 동작(제약·jsonb)을 요구한다 |
-| 배포 형태 | 단일 리눅스 서버 · docker compose — api 프로세스 하나 · Postgres · 앞단(Caddy). 이미지는 저장소의 `Dockerfile`, compose 는 `deploy/` | 팀이 자체 호스팅하는 도구이고 실시간 층이 프로세스 하나를 전제한다. 절차 · 잰 값은 최상위 README 「배포하려면」 |
+| 배포 형태 | 단일 리눅스 서버 · docker compose — 앱만: api 프로세스 하나 · Postgres · HTTP 입구(Caddy). TLS · 도메인은 서버마다의 프록시가 맡고 그 차이는 `compose.override.yaml` 이 갖는다. 이미지는 저장소의 `Dockerfile`, compose 는 뿌리의 `compose.yaml` | 팀이 자체 호스팅하는 도구이고 실시간 층이 프로세스 하나를 전제한다. 절차 · 잰 값은 `docs/guides/deploy-docker.md`, 이미지 없이도 지킬 조건은 최상위 README 「배포하려면」 |
 | PPTX 화면 이미지의 자원 상한 | 동시에 뜨는 브라우저 수(env `EXPORT_RENDER_LIMIT`, 비우면 2 — 넘은 요청은 줄을 서서 기다린다) · 한 장의 넓이(뷰포트 폭 × 8192 CSS px — 넘은 장은 그리지 않고 크기와 상한을 말한다. 테마의 전이 · 애니메이션을 끄고 글꼴을 한 장의 한도 안에서 기다린 뒤 재고 잰 크기로 묶어 찍는다 — 찍는 사이에 커진 장 · 글꼴이 한도 안에 안 온 장도 안 그린다) · 장 수(200). **바이트 상한은 두지 않는다** | 브라우저 하나가 수백 MB, 긴 페이지 한 장이 수 GB 를 먹는다 — 서버 하나의 메모리를 이 셋이 묶고, 파일 크기도 셋의 곱으로 묶인다. 넘은 장을 자르지 않는 것은 잘린 목업이 멀쩡한 한 장으로 읽히기 때문이다 |
 
 ### 2.1 명시적으로 제외한 것 (YAGNI)

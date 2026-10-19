@@ -172,7 +172,7 @@ export const SCREEN_DEFAULTS = {
   /**
    * **한 장의 넓이 상한(CSS px²)** — 뷰포트 폭 × 8192. 넘은 장은 그리지 않고 실패한다(이유가 크기와 상한을 말한다).
    *
-   * 화면 전체를 찍으므로(`FULL_PAGE`) 긴 페이지의 비트맵이 높이만큼 자란다. 잰 값(운영 compose 의 api 컨테이너 · 배포판
+   * 화면 전체를 찍으므로(`FULL_PAGE`) 긴 페이지의 비트맵이 높이만큼 자란다. 잰 값(배포 compose 의 api 컨테이너 · 배포판
    * chromium · `Text` 행만 든 페이지 한 장의 pptx 내려받기 · cgroup `memory.current` 최고 − 부하 전): 200행 +0.38GB · 500행
    * +0.77GB · 1000행 +1.24GB · 2000행 +2.05GB · 4000행 5.7GB 까지 오르고 다음 번은 컨테이너 안에서 OOM kill 로 «Unable to
    * capture screenshot». 페이지 여덟 장 × 40행 짜리 일 하나가 +0.54GB 다 — 긴 페이지 한 장이 서버 하나를 쓰러뜨린다.
@@ -501,7 +501,7 @@ async function probeKoreanGlyphs(browser: Browser, timeoutMs: number): Promise<K
 /**
  * **움직임을 끈다 — 잰 크기와 찍는 크기가 같은 상태를 보게.** 테마의 `transition` 은 시트가 늦게 실리거나 번들 런타임이 다시 그릴 때
  * 옛 값에서 새 값으로 옮겨 가는 전이를 시작한다. 그 사이에 재면 작게 재고 크게 찍는다(여백 20000px 을 전이로 건 파생 테마가 상한의
- * 4.9배 비트맵을 냈다 — 운영 compose 의 api 컨테이너에서 한 장에 cgroup 최고 2GB 안팎) — 시스템 테마도 단추에 `transition` 을 걸어
+ * 4.9배 비트맵을 냈다 — 배포 compose 의 api 컨테이너에서 한 장에 cgroup 최고 2GB 안팎) — 시스템 테마도 단추에 `transition` 을 걸어
  * 그림이 옮겨 가는 중간에 찍혔다. **첫 그림 전에 건다**(초기화 스크립트 · `FREEZE_MOTION_INIT`). 다시 재는 법:
  * `build-test/screen-chromium.test.ts` 「잰 크기와 찍는 크기」(끄기 · 층 · 글꼴 기다림 · 묶어 찍기 · 찍은 뒤 다시 재기를 하나씩 떼면
  * 거기 케이스가 죽는다) · 최상위 README 「화면 그리기 상한」의 잰 값.

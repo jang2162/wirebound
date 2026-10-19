@@ -16,7 +16,7 @@
  * 1. **규칙** — `portAgreementError` 자체
  * 2. **배선** — `loadConfig` 와 `resolveTestDatabaseUrlFrom` 이 그 규칙을 **실제로 지나는가**
  *    (여기서는 인구조사가 아니라 **행동으로** 잰다 — 둘 다 부를 수 있는 함수다)
- * 3. **기본값** — `docker-compose.yml` 과 `.env.example` 이 **같은 수**를 드는가.
+ * 3. **기본값** — 개발 compose(`docker/dev/compose.yaml`)와 `.env.example` 이 **같은 수**를 드는가.
  *    이 둘은 실행할 수 없어 인구조사로 잰다. **주석을 걷고 센다.**
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -218,7 +218,7 @@ describe('안 적은 사람의 기본값', () => {
 /**
  * **인구조사 — 실행할 수 없는 두 파일이 같은 수를 드는가.**
  *
- * `docker-compose.yml` 은 `docker` 없이는 실행할 수 없고 `.env.example` 은 템플릿이다.
+ * 개발 compose(`docker/dev/compose.yaml`)는 `docker` 없이는 실행할 수 없고 `.env.example` 은 템플릿이다.
  * 그런데 **아무것도 안 바꾼 사람이 그대로 도는 것이 정확히 이 둘의 일치에 서 있다**:
  * 그 사람은 compose 의 기본값(5433)으로 컨테이너를 띄우고 `.env.example` 의 접속 문자열로
  * 붙는다. 한쪽만 움직이면 **되던 것이 조용히 안 된다.**
@@ -248,9 +248,11 @@ describe('stripYamlComments — 인구조사가 딛고 선 자', () => {
   })
 })
 
-describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 든다', () => {
+describe('기본값 — 개발 compose 와 .env.example 이 같은 수를 든다', () => {
   const REPO_ROOT = new URL('../../../', import.meta.url)
-  const COMPOSE = stripYamlComments(readFileSync(new URL('docker-compose.yml', REPO_ROOT), 'utf8'))
+  const COMPOSE = stripYamlComments(readFileSync(new URL('docker/dev/compose.yaml', REPO_ROOT), 'utf8'))
+  const DB_SCRIPT =
+    (JSON.parse(readFileSync(new URL('package.json', REPO_ROOT), 'utf8')) as { scripts: Record<string, string> }).scripts.db ?? ''
   const EXAMPLE = readFileSync(new URL('../.env.example', import.meta.url), 'utf8')
   const README = readFileSync(new URL('README.md', REPO_ROOT), 'utf8')
   // 지침의 소스다. `CLAUDE.md` 는 `ruler apply` 의 생성물(gitignore)이라 새 체크아웃 · `git archive` 에 없다.
@@ -264,6 +266,7 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
     expect(EXAMPLE.length).toBeGreaterThan(200)
     expect(README).toContain('## 2. 세우기')
     expect(CLAUDE).toContain('# 워크트리 작업')
+    expect(DB_SCRIPT).toContain('docker compose')
   })
 
   it('**컨테이너 이름을 고정하지 않는다** — 고정하면 워크트리 둘째가 안 뜬다', () => {
@@ -296,26 +299,34 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
     expect(portAgreementError({ postgresPort: COMPOSE_DEFAULT_POSTGRES_PORT, urls: { a: urls[0], b: urls[1] } })).toBeUndefined()
   })
 
+  it('**개발 DB 를 부르는 길은 `db` 스크립트 하나다** — 포트 파일 · 프로젝트 디렉터리를 한 자리에서 준다', () => {
+    // `--env-file` 을 잃으면 컨테이너가 기본 포트로 다시 만들어지고, `--project-directory .` 를 잃으면 모든 체크아웃의 프로젝트 이름이
+    // `dev` 가 되어 한 볼륨을 나눠 쓴다(실물은 `apps/api/build-test/dev-compose.test.ts` 가 `config` 로 잰다).
+    expect(DB_SCRIPT).toContain('--env-file apps/api/.env')
+    expect(DB_SCRIPT).toContain('--project-directory .')
+    expect(DB_SCRIPT).toContain('-f docker/dev/compose.yaml')
+  })
+
   it('**문서가 든 명령과 수도 같은 것을 든다** — 소유자만 안 재는 비대칭을 없앤다', () => {
-    // 이 케이스가 없으면 `README.md` 「세우기 — 다섯 걸음」 절의 `up` 명령에서 `--env-file` 을
-    // 지워도, 거기 적힌 기본 포트를 5432 로 바꿔도 **게이트가 전부 초록**이다. `.env.example` 은
-    // 인구조사가 글자까지 지키는데 README 는 그 절차의 **소유자**다 — *"README 가 소유하고
-    // `.ruler/10-worktree.md` 가 가리킨다"*.
+    // 이 케이스가 없으면 `README.md` 「세우기 — 다섯 걸음」 절의 `up` 명령을 옛 꼴로 되돌려도, 거기 적힌 기본 포트를 5432 로
+    // 바꿔도 **게이트가 전부 초록**이다. `.env.example` 은 인구조사가 글자까지 지키는데 README 는 그 절차의 **소유자**다 —
+    // *"README 가 소유하고 `.ruler/10-worktree.md` 가 가리킨다"*.
     //
-    // **재는 것은 산문이 아니라 명령과 수 둘뿐이다**(산문까지 못박으면 문장을 못 고치게 된다).
+    // **재는 것은 산문이 아니라 명령 둘뿐이다**(산문까지 못박으면 문장을 못 고치게 된다) — 개발 DB 를 띄우는 `pnpm db up -d` 가 있고,
+    // 옛 명령(뿌리에서 `docker compose --env-file apps/api/.env up -d` — 뿌리에서는 배포 compose 를 읽는다)을 칠 명령으로 들지 않는다.
     for (const [이름, 원문] of [
       ['README.md', README],
       ['.ruler/10-worktree.md', CLAUDE],
     ] as const) {
-      // `docker compose … up -d` 처럼 줄임표가 낀 **산문**은 뺀다 — 그것은 칠 명령이 아니다.
-      // 운영 compose(`-f deploy/docker-compose.yml`)도 뺀다 — Postgres 포트를 바깥에 안 열고 `deploy/.env` 를 스스로 읽는다.
-      const 칠명령 = 원문
-        .split('\n')
-        .filter((line) => /docker compose[^…\n]*\bup -d/.test(line) && !line.includes('-f deploy/docker-compose.yml'))
-      expect(칠명령.length, `${이름} 에 칠 수 있는 up 명령이 있어야 한다`).toBeGreaterThan(0)
-      for (const line of 칠명령) {
-        expect(line, `${이름}: 이 플래그를 잃으면 컨테이너가 기본 포트로 다시 만들어진다`).toContain('--env-file apps/api/.env')
-      }
+      const 줄 = 원문.split('\n')
+      expect(
+        줄.filter((line) => /\bpnpm(?:\s+-C\s+\S+)?\s+db up -d\b/.test(line)).length,
+        `${이름} 에 칠 수 있는 up 명령이 있어야 한다`,
+      ).toBeGreaterThan(0)
+      expect(
+        줄.filter((line) => /docker compose\s+--env-file apps\/api\/\.env\s+up\b/.test(line)),
+        `${이름}: 이 명령은 뿌리의 배포 compose 를 읽는다 — pnpm db up -d 로 쓴다`,
+      ).toEqual([])
     }
   })
 
@@ -328,7 +339,7 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
   it('초기화 스크립트가 만드는 DB 를 기본 테스트 URL 이 가리킨다 — 손으로 만드는 걸음을 없앤 근거다', () => {
     // 볼륨을 처음 만들 때만 도는 스크립트다. 워크트리마다 볼륨이 새로 생기면 **매번 돈다**
     // (다시 재는 법: 새 볼륨의 psql `\l` 에 `wirebound_test` 가 있다).
-    const initSql = readFileSync(new URL('docker/postgres-init/01-test-db.sql', REPO_ROOT), 'utf8')
+    const initSql = readFileSync(new URL('docker/dev/postgres-init/01-test-db.sql', REPO_ROOT), 'utf8')
     const 만드는이름 = initSql.match(/CREATE DATABASE (\w+);/)?.[1]
     expect(만드는이름).toBeDefined()
     expect(defaultTestDatabaseUrl()).toContain(`/${만드는이름 as string}`)

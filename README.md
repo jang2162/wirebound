@@ -35,23 +35,23 @@ node -v && pnpm -v && docker -v
 ## 2. 세우기 — 다섯 걸음
 
 **순서가 있다.** 4번을 빼먹으면 테스트는 통과하는데 서버만 안 뜬다(같은 제목의 절). **환경 파일이
-1번인 것도 순서다** — `docker compose` 가 그 파일을 읽으므로 없으면 2번이 죽는다.
+1번인 것도 순서다** — 3번의 `pnpm db` 가 그 파일을 compose 에 주므로 없으면 3번이 죽는다.
 
 ```bash
-# 1. API 의 환경 파일을 만든다 — 아래 2번이 이 파일을 읽는다
+# 1. API 의 환경 파일을 만든다 — 아래 3번이 이 파일을 읽는다
 cp apps/api/.env.example apps/api/.env
 
-# 2. Postgres 를 띄운다 — 저장소(또는 워크트리) 루트에서
-docker compose --env-file apps/api/.env up -d     # 이 플래그를 빼지 마라 → 「컨테이너를 못 찾는다」
-docker compose ps                                 # healthy 가 될 때까지 기다린다
-                                                  # healthy 가 아니면 5번과 테스트가 전부 접속 실패로 죽는다
-docker compose port postgres 5432                 # 포트를 찍어야 한다 — `no port …` · 종료 1 이면
-                                                  # 포트 없이 뜬 것이다 → 「컨테이너를 못 찾는다」 ⓑ
-
-# 3. 런타임을 맞추고(mise — Node · pnpm 판은 mise.toml) 워크스페이스를 설치한다. mise 가 없으면 첫 줄을 건너뛴다
+# 2. 런타임을 맞추고(mise — Node · pnpm 판은 mise.toml) 워크스페이스를 설치한다. mise 가 없으면 첫 줄을 건너뛴다
 #    설치가 Git 훅(lefthook)을 걸고 에이전트 지침(AGENTS.md — `ruler apply`)을 만든다
 mise trust && mise install
 pnpm install
+
+# 3. 개발 Postgres 를 띄운다 — 저장소(또는 워크트리) 루트에서. `pnpm db` 가 docker/dev/compose.yaml 을 부른다(아래)
+pnpm db up -d
+pnpm db ps                                        # healthy 가 될 때까지 기다린다
+                                                  # healthy 가 아니면 5번과 테스트가 전부 접속 실패로 죽는다
+pnpm db port postgres 5432                        # 포트를 찍어야 한다 — `no port …` · 종료 1 이면
+                                                  # 포트 없이 뜬 것이다 → 「컨테이너를 못 찾는다」 ⓑ
 
 # 4. packages/* 를 빌드한다 — 건너뛰지 마라
 pnpm build
@@ -88,25 +88,31 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 
 다시 재려면 각 걸음 앞에 `time` 을 붙인다.
 
-`docker compose … up -d`가 만드는 것은 Postgres 컨테이너 하나이고 **호스트 포트는
+**`pnpm db …` 는 개발 DB 의 compose 다** — 루트 `package.json` 의 `db` 가 `docker compose --project-directory .
+-f docker/dev/compose.yaml --env-file apps/api/.env` 이고, 뒤에 붙인 낱말(`up -d` · `ps` · `exec …` · `down`)이 그대로 넘어간다.
+출력을 다른 명령에 넘길 때는 `pnpm -s db …` 로 친다(안 주면 pnpm 이 머리 두 줄을 붙인다). **뿌리의 `compose.yaml` 은 배포 compose 다** —
+뿌리에서 맨 `docker compose …` 를 치면 그것을 읽어 — 뿌리에 배포 값(`.env`)이 없으면 — `.env 에 WIREBOUND_DEPLOY=1 을 적은 배포 자리에서만 친다 — 개발 DB 는 pnpm db up -d` 로 멈추고,
+`docker/dev/compose.yaml` 을 `pnpm db` 밖에서 부르면 `docker/dev/compose.yaml 은 저장소 뿌리에서 pnpm db 로 부른다` 로 멈춘다(아래 «프로젝트 이름»).
+
+`pnpm db up -d`가 만드는 것은 Postgres 컨테이너 하나이고 **호스트 포트는
 `apps/api/.env` 의 `POSTGRES_PORT` 다. 기본값은 5433**이다(5432가 아니다 — 기계에 이미
 있는 Postgres 와 겹치지 않게 비켜 뒀다). 접속 문자열은 `.env.example`에 그 값으로 들어 있다.
 
 **컨테이너 이름은 고정이 아니다.** compose 가 `<프로젝트>-postgres-1` 로 짓고 **프로젝트
-이름은 디렉터리 이름**이다(**대문자는 소문자로 낮춘다** — `stageA` →
+이름은 체크아웃 디렉터리 이름**이다(`--project-directory .` — **대문자는 소문자로 낮춘다** — `stageA` →
 `stagea`) — 저장소 루트에서 띄우면 `wirebound-postgres-1`, 워크트리에서
 띄우면 `<워크트리이름>-postgres-1`. **볼륨도 같은 규칙으로 갈린다**(`<프로젝트>_wirebound-pgdata`).
-그래서 **워크트리마다 자기 컨테이너·자기 데이터**를 갖는다(「워크트리를 여럿 띄울 때」). 이름으로 컨테이너를 찾지
-말고 `docker compose …` 를 쓴다(「컨테이너를 못 찾는다」). **`docker-compose.yml` 에 `container_name` 을 박지 않는다** —
+그래서 **워크트리마다 자기 컨테이너·자기 데이터**를 갖는다(「워크트리를 여럿 띄울 때」). `pnpm db` 를 거치지 않으면 이 규칙이 안
+선다 — compose 가 `docker/dev/compose.yaml` 의 디렉터리 이름 `dev` 를 모든 체크아웃의 프로젝트 이름으로 써서 한 컨테이너 · 한 볼륨을
+나눠 쓰게 되므로 그 파일이 스크립트 밖의 호출을 멈춘다(`apps/api/build-test/dev-compose.test.ts` 가 이름을 잰다). 이름으로 컨테이너를 찾지
+말고 `pnpm db …` 를 쓴다(「컨테이너를 못 찾는다」). **`docker/dev/compose.yaml` 에 `container_name` 을 박지 않는다** —
 박으면 둘째 워크트리의 `up` 이 `Conflict. The container name "/…" is already in use` 로 죽는다
 (`apps/api/test/port-agreement.test.ts` 가 그 부재를 잰다).
 
-> **`--env-file apps/api/.env` 를 빼면 포트가 기본값(5433)으로 되돌아간다.** 그러면
-> 컨테이너가 그 포트로 **다시 만들어지고**, `apps/api/.env` 의 접속 문자열은 다른 수를
-> 가리킨 채 남는다. 기본 포트를 다른 체크아웃의 컨테이너가 쥐고 있으면 그 `up` 은 종료 1
-> (`port is already allocated`)이고 컨테이너는 `created` 로 남는다 — **그대로 한 번 더 치면 종료 0 으로 포트 없이 뜬다**
-> (워크트리 컨테이너로 쟀다 · 「컨테이너를 못 찾는다」). `up` 에서는 그 플래그를 생략하지 않는다 — `ps`·`logs`·`exec`·`down` 은
-> 프로젝트 이름으로 찾으므로 플래그가 없어도 된다(이 기계에서 쟀다).
+> **포트는 `apps/api/.env` 에서만 온다** — `pnpm db` 가 그 파일을 `--env-file` 로 준다. 파일이 없으면 `couldn't find env file:
+> …/apps/api/.env` · 종료 1 로 아무것도 안 만든다. 파일에 `POSTGRES_PORT` 줄이 없으면 기본값(5433)으로 뜨고, 그 포트를 다른
+> 체크아웃의 컨테이너가 쥐고 있으면 그 `up` 은 종료 1(`port is already allocated`)이고 컨테이너는 `created` 로 남는다 —
+> **그대로 한 번 더 치면 종료 0 으로 포트 없이 뜬다**(워크트리 컨테이너로 쟀다 · 「컨테이너를 못 찾는다」).
 >
 > **어긋나면 서버도 테스트도 뜨지 않고 어디가 어긋났는지 말한다**(「워크트리를 여럿 띄울 때」 절의 «포트를 어긋나게 적으면 무엇이 보이나»). 그 검사는
 > `POSTGRES_PORT` 가 있을 때만 돈다.
@@ -205,8 +211,8 @@ git 워크트리를 여럿 두고 각자 서버를 띄우면 **부딪히는 자�
 | 에디터 → API | **가장 조용하다.** B 의 화면이 A 의 API 에 붙는다 | (자동 — `PORT` 를 따라간다) |
 | 세션 쿠키 | **조용하다.** 쿠키는 포트를 가르지 않아서 한 브라우저로 B 에 로그인하면 A 의 세션이 덮인다 | `SESSION_COOKIE_NAME` |
 
-**컨테이너를 가른다.** 워크트리마다 `docker compose … up -d` 를 자기 디렉터리에서 친다 —
-컨테이너 이름도 볼륨도 **프로젝트 이름(디렉터리 이름)을 따라 저절로 갈린다**(「컨테이너를 못 찾는다」).
+**컨테이너를 가른다.** 워크트리마다 `pnpm db up -d` 를 자기 체크아웃에서 친다 —
+컨테이너 이름도 볼륨도 **프로젝트 이름(체크아웃 디렉터리 이름)을 따라 저절로 갈린다**(「컨테이너를 못 찾는다」).
 **데이터가 완전히 별개다.** 새 볼륨이므로 **처음에는 비어 있다**(그것이 정상이다 — 「띄우기」 절의
 `마이그레이션 0건` 문장이 그것을 말한다).
 
@@ -235,14 +241,14 @@ cp apps/api/.env.example apps/api/.env
 #      PORT=3002                                     ← 워크트리마다 다른 수
 #      SESSION_COOKIE_NAME=wb_session_3002           ← PORT 를 붙인다 — 에디터는 손댈 곳이 없다
 
-# 4. 이 워크트리의 컨테이너를 띄운다 — 이 디렉터리에서
-docker compose --env-file apps/api/.env up -d
-docker compose ps                   # healthy 여야 한다
-docker compose port postgres 5432   # <포트> 를 찍어야 한다 — 종료 1 이면 포트 없이 뜬 것이다(「컨테이너를 못 찾는다」 ⓑ)
+# 4. 이 워크트리의 컨테이너를 띄운다 — 이 디렉터리에서(또는 pnpm -C <워크트리> db …)
+pnpm db up -d
+pnpm db ps                          # healthy 여야 한다
+pnpm db port postgres 5432          # <포트> 를 찍어야 한다 — 종료 1 이면 포트 없이 뜬 것이다(「컨테이너를 못 찾는다」 ⓑ)
 
 # 5. DB 둘을 만든다 — 방금 띄운 내 컨테이너 안에서 한 줄씩
-docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>;'
-docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>_test;'
+pnpm db exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>;'
+pnpm db exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>_test;'
 
 # 6. 마이그레이션 — 계정도 여기서 만든다(「세우기」 절 5번과 같다)
 SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
@@ -256,7 +262,7 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 `wirebound` / `UTF8` / `en_US.utf8`).
 
 > **5번이 왜 있나 — 볼륨이 새것이면 `wirebound`·`wirebound_test` 는 이미 있다.**
-> (이 기계에서 쟀다: 새 볼륨의 `psql \l` 에 둘 다 있다. `docker/postgres-init/01-test-db.sql`
+> (이 기계에서 쟀다: 새 볼륨의 `psql \l` 에 둘 다 있다. `docker/dev/postgres-init/01-test-db.sql`
 > 이 **볼륨을 처음 만들 때 돈다** — 「테스트가 이유를 알기 어려운 접속 에러로 죽는다」 절의 함정이 워크트리마다 새 볼륨에서는 안 온다.)
 > 그 이름을 그대로 쓰면 5번을 지울 수 있다. **그래도 이름을 가르는 이유는 하나다:
 > 포트를 잘못 짚어 남의 컨테이너에 붙었을 때 그것을 시끄럽게 만드는 것이 이 이름이다.**
@@ -299,7 +305,7 @@ apps/api/.env 에서 포트를 한 수로 맞춘다. 자기 Postgres 를 쓰면 
 | 안 가른 값 | 관측 |
 |---|---|
 | `PORT` | 둘째 서버가 `Error: listen EADDRINUSE: address already in use 127.0.0.1:3031` 로 죽는다. **종료 코드 1** |
-| `POSTGRES_PORT` | 둘째 `up -d` 가 `Bind for 0.0.0.0:<포트> failed: port is already allocated` 로 죽는다. **그런데 그대로 한 번 더 치면 종료 0 으로 "Started" 를 찍고 컨테이너가 뜬다 — 포트 없이.** 그때 `docker compose ps` 의 `PORTS` 칸이 **비어 있고**, 그 포트에 붙는 것은 전부 **옆 워크트리의 컨테이너**다(「컨테이너를 못 찾는다」) |
+| `POSTGRES_PORT` | 둘째 `up -d` 가 `Bind for 0.0.0.0:<포트> failed: port is already allocated` 로 죽는다. **그런데 그대로 한 번 더 치면 종료 0 으로 "Started" 를 찍고 컨테이너가 뜬다 — 포트 없이.** 그때 `pnpm db ps` 의 `PORTS` 칸이 **비어 있고**, 그 포트에 붙는 것은 전부 **옆 워크트리의 컨테이너**다(「컨테이너를 못 찾는다」) |
 | `DATABASE_URL` | 워크트리 B 에서 `migrate:down` 을 한 번 돌리자 **A 의 살아 있는 서버가** `500 {"error":{"code":"internal"}}` 을 내기 시작했다. A 의 로그에만 `relation "api_tokens" does not exist` 가 남았고 **B 는 아무 말도 안 했다**(한 컨테이너를 공유할 때의 값이다 — 워크트리마다 컨테이너를 가르면 이 갈래는 포트가 먼저 막는다) |
 | `SESSION_COOKIE_NAME` | 한 브라우저로 워크트리의 에디터에 로그인하자 같은 호스트에 있던 `wb_session`(다른 체크아웃의 세션)이 **새 세션으로 바뀌었다** — 에러도 경고도 없다. 이름을 가르면 그 쿠키가 그대로 남고, 에디터는 로그인 200 · 새로고침 뒤 `/api/auth/me` 200 이다(헤드리스 Chrome · 에디터 프록시 경유). **에디터는 이름을 몰라도 된다** — 같은 출처로 쿠키를 싣기만 한다(`credentials: 'same-origin'`) |
 | `TEST_DATABASE_URL` | 워크트리 둘이 동시에 `pnpm test` 를 돌리면 **둘 다 종료 코드 1**로 죽는다. **가르면 둘 다 전 케이스 통과 · 종료 0** 이고, 벽시계가 **혼자 돌리는 것보다 길지 않게 나오기도 한다** — 느려지는지는 기계와 부하가 정한다(재는 법: 두 워크트리에서 `time pnpm test` 를 동시에 돌려 혼자 돌린 값과 견준다). 깨지는 꼴은 셋이다 — 상대의 `globalSetup` 이 판을 내려서 나는 `relation "…" does not exist` · 상대가 커밋한 행과 부딪히는 `409` · 상대의 정리가 지워서 나는 FK 위반. **몇 개가 죽는지는 판마다 다르다**(경쟁 상태다) — **안 낡는 값은 종료 코드뿐이라 그것만 적는다** |
@@ -309,8 +315,8 @@ apps/api/.env 에서 포트를 한 수로 맞춘다. 자기 Postgres 를 쓰면 
 > 기다려도 응답이 그대로였고, 서버를 다시 띄우자 그 값이 들었다. **조용한 자리다** —
 > 아무 로그도 안 난다.
 >
-> **`POSTGRES_PORT` 를 고쳤으면 컨테이너도 다시 띄워라** — `docker compose --env-file
-> apps/api/.env up -d` 를 다시 치면 compose 가 포트가 바뀐 것을 보고 다시 만든다.
+> **`POSTGRES_PORT` 를 고쳤으면 컨테이너도 다시 띄워라** — `pnpm db up -d` 를
+> 다시 치면 compose 가 포트가 바뀐 것을 보고 다시 만든다.
 > **그 볼륨은 그대로다**(이름이 프로젝트를 따라가지 포트를 따라가지 않는다).
 >
 > **에디터도 같다.** `vite.config.ts`가 그 파일을 읽는 것은 **뜰 때 한 번**이다. vite 는
@@ -499,17 +505,17 @@ that were ignored: esbuild, lefthook`. `WARN`이 아니고 **정상이다**(pnpm
 
 ### 6.3 컨테이너를 못 찾는다 / 포트가 이미 잡혀 있다 / 빈 DB 가 떴다
 
-**원인 하나에서 갈래가 셋 나온다.** `docker compose`는 **디렉터리 이름**을 프로젝트 이름으로
-쓴다(이 기계에서 쟀다: 저장소 루트 → `wirebound`, `.worktrees/<이름>` → `<이름>`).
+**원인 하나에서 갈래가 셋 나온다.** `pnpm db` 는 **체크아웃 디렉터리 이름**을 프로젝트 이름으로
+쓴다(`--project-directory .` · 이 기계에서 쟀다: 저장소 루트 → `wirebound`, `.worktrees/<이름>` → `<이름>`).
 **컨테이너 이름도 볼륨 이름도 그것을 따른다** — `<프로젝트>-postgres-1` ·
 `<프로젝트>_wirebound-pgdata`. **그것이 워크트리마다 컨테이너를 가르는 기전이고**, 동시에
 아래 셋의 원인이다.
 
-**ⓐ `ps` 가 빈 표를 낸다.** 컨테이너를 띄운 디렉터리가 아닌 곳에서 물었다. **상태는 그
-디렉터리에서 묻는다** — 워크트리의 컨테이너는 그 워크트리에서, 루트의 것은 루트에서.
+**ⓐ `ps` 가 빈 표를 낸다.** 컨테이너를 띄운 체크아웃이 아닌 곳에서 물었다. **상태는 그
+체크아웃에서 묻는다** — 워크트리의 컨테이너는 그 워크트리에서, 루트의 것은 루트에서.
 
 ```bash
-docker compose ps                    # 이 디렉터리의 것
+pnpm db ps                           # 이 체크아웃의 것
 docker compose ls                    # 어떤 프로젝트들이 떠 있나
 docker ps --filter name=postgres     # 이 기계의 전부
 ```
@@ -531,19 +537,19 @@ Error response from daemon: failed to set up container networking:
 
 > **✱ 그대로 한 번 더 치면 조용해진다 — 이 절에서 가장 위험한 줄이다.** 이 기계에서 쟀다:
 > 같은 명령을 다시 치면 **종료 0** 으로 `Started` 를 찍고 컨테이너가 `Up (healthy)` 가
-> 되는데 **포트가 하나도 안 열려 있다.** `docker compose ps` 의 `PORTS` 칸이 **빈 칸**이다.
+> 되는데 **포트가 하나도 안 열려 있다.** `pnpm db ps` 의 `PORTS` 칸이 **빈 칸**이다.
 > 그 포트에 붙는 것은 전부 **먼저 잡은 워크트리의 컨테이너**다 — 내 서버가 남의 DB 를
 > 읽고 쓰는데 **아무도 안 운다.**
 >
-> **그래서 `up -d` 뒤에는 `docker compose port postgres 5432` 를 친다** — 포트가 열려 있으면 그 포트를 찍고 종료 0,
-> 포트 없이 떴으면 `no port 5432/tcp for container …` 로 **종료 1** 이다(`docker compose ps` 의 `PORTS` 빈 칸과 같은 판을
-> 눈 대신 종료 코드로 가른다). 종료 1 이면 위 충돌이 났던 것이다: `docker compose down` 하고 포트를 바꿔 다시 띄운다.
+> **그래서 `up -d` 뒤에는 `pnpm db port postgres 5432` 를 친다** — 포트가 열려 있으면 그 포트를 찍고 종료 0,
+> 포트 없이 떴으면 `no port 5432/tcp for container …` 로 **종료 1** 이다(`pnpm db ps` 의 `PORTS` 빈 칸과 같은 판을
+> 눈 대신 종료 코드로 가른다). 종료 1 이면 위 충돌이 났던 것이다: `pnpm db down` 하고 포트를 바꿔 다시 띄운다.
 > 포트를 쥔 쪽이 먼저 내려갔으면 그냥 `up -d` 한 번이 포트를 되찾는다(`Started`).
 > **compose 설정으로는 못 막는다** — 헬스체크는 컨테이너 **안**에서 돌아 호스트 포트를 못 보고(포트 없이도 `healthy`),
 > `up -d --wait` 도 그 판에서 종료 0 이다. 다시 재는 법: 일회용 컨테이너가 그 포트를 쥔 채(`docker run -d --rm -p
 > <포트>:5432 postgres:16-alpine sleep 600`) `up -d` 를 두 번 치고 위 명령의 종료 코드를 본다 — 두 번째 `up` 뒤
 > `DATABASE_URL` 은 **쥔 컨테이너의 DB** 에 닿는다. **호스트 프로세스(컨테이너가 아닌 것 — 기계에 깔린 Postgres 등)가 그
-> 포트를 쥔 판은 `up` 도 `docker compose port` 도 종료 0 인데 `127.0.0.1:<포트>` 는 그 호스트 프로세스가 받는다** — 그
+> 포트를 쥔 판은 `up` 도 `pnpm db port` 도 종료 0 인데 `127.0.0.1:<포트>` 는 그 호스트 프로세스가 받는다** — 그
 > 프로세스가 `127.0.0.1` · `0.0.0.0` · `::` 에 묶였으면 그렇고, `::1` 에만 묶였으면 `127.0.0.1` 은 컨테이너 · `localhost` 는
 > 그 프로세스다(Colima · 이 기계에서 쟀다). 가르는 것은 `lsof -nP -iTCP:<포트> -sTCP:LISTEN` 이다 — 런타임의 포워더(Colima 면
 > `ssh`) 말고 다른 프로세스가 보이면 이 판이니 `POSTGRES_PORT` 를 바꾼다.
@@ -583,7 +589,7 @@ Error response from daemon: failed to set up container networking:
 > docker ps -a --filter volume=<볼륨이름> --format '{{.Names}} ({{.Status}})'
 > ```
 >
-> **`docker compose down -v` 를 치지 마라** — 그 한 줄이 지금 보고 있는 빈 볼륨이 아니라
+> **`pnpm db down -v` 를 치지 마라** — 그 한 줄이 지금 보고 있는 빈 볼륨이 아니라
 > **찾고 있는 볼륨까지** 지운다.
 >
 > **옛 볼륨의 데이터를 이 디렉터리의 볼륨으로 옮기는 것은 복사이지 이동이 아니다** — 아래
@@ -592,7 +598,7 @@ Error response from daemon: failed to set up container networking:
 #### 옛 볼륨을 새 이름으로 복사한다
 
 **하지 않아도 아무것도 안 깨진다.** 옛 컨테이너는 옛 볼륨을 계속 본다. 이 절차는 *"이 디렉터리의
-`docker compose` 로 그 데이터를 다루고 싶다"* 일 때만 친다. **옛 볼륨은 지우지 않는다** — 그것이 되돌릴 수 있는
+`pnpm db` 로 그 데이터를 다루고 싶다"* 일 때만 친다. **옛 볼륨은 지우지 않는다** — 그것이 되돌릴 수 있는
 근거다. **그 서버를 아무도 안 쓰는 때에 친다** — 3번이 옛 컨테이너를 멈춘다.
 
 임시 compose 프로젝트 둘(옛 · 새, 같은 포트)로 아래 명령을 한 줄씩 그대로 돌려 봤다. **사용자 볼륨으로는
@@ -607,7 +613,7 @@ docker exec "$OLD_CONTAINER" psql -U wirebound -d wirebound -tAc \
 #   → 수 셋이 한 줄로 나온다(예: 3|5|11). -d 는 옛 컨테이너가 쓰던 DB 이름이다
 
 # 1. 받을 볼륨의 이름 — compose 가 이 디렉터리에서 쓸 것. apps/api/.env 가 없으면 여기서 종료 1 이다
-NEW_VOLUME="$(docker compose --env-file apps/api/.env config | sed -n 's/^name: //p')_wirebound-pgdata"
+NEW_VOLUME="$(pnpm -s db config | sed -n 's/^name: //p')_wirebound-pgdata"
 
 # 2. 받을 볼륨이 **비었는지** 본다 — 0 이 아니면 **멈춘다**(남의 PGDATA 위에 섞인다)
 docker volume create "$NEW_VOLUME"
@@ -620,11 +626,11 @@ docker run --rm -v "$OLD_VOLUME":/from:ro -v "$NEW_VOLUME":/to alpine sh -c 'cd 
 docker run --rm -v "$NEW_VOLUME":/t:ro alpine sh -c 'ls -A /t | wc -l'      # → 0 이 아니어야 한다
 
 # 4. 이 디렉터리에서 띄운다
-docker compose --env-file apps/api/.env up -d
-docker compose ps        # healthy 이고 PORTS 칸에 포트가 보여야 한다(위 ⓑ 의 빈 PORTS)
+pnpm db up -d
+pnpm db ps               # healthy 이고 PORTS 칸에 포트가 보여야 한다(위 ⓑ 의 빈 PORTS)
 
 # 5. 대조한다 — 0번과 같은 한 줄이어야 한다
-docker compose exec postgres psql -U wirebound -d wirebound -tAc \
+pnpm db exec postgres psql -U wirebound -d wirebound -tAc \
   'SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM projects), (SELECT count(*) FROM pages);'
 ```
 
@@ -633,12 +639,12 @@ docker compose exec postgres psql -U wirebound -d wirebound -tAc \
 - **복사가 들어갔나를 가르는 것은 셋이다** — 3번 끝의 `ls -A`(2번의 0 과 짝), 5번의 수 대조(복사를 건너뛰면
   `relation "users" does not exist` · 종료 1), 서버가 찍는 `이 서버가 보는 DB: … 마이그레이션 N건`(0건이면 빈 볼륨이라
   안 뜬다). `PORTS` 칸과 `wirebound_test` 의 목록은 **복사를 건너뛰어도 똑같이 나와** 가르지 못한다 — 테스트 DB 는
-  옛 볼륨의 것이 그대로 온다(`docker/postgres-init` 은 PGDATA 가 빌 때만 돈다).
+  옛 볼륨의 것이 그대로 온다(`docker/dev/postgres-init` 은 PGDATA 가 빌 때만 돈다).
 
 **되돌리기 — 순서가 전부다.** 새 것을 먼저 내리고 옛 것을 켠다:
 
 ```bash
-docker compose down                          # 이 디렉터리에서 — 새로 띄운 것
+pnpm db down                                 # 이 체크아웃에서 — 새로 띄운 것
 docker start "$OLD_CONTAINER"
 docker ps --filter name="^${OLD_CONTAINER}\$" --format '{{.Names}}\t{{.Ports}}'   # PORTS 가 비면 안 돌아간 것이다
 ```
@@ -647,33 +653,34 @@ docker ps --filter name="^${OLD_CONTAINER}\$" --format '{{.Names}}\t{{.Ports}}' 
 > `Up (healthy)` 인데 `PORTS` 가 빈 칸이다** — 그 포트에 붙는 것은 새 컨테이너다. 그 상태의 옛 컨테이너는
 > `stop` · `start` · `restart` 로 안 돌아온다(설정의 `PortBindings` 는 그대로인데 바인딩만 빈다). **컨테이너를 다시
 > 만드는 것이 유일한 길이다** — 옛 컨테이너를 만든 compose 프로젝트의 디렉터리에서, 옛 포트를 든 `apps/api/.env` 로
-> `docker compose --env-file apps/api/.env up -d --force-recreate`. **그 디렉터리가 없으면**(지운 워크트리) 같은
-> 이름의 디렉터리를 만들고 `docker-compose.yml` · `docker/postgres-init/` · 그 `apps/api/.env` 를 두고 거기서 같은
+> `pnpm db up -d --force-recreate`. **그 디렉터리가 없으면**(지운 워크트리) 같은
+> 이름의 디렉터리를 만들고 `package.json` · `docker/dev/` · 그 `apps/api/.env` 를 두고 거기서 같은
 > 명령을 친다 — 볼륨 이름이 디렉터리 이름을 따르므로 옛 볼륨이 그대로 붙는다. **어느 판에서도 데이터는 옛 볼륨에 그대로 있다.**
 > 다시 재는 법: 임시 프로젝트 둘로, 새 것을 띄운 채 옛 것에 `docker start` 를 두 번 치고 `docker ps` 의 `PORTS` 를 본다.
 
-> **`--env-file apps/api/.env` 는 `up` 에서 빼지 마라.** 빼면 포트가 기본값(5433)으로
-> 되돌아가 컨테이너가 **그 포트로 다시 만들어진다.** `ps`·`logs`·`exec`·`down` 은 프로젝트
-> 이름으로 찾으므로 플래그가 없어도 된다(이 기계에서 쟀다). **`POSTGRES_PORT` 를 바꿔
+> **개발 DB 는 `pnpm db …` 로만 부른다** — 그 스크립트가 포트 파일(`--env-file apps/api/.env`)과 프로젝트 디렉터리를 늘 준다.
+> **뿌리에서 친 맨 `docker compose …`(`ps` · `down` 포함)는 개발 DB 가 아니라 배포 compose(`compose.yaml` · 프로젝트
+> `wirebound-prod`)다** — 배포 값(`.env` 의 `WIREBOUND_DEPLOY`)이 없는 체크아웃에서는 멈추고, 있으면 그 기계의 운영 스택에 닿는다.
+> **`POSTGRES_PORT` 를 바꿔
 > 다시 띄우면 컨테이너는 `Recreated` 되고 볼륨은 그대로다**(이 기계에서 쟀다 — 임시
 > 프로젝트에 표를 하나 만들어 두고 포트를 바꿔 다시 띄웠더니 그 표가 그대로 있었다).
 
-> **워크트리를 지운 뒤 남은 컨테이너는 저장소 루트의 `docker compose down` 으로 못 찾는다.**
+> **워크트리를 지운 뒤 남은 컨테이너는 저장소 루트의 `pnpm db down` 으로 못 찾는다.**
 > 라벨 `com.docker.compose.project=<워크트리명>` · `project.working_dir=…/.worktrees/<워크트리명>` 이
-> git 이 모르는 디렉터리를 가리킨다 — `docker-compose.yml` 은 없고, 그 컨테이너를 다시 띄운 적이
-> 있으면 compose 의 바인드 마운트가 되살린 빈 `docker/postgres-init/` 만 있다. 다루려면
+> git 이 모르는 디렉터리를 가리킨다 — `docker/dev/compose.yaml` 은 없고, 그 컨테이너를 다시 띄운 적이
+> 있으면 compose 의 바인드 마운트가 되살린 빈 `docker/dev/postgres-init/` 만 있다. 다루려면
 > `docker compose -p <워크트리명> …` 이거나 `docker start/stop <컨테이너이름>` 이다(둘 다 이
 > 기계에서 확인했다). **그 빈 `postgres-init/` 은 그 프로젝트로 볼륨을 다시 만들면
 > `01-test-db.sql` 이 안 돈다는 뜻이기도 하다** — 「테스트가 이유를 알기 어려운 접속 에러로 죽는다」 절의 함정이 그때 온다.
 
 ### 6.4 테스트가 이유를 알기 어려운 접속 에러로 죽는다
 
-**원인.** 테스트 DB(기본 `wirebound_test`)가 없다. `docker/postgres-init/01-test-db.sql`이
+**원인.** 테스트 DB(기본 `wirebound_test`)가 없다. `docker/dev/postgres-init/01-test-db.sql`이
 그것을 만드는데 **그 스크립트는 볼륨을 처음 만들 때만 돈다.**
 
 **워크트리마다 컨테이너를 띄우면 볼륨이 새로 생기므로 그 스크립트가 매번 돈다** — 이 기계
 에서 쟀다(새 볼륨의 `psql \l` 에 `wirebound_test` 가 있다). **그래서 이 함정은 두 경우에만
-온다:** 옛 볼륨을 그대로 쓰는 경우, 그리고 **`docker/postgres-init/` 이 비어 있는 경우**다.
+온다:** 옛 볼륨을 그대로 쓰는 경우, 그리고 **`docker/dev/postgres-init/` 이 비어 있는 경우**다.
 뒤엣것도 이 기계에서 쟀다 — 그 디렉터리가 비면 컨테이너 로그가 이렇게만 말하고 지나간다:
 
 ```
@@ -683,7 +690,7 @@ docker ps --filter name="^${OLD_CONTAINER}\$" --format '{{.Names}}\t{{.Ports}}' 
 **조치.** 컨테이너 안에서 직접 만든다 — **자기 디렉터리에서** 친다.
 
 ```bash
-docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wirebound_test;'
+pnpm db exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wirebound_test;'
 ```
 
 > **그 에러가 이 줄을 스스로 들고 온다.** `globalSetup` 이 SQLSTATE `3D000` 을 잡아
@@ -691,7 +698,7 @@ docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE w
 > 종료 코드 1). 워크트리마다 테스트 DB 를 가르면(「워크트리를 여럿 띄울 때」) 이 자리를 자주 지나기 때문이다.
 > **`3D000` 일 때만 붙인다** — 다른 실패에까지 붙이면 엉뚱한 곳을 보게 된다.
 
-> **`docker compose down -v`로 볼륨을 지우는 길도 있지만 그것은 그 볼륨의 설계서를 전부
+> **`pnpm db down -v`로 볼륨을 지우는 길도 있지만 그것은 그 볼륨의 설계서를 전부
 > 지운다.** 위 한 줄로 끝나는 일에 그것을 쓰지 마라.
 
 ### 6.5 pptx 는 나오는데 화면 이미지가 없다
@@ -757,7 +764,8 @@ A 의 사용자를 돌려줬고 **B 의 API 는 그 로그인을 0 번 봤다.**
 주소가 30 번** 넘게 시도하면 그 창이 지날 때까지 옳은 비밀번호도 429 다(규칙은 `apps/api/README.md` 「로그인 시도 제한」 절).
 틀린 비밀번호를 여러 번 친 사람 · 스크립트가 흔한 까닭이고, 남이 내 이메일로 틀리게 보내도 이 갈래다. 비밀번호를 바꾸는
 명령(「비밀번호를 잊었다」 절)은 이 기록을 안 지운다.
-**앞단 뒤에 띄웠는데 모두가 이 문장을 본다**면 `TRUST_PROXY` 를 안 적은 것이다(「앞단(리버스 프록시)이 지킬 조건」).
+**앞단 뒤에 띄웠는데 모두가 이 문장을 본다**면 `TRUST_PROXY` 를 안 적은 것이다(「앞단(리버스 프록시)이 지킬 조건」). 배포 compose 는
+`TRUST_PROXY` 를 스스로 짓는다 — 그 판이면 입구 앞 프록시를 `.env` 의 `TRUSTED_PROXIES` 에 안 적은 것이다(`docs/guides/deploy-docker.md` 「믿는 앞단」).
 
 **푸는 길은 셋이다 — 기다리기 · 명령 · api 재기동.** 기록은 api 의 메모리에 있다. 명령은 서버에 손이 닿는 사람이 **그 api 를 띄운
 루트(같은 `apps/api/.env` 의 `HOST` · `PORT`)에서 · 그 api 를 띄운 사용자 · 같은 환경(`XDG_RUNTIME_DIR` · `TMPDIR`)으로** 친다 —
@@ -1057,7 +1065,7 @@ SCREEN_CHROMIUM_PATH=/usr/bin/chromium
 pnpm test          # 규격·값·인구조사.  Postgres 가 필요하다 (브라우저는 안 띄운다)
 pnpm typecheck     # 컴파일
 pnpm build         # packages/* 의 dist · system-themes/* 의 .wbtheme
-pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브라우저 · 운영 compose 의 값 (없으면 건너뛴다). 아래 둘을 차례로 돈다
+pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브라우저 · 배포 · 개발 compose 의 값 (없으면 건너뛴다). 아래 둘을 차례로 돈다
 pnpm test:build:serial  # 그 가운데 파일을 차례로 도는 갈래 — 루트 vitest 의 build 프로젝트(실브라우저 에디터 판은 빠진다)
 pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만, 파일 병렬 — apps/web/build-test (Postgres · 브라우저가 없으면 건너뛴다)
 ```
@@ -1108,64 +1116,23 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 
 ## 10. 배포하려면 — **단일 리눅스 서버 · docker compose**
 
-**배포 대상은 리눅스 서버 한 대 · docker compose 다** — api 프로세스 하나 · Postgres · 앞단(Caddy). 이미지는 저장소 뿌리의
-`Dockerfile`, 운영 compose 는 `deploy/` 다. 이 절의 값은 그 compose 를 **실제로 올려** 잰 것이다 — Colima 의 리눅스 VM(linux/arm64 ·
-4 CPU · 8GB · Docker 29.2.1 · Compose 5.1.4)이고 **운영 서버에서 돌려 본 적은 없다**(아래 「이 절이 안 잰 것 · 알려진 한계」).
+**배포 대상은 리눅스 서버 한 대 · docker compose 다** — 뿌리의 `compose.yaml` 이 **앱만** 올린다(Postgres · 마이그레이션 · api · 입구 `web`).
+입구는 HTTP 포트 하나를 열고, TLS · 도메인은 그 서버의 프록시가 맡는다 — 프록시에 맞춘 차이는 서버마다 쓰는 `compose.override.yaml` 이 갖는다.
+**올리는 절차 · 환경 변수 · override 예 · 운영 명령 · 잰 값 · Komodo 설정은 [`docs/guides/deploy-docker.md`](docs/guides/deploy-docker.md) 가 갖는다.**
+이 절은 이미지 없이 띄우는 사람도 지킬 조건만 갖는다.
 
-### 10.1 올리기 — `deploy/`
-
-**Komodo 로 올리면** Stack 설정 표와 Komodo 에서만 다른 것(비밀 참조 등)은 [`docs/guides/deploy-komodo.md`](docs/guides/deploy-komodo.md) 가 갖는다 — 아래와 같은 compose · 같은 `deploy/.env` 를 쓴다. 환경 변수의 키와 뜻은 `deploy/.env.example` 이 갖는다.
+### 10.1 올리기
 
 ```bash
 # 저장소 뿌리에서
-cp deploy/.env.example deploy/.env      # SITE_ADDRESS · POSTGRES_PASSWORD · SEED_USER_* 를 채운다
-docker compose -f deploy/docker-compose.yml up -d --build
+cp .env.example .env      # POSTGRES_PASSWORD · SEED_USER_* 를 채운다(WIREBOUND_DEPLOY=1 은 그대로 둔다)
+docker compose up -d --build
 ```
 
-**운영 compose 의 명령은 전부 `-f deploy/docker-compose.yml` 을 붙인다** — compose 가 `deploy/.env` 를 그 파일 옆에서 스스로 읽는다
-(개발용 compose 의 `--env-file apps/api/.env` 는 안 붙인다). 아래 표들의 `docker compose stop` 부류는 그 플래그를 줄여 적은 것이다.
+로그인은 TLS 너머에서만 선다(아래 「api 가 필요로 하는 것」의 `Secure` 줄) — 맨 HTTP 로는 서버 안의 `http://localhost:8080` 에서만 된다.
+사람들이 쓰는 주소는 TLS 를 끝내는 프록시를 앞에 세운다(그 가이드의 「앞에 프록시를 세운다」).
 
-| 서비스 | 무엇 | 바깥 포트 |
-|---|---|---|
-| `postgres` | `postgres:16-alpine` · 데이터는 볼륨 `wirebound-prod_pgdata` | 없음 |
-| `migrate` | api 이미지로 `src/db/migrate.ts latest` 를 한 번 돌고 끝난다 — 마이그레이션을 올리고 `SEED_USER_*` 로 최초 계정을 만든다(이미 있으면 그대로 둔다). **`up` 마다 다시 돈다** — 다 올라간 DB 에는 아무것도 안 한다 | 없음 |
-| `api` | `migrate` 가 종료 0 으로 끝나야 뜬다. 뜰 때 올리지 않고 견주기만 하므로(`apps/api/src/db/schema-version.ts`) 뒤처진 DB 로는 안 뜬다 — `migrate` 가 죽으면 api 도 안 뜨고 `docker compose logs migrate` 에 까닭이 있다 | 없음 |
-| `web` | Caddy — 에디터 정적 번들을 서빙하고 `/api` 를 api 로 넘긴다. TLS 를 끝낸다(도메인이면 인증서를 스스로 받는다) | 80 · 443 |
-
-- **개발용 `docker-compose.yml`(저장소 뿌리)과 다른 프로젝트다** — 운영 compose 는 프로젝트 이름을 `wirebound-prod` 로 고정한다.
-  디렉터리 이름에 맡기면 볼륨이 `deploy_…` 로 지어져 디렉터리를 옮기는 순간 빈 DB 로 뜬다(「워크트리를 여럿 띄울 때」).
-- **비밀은 이미지에 없다** — `.dockerignore` 가 `.env` 를 빌드 문맥에서 뺀다. 값은 `deploy/.env` 에서 기동 때 온다. `SEED_USER_*` 는
-  `migrate` 만 받는다 — api 컨테이너는 그 셋을 빈 값으로 받는다.
-- `SITE_ADDRESS` 가 도메인이면 그 도메인이 이 서버를 가리키고 80 · 443 이 바깥에서 닿아야 한다. `localhost` · `*.localhost` 는 Caddy 의
-  내부 CA 로 서명한다 — 아래 값은 `SITE_ADDRESS=wb.localhost` · `HTTPS_PORT=8443` 으로 쟀다.
-
-### 10.2 올린 판에서 잰 값
-
-| 단계 | 결과 |
-|---|---|
-| 빌드 | 캐시 없이(`build --no-cache --pull`) **151s**. 이미지 api **1.81GB** · web **86MB** |
-| `up -d --build`(이미지 캐시) | postgres healthy → migrate 종료 0(마이그레이션 전부 · 계정 시딩) → api healthy → web. 42s |
-| 에디터 로그인 화면으로 로그인 | 200 · 쿠키 `Secure` · `HttpOnly` |
-| 두 탭이 같은 페이지를 연다 | `wss://…/api/projects/<id>/ws` 가 붙고 `joined` · `presence` · `locks` |
-| 한 탭의 속성 패널에서 글을 고친다 | 다른 탭이 `page-changed` 를 받고 **33ms** 에 화면에 선다 · 서버 판이 같다 |
-| pptx 미리보기 · 내려받기(한 장) | 200 · `screenFailures: []` · `fontWarning: null` · 0.67s / 0.35s · 슬라이드 그림의 한글이 Noto Sans CJK 로 그려졌다 |
-| 이미지 안의 스모크(`screen-chromium.test.ts`) | **23 통과 · 건너뜀 0**(배포판 chromium 154 · `fonts-noto-cjk`) |
-| 40장 pptx 를 내려받는 중 · 에디터 WS 가 붙은 채 `docker compose stop` | 내려받기 **200 · 7.4MB · 그림 실패 0** — 앞단이 그 응답을 넘긴 뒤 WS 를 닫고 끝난다 · 모두 종료 0 · **5.6s** |
-| 같은 판에서 `docker compose stop api` 만(올리기 때 api 를 다시 만드는 판) | api 가 WS 를 곧바로 닫고(에디터는 재연결을 되풀이하며 그동안 502) 도는 pptx 를 끝까지 답한다 — **200 · 그림 실패 0** · 종료 0 · 5.8s |
-| 다시 `up` · `down` 뒤 `up` | 사용자 · 프로젝트 · 페이지 · 리비전 수가 같다 · 로그인해 둔 세션이 산다(`/api/auth/me` 200) |
-| 좀비 | 그림 뒤 chromium 좀비 0(tini 가 거둔다). node 의 자식 esbuild 좀비 하나가 남는다 — 내보내기 셋을 쉬는 시간(10s)을 넘겨 띄워 보낸 뒤에도 하나다(tsx 가 워커 스레드에서 띄운 것 · 늘지 않았다) |
-
-주소 키와 로그인 제한(`TRUST_PROXY` 는 앞단의 고정 주소 — 아래 「앞단(리버스 프록시)이 지킬 조건」):
-
-| 클라이언트 | api 가 본 주소(`remoteAddress`) |
-|---|---|
-| compose 네트워크의 컨테이너 둘(A · B)이 앞단으로 · `X-Forwarded-For: 6.6.6.6` 을 실어도 | 각자의 주소 — 앞단이 받은 머리를 버리고 소켓 주소로 새로 적는다 |
-| 같은 네트워크에서 api 에 곧바로 `X-Forwarded-For` 를 지어 적음 | 소켓 주소 — 믿는 앞단이 아니다 |
-| 호스트(macOS)에서 게시 포트로 | 셋 다 backend 네트워크의 게이트웨이(`10.231.47.128`) 하나 — Colima 가 포트를 넘기는 길이라 모든 요청이 한 주소다(아래 「이 절이 안 잰 것」) |
-
-A 가 틀린 비밀번호로 31번 → 30번 401 · 31번째 **429**. 그 뒤 B 는 **401**(B 가 A 의 주소를 `X-Forwarded-For` 에 적어도 401 — B 로 센다).
-
-### 10.3 api 가 필요로 하는 것
+### 10.2 api 가 필요로 하는 것
 
 `Dockerfile` 이 아래를 다 한다 — 이 표는 그 까닭이다. 이미지 없이 띄우는 사람도 이 표를 지킨다.
 
@@ -1176,11 +1143,11 @@ A 가 틀린 비밀번호로 31번 → 30번 401 · 31번째 **429**. 그 뒤 B 
 | **`pnpm build`** | 「테스트는 통과하는데 서버만 안 뜬다」 절과 같은 까닭 | — |
 | **`HOST=0.0.0.0`** | 기본값이 `127.0.0.1` 이다 | 컨테이너 포트를 열어도 **밖에서 안 닿는다**(호스트 `curl` 000 · 컨테이너 안 200) |
 | **마이그레이션을 먼저** | api 는 뜰 때 마이그레이션을 올리지 않는다 — 코드가 아는 것과 견주기만 한다(`apps/api/src/db/schema-version.ts`) | **뒤처진 DB 면 안 뜬다** — 종료 1 · 한 줄(`이 DB 는 마이그레이션이 뒤처졌습니다(… · 안 올라간 것: 0015-…) — 올린 뒤에 띄우십시오: pnpm --filter @wirebound/api migrate`). 빈 DB 도 안 뜬다(「띄우기」 절). 코드가 모르는 것이 올라간 DB(더 새 코드가 올렸다)면 경고 한 줄을 찍고 뜬다. **순서: `migrate` → 새 api** — compose 의 `migrate` 서비스가 그 순서다 |
-| **`NODE_ENV=production` 이면 TLS** | 세션 쿠키에 `Secure` 가 붙는다(`apps/api/src/auth/plugin.ts`) | http 로 연 화면에서 **로그인 200 인데 바로 다음 `/api/auth/me` 가 401** — 브라우저가 쿠키를 안 받는다(쿠키 0). `http://127.0.0.1` 은 Chrome 이 안전한 출처로 봐 된다 — **그래서 로컬에서는 안 보인다.** 헤드리스 Chrome 에 `--host-resolver-rules=MAP wb.test 127.0.0.1` 로 `http://wb.test` 를 열어 쟀다. `development` 면 둘 다 200 |
+| **`NODE_ENV=production` 이면 TLS** — 앞에 선 프록시가 끝낸다 | 세션 쿠키에 `Secure` 가 붙는다(`apps/api/src/auth/plugin.ts`) | http 로 연 화면에서 **로그인 200 인데 바로 다음 `/api/auth/me` 가 401** — 브라우저가 쿠키를 안 받는다(쿠키 0). `http://127.0.0.1` 은 Chrome 이 안전한 출처로 봐 된다 — **그래서 로컬에서는 안 보인다.** 헤드리스 Chrome 에 `--host-resolver-rules=MAP wb.test 127.0.0.1` 로 `http://wb.test` 를 열어 쟀다. `development` 면 둘 다 200 |
 | **PID 1 아래의 node 가 신호를 받는다** — pnpm 을 거치지 않는다 | `pnpm` 을 거치면 `SIGTERM` 이 서버의 정상 종료에 안 닿는다. 이미지는 `node --import tsx src/main.ts` 다 — tsx CLI 가 아니라서 부모 감시(`apps/api/src/shutdown.ts` 의 `launchedByTsxCli`)는 안 돈다 | `docker stop` 에 종료 코드 1(`--init` 이면 143) · «종료합니다» 줄 0 · **도는 요청이 소켓째 끊긴다**(`UND_ERR_SOCKET`) |
-| **init 을 둔다** — 이미지의 PID 1 은 `tini` | chromium 이 남긴 자식을 node 가 안 거둔다 | node 가 PID 1 이면 pptx 그림 한 번마다 `headless_shell` **좀비가 둘씩 쌓인다**(5번 → 10). tini 면 0(위 「올린 판에서 잰 값」) |
+| **init 을 둔다** — 이미지의 PID 1 은 `tini` | chromium 이 남긴 자식을 node 가 안 거둔다 | node 가 PID 1 이면 pptx 그림 한 번마다 `headless_shell` **좀비가 둘씩 쌓인다**(5번 → 10). tini 면 0 |
 | **터미널 밖에서 띄운다**(compose · 서비스 관리자) — `nohup` 으로는 창 닫기에서 못 지킨다 | api 는 `SIGHUP` 을 «닫아라»로 받는다(`apps/api/README.md` 「끄기」 절) — `nohup` 이 건 무시를 그 처리기가 덮는다 | macOS pty 의 bash 에서 `nohup node --import tsx src/main.ts > log 2>&1 &`(`nohup pnpm start` 도) 뒤 창(pty master)을 닫으면 «SIGHUP 수신 — 서버를 종료합니다»로 끝난다 |
-| **끄는 쪽의 한도가 api 의 한도보다 길다** | `SIGTERM` 을 받은 api 는 도는 요청(그리던 pptx 포함)을 끝까지 답하고 끝낸다 — 한도 30s(`apps/api/README.md` 「끄기」 절). compose 는 api · web 의 `stop_grace_period` 를 40s 로 둔다(기본 10s) | 끄는 쪽의 한도가 먼저 오면 그 뒤는 SIGKILL 이라 도는 응답이 끊긴다. 브라우저는 안 남는다 |
+| **끄는 쪽의 한도가 api 의 한도보다 길다** | `SIGTERM` 을 받은 api 는 도는 요청(그리던 pptx 포함)을 끝까지 답하고 끝낸다 — 한도 30s(`apps/api/README.md` 「끄기」 절). 배포 compose 는 api · web 의 `stop_grace_period` 를 40s 로 둔다(기본 10s) | 끄는 쪽의 한도가 먼저 오면 그 뒤는 SIGKILL 이라 도는 응답이 끊긴다. 브라우저는 안 남는다 |
 | **로그인 막힘을 푸는 명령은 api 가 든 그 컨테이너 · 그 사용자로** | 명령은 api 의 유닉스 소켓(`<바탕>/wirebound-<uid>/api-<HOST>-<PORT>.sock` — 바탕은 `XDG_RUNTIME_DIR`, 없으면 `TMPDIR` · `/tmp`)으로 보낸다(`apps/api/src/auth/unlock-socket.ts` 머리말). 이미지에서는 `/tmp/wirebound-1000/api-0.0.0.0-3001.sock` 이다 — `/tmp` 는 `node` 가 쓸 수 있고, `HOST` · `PORT` 는 이미지의 `ENV` 라 `docker compose exec` 셸도 같은 값을 본다. api 기동 로그의 `로그인 막힘을 푸는 입구: <경로>` 줄이 그 자리다 | 다른 사용자(`exec -u root`) · 다른 컨테이너(`run --rm api …`) · 다른 `HOST`(`exec -e HOST=127.0.0.1`)로 치면 `api 의 입구가 없습니다 — …` · 종료 1 · 아무것도 안 바뀐다 |
 | **로그는 표준출력** | api 는 표준출력에 pino JSON 을 쓴다. compose 는 json-file 드라이버에 20MB × 5 로 돌린다 — 안 돌리면 서버 디스크를 다 먹는다. api 는 로그를 못 써도 멈추지 않는다(`apps/api/src/log-destination.ts`) | — |
 
@@ -1188,16 +1155,16 @@ Node 판을 재는 법 — 저장소 뿌리에서 `git archive HEAD | docker run
 corepack enable && pnpm install --frozen-lockfile && pnpm build'`. tsdown 의 `engines`(`^22.18.0 || >=24.11.0`)는 24.0–24.10 을
 빼지만 그 판에서도 빌드가 돌아(24.10 에서 쟀다) `engines` 는 `>=22.18.0` 으로 둔다.
 
-**환경 값의 목록과 뜻은 `apps/api/.env.example` 이 소유한다.** 운영 compose 에서 사람이 적는 것은 `deploy/.env.example` 이 든다 —
-`HOST` · `PORT` · `NODE_ENV` 는 이미지가, `DATABASE_URL` · `TRUST_PROXY` 는 compose 가 정하고, **`POSTGRES_PORT` 는 두지 않는다**(개발용
+**환경 값의 목록과 뜻은 `apps/api/.env.example` 이 소유한다.** 배포 compose 에서 사람이 적는 것은 뿌리의 `.env.example` 이 든다 —
+`HOST` · `PORT` · `NODE_ENV` 는 이미지가, `DATABASE_URL` · `TRUST_PROXY` 는 compose 가 정하고, **`POSTGRES_PORT` 는 두지 않는다**(개발
 compose 가 여는 포트 — 있으면 접속 문자열과 포트가 맞는지 검사한다).
 
-### 10.4 pptx 의 화면 이미지 — 브라우저와 **한글 글꼴**
+### 10.3 pptx 의 화면 이미지 — 브라우저와 **한글 글꼴**
 
 **이미지는 배포판 `chromium` + `fonts-noto-cjk` 를 넣고 `SCREEN_CHROMIUM_PATH=/usr/bin/chromium` 을 둔다**(아래 표의 다섯째 줄). playwright
 캐시(`cli.js install --with-deps --only-shell`)를 고르지 않은 까닭: 보안 갱신이 apt 로 오고 의존 라이브러리를 패키지 관리자가 맞춘다.
-대가는 판이 `playwright-core` 가 맞춰 지은 리비전이 아니라는 것이다 — 그래서 **이미지를 새로 지으면 그 안에서 스모크를 돌린다**(아래 「다시 재는
-법」).
+대가는 판이 `playwright-core` 가 맞춰 지은 리비전이 아니라는 것이다 — 그래서 **이미지를 새로 지으면 그 안에서 스모크를 돌린다**(`docs/guides/deploy-docker.md`
+「다시 재는 법」).
 
 | 이미지 | 브라우저 | 한글 글리프를 가진 글꼴 | 미리보기 · pptx |
 |---|---|---|---|
@@ -1214,49 +1181,31 @@ compose 가 여는 포트 — 있으면 접속 문자열과 포트가 맞는지 
 - 표의 첫 다섯 줄은 `node:22-slim`(Debian 12) 위에서 쟀다 — 스모크가 한글 글꼴이 없는 두 이미지에서 **10 실패**(playwright 캐시) ·
   **9 실패**(배포판 chromium), 있는 세 이미지에서 **15 통과**였다.
 
-### 10.5 에디터 — 정적 파일
+### 10.4 에디터 — 정적 파일
 
-`pnpm --filter @wirebound/web build` 가 `apps/web/dist`(`index.html` + `assets/`)를 낸다. api 는 이것을 서빙하지 않는다 — **앞단이
-서빙한다**: `web` 이미지가 그 번들을 `/srv` 에 들고, `deploy/Caddyfile` 이 `/api/*` 만 api 로 넘기고 나머지는 파일로 답한다. 깊은
-링크(`/projects/…`)는 `index.html` 로 돌린다(`try_files` — 200 을 쟀다).
+`pnpm --filter @wirebound/web build` 가 `apps/web/dist`(`index.html` + `assets/`)를 낸다. api 는 이것을 서빙하지 않는다 — **입구가
+서빙한다**: `web` 이미지가 그 번들을 `/srv` 에 들고, `docker/web/Caddyfile` 이 `/api/*` 와 `/health` 만 api 로 넘기고 나머지는 파일로 답한다.
+깊은 링크(`/projects/…`)는 `index.html` 로 돌린다(`try_files`).
 
-### 10.6 앞단(리버스 프록시)이 지킬 조건
+### 10.5 앞단(리버스 프록시)이 지킬 조건
 
-| 조건 | 왜 | 쟀다 (Caddy 2.11.4 · `deploy/Caddyfile`) |
+앞단이 둘이다 — **입구**(`web` · `docker/web/Caddyfile` · 이미지에 구워진다)와 그 앞의 **각자의 프록시**(TLS · 도메인). 이미지 없이 띄우면
+둘을 프록시 하나가 맡는다. 「걸리는 곳」 칸이 어느 쪽이 지키는지다.
+
+| 조건 | 왜 | 걸리는 곳 |
 |---|---|---|
-| **에디터와 `/api` 가 같은 출처** | 세션 쿠키가 same-origin 으로 실리고 api 에 CORS 설정이 없다(「띄우기」 절) | 한 사이트 블록이 둘을 낸다 |
-| **TLS 를 앞단이 끝낸다** | `NODE_ENV=production` 의 `Secure` 쿠키(「api 가 필요로 하는 것」) | https 로 로그인 200 · 다음 `/api/auth/me` 200 |
-| **WS 업그레이드를 넘긴다** — `/api/projects/:id/ws` | 실시간 · 잠금 · 방송이 이 연결이다 | `reverse_proxy` 의 기본값이 넘긴다 — 붙고 프레임 셋(`joined` · `presence` · `locks`) |
-| **WS 유휴 제한이 25초보다 길다** | 에디터가 25초마다 `ping` 한다(`apps/web/src/realtime/connection.ts` 의 `DEFAULT_HEARTBEAT_MS`) | 핑 없이 150s 둔 연결이 산 채였다(재는 쪽이 닫음). 상류 응답을 기다리는 제한은 Caddy 문서상 기본값이 없다 — 잰 가장 긴 응답은 7.4s 였다. 두게 되면 가장 긴 내보내기보다 길게 둔다(장 수에 비례한다 — `apps/api/README.md` 「화면 이미지를 그리는 조건」) |
-| **클라이언트의 끊음을 상류로 전한다** | 사용자가 창을 닫거나 형식을 바꾸면 api 가 그 일을 버려야 칸이 돌아온다 | 기본값이 전한다 — 40장 × 40행 미리보기를 4.0s 에 끊자 api 가 곧바로 붙은 판과 **같은 때**(4.00s)에 «요청이 끊겨 내보내기를 멈췄다»를 적었다. **이미 브라우저에 넘긴 그리기는 끝까지 돌고 버려진다**(`apps/api/src/services/export-worker.ts` 머리말 «칸이 둘이다») — chromium 은 두 판 다 안 끊은 판이 끝나는 때(6s 안팎)에 사라졌다 |
-| **상류 keep-alive 유휴가 72초보다 짧다** | Fastify 의 `keepAliveTimeout` 기본값이 72s 다(`apps/api/src/app.ts` 의 닫기 주석) — 앞단이 상류 연결을 그보다 오래 두고 다시 쓰면 api 가 막 닫은 연결에 요청을 실을 수 있다 | Caddyfile 이 `keepalive 60s` 로 둔다(Caddy 문서의 기본값은 2분). **경주 자체는 안 쟀다** |
-| **`TRUST_PROXY` 에 앞단의 주소를 적는다** — **클라이언트가 닿는 대역은 적지 않는다** · 앞단은 `X-Forwarded-For` **끝에 포트 없는 클라이언트 주소를 둔다**(받은 값을 그대로 넘기지 않는다) | 로그인 시도 제한이 요청의 주소로 센다(`apps/api/README.md` 「로그인 시도 제한」 절) — 안 적으면 api 가 보는 주소가 모두 앞단 하나다. api 는 머리를 **오른쪽 끝부터** 읽어 믿는 앞단이 아닌 첫 항목을 주소로 삼는다. 포트가 붙으면 떼고 IP 가 아니면 앞단의 주소로 센다(`apps/api/src/auth/login-limit.ts` 의 `addressKey`) | compose 가 앞단을 고정 주소(`EDGE_IP`)에 두고 그 주소를 `TRUST_PROXY` 로 준다. Caddy 는 `trusted_proxies` 가 없으면 받은 머리를 **버리고** 소켓 주소를 적는다 — 위 「올린 판에서 잰 값」의 주소 표 · 로그인 제한 |
-| **앞단이 클라이언트의 진짜 주소를 본다** | 앞단이 보는 주소가 하나면 위 줄을 지켜도 모두가 한 주소다 | 이 기계(Colima)의 게시 포트로는 **못 지켰다** — 아래 「이 절이 안 잰 것」 |
-| 본문 크기 | — | Caddy 문서상 기본 상한이 없다 — api 의 `bodyLimit`(1MiB)이 413 을 낸다(앞단을 거친 413 은 안 쟀다) |
-| 끄는 동안 도는 응답 | compose 는 web 을 api 보다 먼저 끈다 | `grace_period 35s` — api 의 30s 보다 길고 web 의 `stop_grace_period` 40s 보다 짧다. 위 「올린 판에서 잰 값」의 `docker compose stop` 줄 |
+| **에디터와 `/api` 가 같은 출처** | 세션 쿠키가 same-origin 으로 실리고 api 에 CORS 설정이 없다(「띄우기」 절) | 입구가 한 사이트 블록으로 둘을 낸다 — 프록시는 경로를 가르지 않고 통째로 입구에 넘긴다 |
+| **TLS 를 앞단이 끝낸다** | `NODE_ENV=production` 의 `Secure` 쿠키(「api 가 필요로 하는 것」) | **각자의 프록시.** 입구는 HTTP 만 받는다 |
+| **WS 업그레이드를 넘긴다** — `/api/projects/:id/ws` | 실시간 · 잠금 · 방송이 이 연결이다 | 둘 다. 입구는 `reverse_proxy` 의 기본값이 넘긴다. nginx 는 `proxy_http_version 1.1` 과 `Upgrade` · `Connection` 머리가 있어야 한다(없으면 404) |
+| **WS 유휴 제한이 25초보다 길다** | 에디터가 25초마다 `ping` 한다(`apps/web/src/realtime/connection.ts` 의 `DEFAULT_HEARTBEAT_MS`) | 둘 다. 상류 응답을 기다리는 제한을 두면 가장 긴 내보내기보다 길게 둔다(장 수에 비례한다 — `apps/api/README.md` 「화면 이미지를 그리는 조건」) |
+| **클라이언트의 끊음을 상류로 전한다** | 사용자가 창을 닫거나 형식을 바꾸면 api 가 그 일을 버려야 칸이 돌아온다. **이미 브라우저에 넘긴 그리기는 끝까지 돌고 버려진다**(`apps/api/src/services/export-worker.ts` 머리말 «칸이 둘이다») | 둘 다. 입구는 Caddy 의 기본값이 전한다 |
+| **상류 keep-alive 유휴가 72초보다 짧다** | Fastify 의 `keepAliveTimeout` 기본값이 72s 다(`apps/api/src/app.ts` 의 닫기 주석) — 앞단이 상류 연결을 그보다 오래 두고 다시 쓰면 api 가 막 닫은 연결에 요청을 실을 수 있다 | 입구(api 의 바로 앞). `keepalive 60s` 로 둔다 — 값은 `apps/api/build-test/deploy-compose.test.ts` 가 잰다. 경주 자체는 안 쟀다 |
+| **api 는 바로 앞단 하나만 믿고, 그 앞단은 `X-Forwarded-For` 를 포트 없는 클라이언트 주소 하나로 넘긴다** — 클라이언트가 닿는 대역은 믿지 않는다 | 로그인 시도 제한이 요청의 주소로 센다(`apps/api/README.md` 「로그인 시도 제한」 절) — 안 지키면 모두가 앞단 하나의 주소로 세어 제한이 서버 전체에 한 벌로 걸리거나, 클라이언트가 지은 주소가 키가 된다. api 는 머리를 **오른쪽 끝부터** 읽어 믿는 앞단이 아닌 첫 항목을 주소로 삼는다. 포트가 붙으면 떼고 IP 가 아니면 앞단의 주소로 센다(`apps/api/src/auth/login-limit.ts` 의 `addressKey`) | api 의 `TRUST_PROXY` = 입구의 고정 주소(`EDGE_IP`). 입구는 `TRUSTED_PROXIES` 의 프록시에게서만 머리를 이어받아 오른쪽부터 고른 주소 하나로 새로 적는다(비우면 머리를 버리고 소켓 주소). 프록시는 받은 머리에 덧붙이거나 새로 적는다 — 그대로 넘기지 않는다. 잰 값은 `docs/guides/deploy-docker.md` 「믿는 앞단」 · 「잰 값」 |
+| **맨 앞의 프록시가 클라이언트의 진짜 주소를 본다** | 맨 앞이 보는 주소가 하나면 위 줄을 지켜도 모두가 한 주소다 | 각자의 프록시. 이 기계(Colima)의 게시 포트로는 못 지켰다 — 그 가이드의 「이 문서가 안 잰 것」 |
+| 본문 크기 | — | Caddy 문서상 기본 상한이 없다 — api 의 `bodyLimit`(1MiB)이 413 을 낸다. nginx 의 기본 `client_max_body_size 1m` 은 api 의 상한과 같다 |
+| 끄는 동안 도는 응답 | compose 는 web 을 api 보다 먼저 끈다 | 입구. `grace_period 35s` — api 의 30s 보다 길고 web 의 `stop_grace_period` 40s 보다 짧다(`deploy-compose.test.ts` 가 잰다) |
 
-**nginx 로 둘 때** — 재 본 설정(TLS 가 없다 · 잰 것이지 권하는 운영 설정이 아니다). `proxy_http_version 1.1` 과 `Upgrade` · `Connection`
-머리가 없으면 WS 가 **404**(5ms)이고 에디터는 재연결을 되풀이한다. `proxy_read_timeout 5s` 로 두자 WS 가 **5.0초**에 끊겼다(기본 60s 는
-넘는다). `upstream { keepalive … }` 를 안 두면 상류 연결을 남기지 않는다. 기본 `client_max_body_size 1m` 은 api 의 상한과 같다.
-**nginx 뒤의 `X-Forwarded-For` 는 안 쟀다** — 아래 설정은 그 머리를 안 싣는다. 싣는다면 위 표의 `TRUST_PROXY` 줄을 지키는지 따로 잰다.
-
-```nginx
-map $http_upgrade $connection_upgrade { default upgrade; '' close; }
-server {
-  listen 80;
-  root /srv/web;                                   # apps/web/dist
-  location / { try_files $uri /index.html; }
-  location /api/ {
-    proxy_pass http://api:3001;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $connection_upgrade;
-    proxy_set_header Host $host;
-  }
-}
-```
-
-### 10.7 화면 그리기 상한
+### 10.6 화면 그리기 상한
 
 pptx 의 화면은 요청마다 브라우저를 띄워 그린다 — **서버 하나의 메모리를 셋이 묶는다**:
 
@@ -1291,77 +1240,6 @@ pptx 의 화면은 요청마다 브라우저를 띄워 그린다 — **서버 �
 `mem_limit` 로 api 컨테이너를 묶지 않은 까닭: 넘으면 커널이 api 의 node 를 죽여 모든 사람의 편집 연결이 함께 끊긴다 — 입력(칸 ·
 넓이 · 장 수)을 묶는 쪽을 골랐다.
 
-### 10.8 백업 · 올리기(업그레이드) · 비밀번호
-
-```bash
-# 백업 — 저장소 뿌리에서. 복원은 새 DB 에 pg_restore(아래 «쟀다»)
-docker compose -f deploy/docker-compose.yml exec -T postgres pg_dump -U wirebound -Fc wirebound > wirebound-$(date +%F).dump
-
-# 올리기 — 새 코드를 받은 뒤. migrate 가 먼저 돌고, api 는 도는 요청을 끝까지 답한 뒤 새 것으로 바뀐다
-docker compose -f deploy/docker-compose.yml up -d --build
-
-# 비밀번호 재설정 — 터미널에서 숨겨 묻는다(「비밀번호를 잊었다」 절)
-docker compose -f deploy/docker-compose.yml exec api node --import tsx src/db/reset-password.ts me@example.com
-
-# 로그인 막힘 풀기 — 떠 있는 api 에 보낸다(「에디터가 뜨는데 로그인이 안 된다」의 ⓓ · 주소는 --address <주소>)
-docker compose -f deploy/docker-compose.yml exec api node --import tsx src/auth/unlock-login.ts me@example.com
-```
-
-- **쟀다:** 덤프(250KB)를 새 DB 에 `pg_restore` → 종료 0 · 수가 같다. 재설정은 pty 에 한 줄씩 쳐서 바꿨고 새 비밀번호로 로그인 200 이다
-  — 통째로 붙여 넣는 판은 이 길로는 안 쟀다(명령 쪽은 「비밀번호를 잊었다」 절의 재는 법). 막힘 풀기는 앞단 너머 틀린 비밀번호 10번 →
-  11번째부터 429(맞는 비밀번호도) → 이 명령(`창 안의 시도 10건을 지웠습니다`) → 200 이다. 그 컨테이너 · 그 사용자로 친다(「api 가 필요로 하는 것」).
-- **사람을 더 만들려면** `docker compose -f deploy/docker-compose.yml run --rm -e SEED_USER_EMAIL=… -e SEED_USER_PASSWORD=… migrate` — 시딩은 이미 있는 이메일을
-  그대로 두므로 값을 바꿔 다시 돌리면 계정이 하나 는다(쟀다). 비밀번호가 셸 기록에 남는다 — 곧 위 재설정으로 바꾼다.
-- **저장소 밖에서 칠 때**(배포 도구가 다른 자리에 clone 했거나 compose 파일이 없는 자리)는 `-f deploy/docker-compose.yml` 대신
-  `-p wirebound-prod` 를 붙인다 — 운영 compose 가 프로젝트 이름을 고정하므로 위치와 상관없이 떠 있는 같은 컨테이너에 닿는다
-  (`exec` · `logs` · `ps` 부류). `up` · `run --rm … migrate` 처럼 compose 파일이 필요한 명령은 `deploy/` 가 있는 자리에서 `-f` 로 친다 —
-  `-p` 만 주면 `no configuration file provided` 로 멈춘다. 다시 재는 법: compose 파일이 없는 디렉터리에서
-  `docker compose -p wirebound-prod exec -T postgres true` 의 종료 코드(0)와 같은 자리의 `docker compose -p wirebound-prod run --rm migrate` 의 오류.
-- 올리는 동안 WS 는 끊겼다 다시 붙는다(에디터가 스스로) — api 가 바뀌는 몇 초 동안 앞단은 502 를 낸다. 코드가 모르는 마이그레이션이
-  올라간 DB 로 옛 이미지를 띄우면(되돌리기) 경고 한 줄을 찍고 뜬다(「api 가 필요로 하는 것」).
-
-### 10.9 다시 재는 법 — 이미지를 게이트에 넣지 않는다
-
-이미지 빌드 · 기동은 게이트 넷에 없다 — 캐시 없는 빌드가 2분 반 · api 이미지 1.8GB 다. 대신 둘이 있다:
-
-- **값이 맞물리는지** — `pnpm test:build` 의 `apps/api/build-test/deploy-compose.test.ts` 가 `docker compose config` 로 푼 운영 compose 를
-  읽어 잰다(끄는 한도 대 api 의 한도 · 앞단의 grace · `TRUST_PROXY` = 앞단 주소 · 그 주소가 대역 안 · `ip_range` 밖 · 바깥 포트는 앞단만).
-  docker 가 없으면 건너뛴다.
-- **이미지를 새로 지었으면 그 안에서 스모크** — 브라우저 판과 글꼴이 든 것을 잰다(건너뜀 0 이어야 한다 — 건너뜀은 통과가 아니다):
-
-  ```bash
-  docker run --rm -u root -w /app --entrypoint "" wirebound-api:local \
-    node_modules/.bin/vitest run --project build apps/api/build-test/screen-chromium.test.ts
-  ```
-
-  `-u root` 는 build 프로젝트가 시작할 때 `packages/*` 를 다시 빌드해서다(이미지의 파일은 root 것이다).
-
-손으로 재는 한 판(위 「올린 판에서 잰 값」을 낸 순서) — `deploy/.env` 를 채우고 운영과 안 겹치게 프로젝트 이름을 바꿔 올린다:
-
-```bash
-docker compose -f deploy/docker-compose.yml -p wb-measure up -d --build
-# 앞단 주소로 에디터에 로그인 → 두 탭에서 편집 → pptx 미리보기 · 내려받기 → 40장 pptx 를 받는 중에 stop
-docker compose -f deploy/docker-compose.yml -p wb-measure stop
-docker compose -f deploy/docker-compose.yml -p wb-measure up -d   # 수를 견준다
-docker compose -f deploy/docker-compose.yml -p wb-measure down -v
-```
-
-주소 키는 `docker compose logs api` 의 `remoteAddress` 로 본다.
-
-### 10.10 이 절이 안 잰 것 · 알려진 한계
-
-- **x86_64** — 전부 linux/arm64 에서 쟀다.
-- **실제 도메인의 인증서 발급(ACME)** — `*.localhost` 로 내부 CA 만 쟀다.
-- **바깥 클라이언트의 진짜 주소** — 이 기계(Colima)에서는 호스트에서 게시 포트로 온 요청이 전부 backend 네트워크의 게이트웨이 하나로
-  보였다(위 주소 표) — 그 판이면 **로그인 주소 한도가 서버 전체에 한 벌로 걸린다.** 리눅스 서버에서 바깥 IPv4 는 도커가 iptables 로 넘겨
-  주소가 남는다고 알려져 있고, 도커의 IPv6 를 안 켠 채 IPv6 로 온 요청은 도커의 사용자 공간 프록시를 지나 게이트웨이 주소가 된다고
-  알려져 있다 — **둘 다 안 쟀다.** 올린 뒤 바깥에서 한 번 부르고 `docker compose logs api | grep remoteAddress` 가 게이트웨이(기본
-  `10.231.47.128`)면 그 판이다.
-- **다중 인스턴스 · 운영 DB** — 실시간 층이 프로세스 하나를 전제한다.
-- **상류 keep-alive 경주** — 「앞단(리버스 프록시)이 지킬 조건」 표의 그 줄.
-- **api 의 종료 한도(30s)를 넘는 일** — 한도 뒤 종료 1 은 `apps/api/test/shutdown.test.ts` 가 재고, 컨테이너에서는 30s 를 넘는 일을 안
-  돌려 봤다.
-
 ---
 
 
@@ -1372,7 +1250,7 @@ docker compose -f deploy/docker-compose.yml -p wb-measure down -v
 | 무엇 | 사정 |
 |---|---|
 | **리눅스·Windows** | 이 문서의 값은 **macOS · Apple Silicon** 에서 쟀다 — 「배포하려면」 절만 리눅스 VM 의 컨테이너(arm64)다. `packages/cli`의 경로 처리가 POSIX 문자열 조작만 하므로 **Windows 의 역슬래시 구분자는 다뤄지지 않았다**(`packages/cli/src/paths.ts`가 그렇게 적고 있다) |
-| **배포** | 「배포하려면」 절의 「이 절이 안 잰 것 · 알려진 한계」 |
+| **배포** | `docs/guides/deploy-docker.md` 「이 문서가 안 잰 것」 |
 | **npm 배포** | 패키지가 전부 `private`이다. `npm i -g wirebound` 같은 길은 **없다** — 「부르는 길이 둘이고」 절이 그래서 두 길을 든다 |
 | **Claude Code 밖의 MCP 호스트** | 「다른 호스트」 절 |
 | **첫 설치의 내려받기 시간** | 「세우기」 절의 `pnpm install` 값은 **스토어가 따뜻한 기계**의 것이다 |
@@ -1408,8 +1286,10 @@ packages/mcp           MCP 서버 · 스킬
 system-themes/*        저장소 테마 다섯 — pnpm build 가 .wbtheme 로 내고 api 가 기동 때 넣는다
 apps/web               설계서 에디터
 apps/api               REST + WebSocket
-Dockerfile             운영 이미지 둘(api · web)
-deploy/                운영 compose · Caddyfile — 「배포하려면」
+Dockerfile             배포 이미지 둘(api · web)
+compose.yaml           배포 compose — 앱만(프록시는 서버마다 compose.override.yaml) · docs/guides/deploy-docker.md
+docker/web/            입구(web)의 Caddyfile
+docker/dev/            개발 Postgres compose · init 스크립트 — pnpm db …
 ```
 
 의존 방향은 한 방향이다: `schema` ← `renderer` ← 나머지.

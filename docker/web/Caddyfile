@@ -1,0 +1,39 @@
+# 앱의 입구 — 에디터 정적 번들을 서빙하고 `/api` 를 api 로 넘긴다. HTTP 하나만 받는다 — TLS · 도메인은 앞에 선 각자의 프록시가
+# 맡는다. 이 설정이 지키는 조건은 최상위 README 「앞단(리버스 프록시)이 지킬 조건」, 잰 값은 `docs/guides/deploy-docker.md` 「잰 값」이 갖는다.
+{
+	# 끄는 동안 도는 요청(그리던 pptx 내려받기)을 기다리는 한도. api 의 한도(`apps/api/src/shutdown.ts` 의 `SHUTDOWN_GRACE_MS` 30s)보다
+	# 길고 compose 의 `stop_grace_period`(40s)보다 짧게 둔다 — 입구가 먼저 끊으면 api 가 끝까지 답해도 사람에게 안 닿는다.
+	grace_period 35s
+
+	servers {
+		# 믿는 앞단 — compose 의 `TRUSTED_PROXIES`(공백으로 가른 IP · CIDR). **비우면 아무도 안 믿는다** — 받은 `X-Forwarded-For` 를
+		# 버리고 소켓 주소를 클라이언트 주소로 삼는다.
+		trusted_proxies static {$TRUSTED_PROXIES}
+		# 머리를 오른쪽부터 읽어 믿지 않는 첫 주소를 클라이언트로 삼는다 — 기본(왼쪽 끝)은 클라이언트가 지어 적은 값이다.
+		trusted_proxies_strict
+	}
+}
+
+:80 {
+	# `/health` 도 넘긴다 — 앞에 선 프록시 · 감시가 입구 너머 api 의 생사를 묻는 자리다.
+	@api path /api/* /health
+	handle @api {
+		reverse_proxy api:3001 {
+			# 이어 붙이지 않고 위에서 고른 클라이언트 주소 하나로 새로 적는다 — api 는 이 입구 하나만 믿으므로(`TRUST_PROXY`) 앞단의
+			# 주소가 머리에 남으면 그것을 클라이언트로 센다.
+			header_up X-Forwarded-For {client_ip}
+			# WS 업그레이드 · 클라이언트 끊김의 전달은 기본값이다.
+			transport http {
+				# 상류 keep-alive 를 api 의 `keepAliveTimeout`(72s)보다 짧게 쥔다 — 길면 api 가 막 닫은 연결에 요청을 싣는다.
+				keepalive 60s
+			}
+		}
+	}
+
+	handle {
+		root * /srv
+		# 깊은 링크(`/projects/…`)는 에디터의 `index.html` 로 돌린다.
+		try_files {path} /index.html
+		file_server
+	}
+}

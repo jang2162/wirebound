@@ -35,7 +35,7 @@ export const DEFAULT_TEST_DATABASE_URL = defaultTestDatabaseUrl()
  * 스위트가 **5433**, 즉 **남의 컨테이너**의 `wirebound_test` 를 지우며 돈다. 그 자리를 값
  * 하나로 없앤다 —
  * 안 적은 사람은 **자기 컨테이너의** `wirebound_test` 를 본다(볼륨을 처음 만들 때
- * `docker/postgres-init/01-test-db.sql` 이 만들어 둔다).
+ * `docker/dev/postgres-init/01-test-db.sql` 이 만들어 둔다).
  *
  * **적은 사람의 어긋남은 `portAgreementError` 가 잡는다** — 기본값은 어긋날 수가 없다.
  */

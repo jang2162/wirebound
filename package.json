@@ -7,6 +7,7 @@
     "node": ">=22.18.0"
   },
   "scripts": {
+    "db": "WIREBOUND_DEV_DB=1 docker compose --project-directory . -f docker/dev/compose.yaml --env-file apps/api/.env",
     "dev:api": "pnpm --filter @wirebound/api dev",
     "dev:web": "pnpm --filter @wirebound/web dev",
     "build": "pnpm --filter './packages/*' --filter './system-themes/*' -r build",
