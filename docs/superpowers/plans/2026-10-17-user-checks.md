@@ -1,6 +1,6 @@
 # 사람이 확인할 것 — 이월 장부의 사용자 확인 대기 11 행
 
-이월 장부(`2026-10-07-carry-ledger.md`)에서 에이전트가 이 기계로 잴 수 없어 사람의 손 · 기기 · 배포 DB 가 필요한 행만 모았다(N49 기준 · main `fec34c01`). 코드 차수는 여기서 멈췄다(사용자 결정 2026-10-17 «B»). 확인한 값을 알려 주면 그 행을 장부에서 닫는다.
+이월 장부(`2026-10-07-carry-ledger.md`)에서 에이전트가 이 기계로 잴 수 없어 사람의 손 · 기기 · 배포 DB 가 필요한 행만 모았다(N50 기준 · main `d26edc4e`). 코드 차수는 여기서 멈췄다(사용자 결정 2026-10-17 «B»). 확인한 값을 알려 주면 그 행을 장부에서 닫는다.
 
 모두 «정보» 이고 «낮음» 하나(L-013) · «모름» 하나(L-001)다. 지금 알려진 결함은 없다 — 확인하지 않아도 일은 된다.
 
@@ -34,21 +34,21 @@
 
 ## 4. 배포 인스턴스가 있을 때 — L-304
 
-배포한 서버(`deploy/`)의 DB 에서 아래를 **읽기 전용**으로 한 번 돌려 행 수를 알려 준다. 옛 문서 · 프리셋 · 스냅샷에 중첩 `Page` 가 몇 건 있는지 세는 것이다(있어도 편집 · 복원 · 내보내기는 된다 — 몇 건인지만 모른다). 이 기계의 사용자 DB 는 0 건이었다.
+배포한 서버(`deploy/`)의 DB 에서 아래를 **읽기 전용**으로 한 번 돌려 행 수를 알려 준다. 옛 문서 · 모듈(옛 프리셋을 옮긴 행 포함) · 스냅샷에 중첩 `Page` 가 몇 건 있는지 세는 것이다(있어도 편집 · 복원 · 내보내기는 된다 — 몇 건인지만 모른다). 이 기계의 사용자 DB 는 0 건이었다.
 
 ```sql
 begin read only;
 -- 페이지 문서: 뿌리 아래의 Page
 select id, project_id from pages
  where jsonb_path_exists(schema, 'strict $.root.**.children[*] ? (@.type == "Page")', '{}', true);
--- 프리셋: 맨 위 Page 와 그 아래의 Page
-select id, project_id, name from presets
- where jsonb_path_exists(schema, 'strict $[*] ? (@.type == "Page")')
-    or jsonb_path_exists(schema, 'strict $[*].**.children[*] ? (@.type == "Page")');
+-- 모듈: 맨 위 Page 와 그 아래의 Page
+select id, project_id, name from modules
+ where jsonb_path_exists(nodes, 'strict $[*] ? (@.type == "Page")')
+    or jsonb_path_exists(nodes, 'strict $[*].**.children[*] ? (@.type == "Page")');
 -- 스냅샷: payload 안 페이지마다
 select id, tag from snapshots
  where jsonb_path_exists(payload, 'strict $.pages[*].schema.root.**.children[*] ? (@.type == "Page")');
 rollback;
 ```
 
-식의 출처는 `2026-10-13-n31-report.md` 「프리셋 식(고친 것) · 스냅샷 식」 과 장부 L-036 행이다. 0 이 아니면 그 프로젝트의 `wireb lint` 가 코드 10 을 낸다(옛 문서는 저장을 막지 않는다).
+식의 출처는 `2026-10-13-n31-report.md` 「프리셋 식(고친 것) · 스냅샷 식」 과 장부 L-036 행이다. 모듈 식은 그 프리셋 식에서 표 이름과 열 이름(`presets.schema` → `modules.nodes`)만 바꾼 것이다 — 마이그레이션 `0024-modules.ts` 가 `presets` 표를 `modules` 로 옮기고 지웠다. 그 마이그레이션을 아직 적용하지 않은 인스턴스(`presets` 표가 남은 판)면 위 모듈 식 대신 `presets` 표에 `schema` 열로 같은 두 조건을 건다. 0 이 아니면 그 프로젝트의 `wireb lint` 가 코드 10 을 낸다(옛 문서는 저장을 막지 않는다).
