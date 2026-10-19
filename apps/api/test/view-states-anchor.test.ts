@@ -16,7 +16,7 @@ afterEach(resetRealData)
 
 const ADMIN = { id: 's_admin', name: '관리자' }
 
-/** 편집자 둘(bora · dahye). 목록 `viewStates`, 관리자 가지 안에 `n_ok`. */
+/** 편집자 둘(bora · dahye). 목록 `viewStates`, 관리자에서만 보이는 `n_ok`(목록에 관리자가 있을 때). */
 async function board(ctx: RealApiContext, viewStates: Array<{ id: string; name: string }> | undefined) {
   const bora = await signup(ctx)
   const dahye = await signup(ctx)
@@ -26,30 +26,14 @@ async function board(ctx: RealApiContext, viewStates: Array<{ id: string; name: 
   const page = await createPage(ctx, bora.cookie, project.id, menu.id)
   const base = `/api/projects/${project.id}/pages/${page.id}`
   const schema = {
-    version: 1,
+    version: 2,
     ...(viewStates === undefined ? {} : { viewStates }),
     root: {
       id: 'n_root',
       type: 'Page',
-      children: [
-        {
-          id: 'n_sw',
-          type: 'StateSwitch',
-          children: [
-            { id: 'n_c0', type: 'StateCase', props: { state: 'default' }, children: [] },
-            ...(viewStates?.some((state) => state.id === ADMIN.id)
-              ? [
-                  {
-                    id: 'n_c1',
-                    type: 'StateCase',
-                    props: { state: ADMIN.id },
-                    children: [{ id: 'n_ok', type: 'Button', props: { label: '승인' } }],
-                  },
-                ]
-              : []),
-          ],
-        },
-      ],
+      children: viewStates?.some((state) => state.id === ADMIN.id)
+        ? [{ id: 'n_ok', type: 'Button', props: { label: '승인' }, visibility: { mode: 'only', states: [ADMIN.id] } }]
+        : [],
     },
   }
   const put = await ctx.app.inject({ method: 'PUT', url: `${base}/schema`, cookies: bora.cookie, payload: { schema } as never })
@@ -76,7 +60,7 @@ describe('상태 목록 편집은 그 자리의 id 를 함께 싣는다 — 겹�
       const added = await fx.patch(
         fx.bora,
         head.headSeq,
-        addViewStateOps(head.schema, '손님', () => 's_guest')!,
+        addViewStateOps(head.schema, '손님', null, () => 's_guest')!,
       )
       expect(added.status, JSON.stringify(added.body)).toBe(200)
       // 다혜가 «손님»을 맨 앞으로 — 보라의 역연산(`remove /viewStates/1`)이 가리키던 자리에 «관리자»가 선다.
@@ -99,15 +83,11 @@ describe('상태 목록 편집은 그 자리의 id 를 함께 싣는다 — 겹�
       const added = await fx.patch(
         fx.bora,
         head.headSeq,
-        addViewStateOps(head.schema, '손님', () => 's_guest')!,
+        addViewStateOps(head.schema, '손님', null, () => 's_guest')!,
       )
       // 남의 편집이 목록 밖(노드)을 고친 판 — 판 번호는 오르지만 목록의 자리는 그대로다.
       expect(
-        (
-          await fx.patch(fx.dahye, added.body.seq!, [
-            { op: 'replace', path: '/root/children/0/children/1/children/0/props/label', value: '확인' },
-          ])
-        ).status,
+        (await fx.patch(fx.dahye, added.body.seq!, [{ op: 'replace', path: '/root/children/0/props/label', value: '확인' }])).status,
       ).toBe(200)
       const undo = await fx.resend(fx.bora, added.body.inverse!)
       expect(undo.status, JSON.stringify(undo.body)).toBe(200)
@@ -156,8 +136,8 @@ describe('상태 목록 편집은 그 자리의 id 를 함께 싣는다 — 겹�
     await withRealApi(async (ctx) => {
       const fx = await board(ctx, [ADMIN])
       const head = await fx.read()
-      const mine = addViewStateOps(head.schema, '손님', () => 's_guest')!
-      const theirs = addViewStateOps(head.schema, '직원', () => 's_staff')!
+      const mine = addViewStateOps(head.schema, '손님', null, () => 's_guest')!
+      const theirs = addViewStateOps(head.schema, '직원', null, () => 's_staff')!
       expect((await fx.patch(fx.dahye, head.headSeq, theirs)).status).toBe(200)
       expect((await fx.patch(fx.bora, head.headSeq, mine)).status).toBe(409)
       expect((await fx.resend(fx.bora, mine)).status).toBe(200)
@@ -172,7 +152,7 @@ describe('상태 목록 편집은 그 자리의 id 를 함께 싣는다 — 겹�
       const created = await fx.patch(
         fx.bora,
         head.headSeq,
-        addViewStateOps(head.schema, '손님', () => 's_guest')!,
+        addViewStateOps(head.schema, '손님', null, () => 's_guest')!,
       )
       expect(created.status, JSON.stringify(created.body)).toBe(200)
       const now = await fx.read()
@@ -181,7 +161,7 @@ describe('상태 목록 편집은 그 자리의 id 를 함께 싣는다 — 겹�
           await fx.patch(
             fx.dahye,
             now.headSeq,
-            addViewStateOps(now.schema, '직원', () => 's_staff')!,
+            addViewStateOps(now.schema, '직원', null, () => 's_staff')!,
           )
         ).status,
       ).toBe(200)

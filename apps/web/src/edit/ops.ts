@@ -17,6 +17,7 @@ import {
   WEIGHT_MAX,
   WEIGHT_MIN,
   type Interaction,
+  type NodeVisibility,
   type PageDocument,
   type PatchOp,
   type WbNode,
@@ -179,6 +180,26 @@ export function weightOps(document: PageDocument, nodeId: string, weight: number
   if (!Number.isInteger(weight) || weight < WEIGHT_MIN || weight > WEIGHT_MAX) return null
   if (has && node.weight === weight) return null
   return has ? [{ op: 'replace', path, value: weight }] : [{ op: 'add', path, value: weight }]
+}
+
+/**
+ * 노드의 상태 보임(`visibility` — 설계 spec `2026-10-18-modules-states-layout-design.md` 「C2」)을 바꾸는 op. `weightOps` 와 같은 층 · 같은 갈래다 —
+ * 키가 있으면 `replace`(통째 — 모드와 상태가 한 값이다), 없으면 `add`, `null` 이면 `remove`(없으면 `null`), 지금과 같으면 `null`. `states` 가
+ * 비면 `null` 이다 — 봉투가 거절할 값이다(보임을 걷는 것은 `null` 로 한다). 뿌리는 숨을 수 없어(검증이 거절한다) `null` 이다.
+ */
+export function visibilityOps(document: PageDocument, nodeId: string, visibility: NodeVisibility | null): PatchOp[] | null {
+  const nodePath = findNodePathSafely(document.root, nodeId)
+  if (nodePath === undefined || nodePath === '/root') return null
+  const node = findNodeSafely(document.root, nodeId)
+  if (node === undefined) return null
+
+  const path = `${nodePath}/visibility`
+  const has = Object.hasOwn(node, 'visibility')
+  if (visibility === null) return has ? [{ op: 'remove', path }] : null
+  if (visibility.states.length === 0) return null
+  const value: NodeVisibility = { mode: visibility.mode, states: [...visibility.states] }
+  if (has && JSON.stringify(node.visibility) === JSON.stringify(value)) return null
+  return has ? [{ op: 'replace', path, value }] : [{ op: 'add', path, value }]
 }
 
 /**

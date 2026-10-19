@@ -45,7 +45,7 @@ async function createProjectWithPage(ctx: TestContext, owner: SignedUpUser) {
 /** POST가 만드는 빈 기본 문서와 확실히 다른(자식이 하나 있는) 유효 문서. revision 테스트들이 공유한다. */
 function docWithText(content = '안녕') {
   return {
-    version: 1,
+    version: CURRENT_DOCUMENT_VERSION,
     root: { id: 'n_root', type: 'Page', children: [{ id: 'n_text', type: 'Text', props: { content } }] },
   }
 }
@@ -177,8 +177,8 @@ describe('POST /api/projects/:projectId/pages', () => {
         payload: { menuNodeId: menu.id, title: '새 페이지' },
       })
       const body = res.json() as PageResponse
-      expect(body.schemaVersion).toBe(1)
-      expect(body.schema.version).toBe(1)
+      expect(body.schemaVersion).toBe(CURRENT_DOCUMENT_VERSION)
+      expect(body.schema.version).toBe(CURRENT_DOCUMENT_VERSION)
     })
   })
 
@@ -671,7 +671,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       const { project, page } = await createProjectWithPage(ctx, owner)
 
       const doc = {
-        version: 1,
+        version: CURRENT_DOCUMENT_VERSION,
         root: {
           id: 'n_root',
           type: 'Page',
@@ -761,9 +761,9 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
           method: 'PUT',
           url: `/api/projects/${project.id}/pages/${page.id}/schema`,
           cookies: owner.cookie,
-          payload: { schema: { version: 2, root: { id: 'n_root', type: 'Page', children: [] } } },
+          payload: { schema: { version: CURRENT_DOCUMENT_VERSION + 1, root: { id: 'n_root', type: 'Page', children: [] } } },
         })
-        // 이 케이스는 1단계(zod 파싱)를 통과한다 — version:2는 그 자체로 유효한
+        // 이 케이스는 1단계(zod 파싱)를 통과한다 — 지금보다 높은 판은 그 자체로 유효한
         // 양의 정수다. 400은 2단계(migrateDocument가 지원하지 않는 버전에 대해
         // 던짐)에서 나온다 — 1단계와는 다른 코드 경로지만 같은 400이다.
         expect(res.statusCode).toBe(400)

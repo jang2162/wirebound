@@ -49,7 +49,7 @@
  * 함수 몸 안에서만 쓰므로 적재 순서와 무관하다.
  */
 import { MAX_OPS_PER_EDIT, type NodeLock } from '@wirebound/schema'
-import { MULTI_DISABLED, MULTI_WHY_DISABLED, type RegionBlocked, type StructureAbilities } from '../edit/structure-actions'
+import { MULTI_DISABLED, MULTI_WHY_DISABLED, type StructureAbilities } from '../edit/structure-actions'
 import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
 import { MENU_WHY_DISABLED, STRUCTURE_WHY_DISABLED } from './tree-row-actions'
 
@@ -91,8 +91,6 @@ export interface StructureReasonInput {
    */
   pageLock: NodeLock | null
   abilities: StructureAbilities
-  /** 상태 영역의 자리 규칙이 끈 항목과 까닭(`edit/structure-actions.ts` 의 `regionRules`) — 표(`STRUCTURE_WHY_DISABLED`)보다 먼저 말한다. */
-  region?: RegionBlocked
 }
 
 /**
@@ -115,9 +113,6 @@ export function structureItemReason(input: StructureReasonInput, key: keyof Stru
   }
   // 루트가 아닌데 `addAfter` · `remove`가 함께 꺼졌으면 그 노드가 문서에 없다 — 찾은 비루트 노드는 둘이 언제나 참이다(`structureAbilities`).
   // 루트는 둘이 늘 꺼져 있으므로 이 칸에서 뺀다 — 고른 노드는 있고 그것이 루트다.
-  // 상태 영역 규칙이 끈 항목은 그 까닭을 — 아래 «문서에 없다» 칸보다 먼저다(가지는 `addAfter` · 기본 가지는 `remove`가 함께 꺼져 그 칸과 같은 값이다).
-  const region = input.region?.[key]
-  if (region !== undefined) return region
   if (!input.isRoot && !input.abilities.addAfter && !input.abilities.remove) return NOT_IN_DOCUMENT_STATUS
   return STRUCTURE_WHY_DISABLED[key]
 }

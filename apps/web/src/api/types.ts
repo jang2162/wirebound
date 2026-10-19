@@ -9,7 +9,7 @@
  * 예외는 `PageDetail.schema`다. 문서 스키마는 서버가 아니라 `@wirebound/schema`가
  * 소유하는 단일 진실이므로 그 타입을 그대로 쓴다.
  */
-import type { PageDocument, PatchOp, ValidationIssue, WbNode } from '@wirebound/schema'
+import type { PageDocument, PatchOp, ValidationIssue, ViewState, WbNode } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 
 /** 프로젝트 멤버의 역할. `owner` > `editor` > `viewer`(README "권한(역할)"). */
@@ -193,6 +193,11 @@ export interface TreePage {
   id: string
   title: string
   sortOrder: number
+  /**
+   * 그 페이지의 화면 상태 목록(트리 응답 — `apps/api/src/services/menu-tree.ts` 의 `TreePage`). 메뉴 트리의 상태 줄이 열리지 않은 페이지에서
+   * 쓴다(`panels/state-rows.tsx`). 없으면 상태가 없는 페이지로 읽는다.
+   */
+  viewStates?: ViewState[]
 }
 
 /** 통합 트리의 메뉴 노드. 페이지는 항상 메뉴 노드에 속하므로 루트 페이지 목록은 없다. */

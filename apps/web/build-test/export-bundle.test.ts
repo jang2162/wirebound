@@ -181,8 +181,9 @@ async function downloadBundle(stack: EditorStack, session: Session, projectId: s
 }
 
 /**
- * 화면 상태가 있는 페이지 하나(«회원 목록» — 상태 «관리자» · «비로그인»). 영역 하나: 기본 가지 «보기», 관리자 가지 «승인»(제목을 숨기는
- * 상호작용 · 코멘트). 비로그인 가지는 없다 — 기본으로 그린다.
+ * 화면 상태가 있는 페이지 하나(«회원 목록» — 상태 «관리자» > «운영» · «비로그인»). «보기»는 관리자에서 숨고(`except`), «승인»은 관리자에서만
+ * 보인다(`only` — 제목을 숨기는 상호작용 · 코멘트). «운영»은 관리자의 하위 상태라 관리자의 보임을 물려받는다. 목록에서 «운영»이 끝에 있어도 고르개는
+ * 트리 차례다.
  */
 async function exportStateProject(stack: EditorStack, owner: Session): Promise<string> {
   const call: Call = (method, path, body) => stack.request(owner, method, path, body)
@@ -199,7 +200,6 @@ async function exportStateProject(stack: EditorStack, owner: Session): Promise<s
   )
   const menu = ok(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '관리자' }), '메뉴')
   const page = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '회원 목록' }), '페이지')
-  const caseOf = (id: string, state: string, child: object) => ({ id, type: 'StateCase', props: { state }, children: [child] })
   ok(
     await call('PATCH', `/projects/${project.id}/pages/${page.id}/ops`, {
       baseSeq: 0,
@@ -210,24 +210,24 @@ async function exportStateProject(stack: EditorStack, owner: Session): Promise<s
           value: [
             { id: 's_admin00001', name: '관리자' },
             { id: 's_guest00001', name: '비로그인' },
+            { id: 's_ops0000001', name: '운영', parent: 's_admin00001' },
           ],
         },
         { op: 'add', path: '/root/children/0', value: { id: 'n_title00001', type: 'Text', props: { content: '회원 목록 제목' } } },
         {
           op: 'add',
           path: '/root/children/1',
+          value: { id: 'n_view000001', type: 'Button', props: { label: '보기' }, visibility: { mode: 'except', states: ['s_admin00001'] } },
+        },
+        {
+          op: 'add',
+          path: '/root/children/2',
           value: {
-            id: 'n_switch0001',
-            type: 'StateSwitch',
-            children: [
-              caseOf('n_cased00001', 'default', { id: 'n_view000001', type: 'Button', props: { label: '보기' } }),
-              caseOf('n_casea00001', 's_admin00001', {
-                id: 'n_apprv00001',
-                type: 'Button',
-                props: { label: '승인' },
-                interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_title00001', value: false }] }],
-              }),
-            ],
+            id: 'n_apprv00001',
+            type: 'Button',
+            props: { label: '승인' },
+            visibility: { mode: 'only', states: ['s_admin00001'] },
+            interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_title00001', value: false }] }],
           },
         },
       ],
@@ -389,8 +389,9 @@ describe.skipIf(!전제.ok)('내보낸 번들을 파일로 연다', () => {
   })
 
   /**
-   * **화면 상태 전환기**(설계서 「HTML 정적 번들」) — 셸의 `select#wb-export-state` 를 고르면 목업이 그 상태의 가지로 다시 서고 주소 해시가
-   * 따라간다. 해시로 연 파일은 그 상태로 서고, 목록에 없는 id 는 기본이다. `WB_SHOTS_DIR` 를 주면 관리자 상태의 화면을 찍어 둔다.
+   * **화면 상태 전환기**(설계서 「HTML 정적 번들」) — 셸의 `select#wb-export-state` 는 트리 차례로 하위 상태를 들여 쓰고, 고르면 목업이 그 상태에서
+   * 숨은 노드를 빼고 다시 서며 주소 해시가 따라간다. 하위 상태는 부모의 보임을 물려받는다. 해시로 연 파일은 그 상태로 서고, 목록에 없는 id 는
+   * 기본이다. `WB_SHOTS_DIR` 를 주면 관리자 상태의 화면을 찍어 둔다.
    */
   it('상태가 있는 페이지는 전환기로 상태를 바꾸고, 해시로 연 파일은 그 상태로 선다', async () => {
     const alice = await stack.login(stack.users.alice)
@@ -401,7 +402,7 @@ describe.skipIf(!전제.ok)('내보낸 번들을 파일로 연다', () => {
     const first = await openBundle(stack, dir, { viewport })
     try {
       const { page, errors } = first
-      expect(await page.locator('#wb-export-state option').allInnerTexts()).toEqual(['기본', '관리자', '비로그인'])
+      expect(await page.locator('#wb-export-state option').allInnerTexts()).toEqual(['기본', '관리자', '\u00a0\u00a0운영', '비로그인'])
       expect(await canvas(page)).toContain('보기')
       expect(await canvas(page)).not.toContain('승인')
       expect(await page.locator('.wb-export-marker').count()).toBe(0)
@@ -420,6 +421,12 @@ describe.skipIf(!전제.ok)('내보낸 번들을 파일로 연다', () => {
       // 그 상태의 상호작용이 돈다.
       await page.locator('[data-wb-id="n_apprv00001"]').click()
       expect(await canvas(page)).not.toContain('회원 목록 제목')
+
+      // 하위 상태는 관리자의 보임을 물려받는다 — «승인»이 서고 «보기»가 숨는다.
+      await page.locator('#wb-export-state').selectOption('s_ops0000001')
+      expect(await canvas(page)).toContain('승인')
+      expect(await canvas(page)).not.toContain('보기')
+      expect(new URL(page.url()).hash).toBe('#state=s_ops0000001')
 
       await page.locator('#wb-export-state').selectOption('default')
       expect(new URL(page.url()).hash).toBe('')

@@ -102,14 +102,14 @@ describe('checkTheme', () => {
     expect(report.errors[0]!.message).toContain('Root 를 그리지 않아')
   })
 
-  it('테마가 안 그리는 타입(StateSwitch)의 뷰 키는 오류로 선다 — 문장도 그 키를 말한다', async () => {
+  it('걷은 상태 영역(StateSwitch)의 뷰 키는 카탈로그 밖 키로 선다 — 문장도 그 키를 말한다', async () => {
     const report = await checkTheme(files(BASE, { views: `{ StateSwitch: () => h('div', null, '무시된다') }` }))
     expect(report.errors.map((error) => [error.type, error.source, error.message])).toEqual([
-      ['StateSwitch', 'bundle', expect.stringContaining('그리지 않는')],
+      ['StateSwitch', 'bundle', expect.stringContaining('카탈로그에 없는')],
     ])
     expect(report.items).toBeGreaterThan(0)
     expect(formatCheckReport(report).lines).toContain(
-      '✗ [bundle] 번들: views.StateSwitch 는 테마가 그리지 않는 타입의 뷰입니다 — 렌더러가 직접 다뤄 쓰이지 않습니다',
+      '✗ [bundle] 번들: views.StateSwitch 는 카탈로그에 없는 타입의 뷰입니다 — 쓰이지 않습니다',
     )
   })
 

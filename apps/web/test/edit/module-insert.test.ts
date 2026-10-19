@@ -123,22 +123,25 @@ describe('moduleInsertOps', () => {
     expect(moduleDroppedNotice(edit)).toBe('상호작용 동작 2개는 대상이 없어 빼고 넣었습니다.')
   })
 
-  it('넣는 페이지의 목록에 없는 상태의 가지를 뺀다 — 지금 고른 상태와 무관하다', () => {
-    const region: WbNode = {
-      id: 'm_sw',
-      type: 'StateSwitch',
-      children: [
-        { id: 'm_c0', type: 'StateCase', props: { state: 'default' }, children: [{ id: 'm_t0', type: 'Text' }] },
-        { id: 'm_c1', type: 'StateCase', props: { state: 's_admin' }, children: [{ id: 'm_t1', type: 'Text' }] },
-        { id: 'm_c2', type: 'StateCase', props: { state: 's_gone' }, children: [{ id: 'm_t2', type: 'Text' }] },
-      ],
+  /**
+   * **넣은 노드는 보임 없이 들어간다** — 모듈에는 상태가 없다(설계 spec «B3» · «C2»). 저장이 걷지만(`moduleNodesForSave`) 그 앞에 저장된 묶음 ·
+   * 손으로 넣은 행에 보임이 남았어도 넣기가 걷는다 — 넣는 페이지에 같은 id 의 상태가 있어도(`s_admin`) 붙지 않는다.
+   */
+  it('넣은 노드는 보임 없이 들어간다 — 자손까지 · 넣는 페이지에 그 상태가 있어도', () => {
+    const boxed: WbNode = {
+      id: 'm_box',
+      type: 'Card',
+      visibility: { mode: 'only', states: ['s_admin'] },
+      children: [{ id: 'm_t', type: 'Text', visibility: { mode: 'except', states: ['default'] } }],
     }
     const before = doc({ viewStates: [{ id: 's_admin', name: '관리자' }] })
-    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: [region] }, target(before, null), NO_PAGES, counter())
+    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: [boxed] }, target(before, null), NO_PAGES, counter())
     if ('reason' in edit) throw new Error(edit.reason)
     const placed = applyOps(before, edit.ops).root.children![2]!
-    expect(placed.children!.map((child) => child.props?.['state'])).toEqual(['default', 's_admin'])
-    expect(edit.droppedCases).toEqual([{ state: 's_gone', count: 1 }])
+    expect(placed.visibility).toBeUndefined()
+    expect(placed.children![0]!.visibility).toBeUndefined()
+    // 입력(저장된 묶음)은 그대로다 — 카드가 다시 넣을 때 쓴다.
+    expect(boxed.visibility).toEqual({ mode: 'only', states: ['s_admin'] })
   })
 
   it('패턴은 그대로 넣고 첫 슬롯 노드를 고른다', () => {

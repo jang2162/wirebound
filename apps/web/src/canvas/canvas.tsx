@@ -39,7 +39,7 @@ import {
   type InteractionOverlay,
   type NodeRenderError,
 } from '@wirebound/renderer'
-import { describePageTarget, type PageDocument, type WbNode } from '@wirebound/schema'
+import { describePageTarget, type PageDocument } from '@wirebound/schema'
 import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
@@ -57,9 +57,6 @@ import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
 import { guideOf, useLayoutGuides, type Guide, type GuideLine } from './layout-guides'
-import { useTagStack } from './region-tag-stack'
-import { EMPTY_BRANCH_LABEL, regionBoxOf, regionMarks, type RegionMark } from './view-state-regions'
-import { StateRegionBadges } from './state-badges'
 import { useCanvasMarquee } from './use-canvas-marquee'
 import { themeFileUrl } from '../theme/bundle-loader'
 import { useProjectTheme, type ProjectThemeState } from '../theme/project-theme'
@@ -211,8 +208,6 @@ export function Canvas(props: {
   const [markers, setMarkers] = useState<MarkerBox[]>(NO_MARKERS)
   /** 배치 선(`./layout-guides.tsx`) — 켰고 편집 모드일 때 Flex · Grid 노드마다. */
   const [guides, setGuides] = useState<readonly GuideBox[]>(NO_GUIDES)
-  /** 상태 영역 표지(`./view-state-regions.ts`) — 편집 모드일 때 영역마다. */
-  const [regions, setRegions] = useState<readonly RegionBox[]>(NO_REGIONS)
   /** 문서를 그리는 iframe. 그 문서가 서기 전에는 잴 것이 없다. */
   const [frame, setFrame] = useState<CanvasFrame | null>(null)
   /**
@@ -397,14 +392,8 @@ export function Canvas(props: {
     const next: OutlineBox[] = []
     for (const nodeId of outlinedIds) {
       const target = findNodeElement(frame.document, nodeId)
-      if (target !== null) {
-        next.push({ nodeId, box: measure(target, offset) })
-        continue
-      }
-      // 상태 영역 · 가지는 렌더러의 투명 노드라 요소가 없다 — 표지와 같은 «보이는 가지 자식 합»(빈 가지면 자리표)으로 잰다.
-      const rect = rendered === null ? null : regionBoxOf(rendered, nodeId, viewState, (id) => findNodeElement(frame.document, id))
-      if (rect !== null)
-        next.push({ nodeId, box: { left: offset.left + rect.left, top: offset.top + rect.top, width: rect.width, height: rect.height } })
+      // 지금 상태에서 숨은 노드는 요소가 없다 — 외곽선을 안 세운다(구조 트리 · 속성 패널로 다룬다).
+      if (target !== null) next.push({ nodeId, box: measure(target, offset) })
     }
     setBoxes((prev) => (sameOutlines(prev, next) ? prev : next))
     // `doc`·`viewportWidth`가 의존성에 있는 것은 둘이 바뀌면 노드의 자리가 바뀌기
@@ -497,27 +486,6 @@ export function Canvas(props: {
   }, [guidesOn, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
-   * **상태 영역 표지의 자리를 잰다**(`./view-state-regions.ts`). 배치 선과 같은 장치 · 같은 의존에 지금 상태를 더했다 — 상태를 바꾸면 보이는
-   * 가지가 바뀌어 상자 · 꼬리표가 바뀐다. 편집 모드에서만 그린다(뷰 모드의 «상태에 따라 다름» 표지는 다른 자리다).
-   */
-  useLayoutEffect(() => {
-    const surface = surfaceRef.current
-    if (mode !== 'edit' || surface === null || frame === null || rendered === null) {
-      setRegions((prev) => (prev.length === 0 ? prev : NO_REGIONS))
-      return
-    }
-    const offset = frameOffset(frame, surface, zoom)
-    const next = regionMarks(rendered, viewState, (id) => findNodeElement(frame.document, id)).map((mark) => ({
-      ...mark,
-      box: { left: offset.left + mark.rect.left, top: offset.top + mark.rect.top, width: mark.rect.width, height: mark.rect.height },
-    }))
-    setRegions((prev) => (sameRegions(prev, next) ? prev : next))
-  }, [mode, viewState, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
-  // 영역이 영역의 직계 자식이면 꼬리표가 같은 자리에 겹쳐 선다 — 깊이마다 한 줄씩 아래로 쌓는다(`./region-tag-stack.ts`).
-  const regionAnchors = useMemo(() => regions.map((item) => ({ id: item.switchId, left: item.box.left, top: item.box.top })), [regions])
-  const regionStack = useTagStack(regionAnchors, zoom)
-
-  /**
    * **다시 잰 판** — 위 두 측정 이펙트와 같은 의존이 바뀔 때마다 새 값이다. 손잡이가 끄는 중이면 이 값이 바뀔 때 마지막 좌표로 다시
    * 묻는다(`./canvas-drag-handle.tsx` 머리말 «캔버스가 다시 잴 때») — 노드가 밀려도 표시가 옛 좌표에 남지 않게.
    */
@@ -532,7 +500,7 @@ export function Canvas(props: {
   const handleNode =
     outlinedNodeId === null || selectedNodeIds.length !== 1 || outlinedNodeId === doc.root?.id || lockOf(outlinedNodeId) !== null
       ? undefined
-      : handleTarget(findNodeSafely(doc.root, outlinedNodeId))
+      : findNodeSafely(doc.root, outlinedNodeId)
 
   return (
     <div
@@ -624,30 +592,6 @@ export function Canvas(props: {
           조건이 둘인 것은 `box`만 보면 모드가 뷰로 바뀐 렌더와 그것을 지우는 레이아웃
           이펙트 사이에서 **id 없는 아웃라인**이 한 번 만들어지기 때문이다(레이아웃
           이펙트라 그려지기 전에 지워지지만, 만들지 않는 편이 낫다). */}
-      {/* **상태 영역 표지**(`./view-state-regions.ts`) — 배치 선 · 외곽선보다 먼저 그려 그 밑에 선다. 흐린 영역은 겹 하나를 더 얹는다. 꼬리표는 줌을 걷어
-          화면에서 늘 같은 크기다(배치 선의 모서리 글과 같은 꼴). */}
-      {regions.map((item) => (
-        <div
-          key={item.switchId}
-          className={item.dimmed ? 'wb-shell-region-mark wb-shell-region-mark-dimmed' : 'wb-shell-region-mark'}
-          data-wb-region-for={item.switchId}
-          data-wb-region={item.label}
-          style={{ left: item.box.left, top: item.box.top, width: item.box.width, height: item.box.height, borderWidth: 1 / zoom }}
-        >
-          <span
-            ref={regionStack.bind(item.switchId)}
-            className="wb-shell-region-tag"
-            style={{ transform: `scale(${1 / zoom})`, translate: regionStack.shift(item.switchId) }}
-          >
-            {item.label}
-          </span>
-          {item.empty && (
-            <span className="wb-shell-region-empty" data-wb-region-empty="" style={{ transform: `scale(${1 / zoom})` }}>
-              {EMPTY_BRANCH_LABEL}
-            </span>
-          )}
-        </div>
-      ))}
       {/* **배치 선**(`./layout-guides.tsx`) — 외곽선보다 먼저 그려 그 밑에 선다. 모서리 글은 줌을 걷어 화면에서 늘 같은 크기다(손잡이와 같은 꼴). */}
       {guides.map((item) => (
         <div
@@ -757,11 +701,6 @@ export function Canvas(props: {
           {item.marker}
         </span>
       ))}
-
-      {/* **영역 표지**(`./state-badges.tsx`) — 뷰 모드에서 상태 영역마다 «상태에 따라 다름». 누르면 가지 목록에서 상태를 고른다. */}
-      {mode === 'view' && rendered !== null && props.pageId !== undefined && (
-        <StateRegionBadges pageId={props.pageId} doc={rendered} frame={frame} surfaceRef={surfaceRef} zoom={zoom} layoutKey={layoutKey} />
-      )}
     </div>
   )
 }
@@ -978,29 +917,6 @@ interface GuideBox extends Guide {
 }
 
 const NO_GUIDES: readonly GuideBox[] = []
-
-/** 손잡이를 세울 노드 — 가지(`StateCase`)는 영역 밖으로 못 옮기므로(`edit/structure-drop.ts`) 손잡이가 없다. */
-function handleTarget(node: WbNode | undefined): WbNode | undefined {
-  return node?.type === 'StateCase' ? undefined : node
-}
-
-/** 상태 영역 표지 하나 — 상자는 표면 좌표다(`measure` 와 같은 셈). */
-interface RegionBox extends RegionMark {
-  box: Box
-}
-
-const NO_REGIONS: readonly RegionBox[] = []
-
-/** 두 표지 목록이 같은가 — `sameBox` 와 같은 까닭(값이 같으면 앞 배열을 그대로 둔다). */
-function sameRegions(a: readonly RegionBox[], b: readonly RegionBox[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((item, index) => {
-      const other = b[index]!
-      return item.switchId === other.switchId && item.label === other.label && item.dimmed === other.dimmed && sameBox(item.box, other.box)
-    })
-  )
-}
 
 /** 캔버스 문서 좌표의 안쪽 선 → 표면 좌표(`measure` 와 같은 셈 — iframe 의 자리만 더한다). */
 function onSurface(line: GuideLine, offset: { left: number; top: number }): GuideLine {

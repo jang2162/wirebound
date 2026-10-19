@@ -70,26 +70,7 @@ describe('nodeSummary — 타입마다', () => {
     expect(nodeSummary(n(type, props))).toBe(expected)
   })
 
-  it('상태 영역은 가지 수, 상태 가지는 그 상태의 이름이다', () => {
-    const states = [{ id: 's_admin', name: '관리자' }]
-    const sw = (count: number): WbNode => ({
-      id: 'n_sw',
-      type: 'StateSwitch',
-      children: Array.from({ length: count }, (_, i) => ({ id: `n_c${i}`, type: 'StateCase', props: { state: 'default' } })),
-    })
-    expect(nodeSummary(sw(2))).toBe('가지 2')
-    expect(nodeSummary(sw(0))).toBe('가지 0')
-    expect(nodeSummary({ id: 'n_sw', type: 'StateSwitch', children: 'x' } as unknown as WbNode)).toBe('가지 0')
-    expect(nodeSummary(n('StateCase', { state: 'default' }), states)).toBe('기본')
-    expect(nodeSummary(n('StateCase', { state: 's_admin' }), states)).toBe('관리자')
-    // 목록이 없거나 목록에 없는 상태 — 그 가지는 그려지지 않는다(렌더러 · lint `view-state-unknown`).
-    expect(nodeSummary(n('StateCase', { state: 's_admin' }))).toBe('목록에 없는 상태')
-    expect(nodeSummary(n('StateCase', { state: 's_gone' }), states)).toBe('목록에 없는 상태')
-    expect(nodeSummary(n('StateCase', { state: 7 }), states)).toBe('목록에 없는 상태')
-    expect(nodeRowLabel(n('StateCase', { state: 's_admin' }), states)).toBe('StateCase 관리자')
-  })
-
-  it('표가 카탈로그 21종을 모두 덮는다 — 새 타입은 요약을 정하거나 없음을 정해야 한다', () => {
+  it('표가 카탈로그 19종을 모두 덮는다 — 새 타입은 요약을 정하거나 없음을 정해야 한다', () => {
     // 표의 타입(위 케이스) 집합이 카탈로그와 같아야 한다 — 새 컴포넌트가 이 표에 오르지 않으면 여기서 걸린다.
     const covered = new Set([
       'Flex',
@@ -111,8 +92,6 @@ describe('nodeSummary — 타입마다', () => {
       'Slot',
       'Section',
       'SearchForm',
-      'StateSwitch',
-      'StateCase',
     ])
     expect([...covered].sort()).toEqual([...CATALOG_TYPES].sort())
   })

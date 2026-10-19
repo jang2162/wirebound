@@ -11,7 +11,7 @@
  * 던지면 `.wb-shell`이 통째로 DOM에서 사라진다(`panels/node-shape.ts` 머리말의 실측).
  * 그래서 검증 전 문서에 들어올 수 있는 모양을 값으로 다룬다.
  */
-import { DEFAULT_CASE, getComponent, type NodeLock, type PageDocument, type WbNode } from '@wirebound/schema'
+import { getComponent, type NodeLock, type PageDocument } from '@wirebound/schema'
 import { nodeType } from '../panels/node-shape'
 // **schema의 `walkNodes`를 쓰지 않는다** — `children` 배열 안의 `null` 원소에서 던진다
 // (`./safe-walk.ts` 머리말에 실측). 이 파일의 계약이 "던지지 않는다"이므로 순회부터 `walkSafely`를 쓴다.
@@ -139,9 +139,7 @@ export function structureAbilities(document: PageDocument | null, nodeId: string
   const siblings = Array.isArray(parent.children) ? parent.children : []
   const previous = index > 0 ? siblings[index - 1] : undefined
 
-  // 상태 영역의 자리 규칙(`regionRules`)이 끄는 항목은 아래 판정과 무관하게 꺼진다.
-  const blocked = regionRules(node, parent, previous)
-  return withoutBlocked(blocked, {
+  return {
     addInside,
     addAfter: true,
     remove: true,
@@ -154,61 +152,7 @@ export function structureAbilities(document: PageDocument | null, nodeId: string
     // 루트 노드와 같은 것인지로 본다 — id 비교가 아니라 **참조 비교**인 것은 id가
     // 중복된 문서(검증 전에는 가능하다)에서도 갈리지 않기 위해서다.
     outdent: parent !== document.root,
-  })
-}
-
-/** `blocked` 에 든 항목을 끈다. */
-function withoutBlocked(blocked: RegionBlocked, abilities: StructureAbilities): StructureAbilities {
-  const next = { ...abilities }
-  for (const key of Object.keys(blocked) as (keyof StructureAbilities)[]) next[key] = false
-  return next
-}
-
-/** 상태 영역의 자리 규칙이 끈 항목과 그 까닭. */
-export type RegionBlocked = Partial<Record<keyof StructureAbilities, string>>
-
-export const REGION_INSIDE_REASON = '상태 영역 안에는 가지만 섭니다 — 가지를 고르고 그 안에 추가하세요'
-export const CASE_SIBLING_REASON = '가지 곁에는 노드를 둘 수 없습니다 — 상태 영역을 고르고 아래 추가하세요'
-export const CASE_MOVE_REASON = '가지는 그 상태 영역 밖으로 옮길 수 없습니다'
-export const DEFAULT_CASE_REMOVE_REASON = '기본 가지는 지울 수 없습니다 — 영역째 지우거나 «상태 나누기 풀기»를 쓰세요'
-export const CASE_OUTDENT_REASON = '가지 밖으로 내면 상태 영역 안에 섭니다 — 영역 밖으로는 끌어 옮기세요'
-
-/**
- * **상태 영역의 자리 규칙**(설계서 「페이지 스키마 노드」 «화면 상태» — `StateSwitch` 의 자식은 `StateCase` 만 · `StateCase` 는 `StateSwitch` 바로
- * 아래 · 기본 가지는 정확히 하나). 어기는 편집은 서버가 422 로 막는다 — 화면은 그 항목을 미리 끄고 까닭을 단다(`panels/toolbar-status.ts` 의
- * `structureItemReason` 이 이 까닭을 싣는다). 끌어 놓기는 같은 규칙을 `edit/structure-drop.ts` 가 `acceptsChildren`(영역은 안 받는다)과 가지
- * 끌기 막기로 지킨다.
- *
- * | 고른 것 | 꺼지는 항목 |
- * |---|---|
- * | 상태 영역 | `addInside`(가지를 넣는 길은 «상태별로 나누기» · 상태를 고른 채 편집) |
- * | 상태 가지 | `addAfter` · 들여쓰기 · 내어쓰기, 기본 가지면 삭제도 |
- * | 앞 형제가 상태 영역 | 들여쓰기(영역 안으로 들어간다) |
- * | 가지 바로 안의 노드 | 내어쓰기(영역 안 가지 곁으로 나간다) |
- */
-export function regionRules(node: unknown, parent: unknown, previous: unknown): RegionBlocked {
-  const blocked: RegionBlocked = {}
-  const type = isNodeLike(node) ? nodeType(node) : null
-  if (type === 'StateSwitch') blocked.addInside = REGION_INSIDE_REASON
-  if (type === 'StateCase') {
-    blocked.addAfter = CASE_SIBLING_REASON
-    blocked.indent = CASE_MOVE_REASON
-    blocked.outdent = CASE_MOVE_REASON
-    const state = (node as { props?: { state?: unknown } }).props?.state
-    if (state === DEFAULT_CASE) blocked.remove = DEFAULT_CASE_REMOVE_REASON
   }
-  if (isNodeLike(previous) && nodeType(previous) === 'StateSwitch') blocked.indent ??= REGION_INSIDE_REASON
-  if (isNodeLike(parent) && nodeType(parent) === 'StateCase') blocked.outdent ??= CASE_OUTDENT_REASON
-  return blocked
-}
-
-/** 고른 노드의 상태 영역 자리 규칙 — 문서에 없으면 빈 것. 줄 행동의 까닭(`structureItemReason`)이 부른다. */
-export function regionRulesAt(document: PageDocument | null, nodeId: string | null): RegionBlocked {
-  if (document === null || nodeId === null) return {}
-  const visit = findVisit(document, nodeId)
-  if (visit === null || visit.parent === null) return {}
-  const siblings = Array.isArray(visit.parent.children) ? visit.parent.children : []
-  return regionRules(visit.node, visit.parent, visit.index > 0 ? siblings[visit.index - 1] : undefined)
 }
 
 /**
@@ -303,8 +247,6 @@ export function acceptsChildren(node: unknown): boolean {
 
   const type = nodeType(node)
   if (type === null) return false
-  // 상태 영역은 카탈로그가 `many` 여도 가지만 받는다 — 넣기 · 붙이기 · 끌어 놓기의 «안»과 «영역 안 가지 곁»을 이 한 줄이 막는다(`regionRules`).
-  if (type === 'StateSwitch') return false
   if (getComponent(type)?.children !== 'many') return false
 
   return node.children === undefined || Array.isArray(node.children)

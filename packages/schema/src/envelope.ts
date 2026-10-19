@@ -1,13 +1,15 @@
 import { z } from 'zod'
 import { hasRejectedAliasChar, isBlankAlias } from './alias'
 import {
-  DEFAULT_CASE,
+  DEFAULT_VIEW_STATE,
   NODE_ALIAS_MAX,
+  VIEW_STATE_DEPTH_MAX,
   VIEW_STATE_NAME_MAX,
   VIEW_STATES_MAX,
   WEIGHT_MAX,
   WEIGHT_MIN,
   type Interaction,
+  type NodeVisibility,
   type ViewState,
   type WbNode,
 } from './node'
@@ -86,6 +88,25 @@ const AliasSchema = z
   .refine((value) => !isBlankAlias(value), { message: '별칭에 보이는 글자가 없습니다' })
 
 /**
+ * 노드의 상태 보임 — `states` 는 1개 이상 · 겹침 없음 · 노드 id 모양(`DEFAULT_VIEW_STATE` 도 그 모양이다). **목록에 있는 상태인지는 여기서
+ * 보지 않는다** — 봉투는 노드 하나만 본다. 목록 밖을 가리키는 보임은 문서 하나에서는 lint 경고(`view-state-unknown`)이고, 편집이 새로 만든
+ * 목록 밖 가리킴은 저장 경계가 막는다(`validate.ts`의 `checkViewStateRemoval`).
+ */
+export const VisibilitySchema: z.ZodType<NodeVisibility> = z.strictObject({
+  mode: z.enum(['only', 'except']),
+  states: z
+    .array(z.string().regex(NODE_ID_PATTERN))
+    .min(1, '상태 보임에는 상태가 하나 이상 있어야 합니다')
+    .superRefine((states, ctx) => {
+      const seen = new Set<string>()
+      states.forEach((state, index) => {
+        if (seen.has(state)) ctx.addIssue({ code: 'custom', path: [index], message: `상태 보임의 상태가 겹칩니다: ${state}` })
+        seen.add(state)
+      })
+    }),
+})
+
+/**
  * 노드 봉투. 선언되지 않은 키는 거부한다 — "노드는 스타일을 갖지 않는다"(설계서 「페이지 스키마 노드」)를
  * 런타임에서 강제하는 지점이다. props의 값 자체는 여기서 검사하지 않는다 —
  * 컴포넌트별 검증은 validate.ts가 카탈로그를 참조해 따로 한다.
@@ -98,6 +119,7 @@ export const WbNodeSchema: z.ZodType<WbNode> = z.strictObject({
   props: z.record(z.string(), z.unknown()).optional(),
   variant: z.string().optional(),
   weight: z.int().min(WEIGHT_MIN).max(WEIGHT_MAX).optional(),
+  visibility: VisibilitySchema.optional(),
   // 설계서 「설계서 화면 구조」의 코멘트 번호는 1부터 시작한다.
   marker: z.int().positive().optional(),
   interactions: z.array(InteractionSchema).optional(),
@@ -131,19 +153,21 @@ const ViewStateNameSchema = z
   .refine((value) => !isBlankAlias(value), { message: '상태 이름에 보이는 글자가 없습니다' })
 
 /**
- * 상태 하나. `id`는 노드 id 규칙이고 `default`(기본 가지의 표지 — `DEFAULT_CASE`)일 수 없다 — 그 id 의 상태가 있으면 그 상태의
- * 가지와 기본 가지가 한 값으로 겹쳐 «기본 가지 정확히 하나»가 그 상태의 가지를 막는다.
+ * 상태 하나. `id`는 노드 id 규칙이고 `default`(«기본» 화면의 표지 — `DEFAULT_VIEW_STATE`)일 수 없다 — 노드 보임이 그 값으로 «기본»을
+ * 가리키므로 같은 id 의 상태가 있으면 둘이 한 값으로 겹친다.
  */
 const ViewStateSchema: z.ZodType<ViewState> = z.strictObject({
   id: z
     .string()
     .regex(NODE_ID_PATTERN)
-    .refine((id) => id !== DEFAULT_CASE, { message: `상태 id 로 ${DEFAULT_CASE}를 쓸 수 없습니다` }),
+    .refine((id) => id !== DEFAULT_VIEW_STATE, { message: `상태 id 로 ${DEFAULT_VIEW_STATE}를 쓸 수 없습니다` }),
   name: ViewStateNameSchema,
+  parent: z.string().regex(NODE_ID_PATTERN).optional(),
 })
 
 /**
- * 페이지의 상태 목록 — 많아야 `VIEW_STATES_MAX`개, id 와 이름이 각각 겹치지 않는다. 이름 겹침은 글자 그대로 견준다(대소문자 ·
+ * 페이지의 상태 목록 — 많아야 `VIEW_STATES_MAX`개, id 와 이름이 각각 겹치지 않는다. `parent` 는 목록의 **다른** 상태 id 이고 고리가 없으며
+ * 트리 깊이는 `VIEW_STATE_DEPTH_MAX` 이하다(뿌리 상태가 1). 이름 겹침은 글자 그대로 견준다(대소문자 ·
  * 정규화를 접지 않는다 — 화면에 다르게 보이는 두 이름을 하나로 막지 않는다).
  */
 export const ViewStatesSchema: z.ZodType<ViewState[]> = z
@@ -159,6 +183,38 @@ export const ViewStatesSchema: z.ZodType<ViewState[]> = z
       }
       ids.add(state.id)
       names.add(state.name)
+    })
+    const byId = new Map(states.map((state) => [state.id, state]))
+    states.forEach((state, index) => {
+      if (state.parent === undefined) return
+      if (state.parent === state.id) {
+        ctx.addIssue({ code: 'custom', path: [index, 'parent'], message: `상태의 부모가 자기 자신입니다: ${state.id}` })
+        return
+      }
+      if (!byId.has(state.parent)) {
+        ctx.addIssue({ code: 'custom', path: [index, 'parent'], message: `상태의 부모가 목록에 없습니다: ${state.parent}` })
+        return
+      }
+      // 위로 걸으며 센다 — 다시 만난 id 는 고리다. 깊이는 자신을 1 로 센다.
+      const seen = new Set<string>([state.id])
+      let depth = 1
+      let at: ViewState | undefined = state
+      while (at?.parent !== undefined) {
+        if (seen.has(at.parent)) {
+          ctx.addIssue({ code: 'custom', path: [index, 'parent'], message: `상태의 부모가 고리를 이룹니다: ${state.id}` })
+          return
+        }
+        seen.add(at.parent)
+        at = byId.get(at.parent)
+        depth += 1
+      }
+      if (depth > VIEW_STATE_DEPTH_MAX) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [index, 'parent'],
+          message: `상태 트리는 ${VIEW_STATE_DEPTH_MAX}단까지입니다: ${state.name}`,
+        })
+      }
     })
   })
 

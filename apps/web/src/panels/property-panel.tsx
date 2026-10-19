@@ -24,7 +24,6 @@
  * 실거나(그러면 `loadPage`의 시그니처가 바뀌어 테스트까지 부르는 자리가 전부 바뀐다) 프롭을
  * 한 겹 더 놓거나다. 뷰 모드 탭은 자기 조회를 이미 갖고 있어 요청이 하나도 늘지 않는다.
  */
-import { forkedId, hiddenNodeIds } from '../edit/view-state-fork'
 import { useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { NO_THEME, resolveVariant, weightRoom } from '@wirebound/renderer'
 import {
@@ -50,13 +49,14 @@ import { useEditCommit, type EditCommit } from '../edit/use-edit-commit'
 // 통째로 지운다. 실측: 그 문서에서 **노드를 고르는 순간** `.wb-shell`이 DOM에서 사라진다 —
 // 열기만 할 때는 여기까지 오지 않아 살아 있다.
 import { findNodeSafely, walkSafely } from '../edit/safe-walk'
-import { aliasOps, propOps, variantOps, weightOps } from '../edit/ops'
+import { aliasOps, propOps, variantOps, visibilityOps, weightOps } from '../edit/ops'
+import { useHiddenNodes, useViewState } from '../shell/use-view-state'
+import { VisibilityField } from './visibility-field'
 import { removeManyOps } from '../edit/paste-ops'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 import { LOSS_RANK } from '../store/loss-notice'
 import { useSessionEpochNowOrNull } from '../session/session-context'
-import { useAllCases, useViewState } from '../shell/use-view-state'
 import { ListControl } from './controls/list-control'
 import { SelectControl } from './controls/select-control'
 import { SwitchControl } from './controls/switch-control'
@@ -121,7 +121,7 @@ type BuildOps = (running: PageDocument, nodeId: string) => PatchOp[] | null
  * | 앞 목록에서 | 하는 일 |
  * |---|---|
  * | 아직 문서에 있고 · 그때의 타입 그대로고 · 남이 안 쥔 노드가 있다 | 그 노드들에 쓴다 — 편집 하나(묶음). 하단 바는 치우지 않는다(일부 거절의 통지가 그 자리에 있다) |
- * | 그런 노드가 없다(전부 지워짐 · 타입이 갈림 · 남이 쥠 · 지금 상태에서 안 보임 · 다른 페이지로 옮겨 갔다) | 버리고 하단 바에 `DROPPED_DRAFT_NOTICE` 한 줄(잃음 통지는 안 덮는다) |
+ * | 그런 노드가 없다(전부 지워짐 · 타입이 갈림 · 남이 쥠 · 다른 페이지로 옮겨 갔다) | 버리고 하단 바에 `DROPPED_DRAFT_NOTICE` 한 줄(잃음 통지는 안 덮는다) |
  * | 쓸 노드는 있는데 편집이 큐에 못 들어갔다(`commitOps`가 `false` — 주소가 이미 다른 페이지다) | 버리고 같은 한 줄을 **떠남의 조각**으로(아래) |
  * | 고칠 수 없는 역할이다 | 아무것도 안 한다 — 위젯이 꺼진 까닭은 패널이 이미 말한다 |
  * | 패널이 선 세션이 끝났다(로그아웃 · 다른 탭의 로그아웃 · 다른 사람으로 바뀜 — 세션 세대가 올랐다) | 아무것도 안 한다 — 끝난 세션으로 쓰기를 내지 않는다. 버린 것은 그 로그아웃의 한 줄이 말하는 몫이다 |
@@ -136,35 +136,28 @@ type BuildOps = (running: PageDocument, nodeId: string) => PatchOp[] | null
  * «칸에 친 채 고른 것이 바뀐다» 절.
  */
 function useLeftoverCommit(pageId: string | undefined, canEdit: boolean, commitOps: EditCommit['commitOps']) {
-  // 지금 상태 · «모든 가지 보기» — 안 보이는 노드(남이 가지를 먼저 만들어 숨은 흐린 노드)에는 초안을 안 쓴다(`edit/view-state-fork.ts` 의 `hiddenNodeIds`).
-  const { state: viewState } = useViewState(pageId)
-  const { allCases } = useAllCases()
   const store = useEditorStoreInstance()
   // **패널이 선 세션 세대**(`session/session-context.tsx` «세션 세대»). 세션이 끝나면 셸이 내려가며 위젯의 정리가 여기를 부른다 — 그때 지금
   // 세대가 이것과 다르면 쓰지 않는다. 셸은 세션을 넘어 살지 않으므로(문지기가 로그인 · 목록으로 보낸다) 처음 그린 세대가 그 세션이다.
   const epochNow = useSessionEpochNowOrNull()
   const [bornIn] = useState(() => epochNow?.() ?? null)
   // 내려가는 위젯의 정리는 다시 그린 **뒤에** 돈다 — 그때의 `commitOps`(지금 열린 페이지)를 읽는다.
-  const latest = useRef({ canEdit, commitOps, viewState, allCases })
+  const latest = useRef({ canEdit, commitOps })
   useLayoutEffect(() => {
-    latest.current = { canEdit, commitOps, viewState, allCases }
+    latest.current = { canEdit, commitOps }
   })
   return (at: { pageId: string | undefined; nodeIds: readonly string[]; type: string }, build: BuildOps): void => {
     if (!latest.current.canEdit) return
     if (epochNow !== null && epochNow() !== bornIn) return
     const state = store.getState()
     const document = at.pageId !== undefined && state.openPageId === at.pageId ? state.document : null
-    // 방금 «복사 + 편집»으로 복사된 노드의 초안은 복사에 쓴다(`edit/view-state-fork.ts` 의 `forkedId` — 옛 노드는 이제 숨은 기본 가지다).
-    const hidden = hiddenNodeIds(document, latest.current.viewState, latest.current.allCases)
     const targets =
       document === null
         ? []
-        : at.nodeIds
-            .map((id) => forkedId(store, id))
-            .filter((id) => {
-              const node = findNodeSafely(document.root, id)
-              return node !== undefined && nodeType(node) === at.type && store.lockedBy(id) === null && !hidden.has(id)
-            })
+        : at.nodeIds.filter((id) => {
+            const node = findNodeSafely(document.root, id)
+            return node !== undefined && nodeType(node) === at.type && store.lockedBy(id) === null
+          })
     if (document === null || targets.length === 0) {
       if (!store.showsLoss()) store.setEditFailure({ kind: 'message', message: DROPPED_DRAFT_NOTICE })
       return
@@ -224,6 +217,9 @@ export function PropertyPanel(props: {
   const lockOf = useLockedBy()
   // 캔버스가 그리는 그 바인딩의 manifest(`theme/project-theme.tsx`). 아직 못 읽었으면 테마 없음 — variant 칸은 카탈로그 기본이다.
   const manifest = useProjectTheme().manifest ?? NO_THEME.manifest
+  /** 지금 상태 · 그 상태에서 숨은 노드 — «상태 보임» 칸이 «없음»에서 옮길 첫 상태와 «숨어 있다» 한 줄을 읽는다(`./visibility-field.tsx`). */
+  const viewState = useViewState(props.pageId)
+  const hiddenNodes = useHiddenNodes(props.pageId)
 
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 낙관적
   // 패치가 문서를 갈아 끼울 때 패널만 옛 노드를 들고 있게 된다.
@@ -397,6 +393,22 @@ export function PropertyPanel(props: {
             }
           />
         )}
+        {/* **상태 보임은 몫 아래다** — 같은 층(노드 봉투의 필드)이고 뿌리 말고는 어느 노드에나 선다(`./visibility-field.tsx`). */}
+        {doc !== null && doc.root?.id !== node.id && (
+          <VisibilityField
+            key={node.id}
+            value={node.visibility}
+            viewStates={viewState.viewStates}
+            current={viewState.state}
+            hiddenNow={hiddenNodes.has(node.id)}
+            disabled={blocked}
+            onCommit={(visibility) => {
+              if (blocked || doc === null) return
+              const ops = visibilityOps(doc, node.id, visibility)
+              if (ops !== null) commitOps(ops)
+            }}
+          />
+        )}
       </dl>
       {fields.length === 0 && variantField === null ? (
         // `Page`·`Slot`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
@@ -488,15 +500,14 @@ function parseWeight(text: string): number | null | undefined {
 }
 
 /**
- * 몫을 읽는 부모 — 렌더러가 몫을 싣는 판정(`weightRoom`)의 입력. 상태 영역 · 가지(`StateSwitch` · `StateCase`)는 요소를 안 남기므로 건너 그 위를 본다
- * (렌더러도 그 둘에서 자리를 그대로 넘긴다). 부모가 없으면(뿌리 · 문서에 없음) 아무 자리도 아닌 입력을 낸다.
+ * 몫을 읽는 부모 — 렌더러가 몫을 싣는 판정(`weightRoom`)의 입력. 부모가 없으면(뿌리 · 문서에 없음) 아무 자리도 아닌 입력을 낸다.
  */
 function weightParentOf(doc: PageDocument, nodeId: string): [string, WbNode['props']] {
   const chain: WbNode[] = []
   for (const visit of walkSafely(doc.root)) {
     while (chain.length > 0 && chain.at(-1) !== visit.parent) chain.pop()
     if (visit.node.id === nodeId) {
-      const parent = [...chain].reverse().find((node) => node.type !== 'StateSwitch' && node.type !== 'StateCase')
+      const parent = chain.at(-1)
       return parent === undefined ? ['', undefined] : [String(parent.type), parent.props]
     }
     chain.push(visit.node)

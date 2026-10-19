@@ -30,7 +30,6 @@ import type { NodeLock, PageDocument, WbNode } from '@wirebound/schema'
 import type { TreeMenuNode } from '../../src/api/types'
 import { findNodeSafely } from '../../src/edit/safe-walk'
 import { structureAbilities } from '../../src/edit/structure-actions'
-import { SPLIT_PICK_REASON, SPLIT_ROOT_REASON } from '../../src/edit/view-state-actions'
 import type { ActionMenuItem } from '../../src/shell/action-menu'
 import { treeAbilities, type TreeSelection } from '../../src/tree/tree-actions'
 import type { TreeCommands } from '../../src/tree/use-tree-commands'
@@ -137,27 +136,6 @@ function structureCommands(input: { selectedNodeId: string | null; lock?: NodeLo
     dropTo: unused,
     aliasLocked,
     renameAlias: unused,
-    // 상태 명령 — 이 판의 문서에는 영역이 없다. «상태별로 나누기»의 끔은 잠금(고른 노드)과 같은 까닭을 싣는다(`useStructureCommands`).
-    viewState: {
-      splitWhy:
-        lock !== null
-          ? lockedSelectionStatus(lock.userName)
-          : selectedNodeId === null
-            ? SPLIT_PICK_REASON
-            : selectedNodeId === document.root.id
-              ? SPLIT_ROOT_REASON
-              : undefined,
-      split: unused,
-      canUnsplit: false,
-      unsplitWhy: undefined,
-      askUnsplit: unused,
-      unsplitting: null,
-      confirmUnsplit: unused,
-      cancelUnsplit: unused,
-      canRemoveCase: false,
-      removeCaseWhy: undefined,
-      removeCase: unused,
-    },
   }
 }
 

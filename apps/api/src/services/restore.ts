@@ -14,7 +14,9 @@
  * 3. `payloadVersion > SNAPSHOT_PAYLOAD_VERSION`이면 `payload-version`.
  * 4. `captureSnapshot` — **안전망 스냅샷의 payload이자 지금 상태다**(아래 「안전망 스냅샷」). 지문이 어긋나면
  *    `fingerprint-mismatch`.
- * 5. `planRestore(대상 payload, 지금 payload)` — 막는 갈래 넷은 그쪽이 판정한다.
+ * 5. `planRestore(대상 payload, 지금 payload)` — 막는 갈래 넷은 그쪽이 판정한다. 대상 payload 의 옛 판 문서는 먼저 지금 판으로 옮긴다
+ *    (`migratePageDocument` — 판 1 의 상태 영역이 노드 보임이 된다). 안 옮기면 갈아 끼운 문서의 `version` 이 지금 판과 달라 편집
+ *    파이프라인의 7단계가 `invalid` 로 막는다. 옮기지 못한 문서(같은 노드 id 가 둘)는 그대로 두어 그 7단계가 복원째 되돌린다.
  * 6. 코멘트 작성자가 아직 있는가 — DB 질문이라 계획이 못 한다.
  * 7. `insertSnapshot` — **여기가 첫 쓰기다.** 태그가 부딪히면 `safety-tag-taken`.
  * 8. 계획의 `steps`를 **순서대로** 실행한다.
@@ -106,7 +108,7 @@ import { captureSnapshot, type CaptureHooks } from './snapshot-capture'
 import { planRestore, type RestoreSummary } from './restore-plan'
 import { SNAPSHOT_PAYLOAD_VERSION, type SnapshotPayload } from '@wirebound/themes'
 import type { UnsupportedVersionPage } from './restore-plan'
-import { replaceDocumentOps, type ValidationIssue } from '@wirebound/schema'
+import { CURRENT_DOCUMENT_VERSION, migratePageDocument, replaceDocumentOps, type ValidationIssue } from '@wirebound/schema'
 
 /**
  * 안전망 스냅샷의 태그 앞머리. **형식을 못박고 케이스가 그 형식을 고정한다**(아래 `actor_label`
@@ -212,6 +214,22 @@ export async function restoreSnapshot(db: DbHandle, input: RestoreInput): Promis
   }
 }
 
+/** 대상 payload 의 옛 판 페이지 문서를 지금 판으로(머리말 5단계). 지금보다 높은 판은 그대로 둔다 — `planRestore` 가 `unsupported-version` 으로 말한다. */
+function currentVersionPages(payload: SnapshotPayload): SnapshotPayload {
+  if (payload.pages.every((page) => page.schema.version >= CURRENT_DOCUMENT_VERSION)) return payload
+  return {
+    ...payload,
+    pages: payload.pages.map((page) => {
+      if (page.schema.version >= CURRENT_DOCUMENT_VERSION) return page
+      try {
+        return { ...page, schema: migratePageDocument(page.schema, { pageId: page.id }) }
+      } catch {
+        return page
+      }
+    }),
+  }
+}
+
 async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreResult> {
   // 1단계. **잠그는 것이 가장 먼저다** — 아래의 어떤 읽기보다 앞서야 규칙
   // (*"서버가 값을 읽어 밀어붙이는 것은 잠근 뒤에 읽을 때만 참이다"*)을 지킨다.
@@ -237,7 +255,7 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
   const now: SnapshotPayload = captured.payload
 
   // 5단계.
-  const planned = planRestore(target.payload, now)
+  const planned = planRestore(currentVersionPages(target.payload), now)
   if (planned.kind === 'layout-mismatch') {
     throw new RestoreAbort({ kind: 'layout-mismatch', snapshot: planned.snapshot, current: planned.current })
   }

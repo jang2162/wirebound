@@ -3,7 +3,7 @@ import { checkNodeAction, isPageTargetAction } from './interaction/check'
 import { getComponent } from './component/registry'
 import { aliasNote } from './display'
 import { DocumentEnvelopeSchema, NODE_ID_PATTERN, PageEnvelopeSchema } from './envelope'
-import { DEFAULT_CASE, type LayoutDocument, type PageDocument, type WbNode } from './node'
+import { DEFAULT_VIEW_STATE, type LayoutDocument, type PageDocument, type WbNode } from './node'
 import { walkNodes } from './tree'
 import { getKoreanErrorMap } from './locale'
 
@@ -51,20 +51,9 @@ export type ValidationCode =
    */
   | 'invalid-interaction-prop'
   /**
-   * 상태 영역(`StateSwitch`)의 기본 가지(`StateCase` · `props.state` 가 `default`)가 정확히 하나가 아니다. 렌더러는 그 상태의 가지가
-   * 없으면 기본 가지를 그리므로, 없으면 그릴 것이 없고 둘이면 어느 것인지 정할 수 없다. 노드는 그 `StateSwitch`다.
-   */
-  | 'state-case-default'
-  /** 한 상태 영역 안에서 같은 상태를 가리키는 가지가 둘 이상이다. 노드는 뒤에 선 가지다. */
-  | 'state-case-duplicate'
-  /** `StateCase`가 `StateSwitch`의 자식이 아닌 자리에 섰다. */
-  | 'state-case-outside'
-  /** `StateSwitch`의 자식이 `StateCase`가 아니다. */
-  | 'state-switch-child'
-  /**
-   * **편집이 목록에서 뺀 상태(편집 전 목록에 있던 id)를 가리키는 가지가 편집 뒤 문서에 남았다.** 노드는 그 가지다. 문서 하나만 보고는 «뺐다»를
-   * 알 수 없어 `validatePage`는 이 코드를 안 낸다 — 저장 경계(편집 파이프라인)가 편집 전후로 `checkViewStateRemoval`을 부른다. 편집 전부터
-   * 목록 밖이던 가지는 여기 안 온다(lint 의 몫 — `checkStateRegion` 머리말).
+   * **편집이 목록에 없는 상태를 가리키는 보임을 새로 만들었다** — 목록에서 뺀 상태(편집 전에는 있던 id)를 보임이 아직 가리키거나, 편집이 목록 밖
+   * 상태를 보임에 넣었다. 노드는 그 보임의 노드다. 문서 하나만 보고는 «새로»를 알 수 없어 `validatePage`는 이 코드를 안 낸다 — 저장 경계(편집
+   * 파이프라인)가 편집 전후로 `checkViewStateRemoval`을 부른다. 편집 전부터 목록 밖이던 가리킴은 여기 안 온다(lint 의 `view-state-unknown`).
    */
   | 'state-cases-left'
 
@@ -126,10 +115,6 @@ export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'missing-interaction-target': 'warning',
   'invalid-interaction-target': 'warning',
   'invalid-interaction-prop': 'warning',
-  'state-case-default': 'error',
-  'state-case-duplicate': 'error',
-  'state-case-outside': 'error',
-  'state-switch-child': 'error',
   'state-cases-left': 'error',
 }
 
@@ -216,6 +201,10 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
   if (envelopeIssues.length > 0) return envelopeIssues
 
   const issues = validateTree(doc.root)
+  // 뿌리가 숨으면 그 상태의 화면이 통째로 빈다 — 보임은 뿌리 아래 노드에만 둔다(속성 패널도 뿌리에는 칸을 안 세운다).
+  if (doc.root.visibility !== undefined) {
+    issues.push(makeIssue('bad-root', doc.root.id, '/root/visibility', '페이지 뿌리에는 상태 보임을 둘 수 없습니다'))
+  }
   const slots = countSlots(doc.root)
   if (slots > 0) {
     issues.push(makeIssue('slot-count', null, '/root', `페이지에는 Slot을 둘 수 없습니다 (${slots}개 발견)`))
@@ -255,51 +244,60 @@ export function nestedPagesUnderRoot(nodes: readonly WbNode[]): ValidationIssue[
 }
 
 /**
- * **편집이 목록에서 뺀 상태의 가지가 남았는가**(`state-cases-left`) — 저장 경계(`apps/api`의 `services/edit-pipeline.ts` 6단계)가 편집 전
- * 문서 `before`와 적용 뒤 문서 `after`로 부른다. «뺀 상태»는 `before`의 목록에 있고 `after`의 목록에 없는 id 다(빼기 · id 바꾸기 · 목록째
- * 빼거나 갈아 끼우기). 그 상태를 가리키는 `StateCase`가 `after`에 남았으면 가지마다 이슈 하나.
+ * **편집이 목록 밖 상태를 가리키는 보임을 새로 만들었는가**(`state-cases-left`) — 저장 경계(`apps/api`의 `services/edit-pipeline.ts` 6단계)가
+ * 편집 전 문서 `before`와 적용 뒤 문서 `after`로 부른다. `after`의 노드마다 보임이 가리키는 목록 밖 상태(`unknownVisibilityStates`) 가운데,
+ * `before`에서 **같은 노드 id 가 이미 목록 밖으로 가리키던 것**이 아니면 이슈다 — 목록에서 뺀 상태를 보임이 아직 가리키는 판(상태 빼기 · id
+ * 바꾸기 · 목록째 갈아 끼우기)과 편집이 목록 밖 상태를 보임에 넣은 판 둘 다.
  *
- * **왜 오류인가** — 목록에서만 빼면 그 가지가 어느 상태에서도 안 그려지는데, 잠금 판정은 포인터 겹침이라 `/viewStates`는 가지 안 남의 잠금과
- * 안 겹쳐 지나간다(K1 리뷰 R2). 상태 삭제는 가지째 지우는 묶음(`removeViewStateOps` — 가지 `remove`가 잠금 판정을 탄다)으로만 한다.
+ * **왜 오류인가** — 목록에서만 빼면 그 상태로 설계한 노드가 어느 상태에서도 안 선다(`only`) · 숨기려던 곳에서 선다(`except`). 잠금 판정은 포인터
+ * 겹침이라 `/viewStates`는 남이 잡은 노드와 안 겹쳐 지나간다. 상태 삭제는 보임까지 함께 고치는 묶음(`removeViewStateOps` — 노드 `remove` ·
+ * `replace`가 잠금 판정을 탄다)으로만 한다.
  *
- * | 입구 | 목록 밖 가지 |
+ * | 입구 | 목록 밖 가리킴 |
  * |---|---|
- * | 편집(REST · WS) · `PUT …/schema` · 스냅샷 복원 — 파이프라인을 탄다 | 편집이 **뺀** 상태의 가지면 오류(422). 편집 전부터 목록 밖이면 통과 |
- * | 페이지 JSON 가져오기 | 새 페이지(목록 없음)에 쓰므로 뺀 상태가 없다 — 통과(목록 밖 가지는 lint) |
- * | 붙여넣기 · 복제 · 프리셋 | 목록을 안 바꾼다 — 통과(목록 밖 가지는 lint) |
- * | 저장된 문서를 읽을 때(lint · `pageView`) | 오류가 아니다 — lint 경고(K3) |
+ * | 편집(REST · WS) · `PUT …/schema` · 스냅샷 복원 — 파이프라인을 탄다 | 편집이 **새로 만든** 것이면 오류(422). 편집 전부터 같은 노드가 그랬으면 통과 |
+ * | 페이지 JSON 가져오기 | 새 페이지에 쓰므로 편집 전 문서가 없다 — 통과(lint) |
+ * | 저장된 문서를 읽을 때(lint · `pageView`) | 오류가 아니다 — lint 경고 |
  *
- * `after`의 봉투가 깨졌으면(`validatePage`가 `bad-document`만 내는 판) 부르지 않는다 — 트리를 걷지 못한다.
+ * `after`의 봉투가 깨졌으면(`validatePage`가 `bad-document`만 내는 판) 부르지 않는다 — 트리를 걷지 못한다. `before`는 검증 전일 수 있어
+ * 읽을 수 있는 만큼만 읽는다.
  */
-export function checkViewStateRemoval(before: { viewStates?: unknown }, after: PageDocument): ValidationIssue[] {
-  const listed = (doc: { viewStates?: unknown }) =>
-    new Set(
-      Array.isArray(doc.viewStates)
-        ? doc.viewStates.flatMap((entry: unknown) =>
-            entry !== null && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string'
-              ? [(entry as { id: string }).id]
-              : [],
-          )
-        : [],
-    )
-  const now = listed(after)
-  const removed = [...listed(before)].filter((id) => !now.has(id))
-  if (removed.length === 0) return []
-  const gone = new Set(removed)
+export function checkViewStateRemoval(before: { root?: unknown; viewStates?: unknown }, after: PageDocument): ValidationIssue[] {
+  const standing = new Map<string, Set<string>>()
+  try {
+    for (const entry of unknownVisibilityStates(before as PageDocument)) standing.set(entry.nodeId, new Set(entry.states))
+  } catch {
+    // 걸을 수 없는 편집 전 문서 — 서 있던 것이 없다고 읽는다(새로 만든 것으로 센다).
+  }
   const issues: ValidationIssue[] = []
-  for (const { node, path } of walkNodes(after.root)) {
-    const state = node.type === 'StateCase' ? node.props?.state : undefined
-    if (typeof state !== 'string' || !gone.has(state)) continue
+  for (const { nodeId, path, states } of unknownVisibilityStates(after)) {
+    const fresh = states.filter((state) => !standing.get(nodeId)?.has(state))
+    if (fresh.length === 0) continue
     issues.push(
       makeIssue(
         'state-cases-left',
-        node.id,
+        nodeId,
         path,
-        `목록에서 뺀 상태를 가리키는 가지가 남아 있습니다: ${state} — 상태 삭제는 그 가지를 함께 지웁니다`,
+        `상태 보임이 목록에 없는 상태를 가리킵니다: ${fresh.join(', ')} — 상태 삭제는 그 상태를 가리키는 보임을 함께 고칩니다`,
       ),
     )
   }
   return issues
+}
+
+/**
+ * **목록 밖 상태를 가리키는 보임** — 노드마다 보임의 `states` 중 페이지 목록에 없고 `DEFAULT_VIEW_STATE` 도 아닌 것(문서 차례). 문서 하나에서는
+ * lint 경고(`view-state-unknown`)이고, 편집이 새로 만든 것은 저장 경계가 막는다(`checkViewStateRemoval`). 봉투가 깨진 문서는 부르지 않는다.
+ */
+export function unknownVisibilityStates(doc: PageDocument): { nodeId: string; path: string; states: string[] }[] {
+  const known = new Set((doc.viewStates ?? []).map((state) => state.id))
+  known.add(DEFAULT_VIEW_STATE)
+  const out: { nodeId: string; path: string; states: string[] }[] = []
+  for (const { node, path } of walkNodes(doc.root)) {
+    const states = (node.visibility?.states ?? []).filter((state) => !known.has(state))
+    if (states.length > 0) out.push({ nodeId: node.id, path: `${path}/visibility`, states })
+  }
+  return out
 }
 
 export function validateLayout(doc: LayoutDocument): ValidationIssue[] {
@@ -417,7 +415,6 @@ function validateTree(root: WbNode): ValidationIssue[] {
     if (node.type === 'Page' && parent !== null) {
       issues.push(makeIssue('nested-page', node.id, path, 'Page는 루트에만 둘 수 있습니다 — 페이지 안에 Page를 넣을 수 없습니다'))
     }
-    issues.push(...checkStateRegion(node, path, parent))
     if (seen.has(node.id)) {
       issues.push(makeIssue('duplicate-id', node.id, path, `id가 중복됩니다: ${node.id}`))
     }
@@ -526,46 +523,6 @@ function checkInteractions(node: WbNode, path: string, seen: ReadonlyMap<string,
     }
   }
 
-  return issues
-}
-
-/**
- * 상태 영역의 구조 — `StateSwitch`의 자식은 `StateCase`만이고 기본 가지가 정확히 하나 · 상태마다 가지가 많아야 하나, `StateCase`는
- * `StateSwitch` 아래에만 선다. **가지가 가리키는 상태가 페이지 목록에 있는지는 여기서 보지 않는다** — 문서 하나에서는 lint 경고다(그
- * 가지는 그려지지 않을 뿐 문서를 못 쓰게 하지 않고, 오류로 두면 목록 밖 가지가 든 문서의 **무관한** 편집까지 막힌다 — 상호작용 이슈를
- * `warning`으로 둔 `ISSUE_SEVERITY` 머리말의 둘째 근거와 같다). 편집이 목록에서 **뺀** 상태의 가지는 저장 경계가 편집 전후로 따로 막는다
- * (`checkViewStateRemoval`). 그래서 레이아웃 · 클립보드의 임시 뿌리처럼 목록이 없는 문서도 같은 판정을 받는다.
- *
- * `state`가 문자열이 아닌 가지는 기본도 상태도 아닌 것으로 센다 — 그 모양은 `invalid-props`가 따로 말한다.
- */
-function checkStateRegion(node: WbNode, path: string, parent: WbNode | null): ValidationIssue[] {
-  const issues: ValidationIssue[] = []
-  if (node.type === 'StateCase' && parent?.type !== 'StateSwitch') {
-    issues.push(makeIssue('state-case-outside', node.id, path, '상태 가지는 상태 영역 바로 아래에만 둘 수 있습니다'))
-  }
-  if (node.type !== 'StateSwitch') return issues
-
-  const children = node.children ?? []
-  let defaults = 0
-  const states = new Set<string>()
-  children.forEach((child, index) => {
-    const childPath = `${path}/children/${index}`
-    if (child.type !== 'StateCase') {
-      issues.push(makeIssue('state-switch-child', child.id, childPath, `상태 영역에는 상태 가지만 둘 수 있습니다 (현재: ${child.type})`))
-      return
-    }
-    const state = child.props?.state
-    if (state === DEFAULT_CASE) defaults += 1
-    else if (typeof state === 'string') {
-      if (states.has(state)) {
-        issues.push(makeIssue('state-case-duplicate', child.id, childPath, `한 상태 영역에 같은 상태의 가지가 둘입니다: ${state}`))
-      }
-      states.add(state)
-    }
-  })
-  if (defaults !== 1) {
-    issues.push(makeIssue('state-case-default', node.id, path, `상태 영역에는 기본 가지가 정확히 하나여야 합니다 (${defaults}개 발견)`))
-  }
   return issues
 }
 

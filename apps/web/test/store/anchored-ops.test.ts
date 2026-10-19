@@ -218,7 +218,7 @@ describe('상태 목록 — 번호 자리를 상태 id 로 다시 짓는다', ()
 
   it('남이 순서를 바꾼 뒤 «상태 추가»의 되돌리기는 그 상태를 뺀다 — 남의 상태가 아니라', () => {
     const before = states([GA])
-    const forward = addViewStateOps(before, '나', () => 's_na')!
+    const forward = addViewStateOps(before, '나', null, () => 's_na')!
     const mine = applyOps(before, forward)
     const undo = invertOps(before, forward)
     const reordered = applyOps(mine, [{ op: 'move', from: '/viewStates/1', path: '/viewStates/0' }])
@@ -267,12 +267,12 @@ describe('상태 목록 — 번호 자리를 상태 id 로 다시 짓는다', ()
     const listed = states([GA])
     const theirs = applyOps(
       listed,
-      addViewStateOps(listed, '다', () => 's_da')!,
+      addViewStateOps(listed, '다', null, () => 's_da')!,
     )
     expect(
       names(
         rebase(
-          addViewStateOps(listed, '나', () => 's_na')!,
+          addViewStateOps(listed, '나', null, () => 's_na')!,
           theirs,
           listed,
         )?.document,
@@ -282,11 +282,11 @@ describe('상태 목록 — 번호 자리를 상태 id 로 다시 짓는다', ()
     const bare = states(undefined)
     const created = applyOps(
       bare,
-      addViewStateOps(bare, '다', () => 's_da')!,
+      addViewStateOps(bare, '다', null, () => 's_da')!,
     )
     expect(
       rebase(
-        addViewStateOps(bare, '나', () => 's_na')!,
+        addViewStateOps(bare, '나', null, () => 's_na')!,
         created,
         bare,
       ),

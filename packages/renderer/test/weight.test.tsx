@@ -98,15 +98,6 @@ describe('부모가 정하는 몫', () => {
     expect(weights(page({ id: 'row', type: 'Flex', children: [card] }), 'card', 'a', 'b')).toEqual(['2', '', '1'])
   })
 
-  it('상태 영역 · 가지는 요소를 안 남기므로 가지 안 노드의 부모는 영역의 부모다', () => {
-    const area: WbNode = {
-      id: 'sw',
-      type: 'StateSwitch',
-      children: [{ id: 'cs', type: 'StateCase', props: { state: 'default' }, children: [text('a', 4)] }],
-    }
-    expect(weights(page({ id: 'g', type: 'Grid', props: { columns: 3 }, children: [area] }), 'a')).toEqual(['3'])
-  })
-
   it('모양이 틀린 몫(낙관적 패치가 지난 문서)은 싣지 않는다', () => {
     const odd = (id: string, weight: unknown) => ({ id, type: 'Text', weight }) as unknown as WbNode
     const doc = page({ id: 'f', type: 'Flex', children: [odd('a', 0), odd('b', 13), odd('c', 1.5), odd('d', '2')] })

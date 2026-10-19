@@ -295,9 +295,8 @@ export async function findPageById(db: DbHandle, projectId: string, pageId: stri
 
 /**
  * `services/menu-tree.ts`의 `buildMenuTree`가 받을 페이지 행을 조회한다.
- * 프로젝트의 `pages`에서 `id`·`menu_node_id`·`title`·`sort_order` 네 필드만 고른다 —
- * `schema`는 여기서 애초에 select하지 않는다(통합 트리 응답에 스키마가 실리면
- * 프로젝트가 커질수록 무거워진다). 반환 타입은 `services/menu-tree.ts`의 `PageRow`와
+ * 프로젝트의 `pages`에서 `id`·`menu_node_id`·`title`·`sort_order` 와 문서의 상태 목록(`schema -> 'viewStates'`)만 고른다 —
+ * `schema` 전체는 고르지 않는다(통합 트리 응답에 스키마가 실리면 프로젝트가 커질수록 무거워진다). 상태 목록은 많아야 20개다. 반환 타입은 `services/menu-tree.ts`의 `PageRow`와
  * 구조적으로 같다 — 이 파일 안의 (비공개) `PageRow`(전체 컬럼을 담는 타입)와
  * 이름이 겹치므로 그 타입을 직접 import하지 않고 인라인으로 선언한다.
  *
@@ -307,8 +306,12 @@ export async function findPageById(db: DbHandle, projectId: string, pageId: stri
 export async function listPageRows(
   db: DbHandle,
   projectId: string,
-): Promise<Array<{ id: string; menu_node_id: string; title: string; sort_order: number }>> {
-  return db.selectFrom('pages').select(['id', 'menu_node_id', 'title', 'sort_order']).where('project_id', '=', projectId).execute()
+): Promise<Array<{ id: string; menu_node_id: string; title: string; sort_order: number; view_states: unknown }>> {
+  return db
+    .selectFrom('pages')
+    .select(['id', 'menu_node_id', 'title', 'sort_order', sql<unknown>`schema -> 'viewStates'`.as('view_states')])
+    .where('project_id', '=', projectId)
+    .execute()
 }
 
 /**

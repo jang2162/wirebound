@@ -9,12 +9,12 @@
  * |---|---|
  * | 쓰는 자리 × 창 셋 | 구조 트리 맨 아래 줄 `…` · 스크롤한 트리 가운데 줄 `…` · 메뉴 트리 줄 `+` · 메뉴 트리 맨 아래 줄 `…` · 메뉴 트리 머리 `+` · 셸 `…` 의 목록이 잘리거나 덮인다 |
  * | 셸 밖 화면 머리 `…` × 창 셋 | 프로젝트 목록 · 계정 설정 · 테마 관리 화면의 머리 `…`(`shell/page-head.tsx`)의 목록이 잘리거나 덮인다(L-141 — 셸 밖의 같은 부품) |
- * | 머리 상태 전환기 · 영역 표지 × 창 셋 | 머리 `[기본 ▾]`(`shell/view-state-switcher.tsx`)와 뷰 모드의 «상태에 따라 다름» 표지(`canvas/state-badges.tsx`)의 목록이 잘리거나 덮인다(L-319). 좁은 창은 전환기가 셸 `…` 로 접혀(`shell/head-fold.ts`) 그 항목을 셸 `…` 목록에서 잰다 |
+ * | 머리 상태 전환기 × 창 셋 | 머리 `[기본 ▾]`(`shell/view-state-switcher.tsx`)의 목록이 잘리거나 덮인다(L-319). 좁은 창은 전환기가 셸 `…` 로 접혀(`shell/head-fold.ts`) 그 항목을 셸 `…` 목록에서 잰다 |
  *
  * ## `ActionMenu` 를 쓰는 자리 전부(L-319)
  *
- * `git grep -n '<ActionMenu' -- apps/web/src` — 단추가 목록을 여는 JSX 는 **일곱**(여섯 파일 · `tree-row-actions.tsx` 가 둘 — 구조 트리 머리 `+` 는 걷었다)이고, L-319 전에는 **둘**(`canvas/state-badges.tsx` ·
- * `shell/view-state-switcher.tsx`)이 이 행렬 밖이었다. 지금은 일곱이 모두 들었다(`test/shell/action-menu.test.tsx` · `popover-side.test.tsx` 의 `ActionMenu` 는 단위 테스트의 쓰임이라 뺐다).
+ * `git grep -n '<ActionMenu' -- apps/web/src` — 단추가 목록을 여는 JSX 는 **여섯**(다섯 파일 · `tree-row-actions.tsx` 가 둘 — 구조 트리 머리 `+` 와 뷰 모드
+ * 영역 표지는 걷었다)이고 여섯이 모두 들었다(`test/shell/action-menu.test.tsx` · `popover-side.test.tsx` 의 `ActionMenu` 는 단위 테스트의 쓰임이라 뺐다).
  *
  * | JSX | 파일 | 이 파일의 케이스 |
  * |---|---|---|
@@ -22,10 +22,9 @@
  * | 메뉴 트리 머리 `+` | `panels/menu-tree.tsx` | «메뉴 트리 머리 +» |
  * | 셸 머리 `…` | `routes/editor.tsx` | «셸 …» |
  * | 셸 밖 화면 머리 `…` | `shell/page-head.tsx` | «셸 밖 화면의 머리 …» |
- * | 머리 상태 전환기 | `shell/view-state-switcher.tsx` | **«머리 상태 전환기 · 영역 표지»**(L-319) |
- * | 뷰 모드 영역 표지 | `canvas/state-badges.tsx` | 같은 케이스 |
+ * | 머리 상태 전환기 | `shell/view-state-switcher.tsx` | **«머리 상태 전환기»**(L-319) |
  *
- * **이 표가 재지 않는 것 — `TreeRowActions` 인스턴스.** 같은 JSX 라도 줄마다 자리가 다르다. 행렬에 든 줄은 구조 트리 `…`(맨 아래 · 스크롤한 가운데) · 메뉴 트리의 메뉴 줄 `+` · `…` 뿐이고, **메뉴 트리 페이지 줄의 `…`(`panels/menu-tree.tsx` 의 둘째 `TreeRowActions`)는 안 든다.
+ * **이 표가 재지 않는 것 — `TreeRowActions` 인스턴스.** 같은 JSX 라도 줄마다 자리가 다르다. 행렬에 든 줄은 구조 트리 `…`(맨 아래 · 스크롤한 가운데) · 메뉴 트리의 메뉴 줄 `+` · `…` 뿐이고, **메뉴 트리 페이지 줄의 `…`(`panels/menu-tree.tsx` 의 둘째 `TreeRowActions`)와 상태 줄의 `…`(`panels/state-rows.tsx`)는 안 든다.
  */
 import type { Locator, Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -284,11 +283,11 @@ describe.skipIf(!전제.ok)('행동 메뉴 자리 — 실브라우저', () => {
   })
 
   /**
-   * 머리 상태 전환기 · 뷰 모드 영역 표지(L-319) — 상태 둘과 영역 하나가 있는 페이지. 판은 같다(`sight`): 목록이 창 안에 다 들고 항목이 안 덮인다.
+   * 머리 상태 전환기(L-319) — 상태 트리(로그인 > 관리자 · 손님)가 있는 페이지. 판(`sight`): 목록이 창 안에 다 들고 항목이 안 덮인다.
    * 좁은 창에서는 전환기가 셸 `…` 로 접힌다(`shell/head-fold.ts`) — 그때는 접힌 항목이 셸 `…` 의 목록에 든다는 것(이름이 «화면 상태: …»)을 카나리아로 본다.
-   * 카나리아: 열린 목록에 항목이 있고(`items > 0`), 영역 표지의 목록은 그 영역의 가지(기본 · 관리자)다.
+   * 카나리아: 열린 목록에 항목이 있다(`items > 0`).
    */
-  it.each(WINDOWS)('창 $width×$height — 머리 상태 전환기 · 뷰 모드 영역 표지의 목록이 잘리지도 덮이지도 않는다', async (viewport) => {
+  it.each(WINDOWS)('창 $width×$height — 머리 상태 전환기의 목록이 잘리지도 덮이지도 않는다', async (viewport) => {
     const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
     const project = (
       await call('POST', '/projects', { name: '화면 상태 자리', slug: `place-vs-${viewport.width}-${Date.now().toString(36)}` })
@@ -300,16 +299,17 @@ describe.skipIf(!전제.ok)('행동 메뉴 자리 — 실브라우저', () => {
     const seeded = await call('PATCH', `${P}/ops`, {
       baseSeq: 0,
       ops: [
-        { op: 'add', path: '/viewStates', value: [{ id: 's_admin', name: '관리자' }] },
-        ...Array.from({ length: 30 }, (_, i) => text(`n_f${i}`, `채움 ${i + 1}`)),
         {
-          id: 'n_sw',
-          type: 'StateSwitch',
-          children: [
-            { id: 'n_cd', type: 'StateCase', props: { state: 'default' }, children: [text('n_dt', '기본 글')] },
-            { id: 'n_ca', type: 'StateCase', props: { state: 's_admin' }, children: [text('n_at', '관리자 글')] },
+          op: 'add',
+          path: '/viewStates',
+          value: [
+            { id: 's_login', name: '로그인' },
+            { id: 's_admin', name: '관리자', parent: 's_login' },
+            { id: 's_guest', name: '손님' },
           ],
         },
+        ...Array.from({ length: 30 }, (_, i) => text(`n_f${i}`, `채움 ${i + 1}`)),
+        { ...text('n_at', '관리자 글'), visibility: { mode: 'only', states: ['s_admin'] } },
       ].map((value, at) =>
         at === 0 ? (value as { op: string; path: string; value: unknown }) : { op: 'add', path: `/root/children/${at - 1}`, value },
       ),
@@ -336,26 +336,8 @@ describe.skipIf(!전제.ok)('행동 메뉴 자리 — 실브라우저', () => {
         await page.getByRole('menu').waitFor({ state: 'detached' })
       }
 
-      await page.getByRole('button', { name: '뷰 모드' }).click()
-      const badge = page.getByRole('button', { name: /^상태에 따라 다름/ })
-      await badge.waitFor()
-      // 영역을 창 맨 아래로 굴린다 — 표지가 창 아래 끝에 서서 목록이 위로 열려야 하는 자리다(위쪽에 서면 아래로 열려 자리를 안 가린다).
-      await canvasFrame(page)
-        .locator('[data-wb-id="n_dt"]')
-        .evaluate((el) => el.scrollIntoView({ block: 'end' }))
-      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
-      const anchor = await badge.boundingBox()
-      await badge.click()
-      await page.getByRole('menu').waitFor()
-      const block = await page.locator('.wb-shell-action-menu-body').getAttribute('data-block')
-      const badgeSight = await sight(page)
-      const badgeItems = await page.getByRole('menuitemradio').allTextContents()
-      seen['뷰 모드 영역 표지'] = badgeSight
-      await page.keyboard.press('Escape')
-      await page.getByRole('menu').waitFor({ state: 'detached' })
-
       // eslint-disable-next-line no-console
-      console.log(`[상태 전환기 · 표지 ${viewport.width}×${viewport.height}]`, JSON.stringify({ seen, badgeItems, anchor, block }))
+      console.log(`[상태 전환기 ${viewport.width}×${viewport.height}]`, JSON.stringify({ seen }))
       for (const [label, value] of Object.entries(seen)) {
         if ('folded' in value) {
           expect({ label, foldedItem: value.foldedItem }).toEqual({ label, foldedItem: true })
@@ -368,9 +350,6 @@ describe.skipIf(!전제.ok)('행동 메뉴 자리 — 실브라우저', () => {
           any: true,
         })
       }
-      expect(badgeItems.map((item) => item.trim())).toEqual(['기본', '관리자'])
-      // 판 카나리아 — 표지가 창 아래쪽에 섰고 목록이 위로 열렸다(아래로 열 자리가 없다). 위쪽에 선 표지는 아래로 열려 잘림 · 덮임 칸이 비어 있다.
-      expect({ lowerThird: anchor !== null && anchor.y > viewport.height * 0.66, block }).toEqual({ lowerThird: true, block: 'above' })
     } finally {
       await close()
     }

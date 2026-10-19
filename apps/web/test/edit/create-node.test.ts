@@ -6,7 +6,7 @@
  * 컴포넌트가 늘면 거기서 죽는다(속성 패널 테스트가 `listComponents()`로 control 일곱을
  * 대조하는 것과 같은 방식).
  */
-import { THEMELESS_TYPES, listComponents, validatePage, type PageDocument, type ValidationIssue, type WbNode } from '@wirebound/schema'
+import { listComponents, validatePage, type PageDocument, type ValidationIssue, type WbNode } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import '../../src/catalog-setup'
 import { createNode } from '../../src/edit/create-node'
@@ -68,13 +68,11 @@ describe('createNode', () => {
   })
 
   it('모든 카탈로그 타입에 대해 검증을 통과한다', () => {
-    // **분모를 손으로 적지 않는다** — 카탈로그에 컴포넌트가 늘면 여기서 죽는다. 상태 영역 둘(`THEMELESS_TYPES`)은 홀로 설 수 없다
-    // — `StateSwitch`는 기본 가지를, `StateCase`는 `StateSwitch` 부모를 요구한다. 둘은 «상태별로 나누기» 명령(schema 의
-    // `splitIntoStatesOps`)이 함께 짓고 이 함수로 만들지 않는다. 뿌리 타입 `Page` 는 페이지 안에 못 선다(`nested-page` — 아래
+    // **분모를 손으로 적지 않는다** — 카탈로그에 컴포넌트가 늘면 여기서 죽는다. 뿌리 타입 `Page` 는 페이지 안에 못 선다(`nested-page` — 아래
     // «페이지에 둘 수 없는 타입»).
     const nextId = countingIds()
 
-    for (const def of listComponents().filter((def) => !THEMELESS_TYPES.includes(def.type) && def.type !== 'Page')) {
+    for (const def of listComponents().filter((def) => def.type !== 'Page')) {
       const node = createNode(def.type, nextId)
       expect(node, def.type).not.toBeNull()
       expect(nodeIssues(pageWith(node as WbNode)), def.type).toEqual([])
@@ -86,14 +84,11 @@ describe('createNode', () => {
     // `props.safeParse({})`를 통과하므로 `createNode`는 `{ id, type }`만 만들면 된다.
     // 손으로 기본값 표를 두지 않는 근거가 이것이고, **하나라도 생기면 여기서 죽는다** —
     // 그때 채울 값은 `props.parse({})`가 주는 것을 그대로 쓰는 편이 정확하다.
-    //
-    // **`StateCase`만 예외다** — 빈 props 를 기본 가지로 읽으면 «기본 가지 정확히 하나»를 세는 구조 판정과 갈린다(카탈로그
-    // `StateCaseDef` 머리말). 그 노드는 이 함수가 만들지 않는다(위 «모든 카탈로그 타입»).
     const failing = listComponents()
       .filter((def) => !def.props.safeParse({}).success)
       .map((def) => def.type)
 
-    expect(failing).toEqual(['StateCase'])
+    expect(failing).toEqual([])
   })
 
   it('props를 만들지 않는다', () => {
@@ -126,7 +121,7 @@ describe('createNode', () => {
     }
   })
 
-  it('페이지에 둘 수 없는 타입은 뿌리 Page · Slot · 상태 영역 둘이다', () => {
+  it('페이지에 둘 수 없는 타입은 뿌리 Page · Slot 이다', () => {
     // `createNode`의 계약이 아니라 **카탈로그의 성질**이다. 타입 목록이 무엇을
     // 걸러야 하는지가 여기서 나온다 — 설계서 「레이아웃」이 Slot을 레이아웃 전용으로 두고,
     // `validatePage`가 `slot-count`로 거절한다(실측). `Page` 는 뿌리에만 서고 안에 두면 `nested-page` 다. 카탈로그에 그런 타입이 더
@@ -138,7 +133,6 @@ describe('createNode', () => {
       })
       .map((def) => def.type)
 
-    // 상태 영역 둘은 홀로 설 수 없다(위 «모든 카탈로그 타입»).
-    expect(blocked).toEqual(['Page', 'Slot', 'StateSwitch', 'StateCase'])
+    expect(blocked).toEqual(['Page', 'Slot'])
   })
 })

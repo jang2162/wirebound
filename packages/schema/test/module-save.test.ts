@@ -21,6 +21,21 @@ describe('moduleNodesForSave', () => {
     expect(nodes).toEqual([{ id: 'a', type: 'Card', children: [{ id: 'b', type: 'Text' }] }])
   })
 
+  it('상태 보임을 트리 어디서든 걷는다 — 모듈에는 상태가 없다', () => {
+    const source: WbNode[] = [
+      {
+        id: 'a',
+        type: 'Card',
+        visibility: { mode: 'only', states: ['s1'] },
+        children: [{ id: 'b', type: 'Text', visibility: { mode: 'except', states: ['s2'] } }],
+      },
+    ]
+    const { nodes } = moduleNodesForSave(source)
+    expect(nodes).toEqual([{ id: 'a', type: 'Card', children: [{ id: 'b', type: 'Text' }] }])
+    // 입력은 그대로다 — 화면은 열린 문서의 노드를 넘긴다.
+    expect(source[0]!.visibility).toEqual({ mode: 'only', states: ['s1'] })
+  })
+
   it('묶음 밖 노드를 겨냥하는 액션만 빼고 센다 — 안 · 자손 · 페이지 · 빈 대상은 남는다', () => {
     const { nodes, droppedActions } = moduleNodesForSave([
       opener(['m_panel', 'm_deep', 'n_out1', '', 'n_out2']),

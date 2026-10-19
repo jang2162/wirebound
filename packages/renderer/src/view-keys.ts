@@ -1,8 +1,8 @@
-import { THEMELESS_TYPES, getComponent } from '@wirebound/schema'
+import { getComponent } from '@wirebound/schema'
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
 
 /**
- * **렌더러가 안 읽는 뷰 키** — 렌더러는 `views[노드 타입]` 만 읽는다. 상태 영역(`THEMELESS_TYPES`)은 직접 다뤄 뷰를 안 부르고, 카탈로그에 없는 타입의 뷰는 닿을 노드가 없다.
+ * **렌더러가 안 읽는 뷰 키** — 렌더러는 `views[노드 타입]` 만 읽는다. 카탈로그에 없는 타입의 뷰는 닿을 노드가 없다.
  * 테마가 그런 키를 정의해도 그리는 데는 아무 일이 없어 작성자가 «내 뷰가 안 쓰인다» 를 화면에서 못 안다.
  *
  * 판정과 문장은 이 한 벌이다 — 작성자 도구(`wb-theme check` — `packages/theme-kit/src/check.ts`)는 오류로 내고 호스트 런타임은 `warnUnusedViewKeys` 로
@@ -11,9 +11,7 @@ import type { ThemeDefinition } from '@wirebound/theme-sdk'
 export function unusedViewKeys(views: ThemeDefinition['views']): { key: string; message: string }[] {
   const out: { key: string; message: string }[] = []
   for (const key of Object.keys(views)) {
-    if (THEMELESS_TYPES.includes(key)) {
-      out.push({ key, message: `views.${key} 는 테마가 그리지 않는 타입의 뷰입니다 — 렌더러가 직접 다뤄 쓰이지 않습니다` })
-    } else if (getComponent(key) === undefined) {
+    if (getComponent(key) === undefined) {
       out.push({ key, message: `views.${key} 는 카탈로그에 없는 타입의 뷰입니다 — 쓰이지 않습니다` })
     }
   }

@@ -6,14 +6,15 @@ export type {
   InteractionAction,
   InteractionTrigger,
   LayoutDocument,
+  NodeVisibility,
   PageDocument,
   ViewState,
   WbNode,
 } from './node'
 export {
-  DEFAULT_CASE,
+  DEFAULT_VIEW_STATE,
   NODE_ALIAS_MAX,
-  THEMELESS_TYPES,
+  VIEW_STATE_DEPTH_MAX,
   VIEW_STATE_NAME_MAX,
   VIEW_STATES_MAX,
   WEIGHT_MAX,
@@ -22,19 +23,8 @@ export {
 } from './node'
 
 export { replaceDocumentOps } from './document-ops'
-export { caseFor, nodeViewState, viewStateIndex, visibleTree } from './view-state'
-export {
-  addViewStateOps,
-  editInForkOps,
-  forkCaseOps,
-  moveViewStateOps,
-  removeViewStateOps,
-  renameViewStateOps,
-  splitIntoStatesOps,
-  unsplitStatesOps,
-} from './view-state-ops'
-export type { ViewStateTouch } from './view-state-touch'
-export { viewStateTouch } from './view-state-touch'
+export { effectiveViewState, isVisibleIn, stateDescendants, stateLineage, viewStateOrder, visibleTree } from './visibility'
+export { addViewStateOps, moveViewStateOps, removeViewStateOps, renameViewStateOps } from './view-state-ops'
 export { guardViewStateOps } from './view-state-guard'
 
 export type { NodeVisit } from './tree'
@@ -64,13 +54,22 @@ export {
   assertValidLayout,
   assertValidPage,
   checkViewStateRemoval,
+  unknownVisibilityStates,
   excuseStandingNestedPages,
   nestedPagesUnderRoot,
   validateLayout,
   validatePage,
 } from './validate'
 
-export { DocumentEnvelopeSchema, InteractionSchema, NODE_ID_PATTERN, PageEnvelopeSchema, ViewStatesSchema, WbNodeSchema } from './envelope'
+export {
+  DocumentEnvelopeSchema,
+  InteractionSchema,
+  NODE_ID_PATTERN,
+  PageEnvelopeSchema,
+  ViewStatesSchema,
+  VisibilitySchema,
+  WbNodeSchema,
+} from './envelope'
 
 // 설계서 「설계서 화면 구조」의 클립보드 — 노드 봉투 읽기 · 쓰기 · 붙일 노드 짓기. 편집 묶음의 연산 수 상한도 여기 산다
 // (서버 `OpsBody` 와 화면이 같은 값을 읽는다).
@@ -83,7 +82,7 @@ export {
   type NodesEnvelopeRead,
   writeNodesEnvelope,
 } from './clipboard'
-export type { DroppedCases } from './clipboard'
+export type { DroppedStates } from './clipboard'
 
 export type { ActionProblem, InteractionIssueCode, NodeTargetAction, PageTargetAction } from './interaction/check'
 export { checkNodeAction, checkPageAction, isPageTargetAction } from './interaction/check'
@@ -99,16 +98,7 @@ export {
   namingContexts,
   nodeDisplayName,
 } from './interaction/describe'
-export {
-  UNKNOWN_VIEW_STATE_NAME,
-  aliasNote,
-  caseStateName,
-  viewStateName,
-  nodeAlias,
-  nodeHeading,
-  nodeRowLabel,
-  nodeSummary,
-} from './display'
+export { UNKNOWN_VIEW_STATE_NAME, aliasNote, viewStateName, nodeAlias, nodeHeading, nodeRowLabel, nodeSummary } from './display'
 export { hasRejectedAliasChar, isBlankAlias, tidyAlias } from './alias'
 export { SUMMARY_LIST_MAX, SUMMARY_TEXT_MAX } from './component/summary'
 
@@ -140,7 +130,9 @@ export { applyOp, applyOps } from './patch/apply'
 export { invertOps } from './patch/inverse'
 
 export type { Migration } from './migrate'
-export { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument } from './migrate'
+export { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument, migratePageDocument } from './migrate'
+export type { LiftResult } from './migrate-document'
+export { MigrationError, liftStateRegions } from './migrate-document'
 
 export type { PageJson, PageJsonComment, PageJsonFailure, PageJsonIssue, PageJsonPage, PageJsonResult } from './page-json/envelope'
 export {

@@ -1,10 +1,11 @@
 /**
  * ⚠️ 이 파일은 테스트 DB에 **실제로 커밋한다.** `helpers.ts`의 `withRealApi`를 쓴다.
  *
- * 화면 상태가 저장 경계를 지나는가 — 문서를 통째로 갈아 끼우는 세 길(`PUT …/schema` · 페이지 JSON 가져오기 · 스냅샷 복원)이 상태 목록을
- * 싣고, 비튼 값은 클라이언트 오류(500 없음)이고, 상태 삭제의 연쇄(가지째 지우기)가 WS 편집 하나로 커밋되며 남이 잡은 가지 안 노드에
- * 막히는가(설계 spec `docs/superpowers/specs/2026-10-05-page-states-design.md` 「테스트」의 api). 편집 길(`/viewStates/…` 의 REST · WS ·
- * 되돌리기 · 잠금)은 `view-states-path.test.ts` 가 갖는다.
+ * 화면 상태가 저장 경계를 지나는가 — 문서를 통째로 갈아 끼우는 세 길(`PUT …/schema` · 페이지 JSON 가져오기 · 스냅샷 복원)이 상태 목록 ·
+ * 노드 보임을 싣고, **판 1 문서(상태 영역)는 세 길 모두 판 2 로 옮겨 선다**(계획 Review Focus 3 · `migratePageDocument`), 비튼 값은
+ * 클라이언트 오류(500 없음)이고, 상태 삭제의 연쇄(보임째)가 WS 편집 하나로 커밋되며 남이 잡은 노드에 막히는가(설계 spec
+ * `docs/superpowers/specs/2026-10-18-modules-states-layout-design.md` 「C3」 · 「C4」). 편집 길(`/viewStates/…` 의 REST · WS · 되돌리기 ·
+ * 잠금)은 `view-states-path.test.ts` 가 갖는다.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { WIREBOUND_PAGE_VERSION, applyOps, removeViewStateOps, type PageDocument, type PatchOp } from '@wirebound/schema'
@@ -28,11 +29,28 @@ function track(probe: WsProbe): WsProbe {
 const ADMIN = { id: 's_admin', name: '관리자' }
 const GUEST = { id: 's_guest', name: '비로그인' }
 
-/** 상태 둘 · 영역 하나(기본 · 관리자 가지). */
+/** 상태 둘 · 기본 «보기»(관리자에서 숨김) · 관리자 «승인». */
 function statefulDoc(): PageDocument {
   return {
-    version: 1,
+    version: 2,
     // 사본이다 — 케이스가 목록을 비틀어도 다음 케이스의 문서에 새지 않는다.
+    viewStates: [{ ...ADMIN }, { ...GUEST }],
+    root: {
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_head', type: 'Text', props: { content: '머리' } },
+        { id: 'n_view', type: 'Button', props: { label: '보기' }, visibility: { mode: 'except', states: ['s_admin'] } },
+        { id: 'n_ok', type: 'Button', props: { label: '승인' }, visibility: { mode: 'only', states: ['s_admin'] } },
+      ],
+    },
+  }
+}
+
+/** 같은 화면의 **판 1 문서** — 상태 영역 하나(기본 «보기» · 관리자 «승인»). 판 2 로 옮기면 `statefulDoc()` 이다. */
+function legacyDoc(): unknown {
+  return {
+    version: 1,
     viewStates: [{ ...ADMIN }, { ...GUEST }],
     root: {
       id: 'n_root',
@@ -85,7 +103,7 @@ async function read(ctx: RealApiContext, fx: Board, pageId = fx.page.id): Promis
 }
 
 describe('PUT …/schema — 통째 교체가 상태 목록을 싣는다', () => {
-  it('상태 목록 · 영역이 든 문서를 저장하고 되읽는다 · 룸의 다른 연결이 받은 ops 를 옛 문서에 적용하면 새 문서다', async () => {
+  it('상태 목록 · 보임이 든 문서를 저장하고 되읽는다 · 룸의 다른 연결이 받은 ops 를 옛 문서에 적용하면 새 문서다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const before = (await read(ctx, fx)).schema
@@ -107,7 +125,7 @@ describe('PUT …/schema — 통째 교체가 상태 목록을 싣는다', () =>
       const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
       const stateful = (await read(ctx, fx)).schema
 
-      const plain = { version: 1, root: { id: 'n_root', type: 'Page', children: [] } }
+      const plain = { version: 2, root: { id: 'n_root', type: 'Page', children: [] } }
       const res = await put(ctx, fx, plain)
       expect(res.statusCode, res.body).toBe(200)
       expect((await read(ctx, fx)).schema).toEqual(plain)
@@ -134,34 +152,48 @@ describe('PUT …/schema — 통째 교체가 상태 목록을 싣는다', () =>
     })
   })
 
-  it.each<[string, (doc: PageDocument) => void, string]>([
-    ['기본 가지 없음', (doc) => doc.root.children![1]!.children!.shift(), 'state-case-default'],
-    [
-      '같은 상태 가지 둘',
-      (doc) => doc.root.children![1]!.children!.push({ id: 'n_c2', type: 'StateCase', props: { state: 's_admin' }, children: [] }),
-      'state-case-duplicate',
-    ],
-    [
-      '가지가 영역 밖',
-      (doc) => doc.root.children!.push({ id: 'n_c3', type: 'StateCase', props: { state: 'default' }, children: [] }),
-      'state-case-outside',
-    ],
-    ['영역 아래 다른 타입', (doc) => doc.root.children![1]!.children!.push({ id: 'n_t', type: 'Text', props: {} }), 'state-switch-child'],
-  ])('구조를 어긴 영역(%s)은 422 이고 저장되지 않는다', async (_label, twist, code) => {
+  it.each<[string, (doc: PageDocument) => void]>([
+    ['보임 states 빈 배열', (doc) => (doc.root.children![2]!.visibility = { mode: 'only', states: [] })],
+    ['보임 겹침', (doc) => (doc.root.children![2]!.visibility = { mode: 'only', states: ['s_admin', 's_admin'] })],
+    ['모르는 mode', (doc) => ((doc.root.children![2] as { visibility: unknown }).visibility = { mode: 'hide', states: ['s_admin'] })],
+    ['부모 고리', (doc) => ((doc.viewStates![0]!.parent = 's_guest'), (doc.viewStates![1]!.parent = 's_admin'))],
+  ])('봉투를 어긴 보임 · 트리(%s)는 400 이고 저장되지 않는다', async (_label, twist) => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const doc = statefulDoc()
       twist(doc)
       const res = await put(ctx, fx, doc)
-      expect(res.statusCode, res.body).toBe(422)
-      expect((res.json() as { error: { issues: { code: string }[] } }).error.issues.map((issue) => issue.code)).toContain(code)
+      expect(res.statusCode, res.body).toBe(400)
       expect((await read(ctx, fx)).schema).not.toHaveProperty('viewStates')
+    })
+  })
+
+  it('판 1 문서(상태 영역)를 PUT 하면 판 2 로 옮겨 저장한다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const res = await put(ctx, fx, legacyDoc())
+      expect(res.statusCode, res.body).toBe(200)
+      expect((await read(ctx, fx)).schema).toEqual(statefulDoc())
+    })
+  })
+
+  it('걷은 상태 영역을 판 2 문서에 실으면 422 unknown-type 이다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const doc = statefulDoc()
+      doc.root.children!.push({ id: 'n_sw', type: 'StateSwitch', children: [] })
+      const res = await put(ctx, fx, doc)
+      expect(res.statusCode, res.body).toBe(422)
+      expect((res.json() as { error: { issues: { code: string }[] } }).error.issues.map((issue) => issue.code)).toContain('unknown-type')
     })
   })
 })
 
 describe('페이지 JSON — 내보낸 파일 · 가져오기가 상태 목록을 싣는다', () => {
-  it('가져온 페이지가 파일의 상태 목록을 그대로 갖고, 노드 id 만 새로 짓는다(가지의 state 는 상태 id 그대로)', async () => {
+  it.each<[string, () => unknown]>([
+    ['판 2 파일', statefulDoc],
+    ['판 1 파일(상태 영역) — 판 2 로 옮겨 선다', legacyDoc],
+  ])('%s — 가져온 페이지가 파일의 상태 목록 · 보임을 갖고 노드 id 만 새로 짓는다(보임의 상태 id 는 그대로)', async (_label, schema) => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const res = await ctx.app.inject({
@@ -170,16 +202,20 @@ describe('페이지 JSON — 내보낸 파일 · 가져오기가 상태 목록�
         cookies: fx.owner.cookie,
         payload: {
           menuNodeId: fx.menu.id,
-          file: { wireboundVersion: WIREBOUND_PAGE_VERSION, page: { title: '상태 페이지' }, schema: statefulDoc(), comments: [] },
+          file: { wireboundVersion: WIREBOUND_PAGE_VERSION, page: { title: '상태 페이지' }, schema: schema(), comments: [] },
         } as never,
       })
       expect(res.statusCode, res.body).toBe(201)
       const pageId = (res.json() as { page: { id: string } }).page.id
       const saved = (await read(ctx, fx, pageId)).schema
+      expect(saved.version).toBe(2)
       expect(saved.viewStates).toEqual([ADMIN, GUEST])
-      const region = saved.root.children![1]!
-      expect(region.id).not.toBe('n_sw')
-      expect(region.children!.map((child) => child.props?.state)).toEqual(['default', 's_admin'])
+      expect(saved.root.children!.map((child) => [child.type, child.visibility ?? null])).toEqual([
+        ['Text', null],
+        ['Button', { mode: 'except', states: ['s_admin'] }],
+        ['Button', { mode: 'only', states: ['s_admin'] }],
+      ])
+      expect(saved.root.children!.map((child) => child.id)).not.toContain('n_ok')
     })
   })
 
@@ -205,7 +241,7 @@ describe('페이지 JSON — 내보낸 파일 · 가져오기가 상태 목록�
 })
 
 describe('스냅샷 복원이 상태 목록을 되돌린다', () => {
-  it('얼린 뒤 목록 · 가지를 지운 페이지를 복원하면 목록 · 가지가 돌아온다 · 목록이 없던 판으로 복원하면 목록이 빠진다', async () => {
+  it('얼린 뒤 상태를 지운 페이지를 복원하면 목록 · 보임 · 노드가 돌아온다 · 목록이 없던 판으로 복원하면 목록이 빠진다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const snap = async (tag: string): Promise<string> => {
@@ -248,10 +284,45 @@ describe('스냅샷 복원이 상태 목록을 되돌린다', () => {
       expect((await read(ctx, fx)).schema).not.toHaveProperty('viewStates')
     })
   }, 30_000)
+
+  it('판 1 문서를 얼린 스냅샷(DB 마이그레이션 앞에 찍은 것)을 복원하면 판 2 로 옮겨 선다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      expect((await put(ctx, fx, statefulDoc())).statusCode).toBe(200)
+      const taken = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.project.id}/snapshots`,
+        cookies: fx.owner.cookie,
+        payload: { tag: '옛 판' },
+      })
+      expect(taken.statusCode, taken.body).toBe(201)
+      const snapshotId = (taken.json() as { id: string }).id
+      // 0025 앞에 찍은 스냅샷처럼 그 페이지의 문서를 판 1 로 되돌려 둔다(payload 는 마이그레이션이 안 고친다).
+      const row = await ctx.db.selectFrom('snapshots').select('payload').where('id', '=', snapshotId).executeTakeFirstOrThrow()
+      const payload = row.payload as unknown as { pages: { id: string; schema: unknown }[] }
+      const at = payload.pages.findIndex((page) => page.id === fx.page.id)
+      expect(at).toBeGreaterThanOrEqual(0)
+      payload.pages[at]!.schema = legacyDoc()
+      await ctx.db
+        .updateTable('snapshots')
+        .set({ payload: JSON.stringify(payload) as never })
+        .where('id', '=', snapshotId)
+        .execute()
+
+      expect((await put(ctx, fx, { version: 2, root: { id: 'n_root', type: 'Page', children: [] } })).statusCode).toBe(200)
+      const res = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.project.id}/snapshots/${snapshotId}/restore`,
+        cookies: fx.owner.cookie,
+      })
+      expect(res.statusCode, res.body).toBe(200)
+      expect((await read(ctx, fx)).schema).toEqual(statefulDoc())
+    })
+  }, 30_000)
 })
 
 describe('상태 삭제의 연쇄 — WS 편집 하나', () => {
-  it('상태를 지우는 묶음이 patch-ack 으로 커밋되고 그 상태의 가지가 함께 사라진다 · 역연산 한 번에 돌아온다', async () => {
+  it('상태를 지우는 묶음이 patch-ack 으로 커밋되고 그 상태에서만 보이던 노드가 사라지고 숨김이 걷힌다 · 역연산 한 번에 돌아온다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       expect((await put(ctx, fx, statefulDoc())).statusCode).toBe(200)
@@ -263,7 +334,9 @@ describe('상태 삭제의 연쇄 — WS 편집 하나', () => {
       const after = (await read(ctx, fx)).schema
       expect(after.viewStates).toEqual([GUEST])
       expect(JSON.stringify(after)).not.toContain('n_ok')
-      expect(result.removedNodeIds.sort()).toEqual(['n_c1', 'n_ok'])
+      expect(result.removedNodeIds).toEqual(['n_ok'])
+      expect(result.clearedNodeIds).toEqual(['n_view'])
+      expect(after.root.children!.find((child) => child.id === 'n_view')).not.toHaveProperty('visibility')
 
       const undo = await ctx.app.inject({
         method: 'PATCH',
@@ -276,7 +349,7 @@ describe('상태 삭제의 연쇄 — WS 편집 하나', () => {
     })
   })
 
-  it('지우는 가지 안 노드를 남이 잡고 있으면 423 이고 아무것도 안 지운다 · 다른 가지의 잠금은 막지 않는다', async () => {
+  it('지우거나 고칠 노드를 남이 잡고 있으면 423 이고 아무것도 안 바꾼다 · 무관한 노드의 잠금은 막지 않는다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       expect((await put(ctx, fx, statefulDoc())).statusCode).toBe(200)
@@ -295,8 +368,8 @@ describe('상태 삭제의 연쇄 — WS 편집 하나', () => {
       expect(blocked.statusCode, blocked.body).toBe(423)
       expect((await read(ctx, fx)).schema).toEqual(statefulDoc())
 
-      peerTab.send(JSON.stringify({ type: 'lock', pageId: fx.page.id, nodeId: 'n_view' }))
-      await locksWith(peerTab, 'n_view')
+      peerTab.send(JSON.stringify({ type: 'lock', pageId: fx.page.id, nodeId: 'n_head' }))
+      await locksWith(peerTab, 'n_head')
       const passed = await ctx.app.inject({
         method: 'PATCH',
         url: `${fx.base}/ops`,

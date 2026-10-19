@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { THEMELESS_TYPES, installCatalog, listComponents, validateLayout, validatePage } from '@wirebound/schema'
+import { installCatalog, listComponents, validateLayout, validatePage } from '@wirebound/schema'
 import { defineTheme, Root, useToken, view } from '@wirebound/theme-sdk'
 import { GALLERY_SAMPLES, galleryItems, ThemeGallery } from '@wirebound/theme-gallery'
 
@@ -11,11 +11,10 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
 })
-/** 테마가 그리는 타입 — 상태 영역 둘(`THEMELESS_TYPES`)은 렌더러가 가지만 고르는 투명 노드라 갤러리에 칸이 없다. */
+/** 테마가 그리는 타입 — 카탈로그 전부다. */
 const themed = (): string[] =>
   listComponents()
     .map((d) => d.type)
-    .filter((type) => !THEMELESS_TYPES.includes(type))
     .sort()
 const manifest = {
   id: 't',
@@ -35,8 +34,8 @@ const manifest = {
 }
 
 describe('갤러리', () => {
-  it('표본이 카탈로그 전부를 덮는다 — 테마가 안 그리는 구조는 빼고', () => {
-    expect(themed().length).toBe(listComponents().length - 2)
+  it('표본이 카탈로그 전부를 덮는다', () => {
+    expect(themed().length).toBeGreaterThan(15)
     expect(Object.keys(GALLERY_SAMPLES).sort()).toEqual(themed())
   })
   it('표본이 스키마 검증을 지난다 — 갤러리가 폴백을 그리지 않게', () => {

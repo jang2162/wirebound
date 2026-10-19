@@ -364,6 +364,10 @@ describe('시딩은 마이그레이션이 아니다', () => {
       return /insertInto\(|INSERT\s+INTO|seed-user|seedUser/i.test(source)
     })
     expect(offenders).toEqual([])
+    // 데이터를 고치는 마이그레이션(`0025-state-visibility` — 문서를 판 2 로)도 계정 행은 고치지 않는다.
+    expect(
+      files.filter((name) => /update\s+users\b|updateTable\(\s*['"]users['"]/i.test(readFileSync(join(MIGRATIONS_DIR, name), 'utf8'))),
+    ).toEqual([])
     // 허락한 파일이 실제로 있고 그 표의 삽입을 든다 — 이름이 바뀌어 허락이 헛돌면 여기서 죽는다.
     for (const [name, table] of Object.entries(DATA_MOVES)) {
       expect(files, name).toContain(name)

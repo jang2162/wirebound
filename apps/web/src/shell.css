@@ -1303,6 +1303,25 @@
   color: var(--wb-shell-accent);
 }
 
+/* 지금 상태에서 숨은 노드의 줄(`panels/structure-tree.tsx` · 설계 spec «C3») — 흐리게. 고르고 고칠 수 있어 누름은 그대로다. 고른 줄은 채움이
+   이겨야 읽히므로 흐림을 덜 건다. */
+.wb-shell-structure-node-hidden {
+  opacity: 0.45;
+}
+
+.wb-shell-structure-node-hidden[aria-current='true'] {
+  opacity: 0.75;
+}
+
+/* «이 상태에서 숨김» 표지 — 그 노드 자신의 보임으로 숨은 줄 아래에(잠금 배지와 같은 자리 · 같은 크기). */
+.wb-shell-structure-hidden {
+  display: block;
+  padding: 0 4px 2px;
+  color: var(--wb-shell-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
 /* 메뉴 트리의 단추 — 빈 상태의 «최상위 메뉴» · 줄 아래 삭제 확인 · 소속 메뉴 목록의 «취소». */
 .wb-shell-menu-tool {
   appearance: none;
@@ -1422,6 +1441,52 @@
   order: -1;
   flex: none;
   width: 16px;
+}
+
+/* 메뉴 트리의 상태 줄(`panels/state-rows.tsx`) — 페이지 줄 아래에 그 페이지의 화면 상태가 트리 차례로 선다(깊이는 인라인 `padding-left`).
+   **줄 행동이 서는 조건은 메뉴 트리 줄(`.wb-shell-tree-row`)과 같다** — 줄 상자가 `visibility: hidden` 이고 줄 링크가 스스로 켜며, 행동 상자가
+   줄의 값을 상속받는다. 고른 줄 표지는 따로 둔다 — 메뉴 트리의 고른 줄(`.wb-shell-tree-row-picked`)과 섞이지 않게. */
+.wb-shell-tree-state-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  visibility: hidden;
+}
+
+.wb-shell-tree-state-row:hover,
+.wb-shell-tree-state-row:focus-within,
+.wb-shell-tree-state-row-current {
+  visibility: visible;
+}
+
+.wb-shell-tree-state {
+  display: block;
+  visibility: visible;
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px 2px 20px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+/* 지금 고른 상태. 표시는 `aria-current` 가 갖고 색은 여기서 나온다(페이지 줄의 `aria-current='page'` 와 같은 결 · 더 옅다 — 열린 페이지 안의 고름이다). */
+.wb-shell-tree-state[aria-current='true'] {
+  background: var(--wb-shell-line);
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-tree-state-input {
+  padding-left: 20px;
+}
+
+/* 이름 칸 아래의 까닭 — 보내지 않은 까닭이라 붉은 글이다. */
+.wb-shell-tree-state-problem {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #b42318;
 }
 
 /* 트리 머리의 «모두 접기» · «모두 펴기» — 뿌리 `+`(`.wb-shell-action-menu-compact`)와 같은 꼴로 그 곁에 선다. */
@@ -2084,6 +2149,36 @@
   margin: 4px 0 0;
   font-size: 12px;
   color: #a11;
+}
+
+/* «상태 보임» 칸(`panels/visibility-field.tsx`) — 갈래 고르개 아래에 상태 고르기(트리 차례 · 깊이는 인라인 `padding-left`). 안내 한 줄(상태가
+   없음 · 지금 숨음)은 오류가 아니라 옅은 글이다. */
+.wb-shell-visibility-states {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 0;
+  border: 0;
+  padding: 0;
+}
+
+.wb-shell-visibility-legend {
+  padding: 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-visibility-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.wb-shell-visibility-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
 }
 
 /* ── 속성 패널의 위젯(`panels/controls/*`) ──────────────────────────────────────────
@@ -3275,6 +3370,12 @@
 .wb-shell-action-menu-icon {
   vertical-align: -2px;
   margin-right: 6px;
+  pointer-events: none;
+}
+
+/* 항목의 들여쓰기(`ActionMenuItem.depth` — 머리 상태 전환기의 하위 상태). 폭은 깊이에 따라 인라인이다. */
+.wb-shell-action-menu-indent {
+  display: inline-block;
   pointer-events: none;
 }
 
@@ -4862,8 +4963,8 @@
   cursor: default;
 }
 
-/* ── 상태 다루기 상자(`shell/view-states-dialog.tsx`) ──────────────────────────────────────
-   «상태 추가» · «상태 관리…» · «상태 삭제»가 이 안에 선다. 자리 · 폭 · 스크롤은 대화 상자(`.wb-shell-dialog`)가 갖는다. 붉은색(`#b42318`)은
+/* ── 상태 삭제 확인(`panels/remove-state-dialog.tsx`) ──────────────────────────────────────
+   상태 줄 `…` 의 «삭제»가 연다. 자리 · 폭 · 스크롤은 대화 상자(`.wb-shell-dialog`)가 갖는다. 붉은색(`#b42318`)은
    되돌리기 어려운 일의 몫이고(`.wb-shell-action-menu-danger`), 바뀐 목록 알림은 메뉴 연쇄 삭제 상자(`.wb-shell-menu-delete-changed`)와 같은 주황이다. */
 .wb-shell-view-states-body {
   display: flex;
@@ -4874,91 +4975,10 @@
   text-align: left;
 }
 
-.wb-shell-view-states-note,
-.wb-shell-view-states-empty {
+.wb-shell-view-states-note {
   margin: 0;
   font-size: 12px;
   color: var(--wb-shell-muted);
-}
-
-.wb-shell-view-states-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.wb-shell-view-states-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 6px;
-  padding: 4px 6px 4px 10px;
-}
-
-.wb-shell-view-states-name {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.wb-shell-view-states-row-button {
-  appearance: none;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  padding: 3px;
-  background: none;
-  color: var(--wb-shell-ink);
-  cursor: pointer;
-  line-height: 0;
-}
-
-.wb-shell-view-states-row-button:hover:enabled,
-.wb-shell-view-states-row-button:focus-visible {
-  border-color: var(--wb-shell-line);
-  background: var(--wb-shell-chrome);
-}
-
-.wb-shell-view-states-row-button:disabled {
-  color: var(--wb-shell-muted);
-  cursor: default;
-}
-
-.wb-shell-view-states-add,
-.wb-shell-view-states-rename {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.wb-shell-view-states-rename {
-  flex: 1;
-  align-items: center;
-}
-
-.wb-shell-view-states-field {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--wb-shell-muted);
-}
-
-.wb-shell-view-states-input {
-  flex: 1;
-  min-width: 0;
-  box-sizing: border-box;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 6px;
-  padding: 5px 8px;
-  font: inherit;
-  font-size: 13px;
-  color: var(--wb-shell-ink);
 }
 
 .wb-shell-view-states-button,
@@ -4988,18 +5008,6 @@
   background: var(--wb-shell-chrome);
   color: var(--wb-shell-muted);
   cursor: default;
-}
-
-.wb-shell-view-states-icon {
-  flex: none;
-}
-
-/* 이름 칸 아래의 까닭 — 보내지 않은 까닭이라 붉은 글이다. */
-.wb-shell-view-states-problem {
-  flex-basis: 100%;
-  margin: 0;
-  font-size: 12px;
-  color: #b42318;
 }
 
 .wb-shell-view-states-sentence {

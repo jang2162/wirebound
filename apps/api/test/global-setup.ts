@@ -42,6 +42,26 @@ function buildExportRuntime(): void {
 }
 
 /**
+ * **왕복 전에 테스트 DB 의 프로젝트를 비운다** — `0025-state-visibility` 의 `down` 은 페이지 · 모듈 · 레이아웃이 남은 DB 에서 «되돌릴 수 없다»로
+ * 멈춘다(그 머리말). 앞 실행이 남긴 행(중간에 죽은 실행)이 있어도 왕복이 돌게 프로젝트째 지운다 — 페이지 · 모듈 · 레이아웃은 CASCADE 로 함께 간다.
+ *
+ * **지우는 DB 가 테스트 DB 임을 값으로 확인한다** — 연결한 DB 의 이름이 `TEST_DATABASE_URL` 의 것이고 `_test` 로 끝나야 한다. 아니면 던진다
+ * (설정이 갈려 사람의 DB 를 가리키는 판에서 설계서를 지우지 않는다).
+ */
+async function clearTestProjects(pool: ReturnType<typeof createPool>): Promise<void> {
+  const expected = decodeURIComponent(new URL(TEST_DATABASE_URL).pathname.replace(/^\//, ''))
+  // 풀로 묻는다 — 이 파일은 api 프로젝트 밖(루트)에서 적재돼 `kysely` 의 `sql` 을 못 푼다.
+  const { rows } = await pool.query<{ name: string }>('select current_database() as name')
+  const actual = rows[0]?.name
+  if (actual !== expected || !actual.endsWith('_test')) {
+    throw new Error(
+      `테스트 DB 가 아닌 곳의 프로젝트를 지우려 했습니다: 연결 ${String(actual)} · TEST_DATABASE_URL ${expected} — 이름이 같고 _test 로 끝나야 합니다`,
+    )
+  }
+  await pool.query('delete from projects')
+}
+
+/**
  * vitest가 api 프로젝트 전체 실행 전 딱 한 번 부른다.
  *
  * latest → none → latest 한 사이클을 돈다. 단순히 최신까지 올리기만 하면
@@ -58,6 +78,7 @@ export default async function setup(): Promise<void> {
   const db = createDb(pool)
   try {
     await migrateToLatest(db)
+    await clearTestProjects(pool)
     await migrateToNone(db)
     await migrateToLatest(db)
     // **시딩을 여기서 한 번 커밋해 둔다.** 안 해 두면 첫 `withApi` 앱이 제 트랜잭션 안에서 system-admin 을 넣고, 그 트랜잭션이 열린

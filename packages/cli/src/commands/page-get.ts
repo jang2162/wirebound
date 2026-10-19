@@ -27,7 +27,7 @@
  * **이 파일에는 글자만 있다.** `--json`은 `lookupPage`가 낸 값을 **그대로** 낸다 — 사람이
  * 읽는 판과 기계가 읽는 판이 같은 값에서 나와야 갈리지 않는다.
  */
-import type { PageView } from '@wirebound/schema'
+import { stateLineage, viewStateOrder, type PageView } from '@wirebound/schema'
 import { EXIT, usageError } from '../exit'
 import type { Io } from '../io'
 import { fetchSnapshot, requireProject } from '../project'
@@ -86,8 +86,15 @@ export function renderPageView(view: PageView): string[] {
     lines.push(`  ${view.description}`)
   }
 
-  // 화면 상태가 있으면 목록을 먼저 말한다 — 구조의 «(관리자 상태)» 가 무엇의 이름인지. 없으면 줄을 안 낸다(옛 출력 그대로).
-  if (view.viewStates.length > 0) lines.push(`  화면 상태: 기본 · ${view.viewStates.map((state) => state.name).join(' · ')}`)
+  // 화면 상태가 있으면 목록을 먼저 말한다 — 구조의 «(관리자 상태)» 가 무엇의 이름인지. 없으면 줄을 안 낸다(옛 출력 그대로). 트리 차례이고 하위 상태는
+  // 조상부터 잇는다(«로그인 > 관리자» — 한 줄이라 들여쓰기 대신).
+  if (view.viewStates.length > 0) {
+    const named = (id: string): string => view.viewStates.find((state) => state.id === id)?.name ?? id
+    const paths = viewStateOrder(view.viewStates).map(({ state }) =>
+      stateLineage(view.viewStates, state.id).reverse().map(named).join(' > '),
+    )
+    lines.push(`  화면 상태: 기본 · ${paths.join(' · ')}`)
+  }
 
   lines.push('', '구조')
   for (const node of view.nodes) {

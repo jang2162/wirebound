@@ -1,12 +1,15 @@
 import {
   aliasNote,
-  caseFor,
+  effectiveViewState,
   getComponent,
   getKoreanErrorMap,
+  isVisibleIn,
+  stateLineage,
   WEIGHT_MAX,
   WEIGHT_MIN,
   type AnyDocument,
   type InteractionTrigger,
+  type ViewState,
   type WbNode,
 } from '@wirebound/schema'
 import { DEFAULT_VIEWS, type NodeBinding, type ThemeDefinition } from '@wirebound/theme-sdk'
@@ -68,11 +71,15 @@ export interface RenderOptions {
    */
   theme?: ThemeDefinition
   /**
-   * **지금 화면 상태**(`PageDocument.viewStates`의 id). 상태 영역(`StateSwitch`)마다 그 상태의 가지를, 없으면 기본 가지를 그린다. 없거나
-   * `null`이면 기본이다. `renderDocument`는 그 문서의 목록에 없는 id 를 기본으로 돌린다 — 목록 밖 상태의 가지는 그려지지 않는다(설계
-   * spec 「상태 영역 노드」). `renderNode`는 목록을 모르므로 받은 값을 그대로 쓴다.
+   * **지금 화면 상태**(`PageDocument.viewStates`의 id). 그 상태에서 숨은 노드(`isVisibleIn` — 노드 보임 · 물려받기)는 그 자손째 그리지 않는다.
+   * 없거나 `null`이면 기본이다. 목록(`viewStates`)에 없는 id 도 기본이다.
    */
   viewState?: string | null
+  /**
+   * 판정에 쓰는 상태 트리(그 문서의 `viewStates`). `renderDocument`는 문서에서 읽어 이 값을 덮는다(레이아웃은 목록이 없다). `renderNode`는
+   * 문서를 모르므로 부르는 쪽이 준다 — 안 주면 목록이 빈 것이라 상태를 고른 판도 기본으로 판정한다.
+   */
+  viewStates?: readonly ViewState[]
 }
 
 /**
@@ -261,8 +268,10 @@ function nodeCacheFor(node: unknown, options: RenderOptions, room: WeightRoom | 
     byState = new Map()
     NODE_CACHE.set(theme, byState)
   }
-  // 상태 id 는 노드 id 규칙이라 줄바꿈이 없다 — 몫의 자리와 섞이지 않는다.
-  const stateKey = `${options.viewState ?? ''}\n${roomKey(room)}`
+  // 숨김 판정은 고른 상태의 조상 줄(`stateLineage`)에만 기댄다 — 목록의 다른 상태 · 이름이 바뀌어도 같은 열쇠다. 상태 id 는 노드 id 규칙이라
+  // 쉼표 · 줄바꿈이 없다 — 몫의 자리와 섞이지 않는다.
+  const lineage = stateLineage(options.viewStates, effectiveViewState(options.viewState ?? null, options.viewStates)).join(',')
+  const stateKey = `${lineage}\n${roomKey(room)}`
   let byNode = byState.get(stateKey)
   if (byNode === undefined) {
     byNode = new WeakMap()
@@ -284,20 +293,12 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions, 
   // 아니게 된다.
   if (nodeId !== '' && hiddenByOverlay(options.interaction?.overlay, nodeId)) return <></>
 
-  // **상태 영역은 테마가 그리지 않는다**(`THEMELESS_TYPES`) — 요소를 남기지 않고 가지 하나(영역) · 자식(가지)만 그 자리에 둔다. 요소를
-  // 하나라도 두면 부모 뷰의 배치(Flex 의 자식 · Grid 의 칸)가 그 요소 하나를 자식으로 보아 상태마다 화면이 갈린다. 가지 안 노드는 제
-  // 뷰가 `data-wb-id`를 달아 선택 외곽선 · 마커가 그대로 선다.
-  if (raw?.type === 'StateSwitch' && shapeError(node) === null) {
-    const picked = caseFor(node, options.viewState ?? null)
-    // 영역 · 가지는 요소를 안 남기므로 가지 안 노드의 부모는 영역의 부모다 — 몫의 자리를 그대로 넘긴다.
-    if (picked !== null) return renderNodeIn(root, picked, options, room)
-    options.onNodeError?.({ nodeId, type: 'StateSwitch', message: '상태 영역에 그릴 기본 가지가 없습니다' })
-    return <></>
-  }
+  // **그 상태에서 숨은 노드도 자식까지 함께 사라진다**(`isVisibleIn` — 부모가 숨으면 자손도 숨는다). 겹layer와 같은 까닭으로 자식을 그리기
+  // 전에 거르고 DOM 에서 뺀다 — 숨은 노드는 마커 · 외곽선을 걸 요소가 없다.
+  if (raw !== null && typeof raw === 'object' && !isVisibleIn(node, options.viewState ?? null, options.viewStates)) return <></>
 
   const rawChildren = raw?.children
   const type = readString(raw?.type)
-  const isCase = type === 'StateCase' && shapeError(node) === null
 
   // 자식을 먼저 그린다. 이 노드가 실패해도 자식은 폴백 안에 그대로 들어간다 —
   // 부모를 못 그리는 것과 자식을 못 그리는 것은 별개다.
@@ -305,16 +306,13 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions, 
   // `children`이 배열이 아니면 자식 없음으로 다룬다(그냥 `.map`을 부르면 TypeError다).
   // 배열 원소가 노드가 아니면 재귀 호출의 모양 가드가 그 자리에 폴백을 그린다.
   const childNodes: unknown[] = Array.isArray(rawChildren) ? rawChildren : []
-  // 가지(`StateCase`)는 요소를 안 남기므로 제 자리를 자식에게 그대로 넘긴다.
-  const childRoom = isCase ? room : weightRoom(type, overlayProps(options.interaction?.overlay, nodeId, raw?.props as WbNode['props']))
+  const childRoom = weightRoom(type, overlayProps(options.interaction?.overlay, nodeId, raw?.props as WbNode['props']))
   const children: ReactNode =
     childNodes.length > 0
       ? childNodes.map((child, index) => (
           <Fragment key={childKey(child, index)}>{renderNodeIn(root, child as WbNode, options, childRoom)}</Fragment>
         ))
       : null
-
-  if (isCase) return <>{children}</>
 
   const fallback = (message: string): ReactElement => {
     options.onNodeError?.({ nodeId, type, message })
@@ -511,12 +509,18 @@ const TRIGGERS_OF: Record<string, InteractionTrigger[]> = (() => {
 export function renderDocument(doc: AnyDocument, options: RenderOptions = {}): ReactElement {
   warnUnusedViewKeys(options.theme)
   const root = doc?.root as WbNode
-  return renderNodeIn(root, root, { ...options, viewState: knownViewState(doc, options.viewState) })
+  return renderNodeIn(root, root, { ...options, viewState: knownViewState(doc, options.viewState), viewStates: documentStates(doc) })
+}
+
+/** 문서의 상태 목록 — 레이아웃 · 검증 전 문서(배열이 아님)는 빈 목록. 원소의 모양은 판정(`stateLineage`)이 견딘다. */
+function documentStates(doc: AnyDocument): readonly ViewState[] {
+  const states: unknown = (doc as { viewStates?: unknown } | null | undefined)?.viewStates
+  return Array.isArray(states) ? (states.filter((state) => state !== null && typeof state === 'object') as ViewState[]) : []
 }
 
 /**
  * `viewState`가 그 문서의 목록(`viewStates`)에 있으면 그대로, 아니면 `null`(기본). 레이아웃에는 목록이 없어 늘 `null`이다 —
- * `renderComposed`가 같은 옵션으로 두 문서를 그려도 레이아웃의 영역은 기본을 그린다. 검증 전 문서의 목록(배열이 아님 · 원소가 객체가
+ * `renderComposed`가 같은 옵션으로 두 문서를 그려도 레이아웃은 기본으로 판정한다. 검증 전 문서의 목록(배열이 아님 · 원소가 객체가
  * 아님)도 던지지 않고 «없음»으로 읽는다.
  */
 function knownViewState(doc: AnyDocument, viewState: string | null | undefined): string | null {

@@ -8,6 +8,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
 import { WIREBOUND_PAGE_VERSION, pageJsonText, readPageJson, toPageJson } from '../src/page-json/envelope'
 import { gatePageImport, planPageImport } from '../src/page-json/import'
+import { CURRENT_DOCUMENT_VERSION } from '../src/migrate'
 import type { PageDocument } from '../src/node'
 import { collectNodeIds, walkNodes } from '../src/tree'
 import { partitionIssues, validatePage } from '../src/validate'
@@ -286,7 +287,7 @@ describe('가져오기 게이트 — 서버와 화면이 같은 함수를 부른
 
     expect(gate.ok).toBe(true)
     if (!gate.ok) return
-    expect(gate.document.version).toBe(DOCUMENT.version)
+    expect(gate.document.version).toBe(CURRENT_DOCUMENT_VERSION)
     expect(collectNodeIds(gate.document.root)).toEqual(collectNodeIds(DOCUMENT.root))
   })
 })

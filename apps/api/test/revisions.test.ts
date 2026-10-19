@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { PatchOp } from '@wirebound/schema'
+import { CURRENT_DOCUMENT_VERSION, type PatchOp } from '@wirebound/schema'
 import { withTransaction } from '../src/db/tx'
 import { insertRevision } from '../src/repos/revisions'
 import {
@@ -293,7 +293,12 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
       // `/version`은 zod를 통과한다. 버전 변조를 막는
       // 것은 파이프라인 7단계(`after.version !== before.version` → `invalid`)이고,
       // 이 케이스가 그 자리를 못박는다 — 7단계를 지우면 여기가 200이 된다.
-      const res = await patchOps(ctx, fx, { baseSeq: 0, ops: [{ op: 'replace', path: '/version', value: 2 }] }, fx.owner.cookie)
+      const res = await patchOps(
+        ctx,
+        fx,
+        { baseSeq: 0, ops: [{ op: 'replace', path: '/version', value: CURRENT_DOCUMENT_VERSION + 1 }] },
+        fx.owner.cookie,
+      )
 
       expect(res.statusCode, res.body).toBe(422)
       const error = res.json<{ error: { code: string; issues: { path: string }[] } }>().error
