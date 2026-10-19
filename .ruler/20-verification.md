@@ -73,8 +73,10 @@
 - **다섯째 함정:** ⑤ **역할 하나로 센 목록은 다른 역할의 항목을 0 으로 센다** — 행동 메뉴 `sight` 가 `[role="menuitem"]` 만 세어 `menuitemradio` 목록(화면 상태 전환기 · 영역 표지)이 항목 0 · 덮임 0 으로 늘 초록이었다(`apps/web/build-test/action-menu-place.test.ts`). 자가 세는 역할 목록을 쓰는 곳의 역할 전부와 견주고, 목록마다 `items > 0` 카나리아를 둔다.
 - **문자열 속이나 주석 밖을 셀 때는 줄 머리로 주석을 거르지 말고 파서로 센다** — 템플릿 문자열 안의 CSS 주석(`/* … */`)이 줄 머리 거르개에게는 주석으로 보여 통째로 빠진다(②의 한 꼴).
 - **화면 넘침은 요소 상자로만 세지 않는다** — 끊을 자리 없는 낱말은 제 요소 상자 안에 선 채 글자만 넘치고(`overflow-wrap: normal`), `overflow: hidden` 조상은 넘친 글자를 잘라 숨겨 문서 `scrollWidth` 에도 안 뜬다. 글자 노드의 `Range.getClientRects()` 오른끝으로 잰다(`apps/web/build-test/theme-system-review.test.ts` 의 `TEXT_PAST_ROOT`). 넘침을 보일 표본 낱말에는 하이픈을 넣지 않는다 — 브라우저가 하이픈 뒤에서 줄을 바꿔 넘침이 사라진다.
+- **내보낸 번들에서 테마의 좁은 창 media 를 잴 때는 화면 모드(`#wb-screen`)로 연다** — 번들의 문서는 iframe 이 아니라 media 가 창 폭을 보는데, 뷰어 셸이 서면 창 390 에서 문서 칸이 0 으로 눌려 «한 줄에 하나» 가 폭 0 상자로 늘 참이다. 문서 폭 · 칸 폭 하한을 카나리아로 둔다(`apps/web/build-test/layout-bundle.ts` 의 `openBundlePage` 의 `screen`).
 - **«접히지 않는다» 는 «보인다» 가 아니다** — 통지 · 알림을 숨기지 않는 설계는 접힘(`scrollHeight`)만이 아니라 **창 안에 닿는지**(`scrollIntoView` 뒤 창 안 · 실브라우저)도 잰다. 그릇이 `overflow: visible` 인 채 창을 넘으면 접힘 0 이어도 마지막 항목이 닿을 길이 없다(`apps/web/build-test/n36-notice-floor.test.ts`)
 - **글자가 몇 줄인지는 글자 노드 하나의 `Range.getClientRects()` 서로 다른 `top` 수로 센다** — 요소의 `getClientRects()` 는 블록 상자 하나를 내 접힘을 0 으로 세고, 컨트롤을 품은 요소의 범위는 그 컨트롤의 상자가 섞여 거짓 두 줄을 낸다.
 - **카탈로그 타입 목록은 `CATALOG_TYPES` 로 읽는다** — `@wirebound/schema` 를 Node 에서 바로 적재하면 `listComponents()` 는 `installCatalog` 를 부르기 전이라 빈 배열이고, 그 목록을 도는 탐침은 아무것도 안 재고 오류 없이 끝난다.
 - **하드코딩된 개수 하한 단언(`카드 ≥ 18`)은 분모를 바꾸는 변경에서 `git grep` 으로 같이 센다** — 카탈로그 타입 수를 쓰는 build-test 가 있다(`apps/web/build-test/palette.test.ts`).
 - **걷을 자리 · 고칠 자리를 셀 때는 꼴을 좁힌 식이 아니라 그 낱말 전부를 세고 갈래로 나눈다** — 꼴을 좁힌 식(`actor: (requestEventActor|\{ type: revision)`)은 같은 성질의 다른 꼴(`actor: { type: 'user', … }`)을 오류 없이 빼고, 그 수가 장부에 «N 줄» 로 남아 다음 차수가 그대로 받는다(WS `patch` 의 프레임 `actor` 리터럴이 «17 줄» 에 없었다).
+- **마이그레이션을 새로 두면 마이그레이션 디렉터리를 글자로 세는 자(`apps/api/test/seed-user.test.ts` «행 삽입이 없다» 등 — `git grep -lE 'MIGRATIONS_DIR|db/migrations' apps/api/test`)를 그 트랙 게이트에 넣는다** — 데이터 옮기기의 `insert` 가 계정 시딩으로 세진다.
