@@ -77,8 +77,8 @@ docker compose ps                               # api 가 healthy · migrate 가
 ```
 
 **로그인은 TLS 너머에서만 선다.** 이미지는 `NODE_ENV=production` 이라 세션 쿠키가 `Secure` 다 — 맨 HTTP 로 연 화면에서는 로그인 200 뒤
-`/api/auth/me` 가 401 이다(브라우저가 쿠키를 안 받는다). 예외는 브라우저가 안전한 출처로 보는 `http://localhost:<포트>` · `127.0.0.1` 이다 — 서버
-안에서나 SSH 터널(`ssh -L 8080:127.0.0.1:8080 <서버>`)로 열면 프록시 없이도 로그인이 선다. 사람들이 쓰는 주소는 TLS 를 끝내는 프록시를 앞에 세운다.
+`/api/auth/me` 가 401 이다(브라우저가 쿠키를 안 받는다). 예외는 브라우저가 안전한 출처로 보는 `http://localhost:8080` · `http://127.0.0.1:8080` 이다 — 서버
+안에서나 SSH 터널(`ssh -L 8080:127.0.0.1:8080` 로 그 서버에 붙어)로 열면 프록시 없이도 로그인이 선다. 사람들이 쓰는 주소는 TLS 를 끝내는 프록시를 앞에 세운다.
 
 ## 앞에 프록시를 세운다 — `compose.override.yaml`
 
@@ -249,7 +249,7 @@ docker compose exec api node --import tsx src/auth/unlock-login.ts me@example.co
 
 ```bash
 WIREBOUND_TAG=measure APP_PORT=18080 docker compose -p wb-measure up -d --build
-docker compose -p wb-measure -f compose.yaml -f <override 예> up -d     # ⓐ · ⓑ 를 잴 때
+docker compose -p wb-measure -f compose.yaml -f compose.override.yaml up -d   # ⓐ · ⓑ 를 잴 때(그 예를 그 이름으로 둔다)
 docker compose -p wb-measure logs api | grep remoteAddress              # 클라이언트 주소
 docker compose -p wb-measure down -v
 ```
