@@ -313,13 +313,16 @@ describe('기본값 — 개발 compose 와 .env.example 이 같은 수를 든다
     // *"README 가 소유하고 `.ruler/10-worktree.md` 가 가리킨다"*.
     //
     // **재는 것은 산문이 아니라 명령 둘뿐이다**(산문까지 못박으면 문장을 못 고치게 된다) — 개발 DB 를 띄우는 `pnpm db up -d` 가 있고,
-    // 옛 명령(뿌리에서 `docker compose --env-file apps/api/.env up -d` — 이제 배포 compose 를 읽는다)을 칠 명령으로 들지 않는다.
+    // 옛 명령(뿌리에서 `docker compose --env-file apps/api/.env up -d` — 뿌리에서는 배포 compose 를 읽는다)을 칠 명령으로 들지 않는다.
     for (const [이름, 원문] of [
       ['README.md', README],
       ['.ruler/10-worktree.md', CLAUDE],
     ] as const) {
       const 줄 = 원문.split('\n')
-      expect(줄.filter((line) => /\bpnpm db up -d\b/.test(line)).length, `${이름} 에 칠 수 있는 up 명령이 있어야 한다`).toBeGreaterThan(0)
+      expect(
+        줄.filter((line) => /\bpnpm(?:\s+-C\s+\S+)?\s+db up -d\b/.test(line)).length,
+        `${이름} 에 칠 수 있는 up 명령이 있어야 한다`,
+      ).toBeGreaterThan(0)
       expect(
         줄.filter((line) => /docker compose\s+--env-file apps\/api\/\.env\s+up\b/.test(line)),
         `${이름}: 이 명령은 뿌리의 배포 compose 를 읽는다 — pnpm db up -d 로 쓴다`,

@@ -61,18 +61,18 @@ if (skip) {
 }
 
 describe.skipIf(skip)('개발 DB 의 compose 프로젝트', () => {
-  it('최상위 체크아웃(디렉터리 `wirebound`)은 `wirebound_wirebound-pgdata` 를 쓴다 — 옮기기 전과 같은 볼륨', () => {
-    const c = devConfig(checkout('wirebound', '5433'))
-    expect(typeof c, String(c)).toBe('object')
-    const config = c as DevConfig
-    expect([config.name, config.volumes['wirebound-pgdata']?.name]).toEqual(['wirebound', 'wirebound_wirebound-pgdata'])
-  })
-
-  it('체크아웃 둘은 프로젝트 · 볼륨 · 포트가 다 갈린다', () => {
-    const a = devConfig(checkout('wt-alpha', '15441')) as DevConfig
-    const b = devConfig(checkout('wt-beta', '15442')) as DevConfig
-    const shape = (c: DevConfig) => [c.name, c.volumes['wirebound-pgdata']?.name, c.services.postgres.ports[0]?.published]
-    expect([shape(a), shape(b)]).toEqual([
+  it('프로젝트 이름이 체크아웃 디렉터리다 — 최상위(`wirebound`)는 옮기기 전과 같은 볼륨, 체크아웃 둘은 다 갈린다', () => {
+    const shape = (c: DevConfig | string) => {
+      expect(typeof c, String(c)).toBe('object')
+      const config = c as DevConfig
+      return [config.name, config.volumes['wirebound-pgdata']?.name, config.services.postgres.ports[0]?.published]
+    }
+    expect([
+      shape(devConfig(checkout('wirebound', '5433'))),
+      shape(devConfig(checkout('wt-alpha', '15441'))),
+      shape(devConfig(checkout('wt-beta', '15442'))),
+    ]).toEqual([
+      ['wirebound', 'wirebound_wirebound-pgdata', '5433'],
       ['wt-alpha', 'wt-alpha_wirebound-pgdata', '15441'],
       ['wt-beta', 'wt-beta_wirebound-pgdata', '15442'],
     ])

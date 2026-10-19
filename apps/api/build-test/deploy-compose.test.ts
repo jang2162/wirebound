@@ -17,8 +17,8 @@
  * **값으로 잰다** — compose 는 `docker compose config`(보간 · 기본값을 푼 값), Caddyfile 은 그 이미지의 `caddy adapt`(Caddy 가 읽은
  * JSON)를 읽는다. 글자로 읽으면 주석에 남긴 옛 줄 · 같은 뜻의 다른 꼴이 자를 속인다.
  *
- * **`docker compose` 가 없으면 건너뛴다** — 경로가 아니라 `docker compose config` 를 실제로 돌려 본다. compose 가 돌면 Caddy 이미지도
- * 돌려야 한다(없으면 받는다) — 그것이 안 돌면 건너뛰지 않고 죽는다.
+ * **`docker compose` 가 없으면 건너뛴다** — 경로가 아니라 `docker compose version` 을 실제로 돌려 본다. compose 가 돌면 `config` 와
+ * Caddy 이미지(없으면 받는다)도 돌아야 한다 — 그것이 실패하면 건너뛰지 않고 죽는다.
  */
 import { spawnSync } from 'node:child_process'
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -45,25 +45,30 @@ interface ComposeConfig {
   volumes?: Record<string, { name?: string }>
 }
 
-/** 배포 compose 를 뿌리 `.env` 없이 푼다 — 필수 값만 채운 `.env` 를 임시 디렉터리에 두고 compose 파일을 옮겨 부른다. */
-function resolvedConfig(): ComposeConfig | string {
+/** `docker compose` 가 이 기계에서 도는가 — 안 돌면 건너뛴다. */
+const docker = spawnSync('docker', ['compose', 'version'], { encoding: 'utf8' })
+const skip = docker.error !== undefined || docker.status !== 0
+if (skip) {
+  // eslint-disable-next-line no-console
+  console.log(`[배포 compose] 건너뛴다 — docker compose 가 안 돈다: ${docker.error?.message ?? docker.stderr.trim()}`)
+}
+
+/**
+ * 배포 compose 를 뿌리 `.env` 없이 푼다 — 필수 값만 채운 `.env` 를 임시 디렉터리에 두고 compose 파일을 옮겨 부른다. **docker 가 도는데
+ * `config` 가 실패하면 던진다** — 건너뛰면 고장 난 compose 가 «건너뜀» 으로 지나간다.
+ */
+function resolvedConfig(): ComposeConfig {
   const dir = mkdtempSync(join(tmpdir(), 'wb-deploy-compose-'))
   try {
     copyFileSync(join(ROOT, 'compose.yaml'), join(dir, 'compose.yaml'))
     writeFileSync(join(dir, '.env'), 'POSTGRES_PASSWORD=probe\n')
     const run = spawnSync('docker', ['compose', '-f', join(dir, 'compose.yaml'), 'config', '--format', 'json'], { encoding: 'utf8' })
     if (run.error !== undefined || run.status !== 0)
-      return `docker compose config 이 안 돈다: ${run.error?.message ?? run.stderr.trim().split('\n')[0]}`
+      throw new Error(`docker compose config 이 실패한다: ${run.error?.message ?? run.stderr.trim()}`)
     return JSON.parse(run.stdout) as ComposeConfig
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
-}
-
-const config = resolvedConfig()
-if (typeof config === 'string') {
-  // eslint-disable-next-line no-console
-  console.log(`[배포 compose] 건너뛴다 — ${config}`)
 }
 
 /** web 이미지가 쓰는 Caddy 판 — `Dockerfile` 의 `ARG CADDY_IMAGE` 하나에서 읽는다. */
@@ -127,8 +132,6 @@ function apiProxy(caddy: CaddyJson): CaddyHandler {
   expect(servers).toHaveLength(1)
   const routes = servers[0]!.routes.filter((route) => route.match?.some((m) => m.path?.includes('/api/*')))
   expect(routes).toHaveLength(1)
-  // `/health` 도 같은 처리기로 간다 — 앞의 프록시가 입구 너머 api 의 생사를 묻는 자리다.
-  expect(routes[0]!.match?.flatMap((m) => m.path ?? [])).toEqual(['/api/*', '/health'])
   const proxies = routes[0]!.handle
     .flatMap((h) => h.routes ?? [])
     .flatMap((r) => r.handle)
@@ -144,9 +147,9 @@ function seconds(value: string | undefined): number {
   return Number(match[1]) * 1000
 }
 
-describe.skipIf(typeof config === 'string')('배포 compose 의 값', () => {
-  const c = config as ComposeConfig
-  const caddy = typeof config === 'string' ? undefined : adaptedCaddyfile('')
+describe.skipIf(skip)('배포 compose 의 값', () => {
+  const c = skip ? (undefined as unknown as ComposeConfig) : resolvedConfig()
+  const caddy = skip ? undefined : adaptedCaddyfile('')
   const server = () => Object.values(caddy!.apps.http.servers)[0]!
 
   it('프로젝트 이름 · 운영 볼륨 이름이 고정이다 — 이미 올린 서버가 같은 DB 를 잇는다', () => {
@@ -208,6 +211,13 @@ describe.skipIf(typeof config === 'string')('배포 compose 의 값', () => {
     const proxy = apiProxy(caddy!)
     expect(proxy.headers?.request?.set?.['X-Forwarded-For']).toEqual(['{http.vars.client_ip}'])
     expect(proxy.upstreams).toEqual([{ dial: 'api:3001' }])
+  })
+
+  it('입구는 `/api/*` 와 `/health` 를 api 로 넘긴다 — `/health` 는 앞의 프록시가 입구 너머 api 의 생사를 묻는 자리다', () => {
+    const routes = server().routes.filter((route) =>
+      route.handle.flatMap((h) => h.routes ?? []).some((r) => r.handle.some((h) => h.handler === 'reverse_proxy')),
+    )
+    expect(routes.flatMap((route) => route.match ?? []).flatMap((m) => m.path ?? [])).toEqual(['/api/*', '/health'])
   })
 
   it('입구가 쥐는 상류 keep-alive 가 api 의 keepAliveTimeout(72s)보다 짧다', () => {
