@@ -91,7 +91,7 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 **`pnpm db …` 는 개발 DB 의 compose 다** — 루트 `package.json` 의 `db` 가 `docker compose --project-directory .
 -f docker/dev/compose.yaml --env-file apps/api/.env` 이고, 뒤에 붙인 낱말(`up -d` · `ps` · `exec …` · `down`)이 그대로 넘어간다.
 출력을 다른 명령에 넘길 때는 `pnpm -s db …` 로 친다(안 주면 pnpm 이 머리 두 줄을 붙인다). **뿌리의 `compose.yaml` 은 배포 compose 다** —
-뿌리에서 맨 `docker compose …` 를 치면 그것을 읽어 — 뿌리에 배포 값(`.env`)이 없으면 — `.env 에 POSTGRES_PASSWORD 를 적는다 — 개발 DB 는 pnpm db up -d` 로 멈추고,
+뿌리에서 맨 `docker compose …` 를 치면 그것을 읽어 — 뿌리에 배포 값(`.env`)이 없으면 — `.env 에 WIREBOUND_DEPLOY=1 을 적은 배포 자리에서만 친다 — 개발 DB 는 pnpm db up -d` 로 멈추고,
 `docker/dev/compose.yaml` 을 `pnpm db` 밖에서 부르면 `docker/dev/compose.yaml 은 저장소 뿌리에서 pnpm db 로 부른다` 로 멈춘다(아래 «프로젝트 이름»).
 
 `pnpm db up -d`가 만드는 것은 Postgres 컨테이너 하나이고 **호스트 포트는
@@ -658,9 +658,10 @@ docker ps --filter name="^${OLD_CONTAINER}\$" --format '{{.Names}}\t{{.Ports}}' 
 > 명령을 친다 — 볼륨 이름이 디렉터리 이름을 따르므로 옛 볼륨이 그대로 붙는다. **어느 판에서도 데이터는 옛 볼륨에 그대로 있다.**
 > 다시 재는 법: 임시 프로젝트 둘로, 새 것을 띄운 채 옛 것에 `docker start` 를 두 번 치고 `docker ps` 의 `PORTS` 를 본다.
 
-> **`--env-file apps/api/.env` 는 `up` 에서 빼지 마라.** 빼면 포트가 기본값(5433)으로
-> 되돌아가 컨테이너가 **그 포트로 다시 만들어진다.** `ps`·`logs`·`exec`·`down` 은 프로젝트
-> 이름으로 찾으므로 플래그가 없어도 된다(이 기계에서 쟀다). **`POSTGRES_PORT` 를 바꿔
+> **개발 DB 는 `pnpm db …` 로만 부른다** — 그 스크립트가 포트 파일(`--env-file apps/api/.env`)과 프로젝트 디렉터리를 늘 준다.
+> **뿌리에서 친 맨 `docker compose …`(`ps` · `down` 포함)는 개발 DB 가 아니라 배포 compose(`compose.yaml` · 프로젝트
+> `wirebound-prod`)다** — 배포 값(`.env` 의 `WIREBOUND_DEPLOY`)이 없는 체크아웃에서는 멈추고, 있으면 그 기계의 운영 스택에 닿는다.
+> **`POSTGRES_PORT` 를 바꿔
 > 다시 띄우면 컨테이너는 `Recreated` 되고 볼륨은 그대로다**(이 기계에서 쟀다 — 임시
 > 프로젝트에 표를 하나 만들어 두고 포트를 바꿔 다시 띄웠더니 그 표가 그대로 있었다).
 
@@ -1124,7 +1125,7 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 
 ```bash
 # 저장소 뿌리에서
-cp .env.example .env      # POSTGRES_PASSWORD · SEED_USER_* 를 채운다
+cp .env.example .env      # POSTGRES_PASSWORD · SEED_USER_* 를 채운다(WIREBOUND_DEPLOY=1 은 그대로 둔다)
 docker compose up -d --build
 ```
 

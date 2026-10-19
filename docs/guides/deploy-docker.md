@@ -27,6 +27,7 @@
 
 | 키 | 필수 | 설명 | 예시 |
 | --- | --- | --- | --- |
+| `WIREBOUND_DEPLOY` | 필수(`1`) | 이 자리가 배포 자리라는 표지 — 없으면 `up` · `down` 을 비롯한 `docker compose` 가 멈춘다(아래 「운영 명령」의 `down -v`) | `1` |
 | `POSTGRES_PASSWORD` | 필수(비밀) | Postgres 비밀번호. **영숫자로** — 접속 문자열에 그대로 끼운다. 빈 볼륨에서 처음 뜰 때만 읽힌다(뒤에 바꿔도 DB 는 안 바뀐다) | |
 | `SEED_USER_EMAIL` | 선택 | 최초 계정의 이메일 — `migrate` 가 만든다(이미 있으면 그대로 둔다). 가입 화면이 없어 첫 계정은 이 길뿐이다 | `me@example.com` |
 | `SEED_USER_NAME` | 선택(이메일의 로컬 파트) | 최초 계정의 이름 | |
@@ -49,7 +50,7 @@
 
 ```bash
 # 저장소 뿌리에서
-cp .env.example .env          # POSTGRES_PASSWORD · SEED_USER_* 를 채운다
+cp .env.example .env          # POSTGRES_PASSWORD · SEED_USER_* 를 채운다(WIREBOUND_DEPLOY=1 은 그대로 둔다)
 docker compose up -d --build
 ```
 
@@ -64,8 +65,9 @@ docker compose up -d --build
   코드로 짓는다). 캐시 없는 빌드가 3분 남짓 · api 이미지 2.0GB 안팎이다(아래 「잰 값」).
 - **`container_name` 을 박지 않는다** — 같은 서버의 다른 스택과 겹칠 이름이 없다.
 - **기본은 모든 주소의 `8080` 을 연다.** 프록시를 앞에 세우면 override 가 그 포트를 닫거나 루프백으로 좁힌다(아래).
-- `.env` 가 없으면 `env file …/.env not found`, `POSTGRES_PASSWORD` 가 비면 `required variable POSTGRES_PASSWORD is missing a value` 로 `up` 이
-  아무것도 만들기 전에 멈춘다. 개발 DB 를 띄우려고 뿌리에서 `docker compose --env-file apps/api/.env up -d` 를 쳐도 이 문장으로 멈춘다(개발 DB 는 `pnpm db up -d`).
+- `.env` 가 없거나 `WIREBOUND_DEPLOY` · `POSTGRES_PASSWORD` 가 비면 `required variable … is missing a value` 로 아무것도 만들거나 지우기 전에
+  멈춘다 — `up` 만이 아니라 `ps` · `down` 도 그 줄을 보간한다. 개발 DB 를 띄우려고 뿌리에서 `docker compose --env-file apps/api/.env up -d` 를 쳐도
+  그 문장(`… — 개발 DB 는 pnpm db up -d`)으로 멈춘다.
 
 ## 확인
 
@@ -73,7 +75,7 @@ docker compose up -d --build
 curl -s http://localhost:8080/health            # {"status":"ok"} — 입구 너머 api
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/api/auth/me   # 401 — /api 가 api 에 닿는다
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/projects/x    # 200 — 깊은 링크도 index.html
-docker compose ps                               # api 가 healthy · migrate 가 Exited (0)
+docker compose ps -a                            # api 가 healthy · migrate 가 Exited (0)(끝난 컨테이너는 -a 에만 나온다)
 ```
 
 **로그인은 TLS 너머에서만 선다.** 이미지는 `NODE_ENV=production` 이라 세션 쿠키가 `Secure` 다 — 맨 HTTP 로 연 화면에서는 로그인 200 뒤
@@ -148,11 +150,16 @@ services:
 - 루프백으로 붙은 요청을 입구는 `backend` 네트워크의 **게이트웨이** 주소에서 온 것으로 본다 — `TRUSTED_PROXIES` 가 그 주소다:
 
   ```bash
-  docker network inspect wirebound-prod_backend --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'   # 기본 대역이면 10.231.47.128
+  docker network inspect wirebound-prod_backend --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
   ```
+
+  게이트웨이는 엔진이 고른다(이 기계에서는 `ip_range` 의 첫 주소 `10.231.47.128`) — 적힌 수를 베끼지 말고 위 명령으로 읽는다.
+- **ⓑ 없이(포트가 모든 주소에 열린 채) 게이트웨이를 `TRUSTED_PROXIES` 에 적지 않는다** — 게시 포트로 들어온 요청이 게이트웨이로 보이는 판(이 기계 ·
+  리눅스의 IPv6 · 사용자 공간 프록시)에서 바깥의 누구나 `X-Forwarded-For` 를 지어 적는다. 게이트웨이를 믿는 것은 그 포트를 루프백에만 연 때다.
 
 - **nginx 를 앞에 둘 때 잰 지시어** — `proxy_http_version 1.1` 과 `Upgrade` · `Connection` 머리가 없으면 WS 가 **404** 이고 에디터는 재연결을
   되풀이한다. `proxy_read_timeout` 은 25초보다 길게(에디터의 핑 간격 — `5s` 로 두자 WS 가 5.0초에 끊겼다 · 기본 60s 는 넘는다).
+  `upstream { keepalive … }` 를 안 두면 상류 연결을 남기지 않는다.
   `X-Forwarded-For` 는 `$proxy_add_x_forwarded_for`(덧붙임)로 싣는다 — 덧붙인 값의 경로는 안 쟀다.
 
 ### 믿는 앞단 — `TRUSTED_PROXIES`
@@ -189,8 +196,12 @@ docker compose exec api node --import tsx src/db/reset-password.ts me@example.co
 docker compose exec api node --import tsx src/auth/unlock-login.ts me@example.com
 ```
 
+- **`docker compose down -v` 는 운영 DB(`wirebound-prod_pgdata`)를 지운다** — 프로젝트 이름이 고정이라 그 기계의 어느 디렉터리에서 쳐도 같은
+  볼륨이다. 배포 값(`WIREBOUND_DEPLOY`)이 없는 자리에서는 멈추지만, `-p wirebound-prod` · `COMPOSE_PROJECT_NAME=wirebound-prod` 로 이름을 밖에서 주면
+  compose 는 파일 없이 그 이름의 라벨로 지운다(멈추지 않는다). 컨테이너만 내리려면 `docker compose down`(볼륨 남김)이다.
 - **사람을 더 만들려면** `docker compose run --rm -e SEED_USER_EMAIL=… -e SEED_USER_PASSWORD=… migrate` — 시딩은 이미 있는 이메일을 그대로 두므로
-  값을 바꿔 다시 돌리면 계정이 하나 는다. 비밀번호가 셸 기록에 남는다 — 곧 위 재설정으로 바꾼다.
+  값을 바꿔 다시 돌리면 계정이 하나 는다. 비밀번호가 셸 기록에 남는다 — 곧 위 재설정으로 바꾼다. **`run` 도 `pull_policy: build` 라 api 이미지를
+  다시 짓는다** — 받아 둔 새 코드가 있으면 `wirebound-api:local` 태그가 새 코드로 바뀐다(떠 있는 api 는 옛 이미지 그대로 · 다음 `up` 이 새 것을 띄운다).
 - **막힘 풀기 · 재설정은 api 가 든 그 컨테이너 · 그 사용자로 친다** — `exec -u root` · `run --rm api …` 로 치면 입구를 못 찾는다(README 「api 가
   필요로 하는 것」).
 - **저장소 밖에서 칠 때**(compose 파일이 없는 자리)는 `-p wirebound-prod` 를 붙인다 — 프로젝트 이름이 고정이라 위치와 상관없이 떠 있는 같은
@@ -204,7 +215,7 @@ docker compose exec api node --import tsx src/auth/unlock-login.ts me@example.co
 - 입구가 여는 포트는 `${APP_PORT:-8080}` 하나다 — 80 · 443 은 열지 않는다. 사람들이 쓰던 주소는 그 서버의 프록시가 받아 입구로 넘긴다(위 ⓐ ⓑ).
 - 이 구성은 인증서 볼륨을 쓰지 않는다 — 서버에 `wirebound-prod_caddy-data` · `wirebound-prod_caddy-config` 가 있으면 이 compose 가 안 쓰는
   볼륨이다(`docker volume ls`).
-- 배포 값은 뿌리의 `.env` 에서 온다. Komodo 면 Run Directory 가 뿌리다(아래 부록).
+- 배포 값은 뿌리의 `.env` 에서 온다 — `WIREBOUND_DEPLOY=1` 이 있어야 `docker compose` 가 돈다. Komodo 면 Run Directory 가 뿌리다(아래 부록).
 
 ## 잰 값
 
@@ -245,17 +256,22 @@ docker compose exec api node --import tsx src/auth/unlock-login.ts me@example.co
     node_modules/.bin/vitest run --project build apps/api/build-test/screen-chromium.test.ts
   ```
 
-손으로 재는 한 판 — 운영과 안 겹치게 프로젝트 이름 · 태그 · 포트를 바꿔 올린다(뿌리의 `.env` 를 채운 뒤):
+손으로 재는 한 판 — 운영과 안 겹치게 **프로젝트 이름 · 태그 · 포트 · 대역 셋**을 바꿔 올린다(뿌리의 `.env` 를 채운 뒤). 운영이 떠 있는 서버에서
+대역을 그대로 두면 `Pool overlaps with other one on this address space` 로 안 서고, 태그 · 포트를 그대로 두면 운영 이미지 태그를 새로 짓고 운영
+포트를 겨룬다. 값은 한 번 `export` 해 모든 줄이 같은 값을 쓰게 한다 — 셸 값이 `.env` 를 이긴다:
 
 ```bash
-WIREBOUND_TAG=measure APP_PORT=18080 docker compose -p wb-measure up -d --build
+export WIREBOUND_TAG=measure APP_PORT=18080 \
+  BACKEND_SUBNET=10.241.47.0/24 BACKEND_IP_RANGE=10.241.47.128/25 EDGE_IP=10.241.47.2
+docker compose -p wb-measure up -d --build
 docker compose -p wb-measure -f compose.yaml -f compose.override.yaml up -d   # ⓐ · ⓑ 를 잴 때(그 예를 그 이름으로 둔다)
 docker compose -p wb-measure logs api | grep remoteAddress              # 클라이언트 주소
 docker compose -p wb-measure down -v
+unset WIREBOUND_TAG APP_PORT BACKEND_SUBNET BACKEND_IP_RANGE EDGE_IP
 ```
 
-클라이언트 주소는 이 기계의 게시 포트로 못 잰다(Colima 는 넘긴 요청을 전부 게이트웨이 하나로 보인다) — 같은 네트워크에 고정 주소를 준 컨테이너로
-보낸다: `docker run --rm --network wb-measure_backend --ip 10.231.47.10 caddy:2.11.4 wget -qO- --header 'X-Forwarded-For: 6.6.6.6' http://web/api/auth/me`.
+클라이언트 주소는 이 기계의 게시 포트로 못 잰다(Colima 는 넘긴 요청을 전부 게이트웨이 하나로 보인다) — 같은 네트워크에 고정 주소(대역 안 ·
+`ip_range` 밖)를 준 컨테이너로 보낸다: `docker run --rm --network wb-measure_backend --ip 10.241.47.10 caddy:2.11.4 wget -qO- --header 'X-Forwarded-For: 6.6.6.6' http://web/api/auth/me`.
 
 ## 이 문서가 안 잰 것
 
@@ -263,7 +279,10 @@ docker compose -p wb-measure down -v
 - **실제 도메인의 인증서** — ⓐ 의 TLS 는 Caddy 의 내부 CA(`local_certs`)로만 쟀다.
 - **바깥 클라이언트의 진짜 주소** — 이 기계에서는 호스트 게시 포트로 온 요청이 게이트웨이 하나로 보였다. 리눅스 서버에서 바깥 IPv4 는 도커가
   iptables 로 넘겨 주소가 남는다고 알려져 있다 — 안 쟀다. 올린 뒤 바깥에서 한 번 부르고 `docker compose logs api | grep remoteAddress` 가
-  프록시 · 게이트웨이 주소면 위 「믿는 앞단」을 다시 본다.
+  프록시 · 게이트웨이 주소면 위 「믿는 앞단」을 다시 본다. 도커의 IPv6 를 안 켠 채 IPv6 로 온 요청은 사용자 공간 프록시를 지나 게이트웨이 주소가
+  된다고 알려져 있다 — 안 쟀다. 입구는 `[::]:8080` 도 연다(`docker compose ps`) — 그 판이면 IPv6 클라이언트 전부가 게이트웨이 한 주소로 세어져
+  로그인 제한을 함께 쓴다.
+- **api 의 종료 한도(30s)를 넘는 일** — 한도 뒤 종료 1 은 `apps/api/test/shutdown.test.ts` 가 재고, 컨테이너에서는 30s 를 넘는 일을 안 돌려 봤다.
 - **끄는 동안 도는 응답 · 편집 연결 · 내보내기의 시간** — 입구를 거쳐 이 구성으로 다시 재지 않았다. 그 값에 닿는 입구 설정(`grace_period` ·
   `keepalive` · WS 기본값)과 맞물림은 `deploy-compose.test.ts` 가 잰다.
 - **다중 인스턴스** — 실시간 층이 프로세스 하나를 전제한다.
@@ -287,6 +306,7 @@ Komodo 에서 고르고 이 표에 적지 않는다. **Stack 을 바꾸면 같�
 
 - **Environment 는 compose 의 보간용 `.env` 가 된다** — Komodo 가 Run Directory 의 `.env` 로 써서 `--env-file` 로 준다. 그 파일을 compose 가
   `env_file` 로 api · migrate 에도 싣는다.
+- **`WIREBOUND_DEPLOY=1` 을 Environment 에 넣는다** — 없으면 Deploy 의 `docker compose` 가 보간에서 멈춘다.
 - **비밀 둘은 값 대신 Komodo Variables(Secret)를 참조한다.** Variable 은 Komodo 전체가 공유하므로 이름 앞에 `WIREBOUND_` 를 붙인다:
 
   ```

@@ -1,5 +1,5 @@
 # 앱의 입구 — 에디터 정적 번들을 서빙하고 `/api` 를 api 로 넘긴다. HTTP 하나만 받는다 — TLS · 도메인은 앞에 선 각자의 프록시가
-# 맡는다. 이 설정이 지키는 조건과 잰 값은 `docs/guides/deploy-docker.md` 「입구와 프록시가 지킬 조건」이 갖는다.
+# 맡는다. 이 설정이 지키는 조건은 최상위 README 「앞단(리버스 프록시)이 지킬 조건」, 잰 값은 `docs/guides/deploy-docker.md` 「잰 값」이 갖는다.
 {
 	# 끄는 동안 도는 요청(그리던 pptx 내려받기)을 기다리는 한도. api 의 한도(`apps/api/src/shutdown.ts` 의 `SHUTDOWN_GRACE_MS` 30s)보다
 	# 길고 compose 의 `stop_grace_period`(40s)보다 짧게 둔다 — 입구가 먼저 끊으면 api 가 끝까지 답해도 사람에게 안 닿는다.
