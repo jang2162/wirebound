@@ -150,6 +150,13 @@ describe('seedSystemThemes', () => {
     await expect(seedSystemThemes(db, empty)).rejects.toThrow('`pnpm build`')
     await expect(seedSystemThemes(db, join(empty, 'nope'))).rejects.toThrow('시스템 테마 산출물이 없습니다')
   })
+
+  it('산출물이 package.json 없는 디렉터리에만 있으면 던지고 그 규칙을 말한다 — SYSTEM_THEMES_DIR 에 산출물만 옮긴 판', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wb-system-themes-bare-'))
+    scratch.push(dir)
+    writeArtifacts(dir, [{ manifest: manifest('system-bare', '1.0.0'), withPackage: false }])
+    await expect(seedSystemThemes(db, dir)).rejects.toThrow('`package.json` 이 있는 테마 디렉터리만')
+  })
 })
 
 describe('backfillProjectThemes', () => {

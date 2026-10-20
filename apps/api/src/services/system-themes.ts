@@ -63,7 +63,7 @@ export async function seedSystemThemes(db: DbHandle, dir: string): Promise<{ ins
   const artifacts = findArtifacts(dir)
   if (artifacts.length === 0) {
     throw new SystemThemeError(
-      `시스템 테마 산출물이 없습니다(${join(dir, '*', 'dist', '*.wbtheme')}) — 저장소 뿌리에서 \`pnpm build\` 를 먼저 돌립니다`,
+      `시스템 테마 산출물이 없습니다(${join(dir, '*', 'dist', '*.wbtheme')} — \`package.json\` 이 있는 테마 디렉터리만 읽는다) — 저장소 뿌리에서 \`pnpm build\` 를 먼저 돌립니다`,
     )
   }
   const inserted: string[] = []
