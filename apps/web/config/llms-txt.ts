@@ -28,6 +28,7 @@ import {
   InteractionSchema,
   MAX_OPS_PER_EDIT,
   NODE_ALIAS_MAX,
+  NODE_ID_PATTERN,
   PAGE_TARGET_PREFIX,
   PageEnvelopeSchema,
   VIEW_STATE_DEPTH_MAX,
@@ -77,7 +78,7 @@ const COMPONENT_SUMMARIES: Record<string, string> = {
 
 /** 노드 필드 → 영어 한 줄. 키가 `WbNodeSchema` 의 키와 같아야 한다. */
 const NODE_FIELDS: Record<string, string> = {
-  id: 'Unique within the document. Pattern `[A-Za-z0-9_-]{1,64}`.',
+  id: `Unique within the document. Pattern \`${NODE_ID_PATTERN.source.replace(/^\^|\$$/g, '')}\`.`,
   type: 'A component type from the catalog below.',
   alias: `Optional human name for the node, 1–${NODE_ALIAS_MAX} characters, no surrounding spaces or line breaks. Need not be unique.`,
   props: "The component's props (see the catalog). Omitted props take their defaults.",
