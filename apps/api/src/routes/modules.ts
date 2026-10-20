@@ -24,8 +24,8 @@
  * «이 모듈은 지워졌습니다»를 말해야 하므로(설계 spec 「B3」) 화면이 넣기 직전에 그 모듈 하나를 다시 읽고, 404 면 통지하고 목록을 다시 읽는다.
  * 목록째 다시 읽지 않는 것은 넣을 노드도 그 응답의 것을 쓰기 때문이다 — 하나를 읽으면 «지워졌나»와 «무엇을 넣나»가 한 응답이다.
  *
- * **내장 모듈(«기본 모듈»)은 이 목록에 없다** — `@wirebound/schema` 의 `BUILTIN_MODULES` 를 화면이 직접 읽는다. 서버를 거칠 까닭이 없다(읽기
- * 전용 · 모든 프로젝트에 같다).
+ * **개인 모듈은 이 목록에 없다** — 사람이 소유하고 프로젝트에 매이지 않아 `/api/me/modules` 가 갖는다(`routes/personal-modules.ts`). 본문 ·
+ * 거름 · 오류 문장은 이 파일의 것(`ModuleBody` · `RenameBody` · `rejectUnstorable` · `rejectNestedPages`)을 함께 쓴다.
  *
  * ---
  *
@@ -58,7 +58,7 @@
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { MODULE_NAME_MAX, WbNodeSchema, countModuleNodes, moduleNodesForSave, nestedPagesUnderRoot } from '@wirebound/schema'
+import { MODULE_NAME_MAX, WbNodeSchema, countModuleNodes, moduleNodesForSave, nestedPagesUnderRoot, type WbNode } from '@wirebound/schema'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsLoneSurrogate, containsNulByte } from '../db/nul-guard'
 import { withTransaction } from '../db/tx'
@@ -82,12 +82,12 @@ const ModuleParams = z.object({ projectId: z.uuid(), moduleId: z.uuid() })
 const ModuleName = z.string().min(1, '이름을 입력하세요').max(MODULE_NAME_MAX, `이름은 ${MODULE_NAME_MAX}자 이하여야 합니다`)
 
 /** `z.strictObject`라 선언되지 않은 키(옛 프리셋의 `description` · `viewStates` 포함)는 그 자체로 400이다. 빈 묶음은 모듈이 아니다. */
-const ModuleBody = z.strictObject({
+export const ModuleBody = z.strictObject({
   name: ModuleName,
   nodes: z.array(WbNodeSchema).min(1, '모듈에 담을 노드를 고르세요'),
 })
 
-const RenameBody = z.strictObject({ name: ModuleName })
+export const RenameBody = z.strictObject({ name: ModuleName })
 
 /** 모듈 안의 `Page`를 거절하는 문장 — 웹 «모듈로 저장…» 상자가 그대로 보인다(`apps/web` 의 `api/failure.tsx` 의 `reason`). */
 const MODULE_PAGE_MESSAGE = '모듈에 Page를 담을 수 없습니다 — 넣으면 페이지 안의 Page가 됩니다. Page를 빼고 고른 뒤 저장하세요'
@@ -96,9 +96,25 @@ const MODULE_PAGE_MESSAGE = '모듈에 Page를 담을 수 없습니다 — 넣�
  * NUL · 짝 없는 서로게이트를 jsonb · 텍스트를 만들기 전에 끊는다(repo 도 같은 검사를 한다 — 마지막 방벽). 이름의 서로게이트도 거절한다 —
  * 텍스트 칸은 그 글자를 U+FFFD 로 바꿔 넣어 «저장한 이름과 읽은 이름이 다름»이 된다.
  */
-function rejectUnstorable(name: string, nodes: unknown): void {
+export function rejectUnstorable(name: string, nodes: unknown): void {
   if (containsNulByte(name) || containsNulByte(nodes)) throw badRequest('모듈에 NUL 문자(U+0000)를 포함할 수 없습니다')
   if (containsLoneSurrogate(name) || containsLoneSurrogate(nodes)) throw badRequest('모듈에 짝 없는 서로게이트 글자를 포함할 수 없습니다')
+}
+
+/** 모듈 안의 `Page` 를 422 `nested-page` 로 거절한다(머리말 «저장이 걷는 것» — 노드마다 이슈 · `path` = `/nodes/…`). */
+export function rejectNestedPages(nodes: readonly WbNode[]): void {
+  const nested = nestedPagesUnderRoot(nodes as WbNode[])
+  if (nested.length === 0) return
+  throw validationFailed(
+    '모듈을 저장할 수 없습니다',
+    nested.map((issue) => ({
+      code: issue.code,
+      severity: issue.severity,
+      nodeId: issue.nodeId,
+      path: `/nodes${issue.path}`,
+      message: MODULE_PAGE_MESSAGE,
+    })),
+  )
 }
 
 function toResponse(record: ModuleRecord) {
@@ -139,19 +155,7 @@ export function moduleRoutes() {
       const body = parseBody(ModuleBody, request.body)
       rejectUnstorable(body.name, body.nodes)
 
-      const nested = nestedPagesUnderRoot(body.nodes)
-      if (nested.length > 0) {
-        throw validationFailed(
-          '모듈을 저장할 수 없습니다',
-          nested.map((issue) => ({
-            code: issue.code,
-            severity: issue.severity,
-            nodeId: issue.nodeId,
-            path: `/nodes${issue.path}`,
-            message: MODULE_PAGE_MESSAGE,
-          })),
-        )
-      }
+      rejectNestedPages(body.nodes)
 
       // `projectGuard('editor')`가 이미 인증을 요구한다. `as`로 좁히지 않고 던지는 것은 아래에서 `.id`를 반드시 읽기 때문이다 — 가드가 빠지는
       // 순간 `as` 판은 미인증 요청에 `null` 역참조로 500을 낸다.

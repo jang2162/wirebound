@@ -738,8 +738,11 @@ function EditorShell(props: {
    * 절반이 빈칸이 된다. 설계서 「설계서 화면 구조」의 *"뷰 모드에서는 접혀 메뉴 트리가 전체를 쓴다"*가 그렇게 깨진다.
    */
   const split = mode === 'edit'
-  /** 하단 컴포넌트 판과 그 토글이 서는가 — 편집 입구라 다른 편집 도구와 같은 값(편집 모드 && `canEdit`)이다. */
-  const paletteEditable = mode === 'edit' && canEdit
+  /**
+   * 하단 판에서 넣을 수 있는가 — 넣기는 편집 입구라 다른 편집 도구와 같은 값(편집 모드 && `canEdit`)이다. **판과 토글은 늘 선다** — 넣을 수 없는
+   * 판은 «모듈» 하나다(개인 모듈을 다루고 프로젝트 모듈을 개인으로 복사한다 — `palette/component-palette.tsx` 머리말 «넣을 수 없는 판»).
+   */
+  const paletteInsertable = mode === 'edit' && canEdit
 
   /**
    * 로그아웃 앞의 기다림 — 아래 `useLogout` 자리의 주석. 끊는 신호는 없다: 누른 뒤 화면을 옮겨도 로그아웃은 나간다. 기다림 뒤에 큐에 남은
@@ -1040,9 +1043,9 @@ function EditorShell(props: {
           />
         </main>
 
-        {/* **하단 컴포넌트 판**(`palette/component-palette.tsx`) — 캔버스와 하단 바 사이(그리드의 `palette` 줄). 편집 모드 · `canEdit` 일 때만
-            선다 — 뷰 모드 · viewer 면 판도 토글도 없고 기억한 열림은 그대로다(돌아오면 다시 열린다). */}
-        {paletteEditable && layout.paletteOpen && (
+        {/* **하단 판**(`palette/component-palette.tsx`) — 캔버스와 하단 바 사이(그리드의 `palette` 줄). 늘 선다 — 편집 모드 · `canEdit` 이면
+            «컴포넌트 | 모듈», 아니면(뷰 모드 · viewer) «모듈» 하나이고 넣기 · 끌기가 없다. 프로젝트 모듈 쓰기는 `canEdit`(모드와 무관하다). */}
+        {layout.paletteOpen && (
           <ComponentPalette
             projectId={props.project.id}
             pageId={props.pageId}
@@ -1052,6 +1055,8 @@ function EditorShell(props: {
             onGrab={layout.grabPaletteHeight}
             onMove={layout.setPaletteHeight}
             onReset={layout.resetPaletteHeight}
+            insertable={paletteInsertable}
+            projectWritable={canEdit}
           />
         )}
 
@@ -1097,7 +1102,7 @@ function EditorShell(props: {
               <SessionNotices failure={logoutFailure} className="wb-shell-session-alert" />
             </>
           }
-          tools={paletteEditable && <PaletteToggle open={layout.paletteOpen} onToggle={layout.togglePalette} />}
+          tools={<PaletteToggle open={layout.paletteOpen} onToggle={layout.togglePalette} insertable={paletteInsertable} />}
         />
 
         {/* **캔버스와 우측 패널 사이의 손잡이**(`shell/sidebar-layout.ts` «두 폭은 한 예산을 나눠 쓴다»). 좌측 손잡이와 같은 부품이고 방향만

@@ -44,6 +44,7 @@ const CLEARED_TABLES = [
   'comments',
   'snapshots',
   'modules',
+  'personal_modules',
   'project_menu_revs',
 ] as const
 
@@ -75,6 +76,8 @@ async function fillEveryTable(ctx: TestContext): Promise<void> {
     name: '청소 대상 모듈',
     nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }],
   })
+  // 개인 모듈은 사용자 삭제의 CASCADE 가 데려간다(`0026-personal-modules` — 프로젝트를 안 가리킨다).
+  await post('/api/me/modules', { name: '청소 대상 개인 모듈', nodes: [{ id: 'm_b', type: 'Button', props: { label: '저장' } }] })
 }
 
 describe('실커밋 하네스의 청소', () => {

@@ -310,6 +310,11 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/auth/tokens` | GET | 로그인만(세션) | — | 200 `{ id, name, createdAt, lastUsedAt, projectId, projectName, member }[]` — **로그인한 사람의 토큰 전부**(프로젝트를 가리지 않는다), 오래된 것 먼저. 멤버가 아닌 프로젝트의 줄은 `projectName: null` · `member: false`. 아래 "API 토큰". 토큰으로 부르면 401 |
 | `/api/auth/tokens/:tokenId` | DELETE | 로그인만(세션) | — | 204 — 어느 프로젝트의 것이든. 남의 토큰·없는 id는 404. 토큰으로 부르면 401 |
 | `/api/auth/tokens` | DELETE | 로그인만(세션) | — | 200 `{ revoked }` — 그 순간의 내 토큰 전부를 폐기한 수. 토큰으로 부르면 401 |
+| `/api/me/modules` | GET | 로그인만(세션) | — | 200 `{ modules }` — **내 개인 모듈 전부**(프로젝트를 가리지 않는다 · 아래 "모듈 응답 형태"), 최근 것 먼저. 토큰으로 부르면 401 |
+| `/api/me/modules/:moduleId` | GET | 로그인만(세션) | — | 200 `{ module }` — 넣기 · 복사 직전에 화면이 다시 읽는다. 없는 id · **남의 개인 모듈 id 는 같은 404**(있는지를 알리지 않는다) |
+| `/api/me/modules` | POST | 로그인만(세션) | `{ name, nodes: WbNode[] }` | 201 `{ module }` — **역할과 무관하다**(viewer 도 저장한다). 거름 · 거절은 `POST /api/projects/:projectId/modules` 와 같다(400 · 422 `nested-page`) |
+| `/api/me/modules/:moduleId` | PATCH | 로그인만(세션) | `{ name }` | 200 `{ module }` — 이름만 바꾼다. 없는 id · 남의 것은 404 |
+| `/api/me/modules/:moduleId` | DELETE | 로그인만(세션) | — | 204. 없는 id · 남의 것은 404, uuid 가 아닌 id 는 400 |
 | `/api/projects` | POST | 로그인만 | `{ name, slug, description? }` | 201 `{ ...프로젝트, role }` — 호출자가 owner가 되므로 `role`은 항상 `"owner"`다 |
 | `/api/projects` | GET | 로그인만 | — | 200 `{ ...프로젝트, role }[]`(호출자가 속한 것만, `created_at` 오름차순). 각 항목의 `role`은 **그 호출자의** 역할이다 |
 | `/api/projects/:projectId` | GET | viewer | — | 200 `{ ...프로젝트, role, themeRev }` — `themeRev` 는 테마 바인딩의 `rev`(`theme-changed` 를 놓친 탭이 따라잡는 값) |
@@ -342,7 +347,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/snapshots` | GET | viewer | — | 200 스냅샷 배열(`created_at` 내림차순, 동률은 `tag` 오름차순). **`payload`가 없다** — 크기(`payloadBytes`)만 실린다 |
 | `/api/projects/:projectId/snapshots/:snapshotId` | GET | viewer | — | 200 스냅샷 + `payload`. 남의 프로젝트의 id는 404(존재를 숨긴다) |
 | `/api/projects/:projectId/snapshots/:snapshotId/restore` | POST | **owner** | — | 200 복원 결과(아래 "복원"). **그때로 되돌린다**(설계서 「스냅샷」). 본문이 없다 — 안전망 스냅샷의 태그는 서버가 짓는다. 갈래별 상태는 아래 오류 표 |
-| `/api/projects/:projectId/modules` | GET | viewer | — | 200 `{ modules }` — 모듈 배열(아래 "모듈 응답 형태"), **최근 것 먼저**. 내장(«기본 모듈»)은 이 목록에 없다 — 화면이 `@wirebound/schema` 의 `BUILTIN_MODULES` 를 직접 읽는다 |
+| `/api/projects/:projectId/modules` | GET | viewer | — | 200 `{ modules }` — 모듈 배열(아래 "모듈 응답 형태"), **최근 것 먼저**. 개인 모듈은 이 목록에 없다(`/api/me/modules`) |
 | `/api/projects/:projectId/modules/:moduleId` | GET | viewer | — | 200 `{ module }` — 넣기 직전에 화면이 다시 읽는다(남이 지웠으면 404 → «이 모듈은 지워졌습니다»). 없는 id · 남의 프로젝트의 id 는 404 |
 | `/api/projects/:projectId/modules` | POST | **editor** | `{ name, nodes: WbNode[] }` | 201 `{ module }`. `nodes` 는 1개 이상 — 넣으면 고른 자리의 형제가 될 것이다. `marker` 와 **묶음 밖 노드를 겨냥하는 액션은 저장하며 걷는다**. 이름 1~60자 밖 · 노드 0개 · 노드 봉투 위반 · 선언되지 않은 키 · NUL · 짝 없는 서로게이트(이름 · 노드)는 400, `Page` 가 든 노드는 422 `nested-page`. **이름 중복은 오류가 아니다** |
 | `/api/projects/:projectId/modules/:moduleId` | PATCH | **editor** | `{ name }` | 200 `{ module }` — **이름만 바꾼다**(내용을 바꾸려면 새로 저장하고 옛것을 지운다). 이름 규칙은 저장과 같다. 없는 id · 남의 프로젝트의 id 는 404 |
@@ -1296,9 +1301,19 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 
 ### 모듈 응답 형태
 
-모듈은 **프로젝트가 소유한 노드 묶음**이고 그 프로젝트의 모든 페이지에 넣는다(설계서 「모듈」). 구조 트리에서 고른 노드를 «모듈로
-저장…» 하고, 하단 판의 «모듈» 탭에서 넣는다. 테마 패턴(설계서 「patterns — 테마가 소유한 구성 레시피」)과 다른 것이다 — 패턴은
-테마가 소유하고 슬롯을 갖는 레시피다.
+모듈은 **넣는 노드 묶음**이고 소유자가 둘이다(설계서 「모듈」) — **프로젝트 모듈**(`/api/projects/:projectId/modules` — 프로젝트가 소유하고
+그 프로젝트의 모든 페이지에 넣는다)과 **개인 모듈**(`/api/me/modules` — 사람 하나가 소유하고 그 사람이 여는 모든 프로젝트에 선다).
+구조 트리에서 고른 노드를 «모듈로 저장…» 하고(상자 안에서 어느 쪽인지 고른다), 하단 판의 «모듈» 탭에서 넣는다. 테마 패턴(설계서
+「patterns — 테마가 소유한 구성 레시피」)과 다른 것이다 — 패턴은 테마가 소유하고 슬롯을 갖는 레시피다.
+
+**개인 모듈은 세션으로만 · 자기 것만이다.** 다른 사용자 · 같은 프로젝트의 다른 멤버가 그 id 로 부르면 모르는 id 와 같은 404 이고, API
+토큰은 프로젝트 단위 스코프라 이 길에 닿지 않는다(`:projectId` 가 없는 라우트라 토큰이 사람을 안 채워 401). 프로젝트를 가리키는 칸이
+없어 **프로젝트 삭제 · 멤버에서 빠짐 · 역할 바뀜이 개인 모듈을 건드리지 않는다**(`0026-personal-modules` — 소유자 사용자와 함께 지워진다).
+쓰기는 프로젝트 행을 안 잡고 재확인하지 않는다(`routes/personal-modules.ts` 머리말 «잠금»).
+
+**복사는 엔드포인트가 아니다** — 화면이 원본 하나를 다시 읽고(`GET …/modules/:moduleId` · `GET /api/me/modules/:moduleId`) 같은 이름 ·
+노드로 대상 쪽 `POST` 를 부른다. 그래서 «프로젝트 모듈로 복사» 는 그 `POST` 의 editor 가드를 지난다(viewer 는 403). 사본은 새 행이라
+원본과 이어지지 않는다.
 
 | 키 | 값 |
 |---|---|
@@ -1306,21 +1321,21 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 | `name` | 1 ~ 60자 |
 | `nodes` | `WbNode[]` — 문서 봉투가 아니다 |
 | `nodeCount` | `nodes` 의 노드 수(자손까지) |
-| `createdBy` · `createdAt` · `updatedAt` | 만든 사람 id · 만든 때 · 이름을 마지막으로 바꾼 때 |
+| `createdBy` · `createdAt` · `updatedAt` | 만든 사람 id(개인 모듈은 소유자) · 만든 때 · 이름을 마지막으로 바꾼 때 |
 
 **목록에도 `nodes`가 실린다**(스냅샷의 `payload`와 갈리는 자리다): 카드가 노드 수 · 끌기 미리보기에 그것을 쓴다. **넣기는 그 모듈 하나를
-다시 읽는다**(`GET …/modules/:moduleId`) — 탭을 연 뒤 남이 지웠으면 404 로 «이 모듈은 지워졌습니다»를 말하고, 아니면 그 응답의 노드를 넣는다.
+다시 읽는다**(`GET …/modules/:moduleId` · `GET /api/me/modules/:moduleId`) — 탭을 연 뒤 지웠으면 404 로 «이 모듈은 지워졌습니다»를 말하고, 아니면 그 응답의 노드를 넣는다.
 
-**실시간 방송이 없다** — 화면은 탭을 열 때와 저장 · 이름 · 삭제 뒤에 목록을 다시 읽는다.
+**실시간 방송이 없다** — 화면은 탭을 열 때와 저장 · 이름 · 삭제 · 복사 뒤에 목록을 다시 읽는다.
 
 #### 저장은 `marker` · 묶음 밖 액션을 걷고 id 는 그대로 담는다
 
 - **`marker`를 담지 않는다.** 담으면 넣은 문서에 번호가 있는데 그것을 가리키는 코멘트 행이 없다 — 코멘트는 `(page_id, node_id)`로
   매달려 있고 모듈은 페이지를 건너 다닌다.
 - **묶음 밖 노드를 겨냥하는 액션을 뺀다** — 넣는 페이지에 그 노드가 없다. 액션이 다 빠진 상호작용은 상호작용째 빠진다. 페이지를
-  겨냥하는 액션(`navigate` · `openModal`)과 빈 대상은 남긴다 — 모듈은 프로젝트 단위다. 규칙은 `@wirebound/schema` 의
-  `moduleNodesForSave` 하나이고 화면(«모듈로 저장…» 상자가 뺀 수를 말한다)과 서버가 같이 부른다 — 화면을 지나지 않는 본문(MCP ·
-  CLI)에도 걸린다.
+  겨냥하는 액션(`navigate` · `openModal`)과 빈 대상은 남긴다 — 그 페이지는 넣는 프로젝트에도 있을 수 있다(넣는 프로젝트에 없으면 넣기의
+  거름이 뺀다). 규칙은 `@wirebound/schema` 의 `moduleNodesForSave` 하나이고 화면(«모듈로 저장…» 상자가 뺀 수를 말한다)과 두 저장
+  라우트가 같이 부른다 — 화면을 지나지 않는 본문(MCP · CLI)에도 걸린다.
 - **노드 `id`는 저장 시점 그대로 담는다.** 재발급은 **넣기**가 한다. 저장에서 재발급하면 같은 모듈을 두 번 넣은 페이지가 같은 id를
   갖는다.
 - **카탈로그 검증을 하지 않는다.** *"이것을 페이지에 놓을 수 있는가"*는 **넣는 시점에 결과 문서 전체로** 판정한다. 여기서 보는 것은

@@ -42,9 +42,6 @@ export { getComponent, listComponents, registerComponent, requireComponent, rese
 export { CATALOG_TYPES, installCatalog } from './component/catalog/index'
 export * from './component/catalog/index'
 
-export type { BuiltinModule } from './module/builtin'
-export { BUILTIN_MODULES } from './module/builtin'
-
 export type { ModuleNodes } from './module/save'
 export { MODULE_NAME_MAX, countModuleNodes, moduleNodesForSave } from './module/save'
 

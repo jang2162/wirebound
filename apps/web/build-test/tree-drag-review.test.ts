@@ -906,22 +906,42 @@ describe.skipIf(!전제.ok)('트리 끌기 · 줄 행동 — C2 리뷰(실브라
     return seen
   }
 
-  it('viewer 에게는 줄 `+` · `…` · 뿌리 `+` 가 없다 — 마우스로도 Tab 으로도', async () => {
+  /**
+   * 메뉴 트리에는 줄 행동이 없고, 구조 트리에는 뿌리 밖 줄마다 «모듈로 저장…» 한 항목짜리 `…` 만 선다(내 개인 모듈로 남기는 쓰기라 문서를
+   * 안 바꾼다 — 설계 spec `2026-10-20-personal-modules-design.md` «편집할 수 없는 판의 입구»). 이 판의 구조 트리는 뿌리 밖 노드가 하나다.
+   */
+  it('viewer 에게는 메뉴 트리 줄 `+` · `…` · 뿌리 `+` 가 없고, 구조 트리 줄 `…` 은 «모듈로 저장…» 하나다 — 마우스로도 Tab 으로도', async () => {
     const { P, ids } = await menuFixture('viewer', 'viewer')
     const tab = await openEditor(P, 'bob')
     try {
       const { page } = tab
       const over = await spot(page, ids['나']!, 'middle')
       await page.mouse.move(over.x, over.y)
-      const boxes = await page.locator('[aria-label="메뉴와 구조"] .wb-shell-tree-row-actions').count()
+      const menuTree = '[aria-label="메뉴와 구조"] .wb-shell-region[aria-label="메뉴·페이지 트리"]'
+      const structureTree = '[aria-label="메뉴와 구조"] .wb-shell-region[aria-label="구조 트리"]'
+      const boxes = await page.locator(`${menuTree} .wb-shell-tree-row-actions`).count()
+      const structureBoxes = await page.locator(`${structureTree} .wb-shell-tree-row-actions`).count()
       // 제목 줄의 «모두 접기» · «모두 펴기»는 읽기 도구라 viewer 에게도 선다(`src/panels/tree-fold.tsx`) — 세는 것은 그 밖의 단추(뿌리 `+`)다.
       const headButtons = await page.locator('[aria-label="메뉴와 구조"] .wb-shell-region-actions button:not(.wb-shell-tree-fold)').count()
       await page.locator('[aria-label="메뉴와 구조"] [data-tree-row] a, [aria-label="메뉴와 구조"] [data-tree-row] button').first().focus()
       const walked = await tabWalk(page, 30)
-      expect({ boxes, headButtons, reached: walked.filter((name) => / (추가|더 보기)$/.test(name) || name === '+') }).toEqual({
+      const textRow = page.locator(`${structureTree} [data-tree-row][data-tree-id="n_text0000001"]`)
+      await textRow.locator(':scope > :first-child').hover()
+      await textRow.getByRole('button', { name: /더 보기$/ }).click()
+      const items = await page.getByRole('menu').getByRole('menuitem').allTextContents()
+      await page.keyboard.press('Escape')
+      expect({
+        boxes,
+        structureBoxes,
+        headButtons,
+        reached: walked.filter((name) => (/ (추가|더 보기)$/.test(name) || name === '+') && !name.startsWith('Text')),
+        items,
+      }).toEqual({
         boxes: 0,
+        structureBoxes: 1,
         headButtons: 0,
         reached: [],
+        items: ['모듈로 저장…'],
       })
     } finally {
       await tab.close()

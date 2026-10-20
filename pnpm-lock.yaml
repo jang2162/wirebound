@@ -78,6 +78,9 @@ importers:
       '@types/pg':
         specifier: ^8.11.0
         version: 8.20.3
+      '@wirebound/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@wirebound/test-support':
         specifier: workspace:*
         version: link:../../packages/test-support
@@ -176,6 +179,9 @@ importers:
       '@wirebound/exporter':
         specifier: workspace:*
         version: link:../../packages/exporter
+      '@wirebound/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@wirebound/system-theme-admin':
         specifier: workspace:*
         version: link:../../system-themes/admin

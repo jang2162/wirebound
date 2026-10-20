@@ -8,17 +8,20 @@
  * | 뿌리만 | 항목이 없다(뿌리 줄 `…` 에 «모듈로 저장…»이 없다) |
  *
  * 저장 본문은 `marker` 와 **묶음 밖을 가리키는 상호작용 동작**을 걷은 것이고, 뺀 수를 상자가 말한다(Review Focus 5 — 서버도 같은 함수로 다시
- * 걷는다: `apps/api/test/modules.test.ts`). 저장하면 하단 판 «모듈» 탭이 목록을 다시 읽어 그 카드가 선다.
+ * 걷는다: `apps/api/test/modules.test.ts`). 저장하면 하단 판 «모듈» 탭이 그 목록을 다시 읽어 그 카드가 선다.
+ *
+ * **저장할 곳**(설계 spec `2026-10-20-personal-modules-design.md` «저장») — 고르기 «개인 모듈» · «프로젝트 모듈», 기본값은 개인. viewer 의 트리는
+ * 줄 `…` 에 «모듈로 저장…» 한 항목만 서고 고르기에 개인 하나뿐이다. 담는 것 · 이름 칸의 케이스는 저장할 곳과 무관해 기본값(개인)으로 잰다.
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { MODULE_NAME_MAX, countModuleNodes, type PageDocument, type WbNode } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectModule } from '../../src/api/types'
-import { moduleSelection } from '../../src/panels/save-module-dialog'
-import { openPage, pageDoc } from '../editor-harness'
+import { moduleSelection, savedModuleNotice } from '../../src/panels/save-module-dialog'
+import { PROJECT_ID, openPage, pageDoc } from '../editor-harness'
 import '../../src/catalog-setup'
-import { queryRowAction, rowAction, structureRowName } from './tree-row'
+import { queryRowAction, rowAction, rowReasons, structureRowName } from './tree-row'
 
 /**
  * ```
@@ -55,18 +58,23 @@ function doc(): PageDocument {
 }
 
 interface Fake {
+  /** 저장된 본문 — 어느 쪽에 저장했든(케이스 대부분은 담는 것만 본다). */
   created: { name: string; nodes: WbNode[] }[]
-  lists: () => number
+  /** 저장한 곳 차례. */
+  targets: ('personal' | 'project')[]
+  lists: () => { project: number; personal: number }
   api: Partial<ApiClient>
 }
 
 function server(refuse?: ApiError): Fake {
   const created: Fake['created'] = []
-  const modules: ProjectModule[] = []
-  let lists = 0
-  const createModule: ApiClient['createModule'] = async (_projectId, body) => {
+  const targets: Fake['targets'] = []
+  const stored = { project: [] as ProjectModule[], personal: [] as ProjectModule[] }
+  const lists = { project: 0, personal: 0 }
+  const make = (to: 'personal' | 'project', body: { name: string; nodes: WbNode[] }): ProjectModule => {
     if (refuse !== undefined) throw refuse
     created.push(structuredClone(body))
+    targets.push(to)
     const made: ProjectModule = {
       id: `m-${created.length}`,
       name: body.name,
@@ -76,14 +84,45 @@ function server(refuse?: ApiError): Fake {
       createdAt: '2026-10-19T00:00:00Z',
       updatedAt: '2026-10-19T00:00:00Z',
     }
-    modules.unshift(made)
+    stored[to].unshift(made)
     return made
   }
-  const listModules: ApiClient['listModules'] = async () => {
-    lists += 1
-    return [...modules]
+  return {
+    created,
+    targets,
+    lists: () => ({ ...lists }),
+    api: {
+      createModule: async (_projectId, body) => make('project', body),
+      createMyModule: async (body) => make('personal', body),
+      listModules: async () => {
+        lists.project += 1
+        return [...stored.project]
+      },
+      listMyModules: async () => {
+        lists.personal += 1
+        return [...stored.personal]
+      },
+    },
   }
-  return { created, lists: () => lists, api: { createModule, listModules } }
+}
+
+const AS_VIEWER: Partial<ApiClient> = {
+  getProject: async () => ({
+    id: PROJECT_ID,
+    name: '관리자 콘솔 설계서',
+    slug: 'admin-console',
+    description: '내부 운영 도구',
+    role: 'viewer',
+    themeRev: 0,
+  }),
+}
+
+/** 고르기 «저장할 곳» 의 라디오 이름과 고른 것. */
+function targetChoices(): [string, boolean][] {
+  const group = within(dialog()).getByRole('group', { name: '저장할 곳' })
+  return within(group)
+    .getAllByRole<HTMLInputElement>('radio')
+    .map((radio) => [radio.closest('label')?.textContent ?? '', radio.checked])
 }
 
 function region(): HTMLElement {
@@ -238,8 +277,41 @@ describe('이름 칸', () => {
   })
 })
 
+describe('저장할 곳', () => {
+  it('고르기는 «개인 모듈» · «프로젝트 모듈» 이고 기본값은 개인 — 그대로 저장하면 개인, 프로젝트를 고르면 프로젝트로 간다', async () => {
+    const fake = server()
+    await openPage(doc(), { apiOverrides: fake.api })
+    openSave('Card')
+    expect(targetChoices()).toEqual([
+      ['개인 모듈', true],
+      ['프로젝트 모듈', false],
+    ])
+    await saveAs('내 것')
+    openSave('Card')
+    fireEvent.click(within(dialog()).getByRole('radio', { name: '프로젝트 모듈' }))
+    await saveAs('함께')
+    expect({ targets: fake.targets, names: fake.created.map((body) => body.name) }).toEqual({
+      targets: ['personal', 'project'],
+      names: ['내 것', '함께'],
+    })
+    expect(savedModuleNotice('내 것', 'personal')).toBe("개인 모듈 '내 것'을(를) 저장했습니다. 하단 판의 «모듈» 탭에 섭니다.")
+  })
+
+  it('viewer — 줄 `…` 에 «모듈로 저장…» 한 항목만 서고, 고르기에 개인 하나 · 개인으로 저장된다 · 뿌리 줄에는 없다', async () => {
+    const fake = server()
+    await openPage(doc(), { apiOverrides: { ...fake.api, ...AS_VIEWER } })
+    await waitFor(() => expect(queryRowAction(region(), '모듈로 저장…', rowOf('Card'))).not.toBeNull())
+    expect(queryRowAction(region(), '모듈로 저장…', rowOf('Page'))).toBeNull()
+    expect(rowReasons(region(), rowOf('Card'))).toEqual({ '모듈로 저장…': null })
+    openSave('Card')
+    expect(targetChoices()).toEqual([['개인 모듈', true]])
+    await saveAs('베라의 것')
+    expect(fake.targets).toEqual(['personal'])
+  })
+})
+
 describe('저장 뒤', () => {
-  it('상자가 닫히고 하단 판 «모듈» 탭이 목록을 다시 읽어 그 카드가 선다', async () => {
+  it('상자가 닫히고 하단 판 «모듈» 탭이 그 목록을 다시 읽어 그 카드가 선다 — 개인 · 프로젝트', async () => {
     const fake = server()
     await openPage(doc(), { apiOverrides: fake.api })
     fireEvent.click(within(screen.getByRole('contentinfo', { name: '하단 바' })).getByRole('button', { name: '컴포넌트' }))
@@ -250,10 +322,15 @@ describe('저장 뒤', () => {
 
     openSave('Card')
     await saveAs('카드 묶음')
-
     expect(screen.queryByRole('dialog', { name: '모듈로 저장…' })).toBeNull()
-    await waitFor(() => expect(fake.lists()).toBe(before + 1))
-    expect(within(within(palette).getByRole('region', { name: '프로젝트 모듈' })).getByText('카드 묶음')).not.toBeNull()
+    await waitFor(() => expect(fake.lists()).toEqual({ project: before.project, personal: before.personal + 1 }))
+    expect(within(within(palette).getByRole('region', { name: '개인 모듈' })).getByText('카드 묶음')).not.toBeNull()
+
+    openSave('Card')
+    fireEvent.click(within(dialog()).getByRole('radio', { name: '프로젝트 모듈' }))
+    await saveAs('함께 쓸 묶음')
+    await waitFor(() => expect(fake.lists()).toEqual({ project: before.project + 1, personal: before.personal + 1 }))
+    expect(within(within(palette).getByRole('region', { name: '프로젝트 모듈' })).getByText('함께 쓸 묶음')).not.toBeNull()
   })
 
   it('서버가 거절하면 상자 안에 그 문장을 세우고 상자는 남는다', async () => {

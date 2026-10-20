@@ -80,6 +80,11 @@ const METHODS = [
   'createModule',
   'renameModule',
   'deleteModule',
+  'listMyModules',
+  'getMyModule',
+  'createMyModule',
+  'renameMyModule',
+  'deleteMyModule',
   'getExportPreview',
   'downloadExport',
   'getProjectTheme',
@@ -224,10 +229,16 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 하단 판 «모듈» 탭 하나다 — 목록 · 넣기 직전의 다시 읽기(`nodes`) · 카드의 이름 바꾸기 · 삭제(`id` 를 경로에 싣는다 — `SHAPES.moduleEnvelope`).
   listModules: ['../src/palette/module-tab.tsx'],
   getModule: ['../src/palette/module-tab.tsx'],
-  // «모듈로 저장…» 상자 하나다 — 응답의 `module` 은 읽지 않는다(성공하면 탭이 목록을 다시 읽는다 — `announceModulesChanged`).
-  createModule: ['../src/panels/save-module-dialog.tsx'],
+  // «모듈로 저장…» 상자와 «프로젝트 모듈로 복사»(탭) — 응답의 `module` 은 읽지 않는다(성공하면 탭이 목록을 다시 읽는다 — `announceModulesChanged`).
+  createModule: ['../src/palette/module-tab.tsx', '../src/panels/save-module-dialog.tsx'],
   renameModule: ['../src/palette/module-tab.tsx'],
   deleteModule: ['../src/palette/module-tab.tsx'],
+  // 개인 모듈 — 목록 · 넣기와 복사 직전의 다시 읽기 · 이름 · 삭제는 «모듈» 탭, 저장은 «모듈로 저장…» 상자와 «개인 모듈로 복사»(탭)다.
+  listMyModules: ['../src/palette/module-tab.tsx'],
+  getMyModule: ['../src/palette/module-tab.tsx'],
+  createMyModule: ['../src/palette/module-tab.tsx', '../src/panels/save-module-dialog.tsx'],
+  renameMyModule: ['../src/palette/module-tab.tsx'],
+  deleteMyModule: ['../src/palette/module-tab.tsx'],
   // 내보내기. 둘 다 같은 한 화면이 부른다 — 미리보기가 무엇이 실릴지 말하고
   // 그 다음에 앵커가 zip을 받는다.
   getExportPreview: ['../src/shell/export-panel.tsx'],
