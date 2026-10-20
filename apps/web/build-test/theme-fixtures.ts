@@ -58,6 +58,44 @@ export default defineTheme({ manifest, views: { Button, Field } })
   }
 }
 
+/**
+ * **주 단추를 제 주색으로 칠하는 테마**(`primary-mark@1.0.0`) — 시스템 테마가 `system-admin` 하나라, 프로젝트 테마를 «다른 테마로» 바꾸는 판은
+ * 이것을 올려 쓴다. 뷰는 기본 뷰 그대로이고 `theme.css` 하나가 `Button` 바탕을 `var(--wb-semantic-primary)` 로 칠한다 — SDK 기본 뷰의 CSS 는
+ * 단추에 바탕을 안 주므로 그 색이 서면 이 테마의 시트가 실린 것이다. 주색 기본값(`PRIMARY_MARK_COLOR`)은 system-admin 의 것과 다르다.
+ */
+export const PRIMARY_MARK_COLOR = '#7c3aed'
+export async function primaryMarkTheme(): Promise<Uint8Array> {
+  const dir = mkdtempSync(join(tmpdir(), 'wb-primary-mark-theme-'))
+  try {
+    cpSync(SAMPLE_ROOT, dir, { recursive: true })
+    writeFileSync(
+      join(dir, 'theme.config.ts'),
+      `import { defineManifest } from '@wirebound/theme-sdk'
+export default defineManifest({
+  id: 'primary-mark',
+  name: '주색 표지',
+  version: '1.0.0',
+  sdk: '^1.0.0',
+  tokens: { items: { 'semantic.primary': { type: 'color', label: '주색', default: '${PRIMARY_MARK_COLOR}' } } },
+})
+`,
+    )
+    writeFileSync(
+      join(dir, 'src/index.tsx'),
+      `import { defineTheme } from '@wirebound/theme-sdk'
+import manifest from '../theme.config'
+import './theme.css'
+export default defineTheme({ manifest, views: {} })
+`,
+    )
+    writeFileSync(join(dir, 'src/theme.css'), '[data-wb-component="Button"] {\n  background-color: var(--wb-semantic-primary);\n}\n')
+    const built = await buildTheme({ root: dir, entry: 'src/index.tsx', outDir: join(dir, 'out') })
+    return new Uint8Array(readFileSync(built.file))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 /** 인스턴스 관리자로 만든다 — API 에는 그 길이 없다(spec 「인스턴스 관리자」). 이 판의 DB 에 직접 쓴다. */
 export async function makeAdmin(stack: EditorStack, user: StackUser): Promise<void> {
   await stack.query('update users set is_instance_admin = true where email = $1', [user.email])

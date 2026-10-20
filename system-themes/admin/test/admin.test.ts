@@ -60,11 +60,11 @@ const ROOT_VARS = (): Map<string, string> => {
 }
 
 describe('system-admin manifest', () => {
-  it('id · 판 · sdk · 이름과 설명은 옛 admin 의 meta 그대로', () => {
+  it('id · 판 · sdk · 이름 · 설명', () => {
     expect(ADMIN_V0.manifest.id).toBe('system-admin')
-    expect(ADMIN_V0.manifest.version).toBe('1.2.0')
+    expect(ADMIN_V0.manifest.version).toBe('1.2.1')
     expect(ADMIN_V0.manifest.sdk).toBe('^1.2.0')
-    expect(ADMIN_V0.manifest.name).toBe('관리자')
+    expect(ADMIN_V0.manifest.name).toBe('기본테마')
     expect(ADMIN_V0.manifest.description).toBe('관리자 화면 기본 테마. 좁은 여백과 표 중심의 밀도를 갖는다.')
   })
 

@@ -727,7 +727,8 @@ function isProjectThemeView(value: unknown): boolean {
     (typeof value['themeId'] === 'string' || value['themeId'] === null) &&
     (typeof value['version'] === 'string' || value['version'] === null) &&
     (value['manifest'] === null || isThemeManifest(value['manifest'])) &&
-    (typeof value['latest'] === 'string' || value['latest'] === null)
+    (typeof value['latest'] === 'string' || value['latest'] === null) &&
+    (typeof value['latestName'] === 'string' || value['latestName'] === null)
   )
 }
 

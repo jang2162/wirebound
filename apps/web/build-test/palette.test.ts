@@ -6,7 +6,7 @@
  * |---|---|
  * | 판을 열면 캔버스 칸이 준다 | 판 높이만큼 안 준다 · 최대에서 캔버스 칸이 `CANVAS_MIN_HEIGHT` 아래 · 셸이 세로로 넘친다 · 새로고침 뒤 열림 · 높이를 잃는다 |
  * | 축소판 — 카드마다 표본 | 탭 다섯을 돌며 어느 카드의 창 안에 그 타입의 `[data-wb-component]` 가 안 선다(빈 카드) · 카드가 17 보다 적다 · 줄임 비의 가운데 값이 0.6 아래(축소판이 작아 안 읽힌다) |
- * | 축소판 — 테마 표지 | `system-portal` 프로젝트에서 축소판 단추의 바탕이 그 테마 주색(`semantic.primary` 기본값)이 아니다 |
+ * | 축소판 — 테마 표지 | 새 프로젝트(`system-admin`)에서 축소판 단추의 바탕이 그 테마 주색(`semantic.primary` 기본값)이 아니다 |
  * | 축소판 — 남이 토큰을 저장 | 저장 뒤에도 축소판 단추의 바탕이 옛 값이다 |
  * | 축소판 — 번들을 못 실음 | 축소판이 빈다(기본 뷰로 안 선다) |
  * | 축소판 — `inert` | 축소판 단추 자리를 눌러 iframe 문서에 클릭이 닿는다 · Tab 이 iframe 안으로 들어간다 |
@@ -297,11 +297,10 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
     }
   })
 
-  it('축소판 — 프로젝트 테마(system-portal)로 그리고, 남이 주색을 저장하면 따라간다', async () => {
-    const project = await fixture(stack, alice, 'pal-portal', texts(1), { bob: true })
-    const manifest = (await project.call('GET', `/theme-packages/system-portal/${seededVersion('system-portal')}/manifest`)).body
-    const portalPrimary = rgb(String(manifest.tokens.items['semantic.primary'].default))
-    await putTheme(project.call, project.projectId, { themeId: 'system-portal', version: seededVersion('system-portal'), tokens: {} })
+  it('축소판 — 프로젝트 테마(system-admin)로 그리고, 남이 주색을 저장하면 따라간다', async () => {
+    const project = await fixture(stack, alice, 'pal-admin', texts(1), { bob: true })
+    const manifest = (await project.call('GET', `/theme-packages/system-admin/${seededVersion('system-admin')}/manifest`)).body
+    const adminPrimary = rgb(String(manifest.tokens.items['semantic.primary'].default))
     const { context, page } = await stack.openTab(stack.users.bob, { viewport: { width: 1440, height: 900 } })
     try {
       await page.goto(project.P)
@@ -311,11 +310,11 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       const before = await poll(
         '축소판 표지',
         async () => String(await page.evaluate(THUMB_BUTTON)),
-        (value) => value === portalPrimary,
+        (value) => value === adminPrimary,
       ).catch(async () => String(await page.evaluate(THUMB_BUTTON)))
       await putTheme(project.call, project.projectId, {
-        themeId: 'system-portal',
-        version: seededVersion('system-portal'),
+        themeId: 'system-admin',
+        version: seededVersion('system-admin'),
         tokens: { 'semantic.primary': '#00aa11' },
       })
       const after = await poll(
@@ -323,7 +322,7 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
         async () => String(await page.evaluate(THUMB_BUTTON)),
         (value) => value === 'rgb(0, 170, 17)',
       ).catch(async () => String(await page.evaluate(THUMB_BUTTON)))
-      expect({ before, after }).toEqual({ before: portalPrimary, after: 'rgb(0, 170, 17)' })
+      expect({ before, after }).toEqual({ before: adminPrimary, after: 'rgb(0, 170, 17)' })
     } finally {
       await context.close()
     }

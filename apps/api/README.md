@@ -64,13 +64,22 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 
 ### 시스템 테마 — 기동 때 넣는다
 
-저장소 빌드(`pnpm build`)가 `system-themes/<이름>/dist/<id>-<version>.wbtheme` 를 낸다. **api 는 기동할 때 그 파일들 가운데 DB 에 없는
-`id@version` 만 넣고**(올린 사람 없음), 테마가 빈 프로젝트를 `system-admin` 의 최신판으로 채운다(`src/services/system-themes.ts`). 테스트
-앱도 `buildApp` 으로 서므로 같은 길을 탄다. 찾는 곳은 `SYSTEM_THEMES_DIR`(비우면 저장소의 `system-themes`)이다.
+저장소 빌드(`pnpm build`)가 `system-themes/<이름>/dist/<id>-<version>.wbtheme` 를 낸다 — 지금 시스템 테마는 `system-admin`(보이는 이름
+«기본테마») 하나다. **api 는 기동할 때 그 파일들 가운데 DB 에 없는 `id@version` 만 넣고**(올린 사람 없음), 테마가 빈 프로젝트를
+`system-admin` 의 최신판으로 채운다(`src/services/system-themes.ts`). 테스트 앱도 `buildApp` 으로 서므로 같은 길을 탄다. 찾는 곳은
+`SYSTEM_THEMES_DIR`(비우면 저장소의 `system-themes`)이고, **`package.json` 이 있는 테마 디렉터리만** 읽는다 — 저장소에서 걷은 테마는
+체크아웃에 무시된 `dist` 를 남기는데(`git pull` 은 추적 파일만 지운다), 그것을 읽으면 걷은 테마가 새 DB 에 숨김 없이 다시 들어온다.
+
+**저장소가 더는 내지 않는 시스템 테마**(`system-commerce` · `system-docs` · `system-portal` · `system-saas-marketing`)는 패키지 행이 남고
+숨겨져 있다 — 행은 지우는 길이 없고, 그 판을 가리키는 판 3 스냅샷의 복원이 행에 기댄다(없으면 409 `missing-theme`). 마이그레이션
+`0027-retire-system-themes` 가 그것에 고정한 프로젝트를 그때 DB 에 있는 `system-admin` 의 숨기지 않은 최신판으로 옮기고(토큰은 테마
+바꾸기와 같게 잇고 `theme_rev` 를 올린다) 넷의 판을 숨긴다. `migrate` 는 api 기동의 시딩보다 먼저 돌므로 그 판은 그 기동이 새로 넣는
+판이 아니라 이미 들어 있던 판이다(옮긴 프로젝트에 «새 버전» 이 뜬다). 옮기기 전 스냅샷을 복원하면 숨긴 그 판으로 돌아간다. `down` 은 되돌리지 않는다(옮기기 전 바인딩을 적어 두지
+않았다) — 되돌린 배포에서 넷을 다시 쓰려면 관리자가 테마 관리 화면에서 판을 되살린다.
 
 | 기동이 멈추는 갈래 | 문장 | 고치는 법 |
 |---|---|---|
-| 산출물이 하나도 없다 | «시스템 테마 산출물이 없습니다 … `pnpm build` 를 먼저» | 저장소 뿌리에서 `pnpm build` |
+| 산출물이 하나도 없다 | «시스템 테마 산출물이 없습니다 … `pnpm build` 를 먼저» | 저장소 뿌리에서 `pnpm build` · `SYSTEM_THEMES_DIR` 를 줬으면 그 아래 테마 디렉터리마다 `package.json` 이 있는지 본다 |
 | 같은 `id@version` 인데 sha256 이 다르다 | «이미 올린 버전의 내용이 바뀌었습니다: system-admin@0.1.0 — 판을 올리십시오» | 그 테마의 `version` 을 올린다 — 이미 그 판에 고정한 프로젝트 · 스냅샷이 «그때 그 화면» 을 잃지 않게 |
 | 검증을 못 지난다(이슈 · `system-` 이 아닌 id · SDK 범위 밖) | 까닭과 파일 경로 | 테마를 고친다 |
 
@@ -350,7 +359,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/tokens` | POST | viewer | `{ name }`(1~60자) | 201 `{ id, name, createdAt, lastUsedAt, value }` — **`value`(원문)가 실리는 유일한 응답이다.** 아래 "API 토큰". 토큰으로 부르면 403 |
 | `/api/projects/:projectId/tokens` | GET | viewer | — | 200 `{ id, name, createdAt, lastUsedAt }[]` — **자기가 만든 것만**, 오래된 것 먼저. **원문이 없다.** 토큰으로 부르면 403 |
 | `/api/projects/:projectId/tokens/:tokenId` | DELETE | viewer | — | 204. 남의 토큰·없는 id는 404. 토큰으로 부르면 403 |
-| `/api/projects/:projectId/theme` | GET | viewer | — | 200 `{ themeId, version, tokens, rev, manifest, latest }` — `latest` 는 같은 테마의 숨기지 않은 최신판(없으면 `null`). 바인딩이 비었으면 `themeId` · `version` · `manifest` 가 `null`. **토큰으로도 닿는다**(CLI · MCP 의 lint) |
+| `/api/projects/:projectId/theme` | GET | viewer | — | 200 `{ themeId, version, tokens, rev, manifest, latest, latestName }` — `latest` 는 같은 테마의 숨기지 않은 최신판(없으면 `null`), `latestName` 은 그 판의 이름(`/api/theme-packages` 의 테마 `name` 과 같다 · `latest` 가 `null` 이면 `null`) — 설정의 지금 테마 요약이 고정한 판의 이름 대신 그린다. 바인딩이 비었으면 `themeId` · `version` · `manifest` 가 `null`. **토큰으로도 닿는다**(CLI · MCP 의 lint) |
 | `/api/projects/:projectId/theme` | PUT | owner | `{ themeId, version, tokens, rev }` | 200 GET 과 같은 모양(`rev` 가 1 오른다) · 409 `{ error, current }`(`rev` 가 저장값과 다르다 — `current` 는 GET 과 같은 모양) · 404 없는 패키지 · 422 `hidden-version` · `token-too-long` · `token-too-large` · 토큰 검증 코드. 커밋 뒤 `theme-changed` 를 룸 전체에(낸 연결도) 보낸다 |
 | `/api/projects/:projectId/theme/impact` | GET | viewer | `?themeId&version` | 200 `{ tokens: { kept, dropped, defaulted }, variants: [{ pageId, title, count }] }` — 그 판으로 바꾸면 무엇이 달라지나. `variants` 는 트리 차례, 0 인 페이지는 빠진다. 없는 패키지 404 · 질의 없음 400 |
 | `/api/theme-packages` | GET | 로그인만(세션) | — | 200 `[{ themeId, name, description, latest, versions: [{ themeId, version, name, preview, hidden, size, uploadedAt, uploadedBy: { id, name } \| null }] }]` — 테마 id 순, 판은 semver 가 큰 것부터. **숨긴 판은 관리자에게만 실린다**(비관리자에게는 판이 다 숨은 테마가 통째로 없다). 토큰으로 부르면 401 |

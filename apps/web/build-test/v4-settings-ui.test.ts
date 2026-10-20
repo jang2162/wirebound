@@ -119,15 +119,15 @@ describe.skipIf(!전제.ok)('V4 — 셸 밖 화면 · 빈 캔버스의 배치', 
         .evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--wb-color-primary').trim())
       expect(primary).toBe('#e11d48')
 
-      // 목록에서 다른 테마를 고르면 미리보기가 그 테마로 갈린다 — 샘플 뷰가 사라지고 시트가 바뀐다.
+      // 목록에서 다른 테마(시스템 테마 «기본테마»)를 고르면 미리보기가 그 테마로 갈린다 — 샘플 뷰가 사라지고 시트가 바뀐다.
       await page
         .getByRole('list', { name: '테마 목록' })
-        .getByRole('button', { name: /^커머스/ })
+        .getByRole('button', { name: /^기본테마/ })
         .click()
-      await page.getByRole('heading', { name: /^미리보기 — system-commerce@/ }).waitFor()
+      await page.getByRole('heading', { name: /^미리보기 — system-admin@/ }).waitFor()
       await expect
         .poll(() => preview.locator('head link[data-wb-style="theme"]').getAttribute('href'), { timeout: 10_000 })
-        .toMatch(/^\/api\/theme-packages\/system-commerce\/[^/]+\/files\/theme\.css$/)
+        .toMatch(/^\/api\/theme-packages\/system-admin\/[^/]+\/files\/theme\.css$/)
       expect(await preview.locator('body', { hasText: '샘플 카드' }).count()).toBe(0)
     } finally {
       await tab.context.close()

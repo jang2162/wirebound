@@ -2,8 +2,9 @@
  * **테마 · 판 고르기**와 그 자리의 **인라인 확인**(spec `2026-09-27-code-themes-design.md` 「테마 바꾸기와 버전 올리기」). 모달이 아니다 —
  * 확인은 고르개 밑에 연다(`projects/delete-confirm.tsx` 와 같은 꼴).
  *
- * - 목록은 `listThemePackages()` 다. 숨긴 판은 관리자 응답에만 실리고 «숨김» 으로 고를 수 없다. **지금 고정한 판은 숨겼어도 선다** —
- *   비관리자 응답에 없으면 그 판을 «지금» 으로 넣는다(없으면 고르개가 지금 값을 못 비춘다).
+ * - 목록은 `listThemePackages()` 다. 숨긴 판은 관리자 응답에만 실리고 «숨김» 으로 고를 수 없다 — 판이 다 숨은 테마는 테마 칸에도 안
+ *   선다(지금 테마는 빼고). **지금 고정한 판은 숨겼어도 선다** — 비관리자 응답에 없으면 그 판을 «지금» 으로 넣는다(없으면 고르개가
+ *   지금 값을 못 비춘다).
  * - 다른 `id@버전` 을 고르면 확인이 열리고 `getThemeManifest` · `getThemeImpact` 를 함께 읽는다 — 토큰의 이어짐 · 버려짐 · 기본값 수와
  *   페이지별 «없는 variant» 수.
  * - «바꾸기» 는 `putProjectTheme` 에 `migrateTokens(지금 manifest, 새 manifest, 지금 토큰)` 을 싣는다 — 서버의 impact 가 같은 함수로
@@ -35,9 +36,12 @@ interface ThemeOption {
   versions: VersionOption[]
 }
 
-/** 고르개의 칸 — 목록에 지금 판을 얹고, 숨긴 판은 끈다(지금 판은 빼고). */
+/**
+ * 고르개의 칸 — 목록에 지금 판을 얹고, 숨긴 판은 끈다(지금 판은 빼고). 켜진 판이 없는 테마(판이 다 숨은 것 — 관리자 응답에만 온다)는
+ * 뺀다. 지금 테마는 지금 판이 켜져 있어 남는다(숨김이 아니라 꺼짐으로 거르는 까닭이다).
+ */
 function themeOptions(packages: readonly ThemePackageSummary[], current: ThemeRef, currentName: string): ThemeOption[] {
-  const themes: ThemeOption[] = packages.map((pkg) => ({
+  const listed: ThemeOption[] = packages.map((pkg) => ({
     themeId: pkg.themeId,
     name: pkg.name,
     versions: pkg.versions.map((v) => {
@@ -50,6 +54,7 @@ function themeOptions(packages: readonly ThemePackageSummary[], current: ThemeRe
       }
     }),
   }))
+  const themes = listed.filter((theme) => theme.versions.some((v) => !v.disabled))
   let mine = themes.find((theme) => theme.themeId === current.themeId)
   if (mine === undefined) {
     mine = { themeId: current.themeId, name: currentName, versions: [] }

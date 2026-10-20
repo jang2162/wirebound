@@ -65,14 +65,14 @@ const projectView = { ...project, themeRev: 3 }
 /** 테마 manifest 하나 — 편집기 · 캔버스가 순회하는 `tokens.items` 까지. */
 const manifest = {
   id: 'system-admin',
-  name: '관리자',
+  name: '기본테마',
   version: '0.1.0',
   sdk: '^1.0.0',
   tokens: { items: { 'color.primary': { type: 'color', label: '주색', default: '#2563eb' } } },
 }
 
 /** `GET · PUT …/theme` 의 응답 — 409 의 `current` 도 이 모양이다. */
-const projectTheme = { themeId: 'system-admin', version: '0.1.0', tokens: {}, rev: 2, manifest, latest: '0.1.0' }
+const projectTheme = { themeId: 'system-admin', version: '0.1.0', tokens: {}, rev: 2, manifest, latest: '0.1.0', latestName: manifest.name }
 
 /** 판 한 줄 — 목록의 `versions[]` 와 숨김 응답. */
 const themeVersion = {
@@ -823,7 +823,14 @@ const SHAPE_CASES: Array<{
   {
     shape: 'projectTheme',
     broken: { ...projectTheme, rev: '2' },
-    ok: { ...projectTheme, themeId: null, version: null, manifest: null, latest: null },
+    ok: { ...projectTheme, themeId: null, version: null, manifest: null, latest: null, latestName: null },
+    call: (c) => c.getProjectTheme('p1'),
+  },
+  // **`latestName` 이 글도 `null` 도 아니면 막는다** — 설정의 지금 테마 요약이 그 글을 그린다.
+  {
+    shape: 'projectTheme',
+    broken: { ...projectTheme, latestName: 1 },
+    ok: projectTheme,
     call: (c) => c.getProjectTheme('p1'),
   },
   {

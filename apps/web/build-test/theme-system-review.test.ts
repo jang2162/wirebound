@@ -1,5 +1,5 @@
 /**
- * **시스템 테마 다섯이 같은 설계서를 캔버스 · 내보낸 번들 · PPTX 화면에서 깨지지 않게 그리는가** — 실브라우저 판.
+ * **시스템 테마가 같은 설계서를 캔버스 · 내보낸 번들 · PPTX 화면에서 깨지지 않게 그리는가** — 실브라우저 판.
  *
  * 테마 build-test(`checkTheme` · `wb-theme shots`)는 갤러리 칸을 **표준 모드 문서 한 장**에 그린다. 여기서 재는 것은 그 자가 못 보는
  * 자리다 — 에디터 캔버스(same-origin iframe · 문서 높이를 따라 자람) · 설정 미리보기 · 번들의 3분할 뷰어 · PPTX 화면(720 폭).
@@ -30,7 +30,7 @@ if (!전제.ok) {
   console.log(`[에디터 실브라우저 판] 건너뛴다 — ${전제.reason}`)
 }
 
-const THEMES = ['system-admin', 'system-commerce', 'system-docs', 'system-portal', 'system-saas-marketing'] as const
+const THEMES = ['system-admin'] as const
 
 /** 끊을 자리가 없는 긴 낱말 — 관리자 화면의 이메일 · 주소는 흔히 이 꼴이다. */
 const LONG_EMAIL = 'hong.gildong.very.long.account@example-company.co.kr'
@@ -270,7 +270,7 @@ function otherValue(type: string, value: string | number, options?: string[]): s
   return options?.find((o) => o !== text) ?? text
 }
 
-describe.skipIf(!전제.ok)('시스템 테마 다섯 — 캔버스 · 번들 · PPTX', () => {
+describe.skipIf(!전제.ok)('시스템 테마 — 캔버스 · 번들 · PPTX', () => {
   let stack: EditorStack
   let alice: Session
   let fixture: Fixture

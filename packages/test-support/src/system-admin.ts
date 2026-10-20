@@ -32,8 +32,8 @@ function readManifest(theme = 'admin'): ThemeManifest {
 }
 
 /**
- * 기동 시딩이 넣는 시스템 테마의 판(`system-<theme>` — `admin` · `commerce` · `docs` · `portal` · `saas-marketing`). `SYSTEM_ADMIN.version` 과
- * 같은 까닭으로 케이스는 다른 시스템 테마의 판도 글자로 적지 않고 이것을 쓴다.
+ * 기동 시딩이 넣는 시스템 테마의 판(`system-<theme>` — `system-themes/<theme>` 의 산출물. 지금은 `admin` 하나다). `SYSTEM_ADMIN.version` 과
+ * 같은 까닭으로 케이스는 시스템 테마의 판을 글자로 적지 않고 이것을 쓴다.
  */
 export function systemThemeVersion(theme: string): string {
   return readManifest(theme).version

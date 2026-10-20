@@ -97,7 +97,8 @@ export function ThemeSection(props: { project: ProjectView }): ReactElement {
 
 /**
  * 지금 값 — 요약 카드. 첫 줄은 `이름 id@버전` 한 글이다(글자로 찾는 자리가 그 요소의 제 글 노드를 본다 — 둘로 가르면 못 찾는다 ·
- * `test/settings/theme-chooser.test.tsx`).
+ * `test/settings/theme-chooser.test.tsx`). 이름은 테마의 이름(숨기지 않은 최신판의 것 — 고르개의 테마 칸과 같다)이고, 고정한 판의
+ * manifest 이름은 숨기지 않은 판이 없을 때만 그린다 — 판을 올리며 이름을 바꾼 테마에서 옛 판에 고정한 프로젝트가 옛 이름으로 서지 않게.
  * 같은 테마에 더 높은 숨기지 않은 판이 있으면 «새 버전», manifest 가 있으면 기본값과 다른 토큰 수(저장된 토큰은 기본값을 뺀 것이다 —
  * `token-editor.tsx` 머리말 «저장은 기본값과 같은 값을 뺀 초안»).
  */
@@ -113,7 +114,7 @@ function CurrentTheme(props: { view: ProjectThemeView }): ReactElement {
     <div className="wb-shell-settings-summary" role="group" aria-label="지금 테마">
       {shellIcon('themes', 20, 'wb-shell-settings-summary-icon')}
       <div className="wb-shell-settings-summary-body">
-        <p className="wb-shell-settings-current">{`${view.manifest?.name ?? view.themeId} ${view.themeId}@${view.version}`}</p>
+        <p className="wb-shell-settings-current">{`${view.latestName ?? view.manifest?.name ?? view.themeId} ${view.themeId}@${view.version}`}</p>
         <p className="wb-shell-settings-summary-meta">
           {total === null ? `바꾼 토큰 ${changed}개` : `바꾼 토큰 ${changed} / ${total}개`}
           {newer && <span className="wb-shell-settings-newer">{`새 버전 ${view.latest}`}</span>}

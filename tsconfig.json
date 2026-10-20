@@ -18,10 +18,6 @@
     { "path": "./apps/playground" },
     { "path": "./apps/api" },
     { "path": "./apps/web" },
-    { "path": "./system-themes/admin" },
-    { "path": "./system-themes/commerce" },
-    { "path": "./system-themes/docs" },
-    { "path": "./system-themes/portal" },
-    { "path": "./system-themes/saas-marketing" }
+    { "path": "./system-themes/admin" }
   ]
 }

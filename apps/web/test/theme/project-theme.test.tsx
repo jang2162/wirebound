@@ -38,7 +38,15 @@ function themed(id: string, marker: string): ThemeDefinition {
 const ADMIN = themed('system-admin', 'admin')
 const ACME_MANIFEST = { ...ADMIN_FIXTURE.manifest, id: 'acme', name: 'Acme', version: '1.0.0' }
 const ACME = defineTheme({ manifest: ACME_MANIFEST, views: { ...themed('acme', 'acme').views } })
-const ACME_VIEW: ProjectThemeView = { themeId: 'acme', version: '1.0.0', tokens: {}, rev: 1, manifest: ACME_MANIFEST, latest: '1.0.0' }
+const ACME_VIEW: ProjectThemeView = {
+  themeId: 'acme',
+  version: '1.0.0',
+  tokens: {},
+  rev: 1,
+  manifest: ACME_MANIFEST,
+  latest: '1.0.0',
+  latestName: 'Acme',
+}
 
 const DOC = docWithText('t1', '안녕')
 

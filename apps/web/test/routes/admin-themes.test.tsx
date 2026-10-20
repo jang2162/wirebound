@@ -20,7 +20,7 @@ function version(themeId: string, v: string, extra: Partial<ThemePackageVersion>
   return {
     themeId,
     version: v,
-    name: themeId === 'acme' ? 'Acme' : '관리자',
+    name: themeId === 'acme' ? 'Acme' : '기본테마',
     preview: null,
     hidden: false,
     size: 2048,
@@ -41,7 +41,7 @@ const PACKAGES: ThemePackageSummary[] = [
       version('acme', '1.0.0', { uploadedBy: { id: 'u-1', name: '관리자님' } }),
     ],
   },
-  { themeId: 'system-admin', name: '관리자', description: null, latest: '0.1.0', versions: [version('system-admin', '0.1.0')] },
+  { themeId: 'system-admin', name: '기본테마', description: null, latest: '0.1.0', versions: [version('system-admin', '0.1.0')] },
 ]
 
 function renderAdmin(
@@ -94,7 +94,7 @@ describe('테마 관리 — 목록', () => {
     expect(within(rows[1]!).getByRole('button', { name: 'acme@1.0.0 숨김' })).toBeDefined()
     // 상세는 고른 테마 하나다 — 목록에서 고른다.
     expect(screen.queryByRole('region', { name: 'system-admin' })).toBeNull()
-    fireEvent.click(within(screen.getByRole('list', { name: '테마 목록' })).getByRole('button', { name: /^관리자/ }))
+    fireEvent.click(within(screen.getByRole('list', { name: '테마 목록' })).getByRole('button', { name: /^기본테마/ }))
     expect(within(theme('system-admin')).getByRole('listitem').textContent).toContain('시스템')
   })
 
@@ -252,7 +252,7 @@ describe('테마 관리 — 목록 · 상세 · 미리보기', () => {
       within(list())
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['Acmeacme · 2판 · 숨김 1', '관리자system-admin · 1판'])
+    ).toEqual(['Acmeacme · 2판 · 숨김 1', '기본테마system-admin · 1판'])
     expect(current()).toEqual(['Acmeacme · 2판 · 숨김 1'])
     // latest 는 숨기지 않은 판의 최대(1.0.0)다 — 숨긴 1.1.0 이 위에 있어도.
     expect(within(theme('acme')).getByRole('button', { name: 'acme@1.0.0 미리보기' }).getAttribute('aria-pressed')).toBe('true')
@@ -281,9 +281,9 @@ describe('테마 관리 — 목록 · 상세 · 미리보기', () => {
   it('목록에서 고르면 주소가 그 테마 · latest 로 바뀌고 상세가 갈린다 · 판의 «미리보기» 는 판만 바꾼다', async () => {
     const api = renderAdmin()
     await waitFor(() => theme('acme'))
-    fireEvent.click(within(list()).getByRole('button', { name: /^관리자/ }))
+    fireEvent.click(within(list()).getByRole('button', { name: /^기본테마/ }))
     expect(Object.fromEntries(new URLSearchParams(currentSearch()))).toEqual({ theme: 'system-admin', version: '0.1.0' })
-    expect(current()).toEqual(['관리자system-admin · 1판'])
+    expect(current()).toEqual(['기본테마system-admin · 1판'])
     expect(screen.queryByRole('region', { name: 'acme' })).toBeNull()
     await waitFor(() => expect(api.getThemeManifest).toHaveBeenCalledWith({ themeId: 'system-admin', version: '0.1.0' }, expect.anything()))
 
@@ -306,7 +306,7 @@ describe('테마 관리 — 목록 · 상세 · 미리보기', () => {
   it('올리기가 성공하면 올린 판을 고른다', async () => {
     renderAdmin()
     await waitFor(() => theme('acme'))
-    fireEvent.click(within(list()).getByRole('button', { name: /^관리자/ }))
+    fireEvent.click(within(list()).getByRole('button', { name: /^기본테마/ }))
     upload(wbtheme())
     await screen.findByText('acme@2.0.0 을 올렸습니다')
     await waitFor(() => expect(Object.fromEntries(new URLSearchParams(currentSearch()))).toEqual({ theme: 'acme', version: '2.0.0' }))

@@ -1290,7 +1290,7 @@ packages/test-support  여러 패키지의 케이스가 함께 쓰는 도구(제
 packages/exporter      HTML 정적 번들 · PPTX
 packages/cli           wireb
 packages/mcp           MCP 서버 · 스킬
-system-themes/*        저장소 테마 다섯 — pnpm build 가 .wbtheme 로 내고 api 가 기동 때 넣는다
+system-themes/*        저장소 테마(admin 하나 — 보이는 이름 «기본테마») — pnpm build 가 .wbtheme 로 내고 api 가 기동 때 넣는다
 apps/web               설계서 에디터
 apps/api               REST + WebSocket
 Dockerfile             배포 이미지 둘(api · web)

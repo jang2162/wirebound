@@ -35,7 +35,7 @@
  *
  * ## 못 재는 것
  *
- * 시스템 테마 다섯은 `direction` · `columns` 를 props 그대로 그린다(`build-test/layout-guides.test.ts` 의 `[배치 선]` 로그 —
+ * 시스템 테마는 `direction` · `columns` 를 props 그대로 그린다(`build-test/layout-guides.test.ts` 의 `[배치 선]` 로그 —
  * 뷰포트 375 의 Grid 도 3열이다) — 그려진 배치로 읽는 길과 props 로 읽는 길이 그 판들에서 같은 글을 내어, props 만 읽게 바꾼 변이가 산다.
  * 그 둘이 갈리는 테마(`*-reverse` · 좁은 폭에서 접히는 Grid)가 서면 그 테마로 케이스를 세운다.
  */

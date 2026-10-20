@@ -17,7 +17,7 @@ const USER = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 /** 여섯 타입 전부와 무리 없는 키 하나. */
 const MANIFEST: ThemeManifest = {
   id: 'system-admin',
-  name: '관리자',
+  name: '기본테마',
   version: '0.1.0',
   sdk: '^1.0.0',
   tokens: {
@@ -38,7 +38,7 @@ const MANIFEST: ThemeManifest = {
 }
 
 function view(tokens: Record<string, string | number> = {}, rev = 3): ProjectThemeView {
-  return { themeId: 'system-admin', version: '0.1.0', tokens, rev, manifest: MANIFEST, latest: '0.1.0' }
+  return { themeId: 'system-admin', version: '0.1.0', tokens, rev, manifest: MANIFEST, latest: '0.1.0', latestName: MANIFEST.name }
 }
 
 function renderEditor(role: ProjectRole = 'owner', overrides: Partial<ApiClient> = {}) {
