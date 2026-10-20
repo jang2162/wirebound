@@ -86,8 +86,7 @@ export async function insertModule(
 }
 
 /**
- * 그 프로젝트의 모듈 전부. **최근 것이 먼저다** — 방금 저장한 모듈을 넣으러 탭을 여는 것이 흔한 걸음이라 맨 위에 선다(옛 프리셋은 내장 뒤에
- * 오래된 것부터였다 — 내장은 이제 화면의 «기본 모듈» 묶음이 따로 갖는다).
+ * 그 프로젝트의 모듈 전부. **최근 것이 먼저다** — 방금 저장한 모듈을 넣으러 탭을 여는 것이 흔한 걸음이라 맨 위에 선다.
  */
 export async function listModules(db: DbHandle, projectId: string): Promise<ModuleRecord[]> {
   const rows = await db

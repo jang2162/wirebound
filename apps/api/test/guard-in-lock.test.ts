@@ -2801,6 +2801,12 @@ const NOT_LOCKED: Record<string, string> = {
     '토큰 행 하나 — 위 줄과 같다(프로젝트를 안 보고 `user_id`로만 거른다 — `deleteUserToken`). 재확인하지 않는다(같은 까닭)',
   'DELETE /api/auth/tokens':
     '내 토큰 행 전부를 id 순으로 — 토큰 행 밖을 안 잡는다(`deleteAllUserTokens`). 프로젝트 삭제 · 멤버 제거가 쥔 토큰 행에는 서고(`my-tokens-lock.test.ts`), 재확인하지 않는다(같은 까닭)',
+  'POST /api/me/modules':
+    '프로젝트 밖 — `personal_modules` 행 하나를 넣는다(FK 가 소유자 사용자 행에 `KEY SHARE` — 비밀번호 바꾸기의 `NO KEY UPDATE` 와 안 부딪힌다). 프로젝트 행을 안 잡고 프로젝트 삭제의 CASCADE 가 이 표에 안 닿는다 — `personal-modules.test.ts` «프로젝트 삭제를 쥔 동안». 재확인하지 않는다 — 프로젝트 권한이 판정에 없고 쓰이는 것은 그 사람 자신의 행뿐이다',
+  'PATCH /api/me/modules/:moduleId':
+    '프로젝트 밖 — 제 `personal_modules` 행 하나의 이름만(`owner_id` 로 거른다). 그 행을 가리키는 FK 가 없다. 프로젝트 삭제 뒤에서 안 선다(위 줄의 케이스). 재확인하지 않는다(같은 까닭)',
+  'DELETE /api/me/modules/:moduleId':
+    '프로젝트 밖 — 제 `personal_modules` 행 하나를 지운다. 그 행을 가리키는 FK 가 없다. 프로젝트 삭제 뒤에서 안 선다(위 줄의 케이스). 재확인하지 않는다(같은 까닭)',
   'POST /api/admin/theme-packages':
     '프로젝트 밖 — `theme_packages` 행 하나를 넣는다(FK 가 올린 사람의 사용자 행에 `KEY SHARE`). 프로젝트 행을 안 잡는다. 커밋 직전에 자격 · 관리자 표시를 다시 본다 — `admin-themes.test.ts` «강등과 겹친 업로드»',
   'PATCH /api/admin/theme-packages/:themeId/:version':
