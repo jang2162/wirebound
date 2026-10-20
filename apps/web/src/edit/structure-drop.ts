@@ -53,7 +53,7 @@ export interface StructureDrop {
  * 끄는 것 — 옮길 노드(구조 트리 줄 · 캔버스 손잡이) · 넣을 새 타입(컴포넌트 목록 카드) · 넣을 모듈 묶음(«모듈» 탭 카드 — `palette/module-tab.tsx`).
  *
  * 모듈의 `nodes` 는 **미리보기 · 판정의 표본**이다 — 놓을 때 넣는 노드는 부르는 쪽이 다시 짓는다(프로젝트 모듈은 서버에서 다시 읽고, 테마 패턴은
- * 다시 전개한다 — `palette/module-insert.ts`). `key` 는 카드를 가르는 값이다(`project:<id>` · `builtin:<키>` · `pattern:<키>`).
+ * 다시 전개한다 — `palette/module-insert.ts`). `key` 는 카드를 가르는 값이다(`personal:<id>` · `project:<id>` · `pattern:<키>`).
  */
 export type Placing =
   | { kind: 'node'; id: string }

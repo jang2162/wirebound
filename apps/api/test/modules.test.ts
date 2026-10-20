@@ -56,7 +56,7 @@ async function made(ctx: TestContext, fx: Fixture, name: string, nodes: WbNode[]
 }
 
 describe('GET /:projectId/modules', () => {
-  it('없으면 빈 목록 — 내장(«기본 모듈»)은 이 목록에 없다', async () => {
+  it('없으면 빈 목록 — 개인 모듈은 이 목록에 없다', async () => {
     await withApi(async (ctx) => {
       expect(await list(ctx, await fixture(ctx))).toEqual([])
     })

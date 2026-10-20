@@ -787,7 +787,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
   })
 
   describe('판 열고 접기 · 높이', () => {
-    it('뷰 모드로 바꾸면 판 · 토글이 없고, 편집 모드로 돌아오면 기억대로 열린다 · 페이지를 옮겨도 열린 채 표본이 선다', async () => {
+    it('뷰 모드로 바꾸면 «컴포넌트» 판 · 토글 대신 «모듈 목록» · «모듈» 이 열린 채 서고, 편집 모드로 돌아오면 «컴포넌트» 로 열린다 · 페이지를 옮겨도 열린 채 표본이 선다', async () => {
       const { P } = await seed('rv-open-mode', [BASIC, [{ id: 'n_text2', type: 'Text', props: { content: '둘째' } }]])
       const { page, close } = await openEditor(P[0]!)
       try {
@@ -799,6 +799,8 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const inView = {
           palette: await page.getByRole('region', { name: '컴포넌트 목록' }).count(),
           toggle: await footer.getByRole('button', { name: '컴포넌트', exact: true }).count(),
+          modules: await page.getByRole('region', { name: '모듈 목록' }).count(),
+          moduleToggle: await footer.getByRole('button', { name: '모듈', exact: true }).getAttribute('aria-expanded'),
         }
         await page.getByRole('button', { name: '편집 모드' }).click()
         await page.getByRole('region', { name: '컴포넌트 목록' }).waitFor()
@@ -822,7 +824,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
           afterMove,
           thumbsOk: thumbs !== null && Object.values(thumbs).length > 0 && Object.values(thumbs).every((c) => c.inside),
         }).toEqual({
-          inView: { palette: 0, toggle: 0 },
+          inView: { palette: 0, toggle: 0, modules: 1, moduleToggle: 'true' },
           back: 1,
           afterMove: 1,
           thumbsOk: true,
@@ -832,7 +834,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       }
     })
 
-    it('판을 연 bob 이 viewer 로 강등되면 판 · 토글이 걷히고, editor 로 돌아오면 다시 선다', async () => {
+    it('판을 연 bob 이 viewer 로 강등되면 «컴포넌트» 판 · 토글이 «모듈 목록» · «모듈» 로 바뀌고, editor 로 돌아오면 다시 선다', async () => {
       const { P, projectId } = await seed('rv-open-demote', [BASIC])
       const b = await openEditor(P[0]!, 'bob')
       try {
@@ -850,6 +852,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
           .getByRole('contentinfo', { name: '하단 바' })
           .getByRole('button', { name: '컴포넌트', exact: true })
           .count()
+        const modules = await b.page.getByRole('region', { name: '모듈 목록' }).count()
         const promote = (await call('PATCH', `/projects/${projectId}/members/${bobId}`, { role: 'editor' })).status
         const back = await poll(
           '다시 선다',
@@ -857,7 +860,14 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
           (n) => n === 1,
           6000,
         ).catch(() => b.page.getByRole('region', { name: '컴포넌트 목록' }).count())
-        expect({ demote, gone, toggle, promote, back }).toEqual({ demote: 200, gone: 0, toggle: 0, promote: 200, back: 1 })
+        expect({ demote, gone, toggle, modules, promote, back }).toEqual({
+          demote: 200,
+          gone: 0,
+          toggle: 0,
+          modules: 1,
+          promote: 200,
+          back: 1,
+        })
       } finally {
         await b.close()
       }

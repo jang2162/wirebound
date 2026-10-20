@@ -10,5 +10,7 @@ describe('viewer 는 에디터에서 쓰기를 내지 않는다', () => {
       http: [],
       frames: [],
     })
+    // 개인 모듈 쓰기는 낸다 — viewer 도 «모듈로 저장…» 의 개인 모듈로 저장한다(훑기가 그 입구에 닿았다는 대조이기도 하다).
+    expect([...new Set(wire.personal)]).toEqual(['POST /api/me/modules'])
   }, 300_000)
 })

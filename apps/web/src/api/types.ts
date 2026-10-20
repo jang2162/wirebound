@@ -370,7 +370,7 @@ export interface CommentCreated extends MarkerChange {
  */
 /**
  * 프로젝트 모듈 하나(정본 설계서 「모듈」 · api README «모듈 응답 형태») — 구조 트리에서 고른 노드를 «모듈로 저장…» 한 묶음이다. 하단 판 «모듈» 탭의
- * «프로젝트 모듈» 묶음이 그린다. 내장 «기본 모듈»은 이 타입이 아니다(`@wirebound/schema` 의 `BuiltinModule`).
+ * «프로젝트 모듈» 묶음이 그린다. 개인 모듈(`PersonalModule`)도 같은 꼴이다.
  *
  * **`nodes` 는 문서 봉투가 아니다** — 넣으면 고른 자리의 형제가 될 노드들이고, 서버가 저장할 때 `marker` · 묶음 밖 액션을 걷었다.
  */
@@ -384,6 +384,12 @@ export interface ProjectModule {
   createdAt: string
   updatedAt: string
 }
+
+/**
+ * 개인 모듈 하나(`GET /api/me/modules`) — 사람이 소유하고 그 사람이 여는 모든 프로젝트의 «개인 모듈» 묶음에 선다. 응답 꼴은 프로젝트 모듈과 같고
+ * `createdBy` 가 소유자다(서버가 같은 모양으로 낸다 — `routes/personal-modules.ts`).
+ */
+export type PersonalModule = ProjectModule
 
 export interface SnapshotSummary {
   id: string

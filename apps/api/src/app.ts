@@ -14,6 +14,7 @@ import { exportRoutes } from './routes/export'
 import { healthRoutes } from './routes/health'
 import { memberRoutes } from './routes/members'
 import { moduleRoutes } from './routes/modules'
+import { personalModuleRoutes } from './routes/personal-modules'
 import { menuRoutes } from './routes/menu'
 import { pageRoutes } from './routes/pages'
 import { projectThemeRoutes } from './routes/project-theme'
@@ -262,9 +263,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 스냅샷도 프로젝트 아래에 산다(`/:projectId/snapshots`). **인자 없이 부른다** — 그
   // 팩토리의 `captureHooks`는 테스트 전용 이음매다(`routes/snapshots.ts`의 머리말).
   await app.register(snapshotRoutes(), { prefix: '/api/projects' })
-  // 모듈도 프로젝트 아래에 산다(`/:projectId/modules`) — 모듈은 프로젝트가 소유한다(설계서 「모듈」). 내장 모듈(«기본 모듈»)은
-  // `@wirebound/schema`에 있고 화면이 직접 읽는다.
+  // 모듈도 프로젝트 아래에 산다(`/:projectId/modules`) — 모듈은 프로젝트가 소유한다(설계서 「모듈」). 개인 모듈은 사람이 소유해 프로젝트
+  // 밖에 산다(`/api/me/modules` — `routes/personal-modules.ts`). 세션으로만 부른다.
   await app.register(moduleRoutes(), { prefix: '/api/projects' })
+  await app.register(personalModuleRoutes(), { prefix: '/api/me' })
   // 내보내기도 프로젝트 아래에 산다(`/:projectId/export`). **URL에 파일 이름이 없다** —
   // 파일 이름은 안정한 열쇠가 아니라 페이지를 하나 더하면 번호가 밀린다.
   await app.register(exportRoutes({ screenRenderer, renderLimit: config.exportRenderLimit }), { prefix: '/api/projects' })

@@ -26,9 +26,21 @@ function toggle(): HTMLElement | null {
   return within(footer()).queryByRole('button', { name: '컴포넌트' })
 }
 
+/** 넣을 수 없는 판(뷰 모드 · viewer)의 토글 · 판 — «모듈» · «모듈 목록»(`component-palette.tsx` 머리말 «넣을 수 없는 판»). */
+function moduleToggle(): HTMLElement | null {
+  return within(footer()).queryByRole('button', { name: '모듈' })
+}
+
 function palette(): HTMLElement | null {
   return screen.queryByRole('region', { name: '컴포넌트 목록' })
 }
+
+function modulePalette(): HTMLElement | null {
+  return screen.queryByRole('region', { name: '모듈 목록' })
+}
+
+/** 판이 «모듈» 탭을 그리면 두 목록을 읽는다 — 빈 목록으로 답한다. */
+const EMPTY_LISTS = { listModules: async () => [], listMyModules: async () => [] }
 
 function setMode(name: '편집 모드' | '뷰 모드'): void {
   fireEvent.click(within(screen.getByRole('group', { name: '모드' })).getByRole('button', { name }))
@@ -57,22 +69,25 @@ describe('하단 판 — 열고 접기', () => {
     expect(button?.getAttribute('aria-expanded')).toBe('false')
   })
 
-  it('viewer 에게는 토글 · 판이 없다 — 열어 둔 기억이 있어도', async () => {
+  it('viewer 에게는 «컴포넌트» 대신 «모듈» 토글 · «모듈 목록» 판이 선다 — 열어 둔 기억대로 열린다', async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ paletteOpen: true }))
-    await openPage(DOC, { apiOverrides: { getProject: async () => project('viewer') } })
-    expect(toggle()).toBeNull()
-    expect(palette()).toBeNull()
+    await openPage(DOC, { apiOverrides: { getProject: async () => project('viewer'), ...EMPTY_LISTS } })
+    await act(async () => {})
+    expect({ toggle: toggle(), palette: palette() }).toEqual({ toggle: null, palette: null })
+    expect(moduleToggle()?.getAttribute('aria-expanded')).toBe('true')
+    expect(moduleToggle()?.getAttribute('aria-controls')).toBe(modulePalette()?.id)
   })
 
-  it('뷰 모드에서는 토글 · 판이 없고, 편집 모드로 돌아오면 기억한 열림대로 선다', async () => {
-    await openPage(DOC, { apiOverrides: { getProject: async () => project('editor') } })
+  it('뷰 모드에서는 토글이 «모듈» · 판이 «모듈 목록» 으로 남고, 편집 모드로 돌아오면 «컴포넌트» 로 선다', async () => {
+    await openPage(DOC, { apiOverrides: { getProject: async () => project('editor'), ...EMPTY_LISTS } })
     fireEvent.click(toggle() as HTMLElement)
     expect(palette()).not.toBeNull()
 
     setMode('뷰 모드')
     await act(async () => {})
-    expect(toggle()).toBeNull()
-    expect(palette()).toBeNull()
+    expect({ toggle: toggle(), palette: palette() }).toEqual({ toggle: null, palette: null })
+    expect(moduleToggle()?.getAttribute('aria-expanded')).toBe('true')
+    expect(modulePalette()).not.toBeNull()
 
     setMode('편집 모드')
     await act(async () => {})

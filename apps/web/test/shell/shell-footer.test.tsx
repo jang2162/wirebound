@@ -91,8 +91,10 @@ describe('캔버스 도구는 머리에 있다', () => {
     expect([
       within(header()).queryAllByRole('combobox', { name: '뷰포트 폭' }).length,
       within(header()).queryAllByRole('group', { name: '줌' }).length,
-      within(footer()).queryAllByRole('button').length,
-    ]).toEqual([1, 1, 0])
+      within(footer())
+        .queryAllByRole('button')
+        .map((button) => button.textContent),
+    ]).toEqual([1, 1, ['모듈']])
   })
 })
 

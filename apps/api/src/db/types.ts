@@ -278,6 +278,19 @@ export interface ModulesTable {
 }
 
 /**
+ * 개인 모듈(`0026-personal-modules`). 설계 spec `2026-10-20-personal-modules-design.md` — 사람 하나가 소유하는 노드 묶음이다. 칸의 뜻은
+ * `ModulesTable` 과 같고, 프로젝트 칸 · 만든 사람 칸 대신 소유자(`owner_id`)가 있다.
+ */
+export interface PersonalModulesTable {
+  id: Generated<string>
+  owner_id: string
+  name: string
+  nodes: JSONColumnType<WbNode[]>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+/**
  * API 토큰(`0011-api-tokens`). 설계서 「권한 모델」의 *"발급자의 권한을 상속 … 스코프는 프로젝트 단위"*.
  *
  * **`token_hash`가 원문의 sha256 hex다 — 원문은 어디에도 저장되지 않는다**(`sessions.id`와
@@ -334,6 +347,7 @@ export interface Database {
   project_menu_revs: ProjectMenuRevsTable
   snapshots: SnapshotsTable
   modules: ModulesTable
+  personal_modules: PersonalModulesTable
   api_tokens: ApiTokensTable
   theme_packages: ThemePackagesTable
 }

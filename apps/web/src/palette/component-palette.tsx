@@ -2,9 +2,15 @@
  * **하단 컴포넌트 판** — 캔버스와 하단 바 사이에 펼쳐지는 판(spec `docs/superpowers/specs/2026-10-01-component-drag-design.md`
  * 「하단 컴포넌트 목록」). 셸 그리드의 `palette` 줄이다(`shell.css` 의 `.wb-shell` · `.wb-shell-palette`).
  *
- * **서는 조건 · 높이 · 열림은 셸이 갖는다** — 셸(`routes/editor.tsx`)이 편집 모드 · `canEdit` · 기억한 열림(`shell/sidebar-layout.ts` 머리말
- * «하단 판의 높이»)으로 이 부품을 그리거나 안 그린다. 여기는 그 높이를 위쪽 손잡이(`ShellResizer` · `orientation="horizontal"`)로 나른다 —
- * 위로 끌면 판이 커지므로 `reversed` 다.
+ * **열림 · 높이는 셸이 갖는다** — 셸(`routes/editor.tsx`)이 기억한 열림(`shell/sidebar-layout.ts` 머리말 «하단 판의 높이»)으로 이 부품을 그리거나
+ * 안 그린다. 여기는 그 높이를 위쪽 손잡이(`ShellResizer` · `orientation="horizontal"`)로 나른다 — 위로 끌면 판이 커지므로 `reversed` 다.
+ *
+ * ## 넣을 수 없는 판 — «모듈» 하나
+ *
+ * 판은 편집할 수 없는 판(viewer · editor 이상의 뷰 모드)에도 선다 — 개인 모듈을 다루고 프로젝트 모듈을 개인으로 복사하는 자리다(설계 spec
+ * `2026-10-20-personal-modules-design.md` «편집할 수 없는 판의 입구»). 그 판(`insertable` 이 거짓)에서는 위층 탭이 «모듈» 하나이고(«컴포넌트» 는
+ * 문서를 바꾸는 입구뿐이다), 판의 이름이 «모듈 목록» · 토글이 «모듈» 이다(`paletteNames`). 기억한 위층 탭은 읽지도 쓰지도 않는다 — 편집 모드로
+ * 돌아오면 그 탭으로 선다. 무엇이 서는지는 `./module-tab.tsx` 머리말 «무엇이 서는가».
  *
  * ## 위층 탭 — «컴포넌트 | 모듈»
  *
@@ -56,6 +62,13 @@ import { PaletteThumbs, type ThumbSlot } from './palette-thumbs'
 /** 판의 id — 하단 바의 토글이 `aria-controls` 로 가리킨다. */
 export const PALETTE_ID = 'wb-shell-palette'
 
+/** 판 · 높이 손잡이 · 토글의 이름 — 넣을 수 없는 판은 «모듈» 쪽이다(머리말 «넣을 수 없는 판»). */
+export function paletteNames(insertable: boolean): { region: string; resizer: string; toggle: string } {
+  return insertable
+    ? { region: '컴포넌트 목록', resizer: '컴포넌트 목록 높이', toggle: '컴포넌트' }
+    : { region: '모듈 목록', resizer: '모듈 목록 높이', toggle: '모듈' }
+}
+
 /** 판의 위층 탭 — 머리말 «위층 탭». */
 export type PaletteView = 'components' | 'modules'
 
@@ -94,13 +107,18 @@ export function ComponentPalette(props: {
   onGrab: () => number
   onMove: (height: number) => void
   onReset: () => void
+  /** 넣기 · 끌기 · «컴포넌트» 탭이 서는가 — 편집 모드 && 고칠 수 있다. */
+  insertable: boolean
+  /** 프로젝트 모듈을 쓸 수 있는가 — editor 이상(모드와 무관하다). */
+  projectWritable: boolean
 }): ReactElement {
+  const names = paletteNames(props.insertable)
   return (
-    <section id={PALETTE_ID} className="wb-shell-palette" aria-label="컴포넌트 목록" style={{ height: `${props.height}px` }}>
+    <section id={PALETTE_ID} className="wb-shell-palette" aria-label={names.region} style={{ height: `${props.height}px` }}>
       <ShellResizer
         orientation="horizontal"
         className="wb-shell-palette-resizer"
-        label="컴포넌트 목록 높이"
+        label={names.resizer}
         reversed
         value={props.height}
         min={props.min}
@@ -111,7 +129,12 @@ export function ComponentPalette(props: {
         onEdge={(edge) => props.onMove(edge === 'min' ? props.min : props.max)}
         onReset={props.onReset}
       />
-      <PaletteBody projectId={props.projectId} pageId={props.pageId} />
+      <PaletteBody
+        projectId={props.projectId}
+        pageId={props.pageId}
+        insertable={props.insertable}
+        projectWritable={props.projectWritable}
+      />
     </section>
   )
 }
@@ -139,10 +162,18 @@ export function rovingStep(key: string, index: number, count: number): number | 
   return null
 }
 
-function PaletteBody(props: { projectId: string; pageId: string | undefined }): ReactElement {
+function PaletteBody(props: {
+  projectId: string
+  pageId: string | undefined
+  insertable: boolean
+  projectWritable: boolean
+}): ReactElement {
   // 카탈로그는 실행 중에 안 바뀐다 — 고르개와 같이 한 번만 센다.
   const groups = useMemo(placeableGroups, [])
-  const [view, setView] = useState<PaletteView>(readPaletteView)
+  const [picked, setView] = useState<PaletteView>(readPaletteView)
+  /** 넣을 수 없는 판은 «모듈» 하나다(머리말 «넣을 수 없는 판») — 고른 탭은 그대로 두어 편집 모드로 돌아오면 그 탭으로 선다. */
+  const view: PaletteView = props.insertable ? picked : 'modules'
+  const views = props.insertable ? VIEWS : VIEWS.filter((entry) => entry.view === 'modules')
   const [group, setGroup] = useState<string>(() => groups[0]?.group ?? '')
   const [query, setQuery] = useState('')
   const [moduleQuery, setModuleQuery] = useState('')
@@ -161,20 +192,21 @@ function PaletteBody(props: { projectId: string; pageId: string | undefined }): 
   )
 
   const pickView = (next: PaletteView): void => {
+    if (!props.insertable) return
     setView(next)
     writePaletteView(next)
   }
   const moveView = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
-    const next = rovingStep(event.key, index, VIEWS.length)
+    const next = rovingStep(event.key, index, views.length)
     if (next === null) return
     event.preventDefault()
-    const target = VIEWS[next]!
+    const target = views[next]!
     pickView(target.view)
     viewRefs.current.get(target.view)?.focus()
   }
   const viewTabs = (
     <div className="wb-shell-palette-tabs wb-shell-palette-views" role="tablist" aria-label="목록 종류">
-      {VIEWS.map((entry, index) => (
+      {views.map((entry, index) => (
         <button
           key={entry.view}
           ref={(element) => {
@@ -215,7 +247,14 @@ function PaletteBody(props: { projectId: string; pageId: string | undefined }): 
           />
           {noticeLine}
         </div>
-        <ModuleTab projectId={props.projectId} pageId={props.pageId} onNotice={onNotice} query={moduleQuery} />
+        <ModuleTab
+          projectId={props.projectId}
+          pageId={props.pageId}
+          onNotice={onNotice}
+          query={moduleQuery}
+          insertable={props.insertable}
+          projectWritable={props.projectWritable}
+        />
       </>
     )
   }
@@ -463,7 +502,7 @@ function logTagShown(element: HTMLDivElement | null): void {
 }
 
 /** 하단 바의 «컴포넌트» 토글. 판이 서는 조건과 같은 조건으로 셸이 그린다. */
-export function PaletteToggle(props: { open: boolean; onToggle: () => void }): ReactElement {
+export function PaletteToggle(props: { open: boolean; onToggle: () => void; insertable: boolean }): ReactElement {
   return (
     <button
       type="button"
@@ -473,7 +512,7 @@ export function PaletteToggle(props: { open: boolean; onToggle: () => void }): R
       onClick={props.onToggle}
     >
       {shellIcon('palette', 14, 'wb-shell-icon-lead')}
-      컴포넌트
+      {paletteNames(props.insertable).toggle}
     </button>
   )
 }
