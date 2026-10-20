@@ -7,6 +7,7 @@
  * |---|---|
  * | 모듈 카드 끌어 놓기 — 캔버스 · 트리 | 개인 모듈을 빈 카드 안에 · 프로젝트 모듈을 구조 트리 줄 안에 놓은 자리가 서버 문서와 다르다 · 표시(미리보기)가 안 선다 · 넣은 노드가 안 골라진다 · 되돌리기 둘 뒤 원래 문서가 아니다 |
  * | 넣을 수 없는 판 — viewer · 뷰 모드 | 판 · «모듈» 탭이 안 선다 · «넣기» 단추가 선다 · 카드를 캔버스에 끌어 놓거나 카드 안에서 Enter 를 치면 편집이 나간다(카나리아: 같은 끌기가 편집 모드에서는 문서를 바꾼다) |
+ * | 끄는 중 강등 · 뷰 모드 | 쥔 카드의 표시가 넣을 수 없게 된 뒤에도 남는다 · 놓으면 편집이 나간다(카나리아: 강등 전 표시 1 · 같은 끌기가 편집 모드에서는 문서를 바꾼다) |
  * | 다른 프로젝트에서 저장한 개인 모듈 | 저장 상자의 기본값(개인)으로 저장한 모듈이 다른 프로젝트의 «개인 모듈» 묶음에 안 선다 · 넣으며 이 프로젝트에 없는 페이지를 가리키는 동작을 안 뺀다 · 뺀 수를 말하지 않는다 |
  * | 마지막 탭 기억 | «모듈» 탭을 고르고 새로고침하면 «컴포넌트» 로 선다 |
  * | 막힌 저장소 | `localStorage` 가 던지는 판에서 판이 안 서거나 «컴포넌트» 가 아니다 · 탭을 못 바꾼다 |
@@ -381,6 +382,76 @@ describe.skipIf(!전제.ok)('하단 판 «모듈» 탭 — 실브라우저', () 
       expect({ viewer: viewer.seen, viewMode: viewMode.seen, edited, editSent: patches.length > 0 }).toEqual({
         viewer: readOnlyShape,
         viewMode: readOnlyShape,
+        edited: { n_root: ['n_text', { n_card: ['n_intx'] }, { n_empt: ['+Button'] }] },
+        editSent: true,
+      })
+    } finally {
+      await viewMode.opened.close()
+    }
+  }, 120_000)
+
+  /**
+   * 끄는 중 넣을 수 없게 되는 판 — 하단 판은 이제 강등 · 뷰 모드에도 남으므로(전에는 판째 내려가 끌기가 끊겼다) 쥔 카드를 놓을 수 있다. 막는 겹이
+   * 셋이다(카드 판의 다시 마운트 · 넣기 첫 줄과 보내기 직전의 `insertable`) — 셋을 다 떼야 편집이 나가고(뷰 모드 판의 문서가 바뀐다), 다시 마운트만
+   * 떼면 강등 판의 표시가 놓기 전까지 남는다.
+   */
+  it('끄는 중 강등 · 뷰 모드로 넣을 수 없게 되면 표시가 걷히고 놓아도 편집이 안 나간다 — 편집 모드의 같은 끌기는 바꾼다', async () => {
+    const { P, projectId } = await seed('mod-midrag')
+    const member = await call('POST', `/projects/${projectId}/members`, { email: stack.users.bob.email, role: 'editor' })
+    expect(member.status, JSON.stringify(member.body)).toBe(201)
+    const bob = await stack.login(stack.users.bob)
+    const nodes = [{ id: 'g_btn', type: 'Button', props: { label: '끄는 중' } }]
+    const alices = (await call('POST', '/me/modules', { name: '앨리스 끌기', nodes })).body.module.id as string
+    const bobs = (await stack.request(bob, 'POST', '/me/modules', { name: '밥 끌기', nodes })).body.module.id as string
+
+    const midDrag = async (user: 'alice' | 'bob', moduleId: string, flip: (page: Page) => Promise<void>) => {
+      const opened = await openAs(user, P)
+      const { page } = opened
+      await openPalette(page)
+      await viewTab(page, '모듈').click()
+      const key = `personal:${moduleId}`
+      await page.locator(`[data-wb-module-card="${key}"]`).waitFor()
+      await grab(page, key)
+      const empty = (await canvasFrame(page).locator('[data-wb-id="n_empt"]').boundingBox())!
+      await page.mouse.move(empty.x + empty.width / 2, empty.y + empty.height / 2, { steps: 8 })
+      const before = (await shownDrops(page)).length
+      await flip(page)
+      // 화면이 넣을 수 없는 판이 됐다 — 하단 바 토글이 «모듈» 이다.
+      await page.getByRole('contentinfo', { name: '하단 바' }).getByRole('button', { name: '모듈', exact: true }).waitFor()
+      await page.mouse.move(empty.x + empty.width / 2 + 2, empty.y + empty.height / 2 + 2, { steps: 2 })
+      const after = (await shownDrops(page)).length
+      await page.mouse.up()
+      await page.waitForTimeout(800)
+      return { opened, seen: { before, after, sent: opened.patches.length, doc: await shape(P) } }
+    }
+
+    const demoted = await midDrag('bob', bobs, async () => {
+      const res = await call('PATCH', `/projects/${projectId}/members/${member.body.userId as string}`, { role: 'viewer' })
+      expect(res.status, JSON.stringify(res.body)).toBe(200)
+    })
+    await demoted.opened.close()
+    // 끄는 중 키보드로 «뷰 모드» 를 누른다(포인터는 쥔 채).
+    const viewMode = await midDrag('alice', alices, async (page) => {
+      await page.getByRole('button', { name: '뷰 모드' }).focus()
+      await page.keyboard.press(' ')
+    })
+    const { page, patches } = viewMode.opened
+    try {
+      // 카나리아 — 같은 탭에서 편집 모드로 돌아와 같은 끌기는 문서를 바꾼다.
+      await page.getByRole('button', { name: '편집 모드' }).click()
+      await page.getByRole('region', { name: '컴포넌트 목록' }).waitFor()
+      await viewTab(page, '모듈').click()
+      await page.locator(`[data-wb-module-card="personal:${alices}"]`).waitFor()
+      await dragToEmpty(page, `personal:${alices}`)
+      const edited = await poll(
+        '편집 모드의 끌기',
+        () => shape(P),
+        (v) => JSON.stringify(v) !== JSON.stringify(ORIGINAL),
+      ).catch(() => shape(P))
+      const stopped = { before: 1, after: 0, sent: 0, doc: ORIGINAL }
+      expect({ demoted: demoted.seen, viewMode: viewMode.seen, edited, editSent: patches.length > 0 }).toEqual({
+        demoted: stopped,
+        viewMode: stopped,
         edited: { n_root: ['n_text', { n_card: ['n_intx'] }, { n_empt: ['+Button'] }] },
         editSent: true,
       })

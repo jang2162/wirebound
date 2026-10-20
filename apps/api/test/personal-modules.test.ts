@@ -5,6 +5,7 @@
  * |---|---|
  * | «저장 · 목록 · 하나 · 이름 · 삭제» | 소유자 · 차례 · 거름(`moduleNodesForSave`) · 한도 · `nested-page` · NUL 이 프로젝트 모듈과 다르다 |
  * | «남의 개인 모듈은 모르는 id 와 같은 답» | repo 가 `owner_id` 를 안 본다 · 토큰이 사람을 채운다 · 답이 «있다» 를 흘린다 |
+ * | «프로젝트 모듈 라우트에 개인 모듈 id» | 프로젝트 모듈의 읽기 · 이름 · 삭제가 개인 모듈 행에 닿는다 · 답이 «있다» 를 흘린다 |
  * | «프로젝트를 지우거나 멤버에서 빠져도 남는다» | 개인 모듈이 프로젝트에 매였다 |
  * | «복사 — 원본 그대로» | 복사(다시 읽고 → 새로 저장)가 원본 행을 바꾸거나 지운다 · 사본이 원본에 이어진다 |
  * | «viewer 의 프로젝트 모듈로 복사는 403» | 프로젝트 모듈 저장 가드가 viewer 를 들인다 |
@@ -204,6 +205,42 @@ describe('남의 개인 모듈은 모르는 id 와 같은 답', () => {
       expect(await mine(ctx, bob)).toEqual([])
       expect(await row(ctx, hers.id)).toEqual(before)
       expect((await mine(ctx, alice)).map((entry) => entry.id)).toEqual([hers.id])
+    })
+  })
+
+  it('프로젝트 모듈 라우트에 개인 모듈 id 를 실어도 — 소유자 · 다른 멤버 · 토큰 모두 — 모르는 id 와 같은 상태 · 같은 본문이고 원본은 그대로', async () => {
+    await withApi(async (ctx) => {
+      const alice = await signup(ctx)
+      const bob = await signup(ctx)
+      const project = await createProject(ctx, alice.cookie)
+      await addMember(ctx, project.id, bob.user.id, 'editor')
+      const aliceToken = await issueToken(ctx, alice, project.id)
+      const hers = await saved(ctx, alice, '앨리스의 것')
+      const before = await row(ctx, hers.id)
+
+      const answer = async (who: Who, id: string) => {
+        const out: Record<string, [number, string]> = {}
+        for (const [key, method, payload] of [
+          ['read', 'GET', undefined],
+          ['rename', 'PATCH', { name: '뺏기' }],
+          ['remove', 'DELETE', undefined],
+        ] as const) {
+          const res = await send(ctx, who, method, `/api/projects/${project.id}/modules/${id}`, payload)
+          out[key] = [res.statusCode, res.body]
+        }
+        return out
+      }
+
+      for (const [label, who] of [
+        ['소유자 앨리스', as(alice)],
+        ['같은 프로젝트의 다른 멤버', as(bob)],
+        ['그 프로젝트의 앨리스 토큰', aliceToken],
+      ] as const) {
+        const theirs = await answer(who, hers.id)
+        expect(theirs, label).toEqual(await answer(who, MISSING))
+        expect(theirs.read![0], label).toBe(404)
+      }
+      expect(await row(ctx, hers.id)).toEqual(before)
     })
   })
 })
