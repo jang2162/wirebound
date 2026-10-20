@@ -185,9 +185,9 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
   /**
    * 창 1024 · 사이드바 기본에서 통지 셋(테마 못 실음 · 남의 복원 · 권한 바뀜 — 모두 실제로 세운다)이 선다. 캔버스 칸의 폭은 444 다 — 하단 바의
    * 오른쪽 도구가 제 폭을 지키면 통지 칸이 남은 폭만 받아 한 줄이 한두 낱말이 되고 바가 자라 캔버스를 먹는다. 바가 접히면 통지가 칸 폭을 다
-   * 쓴다(`src/shell.css`의 `.wb-shell-footer`). 권한이 viewer 로 내려가 하단 바에는 도구가 없다(«컴포넌트»는 editor 이상) — 캔버스 도구(뷰포트 ·
-   * 줌)는 머리에 있다. 성질로 단언한다: 통지 한 줄의 폭 · 캔버스 몫(`CANVAS_MIN_WIDTH`와 같은 320) · 바가 창 안 · 머리의 캔버스 도구가 눌림 ·
-   * 하단 바에 도구가 없음.
+   * 쓴다(`src/shell.css`의 `.wb-shell-footer`). 권한이 viewer 로 내려가 하단 바의 도구는 판 토글 «모듈» 하나다(«컴포넌트»는 editor 이상 — 넣을
+   * 수 없는 판은 «모듈» 하나다) — 캔버스 도구(뷰포트 · 줌)는 머리에 있다. 성질로 단언한다: 통지 한 줄의 폭 · 캔버스 몫(`CANVAS_MIN_WIDTH`와 같은
+   * 320) · 바가 창 안 · 머리의 캔버스 도구가 눌림 · 하단 바의 도구가 토글 하나.
    */
   it('창 1024 에서 통지 셋이 서도 통지 칸이 읽을 폭이고, 캔버스가 320 이상 남고, 바가 창 안이다', async () => {
     const { P, projectId } = await fixture(stack, alice, 'footer-narrow', 3)
@@ -240,7 +240,7 @@ describe.skipIf(!전제.ok)('모달 대화 상자 · 하단 바 — 실브라우
         바_창_안: seen.barInWindow,
         도구: seen.tools,
         하단_도구: seen.footerTools,
-      }).toEqual({ 통지_폭: true, 캔버스: true, 바_창_안: true, 도구: [true, true, true, true], 하단_도구: 0 })
+      }).toEqual({ 통지_폭: true, 캔버스: true, 바_창_안: true, 도구: [true, true, true, true], 하단_도구: 1 })
     } finally {
       await context.close()
     }

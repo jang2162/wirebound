@@ -103,7 +103,7 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
     return { page, close: () => context.close() }
   }
 
-  /** 창 셋 × 두 모드 — 머리 한 줄(48) · 넘침 0 · 덮인 컨트롤 없음, 차례, 하단 바는 «컴포넌트»뿐이고 높이 40. 접힌 창(700)에는 줌이 머리에 없다. */
+  /** 창 셋 × 두 모드 — 머리 한 줄(48) · 넘침 0 · 덮인 컨트롤 없음, 차례, 하단 바는 판 토글뿐이고(편집 «컴포넌트» · 뷰 «모듈») 높이 40. 접힌 창(700)에는 줌이 머리에 없다. */
   it('창 1440 · 900 · 700 × 편집 · 뷰 — 머리는 한 줄이고 넘치지 않으며, 캔버스 도구는 «편집 / 뷰» 뒤 · `…` 앞에 선다', async () => {
     const P = await fixture('head-shape')
     const seen: Record<string, Shape> = {}
@@ -148,7 +148,8 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
           overflow: 0,
           covered: [],
           footer: 40,
-          footerControls: mode === '편집 모드' ? ['컴포넌트'] : [],
+          // 뷰 모드의 하단 판은 «모듈» 하나라 토글 이름도 «모듈» 이다(`src/palette/component-palette.tsx` 의 `paletteNames`).
+          footerControls: mode === '편집 모드' ? ['컴포넌트'] : ['모듈'],
           headControls: head(mode, width === 700, width === 1440),
         }
       }
