@@ -100,6 +100,8 @@ git worktree remove .worktrees/<워크트리명>
   kill <pid>…                                                     # 안 죽으면 kill -9
   ```
 
+  명령 줄에 경로가 없는 서버(그 디렉터리에서 상대 경로로 띄운 것)는 `ps … | grep` 에 안 걸린다 — 그 워크트리의 포트로 `lsof -nP -t -iTCP:<PORT> -sTCP:LISTEN` 을 세고, pid 의 cwd(`lsof -p <pid> -a -d cwd`)가 그 워크트리인지 본 뒤 내린다.
+
   **브리프에 «끝나면 서버를 내려라»를 적어도 남는다** — 세션이 중간에 끊기거나 재개되면 앞 세션의 것이 그대로 산다. 폐기 직전에 메인 세션이 한 번 본다.
 - 디렉터리를 `rm -rf`로 먼저 지웠다면 `git worktree prune`을 함께 돌려 등록 정보를 지운다.
 
