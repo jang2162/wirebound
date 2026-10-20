@@ -32,6 +32,23 @@
 
 백업은 경로 전체 이름 · 복원 `cmp` 같음(변조마다).
 
+### 실브라우저 판
+
+새 파일 `apps/web/build-test/theme-current-name.test.ts`(editor-stack · 2 케이스)에 잠갔다. 옛 판은 `theme-system.test.ts` 와 같은 얼린 산출물 `fixtures/system-admin-0.1.0.wbtheme`(이름 «관리자» — 사용자 DB 에 시딩된 판)을 DB 에 넣고, 시딩된 지금 판(`1.2.1` «기본테마»)의 이름은 그 manifest 에서 읽는다.
+
+| 판 | 고친 뒤 요약 | 고치기 전 소스(B1) |
+|---|---|---|
+| `system-admin@0.1.0` 에 고정(같은 테마에 숨기지 않은 `1.2.1`) | `{ current: '기본테마 system-admin@0.1.0', newer: '새 버전 1.2.1' }` | `current: '관리자 system-admin@0.1.0'` — 빨강 |
+| `primary-mark@1.0.0` 에 고정 뒤 그 판을 숨김(`latest` · `latestName` 이 `null` — 카나리아) | `{ current: '주색 표지 primary-mark@1.0.0', newer: null }` | 같은 값 — 초록(원래 성질) |
+
+| 변조 | 자리 | 실행 · 죽은 케이스 |
+|---|---|---|
+| B1 = M1(웹 요약이 `latestName` 을 안 봄) | `theme-section.tsx` | 2 · 1 — «옛 판에 고정한 프로젝트 …» (`관리자 system-admin@0.1.0`) |
+| B2 서버가 `latestName: null` 만 낸다 | `project-theme.ts` 의 `themeView` | 2 · 1 — 같은 케이스 |
+| B3 = M2(manifest 이름 뗌) | `theme-section.tsx` | 2 · 1 — «판이 다 숨은 테마에 고정한 프로젝트 …» |
+
+판 세우기 전 `pnpm build`(종료 0). 변조마다 백업 · `cmp` 복원.
+
 ## L4 — 고르개의 판이 다 숨은 테마
 
 ### 바꾼 것
