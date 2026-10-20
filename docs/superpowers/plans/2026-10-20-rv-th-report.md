@@ -93,3 +93,32 @@
 | V1 문장에서 `package.json` 조건을 뗀다(고치기 전 문장) | `apps/api/src/services/system-themes.ts` 의 `seedSystemThemes` 첫 `throw` | `apps/api/test/system-themes.test.ts` 15 실행 · 1 실패 — «산출물이 package.json 없는 디렉터리에만 있으면 던지고 그 규칙을 말한다» 만 | «expected … to throw error including '(백틱)package.json(백틱) 이 있는 테마 디렉터리만' but got '시스템 테마 산출물이 없습니다(/var/folders/…'» |
 
 백업은 경로 전체 이름(`backup__apps__api__src__services__system-themes.ts`) · 복원 `cmp` 같음. 고친 뒤 그 파일 15 실행 · 15 통과 · 0 건너뜀.
+
+## 게이트
+
+`f1b20cd9`(구현 `65325712` + 이 리뷰의 고침 · 보고) · node v24.21.0 · 자리(`gate-slots`) 0 개에서 `rv-th` 를 만들고 띄움 · 끝나고 지움 · `nohup nice -n 10 caffeinate -i`.
+
+| 단계 | 결과 | 실행 · 건너뜀 | 시간 |
+|---|---|---|---|
+| `pnpm typecheck` | 통과 | — | 14s |
+| `pnpm build` | 통과 | — | 5s |
+| `pnpm lint` | 오류 0 · 경고 90(모두 이 리뷰가 안 건드린 줄 — 고친 두 파일 0) | — | 0s |
+| `pnpm fmt:check` | 통과 | 1173 파일 | 0s |
+| `pnpm test --maxWorkers=25%` | 통과 | 501 파일 · 8152 통과 · 1 건너뜀 (8153 — 구현 게이트보다 새 케이스 1) | 566s |
+| `pnpm test:build:serial` | 통과 | 17 파일 · 156 통과 · 1 건너뜀 | 134s |
+| `pnpm test:browser` | 통과 | 81 파일 · 487 통과 · 1 건너뜀 | 635s |
+
+- 게이트 18:15:17–18:37:51 · `pmset -g log` 의 마지막 Sleep 은 10:08 — 안 겹친다.
+- 숨은 글자(제어 · 폭 없는 글자 · 방향 제어 · U+2028/9 · 서로게이트) 바뀐 파일 0.
+- 측정 스택: main 사본 api · 이 브랜치 api(3062) · vite(5862)를 내렸고 측정 DB `wb_rvth` · `wb_rvth2` 를 지웠고 main 사본 · 비밀번호가 든 스크래치 env 를 지웠다. 자기 DB 컨테이너(5462)는 남겼다. 이 워크트리 경로의 vitest · vite · api 프로세스 0.
+
+## 지침
+
+1. **시스템 테마 판을 올리는 트랙의 데이터 마이그레이션이 «최신판» 을 겨누면 옛 판을 얻는다.**
+   - 무엇이 비었나: 배포는 `migrate` → api 기동(시딩) 차례라 마이그레이션이 도는 때 DB 에는 그 트랙이 새로 낸 판이 아직 없다. `0027` 이 «`system-admin` 최신판» 으로 옮긴 프로젝트가 «관리자 system-admin@1.2.0» 으로 섰다(발견 L1). 구현 케이스는 테스트 DB 의 global-setup 이 새 판을 먼저 시딩한 판이라 이것을 못 본다.
+   - 어디: `.ruler/20-verification.md` 「수를 셀 때는 두 번 세고 표본을 열어 본다 — 덧붙임」 의 «마이그레이션을 새로 두면 …» 줄 뒤.
+   - 넣을 문장: «**시스템 테마를 고르는 데이터 마이그레이션은 앞 판만 시딩된 DB 에서 잰다** — 배포는 `migrate` 가 api 기동의 시딩보다 먼저라 마이그레이션이 보는 «최신판» 은 이 트랙이 새로 낸 판이 아니라 이미 든 판이다. 테스트 DB 는 global-setup 이 새 판을 먼저 넣어 이 판을 못 낸다 — main 사본으로 시딩한 DB 에 이 브랜치로 `migrate` 하고 바인딩의 판을 적는다(`docs/superpowers/plans/2026-10-20-rv-th-report.md` 항목 3).»
+2. **경로로 찾는 프로세스 정리는 cwd 로 띄운 서버를 놓친다.**
+   - 무엇이 비었나: 「워크트리 폐기」 의 `ps -eo pid,etime,command | grep '<워크트리명>'` 는 명령 줄에 경로가 있는 것만 찾는다. 그 디렉터리에 들어가 `node --import tsx src/main.ts`(상대 경로)로 띄운 api 는 명령 줄에 워크트리 이름이 없어 안 걸린다 — 이 리뷰에서 main 사본 api 를 `pkill -f <경로>` 로 내렸다고 믿은 채 다음 단계(`migrate`)를 돌았다(포트로 다시 세어 알았다 · 측정 값에는 영향 없음).
+   - 어디: `.ruler/10-worktree.md` 「워크트리 폐기」 의 «워커가 띄운 dev 서버가 남아 있는지 본다» 항목.
+   - 넣을 문장: «명령 줄에 경로가 없는 서버(그 디렉터리에서 상대 경로로 띄운 것)는 `ps … | grep` 에 안 걸린다 — 그 워크트리의 포트로 `lsof -nP -t -iTCP:<PORT> -sTCP:LISTEN` 을 세고, pid 의 cwd(`lsof -p <pid> -a -d cwd`)가 그 워크트리인지 본 뒤 내린다.»
