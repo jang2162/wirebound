@@ -149,7 +149,7 @@ export function renderLlmsTxt(): string {
   line('# wirebound')
   line()
   line(
-    '> wirebound is a web screen-design tool. People draw page designs — a menu tree of pages, each page a tree of catalog components — in a browser editor; coding agents read the designs, comment on them and edit them through an MCP server or the `wireb` CLI. This file is the same for every wirebound server and carries no data from this one.',
+    '> wirebound is a web screen-design tool. People draw page designs — a menu tree of pages, each page a tree of catalog components — in a browser editor; coding agents read the designs, comment on them and edit them through an MCP server. The `wireb` CLI only reads them (`wireb --help`). This file is the same for every wirebound server and carries no data from this one.',
   )
   line()
   line('All server paths below are relative to the origin that served this file.')
