@@ -100,3 +100,40 @@ L5 는 목 값만 바꿨다 — 새 케이스가 없다.
 
 - L5 직후 `pnpm vitest run --project web`(일꾼 수 기본)을 한 번 돌렸을 때 195 파일 · 3259 통과 · **2 실패** 였다. dot 출력이라 어느 케이스인지 안 남았다.
 - 같은 소스를 `--maxWorkers=25% --reporter=json` 으로 다시 돌리자 3261 통과 · 0 실패. 첫 판은 일꾼 수를 안 묶은 판이라 부하로 본다 — 전량 게이트(아래)가 다시 잰다.
+
+## 게이트
+
+`d93f3ca8`(L1 · L4 · L5 · 실브라우저 판) · node v24.21.0 · 자리(`gate-slots`) 0 개에서 `fx-th` 를 만들고 띄움 · 끝나고 지움 · `nohup nice -n 10 caffeinate -i`. 서버 칸(`latestName`)을 더해 api 도 건드렸으므로 웹 · api 줄을 합친 전량이다.
+
+| 단계 | 결과 | 실행 · 건너뜀 | 시간 |
+|---|---|---|---|
+| `pnpm typecheck` | 통과 | — | 24s |
+| `pnpm build` | 통과 | — | 6s |
+| `pnpm lint` | 오류 0 · 경고 90(리뷰 게이트와 같은 수 — 이 트랙이 고친 줄 0) | — | 0s |
+| `pnpm fmt:check` | 통과 | 1174 파일 | 0s |
+| `pnpm test --maxWorkers=25%` | 통과 | 501 파일 · 8157 통과 · 1 건너뜀(리뷰 게이트 8152 + 새 케이스 5 = api «latestName 은 …» 1 · 웹 요약 2 · 웹 고르개 2. `http-client` 의 새 모양 줄은 표를 도는 한 `it` 안이라 수에 안 든다) | 950s |
+| `pnpm test:build:serial` | 통과 | 17 파일 · 156 통과 · 1 건너뜀 | 162s |
+| `pnpm test:browser`(1차) | **2 실패** | 82 파일 · 487 통과 · 2 실패 · 1 건너뜀 | 1072s |
+| `pnpm test:browser`(2차) | **1 실패** | 82 파일 · 488 통과 · 1 실패 · 1 건너뜀 | 782s |
+
+- 1차 실패: `canvas-preview.test.ts` «끄는 중 bob 이 맨 위에 노드를 넣으면 미리보기가 새 문서 위에 다시 선다»(`armed: ['preview:n_card@1']` ≠ `['preview:n_empt@0']`) · `editor-shortcuts-review-2.test.ts` «R4 붙이는 사이 같은 페이지를 다시 실으면 …». 2차 실패: `canvas-drop-review.test.ts` «끄는 중 남의 다른 편집 …». **판마다 다른 파일**이고 셋 다 두 사람이 겹치는 끌기 · 붙이기 판이다.
+- 혼자 세 번: `canvas-preview` 6/6 · 6/6 · 6/6, `editor-shortcuts-review-2` 3/3 · 3/3 · 3/3, `canvas-drop-review` 16/16 · 16/16 · 16/16 — 모두 초록. 이 트랙은 끌기 · 붙이기 · 캔버스 소스를 안 건드렸다(바꾼 소스: `theme-section.tsx` · `theme-chooser.tsx` · `http-client.ts` 의 모양 검사 · `types.ts` · api 의 `themeView`). 새 파일 `theme-current-name.test.ts` 는 두 판 모두 초록.
+- 게이트 20:09:26–21:05:48 · `pmset -g log` 의 마지막 `Entering Sleep` 은 20:05:44(152s → 20:08:16 끝) — 안 겹친다.
+- 숨은 글자(제어 · 폭 없는 글자 · 방향 제어 · U+2028/9 · BOM · 서로게이트) — `c3c10eb2..HEAD` 의 바뀐 19 파일에서 0.
+- 측정 스택은 editor-stack 이 케이스마다 거뒀다(`afterAll` 의 `after` 0). 이 워크트리 경로의 vitest · vite · api 프로세스 0. 자기 DB 컨테이너(5462)는 남겼다.
+
+## 남은 것
+
+- 실브라우저 갈래의 두 사람 겹침 판 셋(위)이 전량 안에서만 가끔 빨강이다 — 혼자서는 초록이라 이 트랙에서 원인을 안 쫓았다. 이월 후보.
+- 고르개의 테마 칸은 «목록에 없는 지금 테마»(비관리자 · 판이 다 숨음)의 이름을 여전히 고정판 manifest 에서 짓는다(`themeOptions` 의 `currentName`) — 그 판에서는 `latestName` 도 `null` 이라 요약과 같은 이름이다.
+
+## 지침
+
+1. **타입에 없는 칸을 읽는 변조는 오류 없이 다른 것을 잰다.**
+   - 무엇이 비었나: vitest 는 타입을 안 본다. L4 의 M8(둘째 판)이 `VersionOption` 에 없는 `v.hidden` 으로 걸러 `!undefined` 가 늘 참이 되었고, 그 변조는 «숨김으로 거른다» 가 아니라 «아무것도 안 거른다» 를 재며 엉뚱한 케이스를 죽였다 — 실패 값(`'유령'` 이 남음)을 보고서야 알았다.
+   - 어디: `.ruler/30-delegation.md` 「변조를 `git checkout` 으로 되돌리지 않게 한다 …」 절의 «새 이름을 쓰는 변조는 그 import 도 같은 변조에서 바꾼다» 문장 뒤.
+   - 넣을 문장: «**변조는 타입 검사를 지나는 꼴로 쓴다** — vitest 는 타입을 안 보아, 타입에 없는 칸을 읽는 변조(`v.hidden`)는 `undefined` 로 돌아 재려던 갈래가 아니라 다른 갈래를 잰다. 변조 글이 읽는 칸이 그 타입에 있는지 보고, 죽은 케이스가 그 변조로 죽을 케이스인지 실패 값으로 맞춘다(`docs/superpowers/plans/2026-10-20-fx-th-report.md` L4 M8).»
+2. **목 값의 글자 셈은 «누가 그 값을 단언하나» 를 못 가른다.**
+   - 무엇이 비었나: L5 에서 `'관리자'` 단언 자리를 글자로 셌는데, `theme-chooser.test.tsx` 의 한 단언이 같은 파일의 목(`PACKAGES`)이 아니라 다른 파일의 목(`ADMIN_FIXTURE` → 고정판 manifest → 고르개의 `currentName`)에서 그 글자를 얻었다. 글자 셈은 그 줄을 가까운 목의 몫으로 읽어 `ADMIN_FIXTURE` 의 단언을 0 으로 셌고, 목 값을 표지 글자로 바꾼 변조(M9)가 1 로 바로잡았다.
+   - 어디: `.ruler/20-verification.md` 「수를 셀 때는 두 번 세고 표본을 열어 본다 — 덧붙임」 끝.
+   - 넣을 문장: «**목 · 픽스처 값을 바꾸기 전에 그 값을 단언하는 자리는 글자가 아니라 변조로 센다** — 같은 글자를 여러 목이 들면 글자 셈은 단언을 가까운 목의 몫으로 읽는다. 그 목의 값만 표지 글자(`'ZZ-목-이름'`)로 바꾸고 그 목을 가져오는 파일을 돌려 죽는 케이스 수를 적는다(`docs/superpowers/plans/2026-10-20-fx-th-report.md` L5 M9).»
