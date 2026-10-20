@@ -75,6 +75,7 @@ docker compose up -d --build
 curl -s http://localhost:8080/health            # {"status":"ok"} — 입구 너머 api
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/api/auth/me   # 401 — /api 가 api 에 닿는다
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/projects/x    # 200 — 깊은 링크도 index.html
+curl -s -o /dev/null -w '%{http_code} %{content_type}\n' http://localhost:8080/llms.txt   # 200 text/plain — 에이전트용 안내(text/html 이면 번들에 그 파일이 없어 index.html 로 돌아간 것)
 docker compose ps -a                            # api 가 healthy · migrate 가 Exited (0)(끝난 컨테이너는 -a 에만 나온다)
 ```
 
