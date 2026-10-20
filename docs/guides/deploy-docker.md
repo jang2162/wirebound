@@ -225,6 +225,7 @@ docker compose exec api node --import tsx src/auth/unlock-login.ts me@example.co
 | 빌드(이미지 캐시 없음) | 3:01 · 이미지 api 1.98GB · web 86MB |
 | `up -d`(이미지 있음) | postgres healthy → migrate 종료 0(마이그레이션 · 시딩) → api healthy → web · 51s |
 | 맨 HTTP 로 입구 | `/health` 200 json · `/api/auth/me` 401 json · `/` · `/projects/x` 200 html |
+| 맨 HTTP 로 `/llms.txt` | 200 · `text/plain; charset=utf-8` · `apps/web/public/llms.txt` 와 같은 바이트(`cmp`) |
 | ⓐ — 외부 네트워크의 Caddy(내부 CA TLS) 너머 | 같은 넷 · `POST /api/auth/login` 200 · 쿠키 `Secure` `HttpOnly` · 다음 `/api/auth/me` 200 · 호스트 포트는 닫힘 |
 | ⓑ — `127.0.0.1:18080` | 루프백 200 · 이 기계의 LAN 주소 `000` |
 | `down` 뒤 `up` | 사용자 · 세션 수가 같다 · 받아 둔 세션 쿠키로 `/api/auth/me` 200 |
