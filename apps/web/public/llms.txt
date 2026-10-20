@@ -1,0 +1,265 @@
+# wirebound
+
+> wirebound is a web screen-design tool. People draw page designs — a menu tree of pages, each page a tree of catalog components — in a browser editor; coding agents read the designs, comment on them and edit them through an MCP server. The `wireb` CLI only reads them (`wireb --help`). This file is the same for every wirebound server and carries no data from this one.
+
+All server paths below are relative to the origin that served this file.
+
+## Connect an agent
+
+The agent runs `wireb-mcp`, a stdio MCP server, inside the implementation repository. Project, server and token are not tool arguments: the repository file `.wirebound.json` names the server and project, and the token lives outside the repository.
+
+1. Get the tools: build the wirebound source repository (`pnpm install && pnpm build`). The CLI is `node packages/cli/dist/bin.js` and the MCP server is `node packages/mcp/dist/bin.js`; `pnpm link --global` inside `packages/cli` and `packages/mcp` puts `wireb` and `wireb-mcp` on PATH.
+2. Find the project id: it is in the editor URL, `/projects/<project id>`. You need a user account on this server that is a member of the project (viewer or above).
+3. In the implementation repository: `wireb init --server <this origin> --project <project id>` writes `.wirebound.json` (commit it; it holds no secret).
+4. `wireb login --email <you>` asks for the password, issues an API token for that one project and stores it in `~/.wirebound/credentials.json` (mode 600). `WIREB_TOKEN` overrides it. A person revokes tokens in the account settings ("API 토큰" section) or by removing the member from the project.
+5. Register the server with the host from the repository directory, e.g. `claude mcp add wirebound -- wireb-mcp`, or `{ "mcpServers": { "wirebound": { "command": "wireb-mcp", "args": [] } } }` in `.mcp.json`.
+
+Typical flow: `list_pages` → `get_page` → implement → `add_comment` where the code and the design disagree → `validate`. Edit the design with `patch_page` only when a person asks for it.
+
+## MCP tools
+
+### list_pages
+
+Menu tree and page list of the bound project. Each page `path` is the argument of the other tools.
+
+Arguments: none.
+
+### get_page
+
+One page: document, node outline (`nodes[].id`, `nodes[].path`), comments, interaction sentences and `headSeq`. Unknown or ambiguous paths return candidates instead.
+
+- `path` (string, required) — Page path from `list_pages`, e.g. `Admin/Members/List`. A `page:` prefix is accepted.
+
+### patch_page
+
+Edit the page document with JSON Patch, through the same pipeline as human edits. Rejected with reason `stale` (409: re-read with `get_page`, rebuild the ops), `locked` (423: a person is editing that area — wait) or `rejected`. Never retries.
+
+- `path` (string, required) — Page path.
+- `baseSeq` (integer ≥ 0, required) — The `headSeq` from `get_page` (or from the previous successful edit).
+- `ops` (array of objects, required) — RFC 6902 ops (add, remove, replace, move, test — not copy), at most 200. Paths under `/root` (use `nodes[].path`), `/viewStates` or `/version`.
+
+### add_comment
+
+Comment on one node — how an implementer reports back to the design. Numbering a node changes the document and raises `headSeq`.
+
+- `path` (string, required) — Page path.
+- `nodeId` (string, required) — Node id from `get_page` `nodes[].id`.
+- `body` (string, required) — Comment text.
+
+### validate
+
+Run the lint rules. Findings are a normal result, not an error. Naming rules come from `.wirebound.json`.
+
+- `path` (string, optional) — Optional page path; without it the whole project is checked.
+
+## Page document
+
+A page is a JSON document. Edits are JSON Patch against it; `nodes[].path` from `get_page` is the JSON Pointer of each node.
+
+- `version` (integer, required) — Document format version. The server stores and returns version 2.
+- `root` (node, required) — The root node — always a `Page`.
+- `viewStates` (array, optional) — Optional named screen states (`{ id, name, parent? }`), at most 20, names 1–30 characters, nesting at most 3 deep. Nodes refer to them from `visibility`.
+
+### Node
+
+- `id` (string, required) — Unique within the document. Pattern `[A-Za-z0-9_-]{1,64}`.
+- `type` (string, required) — A component type from the catalog below.
+- `alias` (string, optional) — Optional human name for the node, 1–60 characters, no surrounding spaces or line breaks. Need not be unique.
+- `props` (object, optional) — The component's props (see the catalog). Omitted props take their defaults.
+- `variant` (string, optional) — A theme variant name. The theme decides which values exist; the document doesn't validate it.
+- `weight` (integer, optional) — Integer 1–12: share of the parent — free width in a `Flex`, columns spanned in a `Grid` or a `SearchForm` with `columns`. Ignored elsewhere.
+- `visibility` (object, optional) — `{ mode: "only" | "except", states: [...] }` — show the node only in (or hide it in) those view states and their descendants. `"default"` is the base screen. Omitted: visible in every state.
+- `marker` (integer, optional) — Comment number (positive integer). The server assigns it when the first comment lands on the node; do not invent one.
+- `interactions` (array, optional) — What happens on user events (see Interactions).
+- `children` (node[], optional) — Child nodes. Only components whose children are "many" take them.
+
+Nodes carry no styles. Appearance comes from the project theme.
+
+### Interactions
+
+`interactions` is a list of `{ on, actions }`. `on` is one of `click`, `change`, `select`, `submit`; `actions` run in order. Action `type`s:
+
+- `setProp` `{ target: <node id>, prop, value }` — set a prop of another node.
+- `setVisible` `{ target: <node id>, value: boolean }` — show or hide a node.
+- `switchTab` `{ target: <Tabs node id>, tab: <index> }` — switch a `Tabs` node.
+- `navigate` `{ target: "page:<menu path>" }` — go to another page.
+- `openModal` `{ target: "page:<menu path>" }` — open another page as a modal.
+
+A `page:` target names a page by its menu path, the same `path` the MCP tools take.
+
+## Component catalog
+
+Every node `type` is one of these. Props are validated against the listed shapes; unknown props are rejected. "children: many" components hold child nodes, "children: none" do not. State props are booleans that switch a visual state of the component.
+
+### Structure — containers that arrange other nodes
+
+#### Page
+
+Root of one design page; everything on the page sits inside it. Only valid as the document root. Editor label: 페이지. children: many.
+
+No props.
+
+#### Slot
+
+Where a layout inserts the page content. Layout documents only. Editor label: 슬롯. children: none.
+
+No props.
+
+#### Section
+
+A large band of the screen with its own background and spacing. Editor label: 영역. children: many.
+
+- `compact`: boolean, default false
+
+#### Flex
+
+Lays children out in one row or one column. Editor label: 배치. children: many.
+
+- `direction`: "row" | "column", default "row"
+- `align`: "start" | "center" | "end" | "stretch", default "stretch"
+- `justify`: "start" | "center" | "end" | "between", default "start"
+- `wrap`: boolean, default false
+
+#### Grid
+
+Lays children out on a fixed number of columns. Editor label: 그리드. children: many.
+
+- `columns`: integer 1–12, default 2
+
+#### Card
+
+A box that groups a title and its content. Editor label: 카드. children: many.
+
+- `title`: string, default ""
+- `subtitle`: string, default ""
+
+#### Tabs
+
+Splits content into tabs and shows one at a time. Editor label: 탭. children: many.
+
+- `tabs`: string[], default ["탭 1","탭 2"]
+- `active`: integer ≥ 0, default 0
+
+### Data — show records
+
+#### List
+
+Many records as a table, cards or a list. Editor label: 목록. children: none.
+
+- `items`: integer 0–50, default 5
+- `columns`: string[], default ["컬럼 1","컬럼 2"]
+- `pagination`: boolean, default true
+- `selectable`: boolean, default false
+- `selected`: boolean, default false — state
+- `disabled`: boolean, default false — state
+- `loading`: boolean, default false — state
+- `empty`: boolean, default false — state
+
+#### Tree
+
+Hierarchical items that expand and collapse. Editor label: 트리. children: none.
+
+- `items`: string[], default ["항목 1","항목 2"]
+- `depth`: integer 1–5, default 2
+- `selected`: boolean, default false — state
+- `disabled`: boolean, default false — state
+
+#### KeyValue
+
+Label/value pairs, as on a detail screen. Editor label: 키-값 목록. children: none.
+
+- `pairs`: { key: string, value: string }[], default [{"key":"항목","value":"값"}]
+- `columns`: integer 1–4, default 1
+
+### Input — forms and fields
+
+#### SearchForm
+
+Search conditions that filter a list. Editor label: 검색폼. children: many.
+
+- `collapsed`: boolean, default false
+- `columns`: integer 1–4, optional (no default)
+
+#### EntryForm
+
+A create/edit form with several fields. Editor label: 입력폼. children: many.
+
+- `title`: string, default ""
+
+#### Field
+
+One input; `control` makes it text, select, date and so on. Editor label: 입력 필드. children: none.
+
+- `label`: string, default "라벨"
+- `control`: "text" | "number" | "select" | "date" | "dateRange" | "checkbox" | "radio" | "textarea" | "file", default "text" — selects the theme variant
+- `placeholder`: string, default ""
+- `required`: boolean, default false — state
+- `disabled`: boolean, default false — state
+- `invalid`: boolean, default false — state
+
+### Action — things a user presses
+
+#### Button
+
+A button that triggers an action. Editor label: 버튼. children: none.
+
+- `label`: string, default "버튼"
+- `disabled`: boolean, default false — state
+- `loading`: boolean, default false — state
+
+#### Link
+
+A text link to another screen. Editor label: 링크. children: none.
+
+- `label`: string, default "링크"
+- `target`: string, default ""
+- `disabled`: boolean, default false — state
+
+### Document — text, media and filler
+
+#### Text
+
+Headings and body text; `role` sets the size. Editor label: 텍스트. children: none.
+
+- `content`: string, default "텍스트"
+- `role`: "display" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "body" | "caption", default "body" — selects the theme variant
+
+#### Media
+
+A slot for an image, video, illustration or chart. Editor label: 미디어. children: none.
+
+- `kind`: "image" | "video" | "illustration" | "chart", default "image"
+- `caption`: string, default ""
+- `ratio`: "16/9" | "4/3" | "1/1" | "3/4", default "16/9"
+
+#### Divider
+
+A line that separates content. Editor label: 구분선. children: none.
+
+- `direction`: "horizontal" | "vertical", default "horizontal" — selects the theme variant
+
+#### Placeholder
+
+An area not designed yet; only reserves space. Editor label: 자리 표시자. children: none.
+
+- `label`: string, default "미정 영역"
+- `height`: integer 20–1000, default 120
+
+## REST API (summary)
+
+- Auth: `Authorization: Bearer <token>` (the token from `wireb login`). A token works only on routes under `/api/projects/:projectId/` of its own project — another project answers 404. It cannot open the WebSocket or manage tokens. Permission is the member role at request time: viewer < editor < owner.
+- Bodies are JSON with camelCase keys. Errors: `{ "error": { "code", "message", "issues"? } }`.
+- Edits are optimistic: send the `headSeq` you read as `baseSeq`. A stale `baseSeq` is 409 — re-read and rebuild, never resend the same ops on a new `baseSeq`. At most 200 ops per edit.
+
+- `GET /api/projects/:projectId` (viewer) — The project (name, slug, your role).
+- `GET /api/projects/:projectId/tree` (viewer) — Menu tree with the pages under each menu node (no page documents).
+- `GET /api/projects/:projectId/pages/:pageId` (viewer) — One page with its document (`schema`) and `headSeq` — the `baseSeq` for the next edit.
+- `PATCH /api/projects/:projectId/pages/:pageId/ops` (editor) — Edit the document: `{ baseSeq, ops }` (JSON Patch). 409 when `baseSeq` is stale, 423 when a person holds the area.
+- `GET /api/projects/:projectId/pages/:pageId/revisions` (viewer) — Edit history, newest first (`?limit=`, `?beforeSeq=`).
+- `GET /api/projects/:projectId/pages/:pageId/comments` (viewer) — Comments on the page, oldest first.
+- `POST /api/projects/:projectId/pages/:pageId/comments` (editor) — Add a comment to a node: `{ nodeId, body }`. May number the node, which changes the document.
+- `GET /api/projects/:projectId/snapshot` (viewer) — Read-only dump of the whole project: menu, pages with their stored documents, layouts, comments, theme binding.
+- `GET /api/projects/:projectId/snapshots` (viewer) — Saved snapshots (tags), without their payload.
+- `GET /api/projects/:projectId/theme` (viewer) — The project's theme binding and token values.
+- `GET /api/projects/:projectId/export` (viewer) — Download the design: `?format=html` (static bundle, zip) or `?format=pptx`.
+

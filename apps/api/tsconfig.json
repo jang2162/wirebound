@@ -16,6 +16,8 @@
     { "path": "../../packages/theme-sdk" },
     // 테스트 준비(`test/global-setup.ts`)가 시스템 테마를 빌드한다 — 런타임은 부르지 않는다(devDependencies).
     { "path": "../../packages/theme-kit" },
+    // `test/llms-rest-routes.test.ts` 가 `/llms.txt` 의 REST 표를 등록된 라우트와 견준다 — 런타임은 부르지 않는다(devDependencies).
+    { "path": "../../packages/mcp" },
     // **`exporter`를 참조로 잡는다.** 참조가 없으면 tsc가 그 패키지의 소스를
     // 이 프로그램의 옵션(`lib: ES2022` · jsx 없음 · `types: ["node"]`)으로 컴파일해
     // 그쪽의 브라우저 파일과 `.tsx`에서 깨진다 — 참조로 잡으면 빌드된 선언만 본다.

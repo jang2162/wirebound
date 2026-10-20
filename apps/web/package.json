@@ -28,6 +28,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "@wirebound/exporter": "workspace:*",
+    "@wirebound/mcp": "workspace:*",
     "@wirebound/system-theme-admin": "workspace:*",
     "@wirebound/test-support": "workspace:*",
     "@wirebound/theme-kit": "workspace:*",

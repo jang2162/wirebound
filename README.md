@@ -969,6 +969,13 @@ Claude Desktop·Cursor·Zed 등은 **이 문서가 등록해 보지 않았다.**
 `notes`·`outsideErrors`를 왜 함께 읽어야 하는지가 있다. **호스트에 스킬로 설치하거나
 에이전트 지침에 그대로 실어라.**
 
+### 7.4 서버가 내는 `/llms.txt`
+
+에디터를 낸 주소의 `/llms.txt`(예: `http://127.0.0.1:5173/llms.txt`)가 바깥 에이전트용 영어 안내다 — 붙이는 법 · MCP 도구와 인자 · 페이지
+문서와 노드 필드 · 상호작용 · 카탈로그 · REST 요약. 인스턴스의 데이터는 없다(모든 서버에서 같은 글). 파일은 `apps/web/public/llms.txt` 이고
+**생성물이다** — 카탈로그 · 노드 필드 · MCP 도구를 바꾸면 `pnpm vitest run apps/web/test/llms-txt.test.ts` 가 죽고, 그 명령에 `-u` 를 붙여
+다시 짓는다. 짓는 자리와 무엇을 정의에서 읽는지는 정본 설계서 「`/llms.txt`」.
+
 ---
 
 ## 8. PPTX 의 화면 이미지 — 브라우저를 넣는 자리
@@ -1183,7 +1190,7 @@ compose 가 여는 포트 — 있으면 접속 문자열과 포트가 맞는지 
 
 ### 10.4 에디터 — 정적 파일
 
-`pnpm --filter @wirebound/web build` 가 `apps/web/dist`(`index.html` + `assets/`)를 낸다. api 는 이것을 서빙하지 않는다 — **입구가
+`pnpm --filter @wirebound/web build` 가 `apps/web/dist`(`index.html` + `assets/` + `llms.txt` — 「서버가 내는 `/llms.txt`」)를 낸다. api 는 이것을 서빙하지 않는다 — **입구가
 서빙한다**: `web` 이미지가 그 번들을 `/srv` 에 들고, `docker/web/Caddyfile` 이 `/api/*` 와 `/health` 만 api 로 넘기고 나머지는 파일로 답한다.
 깊은 링크(`/projects/…`)는 `index.html` 로 돌린다(`try_files`).
 

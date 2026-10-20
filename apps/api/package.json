@@ -30,6 +30,7 @@
   "devDependencies": {
     "@types/node": "^26.1.2",
     "@types/pg": "^8.11.0",
+    "@wirebound/mcp": "workspace:*",
     "@wirebound/test-support": "workspace:*",
     "@wirebound/theme-kit": "workspace:*",
     "tsx": "^4.19.0"
