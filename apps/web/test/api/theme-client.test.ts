@@ -25,7 +25,7 @@ const json = (status: number, body: unknown): Response =>
 
 const manifest = {
   id: 'system-admin',
-  name: '관리자',
+  name: '기본테마',
   version: '0.1.0',
   sdk: '^1.0.0',
   tokens: { items: { 'color.primary': { type: 'color', label: '주색', default: '#2563eb' } } },

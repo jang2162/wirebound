@@ -21,7 +21,7 @@ const CURRENT: ProjectThemeView = {
   rev: 4,
   manifest: ADMIN_FIXTURE.manifest,
   latest: '0.2.0',
-  latestName: '관리자',
+  latestName: '기본테마',
 }
 
 /** 바꿀 대상 — 주색은 잇고(같은 타입) · 모서리는 타입이 달라 버린다 · 위험색은 없다. */
@@ -47,7 +47,7 @@ const PACKAGES: ThemePackageSummary[] = [
   { themeId: 'acme', name: 'Acme', description: null, latest: '1.0.0', versions: [version('acme', '1.0.0')] },
   {
     themeId: 'system-admin',
-    name: '관리자',
+    name: '기본테마',
     description: null,
     latest: '0.2.0',
     versions: [version('system-admin', '0.2.0'), version('system-admin', '0.1.0')],
@@ -65,7 +65,7 @@ const ADMIN_PACKAGES: ThemePackageSummary[] = [
   },
   {
     themeId: 'system-admin',
-    name: '관리자',
+    name: '기본테마',
     description: null,
     latest: '0.2.0',
     versions: [version('system-admin', '0.2.0'), version('system-admin', '0.1.0', true)],
@@ -133,7 +133,7 @@ describe('«테마» 절 — 지금 값', () => {
   it('이름 id@버전 과 더 높은 판이 있으면 «새 버전»', async () => {
     renderTheme()
     await ready()
-    expect(within(section()).getByText('관리자 system-admin@0.1.0')).toBeDefined()
+    expect(within(section()).getByText('기본테마 system-admin@0.1.0')).toBeDefined()
     expect(within(section()).getByText('새 버전 0.2.0')).toBeDefined()
   })
 
@@ -164,7 +164,7 @@ describe('«테마» 절 — 목록', () => {
   it('비관리자 응답에는 숨긴 판이 없다', async () => {
     renderTheme()
     await ready()
-    await waitFor(() => expect(options('테마')).toEqual(['Acme', '관리자']))
+    await waitFor(() => expect(options('테마')).toEqual(['Acme', '기본테마']))
     expect(select('테마').value).toBe('system-admin')
     expect(options('버전')).toEqual(['0.2.0', '0.1.0 (지금)'])
   })
@@ -189,7 +189,7 @@ describe('«테마» 절 — 목록', () => {
     renderTheme('owner', { listThemePackages: async () => [...ADMIN_PACKAGES, ghost] })
     await ready()
     await waitFor(() => expect(options('버전')).toEqual(['0.2.0', '0.1.0 (지금 · 숨김)']))
-    expect(options('테마')).toEqual(['Acme', '관리자'])
+    expect(options('테마')).toEqual(['Acme', '기본테마'])
   })
 
   it('지금 테마는 판이 다 숨었어도 테마 칸에 선다 — 지금 판만 고를 수 있다', async () => {
@@ -201,14 +201,14 @@ describe('«테마» 절 — 목록', () => {
     renderTheme('owner', { listThemePackages: async () => [ADMIN_PACKAGES[0]!, hiddenOnly] })
     await ready()
     await waitFor(() => expect(options('버전')).toEqual(['0.2.0 (숨김) [off]', '0.1.0 (지금 · 숨김)']))
-    expect(options('테마')).toEqual(['Acme', '관리자'])
+    expect(options('테마')).toEqual(['Acme', '기본테마'])
     expect(select('테마').value).toBe('system-admin')
   })
 
   it('지금 고정한 판이 목록에 없으면(비관리자 · 숨긴 판) 그 판을 지금 값으로 넣는다', async () => {
     renderTheme('owner', { listThemePackages: async () => [PACKAGES[0]!] })
     await ready()
-    await waitFor(() => expect(options('테마')).toEqual(['Acme', '관리자']))
+    await waitFor(() => expect(options('테마')).toEqual(['Acme', '기본테마']))
     expect(options('버전')).toEqual(['0.1.0 (지금)'])
   })
 })

@@ -9,7 +9,7 @@ import { DEFAULT_VIEWS, defineTheme, type ThemeManifest } from '@wirebound/theme
 
 const MANIFEST: ThemeManifest = {
   id: 'system-admin',
-  name: '관리자',
+  name: '기본테마',
   description: '관리자 화면용 기본 테마',
   version: '0.1.0',
   sdk: '^1.0.0',

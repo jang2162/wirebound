@@ -52,3 +52,34 @@
 | M8 (첫 판) «지금 테마면 남긴다» 갈래를 뗀다 | 같은 자리 | 17 · 0 — **살았다** | 지금 판은 `disabled` 가 늘 거짓이라 그 갈래가 아무것도 안 갈랐다 → 갈래를 걷었다 |
 | M8 (둘째 판) `v.hidden` 으로 거른다 | 같은 자리 | 17 · 1 — «판이 다 숨은 테마는 …» | **무효** — `VersionOption` 에 `hidden` 칸이 없어 `!undefined` 가 늘 참(vitest 는 타입을 안 본다). 표에 남기고 셈에 안 넣는다 |
 | M8b 테마의 `latest !== null` 로 거른다(숨김으로 거르는 꼴) | 같은 자리 | 17 · 1 — «지금 테마는 판이 다 숨었어도 테마 칸에 선다» | `expected [ '0.1.0 (지금)' ] to deeply equal [ '0.2.0 (숨김) [off]', …(1) ]` |
+
+## L5 — 웹 단위 목의 `system-admin` 이름
+
+### 셈(바꾸기 전)
+
+`git grep -n "관리자" -- apps/web/test` 를 열어 테마 이름인 줄만 골랐다(나머지는 인스턴스 관리자 · 화면 상태 · 메뉴 제목 · 프로젝트 이름 «관리자 콘솔» · 사람 이름 «관리자님»).
+
+| 파일 | 목(이름 글자) | 그 글자를 단언하는 자리 |
+|---|---|---|
+| `apps/web/test/admin-theme.ts`(`ADMIN_FIXTURE`) | 1 | **1** — `theme-chooser.test.tsx` «지금 고정한 판이 목록에 없으면 …» 의 테마 칸(목록에 없는 지금 테마의 이름은 고정판 manifest 에서 짓는다 — `themeOptions` 의 `currentName`). 글자 셈은 그 줄을 `PACKAGES` 몫으로 읽어 0 으로 셌고, 아래 M9 가 바로잡았다 |
+| `apps/web/test/api/http-client.test.ts` | 1 | 0 |
+| `apps/web/test/api/theme-client.test.ts` | 1 | 0 |
+| `apps/web/test/settings/token-editor.test.tsx`(리뷰 셈 밖) | 1 | 0 |
+| `apps/web/test/settings/theme-chooser.test.tsx`(리뷰 셈 밖) | 3(`CURRENT.latestName` · `PACKAGES` · `ADMIN_PACKAGES`) | 4(요약 1 · 테마 칸 3) — 테마 칸 하나는 위 `ADMIN_FIXTURE` 몫 |
+| `apps/web/test/routes/admin-themes.test.tsx`(리뷰 셈 밖) | 2 | 5(`/^관리자/` 3 · 줄 글 2) |
+
+리뷰가 든 셋 가운데 `ADMIN_FIXTURE` 만 단언 1 곳이 있고, 나머지 단언 9 곳은 리뷰 셈 밖의 두 파일이 **제 목**에서 읽는다. 이름을 맞추는 것이 일이라 여섯 파일의 목 9 곳과 단언 10 곳을 모두 `'기본테마'` 로 바꿨다(`description` «관리자 화면용 기본 테마» 는 설명이라 그대로 — 실물 manifest 의 설명도 «관리자 화면 기본 테마 …» 다).
+
+### 변조(셈 확인)
+
+| 변조 | 자리 | 실행 · 죽은 케이스 | 실패 값 |
+|---|---|---|---|
+| M9 `ADMIN_FIXTURE` 이름을 `'ZZ-목-이름'` 으로 | `admin-theme.ts` | 그것을 가져오는 9 파일 + `http-client.test.ts` · `theme-client.test.ts` — 283 · 1 — `theme-chooser.test.tsx` «지금 고정한 판이 목록에 없으면 …» | `expected [ 'Acme', 'ZZ-목-이름' ] to deeply equal [ 'Acme', '기본테마' ]` — 단언하는 자리가 그 하나뿐이다 |
+| M10 `admin-themes.test.tsx` 의 목록 목을 `'관리자'` 로 되돌림 | 그 파일의 `PACKAGES` | 19 · 4 — 목록 · 고르기 · 올리기 케이스 | `Unable to find … name /^기본테마/` · 줄 글 `toEqual` — 바꾼 단언이 그 목을 본다 |
+
+L5 는 목 값만 바꿨다 — 새 케이스가 없다.
+
+### 웹 단위 판
+
+- L5 직후 `pnpm vitest run --project web`(일꾼 수 기본)을 한 번 돌렸을 때 195 파일 · 3259 통과 · **2 실패** 였다. dot 출력이라 어느 케이스인지 안 남았다.
+- 같은 소스를 `--maxWorkers=25% --reporter=json` 으로 다시 돌리자 3261 통과 · 0 실패. 첫 판은 일꾼 수를 안 묶은 판이라 부하로 본다 — 전량 게이트(아래)가 다시 잰다.
