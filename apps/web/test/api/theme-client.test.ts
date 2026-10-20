@@ -30,7 +30,15 @@ const manifest = {
   sdk: '^1.0.0',
   tokens: { items: { 'color.primary': { type: 'color', label: '주색', default: '#2563eb' } } },
 }
-const view = { themeId: 'system-admin', version: '0.1.0', tokens: { 'color.primary': '#ff0000' }, rev: 4, manifest, latest: '0.2.0' }
+const view = {
+  themeId: 'system-admin',
+  version: '0.1.0',
+  tokens: { 'color.primary': '#ff0000' },
+  rev: 4,
+  manifest,
+  latest: '0.2.0',
+  latestName: manifest.name,
+}
 
 async function rejection(promise: Promise<unknown>): Promise<ApiError> {
   const error = await promise.catch((e: unknown) => e)

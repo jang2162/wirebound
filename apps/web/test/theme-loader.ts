@@ -62,6 +62,7 @@ export function adminThemeView(tokens: Record<string, string | number> = {}, rev
     rev,
     manifest: ADMIN_FIXTURE.manifest,
     latest: ADMIN_REF.version,
+    latestName: ADMIN_FIXTURE.manifest.name,
   }
 }
 

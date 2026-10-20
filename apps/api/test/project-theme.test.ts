@@ -98,7 +98,21 @@ describe('GET …/theme', () => {
         rev: 0,
         manifest: 'system-admin',
         latest: V,
+        latestName: body.manifest.name,
       })
+    })
+  })
+
+  it('latestName 은 latest 판의 이름이다 — 고정한 판의 이름과 다르면 그 판의 것이 아니다 · 숨기지 않은 판이 없으면 null', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await store(ctx, manifestOf('system-admin', laterAdminVersion(1), { name: '새 이름' }))
+      const later = (await getTheme(ctx, fx, fx.viewer)).json()
+      expect(later.manifest.name).not.toBe('새 이름')
+      expect(later).toMatchObject({ version: V, latest: laterAdminVersion(1), latestName: '새 이름' })
+      await setThemePackageHidden(ctx.db, 'system-admin', laterAdminVersion(1), true)
+      await setThemePackageHidden(ctx.db, 'system-admin', V, true)
+      expect((await getTheme(ctx, fx, fx.viewer)).json()).toMatchObject({ version: V, latest: null, latestName: null })
     })
   })
 
@@ -209,7 +223,7 @@ describe('PUT …/theme', () => {
         await setThemePackageHidden(ctx.db, 'sample', '1.0.0', true)
         const res = await put(ctx, fx, fx.owner, { themeId: 'sample', version: '1.0.0', tokens: { 'color.accent': '#000000' }, rev: 1 })
         expect(res.statusCode, res.body).toBe(200)
-        expect(res.json()).toMatchObject({ rev: 2, tokens: { 'color.accent': '#000000' }, latest: null })
+        expect(res.json()).toMatchObject({ rev: 2, tokens: { 'color.accent': '#000000' }, latest: null, latestName: null })
       })
     })
 

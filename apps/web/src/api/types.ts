@@ -129,6 +129,8 @@ export interface ProjectThemeView {
   rev: number
   manifest: ThemeManifest | null
   latest: string | null
+  /** `latest` 판의 이름(테마 목록의 테마 이름과 같다) — `latest` 가 `null` 이면 `null`. */
+  latestName: string | null
 }
 
 /** `GET …/theme/impact` 의 응답 — 테마를 바꾸기 전 확인 창의 수(spec 「테마 바꾸기와 버전 올리기」). */

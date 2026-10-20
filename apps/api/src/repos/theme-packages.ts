@@ -131,13 +131,21 @@ export async function listThemePackages(db: DbHandle, opts: { includeHidden: boo
 
 /** 한 테마의 «최신» — 숨기지 않은 판 가운데 semver 가 가장 큰 것(spec 「버전과 숨김」). 없으면 `null`. */
 export async function latestVisibleVersion(db: DbHandle, themeId: string): Promise<string | null> {
+  return (await latestVisiblePackage(db, themeId))?.version ?? null
+}
+
+/** `latestVisibleVersion` 의 판과 그 판의 이름 — 테마 목록의 테마 이름(`routes/theme-packages.ts`)과 같은 판이다. */
+export async function latestVisiblePackage(db: DbHandle, themeId: string): Promise<{ version: string; name: string } | null> {
   const rows = await db
     .selectFrom('theme_packages')
-    .select('version')
+    .select(['version', 'name'])
     .where('theme_id', '=', themeId)
     .where('hidden_at', 'is', null)
     .execute()
-  return rows.map((row) => row.version).reduce<string | null>((best, v) => (best === null || compareVersions(v, best) > 0 ? v : best), null)
+  return rows.reduce<{ version: string; name: string } | null>(
+    (best, row) => (best === null || compareVersions(row.version, best.version) > 0 ? row : best),
+    null,
+  )
 }
 
 /**

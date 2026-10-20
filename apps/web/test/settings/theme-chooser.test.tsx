@@ -21,6 +21,7 @@ const CURRENT: ProjectThemeView = {
   rev: 4,
   manifest: ADMIN_FIXTURE.manifest,
   latest: '0.2.0',
+  latestName: '관리자',
 }
 
 /** 바꿀 대상 — 주색은 잇고(같은 타입) · 모서리는 타입이 달라 버린다 · 위험색은 없다. */
@@ -79,7 +80,15 @@ function renderTheme(role: ProjectRole = 'owner', overrides: Partial<ApiClient> 
     listThemePackages: vi.fn(async () => PACKAGES),
     getThemeManifest: vi.fn(async () => ACME),
     getThemeImpact: vi.fn(async () => IMPACT),
-    putProjectTheme: vi.fn(async () => ({ ...CURRENT, themeId: 'acme', version: '1.0.0', manifest: ACME, rev: 5, latest: '1.0.0' })),
+    putProjectTheme: vi.fn(async () => ({
+      ...CURRENT,
+      themeId: 'acme',
+      version: '1.0.0',
+      manifest: ACME,
+      rev: 5,
+      latest: '1.0.0',
+      latestName: 'Acme',
+    })),
     ...overrides,
   }
   renderWithProviders(<App />, {
@@ -126,6 +135,20 @@ describe('«테마» 절 — 지금 값', () => {
     await ready()
     expect(within(section()).getByText('관리자 system-admin@0.1.0')).toBeDefined()
     expect(within(section()).getByText('새 버전 0.2.0')).toBeDefined()
+  })
+
+  it('이름은 테마 줄의 것(숨기지 않은 최신판 — 고르개와 같은 이름)이다 — 고정한 판의 manifest 이름이 달라도', async () => {
+    const pinned = { ...CURRENT, manifest: { ...ADMIN_FIXTURE.manifest, name: '옛 이름' }, latestName: '새 이름' }
+    renderTheme('viewer', { getProjectTheme: async () => pinned })
+    await ready()
+    expect(within(section()).getByText('새 이름 system-admin@0.1.0')).toBeDefined()
+  })
+
+  it('숨기지 않은 판이 없으면(latest 가 null) 고정한 판의 manifest 이름이다', async () => {
+    const hidden = { ...CURRENT, manifest: { ...ADMIN_FIXTURE.manifest, name: '옛 이름' }, latest: null, latestName: null }
+    renderTheme('viewer', { getProjectTheme: async () => hidden })
+    await ready()
+    expect(within(section()).getByText('옛 이름 system-admin@0.1.0')).toBeDefined()
   })
 
   it.each(['editor', 'viewer'] as const)('%s 는 고르개가 없다 — 지금 값만', async (role) => {

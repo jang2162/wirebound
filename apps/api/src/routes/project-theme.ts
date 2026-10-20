@@ -23,7 +23,7 @@ import { withTransaction } from '../db/tx'
 import { notFound, validationFailed, type ApiErrorIssue } from '../errors'
 import { parseBody, parseParams, parseQuery } from '../http/parse'
 import { findProjectTheme, updateProjectTheme, type ProjectThemeBinding } from '../repos/projects'
-import { findThemePackage, latestVisibleVersion } from '../repos/theme-packages'
+import { findThemePackage, latestVisiblePackage } from '../repos/theme-packages'
 import { computeThemeImpact } from '../services/theme-impact'
 import { checkBindingTokens } from '../services/theme-tokens'
 import { notifyThemeChanged } from '../ws/notify'
@@ -39,7 +39,10 @@ const ImpactQuery = z.object({ themeId: z.string().min(1), version: z.string().m
 
 const REJECTED = '테마를 저장하지 않았습니다'
 
-/** GET · PUT · 409 의 `current` 가 같은 모양이다. */
+/**
+ * GET · PUT · 409 의 `current` 가 같은 모양이다. `latestName` 은 `latest` 판의 이름 — 테마 목록의 테마 이름과 같은 판이라, 설정의 지금 테마
+ * 요약이 고정한 판의 이름(옛 판이면 옛 이름) 대신 그린다.
+ */
 async function themeView(db: DbHandle, binding: ProjectThemeBinding, manifest?: ThemeManifest | null) {
   const resolved =
     manifest !== undefined
@@ -47,13 +50,15 @@ async function themeView(db: DbHandle, binding: ProjectThemeBinding, manifest?: 
       : binding.themeId === null || binding.version === null
         ? null
         : ((await findThemePackage(db, binding.themeId, binding.version))?.manifest ?? null)
+  const latest = binding.themeId === null ? null : await latestVisiblePackage(db, binding.themeId)
   return {
     themeId: binding.themeId,
     version: binding.version,
     tokens: binding.tokens,
     rev: binding.rev,
     manifest: resolved,
-    latest: binding.themeId === null ? null : await latestVisibleVersion(db, binding.themeId),
+    latest: latest?.version ?? null,
+    latestName: latest?.name ?? null,
   }
 }
 
