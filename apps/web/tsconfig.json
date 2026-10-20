@@ -15,5 +15,10 @@
   // 잰 값이 있다).
   // **`build-test`도 든다.** 안 들면 그 파일이 타입검사를 아예 안 받는다(`apps/api/tsconfig.json`의 같은 줄).
   "include": ["src", "test", "config", "build-test"],
-  "references": [{ "path": "../../packages/schema" }, { "path": "../../packages/renderer" }, { "path": "../../packages/theme-gallery" }]
+  "references": [
+    { "path": "../../packages/schema" },
+    { "path": "../../packages/renderer" },
+    { "path": "../../packages/theme-gallery" },
+    { "path": "../../packages/mcp" }
+  ]
 }
