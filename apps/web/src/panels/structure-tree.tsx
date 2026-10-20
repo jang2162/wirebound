@@ -38,7 +38,7 @@ import { selectionCapNotice } from './toolbar-status'
 import { useStructureCommands, type StructureCommands } from './structure-toolbar'
 import { TreeFoldButtons, TreeToggle } from './tree-fold'
 import { TreeInput } from './tree-input'
-import { structureRowItems, TreeRowActions } from './tree-row-actions'
+import { saveModuleItem, structureRowItems, TreeRowActions } from './tree-row-actions'
 
 export function StructureTree(props: {
   projectId: string
@@ -48,6 +48,10 @@ export function StructureTree(props: {
    * 함께 간다** — 메뉴 트리의 `editable`과 같은 이유로 가르지 않는다(줄 행동만 빼면 `Delete`·`Alt+↑`가 남는다).
    * **트리 자체는 남는다** — 노드를 고르는 것은 읽기다(속성 · 코멘트를 보려고 고른다). 고른 노드를 잠그지 않는 것은
    * 셸의 `useNodeLock`이 같은 값으로 한다. 이 컴포넌트는 역할을 모른다.
+   *
+   * **«모듈로 저장…» 은 `false`여도 선다** — 문서를 바꾸지 않는 쓰기라(내 개인 모듈) 줄 `…` 에 그 한 항목만 남는다(설계 spec
+   * `2026-10-20-personal-modules-design.md` «편집할 수 없는 판의 입구»). 상자의 «프로젝트 모듈» 고르기는 이 값이 참일 때만 선다 — 트리는 편집
+   * 모드에만 있으므로 이 값이 곧 «프로젝트 모듈을 쓸 수 있는가»(editor 이상)다.
    */
   editable: boolean
   /** 트리 제목 줄의 행동 자리 — 모두 접기 · 펴기 · 모든 가지 보기를 거기 그린다(메뉴 트리의 `headSlot`과 같은 까닭). 없으면 안 그린다. */
@@ -207,6 +211,7 @@ export function StructureTree(props: {
             blockedOf={store.selectionBlockedBy}
             fold={fold}
             row={props.editable ? { commands, drag, rootId, select: store.selectNode, alias, saveModule: openSaveModule } : null}
+            saveOnly={props.editable ? null : { rootId, select: store.selectNode, saveModule: openSaveModule }}
           />
         </ul>
         {props.editable && <DropIndicator hint={drag.hint} />}
@@ -223,14 +228,13 @@ export function StructureTree(props: {
       </div>
       {/* **«모듈로 저장…»**(`./save-module-dialog.tsx`) — 트리 상자의 형제다(상자 안의 키가 React 트리를 따라 줄 행동으로 버블되지 않게 —
         `shell/shell-dialog.tsx` 머리말). */}
-      {props.editable && (
-        <SaveModuleDialog
-          projectId={props.projectId}
-          nodes={saving}
-          onClose={() => setSaving(null)}
-          onSaved={(name) => store.setInfoNotice(savedModuleNotice(name))}
-        />
-      )}
+      <SaveModuleDialog
+        projectId={props.projectId}
+        nodes={saving}
+        projectWritable={props.editable}
+        onClose={() => setSaving(null)}
+        onSaved={(name, to) => store.setInfoNotice(savedModuleNotice(name, to))}
+      />
     </>
   )
 }
@@ -286,6 +290,13 @@ interface RowWiring {
   saveModule: () => void
 }
 
+/** 편집할 수 없는 판에서 줄마다 내려가는 것 — 뿌리 · 고르기 · 모듈로 저장(뿌리 줄에는 항목이 없다). */
+interface SaveOnlyWiring {
+  rootId: string | null
+  select: (nodeId: string) => void
+  saveModule: () => void
+}
+
 /** 노드 한 줄과 그 아래. 트리 자체가 재귀 구조라 컴포넌트도 재귀다. */
 function StructureNode(props: {
   node: WbNode
@@ -311,6 +322,8 @@ function StructureNode(props: {
   fold: Collapsed
   /** 편집할 수 있는 판의 줄 행동 · 끌기 배선. `null`이면 고르기만 한다(viewer · 뷰 모드). */
   row: RowWiring | null
+  /** 편집할 수 없는 판의 줄 `…` — «모듈로 저장…» 한 항목(`StructureTree` 의 `editable` 주석). 편집할 수 있는 판이면 `null`(`row` 가 갖는다). */
+  saveOnly: SaveOnlyWiring | null
 }): ReactElement {
   const { node, row } = props
   // **모양 가드 둘.** 검증 전 문서에는 `children`이 배열이 아니거나 `type`이
@@ -355,6 +368,11 @@ function StructureNode(props: {
    * 들리지도 않게 한다. 뿌리는 옮기지 않으므로 끌지 않는다.
    */
   const open = row !== null && isSelectable(node) && (picked || props.blockedOf(node.id) === null)
+  /** 편집할 수 없는 판의 «모듈로 저장…» 한 항목 — 서는 조건은 `open` 과 같고 뿌리 줄은 뺀다(뿌리는 담을 수 없다). */
+  const saveOnly =
+    props.saveOnly !== null && isSelectable(node) && node.id !== props.saveOnly.rootId && (picked || props.blockedOf(node.id) === null)
+      ? props.saveOnly
+      : null
   /** 줄 단추 — 별칭 입력을 닫은 뒤 포커스를 돌릴 자리. */
   const button = useRef<HTMLButtonElement>(null)
   const draggable = open && row.rootId !== node.id && props.lockOf(node.id) === null
@@ -442,6 +460,17 @@ function StructureNode(props: {
               selection={props.selection}
             />
           )}
+          {saveOnly !== null && (
+            <TreeRowActions
+              name={rowLabel}
+              more={[saveModuleItem(saveOnly.saveModule)]}
+              onOpen={() => {
+                if (!picked) saveOnly.select(node.id)
+              }}
+              picked={picked}
+              selection={props.selection}
+            />
+          )}
         </div>
       ) : (
         <span className="wb-shell-structure-broken">{typeLabel}</span>
@@ -506,6 +535,7 @@ function StructureNode(props: {
               blockedOf={props.blockedOf}
               fold={props.fold}
               row={row}
+              saveOnly={props.saveOnly}
             />
           ))}
         </ul>

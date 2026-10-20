@@ -1,6 +1,11 @@
 /**
- * **«모듈로 저장…» 상자** — 구조 트리에서 고른 노드를 프로젝트 모듈로 남긴다(설계 spec `docs/superpowers/specs/2026-10-18-modules-states-layout-design.md`
- * 「B3. 모듈」). 구조 트리 줄 `…` 의 «모듈로 저장…»이 연다(`./tree-row-actions.tsx` — 뿌리 줄에는 없다).
+ * **«모듈로 저장…» 상자** — 구조 트리에서 고른 노드를 개인 모듈 · 프로젝트 모듈로 남긴다(설계 spec
+ * `docs/superpowers/specs/2026-10-18-modules-states-layout-design.md` 「B3. 모듈」 · `2026-10-20-personal-modules-design.md` «저장»). 구조 트리 줄 `…` 의
+ * «모듈로 저장…»이 연다(`./tree-row-actions.tsx` — 뿌리 줄에는 없다). 편집할 수 없는 판(viewer)의 트리에도 그 한 항목은 선다.
+ *
+ * **어디에 저장할지 상자 안에서 고른다** — «개인 모듈»(내가 여는 모든 프로젝트) · «프로젝트 모듈»(이 프로젝트의 멤버 모두). **기본값은 개인 모듈이다** —
+ * 남에게 보이지 않는 쪽이라 고르지 않고 저장해도 아무에게도 새지 않는다. 프로젝트 쪽은 프로젝트 모듈을 쓸 수 있을 때(editor 이상)만 선다 —
+ * viewer 에게는 고르기에 개인 하나뿐이다(서버도 막는다 — `POST …/modules` 의 editor 가드).
  *
  * | 담는 것 | 규칙 |
  * |---|---|
@@ -10,7 +15,7 @@
  * **담을 노드는 연 순간의 문서로 정한다** — 상자를 연 뒤 남이 그 노드를 고쳐도 담는 것은 연 순간의 모양이다(상자가 노드 수 · 뺀 수를 그 모양으로
  * 말했다). 저장은 문서를 바꾸지 않는 쓰기라 잠금 · 되돌리기와 무관하다.
  *
- * 이름은 1 ~ 60자(`MODULE_NAME_MAX` — 서버와 같은 값)이고 앞뒤 공백을 뗀다. 저장하면 상자를 닫고 하단 판 «모듈» 탭이 목록을 다시 읽는다
+ * 이름은 1 ~ 60자(`MODULE_NAME_MAX` — 서버와 같은 값)이고 앞뒤 공백을 뗀다. 저장하면 상자를 닫고 하단 판 «모듈» 탭이 그 목록을 다시 읽는다
  * (`announceModulesChanged`). 서버가 거절하면(422 `nested-page` · 400) 그 문장을 상자 안에 세운다.
  *
  * **상자는 구조 트리의 키 상자 밖에 선다**(`shell/shell-dialog.tsx` 머리말 «상자 안의 키는 React 트리를 따라 버블된다» — 상자 단추의 키가 뒤 트리의 단축키로 버블되지 않게).
@@ -57,18 +62,25 @@ export function moduleNameWhy(name: string): string | undefined {
   return undefined
 }
 
+/** 저장할 곳 — 개인 모듈 · 프로젝트 모듈. */
+export type ModuleTarget = 'personal' | 'project'
+
+const TARGET_LABEL: Record<ModuleTarget, string> = { personal: '개인 모듈', project: '프로젝트 모듈' }
+
 /** 저장했다 — 정보 통지 자리의 한 줄. */
-export function savedModuleNotice(name: string): string {
-  return `모듈 '${name}'을(를) 저장했습니다. 하단 판의 «모듈» 탭에서 넣을 수 있습니다.`
+export function savedModuleNotice(name: string, to: ModuleTarget): string {
+  return `${TARGET_LABEL[to]} '${name}'을(를) 저장했습니다. 하단 판의 «모듈» 탭에 섭니다.`
 }
 
 export function SaveModuleDialog(props: {
   projectId: string
   /** 연 순간에 고른 노드(`moduleSelection`). `null` 이면 닫혀 있다. */
   nodes: readonly WbNode[] | null
+  /** 프로젝트 모듈을 쓸 수 있는가(editor 이상) — 아니면 고르기에 «개인 모듈» 하나다. */
+  projectWritable: boolean
   onClose: () => void
   /** 저장했다 — 부르는 쪽이 통지를 세운다. */
-  onSaved: (name: string) => void
+  onSaved: (name: string, to: ModuleTarget) => void
 }): ReactElement | null {
   if (props.nodes === null) return null
   return <OpenSaveModule {...props} nodes={props.nodes} />
@@ -77,8 +89,9 @@ export function SaveModuleDialog(props: {
 function OpenSaveModule(props: {
   projectId: string
   nodes: readonly WbNode[]
+  projectWritable: boolean
   onClose: () => void
-  onSaved: (name: string) => void
+  onSaved: (name: string, to: ModuleTarget) => void
 }): ReactElement {
   const api = useApi()
   const sentenceId = useId()
@@ -86,6 +99,10 @@ function OpenSaveModule(props: {
   const [name, setName] = useState('')
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const [target, setTarget] = useState<ModuleTarget>('personal')
+  /** 고른 곳 — 연 뒤 프로젝트 쪽을 잃었으면(강등) 개인으로 저장한다(고르기에서도 사라진다). */
+  const to: ModuleTarget = props.projectWritable ? target : 'personal'
+  const targets: ModuleTarget[] = props.projectWritable ? ['personal', 'project'] : ['personal']
   const [prepared] = useState(() => moduleNodesForSave(props.nodes))
   const count = prepared.nodes.reduce((sum, node) => sum + [...walkSafely(node)].length, 0)
   const why = moduleNameWhy(name)
@@ -95,11 +112,13 @@ function OpenSaveModule(props: {
     const trimmed = name.trim()
     setPending(true)
     setFailure(null)
-    api.createModule(props.projectId, { name: trimmed, nodes: prepared.nodes }).then(
+    const body = { name: trimmed, nodes: prepared.nodes }
+    const saved = to === 'personal' ? api.createMyModule(body) : api.createModule(props.projectId, body)
+    saved.then(
       () => {
         setPending(false)
-        announceModulesChanged(props.projectId)
-        props.onSaved(trimmed)
+        announceModulesChanged(to === 'personal' ? { kind: 'personal' } : { kind: 'project', projectId: props.projectId })
+        props.onSaved(trimmed, to)
         props.onClose()
       },
       (caught: unknown) => {
@@ -122,6 +141,15 @@ function OpenSaveModule(props: {
         <p id={sentenceId} className="wb-shell-module-dialog-sentence">
           {saveModuleSentence(count, prepared.droppedActions)}
         </p>
+        <fieldset className="wb-shell-module-dialog-targets" disabled={pending}>
+          <legend className="wb-shell-module-dialog-label">저장할 곳</legend>
+          {targets.map((entry) => (
+            <label key={entry} className="wb-shell-module-dialog-target">
+              <input type="radio" name={`${inputId}-target`} value={entry} checked={to === entry} onChange={() => setTarget(entry)} />
+              {TARGET_LABEL[entry]}
+            </label>
+          ))}
+        </fieldset>
         <label className="wb-shell-module-dialog-label" htmlFor={inputId}>
           모듈 이름
         </label>

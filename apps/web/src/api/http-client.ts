@@ -26,6 +26,7 @@ import type {
   PageDetail,
   PageImported,
   PatchResult,
+  PersonalModule,
   ProjectModule,
   ProjectDetail,
   ProjectThemeView,
@@ -1066,6 +1067,9 @@ const BODY_KEYS = {
   // `createdBy` 가 그 자리다** — 응답 객체를 고쳐 되보내는 실수가 실제로 있을 법하다(`createSnapshot` 이 같은 자리에서 같은 판단).
   createModule: { name: true, nodes: true } satisfies Record<keyof Parameters<ApiClient['createModule']>[1], true>,
   renameModule: { name: true } satisfies Record<keyof Parameters<ApiClient['renameModule']>[2], true>,
+  // 개인 모듈 — 서버가 같은 본문(`ModuleBody` · `RenameBody`)을 쓴다. 같은 까닭으로 선언한 키만 싣는다.
+  createMyModule: { name: true, nodes: true } satisfies Record<keyof Parameters<ApiClient['createMyModule']>[0], true>,
+  renameMyModule: { name: true } satisfies Record<keyof Parameters<ApiClient['renameMyModule']>[1], true>,
   // 테마 저장. 서버의 `ThemeBody` 가 `z.strictObject` 라 선언되지 않은 키는 그 자체로 400 이고, **`manifest` · `latest` 가 그 자리다** —
   // GET 응답(`ProjectThemeView`)을 고쳐 되보내는 실수가 실제로 있을 법하다.
   putProjectTheme: { themeId: true, version: true, tokens: true, rev: true } satisfies Record<
@@ -1255,6 +1259,7 @@ export function createHttpClient(
   const menuPath = (projectId: string, nodeId: string): string => `${projectPath(projectId)}/menu/${encodeURIComponent(nodeId)}`
   const modulesPath = (projectId: string): string => `${projectPath(projectId)}/modules`
   const modulePath = (projectId: string, moduleId: string): string => `${modulesPath(projectId)}/${encodeURIComponent(moduleId)}`
+  const myModulePath = (moduleId: string): string => `/me/modules/${encodeURIComponent(moduleId)}`
 
   const commentsPath = (projectId: string, pageId: string): string => `${pagePath(projectId, pageId)}/comments`
 
@@ -1449,6 +1454,30 @@ export function createHttpClient(
         )
       ).module,
     deleteModule: (projectId, moduleId) => request<void>('DELETE', modulePath(projectId, moduleId), SHAPES.noBody),
+    // 개인 모듈 — 봉투 · 검사가 프로젝트 모듈과 같다(같은 꼴을 낸다).
+    listMyModules: async (options) =>
+      (await request<{ modules: PersonalModule[] }>('GET', '/me/modules', SHAPES.moduleListEnvelope, undefined, options)).modules,
+    getMyModule: async (moduleId, options) =>
+      (await request<{ module: PersonalModule }>('GET', myModulePath(moduleId), SHAPES.moduleEnvelope, undefined, options)).module,
+    createMyModule: async (body) =>
+      (
+        await request<{ module: PersonalModule }>(
+          'POST',
+          '/me/modules',
+          SHAPES.moduleEnvelope,
+          declaredOnly(body, BODY_KEYS.createMyModule),
+        )
+      ).module,
+    renameMyModule: async (moduleId, body) =>
+      (
+        await request<{ module: PersonalModule }>(
+          'PATCH',
+          myModulePath(moduleId),
+          SHAPES.moduleEnvelope,
+          declaredOnly(body, BODY_KEYS.renameMyModule),
+        )
+      ).module,
+    deleteMyModule: (moduleId) => request<void>('DELETE', myModulePath(moduleId), SHAPES.noBody),
     listSnapshots: (projectId) => request<SnapshotSummary[]>('GET', `${projectPath(projectId)}/snapshots`, SHAPES.snapshotList),
     // **응답이 더 넓다(`payload`가 붙는다).** `SHAPES.snapshot`은 그것을 보지 않고 통과시킨다 —
     // 이 화면이 payload를 읽지 않기 때문이다(`api/client.ts`의 `createSnapshot` 주석).

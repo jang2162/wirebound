@@ -224,6 +224,14 @@ export const STRUCTURE_WHY_DISABLED: Record<keyof StructureAbilities, string> = 
 export const SAVE_MODULE_LABEL = '모듈로 저장…'
 
 /**
+ * «모듈로 저장…» 항목 — 편집할 수 있는 판(`structureRowItems`)과 편집할 수 없는 판의 한 항목(`panels/structure-tree.tsx` 의 `saveOnly`)이 같은
+ * 것을 쓴다. 끄지 않는다 — 문서 읽기라 잠금과 무관하다(아래 머리말).
+ */
+export function saveModuleItem(onSelect: () => void): ActionMenuItem {
+  return { key: 'save-module', label: SAVE_MODULE_LABEL, icon: ICONS.saveModule, onSelect }
+}
+
+/**
  * 구조 트리 줄의 `…` 항목(spec 「트리」 표 — `…` 별칭 바꾸기 · 모듈로 저장… · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제). `+`는 없다(머리말).
  *
  * **«모듈로 저장…»은 뿌리 줄에 없다** — 뿌리는 모듈에 담을 수 없다(설계 spec 「B3」 — 저장되는 것은 고른 노드들이고, 뿌리는 그 페이지의 것이다).
@@ -263,7 +271,7 @@ export function structureRowItems(
         title: commands.why.alias,
         description: commands.why.alias,
       },
-      ...(saveModule === undefined ? [] : [{ key: 'save-module', label: SAVE_MODULE_LABEL, icon: ICONS.saveModule, onSelect: saveModule }]),
+      ...(saveModule === undefined ? [] : [saveModuleItem(saveModule)]),
       item('moveUp', '위로', ICONS.moveUp, commands.moveUp),
       item('moveDown', '아래로', ICONS.moveDown, commands.moveDown),
       item('indent', '들여쓰기', ICONS.indent, commands.indent),

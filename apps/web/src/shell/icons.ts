@@ -33,6 +33,7 @@ import {
   CircleCheck,
   CircleUser,
   CircleX,
+  CopyPlus,
   Download,
   Eye,
   Ellipsis,
@@ -114,6 +115,8 @@ export const ICONS = {
   addPage: FilePlus,
   /** 고른 노드를 모듈로 남긴다 — 구조 트리 줄 `…` 의 «모듈로 저장…»(`panels/save-module-dialog.tsx`). */
   saveModule: PackagePlus,
+  /** 모듈을 다른 묶음에 사본으로 남긴다 — «모듈» 탭 카드의 «프로젝트 모듈로 복사» · «개인 모듈로 복사»(`palette/module-tab.tsx`). */
+  copyModule: CopyPlus,
   importJson: FileUp,
   exportJson: FileDown,
   account: CircleUser,

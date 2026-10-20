@@ -170,7 +170,7 @@ describe('moduleInsertOps', () => {
     expect(edit).toEqual({ reason: '넣지 못했습니다: Page는 루트에만 둘 수 있습니다 — 페이지 안에 Page를 넣을 수 없습니다' })
   })
 
-  it('입력 묶음을 바꾸지 않는다(기본 모듈은 모듈 상수다)', () => {
+  it('입력 묶음을 바꾸지 않는다(탭이 쥔 모듈 목록을 그대로 넘긴다)', () => {
     const before = doc()
     const copy = structuredClone(NODES)
     moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, target(before, null), NO_PAGES, counter())

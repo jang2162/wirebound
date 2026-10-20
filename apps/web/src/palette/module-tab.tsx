@@ -1,39 +1,60 @@
 /**
- * **하단 판의 «모듈» 탭** — 모듈 묶음을 골라 넣는다(설계 spec `docs/superpowers/specs/2026-10-18-modules-states-layout-design.md` 「B2」 · 「B3」).
- * 판의 위층 탭(«컴포넌트 | 모듈» — `./component-palette.tsx`)이 이것을 그린다.
+ * **하단 판의 «모듈» 탭** — 모듈 묶음을 골라 넣는다(설계 spec `docs/superpowers/specs/2026-10-18-modules-states-layout-design.md` 「B2」 · 「B3」 ·
+ * `2026-10-20-personal-modules-design.md`). 판의 위층 탭(«컴포넌트 | 모듈» — `./component-palette.tsx`)이 이것을 그린다.
  *
  * ## 묶음 셋
  *
  * | 묶음 | 어디서 | 카드 |
  * |---|---|---|
- * | 프로젝트 모듈 | 서버(`GET …/modules` — 탭을 열 때 · 저장 · 이름 · 삭제 뒤에 다시 읽는다. 방송은 없다) | 이름 · 노드 수 · «넣기» · «이름 바꾸기» · «삭제» |
- * | 기본 모듈 | `@wirebound/schema` 의 `BUILTIN_MODULES`(읽기 전용) | 이름 · 노드 수 · «넣기» |
+ * | 개인 모듈 | 서버(`GET /api/me/modules` — 사람이 소유하고 그 사람이 여는 모든 프로젝트에 선다) | 이름 · 노드 수 · «넣기» · «이름 바꾸기» · «삭제» · «프로젝트 모듈로 복사» |
+ * | 프로젝트 모듈 | 서버(`GET …/modules`) | 이름 · 노드 수 · «넣기» · «이름 바꾸기» · «삭제» · «개인 모듈로 복사» |
  * | 테마 패턴 | 캔버스가 그리는 테마의 manifest `patterns`(읽기 전용 — `./theme-patterns.ts` 의 `themePatterns`) | 이름 · 범주 · «넣기» |
  *
- * 프로젝트 모듈이 하나도 없으면 «구조 트리에서 노드를 골라 '모듈로 저장'» 한 줄이 선다. 판은 편집할 수 있는 사람(editor 이상 · 편집 모드)에게만
- * 서므로(셸 — `routes/editor.tsx`) 이름 바꾸기 · 삭제를 다시 가리지 않는다.
+ * 두 서버 목록은 탭을 열 때와 저장 · 이름 · 삭제 · 복사 뒤에 다시 읽는다(방송은 없다). 비었으면 그 묶음이 어디서 채우는지 한 줄을 말한다.
+ *
+ * ## 무엇이 서는가 — 셋을 가른다
+ *
+ * 판은 편집할 수 없는 판(viewer · editor 이상의 뷰 모드)에도 선다(셸 — `routes/editor.tsx`). 카드의 단추는 두 값이 가른다:
+ *
+ * | 값 | 셸의 무엇 | 서는 것 |
+ * |---|---|---|
+ * | `insertable` | 편집 모드 && 고칠 수 있다 | «넣기» 단추 · 카드 끌기 — 문서를 바꾸는 길 전부 |
+ * | `projectWritable` | 고칠 수 있다(editor 이상 — 모드와 무관하다. 모듈 쓰기는 문서 편집이 아니다) | 프로젝트 모듈의 «이름 바꾸기» · «삭제», 개인 카드의 «프로젝트 모듈로 복사» |
+ * | (늘) | — | 개인 모듈의 «이름 바꾸기» · «삭제» · 프로젝트 카드의 «개인 모듈로 복사» — 내 것이라 역할과 무관하다 |
+ *
+ * 서버가 같은 것을 다시 막는다 — 프로젝트 모듈 쓰기는 editor 가드, 개인 모듈은 세션의 그 사람만.
  *
  * ## 넣기 — 단추는 고른 노드 곁에, 끌기는 놓은 자리에
  *
  * 자리는 컴포넌트 카드와 같은 규칙이다 — 단추(Enter)는 `paletteAddTarget`(고른 것 없음 · 뿌리 → 페이지 끝, 자식을 받는 노드 → 그 안 끝, 잎 → 바로 뒤),
  * 끌기는 경로 층(`drag/use-placement.ts`)이 판정한 자리다. 넣는 편집은 `./module-insert.ts` 다(편집 하나 · 되돌리기 한 번 · 넣은 노드를 고른다).
  *
- * **넣기는 비동기다** — 프로젝트 모듈은 그 모듈 하나를 다시 읽고(`GET …/modules/:id` — 탭을 연 뒤 남이 지웠으면 404 → «이 모듈은 지워졌습니다» ·
- * 목록 다시 읽기), 페이지를 겨냥하는 액션이 있으면 프로젝트 트리도 읽는다(붙여넣기와 같다 — `shell/editor-keys.tsx` 의 `paste`). 그 사이 페이지를
- * 옮겼으면 넣지 않고 말한다 — 판은 페이지 id 가 아니라 판을 연 세대(`pageOpenEpoch`)로 가른다(붙여넣기의 판단과 같다). 자리는 **다 읽은 뒤의 문서로**
- * 판정한다 — 읽는 사이 남이 고쳤을 수 있다. 기본 모듈 · 패턴은 읽을 것이 없어 같은 걸음을 곧바로 지난다.
+ * **넣기는 비동기다** — 개인 · 프로젝트 모듈은 그 모듈 하나를 다시 읽고(탭을 연 뒤 지웠으면 404 → «이 모듈은 지워졌습니다» · 목록 다시 읽기),
+ * 페이지를 겨냥하는 액션이 있으면 프로젝트 트리도 읽는다(붙여넣기와 같다 — `shell/editor-keys.tsx` 의 `paste`). 개인 모듈은 다른 프로젝트에서
+ * 저장했을 수 있어 이 프로젝트에 없는 페이지 · 넣는 페이지에 없는 노드를 겨냥하는 동작이 흔히 빠진다 — 뺀 수를 정보 통지로 말한다. 그 사이
+ * 페이지를 옮겼으면 넣지 않고 말한다 — 판은 페이지 id 가 아니라 판을 연 세대(`pageOpenEpoch`)로 가른다(붙여넣기의 판단과 같다). 자리는 **다 읽은
+ * 뒤의 문서로** 판정한다 — 읽는 사이 남이 고쳤을 수 있다. 패턴은 읽을 것이 없어 같은 걸음을 곧바로 지난다.
+ *
+ * **넣을 수 있는가를 넣는 순간에 다시 본다** — 판은 뷰 모드 · 강등에도 남으므로 끄는 중 · 읽는 중에 넣을 수 없게 될 수 있다. 그 값이 바뀌면 카드
+ * 판을 다시 마운트해(끌기를 끊는다) 놓기가 오지 않게 하고, 그래도 온 넣기(읽는 사이 바뀜)는 보내기 직전에 그 값을 보고 버린다.
  *
  * **더블클릭 · 연달아 친 Enter 의 둘째는 안 넣는다** — 컴포넌트 카드의 «넣기» 와 같은 판정(`DOUBLE_CLICK_MS` · `DOUBLE_CLICK_SLOP`)이다. 넣는 중
  * (읽는 사이)의 다음 누름도 버린다.
+ *
+ * ## 복사 — 다시 읽고 새로 저장한다
+ *
+ * «프로젝트 모듈로 복사» · «개인 모듈로 복사» 는 원본 하나를 다시 읽고(지워졌으면 넣기와 같은 404 길) 그 이름 · 노드로 대상 쪽 저장을 부른다 — 서버의
+ * 복사 엔드포인트가 따로 없다(`apps/api` 의 `routes/personal-modules.ts` 머리말). 사본은 새 모듈이라 원본과 이어지지 않는다. 끝나면 대상 목록을
+ * 다시 읽고 정보 통지(`copiedNotice`)를 세운다.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactElement } from 'react'
-import { BUILTIN_MODULES, MODULE_NAME_MAX, countModuleNodes, matchPageTargets, type PageDocument, type WbNode } from '@wirebound/schema'
+import { MODULE_NAME_MAX, matchPageTargets, type PageDocument, type WbNode } from '@wirebound/schema'
 import { NO_THEME } from '@wirebound/renderer'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
-import { ApiError } from '../api/client'
+import { ApiError, type ApiClient } from '../api/client'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
-import type { ProjectModule } from '../api/types'
+import type { PersonalModule, ProjectModule } from '../api/types'
 import { DropIndicator } from '../drag/drop-indicator'
 import { useCanvasRemeasured, usePlacementDrop, usePublishPlacementPreview, type PlacementDrop } from '../drag/use-placement'
 import { usePointerDrag, type DragPoint } from '../drag/use-pointer-drag'
@@ -50,10 +71,17 @@ import { moduleDroppedNotice, moduleInsertOps, type ModuleBundle } from './modul
 import { paletteAddTarget } from './palette-add'
 import { EMPTY_NOTICE, themePatterns } from './theme-patterns'
 
+/** 개인 모듈이 없을 때의 안내 한 줄. */
+export const NO_PERSONAL_MODULES = "구조 트리에서 노드를 골라 '모듈로 저장'에서 '개인 모듈'을 고르면 여기에 섭니다"
 /** 프로젝트 모듈이 없을 때의 안내 한 줄. */
 export const NO_PROJECT_MODULES = "구조 트리에서 노드를 골라 '모듈로 저장'하면 여기에 섭니다"
-/** 넣으려던 프로젝트 모듈이 그 사이 지워졌다(404). */
+/** 넣거나 복사하려던 모듈이 그 사이 지워졌다(404). */
 export const MODULE_GONE_NOTICE = '이 모듈은 지워졌습니다'
+
+/** 복사했다 — 정보 통지 자리의 한 줄. */
+export function copiedNotice(name: string, to: 'project' | 'personal'): string {
+  return `'${name}' 을 ${to === 'project' ? '프로젝트 모듈' : '개인 모듈'}로 복사했습니다`
+}
 /** 넣을 노드를 읽는 사이 페이지를 옮겼다(떠나 머묾 · 떠났다 돌아옴). */
 export const MODULE_LEFT_NOTICE = '넣는 사이 페이지를 옮겨 넣지 않았습니다. 다시 넣으세요.'
 /** 목록 · 모듈 · 페이지 목록을 못 읽었다(서버 문장이 없을 때). */
@@ -72,18 +100,55 @@ interface ModuleCard {
   /** 끌기 미리보기 · 판정의 표본(`Placing` 머리말). */
   sample: readonly WbNode[]
   source:
+    | { kind: 'personal'; module: PersonalModule }
     | { kind: 'project'; module: ProjectModule }
-    | { kind: 'builtin'; nodes: readonly WbNode[] }
     | { kind: 'pattern'; key: string; pattern: ThemePattern }
 }
 
+/** 바뀐 목록 — 개인(사람 하나) · 프로젝트 하나. */
+export type ModulesScope = { kind: 'personal' } | { kind: 'project'; projectId: string }
+
 /**
- * 프로젝트 모듈 목록이 바뀌었다 — «모듈로 저장…» 상자(`panels/save-module-dialog.tsx`)가 저장한 뒤 부른다. 탭이 열려 있으면 목록을 다시 읽는다(방송이
- * 없다 — 같은 사람의 같은 화면 안 소식이다).
+ * 모듈 목록이 바뀌었다 — «모듈로 저장…» 상자(`panels/save-module-dialog.tsx`)와 이 탭의 복사가 저장한 뒤 부른다. 탭이 열려 있으면 그 목록을 다시
+ * 읽는다(방송이 없다 — 같은 사람의 같은 화면 안 소식이다).
  */
-const listeners = new Set<(projectId: string) => void>()
-export function announceModulesChanged(projectId: string): void {
-  for (const listener of [...listeners]) listener(projectId)
+const listeners = new Set<(scope: ModulesScope) => void>()
+export function announceModulesChanged(scope: ModulesScope): void {
+  for (const listener of [...listeners]) listener(scope)
+}
+
+type Listed<T> = { status: 'loading' | 'ready' | 'failed'; modules: T[] }
+
+/** 서버 목록 하나 — 읽기 · 다시 읽기 · 세대(늦게 온 앞 응답을 버린다). 실패는 판 머리의 한 줄로 말한다. */
+function useModuleList<T>(read: () => Promise<T[]>, onNotice: (text: string) => void): { listed: Listed<T>; reload: () => void } {
+  const [listed, setListed] = useState<Listed<T>>({ status: 'loading', modules: [] })
+  const generation = useRef(0)
+  const reload = useCallback(() => {
+    const mine = (generation.current += 1)
+    read().then(
+      (modules) => {
+        if (generation.current === mine) setListed({ status: 'ready', modules })
+      },
+      (caught: unknown) => {
+        if (generation.current !== mine) return
+        setListed((prev) => ({ status: 'failed', modules: prev.modules }))
+        const failure = toFailure(caught, READ_FAILURE)
+        onNotice(failure.kind === 'message' ? failure.message : READ_FAILURE)
+      },
+    )
+  }, [read, onNotice])
+  useEffect(
+    () => () => {
+      generation.current += 1
+    },
+    [],
+  )
+  return { listed, reload }
+}
+
+/** 묶음의 빈 줄 — 읽는 중 · 하나도 없음 · 검색에 안 맞음. */
+function emptyLine(listed: Listed<unknown>, none: string): string {
+  return listed.status === 'loading' ? '읽는 중…' : listed.modules.length === 0 ? none : '맞는 모듈이 없습니다'
 }
 
 /** 검색에 쓰는 꼴 — 컴포넌트 탭의 검색과 같다(NFC · 소문자). */
@@ -107,61 +172,52 @@ export function ModuleTab(props: {
   pageId: string | undefined
   onNotice: (text: string) => void
   query: string
+  /** 넣기 단추 · 끌기가 서는가 — 편집 모드 && 고칠 수 있다(머리말 «무엇이 서는가»). */
+  insertable: boolean
+  /** 프로젝트 모듈을 쓸 수 있는가 — editor 이상(모드와 무관하다). */
+  projectWritable: boolean
 }): ReactElement {
   const api = useApi()
-  const [listed, setListed] = useState<{ status: 'loading' | 'ready' | 'failed'; modules: ProjectModule[] }>({
-    status: 'loading',
-    modules: [],
-  })
-  const generation = useRef(0)
   const { onNotice } = props
+  const readPersonal = useCallback(() => api.listMyModules(), [api])
+  const readProject = useCallback(() => api.listModules(props.projectId), [api, props.projectId])
+  const personal = useModuleList(readPersonal, onNotice)
+  const project = useModuleList(readProject, onNotice)
+  const reloadPersonal = personal.reload
+  const reloadProject = project.reload
 
-  const reload = useCallback(() => {
-    const mine = (generation.current += 1)
-    api.listModules(props.projectId).then(
-      (modules) => {
-        if (generation.current === mine) setListed({ status: 'ready', modules })
-      },
-      (caught: unknown) => {
-        if (generation.current !== mine) return
-        setListed((prev) => ({ status: 'failed', modules: prev.modules }))
-        const failure = toFailure(caught, READ_FAILURE)
-        onNotice(failure.kind === 'message' ? failure.message : READ_FAILURE)
-      },
-    )
-  }, [api, props.projectId, onNotice])
-
-  // 탭을 열 때 읽는다(머리말 «묶음 셋»). 같은 화면에서 저장했으면 다시 읽는다.
+  // 탭을 열 때 읽는다(머리말 «묶음 셋»). 같은 화면에서 저장 · 복사했으면 그 목록을 다시 읽는다.
   useEffect(() => {
-    reload()
-    const listener = (projectId: string): void => {
-      if (projectId === props.projectId) reload()
+    reloadPersonal()
+    reloadProject()
+    const listener = (scope: ModulesScope): void => {
+      if (scope.kind === 'personal') reloadPersonal()
+      else if (scope.projectId === props.projectId) reloadProject()
     }
     listeners.add(listener)
     return () => {
       listeners.delete(listener)
-      generation.current += 1
     }
-  }, [reload, props.projectId])
+  }, [reloadPersonal, reloadProject, props.projectId])
 
   const manifest = useProjectTheme().manifest ?? NO_THEME.manifest
   const patterns = useMemo(() => themePatterns(manifest), [manifest])
   const wanted = searchable(props.query.trim())
   const matches = (card: ModuleCard): boolean => wanted === '' || searchable(card.name).includes(wanted)
 
-  const projectCards: ModuleCard[] = listed.modules.map((module) => ({
+  const personalCards: ModuleCard[] = personal.listed.modules.map((module) => ({
+    key: `personal:${module.id}`,
+    name: module.name,
+    detail: `노드 ${module.nodeCount}개`,
+    sample: module.nodes,
+    source: { kind: 'personal', module },
+  }))
+  const projectCards: ModuleCard[] = project.listed.modules.map((module) => ({
     key: `project:${module.id}`,
     name: module.name,
     detail: `노드 ${module.nodeCount}개`,
     sample: module.nodes,
     source: { kind: 'project', module },
-  }))
-  const builtinCards: ModuleCard[] = BUILTIN_MODULES.map((entry) => ({
-    key: `builtin:${entry.key}`,
-    name: entry.name,
-    detail: `노드 ${countModuleNodes(entry.nodes)}개`,
-    sample: entry.nodes,
-    source: { kind: 'builtin', nodes: entry.nodes },
   }))
   const patternCards: ModuleCard[] = patterns.entries.map(([key, pattern]) => ({
     key: `pattern:${key}`,
@@ -171,30 +227,34 @@ export function ModuleTab(props: {
     source: { kind: 'pattern', key, pattern },
   }))
 
-  const insert = useModuleInsert({ projectId: props.projectId, pageId: props.pageId, onNotice, onGone: reload })
+  const insert = useModuleInsert({
+    projectId: props.projectId,
+    pageId: props.pageId,
+    insertable: props.insertable,
+    onNotice,
+    onGone: (kind) => (kind === 'personal' ? reloadPersonal() : reloadProject()),
+  })
 
   return (
     <ModuleCards
+      // 넣을 수 있는가가 바뀌면 다시 마운트한다 — 끄던 끌기를 끊는다(머리말 «넣을 수 있는가를 넣는 순간에 다시 본다»).
+      key={props.insertable ? 'insertable' : 'read-only'}
       projectId={props.projectId}
       pageId={props.pageId}
       insert={insert}
+      insertable={props.insertable}
+      projectWritable={props.projectWritable}
       groups={[
-        {
-          label: '프로젝트 모듈',
-          cards: projectCards.filter(matches),
-          empty: listed.status === 'loading' ? '읽는 중…' : listed.modules.length === 0 ? NO_PROJECT_MODULES : '맞는 모듈이 없습니다',
-          editable: true,
-        },
-        { label: '기본 모듈', cards: builtinCards.filter(matches), empty: '맞는 모듈이 없습니다', editable: false },
+        { label: '개인 모듈', cards: personalCards.filter(matches), empty: emptyLine(personal.listed, NO_PERSONAL_MODULES) },
+        { label: '프로젝트 모듈', cards: projectCards.filter(matches), empty: emptyLine(project.listed, NO_PROJECT_MODULES) },
         {
           label: '테마 패턴',
           cards: patternCards.filter(matches),
           empty: patterns.broken ?? (patterns.entries.length === 0 ? EMPTY_NOTICE : '맞는 패턴이 없습니다'),
-          editable: false,
         },
       ]}
       onNotice={onNotice}
-      onChanged={reload}
+      onChanged={(kind) => (kind === 'personal' ? reloadPersonal() : reloadProject())}
     />
   )
 }
@@ -208,8 +268,9 @@ type Insert = (card: ModuleCard, where: Where) => Promise<boolean>
 function useModuleInsert(input: {
   projectId: string
   pageId: string | undefined
+  insertable: boolean
   onNotice: (text: string) => void
-  onGone: () => void
+  onGone: (kind: 'personal' | 'project') => void
 }): Insert {
   const api = useApi()
   const store = useEditorStoreInstance()
@@ -221,28 +282,15 @@ function useModuleInsert(input: {
   return useCallback(
     async (card: ModuleCard, where: Where): Promise<boolean> => {
       const { pageId, onNotice, onGone, projectId } = live.current.input
-      if (pageId === undefined || busy.current) return false
+      if (pageId === undefined || busy.current || !live.current.input.insertable) return false
       busy.current = true
       try {
         const opened = store.pageOpenEpoch()
         let bundle: ModuleBundle
-        if (card.source.kind === 'project') {
-          let module: ProjectModule
-          try {
-            module = await api.getModule(projectId, card.source.module.id)
-          } catch (caught) {
-            if (caught instanceof ApiError && caught.code === 'not-found') {
-              onNotice(MODULE_GONE_NOTICE)
-              onGone()
-            } else {
-              const failure = toFailure(caught, READ_FAILURE)
-              onNotice(failure.kind === 'message' ? failure.message : READ_FAILURE)
-            }
-            return false
-          }
+        if (card.source.kind !== 'pattern') {
+          const module = await reread(api, projectId, card.source, onNotice, onGone)
+          if (module === null) return false
           bundle = { kind: 'nodes', nodes: module.nodes }
-        } else if (card.source.kind === 'builtin') {
-          bundle = { kind: 'nodes', nodes: card.source.nodes }
         } else {
           const { expanded } = expandPattern(card.source.pattern)
           if (expanded === null) {
@@ -302,6 +350,8 @@ function useModuleInsert(input: {
           onNotice(lockedNotice(blocker.userName))
           return false
         }
+        // 읽는 사이 뷰 모드 · 강등으로 넣을 수 없게 됐다 — 보내지 않는다(머리말 «넣을 수 있는가를 넣는 순간에 다시 본다»).
+        if (!live.current.input.insertable) return false
         onNotice('')
         if (!live.current.commitOps(edit.ops)) return false
         const last = edit.selectIds[edit.selectIds.length - 1]
@@ -317,22 +367,47 @@ function useModuleInsert(input: {
   )
 }
 
+/**
+ * 넣기 · 복사 직전에 그 모듈 하나를 다시 읽는다(머리말 «넣기는 비동기다»). 지워졌으면(404) «이 모듈은 지워졌습니다» 를 말하고 그 목록을 다시 읽게
+ * 하고 `null`, 다른 실패도 말하고 `null`.
+ */
+async function reread(
+  api: ApiClient,
+  projectId: string,
+  source: { kind: 'personal'; module: PersonalModule } | { kind: 'project'; module: ProjectModule },
+  onNotice: (text: string) => void,
+  onGone: (kind: 'personal' | 'project') => void,
+): Promise<ProjectModule | null> {
+  try {
+    return source.kind === 'personal' ? await api.getMyModule(source.module.id) : await api.getModule(projectId, source.module.id)
+  } catch (caught) {
+    if (caught instanceof ApiError && caught.code === 'not-found') {
+      onNotice(MODULE_GONE_NOTICE)
+      onGone(source.kind)
+    } else {
+      const failure = toFailure(caught, READ_FAILURE)
+      onNotice(failure.kind === 'message' ? failure.message : READ_FAILURE)
+    }
+    return null
+  }
+}
+
 interface CardGroup {
   label: string
   cards: ModuleCard[]
   /** 카드가 없을 때의 한 줄. */
   empty: string
-  /** 이름 바꾸기 · 삭제가 서는가(프로젝트 모듈). */
-  editable: boolean
 }
 
 function ModuleCards(props: {
   projectId: string
   pageId: string | undefined
   insert: Insert
+  insertable: boolean
+  projectWritable: boolean
   groups: CardGroup[]
   onNotice: (text: string) => void
-  onChanged: () => void
+  onChanged: (kind: 'personal' | 'project') => void
 }): ReactElement {
   const cards = props.groups.flatMap((group) => group.cards)
   const placement = usePlacementDrop({
@@ -391,27 +466,32 @@ function ModuleCards(props: {
                     key={card.key}
                     className="wb-shell-module-card"
                     data-wb-module-card={card.key}
-                    {...drag.bind({ kind: 'module', key: card.key, nodes: card.sample })}
+                    // 넣을 수 없는 판에는 끌기가 없다 — 몸통이 끌기 전용이라 그때는 아무것도 안 한다(머리말 «무엇이 서는가»).
+                    {...(props.insertable ? drag.bind({ kind: 'module', key: card.key, nodes: card.sample }) : {})}
                   >
                     <span className="wb-shell-module-name">{card.name}</span>
                     <span className="wb-shell-module-detail">{card.detail}</span>
                     <span className="wb-shell-module-actions">
-                      <button
-                        type="button"
-                        className="wb-shell-palette-add wb-shell-module-action"
-                        aria-label={`${card.name} 넣기`}
-                        title={`${card.name} 넣기`}
-                        onKeyDown={(event) => {
-                          if (event.repeat && (event.key === 'Enter' || event.key === ' ')) event.preventDefault()
-                        }}
-                        onClick={(event) => add(card, event)}
-                      >
-                        {shellIcon('add', 14)}
-                      </button>
-                      {group.editable && card.source.kind === 'project' && (
-                        <ProjectModuleActions
+                      {props.insertable && (
+                        <button
+                          type="button"
+                          className="wb-shell-palette-add wb-shell-module-action"
+                          aria-label={`${card.name} 넣기`}
+                          title={`${card.name} 넣기`}
+                          onKeyDown={(event) => {
+                            if (event.repeat && (event.key === 'Enter' || event.key === ' ')) event.preventDefault()
+                          }}
+                          onClick={(event) => add(card, event)}
+                        >
+                          {shellIcon('add', 14)}
+                        </button>
+                      )}
+                      {card.source.kind !== 'pattern' && (
+                        <SavedModuleActions
                           projectId={props.projectId}
-                          module={card.source.module}
+                          source={card.source}
+                          writable={card.source.kind === 'personal' || props.projectWritable}
+                          copyable={card.source.kind === 'project' || props.projectWritable}
                           onNotice={props.onNotice}
                           onChanged={props.onChanged}
                         />
@@ -435,18 +515,26 @@ function ModuleCards(props: {
 }
 
 /**
- * 프로젝트 모듈 카드의 «이름 바꾸기» · «삭제». 이름 바꾸기는 카드 안의 이름 칸(Enter 저장 · Escape 취소), 삭제는 한 번 더 묻는다(«삭제 확인» · «취소»)
- * — 되돌릴 길이 없다. 끝나면 목록을 다시 읽는다(없어졌으면 — 404 — 그 사실을 말하고 다시 읽는다).
+ * 개인 · 프로젝트 모듈 카드의 «이름 바꾸기» · «삭제» · 복사. 이름 바꾸기는 카드 안의 이름 칸(Enter 저장 · Escape 취소), 삭제는 한 번 더 묻는다
+ * («삭제 확인» · «취소») — 되돌릴 길이 없다. 끝나면 목록을 다시 읽는다(없어졌으면 — 404 — 그 사실을 말하고 다시 읽는다). 복사는 머리말 «복사».
  */
-function ProjectModuleActions(props: {
+function SavedModuleActions(props: {
   projectId: string
-  module: ProjectModule
+  source: { kind: 'personal'; module: PersonalModule } | { kind: 'project'; module: ProjectModule }
+  /** 이름 바꾸기 · 삭제가 서는가 — 개인은 늘, 프로젝트는 editor 이상. */
+  writable: boolean
+  /** 다른 묶음으로 복사가 서는가 — 개인 → 프로젝트는 editor 이상, 프로젝트 → 개인은 늘. */
+  copyable: boolean
   onNotice: (text: string) => void
-  onChanged: () => void
+  onChanged: (kind: 'personal' | 'project') => void
 }): ReactElement {
   const api = useApi()
+  const store = useEditorStoreInstance()
+  const { kind, module } = props.source
+  const to = kind === 'personal' ? 'project' : 'personal'
+  const copyLabel = `${module.name} ${to === 'project' ? '프로젝트 모듈로 복사' : '개인 모듈로 복사'}`
   const [mode, setMode] = useState<'idle' | 'renaming' | 'deleting'>('idle')
-  const [name, setName] = useState(props.module.name)
+  const [name, setName] = useState(module.name)
   const [pending, setPending] = useState(false)
   const trimmed = name.trim()
   const nameWhy =
@@ -458,22 +546,26 @@ function ProjectModuleActions(props: {
       const failure = toFailure(caught, '모듈을 바꾸지 못했습니다. 다시 시도하세요.')
       props.onNotice(failure.kind === 'message' ? failure.message : '모듈을 바꾸지 못했습니다. 다시 시도하세요.')
     }
-    props.onChanged()
+    props.onChanged(kind)
   }
 
   const rename = (): void => {
     if (nameWhy !== undefined || pending) return
-    if (trimmed === props.module.name) {
+    if (trimmed === module.name) {
       setMode('idle')
       return
     }
     setPending(true)
-    api.renameModule(props.projectId, props.module.id, { name: trimmed }).then(
+    const renamed =
+      kind === 'personal'
+        ? api.renameMyModule(module.id, { name: trimmed })
+        : api.renameModule(props.projectId, module.id, { name: trimmed })
+    renamed.then(
       () => {
         setPending(false)
         setMode('idle')
         props.onNotice('')
-        props.onChanged()
+        props.onChanged(kind)
       },
       (caught: unknown) => {
         setPending(false)
@@ -485,12 +577,13 @@ function ProjectModuleActions(props: {
   const remove = (): void => {
     if (pending) return
     setPending(true)
-    api.deleteModule(props.projectId, props.module.id).then(
+    const removed = kind === 'personal' ? api.deleteMyModule(module.id) : api.deleteModule(props.projectId, module.id)
+    removed.then(
       () => {
         setPending(false)
         setMode('idle')
         props.onNotice('')
-        props.onChanged()
+        props.onChanged(kind)
       },
       (caught: unknown) => {
         setPending(false)
@@ -500,13 +593,35 @@ function ProjectModuleActions(props: {
     )
   }
 
+  /** 복사 — 원본을 다시 읽고(지웠으면 404 길) 그 이름 · 노드로 대상 쪽에 새로 저장한다(머리말 «복사»). */
+  const copy = (): void => {
+    if (pending) return
+    setPending(true)
+    void (async () => {
+      try {
+        const fresh = await reread(api, props.projectId, props.source, props.onNotice, props.onChanged)
+        if (fresh === null) return
+        const body = { name: fresh.name, nodes: fresh.nodes }
+        await (to === 'project' ? api.createModule(props.projectId, body) : api.createMyModule(body))
+        props.onNotice('')
+        announceModulesChanged(to === 'project' ? { kind: 'project', projectId: props.projectId } : { kind: 'personal' })
+        store.setInfoNotice(copiedNotice(fresh.name, to))
+      } catch (caught) {
+        const failure = toFailure(caught, '모듈을 복사하지 못했습니다. 다시 시도하세요.')
+        props.onNotice(failure.kind === 'message' ? failure.message : '모듈을 복사하지 못했습니다. 다시 시도하세요.')
+      } finally {
+        setPending(false)
+      }
+    })()
+  }
+
   if (mode === 'renaming') {
     return (
       // 칸 안의 누름이 카드의 끌기로 새지 않게 한다(글자를 끌어 고르는 누름 — 카드 몸통이 끌기다).
       <span className="wb-shell-module-edit" data-wb-holds-keys="" onPointerDown={(event) => event.stopPropagation()}>
         <input
           className="wb-shell-module-name-input"
-          aria-label={`${props.module.name} 새 이름`}
+          aria-label={`${module.name} 새 이름`}
           value={name}
           maxLength={MODULE_NAME_MAX + 20}
           autoFocus
@@ -521,7 +636,7 @@ function ProjectModuleActions(props: {
               rename()
             } else if (event.key === 'Escape') {
               event.preventDefault()
-              setName(props.module.name)
+              setName(module.name)
               setMode('idle')
             }
           }}
@@ -546,27 +661,43 @@ function ProjectModuleActions(props: {
   }
   return (
     <>
-      <button
-        type="button"
-        className="wb-shell-palette-add wb-shell-module-action"
-        aria-label={`${props.module.name} 이름 바꾸기`}
-        title={`${props.module.name} 이름 바꾸기`}
-        onClick={() => {
-          setName(props.module.name)
-          setMode('renaming')
-        }}
-      >
-        {shellIcon('rename', 14)}
-      </button>
-      <button
-        type="button"
-        className="wb-shell-palette-add wb-shell-module-action"
-        aria-label={`${props.module.name} 삭제`}
-        title={`${props.module.name} 삭제`}
-        onClick={() => setMode('deleting')}
-      >
-        {shellIcon('remove', 14)}
-      </button>
+      {props.writable && (
+        <>
+          <button
+            type="button"
+            className="wb-shell-palette-add wb-shell-module-action"
+            aria-label={`${module.name} 이름 바꾸기`}
+            title={`${module.name} 이름 바꾸기`}
+            onClick={() => {
+              setName(module.name)
+              setMode('renaming')
+            }}
+          >
+            {shellIcon('rename', 14)}
+          </button>
+          <button
+            type="button"
+            className="wb-shell-palette-add wb-shell-module-action"
+            aria-label={`${module.name} 삭제`}
+            title={`${module.name} 삭제`}
+            onClick={() => setMode('deleting')}
+          >
+            {shellIcon('remove', 14)}
+          </button>
+        </>
+      )}
+      {props.copyable && (
+        <button
+          type="button"
+          className="wb-shell-palette-add wb-shell-module-action"
+          aria-label={copyLabel}
+          title={copyLabel}
+          disabled={pending}
+          onClick={copy}
+        >
+          {shellIcon('copyModule', 14)}
+        </button>
+      )}
     </>
   )
 }

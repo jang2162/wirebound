@@ -20,6 +20,7 @@ import type {
   PageImported,
   PatchResult,
   ProjectDetail,
+  PersonalModule,
   ProjectModule,
   ProjectThemeView,
   ProjectView,
@@ -433,8 +434,7 @@ export interface ApiClient {
    * `viewer`도 읽는다 — 막는 것은 생성 하나다(「권한 모델」).
    */
   /**
-   * **이 프로젝트의 모듈 전부** — 최근 것이 먼저다(서버의 계약 — 여기서 다시 정렬하지 않는다). 내장 «기본 모듈»은 없다(`BUILTIN_MODULES` 를 화면이
-   * 직접 읽는다). viewer 도 읽는다.
+   * **이 프로젝트의 모듈 전부** — 최근 것이 먼저다(서버의 계약 — 여기서 다시 정렬하지 않는다). 개인 모듈은 없다(`listMyModules`). viewer 도 읽는다.
    */
   listModules(projectId: string, options?: ReadOptions): Promise<ProjectModule[]>
   /** 모듈 하나 — 넣기 직전에 다시 읽는다. 남이 지웠으면 404(«이 모듈은 지워졌습니다»). */
@@ -448,6 +448,19 @@ export interface ApiClient {
   renameModule(projectId: string, moduleId: string, body: { name: string }): Promise<ProjectModule>
   /** 지운다. 없으면 404. editor 이상. */
   deleteModule(projectId: string, moduleId: string): Promise<void>
+  /**
+   * **내 개인 모듈 전부**(`GET /api/me/modules`) — 프로젝트를 가리지 않는다. 최근 것이 먼저다. 응답 꼴은 프로젝트 모듈과 같다(`createdBy` 는 나).
+   * 세션으로만 부른다 · 역할과 무관하다(viewer 도 저장 · 이름 · 삭제한다).
+   */
+  listMyModules(options?: ReadOptions): Promise<PersonalModule[]>
+  /** 내 개인 모듈 하나 — 넣기 · 복사 직전에 다시 읽는다. 없거나(지웠다) 남의 것이면 404. */
+  getMyModule(moduleId: string, options?: ReadOptions): Promise<PersonalModule>
+  /** 개인 모듈로 남긴다 — 거름 · 한도 · 거절이 `createModule` 과 같다. */
+  createMyModule(body: { name: string; nodes: WbNode[] }): Promise<PersonalModule>
+  /** 이름만 바꾼다. 없으면 404. */
+  renameMyModule(moduleId: string, body: { name: string }): Promise<PersonalModule>
+  /** 지운다. 없으면 404. */
+  deleteMyModule(moduleId: string): Promise<void>
   listSnapshots(projectId: string): Promise<SnapshotSummary[]>
   /**
    * **지금 상태를 태그 하나로 얼린다.** 「권한 모델」이 **editor**에게 연 자리다 — 테마 고르기가

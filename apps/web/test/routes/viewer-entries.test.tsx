@@ -21,7 +21,7 @@ import { openDraftStore } from '../../src/panels/draft-store'
 import { openPage, pageDoc, PROJECT_ID, PROJECT_NAME, type EditorOptions, canvasQuery } from '../editor-harness'
 import { fakeRealtime, type FakeRealtime } from '../fake-realtime'
 import '../../src/catalog-setup'
-import { structureRowName } from '../panels/tree-row'
+import { rowReasons, structureRowName } from '../panels/tree-row'
 
 const VIEWER: ProjectView = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role: 'viewer', themeRev: 0 }
 const EDITOR: ProjectView = { ...VIEWER, role: 'editor' }
@@ -152,8 +152,11 @@ describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다 �
     expect(within(tree).getByRole('button', { name: '회원관리' }).getAttribute('aria-pressed')).toBe('true')
   })
 
-  /** 혼자 죽는 변조: 구조 트리가 줄 행동을 `editable`과 무관하게 그린다. */
-  it('구조 트리 — 노드는 고를 수 있고 줄 행동(`+` · `…` · 뿌리 `+`)이 없다(숨김)', async () => {
+  /**
+   * 혼자 죽는 변조: 구조 트리가 줄 행동을 `editable`과 무관하게 그린다. **«모듈로 저장…» 한 항목만 선다** — 내 개인 모듈로 남기는 쓰기라
+   * 문서를 안 바꾼다(설계 spec `2026-10-20-personal-modules-design.md` «편집할 수 없는 판의 입구»). 뿌리 줄에는 그것도 없다.
+   */
+  it('구조 트리 — 노드는 고를 수 있고 줄 행동은 «모듈로 저장…» 하나뿐이다(`+` · 뿌리 `+` 없음 · 뿌리 줄에는 아무것도 없다)', async () => {
     await openAsViewer(how)
     const structure = screen.getByRole('region', { name: '구조 트리' })
 
@@ -161,7 +164,15 @@ describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다 �
     expect((card as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(card)
     expect(card.getAttribute('aria-current')).toBe('true')
-    expect(structure.querySelectorAll('.wb-shell-tree-row-actions')).toHaveLength(0)
+    const cardRow = card.closest<HTMLElement>('[data-tree-row]')!
+    const rootRow = within(structure)
+      .getByRole('button', { name: structureRowName('Page') })
+      .closest<HTMLElement>('[data-tree-row]')!
+    expect({
+      card: rowReasons(structure, cardRow),
+      root: rootRow.querySelectorAll('.wb-shell-tree-row-actions').length,
+      add: within(structure).queryAllByRole('button', { name: / 추가$/ }).length,
+    }).toEqual({ card: { '모듈로 저장…': null }, root: 0, add: 0 })
     expect(within(structure).queryByRole('button', { name: '구조 트리에 추가' })).toBeNull()
   })
 

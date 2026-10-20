@@ -11,6 +11,8 @@
  *
  * - **HTTP** — 진짜 `createHttpClient`에 가짜 `fetch`를 문다. **`GET` 이 아닌 요청은 전부 쓰기**로 적고 서버처럼
  *   403 으로 답한다. 메서드 이름 표로 가르지 않으므로 `ApiClient`에 쓰기가 늘어도 이 자가 따로 안 낡는다.
+ *   **`/api/me/` 아래의 쓰기(개인 모듈)는 따로 적는다**(`personal`) — 설계서가 아니라 그 사람의 데이터라 viewer 도 낸다(설계 spec
+ *   `2026-10-20-personal-modules-design.md` «사용자가 정한 것» 6). 경로 머리로 가르므로 `/api/me/` 밖의 새 쓰기는 그대로 `http` 에 든다.
  * - **WS** — 가짜 소켓이 보낸 프레임을 적는다. **`ping` 이 아닌 프레임은 전부 쓰기**다(`patch` · `lock` · `unlock` —
  *   서버가 셋 다 editor 게이트로 받는다: `apps/api/src/ws/protocol.ts`의 `MIN_ROLE_FOR_FRAME`).
  *
@@ -172,6 +174,8 @@ function reads(role: ProjectRole): Record<string, unknown> {
     [`${project}/pages/${PAGE_ID}/comments`]: COMMENTS,
     [`${project}/pages/${OTHER_PAGE_ID}/comments`]: COMMENTS,
     [`${project}/modules`]: { modules: [] },
+    // 개인 모듈(`/api/me/modules`) — 하단 판은 넣을 수 없는 판에도 서서 이 목록을 읽는다.
+    '/api/me/modules': { modules: [] },
     [`${project}/snapshots`]: SNAPSHOTS,
     // 셸이 읽는 테마 바인딩 — 번들은 시험용 로더가 준다(`helpers.tsx`의 `bundleLoader`).
     [`${project}/theme`]: adminThemeView(),
@@ -227,6 +231,8 @@ interface Wire {
   frames: string[]
   /** 가짜가 모르는 `GET` — 조회가 비어 입구가 안 섰을 수 있다는 신호다. */
   unrouted: string[]
+  /** `METHOD 경로` — `/api/me/` 아래의 쓰기(개인 모듈). 프로젝트 쓰기가 아니다(머리말 «HTTP»). */
+  personal: string[]
 }
 
 /** 본문의 최상위 키 — 요청의 **값**을 읽는다(글자를 훑지 않는다). */
@@ -241,7 +247,7 @@ function bodyKeys(body: BodyInit | null | undefined): string[] {
 }
 
 function mount(role: ProjectRole, draftStore?: DraftStore): Wire {
-  const wire: Wire = { http: [], writes: [], frames: [], unrouted: [] }
+  const wire: Wire = { http: [], writes: [], frames: [], unrouted: [], personal: [] }
   const table = reads(role)
   const json = (status: number, body: unknown): Response =>
     new Response(body === undefined ? null : JSON.stringify(body), {
@@ -253,6 +259,10 @@ function mount(role: ProjectRole, draftStore?: DraftStore): Wire {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     const method = (init?.method ?? 'GET').toUpperCase()
     const path = url.split('?')[0] ?? url
+    if (method !== 'GET' && path.startsWith('/api/me/')) {
+      wire.personal.push(`${method} ${path}`)
+      return json(403, { code: 'forbidden', message: '이 작업을 수행할 권한이 없습니다' })
+    }
     if (method !== 'GET') {
       wire.http.push(`${method} ${path}`)
       wire.writes.push({ method, path, keys: bodyKeys(init?.body) })
@@ -397,7 +407,10 @@ function keyOf(el: Element): string {
   }
   const name = el.getAttribute('aria-label') ?? el.getAttribute('name') ?? el.id ?? ''
   const text = el.tagName === 'FORM' || el.getAttribute('role') === 'tabpanel' ? '' : (el.textContent ?? '').slice(0, 40)
-  return `${chain.join('<')}|${name}|${text}|${el.getAttribute('data-wb-id') ?? ''}`
+  // 라디오 · 체크박스는 값으로 가른다 — 한 무리의 라디오는 이름이 같고 글이 없어(이름은 감싼 `<label>` 이 준다) 값을 안 보면 첫 하나만 눌린다
+  // («모듈로 저장…» 의 «저장할 곳»).
+  const choice = el instanceof HTMLInputElement && (el.type === 'radio' || el.type === 'checkbox') ? el.value : ''
+  return `${chain.join('<')}|${name}|${text}|${el.getAttribute('data-wb-id') ?? ''}|${choice}`
 }
 
 async function activate(el: Element): Promise<void> {

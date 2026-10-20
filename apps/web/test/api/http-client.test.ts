@@ -498,6 +498,42 @@ const ENDPOINTS: Array<{
     body: null,
     call: (c) => c.deleteModule('p1', 'm1'),
   },
+  // **개인 모듈 다섯.** 프로젝트 밖(`/api/me`)에 산다 — 사람이 소유한다. 봉투 · 응답 꼴이 프로젝트 모듈과 같다.
+  {
+    client: 'listMyModules',
+    url: '/api/me/modules',
+    method: 'GET',
+    body: { modules: [projectModule] },
+    call: (c) => c.listMyModules(),
+  },
+  {
+    client: 'getMyModule',
+    url: '/api/me/modules/m1',
+    method: 'GET',
+    body: { module: projectModule },
+    call: (c) => c.getMyModule('m1'),
+  },
+  {
+    client: 'createMyModule',
+    url: '/api/me/modules',
+    method: 'POST',
+    body: { module: projectModule },
+    call: (c) => c.createMyModule({ name: '내 모듈', nodes: [{ id: 'a', type: 'List' }] }),
+  },
+  {
+    client: 'renameMyModule',
+    url: '/api/me/modules/m1',
+    method: 'PATCH',
+    body: { module: projectModule },
+    call: (c) => c.renameMyModule('m1', { name: '새 이름' }),
+  },
+  {
+    client: 'deleteMyModule',
+    url: '/api/me/modules/m1',
+    method: 'DELETE',
+    body: null,
+    call: (c) => c.deleteMyModule('m1'),
+  },
   // **복원은 `:snapshotId` 아래의 정적 세그먼트다** — `GET .../snapshots/:id`(상세)와
   // 한 칸 차이인데 그쪽은 `ApiClient`에 없다(payload를 읽는 것은 서버다).
   {
