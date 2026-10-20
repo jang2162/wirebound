@@ -265,7 +265,8 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
     ]
     const REVERSE = '[data-wb-id="n_row"]{flex-direction:row-reverse !important}'
     const THEMES = ['admin'] as const
-    const TRIALS = 3
+    // 판의 수(테마 × 줌 셋 × TRIALS)가 아래 카나리아 하한(시도 ≥ 40 · 미리보기 ≥ 25 …)을 넘게 둔다 — 테마가 하나라 줌마다 열다섯.
+    const TRIALS = 15
 
     function locate(root: Doc, id: string): { parent: Doc | null; index: number } | null {
       const visit = (node: Doc, parent: Doc | null, index: number): { parent: Doc | null; index: number } | null => {
