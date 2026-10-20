@@ -178,6 +178,33 @@ describe('«테마» 절 — 목록', () => {
     expect(select('버전').value).toBe('1.0.0')
   })
 
+  it('판이 다 숨은 테마는 테마 칸에 안 선다(관리자 응답) — 고를 판이 없다', async () => {
+    const ghost: ThemePackageSummary = {
+      themeId: 'ghost',
+      name: '유령',
+      description: null,
+      latest: null,
+      versions: [version('ghost', '1.0.0', true)],
+    }
+    renderTheme('owner', { listThemePackages: async () => [...ADMIN_PACKAGES, ghost] })
+    await ready()
+    await waitFor(() => expect(options('버전')).toEqual(['0.2.0', '0.1.0 (지금 · 숨김)']))
+    expect(options('테마')).toEqual(['Acme', '관리자'])
+  })
+
+  it('지금 테마는 판이 다 숨었어도 테마 칸에 선다 — 지금 판만 고를 수 있다', async () => {
+    const hiddenOnly: ThemePackageSummary = {
+      ...ADMIN_PACKAGES[1]!,
+      latest: null,
+      versions: [version('system-admin', '0.2.0', true), version('system-admin', '0.1.0', true)],
+    }
+    renderTheme('owner', { listThemePackages: async () => [ADMIN_PACKAGES[0]!, hiddenOnly] })
+    await ready()
+    await waitFor(() => expect(options('버전')).toEqual(['0.2.0 (숨김) [off]', '0.1.0 (지금 · 숨김)']))
+    expect(options('테마')).toEqual(['Acme', '관리자'])
+    expect(select('테마').value).toBe('system-admin')
+  })
+
   it('지금 고정한 판이 목록에 없으면(비관리자 · 숨긴 판) 그 판을 지금 값으로 넣는다', async () => {
     renderTheme('owner', { listThemePackages: async () => [PACKAGES[0]!] })
     await ready()
