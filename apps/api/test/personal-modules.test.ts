@@ -148,7 +148,10 @@ describe('저장 · 목록 · 하나 · 이름 · 삭제 — 내 것', () => {
         nul: await post({ name: `이${NUL}름`, nodes: [BUTTON] }),
         page: [
           page.statusCode,
-          (page.json() as { error: { issues: { code: string; path: string }[] } }).error.issues.map((issue) => [issue.code, issue.path]),
+          ((page.json() as { error?: { issues?: { code: string; path: string }[] } }).error?.issues ?? []).map((issue) => [
+            issue.code,
+            issue.path,
+          ]),
         ],
       }).toEqual({ empty: 400, long: 400, max: 201, none: 400, extra: 400, nul: 400, page: [422, [['nested-page', '/nodes/0']]] })
       const first = (await mine(ctx, alice))[0]!

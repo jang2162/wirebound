@@ -450,7 +450,8 @@ describe.skipIf(!전제.ok)('하단 판 «모듈» 탭 — 실브라우저', () 
         async () => ((await call('GET', target.P)).body.schema.root.children as { type: string; children?: unknown[] }[]).slice(3),
         (v) => v.length > 0,
       )
-      const notice = await page.locator('.wb-shell-info-notice').textContent()
+      // 기다리지 않고 읽는다 — 뺀 것이 없으면 통지 칸이 안 서서, 기다리면 값이 아니라 시간 초과로 죽는다.
+      const notice = (await page.locator('.wb-shell-info-notice').allTextContents()).join('')
       const actions = ((placed[0]?.children ?? []) as { interactions?: { actions: unknown[] }[] }[]).map((child) =>
         (child.interactions ?? []).flatMap((interaction) => interaction.actions),
       )
