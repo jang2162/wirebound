@@ -9,7 +9,7 @@
  * | 빈 카드 안 · 형제 앞 · 되돌리기 | 서버 문서에서 그 자리가 아니다 · 되돌리기 뒤 원래 문서가 아니다 |
  * | 클릭만 | 편집이 나간다 · 고른 노드가 풀린다 |
  * | 끄는 중 남이 대상을 잡음 · 지움 | 포인터가 멈춘 채 표시가 남는다 · 조금 움직였다 놓으면 편집이 나간다(지운 자리 밑의 바탕 = 페이지 끝으로) |
- * | 시스템 테마 다섯의 가로 배치 | `Grid` 칸의 왼 · 오른쪽이 문서의 앞 · 뒤가 아니다 · 표시가 세로 선이 아니다 · 검색폼 필드 줄의 축이 표와 다르다 |
+ * | 시스템 테마의 가로 배치 | `Grid` 칸의 왼 · 오른쪽이 문서의 앞 · 뒤가 아니다 · 표시가 세로 선이 아니다 · 검색폼 필드 줄의 축이 표와 다르다 |
  * | 줌 0.5 · 1 · 1.5 · 스크롤한 칸 | 미리보기가 포인터 밑 노드의 자식 · 바로 뒤 형제로 안 서거나 그 노드 안 · 아래에 안 그려진다 |
  * | 끄는 중 페이지 옮김 | 표시가 남는다 · 놓으면 편집이 나간다 |
  * | 트리 영역을 지나 캔버스로 돌아옴 · 트리 줄 위에 놓음 | 트리 위에서 선이 안 서거나 캔버스에 같은 미리보기가 안 선다 · 돌아와 놓은 자리 · 트리 줄에 놓은 자리가 서버 문서와 다르다 |
@@ -342,18 +342,18 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
   })
 
   /**
-   * **시스템 테마 다섯의 가로 배치.** 노드를 자식으로 담아 가로로 늘어놓는 상자(테마 소스에서 센 것):
+   * **시스템 테마의 가로 배치.** 노드를 자식으로 담아 가로로 늘어놓는 상자(테마 소스에서 센 것):
    *
    * | 테마 | `Flex`(`direction` 기본 `row` · `wrap`) | `Grid`(`columns` ≥ 2) | `SearchForm` 필드 줄 |
    * |---|---|---|---|
-   * | 다섯 다 | SDK 기본 뷰 `display: flex` · `flex-direction`(기본 `row`) — 테마 CSS 는 `gap` 만 준다 | SDK 기본 뷰 `display: grid` — 테마 CSS 는 `gap` 만 준다 | 테마 CSS 가 `[data-wb-part="fields"]` 를 `display: flex`(row) 로 둔다 |
+   * | system-admin | SDK 기본 뷰 `display: flex` · `flex-direction`(기본 `row`) — 테마 CSS 는 `gap` 만 준다 | SDK 기본 뷰 `display: grid` — 테마 CSS 는 `gap` 만 준다 | 테마 CSS 가 `[data-wb-part="fields"]` 를 `display: flex`(row) 로 둔다 |
    *
    * (다시 세는 법: `grep -rn "componentRule('Flex'" packages/theme-sdk/src` · `grep -En 'data-wb-component="(Flex|Grid|SearchForm)"' system-themes/*\/src/theme.css`
    * 와 `ls system-themes/*\/src/views` — `Flex` · `Grid` 뷰를 덮는 테마가 없다.) 이 판은 `Grid` · `SearchForm` 을 싣는다 — `Flex` 의 가로
-   * 무리는 `./canvas-drop-review.test.ts` 의 오라클 판(줄바꿈된 가로 `Flex` · 가로 안의 세로)이 잰다. `row-reverse` 로 노드를 늘어놓는 상자는 다섯 다 없다 — 뒤집힘은 순수 함수 판(`test/canvas/canvas-drop.test.ts`)과 리뷰의 오라클 판(덧입힌
+   * 무리는 `./canvas-drop-review.test.ts` 의 오라클 판(줄바꿈된 가로 `Flex` · 가로 안의 세로)이 잰다. `row-reverse` 로 노드를 늘어놓는 상자는 system-admin 에 없다 — 뒤집힘은 순수 함수 판(`test/canvas/canvas-drop.test.ts`)과 리뷰의 오라클 판(덧입힌
    * `row-reverse`)이 잰다.
    */
-  const THEMES = ['admin', 'commerce', 'docs', 'portal', 'saas-marketing'] as const
+  const THEMES = ['admin'] as const
   const ROW: SeedNode[] = [
     { id: 'n_move', type: 'Text', props: { content: '옮길 글' } },
     {

@@ -1,5 +1,5 @@
 /**
- * **노드 몫(`WbNode.weight`)이 시스템 테마 다섯에서 실제로 폭을 나누는가** — 실브라우저 판(내보낸 번들 · 문서 폭 1280). 몫을 싣는 길(렌더러가
+ * **노드 몫(`WbNode.weight`)이 시스템 테마에서 실제로 폭을 나누는가** — 실브라우저 판(내보낸 번들 · 문서 폭 1280). 몫을 싣는 길(렌더러가
  * 부모를 보고 정한 값 → `Root` 의 `--wb-node-weight`)은 jsdom(`packages/renderer/test/weight.test.tsx` · `packages/theme-sdk/test/root-weight.test.tsx`)
  * 이 잰다. 여기서는 그 값을 SDK 기본 CSS(`structureCssBlocks` 의 몫 규칙 셋)가 읽어 **상자가 바뀌는지**를 잰다.
  *
@@ -32,7 +32,7 @@ if (!전제.ok) {
   console.log(`[에디터 실브라우저 판] 건너뛴다 — ${전제.reason}`)
 }
 
-const THEMES = ['system-admin', 'system-commerce', 'system-docs', 'system-portal', 'system-saas-marketing'] as const
+const THEMES = ['system-admin'] as const
 const SHOTS = process.env.WB_LAYOUT_WEIGHT_SHOTS
 
 const text = (id: string, content: string, weight?: number) => ({
@@ -143,7 +143,7 @@ async function measure(page: Page, nodes: readonly unknown[]): Promise<Record<st
   return m as Record<string, Box>
 }
 
-describe.skipIf(!전제.ok)('시스템 테마 다섯 — 노드 몫이 폭을 나눈다', () => {
+describe.skipIf(!전제.ok)('시스템 테마 — 노드 몫이 폭을 나눈다', () => {
   let stack: EditorStack
   let alice: Session
   let call: Call

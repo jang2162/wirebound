@@ -2,7 +2,8 @@
  * **시스템 테마를 기동 때 넣고, 테마가 비어 있는 프로젝트를 채운다**(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md`
  * 「시스템 테마」). `buildApp` 이 라우트보다 먼저 부른다 — 운영 · 개발 서버 · 테스트 앱이 같은 길을 탄다.
  *
- * 저장소 빌드(`pnpm build`)가 `system-themes/<이름>/dist/<id>-<version>.wbtheme` 를 낸다. 여기서는 그 파일들 가운데 **DB 에 없는
+ * 저장소 빌드(`pnpm build`)가 `system-themes/<이름>/dist/<id>-<version>.wbtheme` 를 낸다. 여기서는 `package.json` 이 있는 테마 디렉터리의
+ * 그 파일들 가운데 **DB 에 없는
  * `id@version` 만** 넣는다(`uploaded_by` 없음). 있는 판은 건드리지 않는다.
  *
  * **기동을 멈추는 갈래 셋** — 셋 다 조용히 넘기면 화면이 뒤늦게 틀린다:
@@ -40,11 +41,15 @@ export class SystemThemeError extends Error {
   }
 }
 
-/** `dir/*\/dist/*.wbtheme` — 경로 차례로. */
+/**
+ * `dir/*\/dist/*.wbtheme` — 경로 차례로. **`package.json` 이 있는 테마 디렉터리만 본다** — 저장소에서 걷은 테마는 체크아웃에 무시된
+ * `dist` 가 남는다(`git pull` 은 추적하는 파일만 지운다). 그것을 읽으면 걷은 테마가 새 DB 에 숨김 없이 다시 들어온다.
+ */
 function findArtifacts(dir: string): string[] {
   if (!existsSync(dir)) return []
   const found: string[] = []
   for (const theme of readdirSync(dir).sort()) {
+    if (!existsSync(join(dir, theme, 'package.json'))) continue
     const dist = join(dir, theme, 'dist')
     if (!existsSync(dist) || !statSync(dist).isDirectory()) continue
     for (const file of readdirSync(dist).sort()) {

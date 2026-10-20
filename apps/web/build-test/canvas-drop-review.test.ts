@@ -218,8 +218,8 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
   describe('무작위 끌기 — 오라클', () => {
     /**
      * 가로 배치를 고루 싣는다: 줄바꿈된 flex(`n_flex`) · 그리드 둘째 줄 첫 칸(`n_g3`) · 가로 안의 세로(`n_row` > `n_rcol`) · 검색폼 필드 줄.
-     * `n_row` 는 iframe 에 `row-reverse` 를 덧입혀 뒤집힌 배치를 세운다 — 시스템 테마 다섯에는 노드를 늘어놓는 `row-reverse` 상자가 없다
-     * (`./canvas-drop.test.ts` 의 «시스템 테마 다섯의 가로 배치» 머리말).
+     * `n_row` 는 iframe 에 `row-reverse` 를 덧입혀 뒤집힌 배치를 세운다 — 시스템 테마에는 노드를 늘어놓는 `row-reverse` 상자가 없다
+     * (`./canvas-drop.test.ts` 의 «시스템 테마의 가로 배치» 머리말).
      */
     const DOC: SeedNode[] = [
       text('n_a', '첫 글'),
@@ -264,7 +264,7 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       ...Array.from({ length: 6 }, (_, i) => text(`n_z${i}`, `끝 글 ${i}`)),
     ]
     const REVERSE = '[data-wb-id="n_row"]{flex-direction:row-reverse !important}'
-    const THEMES = ['admin', 'commerce', 'docs', 'portal', 'saas-marketing'] as const
+    const THEMES = ['admin'] as const
     const TRIALS = 3
 
     function locate(root: Doc, id: string): { parent: Doc | null; index: number } | null {
@@ -293,7 +293,7 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       return prevOk && nextOk
     }
 
-    it('다섯 테마 × 줌 셋 · 칸을 민 판 · 뒤집힌 가로 무리에서 뗀 순간의 미리보기가 선 자리가 서버 문서의 자리다', async () => {
+    it('시스템 테마 × 줌 셋 · 칸을 민 판 · 뒤집힌 가로 무리에서 뗀 순간의 미리보기가 선 자리가 서버 문서의 자리다', async () => {
       const rand = seeded(7)
       const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!
       const wrong: unknown[] = []
@@ -920,7 +920,7 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
     /**
      * 기록 — `order` 는 안 읽는다. n_r0 가 `order: 2` 라 보이는 차례는 n_r1 · n_r2 · n_r0 이다. 보이는 맨 끝(n_r0)의 오른쪽 절반은 «n_r0 뒤»
      * 로 읽혀 DOM 이웃 `n_r0→n_r1` 사이에 서는데, 새 노드는 `order: 0` 이라 그 자리가 **보이는 맨 앞**이다 — 포인터(맨 끝)와 미리보기(맨 앞)가 갈린다.
-     * 고치지 않는다: 놓을 노드의 `order` 를 정할 수 없어(문서 스키마에 `order` 가 없다) DOM 앞 · 뒤가 보이는 자리의 뜻을 못 갖는다. 시스템 테마 다섯의
+     * 고치지 않는다: 놓을 노드의 `order` 를 정할 수 없어(문서 스키마에 `order` 가 없다) DOM 앞 · 뒤가 보이는 자리의 뜻을 못 갖는다. 시스템 테마의
      * 노드 상자에 `order` 규칙이 없다(`src/canvas/canvas-drop.ts` 머리말).
      */
     it('기록 — order 는 안 읽는다: 보이는 맨 끝의 오른쪽 절반이 «보이는 맨 앞» 에 미리보기를 세운다', async () => {

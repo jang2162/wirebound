@@ -4,11 +4,11 @@
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 시스템 테마 다섯 — 줌 0.5 · 1 · 1.5 · 칸 스크롤 · 뷰포트 폭 | 선의 네 변이 노드 상자(외곽선과 같은 `data-wb-focus` 상자)에서 1px 넘게 어긋난다 · Flex 가로 · 세로 · Grid 3열의 모서리 글이 «→ · ↓ · 3열»이 아니다(창 1440 · 뷰포트 1440) |
+ * | 시스템 테마 — 줌 0.5 · 1 · 1.5 · 칸 스크롤 · 뷰포트 폭 | 선의 네 변이 노드 상자(외곽선과 같은 `data-wb-focus` 상자)에서 1px 넘게 어긋난다 · Flex 가로 · 세로 · Grid 3열의 모서리 글이 «→ · ↓ · 3열»이 아니다(창 1440 · 뷰포트 1440) |
  * | 남의 편집 | 남이 형제 차례를 바꾼 뒤(문서 높이 그대로 — iframe 이 다시 안 잼) 선이 옛 상자에 남는다 · 남이 Flex 를 세로로 바꾼 뒤 그 선의 글이 «↓»가 아니다 |
  * | 미리보기 끌기 | 끄는 동안 미리보기 노드(`wb:preview:`)에 선이 선다 · 밀린 형제의 선이 옛 자리에 남는다 |
  * | 뷰 모드 · 새로 고침 | 뷰 모드에 단추 · 선이 남는다 · 새로 고친 뒤 켬을 잃는다 |
- * | 안쪽 선 — 시스템 테마 다섯 · 관리 테마 간격 0 × 줌 0.5 · 1 · 1.5 · 칸 스크롤 · 뷰포트 375 · 남의 편집 | Grid 2×3 · 3×2 · 빈 칸이 있는 3열 · Flex 가로 · 세로 · 줄바꿈 · 자식 하나의 선 수가 기대와 다르다 · 선이 이웃 자식 사이 간격의 가운데에서 1px 넘게 어긋난다 · 남이 자식을 지운 뒤 옛 선이 남는다 · 맞닿은 칸(간격 0)을 한 열로 잇는다 |
+ * | 안쪽 선 — 시스템 테마 · 관리 테마 간격 0 × 줌 0.5 · 1 · 1.5 · 칸 스크롤 · 뷰포트 375 · 남의 편집 | Grid 2×3 · 3×2 · 빈 칸이 있는 3열 · Flex 가로 · 세로 · 줄바꿈 · 자식 하나의 선 수가 기대와 다르다 · 선이 이웃 자식 사이 간격의 가운데에서 1px 넘게 어긋난다 · 남이 자식을 지운 뒤 옛 선이 남는다 · 맞닿은 칸(간격 0)을 한 열로 잇는다 |
  * | 미리보기 끌기 — 안쪽 선 | Flex 안에 선 미리보기를 자식으로 세어 선을 하나 더 긋는다 |
  * | 자식 수백 | 자식 200 의 Grid(10열)에 세로 9 · 가로 19 가 아니다 — 비용(판정 하나 · 줌 한 단계)은 `[다시 잼]` 로그 |
  *
@@ -29,7 +29,7 @@ if (!전제.ok) {
   console.log(`[에디터 실브라우저 판] 건너뛴다 — ${전제.reason}`)
 }
 
-const THEMES = ['system-admin', 'system-commerce', 'system-docs', 'system-portal', 'system-saas-marketing'] as const
+const THEMES = ['system-admin'] as const
 
 const text = (id: string, content: string) => ({ id, type: 'Text', props: { content } })
 
@@ -237,7 +237,7 @@ describe.skipIf(!전제.ok)('배치 선 — 실브라우저', () => {
       const at05 = await guides(page)
       await zoomTo(page, 4)
       const at15 = await guides(page)
-      // 칸 스크롤은 줌 1.5 에서 — 문서가 짧은 테마(portal)도 칸보다 길어진다.
+      // 칸 스크롤은 줌 1.5 에서 — 그 줌이면 문서가 칸보다 길어진다.
       await page.evaluate(() => {
         const canvas = document.querySelector('main.wb-shell-canvas') as HTMLElement
         canvas.scrollTop = 400

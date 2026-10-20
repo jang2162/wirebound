@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 /**
- * 저장소 빌드가 낸 `theme.js` 를 공유 런타임으로 싣고 뷰가 제 DOM 을 내는지 본다 — 까닭 · 꼴은 `system-themes/portal/build-test/bundle-views.test.tsx`
- * 머리말. 조각 칸은 기본 뷰에 없는 `data-wb-part` 다 — `null` 이면 기본 뷰로 서는 곁의 variant 라 태그 · 구조만 본다.
+ * 저장소 빌드가 낸 `theme.js` 를 공유 런타임으로 싣고 뷰가 제 DOM 을 내는지 본다. 소스 케이스(`test/views.test.tsx`)는 SDK 를 모듈로
+ * 가져오고, 번들은 그 import 가 `__wirebound_runtime__` 의 속성으로 바뀌어 있다 — 런타임이 늦게 서거나 이름이 어긋나면 이 판에서만 드러난다.
+ * `checkTheme`(`wbtheme.test.ts`)는 오류가 없는지만 본다 — 번들의 뷰가 기본 뷰로 대신 그려져도 오류는 0 이다. 조각 칸은 기본 뷰에 없는
+ * `data-wb-part` 다 — `null` 이면 기본 뷰로 서는 곁의 variant 라 태그 · 구조만 본다.
  *
  * 관리자 화면은 뷰를 내지 않는다 — 아래 칸은 번들을 실은 판에서 SDK 기본 뷰가 props 로 내는 조각(`checkbox` · `skeleton` · `filler`)을 본다.
  */

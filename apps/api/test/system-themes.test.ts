@@ -34,7 +34,7 @@ const REPO_SYSTEM_THEMES = testConfig().systemThemesDir
 const ADMIN_KEY = `${SYSTEM_ADMIN.id}@${SYSTEM_ADMIN.version}`
 const ADMIN_ARTIFACT = join(REPO_SYSTEM_THEMES, 'admin', 'dist', `${SYSTEM_ADMIN.id}-${SYSTEM_ADMIN.version}.wbtheme`)
 /** 저장소가 내는 시스템 테마 — 디렉터리 차례(시딩이 도는 차례)다. 판은 테마마다 제 디렉터리에서 올리므로 여기서는 id 만 적는다. */
-const REPO_THEME_IDS = ['system-admin', 'system-commerce', 'system-docs', 'system-portal', 'system-saas-marketing']
+const REPO_THEME_IDS = ['system-admin']
 const idOf = (key: string) => key.slice(0, key.lastIndexOf('@'))
 
 let admin: DbHandle
@@ -68,7 +68,7 @@ function manifest(id: string, version: string, sdk = '^1.0.0'): ThemeManifest {
   return { id, name: id, version, sdk, tokens: { items: {} } } as ThemeManifest
 }
 
-/** 임시 디렉터리에 `<id>/dist/<id>-<version>.wbtheme` 를 쓴다. `body` 가 다르면 바이트가 다르다. */
+/** 임시 디렉터리에 `<id>/package.json` 과 `<id>/dist/<id>-<version>.wbtheme` 를 쓴다. `body` 가 다르면 바이트가 다르다. */
 function artifactDir(entries: { manifest: ThemeManifest; body?: string }[]): string {
   const dir = mkdtempSync(join(tmpdir(), 'wb-system-themes-'))
   scratch.push(dir)
@@ -76,10 +76,12 @@ function artifactDir(entries: { manifest: ThemeManifest; body?: string }[]): str
   return dir
 }
 
-function writeArtifacts(dir: string, entries: { manifest: ThemeManifest; body?: string }[]): void {
-  for (const { manifest: m, body } of entries) {
+/** `withPackage` 가 거짓이면 `package.json` 을 안 쓴다 — 저장소에서 걷은 테마의 남은 `dist` 꼴이다. */
+function writeArtifacts(dir: string, entries: { manifest: ThemeManifest; body?: string; withPackage?: false }[]): void {
+  for (const { manifest: m, body, withPackage } of entries) {
     const dist = join(dir, m.id, 'dist')
     mkdirSync(dist, { recursive: true })
+    if (withPackage !== false) writeFileSync(join(dir, m.id, 'package.json'), '{}')
     writeFileSync(join(dist, `${m.id}-${m.version}.wbtheme`), packWbtheme({ manifest: m, themeJs: body ?? ';' }))
   }
 }
@@ -87,7 +89,7 @@ function writeArtifacts(dir: string, entries: { manifest: ThemeManifest; body?: 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 
 describe('seedSystemThemes', () => {
-  it('빈 표에 저장소의 시스템 테마 다섯을 넣는다 — system-admin 은 올린 사람 없음 · sha256 이 산출물과 같다', async () => {
+  it('빈 표에 저장소의 시스템 테마(system-admin 하나)를 넣는다 — 올린 사람 없음 · sha256 이 산출물과 같다', async () => {
     const outcome = await seedSystemThemes(db, REPO_SYSTEM_THEMES)
     expect(outcome.inserted.map(idOf)).toEqual(REPO_THEME_IDS)
     expect(outcome.inserted).toContain(ADMIN_KEY)
@@ -132,6 +134,13 @@ describe('seedSystemThemes', () => {
     await expect(seedSystemThemes(db, dir)).rejects.toThrow(
       `호스트 SDK ${SDK_VERSION} 과 맞지 않습니다: system-future@1.0.0 의 sdk 는 ^2.0.0`,
     )
+  })
+
+  it('package.json 이 없는 디렉터리의 산출물은 안 넣는다 — 저장소에서 걷은 테마가 체크아웃에 남긴 dist', async () => {
+    const dir = artifactDir([{ manifest: manifest('system-kept', '1.0.0') }])
+    writeArtifacts(dir, [{ manifest: manifest('system-retired', '1.0.0'), withPackage: false }])
+    expect(await seedSystemThemes(db, dir)).toEqual({ inserted: ['system-kept@1.0.0'], kept: [] })
+    expect((await db.selectFrom('theme_packages').select('theme_id').execute()).map((row) => row.theme_id)).toEqual(['system-kept'])
   })
 
   it('산출물이 하나도 없으면 던지고 `pnpm build` 를 말한다', async () => {
@@ -199,7 +208,7 @@ describe('listThemePackages', () => {
 })
 
 describe('기동', () => {
-  it('buildApp 이 다섯을 시딩하고 새 프로젝트가 system-admin 의 지금 판에 고정된다', async () => {
+  it('buildApp 이 저장소의 시스템 테마를 시딩하고 새 프로젝트가 system-admin 의 지금 판에 고정된다', async () => {
     const app = await buildApp({ db, config: { ...testConfig(), databaseUrl: url } })
     try {
       expect((await db.selectFrom('theme_packages').select('theme_id').orderBy('theme_id').execute()).map((row) => row.theme_id)).toEqual(

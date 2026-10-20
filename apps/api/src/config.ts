@@ -43,8 +43,8 @@ export interface ApiConfig {
    */
   exportRenderLimit: number
   /**
-   * 시스템 테마 산출물(`<이 디렉터리>/*\/dist/*.wbtheme`)을 찾는 곳 — 기동 시딩(`services/system-themes.ts`)이 읽는다. 기본은 저장소의
-   * `system-themes` 다(`DEFAULT_SYSTEM_THEMES_DIR`).
+   * 시스템 테마 산출물(`<이 디렉터리>/*\/dist/*.wbtheme` — `package.json` 이 있는 테마 디렉터리만)을 찾는 곳 — 기동 시딩
+   * (`services/system-themes.ts`)이 읽는다. 기본은 저장소의 `system-themes` 다(`DEFAULT_SYSTEM_THEMES_DIR`).
    */
   systemThemesDir: string
   /** 관리자가 내려받는 스타터 템플릿 zip(`routes/admin-themes.ts`). 기본은 kit 이 짓는 자리다(`DEFAULT_THEME_TEMPLATE_ZIP`). */

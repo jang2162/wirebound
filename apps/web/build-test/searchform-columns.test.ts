@@ -1,5 +1,5 @@
 /**
- * **조회 폼의 열(`SearchForm.columns`)이 시스템 테마 다섯에서 필드를 같은 폭 칸으로 까는가** — 실브라우저 판(내보낸 번들). 열을 정한 판의 표지
+ * **조회 폼의 열(`SearchForm.columns`)이 시스템 테마에서 필드를 같은 폭 칸으로 까는가** — 실브라우저 판(내보낸 번들). 열을 정한 판의 표지
  * (`fields` 조각의 `data-wb-columns` · `--wb-node-searchform-columns`)와 필드 몫의 자르기는 jsdom(`packages/renderer/test/weight.test.tsx`)이 잰다.
  * 여기서는 테마 CSS 가 그 표지를 읽어 **상자가 바뀌는지**를 잰다.
  *
@@ -7,7 +7,7 @@
  * |---|---|---|
  * | 3열 | 문서 폭 1280 · `columns: 3` · 필드 여섯 | 줄 둘 · 줄마다 셋 · 칸 폭 같음(± 2px) |
  * | 몫 | 문서 폭 1280 · `columns: 3` · 첫 필드 몫 2 | 그 칸 폭 = 칸 둘 + 틈 하나(± 2px) |
- * | 좁은 창 | 창 390 · 화면 모드(`#wb-screen` — 문서 폭 = 창 폭)(테마마다의 좁은 창 문턱 아래 — admin · docs · portal · saas 640 · commerce 480) | 필드 여섯이 여섯 줄 · 몫 2 인 칸도 한 칸 폭 |
+ * | 좁은 창 | 창 390 · 화면 모드(`#wb-screen` — 문서 폭 = 창 폭)(system-admin 의 좁은 창 문턱 640 아래) | 필드 여섯이 여섯 줄 · 몫 2 인 칸도 한 칸 폭 |
  * | 열 없음 | 문서 폭 1280 · `columns` 없음 | `data-wb-columns` 규칙을 걷은 `views.css` · `theme.css` 판과 노드 상자가 같다(고치기 전 = 그 규칙이 없던 판 — 열이 없으면 DOM 은 그대로다) |
  *
  * **«열 없음» 의 고치기 전 판은 `data-wb-columns` 를 품은 규칙을 걷어 세운다** — 그래서 표지 없이 거는 새 규칙(셀렉터에서 `[data-wb-columns]` 를 뺀
@@ -30,7 +30,7 @@ if (!전제.ok) {
   console.log(`[에디터 실브라우저 판] 건너뛴다 — ${전제.reason}`)
 }
 
-const THEMES = ['system-admin', 'system-commerce', 'system-docs', 'system-portal', 'system-saas-marketing'] as const
+const THEMES = ['system-admin'] as const
 const SHOTS = process.env.WB_SEARCHFORM_COLUMNS_SHOTS
 
 const field = (id: string, label: string, weight?: number) => ({
@@ -113,7 +113,7 @@ function rows(boxes: Box[]): number[] {
   return counts
 }
 
-describe.skipIf(!전제.ok)('시스템 테마 다섯 — 조회 폼의 열', () => {
+describe.skipIf(!전제.ok)('시스템 테마 — 조회 폼의 열', () => {
   let stack: EditorStack
   let alice: Session
   let call: Call

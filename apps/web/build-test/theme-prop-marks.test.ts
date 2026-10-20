@@ -1,5 +1,5 @@
 /**
- * **화면을 바꾸는 prop 이 시스템 테마 다섯에서 실제로 화면을 바꾸는가** — 실브라우저 판. 표지(`data-wb-<prop>`)와 상태의 접근성 속성이
+ * **화면을 바꾸는 prop 이 시스템 테마에서 실제로 화면을 바꾸는가** — 실브라우저 판. 표지(`data-wb-<prop>`)와 상태의 접근성 속성이
  * DOM 에 실리는지는 jsdom(`packages/renderer/test/prop-marks.test.tsx`)이 잰다. 여기서는 그 표지 · 상태를 테마 CSS 가 읽어 **상자가
  * 바뀌는지**를 켬/끔 두 노드를 나란히 두고 잰다.
  *
@@ -32,7 +32,7 @@ if (!전제.ok) {
   console.log(`[에디터 실브라우저 판] 건너뛴다 — ${전제.reason}`)
 }
 
-const THEMES = ['system-admin', 'system-commerce', 'system-docs', 'system-portal', 'system-saas-marketing'] as const
+const THEMES = ['system-admin'] as const
 const SHOTS = process.env.WB_PROP_MARKS_SHOTS
 
 const text = (id: string, content: string) => ({ id, type: 'Text', props: { content } })
@@ -162,7 +162,7 @@ type Call = (method: string, path: string, body?: unknown) => Promise<{ status: 
 
 const unpacked: string[] = []
 
-describe.skipIf(!전제.ok)('시스템 테마 다섯 — 화면을 바꾸는 prop 의 켬/끔', () => {
+describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 켬/끔', () => {
   let stack: EditorStack
   let alice: Session
   let call: Call
@@ -372,10 +372,9 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 화면을 바꾸는 pro
       // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
       const detail = `${themeId} ${JSON.stringify(rows)}`
       const tables = rows.filter((row) => row.structure === 'table')
-      // 카나리아 — variant 가 안 읽히면 아래는 아무것도 안 잰다. 표 구조를 갖는 테마는 하나 이상 읽혀야 하고, `system-commerce` 는 표 variant 가
-      // 없는 테마다(그 테마가 표를 더하면 이 줄이 알린다 — 그때 위 문장과 이 목록을 함께 고친다).
+      // 카나리아 — variant 가 안 읽히면 아래는 아무것도 안 잰다. system-admin 은 표 구조 variant 를 갖는다 — 하나 이상 읽혀야 한다.
       expect(rows.length, detail).toBeGreaterThan(0)
-      expect(tables.length > 0, detail).toBe(themeId !== 'system-commerce')
+      expect(tables.length, detail).toBeGreaterThan(0)
       for (const row of rows) {
         expect(row.mark, `${detail} — ${row.variant} 표지`).toBe(true)
         if (row.structure === 'table') {
@@ -394,7 +393,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 화면을 바꾸는 pro
   /**
    * **`Field` 의 필수 · 오류는 접근성 트리에 선다** — 역할 없는 `div` 루트에 단 `aria-required` 는 Chrome 의 접근성 트리가 버린다(`aria-invalid` 만
    * 남고 이름도 비어 있다). 기본 `Field` 뷰는 그 속성을 입력 종류별 역할과 이름을 단 `control` 조각에 둔다 — 그 조각이 이름이 있는
-   * `textbox` 로 서고 `required` · `invalid` 가 둘 다 읽히는지를 CDP 접근성 트리로 잰다. 시스템 테마 다섯은 `Field` 뷰가 없어 기본 뷰다.
+   * `textbox` 로 서고 `required` · `invalid` 가 둘 다 읽히는지를 CDP 접근성 트리로 잰다. 시스템 테마는 `Field` 뷰가 없어 기본 뷰다.
    */
   it.each(THEMES)(
     '%s — Field 의 필수 · 오류는 접근성 트리에 선다',

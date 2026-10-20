@@ -18,7 +18,7 @@ packages/renderer   스키마 → React 렌더링 — 노드마다 «테마 뷰 
 packages/themes     manifest 검증 · 토큰 CSS · .wbtheme 읽기 · 쓰기 · 패턴 규격 · 전개 · 스냅샷 payload 규격 · 설계 lint
 packages/theme-gallery 카탈로그 × variant 표본 갤러리(kit dev 가 그린다)
 packages/theme-kit  테마 작성 도구 wb-theme — dev · build · 스타터 템플릿(pack-template)
-system-themes/*     저장소 테마 다섯(admin · commerce · docs · portal · saas-marketing — id 는 system-<이름>) — pnpm build 가 .wbtheme 로 낸다 · api 가 기동 때 시딩한다 · 판마다 sha256 을 `system-themes/<이름>/checksums.json` 에 적는다(테마마다 제 표)
+system-themes/*     저장소 테마(admin 하나 — id 는 system-<이름> · 보이는 이름 «기본테마») — pnpm build 가 .wbtheme 로 낸다 · api 가 기동 때 시딩한다 · 판마다 sha256 을 `system-themes/<이름>/checksums.json` 에 적는다(테마마다 제 표)
 packages/exporter   HTML 정적 번들 · PPTX
 packages/cli        wireb
 packages/mcp        MCP 서버

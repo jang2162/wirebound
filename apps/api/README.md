@@ -64,9 +64,17 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 
 ### 시스템 테마 — 기동 때 넣는다
 
-저장소 빌드(`pnpm build`)가 `system-themes/<이름>/dist/<id>-<version>.wbtheme` 를 낸다. **api 는 기동할 때 그 파일들 가운데 DB 에 없는
-`id@version` 만 넣고**(올린 사람 없음), 테마가 빈 프로젝트를 `system-admin` 의 최신판으로 채운다(`src/services/system-themes.ts`). 테스트
-앱도 `buildApp` 으로 서므로 같은 길을 탄다. 찾는 곳은 `SYSTEM_THEMES_DIR`(비우면 저장소의 `system-themes`)이다.
+저장소 빌드(`pnpm build`)가 `system-themes/<이름>/dist/<id>-<version>.wbtheme` 를 낸다 — 지금 시스템 테마는 `system-admin`(보이는 이름
+«기본테마») 하나다. **api 는 기동할 때 그 파일들 가운데 DB 에 없는 `id@version` 만 넣고**(올린 사람 없음), 테마가 빈 프로젝트를
+`system-admin` 의 최신판으로 채운다(`src/services/system-themes.ts`). 테스트 앱도 `buildApp` 으로 서므로 같은 길을 탄다. 찾는 곳은
+`SYSTEM_THEMES_DIR`(비우면 저장소의 `system-themes`)이고, **`package.json` 이 있는 테마 디렉터리만** 읽는다 — 저장소에서 걷은 테마는
+체크아웃에 무시된 `dist` 를 남기는데(`git pull` 은 추적 파일만 지운다), 그것을 읽으면 걷은 테마가 새 DB 에 숨김 없이 다시 들어온다.
+
+**저장소가 더는 내지 않는 시스템 테마**(`system-commerce` · `system-docs` · `system-portal` · `system-saas-marketing`)는 패키지 행이 남고
+숨겨져 있다 — 행은 지우는 길이 없고, 그 판을 가리키는 판 3 스냅샷의 복원이 행에 기댄다(없으면 409 `missing-theme`). 마이그레이션
+`0027-retire-system-themes` 가 그것에 고정한 프로젝트를 `system-admin` 최신판으로 옮기고(토큰은 테마 바꾸기와 같게 잇고 `theme_rev` 를
+올린다) 넷의 판을 숨긴다. 옮기기 전 스냅샷을 복원하면 숨긴 그 판으로 돌아간다. `down` 은 되돌리지 않는다(옮기기 전 바인딩을 적어 두지
+않았다) — 되돌린 배포에서 넷을 다시 쓰려면 관리자가 테마 관리 화면에서 판을 되살린다.
 
 | 기동이 멈추는 갈래 | 문장 | 고치는 법 |
 |---|---|---|

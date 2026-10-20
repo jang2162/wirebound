@@ -14,7 +14,7 @@
  * | Enter 누른 채 | 키 반복마다 넣는다 — 누른 채 한 번이 넣기 여럿이 된다 |
  * | 누르는 사이 남이 지움 | bob 이 alice 의 고른 노드를 지우려 함 → 그 답 · 뒤의 누름이 엉뚱한 자리로 간다 |
  * | 축소판 좌표 | 판 폭 셋(창 1440 · 1024 · 800)과 카드 판을 가운데 · 끝까지 세로로 민 판에서 표본이 창 밖이다 · 표본 중심과 창 중심이 1px 넘게 어긋난다 · 민 판이 하나도 없다 |
- * | 축소판 — 남이 테마를 바꿈 | bob 이 프로젝트 테마를 `system-portal` 로 바꾼 뒤에도 축소판 단추가 옛 테마 색이다 |
+ * | 축소판 — 남이 테마를 바꿈 | bob 이 프로젝트 테마를 올린 테마(`primary-mark`)로 바꾼 뒤에도 축소판 단추가 옛 테마 색이다 |
  * | 축소판 — 입력 표본 `inert` | 입력 표본 자리를 눌러 iframe 이 포커스 · 클릭을 받는다 · 그 점의 맨 위가 그 카드가 아니다 |
  * | 판 열고 접기 | 뷰 모드 · 실시간 viewer 강등에 판이 남는다 · 돌아오면 기억대로 안 선다 · 페이지를 옮기면 판이 닫히거나 표본이 빈다 |
  * | 창 700 · 최대 판 · 통지 다섯 | 셸이 세로로 넘친다 · 하단 바가 창 밖이다 · 하단 바가 자라도 판이 안 줄어 캔버스 칸이 `CANVAS_MIN_HEIGHT` 아래다 · 통지를 걷어도 판이 안 돌아온다 |
@@ -29,7 +29,7 @@ import { GALLERY_SAMPLES } from '@wirebound/theme-gallery'
 import { placeableGroups } from '../src/palette/placeable'
 import { CANVAS_MIN_HEIGHT } from '../src/shell/sidebar-layout'
 import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
-import { controlsTheme, makeAdmin, putTheme, seededVersion, uploadRaw } from './theme-fixtures'
+import { controlsTheme, makeAdmin, PRIMARY_MARK_COLOR, primaryMarkTheme, putTheme, uploadRaw } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -695,10 +695,12 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       }
     })
 
-    it('bob 이 프로젝트 테마를 system-portal 로 바꾸면 alice 의 축소판도 그 테마로 선다', async () => {
+    // 시스템 테마가 system-admin 하나라 바꿀 곳으로 픽스처 테마(`./theme-fixtures.ts` 의 `primaryMarkTheme`)를 올린다.
+    it('bob 이 프로젝트 테마를 올린 테마로 바꾸면 alice 의 축소판도 그 테마로 선다', async () => {
+      await makeAdmin(stack, stack.users.alice)
+      expect(await uploadRaw(stack, alice, await primaryMarkTheme())).toBe(201)
       const { P, projectId } = await seed('rv-thumb-theme', [BASIC], 'owner')
-      const manifest = (await call('GET', `/theme-packages/system-portal/${seededVersion('system-portal')}/manifest`)).body
-      const portalPrimary = rgb(String(manifest.tokens.items['semantic.primary'].default))
+      const markPrimary = rgb(PRIMARY_MARK_COLOR)
       const { page, close } = await openEditor(P[0]!)
       try {
         await openPalette(page)
@@ -709,20 +711,20 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
           (v) => v !== '단추 없음',
         )
         const bobCall = (m: string, p: string, b?: unknown) => stack.request(bob, m, p, b)
-        await putTheme(bobCall, projectId, { themeId: 'system-portal', version: seededVersion('system-portal'), tokens: {} })
+        await putTheme(bobCall, projectId, { themeId: 'primary-mark', version: '1.0.0', tokens: {} })
         const after = await poll(
           '테마를 따라간다',
           async () => String(await page.evaluate(THUMB_BUTTON)),
-          (v) => v === portalPrimary,
+          (v) => v === markPrimary,
         ).catch(async () => String(await page.evaluate(THUMB_BUTTON)))
         const thumbs = await page.evaluate(CARD_THUMBS)
         expect({
-          changed: before !== portalPrimary,
+          changed: before !== markPrimary,
           after,
           thumbsInside: Object.values(thumbs as object).every((c: { inside: boolean }) => c.inside),
         }).toEqual({
           changed: true,
-          after: portalPrimary,
+          after: markPrimary,
           thumbsInside: true,
         })
       } finally {

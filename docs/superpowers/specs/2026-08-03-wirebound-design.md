@@ -102,8 +102,7 @@ packages/
   mcp        MCP 서버
 
 system-themes/
-  admin · commerce · docs · portal · saas-marketing
-             시스템 테마 다섯(id 는 system-<이름>) — 저장소 빌드가 `.wbtheme` 로 내고 api 가 기동 때 넣는다(§6)
+  admin      시스템 테마(id 는 system-<이름> · `system-admin` 하나 — 보이는 이름 «기본테마») — 저장소 빌드가 `.wbtheme` 로 내고 api 가 기동 때 넣는다(§6)
 ```
 
 ### 3.2 핵심 원칙
@@ -133,7 +132,7 @@ system-themes/
 | `exporter` | 정적 HTML 번들 · PPTX 생성 | `schema`, `renderer`, `theme-sdk`, `themes` |
 | `cli` | 터미널 명령, API 클라이언트 | `schema`, `themes` |
 | `mcp` | MCP 도구 정의 | `cli` |
-| `system-themes/*` | 시스템 테마 다섯의 소스(SDK 뷰 · manifest · `theme.css`) | `theme-sdk`(빌드는 `theme-kit`) |
+| `system-themes/*` | 시스템 테마의 소스(SDK 뷰 · manifest · `theme.css`) | `theme-sdk`(빌드는 `theme-kit`) |
 | `apps/api` | 인증, 권한, 영속성, revision, WebSocket, 시스템 테마 시딩 | `schema`, `theme-sdk`, `themes`, `exporter` |
 | `apps/web` | 에디터 UI, 실시간 동기화, undo 스택, 프로젝트 설정 · 테마 관리 화면 | `schema`, `renderer`, `theme-sdk`, `themes`, `theme-gallery` |
 
@@ -305,7 +304,7 @@ payload를 통째로 저장하는 이유는 복원 속도 때문이다. revision
 | 데이터 | `List` | 목록. 컬럼/아이템, 개수, 페이지네이션, 선택 |
 | | `Tree` | 계층 목록 |
 | | `KeyValue` | 키-값 뷰 (상세 화면용) |
-| 입력 | `SearchForm` | 검색 조건 필드 묶음 + 조회/초기화. `columns`(1 ~ 4 · 기본값 없음)를 정하면 필드를 그 수의 같은 폭 칸으로 깔고 필드의 몫(§4.3)이 칸 수다 — 안 정하면 테마마다의 지금 배치(필드가 옆으로 서고 넘치면 접힌다). 좁은 창에서는 열을 정했어도 한 줄에 필드 하나다(시스템 테마 다섯의 좁은 창 문턱 — admin · docs · portal · saas-marketing 640px · commerce 480px) |
+| 입력 | `SearchForm` | 검색 조건 필드 묶음 + 조회/초기화. `columns`(1 ~ 4 · 기본값 없음)를 정하면 필드를 그 수의 같은 폭 칸으로 깔고 필드의 몫(§4.3)이 칸 수다 — 안 정하면 테마마다의 지금 배치(필드가 옆으로 서고 넘치면 접힌다). 좁은 창에서는 열을 정했어도 한 줄에 필드 하나다(시스템 테마의 좁은 창 문턱 640px) |
 | | `EntryForm` | 등록/수정 폼. 라벨-필드 배치 규칙 |
 | | `Field` | 단일 입력요소 (text/number/select/date/dateRange/checkbox/radio/textarea/file) |
 | 액션 | `Button` | 버튼 |
@@ -366,12 +365,12 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 - **캔버스는 same-origin iframe 안에서 프로젝트가 고정한 `id@버전` 의 번들과 토큰으로 그린다.** iframe 문서는 표준 모드(`<!doctype html>`)로 선다 — 내보낸 번들 · PPTX 화면과 같은 레이아웃 규칙이라 같은 폭에서 노드 · 번호 마커가 같은 자리에 선다(quirks 모드면 폼 뒤 여백 · 줄 높이 셈이 갈린다). 번들(`theme.js`)은 에디터가 세션마다 하나 두는 숨은 적재 iframe 에 `<script>` 로 싣고 판마다 한 번만 싣는다. 캔버스 머리의 시트는 SDK 기본 뷰 CSS → 그 판의 `theme.css`(`<link>`) → 토큰 CSS 변수 차례다. 다른 사람이 테마 · 토큰을 저장하면 열린 캔버스가 `theme-changed` 로 새로고침 없이 따라가고(토큰만이면 변수만, 판이 바뀌면 번들을 다시 싣는다), 끊긴 동안 놓친 저장은 셸이 프로젝트를 다시 읽을 때의 `themeRev` 로 따라잡는다. 번들을 못 받으면(오류 · 등록 없음 · 10 초) SDK 기본 뷰로 그리고 셸 머리에 한 줄로 알리며 «다시 불러오기» 를 둔다.
 - **프로젝트 설정 페이지**(`/projects/:projectId/settings` — §9)가 테마를 고르고(고르개 밑의 인라인 확인에 토큰 이어짐 · 버려짐 · 기본값 수와 페이지별 없는 variant 수) 토큰을 고친다(manifest 선언에서 짓는 폼 + 갤러리 미리보기). 인스턴스 관리자는 **테마 관리** 화면(`/admin/themes`)에서 패키지를 올리고 판을 숨기고 스타터 템플릿을 받고 판마다 갤러리 미리보기를 본다 — 셸 밖 화면 머리 `…` 의 «테마 관리» 항목은 관리자에게만 있다(§9 «셸 밖의 화면»).
 - **서버는 테마 패키지를 받고 프로젝트가 그중 하나에 고정된다.** 인스턴스 관리자(§10)가 `.wbtheme` 를 올리고(`POST /api/admin/theme-packages` — 본문은 zip 바이트, 서버는 코드를 실행하지 않고 `readWbtheme` · manifest · SDK 범위 · `system-` 접두어 · 같은 `id@version` 을 본다) 버전을 숨기고 되살린다. 올린 패키지는 불변이고 지우는 길이 없다. 로그인한 사람은 목록 · manifest · 패키지 안의 파일을 읽는다(숨긴 버전은 목록에서 관리자에게만 보이고 파일은 누구에게나 나간다 — 고정한 프로젝트가 그려져야 한다). 한 테마의 «최신» 은 숨기지 않은 버전 가운데 semver 가 가장 큰 것이다.
-- **시스템 테마는 다섯이다** — `system-admin`(관리자 — 새 프로젝트가 서는 테마) · `system-commerce`(커머스) · `system-docs`(문서) · `system-portal`(포털) · `system-saas-marketing`(마케팅). 작성자 테마와 같은 SDK 로 짠 저장소 안의 테마이고(`system-themes/<이름>/`), 형태가 다른 구조(카드 그리드 · 아코디언 트리 · 정의 목록 등)는 variant 와 뷰로, 토큰은 사람이 고칠 만한 것(색 · 서체 · 모양 · 밀도 · 폭)만 선언한다. 한 테마 안에서 variant 는 여럿이고 `defaultVariant` 가 그 테마의 대표 모양이다 — 한 문서에 두 모양을 함께 둘 수 있다.
-- **시스템 테마는 api 가 기동할 때 넣는다** — 저장소 빌드가 낸 `system-themes/*/dist/*.wbtheme` 가운데 DB 에 없는 `id@version` 만. 같은 `id@version` 인데 내용(sha256)이 다르면 기동을 멈춘다(판을 올려야 한다). 판마다 산출물의 sha256 을 `system-themes/<이름>/checksums.json` 에 적는다 — 판을 안 올린 채 내용이 바뀌면 기동이 멈추기 전에 테스트가 잡는다. 배포한 판의 줄은 고치지 않는다(그 판이 시딩된 DB 가 있다). 테마가 비어 있는 프로젝트는 그 자리에서 `system-admin` 최신판으로 채워지고, 새 프로젝트도 그 판으로 선다.
+- **시스템 테마는 하나다** — `system-admin`(보이는 이름 «기본테마» — 새 프로젝트가 서는 테마). 다른 모양의 사이트는 관리자가 올린 테마로 그린다(위 «테마 관리»). 작성자 테마와 같은 SDK 로 짠 저장소 안의 테마이고(`system-themes/admin/`) 뷰 없이 SDK 기본 뷰와 `theme.css` 로 그린다. 형태가 다른 구조(카드 그리드 · 아코디언 트리 · 정의 목록 등)는 테마가 variant 와 뷰로 더한다. 시스템 테마의 토큰은 사람이 고칠 만한 것(색 · 서체 · 모양 · 밀도 · 폭)만 선언한다. 한 테마 안에서 variant 는 여럿이고 `defaultVariant` 가 그 테마의 대표 모양이다 — 한 문서에 두 모양을 함께 둘 수 있다.
+- **시스템 테마는 api 가 기동할 때 넣는다** — 저장소 빌드가 낸 `system-themes/*/dist/*.wbtheme`(`package.json` 이 있는 테마 디렉터리만 — 저장소에서 걷은 테마가 체크아웃에 남긴 `dist` 는 안 읽는다) 가운데 DB 에 없는 `id@version` 만. 같은 `id@version` 인데 내용(sha256)이 다르면 기동을 멈춘다(판을 올려야 한다). 판마다 산출물의 sha256 을 `system-themes/<이름>/checksums.json` 에 적는다 — 판을 안 올린 채 내용이 바뀌면 기동이 멈추기 전에 테스트가 잡는다. 배포한 판의 줄은 고치지 않는다(그 판이 시딩된 DB 가 있다). 테마가 비어 있는 프로젝트는 그 자리에서 `system-admin` 최신판으로 채워지고, 새 프로젝트도 그 판으로 선다. 저장소가 더는 내지 않는 시스템 테마(`system-commerce` · `system-docs` · `system-portal` · `system-saas-marketing`)는 패키지 행이 남아 숨겨져 있고, 그것에 고정한 프로젝트는 마이그레이션 `0027-retire-system-themes` 가 `system-admin` 최신판으로 옮긴다(토큰은 테마 바꾸기와 같게 잇는다). 그 테마를 가리키는 옛 판 3 스냅샷은 숨긴 그 판으로 복원된다.
 - **프로젝트의 테마 바인딩은 owner 가 바꾼다**(`PUT /api/projects/:projectId/theme` — `theme_rev` 낙관적 동시성, 숨긴 버전은 지금 고정한 판의 토큰만 고칠 때만). 토큰은 대상 manifest 로 검증하고 기본값과 같은 값을 뺀 뒤 저장한다(값 200 글자 · 전체 16 KB 상한). 저장은 프로젝트 룸에 `theme-changed` 를 방송한다. 바꾸기 전의 영향(이어지는 · 버려지는 · 기본값으로 서는 토큰 수, 새 테마에 없는 variant 를 쓰는 노드 수)은 `GET …/theme/impact` 가 계산한다. lint 의 테마 규칙이 «현재 테마에 없는 variant» 를 본다(§12.4).
 - **변형은 manifest 가 선언한다** — `components[type].variants` · `defaultVariant` · `hideProps`. 노드의 `variant`가 선언 밖이면 렌더러가 `defaultVariant`로 그린다(페이지 데이터는 바꾸지 않는다). 속성 패널의 변형 칸과 감출 속성도 이 선언을 읽는다.
 - **내보내기(HTML 번들 · PPTX 화면)도 프로젝트가 고정한 `id@버전` 의 번들 · CSS · 토큰으로 그린다**(§11.3). 테마 코드는 브라우저(내보낸 페이지 · PPTX 의 Chromium)에서만 돈다 — api 의 Node 프로세스는 패키지 파일을 바이트로 번들에 싣기만 한다.
-- **테마는 저장소 밖에서 짜서 `.wbtheme` 한 파일로 빌드한다.** 스타터 템플릿(`wb-theme pack-template` 이 짓는 zip — SDK · kit tarball 과 코딩 에이전트용 `SKILL.md` 동봉)을 풀고 `wb-theme dev` 로 갤러리를 보며 짜고, `wb-theme build` 가 manifest 를 검증해 `dist/<id>-<version>.wbtheme` 를 낸다. `wb-theme check` 는 갤러리 칸 전부를 빌드한 번들로 그려 오류를(그리지 않는 타입 · 카탈로그에 없는 타입을 가리키는 `views` 키도 오류다 — 렌더러가 읽지 않아 조용히 버려진다), `wb-theme shots` 는 실 Chromium 스크린숏으로 콘솔 오류 · 가로 넘침을 본다(§3.3). `.wbtheme` 는 zip 이고 `manifest.json` · `theme.js`(IIFE — `react` · `react/jsx-runtime` · `@wirebound/theme-sdk` 를 번들에 넣지 않고 호스트가 세운 `__wirebound_runtime__` 에서 읽는다) · `theme.css` · `assets/**` 만 든다. 읽기(`readWbtheme`)는 크기 · 항목 수 · 경로 · 허용 목록 · 링크를 풀기 전에 본다. 시스템 테마 다섯도 `pnpm build` 가 같은 길로 `.wbtheme` 를 낸다. 만든 `.wbtheme` 는 관리자가 올린다(위 «테마 관리»).
+- **테마는 저장소 밖에서 짜서 `.wbtheme` 한 파일로 빌드한다.** 스타터 템플릿(`wb-theme pack-template` 이 짓는 zip — SDK · kit tarball 과 코딩 에이전트용 `SKILL.md` 동봉)을 풀고 `wb-theme dev` 로 갤러리를 보며 짜고, `wb-theme build` 가 manifest 를 검증해 `dist/<id>-<version>.wbtheme` 를 낸다. `wb-theme check` 는 갤러리 칸 전부를 빌드한 번들로 그려 오류를(그리지 않는 타입 · 카탈로그에 없는 타입을 가리키는 `views` 키도 오류다 — 렌더러가 읽지 않아 조용히 버려진다), `wb-theme shots` 는 실 Chromium 스크린숏으로 콘솔 오류 · 가로 넘침을 본다(§3.3). `.wbtheme` 는 zip 이고 `manifest.json` · `theme.js`(IIFE — `react` · `react/jsx-runtime` · `@wirebound/theme-sdk` 를 번들에 넣지 않고 호스트가 세운 `__wirebound_runtime__` 에서 읽는다) · `theme.css` · `assets/**` 만 든다. 읽기(`readWbtheme`)는 크기 · 항목 수 · 경로 · 허용 목록 · 링크를 풀기 전에 본다. 시스템 테마도 `pnpm build` 가 같은 길로 `.wbtheme` 를 낸다. 만든 `.wbtheme` 는 관리자가 올린다(위 «테마 관리»).
 
 ### 6.1 노드 속성
 
@@ -396,9 +395,9 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 
 **테마 뷰가 그리는 포커스 받는 요소는 단추(`<button>`) · 링크(`<a href>`) · 입력 칸(`input` · `select` · `textarea`)만이다.** 에디터의 단축키 · 노드 복사는 캔버스 문서에서 포커스가 없거나(본문) 단추 · 링크일 때만 서고(「단축키」의 «서지 않는 때») 그 밖의 포커스 받은 요소(`tabindex` 를 단 요소 · `summary` · `controls` 를 켠 `video` · `audio`)는 입력 표면으로 본다 — 그런 요소를 누른 뒤에는 Delete · Cmd+C · Cmd+D 가 안 서고 통지도 없다. 판정을 넓히지 않는 것은 닫힌 shadow 안의 입력과 `tabindex` 만 단 요소를 DOM 으로 가를 수 없어서다(`apps/web/src/edit/editor-shortcuts.ts` 의 `shortcutsBlocked`). `wb-theme check` 가 갤러리 칸마다 그런 요소를 찾아 경고한다 — 오류가 아니라 종료 코드에 안 들고, 닫힌 shadow 안은 못 본다. 계약은 테마 작성 안내(`packages/theme-kit/template/SKILL.md` 「뷰 계약」)에도 있다.
 
-**prop 표지는 화면을 바꾸는 불리언 · enum prop 가운데 상태(`data-wb-state`) · 변형(`variantFrom` → `data-wb-variant`)으로 실리지 않는 것 전부에 선다** — 지금 `Section.compact` · `Flex` 의 `direction` · `align` · `justify` · `wrap` · `List` 의 `pagination` · `selectable` · `SearchForm.collapsed` · `Media` 의 `kind` · `ratio` 다(표는 `packages/theme-sdk/src/marks.ts` 의 `MARKED_PROPS`). 같은 값을 두 이름으로 싣지 않는다 — 상태 · 변형으로 실리는 prop 은 표지가 없다. 테마 CSS 는 `[data-wb-component="Section"][data-wb-compact]` 처럼 겨냥한다. 렌더러의 노드 속성 계약은 넓히지 않는다: `view()` 가 노드의 props · 상태를 문맥으로 내리고 `Root` 가 펴므로 기본 뷰와 테마 뷰가 같은 표지를 빠뜨릴 수 없다. `Root` 는 제 노드 id 의 문맥만 읽는다 — `view()` 를 거치지 않은 맨 함수 뷰의 `Root` 는 표지 · 접근성 속성을 안 편다(부모 노드의 것을 잘못 읽지 않게). 카탈로그에 불리언 · enum prop 이 생기면 표 · 상태 · 변형 가운데 하나에 들어야 한다 — `packages/renderer/test/prop-marks.test.tsx` 가 prop 마다 그 길과 «바꾸면 기본 뷰의 DOM 이 바뀐다» 를 센다. 수 prop 은 표지가 아니다(셀렉터로 셀 수 없다) — `SearchForm.columns` 는 `fields` 조각의 `data-wb-columns` 로 «정했다» 를 가르고 열 수는 변수가 나른다. 시스템 테마 다섯은 `[data-wb-part="fields"][data-wb-columns]` 에서만 제 `fields` 배치를 격자로 바꾼다(`apps/web/build-test/searchform-columns.test.ts`).
+**prop 표지는 화면을 바꾸는 불리언 · enum prop 가운데 상태(`data-wb-state`) · 변형(`variantFrom` → `data-wb-variant`)으로 실리지 않는 것 전부에 선다** — 지금 `Section.compact` · `Flex` 의 `direction` · `align` · `justify` · `wrap` · `List` 의 `pagination` · `selectable` · `SearchForm.collapsed` · `Media` 의 `kind` · `ratio` 다(표는 `packages/theme-sdk/src/marks.ts` 의 `MARKED_PROPS`). 같은 값을 두 이름으로 싣지 않는다 — 상태 · 변형으로 실리는 prop 은 표지가 없다. 테마 CSS 는 `[data-wb-component="Section"][data-wb-compact]` 처럼 겨냥한다. 렌더러의 노드 속성 계약은 넓히지 않는다: `view()` 가 노드의 props · 상태를 문맥으로 내리고 `Root` 가 펴므로 기본 뷰와 테마 뷰가 같은 표지를 빠뜨릴 수 없다. `Root` 는 제 노드 id 의 문맥만 읽는다 — `view()` 를 거치지 않은 맨 함수 뷰의 `Root` 는 표지 · 접근성 속성을 안 편다(부모 노드의 것을 잘못 읽지 않게). 카탈로그에 불리언 · enum prop 이 생기면 표 · 상태 · 변형 가운데 하나에 들어야 한다 — `packages/renderer/test/prop-marks.test.tsx` 가 prop 마다 그 길과 «바꾸면 기본 뷰의 DOM 이 바뀐다» 를 센다. 수 prop 은 표지가 아니다(셀렉터로 셀 수 없다) — `SearchForm.columns` 는 `fields` 조각의 `data-wb-columns` 로 «정했다» 를 가르고 열 수는 변수가 나른다. 시스템 테마는 `[data-wb-part="fields"][data-wb-columns]` 에서만 제 `fields` 배치를 격자로 바꾼다(`apps/web/build-test/searchform-columns.test.ts`).
 
-**SDK 기본 뷰는 표지 · 상태로 제 모양을 바꾼다** — 테마가 없어도 화면이 바뀐다. `Section` 의 위아래 여백은 compact 면 준다(특이도 0 — 테마의 여백 규칙이 이긴다), `SearchForm` 은 접히면 머리줄(`toggle` 조각)만 남고 자식이 DOM 에서 빠진다(`display: none` 으로 감추면 테마 CSS 가 되살릴 수 있다), `List` 는 `selectable` · `empty` · `loading` 을 체크 칸 · 빈 줄 · 막대 조각으로, `KeyValue` 는 `columns` 쌍씩 한 행으로, `Media` 는 `kind` 를 틀 가운데 표지(`glyph`)로 그린다. 시스템 테마 다섯이 표지를 읽는지는 `apps/web/build-test/theme-prop-marks.test.ts` 가 켬/끔의 상자 차로 잰다. **`List.selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다** — 표 구조는 체크 칸을 머리에 하나 · 행마다 하나 그리고, 줄 · 카드 목록 구조(`mediaList` · `cardGrid` · `stackedList` 등)는 표지 `data-wb-selectable` 만 서고 체크 칸을 그리지 않는다. 시스템 테마 다섯은 `List` variant 전부에서 이 계약대로 서고(표 구조 variant 가 없는 `system-commerce` 는 어느 variant 에도 체크 칸이 없다), 같은 테스트가 variant 를 구조로 가르며 잰다. 줄 · 카드 목록에 체크 칸이 필요한 테마는 자기 뷰가 그린다.
+**SDK 기본 뷰는 표지 · 상태로 제 모양을 바꾼다** — 테마가 없어도 화면이 바뀐다. `Section` 의 위아래 여백은 compact 면 준다(특이도 0 — 테마의 여백 규칙이 이긴다), `SearchForm` 은 접히면 머리줄(`toggle` 조각)만 남고 자식이 DOM 에서 빠진다(`display: none` 으로 감추면 테마 CSS 가 되살릴 수 있다), `List` 는 `selectable` · `empty` · `loading` 을 체크 칸 · 빈 줄 · 막대 조각으로, `KeyValue` 는 `columns` 쌍씩 한 행으로, `Media` 는 `kind` 를 틀 가운데 표지(`glyph`)로 그린다. 시스템 테마가 표지를 읽는지는 `apps/web/build-test/theme-prop-marks.test.ts` 가 켬/끔의 상자 차로 잰다. **`List.selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다** — 표 구조는 체크 칸을 머리에 하나 · 행마다 하나 그리고, 줄 · 카드 목록 구조(`mediaList` · `cardGrid` · `stackedList` 등)는 표지 `data-wb-selectable` 만 서고 체크 칸을 그리지 않는다. 시스템 테마는 `List` variant 전부에서 이 계약대로 서고, 같은 테스트가 variant 를 구조로 가르며 잰다. 줄 · 카드 목록에 체크 칸이 필요한 테마는 자기 뷰가 그린다.
 
 ### 6.2 patterns — 테마가 소유한 구성 레시피
 
@@ -1019,7 +1018,7 @@ patch/inverse 왕복 테스트가 가장 중요하다. undo, 스냅샷 복원, M
 | **P2a** | 편집 파이프라인 — revision 로그, JSON Patch 엔드포인트, 개인 undo/redo의 서버 쪽 | 편집 이력이 쌓이고 되돌릴 수 있다 |
 | **P2b** | 에디터 3분할 셸 — 메뉴·구조 트리, 캔버스, 속성 패널, 낙관적 편집 | 혼자서 설계서를 작성할 수 있다 |
 | **P3** | WebSocket 실시간 동기화 + 소프트 잠금 | 여럿이 동시에 작업한다 |
-| **P4** | 테마 — 코드 테마 차수 A1 ~ A6(`docs/superpowers/specs/2026-09-27-code-themes-design.md` 「진행 단계」): 뷰 SDK · iframe 캔버스(A1), `.wbtheme` · 작성자 도구(A2), 업로드 · 버전 · 프로젝트 바인딩(A3), 테마 선택 · 토큰 편집 화면(A4), 내보내기(A5), 시스템 테마 5종(A6) | 관리자 외 사이트 형태를 테마로 그리고, 테마를 코드로 짜서 올린다 |
+| **P4** | 테마 — 코드 테마 차수 A1 ~ A6(`docs/superpowers/specs/2026-09-27-code-themes-design.md` 「진행 단계」): 뷰 SDK · iframe 캔버스(A1), `.wbtheme` · 작성자 도구(A2), 업로드 · 버전 · 프로젝트 바인딩(A3), 테마 선택 · 토큰 편집 화면(A4), 내보내기(A5), 시스템 테마(A6) | 관리자 외 사이트 형태를 테마로 그리고, 테마를 코드로 짜서 올린다 |
 | **P5** | 코멘트/번호 마커 + 상호작용 규칙 + 뷰 모드 | 설계서로서 완성된다 |
 | **P6** | 스냅샷 태그/복원 | 버전을 관리한다 |
 | **P7** | 모듈 + 테마 패턴 삽입 + JSON 가져오기/내보내기 | 반복 작업이 빨라진다 |

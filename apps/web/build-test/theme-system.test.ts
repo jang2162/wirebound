@@ -1,16 +1,19 @@
 /**
- * **시스템 테마 다섯을 설정 페이지에서 골라 쓴다** — 실브라우저 판(`settings/theme-chooser.tsx` · 캔버스 · 내보낸 번들).
+ * **설정 페이지에서 테마를 골라 쓴다** — 실브라우저 판(`settings/theme-chooser.tsx` · 캔버스 · 내보낸 번들).
  *
  * | 케이스 | 재는 성질 | 값 |
  * |---|---|---|
- * | 다섯 차례로 | 설정 페이지의 고르개 · 확인 · «바꾸기» 로 테마를 바꾸면 캔버스와 내보낸 번들이 **그 테마로** 선다 · 확인 상자의 수가 impact 응답과 같다 | 테마 표지(아래) · 확인 줄 |
+ * | 올린 테마 → system-admin | 설정 페이지의 고르개 · 확인 · «바꾸기» 로 테마를 바꾸면 캔버스와 내보낸 번들이 **그 테마로** 선다 · 확인 상자의 수가 impact 응답과 같다 | 테마 표지(아래) · 확인 줄 |
  * | 0.1.0 → 지금 판 | `system-admin@0.1.0` 에 고정한 프로젝트를 설정 페이지에서 올릴 때 확인 상자의 토큰 이전 · 없는 variant 수가 impact 응답과 같고, 올린 뒤 고친 토큰이 이어진다 | 확인 줄 · 목록 · 저장된 바인딩 |
  *
- * **테마 표지는 주 단추(`Button` `primary`)의 바탕색이다** — 다섯 테마의 `theme.css` 가 저마다의 규칙으로 그 단추를 `var(--wb-semantic-primary)`
- * 로 칠하고, 그 토큰의 기본값이 테마마다 다르다(기대값은 그 판의 manifest 에서 읽는다 — 색을 글자로 적지 않는다). SDK 기본 뷰의 CSS 는 단추에
- * 바탕을 안 준다 — 테마 시트가 안 실리면(번들 적재 실패는 시트도 걷는다) 표지가 선다는 길이 없다. 다섯 값이 서로 다른지를 먼저 본다.
+ * **시스템 테마는 `system-admin` 하나라 바꿀 곳으로 픽스처 테마를 올린다**(`theme-fixtures.ts` 의 `primaryMarkTheme` — 관리자 업로드). 새 프로젝트가
+ * `system-admin` 으로 서므로 올린 테마로 바꾼 뒤 `system-admin` 으로 돌아온다 — 둘 다 고르개로 고른다.
  *
- * 같은 설계서를 다섯 테마로 그렸을 때 깨지지 않는가(세로 Divider · 좁은 폭 · 캔버스 = 번들 · PPTX 폭 · 토큰 칸)는
+ * **테마 표지는 주 단추(`Button` `primary`)의 바탕색이다** — 두 테마의 `theme.css` 가 저마다의 규칙으로 그 단추를 `var(--wb-semantic-primary)`
+ * 로 칠하고, 그 토큰의 기본값이 테마마다 다르다(기대값은 그 판의 manifest 에서 읽는다 — 색을 글자로 적지 않는다). SDK 기본 뷰의 CSS 는 단추에
+ * 바탕을 안 준다 — 테마 시트가 안 실리면(번들 적재 실패는 시트도 걷는다) 표지가 선다는 길이 없다. 두 값이 서로 다른지를 먼저 본다.
+ *
+ * 같은 설계서를 시스템 테마로 그렸을 때 깨지지 않는가(세로 Divider · 좁은 폭 · 캔버스 = 번들 · PPTX 폭 · 토큰 칸)는
  * `theme-system-review.test.ts` 가 잰다 — 여기서 다시 세우지 않는다. 캔버스가 판의 번들 · 시트를 싣는 차례 · 캐시 · `theme-changed` 따라가기는
  * `theme-canvas.test.ts`, 토큰 편집기는 `theme-settings.test.ts` 다.
  *
@@ -29,7 +32,7 @@ import type { Frame, Page } from 'playwright-core'
 import { readWbtheme } from '@wirebound/themes'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
-import { seededVersion } from './theme-fixtures'
+import { makeAdmin, primaryMarkTheme, seededVersion, uploadRaw } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -37,8 +40,10 @@ if (!전제.ok) {
   console.log(`[에디터 실브라우저 판] 건너뛴다 — ${전제.reason}`)
 }
 
-/** 고르는 차례 — 새 프로젝트가 `system-admin` 으로 서므로 admin 을 끝에 둔다(다섯 모두 고르개로 고른다). */
-const ORDER = ['system-commerce', 'system-docs', 'system-portal', 'system-saas-marketing', 'system-admin'] as const
+/** 고르는 차례 — 새 프로젝트가 `system-admin` 으로 서므로 admin 을 끝에 둔다(둘 다 고르개로 고른다). */
+const ORDER = ['primary-mark', 'system-admin'] as const
+/** 고를 판 — 올린 테마는 픽스처의 판, 시스템 테마는 기동 시딩이 넣은 판. */
+const versionOf = (themeId: string): string => (themeId === 'primary-mark' ? '1.0.0' : seededVersion(themeId))
 
 const OLD_ADMIN = fileURLToPath(new URL('./fixtures/system-admin-0.1.0.wbtheme', import.meta.url))
 const ADMIN_CHECKSUMS = fileURLToPath(new URL('../../../system-themes/admin/checksums.json', import.meta.url))
@@ -157,7 +162,7 @@ async function openBundle(
   return { page, close: () => context.close() }
 }
 
-describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 고르기', () => {
+describe.skipIf(!전제.ok)('테마 — 설정 페이지에서 고르기', () => {
   let stack: EditorStack
   let alice: Session
   /** 테마 → 표지의 기대값(그 판 manifest 의 `semantic.primary` 기본값). */
@@ -168,6 +173,8 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
     if (!전제.ok) return
     stack = await startEditorStack(전제)
     alice = await stack.login(stack.users.alice)
+    await makeAdmin(stack, stack.users.alice)
+    expect(await uploadRaw(stack, alice, await primaryMarkTheme()), '픽스처 테마 올리기').toBe(201)
     fixture = await project(stack, alice, {
       화면: [
         { id: 'm_head', type: 'Text', props: { content: '주문 관리', role: 'h1' } },
@@ -181,7 +188,7 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
       ],
     })
     for (const themeId of ORDER) {
-      const manifest = ok(await fixture.call('GET', `/theme-packages/${themeId}/${seededVersion(themeId)}/manifest`), `manifest ${themeId}`)
+      const manifest = ok(await fixture.call('GET', `/theme-packages/${themeId}/${versionOf(themeId)}/manifest`), `manifest ${themeId}`)
       expected.set(themeId, rgb(manifest.tokens.items['semantic.primary'].default))
     }
   }, 180_000)
@@ -195,9 +202,9 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
     expect(after).toEqual({ processes: 0, listeningPorts: [], databases: 0 })
   }, 120_000)
 
-  it('표지 다섯이 서로 다르다 — 한 값이 두 테마를 가리키면 표지가 테마를 못 가른다', () => {
-    expect(expected.size).toBe(5)
-    expect(new Set(expected.values()).size).toBe(5)
+  it('표지 둘이 서로 다르다 — 한 값이 두 테마를 가리키면 표지가 테마를 못 가른다', () => {
+    expect(expected.size).toBe(ORDER.length)
+    expect(new Set(expected.values()).size).toBe(ORDER.length)
   })
 
   it.each(ORDER)(
@@ -211,13 +218,13 @@ describe.skipIf(!전제.ok)('시스템 테마 다섯 — 설정 페이지에서 
         await page.getByRole('combobox', { name: '테마', exact: true }).selectOption(themeId)
         const box = await confirmBox(page)
         const impact = ok(
-          await fixture.call('GET', `/projects/${fixture.id}/theme/impact?themeId=${themeId}&version=${seededVersion(themeId)}`),
+          await fixture.call('GET', `/projects/${fixture.id}/theme/impact?themeId=${themeId}&version=${versionOf(themeId)}`),
           'impact',
         )
         expect(box).toEqual(impactAsBox(impact))
         await apply(page)
         const saved = ok(await fixture.call('GET', `/projects/${fixture.id}/theme`), '바인딩')
-        expect({ themeId: saved.themeId, version: saved.version }).toEqual({ themeId, version: seededVersion(themeId) })
+        expect({ themeId: saved.themeId, version: saved.version }).toEqual({ themeId, version: versionOf(themeId) })
 
         const frame = await openCanvas(page, fixture.id, fixture.pages.화면!)
         // 기다림이 끝나도 값으로 단언한다 — 시간 초과로 죽으면 무엇이 섰는지가 안 남는다.

@@ -69,8 +69,8 @@ type Item = { kind: 'element'; element: Element } | { kind: 'text'; text: string
 /**
  * 자식을 견줄 단위로 편다. **이어 붙은 텍스트 노드를 한 덩이로 합친다.**
  *
- * 실측(갈림 ㉡ — 다섯 테마 중 `portal` 하나에서만 난다. `EntryForm:sectioned`를 그 테마만
- * 고른다):
+ * 실측(갈림 ㉡ — 뷰가 글 한 줄을 JSX 자식 둘로 내는 자리에서 난다. 예: `EntryForm:sectioned` 의 `sectionTitle` 을
+ * `구획 {번호}` 로 그리는 테마 뷰):
  *
  * | 경로 | `sectionTitle`의 자식 |
  * |---|---|
