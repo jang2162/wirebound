@@ -69,19 +69,36 @@ export function tidyViewStateDescription(text: string): string | null {
 }
 
 /**
- * **설명 쓰기** — 빈 글(보이는 글자 없음)은 칸을 지운다. `null`인 판: 상태가 없음 · 글이 규칙 밖(`tidyViewStateDescription`) · 설명이 그대로
- * (없는 설명을 비움 포함).
+ * **설명 쓰기** — 빈 글(보이는 글자 없음)은 칸을 지운다. `base` 는 쓰기 시작한 때의 설명(없었으면 `null`)이고 `null`인 판은 상태가 없음 · 글이
+ * 규칙 밖(`tidyViewStateDescription`) · 글이 바탕 그대로(없는 설명을 비움 포함)다.
+ *
+ * **바탕을 `test`로 싣는다 — 남의 설명을 조용히 덮지 않는다.** 바탕을 안 실으면 내가 쓰는 동안 남이 같은 상태의 설명을 쓴 판에서 나중에 보낸
+ * 쪽이 이긴다(`docs/superpowers/plans/2026-10-22-rv-pi-report.md` H3). 실으면 그 판의 묶음은 서버에서 통째로 실패한다(409 — 상태 id 의 `test`와
+ * 같은 길).
+ *
+ * | 바탕 | 싣는 `test` |
+ * |---|---|
+ * | 있음 | `/viewStates/<i>/description` = 바탕 |
+ * | 없음 | `/viewStates/<i>` = 그 항목에서 설명을 뺀 값 — RFC 6902 의 `test`는 «칸 없음»을 못 말한다(없는 자리는 어떤 값과도 같지 않다). 항목째 견주면 남이 칸을 만든 판에서 실패한다 |
+ *
+ * 항목째 견주기는 **남이 같은 상태의 이름 · 부모를 고친 판에서도** 실패한다 — 설명은 그대로인데 저장이 안 된다. 그 판은 다시 보내면
+ * 서고(바탕이 여전히 «없음»이다), 칸을 지우는 판과 갈리지 않아 덮는 일은 없다.
+ *
+ * 지금 문서의 설명이 바탕과 다르면 이 묶음은 그 문서에서 적용이 실패한다 — 부르는 쪽이 먼저 견준다(남이 바꿨다는 화면을 세운다).
  */
-export function describeViewStateOps(doc: PageDocument, stateId: string, text: string): PatchOp[] | null {
+export function describeViewStateOps(doc: PageDocument, stateId: string, text: string, base: string | null): PatchOp[] | null {
   const tidy = tidyViewStateDescription(text)
   const states = doc.viewStates ?? []
   const index = states.findIndex((state) => state.id === stateId)
   if (tidy === null || index === -1) return null
-  const current = states[index]!.description
-  const path = `/viewStates/${index}/description`
-  if (tidy === '') return current === undefined ? null : guardViewStateOps(doc, [{ op: 'remove', path }])
-  if (tidy === current) return null
-  return guardViewStateOps(doc, [{ op: current === undefined ? 'add' : 'replace', path, value: tidy }])
+  const next = tidy === '' ? null : tidy
+  if (next === base) return null
+  const at = `/viewStates/${index}`
+  const path = `${at}/description`
+  const { description: _dropped, ...without } = states[index]!
+  const premise: PatchOp = base === null ? { op: 'test', path: at, value: without } : { op: 'test', path, value: base }
+  const write: PatchOp = next === null ? { op: 'remove', path } : { op: base === null ? 'add' : 'replace', path, value: next }
+  return guardViewStateOps(doc, [{ op: 'test', path: `${at}/id`, value: stateId }, premise, write])
 }
 
 /**
