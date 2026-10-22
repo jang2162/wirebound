@@ -1,7 +1,7 @@
 /**
- * **페이지 설명 편집**(설계서 「설계서 화면 구조」). 뷰 모드 «페이지 설명» 탭이 그 자리다.
+ * **페이지 설명 편집**(설계서 「설계서 화면 구조」). 편집 모드 «페이지 정보» 탭이 그 자리다(뷰 모드의 같은 탭은 읽기만 한다).
  *
- * **그 탭의 읽기 쪽은 `test/routes/view-mode.test.tsx`의 *"설계서 「설계서 화면 구조」 — 페이지 설명 탭"*이
+ * **그 탭의 읽기 쪽은 `test/routes/view-mode.test.tsx`의 *"설계서 「설계서 화면 구조」 — 페이지 정보 탭"*이
  * 소유한다** — 여기는 **고치는 쪽**만 잰다. 둘을 한 파일에 두면 같은 축을 두 자리가 재게 된다.
  *
  * **서버 계약도 여기서 재지 않는다** — 상한·`null`·빈 문자열·역할·잠금은 전부
@@ -90,6 +90,11 @@ function toView(): void {
   fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
 }
 
+/** 편집 모드의 «페이지 정보» 탭을 연다 — 편집기가 서는 자리다. */
+function toInfo(): void {
+  toTab('페이지 정보')
+}
+
 function toEdit(): void {
   fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
 }
@@ -138,26 +143,26 @@ function recordingApi(reply?: (description: string | null) => PageDetail): {
   }
 }
 
-describe('편집기는 뷰 모드 «페이지 설명» 탭에 있다', () => {
-  // **혼자 죽지 않는다 — 늘 `test/routes/view-mode.test.tsx`의 *"뷰 모드에서 속성 탭의
-  // 본문이 사라진다"*와 함께 죽는다**(`routes/editor.tsx`의 `PANEL_BODIES.props`를 이 패널로 바꾸면
-  // 둘이 함께 죽는다). **그 축의 주인은 그쪽이다** — 탭과 본문의 짝을 재는 자리이고, 여기는
-  // 그 위에 *"그 본문에 편집기가 있다"*를 얹는다.
-  //
-  // **수는 적지 않는다.** 그 변조를 글자 그대로 심으면 둘 말고도 많이 죽는다(속성 탭 자리를
-  // 통째로 바꾸는 변조라 `getPage` 횟수를 재는 파일들이 함께 쓸린다). **주장하는 것은 «관계»뿐이다**
-  // — 다시 잴 수 없는 수는 자에서 뺀다(`CLAUDE.md`).
-  it('편집 모드에는 없고 뷰 모드로 가면 선다', async () => {
+describe('편집기는 편집 모드 «페이지 정보» 탭에 있다', () => {
+  // 탭과 본문의 짝 · 처음 고른 탭은 `test/routes/view-mode.test.tsx`가 잰다 — 여기는 그 위에 *"그 본문에 편집기가 있다 ·
+  // 뷰 모드에서는 읽기만 한다"*를 얹는다.
+  it('처음 고른 «속성»에는 없고 «페이지 정보»를 누르면 선다 — 뷰 모드에서는 상자 없이 글이다', async () => {
     await openPage(DOC, { apiOverrides: withDescription('회원을 찾고 고치는 화면') })
 
     // **음성 대조가 이 케이스의 절반이다.** 없으면 "언제나 편집기를 그린다"도 통과한다 —
-    // 편집 모드의 첫 탭은 속성이고 거기엔 설명이 없다.
+    // 편집 모드에서 처음 고른 탭은 속성이고 거기엔 설명이 없다.
     expect(boxOrNull()).toBeNull()
 
-    toView()
+    toInfo()
 
     expect(await findBox()).toBeTruthy()
     expect(screen.getByRole('button', { name: '설명 저장' })).toBeTruthy()
+
+    // 뷰 모드는 같은 탭을 읽기만 한다 — 결과를 보는 모드다.
+    toView()
+    expect(await screen.findByText('회원을 찾고 고치는 화면')).toBeTruthy()
+    expect(boxOrNull()).toBeNull()
+    expect(screen.queryByRole('button', { name: '설명 저장' })).toBeNull()
   })
 
   // **«빈 설명일 때 무엇이 보이나»는 여기 없다** — `test/routes/view-mode.test.tsx`의
@@ -169,7 +174,7 @@ describe('설명을 저장한다', () => {
     // **서버가 다른 값을 준다.** 화면이 보낸 것을 그대로 그리면 이 케이스가 죽는다.
     const api = recordingApi(() => ({ ...pageDetail(PAGE_ID, DOC), description: '서버가 정한 값' }))
     await openPage(DOC, { apiOverrides: { ...withDescription('옛 설명'), ...api.overrides } })
-    toView()
+    toInfo()
     await findBox()
 
     type('새 설명')
@@ -183,7 +188,7 @@ describe('설명을 저장한다', () => {
   it('저장이 끝나면 그렇다고 말한다', async () => {
     const api = recordingApi()
     await openPage(DOC, { apiOverrides: { ...withDescription('옛 설명'), ...api.overrides } })
-    toView()
+    toInfo()
     await findBox()
 
     type('새 설명')
@@ -197,7 +202,7 @@ describe('설명을 저장한다', () => {
     // 화면에서 둘은 똑같이 보이므로 눈에 안 보이는 차이를 만들지 않는다.
     const api = recordingApi()
     await openPage(DOC, { apiOverrides: { ...withDescription('지울 설명'), ...api.overrides } })
-    toView()
+    toInfo()
     await findBox()
 
     type('')
@@ -208,7 +213,7 @@ describe('설명을 저장한다', () => {
 
   it('바꾼 것이 없으면 저장 버튼이 눌리지 않는다', async () => {
     await openPage(DOC, { apiOverrides: withDescription('그대로 둘 설명') })
-    toView()
+    toInfo()
     await findBox()
 
     expect(saveButton().disabled).toBe(true)
@@ -227,7 +232,7 @@ describe('설명을 저장한다', () => {
         }) as never,
       },
     })
-    toView()
+    toInfo()
     await findBox()
 
     type('viewer가 친 글')
@@ -244,7 +249,7 @@ describe('설명을 저장한다', () => {
   it('다시 치면 앞의 통지가 사라진다 — 고치는 중에 «저장했습니다»가 떠 있지 않는다', async () => {
     const api = recordingApi()
     await openPage(DOC, { apiOverrides: { ...withDescription('옛 설명'), ...api.overrides } })
-    toView()
+    toInfo()
     await findBox()
 
     type('새 설명')
@@ -260,7 +265,7 @@ describe('설명을 저장한다', () => {
 describe('상한은 `@wirebound/schema`가 소유한다', () => {
   it('입력 상자의 `maxLength`가 그 상수와 같다 — 화면이 수를 따로 갖지 않는다', async () => {
     await openPage(DOC, { apiOverrides: withDescription(null) })
-    toView()
+    toInfo()
 
     // **값으로 잰다.** 원문에서 `2000`을 찾는 자는 라우트가 상수에서 떨어져 나가도 안 죽는다.
     //
@@ -274,7 +279,7 @@ describe('상한은 `@wirebound/schema`가 소유한다', () => {
 
   it('글자 수를 그 상수와 함께 보인다', async () => {
     await openPage(DOC, { apiOverrides: withDescription('네 글자') })
-    toView()
+    toInfo()
     await findBox()
 
     expect(screen.getByText(`4 / ${PAGE_DESCRIPTION_MAX_LENGTH}`)).toBeTruthy()
@@ -320,7 +325,7 @@ describe('페이지를 바꾸면 앞 페이지의 것을 버린다', () => {
       docs: { [OTHER_PAGE_ID]: DOC },
       apiOverrides: { ...perPageDescription, ...api.overrides },
     })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
 
     type('저장하지 않은 초안 — 앞 페이지의 것')
@@ -351,7 +356,7 @@ describe('페이지를 바꾸면 앞 페이지의 것을 버린다', () => {
       docs: { [OTHER_PAGE_ID]: DOC },
       apiOverrides: { ...perPageDescription, ...api.overrides },
     })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
 
     type('앞 페이지에 저장할 글')
@@ -375,7 +380,7 @@ describe('페이지를 바꾸면 앞 페이지의 것을 버린다', () => {
         }) as never,
       },
     })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
 
     type('막힐 글')
@@ -417,7 +422,7 @@ describe('탭·모드를 오가도 저장하지 않은 초안이 남는다', () 
   it('탭을 오갔다 돌아와도 친 글이 남는다 — 서버 값으로 되돌아가지 않는다', async () => {
     const api = recordingApi()
     await openPage(DOC, { apiOverrides: { ...withDescription('서버에 있는 설명'), ...api.overrides } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버에 있는 설명'))
 
     type('아직 저장 안 한 초안')
@@ -426,7 +431,7 @@ describe('탭·모드를 오가도 저장하지 않은 초안이 남는다', () 
     // 판에서도 이 케이스가 통과해, 재는 것이 없어진다.
     expect(boxOrNull()).toBeNull()
 
-    toTab('페이지 설명')
+    toTab('페이지 정보')
     await findBox()
 
     expect(box().value).toBe('아직 저장 안 한 초안')
@@ -438,20 +443,20 @@ describe('탭·모드를 오가도 저장하지 않은 초안이 남는다', () 
     expect(api.pages).toEqual([PAGE_ID])
   })
 
-  it('모드를 오갔다 돌아와도 친 글이 남는다 — 편집 모드에는 이 탭이 아예 없다', async () => {
+  it('모드를 오갔다 돌아와도 친 글이 남는다 — 뷰 모드에서는 상자가 없다', async () => {
     const api = recordingApi()
     await openPage(DOC, { apiOverrides: { ...withDescription('서버에 있는 설명'), ...api.overrides } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버에 있는 설명'))
 
     type('모드를 오갈 초안')
-    toEdit()
-    // **탭 왕복과 다른 사건이다.** 편집 모드의 탭 목록에 «페이지 설명»이 없어서
-    // (`PANEL_TABS`) 눌러서 돌아올 탭조차 없다 — 그래서 케이스를 따로 둔다.
-    expect(boxOrNull()).toBeNull()
-    expect(screen.queryByRole('tab', { name: '페이지 설명' })).toBeNull()
-
     toView()
+    // **탭 왕복과 다른 사건이다.** 탭은 그대로인데(뷰 모드에도 «페이지 정보»가 있다) 본문이 읽기 갈래로 다시 그려진다 —
+    // 초안을 드는 것이 상자가 아니라는 것을 이 갈래가 잰다. 그래서 케이스를 따로 둔다.
+    await waitFor(() => expect(boxOrNull()).toBeNull())
+    expect(screen.getByRole('tab', { name: '페이지 정보' }).getAttribute('aria-selected')).toBe('true')
+
+    toEdit()
     await findBox()
 
     expect(box().value).toBe('모드를 오갈 초안')
@@ -555,7 +560,7 @@ describe('저장이 나가 있는 동안 탭·페이지를 옮겨도 그 저장�
   it('저장이 나가 있는 동안 탭을 오가도 저장 중 잠금이 남는다 — 한 번 더 보낼 수 없다', async () => {
     const api = heldApi()
     await openPage(DOC, { apiOverrides: { ...withDescription('서버 값'), ...api.overrides } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     type('첫 저장 글')
@@ -565,7 +570,7 @@ describe('저장이 나가 있는 동안 탭·페이지를 옮겨도 그 저장�
 
     toTab('코멘트')
     expect(boxOrNull()).toBeNull()
-    toTab('페이지 설명')
+    toTab('페이지 정보')
     await findBox()
 
     // **잠금이 마운트에 묶이면 여기서 상자와 버튼이 열린다**(새 마운트가 저장 상태를 `idle`로
@@ -584,7 +589,7 @@ describe('저장이 나가 있는 동안 탭·페이지를 옮겨도 그 저장�
   it('저장이 나가 있는 동안 탭을 오가면 그 응답이 떠 있는 본문에 닿는다 — 낡은 서버 값을 보이지 않는다', async () => {
     const api = heldApi()
     await openPage(DOC, { apiOverrides: { ...withDescription('서버 값'), ...api.overrides } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     type('첫 저장 글')
@@ -592,7 +597,7 @@ describe('저장이 나가 있는 동안 탭·페이지를 옮겨도 그 저장�
     await waitFor(() => expect(api.bodies).toHaveLength(1))
 
     toTab('코멘트')
-    toTab('페이지 설명')
+    toTab('페이지 정보')
     await findBox()
 
     await api.release()
@@ -610,7 +615,7 @@ describe('저장이 나가 있는 동안 탭·페이지를 옮겨도 그 저장�
       docs: { [OTHER_PAGE_ID]: DOC },
       apiOverrides: { ...perPageDescription, ...api.overrides },
     })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
 
     type('앞 페이지에 저장할 글')
@@ -646,7 +651,7 @@ describe('저장이 나가 있는 동안 탭·페이지를 옮겨도 그 저장�
       docs: { [OTHER_PAGE_ID]: DOC },
       apiOverrides: { ...perPageDescription, ...api.overrides },
     })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
 
     type('첫 저장 글')
@@ -681,7 +686,7 @@ describe('저장이 나가 있는 동안 탭·페이지를 옮겨도 그 저장�
       docs: { [OTHER_PAGE_ID]: DOC },
       apiOverrides: { ...perPageDescription, ...api.overrides },
     })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
 
     type('앞 페이지에 저장할 글')

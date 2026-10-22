@@ -6,7 +6,7 @@
  * | 무엇 | 편집 모드 | 뷰 모드 |
  * |---|---|---|
  * | 좌측 하단 구조 트리 | 보인다 | **접힌다** |
- * | 우측 탭 | 속성 / 코멘트 / 상호작용 | **페이지 설명** / 코멘트 / 상호작용 |
+ * | 우측 탭 | 페이지 정보 / 속성 / 코멘트 / 상호작용(처음 고른 것은 속성) | **페이지 정보**(읽기만) / 코멘트 / 상호작용 |
  *
  * 구조 트리 쪽은 `routes/editor-shell.test.tsx`가 잰다. **여기가 재는 것은 우측 탭이다** —
  * `RightPanel`이 `mode`를 안 읽으면 뷰 모드에서도 편집 모드의 탭이 남는다.
@@ -45,6 +45,11 @@ function toEdit(): void {
   fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
 }
 
+/** 편집 모드의 «페이지 정보» 탭을 연다 — 이름 · 설명을 고치는 자리다. */
+function toInfo(): void {
+  fireEvent.click(screen.getByRole('tab', { name: '페이지 정보' }))
+}
+
 /** 설명을 실은 페이지 응답을 내는 가짜. */
 function withDescription(description: string | null): { getPage: () => Promise<never> } {
   return {
@@ -56,28 +61,29 @@ function withDescription(description: string | null): { getPage: () => Promise<n
 }
 
 describe('설계서 「설계서 화면 구조」 — 우측 탭 구성이 모드로 갈린다', () => {
-  it('편집 모드는 속성 / 코멘트 / 상호작용이다', async () => {
+  it('편집 모드는 페이지 정보 / 속성 / 코멘트 / 상호작용이다 — 처음 고른 것은 속성이다', async () => {
     await openPage(DOC)
 
-    expect(tabs()).toEqual(['속성', '코멘트', '상호작용'])
+    expect(tabs()).toEqual(['페이지 정보', '속성', '코멘트', '상호작용'])
+    expect(screen.getByRole('tab', { name: '속성' }).getAttribute('aria-selected')).toBe('true')
   })
 
-  it('뷰 모드는 페이지 설명 / 코멘트 / 상호작용이다', async () => {
+  it('뷰 모드는 페이지 정보 / 코멘트 / 상호작용이다', async () => {
     await openPage(DOC)
 
     toView()
 
-    expect(tabs()).toEqual(['페이지 설명', '코멘트', '상호작용'])
+    expect(tabs()).toEqual(['페이지 정보', '코멘트', '상호작용'])
   })
 
   it('편집 모드로 돌아오면 속성이 돌아온다', async () => {
-    // 한 방향만 보면 "뷰 모드를 지나면 영영 페이지 설명"인 구현도 위를 통과한다.
+    // 한 방향만 보면 "뷰 모드를 지나면 영영 속성이 없다"인 구현도 위를 통과한다.
     await openPage(DOC)
     toView()
 
     toEdit()
 
-    expect(tabs()).toEqual(['속성', '코멘트', '상호작용'])
+    expect(tabs()).toEqual(['페이지 정보', '속성', '코멘트', '상호작용'])
   })
 
   it('뷰 모드에서 속성 탭의 본문이 사라진다 — 탭만 바뀌는 것이 아니다', async () => {
@@ -112,7 +118,7 @@ describe('설계서 「설계서 화면 구조」 — 모드를 바꿀 때 보�
 
     toView()
 
-    expect(screen.getByRole('tab', { name: '페이지 설명' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: '페이지 정보' }).getAttribute('aria-selected')).toBe('true')
   })
 
   it('되돌아오면 앞서 보던 탭이 되살아난다', async () => {
@@ -120,7 +126,7 @@ describe('설계서 「설계서 화면 구조」 — 모드를 바꿀 때 보�
     // "속성을 보고 있었다"는 사실까지 지우지 않는다.
     await openPage(DOC, { apiOverrides: withDescription(null) })
     toView()
-    expect(screen.getByRole('tab', { name: '페이지 설명' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: '페이지 정보' }).getAttribute('aria-selected')).toBe('true')
 
     toEdit()
 
@@ -149,8 +155,8 @@ describe('설계서 「설계서 화면 구조」 — 편집 도구는 편집 �
   })
 })
 
-describe('설계서 「설계서 화면 구조」 — 페이지 설명 탭', () => {
-  it('서버가 준 제목과 설명을 보인다', async () => {
+describe('설계서 「설계서 화면 구조」 — 페이지 정보 탭', () => {
+  it('뷰 모드에서는 서버가 준 제목과 설명을 글로 보인다 — 상자가 없다', async () => {
     await openPage(DOC, { apiOverrides: withDescription('회원을 찾고 고치는 화면') })
 
     toView()
@@ -158,12 +164,22 @@ describe('설계서 「설계서 화면 구조」 — 페이지 설명 탭', () 
     expect(await screen.findByText('회원을 찾고 고치는 화면')).toBeTruthy()
     // 제목도 함께 온다 — 어느 페이지의 설명인지가 보여야 한다.
     expect(screen.getByRole('heading', { name: '회원 목록' })).toBeTruthy()
+    expect(screen.queryByRole('textbox', { name: '페이지 설명' })).toBeNull()
+    expect(screen.queryByRole('textbox', { name: '페이지 이름' })).toBeNull()
+  })
+
+  it('뷰 모드에서 설명이 없으면 그렇다고 말한다', async () => {
+    await openPage(DOC, { apiOverrides: withDescription(null) })
+
+    toView()
+
+    expect(await screen.findByText('이 페이지에는 아직 설명이 없습니다')).toBeTruthy()
   })
 
   it('설명이 없으면 그렇다고 말한다 — 빈 자리로 두지 않는다', async () => {
     await openPage(DOC, { apiOverrides: withDescription(null) })
 
-    toView()
+    toInfo()
 
     // **이 자리는 문장이 아니라 상자다.** 탭이 고칠 수 있으므로 *"아직 설명이 없습니다"*는
     // **어디에 쓰라는 안내**다 — 재는 것은: 빈 자리로 두지 않는다. (고치는 쪽의 다른
@@ -178,7 +194,7 @@ describe('설계서 「설계서 화면 구조」 — 페이지 설명 탭', () 
     // 들어 있다는 사실 자체가 사용자가 고쳐야 할 것이고, 화면이 그것을 감추면 지울 수가 없다.
     await openPage(DOC, { apiOverrides: withDescription('   ') })
 
-    toView()
+    toInfo()
 
     const box = await screen.findByRole('textbox', { name: '페이지 설명' })
     expect((box as HTMLTextAreaElement).value).toBe('   ')
@@ -219,7 +235,7 @@ describe('설계서 「설계서 화면 구조」 — 페이지 설명 탭', () 
 
     toView()
 
-    expect(await screen.findByText('페이지를 열면 설명이 보입니다')).toBeTruthy()
+    expect(await screen.findByText('페이지를 열면 페이지 정보가 보입니다')).toBeTruthy()
     expect(calls).toBe(0)
   })
 })

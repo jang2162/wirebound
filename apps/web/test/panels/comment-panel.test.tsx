@@ -111,13 +111,13 @@ describe('코멘트 탭 — 자리', () => {
   })
 
   /**
-   * **여기가 재는 것은 편집 모드의 셋이다.** 뷰 모드는 첫 탭이 *페이지 설명*이고(설계서
+   * **여기가 재는 것은 편집 모드의 넷이다.** 뷰 모드는 속성이 없고 첫 탭이 *페이지 정보*이고(설계서
    * 「설계서 화면 구조」의 탭 표), 두 모드를 나란히 재는 것은 `test/routes/view-mode.test.tsx`다.
    */
-  it('편집 모드의 탭이 셋이다', async () => {
+  it('편집 모드의 탭이 넷이다', async () => {
     await openPage(pageDoc(three({})), { apiOverrides: { listComments: async () => [] } })
 
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['속성', '코멘트', '상호작용'])
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['페이지 정보', '속성', '코멘트', '상호작용'])
   })
 })
 

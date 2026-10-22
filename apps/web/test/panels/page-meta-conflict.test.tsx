@@ -73,8 +73,9 @@ function type(value: string): void {
   fireEvent.change(box(), { target: { value } })
 }
 
-function toView(): void {
-  fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+/** 편집 모드의 «페이지 정보» 탭을 연다 — 이름 · 설명 편집기가 서는 자리다(뷰 모드의 같은 탭은 읽기만 한다). */
+function toInfo(): void {
+  fireEvent.click(screen.getByRole('tab', { name: '페이지 정보' }))
 }
 
 /** 충돌 화면 — 그 문장이 선 `alert`. */
@@ -88,7 +89,7 @@ async function findConflict(): Promise<HTMLElement> {
 /** 앨리스가 `START`에서 고치기 시작한 사이 밥이 저장했고, 앨리스가 누른다 — 충돌까지. */
 async function collide(server: ReturnType<typeof metaServer>, options: EditorOptions = {}): Promise<HTMLElement> {
   await openPage(DOC, { ...options, apiOverrides: { ...server.overrides, ...options.apiOverrides } })
-  toView()
+  toInfo()
   await waitFor(() => expect(box().value).toBe(START))
   type('앨리스의 글')
   server.overwrite('밥의 글')
@@ -149,14 +150,14 @@ describe('설명 — 남이 먼저 저장했으면 409 로 안다', () => {
   it('바탕은 첫 글자를 친 때의 값이다 — 탭을 다녀와 새 서버 값을 읽은 뒤 더 쳐도 옮겨 가지 않는다', async () => {
     const server = metaServer(START)
     await openPage(DOC, { apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe(START))
     type('앨리스의')
     server.overwrite('밥의 글')
 
     // 탭을 다녀온다 — 이 탭이 다시 마운트되며 서버를 다시 읽는다(밥의 값). 상자는 초안을 보인다.
     fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
-    fireEvent.click(await screen.findByRole('tab', { name: '페이지 설명' }))
+    fireEvent.click(await screen.findByRole('tab', { name: '페이지 정보' }))
     await waitFor(() => expect(box().value).toBe('앨리스의'))
     type('앨리스의 글')
     fireEvent.click(saveButton())
@@ -170,7 +171,7 @@ describe('설명 — 남이 먼저 저장했으면 409 로 안다', () => {
   it('409 의 지금 값이 내 글과 같으면 원하던 상태다 — 충돌이 아니고 초안을 비운다', async () => {
     const server = metaServer(START)
     await openPage(DOC, { apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe(START))
     type('같은 글')
     server.overwrite('같은 글')
@@ -181,8 +182,9 @@ describe('설명 — 남이 먼저 저장했으면 409 로 안다', () => {
     expect(saveButton().disabled).toBe(true)
     // **초안을 비웠다** — 뒤에 서버 값이 바뀌면 그것이 보인다(초안이 남았으면 가린다).
     server.overwrite('그 뒤 남이 고친 글')
-    fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
-    toView()
+    // 탭을 다녀와 본문을 다시 세운다 — 마운트의 조회가 다시 나간다.
+    fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+    toInfo()
     await waitFor(() => expect(box().value).toBe('그 뒤 남이 고친 글'))
   })
 })
@@ -199,7 +201,7 @@ describe('설명 — 바탕은 조회가 준 값 그대로다', () => {
   it('설명이 없는(null) 페이지에서 치고 저장하면 바탕이 null 이다 — 빈 문자열로 접지 않는다', async () => {
     const server = metaServer(null)
     await openPage(DOC, { apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(saveButton().disabled).toBe(true))
     expect(box().value).toBe('')
     type('첫 설명')
@@ -253,7 +255,7 @@ describe('설명 — 되살린 초안은 제 바탕을 든다', () => {
         () => shared,
       ),
     })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe(START))
     type('앨리스의 초안')
 
@@ -267,7 +269,7 @@ describe('설명 — 되살린 초안은 제 바탕을 든다', () => {
         () => shared,
       ),
     })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('앨리스의 초안'))
 
     fireEvent.click(saveButton())
@@ -294,7 +296,7 @@ describe('viewer 는 읽기 전용이다', () => {
   it('«페이지 설명» 탭 — 설명의 글이 보이고 상자 · 저장 단추가 없다', async () => {
     const server = metaServer(START)
     await openPage(DOC, { apiOverrides: { ...server.overrides, getProject: async () => VIEWER_PROJECT } })
-    toView()
+    toInfo()
 
     expect(await screen.findByText(START)).toBeTruthy()
     expect(screen.queryByRole('textbox', { name: '페이지 설명' })).toBeNull()

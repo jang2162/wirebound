@@ -38,7 +38,7 @@ import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
 import { PageJsonNoticeList, usePageJsonNotices } from '../panels/page-json-notices'
 import { InteractionPanel } from '../panels/interaction-panel'
-import { PageDescriptionPanel } from '../panels/page-description'
+import { PageInfoPanel } from '../panels/page-info'
 import { PanelDraftsProvider } from '../panels/panel-drafts'
 import { PropertyPanel } from '../panels/property-panel'
 import { AliasEditProvider } from '../panels/alias-edit'
@@ -313,7 +313,7 @@ const LATE_LEAD = '늦게 반영된 변경을 포함해 페이지를 서버 상�
 const lateReloadFailedNotice = (reason: string): string =>
   `${RELOAD_FAILED_LEAD} ${reason} — 화면은 아직 최신이 아닙니다. «다시 불러오기»를 다시 누르세요.`
 
-/** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
+/** 우측 패널의 탭. **넷이 선언되고 편집 모드에 넷 · 뷰 모드에 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
 type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
 
 /**
@@ -321,10 +321,10 @@ type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
  *
  * | 모드 | 탭 |
  * |---|---|
- * | 편집 | **속성**(선택 노드) / 코멘트 / 상호작용 |
- * | 뷰 | **페이지 설명** / 코멘트 / 상호작용 |
+ * | 편집 | 페이지 정보 / **속성**(선택 노드) / 코멘트 / 상호작용 |
+ * | 뷰 | **페이지 정보**(읽기만) / 코멘트 / 상호작용 |
  *
- * **첫째만 갈린다.** 코멘트·상호작용이 두 모드에 다 있는 것은 그 표가 그렇고, 캔버스의
+ * **속성만 갈린다.** 페이지 정보 · 코멘트 · 상호작용이 두 모드에 다 있는 것은 그 표가 그렇고, 캔버스의
  * 번호 마커가 두 모드에 다 있는 것(`canvas/canvas.tsx`)과도 짝이 맞는다 — 뷰 모드에서 설계서를 읽는
  * 사람이 보는 것이 바로 그 둘이다.
  *
@@ -333,12 +333,13 @@ type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
  */
 const PANEL_TABS: Record<EditorMode, readonly { id: PanelTab; label: string }[]> = {
   edit: [
+    { id: 'page', label: '페이지 정보' },
     { id: 'props', label: '속성' },
     { id: 'comments', label: '코멘트' },
     { id: 'interactions', label: '상호작용' },
   ],
   view: [
-    { id: 'page', label: '페이지 설명' },
+    { id: 'page', label: '페이지 정보' },
     { id: 'comments', label: '코멘트' },
     { id: 'interactions', label: '상호작용' },
   ],
@@ -347,11 +348,12 @@ const PANEL_TABS: Record<EditorMode, readonly { id: PanelTab; label: string }[]>
 /** 탭 하나의 본문. **표 기반이라 탭이 늘어도 삼항이 깊어지지 않는다**. */
 const PANEL_BODIES: Record<
   PanelTab,
-  // `canEdit`은 **넷 다** 본다(근거는 셸의 `canEdit` 주석).
-  (props: { projectId: string; pageId: string | undefined; canEdit: boolean }) => ReactElement
+  // `canEdit`은 **넷 다** 본다(근거는 셸의 `canEdit` 주석). `editable`은 설계서를 고칠 수 있는 판(편집 모드 · `canEdit`) — 메뉴 트리의
+  // `editable`과 같은 값이고 «페이지 정보»가 쓰기를 가른다. `menuRev`는 셸이 본 가장 큰 트리 번호다(페이지 정보가 이름을 다시 읽는다).
+  (props: { projectId: string; pageId: string | undefined; canEdit: boolean; editable: boolean; menuRev: number }) => ReactElement
 > = {
   props: PropertyPanel,
-  page: PageDescriptionPanel,
+  page: (props) => <PageInfoPanel projectId={props.projectId} pageId={props.pageId} canEdit={props.editable} menuRev={props.menuRev} />,
   comments: CommentPanel,
   interactions: InteractionPanel,
 }
@@ -560,7 +562,7 @@ function EditorShell(props: {
    *
    * | 자리 | viewer 에게 | 왜 |
    * |---|---|---|
-   * | **동작 입구** — 메뉴 트리의 줄 행동(`+` · `…` · 뿌리 `+`) · 끌어 놓기 · 빈 트리의 «최상위 메뉴» · 페이지 JSON · 구조 트리의 줄 행동 · 되돌리기 · 코멘트 폼 · 코멘트의 «수정» · «삭제» · 트리 두 곳의 단축키 | **숨긴다**(DOM 에서 뺀다) | 역할은 기다려서 풀리는 것이 아니다 — 켜질 길이 없는 회색 단추는 소음이다(스냅샷 복원 · 설정의 테마 고르개 · «페이지 설명»과 같은 판단). 뷰 모드가 편집 도구를 빼는 방식과도 같아서 viewer 의 편집 모드 좌측은 뷰 모드의 좌측과 같다 |
+   * | **동작 입구** — 메뉴 트리의 줄 행동(`+` · `…` · 뿌리 `+`) · 끌어 놓기 · 빈 트리의 «최상위 메뉴» · 페이지 JSON · 구조 트리의 줄 행동 · 되돌리기 · 코멘트 폼 · 코멘트의 «수정» · «삭제» · 트리 두 곳의 단축키 | **숨긴다**(DOM 에서 뺀다) | 역할은 기다려서 풀리는 것이 아니다 — 켜질 길이 없는 회색 단추는 소음이다(스냅샷 복원 · 설정의 테마 고르개 · «페이지 정보»와 같은 판단). 뷰 모드가 편집 도구를 빼는 방식과도 같아서 viewer 의 편집 모드 좌측은 뷰 모드의 좌측과 같다 |
    * | **값을 보이는 칸** — 속성 패널 · 상호작용 패널의 위젯 | **끄고 이유 한 줄**(`panels/property-panel.tsx`의 `VIEWER_NOTICE`) | 그 칸이 곧 값의 표시다 — 숨기면 viewer 가 읽을 것을 잃는다. 그리고 두 패널에는 «꺼진 이유» 관례가 이미 있다(남의 잠금 — `lockedNotice`). |
    * | **잠금** — 노드를 고르는 것 | **잡지 않는다**(`useNodeLock`) | 고르기는 읽기다(속성 · 코멘트를 보려고 고른다). 서버는 viewer 의 `lock`을 조용히 버리지만(`MIN_ROLE_FOR_FRAME`) 보내는 것 자체가 쓰기 프레임이다 |
    *
@@ -609,7 +611,7 @@ function EditorShell(props: {
    * |---|---|
    * | 메뉴 · 페이지 목록 · 제목 | 좌측 트리(`MenuTree`의 `reloadToken`) |
    * | 열린 페이지의 문서 | 캔버스(`CanvasFrame`의 복원 재조회) — 구조 트리 · 속성 패널은 스토어에서 읽는다 |
-   * | 코멘트 · 페이지 설명 | 우측 본문 — **탭을 다녀온 것처럼 다시 세운다**(`RightPanel`의 `key`) |
+   * | 코멘트 · 페이지 정보 | 우측 본문 — **탭을 다녀온 것처럼 다시 세운다**(`RightPanel`의 `key`) |
    * | 테마 바인딩 | `theme-changed` 프레임(복원도 보낸다 — `theme/project-theme.tsx` 의 `applyFrame`) · 놓치면 다시 읽기의 `themeRev`(`catchUp`) — 이 신호를 안 탄다 |
    *
    * **자리를 하나 빠뜨리면 탭을 다녀오거나 새로고침해야 맞는다** — 되돌렸다는 알림 아래 옛 코멘트 목록이 조용히 남는다
@@ -850,7 +852,7 @@ function EditorShell(props: {
               창에서는 «뷰포트 폭» 글을 감추고, 더 좁으면 상태 전환기를, 그보다 좁으면 줌 묶음도 오른쪽 끝 `…` 로 접는다(`shell/head-fold.ts` 의 단계 표).
 
               **되돌리기·다시 실행은 편집 모드에만 있다**.
-              「설계서 화면 구조」가 뷰 모드에서 구조 트리를 접고 속성 탭을 페이지 설명으로 바꾸는 것과 같은
+              「설계서 화면 구조」가 뷰 모드에서 구조 트리를 접고 속성 탭을 빼는 것과 같은
               선이다 — **편집 도구는 편집 모드에 있다.**
 
               **뷰 모드에 두면 깨진다.** 뷰 모드에서 undo를 누르면 문서는
@@ -1132,7 +1134,13 @@ function EditorShell(props: {
           style={{ width: `${layout.panelWidth}px` }}
         >
           {/* **본문 넷이 같은 `canEdit`을 받는다** — 속성 · 상호작용은 끄고, 코멘트 폼 · 설명 편집기는 숨긴다. */}
-          <RightPanel projectId={props.project.id} pageId={props.pageId} canEdit={canEdit} restoredToken={restoredToken} />
+          <RightPanel
+            projectId={props.project.id}
+            pageId={props.pageId}
+            canEdit={canEdit}
+            restoredToken={restoredToken}
+            menuRev={menuRev}
+          />
         </aside>
       </div>
     </AliasEditProvider>
@@ -1142,15 +1150,15 @@ function EditorShell(props: {
 /**
  * 우측 패널의 탭(설계서 「설계서 화면 구조」).
  *
- * **`mode`를 읽는다.** 그 절의 표대로 편집 모드는 **속성** / 코멘트 / 상호작용, 뷰 모드는 **페이지 설명** /
- * 코멘트 / 상호작용이다(위 `PANEL_TABS`).
+ * **`mode`를 읽는다.** 그 절의 표대로 편집 모드는 페이지 정보 / **속성** / 코멘트 / 상호작용, 뷰 모드는 **페이지 정보** /
+ * 코멘트 / 상호작용이다(위 `PANEL_TABS`). 처음 고른 탭은 «속성»이다 — 뷰 모드에는 없어 첫 탭(«페이지 정보»)이 선다.
  *
  * **본문은 삼항이 아니라 표다.** 탭이 셋이 되면 삼항이 겹치는데, 그러면 탭이 늘 때마다
  * 중첩이 깊어지고 어느 탭이 어느 본문인지 읽기 어렵다. **모드로 갈리는 것은 *목록*이지
  * 본문이 아니다** — 모드는 목록 표(`PANEL_TABS`)의 키이고 본문 표(`PANEL_BODIES`)는 모드를 모른다.
  *
  * **모드를 바꿀 때 탭이 어떻게 되는가 — 판정.** 지금 보던 탭이 새 모드에도 있으면 **그대로
- * 둔다**(코멘트를 보다 뷰 모드로 가면 코멘트가 그대로 보인다). 없으면(속성 ↔ 페이지 설명)
+ * 둔다**(코멘트를 보다 뷰 모드로 가면 코멘트가 그대로 보인다). 없으면(속성 → 뷰 모드)
  * **그 모드의 첫 탭으로 간다.** 무조건 첫 탭으로 되돌리는 판을 고르지 않은 것은, 모드 토글이
  * *"같은 것을 다르게 본다"*이지 *"다른 것을 본다"*가 아니기 때문이다 — 캔버스가 문서를,
  * 좌측이 트리를 그대로 두는 것과 같은 결이다.
@@ -1175,6 +1183,8 @@ function RightPanel(props: {
   canEdit: boolean
   /** 내가 스냅샷을 복원했다는 신호(셸의 `restoredToken`). 본문의 `key`다 — 아래 본문 자리의 주석. */
   restoredToken: number
+  /** 셸이 본 가장 큰 `menu-changed` 번호 — 본문에 그대로 내린다(`PANEL_BODIES`). */
+  menuRev: number
 }): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
@@ -1237,7 +1247,7 @@ function RightPanel(props: {
           왜 드는지, 페이지가 바뀌면 무엇을 버리는지는 `panels/panel-drafts.tsx`의 머리말이
           갖는다(여기 두 벌로 적지 않는다).
 
-          «페이지 설명»과 코멘트 탭이 **같은 provider**를 쓴다 — 페이지가 바뀌면 버리는 일도
+          «페이지 정보»와 코멘트 탭이 **같은 provider**를 쓴다 — 페이지가 바뀌면 버리는 일도
           그 한 자리에서 같은 값으로 한다. */}
       <PanelDraftsProvider projectId={props.projectId} pageId={props.pageId}>
         <div className="wb-shell-tabpanel" role="tabpanel" id={`wb-tabpanel-${tab}`} aria-labelledby={`wb-tab-${tab}`}>
@@ -1247,7 +1257,16 @@ function RightPanel(props: {
               다시 읽게 하지 않은 것은, 그러면 복원이 바꾸는 것을 읽는 본문이 늘 때마다 그 배선을 잊는 자리가 생기기 때문이다. */}
           {(() => {
             const Body = PANEL_BODIES[tab]
-            return <Body key={props.restoredToken} projectId={props.projectId} pageId={props.pageId} canEdit={props.canEdit} />
+            return (
+              <Body
+                key={props.restoredToken}
+                projectId={props.projectId}
+                pageId={props.pageId}
+                canEdit={props.canEdit}
+                editable={mode === 'edit' && props.canEdit}
+                menuRev={props.menuRev}
+              />
+            )
           })()}
         </div>
       </PanelDraftsProvider>

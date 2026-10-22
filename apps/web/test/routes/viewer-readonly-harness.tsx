@@ -28,7 +28,7 @@
  *   **줄 행동**은 `viewer-entries.test.tsx`의 «구조 트리»가 소유한다(줄 행동째 없다).
  * - **메뉴 트리 단축키 ↔ 메뉴 줄 행동** — 둘 다 `menu` 경로로 쓴다. 한쪽만 꺼도 «메뉴 트리» 칸이 산다(editor 대조는 둘 다 닿는다 —
  *   단축키 쪽은 `handleKeyDown`에 탐침을 심어 센다). viewer 에게 **단축키** 축은 `viewer-readonly-viewer.test.tsx` 의 viewer 케이스가 소유한다.
- * - **페이지 이름 변경 · 페이지 추가** — editor 훑기가 **못 닿는다**(칸이 없다). 둘 다 줄 행동이 여는 «이름» 칸인데 그 칸은
+ * - **메뉴 트리의 페이지 이름 변경 · 페이지 추가** — editor 훑기가 **못 닿는다**(칸이 없다 — 이름 변경의 «페이지 이름 저장» 칸은 «페이지 정보» 탭의 이름 칸이 채운다). 둘 다 줄 행동이 여는 «이름» 칸인데 그 칸은
  *   하나가 용도만 바꿔 서서(`menu-tree.tsx`의 `RowPanel` · `TreeInput`) 아래 `keyOf`로는 한 칸이다 — 처음 연 용도만
  *   친다(줄 행동으로 옮긴 뒤 어느 용도가 처음인지는 다시 재지 않았다 — 칸이 없는 것은 그대로다).
  *   viewer 에게 그 둘이 없다는 것은 `viewer-entries.test.tsx`의 «메뉴 트리»(줄 행동째 없다)가 소유한다.
@@ -359,7 +359,9 @@ function mount(role: ProjectRole, draftStore?: DraftStore): Wire {
             ? 'interactions'
             : paths.some((path) => /\/props(\/|$)|\/variant$/.test(path))
               ? 'props'
-              : 'structure'
+              : paths.every((path) => path === '/viewStates' || path.startsWith('/viewStates/'))
+                ? 'states'
+                : 'structure'
           return `patch ${kind}`
         }),
   })
@@ -689,8 +691,9 @@ afterEach(() => {
 export const REACH: { name: string; hit: (wire: Wire) => boolean }[] = [
   { name: '메뉴 트리(메뉴 CRUD · 순서)', hit: (w) => w.writes.some((r) => route(r)[0] === 'menu') },
   // **한 경로(`PATCH pages/:id`)에 입구가 넷이다** — 이름 변경 · 설명 저장 · 순서 옮기기 · 메뉴 옮기기. 경로로 재면 메뉴 트리의
-  // 순서 옮기기가 설명 저장 대신 칸을 채운다. 본문의 키로 가른다. **이름 변경(`title`)은 칸이 없다** — 이
-  // 훑기가 못 닿는다(머리말 «사각»).
+  // 순서 옮기기가 설명 저장 대신 칸을 채운다. 본문의 키로 가른다. 이름 변경(`title`)은 «페이지 정보» 탭의 이름 칸이 닿는다 — 메뉴 트리의
+  // 이름 칸은 여전히 못 닿는다(머리말 «대조가 입구 하나를 따로 증언하지 못하는 곳»).
+  { name: '페이지 이름 저장', hit: (w) => w.writes.some((r) => isPagePatch(r) && r.keys.includes('title')) },
   { name: '페이지 설명 저장', hit: (w) => w.writes.some((r) => isPagePatch(r) && r.keys.includes('description')) },
   { name: '페이지 가져오기', hit: (w) => w.writes.some((r) => r.method === 'POST' && same(route(r), ['pages', 'import'])) },
   // **코멘트는 입구가 넷이다** — 하나만 남아도 «코멘트»라는 한 칸은 산다. 두 페이지 어느 쪽이든.
@@ -705,6 +708,8 @@ export const REACH: { name: string; hit: (wire: Wire) => boolean }[] = [
   { name: '속성(패치)', hit: (w) => w.frames.includes('patch props') },
   { name: '상호작용(패치)', hit: (w) => w.frames.includes('patch interactions') },
   { name: '구조 편집(패치)', hit: (w) => w.frames.includes('patch structure') },
+  // 상태 목록만 고치는 편집(«페이지 정보» 탭의 상태 추가 · 이름 · 설명 · 순서) — 상태 삭제는 노드 보임도 함께 고쳐 구조 칸에 든다.
+  { name: '상태 편집(패치)', hit: (w) => w.frames.includes('patch states') },
   { name: '노드 잠금', hit: (w) => w.frames.some((f) => f.startsWith('lock')) },
   { name: '스냅샷 저장', hit: (w) => w.writes.some((r) => r.method === 'POST' && same(route(r), ['snapshots'])) },
 ]
@@ -779,9 +784,8 @@ export async function fillDraftsAsEditor(store: DraftStore): Promise<void> {
   const wire = mount('editor', store)
   await opened(wire)
 
-  // 페이지 설명 — 뷰 모드의 탭.
-  await toMode('뷰 모드')
-  fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
+  // 페이지 설명 — 편집 모드 «페이지 정보» 탭.
+  fireEvent.click(screen.getByRole('tab', { name: '페이지 정보' }))
   const description = (await screen.findByRole('textbox', { name: '페이지 설명' })) as HTMLTextAreaElement
   await waitFor(() => expect(description.value).toBe('회원을 찾는 화면'))
   fireEvent.change(description, { target: { value: '강등 전에 친 설명 초안' } })

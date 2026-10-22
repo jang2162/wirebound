@@ -26,13 +26,13 @@
  * 화면의 상태(`tree/collapse.ts`)이고, 열린 페이지 · 고른 줄이 접힌 메뉴 안이면 그 위 메뉴를 편다(아래 `chains`).
  *
  * **상태가 있는 페이지 줄도 접힌다** — 그 아래에 화면 상태 줄이 트리로 선다(`./state-rows.tsx` — 메뉴 트리의 줄이 아니라 그 페이지의 하위
- * 줄이다). 상태 이름 입력과 상태 삭제 확인은 이 컴포넌트가 든다(`stateInput` · `removingState` — 확인 상자는 트리 상자 밖에 선다).
+ * 줄이다). 상태 줄은 고르기만 한다 — 상태를 다루는 입구는 우측 «페이지 정보» 탭이다(`./page-states.tsx`).
  *
  * **줄 단추 · 링크에서 ↑ ↓ · Home · End 는 보이는 줄을 옮겨 다닌다**(`rowStep`) — 옮겨 간 줄을 고르고 포커스도 옮긴다. 페이지 줄로 옮기는 것은 고르는 것이고
  * 여는 것은 그 링크의 Enter 다(클릭과 같은 길). ← → · ↑ ↓ 는 고르기와 같은 읽기라 뷰 모드에도 선다. 포커스가 선 줄이 다시 받은 트리에서
  * 빠지면(남의 지우기 · 옮기기) 그 줄 · 이웃 줄로 포커스를 돌려준다(`refocus`) — 안 돌려주면 `body` 로 떨어져 키보드 사람이 트리를 다시 찾아간다.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type FocusEvent, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
@@ -54,8 +54,7 @@ import { usePageJsonExport, type PageJsonExport } from './page-json-export'
 import type { PageJsonNotices } from './page-json-notices'
 import { PageImportDialog } from './page-import-dialog'
 import { MenuDeleteDialog } from './menu-delete-dialog'
-import { RemoveStateDialog } from './remove-state-dialog'
-import { addStateItem, StateRows, usePageStates, type StateInput } from './state-rows'
+import { StateRows, usePageStates } from './state-rows'
 import { BUSY_REASON, menuItemReason } from './toolbar-status'
 import { TreeInput } from './tree-input'
 import { TreeFoldButtons, TreeToggle } from './tree-fold'
@@ -213,16 +212,6 @@ export function MenuTree(props: {
   }, [props.editable])
   /** 줄을 찾는 상자 — 끄는 동안 포인터 밑 줄(`[data-tree-row]`)을 여기서 찾는다. */
   const treeRef = useRef<HTMLUListElement>(null)
-  /** 열린 상태 이름 입력(`./state-rows.tsx`) — 어느 페이지의 추가 · 이름 바꾸기인가. */
-  const [stateInput, setStateInput] = useState<StateInput | null>(null)
-  /** 묻는 상태 삭제(`./remove-state-dialog.tsx`). */
-  const [removingState, setRemovingState] = useState<{ pageId: string; stateId: string } | null>(null)
-  // 편집할 수 없게 되면 상태 입력 · 삭제 확인도 닫는다(가져오기 상자와 같은 까닭).
-  useEffect(() => {
-    if (props.editable) return
-    setStateInput(null)
-    setRemovingState(null)
-  }, [props.editable])
   /** 접힌 메뉴(`tree/collapse.ts` — 프로젝트마다 · 세션 동안). 페이지는 접을 것이 없다. */
   const fold = useCollapsed(menuKey(props.projectId))
   /**
@@ -422,14 +411,6 @@ export function MenuTree(props: {
         {tree}
         {props.editable && <PageImportDialog commands={commands} focusFallback={treeFocusFallback} />}
         {props.editable && <MenuDeleteDialog commands={commands} focusFallback={treeFocusFallback} />}
-        {props.editable && (
-          <RemoveStateDialog
-            projectId={props.projectId}
-            target={removingState}
-            onClose={() => setRemovingState(null)}
-            focusFallback={treeFocusFallback}
-          />
-        )}
       </>
     )
   }
@@ -452,13 +433,6 @@ export function MenuTree(props: {
         {state.failure.message}
       </p>,
     )
-  }
-
-  const states: StateRowsWiring = {
-    input: stateInput,
-    setInput: setStateInput,
-    askRemove: (pageId, stateId) => setRemovingState({ pageId, stateId }),
-    expand: (pageId) => fold.expand([pageId]),
   }
 
   return outside(
@@ -542,7 +516,6 @@ export function MenuTree(props: {
             drag={props.editable ? drag : null}
             exporter={exporter}
             fold={fold}
-            states={states}
           />
         ))}
       </ul>
@@ -636,15 +609,6 @@ function foldableMenus(menu: readonly TreeMenuNode[]): string[] {
     ...node.pages.filter((page) => (page.viewStates?.length ?? 0) > 0).map((page) => page.id),
     ...foldableMenus(node.children),
   ])
-}
-
-/** 상태 줄에 내려 주는 것 — 입력 · 삭제 확인은 `MenuTree` 가 든다(머리말). */
-interface StateRowsWiring {
-  input: StateInput | null
-  setInput: (input: StateInput | null) => void
-  askRemove: (pageId: string, stateId: string) => void
-  /** 그 페이지 줄을 편다 — «상태 추가»가 접힌 줄에 입력을 연다. */
-  expand: (pageId: string) => void
 }
 
 /**
@@ -741,7 +705,6 @@ function MenuItem(props: {
   drag: PointerDrag<TreeSelection, MenuDrop> | null
   exporter: PageJsonExport
   fold: Collapsed
-  states: StateRowsWiring
 }): ReactElement {
   const { node, projectId, pageId, commands, drag } = props
   const pages = byOrder(node.pages)
@@ -799,7 +762,6 @@ function MenuItem(props: {
                 drag={drag}
                 exporter={props.exporter}
                 fold={props.fold}
-                states={props.states}
               />
             </li>
           ))}
@@ -813,7 +775,6 @@ function MenuItem(props: {
               drag={drag}
               exporter={props.exporter}
               fold={props.fold}
-              states={props.states}
             />
           ))}
         </ul>
@@ -828,7 +789,7 @@ function MenuItem(props: {
  * 페이지는 열리는 것이라 그 근거가 그대로 선다.**
  *
  * **상태가 있으면 접히는 줄이다** — 그 아래에 상태 줄이 선다(`./state-rows.tsx`). 목록은 열린 페이지면 열린 문서, 아니면 트리 응답이다
- * (`usePageStates`). 줄 `…` 의 «상태 추가»는 열린 페이지에서만 켜진다.
+ * (`usePageStates`).
  */
 function PageLink(props: {
   page: TreePage
@@ -838,27 +799,18 @@ function PageLink(props: {
   drag: PointerDrag<TreeSelection, MenuDrop> | null
   exporter: PageJsonExport
   fold: Collapsed
-  states: StateRowsWiring
 }): ReactElement {
   const { commands, drag, exporter } = props
   const selected = props.page.id === props.pageId
   const self: TreeSelection = { kind: 'page', id: props.page.id }
   const picked = isPicked(commands.selection, self)
-  const { states, open } = usePageStates(props.page)
+  const { states } = usePageStates(props.page)
   const foldable = states.length > 0
   const folded = foldable && props.fold.collapsed.has(props.page.id)
-  const rowItems = menuRowItems(
-    commands,
-    'page',
-    {
-      run: () => exporter.run(props.page.id),
-      busy: exporter.exporting !== null,
-    },
-    addStateItem(props.page, states, open, () => {
-      props.states.expand(props.page.id)
-      props.states.setInput({ pageId: props.page.id, kind: 'add', parent: null })
-    }),
-  )
+  const rowItems = menuRowItems(commands, 'page', {
+    run: () => exporter.run(props.page.id),
+    busy: exporter.exporting !== null,
+  })
 
   return (
     <>
@@ -889,10 +841,6 @@ function PageLink(props: {
         <StateRows
           projectId={props.projectId}
           page={props.page}
-          editable={drag !== null}
-          input={props.states.input}
-          setInput={props.states.setInput}
-          onAskRemove={props.states.askRemove}
           onPick={() => {
             if (commands.selection !== null) commands.select(null)
           }}
