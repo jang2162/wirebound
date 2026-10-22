@@ -93,7 +93,7 @@ describe('넣을 자리는 앞 형제 뒤다', () => {
     expect(contents(result!.document)).toEqual(['ga', 'na', 'mine', 'bob', 'da'])
   })
 
-  it('op 이 여럿인 넣기(패턴)는 뒤 op 의 앞 형제가 앞 op 이 넣은 노드다', () => {
+  it('op 이 여럿인 넣기(모듈)는 뒤 op 의 앞 형제가 앞 op 이 넣은 노드다', () => {
     const ops: PatchOp[] = [
       { op: 'add', path: '/root/children/1', value: text('m1') },
       { op: 'add', path: '/root/children/2', value: text('m2') },

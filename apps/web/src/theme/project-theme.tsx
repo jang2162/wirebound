@@ -1,6 +1,6 @@
 /**
  * **에디터가 쥔 프로젝트의 테마** — 고정한 `id@버전` · manifest · 토큰 · `rev` 와 번들의 정의. 셸(`routes/editor.tsx`)이 감싸고 캔버스 ·
- * 속성 패널 · 패턴 고르개가 읽는다.
+ * 속성 패널이 읽는다.
  *
  * # 무엇이 이 값을 바꾸나
  *
@@ -19,7 +19,7 @@
  * **정의의 manifest 는 서버 것이다** — 번들이 실은 manifest 는 버린다(`withServerManifest` — 다른 테마를 등록했으면 `bundle-failed`).
  *
  * **번들이 실패해도 그린다** — `bundle-failed` 는 정의 대신 `{ manifest, views: {} }`(렌더러가 노드마다 SDK 기본 뷰로 떨어진다)이고 manifest 의
- * variant · 패턴 칸은 그대로 선다. 테마를 읽지 못했으면(`failed`) 앞에 쥔 것이 있으면 그것을, 없으면 테마 없음(`NO_THEME`)으로 그린다. 둘 다
+ * variant 칸은 그대로 선다. 테마를 읽지 못했으면(`failed`) 앞에 쥔 것이 있으면 그것을, 없으면 테마 없음(`NO_THEME`)으로 그린다. 둘 다
  * 셸 머리에 한 줄로 알린다(`theme/theme-alert.tsx`).
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
