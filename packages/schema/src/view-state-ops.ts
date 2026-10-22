@@ -1,5 +1,5 @@
 /**
- * 화면 상태 목록의 편집 — 추가 · 이름 바꾸기 · 형제 안 옮기기 · 삭제를 **JSON Patch 묶음 하나**로 짓는 순수 함수(설계 spec
+ * 화면 상태 목록의 편집 — 추가 · 이름 바꾸기 · 설명 쓰기 · 형제 안 옮기기 · 삭제를 **JSON Patch 묶음 하나**로 짓는 순수 함수(설계 spec
  * `docs/superpowers/specs/2026-10-18-modules-states-layout-design.md` 「C1」 · 「C3」의 상태 삭제). 새 편집 종류를 만들지 않는다 — 묶음 하나가
  * 편집 하나라 지금 전송 길 · 잠금 판정(`lockConflictOfOps`) · 개인 되돌리기(묶음 하나 = 되돌리기 한 번)를 그대로 탄다.
  *
@@ -7,7 +7,7 @@
  * 오류가 늘지 않는다(그 판정은 케이스가 잰다 — `test/view-state-ops.test.ts`).
  */
 import { isBlankAlias, hasRejectedAliasChar } from './alias'
-import { VIEW_STATE_DEPTH_MAX, VIEW_STATE_NAME_MAX, VIEW_STATES_MAX, type PageDocument } from './node'
+import { VIEW_STATE_DEPTH_MAX, VIEW_STATE_DESCRIPTION_MAX, VIEW_STATE_NAME_MAX, VIEW_STATES_MAX, type PageDocument } from './node'
 import type { PatchOp } from './patch/types'
 import { walkNodes } from './tree'
 import { guardViewStateOps } from './view-state-guard'
@@ -55,6 +55,33 @@ export function renameViewStateOps(doc: PageDocument, stateId: string, name: str
   if (tidy === null || index === -1 || states[index]!.name === tidy) return null
   if (states.some((state) => state.id !== stateId && state.name === tidy)) return null
   return guardViewStateOps(doc, [{ op: 'replace', path: `/viewStates/${index}/name`, value: tidy }])
+}
+
+/**
+ * 친 설명을 목록이 받는 모양으로 — 앞뒤 공백을 걷고, 보이는 글자가 없으면 `''`(칸을 지운다는 뜻). 상한을 넘거나 짝 없는 서로게이트가 있으면
+ * `null` — 자르거나 고쳐 받지 않는다(`tidyName`과 같은 까닭). 규칙의 정본은 봉투(`envelope.ts`의 `ViewStateDescriptionSchema`)다.
+ */
+export function tidyViewStateDescription(text: string): string | null {
+  const trimmed = text.trim()
+  if (isBlankAlias(trimmed)) return ''
+  if (trimmed.length > VIEW_STATE_DESCRIPTION_MAX || /\p{Cs}/u.test(trimmed)) return null
+  return trimmed
+}
+
+/**
+ * **설명 쓰기** — 빈 글(보이는 글자 없음)은 칸을 지운다. `null`인 판: 상태가 없음 · 글이 규칙 밖(`tidyViewStateDescription`) · 설명이 그대로
+ * (없는 설명을 비움 포함).
+ */
+export function describeViewStateOps(doc: PageDocument, stateId: string, text: string): PatchOp[] | null {
+  const tidy = tidyViewStateDescription(text)
+  const states = doc.viewStates ?? []
+  const index = states.findIndex((state) => state.id === stateId)
+  if (tidy === null || index === -1) return null
+  const current = states[index]!.description
+  const path = `/viewStates/${index}/description`
+  if (tidy === '') return current === undefined ? null : guardViewStateOps(doc, [{ op: 'remove', path }])
+  if (tidy === current) return null
+  return guardViewStateOps(doc, [{ op: current === undefined ? 'add' : 'replace', path, value: tidy }])
 }
 
 /**

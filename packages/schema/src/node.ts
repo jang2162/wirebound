@@ -91,6 +91,8 @@ export interface ViewState {
   id: string
   name: string
   parent?: string
+  /** 그 상태가 무엇인지 사람이 적는 글(여러 줄) — 없으면 설명이 없는 상태다. 모양은 봉투(`envelope.ts`의 `ViewStateSchema`)가 본다. */
+  description?: string
 }
 
 /** 상태 트리의 깊이 상한 — 뿌리 상태가 1 이다(«로그인 > 관리자 > 최고 관리자»까지). */
@@ -104,6 +106,12 @@ export const VIEW_STATE_NAME_MAX = 30
 
 /** 한 페이지의 상태 수 상한. */
 export const VIEW_STATES_MAX = 20
+
+/**
+ * 상태 설명 글자 수의 상한 — 페이지 설명 · 코멘트와 같은 수이고 같은 단위(UTF-16 코드 단위 — 입력 칸의 `maxLength` 가 세는 단위)로 센다
+ * (`page-json/envelope.ts`의 `PAGE_DESCRIPTION_MAX_LENGTH`).
+ */
+export const VIEW_STATE_DESCRIPTION_MAX = 2000
 
 /** 레이아웃 문서. Slot 노드를 정확히 하나 품는다 (설계서 「레이아웃」). */
 export interface LayoutDocument {

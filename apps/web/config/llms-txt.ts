@@ -32,6 +32,7 @@ import {
   PAGE_TARGET_PREFIX,
   PageEnvelopeSchema,
   VIEW_STATE_DEPTH_MAX,
+  VIEW_STATE_DESCRIPTION_MAX,
   VIEW_STATE_NAME_MAX,
   VIEW_STATES_MAX,
   WEIGHT_MAX,
@@ -94,7 +95,7 @@ const NODE_FIELDS: Record<string, string> = {
 const PAGE_FIELDS: Record<string, string> = {
   version: `Document format version. The server stores and returns version ${CURRENT_DOCUMENT_VERSION}.`,
   root: 'The root node — always a `Page`.',
-  viewStates: `Optional named screen states (\`{ id, name, parent? }\`), at most ${VIEW_STATES_MAX}, names 1–${VIEW_STATE_NAME_MAX} characters, nesting at most ${VIEW_STATE_DEPTH_MAX} deep. Nodes refer to them from \`visibility\`.`,
+  viewStates: `Optional named screen states (\`{ id, name, parent?, description? }\`), at most ${VIEW_STATES_MAX}, names 1–${VIEW_STATE_NAME_MAX} characters, nesting at most ${VIEW_STATE_DEPTH_MAX} deep, \`description\` free text up to ${VIEW_STATE_DESCRIPTION_MAX} characters (omit it rather than send a blank one). Nodes refer to them from \`visibility\`.`,
 }
 
 /** 상호작용 액션 → 영어 한 줄. 키가 `InteractionSchema` 의 액션 `type` 과 같아야 한다. */
