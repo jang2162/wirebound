@@ -345,71 +345,6 @@ export function PropertyPanel(props: {
       {/* **꺼진 위젯의 이유를 이 패널이 자기 자리에서 말한다.** 별칭 칸은 어느 컴포넌트에나 서므로 위젯이 없는 판이 없다 —
           편집할 속성이 없는 컴포넌트(`Page`·`Slot`)도 꺼진 별칭 칸의 이유를 여기서 말한다. */}
       {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
-      {/* **별칭이 맨 위다**(설계서 「설계서 화면 구조」의 노드 별칭) — props 가 아니라 노드 봉투의 필드이고 어느 컴포넌트에나 선다. 칸을
-          떠날 때 커밋하는 길은 글 칸과 같다(`TextControl`) — 편집은 `aliasOps` 하나. */}
-      <dl className="wb-shell-props">
-        <div className="wb-shell-prop" key={ALIAS_FIELD.prop} data-wb-node-alias="">
-          <dt className="wb-shell-prop-label">
-            <label id={`${controlId(ALIAS_FIELD.prop)}-label`} htmlFor={controlId(ALIAS_FIELD.prop)}>
-              {ALIAS_FIELD.label}
-            </label>
-          </dt>
-          <dd className="wb-shell-prop-value">
-            <TextControl
-              key={node.id}
-              field={ALIAS_FIELD}
-              value={nodeAlias(node) ?? ''}
-              id={controlId(ALIAS_FIELD.prop)}
-              // 61자째부터는 칸이 받지 않는다 — 안 막으면 떠날 때 `tidyAlias` 가 60자에서 말없이 잘라 저장했다.
-              maxLength={NODE_ALIAS_MAX}
-              placeholder={`${NODE_ALIAS_MAX}자까지`}
-              disabled={blocked}
-              onCommit={(value) => {
-                if (blocked || doc === null) return
-                const ops = aliasOps(doc, node.id, String(value))
-                if (ops !== null) commitOps(ops)
-              }}
-              onLeave={(value) =>
-                commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) =>
-                  aliasOps(running, nodeId, String(value)),
-                )
-              }
-            />
-          </dd>
-        </div>
-        {/* **몫은 별칭 바로 아래다** — 별칭처럼 노드 봉투의 필드이고, 부모가 몫을 읽을 때만 선다(`weightRoom` — 렌더러가 몫을 싣는 판정과 같다). */}
-        {doc !== null && weightRoom(...weightParentOf(doc, node.id)) !== undefined && (
-          <WeightField
-            key={node.id}
-            value={node.weight}
-            disabled={blocked}
-            onCommit={(weight) => {
-              if (blocked || doc === null) return
-              const ops = weightOps(doc, node.id, weight)
-              if (ops !== null) commitOps(ops)
-            }}
-            onLeave={(weight) =>
-              commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) => weightOps(running, nodeId, weight))
-            }
-          />
-        )}
-        {/* **상태 보임은 몫 아래다** — 같은 층(노드 봉투의 필드)이고 뿌리 말고는 어느 노드에나 선다(`./visibility-field.tsx`). */}
-        {doc !== null && doc.root?.id !== node.id && (
-          <VisibilityField
-            key={node.id}
-            value={node.visibility}
-            viewStates={viewState.viewStates}
-            current={viewState.state}
-            hiddenNow={hiddenNodes.has(node.id)}
-            disabled={blocked}
-            onCommit={(visibility) => {
-              if (blocked || doc === null) return
-              const ops = visibilityOps(doc, node.id, visibility)
-              if (ops !== null) commitOps(ops)
-            }}
-          />
-        )}
-      </dl>
       {fields.length === 0 && variantField === null ? (
         // `Page`·`Slot`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
         // "아직 고르지 않았다"와 구분되지 않는다.
@@ -477,6 +412,71 @@ export function PropertyPanel(props: {
           </dl>
         </>
       )}
+      <dl className="wb-shell-props">
+        {/* **몫은 컴포넌트 속성 칸들 바로 아래다** — 별칭처럼 노드 봉투의 필드이고, 부모가 몫을 읽을 때만 선다(`weightRoom` — 렌더러가 몫을 싣는 판정과 같다). */}
+        {doc !== null && weightRoom(...weightParentOf(doc, node.id)) !== undefined && (
+          <WeightField
+            key={node.id}
+            value={node.weight}
+            disabled={blocked}
+            onCommit={(weight) => {
+              if (blocked || doc === null) return
+              const ops = weightOps(doc, node.id, weight)
+              if (ops !== null) commitOps(ops)
+            }}
+            onLeave={(weight) =>
+              commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) => weightOps(running, nodeId, weight))
+            }
+          />
+        )}
+        {/* **상태 보임은 몫 아래다** — 같은 층(노드 봉투의 필드)이고 뿌리 말고는 어느 노드에나 선다(`./visibility-field.tsx`). */}
+        {doc !== null && doc.root?.id !== node.id && (
+          <VisibilityField
+            key={node.id}
+            value={node.visibility}
+            viewStates={viewState.viewStates}
+            current={viewState.state}
+            hiddenNow={hiddenNodes.has(node.id)}
+            disabled={blocked}
+            onCommit={(visibility) => {
+              if (blocked || doc === null) return
+              const ops = visibilityOps(doc, node.id, visibility)
+              if (ops !== null) commitOps(ops)
+            }}
+          />
+        )}
+        {/* **별칭이 맨 아래다**(설계서 「설계서 화면 구조」의 노드 별칭) — props 가 아니라 노드 봉투의 필드이고 어느 컴포넌트에나 선다. 칸을
+            떠날 때 커밋하는 길은 글 칸과 같다(`TextControl`) — 편집은 `aliasOps` 하나. */}
+        <div className="wb-shell-prop" key={ALIAS_FIELD.prop} data-wb-node-alias="">
+          <dt className="wb-shell-prop-label">
+            <label id={`${controlId(ALIAS_FIELD.prop)}-label`} htmlFor={controlId(ALIAS_FIELD.prop)}>
+              {ALIAS_FIELD.label}
+            </label>
+          </dt>
+          <dd className="wb-shell-prop-value">
+            <TextControl
+              key={node.id}
+              field={ALIAS_FIELD}
+              value={nodeAlias(node) ?? ''}
+              id={controlId(ALIAS_FIELD.prop)}
+              // 61자째부터는 칸이 받지 않는다 — 안 막으면 떠날 때 `tidyAlias` 가 60자에서 말없이 잘라 저장했다.
+              maxLength={NODE_ALIAS_MAX}
+              placeholder={`${NODE_ALIAS_MAX}자까지`}
+              disabled={blocked}
+              onCommit={(value) => {
+                if (blocked || doc === null) return
+                const ops = aliasOps(doc, node.id, String(value))
+                if (ops !== null) commitOps(ops)
+              }}
+              onLeave={(value) =>
+                commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) =>
+                  aliasOps(running, nodeId, String(value)),
+                )
+              }
+            />
+          </dd>
+        </div>
+      </dl>
     </>
   )
 }

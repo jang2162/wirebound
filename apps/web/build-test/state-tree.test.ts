@@ -224,7 +224,7 @@ describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우�
     }
   }, 60_000)
 
-  it('패널 «상태 보임» — 손님 상태에서 «이 상태에서만»을 고르면 서버에 그 보임이 서고, 기본으로 가면 캔버스에서 빠진다', async () => {
+  it('패널 «상태 보임» — 손님 상태에서 «표시»를 고르면 서버에 그 보임이 서고, 기본으로 가면 캔버스에서 빠진다', async () => {
     const { P } = await fixture('st-panel')
     const tab = await openTab(P)
     try {
@@ -235,7 +235,7 @@ describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우�
         (head) => head === '화면 상태: 손님',
       )
       await tab.page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-id="n_all"] > .wb-shell-structure-node').click()
-      await tab.page.locator('[data-wb-node-visibility] select').selectOption('only')
+      await tab.page.locator('[data-wb-node-visibility]').getByRole('radio', { name: '표시', exact: true }).click()
       const server = await poll(
         '서버 보임',
         () => serverDoc(P),

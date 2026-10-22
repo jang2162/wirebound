@@ -159,12 +159,14 @@ describe('속성 패널 «몫» 칸 — 서는 자리', () => {
     ['Flex 의 자식', 'n-a'],
     ['Grid 의 자식', 'n-g'],
     ['열을 정한 SearchForm 의 자식', 'n-f'],
-  ])('%s 이면 선다 — 별칭 바로 아래 칸이다', async (_label, nodeId) => {
+  ])('%s 이면 선다 — 컴포넌트 속성 칸들 아래 · 상태 보임 · 별칭 위다', async (_label, nodeId) => {
     await board()
     select(nodeId)
     expect(weightField()).not.toBeNull()
     const rows = [...panel().querySelectorAll('.wb-shell-prop')].map((row) => row.querySelector('.wb-shell-prop-label')?.textContent)
-    expect(rows.slice(0, 2)).toEqual(['별칭', '몫'])
+    // 차례: 컴포넌트 속성 칸들 → 몫 → 상태 보임 → 별칭(맨 아래). 속성 칸이 하나는 앞에 선다.
+    expect(rows.slice(-3)).toEqual(['몫', '상태 보임', '별칭'])
+    expect(rows.length).toBeGreaterThan(3)
   })
 
   it.each([

@@ -1,11 +1,10 @@
 /**
- * **속성 패널 «상태 보임» 칸**(`src/panels/visibility-field.tsx` · `src/edit/ops.ts` 의 `visibilityOps` — 설계 spec
- * `2026-10-18-modules-states-layout-design.md` 「C2」 · 「C3」).
+ * **속성 패널 «상태 보임» 칸**(`src/panels/visibility-field.tsx` · `src/edit/ops.ts` 의 `visibilityOps` — 설계서 「설계서 화면 구조」의 «화면 상태»).
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 세 갈래 | «없음» → «이 상태에서만»이 지금 상태 하나로 시작하지 않는다 · «이 상태에서 숨김»으로 옮기며 상태를 잃는다 · «없음»이 보임을 안 걷는다 · 편집이 하나가 아니다 |
- * | 상태 고르기 | 항목이 «기본» + 트리 차례 · 들여쓰기가 아니다 · 여럿을 못 고른다 · 적는 차례가 고른 차례를 따른다 · 마지막 하나를 뺄 수 있다 |
+ * | 세 갈래 | 첫 줄이 `[비활성][숨김][표시]` 라디오가 아니다 · «비활성» → «표시»가 지금 상태 하나로 시작하지 않는다 · «숨김»으로 옮기며 상태를 잃는다 · «비활성»이 보임을 안 걷는다 · 편집이 하나가 아니다 · ← → 가 갈래를 안 옮긴다 |
+ * | 상태 고르기 | 둘째 줄이 «비활성»에서 선다 · 항목이 «기본» + 트리 차례 · 깊이 표지가 아니다 · 여럿을 못 켠다(토글) · 적는 차례가 켠 차례를 따른다 · 마지막 하나를 끌 수 있다 |
  * | 상태 없는 페이지 · 뿌리 | 고르개가 선다 · 뿌리에 칸이 선다 |
  * | 숨은 노드 · 잠금 | 지금 숨은 노드에 한 줄이 없다 · 남이 잡은 노드에서 칸이 켜져 있다 |
  */
@@ -15,7 +14,13 @@ import { applyOps, walkNodes, type PageDocument, type PatchOp, type ViewState, t
 import type { ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
 import { visibilityOps } from '../../src/edit/ops'
-import { HIDDEN_NOW_NOTICE, LAST_STATE_REASON, NO_STATES_NOTICE, VISIBILITY_LABEL } from '../../src/panels/visibility-field'
+import {
+  HIDDEN_NOW_NOTICE,
+  LAST_STATE_REASON,
+  NO_STATES_NOTICE,
+  STATE_DEPTH_MARK,
+  VISIBILITY_LABEL,
+} from '../../src/panels/visibility-field'
 import { HEAD_SEQ, openPage, pageDetail, pageDoc } from '../editor-harness'
 import { structureRowName } from './tree-row'
 import '../../src/catalog-setup'
@@ -76,26 +81,38 @@ function field(): HTMLElement | null {
   return document.body.querySelector<HTMLElement>('[data-wb-node-visibility]')
 }
 
-function modeSelect(): HTMLSelectElement {
-  return within(field()!).getByRole('combobox', { name: VISIBILITY_LABEL }) as HTMLSelectElement
+/** 첫 줄의 라디오 — 이름 차례 · 고른 것. */
+function modes(): { name: string; checked: boolean }[] {
+  const group = within(field()!).getByRole('radiogroup', { name: VISIBILITY_LABEL })
+  return within(group)
+    .getAllByRole('radio')
+    .map((radio) => ({ name: radio.textContent ?? '', checked: radio.getAttribute('aria-checked') === 'true' }))
 }
 
-/** 상태 칸 — 이름 · 들여쓰기 · 골랐나 · 끈 까닭. */
-function stateBoxes(): { name: string; indent: string; checked: boolean; why: string | null }[] {
-  return [...field()!.querySelectorAll<HTMLLabelElement>('.wb-shell-visibility-state')].map((label) => {
-    const box = label.querySelector('input')!
-    return {
-      name: label.textContent ?? '',
-      indent: label.style.paddingLeft,
-      checked: box.checked,
-      why: box.getAttribute('aria-disabled') === 'true' ? box.getAttribute('aria-description') : null,
-    }
-  })
+function chooseMode(name: string): void {
+  fireEvent.click(within(field()!).getByRole('radio', { name }))
+}
+
+function checkedMode(): string | undefined {
+  return modes().find((mode) => mode.checked)?.name
+}
+
+/** 상태 단추 — 이름(접근 이름) · 깊이 표지 · 켰나 · 끈 까닭. */
+function stateBoxes(): { name: string; mark: string; on: boolean; why: string | null }[] {
+  return [...field()!.querySelectorAll<HTMLButtonElement>('.wb-shell-visibility-state')].map((button) => ({
+    name: [...button.childNodes]
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent)
+      .join(''),
+    mark: button.querySelector('[aria-hidden="true"]')?.textContent ?? '',
+    on: button.getAttribute('aria-pressed') === 'true',
+    why: button.getAttribute('aria-disabled') === 'true' ? button.getAttribute('aria-description') : null,
+  }))
 }
 
 function toggle(name: string): void {
-  const label = [...field()!.querySelectorAll<HTMLLabelElement>('.wb-shell-visibility-state')].find((one) => one.textContent === name)!
-  fireEvent.click(label.querySelector('input')!)
+  const group = within(field()!).getByRole('group')
+  fireEvent.click(within(group).getByRole('button', { name }))
 }
 
 function buttonVisibility(held: PageDocument): unknown {
@@ -108,45 +125,64 @@ async function chooseState(name: string): Promise<void> {
 }
 
 describe('«상태 보임» — 세 갈래', () => {
-  it('«없음» → «이 상태에서만»은 지금 상태 하나로 시작한다 · «숨김»으로 옮겨도 상태가 그대로 · «없음»은 보임을 걷는다 — 고칠 때마다 편집 하나', async () => {
+  it('«비활성» → «표시»는 지금 상태 하나로 시작한다 · «숨김»으로 옮겨도 상태가 그대로 · «비활성»은 보임을 걷는다 — 고칠 때마다 편집 하나', async () => {
     const srv = await open(doc())
     await chooseState('관리자')
     select('Button')
-    expect(modeSelect().value).toBe('none')
+    expect(modes()).toEqual([
+      { name: '비활성', checked: true },
+      { name: '숨김', checked: false },
+      { name: '표시', checked: false },
+    ])
+    // 둘째 줄은 «숨김» · «표시»에서만 선다.
+    expect(within(field()!).queryByRole('group')).toBeNull()
 
-    fireEvent.change(modeSelect(), { target: { value: 'only' } })
+    chooseMode('표시')
     await waitFor(() => expect(srv.calls).toHaveLength(1))
     expect(buttonVisibility(srv.held())).toEqual({ mode: 'only', states: ['s_admin'] })
+    await waitFor(() => expect(checkedMode()).toBe('표시'))
 
-    fireEvent.change(modeSelect(), { target: { value: 'except' } })
+    chooseMode('숨김')
     await waitFor(() => expect(srv.calls).toHaveLength(2))
     expect(buttonVisibility(srv.held())).toEqual({ mode: 'except', states: ['s_admin'] })
 
-    fireEvent.change(modeSelect(), { target: { value: 'none' } })
+    chooseMode('비활성')
     await waitFor(() => expect(srv.calls).toHaveLength(3))
     expect(buttonVisibility(srv.held())).toBeUndefined()
     expect(srv.calls.map((ops) => ops.map((op) => op.op))).toEqual([['add'], ['replace'], ['remove']])
   })
 
-  it('기본 상태에서 «이 상태에서만»은 «기본» 하나로 시작한다', async () => {
+  it('기본 상태에서 «표시»는 «기본» 하나로 시작한다', async () => {
     const srv = await open(doc())
     select('Button')
-    fireEvent.change(modeSelect(), { target: { value: 'only' } })
+    chooseMode('표시')
     await waitFor(() => expect(srv.calls).toHaveLength(1))
     expect(buttonVisibility(srv.held())).toEqual({ mode: 'only', states: ['default'] })
+  })
+
+  it('← → 는 라디오 줄에서 갈래를 옮겨 고른다 — 포커스도 따라간다', async () => {
+    const srv = await open(doc())
+    select('Button')
+    const none = within(field()!).getByRole('radio', { name: '비활성' })
+    fireEvent.keyDown(none, { key: 'ArrowRight' })
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    expect(buttonVisibility(srv.held())).toEqual({ mode: 'except', states: ['default'] })
+    expect(document.activeElement?.textContent).toBe('숨김')
   })
 })
 
 describe('«상태 보임» — 상태 고르기', () => {
-  it('«기본» + 트리 차례 · 들여쓰기 · 여럿 — 적는 차례는 고른 차례가 아니라 «기본» 다음 트리 차례다', async () => {
+  it('«기본» + 트리 차례 · 깊이 표지 · 여럿을 켜는 토글 — 적는 차례는 켠 차례가 아니라 «기본» 다음 트리 차례다', async () => {
     const srv = await open(doc(undefined, { mode: 'only', states: ['s_guest'] }))
     select('Button')
-    expect(stateBoxes().map(({ name, indent, checked }) => [name, indent, checked])).toEqual([
-      ['기본', '0px', false],
-      ['로그인', '0px', false],
-      ['관리자', '12px', false],
-      ['손님', '0px', true],
+    expect(stateBoxes().map(({ name, mark, on }) => [name, mark, on])).toEqual([
+      ['기본', '', false],
+      ['로그인', '', false],
+      ['관리자', STATE_DEPTH_MARK, false],
+      ['손님', '', true],
     ])
+    // 깊이 표지는 접근 이름에 안 든다.
+    expect(within(field()!).getByRole('button', { name: '관리자' })).toBeTruthy()
 
     toggle('관리자')
     await waitFor(() => expect(srv.calls).toHaveLength(1))
@@ -159,19 +195,19 @@ describe('«상태 보임» — 상태 고르기', () => {
     expect(buttonVisibility(srv.held())).toEqual({ mode: 'only', states: ['default', 's_admin'] })
   })
 
-  it('마지막 하나는 뺄 수 없다 — 까닭을 달고 누르면 아무것도 안 보낸다', async () => {
+  it('마지막 하나는 끌 수 없다 — 까닭을 달고 누르면 아무것도 안 보낸다', async () => {
     const srv = await open(doc(undefined, { mode: 'except', states: ['s_login'] }))
     select('Button')
     expect(stateBoxes().find((box) => box.name === '로그인')).toEqual({
       name: '로그인',
-      indent: '0px',
-      checked: true,
+      mark: '',
+      on: true,
       why: LAST_STATE_REASON,
     })
     toggle('로그인')
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(srv.calls).toEqual([])
-    expect(stateBoxes().find((box) => box.name === '로그인')!.checked).toBe(true)
+    expect(stateBoxes().find((box) => box.name === '로그인')!.on).toBe(true)
   })
 })
 
@@ -180,7 +216,7 @@ describe('«상태 보임» — 서지 않는 판 · 한 줄', () => {
     await open(doc([]))
     select('Button')
     expect(field()!.textContent).toContain(NO_STATES_NOTICE)
-    expect(within(field()!).queryByRole('combobox')).toBeNull()
+    expect(within(field()!).queryByRole('radiogroup')).toBeNull()
   })
 
   it('뿌리에는 칸이 없다', async () => {
