@@ -3160,7 +3160,7 @@
   color: #a11;
 }
 
-/* 페이지 메타 충돌 — «다른 사람이 이 설명(제목)을 바꿨습니다»(`panels/meta-conflict.tsx`). «페이지 설명» 탭과
+/* 페이지 메타 충돌 — «다른 사람이 이 설명(제목)을 바꿨습니다»(`panels/meta-conflict.tsx`). «페이지 정보» 탭과
    메뉴 트리의 이름 변경이 같은 것을 쓴다. 실패 통지와 같은 붉은 글이되, **그 사람의 값**을 글 그대로 보이는 칸이
    있다 — 무엇을 덮는지 모르고 덮지 않게. */
 .wb-shell-meta-conflict {
@@ -5092,7 +5092,7 @@
 }
 
 /* ── 상태 삭제 확인(`panels/remove-state-dialog.tsx`) ──────────────────────────────────────
-   상태 줄 `…` 의 «삭제»가 연다. 자리 · 폭 · 스크롤은 대화 상자(`.wb-shell-dialog`)가 갖는다. 붉은색(`#b42318`)은
+   «페이지 정보» 탭의 상태 `…` «삭제»가 연다. 자리 · 폭 · 스크롤은 대화 상자(`.wb-shell-dialog`)가 갖는다. 붉은색(`#b42318`)은
    되돌리기 어려운 일의 몫이고(`.wb-shell-action-menu-danger`), 바뀐 목록 알림은 메뉴 연쇄 삭제 상자(`.wb-shell-menu-delete-changed`)와 같은 주황이다. */
 .wb-shell-view-states-body {
   display: flex;
