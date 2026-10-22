@@ -380,7 +380,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | code | 뜻 |
 |---|---|
 | `too-large` · `too-many-entries` · `unzipped-too-large` · `bad-path` · `not-allowed` · `symlink` · `missing-manifest` · `missing-theme-js` · `bad-json` · `bad-zip` | `.wbtheme` 읽기가 거절했다(`@wirebound/themes`의 `readWbtheme` — 풀기 전에 본다). 코드는 실행하지 않는다 |
-| `manifest` | manifest 규격 위반. `manifestCode` 가 `validateManifest` 의 원래 코드(`bad-version` · `unknown-token-ref` · …)를 든다. **새 패키지만** 더 보는 것 — `Page` 가 든 패턴(`manifestCode: pattern` · `path` 가 그 노드, `@wirebound/themes` 의 `readNewWbtheme`) — 은 저장된 패키지를 다시 읽는 내보내기 · 시딩에서는 안 본다 |
+| `manifest` | manifest 규격 위반. `manifestCode` 가 `validateManifest` 의 원래 코드(`shape` · `bad-version` · `unknown-token-ref` · …)를 든다. `patterns` 를 실은 manifest 는 `manifestCode: shape` · `path` `manifest.json:patterns` · 문장 «patterns 는 더 지원하지 않습니다 — …» 로 거절한다(내보내기 · 시딩의 다시 읽기도 같은 검증이다) |
 | `reserved-id` | `id` 가 `system-` 로 시작한다 — 시스템 테마의 것이다 |
 | `sdk-incompatible` | 호스트 SDK 판이 manifest 의 `sdk` 범위 밖이다 |
 
@@ -1304,8 +1304,7 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 
 모듈은 **넣는 노드 묶음**이고 소유자가 둘이다(설계서 「모듈」) — **프로젝트 모듈**(`/api/projects/:projectId/modules` — 프로젝트가 소유하고
 그 프로젝트의 모든 페이지에 넣는다)과 **개인 모듈**(`/api/me/modules` — 사람 하나가 소유하고 그 사람이 여는 모든 프로젝트에 선다).
-구조 트리에서 고른 노드를 «모듈로 저장…» 하고(상자 안에서 어느 쪽인지 고른다), 하단 판의 «모듈» 탭에서 넣는다. 테마 패턴(설계서
-「patterns — 테마가 소유한 구성 레시피」)과 다른 것이다 — 패턴은 테마가 소유하고 슬롯을 갖는 레시피다.
+구조 트리에서 고른 노드를 «모듈로 저장…» 하고(상자 안에서 어느 쪽인지 고른다), 하단 판의 «모듈» 탭에서 넣는다.
 
 **개인 모듈은 세션으로만 · 자기 것만이다.** 다른 사용자 · 같은 프로젝트의 다른 멤버가 그 id 로 부르면 모르는 id 와 같은 404 이고, API
 토큰은 프로젝트 단위 스코프라 이 길에 닿지 않는다(`:projectId` 가 없는 라우트라 토큰이 사람을 안 채워 401). 프로젝트를 가리키는 칸이

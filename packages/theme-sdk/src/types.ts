@@ -42,7 +42,6 @@ export interface ThemeManifest {
     items: Readonly<Record<string, TokenDecl>>
   }
   components?: Readonly<Record<string, ComponentDecl>>
-  patterns?: Readonly<Record<string, unknown>>
 }
 
 export interface ViewProps<P extends Record<string, unknown> = Record<string, unknown>> {

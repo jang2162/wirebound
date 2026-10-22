@@ -1,7 +1,7 @@
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { Inflate, strFromU8, unzipSync, type UnzipFileInfo } from 'fflate'
 import type { ManifestIssue, ManifestIssueCode } from '../manifest/schema'
-import { newManifestIssues, validateManifest } from '../manifest/schema'
+import { validateManifest } from '../manifest/schema'
 
 /** spec 「업로드 · 버전 · 인스턴스 관리자」의 «저장» 이 정한 상한 — 압축 10 MB · 풀었을 때 50 MB · 항목 500. */
 export const WBTHEME_LIMITS = { zipBytes: 10_485_760, unzippedBytes: 52_428_800, entries: 500 } as const
@@ -166,18 +166,6 @@ export function readWbtheme(bytes: Uint8Array): { files: WbthemeFiles | null; is
     files: { manifest, themeJs: strFromU8(raw['theme.js']!), themeCss: css === undefined ? null : strFromU8(css), assets },
     issues: [],
   }
-}
-
-/**
- * **새로 들이는 `.wbtheme` 의 읽기** — 업로드(`apps/api` 의 `routes/admin-themes.ts`)와 `wb-theme build` 가 부른다. `readWbtheme` 에 새
- * 패키지에만 거는 manifest 검사(`newManifestIssues` — `Page` 가 든 패턴)를 더한다. 저장된 패키지를 다시 읽는 자리(내보내기 · 시딩 ·
- * 바이트를 내주는 라우트)는 `readWbtheme` 을 그대로 쓴다 — 이미 받은 패키지는 다시 읽기에서 깨지지 않는다.
- */
-export function readNewWbtheme(bytes: Uint8Array): { files: WbthemeFiles | null; issues: WbthemeIssue[] } {
-  const read = readWbtheme(bytes)
-  if (read.files === null) return read
-  const issues = newManifestIssues(read.files.manifest)
-  return issues.length === 0 ? read : { files: null, issues: issues.map(asWbthemeIssue) }
 }
 
 function asWbthemeIssue(issue: ManifestIssue): WbthemeIssue {

@@ -157,7 +157,7 @@ describe.skipIf(!전제.ok)('A4 리뷰', () => {
   })
 
   /**
-   * 캔버스는 정의의 manifest(`definition.manifest` — 렌더러의 `resolveVariant`)로 variant 를 풀고, 속성 패널 · 패턴 고르개는 서버의
+   * 캔버스는 정의의 manifest(`definition.manifest` — 렌더러의 `resolveVariant`)로 variant 를 풀고, 속성 패널은 서버의
    * manifest(`GET …/theme`)로 칸을 짓는다. 정의가 번들이 실은 manifest 를 그대로 쓰면 둘이 다른 패키지(업로드는 `theme.js` 를 실행하지 않아
    * 못 견준다)에서 패널이 고른 variant 를 캔버스가 말없이 기본으로 그린다(`theme/bundle-loader.ts` 의 `withServerManifest`). 판정: 패널이
    * 보이는 값과 캔버스가 그린 값이 같다.

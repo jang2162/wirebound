@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { WBTHEME_LIMITS } from '@wirebound/themes'
+import { WBTHEME_LIMITS, type ThemeManifest } from '@wirebound/themes'
 import { loadConfig } from '../src/config'
 import { insertApiToken } from '../src/repos/api-tokens'
 import { setInstanceAdmin } from '../src/repos/users'
@@ -132,6 +132,26 @@ describe('업로드 — 받는 것', () => {
       const issues = res.json().error.issues as { code: string; path: string; manifestCode?: string }[]
       expect(issues.map((issue) => issue.code)).toContain('manifest')
       expect(issues.find((issue) => issue.code === 'manifest')?.path).toContain('version')
+    })
+  })
+
+  it('patterns 를 실은 manifest 는 422 이고 까닭을 말한다 · 행이 안 남는다(대조: 빼면 201)', async () => {
+    await withApi(async (ctx) => {
+      const admin = await adminOf(ctx)
+      const patterns = { 'hero.split': { name: '히어로', schema: { type: 'Section' } } }
+      const res = await upload(
+        ctx,
+        admin.cookie,
+        packed(manifestOf('patterned', '1.0.0', { patterns } as unknown as Partial<ThemeManifest>)),
+      )
+      expect(res.statusCode, res.body).toBe(422)
+      const issues = res.json().error.issues as { code: string; path: string; message: string; manifestCode?: string }[]
+      expect(issues.map((issue) => [issue.code, issue.manifestCode, issue.path])).toEqual([['manifest', 'shape', 'manifest.json:patterns']])
+      expect(issues[0]!.message).toContain('patterns 는 더 지원하지 않습니다')
+      const rows = await ctx.db.selectFrom('theme_packages').select('theme_id').where('theme_id', '=', 'patterned').execute()
+      expect(rows).toEqual([])
+      const plain = await upload(ctx, admin.cookie, packed(manifestOf('patterned', '1.0.0')))
+      expect(plain.statusCode, plain.body).toBe(201)
     })
   })
 

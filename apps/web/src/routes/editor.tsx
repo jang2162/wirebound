@@ -519,7 +519,7 @@ export function EditorShellRoute(): ReactElement {
     <EditorStoreProvider store={store}>
       {/* 캔버스 iframe 의 문서를 머리의 `…` 메뉴가 아는 통로(바깥 누름 닫기) — 캔버스와 머리의 공통 조상이 셸이라 셸째 감싼다. */}
       <CanvasDocumentProvider>
-        {/* **프로젝트가 고정한 테마**(`theme/project-theme.tsx`) — 캔버스 · 속성 패널 · 패턴 고르개가 읽고, 셸이 프레임 · 다시 읽기로 따라잡게 한다. */}
+        {/* **프로젝트가 고정한 테마**(`theme/project-theme.tsx`) — 캔버스 · 속성 패널이 읽고, 셸이 프레임 · 다시 읽기로 따라잡게 한다. */}
         <ProjectThemeProvider projectId={state.project.id}>
           {/* 끌기의 두 대상(구조 트리 · 캔버스)을 경로 층이 아는 통로(`drag/use-placement.ts`) — 둘의 공통 조상이 셸이다. */}
           <PlacementRegionsProvider>

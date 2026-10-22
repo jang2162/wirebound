@@ -45,8 +45,7 @@ export function collectNodeIds(root: WbNode): string[] {
 }
 
 /**
- * 트리 전체에 새 id를 발급한다. 가져오기·모듈 넣기 · 붙여넣기에서 쓴다(패턴 전개는 **안 쓴다** —
- * `PatternNode`에 옛 id도 `interactions`도 없어 리매핑할 대상 자체가 없다).
+ * 트리 전체에 새 id를 발급한다. 가져오기·모듈 넣기 · 붙여넣기에서 쓴다.
  * 트리 안을 가리키던 상호작용 target도 함께 바꾸고, 트리 밖 참조(`page:...`)는 그대로 둔다.
  *
  * ---
@@ -56,8 +55,7 @@ export function collectNodeIds(root: WbNode): string[] {
  * 그것이 계약이다. `{ ...node }`로 노드만 새로 만들면 `props`와 상호작용 액션의 `value`가
  * **입력과 같은 객체**로 남는다 — 그러면 결과 문서를 고칠 때 원본이 함께 바뀐다. 입력이
  * 오래 사는 객체일 때(화면이 쥔 모듈 목록, 초안 스토어) 그 공유가 프로세스 수명
- * 내내 남는다. `expandPattern`의 공유와 같은 부류이고, *"무관한 테스트가 순서에 따라
- * 깨진다"*로 나타난다.
+ * 내내 남는다. *"무관한 테스트가 순서에 따라 깨진다"*로 나타난다.
  *
  * **선언되지 않은 키는 참조로 남는다.** `{ ...node }`가 그것을 그대로 옮기기 때문이다.
  * 그 키들은 봉투(`WbNodeSchema`가 strictObject다)가 저장 경계에서 거부하므로 문서에
@@ -113,8 +111,7 @@ function rewrite(node: WbNode, mapping: Map<string, string>): WbNode {
  * `prepareNodesForPaste`).
  *
  * **깊은 복사를 겸한다.** 저장 경계가 받은 값을 그대로 들고 있으면 부르는 쪽이 나중에
- * 그 트리를 만졌을 때 저장된 것이 함께 바뀐다 — `expandPattern`이 `structuredClone`으로
- * 닫는 것과 같은 부류다. 임의 JSON을 복사하는 규칙은 `./clone.ts` 하나가
+ * 그 트리를 만졌을 때 저장된 것이 함께 바뀐다. 임의 JSON을 복사하는 규칙은 `./clone.ts` 하나가
  * 갖는다(`structuredClone`을 왜 안 쓰는지도 거기 있다).
  *
  * **`WbNode`가 아닌 키는 옮기지 않는다.** `remapNodeIds`가 `{ ...node }`로 그것을 남기는

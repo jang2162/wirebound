@@ -149,13 +149,6 @@ describe('validateManifest', () => {
         m.components.List.variants[1].hideProps = ['nope']
       }),
     ],
-    [
-      '패턴이 스키마를 못 지나면',
-      'pattern',
-      edit((m) => {
-        m.patterns = { 'hero.split': { name: 'x', schema: { type: 'Nope' } } }
-      }),
-    ],
   ])('%s → %s', (_label, code, raw) => {
     const r = validateManifest(raw)
     expect(r.manifest).toBeNull()

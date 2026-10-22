@@ -1,4 +1,3 @@
-import { installCatalog } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import packageJson from '../package.json?raw'
 import tsconfigJson from '../tsconfig.json?raw'
@@ -65,15 +64,6 @@ describe('공개 표면이 계약이다', () => {
    */
   const CONTRACT = [
     'PACKAGE_NAME',
-    // 패턴(설계서 「patterns — 테마가 소유한 구성 레시피」). 규격 · 검증 · 전개. `apps/web`의 패턴 고르개와 삽입 경로가 부른다 —
-    // CLI·MCP가 부르려면 패키지에 있어야 한다(설계서 「LLM 연계 (P9)」).
-    'PatternSchema',
-    'PatternsSchema',
-    'PatternNodeSchema',
-    'PATTERN_CATEGORIES',
-    'SLOT_TYPES',
-    'checkPatterns',
-    'expandPattern',
     // 설계서 「lint 규칙」의 lint. 웹·CLI·MCP 셋이 이 이름을 부른다.
     'lintProject',
     // 스냅샷 payload 규격과 lint 입력 변환. **`apps/api`가 아니라 여기 둔다** — api·CLI(`wireb pull`·`wireb lint`)·MCP가
@@ -91,8 +81,6 @@ describe('공개 표면이 계약이다', () => {
     'SDK_RANGE_PATTERN',
     // `.wbtheme` 읽기 · 쓰기. 빌드 · 업로드 · 시딩 · 호스트가 같은 읽기로 검증한다.
     'readWbtheme',
-    // 새로 들이는 입구(업로드 · `wb-theme build`)의 읽기 — 다시 읽기에는 없는 검사(`Page` 가 든 패턴)를 더한다.
-    'readNewWbtheme',
     'packWbtheme',
     'WBTHEME_LIMITS',
     // 토큰 → CSS 변수 · 푼 값. 갤러리 · 캔버스 · 내보내기가 같은 함수로 짓는다.
@@ -105,25 +93,5 @@ describe('공개 표면이 계약이다', () => {
 
   it('공개 표면이 계약과 정확히 같다', () => {
     expect(Object.keys(api).sort()).toEqual(CONTRACT)
-  })
-
-  it('내부 헬퍼가 새어 나가지 않는다', () => {
-    // 이슈 팩토리와 severity 표는 패턴 검증 안의 일이다 — 바깥에서 테마 이슈를 만드는 자리가 없다.
-    for (const name of ['issue', 'themeIssue', 'THEME_ISSUE_SEVERITY']) {
-      expect(Object.keys(api), name).not.toContain(name)
-    }
-  })
-
-  it('패턴 검증과 전개가 공개 표면만으로 이어진다', () => {
-    installCatalog()
-    const pattern = api.PatternSchema.parse({
-      name: '제목 하나',
-      slots: { title: 'text' },
-      schema: { type: 'Text', slot: 'title', props: { content: '안녕' } },
-    })
-    expect(api.checkPatterns({ 'hero.basic': pattern }).issues).toEqual([])
-    const { expanded, issues } = api.expandPattern(pattern, () => 'n_000000000001')
-    expect(issues).toEqual([])
-    expect([...expanded!.slots]).toEqual([['title', 'n_000000000001']])
   })
 })
