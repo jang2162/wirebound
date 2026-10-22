@@ -2,13 +2,12 @@
  * **하단 판의 «모듈» 탭** — 모듈 묶음을 골라 넣는다(설계 spec `docs/superpowers/specs/2026-10-18-modules-states-layout-design.md` 「B2」 · 「B3」 ·
  * `2026-10-20-personal-modules-design.md`). 판의 위층 탭(«컴포넌트 | 모듈» — `./component-palette.tsx`)이 이것을 그린다.
  *
- * ## 묶음 셋
+ * ## 묶음 둘
  *
  * | 묶음 | 어디서 | 카드 |
  * |---|---|---|
  * | 개인 모듈 | 서버(`GET /api/me/modules` — 사람이 소유하고 그 사람이 여는 모든 프로젝트에 선다) | 이름 · 노드 수 · «넣기» · «이름 바꾸기» · «삭제» · «프로젝트 모듈로 복사» |
  * | 프로젝트 모듈 | 서버(`GET …/modules`) | 이름 · 노드 수 · «넣기» · «이름 바꾸기» · «삭제» · «개인 모듈로 복사» |
- * | 테마 패턴 | 캔버스가 그리는 테마의 manifest `patterns`(읽기 전용 — `./theme-patterns.ts` 의 `themePatterns`) | 이름 · 범주 · «넣기» |
  *
  * 두 서버 목록은 탭을 열 때와 저장 · 이름 · 삭제 · 복사 뒤에 다시 읽는다(방송은 없다). 비었으면 그 묶음이 어디서 채우는지 한 줄을 말한다.
  *
@@ -33,7 +32,7 @@
  * 페이지를 겨냥하는 액션이 있으면 프로젝트 트리도 읽는다(붙여넣기와 같다 — `shell/editor-keys.tsx` 의 `paste`). 개인 모듈은 다른 프로젝트에서
  * 저장했을 수 있어 이 프로젝트에 없는 페이지 · 넣는 페이지에 없는 노드를 겨냥하는 동작이 흔히 빠진다 — 뺀 수를 정보 통지로 말한다. 그 사이
  * 페이지를 옮겼으면 넣지 않고 말한다 — 판은 페이지 id 가 아니라 판을 연 세대(`pageOpenEpoch`)로 가른다(붙여넣기의 판단과 같다). 자리는 **다 읽은
- * 뒤의 문서로** 판정한다 — 읽는 사이 남이 고쳤을 수 있다. 패턴은 읽을 것이 없어 같은 걸음을 곧바로 지난다.
+ * 뒤의 문서로** 판정한다 — 읽는 사이 남이 고쳤을 수 있다.
  *
  * **넣을 수 있는가를 넣는 순간에 다시 본다** — 판은 뷰 모드 · 강등에도 남으므로 끄는 중 · 읽는 중에 넣을 수 없게 될 수 있다. 그 값이 바뀌면 카드
  * 판을 다시 마운트해(끌기를 끊는다) 놓기가 오지 않게 하고, 그래도 온 넣기(읽는 사이 바뀜)는 보내기 직전에 그 값을 보고 버린다.
@@ -47,10 +46,8 @@
  * 복사 엔드포인트가 따로 없다(`apps/api` 의 `routes/personal-modules.ts` 머리말). 사본은 새 모듈이라 원본과 이어지지 않는다. 끝나면 대상 목록을
  * 다시 읽고 정보 통지(`copiedNotice`)를 세운다.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactElement } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactElement } from 'react'
 import { MODULE_NAME_MAX, matchPageTargets, type PageDocument, type WbNode } from '@wirebound/schema'
-import { NO_THEME } from '@wirebound/renderer'
-import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { ApiError, type ApiClient } from '../api/client'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
@@ -59,17 +56,14 @@ import { DropIndicator } from '../drag/drop-indicator'
 import { useCanvasRemeasured, usePlacementDrop, usePublishPlacementPreview, type PlacementDrop } from '../drag/use-placement'
 import { usePointerDrag, type DragPoint } from '../drag/use-pointer-drag'
 import { hasPageTargets, pageTargetsOf } from '../edit/paste-ops'
-import type { ExpandedNodes } from '../edit/pattern-insert'
 import type { Placing, StructureDrop } from '../edit/structure-drop'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { lockedNotice } from '../panels/property-panel'
 import { DOUBLE_CLICK_MS, DOUBLE_CLICK_SLOP } from '../shell/action-menu'
 import { shellIcon } from '../shell/icons'
 import { openDocumentNow, useEditorStoreInstance } from '../store/use-editor-store'
-import { useProjectTheme } from '../theme/project-theme'
-import { moduleDroppedNotice, moduleInsertOps, type ModuleBundle } from './module-insert'
+import { moduleDroppedNotice, moduleInsertOps } from './module-insert'
 import { paletteAddTarget } from './palette-add'
-import { EMPTY_NOTICE, themePatterns } from './theme-patterns'
 
 /** 개인 모듈이 없을 때의 안내 한 줄. */
 export const NO_PERSONAL_MODULES = "구조 트리에서 노드를 골라 '모듈로 저장'에서 '개인 모듈'을 고르면 여기에 섭니다"
@@ -86,23 +80,16 @@ export function copiedNotice(name: string, to: 'project' | 'personal'): string {
 export const MODULE_LEFT_NOTICE = '넣는 사이 페이지를 옮겨 넣지 않았습니다. 다시 넣으세요.'
 /** 목록 · 모듈 · 페이지 목록을 못 읽었다(서버 문장이 없을 때). */
 const READ_FAILURE = '모듈을 읽지 못했습니다. 다시 시도하세요.'
-/** 패턴 전개가 실패했다 — 테마를 고쳐야 한다. */
-function brokenPattern(name: string): string {
-  return `패턴을 넣지 못했습니다 — ${name}. 테마의 패턴을 고쳐야 합니다.`
-}
 
 /** 카드 하나 — 끌기 표본 · 넣기 원천. `key` 는 `Placing.key` 와 같다. */
 interface ModuleCard {
   key: string
   name: string
-  /** 카드의 둘째 줄(«노드 N개» · 패턴 범주). */
+  /** 카드의 둘째 줄(«노드 N개»). */
   detail: string
   /** 끌기 미리보기 · 판정의 표본(`Placing` 머리말). */
   sample: readonly WbNode[]
-  source:
-    | { kind: 'personal'; module: PersonalModule }
-    | { kind: 'project'; module: ProjectModule }
-    | { kind: 'pattern'; key: string; pattern: ThemePattern }
+  source: { kind: 'personal'; module: PersonalModule } | { kind: 'project'; module: ProjectModule }
 }
 
 /** 바뀐 목록 — 개인(사람 하나) · 프로젝트 하나. */
@@ -156,17 +143,6 @@ function searchable(text: string): string {
   return text.normalize('NFC').toLowerCase()
 }
 
-/** 패턴 키의 범주 — 설계서 「patterns — 테마가 소유한 구성 레시피」가 패턴 이름을 `<범주>.<변형>` 으로 정했다. 표시일 뿐이다(판정은 `checkPatterns`). */
-function patternCategory(key: string): string {
-  return key.includes('.') ? key.slice(0, key.indexOf('.')) : key
-}
-
-/** 끌기 표본으로 쓸 패턴 전개 — 결정적 id(렌더마다 같은 표본). 전개가 실패하면 빈 표본이다(그 카드의 끌기는 놓을 자리가 없다). */
-function patternSample(key: string, pattern: ThemePattern): readonly WbNode[] {
-  let next = 0
-  return expandPattern(pattern, () => `pv_${key.replace(/[^A-Za-z0-9_-]/g, '_')}_${(next += 1)}`).expanded?.nodes ?? []
-}
-
 export function ModuleTab(props: {
   projectId: string
   pageId: string | undefined
@@ -186,7 +162,7 @@ export function ModuleTab(props: {
   const reloadPersonal = personal.reload
   const reloadProject = project.reload
 
-  // 탭을 열 때 읽는다(머리말 «묶음 셋»). 같은 화면에서 저장 · 복사했으면 그 목록을 다시 읽는다.
+  // 탭을 열 때 읽는다(머리말 «묶음 둘»). 같은 화면에서 저장 · 복사했으면 그 목록을 다시 읽는다.
   useEffect(() => {
     reloadPersonal()
     reloadProject()
@@ -200,8 +176,6 @@ export function ModuleTab(props: {
     }
   }, [reloadPersonal, reloadProject, props.projectId])
 
-  const manifest = useProjectTheme().manifest ?? NO_THEME.manifest
-  const patterns = useMemo(() => themePatterns(manifest), [manifest])
   const wanted = searchable(props.query.trim())
   const matches = (card: ModuleCard): boolean => wanted === '' || searchable(card.name).includes(wanted)
 
@@ -218,13 +192,6 @@ export function ModuleTab(props: {
     detail: `노드 ${module.nodeCount}개`,
     sample: module.nodes,
     source: { kind: 'project', module },
-  }))
-  const patternCards: ModuleCard[] = patterns.entries.map(([key, pattern]) => ({
-    key: `pattern:${key}`,
-    name: pattern.name,
-    detail: patternCategory(key),
-    sample: patternSample(key, pattern),
-    source: { kind: 'pattern', key, pattern },
   }))
 
   const insert = useModuleInsert({
@@ -247,11 +214,6 @@ export function ModuleTab(props: {
       groups={[
         { label: '개인 모듈', cards: personalCards.filter(matches), empty: emptyLine(personal.listed, NO_PERSONAL_MODULES) },
         { label: '프로젝트 모듈', cards: projectCards.filter(matches), empty: emptyLine(project.listed, NO_PROJECT_MODULES) },
-        {
-          label: '테마 패턴',
-          cards: patternCards.filter(matches),
-          empty: patterns.broken ?? (patterns.entries.length === 0 ? EMPTY_NOTICE : '맞는 패턴이 없습니다'),
-        },
       ]}
       onNotice={onNotice}
       onChanged={(kind) => (kind === 'personal' ? reloadPersonal() : reloadProject())}
@@ -286,21 +248,9 @@ function useModuleInsert(input: {
       busy.current = true
       try {
         const opened = store.pageOpenEpoch()
-        let bundle: ModuleBundle
-        if (card.source.kind !== 'pattern') {
-          const module = await reread(api, projectId, card.source, onNotice, onGone)
-          if (module === null) return false
-          bundle = { kind: 'nodes', nodes: module.nodes }
-        } else {
-          const { expanded } = expandPattern(card.source.pattern)
-          if (expanded === null) {
-            onNotice(brokenPattern(card.name))
-            return false
-          }
-          bundle = { kind: 'pattern', expanded: expanded as ExpandedNodes }
-        }
-
-        const nodes = bundle.kind === 'nodes' ? bundle.nodes : bundle.expanded.nodes
+        const module = await reread(api, projectId, card.source, onNotice, onGone)
+        if (module === null) return false
+        const nodes = module.nodes
         let pages: ReturnType<typeof pageTargetsOf> | null = null
         if (hasPageTargets(nodes)) {
           try {
@@ -337,7 +287,7 @@ function useModuleInsert(input: {
           if (target === null) return false
         }
 
-        const edit = moduleInsertOps(document, bundle, target, (page) => pages !== null && matchPageTargets(pages, page).length > 0)
+        const edit = moduleInsertOps(document, nodes, target, (page) => pages !== null && matchPageTargets(pages, page).length > 0)
         if ('reason' in edit) {
           onNotice(edit.reason)
           return false
@@ -486,16 +436,14 @@ function ModuleCards(props: {
                           {shellIcon('add', 14)}
                         </button>
                       )}
-                      {card.source.kind !== 'pattern' && (
-                        <SavedModuleActions
-                          projectId={props.projectId}
-                          source={card.source}
-                          writable={card.source.kind === 'personal' || props.projectWritable}
-                          copyable={card.source.kind === 'project' || props.projectWritable}
-                          onNotice={props.onNotice}
-                          onChanged={props.onChanged}
-                        />
-                      )}
+                      <SavedModuleActions
+                        projectId={props.projectId}
+                        source={card.source}
+                        writable={card.source.kind === 'personal' || props.projectWritable}
+                        copyable={card.source.kind === 'project' || props.projectWritable}
+                        onNotice={props.onNotice}
+                        onChanged={props.onChanged}
+                      />
                     </span>
                   </div>
                 ))}

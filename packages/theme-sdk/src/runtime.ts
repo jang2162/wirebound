@@ -71,7 +71,7 @@ export function installRuntime(target: typeof globalThis = globalThis): RuntimeH
 }
 
 /**
- * **번들 정의에 서버 manifest 를 끼운다** — 뷰는 번들, 선언(variant · 토큰 · 패턴)은 서버 한 벌(spec 「캔버스 iframe」 의 «정의의
+ * **번들 정의에 서버 manifest 를 끼운다** — 뷰는 번들, 선언(variant · 토큰)은 서버 한 벌(spec 「캔버스 iframe」 의 «정의의
  * manifest 는 서버 것이다»). 업로드는 `theme.js` 를 실행하지 않아 번들 안 manifest 를 못 견주므로 싣는 쪽이 바꿔 끼운다.
  *
  * `components` 만 다르면 서버 것을 쓴다. `id` · 판이 다르면 다른 테마의 번들이다 — 까닭을 낸다. 에디터(`apps/web` 의 번들 로더)와

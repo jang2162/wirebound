@@ -62,11 +62,6 @@ export type ValidationCode =
  *
  * - `error` — 막는다. 설계서 「정방향 흐름」의 서버 게이트가 거부한다.
  * - `warning` — 막지 않는다. 저장되고 응답에 실려 나간다.
- *
- * **`themes`의 `ThemeIssue`가 이 타입을 그대로 쓴다**(`packages/themes/src/issue.ts`).
- * 코드 유니온은 일부러 갈라 두었지만(그쪽 주석 참고) severity는 갈라 둘 이유가 없다 —
- * 둘 다 같은 API 봉투에 실려 같은 클라이언트가 읽으므로, 값 집합이 갈리면 읽는 쪽이
- * 두 어휘를 알아야 한다.
  */
 export type IssueSeverity = 'error' | 'warning'
 
@@ -155,15 +150,8 @@ function makeIssue(code: ValidationCode, nodeId: string | null, path: string, me
  *
  * ---
  *
- * **`severity`를 가진 것이면 무엇이든 받는다 — 제네릭이다.**
- *
- * 코드 유니온이 다른 이슈도 같은 `severity`를 든다 — `packages/themes`의 `ThemeIssue`(패턴 이슈)가 그렇다(평행 유니온을
- * 만들면 따로 썩어 코드를 일부러 갈라 두었다). `ValidationIssue[]`로 못박아
- * 두면 그쪽이 이 함수를 부를 수 없고, **선을 긋는 코드가 하나여야 한다**는 위 규칙이
- * 바로 그 자리에서 깨진다 — 그쪽이 자기 `filter`를 다시 쓰게 된다.
- *
- * 제네릭인 것은 **입력의 타입뿐이고 판정은 하나다.** `T`가 그대로 나가므로 부르는 쪽이
- * 자기 이슈 타입을 잃지 않는다(`ThemeIssue[]`를 넣으면 `ThemeIssue[]`가 나온다).
+ * **`severity`를 가진 것이면 무엇이든 받는다 — 제네릭이다.** 제네릭인 것은 **입력의 타입뿐이고 판정은 하나다** —
+ * `T`가 그대로 나가므로 부르는 쪽이 자기 이슈 타입(`ValidationIssue`의 좁힌 꼴 등)을 잃지 않는다.
  */
 export function partitionIssues<T extends { severity: IssueSeverity }>(
   issues: readonly T[],
@@ -180,19 +168,8 @@ export function partitionIssues<T extends { severity: IssueSeverity }>(
   return { errors, warnings }
 }
 
-/**
- * 무시되는 `variant`를 알리는 문장. **검증 경로가 둘이라 여기 한 곳에서 만든다.**
- *
- * 페이지 문서는 `validatePage`가 보고 테마의 패턴 템플릿은 `checkPatterns`(themes)가
- * 보는데, 두 곳이 문장을 따로 쓰면 사용자가 **같은 문제를 다른 문제로 읽는다.**
- * 이슈 **코드**는 갈려 있다(여기는 전용 코드, 패턴 쪽은 catch-all `bad-pattern-node`) —
- * 그쪽에 평행한 유니온을 만들면 둘이 따로 썩기 때문이다. 갈리지 않게 묶는 것은 **문장**이고,
- * 두 문자열이 글자까지 같은 것을 `packages/themes/test/spec-patterns.test.ts`가 대조한다
- * (`fallback.test.tsx`가 `invalid-props`에 쓰는 것과 같은 방식이다).
- *
- * 문장이 말해야 하는 것 둘: **적은 값이 버려진다**는 것과 **무엇이 대신 쓰이는가**.
- */
-export function ignoredVariantMessage(def: ComponentDef, variant: string): string {
+/** 무시되는 `variant`를 알리는 문장. 말해야 하는 것 둘: **적은 값이 버려진다**는 것과 **무엇이 대신 쓰이는가**. */
+function ignoredVariantMessage(def: ComponentDef, variant: string): string {
   return `${def.type}의 variant는 무시됩니다: ${variant} ` + `(${def.type}은 ${def.variantFrom} prop에서 변형을 파생합니다)`
 }
 

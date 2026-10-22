@@ -353,7 +353,7 @@ export function usePlacementDrop(input: {
   /** 캔버스 판정을 주입한다(테스트 — jsdom 에 레이아웃이 없다). */
   canvasHit?: typeof canvasHitAt
   /**
-   * 모듈 카드를 놓았다 — 넣을 노드를 다시 지은 뒤(서버에서 다시 읽기 · 패턴 다시 전개) 넣는 것은 부르는 쪽이다(`palette/module-tab.tsx`). `verdict` 는
+   * 모듈 카드를 놓았다 — 넣을 노드를 다시 지은 뒤(서버에서 다시 읽기) 넣는 것은 부르는 쪽이다(`palette/module-tab.tsx`). `verdict` 는
    * 놓은 대상 · 띠를 **그때의 문서**로 다시 묻는 함수다 — 다시 짓는 사이 남이 고쳤을 수 있다(머리말 «보인 자리에만 놓는다»의 «놓기» 겹과 같은 물음).
    * 없으면 모듈 카드의 놓기는 편집 0 이다.
    */

@@ -95,7 +95,7 @@ describe('자리 — 컴포넌트 카드와 같은 표', () => {
 describe('moduleInsertOps', () => {
   it('편집 하나가 노드를 차례로 넣는다 · 새 id · 넣은 노드 전부를 고른다 · 결과 문서가 검증을 지난다', () => {
     const before = doc()
-    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, target(before, 'n-text'), NO_PAGES, counter())
+    const edit = moduleInsertOps(before, NODES, target(before, 'n-text'), NO_PAGES, counter())
     if ('reason' in edit) throw new Error(edit.reason)
     const after = applyOps(before, edit.ops)
     // 첫 id 는 임시 뿌리가 받아 간다(`prepareNodesForPaste` 머리말).
@@ -107,7 +107,7 @@ describe('moduleInsertOps', () => {
 
   it('되돌리기(역연산 한 묶음)로 넣기 전 문서', () => {
     const before = doc()
-    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, target(before, null), NO_PAGES, counter())
+    const edit = moduleInsertOps(before, NODES, target(before, null), NO_PAGES, counter())
     if ('reason' in edit) throw new Error(edit.reason)
     const inverse = invertOps(before, edit.ops)
     expect(applyOps(applyOps(before, edit.ops), inverse)).toEqual(before)
@@ -115,7 +115,7 @@ describe('moduleInsertOps', () => {
 
   it('넣는 페이지에 없는 노드 · 페이지를 겨냥한 액션을 빼고 센다 — 묶음 안은 새 id 를 따라가고 페이지에 있는 노드는 남는다', () => {
     const before = doc()
-    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, target(before, null), NO_PAGES, counter())
+    const edit = moduleInsertOps(before, NODES, target(before, null), NO_PAGES, counter())
     if ('reason' in edit) throw new Error(edit.reason)
     const open = applyOps(before, edit.ops).root.children![2]!
     expect(open.interactions![0]!.actions.map((action) => action.target)).toEqual(['n_new000000003', 'n-text'])
@@ -135,7 +135,7 @@ describe('moduleInsertOps', () => {
       children: [{ id: 'm_t', type: 'Text', visibility: { mode: 'except', states: ['default'] } }],
     }
     const before = doc({ viewStates: [{ id: 's_admin', name: '관리자' }] })
-    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: [boxed] }, target(before, null), NO_PAGES, counter())
+    const edit = moduleInsertOps(before, [boxed], target(before, null), NO_PAGES, counter())
     if ('reason' in edit) throw new Error(edit.reason)
     const placed = applyOps(before, edit.ops).root.children![2]!
     expect(placed.visibility).toBeUndefined()
@@ -144,28 +144,16 @@ describe('moduleInsertOps', () => {
     expect(boxed.visibility).toEqual({ mode: 'only', states: ['s_admin'] })
   })
 
-  it('패턴은 그대로 넣고 첫 슬롯 노드를 고른다', () => {
-    const before = doc()
-    const expanded = {
-      nodes: [{ id: 'p_sec', type: 'Section', children: [{ id: 'p_title', type: 'Text' }] }],
-      slots: new Map([['title', 'p_title']]),
-    }
-    const edit = moduleInsertOps(before, { kind: 'pattern', expanded }, target(before, null), NO_PAGES)
-    if ('reason' in edit) throw new Error(edit.reason)
-    expect(edit.insertedIds).toEqual(['p_sec'])
-    expect(edit.selectIds).toEqual(['p_title'])
-  })
-
   it('자식을 안 받는 부모 자리면 까닭 — `addInside` 판정의 설명', () => {
     const before = doc()
-    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, { parentId: 'n-text', index: 0, placement: 'inside' }, NO_PAGES)
+    const edit = moduleInsertOps(before, NODES, { parentId: 'n-text', index: 0, placement: 'inside' }, NO_PAGES)
     expect(edit).toEqual({ reason: STRUCTURE_WHY_DISABLED.addInside })
   })
 
   it('넣으면 문서가 저장될 수 없는 묶음(Page 가 든 옮긴 옛 모듈)은 까닭', () => {
     const before = doc()
     const nested: WbNode[] = [{ id: 'm_page', type: 'Page', children: [] }]
-    const edit = moduleInsertOps(before, { kind: 'nodes', nodes: nested }, target(before, null), NO_PAGES, counter())
+    const edit = moduleInsertOps(before, nested, target(before, null), NO_PAGES, counter())
     // 문장의 동사는 넣기의 것이다(붙여넣기와 같은 `insertMany` 를 지나지만 «붙이지»가 아니다).
     expect(edit).toEqual({ reason: '넣지 못했습니다: Page는 루트에만 둘 수 있습니다 — 페이지 안에 Page를 넣을 수 없습니다' })
   })
@@ -173,7 +161,7 @@ describe('moduleInsertOps', () => {
   it('입력 묶음을 바꾸지 않는다(탭이 쥔 모듈 목록을 그대로 넘긴다)', () => {
     const before = doc()
     const copy = structuredClone(NODES)
-    moduleInsertOps(before, { kind: 'nodes', nodes: NODES }, target(before, null), NO_PAGES, counter())
+    moduleInsertOps(before, NODES, target(before, null), NO_PAGES, counter())
     expect(NODES).toEqual(copy)
   })
 })

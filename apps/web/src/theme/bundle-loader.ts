@@ -49,8 +49,8 @@ export function refKey(ref: ThemeRef): string {
 }
 
 /**
- * **번들 정의에 서버 manifest 를 끼운다** — 뷰는 번들, 선언(variant · 토큰 · 패턴)은 서버 한 벌. 캔버스의 렌더러는 정의의 manifest 로
- * variant 를 풀고 속성 패널 · 패턴 고르개는 서버 manifest(`GET …/theme`)를 읽으므로, 번들이 다른 manifest 를 실으면 패널이 고른 variant 를
+ * **번들 정의에 서버 manifest 를 끼운다** — 뷰는 번들, 선언(variant · 토큰)은 서버 한 벌. 캔버스의 렌더러는 정의의 manifest 로
+ * variant 를 풀고 속성 패널은 서버 manifest(`GET …/theme`)를 읽으므로, 번들이 다른 manifest 를 실으면 패널이 고른 variant 를
  * 캔버스가 말없이 기본으로 그린다(A4 리뷰 2c). 업로드는 `theme.js` 를 실행하지 않아 둘을 못 견준다 — 싣는 쪽이 한 벌로 맞춘다.
  *
  * `components` 만 다르면 알림 없이 서버 것을 쓴다. `id` · 판이 다르면 다른 테마의 번들이다 — 실패로 바꿔 기본 뷰로 그리고 알린다.

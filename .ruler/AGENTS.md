@@ -15,7 +15,7 @@ TypeScript 모노레포 (pnpm workspace) · React 19 · Node(Fastify) · Postgre
 packages/schema     노드 타입·컴포넌트 카탈로그·검증·JSON Patch   ← 단일 진실
 packages/theme-sdk  테마 뷰 계약(view · Root · Focus · useToken) · SDK 기본 뷰
 packages/renderer   스키마 → React 렌더링 — 노드마다 «테마 뷰 → 기본 뷰»
-packages/themes     manifest 검증 · 토큰 CSS · .wbtheme 읽기 · 쓰기 · 패턴 규격 · 전개 · 스냅샷 payload 규격 · 설계 lint
+packages/themes     manifest 검증 · 토큰 CSS · .wbtheme 읽기 · 쓰기 · 스냅샷 payload 규격 · 설계 lint
 packages/theme-gallery 카탈로그 × variant 표본 갤러리(kit dev 가 그린다)
 packages/theme-kit  테마 작성 도구 wb-theme — dev · build · 스타터 템플릿(pack-template)
 system-themes/*     저장소 테마(admin 하나 — id 는 system-<이름> · 보이는 이름 «기본테마») — pnpm build 가 .wbtheme 로 낸다 · api 가 기동 때 시딩한다 · 판마다 sha256 을 `system-themes/<이름>/checksums.json` 에 적는다(테마마다 제 표)

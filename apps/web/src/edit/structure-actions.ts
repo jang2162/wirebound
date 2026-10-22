@@ -109,11 +109,8 @@ const NOTHING: StructureAbilities = {
  * 받아들였고, 되돌리기에는 **선택이 없어** 단위가 곧 `inverse` ops다 — 서버가 재는 그
  * 입력을 그대로 넣을 수 있으므로 엄격해질 이유가 없다. 그쪽 표에 실측이 있다.
  *
- * **기본값이 `null`인 것은 부르는 자리가 둘이기 때문이다.** 도구모음(`useStructureCommands`)은
- * 잠금을 **반드시** 넘기고(그쪽의 `selectedLock`이 필수 인자다), `edit/pattern-insert.ts`는
- * 넘기지 않는다 — 거기서 `addInside`를 묻는 것은 권한이 아니라 **자리 계산**이고(*"이 노드가
- * 자식을 받나"*), 패턴은 애초에 판정을 지나지 않는 조작이다. **잠금이 패턴에도 걸려야
- * 하는지는 이 함수가 답할 물음이 아니다** — 그 조작에는 끌 `ability`가 없다.
+ * **기본값 `null`은 케이스가 잠금 없이 판정만 묻는 편의다.** 운영에서 부르는 자리는 `selectionAbilities` 하나이고 잠금을
+ * **반드시** 넘긴다(도구모음 `useStructureCommands`의 `selectedLock`이 필수 인자다).
  */
 export function structureAbilities(document: PageDocument | null, nodeId: string | null, lock: NodeLock | null = null): StructureAbilities {
   if (document === null || nodeId === null) return NOTHING

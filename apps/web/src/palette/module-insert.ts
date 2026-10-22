@@ -3,12 +3,8 @@
  * `docs/superpowers/specs/2026-10-18-modules-states-layout-design.md` 「B2」 · 「B3」).
  *
  * **편집은 새 종류를 만들지 않는다** — 붙여넣기와 같은 길이다: 노드는 `prepareNodesForPaste` 가 새 id 를 받고(넣는 페이지에 없는 대상을 겨냥하는
- * 액션을 빼고 센다) `insertMany`(`edit/paste-ops.ts`)가 자리에 차례로 넣는다. 묶음 하나가 편집 하나 · 되돌리기 하나다.
- *
- * | 묶음 | 노드 | 넣은 뒤 고르는 것 |
- * |---|---|---|
- * | 개인 모듈 · 프로젝트 모듈 | 새 id 로 다시 짓는다(`prepareNodesForPaste`) | 넣은 노드 전부 |
- * | 테마 패턴 | 전개가 이미 새 id 를 지었다 — 그대로 넣는다(거를 액션 · 보임 · 번호가 없다) | 첫 슬롯 노드(`patternInsert` 와 같은 `selectId`) |
+ * 액션을 빼고 센다) `insertMany`(`edit/paste-ops.ts`)가 자리에 차례로 넣는다. 묶음 하나가 편집 하나 · 되돌리기 하나고, 넣은 뒤 넣은 노드 전부를
+ * 고른다.
  *
  * **자리는 부르는 쪽이 정한다** — 단추는 `paletteAddTarget`(고른 노드에 따라), 끌기는 놓은 대상 · 띠를 그때의 문서로 다시 판정한 자리다
  * (`drag/use-placement.ts` 의 `onModuleDrop`).
@@ -20,7 +16,6 @@
  */
 import { prepareNodesForPaste, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
 import { insertMany } from '../edit/paste-ops'
-import { selectId, type ExpandedNodes } from '../edit/pattern-insert'
 import { findNodeSafely } from '../edit/safe-walk'
 import type { StructureDrop } from '../edit/structure-drop'
 
@@ -28,7 +23,7 @@ export interface ModuleInsert {
   ops: PatchOp[]
   /** 넣은 맨 위 노드들의 id — 문서 차례. */
   insertedIds: string[]
-  /** 넣은 뒤 고를 노드들 — 모듈은 넣은 노드 전부, 패턴은 첫 슬롯 하나. */
+  /** 넣은 뒤 고를 노드들 — 넣은 노드 전부. */
   selectIds: string[]
   /** 넣는 페이지에 없는 대상을 겨냥해 뺀 액션 수(`prepareNodesForPaste`). */
   droppedActions: number
@@ -42,12 +37,9 @@ function withoutVisibility(node: WbNode): WbNode {
   return next
 }
 
-/** 넣을 묶음 — 모듈(노드를 다시 짓는다) · 전개한 패턴(그대로 넣는다). */
-export type ModuleBundle = { kind: 'nodes'; nodes: readonly WbNode[] } | { kind: 'pattern'; expanded: ExpandedNodes }
-
 /**
- * 묶음을 `target` 에 넣는 편집. 못 넣으면 `{ reason }`(자리의 부모가 자식을 안 받음 · 연산 수 한도 · 넣은 뒤 문서가 저장될 수 없음 — `insertMany` 의
- * 문장 그대로).
+ * 모듈의 노드를 `target` 에 넣는 편집(노드는 새 id 로 다시 짓는다). 못 넣으면 `{ reason }`(자리의 부모가 자식을 안 받음 · 연산 수 한도 ·
+ * 넣은 뒤 문서가 저장될 수 없음 — `insertMany` 의 문장 그대로).
  *
  * @param keepPage 페이지 대상 액션을 남길지 — 붙여넣기처럼 프로젝트의 페이지 목록으로 가늠한다(`matchPageTargets`). 페이지 대상이 없는 묶음이면 안
  *   불린다.
@@ -55,18 +47,13 @@ export type ModuleBundle = { kind: 'nodes'; nodes: readonly WbNode[] } | { kind:
  */
 export function moduleInsertOps(
   document: PageDocument,
-  bundle: ModuleBundle,
+  nodes: readonly WbNode[],
   target: StructureDrop,
   keepPage: (target: string) => boolean,
   generate?: () => string,
 ): ModuleInsert | { reason: string } {
-  if (bundle.kind === 'pattern') {
-    const edit = insertMany(document, target.parentId, target.index, bundle.expanded.nodes, '넣지')
-    if ('reason' in edit) return edit
-    return { ...edit, selectIds: [selectId(bundle.expanded)], droppedActions: 0 }
-  }
   const prepared = prepareNodesForPaste(
-    bundle.nodes.map(withoutVisibility),
+    nodes.map(withoutVisibility),
     { node: (id) => findNodeSafely(document.root, id) !== undefined, page: keepPage },
     generate,
   )
