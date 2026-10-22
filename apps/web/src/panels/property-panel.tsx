@@ -415,7 +415,8 @@ export function PropertyPanel(props: {
         {/* **몫은 컴포넌트 속성 칸들 바로 아래다** — 별칭처럼 노드 봉투의 필드이고, 부모가 몫을 읽을 때만 선다(`weightRoom` — 렌더러가 몫을 싣는 판정과 같다). */}
         {doc !== null && weightRoom(...weightParentOf(doc, node.id)) !== undefined && (
           <WeightField
-            key={node.id}
+            // 형제 칸(상태 보임)과 키가 겹치면 React 가 둘의 짝을 잘못 지어 초안 · 까닭을 엉뚱한 칸에 남긴다 — 칸 이름을 붙여 가른다.
+            key={`${node.id}:weight`}
             value={node.weight}
             disabled={blocked}
             onCommit={(weight) => {
@@ -431,7 +432,7 @@ export function PropertyPanel(props: {
         {/* **상태 보임은 몫 아래다** — 같은 층(노드 봉투의 필드)이고 뿌리 말고는 어느 노드에나 선다(`./visibility-field.tsx`). */}
         {doc !== null && doc.root?.id !== node.id && (
           <VisibilityField
-            key={node.id}
+            key={`${node.id}:visibility`}
             value={node.visibility}
             viewStates={viewState.viewStates}
             current={viewState.state}
