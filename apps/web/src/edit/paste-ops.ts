@@ -8,7 +8,7 @@
  * **붙이는 · 복제한 노드는 `marker`(코멘트 번호)를 안 든다** — 코멘트는 따라가지 않는다(설계서 「설계서 화면 구조」의 클립보드). 번호를 든 채
  * 넣으면 한 페이지에 같은 번호가 둘이 되거나 다른 페이지의 번호가 코멘트 없이 선다. 걷는 것은 `stripMarkers`(`@wirebound/schema`) 하나다.
  *
- * **순수하고 던지지 않는다** — `{ reason }` 으로 왜 못 하는지 말한다(`./pattern-insert.ts` · `palette/palette-add.ts` 와 같은 층).
+ * **순수하고 던지지 않는다** — `{ reason }` 으로 왜 못 하는지 말한다(`palette/palette-add.ts` · `palette/module-insert.ts` 와 같은 층).
  */
 import {
   MAX_OPS_PER_EDIT,

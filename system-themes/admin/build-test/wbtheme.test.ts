@@ -59,8 +59,7 @@ describe('system-admin .wbtheme', () => {
     expect(report.errors).toEqual([])
   })
 
-  it('선언한 토큰은 전부 쓰이고 · 패턴은 선언한 variant 만 쓴다', () => {
+  it('선언한 토큰은 전부 쓰인다', () => {
     expect(report.unusedTokens).toEqual([])
-    expect(report.undeclaredVariantsUsedByPatterns).toEqual([])
   })
 })

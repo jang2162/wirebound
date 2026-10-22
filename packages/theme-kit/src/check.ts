@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { installCatalog } from '@wirebound/schema'
 import { renderDocument, unusedViewKeys } from '@wirebound/renderer'
 import { galleryItemDocument, galleryItems } from '@wirebound/theme-gallery'
-import { ThemeProvider, type ThemeDefinition, type ThemeManifest } from '@wirebound/theme-sdk'
+import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { installRuntime } from '@wirebound/theme-sdk/runtime'
 import { tokenValues, tokenVar, type WbthemeFiles } from '@wirebound/themes'
 
@@ -17,14 +17,6 @@ export interface ThemeCheckError {
   message: string
   /** `fallback` — 칸에 선 `data-wb-error`. `console` — 그 칸을 그리는 동안 난 `console.error`. `bundle` — 번들을 못 실었다. */
   source: 'fallback' | 'console' | 'bundle'
-}
-
-export interface UndeclaredPatternVariant {
-  pattern: string
-  /** 패턴 안의 노드 자리 — `schema` · `schema.children.1` 꼴. */
-  path: string
-  type: string
-  variant: string
 }
 
 export interface ThemeCheckFocusable {
@@ -42,8 +34,6 @@ export interface ThemeCheckReport {
   errors: ThemeCheckError[]
   /** manifest 가 선언했는데 `theme.css` · `theme.js` 어디서도 안 쓰는 토큰 — 토큰 폼에 효과 없는 칸이 선다. */
   unusedTokens: string[]
-  /** 패턴이 `components` 에 없는 variant 를 쓴 자리 — 패턴을 넣으면 그 노드가 선언 밖 variant 로 선다. */
-  undeclaredVariantsUsedByPatterns: UndeclaredPatternVariant[]
   /**
    * 캔버스에서 누르면 단축키 · 노드 복사가 안 서게 하는 포커스 받는 요소 — 단추 · 링크 · 입력 칸이 아닌데 포커스를 받는 것(`tabindex` · `summary` ·
    * `controls` 를 켠 `video` · `audio` · `iframe`). **경고다 — `ok` 에 안 든다**(`formatCheckReport`). 에디터가 포커스 받은 요소를 입력 표면으로 보기 때문이다
@@ -97,7 +87,6 @@ const settle = () => new Promise<void>((done) => setTimeout(done, 0))
 export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport> {
   const { manifest } = files
   const unusedTokens = findUnusedTokens(files)
-  const undeclaredVariantsUsedByPatterns = findUndeclaredPatternVariants(manifest)
   return withDom(async () => {
     installCatalog()
     const handle = installRuntime(globalThis)
@@ -117,7 +106,6 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
         items: 0,
         errors: [{ type: '', variant: undefined, label: '', message, source: 'bundle' }],
         unusedTokens,
-        undeclaredVariantsUsedByPatterns,
         focusables: [],
       }
     }
@@ -164,7 +152,7 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
       console.error = consoleError
       flags.IS_REACT_ACT_ENVIRONMENT = actBefore
     }
-    return { items: items.length, errors, unusedTokens, undeclaredVariantsUsedByPatterns, focusables }
+    return { items: items.length, errors, unusedTokens, focusables }
   })
 }
 
@@ -242,31 +230,8 @@ function findUnusedTokens(files: WbthemeFiles): string[] {
   return keys.filter((key) => !used.has(key))
 }
 
-interface PatternNodeLike {
-  type?: unknown
-  variant?: unknown
-  children?: unknown
-}
-
-function findUndeclaredPatternVariants(manifest: ThemeManifest): UndeclaredPatternVariant[] {
-  const found: UndeclaredPatternVariant[] = []
-  const visit = (pattern: string, node: PatternNodeLike, path: string) => {
-    if (typeof node.type === 'string' && typeof node.variant === 'string') {
-      const declared = manifest.components?.[node.type]?.variants.some((v) => v.id === node.variant) ?? false
-      if (!declared) found.push({ pattern, path, type: node.type, variant: node.variant })
-    }
-    if (Array.isArray(node.children))
-      node.children.forEach((child, index) => visit(pattern, child as PatternNodeLike, `${path}.children.${index}`))
-  }
-  for (const [name, pattern] of Object.entries(manifest.patterns ?? {})) {
-    const schema = (pattern as { schema?: unknown } | null)?.schema
-    if (schema !== null && typeof schema === 'object') visit(name, schema as PatternNodeLike, 'schema')
-  }
-  return found
-}
-
 /**
- * 보고를 사람이 읽을 줄로 — `wb-theme check` 가 찍는다. `ok` 는 셋(오류 · 안 쓰는 토큰 · 선언 밖 variant)이 다 비었을 때만 참이다. **포커스 받는 요소는
+ * 보고를 사람이 읽을 줄로 — `wb-theme check` 가 찍는다. `ok` 는 둘(오류 · 안 쓰는 토큰)이 다 비었을 때만 참이다. **포커스 받는 요소는
  * 경고 줄(`⚠`)이라 `ok` 에 안 든다** — 같은 컴포넌트 · variant · 요소는 한 줄로 묶고 칸 수를 적는다.
  */
 export function formatCheckReport(report: ThemeCheckReport): { ok: boolean; lines: string[] } {
@@ -278,9 +243,6 @@ export function formatCheckReport(report: ThemeCheckReport): { ok: boolean; line
   }
   for (const key of report.unusedTokens)
     lines.push(`✗ 안 쓰는 토큰: ${key} — theme.css · 뷰 어디서도 var(${tokenVar(key)}) · useToken 으로 안 읽는다`)
-  for (const found of report.undeclaredVariantsUsedByPatterns) {
-    lines.push(`✗ 패턴 ${found.pattern} 의 ${found.path}: ${found.type} 의 variant "${found.variant}" 는 components 에 없다`)
-  }
   const warned = new Map<string, number>()
   for (const found of report.focusables) {
     const key = `${found.type}${found.variant === undefined ? '' : ` · ${found.variant}`}: ${found.element}`
@@ -289,11 +251,7 @@ export function formatCheckReport(report: ThemeCheckReport): { ok: boolean; line
   for (const [key, cells] of warned) {
     lines.push(`⚠ 포커스 받는 요소 ${key} (${cells} 칸) — 캔버스에서 누른 뒤 단축키 · 노드 복사가 안 섭니다. 단추 · 링크만 쓰세요`)
   }
-  const ok = report.errors.length === 0 && report.unusedTokens.length === 0 && report.undeclaredVariantsUsedByPatterns.length === 0
-  lines.push(
-    ok
-      ? '✓ 오류 없음'
-      : `✗ 오류 ${report.errors.length} · 안 쓰는 토큰 ${report.unusedTokens.length} · 선언 밖 variant ${report.undeclaredVariantsUsedByPatterns.length}`,
-  )
+  const ok = report.errors.length === 0 && report.unusedTokens.length === 0
+  lines.push(ok ? '✓ 오류 없음' : `✗ 오류 ${report.errors.length} · 안 쓰는 토큰 ${report.unusedTokens.length}`)
   return { ok, lines }
 }

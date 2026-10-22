@@ -35,7 +35,6 @@ describe('checkTheme', () => {
     expect(report.items).toBe(galleryItems({ manifest: BASE, views: DEFAULT_VIEWS }).length)
     expect(report.items).toBeGreaterThan(0)
     expect(report.unusedTokens).toEqual([])
-    expect(report.undeclaredVariantsUsedByPatterns).toEqual([])
     expect(report.focusables).toEqual([])
     expect(typeof document).toBe('undefined')
     expect(typeof window).toBe('undefined')
@@ -126,31 +125,6 @@ describe('checkTheme', () => {
     expect(report.items).toBe(0)
     expect(report.errors).toEqual([
       expect.objectContaining({ type: '', source: 'bundle', message: expect.stringContaining('등록하지 않았습니다') }),
-    ])
-  })
-
-  it('패턴이 선언 안 한 variant 를 쓰면 센다 — 선언한 것은 안 센다', async () => {
-    const manifest: ThemeManifest = {
-      ...BASE,
-      components: { Button: { variants: [{ id: 'primary', label: '주' }], defaultVariant: 'primary' } },
-      patterns: {
-        'hero.split': {
-          name: '나눈 히어로',
-          schema: {
-            type: 'Section',
-            variant: 'wide',
-            children: [
-              { type: 'Button', props: { label: '가' }, variant: 'primary' },
-              { type: 'Button', props: { label: '나' }, variant: 'huge' },
-            ],
-          },
-        },
-      },
-    }
-    const report = await checkTheme(files(manifest))
-    expect(report.undeclaredVariantsUsedByPatterns).toEqual([
-      { pattern: 'hero.split', path: 'schema', type: 'Section', variant: 'wide' },
-      { pattern: 'hero.split', path: 'schema.children.1', type: 'Button', variant: 'huge' },
     ])
   })
 

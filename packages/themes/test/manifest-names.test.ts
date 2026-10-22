@@ -28,7 +28,6 @@ describe('manifest 이름 입력', () => {
 
   it.each([
     ['tokens.items', '"tokens":{"items":{"__proto__":{"type":"color","label":"x","default":"#000"}}}', 'tokens.items.__proto__'],
-    ['patterns', '"tokens":{"items":{}},"patterns":{"__proto__":{"name":"x","schema":{"type":"Nope"}}}', 'patterns.__proto__'],
     [
       '깊은 자리',
       '"tokens":{"items":{}},"components":{"List":{"variants":[{"id":"a","label":"a","__proto__":{}}],"defaultVariant":"a"}}',

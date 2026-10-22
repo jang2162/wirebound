@@ -1,7 +1,6 @@
 import { getComponent, getKoreanErrorMap, installCatalog } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { z } from 'zod'
-import { checkNewPatterns, checkPatterns, PatternsSchema } from '../spec/patterns'
 import { SDK_RANGE_PATTERN, VERSION_PATTERN } from './semver'
 import { checkTokens } from './tokens'
 
@@ -19,7 +18,6 @@ export type ManifestIssueCode =
   | 'duplicate-variant'
   | 'default-variant-missing'
   | 'unknown-hide-prop'
-  | 'pattern'
   /** 두 토큰 키가 같은 CSS 변수 이름이 된다(`a.b` · `a-b` → `--wb-a-b`). */
   | 'token-var-collision'
   /** `tokensCss` · `tokenValues` 에 받은 값의 키가 선언에 없다 — manifest 검증은 내지 않는다. */
@@ -67,8 +65,14 @@ export const ManifestSchema = z.strictObject({
     items: z.record(z.string().regex(TOKEN_KEY), TokenDeclSchema),
   }),
   components: z.record(z.string(), z.strictObject({ variants: z.array(VariantDeclSchema).min(1), defaultVariant: z.string() })).optional(),
-  patterns: z.record(z.string(), z.unknown()).optional(),
 }) satisfies z.ZodType<ThemeManifest>
+
+/**
+ * 걷은 `patterns`(테마가 싣던 구성 레시피)를 실은 manifest 의 이슈. 아는 키가 아니라 `ManifestSchema` 도 거절하지만 그 문장은 «알 수 없는 키» 라
+ * 작성자가 까닭을 모른다 — 그래서 모양 검사 앞에서 따로 짚고, 그 키를 뺀 나머지로 모양 검사를 이어 이슈를 한 번에 모은다.
+ */
+export const PATTERNS_RETIRED =
+  'patterns 는 더 지원하지 않습니다 — 테마는 구성 레시피를 싣지 않습니다. 되풀이해 넣을 묶음은 에디터에서 모듈로 저장하세요'
 
 /**
  * manifest 를 검증한다 — 빌드(`wb-theme build`) · 업로드 · 호스트가 이 함수 하나를 부른다. 이슈를 모아서 돌려주고,
@@ -86,15 +90,15 @@ export function validateManifest(raw: unknown): { manifest: ThemeManifest | null
     }
   }
 
-  const parsed = ManifestSchema.safeParse(raw, { error: getKoreanErrorMap() })
+  const { rest, issues } = withoutPatterns(raw)
+  const parsed = ManifestSchema.safeParse(rest, { error: getKoreanErrorMap() })
   if (!parsed.success) {
     return {
       manifest: null,
-      issues: parsed.error.issues.map((i) => ({ code: 'shape', path: i.path.join('.'), message: i.message })),
+      issues: [...issues, ...parsed.error.issues.map((i) => ({ code: 'shape' as const, path: i.path.join('.'), message: i.message }))],
     }
   }
   const manifest = parsed.data
-  const issues: ManifestIssue[] = []
 
   if (!VERSION_PATTERN.test(manifest.version)) {
     issues.push({ code: 'bad-version', path: 'version', message: `판 ${JSON.stringify(manifest.version)} 이 x.y.z 가 아닙니다` })
@@ -108,22 +112,15 @@ export function validateManifest(raw: unknown): { manifest: ThemeManifest | null
   }
   issues.push(...checkTokens(manifest.tokens.items))
   issues.push(...checkComponents(manifest.components ?? {}))
-  if (manifest.patterns !== undefined) issues.push(...checkManifestPatterns(manifest.patterns))
 
   return { manifest: issues.length === 0 ? manifest : null, issues }
 }
 
-/**
- * **새로 들이는 manifest 에만 거는 검사** — `validateManifest` 를 지난 manifest 에 업로드 · `wb-theme build` 가 더 묻는다(`readNewWbtheme`).
- * 지금은 `Page` 가 든 패턴(`checkNewPatterns`) 하나다. `validateManifest` 에 넣지 않는 까닭은 그 함수가 저장된 패키지를 다시 읽는 자리
- * (내보내기 · 시딩 · CLI lint)에서도 돌기 때문이다 — 거기서 조이면 이미 받은 패키지가 다시 읽기에서 깨진다.
- */
-export function newManifestIssues(manifest: ThemeManifest): ManifestIssue[] {
-  if (manifest.patterns === undefined) return []
-  const parsed = PatternsSchema.safeParse(manifest.patterns)
-  // 모양은 `validateManifest` 가 이미 봤다 — 못 읽으면 그쪽이 이슈를 냈다.
-  if (!parsed.success) return []
-  return checkNewPatterns(parsed.data).issues.map((i) => ({ code: 'pattern' as const, path: i.path, message: i.message }))
+/** 맨 위의 `patterns` 를 뺀 사본과 그 이슈(`PATTERNS_RETIRED`). 객체가 아니거나 그 키가 없으면 원문 그대로다. */
+function withoutPatterns(raw: unknown): { rest: unknown; issues: ManifestIssue[] } {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw) || !Object.hasOwn(raw, 'patterns')) return { rest: raw, issues: [] }
+  const { patterns: _retired, ...rest } = raw as Record<string, unknown>
+  return { rest, issues: [{ code: 'shape', path: 'patterns', message: PATTERNS_RETIRED }] }
 }
 
 /**
@@ -192,16 +189,4 @@ function checkComponents(components: NonNullable<ThemeManifest['components']>): 
 function propKeys(props: z.ZodType): Set<string> {
   const shape = (props as { shape?: Record<string, unknown> }).shape
   return new Set(shape ? Object.keys(shape) : [])
-}
-
-function checkManifestPatterns(patterns: Readonly<Record<string, unknown>>): ManifestIssue[] {
-  const parsed = PatternsSchema.safeParse(patterns, { error: getKoreanErrorMap() })
-  if (!parsed.success) {
-    return parsed.error.issues.map((i) => ({
-      code: 'pattern' as const,
-      path: ['patterns', ...i.path].join('.'),
-      message: i.message,
-    }))
-  }
-  return checkPatterns(parsed.data).issues.map((i) => ({ code: 'pattern' as const, path: i.path, message: i.message }))
 }

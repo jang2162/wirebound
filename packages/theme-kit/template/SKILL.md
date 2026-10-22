@@ -12,7 +12,7 @@ description: wirebound 설계서 테마를 짠다 — 컴포넌트 뷰(tsx) · C
 
 | 파일 | 하는 일 |
 |---|---|
-| `theme.config.ts` | manifest — 테마 id · 판 · 토큰 · variant · 패턴 선언(「manifest」) |
+| `theme.config.ts` | manifest — 테마 id · 판 · 토큰 · variant 선언(「manifest」) |
 | `src/index.tsx` | `defineTheme({ manifest, views })` — 컴포넌트 이름 → 뷰 |
 | `src/views/*.tsx` | 뷰. SDK 기본 뷰를 옮긴 출발점이다 — 마음대로 고친다 |
 | `src/theme.css` | 테마 CSS. `src/index.tsx` 가 import 한다 |
@@ -101,7 +101,6 @@ export const ListView = view(({ props, variant, states, children }) => {
 | `tokens.items` | 키는 `[a-zA-Z0-9.-]+`. 타입은 `color` · `length` · `number` · `font` · `shadow` · `select` 여섯 |
 | `tokens.groups` | 토큰 패널의 묶음. 토큰의 `group` 이 그 `id` 를 가리킨다 |
 | `components` | 키는 카탈로그의 컴포넌트 이름. `variants` 는 하나 이상, `defaultVariant` 는 그 안의 id |
-| `patterns` | 구성 레시피(「패턴」) |
 
 **토큰 값**
 
@@ -124,24 +123,6 @@ export const ListView = view(({ props, variant, states, children }) => {
   오고 그 값이 `data-wb-variant` 가 된다.
 - **세로 `Divider`(`[data-wb-variant='vertical']`)에 백분율 높이(`min-height: 100%`)를 걸지 않는다** — 높이가 정해지지 않은
   부모에서 0 이 되어 선이 안 보인다. 한 줄 높이(`1.5em`)를 바닥으로 두고 `align-self: stretch`.
-
-## 패턴
-
-`patterns` 는 페이지에 한 번에 넣는 구성 레시피다. 이름은 `<범주>.<변형>`(`hero.split`)이고 범주는 `header` · `nav` · `hero` ·
-`features` · `content` · `cta` · `pricing` · `testimonial` · `footer` · `auth` · `empty` · `error` 가운데 하나다.
-
-```ts
-patterns: {
-  'hero.split': {
-    name: '히어로 — 좌우 분할',
-    slots: { title: 'text' },
-    schema: { type: 'Section', children: [{ type: 'Text', slot: 'title', props: { content: '제목', role: 'h1' } }] },
-  },
-},
-```
-
-`schema` 의 노드는 카탈로그와 props 규칙을 지나야 하고(`id` 는 적지 않는다 — 넣을 때 새로 발급한다), `slot` 은 `slots` 에 선언한
-이름만 쓴다. `Slot` 컴포넌트는 패턴에 둘 수 없다.
 
 ## sdk 범위
 

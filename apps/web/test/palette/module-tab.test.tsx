@@ -9,16 +9,13 @@
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { applyOps, invertOps, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
-import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PatchResult, PersonalModule, ProjectModule } from '../../src/api/types'
 import { PALETTE_VIEW_KEY } from '../../src/palette/component-palette'
 import { MODULE_GONE_NOTICE, NO_PERSONAL_MODULES, NO_PROJECT_MODULES, copiedNotice } from '../../src/palette/module-tab'
-import { BROKEN_NOTICE, EMPTY_NOTICE } from '../../src/palette/theme-patterns'
 import { lockedNotice } from '../../src/panels/property-panel'
 import { EditorStore } from '../../src/store/editor-store'
-import { ADMIN_FIXTURE } from '../admin-theme'
 import { HEAD_SEQ, PAGE_ID, PROJECT_ID, openPage, pageDoc } from '../editor-harness'
 import { adminThemeView } from '../theme-loader'
 
@@ -80,20 +77,6 @@ function personalModule(id: string, name: string): PersonalModule {
   return { id, name, nodes, nodeCount: 2, createdBy: 'u-me', createdAt: '2026-10-20T00:00:00.000Z', updatedAt: '2026-10-20T00:00:00.000Z' }
 }
 
-const PATTERNS = {
-  'content.notice': {
-    name: '공지 묶음',
-    slots: { title: 'text' },
-    schema: {
-      type: 'Section',
-      children: [
-        { type: 'Text', props: { role: 'h2', content: '공지' }, slot: 'title' },
-        { type: 'List', props: { items: 3 } },
-      ],
-    },
-  },
-}
-
 interface Server {
   sent: PatchOp[][]
   held: () => PageDocument
@@ -113,12 +96,7 @@ interface Server {
 }
 
 /** 편집을 받아 문서를 진행시키고 모듈 목록 · 하나를 내는 대역. */
-/** `theme` 은 저장소 테마 manifest 에 얹을 칸 — 빈 객체면 저장소 테마 그대로(패턴 없음)다. */
-function server(
-  initial: ProjectModule[] = [],
-  theme: { patterns?: unknown } = { patterns: PATTERNS },
-  mine: PersonalModule[] = [],
-): Server {
+function server(initial: ProjectModule[] = [], mine: PersonalModule[] = []): Server {
   const sent: PatchOp[][] = []
   const calls: Server['calls'] = { list: 0, mine: 0, get: [], getMine: [], created: [], createdMine: [], renamedMine: [], deletedMine: [] }
   const modules = [...initial]
@@ -184,10 +162,7 @@ function server(
       if (at < 0) gone()
       personal.splice(at, 1)
     },
-    getProjectTheme: async () => ({
-      ...adminThemeView(),
-      manifest: { ...ADMIN_FIXTURE.manifest, ...theme } as ThemeManifest,
-    }),
+    getProjectTheme: async () => adminThemeView(),
   }
   return { sent, held: () => held, calls, modules, personal, api }
 }
@@ -300,33 +275,17 @@ describe('위층 탭', () => {
   })
 })
 
-describe('묶음 셋', () => {
-  it('개인 모듈 · 프로젝트 모듈 · 테마 패턴 — 차례대로 · 탭을 열 때 두 목록을 읽는다 · 내장 묶음은 없다', async () => {
-    const fake = server([projectModule('m-1', '저장 묶음')], { patterns: PATTERNS }, [personalModule('p-1', '내 카드')])
+describe('묶음 둘', () => {
+  it('개인 모듈 · 프로젝트 모듈 — 차례대로 · 탭을 열 때 두 목록을 읽는다 · 내장 묶음은 없다', async () => {
+    const fake = server([projectModule('m-1', '저장 묶음')], [personalModule('p-1', '내 카드')])
     await openWithPalette(fake)
     await openModules()
     const groups = [...palette().querySelectorAll('section[aria-label]')].map((element) => element.getAttribute('aria-label'))
-    expect(groups).toEqual(['개인 모듈', '프로젝트 모듈', '테마 패턴'])
+    expect(groups).toEqual(['개인 모듈', '프로젝트 모듈'])
     expect([fake.calls.mine, fake.calls.list]).toEqual([1, 1])
     expect(within(group('개인 모듈')).getByText('내 카드')).not.toBeNull()
     expect(within(group('개인 모듈')).getByText('노드 2개')).not.toBeNull()
     expect(within(group('프로젝트 모듈')).getByText('저장 묶음')).not.toBeNull()
-    expect(within(group('테마 패턴')).getByText('공지 묶음')).not.toBeNull()
-  })
-
-  // 패턴이 없는 테마가 정상이고(`system-admin` 첫 판), 없음과 고장을 사람이 갈라야 한다 — 두 문장이 다르다(옛 패턴 고르개의 케이스를 옮겼다).
-  it('테마에 패턴이 없으면 «테마 패턴» 묶음이 «없다»고 말한다', async () => {
-    await openWithPalette(server([], {}))
-    await openModules()
-    expect(within(group('테마 패턴')).getByText(EMPTY_NOTICE)).not.toBeNull()
-  })
-
-  it('테마의 패턴 선언이 규격을 못 지나면 «읽지 못했다»고 말한다 — «없다»와 다른 문장', async () => {
-    await openWithPalette(server([], { patterns: { 'hero.x': { name: '' } } }))
-    await openModules()
-    expect(within(group('테마 패턴')).getByText(BROKEN_NOTICE)).not.toBeNull()
-    expect(within(group('테마 패턴')).queryByText(EMPTY_NOTICE)).toBeNull()
-    expect(BROKEN_NOTICE).not.toBe(EMPTY_NOTICE)
   })
 
   it('개인 · 프로젝트 모듈이 없으면 묶음마다 «모듈로 저장» 안내 한 줄', async () => {
@@ -337,8 +296,8 @@ describe('묶음 셋', () => {
     expect(NO_PERSONAL_MODULES).toBe("구조 트리에서 노드를 골라 '모듈로 저장'에서 '개인 모듈'을 고르면 여기에 섭니다")
   })
 
-  it('검색이 이름으로 묶음 셋을 함께 거른다 — 컴포넌트 탭의 검색어와 따로다', async () => {
-    await openWithPalette(server([projectModule('m-1', '저장 묶음')], { patterns: PATTERNS }, [personalModule('p-1', '내 상세')]))
+  it('검색이 이름으로 묶음 둘을 함께 거른다 — 컴포넌트 탭의 검색어와 따로다', async () => {
+    await openWithPalette(server([projectModule('m-1', '저장 묶음')], [personalModule('p-1', '내 묶음 상세')]))
     fireEvent.change(within(palette()).getByRole('searchbox', { name: '컴포넌트 찾기' }), { target: { value: '버튼' } })
     await openModules()
     expect(within(palette()).getByRole('searchbox', { name: '모듈 찾기' })).toHaveProperty('value', '')
@@ -347,9 +306,9 @@ describe('묶음 셋', () => {
         .getAllByRole('button', { name: /넣기$/ })
         .map((button) => button.getAttribute('aria-label') ?? '')
     fireEvent.change(within(palette()).getByRole('searchbox', { name: '모듈 찾기' }), { target: { value: '묶음' } })
-    expect(named()).toEqual(['저장 묶음 넣기', '공지 묶음 넣기'])
+    expect(named()).toEqual(['내 묶음 상세 넣기', '저장 묶음 넣기'])
     fireEvent.change(within(palette()).getByRole('searchbox', { name: '모듈 찾기' }), { target: { value: '상세' } })
-    expect(named()).toEqual(['내 상세 넣기'])
+    expect(named()).toEqual(['내 묶음 상세 넣기'])
   })
 })
 
@@ -372,7 +331,7 @@ describe('넣기', () => {
   })
 
   it('개인 모듈 — 다시 읽고(getMyModule) 컨테이너를 고르면 그 안 끝 · 잎을 고르면 바로 뒤(컴포넌트 카드와 같은 표)', async () => {
-    const fake = server([], { patterns: PATTERNS }, [personalModule('p-1', '내 카드')])
+    const fake = server([], [personalModule('p-1', '내 카드')])
     await openWithPalette(fake)
     await openModules()
     await select('n-box')
@@ -388,7 +347,7 @@ describe('넣기', () => {
   })
 
   it('되돌리기 한 번에 넣기 전 문서로 돌아온다', async () => {
-    const fake = server([], { patterns: PATTERNS }, [personalModule('p-1', '내 카드')])
+    const fake = server([], [personalModule('p-1', '내 카드')])
     await openWithPalette(fake)
     await openModules()
     await select(null)
@@ -401,31 +360,19 @@ describe('넣기', () => {
     expect(fake.held()).toEqual(DOC)
   })
 
-  it('테마 패턴은 첫 슬롯 노드를 고른다', async () => {
-    const fake = server()
-    await openWithPalette(fake)
-    await openModules()
-    await select(null)
-    await insert('공지 묶음')
-    await waitFor(() => expect(fake.sent).toHaveLength(1))
-    const section = fake.held().root.children![2]!
-    expect(section.type).toBe('Section')
-    expect(shellStore().getState().selectedNodeIds).toEqual([section.children![0]!.id])
-  })
-
   it('남이 잡은 잎을 고른 채 넣으면 편집 0 · 잠금 문장', async () => {
-    const fake = server()
+    const fake = server([], [personalModule('p-1', '내 카드')])
     await openWithPalette(fake)
     await openModules()
     await select('n-text')
     await act(async () => shellStore().setLocks([{ pageId: PAGE_ID, nodeId: 'n-text', userId: 'u-bora', userName: '보라' }]))
-    await insert('공지 묶음')
+    await insert('내 카드')
     expect(fake.sent).toEqual([])
     expect(notice()).not.toBe('')
   })
 
   it('넣을 자리 뒤 형제를 남이 잡았으면 편집 0 · 속성 패널의 잠금 문장', async () => {
-    const fake = server([], { patterns: PATTERNS }, [personalModule('p-1', '내 카드')])
+    const fake = server([], [personalModule('p-1', '내 카드')])
     await openWithPalette(fake)
     await openModules()
     await select('n-text')
@@ -450,7 +397,7 @@ describe('넣기', () => {
   })
 
   it('다른 탭에서 지운 개인 모듈을 넣으면 404 → «이 모듈은 지워졌습니다» · 편집 0 · 개인 목록만 다시 읽는다', async () => {
-    const fake = server([], { patterns: PATTERNS }, [personalModule('p-1', '지울 카드')])
+    const fake = server([], [personalModule('p-1', '지울 카드')])
     await openWithPalette(fake)
     await openModules()
     fake.personal.splice(0)
@@ -463,11 +410,11 @@ describe('넣기', () => {
   })
 
   it('같은 카드의 더블클릭 둘째는 안 넣는다', async () => {
-    const fake = server()
+    const fake = server([], [personalModule('p-1', '내 카드')])
     await openWithPalette(fake)
     await openModules()
     await select(null)
-    const button = within(palette()).getByRole('button', { name: '공지 묶음 넣기' })
+    const button = within(palette()).getByRole('button', { name: '내 카드 넣기' })
     fireEvent.click(button, { detail: 1, clientX: 10, clientY: 10 })
     await act(async () => {})
     fireEvent.click(button, { detail: 2, clientX: 10, clientY: 10 })
@@ -479,7 +426,7 @@ describe('넣기', () => {
 
   /** Review Focus 1 — 판은 뷰 모드에도 남으므로 읽는 사이 넣을 수 없게 될 수 있다. */
   it('다시 읽는 사이 뷰 모드로 바꾸면 넣지 않는다 — 편집 0', async () => {
-    const fake = server([], { patterns: PATTERNS }, [personalModule('p-1', '내 카드')])
+    const fake = server([], [personalModule('p-1', '내 카드')])
     let release: () => void = () => {}
     const getMyModule = fake.api.getMyModule!
     fake.api.getMyModule = async (moduleId) => {
@@ -503,7 +450,7 @@ describe('넣기', () => {
 
 describe('카드 행동 · 복사', () => {
   it('개인 모듈의 이름 바꾸기 · 삭제는 개인 길로 가고 개인 목록만 다시 읽는다', async () => {
-    const fake = server([], { patterns: PATTERNS }, [personalModule('p-1', '내 카드'), personalModule('p-2', '지울 카드')])
+    const fake = server([], [personalModule('p-1', '내 카드'), personalModule('p-2', '지울 카드')])
     await openWithPalette(fake)
     await openModules()
     fireEvent.click(within(group('개인 모듈')).getByRole('button', { name: '내 카드 이름 바꾸기' }))
@@ -523,7 +470,7 @@ describe('카드 행동 · 복사', () => {
 
   it('«프로젝트 모듈로 복사» — 원본을 다시 읽고 그 이름 · 노드로 프로젝트 모듈을 저장하고 프로젝트 목록을 다시 읽는다 · 원본은 그대로', async () => {
     const original = personalModule('p-1', '내 카드')
-    const fake = server([], { patterns: PATTERNS }, [original])
+    const fake = server([], [original])
     await openWithPalette(fake)
     await openModules()
     fireEvent.click(within(group('개인 모듈')).getByRole('button', { name: '내 카드 프로젝트 모듈로 복사' }))
@@ -568,7 +515,7 @@ describe('카드 행동 · 복사', () => {
  * **역할 · 모드마다 서는 것**(`module-tab.tsx` 머리말 «무엇이 서는가»). 판은 편집할 수 없는 판에도 서고 «모듈» 하나다.
  */
 describe('역할 · 모드', () => {
-  const both = (): Server => server([projectModule('m-1', '저장 묶음')], { patterns: PATTERNS }, [personalModule('p-1', '내 카드')])
+  const both = (): Server => server([projectModule('m-1', '저장 묶음')], [personalModule('p-1', '내 카드')])
 
   async function shape(): Promise<Record<string, unknown>> {
     return {
@@ -579,7 +526,6 @@ describe('역할 · 모드', () => {
       tabs: viewTabs().map((tab) => tab.textContent),
       personal: buttonsIn('개인 모듈'),
       project: buttonsIn('프로젝트 모듈'),
-      pattern: buttonsIn('테마 패턴'),
     }
   }
 
@@ -592,7 +538,6 @@ describe('역할 · 모드', () => {
       tabs: ['컴포넌트', '모듈'],
       personal: ['내 카드 넣기', '내 카드 이름 바꾸기', '내 카드 삭제', '내 카드 프로젝트 모듈로 복사'],
       project: ['저장 묶음 넣기', '저장 묶음 이름 바꾸기', '저장 묶음 삭제', '저장 묶음 개인 모듈로 복사'],
-      pattern: ['공지 묶음 넣기'],
     })
   })
 
@@ -606,7 +551,6 @@ describe('역할 · 모드', () => {
       tabs: ['모듈'],
       personal: ['내 카드 이름 바꾸기', '내 카드 삭제', '내 카드 프로젝트 모듈로 복사'],
       project: ['저장 묶음 이름 바꾸기', '저장 묶음 삭제', '저장 묶음 개인 모듈로 복사'],
-      pattern: [],
     })
   })
 
@@ -619,7 +563,6 @@ describe('역할 · 모드', () => {
       tabs: ['모듈'],
       personal: ['내 카드 이름 바꾸기', '내 카드 삭제'],
       project: ['저장 묶음 개인 모듈로 복사'],
-      pattern: [],
     })
   })
 
