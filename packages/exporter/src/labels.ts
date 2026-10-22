@@ -12,7 +12,11 @@
  * 것인지 읽는 사람이 모른다.
  */
 
-/** 우측 패널의 탭 셋. **「설계서 화면 구조」의 뷰 모드 구성이고 `apps/web`의 `PANEL_TABS.view`와 같은 셋이다.** */
+/**
+ * 우측 패널의 탭 셋. **「설계서 화면 구조」의 뷰 모드 구성이고 `apps/web`의 `PANEL_TABS.view`와 같은 셋이다.** 첫 탭(`description`)은
+ * 페이지 설명과 화면 상태(이름 · 설명)를 싣는다 — 에디터 뷰 모드의 «페이지 정보»와 같은 것을 읽는다. **이름은 «페이지 설명»으로 둔다** —
+ * 바꾸면 상태 없는 페이지의 번들 바이트가 바뀐다(`test/bundle-stateless-bytes.test.ts` — 상태 없는 페이지는 화면 상태 전 모양 그대로다).
+ */
 export const PANEL_TABS = [
   { id: 'description', label: '페이지 설명' },
   { id: 'comments', label: '코멘트' },
