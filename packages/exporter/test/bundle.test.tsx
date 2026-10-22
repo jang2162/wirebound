@@ -339,7 +339,7 @@ describe('exportBundle — 우측 탭 셋', () => {
 
   it('설계서 「설계서 화면 구조」의 뷰 모드와 같은 셋이다', () => {
     const labels = [...panel(fileAt(twoPages(), 'index.html')).querySelectorAll('.wb-export-tab')]
-    expect(labels.map((label) => label.textContent)).toEqual(['페이지 설명', '코멘트', '상호작용'])
+    expect(labels.map((label) => label.textContent)).toEqual(['페이지 정보', '코멘트', '상호작용'])
   })
 
   it('라디오 셋이 한 이름을 나누고 첫째가 켜져 있다', () => {

@@ -19,3 +19,28 @@
 
 고친 판: 같은 파일 13 케이스 — 통과 13 · 실패 0(새 넷 포함). 고치는 중 한 번 «상자를 연 뒤 …» 둘째 판이 «설명 쓰기» 를 다시 누르는 자리에서 죽었다 —
 첫 판의 같은 자리 누름에서 500ms 안이라 행동 메뉴가 더블클릭의 둘째로 삼켰다(스크린숏: 메뉴가 열린 채). 케이스가 600ms 를 넘긴 뒤 누르게 했다.
+
+## L3 — 번들 첫 탭 이름 · PPTX 노트 절
+
+번들 첫 탭(`packages/exporter/src/labels.ts` 의 `PANEL_TABS[0]`)을 «페이지 정보»로 바꾸고, PPTX 노트의 페이지 설명 절은 따로 둔 `NOTE_DESCRIPTION_SECTION`
+(«페이지 설명»)으로 낸다 — 그 절은 페이지 설명만 싣는다. `labels.ts` 머리말의 «탭 이름을 PPTX가 절 제목으로 쓴다»를 «같은 것을 싣는 탭만»으로 좁혔다.
+노트 절 이름을 재는 케이스를 `packages/exporter/test/pptx.test.ts` 에 세웠다(«노트의 절 이름은 «페이지 설명» · «코멘트» · «상호작용» 차례다 …» — 앞의
+`toContain(panelLabel('description'))` 는 이름이 무엇으로 바뀌든 따라가 아무것도 안 쟀다).
+
+바이트 잠금(`bundle-stateless-bytes.test.ts`)은 `WB_PRINT_DIGEST=1` 로 새로 지었다. **바뀐 바이트가 탭 이름뿐인지** 쟀다: 새 판의 페이지 HTML 마다
+«페이지 정보» 를 «페이지 설명» 으로 되돌려 해시했다.
+
+| 파일 | «페이지 정보» 수 | 되돌린 해시 | 앞 해시(`916e4245`) | 새 해시 |
+|---|---|---|---|---|
+| 테마 없음 `index.html` | 1 | `257df31e66529a96` | `257df31e66529a96` | `00325ded8443628c` |
+| 〃 `pages/넓은-표본.html` | 1 | `4a6cec2bef49de7c` | 같음 | `cfd49460874d47d4` |
+| 〃 `pages/슬롯.html` | 1 | `681f803bd957006e` | 같음 | `aa3ab81956adac75` |
+| 〃 `pages/글.html` | 1 | `84b26fe335a70579` | 같음 | `471e3d78fd9d66df` |
+| 〃 `pages/깨진-문서.html` | 1 | `887683844a0a5cb9` | 같음 | `9ab11048c5f61199` |
+| 테마 있음 `index.html` | 1 | `e61f7db03415ae1f` | 같음 | `ad20498e2f5f4a0e` |
+| 〃 `pages/넓은-표본.html` | 1 | `7eb7c94ccaa43c10` | 같음 | `4adaced61f6f0c87` |
+| 〃 `pages/슬롯.html` | 1 | `27f2f0b80889417c` | 같음 | `f6f459c1f23e816b` |
+| 〃 `pages/글.html` | 1 | `8a1e77b21772c0f0` | 같음 | `e191ae0229f91004` |
+| 〃 `pages/깨진-문서.html` | 1 | `0579d7f72b4430c0` | 같음 | `0cf1fd266dd8dd82` |
+
+CSS · 테마 · 토큰 파일의 해시는 그대로다. `packages/exporter` 전부 + `system-themes/admin/build-test/bundle-views.test.tsx`: 26 파일 · 통과 482 · 실패 0.

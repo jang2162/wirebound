@@ -60,7 +60,14 @@
  */
 import type { PageDocument } from '@wirebound/schema'
 import { commentEntries, type BundleComment, type CommentEntry } from '../bundle/comments'
-import { EMPTY_COMMENTS, EMPTY_DESCRIPTION, EMPTY_INTERACTIONS, MARKER_WITHOUT_COMMENT, panelLabel } from '../labels'
+import {
+  EMPTY_COMMENTS,
+  EMPTY_DESCRIPTION,
+  EMPTY_INTERACTIONS,
+  MARKER_WITHOUT_COMMENT,
+  NOTE_DESCRIPTION_SECTION,
+  panelLabel,
+} from '../labels'
 import { installRegistries } from '../page'
 import { pageSentences } from '../sentences'
 import { NOTES_BOX, PANEL_BOX, SCREEN_BOX, TITLE_BOX, type Box } from './geometry'
@@ -280,7 +287,7 @@ function noteLines(page: PptxPage, entries: readonly CommentEntry[], sentences: 
   const description = page.description ?? null
   return [
     { text: page.title, size: NOTE_SIZE, bold: true },
-    section(panelLabel('description'), false),
+    section(NOTE_DESCRIPTION_SECTION, false),
     {
       text: description === null || description.trim().length === 0 ? EMPTY_DESCRIPTION : description,
       size: ENTRY_SIZE,
