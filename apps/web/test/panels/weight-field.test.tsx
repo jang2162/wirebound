@@ -8,7 +8,7 @@
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { applyOps, lockConflictOfOps, type PageDocument, type PatchOp } from '@wirebound/schema'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
 import type { RealtimeSocket } from '../../src/realtime/connection'
@@ -159,12 +159,29 @@ describe('속성 패널 «몫» 칸 — 서는 자리', () => {
     ['Flex 의 자식', 'n-a'],
     ['Grid 의 자식', 'n-g'],
     ['열을 정한 SearchForm 의 자식', 'n-f'],
-  ])('%s 이면 선다 — 별칭 바로 아래 칸이다', async (_label, nodeId) => {
+  ])('%s 이면 선다 — 컴포넌트 속성 칸들 아래 · 상태 보임 · 별칭 위다', async (_label, nodeId) => {
     await board()
     select(nodeId)
     expect(weightField()).not.toBeNull()
     const rows = [...panel().querySelectorAll('.wb-shell-prop')].map((row) => row.querySelector('.wb-shell-prop-label')?.textContent)
-    expect(rows.slice(0, 2)).toEqual(['별칭', '몫'])
+    // 차례: 컴포넌트 속성 칸들 → 몫 → 상태 보임 → 별칭(맨 아래). 속성 칸이 하나는 앞에 선다.
+    expect(rows.slice(-3)).toEqual(['몫', '상태 보임', '별칭'])
+    expect(rows.length).toBeGreaterThan(3)
+  })
+
+  it('몫 · 상태 보임 칸은 키가 갈린다 — 몫이 서는 다른 노드로 옮겨 골라도 몫 칸이 서고 같은 키 경고가 없다', async () => {
+    // 두 칸이 노드 id 하나를 키로 나눠 쓰면 React 가 짝을 잘못 짓는다(지원하지 않는 동작) — 옮겨 고른 둘째 노드의 몫 칸이 빠졌다.
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await board()
+      select('n-a')
+      select('n-b')
+      expect(weightField()).not.toBeNull()
+      const sameKey = errors.mock.calls.filter((call) => call.some((arg) => String(arg).includes('same key')))
+      expect(sameKey).toEqual([])
+    } finally {
+      errors.mockRestore()
+    }
   })
 
   it.each([

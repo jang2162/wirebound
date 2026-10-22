@@ -8,7 +8,7 @@
  * 판이 못 말하는 것 — **바뀌는 순간**(잠금 · 통지 · 다시 읽기가 실패하면 · 끊겼다 붙으면 · 답이 엇갈려 오면)을 잰다.
  * **그래서 이 파일은 그 자리들(메뉴 · 구조 트리의 줄 행동 · 되돌리기 · 속성 · 상호작용 · 코멘트)을 단언하지 않는다** — 단언하면 그 자리의
  * 변조가 이 파일과 그 판에서 함께 죽어 어느 쪽이 무엇을 소유하는지가 흐려진다. «역할이 섰다»의 표지로는 그 파일이 안 보는
- * 자리 — **뷰 모드 «페이지 설명» 탭의 편집기**(`canEdit` — owner · editor 에게 서고 viewer · 역할 모름에는 읽기 전용)와 통지
+ * 자리 — **편집 모드 «페이지 정보» 탭의 편집기**(`canEdit` — owner · editor 에게 서고 viewer · 역할 모름에는 읽기 전용)와 통지
  * 문장을 쓴다. 셸에 실행 중 역할을 따라가는 owner 전용 자리는 없다(스냅샷 팝오버는 열 때 역할을 읽는다) — 표지를 쓰는 케이스는
  * 전부 owner 와 viewer · 역할 모름 사이를 오가므로 `canEdit` 으로 갈린다.
  */
@@ -97,10 +97,9 @@ function pick(nodeId: string): void {
   fireEvent.click(el)
 }
 
-/** 뷰 모드로 가 «페이지 설명» 탭을 연다 — 아래 `editOn` 이 읽는 자리다. */
+/** «페이지 정보» 탭을 연다(편집 모드) — 아래 `editOn` 이 읽는 자리다. */
 function openDescription(): void {
-  fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
-  fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
+  fireEvent.click(screen.getByRole('tab', { name: '페이지 정보' }))
 }
 
 /** 페이지 설명 편집기가 섰나(`canEdit`) — 읽기 전용이면 `false`, 탭이 아직 안 섰으면 `null`. */

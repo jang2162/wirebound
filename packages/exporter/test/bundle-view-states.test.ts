@@ -28,7 +28,7 @@ beforeAll(() => {
 const STATE_PAGE: PageDocument = {
   version: 2,
   viewStates: [
-    { id: 's_admin', name: '관리자', parent: 's_login' },
+    { id: 's_admin', name: '관리자', parent: 's_login', description: '승인을 맡는 사람\n둘째 줄' },
     { id: 's_guest', name: '비로그인' },
     { id: 's_login', name: '로그인' },
   ],
@@ -114,6 +114,33 @@ describe('셸 — 상태가 있는 페이지', () => {
     expect(select().value).toBe('default')
     const label = document.querySelector('label[for="wb-export-state"]')
     expect(label?.textContent).toBe('화면 상태')
+  })
+
+  it('첫 탭이 페이지 설명 아래 화면 상태를 트리 차례로 싣는다 — 이름 · 깊이 · 설명(없으면 이름만)', () => {
+    load()
+    const items = [...document.querySelectorAll('#wb-export-panel-description .wb-export-state-item')].map((item) => [
+      item.querySelector('.wb-export-state-name')?.textContent,
+      item.getAttribute('data-depth'),
+      item.querySelector('.wb-export-state-description')?.textContent ?? null,
+    ])
+    expect(items).toEqual([
+      ['비로그인', '0', null],
+      ['로그인', '0', null],
+      ['관리자', '1', '승인을 맡는 사람\n둘째 줄'],
+    ])
+    expect(document.querySelector('#wb-export-panel-description .wb-export-state-heading')?.textContent).toBe('화면 상태')
+  })
+
+  it('상태가 없는 페이지의 첫 탭에는 상태 목록이 없다', () => {
+    const html = String(
+      exportBundle({ pages: [{ title: '빈', document: { ...STATE_PAGE, viewStates: [] } }], runtimeJs: '/* runtime */' }).files.find(
+        (file) => file.path === 'pages/빈.html',
+      )!.content,
+    )
+    const parsed = new DOMParser().parseFromString(html, 'text/html')
+    // 판 카나리아 — 첫 탭은 섰다.
+    expect(parsed.querySelector('#wb-export-panel-description')).not.toBeNull()
+    expect(parsed.querySelector('.wb-export-state-info')).toBeNull()
   })
 
   it('상호작용 탭의 문장 · 코멘트 탭의 이름이 노드에 상태를 붙인다', () => {

@@ -4,6 +4,7 @@ import {
   DEFAULT_VIEW_STATE,
   NODE_ALIAS_MAX,
   VIEW_STATE_DEPTH_MAX,
+  VIEW_STATE_DESCRIPTION_MAX,
   VIEW_STATE_NAME_MAX,
   VIEW_STATES_MAX,
   WEIGHT_MAX,
@@ -153,6 +154,17 @@ const ViewStateNameSchema = z
   .refine((value) => !isBlankAlias(value), { message: '상태 이름에 보이는 글자가 없습니다' })
 
 /**
+ * 상태 설명의 모양 — 여러 줄 자유 글이고 1 ~ `VIEW_STATE_DESCRIPTION_MAX` 자(UTF-16 — 페이지 설명과 같은 단위)다. **빈 글 · 보이는 글자가 없는
+ * 글은 받지 않는다** — 설명이 없는 상태는 칸이 없는 상태 하나뿐이다(화면은 비우면 칸을 지운다 — `view-state-ops.ts`의 `describeViewStateOps`).
+ * 짝 없는 서로게이트는 받지 않는다 — 문서가 사는 `jsonb` 가 거절해 저장이 500 으로 죽는다. 그 밖의 글자(줄바꿈 · 방향 제어)는 페이지 설명처럼 받는다.
+ */
+const ViewStateDescriptionSchema = z
+  .string()
+  .max(VIEW_STATE_DESCRIPTION_MAX, `상태 설명은 ${VIEW_STATE_DESCRIPTION_MAX}자 이하여야 합니다`)
+  .refine((value) => !isBlankAlias(value), { message: '상태 설명에 보이는 글자가 없습니다' })
+  .refine((value) => !/\p{Cs}/u.test(value), { message: '상태 설명에 짝 없는 서로게이트를 둘 수 없습니다' })
+
+/**
  * 상태 하나. `id`는 노드 id 규칙이고 `default`(«기본» 화면의 표지 — `DEFAULT_VIEW_STATE`)일 수 없다 — 노드 보임이 그 값으로 «기본»을
  * 가리키므로 같은 id 의 상태가 있으면 둘이 한 값으로 겹친다.
  */
@@ -163,6 +175,7 @@ const ViewStateSchema: z.ZodType<ViewState> = z.strictObject({
     .refine((id) => id !== DEFAULT_VIEW_STATE, { message: `상태 id 로 ${DEFAULT_VIEW_STATE}를 쓸 수 없습니다` }),
   name: ViewStateNameSchema,
   parent: z.string().regex(NODE_ID_PATTERN).optional(),
+  description: ViewStateDescriptionSchema.optional(),
 })
 
 /**

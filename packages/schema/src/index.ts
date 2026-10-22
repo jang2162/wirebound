@@ -15,6 +15,7 @@ export {
   DEFAULT_VIEW_STATE,
   NODE_ALIAS_MAX,
   VIEW_STATE_DEPTH_MAX,
+  VIEW_STATE_DESCRIPTION_MAX,
   VIEW_STATE_NAME_MAX,
   VIEW_STATES_MAX,
   WEIGHT_MAX,
@@ -24,7 +25,14 @@ export {
 
 export { replaceDocumentOps } from './document-ops'
 export { effectiveViewState, isVisibleIn, stateDescendants, stateLineage, viewStateOrder, visibleTree } from './visibility'
-export { addViewStateOps, moveViewStateOps, removeViewStateOps, renameViewStateOps } from './view-state-ops'
+export {
+  addViewStateOps,
+  describeViewStateOps,
+  moveViewStateOps,
+  removeViewStateOps,
+  renameViewStateOps,
+  tidyViewStateDescription,
+} from './view-state-ops'
 export { guardViewStateOps } from './view-state-guard'
 
 export type { NodeVisit } from './tree'

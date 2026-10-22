@@ -1,5 +1,5 @@
 /**
- * 화면 상태 목록의 편집 — 추가 · 이름 바꾸기 · 형제 안 옮기기 · 삭제를 **JSON Patch 묶음 하나**로 짓는 순수 함수(설계 spec
+ * 화면 상태 목록의 편집 — 추가 · 이름 바꾸기 · 설명 쓰기 · 형제 안 옮기기 · 삭제를 **JSON Patch 묶음 하나**로 짓는 순수 함수(설계 spec
  * `docs/superpowers/specs/2026-10-18-modules-states-layout-design.md` 「C1」 · 「C3」의 상태 삭제). 새 편집 종류를 만들지 않는다 — 묶음 하나가
  * 편집 하나라 지금 전송 길 · 잠금 판정(`lockConflictOfOps`) · 개인 되돌리기(묶음 하나 = 되돌리기 한 번)를 그대로 탄다.
  *
@@ -7,7 +7,7 @@
  * 오류가 늘지 않는다(그 판정은 케이스가 잰다 — `test/view-state-ops.test.ts`).
  */
 import { isBlankAlias, hasRejectedAliasChar } from './alias'
-import { VIEW_STATE_DEPTH_MAX, VIEW_STATE_NAME_MAX, VIEW_STATES_MAX, type PageDocument } from './node'
+import { VIEW_STATE_DEPTH_MAX, VIEW_STATE_DESCRIPTION_MAX, VIEW_STATE_NAME_MAX, VIEW_STATES_MAX, type PageDocument } from './node'
 import type { PatchOp } from './patch/types'
 import { walkNodes } from './tree'
 import { guardViewStateOps } from './view-state-guard'
@@ -55,6 +55,50 @@ export function renameViewStateOps(doc: PageDocument, stateId: string, name: str
   if (tidy === null || index === -1 || states[index]!.name === tidy) return null
   if (states.some((state) => state.id !== stateId && state.name === tidy)) return null
   return guardViewStateOps(doc, [{ op: 'replace', path: `/viewStates/${index}/name`, value: tidy }])
+}
+
+/**
+ * 친 설명을 목록이 받는 모양으로 — 앞뒤 공백을 걷고, 보이는 글자가 없으면 `''`(칸을 지운다는 뜻). 상한을 넘거나 짝 없는 서로게이트가 있으면
+ * `null` — 자르거나 고쳐 받지 않는다(`tidyName`과 같은 까닭). 규칙의 정본은 봉투(`envelope.ts`의 `ViewStateDescriptionSchema`)다.
+ */
+export function tidyViewStateDescription(text: string): string | null {
+  const trimmed = text.trim()
+  if (isBlankAlias(trimmed)) return ''
+  if (trimmed.length > VIEW_STATE_DESCRIPTION_MAX || /\p{Cs}/u.test(trimmed)) return null
+  return trimmed
+}
+
+/**
+ * **설명 쓰기** — 빈 글(보이는 글자 없음)은 칸을 지운다. `base` 는 쓰기 시작한 때의 설명(없었으면 `null`)이고 `null`인 판은 상태가 없음 · 글이
+ * 규칙 밖(`tidyViewStateDescription`) · 글이 바탕 그대로(없는 설명을 비움 포함)다.
+ *
+ * **바탕을 `test`로 싣는다 — 남의 설명을 조용히 덮지 않는다.** 바탕을 안 실으면 내가 쓰는 동안 남이 같은 상태의 설명을 쓴 판에서 나중에 보낸
+ * 쪽이 이긴다(`docs/superpowers/plans/2026-10-22-rv-pi-report.md` H3). 실으면 그 판의 묶음은 서버에서 통째로 실패한다(409 — 상태 id 의 `test`와
+ * 같은 길).
+ *
+ * | 바탕 | 싣는 `test` |
+ * |---|---|
+ * | 있음 | `/viewStates/<i>/description` = 바탕 |
+ * | 없음 | `/viewStates/<i>` = 그 항목에서 설명을 뺀 값 — RFC 6902 의 `test`는 «칸 없음»을 못 말한다(없는 자리는 어떤 값과도 같지 않다). 항목째 견주면 남이 칸을 만든 판에서 실패한다 |
+ *
+ * 항목째 견주기는 **남이 같은 상태의 이름 · 부모를 고친 판에서도** 실패한다 — 설명은 그대로인데 저장이 안 된다. 그 판은 다시 보내면
+ * 서고(바탕이 여전히 «없음»이다), 칸을 지우는 판과 갈리지 않아 덮는 일은 없다.
+ *
+ * 지금 문서의 설명이 바탕과 다르면 이 묶음은 그 문서에서 적용이 실패한다 — 부르는 쪽이 먼저 견준다(남이 바꿨다는 화면을 세운다).
+ */
+export function describeViewStateOps(doc: PageDocument, stateId: string, text: string, base: string | null): PatchOp[] | null {
+  const tidy = tidyViewStateDescription(text)
+  const states = doc.viewStates ?? []
+  const index = states.findIndex((state) => state.id === stateId)
+  if (tidy === null || index === -1) return null
+  const next = tidy === '' ? null : tidy
+  if (next === base) return null
+  const at = `/viewStates/${index}`
+  const path = `${at}/description`
+  const { description: _dropped, ...without } = states[index]!
+  const premise: PatchOp = base === null ? { op: 'test', path: at, value: without } : { op: 'test', path, value: base }
+  const write: PatchOp = next === null ? { op: 'remove', path } : { op: base === null ? 'add' : 'replace', path, value: next }
+  return guardViewStateOps(doc, [{ op: 'test', path: `${at}/id`, value: stateId }, premise, write])
 }
 
 /**

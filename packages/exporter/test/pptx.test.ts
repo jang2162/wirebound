@@ -169,7 +169,16 @@ describe('노트가 전문을 받는다', () => {
     const { parts } = exportPptx({ pages: PAGES })
     expect(texts(notes(parts, 1))).toContain('회원을 조건으로 찾는 화면')
     expect(texts(slide(parts, 1))).not.toContain('회원을 조건으로 찾는 화면')
-    expect(texts(notes(parts, 1))).toContain(panelLabel('description'))
+  })
+
+  // RV-PI 6 절 — 번들 첫 탭(«페이지 정보»)은 상태까지 싣지만 노트의 절은 페이지 설명만 싣는다. 탭 이름을 따라가면 «페이지 정보» 절이 설명 한 줄만 든다.
+  it('노트의 절 이름은 «페이지 설명» · «코멘트» · «상호작용» 차례다 — 번들 첫 탭 이름(«페이지 정보»)을 안 따른다', () => {
+    const { parts } = exportPptx({ pages: PAGES })
+    const 노트 = texts(notes(parts, 1))
+    const sections = ['페이지 설명', '코멘트', '상호작용'].map((name) => 노트.indexOf(name))
+    expect(sections.every((at) => at > 0)).toBe(true)
+    expect(sections).toEqual([...sections].sort((a, b) => a - b))
+    expect(노트).not.toContain(panelLabel('description'))
   })
 
   it('설명이 없으면 없다고 말한다', () => {

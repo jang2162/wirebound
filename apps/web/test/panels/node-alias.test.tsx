@@ -1,5 +1,5 @@
 /**
- * **노드 별칭을 고치는 자리**(설계서 「설계서 화면 구조」의 노드 별칭) — 속성 패널 맨 위 «별칭» 칸 · 구조 트리 줄의 더블클릭 · F2 ·
+ * **노드 별칭을 고치는 자리**(설계서 「설계서 화면 구조」의 노드 별칭) — 속성 패널 맨 아래 «별칭» 칸 · 구조 트리 줄의 더블클릭 · F2 ·
  * 줄 `…` «별칭 바꾸기». 넷 다 편집 하나(`add` · `replace` · `remove` `/…/alias` — `src/edit/ops.ts` 의 `aliasOps`)를 지금 편집 길로
  * 보낸다 — 되돌리기 한 번 · 남의 잠금이면 막힘.
  *
@@ -178,12 +178,13 @@ const CARD = '/root/children/0/alias'
 const SAVE = '/root/children/0/children/0/alias'
 
 describe('속성 패널 «별칭» 칸', () => {
-  it('맨 위 칸이다 — 고른 노드의 별칭을 보이고, 바꿔 떠나면 `replace` 하나를 보낸다', async () => {
+  it('맨 아래 칸이다 — 고른 노드의 별칭을 보이고, 바꿔 떠나면 `replace` 하나를 보낸다', async () => {
     const b = await board()
     fireEvent.click(rowButton('n-card'))
 
     const rows = panel().querySelectorAll('.wb-shell-prop')
-    expect(rows[0]?.querySelector('.wb-shell-prop-label')?.textContent).toBe('별칭')
+    expect(rows.length).toBeGreaterThan(1)
+    expect(rows[rows.length - 1]?.querySelector('.wb-shell-prop-label')?.textContent).toBe('별칭')
     expect(aliasField().value).toBe('회원 카드')
 
     fireEvent.change(aliasField(), { target: { value: '회원 정보 카드' } })

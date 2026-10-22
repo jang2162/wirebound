@@ -5,13 +5,12 @@
  *
  * **여기가 편집의 입구다.**
  *
- * 「설계서 화면 구조」의 우측 패널은 탭 셋(속성·코멘트·상호작용)이다. 이 패널은 그중
- * **속성 탭의 본문**이고, 탭 자체는 `routes/editor.tsx`의 `RightPanel`이 든다. 뷰 모드의
- * «페이지 설명» 탭은 **편집까지 한다**(`panels/page-description.tsx`).
+ * 「설계서 화면 구조」의 우측 패널은 편집 모드에서 탭 넷(페이지 정보·속성·코멘트·상호작용)이다. 이 패널은 그중
+ * **속성 탭의 본문**이고, 탭 자체는 `routes/editor.tsx`의 `RightPanel`이 든다.
  *
- * ## 페이지 설명은 여기 없다
+ * ## 페이지 이름 · 설명은 여기 없다
  *
- * 설명을 읽고 고치는 자리는 뷰 모드의 «페이지 설명» 탭이다(「설계서 화면 구조」가 그렇게
+ * 이름 · 설명을 읽고 고치는 자리는 «페이지 정보» 탭이다(`panels/page-info.tsx` — 「설계서 화면 구조」가 그렇게
  * 적는다). 루트 `Page`를 고르면 `PageDef.editor`가 `[]`라 *"편집할 속성이 없습니다"*가 뜬다.
  *
  * **여기로 옮기지 않는 까닭 — 값을 쟀다.** 이 패널은 편집 모드의 **첫 탭**이고 페이지를
@@ -22,7 +21,7 @@
  *
  * **옮기려면 페이지 메타(`title`·`description`)가 셸에서 여기까지 와야 한다** — 스토어에
  * 실거나(그러면 `loadPage`의 시그니처가 바뀌어 테스트까지 부르는 자리가 전부 바뀐다) 프롭을
- * 한 겹 더 놓거나다. 뷰 모드 탭은 자기 조회를 이미 갖고 있어 요청이 하나도 늘지 않는다.
+ * 한 겹 더 놓거나다. «페이지 정보» 탭은 처음 고른 탭이 아니라 자기 조회를 열 때만 낸다.
  */
 import { useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { NO_THEME, resolveVariant, weightRoom } from '@wirebound/renderer'
@@ -345,71 +344,6 @@ export function PropertyPanel(props: {
       {/* **꺼진 위젯의 이유를 이 패널이 자기 자리에서 말한다.** 별칭 칸은 어느 컴포넌트에나 서므로 위젯이 없는 판이 없다 —
           편집할 속성이 없는 컴포넌트(`Page`·`Slot`)도 꺼진 별칭 칸의 이유를 여기서 말한다. */}
       {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
-      {/* **별칭이 맨 위다**(설계서 「설계서 화면 구조」의 노드 별칭) — props 가 아니라 노드 봉투의 필드이고 어느 컴포넌트에나 선다. 칸을
-          떠날 때 커밋하는 길은 글 칸과 같다(`TextControl`) — 편집은 `aliasOps` 하나. */}
-      <dl className="wb-shell-props">
-        <div className="wb-shell-prop" key={ALIAS_FIELD.prop} data-wb-node-alias="">
-          <dt className="wb-shell-prop-label">
-            <label id={`${controlId(ALIAS_FIELD.prop)}-label`} htmlFor={controlId(ALIAS_FIELD.prop)}>
-              {ALIAS_FIELD.label}
-            </label>
-          </dt>
-          <dd className="wb-shell-prop-value">
-            <TextControl
-              key={node.id}
-              field={ALIAS_FIELD}
-              value={nodeAlias(node) ?? ''}
-              id={controlId(ALIAS_FIELD.prop)}
-              // 61자째부터는 칸이 받지 않는다 — 안 막으면 떠날 때 `tidyAlias` 가 60자에서 말없이 잘라 저장했다.
-              maxLength={NODE_ALIAS_MAX}
-              placeholder={`${NODE_ALIAS_MAX}자까지`}
-              disabled={blocked}
-              onCommit={(value) => {
-                if (blocked || doc === null) return
-                const ops = aliasOps(doc, node.id, String(value))
-                if (ops !== null) commitOps(ops)
-              }}
-              onLeave={(value) =>
-                commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) =>
-                  aliasOps(running, nodeId, String(value)),
-                )
-              }
-            />
-          </dd>
-        </div>
-        {/* **몫은 별칭 바로 아래다** — 별칭처럼 노드 봉투의 필드이고, 부모가 몫을 읽을 때만 선다(`weightRoom` — 렌더러가 몫을 싣는 판정과 같다). */}
-        {doc !== null && weightRoom(...weightParentOf(doc, node.id)) !== undefined && (
-          <WeightField
-            key={node.id}
-            value={node.weight}
-            disabled={blocked}
-            onCommit={(weight) => {
-              if (blocked || doc === null) return
-              const ops = weightOps(doc, node.id, weight)
-              if (ops !== null) commitOps(ops)
-            }}
-            onLeave={(weight) =>
-              commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) => weightOps(running, nodeId, weight))
-            }
-          />
-        )}
-        {/* **상태 보임은 몫 아래다** — 같은 층(노드 봉투의 필드)이고 뿌리 말고는 어느 노드에나 선다(`./visibility-field.tsx`). */}
-        {doc !== null && doc.root?.id !== node.id && (
-          <VisibilityField
-            key={node.id}
-            value={node.visibility}
-            viewStates={viewState.viewStates}
-            current={viewState.state}
-            hiddenNow={hiddenNodes.has(node.id)}
-            disabled={blocked}
-            onCommit={(visibility) => {
-              if (blocked || doc === null) return
-              const ops = visibilityOps(doc, node.id, visibility)
-              if (ops !== null) commitOps(ops)
-            }}
-          />
-        )}
-      </dl>
       {fields.length === 0 && variantField === null ? (
         // `Page`·`Slot`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
         // "아직 고르지 않았다"와 구분되지 않는다.
@@ -477,6 +411,72 @@ export function PropertyPanel(props: {
           </dl>
         </>
       )}
+      <dl className="wb-shell-props">
+        {/* **몫은 컴포넌트 속성 칸들 바로 아래다** — 별칭처럼 노드 봉투의 필드이고, 부모가 몫을 읽을 때만 선다(`weightRoom` — 렌더러가 몫을 싣는 판정과 같다). */}
+        {doc !== null && weightRoom(...weightParentOf(doc, node.id)) !== undefined && (
+          <WeightField
+            // 형제 칸(상태 보임)과 키가 겹치면 React 가 둘의 짝을 잘못 지어 초안 · 까닭을 엉뚱한 칸에 남긴다 — 칸 이름을 붙여 가른다.
+            key={`${node.id}:weight`}
+            value={node.weight}
+            disabled={blocked}
+            onCommit={(weight) => {
+              if (blocked || doc === null) return
+              const ops = weightOps(doc, node.id, weight)
+              if (ops !== null) commitOps(ops)
+            }}
+            onLeave={(weight) =>
+              commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) => weightOps(running, nodeId, weight))
+            }
+          />
+        )}
+        {/* **상태 보임은 몫 아래다** — 같은 층(노드 봉투의 필드)이고 뿌리 말고는 어느 노드에나 선다(`./visibility-field.tsx`). */}
+        {doc !== null && doc.root?.id !== node.id && (
+          <VisibilityField
+            key={`${node.id}:visibility`}
+            value={node.visibility}
+            viewStates={viewState.viewStates}
+            current={viewState.state}
+            hiddenNow={hiddenNodes.has(node.id)}
+            disabled={blocked}
+            onCommit={(visibility) => {
+              if (blocked || doc === null) return
+              const ops = visibilityOps(doc, node.id, visibility)
+              if (ops !== null) commitOps(ops)
+            }}
+          />
+        )}
+        {/* **별칭이 맨 아래다**(설계서 「설계서 화면 구조」의 노드 별칭) — props 가 아니라 노드 봉투의 필드이고 어느 컴포넌트에나 선다. 칸을
+            떠날 때 커밋하는 길은 글 칸과 같다(`TextControl`) — 편집은 `aliasOps` 하나. */}
+        <div className="wb-shell-prop" key={ALIAS_FIELD.prop} data-wb-node-alias="">
+          <dt className="wb-shell-prop-label">
+            <label id={`${controlId(ALIAS_FIELD.prop)}-label`} htmlFor={controlId(ALIAS_FIELD.prop)}>
+              {ALIAS_FIELD.label}
+            </label>
+          </dt>
+          <dd className="wb-shell-prop-value">
+            <TextControl
+              key={node.id}
+              field={ALIAS_FIELD}
+              value={nodeAlias(node) ?? ''}
+              id={controlId(ALIAS_FIELD.prop)}
+              // 61자째부터는 칸이 받지 않는다 — 안 막으면 떠날 때 `tidyAlias` 가 60자에서 말없이 잘라 저장했다.
+              maxLength={NODE_ALIAS_MAX}
+              placeholder={`${NODE_ALIAS_MAX}자까지`}
+              disabled={blocked}
+              onCommit={(value) => {
+                if (blocked || doc === null) return
+                const ops = aliasOps(doc, node.id, String(value))
+                if (ops !== null) commitOps(ops)
+              }}
+              onLeave={(value) =>
+                commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) =>
+                  aliasOps(running, nodeId, String(value)),
+                )
+              }
+            />
+          </dd>
+        </div>
+      </dl>
     </>
   )
 }

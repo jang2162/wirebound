@@ -324,6 +324,40 @@ body {
   white-space: pre-wrap;
 }
 
+/* 첫 탭의 화면 상태 — 트리 차례, 하위 상태는 깊이마다 들여 쓴다(\`data-depth\` — 깊이는 3 까지). 설명은 이름 아래 옅은 글이다. */
+.wb-export-state-info {
+  margin: 1rem 0 0;
+}
+
+.wb-export-state-heading {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+}
+
+.wb-export-state-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-export-state-item {
+  margin: 0 0 0.375rem;
+}
+
+.wb-export-state-item[data-depth="1"] {
+  padding-left: 0.75rem;
+}
+
+.wb-export-state-item[data-depth="2"] {
+  padding-left: 1.5rem;
+}
+
+.wb-export-state-description {
+  margin: 0.125rem 0 0;
+  color: #6b7280;
+  white-space: pre-wrap;
+}
+
 /* 전환기는 목업 위 셸의 줄이다 — 문서를 감싸지 않으므로 글자 속성을 건다(위 «상속되는 속성» 규율은 감싸개의 것). */
 .wb-export-states {
   display: flex;

@@ -84,8 +84,9 @@ function submitButton(): HTMLButtonElement {
   return screen.getByRole('button', { name: '코멘트 달기' }) as HTMLButtonElement
 }
 
-function toView(): void {
-  fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+/** 편집 모드의 «페이지 정보» 탭을 연다 — 이름 · 설명 편집기가 서는 자리다(뷰 모드의 같은 탭은 읽기만 한다). */
+function toInfo(): void {
+  fireEvent.click(screen.getByRole('tab', { name: '페이지 정보' }))
 }
 
 async function toCommentTab(): Promise<void> {
@@ -536,7 +537,7 @@ describe('Q — 에디터를 떠났다 와도 나가 있는 쓰기가 제자리�
   it('설명 — 에디터를 떠났다 와도 잠금이 남는다: 둘째 저장이 나갈 수 없다', async () => {
     const server = descriptionServer('서버 값')
     await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     type(box(), '매달린 저장 글')
@@ -544,7 +545,7 @@ describe('Q — 에디터를 떠났다 와도 나가 있는 쓰기가 제자리�
     await waitFor(() => expect(server.sent).toHaveLength(1))
 
     await leaveEditorAndReturn()
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     // **잠금이 셸과 함께 사라지면 여기서 상자와 버튼이 열린다**(Chrome 에서 잰 고장 방식). 그러면 둘째
@@ -562,7 +563,7 @@ describe('Q — 에디터를 떠났다 와도 나가 있는 쓰기가 제자리�
   it('설명 — 떠났다 온 방문에 응답이 닿는다: 돌아와 읽은 옛 값이 아니라 저장된 값과 «저장했습니다»가 선다', async () => {
     const server = descriptionServer('서버 값')
     await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     type(box(), '매달린 저장 글')
@@ -570,7 +571,7 @@ describe('Q — 에디터를 떠났다 와도 나가 있는 쓰기가 제자리�
     await waitFor(() => expect(server.sent).toHaveLength(1))
 
     await leaveEditorAndReturn()
-    toView()
+    toInfo()
     // 돌아와 건 조회는 쓰기가 커밋되기 **전**에 읽었다 — 옛 값이다.
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
@@ -586,7 +587,7 @@ describe('Q — 에디터를 떠났다 와도 나가 있는 쓰기가 제자리�
   it('설명 — 에디터 밖에 있는 동안 끝난 쓰기: 돌아오면 풀려 있고 서버에서 다시 읽은 저장된 값이 선다', async () => {
     const server = descriptionServer('서버 값')
     await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     type(box(), '밖에서 끝난 저장 글')
@@ -597,7 +598,7 @@ describe('Q — 에디터를 떠났다 와도 나가 있는 쓰기가 제자리�
     // 받을 방문이 없다 — 응답은 버려지고 잠금만 장부에서 풀린다.
     await server.respond()
     await returnFromList()
-    toView()
+    toInfo()
 
     await waitFor(() => expect(box().value).toBe('밖에서 끝난 저장 글'))
     expect(box().disabled).toBe(false)
@@ -682,7 +683,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
   /** 설명을 치고 저장을 누른다 — **가짜 타이머를 켠 뒤에** 누른다(시간 제한의 타이머가 가짜여야 한다). */
   async function saveWithFakeTimers(server: ReturnType<typeof descriptionServer>, text: string): Promise<void> {
     await openPage(DOC, { apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     type(box(), text)
@@ -724,8 +725,9 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     // **초안을 비웠다** — 판정 직후에는 초안과 서버 값이 같아 화면으로 안 갈린다. 갈리는 것은 그 뒤에
     // 서버 값이 바뀔 때다: 초안이 남아 있으면 `draft ?? server`에서 초안이 이겨 남이 고친 값을 가린다.
     server.overwrite('남이 고친 글')
-    fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
-    toView()
+    // 탭을 다녀와 본문을 다시 세운다 — 마운트의 조회가 다시 나간다.
+    fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+    toInfo()
     await waitFor(() => expect(box().value).toBe('남이 고친 글'))
   })
 
@@ -1460,7 +1462,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
   it('다른 사람 — 앞 사람의 나가 있는 저장은 로그아웃에 끊기고, 다음 사람의 상자를 잠그지 않는다', async () => {
     const server = descriptionServer('서버 값')
     await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects, ...accounts } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     type(box(), '앨리스의 글')
@@ -1473,7 +1475,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
 
     await login(BOB)
     await returnFromList()
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     // **세션이 장부를 끊지 않으면 여기서 밥의 상자가 꺼진다**(Chrome 에서 잰 고장 방식 — 앨리스의 쓰기가 잠근다).
@@ -1486,7 +1488,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
   it('다른 사람 — «확인하지도 못했습니다»로 남은 앞 사람의 쓰기가 다음 사람에게 넘어가지 않는다', async () => {
     const server = descriptionServer('서버 값')
     await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects, ...accounts } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     type(box(), '앨리스의 글')
@@ -1500,7 +1502,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
     await logout()
     await login(BOB)
     await returnFromList()
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     // **세대가 바뀌어도 항목을 안 비우면 밥이 앨리스의 «모름»을 본다** — 꺼진 상자와 «다시 확인».
@@ -1544,7 +1546,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
     // 뒷일로 닿는다. 그때 막는 것이 **칸 쓰기의 세대**다(`deliver`).
     const server = descriptionServer('서버 값', { ignoreAbort: true })
     await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects, ...accounts } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '앨리스의 글')
     fireEvent.click(saveButton())
@@ -1553,7 +1555,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
     await logout()
     await login(BOB)
     await returnFromList()
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     await server.fail(0, new ApiError(401, 'unauthenticated', '로그인이 필요합니다'))
@@ -1581,7 +1583,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
         }) as never,
       },
     })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     type(box(), '만료 전의 글')
@@ -1594,7 +1596,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
 
     await login(ALICE)
     await returnFromList()
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     // **사람은 같아도 세션이 다르다** — 로그아웃 단추가 아니라 401 이 세션을 끝낸 판이다.
@@ -1606,7 +1608,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
   it('앞 세션의 판정이 늦게 끝나도 다음 세션의 잠금을 풀지 않는다', async () => {
     const server = descriptionServer('서버 값')
     await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects, ...accounts } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     type(box(), '앨리스의 글')
@@ -1620,7 +1622,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
     await logout()
     await login(BOB)
     await returnFromList()
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     expect(box().disabled).toBe(false)
 
@@ -1679,7 +1681,7 @@ describe('탭 사이 — 다른 탭이 들어오면 나가 있던 쓰기는', ()
     const hub = tabHub()
     const server = descriptionServer('서버 값')
     await openPage(DOC, { apiOverrides: server.overrides, tabChannel: hub.channel })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '앨리스의 글')
     fireEvent.click(saveButton())
@@ -1883,7 +1885,7 @@ describe('쓰기가 끝나면 잠금이 풀린다 — 목록 다시 받기는 �
     // «다른 사람이 바꿨습니다»로 보인다).
     const server = descriptionServer('서버 값')
     await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '매달린 저장 글')
     fireEvent.click(saveButton())
@@ -1939,7 +1941,7 @@ describe('설명 칸의 순서 — 409 · 판정용 다시 읽기', () => {
     // 이 글과 같습니다» 옆에 세운다(Chrome route 로 잰 고장 방식).
     const server = descriptionServer('서버 값')
     await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '같은 글')
     fireEvent.click(saveButton())
@@ -1969,7 +1971,7 @@ describe('설명 칸의 순서 — 409 · 판정용 다시 읽기', () => {
     // 읽었으므로 더 새것이다. 받을 때 번호를 주면 먼저 읽은 판정 값이 그것을 덮는다.
     const server = descriptionServer('서버 값')
     await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     type(box(), '내 글')
@@ -2000,11 +2002,12 @@ describe('설명 칸의 순서 — 409 · 판정용 다시 읽기', () => {
     // 끊는 일 자체는 `api/http-client.ts`가 한다(`test/api/http-client.test.ts`의 «떠나면 …»). 여기는 패널이 싣고 끊는가.
     const server = descriptionServer('서버 값')
     await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     server.holdReads(true)
-    fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
-    toView()
+    // 탭을 다녀와 본문을 다시 세운다 — 마운트의 조회가 다시 나간다.
+    fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+    toInfo()
     await waitFor(() => expect(server.heldReads()).toBe(1))
     const lookup = server.readCancels.at(-1)
     expect(lookup?.aborted).toBe(false)
@@ -2020,7 +2023,7 @@ describe('설명 칸의 순서 — 409 · 판정용 다시 읽기', () => {
     // 판(아래 S 절)은 «확인»뿐이다 — 두 판의 말을 맞춘다.
     const server = descriptionServer('서버 값')
     await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '내 글')
     fireEvent.click(saveButton())
@@ -2075,7 +2078,7 @@ describe('S — 페이지를 떠나 있는 동안 끝난 실패는 돌아오면 
   /** 설명을 저장해 둔 채(붙잡힘) 옆 페이지로 간다. */
   async function saveAndLeave(server: ReturnType<typeof descriptionServer>, text: string): Promise<void> {
     await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), text)
     fireEvent.click(saveButton())
@@ -2143,7 +2146,7 @@ describe('S — 페이지를 떠나 있는 동안 끝난 실패는 돌아오면 
   it('설명 — «저장되지 않았습니다» 뒤 늦게 커밋된 내 앞 글을 떠나 있는 동안 409 가 실어 오면, 돌아온 가가 «다른 사람이 바꿨다» 대신 앞서 보낸 글과 같다고 말한다', async () => {
     const server = descriptionServer('서버 값')
     await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     type(box(), '앞 글')
@@ -2250,7 +2253,7 @@ describe('판정으로 끝난 쓰기도 전한다 — 받는 자리가 그 결�
   it('설명 — 옆 페이지에 가 있는 동안 판정이 «저장되지 않았습니다»로 끝나면 돌아온 가가 그렇다고 말한다', async () => {
     const server = descriptionServer('서버 값')
     await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '안 닿을 글')
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
@@ -2336,7 +2339,7 @@ describe('판정으로 끝난 쓰기도 전한다 — 받는 자리가 그 결�
   it('설명 — 같은 페이지의 다른 탭에 가 있는 동안 저장이 실패하면 돌아온 설명 탭이 «이 탭을 떠나 있는 동안 …»으로 말한다', async () => {
     const server = descriptionServer('서버 값')
     await openPage(DOC, { apiOverrides: { ...server.overrides, ...commentServer().overrides } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '실패할 글')
     fireEvent.click(saveButton())
@@ -2345,7 +2348,7 @@ describe('판정으로 끝난 쓰기도 전한다 — 받는 자리가 그 결�
     await server.fail(0, new ApiError(500, 'internal', '서버 오류가 발생했습니다'))
     expect(screen.queryByRole('alert')).toBeNull()
 
-    fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
+    fireEvent.click(screen.getByRole('tab', { name: '페이지 정보' }))
     await waitFor(() => expect(box().disabled).toBe(false))
     expect(screen.getByRole('alert').textContent).toBe(`${STAYED} — 서버 오류가 발생했습니다`)
   })
@@ -2360,7 +2363,7 @@ describe('판정으로 끝난 쓰기도 전한다 — 받는 자리가 그 결�
   it('설명 — 다른 탭에 가 있는 동안 저장이 충돌로 끝나면 돌아온 탭은 말만 하고 충돌 화면은 세우지 않는다 · 초안은 그대로다', async () => {
     const server = descriptionServer('서버 값')
     await openPage(DOC, { apiOverrides: { ...server.overrides, ...commentServer().overrides } })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '내 글')
     fireEvent.click(saveButton())
@@ -2369,7 +2372,7 @@ describe('판정으로 끝난 쓰기도 전한다 — 받는 자리가 그 결�
     server.overwrite('남의 글')
     await server.fail(0, metaChanged('남의 글'))
 
-    fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
+    fireEvent.click(screen.getByRole('tab', { name: '페이지 정보' }))
     await waitFor(() => expect(box().disabled).toBe(false))
     expect(screen.getByRole('alert').textContent).toContain('다른 사람이 이 설명을 바꿨습니다 · 지금 저장된 설명: 남의 글')
     expect(screen.queryByRole('button', { name: '내 글로 덮기' })).toBeNull()
@@ -2409,7 +2412,7 @@ describe('그리는 갈래가 없는 동안 끝난 결말 — 강등된 viewer �
   async function descriptionDemoted(): Promise<{ server: ReturnType<typeof descriptionServer>; setRole: (role: ProjectRole) => void }> {
     const server = descriptionServer('서버 값')
     const setRole = await openAs({ ...server.overrides, ...commentServer().overrides })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '강등될 글')
     fireEvent.click(saveButton())
@@ -2469,7 +2472,7 @@ describe('그리는 갈래가 없는 동안 끝난 결말 — 강등된 viewer �
     await server.fail(0, new ApiError(500, 'internal', SERVER_ERROR))
     // viewer 인 채 탭을 한 번 오간다 — 돌아온 본문의 마운트가 칸의 지난 통지를 지운다.
     fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
-    fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
+    fireEvent.click(screen.getByRole('tab', { name: '페이지 정보' }))
 
     setRole('editor')
     await waitFor(() => expect(box().disabled).toBe(false))

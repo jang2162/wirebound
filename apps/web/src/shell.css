@@ -2169,28 +2169,66 @@
   color: #a11;
 }
 
-/* «상태 보임» 칸(`panels/visibility-field.tsx`) — 갈래 고르개 아래에 상태 고르기(트리 차례 · 깊이는 인라인 `padding-left`). 안내 한 줄(상태가
-   없음 · 지금 숨음)은 오류가 아니라 옅은 글이다. */
-.wb-shell-visibility-states {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 6px 0 0;
-  border: 0;
-  padding: 0;
+/* «상태 보임» 칸(`panels/visibility-field.tsx`) — 첫 줄은 버튼 꼴 라디오 셋(모드 토글 `.wb-shell-mode` 와 같은 꼴), 둘째 줄은 켜고 끄는 상태
+   단추(줄을 바꿔 흐른다 · 깊이는 이름 앞 표지). 안내 한 줄(상태가 없음 · 지금 숨음)은 오류가 아니라 옅은 글이다. */
+.wb-shell-visibility-modes {
+  display: inline-flex;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
 }
 
-.wb-shell-visibility-legend {
-  padding: 0;
-  font-size: 12px;
+.wb-shell-visibility-mode {
+  appearance: none;
+  border: 0;
+  padding: 4px 10px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
   color: var(--wb-shell-muted);
+  cursor: pointer;
+}
+
+.wb-shell-visibility-mode[aria-checked='true'] {
+  background: var(--wb-shell-accent);
+  color: #fff;
+}
+
+.wb-shell-visibility-states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 0;
 }
 
 .wb-shell-visibility-state {
-  display: flex;
+  appearance: none;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 2px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 2px 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+  cursor: pointer;
+}
+
+.wb-shell-visibility-state[aria-pressed='true'] {
+  border-color: var(--wb-shell-accent);
+  background: var(--wb-shell-accent);
+  color: #fff;
+}
+
+.wb-shell-visibility-state[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+.wb-shell-visibility-depth {
+  opacity: 0.7;
 }
 
 .wb-shell-visibility-note {
@@ -2981,7 +3019,7 @@
   white-space: pre-wrap;
 }
 
-/* 페이지 설명 탭의 본문(`panels/page-description.tsx`). 줄바꿈이 뜻을 갖는 글이라
+/* «페이지 정보» 탭의 설명 글(`panels/page-description.tsx`) — 읽기만 하는 판. 줄바꿈이 뜻을 갖는 글이라
    그대로 보인다 — 코멘트 본문과 같은 취급이다. */
 .wb-shell-page-description {
   margin: 0;
@@ -2991,10 +3029,9 @@
   word-break: break-word;
 }
 
-/* 페이지 설명 편집기(`panels/page-description.tsx`의 `PageDescriptionPanel`). **뷰 모드
-   «페이지 설명» 탭**에 선다 — 위 `.wb-shell-page-description`과 같은 탭이고, editor
-   이상에게는 이 폼이, viewer 에게는 위 문단이 선다(`canEdit`). `snapshots-panel.tsx`의 폼과
-   같은 결이되 여러 줄 상자라 세로로 쌓는다.
+/* 페이지 이름 · 설명 편집기(`panels/page-description.tsx`의 `PageMeta`). **«페이지 정보» 탭**에 선다 — 위
+   `.wb-shell-page-description`과 같은 탭이고, 고칠 수 있는 판(편집 모드 · editor 이상)에는 이 폼이, 그 밖에는 위 문단이
+   선다(`canEdit`). `snapshots-panel.tsx`의 폼과 같은 결이되 세로로 쌓는다(이름 폼 · 설명 폼 · 상태 목록).
 
    **편집 모드 속성 탭(루트 `Page`를 골랐을 때)에는 두지 않는다** — 설계서 「설계서 화면
    구조」가 그렇게 정하고, 그 파일 머리말과 `panels/property-panel.tsx` 머리말이 그 이유를
@@ -3003,6 +3040,80 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  margin: 0 0 12px;
+}
+
+.wb-shell-page-title-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+}
+
+/* «페이지 정보» 탭의 절 머리(설명 · 상태). */
+.wb-shell-page-info-heading {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #234;
+}
+
+/* «페이지 정보» 탭의 상태 목록(`panels/page-states.tsx`) — 줄마다 이름 · `…`, 그 아래 설명 글. 깊이는 인라인 `padding-left`. */
+.wb-shell-page-state-list {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-shell-page-state {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.wb-shell-page-state-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.wb-shell-page-state-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-page-state-description {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--wb-shell-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.wb-shell-page-state-input,
+.wb-shell-page-state-describe,
+.wb-shell-page-state-gone {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+}
+
+.wb-shell-page-state-describe-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.wb-shell-page-states {
+  margin: 0;
+}
+
+/* 목록 아래 «상태 추가» · 설명 상자의 «취소» — 저장 단추와 같은 자리 맞춤. */
+.wb-shell-page-state-add,
+.wb-shell-page-state-cancel {
+  align-self: flex-start;
 }
 
 .wb-shell-page-description-field {
@@ -3050,7 +3161,7 @@
   color: #a11;
 }
 
-/* 페이지 메타 충돌 — «다른 사람이 이 설명(제목)을 바꿨습니다»(`panels/meta-conflict.tsx`). «페이지 설명» 탭과
+/* 페이지 메타 충돌 — «다른 사람이 이 설명(제목)을 바꿨습니다»(`panels/meta-conflict.tsx`). «페이지 정보» 탭과
    메뉴 트리의 이름 변경이 같은 것을 쓴다. 실패 통지와 같은 붉은 글이되, **그 사람의 값**을 글 그대로 보이는 칸이
    있다 — 무엇을 덮는지 모르고 덮지 않게. */
 .wb-shell-meta-conflict {
@@ -4982,7 +5093,7 @@
 }
 
 /* ── 상태 삭제 확인(`panels/remove-state-dialog.tsx`) ──────────────────────────────────────
-   상태 줄 `…` 의 «삭제»가 연다. 자리 · 폭 · 스크롤은 대화 상자(`.wb-shell-dialog`)가 갖는다. 붉은색(`#b42318`)은
+   «페이지 정보» 탭의 상태 `…` «삭제»가 연다. 자리 · 폭 · 스크롤은 대화 상자(`.wb-shell-dialog`)가 갖는다. 붉은색(`#b42318`)은
    되돌리기 어려운 일의 몫이고(`.wb-shell-action-menu-danger`), 바뀐 목록 알림은 메뉴 연쇄 삭제 상자(`.wb-shell-menu-delete-changed`)와 같은 주황이다. */
 .wb-shell-view-states-body {
   display: flex;

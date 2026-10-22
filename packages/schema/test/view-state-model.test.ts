@@ -6,7 +6,15 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { CATALOG_TYPES, installCatalog } from '../src/component/catalog/index'
 import { DocumentEnvelopeSchema, PageEnvelopeSchema } from '../src/envelope'
-import { DEFAULT_VIEW_STATE, VIEW_STATE_NAME_MAX, VIEW_STATES_MAX, type NodeVisibility, type PageDocument, type WbNode } from '../src/index'
+import {
+  DEFAULT_VIEW_STATE,
+  VIEW_STATE_DESCRIPTION_MAX,
+  VIEW_STATE_NAME_MAX,
+  VIEW_STATES_MAX,
+  type NodeVisibility,
+  type PageDocument,
+  type WbNode,
+} from '../src/index'
 import { checkViewStateRemoval, partitionIssues, validateLayout, validatePage } from '../src/validate'
 
 beforeAll(() => {
@@ -51,7 +59,19 @@ describe('viewStates — 상태 목록', () => {
     expect(validatePage(page([], [{ id: 's_1', name: '😀'.repeat(30) }]))).toEqual([])
   })
 
+  it('설명 — 여러 줄 · 상한까지 받는다(UTF-16 단위 — 페이지 설명과 같다)', () => {
+    expect(VIEW_STATE_DESCRIPTION_MAX).toBe(2000)
+    expect(validatePage(page([], [{ id: 's_1', name: '관리자', description: '첫 줄\n  둘째 줄 ' }]))).toEqual([])
+    expect(validatePage(page([], [{ id: 's_1', name: '관리자', description: '가'.repeat(VIEW_STATE_DESCRIPTION_MAX) }]))).toEqual([])
+    expect(validatePage(page([], [{ id: 's_1', name: '관리자', description: '😀'.repeat(VIEW_STATE_DESCRIPTION_MAX / 2) }]))).toEqual([])
+  })
+
   it.each([
+    ['설명 0자', [{ id: 's_1', name: '관리자', description: '' }]],
+    ['설명이 공백뿐', [{ id: 's_1', name: '관리자', description: ' \n\t' }]],
+    ['설명 상한 + 1', [{ id: 's_1', name: '관리자', description: '가'.repeat(VIEW_STATE_DESCRIPTION_MAX + 1) }]],
+    ['설명에 짝 없는 서로게이트', [{ id: 's_1', name: '관리자', description: '앞\ud800뒤' }]],
+    ['설명이 문자열이 아니다', [{ id: 's_1', name: '관리자', description: 3 }]],
     ['이름 0자', [{ id: 's_1', name: '' }]],
     ['이름 31자', [{ id: 's_1', name: '가'.repeat(31) }]],
     ['이름이 공백뿐', [{ id: 's_1', name: '   ' }]],

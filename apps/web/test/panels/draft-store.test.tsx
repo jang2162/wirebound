@@ -144,8 +144,9 @@ function type(target: HTMLTextAreaElement, value: string): void {
   fireEvent.change(target, { target: { value } })
 }
 
-function toView(): void {
-  fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+/** 편집 모드의 «페이지 정보» 탭을 연다 — 이름 · 설명 편집기가 서는 자리다(뷰 모드의 같은 탭은 읽기만 한다). */
+function toInfo(): void {
+  fireEvent.click(screen.getByRole('tab', { name: '페이지 정보' }))
 }
 
 async function toCommentTab(): Promise<void> {
@@ -390,12 +391,12 @@ describe('새로고침 — 초안과 키를 살린다', () => {
     const backend = server()
     let current = tab()
     const options = await open(backend, current)
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '저장 안 한 설명')
 
     current = await reload(current, options)
-    toView()
+    toInfo()
 
     await waitFor(() => expect(box().value).toBe('저장 안 한 설명'))
     expect((screen.getByRole('button', { name: '설명 저장' }) as HTMLButtonElement).disabled).toBe(false)
@@ -570,14 +571,14 @@ describe('세션 만료 — 같은 사람이 다시 들어오면 이어 쓴다',
     const backend = server()
     const current = tab()
     await open(backend, current)
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '만료 전에 친 설명')
 
     await expireToLogin(backend)
     await login(ALICE)
     await fromList()
-    toView()
+    toInfo()
 
     await waitFor(() => expect(box().value).toBe('만료 전에 친 설명'))
   })
@@ -649,7 +650,7 @@ describe('명시적 로그아웃 — 이 브라우저에 그 사람의 초안·�
     const hub = tabHub()
     const current = tab()
     await open(backend, current, { tabChannel: hub.channel })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '다른 탭이 로그아웃할 설명')
     expect(current.session.draftKeys()).toHaveLength(1)
@@ -801,14 +802,14 @@ describe('로그아웃 표지 — 세대 번호', () => {
     await logout()
     await login(ALICE)
     await fromList()
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '다시 들어와 친 설명')
 
     // B 가 이제야 로그아웃 소식(번호 1)을 듣는다.
     other.forgetHeard(1)
     current = await reload(current, options)
-    toView()
+    toInfo()
 
     await waitFor(() => expect(box().value).toBe('다시 들어와 친 설명'))
   })
@@ -841,12 +842,12 @@ describe('로그아웃 표지 — 세대 번호', () => {
     vi.spyOn(Date, 'now').mockImplementation(() => real() - 600_000)
     await login(ALICE)
     await fromList()
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '시계가 뒤로 간 뒤 친 설명')
 
     current = await reload(current, options)
-    toView()
+    toInfo()
 
     await waitFor(() => expect(box().value).toBe('시계가 뒤로 간 뒤 친 설명'))
   })
@@ -870,7 +871,7 @@ describe('다른 사람 — 앞 사람의 초안을 읽지 않고, 들어오는 
     const backend = server()
     const current = tab()
     await open(backend, current)
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '앨리스의 설명')
     await expireToLogin(backend)
@@ -881,7 +882,7 @@ describe('다른 사람 — 앞 사람의 초안을 읽지 않고, 들어오는 
     expect(current.session.draftKeys()).toEqual([])
     expect(current.session.dump()).not.toContain('앨리스의 설명')
     await fromList()
-    toView()
+    toInfo()
 
     await waitFor(() => expect(box().value).toBe('서버 값'))
     expect(current.session.reads).not.toContain(`${DRAFT_KEY_PREFIX}${ALICE.id}`)
@@ -894,7 +895,7 @@ describe('다른 사람 — 앞 사람의 초안을 읽지 않고, 들어오는 
     const hub = tabHub()
     const current = tab()
     await open(backend, current, { tabChannel: hub.channel })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '앨리스의 설명')
     current.session.reads.length = 0
@@ -904,7 +905,7 @@ describe('다른 사람 — 앞 사람의 초안을 읽지 않고, 들어오는 
     // 소식을 들은 순간 앨리스의 칸이 없다 — 앨리스의 화면이 내려가며 한 번 더 커밋돼도 다시 서지 않는다.
     expect(current.session.draftKeys()).toEqual([])
     await fromList()
-    toView()
+    toInfo()
 
     await waitFor(() => expect(box().value).toBe('서버 값'))
     expect(current.session.reads).not.toContain(`${DRAFT_KEY_PREFIX}${ALICE.id}`)
@@ -921,7 +922,7 @@ describe('다른 사람 — 앞 사람의 초안을 읽지 않고, 들어오는 
     expect(current.session.draftKeys()).toEqual([`${DRAFT_KEY_PREFIX}${ALICE.id}`])
 
     await open(backend, current, { apiOverrides: { ...backend.overrides, me: async () => BOB } })
-    toView()
+    toInfo()
 
     await waitFor(() => expect(box().value).toBe('서버 값'))
     expect(current.session.draftKeys()).toEqual([])
@@ -1000,13 +1001,13 @@ describe('다른 페이지로 가면 버린다: 저장소는 이 탭이 마지�
     const backend = server()
     const current = tab()
     await open(backend, current)
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '목록을 다녀올 설명')
 
     await toList()
     await fromList()
-    toView()
+    toInfo()
 
     await waitFor(() => expect(box().value).toBe('목록을 다녀올 설명'))
   })
@@ -1015,14 +1016,14 @@ describe('다른 페이지로 가면 버린다: 저장소는 이 탭이 마지�
     const backend = server()
     const current = tab()
     await open(backend, current)
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '버려질 설명')
 
     await toList()
     await fromList(OTHER_PAGE_TITLE, 'n-other')
     await toPage(PAGE_TITLE, ROOT_ID)
-    toView()
+    toInfo()
 
     await waitFor(() => expect(box().value).toBe('서버 값'))
   })
@@ -1047,7 +1048,7 @@ describe('저장소를 못 쓴다 — 앱은 이 파일 앞처럼 돈다', () =>
     const store = openDraftStore(blocked, blocked)
     const options: EditorOptions = { apiOverrides: backend.overrides, docs: { [OTHER_PAGE_ID]: OTHER_DOC } }
     await openPage(DOC, { ...options, draftStore: store })
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '못 비추는 설명')
     fireEvent.click(screen.getByRole('button', { name: '설명 저장' }))
@@ -1057,7 +1058,7 @@ describe('저장소를 못 쓴다 — 앱은 이 파일 앞처럼 돈다', () =>
     await expireToLogin(backend)
     await login(ALICE)
     await fromList()
-    toView()
+    toInfo()
 
     // 저장소를 쓸 수 있으면 «저장 안 한 둘째»가 돌아온다(위 «세션 만료» 절) — 못 쓰면 사본 없이 서버 값이다.
     await waitFor(() => expect(box().value).toBe('못 비추는 설명'))
@@ -1069,7 +1070,7 @@ describe('저장소를 못 쓴다 — 앱은 이 파일 앞처럼 돈다', () =>
     // 옛 판 앱을 띄운 탭이 남긴 것 · 손으로 고친 것이다. 사람마다 칸이 하나라 둘을 두 사람의 칸에 둔다.
     current.session.setItem(`${DRAFT_KEY_PREFIX}${ALICE.id}`, '{깨진')
     await open(backend, current)
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
 
     cleanup()
@@ -1082,7 +1083,7 @@ describe('저장소를 못 쓴다 — 앱은 이 파일 앞처럼 돈다', () =>
     })
     current.session.setItem(`${DRAFT_KEY_PREFIX}${ALICE.id}`, future)
     await openPage(DOC, { apiOverrides: backend.overrides, draftStore: renewed(current).store })
-    toView()
+    toInfo()
 
     await waitFor(() => expect(box().value).toBe('서버 값'))
   })
@@ -1091,14 +1092,14 @@ describe('저장소를 못 쓴다 — 앱은 이 파일 앞처럼 돈다', () =>
     const backend = server()
     let current = tab()
     const options = await open(backend, current)
-    toView()
+    toInfo()
     await waitFor(() => expect(box().value).toBe('서버 값'))
     type(box(), '비춰 둔 첫 글')
     current.session.failWrites = true
     type(box(), '못 비춘 둘째 글')
 
     current = await reload(current, options)
-    toView()
+    toInfo()
 
     // 첫 글이 돌아오면 사용자가 지운 글이 되살아난 것이다 — 서버 값이 맞다.
     await waitFor(() => expect(box().value).toBe('서버 값'))

@@ -1,6 +1,5 @@
 /**
- * **상태 삭제 확인**(설계 spec `docs/superpowers/specs/2026-10-18-modules-states-layout-design.md` 「C3」) — 상태 줄 `…` 의 «삭제»가 연다
- * (`./state-rows.tsx`). 메뉴 트리 상자 밖에 선다(`./menu-tree.tsx` 의 `outside` — 상자 단추의 키가 트리 단축키로 버블되지 않게).
+ * **상태 삭제 확인**(설계서 「설계서 화면 구조」의 «화면 상태») — «페이지 정보» 탭의 상태 `…` «삭제»가 연다(`./page-states.tsx`).
  *
  * 지우는 것은 `removeViewStateOps` 하나가 정한다 — 그 상태와 하위 상태를 목록에서 빼고, 노드 보임의 `states` 에서 그 id 들을 뺀다:
  *

@@ -6,11 +6,13 @@
  * |---|---|
  * | 상태마다 캔버스 | 고른 상태에서 캔버스에 선 노드 집합이 보임 판정(물려받기 · `only` · `except` · `default`)과 다르다 · 구조 트리가 숨은 노드를 안 그리거나 안 흐린다 · 고르기가 편집을 낸다 |
  * | 메뉴 트리 상태 줄 | 트리 차례 · 깊이로 안 선다 · 누르면 그 상태가 안 골라진다 · 다른 페이지의 줄이 `?state=` 로 안 연다 |
- * | 패널 «상태 보임» | 고친 보임이 서버 · 캔버스에 안 닿는다 |
+ * | 패널 «상태 보임» | 고른 갈래 · 켠 상태가 서버 · 캔버스에 안 닿는다 |
+ * | «페이지 정보» 탭 | 탭에서 더한 상태 · 고친 이름 · 설명이 서버와 메뉴 트리 상태 줄에 곧바로 안 선다 · 남이 고친 상태 · 페이지 이름이 탭에 곧바로 안 선다 · 탭에서 바꾼 페이지 이름이 메뉴 트리에 안 선다 |
+ * | 상태 설명 초안 | 탭 · 모드 왕복에 친 글이 사라진다 · 뷰 모드에 상자가 선다 · 다른 상태의 상자를 열면 앞 상자가 닫힌다 · 남이 그 상태를 지우면 친 글이 말없이 사라진다 · 남이 같은 상태에 쓴 설명을 저장이 덮는다(화면에 와 있는 판 · 서버만 아는 판) |
  * | 상태 삭제 · 두 사람 | 지울 노드를 남이 잡았는데 «삭제»가 켜져 있다 · 놓은 뒤에도 꺼져 있다 · 서버가 상자가 말한 것과 다르게 바뀐다 · 되돌리기 한 번에 서버가 안 돌아온다 |
  * | 연 뒤 바뀐 집합 | 다른 탭이 그 상태에 보임을 걸었는데 상자가 다시 안 서거나 첫 누름에 보낸다 |
  * | 남의 상태 추가 | 열린 페이지에 남이 더한 상태가 새로고침 없이 메뉴 트리 · 전환기에 안 선다 |
- * | 주소 · viewer | viewer 가 `?state=` 로 연 상태로 안 선다 · 상태 줄 `…` 가 viewer 에게 선다 · 뷰 모드에서 고른 상태가 주소에 안 실린다 |
+ * | 주소 · viewer | viewer 가 `?state=` 로 연 상태로 안 선다 · 상태 `…` 가 viewer 에게(트리 · 탭) 선다 · 뷰 모드에서 고른 상태가 주소에 안 실린다 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -101,18 +103,22 @@ describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우�
     return (await call('GET', P)).body
   }
 
-  async function openTab(path: string, user: 'alice' | 'bob' = 'alice', viewport = { width: 1440, height: 900 }) {
-    const { context, page } = await stack.openTab(stack.users[user], { viewport })
+  async function openTab(path: string, user: 'alice' | 'bob' = 'alice', viewport = { width: 1440, height: 900 }, origin?: string) {
+    const { context, page } = await stack.openTab(stack.users[user], origin === undefined ? { viewport } : { viewport, origin })
     const patches: string[] = []
+    const received: string[] = []
     page.on('websocket', (socket) => {
       socket.on('framesent', (frame) => {
         const payload = typeof frame.payload === 'string' ? frame.payload : frame.payload.toString()
         if (payload.includes('"type":"patch"')) patches.push(payload)
       })
+      socket.on('framereceived', (frame) => {
+        received.push(typeof frame.payload === 'string' ? frame.payload : frame.payload.toString())
+      })
     })
     await page.goto(path)
     await canvasFrame(page).locator('[data-wb-id]').first().waitFor({ state: 'attached' })
-    return { page, patches, close: () => context.close() }
+    return { page, patches, received, close: () => context.close() }
   }
 
   const frames = (page: Page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
@@ -147,10 +153,32 @@ describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우�
 
   const stateLink = (page: Page, id: string) => page.locator(`[data-state-row][data-state-id="${id}"] .wb-shell-tree-state`)
 
-  /** 상태 줄 `…` 의 항목을 고른다 — 줄 행동은 줄에 마우스가 올라와야 보인다(`shell.css` 의 `.wb-shell-tree-state-row`). */
-  async function stateItem(page: Page, id: string, name: string, item: string): Promise<void> {
-    await stateLink(page, id).hover()
-    await page.getByRole('button', { name: `상태 ${name} 더 보기`, exact: true }).click()
+  /** 우측 «페이지 정보» 탭을 연다 — 상태를 다루는 입구다(메뉴 트리의 상태 줄은 고르기만 한다). */
+  async function infoTab(page: Page) {
+    await page.getByRole('tab', { name: '페이지 정보', exact: true }).click()
+    const panel = page.getByRole('tabpanel')
+    await panel.getByRole('textbox', { name: '페이지 이름', exact: true }).waitFor()
+    return panel
+  }
+
+  /** 탭의 상태 줄 — 이름 · 깊이 · 설명. */
+  async function tabStates(page: Page) {
+    return page
+      .getByRole('tabpanel')
+      .locator('ul[aria-label="화면 상태"] > li')
+      .evaluateAll((rows) =>
+        rows.map((row) => [
+          row.querySelector('.wb-shell-page-state-name')?.textContent ?? '',
+          (row as HTMLElement).style.paddingLeft,
+          row.querySelector('.wb-shell-page-state-description')?.textContent ?? null,
+        ]),
+      )
+  }
+
+  /** 탭에서 상태 `…` 의 항목을 고른다. */
+  async function stateItem(page: Page, name: string, item: string): Promise<void> {
+    const panel = await infoTab(page)
+    await panel.getByRole('button', { name: `상태 ${name} 더 보기`, exact: true }).click()
     await page.getByRole('menuitem', { name: item, exact: true }).click()
   }
 
@@ -224,7 +252,7 @@ describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우�
     }
   }, 60_000)
 
-  it('패널 «상태 보임» — 손님 상태에서 «이 상태에서만»을 고르면 서버에 그 보임이 서고, 기본으로 가면 캔버스에서 빠진다', async () => {
+  it('패널 «상태 보임» — 손님 상태에서 «표시»를 고르면 서버에 그 보임이 서고, 기본으로 가면 캔버스에서 빠진다', async () => {
     const { P } = await fixture('st-panel')
     const tab = await openTab(P)
     try {
@@ -235,7 +263,7 @@ describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우�
         (head) => head === '화면 상태: 손님',
       )
       await tab.page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-id="n_all"] > .wb-shell-structure-node').click()
-      await tab.page.locator('[data-wb-node-visibility] select').selectOption('only')
+      await tab.page.locator('[data-wb-node-visibility]').getByRole('radio', { name: '표시', exact: true }).click()
       const server = await poll(
         '서버 보임',
         () => serverDoc(P),
@@ -253,10 +281,411 @@ describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우�
       )
       await frames(tab.page)
       expect((await shown(tab.page)).canvas).toEqual(['n_noguest', 'n_default'])
+
+      // 상태 줄은 여럿을 켜는 토글이다 — «기본»을 켜면 기본 화면에 다시 선다(고른 노드는 그대로 n_all 이다).
+      const field = tab.page.locator('[data-wb-node-visibility]')
+      await field.getByRole('button', { name: '기본', exact: true }).click()
+      await poll(
+        '서버 보임 — 기본 켬',
+        () => serverDoc(P),
+        (doc) => (doc.schema.root.children[0].visibility?.states ?? []).length === 2,
+      )
+      expect((await serverDoc(P)).schema.root.children[0].visibility).toEqual({ mode: 'only', states: ['default', 's_guest'] })
+      await poll(
+        '기본 화면에 다시 섬',
+        async () => (await shown(tab.page)).canvas,
+        (canvas) => canvas.includes('n_all'),
+      )
+      expect(await field.getByRole('button', { name: '기본', exact: true }).getAttribute('aria-pressed')).toBe('true')
+
+      // «숨김»으로 옮기면 켠 상태 그대로 숨는다 — 기본 화면에서 빠진다.
+      await field.getByRole('radio', { name: '숨김', exact: true }).click()
+      await poll(
+        '서버 보임 — 숨김',
+        () => serverDoc(P),
+        (doc) => doc.schema.root.children[0].visibility?.mode === 'except',
+      )
+      await poll(
+        '기본 화면에서 빠짐',
+        async () => (await shown(tab.page)).canvas,
+        (canvas) => !canvas.includes('n_all'),
+      )
+
+      // «비활성»은 보임을 걷는다 — 기본 화면에 다시 선다.
+      await field.getByRole('radio', { name: '비활성', exact: true }).click()
+      await poll(
+        '서버 보임 — 걷음',
+        () => serverDoc(P),
+        (doc) => doc.schema.root.children[0].visibility === undefined,
+      )
+      await poll(
+        '기본 화면에 다시 섬(비활성)',
+        async () => (await shown(tab.page)).canvas,
+        (canvas) => canvas.includes('n_all'),
+      )
     } finally {
       await tab.close()
     }
   }, 60_000)
+
+  it('«페이지 정보» 탭 — 상태를 더하고 이름 · 설명을 고치면 서버와 메뉴 트리 상태 줄에 곧바로 선다', async () => {
+    const { P } = await fixture('st-info')
+    const tab = await openTab(P)
+    try {
+      const panel = await infoTab(tab.page)
+      // 판 카나리아 — 탭이 상태 셋을 그린다.
+      expect(await tabStates(tab.page)).toEqual([
+        ['로그인', '0px', null],
+        ['관리자', '12px', null],
+        ['손님', '0px', null],
+      ])
+
+      // 더하기 — 목록 아래 «상태 추가».
+      await panel.getByRole('button', { name: '상태 추가', exact: true }).click()
+      const name = panel.getByRole('textbox', { name: '상태 이름', exact: true })
+      await name.fill('방문자')
+      await name.press('Enter')
+      await poll(
+        '서버 — 더함',
+        () => serverDoc(P),
+        (doc) => (doc.schema.viewStates ?? []).some((state: { name: string }) => state.name === '방문자'),
+      )
+      await poll(
+        '트리 상태 줄 — 더함',
+        () => stateRows(tab.page, '첫째'),
+        (rows) => rows.some((row) => row[0] === '방문자'),
+      )
+
+      // 이름 바꾸기 — `…` «이름 바꾸기».
+      await panel.getByRole('button', { name: '상태 방문자 더 보기', exact: true }).click()
+      await tab.page.getByRole('menuitem', { name: '이름 바꾸기', exact: true }).click()
+      const rename = panel.getByRole('textbox', { name: '상태 이름', exact: true })
+      await rename.fill('손님 외')
+      await rename.press('Enter')
+      await poll(
+        '트리 상태 줄 — 이름',
+        () => stateRows(tab.page, '첫째'),
+        (rows) => rows.some((row) => row[0] === '손님 외') && !rows.some((row) => row[0] === '방문자'),
+      )
+
+      // 설명 쓰기 — `…` «설명 쓰기».
+      await panel.getByRole('button', { name: '상태 손님 외 더 보기', exact: true }).click()
+      await tab.page.getByRole('menuitem', { name: '설명 쓰기', exact: true }).click()
+      await panel.getByRole('textbox', { name: '상태 설명', exact: true }).fill('처음 온 사람\n둘째 줄')
+      await panel.getByRole('button', { name: '상태 설명 저장', exact: true }).click()
+      const after = await poll(
+        '서버 — 설명',
+        () => serverDoc(P),
+        (doc) => (doc.schema.viewStates ?? []).some((state: { description?: string }) => state.description !== undefined),
+      )
+      expect(after.schema.viewStates.at(-1)).toMatchObject({ name: '손님 외', description: '처음 온 사람\n둘째 줄' })
+      expect((await tabStates(tab.page)).at(-1)).toEqual(['손님 외', '0px', '처음 온 사람\n둘째 줄'])
+      // 머리 전환기도 같은 목록이다(더한 상태를 고른 채다).
+      expect(await switcherName(tab.page)).toBe('화면 상태: 손님 외')
+    } finally {
+      await tab.close()
+    }
+  }, 60_000)
+
+  it('«페이지 정보» 탭 — 남이 고친 상태 이름 · 설명과 페이지 이름이 곧바로 서고, 탭에서 바꾼 페이지 이름이 메뉴 트리에 선다', async () => {
+    const { P } = await fixture('st-info-live')
+    const tab = await openTab(P)
+    try {
+      const panel = await infoTab(tab.page)
+      // 남(bob)이 «손님»의 이름 · 설명을 고친다.
+      const head = (await serverDoc(P)).headSeq
+      const res = await stack.request(bob, 'PATCH', `${P}/ops`, {
+        baseSeq: head,
+        ops: [
+          { op: 'test', path: '/viewStates/2/id', value: 's_guest' },
+          { op: 'replace', path: '/viewStates/2/name', value: '비회원' },
+          { op: 'add', path: '/viewStates/2/description', value: '밥이 쓴 설명' },
+        ],
+      })
+      expect(res.status).toBe(200)
+      await poll(
+        '탭 — 남의 상태',
+        () => tabStates(tab.page),
+        (rows) => rows.some((row) => row[0] === '비회원' && row[2] === '밥이 쓴 설명'),
+      )
+
+      // 남(bob)이 페이지 이름을 바꾼다 — 메뉴 트리 쓰기라 `menu-changed`가 오고 탭이 이름을 다시 읽는다.
+      const renamed = await stack.request(bob, 'PATCH', P, { title: '밥의 첫째' })
+      expect(renamed.status).toBe(200)
+      const title = panel.getByRole('textbox', { name: '페이지 이름', exact: true })
+      await poll(
+        '탭 — 남의 페이지 이름',
+        () => title.inputValue(),
+        (value) => value === '밥의 첫째',
+      )
+
+      // 탭에서 이름을 바꾼다 — 메뉴 트리의 페이지 줄이 따라간다.
+      await title.fill('앨리스의 첫째')
+      await panel.getByRole('button', { name: '이름 저장', exact: true }).click()
+      await poll(
+        '서버 — 페이지 이름',
+        async () => (await call('GET', P)).body.title as string,
+        (value) => value === '앨리스의 첫째',
+      )
+      await tab.page.getByRole('region', { name: '메뉴·페이지 트리' }).getByRole('link', { name: '앨리스의 첫째', exact: true }).waitFor()
+      expect(await panel.getByText('이름을 저장했습니다').count()).toBe(1)
+    } finally {
+      await tab.close()
+    }
+  }, 60_000)
+
+  /** 탭에서 그 상태 줄의 설명 상자. */
+  const describeBox = (page: Page, stateId: string) =>
+    page.getByRole('tabpanel').locator(`li[data-state-id="${stateId}"]`).getByRole('textbox', { name: '상태 설명', exact: true })
+
+  /** 그 상태 줄의 설명 상자 글 — 상자가 없으면 `null`(기다리지 않는다 — 없는 상자가 시간 초과가 아니라 값으로 죽는다). */
+  async function boxText(page: Page, stateId: string): Promise<string | null> {
+    const box = describeBox(page, stateId)
+    return (await box.count()) === 1 ? box.inputValue() : null
+  }
+
+  /**
+   * 저장 뒤 그 줄의 결말을 기다린다 — 충돌 화면 · «저장되지 않았습니다» · 서버에 내 글, 셋 중 하나가 서면 돌려준다. 충돌만 기다리면 충돌을 뗀 변조가
+   * 값이 아니라 시간 초과로 죽는다 — 끝난 판을 보고 값을 단언한다.
+   */
+  async function saveOutcome(P: string, page: Page, stateId: string, mine: string) {
+    const row = page.getByRole('tabpanel').locator(`li[data-state-id="${stateId}"]`)
+    return poll(
+      '저장의 결말',
+      async () => ({
+        alert: await row.getByRole('alert').count(),
+        notSaved: await row.getByText('이 설명은 저장되지 않았습니다', { exact: false }).count(),
+        server: await serverDescription(P, stateId),
+      }),
+      (outcome) => outcome.alert > 0 || outcome.notSaved > 0 || outcome.server === mine,
+      15_000,
+    )
+  }
+
+  /** 서버의 그 상태 설명. */
+  async function serverDescription(P: string, stateId: string): Promise<string | undefined> {
+    const doc = await serverDoc(P)
+    return (doc.schema.viewStates ?? []).find((state: { id: string }) => state.id === stateId)?.description
+  }
+
+  it('상태 설명 초안은 탭 왕복 · 모드 왕복을 넘고(뷰 모드에는 상자가 없다), 다른 상태의 상자를 열어도 앞 초안이 남는다', async () => {
+    const { P } = await fixture('st-desc-draft')
+    const tab = await openTab(P)
+    try {
+      await stateItem(tab.page, '손님', '설명 쓰기')
+      await describeBox(tab.page, 's_guest').fill('손님 초안')
+
+      // 탭 왕복 — «속성» → «페이지 정보».
+      await tab.page.getByRole('tab', { name: '속성', exact: true }).click()
+      await infoTab(tab.page)
+      expect(await boxText(tab.page, 's_guest')).toBe('손님 초안')
+
+      // 모드 왕복 — 뷰 모드의 탭은 읽기만이라 상자가 없고, 편집 모드로 돌아오면 초안이 선다.
+      await tab.page.getByRole('button', { name: '뷰 모드' }).click()
+      await tab.page.getByRole('tab', { name: '페이지 정보', exact: true }).click()
+      await tab.page.getByRole('tabpanel').locator('ul[aria-label="화면 상태"]').waitFor()
+      expect(await tab.page.getByRole('tabpanel').getByRole('textbox', { name: '상태 설명', exact: true }).count()).toBe(0)
+      await tab.page.getByRole('button', { name: '편집 모드' }).click()
+      await infoTab(tab.page)
+      expect(await boxText(tab.page, 's_guest')).toBe('손님 초안')
+
+      // 다른 상태의 상자를 연다 — 앞 초안의 상자는 그대로 남는다.
+      await stateItem(tab.page, '로그인', '설명 쓰기')
+      await describeBox(tab.page, 's_login').fill('로그인 초안')
+      expect(await boxText(tab.page, 's_guest')).toBe('손님 초안')
+
+      // 하나를 저장하면 그 상태만 서버에 닿고 다른 상자는 남는다.
+      await tab.page
+        .getByRole('tabpanel')
+        .locator('li[data-state-id="s_login"]')
+        .getByRole('button', { name: '상태 설명 저장', exact: true })
+        .click()
+      await poll(
+        '서버 — 로그인 설명',
+        () => serverDescription(P, 's_login'),
+        (value) => value === '로그인 초안',
+      )
+      expect(await serverDescription(P, 's_guest')).toBeUndefined()
+      expect(await boxText(tab.page, 's_guest')).toBe('손님 초안')
+      await poll(
+        '탭 — 로그인 상자가 닫히고 설명이 선다',
+        () => tabStates(tab.page),
+        (rows) => rows[0]![2] === '로그인 초안',
+      )
+    } finally {
+      await tab.close()
+    }
+  }, 60_000)
+
+  it('설명을 치는 중 남이 그 상태를 지우면 «지워졌습니다» 와 친 글이 남고, 버리기로 걷는다 — 편집 0', async () => {
+    const { P } = await fixture('st-desc-gone')
+    const tab = await openTab(P)
+    try {
+      await stateItem(tab.page, '손님', '설명 쓰기')
+      await describeBox(tab.page, 's_guest').fill('지울 초안\n둘째 줄')
+      const head = (await serverDoc(P)).headSeq
+      // 손님을 숨기던 노드의 보임을 걷고 상태를 뺀다(`removeViewStateOps` 가 짓는 것과 같은 묶음).
+      const res = await stack.request(bob, 'PATCH', `${P}/ops`, {
+        baseSeq: head,
+        ops: [
+          { op: 'remove', path: '/root/children/3/visibility' },
+          { op: 'test', path: '/viewStates/2/id', value: 's_guest' },
+          { op: 'remove', path: '/viewStates/2' },
+        ],
+      })
+      expect(res.status).toBe(200)
+      await poll(
+        '탭 — 손님 줄이 빠진다',
+        () => tabStates(tab.page),
+        (rows) => rows.length === 2,
+      )
+      // 줄이 빠진 그 그림에 함께 선다 — 기다리지 않고 센다.
+      const gone = tab.page.getByRole('tabpanel').getByRole('group', { name: '지워진 상태의 설명', exact: true })
+      expect(await gone.count()).toBe(1)
+      expect(await gone.getByText('«손님» 상태가 지워졌습니다', { exact: false }).count()).toBe(1)
+      expect(await gone.getByRole('textbox').inputValue()).toBe('지울 초안\n둘째 줄')
+      await gone.getByRole('button', { name: '버리기', exact: true }).click()
+      expect(await gone.count()).toBe(0)
+      expect(tab.patches).toEqual([])
+    } finally {
+      await tab.close()
+    }
+  }, 60_000)
+
+  it('상자를 연 뒤 남이 같은 상태의 설명을 쓰면 저장이 덮지 않고 충돌을 세운다 — 버리기는 남의 글 · 덮기는 내 글', async () => {
+    const { P } = await fixture('st-desc-clash')
+    const tab = await openTab(P)
+    try {
+      const write = async (value: string, op: 'add' | 'replace') => {
+        const head = (await serverDoc(P)).headSeq
+        const res = await stack.request(bob, 'PATCH', `${P}/ops`, {
+          baseSeq: head,
+          ops: [
+            { op: 'test', path: '/viewStates/2/id', value: 's_guest' },
+            { op, path: '/viewStates/2/description', value },
+          ],
+        })
+        expect(res.status).toBe(200)
+        // 남의 프레임이 이 탭에 닿은 뒤에 누른다 — 화면의 문서가 남의 글을 든 판이다.
+        await poll(
+          '탭 — 남의 설명 프레임',
+          async () => tab.received.some((frame) => frame.includes(value)),
+          (got) => got,
+        )
+      }
+      const row = tab.page.getByRole('tabpanel').locator('li[data-state-id="s_guest"]')
+      const clash = row.getByRole('alert')
+
+      // 칸이 없던 상태 — 연 뒤 남이 칸을 만든다.
+      await stateItem(tab.page, '손님', '설명 쓰기')
+      await describeBox(tab.page, 's_guest').fill('앨리스 설명')
+      await write('밥의 설명', 'add')
+      await poll(
+        '서버 — 밥의 설명',
+        () => serverDescription(P, 's_guest'),
+        (value) => value === '밥의 설명',
+      )
+      await frames(tab.page)
+      await row.getByRole('button', { name: '상태 설명 저장', exact: true }).click()
+      expect(await saveOutcome(P, tab.page, 's_guest', '앨리스 설명')).toEqual({ alert: 1, notSaved: 0, server: '밥의 설명' })
+      expect(await clash.innerText()).toContain('다른 사람이 이 상태 설명을 바꿨습니다')
+      expect(await clash.innerText()).toContain('밥의 설명')
+      // 화면에 남의 글이 와 있으니 보내지 않는다.
+      expect(tab.patches).toEqual([])
+      // 버리기 — 남의 글을 받는다.
+      await clash.getByRole('button', { name: '내 글 버리기', exact: true }).click()
+      await poll(
+        '탭 — 남의 설명',
+        () => tabStates(tab.page),
+        (rows) => rows[2]![2] === '밥의 설명',
+      )
+      expect(await describeBox(tab.page, 's_guest').count()).toBe(0)
+
+      // 칸이 있던 상태 — 연 뒤 남이 바꾼다. 덮기는 그 값을 바탕으로 내 글을 보낸다. 같은 자리의 항목을 다시 누르므로 앞 누름에서
+      // `DOUBLE_CLICK_MS`(500ms)를 넘긴다 — 안 넘기면 행동 메뉴가 둘째 누름으로 삼킨다(`shell/action-menu.tsx`).
+      await new Promise((resolve) => setTimeout(resolve, 600))
+      await stateItem(tab.page, '손님', '설명 쓰기')
+      await describeBox(tab.page, 's_guest').fill('앨리스 둘째')
+      await write('밥의 둘째', 'replace')
+      await poll(
+        '서버 — 밥의 둘째',
+        () => serverDescription(P, 's_guest'),
+        (value) => value === '밥의 둘째',
+      )
+      await frames(tab.page)
+      await row.getByRole('button', { name: '상태 설명 저장', exact: true }).click()
+      expect(await saveOutcome(P, tab.page, 's_guest', '앨리스 둘째')).toEqual({ alert: 1, notSaved: 0, server: '밥의 둘째' })
+      expect(await clash.innerText()).toContain('밥의 둘째')
+      await clash.getByRole('button', { name: '내 글로 덮기', exact: true }).click()
+      await poll(
+        '서버 — 덮은 내 글',
+        () => serverDescription(P, 's_guest'),
+        (value) => value === '앨리스 둘째',
+      )
+    } finally {
+      await tab.close()
+    }
+  }, 60_000)
+
+  // 서버는 낡은 `baseSeq` 의 묶음을 늘 거절하고(`stale` — 409) 클라이언트가 남의 판 위에 다시 얹는다. 그때 바탕의 `test`가 실패해 편집이 버려진다.
+  // 칸이 있던 판(`replace`)은 그 `test`만 막는다 — 칸이 없던 판(`add`)은 리베이스의 전제(«그 키가 없었다» — `store/anchored-ops.ts`)도 막는다.
+  it('남의 설명이 내 화면에 닿기 전에 저장하면 서버가 묶음째 거절하고 같은 충돌이 선다 — 칸이 있던 상태 · 없던 상태 · 서버는 남의 글', async () => {
+    const { P } = await fixture('st-desc-race')
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: (await serverDoc(P)).headSeq,
+      ops: [
+        { op: 'test', path: '/viewStates/2/id', value: 's_guest' },
+        { op: 'add', path: '/viewStates/2/description', value: '처음 설명' },
+      ],
+    })
+    expect(seeded.status).toBe(200)
+    // 서버 → 브라우저 WS 를 늦춰 남의 프레임이 저장 뒤에 닿게 한다.
+    const delay = await stack.startDownDelay(2_500)
+    const tab = await openTab(P, 'alice', { width: 1440, height: 900 }, delay.origin)
+    try {
+      // 편집이 WS 로 나가는 판 — 룸에 든 뒤에 친다(그 전의 편집은 REST 로 나간다).
+      await poll(
+        '룸에 듦',
+        async () => tab.received.some((frame) => frame.includes('"type":"joined"')),
+        (got) => got,
+      )
+      const race = async (stateId: string, name: string, index: number, op: 'add' | 'replace', mine: string, theirs: string) => {
+        await stateItem(tab.page, name, '설명 쓰기')
+        await describeBox(tab.page, stateId).fill(mine)
+        const sentBefore = tab.patches.length
+        const res = await stack.request(bob, 'PATCH', `${P}/ops`, {
+          baseSeq: (await serverDoc(P)).headSeq,
+          ops: [
+            { op: 'test', path: `/viewStates/${index}/id`, value: stateId },
+            { op, path: `/viewStates/${index}/description`, value: theirs },
+          ],
+        })
+        expect(res.status).toBe(200)
+        const row = tab.page.getByRole('tabpanel').locator(`li[data-state-id="${stateId}"]`)
+        await row.getByRole('button', { name: '상태 설명 저장', exact: true }).click()
+        // 판 카나리아 — 저장이 서버로 나갔다(남의 프레임이 아직 안 닿아 화면은 바탕 그대로였다).
+        await poll(
+          '보낸 편집',
+          async () => tab.patches.length,
+          (n) => n > sentBefore,
+        )
+        expect(tab.patches[sentBefore]).toContain(mine)
+        // 남의 글의 프레임은 아직 안 닿았다 — 늦춤이 걸린 판이다.
+        expect(tab.received.some((frame) => frame.includes(theirs))).toBe(false)
+        expect(await saveOutcome(P, tab.page, stateId, mine)).toEqual({ alert: 1, notSaved: 0, server: theirs })
+        const clash = row.getByRole('alert')
+        expect(await clash.innerText()).toContain(theirs)
+        await clash.getByRole('button', { name: '내 글 버리기', exact: true }).click()
+      }
+      // 칸이 있던 상태(바탕 «처음 설명» — `replace`) · 칸이 없던 상태(`add`).
+      await race('s_guest', '손님', 2, 'replace', '앨리스 설명', '밥의 설명')
+      await race('s_login', '로그인', 0, 'add', '앨리스 로그인', '밥의 로그인')
+      expect(delay.delayed()).toBeGreaterThan(0)
+    } finally {
+      await tab.close()
+      await delay.close()
+    }
+  }, 90_000)
 
   it('두 사람 — bob 이 지울 노드를 잡으면 «삭제»가 까닭과 함께 꺼지고, 놓으면 켜진다 · 지우면 서버가 상자대로 바뀌고 되돌리기 한 번에 돌아온다', async () => {
     const { P } = await fixture('st-remove')
@@ -267,7 +696,7 @@ describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우�
       // bob 이 관리자 글을 고른다(잠금). alice 는 «로그인»(하위 «관리자») 삭제를 묻는다 — 관리자 글이 함께 지워진다.
       await bobPage.page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-id="n_admin"] > .wb-shell-structure-node').click()
       await lockBadge(alicePage.page, 'n_admin').waitFor()
-      await stateItem(alicePage.page, 's_login', '로그인', '삭제')
+      await stateItem(alicePage.page, '로그인', '삭제')
       const dialog = alicePage.page.getByRole('dialog', { name: '상태 삭제' })
       await dialog.waitFor()
       const danger = dialog.locator('.wb-shell-view-states-danger')
@@ -335,16 +764,21 @@ describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우�
     const { P } = await fixture('st-restand')
     const tab = await openTab(P)
     try {
-      await stateItem(tab.page, 's_guest', '손님', '삭제')
+      // 손님을 고른다(메뉴 트리 상태 줄) — 아래 남의 편집이 닿은 것을 손님 화면의 흐림으로 본다.
+      await stateLink(tab.page, 's_guest').click()
+      await poll(
+        '손님',
+        () => switcherName(tab.page),
+        (head) => head === '화면 상태: 손님',
+      )
+      await stateItem(tab.page, '손님', '삭제')
       const dialog = tab.page.getByRole('dialog', { name: '상태 삭제' })
       await dialog.waitFor()
       const removed = () => dialog.locator('[data-node-id]').evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id')))
       expect(await removed()).toEqual([])
-      // 판 카나리아 — `…` 를 연 누름이 그 줄(손님)을 골랐다(`state-rows.tsx` 의 `onOpen`).
-      expect(await switcherName(tab.page)).toBe('화면 상태: 손님')
 
       // 같은 사람의 다른 탭(REST)이 «손님 빼고»를 손님에서만 보이게 한다 — 그 상태를 지우면 «손님 빼고»가 함께 지워진다(연 뒤에는 보임을 걷을
-      // 노드였다). `…` 를 연 누름이 손님을 골랐다 — 손님 화면에서 그 노드가 보이게 된다.
+      // 노드였다). 손님 화면에서 그 노드가 보이게 된다.
       const head = (await serverDoc(P)).headSeq
       const res = await call('PATCH', `${P}/ops`, {
         baseSeq: head,
@@ -429,6 +863,19 @@ describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우�
       expect((await shown(viewer.page)).canvas).toEqual(EXPECTED['관리자'])
       await stateLink(viewer.page, 's_admin').hover()
       expect(await viewer.page.getByRole('button', { name: '상태 관리자 더 보기', exact: true }).count()).toBe(0)
+      // 탭도 읽기만 한다 — 이름 · 설명 글은 서고(판 카나리아) `…` · «상태 추가»가 없다.
+      await viewer.page.getByRole('tab', { name: '페이지 정보', exact: true }).click()
+      await poll(
+        '탭 상태 목록',
+        () => tabStates(viewer.page),
+        (rows) => rows.length === 3,
+      )
+      expect(
+        await viewer.page
+          .getByRole('tabpanel')
+          .getByRole('button', { name: /더 보기$|^상태 추가$/ })
+          .count(),
+      ).toBe(0)
       await stateLink(viewer.page, 's_guest').click()
       await poll(
         '주소',

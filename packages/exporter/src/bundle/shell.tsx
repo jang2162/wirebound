@@ -21,8 +21,8 @@
  *
  * ## 우측 탭 셋과 번호 마커
  *
- * 탭은 「설계서 화면 구조」의 **뷰 모드** 구성이다: 페이지 설명 · 코멘트 · 상호작용.
- * `apps/web`의 `PANEL_TABS.view`와 같은 셋이다.
+ * 탭은 「설계서 화면 구조」의 **뷰 모드** 구성이다: 페이지 정보(페이지 설명 · 화면 상태가 있으면 그 목록까지) · 코멘트 · 상호작용.
+ * `apps/web`의 `PANEL_TABS.view`와 같은 셋 · 같은 이름이다(`../labels`의 `PANEL_TABS`).
  *
  * **셸은 번호 마커를 목업 위에 겹쳐 그리지 않는다.** 마커는 노드의 **자리**를 알아야 하는데 목업은 브라우저가 그린다 —
  * 런타임이 그린 뒤에 렌더러의 `markerPoint` 로 잰다(`browser/mount.tsx`). 셸이 그리는 것은 **번호와 노드의 목록**(코멘트 탭)이고
@@ -203,7 +203,7 @@ export function shellBody(input: ShellInput): ReactElement {
             ))}
           </div>
           <section className="wb-export-tabpanel" id={panelId('description')}>
-            <DescriptionTab description={input.description} />
+            <DescriptionTab description={input.description} viewStates={input.page.viewStates} />
           </section>
           <section className="wb-export-tabpanel" id={panelId('comments')}>
             <CommentTab entries={input.comments} />
@@ -246,9 +246,40 @@ function StatePicker({ viewStates }: { viewStates: readonly ViewState[] | undefi
   )
 }
 
-function DescriptionTab({ description }: { description: string | null }): ReactElement {
-  if (description === null) return <p className="wb-export-empty">{EMPTY_DESCRIPTION}</p>
-  return <p className="wb-export-description">{description}</p>
+/**
+ * 첫 탭 — 페이지 설명과, 상태가 있는 페이지면 그 아래 **화면 상태**(트리 차례 · 이름 · 설명). 에디터 뷰 모드의 «페이지 정보» 탭이 읽는 것과
+ * 같다(`apps/web`의 `panels/page-states.tsx`). 깊이는 `data-depth` 로 싣고 들여쓰기는 셸 CSS 가 한다 — 설명이 없는 상태는 이름만이다.
+ */
+function DescriptionTab({
+  description,
+  viewStates,
+}: {
+  description: string | null
+  viewStates: readonly ViewState[] | undefined
+}): ReactElement {
+  const states = Array.isArray(viewStates) ? viewStateOrder(viewStates) : []
+  return (
+    <>
+      {description === null ? (
+        <p className="wb-export-empty">{EMPTY_DESCRIPTION}</p>
+      ) : (
+        <p className="wb-export-description">{description}</p>
+      )}
+      {states.length > 0 && (
+        <section className="wb-export-state-info" aria-label={STATE_SWITCH_LABEL}>
+          <p className="wb-export-state-heading">{STATE_SWITCH_LABEL}</p>
+          <ul className="wb-export-state-list">
+            {states.map(({ state, depth }) => (
+              <li key={state.id} className="wb-export-state-item" data-depth={depth} data-state-id={state.id}>
+                <span className="wb-export-state-name">{state.name}</span>
+                {state.description !== undefined && <p className="wb-export-state-description">{state.description}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </>
+  )
 }
 
 /**

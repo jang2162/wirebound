@@ -11,7 +11,15 @@ import { invertOps } from '../src/patch/inverse'
 import type { PatchOp } from '../src/patch/types'
 import { collectNodeIds, findNode, walkNodes } from '../src/tree'
 import { partitionIssues, validatePage } from '../src/validate'
-import { addViewStateOps, moveViewStateOps, removeViewStateOps, renameViewStateOps } from '../src/view-state-ops'
+import { VIEW_STATE_DESCRIPTION_MAX } from '../src/node'
+import {
+  addViewStateOps,
+  describeViewStateOps,
+  moveViewStateOps,
+  removeViewStateOps,
+  renameViewStateOps,
+  tidyViewStateDescription,
+} from '../src/view-state-ops'
 
 beforeAll(() => {
   installCatalog()
@@ -180,6 +188,86 @@ describe('상태 목록 편집 — 추가 · 이름 · 순서', () => {
     ['정수 아님', 's_admin', 0.5],
   ])('순서 바꾸기 — %s 이면 null', (_label, id, to) => {
     expect(moveViewStateOps(fixture(), id, to)).toBeNull()
+  })
+})
+
+describe('describeViewStateOps — 상태 설명', () => {
+  it('없는 설명을 쓰면 칸을 더하고 · 있으면 바꾸고 · 앞뒤 공백을 걷는다 · 줄바꿈은 그대로', () => {
+    const added = applied(fixture(), describeViewStateOps(fixture(), 's_admin', '  운영자만 보는 화면\n둘째 줄  ', null)!)
+    expect(added.viewStates![1]).toEqual({ ...ADMIN, description: '운영자만 보는 화면\n둘째 줄' })
+    const replaced = applied(added, describeViewStateOps(added, 's_admin', '바꾼 설명', '운영자만 보는 화면\n둘째 줄')!)
+    expect(replaced.viewStates![1]).toEqual({ ...ADMIN, description: '바꾼 설명' })
+    // 다른 상태는 그대로다.
+    expect(replaced.viewStates!.filter((state) => state.id !== 's_admin')).toEqual([LOGIN, GUEST, MEMBER])
+  })
+
+  it('빈 글 · 공백뿐인 글은 칸을 지운다', () => {
+    const added = applyOps(fixture(), describeViewStateOps(fixture(), 's_guest', '손님 화면', null)!)
+    for (const blank of ['', ' \n ', '\u200b']) {
+      const ops = describeViewStateOps(added, 's_guest', blank, '손님 화면')!
+      expect(ops.some((op) => op.op === 'remove' && op.path === '/viewStates/2/description')).toBe(true)
+      expect(applied(added, ops).viewStates![2]).toEqual(GUEST)
+    }
+  })
+
+  it('있는 자리를 고치므로 그 자리의 id 를 test 로 싣는다 — 남이 순서를 바꿨으면 묶음째 실패한다', () => {
+    const ops = describeViewStateOps(fixture(), 's_admin', '운영자', null)!
+    expect(ops[0]).toEqual({ op: 'test', path: '/viewStates/1/id', value: 's_admin' })
+    const moved = applyOps(fixture(), moveViewStateOps(fixture(), 's_admin', 1)!)
+    expect(() => applyOps(moved, ops)).toThrow()
+  })
+
+  it.each([
+    ['없는 상태', 's_nope', '설명'],
+    ['없는 설명을 비움', 's_guest', '  '],
+    ['상한 + 1', 's_guest', '가'.repeat(VIEW_STATE_DESCRIPTION_MAX + 1)],
+    ['짝 없는 서로게이트', 's_guest', '앞\ud800뒤'],
+  ])('%s 이면 null', (_label, id, text) => {
+    expect(describeViewStateOps(fixture(), id, text, null)).toBeNull()
+  })
+
+  it('글이 바탕 그대로면 null — 앞뒤 공백만 다른 글도 같다', () => {
+    const added = applyOps(fixture(), describeViewStateOps(fixture(), 's_guest', '손님 화면', null)!)
+    expect(describeViewStateOps(added, 's_guest', ' 손님 화면 \n', '손님 화면')).toBeNull()
+  })
+
+  // RV-PI H3 — 남이 그 사이 같은 상태의 설명을 쓰면 묶음째 실패한다(조용히 덮지 않는다).
+  it('바탕이 있으면 그 설명을 test 로 싣는다 — 남이 바꿨거나 지웠으면 묶음째 실패한다', () => {
+    const added = applyOps(fixture(), describeViewStateOps(fixture(), 's_guest', '처음 설명', null)!)
+    for (const ops of [
+      describeViewStateOps(added, 's_guest', '내 설명', '처음 설명')!,
+      describeViewStateOps(added, 's_guest', '', '처음 설명')!,
+    ]) {
+      expect(ops).toContainEqual({ op: 'test', path: '/viewStates/2/description', value: '처음 설명' })
+      const theirs = applyOps(added, [{ op: 'replace', path: '/viewStates/2/description', value: '남의 설명' }])
+      expect(() => applyOps(theirs, ops)).toThrow()
+      const cleared = applyOps(added, [{ op: 'remove', path: '/viewStates/2/description' }])
+      expect(() => applyOps(cleared, ops)).toThrow()
+      // 남이 안 건드렸으면 선다.
+      expect(() => applyOps(added, ops)).not.toThrow()
+    }
+  })
+
+  it('바탕이 «없음»이면 설명을 뺀 항목째를 test 로 싣는다 — 남이 칸을 만들었으면 묶음째 실패한다', () => {
+    const ops = describeViewStateOps(fixture(), 's_guest', '내 설명', null)!
+    expect(ops).toContainEqual({ op: 'test', path: '/viewStates/2', value: GUEST })
+    const theirs = applyOps(fixture(), [{ op: 'add', path: '/viewStates/2/description', value: '남의 설명' }])
+    expect(() => applyOps(theirs, ops)).toThrow()
+    expect(applied(fixture(), ops).viewStates![2]).toEqual({ ...GUEST, description: '내 설명' })
+  })
+
+  it('지금 문서의 설명이 바탕과 달라도 바탕으로 짓는다 — 그 문서에서는 적용이 실패한다(부르는 쪽이 먼저 견준다)', () => {
+    const theirs = applyOps(fixture(), [{ op: 'add', path: '/viewStates/2/description', value: '남의 설명' }])
+    const ops = describeViewStateOps(theirs, 's_guest', '내 설명', null)!
+    expect(ops).toContainEqual({ op: 'test', path: '/viewStates/2', value: GUEST })
+    expect(() => applyOps(theirs, ops)).toThrow()
+  })
+
+  it('다듬기 — 상한까지는 그대로 · 넘으면 null · 보이는 글자가 없으면 빈 글', () => {
+    expect(tidyViewStateDescription(' 가 ')).toBe('가')
+    expect(tidyViewStateDescription('가'.repeat(VIEW_STATE_DESCRIPTION_MAX))).toBe('가'.repeat(VIEW_STATE_DESCRIPTION_MAX))
+    expect(tidyViewStateDescription('가'.repeat(VIEW_STATE_DESCRIPTION_MAX + 1))).toBeNull()
+    expect(tidyViewStateDescription('\u200b \n')).toBe('')
   })
 })
 

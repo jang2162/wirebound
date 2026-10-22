@@ -1279,7 +1279,7 @@ describe('복원 뒤 재동기화', () => {
     expect(lists).toBe(2)
   })
 
-  it('페이지 설명 탭이 떠 있으면 설명을 다시 받는다', async () => {
+  it('페이지 정보 탭이 떠 있으면 설명을 다시 받는다', async () => {
     // 캔버스와 설명 탭이 **각자** `getPage`를 부르므로 부른 수가 아니라 복원 여부로 가른다.
     let restored = false
     await openPage(pageDoc(옛뿌리), {
@@ -1294,8 +1294,7 @@ describe('복원 뒤 재동기화', () => {
           restored ? { ...pageDetail(pageId, pageDoc(새뿌리)), description: '스냅샷의 설명' } : pageDetail(pageId, pageDoc(옛뿌리)),
       },
     })
-    fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
-    fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
+    fireEvent.click(screen.getByRole('tab', { name: '페이지 정보' }))
     const box = (await screen.findByRole('textbox', { name: '페이지 설명' })) as HTMLTextAreaElement
     expect(box.value).toBe('')
     chooseFromShellMenu('스냅샷')

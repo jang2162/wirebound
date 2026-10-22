@@ -142,8 +142,6 @@ export function menuRowItems(
   commands: TreeCommands,
   kind: 'menu' | 'page',
   exportEntry?: PageExportEntry,
-  /** 페이지 줄의 «상태 추가»(`./state-rows.tsx` 의 `addStateItem`) — 이름 변경 뒤에 선다. 트리 판정과 무관하다(문서의 편집이다). */
-  addState?: ActionMenuItem,
 ): { add?: ActionMenuItem[]; more: ActionMenuItem[] } {
   const item = (key: keyof TreeAbilities, label: string, icon: LucideIcon, onSelect: () => void, danger = false): ActionMenuItem =>
     menuItem(commands, key, { label, onSelect, danger, icon })
@@ -168,15 +166,7 @@ export function menuRowItems(
             },
           ]
     return {
-      more: [
-        rename,
-        ...(addState === undefined ? [] : [addState]),
-        item('reparent', '옮기기', ICONS.reparent, commands.openReparent),
-        up,
-        down,
-        ...exported,
-        remove,
-      ],
+      more: [rename, item('reparent', '옮기기', ICONS.reparent, commands.openReparent), up, down, ...exported, remove],
     }
   }
   return {
