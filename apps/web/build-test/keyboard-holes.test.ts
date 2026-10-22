@@ -927,7 +927,8 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
         const read = async () => ({ tab: await selectedTab(), focus: await page.evaluate(() => document.activeElement?.textContent ?? '') })
         const steps: Record<string, unknown> = {}
         steps['탭 정지점'] = await tabs.evaluateAll((all) => all.map((one) => one.getAttribute('tabindex')))
-        await tabs.first().focus()
+        // 처음 고른 탭(«속성»)은 첫 탭(«페이지 정보») 다음이다 — Tab 으로 닿는 그 탭에서 시작한다.
+        await page.locator('.wb-shell-tab[aria-selected="true"]').focus()
         steps['처음'] = await read()
         await page.keyboard.press('ArrowRight')
         steps['→'] = await read()
@@ -948,15 +949,15 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
         // eslint-disable-next-line no-console
         console.log(`[N4 우측 탭] ${JSON.stringify(steps)}`)
         expect(steps).toEqual({
-          '탭 정지점': ['0', '-1', '-1'],
+          '탭 정지점': ['-1', '0', '-1', '-1'],
           처음: { tab: '속성', focus: '속성' },
           '→': { tab: '코멘트', focus: '코멘트' },
           End: { tab: '상호작용', focus: '상호작용' },
           '끝에서 →': { tab: '상호작용', focus: '상호작용' },
           '←': { tab: '코멘트', focus: '코멘트' },
-          Home: { tab: '속성', focus: '속성' },
-          '본문 id': 'wb-tab-props',
-          '노드를 고른 채 →': { selected: 'n_text0000002', tab: '코멘트', focus: '코멘트' },
+          Home: { tab: '페이지 정보', focus: '페이지 정보' },
+          '본문 id': 'wb-tab-page',
+          '노드를 고른 채 →': { selected: 'n_text0000002', tab: '속성', focus: '속성' },
         })
       } finally {
         await close()
