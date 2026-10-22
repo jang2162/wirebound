@@ -232,7 +232,8 @@ const ids = (document: PageDocument): string[] => [...walkNodes(document.root)].
 
 describe('탭의 상태 목록', () => {
   it('트리 차례 · 깊이로 서고 설명이 이름 아래 선다', async () => {
-    await open({ document: doc([LOGIN, { ...ADMIN, description: '운영자만\n보는 화면' }, GUEST]) })
+    // 목록 차례(관리자가 앞)와 트리 차례(로그인 > 관리자)가 갈리는 판 — 목록 차례로 그리면 죽는다.
+    await open({ document: doc([{ ...ADMIN, description: '운영자만\n보는 화면' }, LOGIN, GUEST]) })
     expect(rows()).toEqual([
       { name: '로그인', indent: '0px', description: null },
       { name: '관리자', indent: '12px', description: '운영자만\n보는 화면' },

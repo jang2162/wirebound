@@ -162,11 +162,12 @@ describe('«상태 보임» — 세 갈래', () => {
 
   it('← → 는 라디오 줄에서 갈래를 옮겨 고른다 — 포커스도 따라간다', async () => {
     const srv = await open(doc())
+    await chooseState('손님')
     select('Button')
     const none = within(field()!).getByRole('radio', { name: '비활성' })
     fireEvent.keyDown(none, { key: 'ArrowRight' })
     await waitFor(() => expect(srv.calls).toHaveLength(1))
-    expect(buttonVisibility(srv.held())).toEqual({ mode: 'except', states: ['default'] })
+    expect(buttonVisibility(srv.held())).toEqual({ mode: 'except', states: ['s_guest'] })
     expect(document.activeElement?.textContent).toBe('숨김')
   })
 })
