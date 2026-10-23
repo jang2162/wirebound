@@ -54,8 +54,13 @@ const LIST_NODES = [
     type: 'SearchForm',
     props: {},
     children: [
-      { id: 'a_f1', type: 'Field', props: { label: '검색어', placeholder: '이름 · 이메일' } },
-      { id: 'a_f2', type: 'Field', props: { label: '상태', control: 'select' } },
+      {
+        id: 'a_f1',
+        type: 'Field',
+        props: { label: '검색어' },
+        children: [{ id: 'a_f1i', type: 'Input', props: { placeholder: '이름 · 이메일' } }],
+      },
+      { id: 'a_f2', type: 'Field', props: { label: '상태' }, children: [{ id: 'a_f2s', type: 'Select' }] },
     ],
   },
   { id: 'a_new', type: 'Button', variant: 'primary', props: { label: '회원 등록' } },
@@ -84,8 +89,8 @@ const DETAIL_NODES = [
     type: 'EntryForm',
     props: { title: '회원 정보 수정' },
     children: [
-      { id: 'b_f1', type: 'Field', props: { label: '이름', required: true } },
-      { id: 'b_f2', type: 'Field', props: { label: '메모', control: 'textarea' } },
+      { id: 'b_f1', type: 'Field', props: { label: '이름', required: true }, children: [{ id: 'b_f1i', type: 'Input' }] },
+      { id: 'b_f2', type: 'Field', props: { label: '메모' }, children: [{ id: 'b_f2t', type: 'TextArea' }] },
     ],
   },
   { id: 'b_card', type: 'Card', props: { title: '상담 메모' }, children: [text('b_memo', '배송 지연 문의 — 부분 환불 처리.')] },

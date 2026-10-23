@@ -764,7 +764,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
         const center = (await page.evaluate(`(() => {
           const iframe = document.querySelector('iframe.wb-shell-palette-thumbs-iframe')
           const f = iframe.getBoundingClientRect()
-          const el = iframe.contentDocument.querySelector('[data-wb-palette-thumb="Field"] [data-wb-part="control"]')
+          const el = iframe.contentDocument.querySelector('[data-wb-palette-thumb="Field"] [data-wb-component="Input"]')
           if (el === null) return null
           const b = el.getBoundingClientRect()
           return { x: f.left + b.left + b.width / 2, y: f.top + b.top + b.height / 2 }

@@ -207,7 +207,7 @@ describe('줄 `…` 의 «종류 바꾸기…»', () => {
     await waitFor(() => expect(srv.calls).toHaveLength(1))
     expect(piece(srv.held()).type).toBe('DateInput')
 
-    fireEvent.click(screen.getByRole('button', { name: '되돌리기', exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: '되돌리기' }))
     await waitFor(() => expect(srv.calls).toHaveLength(2))
     expect(srv.held()).toEqual(doc())
     await waitFor(() => expect(within(structureRegion()).queryByRole('button', { name: structureRowName('Input') })).not.toBeNull())
@@ -240,6 +240,16 @@ describe('잠금 · 권한', () => {
     expect(srv.calls).toEqual([])
     expect(piece(srv.held()).type).toBe('Input')
     expect(screen.getAllByText(/보라님이/).length).toBeGreaterThan(0)
+  })
+
+  it('뷰 모드 — 구조 트리째 없고 속성 탭(선택지 위젯)도 없다 · 편집 0', async () => {
+    const srv = await board()
+    fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName('Input') }))
+    fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+    await waitFor(() => expect(screen.queryByRole('region', { name: '구조 트리' })).toBeNull())
+    expect(screen.queryByRole('tab', { name: '속성' })).toBeNull()
+    expect(screen.queryByRole('group', { name: '선택지' })).toBeNull()
+    expect(srv.calls).toEqual([])
   })
 
   it('viewer — 줄 `…` 에 «종류 바꾸기…» 가 없다(모듈로 저장만)', async () => {
