@@ -313,3 +313,74 @@ describe('맵째 op 을 구역 키로 좁힌다 — 정해진 판', () => {
     expect(rebaseAnchored(applyOps(after, insertNodeOps(after, 'n_card', 1, y, 'footer')!), anchoredUndo)).toBeNull()
   })
 })
+
+/**
+ * **좁히기의 거울 — 남이 맵을 지웠거나 빈 구역을 남겼을 때**(리뷰 RV-ZE M1 · L3 — 스토어 B5 · B4). 맵이 있을 때 낸 키 `add …/zones/<k>` 는 얹을
+ * 문서에 맵이 없으면 맵째 `add …/zones { k: … }` 로 되살리고, 남이 만들었다 비운 구역(`k: []`)에 오는 첫 넣기는 `add …/zones/k/<i>` 로 다시
+ * 짓는다. 남이 그 구역에 넣은 노드가 있으면 지금처럼 못 얹는다(덮지 않는다 — 위 «같은 구역» 판).
+ */
+describe('맵을 지운 판 · 빈 구역 키 — 정해진 판(리뷰 RV-ZE M1 · L3)', () => {
+  const x: WbNode = { id: 'n_x', type: 'Button', props: { label: 'x' } }
+  const y: WbNode = { id: 'n_y', type: 'Button', props: { label: 'y' } }
+  const card = (zones?: WbNode['zones'], extra: WbNode[] = []): PageDocument => ({
+    version: CURRENT_DOCUMENT_VERSION,
+    root: {
+      id: 'n_root',
+      type: 'Page',
+      children: [{ id: 'n_card', type: 'Card', props: { title: 'c' }, ...(zones === undefined ? {} : { zones }) }, ...extra],
+    },
+  })
+  const zonesOf = (doc: PageDocument): unknown => (doc.root.children![0] as WbNode).zones
+
+  it('B5 — 맵이 있을 때 낸 키 `add` 는 남이 맵을 지웠으면 맵째로 되살아난다', () => {
+    const D = card({ headEnd: [y] })
+    const mine = insertNodeOps(D, 'n_card', 0, x, 'footer')!
+    // 카나리아 — 키 `add` 다(재려던 판).
+    expect(mine).toEqual([{ op: 'add', path: '/root/children/0/zones/footer', value: [x] }])
+    const S = applyOps(D, [{ op: 'remove', path: '/root/children/0/zones' }])
+    const result = rebaseAnchored(S, anchorOps(D, mine)!)
+    expect(result?.ops).toEqual([{ op: 'add', path: '/root/children/0/zones', value: { footer: [x] } }])
+    expect(zonesOf(result!.document)).toEqual({ footer: [x] })
+  })
+
+  it('B5 — 빈 구역으로 옮기기(키 `add` 빈 배열 + `move`)도 남이 맵을 지웠으면 맵째로 되살아난다', () => {
+    const D = card({ headEnd: [y] }, [x])
+    const mine = moveNodeOps(D, 'n_x', 'n_card', 0, 'footer')!
+    expect(mine[0]).toEqual({ op: 'add', path: '/root/children/0/zones/footer', value: [] })
+    const S = applyOps(D, [{ op: 'remove', path: '/root/children/0/zones' }])
+    const result = rebaseAnchored(S, anchorOps(D, mine)!)
+    expect(result?.ops[0]).toEqual({ op: 'add', path: '/root/children/0/zones', value: { footer: [] } })
+    expect(zonesOf(result!.document)).toEqual({ footer: [x] })
+  })
+
+  it('B4 — 남이 만들었다 비운 구역에 오는 내 맵째 첫 넣기는 `add …/zones/k/0` 으로 얹힌다', () => {
+    const D = card()
+    const mine = insertNodeOps(D, 'n_card', 0, x, 'footer')!
+    expect(mine[0]!.path).toBe('/root/children/0/zones')
+    const S = applyOps(D, [
+      { op: 'add', path: '/root/children/0/zones', value: { footer: [y] } },
+      { op: 'remove', path: '/root/children/0/zones/footer/0' },
+    ])
+    expect(zonesOf(S)).toEqual({ footer: [] })
+    const result = rebaseAnchored(S, anchorOps(D, mine)!)
+    expect(result?.ops).toEqual([{ op: 'add', path: '/root/children/0/zones/footer/0', value: x }])
+    expect(zonesOf(result!.document)).toEqual({ footer: [x] })
+  })
+
+  it('B4 — 키 `add` 도 · 빈 구역으로 옮기기도 남이 남긴 빈 구역에 얹힌다', () => {
+    const D = card({ headEnd: [y] }, [x])
+    const S = applyOps(D, [{ op: 'add', path: '/root/children/0/zones/footer', value: [] }])
+    const insert = rebaseAnchored(S, anchorOps(D, insertNodeOps(D, 'n_card', 0, { ...x, id: 'n_z' }, 'footer')!)!)
+    expect(insert?.ops).toEqual([{ op: 'add', path: '/root/children/0/zones/footer/0', value: { ...x, id: 'n_z' } }])
+    const move = rebaseAnchored(S, anchorOps(D, moveNodeOps(D, 'n_x', 'n_card', 0, 'footer')!)!)
+    expect(move?.ops).toEqual([{ op: 'move', from: '/root/children/1', path: '/root/children/0/zones/footer/0' }])
+    expect(zonesOf(move!.document)).toEqual({ headEnd: [y], footer: [x] })
+  })
+
+  it('남이 그 구역에 넣은 노드가 있으면 지금처럼 못 얹는다 — 키 `add` 도 덮지 않는다', () => {
+    const D = card({ headEnd: [y] })
+    const mine = insertNodeOps(D, 'n_card', 0, x, 'footer')!
+    const S = applyOps(D, [{ op: 'add', path: '/root/children/0/zones/footer', value: [{ id: 'n_w', type: 'Button' }] }])
+    expect(rebaseAnchored(S, anchorOps(D, mine)!)).toBeNull()
+  })
+})
