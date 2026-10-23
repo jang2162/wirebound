@@ -163,3 +163,40 @@
 **N4 의 첫 판은 구분력이 아니었다** — 겹친 올리기의 문이 한도 자물쇠 자체였어서 자물쇠를 뗀 변조가 판 카나리아(«줄 서지 않았다(0)»)로 죽었다. 문을 프로젝트 행(`FOR UPDATE` — 한도 자물쇠 앞)으로 옮기고 `project_assets` 커밋을 늦춘 판(`pg_sleep(0.5)` 제약 트리거)으로 다시 지었다 — 변조 3 번 다 `[201, 201]` · 고친 소스 3 번 다 초록.
 
 **못 재는 것** — `imagesSettled` 의 한도를 떼는 변조는 값이 아니라 케이스 시간 초과로 죽는다(기다림이 끝나지 않는 것이 그 결함이다). 한도 케이스는 «한도에서 놓는다»(60ms) 하나다.
+
+### 설계와 다른 점(B2)
+
+- **복사(개인 ↔ 프로젝트 모듈)의 가져오기는 웹이 부른다** — 설계 «10» 은 «복사 라우트 안에서 서버가 한다» 인데 복사 라우트가 없다(웹이 원본을 다시 읽고 `createModule` · `createMyModule` 로 새로 저장한다 — 정본 §11.1). 서버 라우트를 새로 세우지 않고 붙이기 · 넣기와 같은 `edit/claim-images.ts` 를 지난다. 그 대가: MCP · CLI 가 그림 든 노드로 개인 모듈을 저장하면 가져오기가 없다(둘 다 모듈 도구가 없어 오늘은 길이 없다).
+- **응답 머리에 `Cross-Origin-Resource-Policy: same-origin` 을 더했다**(설계에 없다).
+- **번들 페이지 데이터의 `images` 는 실린 그림이 있을 때만 싣는다** — 그림 없는 번들의 페이지 HTML 바이트가 그대로다(`bundle-stateless-bytes` 의 핀은 `assets/views.css` 하나만 바뀐다).
+
+## 게이트
+
+커밋 `df118fe0`(B1 `e12a139d` + B2) · node v24.21.0 · `nohup nice -n 10 caffeinate -i` 체인 하나(슬롯 `gate-slots/ci-b` · 띄울 때 슬롯 0). `README.md` 「트랙 게이트」 의 web · schema · renderer · theme-sdk · themes · theme-kit · exporter · api 줄을 합친 것 = `pnpm test` · `pnpm test:build` 두 갈래다. 마이그레이션 디렉터리를 글자로 세는 자(`git grep -lE 'MIGRATIONS_DIR|db/migrations' apps/api/test` — 14 파일)는 api 프로젝트라 `pnpm test` 에 든다.
+
+| 단계 | 시각 | rc | 파일 | 통과 | 실패 | 건너뜀 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pnpm test --maxWorkers=25%` | 05:14 – 05:23 | 0 | 519 | 8308 | 0 | 1(`log-destination` 의 Linux `/dev/full` 판 — macOS) |
+| `test:build:serial`(`vitest run --project build`) | 05:23 – 05:25 | 1 | 17 | 157 | **1** | 1(`template` 의 `WB_TEMPLATE_INSTALL=1` 판) |
+| `test:browser` | 05:25 – 05:39 | 0 | 86 | 515 | 0 | 1(`layout-weight` 의 스크린숏 판) |
+| `test:build:serial` 다시 | 05:42 – 05:44 | 0 | 17 | 158 | 0 | 1(같은 판) |
+
+- **실패 하나** — `apps/api/build-test/screen-chromium.test.ts` «장 수를 네 배로 늘려도 최고치가 거의 그대로다» 의 `많이.after`(0) ≠ `적게.after`(2): 첫 판이 끝난 뒤 500ms 에 이 프로세스의 Chromium 자손 둘이 아직 남아 있었다(닫히는 중). 그 파일을 혼자 세 번 — 31 · 31 · 31 통과, 그 갈래를 다시 — 158 통과. 이 트랙은 그 경로(`screen-render-chromium.ts`)를 안 바꿨고(그림 없는 페이지는 `imagesSettled` 가 곧바로 끝난다) 도는 동안 CI-A 의 슬롯이 섰다(같은 기계의 부하). 두 판 다 적는다.
+- **잠듦** — `pmset -g log` 의 마지막 ` Sleep ` 줄은 2026-10-23 20:49 — 게이트 시각(2026-10-24 05:14 – 05:44)과 안 겹친다.
+- `pnpm fmt` · `pnpm lint`(경고만 — 오류 0) · `pnpm typecheck` 깨끗. 바뀐 파일의 숨은 글자(제어 · 방향 · 폭 없는 · U+2028)는 0(날 BOM 둘을 `\uFEFF` 로 되돌렸다).
+
+## 남은 것
+
+- **CI-A 병합을 기다림** — 병합되면 main 을 합치고 SDK · `system-admin` 판(1.5.0 이 CI-A 의 1.4.0 위인지) · `checksums.json` 새 줄 · `/llms.txt` 다시 내기 · 겹침 표의 손 합치기(`EditorControl` · `marks.ts` · `render.tsx` · `samples.ts` · `prop-marks.test.tsx` · SKILL.md)를 한 뒤 게이트를 다시 돈다. 병합 전에 이 워크트리 테스트 DB 의 `kysely_migration` 에서 `0029` 없이 `0030` 을 기록한 판을 내린다(AGENTS.md «마이그레이션 번호를 옮기면»).
+- **그림 칸의 «올리는 사이 남이 잠금 · 지움» 갈래는 jsdom 케이스가 없다** — `usePlaceImage` 의 `locked` · `gone` 문장. 잰 것은 «다른 노드를 골라도 처음 노드에»(`image-control.test.tsx`) 하나다. 잠금 판은 실브라우저 두 사람 판으로 재는 것이 맞다(리뷰 몫).
+- **칸 안의 붙여넣기(`paste` 의 `clipboardData.files`)는 jsdom 흉내로만 쟀다** — Chrome 에서 파일 붙여넣기를 자동화로 낼 길(CDP)이 없어 실브라우저 판이 없다.
+- **쓰지 않는 그림의 정리 단추는 없다**(Q5 — 프로젝트 · 사람과 함께만 지운다). 한도를 먹는 판은 «올린 그림에서» 의 쓴 용량으로 보인다.
+- **페이지 JSON 은 그림을 안 싣는다** — 다른 프로젝트로 가져오면 그림이 «그림을 불러올 수 없음» 이다(설계 «10»).
+- **번들의 SVG 를 `file://` 로 직접 열면 그 로컬 origin 에서 스크립트가 돈다**(Q7 이 받은 대가 · 쿠키 · 세션 없음).
+
+## 지침
+
+1. **무엇이 틀렸나** — `.ruler/20-verification.md` 「「통과」를 보기 전에 몇 개가 실행됐는지 확인한다 — 덧붙임」 의 zsh 항목이 줄바꿈 목록을 `F=("${(@f)$(…)}")` 배열로 받아 `"${F[@]}"` 로 넘기라고 하는데, 그 꼴로 `git add -- "${F[@]}"` 를 치자 에이전트 셸의 안전 검사가 «rm 이 든지 읽을 수 없다» 로 거절했다(명령 안에 `rm` 이 없었다). **넣을 문장**(같은 항목 끝): «경로 목록을 `git add` 에 넘길 때는 배열 대신 목록을 스크래치 파일에 쓰고 `git add --pathspec-from-file=<파일>` 로 넘긴다 — `"${(@f)…}"` 배열 확장이 든 명령은 에이전트 셸의 안전 검사가 못 읽어 거절한다.»
+2. **비어 있던 것** — `.ruler/30-delegation.md` 「경주를 재는 케이스는 두 요청이 겹친 판만 센다」 절. 겹침의 문을 **재려는 장치 그 자체**(한도 자물쇠)로 세우면 그 장치를 뗀 변조가 값이 아니라 판 카나리아(«줄 서지 않았다(0)»)로 죽는다 — 구분력이 아니다. **넣을 문장**: «겹침의 문은 재려는 장치 **앞**의 다른 잠금(그 요청이 먼저 지나는 행)으로 세운다 — 재려는 장치를 문으로 쓰면 그 장치를 뗀 변조가 판 카나리아로 죽는다. 문을 놓은 뒤 둘이 함께 읽는 창은 그 쓰기의 커밋을 늦춰(`DEFERRABLE INITIALLY DEFERRED` 제약 트리거의 `pg_sleep`) 넓힌다(`apps/api/test/assets-race.test.ts`).»
+3. **비어 있던 것** — `.ruler/30-delegation.md` 「jsdom 값은 실브라우저 값이 아니다」 절. **넣을 문장**: «**jsdom 은 그림을 싣지 않는다** — `img.complete` 가 거짓인 채 `load` · `error` 가 오지 않아, 그림을 기다리는 준비 신호(`packages/exporter/src/browser/ready.ts` 의 `imagesSettled`)를 타는 jsdom 케이스는 한도까지 멈춘다. 그 케이스는 `HTMLImageElement.prototype.complete` 를 참으로 세워 돌리고, 기다림 자체는 그 함수에 직접 단 케이스로 잰다(`packages/exporter/test/bundle-images.test.ts`).»
+4. **비어 있던 것** — 같은 절의 실브라우저 크기 항목. Chrome 은 `viewBox` 만 든 SVG 의 `naturalWidth` 를 기본 300×150 에 맞춘 값(120×80 → 225)으로 낸다 — 서버가 머리에서 잰 크기와 다르다. **넣을 문장**: «`viewBox` 만 든 SVG 의 `naturalWidth` 는 Chrome 이 기본 크기 300×150 에 맞춰 정한다 — 그림이 실렸는지는 `> 0` 으로 재고 크기는 서버가 잰 값(`asset_blobs.width`)으로 견준다.»
