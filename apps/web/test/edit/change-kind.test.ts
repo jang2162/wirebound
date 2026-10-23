@@ -81,6 +81,11 @@ describe('changeKindOps', () => {
     expect(carriedProps({ options }, 'Input')).toEqual({})
   })
 
+  it('같은 이름이어도 새 규격을 못 지나는 값은 그것만 버리고 나머지는 옮긴다', () => {
+    // 저장된 문서의 prop 이 규격 밖일 수 있다(검증은 경고로 받는다) — 그 한 칸 때문에 안내 문구까지 잃지 않는다.
+    expect(carriedProps({ placeholder: '입력', value: 7, size: 'huge' }, 'TextArea')).toEqual({ placeholder: '입력' })
+  })
+
   it('옮길 것이 없으면 props 를 걷고 · props 키가 없던 노드에서는 타입만 바꾼다', () => {
     expect(changeKindOps(doc({ type: 'Input', props: { kind: 'password' } }), 'n_p', 'CheckboxGroup')).toEqual([
       { op: 'replace', path: '/root/children/0/children/0/type', value: 'CheckboxGroup' },
