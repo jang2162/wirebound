@@ -21,6 +21,7 @@ import { isPageTargetAction } from './interaction/check'
 import { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument, type Migration } from './migrate'
 import { DEFAULT_VIEW_STATE, type Interaction, type InteractionAction, type PageDocument, type ViewState, type WbNode } from './node'
 import { collectNodeIds, remapNodeIds } from './tree'
+import { mapChildLists } from './zones'
 import { partitionIssues, validatePage } from './validate'
 
 /** 봉투의 `wirebound` 값. 페이지 JSON(`wireboundVersion`) · 테마 봉투와 갈리는 표지다. */
@@ -116,7 +117,10 @@ export function inspectNodesEnvelope(
 
   const checked = DocumentEnvelopeSchema.safeParse({ version: document.version, root: document.root })
   if (!checked.success) return { kind: 'rejected', reason: '노드의 모양이 맞지 않습니다.' }
-  const first = partitionIssues(validatePage(checked.data)).errors[0]
+  // 맨 위 노드가 설 자리(`misplaced-component` — `TabPanel`)는 감싼 뿌리가 아니라 붙일 자리가 정한다 — 붙인 뒤 문서의 검증이 본다.
+  const first = partitionIssues(validatePage(checked.data)).errors.find(
+    (issue) => !(issue.code === 'misplaced-component' && /^\/root\/children\/\d+$/.test(issue.path)),
+  )
   if (first !== undefined) return { kind: 'rejected', reason: first.message }
 
   const nodes = checked.data.root.children ?? []
@@ -205,8 +209,7 @@ export function prepareNodesForPaste(
         if (node.visibility.mode === 'only') clearedOnly += 1
       }
     }
-    if (node.children) next.children = node.children.map(filter)
-    return next
+    return mapChildLists(next, filter)
   }
 
   const remapped = remapNodeIds(wrap(nodes.map(filter), CURRENT_DOCUMENT_VERSION).root, generate)

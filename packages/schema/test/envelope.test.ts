@@ -68,7 +68,7 @@ describe('WbNodeSchema — interactions', () => {
         actions: [
           { type: 'setProp', target: 'n_000000000002', prop: 'loading', value: true },
           { type: 'setVisible', target: 'n_000000000002', value: false },
-          { type: 'switchTab', target: 'n_000000000002', tab: 2 },
+          { type: 'switchTab', target: 'n_000000000002' },
           { type: 'navigate', target: 'page:관리자/회원/상세' },
           { type: 'openModal', target: 'page:관리자/회원/등록' },
         ],
@@ -83,7 +83,7 @@ describe('WbNodeSchema — interactions', () => {
     ['target이 숫자', [{ on: 'click', actions: [{ type: 'navigate', target: 1 }] }]],
     ['actions가 없음', [{ on: 'click' }]],
     ['setVisible의 value가 문자열', [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_1', value: 'no' }] }]],
-    ['switchTab의 tab이 문자열', [{ on: 'click', actions: [{ type: 'switchTab', target: 'n_1', tab: 'a' }] }]],
+    ['switchTab에 옛 탭 번호(tab)', [{ on: 'click', actions: [{ type: 'switchTab', target: 'n_1', tab: 1 }] }]],
     ['interactions가 배열이 아님', { on: 'click' }],
   ])('%s를 거부한다', (_label, interactions) => {
     expect(WbNodeSchema.safeParse(withInteraction(interactions)).success).toBe(false)

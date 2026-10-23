@@ -1,16 +1,24 @@
-import type { ComponentDef } from './component/define'
+import { BODY_ZONE, type ComponentDef } from './component/define'
 import { checkNodeAction, isPageTargetAction } from './interaction/check'
 import { getComponent } from './component/registry'
 import { aliasNote } from './display'
 import { DocumentEnvelopeSchema, NODE_ID_PATTERN, PageEnvelopeSchema } from './envelope'
 import { DEFAULT_VIEW_STATE, type LayoutDocument, type PageDocument, type WbNode } from './node'
 import { walkNodes } from './tree'
+import { zoneList, zonePointer } from './zones'
 import { getKoreanErrorMap } from './locale'
 
 export type ValidationCode =
   | 'unknown-type'
   | 'invalid-props'
+  /** 몸통(`body` 구역)이 없는 타입이 `children`을 들었다. 경로는 `…/children`. */
   | 'children-not-allowed'
+  /** 그 타입이 선언하지 않은 구역을 `zones`에 들었다. 경로는 `…/zones/<이름>`. */
+  | 'zone-not-allowed'
+  /** 구역이 받지 않는 타입의 노드가 그 구역에 섰다(`ZoneDef.accepts` — `Tabs` 몸통의 `TabPanel` 밖). 노드는 그 자식이다. */
+  | 'zone-type-not-allowed'
+  /** 설 자리가 정해진 타입이 그 밖에 섰다(`ComponentDef.placement` — `TabPanel` 이 `Tabs` 몸통 밖). 노드는 그 노드다. */
+  | 'misplaced-component'
   /**
    * 노드가 `variant`를 들고 왔는데 그 컴포넌트는 **prop에서 변형을 파생한다**(`variantFrom`).
    * **작성자가 적은 값이 버려진다.**
@@ -38,7 +46,7 @@ export type ValidationCode =
   | 'missing-interaction-target'
   /**
    * 타겟 노드는 있는데 **그 액션을 받을 수 없는 종류**다. 지금 이것을 내는 자리는
-   * `switchTab`의 대상이 `Tabs`가 아닐 때 하나뿐이다.
+   * `switchTab`의 대상이 `TabPanel`이 아닐 때 하나뿐이다.
    *
    * `missing-interaction-target`과 갈라 둔 이유: 사용자가 할 일이 다르다. 없는 노드는
    * **타겟을 다시 고르거나 규칙을 지우는** 일이고, 종류가 안 맞는 것은 **액션 타입이
@@ -101,6 +109,9 @@ export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'unknown-type': 'error',
   'invalid-props': 'error',
   'children-not-allowed': 'error',
+  'zone-not-allowed': 'error',
+  'zone-type-not-allowed': 'error',
+  'misplaced-component': 'error',
   'ignored-variant': 'warning',
   'duplicate-id': 'error',
   'bad-root': 'error',
@@ -371,7 +382,7 @@ function validateTree(root: WbNode): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   /**
    * 지나온 노드를 id로 든다. **`Set`이 아니라 `Map`인 것은 상호작용 검사 때문이다** —
-   * 타겟이 **있는지**만이 아니라 그 노드의 **타입**까지 봐야 `switchTab`의 대상이 `Tabs`인지,
+   * 타겟이 **있는지**만이 아니라 그 노드의 **타입**까지 봐야 `switchTab`의 대상이 `TabPanel`인지,
    * `setProp`의 prop이 그 컴포넌트의 것인지 판정할 수 있다. `duplicate-id` 쪽은 `has`만
    * 쓰므로 그대로다.
    */
@@ -388,7 +399,7 @@ function validateTree(root: WbNode): ValidationIssue[] {
     issues.push(makeIssue('bad-root', root.id, '/root', `루트는 Page여야 합니다 (현재: ${root.type})`))
   }
 
-  for (const { node, path, parent } of walkNodes(root)) {
+  for (const { node, path, parent, zone } of walkNodes(root)) {
     if (node.type === 'Page' && parent !== null) {
       issues.push(makeIssue('nested-page', node.id, path, 'Page는 루트에만 둘 수 있습니다 — 페이지 안에 Page를 넣을 수 없습니다'))
     }
@@ -422,10 +433,9 @@ function validateTree(root: WbNode): ValidationIssue[] {
       )
     }
 
-    if (def.children === 'none' && (node.children?.length ?? 0) > 0) {
-      issues.push(
-        makeIssue('children-not-allowed', node.id, `${path}/children`, `${node.type}은 자식을 담을 수 없습니다${aliasNote(node)}`),
-      )
+    issues.push(...checkZones(def, node, path))
+    if (def.placement !== undefined && !(parent !== null && parent.type === def.placement.type && zone === def.placement.zone)) {
+      issues.push(makeIssue('misplaced-component', node.id, path, `${def.label}은 ${placementName(def.placement)} 안에만 놓을 수 있습니다`))
     }
 
     /**
@@ -444,6 +454,48 @@ function validateTree(root: WbNode): ValidationIssue[] {
   }
 
   return issues
+}
+
+/**
+ * 노드의 자식 줄이 그 타입의 구역 선언(`ComponentDef.zones`)과 맞는가 — 몸통이 없는 타입의 `children` · 선언 밖 구역 · 구역이 받지 않는 타입.
+ * 이슈 경로는 그 구역(또는 그 자식)의 경로다.
+ */
+function checkZones(def: ComponentDef, node: WbNode, path: string): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  if (!def.zones.some((zone) => zone.name === BODY_ZONE) && (node.children?.length ?? 0) > 0) {
+    issues.push(makeIssue('children-not-allowed', node.id, `${path}/children`, `${node.type}은 자식을 담을 수 없습니다${aliasNote(node)}`))
+  }
+  for (const name of Object.keys(node.zones ?? {})) {
+    if (def.zones.some((zone) => zone.name === name && name !== BODY_ZONE)) continue
+    issues.push(
+      makeIssue('zone-not-allowed', node.id, `${path}/zones/${name}`, `${node.type}에는 ${name} 구역이 없습니다${aliasNote(node)}`),
+    )
+  }
+  for (const zone of def.zones) {
+    if (zone.accepts === undefined) continue
+    zoneList(node, zone.name).forEach((child, index) => {
+      const type = (child as WbNode).type
+      if (zone.accepts!.includes(type)) return
+      issues.push(
+        makeIssue(
+          'zone-type-not-allowed',
+          (child as WbNode).id,
+          `${path}${zonePointer(zone.name)}/${index}`,
+          `${def.label}에는 ${zone.accepts!.map(componentName).join(' · ')}만 넣을 수 있습니다 (현재: ${componentName(type)})`,
+        ),
+      )
+    })
+  }
+  return issues
+}
+
+/** 이유 문장의 컴포넌트 이름 — 카탈로그의 `label`, 모르는 타입은 그대로. */
+function componentName(type: string): string {
+  return getComponent(type)?.label ?? type
+}
+
+function placementName(placement: { type: string; zone: string }): string {
+  return componentName(placement.type)
 }
 
 /**
@@ -466,13 +518,6 @@ function validateTree(root: WbNode): ValidationIssue[] {
  *
  * **그래서 노드 id처럼 생긴 값을 줘도 노드로 보지 않는다.** 그 둘의 `target`은 노드 id
  * 공간이 아니므로 *"문서에 없는 노드"*라고 말하면 거짓 경고가 된다.
- *
- * ---
- *
- * **재지 않고 남긴 것 — `switchTab`의 `tab` 범위.** `tabs` 배열 길이 밖의 번호를 여기서
- * 막지 않는다. `Tabs.active`(같은 뜻의 값)가 카탈로그에서 `z.number().int().min(0)`뿐이라
- * **상한이 없기 때문이다** — 상호작용에만 상한을 두면 같은 값이 노드의 prop 자리에서는
- * 유효하고 액션 자리에서는 무효가 된다. 카탈로그가 상한을 정하는 것이 먼저다.
  *
  * ---
  *

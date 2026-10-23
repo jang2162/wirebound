@@ -18,7 +18,7 @@ describe('defineComponent의 variantFrom 검사', () => {
     group: 'document' as const,
     editor: [],
     states: [],
-    children: 'none' as const,
+    zones: [] as const,
   }
 
   it('variantFrom이 가리키는 prop이 없으면 던진다', () => {

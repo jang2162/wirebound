@@ -28,7 +28,7 @@ const DESCRIPTION_MAX = 60
  *
  * | 축 | 필드 | 누가 읽는가 |
  * |---|---|---|
- * | **노드의 계약** | `props`·`editor`·`variantFrom`·`states`·`children` | 검증기·렌더러·속성 패널 |
+ * | **노드의 계약** | `props`·`editor`·`variantFrom`·`states`·`zones`·`placement`·`bodyHost` | 검증기·렌더러·속성 패널 |
  * | **사람이 읽을 것** | `label`·`description`·`group`·`summary` | 저작 UI(타입 고르개·문장화·구조 트리 줄) |
  *
  * 아래 축은 **DOM에 나가지 않는다.** 렌더러가 노드에 싣는 `data-wb-*`(`id`·`component`·`variant`·`state`)는 전부 위
@@ -82,8 +82,46 @@ export interface ComponentDef {
   summary?: (props: Record<string, unknown>) => string | null
   /** 같은 이름의 prop이 true면 활성화되는 상태 */
   states: string[]
-  children: 'none' | 'many'
+  /**
+   * 자식 자리(구역) 선언 — **차례가 곧 순회 · 화면 차례다**(`../zones.ts`의 `childLists`). 이름이 `BODY_ZONE`(`body`)이면 몸통(`node.children`),
+   * 그 밖은 `node.zones[name]`이다. 빈 목록이면 자식을 안 받는다.
+   */
+  zones: readonly ZoneDef[]
+  /** 이 타입이 설 수 있는 자리. 없으면 아무 데나. 밖에 서면 검증의 `misplaced-component`다. */
+  placement?: { type: string; zone: string }
+  /**
+   * 몸통을 누가 그리나. `'parent'` 면 이 타입의 뷰는 몸통을 `null` 로 받고, 렌더러가 그 몸통을 부모 뷰의 `items[i].content` 로 넘긴다
+   * (탭 머리와 탭 내용이 DOM 에서 부모 · 자식이 아닌 `TabPanel`). 없으면 `'self'`.
+   */
+  bodyHost?: 'self' | 'parent'
 }
+
+/** 구역 하나의 선언. */
+export interface ZoneDef {
+  /** `body` 면 몸통(`children`), 그 밖은 `zones[name]`. 꼴은 `ZONE_NAME_PATTERN`이고 한 컴포넌트 안에서 겹치지 않는다. */
+  name: string
+  /** 화면 이름 — 구조 트리의 구역 줄 · 이유 문장. `label`과 같은 검사를 받는다. */
+  label: string
+  /** 받는 타입. 없으면 무엇이든(밖이면 검증의 `zone-type-not-allowed`). */
+  accepts?: readonly string[]
+  /**
+   * 에디터가 노드를 새로 만들 때 이 구역에 넣는 내용 — 지울 수 있는 보통 노드다(id 는 만들 때 짓는다). 문서에 굽는 prop 기본값과 다른 축이다:
+   * 이것은 사람이 고치고 지울 **내용**이다. MCP · REST 로 쓰는 쪽은 받지 않는다(서버는 문서를 고쳐 쓰지 않는다).
+   */
+  initial?: readonly NodeSeed[]
+}
+
+/** 기본 내용 한 개. `props`가 그 타입의 규격을 지나는지는 카탈로그를 모은 자리가 본다(`catalog/index.ts`의 `assertSeeds`). */
+export interface NodeSeed {
+  type: string
+  props?: Record<string, unknown>
+}
+
+/** 구역 이름의 꼴 — JSON Pointer 이스케이프가 필요 없고 프로토타입 토큰(`__proto__`)이 꼴에서 빠진다. */
+export const ZONE_NAME_PATTERN = /^[a-z][A-Za-z0-9]{0,31}$/
+
+/** 몸통 구역의 이름 — 그 내용은 `node.children` 에 산다(`node.zones.body` 는 봉투가 거절한다). */
+export const BODY_ZONE = 'body'
 
 /** 계약의 자체 정합성을 확인하고 그대로 돌려준다. */
 export function defineComponent(def: ComponentDef): ComponentDef {
@@ -106,6 +144,18 @@ export function defineComponent(def: ComponentDef): ComponentDef {
   }
 
   assertUnique(type, 'states', def.states)
+  assertUnique(
+    type,
+    'zones',
+    def.zones.map((zone) => zone.name),
+  )
+  for (const zone of def.zones) {
+    if (!ZONE_NAME_PATTERN.test(zone.name)) throw new Error(`${type}: 구역 이름의 꼴이 아닙니다: ${zone.name}`)
+    assertHumanText(type, `zones.${zone.name}.label`, zone.label, LABEL_MAX)
+  }
+  if (def.bodyHost === 'parent' && !def.zones.some((zone) => zone.name === BODY_ZONE)) {
+    throw new Error(`${type}: bodyHost 가 parent 인데 몸통 구역이 없습니다`)
+  }
 
   const known = propKeys(def.props)
   for (const field of def.editor) {

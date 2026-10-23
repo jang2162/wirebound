@@ -5,7 +5,7 @@ export type InteractionTrigger = 'click' | 'change' | 'select' | 'submit'
 export type InteractionAction =
   | { type: 'setProp'; target: string; prop: string; value: unknown }
   | { type: 'setVisible'; target: string; value: boolean }
-  | { type: 'switchTab'; target: string; tab: number }
+  | { type: 'switchTab'; target: string }
   | { type: 'navigate'; target: string }
   | { type: 'openModal'; target: string }
 
@@ -41,7 +41,13 @@ export interface WbNode {
   visibility?: NodeVisibility
   marker?: number
   interactions?: Interaction[]
+  /** 몸통 구역(`body`)의 자식 — 카탈로그가 몸통을 선언한 타입만 갖는다. */
   children?: WbNode[]
+  /**
+   * 이름 붙은 구역의 자식(`Card`의 머리 오른쪽 · 폼의 단추 등 — 카탈로그 `ComponentDef.zones`). 없는 열쇠는 빈 구역이다. 열쇠 차례는 뜻이
+   * 없다(`zones.ts` 머리말). 읽는 자리는 `childLists` 하나를 지난다.
+   */
+  zones?: Record<string, WbNode[]>
 }
 
 /**

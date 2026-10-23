@@ -8,8 +8,8 @@ describe('컴포넌트 카탈로그', () => {
     installCatalog()
   })
 
-  it('19종을 등록한다', () => {
-    expect(listComponents()).toHaveLength(19)
+  it('20종을 등록한다', () => {
+    expect(listComponents()).toHaveLength(20)
   })
 
   it('CATALOG_TYPES와 등록 결과가 일치한다', () => {
@@ -22,19 +22,56 @@ describe('컴포넌트 카탈로그', () => {
 
   it('두 번 설치해도 중복 등록하지 않는다', () => {
     installCatalog()
-    expect(listComponents()).toHaveLength(19)
+    expect(listComponents()).toHaveLength(20)
   })
 
-  it('자식을 담는 컴포넌트만 children이 many다', () => {
-    const containers = listComponents()
-      .filter((d) => d.children === 'many')
-      .map((d) => d.type)
-      .sort()
-    expect(containers).toEqual(['Card', 'EntryForm', 'Flex', 'Grid', 'Page', 'SearchForm', 'Section', 'Tabs'])
+  it('구역 선언 — 타입마다 이름 차례', () => {
+    const zones = Object.fromEntries(
+      listComponents()
+        .filter((d) => d.zones.length > 0)
+        .map((d) => [d.type, d.zones.map((zone) => zone.name)]),
+    )
+    expect(zones).toEqual({
+      Page: ['body'],
+      Section: ['body'],
+      Flex: ['body'],
+      Grid: ['body'],
+      Card: ['titleSide', 'headEnd', 'body', 'footer'],
+      Tabs: ['body'],
+      TabPanel: ['body'],
+      List: ['headStart', 'headEnd'],
+      SearchForm: ['body', 'actions'],
+      EntryForm: ['body', 'actions'],
+    })
   })
 
   it('Slot은 자식을 담지 않는다', () => {
-    expect(getComponent('Slot')!.children).toBe('none')
+    expect(getComponent('Slot')!.zones).toEqual([])
+  })
+
+  it('받는 타입 제약은 탭 하나다 — 탭 몸통은 탭 패널만 · 탭 패널은 탭 몸통에만', () => {
+    const accepts = listComponents().flatMap((d) => d.zones.filter((z) => z.accepts !== undefined).map((z) => [d.type, z.name, z.accepts]))
+    expect(accepts).toEqual([['Tabs', 'body', ['TabPanel']]])
+    expect(listComponents().flatMap((d) => (d.placement === undefined ? [] : [[d.type, d.placement]]))).toEqual([
+      ['TabPanel', { type: 'Tabs', zone: 'body' }],
+    ])
+    expect(getComponent('TabPanel')!.bodyHost).toBe('parent')
+  })
+
+  it('기본 내용 — 폼의 단추 · 탭의 패널 둘', () => {
+    const seeds = (type: string, zone: string) => getComponent(type)!.zones.find((z) => z.name === zone)!.initial
+    expect(seeds('SearchForm', 'actions')).toEqual([
+      { type: 'Button', props: { label: '초기화' } },
+      { type: 'Button', props: { label: '검색' } },
+    ])
+    expect(seeds('EntryForm', 'actions')).toEqual([
+      { type: 'Button', props: { label: '저장' } },
+      { type: 'Button', props: { label: '취소' } },
+    ])
+    expect(seeds('Tabs', 'body')).toEqual([
+      { type: 'TabPanel', props: { label: '탭 1' } },
+      { type: 'TabPanel', props: { label: '탭 2' } },
+    ])
   })
 
   it('props 스키마가 기본값을 채워 준다', () => {

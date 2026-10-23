@@ -30,6 +30,7 @@ import { addAt, applyOpInPlace, removeAt } from './patch/apply'
 import { getByPointer, parsePointer, readMember } from './patch/pointer'
 import { PatchError, type PatchOp } from './patch/types'
 import { findNodePath } from './tree'
+import { childLists } from './zones'
 
 /**
  * 살아 있는 잠금 하나. **서버가 준 그대로다** — 만료 판정은 서버가 이미 했다.
@@ -110,7 +111,7 @@ export interface SelectionConflictInput {
  * 한 번씩 짓는다 — 노드마다 그 둘의 앞선 쪽이 답이다. 문서 노드 수 + 잠금 수 + 고른 수에 비례한다. 옛 판정(노드마다 따로)과 답이 같은지는
  * `test/lock-selection-oracle.test.ts`가 무작위 판으로 잰다.
  *
- * **검증 전 문서에서 던지지 않는다** — `children` 안의 노드가 아닌 원소(`null` 등)는 노드가 아니라 건너뛴다(화면은 검증 전 문서로 묻는다 —
+ * **검증 전 문서에서 던지지 않는다** — 자식 줄 안의 노드가 아닌 원소(`null` 등)는 노드가 아니라 건너뛴다(화면은 검증 전 문서로 묻는다 —
  * `apps/web`의 `edit/safe-walk.ts`). 남의 잠금이 없거나 고른 것이 없으면 문서를 돌지 않는다.
  */
 export function selectionConflicts(input: SelectionConflictInput): (NodeLock | null)[] {
@@ -126,11 +127,14 @@ export function selectionConflicts(input: SelectionConflictInput): (NodeLock | n
     const at = parent.length
     parent.push(up)
     if (!firstAt.has(node.id)) firstAt.set(node.id, at)
-    const children: unknown = node.children
-    if (!Array.isArray(children)) continue
-    for (let i = children.length - 1; i >= 0; i -= 1) {
-      const child: unknown = children[i]
-      if (child !== null && typeof child === 'object') stack.push({ node: child as WbNode, up: at })
+    // 자식 줄은 몸통과 구역 전부다(`childLists`) — 구역 안 노드가 빠지면 그 안의 남의 잠금을 고른 조상이 지난다.
+    const lists = childLists(node)
+    for (let l = lists.length - 1; l >= 0; l -= 1) {
+      const list = lists[l]!.list
+      for (let i = list.length - 1; i >= 0; i -= 1) {
+        const child: unknown = list[i]
+        if (child !== null && typeof child === 'object') stack.push({ node: child as WbNode, up: at })
+      }
     }
   }
 

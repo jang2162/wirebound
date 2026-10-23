@@ -1,28 +1,32 @@
 import { cloneJsonValue } from './clone'
 import { createNodeId, type WbNode } from './node'
+import { childLists } from './zones'
 
 export interface NodeVisit {
   node: WbNode
   /** 문서 루트(`{ version, root }`) 기준 JSON Pointer */
   path: string
   parent: WbNode | null
-  /** 부모의 children 안에서의 인덱스. 루트는 -1 */
+  /** 부모 안에서 선 구역(`body` · 구역 이름). 루트는 `null` */
+  zone: string | null
+  /** 그 구역 배열 안에서의 인덱스. 루트는 -1 */
   index: number
 }
 
-/** 깊이 우선 전위 순회로 모든 노드를 방문한다. */
+/** 깊이 우선 전위 순회로 모든 노드를 방문한다 — 한 노드의 자식 줄은 `childLists`의 차례(카탈로그의 구역 선언 차례)로 돈다. */
 export function* walkNodes(root: WbNode, basePath = '/root'): Generator<NodeVisit> {
-  yield { node: root, path: basePath, parent: null, index: -1 }
+  yield { node: root, path: basePath, parent: null, zone: null, index: -1 }
   yield* walkChildren(root, basePath)
 }
 
 function* walkChildren(parent: WbNode, parentPath: string): Generator<NodeVisit> {
-  const children = parent.children ?? []
-  for (let index = 0; index < children.length; index += 1) {
-    const node = children[index]!
-    const path = `${parentPath}/children/${index}`
-    yield { node, path, parent, index }
-    yield* walkChildren(node, path)
+  for (const { zone, pointer, list } of childLists(parent)) {
+    for (let index = 0; index < list.length; index += 1) {
+      const node = list[index]!
+      const path = `${parentPath}${pointer}/${index}`
+      yield { node, path, parent, zone, index }
+      yield* walkChildren(node, path)
+    }
   }
 }
 
@@ -96,8 +100,16 @@ function rewrite(node: WbNode, mapping: Map<string, string>): WbNode {
   if (node.children) {
     next.children = node.children.map((child) => rewrite(child, mapping))
   }
+  if (node.zones) next.zones = copyZones(node.zones, (child) => rewrite(child, mapping))
 
   return next
+}
+
+/** 구역 맵의 사본 — 열쇠마다 새 배열(입력과 공유하지 않는다). 배열이 아닌 값은 그대로 옮긴다(봉투가 거절한다 — `rewrite`의 «선언되지 않은 키» 와 같은 자세). */
+function copyZones(zones: NonNullable<WbNode['zones']>, copy: (node: WbNode) => WbNode): NonNullable<WbNode['zones']> {
+  const out: NonNullable<WbNode['zones']> = {}
+  for (const [name, list] of Object.entries(zones)) out[name] = Array.isArray(list) ? list.map(copy) : list
+  return out
 }
 
 /**
@@ -144,5 +156,6 @@ function copyNode(node: WbNode): WbNode {
   if (node.children !== undefined) {
     next.children = node.children.map((child) => copyNode(child))
   }
+  if (node.zones !== undefined) next.zones = copyZones(node.zones, copyNode)
   return next
 }

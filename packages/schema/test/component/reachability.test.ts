@@ -35,7 +35,7 @@ const base = {
   description: '검사용 표본.',
   group: 'document' as const,
   states: [],
-  children: 'none' as const,
+  zones: [] as const,
 }
 
 describe('defineComponent — states의 도달성', () => {

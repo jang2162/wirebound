@@ -23,7 +23,7 @@ export const TextDef = defineComponent({
   variantFrom: 'role',
   summary: (props) => clipped(props.content, SUMMARY_TEXT_MAX),
   states: [],
-  children: 'none',
+  zones: [],
 })
 
 export const MediaDef = defineComponent({
@@ -43,7 +43,7 @@ export const MediaDef = defineComponent({
   ],
   summary: (props) => joined(oneLine(props.kind), oneLine(props.caption)),
   states: [],
-  children: 'none',
+  zones: [],
 })
 
 export const DividerDef = defineComponent({
@@ -58,7 +58,7 @@ export const DividerDef = defineComponent({
   variantFrom: 'direction',
   summary: (props) => axisWord(props.direction),
   states: [],
-  children: 'none',
+  zones: [],
 })
 
 export const PlaceholderDef = defineComponent({
@@ -79,5 +79,5 @@ export const PlaceholderDef = defineComponent({
   ],
   summary: (props) => oneLine(props.label),
   states: [],
-  children: 'none',
+  zones: [],
 })

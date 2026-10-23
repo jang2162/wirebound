@@ -6,6 +6,7 @@
  * 읽을 수 있는 만큼 읽는다: 모양이 틀린 보임은 «없음»(보인다), 고리 · 없는 부모는 거기서 멈춘다.
  */
 import { DEFAULT_VIEW_STATE, type NodeVisibility, type PageDocument, type ViewState, type WbNode } from './node'
+import { mapChildLists } from './zones'
 
 type States = readonly ViewState[] | undefined
 
@@ -69,25 +70,8 @@ export function isVisibleIn(node: WbNode, viewState: string | null, viewStates: 
  * 쓴다. 바뀌지 않은 하위 트리는 입력과 객체를 나눠 쓴다 — 결과를 고치지 마라.
  */
 export function visibleTree(doc: Pick<PageDocument, 'root' | 'viewStates'>, viewState: string | null): WbNode {
-  const visit = (node: WbNode): WbNode => {
-    if (!Array.isArray(node.children)) return node
-    let changed = false
-    const children: WbNode[] = []
-    for (const child of node.children) {
-      if (child === null || typeof child !== 'object') {
-        children.push(child)
-        continue
-      }
-      if (!isVisibleIn(child, viewState, doc.viewStates)) {
-        changed = true
-        continue
-      }
-      const next = visit(child)
-      if (next !== child) changed = true
-      children.push(next)
-    }
-    return changed ? { ...node, children } : node
-  }
+  const visit = (node: WbNode): WbNode =>
+    mapChildLists(node, (child) => (isVisibleIn(child, viewState, doc.viewStates) ? visit(child) : null))
   return visit(doc.root)
 }
 

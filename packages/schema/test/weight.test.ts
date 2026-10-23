@@ -74,7 +74,7 @@ describe('몫은 노드와 함께 간다', () => {
   })
 
   it('클립보드 봉투를 오가며 남는다', () => {
-    const read = readNodesEnvelope(writeNodesEnvelope(tree().children!, 1))
+    const read = readNodesEnvelope(writeNodesEnvelope(tree().children!, 3))
     expect(read).not.toBeNull()
     expect(read!.nodes.map((item) => item.weight)).toEqual([2, 5])
   })
@@ -87,7 +87,7 @@ describe('몫은 노드와 함께 간다', () => {
   })
 
   it('클립보드 봉투는 범위 밖 몫을 받지 않는다', () => {
-    const text = JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [{ id: 'a', type: 'Button', weight: 13 }] })
+    const text = JSON.stringify({ wirebound: 'nodes', version: 3, nodes: [{ id: 'a', type: 'Button', weight: 13 }] })
     expect(readNodesEnvelope(text)).toBeNull()
   })
 })

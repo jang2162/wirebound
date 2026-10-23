@@ -7,6 +7,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prepareNodesForPaste, readNodesEnvelope, writeNodesEnvelope } from '../src/clipboard'
 import { installCatalog } from '../src/component/catalog/index'
+import { MIGRATIONS } from '../src/migrate'
 import type { ViewState, WbNode } from '../src/node'
 
 beforeAll(() => {
@@ -30,39 +31,42 @@ const keepAll = { node: () => true, page: () => true }
 describe('봉투의 상태 목록', () => {
   it('상태 목록이 없거나 비면 봉투는 그 키가 없다', () => {
     const nodes: WbNode[] = [{ id: 'n_t', type: 'Text', props: { content: '글' } }]
-    const plain = JSON.stringify({ wirebound: 'nodes', version: 2, nodes })
-    expect(writeNodesEnvelope(nodes, 2)).toBe(plain)
-    expect(writeNodesEnvelope(nodes, 2, [])).toBe(plain)
+    const plain = JSON.stringify({ wirebound: 'nodes', version: 3, nodes })
+    expect(writeNodesEnvelope(nodes, 3)).toBe(plain)
+    expect(writeNodesEnvelope(nodes, 3, [])).toBe(plain)
     expect(readNodesEnvelope(plain)).toEqual({ nodes })
   })
 
   it('출처의 상태 목록(parent 포함)과 보임을 싣고 그대로 읽는다', () => {
     const states: ViewState[] = [ADMIN, { id: 's_top', name: '최고', parent: 's_admin' }]
     const nodes: WbNode[] = [{ id: 'b', type: 'Button', props: { label: '승인' }, visibility: { mode: 'only', states: ['s_top'] } }]
-    const read = readNodesEnvelope(writeNodesEnvelope(nodes, 2, states))
+    const read = readNodesEnvelope(writeNodesEnvelope(nodes, 3, states))
     expect(read).toEqual({ nodes, viewStates: states })
   })
 
   it('모양이 틀린 목록 · 틀린 보임을 든 봉투는 읽지 않는다', () => {
     const badList = JSON.stringify({
       wirebound: 'nodes',
-      version: 2,
+      version: 3,
       nodes: [{ id: 'b', type: 'Text' }],
       viewStates: [{ id: 's_admin', name: '' }],
     })
     expect(readNodesEnvelope(badList)).toBeNull()
     const badVisibility = JSON.stringify({
       wirebound: 'nodes',
-      version: 2,
+      version: 3,
       nodes: [{ id: 'b', type: 'Text', visibility: { mode: 'only', states: [] } }],
     })
     expect(readNodesEnvelope(badVisibility)).toBeNull()
   })
 })
 
+/** 판 1 → 2 단계까지만 — 판 2 → 3 은 런타임 사슬에 없어 판 1 봉투는 운영에서 거절된다(`clipboard.test.ts`). 얼린 판 1 → 2 의 뜻을 이음매로 잰다. */
+const readToV2 = (text: string) => readNodesEnvelope(text, MIGRATIONS, 2)
+
 describe('판 1 봉투 — 출처의 목록으로 판 2 로 옮긴다', () => {
   it('상태 영역이 보임이 된다 — 목록을 실은 봉투는 상태 가지가 살아남는다', () => {
-    const read = readNodesEnvelope(JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [area], viewStates: [ADMIN] }))
+    const read = readToV2(JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [area], viewStates: [ADMIN] }))
     expect(read?.viewStates).toEqual([ADMIN])
     expect(read?.nodes).toEqual([
       { id: 'b_d', type: 'Button', props: { label: '보기' }, visibility: { mode: 'except', states: ['s_admin'] } },
@@ -71,12 +75,12 @@ describe('판 1 봉투 — 출처의 목록으로 판 2 로 옮긴다', () => {
   })
 
   it('목록 없는 판 1 봉투는 기본 가지만 남는다', () => {
-    const read = readNodesEnvelope(JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [area] }))
+    const read = readToV2(JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [area] }))
     expect(read?.nodes).toEqual([{ id: 'b_d', type: 'Button', props: { label: '보기' } }])
   })
 
   it('영역 없이 가지만 고른 판 1 복사 — 그 가지의 내용을 읽는다', () => {
-    const read = readNodesEnvelope(JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [area.children![1]], viewStates: [ADMIN] }))
+    const read = readToV2(JSON.stringify({ wirebound: 'nodes', version: 1, nodes: [area.children![1]], viewStates: [ADMIN] }))
     expect(read?.nodes.map((node) => node.id)).toEqual(['b_a'])
   })
 })

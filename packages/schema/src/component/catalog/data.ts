@@ -34,7 +34,11 @@ export const ListDef = defineComponent({
   ],
   summary: (props) => firstOf(props.columns),
   states: ['selected', 'disabled', 'loading', 'empty'],
-  children: 'none',
+  // 결과 머리줄(«검색결과 총 N건» · 엑셀 다운로드 단추) — 그리드 위에 붙는다. 둘 다 비면 머리줄째 없다. 몸통은 없다.
+  zones: [
+    { name: 'headStart', label: '머리 왼쪽' },
+    { name: 'headEnd', label: '머리 오른쪽' },
+  ],
 })
 
 export const TreeDef = defineComponent({
@@ -60,7 +64,7 @@ export const TreeDef = defineComponent({
     return count === null ? null : `항목 ${count}`
   },
   states: ['selected', 'disabled'],
-  children: 'none',
+  zones: [],
 })
 
 export const KeyValueDef = defineComponent({
@@ -81,5 +85,5 @@ export const KeyValueDef = defineComponent({
     return count === null ? null : `${count}쌍`
   },
   states: [],
-  children: 'none',
+  zones: [],
 })

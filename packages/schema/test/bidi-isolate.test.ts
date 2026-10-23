@@ -61,9 +61,9 @@ describe('이름이 이어 붙는 자리', () => {
     expect(firstOf(['개요', '상세'])).toBe('개요 · 상세')
   })
 
-  it('줄 요약 — Tabs · Card · Button', () => {
-    const tabs = { id: 'n_tabs00000001', type: 'Tabs', props: { tabs: [`x${RLO}y`, '둘째'] } } as WbNode
-    expect(nodeSummary(tabs)).toBe(`${FSI}x${RLO}y${PDI} · 둘째`)
+  it('줄 요약 — TabPanel · Card · Button', () => {
+    const panel = { id: 'n_tabp00000001', type: 'TabPanel', props: { label: `x${RLO}y` } } as WbNode
+    expect(nodeSummary(panel)).toBe(`${FSI}x${RLO}y${PDI}`)
     expect(nodeSummary(button('n_btn000000001', `a${RLO}b`))).toBe(`${FSI}a${RLO}b${PDI}`)
     expect(nodeSummary(button('n_btn000000002', '저장'))).toBe('저장')
   })
@@ -75,11 +75,19 @@ describe('이름이 이어 붙는 자리', () => {
     expect(nodeDisplayName(button('n_btn000000003', `a${RLO}b`, { alias: '머리 저장' }))).toBe('머리 저장')
 
     const source = button('n_src000000001', `a${RLO}b`, { marker: 1 })
-    const tabs = { id: 'n_tabs00000001', type: 'Tabs', marker: 2, props: { tabs: [`x${RLO}y`, '둘째'] } } as WbNode
+    const tabs = {
+      id: 'n_tabs00000001',
+      type: 'Tabs',
+      marker: 2,
+      children: [
+        { id: 'n_tabp00000001', type: 'TabPanel', props: { label: `x${RLO}y` } },
+        { id: 'n_tabp00000002', type: 'TabPanel', props: { label: '둘째' } },
+      ],
+    } as WbNode
     const document = { version: 1, root: { id: 'page', type: 'Page', children: [source, tabs] } } as unknown as PageDocument
     const sentence = (action: object) => describeInteraction(document, source, { on: 'click', actions: [action] } as never)
     // 탭 이름 · `setProp` 의 글 값 · 페이지 경로(메뉴 · 페이지 제목 몫).
-    expect(sentence({ type: 'switchTab', target: 'n_tabs00000001', tab: 0 })).toBe(
+    expect(sentence({ type: 'switchTab', target: 'n_tabp00000001' })).toBe(
       `① ${FSI}a${RLO}b${PDI} 버튼 클릭 시 ② 탭이 "${FSI}x${RLO}y${PDI}" 탭으로 바뀝니다`,
     )
     expect(sentence({ type: 'setProp', target: 'n_src000000001', prop: 'label', value: `c${RLO}d` })).toContain(`"${FSI}c${RLO}d${PDI}"`)

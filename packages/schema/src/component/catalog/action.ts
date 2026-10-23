@@ -21,7 +21,7 @@ export const ButtonDef = defineComponent({
   ],
   summary: (props) => oneLine(props.label),
   states: ['disabled', 'loading'],
-  children: 'none',
+  zones: [],
 })
 
 export const LinkDef = defineComponent({
@@ -42,5 +42,5 @@ export const LinkDef = defineComponent({
   ],
   summary: (props) => oneLine(props.label),
   states: ['disabled'],
-  children: 'none',
+  zones: [],
 })
