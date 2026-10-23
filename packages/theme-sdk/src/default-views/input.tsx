@@ -53,7 +53,8 @@ export const EntryFormView = view(({ props, children }) => (
 /**
  * 기본 구조 `outlined`. 뿌리는 라벨 이름을 단 `group` 이고, 그 밑에 `label` 조각과 `value` 조각(값 구역 — 몸통)이 형제로 선다 — 라벨|값 표가 두
  * 조각을 칸에 나눠 놓을 수 있게(설계 spec `2026-10-24-compose-input-design.md` 「5. 검색폼 · 입력폼과의 관계」). **`aria-required` 를 루트에서
- * 거둔다** — `group` 은 그 속성을 받는 역할이 아니다. 필수는 라벨의 별(`data-wb-state~="required"`)이 말한다. `invalid` 는 조각이 제 뿌리에 낸다.
+ * 거둔다** — `group` 은 그 속성을 받는 역할이 아니다. 필수는 라벨의 별(`data-wb-state~="required"`)이 말하고, 값 칸의 입력 조각이 렌더러가 넘긴 필드 이름(`ViewProps.field`)으로 제 뿌리에
+ * `aria-required` 를 낸다(`pieceAria`). `invalid` 는 조각이 제 뿌리에 낸다.
  */
 export const FieldView = view(({ nodeId, props, children }) => {
   const labelId = `${nodeId}-label`

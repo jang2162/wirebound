@@ -76,7 +76,7 @@ export const ListView = view(({ props, variant, states, children }) => {
   - 상태(`data-wb-state~='disabled'`)가 참이면 `aria-disabled` · `loading` 은 `aria-busy` · `invalid` 는 `aria-invalid` · `required` 는
     `aria-required` 가 `"true"` 로 선다. 그 뜻을 안쪽 요소로 옮기려면 `Root` 에 같은 이름(`undefined`)을 넘긴다.
     `readonly` 는 `aria-readonly` 다. 입력 조각(`Input` · `Select` …)의 뷰는 루트에 역할(`textbox` · `combobox` 등)과 이름을 달아 그 속성이
-    읽히게 한다. `Field` 의 뿌리는 `group` 이라 `aria-required` 를 받는 역할이 아니다 — 기본 `Field` 뷰는 그것을 거두고 필수를 라벨의
+    읽히게 한다. `Field` 의 뿌리는 `group` 이라 `aria-required` 를 받는 역할이 아니다 — 기본 `Field` 뷰는 그것을 거두고(필수는 값 칸 조각이 `field.required` 로 `aria-required` 를 단다) 필수를 라벨의
     별(`data-wb-state~='required'`)로 보인다.
 - **`Field` 는 라벨과 값 칸이다.** 값 칸(몸통 — `children`)에 입력 조각이 줄 선다. 뷰는 `label` 조각과 `value` 조각(그 안에 `children`)을
   형제로 둔다 — `children` 을 안 그리면 값 칸의 조각이 화면에서 사라지고 `wb-theme check` 가 막는다. 조각의 몫(`--wb-node-weight`)은 SDK 기본
