@@ -108,10 +108,10 @@ describe('자식을 받는 컴포넌트 안 · 형제 앞뒤', () => {
 
 describe('못 놓는 자리', () => {
   it('자기 · 자손 → null', () => {
-    for (const zone of ['before', 'inside', 'after'] as const) {
-      expect(structureDropTarget(doc(), moving('n-box'), 'n-box', zone, free)).toBeNull()
-      expect(structureDropTarget(doc(), moving('n-box'), 'n-inner', zone, free)).toBeNull()
-      expect(structureDropTarget(doc(), moving('n-box'), 'n-deep', zone, free)).toBeNull()
+    for (const band of ['before', 'inside', 'after'] as const) {
+      expect(structureDropTarget(doc(), moving('n-box'), 'n-box', band, free)).toBeNull()
+      expect(structureDropTarget(doc(), moving('n-box'), 'n-inner', band, free)).toBeNull()
+      expect(structureDropTarget(doc(), moving('n-box'), 'n-deep', band, free)).toBeNull()
     }
   })
 
@@ -133,9 +133,9 @@ describe('못 놓는 자리', () => {
         ],
       },
     }
-    for (const zone of ['before', 'after'] as const) {
-      expect(structureDropTarget(odd, moving('n-x'), 'n-bt', zone, free)).toBeNull()
-      expect(structureDropTarget(odd, adding('Divider'), 'n-bt', zone, free)).toBeNull()
+    for (const band of ['before', 'after'] as const) {
+      expect(structureDropTarget(odd, moving('n-x'), 'n-bt', band, free)).toBeNull()
+      expect(structureDropTarget(odd, adding('Divider'), 'n-bt', band, free)).toBeNull()
     }
     // 그 단추 자신의 앞 · 뒤는 뿌리 안이라 된다.
     expect(structureDropTarget(odd, adding('Divider'), 'n-btn', 'after', free)).toEqual({

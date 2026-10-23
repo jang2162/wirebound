@@ -70,7 +70,7 @@ const DOC: PageDocument = pageDoc({
 
 const RECT = { left: 300, top: 100, width: 400, height: 40 }
 const PAGE_END: CanvasHit = { pageEnd: true, rect: RECT, layout: { axis: 'y', reversed: false } }
-const ON_TEXT_INSIDE: CanvasHit = { overId: 'n-text', zone: 'inside', rect: RECT, layout: { axis: 'y', reversed: false } }
+const ON_TEXT_INSIDE: CanvasHit = { overId: 'n-text', band: 'inside', rect: RECT, layout: { axis: 'y', reversed: false } }
 
 function recordingPatchOps(): { sent: PatchOp[][]; patchOps: ApiClient['patchOps'] } {
   const sent: PatchOp[][] = []

@@ -1,46 +1,46 @@
 /**
- * **캔버스 판정의 순수 함수**(`src/canvas/canvas-drop.ts`) — 구역(`zoneOf`) · 배치 축(`axisOf`) · 좌표 환산(`hostToFrame` · `frameToHost`).
+ * **캔버스 판정의 순수 함수**(`src/canvas/canvas-drop.ts`) — 띠(`bandOf`) · 배치 축(`axisOf`) · 좌표 환산(`hostToFrame` · `frameToHost`).
  * jsdom 에 레이아웃이 없으므로 상자 · 스타일을 값으로 준다. DOM 층(`canvasHitAt`)은 실브라우저 판(`build-test/canvas-drop.test.ts`)이 잰다.
  */
 import { describe, expect, it } from 'vitest'
-import { axisOf, frameToHost, hostToFrame, zoneOf, type Rect } from '../../src/canvas/canvas-drop'
+import { axisOf, frameToHost, hostToFrame, bandOf, type Rect } from '../../src/canvas/canvas-drop'
 
 const box: Rect = { left: 0, top: 0, width: 200, height: 100 }
 
-describe('zoneOf — 축 방향 앞 25% · 뒤 25% · 가운데', () => {
+describe('bandOf — 축 방향 앞 25% · 뒤 25% · 가운데', () => {
   it('세로 축: 받는 노드는 앞 · 안 · 뒤, 안 받는 노드는 반씩', () => {
-    expect(zoneOf(box, 'y', false, { x: 100, y: 10 }, true, false)).toBe('before')
-    expect(zoneOf(box, 'y', false, { x: 100, y: 90 }, true, false)).toBe('after')
-    expect(zoneOf(box, 'y', false, { x: 100, y: 50 }, true, false)).toBe('inside')
-    expect(zoneOf(box, 'y', false, { x: 100, y: 50 }, false, false)).toBe('after')
-    expect(zoneOf(box, 'y', false, { x: 100, y: 40 }, false, false)).toBe('before')
+    expect(bandOf(box, 'y', false, { x: 100, y: 10 }, true, false)).toBe('before')
+    expect(bandOf(box, 'y', false, { x: 100, y: 90 }, true, false)).toBe('after')
+    expect(bandOf(box, 'y', false, { x: 100, y: 50 }, true, false)).toBe('inside')
+    expect(bandOf(box, 'y', false, { x: 100, y: 50 }, false, false)).toBe('after')
+    expect(bandOf(box, 'y', false, { x: 100, y: 40 }, false, false)).toBe('before')
   })
 
   it('빈 컨테이너는 상자 전체가 안 — 앞 끝이어도', () => {
-    expect(zoneOf(box, 'y', false, { x: 100, y: 10 }, true, true)).toBe('inside')
-    expect(zoneOf(box, 'x', false, { x: 5, y: 50 }, true, true)).toBe('inside')
+    expect(bandOf(box, 'y', false, { x: 100, y: 10 }, true, true)).toBe('inside')
+    expect(bandOf(box, 'x', false, { x: 5, y: 50 }, true, true)).toBe('inside')
     // 자식을 안 받으면 «빈» 이 뜻이 없다 — 반씩.
-    expect(zoneOf(box, 'y', false, { x: 100, y: 10 }, false, true)).toBe('before')
+    expect(bandOf(box, 'y', false, { x: 100, y: 10 }, false, true)).toBe('before')
   })
 
   it('가로 축: x 로 같은 표 — y 는 보지 않는다', () => {
-    expect(zoneOf(box, 'x', false, { x: 20, y: 5 }, true, false)).toBe('before')
-    expect(zoneOf(box, 'x', false, { x: 180, y: 5 }, true, false)).toBe('after')
-    expect(zoneOf(box, 'x', false, { x: 100, y: 95 }, true, false)).toBe('inside')
-    expect(zoneOf(box, 'x', false, { x: 120, y: 5 }, false, false)).toBe('after')
+    expect(bandOf(box, 'x', false, { x: 20, y: 5 }, true, false)).toBe('before')
+    expect(bandOf(box, 'x', false, { x: 180, y: 5 }, true, false)).toBe('after')
+    expect(bandOf(box, 'x', false, { x: 100, y: 95 }, true, false)).toBe('inside')
+    expect(bandOf(box, 'x', false, { x: 120, y: 5 }, false, false)).toBe('after')
   })
 
   it('뒤집힌 배치면 앞 · 뒤가 바뀐다 — 안은 그대로', () => {
-    expect(zoneOf(box, 'x', true, { x: 20, y: 50 }, true, false)).toBe('after')
-    expect(zoneOf(box, 'x', true, { x: 180, y: 50 }, true, false)).toBe('before')
-    expect(zoneOf(box, 'x', true, { x: 100, y: 50 }, true, false)).toBe('inside')
-    expect(zoneOf(box, 'y', true, { x: 100, y: 10 }, false, false)).toBe('after')
+    expect(bandOf(box, 'x', true, { x: 20, y: 50 }, true, false)).toBe('after')
+    expect(bandOf(box, 'x', true, { x: 180, y: 50 }, true, false)).toBe('before')
+    expect(bandOf(box, 'x', true, { x: 100, y: 50 }, true, false)).toBe('inside')
+    expect(bandOf(box, 'y', true, { x: 100, y: 10 }, false, false)).toBe('after')
   })
 
   it('상자 왼 · 위가 0 이 아니어도 상자 안 자리로 잰다', () => {
     const moved: Rect = { left: 300, top: 400, width: 200, height: 100 }
-    expect(zoneOf(moved, 'y', false, { x: 0, y: 410 }, true, false)).toBe('before')
-    expect(zoneOf(moved, 'x', false, { x: 480, y: 0 }, true, false)).toBe('after')
+    expect(bandOf(moved, 'y', false, { x: 0, y: 410 }, true, false)).toBe('before')
+    expect(bandOf(moved, 'x', false, { x: 480, y: 0 }, true, false)).toBe('after')
   })
 })
 

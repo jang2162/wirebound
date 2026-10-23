@@ -47,7 +47,7 @@ import { PendingNotice } from './pending-notice'
 import type { TreeMenuNode, TreePage } from '../api/types'
 import { menuKey, useCollapsed, type Collapsed } from '../tree/collapse'
 import { treeSpot, type TreeAbilities, type TreeSelection } from '../tree/tree-actions'
-import { dropZone, menuDropTarget, sameMenuDrop, type MenuDrop } from '../tree/tree-drop'
+import { dropBand, menuDropTarget, sameMenuDrop, type MenuDrop } from '../tree/tree-drop'
 import { useTreeCommands, type TreeCommands } from '../tree/use-tree-commands'
 import { MenuPicker } from './menu-picker'
 import { usePageJsonExport, type PageJsonExport } from './page-json-export'
@@ -287,7 +287,7 @@ export function MenuTree(props: {
   })
 
   /**
-   * **끌어 놓기.** 포인터 밑 줄과 띠(`dropZone`)를 `menuDropTarget`에 물어 놓을 자리를 받고, 놓으면 `dropTo`가 보낸다. 판정 · 보내기가
+   * **끌어 놓기.** 포인터 밑 줄과 띠(`dropBand`)를 `menuDropTarget`에 물어 놓을 자리를 받고, 놓으면 `dropTo`가 보낸다. 판정 · 보내기가
    * 줄 행동과 같은 명령 · 같은 서버 규칙을 쓴다(`tree/tree-drop.ts` 머리말).
    *
    * **놓는 답은 보인 답이다**(`sameMenuDrop` · `refresh`) — 끄는 사이 남이 줄을 밀어 포인터 밑에 다른 부모의 줄이 오면 놓지 않고 표시를
@@ -301,7 +301,7 @@ export function MenuTree(props: {
       const over = row === null ? null : rowSelection(row)
       if (row === null || over === null) return null
       const box = row.getBoundingClientRect()
-      const target = menuDropTarget(state.menu, source, over, dropZone(point.y - box.top, box.height, over.kind === 'menu'))
+      const target = menuDropTarget(state.menu, source, over, dropBand(point.y - box.top, box.height, over.kind === 'menu'))
       if (target === null) return null
       return {
         value: target,

@@ -49,7 +49,7 @@
 | `start` | 끌기가 섰다 | `via`(threshold · touch-hold) · `dist` · `capture`(set · absent · threw) · `has`(`hasPointerCapture`) |
 | `capture-got` · `capture-lost` | 포인터 캡처를 얻고 잃음 | `capture-lost` 의 `started` |
 | `window-blur` | 끄는 중 창이 포커스를 잃음 | `started` |
-| `over` | 놓을 자리의 답이 **바뀔 때만** | 자리가 있으면 `result=canvas`·`tree` · `parent` · `index` · `placement` · `over`(노드 id · `page-end`) · `zone`, 없으면 `result=none why=<까닭>` |
+| `over` | 놓을 자리의 답이 **바뀔 때만** | 자리가 있으면 `result=canvas`·`tree` · `parent` · `index` · `placement` · `over`(노드 id · `page-end`) · `band`, 없으면 `result=none why=<까닭>` |
 | `tag` | 카드 이름표가 섰다(누름마다 한 번) | 글 · 상자(`width`·`height` 0 이면 섰는데 안 보인다) |
 | `release` | 뗐다 | 좌표 · `landed`(뗀 자리의 답이 있나) · `shown`(보인 답이 있었나) · `still`(마지막 움직임과 같은 자리인가) |
 | `drop-refused` | 뗀 자리의 답이 보인 답과 다른 부모 | `why=not-shown` |

@@ -36,7 +36,7 @@
  */
 import type { NodeLock, PageDocument, PatchOp, WbNode } from '@wirebound/schema'
 import type { DropMiss } from '../drag/drag-debug'
-import type { DropZone } from '../tree/tree-drop'
+import type { DropBand } from '../tree/tree-drop'
 import { createNode } from './create-node'
 import { insertNodeOps, moveNodeOps } from './ops'
 import { walkSafely, type SafeVisit } from './safe-walk'
@@ -46,7 +46,7 @@ import { acceptsChildren } from './structure-actions'
 export interface StructureDrop {
   parentId: string
   index: number
-  placement: DropZone
+  placement: DropBand
 }
 
 /**
@@ -67,7 +67,7 @@ export function structureDropTarget(
   document: PageDocument,
   placing: Placing,
   overId: string,
-  zone: DropZone,
+  band: DropBand,
   blockedBy: (ops: readonly PatchOp[]) => NodeLock | null,
   why?: (reason: DropMiss) => void,
 ): StructureDrop | null {
@@ -76,7 +76,7 @@ export function structureDropTarget(
 
   let parentId: unknown
   let insertAt: number
-  if (zone === 'inside') {
+  if (band === 'inside') {
     if (!acceptsChildren(over.node)) return miss(why, 'not-container')
     parentId = over.node.id
     insertAt = Array.isArray(over.node.children) ? over.node.children.length : 0
@@ -85,7 +85,7 @@ export function structureDropTarget(
     // 형제 자리는 부모 «안» 이다 — 부모가 자식을 안 받으면(검증 전 문서 · 카탈로그가 바뀐 옛 문서) 못 놓는다.
     if (!acceptsChildren(over.parent)) return miss(why, 'parent-not-container')
     parentId = over.parent.id
-    insertAt = zone === 'before' ? over.index : over.index + 1
+    insertAt = band === 'before' ? over.index : over.index + 1
   }
   if (typeof parentId !== 'string') return miss(why, 'target-not-in-document')
 
@@ -95,7 +95,7 @@ export function structureDropTarget(
     const ops = insertNodeOps(document, parentId, insertAt, probe)
     if (ops === null) return miss(why, 'ops-unbuildable')
     if (blockedBy(ops) !== null) return miss(why, 'locked')
-    return { parentId, index: insertAt, placement: zone }
+    return { parentId, index: insertAt, placement: band }
   }
 
   const draggedId = placing.id
@@ -111,7 +111,7 @@ export function structureDropTarget(
   const ops = moveNodeOps(document, draggedId, parentId, index)
   if (ops === null) return miss(why, 'ops-unbuildable')
   if (blockedBy(ops) !== null) return miss(why, 'locked')
-  return { parentId, index, placement: zone }
+  return { parentId, index, placement: band }
 }
 
 /**

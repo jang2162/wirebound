@@ -174,11 +174,11 @@ describe('어느 판정을 부르나', () => {
     mountDriver({ patchOps } as unknown as ApiClient)
     regions.tree = treeRegion()
     // 캔버스가 답을 가져도 트리 영역 안이면 트리가 이긴다.
-    regions.hit = { overId: 'n-box', zone: 'inside', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
+    regions.hit = { overId: 'n-box', band: 'inside', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
 
     const hint = over(adding, 50, 132)
     expect(hint).toMatchObject({
-      value: { target: { parentId: 'n-root', index: 0, placement: 'before' }, over: { overId: 'n-text', zone: 'before' } },
+      value: { target: { parentId: 'n-root', index: 0, placement: 'before' }, over: { overId: 'n-text', band: 'before' } },
       rect: { left: 0, top: 130, width: 240, height: 30 },
       placement: 'before',
     })
@@ -190,7 +190,7 @@ describe('어느 판정을 부르나', () => {
     mountDriver({ patchOps } as unknown as ApiClient)
     regions.tree = treeRegion()
 
-    regions.hit = { overId: 'n-box', zone: 'inside', rect: HOST_RECT, layout: { axis: 'x', reversed: true } }
+    regions.hit = { overId: 'n-box', band: 'inside', rect: HOST_RECT, layout: { axis: 'x', reversed: true } }
     expect(over(adding, 500, 220)).toMatchObject({
       value: { target: { parentId: 'n-box', index: 1, placement: 'inside' }, layout: { axis: 'x', reversed: true } },
       rect: HOST_RECT,
@@ -211,11 +211,11 @@ describe('어느 판정을 부르나', () => {
 
     expect(over(adding, 900, 900)).toBeNull()
     // 잎(Text) 안 — 판정이 null.
-    regions.hit = { overId: 'n-text', zone: 'inside', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
+    regions.hit = { overId: 'n-text', band: 'inside', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
     expect(over(adding, 500, 220)).toBeNull()
     // 캔버스 칸이 없다.
     regions.canvas = null
-    regions.hit = { overId: 'n-box', zone: 'inside', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
+    regions.hit = { overId: 'n-box', band: 'inside', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
     expect(over(adding, 500, 220)).toBeNull()
   })
 })
@@ -225,7 +225,7 @@ describe('놓는 순간 다시 판정한다', () => {
     const { sent, patchOps } = recordingPatchOps()
     await openPage(doc(), { apiOverrides: { patchOps } })
     const setPage = mountDriver({ patchOps } as unknown as ApiClient)
-    regions.hit = { overId: 'n-text', zone: 'after', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
+    regions.hit = { overId: 'n-text', band: 'after', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
     const hint = over(adding, 500, 220)
     if (hint === null) throw new Error('판정이 안 섰다')
     return { sent, value: (hint as DropHint<PlacementDrop>).value, setPage }
@@ -288,7 +288,7 @@ describe('놓는 순간 다시 판정한다', () => {
 
   it('«안» · 앞 · 뒤 표시는 남이 형제를 넣어 차례가 밀려도 같은 부모면 남는다', async () => {
     const { value } = await armed()
-    regions.hit = { overId: 'n-box', zone: 'inside', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
+    regions.hit = { overId: 'n-box', band: 'inside', rect: HOST_RECT, layout: { axis: 'y', reversed: false } }
     const inside = over(adding, 520, 240)
     if (inside === null) throw new Error('«안» 판정이 안 섰다')
     act(() => {

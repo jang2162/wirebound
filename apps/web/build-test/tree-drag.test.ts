@@ -131,10 +131,10 @@ describe.skipIf(!전제.ok)('트리 끌어 놓기 · 줄 행동 — 실브라우
     return page.locator(`.wb-shell-region[aria-label="메뉴·페이지 트리"] [data-tree-row][data-tree-id="${id}"]`)
   }
 
-  /** 줄 상자의 띠 좌표 — 위 끝 근처 · 가운데 · 아래 끝 근처(`tree-drop.ts`의 `dropZone`). */
-  async function spot(page: Page, id: string, zone: 'top' | 'middle' | 'bottom'): Promise<{ x: number; y: number }> {
+  /** 줄 상자의 띠 좌표 — 위 끝 근처 · 가운데 · 아래 끝 근처(`tree-drop.ts`의 `dropBand`). */
+  async function spot(page: Page, id: string, band: 'top' | 'middle' | 'bottom'): Promise<{ x: number; y: number }> {
     const box = (await row(page, id).boundingBox())!
-    const y = zone === 'top' ? box.y + 3 : zone === 'middle' ? box.y + box.height / 2 : box.y + box.height - 3
+    const y = band === 'top' ? box.y + 3 : band === 'middle' ? box.y + box.height / 2 : box.y + box.height - 3
     return { x: box.x + 40, y }
   }
 
@@ -354,9 +354,9 @@ describe.skipIf(!전제.ok)('트리 끌어 놓기 · 줄 행동 — 실브라우
     return page.locator(`.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="${id}"]`)
   }
 
-  async function nodeSpot(page: Page, id: string, zone: 'top' | 'middle' | 'bottom'): Promise<{ x: number; y: number }> {
+  async function nodeSpot(page: Page, id: string, band: 'top' | 'middle' | 'bottom'): Promise<{ x: number; y: number }> {
     const box = (await nodeRow(page, id).boundingBox())!
-    const y = zone === 'top' ? box.y + 3 : zone === 'middle' ? box.y + box.height / 2 : box.y + box.height - 3
+    const y = band === 'top' ? box.y + 3 : band === 'middle' ? box.y + box.height / 2 : box.y + box.height - 3
     return { x: box.x + 30, y }
   }
 
