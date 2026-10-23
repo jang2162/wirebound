@@ -32,7 +32,7 @@ const GUEST = { id: 's_guest', name: '비로그인' }
 /** 상태 둘 · 기본 «보기»(관리자에서 숨김) · 관리자 «승인». */
 function statefulDoc(): PageDocument {
   return {
-    version: 2,
+    version: 3,
     // 사본이다 — 케이스가 목록을 비틀어도 다음 케이스의 문서에 새지 않는다.
     viewStates: [{ ...ADMIN }, { ...GUEST }],
     root: {
@@ -47,7 +47,10 @@ function statefulDoc(): PageDocument {
   }
 }
 
-/** 같은 화면의 **판 1 문서** — 상태 영역 하나(기본 «보기» · 관리자 «승인»). 판 2 로 옮기면 `statefulDoc()` 이다. */
+/**
+ * 같은 화면의 **판 1 문서** — 상태 영역 하나(기본 «보기» · 관리자 «승인»). 판 2 로 옮기면 `statefulDoc()` 의 화면이다. 들어오는 경계는 판 3 만
+ * 받는다(판 2 → 3 은 DB 마이그레이션 `0028` 에만 있다) — 아래 케이스가 그 거절을 잰다.
+ */
 function legacyDoc(): unknown {
   return {
     version: 1,
@@ -125,7 +128,7 @@ describe('PUT …/schema — 통째 교체가 상태 목록을 싣는다', () =>
       const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
       const stateful = (await read(ctx, fx)).schema
 
-      const plain = { version: 2, root: { id: 'n_root', type: 'Page', children: [] } }
+      const plain = { version: 3, root: { id: 'n_root', type: 'Page', children: [] } }
       const res = await put(ctx, fx, plain)
       expect(res.statusCode, res.body).toBe(200)
       expect((await read(ctx, fx)).schema).toEqual(plain)
@@ -168,16 +171,18 @@ describe('PUT …/schema — 통째 교체가 상태 목록을 싣는다', () =>
     })
   })
 
-  it('판 1 문서(상태 영역)를 PUT 하면 판 2 로 옮겨 저장한다', async () => {
+  it('판 1 문서(상태 영역)를 PUT 하면 400 이고 저장되지 않는다 — 런타임은 판 3 에 못 올린다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
+      const before = (await read(ctx, fx)).schema
       const res = await put(ctx, fx, legacyDoc())
-      expect(res.statusCode, res.body).toBe(200)
-      expect((await read(ctx, fx)).schema).toEqual(statefulDoc())
+      expect(res.statusCode, res.body).toBe(400)
+      expect(res.body).toContain('버전 2에서 올릴 마이그레이션이 없습니다')
+      expect((await read(ctx, fx)).schema).toEqual(before)
     })
   })
 
-  it('걷은 상태 영역을 판 2 문서에 실으면 422 unknown-type 이다', async () => {
+  it('걷은 상태 영역을 판 3 문서에 실으면 422 unknown-type 이다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const doc = statefulDoc()
@@ -190,10 +195,36 @@ describe('PUT …/schema — 통째 교체가 상태 목록을 싣는다', () =>
 })
 
 describe('페이지 JSON — 내보낸 파일 · 가져오기가 상태 목록을 싣는다', () => {
-  it.each<[string, () => unknown]>([
-    ['판 2 파일', statefulDoc],
-    ['판 1 파일(상태 영역) — 판 2 로 옮겨 선다', legacyDoc],
-  ])('%s — 가져온 페이지가 파일의 상태 목록 · 보임을 갖고 노드 id 만 새로 짓는다(보임의 상태 id 는 그대로)', async (_label, schema) => {
+  it.each<[string, () => unknown]>([['판 3 파일', statefulDoc]])(
+    '%s — 가져온 페이지가 파일의 상태 목록 · 보임을 갖고 노드 id 만 새로 짓는다(보임의 상태 id 는 그대로)',
+    async (_label, schema) => {
+      await withRealApi(async (ctx) => {
+        const fx = await board(ctx)
+        const res = await ctx.app.inject({
+          method: 'POST',
+          url: `/api/projects/${fx.project.id}/pages/import`,
+          cookies: fx.owner.cookie,
+          payload: {
+            menuNodeId: fx.menu.id,
+            file: { wireboundVersion: WIREBOUND_PAGE_VERSION, page: { title: '상태 페이지' }, schema: schema(), comments: [] },
+          } as never,
+        })
+        expect(res.statusCode, res.body).toBe(201)
+        const pageId = (res.json() as { page: { id: string } }).page.id
+        const saved = (await read(ctx, fx, pageId)).schema
+        expect(saved.version).toBe(3)
+        expect(saved.viewStates).toEqual([ADMIN, GUEST])
+        expect(saved.root.children!.map((child) => [child.type, child.visibility ?? null])).toEqual([
+          ['Text', null],
+          ['Button', { mode: 'except', states: ['s_admin'] }],
+          ['Button', { mode: 'only', states: ['s_admin'] }],
+        ])
+        expect(saved.root.children!.map((child) => child.id)).not.toContain('n_ok')
+      })
+    },
+  )
+
+  it('판 1 파일(상태 영역)은 400 이고 페이지가 남지 않는다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const res = await ctx.app.inject({
@@ -202,20 +233,13 @@ describe('페이지 JSON — 내보낸 파일 · 가져오기가 상태 목록�
         cookies: fx.owner.cookie,
         payload: {
           menuNodeId: fx.menu.id,
-          file: { wireboundVersion: WIREBOUND_PAGE_VERSION, page: { title: '상태 페이지' }, schema: schema(), comments: [] },
+          file: { wireboundVersion: WIREBOUND_PAGE_VERSION, page: { title: '옛 파일' }, schema: legacyDoc(), comments: [] },
         } as never,
       })
-      expect(res.statusCode, res.body).toBe(201)
-      const pageId = (res.json() as { page: { id: string } }).page.id
-      const saved = (await read(ctx, fx, pageId)).schema
-      expect(saved.version).toBe(2)
-      expect(saved.viewStates).toEqual([ADMIN, GUEST])
-      expect(saved.root.children!.map((child) => [child.type, child.visibility ?? null])).toEqual([
-        ['Text', null],
-        ['Button', { mode: 'except', states: ['s_admin'] }],
-        ['Button', { mode: 'only', states: ['s_admin'] }],
-      ])
-      expect(saved.root.children!.map((child) => child.id)).not.toContain('n_ok')
+      expect(res.statusCode, res.body).toBe(400)
+      expect(res.body).toContain('버전 2에서 올릴 마이그레이션이 없습니다')
+      const rows = await ctx.db.selectFrom('pages').select('id').where('project_id', '=', fx.project.id).execute()
+      expect(rows).toHaveLength(1)
     })
   })
 
@@ -285,7 +309,11 @@ describe('스냅샷 복원이 상태 목록을 되돌린다', () => {
     })
   }, 30_000)
 
-  it('판 1 문서를 얼린 스냅샷(DB 마이그레이션 앞에 찍은 것)을 복원하면 판 2 로 옮겨 선다', async () => {
+  /**
+   * 저장된 스냅샷은 DB 마이그레이션(`0028`)이 판 3 으로 옮겼다 — 옮기기를 지나지 않은 판 1 문서는 복원이 올리지 못해 그대로 두고(`currentVersionPages`)
+   * 검증이 거절한다. 판 1 의 상태 영역은 `unknown-type`, 판 2 문서면 `bad-document`(«version은 편집으로 바꿀 수 없습니다») 로 같은 422 다.
+   */
+  it('판 1 문서를 얼린 스냅샷을 복원하면 422 이고 문서가 그대로다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       expect((await put(ctx, fx, statefulDoc())).statusCode).toBe(200)
@@ -297,7 +325,7 @@ describe('스냅샷 복원이 상태 목록을 되돌린다', () => {
       })
       expect(taken.statusCode, taken.body).toBe(201)
       const snapshotId = (taken.json() as { id: string }).id
-      // 0025 앞에 찍은 스냅샷처럼 그 페이지의 문서를 판 1 로 되돌려 둔다(payload 는 마이그레이션이 안 고친다).
+      // 옮기기를 지나지 않은 판 1 문서를 payload 에 심는다 — 런타임 복원은 판 3 만 받는다.
       const row = await ctx.db.selectFrom('snapshots').select('payload').where('id', '=', snapshotId).executeTakeFirstOrThrow()
       const payload = row.payload as unknown as { pages: { id: string; schema: unknown }[] }
       const at = payload.pages.findIndex((page) => page.id === fx.page.id)
@@ -309,14 +337,14 @@ describe('스냅샷 복원이 상태 목록을 되돌린다', () => {
         .where('id', '=', snapshotId)
         .execute()
 
-      expect((await put(ctx, fx, { version: 2, root: { id: 'n_root', type: 'Page', children: [] } })).statusCode).toBe(200)
+      expect((await put(ctx, fx, { version: 3, root: { id: 'n_root', type: 'Page', children: [] } })).statusCode).toBe(200)
       const res = await ctx.app.inject({
         method: 'POST',
         url: `/api/projects/${fx.project.id}/snapshots/${snapshotId}/restore`,
         cookies: fx.owner.cookie,
       })
-      expect(res.statusCode, res.body).toBe(200)
-      expect((await read(ctx, fx)).schema).toEqual(statefulDoc())
+      expect(res.statusCode, res.body).toBe(422)
+      expect((await read(ctx, fx)).schema).toEqual({ version: 3, root: { id: 'n_root', type: 'Page', children: [] } })
     })
   }, 30_000)
 })

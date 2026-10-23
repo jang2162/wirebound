@@ -35,7 +35,7 @@ const GUEST = { id: 's_guest', name: '손님' }
 
 /** 목록 `[관리자, 손님]` · `n_ok` 는 관리자에서만(`only`). 손님을 가리키는 보임은 없다. */
 const SCHEMA = {
-  version: 2,
+  version: 3,
   viewStates: [ADMIN, GUEST],
   root: {
     id: 'n_root',

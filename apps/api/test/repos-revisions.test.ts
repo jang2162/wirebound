@@ -244,7 +244,7 @@ describe('repos/revisions', () => {
       const before = await ctx.db.selectFrom('pages').select(['updated_at']).where('id', '=', page.id).executeTakeFirstOrThrow()
 
       const newSchema: PageDocument = {
-        version: 2,
+        version: 3,
         root: { id: 'n_root000001', type: 'Page', children: [{ id: 'n_child00001', type: 'Text', props: { text: '새 내용' } }] },
       }
 
@@ -271,7 +271,7 @@ describe('repos/revisions', () => {
       const menu = await createMenuNode(ctx, owner.cookie, project.id)
       const page = await createPage(ctx, owner.cookie, project.id, menu.id, { title: '원래 제목' })
 
-      const newSchema: PageDocument = { version: 1, root: { id: 'n_root000002', type: 'Page', children: [] } }
+      const newSchema: PageDocument = { version: 3, root: { id: 'n_root000002', type: 'Page', children: [] } }
       await writePageSchemaAtSeq(ctx.db, page.id, newSchema, 1, 1, 1)
 
       const after = await ctx.db.selectFrom('pages').select(['title', 'menu_node_id']).where('id', '=', page.id).executeTakeFirstOrThrow()
@@ -297,7 +297,7 @@ describe('repos/revisions', () => {
       // 헤더 주석이 설명한다 — String.fromCharCode(0)으로 런타임에 만든다.
       const nul = String.fromCharCode(0)
       const docWithNul: PageDocument = {
-        version: 1,
+        version: 3,
         root: { id: 'n_root', type: 'Page', children: [{ id: 'n_text', type: 'Text', props: { content: `a${nul}b` } }] },
       }
 
@@ -335,7 +335,7 @@ describe('repos/revisions', () => {
   it('writePageSchemaAtSeq는 트랜잭션이 아닌 핸들로 부르면 크게 실패한다', async () => {
     const root = getTestDb()
     expect(root.isTransaction).toBe(false)
-    const schema: PageDocument = { version: 1, root: { id: 'n_guardtest01', type: 'Page', children: [] } }
+    const schema: PageDocument = { version: 3, root: { id: 'n_guardtest01', type: 'Page', children: [] } }
     await expect(writePageSchemaAtSeq(root, NONEXISTENT_UUID, schema, 1, 1, 1)).rejects.toThrow()
   })
 })

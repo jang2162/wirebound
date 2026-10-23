@@ -50,7 +50,7 @@ describe('스킬 문서의 화면 상태 꼴', () => {
         cookies: owner.cookie,
         payload: {
           schema: {
-            version: 2,
+            version: 3,
             root: {
               id: 'n_root',
               type: 'Page',

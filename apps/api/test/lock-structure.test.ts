@@ -47,6 +47,29 @@ describe('sameStructure', () => {
     expect(sameStructure(odd, page(text('n_a')))).toBe(true)
   })
 
+  describe('구역', () => {
+    const card = (zones: WbNode['zones'], ...children: WbNode[]): WbNode => ({ id: 'n_card', type: 'Card', children, zones })
+
+    it('같은 부모의 다른 구역으로 옮기면 다르다 — 부모 자리 · 차례가 같아도', () => {
+      expect(sameStructure(page(card({ headEnd: [text('n_a')] })), page(card({ footer: [text('n_a')] })))).toBe(false)
+    })
+
+    it('몸통과 구역 사이를 옮기면 다르다', () => {
+      expect(sameStructure(page(card({}, text('n_a'))), page(card({ footer: [text('n_a')] })))).toBe(false)
+    })
+
+    it('구역 안 노드를 더하면 다르다 · 내용만 바꾸면 같다', () => {
+      expect(sameStructure(page(card({ footer: [text('n_a')] })), page(card({ footer: [text('n_a'), text('n_b')] })))).toBe(false)
+      expect(sameStructure(page(card({ footer: [text('n_a', '가')] })), page(card({ footer: [text('n_a', '나')] })))).toBe(true)
+    })
+
+    it('구역 열쇠의 차례만 다르면 같다 — jsonb 는 열쇠 차례를 안 지킨다', () => {
+      const before = page(card({ headEnd: [text('n_a')], footer: [text('n_b')] }))
+      const after = page(card({ footer: [text('n_b')], headEnd: [text('n_a')] }))
+      expect(sameStructure(before, after)).toBe(true)
+    })
+  })
+
   it('아주 깊은 문서에서 호출 스택이 안 넘친다', () => {
     const chain = (depth: number): WbNode => {
       let node: WbNode = text('n_leaf')

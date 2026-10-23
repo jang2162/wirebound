@@ -81,7 +81,7 @@ async function putSchema(
 
 function doc(rootId: string, buttonId: string, label: string): PageDocument {
   return {
-    version: 1,
+    version: 3,
     root: {
       id: rootId,
       type: 'Page',

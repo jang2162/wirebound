@@ -322,7 +322,7 @@ const CASES: Case[] = [
       file: {
         wireboundVersion: '1',
         page: { title: '가져온 페이지' },
-        schema: { version: 1, root: { id: 'n_root', type: 'Page', children: [] } },
+        schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [] } },
         comments: [],
       },
     }),
@@ -348,7 +348,7 @@ const CASES: Case[] = [
     label: '페이지 스키마 저장',
     method: 'PUT',
     url: '/api/projects/:projectId/pages/:pageId/schema',
-    payload: { schema: { version: 1, root: { id: 'n_root', type: 'Page', children: [] } } },
+    payload: { schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [] } } },
     allowed: ['owner', 'editor'],
     setup: 페이지하나,
   },

@@ -116,7 +116,7 @@ async function fixture(ctx: RealApiContext): Promise<Fx> {
     cookies: owner.cookie,
     payload: {
       schema: {
-        version: 1,
+        version: 3,
         root: { id: 'n_root', type: 'Page', children: ['n_a', 'n_b', 'n_c'].map((id) => ({ id, type: 'Text', props: { content: id } })) },
       },
     } as never,

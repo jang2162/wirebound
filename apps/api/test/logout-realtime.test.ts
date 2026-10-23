@@ -57,7 +57,7 @@ async function scene(ctx: RealApiContext) {
     cookies: owner.cookie,
     payload: {
       schema: {
-        version: 1,
+        version: 3,
         root: {
           id: 'n_root',
           type: 'Page',

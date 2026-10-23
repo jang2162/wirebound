@@ -63,7 +63,7 @@ function importFile(): PageJson {
   return {
     wireboundVersion: WIREBOUND_PAGE_VERSION,
     page: { title: '가져온 페이지' },
-    schema: { version: 1, root: { id: 'r', type: 'Page', children: [] } },
+    schema: { version: 3, root: { id: 'r', type: 'Page', children: [] } },
     comments: [],
   }
 }
