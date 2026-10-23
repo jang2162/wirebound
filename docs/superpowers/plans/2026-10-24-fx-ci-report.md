@@ -77,3 +77,64 @@
 | `아이디` `[Input][중복확인]` | `textbox` «입력» | «아이디»(단추는 «중복확인» 그대로) |
 | `소개` `TextArea` | `textbox` «여러 줄 입력» | «소개» |
 | 필드 밖 `Input` 안내 «필드 밖» | «필드 밖» | 그대로 |
+
+### 3′. 접근 이름으로 조각을 찾던 케이스 · 번들 = 화면
+
+| 센 것 | 식 | 맞은 줄 | 갈래 |
+| --- | --- | --- | --- |
+| 조각의 옛 이름(«입력» · «날짜» · «시간» · «셀렉트» · «여러 줄 입력» · «이름을 입력» · «YYYY-MM-DD» · «00:00» · «== 선택 ==») · 입력 역할(`textbox` · `spinbutton` · `combobox` · `radiogroup`)로 찾는 줄 — 케이스 · `apps/web/build-test/*.ts` | `git grep -nE "name: ?['\"](입력\|날짜\|…)['\"]\|aria-label[^\n]{0,40}(입력\|…)\|role: ?['\"](textbox\|…)['\"]"`(새 `field-a11y` 뺌) | 6 | **조각이 아니다** — 종류 바꾸기 상자의 단추 «날짜» · «셀렉트»(`compose-input.test.ts` 219 · 262 · `change-kind.test.tsx` 187 · 206 · 238) · 테마 픽스처의 실제 `<input aria-label="실제 입력">`(`theme-fixtures.ts` 50) |
+| 패키지 케이스의 `aria-label` · `aria-required` 단언 | `git grep -nE "aria-label\|aria-required" -- 'packages/*/test/*' 'system-themes/*/test/*'` | 10 | 필드 밖 조각(`default-view-props` 215 «이름» — 필드 없이 그린 `Input` 의 안내) · `Field` 뿌리(`group`)의 `aria-required` 없음(`prop-marks` 290 – 294 — 자식 없는 `Field` 라 그대로 참) · 그 밖은 셸 · 상태 |
+| `getByRole('textbox' …)` 등 셸 입력을 이름으로 찾는 줄 | 첫 인구조사의 넓은 식 | 50 여 | 셸 UI(«별칭» · «몫» · «페이지 이름» …)다. 캔버스는 iframe 이라 셸 쿼리에 안 섞인다 |
+
+값으로 잰 것: `pnpm vitest run --project unit`(조각 · 고침 뒤) 577 파일 · 2 428 중 통과 2 428 · 실패 0 — 번들 = 화면 DOM 패리티 `packages/exporter/test/parity.test.tsx` · 번들 바이트 기준 `bundle-stateless-bytes.test.ts` 가 든다(`views.css` 는 안 바뀌었다). `pnpm vitest run --project web` 204 파일 · 3 321 중 통과 3 321 · 실패 0.
+
+## 혼자 죽는 변조 표
+
+러너: `…/scratchpad/mut.py` — 백업(경로 전체 이름) · 찾는 글자 맞은 수 1 확인 · 그 케이스 파일만 · 바이트 비교 복원. 실행 수는 `통과 + 실패`.
+
+| 변조 | 바꾼 곳 | 돌린 파일 | 실행 · 죽음 | 죽은 케이스 ⟶ 값 |
+| --- | --- | --- | --- | --- |
+| M1 첫 조각만(`pieces.slice(0, 1)`) | `apps/api/src/db/migrations/0029-compose-field.ts` | `compose-field-migration.test.ts` | 10 · 2 | «setProp — 옮긴 prop 은 그 prop 을 가진 조각마다 하나씩 …» ⟶ `expected [ { prop: 'placeholder', …(3) }, …(4) ] to deeply equal [ { type: 'setProp', …(3) }, …(5) ]`<br>«넓힌 표본 — 옛 필드를 바꾸던 setProp 은 …» ⟶ `expected [ …(1495) ] to deeply equal [ …(1905) ]` |
+| M1b 안내 문구만 첫 칸 | 같은 파일 | 같은 파일 | 10 · 1 | «넓힌 표본 — 옛 필드를 바꾸던 setProp 은 …» ⟶ `expected [ …(1803) ] to deeply equal [ …(1905) ]` |
+| M1c 값 칸 든 필드에도 조각을 더함(`length > 99`) | 같은 파일 | 같은 파일 | 10 · 3 | «넓힌 표본 — 실제 DB 에서 up 을 한 번 더 …» ⟶ `expected [ …(7) ] to deeply equal [ …(7) ]`<br>«한 번 더 돌려도 그대로다 …» ⟶ `expected [ { id: 'x', type: 'Field', …(2) } ] to deeply equal …`<br>«넓힌 표본 — 옛 필드를 바꾸던 setProp 은 …» ⟶ `expected [ { id: 'f0001', …(3) }, …(95) ] to deeply equal …`(`liftNodes` 두 번) |
+| M2 옛 폭(`DateInput` 9.5em) | `system-themes/admin/src/theme.css` | `packages/theme-kit/build-test/shots.test.ts` | 5 · 1 | «system-admin 을 두 폭으로 찍는다 …» ⟶ `390px [{"item":"Field//field2",…"lines":2},{"item":"DateInput//date",…"lines":2}]: expected [ …(2) ] to deeply equal []` |
+| M2b 꺾임 셈을 끔(`tops.size > 99`) | `packages/theme-kit/src/shots.ts` | 같은 파일 | 5 · 1 | «한 줄 입력 조각의 글이 칸 안에서 꺾이면 …» ⟶ 종료 코드 0(기대 1 — 실패 문장의 첫 줄은 명령 출력 `✓ …/wrap/sample-390-1.png`) |
+| M3a 이름을 안 넘김(`fields[index]` → `undefined`) | `packages/renderer/src/render.tsx` | `field-a11y.test.ts` · `field-name.test.tsx` | 5 · 4 | 두 테마 판 ⟶ `expected [ { role: 'combobox', …(2) }, …(10) ] to deeply equal …`<br>«상태로 숨은 형제 …» ⟶ `expected { d1: [ 'YYYY-MM-DD', null ] } to deeply equal { d1: [ '기간', 'true' ] }`<br>«라벨을 고치면 …» ⟶ `expected { i: [ '입력', null ] } to deeply equal { i: [ '이름', null ] }` |
+| M3b 별칭을 안 봄(늘 차례) | 같은 파일 | 같은 둘 | 5 · 2 | 두 테마 판(«근무 시작 · 끝» 대신 «근무 1 · 2») |
+| M3c 숨은 형제도 셈 | 같은 파일 | 같은 둘 | 5 · 1 | «상태로 숨은 형제는 안 센다 …» ⟶ `expected { d1: [ '기간 1', 'true' ] } to deeply equal { d1: [ '기간', 'true' ] }` |
+| M3d 필드 이름을 받는 조각도 캐시(열쇠에 이름 없음 · 캐시 길도 이름을 넘김) | 같은 파일 | 같은 둘 | 5 · 1 | «라벨을 고치면 조각의 이름도 바뀐다 …» ⟶ `expected { i: [ '이름', null ] } to deeply equal { i: [ '성명', 'true' ] }` |
+| M3a′ 이름을 안 넘김 — 번들 판(변조를 건 채 `pnpm build` · 복원 뒤 다시 빌드) | `packages/renderer/src/render.tsx` | `apps/web/build-test/theme-prop-marks.test.ts` | 3 · 1 | «system-admin — 필드는 이름 붙은 묶음 · 조각의 오류 · 읽기 전용은 접근성 트리에 선다» ⟶ `expected { groups: [ '접근성 이름 *' ], hits: [] } to deeply equal { groups: [ '접근성 이름 *' ], …(1) }` |
+| M3e 빈 라벨도 싣음 | 같은 파일 | 같은 둘 | 5 · 1 | «빈 라벨이면 조각은 제 이름 …» ⟶ `expected { a: [ '', null ], …(1) } to deeply equal { a: [ '안내', null ], …(1) }` |
+
+- **함께만 죽는 것** — 바꾼 «setProp — 옮긴 prop 은 그 prop 을 가진 조각마다 하나씩 …» 은 M1 에서 넓힌 표본과 함께 죽는다. 그 축(조각마다 퍼짐)은 넓힌 표본이 소유하고, 이 케이스는 작은 표본에서 차례 · `control` 액션의 경고를 잰다. 두 테마 판(`field-a11y`)은 같은 단언을 테마만 바꿔 싣는다 — 늘 함께 죽는다(축은 «이름은 CSS 와 무관하다»).
+- **바꾼 `theme-prop-marks` «필드는 이름 붙은 묶음 …»** — 내보낸 번들을 열어 빌드한 런타임을 본다. 소스만 바꾼 M3a 에는 살았고(3 · 0 — 변조가 `dist` 에 안 닿음) 변조를 건 채 빌드한 M3a′ 에 값으로 죽었다. 게이트 전 판에서 이 케이스가 빨강이었던 것은 조각 이름이 안내 문구(«접근성 칸»)에서 필드 라벨(«접근성 이름»)로 바뀐 몫이다 — 새 이름으로 찾고 필드의 `required` 까지 단언하게 고쳤다. 축(이름 · 필수)은 `field-a11y` 가 소유하고 이 케이스는 내보낸 번들에서 그 이름에 상태 속성이 함께 실리는지를 잰다.
+- **첫 M3d 는 재려던 값이 아니었다** — 우회만 걷자 캐시 길이 `field` 를 안 넘겨 이름이 통째로 빠졌다(«입력» — M3a 와 같은 값). 캐시 길도 이름을 넘기는 꼴로 다시 짜 «옛 이름 «이름» 이 캐시에서 나옴» 으로 죽는 것을 보았다(표의 M3d).
+- 고치기 전 빨강 — 1: 넓힌 표본 1 496 ≠ 1 906(10 · 1). 2: shots 5 · 1(위 M2 와 같은 값). 3: `field-a11y` 2 · 2(조각 이름이 안내 문구 · 종류 이름 · 라디오 묶음 «» · 필수 false — 「3」 표의 «고치기 전»).
+
+### 3″. 스타터 템플릿 — `import type` 을 못 옮긴다
+
+게이트 전 `test:build:serial` 에서 `packages/theme-kit/build-test/template.test.ts` 가 파일째 죽었다 — `input.tsx: 옮기지 못한 상대 import 가 남았습니다`(9 케이스 건너뜀). 3 에서 기본 뷰에 `import type { ViewField } from '../types'` 를 더했는데 `packTemplate` 의 `templateView` 는 `import { … } from '../…'` 만 `@wirebound/theme-sdk` 한 줄로 옮긴다. 기본 뷰의 `pieceAria` 가 그 모양(`{ name: string; required: boolean } | undefined`)을 그 자리에 적게 고쳤다(다른 기본 뷰도 타입을 import 하지 않는다 — 주석에 까닭을 적었다). 이 편집은 `test:browser` 가 돌던 중이었다 — 타입 자리만 바뀌어 esbuild 가 내는 JS 가 같다.
+
+## 남은 것
+
+이 트랙에서 안 고친 것:
+
+1. **기본테마 `Select` `short`(6em = 84px)에 기본 안내 «== 선택 ==»(76px)가 안 든다** — 글 칸 약 41px 이라 두 줄로 꺾인다. 기본 크기(`medium`)는 들고 갤러리에 `short` 셀렉트 표본이 없어 `shots` 는 초록이다. «짧은 칸» 은 고른 항목이 짧은 꼴(행 수 «10 · 20 · 50»)에 쓰여 고르면 안 꺾인다. 고치려면 `short` 셀렉트의 폭을 안내에 맞추거나 갤러리에 그 표본을 더해 `shots` 가 재게 한다.
+2. **`wb-theme shots` 의 «꺾임» 은 한 줄 입력 조각 넷(`ONE_LINE_PIECES`)만 센다** — 단추 · 칩 · 사이 글자의 꺾임은 안 센다(글이 길면 꺾이는 것이 그 꼴의 정상일 수 있다).
+3. **SDK 판 1.4.0 그대로** — `ViewProps.field` 는 선택 칸으로 더했다(1.4.0 은 아직 main 에 없다). CI-B 의 1.5.0 이 그 위에 선다.
+4. 브리프의 이월(리뷰 «낮은 무게» 표 전부 — 고치지 않았다):
+   - 종류 바꾸기의 덮임 범위는 «prop 하나» 가 아니라 «그 노드 하나의 `type` · `props` 전부»(남의 노드 · 구조는 안 덮는다 · 창은 남이 손 뗀 뒤 아직 안 닿은 편집뿐).
+   - 선택지 옮기기의 두 사람 판도 같은 꼴(배열째 «뒤의 것이 이긴다»).
+   - `0029` 가 `checkbox` · `radio` 의 오류(`invalid`) · 안내, `dateRange` · `file` 의 안내를 버린다(설계 표대로).
+   - 판 3 의 무시된 `Field.variant` 가 남고 판 4 검증 · lint 가 말이 없다.
+   - `liftNodes` 가 판 4 의 빈 값 칸 필드에 `Input` 을 더한다(마이그레이션 안에서는 안 닿는다).
+   - 들여쓰기 · «안에 넣기» 가 앞 필드의 값 칸으로 들어간다(설계가 받는 꼴).
+   - 기본테마 390 의 세그먼트 7 칸 글 쪼개짐 · 스타터의 빈 `Input` 6px.
+   - `theme-variant` lint 가 선언 안 한 컴포넌트의 변형을 안 센다 — 설계 문장과 갈림.
+
+## 지침
+
+| 무엇이 틀렸나(비었나) | 어느 문서 어느 절 | 넣을 문장 |
+| --- | --- | --- |
+| Chrome `Accessibility.getFullAXTree` 의 노드 차례는 DOM 차례가 아니다 — 첫 판이 필드 밖 입력(문서 끝)을 맨 앞에 받아 차례째 견준 단언이 값과 무관하게 빨강이었다 | `.ruler/wirebound/` 의 「검증 — wirebound」 소스 · 「수를 셀 때는 두 번 세고 표본을 열어 본다 — 덧붙임」 | «**접근성 트리(`Accessibility.getFullAXTree`)의 노드 차례는 DOM 차례가 아니다** — 이름 · 역할을 견주는 케이스는 (역할 · 이름)으로 늘어놓고 견주거나 `backendDOMNodeId` 로 DOM 과 짝짓는다(`packages/theme-kit/build-test/field-a11y.test.ts`).» |
+| 캐시를 지나치는 갈래를 떼는 변조는 그 갈래만 값을 넘기던 경우 «값이 통째로 빠짐» 으로 죽는다 — 재려던 «캐시가 옛 값을 냄» 이 아니다(M3d 첫 판) | 「워커에게 맡길 때 — wirebound」 소스 · 「변조를 `git checkout` 으로 되돌리지 않게 한다 …」 문단 끝 | «**캐시 우회를 떼는 변조는 캐시 길도 같은 입력을 넘기는지 본다** — 우회한 갈래만 값을 넘기면 우회를 뗀 변조가 «캐시가 옛 값을 냄» 이 아니라 «값이 빠짐» 으로 죽는다. 캐시 길에도 그 값을 넘기는 꼴로 짠다(`docs/superpowers/plans/2026-10-24-fx-ci-report.md` M3d).» |

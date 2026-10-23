@@ -3,7 +3,6 @@ import type { CSSProperties, ReactElement } from 'react'
 import { nodeVar, WEIGHT_VAR, zeroRule } from '../css-tools'
 import { view } from '../define'
 import { Root } from '../root'
-import type { ViewField } from '../types'
 import { Zone } from '../zone'
 
 /** 열을 정한 조회 폼이 열 수를 나르는 변수 — `fields` 조각에 인라인으로 선다. */
@@ -91,7 +90,8 @@ function TextPart(props: { value: unknown; placeholder: unknown; secret?: boolea
  * `radiogroup`)에만 — 체크 묶음(`group`)은 이름만 받는다(`required: false` 로 부른다).
  */
 function pieceAria(
-  field: ViewField | undefined,
+  // `ViewProps.field`(`ViewField`)의 모양 — 타입 import 를 두지 않는다(스타터 템플릿이 이 파일을 옮길 때 `import type` 을 못 옮긴다).
+  field: { name: string; required: boolean } | undefined,
   placeholder: unknown,
   fallback: string | undefined,
   required = true,
