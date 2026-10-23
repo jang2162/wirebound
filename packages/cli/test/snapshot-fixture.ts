@@ -31,7 +31,7 @@ const AUTHOR = '60000000-0000-4000-8000-000000000001'
  */
 function 목록문서(): unknown {
   return {
-    version: 1,
+    version: 3,
     root: {
       id: 'root',
       type: 'Page',
@@ -50,7 +50,7 @@ function 목록문서(): unknown {
 }
 
 function 빈문서(): unknown {
-  return { version: 1, root: { id: 'root', type: 'Page', children: [] } }
+  return { version: 3, root: { id: 'root', type: 'Page', children: [] } }
 }
 
 /**
@@ -104,7 +104,7 @@ export function page(
   schema: unknown,
   description: string | null,
 ): SnapshotPayload['pages'][number] {
-  return { id, menuNodeId, title, sortOrder, description, schemaVersion: 1, schema: schema as never, headSeq: 0 }
+  return { id, menuNodeId, title, sortOrder, description, schemaVersion: 3, schema: schema as never, headSeq: 0 }
 }
 
 /**
@@ -123,7 +123,7 @@ export function 경고가_있는_프로젝트(): SnapshotPayload {
       '경고',
       9,
       {
-        version: 1,
+        version: 3,
         root: { id: 'root', type: 'Page', children: [{ id: 'lonely', type: 'List' }] },
       },
       null,
@@ -133,10 +133,9 @@ export function 경고가_있는_프로젝트(): SnapshotPayload {
 }
 
 /**
- * **화면 상태가 있는 페이지 하나**(«상태», 경로 `관리자/회원/상태`)를 더한다 — 상태 «관리자» · «비로그인», **판 1 문서**의 영역 하나(기본
- * 가지 «보기» · 관리자 가지 «승인» — 승인은 제목을 숨기는 상호작용을 든다). 읽기 경계(`migrateDocument`)가 판 2 로 옮겨 «보기»는
- * `except [관리자]` · «승인»은 `only [관리자]` 가 된다 — 그 옮김도 함께 잰다. 비로그인을 가리키는 보임이 없어 lint 가 `view-state-unused`(info)
- * 하나를 낸다 — 결함(`error` · `warning`)은 없다.
+ * **화면 상태가 있는 페이지 하나**(«상태», 경로 `관리자/회원/상태`)를 더한다 — 상태 «관리자» · «비로그인», 보임을 든 단추 둘(«보기»는
+ * `except [관리자]` · «승인»은 `only [관리자]` — 승인은 제목을 숨기는 상호작용을 든다). 비로그인을 가리키는 보임이 없어 lint 가
+ * `view-state-unused`(info) 하나를 낸다 — 결함(`error` · `warning`)은 없다.
  *
  * `packages/mcp` 도 이것을 본다 — `get_page` 의 상태 필드 · `validate` 의 `infos`.
  */
@@ -149,7 +148,7 @@ export function 상태가_있는_프로젝트(): SnapshotPayload {
       '상태',
       10,
       {
-        version: 1,
+        version: 3,
         viewStates: [
           { id: 's_admin', name: '관리자' },
           { id: 's_guest', name: '비로그인' },
@@ -159,30 +158,13 @@ export function 상태가_있는_프로젝트(): SnapshotPayload {
           type: 'Page',
           children: [
             { id: 'st_title', type: 'Text', props: { content: '회원' } },
+            { id: 'st_view', type: 'Button', props: { label: '보기' }, visibility: { mode: 'except', states: ['s_admin'] } },
             {
-              id: 'st_switch',
-              type: 'StateSwitch',
-              children: [
-                {
-                  id: 'st_case_d',
-                  type: 'StateCase',
-                  props: { state: 'default' },
-                  children: [{ id: 'st_view', type: 'Button', props: { label: '보기' } }],
-                },
-                {
-                  id: 'st_case_a',
-                  type: 'StateCase',
-                  props: { state: 's_admin' },
-                  children: [
-                    {
-                      id: 'st_approve',
-                      type: 'Button',
-                      props: { label: '승인' },
-                      interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'st_title', value: false }] }],
-                    },
-                  ],
-                },
-              ],
+              id: 'st_approve',
+              type: 'Button',
+              props: { label: '승인' },
+              visibility: { mode: 'only', states: ['s_admin'] },
+              interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'st_title', value: false }] }],
             },
           ],
         },
@@ -203,7 +185,7 @@ export function 오류가_있는_프로젝트(): SnapshotPayload {
       '오류',
       8,
       {
-        version: 1,
+        version: 3,
         root: { id: 'bad', type: '없는컴포넌트' },
       },
       null,
@@ -246,7 +228,7 @@ export function 테마에_없는_variant_프로젝트(): SnapshotPayload {
       '그리드',
       10,
       {
-        version: 1,
+        version: 3,
         root: { id: 'root', type: 'Page', children: [{ id: 'grid-list', type: 'List', variant: 'grid' }] },
       },
       null,

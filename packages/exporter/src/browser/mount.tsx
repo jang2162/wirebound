@@ -15,7 +15,7 @@ import {
   type InteractionOverlay,
   type NodeRenderError,
 } from '@wirebound/renderer'
-import type { PageDocument, WbNode } from '@wirebound/schema'
+import { childLists, type PageDocument, type WbNode } from '@wirebound/schema'
 import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { flushSync } from 'react-dom'
@@ -274,14 +274,14 @@ function sameMarkers(a: readonly MarkerBox[], b: readonly MarkerBox[]): boolean 
   )
 }
 
-/** id → 노드. 문서 순서로 먼저 온 것이 이긴다. 노드 아닌 자식은 건너뛴다. */
+/** id → 노드. 문서 순서로 먼저 온 것이 이긴다. 노드 아닌 자식은 건너뛴다. 자식 줄은 몸통 · 구역 전부다(`childLists`). */
 function nodeIndex(root: WbNode): Map<string, WbNode> {
   const found = new Map<string, WbNode>()
   const visit = (node: unknown): void => {
     if (typeof node !== 'object' || node === null) return
     const value = node as WbNode
     if (typeof value.id === 'string' && !found.has(value.id)) found.set(value.id, value)
-    if (Array.isArray(value.children)) for (const child of value.children) visit(child)
+    for (const { list } of childLists(value)) for (const child of list) visit(child)
   }
   visit(root)
   return found

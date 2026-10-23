@@ -30,7 +30,7 @@ function id(): string {
 export function broadFixture(): PageDocument {
   nextId = 0
   return {
-    version: 1,
+    version: 3,
     root: {
       id: id(),
       type: 'Page',
@@ -67,12 +67,16 @@ export function broadFixture(): PageDocument {
               type: 'Card',
               props: { title: '요약', subtitle: '부제' },
               children: [{ id: id(), type: 'KeyValue', props: { columns: 2 } }],
+              zones: { headEnd: [{ id: id(), type: 'Button', props: { label: '수정' } }] },
             },
             {
               id: id(),
               type: 'Tabs',
-              props: { tabs: ['개요', '상세'], active: 1 },
-              children: [{ id: id(), type: 'Tree', props: { selected: true } }],
+              props: { active: 1 },
+              children: [
+                { id: id(), type: 'TabPanel', props: { label: '개요' } },
+                { id: id(), type: 'TabPanel', props: { label: '상세' }, children: [{ id: id(), type: 'Tree', props: { selected: true } }] },
+              ],
             },
           ],
         },
@@ -80,6 +84,12 @@ export function broadFixture(): PageDocument {
           id: id(),
           type: 'SearchForm',
           children: [{ id: id(), type: 'Field', props: { control: 'select', required: true, label: '등급' } }],
+          zones: {
+            actions: [
+              { id: id(), type: 'Button', props: { label: '초기화' } },
+              { id: id(), type: 'Button', props: { label: '검색' } },
+            ],
+          },
         },
         {
           id: id(),
@@ -92,8 +102,15 @@ export function broadFixture(): PageDocument {
               props: { control: 'checkbox', disabled: true, invalid: true, label: '동의' },
             },
           ],
+          zones: { actions: [{ id: id(), type: 'Button', props: { label: '저장' } }] },
         },
-        { id: id(), type: 'List', variant: 'compact', props: { items: 3, selected: true } },
+        {
+          id: id(),
+          type: 'List',
+          variant: 'compact',
+          props: { items: 3, selected: true },
+          zones: { headStart: [{ id: id(), type: 'Text', props: { content: '총 3건' } }] },
+        },
       ],
     },
   }
@@ -109,7 +126,7 @@ export function broadFixture(): PageDocument {
 export function slotFixture(): PageDocument {
   nextId = 900
   return {
-    version: 1,
+    version: 3,
     root: { id: id(), type: 'Page', children: [{ id: id(), type: 'Slot' }] },
   }
 }
@@ -121,7 +138,7 @@ export function slotFixture(): PageDocument {
 export function stateFixture(): PageDocument {
   nextId = 3000
   return {
-    version: 2,
+    version: 3,
     viewStates: [{ id: 's_admin', name: '관리자' }],
     root: {
       id: id(),
@@ -136,7 +153,7 @@ export function stateFixture(): PageDocument {
 
 /** 노드 하나를 `Page` 아래에 둔 문서. */
 export function pageWith(node: WbNode): PageDocument {
-  return { version: 1, root: { id: 'n_page', type: 'Page', children: [node] } }
+  return { version: 3, root: { id: 'n_page', type: 'Page', children: [node] } }
 }
 
 /** 글 하나 — 작은 표본. */

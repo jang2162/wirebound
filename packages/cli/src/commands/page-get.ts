@@ -98,7 +98,8 @@ export function renderPageView(view: PageView): string[] {
 
   lines.push('', '구조')
   for (const node of view.nodes) {
-    lines.push(`  ${'  '.repeat(node.depth)}${node.name}`)
+    // 이름 붙은 구역에 선 노드는 구역 화면 이름을 앞에 붙인다(«[머리 오른쪽] 수정 버튼»).
+    lines.push(`  ${'  '.repeat(node.depth)}${node.zoneLabel === undefined ? '' : `[${node.zoneLabel}] `}${node.name}`)
   }
 
   lines.push('', `상호작용 ${view.interactions.length}개`)

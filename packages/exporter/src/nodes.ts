@@ -1,8 +1,8 @@
 /**
  * **견디는 순회 하나.** 문서를 훑어 노드를 문서 순서로 낸다.
  *
- * **`schema`의 `walkNodes`를 쓰지 않는다.** 그쪽은 `children` 배열의 원소를 노드라고 믿고
- * `null`이면 던진다. 번들은 **그리지 못하는 문서도 통과시킨다** — 렌더러가 폴백 상자를
+ * **`schema`의 `walkNodes`를 쓰지 않는다.** 그쪽은 자식 줄의 원소를 노드라고 믿고 그대로
+ * 낸다(소비자가 `null`의 `id`를 읽으면 던진다). 번들은 **그리지 못하는 문서도 통과시킨다** — 렌더러가 폴백 상자를
  * 그리고 `errors`로 이름 붙이는 것이 계약이므로, 여기서 던지면 그린 페이지가 통째로
  * 사라진다.
  *
@@ -12,15 +12,14 @@
  * `walkSafely` · `renderer`의 `nodeIndex` · 이것. 묶으려면 앞의 셋의 소비자 계약을
  * 바꿔야 해서 여기서 묶지 않는다.)
  */
-import type { WbNode } from '@wirebound/schema'
+import { childLists, type WbNode } from '@wirebound/schema'
 
+/** 문서 차례(`childLists` — 몸통 · 구역의 카탈로그 차례)로 노드를 낸다. */
 export function* eachNode(node: unknown): Generator<WbNode> {
   if (node === null || typeof node !== 'object') return
   const shaped = node as WbNode
   yield shaped
-  const children = (node as { children?: unknown }).children
-  if (!Array.isArray(children)) return
-  for (const child of children) yield* eachNode(child)
+  for (const { list } of childLists(node)) for (const child of list) yield* eachNode(child)
 }
 
 /**
@@ -41,20 +40,27 @@ export function* eachNode(node: unknown): Generator<WbNode> {
  * **걷어 낸 것이 타겟 해석을 바꾸지 않는다.** 걷히는 것은 노드가 아닌 값이라 `id`가 없고,
  * `id`가 없으면 어떤 액션의 타겟도 될 수 없다.
  *
- * `children`이 배열이 아니면 **키를 지운다** — 그 값은 자식 목록이 아니고, 남겨 두면
- * 순회가 문자열의 글자를 노드로 훑는다.
+ * 자식 줄(몸통 `children` · 구역 `zones`)이 배열이 아니면 **키를 지운다** — 그 값은 자식 목록이 아니고, 남겨 두면
+ * 순회가 문자열의 글자를 노드로 훑는다. `zones` 가 맵이 아니면 `zones` 키째 지운다.
  */
 export function nodesOnly(node: unknown): WbNode | null {
   if (node === null || typeof node !== 'object') return null
-  const source = node as Record<string, unknown>
+  const source = { ...(node as Record<string, unknown>) }
   const children = source['children']
-  if (!Array.isArray(children)) {
-    if (!('children' in source)) return node as WbNode
-    const { children: _drop, ...rest } = source
-    return rest as unknown as WbNode
+  if ('children' in source) {
+    if (Array.isArray(children)) source['children'] = children.map(nodesOnly).filter((child): child is WbNode => child !== null)
+    else delete source['children']
   }
-  return {
-    ...source,
-    children: children.map(nodesOnly).filter((child): child is WbNode => child !== null),
-  } as unknown as WbNode
+  const zones = source['zones']
+  if ('zones' in source) {
+    if (zones === null || typeof zones !== 'object' || Array.isArray(zones)) delete source['zones']
+    else {
+      const kept: Record<string, WbNode[]> = {}
+      for (const [name, list] of Object.entries(zones)) {
+        if (Array.isArray(list)) kept[name] = list.map(nodesOnly).filter((child): child is WbNode => child !== null)
+      }
+      source['zones'] = kept
+    }
+  }
+  return source as unknown as WbNode
 }

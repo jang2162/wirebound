@@ -10,7 +10,16 @@
  * 소비자가 정한다.
  */
 import type { ThemeManifest } from '@wirebound/theme-sdk'
-import { getComponent, lintDesign, lintIssue, type LintConfig, type LintIssue, type LintProject, type WbNode } from '@wirebound/schema'
+import {
+  childLists,
+  getComponent,
+  lintDesign,
+  lintIssue,
+  type LintConfig,
+  type LintIssue,
+  type LintProject,
+  type WbNode,
+} from '@wirebound/schema'
 
 export interface ProjectLintInput {
   /** 설계서 규칙이 보는 것. */
@@ -37,7 +46,7 @@ export function lintProject(input: ProjectLintInput): LintIssue[] {
  * 값이 통과한다. **`variantFrom` 컴포넌트는 보지 않는다** — 렌더러가 노드의 `variant` 를 버리고 prop 에서 짓는다. manifest 검증이 그
  * 선언을 막지만 여기서도 카탈로그로 거른다 — 검증을 안 지난 manifest(옛 서버 · 손으로 고친 행)에서 없는 결함을 말하지 않게.
  *
- * **문서를 믿지 않는다** — 입력은 `JSON.parse` 의 결과라 봉투가 깨진 페이지가 온다. 노드 · 자식이 모양이 아니면 건너뛴다(그 결함은
+ * **문서를 믿지 않는다** — 입력은 `JSON.parse` 의 결과라 봉투가 깨진 페이지가 온다. 노드 · 자식 줄이 모양이 아니면 건너뛴다(그 결함은
  * `document-invalid` 가 말한다).
  */
 function themeVariantIssues(project: LintProject, manifest: ThemeManifest): LintIssue[] {
@@ -45,7 +54,7 @@ function themeVariantIssues(project: LintProject, manifest: ThemeManifest): Lint
   const issues: LintIssue[] = []
   const visit = (node: unknown, path: string, pageId: string): void => {
     if (typeof node !== 'object' || node === null) return
-    const { id, type, variant, children } = node as Partial<WbNode>
+    const { id, type, variant } = node as Partial<WbNode>
     const declared =
       typeof type === 'string' && Object.hasOwn(components, type) && getComponent(type)?.variantFrom === undefined
         ? components[type]
@@ -60,7 +69,8 @@ function themeVariantIssues(project: LintProject, manifest: ThemeManifest): Lint
         ),
       )
     }
-    if (Array.isArray(children)) children.forEach((child, index) => visit(child, `${path}/children/${index}`, pageId))
+    // 자식 줄은 몸통 · 구역 전부다(`childLists`) — 구역 안 노드의 variant 도 센다.
+    for (const { pointer, list } of childLists(node)) list.forEach((child, index) => visit(child, `${path}${pointer}/${index}`, pageId))
   }
   for (const page of project.pages) {
     const root = (page.document as { root?: unknown } | undefined)?.root
