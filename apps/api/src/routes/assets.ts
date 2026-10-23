@@ -81,9 +81,15 @@ const NAME_MAX = 120
 const NOT_FOUND = '그림을 찾을 수 없습니다'
 const TOKEN_REFUSAL = 'API 토큰으로는 다른 프로젝트 · 개인 몫의 그림을 가져올 수 없습니다. 로그인 후 다시 시도하세요'
 
-/** 바이트를 사람이 읽는 MB(1024²) — 소수 한 자리, 끝의 `.0` 은 뗀다. */
-export function megabytes(bytes: number): string {
-  return `${Number((bytes / (1024 * 1024)).toFixed(1))} MB`
+/**
+ * 바이트를 사람이 읽는 크기(1024 단위) — 소수 한 자리, 끝의 `.0` 은 뗀다. MB 로 쓰면 «0 MB» 가 될 크기(0.05 MB 밑 — 한도를 env 로 줄인 판)는 KB,
+ * 1 KB 밑은 바이트로 쓴다. 웹의 그림 칸이 쓴 용량을 쓰는 꼴(`panels/controls/image-control.tsx` 의 `sizeLabel`)과 단위 이름이 같다.
+ */
+export function byteSize(bytes: number): string {
+  const one = (value: number) => Number(value.toFixed(1))
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 0.05 * 1024 * 1024) return `${one(bytes / 1024)} KB`
+  return `${one(bytes / (1024 * 1024))} MB`
 }
 
 /** `X-Asset-Name` — `encodeURIComponent` 한 글. 못 풀거나 비면 `image.<ext>`. 제어 글자를 걷고 상한에서 자른다. */
@@ -144,7 +150,7 @@ export function assetRoutes(limits: AssetLimits) {
       bytesOnly.removeAllContentTypeParsers()
       bytesOnly.addContentTypeParser('*', { parseAs: 'buffer', bodyLimit: limits.fileBytes }, (_request, body, done) => done(null, body))
       const tooLargeMessage = (length: number | null) =>
-        `그림은 ${megabytes(limits.fileBytes)} 까지 올릴 수 있습니다${length === null ? '' : `(이 파일 ${megabytes(length)})`}`
+        `그림은 ${byteSize(limits.fileBytes)} 까지 올릴 수 있습니다${length === null ? '' : `(이 파일 ${byteSize(length)})`}`
       bytesOnly.post(
         '/:projectId/assets',
         { bodyLimit: limits.fileBytes, config: { tooLarge: tooLargeMessage }, preHandler: projectGuard('editor') },
@@ -179,7 +185,7 @@ export function assetRoutes(limits: AssetLimits) {
               uploadedBy: currentUser.id,
               limit: limits.projectBytes,
             })
-            if (added === 'quota') throw assetQuota(`이 프로젝트의 그림 공간 ${megabytes(limits.projectBytes)} 가 찼습니다`)
+            if (added === 'quota') throw assetQuota(`이 프로젝트의 그림 공간 ${byteSize(limits.projectBytes)} 가 찼습니다`)
             await recheckProjectRole(trx, request)
             const record = await findProjectAsset(trx, projectId, sha256)
             if (record === null) throw new Error('넣은 그림을 다시 읽지 못했습니다')

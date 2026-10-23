@@ -283,11 +283,29 @@ describe('한도 — 바로 밑 · 위(한 바이트)', () => {
         expect((await upload(ctx, b.p, pngOfSize(limit, 1), { cookies: b.editor.cookie })).statusCode).toBe(201)
         const over = await upload(ctx, b.p, pngOfSize(limit + 1, 2), { cookies: b.editor.cookie })
         expect(over.statusCode).toBe(413)
-        expect(over.json().error).toEqual({ code: 'too-large', message: '그림은 0 MB 까지 올릴 수 있습니다(이 파일 0 MB)' })
+        expect(over.json().error).toEqual({ code: 'too-large', message: '그림은 2.9 KB 까지 올릴 수 있습니다(이 파일 2.9 KB)' })
         expect((await ownerRows(ctx)).projects).toHaveLength(1)
       },
       withLimits({ fileBytes: limit }),
     )
+  })
+
+  it('한도 문장의 크기 — 0.05 MB 밑은 «0 MB» 가 아니라 KB · 1 KB 밑은 바이트 · 기본 한도는 MB', async () => {
+    const { byteSize } = await import('../src/routes/assets')
+    const sizes = [0, 1000, 1023, 1024, 3001, 52_428, 52_429, 7.2 * 1024 * 1024, 5 * 1024 * 1024, 100 * 1024 * 1024, 200 * 1024 * 1024]
+    expect(sizes.map(byteSize)).toEqual([
+      '0 B',
+      '1000 B',
+      '1023 B',
+      '1 KB',
+      '2.9 KB',
+      '51.2 KB',
+      '0.1 MB',
+      '7.2 MB',
+      '5 MB',
+      '100 MB',
+      '200 MB',
+    ])
   })
 
   it('파일 한도의 문장 — 5 MB 한도 · 7.2 MB 파일(길이 머리로 읽기 전에 끊는다)', async () => {
@@ -316,7 +334,7 @@ describe('한도 — 바로 밑 · 위(한 바이트)', () => {
         // 1000 + 1001 = 2001 — 한 바이트 넘는다.
         const over = await upload(ctx, b.p, d, { cookies: b.editor.cookie })
         expect(over.statusCode).toBe(409)
-        expect(over.json().error).toEqual({ code: 'asset-quota', message: '이 프로젝트의 그림 공간 0 MB 가 찼습니다' })
+        expect(over.json().error).toEqual({ code: 'asset-quota', message: '이 프로젝트의 그림 공간 2 KB 가 찼습니다' })
         // 1000 + 1000 = 2000 — 한도와 같으면 받는다. 이미 가진 그림은 다시 올려도 안 센다.
         expect((await upload(ctx, b.p, c, { cookies: b.editor.cookie })).statusCode).toBe(201)
         expect((await upload(ctx, b.p, a, { cookies: b.editor.cookie })).statusCode).toBe(200)
