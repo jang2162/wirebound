@@ -109,9 +109,19 @@ describe('system-admin manifest', () => {
 })
 
 describe('system-admin CSS', () => {
-  /** variant 없는 노드는 `defaultVariant`(`default`)로 그려진다 — 그 값을 겨냥한 규칙이 있으면 variant 없는 노드의 모습이 바뀐다. */
-  it('[data-wb-variant="default"] 규칙이 없다', () => {
-    expect(rules().filter((rule) => rule.selector.includes('data-wb-variant="default"'))).toEqual([])
+  /**
+   * variant 없는 노드는 `defaultVariant`(`default`)로 그려진다 — 그 값을 겨냥한 규칙이 있으면 variant 없는 노드의 모습이 바뀐다. 예외는 폼 단추 구역의
+   * 기본 단추 둘뿐이다 — 이 테마의 기본 단추가 주색이라 주 단추(`primary`)와 나란히 서면 같은 칠이 되어, 그 자리에서만 보조 꼴로 바꾼다(`theme.css` 의
+   * «폼의 단추 구역»). 그 밖의 자리에 `default` 를 겨냥한 셀렉터는 여전히 죽는다.
+   */
+  it('[data-wb-variant="default"] 규칙은 폼 단추 구역의 기본 단추 둘뿐이다', () => {
+    const FORM_ACTIONS = ['SearchForm', 'EntryForm'].map(
+      (form) => `[data-wb-component="${form}"] > [data-wb-part="actions"] > [data-wb-component="Button"][data-wb-variant="default"]`,
+    )
+    const targeting = rules()
+      .flatMap((rule) => rule.selector.split(',').map((part) => part.trim()))
+      .filter((part) => part.includes('data-wb-variant="default"'))
+    expect(targeting).toEqual(FORM_ACTIONS)
   })
 
   /** 선언한 variant 는 속성 패널에 칸으로 선다 — 규칙이 없으면 골라도 아무것도 안 바뀌는 칸이다. `Button` 의 `primary` 는 바탕 그대로가 뜻이다. */
