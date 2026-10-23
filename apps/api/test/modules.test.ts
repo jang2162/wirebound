@@ -255,7 +255,7 @@ describe('POST /:projectId/modules', () => {
       const codes = [
         (await post(ctx, fx, { name: '빈', nodes: [] })).statusCode,
         (await post(ctx, fx, { name: '스타일', nodes: [{ id: 'a', type: 'List', style: 'red' }] })).statusCode,
-        (await post(ctx, fx, { name: '봉투째', nodes: { version: 3, root: { id: 'a', type: 'Page' } } })).statusCode,
+        (await post(ctx, fx, { name: '봉투째', nodes: { version: 4, root: { id: 'a', type: 'Page' } } })).statusCode,
         (await post(ctx, fx, { name: '옛 꼴', schema: [BUTTON] })).statusCode,
         (await post(ctx, fx, { name: '설명', nodes: [BUTTON], description: '옛 칸' })).statusCode,
         (await post(ctx, fx, { name: '상태', nodes: [BUTTON], viewStates: [] })).statusCode,

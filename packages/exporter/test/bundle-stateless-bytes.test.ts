@@ -12,7 +12,9 @@
  * 지었다 — 그 낱말 말고 바뀐 바이트가 없다(다시 재는 법: 페이지 HTML 의 «페이지 정보» 하나를 «페이지 설명»으로 되돌려 해시하면 그 앞 값이 선다 —
  * `docs/superpowers/plans/2026-10-22-fx-pi-report.md` 의 L3 표). 노드 구역(문서 판 3)을 들이며 다시 지었다 — `assets/views.css` 는 기본 뷰의 구역 규칙,
  * «넓은 표본»(과 그 사본 `index.html`)은 픽스처가 구역 · 탭 패널을 싣게 바뀌었고, «슬롯» · «글» 은 문서 JSON 의 판 번호(1 → 3)만 다르다(다시 재는 법:
- * 두 페이지의 문서를 `version: 1` 로 되돌려 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-10-23-ns2-report.md`).
+ * 두 페이지의 문서를 `version: 1` 로 되돌려 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-10-23-ns2-report.md`). 조합 입력(문서 판 4)을 들이며
+ * 다시 지었다 — `assets/views.css` 는 값 칸 · 입력 조각의 기본 규칙, «넓은 표본» 은 픽스처의 `Field` 가 값 칸에 조각을 싣게 바뀌었고, «슬롯» · «글» 은
+ * 문서 JSON 의 판 번호(3 → 4)만 다르다(`docs/superpowers/plans/2026-10-24-ci-a-report.md`).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -53,20 +55,20 @@ function digest(withTheme: boolean): Record<string, string> {
 /** 상태 없는 페이지의 해시(파일마다 sha256 앞 16자) — 지은 때는 머리말. */
 const BEFORE = {
   plain: {
-    'index.html': '20f054044bcf6906',
-    'pages/넓은-표본.html': '83d26fbb39033c3e',
-    'pages/슬롯.html': '293d417800dcbdb5',
-    'pages/글.html': 'd18da2f849fde324',
+    'index.html': '20fee83818394f4f',
+    'pages/넓은-표본.html': '947c19e503ea22cf',
+    'pages/슬롯.html': '4e8bd0e4f441ced8',
+    'pages/글.html': 'abed474c8d552b49',
     'pages/깨진-문서.html': '9ab11048c5f61199',
-    'assets/views.css': 'bef9cb8070612849',
+    'assets/views.css': 'd509499a78fb7a63',
   },
   themed: {
-    'index.html': '269cedc4ba67c0c1',
-    'pages/넓은-표본.html': '55f67e55cf74b4c0',
-    'pages/슬롯.html': '8adb1fd3f58af05f',
-    'pages/글.html': 'b0035fe41d1fe05f',
+    'index.html': '384e33fd7bd0a4a8',
+    'pages/넓은-표본.html': 'cb5792526d7b0979',
+    'pages/슬롯.html': 'd95293b9a6b0d653',
+    'pages/글.html': 'f6e6876dde5919f0',
     'pages/깨진-문서.html': '0cf1fd266dd8dd82',
-    'assets/views.css': 'bef9cb8070612849',
+    'assets/views.css': 'd509499a78fb7a63',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',

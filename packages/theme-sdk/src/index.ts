@@ -17,5 +17,5 @@ export { NodeContext, ThemeProvider, useToken, useWindow, ViewNodeContext } from
 export { markAttr, MARKED_PROPS, propMarks, STATE_ARIA, stateAria, type MarkKind } from './marks'
 export { Focus, markerAttrs, Root } from './root'
 export { Zone } from './zone'
-export { DEFAULT_VIEWS, defaultViewsCss, SEARCHFORM_COLUMNS_VAR, searchFormFieldsAttrs } from './default-views/index'
+export { DEFAULT_VIEWS, defaultViewsCss, SEARCHFORM_COLUMNS_VAR, searchFormFieldsAttrs, TEXTAREA_ROWS_VAR } from './default-views/index'
 export { NODE_VAR_PREFIX, nodeVar, TREE_INDENT_VAR, WEIGHT_VAR } from './css-tools'

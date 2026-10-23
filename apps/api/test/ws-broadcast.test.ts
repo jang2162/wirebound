@@ -337,7 +337,7 @@ describe('무엇을 알리는가', () => {
         cookies: fx.owner.cookie,
         payload: {
           schema: {
-            version: 3,
+            version: 4,
             root: {
               id: 'n_root',
               type: 'Page',

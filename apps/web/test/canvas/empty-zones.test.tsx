@@ -11,7 +11,7 @@ import type { Placing } from '../../src/edit/structure-drop'
 
 function doc(): PageDocument {
   return {
-    version: 3,
+    version: 4,
     root: {
       id: 'n-root',
       type: 'Page',

@@ -218,8 +218,8 @@ describe('patch_page — 못 찾은 것과 둘 이상은 결과다', () => {
 
   it('둘 이상이면 하나를 고르지 않는다 — 어느 것을 고쳤는지 아무도 모르게 된다', async () => {
     const 겹침 = snapshotPayload()
-    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 3, root: { id: 'r', type: 'Page' } }, null))
-    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 3, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 4, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 4, root: { id: 'r', type: 'Page' } }, null))
 
     const io = harness({ payload: 겹침 })
     const outcome = await callTool(io, 'patch_page', { path: '관리자/목록', baseSeq: 0, ops: OPS })

@@ -45,8 +45,22 @@ export const samplePage: PageDocument = {
         type: 'SearchForm',
         marker: 1,
         children: [
-          { id: 'n_pag000000004', type: 'Field', props: { label: '아이디', control: 'text' } },
-          { id: 'n_pag000000005', type: 'Field', props: { label: '가입일', control: 'dateRange' } },
+          {
+            id: 'n_pag000000004',
+            type: 'Field',
+            props: { label: '아이디' },
+            children: [{ id: 'n_pag000000041', type: 'Input' }],
+          },
+          {
+            id: 'n_pag000000005',
+            type: 'Field',
+            props: { label: '가입일' },
+            children: [
+              { id: 'n_pag000000051', type: 'DateInput' },
+              { id: 'n_pag000000052', type: 'Affix', props: { text: '~' } },
+              { id: 'n_pag000000053', type: 'DateInput' },
+            ],
+          },
         ],
       },
       {

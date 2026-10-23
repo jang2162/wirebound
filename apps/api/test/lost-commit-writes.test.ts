@@ -48,7 +48,7 @@ async function fixture(ctx: ProxiedRealApi) {
     cookies: owner.cookie,
     payload: {
       schema: {
-        version: 3,
+        version: 4,
         root: {
           id: 'n_root',
           type: 'Page',
@@ -104,7 +104,7 @@ describe('COMMIT 답을 잃은 쓰기', () => {
         method: 'PUT',
         url: `${fx.pageUrl}/schema`,
         cookies: fx.owner.cookie,
-        payload: { schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_c', type: 'Text', props: {} }] } } },
+        payload: { schema: { version: 4, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_c', type: 'Text', props: {} }] } } },
       })
       expect(ctx.proxy.fired).toBe(true)
       expect(res.statusCode, res.body).toBe(200)
@@ -221,7 +221,7 @@ describe('COMMIT 답을 잃은 쓰기', () => {
         method: 'PUT',
         url: `${fx.pageUrl}/schema`,
         cookies: fx.owner.cookie,
-        payload: { schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_c', type: 'Text', props: {} }] } } },
+        payload: { schema: { version: 4, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_c', type: 'Text', props: {} }] } } },
       })
       const deadline = Date.now() + 5_000
       while ((await headSeq(fx.pageId)) === before) {

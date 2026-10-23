@@ -32,7 +32,7 @@ const GUEST = { id: 's_guest', name: '비로그인' }
 /** 상태 둘 · 기본 «보기»(관리자에서 숨김) · 관리자 «승인». */
 function statefulDoc(): PageDocument {
   return {
-    version: 3,
+    version: 4,
     // 사본이다 — 케이스가 목록을 비틀어도 다음 케이스의 문서에 새지 않는다.
     viewStates: [{ ...ADMIN }, { ...GUEST }],
     root: {
@@ -128,7 +128,7 @@ describe('PUT …/schema — 통째 교체가 상태 목록을 싣는다', () =>
       const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
       const stateful = (await read(ctx, fx)).schema
 
-      const plain = { version: 3, root: { id: 'n_root', type: 'Page', children: [] } }
+      const plain = { version: 4, root: { id: 'n_root', type: 'Page', children: [] } }
       const res = await put(ctx, fx, plain)
       expect(res.statusCode, res.body).toBe(200)
       expect((await read(ctx, fx)).schema).toEqual(plain)
@@ -337,14 +337,14 @@ describe('스냅샷 복원이 상태 목록을 되돌린다', () => {
         .where('id', '=', snapshotId)
         .execute()
 
-      expect((await put(ctx, fx, { version: 3, root: { id: 'n_root', type: 'Page', children: [] } })).statusCode).toBe(200)
+      expect((await put(ctx, fx, { version: 4, root: { id: 'n_root', type: 'Page', children: [] } })).statusCode).toBe(200)
       const res = await ctx.app.inject({
         method: 'POST',
         url: `/api/projects/${fx.project.id}/snapshots/${snapshotId}/restore`,
         cookies: fx.owner.cookie,
       })
       expect(res.statusCode, res.body).toBe(422)
-      expect((await read(ctx, fx)).schema).toEqual({ version: 3, root: { id: 'n_root', type: 'Page', children: [] } })
+      expect((await read(ctx, fx)).schema).toEqual({ version: 4, root: { id: 'n_root', type: 'Page', children: [] } })
     })
   }, 30_000)
 })

@@ -414,7 +414,7 @@ describe('nodeSpot', () => {
 
   it('구역 안 노드는 그 구역 · 그 구역 안의 자리 · 그 구역의 형제 수를 낸다 — 몸통과 섞어 세지 않는다', () => {
     const document: PageDocument = {
-      version: 3,
+      version: 4,
       root: {
         id: 'n_root',
         type: 'Page',

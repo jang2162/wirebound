@@ -182,7 +182,7 @@ function boardOf(seed: number): Board | null {
     }
     return made
   }
-  const doc = { version: 3, root: node(3) }
+  const doc = { version: 4, root: node(3) }
   const ids = [...walkNodes(doc.root)].map((visit) => visit.node.id)
   if (ids.length < 2) return null
   const lockIds = [pick(ids.slice(1))]

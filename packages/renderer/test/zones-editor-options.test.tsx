@@ -22,7 +22,7 @@ function draw(nodes: WbNode[], options: Parameters<typeof renderDocument>[1] = {
   return container
 }
 
-const page = (nodes: WbNode[]): PageDocument => ({ version: 3, root: { id: 'page', type: 'Page', children: nodes } })
+const page = (nodes: WbNode[]): PageDocument => ({ version: 4, root: { id: 'page', type: 'Page', children: nodes } })
 const button = (id: string): WbNode => ({ id, type: 'Button', props: { label: id } })
 const slot = (nodeId: string, zone: string) => createElement('span', { 'data-slot': `${nodeId}:${zone}` })
 

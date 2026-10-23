@@ -14,7 +14,7 @@ afterEach(resetRealData)
 /** 글 노드 7000 개 — 한 장이 약 500KB 다. 열두 장이면 워커가 도는 동안 끊을 틈이 넉넉하다. */
 function bigDocument(prefix: string): PageDocument {
   return {
-    version: 3,
+    version: 4,
     root: {
       id: `${prefix}_root`,
       type: 'Page',

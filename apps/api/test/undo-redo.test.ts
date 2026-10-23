@@ -252,7 +252,7 @@ describe('undo/redo 왕복', () => {
         cookies: fx.owner.cookie,
         payload: {
           schema: {
-            version: 3,
+            version: 4,
             root: { id: 'n_put_root', type: 'Page', children: [NODE_A] },
           },
         },

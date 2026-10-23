@@ -178,7 +178,8 @@ const FLEX_ROOM: WeightRoom = { kind: 'flex' }
  * 안 바뀌는 부모가 생긴다.
  */
 export function weightRoom(type: string, props: WbNode['props']): WeightRoom | undefined {
-  if (type === 'Flex') return FLEX_ROOM
+  // `Field` 의 값 구역은 `Flex` 처럼 몫을 읽는다 — 몫을 준 조각이 남는 폭을 나눠 갖는다(`[입력 몫 1][중복확인]`).
+  if (type === 'Flex' || type === 'Field') return FLEX_ROOM
   if (type !== 'Grid' && type !== 'SearchForm') return undefined
   // 열 수는 카탈로그가 정한 모양 · 기본값으로 읽는다 — 못 읽으면(검증 실패) 이 노드는 폴백이라 자식의 몫이 서지 않는다.
   const parsed = getComponent(type)?.props.safeParse(props ?? {})

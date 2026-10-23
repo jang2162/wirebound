@@ -9,7 +9,7 @@ export default defineManifest({
   name: '내 테마',
   description: '스타터 템플릿에서 시작한 테마',
   version: '0.1.0',
-  sdk: '^1.3.0',
+  sdk: '^1.4.0',
   tokens: {
     groups: [
       { id: 'color', label: '색' },
