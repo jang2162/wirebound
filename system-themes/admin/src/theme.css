@@ -503,10 +503,16 @@
 [data-wb-component="Input"][data-wb-kind="number"] {
   justify-content: flex-end;
 }
+/* 날짜 · 시간은 글자 수가 정해진 고정 폭이다 — 여백 · 표지 · 틈을 뺀 글 칸이 제 기본 안내(«YYYY-MM-DD» 7.6em · «00:00» 2.6em)보다 넓다. */
 [data-wb-component="DateInput"],
 [data-wb-component="TimeInput"] {
-  width: 9.5em;
   justify-content: space-between;
+}
+[data-wb-component="DateInput"] {
+  width: min(12em, 100%);
+}
+[data-wb-component="TimeInput"] {
+  width: min(9.5em, 100%);
 }
 [data-wb-component="DateInput"] > [data-wb-part="glyph"],
 [data-wb-component="TimeInput"] > [data-wb-part="glyph"] {

@@ -49,6 +49,7 @@ interface Report {
     consoleErrors: string[]
     wbErrors: { item: string | null; message: string }[]
     overflow: { item: string | null; element: string; left: number; right: number }[]
+    wrapped: { item: string | null; element: string; lines: number }[]
     pageScrollWidth: number
     pageClientWidth: number
     compatMode: string
@@ -102,9 +103,30 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
       expect(w.consoleErrors).toEqual([])
       expect(w.wbErrors).toEqual([])
       expect(w.compatMode).toBe('CSS1Compat')
+      // 한 줄 입력 조각의 글이 칸 안에서 안 꺾인다 — 날짜 · 시간의 고정 폭이 제 기본 안내(«YYYY-MM-DD» · «00:00»)보다 넓다.
+      expect(w.wrapped, `${w.width}px ${JSON.stringify(w.wrapped)}`).toEqual([])
     }
-    // 종료 코드는 넘침까지 센다 — 넘침이 없으면 0 이다.
-    expect(status).toBe(report.widths.every((w) => w.overflow.length === 0) ? 0 : 1)
+    // 종료 코드는 넘침 · 꺾임까지 센다 — 둘 다 없으면 0 이다.
+    expect(status).toBe(report.widths.every((w) => w.overflow.length === 0 && w.wrapped.length === 0) ? 0 : 1)
+  })
+
+  /** 꺾임을 재는 자가 0 만 내지 않는가 — 날짜 칸을 안내보다 좁게 둔 테마에서 그 표본이 꺾임으로 적힌다(«YYYY-MM-DD» 는 하이픈 뒤에서 꺾인다). */
+  it('한 줄 입력 조각의 글이 칸 안에서 꺾이면 report.json 에 적고 1 로 끝난다 — 글자 노드의 줄 수로 잰다', () => {
+    const root = mkdtempSync(join(TMP, 'shots-wrap-'))
+    cpSync(FIXTURE, root, { recursive: true })
+    appendFileSync(join(root, 'src/theme.css'), '\nbody [data-wb-component="DateInput"] { width: 3em; }\n')
+    const dir = join(out, 'wrap')
+    const { status, out: printed } = shots(root, ['--out', dir, '--widths', '390', '--browser', browser.path!])
+    expect(status, printed).toBe(1)
+    const [w] = (JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as Report).widths
+    expect(w!.overflow, printed).toEqual([])
+    expect(w!.wrapped.length, printed).toBeGreaterThan(0)
+    expect(w!.wrapped.every((entry) => entry.lines >= 2)).toBe(true)
+    expect(
+      w!.wrapped.some((entry) => entry.item === 'DateInput//date' && entry.element.includes('"YYYY-MM-DD"')),
+      printed,
+    ).toBe(true)
+    expect(printed).toContain('꺾임 DateInput//date')
   })
 
   it('넘치는 칸 · 던지는 뷰를 report.json 에 적고 1 로 끝난다', () => {

@@ -14,6 +14,18 @@ export interface ShotOverflow {
   right: number
 }
 
+export interface ShotWrapped {
+  /** 꺾인 글이 든 갤러리 칸(`type/variant/표본 id`). 칸 밖이면 `null`. */
+  item: string | null
+  /** 조각과 글 — `div[data-wb-component=DateInput] "YYYY-MM-DD"`. */
+  element: string
+  /** 글자 노드의 줄 수(2 이상). */
+  lines: number
+}
+
+/** 값을 한 줄로 그리는 입력 조각 — 그 글이 꺾이면 `wrapped` 다. 여러 줄 입력(`TextArea`)은 뺀다. */
+export const ONE_LINE_PIECES: readonly string[] = ['Input', 'Select', 'DateInput', 'TimeInput']
+
 export interface ShotWidthReport {
   width: number
   /**
@@ -32,6 +44,11 @@ export interface ShotWidthReport {
    * 글자만 넘치고, `overflow: hidden` 조상은 그 글자를 잘라 숨겨 요소 상자로는 안 보인다.
    */
   overflow: ShotOverflow[]
+  /**
+   * 한 줄 입력 조각(`ONE_LINE_PIECES`)의 글이 칸 안에서 꺾인 자리 — 글자 노드 하나의 `Range.getClientRects()` 가 서로 다른 `top` 을 둘 이상
+   * 낸다. 칸을 안 넘으니 `overflow` 에는 안 든다 — 고정 폭이 제 기본 안내(«YYYY-MM-DD»)보다 좁으면 그 안내가 두 줄로 선다.
+   */
+  wrapped: ShotWrapped[]
   pageScrollWidth: number
   pageClientWidth: number
   /**
@@ -113,7 +130,7 @@ async function galleryReady(page: Page): Promise<void> {
 }
 
 /** 페이지 안에서 돈다 — 폴백 · 넘침을 잰다. 인자로 넘기는 함수라 바깥 이름을 쓰지 않는다. */
-function measure(): Omit<ShotWidthReport, 'width' | 'pngs' | 'pageHeight' | 'consoleErrors'> {
+function measure(onePieces: readonly string[]): Omit<ShotWidthReport, 'width' | 'pngs' | 'pageHeight' | 'consoleErrors'> {
   const itemOf = (el: Element) => el.closest('[data-wb-gallery-item]')?.getAttribute('data-wb-gallery-item') ?? null
   const describe = (el: Element) => {
     const classes = typeof el.className === 'string' && el.className.trim() !== '' ? `.${el.className.trim().split(/\s+/).join('.')}` : ''
@@ -178,12 +195,27 @@ function measure(): Omit<ShotWidthReport, 'width' | 'pngs' | 'pageHeight' | 'con
       right: Math.round(right),
     })
   }
+  // 한 줄 입력 조각의 글 — 칸 안에서 꺾였는가. 줄은 글자 노드 하나의 사각 `top` 으로 센다(요소의 사각은 블록 상자 하나다).
+  const wrapped: ShotWrapped[] = []
+  for (const piece of document.querySelectorAll('[data-wb-component]')) {
+    if (!onePieces.includes(piece.getAttribute('data-wb-component') ?? '')) continue
+    const texts = document.createTreeWalker(piece, NodeFilter.SHOW_TEXT)
+    for (let text = texts.nextNode(); text !== null; text = texts.nextNode()) {
+      const content = (text.textContent ?? '').trim()
+      if (content === '') continue
+      const range = document.createRange()
+      range.selectNodeContents(text)
+      const tops = new Set([...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0).map((r) => Math.round(r.top)))
+      if (tops.size > 1) wrapped.push({ item: itemOf(piece), element: `${describe(piece)} "${content.slice(0, 24)}"`, lines: tops.size })
+    }
+  }
   return {
     wbErrors: [...document.querySelectorAll('[data-wb-error]')].map((el) => ({
       item: itemOf(el),
       message: el.getAttribute('data-wb-error') ?? '',
     })),
     overflow,
+    wrapped,
     pageScrollWidth: document.documentElement.scrollWidth,
     pageClientWidth: vw,
     compatMode: document.compatMode,
@@ -232,7 +264,7 @@ export async function takeShots(opts: {
       try {
         await page.goto(frameUrl)
         await galleryReady(page)
-        const measured = await page.evaluate(measure)
+        const measured = await page.evaluate(measure, ONE_LINE_PIECES)
         const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight)
         const count = Math.max(1, Math.ceil(pageHeight / SHOT_SEGMENT_PX))
         const pngs: string[] = []
@@ -264,6 +296,7 @@ export function shotsProblems(report: ShotsReport): string[] {
     for (const line of w.consoleErrors) lines.push(`✗ ${w.width}px 콘솔: ${line}`)
     for (const e of w.wbErrors) lines.push(`✗ ${w.width}px 폴백 ${e.item ?? '(칸 밖)'}: ${e.message}`)
     for (const o of w.overflow) lines.push(`✗ ${w.width}px 넘침 ${o.item ?? '(칸 밖)'}: ${o.element} (${o.left}–${o.right}px)`)
+    for (const o of w.wrapped) lines.push(`✗ ${w.width}px 꺾임 ${o.item ?? '(칸 밖)'}: ${o.element} (${o.lines}줄)`)
   }
   return lines
 }
