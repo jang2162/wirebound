@@ -1106,6 +1106,30 @@ export async function canvasText(page: Page): Promise<string> {
   return frame.evaluate(() => document.body.innerText)
 }
 
+/**
+ * **끌기를 시작한 뒤 캔버스 배치가 설 때까지 기다린다** — 끄는 동안만 서는 빈 구역 칸(`src/canvas/empty-zones.tsx`)이 끌기가 서는 순간 노드를
+ * 민다. 끌기 **전**에 잰 상자로 겨누면 칸이 민 만큼 빗나간다(빈 카드가 한 줄 남짓 자란다). 두 프레임씩 기다려 칸 수가 두 번 같으면 선 것으로
+ * 본다 — 칸이 없는 문서는 곧바로 0 이다. 선 칸 수를 돌려준다.
+ */
+export async function dragLayoutSettled(page: Page): Promise<number> {
+  const frame = await (await page.$('iframe.wb-shell-canvas-iframe'))?.contentFrame()
+  if (frame === null || frame === undefined) return 0
+  const read = () =>
+    frame.evaluate(
+      () =>
+        new Promise<number>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve(document.querySelectorAll('[data-zone-slot]').length))),
+        ),
+    )
+  let last = await read()
+  for (let tries = 0; tries < 20; tries += 1) {
+    const now = await read()
+    if (now === last) return now
+    last = now
+  }
+  return last
+}
+
 /** 지금 보인 놓을 자리 하나(`shownDrops`). */
 export interface ShownDrop {
   /** 트리의 선 · 강조(`.wb-shell-drop-indicator`)인가, 캔버스의 배치 미리보기인가. */

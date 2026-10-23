@@ -28,7 +28,16 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { GALLERY_SAMPLES } from '@wirebound/theme-gallery'
 import { placeableGroups } from '../src/palette/placeable'
 import { CANVAS_MIN_HEIGHT } from '../src/shell/sidebar-layout'
-import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import {
+  canvasFrame,
+  dragLayoutSettled,
+  editorStackPrerequisite,
+  poll,
+  shownDrops,
+  startEditorStack,
+  type EditorStack,
+  type Session,
+} from './editor-stack'
 import { controlsTheme, makeAdmin, PRIMARY_MARK_COLOR, primaryMarkTheme, putTheme, uploadRaw } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
@@ -61,7 +70,7 @@ const BASIC: SeedNode[] = [
   { id: 'n_last', type: 'Text', props: { content: '끝' } },
 ]
 const ORIGINAL = { n_root: ['n_text', { n_card: ['n_intx'] }, 'n_empt', 'n_last'] }
-const KNOWN = new Set(['n_text', 'n_card', 'n_intx', 'n_empt', 'n_last', 'n_text2', 'n_empt2'])
+const KNOWN = new Set(['n_text', 'n_card', 'n_intx', 'n_empt', 'n_last', 'n_text2', 'n_empt2', 'n_tall'])
 
 const CARD_THUMBS = `(() => {
   const iframe = document.querySelector('iframe.wb-shell-palette-thumbs-iframe')
@@ -235,12 +244,14 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
     return ((await page.locator('[data-wb-palette-notice]').textContent()) ?? '').trim()
   }
 
+  /** 카드를 쥐고 끌기를 세운다 — 끌기 시작에 서는 빈 구역 칸이 캔버스를 민 뒤에 돌아온다(`./editor-stack.ts` 의 `dragLayoutSettled`). 겨눌 상자는 그 뒤에 잰다. */
   async function grabCard(page: Page, type: string): Promise<void> {
     const box = (await page.locator(`[data-wb-palette-card="${type}"]`).boundingBox())!
     const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
     await page.mouse.move(at.x, at.y)
     await page.mouse.down()
     await page.mouse.move(at.x + 3, at.y - 6, { steps: 3 })
+    await dragLayoutSettled(page)
   }
 
   /** 지금 보인 놓을 자리(`./editor-stack.ts` 의 `shownDrops` — 트리의 선 · 캔버스의 배치 미리보기). */
@@ -1081,8 +1092,9 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
       await openPalette(tab.page)
       await only(tab.page, 'Divider')
       await grabCard(tab.page, 'Divider')
-      await tab.page.mouse.move(...(Object.values(await spotIn(tab.page, 'n_empt', 0.5, 0.5)) as [number, number]), { steps: 8 })
-      return { ...tab, armedHint: (await indicators(tab.page)).map((h) => h.placement) }
+      const at = await spotIn(tab.page, 'n_empt', 0.5, 0.5)
+      await tab.page.mouse.move(at.x, at.y, { steps: 8 })
+      return { ...tab, at, armedHint: (await indicators(tab.page)).map((h) => h.placement) }
     }
 
     it('bob 이 그 카드를 고르면 표시가 걷히고 조금 움직였다 놓아도 편집이 없다', async () => {
@@ -1117,9 +1129,9 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
 
     it('bob 이 그 카드를 지우면 표시가 걷히고 조금 움직였다 놓아도 그 밑의 다른 자리로 안 간다', async () => {
       const { P } = await seed('rv-drag-remove', [BASIC])
-      const { page, close, patches, armedHint } = await armed(P[0]!)
+      const { page, close, patches, armedHint, at: here } = await armed(P[0]!)
       try {
-        const here = await spotIn(page, 'n_empt', 0.5, 0.5)
+        // «조금» 은 포인터가 있는 점에서 잰다 — 미리보기가 빈 카드를 키운 채 상자를 다시 재면 그 점은 포인터에서 떨어진다.
         const removed = await bobOps(P[0]!, [{ op: 'remove', path: '/root/children/2' }])
         await canvasFrame(page).locator('[data-wb-id="n_empt"]').waitFor({ state: 'detached' })
         const still = (await indicators(page)).length
@@ -1148,7 +1160,14 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
      * 그 구독을 떼면 빨강이다(표시가 옛 y 에 남는다 · 놓으면 편집 0). 표시를 안 옮기고 걷기만 하는 판은 아래 대조군이 잡는다.
      */
     it('bob 이 위 글을 길게 고쳐 표시한 노드가 밀리면 같은 부모 안의 새 자리로 표시가 따라가고 놓은 자리가 그 자리다', async () => {
-      const { P } = await seed('rv-drag-shift', [BASIC])
+      // 밀린 뒤 포인터 밑이 뿌리의 자식이어야 «같은 부모 안의 새 자리» 를 잰다 — 카드는 끄는 동안 바닥에 빈 구역 칸이 서서 그 밑이 카드 구역이
+      // 된다(다른 부모라 표시가 걷힌다 — `sameDrop`). 그래서 이 판은 구역이 없는 키 큰 글(n_tall)을 n_last 위에 둔다.
+      const tall: SeedNode[] = [
+        { id: 'n_text', type: 'Text', props: { content: '글' } },
+        { id: 'n_tall', type: 'Text', props: { content: '세로로 긴 글 '.repeat(160) } },
+        { id: 'n_last', type: 'Text', props: { content: '끝' } },
+      ]
+      const { P } = await seed('rv-drag-shift', [tall])
       const tab = await openEditor(P[0]!)
       const { page, close } = tab
       try {
@@ -1177,7 +1196,7 @@ describe.skipIf(!전제.ok)('D2 리뷰 — 하단 판 실브라우저', () => {
           status: 200,
           afterShift: ['after'],
         })
-        expect(final).toEqual({ n_root: ['n_text', { n_card: ['n_intx'] }, '+Divider', 'n_empt', 'n_last'] })
+        expect(final).toEqual({ n_root: ['n_text', 'n_tall', '+Divider', 'n_last'] })
       } finally {
         await close()
       }

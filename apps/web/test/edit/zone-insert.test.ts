@@ -125,6 +125,13 @@ describe('구역 끝(`zoneDropTarget`)', () => {
   })
 })
 
+/**
+ * 아래 케이스들의 이유 문장은 `fitRefusal` 이 짓는 그대로다 — 글자는 «받는 타입 밖 · 설 자리 밖 · 설 수 있는 판» 케이스 하나가 갖는다(문장을 바꾸는
+ * 변조는 그 케이스만 죽고, 나머지는 «어느 판에서 그 문장이 서나» 를 잰다).
+ */
+const TABS_ONLY_PANELS = fitRefusal('Tabs', 'body', 'Button')
+const PANEL_ONLY_IN_TABS = fitRefusal('Card', 'footer', 'TabPanel')
+
 describe('못 놓는 까닭의 문장', () => {
   it('받는 타입 밖 · 설 자리 밖 · 설 수 있는 판', () => {
     expect(fitRefusal('Tabs', 'body', 'Button')).toBe('탭에는 탭 패널만 놓을 수 있습니다')
@@ -134,11 +141,11 @@ describe('못 놓는 까닭의 문장', () => {
   })
 
   it('포인터 밑 노드 · 띠의 문장(`dropRefusal`) — 탭 «안» · 패널 곁 · 패널 «안»', () => {
-    expect(dropRefusal(doc(), adding('Button'), 'n-tabs', 'inside')).toBe('탭에는 탭 패널만 놓을 수 있습니다')
-    expect(dropRefusal(doc(), adding('Button'), 'n-tp1', 'after')).toBe('탭에는 탭 패널만 놓을 수 있습니다')
+    expect(dropRefusal(doc(), adding('Button'), 'n-tabs', 'inside')).toBe(TABS_ONLY_PANELS)
+    expect(dropRefusal(doc(), adding('Button'), 'n-tp1', 'after')).toBe(TABS_ONLY_PANELS)
     expect(dropRefusal(doc(), adding('Button'), 'n-tp1', 'inside')).toBeNull()
-    expect(dropRefusal(doc(), moving('n-tp1'), 'n-text', 'after')).toBe('탭 패널은 탭 안에만 놓을 수 있습니다')
-    expect(zoneDropRefusal(doc(), adding('TabPanel'), 'n-card', 'footer')).toBe('탭 패널은 탭 안에만 놓을 수 있습니다')
+    expect(dropRefusal(doc(), moving('n-tp1'), 'n-text', 'after')).toBe(PANEL_ONLY_IN_TABS)
+    expect(zoneDropRefusal(doc(), adding('TabPanel'), 'n-card', 'footer')).toBe(PANEL_ONLY_IN_TABS)
   })
 })
 
@@ -165,12 +172,12 @@ describe('하단 판 넣기 — 고른 구역(`paletteAddTarget` 의 `selectedZo
   })
 
   it('못 넣으면 까닭 — 받는 타입 밖은 이유 문장 · 부모가 사라짐은 «문서에 없다»', () => {
-    expect(add({ selectedZone: { parentId: 'n-tabs', zone: 'body' } })).toEqual({ ok: false, reason: '탭에는 탭 패널만 놓을 수 있습니다' })
+    expect(add({ selectedZone: { parentId: 'n-tabs', zone: 'body' } })).toEqual({ ok: false, reason: TABS_ONLY_PANELS })
     expect(add({ selectedZone: { parentId: 'n-gone', zone: 'footer' } })).toEqual({ ok: false, reason: NOT_IN_DOCUMENT_STATUS })
   })
 
   it('고른 노드의 판도 받는 타입 밖이면 이유 문장이다 — 탭을 고르고 단추 넣기', () => {
-    expect(add({ selectedNodeId: 'n-tabs' })).toEqual({ ok: false, reason: '탭에는 탭 패널만 놓을 수 있습니다' })
+    expect(add({ selectedNodeId: 'n-tabs' })).toEqual({ ok: false, reason: TABS_ONLY_PANELS })
   })
 
   it('고른 노드가 구역 안 잎이면 같은 구역의 그 뒤 — 머리 오른쪽 단추를 고른 판', () => {
@@ -199,7 +206,7 @@ describe('붙여넣기 — 고른 구역(`pasteOps`)', () => {
   })
 
   it('받는 타입 밖이면 이유 문장 · 부모가 없으면 붙일 자리 없음', () => {
-    expect(pasteOps(doc(), { parentId: 'n-tabs', zone: 'body' }, [button])).toEqual({ reason: '탭에는 탭 패널만 놓을 수 있습니다' })
+    expect(pasteOps(doc(), { parentId: 'n-tabs', zone: 'body' }, [button])).toEqual({ reason: TABS_ONLY_PANELS })
     expect('reason' in pasteOps(doc(), { parentId: 'n-gone', zone: 'footer' }, [button])).toBe(true)
   })
 })

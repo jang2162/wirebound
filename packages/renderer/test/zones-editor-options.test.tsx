@@ -27,11 +27,12 @@ const button = (id: string): WbNode => ({ id, type: 'Button', props: { label: id
 const slot = (nodeId: string, zone: string) => createElement('span', { 'data-slot': `${nodeId}:${zone}` })
 
 describe('빈 구역 칸(`emptyZones`)', () => {
-  const card: WbNode = { id: 'c', type: 'Card', props: { title: '회원' }, zones: { headEnd: [button('e')] } }
+  // 케이스마다 새 노드 객체다 — 렌더러의 노드 캐시는 객체로 열쇠를 잡아, 나눠 쓰면 앞 케이스의 그림이 뒤 케이스에 나온다. 캐시 열쇠는 «없으면 …» 케이스가 잰다.
+  const card = (): WbNode => ({ id: 'c', type: 'Card', props: { title: '회원' }, zones: { headEnd: [button('e')] } })
 
   it('이름 붙은 구역마다 물어 받은 것을 그 구역 끝에 둔다 — 빈 구역도 그 자리가 선다 · 몸통은 안 묻는다', () => {
     const asked: string[] = []
-    const el = draw([card], {
+    const el = draw([card()], {
       emptyZones: {
         key: 'k',
         render: (nodeId, zone) => {
@@ -49,7 +50,7 @@ describe('빈 구역 칸(`emptyZones`)', () => {
   })
 
   it('든 구역에도 덧붙으면 내용 뒤에 선다', () => {
-    const el = draw([card], { emptyZones: { key: 'k2', render: (nodeId, zone) => (zone === 'headEnd' ? slot(nodeId, zone) : null) } })
+    const el = draw([card()], { emptyZones: { key: 'k2', render: (nodeId, zone) => (zone === 'headEnd' ? slot(nodeId, zone) : null) } })
     const zone = el.querySelector('[data-wb-zone="headEnd"]')!
     expect(Array.from(zone.children).map((child) => child.getAttribute('data-wb-id') ?? child.getAttribute('data-slot'))).toEqual([
       'e',
@@ -58,7 +59,7 @@ describe('빈 구역 칸(`emptyZones`)', () => {
   })
 
   it('없으면 빈 구역은 감싸는 요소째 없다 — 같은 노드 객체를 다른 열쇠로 그리면 캐시가 옛 그림을 안 낸다', () => {
-    const doc = page([card])
+    const doc = page([card()])
     const plain = draw([], {}, doc)
     expect(plain.querySelector('[data-wb-zone="footer"]')).toBeNull()
     cleanup()

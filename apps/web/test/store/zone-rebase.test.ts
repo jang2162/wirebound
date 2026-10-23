@@ -193,6 +193,8 @@ const created = (ops: readonly PatchOp[]): Set<string> =>
   )
 
 describe('리베이스 — 구역이 든 문서의 무작위 판', () => {
+  // 이 판은 아래 «정해진 판» 넷의 꼴을 다 품어, 그 넷을 죽이는 변조에 함께 죽는다 — 축마다의 잠금은 정해진 판이 갖는다(정해진 판 가운데 그 하나만
+  // 죽이는 변조가 저마다 있다 — 보고 `docs/superpowers/plans/2026-10-23-ze-report.md` 「혼자 죽는 변조」). 이 판은 그 꼴들이 무작위 문서 · 편집에서도 서는지를 센다.
   it('내 편집이 남의 편집 뒤에 같은 뜻으로 얹힌다 — 못 얹는 것은 둘이 같은 구역을 함께 만든 판뿐', () => {
     const count: Record<string, number> = {}
     const bump = (key: string): void => {
