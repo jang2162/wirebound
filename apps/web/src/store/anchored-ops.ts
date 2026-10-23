@@ -145,7 +145,7 @@ export function anchorOps(document: PageDocument, ops: readonly PatchOp[]): Anch
         op.op === 'add' || op.op === 'remove' ? singleZoneKey(op.op === 'add' ? op.value : getByPointer(current, op.path), op.path) : null
       // 맵이 있을 때 낸 키 `add …/zones/<k>` — 맵째 op 과 같은 «구역 하나의 뜻» 으로 맵 경로에 붙잡는다(머리말의 표).
       const keyed = op.op === 'add' ? newZoneKey(current, op.path, op.value) : null
-      if (keyed !== null) {
+      if (keyed !== null && op.op === 'add') {
         const mapPath = formatPointer(parsePointer(op.path).slice(0, -1))
         anchored.push({ op: 'add', at: anchorPath(current, mapPath, false), value: { [keyed]: op.value }, premise: {}, zoneKey: keyed })
       } else if (op.op === 'remove') {

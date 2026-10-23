@@ -120,4 +120,25 @@ describe('펼쳐 보이기(`reveal`)', () => {
     expect(same.querySelector('[data-wb-id="t1"]')).not.toBeNull()
     expect(same.querySelector('[data-wb-id="t2"]')).toBeNull()
   })
+
+  it('구역을 보이면 그 부모 자신도 덮는다 — 접힌 검색폼의 단추 구역(리뷰 RV-ZE L2) · 지금 탭이 아닌 패널 안이면 그 탭도 연다', () => {
+    const doc = page([form])
+    // 노드 id 만이면 그 노드의 조상만 덮는다 — 검색폼 자신을 고르면 접힌 그대로다.
+    const own = draw([], { reveal: ['form'] }, doc)
+    expect([own.querySelector('[data-wb-id="go"]'), own.querySelector('[data-wb-id="f1"]')]).toEqual([null, null])
+    cleanup()
+    const zone = draw([], { reveal: [{ nodeId: 'form', zone: 'actions' }] }, doc)
+    expect(zone.querySelector('[data-wb-id="go"]')).not.toBeNull()
+    expect(form.props).toEqual({ collapsed: true })
+    cleanup()
+    const nested: WbNode = {
+      ...tabs,
+      children: [tabs.children![0]!, { ...tabs.children![1]!, children: [{ ...form, id: 'form2', zones: { actions: [button('go2')] } }] }],
+    }
+    const deep = draw([], { reveal: [{ nodeId: 'form2', zone: 'actions' }] }, page([nested]))
+    expect([deep.querySelector('[data-wb-id="go2"]') !== null, deep.querySelector('[data-wb-id="t1"]')]).toEqual([true, null])
+    cleanup()
+    // 캐시가 펼친 그림을 남기지 않는다.
+    expect(draw([], {}, doc).querySelector('[data-wb-id="go"]')).toBeNull()
+  })
 })

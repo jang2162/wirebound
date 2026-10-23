@@ -93,9 +93,15 @@ export interface RenderOptions {
    * **펼쳐 보일 노드**(설계 spec `2026-10-23-node-slots-design.md` Q3 (가)) — 이 노드들의 조상 가운데 자손을 가리는 타입(`ComponentDef.reveal` —
    * 지금 탭이 아닌 패널을 든 `Tabs` · 접힌 `SearchForm`)을 **이 렌더에서만** 펼친 props 로 그린다. 문서 · 내보내기 · 뷰 모드는 그대로다 — 에디터
    * 캔버스가 고른 노드를 준다. 덮을 것이 없으면(고른 노드가 이미 보인다) 한 글자도 안 바뀐다.
+   *
+   * 노드 id 는 그 노드의 **조상**만 덮는다. `{ nodeId, zone }`(넣을 자리로 고른 구역)은 그 부모 **자신**도 덮는다 — 부모가 제 구역을 가리는
+   * 타입(접힌 `SearchForm` 의 단추 구역)이면 고른 구역이 화면에 없다(리뷰 RV-ZE L2).
    */
-  reveal?: readonly string[]
+  reveal?: readonly RevealTarget[]
 }
+
+/** 펼쳐 보일 것 하나 — 노드 id, 또는 노드의 구역(`RenderOptions.reveal`). */
+export type RevealTarget = string | { readonly nodeId: string; readonly zone: string }
 
 /**
  * `reveal` 을 푼 것 — 덮을 노드의 props 와, 노드 캐시를 지나칠 노드(덮을 노드와 그 조상 — 조상의 캐시된 엘리먼트는 덮기 전 자식을 든다).
@@ -254,28 +260,43 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
  * 견준다. 값이 바뀌는 조상만 덮고, 그 조상과 그 위 사슬은 캐시를 지나친다. 덮을 것이 없으면 옵션 그대로다(캐시도 그대로 쓴다).
  */
 function withReveal(root: WbNode, options: RenderOptions): Options {
-  const ids = options.reveal
-  if (ids === undefined || ids.length === 0) return options
-  const wanted = new Set(ids)
+  const targets = options.reveal
+  if (targets === undefined || targets.length === 0) return options
+  const wanted = new Set(targets.filter((target) => typeof target === 'string'))
+  // 구역 — 부모 id → 구역 이름들. 그 부모 자신을 «그 구역 끝의 자식이 보인다» 로 덮는다.
+  const zones = new Map<string, string[]>()
+  for (const target of targets) {
+    if (typeof target !== 'string') zones.set(target.nodeId, [...(zones.get(target.nodeId) ?? []), target.zone])
+  }
   const props = new Map<string, Record<string, unknown>>()
   const uncached = new Set<string>()
   const chain: { id: string; type: string; props: unknown; step: { zone: string; index: number } }[] = []
+  /** 사슬(뿌리 → 보일 것의 부모)의 덮을 조상을 덮는다. */
+  const cover = (): void => {
+    for (let i = chain.length - 1; i >= 0; i -= 1) {
+      const link = chain[i]!
+      const def = getComponent(link.type)
+      if (def?.reveal === undefined) continue
+      const parsed = def.props.safeParse(props.get(link.id) ?? link.props ?? {})
+      if (!parsed.success) continue
+      const now = parsed.data as Record<string, unknown>
+      const next = def.reveal(now, link.step)
+      if (Object.keys(next).every((key) => Object.is(next[key], now[key]))) continue
+      props.set(link.id, next)
+      for (let j = 0; j <= i; j += 1) uncached.add(chain[j]!.id)
+    }
+  }
   const walk = (node: unknown): void => {
     if (node === null || typeof node !== 'object') return
     const raw = node as { id?: unknown; type?: unknown; props?: unknown }
-    if (wanted.has(readString(raw.id))) {
-      for (let i = chain.length - 1; i >= 0; i -= 1) {
-        const link = chain[i]!
-        const def = getComponent(link.type)
-        if (def?.reveal === undefined) continue
-        const parsed = def.props.safeParse(props.get(link.id) ?? link.props ?? {})
-        if (!parsed.success) continue
-        const now = parsed.data as Record<string, unknown>
-        const next = def.reveal(now, link.step)
-        if (Object.keys(next).every((key) => Object.is(next[key], now[key]))) continue
-        props.set(link.id, next)
-        for (let j = 0; j <= i; j += 1) uncached.add(chain[j]!.id)
-      }
+    const id = readString(raw.id)
+    if (wanted.has(id)) cover()
+    for (const zone of zones.get(id) ?? []) {
+      // 그 구역의 끝(넣을 자리)이 보일 자리다 — 부모 자신을 사슬 끝에 얹어 덮는다.
+      const end = childLists(node).find((entry) => entry.zone === zone)?.list.length ?? 0
+      chain.push({ id, type: readString(raw.type), props: raw.props, step: { zone, index: end } })
+      cover()
+      chain.pop()
     }
     for (const entry of childLists(node)) {
       entry.list.forEach((child, index) => {

@@ -38,6 +38,7 @@ import {
   type InteractionEvent,
   type InteractionOverlay,
   type NodeRenderError,
+  type RevealTarget,
 } from '@wirebound/renderer'
 import { describePageTarget, type PageDocument } from '@wirebound/schema'
 import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
@@ -240,11 +241,18 @@ export function Canvas(props: {
   const dragging = useDragging()
   /**
    * **고른 노드를 펼쳐 보인다**(설계 spec Q3 (가)) — 고른 노드 · 고른 구역의 부모가 지금 탭이 아닌 패널 · 접힌 검색폼 안이면 그 화면에서만 펼친 판으로 그린다
-   * (렌더러의 `reveal`). 문서(`active` · `collapsed`)는 안 바뀐다 — 남의 화면 · 내보내기 · 뷰 모드는 그대로다. 편집 모드에서만이다.
+   * (렌더러의 `reveal`). 고른 구역은 그 부모 자신이 그 구역을 가리면(접힌 검색폼의 단추 구역) 부모도 펼친다(리뷰 RV-ZE L2). 문서(`active` ·
+   * `collapsed`)는 안 바뀐다 — 남의 화면 · 내보내기 · 뷰 모드는 그대로다. 편집 모드에서만이다.
    */
   const selectedZone = useEditorStore(store, (s) => s.selectedZone)
-  const revealKey = mode === 'edit' ? [...selectedNodeIds, ...(selectedZone === null ? [] : [selectedZone.parentId])].join('\n') : ''
-  const reveal = useMemo(() => (revealKey === '' ? undefined : revealKey.split('\n')), [revealKey])
+  const revealKey = mode === 'edit' ? selectedNodeIds.join('\n') : ''
+  const zoneParent = mode === 'edit' ? (selectedZone?.parentId ?? null) : null
+  const zoneName = mode === 'edit' ? (selectedZone?.zone ?? null) : null
+  const reveal = useMemo((): RevealTarget[] | undefined => {
+    const targets: RevealTarget[] = revealKey === '' ? [] : revealKey.split('\n')
+    if (zoneParent !== null && zoneName !== null) targets.push({ nodeId: zoneParent, zone: zoneName })
+    return targets.length === 0 ? undefined : targets
+  }, [revealKey, zoneParent, zoneName])
   const emptyZones = useMemo(
     () => (mode === 'edit' && doc !== null && dragging !== null ? emptyZonesFor(doc, dragging) : null),
     [mode, doc, dragging],
@@ -745,8 +753,8 @@ function CanvasDocument(props: {
   bannerHost: HTMLElement | null
   /** 끄는 동안의 빈 구역 칸(`./empty-zones.tsx`). 끌지 않으면 `null` — 렌더러에 안 넘긴다. */
   emptyZones?: EmptyZones | null
-  /** 펼쳐 보일 노드 — 렌더러의 `reveal`. 없으면 안 넘긴다. */
-  reveal?: readonly string[] | undefined
+  /** 펼쳐 보일 노드 · 구역 — 렌더러의 `reveal`. 없으면 안 넘긴다. */
+  reveal?: readonly RevealTarget[] | undefined
 }): ReactElement {
   /**
    * 렌더 중에 모은다. `onNodeError` 안에서 `setState`를 부르면 안 되고(렌더러 주석),
