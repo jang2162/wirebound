@@ -50,3 +50,25 @@ export function useToken(key: string): string | number | undefined {
 export function useWindow(): Window {
   return useContext(ThemeContext)?.window ?? window
 }
+
+/**
+ * 그림 id(sha256) → 그 그림을 읽을 주소. 그리는 자리마다 다르다 — 캔버스는 `/api/projects/:p/assets/:id`(세션 쿠키), 내보낸 번들은 페이지 깊이에 맞춘
+ * 상대 주소(`../assets/images/<id>.<ext>`), 갤러리는 표본 `data:`. 못 읽는 그림이면 `null` 이다. 렌더러가 `RenderOptions.assetUrl` 로 받아 연다.
+ */
+export type AssetResolver = (id: string) => string | null
+
+const AssetContext = createContext<AssetResolver | null>(null)
+
+export function AssetProvider(props: { value: AssetResolver | null; children: ReactNode }): ReactElement {
+  return <AssetContext.Provider value={props.value}>{props.children}</AssetContext.Provider>
+}
+
+/**
+ * 그림 id 의 주소. 빈 id · 주소를 정하는 자리가 없는 렌더(`assetUrl` 없음) · 그 자리가 못 읽는 그림이면 `null` — 뷰는 그때 «그림 없음» 표지를
+ * 그린다. 자리표시자를 제 뷰로 그리는 테마가 쓴다(SDK 1.5.0).
+ */
+export function useAsset(id: string | null | undefined): string | null {
+  const resolve = useContext(AssetContext)
+  if (resolve === null || typeof id !== 'string' || id === '') return null
+  return resolve(id)
+}

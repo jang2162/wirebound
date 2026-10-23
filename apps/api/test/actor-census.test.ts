@@ -845,6 +845,9 @@ describe('`:projectId` 라우트 전부가 나쁜 헤더를 핸들러 앞에서 
     'personal_modules',
     'api_tokens',
     'theme_packages',
+    'asset_blobs',
+    'project_assets',
+    'personal_assets',
   ] as const
 
   async function rowCounts(ctx: TestContext): Promise<Record<string, number>> {

@@ -12,6 +12,8 @@ export type EditorControl =
   | 'pairList'
   /** 소문자 `#rrggbb` 또는 없음 — 견본 · 글 칸 · 지우기(`apps/web/src/panels/controls/color-control.tsx`). */
   | 'color'
+  /** 그림 id(sha256) 또는 없음 — 올리기 · 고르기 · 지우기(`apps/web/src/panels/controls/image-control.tsx`). */
+  | 'image'
 
 export interface EditorField {
   prop: string

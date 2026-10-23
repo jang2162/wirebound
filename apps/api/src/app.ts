@@ -15,6 +15,7 @@ import { healthRoutes } from './routes/health'
 import { memberRoutes } from './routes/members'
 import { moduleRoutes } from './routes/modules'
 import { personalModuleRoutes } from './routes/personal-modules'
+import { assetRoutes, meAssetRoutes } from './routes/assets'
 import { menuRoutes } from './routes/menu'
 import { pageRoutes } from './routes/pages'
 import { projectThemeRoutes } from './routes/project-theme'
@@ -267,6 +268,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 밖에 산다(`/api/me/modules` — `routes/personal-modules.ts`). 세션으로만 부른다.
   await app.register(moduleRoutes(), { prefix: '/api/projects' })
   await app.register(personalModuleRoutes(), { prefix: '/api/me' })
+  // 그림 — 프로젝트의 그림(올리기 · 목록 · 읽기 · 가져오기)과 사람의 몫(`routes/assets.ts` 머리말).
+  await app.register(assetRoutes(config.assetLimits), { prefix: '/api/projects' })
+  await app.register(meAssetRoutes(config.assetLimits), { prefix: '/api/me' })
   // 내보내기도 프로젝트 아래에 산다(`/:projectId/export`). **URL에 파일 이름이 없다** —
   // 파일 이름은 안정한 열쇠가 아니라 페이지를 하나 더하면 번호가 밀린다.
   await app.register(exportRoutes({ screenRenderer, renderLimit: config.exportRenderLimit }), { prefix: '/api/projects' })

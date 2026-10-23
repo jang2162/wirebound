@@ -4,6 +4,7 @@ import { projectGuard, roleAtLeast } from '../src/auth/roles'
 import type { ProjectRole } from '../src/db/types'
 import { insertApiToken } from '../src/repos/api-tokens'
 import { insertModule } from '../src/repos/modules'
+import { png, sha256 } from './asset-samples'
 import { insertSnapshot } from '../src/repos/snapshots'
 import { captureSnapshot } from '../src/services/snapshot-capture'
 import { SNAPSHOT_PAYLOAD_VERSION } from '@wirebound/themes'
@@ -195,6 +196,21 @@ const 모듈하나 = async (
     })
   ).id,
 })
+
+/**
+ * ':id'가 필요한 그림 읽기가 대상 그림을 만든다 — `모듈하나` 와 같은 까닭으로 API(`POST …/assets`)가 아니라 행을 넣는다.
+ */
+const 그림하나 = async (ctx: TestContext, projectId: string): Promise<Record<string, string>> => {
+  const bytes = png(3, 2, 77)
+  const id = sha256(bytes)
+  await ctx.db
+    .insertInto('asset_blobs')
+    .values({ sha256: id, bytes, mime: 'image/png', size: bytes.length, width: 3, height: 2 })
+    .onConflict((oc) => oc.column('sha256').doNothing())
+    .execute()
+  await ctx.db.insertInto('project_assets').values({ project_id: projectId, sha256: id, name: '그림.png', uploaded_by: null }).execute()
+  return { id }
+}
 
 /**
  * ':snapshotId'가 필요한 **복원** 케이스가 실행 전에 대상 스냅샷을 만든다.
@@ -504,6 +520,35 @@ const CASES: Case[] = [
     url: '/api/projects/:projectId/modules/:moduleId',
     allowed: ['owner', 'editor'],
     setup: 모듈하나,
+  },
+  {
+    // 그림 — 정본 「그림」 · `routes/assets.ts` 머리말. 올리기 · 가져오기는 editor(페이지 편집을 돕는 바이트), 읽기 · 목록은 viewer.
+    label: '그림 올리기',
+    method: 'POST',
+    url: '/api/projects/:projectId/assets',
+    payload: png(2, 2, 78),
+    allowed: ['owner', 'editor'],
+  },
+  {
+    label: '그림 목록',
+    method: 'GET',
+    url: '/api/projects/:projectId/assets',
+    allowed: ['owner', 'editor', 'viewer'],
+  },
+  {
+    label: '그림 읽기',
+    method: 'GET',
+    url: '/api/projects/:projectId/assets/:id',
+    allowed: ['owner', 'editor', 'viewer'],
+    setup: 그림하나,
+  },
+  {
+    // 가져오기는 세션만이다(토큰 403) — 이 표의 행위자는 세션이다.
+    label: '그림 가져오기',
+    method: 'POST',
+    url: '/api/projects/:projectId/assets/claim',
+    payload: { ids: ['0'.repeat(64)], from: { personal: true } },
+    allowed: ['owner', 'editor'],
   },
   {
     // **내보내기는 viewer다.** 번들은 viewer가 화면에서 볼 수 있는 것을 파일로

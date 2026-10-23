@@ -45,6 +45,7 @@ import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound
 import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
 import { KeepDropPlace } from './keep-drop-place'
+import { projectAssetUrl } from '../api/asset-url'
 import { platformOf } from '../edit/editor-shortcuts'
 import { findNodeSafely, walkSafely } from '../edit/safe-walk'
 import { selectionCapNotice } from '../panels/toolbar-status'
@@ -609,6 +610,7 @@ export function Canvas(props: {
                   bannerHost={bannerHost}
                   emptyZones={emptyZones}
                   reveal={reveal}
+                  projectId={props.projectId}
                 />
               </KeepDropPlace>
             </ThemeProvider>
@@ -759,6 +761,8 @@ function CanvasDocument(props: {
   emptyZones?: EmptyZones | null
   /** 펼쳐 보일 노드 · 구역 — 렌더러의 `reveal`. 없으면 안 넘긴다. */
   reveal?: readonly RevealTarget[] | undefined
+  /** 그림 주소의 프로젝트(`../api/asset-url.ts`). */
+  projectId: string
 }): ReactElement {
   /**
    * 렌더 중에 모은다. `onNodeError` 안에서 `setState`를 부르면 안 되고(렌더러 주석),
@@ -776,6 +780,7 @@ function CanvasDocument(props: {
     ...(props.interaction === undefined ? {} : { interaction: props.interaction }),
     ...(props.emptyZones === undefined || props.emptyZones === null ? {} : { emptyZones: props.emptyZones }),
     ...(props.reveal === undefined ? {} : { reveal: props.reveal }),
+    assetUrl: (id) => projectAssetUrl(props.projectId, id),
   })
 
   return (

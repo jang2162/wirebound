@@ -23,15 +23,17 @@
  *    `theme.js` 를 실행하지 않는다** — 번들에 실어 브라우저가 돌린다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md`
  *    「내보내기와 PPTX」 의 «테마 코드는 브라우저에서만 돈다»). 번들과 PPTX 화면이 같은 테마로 그린다.
  */
-import type { BundleComment, BundleTheme } from '@wirebound/exporter'
-import { migrateDocument, targetedPages, type PageDocument, type TargetedPage } from '@wirebound/schema'
+import type { BundleComment, BundleImage, BundleTheme } from '@wirebound/exporter'
+import { imageIdsIn, migrateDocument, targetedPages, type PageDocument, type TargetedPage } from '@wirebound/schema'
 import { readWbtheme } from '@wirebound/themes'
 import type { DbHandle } from '../db/tx'
+import { readProjectAssetsForBundle } from '../repos/assets'
 import { listProjectComments, type CommentRecord } from '../repos/comments'
 import { listMenuRows } from '../repos/menu'
 import { listPages, type PageRecord } from '../repos/pages'
 import { findProjectTheme } from '../repos/projects'
 import { findThemePackage, readThemePackageFiles } from '../repos/theme-packages'
+import { extensionOf } from './asset-format'
 import type { MenuRow } from './menu-tree'
 
 /** 페이지가 하나도 없는 프로젝트. 호출자가 409로 매핑한다. */
@@ -89,6 +91,11 @@ export interface ExportRows {
   theme: BundleTheme | null
   /** 바인딩은 있는데 패키지를 못 읽은 까닭 — 미리보기가 한 줄로 말한다. 정상이면 `null`. */
   themeWarning: string | null
+  /**
+   * 페이지들이 든 그림 가운데 **그 프로젝트가 가진 것**(소유 행이 있는 것) — 번들의 `assets/images/` 에 실린다. 남의 그림 id 를 문서에 적어도
+   * 그 바이트는 여기 안 든다(정본 「그림」 — 권한은 소유 행이 가른다). 워커 경계를 넘도록 배열이다.
+   */
+  images: BundleImage[]
 }
 
 /**
@@ -101,7 +108,15 @@ export async function readExportRows(db: DbHandle, projectId: string): Promise<E
   const pages = await listPages(db, projectId)
   if (pages.length === 0) throw new EmptyProjectError()
   const comments = await listProjectComments(db, projectId)
-  return { menu, pages, comments, ...(await readExportTheme(db, projectId)) }
+  const images = await readExportImages(db, projectId, pages)
+  return { menu, pages, comments, ...(await readExportTheme(db, projectId)), images }
+}
+
+/** 페이지 문서들이 든 그림 id 가운데 그 프로젝트가 가진 것의 바이트(`ExportRows.images`). */
+async function readExportImages(db: DbHandle, projectId: string, pages: readonly PageRecord[]): Promise<BundleImage[]> {
+  const ids = [...new Set(pages.flatMap((page) => imageIdsIn([(page.schema as { root?: unknown } | null)?.root])))]
+  const rows = await readProjectAssetsForBundle(db, projectId, ids)
+  return rows.map((row) => ({ id: row.id, ext: extensionOf(row.mime), bytes: new Uint8Array(row.bytes) }))
 }
 
 /**

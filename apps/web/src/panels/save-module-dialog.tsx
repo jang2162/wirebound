@@ -24,6 +24,7 @@ import { useId, useState, type ReactElement } from 'react'
 import { MODULE_NAME_MAX, moduleNodesForSave, type PageDocument, type WbNode } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
+import { claimNodeImagesToMe } from '../edit/claim-images'
 import { walkSafely } from '../edit/safe-walk'
 import { announceModulesChanged } from '../palette/module-tab'
 import { ShellDialog } from '../shell/shell-dialog'
@@ -113,20 +114,28 @@ function OpenSaveModule(props: {
     setPending(true)
     setFailure(null)
     const body = { name: trimmed, nodes: prepared.nodes }
-    const saved = to === 'personal' ? api.createMyModule(body) : api.createModule(props.projectId, body)
-    saved.then(
-      () => {
+    void (async () => {
+      try {
+        // 개인 모듈은 든 그림을 먼저 개인 몫으로 가져온다 — 하나라도 못 가져오면 저장하지 않고 까닭을 말한다(`edit/claim-images.ts`).
+        if (to === 'personal') {
+          const refusal = await claimNodeImagesToMe(api, props.projectId, prepared.nodes)
+          if (refusal !== null) {
+            setPending(false)
+            setFailure(refusal)
+            return
+          }
+        }
+        await (to === 'personal' ? api.createMyModule(body) : api.createModule(props.projectId, body))
         setPending(false)
         announceModulesChanged(to === 'personal' ? { kind: 'personal' } : { kind: 'project', projectId: props.projectId })
         props.onSaved(trimmed, to)
         props.onClose()
-      },
-      (caught: unknown) => {
+      } catch (caught: unknown) {
         setPending(false)
         const read = toFailure(caught, '모듈을 저장하지 못했습니다. 다시 시도하세요.')
         setFailure(read.kind === 'message' ? read.message : '로그인이 필요합니다')
-      },
-    )
+      }
+    })()
   }
 
   return (

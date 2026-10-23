@@ -285,7 +285,7 @@ Zones: none.
 
 #### Placeholder
 
-Draws what the catalog lacks (a chip, a badge, a banner) or reserves an undesigned area. The only component whose props carry drawing values (size, colors, border, text, padding); empty values follow the theme. Children (body zone) replace the label. Editor label: 자리 표시자.
+Draws what the catalog lacks (a chip, a badge, a banner) or reserves an undesigned area. The only component whose props carry drawing values (size, colors, border, text, padding, image); empty values follow the theme. Children (body zone) replace the label. `image` is the id (sha256) of an image uploaded to this project (`POST /api/projects/:projectId/assets`) — an id the project does not hold draws as a missing image. Editor label: 자리 표시자.
 
 Zones: `body` (children) "내용".
 
@@ -300,6 +300,8 @@ Zones: `body` (children) "내용".
 - `fontSize`: integer 10–72, optional (no default)
 - `align`: "start" | "center" | "end", default "center"
 - `padding`: integer 0–200, optional (no default)
+- `image`: string matching `^[0-9a-f]{64}$` | "", optional (no default)
+- `imageFit`: "cover" | "contain", default "cover"
 
 ## REST API (summary)
 
@@ -317,5 +319,7 @@ Zones: `body` (children) "내용".
 - `GET /api/projects/:projectId/snapshot` (viewer) — Read-only dump of the whole project: menu, pages with their stored documents, layouts, comments, theme binding.
 - `GET /api/projects/:projectId/snapshots` (viewer) — Saved snapshots (tags), without their payload.
 - `GET /api/projects/:projectId/theme` (viewer) — The project's theme binding and token values.
+- `GET /api/projects/:projectId/assets` (viewer) — The project's uploaded images (`id` is what a Placeholder's `image` prop holds), used bytes and limits.
+- `POST /api/projects/:projectId/assets` (editor) — Upload an image: the body is the file bytes (PNG, JPEG, WebP, GIF, SVG — not multipart), optional `X-Asset-Name` header. Answers `{ id, … }`; the same bytes answer the same id.
 - `GET /api/projects/:projectId/export` (viewer) — Download the design: `?format=html` (static bundle, zip) or `?format=pptx`.
 

@@ -24,7 +24,7 @@ let rows: ExportRows = emptyRows()
 let pendingScreens: { results: ScreenResult[]; resolve(batch: ScreenBatch): void; reject(error: unknown): void } | null = null
 
 function emptyRows(): ExportRows {
-  return { menu: [], pages: [], comments: [], theme: null, themeWarning: null }
+  return { menu: [], pages: [], comments: [], theme: null, themeWarning: null, images: [] }
 }
 
 function send(message: FromWorker, transfer: ArrayBuffer[] = []): void {
@@ -71,6 +71,7 @@ port.on('message', (message: ToWorker) => {
       if (message.part === 'menu') rows.menu.push(...message.items)
       else if (message.part === 'pages') rows.pages.push(...message.items)
       else if (message.part === 'comments') rows.comments.push(...message.items)
+      else if (message.part === 'images') rows.images.push(...message.items)
       else {
         rows.theme = message.theme
         rows.themeWarning = message.warning

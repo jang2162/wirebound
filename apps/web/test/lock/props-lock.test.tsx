@@ -9,7 +9,7 @@
  *
  * | 무엇 | 패널이 잠금을 안 보면 |
  * |---|---|
- * | 잠긴 노드의 위젯 여덟(변형·text·textarea·number·switch·select·목록 칸·목록 버튼 둘) | **전부 살아 있다**(`disabled=false`) |
+ * | 잠긴 노드의 위젯 아홉(변형·text·textarea·number·switch·select·목록 칸·목록 버튼 둘) | **전부 살아 있다**(`disabled=false`) |
  * | 값을 치고 blur | 요청이 나가고 **423** |
  * | 그때 트리의 꺼진 항목 | *"보라님이 편집 중이라 고를 수도 **바꿀** 수도 없습니다"* — **거짓이다** |
  * | 되돌리기 스택(「스택 몰살」 — 423의 재조회가 두 스택을 통째로 비운다) | 요청 3건 `200/200/`**`423`** · **2 → 0** |
@@ -48,8 +48,8 @@
  *
  * | 케이스 | 혼자 죽이는 변조 |
  * |---|---|
- * | 카탈로그가 쓰는 control을 다 짚는다 | 이 줄은 **분모 대조**다 — 카탈로그에 여덟째 control이 생기면 죽는다 |
- * | 위젯 여덟이 종류마다 꺼진다 | `number` 위젯만 안 끈다 |
+ * | 카탈로그가 쓰는 control을 다 짚는다 | 이 줄은 **분모 대조**다 — 카탈로그에 아홉째 control이 생기면 죽는다 |
+ * | 위젯 아홉이 종류마다 꺼진다 | `number` 위젯만 안 끈다 |
  * | 변형 위젯도 함께 꺼진다 | **없음** — 변형만 안 끄면 «조상…»·«꺼진 항목…»이 함께 죽는다(둘 다 `allWidgetsOff()`가 변형을 센다). **변형 축의 주인은 이 케이스다** |
  * | 목록 위젯은 …버튼도 꺼진다 | 추가·삭제 버튼 둘만 안 끈다 |
  * | 잠긴 서브트리 **안쪽**… | **없음** — 조상 잠금만 안 보면 «꺼진 항목…»과 함께 죽는다 |
@@ -149,7 +149,7 @@ class FakeSocket implements RealtimeSocket {
  *   n-field (Field)                  ← text · switch · select 셋을 한 노드에서 낸다
  *   n-list  (List)                   ← number · stringList
  *   n-kv    (KeyValue)               ← pairList
- *   n-ph    (Placeholder)            ← color
+ *   n-ph    (Placeholder)            ← color · image
  *   n-div   (Divider)                ← 대조군. 잠금과 무관한 **형제**
  * ```
  * **타입이 전부 다르다** — 트리 줄의 이름이 타입이라 그래야 노드를 이름으로 고른다.
@@ -193,10 +193,10 @@ function doc(): PageDocument {
 
 /**
  * control 종류마다 그것을 쓰는 자리 하나씩. **아래 `카탈로그가 쓰는 control을 다 짚는다`가
- * 이 표의 분모를 카탈로그에서 세어 맞춘다** — 아홉 번째 control이 생기면 거기서 죽는다.
+ * 이 표의 분모를 카탈로그에서 세어 맞춘다** — 열 번째 control이 생기면 거기서 죽는다.
  *
  * **«위젯이 있는가»는 이 파일이 재지 않는다.** 그 축은
- * `test/panels/property-panel.test.tsx`의 `카탈로그의 control 여덟에 전부 대응하는 위젯이
+ * `test/panels/property-panel.test.tsx`의 `카탈로그의 control 아홉에 전부 대응하는 위젯이
  * 있다`가 소유한다. 여기서 재는 것은 **그 위젯이 잠금에 꺼지는가**다.
  */
 const CONTROL_SAMPLES: { control: EditorControl; type: string; nodeId: string; label: string }[] = [
@@ -208,6 +208,7 @@ const CONTROL_SAMPLES: { control: EditorControl; type: string; nodeId: string; l
   { control: 'stringList', type: 'List', nodeId: 'n-list', label: '컬럼' },
   { control: 'pairList', type: 'KeyValue', nodeId: 'n-kv', label: '키-값' },
   { control: 'color', type: 'Placeholder', nodeId: 'n-ph', label: '바탕색' },
+  { control: 'image', type: 'Placeholder', nodeId: 'n-ph', label: '그림' },
 ]
 
 interface Board {
@@ -396,14 +397,14 @@ function typeAndCommit(label: string, value: string): void {
 
 describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없다', () => {
   it('카탈로그가 쓰는 control을 다 짚는다 — 아래 표의 분모다', () => {
-    // **손으로 적으면 낡는다.** 카탈로그에 아홉 번째 control이 생기면 여기서 죽고, 그때
+    // **손으로 적으면 낡는다.** 카탈로그에 열 번째 control이 생기면 여기서 죽고, 그때
     // 사람이 *"그 위젯도 잠금에 꺼지나"*를 본다.
     const used = new Set(listComponents().flatMap((def) => def.editor.map((field) => field.control)))
 
     expect(new Set(CONTROL_SAMPLES.map((sample) => sample.control))).toEqual(used)
   })
 
-  it('위젯 여덟이 종류마다 꺼진다 — 잠긴 노드 자신을 골라 둔 판', async () => {
+  it('위젯 아홉이 종류마다 꺼진다 — 잠긴 노드 자신을 골라 둔 판', async () => {
     const view = await board()
 
     for (const sample of CONTROL_SAMPLES) {

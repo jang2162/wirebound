@@ -12,6 +12,9 @@ export type ApiErrorCode =
   | 'locked'
   | 'validation-failed'
   | 'rate-limited'
+  | 'too-large'
+  | 'unsupported-media'
+  | 'asset-quota'
   | 'internal'
 
 export const ERROR_STATUS: Record<ApiErrorCode, number> = {
@@ -52,6 +55,18 @@ export const ERROR_STATUS: Record<ApiErrorCode, number> = {
    * 둔다: 401 은 «그 비밀번호가 틀렸다»이고 이것은 «견주지 않았다»다. 같은 숫자면 사람은 옳은 비밀번호를 틀린 줄 알고 바꾼다.
    */
   'rate-limited': 429,
+  /**
+   * 그림 파일이 한도(`ASSET_FILE_MAX_BYTES`)를 넘었다(`routes/assets.ts`). 문장이 한도와 그 파일의 크기를 말한다 — Fastify 가 본문 상한에서 끊는
+   * 413(`http/error-handler.ts` 의 «요청 본문이 너무 큽니다» · `bad-request`)과 갈라 둔다: 이것은 길이를 알고 읽기 전에 끊은 것이다.
+   */
+  'too-large': 413,
+  /** 받지 않는 그림 꼴 — 바이트가 PNG · JPEG · WebP · GIF · SVG 가 아니다(`services/asset-format.ts`). */
+  'unsupported-media': 415,
+  /**
+   * 그림 공간이 찼다 — 프로젝트(`ASSET_PROJECT_MAX_BYTES`) · 사람(`ASSET_PERSONAL_MAX_BYTES`). `conflict` 와 갈라 둔다: 편집 경로가 `409` + `conflict` 로
+   * 리베이스를 하고, 화면은 이 코드일 때 «공간이 찼다» 를 말한다(`apps/web/src/panels/controls/image-control.tsx`).
+   */
+  'asset-quota': 409,
   internal: 500,
 }
 
@@ -147,6 +162,18 @@ export function validationFailed(message: string, issues: ApiErrorIssue[]): ApiE
 
 export function rateLimited(message: string): ApiError {
   return new ApiError('rate-limited', message)
+}
+
+export function tooLarge(message: string): ApiError {
+  return new ApiError('too-large', message)
+}
+
+export function unsupportedMedia(message: string): ApiError {
+  return new ApiError('unsupported-media', message)
+}
+
+export function assetQuota(message: string): ApiError {
+  return new ApiError('asset-quota', message)
 }
 
 export function internal(message = '서버 오류가 발생했습니다'): ApiError {

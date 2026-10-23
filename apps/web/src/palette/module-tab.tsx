@@ -61,6 +61,7 @@ import {
   type PlacementDrop,
 } from '../drag/use-placement'
 import { usePointerDrag, type DragPoint } from '../drag/use-pointer-drag'
+import { claimNodeImages, claimNodeImagesToMe } from '../edit/claim-images'
 import { hasPageTargets, pageTargetsOf } from '../edit/paste-ops'
 import type { Placing, StructureDrop } from '../edit/structure-drop'
 import { useEditCommit } from '../edit/use-edit-commit'
@@ -256,7 +257,9 @@ function useModuleInsert(input: {
         const opened = store.pageOpenEpoch()
         const module = await reread(api, projectId, card.source, onNotice, onGone)
         if (module === null) return false
-        const nodes = module.nodes
+        // 개인 모듈의 그림은 이 프로젝트로 먼저 가져온다 — 못 가져온 것은 비우고 넣은 뒤 말한다(`edit/claim-images.ts`). 프로젝트 모듈은 같은 프로젝트다.
+        const claimed = card.source.kind === 'personal' ? await claimNodeImages(api, projectId, module.nodes, { personal: true }) : null
+        const nodes = claimed === null ? module.nodes : claimed.nodes
         let pages: ReturnType<typeof pageTargetsOf> | null = null
         if (hasPageTargets(nodes)) {
           try {
@@ -313,7 +316,7 @@ function useModuleInsert(input: {
         if (!live.current.commitOps(edit.ops)) return false
         const last = edit.selectIds[edit.selectIds.length - 1]
         if (last !== undefined) store.selectMany(edit.selectIds, 'replace', last)
-        const dropped = moduleDroppedNotice(edit)
+        const dropped = [moduleDroppedNotice(edit), claimed?.notice ?? ''].filter((line) => line !== '').join(' ')
         if (dropped !== '') store.setInfoNotice(dropped)
         return true
       } finally {
@@ -560,11 +563,25 @@ function SavedModuleActions(props: {
       try {
         const fresh = await reread(api, props.projectId, props.source, props.onNotice, props.onChanged)
         if (fresh === null) return
-        const body = { name: fresh.name, nodes: fresh.nodes }
+        // 그림도 옮긴다(`edit/claim-images.ts`) — 프로젝트로는 못 가져온 것을 비우고 말하고, 개인 몫으로는 하나라도 못 가져오면 복사하지 않는다.
+        let nodes = fresh.nodes
+        let imageNotice: string | null = null
+        if (to === 'project') {
+          const claimed = await claimNodeImages(api, props.projectId, fresh.nodes, { personal: true })
+          nodes = claimed.nodes
+          imageNotice = claimed.notice
+        } else {
+          const refusal = await claimNodeImagesToMe(api, props.projectId, fresh.nodes)
+          if (refusal !== null) {
+            props.onNotice(refusal)
+            return
+          }
+        }
+        const body = { name: fresh.name, nodes }
         await (to === 'project' ? api.createModule(props.projectId, body) : api.createMyModule(body))
         props.onNotice('')
         announceModulesChanged(to === 'project' ? { kind: 'project', projectId: props.projectId } : { kind: 'personal' })
-        store.setInfoNotice(copiedNotice(fresh.name, to))
+        store.setInfoNotice(imageNotice === null ? copiedNotice(fresh.name, to) : `${copiedNotice(fresh.name, to)} ${imageNotice}`)
       } catch (caught) {
         const failure = toFailure(caught, '모듈을 복사하지 못했습니다. 다시 시도하세요.')
         props.onNotice(failure.kind === 'message' ? failure.message : '모듈을 복사하지 못했습니다. 다시 시도하세요.')

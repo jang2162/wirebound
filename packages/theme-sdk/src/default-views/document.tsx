@@ -1,5 +1,6 @@
 /** **문서 그룹 기본 뷰.** `Text`·`Media`·`Divider`·`Placeholder`. 옮긴 규칙은 `./index.ts` 머리말. */
-import type { CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
+import { useAsset } from '../context'
 import { nodeVar, partRule, zeroRule } from '../css-tools'
 import { view } from '../define'
 import { PLACEHOLDER_VARS, placeholderVars } from '../placeholder'
@@ -46,12 +47,47 @@ export const MediaView = view(({ props }) => {
 
 export const DividerView = view(() => <Root as="hr" data-wb-structure="default" />)
 
-// 몸통(`content`)이 있으면 라벨이 안 선다 — 라벨은 «아직 정하지 않은 자리» 의 글이고, 안을 채웠으면 채운 것이 그 자리를 말한다.
-export const PlaceholderView = view(({ props, children }) => (
-  <Root as="div" data-wb-structure="default" style={placeholderVars(props)}>
-    {children === null ? <span data-wb-part="label">{String(props.label)}</span> : <div data-wb-part="content">{children}</div>}
-  </Root>
-))
+/**
+ * 몸통(`content`)이나 그림이 있으면 라벨이 안 선다 — 라벨은 «아직 정하지 않은 자리» 의 글이고, 안을 채웠으면 채운 것이 그 자리를 말한다. 그림이 있으면
+ * 라벨은 그림의 `alt` 다.
+ *
+ * **그림 조각의 `data-wb-frame`** — 그림이 칸을 어떻게 채우나(뷰가 props 로 정하는 조각 속성이다 — `SearchForm` 의 `data-wb-columns` 와 같은 자세).
+ * `box` 는 칸에 깔린 바탕(너비 · 높이를 다 정했거나 몸통이 그림 위에 선다 — `imageFit` 으로 맞춘다), `width` · `height` 는 정한 한 변에 맞추고 다른 변은
+ * 그림의 비율, 없으면 그림의 원래 크기(칸 폭을 안 넘는다)다. 못 읽는 그림(`useAsset` 이 `null` · 읽다 깨짐)은 «그림을 불러올 수 없음» 표지다.
+ */
+export const PlaceholderView = view(({ props, children }) => {
+  const label = String(props.label)
+  const image = typeof props.image === 'string' ? props.image : ''
+  const src = useAsset(image)
+  // 깨진 주소를 적어 둔다 — 그림을 바꾸면(새 주소) 표지가 걷힌다.
+  const [broken, setBroken] = useState<string | null>(null)
+  const frame =
+    children !== null || (props.width !== undefined && props.height !== undefined)
+      ? 'box'
+      : props.width !== undefined
+        ? 'width'
+        : props.height !== undefined
+          ? 'height'
+          : undefined
+  const picture =
+    image === '' ? null : src === null || broken === src ? (
+      <span data-wb-part="image-missing" role="img" aria-label={label}>
+        그림을 불러올 수 없음
+      </span>
+    ) : (
+      <img data-wb-part="image" data-wb-frame={frame} src={src} alt={label} onError={() => setBroken(src)} />
+    )
+  return (
+    <Root as="div" data-wb-structure="default" style={placeholderVars(props)}>
+      {picture}
+      {children !== null ? (
+        <div data-wb-part="content">{children}</div>
+      ) : picture === null ? (
+        <span data-wb-part="label">{label}</span>
+      ) : null}
+    </Root>
+  )
+})
 
 export function documentCssBlocks(): string[] {
   return [
@@ -103,5 +139,21 @@ export function documentCssBlocks(): string[] {
     zeroRule('[data-wb-component="Flex"] > [data-wb-component="Placeholder"]', [
       `min-width: var(${nodeVar('placeholder', 'width')}, auto);`,
     ]),
+    // 그림 — 바탕(`box`)은 칸에 깔고(테두리 안 · 여백까지) 몸통이 그 위에 선다. 모서리를 따라 자른다.
+    zeroRule('[data-wb-component="Placeholder"]:has(> [data-wb-part="image"][data-wb-frame="box"])', [
+      'position: relative;',
+      'overflow: hidden;',
+    ]),
+    zeroRule('[data-wb-component="Placeholder"] > [data-wb-part="image"]', ['display: block;', 'max-width: 100%;', 'object-fit: cover;']),
+    zeroRule('[data-wb-component="Placeholder"][data-wb-image-fit="contain"] > [data-wb-part="image"]', ['object-fit: contain;']),
+    zeroRule('[data-wb-component="Placeholder"] > [data-wb-part="image"][data-wb-frame="box"]', [
+      'position: absolute;',
+      'inset: 0;',
+      'width: 100%;',
+      'height: 100%;',
+    ]),
+    zeroRule('[data-wb-component="Placeholder"] > [data-wb-part="image"][data-wb-frame="width"]', ['width: 100%;', 'height: auto;']),
+    zeroRule('[data-wb-component="Placeholder"] > [data-wb-part="image"][data-wb-frame="height"]', ['height: 100%;', 'width: auto;']),
+    zeroRule('[data-wb-component="Placeholder"] > [data-wb-part="content"]', ['position: relative;']),
   ]
 }

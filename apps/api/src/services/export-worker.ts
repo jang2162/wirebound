@@ -721,6 +721,11 @@ export class ExportWorkerPool {
       if (done()) return
       post({ t: 'rows', part: 'comments', items: rows.comments.slice(at, at + COMMENTS_PER_MESSAGE) })
     }
+    for (const image of rows.images) {
+      await yieldToLoop()
+      if (done()) return
+      post({ t: 'rows', part: 'images', items: [image] })
+    }
     await yieldToLoop()
     if (done()) return
     post({ t: 'rows', part: 'theme', theme: rows.theme, warning: rows.themeWarning })

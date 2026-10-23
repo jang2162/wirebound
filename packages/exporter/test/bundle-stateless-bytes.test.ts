@@ -14,7 +14,7 @@
  * «넓은 표본»(과 그 사본 `index.html`)은 픽스처가 구역 · 탭 패널을 싣게 바뀌었고, «슬롯» · «글» 은 문서 JSON 의 판 번호(1 → 3)만 다르다(다시 재는 법:
  * 두 페이지의 문서를 `version: 1` 로 되돌려 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-10-23-ns2-report.md`).
  * 자리표시자의 그리기 값(SDK 1.5.0)을 들이며 `assets/views.css` 만 다시 지었다 — 자리표시자 뿌리의 변수 끊기 · 배치 · 표지(`data-wb-border` ·
- * `data-wb-align`) 규칙이 더해졌고 페이지 HTML 은 그대로다(다시 재는 법: `packages/theme-sdk/src/default-views/document.tsx` 의 자리표시자 규칙을 걷고 해시).
+ * `data-wb-align`) 규칙이 더해졌고 페이지 HTML 은 그대로다(다시 재는 법: `packages/theme-sdk/src/default-views/document.tsx` 의 자리표시자 규칙을 걷고 해시). 그림(`image` 조각 · `data-wb-frame` · `data-wb-image-fit`)의 규칙도 `assets/views.css` 에만 든다 — 그림이 없는 페이지의 데이터에는 `images` 키가 없어 페이지 HTML 이 그대로다.
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -60,7 +60,7 @@ const BEFORE = {
     'pages/슬롯.html': '293d417800dcbdb5',
     'pages/글.html': 'd18da2f849fde324',
     'pages/깨진-문서.html': '9ab11048c5f61199',
-    'assets/views.css': 'd640f37f50db8546',
+    'assets/views.css': 'b3d104ab9b7a79e1',
   },
   themed: {
     'index.html': '269cedc4ba67c0c1',
@@ -68,7 +68,7 @@ const BEFORE = {
     'pages/슬롯.html': '8adb1fd3f58af05f',
     'pages/글.html': 'b0035fe41d1fe05f',
     'pages/깨진-문서.html': '0cf1fd266dd8dd82',
-    'assets/views.css': 'd640f37f50db8546',
+    'assets/views.css': 'b3d104ab9b7a79e1',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',

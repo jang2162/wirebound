@@ -64,6 +64,11 @@ export const DividerDef = defineComponent({
 /** 자리표시자 색의 꼴 — 소문자 `#rrggbb` 하나. 에디터의 색 칸이 소문자로 바꿔 보낸다. */
 export const PLACEHOLDER_COLOR = /^#[0-9a-f]{6}$/
 
+/**
+ * 그림 id 의 꼴 — 그림 바이트의 sha256 소문자 16진수 64 자(내용이 이름이다 · 정본 「그림」). api 의 그림 라우트 · 번들 수집 · 에디터가 같은 꼴을 쓴다.
+ */
+export const ASSET_ID_PATTERN = /^[0-9a-f]{64}$/
+
 /** 빈 값(`''` · 없음)은 «테마 기본» 이다. */
 function placeholderColor() {
   return z.string().regex(PLACEHOLDER_COLOR, '색은 #rrggbb(소문자) 꼴입니다').or(z.literal('')).optional()
@@ -94,6 +99,9 @@ export const PlaceholderDef = defineComponent({
     fontSize: z.number().int().min(10).max(72).optional(),
     align: z.enum(['start', 'center', 'end']).default('center'),
     padding: z.number().int().min(0).max(200).optional(),
+    // 이 프로젝트에 올린 그림의 id. 권한은 그 프로젝트의 소유 행이 가른다 — 남의 그림 id 를 적어도 읽히지 않는다(빈 그림 표지).
+    image: z.string().regex(ASSET_ID_PATTERN, '그림 id 는 소문자 16진수 64 자입니다').or(z.literal('')).optional(),
+    imageFit: z.enum(['cover', 'contain']).default('cover'),
   }),
   editor: [
     { prop: 'label', control: 'text', label: '라벨' },
@@ -107,6 +115,8 @@ export const PlaceholderDef = defineComponent({
     { prop: 'fontSize', control: 'number', label: '글 크기(px)' },
     { prop: 'align', control: 'select', label: '정렬', options: ['start', 'center', 'end'] },
     { prop: 'padding', control: 'number', label: '여백(px)' },
+    { prop: 'image', control: 'image', label: '그림' },
+    { prop: 'imageFit', control: 'select', label: '그림 맞춤', options: ['cover', 'contain'] },
   ],
   summary: (props) => oneLine(props.label),
   states: [],

@@ -140,7 +140,7 @@ export function projectBundle(rows: ExportRows, source: ExportSource): ExportedB
     target: page.target,
   }))
 
-  return exportBundle({ pages: bundlePages, runtimeJs: readExportRuntime(), theme: rows.theme })
+  return exportBundle({ pages: bundlePages, runtimeJs: readExportRuntime(), theme: rows.theme, images: rows.images })
 }
 
 /**

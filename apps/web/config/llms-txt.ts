@@ -77,7 +77,7 @@ const COMPONENT_SUMMARIES: Record<string, string> = {
   Media: 'A slot for an image, video, illustration or chart.',
   Divider: 'A line that separates content.',
   Placeholder:
-    'Draws what the catalog lacks (a chip, a badge, a banner) or reserves an undesigned area. The only component whose props carry drawing values (size, colors, border, text, padding); empty values follow the theme. Children (body zone) replace the label.',
+    'Draws what the catalog lacks (a chip, a badge, a banner) or reserves an undesigned area. The only component whose props carry drawing values (size, colors, border, text, padding, image); empty values follow the theme. Children (body zone) replace the label. `image` is the id (sha256) of an image uploaded to this project (`POST /api/projects/:projectId/assets`) — an id the project does not hold draws as a missing image.',
 }
 
 /** 노드 필드 → 영어 한 줄. 키가 `WbNodeSchema` 의 키와 같아야 한다. */

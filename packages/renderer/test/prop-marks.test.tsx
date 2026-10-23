@@ -113,6 +113,8 @@ const CENSUS: Record<string, Record<string, Cell>> = {
     fontSize: { route: 'var', alt: 14 },
     align: { route: 'mark', alt: 'start' },
     padding: { route: 'var', alt: 4 },
+    image: { route: 'markup', alt: 'a'.repeat(64) },
+    imageFit: { route: 'mark', alt: 'contain' },
   },
 }
 

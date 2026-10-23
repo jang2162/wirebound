@@ -27,6 +27,7 @@ import { migration as m0025 } from './0025-state-visibility'
 import { migration as m0026 } from './0026-personal-modules'
 import { migration as m0027 } from './0027-retire-system-themes'
 import { migration as m0028 } from './0028-node-zones'
+import { migration as m0030 } from './0030-assets'
 
 /**
  * 정적 마이그레이션 레지스트리.
@@ -69,6 +70,7 @@ export const MIGRATIONS: Record<string, Migration> = {
   '0026-personal-modules': m0026,
   '0027-retire-system-themes': m0027,
   '0028-node-zones': m0028,
+  '0030-assets': m0030,
 }
 
 export const migrationProvider: MigrationProvider = {

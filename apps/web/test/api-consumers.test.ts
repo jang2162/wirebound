@@ -85,6 +85,10 @@ const METHODS = [
   'createMyModule',
   'renameMyModule',
   'deleteMyModule',
+  'uploadAsset',
+  'listAssets',
+  'claimAssets',
+  'claimMyAssets',
   'getExportPreview',
   'downloadExport',
   'getProjectTheme',
@@ -239,6 +243,11 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   createMyModule: ['../src/palette/module-tab.tsx', '../src/panels/save-module-dialog.tsx'],
   renameMyModule: ['../src/palette/module-tab.tsx'],
   deleteMyModule: ['../src/palette/module-tab.tsx'],
+  // 그림 — 올리기 · 목록은 속성 패널의 그림 칸, 가져오기 둘은 노드를 다른 몫으로 옮기는 자리가 함께 부르는 한 함수(붙이기 · 모듈 넣기 · 복사 · 저장).
+  uploadAsset: ['../src/panels/controls/image-control.tsx'],
+  listAssets: ['../src/panels/controls/image-control.tsx'],
+  claimAssets: ['../src/edit/claim-images.ts'],
+  claimMyAssets: ['../src/edit/claim-images.ts'],
   // 내보내기. 둘 다 같은 한 화면이 부른다 — 미리보기가 무엇이 실릴지 말하고
   // 그 다음에 앵커가 zip을 받는다.
   getExportPreview: ['../src/shell/export-panel.tsx'],

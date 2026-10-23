@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import { childLists, installCatalog, walkNodes, type WbNode } from '@wirebound/schema'
 import { renderDocument, unusedViewKeys } from '@wirebound/renderer'
-import { galleryItemDocument, galleryItems, PLACEHOLDER_SET_PROPS, PLACEHOLDER_SET_SAMPLE } from '@wirebound/theme-gallery'
+import { galleryAssetUrl, galleryItemDocument, galleryItems, PLACEHOLDER_SET_PROPS, PLACEHOLDER_SET_SAMPLE } from '@wirebound/theme-gallery'
 import { placeholderVars, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { installRuntime } from '@wirebound/theme-sdk/runtime'
 import { tokenValues, tokenVar, type WbthemeFiles } from '@wirebound/themes'
@@ -137,7 +137,10 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
         logged = []
         flushSync(() => {
           root.render(
-            createElement(ThemeProvider, { value: { tokens, window }, children: renderDocument(galleryItemDocument(item), { theme }) }),
+            createElement(ThemeProvider, {
+              value: { tokens, window },
+              children: renderDocument(galleryItemDocument(item), { theme, assetUrl: galleryAssetUrl }),
+            }),
           )
         })
         await settle()

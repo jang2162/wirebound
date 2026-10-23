@@ -43,7 +43,17 @@ const NodesEnvelopeSchema = z.strictObject({
   version: z.int().positive(),
   nodes: z.array(z.unknown()).min(1),
   viewStates: ViewStatesSchema.optional(),
+  /**
+   * 노드를 꺼낸 프로젝트 — 붙이는 쪽이 다른 프로젝트면 그림(자리표시자의 `image`)을 그 출처에서 가져온다(`claim`). 그림은 해시를 안다고 읽을 수
+   * 없어(소유 행이 가른다) 출처를 실어야 붙이는 쪽 서버가 «출처에서 읽을 수 있는가» 를 본다. 없으면(옛 봉투 · 프로젝트 밖) 가져오지 않는다.
+   */
+  source: z.strictObject({ projectId: z.string().min(1) }).optional(),
 })
+
+/** 봉투의 출처(`NodesEnvelopeSchema` 의 `source`). */
+export interface NodesEnvelopeSource {
+  projectId: string
+}
 
 /**
  * 노드들을 문서 검증기 · 마이그레이션 · id 재발급에 넣으려고 감싸는 임시 뿌리의 id. **결과에 남지 않는다.**
@@ -63,14 +73,24 @@ function wrap(nodes: readonly WbNode[], version: number, viewStates?: readonly V
  * 노드를 봉투 글자로. `version` 은 그 노드를 꺼낸 문서의 `version`, `viewStates` 는 그 문서의 상태 목록이다(머리말 — 비었거나 없으면
  * 키를 안 싣는다).
  */
-export function writeNodesEnvelope(nodes: readonly WbNode[], version: number, viewStates?: readonly ViewState[]): string {
-  if (viewStates === undefined || viewStates.length === 0) return JSON.stringify({ wirebound: NODES_ENVELOPE_KIND, version, nodes })
-  return JSON.stringify({ wirebound: NODES_ENVELOPE_KIND, version, nodes, viewStates })
+export function writeNodesEnvelope(
+  nodes: readonly WbNode[],
+  version: number,
+  viewStates?: readonly ViewState[],
+  source?: NodesEnvelopeSource,
+): string {
+  return JSON.stringify({
+    wirebound: NODES_ENVELOPE_KIND,
+    version,
+    nodes,
+    ...(viewStates === undefined || viewStates.length === 0 ? {} : { viewStates }),
+    ...(source === undefined ? {} : { source: { projectId: source.projectId } }),
+  })
 }
 
 /** 봉투를 읽은 결과 — `rejected` 는 우리 봉투(`wirebound: "nodes"`)인데 지금 문서에 실을 수 없는 것이다(`reason` 은 사람이 읽는 한 줄). */
 export type NodesEnvelopeRead =
-  | { kind: 'ok'; nodes: WbNode[]; viewStates?: ViewState[] }
+  | { kind: 'ok'; nodes: WbNode[]; viewStates?: ViewState[]; source?: NodesEnvelopeSource }
   | { kind: 'rejected'; reason: string }
   | { kind: 'not-envelope' }
 
@@ -124,7 +144,12 @@ export function inspectNodesEnvelope(
   if (first !== undefined) return { kind: 'rejected', reason: first.message }
 
   const nodes = checked.data.root.children ?? []
-  return envelope.data.viewStates === undefined ? { kind: 'ok', nodes } : { kind: 'ok', nodes, viewStates: envelope.data.viewStates }
+  return {
+    kind: 'ok',
+    nodes,
+    ...(envelope.data.viewStates === undefined ? {} : { viewStates: envelope.data.viewStates }),
+    ...(envelope.data.source === undefined ? {} : { source: envelope.data.source }),
+  }
 }
 
 /** `inspectNodesEnvelope` 의 `ok` 만 — 봉투가 아니거나 못 지난 봉투는 둘 다 `null` 이다(둘을 가르려면 `inspectNodesEnvelope`). */

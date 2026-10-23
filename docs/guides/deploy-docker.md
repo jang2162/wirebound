@@ -36,6 +36,9 @@
 | `SESSION_TTL_HOURS` | 선택(`720`) | 세션 만료(시간) | |
 | `LOG_LEVEL` | 선택(`info`) | api 로그 수준 | `debug` |
 | `EXPORT_RENDER_LIMIT` | 선택(`2`) | 동시에 뜨는 화면 그리기 브라우저 수 — 서버 메모리로 고른다(README 「화면 그리기 상한」) | `1` |
+| `ASSET_FILE_MAX_BYTES` | 선택(`5242880` — 5 MB) | 그림 파일 하나의 상한(바이트) — 넘으면 413 | `10485760` |
+| `ASSET_PROJECT_MAX_BYTES` | 선택(`209715200` — 200 MB) | 프로젝트 하나가 가진 그림의 합 — 넘으면 409 `asset-quota`. **그림은 DB 에 산다** — 이 값이 DB 볼륨 · 백업이 그림 때문에 자라는 폭을 묶는다 | |
+| `ASSET_PERSONAL_MAX_BYTES` | 선택(`104857600` — 100 MB) | 사람 하나의 개인 몫(개인 모듈이 든 그림)의 합 | |
 | `APP_PORT` | 선택(`8080`) | 입구가 호스트에 여는 HTTP 포트 | `8080` |
 | `TRUSTED_PROXIES` | 선택(비움 = 아무도 안 믿음) | 입구 앞에 선 프록시의 주소 — 공백으로 가른 IP · CIDR(아래 「믿는 앞단」) | `172.20.0.5` |
 | `BACKEND_SUBNET` · `BACKEND_IP_RANGE` · `EDGE_IP` | 선택(`10.231.47.0/24` · `10.231.47.128/25` · `10.231.47.2`) | compose 네트워크의 대역 · 다른 컨테이너가 받는 범위 · 입구의 고정 주소. api 가 믿는 앞단이 `EDGE_IP` 다. 서버의 다른 네트워크와 겹칠 때만 셋을 함께 바꾼다(입구 주소는 대역 안 · 범위 밖) | |
@@ -184,7 +187,7 @@ api 는 입구 하나만 믿는다(`TRUST_PROXY` = `EDGE_IP`).
 저장소 뿌리에서 친다(`compose.yaml` 과 `.env` 가 있는 자리 · override 를 쓰면 그것도 그 자리에 있다).
 
 ```bash
-# 백업 — 복원은 새 DB 에 pg_restore
+# 백업 — 복원은 새 DB 에 pg_restore. 올린 그림도 DB(asset_blobs)에 들어 이 덤프가 함께 든다 — 그림만큼 크다
 docker compose exec -T postgres pg_dump -U wirebound -Fc wirebound > wirebound-$(date +%F).dump
 
 # 올리기 — 새 코드를 받은 뒤. migrate 가 먼저 돌고, api 는 도는 요청을 끝까지 답한 뒤 새 것으로 바뀐다

@@ -76,6 +76,19 @@ export const LLMS_REST_ROUTES: readonly LlmsRestRoute[] = [
   },
   {
     method: 'GET',
+    path: '/api/projects/:projectId/assets',
+    min: 'viewer',
+    summary: "The project's uploaded images (`id` is what a Placeholder's `image` prop holds), used bytes and limits.",
+  },
+  {
+    method: 'POST',
+    path: '/api/projects/:projectId/assets',
+    min: 'editor',
+    summary:
+      'Upload an image: the body is the file bytes (PNG, JPEG, WebP, GIF, SVG — not multipart), optional `X-Asset-Name` header. Answers `{ id, … }`; the same bytes answer the same id.',
+  },
+  {
+    method: 'GET',
     path: '/api/projects/:projectId/export',
     min: 'viewer',
     summary: 'Download the design: `?format=html` (static bundle, zip) or `?format=pptx`.',

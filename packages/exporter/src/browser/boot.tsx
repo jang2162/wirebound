@@ -20,7 +20,7 @@ import { adoptManifest, type RuntimeHandle } from '@wirebound/theme-sdk/runtime'
 import { tokenValues } from '@wirebound/themes'
 import { PAGE_DATA_ID, SCREEN_HASH, STATE_HASH_PREFIX, STATE_SELECT_ID, THEME_SCRIPT_ID, type ExportPageData } from '../page-data'
 import { mountExportDocument, type ExportMount } from './mount'
-import { FAILED_ATTRIBUTE, fontsSettled, nextFrame, READY_ATTRIBUTE, SCREEN_CLASS, sheetSettled } from './ready'
+import { FAILED_ATTRIBUTE, fontsSettled, imagesSettled, nextFrame, READY_ATTRIBUTE, SCREEN_CLASS, sheetSettled } from './ready'
 
 /** 셸이 테마 시트 link 에 다는 표지(`bundle/shell.tsx`). */
 export const THEME_SHEET_SELECTOR = 'link[data-wb-sheet="theme"]'
@@ -50,6 +50,7 @@ export async function boot(env: BootEnv): Promise<BootResult> {
   const finish = async (mount: ExportMount | null): Promise<BootResult> => {
     if (failures.length > 0) html.setAttribute(FAILED_ATTRIBUTE, failures.join(' · '))
     await fontsSettled(doc)
+    await imagesSettled(doc)
     mount?.remeasure()
     await nextFrame(win)
     html.setAttribute(READY_ATTRIBUTE, '')
@@ -91,6 +92,7 @@ export async function boot(env: BootEnv): Promise<BootResult> {
       window: win,
       hrefs: data.hrefs,
       markers: data.markers,
+      images: data.images ?? {},
       status,
       standing: failures,
       ...(env.navigate === undefined ? {} : { navigate: env.navigate }),

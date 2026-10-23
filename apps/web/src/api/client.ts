@@ -22,6 +22,10 @@ import type {
   ProjectDetail,
   PersonalModule,
   ProjectModule,
+  AssetClaimResult,
+  AssetInfo,
+  AssetList,
+  AssetSource,
   ProjectThemeView,
   ProjectView,
   RevisionInverse,
@@ -461,6 +465,23 @@ export interface ApiClient {
   renameMyModule(moduleId: string, body: { name: string }): Promise<PersonalModule>
   /** 지운다. 없으면 404. */
   deleteMyModule(moduleId: string): Promise<void>
+  /**
+   * **그림을 올린다**(`POST /api/projects/:projectId/assets`) — 본문이 파일 바이트 그대로 · 이름은 `X-Asset-Name`. editor 이상. 새로 넣었거나 이미
+   * 있으면 그 그림의 정보다. `onProgress` 는 올린 바이트 · 전체(`XMLHttpRequest.upload` — `fetch` 는 올리기 진행을 못 준다), `signal` 이 끊으면
+   * 요청을 끊고 «취소했다» 로 거절한다. 실패는 서버 봉투(`too-large` 413 · `unsupported-media` 415 · `asset-quota` 409 · 422 · 403)다.
+   */
+  uploadAsset(
+    projectId: string,
+    file: Blob,
+    name: string,
+    options?: { onProgress?: (loaded: number, total: number) => void; signal?: AbortSignal },
+  ): Promise<AssetInfo>
+  /** 프로젝트의 그림 목록 · 쓴 용량 · 한도. viewer 이상. */
+  listAssets(projectId: string, options?: ReadOptions): Promise<AssetList>
+  /** 출처(다른 프로젝트 · 내 개인 몫)의 그림을 이 프로젝트로 가져온다 — 세션 · editor 이상. 바이트를 옮기지 않는다(소유 행 하나). */
+  claimAssets(projectId: string, ids: readonly string[], from: AssetSource): Promise<AssetClaimResult>
+  /** 그 프로젝트의 그림을 내 개인 몫으로 가져온다 — 세션 · 그 프로젝트의 멤버. 개인 모듈을 저장하기 전에 부른다. */
+  claimMyAssets(ids: readonly string[], fromProjectId: string): Promise<AssetClaimResult>
   listSnapshots(projectId: string): Promise<SnapshotSummary[]>
   /**
    * **지금 상태를 태그 하나로 얼린다.** 「권한 모델」이 **editor**에게 연 자리다 — 테마 고르기가
@@ -577,6 +598,12 @@ export type ApiErrorCode =
   | 'validation-failed'
   /** 로그인 시도 제한(429). 화면은 서버 문장을 그대로 그린다(`routes/login.tsx`). */
   | 'rate-limited'
+  /** 그림 파일이 한도를 넘었다(413). 문장이 한도와 그 파일 크기를 말한다(`panels/controls/image-control.tsx`). */
+  | 'too-large'
+  /** 받지 않는 그림 꼴(415). */
+  | 'unsupported-media'
+  /** 그림 공간(프로젝트 · 사람)이 찼다(409) — `conflict` 와 다르다(리베이스 경로가 아니다). */
+  | 'asset-quota'
   | 'internal'
 
 /** 비밀번호 바꾸기에서 지금 비밀번호가 틀렸을 때의 이슈 코드(서버 `routes/auth.ts`의 `WRONG_PASSWORD` — 같은 글자여야 한다). */

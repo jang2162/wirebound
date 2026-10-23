@@ -93,6 +93,9 @@ export const ListView = view(({ props, variant, states, children }) => {
   (`background: var(--wb-node-placeholder-background, <테마의 바탕>)`). 변수를 안 읽고 덮으면 사람이 고른 색이 이 테마에서 사라진다 —
   `wb-theme check` 가 뷰가 변수를 싣는지, `wb-theme shots` 가 계산된 색이 정한 값인지 잰다. 테두리 꼴 · 정렬은 표지
   (`data-wb-border` · `data-wb-align`)다. 몸통(자식)이 있으면 라벨 대신 몸통을 그린다.
+- **`Placeholder` 의 그림은 `useAsset(props.image)` 로 주소를 받는다** — 그림 id(그 바이트의 sha256)를 그리는 자리마다 다른 주소로 바꾼다
+  (에디터 캔버스 · 내보낸 번들 · 갤러리). `null` 이면 그 자리에서 읽을 수 없는 그림이니 «그림 없음» 표지를 그린다. 기본 뷰는
+  `<img data-wb-part="image">` 이고 `imageFit` 은 표지(`data-wb-image-fit` — `cover` · `contain`)다. 그림이나 몸통이 있으면 라벨은 안 선다.
 
 ## 토큰
 

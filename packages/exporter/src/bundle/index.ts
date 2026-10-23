@@ -10,6 +10,7 @@
  *   assets/runtime.js     내보내기 런타임 — 목업을 브라우저에서 그린다(`src/browser/`)
  *   assets/theme/**       프로젝트 테마 패키지의 파일 그대로(theme.js · theme.css · assets/**) — 테마가 있을 때
  *   assets/tokens.css     프로젝트 토큰 값 → CSS 변수(`tokensCss`) — 테마가 있을 때
+ *   assets/images/<id>.<ext>  페이지가 든 그림(자리표시자의 `image`) — 호출자가 그 프로젝트가 가진 것만 넘긴다
  * ```
  *
  * 페이지 머리의 문서 시트는 캔버스와 같은 차례다 — 기본 뷰 → 테마(`theme.css` link) → 토큰(spec 「캔버스 iframe」 의 «머리의 시트는
@@ -41,12 +42,12 @@
  * 아니다**(페이지도 둘만 적혀 있다).
  */
 import { renderDocument, type NodeRenderError } from '@wirebound/renderer'
-import { installCatalog, isPageTargetAction, type PageDocument } from '@wirebound/schema'
+import { imageIdsIn, installCatalog, isPageTargetAction, type PageDocument } from '@wirebound/schema'
 import { defaultViewsCss, type ThemeManifest } from '@wirebound/theme-sdk'
 import { tokensCss } from '@wirebound/themes'
 import { eachNode } from '../nodes'
 import { DEFAULT_LANG, renderHtmlDocument } from '../page'
-import { RUNTIME_JS_PATH, THEME_DIRECTORY, type ExportMarker, type ExportPageData } from '../page-data'
+import { IMAGES_DIRECTORY, RUNTIME_JS_PATH, THEME_DIRECTORY, type ExportMarker, type ExportPageData } from '../page-data'
 import { scriptJson } from '../script-json'
 import { commentEntries, type BundleComment } from './comments'
 import { bundleHref, pageFileNames } from './filename'
@@ -109,6 +110,19 @@ export interface ExportBundleOptions {
   theme?: BundleTheme | null
   /** `<html lang>`. 기본은 `'ko'`다. */
   lang?: string
+  /**
+   * 실을 그림 — `assets/images/<id>.<ext>`. **호출자가 그 프로젝트가 가진 그림만 넘긴다**(해시를 안다고 싣지 않는다 — 권한은 소유 행이 가른다).
+   * 페이지가 들었는데 여기 없는 id 는 런타임이 «그림을 불러올 수 없음» 으로 그린다.
+   */
+  images?: readonly BundleImage[]
+}
+
+/** 번들에 실을 그림 하나. */
+export interface BundleImage {
+  id: string
+  /** 파일 이름의 확장자(`png` · `jpg` · `webp` · `gif` · `svg`). */
+  ext: string
+  bytes: Uint8Array
 }
 
 /** 번들 안의 파일 하나. **경로는 번들 뿌리 기준의 상대 경로다.** */
@@ -181,9 +195,25 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
     { path: VIEWS_CSS_PATH, content: defaultViewsCss() },
     { path: RUNTIME_JS_PATH, content: options.runtimeJs },
     ...themeFiles(options.theme ?? null),
+    ...(options.images ?? []).map((image) => ({ path: imagePath(image), content: image.bytes })),
   ]
 
   return { files, errors, pagePaths: paths }
+}
+
+function imagePath(image: BundleImage): string {
+  return `${IMAGES_DIRECTORY}/${image.id}.${image.ext}`
+}
+
+/** 이 문서가 든 그림 가운데 번들에 실린 것 → **이 파일에서 본** 상대 경로(`ExportPageData.images`). */
+function imageHrefs(page: PageDocument, images: readonly BundleImage[], at: string): Record<string, string> {
+  const byId = new Map(images.map((image) => [image.id, image]))
+  const out: Record<string, string> = {}
+  for (const id of imageIdsIn([page.root])) {
+    const image = byId.get(id)
+    if (image !== undefined) out[id] = bundleHref(at, imagePath(image))
+  }
+  return out
 }
 
 /** 테마 패키지의 파일 그대로 · 토큰 CSS. 테마가 없으면 하나도 안 싣는다. */
@@ -251,6 +281,7 @@ function pageHtml(
     if (entry.marker !== null) markers.push({ nodeId: entry.nodeId, marker: String(entry.marker) })
   }
   const theme = options.theme ?? null
+  const images = imageHrefs(page.document, options.images ?? [], at)
   const data: ExportPageData = {
     document: page.document,
     title: page.title,
@@ -260,6 +291,7 @@ function pageHtml(
     tokens: theme === null ? {} : theme.tokens,
     hrefs: hrefsFor(page.document, targets, at),
     markers,
+    ...(Object.keys(images).length === 0 ? {} : { images }),
   }
   return renderHtmlDocument({
     lang,
