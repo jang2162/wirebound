@@ -58,14 +58,14 @@ interface HostProps {
 }
 
 /**
- * 누락 판정을 되돌릴지 가르는 값 — 노드 **자신의** 입력(type · variant · states · props)이다. 문서의 값이라 JSON 으로 적힌다.
+ * 누락 판정을 되돌릴지 가르는 값 — 노드 **자신의** 입력(type · variant · states · props · 받은 필드 이름)이다. 문서의 값이라 JSON 으로 적힌다.
  *
  * 참조로 견주지 않는다: `viewProps` 는 문서를 그릴 때마다 새 객체이고 `props` 도 매번 새로 파싱돼, 형제만 고친 편집에서도
  * «바뀌었다» 가 되어 멀쩡히 누락인 뷰를 다시 불러 경고를 되풀이한다. `children` · `slot` 은 넣지 않는다 — 자손 편집마다 새
  * 엘리먼트라 같은 까닭으로 되풀이한다.
  */
 function inputsKey(viewProps: ViewProps): string {
-  return JSON.stringify([viewProps.type, viewProps.variant, viewProps.states, viewProps.props])
+  return JSON.stringify([viewProps.type, viewProps.variant, viewProps.states, viewProps.props, viewProps.field])
 }
 
 /**

@@ -53,7 +53,9 @@ export const ListView = view(({ props, variant, states, children }) => {
 - 뷰가 받는 것: `props`(기본값이 채워진 카탈로그 props) · `states`(`disabled` · `loading` 처럼 참인 상태 이름들) ·
   `variant`(노드의 variant — 테마에 없는 값이면 그 컴포넌트의 `defaultVariant`) · `children`(이미 그린 몸통의 자식) · `zones`(이름 붙은
   구역마다 그린 것 — 빈 구역은 `null`) · `items`(몸통 자식 하나씩 — `{ nodeId, index, element, content }`) · `slot`(`Slot` 에 들어갈 내용) ·
-  `nodeId` · `type`.
+  `nodeId` · `type` · `field`(`Field` 값 칸의 입력 조각일 때만 — `{ name, required }`: 조각이 하나면 라벨, 여럿이면 «라벨 + 별칭(없으면 차례)».
+  입력 조각의 뷰를 지으면 `name` 을 접근 이름(`aria-label`)으로, `required` 면 `aria-required` 를 단다 — 입력 칸만 훑는 보조 기술은 필드의
+  묶음 이름을 지나지 않는다).
 - **구역은 `<Zone name>` 으로 둔다.** 카드의 제목 옆(`titleSide`) · 머리 오른쪽(`headEnd`) · 바닥(`footer`), 검색폼 · 입력폼의 단추
   (`actions`), 목록의 머리 왼쪽 · 오른쪽(`headStart` · `headEnd`)은 사람이 놓는 노드가 든 자리다 — `<Zone name="footer" as="div"
   data-wb-part="footer" />` 가 그 구역을 그리고 `data-wb-zone` 을 펴며, 비었으면 감싸는 요소째 안 그린다. `Zone` 을 안 쓰는 뷰는 그

@@ -3,6 +3,7 @@ import type { CSSProperties, ReactElement } from 'react'
 import { nodeVar, WEIGHT_VAR, zeroRule } from '../css-tools'
 import { view } from '../define'
 import { Root } from '../root'
+import type { ViewField } from '../types'
 import { Zone } from '../zone'
 
 /** 열을 정한 조회 폼이 열 수를 나르는 변수 — `fields` 조각에 인라인으로 선다. */
@@ -83,21 +84,34 @@ function TextPart(props: { value: unknown; placeholder: unknown; secret?: boolea
   )
 }
 
-/** 조각의 접근 이름 — 안내 문구가 있으면 그것, 없으면 종류 이름(조각에는 라벨이 없다 — 라벨은 `Field` 의 것이다). */
-function pieceName(placeholder: unknown, fallback: string): string {
-  return typeof placeholder === 'string' && placeholder.trim() !== '' ? placeholder : fallback
+/**
+ * 조각의 접근 이름과 필수 — 필드 값 칸의 조각이면 렌더러가 지은 필드 이름(`ViewProps.field` — 라벨 · 라벨 + 별칭)과 그 필드의 필수를 편다. 필드
+ * 밖이면 안내 문구, 없으면 종류 이름(조각에는 라벨이 없다). `aria-required` 는 그것을 받는 역할(`textbox` · `spinbutton` · `combobox` ·
+ * `radiogroup`)에만 — 체크 묶음(`group`)은 이름만 받는다(`required: false` 로 부른다).
+ */
+function pieceAria(
+  field: ViewField | undefined,
+  placeholder: unknown,
+  fallback: string | undefined,
+  required = true,
+): { 'aria-label'?: string; 'aria-required'?: 'true' } {
+  const name = field?.name ?? (typeof placeholder === 'string' && placeholder.trim() !== '' ? placeholder : fallback)
+  return {
+    ...(name === undefined ? {} : { 'aria-label': name }),
+    ...(required && field?.required === true ? { 'aria-required': 'true' } : {}),
+  }
 }
 
 /**
  * **실제 `<input>` · `<select>` 를 그리지 않는다** — 설계 그림이고, 캔버스에서 누르면 노드가 골라져야 하며, 테마 뷰가 그리는 포커스 받는 요소는
  * 단추 · 링크 · 입력 칸만이다(정본 「노드 속성」). 역할과 이름만 단다.
  */
-export const InputView = view(({ props }) => (
+export const InputView = view(({ props, field }) => (
   <Root
     as="div"
     data-wb-structure="box"
     role={props.kind === 'number' ? 'spinbutton' : 'textbox'}
-    aria-label={pieceName(props.placeholder, '입력')}
+    {...pieceAria(field, props.placeholder, '입력')}
   >
     <TextPart value={props.value} placeholder={props.placeholder} secret={props.kind === 'password'} />
   </Root>
@@ -106,13 +120,13 @@ export const InputView = view(({ props }) => (
 /** 높이는 `rows` 줄 — 변수로 싣고 기본 CSS 가 줄 높이로 곱한다. */
 export const TEXTAREA_ROWS_VAR = nodeVar('textarea', 'rows')
 
-export const TextAreaView = view(({ props }) => (
+export const TextAreaView = view(({ props, field }) => (
   <Root
     as="div"
     data-wb-structure="box"
     role="textbox"
     aria-multiline="true"
-    aria-label={pieceName(props.placeholder, '여러 줄 입력')}
+    {...pieceAria(field, props.placeholder, '여러 줄 입력')}
     style={{ [TEXTAREA_ROWS_VAR]: String(props.rows) } as CSSProperties}
   >
     <TextPart value={props.value} placeholder={props.placeholder} />
@@ -129,10 +143,10 @@ function optionsOf(value: unknown): { label: string; selected: boolean }[] {
 }
 
 // 꺾쇠는 CSS(`::after`)다 — 고른 항목이 없으면 안내 문구(«== 선택 ==»)가 흐리게 선다.
-export const SelectView = view(({ props }) => {
+export const SelectView = view(({ props, field }) => {
   const picked = optionsOf(props.options).find((option) => option.selected)
   return (
-    <Root as="div" data-wb-structure="box" role="combobox" aria-expanded="false" aria-label={pieceName(props.placeholder, '셀렉트')}>
+    <Root as="div" data-wb-structure="box" role="combobox" aria-expanded="false" {...pieceAria(field, props.placeholder, '셀렉트')}>
       <TextPart value={picked?.label ?? ''} placeholder={props.placeholder} />
     </Root>
   )
@@ -140,8 +154,8 @@ export const SelectView = view(({ props }) => {
 
 /** 날짜 · 시간 칸 — 글 칸 + 표지 글자(테마가 덮는다). */
 function stampedInput(fallback: string, glyph: string) {
-  return view(({ props }) => (
-    <Root as="div" data-wb-structure="box" role="textbox" aria-label={pieceName(props.placeholder, fallback)}>
+  return view(({ props, field }) => (
+    <Root as="div" data-wb-structure="box" role="textbox" {...pieceAria(field, props.placeholder, fallback)}>
       <TextPart value={props.value} placeholder={props.placeholder} />
       <span data-wb-part="glyph" aria-hidden="true">
         {glyph}
@@ -155,8 +169,8 @@ export const TimeInputView = stampedInput('시간', '◷')
 
 /** 체크 · 라디오 묶음 — 항목마다 `option` 조각(역할 · `aria-checked`)과 `mark` 조각. 고른 칸은 테마가 `[aria-checked="true"]` 로 겨냥한다. */
 function choiceGroup(groupRole: string, optionRole: string) {
-  return view(({ props }) => (
-    <Root as="div" data-wb-structure="inline" role={groupRole}>
+  return view(({ props, field }) => (
+    <Root as="div" data-wb-structure="inline" role={groupRole} {...pieceAria(field, undefined, undefined, groupRole === 'radiogroup')}>
       {optionsOf(props.options).map((option, index) => (
         <span key={index} data-wb-part="option" role={optionRole} aria-checked={option.selected ? 'true' : 'false'}>
           <span data-wb-part="mark" aria-hidden="true" />

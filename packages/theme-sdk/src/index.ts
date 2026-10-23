@@ -8,6 +8,7 @@ export type {
   TokenType,
   VariantDecl,
   View,
+  ViewField,
   ViewItem,
   ViewProps,
 } from './types'
