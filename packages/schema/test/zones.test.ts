@@ -241,13 +241,13 @@ describe('읽는 값 — pageView · 문장', () => {
       document: page(card()),
       comments: [],
     } as never)
-    expect(view.nodes.map((node) => [node.id, node.depth, node.zone ?? null])).toEqual([
-      ['n_root', 0, null],
-      ['n_card', 1, null],
-      ['n_badge', 2, 'titleSide'],
-      ['n_edit', 2, 'headEnd'],
-      ['n_kv', 2, null],
-      ['n_list', 2, 'footer'],
+    expect(view.nodes.map((node) => [node.id, node.depth, node.zone ?? null, node.zoneLabel ?? null])).toEqual([
+      ['n_root', 0, null, null],
+      ['n_card', 1, null, null],
+      ['n_badge', 2, 'titleSide', '제목 옆'],
+      ['n_edit', 2, 'headEnd', '머리 오른쪽'],
+      ['n_kv', 2, null, null],
+      ['n_list', 2, 'footer', '바닥'],
     ])
   })
 

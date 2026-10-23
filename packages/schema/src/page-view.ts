@@ -26,6 +26,7 @@ import { MISSING_NODE_NAME, describeNode, listInteractionSentences, namingContex
 import { pageTargetPath } from './page-target'
 import { BODY_ZONE } from './component/define'
 import { walkNodes } from './tree'
+import { zoneDefs } from './zones'
 
 /**
  * 코멘트 하나. **어느 노드에 달렸는지를 이름으로도 말한다** — id만 내면 읽는 사람이 그것을
@@ -57,6 +58,8 @@ export interface PageViewNode {
   depth: number
   /** 부모의 이름 붙은 구역에 선 노드면 그 구역 이름(`headEnd` · `actions` …). 몸통 · 뿌리는 키가 없다. */
   zone?: string
+  /** `zone` 의 화면 이름(카탈로그의 `ZoneDef.label` — «머리 오른쪽»). 카탈로그가 모르는 구역이면 이름 그대로. `zone` 이 없으면 키가 없다. */
+  zoneLabel?: string
   /** 문장이 이 노드를 부르는 이름과 **같은 이름**이다(`describeNode`). */
   name: string
   /** 사람이 붙인 별칭. 없으면 키가 없다. */
@@ -133,7 +136,9 @@ export function pageView(input: PageViewInput): PageView {
       id: node.id,
       type: node.type,
       depth,
-      ...(zone !== null && zone !== BODY_ZONE ? { zone } : {}),
+      ...(zone !== null && zone !== BODY_ZONE && parent !== null
+        ? { zone, zoneLabel: zoneDefs(parent.type).find((def) => def.name === zone)?.label ?? zone }
+        : {}),
       name: describeNode(node, naming.get(node.id)),
       ...aliasEntry(node),
       rowLabel: nodeRowLabel(node),
