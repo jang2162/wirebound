@@ -162,6 +162,62 @@ describe('못 놓는 자리', () => {
   })
 })
 
+describe('받는 타입 · 설 자리 — 탭 몸통은 `TabPanel` 만, `TabPanel` 은 탭 몸통에만', () => {
+  /** 뿌리 밑에 탭 하나(패널 둘 · 첫 패널 안에 글)와 글 하나. */
+  function tabsDoc(): PageDocument {
+    return {
+      version: 3,
+      root: {
+        id: 'n-root',
+        type: 'Page',
+        children: [
+          {
+            id: 'n-tabs',
+            type: 'Tabs',
+            children: [
+              { id: 'n-p1', type: 'TabPanel', children: [{ id: 'n-in', type: 'Text' }] },
+              { id: 'n-p2', type: 'TabPanel' },
+            ],
+          },
+          { id: 'n-t', type: 'Text' },
+        ],
+      },
+    }
+  }
+
+  it('탭 «안» · 패널 곁에 글을 놓거나 옮기면 null — 패널 «안» 은 된다', () => {
+    const d = tabsDoc()
+    expect(structureDropTarget(d, moving('n-t'), 'n-tabs', 'inside', free)).toBeNull()
+    expect(structureDropTarget(d, moving('n-t'), 'n-p1', 'after', free)).toBeNull()
+    expect(structureDropTarget(d, adding('Text'), 'n-p2', 'before', free)).toBeNull()
+    expect(structureDropTarget(d, moving('n-t'), 'n-p2', 'inside', free)).toEqual({ parentId: 'n-p2', index: 0, placement: 'inside' })
+  })
+
+  it('패널을 탭 밖(뿌리 · 패널 안 · 글 곁)에 놓거나 옮기면 null — 탭 «안» · 패널 곁은 된다', () => {
+    const d = tabsDoc()
+    expect(structureDropTarget(d, adding('TabPanel'), 'n-root', 'inside', free)).toBeNull()
+    expect(structureDropTarget(d, adding('TabPanel'), 'n-p1', 'inside', free)).toBeNull()
+    expect(structureDropTarget(d, moving('n-p2'), 'n-t', 'after', free)).toBeNull()
+    expect(structureDropTarget(d, adding('TabPanel'), 'n-tabs', 'inside', free)).toEqual({
+      parentId: 'n-tabs',
+      index: 2,
+      placement: 'inside',
+    })
+    expect(structureDropTarget(d, moving('n-p2'), 'n-p1', 'before', free)).toEqual({ parentId: 'n-tabs', index: 0, placement: 'before' })
+  })
+
+  it('모듈 묶음은 맨 위 노드 전부를 본다 — 하나라도 못 서면 null', () => {
+    const d = tabsDoc()
+    const module = (types: string[]): Placing => ({
+      kind: 'module',
+      key: 'project:m',
+      nodes: types.map((type, i) => ({ id: `m${i}`, type })),
+    })
+    expect(structureDropTarget(d, module(['Text', 'Button']), 'n-p1', 'inside', free)).not.toBeNull()
+    expect(structureDropTarget(d, module(['TabPanel', 'Text']), 'n-tabs', 'inside', free)).toBeNull()
+  })
+})
+
 describe('남이 잡은 자리 — 낼 편집이 부딪치는 잠금', () => {
   it('편집이 부딪치면 null — 끄는 노드가 잠긴 자리 안이거나 놓을 자리가 잠겼다', () => {
     // n-inner(= /root/children/1/children/1)가 잠겼다.

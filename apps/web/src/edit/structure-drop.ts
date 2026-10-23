@@ -13,6 +13,7 @@
  * | 부모가 자식을 안 받는 노드(검증 전 문서) | 앞 · 뒤 | `null` — 형제 자리는 그 부모 «안» 이다 |
  * | 뿌리 아닌 노드 | 앞 · 뒤 | 그 노드의 형제(그 앞 · 뒤) — 그 노드가 선 구역 안이다(구역 안 노드면 그 구역) |
  * | 뿌리 | 앞 · 뒤 | `null` — 뿌리는 형제가 없다 |
+ * | 그 구역이 받지 않는 타입(탭 몸통의 `TabPanel` 밖) · 설 자리 밖의 타입(탭 몸통 밖의 `TabPanel`) | 어느 띠든 | `null` — 놓으면 검증이 거절한다 |
  * | 끄는 노드 자신 · 그 자손 | 어느 띠든 | `null` |
  * | 끄는 노드가 뿌리 | — | `null` — 뿌리는 옮기지 않는다 |
  *
@@ -34,7 +35,7 @@
  *
  * **`why` 를 주면 `null` 의 까닭을 한 번 부른다** — 끌기 진단 줄(`drag/drag-debug.ts`)에만 쓰고 답은 안 바꾼다. 꺼진 판은 안 준다.
  */
-import { BODY_ZONE, type NodeLock, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import { BODY_ZONE, getComponent, zoneDefs, type NodeLock, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
 import type { DropMiss } from '../drag/drag-debug'
 import type { DropBand } from '../tree/tree-drop'
 import { createNode } from './create-node'
@@ -102,6 +103,15 @@ export function structureDropTarget(
     insertAt = band === 'before' ? over.index : over.index + 1
   }
   if (typeof parentId !== 'string') return miss(why, 'target-not-in-document')
+  // 받는 타입 · 설 자리는 검증(`zone-type-not-allowed` · `misplaced-component`)과 같은 규칙이다 — 여기서 안 거르면 미리보기가 서고 놓아도 편집이 없다.
+  const placedTypes =
+    placing.kind === 'new'
+      ? [placing.type]
+      : placing.kind === 'module'
+        ? placing.nodes.map((node) => node.type)
+        : [findVisit(document, placing.id)?.node.type]
+  const parentType = (band === 'inside' ? over.node : over.parent)?.type
+  if (!placedTypes.every((type) => fitsIn(parentType, zone, type))) return miss(why, 'not-accepted')
 
   if (placing.kind === 'new' || placing.kind === 'module') {
     const probe = probeNode(placing)
@@ -139,6 +149,15 @@ export function probeNode(placing: Exclude<Placing, { kind: 'node' }>, id = PROB
   if (placing.kind === 'new') return createNode(placing.type, () => (made++ === 0 ? id : `${id}-${made - 1}`))
   const first = placing.nodes[0]
   return first === undefined ? null : { id, type: first.type }
+}
+
+/** 그 타입의 노드가 그 부모의 그 구역에 설 수 있는가 — 구역의 `accepts` 와 타입의 `placement` 둘 다(검증의 두 코드와 같다). */
+function fitsIn(parentType: unknown, zone: string, type: unknown): boolean {
+  if (typeof type !== 'string') return true
+  const accepts = zoneDefs(parentType).find((def) => def.name === zone)?.accepts
+  if (accepts !== undefined && !accepts.includes(type)) return false
+  const placement = getComponent(type)?.placement
+  return placement === undefined || (placement.type === parentType && placement.zone === zone)
 }
 
 /** `null` 을 내며 그 까닭을 진단 줄에 알린다(`why` 가 없으면 — 꺼진 판 — 알리지 않는다). */

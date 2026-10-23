@@ -140,9 +140,9 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
     return (await stack.request(bob, 'PATCH', `${P}/ops`, { baseSeq: head, ops })).status
   }
 
-  async function openTab(P: string, user: 'alice' | 'bob' = 'alice', origin?: string) {
+  async function openTab(P: string, user: 'alice' | 'bob' = 'alice', origin?: string, height = 900) {
     const { context, page } = await stack.openTab(stack.users[user], {
-      viewport: { width: 1440, height: 900 },
+      viewport: { width: 1440, height },
       ...(origin === undefined ? {} : { origin }),
     })
     const patches: string[] = []
@@ -620,7 +620,9 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
      */
     describe('구조 트리 줄 끌기', () => {
       async function armedOnRow(P: string, overId: string, fy: number) {
-        const tab = await openTab(P)
+        // 창을 키운다 — 빈 카드도 구역 줄(제목 옆 · 머리 오른쪽 · 몸통 · 바닥)을 세워 트리가 길고, 창 900 에서는 겨누는 줄이 트리 칸의
+        // 가장자리 자동 스크롤 띠에 들어 끄는 동안 칸이 한 줄 밀린다(겨눈 줄이 아니라 그 다음 줄에 선다). 재려는 것은 남의 편집이 민 줄이다.
+        const tab = await openTab(P, 'alice', undefined, 1200)
         await select(tab.page, 'n_t3')
         const source = (await treeRow(tab.page, 'n_t3').boundingBox())!
         await tab.page.mouse.move(source.x + 30, source.y + source.height / 2)
