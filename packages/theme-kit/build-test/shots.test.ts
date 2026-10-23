@@ -129,7 +129,10 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
     expect(sizes.reduce((sum, size) => sum + size.height, 0)).toBe(w!.pageHeight)
     expect(w!.pageScrollWidth).toBeGreaterThan(w!.pageClientWidth)
     expect(w!.overflow.length).toBeGreaterThan(0)
-    expect(w!.overflow.every((entry) => entry.item?.startsWith('Card/'))).toBe(true)
+    expect(
+      w!.overflow.every((entry) => entry.item?.startsWith('Card/')),
+      JSON.stringify(w!.overflow.map((entry) => [entry.item, entry.element])),
+    ).toBe(true)
     // 넘친 뿌리만 — 카드 안의 제목 · 글(카드와 함께 넘친다)은 안 든다.
     expect(w!.overflow.every((entry) => entry.element.startsWith('article.sample-card'))).toBe(true)
     expect(w!.wbErrors.length).toBeGreaterThan(0)

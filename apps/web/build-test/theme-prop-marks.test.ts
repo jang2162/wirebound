@@ -414,7 +414,7 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
   /**
    * **필드는 이름 붙은 묶음 · 조각의 오류 · 읽기 전용은 접근성 트리에 선다** — 기본 `Field` 뷰의 뿌리는 라벨을 이름으로 단 `group` 이고, 값 칸의 입력 조각은
    * 역할(`textbox`)과 이름(안내 문구)을 달아 `aria-invalid` · `aria-readonly` 가 읽힌다. 역할 없는 `div` 에 단 상태 속성은 Chrome 의 접근성 트리가 버리므로
-   * CDP 접근성 트리로 잰다. 필수는 묶음의 속성이 아니다(`group` 은 `aria-required` 를 안 받는다 — 라벨의 별이 말한다). 시스템 테마는 뷰가 없어 기본 뷰다.
+   * CDP 접근성 트리로 잰다. 필수는 묶음의 속성이 아니다(`group` 은 `aria-required` 를 안 받는다 — 라벨의 별이 말한다). 기본테마의 별(`::after " *"`)은 라벨을 거쳐 묶음 이름 끝에 든다. 시스템 테마는 뷰가 없어 기본 뷰다.
    */
   it.each(THEMES)(
     '%s — 필드는 이름 붙은 묶음 · 조각의 오류 · 읽기 전용은 접근성 트리에 선다',
@@ -433,7 +433,9 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
           }>
         }
         const live = nodes.filter((node) => node.ignored !== true)
-        const groups = live.filter((node) => node.role?.value === 'group' && node.name?.value === '접근성 이름').length
+        const groups = live
+          .filter((node) => node.role?.value === 'group' && (node.name?.value ?? '').startsWith('접근성 이름'))
+          .map((node) => node.name?.value)
         const hits = live
           .filter((node) => node.role?.value === 'textbox' && node.name?.value === '접근성 칸')
           .map((node) =>
@@ -442,7 +444,7 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
             ),
           )
         // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
-        expect({ groups, hits }, themeId).toEqual({ groups: 1, hits: [{ readonly: true, invalid: 'true' }] })
+        expect({ groups, hits }, themeId).toEqual({ groups: ['접근성 이름 *'], hits: [{ readonly: true, invalid: 'true' }] })
       } finally {
         await context.close()
       }

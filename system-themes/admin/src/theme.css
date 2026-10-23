@@ -487,17 +487,18 @@
   color: var(--wb-semantic-textMuted);
   opacity: 0.8;
 }
+/* 고정 폭은 칸보다 넓지 않다 — 좁은 창에서 `long`(24em)이 칸을 넘는다. */
 [data-wb-component="Input"][data-wb-size="short"],
 [data-wb-component="Select"][data-wb-size="short"] {
-  width: 6em;
+  width: min(6em, 100%);
 }
 [data-wb-component="Input"][data-wb-size="medium"],
 [data-wb-component="Select"][data-wb-size="medium"] {
-  width: 12em;
+  width: min(12em, 100%);
 }
 [data-wb-component="Input"][data-wb-size="long"],
 [data-wb-component="Select"][data-wb-size="long"] {
-  width: 24em;
+  width: min(24em, 100%);
 }
 [data-wb-component="Input"][data-wb-kind="number"] {
   justify-content: flex-end;
