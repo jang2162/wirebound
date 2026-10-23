@@ -48,6 +48,7 @@ export type DropMiss =
   | 'not-container'
   | 'root-has-no-siblings'
   | 'parent-not-container'
+  | 'not-accepted'
   | 'unknown-type'
   | 'ops-unbuildable'
   | 'locked'

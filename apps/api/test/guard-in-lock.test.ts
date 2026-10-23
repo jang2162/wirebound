@@ -275,7 +275,7 @@ const PROBES: Probe[] = [
     lockPage: (fx) => fx.pageId,
     fire: async (ctx, fx) =>
       fireRest(ctx, fx, 'PUT', `/api/projects/${fx.projectId}/pages/${fx.pageId}/schema`, {
-        schema: { version: 1, root: { id: fx.nodeId, type: 'Page', children: [] } },
+        schema: { version: 3, root: { id: fx.nodeId, type: 'Page', children: [] } },
       }),
     okStatus: 200,
   },
@@ -2520,7 +2520,7 @@ interface ProjectProbe {
 const IMPORT_FILE = {
   wireboundVersion: '1',
   page: { title: '밥이 가져온 페이지' },
-  schema: { version: 1, root: { id: 'n_root', type: 'Page', children: [] } },
+  schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [] } },
   comments: [],
 }
 

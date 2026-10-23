@@ -110,7 +110,7 @@ if (!있다) {
  */
 function doc(index: number, rows: number): PageDocument {
   return {
-    version: 1,
+    version: 3,
     root: {
       id: `n_page_${index}`,
       type: 'Page',
@@ -812,7 +812,7 @@ describe.skipIf(!있다)('번들 페이지를 연다', () => {
   /** 샘플 테마(kit 픽스처 — `packages/theme-kit/test/fixtures/sample-theme`)의 `Card` 뷰는 테두리를 주색 토큰(`#e11d48`)으로 그린다. */
   it('kit 으로 지은 테마의 뷰가 화면에 선다 — 주색 테두리가 테마 판에만 있다', async () => {
     const card = {
-      version: 1,
+      version: 3,
       root: { id: 'n_page', type: 'Page', children: [{ id: 'n_card', type: 'Card', props: { title: '카드' }, children: [] }] },
     } as unknown as PageDocument
     const theme = packageTheme(await builtSample())

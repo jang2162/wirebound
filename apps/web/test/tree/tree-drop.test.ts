@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { TreeMenuNode } from '../../src/api/types'
-import { dropZone, menuDropTarget } from '../../src/tree/tree-drop'
+import { dropBand, menuDropTarget } from '../../src/tree/tree-drop'
 
 /**
  * ```
@@ -60,16 +60,16 @@ describe('메뉴를 끈다', () => {
   })
 
   it('자기 · 자기 자손 위 → null', () => {
-    for (const zone of ['before', 'inside', 'after'] as const) {
-      expect(menuDropTarget(tree(), menu('m-a'), menu('m-a'), zone)).toBeNull()
-      expect(menuDropTarget(tree(), menu('m-a'), menu('m-a1'), zone)).toBeNull()
-      expect(menuDropTarget(tree(), menu('m-a'), menu('m-a11'), zone)).toBeNull()
+    for (const band of ['before', 'inside', 'after'] as const) {
+      expect(menuDropTarget(tree(), menu('m-a'), menu('m-a'), band)).toBeNull()
+      expect(menuDropTarget(tree(), menu('m-a'), menu('m-a1'), band)).toBeNull()
+      expect(menuDropTarget(tree(), menu('m-a'), menu('m-a11'), band)).toBeNull()
     }
   })
 
   it('페이지 위 → null — 메뉴는 페이지 안에도, 페이지의 형제로도 못 간다', () => {
-    for (const zone of ['before', 'inside', 'after'] as const) {
-      expect(menuDropTarget(tree(), menu('m-c'), page('p-1'), zone)).toBeNull()
+    for (const band of ['before', 'inside', 'after'] as const) {
+      expect(menuDropTarget(tree(), menu('m-c'), page('p-1'), band)).toBeNull()
     }
   })
 
@@ -82,8 +82,8 @@ describe('메뉴를 끈다', () => {
 
 describe('페이지를 끈다', () => {
   it('메뉴 위 → 그 메뉴 안의 마지막 페이지(띠와 무관하게 안이다)', () => {
-    for (const zone of ['before', 'inside', 'after'] as const) {
-      expect(menuDropTarget(tree(), page('p-1'), menu('m-b'), zone)).toEqual({ parentId: 'm-b', index: 1, placement: 'inside' })
+    for (const band of ['before', 'inside', 'after'] as const) {
+      expect(menuDropTarget(tree(), page('p-1'), menu('m-b'), band)).toEqual({ parentId: 'm-b', index: 1, placement: 'inside' })
     }
     // 이미 그 메뉴에 있으면 끝은 자기를 뺀 수다 — 가의 [일 이 삼] 에서 일을 끝으로 → 자리 2.
     expect(menuDropTarget(tree(), page('p-1'), menu('m-a'), 'inside')).toEqual({ parentId: 'm-a', index: 2, placement: 'inside' })
@@ -124,16 +124,16 @@ it('트리에 없는 것 → null(남이 지운 뒤 다시 받기 전의 창) ·
   ).toBeNull()
 })
 
-describe('띠(dropZone)', () => {
+describe('띠(dropBand)', () => {
   it('안을 받는 줄은 위 25% · 가운데 · 아래 25%', () => {
-    expect(dropZone(4, 20, true)).toBe('before')
-    expect(dropZone(5, 20, true)).toBe('inside')
-    expect(dropZone(15, 20, true)).toBe('inside')
-    expect(dropZone(15.1, 20, true)).toBe('after')
+    expect(dropBand(4, 20, true)).toBe('before')
+    expect(dropBand(5, 20, true)).toBe('inside')
+    expect(dropBand(15, 20, true)).toBe('inside')
+    expect(dropBand(15.1, 20, true)).toBe('after')
   })
 
   it('안을 안 받는 줄은 반으로 가른다', () => {
-    expect(dropZone(9.9, 20, false)).toBe('before')
-    expect(dropZone(10, 20, false)).toBe('after')
+    expect(dropBand(9.9, 20, false)).toBe('before')
+    expect(dropBand(10, 20, false)).toBe('after')
   })
 })

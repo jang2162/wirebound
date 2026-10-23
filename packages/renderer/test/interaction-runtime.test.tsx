@@ -30,7 +30,15 @@ function example(interactions: Interaction[]): PageDocument {
       children: [
         { id: 'n_btn', type: 'Button', props: { label: '검색' }, marker: 1, interactions },
         { id: 'n_list', type: 'List', props: {}, marker: 2 },
-        { id: 'n_tabs', type: 'Tabs', props: { tabs: ['기본정보', '상세정보'], active: 0 } },
+        {
+          id: 'n_tabs',
+          type: 'Tabs',
+          props: { active: 0 },
+          children: [
+            { id: 'n_tab1', type: 'TabPanel', props: { label: '기본정보' } },
+            { id: 'n_tab2', type: 'TabPanel', props: { label: '상세정보' } },
+          ],
+        },
       ],
     } as WbNode,
   }
@@ -140,8 +148,8 @@ describe('셋을 실행한다', () => {
     expect(markup(doc, EMPTY_OVERLAY)).toBe(markup(doc))
   })
 
-  it('switchTab이 Tabs의 활성 탭을 덮는다 — 뷰는 그대로다', () => {
-    const doc = example([{ on: 'click', actions: [{ type: 'switchTab', target: 'n_tabs', tab: 1 }] }])
+  it('switchTab이 대상 패널의 부모 Tabs의 활성 탭을 그 패널의 차례로 덮는다 — 뷰는 그대로다', () => {
+    const doc = example([{ on: 'click', actions: [{ type: 'switchTab', target: 'n_tab2' }] }])
     const { overlay } = press(doc, 'n_btn')
 
     const before = markup(doc)
@@ -150,6 +158,7 @@ describe('셋을 실행한다', () => {
     // 본다 — 첫 탭에서 둘째 탭으로.
     expect(before.indexOf('aria-selected="true"')).toBeLessThan(before.indexOf('상세정보'))
     expect(after.indexOf('aria-selected="true"')).toBeGreaterThan(after.indexOf('기본정보'))
+    expect(overlay['n_tabs']).toEqual({ active: 1 })
   })
 
   it('setVisible이 노드를 DOM에서 뺀다 — 자식까지 함께', () => {
@@ -372,24 +381,29 @@ describe('깨진 규칙', () => {
     expect(events[0]?.issues[0]?.message).toBe(validationMessage(doc, 'invalid-interaction-prop'))
   })
 
-  it('범위 밖 탭 — Tabs가 아닌 노드에 탭을 넘긴다', () => {
-    const doc = example([{ on: 'click', actions: [{ type: 'switchTab', target: 'n_list', tab: 1 }] }])
+  it('패널이 아닌 대상 — 탭(Tabs) 자신도 아니다', () => {
+    for (const target of ['n_list', 'n_tabs']) {
+      const doc = example([{ on: 'click', actions: [{ type: 'switchTab', target }] }])
 
-    const { events, overlay } = press(doc, 'n_btn')
+      const { events, overlay } = press(doc, 'n_btn')
 
-    expect(overlay).toBe(EMPTY_OVERLAY)
-    expect(events[0]?.issues[0]?.code).toBe('invalid-interaction-target')
-    expect(events[0]?.issues[0]?.message).toBe('switchTab의 타겟은 Tabs여야 합니다 (현재: List)')
-    expect(events[0]?.issues[0]?.message).toBe(validationMessage(doc, 'invalid-interaction-target'))
+      expect(overlay).toBe(EMPTY_OVERLAY)
+      expect(events[0]?.issues[0]?.code).toBe('invalid-interaction-target')
+      expect(events[0]?.issues[0]?.message).toBe(validationMessage(doc, 'invalid-interaction-target'))
+    }
   })
 
-  it('뜻이 없는 탭 번호도 잡는다 — Tabs.active와 같은 규칙이다', () => {
-    const doc = example([{ on: 'click', actions: [{ type: 'switchTab', target: 'n_tabs', tab: 1.5 }] }])
+  it('탭 밖에 선 패널(검증의 misplaced-component 판) — 바꿀 탭이 없다고 말한다', () => {
+    const doc = example([{ on: 'click', actions: [{ type: 'switchTab', target: 'n_loose' }] }])
+    doc.root.children!.push({ id: 'n_loose', type: 'TabPanel', props: { label: '떠돎' } })
 
     const { events, overlay } = press(doc, 'n_btn')
 
     expect(overlay).toBe(EMPTY_OVERLAY)
-    expect(events[0]?.issues[0]?.message).toBe(validationMessage(doc, 'invalid-interaction-prop'))
+    expect(events[0]?.issues[0]).toMatchObject({
+      code: 'invalid-interaction-target',
+      message: '탭 패널이 탭 안에 있지 않아 바꿀 탭이 없습니다',
+    })
   })
 
   it('셋 중 하나가 깨져도 나머지는 돈다 — 되돌리지 않는다', () => {
@@ -399,7 +413,7 @@ describe('깨진 규칙', () => {
         actions: [
           { type: 'setProp', target: 'n_list', prop: 'loading', value: true },
           { type: 'setProp', target: 'n_gone', prop: 'loading', value: true },
-          { type: 'switchTab', target: 'n_tabs', tab: 1 },
+          { type: 'switchTab', target: 'n_tab2' },
         ],
       },
     ])

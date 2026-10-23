@@ -39,14 +39,14 @@ const CLICK: Interaction[] = [
     on: 'click',
     actions: [
       { type: 'setProp', target: 'n_list', prop: 'loading', value: true },
-      { type: 'switchTab', target: 'n_tabs', tab: 1 },
+      { type: 'switchTab', target: 'n_tab_b' },
       { type: 'setVisible', target: 'n_card', value: false },
     ],
   },
 ]
 
 const LIST_PAGE: PageDocument = {
-  version: 1,
+  version: 3,
   root: {
     id: 'n_root',
     type: 'Page',
@@ -120,7 +120,15 @@ const LIST_PAGE: PageDocument = {
         ],
       },
       { id: 'n_list', type: 'List', props: {}, marker: 2 },
-      { id: 'n_tabs', type: 'Tabs', props: { tabs: ['기본정보', '상세정보'], active: 0 } },
+      {
+        id: 'n_tabs',
+        type: 'Tabs',
+        props: { active: 0 },
+        children: [
+          { id: 'n_tab_a', type: 'TabPanel', props: { label: '기본정보' } },
+          { id: 'n_tab_b', type: 'TabPanel', props: { label: '상세정보' } },
+        ],
+      },
       { id: 'n_card', type: 'Card', props: { title: '회원' }, marker: 3 },
       // **번호의 기준을 재는 자리.** 캔버스는 `Number.isInteger`라 0·음수도
       // 그리는데, 번들의 코멘트 줄은 문장화 쪽(1 이상)을 따른다. 겹layer가 어느 쪽을

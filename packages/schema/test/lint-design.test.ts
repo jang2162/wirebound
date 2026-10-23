@@ -165,12 +165,12 @@ describe('③ 대상 노드가 삭제된 상호작용 규칙', () => {
   it('타겟 종류가 안 맞는 것도 같은 규칙으로 나른다', () => {
     const card = node('Card')
     const button = node('Button', {
-      interactions: [{ on: 'click', actions: [{ type: 'switchTab', target: card.id, tab: 0 }] }],
+      interactions: [{ on: 'click', actions: [{ type: 'switchTab', target: card.id }] }],
     })
     const issues = lintDesign(project({ pages: [page({ document: doc([card, button]) })] })).filter(
       (issue) => issue.rule === 'interaction-target',
     )
-    expect(issues.map((issue) => issue.message.includes('Tabs'))).toEqual([true])
+    expect(issues.map((issue) => issue.message.includes('TabPanel'))).toEqual([true])
   })
 })
 

@@ -60,6 +60,7 @@ import { nodeAlias, viewStateName } from '../display'
 import type { AnyDocument, Interaction, InteractionAction, InteractionTrigger, ViewState, WbNode } from '../node'
 import { pageTargetPath } from '../page-target'
 import { walkNodes } from '../tree'
+import { childLists } from '../zones'
 
 /** 컴포넌트를 문장에서 부르는 이름과, 그 앞에 붙일 라벨을 담은 prop. */
 export interface ComponentNoun {
@@ -87,10 +88,11 @@ const LABEL_PROPS: Record<string, string> = {
   Text: 'content',
   Media: 'caption',
   Placeholder: 'label',
+  TabPanel: 'label',
 }
 
 /**
- * 카탈로그 19종의 한국어 이름.
+ * 카탈로그 컴포넌트의 한국어 이름.
  *
  * **이름은 카탈로그가 소유한다**(`def.label`). 이 객체는 그것에 `labelProp`을 얹어 문장이
  * 쓰기 좋은 모양으로 만든 것뿐이고, 표를 두 벌 두지 않는 것이 요점이다 — 근거는 파일
@@ -140,8 +142,6 @@ const UNSET_PAGE = '아직 정해지지 않은 페이지'
  * (`목록이 로 바뀝니다`) — 미확정을 **아무 말도 하지 않는 것으로 접은** 형태다.
  */
 const UNSET_PROP = '아직 고르지 않은 속성'
-/** 뜻이 없는 탭 번호(음수·비정수). **번호로 읽어 주지 않는다** — `-2번째 탭`은 뜻이 없다. */
-const BAD_TAB = '올바르지 않은 탭 번호'
 /** 라벨을 문장에 실을 때의 상한. 넘으면 잘리고 `…`가 붙는다. */
 const LABEL_MAX = 20
 
@@ -197,13 +197,19 @@ export function listInteractionSentences(document: AnyDocument): InteractionSent
  */
 interface NodeIndex {
   nodes: Map<string, WbNode>
+  /** 노드 id → 부모와 그 안의 자리(구역 · 차례) — 탭 바꾸기가 패널의 부모 `Tabs`와 패널 차례를 읽는다. */
+  parents: Map<string, { parent: WbNode; index: number }>
   naming: Map<string, NamingContext>
 }
 
 function nodeIndex(document: AnyDocument): NodeIndex {
   const nodes = new Map<string, WbNode>()
-  for (const { node } of walkNodes(document.root)) nodes.set(node.id, node)
-  return { nodes, naming: namingContexts(document) }
+  const parents = new Map<string, { parent: WbNode; index: number }>()
+  for (const { node, parent, index } of walkNodes(document.root)) {
+    nodes.set(node.id, node)
+    if (parent !== null && !parents.has(node.id)) parents.set(node.id, { parent, index })
+  }
+  return { nodes, parents, naming: namingContexts(document) }
 }
 
 /**
@@ -217,7 +223,7 @@ export function namingContexts(document: AnyDocument): Map<string, NamingContext
   // 가장 가까운 보임이 그 노드의 이름을 정한다 — `only [관리자]` 카드 안의 버튼도 관리자 화면에만 있다.
   const visit = (node: unknown, inherited: NamingContext | undefined): void => {
     if (node === null || typeof node !== 'object') return
-    const { id, visibility, children } = node as { id?: unknown; visibility?: unknown; children?: unknown }
+    const { id, visibility } = node as { id?: unknown; visibility?: unknown }
     let own = inherited
     if (visibility !== null && typeof visibility === 'object') {
       const { mode, states: chosen } = visibility as { mode?: unknown; states?: unknown }
@@ -227,7 +233,7 @@ export function namingContexts(document: AnyDocument): Map<string, NamingContext
           : undefined
     }
     if (own !== undefined && typeof id === 'string' && !naming.has(id)) naming.set(id, own)
-    if (Array.isArray(children)) for (const child of children) visit(child, own)
+    for (const { list } of childLists(node)) for (const child of list) visit(child, own)
   }
   visit(document.root, undefined)
   return naming
@@ -285,16 +291,17 @@ function actionClause(index: NodeIndex, action: InteractionAction): string {
     }
     case 'switchTab': {
       const target = nodes.get(action.target)
-      const name = targetName(index, action.target)
-      const tabName = tabLabel(target, action.tab)
-      // **뜻이 없는 번호는 번호로 읽어 주지 않는다** — 그대로 셈하면 `tab: -3`이
-      // `-2번째 탭`이 된다. 검증도 같은 값을 `invalid-interaction-prop`으로 잡는다.
-      const usable = typeof action.tab === 'number' && Number.isInteger(action.tab) && action.tab >= 0
-      // 이름을 못 읽으면 번호로 말한다 — `tab`은 0부터이고 사람이 세는 것은 1부터다.
-      const which = !usable ? BAD_TAB : tabName === null ? `${action.tab + 1}번째 탭` : `"${tabName}" 탭`
-      // **조사를 계산한다.** `으로`를 박아 두면 `올바르지 않은 탭 번호`에서 틀린다
-      // (`번호`는 받침이 없어 `로`다 — 케이스가 `번호으로`를 잡는다).
-      return `${name}${subjectParticle(name)} ${which}${directionParticle(which)} 바뀝니다`
+      const at = target?.type === 'TabPanel' ? index.parents.get(target.id) : undefined
+      // 패널이 아니면(안 고름 · 사라짐 · 다른 타입) 그 이름만 말한다 — 검증이 `invalid-interaction-target` 으로 따로 잡는다.
+      if (target === undefined || at === undefined) {
+        const name = targetName(index, action.target)
+        return `${name}${subjectParticle(name)} 탭으로 열립니다`
+      }
+      const tabs = nodeName(at.parent, index.naming.get(at.parent.id))
+      const label = readLabel(target, 'label')
+      // 이름을 못 읽으면 차례로 말한다 — 차례는 0부터이고 사람이 세는 것은 1부터다.
+      const which = label === undefined ? `${at.index + 1}번째 탭` : `"${label}" 탭`
+      return `${tabs}${subjectParticle(tabs)} ${which}${directionParticle(which)} 바뀝니다`
     }
     case 'navigate':
       return `${pageName(action.target)}${directionParticle(pageName(action.target))} 이동합니다`
@@ -382,14 +389,6 @@ function propLabel(target: WbNode | undefined, prop: string): string {
   const def = getComponent(target.type)
   const field = def?.editor.find((item) => item.prop === prop)
   return field?.label ?? prop
-}
-
-/** `Tabs`의 `tabs` 배열에서 그 자리의 이름. 못 읽으면 `null`이다. */
-function tabLabel(target: WbNode | undefined, index: number): string | null {
-  const tabs = target?.props?.tabs
-  if (!Array.isArray(tabs)) return null
-  const name = tabs[index]
-  return typeof name === 'string' && name.trim().length > 0 ? isolateBidi(name.trim()) : null
 }
 
 /**

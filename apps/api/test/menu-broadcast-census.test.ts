@@ -237,7 +237,7 @@ const CALL_SITES: CallSite[] = [
         file: {
           wireboundVersion: WIREBOUND_PAGE_VERSION,
           page: { title: '가져온 페이지' },
-          schema: { version: 1, root: { id: 'file_root', type: 'Page', children: [] } },
+          schema: { version: 3, root: { id: 'file_root', type: 'Page', children: [] } },
           comments: [],
         },
       })

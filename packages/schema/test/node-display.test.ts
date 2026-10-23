@@ -42,10 +42,9 @@ describe('nodeSummary — 타입마다', () => {
     ['Text', { content: '안녕하세요' }, '안녕하세요'],
     ['Text', { content: '가나다라마바사아자차카타파하가나다라마바사아자' }, '가나다라마바사아자차카타파하가나다라마바…'],
     ['Text', { content: '첫 줄\n둘째 줄' }, '첫 줄 둘째 줄'],
-    ['Tabs', { tabs: ['기본', '상세'] }, '기본 · 상세'],
-    ['Tabs', { tabs: ['가', '나', '다'] }, '가 · 나 · 다'],
-    ['Tabs', { tabs: ['가', '나', '다', '라'] }, '가 · 나 · 다 · …'],
-    ['Tabs', { tabs: [] }, null],
+    ['Tabs', undefined, null],
+    ['TabPanel', { label: '상세정보' }, '상세정보'],
+    ['TabPanel', { label: ' ' }, null],
     ['List', { columns: ['이름', '이메일', '가입일', '상태'] }, '이름 · 이메일 · 가입일 · …'],
     [
       'KeyValue',
@@ -70,7 +69,7 @@ describe('nodeSummary — 타입마다', () => {
     expect(nodeSummary(n(type, props))).toBe(expected)
   })
 
-  it('표가 카탈로그 19종을 모두 덮는다 — 새 타입은 요약을 정하거나 없음을 정해야 한다', () => {
+  it('표가 카탈로그 전부를 덮는다 — 새 타입은 요약을 정하거나 없음을 정해야 한다', () => {
     // 표의 타입(위 케이스) 집합이 카탈로그와 같아야 한다 — 새 컴포넌트가 이 표에 오르지 않으면 여기서 걸린다.
     const covered = new Set([
       'Flex',
@@ -83,6 +82,7 @@ describe('nodeSummary — 타입마다', () => {
       'EntryForm',
       'Text',
       'Tabs',
+      'TabPanel',
       'List',
       'KeyValue',
       'Media',
@@ -103,7 +103,7 @@ describe('nodeSummary — 타입마다', () => {
 
   it('props 가 규격에 안 맞아도 던지지 않는다', () => {
     expect(nodeSummary(n('Grid', { columns: 'many' }))).toBeNull()
-    expect(nodeSummary(n('Tabs', { tabs: 'x' }))).toBeNull()
+    expect(nodeSummary(n('TabPanel', { label: 3 }))).toBeNull()
     expect(nodeSummary(n('Button', { label: 3 }))).toBeNull()
     expect(nodeSummary({ id: 'x', type: 'Button', props: null } as unknown as WbNode)).toBe('버튼')
   })

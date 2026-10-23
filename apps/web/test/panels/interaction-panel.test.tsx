@@ -20,7 +20,14 @@ const DOC = pageDoc({
   children: [
     { id: 'n-btn', type: 'Button', props: { label: '검색' }, marker: 1 },
     { id: 'n-list', type: 'List', marker: 2 },
-    { id: 'n-tabs', type: 'Tabs', props: { tabs: ['기본정보', '상세정보'] } },
+    {
+      id: 'n-tabs',
+      type: 'Tabs',
+      children: [
+        { id: 'n-tab-basic', type: 'TabPanel', props: { label: '기본정보' } },
+        { id: 'n-tab-detail', type: 'TabPanel', props: { label: '상세정보' } },
+      ],
+    },
   ],
 })
 

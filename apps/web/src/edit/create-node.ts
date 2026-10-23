@@ -13,8 +13,12 @@
  * 손으로 기본값 표를 두지 않는 것도 같은 이유다 — 그 표는 카탈로그와
  * 어긋나는 자리를 하나 더 만든다.
  *
- * `children`도 만들지 않는다. `many`인 타입도 마찬가지다 — `insertNodeOps`가 `children`
- * 키가 없는 부모에 **배열째 넣는 갈래를 이미 갖는다**(그쪽 실측).
+ * **기본 내용은 넣는다** — 카탈로그 구역의 `initial`(검색폼 · 입력폼의 단추 둘 · 탭의 패널 둘)은 prop 기본값이 아니라 사람이 지우고 고칠
+ * **내용**이라(설계 spec `2026-10-23-node-slots-design.md` 「2. 카탈로그 계약」) 만들 때 실제 노드로 든다. 그 노드도 이 함수로 짓는다(제 기본
+ * 내용까지 · id 는 같은 생성기에서 — 제 id 다음 구역 차례로).
+ *
+ * 기본 내용이 없는 구역은 키를 안 만든다 — 빈 `children` · 빈 `zones` 를 두지 않는다. `insertNodeOps`가 그 배열 · 맵이
+ * 없는 부모에 **배열째 넣는 갈래를 이미 갖는다**(그쪽 실측).
  *
  * **undo 왕복은 근거가 되지 못한다.** *"빈 배열을 미리 두면 undo 왕복 뒤 그 키가 문서에
  * 남아 원본과 달라진다"*는 틀린 근거다 — **두 판 모두 왕복이 자기 원본과 정확히 같다:**
@@ -33,7 +37,7 @@
  * 잔여물이 이 함수 쪽에 있다는 것이 그 판단을 바꾸지는 않는다 — 어느 쪽을 골라도 왕복은
  * 같고 검증도 같으므로, 만들 때 덜 넣는 쪽을 고른다.
  */
-import { createNodeId, getComponent, type WbNode } from '@wirebound/schema'
+import { BODY_ZONE, createNodeId, getComponent, type WbNode } from '@wirebound/schema'
 
 /**
  * 타입 이름에서 새 노드 하나. 카탈로그에 없는 타입이면 `null`이다.
@@ -43,7 +47,25 @@ import { createNodeId, getComponent, type WbNode } from '@wirebound/schema'
  * (`EditorStore.applyEdit`이 적용 실패 시 id 발급을 미루는 것과 같은 판단).
  */
 export function createNode(type: string, nextId: () => string = createNodeId): WbNode | null {
-  if (getComponent(type) === undefined) return null
+  const def = getComponent(type)
+  if (def === undefined) return null
 
-  return { id: nextId(), type }
+  const node: WbNode = { id: nextId(), type }
+  for (const zone of def.zones) {
+    const seeds = (zone.initial ?? []).flatMap((seed) => {
+      const made = createNode(seed.type, nextId)
+      if (made === null) return []
+      return [
+        {
+          ...made,
+          ...(seed.props === undefined ? {} : { props: { ...seed.props } }),
+          ...(seed.variant === undefined ? {} : { variant: seed.variant }),
+        },
+      ]
+    })
+    if (seeds.length === 0) continue
+    if (zone.name === BODY_ZONE) node.children = seeds
+    else node.zones = { ...node.zones, [zone.name]: seeds }
+  }
+  return node
 }

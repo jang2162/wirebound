@@ -67,7 +67,7 @@ class OverlapRenderer implements ScreenRenderer {
 }
 
 function doc(rootId: string): PageDocument {
-  return { version: 1, root: { id: rootId, type: 'Page', children: [] } }
+  return { version: 3, root: { id: rootId, type: 'Page', children: [] } }
 }
 
 /** 페이지 하나짜리 프로젝트 둘 — 사람 몫(`EXPORT_PERSON_JOB_LIMIT` 2)에 안 걸리게 사람도 둘이다. */

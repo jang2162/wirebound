@@ -6,27 +6,35 @@
  * (id, 부모 자리) 열이 같은가**다 — 노드를 더하거나 지우면 열이 달라지고, 옮기면 부모 자리나 열의 차례가 달라진다. 형제끼리 차례만 바뀐 것도
  * 다르다고 본다(판정은 안 바뀌지만 «옮김» 을 좁히려고 규칙을 늘리지 않는다 — 다시 판정하는 쪽으로 틀린다).
  *
- * **재귀가 아니다** — 스택으로 돈다(깊은 문서에서 호출 스택이 안 넘친다). `children` 안의 노드 아닌 원소는 건너뛴다(`selectionConflicts` 와 같다).
+ * **자리에는 부모 안의 구역 이름도 든다** — 자식 줄은 몸통과 구역 전부이고(`@wirebound/schema` 의 `childLists`), 같은 부모의 다른 구역으로 옮기는
+ * 것(`move …/zones/headEnd/0` → `…/zones/footer/0`)은 부모 자리가 같아 구역을 안 보면 «같다» 가 된다. 판정은 집합만 보지만 위와 같은 까닭으로
+ * 다르다고 본다.
+ *
+ * **재귀가 아니다** — 스택으로 돈다(깊은 문서에서 호출 스택이 안 넘친다). 자식 줄 안의 노드 아닌 원소는 건너뛴다(`selectionConflicts` 와 같다).
  */
-import type { WbNode } from '@wirebound/schema'
+import { childLists, type WbNode } from '@wirebound/schema'
 
-function preorder(root: WbNode): { ids: string[]; parents: number[] } {
+function preorder(root: WbNode): { ids: string[]; parents: number[]; zones: string[] } {
   const ids: string[] = []
   const parents: number[] = []
-  const stack: { node: WbNode; up: number }[] = [{ node: root, up: -1 }]
+  const zones: string[] = []
+  const stack: { node: WbNode; up: number; zone: string }[] = [{ node: root, up: -1, zone: '' }]
   while (stack.length > 0) {
-    const { node, up } = stack.pop()!
+    const { node, up, zone } = stack.pop()!
     const at = ids.length
     ids.push(node.id)
     parents.push(up)
-    const children: unknown = node.children
-    if (!Array.isArray(children)) continue
-    for (let i = children.length - 1; i >= 0; i -= 1) {
-      const child: unknown = children[i]
-      if (child !== null && typeof child === 'object') stack.push({ node: child as WbNode, up: at })
+    zones.push(zone)
+    const lists = childLists(node)
+    for (let l = lists.length - 1; l >= 0; l -= 1) {
+      const { pointer, list } = lists[l]!
+      for (let i = list.length - 1; i >= 0; i -= 1) {
+        const child: unknown = list[i]
+        if (child !== null && typeof child === 'object') stack.push({ node: child as WbNode, up: at, zone: pointer })
+      }
     }
   }
-  return { ids, parents }
+  return { ids, parents, zones }
 }
 
 export function sameStructure(before: WbNode, after: WbNode): boolean {
@@ -34,7 +42,7 @@ export function sameStructure(before: WbNode, after: WbNode): boolean {
   const right = preorder(after)
   if (left.ids.length !== right.ids.length) return false
   for (let at = 0; at < left.ids.length; at += 1) {
-    if (left.ids[at] !== right.ids[at] || left.parents[at] !== right.parents[at]) return false
+    if (left.ids[at] !== right.ids[at] || left.parents[at] !== right.parents[at] || left.zones[at] !== right.zones[at]) return false
   }
   return true
 }

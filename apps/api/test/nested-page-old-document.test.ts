@@ -23,7 +23,7 @@ const OLD_PAGE: WbNode = {
 
 function oldDocument(rootId: string): PageDocument {
   return {
-    version: 1,
+    version: 3,
     root: {
       id: rootId,
       type: 'Page',

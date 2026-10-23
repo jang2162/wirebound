@@ -62,7 +62,7 @@ async function board(ctx: RealApiContext) {
     cookies: dahye.cookie,
     payload: {
       schema: {
-        version: 1,
+        version: 3,
         root: {
           id: 'n_root',
           type: 'Page',

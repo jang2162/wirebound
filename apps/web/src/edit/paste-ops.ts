@@ -11,6 +11,7 @@
  * **순수하고 던지지 않는다** — `{ reason }` 으로 왜 못 하는지 말한다(`palette/palette-add.ts` · `palette/module-insert.ts` 와 같은 층).
  */
 import {
+  BODY_ZONE,
   MAX_OPS_PER_EDIT,
   applyOps,
   excuseStandingNestedPages,
@@ -33,7 +34,7 @@ import type { TreeMenuNode } from '../api/types'
 import { STRUCTURE_WHY_DISABLED } from '../panels/tree-row-actions'
 import { insertNodeOps, removeNodeOps } from './ops'
 import { findNodeSafely, walkSafely } from './safe-walk'
-import { acceptsChildren, nodeSpot } from './structure-actions'
+import { acceptsIn, nodeSpot } from './structure-actions'
 
 export type NodeEdit = { ops: PatchOp[]; insertedIds: string[] } | { reason: string }
 
@@ -66,14 +67,15 @@ export function insertMany(
   index: number,
   nodes: readonly WbNode[],
   verb: InsertVerb = '붙이지',
+  zone: string = BODY_ZONE,
 ): NodeEdit {
-  if (!acceptsChildren(findNodeSafely(document.root, parentId))) return { reason: STRUCTURE_WHY_DISABLED.addInside }
+  if (!acceptsIn(findNodeSafely(document.root, parentId), zone)) return { reason: STRUCTURE_WHY_DISABLED.addInside }
   if (nodes.length > MAX_OPS_PER_EDIT) return { reason: tooManyOpsNotice(nodes.length) }
 
   const ops: PatchOp[] = []
   let running = document
   for (const [offset, node] of nodes.entries()) {
-    const step = insertNodeOps(running, parentId, index + offset, node)
+    const step = insertNodeOps(running, parentId, index + offset, node, zone)
     if (step === null) return { reason: NO_PASTE_SPOT }
     ops.push(...step)
     running = applyOps(running, step)
@@ -107,7 +109,7 @@ export function pasteOps(document: PageDocument, anchorId: string | null, nodes:
   const placed = stripMarkers(nodes)
   const rootId: unknown = document.root?.id
   const spot = anchorId === null || anchorId === rootId ? null : nodeSpot(document, anchorId)
-  if (spot !== null) return insertMany(document, spot.parentId, spot.index + 1, placed)
+  if (spot !== null) return insertMany(document, spot.parentId, spot.index + 1, placed, '붙이지', spot.zone)
   if (typeof rootId !== 'string') return { reason: NO_PASTE_SPOT }
   const children = document.root.children
   return insertMany(document, rootId, Array.isArray(children) ? children.length : 0, placed)
@@ -132,7 +134,7 @@ export function duplicateOps(document: PageDocument, nodeIds: readonly string[],
     const spot = nodeSpot(running, nodeId)
     if (node === undefined || spot === null) return { reason: STRUCTURE_WHY_DISABLED.addAfter }
     const copy = stripMarkers(prepareNodesForPaste([node], KEEP_EVERY_TARGET, generate).nodes)[0]!
-    const step = insertNodeOps(running, spot.parentId, spot.index + 1, copy)
+    const step = insertNodeOps(running, spot.parentId, spot.index + 1, copy, spot.zone)
     if (step === null) return { reason: NO_PASTE_SPOT }
     ops.push(...step)
     insertedIds.push(copy.id)

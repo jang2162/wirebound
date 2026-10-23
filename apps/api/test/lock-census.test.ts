@@ -113,7 +113,7 @@ const CALL_SITES: LockSite[] = [
         url: `/api/projects/${fx.projectId}/pages/${fx.pageId}/schema`,
         cookies: fx.actor.cookie,
         payload: {
-          schema: { version: 1, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_put', type: 'Text', props: {} }] } },
+          schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_put', type: 'Text', props: {} }] } },
         } as never,
       })
       return res.statusCode
@@ -224,7 +224,7 @@ const CALL_SITES: LockSite[] = [
           file: {
             wireboundVersion: WIREBOUND_PAGE_VERSION,
             page: { title: '가져온 페이지' },
-            schema: { version: 1, root: { id: 'file_root', type: 'Page', children: [] } },
+            schema: { version: 3, root: { id: 'file_root', type: 'Page', children: [] } },
             comments: [],
           },
         } as never,
@@ -529,7 +529,7 @@ async function fixture(ctx: RealApiContext): Promise<Fixture> {
     cookies: actor.cookie,
     payload: {
       schema: {
-        version: 1,
+        version: 3,
         root: {
           id: 'n_root',
           type: 'Page',
@@ -558,7 +558,7 @@ async function fixture(ctx: RealApiContext): Promise<Fixture> {
     cookies: actor.cookie,
     payload: {
       schema: {
-        version: 1,
+        version: 3,
         root: {
           id: 'n_root',
           type: 'Page',

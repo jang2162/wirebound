@@ -16,7 +16,7 @@
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { pageJsonText, toPageJson, WIREBOUND_PAGE_VERSION, type PageJson } from '@wirebound/schema'
+import { CURRENT_DOCUMENT_VERSION, pageJsonText, toPageJson, WIREBOUND_PAGE_VERSION, type PageJson } from '@wirebound/schema'
 import type { ApiClient } from '../../src/api/client'
 import type { Comment, PageDetail, PageImported, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
@@ -52,10 +52,10 @@ function pageDetail(id: string, title: string): PageDetail {
     title,
     description: '가입한 회원을 본다',
     sortOrder: 0,
-    schemaVersion: 1,
+    schemaVersion: CURRENT_DOCUMENT_VERSION,
     headSeq: 1,
     schema: {
-      version: 1,
+      version: CURRENT_DOCUMENT_VERSION,
       root: { id: 'n_00000000000a', type: 'Page', children: [{ id: 'n_00000000000b', type: 'List', marker: 1 }] },
     },
   }
@@ -77,7 +77,7 @@ function file(patch: Partial<PageJson> = {}): PageJson {
     wireboundVersion: WIREBOUND_PAGE_VERSION,
     page: { title: '가져온 목록', description: null },
     schema: {
-      version: 1,
+      version: CURRENT_DOCUMENT_VERSION,
       root: { id: 'file_root', type: 'Page', children: [{ id: 'file_list', type: 'List' }] },
     },
     comments: [{ nodeId: 'file_list', body: '가' }],
@@ -372,7 +372,7 @@ describe('미리보기', () => {
 function warnedFile(): PageJson {
   return file({
     schema: {
-      version: 1,
+      version: CURRENT_DOCUMENT_VERSION,
       root: {
         id: 'file_root',
         type: 'Page',
@@ -402,7 +402,7 @@ describe('미리보기가 서버와 같은 게이트를 지난다', () => {
       JSON.stringify(
         file({
           schema: {
-            version: 1,
+            version: CURRENT_DOCUMENT_VERSION,
             root: { id: 'file_root', type: 'Page', children: [{ id: 'file_odd', type: '없는타입' }] },
           },
           comments: [],
@@ -422,7 +422,7 @@ describe('미리보기가 서버와 같은 게이트를 지난다', () => {
       toPageJson({
         page: { title: '옛 페이지' },
         document: {
-          version: 1,
+          version: CURRENT_DOCUMENT_VERSION,
           root: {
             id: 'n_oldroot0001',
             type: 'Page',
@@ -453,7 +453,7 @@ describe('미리보기가 서버와 같은 게이트를 지난다', () => {
       JSON.stringify(
         file({
           schema: {
-            version: 1,
+            version: CURRENT_DOCUMENT_VERSION,
             root: {
               id: 'file_root',
               type: 'Page',

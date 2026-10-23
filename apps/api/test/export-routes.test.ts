@@ -38,7 +38,7 @@ async function putSchema(
 
 function doc(rootId: string, buttonId: string, label: string, navigateTo?: string): PageDocument {
   return {
-    version: 1,
+    version: 3,
     root: {
       id: rootId,
       type: 'Page',
@@ -71,7 +71,7 @@ async function 그리지못할노드를심는다(ctx: TestContext, pageId: strin
     .updateTable('pages')
     .set({
       schema: JSON.stringify({
-        version: 1,
+        version: 3,
         root: { id: 'n_broken_root', type: 'Page', children: [{ id: nodeId, type: '없는컴포넌트' }] },
       }),
     })

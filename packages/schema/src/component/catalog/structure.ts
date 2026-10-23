@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineComponent } from '../define'
-import { axisWord, firstOf, integer, joined, oneLine } from '../summary'
+import { axisWord, integer, joined, oneLine } from '../summary'
 
 export const PageDef = defineComponent({
   type: 'Page',
@@ -10,7 +10,7 @@ export const PageDef = defineComponent({
   props: z.strictObject({}),
   editor: [],
   states: [],
-  children: 'many',
+  zones: [{ name: 'body', label: '몸통' }],
 })
 
 export const SlotDef = defineComponent({
@@ -21,7 +21,7 @@ export const SlotDef = defineComponent({
   props: z.strictObject({}),
   editor: [],
   states: [],
-  children: 'none',
+  zones: [],
 })
 
 export const SectionDef = defineComponent({
@@ -34,7 +34,7 @@ export const SectionDef = defineComponent({
   }),
   editor: [{ prop: 'compact', control: 'switch', label: '좁은 여백' }],
   states: [],
-  children: 'many',
+  zones: [{ name: 'body', label: '몸통' }],
 })
 
 export const FlexDef = defineComponent({
@@ -56,7 +56,7 @@ export const FlexDef = defineComponent({
   ],
   summary: (props) => joined(axisWord(props.direction), props.wrap === true ? '줄바꿈' : null),
   states: [],
-  children: 'many',
+  zones: [{ name: 'body', label: '몸통' }],
 })
 
 export const GridDef = defineComponent({
@@ -73,7 +73,7 @@ export const GridDef = defineComponent({
     return columns === null ? null : `${columns}열`
   },
   states: [],
-  children: 'many',
+  zones: [{ name: 'body', label: '몸통' }],
 })
 
 export const CardDef = defineComponent({
@@ -91,23 +91,54 @@ export const CardDef = defineComponent({
   ],
   summary: (props) => oneLine(props.title),
   states: [],
-  children: 'many',
+  zones: [
+    { name: 'titleSide', label: '제목 옆' },
+    { name: 'headEnd', label: '머리 오른쪽' },
+    { name: 'body', label: '몸통' },
+    { name: 'footer', label: '바닥' },
+  ],
 })
 
+/**
+ * 탭 — 탭마다 `TabPanel` 노드 하나를 몸통에 둔다(탭 이름은 패널의 `label`). `active`는 «몇째 패널»(0 부터 · 숨은 패널도 센다)이고, 그 자리의
+ * 패널이 지금 상태에서 숨었거나 없으면 보이는 첫 패널을 연다.
+ */
 export const TabsDef = defineComponent({
   type: 'Tabs',
   label: '탭',
   description: '여러 화면을 탭으로 갈라 한 번에 하나씩 보인다.',
   group: 'structure',
   props: z.strictObject({
-    tabs: z.array(z.string()).default(['탭 1', '탭 2']),
     active: z.number().int().min(0).default(0),
   }),
-  editor: [
-    { prop: 'tabs', control: 'stringList', label: '탭 목록' },
-    { prop: 'active', control: 'number', label: '활성 탭' },
-  ],
-  summary: (props) => firstOf(props.tabs),
+  editor: [{ prop: 'active', control: 'number', label: '활성 탭' }],
   states: [],
-  children: 'many',
+  zones: [
+    {
+      name: 'body',
+      label: '탭',
+      accepts: ['TabPanel'],
+      initial: [
+        { type: 'TabPanel', props: { label: '탭 1' } },
+        { type: 'TabPanel', props: { label: '탭 2' } },
+      ],
+    },
+  ],
+})
+
+/** 탭 하나 — 뿌리 요소는 탭 머리(`label`)이고 몸통은 부모 `Tabs`의 뷰가 패널 칸에 둔다(`bodyHost: 'parent'`). `Tabs`의 몸통에만 선다. */
+export const TabPanelDef = defineComponent({
+  type: 'TabPanel',
+  label: '탭 패널',
+  description: '탭 하나. 이름은 탭 머리에, 내용은 그 탭의 패널에 선다.',
+  group: 'structure',
+  props: z.strictObject({
+    label: z.string().default('탭'),
+  }),
+  editor: [{ prop: 'label', control: 'text', label: '탭 이름' }],
+  summary: (props) => oneLine(props.label),
+  states: [],
+  zones: [{ name: 'body', label: '내용' }],
+  placement: { type: 'Tabs', zone: 'body' },
+  bodyHost: 'parent',
 })

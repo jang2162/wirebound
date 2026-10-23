@@ -30,7 +30,7 @@ async function createProjectWithPage(ctx: TestContext, owner: SignedUpUser) {
  */
 function docWithWarning(content = '처음') {
   return {
-    version: 1,
+    version: 3,
     root: {
       id: 'n_root',
       type: 'Page',
@@ -122,7 +122,7 @@ describe('경고는 편집을 막지 않는다', () => {
       const { project, page } = await createProjectWithPage(ctx, owner)
 
       const put = await putSchema(ctx, project.id, page.id, owner.cookie, {
-        version: 1,
+        version: 3,
         root: { id: 'n_root', type: 'Page', children: [{ id: 'n_other', type: 'Text', props: { content: '가' } }] },
       })
       expect(put.statusCode).toBe(200)
@@ -149,7 +149,7 @@ describe('경고는 편집을 막지 않는다', () => {
         const { project, page } = await createProjectWithPage(ctx, owner)
 
         const res = await putSchema(ctx, project.id, page.id, owner.cookie, {
-          version: 1,
+          version: 3,
           root: {
             id: 'n_root',
             type: 'Page',
@@ -210,7 +210,7 @@ describe('상호작용 타겟이 끊겨도 편집을 막지 않는다', () => {
   /** `n_button`이 `n_list`를 가리킨다. 둘째 자식을 지우면 그 참조가 끊긴다. */
   function docWithInteraction() {
     return {
-      version: 1,
+      version: 3,
       root: {
         id: 'n_root',
         type: 'Page',

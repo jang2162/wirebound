@@ -49,7 +49,7 @@
 | `start` | 끌기가 섰다 | `via`(threshold · touch-hold) · `dist` · `capture`(set · absent · threw) · `has`(`hasPointerCapture`) |
 | `capture-got` · `capture-lost` | 포인터 캡처를 얻고 잃음 | `capture-lost` 의 `started` |
 | `window-blur` | 끄는 중 창이 포커스를 잃음 | `started` |
-| `over` | 놓을 자리의 답이 **바뀔 때만** | 자리가 있으면 `result=canvas`·`tree` · `parent` · `index` · `placement` · `over`(노드 id · `page-end`) · `zone`, 없으면 `result=none why=<까닭>` |
+| `over` | 놓을 자리의 답이 **바뀔 때만** | 자리가 있으면 `result=canvas`·`tree` · `parent` · `index` · `placement` · `over`(노드 id · `page-end`) · `band`, 없으면 `result=none why=<까닭>` |
 | `tag` | 카드 이름표가 섰다(누름마다 한 번) | 글 · 상자(`width`·`height` 0 이면 섰는데 안 보인다) |
 | `release` | 뗐다 | 좌표 · `landed`(뗀 자리의 답이 있나) · `shown`(보인 답이 있었나) · `still`(마지막 움직임과 같은 자리인가) |
 | `drop-refused` | 뗀 자리의 답이 보인 답과 다른 부모 | `why=not-shown` |
@@ -71,6 +71,7 @@
 | `tree-miss` | 경로 층 | 트리 영역 안이지만 놓을 줄이 없다 |
 | `not-container` | 놓을 자리 판정 | «안» 에 놓으려는 노드가 자식을 안 받는다 |
 | `parent-not-container` | 놓을 자리 판정 | 앞 · 뒤에 놓으려는 노드의 부모가 자식을 안 받는다 |
+| `not-accepted` | 놓을 자리 판정 | 그 구역이 그 타입을 안 받는다(탭 몸통에 `TabPanel` 밖) · 그 타입의 설 자리가 아니다(탭 몸통 밖의 `TabPanel`) |
 | `root-has-no-siblings` | 놓을 자리 판정 | 뿌리의 앞 · 뒤 |
 | `locked` | 놓을 자리 판정 | 낼 편집이 남이 잡은 자리에 부딪친다 |
 | `unknown-type` | 놓을 자리 판정 | 카드의 타입으로 노드를 못 짓는다 |

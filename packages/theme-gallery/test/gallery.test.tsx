@@ -40,8 +40,9 @@ describe('갤러리', () => {
   })
   it('표본이 스키마 검증을 지난다 — 갤러리가 폴백을 그리지 않게', () => {
     for (const [type, samples] of Object.entries(GALLERY_SAMPLES)) {
-      for (const { label, node } of samples) {
-        const root = node.type === 'Page' ? node : { id: 'root', type: 'Page', children: [node] }
+      for (const { label, node, within } of samples) {
+        const placed = within === undefined ? node : { ...within, children: [node] }
+        const root = placed.type === 'Page' ? placed : { id: 'root', type: 'Page', children: [placed] }
         // Slot 은 레이아웃에만 선다. 칸의 문서는 둘 다 Page 뿌리라 렌더러에는 같다.
         const validate = node.type === 'Slot' ? validateLayout : validatePage
         const errors = validate({ version: 1, root } as never).filter((i) => i.severity === 'error')

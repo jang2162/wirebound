@@ -33,7 +33,7 @@ beforeAll(() => {
 }, 300_000)
 
 const DOC = {
-  version: 1,
+  version: 3,
   root: {
     id: 'n_root',
     type: 'Page',
@@ -160,7 +160,7 @@ interface DistExporter {
 
 /** 상호작용 · 마커가 든 문서 — 누른 결과가 셋(setProp · switchTab · setVisible) 다 보이게. */
 const PRESSED = {
-  version: 1,
+  version: 3,
   root: {
     id: 'n_root',
     type: 'Page',
@@ -175,14 +175,22 @@ const PRESSED = {
             on: 'click',
             actions: [
               { type: 'setProp', target: 'n_list', prop: 'loading', value: true },
-              { type: 'switchTab', target: 'n_tabs', tab: 1 },
+              { type: 'switchTab', target: 'n_tab_b' },
               { type: 'setVisible', target: 'n_card', value: false },
             ],
           },
         ],
       },
       { id: 'n_list', type: 'List', props: {}, marker: 2 },
-      { id: 'n_tabs', type: 'Tabs', props: { tabs: ['ㄱ', 'ㄴ'], active: 0 } },
+      {
+        id: 'n_tabs',
+        type: 'Tabs',
+        props: { active: 0 },
+        children: [
+          { id: 'n_tab_a', type: 'TabPanel', props: { label: 'ㄱ' } },
+          { id: 'n_tab_b', type: 'TabPanel', props: { label: 'ㄴ' } },
+        ],
+      },
       { id: 'n_card', type: 'Card', props: { title: '회원' } },
     ],
   },

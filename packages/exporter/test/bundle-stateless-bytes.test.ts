@@ -10,7 +10,9 @@
  * 조회 폼(`[data-wb-columns]`)의 규칙 둘을 더하며 새로 지었다 — 몫 · 열이 없는 노드에는 안 닿는 특이도 0 규칙이다(`apps/web/build-test/layout-weight.test.ts`
  * «몫이 없는 문서» · `searchform-columns.test.ts` «열을 안 정한 조회 폼»). 페이지 HTML 은 첫 탭 이름을 에디터와 같은 «페이지 정보»로 바꾸며 새로
  * 지었다 — 그 낱말 말고 바뀐 바이트가 없다(다시 재는 법: 페이지 HTML 의 «페이지 정보» 하나를 «페이지 설명»으로 되돌려 해시하면 그 앞 값이 선다 —
- * `docs/superpowers/plans/2026-10-22-fx-pi-report.md` 의 L3 표).
+ * `docs/superpowers/plans/2026-10-22-fx-pi-report.md` 의 L3 표). 노드 구역(문서 판 3)을 들이며 다시 지었다 — `assets/views.css` 는 기본 뷰의 구역 규칙,
+ * «넓은 표본»(과 그 사본 `index.html`)은 픽스처가 구역 · 탭 패널을 싣게 바뀌었고, «슬롯» · «글» 은 문서 JSON 의 판 번호(1 → 3)만 다르다(다시 재는 법:
+ * 두 페이지의 문서를 `version: 1` 로 되돌려 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-10-23-ns2-report.md`).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -51,20 +53,20 @@ function digest(withTheme: boolean): Record<string, string> {
 /** 상태 없는 페이지의 해시(파일마다 sha256 앞 16자) — 지은 때는 머리말. */
 const BEFORE = {
   plain: {
-    'index.html': '00325ded8443628c',
-    'pages/넓은-표본.html': 'cfd49460874d47d4',
-    'pages/슬롯.html': 'aa3ab81956adac75',
-    'pages/글.html': '471e3d78fd9d66df',
+    'index.html': '20f054044bcf6906',
+    'pages/넓은-표본.html': '83d26fbb39033c3e',
+    'pages/슬롯.html': '293d417800dcbdb5',
+    'pages/글.html': 'd18da2f849fde324',
     'pages/깨진-문서.html': '9ab11048c5f61199',
-    'assets/views.css': '8c52f1c23901a4b7',
+    'assets/views.css': 'bef9cb8070612849',
   },
   themed: {
-    'index.html': 'ad20498e2f5f4a0e',
-    'pages/넓은-표본.html': '4adaced61f6f0c87',
-    'pages/슬롯.html': 'f6f459c1f23e816b',
-    'pages/글.html': 'e191ae0229f91004',
+    'index.html': '269cedc4ba67c0c1',
+    'pages/넓은-표본.html': '55f67e55cf74b4c0',
+    'pages/슬롯.html': '8adb1fd3f58af05f',
+    'pages/글.html': 'b0035fe41d1fe05f',
     'pages/깨진-문서.html': '0cf1fd266dd8dd82',
-    'assets/views.css': '8c52f1c23901a4b7',
+    'assets/views.css': 'bef9cb8070612849',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',

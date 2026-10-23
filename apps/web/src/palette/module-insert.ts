@@ -14,10 +14,10 @@
  *
  * **순수 함수이고 던지지 않는다**(`edit/paste-ops.ts` · `./palette-add.ts` 와 같은 층).
  */
-import { prepareNodesForPaste, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import { mapChildLists, prepareNodesForPaste, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
 import { insertMany } from '../edit/paste-ops'
 import { findNodeSafely } from '../edit/safe-walk'
-import type { StructureDrop } from '../edit/structure-drop'
+import { dropZoneOf, type StructureDrop } from '../edit/structure-drop'
 
 export interface ModuleInsert {
   ops: PatchOp[]
@@ -31,9 +31,9 @@ export interface ModuleInsert {
 
 /** 노드(와 자손)의 보임을 걷은 사본 — 넣은 노드는 모든 상태에서 보인다(머리말). */
 function withoutVisibility(node: WbNode): WbNode {
-  const next: WbNode = { ...node }
+  // 자식 줄은 몸통 · 구역 전부다(`mapChildLists`) — 구역 안 노드의 보임도 걷는다.
+  const next: WbNode = { ...mapChildLists(node, withoutVisibility) }
   delete next.visibility
-  if (Array.isArray(node.children)) next.children = node.children.map(withoutVisibility)
   return next
 }
 
@@ -57,7 +57,7 @@ export function moduleInsertOps(
     { node: (id) => findNodeSafely(document.root, id) !== undefined, page: keepPage },
     generate,
   )
-  const edit = insertMany(document, target.parentId, target.index, prepared.nodes, '넣지')
+  const edit = insertMany(document, target.parentId, target.index, prepared.nodes, '넣지', dropZoneOf(target))
   if ('reason' in edit) return edit
   return { ...edit, selectIds: edit.insertedIds, droppedActions: prepared.droppedActions }
 }

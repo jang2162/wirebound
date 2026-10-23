@@ -56,7 +56,7 @@ Run the lint rules. Findings are a normal result, not an error. Naming rules com
 
 A page is a JSON document. Edits are JSON Patch against it; `nodes[].path` from `get_page` is the JSON Pointer of each node.
 
-- `version` (integer, required) — Document format version. The server stores and returns version 2.
+- `version` (integer, required) — Document format version. The server stores and returns version 3.
 - `root` (node, required) — The root node — always a `Page`.
 - `viewStates` (array, optional) — Optional named screen states (`{ id, name, parent?, description? }`), at most 20, names 1–30 characters, nesting at most 3 deep, `description` free text up to 2000 characters (omit it rather than send a blank one). Nodes refer to them from `visibility`.
 
@@ -71,7 +71,8 @@ A page is a JSON document. Edits are JSON Patch against it; `nodes[].path` from 
 - `visibility` (object, optional) — `{ mode: "only" | "except", states: [...] }` — show the node only in (or hide it in) those view states and their descendants. `"default"` is the base screen. Omitted: visible in every state.
 - `marker` (integer, optional) — Comment number (positive integer). The server assigns it when the first comment lands on the node; do not invent one.
 - `interactions` (array, optional) — What happens on user events (see Interactions).
-- `children` (node[], optional) — Child nodes. Only components whose children are "many" take them.
+- `children` (node[], optional) — Child nodes in the body zone. Only components that declare a `body` zone take them.
+- `zones` (object, optional) — Named child zones: `{ <zone name>: [nodes] }`. Only the zones a component declares (see the catalog); a missing key is an empty zone. Patch paths: `…/zones/<zone name>/<index>` (add a first node with `…/zones/<zone name>` and value `[node]`, or `…/zones` with `{ <zone name>: [node] }` when the node has no `zones`).
 
 Nodes carry no styles. Appearance comes from the project theme.
 
@@ -81,7 +82,7 @@ Nodes carry no styles. Appearance comes from the project theme.
 
 - `setProp` `{ target: <node id>, prop, value }` — set a prop of another node.
 - `setVisible` `{ target: <node id>, value: boolean }` — show or hide a node.
-- `switchTab` `{ target: <Tabs node id>, tab: <index> }` — switch a `Tabs` node.
+- `switchTab` `{ target: <TabPanel node id> }` — open that tab of its parent `Tabs`.
 - `navigate` `{ target: "page:<menu path>" }` — go to another page.
 - `openModal` `{ target: "page:<menu path>" }` — open another page as a modal.
 
@@ -89,31 +90,39 @@ A `page:` target names a page by its menu path, the same `path` the MCP tools ta
 
 ## Component catalog
 
-Every node `type` is one of these. Props are validated against the listed shapes; unknown props are rejected. "children: many" components hold child nodes, "children: none" do not. State props are booleans that switch a visual state of the component.
+Every node `type` is one of these. Props are validated against the listed shapes; unknown props are rejected. Child nodes live in zones: the `body` zone is the node's `children`, every other zone is `zones.<name>`. A component with no zones holds no child nodes. Some zones accept only certain types, and some types stand only in one zone. "Create with" lists the nodes the editor puts in a new node — the server does not add them, so add them yourself when you create one. State props are booleans that switch a visual state of the component.
 
 ### Structure — containers that arrange other nodes
 
 #### Page
 
-Root of one design page; everything on the page sits inside it. Only valid as the document root. Editor label: 페이지. children: many.
+Root of one design page; everything on the page sits inside it. Only valid as the document root. Editor label: 페이지.
+
+Zones: `body` (children) "몸통".
 
 No props.
 
 #### Slot
 
-Where a layout inserts the page content. Layout documents only. Editor label: 슬롯. children: none.
+Where a layout inserts the page content. Layout documents only. Editor label: 슬롯.
+
+Zones: none.
 
 No props.
 
 #### Section
 
-A large band of the screen with its own background and spacing. Editor label: 영역. children: many.
+A large band of the screen with its own background and spacing. Editor label: 영역.
+
+Zones: `body` (children) "몸통".
 
 - `compact`: boolean, default false
 
 #### Flex
 
-Lays children out in one row or one column. Editor label: 배치. children: many.
+Lays children out in one row or one column. Editor label: 배치.
+
+Zones: `body` (children) "몸통".
 
 - `direction`: "row" | "column", default "row"
 - `align`: "start" | "center" | "end" | "stretch", default "stretch"
@@ -122,29 +131,45 @@ Lays children out in one row or one column. Editor label: 배치. children: many
 
 #### Grid
 
-Lays children out on a fixed number of columns. Editor label: 그리드. children: many.
+Lays children out on a fixed number of columns. Editor label: 그리드.
+
+Zones: `body` (children) "몸통".
 
 - `columns`: integer 1–12, default 2
 
 #### Card
 
-A box that groups a title and its content. Editor label: 카드. children: many.
+A box that groups a title and its content. Editor label: 카드.
+
+Zones: `titleSide` (zones.titleSide) "제목 옆"; `headEnd` (zones.headEnd) "머리 오른쪽"; `body` (children) "몸통"; `footer` (zones.footer) "바닥".
 
 - `title`: string, default ""
 - `subtitle`: string, default ""
 
 #### Tabs
 
-Splits content into tabs and shows one at a time. Editor label: 탭. children: many.
+Splits content into tabs and shows one at a time. Each tab is a `TabPanel` child. Editor label: 탭.
 
-- `tabs`: string[], default ["탭 1","탭 2"]
+Zones: `body` (children) "탭", accepts only `TabPanel`, create with `TabPanel` {"label":"탭 1"} + `TabPanel` {"label":"탭 2"}.
+
 - `active`: integer ≥ 0, default 0
+
+#### TabPanel
+
+One tab of a `Tabs`: its `label` is the tab head, its children are the tab content. Only valid in the body of a `Tabs`. Editor label: 탭 패널.
+
+Zones: `body` (children) "내용".
+Stands only in the `body` zone of a `Tabs`.
+
+- `label`: string, default "탭"
 
 ### Data — show records
 
 #### List
 
-Many records as a table, cards or a list. Editor label: 목록. children: none.
+Many records as a table, cards or a list. Editor label: 목록.
+
+Zones: `headStart` (zones.headStart) "머리 왼쪽"; `headEnd` (zones.headEnd) "머리 오른쪽".
 
 - `items`: integer 0–50, default 5
 - `columns`: string[], default ["컬럼 1","컬럼 2"]
@@ -157,7 +182,9 @@ Many records as a table, cards or a list. Editor label: 목록. children: none.
 
 #### Tree
 
-Hierarchical items that expand and collapse. Editor label: 트리. children: none.
+Hierarchical items that expand and collapse. Editor label: 트리.
+
+Zones: none.
 
 - `items`: string[], default ["항목 1","항목 2"]
 - `depth`: integer 1–5, default 2
@@ -166,7 +193,9 @@ Hierarchical items that expand and collapse. Editor label: 트리. children: non
 
 #### KeyValue
 
-Label/value pairs, as on a detail screen. Editor label: 키-값 목록. children: none.
+Label/value pairs, as on a detail screen. Editor label: 키-값 목록.
+
+Zones: none.
 
 - `pairs`: { key: string, value: string }[], default [{"key":"항목","value":"값"}]
 - `columns`: integer 1–4, default 1
@@ -175,20 +204,26 @@ Label/value pairs, as on a detail screen. Editor label: 키-값 목록. children
 
 #### SearchForm
 
-Search conditions that filter a list. Editor label: 검색폼. children: many.
+Search conditions that filter a list. Editor label: 검색폼.
+
+Zones: `body` (children) "조건"; `actions` (zones.actions) "단추", create with `Button` {"label":"초기화"} + `Button` {"label":"검색"} variant "primary".
 
 - `collapsed`: boolean, default false
 - `columns`: integer 1–4, optional (no default)
 
 #### EntryForm
 
-A create/edit form with several fields. Editor label: 입력폼. children: many.
+A create/edit form with several fields. Editor label: 입력폼.
+
+Zones: `body` (children) "항목"; `actions` (zones.actions) "단추", create with `Button` {"label":"저장"} variant "primary" + `Button` {"label":"취소"}.
 
 - `title`: string, default ""
 
 #### Field
 
-One input; `control` makes it text, select, date and so on. Editor label: 입력 필드. children: none.
+One input; `control` makes it text, select, date and so on. Editor label: 입력 필드.
+
+Zones: none.
 
 - `label`: string, default "라벨"
 - `control`: "text" | "number" | "select" | "date" | "dateRange" | "checkbox" | "radio" | "textarea" | "file", default "text" — selects the theme variant
@@ -201,7 +236,9 @@ One input; `control` makes it text, select, date and so on. Editor label: 입력
 
 #### Button
 
-A button that triggers an action. Editor label: 버튼. children: none.
+A button that triggers an action. Editor label: 버튼.
+
+Zones: none.
 
 - `label`: string, default "버튼"
 - `disabled`: boolean, default false — state
@@ -209,7 +246,9 @@ A button that triggers an action. Editor label: 버튼. children: none.
 
 #### Link
 
-A text link to another screen. Editor label: 링크. children: none.
+A text link to another screen. Editor label: 링크.
+
+Zones: none.
 
 - `label`: string, default "링크"
 - `target`: string, default ""
@@ -219,14 +258,18 @@ A text link to another screen. Editor label: 링크. children: none.
 
 #### Text
 
-Headings and body text; `role` sets the size. Editor label: 텍스트. children: none.
+Headings and body text; `role` sets the size. Editor label: 텍스트.
+
+Zones: none.
 
 - `content`: string, default "텍스트"
 - `role`: "display" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "body" | "caption", default "body" — selects the theme variant
 
 #### Media
 
-A slot for an image, video, illustration or chart. Editor label: 미디어. children: none.
+A slot for an image, video, illustration or chart. Editor label: 미디어.
+
+Zones: none.
 
 - `kind`: "image" | "video" | "illustration" | "chart", default "image"
 - `caption`: string, default ""
@@ -234,13 +277,17 @@ A slot for an image, video, illustration or chart. Editor label: 미디어. chil
 
 #### Divider
 
-A line that separates content. Editor label: 구분선. children: none.
+A line that separates content. Editor label: 구분선.
+
+Zones: none.
 
 - `direction`: "horizontal" | "vertical", default "horizontal" — selects the theme variant
 
 #### Placeholder
 
-An area not designed yet; only reserves space. Editor label: 자리 표시자. children: none.
+An area not designed yet; only reserves space. Editor label: 자리 표시자.
+
+Zones: none.
 
 - `label`: string, default "미정 영역"
 - `height`: integer 20–1000, default 120

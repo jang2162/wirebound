@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import { installCatalog } from '@wirebound/schema'
+import { childLists, installCatalog, walkNodes, type WbNode } from '@wirebound/schema'
 import { renderDocument, unusedViewKeys } from '@wirebound/renderer'
 import { galleryItemDocument, galleryItems } from '@wirebound/theme-gallery'
 import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
@@ -15,8 +15,11 @@ export interface ThemeCheckError {
   /** 표본의 이름(`GallerySample.label`). */
   label: string
   message: string
-  /** `fallback` — 칸에 선 `data-wb-error`. `console` — 그 칸을 그리는 동안 난 `console.error`. `bundle` — 번들을 못 실었다. */
-  source: 'fallback' | 'console' | 'bundle'
+  /**
+   * `fallback` — 칸에 선 `data-wb-error`. `console` — 그 칸을 그리는 동안 난 `console.error`. `bundle` — 번들을 못 실었다. `zone` — 내용이 든 구역을
+   * 뷰가 안 그렸다(`missingZones`).
+   */
+  source: 'fallback' | 'console' | 'bundle' | 'zone'
 }
 
 export interface ThemeCheckFocusable {
@@ -142,6 +145,7 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
           errors.push({ ...at, message: node.getAttribute('data-wb-error') ?? '', source: 'fallback' })
         }
         for (const message of logged) errors.push({ ...at, message, source: 'console' })
+        for (const message of missingZones(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'zone' })
         for (const element of focusReceivers(container)) focusables.push({ ...at, element: openingTag(element) })
         root.unmount()
         container.remove()
@@ -154,6 +158,27 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
     }
     return { items: items.length, errors, unusedTokens, focusables }
   })
+}
+
+/**
+ * **내용이 든 구역을 뷰가 안 그렸다** — 그린 노드마다, 선언된 이름 붙은 구역에 노드가 있는데 그 노드의 요소 안에 그 노드의 구역 상자
+ * (`[data-wb-zone=<이름>]` — 가장 가까운 노드 요소가 그 노드다)가 없으면 그 내용이 화면에서 사라진 것이다. SDK `Zone` 을 안 쓰는 뷰(구역 전의
+ * SDK 로 짠 뷰)가 걸린다. 그 노드 자신이 안 그려졌으면(숨은 탭의 내용) 보지 않는다.
+ */
+function missingZones(container: Element, root: WbNode): string[] {
+  const out: string[] = []
+  for (const { node } of walkNodes(root)) {
+    const element = container.querySelector(`[data-wb-id="${node.id}"]`)
+    if (element === null) continue
+    for (const { zone, pointer, list } of childLists(node)) {
+      if (pointer === '/children' || list.length === 0) continue
+      const drawn = [...element.querySelectorAll(`[data-wb-zone="${zone}"]`)].some(
+        (box) => box.parentElement?.closest('[data-wb-id]') === element,
+      )
+      if (!drawn) out.push(`${node.type} 뷰가 내용이 든 구역 ${zone} 을 그리지 않았습니다 — SDK 의 Zone 으로 둡니다(노드 ${node.id})`)
+    }
+  }
+  return out
 }
 
 /** 단추 · 링크 · 입력 칸 — 에디터가 단축키를 받거나(단추 · 링크) 입력 표면으로 따로 다루는(입력 칸) 포커스 받는 요소. 이들은 경고가 아니다. */

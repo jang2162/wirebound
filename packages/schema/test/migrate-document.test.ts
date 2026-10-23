@@ -7,7 +7,7 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
-import { CURRENT_DOCUMENT_VERSION, migrateDocument, migratePageDocument } from '../src/migrate'
+import { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument, migratePageDocument } from '../src/migrate'
 import { MigrationError, liftStateRegions } from '../src/migrate-document'
 import type { PageDocument, ViewState, WbNode } from '../src/node'
 import { validatePage } from '../src/validate'
@@ -55,9 +55,12 @@ const v2VisibleIds = (doc: PageDocument, viewState: string | null): string[] => 
   return out
 }
 
+/** 판 1 → 2 단계까지만 — 판 2 → 3 은 런타임 사슬에 없다(`migrate.ts` 머리말). 판 1 → 2 는 그 판의 뜻으로 얼어 있어 그대로 잰다. */
+const toV2 = (doc: PageDocument): PageDocument => migrateDocument(doc, MIGRATIONS, 2)
+
 /** 상태마다(기본 · 목록의 상태 전부 · 목록 밖 하나) 판 1 과 판 2 의 보이는 차례. */
 function samePerState(v1: PageDocument): void {
-  const v2 = migrateDocument(v1)
+  const v2 = toV2(v1)
   const states: (string | null)[] = [null, ...(v1.viewStates ?? []).map((state) => state.id), 's_unlisted']
   for (const state of states) expect(v2VisibleIds(v2, state), `상태 ${state}`).toEqual(v1VisibleIds(v1, state))
 }
@@ -88,15 +91,16 @@ const vis = (doc: PageDocument): Record<string, unknown> => {
 const ids = (node: WbNode): string[] => [node.id, ...(node.children ?? []).flatMap(ids)]
 
 describe('판 1 → 2', () => {
-  it('지금 판은 2 · 판 2 문서는 그대로', () => {
-    expect(CURRENT_DOCUMENT_VERSION).toBe(2)
+  it('판 2 문서는 그대로 · 지금 판(3)은 판 2 를 올리지 못한다 — 판 2 → 3 은 DB 마이그레이션 몫이다', () => {
     const doc: PageDocument = { version: 2, root: { id: 'n_root', type: 'Page', children: [text('n_a')] } }
-    expect(migratePageDocument(doc)).toEqual(doc)
+    expect(toV2(doc)).toEqual(doc)
+    expect(CURRENT_DOCUMENT_VERSION).toBe(3)
+    expect(() => migratePageDocument(doc)).toThrow('버전 2에서 올릴 마이그레이션이 없습니다')
   })
 
   it('기본 가지만 — 자식이 영역 자리에 보임 없이 선다', () => {
     const doc = v1([text('n_a'), region('n_sw', [branch('n_d', 'default', [text('n_b'), text('n_c')])]), text('n_z')])
-    const out = migratePageDocument(doc)
+    const out = toV2(doc)
     expect(out.version).toBe(2)
     expect(ids(out.root)).toEqual(['n_root', 'n_a', 'n_b', 'n_c', 'n_z'])
     expect(vis(out)).toEqual({})
@@ -112,7 +116,7 @@ describe('판 1 → 2', () => {
         branch('n_a', 's_admin', [text('n_a1')]),
       ]),
     ])
-    const out = migratePageDocument(doc)
+    const out = toV2(doc)
     expect(ids(out.root)).toEqual(['n_root', 'n_d1', 'n_d2', 'n_g1', 'n_a1'])
     expect(vis(out)).toEqual({
       n_d1: { mode: 'except', states: ['s_admin', 's_guest'] },
@@ -126,7 +130,7 @@ describe('판 1 → 2', () => {
 
   it('빈 가지 — 아무것도 안 꺼낸다', () => {
     const doc = v1([region('n_sw', [branch('n_d', 'default', []), branch('n_a', 's_admin', [])]), text('n_z')])
-    expect(ids(migratePageDocument(doc).root)).toEqual(['n_root', 'n_z'])
+    expect(ids(toV2(doc).root)).toEqual(['n_root', 'n_z'])
     samePerState(doc)
   })
 
@@ -193,7 +197,7 @@ describe('판 1 → 2', () => {
         ],
       },
     ])
-    const out = migratePageDocument(doc)
+    const out = toV2(doc)
     expect(vis(out)).toEqual({
       n_box: { mode: 'except', states: ['s_guest'] },
       // 부모(n_box)가 «손님이 아닌 곳»이라 그 안에서는 관리자 가지를 빼면 기본만 남는다.
@@ -235,13 +239,13 @@ describe('판 1 → 2', () => {
 
   it('상태 영역이 없는 문서는 겹친 id 를 보지 않는다 — 검증의 duplicate-id 몫이다', () => {
     const doc: PageDocument = { version: 1, root: { id: 'n_root', type: 'Page', children: [text('n_a'), text('n_a')] } }
-    expect(migratePageDocument(doc)).toEqual({ ...doc, version: 2 })
+    expect(toV2(doc)).toEqual({ ...doc, version: 2 })
   })
 
   it('입력을 고치지 않는다', () => {
     const doc = v1([region('n_sw', [branch('n_d', 'default', [text('n_a')]), branch('n_x', 's_admin', [text('n_b')])])])
     const before = structuredClone(doc)
-    migratePageDocument(doc)
+    toV2(doc)
     expect(doc).toEqual(before)
   })
 })

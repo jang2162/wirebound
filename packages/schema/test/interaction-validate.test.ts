@@ -55,7 +55,7 @@ describe('타겟 존재', () => {
   })
 
   it('switchTab의 타겟이 문서에 없으면 missing-interaction-target', () => {
-    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: 'n_deadbeef', tab: 1 }] })
+    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: 'n_deadbeef' }] })
     expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'missing-interaction-target' }))
   })
 
@@ -148,63 +148,23 @@ describe('navigate·openModal의 타겟은 검사하지 않는다', () => {
 })
 
 describe('대상 종류', () => {
-  it('switchTab의 타겟이 Tabs면 통과한다', () => {
-    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: 1 }] }, 'Tabs')
+  it('switchTab의 타겟이 TabPanel이면 통과한다', () => {
+    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET }] }, 'TabPanel')
     expect(interactionIssues(doc)).toEqual([])
   })
 
-  it('switchTab의 타겟이 Tabs가 아니면 invalid-interaction-target', () => {
-    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: 1 }] }, 'List')
-    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-target' }))
+  it('switchTab의 타겟이 TabPanel이 아니면 invalid-interaction-target — Tabs 도 아니다', () => {
+    for (const type of ['List', 'Tabs']) {
+      const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET }] }, type)
+      expect(interactionIssues(doc), type).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-target' }))
+    }
   })
 
   it('메시지가 무엇이 와야 하는지와 무엇이 왔는지를 말한다', () => {
-    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: 1 }] }, 'List')
+    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET }] }, 'List')
     const message = interactionIssues(doc)[0]?.message ?? ''
-    expect(message).toContain('Tabs')
+    expect(message).toContain('TabPanel')
     expect(message).toContain('List')
-  })
-
-  /**
-   * **`switchTab`의 `tab`은 `Tabs.active`와 같은 축의 값이다 — 같은 규칙으로 본다.**
-   * *"상한이 없어서 검사하지 않는다"*는 **상한에만 해당하는 근거다** — `Tabs.active`의 zod는
-   * `z.number().int().min(0)`이라 **하한과 정수성은 규칙이 있고**, 액션 자리가 그것을 안 보면
-   * 같은 값이 prop 자리에서는 `invalid-props`(error)인데 액션 자리에서는 이슈 0건이 된다.
-   *
-   * **그 zod를 그대로 재사용한다** — 규칙을 베껴 적으면 둘이 따로 썩는다.
-   * **상한은 없다**(카탈로그가 안 정했다) — 그래서 큰 수는 통과한다.
-   */
-  it('switchTab의 탭 번호가 음수면 invalid-interaction-prop', () => {
-    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: -3 }] }, 'Tabs')
-    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-prop' }))
-  })
-
-  it('탭 번호가 정수가 아니어도 잡는다', () => {
-    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: 1.5 }] }, 'Tabs')
-    expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-prop' }))
-  })
-
-  it('메시지가 탭 번호에 대한 것임을 말한다', () => {
-    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: -3 }] }, 'Tabs')
-    expect(interactionIssues(doc)[0]?.message).toContain('탭 번호')
-  })
-
-  /**
-   * **`Tabs.active`와 같은 값을 넣으면 같은 판정이 나온다** — 두 자리가 갈리지 않는다는
-   * 것을 값으로 고정한다. 상한은 둘 다 없으므로 큰 수는 둘 다 통과한다.
-   */
-  it('prop 자리와 액션 자리가 같은 값에 같은 판정을 낸다', () => {
-    for (const tab of [-3, 1.5]) {
-      const asProp = pageWith({ on: 'click', actions: [{ type: 'setVisible', target: TARGET, value: true }] }, 'Tabs', { active: tab })
-      const asAction = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab }] }, 'Tabs')
-      // prop 자리: invalid-props(error) · 액션 자리: invalid-interaction-prop(warning)
-      expect(validatePage(asProp).some((issue) => issue.code === 'invalid-props')).toBe(true)
-      expect(interactionIssues(asAction)).toHaveLength(1)
-    }
-
-    // 상한은 어느 쪽도 없다 — 큰 수는 둘 다 통과한다.
-    const big = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: 99 }] }, 'Tabs')
-    expect(interactionIssues(big)).toEqual([])
   })
 
   /**

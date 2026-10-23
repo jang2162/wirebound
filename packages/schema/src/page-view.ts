@@ -24,7 +24,9 @@ import type { NodeVisibility, PageDocument, ViewState, WbNode } from './node'
 import { nodeAlias, nodeRowLabel } from './display'
 import { MISSING_NODE_NAME, describeNode, listInteractionSentences, namingContexts, type InteractionSentence } from './interaction/describe'
 import { pageTargetPath } from './page-target'
+import { BODY_ZONE } from './component/define'
 import { walkNodes } from './tree'
+import { zoneDefs } from './zones'
 
 /**
  * 코멘트 하나. **어느 노드에 달렸는지를 이름으로도 말한다** — id만 내면 읽는 사람이 그것을
@@ -52,8 +54,12 @@ export interface PageViewComment {
 export interface PageViewNode {
   id: string
   type: string
-  /** 뿌리가 0. */
+  /** 뿌리가 0. 구역 안 노드도 노드 마디로 센다(구역은 깊이를 더하지 않는다). */
   depth: number
+  /** 부모의 이름 붙은 구역에 선 노드면 그 구역 이름(`headEnd` · `actions` …). 몸통 · 뿌리는 키가 없다. */
+  zone?: string
+  /** `zone` 의 화면 이름(카탈로그의 `ZoneDef.label` — «머리 오른쪽»). 카탈로그가 모르는 구역이면 이름 그대로. `zone` 이 없으면 키가 없다. */
+  zoneLabel?: string
   /** 문장이 이 노드를 부르는 이름과 **같은 이름**이다(`describeNode`). */
   name: string
   /** 사람이 붙인 별칭. 없으면 키가 없다. */
@@ -121,13 +127,18 @@ export function pageView(input: PageViewInput): PageView {
   const viewStates = Array.isArray(input.document.viewStates) ? input.document.viewStates : []
   const nodes = new Map<string, WbNode>()
   const outline: PageViewNode[] = []
-  for (const { node, path } of walkNodes(input.document.root)) {
+  const depths = new Map<WbNode, number>()
+  for (const { node, path, parent, zone } of walkNodes(input.document.root)) {
     nodes.set(node.id, node)
+    const depth = parent === null ? 0 : (depths.get(parent) ?? 0) + 1
+    depths.set(node, depth)
     outline.push({
       id: node.id,
       type: node.type,
-      // 포인터의 `/children/` 마디 수가 곧 깊이다 — 순회가 이미 그 값을 문자열로 들고 있다.
-      depth: path.split('/children/').length - 1,
+      depth,
+      ...(zone !== null && zone !== BODY_ZONE && parent !== null
+        ? { zone, zoneLabel: zoneDefs(parent.type).find((def) => def.name === zone)?.label ?? zone }
+        : {}),
       name: describeNode(node, naming.get(node.id)),
       ...aliasEntry(node),
       rowLabel: nodeRowLabel(node),

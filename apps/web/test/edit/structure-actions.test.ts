@@ -311,7 +311,7 @@ describe('structureAbilities', () => {
       children: [null as unknown as WbNode, { id: 'n_a', type: 'Text' }],
     })
 
-    expect(nodeSpot(document, 'n_a')).toEqual({ parentId: 'n_root', index: 1, siblingCount: 2 })
+    expect(nodeSpot(document, 'n_a')).toEqual({ parentId: 'n_root', zone: 'body', index: 1, siblingCount: 2 })
     // 앞에 원소가 하나 있으므로 위로 갈 수 있다고 판정한다 — 그 자리가 `null`이어도
     // `moveNodeOps`가 만드는 것은 배열 안의 자리 이동이라 성립한다.
     expect(structureAbilities(document, 'n_a').moveUp).toBe(true)
@@ -349,14 +349,41 @@ describe('nodeSpot', () => {
   it('부모와 인덱스를 낸다', () => {
     expect(nodeSpot(withSiblings(), 'n_last')).toEqual({
       parentId: 'n_root',
+      zone: 'body',
       index: 2,
       siblingCount: 3,
     })
   })
 
+  it('구역 안 노드는 그 구역 · 그 구역 안의 자리 · 그 구역의 형제 수를 낸다 — 몸통과 섞어 세지 않는다', () => {
+    const document: PageDocument = {
+      version: 3,
+      root: {
+        id: 'n_root',
+        type: 'Page',
+        children: [
+          {
+            id: 'n_card',
+            type: 'Card',
+            children: [{ id: 'n_body', type: 'Text' }],
+            zones: {
+              headEnd: [
+                { id: 'n_x', type: 'Button' },
+                { id: 'n_y', type: 'Button' },
+              ],
+            },
+          },
+        ],
+      },
+    }
+    expect(nodeSpot(document, 'n_y')).toEqual({ parentId: 'n_card', zone: 'headEnd', index: 1, siblingCount: 2 })
+    expect(nodeSpot(document, 'n_body')).toEqual({ parentId: 'n_card', zone: 'body', index: 0, siblingCount: 1 })
+  })
+
   it('깊은 노드의 자리도 낸다', () => {
     expect(nodeSpot(withGrandchild(), 'n_deep')).toEqual({
       parentId: 'n_box',
+      zone: 'body',
       index: 0,
       siblingCount: 1,
     })

@@ -1,8 +1,11 @@
 import { liftStateRegions, MigrationError } from './migrate-document'
 import type { AnyDocument, PageDocument } from './node'
 
-/** 지금 문서 판. 판 2 — 화면 상태가 노드 보임이다(판 1 의 상태 영역은 `migrate-document.ts`가 푼다). */
-export const CURRENT_DOCUMENT_VERSION = 2
+/**
+ * 지금 문서 판. 판 3 — 노드에 이름 붙은 구역(`zones`)이 있고 탭은 `TabPanel` 노드다. **판 2 → 3 단계는 런타임 사슬에 없다** — 저장된 문서는
+ * DB 마이그레이션(`apps/api` 의 `0028-node-zones`)이 한 번 옮겼고, 판 2 를 들고 오는 입구(페이지 JSON 가져오기 · 클립보드)는 거절된다.
+ */
+export const CURRENT_DOCUMENT_VERSION = 3
 
 export interface Migration {
   from: number
@@ -44,7 +47,7 @@ export function migrateDocument<T extends AnyDocument>(
 
 /**
  * **페이지 문서를 지금 판으로** — 문서가 들어오는 경계(DB 의 `pages.schema` · 스냅샷 복원 · 페이지 JSON 가져오기 · 클립보드 봉투)가 부르는
- * 이름. `migrateDocument` 와 같은 사슬이다(판 2 면 그대로의 사본). `pageId` 를 주면 판 1 → 2 가 멈춘 `MigrationError` 에 그 페이지를 싣는다.
+ * 이름. `migrateDocument` 와 같은 사슬이다(지금 판이면 그대로의 사본). `pageId` 를 주면 판 1 → 2 가 멈춘 `MigrationError` 에 그 페이지를 싣는다.
  */
 export function migratePageDocument(doc: unknown, options: { pageId?: string } = {}): PageDocument {
   try {

@@ -6,8 +6,8 @@
  * 일어나는 것은 번들 런타임이 브라우저에서 돌린다(`browser/mount.tsx` — 렌더러의 상호작용 런타임). **둘이 갈리면 설계서가
  * 거짓말을 한다** — 탭에는 적혀 있는데 눌러도 안 되거나, 눌리는데 탭에 없다.
  *
- * 그리고 **검증기와 런타임의 문장을 갈래마다 잰다** — 여덟 갈래 중 여섯은 글자까지 같고
- * 둘은 런타임에만 있다. 아래 표가 그 여덟을 하나씩 짚는다. 런타임의 문장은 **마운트해 눌러 상태 줄에서** 읽는다.
+ * 그리고 **검증기와 런타임의 문장을 갈래마다 잰다** — 일곱 갈래 중 다섯은 글자까지 같고
+ * 둘은 런타임에만 있다. 아래 표가 그 일곱을 하나씩 짚는다. 런타임의 문장은 **마운트해 눌러 상태 줄에서** 읽는다.
  */
 import { NO_THEME, renderDocument, type InteractionEvent } from '@wirebound/renderer'
 import {
@@ -34,14 +34,22 @@ beforeAll(() => {
 
 function documentWith(interactions: Interaction[]): PageDocument {
   return {
-    version: 1,
+    version: 3,
     root: {
       id: 'n_root',
       type: 'Page',
       children: [
         { id: 'n_btn', type: 'Button', props: { label: '검색' }, interactions },
         { id: 'n_list', type: 'List', props: {} },
-        { id: 'n_tabs', type: 'Tabs', props: { tabs: ['ㄱ', 'ㄴ'], active: 0 } },
+        {
+          id: 'n_tabs',
+          type: 'Tabs',
+          props: { active: 0 },
+          children: [
+            { id: 'n_tab_a', type: 'TabPanel', props: { label: 'ㄱ' } },
+            { id: 'n_tab_b', type: 'TabPanel', props: { label: 'ㄴ' } },
+          ],
+        },
       ],
     } as WbNode,
   }
@@ -114,7 +122,7 @@ function validatorMessages(page: PageDocument): string[] {
 }
 
 /**
- * **판정이 갈릴 수 있는 갈래 여덟.** `schema`의 `interaction/check.ts`가 내는 문장의 종류를
+ * **판정이 갈릴 수 있는 갈래 일곱.** `schema`의 `interaction/check.ts`가 내는 문장의 종류를
  * 자리마다 하나씩 짚는다 — 목록이 여기 글자로 사는 것이 요점이다.
  */
 const BRANCHES: [name: string, action: InteractionAction][] = [
@@ -122,14 +130,13 @@ const BRANCHES: [name: string, action: InteractionAction][] = [
   ['setProp 타겟이 문서에 없다', { type: 'setProp', target: 'n_없음', prop: 'loading', value: true }],
   ['setProp의 prop이 그 컴포넌트에 없다', { type: 'setProp', target: 'n_list', prop: '없는것', value: 1 }],
   ['setProp의 값이 계약에 안 맞다', { type: 'setProp', target: 'n_list', prop: 'items', value: -1 }],
-  ['switchTab의 타겟이 Tabs가 아니다', { type: 'switchTab', target: 'n_list', tab: 0 }],
-  ['switchTab의 탭 번호가 계약에 안 맞다', { type: 'switchTab', target: 'n_tabs', tab: -3 }],
+  ['switchTab의 타겟이 TabPanel이 아니다', { type: 'switchTab', target: 'n_list' }],
   ['navigate의 타겟을 아직 안 골랐다', { type: 'navigate', target: '' }],
   ['openModal의 타겟을 아직 안 골랐다', { type: 'openModal', target: '   ' }],
 ]
 
 describe('검증기와 런타임의 문장을 갈래마다 잰다', () => {
-  it('여덟 갈래가 전부 서로 다른 문장을 낸다 — 카나리아', () => {
+  it('일곱 갈래가 전부 서로 다른 문장을 낸다 — 카나리아', () => {
     const messages = BRANCHES.map(([, action]) => planMessages(documentWith([{ on: 'click', actions: [action] }])))
     // 갈래마다 문장이 정확히 하나 나야 한다. 0이면 판정이 그 자리를 안 보는 것이다.
     expect(messages.map((list) => list.length)).toEqual(BRANCHES.map(() => 1))
@@ -137,9 +144,9 @@ describe('검증기와 런타임의 문장을 갈래마다 잰다', () => {
   })
 
   /**
-   * **여섯은 글자까지 같다.** 저장 게이트와 런타임이 `checkNodeAction` 하나를 함께 부른다.
+   * **다섯은 글자까지 같다.** 저장 게이트와 런타임이 `checkNodeAction` 하나를 함께 부른다.
    */
-  it.each(BRANCHES.slice(0, 6))('%s — 검증기와 런타임이 같은 문장을 낸다', (_name, action) => {
+  it.each(BRANCHES.slice(0, 5))('%s — 검증기와 런타임이 같은 문장을 낸다', (_name, action) => {
     const page = documentWith([{ on: 'click', actions: [action] }])
     expect(planMessages(page)).toEqual(validatorMessages(page))
   })
@@ -153,7 +160,7 @@ describe('검증기와 런타임의 문장을 갈래마다 잰다', () => {
    * `checkPageAction`을 부르면 그쪽 판정이 뒤집히고, 그러면 **타겟이 된 노드를 지우는
    * 편집이 422가 된다.**
    */
-  it.each(BRANCHES.slice(6))('%s — 검증기는 말이 없고 런타임만 말한다', (_name, action) => {
+  it.each(BRANCHES.slice(5))('%s — 검증기는 말이 없고 런타임만 말한다', (_name, action) => {
     const page = documentWith([{ on: 'click', actions: [action] }])
     expect(validatorMessages(page)).toEqual([])
     expect(planMessages(page)).toHaveLength(1)
@@ -163,7 +170,7 @@ describe('검증기와 런타임의 문장을 갈래마다 잰다', () => {
 describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
   const RULES: Interaction[] = [
     { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
-    { on: 'select', actions: [{ type: 'switchTab', target: 'n_tabs', tab: 1 }] },
+    { on: 'select', actions: [{ type: 'switchTab', target: 'n_tab_b' }] },
     { on: 'change', actions: [] },
     { on: 'submit', actions: [{ type: 'navigate', target: 'page:어디' }] },
   ]

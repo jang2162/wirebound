@@ -95,7 +95,7 @@ describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
   })
 
   /**
-   * 판마다 긴 이름 메뉴 줄을 고르고(줄 `+` · `…` 가 선다) 목록 칸(Tabs)을 고른 뒤 잰다. 판 카나리아: 아이콘만 남은 단추가 셋 이상
+   * 판마다 긴 이름 메뉴 줄을 고르고(줄 `+` · `…` 가 선다) 목록 칸(List 의 컬럼)을 고른 뒤 잰다. 판 카나리아: 아이콘만 남은 단추가 셋 이상
    * 보이고(머리 `…` · 되돌리기 · 줄 `+` · `…` · 휴지통 …) 긴 이름 줄을 찾았다.
    */
   it.each([
@@ -206,7 +206,7 @@ describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
   })
 })
 
-/** 긴 이름 메뉴 하나 · 페이지 하나 · Tabs(목록 칸 둘) · 상호작용 한 규칙(액션 하나)을 단 Button · 코멘트 하나. */
+/** 긴 이름 메뉴 하나 · 페이지 하나 · List(목록 칸 둘 — 컬럼) · 상호작용 한 규칙(액션 하나)을 단 Button · 코멘트 하나. */
 async function fixture(stack: EditorStack, owner: Session, slug: string): Promise<{ P: string }> {
   const call = (m: string, p: string, b?: unknown) => stack.request(owner, m, p, b)
   const project = (await call('POST', '/projects', { name: '아이콘 판', slug: `${slug}-${Date.now().toString(36)}` })).body
@@ -214,7 +214,7 @@ async function fixture(stack: EditorStack, owner: Session, slug: string): Promis
   const page = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body
   const P = `/projects/${project.id}/pages/${page.id}`
   const ops = [
-    { op: 'add', path: '/root/children/0', value: { id: 'n_tabs000001', type: 'Tabs', props: { tabs: ['개요', '상세'] } } },
+    { op: 'add', path: '/root/children/0', value: { id: 'n_tabs000001', type: 'List', props: { columns: ['개요', '상세'] } } },
     {
       op: 'add',
       path: '/root/children/1',

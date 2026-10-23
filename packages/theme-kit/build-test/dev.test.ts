@@ -99,7 +99,7 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
     const kinds = await frame.evaluate(
       () => new Set([...document.querySelectorAll('[data-wb-component]')].map((el) => el.getAttribute('data-wb-component'))).size,
     )
-    expect(kinds).toBe(19)
+    expect(kinds).toBe(20)
   })
 
   it('테마 뷰가 쓰인다 — SDK 한 벌', async () => {
@@ -108,7 +108,7 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
       cards: document.querySelectorAll('.sample-card').length,
       errors: document.querySelectorAll('[data-wb-error]').length,
     }))
-    expect(probe).toEqual({ cards: 4, errors: 0 })
+    expect(probe).toEqual({ cards: 6, errors: 0 })
   })
 
   it('뷰포트 프리셋 — 375 를 고르면 프레임이 375 폭이다', async () => {

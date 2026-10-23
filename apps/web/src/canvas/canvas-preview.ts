@@ -25,8 +25,18 @@
  * 그린 뒤 미리보기 루트 · 옮기는 원본의 요소에 `opacity` 를 인라인으로 얹고 미리보기가 걷히면 원래 값으로 되돌린다(`applyPreviewLook`).
  * 노드 바깥에 상자를 하나 두르면 부모 뷰의 배치(그리드 칸 · 가로 무리)가 그 상자를 자식으로 읽어 모양이 달라진다.
  */
-import { getComponent, type PageDocument, type WbNode } from '@wirebound/schema'
-import type { Placing, StructureDrop } from '../edit/structure-drop'
+import {
+  BODY_ZONE,
+  childLists,
+  getComponent,
+  mapChildLists,
+  zoneList,
+  zonePointer,
+  type PageDocument,
+  type WbNode,
+} from '@wirebound/schema'
+import { walkSafely } from '../edit/safe-walk'
+import { dropZoneOf, type Placing, type StructureDrop } from '../edit/structure-drop'
 import '../catalog-setup'
 
 /** 미리보기 노드 id 의 머리 — 머리말 «미리보기 노드는 id 머리로 가른다». */
@@ -48,24 +58,15 @@ export interface PlacementPreview {
   axis?: 'x' | 'y'
 }
 
-/** 노드 서브트리를 미리보기 id 로 베낀다. */
+/** 노드 서브트리를 미리보기 id 로 베낀다(몸통 · 구역 전부). */
 function previewCopy(node: WbNode): WbNode {
-  const copy: WbNode = { ...node, id: `${PREVIEW_ID_PREFIX}${node.id}` }
-  if (Array.isArray(node.children)) copy.children = node.children.map((child) => previewCopy(child as WbNode))
-  return copy
+  return prefixedCopy(node, PREVIEW_ID_PREFIX)
 }
 
-/** `id` 노드와 그 부모 · 차례. 없으면 `null`. 노드가 아닌 것은 건너뛴다(검증 전 문서). */
-function locate(root: WbNode, id: string): { node: WbNode; parent: WbNode | null; index: number } | null {
-  const stack: { node: WbNode; parent: WbNode | null; index: number }[] = [{ node: root, parent: null, index: -1 }]
-  while (stack.length > 0) {
-    const visit = stack.pop()!
-    if (visit.node.id === id) return visit
-    const children = visit.node.children
-    if (!Array.isArray(children)) continue
-    children.forEach((child, index) => {
-      if (typeof child === 'object' && child !== null) stack.push({ node: child as WbNode, parent: visit.node, index })
-    })
+/** `id` 노드와 그 부모 · 구역 · 차례. 없으면 `null`. 노드가 아닌 것은 건너뛴다(검증 전 문서 — `walkSafely`). */
+function locate(root: WbNode, id: string): { node: WbNode; parent: WbNode | null; zone: string; index: number } | null {
+  for (const visit of walkSafely(root)) {
+    if (visit.node.id === id) return { node: visit.node, parent: visit.parent, zone: visit.zone ?? BODY_ZONE, index: visit.index }
   }
   return null
 }
@@ -75,25 +76,33 @@ function modulePrefix(index: number): string {
   return `${PREVIEW_ID_PREFIX}m${index}:`
 }
 
-/** 노드 서브트리를 미리보기 id 로 베낀다 — 머리를 준다. */
+/** 노드 서브트리를 미리보기 id 로 베낀다 — 머리를 준다. 몸통 · 구역 전부를 베낀다(구역을 빼면 미리보기 동안 그 안 노드가 사라진다). */
 function prefixedCopy(node: WbNode, prefix: string): WbNode {
-  const copy: WbNode = { ...node, id: `${prefix}${node.id}` }
-  if (Array.isArray(node.children)) copy.children = node.children.map((child) => prefixedCopy(child as WbNode, prefix))
-  return copy
+  return { ...mapChildLists(node, (child) => prefixedCopy(child, prefix)), id: `${prefix}${node.id}` }
 }
 
-/** `parentId` 의 자식 `index` 자리에 `inserted` 를 차례로 끼운 사본 — 지나는 길의 노드만 새 객체다. */
-function withInserted(node: WbNode, parentId: string, index: number, inserted: readonly WbNode[]): WbNode | null {
-  const children = Array.isArray(node.children) ? node.children : []
+/** 노드의 한 줄(`pointer` — `/children` · `/zones/<이름>`)을 `list` 로 바꾼 사본. */
+function withList(node: WbNode, pointer: string, list: unknown[]): WbNode {
+  if (pointer === '/children') return { ...node, children: list as WbNode[] }
+  const name = pointer.slice('/zones/'.length)
+  const zones = node.zones !== null && typeof node.zones === 'object' && !Array.isArray(node.zones) ? node.zones : {}
+  return { ...node, zones: { ...zones, [name]: list as WbNode[] } }
+}
+
+/** `parentId` 의 그 구역 `index` 자리에 `inserted` 를 차례로 끼운 사본 — 지나는 길의 노드만 새 객체다. */
+function withInserted(node: WbNode, parentId: string, zone: string, index: number, inserted: readonly WbNode[]): WbNode | null {
   if (node.id === parentId) {
-    const at = Math.max(0, Math.min(index, children.length))
-    return { ...node, children: [...children.slice(0, at), ...inserted, ...children.slice(at)] }
+    const list = zoneList(node, zone)
+    const at = Math.max(0, Math.min(index, list.length))
+    return withList(node, zonePointer(zone), [...list.slice(0, at), ...inserted, ...list.slice(at)])
   }
-  for (let i = 0; i < children.length; i += 1) {
-    const child = children[i]
-    if (typeof child !== 'object' || child === null) continue
-    const next = withInserted(child as WbNode, parentId, index, inserted)
-    if (next !== null) return { ...node, children: [...children.slice(0, i), next, ...children.slice(i + 1)] }
+  for (const { pointer, list } of childLists(node)) {
+    for (let i = 0; i < list.length; i += 1) {
+      const child = list[i]
+      if (typeof child !== 'object' || child === null) continue
+      const next = withInserted(child as WbNode, parentId, zone, index, inserted)
+      if (next !== null) return withList(node, pointer, [...list.slice(0, i), next, ...list.slice(i + 1)])
+    }
   }
   return null
 }
@@ -102,8 +111,8 @@ function withInserted(node: WbNode, parentId: string, index: number, inserted: r
  * 스토어 문서에 미리보기를 끼운 사본(머리말의 표). 못 끼우면(부모 · 옮길 노드가 문서에 없음 · 카탈로그에 없는 타입) `null` — 부르는 쪽은
  * 스토어 문서를 그대로 그린다.
  *
- * 옮기기의 `target.index` 는 «옮긴 뒤 그 부모 안 차례»다(`edit/structure-drop.ts` 머리말) — 원본이 남은 이 사본에서는 같은 부모의
- * 원본 뒤쪽 차례면 하나 민다.
+ * 옮기기의 `target.index` 는 «옮긴 뒤 그 부모 안 차례»다(`edit/structure-drop.ts` 머리말) — 원본이 남은 이 사본에서는 같은 부모 · 같은
+ * 구역의 원본 뒤쪽 차례면 하나 민다.
  */
 export function previewDocument(document: PageDocument, preview: PlacementPreview): PageDocument | null {
   const root = document.root as WbNode | undefined
@@ -120,10 +129,10 @@ export function previewDocument(document: PageDocument, preview: PlacementPrevie
   } else {
     const moving = locate(root, placing.id)
     if (moving === null || moving.parent === null) return null
-    if (moving.parent.id === target.parentId && moving.index <= index) index += 1
+    if (moving.parent.id === target.parentId && moving.zone === dropZoneOf(target) && moving.index <= index) index += 1
     inserted = [previewCopy(moving.node)]
   }
-  const next = withInserted(root, target.parentId, index, inserted)
+  const next = withInserted(root, target.parentId, dropZoneOf(target), index, inserted)
   return next === null ? null : { ...document, root: next }
 }
 

@@ -64,7 +64,8 @@ export function thumbSample(type: string): Sample | null {
   if (first !== undefined) {
     return { doc: galleryItemDocument({ type, variant: undefined, sample: first }), nodeId: first.node.id }
   }
-  const node: WbNode | null = createNode(type, () => `thumb-${type}`)
+  let made = 0
+  const node: WbNode | null = createNode(type, () => `thumb-${type}${made++ === 0 ? '' : `-${made - 1}`}`)
   if (node === null) return null
   return { doc: { version: 1, root: { id: 'thumb-page', type: 'Page', children: [node] } } as AnyDocument, nodeId: node.id }
 }

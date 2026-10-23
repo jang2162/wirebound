@@ -3,7 +3,7 @@
  * `docs/superpowers/specs/2026-10-01-component-drag-design.md` 「놓을 자리 판정」). 답은 «대상 노드 + 띠 | 페이지 끝»까지이고, 그것을
  * 부모 id + 차례로 바꾸는 것은 트리와 같은 함수(`edit/structure-drop.ts`)다 — 경로 층(`drag/use-placement.ts`)이 둘을 잇는다.
  *
- * 순수 함수(구역 · 축 · 좌표 환산)와 그것을 그려진 DOM 에 대는 얇은 층(`canvasHitAt`)으로 가른다 — jsdom 에 레이아웃이 없어 순수 함수는
+ * 순수 함수(띠 · 축 · 좌표 환산)와 그것을 그려진 DOM 에 대는 얇은 층(`canvasHitAt`)으로 가른다 — jsdom 에 레이아웃이 없어 순수 함수는
  * 값으로 재고(`test/canvas/canvas-drop.test.ts`), DOM 층은 실브라우저로 잰다(`build-test/canvas-drop.test.ts`).
  *
  * ## 띠는 그려진 상자와 부모의 배치로 정한다 — 카탈로그가 아니다
@@ -54,7 +54,7 @@
  * 옆 바탕의 페이지 끝이 화면 밖이라 미리보기 없이 놓이게 된다. 아래 바탕은 문서 끝이 보일 때만 드러나므로 미리보기가 늘 보인다.
  */
 import type { DropMiss } from '../drag/drag-debug'
-import { dropZone, type DropZone } from '../tree/tree-drop'
+import { dropBand, type DropBand } from '../tree/tree-drop'
 
 export interface Rect {
   left: number
@@ -81,7 +81,7 @@ export interface Layout {
  * 바탕 · 뿌리 자신(자식이 없을 때)은 페이지 끝이고 그 상자는 뿌리의 것이다.
  */
 export type CanvasHit =
-  | { overId: string; zone: DropZone; rect: Rect; layout: Layout }
+  | { overId: string; band: DropBand; rect: Rect; layout: Layout }
   | { pageEnd: true; rect: Rect; layout: Layout }
   | { preview: true; rect: Rect; layout: Layout }
 
@@ -97,14 +97,14 @@ const VERTICAL: Layout = { axis: 'y', reversed: false }
 
 /**
  * 상자 안 자리를 띠로. 축 방향으로 앞 25% · 뒤 25% · 가운데(받을 때만 — 아니면 반씩)는 트리 줄과 같은 셈이다(`tree/tree-drop.ts` 의
- * `dropZone`). 받는 빈 노드는 상자 전체가 «안» 이다 — 빈 컨테이너에 놓을 자리가 가운데 절반뿐이면 작은 상자에서 못 맞춘다.
+ * `dropBand`). 받는 빈 노드는 상자 전체가 «안» 이다 — 빈 컨테이너에 놓을 자리가 가운데 절반뿐이면 작은 상자에서 못 맞춘다.
  */
-export function zoneOf(rect: Rect, axis: Axis, reversed: boolean, point: Point, acceptsChildren: boolean, empty: boolean): DropZone {
+export function bandOf(rect: Rect, axis: Axis, reversed: boolean, point: Point, acceptsChildren: boolean, empty: boolean): DropBand {
   if (acceptsChildren && empty) return 'inside'
-  const zone =
-    axis === 'x' ? dropZone(point.x - rect.left, rect.width, acceptsChildren) : dropZone(point.y - rect.top, rect.height, acceptsChildren)
-  if (!reversed || zone === 'inside') return zone
-  return zone === 'before' ? 'after' : 'before'
+  const band =
+    axis === 'x' ? dropBand(point.x - rect.left, rect.width, acceptsChildren) : dropBand(point.y - rect.top, rect.height, acceptsChildren)
+  if (!reversed || band === 'inside') return band
+  return band === 'before' ? 'after' : 'before'
 }
 
 /** 두 상자가 세로로 겹치는가 — 같은 줄. 맞닿기만 한 것은 아니다(위아래로 쌓인 블록). */
@@ -255,8 +255,8 @@ function nodeHit(frame: Window, frameRect: Rect, zoom: number, point: Point, ele
   const rect = plain(element.getBoundingClientRect())
   const parent = layoutParent(element, frame)
   const layout = parent === null ? VERTICAL : axisOf(frame.getComputedStyle(parent), siblingRects(parent, element, frame), rect)
-  const zone = zoneOf(rect, layout.axis, layout.reversed, point, info.acceptsChildren, info.empty)
-  return { overId: id, zone, rect: frameToHost(rect, frameRect, zoom), layout }
+  const band = bandOf(rect, layout.axis, layout.reversed, point, info.acceptsChildren, info.empty)
+  return { overId: id, band, rect: frameToHost(rect, frameRect, zoom), layout }
 }
 
 /**

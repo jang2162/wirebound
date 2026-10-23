@@ -13,7 +13,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
 import { CATALOG_TYPES } from '../src/component/catalog/index'
-import type { Interaction, InteractionAction, InteractionTrigger, PageDocument } from '../src/node'
+import type { Interaction, InteractionAction, InteractionTrigger, PageDocument, WbNode } from '../src/node'
 import { COMPONENT_NOUNS, describeInteraction, listInteractionSentences } from '../src/interaction/describe'
 
 beforeAll(() => {
@@ -199,7 +199,7 @@ describe('끊긴 타겟', () => {
       id: 'n_search',
       type: 'Button',
       props: { label: '검색' },
-      interactions: [{ on: 'click', actions: [{ type: 'switchTab', target: '', tab: 0 }] }],
+      interactions: [{ on: 'click', actions: [{ type: 'switchTab', target: '' }] }],
     })
     expect(sentence(switchTab)).toContain('아직 고르지 않은 대상')
   })
@@ -269,25 +269,36 @@ describe('액션 5종', () => {
     expect(withAction({ type: 'setVisible', target: 'n_tgt', value: false })).toBe('실행 버튼 클릭 시 목록이 숨겨집니다')
   })
 
-  /** 타겟이 `Tabs`면 그 `tabs` 배열에서 이름을 읽는다 — 번호보다 읽는 사람에게 뜻이 있다. */
-  it('switchTab — 탭 이름을 읽는다', () => {
-    expect(withAction({ type: 'switchTab', target: 'n_tgt', tab: 1 }, 'Tabs', { tabs: ['기본정보', '상세정보'] })).toBe(
-      '실행 버튼 클릭 시 탭이 "상세정보" 탭으로 바뀝니다',
-    )
+  /** 탭 바꾸기의 판 — 버튼 하나와 탭 하나(패널 둘). 대상은 패널이다. */
+  function withTabs(target: string, second: Record<string, unknown> = { label: '상세정보' }): string {
+    const tabs: WbNode = {
+      id: 'n_tabs',
+      type: 'Tabs',
+      children: [
+        { id: 'n_p1', type: 'TabPanel', props: { label: '기본정보' } },
+        { id: 'n_p2', type: 'TabPanel', props: second },
+      ],
+    }
+    const source: WbNode = {
+      id: 'n_src',
+      type: 'Button',
+      props: { label: '실행' },
+      interactions: [{ on: 'click', actions: [{ type: 'switchTab', target }] }],
+    }
+    return sentence(doc(source, tabs))
+  }
+
+  /** 대상 패널의 이름(`label`)을 읽고, 주어는 그 패널의 부모 `Tabs`다. */
+  it('switchTab — 패널 이름을 읽는다', () => {
+    expect(withTabs('n_p2')).toBe('실행 버튼 클릭 시 탭이 "상세정보" 탭으로 바뀝니다')
   })
 
-  /**
-   * **뜻이 없는 번호는 번호로 읽어 주지 않는다.** 번호로 읽으면 `tab: -3`이
-   * `-2번째 탭`으로, `1.5`가 `2.5번째 탭`으로 나온다 — **검증이 못 잡은 값을 문장화가
-   * 그대로 읽어 주는** 꼴이다(검증 쪽은 `interaction-validate.test.ts`가 같은 값을 잡는다).
-   */
-  it('switchTab — 음수·비정수 번호는 그렇다고 말한다', () => {
-    expect(withAction({ type: 'switchTab', target: 'n_tgt', tab: -3 }, 'Tabs', { tabs: ['하나'] })).toBe(
-      '실행 버튼 클릭 시 탭이 올바르지 않은 탭 번호로 바뀝니다',
-    )
-    expect(withAction({ type: 'switchTab', target: 'n_tgt', tab: 1.5 }, 'Tabs', { tabs: ['하나'] })).toBe(
-      '실행 버튼 클릭 시 탭이 올바르지 않은 탭 번호로 바뀝니다',
-    )
+  it('switchTab — 이름을 못 읽으면 차례로 말한다', () => {
+    expect(withTabs('n_p2', { label: '  ' })).toBe('실행 버튼 클릭 시 탭이 2번째 탭으로 바뀝니다')
+  })
+
+  it('switchTab — 대상이 패널이 아니면 그 이름만 말한다', () => {
+    expect(withAction({ type: 'switchTab', target: 'n_tgt' })).toBe('실행 버튼 클릭 시 목록이 탭으로 열립니다')
   })
 
   /**
@@ -301,12 +312,6 @@ describe('액션 5종', () => {
     )
     expect(withAction({ type: 'setProp', target: 'n_tgt', prop: '', value: '가' })).toBe(
       '실행 버튼 클릭 시 목록의 아직 고르지 않은 속성이 "가"로 바뀝니다',
-    )
-  })
-
-  it('switchTab — 이름을 못 읽으면 번호로 말한다', () => {
-    expect(withAction({ type: 'switchTab', target: 'n_tgt', tab: 5 }, 'Tabs', { tabs: ['하나'] })).toBe(
-      '실행 버튼 클릭 시 탭이 6번째 탭으로 바뀝니다',
     )
   })
 
@@ -362,7 +367,7 @@ describe('5종 × 4종 = 20 조합', () => {
   const ACTIONS: InteractionAction[] = [
     { type: 'setProp', target: 'n_tgt', prop: 'loading', value: true },
     { type: 'setVisible', target: 'n_tgt', value: false },
-    { type: 'switchTab', target: 'n_tabs', tab: 0 },
+    { type: 'switchTab', target: 'n_tabs' },
     { type: 'navigate', target: 'page:다음' },
     { type: 'openModal', target: 'page:등록' },
   ]
@@ -536,7 +541,7 @@ describe('COMPONENT_NOUNS는 카탈로그 전체를 덮는다', () => {
     expect(extra).toEqual([])
   })
 
-  it('labelProp을 가진 타입이 여덟이다', () => {
+  it('labelProp을 가진 타입이 아홉이다', () => {
     /**
      * **오타 하나가 조용히 라벨을 지우는 자리다.** 이름은 카탈로그에서
      * 유도되지만 `labelProp`은 `describe.ts`의 리터럴 표(`LABEL_PROPS`)에 남았다 —
@@ -550,7 +555,7 @@ describe('COMPONENT_NOUNS는 카탈로그 전체를 덮는다', () => {
       .filter(([, noun]) => noun.labelProp !== undefined)
       .map(([type]) => type)
       .sort()
-    expect(withLabel).toEqual(['Button', 'Card', 'EntryForm', 'Field', 'Link', 'Media', 'Placeholder', 'Text'])
+    expect(withLabel).toEqual(['Button', 'Card', 'EntryForm', 'Field', 'Link', 'Media', 'Placeholder', 'TabPanel', 'Text'])
   })
 
   /** `labelProp`은 그 컴포넌트에 **실제로 있는** prop이어야 한다. */

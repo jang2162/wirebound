@@ -41,8 +41,10 @@ export { collectNodeIds, findNode, findNodePath, remapNodeIds, stripMarkers, wal
 export type { LockConflictInput, NodeLock, OpsLockConflictInput, SelectionConflictInput } from './lock'
 export { findLockConflict, lockConflictOfOps, locksAgainst, selectionConflicts } from './lock'
 
-export type { ComponentDef, EditorControl, EditorField } from './component/define'
-export { defineComponent } from './component/define'
+export type { ComponentDef, EditorControl, EditorField, NodeSeed, ZoneDef } from './component/define'
+export { BODY_ZONE, defineComponent, ZONE_NAME_PATTERN } from './component/define'
+export type { ChildList } from './zones'
+export { childLists, childNodes, hasBody, hasZone, mapChildLists, zoneDefs, zoneList, zonePointer } from './zones'
 export type { ComponentGroup } from './component/group'
 export { COMPONENT_GROUP_LABELS, COMPONENT_GROUPS, isComponentGroup } from './component/group'
 export { getComponent, listComponents, registerComponent, requireComponent, resetRegistry } from './component/registry'

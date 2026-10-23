@@ -65,7 +65,7 @@ function syntheticRows(pages: number, nodes: number): ExportRows {
       schemaVersion: 1,
       headSeq: 0,
       schema: {
-        version: 1,
+        version: 3,
         root: {
           id: `p${p}_root`,
           type: 'Page',
@@ -125,7 +125,7 @@ async function addComment(
 
 function button(rootId: string, buttonId: string, label: string, navigateTo: string): PageDocument {
   return {
-    version: 1,
+    version: 3,
     root: {
       id: rootId,
       type: 'Page',

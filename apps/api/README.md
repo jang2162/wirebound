@@ -45,6 +45,13 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 페이지 · 모듈 · 레이아웃이 하나라도 있는 DB 에서 `migrate:down` 은 그 마이그레이션에서 «백업에서 되돌린다» 로 멈춘다(셋 다 빈 DB 는
 내려간다). 옛 판 서버로 돌아가려면 0025 앞에 뜬 백업을 쓴다. 테스트의 왕복(`test/global-setup.ts`)은 테스트 DB 의 프로젝트를 비운 뒤 돈다.
 
+**`0028-node-zones` 도 되돌릴 수 없다.** 문서를 판 3(노드 구역 — 탭 이름 배열 → `TabPanel` 노드 · `switchTab` 의 탭 번호 → 패널 id ·
+검색폼 · 입력폼의 기본 단추 둘 → `zones.actions`)으로 옮겼다. 옮기는 자리는 `pages` · `layouts` · `modules` · `personal_modules` ·
+`snapshots.payload` 의 페이지 · 레이아웃 문서다(스냅샷의 판 1 문서는 먼저 판 1 → 2 를 탄다). `revisions` 는 안 옮긴다 — 옮기기 전
+편집의 되돌리기는 옛 경로(`/props/tabs` 등)를 가리켜 건너뛰어진다. 판 2 → 3 단계는 이 파일에만 있어 런타임은 판 1 · 2 문서(가져오기 ·
+클립보드 · 판 2 스냅샷의 복원)를 «버전 2에서 올릴 마이그레이션이 없습니다» 로 거절한다. 내리기는 0025 와 같다 — 페이지 · 모듈 ·
+레이아웃 · 스냅샷이 하나라도 있으면 «백업에서 되돌린다» 로 멈춘다.
+
 **`migrate:down` 은 계정을 안 건드린다.** 시딩이 마이그레이션 **파일 안**이 아니라 CLI
 진입점에 있기 때문이다 — 계정을 마이그레이션 파일로 만들면 롤백이 남의
 계정을 지우게 된다(`src/db/seed-user.ts` 의 머리말이 그 판정을 든다).
@@ -728,7 +735,7 @@ payload는 `payloadVersion`·`capturedAt`을 스스로 들어 자기를 설명�
 
 ```jsonc
 { "id": "…", "menuNodeId": "…", "title": "…", "description": null,
-  "sortOrder": 0, "schemaVersion": 1, "headSeq": 0, "schema": { /* 문서 봉투 */ } }
+  "sortOrder": 0, "schemaVersion": 3, "headSeq": 0, "schema": { /* 문서 봉투 */ } }
 ```
 
 **`PUT .../schema`만 아홉 번째 키를 낼 수 있다: `warnings`.** 저장된 문서에 경고가 있을
@@ -838,7 +845,7 @@ PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "sch
   "wireboundVersion": "1",
   "page": { "title": "회원 목록", "layoutRef": "admin-lnb", "description": null },
   // ① root 노드가 아니라 **문서 봉투**다 — 문서 버전을 적을 자리가 필요하다
-  "schema": { "version": 1, "root": { "id": "n_root", "type": "Page", "children": [] } },
+  "schema": { "version": 3, "root": { "id": "n_root", "type": "Page", "children": [] } },
   // ② `marker`는 받지 않는다(400) — 번호는 `schema` 안의 노드가 든다
   "comments": [{ "nodeId": "n_7f3a", "body": "검색 조건은 AND 결합" }]
 }

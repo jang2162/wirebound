@@ -18,7 +18,7 @@
  * > 막는다** — 화면이 서버보다 엄격해지는 부류 중 가장 나쁜 모양이다.
  */
 import { describe, expect, it } from 'vitest'
-import { WIREBOUND_PAGE_VERSION, type PageJson } from '@wirebound/schema'
+import { CURRENT_DOCUMENT_VERSION, WIREBOUND_PAGE_VERSION, type PageJson } from '@wirebound/schema'
 import { previewPageJson } from '../../src/panels/page-json-preview'
 
 function file(patch: Partial<PageJson> = {}): PageJson {
@@ -26,7 +26,7 @@ function file(patch: Partial<PageJson> = {}): PageJson {
     wireboundVersion: WIREBOUND_PAGE_VERSION,
     page: { title: '가져온 목록', description: null },
     schema: {
-      version: 1,
+      version: CURRENT_DOCUMENT_VERSION,
       root: { id: 'file_root', type: 'Page', children: [{ id: 'file_list', type: 'List' }] },
     },
     comments: [{ nodeId: 'file_list', body: '가' }],
@@ -59,7 +59,7 @@ describe('미리보기 판정 (화면 없이)', () => {
       text(
         file({
           schema: {
-            version: 1,
+            version: CURRENT_DOCUMENT_VERSION,
             root: { id: 'file_root', type: 'Page', children: [{ id: 'file_odd', type: '없는타입' }] },
           },
           comments: [],
@@ -70,7 +70,7 @@ describe('미리보기 판정 (화면 없이)', () => {
       text(
         file({
           schema: {
-            version: 1,
+            version: CURRENT_DOCUMENT_VERSION,
             root: {
               id: 'file_root',
               type: 'Page',
@@ -93,7 +93,7 @@ describe('미리보기 판정 (화면 없이)', () => {
       text(
         file({
           schema: {
-            version: 1,
+            version: CURRENT_DOCUMENT_VERSION,
             root: {
               id: 'file_root',
               type: 'Page',

@@ -31,7 +31,7 @@ interface PageResponse {
 
 /** POST가 만드는 기본 문서와 형태가 같은 최소 유효 문서. `rootId`는 노드 id 패턴만 지키면 아무 값이나 된다. */
 function minimalValidDoc(rootId = 'n_root') {
-  return { version: 1, root: { id: rootId, type: 'Page', children: [] } }
+  return { version: 3, root: { id: rootId, type: 'Page', children: [] } }
 }
 
 /** 프로젝트 하나, 메뉴 하나, 그 메뉴 밑 페이지 하나를 만들어 돌려준다. PUT .../schema 테스트가 공유하는 픽스처. */
@@ -104,7 +104,7 @@ describe('ensureCatalog', () => {
       props: z.strictObject({}),
       editor: [],
       states: [],
-      children: 'none',
+      zones: [],
     })
     registerComponent(marker)
 
@@ -708,7 +708,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
           method: 'PUT',
           url: `/api/projects/${project.id}/pages/${page.id}/schema`,
           cookies: owner.cookie,
-          payload: { schema: { version: 1, root: { id: null, type: 'Page', children: [] } } },
+          payload: { schema: { version: 3, root: { id: null, type: 'Page', children: [] } } },
         })
         expect(res.statusCode).toBe(400)
         expect(res.json().error.code).toBe('bad-request')
@@ -742,7 +742,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
           cookies: owner.cookie,
           payload: {
             schema: {
-              version: 1,
+              version: 3,
               root: { id: 'n_root', type: 'Page', children: [], style: { color: 'red' } },
             },
           },
@@ -784,7 +784,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
           cookies: owner.cookie,
           payload: {
             schema: {
-              version: 1,
+              version: 3,
               root: { id: 'n_root', type: 'Page', children: [{ id: 'n_x', type: 'Bogus' }] },
             },
           },
@@ -806,7 +806,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
           cookies: owner.cookie,
           payload: {
             schema: {
-              version: 1,
+              version: 3,
               root: {
                 id: 'n_root',
                 type: 'Page',
@@ -831,7 +831,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
           cookies: owner.cookie,
           payload: {
             schema: {
-              version: 1,
+              version: 3,
               root: { id: 'n_root', type: 'Page', children: [{ id: 'n_slot', type: 'Slot' }] },
             },
           },
@@ -852,7 +852,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
           cookies: owner.cookie,
           payload: {
             schema: {
-              version: 1,
+              version: 3,
               root: {
                 id: 'n_root',
                 type: 'Page',
@@ -878,7 +878,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
           method: 'PUT',
           url: `/api/projects/${project.id}/pages/${page.id}/schema`,
           cookies: owner.cookie,
-          payload: { schema: { version: 1, root: { id: 'n_root', type: 'Section', children: [] } } },
+          payload: { schema: { version: 3, root: { id: 'n_root', type: 'Section', children: [] } } },
         })
         expect(res.statusCode).toBe(422)
         expect(res.json().error.issues[0].code).toBe('bad-root')
@@ -897,7 +897,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         cookies: owner.cookie,
         payload: {
           schema: {
-            version: 1,
+            version: 3,
             root: { id: 'n_root', type: 'Page', children: [{ id: 'n_x', type: 'Bogus' }] },
           },
         },
@@ -925,7 +925,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         cookies: owner.cookie,
         payload: {
           schema: {
-            version: 1,
+            version: 3,
             root: { id: 'n_root', type: 'Page', children: [{ id: 'n_x', type: 'Bogus' }] },
           },
         },
@@ -947,7 +947,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         cookies: owner.cookie,
         payload: {
           schema: {
-            version: 1,
+            version: 3,
             root: { id: 'n_root', type: 'Page', children: [{ id: 'n_x', type: 'Bogus' }] },
           },
         },
@@ -986,7 +986,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         cookies: owner.cookie,
         payload: {
           schema: {
-            version: 1,
+            version: 3,
             root: {
               id: 'n_root',
               type: 'Page',
@@ -1039,7 +1039,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         cookies: owner.cookie,
         payload: {
           schema: {
-            version: 1,
+            version: 3,
             root: {
               id: 'n_root',
               type: 'Page',
@@ -1184,7 +1184,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         const { project, page } = await createProjectWithPage(ctx, owner)
 
         const res = await putSchema(ctx, project.id, page.id, owner.cookie, {
-          version: 1,
+          version: 3,
           root: { id: null, type: 'Page', children: [] },
         })
         expect(res.statusCode, res.body).toBe(400)
@@ -1207,7 +1207,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         const { project, page } = await createProjectWithPage(ctx, owner)
 
         const res = await putSchema(ctx, project.id, page.id, owner.cookie, {
-          version: 1,
+          version: 3,
           root: { id: 'n_root', type: 'Page', children: [{ id: 'n_x', type: 'Bogus' }] },
         })
         expect(res.statusCode, res.body).toBe(422)
@@ -1358,7 +1358,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         // 버전)이 된다. 다른 어떤 테스트도 이 차이를 보지 못한다 — 저장 문서가
         // 정상이면 라우트와 파이프라인이 바이트 단위로 같은 422를 내기 때문이다.
         const res = await putSchema(ctx, project.id, page.id, owner.cookie, {
-          version: 1,
+          version: 3,
           root: { id: 'n_root', type: 'Page', children: [{ id: 'n_x', type: 'Bogus' }] },
         })
         expect(res.statusCode, res.body).toBe(422)
@@ -1378,7 +1378,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         // 상태 코드가 아니라 메시지가 판별력을 낸다.
         const nul = String.fromCharCode(0)
         const res = await putSchema(ctx, project.id, page.id, owner.cookie, {
-          version: 1,
+          version: 3,
           root: { id: 'n_root', type: 'Page', children: [{ id: 'n_text', type: 'Text', props: { content: `a${nul}b` } }] },
         })
         expect(res.statusCode, res.body).toBe(400)

@@ -118,7 +118,7 @@ describe('페이지 JSON 가져오기 — 옛 문서를 내보낸 파일', () =>
       const project = await createProject(ctx, owner.cookie)
       const menu = await createMenuNode(ctx, owner.cookie, project.id, { title: '설정' })
       const document: PageDocument = {
-        version: 1,
+        version: 3,
         root: {
           id: 'n_oldroot0001',
           type: 'Page',

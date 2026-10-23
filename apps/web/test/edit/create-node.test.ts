@@ -6,15 +6,38 @@
  * 컴포넌트가 늘면 거기서 죽는다(속성 패널 테스트가 `listComponents()`로 control 일곱을
  * 대조하는 것과 같은 방식).
  */
-import { listComponents, validatePage, type PageDocument, type ValidationIssue, type WbNode } from '@wirebound/schema'
+import {
+  BODY_ZONE,
+  CURRENT_DOCUMENT_VERSION,
+  getComponent,
+  listComponents,
+  validatePage,
+  type PageDocument,
+  type ValidationIssue,
+  type WbNode,
+} from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import '../../src/catalog-setup'
 import { createNode } from '../../src/edit/create-node'
 
 /** 만든 노드를 루트 밑에 하나 단 페이지. 검증은 문서 단위라 봉투가 필요하다. */
 function pageWith(node: WbNode): PageDocument {
-  return { version: 1, root: { id: 'n_root', type: 'Page', children: [node] } }
+  return { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_root', type: 'Page', children: [node] } }
 }
+
+/** 설 자리가 정해진 타입(`TabPanel`)은 그 자리(부모 타입의 그 구역)에 놓은 페이지 — 뿌리 밑에 두면 `misplaced-component` 로 늘 거절된다. */
+function placedPage(node: WbNode): PageDocument {
+  const host = getComponent(node.type)?.placement
+  if (host === undefined) return pageWith(node)
+  return pageWith({
+    id: 'n_host',
+    type: host.type,
+    ...(host.zone === BODY_ZONE ? { children: [node] } : { zones: { [host.zone]: [node] } }),
+  })
+}
+
+/** 구역에 기본 내용(`initial`)을 갖는 타입인가 — 그 타입은 만들 때 그 노드가 함께 든다. */
+const seeded = (type: string): boolean => (getComponent(type)?.zones ?? []).some((zone) => zone.initial !== undefined)
 
 /**
  * 노드 자체의 검증 이슈만. `slot-count`는 **노드가 아니라 문서 종류의 제약**이라
@@ -75,7 +98,7 @@ describe('createNode', () => {
     for (const def of listComponents().filter((def) => def.type !== 'Page')) {
       const node = createNode(def.type, nextId)
       expect(node, def.type).not.toBeNull()
-      expect(nodeIssues(pageWith(node as WbNode)), def.type).toEqual([])
+      expect(nodeIssues(placedPage(node as WbNode)), def.type).toEqual([])
     }
   })
 
@@ -95,15 +118,54 @@ describe('createNode', () => {
     // 위 케이스의 짝이다. 기본값을 문서에 굽지 않는 것은 **카탈로그가 기본값을 바꾸면
     // 옛 노드만 옛 값에 붙박이기 때문이다** — 검증·렌더가 `props ?? {}`로 스키마
     // 기본값을 읽으므로(`validate.ts`·렌더러) 문서에 없는 것이 곧 "카탈로그를 따른다"다.
+    // 기본 내용이 든 타입(검색폼 · 입력폼 · 탭)은 제 노드에 `props` 가 없고, 든 노드는 카탈로그 `initial` 이 적은 props 만 갖는다
+    // (아래 «기본 내용» 케이스).
     for (const def of listComponents()) {
-      expect(createNode(def.type, countingIds()), def.type).toEqual({
-        id: 'n_test1',
-        type: def.type,
-      })
+      const node = createNode(def.type, countingIds())
+      if (seeded(def.type)) expect(node, def.type).not.toHaveProperty('props')
+      else expect(node, def.type).toEqual({ id: 'n_test1', type: def.type })
     }
   })
 
-  it('children이 many인 타입도 빈 children을 갖지 않는다', () => {
+  it('기본 내용 — 구역의 `initial` 이 실제 노드로 들고 id 는 같은 생성기에서 차례로 나온다', () => {
+    const withSeeds = listComponents().filter((def) => seeded(def.type))
+    expect(withSeeds.map((def) => def.type).sort()).toEqual(['EntryForm', 'SearchForm', 'Tabs'])
+
+    expect(createNode('SearchForm', countingIds())).toEqual({
+      id: 'n_test1',
+      type: 'SearchForm',
+      zones: {
+        actions: [
+          { id: 'n_test2', type: 'Button', props: { label: '초기화' } },
+          { id: 'n_test3', type: 'Button', props: { label: '검색' }, variant: 'primary' },
+        ],
+      },
+    })
+    expect(createNode('EntryForm', countingIds())).toEqual({
+      id: 'n_test1',
+      type: 'EntryForm',
+      zones: {
+        actions: [
+          { id: 'n_test2', type: 'Button', props: { label: '저장' }, variant: 'primary' },
+          { id: 'n_test3', type: 'Button', props: { label: '취소' } },
+        ],
+      },
+    })
+    expect(createNode('Tabs', countingIds())).toEqual({
+      id: 'n_test1',
+      type: 'Tabs',
+      children: [
+        { id: 'n_test2', type: 'TabPanel', props: { label: '탭 1' } },
+        { id: 'n_test3', type: 'TabPanel', props: { label: '탭 2' } },
+      ],
+    })
+    for (const def of withSeeds) {
+      const node = createNode(def.type, countingIds()) as WbNode
+      expect(validatePage(placedPage(node)), def.type).toEqual([])
+    }
+  })
+
+  it('몸통을 받는 타입도 빈 children을 갖지 않는다 — 기본 내용이 없는 구역은 키가 없다', () => {
     // 어느 쪽이든 검증은 통과한다(실측: `children: []`을 붙인 판도 이슈 0이다). 갖지 않는
     // 쪽을 고른 것은 `insertNodeOps`가 `children` 키가 없는 부모에 **배열째 넣는 갈래를
     // 갖기** 때문이다(그쪽 실측).
@@ -112,20 +174,24 @@ describe('createNode', () => {
     // 재 보면 **두 판 모두 왕복이 자기 원본과 같다.** 잔여물은 오히려 지금 구현 쪽에 있고
     // (넣은 뒤 `removeNodeOps`로 지우면 `children: []`이 남는다) 그것도 무해하다. 자세한 값은
     // `src/edit/create-node.ts` 머리말에 있다.
-    const many = listComponents().filter((def) => def.children === 'many')
+    const many = listComponents().filter((def) => def.zones.some((zone) => zone.name === 'body' && zone.initial === undefined))
 
     // 분모가 0이면 이 케이스는 아무것도 재지 않는다.
     expect(many.length).toBeGreaterThan(0)
     for (const def of many) {
       expect(createNode(def.type, countingIds()), def.type).not.toHaveProperty('children')
     }
+    // 이름 붙은 구역도 기본 내용이 없으면 `zones` 키가 없다(카드 · 목록).
+    expect(createNode('Card', countingIds())).toEqual({ id: expect.any(String), type: 'Card' })
+    expect(createNode('List', countingIds())).toEqual({ id: expect.any(String), type: 'List' })
   })
 
-  it('페이지에 둘 수 없는 타입은 뿌리 Page · Slot 이다', () => {
+  it('페이지에 바로 둘 수 없는 타입은 뿌리 Page · Slot · 탭 안의 TabPanel 이다', () => {
     // `createNode`의 계약이 아니라 **카탈로그의 성질**이다. 타입 목록이 무엇을
     // 걸러야 하는지가 여기서 나온다 — 설계서 「레이아웃」이 Slot을 레이아웃 전용으로 두고,
-    // `validatePage`가 `slot-count`로 거절한다(실측). `Page` 는 뿌리에만 서고 안에 두면 `nested-page` 다. 카탈로그에 그런 타입이 더
-    // 생기면 여기서 죽어야 한다.
+    // `validatePage`가 `slot-count`로 거절한다(실측). `Page` 는 뿌리에만 서고 안에 두면 `nested-page` 다. `TabPanel` 은 탭 안에만 서고
+    // 페이지에 바로 두면 `misplaced-component` 다(설 자리가 정해진 타입 — 하단 판은 그 자리에 놓아 잰다 · `palette/placeable.ts`).
+    // 카탈로그에 그런 타입이 더 생기면 여기서 죽어야 한다.
     const blocked = listComponents()
       .filter((def) => {
         const node = createNode(def.type, countingIds())
@@ -133,6 +199,6 @@ describe('createNode', () => {
       })
       .map((def) => def.type)
 
-    expect(blocked).toEqual(['Page', 'Slot'])
+    expect(blocked).toEqual(['Page', 'Slot', 'TabPanel'])
   })
 })

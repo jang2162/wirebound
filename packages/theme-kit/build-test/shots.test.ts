@@ -133,7 +133,9 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
     // 넘친 뿌리만 — 카드 안의 제목 · 글(카드와 함께 넘친다)은 안 든다.
     expect(w!.overflow.every((entry) => entry.element.startsWith('article.sample-card'))).toBe(true)
     expect(w!.wbErrors.length).toBeGreaterThan(0)
-    expect(w!.wbErrors.every((entry) => entry.item?.startsWith('Tabs/') && entry.message.includes('탭이 터졌다'))).toBe(true)
+    // `TabPanel` 표본은 탭 몸통에만 서서 `Tabs` 부모 안에 그려진다(`galleryItemDocument`) — 던지는 `Tabs` 에 함께 걸린다.
+    expect(w!.wbErrors.map((entry) => entry.item)).toEqual(['Tabs//tabs', 'TabPanel//tabp'])
+    expect(w!.wbErrors.every((entry) => entry.message.includes('탭이 터졌다'))).toBe(true)
     expect(w!.consoleErrors.some((line) => line.includes('탭이 터졌다'))).toBe(true)
   })
 

@@ -65,7 +65,7 @@ async function fixture(ctx: RealApiContext): Promise<Fixture> {
     cookies: owner.cookie,
     payload: {
       schema: {
-        version: 1,
+        version: 3,
         root: {
           id: 'n_root',
           type: 'Page',

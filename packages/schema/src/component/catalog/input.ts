@@ -19,7 +19,18 @@ export const SearchFormDef = defineComponent({
     { prop: 'columns', control: 'number', label: '열 수' },
   ],
   states: [],
-  children: 'many',
+  // 접히면(`collapsed`) 두 구역 다 DOM 에서 빠지고 접기 줄만 선다 — 그 줄은 뷰 몫이다.
+  zones: [
+    { name: 'body', label: '조건' },
+    {
+      name: 'actions',
+      label: '단추',
+      initial: [
+        { type: 'Button', props: { label: '초기화' } },
+        { type: 'Button', props: { label: '검색' }, variant: 'primary' },
+      ],
+    },
+  ],
 })
 
 export const EntryFormDef = defineComponent({
@@ -33,7 +44,17 @@ export const EntryFormDef = defineComponent({
   editor: [{ prop: 'title', control: 'text', label: '제목' }],
   summary: (props) => oneLine(props.title),
   states: [],
-  children: 'many',
+  zones: [
+    { name: 'body', label: '항목' },
+    {
+      name: 'actions',
+      label: '단추',
+      initial: [
+        { type: 'Button', props: { label: '저장' }, variant: 'primary' },
+        { type: 'Button', props: { label: '취소' } },
+      ],
+    },
+  ],
 })
 
 export const FieldDef = defineComponent({
@@ -65,5 +86,5 @@ export const FieldDef = defineComponent({
   variantFrom: 'control',
   summary: (props) => joined(oneLine(props.label), oneLine(props.control)),
   states: ['required', 'disabled', 'invalid'],
-  children: 'none',
+  zones: [],
 })

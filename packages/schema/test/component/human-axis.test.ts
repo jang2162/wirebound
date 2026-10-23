@@ -27,7 +27,7 @@ const base = {
   props: z.strictObject({}),
   editor: [],
   states: [],
-  children: 'none' as const,
+  zones: [] as const,
 }
 
 describe('defineComponent — 사람이 읽을 축', () => {

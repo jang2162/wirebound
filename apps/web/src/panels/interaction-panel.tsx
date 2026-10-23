@@ -115,7 +115,7 @@ function emptyAction(type: InteractionAction['type']): InteractionAction {
     case 'setVisible':
       return { type: 'setVisible', target: '', value: false }
     case 'switchTab':
-      return { type: 'switchTab', target: '', tab: 0 }
+      return { type: 'switchTab', target: '' }
     case 'navigate':
       return { type: 'navigate', target: '' }
     case 'openModal':
@@ -332,7 +332,7 @@ function ActionRow(props: {
   document: PageDocument
   action: InteractionAction
   index: number
-  choices: { id: string; label: string }[]
+  choices: { id: string; type: string; label: string }[]
   /** 남이 잠근 자리인가. `NodeRules`가 그대로 내려 준다. */
   disabled: boolean
   onChange: (next: InteractionAction) => void
@@ -383,11 +383,14 @@ function ActionRow(props: {
           >
             {/* 빈 값이 선택지에 있어야 `<select>`가 아직 안 고른 상태를 그릴 수 있다. */}
             <option value="">{UNSET_TARGET_OPTION}</option>
-            {choices.map((choice) => (
-              <option key={choice.id} value={choice.id}>
-                {choice.label}
-              </option>
-            ))}
+            {/* 탭 전환의 대상은 탭 패널이다 — 패널만 고르게 한다(이미 적힌 다른 대상은 그대로 보인다 — 고칠 길을 남긴다). */}
+            {choices
+              .filter((choice) => action.type !== 'switchTab' || choice.type === 'TabPanel' || choice.id === action.target)
+              .map((choice) => (
+                <option key={choice.id} value={choice.id}>
+                  {choice.label}
+                </option>
+              ))}
           </select>
         </label>
       )}
@@ -405,16 +408,6 @@ function ActionRow(props: {
             <option value="hide">숨기기</option>
           </select>
         </label>
-      )}
-
-      {action.type === 'switchTab' && (
-        <TabPicker
-          document={doc}
-          disabled={disabled}
-          target={action.target}
-          tab={action.tab}
-          onChange={(tab) => onChange({ ...action, tab })}
-        />
       )}
 
       {action.type === 'setProp' && (
@@ -439,57 +432,6 @@ function ActionRow(props: {
         {shellIcon('remove', 14)}
       </button>
     </div>
-  )
-}
-
-/**
- * `switchTab`의 탭 고르개. 타겟의 `tabs`를 읽어 이름으로 고르게 한다 —
- * 번호만 보이면 저작하는 사람이 그것이 어느 탭인지 세어야 한다.
- */
-function TabPicker(props: {
-  document: PageDocument
-  target: string
-  tab: number
-  /** 남이 잠근 자리인가. `ActionRow`가 그대로 내려 준다. */
-  disabled: boolean
-  onChange: (tab: number) => void
-}): ReactElement {
-  const node = findSafely(props.document, props.target)
-  const tabs = node?.props?.tabs
-  const names = Array.isArray(tabs) ? tabs.filter((item): item is string => typeof item === 'string') : []
-
-  if (names.length === 0) {
-    // 타겟을 아직 안 골랐거나 `Tabs`가 아니다. 번호로라도 적을 수 있게 둔다 —
-    // 컨트롤을 감추면 이미 적혀 있는 값을 고칠 길이 없어진다.
-    return (
-      <TextField
-        label="탭 번호"
-        value={String(props.tab)}
-        disabled={props.disabled}
-        onCommit={(value) => {
-          const parsed = Number(value)
-          if (Number.isInteger(parsed) && parsed >= 0) props.onChange(parsed)
-        }}
-      />
-    )
-  }
-
-  return (
-    <label className="wb-shell-field wb-shell-field-oneline">
-      탭
-      <select
-        className="wb-shell-select"
-        disabled={props.disabled}
-        value={String(props.tab)}
-        onChange={(event) => props.onChange(Number(event.target.value))}
-      >
-        {names.map((name, index) => (
-          <option key={index} value={String(index)}>
-            {name}
-          </option>
-        ))}
-      </select>
-    </label>
   )
 }
 
@@ -660,10 +602,10 @@ function TextField(props: {
  * 이름은 문장과 **같은 함수**가 만든다(`describeNode`) — 목록에서 고른 이름과 문장에
  * 나오는 이름이 갈리면 사용자가 둘을 잇지 못한다.
  */
-function nodeChoices(doc: PageDocument, naming: ReadonlyMap<string, NamingContext>): { id: string; label: string }[] {
-  const out: { id: string; label: string }[] = []
+function nodeChoices(doc: PageDocument, naming: ReadonlyMap<string, NamingContext>): { id: string; type: string; label: string }[] {
+  const out: { id: string; type: string; label: string }[] = []
   for (const visit of walkSafely(doc.root)) {
-    out.push({ id: visit.node.id, label: describeNode(visit.node, naming.get(visit.node.id)) })
+    out.push({ id: visit.node.id, type: String(visit.node.type), label: describeNode(visit.node, naming.get(visit.node.id)) })
   }
   return out
 }

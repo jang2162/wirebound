@@ -194,7 +194,10 @@ describe('끌어 놓기 — 내는 편집(jsdom · 가짜 자리)', () => {
     await waitFor(() => expect(srv.calls).toHaveLength(1))
     expect(srv.calls[0]).toEqual([{ op: 'move', from: '/root/children/2', path: '/root/children/1/children/2' }])
     expect(structureTypes()).toEqual(['Page', 'Text', 'Card', 'Button', 'Link', 'Divider'])
-    expect(row('Divider').parentElement!.parentElement!.closest('li')).toBe(row('Card').parentElement)
+    // 카드는 이름 붙은 구역이 있어 자식 줄 위에 구역 줄이 선다 — 옮긴 줄은 카드의 몸통 구역 줄(`/children`) 안이다.
+    const zone = row('Divider').parentElement!.parentElement!.closest('li')!
+    expect(zone.getAttribute('data-tree-zone')).toBe('/children')
+    expect(zone.parentElement!.closest('li')).toBe(row('Card').parentElement)
   })
 
   it('형제 앞 · 뒤 — 같은 부모 안 뒤로 옮기면 옮긴 뒤 차례', async () => {

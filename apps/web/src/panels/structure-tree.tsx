@@ -17,7 +17,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
-import { nodeAlias, nodeSummary, type NodeLock, type WbNode } from '@wirebound/schema'
+import { childLists, nodeAlias, nodeSummary, zoneDefs, zonePointer, type NodeLock, type WbNode } from '@wirebound/schema'
 import { DropIndicator } from '../drag/drop-indicator'
 import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { platformOf } from '../edit/editor-shortcuts'
@@ -249,13 +249,13 @@ export function StructureTree(props: {
  * 않는다: **선택이 없는 문서에서는 `structureAbilities`가 불리지도 않고**, 여기가 먼저
  * 그린다.
  *
- * **이 검사 자체는 지워도 지금 죽는 케이스가 없다.** 자식은 아래 `children.filter(isNodeShaped)`가
+ * **이 검사 자체는 지워도 지금 죽는 케이스가 없다.** 자식은 위 `rowLists` 의 `filter(isNodeShaped)`가
  * 먼저 거르고(그 걸러내기는 죽는다 — 지우면 `children 배열 안에 …` 케이스가 죽는다),
  * 루트가 노드가 아닌 문서는 **캔버스·렌더러가 먼저 무너져** 구조 트리까지 오지 않는다
  * (그런 문서로 열면 `구조 트리` region 자체가 화면에 없다). 그래서 루트 쪽
  * 하중을 케이스로 만들 수 없다 — 두는 것은 걸러내기가 닿지 않는 유일한 경로가 루트라서다.
  */
-function isNodeShaped(node: WbNode): boolean {
+function isNodeShaped(node: unknown): node is WbNode {
   return typeof node === 'object' && node !== null && !Array.isArray(node)
 }
 
@@ -297,6 +297,57 @@ interface SaveOnlyWiring {
   saveModule: () => void
 }
 
+/** 빈 구역 줄의 꼬리 글. */
+export const EMPTY_ZONE_LABEL = '비어 있음'
+
+/**
+ * 노드의 자식 줄 묶음 — 구역 줄을 세울지와 그 아래 노드들. **구역이 몸통 하나뿐인 노드는 구역 줄이 없다**(지금 그대로 — `Flex` · `Grid` ·
+ * `Section` · `Page` · `TabPanel`). 이름 붙은 구역을 선언했거나 선언 밖 구역을 든 노드는 카탈로그 차례대로 구역마다 줄(`label`)을 세운다(빈
+ * 구역 포함 — 선언 밖 구역은 든 것만). 노드가 아닌 원소는 뺀다.
+ */
+function rowLists(node: WbNode): { key: string; label: string | null; nodes: WbNode[] }[] {
+  const entries = childLists(node as unknown)
+  const declared = zoneDefs(node.type)
+  const zoned = entries.some((entry) => entry.pointer !== '/children')
+  return entries
+    .map((entry) => ({
+      key: entry.pointer,
+      label: zoned
+        ? (declared.find((zone) => zone.name === entry.zone && entry.pointer === zonePointer(zone.name))?.label ?? entry.zone)
+        : null,
+      nodes: entry.list.filter(isNodeShaped),
+    }))
+    .filter((list) => list.label !== null || list.nodes.length > 0)
+}
+
+/** 한 줄 묶음의 노드들 — 노드 줄(`StructureNode`)을 차례로. */
+function StructureChildren(props: Parameters<typeof StructureNode>[0] & { nodes: WbNode[] }): ReactElement {
+  return (
+    <>
+      {props.nodes.map((child, index) => (
+        // 키는 노드 id다. 인덱스를 쓰면 구조 편집이 형제를 넣고 뺄 때 React가 앞 노드의
+        // 상태를 다른 노드에 재사용한다. id가 없는 노드에서만 인덱스로 물러선다 —
+        // 그 자리에는 쓸 id가 없다.
+        <StructureNode
+          key={isSelectable(child) ? child.id : `wb-invalid-${index}`}
+          node={child}
+          hidden={props.hidden}
+          parentHidden={props.parentHidden}
+          selectedNodeId={props.selectedNodeId}
+          selected={props.selected}
+          selection={props.selection}
+          onSelect={props.onSelect}
+          lockOf={props.lockOf}
+          blockedOf={props.blockedOf}
+          fold={props.fold}
+          row={props.row}
+          saveOnly={props.saveOnly}
+        />
+      ))}
+    </>
+  )
+}
+
 /** 노드 한 줄과 그 아래. 트리 자체가 재귀 구조라 컴포넌트도 재귀다. */
 function StructureNode(props: {
   node: WbNode
@@ -332,7 +383,7 @@ function StructureNode(props: {
   // 경계가 없어서 던지면 **셸 전체가 DOM에서 사라진다**(실측: `type`이 객체인 노드로
   // 재 봤다 — `./node-shape.ts`의 머리말). 지금 막는 것이 이 둘이고, 목록이 완전한지는
   // 재지 못했다.
-  const children = Array.isArray(node.children) ? node.children : []
+  const lists = rowLists(node)
   const typeLabel = nodeTypeLabel(node)
   /**
    * **줄 글은 `타입 (별칭) 요약`이다**(설계서 「설계서 화면 구조」의 구조 트리 줄) — 같은 타입이 여럿일 때 어느 것인지 가르는 데까지만.
@@ -513,31 +564,27 @@ function StructureNode(props: {
         </div>
       )}
 
-      {children.length > 0 && !folded && (
+      {lists.length > 0 && !folded && (
         <ul className="wb-shell-structure-list">
-          {/* **노드가 아닌 원소는 줄로 그리지 않는다.** 그릴 이름도 고를 id도 없고,
-              `nodeTypeLabel`이 `node.type`을 읽는 순간 던진다. id 없는 노드(줄은 그린다)와
-              다른 것은 그쪽은 **노드이긴 하다**는 점이다. */}
-          {children.filter(isNodeShaped).map((child, index) => (
-            // 키는 노드 id다. 인덱스를 쓰면 구조 편집이 형제를 넣고 뺄 때 React가 앞 노드의
-            // 상태를 다른 노드에 재사용한다. id가 없는 노드에서만 인덱스로 물러선다 —
-            // 그 자리에는 쓸 id가 없다.
-            <StructureNode
-              key={isSelectable(child) ? child.id : `wb-invalid-${index}`}
-              node={child}
-              hidden={props.hidden}
-              parentHidden={hiddenHere}
-              selectedNodeId={props.selectedNodeId}
-              selected={props.selected}
-              selection={props.selection}
-              onSelect={props.onSelect}
-              lockOf={props.lockOf}
-              blockedOf={props.blockedOf}
-              fold={props.fold}
-              row={row}
-              saveOnly={props.saveOnly}
-            />
-          ))}
+          {lists.map((list) =>
+            list.label === null ? (
+              <StructureChildren key={list.key} {...props} nodes={list.nodes} parentHidden={hiddenHere} />
+            ) : (
+              // **구역 줄** — 이름 붙은 구역이 있는 노드는 자식 줄 위에 구역마다 줄을 세운다(카탈로그 차례 · 빈 구역 포함). 노드가 아니라
+              // 고를 수 없다(고르기 · 넣기의 대상은 다음 차수의 일이다 — 설계 spec `2026-10-23-node-slots-design.md` 「8. 구현을 나누는 법」 B).
+              <li key={list.key} className="wb-shell-structure-zone" data-tree-zone={list.key}>
+                <span className="wb-shell-structure-zone-label">
+                  {list.label}
+                  {list.nodes.length === 0 ? ` · ${EMPTY_ZONE_LABEL}` : ''}
+                </span>
+                {list.nodes.length > 0 && (
+                  <ul className="wb-shell-structure-list">
+                    <StructureChildren {...props} nodes={list.nodes} parentHidden={hiddenHere} />
+                  </ul>
+                )}
+              </li>
+            ),
+          )}
         </ul>
       )}
     </li>

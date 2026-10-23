@@ -1,6 +1,6 @@
 /**
  * **구조 · 조각 · 변형은 테마가 선언한다 — 카탈로그에 없다.** 카탈로그가 드는 것은 노드의 계약(props · editor · states ·
- * children · variantFrom)과 사람이 읽을 것(label · description · group · summary)뿐이다. 변형 목록은 테마 manifest 의
+ * zones · placement · bodyHost · variantFrom)과 사람이 읽을 것(label · description · group · summary)뿐이다. 변형 목록은 테마 manifest 의
  * `components[type].variants` 가 갖고, 스키마는 `node.variant` 를 판정하지 않는다.
  */
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -24,7 +24,7 @@ describe('카탈로그의 어휘', () => {
     for (const def of defs) {
       expect(Object.keys(def).sort(), def.type).toEqual(
         [
-          'children',
+          'zones',
           'description',
           'editor',
           'group',
@@ -34,6 +34,8 @@ describe('카탈로그의 어휘', () => {
           'type',
           ...(def.variantFrom !== undefined ? ['variantFrom'] : []),
           ...(def.summary !== undefined ? ['summary'] : []),
+          ...(def.placement !== undefined ? ['placement'] : []),
+          ...(def.bodyHost !== undefined ? ['bodyHost'] : []),
         ].sort(),
       )
       for (const field of def.editor) expect('visibleWhen' in field, `${def.type}.${field.prop}`).toBe(false)

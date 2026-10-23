@@ -108,10 +108,10 @@ describe('자식을 받는 컴포넌트 안 · 형제 앞뒤', () => {
 
 describe('못 놓는 자리', () => {
   it('자기 · 자손 → null', () => {
-    for (const zone of ['before', 'inside', 'after'] as const) {
-      expect(structureDropTarget(doc(), moving('n-box'), 'n-box', zone, free)).toBeNull()
-      expect(structureDropTarget(doc(), moving('n-box'), 'n-inner', zone, free)).toBeNull()
-      expect(structureDropTarget(doc(), moving('n-box'), 'n-deep', zone, free)).toBeNull()
+    for (const band of ['before', 'inside', 'after'] as const) {
+      expect(structureDropTarget(doc(), moving('n-box'), 'n-box', band, free)).toBeNull()
+      expect(structureDropTarget(doc(), moving('n-box'), 'n-inner', band, free)).toBeNull()
+      expect(structureDropTarget(doc(), moving('n-box'), 'n-deep', band, free)).toBeNull()
     }
   })
 
@@ -133,9 +133,9 @@ describe('못 놓는 자리', () => {
         ],
       },
     }
-    for (const zone of ['before', 'after'] as const) {
-      expect(structureDropTarget(odd, moving('n-x'), 'n-bt', zone, free)).toBeNull()
-      expect(structureDropTarget(odd, adding('Divider'), 'n-bt', zone, free)).toBeNull()
+    for (const band of ['before', 'after'] as const) {
+      expect(structureDropTarget(odd, moving('n-x'), 'n-bt', band, free)).toBeNull()
+      expect(structureDropTarget(odd, adding('Divider'), 'n-bt', band, free)).toBeNull()
     }
     // 그 단추 자신의 앞 · 뒤는 뿌리 안이라 된다.
     expect(structureDropTarget(odd, adding('Divider'), 'n-btn', 'after', free)).toEqual({
@@ -159,6 +159,62 @@ describe('못 놓는 자리', () => {
     expect(structureDropTarget(doc(), moving('n-root'), 'n-a', 'after', free)).toBeNull()
     expect(structureDropTarget(doc(), moving('n-gone'), 'n-a', 'after', free)).toBeNull()
     expect(structureDropTarget(doc(), moving('n-a'), 'n-gone', 'after', free)).toBeNull()
+  })
+})
+
+describe('받는 타입 · 설 자리 — 탭 몸통은 `TabPanel` 만, `TabPanel` 은 탭 몸통에만', () => {
+  /** 뿌리 밑에 탭 하나(패널 둘 · 첫 패널 안에 글)와 글 하나. */
+  function tabsDoc(): PageDocument {
+    return {
+      version: 3,
+      root: {
+        id: 'n-root',
+        type: 'Page',
+        children: [
+          {
+            id: 'n-tabs',
+            type: 'Tabs',
+            children: [
+              { id: 'n-p1', type: 'TabPanel', children: [{ id: 'n-in', type: 'Text' }] },
+              { id: 'n-p2', type: 'TabPanel' },
+            ],
+          },
+          { id: 'n-t', type: 'Text' },
+        ],
+      },
+    }
+  }
+
+  it('탭 «안» · 패널 곁에 글을 놓거나 옮기면 null — 패널 «안» 은 된다', () => {
+    const d = tabsDoc()
+    expect(structureDropTarget(d, moving('n-t'), 'n-tabs', 'inside', free)).toBeNull()
+    expect(structureDropTarget(d, moving('n-t'), 'n-p1', 'after', free)).toBeNull()
+    expect(structureDropTarget(d, adding('Text'), 'n-p2', 'before', free)).toBeNull()
+    expect(structureDropTarget(d, moving('n-t'), 'n-p2', 'inside', free)).toEqual({ parentId: 'n-p2', index: 0, placement: 'inside' })
+  })
+
+  it('패널을 탭 밖(뿌리 · 패널 안 · 글 곁)에 놓거나 옮기면 null — 탭 «안» · 패널 곁은 된다', () => {
+    const d = tabsDoc()
+    expect(structureDropTarget(d, adding('TabPanel'), 'n-root', 'inside', free)).toBeNull()
+    expect(structureDropTarget(d, adding('TabPanel'), 'n-p1', 'inside', free)).toBeNull()
+    expect(structureDropTarget(d, moving('n-p2'), 'n-t', 'after', free)).toBeNull()
+    expect(structureDropTarget(d, adding('TabPanel'), 'n-tabs', 'inside', free)).toEqual({
+      parentId: 'n-tabs',
+      index: 2,
+      placement: 'inside',
+    })
+    expect(structureDropTarget(d, moving('n-p2'), 'n-p1', 'before', free)).toEqual({ parentId: 'n-tabs', index: 0, placement: 'before' })
+  })
+
+  it('모듈 묶음은 맨 위 노드 전부를 본다 — 하나라도 못 서면 null', () => {
+    const d = tabsDoc()
+    const module = (types: string[]): Placing => ({
+      kind: 'module',
+      key: 'project:m',
+      nodes: types.map((type, i) => ({ id: `m${i}`, type })),
+    })
+    expect(structureDropTarget(d, module(['Text', 'Button']), 'n-p1', 'inside', free)).not.toBeNull()
+    expect(structureDropTarget(d, module(['TabPanel', 'Text']), 'n-tabs', 'inside', free)).toBeNull()
   })
 })
 

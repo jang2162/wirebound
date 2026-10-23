@@ -30,7 +30,7 @@ function id(): string {
 export function broadFixture(): PageDocument {
   nextId = 0
   return {
-    version: 1,
+    version: 3,
     root: {
       id: id(),
       type: 'Page',
@@ -67,12 +67,16 @@ export function broadFixture(): PageDocument {
               type: 'Card',
               props: { title: '요약', subtitle: '부제' },
               children: [{ id: id(), type: 'KeyValue', props: { columns: 2 } }],
+              zones: { headEnd: [{ id: id(), type: 'Button', props: { label: '수정' } }] },
             },
             {
               id: id(),
               type: 'Tabs',
-              props: { tabs: ['개요', '상세'], active: 1 },
-              children: [{ id: id(), type: 'Tree', props: { selected: true } }],
+              props: { active: 1 },
+              children: [
+                { id: id(), type: 'TabPanel', props: { label: '개요' } },
+                { id: id(), type: 'TabPanel', props: { label: '상세' }, children: [{ id: id(), type: 'Tree', props: { selected: true } }] },
+              ],
             },
           ],
         },
@@ -80,6 +84,12 @@ export function broadFixture(): PageDocument {
           id: id(),
           type: 'SearchForm',
           children: [{ id: id(), type: 'Field', props: { control: 'select', required: true, label: '등급' } }],
+          zones: {
+            actions: [
+              { id: id(), type: 'Button', props: { label: '초기화' } },
+              { id: id(), type: 'Button', props: { label: '검색' } },
+            ],
+          },
         },
         {
           id: id(),
@@ -92,8 +102,15 @@ export function broadFixture(): PageDocument {
               props: { control: 'checkbox', disabled: true, invalid: true, label: '동의' },
             },
           ],
+          zones: { actions: [{ id: id(), type: 'Button', props: { label: '저장' } }] },
         },
-        { id: id(), type: 'List', variant: 'compact', props: { items: 3, selected: true } },
+        {
+          id: id(),
+          type: 'List',
+          variant: 'compact',
+          props: { items: 3, selected: true },
+          zones: { headStart: [{ id: id(), type: 'Text', props: { content: '총 3건' } }] },
+        },
       ],
     },
   }
@@ -109,7 +126,7 @@ export function broadFixture(): PageDocument {
 export function slotFixture(): PageDocument {
   nextId = 900
   return {
-    version: 1,
+    version: 3,
     root: { id: id(), type: 'Page', children: [{ id: id(), type: 'Slot' }] },
   }
 }
@@ -121,7 +138,7 @@ export function slotFixture(): PageDocument {
 export function stateFixture(): PageDocument {
   nextId = 3000
   return {
-    version: 2,
+    version: 3,
     viewStates: [{ id: 's_admin', name: '관리자' }],
     root: {
       id: id(),
@@ -136,7 +153,7 @@ export function stateFixture(): PageDocument {
 
 /** 노드 하나를 `Page` 아래에 둔 문서. */
 export function pageWith(node: WbNode): PageDocument {
-  return { version: 1, root: { id: 'n_page', type: 'Page', children: [node] } }
+  return { version: 3, root: { id: 'n_page', type: 'Page', children: [node] } }
 }
 
 /** 글 하나 — 작은 표본. */
@@ -212,14 +229,18 @@ export function markedTheme(): ThemeDefinition {
 
 /* ------------------------------------------------------------------ 세는 자 */
 
-/** 문서가 실제로 쓰는 컴포넌트 타입. */
+/**
+ * 문서가 실제로 쓰는 컴포넌트 타입 — 몸통과 구역 전부를 돈다. 카탈로그를 안 보고 `zones` 의 배열을 다 걷는다 — 구역 안에 둔 카탈로그 밖 타입(오타)도
+ * 세어야 «카탈로그 밖의 타입» 케이스가 그것을 잡는다.
+ */
 export function typesIn(document_: PageDocument): string[] {
   const seen = new Set<string>()
   const walk = (node: unknown): void => {
     if (node === null || typeof node !== 'object') return
-    const { type, children } = node as { type?: unknown; children?: unknown }
+    const { type, children, zones } = node as { type?: unknown; children?: unknown; zones?: unknown }
     if (typeof type === 'string') seen.add(type)
     if (Array.isArray(children)) children.forEach(walk)
+    if (zones !== null && typeof zones === 'object') for (const list of Object.values(zones)) if (Array.isArray(list)) list.forEach(walk)
   }
   walk(document_.root)
   return [...seen].sort()

@@ -81,6 +81,8 @@ describe('prop 표지 · 상태의 접근성 속성(view → Root)', () => {
       states: [],
       variant: undefined,
       children: null,
+      zones: {},
+      items: [],
       slot: null,
       ...props,
     }

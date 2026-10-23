@@ -13,7 +13,7 @@
  * 상태를 고른 채 편집해도 노드는 하나다 — 숨은 노드도 고르고 고칠 수 있다(구조 트리가 흐리게 그린다 · 캔버스는 안 그린다).
  */
 import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactElement, type ReactNode } from 'react'
-import { isVisibleIn, type PageDocument, type ViewState, type WbNode } from '@wirebound/schema'
+import { childLists, isVisibleIn, type PageDocument, type ViewState, type WbNode } from '@wirebound/schema'
 import { useOpenDocument } from '../store/use-editor-store'
 
 interface Chosen {
@@ -82,10 +82,10 @@ export function hiddenNodeIds(document: Pick<PageDocument, 'root' | 'viewStates'
   const out = new Set<string>()
   const visit = (node: unknown, hidden: boolean): void => {
     if (node === null || typeof node !== 'object') return
-    const { id, children } = node as { id?: unknown; children?: unknown }
+    const { id } = node as { id?: unknown }
     const here = hidden || (node !== document.root && !isVisibleIn(node as WbNode, state, document.viewStates))
     if (here && typeof id === 'string') out.add(id)
-    if (Array.isArray(children)) for (const child of children) visit(child, here)
+    for (const { list } of childLists(node)) for (const child of list) visit(child, here)
   }
   visit(document.root, false)
   return out.size === 0 ? NO_HIDDEN : out

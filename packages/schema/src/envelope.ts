@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { hasRejectedAliasChar, isBlankAlias } from './alias'
+import { BODY_ZONE, ZONE_NAME_PATTERN } from './component/define'
 import {
   DEFAULT_VIEW_STATE,
   NODE_ALIAS_MAX,
@@ -41,10 +42,10 @@ const SetVisibleActionSchema = z.strictObject({
   value: z.boolean(),
 })
 
+/** 탭 바꾸기 — `target`은 `TabPanel` 노드 id 다(부모 `Tabs`가 그 패널을 연다). */
 const SwitchTabActionSchema = z.strictObject({
   type: z.literal('switchTab'),
   target: z.string(),
-  tab: z.number(),
 })
 
 const NavigateActionSchema = z.strictObject({
@@ -108,6 +109,15 @@ export const VisibilitySchema: z.ZodType<NodeVisibility> = z.strictObject({
 })
 
 /**
+ * 구역 이름 — `ZONE_NAME_PATTERN`이고 `body`가 아니다(몸통은 `children`에 산다 — 두 자리에 몸통이 서지 않게 한다). 그 타입이 선언한 구역인지는
+ * 봉투가 아니라 검증(`validate.ts`의 `zone-not-allowed`)이 본다.
+ */
+const ZoneNameSchema = z
+  .string()
+  .regex(ZONE_NAME_PATTERN, '구역 이름의 꼴이 아닙니다')
+  .refine((name) => name !== BODY_ZONE, { message: '몸통은 zones 가 아니라 children 에 둡니다' })
+
+/**
  * 노드 봉투. 선언되지 않은 키는 거부한다 — "노드는 스타일을 갖지 않는다"(설계서 「페이지 스키마 노드」)를
  * 런타임에서 강제하는 지점이다. props의 값 자체는 여기서 검사하지 않는다 —
  * 컴포넌트별 검증은 validate.ts가 카탈로그를 참조해 따로 한다.
@@ -126,6 +136,21 @@ export const WbNodeSchema: z.ZodType<WbNode> = z.strictObject({
   interactions: z.array(InteractionSchema).optional(),
   get children() {
     return z.array(WbNodeSchema).optional()
+  },
+  get zones() {
+    // **원문의 열쇠를 먼저 본다** — `z.record`는 `__proto__` 열쇠를 거절하지 않고 조용히 버려(zod 4.4 실측) 검증은 지나고 원문에는 남는다.
+    // 그 열쇠 아래 노드는 포인터(`/zones/__proto__/…`)를 못 읽어 잠금 판정을 지난다(`lock.ts`의 `segmentsOf`).
+    return z
+      .custom<Record<string, unknown>>(
+        (value) =>
+          value === null ||
+          typeof value !== 'object' ||
+          Array.isArray(value) ||
+          Object.keys(value).every((name) => ZONE_NAME_PATTERN.test(name) && name !== BODY_ZONE),
+        '구역 이름의 꼴이 아닙니다',
+      )
+      .pipe(z.record(ZoneNameSchema, z.array(WbNodeSchema)))
+      .optional()
   },
 })
 

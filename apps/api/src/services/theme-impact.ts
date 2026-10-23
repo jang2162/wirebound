@@ -7,7 +7,7 @@
  * - 없는 variant: 대상 manifest 가 `components` 로 선언한 컴포넌트의 노드 가운데, `variant` 를 들고 있는데 그 값이 선언 밖인 것. 선언이
  *   없는 컴포넌트는 모든 값이 통과하고, `variant` 가 없는 노드는 `defaultVariant` 로 그려지므로 안 센다. 페이지 데이터는 바꾸지 않는다.
  */
-import type { WbNode } from '@wirebound/schema'
+import { childNodes, type WbNode } from '@wirebound/schema'
 import { migrateTokens, type ThemeManifest } from '@wirebound/themes'
 import type { DbHandle } from '../db/tx'
 import type { ProjectThemeBinding } from '../repos/projects'
@@ -50,7 +50,8 @@ export async function computeThemeImpact(
 function countMissingVariants(node: WbNode, target: ThemeManifest): number {
   const declared = target.components?.[node.type]
   const missing = declared !== undefined && node.variant !== undefined && !declared.variants.some((v) => v.id === node.variant) ? 1 : 0
-  return missing + (node.children ?? []).reduce((sum, child) => sum + countMissingVariants(child, target), 0)
+  // 구역 안 노드도 센다(`childNodes` — 몸통과 구역 전부).
+  return missing + childNodes(node).reduce((sum, child) => sum + countMissingVariants(child, target), 0)
 }
 
 /** 페이지를 설계서 트리의 차례로 — 메뉴를 깊이 우선(형제는 `sort_order`), 한 메뉴 안의 페이지는 `sort_order`. 화면이 트리 차례로 보인다. */

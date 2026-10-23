@@ -15,7 +15,7 @@ const Sample = defineComponent({
     { prop: 'disabled', control: 'switch', label: '비활성' },
   ],
   states: ['disabled'],
-  children: 'none',
+  zones: [],
 })
 
 describe('컴포넌트 레지스트리', () => {

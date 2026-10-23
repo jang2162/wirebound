@@ -4,7 +4,7 @@
  * jsdom 값이다 — 말하는 문장만 잰다(판을 비우는 길 자체는 `build-test/editor-shortcuts-review-2.test.ts` 가 Chrome 으로 잰다).
  */
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
-import { writeNodesEnvelope, type WbNode } from '@wirebound/schema'
+import { CURRENT_DOCUMENT_VERSION, writeNodesEnvelope, type WbNode } from '@wirebound/schema'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TreeMenuNode } from '../../src/api/types'
 import { PASTE_GONE_NOTICE, PASTE_LEFT_NOTICE } from '../../src/edit/paste-ops'
@@ -59,7 +59,7 @@ async function pasteWhileTreeIsRead(answer: TreeMenuNode[]): Promise<string[]> {
   })
   await openPage(doc(), { apiOverrides: { getTree: async () => await held } })
   const store = createdStores.at(-1) as EditorStore
-  paste(writeNodesEnvelope([GO], 1))
+  paste(writeNodesEnvelope([GO], CURRENT_DOCUMENT_VERSION))
   // 읽는 사이 복원이 판을 비운다(`clearPage({ restoreReread: true })`) 다음 목록이 답한다.
   act(() => {
     store.clearPage({ restoreReread: true })

@@ -106,7 +106,7 @@ import { useEditCommit } from '../edit/use-edit-commit'
 import { structureTreeHint } from '../panels/structure-tree-hint'
 import { openDocumentNow, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
-import type { DropZone } from '../tree/tree-drop'
+import type { DropBand } from '../tree/tree-drop'
 import { dragDebug, round, type DragDebug, type DropMiss } from './drag-debug'
 import { hoverRow } from './hover-open'
 import { DRAG_THRESHOLD, elementAt, scrollParent, type DragPoint, type DropHint } from './use-pointer-drag'
@@ -127,7 +127,7 @@ interface Stage {
 export interface PlacementDrop {
   placing: Placing
   target: StructureDrop
-  over: { overId: string; zone: DropZone } | 'page-end'
+  over: { overId: string; band: DropBand } | 'page-end'
   layout: Layout
   stage: Stage
   /** 어느 대상 위에서 선 자리인가 — 트리면 트리의 선 · 강조를 그리고, 캔버스면 미리보기가 대신한다(머리말 «배치 미리보기»). */
@@ -230,6 +230,7 @@ function samePreview(a: PlacementPreview, b: PlacementPreview): boolean {
   return (
     placing &&
     a.target.parentId === b.target.parentId &&
+    a.target.zone === b.target.zone &&
     a.target.index === b.target.index &&
     a.target.placement === b.target.placement &&
     a.axis === b.axis
@@ -305,14 +306,14 @@ function logOver(debug: DragDebug, hint: DropHint<PlacementDrop> | null, reason:
   }
   const { region, target, over } = hint.value
   const overId = over === 'page-end' ? 'page-end' : over.overId
-  const zone = over === 'page-end' ? undefined : over.zone
-  debug.over(`${region}:${target.parentId}:${target.index}:${target.placement}:${overId}:${zone ?? ''}`, {
+  const band = over === 'page-end' ? undefined : over.band
+  debug.over(`${region}:${target.parentId}:${target.index}:${target.placement}:${overId}:${band ?? ''}`, {
     result: region,
     parent: target.parentId,
     index: target.index,
     placement: target.placement,
     over: overId,
-    zone,
+    band,
     x: round(point.x),
     y: round(point.y),
   })
@@ -379,7 +380,7 @@ export function usePlacementDrop(input: {
   const verdict = (doc: Parameters<typeof structureDropTarget>[0], placing: Placing, over: PlacementDrop['over'], why?: Why) =>
     over === 'page-end'
       ? pageEndTarget(doc, placing, store.editBlockedBy, why)
-      : structureDropTarget(doc, placing, over.overId, over.zone, store.editBlockedBy, why)
+      : structureDropTarget(doc, placing, over.overId, over.band, store.editBlockedBy, why)
 
   /** 보인 자리가 지금 문서 · 잠금에서도 같은 답인가(머리말 «보인 자리에만 놓는다»). */
   const holds = (shown: PlacementDrop): boolean => {
@@ -452,7 +453,7 @@ export function usePlacementDrop(input: {
         value: {
           placing,
           target: hit.hint.value,
-          over: { overId: hit.overId, zone: hit.zone },
+          over: { overId: hit.overId, band: hit.band },
           layout: VERTICAL,
           stage: now,
           region: 'tree',
@@ -485,7 +486,7 @@ export function usePlacementDrop(input: {
     if (hit === null) return null
     // 숨긴 미리보기는 안 잡힌다 — 그래도 잡히면(숨기기 전에 선 요소) 노드로 읽지 않고 보인 자리 그대로다.
     if ('preview' in hit) return keep(shown, hit.rect, now, why)
-    const over: PlacementDrop['over'] = 'pageEnd' in hit ? 'page-end' : { overId: hit.overId, zone: hit.zone }
+    const over: PlacementDrop['over'] = 'pageEnd' in hit ? 'page-end' : { overId: hit.overId, band: hit.band }
     const target = verdict(document, placing, over, why)
     if (target === null) return null
     return {

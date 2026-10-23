@@ -14,7 +14,7 @@
  * `→` 는 고를 수 있는 첫 자식으로 간다. `←` 는 부모 하나만 본다 — 부모가 막혔으면 그 위도 막혀 있다(잠금은 서브트리를 덮고, 조상을
  * 고르는 것도 막는다 — `packages/schema/src/lock.ts` 의 선택 판정).
  */
-import type { WbNode } from '@wirebound/schema'
+import { BODY_ZONE, childLists, zoneList, type WbNode } from '@wirebound/schema'
 import { findNodeSafely, walkSafely } from './safe-walk'
 
 export type SelectionMove = 'selectPrev' | 'selectNext' | 'selectParent' | 'selectFirstChild'
@@ -55,10 +55,14 @@ export function ancestorIds(root: unknown, nodeId: string): string[] {
   return []
 }
 
-/** 고를 수 있는 자식 줄이 있는가 — 펼침 단추가 서는 줄이다. */
+/** 노드의 자식 전부 — 몸통 · 구역의 차례(`childLists`)로 이은 것. 검증 전 노드에서 던지지 않는다. */
+function childrenOf(node: unknown): unknown[] {
+  return childLists(node).flatMap((entry) => entry.list)
+}
+
+/** 고를 수 있는 자식 줄이 있는가 — 펼침 단추가 서는 줄이다. 구역 안 노드도 자식 줄이다. */
 export function hasChildRows(node: WbNode | undefined): boolean {
-  const children = Array.isArray(node?.children) ? node.children : []
-  return children.some((child) => typeof child === 'object' && child !== null && !Array.isArray(child))
+  return childrenOf(node).some((child) => typeof child === 'object' && child !== null && !Array.isArray(child))
 }
 
 /**
@@ -115,9 +119,9 @@ export function moveSelection(
   }
 
   const node = findNodeSafely(root, selectedId)
-  const children = Array.isArray(node?.children) ? node.children : []
-  for (const child of children) {
-    if (typeof child !== 'object' || child === null || Array.isArray(child)) continue
+  for (const item of childrenOf(node)) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) continue
+    const child = item as WbNode
     if (selectable(child) && !blocked(child.id)) return child.id
   }
   return null
@@ -136,11 +140,13 @@ function visibleAt(root: unknown, order: readonly string[], nodeId: string): num
 }
 
 /**
- * **Cmd+A 가 고를 노드** — 기준 노드의 형제 모두(그 노드 포함 · 문서 차례). 기준 노드가 없거나 루트거나 문서에 없으면 루트의 자식 모두다
+ * **Cmd+A 가 고를 노드** — 기준 노드의 형제 모두(그 노드 포함 · 문서 차례 · 그 노드가 선 구역 안). 기준 노드가 없거나 루트거나 문서에 없으면 루트의 자식 모두다
  * (설계서 「설계서 화면 구조」의 «고르는 법»). 남이 잡은 노드 · 상한은 스토어의 `selectMany`가 거른다. 노드가 아닌 원소 · 빈 id 는 뺀다.
  */
 export function siblingIds(root: unknown, anchorId: string | null): string[] {
   let parent: WbNode | null = null
+  // 형제는 기준 노드가 선 구역 안의 것이다 — 루트 · 기준이 없으면 루트의 몸통.
+  let zone = BODY_ZONE
   for (const visit of walkSafely(root)) {
     if (visit.parent === null && (anchorId === null || visit.node.id === anchorId)) {
       parent = visit.node
@@ -148,6 +154,7 @@ export function siblingIds(root: unknown, anchorId: string | null): string[] {
     }
     if (visit.node.id === anchorId) {
       parent = visit.parent
+      zone = visit.zone ?? BODY_ZONE
       break
     }
   }
@@ -155,8 +162,8 @@ export function siblingIds(root: unknown, anchorId: string | null): string[] {
     const first = walkSafely(root).next()
     parent = first.done === true ? null : first.value.node
   }
-  const children = Array.isArray(parent?.children) ? parent.children : []
+  const children = zoneList(parent, zone)
   return children
-    .filter((child): child is WbNode => typeof child === 'object' && child !== null && !Array.isArray(child) && selectable(child))
+    .filter((child): child is WbNode => typeof child === 'object' && child !== null && !Array.isArray(child) && selectable(child as WbNode))
     .map((child) => child.id)
 }

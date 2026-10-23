@@ -71,7 +71,7 @@ async function buildFixture(ctx: Parameters<Parameters<typeof withRealApi>[0]>[0
     type: 'Text',
     props: { content: `줄 ${i} 가나다라마바사 아자차카타파하` },
   }))
-  const schema = { version: 1, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_sec', type: 'Section', children: [] }, ...texts] } }
+  const schema = { version: 3, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_sec', type: 'Section', children: [] }, ...texts] } }
   const P = `/api/projects/${project.id}/pages/${page.id}`
   const put = await ctx.app.inject({ method: 'PUT', url: `${P}/schema`, cookies: holders[0]!.cookie, payload: { schema } })
   expect(put.statusCode).toBe(200)

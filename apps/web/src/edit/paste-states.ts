@@ -3,7 +3,7 @@
  * `2026-10-18-modules-states-layout-design.md` 「C2」 · 설계서 「설계서 화면 구조」 클립보드). `shell/editor-keys.tsx` 의 `finishPaste` 가 쓴다.
  * 이름이 페이지에 없는 상태는 `prepareNodesForPaste` 가 보임에서 빼고 센다.
  */
-import type { ViewState, WbNode } from '@wirebound/schema'
+import { mapChildLists, type ViewState, type WbNode } from '@wirebound/schema'
 
 /**
  * **상태를 이름으로 맞추는 자.** 이름은 글자 그대로 견준다 — 상태 줄의 이름 칸이 이름을 앞뒤 공백을 뗀 채 받고 같은 이름을 거절하는 것
@@ -31,11 +31,11 @@ export function renameStatesByName(current: unknown, incoming: readonly ViewStat
 
 /** 노드(와 자손) 보임의 상태를 표대로 바꾼 사본(`renameStatesByName` 의 표). 바꾼 뒤 겹친 상태는 하나로 접는다. 입력을 바꾸지 않는다. */
 export function renameVisibilityStates(node: WbNode, rename: ReadonlyMap<string, string>): WbNode {
-  const next: WbNode = { ...node }
+  // 자식 줄은 몸통 · 구역 전부다(`mapChildLists`) — 구역 안 노드의 보임도 바꾼다.
+  const next: WbNode = { ...mapChildLists(node, (child) => renameVisibilityStates(child, rename)) }
   if (node.visibility !== undefined) {
     const states = [...new Set(node.visibility.states.map((state) => rename.get(state) ?? state))]
     next.visibility = { mode: node.visibility.mode, states }
   }
-  if (Array.isArray(node.children)) next.children = node.children.map((child) => renameVisibilityStates(child, rename))
   return next
 }

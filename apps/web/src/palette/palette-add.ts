@@ -26,10 +26,10 @@
  *
  * **순수 함수이고 던지지 않는다**(`edit/structure-drop.ts` 와 같은 층).
  */
-import type { NodeLock, PageDocument, PatchOp } from '@wirebound/schema'
+import { BODY_ZONE, type NodeLock, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { insertNodeOps } from '../edit/ops'
 import { findNodeSafely } from '../edit/safe-walk'
-import { acceptsChildren, nodeSpot } from '../edit/structure-actions'
+import { acceptsChildren, acceptsIn, nodeSpot } from '../edit/structure-actions'
 import { pageEndTarget, probeNode, structureDropTarget, type Placing, type StructureDrop } from '../edit/structure-drop'
 import { lockedNotice } from '../panels/property-panel'
 import { lockedSelectionStatus, NOT_IN_DOCUMENT_STATUS } from '../panels/toolbar-status'
@@ -70,17 +70,17 @@ export function paletteAddTarget(input: {
   // 왜 못 넣나 — 머리말의 표 차례대로(고른 잎의 잠금은 위에서 봤다).
   const slot = atEnd
     ? typeof rootId === 'string'
-      ? { parentId: rootId, index: childCount(document.root) }
+      ? { parentId: rootId, zone: BODY_ZONE, index: childCount(document.root) }
       : null
     : node === undefined
       ? null
       : inside
-        ? { parentId: selected, index: childCount(node) }
+        ? { parentId: selected, zone: BODY_ZONE, index: childCount(node) }
         : afterSlot(document, selected)
   if (slot === null) return { ok: false, reason: NOT_IN_DOCUMENT_STATUS }
-  if (!acceptsChildren(findNodeSafely(document.root, slot.parentId))) return { ok: false, reason: STRUCTURE_WHY_DISABLED.addInside }
+  if (!acceptsIn(findNodeSafely(document.root, slot.parentId), slot.zone)) return { ok: false, reason: STRUCTURE_WHY_DISABLED.addInside }
   const probe = probeNode(placing, 'palette-probe')
-  const ops = probe === null ? null : insertNodeOps(document, slot.parentId, slot.index, probe)
+  const ops = probe === null ? null : insertNodeOps(document, slot.parentId, slot.index, probe, slot.zone)
   const blocker = ops === null ? null : input.blockedBy(ops)
   if (blocker !== null) return { ok: false, reason: lockedNotice(blocker.userName) }
   return { ok: false, reason: NOT_IN_DOCUMENT_STATUS }
@@ -91,7 +91,8 @@ function childCount(node: unknown): number {
   return Array.isArray(children) ? children.length : 0
 }
 
-function afterSlot(document: PageDocument, nodeId: string): { parentId: string; index: number } | null {
+/** 고른 노드 바로 뒤 — 그 노드가 선 구역 안이다. */
+function afterSlot(document: PageDocument, nodeId: string): { parentId: string; zone: string; index: number } | null {
   const spot = nodeSpot(document, nodeId)
-  return spot === null ? null : { parentId: spot.parentId, index: spot.index + 1 }
+  return spot === null ? null : { parentId: spot.parentId, zone: spot.zone, index: spot.index + 1 }
 }

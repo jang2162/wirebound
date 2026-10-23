@@ -308,7 +308,7 @@ describe('GET /api/projects/:projectId/tree', () => {
         .updateTable('pages')
         .set({
           schema: JSON.stringify({
-            version: 2,
+            version: 3,
             viewStates: [{ id: 's_ok', name: '됨' }, { id: 7 }, 'x'],
             root: { id: 'r', type: 'Page' },
           }) as never,
