@@ -314,7 +314,10 @@ function renderCatalog(line: Line): void {
 function zoneText(zone: ComponentDef['zones'][number]): string {
   const where = zone.name === BODY_ZONE ? '`body` (children)' : `\`${zone.name}\` (zones.${zone.name})`
   const accepts = zone.accepts === undefined ? '' : `, accepts only ${zone.accepts.map((type) => `\`${type}\``).join(', ')}`
-  const seeds = (zone.initial ?? []).map((seed) => `\`${seed.type}\`${seed.props === undefined ? '' : ` ${JSON.stringify(seed.props)}`}`)
+  const seeds = (zone.initial ?? []).map(
+    (seed) =>
+      `\`${seed.type}\`${seed.props === undefined ? '' : ` ${JSON.stringify(seed.props)}`}${seed.variant === undefined ? '' : ` variant ${JSON.stringify(seed.variant)}`}`,
+  )
   return `${where} "${zone.label}"${accepts}${seeds.length === 0 ? '' : `, create with ${seeds.join(' + ')}`}`
 }
 

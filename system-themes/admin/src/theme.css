@@ -569,6 +569,16 @@
   color: var(--wb-semantic-primary);
   border-color: var(--wb-semantic-surface);
 }
+/*
+ * 폼의 단추 구역(`actions`)은 주 단추(`primary` — 새 폼의 «검색» · «저장»)만 채워 칠하고, 기본(`default`) 단추는 보조 꼴로 둔다 — 기본 단추가 주색으로
+ * 칠해지는 이 테마에서 둘이 같은 칠이 되지 않게. 다른 variant(`danger` 등)는 제 규칙 그대로다.
+ */
+[data-wb-component="SearchForm"] > [data-wb-part="actions"] > [data-wb-component="Button"][data-wb-variant="default"],
+[data-wb-component="EntryForm"] > [data-wb-part="actions"] > [data-wb-component="Button"][data-wb-variant="default"] {
+  background: var(--wb-semantic-surface);
+  color: var(--wb-semantic-text);
+  border-color: var(--wb-semantic-border);
+}
 [data-wb-component="Button"][data-wb-state~="disabled"] {
   opacity: 0.5;
 }

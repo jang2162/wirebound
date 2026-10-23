@@ -27,7 +27,7 @@ export const SearchFormDef = defineComponent({
       label: '단추',
       initial: [
         { type: 'Button', props: { label: '초기화' } },
-        { type: 'Button', props: { label: '검색' } },
+        { type: 'Button', props: { label: '검색' }, variant: 'primary' },
       ],
     },
   ],
@@ -50,7 +50,7 @@ export const EntryFormDef = defineComponent({
       name: 'actions',
       label: '단추',
       initial: [
-        { type: 'Button', props: { label: '저장' } },
+        { type: 'Button', props: { label: '저장' }, variant: 'primary' },
         { type: 'Button', props: { label: '취소' } },
       ],
     },

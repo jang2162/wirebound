@@ -206,7 +206,7 @@ Zones: none.
 
 Search conditions that filter a list. Editor label: 검색폼.
 
-Zones: `body` (children) "조건"; `actions` (zones.actions) "단추", create with `Button` {"label":"초기화"} + `Button` {"label":"검색"}.
+Zones: `body` (children) "조건"; `actions` (zones.actions) "단추", create with `Button` {"label":"초기화"} + `Button` {"label":"검색"} variant "primary".
 
 - `collapsed`: boolean, default false
 - `columns`: integer 1–4, optional (no default)
@@ -215,7 +215,7 @@ Zones: `body` (children) "조건"; `actions` (zones.actions) "단추", create wi
 
 A create/edit form with several fields. Editor label: 입력폼.
 
-Zones: `body` (children) "항목"; `actions` (zones.actions) "단추", create with `Button` {"label":"저장"} + `Button` {"label":"취소"}.
+Zones: `body` (children) "항목"; `actions` (zones.actions) "단추", create with `Button` {"label":"저장"} variant "primary" + `Button` {"label":"취소"}.
 
 - `title`: string, default ""
 

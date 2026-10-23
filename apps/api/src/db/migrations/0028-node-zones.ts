@@ -12,7 +12,7 @@ import { liftStateRegions, MigrationError, type PageDocument } from '@wirebound/
  * |---|---|
  * | `Tabs.props.tabs`(탭 이름 배열) · 자식 전부가 패널 하나 | 이름마다 `TabPanel`(`props.label`) 을 몸통에 · 옛 자식은 `active` 자리 패널(범위 밖이면 마지막 · 이름이 없으면 «탭» 패널 하나)에 · `tabs` 를 걷는다 |
  * | `switchTab { target: <Tabs>, tab: n }` | `{ target: <n 번째 패널> }` — 대상 탭을 못 찾거나 n 이 범위 밖이면 대상은 그대로(검증 경고 `invalid-interaction-target`) · `tab` 을 걷는다 |
- * | `SearchForm` · `EntryForm`(뷰에 박힌 단추) | `zones.actions` 에 기본 단추 둘 — 검색폼 «초기화» · «검색», 입력폼 «저장» · «취소»(카탈로그의 `initial` 을 이 판의 뜻으로 얼린 사본) |
+ * | `SearchForm` · `EntryForm`(뷰에 박힌 단추) | `zones.actions` 에 기본 단추 둘 — 검색폼 «초기화» · «검색», 입력폼 «저장» · «취소», 주 단추(«검색» · «저장»)는 `variant: 'primary'`(카탈로그의 `initial` 을 이 판의 뜻으로 얼린 사본) |
  *
  * | 표 · 칸 | 옮기는 것 |
  * |---|---|
@@ -95,9 +95,9 @@ function isRecord(value: unknown): value is Raw {
 }
 
 /** 이 판의 폼 기본 단추 — 카탈로그 `initial` 의 판 3 사본(얼린다). */
-const FORM_BUTTONS: Readonly<Record<string, readonly string[]>> = {
-  SearchForm: ['초기화', '검색'],
-  EntryForm: ['저장', '취소'],
+const FORM_BUTTONS: Readonly<Record<string, readonly { label: string; variant?: string }[]>> = {
+  SearchForm: [{ label: '초기화' }, { label: '검색', variant: 'primary' }],
+  EntryForm: [{ label: '저장', variant: 'primary' }, { label: '취소' }],
 }
 
 /** 판 2 문서를 판 3 으로 — 판 1 이면 먼저 얼린 판 1 → 2. 판 3 이상이거나 문서 꼴이 아니면 `null`(건드리지 않는다). */
@@ -151,11 +151,16 @@ export function liftNodes(nodes: readonly unknown[]): unknown[] {
       next.zones = zones
     }
     if (node.type === 'Tabs') liftTabs(next, freshId, panelsOf)
-    const labels = typeof node.type === 'string' ? FORM_BUTTONS[node.type] : undefined
-    if (labels !== undefined) {
+    const buttons = typeof node.type === 'string' ? FORM_BUTTONS[node.type] : undefined
+    if (buttons !== undefined) {
       const zones: Record<string, unknown> = isRecord(next.zones) ? { ...next.zones } : {}
       if (!Array.isArray(zones.actions) || zones.actions.length === 0) {
-        zones.actions = labels.map((label) => ({ id: freshId(), type: 'Button', props: { label } }))
+        zones.actions = buttons.map(({ label, variant }) => ({
+          id: freshId(),
+          type: 'Button',
+          props: { label },
+          ...(variant === undefined ? {} : { variant }),
+        }))
       }
       next.zones = zones
     }

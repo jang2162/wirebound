@@ -111,10 +111,15 @@ export interface ZoneDef {
   initial?: readonly NodeSeed[]
 }
 
-/** 기본 내용 한 개. `props`가 그 타입의 규격을 지나는지는 카탈로그를 모은 자리가 본다(`catalog/index.ts`의 `assertSeeds`). */
+/** 기본 내용 한 개. `props`가 그 타입의 규격을 지나는지는 카탈로그를 모은 자리가 본다(`catalog/index.ts`의 `assertZoneReferences`). */
 export interface NodeSeed {
   type: string
   props?: Record<string, unknown>
+  /**
+   * 노드의 `variant` — 폼의 주 단추(`primary`)처럼 기본 내용 가운데 하나를 돋운다. 값은 스키마가 판정하지 않는다(테마가 선언한다). 선언 안 한 테마는
+   * lint `theme-variant`(경고)를 내고 제 `defaultVariant` 로 그리므로, 흔한 이름(스타터 테마 · 기본테마가 둘 다 선언하는 `primary`)만 쓴다.
+   */
+  variant?: string
 }
 
 /** 구역 이름의 꼴 — JSON Pointer 이스케이프가 필요 없고 프로토타입 토큰(`__proto__`)이 꼴에서 빠진다. */

@@ -59,6 +59,10 @@ function assertZoneReferences(defs: readonly ComponentDef[]): void {
         if (!target.props.safeParse(seed.props ?? {}).success) {
           throw new Error(`${def.type}.${zone.name}: 기본 내용 ${seed.type}의 props 가 규격에 맞지 않습니다`)
         }
+        // `variantFrom` 을 가진 타입은 `node.variant` 를 버린다(검증 경고 `ignored-variant`) — 새로 만든 노드가 경고를 들고 서지 않게.
+        if (seed.variant !== undefined && target.variantFrom !== undefined) {
+          throw new Error(`${def.type}.${zone.name}: 기본 내용 ${seed.type}은 variant 를 ${target.variantFrom} prop 에서 파생합니다`)
+        }
         if (zone.accepts !== undefined && !zone.accepts.includes(seed.type)) {
           throw new Error(`${def.type}.${zone.name}: 기본 내용 ${seed.type}을 그 구역이 받지 않습니다`)
         }

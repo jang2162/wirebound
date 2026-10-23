@@ -58,14 +58,14 @@ describe('컴포넌트 카탈로그', () => {
     expect(getComponent('TabPanel')!.bodyHost).toBe('parent')
   })
 
-  it('기본 내용 — 폼의 단추 · 탭의 패널 둘', () => {
+  it('기본 내용 — 폼의 단추(주 단추는 «검색» · «저장» 의 primary) · 탭의 패널 둘', () => {
     const seeds = (type: string, zone: string) => getComponent(type)!.zones.find((z) => z.name === zone)!.initial
     expect(seeds('SearchForm', 'actions')).toEqual([
       { type: 'Button', props: { label: '초기화' } },
-      { type: 'Button', props: { label: '검색' } },
+      { type: 'Button', props: { label: '검색' }, variant: 'primary' },
     ])
     expect(seeds('EntryForm', 'actions')).toEqual([
-      { type: 'Button', props: { label: '저장' } },
+      { type: 'Button', props: { label: '저장' }, variant: 'primary' },
       { type: 'Button', props: { label: '취소' } },
     ])
     expect(seeds('Tabs', 'body')).toEqual([

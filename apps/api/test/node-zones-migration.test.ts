@@ -4,7 +4,8 @@
  * **이 파일은 제 DB 를 만든다** — `state-visibility-migration.test.ts` 와 같은 까닭(마이그레이션을 오르내리면 다른 파일의 판이 깨진다).
  *
  * 잰 성질: 판 2 페이지 · 레이아웃 · 모듈 · 개인 모듈 · 스냅샷(판 1 · 2 문서)이 판 3 이 되고 판 2 가 하나도 안 남는다 · 옛 탭은 이름마다 패널 ·
- * 옛 자식은 `active` 자리 패널에 · `switchTab` 은 그 패널을 가리킨다 · 폼에 기본 단추 · 옮긴 문서가 판 3 검증(오류)을 지난다 · 스냅샷은 payload 규격을
+ * 옛 자식은 `active` 자리 패널에 · `switchTab` 은 그 패널을 가리킨다 · 폼에 기본 단추(카탈로그 `initial` 과 같은 노드 — 낱말 · 차례 · 주 단추
+ * `primary`) · 옮긴 문서가 판 3 검증(오류)을 지난다 · 스냅샷은 payload 규격을
  * 지난다 · 상태 보임 · 코멘트 번호 · 별칭은 그대로다 · `down` 은 행이 있으면 거절하고 비었으면 내려간다.
  */
 import { randomUUID } from 'node:crypto'
@@ -208,6 +209,31 @@ async function pageRow(id: string): Promise<{ schema: PageDocument; schema_versi
 }
 
 const find = (root: WbNode, id: string): WbNode => [...walkNodes(root)].find((visit) => visit.node.id === id)!.node
+
+/** 폼 단추 구역의 꼴 — 낱말 · 차례 · 주 단추(`variant`). 새로 만드는 폼(카탈로그 `initial`)과 같아야 한다. */
+const FORM_BUTTONS: Record<string, [string, string | null][]> = {
+  SearchForm: [
+    ['초기화', null],
+    ['검색', 'primary'],
+  ],
+  EntryForm: [
+    ['저장', 'primary'],
+    ['취소', null],
+  ],
+}
+const buttonsOf = (form: { zones?: Record<string, unknown> }): [unknown, unknown][] =>
+  ((form.zones?.actions ?? []) as WbNode[]).map((node) => [node.props?.label, node.variant ?? null])
+
+/** 글자 하나(JSON)에서 폼 노드 전부 — 문서 · 묶음 · payload 어디에 있든(키를 가리지 않고 걷는다). */
+function formsIn(value: unknown, out: { type: string; zones?: Record<string, unknown> }[] = []): typeof out {
+  if (Array.isArray(value)) for (const item of value) formsIn(item, out)
+  else if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    if (typeof record.type === 'string' && record.type in FORM_BUTTONS) out.push(record as (typeof out)[number])
+    for (const child of Object.values(record)) formsIn(child, out)
+  }
+  return out
+}
 const errorsOf = (doc: PageDocument) => partitionIssues(validatePage(doc)).errors
 
 describe('0028 — 문서 판 2 → 3', () => {
@@ -239,6 +265,11 @@ describe('0028 — 문서 판 2 → 3', () => {
       expect(body).not.toContain('"tab":')
       expect(body).not.toContain('"StateSwitch"')
     }
+    // 단추 없는 폼 — 모든 표의 폼이 기본 단추 둘을 든다(낱말 · 차례 · 주 단추까지). 폼 수는 카나리아다: 페이지 3 · 레이아웃 1 · 개인 모듈 1 ·
+    // 스냅샷 5(판 2 페이지 3 · 판 1 페이지 1 · 레이아웃 1). 판 3 페이지 · 모듈 표에는 폼이 없다.
+    const forms = texts.rows.flatMap(({ body }) => formsIn(JSON.parse(body)))
+    expect(forms).toHaveLength(10)
+    expect(forms.filter((form) => JSON.stringify(buttonsOf(form)) !== JSON.stringify(FORM_BUTTONS[form.type]))).toEqual([])
   })
 
   it('페이지 — 탭은 이름마다 패널 · 옛 자식은 active 자리 패널 · switchTab 은 그 패널 · 폼에 기본 단추 · 판 3 검증을 지난다', async () => {
@@ -269,18 +300,16 @@ describe('0028 — 문서 판 2 → 3', () => {
       { type: 'setVisible', target: 'n_in1', value: false },
     ])
 
-    const buttons = (id: string) => (find(schema.root, id).zones?.actions ?? []).map((node) => [node.type, node.props])
+    // 단추는 새로 만드는 폼과 같은 노드다 — 타입 · props · 주 단추 `variant`(그 밖의 키 없음 — id 만 새로).
+    const buttons = (id: string) => (find(schema.root, id).zones?.actions ?? []).map(({ id: _id, ...rest }) => rest)
     expect(buttons('n_sf')).toEqual([
-      ['Button', { label: '초기화' }],
-      ['Button', { label: '검색' }],
+      { type: 'Button', props: { label: '초기화' } },
+      { type: 'Button', props: { label: '검색' }, variant: 'primary' },
     ])
-    expect(buttons('n_sf2')).toEqual([
-      ['Button', { label: '초기화' }],
-      ['Button', { label: '검색' }],
-    ])
+    expect(buttons('n_sf2')).toEqual(buttons('n_sf'))
     expect(buttons('n_ef')).toEqual([
-      ['Button', { label: '저장' }],
-      ['Button', { label: '취소' }],
+      { type: 'Button', props: { label: '저장' }, variant: 'primary' },
+      { type: 'Button', props: { label: '취소' } },
     ])
     expect(find(schema.root, 'n_tabs2').children!.map((panel) => panel.props)).toEqual([{ label: '탭 1' }, { label: '탭 2' }])
 
@@ -297,7 +326,7 @@ describe('0028 — 문서 판 2 → 3', () => {
       .schema
     expect(layout.version).toBe(3)
     expect(partitionIssues(validateLayout(layout)).errors).toEqual([])
-    expect(find(layout.root, 'l_ef').zones!.actions!.map((node) => node.props!.label)).toEqual(['저장', '취소'])
+    expect(buttonsOf(find(layout.root, 'l_ef'))).toEqual(FORM_BUTTONS.EntryForm)
 
     const nodes = (await sql<{ nodes: WbNode[] }>`select nodes from modules where id = ${seeded.moduleId}`.execute(db)).rows[0]!.nodes
     const panels = nodes[0]!.children!
@@ -309,7 +338,7 @@ describe('0028 — 문서 판 2 → 3', () => {
 
     const personal = (await sql<{ nodes: WbNode[] }>`select nodes from personal_modules where id = ${seeded.personalId}`.execute(db))
       .rows[0]!.nodes
-    expect(personal[0]!.zones!.actions!.map((node) => node.props!.label)).toEqual(['초기화', '검색'])
+    expect(buttonsOf(personal[0]!)).toEqual(FORM_BUTTONS.SearchForm)
 
     const payload = (await sql<{ payload: unknown }>`select payload from snapshots where id = ${seeded.snapshotId}`.execute(db)).rows[0]!
       .payload

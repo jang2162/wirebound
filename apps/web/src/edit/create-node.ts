@@ -55,7 +55,13 @@ export function createNode(type: string, nextId: () => string = createNodeId): W
     const seeds = (zone.initial ?? []).flatMap((seed) => {
       const made = createNode(seed.type, nextId)
       if (made === null) return []
-      return [seed.props === undefined ? made : { ...made, props: { ...seed.props } }]
+      return [
+        {
+          ...made,
+          ...(seed.props === undefined ? {} : { props: { ...seed.props } }),
+          ...(seed.variant === undefined ? {} : { variant: seed.variant }),
+        },
+      ]
     })
     if (seeds.length === 0) continue
     if (zone.name === BODY_ZONE) node.children = seeds

@@ -137,7 +137,17 @@ describe('createNode', () => {
       zones: {
         actions: [
           { id: 'n_test2', type: 'Button', props: { label: '초기화' } },
-          { id: 'n_test3', type: 'Button', props: { label: '검색' } },
+          { id: 'n_test3', type: 'Button', props: { label: '검색' }, variant: 'primary' },
+        ],
+      },
+    })
+    expect(createNode('EntryForm', countingIds())).toEqual({
+      id: 'n_test1',
+      type: 'EntryForm',
+      zones: {
+        actions: [
+          { id: 'n_test2', type: 'Button', props: { label: '저장' }, variant: 'primary' },
+          { id: 'n_test3', type: 'Button', props: { label: '취소' } },
         ],
       },
     })
