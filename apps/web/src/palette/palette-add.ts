@@ -5,6 +5,7 @@
  *
  * | 고른 것 | 대상 · 띠 |
  * |---|---|
+ * | 구조 트리의 구역 줄(`selectedZone`) | 그 구역의 끝(`zoneDropTarget`) |
  * | 없음 · 뿌리 | 페이지 끝(`pageEndTarget`) |
  * | 자식을 받는 컴포넌트 | 그 노드 «안»(끝) |
  * | 잎(자식을 안 받음) | 그 노드 «뒤»(같은 부모) |
@@ -16,6 +17,7 @@
  * |---|---|
  * | 고른 잎을 남이 잡음(`lockedBy`) | 구조 트리 줄 행동의 꺼진 항목이 드는 잠금 이유(`panels/toolbar-status.ts` 의 `lockedSelectionStatus`) |
  * | 넣을 부모가 자식을 안 받음(검증 전 문서 — 잎의 부모가 자식을 안 받는 타입) | `addInside` 판정의 설명(`panels/tree-row-actions.tsx` 의 `STRUCTURE_WHY_DISABLED.addInside`) |
+ * | 그 구역이 그 타입을 안 받음 · 그 타입의 설 자리가 아님(탭 몸통 · 탭 패널) | 놓기와 같은 이유 문장(`edit/structure-drop.ts` 의 `fitRefusal`) |
  * | 지을 편집이 남의 잠금에 부딪힘(넣을 자리 바로 뒤 형제를 남이 잡음 · 고른 컨테이너 · 뿌리를 남이 잡음) | 속성 패널의 잠금 문장(`panels/property-panel.tsx` 의 `lockedNotice`) |
  * | 그 밖 — 고른 노드가 문서에 없음 | 꺼진 항목의 «문서에 없다» 이유(`NOT_IN_DOCUMENT_STATUS`) |
  *
@@ -26,11 +28,20 @@
  *
  * **순수 함수이고 던지지 않는다**(`edit/structure-drop.ts` 와 같은 층).
  */
-import { BODY_ZONE, type NodeLock, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { BODY_ZONE, zoneList, type NodeLock, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { insertNodeOps } from '../edit/ops'
 import { findNodeSafely } from '../edit/safe-walk'
 import { acceptsChildren, acceptsIn, nodeSpot } from '../edit/structure-actions'
-import { pageEndTarget, probeNode, structureDropTarget, type Placing, type StructureDrop } from '../edit/structure-drop'
+import {
+  pageEndTarget,
+  probeNode,
+  structureDropTarget,
+  zoneDropRefusal,
+  zoneDropTarget,
+  type Placing,
+  type StructureDrop,
+} from '../edit/structure-drop'
+import type { ZoneRef } from '../store/editor-store'
 import { lockedNotice } from '../panels/property-panel'
 import { lockedSelectionStatus, NOT_IN_DOCUMENT_STATUS } from '../panels/toolbar-status'
 import { STRUCTURE_WHY_DISABLED } from '../panels/tree-row-actions'
@@ -40,6 +51,8 @@ export type PaletteAdd = { ok: true; target: StructureDrop } | { ok: false; reas
 export function paletteAddTarget(input: {
   document: PageDocument
   selectedNodeId: string | null
+  /** 넣을 자리로 고른 구역(스토어의 `selectedZone`) — 있으면 고른 노드보다 앞선다(스토어가 둘을 함께 세우지 않는다). */
+  selectedZone?: ZoneRef | null
   /** 넣을 것 — 새 타입 · 모듈 묶음. 노드 옮기기(`'node'`)는 단추 넣기가 아니다. */
   placing: Exclude<Placing, { kind: 'node' }>
   /** 지을 편집이 부딪히는 남의 잠금(스토어의 `editBlockedBy`). */
@@ -48,6 +61,18 @@ export function paletteAddTarget(input: {
   lockedBy: (nodeId: string) => NodeLock | null
 }): PaletteAdd {
   const { document, selectedNodeId: selected, placing } = input
+  const zone = input.selectedZone ?? null
+  if (zone !== null) {
+    const target = zoneDropTarget(document, placing, zone.parentId, zone.zone, input.blockedBy)
+    if (target !== null) return { ok: true, target }
+    const parent = findNodeSafely(document.root, zone.parentId)
+    return whyNot(
+      document,
+      placing,
+      parent === undefined ? null : { parentId: zone.parentId, zone: zone.zone, index: zoneList(parent, zone.zone).length },
+      input.blockedBy,
+    )
+  }
   const rootId: unknown = document.root?.id
   const atEnd = selected === null || selected === rootId
   const node = atEnd ? undefined : findNodeSafely(document.root, selected)
@@ -77,11 +102,23 @@ export function paletteAddTarget(input: {
       : inside
         ? { parentId: selected, zone: BODY_ZONE, index: childCount(node) }
         : afterSlot(document, selected)
+  return whyNot(document, placing, slot, input.blockedBy)
+}
+
+/** 판정이 `null` 을 낸 자리의 이유 문장 — 머리말의 표 차례대로(고른 잎의 잠금은 부르는 쪽이 먼저 봤다). */
+function whyNot(
+  document: PageDocument,
+  placing: Exclude<Placing, { kind: 'node' }>,
+  slot: { parentId: string; zone: string; index: number } | null,
+  blockedBy: (ops: readonly PatchOp[]) => NodeLock | null,
+): PaletteAdd {
   if (slot === null) return { ok: false, reason: NOT_IN_DOCUMENT_STATUS }
   if (!acceptsIn(findNodeSafely(document.root, slot.parentId), slot.zone)) return { ok: false, reason: STRUCTURE_WHY_DISABLED.addInside }
+  const refusal = zoneDropRefusal(document, placing, slot.parentId, slot.zone)
+  if (refusal !== null) return { ok: false, reason: refusal }
   const probe = probeNode(placing, 'palette-probe')
   const ops = probe === null ? null : insertNodeOps(document, slot.parentId, slot.index, probe, slot.zone)
-  const blocker = ops === null ? null : input.blockedBy(ops)
+  const blocker = ops === null ? null : blockedBy(ops)
   if (blocker !== null) return { ok: false, reason: lockedNotice(blocker.userName) }
   return { ok: false, reason: NOT_IN_DOCUMENT_STATUS }
 }

@@ -29,12 +29,15 @@ import {
   type TargetedPage,
   type ViewState,
   type WbNode,
+  zoneList,
 } from '@wirebound/schema'
 import type { TreeMenuNode } from '../api/types'
 import { STRUCTURE_WHY_DISABLED } from '../panels/tree-row-actions'
 import { insertNodeOps, removeNodeOps } from './ops'
 import { findNodeSafely, walkSafely } from './safe-walk'
+import type { ZoneRef } from '../store/editor-store'
 import { acceptsIn, nodeSpot } from './structure-actions'
+import { fitRefusal } from './structure-drop'
 
 export type NodeEdit = { ops: PatchOp[]; insertedIds: string[] } | { reason: string }
 
@@ -69,7 +72,13 @@ export function insertMany(
   verb: InsertVerb = '붙이지',
   zone: string = BODY_ZONE,
 ): NodeEdit {
-  if (!acceptsIn(findNodeSafely(document.root, parentId), zone)) return { reason: STRUCTURE_WHY_DISABLED.addInside }
+  const parent = findNodeSafely(document.root, parentId)
+  if (!acceptsIn(parent, zone)) return { reason: STRUCTURE_WHY_DISABLED.addInside }
+  // 받는 타입 · 설 자리는 놓기와 같은 문장으로 먼저 말한다 — 검증 문장(`zone-type-not-allowed`)은 경로를 들어 사람이 읽기 어렵다.
+  for (const node of nodes) {
+    const refusal = fitRefusal(parent?.type, zone, node.type)
+    if (refusal !== null) return { reason: refusal }
+  }
   if (nodes.length > MAX_OPS_PER_EDIT) return { reason: tooManyOpsNotice(nodes.length) }
 
   const ops: PatchOp[] = []
@@ -100,13 +109,20 @@ export function insertMany(
 /**
  * 붙이기(설계서 「설계서 화면 구조」의 클립보드 «붙이기»). 노드는 이미 id 를 새로 받은 것이다(`prepareNodesForPaste`).
  *
- * | 기준 노드 | 자리 |
+ * | 기준 | 자리 |
  * |---|---|
- * | 있고 루트가 아니다 | 그 노드 바로 뒤 형제로 차례대로 |
+ * | 고른 구역(구조 트리의 구역 줄 — 스토어의 `selectedZone`) | 그 구역의 끝 |
+ * | 노드가 있고 루트가 아니다 | 그 노드 바로 뒤 형제로 차례대로 — 그 노드가 선 구역 안 |
  * | 없다 · 루트다 · 문서에 없다 | 루트 끝 |
  */
-export function pasteOps(document: PageDocument, anchorId: string | null, nodes: readonly WbNode[]): NodeEdit {
+export function pasteOps(document: PageDocument, anchor: string | ZoneRef | null, nodes: readonly WbNode[]): NodeEdit {
   const placed = stripMarkers(nodes)
+  if (anchor !== null && typeof anchor === 'object') {
+    const parent = findNodeSafely(document.root, anchor.parentId)
+    if (parent === undefined) return { reason: NO_PASTE_SPOT }
+    return insertMany(document, anchor.parentId, zoneList(parent, anchor.zone).length, placed, '붙이지', anchor.zone)
+  }
+  const anchorId = anchor
   const rootId: unknown = document.root?.id
   const spot = anchorId === null || anchorId === rootId ? null : nodeSpot(document, anchorId)
   if (spot !== null) return insertMany(document, spot.parentId, spot.index + 1, placed, '붙이지', spot.zone)

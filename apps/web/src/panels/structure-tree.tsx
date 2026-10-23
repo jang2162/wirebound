@@ -28,6 +28,7 @@ import { ancestorIds, hasChildRows, visibleNodeOrder } from '../edit/selection-m
 import { sameDrop, type StructureDrop } from '../edit/structure-drop'
 import { useHiddenNodes } from '../shell/use-view-state'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import type { ZoneRef } from '../store/editor-store'
 import { useLockedBy, useLocksVersion } from '../store/use-locked-by'
 import { structureKey, useCollapsed, type Collapsed } from '../tree/collapse'
 import { useAliasEdit, type AliasEdit } from './alias-edit'
@@ -63,6 +64,7 @@ export function StructureTree(props: {
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
   const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
+  const selectedZone = useEditorStore(store, (s) => s.selectedZone)
   const [platform] = useState(() => platformOf(navigator))
   // **목록을 구독하는 자리는 이 파일 밖이다.** 잠금을 봐야 하는 패널이 둘(여기와 속성
   // 패널)이라 형제 둘 중 하나에 둘 수 없다 — 그 사정과 «자리는 하나»는
@@ -212,6 +214,8 @@ export function StructureTree(props: {
             fold={fold}
             row={props.editable ? { commands, drag, rootId, select: store.selectNode, alias, saveModule: openSaveModule } : null}
             saveOnly={props.editable ? null : { rootId, select: store.selectNode, saveModule: openSaveModule }}
+            selectedZone={selectedZone}
+            onSelectZone={store.selectZone}
           />
         </ul>
         {props.editable && <DropIndicator hint={drag.hint} />}
@@ -305,19 +309,49 @@ export const EMPTY_ZONE_LABEL = '비어 있음'
  * `Section` · `Page` · `TabPanel`). 이름 붙은 구역을 선언했거나 선언 밖 구역을 든 노드는 카탈로그 차례대로 구역마다 줄(`label`)을 세운다(빈
  * 구역 포함 — 선언 밖 구역은 든 것만). 노드가 아닌 원소는 뺀다.
  */
-function rowLists(node: WbNode): { key: string; label: string | null; nodes: WbNode[] }[] {
+function rowLists(node: WbNode): { key: string; zone: string; label: string | null; nodes: WbNode[] }[] {
   const entries = childLists(node as unknown)
   const declared = zoneDefs(node.type)
   const zoned = entries.some((entry) => entry.pointer !== '/children')
   return entries
     .map((entry) => ({
       key: entry.pointer,
+      zone: entry.zone,
       label: zoned
         ? (declared.find((zone) => zone.name === entry.zone && entry.pointer === zonePointer(zone.name))?.label ?? entry.zone)
         : null,
       nodes: entry.list.filter(isNodeShaped),
     }))
     .filter((list) => list.label !== null || list.nodes.length > 0)
+}
+
+/**
+ * 구역 줄의 머리 — 누르면 그 구역을 넣을 자리로 고른다(`StructureNode` 의 구역 줄 주석). 부모 노드에 id 가 없으면(검증 전 문서) 고를 수 없어
+ * 글만 선다. 끄는 동안 이 줄 위에 놓으면 그 구역 끝이다(`./structure-tree-hint.ts` 가 `data-tree-zone-row` 로 찾는다).
+ */
+function ZoneRow(props: {
+  parentId: string | null
+  zone: string
+  label: string
+  selected: ZoneRef | null
+  onSelect: (parentId: string, zone: string) => void
+}): ReactElement {
+  const { parentId, zone } = props
+  if (parentId === null) return <span className="wb-shell-structure-zone-label">{props.label}</span>
+  const current = props.selected !== null && props.selected.parentId === parentId && props.selected.zone === zone
+  return (
+    <button
+      type="button"
+      className="wb-shell-structure-zone-label wb-shell-structure-zone-pick"
+      data-tree-zone-row=""
+      data-tree-zone-parent={parentId}
+      data-tree-zone-name={zone}
+      aria-current={current ? true : undefined}
+      onClick={() => props.onSelect(parentId, zone)}
+    >
+      {props.label}
+    </button>
+  )
 }
 
 /** 한 줄 묶음의 노드들 — 노드 줄(`StructureNode`)을 차례로. */
@@ -342,6 +376,8 @@ function StructureChildren(props: Parameters<typeof StructureNode>[0] & { nodes:
           fold={props.fold}
           row={props.row}
           saveOnly={props.saveOnly}
+          selectedZone={props.selectedZone}
+          onSelectZone={props.onSelectZone}
         />
       ))}
     </>
@@ -375,6 +411,9 @@ function StructureNode(props: {
   row: RowWiring | null
   /** 편집할 수 없는 판의 줄 `…` — «모듈로 저장…» 한 항목(`StructureTree` 의 `editable` 주석). 편집할 수 있는 판이면 `null`(`row` 가 갖는다). */
   saveOnly: SaveOnlyWiring | null
+  /** 넣을 자리로 고른 구역(스토어의 `selectedZone`) — 그 구역 줄이 `aria-current` 다. */
+  selectedZone: ZoneRef | null
+  onSelectZone: (parentId: string, zone: string) => void
 }): ReactElement {
   const { node, row } = props
   // **모양 가드 둘.** 검증 전 문서에는 `children`이 배열이 아니거나 `type`이
@@ -570,13 +609,17 @@ function StructureNode(props: {
             list.label === null ? (
               <StructureChildren key={list.key} {...props} nodes={list.nodes} parentHidden={hiddenHere} />
             ) : (
-              // **구역 줄** — 이름 붙은 구역이 있는 노드는 자식 줄 위에 구역마다 줄을 세운다(카탈로그 차례 · 빈 구역 포함). 노드가 아니라
-              // 고를 수 없다(고르기 · 넣기의 대상은 다음 차수의 일이다 — 설계 spec `2026-10-23-node-slots-design.md` 「8. 구현을 나누는 법」 B).
+              // **구역 줄** — 이름 붙은 구역이 있는 노드는 자식 줄 위에 구역마다 줄을 세운다(카탈로그 차례 · 빈 구역 포함). 구역 줄은 노드가
+              // 아니다 — 누르면 «넣을 자리» 가 그 구역이 되고(`store.selectZone` — 노드 선택이 비어 잠금을 잡지 않는다) 하단 판 넣기 · 붙여넣기 ·
+              // 모듈 넣기가 그 구역 끝에 넣는다. 줄 행동(`…`)이 없다. 고르기는 읽기라 고칠 수 없는 판(viewer)에서도 선다(넣는 입구가 꺼진다).
               <li key={list.key} className="wb-shell-structure-zone" data-tree-zone={list.key}>
-                <span className="wb-shell-structure-zone-label">
-                  {list.label}
-                  {list.nodes.length === 0 ? ` · ${EMPTY_ZONE_LABEL}` : ''}
-                </span>
+                <ZoneRow
+                  parentId={isSelectable(node) ? node.id : null}
+                  zone={list.zone}
+                  label={`${list.label}${list.nodes.length === 0 ? ` · ${EMPTY_ZONE_LABEL}` : ''}`}
+                  selected={props.selectedZone}
+                  onSelect={props.onSelectZone}
+                />
                 {list.nodes.length > 0 && (
                   <ul className="wb-shell-structure-list">
                     <StructureChildren {...props} nodes={list.nodes} parentHidden={hiddenHere} />

@@ -62,7 +62,7 @@ import { lockedNotice } from '../panels/property-panel'
 import { useStructureCommands } from '../panels/structure-toolbar'
 import { lockedSelectionStatus, selectionCapNotice } from '../panels/toolbar-status'
 import { MULTI_WHY_DISABLED } from '../edit/structure-actions'
-import type { EditFailure } from '../store/editor-store'
+import type { EditFailure, ZoneRef } from '../store/editor-store'
 import { LOSS_RANK } from '../store/loss-notice'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
@@ -173,7 +173,7 @@ export function EditorKeys(props: {
     nodes: readonly WbNode[],
     sourceStates: readonly ViewState[] | undefined,
     pages: readonly TargetedPage[] | null,
-    anchor: string | null,
+    anchor: string | ZoneRef | null,
     pressed?: EditFailure | null,
   ): void => {
     const document = openDocumentNow(store, pageId)
@@ -182,7 +182,17 @@ export function EditorKeys(props: {
       pressed === undefined
         ? say
         : (message: string) => (store.getState().editFailure !== pressed && store.showsLoss() ? tellPasteLoss(message) : say(message))
-    const at = anchor !== null && findNodeSafely(document.root, anchor) !== undefined ? anchor : null
+    // 고른 구역은 그 부모가 이 문서에 있을 때만 그 자리다 — 없으면 고른 노드가 사라진 판과 같이 페이지 끝이다.
+    const at =
+      anchor === null
+        ? null
+        : typeof anchor === 'object'
+          ? findNodeSafely(document.root, anchor.parentId) !== undefined
+            ? anchor
+            : null
+          : findNodeSafely(document.root, anchor) !== undefined
+            ? anchor
+            : null
     // 붙이는 페이지에 같은 이름의 상태가 있으면 보임을 그 id 로 옮기고(`edit/paste-states.ts` 의 `renameStatesByName`), 없는 이름의 상태는 보임에서
     // 뺀다(설계서 「설계서 화면 구조」 클립보드 · 화면 상태).
     const states = new Set((Array.isArray(document.viewStates) ? document.viewStates : []).map((state) => state.id))
@@ -192,7 +202,7 @@ export function EditorKeys(props: {
       page: (target) => pages !== null && matchPageTargets(pages, target).length > 0,
       state: (id) => states.has(id),
     })
-    if (at !== null && at !== document.root?.id) {
+    if (typeof at === 'string' && at !== document.root?.id) {
       const lock = store.lockedBy(at)
       if (lock !== null) {
         tell(lockedSelectionStatus(lock.userName))
@@ -226,7 +236,8 @@ export function EditorKeys(props: {
       return true
     }
     if (pageId === undefined) return true
-    const anchor = store.getState().selectedNodeId
+    // 붙일 자리 — 고른 구역 줄이 있으면 그 구역 끝(`pasteOps` 의 표), 아니면 기준 노드 뒤.
+    const anchor = store.getState().selectedZone ?? store.getState().selectedNodeId
     if (!hasPageTargets(read.nodes)) {
       finishPaste(pageId, read.nodes, read.viewStates, null, anchor)
       return true

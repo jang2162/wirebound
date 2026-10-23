@@ -1393,17 +1393,33 @@
 
 /* ── 트리 줄 행동(`panels/tree-row-actions.tsx`) ─────────────────────────────────────── */
 
-/* 구조 트리의 구역 줄(`panels/structure-tree.tsx` 의 `rowLists`) — 고를 수 없는 머리 글과 그 구역의 노드 줄 목록을 품는다. 머리 글은
-   노드 줄보다 작고 흐리다. */
+/* 구조 트리의 구역 줄(`panels/structure-tree.tsx` 의 `rowLists`) — 머리 글과 그 구역의 노드 줄 목록을 품는다. 머리 글은 노드 줄보다 작고
+   흐리다. 머리 글은 단추다 — 누르면 그 구역이 넣을 자리가 된다(`ZoneRow`). 고른 구역은 노드 줄의 선택과 같은 채움이다. */
 .wb-shell-structure-zone {
   display: block;
 }
 
 .wb-shell-structure-zone-label {
   display: block;
+  width: 100%;
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
   padding: 2px 6px;
+  background: transparent;
+  font: inherit;
   font-size: 11px;
+  text-align: left;
   color: var(--wb-shell-muted);
+}
+
+.wb-shell-structure-zone-pick {
+  cursor: pointer;
+}
+
+.wb-shell-structure-zone-label[aria-current='true'] {
+  background: var(--wb-shell-accent);
+  color: #fff;
 }
 
 /* 줄 하나 — 줄 단추(메뉴 · 페이지 · 노드)와 `+` · `…`가 한 줄에 선다. **줄 행동이 서는 조건 셋이 여기 걸린다**(아래 규칙) — 셸

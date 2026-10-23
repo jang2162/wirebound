@@ -273,6 +273,7 @@ function useModuleInsert(input: {
           const verdict = paletteAddTarget({
             document,
             selectedNodeId: store.getState().selectedNodeId,
+            selectedZone: store.getState().selectedZone,
             placing: { kind: 'module', key: card.key, nodes },
             blockedBy: store.editBlockedBy,
             lockedBy: store.lockedBy,

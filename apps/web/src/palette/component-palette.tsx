@@ -53,6 +53,7 @@ import { useEditCommit } from '../edit/use-edit-commit'
 import { placeableGroups, type PickableGroup, type PickableType } from './placeable'
 import { ShellResizer } from '../shell/shell-resizer'
 import { shellIcon } from '../shell/icons'
+import type { ZoneRef } from '../store/editor-store'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
 import { ModuleTab } from './module-tab'
 import { paletteAddTarget } from './palette-add'
@@ -178,7 +179,8 @@ function PaletteBody(props: {
   const [query, setQuery] = useState('')
   const [moduleQuery, setModuleQuery] = useState('')
   const store = useEditorStoreInstance()
-  const selected = useEditorStore(store, (s) => s.selectedNodeId)
+  // 고른 것 — 노드 id · 구역 줄(`구역:` 머리)을 한 글자로. 바뀌면 거절 문장을 걷는다(아래).
+  const selected = useEditorStore(store, (s) => selectedKey(s.selectedNodeId, s.selectedZone))
   /** 거절 문장과 그것을 세운 판(머리말 «카드»). 위층 탭을 바꾸면 걷는다. */
   const [notice, setNotice] = useState<{ text: string; pageId: string | undefined; selected: string | null; view: PaletteView } | null>(
     null,
@@ -187,7 +189,12 @@ function PaletteBody(props: {
   const tabRefs = useRef(new Map<string, HTMLButtonElement>())
   const viewRefs = useRef(new Map<PaletteView, HTMLButtonElement>())
   const onNotice = useCallback(
-    (text: string) => setNotice(text === '' ? null : { text, pageId: props.pageId, selected: store.getState().selectedNodeId, view }),
+    (text: string) =>
+      setNotice(
+        text === ''
+          ? null
+          : { text, pageId: props.pageId, selected: selectedKey(store.getState().selectedNodeId, store.getState().selectedZone), view },
+      ),
     [props.pageId, store, view],
   )
 
@@ -404,6 +411,7 @@ function PaletteCards(props: {
     const verdict = paletteAddTarget({
       document,
       selectedNodeId: store.getState().selectedNodeId,
+      selectedZone: store.getState().selectedZone,
       placing,
       blockedBy: store.editBlockedBy,
       lockedBy: store.lockedBy,
@@ -515,4 +523,9 @@ export function PaletteToggle(props: { open: boolean; onToggle: () => void; inse
       {paletteNames(props.insertable).toggle}
     </button>
   )
+}
+
+/** 고른 것의 글자 — 노드면 그 id, 구역 줄이면 `구역:<부모>:<구역>`, 없으면 `null`. */
+function selectedKey(nodeId: string | null, zone: ZoneRef | null): string | null {
+  return zone !== null ? `구역:${zone.parentId}:${zone.zone}` : nodeId
 }
