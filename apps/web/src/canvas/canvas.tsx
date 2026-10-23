@@ -44,6 +44,7 @@ import { describePageTarget, type PageDocument } from '@wirebound/schema'
 import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
+import { KeepDropPlace } from './keep-drop-place'
 import { platformOf } from '../edit/editor-shortcuts'
 import { findNodeSafely, walkSafely } from '../edit/safe-walk'
 import { selectionCapNotice } from '../panels/toolbar-status'
@@ -598,15 +599,18 @@ export function Canvas(props: {
         >
           {(f) => (
             <ThemeProvider value={{ tokens, window: f.window }}>
-              <CanvasDocument
-                doc={rendered ?? doc}
-                theme={definition}
-                viewState={viewState}
-                interaction={interaction}
-                bannerHost={bannerHost}
-                emptyZones={emptyZones}
-                reveal={reveal}
-              />
+              {/* 빈 구역 칸이 걷힐 때 놓인 노드의 화면 자리를 지킨다(`./keep-drop-place.tsx`). */}
+              <KeepDropPlace slots={emptyZones !== null} frame={f}>
+                <CanvasDocument
+                  doc={rendered ?? doc}
+                  theme={definition}
+                  viewState={viewState}
+                  interaction={interaction}
+                  bannerHost={bannerHost}
+                  emptyZones={emptyZones}
+                  reveal={reveal}
+                />
+              </KeepDropPlace>
             </ThemeProvider>
           )}
         </CanvasIframe>
