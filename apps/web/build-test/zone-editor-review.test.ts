@@ -229,7 +229,7 @@ describe.skipIf(!전제.ok)('구역 에디터 리뷰 — 실브라우저', () =>
 
   it('H1 — 받는 타입 · 설 자리를 넘는 내어쓰기 · 들여쓰기는 편집 없이 다른 입구와 같은 까닭을 말한다 · WS 를 늦춘 판에서 그 뒤에 곧바로 넣은 편집이 산다', async () => {
     const P = await fixture('indent')
-    const delay = await stack.startWsDelay(1200)
+    const delay = await stack.startWsDelay(2000)
     const tab = await openTab(P, 'alice', { origin: delay.origin })
     try {
       await poll(
@@ -243,10 +243,11 @@ describe.skipIf(!전제.ok)('구역 에디터 리뷰 — 실브라우저', () =>
       // 탭 패널 안 글의 내어쓰기 — 탭 몸통(탭 패널만 받는다).
       await selectRow(tab.page, 'n_t1')
       await tab.page.keyboard.press('Alt+Shift+ArrowLeft')
+      // 짧게만 기다린다 — 고치기 전 판은 내어쓰기가 나가 2s 뒤에 422 를 받는다. 그 전에 다음 편집을 줄 세워야 «뒤에 줄 선 편집도 버린다» 판이 선다.
       const outdentNotice = await settle(
         () => infoNotices(tab.page),
         (list) => list.length > 0,
-        1500,
+        300,
       )
       // 곧바로 — 올림이 늦는 사이 — 맵 없는 카드 바닥 구역에 구분선을 넣는다.
       await zoneRow(tab.page, 'n_bare', 'footer').click()
