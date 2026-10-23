@@ -13,6 +13,8 @@
  */
 import { BODY_ZONE, hasBody, hasZone, zoneList, type NodeLock, type PageDocument } from '@wirebound/schema'
 import { nodeType } from '../panels/node-shape'
+// 순환 import 다(`./structure-drop` 이 `acceptsChildren` · `acceptsIn` 을 이 파일에서 가져온다) — 둘 다 함수 몸 안에서만 써 적재 순서와 무관하다.
+import { fitRefusal } from './structure-drop'
 // **schema의 `walkNodes`를 쓰지 않는다** — 자식 줄 안의 `null` 원소를 노드로 낸다
 // (`./safe-walk.ts` 머리말). 이 파일의 계약이 "던지지 않는다"이므로 순회부터 `walkSafely`를 쓴다.
 import { isNodeLike, walkSafely, type SafeVisit } from './safe-walk'
@@ -50,7 +52,8 @@ const NOTHING: StructureAbilities = {
 /**
  * 고른 노드가 없거나 문서에 없으면 전부 `false`다.
  *
- * **카탈로그를 보는 조작은 둘뿐이다 — `addInside`와 `indent`.** 나머지는 자리만 본다.
+ * **카탈로그를 보는 조작은 셋뿐이다 — `addInside` · `indent` · `outdent`.** 나머지는 자리만 본다. 들여쓰기 · 내어쓰기는 부모를 바꾸므로 갈
+ * 자리가 그 노드를 받는지(`levelRefusals`)를 본다 — 카탈로그에 없는 타입은 받는 타입 · 설 자리 판정에 안 걸린다(`fitRefusal`).
  * *"카탈로그에 없는 타입·모양이 깨진 노드는 전부 불가"*로 판정하면 **사용자가 그 노드를
  * 치울 수단이 없어진다.** 실측: 카탈로그에
  * 없는 타입의 노드가 하나라도 있으면 `validatePage`가 `unknown-type`을 내고 편집
@@ -135,6 +138,7 @@ export function structureAbilities(document: PageDocument | null, nodeId: string
   // 「5. 에디터」). 줄이 배열이 아니면(배열 유사 객체 · 문자열) 빈 줄이다(`zoneList`) — 글자 수가 형제 수가 되지 않게.
   const siblings = zoneList(parent, zone)
   const previous = index > 0 ? siblings[index - 1] : undefined
+  const refusals = levelRefusals(document, visit)
 
   return {
     addInside,
@@ -144,12 +148,43 @@ export function structureAbilities(document: PageDocument | null, nodeId: string
     moveDown: index < siblings.length - 1,
     // **앞 형제가 있고 그 형제가 자식을 담을 수 있을 때만이다**(들여쓰기의 핵심 제약).
     // 들여쓰기는 노드를 앞 형제의 **몸통 끝**으로 넣는 것이라 그 형제의 카탈로그를 본다(몸통이 없으면 꺼진다).
-    indent: previous !== undefined && acceptsChildren(previous),
+    indent: previous !== undefined && acceptsChildren(previous) && refusals.indent === null,
     // 부모가 루트면 나갈 곳이 문서 밖이다. 부모의 부모가 있는지는 방문 정보에 없으므로
     // 루트 노드와 같은 것인지로 본다 — id 비교가 아니라 **참조 비교**인 것은 id가
     // 중복된 문서(검증 전에는 가능하다)에서도 갈리지 않기 위해서다.
-    outdent: parent !== document.root,
+    outdent: parent !== document.root && refusals.outdent === null,
   }
+}
+
+/** 들여쓰기 · 내어쓰기가 갈 자리에 그 노드가 못 서는 까닭(`levelRefusals`). 설 수 있거나 갈 자리가 없으면 `null`. */
+export interface LevelRefusals {
+  indent: string | null
+  outdent: string | null
+}
+
+const NO_REFUSAL: LevelRefusals = { indent: null, outdent: null }
+
+/**
+ * **들여쓰기 · 내어쓰기는 부모를 바꾼다 — 놓기 · 넣기 · 붙이기와 같은 판정(`fitRefusal` — 받는 타입 · 설 자리)을 지난다.** 들여쓰기는 앞 형제의
+ * 몸통 끝, 내어쓰기는 부모가 선 구역(조부모의 그 줄)이다. 안 보면 편집이 나가 서버 422 를 받고, 페이지를 다시 실으며 뒤에 줄 선 편집까지
+ * 버린다(리뷰 RV-ZE H1 — 탭 패널 안 글의 내어쓰기 · 탭 패널의 들여쓰기). 꺼진 항목 · 키 통지가 이 문장을 그대로 싣는다(`panels/toolbar-status.ts`
+ * · `shell/editor-keys.tsx`). 고른 노드가 없거나 문서에 없거나 루트면 둘 다 `null` 이다 — 그 판은 `structureAbilities` 가 자리로 끈다.
+ */
+export function levelRefusals(document: PageDocument | null, at: string | SafeVisit | null): LevelRefusals {
+  if (document === null || at === null) return NO_REFUSAL
+  const visit = typeof at === 'string' ? findVisit(document, at) : at
+  if (visit === null || visit.parent === null) return NO_REFUSAL
+  const type = nodeType(visit.node)
+  const previous = visit.index > 0 ? zoneList(visit.parent, visit.zone ?? BODY_ZONE)[visit.index - 1] : undefined
+  const indent = isNodeLike(previous) ? fitRefusal(nodeType(previous), BODY_ZONE, type) : null
+  // 부모의 자리 — 참조로 찾는다(id 가 겹친 문서에서도 갈리지 않게 — 위 `outdent` 의 참조 비교와 같은 까닭).
+  let outdent: string | null = null
+  for (const holder of walkSafely(document.root)) {
+    if (holder.node !== visit.parent) continue
+    if (holder.parent !== null) outdent = fitRefusal(nodeType(holder.parent), holder.zone ?? BODY_ZONE, type)
+    break
+  }
+  return { indent, outdent }
 }
 
 /**

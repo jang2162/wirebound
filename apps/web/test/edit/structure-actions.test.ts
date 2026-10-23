@@ -10,7 +10,7 @@
 import type { PageDocument, WbNode } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import '../../src/catalog-setup'
-import { nodeSpot, structureAbilities } from '../../src/edit/structure-actions'
+import { levelRefusals, nodeSpot, structureAbilities } from '../../src/edit/structure-actions'
 
 function doc(root: WbNode): PageDocument {
   return { version: 1, root }
@@ -342,6 +342,63 @@ describe('structureAbilities', () => {
     })
 
     expect(structureAbilities(document, 'n_bad').addInside).toBe(false)
+  })
+})
+
+describe('levelRefusals — 들여쓰기 · 내어쓰기가 갈 자리의 받는 타입 · 설 자리(리뷰 RV-ZE H1)', () => {
+  /** 탭 둘 · 그 안 글, 카드 안 글, 카탈로그에 없는 타입이 든 카드. */
+  const tabs = (): PageDocument =>
+    doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        {
+          id: 'n_tabs',
+          type: 'Tabs',
+          children: [
+            { id: 'n_tp1', type: 'TabPanel', children: [{ id: 'n_t1', type: 'Text' }] },
+            { id: 'n_tp2', type: 'TabPanel', children: [] },
+          ],
+        },
+        {
+          id: 'n_card',
+          type: 'Card',
+          children: [
+            { id: 'n_k', type: 'Text' },
+            { id: 'n_ghost', type: 'Nonexistent' },
+          ],
+        },
+      ],
+    })
+
+  it('갈 자리가 그 노드를 안 받으면 다른 입구와 같은 문장이고 판정이 꺼진다 — 받으면 `null` 이고 켜진다', () => {
+    const document = tabs()
+    const of = (id: string) => ({ ...levelRefusals(document, id), on: structureAbilities(document, id) })
+    expect({ t1: of('n_t1'), tp2: of('n_tp2'), k: of('n_k') }).toEqual({
+      // 탭 패널 안 글의 내어쓰기는 탭 몸통이다(탭 패널만 받는다).
+      t1: { indent: null, outdent: '탭에는 탭 패널만 놓을 수 있습니다', on: expect.objectContaining({ indent: false, outdent: false }) },
+      // 탭 패널의 들여쓰기는 앞 탭 패널의 몸통 · 내어쓰기는 뿌리 몸통이다(탭 패널은 탭 안에만 선다).
+      tp2: {
+        indent: '탭 패널은 탭 안에만 놓을 수 있습니다',
+        outdent: '탭 패널은 탭 안에만 놓을 수 있습니다',
+        on: expect.objectContaining({ indent: false, outdent: false }),
+      },
+      k: { indent: null, outdent: null, on: expect.objectContaining({ indent: false, outdent: true }) },
+    })
+  })
+
+  it('카탈로그에 없는 타입은 받는 타입 · 설 자리 판정에 안 걸린다 — 자리로만 판정한다(치울 길을 막지 않는다)', () => {
+    expect(levelRefusals(tabs(), 'n_ghost')).toEqual({ indent: null, outdent: null })
+    expect(structureAbilities(tabs(), 'n_ghost').outdent).toBe(true)
+  })
+
+  it('없는 노드 · 루트 · 고른 것 없음 · 문서 없음은 둘 다 `null` 이다', () => {
+    expect([
+      levelRefusals(tabs(), 'n_none'),
+      levelRefusals(tabs(), 'n_root'),
+      levelRefusals(tabs(), null),
+      levelRefusals(null, 'n_t1'),
+    ]).toEqual(Array(4).fill({ indent: null, outdent: null }))
   })
 })
 

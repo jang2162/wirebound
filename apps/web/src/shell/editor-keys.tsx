@@ -20,8 +20,8 @@
  * `test/edit/use-editor-shortcuts.test.tsx` 가 단추와 키로 각각 되돌린 스토어 상태를 견준다.
  *
  * **키가 판정을 지나야 하는 까닭** — 키 이벤트는 끈 단추를 지나지 않는다. 판정을 안 보면 회색인 조작이 키로만 실행된다. 특히 **들여쓰기는
- * 뒤에서 안 막힌다** — `moveNodeOps` 는 타입을 읽지 않아 앞 형제가 자식을 못 담아도 연산을 짓고, 그것이 `children-not-allowed` 문서가 되어
- * 서버로 나간다. 그것을 막는 것은 `structureAbilities.indent` 하나다. 되돌리기도 단추가 꺼진 판(`canUndo` 가 거짓)에서는 부르지 않는다 —
+ * 뒤에서 안 막힌다** — `moveNodeOps` 는 타입을 읽지 않아 앞 형제가 자식을 못 담아도 · 갈 자리가 그 타입을 안 받아도 연산을 짓고, 그것이
+ * `children-not-allowed` · `misplaced-component` 문서가 되어 서버로 나간다. 그것을 막는 것은 `structureAbilities` 의 `indent` · `outdent` 다. 되돌리기도 단추가 꺼진 판(`canUndo` 가 거짓)에서는 부르지 않는다 —
  * 빈 스택의 되돌리기가 앞 통지를 치우는 것까지 단추와 같게.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
@@ -303,13 +303,16 @@ export function EditorKeys(props: {
         if (manyPicked()) return
         if (commands.abilities.moveDown) commands.moveDown()
         return
+      // 갈 자리가 고른 노드를 안 받아 꺼졌으면 다른 입구(놓기 · 넣기 · 붙이기)와 같은 까닭을 말한다(`levelRefusals` — 리뷰 RV-ZE H1).
       case 'indent':
         if (manyPicked()) return
         if (commands.abilities.indent) commands.indent()
+        else if (commands.levels.indent !== null) info(commands.levels.indent)
         return
       case 'outdent':
         if (manyPicked()) return
         if (commands.abilities.outdent) commands.outdent()
+        else if (commands.levels.outdent !== null) info(commands.levels.outdent)
         return
       // **고른 노드마다 제 바로 뒤에**(`duplicateOps`) — 여럿이면 묶음 하나 · 되돌리기 하나다.
       case 'duplicate':

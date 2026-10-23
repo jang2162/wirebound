@@ -49,7 +49,7 @@
  * 함수 몸 안에서만 쓰므로 적재 순서와 무관하다.
  */
 import { MAX_OPS_PER_EDIT, type NodeLock } from '@wirebound/schema'
-import { MULTI_DISABLED, MULTI_WHY_DISABLED, type StructureAbilities } from '../edit/structure-actions'
+import { MULTI_DISABLED, MULTI_WHY_DISABLED, type LevelRefusals, type StructureAbilities } from '../edit/structure-actions'
 import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
 import { MENU_WHY_DISABLED, STRUCTURE_WHY_DISABLED } from './tree-row-actions'
 
@@ -91,6 +91,11 @@ export interface StructureReasonInput {
    */
   pageLock: NodeLock | null
   abilities: StructureAbilities
+  /**
+   * 들여쓰기 · 내어쓰기가 갈 자리에 그 노드가 못 서는 까닭(`edit/structure-actions.ts` 의 `levelRefusals` — 놓기 · 넣기 · 붙이기와 같은 문장).
+   * 빠뜨리면 그 두 항목은 자리의 조건(`STRUCTURE_WHY_DISABLED`)을 말한다.
+   */
+  levels?: LevelRefusals
 }
 
 /**
@@ -114,6 +119,11 @@ export function structureItemReason(input: StructureReasonInput, key: keyof Stru
   // 루트가 아닌데 `addAfter` · `remove`가 함께 꺼졌으면 그 노드가 문서에 없다 — 찾은 비루트 노드는 둘이 언제나 참이다(`structureAbilities`).
   // 루트는 둘이 늘 꺼져 있으므로 이 칸에서 뺀다 — 고른 노드는 있고 그것이 루트다.
   if (!input.isRoot && !input.abilities.addAfter && !input.abilities.remove) return NOT_IN_DOCUMENT_STATUS
+  // 갈 자리가 그 노드를 안 받으면 다른 입구와 같은 까닭을 말한다(리뷰 RV-ZE H1).
+  if (key === 'indent' || key === 'outdent') {
+    const refusal = input.levels?.[key] ?? null
+    if (refusal !== null) return refusal
+  }
   return STRUCTURE_WHY_DISABLED[key]
 }
 
