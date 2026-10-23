@@ -10,12 +10,14 @@
  * - 넣기: 부모가 S 에 있으면 새 노드가 그 부모의 그 구역에 선다.
  * - 옮기기: 노드 · 새 부모가 S 에 있고 새 부모가 노드의 서브트리 밖이면 노드가 그 부모의 그 구역에 선다(구역 사이 `move` 포함).
  *
- * **못 얹어도 되는 판은 하나다** — 둘이 같은 부모에 같은 그릇(`children` 배열 · `zones` 맵 · 한 구역 배열)을 함께 새로 만든 판. 뒤에 닿은 쪽의
- * 전제(«그 키가 없었다»)가 깨져 버려진다(통지가 말한다 — 리뷰 RV-NS 발견 3, B 의 몫). 그 밖의 버림은 결함이다.
+ * **못 얹어도 되는 판은 하나다** — 둘이 같은 부모의 **같은 구역**(몸통 `children` 배열 · 한 구역 배열)을 함께 새로 만든 판. 뒤에 닿은 쪽의
+ * 전제(«그 키가 없었다»)가 깨져 버려진다(통지가 말한다 — 먼저 선 자리를 덮지 않으려면 버려야 맞다). `zones` 맵이 없는 노드의 **서로 다른** 구역에
+ * 둘이 함께 첫 노드를 넣은 판은 얹혀야 한다 — 맵째 `add` 를 그 구역 키의 `add` 로 좁힌다(`src/store/anchored-ops.ts` 머리말 «구역 하나의 뜻인 맵째
+ * op 은 그 구역 키로 좁힌다» · 리뷰 RV-NS 발견 3). 그 밖의 버림은 결함이다.
  *
  * 시드를 고정해 판이 늘 같다. 카나리아(판 수 · 꼴마다 얹힌 수 · 구역 경로를 건드린 판 · 구역 사이 옮기기)는 재려던 판이 실제로 섰는지를 센다.
  */
-import { applyOps, childLists, CURRENT_DOCUMENT_VERSION, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import { applyOps, childLists, CURRENT_DOCUMENT_VERSION, invertOps, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { insertNodeOps, moveNodeOps, propOps, removeNodeOps } from '../../src/edit/ops'
 import { anchorOps, rebaseAnchored } from '../../src/store/anchored-ops'
@@ -175,12 +177,23 @@ function judge(S: PageDocument, intent: Intent, result: { document: PageDocument
   return othersStay(after, new Set([intent.x]), 'move')
 }
 
-/** 편집이 새로 만드는 그릇 — `add` 가 `…/children` · `…/zones` · `…/zones/<이름>` 을 통째로 넣는 자리. D 의 포인터라 두 편집끼리 견줄 수 있다. */
+/**
+ * 편집이 새로 만드는 그릇 — 구역 단위로(`…/children` · `…/zones/<이름>`). 맵째 `add …/zones { <이름>: … }` 는 그 맵이 든 구역마다의 그릇이다 — 맵 하나를
+ * 서로 다른 구역의 넣기가 함께 만든 판은 같은 그릇이 아니다. D 의 포인터라 두 편집끼리 견줄 수 있다.
+ */
 const created = (ops: readonly PatchOp[]): Set<string> =>
-  new Set(ops.filter((op) => op.op === 'add' && /\/(children|zones(\/[A-Za-z0-9]+)?)$/.test(op.path)).map((op) => op.path))
+  new Set(
+    ops.flatMap((op) => {
+      if (op.op !== 'add') return []
+      if (/\/(children|zones\/[A-Za-z0-9]+)$/.test(op.path)) return [op.path]
+      if (op.path.endsWith('/zones') && typeof op.value === 'object' && op.value !== null)
+        return Object.keys(op.value).map((name) => `${op.path}/${name}`)
+      return []
+    }),
+  )
 
 describe('리베이스 — 구역이 든 문서의 무작위 판', () => {
-  it('내 편집이 남의 편집 뒤에 같은 뜻으로 얹힌다 — 못 얹는 것은 둘이 같은 그릇을 함께 만든 판뿐', () => {
+  it('내 편집이 남의 편집 뒤에 같은 뜻으로 얹힌다 — 못 얹는 것은 둘이 같은 구역을 함께 만든 판뿐', () => {
     const count: Record<string, number> = {}
     const bump = (key: string): void => {
       count[key] = (count[key] ?? 0) + 1
@@ -201,6 +214,14 @@ describe('리베이스 — 구역이 든 문서의 무작위 판', () => {
       if (JSON.stringify(mine.ops).includes('/zones')) bump('zone-path')
       const anchored = anchorOps(D, mine.ops)
       const result = anchored === null ? null : rebaseAnchored(S, anchored)
+      // 서로 다른 구역의 첫 넣기가 맵을 함께 만든 판(리뷰 RV-NS 발견 3) — 이 판이 얹혀야 한다(아래 `judge`).
+      const mapBoth = (ops: readonly PatchOp[]): string[] =>
+        ops.filter((op) => op.op === 'add' && op.path.endsWith('/zones')).map((op) => op.path)
+      if (
+        mapBoth(mine.ops).some((path) => mapBoth(theirs.ops).includes(path)) &&
+        [...created(mine.ops)].every((path) => !created(theirs.ops).has(path))
+      )
+        bump(result === null ? 'map-both-dropped' : 'map-both-applied')
       let verdict = judge(S, mine.intent, result)
       if (verdict === 'premise') {
         const theirsMade = created(theirs.ops)
@@ -224,6 +245,69 @@ describe('리베이스 — 구역이 든 문서의 무작위 판', () => {
     expect(count['zone-path']).toBeGreaterThan(1500)
     for (const kind of ['remove', 'prop', 'insert', 'move']) expect(count[`applied-${kind}`], kind).toBeGreaterThan(500)
     expect(count['applied-move-across']).toBeGreaterThan(500)
+    // 서로 다른 구역의 첫 넣기가 맵을 함께 만든 판이 섰고 다 얹혔다 — 위 `wrong` 이 «얹을 수 있는데 못 얹었다» 로도 세지만, 그 판이 몇이나 섰는지를 여기서 센다.
+    expect(count['map-both-applied']).toBeGreaterThan(10)
+    expect(count['map-both-dropped'] ?? 0).toBe(0)
     expect(count.wrong ?? 0).toBe(0)
+  })
+})
+
+/**
+ * 위 무작위 판이 넣기 · 옮기기 축을 갖는다 — 아래 정해진 판의 앞 셋(다른 구역 · 같은 구역 · 옮기기)은 그 판이 무엇을 재는지 이름으로 보이는 것이라
+ * 늘 무작위 판과 함께 죽는다. 되돌리기(넷째)는 무작위 판에 없는 축이라 혼자 죽는다.
+ */
+describe('맵째 op 을 구역 키로 좁힌다 — 정해진 판', () => {
+  /** `zones` 맵이 없는 카드 하나. */
+  const bare = (): PageDocument => ({
+    version: CURRENT_DOCUMENT_VERSION,
+    root: { id: 'n_root', type: 'Page', children: [{ id: 'n_card', type: 'Card', props: { title: 'c' } }] },
+  })
+  const x: WbNode = { id: 'n_x', type: 'Button', props: { label: 'x' } }
+  const y: WbNode = { id: 'n_y', type: 'Button', props: { label: 'y' } }
+  const zonesOf = (doc: PageDocument): unknown => (doc.root.children![0] as WbNode).zones
+
+  it('남이 다른 구역의 첫 노드로 맵을 먼저 만들었으면 내 첫 넣기는 그 구역 키의 `add` 로 얹힌다', () => {
+    const D = bare()
+    const mine = insertNodeOps(D, 'n_card', 0, x, 'footer')!
+    const theirs = insertNodeOps(D, 'n_card', 0, y, 'headEnd')!
+    // 카나리아 — 둘 다 맵째 `add` 다(재려던 판).
+    expect([mine[0]!.path, theirs[0]!.path]).toEqual(['/root/children/0/zones', '/root/children/0/zones'])
+    const result = rebaseAnchored(applyOps(D, theirs), anchorOps(D, mine)!)
+    expect(result?.ops).toEqual([{ op: 'add', path: '/root/children/0/zones/footer', value: [x] }])
+    expect(zonesOf(result!.document)).toEqual({ headEnd: [y], footer: [x] })
+  })
+
+  it('남이 같은 구역을 먼저 만들었으면 못 얹는다 — 남의 노드를 덮지 않는다', () => {
+    const D = bare()
+    const mine = insertNodeOps(D, 'n_card', 0, x, 'footer')!
+    const theirs = insertNodeOps(D, 'n_card', 0, y, 'footer')!
+    expect(rebaseAnchored(applyOps(D, theirs), anchorOps(D, mine)!)).toBeNull()
+  })
+
+  it('빈 구역으로 옮기기(맵째 빈 배열 + `move`)도 좁혀 얹힌다', () => {
+    const D: PageDocument = { ...bare(), root: { ...bare().root, children: [...bare().root.children!, x] } }
+    const mine = moveNodeOps(D, 'n_x', 'n_card', 0, 'footer')!
+    expect(mine[0]).toEqual({ op: 'add', path: '/root/children/0/zones', value: { footer: [] } })
+    const result = rebaseAnchored(applyOps(D, insertNodeOps(D, 'n_card', 0, y, 'headEnd')!), anchorOps(D, mine)!)
+    expect(result).not.toBeNull()
+    expect(zonesOf(result!.document)).toEqual({ headEnd: [y], footer: [x] })
+  })
+
+  it('맵을 만든 넣기의 되돌리기(`remove …/zones`)는 남이 다른 구역을 더한 뒤 그 구역만 지운다 — 그 구역이 그대로일 때만', () => {
+    const D = bare()
+    const mine = insertNodeOps(D, 'n_card', 0, x, 'footer')!
+    const after = applyOps(D, mine)
+    const inverse = invertOps(D, mine)
+    expect(inverse).toEqual([{ op: 'remove', path: '/root/children/0/zones' }])
+    const anchoredUndo = anchorOps(after, inverse)!
+    // 남이 다른 구역에 넣었다 → 내 구역만 지운다.
+    const S = applyOps(after, insertNodeOps(after, 'n_card', 0, y, 'headEnd')!)
+    const undone = rebaseAnchored(S, anchoredUndo)
+    expect(undone?.ops).toEqual([{ op: 'remove', path: '/root/children/0/zones/footer' }])
+    expect(zonesOf(undone!.document)).toEqual({ headEnd: [y] })
+    // 아무도 안 고쳤으면 맵째 그대로.
+    expect(rebaseAnchored(after, anchoredUndo)?.ops).toEqual(inverse)
+    // 남이 내 구역에 더 넣었으면 못 얹는다 — 남의 노드를 함께 지우지 않는다.
+    expect(rebaseAnchored(applyOps(after, insertNodeOps(after, 'n_card', 1, y, 'footer')!), anchoredUndo)).toBeNull()
   })
 })

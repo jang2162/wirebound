@@ -56,7 +56,7 @@ function doc(): PageDocument {
 }
 
 const free = (): NodeLock | null => null
-const adding = (type: string): Placing => ({ kind: 'new', type })
+const adding = (type: string): Extract<Placing, { kind: 'new' }> => ({ kind: 'new', type })
 const moving = (id: string): Placing => ({ kind: 'node', id })
 
 function lockOn(nodeId: string, document: PageDocument = doc()): (ops: readonly PatchOp[]) => NodeLock | null {
