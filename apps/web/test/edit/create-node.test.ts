@@ -118,7 +118,7 @@ describe('createNode', () => {
     // 위 케이스의 짝이다. 기본값을 문서에 굽지 않는 것은 **카탈로그가 기본값을 바꾸면
     // 옛 노드만 옛 값에 붙박이기 때문이다** — 검증·렌더가 `props ?? {}`로 스키마
     // 기본값을 읽으므로(`validate.ts`·렌더러) 문서에 없는 것이 곧 "카탈로그를 따른다"다.
-    // 기본 내용이 든 타입(검색폼 · 입력폼 · 탭)은 제 노드에 `props` 가 없고, 든 노드는 카탈로그 `initial` 이 적은 props 만 갖는다
+    // 기본 내용이 든 타입(검색폼 · 입력폼 · 탭 · 입력 필드)은 제 노드에 `props` 가 없고, 든 노드는 카탈로그 `initial` 이 적은 props 만 갖는다
     // (아래 «기본 내용» 케이스).
     for (const def of listComponents()) {
       const node = createNode(def.type, countingIds())
@@ -129,7 +129,10 @@ describe('createNode', () => {
 
   it('기본 내용 — 구역의 `initial` 이 실제 노드로 들고 id 는 같은 생성기에서 차례로 나온다', () => {
     const withSeeds = listComponents().filter((def) => seeded(def.type))
-    expect(withSeeds.map((def) => def.type).sort()).toEqual(['EntryForm', 'SearchForm', 'Tabs'])
+    expect(withSeeds.map((def) => def.type).sort()).toEqual(['EntryForm', 'Field', 'SearchForm', 'Tabs'])
+
+    // 입력 필드는 팔레트 한 걸음으로 «라벨 + 입력 하나» 가 선다 — 값 칸에 `Input` 하나(props 없음 · 카탈로그 기본값을 따른다).
+    expect(createNode('Field', countingIds())).toEqual({ id: 'n_test1', type: 'Field', children: [{ id: 'n_test2', type: 'Input' }] })
 
     expect(createNode('SearchForm', countingIds())).toEqual({
       id: 'n_test1',

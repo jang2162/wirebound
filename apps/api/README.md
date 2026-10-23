@@ -52,6 +52,14 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 클립보드 · 판 2 스냅샷의 복원)를 «버전 2에서 올릴 마이그레이션이 없습니다» 로 거절한다. 내리기는 0025 와 같다 — 페이지 · 모듈 ·
 레이아웃 · 스냅샷이 하나라도 있으면 «백업에서 되돌린다» 로 멈춘다.
 
+**`0029-compose-field` 도 되돌릴 수 없다.** 문서를 판 4(조합 입력 — `Field` 의 `control` · `placeholder` · `disabled` · `invalid` → 값 칸의
+조각 노드)로 옮겼다. `control` 마다 조각이 서고(`text` · `number` → `Input` · `select` → `Select` · `date` → `DateInput` · `dateRange` →
+`DateInput` · `Affix '~'` · `DateInput` · `checkbox` → `CheckboxGroup` · `radio` → `RadioGroup` + `variant: 'radio'` · `textarea` → `TextArea` ·
+`file` → 읽기 전용 `Input` · `Button '파일 선택'`), 그 prop 이 있는 조각에만 안내 문구(빈 글은 빼고) · 비활성 · 오류를 옮긴다. 노드 id 는
+그대로라 코멘트 · 번호가 안 끊긴다. 옮긴 prop 을 바꾸던 `setProp` 은 그 prop 을 가진 첫 조각을 가리킨다. 옮기는 자리 · `revisions` ·
+내리기는 `0028` 과 같다 — 스냅샷의 판 1 · 2 문서는 먼저 `0028` 의 얼린 판 2 → 3 을 탄다. 런타임은 판 3 문서를 «버전 3에서 올릴
+마이그레이션이 없습니다» 로 거절한다.
+
 **`migrate:down` 은 계정을 안 건드린다.** 시딩이 마이그레이션 **파일 안**이 아니라 CLI
 진입점에 있기 때문이다 — 계정을 마이그레이션 파일로 만들면 롤백이 남의
 계정을 지우게 된다(`src/db/seed-user.ts` 의 머리말이 그 판정을 든다).
@@ -284,7 +292,7 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 - **422 응답의 `issues`에는 경고까지 함께 실린다** — 받는 쪽이 `severity`로 가른다.
 
 `warning`인 코드는 **`ignored-variant` 하나뿐**이다(`@wirebound/schema`의
-`ISSUE_SEVERITY`가 코드마다 정한다). `variantFrom`을 가진 컴포넌트(`Text`·`Field`·
+`ISSUE_SEVERITY`가 코드마다 정한다). `variantFrom`을 가진 컴포넌트(`Text`·
 `Divider`)에 `node.variant`를 적으면 그 값이 버려지는데, 그것은 문서를 무효로 만드는
 사실이 아니라 알림이다. 경고를 오류와 접으면 그 경고 하나가 문서 어딘가에 있을 때
 **그 노드와 무관한 편집까지 422로 거부**된다 — 편집 파이프라인이 문서 **전체**를
