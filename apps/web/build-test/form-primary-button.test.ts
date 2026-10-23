@@ -10,13 +10,17 @@
  * 의 «폼의 단추 구역» 규칙). 그 테마의 기본 단추는 폼 밖에서는 주색이다 — 폼 밖 단추 하나를 카나리아로 함께 잰다(규칙이 폼 밖으로 새지 않는다 · 테마 시트가 섰다).
  * 색은 캔버스 문서의 토큰(`--wb-semantic-primary` · `--wb-semantic-surface`)을 같은 문서에서 계산한 값과 견준다 — 색을 글자로 적지 않는다.
  */
+import { fileURLToPath } from 'node:url'
 import { installCatalog, type WbNode } from '@wirebound/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { liftDocument } from '../../api/src/db/migrations/0028-node-zones'
 import { createNode } from '../src/edit/create-node'
 import { canvasFrame, editorStackPrerequisite, startEditorStack, type EditorStack } from './editor-stack'
 
 installCatalog()
+
+// `0028` 은 api 소스라 이 프로젝트의 참조 밖이다(`tsconfig.json` 의 `rootDir`) — 경로를 실행 때 짓고 싣는다. 타입은 쓰는 함수 하나만 적는다.
+const MIGRATION = fileURLToPath(new URL('../../api/src/db/migrations/0028-node-zones.ts', import.meta.url))
+const { liftDocument } = (await import(MIGRATION)) as { liftDocument: (schema: unknown, pageId: string | null) => unknown }
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
