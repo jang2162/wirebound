@@ -83,6 +83,25 @@ describe('카드 — 제목 옆 · 머리 오른쪽 · 몸통 · 바닥', () => 
 })
 
 describe('입력폼 · 목록', () => {
+  it('검색폼 — 필드 뒤 단추 구역 · 비면 단추줄째 없다 · 접히면 머리줄만(두 구역 다 빠진다)', () => {
+    const form = (actions: WbNode[], collapsed = false): WbNode => ({
+      id: 'sf',
+      type: 'SearchForm',
+      props: { collapsed },
+      children: [{ id: 'fd', type: 'Field' }],
+      zones: { actions },
+    })
+    const el = draw(form([button('g', '검색')]))
+    expect(parts(el)).toEqual(['fields', 'actions'])
+    expect(el.querySelector('[data-wb-zone="actions"] [data-wb-id="g"]')).not.toBeNull()
+    cleanup()
+    expect(parts(draw(form([])))).toEqual(['fields'])
+    cleanup()
+    const folded = draw(form([button('g', '검색')], true))
+    expect(parts(folded)).toEqual(['toggle'])
+    expect(folded.querySelector('[data-wb-id="g"]')).toBeNull()
+  })
+
   it('입력폼 — 항목 뒤 단추 구역 · 비면 단추줄째 없다', () => {
     const form = (actions: WbNode[]): WbNode => ({
       id: 'ef',
@@ -156,7 +175,8 @@ describe('탭 — 패널마다 탭 머리 · 지금 패널의 내용', () => {
   it('패널이 없는 탭 — 머리 · 칸 모두 빈다', () => {
     const el = draw(tabs(0, []))
     expect(el.querySelectorAll('[data-wb-part="tab"]')).toHaveLength(0)
-    expect(el.querySelector('[data-wb-part="panel"]')!.children).toHaveLength(0)
+    // 요소만이 아니라 글 노드도 없다 — 빈 패널 칸에 자리표 글이 서지 않는다.
+    expect(el.querySelector('[data-wb-part="panel"]')!.childNodes).toHaveLength(0)
   })
 
   it('탭이 폴백이 돼도 패널의 내용은 폴백 안에 남는다', () => {

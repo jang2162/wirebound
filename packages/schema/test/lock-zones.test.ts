@@ -5,6 +5,10 @@
  *
  * 무작위 판은 `lock-ops-identity.test.ts`의 오라클(객체 정체성)을 구역이 든 문서로 돌린다 — 판정이 포인터 따라가기에서 구역 경로를 몸통과 다르게
  * 읽으면 오라클과 갈린다. 고르기는 경로 접두로 지은 옛 판정(노드마다 따로)과 견준다.
+ *
+ * **케이스 여럿이 늘 함께 죽는다** — 편집 쪽은 몸통에서 이미 서던 경로 일반 기전(`lockConflictOfOps` 의 겹침 · 자리 따라가기 · 잠긴 노드의
+ * 경로 찾기)이 구역 경로에도 서는지 잠그는 성질 케이스라, 그 기전을 떼는 변조는 조상 쪽 · 자손 쪽 · 옮김을 함께 죽인다. 고르기 쪽은
+ * `selectionConflicts` 의 순회 하나에 매여 같다. «순회가 구역을 도는가»의 축은 소스 쪽에서 `zones-census.test.ts` 가 갖는다.
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'

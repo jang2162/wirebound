@@ -13,7 +13,7 @@ import { visibleTree } from '../src/visibility'
 import { childLists, mapChildLists } from '../src/zones'
 import { moduleNodesForSave } from '../src/module/save'
 import { inspectNodesEnvelope, writeNodesEnvelope } from '../src/clipboard'
-import { listInteractionSentences } from '../src/interaction/describe'
+import { listInteractionSentences, namingContexts } from '../src/interaction/describe'
 
 beforeAll(() => {
   installCatalog()
@@ -256,5 +256,17 @@ describe('읽는 값 — pageView · 문장', () => {
     source.zones!.footer![0]!.interactions = [{ on: 'click', actions: [{ type: 'navigate', target: 'page:목록' }] }]
     source.zones!.titleSide![0]!.interactions = [{ on: 'click', actions: [{ type: 'navigate', target: 'page:안내' }] }]
     expect(listInteractionSentences(page(source)).map((line) => line.nodeId)).toEqual(['n_badge', 'n_list'])
+  })
+  it('구역 안 노드도 조상의 `only` 보임을 이름에 물려받는다', () => {
+    const source = { ...card(), visibility: { mode: 'only' as const, states: ['s_admin'] } }
+    const doc = { ...page(source), viewStates: [{ id: 's_admin', name: '관리자' }] }
+    const naming = namingContexts(doc)
+    expect(['n_card', 'n_badge', 'n_edit', 'n_kv', 'n_list'].map((id) => naming.get(id)?.viewStateName ?? null)).toEqual([
+      '관리자',
+      '관리자',
+      '관리자',
+      '관리자',
+      '관리자',
+    ])
   })
 })
