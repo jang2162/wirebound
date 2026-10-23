@@ -42,7 +42,7 @@ export type { LockConflictInput, NodeLock, OpsLockConflictInput, SelectionConfli
 export { findLockConflict, lockConflictOfOps, locksAgainst, selectionConflicts } from './lock'
 
 export type { ComponentDef, EditorControl, EditorField, NodeSeed, ZoneDef } from './component/define'
-export { BODY_ZONE, defineComponent, ZONE_NAME_PATTERN } from './component/define'
+export { BODY_ZONE, defineComponent, propSchema, ZONE_NAME_PATTERN } from './component/define'
 export type { ChildList } from './zones'
 export { childLists, childNodes, hasBody, hasZone, mapChildLists, zoneDefs, zoneList, zonePointer } from './zones'
 export type { ComponentGroup } from './component/group'

@@ -131,6 +131,9 @@ export function structureItemReason(input: StructureReasonInput, key: keyof Stru
  * 별칭 바꾸기가 꺼졌을 때(`aliasLocked`가 참일 때만 부른다) — 하나를 고르지 않았거나 · 고른 노드가 문서에 없거나 · 남이 잡았다. 잠금이
  * 먼저다(위 «차례»와 같은 까닭).
  */
+/** «종류 바꾸기…» 가 고른 노드의 종류 때문에 꺼졌을 때 — 입력 조각(`edit/change-kind.ts` 의 `KIND_TYPES`)이 아니다. */
+export const KIND_REASON = '입력 조각만 종류를 바꿀 수 있습니다'
+
 export function aliasReason(input: StructureReasonInput): string {
   if (input.selectedNodeId === null) return PICK_NODE_REASON
   if (input.lock !== null) return lockedSelectionStatus(input.lock.userName)
@@ -154,10 +157,10 @@ export function menuItemReason(
 }
 
 /** 꺼진 항목의 이유 — 판정 일곱과 판정 키가 없는 별칭. 켜진 항목은 `undefined`다. */
-export type StructureWhy = { readonly [K in keyof StructureAbilities | 'alias']?: string }
+export type StructureWhy = { readonly [K in keyof StructureAbilities | 'alias' | 'kind']?: string }
 
-/** 구조 트리 줄 행동이 싣는 이유 전부(`StructureCommands.why`). 판정 키가 없는 별칭은 끈 값(`aliasLocked`)을 받는다. */
-export function structureWhy(input: StructureReasonInput, gates: { aliasLocked: boolean }): StructureWhy {
+/** 구조 트리 줄 행동이 싣는 이유 전부(`StructureCommands.why`). 판정 키가 없는 별칭 · 종류 바꾸기는 끈 값(`aliasLocked` · `kindLocked`)을 받는다. */
+export function structureWhy(input: StructureReasonInput, gates: { aliasLocked: boolean; kindLocked?: boolean }): StructureWhy {
   return {
     addInside: structureItemReason(input, 'addInside'),
     addAfter: structureItemReason(input, 'addAfter'),
@@ -167,6 +170,8 @@ export function structureWhy(input: StructureReasonInput, gates: { aliasLocked: 
     indent: structureItemReason(input, 'indent'),
     outdent: structureItemReason(input, 'outdent'),
     alias: gates.aliasLocked ? aliasReason(input) : undefined,
+    // 항목은 입력 조각 줄에만 서므로 꺼지는 까닭은 대개 별칭과 같다(하나 · 문서 · 잠금).
+    kind: gates.kindLocked === true ? (gates.aliasLocked ? aliasReason(input) : KIND_REASON) : undefined,
   }
 }
 
