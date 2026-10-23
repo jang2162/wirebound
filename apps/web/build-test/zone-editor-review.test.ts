@@ -9,6 +9,7 @@
  * | M1 거울 — 맵을 지움 | 남이 맵을 지운 사이 다른 구역에 낸 내 넣기(키 `add`)가 버려진다 · 화면 ≠ 서버 |
  * | L2 접힌 검색폼의 구역 줄 | 구역 줄을 골라도 캔버스가 그 폼을 안 펼친다 · 문서가 바뀐다 |
  * | L1 놓은 뒤 스크롤 | 긴 문서 가장자리에서 스크롤해 놓은 노드가 칸이 걷히며 화면에서 뛴다(구역 없는 대조군은 원래 0) |
+ * | L1 그만둔 끌기 | Escape 로 끝낸 끌기에서 칸이 걷히며 화면 위 끝 노드가 뛴다 |
  */
 import { childLists, installCatalog, type WbNode } from '@wirebound/schema'
 import type { Page } from 'playwright-core'
@@ -487,5 +488,75 @@ describe.skipIf(!전제.ok)('구역 에디터 리뷰 — 실브라우저', () =>
       sLanded: true,
     })
     expect({ cards: c.jumped, sections: s.jumped }).toEqual({ cards: 0, sections: 0 })
+  })
+
+  it('L1 — 놓지 않고 끝낸 끌기(Escape)도 칸이 걷힐 때 화면 위 끝에 걸친 노드가 제자리다', async () => {
+    const nodes: WbNode[] = []
+    for (let i = 0; i < 14; i += 1) {
+      nodes.push({ id: `n_fill${i}`, type: 'Text', props: { content: `채움 글 ${i}` } })
+      nodes.push({
+        id: `n_c${i}`,
+        type: 'Card',
+        props: { title: `카드 ${i}` },
+        children: [{ id: `n_ct${i}`, type: 'Text', props: { content: `몸통 ${i}` } }],
+      })
+    }
+    nodes.push({ id: 'n_text', type: 'Text', props: { content: '끝' } })
+    const P = await fixture('edge-escape', nodes)
+    const tab = await openTab(P, 'alice', { viewport: { width: 1500, height: 720 } })
+    const pane = tab.page.locator('.wb-shell-canvas')
+    /** 캔버스 칸 위 끝 아래에서 가장 가까운 노드와 그 화면 위 끝(호스트 창 좌표). */
+    const topmost = () =>
+      tab.page.evaluate(() => {
+        const iframe = document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement
+        const paneTop = document.querySelector('.wb-shell-canvas')!.getBoundingClientRect().top
+        const f = iframe.getBoundingClientRect()
+        const zoom = f.height / iframe.offsetHeight
+        let best: { id: string; top: number } | null = null
+        for (const el of Array.from(iframe.contentDocument!.querySelectorAll('[data-wb-id]'))) {
+          const id = el.getAttribute('data-wb-id') ?? ''
+          if (id === '' || id.startsWith('wb:preview:')) continue
+          const top = f.y + el.getBoundingClientRect().top * zoom
+          if (top >= paneTop && (best === null || top < best.top)) best = { id, top }
+        }
+        return best
+      })
+    const rows: { slots: number; id: string | null; shift: number | null }[] = []
+    try {
+      await showOnly(tab.page, 'Button')
+      for (const scroll of [900, 1500, 2100]) {
+        await pane.evaluate((el, top) => (el.scrollTop = top), scroll)
+        const card = (await tab.page.locator('[data-wb-palette-card="Button"]').boundingBox())!
+        await tab.page.mouse.move(card.x + card.width / 2, card.y + card.height / 2)
+        await tab.page.mouse.down()
+        await tab.page.mouse.move(card.x + card.width / 2 + 3, card.y + card.height / 2 - 6, { steps: 3 })
+        const slots = await dragLayoutSettled(tab.page)
+        // 판(카드 위)에 머문 채 — 캔버스에 미리보기가 안 선 채 — 그만둔다.
+        const before = await topmost()
+        await tab.page.keyboard.press('Escape')
+        await tab.page.mouse.up()
+        await tab.page.waitForTimeout(150)
+        const after =
+          before === null
+            ? null
+            : await tab.page.evaluate((id) => {
+                const iframe = document.querySelector('iframe.wb-shell-canvas-iframe') as HTMLIFrameElement
+                const f = iframe.getBoundingClientRect()
+                const zoom = f.height / iframe.offsetHeight
+                const el = Array.from(iframe.contentDocument!.querySelectorAll('[data-wb-id]')).find(
+                  (e) => e.getAttribute('data-wb-id') === id,
+                )
+                return el === undefined ? null : f.y + el.getBoundingClientRect().top * zoom
+              }, before.id)
+        rows.push({ slots, id: before?.id ?? null, shift: before === null || after === null ? null : Math.round(after - before.top) + 0 })
+      }
+    } finally {
+      await tab.close()
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[L1 그만둔 끌기] ${JSON.stringify(rows)}`)
+    // 카나리아 — 칸이 섰고 붙잡을 노드가 있었다.
+    expect(rows.map((row) => row.slots > 0 && row.id !== null)).toEqual([true, true, true])
+    expect(rows.map((row) => row.shift)).toEqual([0, 0, 0])
   })
 })
