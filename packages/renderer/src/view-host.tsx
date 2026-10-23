@@ -53,6 +53,8 @@ interface HostProps {
   binding: Omit<NodeBinding, 'markRootRendered'>
   viewProps: ViewProps
   nodeId: string
+  /** 뷰가 던졌을 때 폴백 안에 둘 것 — 몸통과 구역 전부(렌더러가 짓는다). 없으면 몸통. */
+  fallbackChildren?: ReactNode
 }
 
 /**
@@ -105,7 +107,7 @@ function Guarded(props: HostProps): ReactElement {
 
 export function ViewHost(props: HostProps): ReactElement {
   return (
-    <NodeBoundary nodeId={props.nodeId} resetKey={props.viewProps} fallbackChildren={props.viewProps.children}>
+    <NodeBoundary nodeId={props.nodeId} resetKey={props.viewProps} fallbackChildren={props.fallbackChildren ?? props.viewProps.children}>
       <Guarded {...props} />
     </NodeBoundary>
   )

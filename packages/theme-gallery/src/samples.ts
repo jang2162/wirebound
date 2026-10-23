@@ -4,9 +4,15 @@ export interface GallerySample {
   /** 무엇을 보이는 표본인지. «List — 컬럼 셋» 꼴. */
   label: string
   node: WbNode
+  /**
+   * 표본이 설 자리가 정해진 타입(`TabPanel` — 탭 몸통에만 선다)이면 그 부모 — 표본을 그 몸통에 넣어 그린다(`galleryItemDocument`). variant 는
+   * 표본 노드에 붙는다.
+   */
+  within?: WbNode
 }
 
 const child = (id: string, content = `자식 ${id}`): WbNode => ({ id, type: 'Text', props: { content } })
+const button = (id: string, label: string): WbNode => ({ id, type: 'Button', props: { label } })
 
 /**
  * 끊을 자리가 없는 긴 낱말 — 관리자 화면의 이메일 · 주소는 흔히 이 꼴이다. 하이픈을 넣지 않는다 — 브라우저는 하이픈 뒤에서 줄을 바꿔
@@ -53,11 +59,38 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
       node: { id: 'card', type: 'Card', props: { title: '제목', subtitle: '부제' }, children: [child('c1')] },
     },
     { label: 'Card — 제목만', node: { id: 'card2', type: 'Card', props: { title: '제목' }, children: [child('c1')] } },
+    // 구역 넷 — 제목 옆 · 머리 오른쪽 · 몸통 · 바닥(`wb-theme check` 가 내용이 든 구역을 뷰가 그렸는지 잰다).
+    {
+      label: 'Card — 제목 옆 · 머리 오른쪽 · 바닥',
+      node: {
+        id: 'card3',
+        type: 'Card',
+        props: { title: '회원 정보' },
+        children: [child('c1')],
+        zones: { titleSide: [child('c-side', '필수')], headEnd: [button('c-edit', '수정')], footer: [button('c-list', '목록')] },
+      },
+    },
   ],
   Tabs: [
     {
       label: 'Tabs — 셋 · 둘째 활성',
-      node: { id: 'tabs', type: 'Tabs', props: { tabs: ['가', '나', '다'], active: 1 }, children: [child('t1')] },
+      node: {
+        id: 'tabs',
+        type: 'Tabs',
+        props: { active: 1 },
+        children: [
+          { id: 'tp1', type: 'TabPanel', props: { label: '가' }, children: [child('t1', '가의 내용')] },
+          { id: 'tp2', type: 'TabPanel', props: { label: '나' }, children: [child('t2', '나의 내용')] },
+          { id: 'tp3', type: 'TabPanel', props: { label: '다' }, children: [child('t3', '다의 내용')] },
+        ],
+      },
+    },
+  ],
+  TabPanel: [
+    {
+      label: 'TabPanel — 탭 하나',
+      node: { id: 'tabp', type: 'TabPanel', props: { label: '상세정보' }, children: [child('tp-c', '상세 내용')] },
+      within: { id: 'tabp-host', type: 'Tabs', props: { active: 0 } },
     },
   ],
   List: [
@@ -72,6 +105,15 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     {
       label: 'List — 로딩 · 빈 목록',
       node: { id: 'list3', type: 'List', props: { items: 2, columns: ['이름'], loading: true, empty: true } },
+    },
+    {
+      label: 'List — 결과 머리줄',
+      node: {
+        id: 'list4',
+        type: 'List',
+        props: { items: 2, columns: ['이름', '상태'] },
+        zones: { headStart: [child('l-total', '검색결과 총 2건')], headEnd: [button('l-excel', '엑셀다운로드')] },
+      },
     },
   ],
   Tree: [{ label: 'Tree — 두 단계', node: { id: 'tree', type: 'Tree', props: { items: ['뿌리', '가지', '잎'], depth: 2 } } }],
@@ -103,6 +145,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
           { id: 'sf-a', type: 'Field', props: { label: '검색어' } },
           { id: 'sf-b', type: 'Field', props: { label: '상태', control: 'select' } },
         ],
+        zones: { actions: [button('sf-reset', '초기화'), button('sf-go', '검색')] },
       },
     },
     {
@@ -126,6 +169,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
           { id: 'ef-a', type: 'Field', props: { label: '이름', required: true } },
           { id: 'ef-b', type: 'Field', props: { label: '소개', control: 'textarea' } },
         ],
+        zones: { actions: [button('ef-save', '저장'), button('ef-cancel', '취소')] },
       },
     },
   ],

@@ -3,12 +3,13 @@ import type { CSSProperties } from 'react'
 import { nodeVar, partRule, TREE_INDENT_VAR, zeroRule } from '../css-tools'
 import { view } from '../define'
 import { Root } from '../root'
+import { Zone } from '../zone'
 
 // 기본 구조 `table`. 상태 · 표지가 DOM 을 바꾸는 셋:
 // - `selectable` — 머리와 행마다 맨 앞에 체크 칸(`data-wb-cell="check"` 칸 안의 `checkbox` 조각).
 // - `empty` — 행 대신 «데이터가 없습니다» 한 줄(`empty` 조각)이 모든 칸을 덮는다.
 // - `loading` — 칸마다 `—` 대신 막대(`skeleton` 조각).
-export const ListView = view(({ props }) => {
+export const ListView = view(({ props, zones }) => {
   const columns = props.columns as string[]
   const items = props.items as number
   const selectable = props.selectable === true
@@ -18,8 +19,18 @@ export const ListView = view(({ props }) => {
       <span data-wb-part="checkbox" />
     </td>
   ) : null
+  // 결과 머리줄(«총 N건» · 엑셀 다운로드)은 표에 붙는 `caption` 이다 — 뿌리가 `table` 이라 표 밖에 둘 수 없다. 두 구역이 다 비면 줄째 없다.
+  const head = zones.headStart != null || zones.headEnd != null
   return (
     <Root as="table" data-wb-structure="table">
+      {head ? (
+        <caption data-wb-part="head">
+          <div data-wb-part="headRow">
+            <Zone name="headStart" data-wb-part="headStart" />
+            <Zone name="headEnd" data-wb-part="headEnd" />
+          </div>
+        </caption>
+      ) : null}
       <thead data-wb-part="header">
         <tr>
           {selectable ? (
@@ -130,5 +141,11 @@ export function dataCssBlocks(): string[] {
       'opacity: 0.2;',
     ]),
     zeroRule('[data-wb-component="List"] [data-wb-part="empty"]', ['text-align: center;']),
+    // 결과 머리줄 — 머리 왼쪽은 왼쪽, 머리 오른쪽은 오른끝.
+    // `caption` 은 표 상자 그대로 두고 안쪽 줄을 flex 로 편다(`caption` 에 `display` 를 걸면 표 머리 상자가 아니게 된다).
+    zeroRule('[data-wb-component="List"] > [data-wb-part="head"]', ['caption-side: top;', 'text-align: start;']),
+    zeroRule('[data-wb-component="List"] [data-wb-part="headRow"]', ['display: flex;', 'align-items: center;', 'gap: 8px;']),
+    zeroRule('[data-wb-component="List"] [data-wb-part="headRow"] > *', ['display: flex;', 'align-items: center;', 'gap: 6px;']),
+    zeroRule('[data-wb-component="List"] [data-wb-part="headRow"] > [data-wb-part="headEnd"]', ['margin-inline-start: auto;']),
   ]
 }

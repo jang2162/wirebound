@@ -50,8 +50,17 @@ export const ListView = view(({ props, variant, states, children }) => {
 ```
 
 - 뷰가 받는 것: `props`(기본값이 채워진 카탈로그 props) · `states`(`disabled` · `loading` 처럼 참인 상태 이름들) ·
-  `variant`(노드의 variant — 테마에 없는 값이면 그 컴포넌트의 `defaultVariant`) · `children`(이미 그린 자식) · `slot`(`Slot`
-  에 들어갈 내용) · `nodeId` · `type`.
+  `variant`(노드의 variant — 테마에 없는 값이면 그 컴포넌트의 `defaultVariant`) · `children`(이미 그린 몸통의 자식) · `zones`(이름 붙은
+  구역마다 그린 것 — 빈 구역은 `null`) · `items`(몸통 자식 하나씩 — `{ nodeId, index, element, content }`) · `slot`(`Slot` 에 들어갈 내용) ·
+  `nodeId` · `type`.
+- **구역은 `<Zone name>` 으로 둔다.** 카드의 제목 옆(`titleSide`) · 머리 오른쪽(`headEnd`) · 바닥(`footer`), 검색폼 · 입력폼의 단추
+  (`actions`), 목록의 머리 왼쪽 · 오른쪽(`headStart` · `headEnd`)은 사람이 놓는 노드가 든 자리다 — `<Zone name="footer" as="div"
+  data-wb-part="footer" />` 가 그 구역을 그리고 `data-wb-zone` 을 펴며, 비었으면 감싸는 요소째 안 그린다. `Zone` 을 안 쓰는 뷰는 그
+  구역의 노드를 화면에서 잃는다 — `wb-theme check` 가 «내용이 든 구역을 그리지 않았습니다» 로 막는다. 단추 글자(«검색» · «저장»)를 뷰에
+  박지 않는다 — 단추는 문서의 노드다.
+- **탭은 `items` 로 그린다.** `Tabs` 의 몸통은 `TabPanel` 노드들이다 — `items` 마다 `item.element`(탭 머리 — 패널 노드의 뿌리)를 머리 줄에,
+  고른 패널(`props.active` 자리, 그 패널이 없거나 숨었으면 첫 `item`)의 `item.content`(그 패널의 내용)를 패널 칸에 둔다. `TabPanel` 뷰는
+  몸통(`children`)을 `null` 로 받는다 — 내용은 부모가 둔다.
 - **`<Root>` 로 감싼다 — 빠뜨릴 수 없다.** `Root` 가 `data-wb-id` · `data-wb-component` · `data-wb-variant` · `data-wb-state` 와
   상호작용 핸들러를 루트 요소에 붙인다. 에디터는 그 속성으로 노드를 고르고 외곽선을 그린다.
 - **뷰는 `view(…)` 로 짠다.** `Root` 는 `view` 가 내린 노드의 props · 상태로 **prop 표지**와 접근성 속성을 함께 단다 — `view` 를
@@ -128,9 +137,9 @@ export const ListView = view(({ props, variant, states, children }) => {
 
 `sdk` 는 이 테마가 기대는 `@wirebound/theme-sdk` 의 판이다. 업로드할 때 wirebound 의 SDK 판과 견준다.
 
-- `^1.2.0` — major 가 같고 1.2.0 이상. **0.x 에서도 major 만 본다** — `^0.3.0` 은 `0.9.0` 을 받는다(npm 은 `<0.4.0` 으로 읽는다).
-- `~1.2.0` — major.minor 가 같고 1.2.0 이상.
-- `1.2.0` — 그 판만.
+- `^1.3.0` — major 가 같고 1.3.0 이상(구역 — `zones` · `items` · `Zone` — 이 든 판). **0.x 에서도 major 만 본다** — `^0.3.0` 은 `0.9.0` 을 받는다(npm 은 `<0.4.0` 으로 읽는다).
+- `~1.3.0` — major.minor 가 같고 1.3.0 이상.
+- `1.3.0` — 그 판만.
 
 ## 하지 않는 것
 

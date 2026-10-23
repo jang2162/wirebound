@@ -50,8 +50,27 @@ export interface ViewProps<P extends Record<string, unknown> = Record<string, un
   props: P
   states: readonly string[]
   variant: string | undefined
+  /** 몸통 구역(`body`)을 그린 것. 몸통을 부모에게 맡기는 타입(`TabPanel`)이면 `null` 이다. */
   children: ReactNode
+  /**
+   * 이름 붙은 구역마다 그린 것(카탈로그의 구역 선언 — `headEnd` · `actions` …). 빈 구역(보이는 자식이 없는 구역)은 `null`. **뷰는 직접 두지
+   * 않고 `<Zone name>` 으로 둔다** — `Zone` 이 `data-wb-zone` 을 펴고 빈 구역은 감싸는 요소째 안 그린다.
+   */
+  zones: Readonly<Record<string, ReactNode>>
+  /** 몸통의 자식을 하나씩 — 탭처럼 자식마다 머리와 내용을 가르는 뷰가 쓴다. 지금 보이는 자식만 든다(문서 차례). */
+  items: readonly ViewItem[]
   slot: ReactNode
+}
+
+/** 몸통 자식 하나(`ViewProps.items`). */
+export interface ViewItem {
+  nodeId: string
+  /** 몸통 배열의 자리 — 숨은 형제도 센다(`Tabs.active` 와 같은 축). */
+  index: number
+  /** 그 자식을 그린 것(그 노드의 뿌리 요소). */
+  element: ReactNode
+  /** 그 자식의 몸통을 그린 것 — 자식이 제 몸통을 부모에게 맡기는 타입(`TabPanel`)일 때만, 아니면 `null`. */
+  content: ReactNode
 }
 
 export type View = ComponentType<ViewProps>

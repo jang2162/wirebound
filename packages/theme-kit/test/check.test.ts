@@ -40,11 +40,33 @@ describe('checkTheme', () => {
     expect(typeof window).toBe('undefined')
   })
 
+  it('내용이 든 구역을 안 그리는 뷰는 구역 오류로 선다 — Zone 을 쓰는 뷰는 깨끗하다', async () => {
+    const without = await checkTheme(files(BASE, { views: `{ Card: ({ children }) => h(Root, null, children) }` }))
+    const zone = without.errors.filter((error) => error.source === 'zone')
+    expect(zone.map((error) => `${error.type}/${error.label}`)).toEqual([
+      'Card/Card — 제목 옆 · 머리 오른쪽 · 바닥',
+      'Card/Card — 제목 옆 · 머리 오른쪽 · 바닥',
+      'Card/Card — 제목 옆 · 머리 오른쪽 · 바닥',
+    ])
+    expect(zone.map((error) => error.message)).toEqual(
+      ['titleSide', 'headEnd', 'footer'].map(
+        (name) => `Card 뷰가 내용이 든 구역 ${name} 을 그리지 않았습니다 — SDK 의 Zone 으로 둡니다(노드 card3)`,
+      ),
+    )
+    expect(formatCheckReport(without).ok).toBe(false)
+    const withZone = await checkTheme(
+      files(BASE, {
+        views: `{ Card: rt.sdk.view(({ children }) => h(Root, null, children, ['titleSide', 'headEnd', 'footer'].map((name) => h(rt.sdk.Zone, { key: name, name })))) }`,
+      }),
+    )
+    expect(withZone.errors).toEqual([])
+  })
+
   it('던지는 뷰는 그 컴포넌트의 칸마다 폴백 오류로 선다 — 다른 컴포넌트는 깨끗하다', async () => {
     const manifest: ThemeManifest = {
       ...BASE,
       components: {
-        Button: {
+        Link: {
           variants: [
             { id: 'primary', label: '주' },
             { id: 'ghost', label: '투명' },
@@ -53,14 +75,14 @@ describe('checkTheme', () => {
         },
       },
     }
-    const report = await checkTheme(files(manifest, { views: `{ Button: () => { throw new Error('단추가 터졌다') } }` }))
+    const report = await checkTheme(files(manifest, { views: `{ Link: () => { throw new Error('링크가 터졌다') } }` }))
     const fallbacks = report.errors.filter((error) => error.source === 'fallback')
-    const buttonItems = galleryItems({ manifest, views: DEFAULT_VIEWS }).filter((item) => item.type === 'Button')
+    const linkItems = galleryItems({ manifest, views: DEFAULT_VIEWS }).filter((item) => item.type === 'Link')
     expect(fallbacks.map((error) => `${error.type}/${error.variant}/${error.label}`).sort()).toEqual(
-      buttonItems.map((item) => `Button/${item.variant}/${item.sample.label}`).sort(),
+      linkItems.map((item) => `Link/${item.variant}/${item.sample.label}`).sort(),
     )
-    expect(fallbacks.every((error) => error.message.includes('단추가 터졌다'))).toBe(true)
-    expect(new Set(report.errors.map((error) => error.type))).toEqual(new Set(['Button']))
+    expect(fallbacks.every((error) => error.message.includes('링크가 터졌다'))).toBe(true)
+    expect(new Set(report.errors.map((error) => error.type))).toEqual(new Set(['Link']))
   })
 
   /**
@@ -69,7 +91,7 @@ describe('checkTheme', () => {
    */
   it('포커스 받는 요소는 경고로 선다 — tabindex · summary · controls 영상, 단추 · 링크 · 입력 칸은 아니다 · 종료 코드에 안 든다', async () => {
     const views = `{
-      Card: () => h(Root, null, h('div', { tabIndex: 0 }, '카드'), h('div', { tabIndex: -1 }, '눌러서 포커스'), h('div', { tabIndex: 'abc' }, '무효'), h('button', { type: 'button', tabIndex: 0 }, '단추'), h('a', { href: '#x', tabIndex: 0 }, '링크'), h('input', { 'aria-label': '칸', tabIndex: 0 })),
+      Placeholder: () => h(Root, null, h('div', { tabIndex: 0 }, '자리'), h('div', { tabIndex: -1 }, '눌러서 포커스'), h('div', { tabIndex: 'abc' }, '무효'), h('button', { type: 'button', tabIndex: 0 }, '단추'), h('a', { href: '#x', tabIndex: 0 }, '링크'), h('input', { 'aria-label': '칸', tabIndex: 0 })),
       Text: () => h(Root, null, h('details', null, h('summary', null, '접기'))),
       Media: () => h(Root, null, h('video', { controls: true }), h('audio', null)),
     }`
@@ -78,9 +100,9 @@ describe('checkTheme', () => {
     const byType = new Map<string, Set<string>>()
     for (const found of report.focusables) byType.set(found.type, (byType.get(found.type) ?? new Set()).add(found.element))
     // 부모 컴포넌트의 칸(탭 · 목록 …)은 자식으로 이 뷰들을 품어 같은 요소가 거기서도 선다 — 뷰를 짠 세 타입의 칸만 본다.
-    const own = Object.fromEntries(['Card', 'Text', 'Media'].map((type) => [type, [...(byType.get(type) ?? [])].sort()]))
+    const own = Object.fromEntries(['Placeholder', 'Text', 'Media'].map((type) => [type, [...(byType.get(type) ?? [])].sort()]))
     expect(own).toEqual({
-      Card: ['<div tabindex="-1">', '<div tabindex="0">'],
+      Placeholder: ['<div tabindex="-1">', '<div tabindex="0">'],
       Text: ['<summary>'],
       Media: ['<video controls>'],
     })
@@ -89,7 +111,7 @@ describe('checkTheme', () => {
     expect(
       lines
         .filter((line) => line.startsWith('⚠'))
-        .some((line) => line.includes('Card') && line.includes('<div tabindex="0">') && line.includes('칸)')),
+        .some((line) => line.includes('Placeholder') && line.includes('<div tabindex="0">') && line.includes('칸)')),
     ).toBe(true)
     expect(lines.at(-1)).toBe('✓ 오류 없음')
   })

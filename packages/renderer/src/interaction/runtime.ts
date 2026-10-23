@@ -43,7 +43,9 @@
  * 저장할 때 통과한 규칙이 눌렀을 때 다른 말을 하는 일이 없다.
  */
 import {
+  BODY_ZONE,
   checkNodeAction,
+  childLists,
   checkPageAction,
   isPageTargetAction,
   type InteractionAction,
@@ -159,7 +161,7 @@ export function runInteraction(
   const empty: InteractionResult = { overlay, requests: [], issues: [], matched: 0, applied: 0 }
   if (root === null || root === undefined) return empty
 
-  const nodes = nodeIndex(root)
+  const { nodes, parents } = nodeIndex(root)
   const source = nodes.get(nodeId)
   if (source === undefined) return empty
 
@@ -215,11 +217,17 @@ export function runInteraction(
           // 예약 키다(위 `InteractionOverlay`의 머리말). props로 내려가지 않는다.
           write(action.target, VISIBLE_KEY, action.value)
           break
-        case 'switchTab':
-          // `Tabs`의 활성 탭은 `props.active`이고 뷰가 그것을 읽는다. 겹layer가 그 자리를 덮으면
-          // **뷰를 한 글자도 안 고치고** 탭이 바뀐다.
-          write(action.target, 'active', action.tab)
+        case 'switchTab': {
+          // 대상은 패널이고, 그 부모 `Tabs`의 `props.active`(몇째 패널)를 그 패널의 차례로 덮는다 — 뷰가 그것을 읽어 **뷰를 한 글자도 안
+          // 고치고** 탭이 바뀐다. 부모가 `Tabs`가 아니면(검증의 `misplaced-component` 판) 바꿀 탭이 없다.
+          const at = parents.get(action.target)
+          if (at === undefined || at.parent.type !== 'Tabs') {
+            report('탭 패널이 탭 안에 있지 않아 바꿀 탭이 없습니다', 'invalid-interaction-target')
+            break
+          }
+          write(at.parent.id, 'active', at.index)
           break
+        }
       }
     }
   }
@@ -256,29 +264,27 @@ export function hiddenByOverlay(overlay: InteractionOverlay | undefined, nodeId:
 }
 
 /**
- * id → 노드.
+ * id → 노드, 그리고 몸통 안 노드의 부모와 차례(탭 바꾸기가 패널의 부모 `Tabs`를 연다).
  *
- * **`schema`의 `walkNodes`를 쓰지 않는다.** 그쪽은 `children` 배열의 원소를 그대로 내고
- * **그 직후 그 원소의 `children`을 읽어** 원소가 `null`이면 던진다(`apps/web/src/edit/
- * safe-walk.ts`의 실측). 이 렌더러가 받는 문서는 서버 검증 **전에** 낙관적 패치가 지나간
- * 것이라(설계서 「정방향 흐름」) 그 상태가 일시적으로 정상이고, `renderNode`의 모양 가드가 같은 이유로 있다.
- * **여기서 던지면 클릭 핸들러가 던지는 것이고**, 그것은 폴백으로 흡수되지 않는다.
- *
- * **같은 판정이 저장소에 세 벌 있다**(`schema`의 `walkNodes` · `apps/web`의
- * `walkSafely` · 여기). 묶으려면 `schema`가 견디는 순회를 함께 갖는 것이 맞는데, 그것은
- * 세 소비자의 계약을 바꾸는 일이라 따로 한다 — 그때까지 셋 중 하나의 판정을 바꾸면
- * 나머지 둘도 함께 봐야 한다.
+ * **`schema`의 `walkNodes`를 쓰지 않는다.** 그쪽은 검증된 문서를 믿어 줄 안의 원소를 노드로 낸다 — 이 렌더러가 받는 문서는 서버 검증
+ * **전에** 낙관적 패치가 지나간 것이라(설계서 「정방향 흐름」) 노드가 아닌 원소가 일시적으로 정상이고, 그 `id`를 읽으면 클릭 핸들러가 던진다
+ * (폴백으로 흡수되지 않는다). 자식 줄은 `childLists`로 읽는다 — 몸통과 구역 전부다.
  */
-function nodeIndex(root: WbNode): Map<string, WbNode> {
+function nodeIndex(root: WbNode): { nodes: Map<string, WbNode>; parents: Map<string, { parent: WbNode; index: number }> } {
   const nodes = new Map<string, WbNode>()
+  const parents = new Map<string, { parent: WbNode; index: number }>()
   const visit = (node: unknown): void => {
     if (typeof node !== 'object' || node === null) return
     const shaped = node as WbNode
     if (typeof shaped.id === 'string') nodes.set(shaped.id, shaped)
-    const children = shaped.children
-    if (!Array.isArray(children)) return
-    for (const child of children) visit(child)
+    for (const { zone, list } of childLists(shaped)) {
+      list.forEach((child, index) => {
+        const id = (child as { id?: unknown } | null)?.id
+        if (zone === BODY_ZONE && typeof id === 'string') parents.set(id, { parent: shaped, index })
+        visit(child)
+      })
+    }
   }
   visit(root)
-  return nodes
+  return { nodes, parents }
 }

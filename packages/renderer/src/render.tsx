@@ -1,5 +1,7 @@
 import {
   aliasNote,
+  BODY_ZONE,
+  childLists,
   effectiveViewState,
   getComponent,
   getKoreanErrorMap,
@@ -11,8 +13,9 @@ import {
   type InteractionTrigger,
   type ViewState,
   type WbNode,
+  zoneList,
 } from '@wirebound/schema'
-import { DEFAULT_VIEWS, type NodeBinding, type ThemeDefinition } from '@wirebound/theme-sdk'
+import { DEFAULT_VIEWS, type NodeBinding, type ThemeDefinition, type ViewItem } from '@wirebound/theme-sdk'
 import { Fragment, type ReactElement, type ReactNode } from 'react'
 import { activeStates, type WbAttrs, type WbHandlers } from './attrs'
 import { FallbackNode } from './fallback'
@@ -185,6 +188,17 @@ function shapeError(node: unknown): string | null {
   return null
 }
 
+/**
+ * 그 자식이 이 렌더에서 서는가 — 겹layer가 안 숨겼고 고른 상태에서 보인다(`renderNodeUncached` 의 두 숨김과 같은 판정). 빈 구역(`ViewProps.zones` 의
+ * `null`)과 뷰가 받는 자식 목록(`items`)이 이것으로 가른다. 노드가 아닌 원소는 그 자리에 폴백이 서므로 선다.
+ */
+function shownIn(child: unknown, options: RenderOptions): boolean {
+  if (child === null || typeof child !== 'object') return true
+  const id = readString((child as { id?: unknown }).id)
+  if (id !== '' && hiddenByOverlay(options.interaction?.overlay, id)) return false
+  return isVisibleIn(child as WbNode, options.viewState ?? null, options.viewStates)
+}
+
 /** 자식 Fragment의 key. id를 문자열로 읽지 못하면 인덱스로 대신한다 — 모양 가드가 흡수할 자식이다. */
 function childKey(child: unknown, index: number): string {
   const id = (child as { id?: unknown } | null | undefined)?.id
@@ -297,28 +311,58 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions, 
   // 전에 거르고 DOM 에서 뺀다 — 숨은 노드는 마커 · 외곽선을 걸 요소가 없다.
   if (raw !== null && typeof raw === 'object' && !isVisibleIn(node, options.viewState ?? null, options.viewStates)) return <></>
 
-  const rawChildren = raw?.children
   const type = readString(raw?.type)
+  const def = getComponent(type)
 
   // 자식을 먼저 그린다. 이 노드가 실패해도 자식은 폴백 안에 그대로 들어간다 —
   // 부모를 못 그리는 것과 자식을 못 그리는 것은 별개다.
   //
-  // `children`이 배열이 아니면 자식 없음으로 다룬다(그냥 `.map`을 부르면 TypeError다).
-  // 배열 원소가 노드가 아니면 재귀 호출의 모양 가드가 그 자리에 폴백을 그린다.
-  const childNodes: unknown[] = Array.isArray(rawChildren) ? rawChildren : []
+  // 자식 줄은 몸통과 구역 전부다(`childLists` — 카탈로그의 구역 선언 차례). 줄이 배열이 아니면 빈 줄이고, 원소가 노드가 아니면 재귀 호출의
+  // 모양 가드가 그 자리에 폴백을 그린다. **몫의 자리는 몸통에만 준다** — 몫이 듣는 배치(`Flex` · `Grid` · 열을 정한 `SearchForm`)는 몸통이다.
   const childRoom = weightRoom(type, overlayProps(options.interaction?.overlay, nodeId, raw?.props as WbNode['props']))
-  const children: ReactNode =
-    childNodes.length > 0
-      ? childNodes.map((child, index) => (
-          <Fragment key={childKey(child, index)}>{renderNodeIn(root, child as WbNode, options, childRoom)}</Fragment>
-        ))
-      : null
+  const drawn = (list: readonly unknown[], at: WeightRoom | undefined): ReactElement[] =>
+    list.map((child, index) => <Fragment key={childKey(child, index)}>{renderNodeIn(root, child as WbNode, options, at)}</Fragment>)
+  const lists = childLists(raw)
+  const bodyList = lists.find((entry) => entry.pointer === '/children')?.list ?? []
+  const bodyDrawn = drawn(bodyList, childRoom)
+  // 몸통을 부모에게 맡기는 타입(`TabPanel`)은 제 뷰에 몸통을 안 준다 — 부모가 `items[i].content` 로 둔다(그 몸통은 부모의 폴백에도 실린다).
+  const hostedByParent = def?.bodyHost === 'parent'
+  const children: ReactNode = !hostedByParent && bodyDrawn.length > 0 ? bodyDrawn : null
+  const zones: Record<string, ReactNode> = {}
+  const strays: ReactNode[] = []
+  for (const entry of lists) {
+    if (entry.pointer === '/children') continue
+    const elements = drawn(entry.list, undefined)
+    // 몸통이 아닌 줄인데 이름이 `body` 인 것(검증 전 `zones.body`)과 선언 밖 구역은 뷰에 안 간다 — 폴백에만 싣는다.
+    if (entry.zone !== BODY_ZONE && def?.zones.some((zone) => zone.name === entry.zone) === true) {
+      zones[entry.zone] = entry.list.some((child) => shownIn(child, options)) ? elements : null
+    } else if (elements.length > 0) strays.push(<Fragment key={`wb-zone-${entry.pointer}`}>{elements}</Fragment>)
+  }
+  const items: ViewItem[] = []
+  bodyList.forEach((child, index) => {
+    if (!shownIn(child, options)) return
+    const shaped = child as { id?: unknown; type?: unknown } | null
+    const hosted = getComponent(readString(shaped?.type))?.bodyHost === 'parent'
+    const content = hosted ? drawn(zoneList(child, BODY_ZONE), undefined) : []
+    items.push({ nodeId: readString(shaped?.id), index, element: bodyDrawn[index], content: content.length > 0 ? content : null })
+  })
+  const fallbackChildren: ReactNode = (
+    <>
+      {hostedByParent ? null : children}
+      {lists
+        .filter((entry) => entry.pointer !== '/children')
+        .map((entry) => (
+          <Fragment key={`wb-zone-${entry.pointer}`}>{drawn(entry.list, undefined)}</Fragment>
+        ))}
+      {items.map((item) => (item.content === null ? null : <Fragment key={`wb-content-${item.nodeId}`}>{item.content}</Fragment>))}
+    </>
+  )
 
   const fallback = (message: string): ReactElement => {
     options.onNodeError?.({ nodeId, type, message })
     return (
       <FallbackNode nodeId={nodeId} message={message}>
-        {children}
+        {fallbackChildren}
       </FallbackNode>
     )
   }
@@ -330,7 +374,6 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions, 
   const shape = shapeError(node)
   if (shape !== null) return fallback(shape)
 
-  const def = getComponent(type)
   if (!def) return fallback(`알 수 없는 컴포넌트 타입: ${type}`)
 
   // **겹layer가 문서의 props를 덮는다.** 겹layer에 이 노드가 없으면 `node.props`가
@@ -377,7 +420,8 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions, 
       view={theme.views[node.type] ?? fallbackView}
       fallbackView={fallbackView}
       binding={binding}
-      viewProps={{ nodeId: node.id, type: node.type, props, states, variant, children, slot: options.slot ?? null }}
+      viewProps={{ nodeId: node.id, type: node.type, props, states, variant, children, zones, items, slot: options.slot ?? null }}
+      fallbackChildren={fallbackChildren}
     />
   )
 }

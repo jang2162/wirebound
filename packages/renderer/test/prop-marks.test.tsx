@@ -52,7 +52,8 @@ const CENSUS: Record<string, Record<string, Cell>> = {
   },
   Grid: { columns: { route: 'var', alt: 3 } },
   Card: { title: { route: 'text', alt: '제목' }, subtitle: { route: 'text', alt: '부제' } },
-  Tabs: { tabs: { route: 'text', alt: ['가', '나', '다'] }, active: { route: 'markup', alt: 1 } },
+  Tabs: { active: { route: 'markup', alt: 1 } },
+  TabPanel: { label: { route: 'text', alt: '상세' } },
   List: {
     items: { route: 'markup', alt: 2 },
     columns: { route: 'text', alt: ['이름'] },
@@ -116,6 +117,7 @@ const RESERVED = [
   'data-wb-marker-offset',
   'data-wb-error',
   'data-wb-cell',
+  'data-wb-zone',
 ]
 
 interface ZodNode {
@@ -136,9 +138,19 @@ function catalogProps(type: string): string[] {
   return Object.keys((requireComponent(type).props as unknown as { shape: Record<string, unknown> }).shape)
 }
 
-/** 노드 하나를 기본 뷰(테마 없음)로 그리고 그 루트를 준다. */
+/** 자식이 있어야 prop 이 화면에 닿는 타입의 표본 자식 — 탭의 `active` 는 패널이 둘은 있어야 고른 탭이 옮긴다. */
+const SAMPLE_CHILDREN: Record<string, unknown[]> = {
+  Tabs: [
+    { id: 'p1', type: 'TabPanel', props: { label: '하나' } },
+    { id: 'p2', type: 'TabPanel', props: { label: '둘' } },
+  ],
+}
+
+/** 노드 하나를 기본 뷰(테마 없음)로 그리고 그 루트를 준다. 탭 패널은 탭 안에 둔다(그 밖이면 설 자리가 아니다). */
 function root(type: string, props: Record<string, unknown>): Element {
-  const doc = { version: 1, root: { id: 'page', type: 'Page', children: [{ id: 'n', type, props }] } } as unknown as PageDocument
+  const node = { id: 'n', type, props, ...(SAMPLE_CHILDREN[type] === undefined ? {} : { children: SAMPLE_CHILDREN[type] }) }
+  const placed = type === 'TabPanel' ? { id: 'tabs', type: 'Tabs', children: [node] } : node
+  const doc = { version: 3, root: { id: 'page', type: 'Page', children: [placed] } } as unknown as PageDocument
   const { container } = render(<>{renderDocument(doc)}</>)
   const el = container.querySelector('[data-wb-id="n"]')
   if (el === null) throw new Error(`${type} 가 안 그려졌다`)

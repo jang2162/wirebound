@@ -4,6 +4,7 @@ import { nodeVar, WEIGHT_VAR, zeroRule } from '../css-tools'
 import { view } from '../define'
 import { stateAria } from '../marks'
 import { Root } from '../root'
+import { Zone } from '../zone'
 
 /** 열을 정한 조회 폼이 열 수를 나르는 변수 — `fields` 조각에 인라인으로 선다. */
 export const SEARCHFORM_COLUMNS_VAR = nodeVar('searchform', 'columns')
@@ -20,8 +21,8 @@ export function searchFormFieldsAttrs(columns: unknown): { 'data-wb-columns'?: s
   return { 'data-wb-columns': String(columns), style: { [SEARCHFORM_COLUMNS_VAR]: String(columns) } as CSSProperties }
 }
 
-// 기본 구조 `inline`. **접히면(`collapsed`) 머리줄(`toggle` 조각)만 남고 자식도 DOM 에서 빠진다** — `display: none` 으로 감추면 테마 CSS 가
-// `display` 를 덮어 되살릴 수 있어 접힘이 아니게 된다. 펴진 판의 DOM 은 머리줄 없이 그대로다.
+// 기본 구조 `inline`. **접히면(`collapsed`) 머리줄(`toggle` 조각)만 남고 두 구역(조건 · 단추)이 DOM 에서 빠진다** — `display: none` 으로 감추면
+// 테마 CSS 가 `display` 를 덮어 되살릴 수 있어 접힘이 아니게 된다. 펴진 판은 머리줄 없이 조건(`fields`) 뒤에 단추 구역(`actions`)이다.
 export const SearchFormView = view(({ props, children }) =>
   props.collapsed === true ? (
     <Root as="form" data-wb-structure="inline">
@@ -35,23 +36,17 @@ export const SearchFormView = view(({ props, children }) =>
       <div data-wb-part="fields" {...searchFormFieldsAttrs(props.columns)}>
         {children}
       </div>
-      <div data-wb-part="actions">
-        <span>조회</span>
-        <span>초기화</span>
-      </div>
+      <Zone name="actions" data-wb-part="actions" />
     </Root>
   ),
 )
 
-// 기본 구조 `labelLeft`. `label` 조각은 폼의 `title` 을 담는다 — `system-admin` 의 CSS 가 그 이름을 겨냥한다.
+// 기본 구조 `labelLeft`. `label` 조각은 폼의 `title` 을 담는다 — `system-admin` 의 CSS 가 그 이름을 겨냥한다. 단추는 `actions` 구역이다.
 export const EntryFormView = view(({ props, children }) => (
   <Root as="form" data-wb-structure="labelLeft">
     {props.title ? <div data-wb-part="label">{String(props.title)}</div> : null}
     <div data-wb-part="row">{children}</div>
-    <div data-wb-part="actions">
-      <span>저장</span>
-      <span>취소</span>
-    </div>
+    <Zone name="actions" data-wb-part="actions" />
   </Root>
 ))
 

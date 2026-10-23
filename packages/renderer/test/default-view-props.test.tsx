@@ -31,16 +31,26 @@ const childParts = (el: Element) => Array.from(el.children).map((child) => child
 describe('SearchForm — collapsed', () => {
   const field: WbNode = { id: 'f', type: 'Field', props: { label: '검색어' } }
 
-  it('펴진 판은 필드 · 단추 — 머리줄이 없다', () => {
-    const el = draw({ id: 's', type: 'SearchForm', props: {}, children: [field] })
+  const search: WbNode = { id: 'b', type: 'Button', props: { label: '검색' } }
+
+  it('펴진 판은 필드 · 단추 구역 — 머리줄이 없다 · 단추 구역은 구역 속성을 단다', () => {
+    const el = draw({ id: 's', type: 'SearchForm', props: {}, children: [field], zones: { actions: [search] } })
     expect(childParts(el)).toEqual(['fields', 'actions'])
     expect(el.querySelector('[data-wb-id="f"]')).not.toBeNull()
+    expect(el.querySelector('[data-wb-part="actions"]')!.getAttribute('data-wb-zone')).toBe('actions')
+    expect(el.querySelector('[data-wb-zone="actions"] > [data-wb-id="b"]')).not.toBeNull()
   })
 
-  it('접힌 판은 머리줄(toggle)만 남고 자식이 DOM 에서 빠진다', () => {
-    const el = draw({ id: 's', type: 'SearchForm', props: { collapsed: true }, children: [field] })
+  it('단추 구역이 비면 단추줄째 없다 — 조회 전용 폼', () => {
+    const el = draw({ id: 's', type: 'SearchForm', props: {}, children: [field] })
+    expect(childParts(el)).toEqual(['fields'])
+  })
+
+  it('접힌 판은 머리줄(toggle)만 남고 두 구역이 DOM 에서 빠진다', () => {
+    const el = draw({ id: 's', type: 'SearchForm', props: { collapsed: true }, children: [field], zones: { actions: [search] } })
     expect(childParts(el)).toEqual(['toggle'])
     expect(el.querySelector('[data-wb-id="f"]')).toBeNull()
+    expect(el.querySelector('[data-wb-id="b"]')).toBeNull()
     expect(el.getAttribute('data-wb-structure')).toBe('inline')
   })
 })

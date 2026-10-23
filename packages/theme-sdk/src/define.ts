@@ -18,11 +18,11 @@ export function defineManifest(manifest: ThemeManifest): ThemeManifest {
 }
 
 export function view<P extends Record<string, unknown> = Record<string, unknown>>(render: (props: ViewProps<P>) => ReactElement): View {
-  // 노드의 입력을 문맥으로 내린다 — `Root` 가 그것으로 prop 표지를 편다(`./marks.ts`).
+  // 노드의 입력을 문맥으로 내린다 — `Root` 가 그것으로 prop 표지를 펴고(`./marks.ts`) `Zone` 이 구역을 읽는다(`./zone.tsx`).
   const component = (props: ViewProps) =>
     createElement(
       ViewNodeContext.Provider,
-      { value: { nodeId: props.nodeId, type: props.type, props: props.props, states: props.states } },
+      { value: { nodeId: props.nodeId, type: props.type, props: props.props, states: props.states, zones: props.zones } },
       render(props as ViewProps<P>),
     )
   return component

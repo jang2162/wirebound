@@ -25,6 +25,8 @@ export interface ViewNode {
   type: string
   props: Readonly<Record<string, unknown>>
   states: readonly string[]
+  /** 이름 붙은 구역을 그린 것 — `Zone` 이 읽는다(`ViewProps.zones`). */
+  zones: Readonly<Record<string, ReactNode>>
 }
 
 export const ViewNodeContext = createContext<ViewNode | null>(null)

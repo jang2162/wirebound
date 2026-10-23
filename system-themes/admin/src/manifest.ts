@@ -10,8 +10,8 @@ export const MANIFEST: ThemeManifest = {
   id: 'system-admin',
   name: '기본테마',
   description: '관리자 화면 기본 테마. 좁은 여백과 표 중심의 밀도를 갖는다.',
-  version: '1.2.1',
-  sdk: '^1.2.0',
+  version: '1.3.0',
+  sdk: '^1.3.0',
   tokens: {
     groups: [
       { id: 'color', label: '색' },
@@ -66,6 +66,8 @@ export const MANIFEST: ThemeManifest = {
       variants: [
         { id: 'default', label: '기본' },
         { id: 'featured', label: '강조' },
+        // «소제목 + 오른쪽 단추» 줄 — 제목 · 머리 오른쪽 구역 · 몸통을 상자 없이 쓴다.
+        { id: 'borderless', label: '테두리 없음' },
       ],
       defaultVariant: 'default',
     },

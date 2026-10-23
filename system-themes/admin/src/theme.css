@@ -138,6 +138,25 @@
 [data-wb-component="Card"] [data-wb-part="header"] {
   margin-bottom: var(--wb-space-3);
 }
+/* 카드 머리줄 — 제목(과 제목 옆)은 왼쪽, 머리 오른쪽 구역(단추 · 링크 · 셀렉트)은 오른끝, 부제는 제목 밑. 바닥 구역은 몸통 밑의 오른쪽 단추줄이다. */
+[data-wb-component="Card"] > [data-wb-part="header"] {
+  column-gap: var(--wb-space-3);
+}
+[data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="heading"],
+[data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="headEnd"],
+[data-wb-component="Card"] > [data-wb-part="footer"] {
+  gap: var(--wb-space-2);
+}
+[data-wb-component="Card"] > [data-wb-part="footer"] {
+  margin-top: var(--wb-space-4);
+}
+/* 테두리 없는 카드 — «소제목 + 오른쪽 단추» 줄과 그 밑의 내용(설계서의 «강의 이력 [엑셀다운로드]»). 상자는 없고 머리줄만 선다. */
+[data-wb-component="Card"][data-wb-variant="borderless"] {
+  background: transparent;
+  border-width: 0;
+  border-radius: 0;
+  padding: 0;
+}
 [data-wb-component="Card"] [data-wb-part="title"] {
   font-size: var(--wb-typography-h3-fontSize);
   line-height: var(--wb-typography-h3-lineHeight);
@@ -184,10 +203,19 @@
   padding-top: var(--wb-space-4);
   padding-bottom: var(--wb-space-4);
 }
+/* 탭 머리 안의 패널 노드(`TabPanel` — 탭 이름)는 글자 그대로다 — 색 · 크기는 머리(`tab`)의 것을 받는다. */
 
 /* ── 데이터 ───────────────────────────────────────────────────────────── */
 
 /* 표 — 바깥 테두리 · 행마다 아래 실선 · 왼쪽 정렬 머리. 뷰는 SDK 기본 뷰(체크 칸 · 빈 줄 · 막대 조각을 낸다). */
+/* 결과 머리줄(`caption` — «총 N건» · 엑셀 다운로드) — 표 위에 붙는다. 표의 테두리 밖이다(`caption` 은 표 상자 위에 선다). */
+[data-wb-component="List"] > [data-wb-part="head"] {
+  padding-bottom: var(--wb-space-2);
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="List"] [data-wb-part="headRow"] {
+  gap: var(--wb-space-2);
+}
 [data-wb-component="List"][data-wb-structure="table"] {
   width: 100%;
   border-collapse: collapse;
@@ -394,28 +422,6 @@
   display: flex;
   gap: var(--wb-space-2);
   padding-left: calc(var(--wb-form-labelWidth) + var(--wb-space-4));
-}
-
-/* 폼이 스스로 그리는 단추 자리(`조회` · `초기화` · `저장` · `취소`) — 첫째가 주 단추, 나머지는 보조. `Button` 과 같은 크기다. */
-[data-wb-component="SearchForm"] > [data-wb-part="actions"] > span,
-[data-wb-component="EntryForm"] > [data-wb-part="actions"] > span {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--wb-space-2) var(--wb-space-4);
-  border: 1px solid var(--wb-semantic-border);
-  border-radius: var(--wb-radius-sm);
-  background: var(--wb-semantic-surface);
-  color: var(--wb-semantic-text);
-  font-size: var(--wb-typography-h6-fontSize);
-  line-height: var(--wb-typography-h6-lineHeight);
-  font-weight: var(--wb-typography-h6-fontWeight);
-  white-space: nowrap;
-}
-[data-wb-component="SearchForm"] > [data-wb-part="actions"] > span:first-child,
-[data-wb-component="EntryForm"] > [data-wb-part="actions"] > span:first-child {
-  background: var(--wb-semantic-primary);
-  border-color: var(--wb-semantic-primary);
-  color: var(--wb-semantic-surface);
 }
 
 /* 열을 정한 조회 폼(`SearchForm.columns` — `fields` 조각의 `data-wb-columns`) — 필드를 그 수의 같은 폭 칸으로 깐다. 열을 안 정한 판은 위 규칙

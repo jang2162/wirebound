@@ -1,8 +1,9 @@
-/** **구조 그룹 기본 뷰.** `Page`·`Slot`·`Section`·`Flex`·`Grid`·`Card`·`Tabs`. 옮긴 규칙은 `./index.ts` 머리말. */
+/** **구조 그룹 기본 뷰.** `Page`·`Slot`·`Section`·`Flex`·`Grid`·`Card`·`Tabs`·`TabPanel`. 옮긴 규칙은 `./index.ts` 머리말. */
 import type { CSSProperties } from 'react'
 import { componentRule, nodeVar, partRule, WEIGHT_VAR, zeroRule } from '../css-tools'
 import { view } from '../define'
 import { Root } from '../root'
+import { Zone } from '../zone'
 
 /**
  * 커스텀 프로퍼티만 담은 `style`. **일반 선언을 넣지 마라** — inline 일반 선언은 모든 셀렉터를 이겨 테마가
@@ -58,34 +59,49 @@ export const GridView = view(({ props, children }) => (
   </Root>
 ))
 
-// 기본 구조 `plain`.
-export const CardView = view(({ props, children }) => (
-  <Root as="div" data-wb-structure="plain">
-    <div data-wb-part="header">
-      <div data-wb-part="title">{String(props.title)}</div>
-      {props.subtitle ? <div data-wb-part="subtitle">{String(props.subtitle)}</div> : null}
-    </div>
-    <div data-wb-part="body">{children}</div>
-  </Root>
-))
-
-// 기본 구조 `underline`.
-export const TabsView = view(({ props, children }) => {
-  const tabs = props.tabs as string[]
-  const active = props.active as number
+// 기본 구조 `plain`. 머리줄(`header`)은 제목 · 부제 · 제목 옆 · 머리 오른쪽 가운데 하나라도 있으면 선다 — 다 비면 머리줄째 없다.
+export const CardView = view(({ props, children, zones }) => {
+  const title = String(props.title)
+  const subtitle = String(props.subtitle)
+  const header = title !== '' || subtitle !== '' || zones.titleSide != null || zones.headEnd != null
   return (
-    <Root as="div" data-wb-structure="underline">
-      <div data-wb-part="list">
-        {tabs.map((label, index) => (
-          <span key={`${label}-${index}`} data-wb-part="tab" aria-selected={index === active}>
-            {label}
-          </span>
-        ))}
-      </div>
-      <div data-wb-part="panel">{children}</div>
+    <Root as="div" data-wb-structure="plain">
+      {header ? (
+        <div data-wb-part="header">
+          <div data-wb-part="heading">
+            {title !== '' ? <div data-wb-part="title">{title}</div> : null}
+            <Zone name="titleSide" data-wb-part="titleSide" />
+          </div>
+          {subtitle !== '' ? <div data-wb-part="subtitle">{subtitle}</div> : null}
+          <Zone name="headEnd" data-wb-part="headEnd" />
+        </div>
+      ) : null}
+      <div data-wb-part="body">{children}</div>
+      <Zone name="footer" data-wb-part="footer" />
     </Root>
   )
 })
+
+// 기본 구조 `underline`. 탭 머리는 몸통의 패널마다(`items` — 지금 보이는 패널) 그 패널의 뿌리 요소(`TabPanelView`)를 감싸 둔다 — 탭 머리를
+// 누르면 그 패널이 골라진다. 패널 칸은 지금 패널의 내용이다: `active` 자리의 패널, 그 패널이 숨었거나 없으면 보이는 첫 패널.
+export const TabsView = view(({ props, items }) => {
+  const active = items.find((item) => item.index === props.active) ?? items[0]
+  return (
+    <Root as="div" data-wb-structure="underline">
+      <div data-wb-part="list">
+        {items.map((item) => (
+          <span key={item.nodeId} data-wb-part="tab" aria-selected={item === active}>
+            {item.element}
+          </span>
+        ))}
+      </div>
+      <div data-wb-part="panel">{active?.content ?? null}</div>
+    </Root>
+  )
+})
+
+// 탭 하나 — 뿌리는 탭 머리의 글이다. 내용은 부모 `Tabs` 의 뷰가 패널 칸에 둔다(`ViewItem.content`).
+export const TabPanelView = view(({ props }) => <Root as="span">{String(props.label)}</Root>)
 
 /** 순서가 곧 캐스케이드 순서다 — 같은 특이도의 규칙끼리는 뒤의 것이 이긴다. 끼워 넣지 말고 뒤에 붙인다. */
 export function structureCssBlocks(): string[] {
@@ -101,6 +117,27 @@ export function structureCssBlocks(): string[] {
     // `Card` 의 기본 구조(`plain`)에는 `media` 조각이 없어 기본 뷰에는 닿지 않는다. 테마 뷰가 `media` 조각을 내면
     // 받는다 — 빈 상자에 높이를 준다.
     partRule('Card', 'media', ['aspect-ratio: 16 / 9;']),
+    // 카드 머리줄 — 제목(제목 옆을 품은 줄)과 부제는 왼쪽 칸, 머리 오른쪽은 오른쪽 칸(두 줄에 걸친다). 바닥 단추줄은 오른쪽 정렬이다.
+    zeroRule('[data-wb-component="Card"] > [data-wb-part="header"]', [
+      'display: grid;',
+      'grid-template-columns: minmax(0, 1fr) auto;',
+      'column-gap: 8px;',
+      'align-items: center;',
+    ]),
+    zeroRule('[data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="heading"]', [
+      'display: flex;',
+      'align-items: center;',
+      'gap: 6px;',
+    ]),
+    zeroRule('[data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="subtitle"]', ['grid-column: 1;']),
+    zeroRule('[data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="headEnd"]', [
+      'grid-column: 2;',
+      'grid-row: 1 / span 2;',
+      'display: flex;',
+      'align-items: center;',
+      'gap: 6px;',
+    ]),
+    zeroRule('[data-wb-component="Card"] > [data-wb-part="footer"]', ['display: flex;', 'justify-content: flex-end;', 'gap: 6px;']),
     // 가둔 칼럼을 가운데 둔다 — 테마가 `maxWidth` 만 걸고 가로 여백을 빠뜨려도 칼럼이 왼쪽에 붙지 않는다.
     partRule('Section', 'inner', ['margin-inline: auto;'], ['contained']),
     // 좁은 여백(`compact`). 테마는 제 여백 규칙을 `[data-wb-compact]` 로 덮는다 — 이 둘은 테마가 없는 판의 모양이다.
