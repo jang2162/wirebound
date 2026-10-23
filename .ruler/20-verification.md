@@ -22,7 +22,7 @@
 루트 `vitest.config.ts` 의 `css.include` 는 unit 프로젝트에만 있어 `--project build` 에서 `theme.css?raw` 는 빈 글자로 읽힌다.
 
 - **Why:** 빈 글자와 견주는 단언(`toContain(css.slice(0, 200))`)은 `toContain('')` 이 되어 늘 참이다 — system-admin build-test 가 그렇게 아무것도 안 쟀다.
-- **How to apply:** build-test 에서 소스 CSS 가 필요하면 `readFileSync` 로 읽고 `length > 0` 카나리아를 함께 둔다. 빌드된 `theme.css` 는 줄인 글자라 소스와 글자로 견주지 않는다 — 토큰 기본값(`--wb-<키>: <값>;`)처럼 뜻이 같은 조각으로 잰다.
+- **How to apply:** build-test 에서 소스 CSS 가 필요하면 `readFileSync` 로 읽고 `length > 0` 카나리아를 함께 둔다. 빌드된 `theme.css` 는 줄인 글자라 소스와 글자로 견주지 않는다 — 토큰 기본값(`--wb-<키>: <값>;`)처럼 뜻이 같은 조각으로 잰다. **스크래치 탐침 설정도 같다** — 루트 설정에서 `resolve` · `esbuild` 만 실은 스크래치 설정은 `css.include` 가 없어 `ADMIN_V0_CSS` 같은 `?raw` CSS 가 빈 글자다(기본테마 CSS 없이 잰 판이 «세그먼트 규칙이 안 먹는다» 로 읽혔다 — `docs/superpowers/plans/2026-10-24-rv-ci-report.md` 「지침」). 탐침은 테마 CSS 를 `readFileSync` 로 읽고 `length > 0` 카나리아를 둔다. **테마 CSS 만 실은 정적 판은 토큰이 비어 크기가 실제와 다르다** — 테마 규칙은 `var(--wb-…)` 로 크기를 읽어, 토큰이 없으면 브라우저 기본값(16px)으로 잰다. `@wirebound/themes` 의 `tokensCss(manifest)` 를 먼저 싣고 잰다.
 
 ## `apps/*`·`packages/*`·`system-themes/*` 바로 밑에 `tsconfig*.json` 을 새로 두지 않는다
 
