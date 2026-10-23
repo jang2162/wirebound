@@ -78,7 +78,7 @@
 - **«접히지 않는다» 는 «보인다» 가 아니다** — 통지 · 알림을 숨기지 않는 설계는 접힘(`scrollHeight`)만이 아니라 **창 안에 닿는지**(`scrollIntoView` 뒤 창 안 · 실브라우저)도 잰다. 그릇이 `overflow: visible` 인 채 창을 넘으면 접힘 0 이어도 마지막 항목이 닿을 길이 없다(`apps/web/build-test/n36-notice-floor.test.ts`)
 - **글자가 몇 줄인지는 글자 노드 하나의 `Range.getClientRects()` 서로 다른 `top` 수로 센다** — 요소의 `getClientRects()` 는 블록 상자 하나를 내 접힘을 0 으로 세고, 컨트롤을 품은 요소의 범위는 그 컨트롤의 상자가 섞여 거짓 두 줄을 낸다.
 - **카탈로그 타입 목록은 `CATALOG_TYPES` 로 읽는다** — `@wirebound/schema` 를 Node 에서 바로 적재하면 `listComponents()` 는 `installCatalog` 를 부르기 전이라 빈 배열이고, 그 목록을 도는 탐침은 아무것도 안 재고 오류 없이 끝난다.
-- **하드코딩된 개수 하한 단언(`카드 ≥ 17`)은 분모를 바꾸는 변경에서 `git grep` 으로 같이 센다** — 카탈로그 타입 수를 쓰는 build-test 가 있다(`apps/web/build-test/palette.test.ts`).
+- **하드코딩된 개수 하한 단언(`카드 ≥ 17`)은 분모를 바꾸는 변경에서 `git grep` 으로 같이 센다** — 카탈로그 타입 수를 쓰는 build-test 가 있다(`apps/web/build-test/palette.test.ts`). 카탈로그 · 갤러리 표본을 바꾸면 `packages/theme-kit/build-test/dev.test.ts`(타입 수 · `.sample-card` 수)와 `shots.test.ts`(폴백 항목 목록)도 센다 — 둘은 `test:build:serial` 갈래라 `pnpm test` · `test:browser` 에 안 걸린다.
 - **도는 목록(테마 · 창 · 줌)을 줄이는 변경은 그 목록이 곱해 내는 판 수에 기대는 카나리아 하한(`count.trials >= 40` 등)을 함께 센다** — 목록만 줄이면 틀린 자리 0 인 채 하한에 못 미쳐 빨강이다(`apps/web/build-test/canvas-drop-review.test.ts` «무작위 끌기 — 오라클» 이 시스템 테마 다섯 → 하나에서 45 판 → 9 판). 판 수를 되돌리는 쪽(차원당 시도를 늘림)으로 고치고 하한을 낮추지 않는다.
 - **걷을 자리 · 고칠 자리를 셀 때는 꼴을 좁힌 식이 아니라 그 낱말 전부를 세고 갈래로 나눈다** — 꼴을 좁힌 식(`actor: (requestEventActor|\{ type: revision)`)은 같은 성질의 다른 꼴(`actor: { type: 'user', … }`)을 오류 없이 빼고, 그 수가 장부에 «N 줄» 로 남아 다음 차수가 그대로 받는다(WS `patch` 의 프레임 `actor` 리터럴이 «17 줄» 에 없었다).
 - **마이그레이션을 새로 두면 마이그레이션 디렉터리를 글자로 세는 자(`apps/api/test/seed-user.test.ts` «행 삽입이 없다» 등 — `git grep -lE 'MIGRATIONS_DIR|db/migrations' apps/api/test`)를 그 트랙 게이트에 넣는다** — 데이터 옮기기의 `insert` 가 계정 시딩으로 세진다.
