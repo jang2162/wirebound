@@ -229,14 +229,18 @@ export function markedTheme(): ThemeDefinition {
 
 /* ------------------------------------------------------------------ 세는 자 */
 
-/** 문서가 실제로 쓰는 컴포넌트 타입. */
+/**
+ * 문서가 실제로 쓰는 컴포넌트 타입 — 몸통과 구역 전부를 돈다. 카탈로그를 안 보고 `zones` 의 배열을 다 걷는다 — 구역 안에 둔 카탈로그 밖 타입(오타)도
+ * 세어야 «카탈로그 밖의 타입» 케이스가 그것을 잡는다.
+ */
 export function typesIn(document_: PageDocument): string[] {
   const seen = new Set<string>()
   const walk = (node: unknown): void => {
     if (node === null || typeof node !== 'object') return
-    const { type, children } = node as { type?: unknown; children?: unknown }
+    const { type, children, zones } = node as { type?: unknown; children?: unknown; zones?: unknown }
     if (typeof type === 'string') seen.add(type)
     if (Array.isArray(children)) children.forEach(walk)
+    if (zones !== null && typeof zones === 'object') for (const list of Object.values(zones)) if (Array.isArray(list)) list.forEach(walk)
   }
   walk(document_.root)
   return [...seen].sort()
