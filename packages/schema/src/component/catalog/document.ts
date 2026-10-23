@@ -61,23 +61,55 @@ export const DividerDef = defineComponent({
   zones: [],
 })
 
+/** 자리표시자 색의 꼴 — 소문자 `#rrggbb` 하나. 에디터의 색 칸이 소문자로 바꿔 보낸다. */
+export const PLACEHOLDER_COLOR = /^#[0-9a-f]{6}$/
+
+/** 빈 값(`''` · 없음)은 «테마 기본» 이다. */
+function placeholderColor() {
+  return z.string().regex(PLACEHOLDER_COLOR, '색은 #rrggbb(소문자) 꼴입니다').or(z.literal('')).optional()
+}
+
 export const PlaceholderDef = defineComponent({
   type: 'Placeholder',
   // **`영역`이 아닌 것에 근거가 있다.** 이 컴포넌트의 `label` 기본값이 `'미정 영역'`이라
   // 이름을 `영역`으로 두면 상호작용 문장이 *"미정 영역 영역"*이 된다(`describe.ts`가 이
   // 이름을 그대로 쓴다). 짧게 «고치지» 마라.
   label: '자리 표시자',
-  description: '아직 정하지 않은 자리. 크기만 잡아 둔다.',
+  description: '카탈로그에 없는 요소를 손으로 그리는 자리. 색 · 글 · 그림을 정한다.',
   group: 'document',
+  /**
+   * **이 컴포넌트만 그리기 값을 prop 으로 든다** — 정본 「페이지 스키마 노드」 의 «노드는 스타일을 갖지 않는다» 의 예외(카탈로그 밖 요소를 그리는
+   * 자리). 값의 꼴을 좁힌다: 색은 `PLACEHOLDER_COLOR` · 길이는 정수 px. 뷰가 값을 인라인 변수로 싣는데, 자유 CSS 글자를 받으면 `url(…)` 이
+   * 캔버스 · 내보낸 번들에서 바깥 요청을 내고 `;` · `}` 로 꾸밈을 넘길 길이 생긴다. 값이 없으면 «테마 기본» 이다.
+   */
   props: z.strictObject({
     label: z.string().default('미정 영역'),
-    height: z.number().int().min(20).max(1000).default(120),
+    width: z.number().int().min(20).max(2000).optional(),
+    height: z.number().int().min(20).max(2000).optional(),
+    background: placeholderColor(),
+    border: z.enum(['dashed', 'solid', 'none']).default('dashed'),
+    borderColor: placeholderColor(),
+    radius: z.number().int().min(0).max(999).optional(),
+    color: placeholderColor(),
+    fontSize: z.number().int().min(10).max(72).optional(),
+    align: z.enum(['start', 'center', 'end']).default('center'),
+    padding: z.number().int().min(0).max(200).optional(),
   }),
   editor: [
     { prop: 'label', control: 'text', label: '라벨' },
+    { prop: 'width', control: 'number', label: '너비(px)' },
     { prop: 'height', control: 'number', label: '높이(px)' },
+    { prop: 'background', control: 'color', label: '바탕색' },
+    { prop: 'border', control: 'select', label: '테두리', options: ['dashed', 'solid', 'none'] },
+    { prop: 'borderColor', control: 'color', label: '테두리 색' },
+    { prop: 'radius', control: 'number', label: '모서리(px)' },
+    { prop: 'color', control: 'color', label: '글 색' },
+    { prop: 'fontSize', control: 'number', label: '글 크기(px)' },
+    { prop: 'align', control: 'select', label: '정렬', options: ['start', 'center', 'end'] },
+    { prop: 'padding', control: 'number', label: '여백(px)' },
   ],
   summary: (props) => oneLine(props.label),
   states: [],
-  zones: [],
+  // 몸통 하나라 구조 트리에 구역 줄이 안 선다. 기본 내용이 없다 — 새 자리표시자는 라벨이 선 빈 칸이다.
+  zones: [{ name: 'body', label: '내용' }],
 })

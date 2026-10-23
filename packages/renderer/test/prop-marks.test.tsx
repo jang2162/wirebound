@@ -101,7 +101,19 @@ const CENSUS: Record<string, Record<string, Cell>> = {
     ratio: { route: 'mark', alt: '1/1' },
   },
   Divider: { direction: { route: 'variant', alt: 'vertical' } },
-  Placeholder: { label: { route: 'text', alt: '자리' }, height: { route: 'var', alt: 200 } },
+  Placeholder: {
+    label: { route: 'text', alt: '자리' },
+    width: { route: 'var', alt: 300 },
+    height: { route: 'var', alt: 200 },
+    background: { route: 'var', alt: '#2563eb' },
+    border: { route: 'mark', alt: 'solid' },
+    borderColor: { route: 'var', alt: '#000000' },
+    radius: { route: 'var', alt: 999 },
+    color: { route: 'var', alt: '#ffffff' },
+    fontSize: { route: 'var', alt: 14 },
+    align: { route: 'mark', alt: 'start' },
+    padding: { route: 'var', alt: 4 },
+  },
 }
 
 /** SDK 와 렌더러가 이미 쓰는 `data-wb-*` 이름 — 표지가 이것과 겹치면 셀렉터의 뜻이 갈린다. */

@@ -22,6 +22,7 @@ export const MARKED_PROPS: Readonly<Record<string, Readonly<Record<string, MarkK
   List: { pagination: 'flag', selectable: 'flag' },
   SearchForm: { collapsed: 'flag' },
   Media: { kind: 'value', ratio: 'value' },
+  Placeholder: { border: 'value', align: 'value' },
 })
 
 /**

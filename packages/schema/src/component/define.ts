@@ -2,7 +2,16 @@ import { z } from 'zod'
 import { COMPONENT_GROUPS, isComponentGroup, type ComponentGroup } from './group'
 
 /** 속성 패널이 자동 생성할 입력 컨트롤 종류 */
-export type EditorControl = 'text' | 'textarea' | 'number' | 'switch' | 'select' | 'stringList' | 'pairList'
+export type EditorControl =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'switch'
+  | 'select'
+  | 'stringList'
+  | 'pairList'
+  /** 소문자 `#rrggbb` 또는 없음 — 견본 · 글 칸 · 지우기(`apps/web/src/panels/controls/color-control.tsx`). */
+  | 'color'
 
 export interface EditorField {
   prop: string

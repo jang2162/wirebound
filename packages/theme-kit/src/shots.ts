@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { join, resolve } from 'node:path'
 import type { Browser, Page } from 'playwright-core'
+import { GALLERY_SAMPLES, PLACEHOLDER_SET_PROPS, PLACEHOLDER_SET_SAMPLE } from '@wirebound/theme-gallery'
 import { loadProject } from './config'
 import { startDev } from './dev'
 
@@ -39,6 +40,11 @@ export interface ShotWidthReport {
    * `shotsProblems` 가 적는다.
    */
   compatMode: string
+  /**
+   * **사람이 정한 그리기 값을 테마가 안 따른 자리** — 그 자리표시자 표본(`PLACEHOLDER_SET_PROPS`)의 계산된 값이 정한 값과 다른 속성. 테마 CSS 가
+   * `--wb-node-placeholder-*` 변수를 안 읽고 덮으면 선다. 표본을 하나도 못 찾았으면 `item` 이 `null` 인 한 줄이다(자가 아무것도 안 잰 판).
+   */
+  placeholder: { item: string | null; property: string; want: string; got: string }[]
 }
 
 export interface ShotsReport {
@@ -112,8 +118,36 @@ async function galleryReady(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
 }
 
-/** 페이지 안에서 돈다 — 폴백 · 넘침을 잰다. 인자로 넘기는 함수라 바깥 이름을 쓰지 않는다. */
-function measure(): Omit<ShotWidthReport, 'width' | 'pngs' | 'pageHeight' | 'consoleErrors'> {
+/** `#rrggbb` → Chromium 의 계산 값 꼴(`rgb(r, g, b)`). */
+function rgb(hex: string): string {
+  const n = Number.parseInt(hex.slice(1), 16)
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+}
+
+/** 정한 값 표본의 노드 id 와, 계산 값이 그대로 나와야 할 속성 → 값. 길이는 `px` 정수다(확대 없는 창). */
+export function placeholderExpectations(): { nodeId: string; want: Record<string, string> } {
+  const sample = GALLERY_SAMPLES.Placeholder?.find((entry) => entry.label === PLACEHOLDER_SET_SAMPLE)
+  if (sample === undefined) throw new Error('갤러리에 정한 값 자리표시자 표본이 없습니다')
+  const p = PLACEHOLDER_SET_PROPS
+  return {
+    nodeId: sample.node.id,
+    want: {
+      'background-color': rgb(p.background),
+      'border-top-color': rgb(p.borderColor),
+      'border-top-style': p.border,
+      color: rgb(p.color),
+      'border-top-left-radius': `${p.radius}px`,
+      'font-size': `${p.fontSize}px`,
+      'padding-top': `${p.padding}px`,
+    },
+  }
+}
+
+/** 페이지 안에서 돈다 — 폴백 · 넘침 · 정한 값 자리표시자를 잰다. 인자로 넘기는 함수라 바깥 이름을 쓰지 않는다. */
+function measure(expect: {
+  nodeId: string
+  want: Record<string, string>
+}): Omit<ShotWidthReport, 'width' | 'pngs' | 'pageHeight' | 'consoleErrors'> {
   const itemOf = (el: Element) => el.closest('[data-wb-gallery-item]')?.getAttribute('data-wb-gallery-item') ?? null
   const describe = (el: Element) => {
     const classes = typeof el.className === 'string' && el.className.trim() !== '' ? `.${el.className.trim().split(/\s+/).join('.')}` : ''
@@ -178,7 +212,18 @@ function measure(): Omit<ShotWidthReport, 'width' | 'pngs' | 'pageHeight' | 'con
       right: Math.round(right),
     })
   }
+  const placeholder: ShotWidthReport['placeholder'] = []
+  const samples = [...document.querySelectorAll(`[data-wb-gallery-item^="Placeholder/"] [data-wb-id="${expect.nodeId}"]`)]
+  if (samples.length === 0) placeholder.push({ item: null, property: '(표본)', want: expect.nodeId, got: '(없음)' })
+  for (const el of samples) {
+    const style = getComputedStyle(el)
+    for (const [property, want] of Object.entries(expect.want)) {
+      const got = style.getPropertyValue(property)
+      if (got !== want) placeholder.push({ item: itemOf(el), property, want, got })
+    }
+  }
   return {
+    placeholder,
     wbErrors: [...document.querySelectorAll('[data-wb-error]')].map((el) => ({
       item: itemOf(el),
       message: el.getAttribute('data-wb-error') ?? '',
@@ -232,7 +277,7 @@ export async function takeShots(opts: {
       try {
         await page.goto(frameUrl)
         await galleryReady(page)
-        const measured = await page.evaluate(measure)
+        const measured = await page.evaluate(measure, placeholderExpectations())
         const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight)
         const count = Math.max(1, Math.ceil(pageHeight / SHOT_SEGMENT_PX))
         const pngs: string[] = []
@@ -264,6 +309,11 @@ export function shotsProblems(report: ShotsReport): string[] {
     for (const line of w.consoleErrors) lines.push(`✗ ${w.width}px 콘솔: ${line}`)
     for (const e of w.wbErrors) lines.push(`✗ ${w.width}px 폴백 ${e.item ?? '(칸 밖)'}: ${e.message}`)
     for (const o of w.overflow) lines.push(`✗ ${w.width}px 넘침 ${o.item ?? '(칸 밖)'}: ${o.element} (${o.left}–${o.right}px)`)
+    for (const p of w.placeholder) {
+      lines.push(
+        `✗ ${w.width}px 자리표시자 ${p.item ?? '(표본 없음)'}: 정한 ${p.property} ${p.want} 가 아니라 ${p.got} — 테마 CSS 가 --wb-node-placeholder-* 를 안 읽고 덮었습니다`,
+      )
+    }
   }
   return lines
 }

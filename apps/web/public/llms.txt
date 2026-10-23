@@ -285,12 +285,21 @@ Zones: none.
 
 #### Placeholder
 
-An area not designed yet; only reserves space. Editor label: 자리 표시자.
+Draws what the catalog lacks (a chip, a badge, a banner) or reserves an undesigned area. The only component whose props carry drawing values (size, colors, border, text, padding); empty values follow the theme. Children (body zone) replace the label. Editor label: 자리 표시자.
 
-Zones: none.
+Zones: `body` (children) "내용".
 
 - `label`: string, default "미정 영역"
-- `height`: integer 20–1000, default 120
+- `width`: integer 20–2000, optional (no default)
+- `height`: integer 20–2000, optional (no default)
+- `background`: string matching `^#[0-9a-f]{6}$` | "", optional (no default)
+- `border`: "dashed" | "solid" | "none", default "dashed"
+- `borderColor`: string matching `^#[0-9a-f]{6}$` | "", optional (no default)
+- `radius`: integer 0–999, optional (no default)
+- `color`: string matching `^#[0-9a-f]{6}$` | "", optional (no default)
+- `fontSize`: integer 10–72, optional (no default)
+- `align`: "start" | "center" | "end", default "center"
+- `padding`: integer 0–200, optional (no default)
 
 ## REST API (summary)
 

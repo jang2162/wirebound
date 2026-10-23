@@ -2430,6 +2430,95 @@
   padding: 3px 5px;
 }
 
+/* 색 위젯(`panels/controls/color-control.tsx`) — 첫 줄은 지금 색 · 글 칸 · 고르개 · «테마 기본», 둘째 줄은 견본 열둘. 값 칸이 좁아(172px) 첫 줄은
+   흐름을 바꾼다 — 글 칸이 남는 폭을 받고(`.wb-shell-list-cell` 과 같은 까닭으로 `min-width: 0`) 단추가 아랫줄로 내려간다. */
+.wb-shell-color {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-shell-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.wb-shell-color-text {
+  flex: 1 1 72px;
+  min-width: 0;
+}
+
+/* 지금 색. 테마 기본이면 빗금 — 빈 칸과 흰색을 가른다. */
+.wb-shell-color-chip {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+}
+
+.wb-shell-color-chip[data-empty] {
+  background: repeating-linear-gradient(45deg, #fff 0 4px, var(--wb-shell-line) 4px 5px);
+}
+
+.wb-shell-color-picker {
+  flex: none;
+  width: 28px;
+  height: 24px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 0;
+  background: #fff;
+}
+
+.wb-shell-color-clear {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+.wb-shell-color-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 20px);
+  gap: 4px;
+}
+
+.wb-shell-color-swatch {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.wb-shell-color-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--wb-shell-ink);
+  outline-offset: 1px;
+}
+
+/* 잠긴 자리. `.wb-shell-control:disabled`와 같은 값이다 — 그쪽 주석이 근거를 갖는다. 견본은 제 색을 지키고 흐리게만 한다. */
+.wb-shell-color-clear:disabled {
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: not-allowed;
+}
+
+.wb-shell-color-swatch:disabled,
+.wb-shell-color-picker:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ── 상호작용 탭(`panels/interaction-panel.tsx`, 설계서 「상호작용」 「모델」·「자동 문장화」) ──
 
    **아래 규칙이 없으면 이 탭은** `<h2>`의 `.wb-shell-panel-title`을 빼고

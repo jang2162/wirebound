@@ -4,12 +4,13 @@
  * **저장소 밖 실제 설치는 `WB_TEMPLATE_INSTALL=1` 일 때만 돈다**(npm 레지스트리에서 react · vite 를 받는다). 기본 실행에서는 그
  * 케이스를 건너뛴다.
  */
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { unzipSync } from 'fflate'
+import { chromium } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '@wirebound/schema'
 import { readWbtheme } from '@wirebound/themes'
@@ -21,6 +22,27 @@ const KIT = resolve(repoRoot, 'packages/theme-kit')
 const TMP = join(KIT, '.tmp')
 const ROOT = 'wirebound-theme-starter'
 const INSTALL = process.env.WB_TEMPLATE_INSTALL === '1'
+
+/** 띄워지는 첫 Chromium — `./shots.test.ts` 의 `launchablePath` 와 같은 순서 · 띄워 보고 정한다. 못 띄우면 `null`. */
+async function launchable(): Promise<string | null> {
+  const fromShell = process.env.EDITOR_BROWSER_PATH
+  const candidates =
+    fromShell !== undefined && fromShell !== ''
+      ? [fromShell]
+      : ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', chromium.executablePath()]
+  for (const candidate of candidates) {
+    try {
+      const browser = await chromium.launch({ executablePath: candidate, headless: true })
+      await browser.close()
+      return candidate
+    } catch {
+      // 다음 후보.
+    }
+  }
+  return null
+}
+const BROWSER = await launchable()
+if (BROWSER === null) console.warn('[template] Chrome 을 못 띄워 shots 케이스를 건너뛴다')
 
 interface DistKit {
   packTemplate(opts: { outFile?: string }): Promise<{ file: string; bytes: number; tarballs: { name: string; bytes: number }[] }>
@@ -152,6 +174,25 @@ describe('스타터 템플릿 zip', () => {
     const r = await kit.buildTheme({ root: template })
     console.log(`[template] 빌드 ${r.bytes} 바이트 · theme.js ${r.themeJsBytes} 바이트`)
     expect(readWbtheme(new Uint8Array(readFileSync(r.file))).issues).toEqual([])
+  })
+
+  /**
+   * 스타터 테마가 자리표시자의 정한 그리기 값을 실 Chromium 에서 따른다 — 옮긴 기본 뷰가 `placeholderVars` 를 싣고 템플릿 CSS 가 변수를 덮지 않는다
+   * (`wb-theme shots` 의 `placeholder` — 정한 값 표본의 계산된 바탕 · 테두리 · 글 색 · 모서리 · 글 크기 · 여백).
+   */
+  it.skipIf(BROWSER === null)('템플릿의 자리표시자가 정한 그리기 값을 따른다 — wb-theme shots(실 Chromium)', () => {
+    const out = mkdtempSync(join(TMP, 'template-shots-'))
+    const run = spawnSync('node', [join(KIT, 'bin/wb-theme.js'), 'shots', '--out', out, '--widths', '1280', '--browser', BROWSER!], {
+      cwd: template,
+      encoding: 'utf8',
+      timeout: 180_000,
+    })
+    const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as {
+      widths: { placeholder: unknown[]; wbErrors: unknown[]; consoleErrors: string[] }[]
+    }
+    expect(report.widths, `${run.stdout}${run.stderr}`).toHaveLength(1)
+    expect(report.widths[0]!.placeholder).toEqual([])
+    expect(report.widths[0]!.wbErrors).toEqual([])
   })
 
   it.skipIf(!INSTALL)(

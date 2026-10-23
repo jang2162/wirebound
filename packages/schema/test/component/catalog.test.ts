@@ -42,6 +42,7 @@ describe('컴포넌트 카탈로그', () => {
       List: ['headStart', 'headEnd'],
       SearchForm: ['body', 'actions'],
       EntryForm: ['body', 'actions'],
+      Placeholder: ['body'],
     })
   })
 

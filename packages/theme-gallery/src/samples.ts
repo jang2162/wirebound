@@ -20,6 +20,23 @@ const button = (id: string, label: string): WbNode => ({ id, type: 'Button', pro
  */
 const LONG_WORD = 'hong.gildong.very.long.account@examplecompany.co.kr'
 
+/** 그리기 값을 정한 자리표시자 표본의 이름 — 테마가 그 값을 따르는지 재는 자가 이 이름으로 칸을 고른다. */
+export const PLACEHOLDER_SET_SAMPLE = 'Placeholder — 정한 색 · 모서리 · 여백'
+
+/** 그 표본의 props. 색은 테마 기본값과 겹치지 않게 골랐다 — 겹치면 테마가 변수를 무시해도 같은 색이 나와 자가 못 가른다. */
+export const PLACEHOLDER_SET_PROPS = {
+  label: '정한 값',
+  width: 240,
+  height: 64,
+  background: '#fde047',
+  border: 'solid',
+  borderColor: '#dc2626',
+  radius: 12,
+  color: '#7c2d12',
+  fontSize: 15,
+  padding: 6,
+} as const
+
 /**
  * 카탈로그 컴포넌트마다 표본 노드. 갤러리가 manifest 가 선언한 variant 마다 한 번씩 그린다(`galleryItems`).
  *
@@ -207,5 +224,18 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     { label: 'Divider — 가로', node: { id: 'div', type: 'Divider', props: { direction: 'horizontal' } } },
     { label: 'Divider — 세로', node: { id: 'div2', type: 'Divider', props: { direction: 'vertical' } } },
   ],
-  Placeholder: [{ label: 'Placeholder — 높이 120', node: { id: 'ph', type: 'Placeholder', props: { label: '광고', height: 120 } } }],
+  Placeholder: [
+    { label: 'Placeholder — 높이 120', node: { id: 'ph', type: 'Placeholder', props: { label: '광고', height: 120 } } },
+    // 정한 그리기 값을 테마가 따르는지 `wb-theme check` · `wb-theme shots` 가 이 표본으로 잰다(`PLACEHOLDER_SET_SAMPLE`).
+    { label: PLACEHOLDER_SET_SAMPLE, node: { id: 'ph2', type: 'Placeholder', props: PLACEHOLDER_SET_PROPS } },
+    {
+      label: 'Placeholder — 칩(내용)',
+      node: {
+        id: 'ph3',
+        type: 'Placeholder',
+        props: { background: '#2563eb', color: '#ffffff', radius: 999, padding: 4, border: 'none' },
+        children: [child('ph3a', '퀴즈'), child('ph3b', '×')],
+      },
+    },
+  ],
 }

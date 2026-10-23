@@ -52,6 +52,7 @@ interface Report {
     pageScrollWidth: number
     pageClientWidth: number
     compatMode: string
+    placeholder: { item: string | null; property: string; want: string; got: string }[]
   }[]
 }
 
@@ -102,6 +103,8 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
       expect(w.consoleErrors).toEqual([])
       expect(w.wbErrors).toEqual([])
       expect(w.compatMode).toBe('CSS1Compat')
+      // 정한 그리기 값을 기본테마가 따른다 — 갤러리의 정한 값 표본(`PLACEHOLDER_SET_PROPS`)의 계산 값이 정한 값이다.
+      expect(w.placeholder).toEqual([])
     }
     // 종료 코드는 넘침까지 센다 — 넘침이 없으면 0 이다.
     expect(status).toBe(report.widths.every((w) => w.overflow.length === 0) ? 0 : 1)
@@ -137,6 +140,29 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
     expect(w!.wbErrors.map((entry) => entry.item)).toEqual(['Tabs//tabs', 'TabPanel//tabp'])
     expect(w!.wbErrors.every((entry) => entry.message.includes('탭이 터졌다'))).toBe(true)
     expect(w!.consoleErrors.some((line) => line.includes('탭이 터졌다'))).toBe(true)
+  })
+
+  /**
+   * 테마 CSS 가 자리표시자 변수를 안 읽고 바탕 · 테두리 · 글 색을 덮으면 정한 값 표본의 계산 값이 정한 값이 아니다 — 속성마다 한 줄 · 1 로 끝난다.
+   * jsdom 의 `wb-theme check` 는 이것을 못 잰다(특이도 · `var()` 를 안 푼다 — `src/check.ts` 의 `placeholderDrops`).
+   */
+  it('자리표시자 변수를 덮는 테마 CSS 를 계산 값으로 적고 1 로 끝난다', () => {
+    const root = mkdtempSync(join(TMP, 'shots-placeholder-'))
+    cpSync(FIXTURE, root, { recursive: true })
+    appendFileSync(
+      join(root, 'src/theme.css'),
+      '\n[data-wb-component="Placeholder"][data-wb-structure="default"] { background: #eeeeee; border-color: #cccccc; color: var(--wb-node-placeholder-color, #333333); }\n',
+    )
+    const dir = join(out, 'placeholder')
+    const { status, out: printed } = shots(root, ['--out', dir, '--widths', '390', '--browser', browser.path!])
+    expect(status, printed).toBe(1)
+    const [w] = (JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as Report).widths
+    // 변수를 읽은 글 색은 따른다 — 덮은 둘만 선다.
+    expect(w!.placeholder).toEqual([
+      { item: 'Placeholder//ph2', property: 'background-color', want: 'rgb(253, 224, 71)', got: 'rgb(238, 238, 238)' },
+      { item: 'Placeholder//ph2', property: 'border-top-color', want: 'rgb(220, 38, 38)', got: 'rgb(204, 204, 204)' },
+    ])
+    expect(printed).toContain('자리표시자 Placeholder//ph2: 정한 background-color rgb(253, 224, 71) 가 아니라 rgb(238, 238, 238)')
   })
 
   /**

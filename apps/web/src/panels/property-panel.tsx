@@ -58,6 +58,7 @@ import { useLockedBy } from '../store/use-locked-by'
 import { LOSS_RANK } from '../store/loss-notice'
 import { useSessionEpochNowOrNull } from '../session/session-context'
 import { ListControl } from './controls/list-control'
+import { ColorControl } from './controls/color-control'
 import { SelectControl } from './controls/select-control'
 import { SwitchControl } from './controls/switch-control'
 import { VariantControl } from './controls/variant-control'
@@ -891,6 +892,20 @@ function PropControl(props: {
 
   if (field.control === 'stringList' || field.control === 'pairList') {
     return <ListControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} onLeave={onLeave} />
+  }
+
+  if (field.control === 'color') {
+    return (
+      <ColorControl
+        field={field}
+        value={value}
+        id={id}
+        disabled={disabled}
+        onCommit={onCommit}
+        mixed={mixed}
+        onLeave={onLeave === undefined ? undefined : (next) => onLeave(next === '' ? undefined : next)}
+      />
+    )
   }
 
   // `options`가 없거나 비면 `<select>`를 그리지 않는다(`SelectControl`이 `null`을 낸다).

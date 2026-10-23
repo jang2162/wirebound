@@ -3,8 +3,8 @@ import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import { childLists, installCatalog, walkNodes, type WbNode } from '@wirebound/schema'
 import { renderDocument, unusedViewKeys } from '@wirebound/renderer'
-import { galleryItemDocument, galleryItems } from '@wirebound/theme-gallery'
-import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
+import { galleryItemDocument, galleryItems, PLACEHOLDER_SET_PROPS, PLACEHOLDER_SET_SAMPLE } from '@wirebound/theme-gallery'
+import { placeholderVars, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { installRuntime } from '@wirebound/theme-sdk/runtime'
 import { tokenValues, tokenVar, type WbthemeFiles } from '@wirebound/themes'
 
@@ -17,9 +17,9 @@ export interface ThemeCheckError {
   message: string
   /**
    * `fallback` — 칸에 선 `data-wb-error`. `console` — 그 칸을 그리는 동안 난 `console.error`. `bundle` — 번들을 못 실었다. `zone` — 내용이 든 구역을
-   * 뷰가 안 그렸다(`missingZones`).
+   * 뷰가 안 그렸다(`missingZones`). `placeholder` — 자리표시자 뷰가 사람이 정한 그리기 값을 뿌리의 변수로 안 실었다(`placeholderDrops`).
    */
-  source: 'fallback' | 'console' | 'bundle' | 'zone'
+  source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder'
 }
 
 export interface ThemeCheckFocusable {
@@ -146,6 +146,9 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
         }
         for (const message of logged) errors.push({ ...at, message, source: 'console' })
         for (const message of missingZones(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'zone' })
+        if (item.type === 'Placeholder' && item.sample.label === PLACEHOLDER_SET_SAMPLE) {
+          for (const message of placeholderDrops(container, item.sample.node.id)) errors.push({ ...at, message, source: 'placeholder' })
+        }
         for (const element of focusReceivers(container)) focusables.push({ ...at, element: openingTag(element) })
         root.unmount()
         container.remove()
@@ -176,6 +179,28 @@ function missingZones(container: Element, root: WbNode): string[] {
         (box) => box.parentElement?.closest('[data-wb-id]') === element,
       )
       if (!drawn) out.push(`${node.type} 뷰가 내용이 든 구역 ${zone} 을 그리지 않았습니다 — SDK 의 Zone 으로 둡니다(노드 ${node.id})`)
+    }
+  }
+  return out
+}
+
+/**
+ * **자리표시자 뷰가 정한 그리기 값을 안 실었다** — 그 표본(`PLACEHOLDER_SET_PROPS`)의 뿌리 inline `style` 에 `placeholderVars` 가 내는 변수가
+ * 같은 값으로 있는지 본다. 제 뷰로 그리며 props 를 버리는 테마가 걸린다.
+ *
+ * **계산된 색은 여기서 못 잰다** — jsdom 은 특이도를 안 보고(문서 차례만) `var()` 를 안 풀어 계산 값이 `var(--x, …)` 글자 그대로다. 테마 CSS 가
+ * 변수를 무시하고 덮는 판은 실 Chromium 으로 그리는 `wb-theme shots` 가 잰다(`./shots.ts` 의 `placeholderColors`).
+ */
+function placeholderDrops(container: Element, nodeId: string): string[] {
+  const element = container.querySelector<HTMLElement>(`[data-wb-id="${nodeId}"]`)
+  if (element === null) return [`Placeholder 표본(노드 ${nodeId})이 그려지지 않았습니다`]
+  const out: string[] = []
+  for (const [name, want] of Object.entries(placeholderVars(PLACEHOLDER_SET_PROPS) as Record<string, string>)) {
+    const got = element.style.getPropertyValue(name).trim()
+    if (got !== want) {
+      out.push(
+        `Placeholder 뷰가 정한 값을 뿌리에 싣지 않았습니다 — ${name} 가 ${want} 가 아니라 ${got === '' ? '(없음)' : got} 입니다. placeholderVars(props) 를 Root 의 style 로 둡니다`,
+      )
     }
   }
   return out

@@ -87,6 +87,12 @@ export const ListView = view(({ props, variant, states, children }) => {
 - **`marker`** — 코멘트 번호 마커의 자리. `placement` 는 `top-start` · `top-end` · `bottom-start` · `bottom-end` · `start` ·
   `end`(기본 `top-start`), `offset` 은 `[x, y]` CSS px(기본 `[0, 0]`). 기준 상자는 `<Focus>` 가 있으면 그것, 없으면 루트다.
 - 뷰가 던지면 그 노드 자리에만 오류 상자가 선다 — 다른 노드는 그려진다. 갤러리에서 보인다.
+- **`Placeholder` 는 사람이 정한 그리기 값(크기 · 바탕 · 테두리 색 · 모서리 · 글 색 · 글 크기 · 여백)을 따른다.** 제 뷰로 그리면
+  `placeholderVars(props)` 를 `Root` 의 `style` 에 싣는다 — 값이 `--wb-node-placeholder-<이름>`(`width` · `height` · `background` ·
+  `border-color` · `radius` · `font-size` · `padding` · `color`) 변수로 선다. CSS 는 그 변수를 대체값과 함께 읽는다
+  (`background: var(--wb-node-placeholder-background, <테마의 바탕>)`). 변수를 안 읽고 덮으면 사람이 고른 색이 이 테마에서 사라진다 —
+  `wb-theme check` 가 뷰가 변수를 싣는지, `wb-theme shots` 가 계산된 색이 정한 값인지 잰다. 테두리 꼴 · 정렬은 표지
+  (`data-wb-border` · `data-wb-align`)다. 몸통(자식)이 있으면 라벨 대신 몸통을 그린다.
 
 ## 토큰
 
@@ -137,9 +143,9 @@ export const ListView = view(({ props, variant, states, children }) => {
 
 `sdk` 는 이 테마가 기대는 `@wirebound/theme-sdk` 의 판이다. 업로드할 때 wirebound 의 SDK 판과 견준다.
 
-- `^1.3.0` — major 가 같고 1.3.0 이상(구역 — `zones` · `items` · `Zone` — 이 든 판). **0.x 에서도 major 만 본다** — `^0.3.0` 은 `0.9.0` 을 받는다(npm 은 `<0.4.0` 으로 읽는다).
-- `~1.3.0` — major.minor 가 같고 1.3.0 이상.
-- `1.3.0` — 그 판만.
+- `^1.5.0` — major 가 같고 1.5.0 이상(자리표시자의 그리기 값 — `placeholderVars` — 이 든 판). **0.x 에서도 major 만 본다** — `^0.3.0` 은 `0.9.0` 을 받는다(npm 은 `<0.4.0` 으로 읽는다).
+- `~1.5.0` — major.minor 가 같고 1.5.0 이상.
+- `1.5.0` — 그 판만.
 
 ## 하지 않는 것
 

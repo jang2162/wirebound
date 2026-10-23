@@ -76,7 +76,8 @@ const COMPONENT_SUMMARIES: Record<string, string> = {
   Text: 'Headings and body text; `role` sets the size.',
   Media: 'A slot for an image, video, illustration or chart.',
   Divider: 'A line that separates content.',
-  Placeholder: 'An area not designed yet; only reserves space.',
+  Placeholder:
+    'Draws what the catalog lacks (a chip, a badge, a banner) or reserves an undesigned area. The only component whose props carry drawing values (size, colors, border, text, padding); empty values follow the theme. Children (body zone) replace the label.',
 }
 
 /** 노드 필드 → 영어 한 줄. 키가 `WbNodeSchema` 의 키와 같아야 한다. */
@@ -347,6 +348,9 @@ function renderComponent(line: Line, def: ComponentDef): void {
 }
 
 function propType(prop: JsonSchema): string {
+  if (prop.anyOf !== undefined) return prop.anyOf.map(propType).join(' | ')
+  if (prop.const !== undefined) return JSON.stringify(prop.const)
+  if (prop.type === 'string' && prop.pattern !== undefined) return `string matching \`${prop.pattern}\``
   if (prop.enum !== undefined) return prop.enum.map((value) => JSON.stringify(value)).join(' | ')
   if (prop.type === 'integer' || prop.type === 'number') return `${prop.type}${range(prop)}`
   if (prop.type === 'array') {
@@ -387,6 +391,8 @@ interface JsonSchema {
   required?: string[]
   items?: JsonSchema
   oneOf?: JsonSchema[]
+  anyOf?: JsonSchema[]
+  pattern?: string
 }
 
 /**

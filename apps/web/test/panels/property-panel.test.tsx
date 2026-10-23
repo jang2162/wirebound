@@ -148,10 +148,10 @@ const BROKEN_TYPE_DOC = pageDoc({
 })
 
 /** 위젯이 있는 control. */
-const WIDGET_CONTROLS: EditorControl[] = ['text', 'textarea', 'number', 'switch', 'select', 'stringList', 'pairList']
+const WIDGET_CONTROLS: EditorControl[] = ['text', 'textarea', 'number', 'switch', 'select', 'stringList', 'pairList', 'color']
 /**
  * 위젯이 없어 `formatValue`가 글자로만 그리는 control. **비어 있다** —
- * 위젯이 일곱을 전부 덮는다. 카탈로그에 여덟 번째가 생기면 아래 대조가 그것을 잡는다.
+ * 위젯이 여덟을 전부 덮는다. 카탈로그에 아홉 번째가 생기면 아래 대조가 그것을 잡는다.
  */
 const NOT_YET: EditorControl[] = []
 
@@ -161,7 +161,7 @@ function catalogControls(): Set<EditorControl> {
 }
 
 /**
- * control 종류마다 그것을 쓰는 카탈로그 자리 하나씩. **일곱을 전부 짚는다** — 위
+ * control 종류마다 그것을 쓰는 카탈로그 자리 하나씩. **여덟을 전부 짚는다** — 위
  * `catalogControls()`와의 대조가 그 사실을 지킨다.
  */
 const CONTROL_SAMPLES: { control: EditorControl; type: string; label: string }[] = [
@@ -172,6 +172,7 @@ const CONTROL_SAMPLES: { control: EditorControl; type: string; label: string }[]
   { control: 'select', type: 'Field', label: '입력 종류' },
   { control: 'stringList', type: 'List', label: '컬럼' },
   { control: 'pairList', type: 'KeyValue', label: '키-값' },
+  { control: 'color', type: 'Placeholder', label: '바탕색' },
 ]
 
 /** 위 표가 짚는 자리를 전부 담은 문서. `DOC`을 건드리지 않는 것은 다른 케이스가 그것에 매여 있어서다. */
@@ -187,6 +188,7 @@ const CONTROLS_DOC = pageDoc({
     { id: 'n-text', type: 'Text', props: { content: '문단', role: 'body' } },
     { id: 'n-list', type: 'List', props: { columns: ['이름'], items: 3 } },
     { id: 'n-kv', type: 'KeyValue', props: { pairs: [{ key: 'k', value: 'v' }] } },
+    { id: 'n-ph', type: 'Placeholder', props: { background: '#2563eb' } },
   ],
 })
 
@@ -370,16 +372,16 @@ describe('속성 패널', () => {
     expect(propRows()).toHaveLength(0)
   })
 
-  it('카탈로그의 control 일곱에 전부 대응하는 위젯이 있다', async () => {
+  it('카탈로그의 control 여덟에 전부 대응하는 위젯이 있다', async () => {
     // **경계는 "control마다 위젯이 있다"이다.**
     //
-    // **그 "일곱"은 아래에서 세어 나온 값이다.** `NOT_YET`이 비어 있는 것이 전부 덮였다는
+    // **그 "여덟"은 아래에서 세어 나온 값이다.** `NOT_YET`이 비어 있는 것이 전부 덮였다는
     // 표시이고, 카탈로그에 새 control이 생기면 두 목록의 합이
     // 어긋나 여기서 죽는다.
     await openPage(CONTROLS_DOC)
 
     // **분모를 손으로 적지 않는다.** 카탈로그가 실제로 쓰는 control 집합을 세어
-    // 두 목록의 합과 맞춘다 — 카탈로그에 여덟 번째 control이 생기면 여기서 죽는다.
+    // 두 목록의 합과 맞춘다 — 카탈로그에 아홉 번째 control이 생기면 여기서 죽는다.
     expect(new Set([...WIDGET_CONTROLS, ...NOT_YET])).toEqual(catalogControls())
 
     for (const { control, type, label } of CONTROL_SAMPLES) {

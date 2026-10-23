@@ -688,18 +688,30 @@
   width: 1px;
   min-height: 1.5em;
 }
+/*
+ * 자리표시자 — 사람이 정한 그리기 값은 노드 변수(`--wb-node-placeholder-*`)로 온다. 테마의 값은 그 변수의 대체값으로만 둔다 — 변수를 안 읽고
+ * 덮으면 사람이 고른 색이 이 테마에서 사라진다(`wb-theme shots` 가 잰다). 배치(가로 줄 세우기 · 정렬 · 빈 칸의 최소 높이)는 SDK 기본 CSS 다.
+ */
 [data-wb-component="Placeholder"][data-wb-structure="default"] {
-  background: var(--wb-semantic-canvas);
+  background: var(--wb-node-placeholder-background, var(--wb-semantic-canvas));
   border-width: 1px;
   border-style: dashed;
-  border-color: var(--wb-semantic-borderStrong);
-  border-radius: var(--wb-radius-md);
-  color: var(--wb-semantic-textMuted);
-  font-size: var(--wb-typography-caption-fontSize);
+  border-color: var(--wb-node-placeholder-border-color, var(--wb-semantic-borderStrong));
+  border-radius: var(--wb-node-placeholder-radius, var(--wb-radius-md));
+  color: var(--wb-node-placeholder-color, var(--wb-semantic-textMuted));
+  font-size: var(--wb-node-placeholder-font-size, var(--wb-typography-caption-fontSize));
   line-height: var(--wb-typography-caption-lineHeight);
   font-weight: var(--wb-typography-caption-fontWeight);
-  display: grid;
-  place-items: center;
+}
+[data-wb-component="Placeholder"][data-wb-border="solid"] {
+  border-style: solid;
+}
+[data-wb-component="Placeholder"][data-wb-border="none"] {
+  border-style: none;
+}
+/* 안에 둔 글은 자리표시자의 글 색을 받는다 — 칩 · 배지를 지으면 그 글이 바탕색 위의 글 색으로 선다. */
+[data-wb-component="Placeholder"] > [data-wb-part="content"] > [data-wb-component="Text"][data-wb-structure="default"] {
+  color: inherit;
 }
 
 /* ── 좁은 폭 ──────────────────────────────────────────────────────────── */
