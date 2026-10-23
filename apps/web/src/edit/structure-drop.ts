@@ -8,10 +8,10 @@
  *
  * | 포인터 밑 | 띠 | 결과 |
  * |---|---|---|
- * | 자식을 받는 컴포넌트(카탈로그 `children: 'many'` · `acceptsChildren`) | 안 | 그 노드의 마지막 자식 |
+ * | 자식을 받는 컴포넌트(카탈로그가 몸통을 선언 · `acceptsChildren`) | 안 | 그 노드의 몸통 마지막 자식 |
  * | 자식을 안 받는 컴포넌트 | 안 | `null` |
  * | 부모가 자식을 안 받는 노드(검증 전 문서) | 앞 · 뒤 | `null` — 형제 자리는 그 부모 «안» 이다 |
- * | 뿌리 아닌 노드 | 앞 · 뒤 | 그 노드의 형제(그 앞 · 뒤) |
+ * | 뿌리 아닌 노드 | 앞 · 뒤 | 그 노드의 형제(그 앞 · 뒤) — 그 노드가 선 구역 안이다(구역 안 노드면 그 구역) |
  * | 뿌리 | 앞 · 뒤 | `null` — 뿌리는 형제가 없다 |
  * | 끄는 노드 자신 · 그 자손 | 어느 띠든 | `null` |
  * | 끄는 노드가 뿌리 | — | `null` — 뿌리는 옮기지 않는다 |
@@ -34,19 +34,29 @@
  *
  * **`why` 를 주면 `null` 의 까닭을 한 번 부른다** — 끌기 진단 줄(`drag/drag-debug.ts`)에만 쓰고 답은 안 바꾼다. 꺼진 판은 안 준다.
  */
-import type { NodeLock, PageDocument, PatchOp, WbNode } from '@wirebound/schema'
+import { BODY_ZONE, type NodeLock, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
 import type { DropMiss } from '../drag/drag-debug'
 import type { DropBand } from '../tree/tree-drop'
 import { createNode } from './create-node'
 import { insertNodeOps, moveNodeOps } from './ops'
 import { walkSafely, type SafeVisit } from './safe-walk'
-import { acceptsChildren } from './structure-actions'
+import { acceptsChildren, acceptsIn } from './structure-actions'
 
-/** 놓을 자리. `placement`는 표시가 설 띠다. */
+/** 놓을 자리. `placement`는 표시가 설 띠다. `zone` 은 부모의 그 구역이다 — 몸통이면 키가 없다. */
 export interface StructureDrop {
   parentId: string
+  zone?: string
   index: number
   placement: DropBand
+}
+
+/** 자리의 구역 — 키가 없으면 몸통. */
+export function dropZoneOf(drop: StructureDrop): string {
+  return drop.zone ?? BODY_ZONE
+}
+
+function drop(parentId: string, zone: string, index: number, placement: DropBand): StructureDrop {
+  return zone === BODY_ZONE ? { parentId, index, placement } : { parentId, zone, index, placement }
 }
 
 /**
@@ -75,15 +85,19 @@ export function structureDropTarget(
   if (over === null) return miss(why, 'target-not-in-document')
 
   let parentId: unknown
+  let zone: string
   let insertAt: number
   if (band === 'inside') {
+    // 노드의 «안» 은 몸통이다 — 몸통이 없는 노드(구역만 있는 목록)는 «안» 이 없다.
     if (!acceptsChildren(over.node)) return miss(why, 'not-container')
     parentId = over.node.id
+    zone = BODY_ZONE
     insertAt = Array.isArray(over.node.children) ? over.node.children.length : 0
   } else {
     if (over.parent === null) return miss(why, 'root-has-no-siblings')
-    // 형제 자리는 부모 «안» 이다 — 부모가 자식을 안 받으면(검증 전 문서 · 카탈로그가 바뀐 옛 문서) 못 놓는다.
-    if (!acceptsChildren(over.parent)) return miss(why, 'parent-not-container')
+    // 형제 자리는 부모의 그 구역 «안» 이다 — 부모가 그 구역에 자식을 안 받으면(검증 전 문서 · 카탈로그가 바뀐 옛 문서) 못 놓는다.
+    zone = over.zone ?? BODY_ZONE
+    if (!acceptsIn(over.parent, zone)) return miss(why, 'parent-not-container')
     parentId = over.parent.id
     insertAt = band === 'before' ? over.index : over.index + 1
   }
@@ -92,10 +106,10 @@ export function structureDropTarget(
   if (placing.kind === 'new' || placing.kind === 'module') {
     const probe = probeNode(placing)
     if (probe === null) return miss(why, 'unknown-type')
-    const ops = insertNodeOps(document, parentId, insertAt, probe)
+    const ops = insertNodeOps(document, parentId, insertAt, probe, zone)
     if (ops === null) return miss(why, 'ops-unbuildable')
     if (blockedBy(ops) !== null) return miss(why, 'locked')
-    return { parentId, index: insertAt, placement: band }
+    return drop(parentId, zone, insertAt, band)
   }
 
   const draggedId = placing.id
@@ -104,14 +118,15 @@ export function structureDropTarget(
   if (dragged === null || dragged.parent === null) return miss(why, 'target-not-in-document')
   if (contains(dragged.node, overId)) return miss(why, 'into-own-subtree')
 
-  const sameParent = parentId === dragged.parent.id
-  const index = sameParent && dragged.index < insertAt ? insertAt - 1 : insertAt
-  if (sameParent && index === dragged.index) return miss(why, 'same-place')
+  // 같은 줄(부모 · 구역)이어야 «제 몫을 하나 당긴다» — 같은 부모의 다른 구역으로 옮기면 뺀 배열이 다르다.
+  const sameList = parentId === dragged.parent.id && zone === (dragged.zone ?? BODY_ZONE)
+  const index = sameList && dragged.index < insertAt ? insertAt - 1 : insertAt
+  if (sameList && index === dragged.index) return miss(why, 'same-place')
 
-  const ops = moveNodeOps(document, draggedId, parentId, index)
+  const ops = moveNodeOps(document, draggedId, parentId, index, zone)
   if (ops === null) return miss(why, 'ops-unbuildable')
   if (blockedBy(ops) !== null) return miss(why, 'locked')
-  return { parentId, index, placement: band }
+  return drop(parentId, zone, index, band)
 }
 
 /**
@@ -119,7 +134,9 @@ export function structureDropTarget(
  * 빈 모듈 · 모르는 타입이면 `null`.
  */
 export function probeNode(placing: Exclude<Placing, { kind: 'node' }>, id = PROBE_ID): WbNode | null {
-  if (placing.kind === 'new') return createNode(placing.type, () => id)
+  // 기본 내용(검색폼의 단추 · 탭의 패널)도 짓는다 — 그 노드의 id 는 표본 id 뒤에 차례를 붙인다(겹치지 않게).
+  let made = 0
+  if (placing.kind === 'new') return createNode(placing.type, () => (made++ === 0 ? id : `${id}-${made - 1}`))
   const first = placing.nodes[0]
   return first === undefined ? null : { id, type: first.type }
 }
@@ -149,7 +166,7 @@ export function pageEndTarget(
  * **같은 자리인가** — 보인 자리와 다시 물은 자리를 견준다. 끌기 장치의 «놓는 답은 보인 답이다»(`drag/use-pointer-drag.ts` 의 `sameDrop`
  * — 구조 트리 줄 끌기 · 캔버스 손잡이)와 경로 층의 보인 자리 다시 판정(`drag/use-placement.ts` 의 `holds`)이 같은 이 함수다.
  *
- * **부모만 견준다.** 띠 · 차례는 안 본다 — 놓을 때 부르는 쪽이 지금 문서로 그 자리를 다시 판정하므로(`drag/use-placement.ts` 의 `onDrop`)
+ * **부모와 구역만 견준다.** 띠 · 차례는 안 본다 — 놓을 때 부르는 쪽이 지금 문서로 그 자리를 다시 판정하므로(`drag/use-placement.ts` 의 `onDrop`)
  * 차례는 **지금 문서를 따라간다**. 남이 형제를 넣거나 빼 차례가 밀려도 · 넣은 칸이 포인터 밑으로 밀려 와 «안» 이 «그 칸 뒤» 로 바뀌어도(같은
  * 그리드 끝) 같은 부모 안의 자리라 표시도 놓기도 새 자리를 따라가고, 부모가 다르면(포인터 밑에 다른 상자가 온 판 · 보인 노드가 다른 부모로
  * 옮겨진 판) 다른 자리다 — 보인 상자가 아닌 곳으로 놓지 않는다.
@@ -159,7 +176,7 @@ export function pageEndTarget(
  * 포인터가 멈춰 있으면 보인 자리가 곧 놓는 자리다.
  */
 export function sameDrop(a: StructureDrop, b: StructureDrop): boolean {
-  return a.parentId === b.parentId
+  return a.parentId === b.parentId && dropZoneOf(a) === dropZoneOf(b)
 }
 
 /**
@@ -168,10 +185,10 @@ export function sameDrop(a: StructureDrop, b: StructureDrop): boolean {
  * 편집은 넣을 노드를 다시 지은 뒤 `palette/module-insert.ts` 가 짓는다(`Placing` 머리말).
  */
 export function dropOps(document: PageDocument, placing: Placing, drop: StructureDrop, node?: WbNode): PatchOp[] | null {
-  if (placing.kind === 'node') return moveNodeOps(document, placing.id, drop.parentId, drop.index)
+  if (placing.kind === 'node') return moveNodeOps(document, placing.id, drop.parentId, drop.index, dropZoneOf(drop))
   if (placing.kind === 'module') return null
   if (node === undefined || node.type !== placing.type) return null
-  return insertNodeOps(document, drop.parentId, drop.index, node)
+  return insertNodeOps(document, drop.parentId, drop.index, node, dropZoneOf(drop))
 }
 
 function findVisit(document: PageDocument, nodeId: string): SafeVisit | null {

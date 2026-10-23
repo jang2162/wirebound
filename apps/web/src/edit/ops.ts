@@ -12,6 +12,7 @@
  */
 import {
   applyOps,
+  BODY_ZONE,
   getByPointer,
   tidyAlias,
   WEIGHT_MAX,
@@ -21,10 +22,11 @@ import {
   type PageDocument,
   type PatchOp,
   type WbNode,
+  zonePointer,
 } from '@wirebound/schema'
 // **schema의 `findNodePath`·`findNode`·`walkNodes`를 쓰지 않는다.** 셋 다 `walkNodes`를
-// 지나고 그것이 `children` 배열 안의 `null` 원소에서 던진다 — 이 파일의 계약("던지지
-// 않는다")이 거기서 깨진다(`./safe-walk.ts` 머리말에 실측).
+// 지나고 그것은 자식 줄 안의 `null` 원소를 노드로 낸다 — 이 파일의 계약("던지지
+// 않는다")이 거기서 깨진다(`./safe-walk.ts` 머리말).
 import { findNodePathSafely, findNodeSafely, walkSafely } from './safe-walk'
 
 /**
@@ -243,42 +245,66 @@ export function interactionsOps(document: PageDocument, nodeId: string, interact
 }
 
 /**
- * 새 노드를 부모의 `children` 안 `index` 자리에 넣는 op. 넣을 수 없으면 `null`이다.
+ * 새 노드를 부모의 구역(`zone` — 기본 몸통 `body`) 안 `index` 자리에 넣는 op. 넣을 수 없으면 `null`이다.
  *
- * **`children` 키가 없는 부모에는 배열째 넣는다 — `propOps`의 첫 갈래와 같은 성질이고
+ * **그 구역의 배열이 없는 부모에는 배열째 넣는다 — `propOps`의 첫 갈래와 같은 성질이고
  * 실측했다.** `children`이 없는 노드에 `add /…/children/0`을 주면 `applyOps`의
  * `resolveSlot`이 마지막 토큰만 남기고 따라 내려가다 `parent`를 `undefined`로 만들어
  * `경로를 찾을 수 없습니다`로 던진다(실측). 그러면 로컬 적용이 던진 편집은 나가지 않으므로 **빈 컨테이너에
  * 첫 자식을 넣는 편집이 아예 나가지 못한다.** 그 배열째 `add`의 `inverse`는
- * `[remove /…/children]` 하나다(실측) — undo가 키까지 지워 원본과 완전히 같아진다.
+ * `[remove /…/children]` 하나다(실측) — undo가 키까지 지워 원본과 완전히 같아진다. 이름 붙은 구역은 한 단계가 더 있다 —
+ * `zones` 맵이 없으면 `add …/zones { <이름>: [노드] }`, 맵은 있고 그 구역이 없으면 `add …/zones/<이름> [노드]`.
  *
  * `null`을 내는 자리 넷:
  *
  * | 조건 | 왜 |
  * |---|---|
  * | 부모가 문서에 없다 | 보낼 경로가 없다 |
- * | `children`이 없는데 `index`가 0이 아니다 | 배열을 통째로 놓는 것이라 "1번 자리"가 없다 |
- * | `index`가 `0…children.length` 밖이다 | `applyOps`가 `배열 인덱스가 범위를 벗어납니다`로 던진다(실측) |
- * | `children`이 배열도 `undefined`도 아니다 | 아래 참조 |
+ * | 구역 배열이 없는데 `index`가 0이 아니다 | 배열을 통째로 놓는 것이라 "1번 자리"가 없다 |
+ * | `index`가 `0…길이` 밖이다 | `applyOps`가 `배열 인덱스가 범위를 벗어납니다`로 던진다(실측) |
+ * | 구역 배열 · `zones` 맵이 제 꼴(배열 · 객체)도 `undefined`도 아니다 | 아래 참조 |
  *
  * 마지막 줄은 **깨진 문서를 조용히 덮지 않기 위해서다.** 실측: `children`이 문자열인
  * 노드에 배열째 `add`를 주면 던지지 않고 그 문자열을 배열로 갈아 끼운다(`addAt`이
  * 객체 부모에서는 키 할당이라서다). `propOps`가 `props`에 대해 내린 것과 같은 판단이다.
  */
-export function insertNodeOps(document: PageDocument, parentId: string, index: number, node: WbNode): PatchOp[] | null {
+export function insertNodeOps(
+  document: PageDocument,
+  parentId: string,
+  index: number,
+  node: WbNode,
+  zone: string = BODY_ZONE,
+): PatchOp[] | null {
   const parentPath = findNodePathSafely(document.root, parentId)
   if (parentPath === undefined) return null
 
-  const childrenPath = `${parentPath}/children`
-  const children = getByPointer(document, childrenPath)
+  const slot = zoneSlot(document, parentPath, zone)
+  if (slot === null) return null
+  if (slot.list === undefined) return index === 0 ? [slot.create([node])] : null
+  if (!Number.isInteger(index) || index < 0 || index > slot.list.length) return null
 
-  if (children === undefined) {
-    return index === 0 ? [{ op: 'add', path: childrenPath, value: [node] }] : null
-  }
-  if (!Array.isArray(children)) return null
-  if (!Number.isInteger(index) || index < 0 || index > children.length) return null
+  return [{ op: 'add', path: `${slot.path}/${index}`, value: node }]
+}
 
-  return [{ op: 'add', path: `${childrenPath}/${index}`, value: node }]
+/**
+ * 부모의 한 구역 자리 — 배열의 경로와 지금 배열(없으면 `undefined`), 그리고 배열이 없을 때 그 배열째 놓는 `add`. 꼴이 깨졌으면 `null`
+ * (`insertNodeOps` 표의 마지막 줄). `doc` 은 그 경로를 읽을 문서다.
+ */
+function zoneSlot(
+  doc: unknown,
+  parentPath: string,
+  zone: string,
+): { path: string; list: unknown[] | undefined; create: (value: WbNode[]) => PatchOp } | null {
+  const path = `${parentPath}${zonePointer(zone)}`
+  const list = getByPointer(doc, path)
+  if (Array.isArray(list)) return { path, list, create: (value) => ({ op: 'add', path, value }) }
+  if (list !== undefined) return null
+  if (zone === BODY_ZONE) return { path, list: undefined, create: (value) => ({ op: 'add', path, value }) }
+  const zones = getByPointer(doc, `${parentPath}/zones`)
+  if (zones === undefined)
+    return { path, list: undefined, create: (value) => ({ op: 'add', path: `${parentPath}/zones`, value: { [zone]: value } }) }
+  if (typeof zones !== 'object' || zones === null || Array.isArray(zones)) return null
+  return { path, list: undefined, create: (value) => ({ op: 'add', path, value }) }
 }
 
 /**
@@ -301,8 +327,8 @@ export function removeNodeOps(document: PageDocument, nodeId: string): PatchOp[]
 }
 
 /**
- * 노드를 다른 부모의 `index` 자리로 옮기는 op. 같은 부모 안 순서 변경도 이것이다.
- * 옮길 수 없으면 `null`이다.
+ * 노드를 다른 부모의 구역(`zone` — 기본 몸통) `index` 자리로 옮기는 op. 같은 부모 안 순서 변경 · 같은 부모의 다른 구역으로 옮기기도
+ * 이것이다(`move` 하나). 옮길 수 없으면 `null`이다.
  *
  * **`index`는 결과 배열에서 그 노드가 놓일 자리다.** `move`가 remove 후 add이므로 목적지
  * 인덱스는 **값을 뺀 배열**을 기준으로 읽히고(실측: `[A,B,C]`에서 A를 인덱스 2로 옮기면
@@ -315,7 +341,7 @@ export function removeNodeOps(document: PageDocument, nodeId: string): PatchOp[]
  * `applyOps`가 `경로를 찾을 수 없습니다`로 던지고(실측) 편집이 나가지 않는다. 이
  * 보정은 "같은 배열 안에서 뒤로 옮길 때"만의 일이 아니다 — **부모가 다를 때도 난다.**
  *
- * **목적지에 `children` 키가 없으면 빈 배열을 먼저 놓는다**(`insertNodeOps`의 같은 갈래와
+ * **목적지에 그 구역의 배열이 없으면 빈 배열을 먼저 놓는다**(`insertNodeOps`의 같은 갈래와
  * 같은 원인 — 실측으로 던지는 것을 봤다). 그때만 op이 둘이 되고, **그 둘의 경로 기준이
  * 다르다**: `add`는 첫 op이라 원본 문서 기준이고 `move`의 `path`는 remove가 지나간 뒤
  * 기준이다. 한쪽으로 통일하면 둘 중 하나가 다른 노드를 가리킨다(테스트가 그 두 값이
@@ -328,14 +354,20 @@ export function removeNodeOps(document: PageDocument, nodeId: string): PatchOp[]
  *
  * `null`을 내는 자리: 노드가 없거나 루트다 · 부모가 없다 · **자기 자신이나 자기 자손을
  * 부모로 삼는다**(그 op은 `applyOps`가 던진다 — 아래) · 인덱스가 범위 밖이다 ·
- * 목적지 `children`이 배열이 아니다.
+ * 목적지 구역이 배열이 아니다.
  *
  * **자손 판정이 막는 것은 "끊어진 트리"가 아니다.** `move`가 `from`을 먼저 빼므로 목적지 경로가 그 순간 문서에서
  * 사라지고 `applyOps`가 `경로를 찾을 수 없습니다`로 던진다. 즉 이 판정의 값어치는
  * **적용해 보기 전에 끊는 것**이고, 그마저도 `EditorStore.applyEdit`의 `try/catch`가
  * 뒤에서 잡는다(`test/edit/ops.test.ts`의 `자손을 부모로 주면 null이다 —`).
  */
-export function moveNodeOps(document: PageDocument, nodeId: string, parentId: string, index: number): PatchOp[] | null {
+export function moveNodeOps(
+  document: PageDocument,
+  nodeId: string,
+  parentId: string,
+  index: number,
+  zone: string = BODY_ZONE,
+): PatchOp[] | null {
   const from = findNodePathSafely(document.root, nodeId)
   if (from === undefined || from === ROOT_PATH) return null
 
@@ -368,19 +400,19 @@ export function moveNodeOps(document: PageDocument, nodeId: string, parentId: st
   const parentPathAfter = findNodePathSafely(afterRemove.root, parentId)
   if (parentPathAfter === undefined) return null
 
-  const children = getByPointer(afterRemove, `${parentPathAfter}/children`)
+  const slot = zoneSlot(afterRemove, parentPathAfter, zone)
+  if (slot === null) return null
 
-  if (children === undefined) {
+  if (slot.list === undefined) {
     if (index !== 0) return null
-    return [
-      { op: 'add', path: `${parentPathBefore}/children`, value: [] },
-      { op: 'move', from, path: `${parentPathAfter}/children/0` },
-    ]
+    // 빈 배열을 놓는 `add` 는 첫 op 이라 원본 문서의 경로로 짓는다(위 머리말 — 두 op 의 경로 기준이 다르다).
+    const before = zoneSlot(document, parentPathBefore, zone)
+    if (before === null || before.list !== undefined) return null
+    return [before.create([]), { op: 'move', from, path: `${slot.path}/0` }]
   }
-  if (!Array.isArray(children)) return null
-  if (!Number.isInteger(index) || index < 0 || index > children.length) return null
+  if (!Number.isInteger(index) || index < 0 || index > slot.list.length) return null
 
-  return [{ op: 'move', from, path: `${parentPathAfter}/children/${index}` }]
+  return [{ op: 'move', from, path: `${slot.path}/${index}` }]
 }
 
 /**

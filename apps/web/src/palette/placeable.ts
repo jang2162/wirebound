@@ -10,12 +10,16 @@
  * **`validatePage`를 실제로 돌려** 한다. 이름으로 거르면 카탈로그에 같은 성질의 타입이 생길 때 어긋난다.
  */
 import {
+  BODY_ZONE,
+  CURRENT_DOCUMENT_VERSION,
+  hasBody,
   COMPONENT_GROUPS,
   COMPONENT_GROUP_LABELS,
   listComponents,
   validatePage,
   type ComponentGroup,
   type PageDocument,
+  type WbNode,
 } from '@wirebound/schema'
 import { createNode } from '../edit/create-node'
 import '../catalog-setup'
@@ -50,11 +54,19 @@ export function placeableGroups(): PickableGroup[] {
   const buckets = new Map<string, PickableType[]>()
 
   for (const def of listComponents()) {
-    const node = createNode(def.type, () => 'n-probe')
+    // 기본 내용의 노드도 id 가 겹치지 않게 차례를 붙인다 — 겹치면 `duplicate-id` 로 그 타입이 판에서 빠진다.
+    let made = 0
+    const node = createNode(def.type, () => `n-probe-${made++}`)
     if (node === null) continue
+    // 설 자리가 정해진 타입(`TabPanel`)은 그 자리(부모 타입의 그 구역)에 놓아 재 본다 — 뿌리에 두면 `misplaced-component` 로 늘 빠진다.
+    const host = def.placement
+    const placed: WbNode =
+      host === undefined
+        ? node
+        : { id: 'n-probe-host', type: host.type, ...(host.zone === BODY_ZONE ? { children: [node] } : { zones: { [host.zone]: [node] } }) }
     const probe: PageDocument = {
-      version: 1,
-      root: { id: 'n-probe-root', type: 'Page', children: [node] },
+      version: CURRENT_DOCUMENT_VERSION,
+      root: { id: 'n-probe-root', type: 'Page', children: [placed] },
     }
     if (validatePage(probe).length > 0) continue
 
@@ -63,7 +75,7 @@ export function placeableGroups(): PickableGroup[] {
       type: def.type,
       label: def.label,
       description: def.description,
-      many: def.children === 'many',
+      many: hasBody(def.type),
     })
     buckets.set(def.group, bucket)
   }

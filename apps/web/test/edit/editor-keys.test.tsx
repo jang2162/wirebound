@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import type { PatchOp } from '@wirebound/schema'
 import type { ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
-import { readNodesEnvelope, writeNodesEnvelope, type WbNode } from '@wirebound/schema'
+import { CURRENT_DOCUMENT_VERSION, readNodesEnvelope, writeNodesEnvelope, type WbNode } from '@wirebound/schema'
 import { CLIPBOARD_SHORTCUT_LINES, EDITOR_SHORTCUTS, platformOf } from '../../src/edit/editor-shortcuts'
 import { droppedActionsNotice } from '../../src/edit/paste-ops'
 import { PASTE_REJECTED_HEAD } from '../../src/shell/editor-keys'
@@ -405,7 +405,7 @@ describe('클립보드 · 복제 — 셸', () => {
     const srv = server()
     await openPage(doc(), { apiOverrides: srv.api })
     fireEvent.click(row('Card'))
-    const unknown = writeNodesEnvelope([{ id: 'x', type: 'NoSuchType' }] as WbNode[], 1)
+    const unknown = writeNodesEnvelope([{ id: 'x', type: 'NoSuchType' }] as WbNode[], CURRENT_DOCUMENT_VERSION)
     expect(clip('paste', document.body, unknown).prevented).toBe(true)
     await waitFor(() => expect(infoTexts()).toEqual([`${PASTE_REJECTED_HEAD} 알 수 없는 컴포넌트 타입: NoSuchType`]))
     expect(alertTexts()).toEqual([])
@@ -419,7 +419,7 @@ describe('클립보드 · 복제 — 셸', () => {
             { id: 'y', type: 'Text' },
             { id: 'y', type: 'Text' },
           ] as WbNode[],
-          1,
+          CURRENT_DOCUMENT_VERSION,
         ),
       ).prevented,
     ).toBe(true)
@@ -438,7 +438,7 @@ describe('클립보드 · 복제 — 셸', () => {
       type: 'Button',
       interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n-elsewhere', value: true }] }],
     }
-    clip('paste', document.body, writeNodesEnvelope([button], 1))
+    clip('paste', document.body, writeNodesEnvelope([button], CURRENT_DOCUMENT_VERSION))
     await waitFor(() => expect(infoTexts()).toEqual([droppedActionsNotice(1)]))
     expect(alertTexts()).toEqual([])
 
@@ -466,7 +466,7 @@ describe('클립보드 · 복제 — 셸', () => {
         },
       ],
     }
-    clip('paste', document.body, writeNodesEnvelope([button], 1))
+    clip('paste', document.body, writeNodesEnvelope([button], CURRENT_DOCUMENT_VERSION))
 
     await waitFor(() => expect(srv.calls).toHaveLength(1))
     const pasted = (srv.calls[0]![0] as { value: WbNode }).value

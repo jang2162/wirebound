@@ -6,6 +6,7 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
+  CURRENT_DOCUMENT_VERSION,
   WIREBOUND_PAGE_VERSION,
   gatePageImport,
   inspectNodesEnvelope,
@@ -20,7 +21,10 @@ beforeAll(() => {
   installCatalog()
 })
 
-const DOC: PageDocument = { version: 1, root: { id: 'n-root', type: 'Page', children: [{ id: 'n-a', type: 'Text' }] } }
+const DOC: PageDocument = {
+  version: CURRENT_DOCUMENT_VERSION,
+  root: { id: 'n-root', type: 'Page', children: [{ id: 'n-a', type: 'Text' }] },
+}
 const WITH_PAGE: WbNode = { id: 'n-box', type: 'Flex', children: [{ id: 'n-inner', type: 'Page' }] }
 const PLAIN: WbNode = { id: 'n-box', type: 'Flex', children: [{ id: 'n-inner', type: 'Text' }] }
 
@@ -39,7 +43,7 @@ describe('새 중첩 Page 를 넣는 입구', () => {
     const file = (children: WbNode[]) => ({
       wireboundVersion: WIREBOUND_PAGE_VERSION,
       page: { title: '가져온 페이지', description: null },
-      schema: { version: 1, root: { id: 'n_file_root01', type: 'Page', children } },
+      schema: { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_file_root01', type: 'Page', children } },
       comments: [],
     })
     const refused = gatePageImport(file([{ id: 'n_file_page01', type: 'Page' }]))
@@ -49,10 +53,10 @@ describe('새 중첩 Page 를 넣는 입구', () => {
   })
 
   it('클립보드 봉투 읽기 — rejected · 그 문장 (대조: Page 가 없으면 읽는다)', () => {
-    expect(inspectNodesEnvelope(writeNodesEnvelope([WITH_PAGE], 1))).toEqual({
+    expect(inspectNodesEnvelope(writeNodesEnvelope([WITH_PAGE], CURRENT_DOCUMENT_VERSION))).toEqual({
       kind: 'rejected',
       reason: 'Page는 루트에만 둘 수 있습니다 — 페이지 안에 Page를 넣을 수 없습니다',
     })
-    expect(inspectNodesEnvelope(writeNodesEnvelope([PLAIN], 1)).kind).toBe('ok')
+    expect(inspectNodesEnvelope(writeNodesEnvelope([PLAIN], CURRENT_DOCUMENT_VERSION)).kind).toBe('ok')
   })
 })

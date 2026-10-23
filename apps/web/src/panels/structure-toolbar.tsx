@@ -15,14 +15,14 @@
  * 지나고, 그것이 노드가 아닌 값을 순회에서 뺀다. `@wirebound/schema`의 `walkNodes`를 여기서 다시 쓰면 그 전제가 깨진다 — `children` 배열 안의
  * `null` 원소 같은 것에서 던진다. **완전하다고는 적지 않는다** — 잰 것은 그 반례 부류(배열 원소가 노드가 아닌 경우)와 몇 가지 깨진 형태까지다.
  */
-import type { NodeLock } from '@wirebound/schema'
+import { zoneList, type NodeLock, type WbNode } from '@wirebound/schema'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { aliasOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { reselectAfterReject } from '../edit/reselect-after-reject'
 import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, selectionAbilities, type StructureAbilities } from '../edit/structure-actions'
 import { removeManyOps } from '../edit/paste-ops'
-import type { StructureDrop } from '../edit/structure-drop'
+import { dropZoneOf, type StructureDrop } from '../edit/structure-drop'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { lockedNotice } from './property-panel'
 import { structureWhy, type StructureReasonInput, type StructureWhy } from './toolbar-status'
@@ -209,11 +209,11 @@ export function useStructureCommands(props: {
     const spot = nodeSpot(document, selectedNodeId)
     if (spot === null) return
 
-    commitOps(moveNodeOps(document, selectedNodeId, spot.parentId, spot.index + delta))
+    commitOps(moveNodeOps(document, selectedNodeId, spot.parentId, spot.index + delta, spot.zone))
   }
 
   /**
-   * 한 단계 안으로 — **앞 형제의 마지막 자식**이 된다.
+   * 한 단계 안으로 — **앞 형제(같은 구역 안)의 몸통 마지막 자식**이 된다.
    *
    * 목적지 인덱스가 앞 형제의 `children` 길이인 것은 그 배열이 **소스를 빼는 것과
    * 무관하기 때문이다.** 노드는 부모의 배열에서 빠지고 앞 형제의 배열로 들어가므로,
@@ -237,7 +237,8 @@ export function useStructureCommands(props: {
     // **이 줄 자체도 지워도 죽는 케이스가 없다**: 첫 형제에서는 버튼이 비활성이라 클릭이 오지 않고,
     // 단축키는 `structureAbilities.indent`를 먼저 지난다. 둘 다 `disabled`/판정이 덮고
     // 있고, 여기 남은 것은 그 둘이 벗겨졌을 때의 `TypeError` 방벽이다.
-    const previous = parent?.children?.[spot.index - 1]
+    // 앞 형제는 그 노드가 선 구역 안의 것이다(`structureAbilities` 의 `indent` 와 같은 줄).
+    const previous = parent === undefined ? undefined : (zoneList(parent, spot.zone)[spot.index - 1] as WbNode | undefined)
     if (previous === undefined) return
 
     // **앞 형제의 `children`이 배열인지 여기서 보지 않는다.** `structureAbilities`의
@@ -248,7 +249,7 @@ export function useStructureCommands(props: {
   }
 
   /**
-   * 한 단계 밖으로 — **부모의 다음 형제**가 된다.
+   * 한 단계 밖으로 — **부모의 다음 형제**가 된다(부모가 선 구역 — 부모가 조부모의 머리 오른쪽에 섰으면 거기).
    *
    * 부모의 자리를 `nodeSpot`으로 한 번 더 읽는다. 그것이 `null`이면 부모가 루트라
    * 나갈 곳이 없다 — `structureAbilities`의 `outdent`와 같은 판정이지만, 여기서는
@@ -269,7 +270,7 @@ export function useStructureCommands(props: {
     const parentSpot = nodeSpot(document, spot.parentId)
     if (parentSpot === null) return
 
-    commitOps(moveNodeOps(document, selectedNodeId, parentSpot.parentId, parentSpot.index + 1))
+    commitOps(moveNodeOps(document, selectedNodeId, parentSpot.parentId, parentSpot.index + 1, parentSpot.zone))
   }
 
   const aliasLocked =
@@ -300,7 +301,7 @@ export function useStructureCommands(props: {
     moveDown: () => moveSelected(1),
     dropTo: (nodeId, target) => {
       if (document === null) return
-      commitOps(moveNodeOps(document, nodeId, target.parentId, target.index))
+      commitOps(moveNodeOps(document, nodeId, target.parentId, target.index, dropZoneOf(target)))
     },
     indent: indentSelected,
     outdent: outdentSelected,

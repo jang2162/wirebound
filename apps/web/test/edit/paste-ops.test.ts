@@ -187,7 +187,7 @@ describe('duplicateOps', () => {
             id: 'sec',
             type: 'Section',
             children: [
-              { id: 'tabs', type: 'Tabs' },
+              { id: 'tabs', type: 'Tabs', children: [{ id: 'panel', type: 'TabPanel' }] },
               {
                 id: 'btn',
                 type: 'Button',
@@ -195,7 +195,7 @@ describe('duplicateOps', () => {
                   {
                     on: 'click',
                     actions: [
-                      { type: 'switchTab', target: 'tabs', tab: 1 },
+                      { type: 'switchTab', target: 'panel' },
                       { type: 'setVisible', target: 'dlg', value: true },
                     ],
                   },
@@ -209,7 +209,7 @@ describe('duplicateOps', () => {
     const after = applied(withTargets, duplicateOps(withTargets, ['sec'], counter()))
     const copy = after.root.children![2]!
     const [tabsCopy, btnCopy] = copy.children!
-    expect(btnCopy!.interactions![0]!.actions.map((action) => action.target)).toEqual([tabsCopy!.id, 'dlg'])
+    expect(btnCopy!.interactions![0]!.actions.map((action) => action.target)).toEqual([tabsCopy!.children![0]!.id, 'dlg'])
     expect(validatePage(after)).toEqual([]) // 끊긴 대상(warning)도 없다
   })
 

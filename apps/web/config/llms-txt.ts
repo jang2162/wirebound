@@ -21,6 +21,7 @@
  * 싣지 않는다. 주소는 «이 파일을 낸 origin» 으로 말한다.
  */
 import {
+  BODY_ZONE,
   CATALOG_DEFS,
   COMPONENT_GROUPS,
   CURRENT_DOCUMENT_VERSION,
@@ -62,7 +63,8 @@ const COMPONENT_SUMMARIES: Record<string, string> = {
   Flex: 'Lays children out in one row or one column.',
   Grid: 'Lays children out on a fixed number of columns.',
   Card: 'A box that groups a title and its content.',
-  Tabs: 'Splits content into tabs and shows one at a time.',
+  Tabs: 'Splits content into tabs and shows one at a time. Each tab is a `TabPanel` child.',
+  TabPanel: 'One tab of a `Tabs`: its `label` is the tab head, its children are the tab content. Only valid in the body of a `Tabs`.',
   List: 'Many records as a table, cards or a list.',
   Tree: 'Hierarchical items that expand and collapse.',
   KeyValue: 'Label/value pairs, as on a detail screen.',
@@ -88,7 +90,9 @@ const NODE_FIELDS: Record<string, string> = {
   visibility: `\`{ mode: "only" | "except", states: [...] }\` — show the node only in (or hide it in) those view states and their descendants. \`"${DEFAULT_VIEW_STATE}"\` is the base screen. Omitted: visible in every state.`,
   marker: 'Comment number (positive integer). The server assigns it when the first comment lands on the node; do not invent one.',
   interactions: 'What happens on user events (see Interactions).',
-  children: 'Child nodes. Only components whose children are "many" take them.',
+  children: 'Child nodes in the body zone. Only components that declare a `body` zone take them.',
+  zones:
+    'Named child zones: `{ <zone name>: [nodes] }`. Only the zones a component declares (see the catalog); a missing key is an empty zone. Patch paths: `…/zones/<zone name>/<index>` (add a first node with `…/zones/<zone name>` and value `[node]`, or `…/zones` with `{ <zone name>: [node] }` when the node has no `zones`).',
 }
 
 /** 페이지 문서 필드 → 영어 한 줄. 키가 `PageEnvelopeSchema` 의 키와 같아야 한다. */
@@ -102,7 +106,7 @@ const PAGE_FIELDS: Record<string, string> = {
 const ACTIONS: Record<string, string> = {
   setProp: '`{ target: <node id>, prop, value }` — set a prop of another node.',
   setVisible: '`{ target: <node id>, value: boolean }` — show or hide a node.',
-  switchTab: '`{ target: <Tabs node id>, tab: <index> }` — switch a `Tabs` node.',
+  switchTab: '`{ target: <TabPanel node id> }` — open that tab of its parent `Tabs`.',
   navigate: `\`{ target: "${PAGE_TARGET_PREFIX}<menu path>" }\` — go to another page.`,
   openModal: `\`{ target: "${PAGE_TARGET_PREFIX}<menu path>" }\` — open another page as a modal.`,
 }
@@ -206,7 +210,7 @@ export function renderLlmsTxt(): string {
   line('## Component catalog')
   line()
   line(
-    'Every node `type` is one of these. Props are validated against the listed shapes; unknown props are rejected. "children: many" components hold child nodes, "children: none" do not. State props are booleans that switch a visual state of the component.',
+    'Every node `type` is one of these. Props are validated against the listed shapes; unknown props are rejected. Child nodes live in zones: the `body` zone is the node\'s `children`, every other zone is `zones.<name>`. A component with no zones holds no child nodes. Some zones accept only certain types, and some types stand only in one zone. "Create with" lists the nodes the editor puts in a new node — the server does not add them, so add them yourself when you create one. State props are booleans that switch a visual state of the component.',
   )
   line()
   renderCatalog(line)
@@ -306,10 +310,21 @@ function renderCatalog(line: Line): void {
   }
 }
 
+/** 구역 하나의 글 — 이름 · 화면 이름 · 받는 타입 · 기본 내용. */
+function zoneText(zone: ComponentDef['zones'][number]): string {
+  const where = zone.name === BODY_ZONE ? '`body` (children)' : `\`${zone.name}\` (zones.${zone.name})`
+  const accepts = zone.accepts === undefined ? '' : `, accepts only ${zone.accepts.map((type) => `\`${type}\``).join(', ')}`
+  const seeds = (zone.initial ?? []).map((seed) => `\`${seed.type}\`${seed.props === undefined ? '' : ` ${JSON.stringify(seed.props)}`}`)
+  return `${where} "${zone.label}"${accepts}${seeds.length === 0 ? '' : `, create with ${seeds.join(' + ')}`}`
+}
+
 function renderComponent(line: Line, def: ComponentDef): void {
   line(`#### ${def.type}`)
   line()
-  line(`${COMPONENT_SUMMARIES[def.type]} Editor label: ${def.label}. children: ${def.children}.`)
+  line(`${COMPONENT_SUMMARIES[def.type]} Editor label: ${def.label}.`)
+  line()
+  line(def.zones.length === 0 ? 'Zones: none.' : `Zones: ${def.zones.map(zoneText).join('; ')}.`)
+  if (def.placement !== undefined) line(`Stands only in the \`${def.placement.zone}\` zone of a \`${def.placement.type}\`.`)
   const props = schemaOf(def.props, 'input')
   const entries = Object.entries(props.properties ?? {})
   if (entries.length === 0) {

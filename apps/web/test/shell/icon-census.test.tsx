@@ -34,13 +34,13 @@ const DOC: PageDocument = pageDoc({
   id: 'n-root',
   type: 'Page',
   children: [
-    { id: 'n-tabs', type: 'Tabs', props: { tabs: ['개요', '상세'] } },
+    { id: 'n-list', type: 'List', props: { columns: ['개요', '상세'] } },
     {
       id: 'n-btn',
       type: 'Button',
       props: { label: '검색' },
       marker: 1,
-      interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n-tabs', value: false }] }],
+      interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n-list', value: false }] }],
     },
   ],
 })
@@ -90,8 +90,8 @@ const ICON_ONLY = [
   '회원관리 추가',
   '회원관리 더 보기',
   '회원 목록 더 보기',
-  'Tabs 개요 · 상세 더 보기',
-  'Tabs 옮기기',
+  'List 개요 · 상세 더 보기',
+  'List 옮기기',
   '축소',
   '확대',
   '화면 맞춤',
@@ -195,7 +195,7 @@ function pickOnCanvas(nodeId: string): void {
 async function editorButtons(): Promise<{ found: IconOnly[]; menus: MenuEntry[] }> {
   await openPage(DOC, { docs: { [PAGE_ID]: DOC, [OTHER_PAGE_ID]: DOC }, apiOverrides: EDITOR_API })
   const found: IconOnly[] = []
-  pickOnCanvas('n-tabs')
+  pickOnCanvas('n-list')
   await screen.findByRole('button', { name: '1번째 지우기' })
   // 하단 컴포넌트 판을 연다 — 카드의 «넣기». 열림은 창 저장소에 남아 앞 케이스가 연 판이면 이미 열려 있다.
   const toggle = screen.getByRole('button', { name: '컴포넌트' })

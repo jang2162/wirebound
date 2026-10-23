@@ -206,16 +206,16 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
   })
 
   /**
-   * L-010 — 안 보이는 자리에 끼운 미리보기. 활성 패널만 보이는 `Tabs` 를 흉내 낸다(첫 자식 밖은 `display: none` — 시스템 테마는 패널을 다 보이므로 CSS 를 덧입힌다).
-   * 첫 패널 «뒤» 에 끼운 미리보기는 숨어 상자가 0 × 0 이다 — 고치기 전에는 끄는 사람이 아무것도 못 보는 채 놓았다. 지금은 들어갈 부모(`Tabs`)에 강조색 테두리가 선다.
+   * L-010 — 안 보이는 자리에 끼운 미리보기. 첫 자식만 보이는 칸(활성 패널만 보이는 탭과 같은 꼴)을 CSS 로 흉내 낸다(첫 자식 뒤의 형제는 `display: none`).
+   * 첫 자식 «뒤» 에 끼운 미리보기는 숨어 상자가 0 × 0 이다 — 고치기 전에는 끄는 사람이 아무것도 못 보는 채 놓았다. 지금은 들어갈 부모(`n_tabs`)에 강조색 테두리가 선다.
    */
   it('안 보이는 자리의 미리보기는 들어갈 부모를 테두리로 보이고 — 보이는 자리에서는 안 두른다 · 걷히면 원래대로', async () => {
     const tabsDoc: SeedNode[] = [
       { id: 'n_top', type: 'Text', props: { content: '위 글' } },
       {
         id: 'n_tabs',
-        type: 'Tabs',
-        props: { tabs: ['하나', '둘'], active: 0 },
+        type: 'Flex',
+        props: { direction: 'column' },
         children: [
           { id: 'n_p0', type: 'Text', props: { content: '첫 패널 글' } },
           { id: 'n_p1', type: 'Text', props: { content: '둘째 패널 글' } },
@@ -229,7 +229,7 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
       const frame = (await (await page.$('iframe.wb-shell-canvas-iframe'))!.contentFrame())!
       await frame.evaluate(() => {
         const style = document.createElement('style')
-        style.textContent = '[data-wb-component="Tabs"] [data-wb-part="panel"] > :not(:first-child) { display: none !important }'
+        style.textContent = '[data-wb-id="n_p0"] ~ * { display: none !important }'
         document.head.appendChild(style)
       })
       await page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="n_move"] button').first().click()

@@ -230,6 +230,7 @@ function samePreview(a: PlacementPreview, b: PlacementPreview): boolean {
   return (
     placing &&
     a.target.parentId === b.target.parentId &&
+    a.target.zone === b.target.zone &&
     a.target.index === b.target.index &&
     a.target.placement === b.target.placement &&
     a.axis === b.axis

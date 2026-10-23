@@ -446,7 +446,17 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
 
   /** L-004 · L-015 — 캔버스 왼끝 노드의 손잡이는 칸 안에 온전히 선다(스크롤 0). 번호 마커와의 겹침은 값으로 적는다(모양만). */
   it('왼끝 노드의 손잡이가 칸에 안 잘린다', async () => {
-    const P = await fixture('n1-handle', [{ id: 'n_tabs00000001', type: 'Tabs', props: { tabs: ['A', 'B'] } }, ...TEXTS])
+    const P = await fixture('n1-handle', [
+      {
+        id: 'n_tabs00000001',
+        type: 'Tabs',
+        children: [
+          { id: 'n_tabpa000001', type: 'TabPanel', props: { label: 'A' } },
+          { id: 'n_tabpb000001', type: 'TabPanel', props: { label: 'B' } },
+        ],
+      },
+      ...TEXTS,
+    ])
     await call('POST', `${P}/comments`, { nodeId: 'n_t0000000000', body: '여기' })
     const seen: Record<string, unknown> = {}
     for (const [width, side] of [

@@ -385,7 +385,7 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
     const { P } = await fixture('f2-narrow', [
       { id: 'n_long00000001', type: 'Button', alias: LONG_ALIAS, props: { label: '아주 긴 라벨 '.repeat(6).trim() } },
       { id: 'n_text00000001', type: 'Text', alias: '안내 문단', props: { content: '긴 본문 글 '.repeat(10).trim() } },
-      { id: 'n_tabs00000001', type: 'Tabs', props: { tabs: ['개요', '상세', '이력', '설정'] } },
+      { id: 'n_tabs00000001', type: 'List', props: { columns: ['개요', '상세', '이력', '설정'] } },
     ])
     const a = await openEditor(P, 'alice', { width: 700, height: 700 })
     try {

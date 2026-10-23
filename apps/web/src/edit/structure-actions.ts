@@ -11,10 +11,10 @@
  * 던지면 `.wb-shell`이 통째로 DOM에서 사라진다(`panels/node-shape.ts` 머리말의 실측).
  * 그래서 검증 전 문서에 들어올 수 있는 모양을 값으로 다룬다.
  */
-import { getComponent, type NodeLock, type PageDocument } from '@wirebound/schema'
+import { BODY_ZONE, hasBody, hasZone, zoneList, type NodeLock, type PageDocument } from '@wirebound/schema'
 import { nodeType } from '../panels/node-shape'
-// **schema의 `walkNodes`를 쓰지 않는다** — `children` 배열 안의 `null` 원소에서 던진다
-// (`./safe-walk.ts` 머리말에 실측). 이 파일의 계약이 "던지지 않는다"이므로 순회부터 `walkSafely`를 쓴다.
+// **schema의 `walkNodes`를 쓰지 않는다** — 자식 줄 안의 `null` 원소를 노드로 낸다
+// (`./safe-walk.ts` 머리말). 이 파일의 계약이 "던지지 않는다"이므로 순회부터 `walkSafely`를 쓴다.
 import { isNodeLike, walkSafely, type SafeVisit } from './safe-walk'
 
 /** 선택 노드에 지금 할 수 있는 조작. 화면은 이것으로 버튼을 비활성한다. */
@@ -28,9 +28,11 @@ export interface StructureAbilities {
   outdent: boolean
 }
 
-/** 선택 노드의 자리. 조작을 실행할 때 부모·인덱스가 필요하다. */
+/** 선택 노드의 자리. 조작을 실행할 때 부모 · 구역 · 인덱스가 필요하다. 형제는 그 구역 안의 것이다. */
 export interface NodeSpot {
   parentId: string
+  /** 부모 안에서 선 구역(`body` · 구역 이름). */
+  zone: string
   index: number
   siblingCount: number
 }
@@ -122,18 +124,16 @@ export function structureAbilities(document: PageDocument | null, nodeId: string
   if (visit === null) return NOTHING
 
   const { node, parent, index } = visit
+  const zone = visit.zone ?? BODY_ZONE
   const addInside = acceptsChildren(node)
 
   // 루트다. 지울 수도 옮길 수도 없고(문서가 통째로 깨진다 — `removeNodeOps`의 실측),
   // 형제가 없으니 순서·계층 이동도 갈 곳이 없다.
   if (parent === null) return { ...NOTHING, addInside }
 
-  // **이 `Array.isArray`를 지워도 죽는 케이스가 없다**(실측). 갈리는 것은
-  // `children`이 **배열 유사 객체**(`{length:2,"0":…}`)일 때뿐인데, 그런 문서가 스토어에
-  // 실리는 경로는 재지 못했다. 지우지 않는 것은 `siblings.length`가 그대로
-  // 판정에 쓰이기 때문이다 — 문자열이면 글자 수가 형제 수가 된다. **그 입력을 재는 케이스는
-  // 없다** — 도달 경로가 확인되면 케이스를 세운다.
-  const siblings = Array.isArray(parent.children) ? parent.children : []
+  // **형제는 그 노드가 선 구역 안의 것이다** — 위로 · 아래로 · 들여쓰기는 구역 경계를 넘지 않는다(설계 spec `2026-10-23-node-slots-design.md`
+  // 「5. 에디터」). 줄이 배열이 아니면(배열 유사 객체 · 문자열) 빈 줄이다(`zoneList`) — 글자 수가 형제 수가 되지 않게.
+  const siblings = zoneList(parent, zone)
   const previous = index > 0 ? siblings[index - 1] : undefined
 
   return {
@@ -143,7 +143,7 @@ export function structureAbilities(document: PageDocument | null, nodeId: string
     moveUp: index > 0,
     moveDown: index < siblings.length - 1,
     // **앞 형제가 있고 그 형제가 자식을 담을 수 있을 때만이다**(들여쓰기의 핵심 제약).
-    // 들여쓰기는 노드를 앞 형제 **안으로** 넣는 것이라 그 형제의 카탈로그를 본다.
+    // 들여쓰기는 노드를 앞 형제의 **몸통 끝**으로 넣는 것이라 그 형제의 카탈로그를 본다(몸통이 없으면 꺼진다).
     indent: previous !== undefined && acceptsChildren(previous),
     // 부모가 루트면 나갈 곳이 문서 밖이다. 부모의 부모가 있는지는 방문 정보에 없으므로
     // 루트 노드와 같은 것인지로 본다 — id 비교가 아니라 **참조 비교**인 것은 id가
@@ -194,10 +194,8 @@ export function nodeSpot(document: PageDocument, nodeId: string): NodeSpot | nul
   const parentId = visit.parent.id
   if (typeof parentId !== 'string') return null
 
-  // 위와 같은 자리다 — 지워도 죽는 케이스가 없고, 갈리는 입력의 도달 경로가 재지지 않았다.
-  const siblings = Array.isArray(visit.parent.children) ? visit.parent.children : []
-
-  return { parentId, index: visit.index, siblingCount: siblings.length }
+  const zone = visit.zone ?? BODY_ZONE
+  return { parentId, zone, index: visit.index, siblingCount: zoneList(visit.parent, zone).length }
 }
 
 /**
@@ -227,9 +225,9 @@ function findVisit(document: PageDocument, nodeId: string): SafeVisit | null {
 }
 
 /**
- * 이 노드 **안에** 다른 노드를 넣을 수 있는가.
+ * 이 노드 **안에** 다른 노드를 넣을 수 있는가 — 노드의 «안» 은 몸통이다(카탈로그가 `body` 구역을 선언했는가).
  *
- * 카탈로그가 `many`여도 문서의 `children`이 배열이 아니면 넣을 수 없다 —
+ * 카탈로그가 몸통을 선언해도 문서의 `children`이 배열이 아니면 넣을 수 없다 —
  * `insertNodeOps`가 그 경우를 `null`로 막으므로(깨진 문서를 조용히 덮지 않는다),
  * 여기서 열어 두면 눌러도 아무 일이 없는 버튼이 된다. `children`이 **없는** 것은
  * 다르다: `insertNodeOps`가 배열째 만들어 넣는다.
@@ -244,7 +242,23 @@ export function acceptsChildren(node: unknown): boolean {
 
   const type = nodeType(node)
   if (type === null) return false
-  if (getComponent(type)?.children !== 'many') return false
+  if (!hasBody(type)) return false
 
   return node.children === undefined || Array.isArray(node.children)
+}
+
+/**
+ * 이 노드의 그 구역(`zone`)에 노드를 넣을 수 있는가 — 몸통이면 `acceptsChildren` 그대로, 이름 붙은 구역이면 카탈로그가 그 구역을 선언했고
+ * 문서의 `zones` 맵 · 그 구역 배열이 제 꼴(없음 · 객체 · 배열)일 때다(`insertNodeOps` 가 꼴이 깨진 자리를 `null` 로 막는 것과 같다).
+ */
+export function acceptsIn(node: unknown, zone: string): boolean {
+  if (zone === BODY_ZONE) return acceptsChildren(node)
+  if (!isNodeLike(node)) return false
+  const type = nodeType(node)
+  if (type === null || !hasZone(type, zone)) return false
+  const zones: unknown = node.zones
+  if (zones === undefined) return true
+  if (!isNodeLike(zones)) return false
+  const list: unknown = (zones as unknown as Record<string, unknown>)[zone]
+  return list === undefined || Array.isArray(list)
 }

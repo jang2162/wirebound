@@ -19,7 +19,7 @@
  * | 무엇을 가리키나 | 적는 것 | 다시 짓기 |
  * |---|---|---|
  * | 노드(와 그 안의 필드) — `remove` · `replace` · 필드 `add` · `move`의 `from` | 노드 id + 그 아래 토큰 | 그 id 의 지금 경로 + 토큰. 없으면 못 얹음 |
- * | `children` 배열의 **넣을 자리** — `add …/children/<i>` · `move`의 `path` | 부모 id · 앞 형제 id 줄 · 뒤 형제 id 줄(가까운 것부터) · 옛 index | 살아 있는 가장 가까운 형제 곁 — 앞 형제면 그 뒤 · 뒤 형제면 그 앞(같은 거리면 앞) → 다 없으면 옛 index(길이로 자름). 부모가 없으면 못 얹음 |
+ * | 자식 줄(몸통 `children` · 구역 `zones/<이름>`)의 **넣을 자리** — `add …/children/<i>` · `add …/zones/<이름>/<i>` · `move`의 `path` | 부모 id · 그 줄(몸통 · 구역 이름) · 앞 형제 id 줄 · 뒤 형제 id 줄(가까운 것부터) · 옛 index | 살아 있는 가장 가까운 형제 곁 — 앞 형제면 그 뒤 · 뒤 형제면 그 앞(같은 거리면 앞) → 다 없으면 옛 index(길이로 자름). 부모가 없거나 그 줄이 배열이 아니면 못 얹음 |
  * | 상태 목록의 항목(과 그 안) — `/viewStates/<i>(/…)`의 `remove` · `replace` · `test` · 항목 안 `add` · `move`의 `from` | 그 자리 상태의 id + 그 아래 토큰 | 그 id 의 지금 번호 + 토큰. 없으면(남이 뺐다) 못 얹음 |
  * | 상태 목록의 **넣을 자리** — `add /viewStates/<i>` · `move`의 `path` | 앞 상태 id 줄 · 뒤 상태 id 줄 · 옛 번호 | 노드의 넣을 자리와 같은 규칙. 목록이 없으면 못 얹음 |
  * | 노드 밖(`/version` · 목록째 `/viewStates`) | 경로 그대로 | 그대로 |
@@ -43,8 +43,8 @@
  * - **객체 키의 `add`** — 만들 때 없던 키가 그 사이 생겼으면 `add`는 만드는 것이 아니라 **덮는 것**이 된다(`addAt`이 객체에서는 키 할당이다).
  *   빈 컨테이너에 첫 자식을 넣는 `add …/children [노드]`가 그렇다 — 남이 먼저 자식을 넣었으면 그 자식이 지워진다. 반대로 있던 키가 사라져도 뜻이
  *   바뀐다.
- * - **`children` 배열을 통째로 바꾸는 op**(`add` · `replace` · `remove …/children` — 빈 컨테이너의 첫 자식 · 그 되돌리기) — 만들 때의
- *   자식 id 줄과 지금이 다르면 남의 노드를 덮거나 지운다.
+ * - **자식 줄을 통째로 바꾸는 op**(`add` · `replace` · `remove …/children` · `…/zones/<이름>` · `…/zones` — 빈 컨테이너 · 빈 구역의 첫
+ *   자식 · 그 되돌리기) — 만들 때의 자식 id 줄(`zones` 맵이면 구역마다의 줄)과 지금이 다르면 남의 노드를 덮거나 지운다.
  *
  * 필드 값 `replace`(글 · prop)는 남이 같은 필드를 고쳤어도 얹는다 — 서버가 받는 순서대로 뒤의 것이 이긴다(리베이스가 원래 하던 일이다).
  *
@@ -80,7 +80,7 @@ import { findNodePathSafely, isNodeLike } from '../edit/safe-walk'
 type Anchor =
   | { kind: 'raw'; path: string }
   | { kind: 'node'; id: string; rest: string[] }
-  | { kind: 'slot'; parentId: string; after: string[]; before: string[]; index: number | '-' }
+  | { kind: 'slot'; parentId: string; list: string; after: string[]; before: string[]; index: number | '-' }
   | { kind: 'state'; id: string; rest: string[] }
   | { kind: 'stateSlot'; after: string[]; before: string[]; index: number | '-' }
 
@@ -182,8 +182,9 @@ export function sameOps(left: readonly PatchOp[], right: readonly PatchOp[]): bo
 }
 
 /**
- * 경로가 지나는 노드를 id 로 적는다. `slot`이면 마지막 `children/<i>`를 **넣을 자리**로 읽는다(`add` · `move`의 `path`).
- * `children/<i>`로 이어지는 동안만 노드를 따라간다 — 그 밖의 토큰(`props/…` · 노드가 아닌 배열의 index)은 그 노드 아래 글자 그대로다.
+ * 경로가 지나는 노드를 id 로 적는다. `slot`이면 마지막 `children/<i>` · `zones/<이름>/<i>`를 **넣을 자리**로 읽는다(`add` · `move`의 `path`).
+ * 자식 줄(`children/<i>` · `zones/<이름>/<i>`)로 이어지는 동안만 노드를 따라간다 — 그 밖의 토큰(`props/…` · 노드가 아닌 배열의 index)은 그
+ * 노드 아래 글자 그대로다.
  */
 function anchorPath(document: PageDocument, path: string, slot: boolean): Anchor {
   const tokens = parsePointer(path)
@@ -191,20 +192,36 @@ function anchorPath(document: PageDocument, path: string, slot: boolean): Anchor
   if (tokens[0] !== 'root' || !isNodeLike(document.root) || typeof document.root.id !== 'string') return { kind: 'raw', path }
   let node = document.root
   let i = 1
-  while (tokens[i] === 'children' && i + 1 < tokens.length) {
-    const token = tokens[i + 1]!
-    const kids = node.children
-    if (slot && i + 2 === tokens.length && Array.isArray(kids)) {
-      if (token === '-') return { kind: 'slot', parentId: node.id, after: [], before: [], index: '-' }
+  for (;;) {
+    // 자식 줄 한 마디 — 몸통은 `children/<i>`(토큰 둘), 구역은 `zones/<이름>/<i>`(토큰 셋).
+    const zoned = tokens[i] === 'zones'
+    if (tokens[i] !== 'children' && !zoned) break
+    const width = zoned ? 3 : 2
+    if (i + width - 1 >= tokens.length) break
+    const list = zoned ? `/zones/${tokens[i + 1]!}` : '/children'
+    const token = tokens[i + width - 1]!
+    const holder: unknown = zoned ? (node.zones as unknown) : node
+    const kids: unknown = isNodeLike(holder)
+      ? (holder as unknown as Record<string, unknown>)[zoned ? tokens[i + 1]! : 'children']
+      : undefined
+    if (slot && i + width === tokens.length && Array.isArray(kids)) {
+      if (token === '-') return { kind: 'slot', parentId: node.id, list, after: [], before: [], index: '-' }
       if (!/^\d+$/.test(token)) break
       const index = Number(token)
-      return { kind: 'slot', parentId: node.id, after: idsOf(kids.slice(0, index)).reverse(), before: idsOf(kids.slice(index)), index }
+      return {
+        kind: 'slot',
+        parentId: node.id,
+        list,
+        after: idsOf(kids.slice(0, index)).reverse(),
+        before: idsOf(kids.slice(index)),
+        index,
+      }
     }
     if (!Array.isArray(kids) || !/^\d+$/.test(token)) break
     const child: unknown = kids[Number(token)]
     if (!isNodeLike(child) || typeof child.id !== 'string') break
     node = child
-    i += 2
+    i += width
   }
   return { kind: 'node', id: node.id, rest: tokens.slice(i) }
 }
@@ -249,11 +266,11 @@ function resolveAnchor(document: PageDocument, anchor: Anchor): string | null {
   }
   const parentPath = findNodePathSafely(document.root, anchor.parentId)
   if (parentPath === undefined) return null
-  const kids: unknown = getByPointer(document, `${parentPath}/children`)
+  const kids: unknown = getByPointer(document, `${parentPath}${anchor.list}`)
   if (!Array.isArray(kids)) return null
   const { index, after, before } = anchor
-  if (index === '-') return `${parentPath}/children/-`
-  return `${parentPath}/children/${slotIndex(kids, { after, before, index })}`
+  if (index === '-') return `${parentPath}${anchor.list}/-`
+  return `${parentPath}${anchor.list}/${slotIndex(kids, { after, before, index })}`
 }
 
 /** 넣을 자리의 index — 머리말의 «넣을 자리는 원래 거리 순으로 앞 · 뒤 형제를 번갈아 본다». */
@@ -277,12 +294,18 @@ function premiseOf(document: PageDocument, op: 'add' | 'remove' | 'replace', pat
   const tokens = parsePointer(path)
   const key = tokens[tokens.length - 1]
   const premise: Premise = {}
-  if (key === 'children') premise.kids = kidIds(getByPointer(document, path))
+  if (wholeList(tokens)) premise.kids = kidIds(getByPointer(document, path))
   if (op === 'add' && key !== undefined) {
     const parent: unknown = getByPointer(document, formatPointer(tokens.slice(0, -1)))
     if (isNodeLike(parent)) premise.had = Object.hasOwn(parent, key)
   }
   return premise
+}
+
+/** 경로가 자식 줄을 통째로 가리키는가 — `…/children` · `…/zones/<이름>` · `…/zones`(구역 맵). */
+function wholeList(tokens: readonly string[]): boolean {
+  const key = tokens[tokens.length - 1]
+  return key === 'children' || key === 'zones' || tokens[tokens.length - 2] === 'zones'
 }
 
 function premiseHolds(document: PageDocument, path: string, premise: Premise): boolean {
@@ -298,8 +321,13 @@ function premiseHolds(document: PageDocument, path: string, premise: Premise): b
   return true
 }
 
-/** `children` 값의 자식 id 줄. 배열이 아니면 `null`. */
+/** 자식 줄 값의 자식 id 줄 — 구역 맵이면 이름 차례로 구역마다(`이름:` 머리). 배열 · 맵이 아니면 `null`. */
 function kidIds(value: unknown): string[] | null {
+  if (isNodeLike(value)) {
+    return Object.keys(value)
+      .sort()
+      .flatMap((name) => [`${name}:`, ...(kidIds((value as unknown as Record<string, unknown>)[name]) ?? ['?'])])
+  }
   if (!Array.isArray(value)) return null
   return value.map((kid) => (isNodeLike(kid) && typeof kid.id === 'string' ? kid.id : ''))
 }

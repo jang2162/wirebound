@@ -176,9 +176,17 @@ describe('설계서 「실행」 — 뷰 모드에서 실제로 동작한다', (
             id: 'n-go',
             type: 'Button',
             props: { label: '상세로' },
-            interactions: [{ on: 'click', actions: [{ type: 'switchTab', target: 'n-tabs', tab: 1 }] }],
+            interactions: [{ on: 'click', actions: [{ type: 'switchTab', target: 'n-tab2' }] }],
           },
-          { id: 'n-tabs', type: 'Tabs', props: { tabs: ['기본정보', '상세정보'], active: 0 } },
+          {
+            id: 'n-tabs',
+            type: 'Tabs',
+            props: { active: 0 },
+            children: [
+              { id: 'n-tab1', type: 'TabPanel', props: { label: '기본정보' } },
+              { id: 'n-tab2', type: 'TabPanel', props: { label: '상세정보' } },
+            ],
+          },
         ],
       }),
     )
@@ -202,7 +210,11 @@ describe('트리거 4종이 실제로 닿는가 — 재서 적는다', () => {
           {
             id: 'n-tabs',
             type: 'Tabs',
-            props: { tabs: ['기본정보', '상세정보'], active: 0 },
+            props: { active: 0 },
+            children: [
+              { id: 'n-tab1', type: 'TabPanel', props: { label: '기본정보' } },
+              { id: 'n-tab2', type: 'TabPanel', props: { label: '상세정보' } },
+            ],
             interactions: [{ on: 'select', actions: [{ type: 'setVisible', target: 'n-list', value: false }] }],
           },
           { id: 'n-list', type: 'List', props: {} },
@@ -228,6 +240,7 @@ describe('트리거 4종이 실제로 닿는가 — 재서 적는다', () => {
             id: 'n-form',
             type: 'SearchForm',
             props: {},
+            zones: { actions: [{ id: 'n-go', type: 'Button', props: { label: '검색' } }] },
             interactions: [{ on: 'submit', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
           },
           { id: 'n-list', type: 'List', props: {} },
@@ -237,11 +250,11 @@ describe('트리거 4종이 실제로 닿는가 — 재서 적는다', () => {
     toView()
 
     const form = requireNode('n-form')
-    // **재서 적는 값**: 이 폼이 그리는 것은 `<span>조회</span>`이지 `<button type="submit">`이
+    // **재서 적는 값**: 폼의 단추는 구역(`actions`) 안의 `Button` 노드이고 `<button type="submit">`이
     // 아니다(와이어프레임이므로). 즉 사용자 조작으로는 이 갈래에 닿을 수 없고, 프로그램적
-    // 제출로만 돈다. 클릭이 제출이 **아니라는 것**을 음성 대조로 함께 잰다.
-    expect(form.querySelectorAll('button').length).toBe(0)
-    fireEvent.click(form.querySelector('[data-wb-part="actions"]')?.firstElementChild as Element)
+    // 제출로만 돈다. 그 단추의 클릭이 제출이 **아니라는 것**을 음성 대조로 함께 잰다.
+    expect(form.querySelectorAll('button[type="submit"]').length).toBe(0)
+    fireEvent.click(requireNode('n-go'))
     expect(requireNode('n-list').getAttribute('data-wb-state')).toBeNull()
 
     fireEvent.submit(form)
@@ -329,7 +342,7 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
     expect(notices()).toEqual(['List에 없는 prop입니다: 없는속성'])
   })
 
-  it('탭이 없는 노드에 탭을 넘기면 말한다', async () => {
+  it('탭 패널이 아닌 노드를 열라고 하면 말한다', async () => {
     await openPage(
       pageDoc({
         id: 'n-root',
@@ -339,7 +352,7 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
             id: 'n-btn',
             type: 'Button',
             props: { label: '검색' },
-            interactions: [{ on: 'click', actions: [{ type: 'switchTab', target: 'n-list', tab: 1 }] }],
+            interactions: [{ on: 'click', actions: [{ type: 'switchTab', target: 'n-list' }] }],
           },
           { id: 'n-list', type: 'List', props: {} },
         ],
@@ -349,7 +362,7 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
 
     fireEvent.click(requireNode('n-btn'))
 
-    expect(notices()).toEqual(['switchTab의 타겟은 Tabs여야 합니다 (현재: List)'])
+    expect(notices()).toEqual(['switchTab의 타겟은 TabPanel이어야 합니다 (현재: List)'])
   })
 
   it('알림은 쌓이지 않는다 — 다음 클릭이 덮는다', async () => {
@@ -488,7 +501,7 @@ describe('알림은 "마지막 조작이 만든 것"이다', () => {
             props: { label: '둘' },
             interactions: [
               { on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'x', value: 1 }] },
-              { on: 'select', actions: [{ type: 'switchTab', target: 'n-gone2', tab: 1 }] },
+              { on: 'select', actions: [{ type: 'switchTab', target: 'n-gone2' }] },
             ],
           },
         ],

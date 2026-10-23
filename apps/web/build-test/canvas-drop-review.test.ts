@@ -260,7 +260,11 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       },
       { id: 'n_sec', type: 'Section', children: [text('n_s0', '영역 글')] },
       { id: 'n_empty', type: 'Card', props: { title: '빈 카드' } },
-      { id: 'n_tabs', type: 'Tabs', children: [text('n_tb0', '탭 글')] },
+      {
+        id: 'n_tabs',
+        type: 'Tabs',
+        children: [{ id: 'n_tbp', type: 'TabPanel', props: { label: '탭' }, children: [text('n_tb0', '탭 글')] }],
+      },
       ...Array.from({ length: 6 }, (_, i) => text(`n_z${i}`, `끝 글 ${i}`)),
     ]
     const REVERSE = '[data-wb-id="n_row"]{flex-direction:row-reverse !important}'

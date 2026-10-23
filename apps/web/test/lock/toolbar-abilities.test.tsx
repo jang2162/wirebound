@@ -36,7 +36,7 @@
  * 센다). 여기서는 그 판정을 **대역의 재료로** 쓸 뿐이라 화면 쪽 판정이 늘지 않는다.
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { lockConflictOfOps, writeNodesEnvelope, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { CURRENT_DOCUMENT_VERSION, lockConflictOfOps, writeNodesEnvelope, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
@@ -517,7 +517,7 @@ describe('붙이기 · 복제 · 잘라내기도 막힌 자리에서는 아무�
     document.body.dispatchEvent(event)
     return event.defaultPrevented
   }
-  const ENVELOPE = writeNodesEnvelope([{ id: 'src', type: 'Divider' }], 1)
+  const ENVELOPE = writeNodesEnvelope([{ id: 'src', type: 'Divider' }], CURRENT_DOCUMENT_VERSION)
 
   it('고른 노드를 남이 잡았으면 붙이기 · 복제 · 잘라내기가 편집을 안 내고 이유를 말한다', async () => {
     const view = await board()

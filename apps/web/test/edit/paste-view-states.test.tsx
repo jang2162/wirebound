@@ -9,6 +9,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  CURRENT_DOCUMENT_VERSION,
   applyOps,
   partitionIssues,
   readNodesEnvelope,
@@ -112,7 +113,10 @@ describe('붙일 페이지에 없는 상태는 보임에서 빼고 말한다', (
   it('`only` 의 상태가 다 빠지면 보임을 걷고 둘 다 말한다 — 상태마다 출처의 이름 · 검증 오류 0', async () => {
     const { srv, pasted } = await pasteInto(
       target(),
-      writeNodesEnvelope([button('b-a', '승인', { mode: 'only', states: ['s_admin', 's_guest'] })], 2, [ADMIN, GUEST]),
+      writeNodesEnvelope([button('b-a', '승인', { mode: 'only', states: ['s_admin', 's_guest'] })], CURRENT_DOCUMENT_VERSION, [
+        ADMIN,
+        GUEST,
+      ]),
     )
     expect(pasted.visibility).toBeUndefined()
     const dropped = droppedStatesNotice(
@@ -131,7 +135,10 @@ describe('붙일 페이지에 없는 상태는 보임에서 빼고 말한다', (
   it('남은 상태가 있으면 보임은 남은 상태로 — 뺀 상태만 말한다', async () => {
     const { srv, pasted } = await pasteInto(
       target([ADMIN]),
-      writeNodesEnvelope([button('b-a', '승인', { mode: 'only', states: ['s_admin', 's_guest'] })], 2, [ADMIN, GUEST]),
+      writeNodesEnvelope([button('b-a', '승인', { mode: 'only', states: ['s_admin', 's_guest'] })], CURRENT_DOCUMENT_VERSION, [
+        ADMIN,
+        GUEST,
+      ]),
     )
     expect(pasted.visibility).toEqual({ mode: 'only', states: ['s_admin'] })
     await waitFor(() => expect(infoTexts()).toEqual(['상태 "비로그인" 보임 1곳을 뺐습니다.']))
@@ -141,7 +148,7 @@ describe('붙일 페이지에 없는 상태는 보임에서 빼고 말한다', (
   it('`except` 가 비면 보임을 걷되 «모든 상태에서 보인다»를 따로 말하지 않는다 — 원래 보이던 곳에서 그대로 보인다', async () => {
     const { pasted } = await pasteInto(
       target(),
-      writeNodesEnvelope([button('b-a', '승인', { mode: 'except', states: ['s_guest'] })], 2, [GUEST]),
+      writeNodesEnvelope([button('b-a', '승인', { mode: 'except', states: ['s_guest'] })], CURRENT_DOCUMENT_VERSION, [GUEST]),
     )
     expect(pasted.visibility).toBeUndefined()
     await waitFor(() => expect(infoTexts()).toEqual(['상태 "비로그인" 보임 1곳을 뺐습니다.']))
@@ -154,7 +161,7 @@ describe('붙일 페이지에 없는 상태는 보임에서 빼고 말한다', (
       visibility: { mode: 'only', states: ['default', 's_guest'] },
       children: [button('b-a', '승인', { mode: 'except', states: ['s_guest', 'default'] })],
     }
-    const { srv, pasted } = await pasteInto(target(), writeNodesEnvelope([card], 2, [GUEST]))
+    const { srv, pasted } = await pasteInto(target(), writeNodesEnvelope([card], CURRENT_DOCUMENT_VERSION, [GUEST]))
     expect(pasted.visibility).toEqual({ mode: 'only', states: ['default'] })
     expect(pasted.children![0]!.visibility).toEqual({ mode: 'except', states: ['default'] })
     await waitFor(() => expect(infoTexts()).toEqual(['상태 "비로그인" 보임 2곳을 뺐습니다.']))
@@ -162,12 +169,12 @@ describe('붙일 페이지에 없는 상태는 보임에서 빼고 말한다', (
   })
 
   it('출처의 목록이 없는 봉투는 상태 id 로 말한다', async () => {
-    await pasteInto(target(), writeNodesEnvelope([button('b-a', '승인', { mode: 'except', states: ['s_x'] })], 2))
+    await pasteInto(target(), writeNodesEnvelope([button('b-a', '승인', { mode: 'except', states: ['s_x'] })], CURRENT_DOCUMENT_VERSION))
     await waitFor(() => expect(infoTexts()).toEqual(['상태 "s_x" 보임 1곳을 뺐습니다.']))
   })
 
   it('지금 고른 상태는 붙지 않는다 — 보임 없는 노드는 보임 없이 들어간다', async () => {
-    const { pasted } = await pasteInto(target([ADMIN]), writeNodesEnvelope([button('b-a', '승인')], 2, [ADMIN]))
+    const { pasted } = await pasteInto(target([ADMIN]), writeNodesEnvelope([button('b-a', '승인')], CURRENT_DOCUMENT_VERSION, [ADMIN]))
     expect(pasted.visibility).toBeUndefined()
   })
 })
@@ -179,7 +186,10 @@ describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(`edit/
   it('같은 이름의 상태가 있으면 보임을 그 id 로 옮기고 말하지 않는다 · 없는 이름만 빼고 센다 · 검증 오류 0', async () => {
     const { srv, pasted } = await pasteInto(
       target([OTHER_ADMIN]),
-      writeNodesEnvelope([button('b-a', '승인', { mode: 'only', states: ['s_admin', 's_guest'] })], 2, [ADMIN, GUEST]),
+      writeNodesEnvelope([button('b-a', '승인', { mode: 'only', states: ['s_admin', 's_guest'] })], CURRENT_DOCUMENT_VERSION, [
+        ADMIN,
+        GUEST,
+      ]),
     )
     expect(pasted.visibility).toEqual({ mode: 'only', states: ['s_page_admin'] })
     await waitFor(() => expect(infoTexts()).toEqual(['상태 "비로그인" 보임 1곳을 뺐습니다.']))
@@ -189,7 +199,9 @@ describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(`edit/
   it('이름이 글자 그대로 같을 때만 맞춘다 — 대소문자 · 다른 글자는 다른 상태다', async () => {
     const { pasted } = await pasteInto(
       target([{ id: 's_page_a', name: 'Admin' }]),
-      writeNodesEnvelope([button('b-a', '승인', { mode: 'only', states: ['s_a'] })], 2, [{ id: 's_a', name: 'admin' }]),
+      writeNodesEnvelope([button('b-a', '승인', { mode: 'only', states: ['s_a'] })], CURRENT_DOCUMENT_VERSION, [
+        { id: 's_a', name: 'admin' },
+      ]),
     )
     expect(pasted.visibility).toBeUndefined()
     await waitFor(() => expect(infoTexts()).toEqual([`상태 "admin" 보임 1곳을 뺐습니다. ${clearedOnlyNotice(1)}`]))
@@ -198,7 +210,7 @@ describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(`edit/
   it('같은 id 는 이름이 달라도 그대로다(같은 페이지 · 이름을 고친 복사)', async () => {
     const { pasted } = await pasteInto(
       target([{ id: 's_admin', name: '운영자' }]),
-      writeNodesEnvelope([button('b-a', '승인', { mode: 'only', states: ['s_admin'] })], 2, [ADMIN]),
+      writeNodesEnvelope([button('b-a', '승인', { mode: 'only', states: ['s_admin'] })], CURRENT_DOCUMENT_VERSION, [ADMIN]),
     )
     expect(pasted.visibility).toEqual({ mode: 'only', states: ['s_admin'] })
     await new Promise((resolve) => setTimeout(resolve, 20))
@@ -206,32 +218,22 @@ describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(`edit/
   })
 })
 
-describe('판 1 봉투(상태 영역)는 판 2 로 옮겨 붙는다', () => {
+describe('옛 판 봉투는 붙이지 않는다', () => {
   /**
-   * 옛 클립보드에 남은 상태 영역 — 읽기가 옮긴다(`readNodesEnvelope` → `migrateDocument` · 계획 V3 Task 2). 기본 가지의 자식은 다른 가지의 상태에서
-   * 숨고, 관리자 가지의 자식은 관리자에서만 보인다. 붙이는 페이지에 그 상태가 있으면(같은 이름) 보임이 그 id 로 맞춰진다.
+   * 옛 클립보드(판 1 · 2 봉투)는 붙이지 않는다 — 문서 판 3 의 옮기기는 DB 마이그레이션에만 있고 런타임은 판 2 를 올리지 않는다(설계 spec
+   * `2026-10-23-node-slots-design.md` 「7. 옮기기」). 상태 영역이 든 판 1 봉투도 같은 거절이다.
    */
-  it('영역을 풀어 보임으로 붙인다 — 붙이는 페이지의 같은 이름 상태로 · 검증 오류 0', async () => {
+  it('판 1 봉투(상태 영역)는 안 붙이고 까닭을 말한다 — 편집이 안 나간다', async () => {
     const region: WbNode = {
       id: 'sw',
       type: 'StateSwitch',
-      children: [
-        { id: 'c-d', type: 'StateCase', props: { state: 'default' }, children: [button('b-d', '보기')] },
-        { id: 'c-a', type: 'StateCase', props: { state: 's_admin' }, children: [button('b-a', '승인')] },
-      ],
+      children: [{ id: 'c-d', type: 'StateCase', props: { state: 'default' }, children: [button('b-d', '보기')] }],
     }
-    // 판 1 봉투는 판 1 을 쓰던 화면이 낸 글 그대로다 — 지금 쓰는 함수(`writeNodesEnvelope`)에 옛 판 번호를 준다.
-    const envelope = writeNodesEnvelope([region], 1, [ADMIN])
     const srv = server(target([{ id: 's_page_admin', name: '관리자' }]))
     await openPage(srv.held(), { apiOverrides: srv.api })
-    expect(clip('paste', envelope).prevented).toBe(true)
-    await waitFor(() => expect(srv.calls).toHaveLength(1))
-    const values = srv.calls[0]!.map((op) => (op as { value: WbNode }).value)
-    expect(values.map((node) => [node.props?.label, node.visibility])).toEqual([
-      ['보기', { mode: 'except', states: ['s_page_admin'] }],
-      ['승인', { mode: 'only', states: ['s_page_admin'] }],
-    ])
-    expect(errorsOf(srv.held())).toEqual([])
+    expect(clip('paste', writeNodesEnvelope([region], 1, [ADMIN])).prevented).toBe(true)
+    await waitFor(() => expect(document.body.textContent).toContain('이 판이 읽을 수 없는 버전입니다'))
+    expect(srv.calls).toHaveLength(0)
   })
 })
 
