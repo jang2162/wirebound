@@ -50,6 +50,16 @@ function slots(placing: Placing): string[] {
 }
 
 describe('빈 구역 칸이 서는 자리', () => {
+  it('칸은 테마 셀렉터의 어휘(`data-wb-*`)를 안 든다 — 에디터만의 그림이라 테마 CSS 에 안 걸린다', () => {
+    const element = emptyZonesFor(doc(), { kind: 'new', type: 'Button' })!.render('n-card', 'footer')!
+    const { container, unmount } = render(element)
+    const names = [container.firstElementChild!, ...Array.from(container.querySelectorAll('*'))].flatMap((el) => el.getAttributeNames())
+    unmount()
+    // 카나리아 — 칸의 표지 둘은 실렸다.
+    expect(names).toEqual(expect.arrayContaining([EMPTY_ZONE_ATTR, EMPTY_ZONE_OF_ATTR]))
+    expect(names.filter((name) => name.startsWith('data-wb-'))).toEqual([])
+  })
+
   it('새 단추 — 비어 있는 이름 붙은 구역마다(든 구역 · 몸통은 아니다)', () => {
     expect(slots({ kind: 'new', type: 'Button' })).toEqual([
       'n-card:footer',

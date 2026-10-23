@@ -108,7 +108,10 @@ describe('구역 끝(`zoneDropTarget`)', () => {
     expect(zoneDropTarget(doc(), adding('Button'), 'n-text', 'footer', free)).toBeNull()
     expect(zoneDropTarget(doc(), adding('Button'), 'n-card', 'nowhere', free)).toBeNull()
     expect(zoneDropTarget(doc(), adding('Button'), 'n-gone', 'footer', free)).toBeNull()
-    expect(zoneDropTarget(doc(), moving('n-card'), 'n-card', 'footer', free)).toBeNull()
+    // 자기 서브트리 — 진단 줄의 까닭(`drag/drag-debug.ts`)도 그 판의 것이다(옮기기 연산이 먼저 막아도 «연산을 못 지음» 으로 적히지 않게).
+    const why: string[] = []
+    expect(zoneDropTarget(doc(), moving('n-card'), 'n-card', 'footer', free, (reason) => why.push(reason))).toBeNull()
+    expect(why).toEqual(['into-own-subtree'])
     expect(zoneDropTarget(doc(), moving('n-edit'), 'n-card', 'headEnd', free)).toBeNull()
     expect(zoneDropTarget(doc(), adding('Button'), 'n-card', 'footer', lockOn('n-card'))).toBeNull()
     // 카나리아 — 잠금이 무관한 노드면 선다.

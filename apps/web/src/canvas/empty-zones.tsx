@@ -15,9 +15,9 @@
  * 판정은 미리보기를 숨긴 배치로 재므로(`drag/use-placement.ts` 머리말 «판정은 미리보기를 뺀 배치로») 칸이 남아야 미리보기가 서기 전과 같은 배치다 — 칸이
  * 사라지면 포인터 밑이 바뀌어 미리보기가 걷히고 다시 서는 떨림이 난다.
  *
- * **칸은 노드가 아니다** — `data-wb-id` 가 없고 판정은 칸의 표지(`EMPTY_ZONE_ATTR` · `EMPTY_ZONE_OF_ATTR`)로 찾는다(`canvas-drop.ts` 의 `canvasHitAt`). 렌더러의
- * 노드 속성 계약(`data-wb-*` 여섯)을 넓히지 않는다 — 칸은 에디터가 렌더러에 넘긴 그림이다. 모양은 인라인 style 이다(캔버스 문서에는 셸 CSS 가 없다 —
- * `canvas-preview.ts` 머리말 «반투명은 그린 뒤 인라인 스타일로»).
+ * **칸은 노드가 아니다** — `data-wb-id` 가 없고 판정은 칸의 표지(`EMPTY_ZONE_ATTR` · `EMPTY_ZONE_OF_ATTR`)로 찾는다(`canvas-drop.ts` 의 `canvasHitAt`). 표지는
+ * `data-wb-` 밖의 이름이다 — `data-wb-*` 는 테마 CSS 가 셀렉터로 쓰는 노드 속성 어휘라(정본 §6.1), 에디터만의 그림이 그 이름을 쓰면 테마 셀렉터에 걸린다.
+ * 모양은 인라인 style 이다(캔버스 문서에는 셸 CSS 가 없다 — `canvas-preview.ts` 머리말 «반투명은 그린 뒤 인라인 스타일로»).
  */
 import type { ReactElement } from 'react'
 import { BODY_ZONE, zoneDefs, zoneList, type PageDocument, type WbNode } from '@wirebound/schema'
@@ -25,9 +25,9 @@ import { walkSafely } from '../edit/safe-walk'
 import { fitRefusal, type Placing } from '../edit/structure-drop'
 
 /** 칸의 구역 이름 표지. */
-export const EMPTY_ZONE_ATTR = 'data-wb-empty-zone'
+export const EMPTY_ZONE_ATTR = 'data-zone-slot'
 /** 칸이 든 노드(구역의 부모) id 표지. */
-export const EMPTY_ZONE_OF_ATTR = 'data-wb-empty-zone-of'
+export const EMPTY_ZONE_OF_ATTR = 'data-zone-slot-of'
 
 /** 렌더러에 넘기는 빈 구역 칸 — `key` 는 노드 캐시의 열쇠에 든다(같은 끌기 동안 같다). */
 export interface EmptyZones {

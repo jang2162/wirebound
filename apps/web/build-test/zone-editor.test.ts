@@ -214,8 +214,8 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
     const handleEl = await page.$('iframe.wb-shell-canvas-iframe')
     const frame = await handleEl!.contentFrame()
     const list = (await frame!.evaluate(() =>
-      Array.from(document.querySelectorAll('[data-wb-empty-zone]')).map(
-        (el) => `${el.getAttribute('data-wb-empty-zone-of')}:${el.getAttribute('data-wb-empty-zone')}`,
+      Array.from(document.querySelectorAll('[data-zone-slot]')).map(
+        (el) => `${el.getAttribute('data-zone-slot-of')}:${el.getAttribute('data-zone-slot')}`,
       ),
     )) as string[]
     return list.sort()
@@ -227,7 +227,7 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
     return box
   }
   const center = (box: { x: number; y: number; width: number; height: number }) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 })
-  const slotSelector = (parentId: string, zone: string) => `[data-wb-empty-zone="${zone}"][data-wb-empty-zone-of="${parentId}"]`
+  const slotSelector = (parentId: string, zone: string) => `[data-zone-slot="${zone}"][data-zone-slot-of="${parentId}"]`
 
   /** 하단 판을 연다 — 새 컨텍스트는 판이 접힌 채 선다(`build-test/palette.test.ts` 의 `openPalette`). */
   async function openPalette(page: Page): Promise<void> {
@@ -263,10 +263,34 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
   const moveTo = (page: Page, at: { x: number; y: number }) => page.mouse.move(at.x, at.y, { steps: 8 })
 
   /**
+   * `done` 이 서거나 `ms` 가 지날 때까지 읽고 마지막 값을 돌려준다 — 안 던진다. 단언할 값을 끝 조건으로 기다리는 자리에 쓴다: 그 값을 깨는
+   * 변조가 시간 초과가 아니라 단언의 값으로 죽게(`.ruler/30-delegation.md` «폴의 끝 조건에 단언할 값을 넣지 않는다»).
+   */
+  async function settle<T>(read: () => Promise<T>, done: (value: T) => boolean, ms = 3000): Promise<T> {
+    const until = Date.now() + ms
+    let last = await read()
+    while (!done(last) && Date.now() < until) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      last = await read()
+    }
+    return last
+  }
+
+  /**
    * 빈 구역 칸으로 간다 — 가는 길의 미리보기가 배치를 밀어 칸이 옮겨 가므로 칸을 다시 재며 그 구역에 미리보기가 설 때까지 다가간다(다섯 번까지).
-   * 선 미리보기의 구역을 돌려준다.
+   * 선 미리보기의 구역을 돌려준다. 칸이 안 서면 `null` — 다가가지 않는다(부르는 쪽이 놓기 전에 단언한다).
    */
   async function aimAtSlot(page: Page, parentId: string, zone: string): Promise<string | null> {
+    const key = `${parentId}:${zone}`
+    if (
+      !(
+        await settle(
+          () => slots(page),
+          (list) => list.includes(key),
+        )
+      ).includes(key)
+    )
+      return null
     for (let attempt = 0; attempt < 5; attempt += 1) {
       await moveTo(page, center(await boxOf(page, slotSelector(parentId, zone))))
       await page.waitForTimeout(120)
@@ -298,12 +322,12 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
       const before = await slots(tab.page)
       await grabCard(tab.page, 'Button')
       await moveTo(tab.page, center(await boxOf(tab.page, '[data-wb-id="n_text"]')))
-      const during = await poll(
-        '칸이 선다',
+      const during = await settle(
         () => slots(tab.page),
         (list) => list.length > 0,
       )
       const zone = await aimAtSlot(tab.page, 'n_card', 'footer')
+      expect(zone).toBe('footer')
       const shown = await shownDrops(tab.page)
       await tab.page.mouse.up()
       const landed = await poll(
@@ -311,10 +335,12 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
         () => zoneIds(P, 'n_card', 'footer'),
         (ids) => ids.length === 1,
       )
-      const after = await poll(
-        '칸이 걷힌다',
+      // 놓은 노드가 화면에 선 뒤의 칸 — 칸이 걷히기를 기다리지 않는다(남는 변조가 값으로 죽게).
+      await canvasFrame(tab.page).locator(`[data-wb-id="${landed[0]}"]`).waitFor({ state: 'attached' })
+      const after = await settle(
         () => slots(tab.page),
         (list) => list.length === 0,
+        1000,
       )
       const node = find((await server(P)).root, landed[0]!)
       expect({
@@ -345,6 +371,7 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
       await selectRow(tab.page, 'n_edit')
       await grabHandle(tab.page)
       const aimed = await aimAtSlot(tab.page, 'n_card', 'footer')
+      expect(aimed).toBe('footer')
       const sentBefore = tab.patches.length
       await tab.page.mouse.up()
       const footer = await poll(
@@ -411,8 +438,7 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
       await grabCard(tab.page, 'Button')
       const tabs = await boxOf(tab.page, '[data-wb-id="n_tabs"]')
       await moveTo(tab.page, { x: tabs.x + tabs.width - 6, y: tabs.y + tabs.height * 0.5 })
-      const card = await poll(
-        '이유',
+      const card = await settle(
         () => refusal(tab.page).allTextContents(),
         (texts) => texts.length > 0,
       )
@@ -422,8 +448,7 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
       await canvasFrame(tab.page).locator('[data-wb-id="n_tp1"]').click()
       await grabHandle(tab.page)
       await moveTo(tab.page, center(await boxOf(tab.page, '[data-wb-id="n_text"]')))
-      const panel = await poll(
-        '이유',
+      const panel = await settle(
         () => refusal(tab.page).allTextContents(),
         (texts) => texts.length > 0,
       )
@@ -478,11 +503,11 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
       await tab.page.mouse.down()
       await tab.page.mouse.move(from.x + from.width / 2, from.y + from.height / 2 + 6, { steps: 3 })
       await tab.page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 10 })
-      const line = await poll(
-        '트리의 «안» 표시',
+      const line = await settle(
         () => shownDrops(tab.page),
         (drops) => drops.some((drop) => drop.kind === 'line'),
       )
+      expect(line.filter((drop) => drop.kind === 'line').map((drop) => drop.placement)).toEqual(['inside'])
       await tab.page.mouse.up()
       const headEnd = await poll(
         '서버의 머리 오른쪽',
@@ -511,18 +536,26 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
     try {
       const frame = canvasFrame(tab.page)
       const before = [await frame.locator('[data-wb-id="n_t2"]').count(), await frame.locator('[data-wb-id="n_f1"]').count()]
+      // 펼쳐 보인 노드를 기다리되 안 던진다 — 펼치지 않는 변조가 시간 초과가 아니라 값(`tab` · `form`)으로 죽게.
+      const shownBox = async (id: string) =>
+        (await frame.locator(`[data-wb-id="${id}"]`).count()) === 0 ? null : frame.locator(`[data-wb-id="${id}"]`).boundingBox()
       await selectRow(tab.page, 'n_t2')
-      await frame.locator('[data-wb-id="n_t2"]').waitFor()
-      const tabShown = await frame.locator('[data-wb-id="n_t2"]').boundingBox()
-      const selected = await tab.page.locator('.wb-shell-selection').getAttribute('data-wb-selected-id')
-      const head = await frame.locator('[data-wb-part="tab"][aria-selected="true"] [data-wb-id]').getAttribute('data-wb-id')
+      const tabShown = await settle(
+        () => shownBox('n_t2'),
+        (box) => box !== null,
+      )
+      const outline = tab.page.locator('.wb-shell-selection')
+      const selected = (await outline.count()) === 0 ? null : await outline.first().getAttribute('data-wb-selected-id')
+      const heads = frame.locator('[data-wb-part="tab"][aria-selected="true"] [data-wb-id]')
+      const head = (await heads.count()) === 0 ? null : await heads.first().getAttribute('data-wb-id')
       await selectRow(tab.page, 'n_f1')
-      await frame.locator('[data-wb-id="n_f1"]').waitFor()
-      const formShown = await frame.locator('[data-wb-id="n_f1"]').boundingBox()
+      const formShown = await settle(
+        () => shownBox('n_f1'),
+        (box) => box !== null,
+      )
       const tabGone = await frame.locator('[data-wb-id="n_t2"]').count()
       await selectRow(tab.page, 'n_text')
-      await poll(
-        '접힘이 돌아온다',
+      const folded = await settle(
         () => frame.locator('[data-wb-id="n_f1"]').count(),
         (n) => n === 0,
       )
@@ -534,6 +567,7 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
         head,
         form: formShown !== null && formShown.height > 0,
         tabGone,
+        folded,
         props: [find(doc, 'n_tabs')?.props, find(doc, 'n_form')?.props],
         sent: tab.patches.length,
         other: [
@@ -547,6 +581,7 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
         head: 'n_tp2',
         form: true,
         tabGone: 0,
+        folded: 0,
         props: [{ active: 0 }, { collapsed: true }],
         sent: 0,
         other: [0, 0],
@@ -667,12 +702,8 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
     try {
       await grabCard(tab.page, 'Button')
       await moveTo(tab.page, center(await boxOf(tab.page, '[data-wb-id="n_text"]')))
-      await poll(
-        '칸이 선다',
-        () => slots(tab.page),
-        (list) => list.includes('n_bare:footer'),
-      )
       const aimed = await aimAtSlot(tab.page, 'n_bare', 'footer')
+      expect(aimed).toBe('footer')
       // 밥이 그 바닥에 첫 노드를 넣는다(맵째 `add`).
       const { headSeq } = await server(P)
       const status = (
