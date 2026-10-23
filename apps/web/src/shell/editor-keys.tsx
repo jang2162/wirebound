@@ -38,6 +38,7 @@ import {
 import { useApi } from '../api/context'
 import { useCanvasDocument } from '../canvas/canvas-document'
 import { claimNodeImages, type ClaimedNodes } from '../edit/claim-images'
+import { copiedHere, markCopiedEnvelope } from '../edit/copy-marks'
 import { platformOf, type ShortcutCommand } from '../edit/editor-shortcuts'
 import {
   PASTE_GONE_NOTICE,
@@ -151,10 +152,14 @@ export function EditorKeys(props: {
     if (doc === null || selectedNodeIds.length === 0 || selectedNodeIds.includes(doc.root?.id)) return null
     const nodes = selectedNodeIds.map((id) => findNodeSafely(doc.root, id)).filter((node): node is WbNode => node !== undefined)
     // 상태 목록을 함께 싣는다 — 붙이는 쪽이 뺀 가지를 이 페이지의 이름으로 말한다(`readNodesEnvelope` 머리말). 출처 프로젝트도 싣는다 — 다른
-    // 프로젝트에 붙이면 그 쪽이 그림을 여기서 가져온다(`edit/claim-images.ts`).
-    return nodes.length === 0
-      ? null
-      : writeNodesEnvelope(nodes, doc.version, Array.isArray(doc.viewStates) ? doc.viewStates : undefined, { projectId: props.projectId })
+    // 프로젝트에 붙이면 그 쪽이 그림을 여기서 가져온다(`edit/claim-images.ts`). 그 출처는 이 브라우저가 낸 복사일 때만 믿으므로 표지를 적는다
+    // (`edit/copy-marks.ts`).
+    if (nodes.length === 0) return null
+    const text = writeNodesEnvelope(nodes, doc.version, Array.isArray(doc.viewStates) ? doc.viewStates : undefined, {
+      projectId: props.projectId,
+    })
+    markCopiedEnvelope(text)
+    return text
   }
 
   /** 여럿을 고른 판에서 하나일 때만 되는 키(순서 · 계층 · 화살표 고르기)를 눌렀다 — 끈 채 이유를 말한다. */
@@ -248,7 +253,8 @@ export function EditorKeys(props: {
     // 붙일 자리 — 고른 구역 줄이 있으면 그 구역 끝(`pasteOps` 의 표), 아니면 기준 노드 뒤.
     const anchor = store.getState().selectedZone ?? store.getState().selectedNodeId
     // 다른 프로젝트에서 꺼낸 노드가 그림을 들면 붙이기 편집 전에 그 출처에서 가져온다 — 못 가져온 그림은 비우고 말한다(`edit/claim-images.ts`).
-    const source = read.source
+    // **출처는 이 브라우저가 낸 복사 그대로일 때만 믿는다**(`edit/copy-marks.ts` 머리말) — 아니면 출처 없는 봉투와 같이 가져오지 않는다.
+    const source = read.source !== undefined && copiedHere(text) ? read.source : undefined
     const claimFrom = source !== undefined && source.projectId !== props.projectId && imageIdsIn(read.nodes).length > 0 ? source : null
     const needsPages = hasPageTargets(read.nodes)
     if (!needsPages && claimFrom === null) {

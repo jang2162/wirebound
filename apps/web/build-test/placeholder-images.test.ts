@@ -8,6 +8,7 @@
  * | 번들 | 내보낸 zip 을 풀어 `file://` 로 연다 | zip 의 `assets/images/` 파일 · 크기 · 그 페이지의 `naturalWidth` · 남의 것은 표지 |
  * | PPTX | 번들 페이지를 찍은 화면 | 그 자리표시자 칸의 화소가 그림의 색이다 |
  * | 파일 놓기 | CDP `Input.dispatchDragEvent`(`files`)로 패널의 다른 자리 · 그림 칸에 놓는다 | 탭 수 · 주소 · 올리기 요청 수 |
+ * | 붙여넣기의 출처 | 그림 든 노드를 복사해 다른 프로젝트에 붙인다 — 같은 컨텍스트의 다른 탭 · 같은 탭 · 남이 지은 글 · 한 글자 바꾼 글(빈 페이지의 `<textarea>` 에서 복사) | 가져오기 요청 수 · 붙인 뒤 `GET <받는 프로젝트>/assets/<id>` 의 상태(`edit/copy-marks.ts`) |
  *
  * 그림 바이트는 이 파일이 짓는다 — 앱끼리 서로의 소스를 부르지 않는다(`apps/api/test/asset-samples.ts` 와 같은 꼴의 작은 판).
  */
@@ -279,6 +280,136 @@ describe.skipIf(!전제.ok)('자리표시자의 그림 — 실브라우저', () 
     // 칸 240×160 CSS px · 기기 배율 2 · 두 칸마다 하나 센다 — 칸이 다 그림이면 약 240×160 개다. 테두리 · 둥근 모서리를 뺀 절반을 하한으로 둔다.
     expect(magenta).toBeGreaterThan((240 * 160) / 2)
   }, 120_000)
+
+  /** alice 의 새 프로젝트 — 페이지 하나 · 글 하나. 붙인 그림을 이 프로젝트가 가졌는지(`GET …/assets/<id>`)로 가져오기를 잰다. */
+  async function receiver(name: string): Promise<{ projectId: string; P: string }> {
+    const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
+    const project = (
+      await call('POST', '/projects', { name, slug: `img-to-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}` })
+    ).body
+    const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' })).body
+    const page = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '받는 곳' })).body
+    const to = `/projects/${project.id}/pages/${page.id}`
+    const seeded = await call('PATCH', `${to}/ops`, {
+      baseSeq: 0,
+      ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_text_to', type: 'Text', props: { content: '받는 페이지' } } }],
+    })
+    if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
+    return { projectId: project.id, P: to }
+  }
+
+  /** 그 탭에서 그림 노드(`n_img`)를 골라 복사한다 — 클립보드에 실린 글을 캔버스 창의 `copy` 리스너로 받아 돌려준다. */
+  async function copyImageNode(page: import('playwright-core').Page): Promise<string> {
+    await page.goto(P)
+    const node = canvasFrame(page).locator('[data-wb-id="n_img"]')
+    await node.waitFor({ state: 'attached' })
+    await canvasFrame(page)
+      .locator('body')
+      .evaluate(() => {
+        ;(window as unknown as { __copied: string[] }).__copied = []
+        window.addEventListener('copy', (event) =>
+          (window as unknown as { __copied: string[] }).__copied.push(event.clipboardData?.getData('text/plain') ?? ''),
+        )
+      })
+    await node.click()
+    await page.keyboard.press('ControlOrMeta+c')
+    return poll(
+      '복사한 글',
+      () =>
+        canvasFrame(page)
+          .locator('body')
+          .evaluate(() => (window as unknown as { __copied: string[] }).__copied.slice()),
+      (copied) => copied.length > 0,
+      5_000,
+    ).then((copied) => copied[0]!)
+  }
+
+  /** 글을 빈 페이지의 `<textarea>` 에서 골라 복사한다 — 남이 보낸 글을 사람이 복사한 판. */
+  async function copyText(context: import('playwright-core').BrowserContext, text: string): Promise<void> {
+    const page = await context.newPage()
+    await page.setContent('<textarea id="t"></textarea>')
+    await page.fill('#t', text)
+    await page.focus('#t')
+    await page.keyboard.press('ControlOrMeta+a')
+    await page.keyboard.press('ControlOrMeta+c')
+    await page.close()
+  }
+
+  /** 받는 페이지를 열고 붙인다 — 붙인 노드가 서버에 닿을 때까지 기다리고, 그 노드의 그림 id 와 그 그림을 받는 프로젝트에서 읽은 상태를 준다. */
+  async function pasteInto(page: import('playwright-core').Page, to: { projectId: string; P: string }) {
+    await page.goto(to.P)
+    await canvasFrame(page).locator('[data-wb-id="n_text_to"]').waitFor({ state: 'attached' })
+    await canvasFrame(page)
+      .locator('body')
+      .click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('ControlOrMeta+v')
+    const children = await poll(
+      '붙인 노드가 서버에 닿는다',
+      async () => ((await stack.request(alice, 'GET', to.P)).body.schema.root.children ?? []) as { props?: { image?: string } }[],
+      (nodes) => nodes.length === 2,
+    )
+    const image = children[1]!.props?.image ?? null
+    return { image, asset: (await stack.request(alice, 'GET', `/projects/${to.projectId}/assets/${sha256(PNG)}`)).status }
+  }
+
+  function countClaims(context: import('playwright-core').BrowserContext): { readonly n: number } {
+    const counter = { n: 0 }
+    context.on('request', (request) => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/assets/claim')) counter.n += 1
+    })
+    return counter
+  }
+
+  it('붙여넣기의 출처 — 같은 브라우저의 다른 탭 · 같은 탭에서 낸 복사는 다른 프로젝트에 붙일 때 그림을 가져온다', async () => {
+    const otherTab = await receiver('다른 탭')
+    const sameTab = await receiver('같은 탭')
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    const claims = countClaims(context)
+    try {
+      await copyImageNode(page)
+      const second = await context.newPage()
+      const viaOtherTab = { ...(await pasteInto(second, otherTab)), claims: claims.n }
+      await copyImageNode(page)
+      const viaSameTab = { ...(await pasteInto(page, sameTab)), claims: claims.n }
+      expect({ viaOtherTab, viaSameTab }).toEqual({
+        viaOtherTab: { image: sha256(PNG), asset: 200, claims: 1 },
+        viaSameTab: { image: sha256(PNG), asset: 200, claims: 2 },
+      })
+    } finally {
+      await context.close()
+    }
+  }, 90_000)
+
+  it('붙여넣기의 출처 — 남이 지은 글 · 이 브라우저의 복사를 한 글자 바꾼 글은 출처가 다른 프로젝트여도 그림을 가져오지 않는다', async () => {
+    const composedTo = await receiver('지은 글')
+    const alteredTo = await receiver('바꾼 글')
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    const claims = countClaims(context)
+    try {
+      const real = await copyImageNode(page)
+      const { version } = JSON.parse(real) as { version: number }
+      // 남이 지은 글 — 출처는 그림을 가진 프로젝트, 노드는 그 그림의 해시(리뷰 RV-CI-B H1 의 재현 꼴).
+      const composed = JSON.stringify({
+        wirebound: 'nodes',
+        version,
+        source: { projectId },
+        nodes: [{ id: 'n_forged', type: 'Placeholder', props: { label: '지은 것', image: sha256(PNG) } }],
+      })
+      await copyText(context, composed)
+      const viaComposed = { ...(await pasteInto(page, composedTo)), claims: claims.n }
+      const altered = real.replace('"그림"', '"그린"')
+      await copyText(context, altered)
+      const viaAltered = { ...(await pasteInto(page, alteredTo)), claims: claims.n }
+      // 카나리아 — 바꾼 글이 실제로 바뀌었고, 두 붙이기가 그림 id 를 든 노드로 닿았다(가져오기만 안 했다).
+      expect({ changed: altered !== real, viaComposed, viaAltered }).toEqual({
+        changed: true,
+        viaComposed: { image: sha256(PNG), asset: 404, claims: 0 },
+        viaAltered: { image: sha256(PNG), asset: 404, claims: 0 },
+      })
+    } finally {
+      await context.close()
+    }
+  }, 90_000)
 
   it('파일 놓기 — 패널의 다른 자리에 놓은 파일은 브라우저가 열지 않는다 · 그림 칸에 놓은 파일은 올린다', async () => {
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
