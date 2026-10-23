@@ -46,6 +46,27 @@
  * - **자식 줄을 통째로 바꾸는 op**(`add` · `replace` · `remove …/children` · `…/zones/<이름>` · `…/zones` — 빈 컨테이너 · 빈 구역의 첫
  *   자식 · 그 되돌리기) — 만들 때의 자식 id 줄(`zones` 맵이면 구역마다의 줄)과 지금이 다르면 남의 노드를 덮거나 지운다.
  *
+ * ## 구역 하나의 뜻인 맵째 op 은 그 구역 키로 좁힌다
+ *
+ * `zones` 맵이 없는 노드의 빈 구역에 첫 노드를 넣는 편집은 맵째 `add …/zones { <이름>: [노드] }` 다(`edit/ops.ts` 의 `zoneSlot` — JSON Patch 는 없는
+ * 부모 아래 키를 못 만든다). 맵 하나를 구역 넷이 나눠 써서, 남이 **다른 구역**의 첫 노드를 먼저 넣어 맵을 만들면 위 «객체 키의 `add`» 전제가 깨져
+ * 서로 다른 자리의 넣기가 버려졌다(리뷰 RV-NS 발견 3). 그래서 키가 하나뿐인 맵째 op 은 **그 구역 키의 op** 으로 붙잡는다(`zoneKey`).
+ * 맵이 있을 때 낸 키 `add …/zones/<이름> [배열]`(그 키가 없었다)도 같은 뜻이라 함께 붙잡는다 — 남이 맵을 만든 넣기를 되돌려 맵이 사라지면
+ * 그 키 `add` 는 부모가 없어 못 얹혔다(리뷰 RV-ZE M1 — 좁히기의 거울):
+ *
+ * | op | 얹을 문서의 맵 | 다시 지은 op |
+ * |---|---|---|
+ * | `add …/zones { k: v }` · `add …/zones/k v` | 없다 | `add …/zones { k: v }`(맵째) — 키 `add` 는 남이 맵을 지운 판(리뷰 RV-ZE M1) |
+ * | 같음 | 있고 `k` 가 없다 | `add …/zones/k v` |
+ * | 같음 | `k` 가 빈 배열이다 | `add …/zones/k/<i> v[i]` 를 노드마다 — 남이 만들었다 비운 구역(리뷰 RV-ZE L3). 빈 배열 `v` 면 op 이 없다 |
+ * | 같음 | `k` 에 노드가 있다 · 맵이 객체가 아니다 | 못 얹음 — 같은 구역을 남이 먼저 만들었다(몸통의 `add …/children` 과 같은 판) |
+ * | `remove …/zones`(만들 때 키가 `k` 하나 — 위 편집의 되돌리기) | `k` 만 있다 | 그대로 — `k` 의 자식 id 줄이 만들 때와 같을 때 |
+ * | `remove …/zones`(같음) | `k` 와 다른 키가 있다 | `remove …/zones/k` — `k` 의 자식 id 줄이 만들 때와 같을 때 |
+ *
+ * 서버가 받는 꼴은 그대로다 — 서버는 낡은 `baseSeq` 를 늘 거절하고(`stale`) 다시 얹는 것은 클라이언트의 리베이스다. 좁힌 op 은 서버가 원래 받는
+ * 꼴(`…/zones/<이름>`)이다. 맵째 `add` 를 내는 자리를 없애는 길(새 노드가 구역 배열을 다 든 채 서기)은 고르지 않았다 — MCP · REST 로 만든 노드 ·
+ * 맵을 지운 노드에서는 여전히 맵째 `add` 가 나고, 그 판의 버림이 남는다.
+ *
  * 필드 값 `replace`(글 · prop)는 남이 같은 필드를 고쳤어도 얹는다 — 서버가 받는 순서대로 뒤의 것이 이긴다(리베이스가 원래 하던 일이다).
  *
  * ## 비용
@@ -95,8 +116,8 @@ interface Premise {
 
 /** 노드 id 로 붙잡은 op 하나. `value`는 원래 op 의 값을 그대로 든다 — `applyOps`가 넣을 때 복제한다. */
 export type AnchoredOp =
-  | { op: 'add' | 'replace' | 'test'; at: Anchor; value: unknown; premise: Premise }
-  | { op: 'remove'; at: Anchor; premise: Premise }
+  | { op: 'add' | 'replace' | 'test'; at: Anchor; value: unknown; premise: Premise; zoneKey?: string }
+  | { op: 'remove'; at: Anchor; premise: Premise; zoneKey?: string; zoneKids?: string[] | null }
   | { op: 'move'; from: Anchor; to: Anchor }
 
 /**
@@ -119,7 +140,26 @@ export function anchorOps(document: PageDocument, ops: readonly PatchOp[]): Anch
     } else {
       const at = anchorPath(current, op.path, op.op === 'add')
       const premise = op.op === 'test' ? {} : premiseOf(current, op.op, op.path)
-      anchored.push(op.op === 'remove' ? { op: 'remove', at, premise } : { op: op.op, at, value: op.value, premise })
+      // 구역 하나의 뜻인 맵째 op(머리말 «구역 하나의 뜻인 맵째 op 은 그 구역 키로 좁힌다»).
+      const key =
+        op.op === 'add' || op.op === 'remove' ? singleZoneKey(op.op === 'add' ? op.value : getByPointer(current, op.path), op.path) : null
+      // 맵이 있을 때 낸 키 `add …/zones/<k>` — 맵째 op 과 같은 «구역 하나의 뜻» 으로 맵 경로에 붙잡는다(머리말의 표).
+      const keyed = op.op === 'add' ? newZoneKey(current, op.path, op.value) : null
+      if (keyed !== null && op.op === 'add') {
+        const mapPath = formatPointer(parsePointer(op.path).slice(0, -1))
+        anchored.push({ op: 'add', at: anchorPath(current, mapPath, false), value: { [keyed]: op.value }, premise: {}, zoneKey: keyed })
+      } else if (op.op === 'remove') {
+        anchored.push(
+          key === null
+            ? { op: 'remove', at, premise }
+            : { op: 'remove', at, premise, zoneKey: key, zoneKids: kidIds(getByPointer(current, `${op.path}/${key}`)) },
+        )
+      } else
+        anchored.push(
+          key === null || op.op !== 'add'
+            ? { op: op.op, at, value: op.value, premise }
+            : { op: 'add', at, value: op.value, premise, zoneKey: key },
+        )
     }
     // 뒤 op 의 자리는 이 op 을 얹은 문서에서 잰다. 마지막 op 은 얹을 까닭이 없다.
     if (i < ops.length - 1) {
@@ -154,6 +194,21 @@ export function rebaseAnchored(document: PageDocument, anchored: readonly Anchor
       const path = resolveAnchor(afterRemove, entry.to)
       if (path === null) return null
       op = { op: 'move', from, path }
+    } else if (entry.zoneKey !== undefined) {
+      const path = resolveAnchor(current, entry.at)
+      if (path === null) return null
+      const narrowed = narrowZoneOp(current, path, entry)
+      if (narrowed === null) return null
+      // 남이 남긴 빈 구역에 다시 지은 넣기는 노드마다 op 하나다(빈 배열이면 0 — 뒤 `move` 가 그 구역에 넣는다).
+      for (const each of narrowed) {
+        try {
+          current = applyOps(current, [each])
+        } catch {
+          return null
+        }
+        ops.push(each)
+      }
+      continue
     } else {
       const path = resolveAnchor(current, entry.at)
       if (path === null || !premiseHolds(current, path, entry.premise)) return null
@@ -319,6 +374,50 @@ function premiseHolds(document: PageDocument, path: string, premise: Premise): b
     if (!isNodeLike(parent) || Object.hasOwn(parent, tokens[tokens.length - 1]!) !== premise.had) return false
   }
   return true
+}
+
+/**
+ * 맵째 op 이 구역 하나의 뜻인가 — 경로가 `…/zones` 로 끝나고 값(`add` 의 값 · `remove` 가 지울 지금 값)이 배열 하나를 든 키 하나짜리 맵이면 그
+ * 키, 아니면 `null`(머리말 «구역 하나의 뜻인 맵째 op»).
+ */
+function singleZoneKey(value: unknown, path: string): string | null {
+  if (!path.endsWith('/zones') || !isNodeLike(value)) return null
+  const keys = Object.keys(value)
+  if (keys.length !== 1) return null
+  return Array.isArray((value as unknown as Record<string, unknown>)[keys[0]!]) ? keys[0]! : null
+}
+
+/**
+ * 맵이 있을 때 낸 키 `add …/zones/<k> [배열]` 의 구역 이름 — 만든 문서에서 맵이 객체이고 그 키가 없었을 때만(넣기 · 옮기기의 첫 노드 —
+ * `edit/ops.ts` 의 `zoneSlot`). 아니면 `null`.
+ */
+function newZoneKey(document: PageDocument, path: string, value: unknown): string | null {
+  const tokens = parsePointer(path)
+  if (tokens.length < 3 || tokens[tokens.length - 2] !== 'zones' || !Array.isArray(value)) return null
+  const map: unknown = getByPointer(document, formatPointer(tokens.slice(0, -1)))
+  const key = tokens[tokens.length - 1]!
+  return isNodeLike(map) && !Object.hasOwn(map, key) ? key : null
+}
+
+/** 구역 키로 붙잡은 맵째 op 을 얹을 문서의 맵에 맞춰 다시 짓는다(머리말의 표). 못 얹으면 `null`. */
+function narrowZoneOp(document: PageDocument, path: string, entry: Exclude<AnchoredOp, { op: 'move' }>): PatchOp[] | null {
+  const key = entry.zoneKey!
+  const map: unknown = getByPointer(document, path)
+  if (entry.op !== 'remove') {
+    const value: unknown = (entry.value as Record<string, unknown>)[key]
+    if (map === undefined) return [{ op: 'add', path, value: entry.value }]
+    if (!isNodeLike(map)) return null
+    if (!Object.hasOwn(map, key)) return [{ op: 'add', path: `${path}/${key}`, value }]
+    // 남이 만들었다 비운 구역 — 그 자리에 차례로 넣는다. 남의 노드가 든 구역이면 못 얹는다(덮지 않는다).
+    const list: unknown = (map as unknown as Record<string, unknown>)[key]
+    if (!Array.isArray(list) || list.length > 0 || !Array.isArray(value)) return null
+    return value.map((node, at) => ({ op: 'add', path: `${path}/${key}/${at}`, value: node }))
+  }
+  if (!isNodeLike(map) || !Object.hasOwn(map, key)) return null
+  const kids = kidIds((map as unknown as Record<string, unknown>)[key])
+  const premised = 'zoneKids' in entry ? (entry.zoneKids ?? null) : null
+  if (kids === null || premised === null || kids.join('\n') !== premised.join('\n')) return null
+  return [Object.keys(map).length === 1 ? { op: 'remove', path } : { op: 'remove', path: `${path}/${key}` }]
 }
 
 /** 자식 줄 값의 자식 id 줄 — 구역 맵이면 이름 차례로 구역마다(`이름:` 머리). 배열 · 맵이 아니면 `null`. */

@@ -101,9 +101,19 @@ import { isPreviewId, withoutPreview, type PlacementPreview } from '../canvas/ca
 import { createNode } from '../edit/create-node'
 import { findNodeSafely } from '../edit/safe-walk'
 import { acceptsChildren } from '../edit/structure-actions'
-import { dropOps, pageEndTarget, sameDrop, structureDropTarget, type Placing, type StructureDrop } from '../edit/structure-drop'
+import {
+  dropOps,
+  dropRefusal,
+  pageEndTarget,
+  sameDrop,
+  structureDropTarget,
+  zoneDropRefusal,
+  zoneDropTarget,
+  type Placing,
+  type StructureDrop,
+} from '../edit/structure-drop'
 import { useEditCommit } from '../edit/use-edit-commit'
-import { structureTreeHint } from '../panels/structure-tree-hint'
+import { structureTreeHint, structureTreeRefusal } from '../panels/structure-tree-hint'
 import { openDocumentNow, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 import type { DropBand } from '../tree/tree-drop'
@@ -127,7 +137,8 @@ interface Stage {
 export interface PlacementDrop {
   placing: Placing
   target: StructureDrop
-  over: { overId: string; band: DropBand } | 'page-end'
+  /** 다시 물을 대상 — 노드 + 띠 · 빈 구역 칸(그 구역 끝 — `canvas/empty-zones.tsx`) · 페이지 끝. */
+  over: { overId: string; band: DropBand } | { zoneOf: string; zone: string } | 'page-end'
   layout: Layout
   stage: Stage
   /** 어느 대상 위에서 선 자리인가 — 트리면 트리의 선 · 강조를 그리고, 캔버스면 미리보기가 대신한다(머리말 «배치 미리보기»). */
@@ -139,6 +150,8 @@ interface Gesture {
   stage: Stage
   last: { point: DragPoint; shown: PlacementDrop | null } | null
   collapsedAt: DragPoint | null
+  /** 마지막 물음이 못 놓은 까닭(받는 타입 · 설 자리) — 끌기 장치의 `refusal` 이 읽는다(`refusalOf`). */
+  refusal: string | null
 }
 
 interface Regions {
@@ -153,6 +166,8 @@ interface RegionSlots {
   remeasured: Set<() => void>
   /** 지금 끼워 보일 미리보기와 그것을 실은 쪽 · 받는 쪽(머리말 «배치 미리보기»). */
   preview: { value: PlacementPreview; owner: object } | null
+  /** 지금 끄는 것과 그것을 실은 쪽 — 캔버스가 빈 구역 칸을 세운다(`canvas/empty-zones.tsx`). 받는 쪽은 미리보기와 같은 목록이다. */
+  dragging: { value: Placing; owner: object } | null
   previewListeners: Set<() => void>
 }
 
@@ -165,6 +180,7 @@ export function PlacementRegionsProvider(props: { children: ReactNode }): ReactE
     canvas: null,
     remeasured: new Set(),
     preview: null,
+    dragging: null,
     previewListeners: new Set(),
   }))
   return createElement(RegionsContext.Provider, { value: slots }, props.children)
@@ -266,6 +282,50 @@ export function usePublishPlacementPreview(drop: PlacementDrop | null): void {
   )
 }
 
+/**
+ * 끄는 쪽이 지금 끄는 것을 싣는다 — `null` 이면 걷는다(끌기가 서기 전 · 끝난 뒤). 내려가면 제가 실은 것만 걷는다. 미리보기(`usePublishPlacementPreview`)와
+ * 달리 놓을 자리가 안 서도 싣는다 — 빈 구역 칸은 끌기를 시작하면 서야 그 칸 위로 갈 수 있다(`canvas/empty-zones.tsx`).
+ */
+export function usePublishDragging(placing: Placing | null): void {
+  const slots = useContext(RegionsContext)
+  const [owner] = useState(() => ({}))
+  useLayoutEffect(() => {
+    if (slots === null) return
+    const now = slots.dragging
+    if (placing === null) {
+      if (now === null || now.owner !== owner) return
+      slots.dragging = null
+    } else {
+      if (now !== null && now.owner === owner && now.value === placing) return
+      slots.dragging = { value: placing, owner }
+    }
+    for (const listener of [...slots.previewListeners]) listener()
+  })
+  useLayoutEffect(
+    () => () => {
+      if (slots === null || slots.dragging?.owner !== owner) return
+      slots.dragging = null
+      for (const listener of [...slots.previewListeners]) listener()
+    },
+    [slots, owner],
+  )
+}
+
+/** 지금 끄는 것(`usePublishDragging`). 없거나 공급자 밖이면 `null`. */
+export function useDragging(): Placing | null {
+  const slots = useContext(RegionsContext)
+  return useSyncExternalStore(
+    (listener) => {
+      if (slots === null) return () => {}
+      slots.previewListeners.add(listener)
+      return () => {
+        slots.previewListeners.delete(listener)
+      }
+    },
+    () => slots?.dragging?.value ?? null,
+  )
+}
+
 /** 지금 끼워 보일 미리보기(머리말 «배치 미리보기»). 없거나 공급자 밖이면 `null`. */
 export function usePlacementPreview(): PlacementPreview | null {
   const slots = useContext(RegionsContext)
@@ -305,8 +365,8 @@ function logOver(debug: DragDebug, hint: DropHint<PlacementDrop> | null, reason:
     return
   }
   const { region, target, over } = hint.value
-  const overId = over === 'page-end' ? 'page-end' : over.overId
-  const band = over === 'page-end' ? undefined : over.band
+  const overId = over === 'page-end' ? 'page-end' : 'zoneOf' in over ? `zone:${over.zoneOf}:${over.zone}` : over.overId
+  const band = over === 'page-end' || 'zoneOf' in over ? undefined : over.band
   debug.over(`${region}:${target.parentId}:${target.index}:${target.placement}:${overId}:${band ?? ''}`, {
     result: region,
     parent: target.parentId,
@@ -344,6 +404,8 @@ export interface Placement {
    * 부르는 쪽이 마지막 좌표를 들고 묻는다(컴포넌트 목록 카드 — 한 끌기가 두 대상 위를 지난다).
    */
   scrollContainerAt: (point: DragPoint) => HTMLElement | null
+  /** 그 끌기의 마지막 물음이 못 놓은 까닭(받는 타입 · 설 자리) — 없으면 `null`. 끌기 장치의 `refusal` 에 준다. */
+  refusalOf: (placing: Placing) => string | null
 }
 
 export function usePlacementDrop(input: {
@@ -380,7 +442,18 @@ export function usePlacementDrop(input: {
   const verdict = (doc: Parameters<typeof structureDropTarget>[0], placing: Placing, over: PlacementDrop['over'], why?: Why) =>
     over === 'page-end'
       ? pageEndTarget(doc, placing, store.editBlockedBy, why)
-      : structureDropTarget(doc, placing, over.overId, over.band, store.editBlockedBy, why)
+      : 'zoneOf' in over
+        ? zoneDropTarget(doc, placing, over.zoneOf, over.zone, store.editBlockedBy, why)
+        : structureDropTarget(doc, placing, over.overId, over.band, store.editBlockedBy, why)
+
+  /** 판정이 `null` 을 낸 대상의 못 놓는 까닭(받는 타입 · 설 자리 — `fitRefusal`) — 없으면 `null`. */
+  const refusalAt = (doc: PageDocument, placing: Placing, over: PlacementDrop['over']): string | null => {
+    if (over === 'page-end') {
+      const rootId: unknown = doc.root?.id
+      return typeof rootId === 'string' ? dropRefusal(doc, placing, rootId, 'inside') : null
+    }
+    return 'zoneOf' in over ? zoneDropRefusal(doc, placing, over.zoneOf, over.zone) : dropRefusal(doc, placing, over.overId, over.band)
+  }
 
   /** 보인 자리가 지금 문서 · 잠금에서도 같은 답인가(머리말 «보인 자리에만 놓는다»). */
   const holds = (shown: PlacementDrop): boolean => {
@@ -404,9 +477,10 @@ export function usePlacementDrop(input: {
     const now = stageNow()
     let gesture = gestures.get(placing)
     if (gesture === undefined) {
-      gesture = { stage: now, last: null, collapsedAt: null }
+      gesture = { stage: now, last: null, collapsedAt: null, refusal: null }
       gestures.set(placing, gesture)
     }
+    gesture.refusal = null
     if (!sameStage(gesture.stage, now)) return miss(why, 'stage-changed')
     const near = (at: DragPoint): boolean => Math.hypot(point.x - at.x, point.y - at.y) <= DRAG_THRESHOLD
     // 무너진 자리에서 문턱 밖으로 나가기 전에는 아무 자리도 내지 않는다 — 조금 움직였다 떼도(머리말 «둘째 겹»).
@@ -420,7 +494,7 @@ export function usePlacementDrop(input: {
       gesture.last = null
       return miss(why, 'collapsed')
     }
-    const hint = placeAt(placing, point, now, last?.shown ?? null, why)
+    const hint = placeAt(placing, point, now, last?.shown ?? null, why, gesture)
     gesture.last = { point, shown: hint?.value ?? null }
     return hint
   }
@@ -439,6 +513,7 @@ export function usePlacementDrop(input: {
     now: Stage,
     shown: PlacementDrop | null,
     why: Why,
+    gesture: Gesture,
   ): DropHint<PlacementDrop> | null => {
     if (document === null) return miss(why, 'no-document')
 
@@ -447,13 +522,16 @@ export function usePlacementDrop(input: {
     hoverRow(tree !== null && withinRegion(tree, point) ? elementAt(tree, '[data-tree-row]', point) : null)
     if (tree !== null && withinRegion(tree, point)) {
       const hit = structureTreeHint(tree, document, placing, point, store.editBlockedBy)
-      if (hit === null) return miss(why, 'tree-miss')
+      if (hit === null) {
+        gesture.refusal = structureTreeRefusal(tree, document, placing, point)
+        return miss(why, 'tree-miss')
+      }
       return {
         ...hit.hint,
         value: {
           placing,
           target: hit.hint.value,
-          over: { overId: hit.overId, band: hit.band },
+          over: hit.over,
           layout: VERTICAL,
           stage: now,
           region: 'tree',
@@ -486,9 +564,17 @@ export function usePlacementDrop(input: {
     if (hit === null) return null
     // 숨긴 미리보기는 안 잡힌다 — 그래도 잡히면(숨기기 전에 선 요소) 노드로 읽지 않고 보인 자리 그대로다.
     if ('preview' in hit) return keep(shown, hit.rect, now, why)
-    const over: PlacementDrop['over'] = 'pageEnd' in hit ? 'page-end' : { overId: hit.overId, band: hit.band }
+    const over: PlacementDrop['over'] =
+      'pageEnd' in hit
+        ? 'page-end'
+        : 'zone' in hit
+          ? { zoneOf: hit.zone.parentId, zone: hit.zone.zone }
+          : { overId: hit.overId, band: hit.band }
     const target = verdict(document, placing, over, why)
-    if (target === null) return null
+    if (target === null) {
+      gesture.refusal = refusalAt(document, placing, over)
+      return null
+    }
     return {
       value: { placing, target, over, layout: hit.layout, stage: now, region: 'canvas' },
       rect: hit.rect,
@@ -542,5 +628,8 @@ export function usePlacementDrop(input: {
     return canvas === null ? null : scrollParent(canvas.frame.frameElement as HTMLElement | null)
   }
 
-  return { onOver, onDrop, live, sameDrop: (shown, landed) => sameDrop(shown.target, landed.target), scrollContainerAt }
+  /** 그 끌기의 마지막 물음이 못 놓은 까닭 — 끌기 장치의 `refusal` 에 준다(`use-pointer-drag.ts` 의 `PointerDragOptions.refusal`). */
+  const refusalOf = (placing: Placing): string | null => gestures.get(placing)?.refusal ?? null
+
+  return { onOver, onDrop, live, sameDrop: (shown, landed) => sameDrop(shown.target, landed.target), scrollContainerAt, refusalOf }
 }

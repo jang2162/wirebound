@@ -20,7 +20,7 @@ import { useEditCommit } from '../edit/use-edit-commit'
 import { aliasOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { reselectAfterReject } from '../edit/reselect-after-reject'
 import { findNodeSafely } from '../edit/safe-walk'
-import { nodeSpot, selectionAbilities, type StructureAbilities } from '../edit/structure-actions'
+import { levelRefusals, nodeSpot, selectionAbilities, type LevelRefusals, type StructureAbilities } from '../edit/structure-actions'
 import { removeManyOps } from '../edit/paste-ops'
 import { dropZoneOf, type StructureDrop } from '../edit/structure-drop'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -48,6 +48,11 @@ export interface StructureCommands {
    * 재진다).
    */
   why: StructureWhy
+  /**
+   * 들여쓰기 · 내어쓰기가 갈 자리에 고른 노드가 못 서는 까닭(`levelRefusals`) — 단축키가 꺼진 키에 이 문장을 말한다(`shell/editor-keys.tsx`).
+   * 여럿을 고른 판은 둘 다 `null` 이다(그 판의 까닭은 «하나일 때만»).
+   */
+  levels: LevelRefusals
   /**
    * 고른 노드를 지운다. 지운 뒤 무엇을 고르는지는 부르는 쪽이 정한다 — 줄 `…` «삭제»는 부모(`'parent'` — 기본), 키보드 삭제 · 잘라내기는
    * 선택을 비운다(`'none'` — `shell/editor-keys.tsx` 머리말 «키보드 삭제는 선택을 비운다»).
@@ -133,6 +138,7 @@ export function useStructureCommands(props: {
   const removable = many && document !== null && removeManyOps(document, selectedNodeIds) !== null
   const selectionBased = selectionAbilities(document, selectedNodeIds, selectedNodeId, props.selectedLock, otherLock !== null, removable)
   const abilities = selectionBased
+  const levels = levelRefusals(document, many ? null : selectedNodeId)
 
   /**
    * 선택 노드를 지운다. **지운 뒤 선택을 부모로 옮긴다**(`selectAfter` 가 `'none'` 이면 비운다 — `StructureCommands.remove`).
@@ -291,11 +297,13 @@ export function useStructureCommands(props: {
     // 판에서도 말한다(`./toolbar-status.ts` 머리말 «안 골랐다 칸»).
     pageLock: props.pageLock,
     abilities,
+    levels,
   }
 
   return {
     abilities,
     why: structureWhy(reasonInput, { aliasLocked }),
+    levels,
     remove: removeSelected,
     moveUp: () => moveSelected(-1),
     moveDown: () => moveSelected(1),

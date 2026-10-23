@@ -52,8 +52,14 @@ import { ApiError, type ApiClient } from '../api/client'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
 import type { PersonalModule, ProjectModule } from '../api/types'
-import { DropIndicator } from '../drag/drop-indicator'
-import { useCanvasRemeasured, usePlacementDrop, usePublishPlacementPreview, type PlacementDrop } from '../drag/use-placement'
+import { DropIndicator, DropRefusal } from '../drag/drop-indicator'
+import {
+  useCanvasRemeasured,
+  usePlacementDrop,
+  usePublishDragging,
+  usePublishPlacementPreview,
+  type PlacementDrop,
+} from '../drag/use-placement'
 import { usePointerDrag, type DragPoint } from '../drag/use-pointer-drag'
 import { hasPageTargets, pageTargetsOf } from '../edit/paste-ops'
 import type { Placing, StructureDrop } from '../edit/structure-drop'
@@ -273,6 +279,7 @@ function useModuleInsert(input: {
           const verdict = paletteAddTarget({
             document,
             selectedNodeId: store.getState().selectedNodeId,
+            selectedZone: store.getState().selectedZone,
             placing: { kind: 'module', key: card.key, nodes },
             blockedBy: store.editBlockedBy,
             lockedBy: store.lockedBy,
@@ -379,10 +386,13 @@ function ModuleCards(props: {
     onDrop: placement.onDrop,
     sameDrop: placement.sameDrop,
     scrollContainer: () => (last.current === null ? null : placement.scrollContainerAt(last.current)),
+    refusal: placement.refusalOf,
   })
   useCanvasRemeasured(drag.refresh)
   const hint = placement.live(drag.hint)
   usePublishPlacementPreview(hint?.value ?? null)
+  // 끄는 것을 캔버스에 알린다 — 받을 수 있는 빈 구역마다 점선 칸이 선다(`canvas/empty-zones.tsx`).
+  usePublishDragging(drag.dragging)
   const dragged = drag.dragging?.kind === 'module' ? cards.find((card) => card.key === (drag.dragging as { key: string }).key) : undefined
 
   /** 마지막으로 넣은 누름 — 같은 카드의 더블클릭 · Enter 두 번의 둘째를 버린다(머리말 «넣기»). */
@@ -453,6 +463,7 @@ function ModuleCards(props: {
         ))}
       </div>
       <DropIndicator hint={hint?.value.region === 'tree' ? hint : null} layout={hint?.value.layout} />
+      <DropRefusal refusal={drag.refusal} />
       {dragged !== undefined && pointer !== null && (
         <div className="wb-shell-palette-dragtag" aria-hidden="true" style={{ left: pointer.x + 14, top: pointer.y + 14 }}>
           {dragged.name}

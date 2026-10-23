@@ -29,7 +29,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { NodeLock, PageDocument, WbNode } from '@wirebound/schema'
 import type { TreeMenuNode } from '../../src/api/types'
 import { findNodeSafely } from '../../src/edit/safe-walk'
-import { structureAbilities } from '../../src/edit/structure-actions'
+import { levelRefusals, structureAbilities } from '../../src/edit/structure-actions'
 import type { ActionMenuItem } from '../../src/shell/action-menu'
 import { treeAbilities, type TreeSelection } from '../../src/tree/tree-actions'
 import type { TreeCommands } from '../../src/tree/use-tree-commands'
@@ -128,6 +128,7 @@ function structureCommands(input: { selectedNodeId: string | null; lock?: NodeLo
       },
       { aliasLocked },
     ),
+    levels: levelRefusals(document, selectedNodeId),
     remove: unused,
     moveUp: unused,
     moveDown: unused,

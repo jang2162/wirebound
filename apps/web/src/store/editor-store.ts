@@ -16,6 +16,7 @@
  */
 import {
   applyOps,
+  hasZone,
   lockConflictOfOps,
   type NodeLock,
   type PageDocument,
@@ -23,6 +24,7 @@ import {
   selectionConflicts,
   type ValidationIssue,
 } from '@wirebound/schema'
+import { findNodeSafely } from '../edit/safe-walk'
 import type { NodeLockView } from '../realtime/protocol'
 import { anchorOps, rebaseAnchored, sameOps, type AnchoredOp } from './anchored-ops'
 import { LOSS_RANK, lossMessage, mergeLoss, type LossPart } from './loss-notice'
@@ -198,6 +200,12 @@ export interface EditorState {
    * `toggleSelect` · `selectRange` · `selectMany` 셋이다.
    */
   selectedNodeIds: readonly string[]
+  /**
+   * **넣을 자리로 고른 구역**(구조 트리의 구역 줄 — 설계 spec `2026-10-23-node-slots-design.md` 「5. 에디터」 «구역 줄은 노드가 아니다»). 하단 판의
+   * 넣기 · 모듈 넣기(`palette/palette-add.ts`)와 붙여넣기(`edit/paste-ops.ts` 의 `pasteOps`)가 그 구역의 끝에 넣는다. **노드 선택과 함께 서지 않는다** — 구역을 고르면 노드 선택이
+   * 비고(그래서 잠금을 잡지 않는다), 노드를 고르면 이것이 빈다(`#withSelection`). 그 부모가 문서에서 사라지거나 그 구역을 선언하지 않게 되면 빈다.
+   */
+  selectedZone: ZoneRef | null
   mode: EditorMode
   viewportWidth: ViewportWidth
   /** 0.05 ~ 2.0 */
@@ -303,6 +311,12 @@ export interface EditorState {
   documentLoads: number
 }
 
+/** 부모 노드의 한 구역 — 몸통이면 `zone` 이 `'body'` 다(`BODY_ZONE`). */
+export interface ZoneRef {
+  parentId: string
+  zone: string
+}
+
 /** 빈 선택 목록 — 비울 때마다 새 배열을 만들면 `#apply`가 참조로 견줘 «바뀌었다»고 알린다. 얼려 둔다(나눠 쓰므로). */
 const NO_SELECTION: readonly string[] = Object.freeze([])
 
@@ -323,6 +337,7 @@ function initialState(): EditorState {
     headSeq: 0,
     selectedNodeId: null,
     selectedNodeIds: NO_SELECTION,
+    selectedZone: null,
     mode: 'edit',
     viewportWidth: 1280,
     zoom: 1,
@@ -953,6 +968,11 @@ export class EditorStore {
       headSeq,
       selectedNodeId: selection.anchor,
       selectedNodeIds: selection.ids,
+      // 고른 구역은 같은 페이지를 다시 실을 때만 남는다 — 노드 선택과 같은 규칙(`#selectionFor`)이고, 새 문서에 그 구역이 없으면 놓는다.
+      selectedZone:
+        samePage && selection.ids.length === 0 && this.#state.selectedZone !== null && zoneStands(document, this.#state.selectedZone)
+          ? this.#state.selectedZone
+          : null,
       // **이미 비어 있으면 같은 배열을 그대로 넘긴다**(`clearPage`와 같은 이유) — 빈 배열을
       // 새로 만들면 참조가 달라져 `pending`을 구독하는 쪽이 페이지를 열 때마다 헛일을 한다.
       pending: pending.length === 0 ? pending : [],
@@ -2825,6 +2845,19 @@ export class EditorStore {
   }
 
   /**
+   * **구역 하나를 넣을 자리로 고른다**(`selectedZone` 의 머리말). 노드 선택은 비운다 — 구역 줄은 노드가 아니라 잠금을 잡지 않는다. **남의 잠금이
+   * 막지 않는다** — 고르기는 읽기이고, 그 구역에 넣는 편집은 넣는 쪽이 편집으로 묻는다(`palette/palette-add.ts` 의 `blockedBy`). 부모가 문서에
+   * 없거나 그 구역을 선언하지 않았으면 아무것도 안 한다.
+   */
+  readonly selectZone = (parentId: string, zone: string): void => {
+    const { document } = this.#state
+    if (document === null || !zoneStands(document, { parentId, zone })) return
+    const now = this.#state.selectedZone
+    const selectedZone = now !== null && now.parentId === parentId && now.zone === zone ? now : { parentId, zone }
+    this.#apply({ selectedZone, selectedNodeId: null })
+  }
+
+  /**
    * **Cmd+클릭** — 고른 것이면 빼고, 아니면 더한다(설계서 「설계서 화면 구조」의 «고르는 법»). 더한 노드가 기준 노드가 되고, 그것의
    * 조상 · 자손이 목록에 있으면 그것이 대신한다(루트를 더하면 루트 하나가 된다 — `normalizeSelection`의 `'anchor'`). 뺀 것이 기준
    * 노드였으면 목록의 마지막이 기준이다. **남이 잡은 자리는 더하지 않는다**(`selectNode`와 같은 판정). 목록이 상한에 차 있으면 더하지
@@ -3120,6 +3153,10 @@ export class EditorStore {
    * 문서마다 트리를 한 번 훑는다 — 고른 것이 없으면 안 훑는다.
    */
   #withSelection(update: Partial<EditorState>): Partial<EditorState> {
+    return this.#withZone(this.#withNodeSelection(update))
+  }
+
+  #withNodeSelection(update: Partial<EditorState>): Partial<EditorState> {
     const { selectedNodeId, selectedNodeIds, document: current } = this.#state
     if ('selectedNodeIds' in update) return update
     if ('selectedNodeId' in update) {
@@ -3132,6 +3169,19 @@ export class EditorStore {
     const kept = normalizeSelection(document.root, selectedNodeIds, selectedNodeId, 'outer')
     if (sameSelection(kept.ids, selectedNodeIds) && kept.anchor === selectedNodeId) return update
     return { ...update, selectedNodeIds: kept.ids.length === 0 ? NO_SELECTION : kept.ids, selectedNodeId: kept.anchor }
+  }
+
+  /**
+   * **고른 구역을 맞춘다**(`selectedZone` 의 머리말) — 노드를 고르면(목록이 비지 않게 바뀌면) 빈다. 문서가 바뀌어 그 부모가 없거나 그 구역을 선언하지
+   * 않게 되면 빈다. 갱신이 `selectedZone` 을 싣고 오면 그대로다(`selectZone` · `loadPage`).
+   */
+  #withZone(update: Partial<EditorState>): Partial<EditorState> {
+    const zone = this.#state.selectedZone
+    if (zone === null || 'selectedZone' in update) return update
+    if (update.selectedNodeIds !== undefined && update.selectedNodeIds.length > 0) return { ...update, selectedZone: null }
+    const document = update.document
+    if (document === undefined || document === this.#state.document) return update
+    return document !== null && zoneStands(document, zone) ? update : { ...update, selectedZone: null }
   }
 
   /**
@@ -3163,4 +3213,10 @@ export class EditorStore {
     // 사본을 순회한다 — 리스너가 알림을 받는 중에 구독을 해제할 수 있다.
     for (const listener of [...this.#listeners]) listener()
   }
+}
+
+/** 그 구역이 문서에 서 있는가 — 부모 노드가 있고 그 타입이 그 구역을 선언했다. */
+function zoneStands(document: PageDocument, zone: ZoneRef): boolean {
+  const parent = findNodeSafely(document.root, zone.parentId)
+  return parent !== undefined && hasZone(parent.type, zone.zone)
 }

@@ -482,10 +482,16 @@ describe('막다른 길이 아니다 — 구조 편집만 얼고 셸은 산다',
     expect(live()).toEqual([])
     // 트리 줄도 전부 꺼진다 — 고를 수 있는 노드가 하나도 없다. 줄 행동의 단추(행동 메뉴를 여는 것)는 줄이 아니다 —
     // 그 안의 항목이 꺼진 것은 위 `live`가 잰다. 머리의 «모두 접기» · «모두 펴기»도 줄이 아니다 — 접기는 고르기와 같은 읽기라
-    // 잠금에 안 꺼진다(`src/panels/tree-fold.tsx`).
+    // 잠금에 안 꺼진다(`src/panels/tree-fold.tsx`). 구역 줄의 머리(`data-tree-zone-row`)도 노드 줄이 아니다 — 구역을 고르는 것은 잠금을
+    // 안 잡는 읽기이고, 그 구역에 넣는 편집은 넣는 쪽이 편집으로 묻는다(`src/palette/palette-add.ts`).
     const rows = within(structureRegion())
       .getAllByRole<HTMLButtonElement>('button')
-      .filter((button) => button.getAttribute('aria-haspopup') !== 'menu' && !button.classList.contains('wb-shell-tree-fold'))
+      .filter(
+        (button) =>
+          button.getAttribute('aria-haspopup') !== 'menu' &&
+          !button.classList.contains('wb-shell-tree-fold') &&
+          !button.hasAttribute('data-tree-zone-row'),
+      )
     expect(rows.filter((button) => !button.disabled)).toEqual([])
   })
 

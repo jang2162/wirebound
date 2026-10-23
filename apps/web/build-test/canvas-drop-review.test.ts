@@ -22,10 +22,12 @@
  * 이웃 노드 — `./editor-stack.ts` 의 `shownDrops`)로 읽는다. 기대 자리는 «끈 노드의 부모 · 바로 앞 · 바로 뒤 형제가 미리보기의 그것» 이라는
  * 이웃 관계로 서버 문서에서 본다 — 차례 셈을 다시 짓지 않는다.
  */
+import { childLists, getComponent, installCatalog, type WbNode } from '@wirebound/schema'
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   canvasFrame,
+  dragLayoutSettled,
   editorStackPrerequisite,
   poll,
   shownDrops,
@@ -58,8 +60,15 @@ interface Box {
 interface Doc {
   id: string
   type?: string
+  props?: Record<string, unknown>
   children?: Doc[]
+  zones?: Record<string, Doc[]>
 }
+
+installCatalog()
+/** 노드의 자식 줄 — 몸통과 이름 붙은 구역을 카탈로그 차례(= 화면 차례)로. 빈 구역 칸으로 구역 안에도 놓이므로 몸통만 걷지 않는다. */
+const listsOf = (node: Doc): { zone: string; list: Doc[] }[] =>
+  childLists(node as unknown as WbNode).map((entry) => ({ zone: entry.zone, list: entry.list as unknown as Doc[] }))
 const text = (id: string, content: string): SeedNode => ({ id, type: 'Text', props: { content } })
 
 /** 시드를 준 의사 난수(mulberry32) — 같은 시드면 같은 끌기 차례다. */
@@ -180,14 +189,24 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
   }
 
   /** 고른 노드의 손잡이를 쥐고 문턱을 넘긴 뒤 `at` 으로 간다. */
-  async function grabTo(page: Page, at: { x: number; y: number }): Promise<void> {
+  /**
+   * 손잡이를 쥐고 `at` 으로 간다. `at` 이 함수면 끌기가 서고 캔버스 배치가 선 **뒤에** 잰다(`./editor-stack.ts` 의 `dragLayoutSettled` — 빈 구역
+   * 칸이 끌기 시작에 노드를 민다). 간 점을 돌려준다.
+   */
+  async function grabTo(
+    page: Page,
+    at: { x: number; y: number } | (() => Promise<{ x: number; y: number }>),
+  ): Promise<{ x: number; y: number }> {
     const box = await handle(page).boundingBox()
     if (box === null) throw new Error('손잡이가 없다')
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
     await page.mouse.down()
     await page.mouse.move(box.x + box.width / 2 + 3, box.y + box.height / 2 + 6, { steps: 3 })
-    await page.mouse.move(at.x, at.y, { steps: 10 })
+    await dragLayoutSettled(page)
+    const point = typeof at === 'function' ? await at() : at
+    await page.mouse.move(point.x, point.y, { steps: 10 })
     await page.waitForTimeout(60)
+    return point
   }
 
   /** 문서 노드 상자 — 주 창 좌표. 배율은 iframe 의 그려진 폭 ÷ 레이아웃 폭(머리말 «오라클은 구현의 환산을 안 쓴다»). */
@@ -272,18 +291,37 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
     // 판의 수(테마 × 줌 셋 × TRIALS)가 아래 카나리아 하한(시도 ≥ 40 · 미리보기 ≥ 25 …)을 넘게 둔다 — 테마가 하나라 줌마다 열다섯.
     const TRIALS = 15
 
-    function locate(root: Doc, id: string): { parent: Doc | null; index: number } | null {
-      const visit = (node: Doc, parent: Doc | null, index: number): { parent: Doc | null; index: number } | null => {
-        if (node.id === id) return { parent, index }
-        for (const [i, child] of (node.children ?? []).entries()) {
-          const found = visit(child, node, i)
-          if (found !== null) return found
-        }
+    function locate(root: Doc, id: string): { parent: Doc | null; zone: string; index: number } | null {
+      const visit = (
+        node: Doc,
+        parent: Doc | null,
+        zone: string,
+        index: number,
+      ): { parent: Doc | null; zone: string; index: number } | null => {
+        if (node.id === id) return { parent, zone, index }
+        for (const entry of listsOf(node))
+          for (const [i, child] of entry.list.entries()) {
+            const found = visit(child, node, entry.zone, i)
+            if (found !== null) return found
+          }
         return null
       }
-      return visit(root, null, -1)
+      return visit(root, null, 'body', -1)
     }
-    const ids = (root: Doc): string[] => [root.id, ...(root.children ?? []).flatMap(ids)]
+    const ids = (root: Doc): string[] => [root.id, ...listsOf(root).flatMap((entry) => entry.list.flatMap(ids))]
+
+    /**
+     * 화면에서 `host` 의 노드 자식 차례 — 미리보기의 DOM 이웃(`shownDrops`)과 같은 셈. 줄마다 카탈로그 차례로 펴고, 제 몸통을 부모 뷰가 그리는
+     * 자식(`bodyHost: 'parent'` — 탭 패널)의 몸통은 그 뒤에 지금 패널(`active`) 것만 선다(탭 머리 줄 → 지금 패널 내용).
+     */
+    function domOrder(host: Doc): string[] {
+      const lists = listsOf(host)
+      const out = lists.flatMap((entry) => entry.list.map((child) => child.id))
+      const hosted = lists.flatMap((entry) => entry.list).filter((child) => getComponent(String(child.type))?.bodyHost === 'parent')
+      const active = hosted[typeof host.props?.['active'] === 'number' ? (host.props['active'] as number) : 0]
+      if (active !== undefined) out.push(...(active.children ?? []).map((child) => child.id))
+      return out
+    }
 
     /**
      * 미리보기 → 놓일 자리(부모 · 앞뒤 이웃)가 서버 문서에 선 자리와 같은가. 미리보기는 캔버스 문서에 실제로 끼운 노드라 그 자리를 DOM
@@ -291,10 +329,15 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
      */
     function lands(root: Doc, moved: string, drop: ShownDrop): boolean {
       const m = locate(root, moved)
-      if (m === null || m.parent === null || m.parent.id !== drop.parent) return false
-      const siblings = m.parent.children ?? []
-      const prevOk = drop.prev === null ? m.index === 0 : siblings[m.index - 1]?.id === drop.prev
-      const nextOk = drop.next === null ? m.index === siblings.length - 1 : siblings[m.index + 1]?.id === drop.next
+      if (m === null || m.parent === null) return false
+      // 탭 패널의 몸통은 탭의 DOM 아래 선다(`domOrder`) — 미리보기의 DOM 부모는 탭이다.
+      const hostedBody = m.zone === 'body' && getComponent(String(m.parent.type))?.bodyHost === 'parent'
+      const host = hostedBody ? locate(root, m.parent.id)?.parent : m.parent
+      if (host === null || host === undefined || host.id !== drop.parent) return false
+      const siblings = domOrder(host)
+      const at = siblings.indexOf(moved)
+      const prevOk = drop.prev === null ? at === 0 : siblings[at - 1] === drop.prev
+      const nextOk = drop.next === null ? at === siblings.length - 1 : siblings[at + 1] === drop.next
       return prevOk && nextOk
     }
 
@@ -463,9 +506,10 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       const tab = await openTab(P, 'alice', origin)
       await select(tab.page, 'n_t3')
       await handle(tab.page).waitFor()
-      const mid = await nodeBox(tab.page, 'n_mid')
-      const at = { x: mid.x + mid.width * 0.3, y: mid.y + mid.height * 0.1 }
-      await grabTo(tab.page, at)
+      const at = await grabTo(tab.page, async () => {
+        const mid = await nodeBox(tab.page, 'n_mid')
+        return { x: mid.x + mid.width * 0.3, y: mid.y + mid.height * 0.1 }
+      })
       return { ...tab, at, armed: (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`) }
     }
 
@@ -573,14 +617,18 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         // 편집 1 — n_t2 를 n_mid 앞으로. 올림이 늦어 서버에 닿기 전에 아래가 다 선다.
         await select(tab.page, 'n_t2')
         await handle(tab.page).waitFor()
-        const mid = await nodeBox(tab.page, 'n_mid')
-        await grabTo(tab.page, { x: mid.x + mid.width * 0.3, y: mid.y + mid.height * 0.1 })
+        await grabTo(tab.page, async () => {
+          const mid = await nodeBox(tab.page, 'n_mid')
+          return { x: mid.x + mid.width * 0.3, y: mid.y + mid.height * 0.1 }
+        })
         await tab.page.mouse.up()
         // 편집 2 — n_t3 를 n_t0 앞으로 세운 채 멈춘다.
         await select(tab.page, 'n_t3')
         await handle(tab.page).waitFor()
-        const t0 = await nodeBox(tab.page, 'n_t0')
-        await grabTo(tab.page, { x: t0.x + t0.width * 0.3, y: t0.y + t0.height * 0.1 })
+        await grabTo(tab.page, async () => {
+          const t0 = await nodeBox(tab.page, 'n_t0')
+          return { x: t0.x + t0.width * 0.3, y: t0.y + t0.height * 0.1 }
+        })
         const armed = (await indicators(tab.page)).map((h) => `${h.placement}:${h.axis}`)
         // bob 이 편집 1 보다 먼저 커밋한다 — 편집 1 은 `patch-error` 를 받고 리베이스돼 다시 나간다.
         const status = await bobOps(P, [{ op: 'replace', path: '/root/children/4/props/content', value: '아래 영!' }])

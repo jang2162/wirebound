@@ -15,7 +15,7 @@
  * 이다 — 받으면 그 밑의 줄이 `onOver` 에 안 잡힌다.
  */
 import type { ReactElement } from 'react'
-import type { DropHint } from './use-pointer-drag'
+import type { DropHint, DropRefusalAt } from './use-pointer-drag'
 
 export function DropIndicator<D>(props: {
   hint: DropHint<D> | null
@@ -54,5 +54,20 @@ export function DropIndicator<D>(props: {
       aria-hidden="true"
       style={{ left, top: start ? top : top + height, width }}
     />
+  )
+}
+
+/**
+ * **못 놓는 까닭** — 끄는 포인터 곁에 한 줄(`use-pointer-drag.ts` 의 `refusal`). 받는 타입 · 설 자리에 걸린 자리(«탭에는 탭 패널만 놓을 수 있습니다»)는
+ * 표시도 미리보기도 안 서서 «조용히 안 놓인다» 로 읽히므로 까닭을 보인다. 놓을 자리 표시와 같은 겹 규칙이다(`position: fixed` · 셸 안 · 누름을 안
+ * 받음 — 위 `DropIndicator` 머리말). 보조 기술에는 `role="status"` 로 읽힌다.
+ */
+export function DropRefusal(props: { refusal: DropRefusalAt | null }): ReactElement | null {
+  if (props.refusal === null) return null
+  const { text, point } = props.refusal
+  return (
+    <div className="wb-shell-drop-refusal" role="status" style={{ left: point.x + 14, top: point.y + 14 }}>
+      {text}
+    </div>
   )
 }

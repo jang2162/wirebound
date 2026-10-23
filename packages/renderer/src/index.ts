@@ -8,7 +8,7 @@ export { EMPTY_OVERLAY, hiddenByOverlay, overlayProps, runInteraction, VISIBLE_K
 
 export { FallbackNode } from './fallback'
 
-export type { InteractionEvent, InteractionOptions, NodeRenderError, RenderOptions, WeightRoom } from './render'
+export type { InteractionEvent, InteractionOptions, NodeRenderError, RenderOptions, RevealTarget, WeightRoom } from './render'
 export { renderDocument, renderNode, weightRoom } from './render'
 
 export { renderComposed } from './compose'

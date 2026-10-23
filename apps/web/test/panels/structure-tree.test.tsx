@@ -98,12 +98,12 @@ function infoTexts(): string[] {
 
 function nodeRows(): HTMLElement[] {
   const list = structureList()
-  // 줄 단추만 — 줄의 `+` · `…`(행동 메뉴 단추)는 줄이 아니다.
+  // 줄 단추만 — 줄의 `+` · `…`(행동 메뉴 단추)와 구역 줄의 머리(`ZoneRow` — 구역을 고르는 단추)는 노드 줄이 아니다.
   return list === null
     ? []
     : within(list)
         .queryAllByRole('button')
-        .filter((button) => button.getAttribute('aria-haspopup') !== 'menu')
+        .filter((button) => button.getAttribute('aria-haspopup') !== 'menu' && !button.hasAttribute('data-tree-zone-row'))
 }
 
 /** 지금 구분 표시가 붙은 줄. `aria-current`가 표시의 단일 진실이다. */

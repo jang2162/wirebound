@@ -19,6 +19,8 @@ export const SearchFormDef = defineComponent({
     { prop: 'columns', control: 'number', label: '열 수' },
   ],
   states: [],
+  // 접히면 안의 노드가 DOM 에 없다 — 그 안을 펼쳐 보일 때는 펴진 판으로 그린다.
+  reveal: (props) => ({ ...props, collapsed: false }),
   // 접히면(`collapsed`) 두 구역 다 DOM 에서 빠지고 접기 줄만 선다 — 그 줄은 뷰 몫이다.
   zones: [
     { name: 'body', label: '조건' },

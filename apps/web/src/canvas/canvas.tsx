@@ -38,11 +38,13 @@ import {
   type InteractionEvent,
   type InteractionOverlay,
   type NodeRenderError,
+  type RevealTarget,
 } from '@wirebound/renderer'
 import { describePageTarget, type PageDocument } from '@wirebound/schema'
 import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
+import { KeepDropPlace } from './keep-drop-place'
 import { platformOf } from '../edit/editor-shortcuts'
 import { findNodeSafely, walkSafely } from '../edit/safe-walk'
 import { selectionCapNotice } from '../panels/toolbar-status'
@@ -51,8 +53,9 @@ import { nodeHeadingLabel } from '../panels/node-shape'
 import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useViewState } from '../shell/use-view-state'
-import { useAnnounceCanvasRemeasure, usePlacementPreview, usePublishCanvasRegion } from '../drag/use-placement'
+import { useAnnounceCanvasRemeasure, useDragging, usePlacementPreview, usePublishCanvasRegion } from '../drag/use-placement'
 import { applyPreviewLook, isPreviewId, previewDocument } from './canvas-preview'
+import { emptyZonesFor, type EmptyZones } from './empty-zones'
 import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasDragHandle } from './canvas-drag-handle'
 import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
@@ -232,6 +235,29 @@ export function Canvas(props: {
    */
   const preview = usePlacementPreview()
   const shownPreview = mode === 'edit' && doc !== null ? preview : null
+  /**
+   * **끄는 동안만 서는 빈 구역 칸**(`./empty-zones.tsx` — 설계 spec Q2 (가)). 칸은 스토어 문서로 정한다(미리보기를 끼운 사본이 아니다 — 그 파일 머리말).
+   * 끌지 않을 때는 렌더러에 아무것도 안 넘겨 캔버스가 내보낸 화면과 같다.
+   */
+  const dragging = useDragging()
+  /**
+   * **고른 노드를 펼쳐 보인다**(설계 spec Q3 (가)) — 고른 노드 · 고른 구역의 부모가 지금 탭이 아닌 패널 · 접힌 검색폼 안이면 그 화면에서만 펼친 판으로 그린다
+   * (렌더러의 `reveal`). 고른 구역은 그 부모 자신이 그 구역을 가리면(접힌 검색폼의 단추 구역) 부모도 펼친다(리뷰 RV-ZE L2). 문서(`active` ·
+   * `collapsed`)는 안 바뀐다 — 남의 화면 · 내보내기 · 뷰 모드는 그대로다. 편집 모드에서만이다.
+   */
+  const selectedZone = useEditorStore(store, (s) => s.selectedZone)
+  const revealKey = mode === 'edit' ? selectedNodeIds.join('\n') : ''
+  const zoneParent = mode === 'edit' ? (selectedZone?.parentId ?? null) : null
+  const zoneName = mode === 'edit' ? (selectedZone?.zone ?? null) : null
+  const reveal = useMemo((): RevealTarget[] | undefined => {
+    const targets: RevealTarget[] = revealKey === '' ? [] : revealKey.split('\n')
+    if (zoneParent !== null && zoneName !== null) targets.push({ nodeId: zoneParent, zone: zoneName })
+    return targets.length === 0 ? undefined : targets
+  }, [revealKey, zoneParent, zoneName])
+  const emptyZones = useMemo(
+    () => (mode === 'edit' && doc !== null && dragging !== null ? emptyZonesFor(doc, dragging) : null),
+    [mode, doc, dragging],
+  )
   const rendered = useMemo(
     () => (doc === null || shownPreview === null ? doc : (previewDocument(doc, shownPreview) ?? doc)),
     [doc, shownPreview],
@@ -573,13 +599,18 @@ export function Canvas(props: {
         >
           {(f) => (
             <ThemeProvider value={{ tokens, window: f.window }}>
-              <CanvasDocument
-                doc={rendered ?? doc}
-                theme={definition}
-                viewState={viewState}
-                interaction={interaction}
-                bannerHost={bannerHost}
-              />
+              {/* 빈 구역 칸이 걷힐 때 놓인 노드의 화면 자리를 지킨다(`./keep-drop-place.tsx`). */}
+              <KeepDropPlace slots={emptyZones !== null} frame={f}>
+                <CanvasDocument
+                  doc={rendered ?? doc}
+                  theme={definition}
+                  viewState={viewState}
+                  interaction={interaction}
+                  bannerHost={bannerHost}
+                  emptyZones={emptyZones}
+                  reveal={reveal}
+                />
+              </KeepDropPlace>
             </ThemeProvider>
           )}
         </CanvasIframe>
@@ -724,6 +755,10 @@ function CanvasDocument(props: {
   interaction?: { overlay: InteractionOverlay; onEvent: (event: InteractionEvent) => void }
   /** 오류 배너를 그릴 호스트 요소. 아직 없으면 배너를 그리지 않는다 — 곧 서고 다시 그려진다. */
   bannerHost: HTMLElement | null
+  /** 끄는 동안의 빈 구역 칸(`./empty-zones.tsx`). 끌지 않으면 `null` — 렌더러에 안 넘긴다. */
+  emptyZones?: EmptyZones | null
+  /** 펼쳐 보일 노드 · 구역 — 렌더러의 `reveal`. 없으면 안 넘긴다. */
+  reveal?: readonly RevealTarget[] | undefined
 }): ReactElement {
   /**
    * 렌더 중에 모은다. `onNodeError` 안에서 `setState`를 부르면 안 되고(렌더러 주석),
@@ -739,6 +774,8 @@ function CanvasDocument(props: {
     // 다루지만(`options.interaction === undefined` 검사), 켜지지 않았다는 것이 호출부에서
     // 보이는 편이 낫다.
     ...(props.interaction === undefined ? {} : { interaction: props.interaction }),
+    ...(props.emptyZones === undefined || props.emptyZones === null ? {} : { emptyZones: props.emptyZones }),
+    ...(props.reveal === undefined ? {} : { reveal: props.reveal }),
   })
 
   return (

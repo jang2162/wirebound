@@ -39,6 +39,7 @@ import {
   type PageDocument,
   type PatchOp,
   type WbNode,
+  zoneDefs,
 } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { useProjectTheme } from '../theme/project-theme'
@@ -67,6 +68,16 @@ import '../catalog-setup'
 
 /** 고를 노드가 아직 없을 때. 페이지를 열지 않았을 때와 고르지 않았을 때가 같은 문장이다. */
 const NO_SELECTION = '노드를 고르면 속성이 보입니다'
+
+/** 구역 줄을 고른 판의 안내(`PropertyPanel` 의 구역 갈래) — 고칠 수 있는 판과 없는 판. */
+export const ZONE_SELECTED_NOTICE = '이 구역에 넣을 것을 하단 판에서 고르세요. 붙여넣기도 이 구역 끝에 들어갑니다.'
+export const ZONE_SELECTED_READONLY = '구역입니다. 이 화면에서는 넣을 수 없습니다.'
+
+/** 구역 줄을 고른 판의 제목 — «부모 머리 · 구역 이름». 부모 머리는 노드 제목과 같은 글이다(`nodeHeading`). */
+function zoneHeading(parent: WbNode, zone: string): string {
+  const label = zoneDefs(parent.type).find((def) => def.name === zone)?.label ?? zone
+  return `${nodeHeading(parent)} · ${label}`
+}
 
 /** 타입을 읽지 못한 노드의 안내. 캔버스는 같은 노드를 폴백으로 그리고 배너로 알린다. */
 const BROKEN_TYPE_NOTICE = '이 노드의 타입을 읽을 수 없습니다'
@@ -201,6 +212,7 @@ export function PropertyPanel(props: {
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
   const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
+  const selectedZone = useEditorStore(store, (s) => s.selectedZone)
   // 훅은 조건부로 부를 수 없으므로 페이지가 없어도 부른다. `pageId`가 없으면 `''`를 주는데,
   // 그 값은 어느 페이지 id와도 같지 않아 `useOpenPage('')`가 `null`을 내고 `commitProp`이
   // 그 자리에서 돌아온다 — 즉 페이지가 없을 때 편집이 나갈 길이 없다. (그 상태에서는 아래
@@ -291,6 +303,19 @@ export function PropertyPanel(props: {
         onRemoved={() => store.selectNode(null)}
       />
     )
+  }
+
+  // **구역 줄을 고른 판** — 구역은 속성 칸이 아니다(설계 spec `2026-10-23-node-slots-design.md` 「5. 에디터」 «속성 패널»). 구역 이름과 넣는 길 한 줄을 보인다.
+  if (node === undefined && selectedZone !== null && doc !== null) {
+    const parent = findNodeSafely(doc.root, selectedZone.parentId)
+    if (parent !== undefined) {
+      return (
+        <>
+          <h2 className="wb-shell-panel-title">{zoneHeading(parent, selectedZone.zone)}</h2>
+          <p className="wb-shell-panel-notice">{props.canEdit ? ZONE_SELECTED_NOTICE : ZONE_SELECTED_READONLY}</p>
+        </>
+      )
+    }
   }
 
   if (node === undefined) {

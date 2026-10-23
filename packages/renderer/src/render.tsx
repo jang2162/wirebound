@@ -83,7 +83,37 @@ export interface RenderOptions {
    * 문서를 모르므로 부르는 쪽이 준다 — 안 주면 목록이 빈 것이라 상태를 고른 판도 기본으로 판정한다.
    */
   viewStates?: readonly ViewState[]
+  /**
+   * **이름 붙은 구역 끝에 덧붙일 것** — 에디터가 끄는 동안만 빈 구역 칸을 세운다(`apps/web/src/canvas/empty-zones.tsx`). 노드의 선언된 이름 붙은
+   * 구역마다(몸통은 아니다) `render(노드 id, 구역 이름)` 을 불러 `null` 이 아니면 그 구역 내용 뒤에 둔다 — 구역이 비었어도 그것이 내용이라 뷰의
+   * `<Zone>` 이 그 자리를 편다. `key` 는 노드 캐시의 열쇠에 든다(같은 노드라도 덧붙일 것이 다르면 다시 그린다). **없으면 한 글자도 안 바뀐다.**
+   */
+  emptyZones?: { key: string; render: (nodeId: string, zone: string) => ReactNode | null }
+  /**
+   * **펼쳐 보일 노드**(설계 spec `2026-10-23-node-slots-design.md` Q3 (가)) — 이 노드들의 조상 가운데 자손을 가리는 타입(`ComponentDef.reveal` —
+   * 지금 탭이 아닌 패널을 든 `Tabs` · 접힌 `SearchForm`)을 **이 렌더에서만** 펼친 props 로 그린다. 문서 · 내보내기 · 뷰 모드는 그대로다 — 에디터
+   * 캔버스가 고른 노드를 준다. 덮을 것이 없으면(고른 노드가 이미 보인다) 한 글자도 안 바뀐다.
+   *
+   * 노드 id 는 그 노드의 **조상**만 덮는다. `{ nodeId, zone }`(넣을 자리로 고른 구역)은 그 부모 **자신**도 덮는다 — 부모가 제 구역을 가리는
+   * 타입(접힌 `SearchForm` 의 단추 구역)이면 고른 구역이 화면에 없다(리뷰 RV-ZE L2).
+   */
+  reveal?: readonly RevealTarget[]
 }
+
+/** 펼쳐 보일 것 하나 — 노드 id, 또는 노드의 구역(`RenderOptions.reveal`). */
+export type RevealTarget = string | { readonly nodeId: string; readonly zone: string }
+
+/**
+ * `reveal` 을 푼 것 — 덮을 노드의 props 와, 노드 캐시를 지나칠 노드(덮을 노드와 그 조상 — 조상의 캐시된 엘리먼트는 덮기 전 자식을 든다).
+ * 렌더러 안에서만 쓴다(`withReveal`).
+ */
+interface RevealPlan {
+  props: ReadonlyMap<string, Record<string, unknown>>
+  uncached: ReadonlySet<string>
+}
+
+/** 렌더 옵션 + 푼 `reveal`. */
+type Options = RenderOptions & { revealPlan?: RevealPlan }
 
 /**
  * 상호작용 런타임의 입출력. **상태는 호출자가 든다** — 이 렌더러는 함수이지 컴포넌트가
@@ -222,7 +252,62 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
   // 상호작용 타겟을 풀려면 **트리 전체**가 필요한데(다른 노드를 가리킨다) 이 진입점이 받는
   // 것은 노드 하나다. 그 노드를 뿌리로 삼는다 — 부분 트리를 그리는 호출자에게는 그 부분이
   // 곧 세계이고, 밖을 가리키는 타겟은 `사라진 노드`가 되어 `issues`로 말하는 경로로 간다.
-  return renderNodeIn(node, node, options)
+  return renderNodeIn(node, node, withReveal(node, options))
+}
+
+/**
+ * `reveal` 을 푼다 — 보일 노드마다 뿌리부터의 조상 사슬을 걸어, 자손을 가리는 타입(`ComponentDef.reveal`)의 props 를 그 자식 줄 자리로 덮은 값과
+ * 견준다. 값이 바뀌는 조상만 덮고, 그 조상과 그 위 사슬은 캐시를 지나친다. 덮을 것이 없으면 옵션 그대로다(캐시도 그대로 쓴다).
+ */
+function withReveal(root: WbNode, options: RenderOptions): Options {
+  const targets = options.reveal
+  if (targets === undefined || targets.length === 0) return options
+  const wanted = new Set(targets.filter((target) => typeof target === 'string'))
+  // 구역 — 부모 id → 구역 이름들. 그 부모 자신을 «그 구역 끝의 자식이 보인다» 로 덮는다.
+  const zones = new Map<string, string[]>()
+  for (const target of targets) {
+    if (typeof target !== 'string') zones.set(target.nodeId, [...(zones.get(target.nodeId) ?? []), target.zone])
+  }
+  const props = new Map<string, Record<string, unknown>>()
+  const uncached = new Set<string>()
+  const chain: { id: string; type: string; props: unknown; step: { zone: string; index: number } }[] = []
+  /** 사슬(뿌리 → 보일 것의 부모)의 덮을 조상을 덮는다. */
+  const cover = (): void => {
+    for (let i = chain.length - 1; i >= 0; i -= 1) {
+      const link = chain[i]!
+      const def = getComponent(link.type)
+      if (def?.reveal === undefined) continue
+      const parsed = def.props.safeParse(props.get(link.id) ?? link.props ?? {})
+      if (!parsed.success) continue
+      const now = parsed.data as Record<string, unknown>
+      const next = def.reveal(now, link.step)
+      if (Object.keys(next).every((key) => Object.is(next[key], now[key]))) continue
+      props.set(link.id, next)
+      for (let j = 0; j <= i; j += 1) uncached.add(chain[j]!.id)
+    }
+  }
+  const walk = (node: unknown): void => {
+    if (node === null || typeof node !== 'object') return
+    const raw = node as { id?: unknown; type?: unknown; props?: unknown }
+    const id = readString(raw.id)
+    if (wanted.has(id)) cover()
+    for (const zone of zones.get(id) ?? []) {
+      // 그 구역의 끝(넣을 자리)이 보일 자리다 — 부모 자신을 사슬 끝에 얹어 덮는다.
+      const end = childLists(node).find((entry) => entry.zone === zone)?.list.length ?? 0
+      chain.push({ id, type: readString(raw.type), props: raw.props, step: { zone, index: end } })
+      cover()
+      chain.pop()
+    }
+    for (const entry of childLists(node)) {
+      entry.list.forEach((child, index) => {
+        chain.push({ id: readString(raw.id), type: readString(raw.type), props: raw.props, step: { zone: entry.zone, index } })
+        walk(child)
+        chain.pop()
+      })
+    }
+  }
+  walk(root)
+  return props.size === 0 ? options : { ...options, revealPlan: { props, uncached } }
 }
 
 /**
@@ -232,8 +317,10 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
  * *"이 액션의 타겟이 무엇인가"*가 호출자마다 갈린다 — 「HTML 정적 번들」의 *"렌더러가 하나뿐이라
  * 결과가 어긋날 수 없다"*가 그 자리에서 깨진다.
  */
-function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions, room?: WeightRoom): ReactElement {
-  const cache = nodeCacheFor(node, options, room)
+function renderNodeIn(root: WbNode, node: WbNode, options: Options, room?: WeightRoom): ReactElement {
+  // 펼쳐 보이느라 덮는 노드와 그 조상은 캐시를 지나친다(`RevealPlan`).
+  const cache =
+    options.revealPlan?.uncached.has(readString((node as { id?: unknown } | null)?.id)) === true ? null : nodeCacheFor(node, options, room)
   if (cache === null) return renderNodeUncached(root, node, options, room)
   const hit = cache.get(node)
   if (hit !== undefined) return hit
@@ -285,7 +372,7 @@ function nodeCacheFor(node: unknown, options: RenderOptions, room: WeightRoom | 
   // 숨김 판정은 고른 상태의 조상 줄(`stateLineage`)에만 기댄다 — 목록의 다른 상태 · 이름이 바뀌어도 같은 열쇠다. 상태 id 는 노드 id 규칙이라
   // 쉼표 · 줄바꿈이 없다 — 몫의 자리와 섞이지 않는다.
   const lineage = stateLineage(options.viewStates, effectiveViewState(options.viewState ?? null, options.viewStates)).join(',')
-  const stateKey = `${lineage}\n${roomKey(room)}`
+  const stateKey = `${lineage}\n${roomKey(room)}${options.emptyZones === undefined ? '' : `\n${options.emptyZones.key}`}`
   let byNode = byState.get(stateKey)
   if (byNode === undefined) {
     byNode = new WeakMap()
@@ -294,7 +381,7 @@ function nodeCacheFor(node: unknown, options: RenderOptions, room: WeightRoom | 
   return byNode
 }
 
-function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions, room: WeightRoom | undefined): ReactElement {
+function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: WeightRoom | undefined): ReactElement {
   const raw = node as unknown as { id?: unknown; type?: unknown; props?: unknown; children?: unknown } | null
   const nodeId = readString(raw?.id)
 
@@ -335,7 +422,9 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions, 
     const elements = drawn(entry.list, undefined)
     // 몸통이 아닌 줄인데 이름이 `body` 인 것(검증 전 `zones.body`)과 선언 밖 구역은 뷰에 안 간다 — 폴백에만 싣는다.
     if (entry.zone !== BODY_ZONE && def?.zones.some((zone) => zone.name === entry.zone) === true) {
-      zones[entry.zone] = entry.list.some((child) => shownIn(child, options)) ? elements : null
+      const extra = options.emptyZones?.render(nodeId, entry.zone) ?? null
+      const content = entry.list.some((child) => shownIn(child, options)) ? elements : null
+      zones[entry.zone] = extra === null ? content : [...(content ?? []), <Fragment key="wb-empty-zone">{extra}</Fragment>]
     } else if (elements.length > 0) strays.push(<Fragment key={`wb-zone-${entry.pointer}`}>{elements}</Fragment>)
   }
   const items: ViewItem[] = []
@@ -383,7 +472,8 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: RenderOptions, 
   // 겹layer에 닿기 전에 런타임의 판정이 먼저 걸러 낸다 — `checkNodeAction`이 같은 카탈로그
   // 스키마로 값을 보고 `invalid-interaction-prop`을 낸다. 즉 여기까지 오는 겹layer 값은
   // 이미 그 prop의 계약을 만족한다.
-  const nodeProps = overlayProps(options.interaction?.overlay, nodeId, node.props)
+  // **펼쳐 보이느라 덮는 props**(`RenderOptions.reveal`) — 이 렌더에서만이다. 덮을 것이 없으면 겹layer를 지난 그대로다.
+  const nodeProps = options.revealPlan?.props.get(nodeId) ?? overlayProps(options.interaction?.overlay, nodeId, node.props)
 
   // 로케일을 넘기는 이유: 이 경로가 내는 메시지도 사용자가 그대로 읽는다.
   // 넘기지 않으면 서버 검증은 한국어, 렌더는 영문이 되어 같은 문제가 둘로 보인다.
@@ -553,7 +643,11 @@ const TRIGGERS_OF: Record<string, InteractionTrigger[]> = (() => {
 export function renderDocument(doc: AnyDocument, options: RenderOptions = {}): ReactElement {
   warnUnusedViewKeys(options.theme)
   const root = doc?.root as WbNode
-  return renderNodeIn(root, root, { ...options, viewState: knownViewState(doc, options.viewState), viewStates: documentStates(doc) })
+  return renderNodeIn(
+    root,
+    root,
+    withReveal(root, { ...options, viewState: knownViewState(doc, options.viewState), viewStates: documentStates(doc) }),
+  )
 }
 
 /** 문서의 상태 목록 — 레이아웃 · 검증 전 문서(배열이 아님)는 빈 목록. 원소의 모양은 판정(`stateLineage`)이 견딘다. */

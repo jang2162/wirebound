@@ -44,8 +44,14 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { COMPONENT_GROUP_LABELS, type ComponentGroup } from '@wirebound/schema'
 import { dragDebug, round } from '../drag/drag-debug'
-import { DropIndicator } from '../drag/drop-indicator'
-import { useCanvasRemeasured, usePlacementDrop, usePublishPlacementPreview, type PlacementDrop } from '../drag/use-placement'
+import { DropIndicator, DropRefusal } from '../drag/drop-indicator'
+import {
+  useCanvasRemeasured,
+  usePlacementDrop,
+  usePublishDragging,
+  usePublishPlacementPreview,
+  type PlacementDrop,
+} from '../drag/use-placement'
 import { usePointerDrag, type DragPoint } from '../drag/use-pointer-drag'
 import { createNode } from '../edit/create-node'
 import { dropOps, type Placing } from '../edit/structure-drop'
@@ -53,6 +59,7 @@ import { useEditCommit } from '../edit/use-edit-commit'
 import { placeableGroups, type PickableGroup, type PickableType } from './placeable'
 import { ShellResizer } from '../shell/shell-resizer'
 import { shellIcon } from '../shell/icons'
+import type { ZoneRef } from '../store/editor-store'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
 import { ModuleTab } from './module-tab'
 import { paletteAddTarget } from './palette-add'
@@ -178,7 +185,8 @@ function PaletteBody(props: {
   const [query, setQuery] = useState('')
   const [moduleQuery, setModuleQuery] = useState('')
   const store = useEditorStoreInstance()
-  const selected = useEditorStore(store, (s) => s.selectedNodeId)
+  // 고른 것 — 노드 id · 구역 줄(`구역:` 머리)을 한 글자로. 바뀌면 거절 문장을 걷는다(아래).
+  const selected = useEditorStore(store, (s) => selectedKey(s.selectedNodeId, s.selectedZone))
   /** 거절 문장과 그것을 세운 판(머리말 «카드»). 위층 탭을 바꾸면 걷는다. */
   const [notice, setNotice] = useState<{ text: string; pageId: string | undefined; selected: string | null; view: PaletteView } | null>(
     null,
@@ -187,7 +195,12 @@ function PaletteBody(props: {
   const tabRefs = useRef(new Map<string, HTMLButtonElement>())
   const viewRefs = useRef(new Map<PaletteView, HTMLButtonElement>())
   const onNotice = useCallback(
-    (text: string) => setNotice(text === '' ? null : { text, pageId: props.pageId, selected: store.getState().selectedNodeId, view }),
+    (text: string) =>
+      setNotice(
+        text === ''
+          ? null
+          : { text, pageId: props.pageId, selected: selectedKey(store.getState().selectedNodeId, store.getState().selectedZone), view },
+      ),
     [props.pageId, store, view],
   )
 
@@ -337,6 +350,7 @@ function PaletteCards(props: {
     onDrop: placement.onDrop,
     sameDrop: placement.sameDrop,
     scrollContainer: () => (last.current === null ? null : placement.scrollContainerAt(last.current)),
+    refusal: placement.refusalOf,
   })
   // 끄는 사이 캔버스가 다시 재면(남의 편집이 노드를 밂) 마지막 좌표로 다시 묻는다 — 손잡이와 같은 길(`canvas/canvas-drag-handle.tsx`
   // 머리말 «캔버스가 다시 잴 때»). 판은 캔버스의 형제라 그 값을 경로 층으로 받는다.
@@ -345,6 +359,8 @@ function PaletteCards(props: {
   // 보인 자리를 캔버스에 미리보기로 끼운다 — 캔버스 위의 선 · 강조는 미리보기가 대신하고, 트리 위면 트리의 선 · 강조도 그린다
   // (`drag/use-placement.ts` 머리말 «배치 미리보기»).
   usePublishPlacementPreview(hint?.value ?? null)
+  // 끄는 것을 캔버스에 알린다 — 받을 수 있는 빈 구역마다 점선 칸이 선다(`canvas/empty-zones.tsx`).
+  usePublishDragging(drag.dragging)
   const dragged =
     drag.dragging?.kind === 'new' ? props.types.find((type) => type.type === (drag.dragging as { type: string }).type) : undefined
 
@@ -404,6 +420,7 @@ function PaletteCards(props: {
     const verdict = paletteAddTarget({
       document,
       selectedNodeId: store.getState().selectedNodeId,
+      selectedZone: store.getState().selectedZone,
       placing,
       blockedBy: store.editBlockedBy,
       lockedBy: store.lockedBy,
@@ -469,6 +486,7 @@ function PaletteCards(props: {
         ))}
       </div>
       <DropIndicator hint={hint?.value.region === 'tree' ? hint : null} layout={hint?.value.layout} />
+      <DropRefusal refusal={drag.refusal} />
       {dragged !== undefined && pointer !== null && (
         <div
           ref={logTagShown}
@@ -515,4 +533,9 @@ export function PaletteToggle(props: { open: boolean; onToggle: () => void; inse
       {paletteNames(props.insertable).toggle}
     </button>
   )
+}
+
+/** 고른 것의 글자 — 노드면 그 id, 구역 줄이면 `구역:<부모>:<구역>`, 없으면 `null`. */
+function selectedKey(nodeId: string | null, zone: ZoneRef | null): string | null {
+  return zone !== null ? `구역:${zone.parentId}:${zone.zone}` : nodeId
 }

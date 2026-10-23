@@ -113,6 +113,8 @@ export const TabsDef = defineComponent({
   }),
   editor: [{ prop: 'active', control: 'number', label: '활성 탭' }],
   states: [],
+  // 지금 탭이 아닌 패널의 내용은 DOM 에 없다 — 그 안을 펼쳐 보일 때는 그 패널을 연 판으로 그린다.
+  reveal: (props, at) => (at.zone === 'body' ? { ...props, active: at.index } : props),
   zones: [
     {
       name: 'body',

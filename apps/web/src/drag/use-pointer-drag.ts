@@ -142,6 +142,12 @@ export interface PointerDragOptions<S, D> {
    * 펜 · 마우스는 이 값과 무관하다.
    */
   touchStart?: 'hold' | 'now'
+  /**
+   * 못 놓는 까닭 — `onOver` 가 `null` 을 낸 바로 그 좌표로 한 번 묻는다. 문장이면 포인터 곁에 보이고(`refusal` — `drop-indicator.tsx` 의
+   * `DropRefusal`), `null` 이면 안 보인다. 받는 타입 · 설 자리처럼 «조용히 안 놓이면 고장으로 읽히는» 까닭만 문장을 낸다(`edit/structure-drop.ts`
+   * 의 `fitRefusal`). 끌기가 끝나면 걷힌다.
+   */
+  refusal?: (source: S, point: DragPoint) => string | null
 }
 
 export interface PointerDrag<S, D> {
@@ -156,6 +162,14 @@ export interface PointerDrag<S, D> {
   hint: DropHint<D> | null
   /** 포인터 밑이 바뀌었다 — 마지막 좌표로 다시 물어 같은 자리면 다시 그리고 다르면 걷는다(머리말). 끌기가 아니면 아무것도 안 한다. */
   refresh: () => void
+  /** 지금 자리에 못 놓는 까닭과 그 좌표(`PointerDragOptions.refusal`). 놓을 자리가 섰거나 까닭이 없으면 `null`. */
+  refusal: DropRefusalAt | null
+}
+
+/** 못 놓는 까닭 한 줄과 그것을 물은 좌표(호스트 창). */
+export interface DropRefusalAt {
+  text: string
+  point: DragPoint
 }
 
 /** 지금 iframe 을 막고 있는 누름의 수 — 0 이 되면 푼다(머리말 «끄는 동안 캔버스 iframe 은 포인터를 안 받는다»). */
@@ -212,6 +226,7 @@ type EndWhy = 'click' | 'touch-scroll' | 'release' | 'pointercancel' | 'escape' 
 export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): PointerDrag<S, D> {
   const [dragging, setDragging] = useState<S | null>(null)
   const [hint, setHint] = useState<DropHint<D> | null>(null)
+  const [refusal, setRefusal] = useState<DropRefusalAt | null>(null)
   const gesture = useRef<Gesture<S, D> | null>(null)
   const canvasDocument = useCanvasDocument()
   // 마지막 콜백 · 캔버스 문서를 ref 로 든다 — 누른 동안 건 리스너가 그 렌더의 것을 붙잡지 않게.
@@ -228,6 +243,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
     if (current.started) swallowNextClick()
     setDragging(null)
     setHint(null)
+    setRefusal(null)
   }, [])
 
   // 끄는 중에 내려가면 걷는다 — 리스너가 남으면 다음 누름이 옛 콜백을 부른다.
@@ -275,7 +291,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
             const same = latest.current.options.sameDrop
             const next = ask(current.last)
             const kept = current.shown !== null && next !== null && (same === undefined || same(current.shown.value, next.value))
-            show(same === undefined || kept ? next : null)
+            show(same === undefined || kept ? next : null, current.last)
           },
           teardown: () => {
             for (const { target, type, listener, options } of listening) target.removeEventListener(type, listener, options)
@@ -300,9 +316,18 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
         })
 
         const ask = (at: DragPoint): DropHint<D> | null => latest.current.options.onOver(source, at)
-        const show = (next: DropHint<D> | null): void => {
+        /** 답을 그린다 — 답이 없으면 그 좌표로 못 놓는 까닭을 묻는다(`PointerDragOptions.refusal`). */
+        const show = (next: DropHint<D> | null, at: DragPoint): void => {
           current.shown = next
           setHint(next)
+          const text = next === null ? (latest.current.options.refusal?.(source, at) ?? null) : null
+          setRefusal((before) =>
+            text === null
+              ? null
+              : before !== null && before.text === text && before.point.x === at.x && before.point.y === at.y
+                ? before
+                : { text, point: at },
+          )
         }
 
         // 이 누름의 포인터가 아닌 이벤트는 모른 척한다(머리말 «시작한 포인터만 듣는다»).
@@ -323,7 +348,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
             if (far <= DRAG_THRESHOLD) return
             begin('threshold')
           }
-          show(ask(at))
+          show(ask(at), at)
         }
 
         /** 끌기가 선다 — 붙잡기는 끌기가 선 뒤다(머리말 «누를 때 붙잡지 않는다»). */
@@ -410,14 +435,14 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
             current.stripSince ??= now
             if (now - current.stripSince < EDGE_ENTER_DWELL_MS) return
           }
-          if (edgeScrollBy(box, delta)) show(ask(current.last))
+          if (edgeScrollBy(box, delta)) show(ask(current.last), current.last)
         }
 
         if (holdToStart) {
           holdTimer = setTimeout(() => {
             holdTimer = null
             begin('touch-hold')
-            show(ask(current.last))
+            show(ask(current.last), current.last)
           }, TOUCH_HOLD_MS)
         }
         if (touch) {
@@ -472,7 +497,7 @@ export function usePointerDrag<S, D>(options: PointerDragOptions<S, D>): Pointer
     if (current !== null && current.started) current.reask()
   }, [])
 
-  return { bind, dragging, hint, refresh }
+  return { bind, dragging, hint, refresh, refusal }
 }
 
 /** 끝 스크롤의 틱 간격(ms) — 사각형 고르기(`canvas/use-canvas-marquee.ts`)도 같은 틱으로 민다. */
