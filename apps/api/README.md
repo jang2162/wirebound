@@ -56,7 +56,7 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 조각 노드)로 옮겼다. `control` 마다 조각이 서고(`text` · `number` → `Input` · `select` → `Select` · `date` → `DateInput` · `dateRange` →
 `DateInput` · `Affix '~'` · `DateInput` · `checkbox` → `CheckboxGroup` · `radio` → `RadioGroup` + `variant: 'radio'` · `textarea` → `TextArea` ·
 `file` → 읽기 전용 `Input` · `Button '파일 선택'`), 그 prop 이 있는 조각에만 안내 문구(빈 글은 빼고) · 비활성 · 오류를 옮긴다. 노드 id 는
-그대로라 코멘트 · 번호가 안 끊긴다. 옮긴 prop 을 바꾸던 `setProp` 은 그 prop 을 가진 첫 조각을 가리킨다. 옮기는 자리 · `revisions` ·
+그대로라 코멘트 · 번호가 안 끊긴다. 옮긴 prop 을 바꾸던 `setProp` 은 그 prop 을 가진 조각마다 하나씩 늘어난다(기간의 두 날짜 칸 · 파일의 입력과 단추). 옮기는 자리 · `revisions` ·
 내리기는 `0028` 과 같다 — 스냅샷의 판 1 · 2 문서는 먼저 `0028` 의 얼린 판 2 → 3 을 탄다. 런타임은 판 3 문서를 «버전 3에서 올릴
 마이그레이션이 없습니다» 로 거절한다.
 

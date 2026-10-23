@@ -5,13 +5,15 @@
  *
  * 잰 성질: 판 3 페이지 · 레이아웃 · 모듈 · 개인 모듈 · 스냅샷(판 2 · 3 문서)이 판 4 가 되고 판 3 이 하나도 안 남는다 · 옛 `control` 아홉이 표대로 조각이
  * 된다(타입 · 차례 · 옮긴 prop · 변형) · 빈 안내 문구는 안 옮긴다 · 구역 안의 필드도 옮긴다 · 노드 수는 옛 수 + 새 조각 수 · 옛 노드 id · 번호 · 별칭 ·
- * 보임은 그대로 · 코멘트가 가리키는 노드가 남는다 · `setProp` 은 그 prop 을 가진 조각으로 · 옮긴 문서가 판 4 검증(오류)을 지난다 · `down` 은 행이
+ * 보임은 그대로 · 코멘트가 가리키는 노드가 남는다 · `setProp` 은 그 prop 을 가진 조각마다 하나씩(넓힌 표본 — 놓인 자리 열한 곳) · 옮긴 문서가 판 4 검증(오류)을 지난다 · `down` 은 행이
  * 있으면 거절하고 비었으면 내려간다.
  */
 import { randomUUID } from 'node:crypto'
 import {
   installCatalog,
   partitionIssues,
+  propSchema,
+  requireComponent,
   validateLayout,
   validatePage,
   walkNodes,
@@ -23,7 +25,7 @@ import { SnapshotPayloadSchema } from '@wirebound/themes'
 import { Migrator, NO_MIGRATIONS, sql } from 'kysely'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createDb, createPool } from '../src/db/client'
-import { liftDocument, liftNodes } from '../src/db/migrations/0029-compose-field'
+import { liftDocument, liftNodes, migration } from '../src/db/migrations/0029-compose-field'
 import { migrationProvider } from '../src/db/migrations/index'
 import type { DbHandle } from '../src/db/tx'
 import { TEST_DATABASE_URL } from './helpers'
@@ -145,9 +147,114 @@ const V4_PAGE = {
   root: { id: 'n_root', type: 'Page', children: [{ id: 'n_t', type: 'Text', props: { content: '이미 판 4' } }] },
 }
 
+/** 넓힌 표본의 `control` — 아홉 · 안 적음 · 모르는 값. */
+const WIDE_CONTROLS = [
+  undefined,
+  'text',
+  'number',
+  'select',
+  'date',
+  'dateRange',
+  'checkbox',
+  'radio',
+  'textarea',
+  'file',
+  'bogus',
+] as const
+
+/** 넓힌 표본의 필드가 놓이는 자리 열한 곳. */
+const WIDE_PLACES = 11
+
+/** 필드 수 — `control` 11 × 안내(빈 글 · 글) × 비활성 × 오류 × 놓인 자리 11. */
+const WIDE_FIELDS = WIDE_CONTROLS.length * 2 * 2 * 2 * WIDE_PLACES
+
+/** 넓힌 표본에서 `setProp` 이 바꾸는 prop — 필드마다 차례로 하나. */
+const WIDE_SET = ['control', 'placeholder', 'disabled', 'invalid', 'label', 'required'] as const
+
+/**
+ * 넓힌 판 3 페이지 — `control` 11 꼴 × 안내 × 비활성 × 오류를 놓인 자리 열한 곳(페이지 몸통 · 카드 몸통 · `footer` · `headEnd` · `titleSide` · 검색폼
+ * 몸통 · `actions` · 입력폼 몸통 · `TabPanel` 몸통 · `List.headEnd` · `Flex > Grid`)에. 판 3 편집기가 기본값을 적어 둔 판(빈 안내 · 거짓)과 번호 ·
+ * 별칭 · 보임 · 몫 · 무시된 옛 변형 · 빈 `children` · 필드 자신의 상호작용을 차례로 섞는다. 단추 하나가 필드마다 `WIDE_SET` 가운데 하나를 바꾸고,
+ * `dateRange` · `file` 필드마다 `disabled` · `invalid` · `placeholder` 를 하나씩 더 바꾼다. 부를 때마다 같은 글자다.
+ */
+function widePage(): { version: 3; viewStates: unknown[]; root: Record<string, unknown> } {
+  let seq = 0
+  const made: { id: string; control: string | undefined }[] = []
+  const fields = (): Record<string, unknown>[] => {
+    const out: Record<string, unknown>[] = []
+    for (const control of WIDE_CONTROLS)
+      for (const placeholder of ['', '안내'])
+        for (const disabled of [false, true])
+          for (const invalid of [false, true]) {
+            const id = `f${String(++seq).padStart(4, '0')}`
+            const props: Record<string, unknown> = { label: `L${seq}` }
+            if (control !== undefined) props.control = control
+            if (placeholder !== '' || seq % 3 === 0) props.placeholder = placeholder
+            if (disabled || seq % 4 === 0) props.disabled = disabled
+            if (invalid || seq % 5 === 0) props.invalid = invalid
+            if (seq % 7 === 0) props.required = true
+            const node: Record<string, unknown> = { id, type: 'Field', props }
+            if (seq % 6 === 0) node.marker = seq
+            if (seq % 8 === 0) node.alias = `별칭${seq}`
+            if (seq % 9 === 0) node.visibility = { mode: 'only', states: ['s_a'] }
+            if (seq % 10 === 0) node.weight = 2
+            if (seq % 11 === 0) node.variant = 'select'
+            if (seq % 12 === 0) node.children = []
+            if (seq % 13 === 0) node.interactions = [{ on: 'change', actions: [{ type: 'setVisible', target: 'n_b', value: false }] }]
+            made.push({ id, control })
+            out.push(node)
+          }
+    return out
+  }
+  const children: Record<string, unknown>[] = [
+    ...fields(),
+    {
+      id: 'n_card',
+      type: 'Card',
+      props: { title: '카드' },
+      children: fields(),
+      zones: { footer: fields(), headEnd: fields(), titleSide: fields() },
+    },
+    {
+      id: 'n_sf',
+      type: 'SearchForm',
+      children: fields(),
+      zones: { actions: [...fields(), { id: 'n_sb', type: 'Button', props: { label: '검색' } }] },
+    },
+    { id: 'n_ef', type: 'EntryForm', children: fields(), zones: { actions: [{ id: 'n_eb', type: 'Button', props: { label: '저장' } }] } },
+    {
+      id: 'n_tabs',
+      type: 'Tabs',
+      children: [
+        { id: 'n_tp1', type: 'TabPanel', props: { label: '탭' }, children: fields() },
+        { id: 'n_tp2', type: 'TabPanel', props: { label: '탭2' } },
+      ],
+    },
+    { id: 'n_list', type: 'List', zones: { headEnd: fields() } },
+    { id: 'n_flex', type: 'Flex', children: [{ id: 'n_grid', type: 'Grid', children: fields() }] },
+    { id: 'n_b', type: 'Button', props: { label: '대상' } },
+  ]
+  const actions: Record<string, unknown>[] = made.map(({ id }, at) => {
+    const prop = WIDE_SET[at % WIDE_SET.length]!
+    return {
+      type: 'setProp',
+      target: id,
+      prop,
+      value: prop === 'control' ? 'text' : prop === 'placeholder' || prop === 'label' ? 'x' : true,
+    }
+  })
+  for (const { id, control } of made)
+    if (control === 'dateRange' || control === 'file')
+      for (const prop of ['disabled', 'invalid', 'placeholder'])
+        actions.push({ type: 'setProp', target: id, prop, value: prop === 'placeholder' ? 'y' : false })
+  children.push({ id: 'n_go', type: 'Button', props: { label: '바꾸기' }, interactions: [{ on: 'click', actions }] })
+  return { version: 3, viewStates: [{ id: 's_a', name: 'A' }], root: { id: 'n_root', type: 'Page', children } }
+}
+
 interface Seeded {
   pageV3: string
   pageV4: string
+  pageWide: string
   layoutId: string
   moduleId: string
   personalId: string
@@ -159,7 +266,7 @@ async function seed(): Promise<Seeded> {
   const userId = randomUUID()
   const projectId = randomUUID()
   const menuId = randomUUID()
-  const [pageV3, pageV4, layoutId, snapshotId] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()]
+  const [pageV3, pageV4, pageWide, layoutId, snapshotId] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()]
   await sql`insert into users (id, email, name, password_hash) values (${userId}, ${`u-${userId}@example.com`}, '앨리스', 'x')`.execute(db)
   await sql`insert into projects (id, name, slug) values (${projectId}, '프로젝트', ${`p-${projectId.slice(0, 8)}`})`.execute(db)
   await sql`insert into menu_nodes (id, project_id, title, sort_order) values (${menuId}, ${projectId}, '메뉴', 0)`.execute(db)
@@ -169,6 +276,7 @@ async function seed(): Promise<Seeded> {
     )
   await page(pageV3, 0, V3_PAGE, 3)
   await page(pageV4, 1, V4_PAGE, 4)
+  await page(pageWide, 2, widePage(), 3)
   const comment = await sql<{ id: string }>`
     insert into comments (page_id, node_id, body, author_id) values (${pageV3}, 'n_text', '이름 칸 확인', ${userId}) returning id
   `.execute(db)
@@ -223,6 +331,7 @@ async function seed(): Promise<Seeded> {
   return {
     pageV3,
     pageV4,
+    pageWide,
     layoutId,
     moduleId: moduleRow.rows[0]!.id,
     personalId: personalRow.rows[0]!.id,
@@ -285,11 +394,11 @@ describe('0029 — 문서 판 3 → 4', () => {
       union all select nodes::text from modules union all select nodes::text from personal_modules
       union all select payload::text from snapshots
     `.execute(db)
-    expect(texts.rows).toHaveLength(6)
-    // 옛 꼴의 흔적 — 필드의 `control` · 안내 · 비활성 · 오류, 값 칸이 빈 필드 — 을 모든 표에서 센다. 필드 수는 카나리아다: 판 3 페이지 10 · 레이아웃 1 ·
-    // 모듈 1 · 개인 모듈 1 · 스냅샷 12(판 3 페이지 10 · 판 2 페이지 1 · 레이아웃 1). 판 4 페이지에는 필드가 없다.
+    expect(texts.rows).toHaveLength(7)
+    // 옛 꼴의 흔적 — 필드의 `control` · 안내 · 비활성 · 오류, 값 칸이 빈 필드 — 을 모든 표에서 센다. 필드 수는 카나리아다: 판 3 페이지 10 · 넓힌 표본 ·
+    // 레이아웃 1 · 모듈 1 · 개인 모듈 1 · 스냅샷 12(판 3 페이지 10 · 판 2 페이지 1 · 레이아웃 1). 판 4 페이지에는 필드가 없다.
     const fields = texts.rows.flatMap(({ body }) => fieldsIn(JSON.parse(body)))
-    expect(fields).toHaveLength(10 + 1 + 1 + 1 + (10 + 1 + 1))
+    expect(fields).toHaveLength(10 + WIDE_FIELDS + 1 + 1 + 1 + (10 + 1 + 1))
     const leftover = fields.filter((node) => {
       const props = (node.props ?? {}) as Record<string, unknown>
       const children = node.children
@@ -340,13 +449,15 @@ describe('0029 — 문서 판 3 → 4', () => {
     expect(find(schema.root, 'n_sf').zones!.actions!.map((node) => node.id)).toEqual(['n_zone', 'n_b1'])
   })
 
-  it('setProp — 옮긴 prop 은 그 prop 을 가진 첫 조각으로 · control 과 남은 prop 은 그대로', async () => {
+  it('setProp — 옮긴 prop 은 그 prop 을 가진 조각마다 하나씩 · control 과 남은 prop 은 그대로', async () => {
     const { schema } = await pageRow(seeded.pageV3)
-    const firstPiece = (id: string) => find(schema.root, id).children![0]!.id
+    const piece = (id: string, at: number) => find(schema.root, id).children![at]!.id
     expect(find(schema.root, 'n_go').interactions![0]!.actions).toEqual([
-      { type: 'setProp', target: firstPiece('n_text'), prop: 'placeholder', value: '새 안내' },
-      { type: 'setProp', target: firstPiece('n_chk'), prop: 'disabled', value: false },
-      { type: 'setProp', target: firstPiece('n_range'), prop: 'invalid', value: false },
+      { type: 'setProp', target: piece('n_text', 0), prop: 'placeholder', value: '새 안내' },
+      { type: 'setProp', target: piece('n_chk', 0), prop: 'disabled', value: false },
+      // 기간은 두 날짜 칸이 오류를 갖는다 — 사이 글자는 건너뛴다.
+      { type: 'setProp', target: piece('n_range', 0), prop: 'invalid', value: false },
+      { type: 'setProp', target: piece('n_range', 2), prop: 'invalid', value: false },
       { type: 'setProp', target: 'n_sel', prop: 'control', value: 'text' },
       { type: 'setProp', target: 'n_text', prop: 'label', value: '성명' },
     ])
@@ -398,11 +509,88 @@ describe('0029 — 문서 판 3 → 4', () => {
     expect(parsed.data!.layouts[0]!.schema.version).toBe(4)
   })
 
+  it('넓힌 표본 — 실제 DB 에서 up 을 한 번 더 돌려도 다섯 표의 글자가 같다', async () => {
+    const dump = async () =>
+      (
+        await sql<{ body: string }>`
+          select schema::text as body from pages union all select schema::text from layouts
+          union all select nodes::text from modules union all select nodes::text from personal_modules
+          union all select payload::text from snapshots
+        `.execute(db)
+      ).rows.map((row) => row.body)
+    const first = await dump()
+    const { schema } = await pageRow(seeded.pageWide)
+    expect(errorsOf(schema)).toEqual([])
+    expect(fieldsIn(schema)).toHaveLength(WIDE_FIELDS)
+    await migration.up(db)
+    expect(await dump()).toEqual(first)
+  })
+
   it('한 번 더 돌려도 그대로다 — 판 4 문서 · 값 칸이 든 필드', () => {
     const v4 = liftDocument(V3_PAGE, null) as PageDocument
     expect(liftDocument(v4, null)).toBeNull()
     const nodes = liftNodes([field('x', { label: '가', control: 'select' })])
     expect(liftNodes(nodes)).toEqual(nodes)
+  })
+
+  it('넓힌 표본 — 옛 필드를 바꾸던 setProp 은 그 prop 을 가진 조각마다 하나 · 검증 오류 0 · 옛 id · 봉투 그대로 · 두 번 돌려도 같다', () => {
+    const before = widePage()
+    const text = JSON.stringify(before)
+    const after = liftDocument(before, 'p') as PageDocument
+    expect(JSON.stringify(before)).toBe(text)
+    expect(errorsOf(after)).toEqual([])
+
+    const old = [...walkNodes(before.root as unknown as WbNode)].map((visit) => visit.node)
+    const now = new Map([...walkNodes(after.root)].map((visit) => [visit.node.id, visit.node]))
+    expect(old.filter((node) => node.type === 'Field')).toHaveLength(WIDE_FIELDS)
+    const ids = [...walkNodes(after.root)].map((visit) => visit.node.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids.filter((id) => old.some((node) => node.id === id))).toEqual(old.map((node) => node.id))
+    for (const node of old) {
+      const lifted = now.get(node.id)!
+      for (const key of ['marker', 'alias', 'visibility', 'weight', 'variant'] as const)
+        expect(lifted[key], `${node.id}.${key}`).toEqual(node[key])
+      if (node.id !== 'n_go') expect(lifted.interactions, `${node.id}.interactions`).toEqual(node.interactions)
+    }
+
+    // 기대값은 판 4 카탈로그의 규격에서 짓는다 — 마이그레이션의 얼린 표(`HAS`)와 따로 선 오라클이다.
+    const hasProp = (type: string, prop: string) => propSchema(requireComponent(type), prop) !== undefined
+    const moved = new Set(['placeholder', 'disabled', 'invalid'])
+    const expected = (old.find((node) => node.id === 'n_go')!.interactions![0]!.actions as Record<string, unknown>[]).flatMap((action) => {
+      const prop = action.prop as string
+      const pieces = (now.get(action.target as string)!.children ?? []).filter((piece) => hasProp(piece.type, prop))
+      return moved.has(prop) && pieces.length > 0 ? pieces.map((piece) => ({ ...action, target: piece.id })) : [action]
+    })
+    const actions = now.get('n_go')!.interactions![0]!.actions
+    expect(actions).toEqual(expected)
+
+    // 카나리아 — 조각이 둘인 필드의 덧붙인 액션이 실제로 늘었는가(기간: 비활성 · 오류 · 안내가 두 날짜 칸 · 파일: 비활성이 입력 · 단추, 오류 · 안내는 입력 하나).
+    const fanOut = (control: string, prop: string) =>
+      new Set(
+        old
+          .filter((node) => node.type === 'Field' && node.props?.control === control)
+          .map(
+            (node) =>
+              actions.filter(
+                (action) =>
+                  action.type === 'setProp' &&
+                  action.prop === prop &&
+                  // 덧붙인 액션만 — 차례로 도는 액션(`WIDE_SET`)은 값이 다르다.
+                  action.value === (prop === 'placeholder' ? 'y' : false) &&
+                  now.get(node.id)!.children!.some((piece) => piece.id === action.target),
+              ).length,
+          ),
+      )
+    expect(fanOut('dateRange', 'disabled')).toEqual(new Set([2]))
+    expect(fanOut('dateRange', 'invalid')).toEqual(new Set([2]))
+    expect(fanOut('dateRange', 'placeholder')).toEqual(new Set([2]))
+    expect(fanOut('file', 'disabled')).toEqual(new Set([2]))
+    expect(fanOut('file', 'invalid')).toEqual(new Set([1]))
+    expect(actions.length).toBeGreaterThan(WIDE_FIELDS)
+
+    expect(liftDocument(after, 'p')).toBeNull()
+    const once = liftNodes(before.root.children as unknown[])
+    expect(liftNodes(once)).toEqual(once)
   })
 
   it('down — 행이 있으면 «백업에서 되돌린다»로 거절하고 아무것도 안 바꾼다', async () => {

@@ -27,8 +27,9 @@ import { liftDocument as liftToV3 } from './0028-node-zones'
  * `disabled` 만), `Field` 에서는 넷을 걷는다. 새 조각 id 는 그 문서(묶음)의 id 와 안 겹치게 새로 짓는다(`n_` + 소문자 hex 12자 — `0028` 과 같은 꼴).
  * 이미 값 칸에 노드가 든 `Field`(판 3 에는 없다)는 걷기만 하고 조각을 안 더한다.
  *
- * `setProp` 이 옮긴 `Field` 의 `placeholder` · `disabled` · `invalid` 를 바꾸던 액션은 그 prop 을 가진 첫 조각(`HAS`)을 가리키게 옮긴다(묶음 안의 필드일
- * 때만 · 그 prop 을 가진 조각이 없으면 그대로).
+ * `setProp` 이 옮긴 `Field` 의 `placeholder` · `disabled` · `invalid` 를 바꾸던 액션은 그 prop 을 가진 조각(`HAS`)마다 하나씩, 조각 차례로 늘려 옮긴다
+ * — 옛 액션은 필드 전체를 바꿨다(`dateRange` 의 두 날짜 칸 · `file` 의 입력과 단추가 함께 꺼진다). 묶음 안의 필드일 때만이고, 그 prop 을 가진 조각이
+ * 없으면 그대로 둔다.
  * `control` 을 바꾸던 액션은 그대로 둔다 — 검증 경고 `invalid-interaction-prop` 이 그 자리를 말한다(바꿀 종류가 이제 노드의 타입이다).
  *
  * | 표 · 칸 | 옮기는 것 |
@@ -186,8 +187,8 @@ export function liftNodes(nodes: readonly unknown[]): unknown[] {
     }
   }
 
-  /** 옮긴 필드 id → 옛 prop 마다 그것을 받은 첫 조각 id. */
-  const movedTo = new Map<string, Partial<Record<string, string>>>()
+  /** 옮긴 필드 id → 옛 prop 마다 그 prop 을 가진 조각 id(차례대로). */
+  const movedTo = new Map<string, Partial<Record<string, string[]>>>()
   const liftNode = (node: unknown): unknown => {
     if (!isRecord(node)) return node
     const next: Raw = { ...node }
@@ -207,7 +208,7 @@ export function liftNodes(nodes: readonly unknown[]): unknown[] {
     if (Array.isArray(node.interactions)) {
       node.interactions = node.interactions.map((interaction) => {
         if (!isRecord(interaction) || !Array.isArray(interaction.actions)) return interaction
-        return { ...interaction, actions: interaction.actions.map((action) => setPropAction(action, movedTo)) }
+        return { ...interaction, actions: interaction.actions.flatMap((action) => setPropActions(action, movedTo)) }
       })
     }
     if (Array.isArray(node.children)) node.children.forEach(retarget)
@@ -218,7 +219,7 @@ export function liftNodes(nodes: readonly unknown[]): unknown[] {
 }
 
 /** 옛 필드 하나를 판 4 로(`next` 는 이미 사본이다). */
-function liftField(next: Raw, freshId: () => string, movedTo: Map<string, Partial<Record<string, string>>>): void {
+function liftField(next: Raw, freshId: () => string, movedTo: Map<string, Partial<Record<string, string[]>>>): void {
   const props: Record<string, unknown> = isRecord(next.props) ? { ...next.props } : {}
   const old = Object.fromEntries(MOVED.map((key) => [key, props[key]]))
   for (const key of MOVED) delete props[key]
@@ -228,7 +229,7 @@ function liftField(next: Raw, freshId: () => string, movedTo: Map<string, Partia
   if (Array.isArray(next.children) && next.children.length > 0) return
 
   const seeds = (typeof old.control === 'string' ? PIECES[old.control] : undefined) ?? PIECES.text!
-  const firstFor: Partial<Record<string, string>> = {}
+  const piecesFor: Partial<Record<string, string[]>> = {}
   next.children = seeds.map((seed) => {
     const id = freshId()
     const pieceProps: Record<string, unknown> = { ...seed.props }
@@ -236,7 +237,7 @@ function liftField(next: Raw, freshId: () => string, movedTo: Map<string, Partia
       pieceProps.placeholder = old.placeholder
     if (seed.takes.includes('disabled') && old.disabled === true) pieceProps.disabled = true
     if (seed.takes.includes('invalid') && old.invalid === true) pieceProps.invalid = true
-    for (const key of HAS[seed.type] ?? []) firstFor[key] ??= id
+    for (const key of HAS[seed.type] ?? []) (piecesFor[key] ??= []).push(id)
     return {
       id,
       type: seed.type,
@@ -244,13 +245,14 @@ function liftField(next: Raw, freshId: () => string, movedTo: Map<string, Partia
       ...(seed.variant === undefined ? {} : { variant: seed.variant }),
     }
   })
-  if (typeof next.id === 'string') movedTo.set(next.id, firstFor)
+  if (typeof next.id === 'string') movedTo.set(next.id, piecesFor)
 }
 
-function setPropAction(action: unknown, movedTo: ReadonlyMap<string, Partial<Record<string, string>>>): unknown {
-  if (!isRecord(action) || action.type !== 'setProp' || typeof action.target !== 'string' || typeof action.prop !== 'string') return action
-  const piece = movedTo.get(action.target)?.[action.prop]
-  return piece === undefined ? action : { ...action, target: piece }
+function setPropActions(action: unknown, movedTo: ReadonlyMap<string, Partial<Record<string, string[]>>>): unknown[] {
+  if (!isRecord(action) || action.type !== 'setProp' || typeof action.target !== 'string' || typeof action.prop !== 'string')
+    return [action]
+  const pieces = movedTo.get(action.target)?.[action.prop]
+  return pieces === undefined ? [action] : pieces.map((piece) => ({ ...action, target: piece }))
 }
 
 /** 스냅샷 payload 의 페이지 · 레이아웃 문서를 판 4 로 — 바꿀 것이 없으면 `null`. */
