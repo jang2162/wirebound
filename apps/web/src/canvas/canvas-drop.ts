@@ -55,6 +55,7 @@
  */
 import type { DropMiss } from '../drag/drag-debug'
 import { dropBand, type DropBand } from '../tree/tree-drop'
+import { EMPTY_ZONE_ATTR, EMPTY_ZONE_OF_ATTR } from './empty-zones'
 
 export interface Rect {
   left: number
@@ -82,6 +83,7 @@ export interface Layout {
  */
 export type CanvasHit =
   | { overId: string; band: DropBand; rect: Rect; layout: Layout }
+  | { zone: { parentId: string; zone: string }; rect: Rect; layout: Layout }
   | { pageEnd: true; rect: Rect; layout: Layout }
   | { preview: true; rect: Rect; layout: Layout }
 
@@ -189,6 +191,9 @@ export function siblingRects(parent: Element, self: Element, view: Window): Rect
  * 포인터 밑 요소에서 가장 가까운 `[data-wb-id]` 조상이 대상이다. `node(id)` 가 `null` 인 id(문서에 없는 — 폴백의 빈 id · 합성의 유령)는
  * 건너뛰고 위로 오른다. 그런 조상이 없으면 페이지 끝이고, 뿌리면 가장 가까운 뿌리 자식의 앞 · 뒤다(머리말 «뿌리의 노드 사이 바탕») — 자식이 없을 때만 페이지 끝.
  *
+ * **빈 구역 칸 위면 `{ zone }` 이다**(`./empty-zones.tsx` — 끄는 동안만 서는 점선 칸). 칸은 노드가 아니라 그 구역 끝이 놓을 자리다. 칸의 부모 id 가
+ * 문서에 없으면(`node` 가 `null`) 건너뛰고 위로 오른다.
+ *
  * **배치 미리보기 위면 `{ preview: true }` 다**(`isPreview` — `./canvas-preview.ts` 의 id 머리) — 미리보기는 문서의 노드가 아니라 그 위의
  * 그림이라 대상도 · 그 부모의 «안» 도 아니다. 판정은 미리보기를 숨기고 재므로(`drag/use-placement.ts` 머리말 «판정은 미리보기를 뺀
  * 배치로») 보통은 안 잡힌다 — 잡히면 부르는 쪽이 보인 자리를 그대로 둔다.
@@ -228,6 +233,14 @@ export function canvasHitAt(
   let cursor: Element | null = isElement(under) ? under : null
   let found: { element: Element; id: string; info: HitNode } | null = null
   while (cursor !== null && doc.body.contains(cursor)) {
+    const emptyZone = cursor.getAttribute(EMPTY_ZONE_ATTR)
+    const emptyOf = cursor.getAttribute(EMPTY_ZONE_OF_ATTR)
+    if (emptyZone !== null && emptyOf !== null && node(emptyOf) !== null)
+      return {
+        zone: { parentId: emptyOf, zone: emptyZone },
+        rect: frameToHost(plain(cursor.getBoundingClientRect()), frameRect, zoom),
+        layout: VERTICAL,
+      }
     const id = cursor.getAttribute('data-wb-id')
     if (id !== null && isPreview(id))
       return { preview: true, rect: frameToHost(plain(cursor.getBoundingClientRect()), frameRect, zoom), layout: VERTICAL }

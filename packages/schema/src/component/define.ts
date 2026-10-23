@@ -94,6 +94,12 @@ export interface ComponentDef {
    * (탭 머리와 탭 내용이 DOM 에서 부모 · 자식이 아닌 `TabPanel`). 없으면 `'self'`.
    */
   bodyHost?: 'self' | 'parent'
+  /**
+   * **자손을 펼쳐 보이는 props** — 이 노드의 자식 줄 `at`(구역 · 차례)에 보일 노드가 들면 렌더러가 **그 화면에서만** props 를 이것으로 덮는다
+   * (`@wirebound/renderer` 의 `RenderOptions.reveal` — 에디터가 고른 노드를 지금 탭이 아닌 패널 · 접힌 검색폼 안에서도 보이게). 문서는 안 바뀐다.
+   * 받는 값은 기본값을 채운 props 다. 없으면 이 타입은 자손을 가리지 않는다.
+   */
+  reveal?: (props: Record<string, unknown>, at: { zone: string; index: number }) => Record<string, unknown>
 }
 
 /** 구역 하나의 선언. */

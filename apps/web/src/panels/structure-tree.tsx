@@ -18,7 +18,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { childLists, nodeAlias, nodeSummary, zoneDefs, zonePointer, type NodeLock, type WbNode } from '@wirebound/schema'
-import { DropIndicator } from '../drag/drop-indicator'
+import { DropIndicator, DropRefusal } from '../drag/drop-indicator'
 import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { platformOf } from '../edit/editor-shortcuts'
 import { usePublishTreeRegion } from '../drag/use-placement'
@@ -33,7 +33,7 @@ import { useLockedBy, useLocksVersion } from '../store/use-locked-by'
 import { structureKey, useCollapsed, type Collapsed } from '../tree/collapse'
 import { useAliasEdit, type AliasEdit } from './alias-edit'
 import { nodeTypeLabel } from './node-shape'
-import { structureTreeHint } from './structure-tree-hint'
+import { structureTreeHint, structureTreeRefusal } from './structure-tree-hint'
 import { moduleSelection, SaveModuleDialog, savedModuleNotice } from './save-module-dialog'
 import { selectionCapNotice } from './toolbar-status'
 import { useStructureCommands, type StructureCommands } from './structure-toolbar'
@@ -154,6 +154,8 @@ export function StructureTree(props: {
     onDrop: (source, target) => commands.dropTo(source, target),
     sameDrop,
     scrollContainer: () => scrollParent(treeRef.current),
+    // 못 놓는 까닭(받는 타입 · 설 자리) — 포인터 곁에 한 줄(`drag/drop-indicator.tsx` 의 `DropRefusal`).
+    refusal: (source, point) => (doc === null ? null : structureTreeRefusal(treeRef.current, doc, { kind: 'node', id: source }, point)),
   })
   // 끄는 사이 문서 · 잠금이 바뀌어 줄이 밀리거나 사라지면 표시를 마지막 좌표로 다시 묻는다 — 같은 부모의 줄이면 새 줄로 옮겨 가고, 다른 부모 ·
   // 못 놓는 자리면 걷는다. 안 부르면 표시가 옛 줄 상자에 남는다(`refresh` 는 끌기가 아니면 아무것도 안 한다).
@@ -219,6 +221,7 @@ export function StructureTree(props: {
           />
         </ul>
         {props.editable && <DropIndicator hint={drag.hint} />}
+        {props.editable && <DropRefusal refusal={drag.refusal} />}
         {props.headSlot !== undefined &&
           props.headSlot !== null &&
           createPortal(

@@ -29,8 +29,8 @@
  */
 import { useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
-import { DropIndicator } from '../drag/drop-indicator'
-import { usePlacementDrop, usePublishPlacementPreview, type PlacementDrop } from '../drag/use-placement'
+import { DropIndicator, DropRefusal } from '../drag/drop-indicator'
+import { usePlacementDrop, usePublishDragging, usePublishPlacementPreview, type PlacementDrop } from '../drag/use-placement'
 import { scrollParent, usePointerDrag } from '../drag/use-pointer-drag'
 import type { Placing } from '../edit/structure-drop'
 import { shellIcon } from '../shell/icons'
@@ -60,6 +60,7 @@ export function CanvasDragHandle(props: {
     touchStart: 'now',
     // 캔버스 칸의 위 · 아래 · 왼 · 오른 끝에 대면 칸이 민다(`drag/use-pointer-drag.ts` 머리말 «끝 스크롤»).
     scrollContainer: () => scrollParent(buttonRef.current),
+    refusal: placement.refusalOf,
   })
   const { refresh } = drag
   useLayoutEffect(() => {
@@ -73,7 +74,14 @@ export function CanvasDragHandle(props: {
   const hint = placement.live(drag.hint)
   // 보인 자리를 캔버스에 미리보기로 끼운다 — 캔버스 위의 선 · 강조는 미리보기가 대신한다(`drag/use-placement.ts` 머리말 «배치 미리보기»).
   usePublishPlacementPreview(hint?.value ?? null)
-  const indicator = <DropIndicator hint={hint?.value.region === 'tree' ? hint : null} layout={hint?.value.layout} />
+  // 끄는 노드를 캔버스에 알린다 — 받을 수 있는 빈 구역마다 점선 칸이 선다(`./empty-zones.tsx`).
+  usePublishDragging(drag.dragging)
+  const indicator = (
+    <>
+      <DropIndicator hint={hint?.value.region === 'tree' ? hint : null} layout={hint?.value.layout} />
+      <DropRefusal refusal={drag.refusal} />
+    </>
+  )
   const scale = 1 / props.zoom
 
   return (

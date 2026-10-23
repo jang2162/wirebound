@@ -1588,6 +1588,20 @@
   pointer-events: none;
 }
 
+/* 못 놓는 까닭(`drag/drop-indicator.tsx` 의 `DropRefusal`) — 끄는 포인터 오른쪽 아래에 한 줄. 표시와 같은 겹 규칙(고정 · 누름 안 받음)이다. */
+.wb-shell-drop-refusal {
+  position: fixed;
+  z-index: 41;
+  max-width: 320px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--wb-shell-ink);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
 /* 형제로 놓기 — 줄의 위 · 아래 가장자리에 걸친 가는 선. 두께의 가운데가 가장자리다(`margin-top`). */
 .wb-shell-drop-line {
   height: 2px;
