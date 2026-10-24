@@ -17,6 +17,7 @@ import {
   DateInputView,
   EntryFormView,
   FieldView,
+  FormTableView,
   InputView,
   inputCssBlocks,
   RadioGroupView,
@@ -25,7 +26,7 @@ import {
   TextAreaView,
   TimeInputView,
 } from './input'
-export { SEARCHFORM_COLUMNS_VAR, searchFormFieldsAttrs, TEXTAREA_ROWS_VAR } from './input'
+export { FORMTABLE_COLUMNS_VAR, formTableCellsAttrs, SEARCHFORM_COLUMNS_VAR, searchFormFieldsAttrs, TEXTAREA_ROWS_VAR } from './input'
 import { CardView, FlexView, GridView, PageView, SectionView, SlotView, structureCssBlocks, TabPanelView, TabsView } from './structure'
 
 export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({
@@ -42,6 +43,7 @@ export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({
   KeyValue: KeyValueView,
   SearchForm: SearchFormView,
   EntryForm: EntryFormView,
+  FormTable: FormTableView,
   Field: FieldView,
   Input: InputView,
   TextArea: TextAreaView,

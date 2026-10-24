@@ -129,7 +129,7 @@ describe('createNode', () => {
 
   it('기본 내용 — 구역의 `initial` 이 실제 노드로 들고 id 는 같은 생성기에서 차례로 나온다', () => {
     const withSeeds = listComponents().filter((def) => seeded(def.type))
-    expect(withSeeds.map((def) => def.type).sort()).toEqual(['EntryForm', 'Field', 'SearchForm', 'Tabs'])
+    expect(withSeeds.map((def) => def.type).sort()).toEqual(['EntryForm', 'Field', 'FormTable', 'SearchForm', 'Tabs'])
 
     // 입력 필드는 팔레트 한 걸음으로 «라벨 + 입력 하나» 가 선다 — 값 칸에 `Input` 하나(props 없음 · 카탈로그 기본값을 따른다).
     expect(createNode('Field', countingIds())).toEqual({ id: 'n_test1', type: 'Field', children: [{ id: 'n_test2', type: 'Input' }] })
@@ -144,13 +144,16 @@ describe('createNode', () => {
         ],
       },
     })
+    // 새 입력폼은 1쌍 폼 표(필드 셋 — 필드마다 값 칸의 `Input`)를 들고 선다 — 기본 내용이 겹으로 돈다.
+    const field = (n: number) => ({ id: `n_test${n}`, type: 'Field', children: [{ id: `n_test${n + 1}`, type: 'Input' }] })
     expect(createNode('EntryForm', countingIds())).toEqual({
       id: 'n_test1',
       type: 'EntryForm',
+      children: [{ id: 'n_test2', type: 'FormTable', children: [field(3), field(5), field(7)] }],
       zones: {
         actions: [
-          { id: 'n_test2', type: 'Button', props: { label: '저장' }, variant: 'primary' },
-          { id: 'n_test3', type: 'Button', props: { label: '취소' } },
+          { id: 'n_test9', type: 'Button', props: { label: '저장' }, variant: 'primary' },
+          { id: 'n_test10', type: 'Button', props: { label: '취소' } },
         ],
       },
     })

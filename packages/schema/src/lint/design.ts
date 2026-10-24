@@ -47,14 +47,15 @@ const MAJOR_COMPONENTS: readonly string[] = ['List', 'EntryForm', 'SearchForm']
 /**
  * ⑥ *"`EntryForm` 안에 `Field`가 하나도 없는 **등**"*의 표.
  *
- * **`등`을 여기서 지어내지 않는다.** 든 둘은 「lint 규칙」이 이름으로 든 `EntryForm`과, 같은
- * 근거가 그대로 서는 `SearchForm`이다 — 둘 다 카탈로그가 몸통을 선언해 자식 0을
- * 허용하는데, **입력 칸이 하나도 없는 폼은 그 노드가 화면에서 하는 일이 없다.** 셋째를
- * 더하려면 같은 종류의 근거가 있어야 한다(*"그 컴포넌트가 무엇 없이는 빈 상자다"*).
+ * **`등`을 여기서 지어내지 않는다.** 든 셋은 「lint 규칙」이 이름으로 든 `EntryForm`과, 같은
+ * 근거가 그대로 서는 `SearchForm` · `FormTable` 이다 — 셋 다 카탈로그가 몸통을 선언해 자식 0을
+ * 허용하는데, **입력 칸이 하나도 없는 폼은 그 노드가 화면에서 하는 일이 없다**(폼 표는 라벨 칸이
+ * 하나도 없는 표다). 넷째를 더하려면 같은 종류의 근거가 있어야 한다(*"그 컴포넌트가 무엇 없이는 빈 상자다"*).
  */
 const STRUCTURAL_GAPS: readonly { container: string; requires: string }[] = [
   { container: 'EntryForm', requires: 'Field' },
   { container: 'SearchForm', requires: 'Field' },
+  { container: 'FormTable', requires: 'Field' },
 ]
 
 /**

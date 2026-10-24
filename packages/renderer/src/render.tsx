@@ -187,14 +187,14 @@ export type WeightRoom = { kind: 'flex' } | { kind: 'span'; columns: number }
 const FLEX_ROOM: WeightRoom = { kind: 'flex' }
 
 /**
- * 이 타입의 노드가 자식에게 주는 몫의 자리. `Grid` 는 늘 열 수가 있고(기본값 2), `SearchForm` 은 열을 정한 판만이다. 없으면 그 부모 안에서 몫은 아무
- * 일도 안 한다. **속성 패널이 «몫» 칸을 보일지도 이것으로 가른다**(`apps/web/src/panels/property-panel.tsx`) — 판정이 두 벌이면 칸이 서는데 화면이
+ * 이 타입의 노드가 자식에게 주는 몫의 자리. `Grid` · `FormTable` 은 늘 열 수가 있고(기본값 2 · 1 — 폼 표의 열은 쌍 수다), `SearchForm` 은 열을 정한
+ * 판만이다. 없으면 그 부모 안에서 몫은 아무 일도 안 한다. **속성 패널이 «몫» 칸을 보일지도 이것으로 가른다**(`apps/web/src/panels/property-panel.tsx`) — 판정이 두 벌이면 칸이 서는데 화면이
  * 안 바뀌는 부모가 생긴다.
  */
 export function weightRoom(type: string, props: WbNode['props']): WeightRoom | undefined {
   // `Field` 의 값 구역은 `Flex` 처럼 몫을 읽는다 — 몫을 준 조각이 남는 폭을 나눠 갖는다(`[입력 몫 1][중복확인]`).
   if (type === 'Flex' || type === 'Field') return FLEX_ROOM
-  if (type !== 'Grid' && type !== 'SearchForm') return undefined
+  if (type !== 'Grid' && type !== 'SearchForm' && type !== 'FormTable') return undefined
   // 열 수는 카탈로그가 정한 모양 · 기본값으로 읽는다 — 못 읽으면(검증 실패) 이 노드는 폴백이라 자식의 몫이 서지 않는다.
   const parsed = getComponent(type)?.props.safeParse(props ?? {})
   const columns = parsed?.success === true ? (parsed.data as { columns?: unknown }).columns : undefined
@@ -492,7 +492,15 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
     const shaped = child as { id?: unknown; type?: unknown } | null
     const hosted = getComponent(readString(shaped?.type))?.bodyHost === 'parent'
     const content = hosted ? drawn(zoneList(child, BODY_ZONE), undefined) : []
-    items.push({ nodeId: readString(shaped?.id), index, element: bodyDrawn[index], content: content.length > 0 ? content : null })
+    const item: ViewItem = {
+      nodeId: readString(shaped?.id),
+      index,
+      element: bodyDrawn[index],
+      content: content.length > 0 ? content : null,
+    }
+    // 칸을 세는 부모(`span` 자리)면 자른 몫 — 그 자식이 실제로 덮는 칸 수다(몫이 없으면 1). 폼 표 뷰가 빈 쌍을 끼울 자리를 이것으로 센다.
+    if (childRoom?.kind === 'span') item.span = weightIn(childRoom, (child as { weight?: unknown } | null)?.weight) ?? 1
+    items.push(item)
   })
   const fallbackChildren: ReactNode = (
     <>

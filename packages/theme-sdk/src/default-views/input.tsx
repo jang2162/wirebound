@@ -1,7 +1,8 @@
-/** **입력 그룹 기본 뷰.** `SearchForm`·`EntryForm`·`Field` 와 값 칸의 조각 아홉. 옮긴 규칙은 `./index.ts` 머리말. */
-import type { CSSProperties, ReactElement } from 'react'
-import { nodeVar, WEIGHT_VAR, zeroRule } from '../css-tools'
+/** **입력 그룹 기본 뷰.** `SearchForm`·`EntryForm`·`FormTable`·`Field` 와 값 칸의 조각 아홉. 옮긴 규칙은 `./index.ts` 머리말. */
+import { Fragment, type CSSProperties, type ReactElement } from 'react'
+import { FORM_LABEL_WIDTH_VAR, nodeVar, WEIGHT_VAR, zeroRule } from '../css-tools'
 import { view } from '../define'
+import { pairRows } from '../pair-rows'
 import { Root } from '../root'
 import { Zone } from '../zone'
 
@@ -49,16 +50,76 @@ export const EntryFormView = view(({ props, children }) => (
   </Root>
 ))
 
+/** 폼 표가 한 줄의 쌍 수를 나르는 변수 — `cells` 조각에 인라인으로 선다. */
+export const FORMTABLE_COLUMNS_VAR = nodeVar('formtable', 'columns')
+
+/**
+ * **폼 표(`FormTable`)의 `cells` 조각에 펼 속성** — `data-wb-columns="<수>"` 와 `--wb-node-formtable-columns`. 열 수는 늘 있다(기본 1) — 속성이
+ * 늘 서는 것이 조회 폼(`searchFormFieldsAttrs` — 열을 정한 판만)과 다르다. 표지가 아닌 까닭은 `searchFormFieldsAttrs` 머리말과 같다.
+ */
+export function formTableCellsAttrs(columns: unknown): { 'data-wb-columns': string; style: CSSProperties } {
+  const value = typeof columns === 'number' ? String(columns) : '1'
+  return { 'data-wb-columns': value, style: { [FORMTABLE_COLUMNS_VAR]: value } as CSSProperties }
+}
+
+/**
+ * 기본 구조 `table`. 머리줄(`header` — `title` 조각 · «머리 오른쪽» 구역)은 제목이 있거나 그 구역이 찼을 때만 선다(`CardView` 와 같다). 옆 칸(`aside`)
+ * 은 표 왼쪽에서 모든 줄을 덮고, 칸(`cells`)은 몸통 자식을 `pairRows` 차례로 그리며 줄 끝 · 구멍에 빈 쌍(`filler` — 노드가 아니다)을 끼운다.
+ *
+ * **빈 쌍은 `Field` 와 같은 두 조각(`label` · `value`)을 갖는다** — 테마의 라벨 칸 바탕 · 칸 선 규칙이 그대로 듣는다. 보조 기술에는 안 보인다.
+ * 제목이 있으면 뿌리가 그 이름의 `group` 이다 — 표 하나가 이름 붙은 묶음이다. **`<table>` 이 아니다** — 칸에 `Field` 뿌리(`group`)가 서고 값 칸에
+ * 그리드 · 하위 표가 든다(자료 표가 아니라 폼 배치다).
+ */
+export const FormTableView = view(({ nodeId, props, items, zones }) => {
+  const title = typeof props.title === 'string' ? props.title : ''
+  const titleId = `${nodeId}-title`
+  return (
+    <Root as="div" data-wb-structure="table" {...(title === '' ? {} : { role: 'group', 'aria-labelledby': titleId })}>
+      {title !== '' || zones.headEnd != null ? (
+        <div data-wb-part="header">
+          {title !== '' ? (
+            <div data-wb-part="title" id={titleId}>
+              {title}
+            </div>
+          ) : null}
+          <Zone name="headEnd" data-wb-part="headEnd" />
+        </div>
+      ) : null}
+      <Zone name="aside" data-wb-part="aside" />
+      <div data-wb-part="cells" {...formTableCellsAttrs(props.columns)}>
+        {pairRows(items, props.columns).map((cell) =>
+          cell.kind === 'item' ? (
+            <Fragment key={cell.item.nodeId}>{cell.item.element}</Fragment>
+          ) : (
+            <div key={cell.key} data-wb-part="filler" aria-hidden="true">
+              <div data-wb-part="label" />
+              <div data-wb-part="value" />
+            </div>
+          ),
+        )}
+      </div>
+    </Root>
+  )
+})
+
 /**
  * 기본 구조 `outlined`. 뿌리는 라벨 이름을 단 `group` 이고, 그 밑에 `label` 조각과 `value` 조각(값 구역 — 몸통)이 형제로 선다 — 라벨|값 표가 두
  * 조각을 칸에 나눠 놓을 수 있게(설계 spec `2026-10-24-compose-input-design.md` 「5. 검색폼 · 입력폼과의 관계」). **`aria-required` 를 루트에서
  * 거둔다** — `group` 은 그 속성을 받는 역할이 아니다. 필수는 라벨의 별(`data-wb-state~="required"`)이 말하고, 값 칸의 입력 조각이 렌더러가 넘긴 필드 이름(`ViewProps.field`)으로 제 뿌리에
- * `aria-required` 를 낸다(`pieceAria`). `invalid` 는 조각이 제 뿌리에 낸다.
+ * `aria-required` 를 낸다(`pieceAria`). `invalid` 는 조각이 제 뿌리에 낸다. **라벨이 비면 역할을 안 낸다** — 이름 없는 `group` 은 보조 기술에 빈 묶음으로
+ * 읽힌다(폼 표 가운데의 빈 쌍이 라벨이 빈 `Field` 다). 두 조각은 뿌리의 **직계**다 — 폼 표 · 열을 정한 조회 폼이 두 조각을 쌍 격자의 트랙에 놓는다(subgrid).
  */
 export const FieldView = view(({ nodeId, props, children }) => {
   const labelId = `${nodeId}-label`
+  const named = String(props.label).trim() !== ''
   return (
-    <Root as="div" data-wb-structure="outlined" role="group" aria-labelledby={labelId} aria-required={undefined}>
+    <Root
+      as="div"
+      data-wb-structure="outlined"
+      role={named ? 'group' : undefined}
+      aria-labelledby={named ? labelId : undefined}
+      aria-required={undefined}
+    >
       <label data-wb-part="label" id={labelId}>
         {String(props.label)}
       </label>
@@ -203,23 +264,53 @@ export const AffixView = view(({ props }) => (
   </Root>
 ))
 
+/** 쌍 격자 둘 — 폼 표의 칸과 열을 정한 조회 폼의 필드 칸. */
+const PAIR_GRIDS = [
+  '[data-wb-component="FormTable"] > [data-wb-part="cells"]',
+  '[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns]',
+]
+
 /** 이 그룹의 기본 CSS. 특이도 0(`:where`)이라 테마의 어느 규칙이든 이긴다 — 테마가 없는 판의 최소 모양이다. */
 export function inputCssBlocks(): string[] {
   // 글을 받는 조각 — 상자 모양을 함께 쓴다.
   const boxed = ['Input', 'TextArea', 'Select', 'DateInput', 'TimeInput']
   return [
     zeroRule('[data-wb-component="SearchForm"] [data-wb-part="toggle"]', ['display: flex;', 'justify-content: space-between;']),
-    // 열을 정한 조회 폼 — 필드를 같은 폭 칸으로 깐다. 테마는 `fields` 를 더 높은 특이도의 `display: flex` 로 덮으므로 테마마다 같은 규칙을
-    // `[data-wb-columns]` 로 다시 건다(이것은 테마가 없는 판의 모양이다).
+    // **쌍 격자** — 폼 표의 칸(`cells`)과 열을 정한 조회 폼의 필드 칸(`fields[data-wb-columns]`). 한 쌍이 트랙 둘(라벨 폭 · 남는 폭)이다. 테마는
+    // `fields` 를 더 높은 특이도의 `display: flex` 로 덮으므로 테마마다 같은 규칙을 `[data-wb-columns]` 로 다시 건다(이것은 테마가 없는 판의 모양이다).
+    zeroRule('[data-wb-component="FormTable"] > [data-wb-part="cells"]', [
+      'display: grid;',
+      `grid-template-columns: repeat(var(${FORMTABLE_COLUMNS_VAR}, 1), var(${FORM_LABEL_WIDTH_VAR}, 8rem) minmax(0, 1fr));`,
+    ]),
     zeroRule('[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns]', [
       'display: grid;',
-      `grid-template-columns: repeat(var(${SEARCHFORM_COLUMNS_VAR}, 1), minmax(0, 1fr));`,
+      `grid-template-columns: repeat(var(${SEARCHFORM_COLUMNS_VAR}, 1), var(${FORM_LABEL_WIDTH_VAR}, 8rem) minmax(0, 1fr));`,
     ]),
-    // 필드의 몫은 차지할 칸 수다 — 열 수로 자른 값을 렌더러가 싣는다(`packages/renderer/src/render.tsx` 의 `weightRoom`). 테마는 이 규칙을
-    // 안 덮는다(테마의 필드 규칙은 `flex` 뿐이고 격자에서는 안 듣는다). 좁은 창에서 한 칸으로 쌓는 테마는 `grid-column: auto` 로 덮는다.
-    zeroRule('[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > *', [
-      `grid-column: span var(${WEIGHT_VAR}, 1);`,
+    // 자식의 몫은 차지할 쌍 수다 — 열 수로 자른 값을 렌더러가 싣는다(`packages/renderer/src/render.tsx` 의 `weightRoom`). 좁은 창에서 한 칸으로
+    // 쌓는 테마는 `grid-column: auto` 로 덮는다.
+    zeroRule(`${PAIR_GRIDS.map((grid) => `${grid} > *`).join(', ')}`, [`grid-column: span calc(2 * var(${WEIGHT_VAR}, 1));`]),
+    // 빈 쌍은 늘 한 쌍이다 — 노드가 아니라 `[data-wb-id]` 의 몫 초기화(`structureCssBlocks`)에 안 걸려, 몫을 준 폼 표의 `--wb-node-weight` 를 물려받는다.
+    zeroRule('[data-wb-component="FormTable"] > [data-wb-part="cells"] > [data-wb-part="filler"]', ['grid-column: span 2;']),
+    // 쌍 격자 안의 `Field` · 빈 쌍은 두 조각을 격자의 트랙에 놓는다 — 라벨 칸 · 값 칸의 왼끝이 줄마다 맞는다.
+    zeroRule(PAIR_GRIDS.flatMap((grid) => [`${grid} > [data-wb-component="Field"]`, `${grid} > [data-wb-part="filler"]`]).join(', '), [
+      'display: grid;',
+      'grid-template-columns: subgrid;',
+      'align-items: center;',
     ]),
+    zeroRule(PAIR_GRIDS.map((grid) => `${grid} > [data-wb-component="Field"] > [data-wb-part="value"]`).join(', '), [
+      'grid-column: 2 / -1;',
+    ]),
+    // 폼 표 — 머리줄이 위 한 줄, 옆 칸이 왼쪽에서 칸 전부의 높이를 덮는다. 옆 칸이 없으면 첫 트랙(`auto`)이 폭 0 이다.
+    zeroRule('[data-wb-component="FormTable"]', ['display: grid;', 'grid-template-columns: auto minmax(0, 1fr);']),
+    zeroRule('[data-wb-component="FormTable"] > [data-wb-part="header"]', [
+      'grid-column: 1 / -1;',
+      'display: flex;',
+      'align-items: center;',
+      'justify-content: space-between;',
+      'gap: 6px;',
+    ]),
+    zeroRule('[data-wb-component="FormTable"] > [data-wb-part="aside"]', ['grid-column: 1;']),
+    zeroRule('[data-wb-component="FormTable"] > [data-wb-part="cells"]', ['grid-column: 2;']),
     // 값 칸 — 조각을 가로로 줄 세우고 넘치면 줄을 바꾼다. 조각의 몫은 `Flex` 처럼 `flex: <몫>`(렌더러 `weightRoom('Field')`) — 몫이 없으면 내용 폭.
     zeroRule('[data-wb-component="Field"] > [data-wb-part="value"]', [
       'display: flex;',
