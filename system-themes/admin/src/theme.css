@@ -501,6 +501,10 @@
   border-top: 1px solid var(--wb-semantic-border);
   border-left: 1px solid var(--wb-semantic-border);
 }
+/* 칸이 하나도 안 선 표(자식이 없거나 지금 상태에서 다 숨음)는 선을 안 긋는다 — 위 · 왼쪽 선만 남아 1px 줄이 선다. */
+[data-wb-component="FormTable"] > [data-wb-part="cells"]:not(:has(> *)) {
+  border: 0;
+}
 [data-wb-component="FormTable"] > [data-wb-part="cells"] > * {
   min-width: 0;
   padding: var(--wb-space-2) var(--wb-space-3);
@@ -554,9 +558,13 @@
   font-weight: var(--wb-typography-h6-fontWeight);
   color: var(--wb-semantic-textMuted);
 }
-/* 필수 별은 라벨 앞이다(표 안팎 모두). */
+/*
+ * 필수 별은 라벨 앞이다(표 안팎 모두). 대체 글(`/ ""`)을 비워 별이 묶음의 접근 이름에 안 든다 — 화면 낭독기는 필수를 입력 조각의 `required` 로 듣는다.
+ * 대체 글을 못 읽는 브라우저는 둘째 선언을 버리고 첫째를 쓴다.
+ */
 [data-wb-component="Field"][data-wb-state~="required"] > [data-wb-part="label"]::before {
   content: "* ";
+  content: "* " / "";
   color: var(--wb-semantic-danger);
 }
 [data-wb-component="Field"] > [data-wb-part="value"] {

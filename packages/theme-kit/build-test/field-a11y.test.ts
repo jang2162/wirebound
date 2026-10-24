@@ -205,6 +205,16 @@ describe.skipIf(launched.browser === null)('값 칸 조각의 접근 이름 (Chr
       expect(rows.filter((row) => row.role === 'button').map((row) => row.name)).toContain('중복확인')
     })
 
+    // 필수 별은 라벨 조각의 생성 내용(`::before`)이라 대체 글을 안 주면 묶음 이름에 든다(«* 이름»). 필수는 입력 조각의 `required` 가 말한다.
+    it(`${theme} — 필수 필드의 묶음 이름은 라벨 그대로다 — 필수 별은 이름에 안 든다`, async () => {
+      const rows = await axRows(await css())
+      const groups = rows.filter((row) => row.role === 'group').map((row) => row.name)
+      // 카나리아 — 필수 필드 «이름» 의 입력 조각이 필수다.
+      expect(rows).toContainEqual({ role: 'textbox', name: '이름', required: true })
+      expect(groups).toContain('이름')
+      expect(groups.filter((name) => name.includes('*'))).toEqual([])
+    })
+
     it(`${theme} — 폼 표 안에서도 같은 이름 · 표는 제목 이름의 group · 빈 쌍은 트리에 없다`, async () => {
       const flat = await axRows(await css())
       const rows = await axRows(await css(), TABLE_DOC)

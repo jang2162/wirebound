@@ -448,7 +448,7 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
           )
         // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
         expect({ groups, hits }, themeId).toEqual({
-          groups: ['* 접근성 이름'],
+          groups: ['접근성 이름'],
           hits: [{ readonly: true, invalid: 'true', required: true }],
         })
       } finally {

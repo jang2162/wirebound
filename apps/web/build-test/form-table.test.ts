@@ -5,6 +5,9 @@
  * | 케이스 | 판 | 재는 값 |
  * |---|---|---|
  * | 칸 흐름 | 문서 폭 1280 · 1 · 2 · 3 · 4 열(전폭 · 몫이 열을 넘는 자르기 · 끝 빈 쌍 · 넓은 칸 앞 구멍) · 옆 칸 | 줄마다 선 칸 차례(위 좌표로 묶음) · 전폭 칸이 칸 폭 전부 |
+ * | 넓은 칸 뒤 | 같은 판 · 열을 넘는 몫 뒤에 칸이 이어지는 표(1 · 2 열) | 칸마다 제 자리 · 폭(렌더러의 몫 자르기를 떼면 암묵 트랙이 뒤 칸을 옮긴다) |
+ * | 빈 표 | 같은 판 · 창 390 · 자식이 없는 표 · 기본 상태에서 자식이 다 숨은 표 | 칸 선(1px 줄)이 안 선다 — 높이 0 |
+ * | 칸 선 | 같은 판 | 라벨 칸과 값 칸 사이 세로 선 — 가로 칸 선과 같은 색 |
  * | 열 맞춤 | 같은 판 | 표마다 라벨 칸 · 값 칸 왼끝이 열 수만큼만 갈린다 · 값 칸이 라벨 칸 오른쪽 같은 줄 |
  * | 키 큰 줄 | 같은 판(여러 줄 값) | 같은 줄 라벨 칸 높이 = 값 칸 높이 |
  * | 빈 쌍 | 같은 판 | 라벨 바탕이 필드 라벨 칸과 같고 두 조각이 줄 높이를 채운다 |
@@ -99,7 +102,25 @@ const TABLES = [
       },
     },
   ),
+  // 열을 넘는 몫 뒤에 칸이 이어진다 — 몫을 열 수로 안 자르면 넓은 칸이 암묵 트랙을 세우고 뒤 칸의 자리 · 폭이 바뀐다(RV-FT «8-c»).
+  table('t6', undefined, [
+    field('t6a', '가', undefined, { weight: 2 }),
+    field('t6b', '나', undefined, { weight: 4 }),
+    field('t6c', '다', undefined, { weight: 2 }),
+    field('t6d', '라', undefined, { weight: 1 }),
+    field('t6e', '마'),
+    { id: 't6f', type: 'Button', props: { label: '단추' }, weight: 2 },
+    field('t6g', '바'),
+  ]),
+  table('t7', 2, [field('t7a', '가', undefined, { weight: 6 }), field('t7b', '나', undefined, { weight: 2 }), field('t7c', '다')]),
+  // 자식이 없는 표.
+  table('t8', undefined, []),
 ]
+// 기본 상태에서 자식이 다 숨은 표 — 페이지에 화면 상태(«수정»)를 더한 뒤 넣는다.
+const HIDDEN_ONLY = table('t9', undefined, [
+  { ...field('t9a', '수정 때만 1'), visibility: { mode: 'only', states: ['s_edit'] } },
+  { ...field('t9b', '수정 때만 2'), visibility: { mode: 'only', states: ['s_edit'] } },
+])
 const SEARCH = [
   {
     id: 's1',
@@ -134,10 +155,14 @@ interface Cell {
   labelBg: string | null
   display: string
   star: string | null
+  /** 라벨 칸 오른쪽 테두리 · 값 칸 왼쪽 테두리 — 폭 · 꼴 · 색. */
+  divider: { labelRight: [string, string, string]; valueLeft: [string, string, string] } | null
 }
 interface Measured {
   root: Rect
   cells: Rect
+  /** `cells` 조각의 위 테두리 색 — 가로 칸 선의 색. */
+  lineColor: string
   list: Cell[]
   aside: Rect | null
   header: Rect | null
@@ -168,12 +193,20 @@ const MEASURE = `(ids) => {
         labelBg: label === null ? null : getComputedStyle(label).backgroundColor,
         display: getComputedStyle(el).display,
         star: label === null ? null : getComputedStyle(label, '::before').content,
+        divider:
+          label === null || value === null
+            ? null
+            : {
+                labelRight: [getComputedStyle(label).borderRightWidth, getComputedStyle(label).borderRightStyle, getComputedStyle(label).borderRightColor],
+                valueLeft: [getComputedStyle(value).borderLeftWidth, getComputedStyle(value).borderLeftStyle, getComputedStyle(value).borderLeftColor],
+              },
       }
     })
     const part = (selector) => box(root.querySelector(selector))
     out[id] = {
       root: box(root),
       cells: box(cellsEl),
+      lineColor: getComputedStyle(cellsEl).borderTopColor,
       list,
       aside: part(':scope > [data-wb-part="aside"]'),
       header: part(':scope > [data-wb-part="header"]'),
@@ -206,7 +239,7 @@ const TEXTS = `(ids) => {
   return { vw, right, count, labelLines: tops.size }
 }`
 
-const ALL = [...TABLES, ...SEARCH].map((node) => node.id)
+const ALL = [...TABLES, HIDDEN_ONLY, ...SEARCH].map((node) => node.id)
 const near = (a: number, b: number, slack = 1) => Math.abs(a - b) <= slack
 
 /** 보이는 칸을 위 좌표로 묶은 줄 — `a b | c _`. */
@@ -245,7 +278,16 @@ describe.skipIf(!전제.ok)('시스템 테마 — 폼 표 · 쌍 격자', () => 
     stack = await startEditorStack(전제)
     alice = await stack.login(stack.users.alice)
     let call
-    ;({ projectId, call } = await layoutProject(stack, alice, '폼', { 표: [...TABLES, ...SEARCH] }))
+    let pageIds: Record<string, string>
+    ;({ projectId, call, pageIds } = await layoutProject(stack, alice, '폼', { 표: [...TABLES, ...SEARCH] }))
+    const added = await call('PATCH', `/projects/${projectId}/pages/${pageIds['표']}/ops`, {
+      baseSeq: 1,
+      ops: [
+        { op: 'add', path: '/viewStates', value: [{ id: 's_edit', name: '수정' }] },
+        { op: 'add', path: `/root/children/${TABLES.length + SEARCH.length}`, value: HIDDEN_ONLY },
+      ],
+    })
+    if (added.status !== 200) throw new Error(`숨은 표 ${added.status} ${JSON.stringify(added.body)}`)
     await putTheme(call, projectId, { themeId: THEME, version: seededVersion(THEME), tokens: {} })
     const pptx = await layoutProject(stack, alice, '표만', { 표: TABLES.slice(0, 2) })
     pptxProject = pptx.projectId
@@ -352,9 +394,9 @@ describe.skipIf(!전제.ok)('시스템 테마 — 폼 표 · 쌍 격자', () => 
     }).toEqual({ asideLeft: true, asideWide: true, asideTop: true, asideBottom: true, title: true, headEnd: true, above: true })
   })
 
-  it('필수 별은 라벨 앞이다', () => {
+  it('필수 별은 라벨 앞이다 — 대체 글은 비었다(별이 묶음의 접근 이름에 안 든다)', () => {
     const star = (id: string) => wide[id.slice(0, 2)]!.list.find((cell) => cell.id === id)!.star
-    expect([star('t1a'), star('t2b'), star('t1b')]).toEqual(['"* "', '"* "', 'none'])
+    expect([star('t1a'), star('t2b'), star('t1b')]).toEqual(['"* " / ""', '"* " / ""', 'none'])
   })
 
   it('조회 폼(Q1) — 열을 정한 판은 라벨이 값 왼쪽 같은 줄 · 열 맞춤 · 안 정한 판은 라벨 위', () => {
@@ -388,6 +430,70 @@ describe.skipIf(!전제.ok)('시스템 테마 — 폼 표 · 쌍 격자', () => 
     if (narrow.t5!.aside!.bottom > narrow.t5!.cells.top + 0.5) bad.push('옆 칸이 칸 위가 아니다')
     expect(texts.narrow.count).toBeGreaterThan(20)
     if (texts.narrow.right > texts.narrow.vw + 0.5) bad.push(`글자 오른끝 ${texts.narrow.right}`)
+    expect(bad).toEqual([])
+  })
+
+  it('넓은 칸 뒤 — 열을 넘는 몫 뒤에 칸이 이어져도 칸마다 제 자리 · 폭이다(렌더러가 몫을 열 수로 자른다)', () => {
+    const t6 = wide.t6!
+    const t7 = wide.t7!
+    const cell = (m: Measured, id: string) => m.list.find((entry) => entry.id === id)!
+    const full = (m: Measured, c: Cell) => near(c.box.left, m.cells.left) && near(c.box.right, m.cells.right)
+    // 1 열 — 몫이 무엇이든 칸이 표 폭 전부 · 값 칸 폭이 다 같다.
+    expect(t6.list.map((c) => c.id)).toEqual(['t6a', 't6b', 't6c', 't6d', 't6e', 't6f', 't6g'])
+    expect(
+      t6.list.filter((c) => !full(t6, c)).map((c) => `${c.id} ${JSON.stringify(c.box)}`),
+      JSON.stringify(t6.cells),
+    ).toEqual([])
+    const values = t6.list.filter((c) => c.value !== null).map((c) => c.value!.width)
+    expect(values.length).toBe(6)
+    expect(distinct(values), JSON.stringify(values)).toBe(1)
+    // 2 열 — 몫 6 · 몫 2 는 한 줄 전부, 몫 없는 칸은 왼쪽 쌍 · 오른쪽은 빈 쌍.
+    expect(layoutOf(t7)).toBe('t7a | t7b | t7c _')
+    const [a, b, c, filler] = [cell(t7, 't7a'), cell(t7, 't7b'), cell(t7, 't7c'), cell(t7, '_')]
+    expect({
+      a: full(t7, a),
+      b: full(t7, b),
+      sameValue: near(a.value!.width, b.value!.width),
+      cLeft: near(c.box.left, t7.cells.left),
+      split: near(c.box.right, filler.box.left),
+      fillerRight: near(filler.box.right, t7.cells.right),
+      half: near(c.box.width, filler.box.width),
+    }).toEqual({ a: true, b: true, sameValue: true, cLeft: true, split: true, fillerRight: true, half: true })
+  })
+
+  it('빈 표 — 자식이 없거나 기본 상태에서 자식이 다 숨은 표는 칸 선(1px 줄)을 안 그린다', () => {
+    const got = Object.fromEntries(
+      (['t8', 't9'] as const).flatMap((id) =>
+        [
+          ['1280', wide],
+          ['390', narrow],
+        ].map(([width, measured]) => {
+          const m = (measured as Record<string, Measured>)[id]!
+          return [`${id}@${width}`, { cells: m.list.length, height: m.cells.height, root: m.root.height }]
+        }),
+      ),
+    )
+    // 카나리아 — 두 표 다 칸이 하나도 안 섰다(t9 의 필드 둘은 «수정» 상태에서만 보인다).
+    const empty = { cells: 0, height: 0, root: 0 }
+    expect(got).toEqual({ 't8@1280': empty, 't8@390': empty, 't9@1280': empty, 't9@390': empty })
+  })
+
+  it('칸 선 — 라벨 칸과 값 칸 사이에 세로 선이 선다 · 가로 칸 선과 같은 색이다', () => {
+    const drawn = ([width, style, color]: [string, string, string], line: string) =>
+      Number.parseFloat(width) >= 1 && style !== 'none' && style !== 'hidden' && color === line
+    const bad: string[] = []
+    let checked = 0
+    for (const id of ['t1', 't2', 't3', 't4', 't5']) {
+      const m = wide[id]!
+      for (const c of m.list) {
+        if (c.divider === null) continue
+        checked += 1
+        if (!drawn(c.divider.labelRight, m.lineColor) && !drawn(c.divider.valueLeft, m.lineColor))
+          bad.push(`${c.id} ${JSON.stringify(c.divider)} · 칸 선 ${m.lineColor}`)
+      }
+    }
+    // 카나리아 — 필드 · 빈 쌍 스물 남짓을 쟀다.
+    expect(checked).toBeGreaterThan(20)
     expect(bad).toEqual([])
   })
 
