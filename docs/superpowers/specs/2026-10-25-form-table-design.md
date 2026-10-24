@@ -218,8 +218,8 @@ export const EntryFormDef = defineComponent({
 
 | 무엇 | 바뀌는 것 |
 | --- | --- |
-| SDK 기본 CSS(`inputCssBlocks`) | `[SearchForm] > [fields][data-wb-columns]` 의 트랙을 `repeat(열 수, 라벨 폭 1fr)` 로, 자식을 `span 2 × 몫` 으로, `Field` 를 subgrid 로 — 폼 표 규칙과 셀렉터 목록을 나눈다(`:is(…)`) |
-| 기본테마 | 열을 정한 검색폼의 필드 규칙(지금 `flex: 1 1 12rem` · 라벨 위)을 쌍 격자로. 라벨은 흰 바탕 굵은 글 · 칸 선 없음(폼 표와 다른 모양은 테마가 부모로 가른다). 640px 아래는 지금처럼 한 줄에 필드 하나(라벨 위) |
+| SDK 기본 CSS(`inputCssBlocks`) | **안 바뀐다**(필드 하나 = 같은 폭 칸 하나). 쌍으로 바꾸면 «필드 하나 = 트랙 하나» 로 덮어 둔 SDK 1.5.0 이하 테마(기본테마 1.5.0 에 고정된 프로젝트)에서 필드가 두 트랙씩 덮어 열이 깨진다 — main 시딩 DB 판에서 쟀다(«상태» 필드 폭 26px). 쌍 격자는 테마의 몫이다 |
+| 기본테마 | 열을 정한 검색폼을 쌍 격자로 — 트랙 `repeat(열 수, 라벨 폭 minmax(0, 1fr))` · 자식 `span calc(2 * var(--wb-node-weight, 1))` · `Field` subgrid · 값 칸 `2 / -1`. 라벨은 흰 바탕 굵은 글 · 칸 선 없음. 640px 아래는 지금처럼 한 줄에 필드 하나(라벨 위) |
 | 빈 쌍 | 검색폼 뷰는 채우지 않는다 — 검색폼의 빈 쌍은 선 없는 빈자리라 그릴 것이 없다(`pairRows` 를 쓰지 않는다) |
 | `SearchFormView` · `searchFormFieldsAttrs` | 안 바뀐다 — 셀렉터가 이미 `[data-wb-columns]` 다 |
 | 열을 안 정한 검색폼 | 안 바뀐다(필드가 옆으로 서고 넘치면 접힌다) |
@@ -370,7 +370,7 @@ export const EntryFormDef = defineComponent({
 1. 몫 변수 상속 재현(열을 정한 검색폼 · 실브라우저) → `@property` 고침 — 지금 main 에서도 서는 결함이라 먼저 잠근다.
 2. 카탈로그 `FormTableDef` · `EntryForm.body.initial` · `STRUCTURAL_GAPS` · `LABEL_PROPS`.
 3. 렌더러 `weightRoom('FormTable')` · `ViewItem.span`.
-4. SDK `FormTableView` · `pairRows` · `formTableCellsAttrs` · 기본 CSS(쌍 격자 · subgrid — 검색폼과 셀렉터 목록을 나눈다(Q1)) · 판 1.6.0.
+4. SDK `FormTableView` · `pairRows` · `formTableCellsAttrs` · 기본 CSS(폼 표의 쌍 격자 · subgrid · 좁은 창 — 열을 정한 검색폼의 쌍 격자는 기본테마가 건다(Q1 · 옛 테마 호환)) · 판 1.6.0.
 5. 기본테마 CSS(폼 표 · 검색폼 쌍 격자 · 별 앞으로 · 입력폼 직계 규칙 · 단추줄 오른쪽 · 640px) · 판 · `checksums.json`.
 6. 갤러리 표본 · 스타터 템플릿 · `wb-theme check` 규칙 · `shots` 표본 · 개수 하한(`dev.test.ts` · `shots.test.ts`).
 7. `/llms.txt` 영어 표 · 생성물.

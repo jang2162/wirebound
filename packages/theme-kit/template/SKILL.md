@@ -80,8 +80,10 @@ export const ListView = view(({ props, variant, states, children }) => {
     별(`data-wb-state~='required'`)로 보인다.
 - **`Field` 는 라벨과 값 칸이다.** 값 칸(몸통 — `children`)에 입력 조각이 줄 선다. 뷰는 `label` 조각과 `value` 조각(그 안에 `children`)을
   형제로 둔다 — `children` 을 안 그리면 값 칸의 조각이 화면에서 사라지고 `wb-theme check` 가 막는다. 조각의 몫(`--wb-node-weight`)은 SDK 기본
-  CSS 가 `flex` 로 건다. **두 조각은 뿌리의 직계로 그린다** — 폼 표(`FormTable`)와 열을 정한 `SearchForm` 은 쌍 격자라 `Field` 뿌리를 subgrid 로 두고
-  두 조각을 라벨 칸 · 값 칸 트랙에 놓는다. 감싸는 요소를 끼우면 두 조각이 한 칸에 몰리고 `wb-theme check` 가 막는다.
+  CSS 가 `flex` 로 건다. **두 조각은 뿌리의 직계로 그린다** — 폼 표(`FormTable`)는 쌍 격자라 SDK 기본 CSS 가 칸의 `Field` 뿌리를 subgrid 로 두고
+  두 조각을 라벨 칸 · 값 칸 트랙에 놓는다. 감싸는 요소를 끼우면 두 조각이 한 칸에 몰리고 `wb-theme check` 가 막는다. 열을 정한 `SearchForm` 의
+  기본 CSS 는 필드 하나를 칸 하나에 깐다 — 라벨 왼쪽 쌍 격자로 꾸미려면 테마 CSS 가 트랙 · 자식 폭(`span calc(2 * var(--wb-node-weight, 1))`) ·
+  subgrid 를 건다(기본테마가 그렇다).
 - **`FormTable` 은 라벨|값 표다.** 한 줄에 쌍을 `columns` 개 놓고 자식의 몫(`items[i].span`)이 차지할 쌍 수다. 줄 끝 · 넓은 칸이 남긴 구멍의 빈 쌍은
   뷰가 그린다 — `pairRows(items, columns)`(SDK)가 자식과 빈 쌍(`filler` — `label` · `value` 두 조각, 노드가 아니다)의 차례를 준다. `cells` 조각에는
   `formTableCellsAttrs(columns)` 를 편다. 빈 쌍 수가 그 셈과 다르면 `wb-theme check` 가 막는다. 라벨 칸 폭은 `--wb-form-labelWidth` 로 싣는다.

@@ -266,54 +266,51 @@ export const AffixView = view(({ props }) => (
 
 /** 이 그룹의 기본 CSS. 특이도 0(`:where`)이라 테마의 어느 규칙이든 이긴다 — 테마가 없는 판의 최소 모양이다. */
 export function inputCssBlocks(): string[] {
-  // 쌍 격자 둘 — 폼 표의 칸과 열을 정한 조회 폼의 필드 칸.
-  const pairGrids = [
-    '[data-wb-component="FormTable"] > [data-wb-part="cells"]',
-    '[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns]',
-  ]
-
-  // **좁은 창(640px 아래)의 쌍 격자** — 한 줄에 쌍 하나 · 라벨 위 · 값 아래 · 빈 쌍 숨김 · 옆 칸은 표 위. 라벨 칸 8rem 을 두 쌍이 나누면 390 폭에서 값 칸이
-  // 글자 몇 자 폭이 되어 한 줄 조각이 꺾이고 고정 폭 조각이 넘친다. 특이도 0 이라 쌍 격자를 꾸미는 테마는 제 규칙으로 덮는다(좁은 창은 테마의 몫이다 —
+  const cells = '[data-wb-component="FormTable"] > [data-wb-part="cells"]'
+  // **좁은 창(640px 아래)의 폼 표** — 한 줄에 쌍 하나 · 라벨 위 · 값 아래 · 빈 쌍 숨김 · 옆 칸은 표 위. 라벨 칸 8rem 을 두 쌍이 나누면 390 폭에서 값 칸이
+  // 글자 몇 자 폭이 되어 한 줄 조각이 꺾이고 고정 폭 조각이 넘친다. 특이도 0 이라 폼 표를 꾸미는 테마는 제 규칙으로 덮는다(좁은 창은 테마의 몫이다 —
   // 이것은 테마가 안 꾸민 판의 모양이다). 문턱은 기본테마와 같다.
-  const pairGridsNarrow = `@media (max-width: 640px) {
+  const narrow = `@media (max-width: 640px) {
   ${[
     zeroRule('[data-wb-component="FormTable"]', ['grid-template-columns: minmax(0, 1fr);']),
-    zeroRule('[data-wb-component="FormTable"] > [data-wb-part="cells"]', ['grid-column: 1;']),
-    zeroRule(pairGrids.join(', '), ['grid-template-columns: minmax(0, 1fr);']),
-    zeroRule(pairGrids.map((grid) => `${grid} > *`).join(', '), ['grid-column: auto;']),
-    zeroRule(pairGrids.map((grid) => `${grid} > [data-wb-component="Field"]`).join(', '), ['grid-template-columns: minmax(0, 1fr);']),
-    zeroRule(pairGrids.map((grid) => `${grid} > [data-wb-component="Field"] > [data-wb-part="value"]`).join(', '), ['grid-column: auto;']),
-    zeroRule('[data-wb-component="FormTable"] > [data-wb-part="cells"] > [data-wb-part="filler"]', ['display: none;']),
+    zeroRule(cells, ['grid-column: 1;', 'grid-template-columns: minmax(0, 1fr);']),
+    zeroRule(`${cells} > *`, ['grid-column: auto;']),
+    zeroRule(`${cells} > [data-wb-component="Field"]`, ['grid-template-columns: minmax(0, 1fr);']),
+    zeroRule(`${cells} > [data-wb-component="Field"] > [data-wb-part="value"]`, ['grid-column: auto;']),
+    zeroRule(`${cells} > [data-wb-part="filler"]`, ['display: none;']),
   ].join('\n')}
   }`
   // 글을 받는 조각 — 상자 모양을 함께 쓴다.
   const boxed = ['Input', 'TextArea', 'Select', 'DateInput', 'TimeInput']
   return [
     zeroRule('[data-wb-component="SearchForm"] [data-wb-part="toggle"]', ['display: flex;', 'justify-content: space-between;']),
-    // **쌍 격자** — 폼 표의 칸(`cells`)과 열을 정한 조회 폼의 필드 칸(`fields[data-wb-columns]`). 한 쌍이 트랙 둘(라벨 폭 · 남는 폭)이다. 테마는
-    // `fields` 를 더 높은 특이도의 `display: flex` 로 덮으므로 테마마다 같은 규칙을 `[data-wb-columns]` 로 다시 건다(이것은 테마가 없는 판의 모양이다).
-    zeroRule('[data-wb-component="FormTable"] > [data-wb-part="cells"]', [
+    // 열을 정한 조회 폼 — 필드를 같은 폭 칸으로 깐다(필드 하나가 트랙 하나). 테마는 `fields` 를 더 높은 특이도의 `display: flex` 로 덮으므로 테마마다
+    // 같은 규칙을 `[data-wb-columns]` 로 다시 건다(이것은 테마가 없는 판의 모양이다). **쌍 격자(라벨 왼쪽)는 테마가 고른다**(기본테마가 그렇다) — 이
+    // 기본값을 쌍으로 바꾸면 «필드 하나 = 트랙 하나» 로 덮어 둔 SDK 1.5.0 이하 테마에서 필드가 두 트랙씩 덮어 열이 깨진다(SDK minor 판이 옛 테마를 깬다).
+    zeroRule('[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns]', [
+      'display: grid;',
+      `grid-template-columns: repeat(var(${SEARCHFORM_COLUMNS_VAR}, 1), minmax(0, 1fr));`,
+    ]),
+    // 필드의 몫은 차지할 칸 수다 — 열 수로 자른 값을 렌더러가 싣는다(`packages/renderer/src/render.tsx` 의 `weightRoom`). 좁은 창에서 한 칸으로
+    // 쌓는 테마는 `grid-column: auto` 로 덮는다.
+    zeroRule('[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > *', [
+      `grid-column: span var(${WEIGHT_VAR}, 1);`,
+    ]),
+    // **폼 표의 쌍 격자** — 한 쌍이 트랙 둘(라벨 폭 · 남는 폭)이고 자식의 몫은 차지할 쌍 수다.
+    zeroRule(cells, [
       'display: grid;',
       `grid-template-columns: repeat(var(${FORMTABLE_COLUMNS_VAR}, 1), var(${FORM_LABEL_WIDTH_VAR}, 8rem) minmax(0, 1fr));`,
     ]),
-    zeroRule('[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns]', [
-      'display: grid;',
-      `grid-template-columns: repeat(var(${SEARCHFORM_COLUMNS_VAR}, 1), var(${FORM_LABEL_WIDTH_VAR}, 8rem) minmax(0, 1fr));`,
-    ]),
-    // 자식의 몫은 차지할 쌍 수다 — 열 수로 자른 값을 렌더러가 싣는다(`packages/renderer/src/render.tsx` 의 `weightRoom`). 좁은 창에서 한 칸으로
-    // 쌓는 테마는 `grid-column: auto` 로 덮는다.
-    zeroRule(`${pairGrids.map((grid) => `${grid} > *`).join(', ')}`, [`grid-column: span calc(2 * var(${WEIGHT_VAR}, 1));`]),
+    zeroRule(`${cells} > *`, [`grid-column: span calc(2 * var(${WEIGHT_VAR}, 1));`]),
     // 빈 쌍은 늘 한 쌍이다 — 노드가 아니라 `[data-wb-id]` 의 몫 초기화(`structureCssBlocks`)에 안 걸려, 몫을 준 폼 표의 `--wb-node-weight` 를 물려받는다.
-    zeroRule('[data-wb-component="FormTable"] > [data-wb-part="cells"] > [data-wb-part="filler"]', ['grid-column: span 2;']),
-    // 쌍 격자 안의 `Field` · 빈 쌍은 두 조각을 격자의 트랙에 놓는다 — 라벨 칸 · 값 칸의 왼끝이 줄마다 맞고, 두 칸이 그 줄 높이를 채운다(값 칸이
-    // 키를 키우면 라벨 칸이 따라 늘어난다 — 격자 기본 `stretch`).
-    zeroRule(pairGrids.flatMap((grid) => [`${grid} > [data-wb-component="Field"]`, `${grid} > [data-wb-part="filler"]`]).join(', '), [
+    zeroRule(`${cells} > [data-wb-part="filler"]`, ['grid-column: span 2;']),
+    // 칸의 `Field` · 빈 쌍은 두 조각을 격자의 트랙에 놓는다 — 라벨 칸 · 값 칸의 왼끝이 줄마다 맞고, 두 칸이 그 줄 높이를 채운다(값 칸이 키를 키우면
+    // 라벨 칸이 따라 늘어난다 — 격자 기본 `stretch`).
+    zeroRule(`${cells} > [data-wb-component="Field"], ${cells} > [data-wb-part="filler"]`, [
       'display: grid;',
       'grid-template-columns: subgrid;',
     ]),
-    zeroRule(pairGrids.map((grid) => `${grid} > [data-wb-component="Field"] > [data-wb-part="value"]`).join(', '), [
-      'grid-column: 2 / -1;',
-    ]),
+    zeroRule(`${cells} > [data-wb-component="Field"] > [data-wb-part="value"]`, ['grid-column: 2 / -1;']),
     // 폼 표 — 머리줄이 위 한 줄, 옆 칸이 왼쪽에서 칸 전부의 높이를 덮는다. 옆 칸이 없으면 첫 트랙(`auto`)이 폭 0 이다.
     zeroRule('[data-wb-component="FormTable"]', ['display: grid;', 'grid-template-columns: auto minmax(0, 1fr);']),
     zeroRule('[data-wb-component="FormTable"] > [data-wb-part="header"]', [
@@ -324,8 +321,8 @@ export function inputCssBlocks(): string[] {
       'gap: 6px;',
     ]),
     zeroRule('[data-wb-component="FormTable"] > [data-wb-part="aside"]', ['grid-column: 1;']),
-    zeroRule('[data-wb-component="FormTable"] > [data-wb-part="cells"]', ['grid-column: 2;']),
-    pairGridsNarrow,
+    zeroRule(cells, ['grid-column: 2;']),
+    narrow,
     // 값 칸 — 조각을 가로로 줄 세우고 넘치면 줄을 바꾼다. 조각의 몫은 `Flex` 처럼 `flex: <몫>`(렌더러 `weightRoom('Field')`) — 몫이 없으면 내용 폭.
     zeroRule('[data-wb-component="Field"] > [data-wb-part="value"]', [
       'display: flex;',

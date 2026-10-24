@@ -17,8 +17,8 @@ export interface ThemeCheckError {
   message: string
   /**
    * `fallback` — 칸에 선 `data-wb-error`. `console` — 그 칸을 그리는 동안 난 `console.error`. `bundle` — 번들을 못 실었다. `zone` — 내용이 든 구역을
-   * 뷰가 안 그렸다(`missingZones`). `placeholder` — 자리표시자 뷰가 사람이 정한 그리기 값을 뿌리의 변수로 안 실었다(`placeholderDrops`). `pairs` — 쌍 격자
-   * (폼 표 · 열을 정한 조회 폼)에서 `Field` 의 두 조각이 뿌리의 직계가 아니거나 폼 표의 빈 쌍 수가 칸 흐름과 다르다(`pairGridProblems`).
+   * 뷰가 안 그렸다(`missingZones`). `placeholder` — 자리표시자 뷰가 사람이 정한 그리기 값을 뿌리의 변수로 안 실었다(`placeholderDrops`). `pairs` — 폼 표
+   * 칸의 `Field` 의 두 조각이 뿌리의 직계가 아니거나 폼 표의 빈 쌍 수가 칸 흐름과 다르다(`pairGridProblems`).
    */
   source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs'
 }
@@ -190,16 +190,16 @@ function missingZones(container: Element, root: WbNode): string[] {
 }
 
 /**
- * **쌍 격자의 두 조건** — ① 폼 표 · 열을 정한 조회 폼의 몸통에 선 `Field` 는 `label` · `value` 조각을 뿌리의 **직계**로 그린다(쌍 격자가 subgrid 로 두
- * 조각을 트랙에 놓는다 — 감싸는 요소를 끼우면 두 조각이 한 칸에 몰린다). ② 폼 표가 그린 빈 쌍(`filler` 조각 — 노드가 아니다) 수가 칸 흐름
- * (`pairRows`)의 셈과 같다(빈 쌍을 안 그리면 줄 끝에 칸 선 · 라벨 바탕이 빈다). 갤러리 표본은 상태가 없어 몸통 자식이 다 보인다.
+ * **폼 표의 두 조건** — ① 칸(몸통)에 선 `Field` 는 `label` · `value` 조각을 뿌리의 **직계**로 그린다(SDK 기본 CSS 가 subgrid 로 두 조각을 쌍 격자의
+ * 트랙에 놓는다 — 감싸는 요소를 끼우면 두 조각이 한 칸에 몰린다). ② 폼 표가 그린 빈 쌍(`filler` 조각 — 노드가 아니다) 수가 칸 흐름(`pairRows`)의
+ * 셈과 같다(빈 쌍을 안 그리면 줄 끝에 칸 선 · 라벨 바탕이 빈다). 갤러리 표본은 상태가 없어 몸통 자식이 다 보인다. 열을 정한 조회 폼은 안 본다 —
+ * SDK 기본 CSS 가 그것을 쌍 격자로 깔지 않는다(쌍으로 꾸미는 테마가 제 `Field` 뷰와 함께 고른다).
  */
 function pairGridProblems(container: Element, root: WbNode): string[] {
   const out: string[] = []
   for (const { node } of walkNodes(root)) {
+    if (node.type !== 'FormTable') continue
     const columns = (node.props as { columns?: unknown } | undefined)?.columns
-    const isTable = node.type === 'FormTable'
-    if (!isTable && !(node.type === 'SearchForm' && typeof columns === 'number')) continue
     const element = container.querySelector(`[data-wb-id="${node.id}"]`)
     if (element === null) continue
     const width = typeof columns === 'number' ? columns : 1
@@ -214,7 +214,6 @@ function pairGridProblems(container: Element, root: WbNode): string[] {
         )
       }
     }
-    if (!isTable) continue
     const items: ViewItem[] = (node.children ?? []).map((child, index) => {
       const weight = typeof child.weight === 'number' && child.weight >= WEIGHT_MIN && child.weight <= WEIGHT_MAX ? child.weight : 1
       return { nodeId: child.id, index, element: null, content: null, span: Math.min(weight, width) }

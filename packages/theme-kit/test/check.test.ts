@@ -151,7 +151,7 @@ describe('checkTheme', () => {
     expect(keeping.errors).toEqual([])
   })
 
-  it('쌍 격자 안 Field 의 두 조각을 감싸는 Field 뷰는 오류로 선다 — 쌍 격자 밖의 필드 표본은 안 걸린다', async () => {
+  it('폼 표 칸의 Field 의 두 조각을 감싸는 Field 뷰는 오류로 선다 — 폼 표 밖의 필드 표본(열을 정한 조회 폼도)은 안 걸린다', async () => {
     const wrapped = await checkTheme(
       files(BASE, {
         views: `{ Field: ({ props, children }) => h(Root, null, h('div', null, h('label', { 'data-wb-part': 'label' }, String(props.label)), h('div', { 'data-wb-part': 'value' }, children))) }`,
@@ -164,7 +164,6 @@ describe('checkTheme', () => {
       'FormTable · FormTable — 2열 · 전폭 · 빈 쌍',
       'FormTable · FormTable — 옆 칸(사진)',
       'FormTable · FormTable — 제목 · 머리 오른쪽',
-      'SearchForm · SearchForm — 2열 · 몫',
     ])
     expect(pairs[0]!.message).toContain('label · value 조각을 뿌리의 직계로 안 그렸습니다')
     expect(wrapped.errors.filter((error) => error.source !== 'pairs')).toEqual([])

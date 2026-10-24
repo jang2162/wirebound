@@ -427,18 +427,24 @@
 
 /*
  * 열을 정한 조회 폼(`SearchForm.columns` — `fields` 조각의 `data-wb-columns`) — 쌍 격자다(라벨 칸 · 값 칸이 열마다 맞는다). 열을 안 정한 판은
- * 위 규칙 그대로다. 필드의 몫(`weight`)은 차지할 쌍 수다(SDK 기본 CSS 가 `grid-column` 을 건다). 라벨은 흰 바탕 굵은 글 · 칸 선 없음이고 빈 쌍은
- * 그리지 않는다(빈자리다). `Field` 를 subgrid 로 다시 거는 까닭: 위 `Field` 규칙(`display: flex`)이 SDK 기본 CSS(특이도 0)를 이긴다.
+ * 위 규칙 그대로다. 필드의 몫(`weight`)은 차지할 쌍 수다. 라벨은 흰 바탕 굵은 글 · 칸 선 없음이고 빈 쌍은 그리지 않는다(빈자리다). SDK 기본 CSS 는
+ * 열을 정한 조회 폼을 «필드 하나 = 트랙 하나» 로 깐다(옛 테마 호환) — 쌍 격자 · 자식 폭 · subgrid 는 이 테마가 건다.
  */
 [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] {
   display: grid;
   grid-template-columns: repeat(var(--wb-node-searchform-columns, 1), var(--wb-form-labelWidth) minmax(0, 1fr));
   gap: var(--wb-space-3);
 }
+[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > * {
+  grid-column: span calc(2 * var(--wb-node-weight, 1));
+}
 [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > [data-wb-component="Field"] {
   display: grid;
   grid-template-columns: subgrid;
   align-items: center;
+}
+[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > [data-wb-component="Field"] > [data-wb-part="value"] {
+  grid-column: 2 / -1;
 }
 [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > [data-wb-component="Field"] > [data-wb-part="label"] {
   color: var(--wb-semantic-text);
