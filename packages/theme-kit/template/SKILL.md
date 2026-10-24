@@ -86,7 +86,9 @@ export const ListView = view(({ props, variant, states, children }) => {
   subgrid 를 건다(기본테마가 그렇다).
 - **`FormTable` 은 라벨|값 표다.** 한 줄에 쌍을 `columns` 개 놓고 자식의 몫(`items[i].span`)이 차지할 쌍 수다. 줄 끝 · 넓은 칸이 남긴 구멍의 빈 쌍은
   뷰가 그린다 — `pairRows(items, columns)`(SDK)가 자식과 빈 쌍(`filler` — `label` · `value` 두 조각, 노드가 아니다)의 차례를 준다. `cells` 조각에는
-  `formTableCellsAttrs(columns)` 를 편다. 빈 쌍 수가 그 셈과 다르면 `wb-theme check` 가 막는다. 라벨 칸 폭은 `--wb-form-labelWidth` 로 싣는다.
+  `formTableCellsAttrs(columns)` 를 편다. **칸과 빈 쌍은 `cells` 조각의 직계로 그린다** — 쌍 격자는 `cells` 의 직계 상자를 트랙에 놓는다(감싸는
+  요소를 끼우거나 빈 쌍을 `cells` 밖에 두거나 조각 이름을 바꾸면 격자가 깨진다). `cells` 조각이 없거나 · 칸 · 빈 쌍이 그 직계가 아니거나 · 빈 쌍에
+  두 조각이 없거나 · 빈 쌍 수가 그 셈과 다르면 `wb-theme check` 가 막는다. 라벨 칸 폭은 `--wb-form-labelWidth` 로 싣는다.
   - CSS 는 `[data-wb-component='Section'][data-wb-compact] { … }` 처럼 겨냥한다. 기본 뷰도 그 값으로 모양을 바꾼다(접힌 검색은
     머리줄 `toggle` 조각만 남고 자식이 빠진다 · 표 구조 목록의 `selectable` 은 `checkbox` 조각) — 테마 CSS 가 여백 · 색을 정한다.
   - **`List.selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다.** 줄 · 카드 목록 구조의 뷰는 표지 `data-wb-selectable` 만 서고

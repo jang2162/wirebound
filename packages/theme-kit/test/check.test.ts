@@ -27,6 +27,39 @@ function files(manifest: ThemeManifest, opts: { views?: string; themeJs?: string
   return { manifest, themeJs: opts.themeJs ?? bundle(manifest, opts.views), themeCss: opts.themeCss ?? null, assets: new Map() }
 }
 
+/**
+ * SDK 기본 `FormTableView` 와 같은 차례로 그리는 폼 표 뷰(번들 원문) — 한 곳만 바꾼다. `cell: 'wrapped'` 는 칸마다 `div` 로 감싼다 · `fillers` 는
+ * 빈 쌍을 안 그림(`none`) · `cells` 밖 표 끝에 그림(`outside`) · 두 조각 없이 그림(`bare`) · `cellsPart` 는 `cells` 조각의 이름이다.
+ */
+function formTableView(change: { cell?: 'wrapped'; fillers?: 'none' | 'outside' | 'bare'; cellsPart?: string }): string {
+  const cell =
+    change.cell === 'wrapped'
+      ? `h('div', { key: c.item.nodeId }, c.item.element)`
+      : `h(rt.react.Fragment, { key: c.item.nodeId }, c.item.element)`
+  const filler =
+    change.fillers === 'bare'
+      ? `h('div', { key: c.key, 'data-wb-part': 'filler', 'aria-hidden': 'true' })`
+      : `h('div', { key: c.key, 'data-wb-part': 'filler', 'aria-hidden': 'true' }, h('div', { 'data-wb-part': 'label' }), h('div', { 'data-wb-part': 'value' }))`
+  return `{ FormTable: rt.sdk.view(({ props, items }) => {
+    const drawn = rt.sdk.pairRows(items, props.columns).map((c) => c.kind === 'item' ? ${cell} : ${filler})
+    const inCells = ${change.fillers === 'none' || change.fillers === 'outside'} ? drawn.filter((el) => el.props['data-wb-part'] !== 'filler') : drawn
+    const after = ${change.fillers === 'outside'} ? drawn.filter((el) => el.props['data-wb-part'] === 'filler') : []
+    return h(Root, null, h(rt.sdk.Zone, { name: 'headEnd' }), h(rt.sdk.Zone, { name: 'aside' }),
+      h('div', { 'data-wb-part': '${change.cellsPart ?? 'cells'}', ...rt.sdk.formTableCellsAttrs(props.columns) }, inCells), ...after)
+  }) }`
+}
+
+/** 갤러리에서 폼 표가 서는 표본 — 폼 표 표본 넷과 몸통에 폼 표를 든 입력폼. */
+const FORM_TABLE_SAMPLES = [
+  'EntryForm — 제목 · 폼 표',
+  'FormTable — 1쌍 다섯 줄',
+  'FormTable — 2열 · 전폭 · 빈 쌍',
+  'FormTable — 옆 칸(사진)',
+  'FormTable — 제목 · 머리 오른쪽',
+]
+
+const labelsOf = (errors: { label: string }[]) => [...new Set(errors.map((error) => error.label))].sort()
+
 describe('checkTheme', () => {
   it('기본 뷰 테마는 오류 0 — 갤러리 칸 전부를 그렸다 · 끝나면 DOM 전역을 걷는다', async () => {
     expect(typeof document).toBe('undefined')
@@ -170,7 +203,7 @@ describe('checkTheme', () => {
   })
 
   it('빈 쌍을 안 그리는 폼 표 뷰는 오류로 선다 — 빈 쌍이 서는 표본만', async () => {
-    const report = await checkTheme(files(BASE, { views: `{ FormTable: ({ children }) => h(Root, null, children) }` }))
+    const report = await checkTheme(files(BASE, { views: formTableView({ fillers: 'none' }) }))
     const pairs = report.errors.filter((error) => error.source === 'pairs')
     expect(pairs.map((error) => [error.label, error.message])).toEqual([
       [
@@ -178,6 +211,61 @@ describe('checkTheme', () => {
         'FormTable 뷰가 빈 쌍(filler 조각)을 2 개가 아니라 0 개 그렸습니다 — pairRows(items, columns) 차례로 그립니다(노드 ft2)',
       ],
     ])
+  })
+
+  // 위 두 셈(두 조각 직계 · 빈 쌍 수)을 다 지나면서 실 Chromium 에서 쌍 격자를 깨는 폼 표 뷰 넷 — 저마다 제 판정 한 줄로만 선다.
+  // 그 뷰들이 실 Chromium 에서 어떻게 깨지는지는 `docs/superpowers/plans/2026-10-25-rv-ft-report.md` 「8-a」 가 쟀다.
+  it('기본 뷰와 같은 차례로 그린 폼 표 뷰는 깨끗하다 — 아래 넷의 대조', async () => {
+    const report = await checkTheme(files(BASE, { views: formTableView({}) }))
+    expect(report.errors).toEqual([])
+  })
+
+  it('칸을 감싸는 폼 표 뷰는 오류로 선다 — 칸(몸통 자식)이 cells 조각의 직계가 아니면 쌍 격자가 그 칸을 트랙에 못 놓는다', async () => {
+    const report = await checkTheme(files(BASE, { views: formTableView({ cell: 'wrapped' }) }))
+    const pairs = report.errors.filter((error) => error.source === 'pairs')
+    expect(labelsOf(pairs)).toEqual(FORM_TABLE_SAMPLES)
+    expect(pairs.every((error) => /^FormTable 칸\(노드 [\w-]+\)이 cells 조각의 직계가 아닙니다/.test(error.message))).toBe(true)
+    expect(pairs.find((error) => error.label === 'FormTable — 2열 · 전폭 · 빈 쌍')!.message).toBe(
+      'FormTable 칸(노드 ft2-a)이 cells 조각의 직계가 아닙니다 — 감싸는 요소를 끼우면 쌍 격자가 그 칸을 트랙에 못 놓습니다(노드 ft2)',
+    )
+    expect(report.errors.filter((error) => error.source !== 'pairs')).toEqual([])
+  })
+
+  it('빈 쌍을 cells 조각 밖에 그리는 폼 표 뷰는 오류로 선다 — 수는 맞아도 줄 끝 · 구멍 자리가 빈다', async () => {
+    const report = await checkTheme(files(BASE, { views: formTableView({ fillers: 'outside' }) }))
+    expect(report.errors.map((error) => [error.source, error.label, error.message])).toEqual([
+      [
+        'pairs',
+        'FormTable — 2열 · 전폭 · 빈 쌍',
+        'FormTable 뷰가 빈 쌍 2 개를 cells 조각의 직계가 아닌 자리에 그렸습니다 — 빈 쌍은 cells 안 제 줄 끝 · 구멍 자리에 섭니다(노드 ft2)',
+      ],
+    ])
+  })
+
+  it('조각 없는 빈 쌍을 그리는 폼 표 뷰는 오류로 선다 — 두 조각이 없으면 라벨 칸 바탕 · 칸 선이 안 선다', async () => {
+    const report = await checkTheme(files(BASE, { views: formTableView({ fillers: 'bare' }) }))
+    expect(report.errors.map((error) => [error.source, error.label, error.message])).toEqual([
+      [
+        'pairs',
+        'FormTable — 2열 · 전폭 · 빈 쌍',
+        'FormTable 뷰가 빈 쌍 2 개를 label · value 조각을 직계로 두지 않고 그렸습니다 — 두 조각이 있어야 라벨 칸 바탕 · 칸 선이 섭니다(노드 ft2)',
+      ],
+    ])
+  })
+
+  it('cells 조각이 없는 폼 표 뷰는 오류로 선다 — 쌍 격자를 까는 SDK · 테마 CSS 가 그 조각을 잡는다', async () => {
+    const report = await checkTheme(files(BASE, { views: formTableView({ cellsPart: 'body' }) }))
+    const pairs = report.errors.filter((error) => error.source === 'pairs')
+    expect(pairs.map((error) => [error.label, error.message])).toEqual(
+      [
+        ['EntryForm — 제목 · 폼 표', 'ef-t'],
+        ['FormTable — 1쌍 다섯 줄', 'ft'],
+        ['FormTable — 2열 · 전폭 · 빈 쌍', 'ft2'],
+        ['FormTable — 제목 · 머리 오른쪽', 'ft3'],
+        ['FormTable — 옆 칸(사진)', 'ft4'],
+      ].map(([label, id]) => [label, `FormTable 뷰가 cells 조각을 그리지 않았습니다 — 쌍 격자는 그 조각의 직계 칸에 섭니다(노드 ${id})`]),
+    )
+    expect(report.errors.filter((error) => error.source !== 'pairs')).toEqual([])
   })
 
   it('Root 를 안 그리는 뷰는 콘솔 오류로 선다', async () => {

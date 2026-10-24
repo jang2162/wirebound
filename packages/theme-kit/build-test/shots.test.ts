@@ -56,6 +56,7 @@ interface Report {
     placeholder: { item: string | null; property: string; want: string; got: string }[]
     pairs: { item: string | null; element: string; label: number; value: number }[]
     pairsMeasured: number
+    pairsOffGrid: { item: string | null; element: string }[]
   }[]
 }
 
@@ -113,6 +114,7 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
       // 폼 표의 같은 줄 라벨 칸 · 값 칸이 줄 높이를 채운다(키 큰 행 — 여러 줄 값). 넓은 폭에서는 잰 필드가 있어야 한다(좁은 폭은 라벨이 위다).
       expect(w.pairs, `${w.width}px ${JSON.stringify(w.pairs)}`).toEqual([])
       if (w.width === 1280) expect(w.pairsMeasured).toBeGreaterThan(5)
+      expect(w.pairsOffGrid, `${w.width}px ${JSON.stringify(w.pairsOffGrid)}`).toEqual([])
     }
     // 종료 코드는 넘침 · 꺾임까지 센다 — 둘 다 없으면 0 이다.
     expect(status).toBe(report.widths.every((w) => w.overflow.length === 0 && w.wrapped.length === 0) ? 0 : 1)
@@ -188,6 +190,57 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
       printed,
     ).toBe(true)
     expect(printed).toContain('폼 표 FormTable//ft: 같은 줄의 라벨 칸')
+  })
+
+  /**
+   * 쌍 높이를 재는 자가 아무것도 안 잰 판을 초록으로 내지 않는가 — 칸을 `div` 로 감싸는 폼 표 뷰에서는 `Field` 가 `cells` 의 직계가 아니라 쌍 격자에
+   * 안 서고(`docs/superpowers/plans/2026-10-25-rv-ft-report.md` 「8」) `pairs` 의 셀렉터가 그 필드를 하나도 못 찾는다. 그 필드를 꼴 없이 찾아 적는다.
+   */
+  it('폼 표 몸통의 Field 가 쌍 격자 꼴로 안 서면 report.json 에 적고 1 로 끝난다 — 잰 쌍 0 인 판을 초록으로 안 낸다', () => {
+    const root = mkdtempSync(join(TMP, 'shots-offgrid-'))
+    cpSync(FIXTURE, root, { recursive: true })
+    const entry = join(root, 'src/index.tsx')
+    writeFileSync(
+      entry,
+      readFileSync(entry, 'utf8')
+        .replace(
+          "import { defineTheme, Root, view } from '@wirebound/theme-sdk'",
+          "import { defineTheme, formTableCellsAttrs, pairRows, Root, view, Zone } from '@wirebound/theme-sdk'",
+        )
+        .replace(
+          'views: { Card }',
+          `views: {
+    Card,
+    FormTable: view(({ props, items }) => (
+      <Root>
+        <Zone name="headEnd" />
+        <Zone name="aside" />
+        <div data-wb-part="cells" {...formTableCellsAttrs(props.columns)}>
+          {pairRows(items, props.columns).map((c) =>
+            c.kind === 'item' ? (
+              <div key={c.item.nodeId}>{c.item.element}</div>
+            ) : (
+              <div key={c.key} data-wb-part="filler" aria-hidden="true"><div data-wb-part="label" /><div data-wb-part="value" /></div>
+            ),
+          )}
+        </div>
+      </Root>
+    )),
+  }`,
+        ),
+    )
+    const dir = join(out, 'offgrid')
+    const { status, out: printed } = shots(root, ['--out', dir, '--widths', '1280', '--browser', browser.path!])
+    expect(status, printed).toBe(1)
+    const [w] = (JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as Report).widths
+    expect(w!.overflow, printed).toEqual([])
+    expect(w!.pairsMeasured, printed).toBe(0)
+    expect(w!.pairsOffGrid.length, printed).toBeGreaterThan(5)
+    expect(
+      w!.pairsOffGrid.every((entry) => entry.item?.startsWith('FormTable/') || entry.item?.startsWith('EntryForm/')),
+      JSON.stringify(w!.pairsOffGrid),
+    ).toBe(true)
+    expect(printed).toContain('폼 표 FormTable//ft: 몸통의 Field 가 [FormTable] > [cells] > [Field] · 두 조각 직계로 안 섰습니다')
   })
 
   /**

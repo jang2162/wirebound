@@ -67,8 +67,14 @@ export interface ShotWidthReport {
    * 여러 줄 · 그리드가 들면 라벨 칸이 따라 늘어난다). 라벨이 값 위에 선 판(좁은 창)은 같은 줄이 아니라 안 잰다.
    */
   pairs: { item: string | null; element: string; label: number; value: number }[]
-  /** 위를 잰 필드 수 — 0 이면 아무것도 안 잰 판이다(폼 표 표본이 없거나 모두 라벨 위). */
+  /** 위를 잰 필드 수 — 0 이면 아무것도 안 잰 판이다(폼 표 표본이 없거나 모두 라벨 위이거나 `pairsOffGrid` 뿐). */
   pairsMeasured: number
+  /**
+   * **폼 표 몸통의 `Field` 인데 쌍 격자의 꼴(`[FormTable] > [cells] > [Field]` · 두 조각 직계)로 안 선 것** — 꼴을 안 보고 찾는다(가장 가까운 노드 ·
+   * 구역 상자가 폼 표 뿌리인 `Field`). 칸을 감싸거나 `cells` 조각 이름을 바꾼 테마에서는 `pairs` 가 그 필드를 못 찾아 `pairsMeasured` 가 0 인 채
+   * 아무것도 안 잰다 — 그 판을 문제로 세운다. 라벨이 값 위에 선 판(좁은 창)은 꼴이 맞아 여기 안 든다.
+   */
+  pairsOffGrid: { item: string | null; element: string }[]
 }
 
 export interface ShotsReport {
@@ -262,11 +268,20 @@ function measure(expect: {
     }
   }
   const pairs: ShotWidthReport['pairs'] = []
+  const pairsOffGrid: ShotWidthReport['pairsOffGrid'] = []
   let pairsMeasured = 0
-  for (const field of document.querySelectorAll('[data-wb-component="FormTable"] > [data-wb-part="cells"] > [data-wb-component="Field"]')) {
+  const gridded = new Set(
+    document.querySelectorAll('[data-wb-component="FormTable"] > [data-wb-part="cells"] > [data-wb-component="Field"]'),
+  )
+  for (const field of document.querySelectorAll('[data-wb-component="Field"]')) {
+    const owner = field.parentElement?.closest('[data-wb-id], [data-wb-zone]')
+    if (owner?.getAttribute('data-wb-component') !== 'FormTable') continue
     const label = field.querySelector(':scope > [data-wb-part="label"]')
     const value = field.querySelector(':scope > [data-wb-part="value"]')
-    if (label === null || value === null) continue
+    if (!gridded.has(field) || label === null || value === null) {
+      pairsOffGrid.push({ item: itemOf(field), element: describe(field) })
+      continue
+    }
     const [a, b] = [label.getBoundingClientRect(), value.getBoundingClientRect()]
     if (Math.abs(a.top - b.top) > 0.5) continue
     pairsMeasured += 1
@@ -278,6 +293,7 @@ function measure(expect: {
     placeholder,
     pairs,
     pairsMeasured,
+    pairsOffGrid,
     wbErrors: [...document.querySelectorAll('[data-wb-error]')].map((el) => ({
       item: itemOf(el),
       message: el.getAttribute('data-wb-error') ?? '',
@@ -368,6 +384,11 @@ export function shotsProblems(report: ShotsReport): string[] {
     for (const p of w.pairs) {
       lines.push(
         `✗ ${w.width}px 폼 표 ${p.item ?? '(칸 밖)'}: 같은 줄의 라벨 칸 ${p.label}px · 값 칸 ${p.value}px — 두 칸이 줄 높이를 채우지 않습니다(${p.element})`,
+      )
+    }
+    for (const p of w.pairsOffGrid) {
+      lines.push(
+        `✗ ${w.width}px 폼 표 ${p.item ?? '(칸 밖)'}: 몸통의 Field 가 [FormTable] > [cells] > [Field] · 두 조각 직계로 안 섰습니다 — 쌍 격자에 안 서고 쌍 높이를 못 잽니다(${p.element})`,
       )
     }
     for (const p of w.placeholder) {

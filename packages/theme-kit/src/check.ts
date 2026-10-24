@@ -18,7 +18,7 @@ export interface ThemeCheckError {
   /**
    * `fallback` — 칸에 선 `data-wb-error`. `console` — 그 칸을 그리는 동안 난 `console.error`. `bundle` — 번들을 못 실었다. `zone` — 내용이 든 구역을
    * 뷰가 안 그렸다(`missingZones`). `placeholder` — 자리표시자 뷰가 사람이 정한 그리기 값을 뿌리의 변수로 안 실었다(`placeholderDrops`). `pairs` — 폼 표
-   * 칸의 `Field` 의 두 조각이 뿌리의 직계가 아니거나 폼 표의 빈 쌍 수가 칸 흐름과 다르다(`pairGridProblems`).
+   * 뷰가 쌍 격자 계약(`cells` 조각 · 그 직계 칸과 빈 쌍 · 두 조각 · 빈 쌍 수)을 어겼다(`pairGridProblems`).
    */
   source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs'
 }
@@ -190,10 +190,14 @@ function missingZones(container: Element, root: WbNode): string[] {
 }
 
 /**
- * **폼 표의 두 조건** — ① 칸(몸통)에 선 `Field` 는 `label` · `value` 조각을 뿌리의 **직계**로 그린다(SDK 기본 CSS 가 subgrid 로 두 조각을 쌍 격자의
- * 트랙에 놓는다 — 감싸는 요소를 끼우면 두 조각이 한 칸에 몰린다). ② 폼 표가 그린 빈 쌍(`filler` 조각 — 노드가 아니다) 수가 칸 흐름(`pairRows`)의
- * 셈과 같다(빈 쌍을 안 그리면 줄 끝에 칸 선 · 라벨 바탕이 빈다). 갤러리 표본은 상태가 없어 몸통 자식이 다 보인다. 열을 정한 조회 폼은 안 본다 —
- * SDK 기본 CSS 가 그것을 쌍 격자로 깔지 않는다(쌍으로 꾸미는 테마가 제 `Field` 뷰와 함께 고른다).
+ * **폼 표의 쌍 격자 계약** — SDK 기본 CSS · 테마 CSS 는 폼 표 뿌리의 `cells` 조각을 격자로 깔고 그 **직계** 상자를 트랙에 놓는다. 그래서
+ * ① `cells` 조각이 있다(이름을 바꾸면 격자가 아예 안 선다). ② 칸(몸통 자식)은 `cells` 의 직계다(감싸는 요소를 끼우면 그 요소가 트랙에 서고 칸의 몫 ·
+ * subgrid 가 안 듣는다). ③ 칸에 선 `Field` 는 `label` · `value` 조각을 뿌리의 직계로 그린다(subgrid 가 두 조각을 쌍의 두 트랙에 놓는다). ④ 빈 쌍
+ * (`filler` 조각 — 노드가 아니다)은 `cells` 의 직계이고 두 조각을 직계로 갖는다(라벨 칸 바탕 · 칸 선이 그 조각에 선다). ⑤ 빈 쌍 수가 칸 흐름
+ * (`pairRows`)의 셈과 같다. ① 이 없으면 나머지는 안 본다 — 잴 자리가 없다. 갤러리 표본은 상태가 없어 몸통 자식이 다 보인다. 열을 정한 조회 폼은
+ * 안 본다 — SDK 기본 CSS 가 그것을 쌍 격자로 깔지 않는다(쌍으로 꾸미는 테마가 제 `Field` 뷰와 함께 고른다).
+ *
+ * **jsdom 이라 DOM 꼴만 본다** — 꼴이 맞아도 CSS 가 격자를 다르게 깔면 못 본다. 그것은 `wb-theme shots` 의 `pairs` 가 실 Chromium 으로 잰다.
  */
 function pairGridProblems(container: Element, root: WbNode): string[] {
   const out: string[] = []
@@ -203,23 +207,49 @@ function pairGridProblems(container: Element, root: WbNode): string[] {
     const element = container.querySelector(`[data-wb-id="${node.id}"]`)
     if (element === null) continue
     const width = typeof columns === 'number' ? columns : 1
+    const owned = (selector: string) => [...element.querySelectorAll(selector)].filter((el) => el.closest('[data-wb-id]') === element)
+    const cells = owned('[data-wb-part="cells"]')[0]
+    if (cells === undefined) {
+      out.push(`FormTable 뷰가 cells 조각을 그리지 않았습니다 — 쌍 격자는 그 조각의 직계 칸에 섭니다(노드 ${node.id})`)
+      continue
+    }
+    const hasParts = (el: Element) => {
+      const parts = [...el.children].map((part) => part.getAttribute('data-wb-part'))
+      return parts.includes('label') && parts.includes('value')
+    }
     for (const child of node.children ?? []) {
-      if (child.type !== 'Field') continue
-      const field = element.querySelector(`[data-wb-id="${child.id}"]`)
-      if (field === null) continue
-      const parts = [...field.children].map((el) => el.getAttribute('data-wb-part'))
-      if (!parts.includes('label') || !parts.includes('value')) {
+      const cell = element.querySelector(`[data-wb-id="${child.id}"]`)
+      if (cell === null) continue
+      if (cell.parentElement !== cells) {
+        out.push(
+          `FormTable 칸(노드 ${child.id})이 cells 조각의 직계가 아닙니다 — 감싸는 요소를 끼우면 쌍 격자가 그 칸을 트랙에 못 놓습니다(노드 ${node.id})`,
+        )
+      }
+      if (child.type === 'Field' && !hasParts(cell)) {
         out.push(
           `${node.type} 안 Field(노드 ${child.id})가 label · value 조각을 뿌리의 직계로 안 그렸습니다 — 쌍 격자가 두 조각을 칸에 못 놓습니다`,
         )
       }
+    }
+    const fillers = owned('[data-wb-part="filler"]')
+    const astray = fillers.filter((filler) => filler.parentElement !== cells).length
+    if (astray > 0) {
+      out.push(
+        `FormTable 뷰가 빈 쌍 ${astray} 개를 cells 조각의 직계가 아닌 자리에 그렸습니다 — 빈 쌍은 cells 안 제 줄 끝 · 구멍 자리에 섭니다(노드 ${node.id})`,
+      )
+    }
+    const bare = fillers.filter((filler) => !hasParts(filler)).length
+    if (bare > 0) {
+      out.push(
+        `FormTable 뷰가 빈 쌍 ${bare} 개를 label · value 조각을 직계로 두지 않고 그렸습니다 — 두 조각이 있어야 라벨 칸 바탕 · 칸 선이 섭니다(노드 ${node.id})`,
+      )
     }
     const items: ViewItem[] = (node.children ?? []).map((child, index) => {
       const weight = typeof child.weight === 'number' && child.weight >= WEIGHT_MIN && child.weight <= WEIGHT_MAX ? child.weight : 1
       return { nodeId: child.id, index, element: null, content: null, span: Math.min(weight, width) }
     })
     const want = pairRows(items, width).filter((cell) => cell.kind === 'filler').length
-    const got = [...element.querySelectorAll('[data-wb-part="filler"]')].filter((el) => el.closest('[data-wb-id]') === element).length
+    const got = fillers.length
     if (got !== want)
       out.push(
         `FormTable 뷰가 빈 쌍(filler 조각)을 ${want} 개가 아니라 ${got} 개 그렸습니다 — pairRows(items, columns) 차례로 그립니다(노드 ${node.id})`,
