@@ -26,6 +26,7 @@
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import {
+  imageIdsIn,
   inspectNodesEnvelope,
   matchPageTargets,
   prepareNodesForPaste,
@@ -36,6 +37,8 @@ import {
 } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { useCanvasDocument } from '../canvas/canvas-document'
+import { claimNodeImages, type ClaimedNodes } from '../edit/claim-images'
+import { copiedHere, markCopiedEnvelope } from '../edit/copy-marks'
 import { platformOf, type ShortcutCommand } from '../edit/editor-shortcuts'
 import {
   PASTE_GONE_NOTICE,
@@ -148,8 +151,15 @@ export function EditorKeys(props: {
   const copySelected = (): string | null => {
     if (doc === null || selectedNodeIds.length === 0 || selectedNodeIds.includes(doc.root?.id)) return null
     const nodes = selectedNodeIds.map((id) => findNodeSafely(doc.root, id)).filter((node): node is WbNode => node !== undefined)
-    // 상태 목록을 함께 싣는다 — 붙이는 쪽이 뺀 가지를 이 페이지의 이름으로 말한다(`readNodesEnvelope` 머리말).
-    return nodes.length === 0 ? null : writeNodesEnvelope(nodes, doc.version, Array.isArray(doc.viewStates) ? doc.viewStates : undefined)
+    // 상태 목록을 함께 싣는다 — 붙이는 쪽이 뺀 가지를 이 페이지의 이름으로 말한다(`readNodesEnvelope` 머리말). 출처 프로젝트도 싣는다 — 다른
+    // 프로젝트에 붙이면 그 쪽이 그림을 여기서 가져온다(`edit/claim-images.ts`). 그 출처는 이 브라우저가 낸 복사일 때만 믿으므로 표지를 적는다
+    // (`edit/copy-marks.ts`).
+    if (nodes.length === 0) return null
+    const text = writeNodesEnvelope(nodes, doc.version, Array.isArray(doc.viewStates) ? doc.viewStates : undefined, {
+      projectId: props.projectId,
+    })
+    markCopiedEnvelope(text)
+    return text
   }
 
   /** 여럿을 고른 판에서 하나일 때만 되는 키(순서 · 계층 · 화살표 고르기)를 눌렀다 — 끈 채 이유를 말한다. */
@@ -165,6 +175,8 @@ export function EditorKeys(props: {
    * 들어올 수 있고, 기준 노드가 그 문서에 없으면 페이지 끝이다(설계서 「설계서 화면 구조」 붙이기의 «자리» — 고른 것이 없으면 페이지 끝). 그 사이
    * 다른 페이지로 옮겼으면 부르는 쪽이 이미 돌아갔다.
    *
+   * `imageNotice` 는 가져오지 못해 비운 그림의 한 줄이다(`edit/claim-images.ts`) — 붙이며 뺀 것과 같은 정보 통지에 든다.
+   *
    * `pressed` 는 누른 때의 통지다 — 기다린 붙이기만 준다. **기다리는 사이 선 잃음(수습의 «취소됐습니다» 등)은 치우지도 덮지도 않는다** — 편집은
    * 그 통지를 안 치우고(`CommitOptions.pressed`) 할 말은 그 뒤에 잇는다(`EditorStore.tellLoss`). 덮으면 사람이 누르지 않은 편집의 잃음이 사라진다.
    */
@@ -175,6 +187,7 @@ export function EditorKeys(props: {
     pages: readonly TargetedPage[] | null,
     anchor: string | ZoneRef | null,
     pressed?: EditFailure | null,
+    imageNotice?: string | null,
   ): void => {
     const document = openDocumentNow(store, pageId)
     if (document === null) return
@@ -215,6 +228,7 @@ export function EditorKeys(props: {
       ...(prepared.droppedStates.length > 0 ? [droppedStatesNotice(prepared.droppedStates, sourceStates)] : []),
       ...(prepared.clearedOnly > 0 ? [clearedOnlyNotice(prepared.clearedOnly)] : []),
       ...(prepared.droppedActions > 0 ? [droppedActionsNotice(prepared.droppedActions)] : []),
+      ...(imageNotice === undefined || imageNotice === null ? [] : [imageNotice]),
     ]
     // **붙이기는 성공했다** — 뺀 것은 정보 통지 자리다(실패 자리의 `role="alert"` 는 «붙이지 못했다» 를 말한다). 앞 잃음의 통지는 건드리지 않는다.
     if (dropped.length > 0) info(dropped.join(' '))
@@ -238,7 +252,12 @@ export function EditorKeys(props: {
     if (pageId === undefined) return true
     // 붙일 자리 — 고른 구역 줄이 있으면 그 구역 끝(`pasteOps` 의 표), 아니면 기준 노드 뒤.
     const anchor = store.getState().selectedZone ?? store.getState().selectedNodeId
-    if (!hasPageTargets(read.nodes)) {
+    // 다른 프로젝트에서 꺼낸 노드가 그림을 들면 붙이기 편집 전에 그 출처에서 가져온다 — 못 가져온 그림은 비우고 말한다(`edit/claim-images.ts`).
+    // **출처는 이 브라우저가 낸 복사 그대로일 때만 믿는다**(`edit/copy-marks.ts` 머리말) — 아니면 출처 없는 봉투와 같이 가져오지 않는다.
+    const source = read.source !== undefined && copiedHere(text) ? read.source : undefined
+    const claimFrom = source !== undefined && source.projectId !== props.projectId && imageIdsIn(read.nodes).length > 0 ? source : null
+    const needsPages = hasPageTargets(read.nodes)
+    if (!needsPages && claimFrom === null) {
       finishPaste(pageId, read.nodes, read.viewStates, null, anchor)
       return true
     }
@@ -247,13 +266,19 @@ export function EditorKeys(props: {
     // «안 떠났다»가 되어 돌아온 뒤의 선택 뒤에 붙었고, 떠나 머문 판은 말없이 사라졌다(Chrome · `build-test/editor-shortcuts-review.test.ts` «L4»).
     // 큐를 갈아 낀 수(`EditorStore` 의 `#queueEpoch`)로 가르면 같은 페이지를 다시 실은 판까지 «옮겨»로 버리고 그 거짓 문장이 수습의 통지를 덮었다(Chrome ·
     // `build-test/editor-shortcuts-review-2.test.ts` «R4»).
+    // 그림 가져오기도 같은 기다림이다 — 기다리는 사이 떠났으면 붙이지 않는다. 가져온 그림의 소유 행은 남는다(다시 붙이면 같은 id 다).
     const opened = store.pageOpenEpoch()
     const pressed = store.getState().editFailure
-    void api.getTree(props.projectId).then(
-      (menu) => {
-        if (store.pageOpenEpoch() === opened) finishPaste(pageId, read.nodes, read.viewStates, pageTargetsOf(menu), anchor, pressed)
+    const claimed: Promise<ClaimedNodes> =
+      claimFrom === null
+        ? Promise.resolve({ nodes: read.nodes, notice: null })
+        : claimNodeImages(api, props.projectId, read.nodes, claimFrom)
+    void Promise.all([needsPages ? api.getTree(props.projectId) : Promise.resolve(null), claimed]).then(
+      ([menu, images]) => {
+        if (store.pageOpenEpoch() === opened)
+          finishPaste(pageId, images.nodes, read.viewStates, menu === null ? null : pageTargetsOf(menu), anchor, pressed, images.notice)
         // 다시 읽은 목록에 이 페이지가 없으면 «옮겼다» 가 아니라 «없어졌다» 다(복원이 지운 판).
-        else tellPasteLoss(menuHasPage(menu, pageId) ? PASTE_LEFT_NOTICE : PASTE_GONE_NOTICE)
+        else tellPasteLoss(menu === null || menuHasPage(menu, pageId) ? PASTE_LEFT_NOTICE : PASTE_GONE_NOTICE)
       },
       () => tellPasteLoss(store.pageOpenEpoch() === opened ? PASTE_PAGES_FAILURE : PASTE_LEFT_NOTICE),
     )

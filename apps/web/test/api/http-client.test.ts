@@ -62,6 +62,19 @@ const project: ProjectDetail = { id: 'p1', name: '프로젝트', slug: 'proj', d
 /** `GET /api/projects/:projectId` 만 `themeRev` 를 더 싣는다(`ProjectView`). */
 const projectView = { ...project, themeRev: 3 }
 
+/** 그림 하나 · 목록 · 가져오기의 답(`GET …/assets` · `POST …/assets/claim`). */
+const asset = {
+  id: 'a'.repeat(64),
+  name: '배너.png',
+  mime: 'image/png',
+  size: 2048,
+  width: 120,
+  height: 80,
+  createdAt: '2026-10-24T00:00:00.000Z',
+}
+const assetList = { assets: [asset], usedBytes: 2048, limitBytes: 209715200, fileLimitBytes: 5242880 }
+const assetClaim = { claimed: ['a'.repeat(64)], failed: [{ id: 'b'.repeat(64), reason: 'quota' }] }
+
 /** 테마 manifest 하나 — 편집기 · 캔버스가 순회하는 `tokens.items` 까지. */
 const manifest = {
   id: 'system-admin',
@@ -534,6 +547,22 @@ const ENDPOINTS: Array<{
     body: null,
     call: (c) => c.deleteMyModule('m1'),
   },
+  // **그림 셋**(올리기는 `XMLHttpRequest` 라 이 표 밖 — 아래 «uploadAsset»). 가져오기 둘은 본문의 출처 꼴을 함께 잰다.
+  { client: 'listAssets', url: '/api/projects/p1/assets', method: 'GET', body: assetList, call: (c) => c.listAssets('p1') },
+  {
+    client: 'claimAssets',
+    url: '/api/projects/p1/assets/claim',
+    method: 'POST',
+    body: assetClaim,
+    call: (c) => c.claimAssets('p1', ['a'.repeat(64)], { personal: true }),
+  },
+  {
+    client: 'claimMyAssets',
+    url: '/api/me/assets/claim',
+    method: 'POST',
+    body: assetClaim,
+    call: (c) => c.claimMyAssets(['a'.repeat(64)], 'p2'),
+  },
   // **복원은 `:snapshotId` 아래의 정적 세그먼트다** — `GET .../snapshots/:id`(상세)와
   // 한 칸 차이인데 그쪽은 `ApiClient`에 없다(payload를 읽는 것은 서버다).
   {
@@ -773,6 +802,14 @@ const SHAPE_CASES: Array<{
     ok: { module: projectModule },
     call: (c) => c.getModule('p1', 'm1'),
   },
+  // **크기 · 이름이 수 · 글이 아니면 막는다** — 그림 칸이 그대로 그린다. 못 옮긴 까닭이 둘 밖이면 막는다 — 화면이 까닭으로 문장을 고른다.
+  { shape: 'assetList', broken: { ...assetList, assets: [{ ...asset, size: '2048' }] }, ok: assetList, call: (c) => c.listAssets('p1') },
+  {
+    shape: 'assetClaim',
+    broken: { claimed: [], failed: [{ id: 'b'.repeat(64), reason: 'gone' }] },
+    ok: assetClaim,
+    call: (c) => c.claimMyAssets(['b'.repeat(64)], 'p2'),
+  },
   {
     shape: 'moduleListEnvelope',
     broken: { modules: [{ ...projectModule, id: '' }] },
@@ -878,6 +915,13 @@ const SHAPES_WITHOUT_BROKEN_CASE = ['noBody']
  */
 const METHODS_WITHOUT_REQUEST: string[] = []
 
+/**
+ * `fetch` 가 아니라 `XMLHttpRequest` 로 보내는 메서드와 그 shape — 위 두 표의 가짜 `fetch` 가 못 본다. 아래 «uploadAsset — XMLHttpRequest» 가
+ * 경로 · 머리 · 진행 · 끊기 · 실패 번역 · 꼴 밖 응답을 잰다.
+ */
+const XHR_METHODS = ['uploadAsset']
+const XHR_SHAPES = ['asset']
+
 /** `src/api`의 소스. 표의 분모를 소스에서 만든다(`test/api-consumers.test.ts`와 같은 배치). */
 const API_SOURCES = import.meta.glob('../../src/api/*.ts', {
   query: '?raw',
@@ -902,7 +946,7 @@ describe('표의 완전성', () => {
   })
 
   it('ApiClient의 모든 메서드가 경로·메서드 표에 있다', () => {
-    const registered = new Set([...ENDPOINTS.map((endpoint) => endpoint.client), ...METHODS_WITHOUT_REQUEST])
+    const registered = new Set([...ENDPOINTS.map((endpoint) => endpoint.client), ...METHODS_WITHOUT_REQUEST, ...XHR_METHODS])
 
     expect(declaredMethods().filter((method) => !registered.has(method))).toEqual([])
   })
@@ -915,7 +959,7 @@ describe('표의 완전성', () => {
   })
 
   it('SHAPES의 모든 키가 응답 모양 케이스에 있다', () => {
-    const registered = new Set([...SHAPE_CASES.map((c) => c.shape), ...SHAPES_WITHOUT_BROKEN_CASE])
+    const registered = new Set([...SHAPE_CASES.map((c) => c.shape), ...SHAPES_WITHOUT_BROKEN_CASE, ...XHR_SHAPES])
 
     expect(declaredShapes().filter((shape) => !registered.has(shape))).toEqual([])
   })
@@ -923,7 +967,9 @@ describe('표의 완전성', () => {
   it('응답 모양 케이스에 SHAPES가 선언하지 않은 이름이 없다', () => {
     const declared = new Set(declaredShapes())
 
-    expect([...SHAPE_CASES.map((c) => c.shape), ...SHAPES_WITHOUT_BROKEN_CASE].filter((shape) => !declared.has(shape))).toEqual([])
+    expect(
+      [...SHAPE_CASES.map((c) => c.shape), ...SHAPES_WITHOUT_BROKEN_CASE, ...XHR_SHAPES].filter((shape) => !declared.has(shape)),
+    ).toEqual([])
   })
 })
 
@@ -1601,6 +1647,9 @@ describe('createHttpClient', () => {
       locked: true,
       'validation-failed': true,
       'rate-limited': true,
+      'too-large': true,
+      'unsupported-media': true,
+      'asset-quota': true,
       internal: true,
     } satisfies Record<ApiErrorCode, true>) as ApiErrorCode[]
 
@@ -2740,5 +2789,107 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+/** 가짜 `XMLHttpRequest` — 연 주소 · 머리 · 보낸 몸을 적고, 케이스가 진행 · 답 · 끊김을 낸다. */
+class FakeXhr {
+  static last: FakeXhr | null = null
+  method = ''
+  url = ''
+  withCredentials = false
+  headers: Record<string, string> = {}
+  sent: unknown = undefined
+  aborted = 0
+  status = 0
+  responseText = ''
+  responseType = ''
+  upload: { onprogress: ((event: { loaded: number; total: number; lengthComputable: boolean }) => void) | null } = { onprogress: null }
+  onload: (() => void) | null = null
+  onerror: (() => void) | null = null
+  onabort: (() => void) | null = null
+  private type = ''
+  constructor() {
+    FakeXhr.last = this
+  }
+  open(method: string, url: string): void {
+    this.method = method
+    this.url = url
+  }
+  setRequestHeader(name: string, value: string): void {
+    this.headers[name.toLowerCase()] = value
+  }
+  getResponseHeader(name: string): string | null {
+    return name.toLowerCase() === 'content-type' ? this.type : null
+  }
+  send(body: unknown): void {
+    this.sent = body
+  }
+  abort(): void {
+    this.aborted += 1
+    this.onabort?.()
+  }
+  answer(status: number, body: unknown): void {
+    this.status = status
+    this.type = 'application/json'
+    this.responseText = JSON.stringify(body)
+    this.onload?.()
+  }
+}
+
+describe('uploadAsset — XMLHttpRequest', () => {
+  const file = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' })
+
+  function start(options?: Parameters<ReturnType<typeof createHttpClient>['uploadAsset']>[3]) {
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const pending = createHttpClient(stubFetch().fetchImpl).uploadAsset('p1', file, '배너 1.png', options)
+    const xhr = FakeXhr.last!
+    return { pending, xhr }
+  }
+
+  it('POST /api/projects/:p/assets · 몸은 파일 그대로 · 꼴 · 이름 머리 · 쿠키를 싣는다 · 진행을 넘긴다 · 답은 그림 하나', async () => {
+    const progress: [number, number][] = []
+    const { pending, xhr } = start({ onProgress: (loaded, total) => progress.push([loaded, total]) })
+    expect({ method: xhr.method, url: xhr.url, credentials: xhr.withCredentials, body: xhr.sent === file }).toEqual({
+      method: 'POST',
+      url: '/api/projects/p1/assets',
+      credentials: true,
+      body: true,
+    })
+    expect({ type: xhr.headers['content-type'], name: xhr.headers['x-asset-name'] }).toEqual({
+      type: 'image/png',
+      name: encodeURIComponent('배너 1.png'),
+    })
+    xhr.upload.onprogress?.({ loaded: 2, total: 4, lengthComputable: true })
+    xhr.answer(201, asset)
+    await expect(pending).resolves.toEqual(asset)
+    expect(progress).toEqual([[2, 4]])
+    vi.unstubAllGlobals()
+  })
+
+  it('서버의 거절은 같은 ApiError 번역 · 끊김은 연결 실패 · signal 은 요청을 끊는다', async () => {
+    const refused = start()
+    refused.xhr.answer(413, { error: { code: 'too-large', message: '그림은 5 MB 까지 올릴 수 있습니다(이 파일 7.2 MB)' } })
+    await expect(refused.pending).rejects.toMatchObject({
+      status: 413,
+      code: 'too-large',
+      message: '그림은 5 MB 까지 올릴 수 있습니다(이 파일 7.2 MB)',
+    })
+    const lost = start()
+    lost.xhr.onerror?.()
+    await expect(lost.pending).rejects.toMatchObject({ status: 0 })
+    const controller = new AbortController()
+    const cut = start({ signal: controller.signal })
+    controller.abort()
+    await expect(cut.pending).rejects.toMatchObject({ status: 0 })
+    expect(cut.xhr.aborted).toBe(1)
+    vi.unstubAllGlobals()
+  })
+
+  it('꼴 밖 답(asset shape)은 ApiError 다', async () => {
+    const { pending, xhr } = start()
+    xhr.answer(201, { ...asset, width: '120' })
+    await expect(pending).rejects.toBeInstanceOf(ApiError)
+    vi.unstubAllGlobals()
   })
 })

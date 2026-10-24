@@ -23,7 +23,7 @@
  * 실거나(그러면 `loadPage`의 시그니처가 바뀌어 테스트까지 부르는 자리가 전부 바뀐다) 프롭을
  * 한 겹 더 놓거나다. «페이지 정보» 탭은 처음 고른 탭이 아니라 자기 조회를 열 때만 낸다.
  */
-import { useLayoutEffect, useRef, useState, type ReactElement } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { NO_THEME, resolveVariant, weightRoom } from '@wirebound/renderer'
 import {
   applyOps,
@@ -58,6 +58,8 @@ import { useLockedBy } from '../store/use-locked-by'
 import { LOSS_RANK } from '../store/loss-notice'
 import { useSessionEpochNowOrNull } from '../session/session-context'
 import { ListControl } from './controls/list-control'
+import { ColorControl } from './controls/color-control'
+import { ImageControl, type PlaceOutcome } from './controls/image-control'
 import { SelectControl } from './controls/select-control'
 import { SwitchControl } from './controls/switch-control'
 import { VariantControl } from './controls/variant-control'
@@ -231,6 +233,7 @@ export function PropertyPanel(props: {
   /** 지금 상태 · 그 상태에서 숨은 노드 — «상태 보임» 칸이 «없음»에서 옮길 첫 상태와 «숨어 있다» 한 줄을 읽는다(`./visibility-field.tsx`). */
   const viewState = useViewState(props.pageId)
   const hiddenNodes = useHiddenNodes(props.pageId)
+  const placeImage = usePlaceImage({ doc, pageId: props.pageId, canEdit: props.canEdit, lockOf, commitProp })
 
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 낙관적
   // 패치가 문서를 갈아 끼울 때 패널만 옛 노드를 들고 있게 된다.
@@ -420,6 +423,7 @@ export function PropertyPanel(props: {
                     value={readProp(node, field.prop)}
                     disabled={blocked}
                     clearable={clearableProp(def, field.prop)}
+                    image={{ projectId: props.projectId, place: (assetId) => placeImage(props.pageId, node.id, field.prop, assetId) }}
                     onCommit={(value) => {
                       if (!blocked) commitProp(node.id, field.prop, value)
                     }}
@@ -538,6 +542,41 @@ function weightParentOf(doc: PageDocument, nodeId: string): [string, WbNode['pro
     chain.push(visit.node)
   }
   return ['', undefined]
+}
+
+/** 여럿을 고른 판의 그림 칸 — 올리기의 편집 자리가 노드 하나라 일괄로 고르지 않는다. */
+const IMAGE_BULK_NOTE = '그림은 하나씩 골라 정합니다'
+
+/**
+ * **올린 그림을 그 순간의 판으로 넣는다**(`controls/image-control.tsx` 머리말 «올리기와 편집은 따로다»). 올리는 동안 노드를 바꿔 위젯이 내려가도
+ * 누른 때의 노드에 낸다 — 그래서 위젯이 아니라 패널이 쥐고, 렌더마다 지금 판(`latest`)을 적어 둔다. 페이지를 옮겼거나 패널이 내려갔으면 안 낸다
+ * (`left`), 노드가 문서에 없으면 `gone`, 남이 잡았거나 고칠 수 없는 역할이면 `locked`.
+ */
+function usePlaceImage(now: {
+  doc: PageDocument | null
+  pageId: string | undefined
+  canEdit: boolean
+  lockOf: (nodeId: string) => unknown
+  commitProp: (nodeId: string, prop: string, value: unknown) => void
+}): (pageId: string | undefined, nodeId: string, prop: string, assetId: string) => PlaceOutcome {
+  const latest = useRef({ ...now, alive: true })
+  useLayoutEffect(() => {
+    latest.current = { ...now, alive: true }
+  })
+  useLayoutEffect(
+    () => () => {
+      latest.current.alive = false
+    },
+    [],
+  )
+  return useCallback((pageId, nodeId, prop, assetId) => {
+    const state = latest.current
+    if (!state.alive || state.pageId !== pageId || state.doc === null) return 'left'
+    if (findNodeSafely(state.doc.root, nodeId) === undefined) return 'gone'
+    if (!state.canEdit || state.lockOf(nodeId) !== null) return 'locked'
+    state.commitProp(nodeId, prop, assetId)
+    return 'ok'
+  }, [])
 }
 
 /** 기본값이 없는 prop 인가 — 안 적으면 파싱한 값에도 없다. 그 prop 의 수 칸은 비워 «안 정한» 판으로 되돌릴 수 있다. */
@@ -863,6 +902,8 @@ function PropControl(props: {
   onLeave?: (value: unknown) => void
   /** 기본값이 없는 수 prop 인가(`clearableProp`) — 비우면 `undefined` 를 커밋한다(`propOps` 가 그 prop 을 지운다). */
   clearable?: boolean
+  /** 그림 칸의 문맥 — 하나 고른 판만 준다. 없으면(일괄 편집) 그림 칸은 글로만 선다(그림은 하나씩 고른다). */
+  image?: { projectId: string; place: (assetId: string) => PlaceOutcome }
 }): ReactElement {
   const { field, value, disabled, onLeave } = props
   const id = controlId(field.prop)
@@ -891,6 +932,35 @@ function PropControl(props: {
 
   if (field.control === 'stringList' || field.control === 'pairList' || field.control === 'optionList') {
     return <ListControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} onLeave={onLeave} />
+  }
+
+  if (field.control === 'image') {
+    if (props.image === undefined) return <>{IMAGE_BULK_NOTE}</>
+    return (
+      <ImageControl
+        field={field}
+        value={value}
+        id={id}
+        projectId={props.image.projectId}
+        disabled={disabled}
+        onCommit={onCommit}
+        place={props.image.place}
+      />
+    )
+  }
+
+  if (field.control === 'color') {
+    return (
+      <ColorControl
+        field={field}
+        value={value}
+        id={id}
+        disabled={disabled}
+        onCommit={onCommit}
+        mixed={mixed}
+        onLeave={onLeave === undefined ? undefined : (next) => onLeave(next === '' ? undefined : next)}
+      />
+    )
   }
 
   // `options`가 없거나 비면 `<select>`를 그리지 않는다(`SelectControl`이 `null`을 낸다).

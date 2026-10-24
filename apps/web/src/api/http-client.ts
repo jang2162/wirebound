@@ -28,6 +28,9 @@ import type {
   PatchResult,
   PersonalModule,
   ProjectModule,
+  AssetClaimResult,
+  AssetInfo,
+  AssetList,
   ProjectDetail,
   ProjectThemeView,
   ProjectView,
@@ -187,6 +190,9 @@ const API_ERROR_CODES: Record<ApiErrorCode, true> = {
   locked: true,
   'validation-failed': true,
   'rate-limited': true,
+  'too-large': true,
+  'unsupported-media': true,
+  'asset-quota': true,
   internal: true,
 }
 
@@ -230,6 +236,19 @@ type SendOptions = (WriteOptions | ReadOptions) & {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isAsset(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    typeof value['name'] === 'string' &&
+    typeof value['mime'] === 'string' &&
+    typeof value['size'] === 'number' &&
+    typeof value['width'] === 'number' &&
+    typeof value['height'] === 'number' &&
+    typeof value['createdAt'] === 'string'
+  )
 }
 
 function isArrayOf(value: unknown, item: Shape): boolean {
@@ -680,6 +699,22 @@ const SHAPES = {
    */
   /** `{ module }` — 모듈 하나(읽기 · 저장 · 이름 바꾸기). `nodes` 는 넣기에 그대로 들어가고 `id` 는 이름 바꾸기 · 삭제 경로에 실린다. */
   moduleEnvelope: (value) => isRecord(value) && isModule(value['module']),
+  /** 그림 하나 — 올리기의 답 · 목록의 항목. 화면이 크기 · 이름을 그린다. */
+  asset: isAsset,
+  assetList: (value) =>
+    isRecord(value) &&
+    isArrayOf(value['assets'], isAsset) &&
+    typeof value['usedBytes'] === 'number' &&
+    typeof value['limitBytes'] === 'number' &&
+    typeof value['fileLimitBytes'] === 'number',
+  /** 가져오기의 답 — 못 옮긴 것을 화면이 비우고 말한다(그 수 · 까닭을 읽는다). */
+  assetClaim: (value) =>
+    isRecord(value) &&
+    isArrayOf(value['claimed'], (id) => typeof id === 'string') &&
+    isArrayOf(
+      value['failed'],
+      (entry) => isRecord(entry) && typeof entry['id'] === 'string' && (entry['reason'] === 'not-readable' || entry['reason'] === 'quota'),
+    ),
   /** `{ modules }` — 프로젝트 모듈 목록. */
   moduleListEnvelope: (value) => isRecord(value) && isArrayOf(value['modules'], isModule),
   restoreResult: isRestoreResult,
@@ -1255,6 +1290,63 @@ export function createHttpClient(
 
   const projectPath = (projectId: string): string => `/projects/${encodeURIComponent(projectId)}`
 
+  /**
+   * **그림 올리기는 `XMLHttpRequest` 다** — `fetch` 는 올리는 바이트의 진행을 못 준다(설계 «그림 칸» 의 «진행»). 머리(연결 id · 아는 사용자)와 실패
+   * 번역은 `transmit` 과 같게 한다: 받은 실패 응답을 `Response` 로 감싸 같은 `toApiError` 에 넘긴다. 연결 실패는 `UNREACHABLE`, `signal` 로 끊으면
+   * `ABANDONED` 다. 시간 제한은 없다 — 5 MB 를 느린 망으로 올리는 데 걸리는 시간을 정할 수 없어 사람이 «취소» 로 끊는다.
+   */
+  function uploadAsset(
+    projectId: string,
+    file: Blob,
+    name: string,
+    options?: { onProgress?: (loaded: number, total: number) => void; signal?: AbortSignal },
+  ): Promise<AssetInfo> {
+    return new Promise<AssetInfo>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${API_PREFIX}${projectPath(projectId)}/assets`)
+      xhr.withCredentials = true
+      xhr.setRequestHeader('content-type', file.type === '' ? 'application/octet-stream' : file.type)
+      xhr.setRequestHeader('x-asset-name', encodeURIComponent(name))
+      const connection = connectionId()
+      if (connection !== undefined) xhr.setRequestHeader(CONNECTION_ID_HEADER, connection)
+      const known = knownUser?.get()
+      if (known !== undefined) xhr.setRequestHeader(KNOWN_USER_HEADER, known)
+      xhr.upload.onprogress = (event) => options?.onProgress?.(event.loaded, event.lengthComputable ? event.total : file.size)
+      const abort = (): void => xhr.abort()
+      options?.signal?.addEventListener('abort', abort, { once: true })
+      const settle = (): void => options?.signal?.removeEventListener('abort', abort)
+      xhr.onabort = () => {
+        settle()
+        reject(new ApiError(NO_RESPONSE, 'internal', ABANDONED))
+      }
+      xhr.onerror = () => {
+        settle()
+        reject(new ApiError(NO_RESPONSE, 'internal', UNREACHABLE))
+      }
+      xhr.onload = () => {
+        settle()
+        const response = new Response(xhr.responseText, {
+          status: xhr.status,
+          headers: { 'content-type': xhr.getResponseHeader('content-type') ?? '' },
+        })
+        if (!response.ok) {
+          void toApiError(response).then((error) => {
+            if (isSessionUserChanged(error)) knownUser?.changed()
+            reject(error)
+          })
+          return
+        }
+        shaped<AssetInfo>(response, SHAPES.asset).then(resolve, reject)
+      }
+      if (options?.signal?.aborted === true) {
+        settle()
+        reject(new ApiError(NO_RESPONSE, 'internal', ABANDONED))
+        return
+      }
+      xhr.send(file)
+    })
+  }
+
   const pagePath = (projectId: string, pageId: string): string => `${projectPath(projectId)}/pages/${encodeURIComponent(pageId)}`
 
   const menuPath = (projectId: string, nodeId: string): string => `${projectPath(projectId)}/menu/${encodeURIComponent(nodeId)}`
@@ -1479,6 +1571,12 @@ export function createHttpClient(
         )
       ).module,
     deleteMyModule: (moduleId) => request<void>('DELETE', myModulePath(moduleId), SHAPES.noBody),
+    uploadAsset: (projectId, file, name, options) => uploadAsset(projectId, file, name, options),
+    listAssets: (projectId, options) => request<AssetList>('GET', `${projectPath(projectId)}/assets`, SHAPES.assetList, undefined, options),
+    claimAssets: (projectId, ids, from) =>
+      request<AssetClaimResult>('POST', `${projectPath(projectId)}/assets/claim`, SHAPES.assetClaim, { ids: [...ids], from }),
+    claimMyAssets: (ids, fromProjectId) =>
+      request<AssetClaimResult>('POST', '/me/assets/claim', SHAPES.assetClaim, { ids: [...ids], from: { projectId: fromProjectId } }),
     listSnapshots: (projectId) => request<SnapshotSummary[]>('GET', `${projectPath(projectId)}/snapshots`, SHAPES.snapshotList),
     // **응답이 더 넓다(`payload`가 붙는다).** `SHAPES.snapshot`은 그것을 보지 않고 통과시킨다 —
     // 이 화면이 payload를 읽지 않기 때문이다(`api/client.ts`의 `createSnapshot` 주석).

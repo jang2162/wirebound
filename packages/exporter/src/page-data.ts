@@ -61,4 +61,12 @@ export interface ExportPageData {
    */
   hrefs: Record<string, string | null>
   markers: ExportMarker[]
+  /**
+   * 이 문서가 든 그림 id → **이 파일에서 본** 상대 경로(`assets/images/<id>.<확장자>`). 번들에 안 실린 그림(그 프로젝트가 안 가진 id)은 키가 없다 —
+   * 런타임의 `assetUrl` 이 `null` 을 내 «그림을 불러올 수 없음» 표지가 선다. 실린 그림이 없는 페이지는 키째 없다 — 그림 없는 번들의 바이트가 그대로다.
+   */
+  images?: Record<string, string>
 }
+
+/** 번들 안 그림의 자리 — `assets/images/<id>.<확장자>`. */
+export const IMAGES_DIRECTORY = 'assets/images'

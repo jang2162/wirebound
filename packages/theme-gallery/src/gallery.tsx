@@ -3,7 +3,7 @@ import { renderDocument } from '@wirebound/renderer'
 import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { useRef, type CSSProperties, type ReactElement } from 'react'
 import { GalleryOverlay } from './overlay'
-import { GALLERY_SAMPLES, type GallerySample } from './samples'
+import { galleryAssetUrl, GALLERY_SAMPLES, type GallerySample } from './samples'
 
 export interface GalleryItem {
   type: string
@@ -64,7 +64,7 @@ function GalleryEntry(props: { theme: ThemeDefinition; item: GalleryItem; showOv
         <strong>{itemTitle(props.theme, item)}</strong>
         <span>{item.sample.label}</span>
       </div>
-      <div ref={stage}>{renderDocument(galleryItemDocument(item), { theme: props.theme })}</div>
+      <div ref={stage}>{renderDocument(galleryItemDocument(item), { theme: props.theme, assetUrl: galleryAssetUrl })}</div>
       {props.showOverlay && <GalleryOverlay stage={stage} nodeId={item.sample.node.id} />}
     </div>
   )

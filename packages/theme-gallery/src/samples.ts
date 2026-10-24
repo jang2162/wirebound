@@ -29,6 +29,39 @@ const input = (id: string, props: Record<string, unknown> = {}): WbNode => ({ id
 const LONG_WORD = 'hong.gildong.very.long.account@examplecompany.co.kr'
 
 /**
+ * 갤러리 표본 그림 하나 — 16×9 PNG(324 바이트). `id` 는 그 바이트의 sha256 이다(그림 id 의 꼴 그대로). 갤러리 · `wb-theme check` · 축소판은 이 id 만
+ * `data:` 로 푼다(`galleryAssetUrl`) — 테마 작성자가 그림 든 자리표시자를 본다. 저장소 밖 주소를 싣지 않는다(오프라인 · 바깥 요청 없음).
+ */
+export const GALLERY_SAMPLE_IMAGE = {
+  id: 'e3e75095bf6b2a07389e46d9167ce506d6d76a6a6706ae3aa9c8f435b95a8709',
+  url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAIAAAC0SDtlAAABC0lEQVR42g3LoY0FIRRA0W3mezyeAvAoDJIETfCgJ0GOweEQWIJ/ldwmdo4/fz+P8miP8ViP8wRP8hRP9Tye1zM923M94vn7RVRER0zERlwkRFKkRGrkibyRGdmRG5H4hYzK6IzJ2IzLhEzKlEzNPJk3MzM7czOSv9BQDd0wDdtwjdBIjdKojafxNmZjN25D2hc6qqM7pmM7rhM6qVM6tfN03s7s7M7tSP/CQA30wAzswA3CIA3KoA6ewTuYgz24AxlfWKiFXpiFXbhFWKRFWdTFs3gXc7EXdyHrCwd10AdzsAd3CId0KId6eA7vYR724R7kfEFQghaMYAUnBCEJRajCI7zCFLZwBRH+AdBrHdCHpvOyAAAAAElFTkSuQmCC',
+  width: 16,
+  height: 9,
+} as const
+
+/** 갤러리가 그리는 그림 주소 — 표본 그림만 푼다. 그 밖의 id 는 못 읽는 그림(`null`)이다. */
+export function galleryAssetUrl(id: string): string | null {
+  return id === GALLERY_SAMPLE_IMAGE.id ? GALLERY_SAMPLE_IMAGE.url : null
+}
+
+/** 그리기 값을 정한 자리표시자 표본의 이름 — 테마가 그 값을 따르는지 재는 자가 이 이름으로 칸을 고른다. */
+export const PLACEHOLDER_SET_SAMPLE = 'Placeholder — 정한 색 · 모서리 · 여백'
+
+/** 그 표본의 props. 색은 테마 기본값과 겹치지 않게 골랐다 — 겹치면 테마가 변수를 무시해도 같은 색이 나와 자가 못 가른다. */
+export const PLACEHOLDER_SET_PROPS = {
+  label: '정한 값',
+  width: 240,
+  height: 64,
+  background: '#fde047',
+  border: 'solid',
+  borderColor: '#dc2626',
+  radius: 12,
+  color: '#7c2d12',
+  fontSize: 15,
+  padding: 6,
+} as const
+
+/**
  * 카탈로그 컴포넌트마다 표본 노드. 갤러리가 manifest 가 선언한 variant 마다 한 번씩 그린다(`galleryItems`).
  *
  * **`variant` 를 적지 않는다** — 갤러리가 선언된 variant 를 붙인다. `variantFrom` 컴포넌트(`Text` · `Divider`)는
@@ -303,5 +336,22 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     { label: 'Divider — 가로', node: { id: 'div', type: 'Divider', props: { direction: 'horizontal' } } },
     { label: 'Divider — 세로', node: { id: 'div2', type: 'Divider', props: { direction: 'vertical' } } },
   ],
-  Placeholder: [{ label: 'Placeholder — 높이 120', node: { id: 'ph', type: 'Placeholder', props: { label: '광고', height: 120 } } }],
+  Placeholder: [
+    { label: 'Placeholder — 높이 120', node: { id: 'ph', type: 'Placeholder', props: { label: '광고', height: 120 } } },
+    // 정한 그리기 값을 테마가 따르는지 `wb-theme check` · `wb-theme shots` 가 이 표본으로 잰다(`PLACEHOLDER_SET_SAMPLE`).
+    { label: PLACEHOLDER_SET_SAMPLE, node: { id: 'ph2', type: 'Placeholder', props: PLACEHOLDER_SET_PROPS } },
+    {
+      label: 'Placeholder — 그림(160×90 · 채움)',
+      node: { id: 'ph4', type: 'Placeholder', props: { label: '배너 그림', width: 160, height: 90, image: GALLERY_SAMPLE_IMAGE.id } },
+    },
+    {
+      label: 'Placeholder — 칩(내용)',
+      node: {
+        id: 'ph3',
+        type: 'Placeholder',
+        props: { background: '#2563eb', color: '#ffffff', radius: 999, padding: 4, border: 'none' },
+        children: [child('ph3a', '퀴즈'), child('ph3b', '×')],
+      },
+    },
+  ],
 }

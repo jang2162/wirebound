@@ -343,3 +343,54 @@ describe('저장 뒤', () => {
     expect(nameInput().value).toBe('카드')
   })
 })
+
+/** **그림**(`src/edit/claim-images.ts`) — 개인 모듈로 저장하면 든 그림을 먼저 개인 몫으로 가져온다. 하나라도 못 가져오면 저장하지 않는다. */
+describe('그림', () => {
+  const PICTURED = 'e'.repeat(64)
+  const pictured = (): PageDocument =>
+    pageDoc({ id: 'n-root', type: 'Page', children: [{ id: 'n-ph', type: 'Placeholder', props: { label: '배너', image: PICTURED } }] })
+
+  function claims(failed: boolean) {
+    const calls: { ids: string[]; from: string; createdBefore: number }[] = []
+    return {
+      calls,
+      api: (fake: Fake): Partial<ApiClient> => ({
+        ...fake.api,
+        listAssets: async () => ({ assets: [], usedBytes: 0, limitBytes: 1, fileLimitBytes: 1 }),
+        claimMyAssets: async (ids, from) => {
+          calls.push({ ids: [...ids], from, createdBefore: fake.created.length })
+          return failed ? { claimed: [], failed: ids.map((id) => ({ id, reason: 'quota' as const })) } : { claimed: [...ids], failed: [] }
+        },
+      }),
+    }
+  }
+
+  it('개인으로 저장 — 저장 전에 이 프로젝트에서 개인 몫으로 가져오고 그림을 그대로 담는다', async () => {
+    const fake = server()
+    const seen = claims(false)
+    await openPage(pictured(), { apiOverrides: seen.api(fake) })
+    openSave('Placeholder')
+    await saveAs('배너')
+    await waitFor(() => expect(fake.created).toHaveLength(1))
+    expect(seen.calls).toEqual([{ ids: [PICTURED], from: PROJECT_ID, createdBefore: 0 }])
+    expect((fake.created[0]!.nodes[0]!.props as { image?: string }).image).toBe(PICTURED)
+  })
+
+  it('못 가져오면 저장하지 않고 상자 안에 까닭을 말한다 · 프로젝트로 저장하면 가져오기를 부르지 않는다', async () => {
+    const fake = server()
+    const seen = claims(true)
+    await openPage(pictured(), { apiOverrides: seen.api(fake) })
+    openSave('Placeholder')
+    await saveAs('배너')
+    await waitFor(() =>
+      expect(within(dialog()).getByRole('alert').textContent).toBe(
+        '그림 1개를 개인 몫으로 가져오지 못해 저장하지 않았습니다 — 개인 그림 공간이 찼습니다',
+      ),
+    )
+    expect(fake.created).toEqual([])
+    fireEvent.click(within(within(dialog()).getByRole('group', { name: '저장할 곳' })).getByRole('radio', { name: '프로젝트 모듈' }))
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(fake.targets).toEqual(['project']))
+    expect(seen.calls).toHaveLength(1)
+  })
+})

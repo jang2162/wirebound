@@ -15,7 +15,15 @@ import {
   type WbNode,
   zoneList,
 } from '@wirebound/schema'
-import { DEFAULT_VIEWS, type NodeBinding, type ThemeDefinition, type ViewField, type ViewItem } from '@wirebound/theme-sdk'
+import {
+  AssetProvider,
+  DEFAULT_VIEWS,
+  type AssetResolver,
+  type NodeBinding,
+  type ThemeDefinition,
+  type ViewField,
+  type ViewItem,
+} from '@wirebound/theme-sdk'
 import { Fragment, type ReactElement, type ReactNode } from 'react'
 import { activeStates, type WbAttrs, type WbHandlers } from './attrs'
 import { FallbackNode } from './fallback'
@@ -98,6 +106,12 @@ export interface RenderOptions {
    * 타입(접힌 `SearchForm` 의 단추 구역)이면 고른 구역이 화면에 없다(리뷰 RV-ZE L2).
    */
   reveal?: readonly RevealTarget[]
+  /**
+   * **그림 id → 주소**(SDK `useAsset` 이 읽는다). 캔버스는 `/api/projects/:p/assets/:id`, 내보낸 번들은 페이지 깊이에 맞춘 상대 주소, 갤러리는 표본
+   * `data:`. 없으면 그림을 든 자리표시자가 «그림을 불러올 수 없음» 표지를 그린다. 문맥으로 내리므로 노드 캐시의 열쇠에 안 든다 — 같은 문서를 다른
+   * 주소로 그려도 캐시된 엘리먼트가 렌더 때 이 함수를 읽는다.
+   */
+  assetUrl?: AssetResolver
 }
 
 /** 펼쳐 보일 것 하나 — 노드 id, 또는 노드의 구역(`RenderOptions.reveal`). */
@@ -285,7 +299,13 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
   // 상호작용 타겟을 풀려면 **트리 전체**가 필요한데(다른 노드를 가리킨다) 이 진입점이 받는
   // 것은 노드 하나다. 그 노드를 뿌리로 삼는다 — 부분 트리를 그리는 호출자에게는 그 부분이
   // 곧 세계이고, 밖을 가리키는 타겟은 `사라진 노드`가 되어 `issues`로 말하는 경로로 간다.
-  return renderNodeIn(node, node, withReveal(node, options))
+  return withAssets(renderNodeIn(node, node, withReveal(node, options)), options)
+}
+
+/** 그림 주소를 문맥으로 연다(`RenderOptions.assetUrl`). 없으면 엘리먼트 그대로 — 그림 없는 렌더는 한 글자도 안 바뀐다. */
+function withAssets(tree: ReactElement, options: RenderOptions): ReactElement {
+  if (options.assetUrl === undefined) return tree
+  return <AssetProvider value={options.assetUrl}>{tree}</AssetProvider>
 }
 
 /**
@@ -693,10 +713,13 @@ const TRIGGERS_OF: Record<string, InteractionTrigger[]> = (() => {
 export function renderDocument(doc: AnyDocument, options: RenderOptions = {}): ReactElement {
   warnUnusedViewKeys(options.theme)
   const root = doc?.root as WbNode
-  return renderNodeIn(
-    root,
-    root,
-    withReveal(root, { ...options, viewState: knownViewState(doc, options.viewState), viewStates: documentStates(doc) }),
+  return withAssets(
+    renderNodeIn(
+      root,
+      root,
+      withReveal(root, { ...options, viewState: knownViewState(doc, options.viewState), viewStates: documentStates(doc) }),
+    ),
+    options,
   )
 }
 

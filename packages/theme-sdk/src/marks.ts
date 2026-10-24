@@ -27,6 +27,7 @@ export const MARKED_PROPS: Readonly<Record<string, Readonly<Record<string, MarkK
   Chip: { removable: 'flag' },
   Affix: { tone: 'value' },
   Media: { kind: 'value', ratio: 'value' },
+  Placeholder: { border: 'value', align: 'value', imageFit: 'value' },
 })
 
 /**

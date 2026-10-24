@@ -579,3 +579,77 @@ describe('역할 · 모드', () => {
     ])
   })
 })
+
+/**
+ * **그림 — 개인 몫과 프로젝트 사이**(`src/edit/claim-images.ts`). 개인 모듈을 넣거나 프로젝트로 복사하면 그림을 개인 몫에서 이 프로젝트로 먼저 가져오고
+ * 못 가져온 것을 비운 뒤 말한다. 프로젝트 모듈을 개인 몫으로 복사하면 그림을 개인 몫으로 가져오고, 하나라도 못 가져오면 복사하지 않는다.
+ */
+describe('그림 — 개인 몫과 프로젝트 사이', () => {
+  const KEPT = 'c'.repeat(64)
+  const LOST = 'd'.repeat(64)
+  const pictured: WbNode[] = [
+    { id: 'p_a', type: 'Placeholder', props: { label: '배너', image: KEPT } },
+    { id: 'p_b', type: 'Placeholder', props: { label: '로고', image: LOST } },
+  ]
+  const imagesOf = (nodes: readonly WbNode[]) => nodes.map((node) => (node.props as { image?: string } | undefined)?.image)
+
+  function withClaims(fake: Server, failed: { id: string; reason: 'not-readable' | 'quota' }[]) {
+    const claims: { projectId: string; ids: string[]; from: unknown; sentBefore: number }[] = []
+    const mine: { ids: string[]; from: string }[] = []
+    fake.api.claimAssets = async (projectId, ids, from) => {
+      claims.push({ projectId, ids: [...ids], from, sentBefore: fake.sent.length })
+      return { claimed: ids.filter((id) => !failed.some((one) => one.id === id)), failed: failed.filter((one) => ids.includes(one.id)) }
+    }
+    fake.api.claimMyAssets = async (ids, from) => {
+      mine.push({ ids: [...ids], from })
+      return { claimed: ids.filter((id) => !failed.some((one) => one.id === id)), failed: failed.filter((one) => ids.includes(one.id)) }
+    }
+    fake.api.listAssets = async () => ({ assets: [], usedBytes: 0, limitBytes: 1, fileLimitBytes: 1 })
+    return { claims, mine }
+  }
+
+  it('개인 모듈 넣기 — 편집 전에 개인 몫에서 가져오고 · 못 가져온 그림만 비우고 · 정보 통지로 말한다', async () => {
+    const fake = server([], [{ ...personalModule('p-1', '그림 묶음'), nodes: pictured }])
+    const seen = withClaims(fake, [{ id: LOST, reason: 'quota' }])
+    await openWithPalette(fake)
+    await openModules()
+    await insert('그림 묶음')
+    await waitFor(() => expect(fake.sent).toHaveLength(1))
+    expect(seen.claims).toEqual([{ projectId: PROJECT_ID, ids: [KEPT, LOST], from: { personal: true }, sentBefore: 0 }])
+    expect(imagesOf(fake.held().root.children!.slice(2))).toEqual([KEPT, undefined])
+    await waitFor(() => expect(infoNotice()).toBe('그림 1개를 가져오지 못해 비웠습니다 — 이 프로젝트의 그림 공간이 찼습니다'))
+  })
+
+  it('프로젝트 모듈 넣기는 가져오기를 부르지 않는다 — 같은 프로젝트다', async () => {
+    const fake = server([{ ...projectModule('m-1', '그림 묶음'), nodes: pictured }])
+    const seen = withClaims(fake, [])
+    await openWithPalette(fake)
+    await openModules()
+    await insert('그림 묶음')
+    await waitFor(() => expect(fake.sent).toHaveLength(1))
+    expect(seen.claims).toEqual([])
+    expect(imagesOf(fake.held().root.children!.slice(2))).toEqual([KEPT, LOST])
+  })
+
+  it('«프로젝트 모듈로 복사» — 개인 몫에서 가져오고 못 가져온 그림은 비운 채 저장하고 말한다', async () => {
+    const fake = server([], [{ ...personalModule('p-1', '그림 묶음'), nodes: pictured }])
+    const seen = withClaims(fake, [{ id: LOST, reason: 'not-readable' }])
+    await openWithPalette(fake)
+    await openModules()
+    fireEvent.click(within(group('개인 모듈')).getByRole('button', { name: '그림 묶음 프로젝트 모듈로 복사' }))
+    await waitFor(() => expect(fake.calls.created).toHaveLength(1))
+    expect(seen.claims.map((one) => one.from)).toEqual([{ personal: true }])
+    expect(imagesOf(fake.calls.created[0]!.nodes)).toEqual([KEPT, undefined])
+    expect(infoNotice()).toBe(`${copiedNotice('그림 묶음', 'project')} 그림 1개를 가져오지 못해 비웠습니다 — 출처에 들어갈 수 없습니다`)
+  })
+
+  it('«개인 모듈로 복사» — 그림을 개인 몫으로 가져오고, 하나라도 못 가져오면 복사하지 않고 까닭을 말한다', async () => {
+    const fake = server([{ ...projectModule('m-1', '그림 묶음'), nodes: pictured }])
+    const seen = withClaims(fake, [{ id: LOST, reason: 'quota' }])
+    await openWithPalette(fake)
+    await openModules()
+    fireEvent.click(within(group('프로젝트 모듈')).getByRole('button', { name: '그림 묶음 개인 모듈로 복사' }))
+    await waitFor(() => expect(notice()).toBe('그림 1개를 개인 몫으로 가져오지 못해 저장하지 않았습니다 — 개인 그림 공간이 찼습니다'))
+    expect({ mine: seen.mine, created: fake.calls.createdMine }).toEqual({ mine: [{ ids: [KEPT, LOST], from: PROJECT_ID }], created: [] })
+  })
+})

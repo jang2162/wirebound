@@ -332,6 +332,38 @@ export interface ThemePackagesTable {
   hidden_at: ColumnType<Date | null, Date | null | undefined, Date | null>
 }
 
+/**
+ * 그림 바이트 한 벌(`0030-assets`) — 이름이 내용의 sha256 이다. 마지막 소유 행이 지워지면 트리거가 함께 지운다(그 마이그레이션의 머리말).
+ * `bytes` 는 읽을 때 `pg` 가 `Buffer` 로 준다.
+ */
+export interface AssetBlobsTable {
+  sha256: string
+  bytes: ColumnType<Buffer, Buffer | Uint8Array, never>
+  mime: string
+  size: number
+  width: number
+  height: number
+  created_at: Generated<Date>
+}
+
+/** 프로젝트가 가진 그림(`0030-assets`). 행이 있어야 그 프로젝트에서 그 그림을 읽는다. */
+export interface ProjectAssetsTable {
+  project_id: string
+  sha256: string
+  /** 올린 파일 이름(`X-Asset-Name`) — 화면의 «올린 그림에서» 목록이 보인다. 가져온 그림(`claim`)은 출처의 이름이다. */
+  name: string
+  uploaded_by: string | null
+  created_at: Generated<Date>
+}
+
+/** 사람이 가진 그림(`0030-assets`) — 개인 모듈이 든 그림. 프로젝트에 매이지 않는다. */
+export interface PersonalAssetsTable {
+  owner_id: string
+  sha256: string
+  name: string
+  created_at: Generated<Date>
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
@@ -350,4 +382,7 @@ export interface Database {
   personal_modules: PersonalModulesTable
   api_tokens: ApiTokensTable
   theme_packages: ThemePackagesTable
+  asset_blobs: AssetBlobsTable
+  project_assets: ProjectAssetsTable
+  personal_assets: PersonalAssetsTable
 }

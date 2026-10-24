@@ -5,6 +5,7 @@ export type {
   BundleComment,
   BundleFile,
   BundleNodeError,
+  BundleImage,
   BundlePage,
   BundleTheme,
   ExportBundleOptions,

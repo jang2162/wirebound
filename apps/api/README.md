@@ -273,6 +273,9 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 | `conflict` | 409 | 유니크 제약 위반, 마지막 owner 제거 시도, 자식이 있는 메뉴 삭제 시도, **스냅샷 태그 중복**, **스냅샷 수집 중 프로젝트 변경**, **복원의 다섯 갈래**(지문 불일치·안전망 태그 중복·레이아웃 불일치·코멘트 작성자 없음·테마 패키지 없음), **같은 테마 패키지 판 재업로드**, **테마 바인딩의 `rev` 불일치**(본문에 `current` — 아래 «테마 패키지와 프로젝트 테마») 등 |
 | `locked` | **423** | **다른 사용자가 편집 중인 노드**(설계서 「소프트 잠금」)를 건드렸다. `message`가 누가 잡고 있는지 말한다. **`conflict`(409)와 갈라 둔 것이 계약이다** — 아래 *"소프트 잠금"* 참고 |
 | `rate-limited` | **429** + `Retry-After` | **로그인 시도가 너무 많다**(`POST /api/auth/login` · `POST /api/auth/password` — 둘이 같은 기록에 센다). 비밀번호를 견주지 않았다 — 옳은 비밀번호도 이 답이다. `Retry-After`(초) 뒤에 풀린다 — 서버에 손이 닿는 사람이 명령으로 먼저 풀 수 있다. 규칙은 아래 «로그인 시도 제한» |
+| `too-large` | **413** | **그림 파일이 한도(`ASSET_FILE_MAX_BYTES`)를 넘었다**(`POST …/assets`) — 문장이 한도와 그 파일의 크기를 말한다(«그림은 5 MB 까지 올릴 수 있습니다(이 파일 7.2 MB)»). 본문은 읽기 전에 끊긴다(`content-length`). 다른 라우트의 본문 상한은 위 `bad-request` 413 이다 |
+| `unsupported-media` | **415** | **받지 않는 그림 꼴** — 바이트가 PNG · JPEG · WebP · GIF · SVG 가 아니다(`POST …/assets`). 꼴은 머리 바이트로 가른다 — `Content-Type` · 확장자를 안 믿는다 |
+| `asset-quota` | **409** | **그림 공간이 찼다** — 프로젝트(`ASSET_PROJECT_MAX_BYTES`) · 사람(`ASSET_PERSONAL_MAX_BYTES`). `conflict` 와 갈라 둔다(화면이 이 코드로 «공간이 찼다» 를 말한다) |
 | `validation-failed` | 422 | 봉투는 유효하지만 카탈로그 규칙(컴포넌트 타입·props·variant 등)을 위반함. `issues`에 `ValidationIssue[]`. **테마 패키지 · 바인딩의 거절도 이 줄이다** — `issues[].code` 가 까닭을 가른다(아래 «테마 패키지와 프로젝트 테마») |
 | `internal` | 500 | 예상하지 못한 서버 오류. **그 요청은 커밋 전이다**(웹의 코멘트 게시가 그렇게 읽는다). COMMIT 답을 잃은 쓰기가 **커밋 안 된 것을 확인한** 판도 이 줄이다 — «…요청이 반영되지 않았습니다 — 다시 시도하세요»(아래 «COMMIT 답을 잃은 편집») |
 | `internal` | **503** | **DB 가 답하지 않았다** — 연결이 끊겼거나 닿지 못했거나, **COMMIT 에 서버의 답이 아닌 거절이 왔다**. **그 요청이 반영됐는지 모른다**(COMMIT 의 답만 잃었을 수 있다). 500 과 갈라 둔 것이 계약이다 — 경계는 `src/db/connection-loss.ts`, 번역은 `src/http/error-handler.ts`. **문장은 메서드로 갈린다** — 쓰는 요청은 «…요청이 반영됐는지 알 수 없습니다», GET · HEAD · OPTIONS 는 «…불러오지 못했습니다 — 잠시 뒤 다시 시도하세요»(읽기는 «반영»을 말하지 않는다). WS `patch`의 `patch-error`도 같은 판에 같은 `status` · 쓰기 문장이다(`http/error-handler.ts`의 `dbUnreachableFailure`). 가르는 값은 숫자다 — 문장은 사람에게만 간다. **편집(`PATCH .../ops` · WS `patch`)은 COMMIT 답을 잃으면 먼저 확인한다** — 아래 "편집 파이프라인"의 «COMMIT 답을 잃은 편집» |
@@ -331,6 +334,8 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/me/modules` | POST | 로그인만(세션) | `{ name, nodes: WbNode[] }` | 201 `{ module }` — **역할과 무관하다**(viewer 도 저장한다). 거름 · 거절은 `POST /api/projects/:projectId/modules` 와 같다(400 · 422 `nested-page`) |
 | `/api/me/modules/:moduleId` | PATCH | 로그인만(세션) | `{ name }` | 200 `{ module }` — 이름만 바꾼다. 없는 id · 남의 것은 404 |
 | `/api/me/modules/:moduleId` | DELETE | 로그인만(세션) | — | 204. 없는 id · 남의 것은 404, uuid 가 아닌 id 는 400 |
+| `/api/me/assets/claim` | POST | 로그인만(세션) | `{ ids: sha256[](1~200), from: { projectId } }` | 200 `{ claimed, failed: [{ id, reason }] }` — 그 프로젝트의 **멤버면**(역할 무관) 그 프로젝트가 가진 그림을 **개인 몫**에 더한다(바이트는 안 옮긴다 · 아래 "그림"). 못 옮긴 까닭은 `not-readable`(출처에 없음 · 멤버가 아님 · 출처가 지워짐을 가르지 않는다) · `quota`(개인 한도). 토큰으로 부르면 401(`:projectId` 가 없는 라우트라 토큰이 사람을 안 채운다) |
+| `/api/me/assets/:id` | GET | 로그인만(세션) | — | 200 그림 바이트(머리는 아래 "그림"). **남의 개인 그림 · 없는 해시는 같은 404**(상태 · 몸 · 머리). 토큰으로 부르면 401 |
 | `/api/projects` | POST | 로그인만 | `{ name, slug, description? }` | 201 `{ ...프로젝트, role }` — 호출자가 owner가 되므로 `role`은 항상 `"owner"`다 |
 | `/api/projects` | GET | 로그인만 | — | 200 `{ ...프로젝트, role }[]`(호출자가 속한 것만, `created_at` 오름차순). 각 항목의 `role`은 **그 호출자의** 역할이다 |
 | `/api/projects/:projectId` | GET | viewer | — | 200 `{ ...프로젝트, role, themeRev }` — `themeRev` 는 테마 바인딩의 `rev`(`theme-changed` 를 놓친 탭이 따라잡는 값) |
@@ -368,6 +373,10 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/modules` | POST | **editor** | `{ name, nodes: WbNode[] }` | 201 `{ module }`. `nodes` 는 1개 이상 — 넣으면 고른 자리의 형제가 될 것이다. `marker` 와 **묶음 밖 노드를 겨냥하는 액션은 저장하며 걷는다**. 이름 1~60자 밖 · 노드 0개 · 노드 봉투 위반 · 선언되지 않은 키 · NUL · 짝 없는 서로게이트(이름 · 노드)는 400, `Page` 가 든 노드는 422 `nested-page`. **이름 중복은 오류가 아니다** |
 | `/api/projects/:projectId/modules/:moduleId` | PATCH | **editor** | `{ name }` | 200 `{ module }` — **이름만 바꾼다**(내용을 바꾸려면 새로 저장하고 옛것을 지운다). 이름 규칙은 저장과 같다. 없는 id · 남의 프로젝트의 id 는 404 |
 | `/api/projects/:projectId/modules/:moduleId` | DELETE | **editor** | — | 204. 없는 id · 남의 프로젝트의 id 는 404, uuid 가 아닌 id 는 400 |
+| `/api/projects/:projectId/assets` | POST | **editor**(세션 · 그 프로젝트의 토큰) | 본문 = 그림 바이트 그대로(multipart 아님 · `Content-Type` 은 안 믿는다) · 머리 `X-Asset-Name`(파일 이름 · `encodeURIComponent` · 선택) | 201 `{ id, name, mime, size, width, height, createdAt }` — `id` 는 바이트의 sha256. **이미 이 프로젝트에 있으면 200 · 같은 답**(한도를 안 센다). 413 `too-large` · 415 `unsupported-media` · 422(`issues[].code` `asset-dimensions`) · 409 `asset-quota` — 아래 "그림" |
+| `/api/projects/:projectId/assets` | GET | viewer | — | 200 `{ assets: [위와 같은 모양], usedBytes, limitBytes, fileLimitBytes }` — 최근 것 먼저 |
+| `/api/projects/:projectId/assets/:id` | GET | viewer(세션 · 토큰) | — | 200 그림 바이트(머리는 아래 "그림"). **이 프로젝트의 소유 행이 없으면 404** — 남의 프로젝트 그림의 해시 · 없는 해시가 같은 답이다 |
+| `/api/projects/:projectId/assets/claim` | POST | **editor**(세션만) | `{ ids: sha256[](1~200), from: { projectId } \| { personal: true } }` | 200 `{ claimed, failed: [{ id, reason }] }` — 출처에서 **읽을 수 있는** 그림만 이 프로젝트에 소유 행을 더한다. 다른 프로젝트가 출처면 그 프로젝트의 멤버여야 한다. 까닭은 `not-readable` · `quota`. 토큰으로 부르면 403 |
 | `/api/projects/:projectId/export/preview` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — **내려받기 전에 화면이 말할 것**(아래 "내보내기"). **형식마다 답이 다르다**: html은 `{ format, pages, duplicateTargets, brokenLinks, errors, themeId, themeWarning, fileName }`, pptx는 `{ format, pages, screenless, screenFailures, fontWarning, fileName }`. 페이지가 없으면 409, 모르는 형식은 400, 내보내기가 밀려 있으면 503 + `Retry-After` |
 | `/api/projects/:projectId/export` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — html이면 `application/zip`(설계서 「HTML 정적 번들」), pptx면 `application/vnd.openxmlformats-officedocument.presentationml.presentation`(설계서 「로드맵」). 이름은 `Content-Disposition`에만 있다. 페이지가 없으면 409, 모르는 형식은 400, 내보내기가 밀려 있으면 503 + `Retry-After` |
 | `/api/projects/:projectId/ws` | GET(업그레이드) | viewer | — | **101** — WebSocket. 아래 "실시간(WebSocket)" 참고. 업그레이드가 아닌 평범한 GET에도 같은 가드가 먼저 돈다(비멤버 404) |
@@ -1314,6 +1323,39 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 
 **복원이 *"그때"*로 읽어야 하는 값은 `payload.capturedAt`이다.** `created_at`은 그
 값의 사본이고, 목록 정렬이 쓰는 것이 그쪽이다.
+
+### 그림
+
+자리표시자의 그림(설계서 「그림」 — §11.4). **바이트는 DB 의 덩이 한 벌(`asset_blobs` — sha256 이 이름)이고 누가 가졌는지는 소유 행
+(`project_assets` · `personal_assets`)이 든다** — `0030-assets`. 노드는 `props.image = <sha256>` 만 든다. 같은 바이트를 두 번 올리면 같은 덩이에
+소유 행만 있다.
+
+- **해시를 안다고 읽을 수 없다.** 읽기(`GET …/assets/:id` · `GET /api/me/assets/:id`)는 그 프로젝트(그 사람)의 소유 행이 있어야 선다 — 남의 그림 ·
+  없는 해시 · 지워진 덩이는 같은 질의 · 같은 404 다. 가져오기(`claim`)가 출처를 읽을 수 있는지 보는 것도 같은 규칙이다.
+- **꼴** — 머리 바이트로 가른다: PNG · JPEG · WebP(VP8 · VP8L · VP8X) · GIF · 뿌리가 `svg` 인 XML(`src/services/asset-format.ts`). 크기는 머리에서
+  읽는다(SVG 는 `viewBox` → 수인 `width` · `height` → 300×150). 가로 · 세로 8192px · 넓이 40,000,000px 밖은 422.
+- **응답 머리 — 그림 응답 전부에 싣는다**(SVG 만이 아니다): `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` ·
+  `X-Content-Type-Options: nosniff` · `Cross-Origin-Resource-Policy: same-origin` · `Cache-Control: private, max-age=31536000, immutable` ·
+  `Content-Disposition: inline; filename=…`(ASCII 대체 + `filename*=UTF-8''…`) · `Content-Type` 은 올릴 때 바이트로 가른 꼴. 주소를 직접 열어도 SVG 의
+  스크립트가 안 돈다.
+- **한도** — env 셋(바이트 · 비우면 기본값 · 0 은 거절해 안 뜬다):
+
+  | env | 기본 | 넘으면 |
+  |---|---|---|
+  | `ASSET_FILE_MAX_BYTES` | 5242880(5 MB) | 413 `too-large` |
+  | `ASSET_PROJECT_MAX_BYTES` | 209715200(200 MB) — 그 프로젝트 소유 행의 덩이 크기 합 | 409 `asset-quota` |
+  | `ASSET_PERSONAL_MAX_BYTES` | 104857600(100 MB) — 개인 몫의 합 | 409 `asset-quota`(가져오기의 `failed[].reason` 은 `quota`) |
+
+  같은 덩이를 두 프로젝트가 가지면 두 프로젝트에 다 센다. 한도는 소유자마다의 자물쇠(`pg_advisory_xact_lock`) 안에서 센다 — 둘이 동시에 올려도
+  넘지 않는다(`test/assets-race.test.ts`).
+- **쓰기의 잠금** — 올리기 · 가져오기(프로젝트로)는 프로젝트 행 `KEY SHARE` → 덩이 `KEY SHARE` → 한도 자물쇠 → 소유 행 → 재확인이다(차례의 근거는
+  `src/repos/assets.ts` 머리말). 그래서 **복원이 도는 동안 막힌다**(`test/restore-lock-census.test.ts`). 가져오기는 출처 프로젝트 행도 `KEY SHARE`
+  로 잡고 출처의 멤버 행을 `FOR SHARE` 로 읽는다.
+- **지우기는 없다** — 그림은 프로젝트 · 사람과 함께만 지운다. 소유 행이 CASCADE 로 빠지면 두 소유 표의 `AFTER DELETE` 트리거가 마지막 소유 행을
+  잃은 덩이를 지운다(남이 가진 덩이는 남는다).
+- **번들** — 내보내기는 페이지 문서가 든 그림 가운데 **그 프로젝트가 가진 것만** `assets/images/<id>.<ext>` 로 싣는다(`src/services/export-source.ts`
+  의 `readExportImages`). PPTX 는 그 번들을 찍는다.
+- **MCP · CLI 에는 그림 도구가 없다** — 이미 올린 그림의 id 를 `patch_page` 로 적을 수 있다.
 
 ### 모듈 응답 형태
 

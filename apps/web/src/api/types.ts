@@ -393,6 +393,37 @@ export interface ProjectModule {
  */
 export type PersonalModule = ProjectModule
 
+/** 프로젝트에 올린 그림 하나(`GET /api/projects/:projectId/assets` 의 항목 · 올리기의 답). `id` 가 그 바이트의 sha256 이다. */
+export interface AssetInfo {
+  id: string
+  name: string
+  mime: string
+  size: number
+  width: number
+  height: number
+  createdAt: string
+}
+
+/** 프로젝트의 그림 목록 · 쓴 용량 · 한도(바이트). */
+export interface AssetList {
+  assets: AssetInfo[]
+  usedBytes: number
+  limitBytes: number
+  fileLimitBytes: number
+}
+
+/**
+ * 가져오기의 답 — 옮긴 그림 · 못 옮긴 그림과 까닭. `not-readable` 은 «출처에 없음 · 출처의 멤버가 아님 · 출처가 지워짐» 을 가르지 않는다
+ * (서버 `apps/api/src/routes/assets.ts` 머리말).
+ */
+export interface AssetClaimResult {
+  claimed: string[]
+  failed: { id: string; reason: 'not-readable' | 'quota' }[]
+}
+
+/** 가져오기의 출처 — 다른 프로젝트 · 내 개인 몫. */
+export type AssetSource = { projectId: string } | { personal: true }
+
 export interface SnapshotSummary {
   id: string
   tag: string

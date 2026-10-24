@@ -63,6 +63,7 @@ import { lockProjectForRestore } from '../src/repos/snapshots'
 import { routeCensus } from './guarded-routes'
 import { createMenuNode, createPage, createProject, getTestDb, resetRealData, signup, withRealApi, type TestContext } from './helpers'
 import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
+import { png } from './asset-samples'
 
 const db = getTestDb()
 
@@ -97,7 +98,9 @@ interface Probe {
   label: string
   method: 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   url: (ids: Ids) => string
-  payload?: (ids: Ids) => Record<string, unknown>
+  payload?: (ids: Ids) => Record<string, unknown> | Buffer
+  /** 본문이 바이트인 쓰기(그림 올리기)의 꼴. */
+  contentType?: string
   /** 복원이 그 행을 쓰는가. `false`면 아래 "복원이 만지지 않는 자원" 절의 대상이다. */
   restoreWrites: boolean
   /** 기대: 잠금이 이 요청을 막는가. */
@@ -379,6 +382,27 @@ const PROBES: Probe[] = [
     blocked: false,
   },
   {
+    // **그림 쓰기 둘** — 둘 다 소유 행을 넣기 전에 프로젝트 행을 `KEY SHARE` 로 먼저 잡는다(`routes/assets.ts` · `lockProjectShared`). **막힌다** — 복원은 그림을
+    // 되돌리지 않지만(그림은 프로젝트와 함께만 지운다) 모듈 저장과 같은 부수 효과다.
+    route: 'POST /:projectId/assets',
+    label: '그림 올리기 — 프로젝트 행 `KEY SHARE` 때문에 막힌다',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/assets`,
+    payload: () => png(2, 2, 91),
+    contentType: 'image/png',
+    restoreWrites: false,
+    blocked: true,
+  },
+  {
+    route: 'POST /:projectId/assets/claim',
+    label: '그림 가져오기 — 같은 까닭으로 막힌다',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/assets/claim`,
+    payload: () => ({ ids: ['0'.repeat(64)], from: { personal: true } }),
+    restoreWrites: false,
+    blocked: true,
+  },
+  {
     // **API 토큰 쓰기 둘.**
     //
     // **막힌다 — `POST .../modules`와 같은 이유다.**
@@ -517,6 +541,7 @@ function fire(app: FastifyInstance, probe: Probe, ids: Ids) {
       method: probe.method,
       url: probe.url(ids),
       cookies: ids.cookie,
+      ...(probe.contentType === undefined ? {} : { headers: { 'content-type': probe.contentType } }),
       payload: probe.payload ? (probe.payload(ids) as never) : undefined,
     })
     .then((res) => {

@@ -111,6 +111,14 @@ export function registerErrorHandler(app: FastifyInstance): void {
       // 이미 하나 있다"*가 양쪽을 잰다). 우리 상한을 새로 두지 않는 것은
       // 이미 상한이 하나 있고 그것이 **우리 코드에 닿기 전에** 끊기 때문이다 — 두 벌이 되면
       // 어느 쪽이 끊었는지가 응답에서 갈리지 않는다.
+      // **본문 상한에 문장을 단 라우트**(라우트 옵션 `config.tooLarge` — 그림 올리기)는 그 문장 · `too-large` 로 답한다. 상한을 넘은 본문은
+      // 가드 전에 끊긴다(Fastify 가 `content-length` 를 보고 읽지 않는다) — 다른 라우트의 413 과 같은 자리이고 문장만 다르다.
+      const tooLarge = (request.routeOptions.config as { tooLarge?: (length: number | null) => string } | undefined)?.tooLarge
+      if (statusCode === ERROR_STATUS_PAYLOAD_TOO_LARGE && typeof tooLarge === 'function') {
+        const length = Number(request.headers['content-length'])
+        send(reply, statusCode, { code: 'too-large', message: tooLarge(Number.isFinite(length) ? length : null) })
+        return
+      }
       const message = statusCode === ERROR_STATUS_PAYLOAD_TOO_LARGE ? '요청 본문이 너무 큽니다' : '요청 형식이 올바르지 않습니다'
       send(reply, statusCode, { code: 'bad-request', message })
       return

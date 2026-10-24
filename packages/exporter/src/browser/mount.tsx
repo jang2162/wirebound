@@ -33,6 +33,8 @@ export interface ExportMountInput {
   /** 타겟 → 이 파일에서 본 상대 경로(`ExportPageData.hrefs`). */
   hrefs: Readonly<Record<string, string | null>>
   markers: readonly ExportMarker[]
+  /** 그림 id → 이 파일에서 본 상대 경로(`ExportPageData.images`). 없으면 그림이 없는 문서다 — 그림 든 자리표시자는 «그림을 불러올 수 없음» 이다. */
+  images?: Readonly<Record<string, string>>
   /** 말할 자리(셸의 `.wb-export-status`). 없으면 말하지 않는다. */
   status: Element | null
   /** 늘 머리에 서는 줄 — 번들을 못 쓴 까닭 따위. 조작마다 비우지 않는다. */
@@ -180,6 +182,7 @@ function ExportCanvas(props: {
     onNodeError: (error) => errors.push(error),
     interaction: { overlay, onEvent },
     viewState,
+    assetUrl: (id) => input.images?.[id] ?? null,
   })
 
   // 셸의 상태 줄. 빈 목록이면 줄을 감춘다 — 빈 상자가 남으면 목업이 밀린다.

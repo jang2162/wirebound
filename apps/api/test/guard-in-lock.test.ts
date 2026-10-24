@@ -62,6 +62,7 @@ import {
 } from './helpers'
 import { joinRoom, type WsProbe } from './ws-client'
 import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
+import { png, sha256 } from './asset-samples'
 
 const db = getTestDb()
 
@@ -183,6 +184,12 @@ async function projectState({ projectId, bob }: Pick<Fx, 'projectId' | 'bob'>) {
       .execute(),
     modules: await db.selectFrom('modules').selectAll().where('project_id', '=', projectId).orderBy('id').execute(),
     tokens: await db.selectFrom('api_tokens').select(['id', 'user_id', 'name']).where('project_id', '=', projectId).orderBy('id').execute(),
+    assets: await db
+      .selectFrom('project_assets')
+      .select(['sha256', 'name'])
+      .where('project_id', '=', projectId)
+      .orderBy('sha256')
+      .execute(),
   }
 }
 
@@ -2658,6 +2665,51 @@ const PROJECT_PROBES: ProjectProbe[] = [
     okStatus: 201,
   },
   {
+    // 그림 올리기 — 프로젝트 행 `KEY SHARE` → 덩이 → 한도 자물쇠 → 소유 행 → 재확인(`repos/assets.ts` 머리말 «잠금»). 본문은 그림 바이트다.
+    route: 'POST /api/projects/:projectId/assets',
+    label: '그림 올리기',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore'],
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/assets`, png(2, 2, 93) as unknown as Record<string, unknown>),
+    okStatus: 201,
+  },
+  {
+    // 그림 가져오기 — 같은 차례(출처가 개인 몫이면 출처 프로젝트 잠금이 없다).
+    route: 'POST /api/projects/:projectId/assets/claim',
+    label: '그림 가져오기',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore'],
+    // 밥의 개인 몫에 그림 하나를 먼저 넣는다(행 — 개인 몫은 프로젝트 잠금에 안 선다) — 옮길 것이 있어야 «상태가 바뀐다» 를 잰다.
+    fire: (ctx, fx) => {
+      const bytes = png(2, 2, 94)
+      const id = sha256(bytes)
+      return track(
+        (async () => {
+          await db
+            .insertInto('asset_blobs')
+            .values({ sha256: id, bytes, mime: 'image/png', size: bytes.length, width: 2, height: 2 })
+            .onConflict((oc) => oc.column('sha256').doNothing())
+            .execute()
+          await db
+            .insertInto('personal_assets')
+            .values({ owner_id: fx.bob.user.id, sha256: id, name: '밥의 그림.png' })
+            .onConflict((oc) => oc.columns(['owner_id', 'sha256']).doNothing())
+            .execute()
+          return ctx.app.inject({
+            method: 'POST',
+            url: `/api/projects/${fx.projectId}/assets/claim`,
+            cookies: fx.bob.cookie,
+            payload: { ids: [id], from: { personal: true } },
+          })
+        })(),
+      )
+    },
+    okStatus: 200,
+  },
+  {
     route: 'POST /api/projects/:projectId/tokens',
     label: 'API 토큰 발급 (가드가 viewer — 멤버에서 뺀다)',
     bobRole: 'editor',
@@ -2807,6 +2859,8 @@ const NOT_LOCKED: Record<string, string> = {
     '프로젝트 밖 — 제 `personal_modules` 행 하나의 이름만(`owner_id` 로 거른다). 그 행을 가리키는 FK 가 없다. 프로젝트 삭제 뒤에서 안 선다(위 줄의 케이스). 재확인하지 않는다(같은 까닭)',
   'DELETE /api/me/modules/:moduleId':
     '프로젝트 밖 — 제 `personal_modules` 행 하나를 지운다. 그 행을 가리키는 FK 가 없다. 프로젝트 삭제 뒤에서 안 선다(위 줄의 케이스). 재확인하지 않는다(같은 까닭)',
+  'POST /api/me/assets/claim':
+    '프로젝트 권한의 쓰기가 아니다 — 개인 몫에 `personal_assets` 행을 넣는다(대상 프로젝트가 없다). 출처 프로젝트 행을 `KEY SHARE` 로 먼저 잡아 그 프로젝트의 복원 · 삭제 뒤에서는 선다 — 출처의 삭제와 덩이를 다른 차례로 잡지 않게(`0030-assets` 머리말 «①»). 출처의 멤버인지는 그 잠금 뒤 새 문장에서 읽는다(기다리는 사이 빠졌으면 `not-readable`) — 재확인 대신이다',
   'POST /api/admin/theme-packages':
     '프로젝트 밖 — `theme_packages` 행 하나를 넣는다(FK 가 올린 사람의 사용자 행에 `KEY SHARE`). 프로젝트 행을 안 잡는다. 커밋 직전에 자격 · 관리자 표시를 다시 본다 — `admin-themes.test.ts` «강등과 겹친 업로드»',
   'PATCH /api/admin/theme-packages/:themeId/:version':

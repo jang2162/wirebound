@@ -91,7 +91,7 @@ describe('checkTheme', () => {
    */
   it('포커스 받는 요소는 경고로 선다 — tabindex · summary · controls 영상, 단추 · 링크 · 입력 칸은 아니다 · 종료 코드에 안 든다', async () => {
     const views = `{
-      Placeholder: () => h(Root, null, h('div', { tabIndex: 0 }, '자리'), h('div', { tabIndex: -1 }, '눌러서 포커스'), h('div', { tabIndex: 'abc' }, '무효'), h('button', { type: 'button', tabIndex: 0 }, '단추'), h('a', { href: '#x', tabIndex: 0 }, '링크'), h('input', { 'aria-label': '칸', tabIndex: 0 })),
+      Placeholder: ({ props }) => h(Root, { style: rt.sdk.placeholderVars(props) }, h('div', { tabIndex: 0 }, '자리'), h('div', { tabIndex: -1 }, '눌러서 포커스'), h('div', { tabIndex: 'abc' }, '무효'), h('button', { type: 'button', tabIndex: 0 }, '단추'), h('a', { href: '#x', tabIndex: 0 }, '링크'), h('input', { 'aria-label': '칸', tabIndex: 0 })),
       Text: () => h(Root, null, h('details', null, h('summary', null, '접기'))),
       Media: () => h(Root, null, h('video', { controls: true }), h('audio', null)),
     }`
@@ -114,6 +114,41 @@ describe('checkTheme', () => {
         .some((line) => line.includes('Placeholder') && line.includes('<div tabindex="0">') && line.includes('칸)')),
     ).toBe(true)
     expect(lines.at(-1)).toBe('✓ 오류 없음')
+  })
+
+  /**
+   * 정한 그리기 값을 버리는 자리표시자 뷰 — 표본(`PLACEHOLDER_SET_PROPS`)의 값 여덟이 뿌리 변수로 안 서면 칸마다 오류다. `placeholderVars` 를 싣는
+   * 뷰는 깨끗하다. 계산된 색(테마 CSS 가 변수를 덮는 판)은 jsdom 이 못 재 `wb-theme shots` 가 잰다(`../build-test/shots.test.ts`).
+   */
+  it('정한 그리기 값을 안 싣는 자리표시자 뷰는 오류로 선다 — placeholderVars 를 싣는 뷰는 깨끗하다', async () => {
+    const dropping = await checkTheme(files(BASE, { views: `{ Placeholder: ({ props }) => h(Root, null, String(props.label)) }` }))
+    const errors = dropping.errors.filter((error) => error.source === 'placeholder')
+    expect(errors.map((error) => error.message.split(' 가 ')[0]!.split('— ')[1])).toEqual([
+      '--wb-node-placeholder-width',
+      '--wb-node-placeholder-height',
+      '--wb-node-placeholder-radius',
+      '--wb-node-placeholder-font-size',
+      '--wb-node-placeholder-padding',
+      '--wb-node-placeholder-background',
+      '--wb-node-placeholder-border-color',
+      '--wb-node-placeholder-color',
+    ])
+    expect(new Set(errors.map((error) => error.label))).toEqual(new Set(['Placeholder — 정한 색 · 모서리 · 여백']))
+    expect(dropping.errors.filter((error) => error.source !== 'placeholder')).toEqual([])
+    expect(formatCheckReport(dropping).ok).toBe(false)
+    // 값 하나만 틀리게 싣는 뷰도 그 하나로 선다.
+    const wrong = await checkTheme(
+      files(BASE, {
+        views: `{ Placeholder: ({ props }) => h(Root, { style: { ...rt.sdk.placeholderVars(props), '--wb-node-placeholder-background': '#000000' } }, String(props.label)) }`,
+      }),
+    )
+    expect(wrong.errors.map((error) => error.message)).toEqual([
+      'Placeholder 뷰가 정한 값을 뿌리에 싣지 않았습니다 — --wb-node-placeholder-background 가 #fde047 가 아니라 #000000 입니다. placeholderVars(props) 를 Root 의 style 로 둡니다',
+    ])
+    const keeping = await checkTheme(
+      files(BASE, { views: `{ Placeholder: ({ props }) => h(Root, { style: rt.sdk.placeholderVars(props) }, String(props.label)) }` }),
+    )
+    expect(keeping.errors).toEqual([])
   })
 
   it('Root 를 안 그리는 뷰는 콘솔 오류로 선다', async () => {

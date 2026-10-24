@@ -49,7 +49,23 @@ export interface ApiConfig {
   systemThemesDir: string
   /** 관리자가 내려받는 스타터 템플릿 zip(`routes/admin-themes.ts`). 기본은 kit 이 짓는 자리다(`DEFAULT_THEME_TEMPLATE_ZIP`). */
   themeTemplateZip: string
+  /** 그림 한도(바이트) — 파일 하나 · 프로젝트 전체 · 사람 하나(`routes/assets.ts`). 기본값은 `DEFAULT_ASSET_LIMITS`. */
+  assetLimits: AssetLimits
 }
+
+export interface AssetLimits {
+  fileBytes: number
+  projectBytes: number
+  personalBytes: number
+}
+
+const MB = 1024 * 1024
+
+/**
+ * 그림 한도의 기본값 — 파일 5 MB · 프로젝트 200 MB · 사람 100 MB(설계 spec `2026-10-24-compose-input-design.md` «한도»). 파일 하나는 테마 패키지
+ * 상한(10 MB)보다 작게 둔다. 그림은 DB 에 산다 — 이 셋이 DB 볼륨 · 백업이 그림 때문에 자라는 폭을 묶는다.
+ */
+export const DEFAULT_ASSET_LIMITS: AssetLimits = { fileBytes: 5 * MB, projectBytes: 200 * MB, personalBytes: 100 * MB }
 
 /** 저장소의 `system-themes` — 이 파일(`apps/api/src/config.ts`)에서 세 단계 위. 운영 이미지도 저장소를 통째로 싣는다(`Dockerfile`). */
 export const DEFAULT_SYSTEM_THEMES_DIR = fileURLToPath(new URL('../../../system-themes', import.meta.url))
@@ -70,6 +86,16 @@ function numericEnv(fieldName: string) {
     .string()
     .regex(/^\d+$/, `${fieldName}은 숫자여야 합니다`)
     .transform((value) => Number.parseInt(value, 10))
+}
+
+/** 그림 한도 env — 비면 기본값 · 1 이상(0 은 올리기를 끄는 값이 아니다). */
+function assetLimitEnv(fieldName: string, fallback: number) {
+  return z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    numericEnv(fieldName)
+      .refine((limit) => limit >= 1, `${fieldName}은 1 이상이어야 합니다`)
+      .default(fallback),
+  )
 }
 
 /**
@@ -254,6 +280,10 @@ const EnvSchema = z.object({
   SCREEN_CHROMIUM_PATH: z.string().optional(),
   /** 믿는 앞단 — `ApiConfig.trustProxy` · `TrustProxyEnv`. */
   TRUST_PROXY: TrustProxyEnv,
+  /** 그림 한도(바이트) — `ApiConfig.assetLimits`. 비면 기본값이다. 0 은 거절한다(올리기를 끄는 값이 아니다). */
+  ASSET_FILE_MAX_BYTES: assetLimitEnv('ASSET_FILE_MAX_BYTES', DEFAULT_ASSET_LIMITS.fileBytes),
+  ASSET_PROJECT_MAX_BYTES: assetLimitEnv('ASSET_PROJECT_MAX_BYTES', DEFAULT_ASSET_LIMITS.projectBytes),
+  ASSET_PERSONAL_MAX_BYTES: assetLimitEnv('ASSET_PERSONAL_MAX_BYTES', DEFAULT_ASSET_LIMITS.personalBytes),
   /** 그리기 칸 수 — `ApiConfig.exportRenderLimit`. 비면 기본값이다(`dbTimeLimitEnv`와 같은 까닭). 0 은 거절한다 — 그리기를 끄는 값이 아니고, 받으면 풀이 1 로 올려 읽어(`ExportWorkerPool`) 적은 값과 다른 수로 돈다. */
   EXPORT_RENDER_LIMIT: z.preprocess(
     (value) => (value === '' ? undefined : value),
@@ -344,5 +374,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
       data.SYSTEM_THEMES_DIR === undefined || data.SYSTEM_THEMES_DIR === '' ? DEFAULT_SYSTEM_THEMES_DIR : data.SYSTEM_THEMES_DIR,
     themeTemplateZip:
       data.THEME_TEMPLATE_ZIP === undefined || data.THEME_TEMPLATE_ZIP === '' ? DEFAULT_THEME_TEMPLATE_ZIP : data.THEME_TEMPLATE_ZIP,
+    assetLimits: {
+      fileBytes: data.ASSET_FILE_MAX_BYTES,
+      projectBytes: data.ASSET_PROJECT_MAX_BYTES,
+      personalBytes: data.ASSET_PERSONAL_MAX_BYTES,
+    },
   }
 }
