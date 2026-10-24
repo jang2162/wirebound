@@ -19,6 +19,8 @@
  * `data-wb-align`) 규칙이 더해졌고 페이지 HTML 은 그대로다(다시 재는 법: `packages/theme-sdk/src/default-views/document.tsx` 의 자리표시자 규칙을 걷고 해시). 그림(`image` 조각 · `data-wb-frame` · `data-wb-image-fit`)의 규칙도 `assets/views.css` 에만 든다 — 그림이 없는 페이지의 데이터에는 `images` 키가 없어 페이지 HTML 이 그대로다.
  * 폼 표(SDK 1.6.0)를 들이며 다시 지었다 — `assets/views.css` 는 폼 표의 쌍 격자와 그 좁은 창(`@media`) · 머리줄 · 옆 칸 규칙(열을 정한 조회 폼의 규칙은 그대로다), «넓은 표본»(과 그 사본 `index.html`)은
  * 픽스처의 입력폼 필드를 폼 표 하나(2열 · 머리 오른쪽 단추)로 감쌌다. «슬롯» · «글» · «깨진 문서» 는 그대로다(`docs/superpowers/plans/2026-10-25-ft2-report.md`).
+ * 폼 표의 중간 폭 판(960px 아래 한 줄에 쌍 하나)과 값 칸 안 폼 표(하위 표)의 규칙을 더하며 `assets/views.css` 만 다시 지었다 — 페이지 HTML 은 그대로다
+ * (`docs/superpowers/plans/2026-10-25-fx-ft-report.md` M2 · M3).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -64,7 +66,7 @@ const BEFORE = {
     'pages/슬롯.html': '4e8bd0e4f441ced8',
     'pages/글.html': 'abed474c8d552b49',
     'pages/깨진-문서.html': '9ab11048c5f61199',
-    'assets/views.css': '649591b9b5781ad4',
+    'assets/views.css': '5202f0e1b522a5dd',
   },
   themed: {
     'index.html': '290fae2c4edca9bf',
@@ -72,7 +74,7 @@ const BEFORE = {
     'pages/슬롯.html': 'd95293b9a6b0d653',
     'pages/글.html': 'f6e6876dde5919f0',
     'pages/깨진-문서.html': '0cf1fd266dd8dd82',
-    'assets/views.css': '649591b9b5781ad4',
+    'assets/views.css': '5202f0e1b522a5dd',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',
