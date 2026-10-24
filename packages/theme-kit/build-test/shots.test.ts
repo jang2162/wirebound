@@ -54,6 +54,8 @@ interface Report {
     pageClientWidth: number
     compatMode: string
     placeholder: { item: string | null; property: string; want: string; got: string }[]
+    pairs: { item: string | null; element: string; label: number; value: number }[]
+    pairsMeasured: number
   }[]
 }
 
@@ -108,6 +110,9 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
       expect(w.wrapped, `${w.width}px ${JSON.stringify(w.wrapped)}`).toEqual([])
       // 정한 그리기 값을 기본테마가 따른다 — 갤러리의 정한 값 표본(`PLACEHOLDER_SET_PROPS`)의 계산 값이 정한 값이다.
       expect(w.placeholder).toEqual([])
+      // 폼 표의 같은 줄 라벨 칸 · 값 칸이 줄 높이를 채운다(키 큰 행 — 여러 줄 값). 넓은 폭에서는 잰 필드가 있어야 한다(좁은 폭은 라벨이 위다).
+      expect(w.pairs, `${w.width}px ${JSON.stringify(w.pairs)}`).toEqual([])
+      if (w.width === 1280) expect(w.pairsMeasured).toBeGreaterThan(5)
     }
     // 종료 코드는 넘침 · 꺾임까지 센다 — 둘 다 없으면 0 이다.
     expect(status).toBe(report.widths.every((w) => w.overflow.length === 0 && w.wrapped.length === 0) ? 0 : 1)
@@ -165,6 +170,24 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
     expect(w!.wbErrors.map((entry) => entry.item)).toEqual(['Tabs//tabs', 'TabPanel//tabp'])
     expect(w!.wbErrors.every((entry) => entry.message.includes('탭이 터졌다'))).toBe(true)
     expect(w!.consoleErrors.some((line) => line.includes('탭이 터졌다'))).toBe(true)
+  })
+
+  /** 라벨 칸 높이를 재는 자가 0 만 내지 않는가 — 폼 표의 필드를 위로 붙여(`align-items: start`) 여러 줄 값이 든 줄의 라벨 칸이 줄 높이보다 작다. */
+  it('폼 표의 같은 줄 라벨 칸이 값 칸보다 낮으면 report.json 에 적고 1 로 끝난다', () => {
+    const root = mkdtempSync(join(TMP, 'shots-pairs-'))
+    cpSync(FIXTURE, root, { recursive: true })
+    appendFileSync(join(root, 'src/theme.css'), '\n[data-wb-component="FormTable"] [data-wb-component="Field"] { align-items: start; }\n')
+    const dir = join(out, 'pairs')
+    const { status, out: printed } = shots(root, ['--out', dir, '--widths', '1280', '--browser', browser.path!])
+    expect(status, printed).toBe(1)
+    const [w] = (JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as Report).widths
+    expect(w!.pairs.length, printed).toBeGreaterThan(0)
+    // 여러 줄 값(`소개`)이 든 줄 — 라벨 칸이 제 글 높이로 줄어 값 칸보다 낮다.
+    expect(
+      w!.pairs.some((entry) => entry.item === 'FormTable//ft' && entry.label < entry.value),
+      printed,
+    ).toBe(true)
+    expect(printed).toContain('폼 표 FormTable//ft: 같은 줄의 라벨 칸')
   })
 
   /**

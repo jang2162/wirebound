@@ -151,6 +151,36 @@ describe('checkTheme', () => {
     expect(keeping.errors).toEqual([])
   })
 
+  it('쌍 격자 안 Field 의 두 조각을 감싸는 Field 뷰는 오류로 선다 — 쌍 격자 밖의 필드 표본은 안 걸린다', async () => {
+    const wrapped = await checkTheme(
+      files(BASE, {
+        views: `{ Field: ({ props, children }) => h(Root, null, h('div', null, h('label', { 'data-wb-part': 'label' }, String(props.label)), h('div', { 'data-wb-part': 'value' }, children))) }`,
+      }),
+    )
+    const pairs = wrapped.errors.filter((error) => error.source === 'pairs')
+    expect([...new Set(pairs.map((error) => `${error.type} · ${error.label}`))].sort()).toEqual([
+      'EntryForm · EntryForm — 제목 · 폼 표',
+      'FormTable · FormTable — 1쌍 다섯 줄',
+      'FormTable · FormTable — 2열 · 전폭 · 빈 쌍',
+      'FormTable · FormTable — 옆 칸(사진)',
+      'FormTable · FormTable — 제목 · 머리 오른쪽',
+      'SearchForm · SearchForm — 2열 · 몫',
+    ])
+    expect(pairs[0]!.message).toContain('label · value 조각을 뿌리의 직계로 안 그렸습니다')
+    expect(wrapped.errors.filter((error) => error.source !== 'pairs')).toEqual([])
+  })
+
+  it('빈 쌍을 안 그리는 폼 표 뷰는 오류로 선다 — 빈 쌍이 서는 표본만', async () => {
+    const report = await checkTheme(files(BASE, { views: `{ FormTable: ({ children }) => h(Root, null, children) }` }))
+    const pairs = report.errors.filter((error) => error.source === 'pairs')
+    expect(pairs.map((error) => [error.label, error.message])).toEqual([
+      [
+        'FormTable — 2열 · 전폭 · 빈 쌍',
+        'FormTable 뷰가 빈 쌍(filler 조각)을 2 개가 아니라 0 개 그렸습니다 — pairRows(items, columns) 차례로 그립니다(노드 ft2)',
+      ],
+    ])
+  })
+
   it('Root 를 안 그리는 뷰는 콘솔 오류로 선다', async () => {
     const report = await checkTheme(files(BASE, { views: `{ Card: () => h('div', null, '뿌리 없음') }` }))
     expect(report.errors.length).toBeGreaterThan(0)

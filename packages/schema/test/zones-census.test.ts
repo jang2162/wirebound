@@ -28,7 +28,7 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', 'migrations'])
  * - **얼린 옮기기**: `migrate-document.ts`(판 1 → 2 — 판 1 에는 구역이 없다).
  * - **봉투의 뿌리**: `clipboard.ts`(감싼 뿌리의 몸통) · `paste-ops.ts`(문서 뿌리의 몸통 · 넣을 노드의 몸통).
  * - **몸통이 뜻**: `layout-guides.tsx`(몸통의 배치 안내) · `use-placement.ts` · `structure-drop.ts`(«안» = 몸통의 끝) · `structure-actions.ts` ·
- *   `structure-toolbar.tsx`(들여쓰기 = 앞 형제의 몸통) · `palette-add.ts`.
+ *   `structure-toolbar.tsx`(들여쓰기 = 앞 형제의 몸통) · `palette-add.ts` · `theme-kit/src/check.ts`(쌍 격자의 칸 = 몸통 둘 · 필드 조각의 DOM 직계 하나).
  * - **구역을 따로 본다**: `lock/structure.ts`(`sameStructure` 의 구역 견주기) · `canvas-preview.ts` · `anchored-ops.ts` · `exporter/src/nodes.ts`
  *   (`nodesOnly` — 깨진 줄을 몸통 · 구역마다 거른다).
  * - **노드가 아니다**: 메뉴 트리(`repos/menu.ts` · `menu-tree.ts` · `http-client.ts` · `menu-tree.tsx` · `tree-actions.ts` · `use-tree-commands.tsx`) · DOM(`canvas-drop.ts` ·
@@ -64,6 +64,7 @@ const DIRECT_READS: Record<string, number> = {
   'packages/schema/src/tree.ts': 12,
   'packages/schema/src/validate.ts': 5,
   'packages/schema/src/zones.ts': 14,
+  'packages/theme-kit/src/check.ts': 3,
   'packages/theme-sdk/src/zone.tsx': 1,
 }
 

@@ -67,7 +67,7 @@ A page is a JSON document. Edits are JSON Patch against it; `nodes[].path` from 
 - `alias` (string, optional) — Optional human name for the node, 1–60 characters, no surrounding spaces or line breaks. Need not be unique.
 - `props` (object, optional) — The component's props (see the catalog). Omitted props take their defaults.
 - `variant` (string, optional) — A theme variant name. The theme decides which values exist; the document doesn't validate it.
-- `weight` (integer, optional) — Integer 1–12: share of the parent — free width in a `Flex`, columns spanned in a `Grid` or a `SearchForm` with `columns`. Ignored elsewhere.
+- `weight` (integer, optional) — Integer 1–12: share of the parent — free width in a `Flex`, columns spanned in a `Grid`, pairs spanned in a `FormTable` or a `SearchForm` with `columns`. Ignored elsewhere.
 - `visibility` (object, optional) — `{ mode: "only" | "except", states: [...] }` — show the node only in (or hide it in) those view states and their descendants. `"default"` is the base screen. Omitted: visible in every state.
 - `marker` (integer, optional) — Comment number (positive integer). The server assigns it when the first comment lands on the node; do not invent one.
 - `interactions` (array, optional) — What happens on user events (see Interactions).
@@ -213,11 +213,20 @@ Zones: `body` (children) "조건"; `actions` (zones.actions) "단추", create wi
 
 #### EntryForm
 
-A create/edit form with several fields. Editor label: 입력폼.
+A create/edit form; its body stacks form tables, headings and grids above one button row (new: one `FormTable`). Editor label: 입력폼.
 
-Zones: `body` (children) "항목"; `actions` (zones.actions) "단추", create with `Button` {"label":"저장"} variant "primary" + `Button` {"label":"취소"}.
+Zones: `body` (children) "항목", create with `FormTable`; `actions` (zones.actions) "단추", create with `Button` {"label":"저장"} variant "primary" + `Button` {"label":"취소"}.
 
 - `title`: string, default ""
+
+#### FormTable
+
+A label|value table: `columns` pairs per row, each child spans `weight` pairs (≥ `columns` = whole row); empty pairs at row ends are drawn. Zones: right of the title, a left cell over all rows (photo), the cells. Editor label: 폼 표.
+
+Zones: `headEnd` (zones.headEnd) "머리 오른쪽"; `aside` (zones.aside) "옆 칸"; `body` (children) "칸", create with `Field` + `Field` + `Field`.
+
+- `title`: string, default ""
+- `columns`: integer 1–4, default 1
 
 #### Field
 
