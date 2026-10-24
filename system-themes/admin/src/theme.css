@@ -475,15 +475,18 @@
   gap: var(--wb-space-2);
   margin-left: auto;
 }
+/* 옆 칸(사진)은 라벨 칸 폭 이상이고 그 안의 노드가 칸을 채운다. */
 [data-wb-component="FormTable"] > [data-wb-part="aside"] {
   grid-column: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  min-width: var(--wb-form-labelWidth);
   padding: var(--wb-space-2);
   background: var(--wb-semantic-surface);
   border: 1px solid var(--wb-semantic-border);
   border-right: 0;
+}
+[data-wb-component="FormTable"] > [data-wb-part="aside"] > * {
+  flex: 1 1 auto;
 }
 [data-wb-component="FormTable"] > [data-wb-part="cells"] {
   grid-column: 2;
@@ -506,9 +509,10 @@
   padding: 0;
   border: 0;
 }
+/* 라벨 칸은 블록이다 — `flex` 로 세로 가운데를 잡으면 필수 별(`::before`)이 따로 선 칸이 되어 꺾인 라벨 옆에 떨어진다. */
 [data-wb-component="FormTable"] > [data-wb-part="cells"] > :is([data-wb-component="Field"], [data-wb-part="filler"]) > [data-wb-part="label"] {
-  display: flex;
-  align-items: center;
+  display: block;
+  align-content: center;
   min-width: 0;
   padding: var(--wb-space-2) var(--wb-space-3);
   background: var(--wb-semantic-canvas);
@@ -525,7 +529,7 @@
 }
 /* 여러 줄 값은 라벨을 위에 맞춘다. */
 [data-wb-component="FormTable"] > [data-wb-part="cells"] > [data-wb-component="Field"]:has(> [data-wb-part="value"] > [data-wb-component="TextArea"]) > [data-wb-part="label"] {
-  align-items: flex-start;
+  align-content: start;
 }
 
 /*

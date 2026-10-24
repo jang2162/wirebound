@@ -446,6 +446,7 @@ export function PropertyPanel(props: {
           <WeightField
             // 형제 칸(상태 보임)과 키가 겹치면 React 가 둘의 짝을 잘못 지어 초안 · 까닭을 엉뚱한 칸에 남긴다 — 칸 이름을 붙여 가른다.
             key={`${node.id}:weight`}
+            pairs={inPairGrid(...weightParentOf(doc, node.id))}
             value={node.weight}
             disabled={blocked}
             onCommit={(weight) => {
@@ -544,6 +545,14 @@ function weightParentOf(doc: PageDocument, nodeId: string): [string, WbNode['pro
   return ['', undefined]
 }
 
+/** 쌍 격자(폼 표 · 열을 정한 조회 폼) 안의 «몫» 칸 밑 안내 — 그 부모에서 몫은 칸이 아니라 쌍을 센다. */
+export const WEIGHT_PAIRS_NOTE = '차지할 쌍 수 — 열 수 이상이면 한 줄 전체'
+
+/** 부모가 쌍 격자인가 — 폼 표, 또는 열을 정한 조회 폼(렌더러가 칸을 세는 자리를 주는 판). */
+function inPairGrid(type: string, props: WbNode['props']): boolean {
+  return type === 'FormTable' || (type === 'SearchForm' && weightRoom(type, props)?.kind === 'span')
+}
+
 /** 여럿을 고른 판의 그림 칸 — 올리기의 편집 자리가 노드 하나라 일괄로 고르지 않는다. */
 const IMAGE_BULK_NOTE = '그림은 하나씩 골라 정합니다'
 
@@ -591,6 +600,8 @@ function clearableProp(def: ComponentDef, prop: string): boolean {
 /** «몫» 칸 한 줄. 범위 밖을 친 채 떠나면 안 보내고 칸 아래에 까닭을 말한다 — 바른 값을 보내거나 노드가 바뀌면(`key`) 걷힌다. */
 function WeightField(props: {
   value: unknown
+  /** 부모가 쌍 격자면 칸 밑에 «쌍 수» 안내를 둔다(`WEIGHT_PAIRS_NOTE`). */
+  pairs: boolean
   disabled: boolean
   onCommit: (weight: number | null) => void
   onLeave: (weight: number | null) => void
@@ -621,6 +632,7 @@ function WeightField(props: {
             if (weight !== undefined) props.onLeave(weight)
           }}
         />
+        {props.pairs && <p className="wb-shell-prop-note">{WEIGHT_PAIRS_NOTE}</p>}
         {invalid && <p className="wb-shell-prop-why">{WEIGHT_RANGE_NOTICE}</p>}
       </dd>
     </div>

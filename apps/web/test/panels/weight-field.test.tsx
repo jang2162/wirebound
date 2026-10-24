@@ -17,7 +17,7 @@ import { createEditChannel } from '../../src/realtime/edit-channel'
 import { createLockChannel } from '../../src/realtime/lock-channel'
 import type { NodeLockView, ServerFrame } from '../../src/realtime/protocol'
 import { HEAD_SEQ, PAGE_ID, PROJECT_ID, openPage, pageDetail, pageDoc } from '../editor-harness'
-import { WEIGHT_RANGE_NOTICE } from '../../src/panels/property-panel'
+import { WEIGHT_PAIRS_NOTE, WEIGHT_RANGE_NOTICE } from '../../src/panels/property-panel'
 import '../../src/catalog-setup'
 
 const ME = 'u-1'
@@ -47,6 +47,8 @@ class FakeSocket implements RealtimeSocket {
  *     n-f0  (Field)
  *   n-card  (Card)
  *     n-in  (Text)
+ *   n-ft    (FormTable — 열 2)
+ *     n-ff  (Field)
  * ```
  */
 function doc(): PageDocument {
@@ -66,6 +68,7 @@ function doc(): PageDocument {
       { id: 'n-sf', type: 'SearchForm', props: { columns: 3 }, children: [{ id: 'n-f', type: 'Field' }] },
       { id: 'n-sf0', type: 'SearchForm', children: [{ id: 'n-f0', type: 'Field' }] },
       { id: 'n-card', type: 'Card', children: [{ id: 'n-in', type: 'Text' }] },
+      { id: 'n-ft', type: 'FormTable', props: { columns: 2 }, children: [{ id: 'n-ff', type: 'Field' }] },
     ],
   })
 }
@@ -159,6 +162,7 @@ describe('속성 패널 «몫» 칸 — 서는 자리', () => {
     ['Flex 의 자식', 'n-a'],
     ['Grid 의 자식', 'n-g'],
     ['열을 정한 SearchForm 의 자식', 'n-f'],
+    ['FormTable 의 자식', 'n-ff'],
   ])('%s 이면 선다 — 컴포넌트 속성 칸들 아래 · 상태 보임 · 별칭 위다', async (_label, nodeId) => {
     await board()
     select(nodeId)
@@ -167,6 +171,18 @@ describe('속성 패널 «몫» 칸 — 서는 자리', () => {
     // 차례: 컴포넌트 속성 칸들 → 몫 → 상태 보임 → 별칭(맨 아래). 속성 칸이 하나는 앞에 선다.
     expect(rows.slice(-3)).toEqual(['몫', '상태 보임', '별칭'])
     expect(rows.length).toBeGreaterThan(3)
+  })
+
+  it.each([
+    ['FormTable 의 자식', 'n-ff', WEIGHT_PAIRS_NOTE],
+    ['열을 정한 SearchForm 의 자식', 'n-f', WEIGHT_PAIRS_NOTE],
+    ['Grid 의 자식', 'n-g', null],
+    ['Flex 의 자식', 'n-a', null],
+  ])('%s — 칸 밑 «쌍 수» 안내는 쌍 격자에서만 선다', async (_label, nodeId, note) => {
+    await board()
+    select(nodeId)
+    expect(weightField()).not.toBeNull()
+    expect(panel().querySelector('[data-wb-node-weight] .wb-shell-prop-note')?.textContent ?? null).toBe(note)
   })
 
   it('몫 · 상태 보임 칸은 키가 갈린다 — 몫이 서는 다른 노드로 옮겨 골라도 몫 칸이 서고 같은 키 경고가 없다', async () => {
