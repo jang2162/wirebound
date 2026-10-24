@@ -41,7 +41,7 @@ const input = (id: string, props: Record<string, unknown> = {}) => ({ id, type: 
 const field = (id: string, label: string, pieces: unknown[] = [input(`${id}_i`)], more: Record<string, unknown> = {}) => ({
   id,
   type: 'Field',
-  props: { label, ...((more.props as object | undefined) ?? {}) },
+  props: { label, ...(more.props as object | undefined) },
   children: pieces,
   ...(more.weight === undefined ? {} : { weight: more.weight }),
 })
@@ -49,7 +49,7 @@ const required = { props: { required: true } }
 const table = (id: string, columns: number | undefined, children: unknown[], more: Record<string, unknown> = {}) => ({
   id,
   type: 'FormTable',
-  props: { ...(columns === undefined ? {} : { columns }), ...((more.props as object | undefined) ?? {}) },
+  props: { ...(columns === undefined ? {} : { columns }), ...(more.props as object | undefined) },
   children,
   ...(more.zones === undefined ? {} : { zones: more.zones }),
 })
