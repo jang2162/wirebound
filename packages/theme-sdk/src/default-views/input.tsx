@@ -280,6 +280,18 @@ export function inputCssBlocks(): string[] {
     zeroRule(`${cells} > [data-wb-part="filler"]`, ['display: none;']),
   ].join('\n')}
   }`
+  // **중간 폭(960px 아래 — PPTX 캡처 폭 720 이 든다)의 폼 표** — 한 줄에 쌍 하나 · 라벨 왼쪽 그대로 · 빈 쌍 숨김. 열 수가 그대로면 라벨 칸이 열마다 빠져
+  // 값 칸이 가장 좁고 줄을 안 바꾸는 값(하위 표 · 세그먼트)이 옆 쌍 · 창 밖으로 넘친다. 640 아래는 위 좁은 창 판이 덮는다(뒤에 둔다). 열을 정한 조회 폼은
+  // 안 접는다 — SDK 기본은 같은 폭 칸 · 라벨 위라 넘치지 않고, 자식 폭을 바꾸면 «필드 하나 = 트랙 하나» 로 덮은 옛 테마의 몫이 깨진다(아래 조회 폼 규칙).
+  const mid = `@media (max-width: 960px) {
+  ${[
+    zeroRule(cells, [`grid-template-columns: var(${FORM_LABEL_WIDTH_VAR}, 8rem) minmax(0, 1fr);`]),
+    zeroRule(`${cells} > *`, ['grid-column: 1 / -1;']),
+    zeroRule(`${cells} > [data-wb-part="filler"]`, ['display: none;']),
+  ].join('\n')}
+  }`
+  // 값 칸 안의 폼 표(하위 표) — 늘 한 줄에 쌍 하나. 값 칸 폭을 채우는 규칙은 값 칸 조각 규칙 뒤에 둔다(아래).
+  const nested = '[data-wb-component="Field"] > [data-wb-part="value"] > [data-wb-component="FormTable"] > [data-wb-part="cells"]'
   // 글을 받는 조각 — 상자 모양을 함께 쓴다.
   const boxed = ['Input', 'TextArea', 'Select', 'DateInput', 'TimeInput']
   return [
@@ -322,6 +334,10 @@ export function inputCssBlocks(): string[] {
     ]),
     zeroRule('[data-wb-component="FormTable"] > [data-wb-part="aside"]', ['grid-column: 1;']),
     zeroRule(cells, ['grid-column: 2;']),
+    zeroRule(nested, [`grid-template-columns: var(${FORM_LABEL_WIDTH_VAR}, 8rem) minmax(0, 1fr);`]),
+    zeroRule(`${nested} > *`, ['grid-column: 1 / -1;']),
+    zeroRule(`${nested} > [data-wb-part="filler"]`, ['display: none;']),
+    mid,
     narrow,
     // 값 칸 — 조각을 가로로 줄 세우고 넘치면 줄을 바꾼다. 조각의 몫은 `Flex` 처럼 `flex: <몫>`(렌더러 `weightRoom('Field')`) — 몫이 없으면 내용 폭.
     zeroRule('[data-wb-component="Field"] > [data-wb-part="value"]', [
@@ -334,6 +350,8 @@ export function inputCssBlocks(): string[] {
     zeroRule('[data-wb-component="Field"] > [data-wb-part="value"] > *', [`flex: var(${WEIGHT_VAR}, 0 1 auto);`]),
     // 여러 줄 입력은 몫이 없어도 값 칸을 채운다(몫 1 과 같은 기본) — 위 규칙보다 뒤라 같은 특이도에서 이긴다.
     zeroRule('[data-wb-component="Field"] > [data-wb-part="value"] > [data-wb-component="TextArea"]', [`flex: var(${WEIGHT_VAR}, 1);`]),
+    // 값 칸 안의 폼 표는 값 칸 폭을 채운다 — 내용 폭으로 줄면 값 트랙(`minmax(0, 1fr)`)이 0 으로 접혀 입력칸이 손톱만 해진다.
+    zeroRule('[data-wb-component="Field"] > [data-wb-part="value"] > [data-wb-component="FormTable"]', ['flex: 1 1 100%;']),
     zeroRule(boxed.map((type) => `[data-wb-component="${type}"]`).join(', '), [
       'display: inline-flex;',
       'align-items: center;',

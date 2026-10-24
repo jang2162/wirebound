@@ -541,7 +541,6 @@
 [data-wb-component="FormTable"] > [data-wb-part="cells"] > [data-wb-component="Field"]:has(> [data-wb-part="value"] > [data-wb-component="TextArea"]) > [data-wb-part="label"] {
   align-content: start;
 }
-
 /*
  * 입력 필드 — 라벨 위 · 값 칸 아래. 조각은 직계(`>`)로 잡는다 — 값 칸의 단추 · 칩도 `label` 조각을 가져 자손으로 잡으면 필드 라벨 글꼴이 선다.
  * 값 칸은 조각을 가로로 줄 세우고 넘치면 줄을 바꾼다(조각의 몫은 SDK 기본 CSS 가 `flex` 로 건다).
@@ -992,6 +991,30 @@
 /* 안에 둔 글은 자리표시자의 글 색을 받는다 — 칩 · 배지를 지으면 그 글이 바탕색 위의 글 색으로 선다. */
 [data-wb-component="Placeholder"] > [data-wb-part="content"] > [data-wb-component="Text"][data-wb-structure="default"] {
   color: inherit;
+}
+
+/* ── 중간 폭 ──────────────────────────────────────────────────────────── */
+
+/*
+ * 960px 아래(PPTX 캡처 폭 720 이 든다)는 폼 표 · 열을 정한 조회 폼을 한 줄에 쌍 하나로 접는다 — 라벨 왼쪽 그대로 · 빈 쌍 숨김. 열 수가 그대로면
+ * 라벨 칸이 열마다 빠져 값 칸이 가장 좁고, 줄을 안 바꾸는 값(세그먼트 · 하위 표)이 옆 쌍 · 창 밖으로 넘친다. 640 아래는 아래 판(라벨 위)이 덮는다.
+ */
+@media (max-width: 960px) {
+  [data-wb-component="FormTable"] > [data-wb-part="cells"] {
+    grid-template-columns: var(--wb-form-labelWidth) minmax(0, 1fr);
+  }
+  [data-wb-component="FormTable"] > [data-wb-part="cells"] > * {
+    grid-column: 1 / -1;
+  }
+  [data-wb-component="FormTable"] > [data-wb-part="cells"] > [data-wb-part="filler"] {
+    display: none;
+  }
+  [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] {
+    grid-template-columns: var(--wb-form-labelWidth) minmax(0, 1fr);
+  }
+  [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > * {
+    grid-column: 1 / -1;
+  }
 }
 
 /* ── 좁은 폭 ──────────────────────────────────────────────────────────── */
