@@ -27,7 +27,7 @@ function counter(): () => string {
 }
 
 const DOCUMENT: PageDocument = {
-  version: 3,
+  version: 4,
   root: {
     id: 'file_root',
     type: 'Page',
@@ -150,7 +150,7 @@ describe('가져오기 계획', () => {
   it('파일의 중복 id는 결과에도 중복으로 남아 검증이 그것을 말한다', () => {
     // 프로브는 못 보지만 결과 문서 전체는 본다.
     const duplicated: PageDocument = {
-      version: 3,
+      version: 4,
       root: {
         id: 'file_root',
         type: 'Page',
@@ -169,7 +169,7 @@ describe('가져오기 계획', () => {
 
   it('D8 — 검증을 리매핑 전 문서로 하면 이슈가 파일의 id를 가리킨다', () => {
     const broken: PageDocument = {
-      version: 3,
+      version: 4,
       root: { id: 'file_root', type: 'Page', children: [{ id: 'file_odd', type: '없는타입' }] },
     }
     const plan = planPageImport(broken, [], counter())
@@ -219,7 +219,7 @@ describe('가져오기 게이트 — 서버와 화면이 같은 함수를 부른
   it('카탈로그에 없는 타입을 막고 **파일의 노드 id**를 가리킨다', () => {
     const gate = gatePageImport(
       envelopeOf({
-        version: 3,
+        version: 4,
         root: { id: 'file_root', type: 'Page', children: [{ id: 'file_odd', type: '없는타입' }] },
       }),
     )
@@ -232,7 +232,7 @@ describe('가져오기 게이트 — 서버와 화면이 같은 함수를 부른
   it('duplicate-id를 막는다', () => {
     const gate = gatePageImport(
       envelopeOf({
-        version: 3,
+        version: 4,
         root: {
           id: 'file_root',
           type: 'Page',
@@ -250,14 +250,14 @@ describe('가져오기 게이트 — 서버와 화면이 같은 함수를 부른
   })
 
   it('경고만 있으면 막지 않고 실어 낸다 — 화면도 서버도 이것으로 막지 않는다', () => {
-    // `Field`는 `variantFrom: 'control'`이라 노드가 든 `variant`가 버려지고 경고가 난다.
+    // `Text`는 `variantFrom: 'role'`이라 노드가 든 `variant`가 버려지고 경고가 난다.
     const gate = gatePageImport(
       envelopeOf({
-        version: 3,
+        version: 4,
         root: {
           id: 'file_root',
           type: 'Page',
-          children: [{ id: 'file_field', type: 'Field', props: { label: '이름', control: 'text' }, variant: 'x' }],
+          children: [{ id: 'file_text', type: 'Text', props: { content: '이름' }, variant: 'x' }],
         },
       }),
     )
@@ -271,13 +271,13 @@ describe('가져오기 게이트 — 서버와 화면이 같은 함수를 부른
   it('막을 때 **경고까지 함께** 싣는다 — 서버 응답과 같은 관례다', () => {
     const gate = gatePageImport(
       envelopeOf({
-        version: 3,
+        version: 4,
         root: {
           id: 'file_root',
           type: 'Page',
           children: [
             { id: 'file_odd', type: '없는타입' },
-            { id: 'file_field', type: 'Field', props: { label: '이름', control: 'text' }, variant: 'x' },
+            { id: 'file_text', type: 'Text', props: { content: '이름' }, variant: 'x' },
           ],
         },
       }),

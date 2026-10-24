@@ -408,7 +408,7 @@ describe('방송 — theme-changed', () => {
 })
 
 describe('GET …/theme/impact', () => {
-  const doc = (nodes: object[]) => JSON.stringify({ version: 3, root: { id: 'n_root', type: 'Page', children: nodes } })
+  const doc = (nodes: object[]) => JSON.stringify({ version: 4, root: { id: 'n_root', type: 'Page', children: nodes } })
 
   async function pagesWithButtons(ctx: TestContext, fx: Fixture) {
     const menu = await createMenuNode(ctx, fx.owner.cookie, fx.projectId)

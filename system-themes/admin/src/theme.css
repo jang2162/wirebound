@@ -431,26 +431,45 @@
   grid-template-columns: repeat(var(--wb-node-searchform-columns, 1), minmax(0, 1fr));
 }
 
-/* 입력칸 — 흰 바탕 · 회색 테두리 · 작은 모서리. 입력 종류는 루트의 `data-wb-variant`(`control` prop)로 온다. */
+/*
+ * 입력 필드 — 라벨 위 · 값 칸 아래. 조각은 직계(`>`)로 잡는다 — 값 칸의 단추 · 칩도 `label` 조각을 가져 자손으로 잡으면 필드 라벨 글꼴이 선다.
+ * 값 칸은 조각을 가로로 줄 세우고 넘치면 줄을 바꾼다(조각의 몫은 SDK 기본 CSS 가 `flex` 로 건다).
+ */
 [data-wb-component="Field"][data-wb-structure="outlined"] {
   display: flex;
   flex-direction: column;
   gap: var(--wb-space-1);
+  min-width: 0;
 }
-[data-wb-component="Field"] [data-wb-part="label"] {
+[data-wb-component="Field"] > [data-wb-part="label"] {
   font-size: var(--wb-typography-h6-fontSize);
   line-height: var(--wb-typography-h6-lineHeight);
   font-weight: var(--wb-typography-h6-fontWeight);
   color: var(--wb-semantic-textMuted);
 }
-[data-wb-component="Field"][data-wb-state~="required"] [data-wb-part="label"]::after {
+[data-wb-component="Field"][data-wb-state~="required"] > [data-wb-part="label"]::after {
   content: " *";
   color: var(--wb-semantic-danger);
 }
-[data-wb-component="Field"] [data-wb-part="control"] {
+[data-wb-component="Field"] > [data-wb-part="value"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wb-space-2);
+  min-width: 0;
+}
+
+/* 글을 받는 조각 — 흰 바탕 · 회색 테두리 · 작은 모서리. 폭은 `size` 표지(짧은 칸 · 보통 · 긴 칸)거나 몫이다. */
+[data-wb-component="Input"],
+[data-wb-component="TextArea"],
+[data-wb-component="Select"],
+[data-wb-component="DateInput"],
+[data-wb-component="TimeInput"] {
   display: flex;
   align-items: center;
+  gap: var(--wb-space-2);
   box-sizing: border-box;
+  min-width: 0;
   min-height: calc(var(--wb-space-unit) * 8.5);
   border-width: 1px;
   border-style: solid;
@@ -461,73 +480,215 @@
   padding-top: var(--wb-space-1);
   padding-bottom: var(--wb-space-1);
   background: var(--wb-semantic-surface);
-  color: var(--wb-semantic-textMuted);
+  color: var(--wb-semantic-text);
   font-size: var(--wb-typography-body-fontSize);
 }
-[data-wb-component="Field"] [data-wb-part="help"] {
-  font-size: var(--wb-typography-caption-fontSize);
-  line-height: var(--wb-typography-caption-lineHeight);
-  font-weight: var(--wb-typography-caption-fontWeight);
+[data-wb-component] > [data-wb-placeholder] {
+  color: var(--wb-semantic-textMuted);
+  opacity: 0.8;
+}
+/* 고정 폭은 칸보다 넓지 않다 — 좁은 창에서 `long`(24em)이 칸을 넘는다. */
+[data-wb-component="Input"][data-wb-size="short"],
+[data-wb-component="Select"][data-wb-size="short"] {
+  width: min(6em, 100%);
+}
+[data-wb-component="Input"][data-wb-size="medium"],
+[data-wb-component="Select"][data-wb-size="medium"] {
+  width: min(12em, 100%);
+}
+[data-wb-component="Input"][data-wb-size="long"],
+[data-wb-component="Select"][data-wb-size="long"] {
+  width: min(24em, 100%);
+}
+[data-wb-component="Input"][data-wb-kind="number"] {
+  justify-content: flex-end;
+}
+/* 날짜 · 시간은 글자 수가 정해진 고정 폭이다 — 여백 · 표지 · 틈을 뺀 글 칸이 제 기본 안내(«YYYY-MM-DD» 7.6em · «00:00» 2.6em)보다 넓다. */
+[data-wb-component="DateInput"],
+[data-wb-component="TimeInput"] {
+  justify-content: space-between;
+}
+[data-wb-component="DateInput"] {
+  width: min(12em, 100%);
+}
+[data-wb-component="TimeInput"] {
+  width: min(9.5em, 100%);
+}
+[data-wb-component="DateInput"] > [data-wb-part="glyph"],
+[data-wb-component="TimeInput"] > [data-wb-part="glyph"] {
   color: var(--wb-semantic-textMuted);
 }
-[data-wb-component="Field"][data-wb-variant="select"] [data-wb-part="control"]::after {
+[data-wb-component="Select"]::after {
   content: "▾";
   margin-left: auto;
   padding-left: var(--wb-space-2);
+  color: var(--wb-semantic-textMuted);
 }
-[data-wb-component="Field"][data-wb-variant="textarea"] [data-wb-part="control"] {
-  min-height: 72px;
+[data-wb-component="TextArea"] {
+  width: 100%;
   align-items: flex-start;
   padding-top: var(--wb-space-2);
+  min-height: calc(var(--wb-node-textarea-rows, 3) * 1.5em + var(--wb-space-2) * 2);
 }
-/* 체크 · 라디오는 상자가 라벨 앞에 선다 — 안내 문구 자리는 비운다(글자가 16px 상자를 밀어낸다). */
-[data-wb-component="Field"][data-wb-variant="checkbox"],
-[data-wb-component="Field"][data-wb-variant="radio"] {
-  flex-direction: row-reverse;
-  justify-content: flex-end;
+/* 읽기 전용은 회색 채움, 비활성은 딤드 — 설계서가 둘을 가른다. */
+[data-wb-state~="readonly"] {
+  background: var(--wb-semantic-canvas);
+}
+[data-wb-component="Input"][data-wb-state~="invalid"],
+[data-wb-component="TextArea"][data-wb-state~="invalid"],
+[data-wb-component="Select"][data-wb-state~="invalid"],
+[data-wb-component="DateInput"][data-wb-state~="invalid"],
+[data-wb-component="TimeInput"][data-wb-state~="invalid"] {
+  border-color: var(--wb-semantic-danger);
+}
+[data-wb-component="Input"][data-wb-state~="disabled"],
+[data-wb-component="TextArea"][data-wb-state~="disabled"],
+[data-wb-component="Select"][data-wb-state~="disabled"],
+[data-wb-component="DateInput"][data-wb-state~="disabled"],
+[data-wb-component="TimeInput"][data-wb-state~="disabled"],
+[data-wb-component="CheckboxGroup"][data-wb-state~="disabled"],
+[data-wb-component="RadioGroup"][data-wb-state~="disabled"],
+[data-wb-component="Chip"][data-wb-state~="disabled"] {
+  opacity: 0.5;
+}
+
+/* 체크 · 라디오 묶음 — 변형 `checkbox` · `radio` 는 상자가 글 앞에 선다. 세그먼트 · 체크 칩은 아래에서 칸째 꾸미고 상자를 숨긴다. */
+[data-wb-component="CheckboxGroup"],
+[data-wb-component="RadioGroup"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wb-space-2) var(--wb-space-4);
+  min-height: calc(var(--wb-space-unit) * 8.5);
+  color: var(--wb-semantic-text);
+  font-size: var(--wb-typography-body-fontSize);
+}
+[data-wb-component="CheckboxGroup"] > [data-wb-part="option"],
+[data-wb-component="RadioGroup"] > [data-wb-part="option"] {
+  display: inline-flex;
   align-items: center;
   gap: var(--wb-space-2);
 }
-[data-wb-component="Field"][data-wb-variant="checkbox"] [data-wb-part="control"],
-[data-wb-component="Field"][data-wb-variant="radio"] [data-wb-part="control"] {
-  flex: none;
+[data-wb-component="CheckboxGroup"][data-wb-variant="checkbox"] [data-wb-part="mark"],
+[data-wb-component="RadioGroup"][data-wb-variant="radio"] [data-wb-part="mark"] {
+  box-sizing: border-box;
   width: 16px;
-  min-height: 16px;
   height: 16px;
-  padding: 0;
-  font-size: 0;
+  border: 1px solid var(--wb-semantic-borderStrong);
+  border-radius: var(--wb-radius-sm);
+  background: var(--wb-semantic-surface);
 }
-[data-wb-component="Field"][data-wb-variant="radio"] [data-wb-part="control"] {
+[data-wb-component="RadioGroup"][data-wb-variant="radio"] [data-wb-part="mark"] {
   border-radius: 50%;
 }
-[data-wb-component="Field"][data-wb-state~="invalid"] [data-wb-part="control"] {
-  border-color: var(--wb-semantic-danger);
+[data-wb-component="CheckboxGroup"][data-wb-variant="checkbox"] [aria-checked="true"] > [data-wb-part="mark"],
+[data-wb-component="RadioGroup"][data-wb-variant="radio"] [aria-checked="true"] > [data-wb-part="mark"] {
+  border-color: var(--wb-semantic-primary);
+  background: var(--wb-semantic-primary);
+  box-shadow: inset 0 0 0 3px var(--wb-semantic-surface);
 }
-[data-wb-component="Field"][data-wb-state~="disabled"] {
-  opacity: 0.5;
+
+/* 세그먼트(`RadioGroup` 변형 `segment` — 기본) — 붙은 칸, 고른 칸은 짙은 바탕 흰 글. 고른 칸이 없어도 선다(«미선택»). */
+[data-wb-component="RadioGroup"][data-wb-variant="segment"] {
+  gap: 0;
+  flex-wrap: nowrap;
 }
-[data-wb-component="Field"][data-wb-state~="disabled"] [data-wb-part="control"] {
-  background: var(--wb-semantic-canvas);
+[data-wb-component="RadioGroup"][data-wb-variant="segment"] > [data-wb-part="option"] {
+  box-sizing: border-box;
+  min-height: calc(var(--wb-space-unit) * 8.5);
+  padding: 0 var(--wb-space-3);
+  border: 1px solid var(--wb-semantic-border);
+  margin-left: -1px;
+  background: var(--wb-semantic-surface);
 }
-/* 등록 폼 안의 필드 — 라벨 칸 · 입력 칸 두 칸. 위 `Field` 규칙과 특이도가 같아 뒤에 둔다. */
+[data-wb-component="RadioGroup"][data-wb-variant="segment"] > [data-wb-part="option"]:first-child {
+  margin-left: 0;
+  border-top-left-radius: var(--wb-radius-sm);
+  border-bottom-left-radius: var(--wb-radius-sm);
+}
+[data-wb-component="RadioGroup"][data-wb-variant="segment"] > [data-wb-part="option"]:last-child {
+  border-top-right-radius: var(--wb-radius-sm);
+  border-bottom-right-radius: var(--wb-radius-sm);
+}
+[data-wb-component="RadioGroup"][data-wb-variant="segment"] > [aria-checked="true"] {
+  background: var(--wb-semantic-text);
+  border-color: var(--wb-semantic-text);
+  color: var(--wb-semantic-surface);
+}
+[data-wb-component="RadioGroup"][data-wb-variant="segment"] [data-wb-part="mark"] {
+  display: none;
+}
+
+/* 체크 칩(`CheckboxGroup` 변형 `chip`) — 칸마다 테두리, 체크되면 짙은 바탕 흰 체크. */
+[data-wb-component="CheckboxGroup"][data-wb-variant="chip"] {
+  gap: var(--wb-space-2);
+}
+[data-wb-component="CheckboxGroup"][data-wb-variant="chip"] > [data-wb-part="option"] {
+  min-height: calc(var(--wb-space-unit) * 7);
+  padding: 0 var(--wb-space-3);
+  border: 1px solid var(--wb-semantic-border);
+  border-radius: var(--wb-radius-sm);
+  background: var(--wb-semantic-surface);
+}
+[data-wb-component="CheckboxGroup"][data-wb-variant="chip"] > [aria-checked="true"] {
+  background: var(--wb-semantic-text);
+  border-color: var(--wb-semantic-text);
+  color: var(--wb-semantic-surface);
+}
+[data-wb-component="CheckboxGroup"][data-wb-variant="chip"] [data-wb-part="mark"] {
+  display: none;
+}
+[data-wb-component="CheckboxGroup"][data-wb-variant="chip"] > [aria-checked="true"]::before {
+  content: "✓";
+}
+
+/* 칩 — 옅은 주색 바탕, 지우기 표지(×)가 뒤에 선다. */
+[data-wb-component="Chip"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wb-space-1);
+  padding: 0 var(--wb-space-2);
+  min-height: calc(var(--wb-space-unit) * 6);
+  border: 1px solid var(--wb-semantic-primary);
+  border-radius: var(--wb-radius-sm);
+  background: var(--wb-semantic-primarySoft);
+  color: var(--wb-semantic-primary);
+  font-size: var(--wb-typography-caption-fontSize);
+}
+[data-wb-component="Chip"] > [data-wb-part="remove"] {
+  font-weight: 600;
+}
+
+/* 사이 글자 — 색조는 `tone` 표지다. */
+[data-wb-component="Affix"] {
+  color: var(--wb-semantic-text);
+  font-size: var(--wb-typography-body-fontSize);
+  white-space: nowrap;
+}
+[data-wb-component="Affix"][data-wb-tone="muted"] {
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Affix"][data-wb-tone="danger"] {
+  color: var(--wb-semantic-danger);
+  white-space: normal;
+}
+[data-wb-component="Affix"][data-wb-tone="primary"] {
+  color: var(--wb-semantic-primary);
+}
+
+/* 등록 폼 안의 필드 — 라벨 칸 · 값 칸 두 칸. 위 `Field` 규칙과 특이도가 같아 뒤에 둔다. */
 [data-wb-component="EntryForm"] [data-wb-component="Field"] {
   display: grid;
   grid-template-columns: var(--wb-form-labelWidth) minmax(0, 1fr);
   column-gap: var(--wb-space-4);
   align-items: center;
 }
-[data-wb-component="EntryForm"] [data-wb-component="Field"][data-wb-variant="textarea"] {
+/* 여러 줄 값은 라벨을 위에 맞춘다. */
+[data-wb-component="EntryForm"] [data-wb-component="Field"]:has(> [data-wb-part="value"] > [data-wb-component="TextArea"]) {
   align-items: start;
 }
-[data-wb-component="EntryForm"] [data-wb-component="Field"][data-wb-variant="textarea"] [data-wb-part="label"] {
+[data-wb-component="EntryForm"] [data-wb-component="Field"]:has(> [data-wb-part="value"] > [data-wb-component="TextArea"]) > [data-wb-part="label"] {
   padding-top: var(--wb-space-2);
-}
-[data-wb-component="EntryForm"] [data-wb-component="Field"] [data-wb-part="help"] {
-  grid-column: 2;
-}
-[data-wb-component="EntryForm"] [data-wb-component="Field"][data-wb-variant="checkbox"] [data-wb-part="control"],
-[data-wb-component="EntryForm"] [data-wb-component="Field"][data-wb-variant="radio"] [data-wb-part="control"] {
-  justify-self: start;
 }
 
 /* ── 액션 ─────────────────────────────────────────────────────────────── */
@@ -717,9 +878,6 @@
   [data-wb-component="EntryForm"] [data-wb-component="Field"] {
     grid-template-columns: minmax(0, 1fr);
     row-gap: var(--wb-space-1);
-  }
-  [data-wb-component="EntryForm"] [data-wb-component="Field"] [data-wb-part="help"] {
-    grid-column: 1;
   }
   [data-wb-component="EntryForm"] > [data-wb-part="actions"] {
     padding-left: 0;

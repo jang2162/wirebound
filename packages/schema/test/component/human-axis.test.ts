@@ -76,7 +76,7 @@ describe('registerComponent — 이름 겹침', () => {
     resetRegistry()
   })
 
-  it('카탈로그 19종의 이름이 서로 다르다', () => {
+  it('카탈로그의 이름이 서로 다르다', () => {
     const labels = CATALOG_DEFS.map((def) => def.label)
     expect(new Set(labels).size).toBe(labels.length)
   })

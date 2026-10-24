@@ -152,38 +152,122 @@ describe('기본 CSS', () => {
   })
 })
 
-describe('Field — 접근성 속성은 control 조각에 선다', () => {
+describe('Field — 라벨 이름을 단 group · 값 칸에 조각', () => {
   const attrs = (el: Element, names: string[]) => names.map((name) => el.getAttribute(name))
-  const control = (el: Element) => el.querySelector('[data-wb-part="control"]')!
+
+  it('뿌리는 group 이고 라벨 조각의 id 를 이름으로 가리킨다 · 라벨 · 값 조각이 형제다', () => {
+    const el = draw({ id: 'f1', type: 'Field', props: { label: '이름' }, children: [{ id: 'i1', type: 'Input' }] })
+    expect(attrs(el, ['role'])).toEqual(['group'])
+    const label = el.querySelector(':scope > [data-wb-part="label"]')!
+    expect(label.textContent).toBe('이름')
+    expect(el.getAttribute('aria-labelledby')).toBe(label.id)
+    expect(label.id).not.toBe('')
+    expect(childParts(el)).toEqual(['label', 'value'])
+    expect(el.querySelector(':scope > [data-wb-part="value"] > [data-wb-id="i1"]')).not.toBeNull()
+  })
+
+  it('필수는 상태 · 별(라벨)이고 group 에 aria-required 를 안 단다', () => {
+    const el = draw({ id: 'f2', type: 'Field', props: { label: '이름', required: true } })
+    expect((el.getAttribute('data-wb-state') ?? '').split(' ')).toContain('required')
+    expect(el.hasAttribute('aria-required')).toBe(false)
+  })
+
+  it('라벨 id 는 노드마다 갈린다 — 한 문서에 필드가 둘이어도 이름이 섞이지 않는다', () => {
+    const doc = {
+      version: 4,
+      root: {
+        id: 'page',
+        type: 'Page',
+        children: [
+          { id: 'fa', type: 'Field', props: { label: '가' } },
+          { id: 'fb', type: 'Field', props: { label: '나' } },
+        ],
+      },
+    } as unknown as PageDocument
+    const { container } = render(<>{renderDocument(doc)}</>)
+    const ids = Array.from(container.querySelectorAll('[data-wb-component="Field"]')).map((f) => f.getAttribute('aria-labelledby'))
+    expect(new Set(ids).size).toBe(2)
+  })
+})
+
+describe('입력 조각 — 역할 · 이름 · 상태', () => {
+  const attrs = (el: Element, names: string[]) => names.map((name) => el.getAttribute(name))
 
   it.each([
-    ['text', 'textbox'],
-    ['number', 'spinbutton'],
-    ['select', 'combobox'],
-    ['date', 'textbox'],
-    ['dateRange', 'textbox'],
-    ['checkbox', 'checkbox'],
-    ['radio', 'radiogroup'],
-    ['textarea', 'textbox'],
-  ])('%s → role=%s · 이름 · required · invalid 가 조각에, 루트에는 없다', (kind, role) => {
-    const el = draw({ id: 'f1', type: 'Field', props: { label: '이름', control: kind, required: true, invalid: true } })
-    expect(attrs(control(el), ['role', 'aria-label', 'aria-required', 'aria-invalid'])).toEqual([role, '이름', 'true', 'true'])
-    expect(attrs(el, ['aria-required', 'aria-invalid'])).toEqual([null, null])
+    ['Input', {}, 'textbox'],
+    ['Input', { kind: 'number' }, 'spinbutton'],
+    ['Input', { kind: 'password' }, 'textbox'],
+    ['TextArea', {}, 'textbox'],
+    ['Select', {}, 'combobox'],
+    ['DateInput', {}, 'textbox'],
+    ['TimeInput', {}, 'textbox'],
+  ])('%s %j → role=%s · invalid · readonly 가 뿌리에', (type, props, role) => {
+    const states = type === 'Select' ? { invalid: true } : { invalid: true, readonly: true }
+    const el = draw({ id: 'p', type, props: { ...props, ...states } })
+    expect(attrs(el, ['role', 'aria-invalid'])).toEqual([role, 'true'])
+    if (type !== 'Select') expect(el.getAttribute('aria-readonly')).toBe('true')
   })
 
-  it('상태가 꺼져 있으면 조각에도 안 선다', () => {
-    const el = draw({ id: 'f2', type: 'Field', props: { label: '이름' } })
-    expect(attrs(control(el), ['role', 'aria-required', 'aria-invalid'])).toEqual(['textbox', null, null])
+  it('값이 있으면 값, 없으면 흐린 안내 · 비밀번호는 점', () => {
+    const text = (el: Element) => el.querySelector('[data-wb-part="text"]')!
+    const hint = draw({ id: 'a', type: 'Input', props: { placeholder: '이름' } })
+    expect([text(hint).textContent, text(hint).hasAttribute('data-wb-placeholder')]).toEqual(['이름', true])
+    expect(hint.getAttribute('aria-label')).toBe('이름')
+    cleanup()
+    const value = draw({ id: 'b', type: 'Input', props: { placeholder: '이름', value: '홍' } })
+    expect([text(value).textContent, text(value).hasAttribute('data-wb-placeholder')]).toEqual(['홍', false])
+    cleanup()
+    expect(text(draw({ id: 'c', type: 'Input', props: { kind: 'password', value: 'abcd' } })).textContent).toBe('••••')
   })
 
-  it('file 은 required 를 받는 역할이 없어 루트에 그대로 두고 조각에는 역할 · 이름을 안 단다', () => {
-    const el = draw({ id: 'f3', type: 'Field', props: { label: '첨부', control: 'file', required: true } })
-    expect(attrs(el, ['aria-required'])).toEqual(['true'])
-    expect(attrs(control(el), ['role', 'aria-label', 'aria-required'])).toEqual([null, null, null])
+  it('셀렉트는 고른 항목, 없으면 안내 문구', () => {
+    const text = (el: Element) => el.querySelector('[data-wb-part="text"]')!.textContent
+    expect(text(draw({ id: 's1', type: 'Select', props: {} }))).toBe('== 선택 ==')
+    cleanup()
+    expect(text(draw({ id: 's2', type: 'Select', props: { options: [{ label: '10' }, { label: '20', selected: true }] } }))).toBe('20')
   })
 
-  it('disabled 는 전역 속성이라 루트에 그대로 선다', () => {
-    const el = draw({ id: 'f4', type: 'Field', props: { label: '이름', disabled: true } })
-    expect(attrs(el, ['aria-disabled'])).toEqual(['true'])
+  it.each([
+    ['CheckboxGroup', 'group', 'checkbox'],
+    ['RadioGroup', 'radiogroup', 'radio'],
+  ])('%s — 묶음 역할 %s · 항목마다 %s · 고른 항목만 aria-checked=true', (type, groupRole, optionRole) => {
+    const el = draw({ id: 'g', type, props: { options: [{ label: '가' }, { label: '나', selected: true }, { label: '다' }] } })
+    expect(el.getAttribute('role')).toBe(groupRole)
+    const options = parts(el, 'option')
+    expect(options.map((o) => [o.getAttribute('role'), o.textContent, o.getAttribute('aria-checked')])).toEqual([
+      [optionRole, '가', 'false'],
+      [optionRole, '나', 'true'],
+      [optionRole, '다', 'false'],
+    ])
+    expect(options.every((o) => o.querySelector(':scope > [data-wb-part="mark"]') !== null)).toBe(true)
+    expect(options.every((o) => o.hasAttribute('data-wb-id'))).toBe(false)
   })
+
+  it('칩의 지우기 표지는 removable 일 때만', () => {
+    expect(parts(draw({ id: 'c1', type: 'Chip', props: {} }), 'remove')).toHaveLength(1)
+    cleanup()
+    expect(parts(draw({ id: 'c2', type: 'Chip', props: { removable: false } }), 'remove')).toHaveLength(0)
+  })
+})
+
+describe('값 칸의 몫 — Field 는 Flex 처럼 몫을 읽는다', () => {
+  it('몫을 준 조각의 뿌리에 --wb-node-weight 가 선다 · 기본 CSS 가 값 칸 자식에 flex 를 건다', () => {
+    const el = draw({
+      id: 'f',
+      type: 'Field',
+      props: { label: '아이디' },
+      children: [
+        { id: 'i', type: 'Input', weight: 1 },
+        { id: 'b', type: 'Button', props: { label: '중복확인' } },
+      ],
+    })
+    const input = el.querySelector('[data-wb-id="i"]') as HTMLElement
+    expect(input.style.getPropertyValue('--wb-node-weight')).toBe('1')
+    expect((el.querySelector('[data-wb-id="b"]') as HTMLElement).style.getPropertyValue('--wb-node-weight')).toBe('')
+    expect(defaultViewsCss()).toContain(':where([data-wb-component="Field"] > [data-wb-part="value"] > *)')
+  })
+})
+
+it('조각의 disabled 는 전역 속성이라 뿌리에 선다', () => {
+  expect(draw({ id: 'd', type: 'Select', props: { disabled: true } }).getAttribute('aria-disabled')).toBe('true')
 })

@@ -21,19 +21,26 @@ export const MARKED_PROPS: Readonly<Record<string, Readonly<Record<string, MarkK
   // `selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다 — 줄 · 카드 목록은 표지만 선다(spec 「6.1 노드 속성」).
   List: { pagination: 'flag', selectable: 'flag' },
   SearchForm: { collapsed: 'flag' },
+  // 고정 폭(`size`)은 길이가 아니라 «짧은 칸 · 보통 · 긴 칸» 이라는 설계의 낱말이다 — 실제 길이는 테마가 정한다(`Section.compact` 와 같은 자세).
+  Input: { kind: 'value', size: 'value' },
+  Select: { size: 'value' },
+  Chip: { removable: 'flag' },
+  Affix: { tone: 'value' },
   Media: { kind: 'value', ratio: 'value' },
 })
 
 /**
  * 상태마다 루트에 다는 접근성 속성. 상태는 `data-wb-state` 로 이미 실리므로 표지가 아니라 뜻을 더한다. `selected` 는 없다 — 루트가
- * 표 · 목록이라 `aria-selected` 를 받는 역할이 아니다. `empty` 도 없다(해당하는 속성이 없다). `Field` 의 기본 뷰는 `invalid` ·
- * `required` 의 속성을 루트가 아니라 `control` 조각에 둔다(`default-views/input.tsx`).
+ * 표 · 목록이라 `aria-selected` 를 받는 역할이 아니다. `empty` 도 없다(해당하는 속성이 없다). `Field` 의 기본 뷰는 `required` 의 속성을 루트에서
+ * 거둔다 — 뿌리가 `group` 이라 그 속성을 받는 역할이 아니다(`default-views/input.tsx`). 입력 조각은 역할(`textbox` · `combobox`)이 `invalid` ·
+ * `readonly` 를 받는다.
  */
 export const STATE_ARIA: Readonly<Record<string, string>> = Object.freeze({
   disabled: 'aria-disabled',
   loading: 'aria-busy',
   invalid: 'aria-invalid',
   required: 'aria-required',
+  readonly: 'aria-readonly',
 })
 
 /** 표지 속성 이름. 낙타 꼴(`fooBar`)은 `data-wb-foo-bar` 로 — HTML 은 속성 이름의 대소문자를 가리지 않는다. */

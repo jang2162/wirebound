@@ -78,12 +78,60 @@ const CENSUS: Record<string, Record<string, Cell>> = {
   EntryForm: { title: { route: 'text', alt: '제목' } },
   Field: {
     label: { route: 'text', alt: '이름' },
-    control: { route: 'variant', alt: 'select' },
-    placeholder: { route: 'text', alt: '입력' },
     required: { route: 'state', alt: true },
+  },
+  Input: {
+    kind: { route: 'mark', alt: 'number' },
+    value: { route: 'text', alt: '홍길동' },
+    placeholder: { route: 'text', alt: '입력' },
+    size: { route: 'mark', alt: 'long' },
+    disabled: { route: 'state', alt: true },
+    readonly: { route: 'state', alt: true },
+    invalid: { route: 'state', alt: true },
+  },
+  TextArea: {
+    value: { route: 'text', alt: '글' },
+    placeholder: { route: 'text', alt: '입력' },
+    rows: { route: 'var', alt: 5 },
+    disabled: { route: 'state', alt: true },
+    readonly: { route: 'state', alt: true },
+    invalid: { route: 'state', alt: true },
+  },
+  Select: {
+    options: { route: 'text', alt: [{ label: '가', selected: true }] },
+    placeholder: { route: 'text', alt: '고르세요' },
+    size: { route: 'mark', alt: 'short' },
     disabled: { route: 'state', alt: true },
     invalid: { route: 'state', alt: true },
   },
+  DateInput: {
+    value: { route: 'text', alt: '2026-10-24' },
+    placeholder: { route: 'text', alt: '날짜' },
+    disabled: { route: 'state', alt: true },
+    readonly: { route: 'state', alt: true },
+    invalid: { route: 'state', alt: true },
+  },
+  TimeInput: {
+    value: { route: 'text', alt: '09:30' },
+    placeholder: { route: 'text', alt: '시각' },
+    disabled: { route: 'state', alt: true },
+    readonly: { route: 'state', alt: true },
+    invalid: { route: 'state', alt: true },
+  },
+  CheckboxGroup: {
+    options: { route: 'markup', alt: [{ label: '선택', selected: true }] },
+    disabled: { route: 'state', alt: true },
+  },
+  RadioGroup: {
+    options: { route: 'markup', alt: [{ label: 'Y', selected: true }, { label: 'N' }] },
+    disabled: { route: 'state', alt: true },
+  },
+  Chip: {
+    label: { route: 'text', alt: '설문' },
+    removable: { route: 'mark', alt: false },
+    disabled: { route: 'state', alt: true },
+  },
+  Affix: { text: { route: 'text', alt: '부터' }, tone: { route: 'mark', alt: 'danger' } },
   Button: {
     label: { route: 'text', alt: '저장' },
     disabled: { route: 'state', alt: true },
@@ -118,6 +166,7 @@ const RESERVED = [
   'data-wb-error',
   'data-wb-cell',
   'data-wb-zone',
+  'data-wb-placeholder',
 ]
 
 interface ZodNode {
@@ -150,7 +199,7 @@ const SAMPLE_CHILDREN: Record<string, unknown[]> = {
 function root(type: string, props: Record<string, unknown>): Element {
   const node = { id: 'n', type, props, ...(SAMPLE_CHILDREN[type] === undefined ? {} : { children: SAMPLE_CHILDREN[type] }) }
   const placed = type === 'TabPanel' ? { id: 'tabs', type: 'Tabs', children: [node] } : node
-  const doc = { version: 3, root: { id: 'page', type: 'Page', children: [placed] } } as unknown as PageDocument
+  const doc = { version: 4, root: { id: 'page', type: 'Page', children: [placed] } } as unknown as PageDocument
   const { container } = render(<>{renderDocument(doc)}</>)
   const el = container.querySelector('[data-wb-id="n"]')
   if (el === null) throw new Error(`${type} 가 안 그려졌다`)
@@ -221,21 +270,28 @@ describe('카탈로그 × prop 인구조사', () => {
     },
   )
 
-  // `Field` 의 `aria-required` · `aria-invalid` 는 역할 없는 루트가 아니라 `control` 조각에 선다(`default-views/input.tsx`).
-  const ariaHolder = (type: string, el: Element, prop: string): Element =>
-    type === 'Field' && (prop === 'required' || prop === 'invalid') ? el.querySelector('[data-wb-part="control"]')! : el
+  /** `Field` 의 뿌리는 `group` 이라 `aria-required` 를 받는 역할이 아니다 — 기본 뷰가 거둔다(`default-views/input.tsx`). 아래 케이스가 따로 잰다. */
+  const ariaOf = (type: string, prop: string): string | undefined =>
+    type === 'Field' && prop === 'required' ? undefined : STATE_ARIA[prop]
 
   it.each(CELLS.filter((c) => c.route === 'state'))('$name — 상태와 접근성 속성', ({ type, prop }) => {
     const el = root(type, { [prop]: true })
     expect((el.getAttribute('data-wb-state') ?? '').split(' ')).toContain(prop)
-    const aria = STATE_ARIA[prop]
-    if (aria !== undefined) expect(ariaHolder(type, el, prop).getAttribute(aria)).toBe('true')
+    const aria = ariaOf(type, prop)
+    if (aria !== undefined) expect(el.getAttribute(aria)).toBe('true')
     cleanup()
     // 꺼진 판에는 접근성 속성이 없다 — 늘 다는 변조를 잡는다.
     if (aria !== undefined) {
       const off = root(type, { [prop]: false })
-      expect(ariaHolder(type, off, prop).hasAttribute(aria)).toBe(false)
+      expect(off.hasAttribute(aria)).toBe(false)
     }
+  })
+
+  it('Field.required — 뿌리(group)에 aria-required 가 없고 라벨의 별은 상태가 낸다', () => {
+    const el = root('Field', { required: true })
+    expect(el.getAttribute('role')).toBe('group')
+    expect(el.hasAttribute('aria-required')).toBe(false)
+    expect(el.querySelector('[aria-required]')).toBeNull()
   })
 
   it.each(CELLS.filter((c) => c.route === 'variant'))('$name — data-wb-variant', ({ type, prop, alt }) => {

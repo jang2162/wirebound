@@ -95,7 +95,10 @@ const DOC: PageDocument = {
       {
         id: 'n-section',
         type: 'Section',
-        children: [{ id: 'n-field', type: 'Field', props: { label: '이름', control: 'select', required: true } }],
+        // 값 칸의 셀렉트 — 선택지 위젯(고르기 · 옮기기 · 풀기)과 «종류 바꾸기…» 도 훑기가 닿는다.
+        children: [
+          { id: 'n-field', type: 'Field', props: { label: '이름', required: true }, children: [{ id: 'n-select', type: 'Select' }] },
+        ],
       },
       {
         id: 'n-btn',

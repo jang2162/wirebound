@@ -83,6 +83,8 @@ const LABEL_PROPS: Record<string, string> = {
   Card: 'title',
   EntryForm: 'title',
   Field: 'label',
+  Chip: 'label',
+  Affix: 'text',
   Button: 'label',
   Link: 'label',
   Text: 'content',

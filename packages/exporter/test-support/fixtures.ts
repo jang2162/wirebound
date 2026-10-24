@@ -30,7 +30,7 @@ function id(): string {
 export function broadFixture(): PageDocument {
   nextId = 0
   return {
-    version: 3,
+    version: 4,
     root: {
       id: id(),
       type: 'Page',
@@ -83,7 +83,14 @@ export function broadFixture(): PageDocument {
         {
           id: id(),
           type: 'SearchForm',
-          children: [{ id: id(), type: 'Field', props: { control: 'select', required: true, label: '등급' } }],
+          children: [
+            {
+              id: id(),
+              type: 'Field',
+              props: { required: true, label: '등급' },
+              children: [{ id: id(), type: 'Select', props: { invalid: true } }],
+            },
+          ],
           zones: {
             actions: [
               { id: id(), type: 'Button', props: { label: '초기화' } },
@@ -99,8 +106,32 @@ export function broadFixture(): PageDocument {
             {
               id: id(),
               type: 'Field',
-              props: { control: 'checkbox', disabled: true, invalid: true, label: '동의' },
+              props: { label: '동의' },
+              children: [{ id: id(), type: 'CheckboxGroup', props: { disabled: true, options: [{ label: '동의', selected: true }] } }],
             },
+            // 값 칸의 조각 — 기간(날짜 ~ 날짜) · 시간 · 세그먼트 · 몫을 준 입력 · 칩 · 여러 줄.
+            {
+              id: id(),
+              type: 'Field',
+              props: { label: '기간', required: true },
+              children: [
+                { id: id(), type: 'DateInput', props: { value: '2026-10-01' } },
+                { id: id(), type: 'Affix', props: { text: '~', tone: 'muted' } },
+                { id: id(), type: 'DateInput', props: { readonly: true } },
+                { id: id(), type: 'TimeInput', props: { invalid: true } },
+              ],
+            },
+            {
+              id: id(),
+              type: 'Field',
+              props: { label: '기준' },
+              children: [
+                { id: id(), type: 'RadioGroup', props: { options: [{ label: 'Y', selected: true }, { label: 'N' }] } },
+                { id: id(), type: 'Input', weight: 1, props: { kind: 'number', size: 'short', value: '80' } },
+                { id: id(), type: 'Chip', props: { label: '설문' } },
+              ],
+            },
+            { id: id(), type: 'Field', props: { label: '소개' }, children: [{ id: id(), type: 'TextArea', props: { rows: 4 } }] },
           ],
           zones: { actions: [{ id: id(), type: 'Button', props: { label: '저장' } }] },
         },
@@ -126,7 +157,7 @@ export function broadFixture(): PageDocument {
 export function slotFixture(): PageDocument {
   nextId = 900
   return {
-    version: 3,
+    version: 4,
     root: { id: id(), type: 'Page', children: [{ id: id(), type: 'Slot' }] },
   }
 }
@@ -138,7 +169,7 @@ export function slotFixture(): PageDocument {
 export function stateFixture(): PageDocument {
   nextId = 3000
   return {
-    version: 3,
+    version: 4,
     viewStates: [{ id: 's_admin', name: '관리자' }],
     root: {
       id: id(),
@@ -153,7 +184,7 @@ export function stateFixture(): PageDocument {
 
 /** 노드 하나를 `Page` 아래에 둔 문서. */
 export function pageWith(node: WbNode): PageDocument {
-  return { version: 3, root: { id: 'n_page', type: 'Page', children: [node] } }
+  return { version: 4, root: { id: 'n_page', type: 'Page', children: [node] } }
 }
 
 /** 글 하나 — 작은 표본. */

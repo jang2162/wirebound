@@ -67,8 +67,7 @@ describe('variantFrom', () => {
     expect(attrs['data-wb-variant']).toBe('h1')
   })
 
-  it('Field의 control과 Divider의 direction도 같은 채널로 나온다', () => {
-    expect(rootAttrs({ id: 'n_000000000001', type: 'Field', props: { control: 'select' } })['data-wb-variant']).toBe('select')
+  it('Divider의 direction도 같은 채널로 나온다', () => {
     expect(rootAttrs({ id: 'n_000000000001', type: 'Divider', props: { direction: 'vertical' } })['data-wb-variant']).toBe('vertical')
   })
 

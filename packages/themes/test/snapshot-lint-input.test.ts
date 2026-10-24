@@ -17,11 +17,11 @@ installCatalog()
 const LAYOUT_A = '11111111-1111-4111-8111-111111111111'
 
 function 문서(nodes: unknown[] = []): PageDocument {
-  return { version: 3, root: { id: 'root', type: 'Page', children: nodes } } as PageDocument
+  return { version: 4, root: { id: 'root', type: 'Page', children: nodes } } as PageDocument
 }
 
 function layout(id: string): SnapshotLayout {
-  return { id, name: '기본', schema: { version: 3, root: { id: 'l', type: 'Slot' } } as never }
+  return { id, name: '기본', schema: { version: 4, root: { id: 'l', type: 'Slot' } } as never }
 }
 
 /**
@@ -37,9 +37,9 @@ function payload(over: Partial<SnapshotPayload> = {}): SnapshotPayload {
       { id: 'm1', parentId: null, title: '관리자', sortOrder: 0 },
     ],
     pages: [
-      { id: 'p2', menuNodeId: 'm2', title: '상세', sortOrder: 1, description: null, schemaVersion: 3, schema: 문서(), headSeq: 0 },
-      { id: 'p1', menuNodeId: 'm2', title: '목록', sortOrder: 0, description: null, schemaVersion: 3, schema: 문서(), headSeq: 0 },
-      { id: 'p3', menuNodeId: 'm1', title: '대시보드', sortOrder: 0, description: null, schemaVersion: 3, schema: 문서(), headSeq: 0 },
+      { id: 'p2', menuNodeId: 'm2', title: '상세', sortOrder: 1, description: null, schemaVersion: 4, schema: 문서(), headSeq: 0 },
+      { id: 'p1', menuNodeId: 'm2', title: '목록', sortOrder: 0, description: null, schemaVersion: 4, schema: 문서(), headSeq: 0 },
+      { id: 'p3', menuNodeId: 'm1', title: '대시보드', sortOrder: 0, description: null, schemaVersion: 4, schema: 문서(), headSeq: 0 },
     ],
     layouts: [layout(LAYOUT_A)],
     comments: [

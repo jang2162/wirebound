@@ -20,10 +20,11 @@ import { createPortal } from 'react-dom'
 import { childLists, nodeAlias, nodeSummary, zoneDefs, zonePointer, type NodeLock, type WbNode } from '@wirebound/schema'
 import { DropIndicator, DropRefusal } from '../drag/drop-indicator'
 import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
+import { kindTargets } from '../edit/change-kind'
 import { platformOf } from '../edit/editor-shortcuts'
 import { usePublishTreeRegion } from '../drag/use-placement'
 import { elementAt, scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
-import { walkSafely } from '../edit/safe-walk'
+import { findNodeSafely, walkSafely } from '../edit/safe-walk'
 import { ancestorIds, hasChildRows, visibleNodeOrder } from '../edit/selection-move'
 import { sameDrop, type StructureDrop } from '../edit/structure-drop'
 import { useHiddenNodes } from '../shell/use-view-state'
@@ -34,6 +35,7 @@ import { structureKey, useCollapsed, type Collapsed } from '../tree/collapse'
 import { useAliasEdit, type AliasEdit } from './alias-edit'
 import { nodeTypeLabel } from './node-shape'
 import { structureTreeHint, structureTreeRefusal } from './structure-tree-hint'
+import { ChangeKindDialog } from './change-kind-dialog'
 import { moduleSelection, SaveModuleDialog, savedModuleNotice } from './save-module-dialog'
 import { selectionCapNotice } from './toolbar-status'
 import { useStructureCommands, type StructureCommands } from './structure-toolbar'
@@ -104,6 +106,8 @@ export function StructureTree(props: {
   const hidden = useHiddenNodes(props.pageId)
   /** «모듈로 저장…» 상자가 담을 노드 — 연 순간의 선택(`./save-module-dialog.tsx` 머리말). `null` 이면 닫혀 있다. */
   const [saving, setSaving] = useState<WbNode[] | null>(null)
+  /** «종류 바꾸기…» 상자가 바꿀 노드 id. `null` 이면 닫혀 있다. 노드가 문서에서 사라지면 상자도 닫힌다(타입을 못 읽는다). */
+  const [changing, setChanging] = useState<string | null>(null)
   /** 줄을 찾는 상자 — 끄는 동안 포인터 밑 줄(`[data-tree-row]`)을 여기서 찾는다. */
   const treeRef = useRef<HTMLUListElement>(null)
   usePublishTreeRegion(treeRef)
@@ -193,6 +197,9 @@ export function StructureTree(props: {
   }
   /** 고른 줄 전부 — 줄마다 «고른 줄인가»를 묻는다(강조). */
   const selectedSet = new Set(selectedNodeIds)
+  /** 상자가 바꿀 노드의 지금 타입 — 노드가 사라졌거나 입력 조각이 아니게 됐으면(남의 편집) `null` 이라 상자가 안 선다. */
+  const changingNode = changing === null ? undefined : findNodeSafely(doc.root, changing)
+  const changingType = changingNode !== undefined && kindTargets(changingNode.type).length > 0 ? changingNode.type : null
   /** «모듈로 저장…» — 그 줄을 연 누름이 줄을 고른 뒤의 선택으로 담을 노드를 정한다(여럿을 고른 판은 고른 것 전부). */
   const openSaveModule = (): void => {
     const nodes = moduleSelection(doc, store.getState().selectedNodeIds)
@@ -214,7 +221,11 @@ export function StructureTree(props: {
             lockOf={lockOf}
             blockedOf={store.selectionBlockedBy}
             fold={fold}
-            row={props.editable ? { commands, drag, rootId, select: store.selectNode, alias, saveModule: openSaveModule } : null}
+            row={
+              props.editable
+                ? { commands, drag, rootId, select: store.selectNode, alias, saveModule: openSaveModule, changeKind: setChanging }
+                : null
+            }
             saveOnly={props.editable ? null : { rootId, select: store.selectNode, saveModule: openSaveModule }}
             selectedZone={selectedZone}
             onSelectZone={store.selectZone}
@@ -235,6 +246,16 @@ export function StructureTree(props: {
       </div>
       {/* **«모듈로 저장…»**(`./save-module-dialog.tsx`) — 트리 상자의 형제다(상자 안의 키가 React 트리를 따라 줄 행동으로 버블되지 않게 —
         `shell/shell-dialog.tsx` 머리말). */}
+      {/* **«종류 바꾸기…»**(`./change-kind-dialog.tsx`) — 같은 까닭으로 트리 상자의 형제다. */}
+      <ChangeKindDialog
+        from={changingType}
+        targets={kindTargets(changingType)}
+        onPick={(type) => {
+          if (changing !== null) commands.changeKind(changing, type)
+          setChanging(null)
+        }}
+        onClose={() => setChanging(null)}
+      />
       <SaveModuleDialog
         projectId={props.projectId}
         nodes={saving}
@@ -295,6 +316,8 @@ interface RowWiring {
   alias: AliasEdit
   /** «모듈로 저장…» 상자를 연다 — 지금 선택으로(뿌리 줄에는 항목이 없다 — `./tree-row-actions.tsx`). */
   saveModule: () => void
+  /** «종류 바꾸기…» 상자를 그 노드로 연다(입력 조각 줄에만 항목이 선다). */
+  changeKind: (nodeId: string) => void
 }
 
 /** 편집할 수 없는 판에서 줄마다 내려가는 것 — 뿌리 · 고르기 · 모듈로 저장(뿌리 줄에는 항목이 없다). */
@@ -544,7 +567,12 @@ function StructureNode(props: {
           {open && (
             <TreeRowActions
               name={rowLabel}
-              {...structureRowItems(row.commands, () => row.alias.open(node.id), row.rootId === node.id ? undefined : row.saveModule)}
+              {...structureRowItems(
+                row.commands,
+                () => row.alias.open(node.id),
+                row.rootId === node.id ? undefined : row.saveModule,
+                kindTargets(node.type).length > 0 ? () => row.changeKind(node.id) : undefined,
+              )}
               // 열면 그 줄을 먼저 고른다 — 이미 고른 줄이면 다시 고르지 않는다(여럿을 고른 판의 기준 줄 `…` 이 고른 것 전부에 대해 서게).
               onOpen={() => {
                 if (!picked) row.select(node.id)

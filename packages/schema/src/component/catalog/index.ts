@@ -3,7 +3,20 @@ import { getComponent, registerComponent } from '../registry'
 import { ButtonDef, LinkDef } from './action'
 import { KeyValueDef, ListDef, TreeDef } from './data'
 import { DividerDef, MediaDef, PlaceholderDef, TextDef } from './document'
-import { EntryFormDef, FieldDef, SearchFormDef } from './input'
+import {
+  AffixDef,
+  CheckboxGroupDef,
+  ChipDef,
+  DateInputDef,
+  EntryFormDef,
+  FieldDef,
+  InputDef,
+  RadioGroupDef,
+  SearchFormDef,
+  SelectDef,
+  TextAreaDef,
+  TimeInputDef,
+} from './input'
 import { CardDef, FlexDef, GridDef, PageDef, SectionDef, SlotDef, TabPanelDef, TabsDef } from './structure'
 
 export * from './action'
@@ -32,6 +45,15 @@ export const CATALOG_DEFS: readonly ComponentDef[] = [
   SearchFormDef,
   EntryFormDef,
   FieldDef,
+  InputDef,
+  TextAreaDef,
+  SelectDef,
+  DateInputDef,
+  TimeInputDef,
+  CheckboxGroupDef,
+  RadioGroupDef,
+  ChipDef,
+  AffixDef,
   ButtonDef,
   LinkDef,
   TextDef,

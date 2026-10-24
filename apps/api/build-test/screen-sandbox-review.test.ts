@@ -68,7 +68,7 @@ async function pageClass(): Promise<{ evaluate: Page['evaluate'] }> {
 
 const doc = (): PageDocument =>
   ({
-    version: 3,
+    version: 4,
     root: { id: 'n_p', type: 'Page', children: [{ id: 'n_t', type: 'Text', props: { content: '한글 본문' } }] },
   }) as unknown as PageDocument
 

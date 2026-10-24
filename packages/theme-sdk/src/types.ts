@@ -60,6 +60,19 @@ export interface ViewProps<P extends Record<string, unknown> = Record<string, un
   /** 몸통의 자식을 하나씩 — 탭처럼 자식마다 머리와 내용을 가르는 뷰가 쓴다. 지금 보이는 자식만 든다(문서 차례). */
   items: readonly ViewItem[]
   slot: ReactNode
+  /**
+   * 값 칸의 입력 조각이면 그 필드의 이름과 필수 — 렌더러가 `Field` 몸통의 입력 조각에만 싣는다(아니면 없다). 입력 칸만 훑는 보조 기술은 묶음
+   * (`group`)의 이름을 지나지 않으므로 조각 뷰는 이것을 제 접근 이름 · `aria-required` 로 편다(SDK 기본 뷰가 그렇게 한다).
+   */
+  field?: ViewField
+}
+
+/** 값 칸 조각이 받는 필드 이름(`ViewProps.field`). */
+export interface ViewField {
+  /** 조각의 접근 이름 — 그 필드의 입력 조각이 하나면 라벨, 여럿이면 라벨 + 별칭(없으면 차례 — 1부터). 같은 필드의 조각끼리 갈린다. */
+  name: string
+  /** 그 필드가 필수인가(`Field.required`). */
+  required: boolean
 }
 
 /** 몸통 자식 하나(`ViewProps.items`). */

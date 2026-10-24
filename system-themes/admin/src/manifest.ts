@@ -10,8 +10,8 @@ export const MANIFEST: ThemeManifest = {
   id: 'system-admin',
   name: '기본테마',
   description: '관리자 화면 기본 테마. 좁은 여백과 표 중심의 밀도를 갖는다.',
-  version: '1.3.0',
-  sdk: '^1.3.0',
+  version: '1.4.1',
+  sdk: '^1.4.0',
   tokens: {
     groups: [
       { id: 'color', label: '색' },
@@ -95,6 +95,21 @@ export const MANIFEST: ThemeManifest = {
         { id: 'muted', label: '옅게' },
       ],
       defaultVariant: 'default',
+    },
+    // 세그먼트가 기본이다 — 설계서의 단일 선택 대부분이 세그먼트이고 라디오는 표 안 선택 열에 몰려 있다(설계 spec `2026-10-24-compose-input-design.md` Q1).
+    RadioGroup: {
+      variants: [
+        { id: 'segment', label: '세그먼트' },
+        { id: 'radio', label: '라디오' },
+      ],
+      defaultVariant: 'segment',
+    },
+    CheckboxGroup: {
+      variants: [
+        { id: 'checkbox', label: '체크박스' },
+        { id: 'chip', label: '칩' },
+      ],
+      defaultVariant: 'checkbox',
     },
   },
 }

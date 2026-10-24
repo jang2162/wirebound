@@ -62,8 +62,8 @@ const ROOT_VARS = (): Map<string, string> => {
 describe('system-admin manifest', () => {
   it('id · 판 · sdk · 이름 · 설명', () => {
     expect(ADMIN_V0.manifest.id).toBe('system-admin')
-    expect(ADMIN_V0.manifest.version).toBe('1.3.0')
-    expect(ADMIN_V0.manifest.sdk).toBe('^1.3.0')
+    expect(ADMIN_V0.manifest.version).toBe('1.4.1')
+    expect(ADMIN_V0.manifest.sdk).toBe('^1.4.0')
     expect(ADMIN_V0.manifest.name).toBe('기본테마')
     expect(ADMIN_V0.manifest.description).toBe('관리자 화면 기본 테마. 좁은 여백과 표 중심의 밀도를 갖는다.')
   })
@@ -92,8 +92,11 @@ describe('system-admin manifest', () => {
     for (const type of Object.keys(ADMIN_V0.manifest.components ?? {})) expect(catalog.has(type)).toBe(true)
   })
 
-  /** `0.1.0` 에 고정된 프로젝트가 판을 올릴 때 없어지는 variant 가 없다 — 그 판이 선언한 id 들에 `1.3.0` 의 카드 `borderless` 를 더한 것이다. */
-  it('0.1.0 이 선언한 variant 를 전부 그대로 선언한다 · 카드의 테두리 없는 변형을 더한다', () => {
+  /**
+   * `0.1.0` 에 고정된 프로젝트가 판을 올릴 때 없어지는 variant 가 없다 — 그 판이 선언한 id 들에 `1.3.0` 의 카드 `borderless` 와 `1.4.0` 의 선택지
+   * 묶음 둘(세그먼트 · 체크 칩)을 더한 것이다.
+   */
+  it('0.1.0 이 선언한 variant 를 전부 그대로 선언한다 · 카드의 테두리 없는 변형 · 선택지 묶음의 변형을 더한다', () => {
     const declared = Object.fromEntries(
       Object.entries(ADMIN_V0.manifest.components ?? {}).map(([type, decl]) => [type, decl.variants.map((v) => v.id)]),
     )
@@ -103,8 +106,21 @@ describe('system-admin manifest', () => {
       List: ['default', 'featured', 'compact'],
       Button: ['default', 'primary', 'secondary', 'danger', 'ghost'],
       Link: ['default', 'muted'],
+      RadioGroup: ['segment', 'radio'],
+      CheckboxGroup: ['checkbox', 'chip'],
     })
-    for (const decl of Object.values(ADMIN_V0.manifest.components ?? {})) expect(decl.defaultVariant).toBe('default')
+    const defaults = Object.fromEntries(
+      Object.entries(ADMIN_V0.manifest.components ?? {}).map(([type, decl]) => [type, decl.defaultVariant]),
+    )
+    expect(defaults).toEqual({
+      Section: 'default',
+      Card: 'default',
+      List: 'default',
+      Button: 'default',
+      Link: 'default',
+      RadioGroup: 'segment',
+      CheckboxGroup: 'checkbox',
+    })
   })
 })
 

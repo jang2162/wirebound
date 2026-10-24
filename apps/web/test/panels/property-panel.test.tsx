@@ -70,11 +70,7 @@ const DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
   children: [
-    {
-      id: 'n-field',
-      type: 'Field',
-      props: { label: '이름', control: 'select', placeholder: '검색어', required: true },
-    },
+    { id: 'n-field', type: 'Input', props: { kind: 'number', placeholder: '검색어', readonly: true } },
     { id: 'n-card', type: 'Card', props: { title: '회원 정보' } },
     { id: 'n-list', type: 'List', props: { columns: ['이름', '이메일'], items: 3 } },
     {
@@ -148,10 +144,10 @@ const BROKEN_TYPE_DOC = pageDoc({
 })
 
 /** 위젯이 있는 control. */
-const WIDGET_CONTROLS: EditorControl[] = ['text', 'textarea', 'number', 'switch', 'select', 'stringList', 'pairList']
+const WIDGET_CONTROLS: EditorControl[] = ['text', 'textarea', 'number', 'switch', 'select', 'stringList', 'pairList', 'optionList']
 /**
  * 위젯이 없어 `formatValue`가 글자로만 그리는 control. **비어 있다** —
- * 위젯이 일곱을 전부 덮는다. 카탈로그에 여덟 번째가 생기면 아래 대조가 그것을 잡는다.
+ * 위젯이 여덟을 전부 덮는다. 카탈로그에 아홉 번째가 생기면 아래 대조가 그것을 잡는다.
  */
 const NOT_YET: EditorControl[] = []
 
@@ -161,7 +157,7 @@ function catalogControls(): Set<EditorControl> {
 }
 
 /**
- * control 종류마다 그것을 쓰는 카탈로그 자리 하나씩. **일곱을 전부 짚는다** — 위
+ * control 종류마다 그것을 쓰는 카탈로그 자리 하나씩. **여덟을 전부 짚는다** — 위
  * `catalogControls()`와의 대조가 그 사실을 지킨다.
  */
 const CONTROL_SAMPLES: { control: EditorControl; type: string; label: string }[] = [
@@ -169,9 +165,10 @@ const CONTROL_SAMPLES: { control: EditorControl; type: string; label: string }[]
   { control: 'textarea', type: 'Text', label: '내용' },
   { control: 'number', type: 'List', label: '항목 수' },
   { control: 'switch', type: 'Field', label: '필수' },
-  { control: 'select', type: 'Field', label: '입력 종류' },
+  { control: 'select', type: 'Input', label: '종류' },
   { control: 'stringList', type: 'List', label: '컬럼' },
   { control: 'pairList', type: 'KeyValue', label: '키-값' },
+  { control: 'optionList', type: 'Select', label: '선택지' },
 ]
 
 /** 위 표가 짚는 자리를 전부 담은 문서. `DOC`을 건드리지 않는 것은 다른 케이스가 그것에 매여 있어서다. */
@@ -179,14 +176,12 @@ const CONTROLS_DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
   children: [
-    {
-      id: 'n-field',
-      type: 'Field',
-      props: { label: '이름', control: 'select', placeholder: '검색어', required: true },
-    },
+    { id: 'n-field', type: 'Field', props: { label: '이름', required: true } },
+    { id: 'n-input', type: 'Input', props: { kind: 'number' } },
     { id: 'n-text', type: 'Text', props: { content: '문단', role: 'body' } },
     { id: 'n-list', type: 'List', props: { columns: ['이름'], items: 3 } },
     { id: 'n-kv', type: 'KeyValue', props: { pairs: [{ key: 'k', value: 'v' }] } },
+    { id: 'n-select', type: 'Select' },
   ],
 })
 
@@ -255,33 +250,35 @@ describe('속성 패널', () => {
   it('선택 노드의 editor 명세대로 필드를 나열한다', async () => {
     await openPage(DOC)
 
-    select('Field')
+    select('Input')
 
     // 카탈로그의 `editor` 배열 순서 그대로다. 순서를 여기 다시 적는 것은 구현이
-    // `FieldDef`를 import해 그대로 훑기만 해도 통과하는 단언을 만들지 않기 위해서다 —
+    // `InputDef`를 import해 그대로 훑기만 해도 통과하는 단언을 만들지 않기 위해서다 —
     // 순서가 잘못 바뀌면 이 줄이 죽어야 한다.
-    expect(labels()).toEqual(['라벨', '입력 종류', '안내 문구', '필수', '비활성', '오류 상태'])
+    expect(labels()).toEqual(['종류', '값', '안내 문구', '폭', '비활성', '읽기 전용', '오류 상태'])
     // 어느 컴포넌트의 속성인지도 보여 준다(설계서 「설계서 화면 구조」의 패널 머리).
-    expect(within(panel()).getByRole('heading').textContent).toBe('Field')
+    expect(within(panel()).getByRole('heading').textContent).toBe('Input')
   })
 
   it('각 필드의 라벨과 현재 값을 보여준다', async () => {
     await openPage(DOC)
 
-    select('Field')
+    select('Input')
 
     expect(propRows()).toEqual([
-      { label: '라벨', value: '이름' },
-      { label: '입력 종류', value: 'select' },
+      { label: '종류', value: 'number' },
+      // 값이 없는 글 칸은 빈 칸이다 — 카탈로그 기본값을 채우지 않는다.
+      { label: '값', value: '' },
       { label: '안내 문구', value: '검색어' },
-      // 켜짐/꺼짐으로 보여 준다. `true`를 그대로 찍으면 사용자가 읽을 문장이 아니다.
-      { label: '필수', value: '켜짐' },
+      { label: '폭', value: '' },
       // **값이 없는 스위치는 "꺼짐"으로 보인다** — 체크박스가 그리기 때문이다
       // (`formatValue(undefined)`가 그리면 빈 문자열이 된다). 체크박스에는
       // "값 없음"을 표현할 자리가 없어 **화면에서는 `false`와 구분되지 않는다** — 문서
       // 안에서는 그대로 갈린다(값이 없던 prop을 켜면 `replace`가 아니라 `add`가 나가는
       // 것을 `값이 없던 prop을 켜면 true가 들어간다`가 지킨다).
       { label: '비활성', value: '꺼짐' },
+      // 켜짐/꺼짐으로 보여 준다. `true`를 그대로 찍으면 사용자가 읽을 문장이 아니다.
+      { label: '읽기 전용', value: '켜짐' },
       { label: '오류 상태', value: '꺼짐' },
     ])
   })
@@ -370,16 +367,16 @@ describe('속성 패널', () => {
     expect(propRows()).toHaveLength(0)
   })
 
-  it('카탈로그의 control 일곱에 전부 대응하는 위젯이 있다', async () => {
+  it('카탈로그의 control 여덟에 전부 대응하는 위젯이 있다', async () => {
     // **경계는 "control마다 위젯이 있다"이다.**
     //
-    // **그 "일곱"은 아래에서 세어 나온 값이다.** `NOT_YET`이 비어 있는 것이 전부 덮였다는
+    // **그 "여덟"은 아래에서 세어 나온 값이다.** `NOT_YET`이 비어 있는 것이 전부 덮였다는
     // 표시이고, 카탈로그에 새 control이 생기면 두 목록의 합이
     // 어긋나 여기서 죽는다.
     await openPage(CONTROLS_DOC)
 
     // **분모를 손으로 적지 않는다.** 카탈로그가 실제로 쓰는 control 집합을 세어
-    // 두 목록의 합과 맞춘다 — 카탈로그에 여덟 번째 control이 생기면 여기서 죽는다.
+    // 두 목록의 합과 맞춘다 — 카탈로그에 아홉 번째 control이 생기면 여기서 죽는다.
     expect(new Set([...WIDGET_CONTROLS, ...NOT_YET])).toEqual(catalogControls())
 
     for (const { control, type, label } of CONTROL_SAMPLES) {
@@ -478,8 +475,8 @@ describe('속성 패널', () => {
     select('Field')
 
     // 필드는 그대로 나오고 **값을 든 자리가 하나도 없다.** 줄 수를 여기서 다시 못박지 않는
-    // 것은 카탈로그가 바뀔 때 이 케이스가 이유 없이 어긋나기 때문이다 — `Field`의 `editor`
-    // 여섯 줄은 위 `선택 노드의 editor 명세대로 필드를 나열한다`가 이미 지킨다.
+    // 것은 카탈로그가 바뀔 때 이 케이스가 이유 없이 어긋나기 때문이다 — 편집 칸의 차례는 위
+    // `선택 노드의 editor 명세대로 필드를 나열한다`가 이미 지킨다.
     //
     // **"빈 문자열"이 아니라 "빈 값"으로 본다.** 스위치 자리는 체크박스가 그리므로 값이
     // 없어도 `꺼짐`으로 읽히고(위 케이스에 그 사실을 적었다), 그것은 "props를 읽지
@@ -915,6 +912,7 @@ const SWITCH_DOC = pageDoc({
     { id: 'n-bare', type: 'Field' },
     { id: 'n-text', type: 'Text', props: { content: '문단', role: 'body' } },
     { id: 'n-noopt', type: NO_OPTIONS_TYPE, props: { items: 2 } },
+    { id: 'n-input', type: 'Input', props: { disabled: false } },
   ],
 })
 
@@ -996,8 +994,8 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
     expect(propRows()).toContainEqual({ label: '선택지 없는 필드', value: '2' })
 
     // 양성 대조: options가 있는 자리는 그린다.
-    selectAt('Field', 0)
-    expect(controlWidget('입력 종류')).not.toBeNull()
+    selectAt('Text', 0)
+    expect(controlWidget('역할')).not.toBeNull()
   })
 
   it('편집이 실패하면 재조회가 서버 값을 되비춘다 — 고르던 자리는 그대로다', async () => {
@@ -1060,6 +1058,7 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
 
     selectAt('Field', 0)
     expect((requireWidget('필수') as HTMLInputElement).checked).toBe(true)
+    selectAt('Input', 0)
     expect((requireWidget('비활성') as HTMLInputElement).checked).toBe(false)
   })
 })

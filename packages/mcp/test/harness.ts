@@ -92,7 +92,7 @@ export function harness(options: HarnessOptions = {}): FakeIo {
 
   stubWrite(io, 'PATCH', `/api/projects/${PROJECT}/pages/${WRITE_PAGE}/ops`, options.patch ?? 'ok', {
     status: 200,
-    body: { seq: 1, revisionId: 'rev_0001', inverse: [], schemaVersion: 3 },
+    body: { seq: 1, revisionId: 'rev_0001', inverse: [], schemaVersion: 4 },
   })
   stubWrite(io, 'POST', `/api/projects/${PROJECT}/pages/${WRITE_PAGE}/comments`, options.comment ?? 'ok', {
     status: 201,

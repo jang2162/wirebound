@@ -35,7 +35,7 @@ function card(): WbNode {
 }
 
 function page(...children: WbNode[]): PageDocument {
-  return { version: 3, root: { id: 'n_root', type: 'Page', children } }
+  return { version: 4, root: { id: 'n_root', type: 'Page', children } }
 }
 
 describe('childLists — 차례는 카탈로그의 구역 선언 차례', () => {
@@ -221,9 +221,9 @@ describe('순회 · 복사 · 보임', () => {
 
   it('클립보드 — 맨 위 탭 패널은 감싼 뿌리 밑이어도 읽는다(설 자리는 붙인 뒤 문서가 본다) · 그 안의 판정은 그대로', () => {
     const panel: WbNode = { id: 'n_p', type: 'TabPanel', props: { label: '상세' } }
-    expect(inspectNodesEnvelope(writeNodesEnvelope([panel], 3))).toEqual({ kind: 'ok', nodes: [panel] })
+    expect(inspectNodesEnvelope(writeNodesEnvelope([panel], 4))).toEqual({ kind: 'ok', nodes: [panel] })
     const nested: WbNode = { id: 'n_f', type: 'Flex', children: [panel] }
-    expect(inspectNodesEnvelope(writeNodesEnvelope([nested], 3))).toEqual({
+    expect(inspectNodesEnvelope(writeNodesEnvelope([nested], 4))).toEqual({
       kind: 'rejected',
       reason: '탭 패널은 탭 안에만 놓을 수 있습니다',
     })

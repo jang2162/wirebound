@@ -17,6 +17,7 @@
  */
 import { zoneList, type NodeLock, type WbNode } from '@wirebound/schema'
 import { useEditCommit } from '../edit/use-edit-commit'
+import { changeKindOps, kindTargets } from '../edit/change-kind'
 import { aliasOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { reselectAfterReject } from '../edit/reselect-after-reject'
 import { findNodeSafely } from '../edit/safe-walk'
@@ -79,6 +80,13 @@ export interface StructureCommands {
    * 입력을 연 뒤 도착한 남의 잠금이면 말하고 안 보낸다.
    */
   renameAlias: (nodeId: string, alias: string) => void
+  /**
+   * «종류 바꾸기…» 를 못 하는가 — 별칭과 같은 조건(하나만 골랐다 · 문서에 있다 · 남이 안 잡았다)에 고른 노드가 입력 조각이어야 한다(`kindTargets`).
+   * 줄 `…` 의 항목은 입력 조각 줄에만 선다 — 이 값은 그 항목의 끔이다.
+   */
+  kindLocked: boolean
+  /** 그 노드의 종류를 바꾼다(`changeKindOps`). 보내기 전에 서버의 2차 방어와 같은 물음(`editBlockedBy`)을 한 번 더 — 상자를 연 뒤 온 남의 잠금이면 말하고 안 보낸다. */
+  changeKind: (nodeId: string, toType: string) => void
 }
 
 export function useStructureCommands(props: {
@@ -285,6 +293,11 @@ export function useStructureCommands(props: {
     selectedNodeIds.length !== 1 ||
     props.selectedLock !== null ||
     findNodeSafely(document.root, selectedNodeId) === undefined
+  const kindLocked =
+    aliasLocked ||
+    document === null ||
+    selectedNodeId === null ||
+    kindTargets(findNodeSafely(document.root, selectedNodeId)?.type).length === 0
   const reasonInput: StructureReasonInput = {
     selectedNodeId,
     // **루트인지는 id로 본다.** 판정을 다시 하지 않는다 — `structureAbilities`가 이미
@@ -302,7 +315,7 @@ export function useStructureCommands(props: {
 
   return {
     abilities,
-    why: structureWhy(reasonInput, { aliasLocked }),
+    why: structureWhy(reasonInput, { aliasLocked, kindLocked }),
     levels,
     remove: removeSelected,
     moveUp: () => moveSelected(-1),
@@ -317,6 +330,18 @@ export function useStructureCommands(props: {
     renameAlias: (nodeId, alias) => {
       if (document === null) return
       const ops = aliasOps(document, nodeId, alias)
+      if (ops === null) return
+      const blocker = store.editBlockedBy(ops)
+      if (blocker !== null) {
+        store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
+        return
+      }
+      commitOps(ops)
+    },
+    kindLocked,
+    changeKind: (nodeId, toType) => {
+      if (document === null) return
+      const ops = changeKindOps(document, nodeId, toType)
       if (ops === null) return
       const blocker = store.editBlockedBy(ops)
       if (blocker !== null) {

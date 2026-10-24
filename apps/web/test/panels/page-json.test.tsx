@@ -368,7 +368,7 @@ describe('미리보기', () => {
   })
 })
 
-/** `Field`는 `variantFrom: 'control'`이라 노드가 든 `variant`가 버려지고 `ignored-variant`(warning)가 난다. 서버는 그것으로 막지 않는다. */
+/** `Text`는 `variantFrom: 'role'`이라 노드가 든 `variant`가 버려지고 `ignored-variant`(warning)가 난다. 서버는 그것으로 막지 않는다. */
 function warnedFile(): PageJson {
   return file({
     schema: {
@@ -376,7 +376,7 @@ function warnedFile(): PageJson {
       root: {
         id: 'file_root',
         type: 'Page',
-        children: [{ id: 'file_field', type: 'Field', props: { label: '이름', control: 'text' }, variant: 'x' }],
+        children: [{ id: 'file_text', type: 'Text', props: { content: '이름' }, variant: 'x' }],
       },
     },
     comments: [],

@@ -61,6 +61,7 @@ import {
   PackageOpen,
   Plus,
   Redo2,
+  Replace,
   Settings,
   SquareDashed,
   Trash2,
@@ -113,6 +114,8 @@ export const ICONS = {
   /** 메뉴를 만든다 — «하위 메뉴» · «최상위 메뉴 추가». */
   addMenu: FolderPlus,
   addPage: FilePlus,
+  /** 입력 조각의 종류를 바꾼다 — 구조 트리 줄 `…` 의 «종류 바꾸기…»(`panels/change-kind-dialog.tsx`). */
+  changeKind: Replace,
   /** 고른 노드를 모듈로 남긴다 — 구조 트리 줄 `…` 의 «모듈로 저장…»(`panels/save-module-dialog.tsx`). */
   saveModule: PackagePlus,
   /** 모듈을 다른 묶음에 사본으로 남긴다 — «모듈» 탭 카드의 «프로젝트 모듈로 복사» · «개인 모듈로 복사»(`palette/module-tab.tsx`). */

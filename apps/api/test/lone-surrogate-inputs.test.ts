@@ -103,7 +103,7 @@ describe('jsonb 로 가는 입구의 외짝은 400 이고 아무것도 안 바�
       const w = await world(ctx)
       const before = await w.head()
       const schema = {
-        version: 3,
+        version: 4,
         root: { id: 'n_root', type: 'Page', children: [{ id: 'n_y', type: 'Text', props: { content: `a${LOW}b` } }] },
       }
 

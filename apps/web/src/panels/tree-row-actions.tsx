@@ -35,6 +35,7 @@ import { ICONS } from '../shell/icons'
 import type { TreeAbilities } from '../tree/tree-actions'
 import type { TreeCommands } from '../tree/use-tree-commands'
 import type { StructureCommands } from './structure-toolbar'
+import { CHANGE_KIND_LABEL } from './change-kind-dialog'
 import { EXPORT_BUSY_REASON, menuItemReason } from './toolbar-status'
 
 /** 줄 행동 한 벌 — `+` · `…`(없으면 안 그린다). `name` 은 그 줄의 이름이다(접근 이름이 줄마다 갈리게). */
@@ -222,7 +223,10 @@ export function saveModuleItem(onSelect: () => void): ActionMenuItem {
 }
 
 /**
- * 구조 트리 줄의 `…` 항목(spec 「트리」 표 — `…` 별칭 바꾸기 · 모듈로 저장… · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제). `+`는 없다(머리말).
+ * 구조 트리 줄의 `…` 항목(spec 「트리」 표 — `…` 별칭 바꾸기 · 종류 바꾸기… · 모듈로 저장… · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제). `+`는 없다(머리말).
+ *
+ * **«종류 바꾸기…» 는 입력 조각 줄에만 선다**(`edit/change-kind.ts` 의 `KIND_TYPES` — 그 밖의 줄은 결코 못 하는 항목이라 뺀다). 상자는
+ * `./change-kind-dialog.tsx`.
  *
  * **«모듈로 저장…»은 뿌리 줄에 없다** — 뿌리는 모듈에 담을 수 없다(설계 spec 「B3」 — 저장되는 것은 고른 노드들이고, 뿌리는 그 페이지의 것이다).
  * 그 줄의 종류가 결코 못 하는 항목이라 끄지 않고 뺀다(머리말 «늘 못 하는 항목은 뺀다»). 고른 것은 문서 읽기라 잠금과 무관하다 — 남이 잡은
@@ -239,6 +243,8 @@ export function structureRowItems(
   openAlias: () => void,
   /** «모듈로 저장…» — 고른 노드들로 상자를 연다. 없으면(뿌리 줄) 항목을 뺀다. */
   saveModule?: () => void,
+  /** «종류 바꾸기…» — 그 줄의 노드로 상자를 연다. 없으면(입력 조각이 아닌 줄) 항목을 뺀다. 끔은 `commands.kindLocked`. */
+  changeKind?: () => void,
 ): { more: ActionMenuItem[] } {
   const item = (key: keyof StructureAbilities, label: string, icon: LucideIcon, onSelect: () => void, danger = false): ActionMenuItem => ({
     key,
@@ -261,6 +267,19 @@ export function structureRowItems(
         title: commands.why.alias,
         description: commands.why.alias,
       },
+      ...(changeKind === undefined
+        ? []
+        : [
+            {
+              key: 'change-kind',
+              label: CHANGE_KIND_LABEL,
+              icon: ICONS.changeKind,
+              onSelect: changeKind,
+              disabled: commands.kindLocked,
+              title: commands.why.kind,
+              description: commands.why.kind,
+            },
+          ]),
       ...(saveModule === undefined ? [] : [saveModuleItem(saveModule)]),
       item('moveUp', '위로', ICONS.moveUp, commands.moveUp),
       item('moveDown', '아래로', ICONS.moveDown, commands.moveDown),

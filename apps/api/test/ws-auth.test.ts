@@ -159,7 +159,7 @@ describe('세션 행을 지우면 권한이 회수된다', () => {
         method: 'PUT',
         url: `/api/projects/${project.id}/pages/${page.id}/schema`,
         cookies: owner.cookie,
-        payload: { schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: {} }] } } },
+        payload: { schema: { version: 4, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: {} }] } } },
       })
       expect(put.statusCode, put.body).toBe(200)
       const probe = track(await joinRoom(ctx.port, project.id, owner.cookie.wb_session))
@@ -231,7 +231,7 @@ describe('세션 행을 지우면 권한이 회수된다', () => {
         method: 'PUT',
         url: `/api/projects/${project.id}/pages/${page.id}/schema`,
         cookies: owner.cookie,
-        payload: { schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: {} }] } } },
+        payload: { schema: { version: 4, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: {} }] } } },
       })
       expect(put.statusCode, put.body).toBe(200)
       const probe = track(await joinRoom(ctx.port, project.id, owner.cookie.wb_session))

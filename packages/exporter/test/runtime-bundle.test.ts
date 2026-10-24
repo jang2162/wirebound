@@ -46,7 +46,7 @@ const CLICK: Interaction[] = [
 ]
 
 const LIST_PAGE: PageDocument = {
-  version: 3,
+  version: 4,
   root: {
     id: 'n_root',
     type: 'Page',
