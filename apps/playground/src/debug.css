@@ -8,7 +8,6 @@ body { margin: 0; font: 14px/1.5 system-ui, sans-serif; color: #1f2937; }
 [data-wb-component="List"] { width: 100%; border-collapse: collapse; }
 [data-wb-part="cell"] { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; }
 [data-wb-part="header"] [data-wb-part="cell"] { background: #f9fafb; font-weight: 600; }
-[data-wb-part="control"] { border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; min-width: 140px; }
 [data-wb-component="Field"] { display: inline-flex; gap: 6px; align-items: center; margin-right: 12px; }
 [data-wb-component="SearchForm"] { display: flex; gap: 12px; align-items: center; padding: 12px 0; }
 [data-wb-component="Button"][data-wb-state~="disabled"] { opacity: 0.5; }

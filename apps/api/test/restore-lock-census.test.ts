@@ -180,7 +180,7 @@ const PROBES: Probe[] = [
       file: {
         wireboundVersion: '1',
         page: { title: '끼어든 가져오기' },
-        schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [] } },
+        schema: { version: 4, root: { id: 'n_root', type: 'Page', children: [] } },
         comments: [],
       },
     }),
@@ -212,7 +212,7 @@ const PROBES: Probe[] = [
     method: 'PUT',
     url: (ids) => `/api/projects/${ids.projectId}/pages/${ids.pageId}/schema`,
     payload: (ids) => ({
-      schema: { version: 3, root: { id: ids.nodeId, type: 'Page', children: [] } },
+      schema: { version: 4, root: { id: ids.nodeId, type: 'Page', children: [] } },
     }),
     restoreWrites: true,
     blocked: true,

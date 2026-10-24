@@ -21,6 +21,7 @@ import {
   type AssetResolver,
   type NodeBinding,
   type ThemeDefinition,
+  type ViewField,
   type ViewItem,
 } from '@wirebound/theme-sdk'
 import { Fragment, type ReactElement, type ReactNode } from 'react'
@@ -191,12 +192,45 @@ const FLEX_ROOM: WeightRoom = { kind: 'flex' }
  * 안 바뀌는 부모가 생긴다.
  */
 export function weightRoom(type: string, props: WbNode['props']): WeightRoom | undefined {
-  if (type === 'Flex') return FLEX_ROOM
+  // `Field` 의 값 구역은 `Flex` 처럼 몫을 읽는다 — 몫을 준 조각이 남는 폭을 나눠 갖는다(`[입력 몫 1][중복확인]`).
+  if (type === 'Flex' || type === 'Field') return FLEX_ROOM
   if (type !== 'Grid' && type !== 'SearchForm') return undefined
   // 열 수는 카탈로그가 정한 모양 · 기본값으로 읽는다 — 못 읽으면(검증 실패) 이 노드는 폴백이라 자식의 몫이 서지 않는다.
   const parsed = getComponent(type)?.props.safeParse(props ?? {})
   const columns = parsed?.success === true ? (parsed.data as { columns?: unknown }).columns : undefined
   return typeof columns === 'number' ? { kind: 'span', columns } : undefined
+}
+
+/** 값을 받는 입력 조각 — `Field` 몸통에서 필드 이름(`ViewProps.field`)을 받는다. 단추 · 사이 글자 · 칩은 제 글이 이름이라 안 받는다. */
+const VALUE_PIECES: ReadonlySet<string> = new Set(['Input', 'TextArea', 'Select', 'DateInput', 'TimeInput', 'CheckboxGroup', 'RadioGroup'])
+
+/**
+ * `Field` 몸통의 자식마다 실을 필드 이름(몸통 배열의 자리 → 이름) — 그 판에 서는 입력 조각만. 조각이 하나면 라벨, 여럿이면 라벨 + 별칭(없으면
+ * 서는 조각 사이의 차례)이라 같은 필드의 조각끼리 갈린다(«기간 1» · «기간 2»). 라벨이 비었거나 props 를 못 읽으면 없다(조각은 제 이름으로 선다).
+ *
+ * **이름을 렌더러가 짓는 까닭:** 필드의 라벨 · 필수 · 형제 조각 수는 부모가 안다 — 조각 뷰는 제 노드만 받는다. 라벨 요소의 id 를 가리키게(`aria-labelledby`)
+ * 하면 테마의 `FieldView` 가 그 id 를 그리는지에 기대게 되고, 글로 넘기면 어느 `FieldView` 아래서도 선다.
+ */
+function fieldNames(type: string, props: WbNode['props'], body: readonly unknown[], options: RenderOptions): (ViewField | undefined)[] {
+  if (type !== 'Field') return []
+  const parsed = getComponent(type)?.props.safeParse(props ?? {})
+  if (parsed?.success !== true) return []
+  const { label, required } = parsed.data as { label?: unknown; required?: unknown }
+  const base = typeof label === 'string' ? label.trim() : ''
+  if (base === '') return []
+  const pieces = body.flatMap((child, index) =>
+    child !== null &&
+    typeof child === 'object' &&
+    VALUE_PIECES.has(readString((child as { type?: unknown }).type)) &&
+    shownIn(child, options)
+      ? [{ index, alias: readString((child as { alias?: unknown }).alias).trim() }]
+      : [],
+  )
+  const names: (ViewField | undefined)[] = []
+  pieces.forEach(({ index, alias }, order) => {
+    names[index] = { name: pieces.length === 1 ? base : `${base} ${alias !== '' ? alias : order + 1}`, required: required === true }
+  })
+  return names
 }
 
 function roomKey(room: WeightRoom | undefined): string {
@@ -336,11 +370,14 @@ function withReveal(root: WbNode, options: RenderOptions): Options {
  * *"이 액션의 타겟이 무엇인가"*가 호출자마다 갈린다 — 「HTML 정적 번들」의 *"렌더러가 하나뿐이라
  * 결과가 어긋날 수 없다"*가 그 자리에서 깨진다.
  */
-function renderNodeIn(root: WbNode, node: WbNode, options: Options, room?: WeightRoom): ReactElement {
-  // 펼쳐 보이느라 덮는 노드와 그 조상은 캐시를 지나친다(`RevealPlan`).
+function renderNodeIn(root: WbNode, node: WbNode, options: Options, room?: WeightRoom, field?: ViewField): ReactElement {
+  // 펼쳐 보이느라 덮는 노드와 그 조상은 캐시를 지나친다(`RevealPlan`). 필드 이름을 받는 조각도 — 이름이 부모(라벨 · 형제 수)에서 오고, 부모가 새로 그릴
+  // 때만 다시 그려진다(부모는 제 캐시를 쓴다). 이름마다 열쇠를 두면 라벨을 고칠 때마다 열쇠가 쌓인다.
   const cache =
-    options.revealPlan?.uncached.has(readString((node as { id?: unknown } | null)?.id)) === true ? null : nodeCacheFor(node, options, room)
-  if (cache === null) return renderNodeUncached(root, node, options, room)
+    field !== undefined || options.revealPlan?.uncached.has(readString((node as { id?: unknown } | null)?.id)) === true
+      ? null
+      : nodeCacheFor(node, options, room)
+  if (cache === null) return renderNodeUncached(root, node, options, room, field)
   const hit = cache.get(node)
   if (hit !== undefined) return hit
   let failed = false
@@ -400,7 +437,7 @@ function nodeCacheFor(node: unknown, options: RenderOptions, room: WeightRoom | 
   return byNode
 }
 
-function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: WeightRoom | undefined): ReactElement {
+function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: WeightRoom | undefined, field?: ViewField): ReactElement {
   const raw = node as unknown as { id?: unknown; type?: unknown; props?: unknown; children?: unknown } | null
   const nodeId = readString(raw?.id)
 
@@ -425,12 +462,15 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
   //
   // 자식 줄은 몸통과 구역 전부다(`childLists` — 카탈로그의 구역 선언 차례). 줄이 배열이 아니면 빈 줄이고, 원소가 노드가 아니면 재귀 호출의
   // 모양 가드가 그 자리에 폴백을 그린다. **몫의 자리는 몸통에만 준다** — 몫이 듣는 배치(`Flex` · `Grid` · 열을 정한 `SearchForm`)는 몸통이다.
-  const childRoom = weightRoom(type, overlayProps(options.interaction?.overlay, nodeId, raw?.props as WbNode['props']))
-  const drawn = (list: readonly unknown[], at: WeightRoom | undefined): ReactElement[] =>
-    list.map((child, index) => <Fragment key={childKey(child, index)}>{renderNodeIn(root, child as WbNode, options, at)}</Fragment>)
+  const ownProps = overlayProps(options.interaction?.overlay, nodeId, raw?.props as WbNode['props'])
+  const childRoom = weightRoom(type, ownProps)
+  const drawn = (list: readonly unknown[], at: WeightRoom | undefined, fields: readonly (ViewField | undefined)[] = []): ReactElement[] =>
+    list.map((child, index) => (
+      <Fragment key={childKey(child, index)}>{renderNodeIn(root, child as WbNode, options, at, fields[index])}</Fragment>
+    ))
   const lists = childLists(raw)
   const bodyList = lists.find((entry) => entry.pointer === '/children')?.list ?? []
-  const bodyDrawn = drawn(bodyList, childRoom)
+  const bodyDrawn = drawn(bodyList, childRoom, fieldNames(type, ownProps, bodyList, options))
   // 몸통을 부모에게 맡기는 타입(`TabPanel`)은 제 뷰에 몸통을 안 준다 — 부모가 `items[i].content` 로 둔다(그 몸통은 부모의 폴백에도 실린다).
   const hostedByParent = def?.bodyHost === 'parent'
   const children: ReactNode = !hostedByParent && bodyDrawn.length > 0 ? bodyDrawn : null
@@ -529,7 +569,18 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
       view={theme.views[node.type] ?? fallbackView}
       fallbackView={fallbackView}
       binding={binding}
-      viewProps={{ nodeId: node.id, type: node.type, props, states, variant, children, zones, items, slot: options.slot ?? null }}
+      viewProps={{
+        nodeId: node.id,
+        type: node.type,
+        props,
+        states,
+        variant,
+        children,
+        zones,
+        items,
+        slot: options.slot ?? null,
+        ...(field === undefined ? {} : { field }),
+      }}
       fallbackChildren={fallbackChildren}
     />
   )

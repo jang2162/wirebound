@@ -542,7 +542,7 @@ describe('번들 — 그 프로젝트가 가진 그림만 싣는다', () => {
         cookies: b.owner.cookie,
         payload: {
           schema: {
-            version: 3,
+            version: 4,
             root: {
               id: 'n_root',
               type: 'Page',

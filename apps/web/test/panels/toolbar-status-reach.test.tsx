@@ -137,6 +137,8 @@ function structureCommands(input: { selectedNodeId: string | null; lock?: NodeLo
     dropTo: unused,
     aliasLocked,
     renameAlias: unused,
+    kindLocked: aliasLocked,
+    changeKind: unused,
   }
 }
 

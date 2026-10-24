@@ -5,8 +5,9 @@ description: wirebound 설계서 테마를 짠다 — 컴포넌트 뷰(tsx) · C
 
 # wirebound 테마 작성 지침
 
-이 프로젝트는 wirebound 설계서의 **테마**다. 설계서의 페이지는 컴포넌트 노드의 트리이고(카탈로그 19 종 — `Page` · `Slot` ·
-`Section` · `Flex` · `Grid` · `Card` · `Tabs` · `List` · `Tree` · `KeyValue` · `SearchForm` · `EntryForm` · `Field` · `Button` ·
+이 프로젝트는 wirebound 설계서의 **테마**다. 설계서의 페이지는 컴포넌트 노드의 트리이고(카탈로그 29 종 — `Page` · `Slot` ·
+`Section` · `Flex` · `Grid` · `Card` · `Tabs` · `TabPanel` · `List` · `Tree` · `KeyValue` · `SearchForm` · `EntryForm` · `Field` ·
+`Input` · `TextArea` · `Select` · `DateInput` · `TimeInput` · `CheckboxGroup` · `RadioGroup` · `Chip` · `Affix` · `Button` ·
 `Link` · `Text` · `Media` · `Divider` · `Placeholder`), 테마는 컴포넌트마다 **뷰**(React 컴포넌트)와 CSS 를 낸다. 카탈로그와 각
 컴포넌트의 props 는 wirebound 가 정한다 — 테마는 컴포넌트나 props 를 더할 수 없고, 어떻게 보이는지만 정한다.
 
@@ -52,7 +53,9 @@ export const ListView = view(({ props, variant, states, children }) => {
 - 뷰가 받는 것: `props`(기본값이 채워진 카탈로그 props) · `states`(`disabled` · `loading` 처럼 참인 상태 이름들) ·
   `variant`(노드의 variant — 테마에 없는 값이면 그 컴포넌트의 `defaultVariant`) · `children`(이미 그린 몸통의 자식) · `zones`(이름 붙은
   구역마다 그린 것 — 빈 구역은 `null`) · `items`(몸통 자식 하나씩 — `{ nodeId, index, element, content }`) · `slot`(`Slot` 에 들어갈 내용) ·
-  `nodeId` · `type`.
+  `nodeId` · `type` · `field`(`Field` 값 칸의 입력 조각일 때만 — `{ name, required }`: 조각이 하나면 라벨, 여럿이면 «라벨 + 별칭(없으면 차례)».
+  입력 조각의 뷰를 지으면 `name` 을 접근 이름(`aria-label`)으로, `required` 면 `aria-required` 를 단다 — 입력 칸만 훑는 보조 기술은 필드의
+  묶음 이름을 지나지 않는다).
 - **구역은 `<Zone name>` 으로 둔다.** 카드의 제목 옆(`titleSide`) · 머리 오른쪽(`headEnd`) · 바닥(`footer`), 검색폼 · 입력폼의 단추
   (`actions`), 목록의 머리 왼쪽 · 오른쪽(`headStart` · `headEnd`)은 사람이 놓는 노드가 든 자리다 — `<Zone name="footer" as="div"
   data-wb-part="footer" />` 가 그 구역을 그리고 `data-wb-zone` 을 펴며, 비었으면 감싸는 요소째 안 그린다. `Zone` 을 안 쓰는 뷰는 그
@@ -68,11 +71,16 @@ export const ListView = view(({ props, variant, states, children }) => {
   - prop 표지: 화면을 바꾸는 불리언 · enum prop 가운데 상태 · 변형으로 실리지 않는 것. 불리언은 참일 때 `data-wb-<prop>=""`, enum
     은 늘 `data-wb-<prop>="<값>"` — `Section` 의 `data-wb-compact`(좁은 여백) · `SearchForm` 의 `data-wb-collapsed`(접힘) · `List` 의
     `data-wb-selectable` · `data-wb-pagination` · `Media` 의 `data-wb-kind` · `data-wb-ratio` · `Flex` 의 `data-wb-direction` ·
-    `data-wb-align` · `data-wb-justify` · `data-wb-wrap`.
+    `data-wb-align` · `data-wb-justify` · `data-wb-wrap` · `Input` 의 `data-wb-kind` · `data-wb-size` · `Select` 의 `data-wb-size` ·
+    `Chip` 의 `data-wb-removable` · `Affix` 의 `data-wb-tone`.
   - 상태(`data-wb-state~='disabled'`)가 참이면 `aria-disabled` · `loading` 은 `aria-busy` · `invalid` 는 `aria-invalid` · `required` 는
     `aria-required` 가 `"true"` 로 선다. 그 뜻을 안쪽 요소로 옮기려면 `Root` 에 같은 이름(`undefined`)을 넘긴다.
-    `aria-required` 는 역할 없는 `div` 에서는 보조 기술이 읽지 않으니, 입력 칸을 그리는 뷰는 그 뜻을 역할(`textbox` · `combobox` 등)과 이름을 단
-    조각으로 옮긴다(기본 `Field` 뷰가 그렇게 한다).
+    `readonly` 는 `aria-readonly` 다. 입력 조각(`Input` · `Select` …)의 뷰는 루트에 역할(`textbox` · `combobox` 등)과 이름을 달아 그 속성이
+    읽히게 한다. `Field` 의 뿌리는 `group` 이라 `aria-required` 를 받는 역할이 아니다 — 기본 `Field` 뷰는 그것을 거두고(필수는 값 칸 조각이 `field.required` 로 `aria-required` 를 단다) 필수를 라벨의
+    별(`data-wb-state~='required'`)로 보인다.
+- **`Field` 는 라벨과 값 칸이다.** 값 칸(몸통 — `children`)에 입력 조각이 줄 선다. 뷰는 `label` 조각과 `value` 조각(그 안에 `children`)을
+  형제로 둔다 — `children` 을 안 그리면 값 칸의 조각이 화면에서 사라지고 `wb-theme check` 가 막는다. 조각의 몫(`--wb-node-weight`)은 SDK 기본
+  CSS 가 `flex` 로 건다.
   - CSS 는 `[data-wb-component='Section'][data-wb-compact] { … }` 처럼 겨냥한다. 기본 뷰도 그 값으로 모양을 바꾼다(접힌 검색은
     머리줄 `toggle` 조각만 남고 자식이 빠진다 · 표 구조 목록의 `selectable` 은 `checkbox` 조각) — 테마 CSS 가 여백 · 색을 정한다.
   - **`List.selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다.** 줄 · 카드 목록 구조의 뷰는 표지 `data-wb-selectable` 만 서고
@@ -137,8 +145,10 @@ export const ListView = view(({ props, variant, states, children }) => {
   CSS 는 `[data-wb-variant='cards']` 로 겨냥한다.
 - `hideProps` — 그 variant 에서 쓰지 않는 props. 속성 패널이 감춘다(예: 카드 목록에는 `columns` 가 없다). 그 컴포넌트의 prop
   이름만 적는다.
-- **`Text` · `Field` · `Divider` 에는 variants 를 선언할 수 없다** — 이 셋은 변형이 prop(`role` · `control` · `direction`)에서
-  오고 그 값이 `data-wb-variant` 가 된다.
+- **`Text` · `Divider` 에는 variants 를 선언할 수 없다** — 이 둘은 변형이 prop(`role` · `direction`)에서 오고 그 값이
+  `data-wb-variant` 가 된다.
+- **`RadioGroup` 의 `segment` · `CheckboxGroup` 의 `chip`** — 설계서가 쓰는 변형 이름이다(붙은 칸 세그먼트 · 칸마다 테두리인 체크 칩). 선언하지
+  않으면 그 변형을 고른 노드에 lint 경고가 나고 그 테마의 `defaultVariant` 로 그려진다.
 - **세로 `Divider`(`[data-wb-variant='vertical']`)에 백분율 높이(`min-height: 100%`)를 걸지 않는다** — 높이가 정해지지 않은
   부모에서 0 이 되어 선이 안 보인다. 한 줄 높이(`1.5em`)를 바닥으로 두고 `align-self: stretch`.
 
@@ -146,7 +156,7 @@ export const ListView = view(({ props, variant, states, children }) => {
 
 `sdk` 는 이 테마가 기대는 `@wirebound/theme-sdk` 의 판이다. 업로드할 때 wirebound 의 SDK 판과 견준다.
 
-- `^1.5.0` — major 가 같고 1.5.0 이상(자리표시자의 그리기 값 — `placeholderVars` — 이 든 판). **0.x 에서도 major 만 본다** — `^0.3.0` 은 `0.9.0` 을 받는다(npm 은 `<0.4.0` 으로 읽는다).
+- `^1.5.0` — major 가 같고 1.5.0 이상(자리표시자의 그리기 값 — `placeholderVars` — 과 그림 `useAsset` 이 든 판 — 그 아래는 값 칸을 가진 `Field` 와 입력 조각 아홉이 든 1.4.0). **0.x 에서도 major 만 본다** — `^0.3.0` 은 `0.9.0` 을 받는다(npm 은 `<0.4.0` 으로 읽는다).
 - `~1.5.0` — major.minor 가 같고 1.5.0 이상.
 - `1.5.0` — 그 판만.
 

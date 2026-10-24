@@ -70,7 +70,7 @@ async function board(ctx: RealApiContext) {
     cookies: bora.cookie,
     payload: {
       schema: {
-        version: 3,
+        version: 4,
         root: {
           id: 'n_root',
           type: 'Page',

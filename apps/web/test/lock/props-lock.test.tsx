@@ -48,8 +48,8 @@
  *
  * | 케이스 | 혼자 죽이는 변조 |
  * |---|---|
- * | 카탈로그가 쓰는 control을 다 짚는다 | 이 줄은 **분모 대조**다 — 카탈로그에 아홉째 control이 생기면 죽는다 |
- * | 위젯 아홉이 종류마다 꺼진다 | `number` 위젯만 안 끈다 |
+ * | 카탈로그가 쓰는 control을 다 짚는다 | 이 줄은 **분모 대조**다 — 카탈로그에 열한째 control이 생기면 죽는다 |
+ * | 위젯 열이 종류마다 꺼진다 | `number` 위젯만 안 끈다 |
  * | 변형 위젯도 함께 꺼진다 | **없음** — 변형만 안 끄면 «조상…»·«꺼진 항목…»이 함께 죽는다(둘 다 `allWidgetsOff()`가 변형을 센다). **변형 축의 주인은 이 케이스다** |
  * | 목록 위젯은 …버튼도 꺼진다 | 추가·삭제 버튼 둘만 안 끈다 |
  * | 잠긴 서브트리 **안쪽**… | **없음** — 조상 잠금만 안 보면 «꺼진 항목…»과 함께 죽는다 |
@@ -146,11 +146,12 @@ class FakeSocket implements RealtimeSocket {
  * n-root  (Page)                     ← 편집할 속성이 없는 컴포넌트. 열면 이것이 자동 선택된다
  *   n-card  (Card)                   ← 변형 위젯이 있는 유일한 자리 · `n-text`의 **조상**
  *     n-text  (Text)                 ← 잠긴 서브트리 **안쪽**을 만드는 자리
- *   n-field (Field)                  ← text · switch · select 셋을 한 노드에서 낸다
+ *   n-field (Field)                  ← text · switch
  *   n-list  (List)                   ← number · stringList
  *   n-kv    (KeyValue)               ← pairList
  *   n-ph    (Placeholder)            ← color · image
  *   n-div   (Divider)                ← 대조군. 잠금과 무관한 **형제**
+ *   n-sel   (Select)                 ← select · optionList
  * ```
  * **타입이 전부 다르다** — 트리 줄의 이름이 타입이라 그래야 노드를 이름으로 고른다.
  */
@@ -168,7 +169,7 @@ function doc(): PageDocument {
       {
         id: 'n-field',
         type: 'Field',
-        props: { label: '이름', control: 'select', placeholder: '검색어', required: true },
+        props: { label: '이름', required: true },
         // **상호작용 탭의 저작 위젯을 다 띄우려고 규칙 하나를 얹는다.** 액션 셋이
         // `ActionRow`의 세 갈래(대상 고르개 · 페이지 경로 칸 · 속성 고르개와 값 칸)를
         // 각각 그린다 — 하나만 두면 나머지 갈래의 위젯이 화면에 없어 조용히 안 잰다.
@@ -187,16 +188,17 @@ function doc(): PageDocument {
       { id: 'n-kv', type: 'KeyValue', props: { pairs: [{ key: 'k', value: 'v' }], columns: 1 } },
       { id: 'n-ph', type: 'Placeholder', props: { background: '#2563eb' } },
       { id: 'n-div', type: 'Divider', props: { direction: 'horizontal' } },
+      { id: 'n-sel', type: 'Select', props: { options: [{ label: '가', selected: true }, { label: '나' }] } },
     ],
   })
 }
 
 /**
  * control 종류마다 그것을 쓰는 자리 하나씩. **아래 `카탈로그가 쓰는 control을 다 짚는다`가
- * 이 표의 분모를 카탈로그에서 세어 맞춘다** — 열 번째 control이 생기면 거기서 죽는다.
+ * 이 표의 분모를 카탈로그에서 세어 맞춘다** — 열한 번째 control이 생기면 거기서 죽는다.
  *
  * **«위젯이 있는가»는 이 파일이 재지 않는다.** 그 축은
- * `test/panels/property-panel.test.tsx`의 `카탈로그의 control 아홉에 전부 대응하는 위젯이
+ * `test/panels/property-panel.test.tsx`의 `카탈로그의 control 열에 전부 대응하는 위젯이
  * 있다`가 소유한다. 여기서 재는 것은 **그 위젯이 잠금에 꺼지는가**다.
  */
 const CONTROL_SAMPLES: { control: EditorControl; type: string; nodeId: string; label: string }[] = [
@@ -204,9 +206,10 @@ const CONTROL_SAMPLES: { control: EditorControl; type: string; nodeId: string; l
   { control: 'textarea', type: 'Text', nodeId: 'n-text', label: '내용' },
   { control: 'number', type: 'List', nodeId: 'n-list', label: '항목 수' },
   { control: 'switch', type: 'Field', nodeId: 'n-field', label: '필수' },
-  { control: 'select', type: 'Field', nodeId: 'n-field', label: '입력 종류' },
+  { control: 'select', type: 'Select', nodeId: 'n-sel', label: '폭' },
   { control: 'stringList', type: 'List', nodeId: 'n-list', label: '컬럼' },
   { control: 'pairList', type: 'KeyValue', nodeId: 'n-kv', label: '키-값' },
+  { control: 'optionList', type: 'Select', nodeId: 'n-sel', label: '선택지' },
   { control: 'color', type: 'Placeholder', nodeId: 'n-ph', label: '바탕색' },
   { control: 'image', type: 'Placeholder', nodeId: 'n-ph', label: '그림' },
 ]
@@ -397,14 +400,14 @@ function typeAndCommit(label: string, value: string): void {
 
 describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없다', () => {
   it('카탈로그가 쓰는 control을 다 짚는다 — 아래 표의 분모다', () => {
-    // **손으로 적으면 낡는다.** 카탈로그에 열 번째 control이 생기면 여기서 죽고, 그때
+    // **손으로 적으면 낡는다.** 카탈로그에 열한 번째 control이 생기면 여기서 죽고, 그때
     // 사람이 *"그 위젯도 잠금에 꺼지나"*를 본다.
     const used = new Set(listComponents().flatMap((def) => def.editor.map((field) => field.control)))
 
     expect(new Set(CONTROL_SAMPLES.map((sample) => sample.control))).toEqual(used)
   })
 
-  it('위젯 아홉이 종류마다 꺼진다 — 잠긴 노드 자신을 골라 둔 판', async () => {
+  it('위젯 열이 종류마다 꺼진다 — 잠긴 노드 자신을 골라 둔 판', async () => {
     const view = await board()
 
     for (const sample of CONTROL_SAMPLES) {
@@ -416,8 +419,10 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
       await settle()
 
       const widget = within(panel()).getByLabelText<HTMLInputElement>(sample.label)
-      // `stringList`·`pairList`·`color`는 라벨이 `role="group"`을 가리키므로 그 안의 칸 · 단추를 본다(단추도 함께 꺼진다 — 칸만 꺼지면 견본 · 추가가 산다).
-      const inputs = widget.tagName === 'DIV' ? [...widget.querySelectorAll<HTMLInputElement>('input, button')] : [widget]
+      // 목록 위젯(`stringList`·`pairList`·`optionList`)과 `color`는 라벨이 `role="group"`을 가리키므로 그 안의 칸 · 단추를 본다 — 고르기 · 옮기기 ·
+      // 지우기 · 추가 · 고른 것 풀기 · 견본도 즉시 커밋이라 칸만 끄면 그 단추로 목록 · 색이 나간다.
+      const inputs =
+        widget.tagName === 'DIV' ? [...widget.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')] : [widget]
 
       expect(inputs.length, `${sample.control}: 잴 위젯이 있어야 한다`).toBeGreaterThan(0)
       expect(disabledOf(inputs), `${sample.control}이 꺼져야 한다`).toEqual(inputs.map(() => true))

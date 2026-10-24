@@ -97,7 +97,7 @@ describe('미리보기 판정 (화면 없이)', () => {
             root: {
               id: 'file_root',
               type: 'Page',
-              children: [{ id: 'file_field', type: 'Field', props: { label: '이름', control: 'text' }, variant: 'x' }],
+              children: [{ id: 'file_text', type: 'Text', props: { content: '이름' }, variant: 'x' }],
             },
           },
           comments: [],

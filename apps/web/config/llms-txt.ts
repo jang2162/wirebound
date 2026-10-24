@@ -70,7 +70,16 @@ const COMPONENT_SUMMARIES: Record<string, string> = {
   KeyValue: 'Label/value pairs, as on a detail screen.',
   SearchForm: 'Search conditions that filter a list.',
   EntryForm: 'A create/edit form with several fields.',
-  Field: 'One input; `control` makes it text, select, date and so on.',
+  Field: 'A labelled value cell; its children are the input pieces lined up in the value cell (new: one `Input`).',
+  Input: 'A one-line input box; `kind` is text, number or password, `size` short, medium or long.',
+  TextArea: 'A multi-line input box; fills the value cell.',
+  Select: 'A drop-down that picks one option; `placeholder` shows while nothing is selected.',
+  DateInput: 'A date input box.',
+  TimeInput: 'A time input box.',
+  CheckboxGroup: 'Checkboxes that pick any number of options; one option is a single checkbox.',
+  RadioGroup: 'Options that pick at most one; themes may draw it as a segmented control.',
+  Chip: 'A small tag showing a chosen value, optionally with a remove mark.',
+  Affix: 'Short text between pieces (`~`, "from", `%`) or a coloured note; `tone` sets the colour.',
   Button: 'A button that triggers an action.',
   Link: 'A text link to another screen.',
   Text: 'Headings and body text; `role` sets the size.',
@@ -340,6 +349,8 @@ function renderComponent(line: Line, def: ComponentDef): void {
       const notes: string[] = []
       if (def.states.includes(name)) notes.push('state')
       if (def.variantFrom === name) notes.push('selects the theme variant')
+      // «하나만 고른다» 는 `refine` 이라 JSON Schema 로 못 옮긴다 — 편집 칸의 고르는 수(`select`)에서 읽는다.
+      if (def.editor.some((field) => field.prop === name && field.select === 'one')) notes.push('at most one option selected')
       const note = notes.length > 0 ? ` — ${notes.join('; ')}` : ''
       line(`- \`${name}\`: ${propType(prop)}${propDefault(name, prop, props)}${note}`)
     }
@@ -356,12 +367,23 @@ function propType(prop: JsonSchema): string {
   if (prop.type === 'array') {
     const items = prop.items
     if (items?.type === 'object' && items.properties !== undefined) {
-      const fields = Object.entries(items.properties).map(([key, value]) => `${key}: ${propType(value)}`)
-      return `{ ${fields.join(', ')} }[]`
+      const fields = Object.entries(items.properties).map(
+        ([key, value]) => `${key}${items.required?.includes(key) === true ? '' : '?'}: ${propType(value)}`,
+      )
+      return `{ ${fields.join(', ')} }[]${count(prop)}`
     }
-    return `${items === undefined ? 'value' : propType(items)}[]`
+    return `${items === undefined ? 'value' : propType(items)}[]${count(prop)}`
   }
   return prop.type ?? 'value'
+}
+
+/** 배열의 길이 한도 — 없으면 빈 글. */
+function count(prop: JsonSchema): string {
+  const { minItems: min, maxItems: max } = prop
+  if (min !== undefined && max !== undefined) return ` (${min}–${max} items)`
+  if (min !== undefined) return ` (≥ ${min} items)`
+  if (max !== undefined) return ` (≤ ${max} items)`
+  return ''
 }
 
 function range(prop: JsonSchema): string {
@@ -387,6 +409,8 @@ interface JsonSchema {
   default?: unknown
   minimum?: number
   maximum?: number
+  minItems?: number
+  maxItems?: number
   properties?: Record<string, JsonSchema>
   required?: string[]
   items?: JsonSchema

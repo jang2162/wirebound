@@ -370,8 +370,8 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
       id: 'n_form',
       type: 'SearchForm',
       children: [
-        { id: 'n_f1', type: 'Field', props: { label: '이름' } },
-        { id: 'n_f2', type: 'Field', props: { label: '상태' } },
+        { id: 'n_f1', type: 'Field', props: { label: '이름' }, children: [{ id: 'n_f1i', type: 'Input' }] },
+        { id: 'n_f2', type: 'Field', props: { label: '상태' }, children: [{ id: 'n_f2i', type: 'Input' }] },
       ],
     },
   ]
@@ -389,7 +389,7 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
         const afterG1 = (await indicators(page)).map((h) => `${h.placement}:${h.axis}`)
         await page.mouse.up()
         // 바뀔 때까지만 기다리고 자리는 아래에서 값으로 견준다 — 자리를 기다리면 틀린 자리가 시간 초과로만 죽는다.
-        const seeded = { n_root: ['n_move', { n_grid: ['n_g1', 'n_g2', 'n_g3'] }, { n_form: ['n_f1', 'n_f2'] }] }
+        const seeded = { n_root: ['n_move', { n_grid: ['n_g1', 'n_g2', 'n_g3'] }, { n_form: [{ n_f1: ['n_f1i'] }, { n_f2: ['n_f2i'] }] }] }
         const first = await poll(
           '서버 문서',
           () => shape(P[0]!),
@@ -415,10 +415,10 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
         expect({ sheet, afterG1, first, beforeF1, beforeG3, second }).toEqual({
           sheet: 1,
           afterG1: ['after:x'],
-          first: { n_root: [{ n_grid: ['n_g1', 'n_move', 'n_g2', 'n_g3'] }, { n_form: ['n_f1', 'n_f2'] }] },
+          first: { n_root: [{ n_grid: ['n_g1', 'n_move', 'n_g2', 'n_g3'] }, { n_form: [{ n_f1: ['n_f1i'] }, { n_f2: ['n_f2i'] }] }] },
           beforeF1: ['before:x'],
           beforeG3: ['before:x'],
-          second: { n_root: [{ n_grid: ['n_g1', 'n_g2', 'n_move', 'n_g3'] }, { n_form: ['n_f1', 'n_f2'] }] },
+          second: { n_root: [{ n_grid: ['n_g1', 'n_g2', 'n_move', 'n_g3'] }, { n_form: [{ n_f1: ['n_f1i'] }, { n_f2: ['n_f2i'] }] }] },
         })
       } finally {
         await close()

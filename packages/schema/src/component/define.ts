@@ -10,6 +10,7 @@ export type EditorControl =
   | 'select'
   | 'stringList'
   | 'pairList'
+  | 'optionList'
   /** 소문자 `#rrggbb` 또는 없음 — 견본 · 글 칸 · 지우기(`apps/web/src/panels/controls/color-control.tsx`). */
   | 'color'
   /** 그림 id(sha256) 또는 없음 — 올리기 · 고르기 · 지우기(`apps/web/src/panels/controls/image-control.tsx`). */
@@ -21,6 +22,8 @@ export interface EditorField {
   label: string
   /** control이 'select'일 때 선택지 */
   options?: string[]
+  /** control이 'optionList'일 때 고르는 수 — `one` 이면 하나를 고르면 다른 항목의 고름을 함께 걷는다(라디오처럼), `many` 면 여럿(체크처럼). */
+  select?: 'one' | 'many'
 }
 
 /** 사람이 읽을 이름의 상한. 고르개의 `<option>` 한 줄에 표시(`담을 수 있음`)와 함께 든다. */
@@ -183,6 +186,10 @@ export function defineComponent(def: ComponentDef): ComponentDef {
   for (const field of def.editor) {
     if (!known.has(field.prop)) {
       throw new Error(`${type}: editor가 스키마에 없는 prop을 가리킵니다: ${field.prop}`)
+    }
+    // 고르는 수가 없으면 위젯이 고르는 칸을 라디오로 그릴지 체크로 그릴지 모른다 — 하나만 받는 prop 에 체크를 그리면 422 를 낼 값을 만든다.
+    if ((field.control === 'optionList') !== (field.select !== undefined)) {
+      throw new Error(`${type}: ${field.prop}의 select 는 optionList 에만 있고 optionList 에는 꼭 있어야 합니다`)
     }
   }
 

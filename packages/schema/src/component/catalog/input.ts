@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineComponent } from '../define'
-import { joined, oneLine } from '../summary'
+import { oneLine } from '../summary'
 
 export const SearchFormDef = defineComponent({
   type: 'SearchForm',
@@ -59,34 +59,278 @@ export const EntryFormDef = defineComponent({
   ],
 })
 
+/**
+ * **라벨과 값 칸** — 값 칸(몸통 구역 «값»)에 입력 조각(아래 아홉 · `Button`)을 줄 세운다(설계 spec `2026-10-24-compose-input-design.md` 「1. `Field` 의 꼴」).
+ * 새로 만들면 값 칸에 `Input` 하나가 든다(`initial`) — 흔한 «라벨 + 입력 하나» 가 팔레트 한 걸음이다. 입력 종류 · 안내 문구 · 비활성 · 오류는 조각의
+ * 것이다. `required` 만 여기 있다 — 라벨 앞 별은 라벨의 것이라 조각마다 두면 한 칸에 별이 여럿 선다.
+ *
+ * **값 칸은 무엇이든 받는다**(`accepts` 없음) — 값 칸 안의 그리드 · 파일첨부 같은 뒤 단계의 꼴을 막지 않는다. 몸통 하나라 구조 트리에 구역 줄이 안 선다.
+ */
 export const FieldDef = defineComponent({
   type: 'Field',
   label: '입력 필드',
-  description: '입력 한 칸. 종류에 따라 텍스트·선택·날짜가 된다.',
+  description: '라벨과 값 칸. 값 칸에 입력 조각을 줄 세운다.',
   group: 'input',
   props: z.strictObject({
     label: z.string().default('라벨'),
-    control: z.enum(['text', 'number', 'select', 'date', 'dateRange', 'checkbox', 'radio', 'textarea', 'file']).default('text'),
-    placeholder: z.string().default(''),
     required: z.boolean().default(false),
+  }),
+  editor: [
+    { prop: 'label', control: 'text', label: '라벨' },
+    { prop: 'required', control: 'switch', label: '필수' },
+  ],
+  summary: (props) => oneLine(props.label),
+  states: ['required'],
+  zones: [{ name: 'body', label: '값', initial: [{ type: 'Input' }] }],
+})
+
+/**
+ * 선택지 한 항목. **고른 것이 항목에 붙는다**(`selected`) — 번호로 두면 항목을 옮기거나 지울 때 번호를 함께 고쳐야 하고, 남이 그 사이 배열을 바꾸면
+ * 번호가 다른 항목을 가리킨다. 항목에 붙이면 배열 하나를 통째로 바꾸는 패널 위젯(`apps/web/src/panels/controls/list-control.tsx`)의 한 연산에 고른
+ * 것까지 든다. 항목은 노드가 아니다 — 표지 · 상호작용을 항목마다 달 수 없다.
+ */
+export const OptionSchema = z.strictObject({ label: z.string(), selected: z.boolean().optional() })
+
+export type ChoiceOption = z.infer<typeof OptionSchema>
+
+/** 선택지 수의 상한 — 13칸 체크 칩 · 7칸 세그먼트 · 행 수 고르개를 덮고 패널 위젯이 한 화면에 든다. */
+export const OPTIONS_MAX = 30
+
+/** 고른 항목이 하나 이하인가 — 하나만 고르는 타입(`Select` · `RadioGroup`)의 규칙이다. */
+export function atMostOneSelected(options: readonly { selected?: boolean }[]): boolean {
+  return options.filter((option) => option.selected === true).length <= 1
+}
+
+export const ONE_SELECTED_MESSAGE = '하나만 고를 수 있습니다'
+
+/** 하나만 고르는 선택지. 둘 이상 고른 배열은 검증이 거절한다 — 패널 위젯은 그 판을 못 만든다(고르면 다른 항목을 함께 걷는다). */
+function singleChoice(defaults: ChoiceOption[]) {
+  return z.array(OptionSchema).min(1).max(OPTIONS_MAX).refine(atMostOneSelected, ONE_SELECTED_MESSAGE).default(defaults)
+}
+
+function multiChoice(defaults: ChoiceOption[]) {
+  return z.array(OptionSchema).min(1).max(OPTIONS_MAX).default(defaults)
+}
+
+/** 고정 폭 표지의 값 — 실제 길이는 테마가 정한다(설계의 낱말 «짧은 칸 · 보통 · 긴 칸»). 몫(`WbNode.weight`)을 주면 몫이 이긴다. */
+const SIZES = ['short', 'medium', 'long'] as const
+
+/** 값이 있으면 그것, 없으면 안내 문구 — 글을 받는 조각의 요약. */
+function valueOrHint(props: Record<string, unknown>): string | null {
+  return oneLine(props.value) ?? oneLine(props.placeholder)
+}
+
+/** 고른 항목들(없으면 첫 항목) — 선택지 조각의 요약. */
+function chosen(props: Record<string, unknown>): string | null {
+  const options = props.options
+  if (!Array.isArray(options)) return null
+  const labelOf = (option: unknown): string | null =>
+    option !== null && typeof option === 'object' ? oneLine((option as { label?: unknown }).label) : null
+  const picked = options.filter(
+    (option) => option !== null && typeof option === 'object' && (option as { selected?: unknown }).selected === true,
+  )
+  const lines = (picked.length > 0 ? picked : options.slice(0, 1)).map(labelOf).filter((line): line is string => line !== null)
+  return lines.length === 0 ? null : lines.join(' · ')
+}
+
+export const InputDef = defineComponent({
+  type: 'Input',
+  label: '입력',
+  description: '글 · 숫자 · 비밀번호를 받는 한 줄 입력 칸.',
+  group: 'input',
+  props: z.strictObject({
+    kind: z.enum(['text', 'number', 'password']).default('text'),
+    value: z.string().default(''),
+    placeholder: z.string().default(''),
+    size: z.enum(SIZES).default('medium'),
+    disabled: z.boolean().default(false),
+    readonly: z.boolean().default(false),
+    invalid: z.boolean().default(false),
+  }),
+  editor: [
+    { prop: 'kind', control: 'select', label: '종류', options: ['text', 'number', 'password'] },
+    { prop: 'value', control: 'text', label: '값' },
+    { prop: 'placeholder', control: 'text', label: '안내 문구' },
+    { prop: 'size', control: 'select', label: '폭', options: [...SIZES] },
+    { prop: 'disabled', control: 'switch', label: '비활성' },
+    { prop: 'readonly', control: 'switch', label: '읽기 전용' },
+    { prop: 'invalid', control: 'switch', label: '오류 상태' },
+  ],
+  summary: valueOrHint,
+  states: ['disabled', 'readonly', 'invalid'],
+  zones: [],
+})
+
+export const TextAreaDef = defineComponent({
+  type: 'TextArea',
+  label: '여러 줄 입력',
+  description: '여러 줄 글을 받는 입력 칸.',
+  group: 'input',
+  props: z.strictObject({
+    value: z.string().default(''),
+    placeholder: z.string().default(''),
+    rows: z.number().int().min(1).max(20).default(3),
+    disabled: z.boolean().default(false),
+    readonly: z.boolean().default(false),
+    invalid: z.boolean().default(false),
+  }),
+  editor: [
+    { prop: 'value', control: 'textarea', label: '값' },
+    { prop: 'placeholder', control: 'text', label: '안내 문구' },
+    { prop: 'rows', control: 'number', label: '줄 수' },
+    { prop: 'disabled', control: 'switch', label: '비활성' },
+    { prop: 'readonly', control: 'switch', label: '읽기 전용' },
+    { prop: 'invalid', control: 'switch', label: '오류 상태' },
+  ],
+  summary: valueOrHint,
+  states: ['disabled', 'readonly', 'invalid'],
+  zones: [],
+})
+
+export const SelectDef = defineComponent({
+  type: 'Select',
+  label: '셀렉트',
+  description: '펼쳐서 항목 하나를 고르는 칸.',
+  group: 'input',
+  props: z.strictObject({
+    options: singleChoice([{ label: '항목 1' }, { label: '항목 2' }]),
+    placeholder: z.string().default('== 선택 =='),
+    size: z.enum(SIZES).default('medium'),
     disabled: z.boolean().default(false),
     invalid: z.boolean().default(false),
   }),
   editor: [
-    { prop: 'label', control: 'text', label: '라벨' },
-    {
-      prop: 'control',
-      control: 'select',
-      label: '입력 종류',
-      options: ['text', 'number', 'select', 'date', 'dateRange', 'checkbox', 'radio', 'textarea', 'file'],
-    },
+    { prop: 'options', control: 'optionList', label: '선택지', select: 'one' },
     { prop: 'placeholder', control: 'text', label: '안내 문구' },
-    { prop: 'required', control: 'switch', label: '필수' },
+    { prop: 'size', control: 'select', label: '폭', options: [...SIZES] },
     { prop: 'disabled', control: 'switch', label: '비활성' },
     { prop: 'invalid', control: 'switch', label: '오류 상태' },
   ],
-  variantFrom: 'control',
-  summary: (props) => joined(oneLine(props.label), oneLine(props.control)),
-  states: ['required', 'disabled', 'invalid'],
+  summary: chosen,
+  states: ['disabled', 'invalid'],
+  zones: [],
+})
+
+export const DateInputDef = defineComponent({
+  type: 'DateInput',
+  label: '날짜',
+  description: '날짜 하나를 받는 칸.',
+  group: 'input',
+  props: z.strictObject({
+    value: z.string().default(''),
+    placeholder: z.string().default('YYYY-MM-DD'),
+    disabled: z.boolean().default(false),
+    readonly: z.boolean().default(false),
+    invalid: z.boolean().default(false),
+  }),
+  editor: [
+    { prop: 'value', control: 'text', label: '값' },
+    { prop: 'placeholder', control: 'text', label: '안내 문구' },
+    { prop: 'disabled', control: 'switch', label: '비활성' },
+    { prop: 'readonly', control: 'switch', label: '읽기 전용' },
+    { prop: 'invalid', control: 'switch', label: '오류 상태' },
+  ],
+  summary: valueOrHint,
+  states: ['disabled', 'readonly', 'invalid'],
+  zones: [],
+})
+
+export const TimeInputDef = defineComponent({
+  type: 'TimeInput',
+  label: '시간',
+  description: '시각 하나를 받는 칸.',
+  group: 'input',
+  props: z.strictObject({
+    value: z.string().default(''),
+    placeholder: z.string().default('00:00'),
+    disabled: z.boolean().default(false),
+    readonly: z.boolean().default(false),
+    invalid: z.boolean().default(false),
+  }),
+  editor: [
+    { prop: 'value', control: 'text', label: '값' },
+    { prop: 'placeholder', control: 'text', label: '안내 문구' },
+    { prop: 'disabled', control: 'switch', label: '비활성' },
+    { prop: 'readonly', control: 'switch', label: '읽기 전용' },
+    { prop: 'invalid', control: 'switch', label: '오류 상태' },
+  ],
+  summary: valueOrHint,
+  states: ['disabled', 'readonly', 'invalid'],
+  zones: [],
+})
+
+// 테마 변형 `checkbox` · `chip`(체크 칩 묶음)은 테마 manifest 가 선언한다 — 자료 모양이 같고 다른 것은 모양뿐이다(설계 Q1).
+export const CheckboxGroupDef = defineComponent({
+  type: 'CheckboxGroup',
+  label: '체크박스',
+  description: '항목을 여럿 고르는 체크 묶음. 하나면 단일 체크다.',
+  group: 'input',
+  props: z.strictObject({
+    options: multiChoice([{ label: '선택' }]),
+    disabled: z.boolean().default(false),
+  }),
+  editor: [
+    { prop: 'options', control: 'optionList', label: '선택지', select: 'many' },
+    { prop: 'disabled', control: 'switch', label: '비활성' },
+  ],
+  summary: chosen,
+  states: ['disabled'],
+  zones: [],
+})
+
+// 테마 변형 `radio` · `segment`(붙은 칸 — 고른 칸이 채워진다)는 테마 manifest 가 선언한다(설계 Q1). 고른 항목 0 개도 받는다(세그먼트의 «미선택»).
+export const RadioGroupDef = defineComponent({
+  type: 'RadioGroup',
+  label: '라디오 묶음',
+  description: '항목 하나를 고르는 묶음. 테마에 따라 세그먼트로 선다.',
+  group: 'input',
+  props: z.strictObject({
+    options: singleChoice([{ label: 'Y' }, { label: 'N' }]),
+    disabled: z.boolean().default(false),
+  }),
+  editor: [
+    { prop: 'options', control: 'optionList', label: '선택지', select: 'one' },
+    { prop: 'disabled', control: 'switch', label: '비활성' },
+  ],
+  summary: chosen,
+  states: ['disabled'],
+  zones: [],
+})
+
+export const ChipDef = defineComponent({
+  type: 'Chip',
+  label: '칩',
+  description: '고른 값을 보이는 작은 꼬리표. 지우기 표지를 달 수 있다.',
+  group: 'input',
+  props: z.strictObject({
+    label: z.string().default('칩'),
+    removable: z.boolean().default(true),
+    disabled: z.boolean().default(false),
+  }),
+  editor: [
+    { prop: 'label', control: 'text', label: '글' },
+    { prop: 'removable', control: 'switch', label: '지우기 표지' },
+    { prop: 'disabled', control: 'switch', label: '비활성' },
+  ],
+  summary: (props) => oneLine(props.label),
+  states: ['disabled'],
+  zones: [],
+})
+
+export const AffixDef = defineComponent({
+  type: 'Affix',
+  label: '사이 글자',
+  description: '조각 사이의 짧은 글(~ · 부터 · % · 안내 글).',
+  group: 'input',
+  props: z.strictObject({
+    text: z.string().default('~'),
+    tone: z.enum(['default', 'muted', 'danger', 'primary']).default('default'),
+  }),
+  editor: [
+    { prop: 'text', control: 'text', label: '글' },
+    { prop: 'tone', control: 'select', label: '색조', options: ['default', 'muted', 'danger', 'primary'] },
+  ],
+  summary: (props) => oneLine(props.text),
+  states: [],
   zones: [],
 })

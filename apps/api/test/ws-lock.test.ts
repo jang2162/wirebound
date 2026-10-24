@@ -95,7 +95,7 @@ async function board(ctx: RealApiContext): Promise<Board> {
     cookies: bora.cookie,
     payload: {
       schema: {
-        version: 3,
+        version: 4,
         root: {
           id: 'n_root',
           type: 'Page',

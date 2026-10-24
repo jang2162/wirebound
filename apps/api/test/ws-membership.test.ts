@@ -196,7 +196,7 @@ describe('바뀌는 순간의 잠금과 연결', () => {
         method: 'PUT',
         url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/schema`,
         cookies: fx.owner.cookie,
-        payload: { schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [] } } },
+        payload: { schema: { version: 4, root: { id: 'n_root', type: 'Page', children: [] } } },
       })
       expect(put.statusCode, put.body).toBe(200)
       const db = getTestDb()
@@ -260,7 +260,7 @@ describe('바뀌는 순간의 잠금과 연결', () => {
         method: 'PUT',
         url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/schema`,
         cookies: fx.owner.cookie,
-        payload: { schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [] } } },
+        payload: { schema: { version: 4, root: { id: 'n_root', type: 'Page', children: [] } } },
       })
       expect(put.statusCode, put.body).toBe(200)
       targetTab.send(lockFrame(fx.page.id, 'n_card'))

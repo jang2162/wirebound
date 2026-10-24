@@ -13,6 +13,14 @@ export interface GallerySample {
 
 const child = (id: string, content = `자식 ${id}`): WbNode => ({ id, type: 'Text', props: { content } })
 const button = (id: string, label: string): WbNode => ({ id, type: 'Button', props: { label } })
+/** 값 칸에 조각을 줄 세운 필드. */
+const field = (id: string, label: string, pieces: WbNode[], extra: Record<string, unknown> = {}): WbNode => ({
+  id,
+  type: 'Field',
+  props: { label, ...extra },
+  children: pieces,
+})
+const input = (id: string, props: Record<string, unknown> = {}): WbNode => ({ id, type: 'Input', props })
 
 /**
  * 끊을 자리가 없는 긴 낱말 — 관리자 화면의 이메일 · 주소는 흔히 이 꼴이다. 하이픈을 넣지 않는다 — 브라우저는 하이픈 뒤에서 줄을 바꿔
@@ -56,7 +64,7 @@ export const PLACEHOLDER_SET_PROPS = {
 /**
  * 카탈로그 컴포넌트마다 표본 노드. 갤러리가 manifest 가 선언한 variant 마다 한 번씩 그린다(`galleryItems`).
  *
- * **`variant` 를 적지 않는다** — 갤러리가 선언된 variant 를 붙인다. `variantFrom` 컴포넌트(`Text` · `Field` · `Divider`)는
+ * **`variant` 를 적지 않는다** — 갤러리가 선언된 variant 를 붙인다. `variantFrom` 컴포넌트(`Text` · `Divider`)는
  * 변형이 prop 에서 오므로 그 prop 을 바꾼 표본을 여럿 둔다. 표본은 스키마 검증을 지난다(`test/gallery.test.tsx`).
  */
 export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>> = {
@@ -175,8 +183,8 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
         type: 'SearchForm',
         props: {},
         children: [
-          { id: 'sf-a', type: 'Field', props: { label: '검색어' } },
-          { id: 'sf-b', type: 'Field', props: { label: '상태', control: 'select' } },
+          field('sf-a', '검색어', [input('sf-a1', { placeholder: '입력' })]),
+          field('sf-b', '상태', [{ id: 'sf-b1', type: 'Select', props: {} }]),
         ],
         zones: { actions: [button('sf-reset', '초기화'), button('sf-go', '검색')] },
       },
@@ -187,7 +195,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
         id: 'sf2',
         type: 'SearchForm',
         props: { collapsed: true },
-        children: [{ id: 'sf-c', type: 'Field', props: { label: '검색어' } }],
+        children: [field('sf-c', '검색어', [input('sf-c1')])],
       },
     },
   ],
@@ -199,8 +207,8 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
         type: 'EntryForm',
         props: { title: '가입' },
         children: [
-          { id: 'ef-a', type: 'Field', props: { label: '이름', required: true } },
-          { id: 'ef-b', type: 'Field', props: { label: '소개', control: 'textarea' } },
+          field('ef-a', '이름', [input('ef-a1', { placeholder: '입력' })], { required: true }),
+          field('ef-b', '소개', [{ id: 'ef-b1', type: 'TextArea', props: {} }]),
         ],
         zones: { actions: [button('ef-save', '저장'), button('ef-cancel', '취소')] },
       },
@@ -208,14 +216,102 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   ],
   Field: [
     {
-      label: 'Field — 글 · 필수',
-      node: { id: 'field', type: 'Field', props: { label: '이름', control: 'text', placeholder: '입력', required: true } },
+      label: 'Field — 입력 · 필수',
+      node: field('field', '이름', [input('field-i', { placeholder: '입력' })], { required: true }),
     },
-    { label: 'Field — 고르개 · 잘못됨', node: { id: 'field2', type: 'Field', props: { label: '상태', control: 'select', invalid: true } } },
+    // 기간 — 날짜 ~ 날짜 + 단추 둘(설계서의 «[날짜]~[날짜][이전주][다음주]»).
     {
-      label: 'Field — 체크 · 비활성',
-      node: { id: 'field3', type: 'Field', props: { label: '동의', control: 'checkbox', disabled: true } },
+      label: 'Field — 기간 · 단추',
+      node: field('field2', '기간', [
+        { id: 'field2-from', type: 'DateInput', props: { value: '2026-10-01' } },
+        { id: 'field2-to', type: 'Affix', props: { text: '~' } },
+        { id: 'field2-until', type: 'DateInput', props: {} },
+        button('field2-prev', '이전주'),
+        button('field2-next', '다음주'),
+      ]),
     },
+    // 세그먼트 + 숫자 + 사이 글자(«[Y][N] + [입력]%») · 몫을 준 입력이 단추 앞까지 찬다(«[입력 몫 1][중복확인]»).
+    {
+      label: 'Field — 세그먼트 · 몫',
+      node: field('field3', '합격 기준', [
+        { id: 'field3-yn', type: 'RadioGroup', props: { options: [{ label: 'Y', selected: true }, { label: 'N' }] } },
+        input('field3-n', { kind: 'number', size: 'short', value: '80' }),
+        { id: 'field3-pct', type: 'Affix', props: { text: '%' } },
+        { ...input('field3-id', { placeholder: '아이디' }), weight: 1 },
+        button('field3-check', '중복확인'),
+      ]),
+    },
+  ],
+  Input: [
+    { label: 'Input — 안내 · 보통', node: input('in', { placeholder: '입력하세요' }) },
+    { label: 'Input — 숫자 · 짧게 · 값', node: input('in2', { kind: 'number', size: 'short', value: '42' }) },
+    { label: 'Input — 비밀번호 · 길게', node: input('in3', { kind: 'password', size: 'long', value: 'secret' }) },
+    { label: 'Input — 읽기 전용', node: input('in4', { value: '자동 계산된 값', readonly: true }) },
+    { label: 'Input — 비활성 · 오류', node: input('in5', { placeholder: '입력', disabled: true, invalid: true }) },
+  ],
+  TextArea: [
+    { label: 'TextArea — 안내 · 3줄', node: { id: 'ta', type: 'TextArea', props: { placeholder: '내용을 입력하세요' } } },
+    {
+      label: 'TextArea — 값 · 5줄 · 읽기 전용',
+      node: { id: 'ta2', type: 'TextArea', props: { value: '적어 둔 글', rows: 5, readonly: true } },
+    },
+  ],
+  Select: [
+    { label: 'Select — 안내', node: { id: 'sel', type: 'Select', props: {} } },
+    {
+      label: 'Select — 고름 · 짧게 · 오류',
+      node: {
+        id: 'sel2',
+        type: 'Select',
+        props: { options: [{ label: '10' }, { label: '20', selected: true }], size: 'short', invalid: true },
+      },
+    },
+  ],
+  DateInput: [
+    { label: 'DateInput — 안내', node: { id: 'date', type: 'DateInput', props: {} } },
+    { label: 'DateInput — 값 · 비활성', node: { id: 'date2', type: 'DateInput', props: { value: '2026-10-24', disabled: true } } },
+  ],
+  TimeInput: [
+    { label: 'TimeInput — 안내', node: { id: 'time', type: 'TimeInput', props: {} } },
+    { label: 'TimeInput — 값 · 읽기 전용', node: { id: 'time2', type: 'TimeInput', props: { value: '09:30', readonly: true } } },
+  ],
+  CheckboxGroup: [
+    {
+      label: 'CheckboxGroup — 셋 · 둘 고름',
+      node: {
+        id: 'cbg',
+        type: 'CheckboxGroup',
+        props: { options: [{ label: '월', selected: true }, { label: '화' }, { label: '수', selected: true }] },
+      },
+    },
+    { label: 'CheckboxGroup — 하나 · 비활성', node: { id: 'cbg2', type: 'CheckboxGroup', props: { disabled: true } } },
+  ],
+  RadioGroup: [
+    {
+      label: 'RadioGroup — Y 고름',
+      node: { id: 'rg', type: 'RadioGroup', props: { options: [{ label: 'Y', selected: true }, { label: 'N' }] } },
+    },
+    {
+      label: 'RadioGroup — 넷 · 안 고름',
+      node: {
+        id: 'rg2',
+        type: 'RadioGroup',
+        props: { options: [{ label: '전체' }, { label: '대기' }, { label: '진행' }, { label: '완료' }] },
+      },
+    },
+  ],
+  Chip: [
+    { label: 'Chip — 지우기', node: { id: 'chip', type: 'Chip', props: { label: '만족도 설문' } } },
+    {
+      label: 'Chip — 지우기 없음 · 비활성',
+      node: { id: 'chip2', type: 'Chip', props: { label: '고정', removable: false, disabled: true } },
+    },
+  ],
+  Affix: [
+    { label: 'Affix — 기본', node: { id: 'affix', type: 'Affix', props: { text: '부터' } } },
+    { label: 'Affix — 흐리게', node: { id: 'affix2', type: 'Affix', props: { text: '(px)', tone: 'muted' } } },
+    { label: 'Affix — 위험', node: { id: 'affix3', type: 'Affix', props: { text: '자동 계산되는 값입니다', tone: 'danger' } } },
+    { label: 'Affix — 주색', node: { id: 'affix4', type: 'Affix', props: { text: '안내', tone: 'primary' } } },
   ],
   Button: [
     { label: 'Button — 보통', node: { id: 'btn', type: 'Button', props: { label: '저장' } } },

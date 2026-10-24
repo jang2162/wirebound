@@ -21,7 +21,7 @@ afterEach(() => {
 const ADMIN: ViewState = { id: 's_admin', name: '관리자' }
 
 function draw(node: WbNode, options: Parameters<typeof renderDocument>[1] = {}): Element {
-  const doc: PageDocument = { version: 3, root: { id: 'page', type: 'Page', children: [node] }, viewStates: [ADMIN] }
+  const doc: PageDocument = { version: 4, root: { id: 'page', type: 'Page', children: [node] }, viewStates: [ADMIN] }
   const { container } = render(<>{renderDocument(doc, options)}</>)
   const el = container.querySelector(`[data-wb-id="${node.id}"]`)
   if (el === null) throw new Error(`${node.id} 가 안 그려졌다`)

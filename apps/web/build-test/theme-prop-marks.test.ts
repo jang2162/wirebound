@@ -7,7 +7,7 @@
  * |---|---|---|
  * | `Section` compact | 루트의 `padding-top` · 높이 | 켜면 여백이 준다 |
  * | `SearchForm` collapsed | 루트 높이 · 안의 필드 수 | 켜면 낮아지고 필드가 DOM 에서 빠진다 |
- * | `Field` disabled · invalid · `List` loading | 루트 · 조각의 계산 스타일 | 꺼진 판과 다른 속성이 하나 이상 |
+ * | 입력 조각(`Field` 값 칸의 `DateInput`) disabled · invalid · `List` loading | 루트 · 조각의 계산 스타일 | 꺼진 판과 다른 속성이 하나 이상 |
  * | `Media` kind | 틀 안 표지(`glyph`)의 글자 · 상자 | `video` 는 보이는 표지이고 `image` 의 것(없거나 다른 글자)과 다르다 |
  * | `List` selectable | 체크 칸 상자 | 표 구조(`data-wb-structure="table"`) variant 는 체크 칸을 그리고, 그 밖의 variant 는 안 그린다(`selectable` 은 표에서만 뜻이 있다 — 아래 «selectable 은 표 구조에서만») |
  *
@@ -37,8 +37,13 @@ const SHOTS = process.env.WB_PROP_MARKS_SHOTS
 
 const text = (id: string, content: string) => ({ id, type: 'Text', props: { content } })
 const fields = (prefix: string) => [
-  { id: `${prefix}_1`, type: 'Field', props: { label: '검색어', placeholder: '이름 · 이메일' } },
-  { id: `${prefix}_2`, type: 'Field', props: { label: '상태', control: 'select' } },
+  {
+    id: `${prefix}_1`,
+    type: 'Field',
+    props: { label: '검색어' },
+    children: [{ id: `${prefix}_1i`, type: 'Input', props: { placeholder: '이름 · 이메일' } }],
+  },
+  { id: `${prefix}_2`, type: 'Field', props: { label: '상태' }, children: [{ id: `${prefix}_2s`, type: 'Select' }] },
 ]
 
 /**
@@ -60,11 +65,27 @@ const NODES = [
   { id: 's_on', type: 'Section', props: { compact: true }, children: [text('s_on_t', '회원 관리')] },
   { id: 'q_off', type: 'SearchForm', props: {}, children: fields('q_off') },
   { id: 'q_on', type: 'SearchForm', props: { collapsed: true }, children: fields('q_on') },
-  { id: 'f_plain', type: 'Field', props: { label: '이름', placeholder: '홍길동' } },
-  { id: 'f_disabled', type: 'Field', props: { label: '이름', placeholder: '홍길동', disabled: true } },
-  { id: 'f_invalid', type: 'Field', props: { label: '이름', placeholder: '홍길동', invalid: true } },
-  // 접근성 트리 판(아래 «Field 의 필수 · 오류는 접근성 트리에 선다») 전용 — 위 짝과 같은 상자 차 재기에는 안 쓴다.
-  { id: 'f_ax', type: 'Field', props: { label: '접근성 이름', required: true, invalid: true } },
+  // 상태는 값 칸의 조각에 있다 — 표지가 없는 `DateInput` 을 써서 아래 «표지» 카나리아에 상태의 접근성 속성만 선다.
+  { id: 'f_plain', type: 'Field', props: { label: '가입일' }, children: [{ id: 'f_plain_d', type: 'DateInput' }] },
+  {
+    id: 'f_disabled',
+    type: 'Field',
+    props: { label: '가입일' },
+    children: [{ id: 'f_disabled_d', type: 'DateInput', props: { disabled: true } }],
+  },
+  {
+    id: 'f_invalid',
+    type: 'Field',
+    props: { label: '가입일' },
+    children: [{ id: 'f_invalid_d', type: 'DateInput', props: { invalid: true } }],
+  },
+  // 접근성 트리 판(아래 «필드는 이름 붙은 묶음 · 조각의 오류 · 읽기 전용은 접근성 트리에 선다») 전용 — 위 짝과 같은 상자 차 재기에는 안 쓴다.
+  {
+    id: 'f_ax',
+    type: 'Field',
+    props: { label: '접근성 이름', required: true },
+    children: [{ id: 'f_ax_i', type: 'Input', props: { placeholder: '접근성 칸', invalid: true, readonly: true } }],
+  },
   { id: 'm_image', type: 'Media', props: { kind: 'image', ratio: '4/3' } },
   { id: 'm_video', type: 'Media', props: { kind: 'video', ratio: '4/3' } },
   { id: 'l_off', type: 'List', props: { items: 2, columns: ['이름', '상태'], pagination: false } },
@@ -131,7 +152,7 @@ const MEASURE = `(input) => {
       fields: el.querySelectorAll('[data-wb-component="Field"]').length,
       glyph: box('[data-wb-part="glyph"]'),
       checkbox: box('[data-wb-part="checkbox"]'),
-      marks: [...el.attributes, ...(el.querySelector('[data-wb-part="control"]')?.attributes ?? [])].filter((a) => /^data-wb-(compact|collapsed|selectable|kind)$|^aria-(disabled|invalid|busy)$/.test(a.name)).map((a) => a.name + '=' + a.value),
+      marks: [...el.attributes, ...(el.querySelector(':scope > [data-wb-part="value"] > [data-wb-component]')?.attributes ?? [])].filter((a) => /^data-wb-(compact|collapsed|selectable|kind)$|^aria-(disabled|invalid|busy)$/.test(a.name)).map((a) => a.name + '=' + a.value),
     }
   }
   return out
@@ -391,12 +412,13 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
   )
 
   /**
-   * **`Field` 의 필수 · 오류는 접근성 트리에 선다** — 역할 없는 `div` 루트에 단 `aria-required` 는 Chrome 의 접근성 트리가 버린다(`aria-invalid` 만
-   * 남고 이름도 비어 있다). 기본 `Field` 뷰는 그 속성을 입력 종류별 역할과 이름을 단 `control` 조각에 둔다 — 그 조각이 이름이 있는
-   * `textbox` 로 서고 `required` · `invalid` 가 둘 다 읽히는지를 CDP 접근성 트리로 잰다. 시스템 테마는 `Field` 뷰가 없어 기본 뷰다.
+   * **필드는 이름 붙은 묶음 · 조각의 오류 · 읽기 전용은 접근성 트리에 선다** — 기본 `Field` 뷰의 뿌리는 라벨을 이름으로 단 `group` 이고, 값 칸의 입력 조각은
+   * 역할(`textbox`)과 이름(필드 라벨 — 렌더러가 넘긴 `ViewProps.field`)을 달아 `aria-invalid` · `aria-readonly` · 필드의 `aria-required` 가 읽힌다. 역할 없는
+   * `div` 에 단 상태 속성은 Chrome 의 접근성 트리가 버리므로 CDP 접근성 트리로 잰다. 필수는 묶음의 속성이 아니다(`group` 은 `aria-required` 를 안 받는다 —
+   * 라벨의 별과 조각이 말한다). 기본테마의 별(`::after " *"`)은 라벨을 거쳐 묶음 이름 끝에 든다. 시스템 테마는 뷰가 없어 기본 뷰다.
    */
   it.each(THEMES)(
-    '%s — Field 의 필수 · 오류는 접근성 트리에 선다',
+    '%s — 필드는 이름 붙은 묶음 · 조각의 오류 · 읽기 전용은 접근성 트리에 선다',
     async (themeId) => {
       await putTheme(call, projectId, { themeId, version: seededVersion(themeId), tokens: {} })
       const { context, page } = await open(await bundlePage())
@@ -411,15 +433,24 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
             properties?: Array<{ name: string; value: { value: unknown } }>
           }>
         }
-        const hits = nodes
-          .filter((node) => node.ignored !== true && node.role?.value === 'textbox' && node.name?.value === '접근성 이름')
+        const live = nodes.filter((node) => node.ignored !== true)
+        const groups = live
+          .filter((node) => node.role?.value === 'group' && (node.name?.value ?? '').startsWith('접근성 이름'))
+          .map((node) => node.name?.value)
+        const hits = live
+          .filter((node) => node.role?.value === 'textbox' && node.name?.value === '접근성 이름')
           .map((node) =>
             Object.fromEntries(
-              (node.properties ?? []).filter((p) => p.name === 'required' || p.name === 'invalid').map((p) => [p.name, p.value.value]),
+              (node.properties ?? [])
+                .filter((p) => p.name === 'readonly' || p.name === 'invalid' || p.name === 'required')
+                .map((p) => [p.name, p.value.value]),
             ),
           )
         // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
-        expect(hits, themeId).toEqual([{ required: true, invalid: 'true' }])
+        expect({ groups, hits }, themeId).toEqual({
+          groups: ['접근성 이름 *'],
+          hits: [{ readonly: true, invalid: 'true', required: true }],
+        })
       } finally {
         await context.close()
       }

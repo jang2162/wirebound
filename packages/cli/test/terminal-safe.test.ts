@@ -55,7 +55,7 @@ function hostilePayload() {
     `제목${ESC}[2J`,
     5,
     {
-      version: 3,
+      version: 4,
       root: {
         id: 'root',
         type: 'Page',

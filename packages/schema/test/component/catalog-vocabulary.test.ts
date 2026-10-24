@@ -50,7 +50,7 @@ describe('states·variantFrom 도달성', () => {
    * `ignored-variant`를 UI가 유도하는 셈이다). 그 대신 도달하는 길은 **그 prop의
    * 컨트롤**뿐이므로, 그 prop이 `editor`에 없으면 **변형이 통째로 도달 불가가 된다.**
    *
-   * 셋(Text·Divider·Field — 아래 카나리아가 목록을 단언한다)이 그 prop을 `editor`에 갖는
+   * 둘(Text·Divider — 아래 카나리아가 목록을 단언한다)이 그 prop을 `editor`에 갖는
    * 것을 **강제하는 자리가 이 케이스다.**
    */
   it('variantFrom이 가리키는 prop도 editor에서 도달 가능하다', () => {
@@ -66,7 +66,7 @@ describe('states·variantFrom 도달성', () => {
     // 카나리아 — `variantFrom`을 가진 컴포넌트가 있어야 이 케이스가 무언가를 지킨다.
     // **정렬해서 비교한다** — `CATALOG_TYPES`의 순서는 이 성질과 무관하고, 순서에 매이면
     // 카탈로그를 재배치할 때 뜻 없는 실패가 난다.
-    expect([...CATALOG_TYPES.filter((type) => getComponent(type)?.variantFrom !== undefined)].sort()).toEqual(['Divider', 'Field', 'Text'])
+    expect([...CATALOG_TYPES.filter((type) => getComponent(type)?.variantFrom !== undefined)].sort()).toEqual(['Divider', 'Text'])
     expect(unreachable).toEqual([])
   })
 })

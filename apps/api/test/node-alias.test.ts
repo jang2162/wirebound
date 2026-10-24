@@ -33,7 +33,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>
 
 function docWith(alias: string) {
   return {
-    version: 3,
+    version: 4,
     root: { id: 'n_root', type: 'Page', children: [{ id: 'n_save', type: 'Button', alias, props: { label: '저장' } }] },
   }
 }
@@ -207,7 +207,7 @@ describe('노드 별칭 — 받지 않는 글자는 입구 다섯 모두 거절'
           file: {
             wireboundVersion: WIREBOUND_PAGE_VERSION,
             page: { title: '가져옴' },
-            schema: { version: 3, root: { id: 'n_root', type: 'Page', children: [node] } },
+            schema: { version: 4, root: { id: 'n_root', type: 'Page', children: [node] } },
             comments: [],
           },
         } as never,

@@ -85,8 +85,8 @@ const PLAIN = [
     type: 'SearchForm',
     props: {},
     children: [
-      { id: 'p_sf1', type: 'Field', props: { label: '검색어' } },
-      { id: 'p_sf2', type: 'Field', props: { label: '상태', control: 'select' } },
+      { id: 'p_sf1', type: 'Field', props: { label: '검색어' }, children: [{ id: 'p_sf1i', type: 'Input' }] },
+      { id: 'p_sf2', type: 'Field', props: { label: '상태' }, children: [{ id: 'p_sf2s', type: 'Select' }] },
     ],
   },
   { id: 'p_ls', type: 'List', props: { items: 2, columns: ['이름', '상태'], pagination: false } },
