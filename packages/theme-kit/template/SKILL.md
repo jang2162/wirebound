@@ -5,8 +5,8 @@ description: wirebound 설계서 테마를 짠다 — 컴포넌트 뷰(tsx) · C
 
 # wirebound 테마 작성 지침
 
-이 프로젝트는 wirebound 설계서의 **테마**다. 설계서의 페이지는 컴포넌트 노드의 트리이고(카탈로그 29 종 — `Page` · `Slot` ·
-`Section` · `Flex` · `Grid` · `Card` · `Tabs` · `TabPanel` · `List` · `Tree` · `KeyValue` · `SearchForm` · `EntryForm` · `Field` ·
+이 프로젝트는 wirebound 설계서의 **테마**다. 설계서의 페이지는 컴포넌트 노드의 트리이고(카탈로그 30 종 — `Page` · `Slot` ·
+`Section` · `Flex` · `Grid` · `Card` · `Tabs` · `TabPanel` · `List` · `Tree` · `KeyValue` · `SearchForm` · `EntryForm` · `FormTable` · `Field` ·
 `Input` · `TextArea` · `Select` · `DateInput` · `TimeInput` · `CheckboxGroup` · `RadioGroup` · `Chip` · `Affix` · `Button` ·
 `Link` · `Text` · `Media` · `Divider` · `Placeholder`), 테마는 컴포넌트마다 **뷰**(React 컴포넌트)와 CSS 를 낸다. 카탈로그와 각
 컴포넌트의 props 는 wirebound 가 정한다 — 테마는 컴포넌트나 props 를 더할 수 없고, 어떻게 보이는지만 정한다.
@@ -80,7 +80,15 @@ export const ListView = view(({ props, variant, states, children }) => {
     별(`data-wb-state~='required'`)로 보인다.
 - **`Field` 는 라벨과 값 칸이다.** 값 칸(몸통 — `children`)에 입력 조각이 줄 선다. 뷰는 `label` 조각과 `value` 조각(그 안에 `children`)을
   형제로 둔다 — `children` 을 안 그리면 값 칸의 조각이 화면에서 사라지고 `wb-theme check` 가 막는다. 조각의 몫(`--wb-node-weight`)은 SDK 기본
-  CSS 가 `flex` 로 건다.
+  CSS 가 `flex` 로 건다. **두 조각은 뿌리의 직계로 그린다** — 폼 표(`FormTable`)는 쌍 격자라 SDK 기본 CSS 가 칸의 `Field` 뿌리를 subgrid 로 두고
+  두 조각을 라벨 칸 · 값 칸 트랙에 놓는다. 감싸는 요소를 끼우면 두 조각이 한 칸에 몰리고 `wb-theme check` 가 막는다. 열을 정한 `SearchForm` 의
+  기본 CSS 는 필드 하나를 칸 하나에 깐다 — 라벨 왼쪽 쌍 격자로 꾸미려면 테마 CSS 가 트랙 · 자식 폭(`span calc(2 * var(--wb-node-weight, 1))`) ·
+  subgrid 를 건다(기본테마가 그렇다).
+- **`FormTable` 은 라벨|값 표다.** 한 줄에 쌍을 `columns` 개 놓고 자식의 몫(`items[i].span`)이 차지할 쌍 수다. 줄 끝 · 넓은 칸이 남긴 구멍의 빈 쌍은
+  뷰가 그린다 — `pairRows(items, columns)`(SDK)가 자식과 빈 쌍(`filler` — `label` · `value` 두 조각, 노드가 아니다)의 차례를 준다. `cells` 조각에는
+  `formTableCellsAttrs(columns)` 를 편다. **칸과 빈 쌍은 `cells` 조각의 직계로 그린다** — 쌍 격자는 `cells` 의 직계 상자를 트랙에 놓는다(감싸는
+  요소를 끼우거나 빈 쌍을 `cells` 밖에 두거나 조각 이름을 바꾸면 격자가 깨진다). `cells` 조각이 없거나 · 칸 · 빈 쌍이 그 직계가 아니거나 · 빈 쌍에
+  두 조각이 없거나 · 빈 쌍 수가 그 셈과 다르면 `wb-theme check` 가 막는다. 라벨 칸 폭은 `--wb-form-labelWidth` 로 싣는다.
   - CSS 는 `[data-wb-component='Section'][data-wb-compact] { … }` 처럼 겨냥한다. 기본 뷰도 그 값으로 모양을 바꾼다(접힌 검색은
     머리줄 `toggle` 조각만 남고 자식이 빠진다 · 표 구조 목록의 `selectable` 은 `checkbox` 조각) — 테마 CSS 가 여백 · 색을 정한다.
   - **`List.selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다.** 줄 · 카드 목록 구조의 뷰는 표지 `data-wb-selectable` 만 서고
@@ -156,9 +164,9 @@ export const ListView = view(({ props, variant, states, children }) => {
 
 `sdk` 는 이 테마가 기대는 `@wirebound/theme-sdk` 의 판이다. 업로드할 때 wirebound 의 SDK 판과 견준다.
 
-- `^1.5.0` — major 가 같고 1.5.0 이상(자리표시자의 그리기 값 — `placeholderVars` — 과 그림 `useAsset` 이 든 판 — 그 아래는 값 칸을 가진 `Field` 와 입력 조각 아홉이 든 1.4.0). **0.x 에서도 major 만 본다** — `^0.3.0` 은 `0.9.0` 을 받는다(npm 은 `<0.4.0` 으로 읽는다).
-- `~1.5.0` — major.minor 가 같고 1.5.0 이상.
-- `1.5.0` — 그 판만.
+- `^1.6.0` — major 가 같고 1.6.0 이상(폼 표 `FormTable` — `pairRows` · `formTableCellsAttrs` · `ViewItem.span` — 이 든 판 — 그 아래는 자리표시자의 그리기 값 `placeholderVars` 와 그림 `useAsset` 이 든 1.5.0). **0.x 에서도 major 만 본다** — `^0.3.0` 은 `0.9.0` 을 받는다(npm 은 `<0.4.0` 으로 읽는다).
+- `~1.6.0` — major.minor 가 같고 1.6.0 이상.
+- `1.6.0` — 그 판만.
 
 ## 하지 않는 것
 

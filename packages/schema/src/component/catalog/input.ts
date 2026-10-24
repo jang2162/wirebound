@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineComponent } from '../define'
-import { oneLine } from '../summary'
+import { integer, joined, oneLine } from '../summary'
 
 export const SearchFormDef = defineComponent({
   type: 'SearchForm',
@@ -46,8 +46,9 @@ export const EntryFormDef = defineComponent({
   editor: [{ prop: 'title', control: 'text', label: '제목' }],
   summary: (props) => oneLine(props.title),
   states: [],
+  // 새 입력폼은 몸통에 1쌍 폼 표 하나(필드 셋 — 그 폼 표의 `initial`)를 들고 선다. 몸통은 무엇이든 받는다 — 폼 표 여럿 · 구역 제목 · 그리드를 쌓는다.
   zones: [
-    { name: 'body', label: '항목' },
+    { name: 'body', label: '항목', initial: [{ type: 'FormTable' }] },
     {
       name: 'actions',
       label: '단추',
@@ -56,6 +57,41 @@ export const EntryFormDef = defineComponent({
         { type: 'Button', props: { label: '취소' } },
       ],
     },
+  ],
+})
+
+/**
+ * **폼 표** — 라벨|값 칸을 표로 깐다(설계 spec `2026-10-25-form-table-design.md`). 한 줄에 쌍을 `columns` 개 놓고 넘치면 다음 줄이다 — 행은 노드가
+ * 아니다. 자식의 몫(`WbNode.weight`)이 차지할 쌍 수이고 열 수로 자른다(몫 ≥ 열 수면 한 줄 전체). 줄 끝 · 넓은 칸이 남긴 구멍의 빈 쌍은 뷰가
+ * 채운다(`@wirebound/theme-sdk` 의 `pairRows`). 라벨 칸 · 값 칸은 안의 `Field` 의 `label` · `value` 조각이다.
+ *
+ * **세 구역 다 무엇이든 받는다**(`accepts` 없음) — 몸통에 `Field` 가 아닌 자식(안내 글 · 그리드)이 서면 그 몫만큼의 쌍 폭을 한 칸으로 덮는다.
+ * «머리 오른쪽» 은 `title` 오른쪽의 단추, «옆 칸» 은 표 왼쪽에서 모든 줄을 덮는 칸(사진)이다.
+ */
+export const FormTableDef = defineComponent({
+  type: 'FormTable',
+  label: '폼 표',
+  description: '라벨|값 칸을 표로 깐다. 한 줄에 쌍을 열 수만큼 놓는다.',
+  group: 'input',
+  props: z.strictObject({
+    // 비면 머리줄째 없다(«머리 오른쪽» 이 차면 제목 없는 머리줄이 선다).
+    title: z.string().default(''),
+    columns: z.number().int().min(1).max(4).default(1),
+  }),
+  editor: [
+    { prop: 'title', control: 'text', label: '제목' },
+    { prop: 'columns', control: 'number', label: '열 수' },
+  ],
+  summary: (props) => {
+    const columns = integer(props.columns)
+    return joined(oneLine(props.title), columns === null ? null : `${columns}열`)
+  },
+  states: [],
+  // 선언 차례가 순회 · 트리 차례다 — 화면을 읽는 차례(제목줄 → 왼쪽 칸 → 칸)다.
+  zones: [
+    { name: 'headEnd', label: '머리 오른쪽' },
+    { name: 'aside', label: '옆 칸' },
+    { name: 'body', label: '칸', initial: [{ type: 'Field' }, { type: 'Field' }, { type: 'Field' }] },
   ],
 })
 

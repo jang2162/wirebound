@@ -8,8 +8,8 @@ describe('컴포넌트 카탈로그', () => {
     installCatalog()
   })
 
-  it('29종을 등록한다', () => {
-    expect(listComponents()).toHaveLength(29)
+  it('30종을 등록한다', () => {
+    expect(listComponents()).toHaveLength(30)
   })
 
   it('CATALOG_TYPES와 등록 결과가 일치한다', () => {
@@ -22,7 +22,7 @@ describe('컴포넌트 카탈로그', () => {
 
   it('두 번 설치해도 중복 등록하지 않는다', () => {
     installCatalog()
-    expect(listComponents()).toHaveLength(29)
+    expect(listComponents()).toHaveLength(30)
   })
 
   it('구역 선언 — 타입마다 이름 차례', () => {
@@ -42,6 +42,7 @@ describe('컴포넌트 카탈로그', () => {
       List: ['headStart', 'headEnd'],
       SearchForm: ['body', 'actions'],
       EntryForm: ['body', 'actions'],
+      FormTable: ['headEnd', 'aside', 'body'],
       Field: ['body'],
       Placeholder: ['body'],
     })
@@ -60,12 +61,15 @@ describe('컴포넌트 카탈로그', () => {
     expect(getComponent('TabPanel')!.bodyHost).toBe('parent')
   })
 
-  it('기본 내용 — 폼의 단추(주 단추는 «검색» · «저장» 의 primary) · 탭의 패널 둘', () => {
+  it('기본 내용 — 폼의 단추(주 단추는 «검색» · «저장» 의 primary) · 입력폼의 폼 표 · 폼 표의 필드 셋 · 탭의 패널 둘', () => {
     const seeds = (type: string, zone: string) => getComponent(type)!.zones.find((z) => z.name === zone)!.initial
     expect(seeds('SearchForm', 'actions')).toEqual([
       { type: 'Button', props: { label: '초기화' } },
       { type: 'Button', props: { label: '검색' }, variant: 'primary' },
     ])
+    // 새 입력폼은 1쌍 폼 표(필드 셋)를 들고 선다 — 기본 내용이 겹으로 돈다(`apps/web/src/edit/create-node.ts`).
+    expect(seeds('EntryForm', 'body')).toEqual([{ type: 'FormTable' }])
+    expect(seeds('FormTable', 'body')).toEqual([{ type: 'Field' }, { type: 'Field' }, { type: 'Field' }])
     expect(seeds('EntryForm', 'actions')).toEqual([
       { type: 'Button', props: { label: '저장' }, variant: 'primary' },
       { type: 'Button', props: { label: '취소' } },

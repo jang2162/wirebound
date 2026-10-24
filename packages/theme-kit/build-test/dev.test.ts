@@ -99,7 +99,7 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
     const kinds = await frame.evaluate(
       () => new Set([...document.querySelectorAll('[data-wb-component]')].map((el) => el.getAttribute('data-wb-component'))).size,
     )
-    expect(kinds).toBe(29)
+    expect(kinds).toBe(30)
   })
 
   it('테마 뷰가 쓰인다 — SDK 한 벌', async () => {

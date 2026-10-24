@@ -82,6 +82,7 @@ export interface ComponentNoun {
 const LABEL_PROPS: Record<string, string> = {
   Card: 'title',
   EntryForm: 'title',
+  FormTable: 'title',
   Field: 'label',
   Chip: 'label',
   Affix: 'text',

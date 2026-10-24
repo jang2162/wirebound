@@ -2212,6 +2212,13 @@
   color: #a11;
 }
 
+/* 칸 밑의 안내 — 쌍 격자 안 «몫» 칸의 «쌍 수» 등. */
+.wb-shell-prop-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
 /* «상태 보임» 칸(`panels/visibility-field.tsx`) — 첫 줄은 버튼 꼴 라디오 셋(모드 토글 `.wb-shell-mode` 와 같은 꼴), 둘째 줄은 켜고 끄는 상태
    단추(줄을 바꿔 흐른다 · 깊이는 이름 앞 표지). 안내 한 줄(상태가 없음 · 지금 숨음)은 오류가 아니라 옅은 글이다. */
 .wb-shell-visibility-modes {

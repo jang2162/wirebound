@@ -76,6 +76,7 @@ const CENSUS: Record<string, Record<string, Cell>> = {
   },
   SearchForm: { collapsed: { route: 'mark', alt: true }, columns: { route: 'var', alt: 3 } },
   EntryForm: { title: { route: 'text', alt: '제목' } },
+  FormTable: { title: { route: 'text', alt: '제목' }, columns: { route: 'var', alt: 2 } },
   Field: {
     label: { route: 'text', alt: '이름' },
     required: { route: 'state', alt: true },

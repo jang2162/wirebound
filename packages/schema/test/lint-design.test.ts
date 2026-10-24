@@ -295,6 +295,17 @@ describe('⑥ 구조적 공백', () => {
     expect(issues.map((issue) => issue.nodeId).sort()).toEqual([entry.id, search.id].sort())
   })
 
+  it('Field가 하나도 없는 FormTable을 낸다 — 그 표를 품은 EntryForm은 표 안 Field로 채워진다', () => {
+    const empty = node('FormTable', { children: [node('Text')] })
+    const filled = node('FormTable', { children: [node('Field')] })
+    const entry = node('EntryForm', { children: [filled] })
+    const issues = lintDesign(project({ pages: [page({ document: doc([empty, entry]) })] })).filter(
+      (issue) => issue.rule === 'structural-gap',
+    )
+
+    expect(issues.map((issue) => [issue.nodeId, issue.message])).toEqual([[empty.id, 'FormTable 안에 Field가 하나도 없습니다']])
+  })
+
   it('자손에 있으면 채워진 것으로 본다', () => {
     const entry = node('EntryForm', { children: [node('Card', { children: [node('Field')] })] })
     const issues = lintDesign(project({ pages: [page({ document: doc([entry]) })] })).filter((issue) => issue.rule === 'structural-gap')

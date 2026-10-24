@@ -62,6 +62,19 @@ export interface ShotWidthReport {
    * `--wb-node-placeholder-*` 변수를 안 읽고 덮으면 선다. 표본을 하나도 못 찾았으면 `item` 이 `null` 인 한 줄이다(자가 아무것도 안 잰 판).
    */
   placeholder: { item: string | null; property: string; want: string; got: string }[]
+  /**
+   * **폼 표에서 같은 줄인데 라벨 칸과 값 칸의 높이가 다른 필드** — 쌍 격자는 `Field` 를 subgrid 로 두어 두 칸이 그 줄 높이를 채워야 한다(값 칸에
+   * 여러 줄 · 그리드가 들면 라벨 칸이 따라 늘어난다). 라벨이 값 위에 선 판(좁은 창)은 같은 줄이 아니라 안 잰다.
+   */
+  pairs: { item: string | null; element: string; label: number; value: number }[]
+  /** 위를 잰 필드 수 — 0 이면 아무것도 안 잰 판이다(폼 표 표본이 없거나 모두 라벨 위이거나 `pairsOffGrid` 뿐). */
+  pairsMeasured: number
+  /**
+   * **폼 표 몸통의 `Field` 인데 쌍 격자의 꼴(`[FormTable] > [cells] > [Field]` · 두 조각 직계)로 안 선 것** — 꼴을 안 보고 찾는다(가장 가까운 노드 ·
+   * 구역 상자가 폼 표 뿌리인 `Field`). 칸을 감싸거나 `cells` 조각 이름을 바꾼 테마에서는 `pairs` 가 그 필드를 못 찾아 `pairsMeasured` 가 0 인 채
+   * 아무것도 안 잰다 — 그 판을 문제로 세운다. 라벨이 값 위에 선 판(좁은 창)은 꼴이 맞아 여기 안 든다.
+   */
+  pairsOffGrid: { item: string | null; element: string }[]
 }
 
 export interface ShotsReport {
@@ -254,8 +267,33 @@ function measure(expect: {
       if (got !== want) placeholder.push({ item: itemOf(el), property, want, got })
     }
   }
+  const pairs: ShotWidthReport['pairs'] = []
+  const pairsOffGrid: ShotWidthReport['pairsOffGrid'] = []
+  let pairsMeasured = 0
+  const gridded = new Set(
+    document.querySelectorAll('[data-wb-component="FormTable"] > [data-wb-part="cells"] > [data-wb-component="Field"]'),
+  )
+  for (const field of document.querySelectorAll('[data-wb-component="Field"]')) {
+    const owner = field.parentElement?.closest('[data-wb-id], [data-wb-zone]')
+    if (owner?.getAttribute('data-wb-component') !== 'FormTable') continue
+    const label = field.querySelector(':scope > [data-wb-part="label"]')
+    const value = field.querySelector(':scope > [data-wb-part="value"]')
+    if (!gridded.has(field) || label === null || value === null) {
+      pairsOffGrid.push({ item: itemOf(field), element: describe(field) })
+      continue
+    }
+    const [a, b] = [label.getBoundingClientRect(), value.getBoundingClientRect()]
+    if (Math.abs(a.top - b.top) > 0.5) continue
+    pairsMeasured += 1
+    if (Math.abs(a.height - b.height) > 1) {
+      pairs.push({ item: itemOf(field), element: describe(field), label: Math.round(a.height), value: Math.round(b.height) })
+    }
+  }
   return {
     placeholder,
+    pairs,
+    pairsMeasured,
+    pairsOffGrid,
     wbErrors: [...document.querySelectorAll('[data-wb-error]')].map((el) => ({
       item: itemOf(el),
       message: el.getAttribute('data-wb-error') ?? '',
@@ -343,6 +381,16 @@ export function shotsProblems(report: ShotsReport): string[] {
     for (const e of w.wbErrors) lines.push(`✗ ${w.width}px 폴백 ${e.item ?? '(칸 밖)'}: ${e.message}`)
     for (const o of w.overflow) lines.push(`✗ ${w.width}px 넘침 ${o.item ?? '(칸 밖)'}: ${o.element} (${o.left}–${o.right}px)`)
     for (const o of w.wrapped) lines.push(`✗ ${w.width}px 꺾임 ${o.item ?? '(칸 밖)'}: ${o.element} (${o.lines}줄)`)
+    for (const p of w.pairs) {
+      lines.push(
+        `✗ ${w.width}px 폼 표 ${p.item ?? '(칸 밖)'}: 같은 줄의 라벨 칸 ${p.label}px · 값 칸 ${p.value}px — 두 칸이 줄 높이를 채우지 않습니다(${p.element})`,
+      )
+    }
+    for (const p of w.pairsOffGrid) {
+      lines.push(
+        `✗ ${w.width}px 폼 표 ${p.item ?? '(칸 밖)'}: 몸통의 Field 가 [FormTable] > [cells] > [Field] · 두 조각 직계로 안 섰습니다 — 쌍 격자에 안 서고 쌍 높이를 못 잽니다(${p.element})`,
+      )
+    }
     for (const p of w.placeholder) {
       lines.push(
         `✗ ${w.width}px 자리표시자 ${p.item ?? '(표본 없음)'}: 정한 ${p.property} ${p.want} 가 아니라 ${p.got} — 테마 CSS 가 --wb-node-placeholder-* 를 안 읽고 덮었습니다`,

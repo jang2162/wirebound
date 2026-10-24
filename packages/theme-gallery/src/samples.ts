@@ -189,6 +189,28 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
         zones: { actions: [button('sf-reset', '초기화'), button('sf-go', '검색')] },
       },
     },
+    // 열을 정한 조회 폼 — 쌍 격자(라벨 왼쪽). 몫 2 인 필드가 두 쌍을 덮는다.
+    {
+      label: 'SearchForm — 2열 · 몫',
+      node: {
+        id: 'sf3',
+        type: 'SearchForm',
+        props: { columns: 2 },
+        children: [
+          field('sf3-a', '검색어', [input('sf3-a1', { placeholder: '입력' })]),
+          field('sf3-b', '상태', [{ id: 'sf3-b1', type: 'Select', props: {} }]),
+          {
+            ...field('sf3-c', '기간', [
+              { id: 'sf3-c1', type: 'DateInput', props: {} },
+              { id: 'sf3-c2', type: 'Affix', props: { text: '~' } },
+              { id: 'sf3-c3', type: 'DateInput', props: {} },
+            ]),
+            weight: 2,
+          },
+        ],
+        zones: { actions: [button('sf3-reset', '초기화'), button('sf3-go', '검색')] },
+      },
+    },
     {
       label: 'SearchForm — 접힘',
       node: {
@@ -201,16 +223,99 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   ],
   EntryForm: [
     {
-      label: 'EntryForm — 제목 · 필드 둘',
+      label: 'EntryForm — 제목 · 폼 표',
       node: {
         id: 'ef',
         type: 'EntryForm',
         props: { title: '가입' },
         children: [
-          field('ef-a', '이름', [input('ef-a1', { placeholder: '입력' })], { required: true }),
-          field('ef-b', '소개', [{ id: 'ef-b1', type: 'TextArea', props: {} }]),
+          {
+            id: 'ef-t',
+            type: 'FormTable',
+            props: {},
+            children: [
+              field('ef-a', '이름', [input('ef-a1', { placeholder: '입력' })], { required: true }),
+              field('ef-b', '소개', [{ id: 'ef-b1', type: 'TextArea', props: {} }]),
+            ],
+          },
         ],
         zones: { actions: [button('ef-save', '저장'), button('ef-cancel', '취소')] },
+      },
+    },
+  ],
+  FormTable: [
+    // 1쌍 다섯 줄 — 필수 · 조합 입력(«[아이디]@[도메인 셀렉트]» · «[ ]-[ ]-[ ]») · 단추 · 여러 줄.
+    {
+      label: 'FormTable — 1쌍 다섯 줄',
+      node: {
+        id: 'ft',
+        type: 'FormTable',
+        props: {},
+        children: [
+          field('ft-a', '이름', [input('ft-a1', { placeholder: '입력' })], { required: true }),
+          field('ft-b', '이메일', [
+            input('ft-b1', { placeholder: '아이디' }),
+            { id: 'ft-b2', type: 'Affix', props: { text: '@' } },
+            { id: 'ft-b3', type: 'Select', props: {} },
+          ]),
+          field('ft-c', '연락처', [
+            input('ft-c1', { size: 'short' }),
+            { id: 'ft-c2', type: 'Affix', props: { text: '-' } },
+            input('ft-c3', { size: 'short' }),
+            { id: 'ft-c4', type: 'Affix', props: { text: '-' } },
+            input('ft-c5', { size: 'short' }),
+          ]),
+          field('ft-d', '주소', [{ ...input('ft-d1', { placeholder: '주소' }), weight: 1 }, button('ft-d2', '우편번호')]),
+          field('ft-e', '소개', [{ id: 'ft-e1', type: 'TextArea', props: {} }]),
+        ],
+      },
+    },
+    // 2쌍 — 넓은 칸(몫 2)이 앞 줄에 구멍을 남기고, 끝 줄의 남는 쌍이 빈 쌍이다(뷰가 채운다). 긴 라벨 · 긴 값이 칸 안에서 꺾인다.
+    {
+      label: 'FormTable — 2열 · 전폭 · 빈 쌍',
+      node: {
+        id: 'ft2',
+        type: 'FormTable',
+        props: { columns: 2 },
+        children: [
+          field('ft2-a', '아이디', [input('ft2-a1', { value: 'hong' })], { required: true }),
+          field('ft2-b', '가입 경로 및 추천인 정보', [{ id: 'ft2-b1', type: 'Text', props: { content: LONG_WORD } }], { required: true }),
+          field('ft2-c', '상태', [{ id: 'ft2-c1', type: 'Select', props: {} }]),
+          { ...field('ft2-d', '비고', [{ id: 'ft2-d1', type: 'TextArea', props: { rows: 2 } }]), weight: 2 },
+          field('ft2-e', '등급', [
+            { id: 'ft2-e1', type: 'RadioGroup', props: { options: [{ label: '일반', selected: true }, { label: '우수' }] } },
+          ]),
+        ],
+      },
+    },
+    // 표 밖 구역 제목 + 오른쪽 단추 — 폼 표의 제목 · «머리 오른쪽».
+    {
+      label: 'FormTable — 제목 · 머리 오른쪽',
+      node: {
+        id: 'ft3',
+        type: 'FormTable',
+        props: { title: '계정상태 정보', columns: 2 },
+        zones: { headEnd: [button('ft3-log', '처리이력조회')] },
+        children: [
+          field('ft3-a', '계정상태', [{ id: 'ft3-a1', type: 'Select', props: {} }]),
+          field('ft3-b', '처리일', [{ id: 'ft3-b1', type: 'DateInput', props: {} }]),
+        ],
+      },
+    },
+    // 사진 칸 — «옆 칸» 이 표 왼쪽에서 모든 줄을 덮는다.
+    {
+      label: 'FormTable — 옆 칸(사진)',
+      node: {
+        id: 'ft4',
+        type: 'FormTable',
+        props: { columns: 2 },
+        zones: { aside: [{ id: 'ft4-photo', type: 'Placeholder', props: { label: '사진' } }] },
+        children: [
+          field('ft4-a', '이름', [input('ft4-a1')]),
+          field('ft4-b', '생년월일', [{ id: 'ft4-b1', type: 'DateInput', props: {} }]),
+          field('ft4-c', '소속', [input('ft4-c1')]),
+          field('ft4-d', '직급', [input('ft4-d1')]),
+        ],
       },
     },
   ],

@@ -18,6 +18,12 @@ export function nodeVar(component: string, prop: string): string {
  */
 export const WEIGHT_VAR = `${NODE_VAR_PREFIX}weight`
 
+/**
+ * 쌍 격자(폼 표 · 열을 정한 조회 폼)의 라벨 칸 폭. **이름이 테마의 손잡이다** — 테마가 이 변수에 폭을 싣고(기본 CSS 는 없으면 8rem), 바꾸면 테마
+ * CSS 가 내는 값이 조용히 안 닿는다. manifest 토큰이 아니다 — 라벨 폭은 테마의 배치 결정이다.
+ */
+export const FORM_LABEL_WIDTH_VAR = '--wb-form-labelWidth'
+
 /** 트리 들여쓰기 한 단계의 폭. **이름이 테마의 손잡이다** — 바꾸면 테마 CSS 가 내는 값이 조용히 안 닿는다. */
 export const TREE_INDENT_VAR = '--wb-tree-indent'
 

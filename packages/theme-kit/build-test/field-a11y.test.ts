@@ -94,6 +94,31 @@ const DOC = {
   },
 }
 
+/**
+ * 같은 필드를 폼 표(제목 · 2열 · 나이는 몫 2 — 그 앞 구멍과 끝에 빈 쌍이 선다)에 넣은 판. 쌍 격자는 CSS(subgrid)라 이름이 그대로여야 하고, 제목이 표 하나를
+ * 이름 붙은 `group` 으로 낸다. 빈 쌍(`aria-hidden`)은 트리에 안 선다.
+ */
+const TABLE_DOC = {
+  ...DOC,
+  root: {
+    ...DOC.root,
+    children: [
+      {
+        ...DOC.root.children[0]!,
+        children: [
+          {
+            id: 'n_ft',
+            type: 'FormTable',
+            props: { title: '등록 정보', columns: 2 },
+            children: DOC.root.children[0]!.children!.map((child) => (child.id === 'fb' ? { ...child, weight: 2 } : child)),
+          },
+        ],
+      },
+      DOC.root.children[1]!,
+    ],
+  },
+}
+
 /** 이 판에서 보는 역할 — 입력 조각 · 묶음 · 단추. */
 const ROLES = ['textbox', 'spinbutton', 'combobox', 'radiogroup', 'group', 'button']
 
@@ -103,8 +128,8 @@ interface Row {
   required: boolean | null
 }
 
-async function axRows(css: string): Promise<Row[]> {
-  const html = renderToStaticMarkup(renderDocument(DOC as unknown as PageDocument, {}))
+async function axRows(css: string, doc: unknown = DOC): Promise<Row[]> {
+  const html = renderToStaticMarkup(renderDocument(doc as unknown as PageDocument, {}))
   const page = await launched.browser!.newPage()
   try {
     await page.setContent(
@@ -178,6 +203,27 @@ describe.skipIf(launched.browser === null)('값 칸 조각의 접근 이름 (Chr
       expect(rows.filter((row) => row.role === 'group').map((row) => row.name)).toContain('요일')
       // 단추는 제 이름 그대로다 — 필드 이름을 받지 않는다.
       expect(rows.filter((row) => row.role === 'button').map((row) => row.name)).toContain('중복확인')
+    })
+
+    // 필수 별은 라벨 조각의 생성 내용(`::before`)이라 대체 글을 안 주면 묶음 이름에 든다(«* 이름»). 필수는 입력 조각의 `required` 가 말한다.
+    it(`${theme} — 필수 필드의 묶음 이름은 라벨 그대로다 — 필수 별은 이름에 안 든다`, async () => {
+      const rows = await axRows(await css())
+      const groups = rows.filter((row) => row.role === 'group').map((row) => row.name)
+      // 카나리아 — 필수 필드 «이름» 의 입력 조각이 필수다.
+      expect(rows).toContainEqual({ role: 'textbox', name: '이름', required: true })
+      expect(groups).toContain('이름')
+      expect(groups.filter((name) => name.includes('*'))).toEqual([])
+    })
+
+    it(`${theme} — 폼 표 안에서도 같은 이름 · 표는 제목 이름의 group · 빈 쌍은 트리에 없다`, async () => {
+      const flat = await axRows(await css())
+      const rows = await axRows(await css(), TABLE_DOC)
+      // 카나리아 — 표가 섰다(빈 쌍 둘이 DOM 에 있다).
+      const html = renderToStaticMarkup(renderDocument(TABLE_DOC as unknown as PageDocument, {}))
+      expect(html.split('data-wb-part="filler"').length - 1).toBe(2)
+      const groups = (list: readonly Row[]) => list.filter((row) => row.role === 'group').map((row) => row.name)
+      expect(sorted(rows.filter((row) => row.role !== 'group'))).toEqual(sorted(flat.filter((row) => row.role !== 'group')))
+      expect([...groups(rows)].sort()).toEqual([...groups(flat), '등록 정보'].sort())
     })
   }
 })

@@ -102,36 +102,51 @@ export function broadFixture(): PageDocument {
           id: id(),
           type: 'EntryForm',
           props: { title: '등록' },
+          // 폼 표 — 2열 · 끝 빈 쌍 · 전폭(몫 2) · 머리줄(제목 + 머리 오른쪽).
           children: [
             {
               id: id(),
-              type: 'Field',
-              props: { label: '동의' },
-              children: [{ id: id(), type: 'CheckboxGroup', props: { disabled: true, options: [{ label: '동의', selected: true }] } }],
-            },
-            // 값 칸의 조각 — 기간(날짜 ~ 날짜) · 시간 · 세그먼트 · 몫을 준 입력 · 칩 · 여러 줄.
-            {
-              id: id(),
-              type: 'Field',
-              props: { label: '기간', required: true },
+              type: 'FormTable',
+              props: { title: '기본 정보', columns: 2 },
+              zones: { headEnd: [{ id: id(), type: 'Button', props: { label: '이력' } }] },
               children: [
-                { id: id(), type: 'DateInput', props: { value: '2026-10-01' } },
-                { id: id(), type: 'Affix', props: { text: '~', tone: 'muted' } },
-                { id: id(), type: 'DateInput', props: { readonly: true } },
-                { id: id(), type: 'TimeInput', props: { invalid: true } },
+                {
+                  id: id(),
+                  type: 'Field',
+                  props: { label: '동의' },
+                  children: [{ id: id(), type: 'CheckboxGroup', props: { disabled: true, options: [{ label: '동의', selected: true }] } }],
+                },
+                // 값 칸의 조각 — 기간(날짜 ~ 날짜) · 시간 · 세그먼트 · 몫을 준 입력 · 칩 · 여러 줄.
+                {
+                  id: id(),
+                  type: 'Field',
+                  props: { label: '기간', required: true },
+                  children: [
+                    { id: id(), type: 'DateInput', props: { value: '2026-10-01' } },
+                    { id: id(), type: 'Affix', props: { text: '~', tone: 'muted' } },
+                    { id: id(), type: 'DateInput', props: { readonly: true } },
+                    { id: id(), type: 'TimeInput', props: { invalid: true } },
+                  ],
+                },
+                {
+                  id: id(),
+                  type: 'Field',
+                  props: { label: '기준' },
+                  children: [
+                    { id: id(), type: 'RadioGroup', props: { options: [{ label: 'Y', selected: true }, { label: 'N' }] } },
+                    { id: id(), type: 'Input', weight: 1, props: { kind: 'number', size: 'short', value: '80' } },
+                    { id: id(), type: 'Chip', props: { label: '설문' } },
+                  ],
+                },
+                {
+                  id: id(),
+                  type: 'Field',
+                  weight: 2,
+                  props: { label: '소개' },
+                  children: [{ id: id(), type: 'TextArea', props: { rows: 4 } }],
+                },
               ],
             },
-            {
-              id: id(),
-              type: 'Field',
-              props: { label: '기준' },
-              children: [
-                { id: id(), type: 'RadioGroup', props: { options: [{ label: 'Y', selected: true }, { label: 'N' }] } },
-                { id: id(), type: 'Input', weight: 1, props: { kind: 'number', size: 'short', value: '80' } },
-                { id: id(), type: 'Chip', props: { label: '설문' } },
-              ],
-            },
-            { id: id(), type: 'Field', props: { label: '소개' }, children: [{ id: id(), type: 'TextArea', props: { rows: 4 } }] },
           ],
           zones: { actions: [{ id: id(), type: 'Button', props: { label: '저장' } }] },
         },

@@ -84,6 +84,11 @@ export interface ViewItem {
   element: ReactNode
   /** 그 자식의 몸통을 그린 것 — 자식이 제 몸통을 부모에게 맡기는 타입(`TabPanel`)일 때만, 아니면 `null`. */
   content: ReactNode
+  /**
+   * 그 자식이 덮는 칸 수 — 부모가 칸을 세는 배치(`Grid` · `FormTable` · 열을 정한 `SearchForm`)일 때만 있다. 몫(`WbNode.weight`)을 부모 열 수로
+   * 자른 값이고 몫이 없으면 1 이다. 폼 표 뷰는 이것으로 줄을 지어 빈 쌍을 끼운다(`pairRows`).
+   */
+  span?: number
 }
 
 export type View = ComponentType<ViewProps>

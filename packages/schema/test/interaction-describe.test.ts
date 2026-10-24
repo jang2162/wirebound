@@ -541,7 +541,7 @@ describe('COMPONENT_NOUNS는 카탈로그 전체를 덮는다', () => {
     expect(extra).toEqual([])
   })
 
-  it('labelProp을 가진 타입이 열하나다', () => {
+  it('labelProp을 가진 타입이 열둘이다', () => {
     /**
      * **오타 하나가 조용히 라벨을 지우는 자리다.** 이름은 카탈로그에서
      * 유도되지만 `labelProp`은 `describe.ts`의 리터럴 표(`LABEL_PROPS`)에 남았다 —
@@ -555,7 +555,20 @@ describe('COMPONENT_NOUNS는 카탈로그 전체를 덮는다', () => {
       .filter(([, noun]) => noun.labelProp !== undefined)
       .map(([type]) => type)
       .sort()
-    expect(withLabel).toEqual(['Affix', 'Button', 'Card', 'Chip', 'EntryForm', 'Field', 'Link', 'Media', 'Placeholder', 'TabPanel', 'Text'])
+    expect(withLabel).toEqual([
+      'Affix',
+      'Button',
+      'Card',
+      'Chip',
+      'EntryForm',
+      'Field',
+      'FormTable',
+      'Link',
+      'Media',
+      'Placeholder',
+      'TabPanel',
+      'Text',
+    ])
   })
 
   /** `labelProp`은 그 컴포넌트에 **실제로 있는** prop이어야 한다. */
