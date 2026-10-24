@@ -115,6 +115,30 @@
 
 게이트 전 `test:build:serial` 에서 `packages/theme-kit/build-test/template.test.ts` 가 파일째 죽었다 — `input.tsx: 옮기지 못한 상대 import 가 남았습니다`(9 케이스 건너뜀). 3 에서 기본 뷰에 `import type { ViewField } from '../types'` 를 더했는데 `packTemplate` 의 `templateView` 는 `import { … } from '../…'` 만 `@wirebound/theme-sdk` 한 줄로 옮긴다. 기본 뷰의 `pieceAria` 가 그 모양(`{ name: string; required: boolean } | undefined`)을 그 자리에 적게 고쳤다(다른 기본 뷰도 타입을 import 하지 않는다 — 주석에 까닭을 적었다). 이 편집은 `test:browser` 가 돌던 중이었다 — 타입 자리만 바뀌어 esbuild 가 내는 JS 가 같다.
 
+## 게이트
+
+README 「트랙 게이트」 — `packages/*` · `system-themes/*` · `apps/api` · `apps/web` 에 걸쳐 전량 넷(`pnpm typecheck` · `pnpm build` · `pnpm test` · `pnpm test:build`) + `pnpm fmt` · `pnpm lint`. 스크립트 하나(`…/scratchpad/gate.sh`)를 `nohup nice -n 10 caffeinate -i … & disown` 으로 · 단계마다 `rc=$?` · `pnpm test --maxWorkers=25%` · 띄우기 전 `gate-slots` 의 파일 수 1(다른 트랙) → 2. node v24.21.0.
+
+| 판 | HEAD | build · fmt · lint · typecheck | `pnpm test` | `test:build:serial` | `test:browser` |
+| --- | --- | --- | --- | --- | --- |
+| 게이트 전(브리프 — 실브라우저 전량 · serial 한 번) 08:38 – 08:52 | `327c9a64` | build rc 0 | — | 18 파일 · 161 중 통과 152 · **파일 하나 죽음**(`template.test.ts` 9 건너뜀) | 86 파일 · 517 중 통과 514 · **실패 2** · 건너뜀 1 |
+| **전량 08:56 – 09:21** | **`7a12ad3e`** | rc 0 · 0(바뀐 파일 0) · 0 · 0 | **517 파일 · 8 331 중 통과 8 330 · 실패 0 · 건너뜀 1** | **18 파일 · 161 중 통과 160 · 실패 0 · 건너뜀 1** | **86 파일 · 515 중 통과 514 · 실패 0 · 건너뜀 1** |
+
+게이트 전 판의 빨강과 고친 것:
+
+| 케이스 | 실패 값 | 까닭 · 고침 |
+| --- | --- | --- |
+| `packages/theme-kit/build-test/template.test.ts`(파일째) | `input.tsx: 옮기지 못한 상대 import 가 남았습니다` | 기본 뷰의 `import type` 을 `packTemplate` 이 못 옮긴다 — 「3″」 · `7a12ad3e` |
+| `apps/web/build-test/theme-prop-marks.test.ts` «system-admin — 필드는 이름 붙은 묶음 …» | `{ groups: [ '접근성 이름 *' ], hits: [] }` | 조각 이름이 필드 라벨로 바뀐 몫 — 새 이름으로 찾고 `required` 도 단언(`7a12ad3e`) |
+| `apps/web/build-test/canvas-drop-review.test.ts` «끄는 중 내 앞 편집이 리베이스돼도 …» | `리베이스 뒤 다시 보낸 편집의 답: 12000ms 안에 안 섰다 — 마지막 값 0` | 고치지 않음 — 그 파일을 혼자 다시 돌려 통과(`theme-prop-marks` 와 함께 2 파일 · 19 중 통과 19), 전량에서도 통과. 이 트랙이 그 길(리베이스 · 끌기)을 안 건드려 붐빈 판의 시간 초과로 본다 |
+
+건너뜀 셋은 이 트랙과 무관한 전제 판이다 — `log-destination` «Linux `/dev/full`»(macOS) · `template` «저장소 밖에서 설치하고 빌드한다(`WB_TEMPLATE_INSTALL=1`)» · `layout-weight` «스크린숏 …»(스크린숏 환경 변수).
+
+- 잠듦: `pmset -g log` 의 마지막 `Sleep` 이 2026-10-23 20:47 — 이 트랙의 측정(10-24 08:10 –)과 두 판(08:38 – 09:21)과 안 겹친다.
+- 끝에 이 워크트리 경로의 vitest · vite · tsx · chrome 0 · `gate-slots` 에 내 파일 없음. DB 컨테이너(5501)는 남긴다.
+- 숨은 글자(제어 · 방향 제어 · 폭 없음 · U+2028/2029 · 서로게이트 · BOM) — 바뀐 21 파일(`f0063067..HEAD` + 이 보고)에서 0.
+- 단위 판(케이스를 쓰는 동안): `pnpm vitest run --project unit` 577 파일 · 2 428 중 통과 2 428 · `--project web` 204 파일 · 3 321 중 통과 3 321(3 의 고침 뒤 · `dd67ef4a` 앞의 작업 트리).
+
 ## 남은 것
 
 이 트랙에서 안 고친 것:
