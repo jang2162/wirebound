@@ -50,6 +50,15 @@ const COLUMNS = [
     children: [field('sfw_a', '검색어', 2), field('sfw_b', '상태'), field('sfw_c', '등급')],
   },
 ]
+/**
+ * 몫을 준 필드 안의 조각 — 필드 뿌리의 `--wb-node-weight` 가 값 칸 조각에 물려지면 짧은 칸(`size: short`)이 `flex: 2` 로 값 칸을 채운다. 몫 없는
+ * 필드 안의 같은 조각과 폭이 같아야 한다.
+ */
+const PIECE = (id: string, weight?: number) => ({
+  ...field(id, id === 'sfp_a' ? '검색어' : '상태', weight),
+  children: [{ id: `${id}_in`, type: 'Input', props: { size: 'short' } }],
+})
+const PIECES = [{ id: 'sfp', type: 'SearchForm', props: { columns: 3 }, children: [PIECE('sfp_a', 2), PIECE('sfp_b')] }]
 const PLAIN = [{ id: 'sf0', type: 'SearchForm', props: {}, children: SIX.slice(0, 3).map((label, i) => field(`sf0_${i}`, label)) }]
 
 /** 노드마다 상자 · `fields` 조각의 틈 · 표지. 글로 넘긴다 — vitest 가 함수 안의 이름을 바꿔 페이지에서 죽지 않게. */
@@ -123,7 +132,7 @@ describe.skipIf(!전제.ok)('시스템 테마 — 조회 폼의 열', () => {
     if (!전제.ok) return
     stack = await startEditorStack(전제)
     alice = await stack.login(stack.users.alice)
-    ;({ projectId, call } = await layoutProject(stack, alice, '조회', { 열: COLUMNS, 열없음: PLAIN }))
+    ;({ projectId, call } = await layoutProject(stack, alice, '조회', { 열: COLUMNS, 열없음: PLAIN, 조각: PIECES }))
     if (SHOTS !== undefined) mkdirSync(SHOTS, { recursive: true })
   }, 180_000)
 
@@ -203,6 +212,35 @@ describe.skipIf(!전제.ok)('시스템 테마 — 조회 폼의 열', () => {
         rows: [1, 1, 1, 1, 1, 1],
         sameWidth: true,
       })
+    },
+    180_000,
+  )
+
+  it.each(THEMES)(
+    '%s — 몫을 준 필드 안의 조각은 그 몫을 물려받지 않는다',
+    async (themeId) => {
+      await putTheme(call, projectId, { themeId, version: seededVersion(themeId), tokens: {} })
+      const bundle = await exportBundle(stack, alice, projectId)
+      let m: Record<string, Box>
+      try {
+        const { context, page } = await openBundlePage(stack, bundle.pages['조회-조각']!, {
+          viewport: { width: 1980, height: 1400 },
+          docWidth: 1280,
+        })
+        try {
+          m = await measure(page, PIECES)
+        } finally {
+          await context.close()
+        }
+      } finally {
+        bundle.dispose()
+      }
+      const values = { a: m.sfp_a!.width, b: m.sfp_b!.width, pieceA: m.sfp_a_in!.width, pieceB: m.sfp_b_in!.width }
+      // eslint-disable-next-line no-console
+      console.log(`[조회 조각] ${themeId} ${JSON.stringify(values)}`)
+      // 카나리아 — 몫이 섰다(필드 칸이 둘 폭이다). 안 서면 아래 견줌은 몫 없는 두 필드를 잰다.
+      expect(values.a > 1.5 * values.b, JSON.stringify(values)).toBe(true)
+      expect(Math.abs(values.pieceA - values.pieceB), JSON.stringify(values)).toBeLessThanOrEqual(1)
     },
     180_000,
   )
