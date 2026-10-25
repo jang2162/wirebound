@@ -212,7 +212,7 @@ describe('페이지 JSON — 내보낸 파일 · 가져오기가 상태 목록�
         expect(res.statusCode, res.body).toBe(201)
         const pageId = (res.json() as { page: { id: string } }).page.id
         const saved = (await read(ctx, fx, pageId)).schema
-        expect(saved.version).toBe(4)
+        expect(saved.version).toBe(5)
         expect(saved.viewStates).toEqual([ADMIN, GUEST])
         expect(saved.root.children!.map((child) => [child.type, child.visibility ?? null])).toEqual([
           ['Text', null],
