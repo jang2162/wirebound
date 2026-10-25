@@ -5,11 +5,20 @@
  * |---|---|
  * | 트리 · 캔버스 | 구조 트리에 그리드의 구역 줄(«열» · «행» · «바닥»)과 열 · 행 줄이 선다 · 사본 칸을 누르면 그리드를 고른다(사본은 `data-wb-id` 가 없다 — 가장 가까운 노드) · 셀 틀 글의 노드 id 가 캔버스에 한 번이다 |
  * | 열 더하기 | 그리드를 골라 팔레트 «열» 이 그리드 «열» 끝에 서고 · 열을 골라 Cmd+D 가 셀 틀째 복제한다 |
+ * | L6 | 끄는 동안 그리드의 빈 이름 구역(머리 왼쪽 · 머리 오른쪽 · 바닥)에 칩이 서고 · 그리드 · 셀 틀 글 · 아래 글이 움직인 값을 적는다(원래 있던 길 — 상한 없음) |
  * | 비용(위험 3) | 행 × 열 10×3 · 50×3 · 10×10 · 50×10 — 판을 열어 그리드가 다 서기까지 · 열 머리 이름을 고쳐 캔버스에 서기까지의 시간과 그 동안의 긴 작업. 기계마다 달라 상한을 단언하지 않는다(`./canvas-cost.test.ts` 와 같다) |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import {
+  canvasFrame,
+  dragLayoutSettled,
+  editorStackPrerequisite,
+  poll,
+  startEditorStack,
+  type EditorStack,
+  type Session,
+} from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -156,6 +165,68 @@ describe.skipIf(!전제.ok)('그리드 — 에디터(실브라우저)', () => {
       // 바로 뒤에 같은 이름 · 같은 셀 틀(새 id)로 선다.
       expect([cols[1]!.props?.label, cols[1]!.children!.map((child) => child.props?.content)]).toEqual(['열 1', ['값 1']])
       expect(cols[1]!.id).not.toBe('g_b_c0')
+    } finally {
+      await close()
+    }
+  })
+
+  /**
+   * **끄는 동안 빈 구역 칸이 그리드를 얼마나 미는가**(4단계 이월 L6 — 폼 표에서 x +712 · y +32). 그리드의 빈 이름 구역(머리 왼쪽 · 머리 오른쪽 ·
+   * 바닥)마다 칩이 서고, 행 구역 칩은 없다(행이 있다). 위의 글을 손잡이로 쥐고 `dragLayoutSettled` 까지 기다린 뒤 그리드 · 첫 셀 틀 글 · 아래 글의
+   * 캔버스 상자가 얼마나 움직였는지 적는다. 원래 있던 길이라 상한을 단언하지 않는다 — 칩이 섰는지(판 카나리아)만 단언한다.
+   */
+  it('L6 — 끄는 동안 빈 구역 칸이 그리드 · 셀 틀 글 · 아래 글을 얼마나 미는지 적는다', async () => {
+    const grid = gridOf('g_l', 3, 2)
+    grid.zones = { rows: grid.zones!.rows! }
+    const { P } = await seed('grid-l6', [
+      { id: 'l_top', type: 'Text', props: { content: '위 글' } },
+      grid,
+      { id: 'l_after', type: 'Text', props: { content: '아래 글' } },
+    ])
+    const { page, close } = await open(P, 'g_l')
+    const ids = ['g_l', 'g_l_t0', 'l_after']
+    const boxes = () =>
+      canvasFrame(page)
+        .locator('body')
+        .evaluate((_body, wanted) => {
+          const out: Record<string, [number, number, number]> = {}
+          for (const id of wanted) {
+            const r = document.querySelector(`[data-wb-id="${id}"]`)!.getBoundingClientRect()
+            out[id] = [Math.round(r.x), Math.round(r.y), Math.round(r.height)]
+          }
+          return out
+        }, ids)
+    try {
+      await treeRow(page, 'l_top').locator('button').first().click()
+      await poll(
+        '위 글을 골랐다',
+        () => selected(page),
+        (id) => id === 'l_top',
+      )
+      const before = await boxes()
+      const handle = page.locator('.wb-shell-canvas-handle')
+      await handle.waitFor()
+      const box = (await handle.boundingBox())!
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(box.x + box.width / 2 + 3, box.y + box.height / 2 + 6, { steps: 3 })
+      const slots = await dragLayoutSettled(page)
+      const during = await boxes()
+      const chips = await canvasFrame(page)
+        .locator('[data-zone-slot-of="g_l"]')
+        .evaluateAll((els) => els.map((el) => el.getAttribute('data-zone-slot')))
+      await page.keyboard.press('Escape')
+      await page.mouse.up()
+      const moved = Object.fromEntries(
+        ids.map((id) => [
+          id,
+          { dx: during[id]![0] - before[id]![0], dy: during[id]![1] - before[id]![1], dh: during[id]![2] - before[id]![2] },
+        ]),
+      )
+      // eslint-disable-next-line no-console
+      console.log('[L6 그리드]', JSON.stringify({ slots, chips, moved }))
+      // 판 카나리아 — 끌기가 섰고 그리드의 빈 이름 구역 셋에 칩이 섰다(행 구역은 행이 있어 칩이 없다).
+      expect([...chips].sort()).toEqual(['footer', 'headEnd', 'headStart'])
     } finally {
       await close()
     }

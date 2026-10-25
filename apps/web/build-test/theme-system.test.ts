@@ -252,7 +252,8 @@ describe.skipIf(!전제.ok)('테마 — 설정 페이지에서 고르기', () =>
     expect(sha256, '얼린 0.1.0 이 사용자 DB 에 시딩된 판(체크섬 줄)과 같다').toBe(
       JSON.parse(readFileSync(ADMIN_CHECKSUMS, 'utf8'))['system-admin@0.1.0'],
     )
-    const { files } = readWbtheme(new Uint8Array(bytes))
+    // 저장된 옛 판이다 — 그 manifest 는 카탈로그가 걷은 `List` 를 선언한다(`readWbtheme` 의 `stored`).
+    const { files } = readWbtheme(new Uint8Array(bytes), { stored: true })
     const old = files!.manifest
     expect(`${old.id}@${old.version}`).toBe('system-admin@0.1.0')
     await stack.query(

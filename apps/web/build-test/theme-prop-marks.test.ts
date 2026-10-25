@@ -338,7 +338,8 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
         ['aria-invalid=true'],
         ['data-wb-kind=video'],
         ['data-wb-select=check'],
-        ['aria-busy=true'],
+        // enum 표지는 늘 실린다 — `select` 를 안 적은 그리드도 기본값 `none` 을 단다(`packages/theme-sdk/src/marks.ts`).
+        ['data-wb-select=none', 'aria-busy=true'],
       ])
       expect(
         {
