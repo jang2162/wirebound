@@ -206,7 +206,8 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
   /**
    * **사본 위 놓기**(설계 «8» «사본에 놓기» · GR-B 4). 사본(되풀이 줄)은 문서의 노드가 아니라 원본의 그림이라 그 «앞 · 뒤 · 안» 은 문서에 없는 자리다 —
    * 표시를 안 세우고 «첫 행의 칸에 놓으세요» 를 포인터 곁에 둔다. 고치기 전에는 사본 위가 가장 가까운 `[data-wb-id]` 인 그리드로 읽혀(`docs/superpowers/plans/2026-10-25-fx-gr-report.md`
-   * «훑기 자리 × 사본을 읽는 법») 그리드의 거절 문장이 섰다. 첫 줄 틀 칸의 빈 자리는 그 열의 셀 틀 끝이다 — 고치기 전에는 행(칸만 받는다)으로 읽혀 놓을 자리가 없었다.
+   * «훑기 자리 × 사본을 읽는 법») 사본 글 위는 그리드의 거절 문장이, 사본 줄 틀 칸의 빈 자리는 그리드 곁의 미리보기(놓으면 그 자리에 놓인다)가 섰다. 첫 줄 틀 칸의
+   * 빈 자리는 그 열의 셀 틀 끝이다 — 고치기 전에는 행(칸만 받는다)으로 읽혀 «행에는 칸만 놓을 수 있습니다» 였다.
    */
   it('사본 위에 끌면 표시 없이 «첫 행의 칸에 놓으세요» · 놓아도 편집 0 — 첫 줄 틀 칸 빈 자리는 그 열의 셀 틀 끝', async () => {
     const { P } = await seed('grb-copy-drop', COPIES)
@@ -442,6 +443,8 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
         head: (await headOf(P)) - head,
         said: (await a.page.getByText(/밥님이/).allTextContents()).length > 0,
       }
+      // 그 걸음의 값을 그 자리에서 — 막힘을 떼면 칸 짓기가 셀 틀 원본 줄을 없애 뒤 걸음이 값 없이 멈춘다.
+      expect(blocked).toEqual({ head: 0, said: true })
       await rowAction(a.page, 'f_r', '한 행 떼어 내기')
       const split = await poll(
         '떼어 내기는 나간다',
@@ -542,20 +545,27 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
         await act()
         // 판 카나리아 — 누른 때 밥의 고침은 아직 앨리스 화면에 안 닿았다.
         const stale = received.filter((f) => f.includes('"type":"page-changed"')).length === before
-        const landed = await poll('서버에 닿는다', () => server(P), settled, 15_000).catch(() => server(P))
-        // 늦춘 프레임이 다 닿을 때까지 — 밥의 고침이 앨리스 화면에 서고(캔버스 줄 수 · 셀 틀 글이 서버의 것), 버린 편집의 알림이 서면 그것까지. 다음 걸음의
-        // «닿기 전» 카나리아를 이 걸음의 늦은 프레임이 흐리지 않게 한다.
-        const lines = rowsOf(landed, 'f_g').reduce((sum, [, repeat]) => sum + Number(repeat), 0)
-        const template = String(find(landed, 'f_tb')?.props?.content)
-        await poll(
-          '앨리스 화면이 서버의 것',
-          async () => [
+        await poll('서버에 닿는다', () => server(P), settled, 15_000).catch(() => null)
+        // 늦춘 프레임 · 리베이스가 다 끝날 때까지 — 앨리스 화면(캔버스 줄 수 · 셀 틀 글)이 **그때의** 서버 문서와 같고 1.5s 뒤에도 서버가 그대로일 때. 밥의
+        // 고침이 먼저 서버에 서고 앨리스의 묶음은 그 프레임을 받은 뒤 리베이스되어 나가므로, 첫 «서버에 닿음» 으로 끊으면 뒤에 얹히는 묶음을 못 본다. 다음 걸음의
+        // «닿기 전» 카나리아를 이 걸음의 늦은 프레임이 흐리지 않게도 한다.
+        const view = async () => {
+          const root = await server(P)
+          const lines = rowsOf(root, 'f_g').reduce((sum, [, repeat]) => sum + Number(repeat), 0)
+          const shown = [
             await canvasFrame(page).locator('tbody > tr').count(),
             await canvasFrame(page).locator('[data-wb-id="f_tb"]').textContent(),
-          ],
-          ([count, text]) => count === lines && text === template,
-          15_000,
-        ).catch(() => null)
+          ]
+          return { root, same: shown[0] === lines && shown[1] === String(find(root, 'f_tb')?.props?.content) }
+        }
+        let landed = (await view()).root
+        for (let round = 0; round < 10; round += 1) {
+          const first = await poll('앨리스 화면이 서버의 것', view, (now) => now.same, 15_000).catch(view)
+          await page.waitForTimeout(1500)
+          const again = await view()
+          landed = again.root
+          if (again.same && JSON.stringify(again.root) === JSON.stringify(first.root)) break
+        }
         await poll(
           '버린 편집의 알림',
           () => page.locator('.wb-shell-info-notice, .wb-shell-edit-alert').count(),

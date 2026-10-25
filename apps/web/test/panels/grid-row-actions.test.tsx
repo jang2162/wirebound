@@ -176,6 +176,12 @@ describe('항목이 서는 줄 · 끔', () => {
     expect(rowReason(structureRegion(), SPLIT_ROW_LABEL, row('n-r2'))).toBe(SPLIT_ROW_WHY)
     expect(rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-r2'))).toBeNull()
     expect(rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-own'))).toBe(BUILD_CELLS_WHY)
+    // 까닭 글만이 아니라 꺼짐(`aria-disabled`)도 — 까닭은 끔과 따로 지어진다(`panels/toolbar-status.ts` 의 `structureWhy`).
+    expect([
+      isOff(rowAction(structureRegion(), SPLIT_ROW_LABEL, row('n-r2'))),
+      isOff(rowAction(structureRegion(), BUILD_CELLS_LABEL, row('n-r2'))),
+    ]).toEqual([true, false])
+    expect(isOff(rowAction(structureRegion(), BUILD_CELLS_LABEL, row('n-own')))).toBe(true)
   })
 })
 

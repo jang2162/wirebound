@@ -8,6 +8,7 @@ import type { NodeLock, PageDocument, PatchOp } from '@wirebound/schema'
 import '../../src/catalog-setup'
 import { fitRefusal, type Placing } from '../../src/edit/structure-drop'
 import { paletteAddTarget } from '../../src/palette/palette-add'
+import { lockedNotice } from '../../src/panels/property-panel'
 import { lockedSelectionStatus } from '../../src/panels/toolbar-status'
 
 /**
@@ -15,7 +16,8 @@ import { lockedSelectionStatus } from '../../src/panels/toolbar-status'
  * n-root (Page)
  * ├ n-grid (DataGrid) — 열 [n-c1 [n-t1] · n-g (열 묶음) [n-c2]] · 행 [n-row [n-cell] · n-row2] · 바닥 [n-pg]
  * ├ n-tabs (Tabs) [n-tp (TabPanel)]
- * └ n-text (Text)
+ * ├ n-text (Text)
+ * └ n-card (Card) [n-ct (Text)]
  * ```
  */
 function doc(): PageDocument {
@@ -42,6 +44,7 @@ function doc(): PageDocument {
         },
         { id: 'n-tabs', type: 'Tabs', children: [{ id: 'n-tp', type: 'TabPanel', props: { label: '탭 1' } }] },
         { id: 'n-text', type: 'Text' },
+        { id: 'n-card', type: 'Card', children: [{ id: 'n-ct', type: 'Text' }] },
       ],
     },
   }
@@ -116,6 +119,22 @@ describe('물러선 «뒤» 도 못 서면', () => {
     expect(add({ selectedNodeId: 'n-c1', placing: adding('GridColumn'), blockedBy })).toEqual({
       ok: false,
       reason: fitRefusal('GridColumn', 'body', 'GridColumn'),
+    })
+  })
+
+  it('«안» 이 받는 타입 · 설 자리가 아니라 남의 잠금으로 막히면 «뒤» 로 안 물러선다 — 셀 틀을 남이 쥔 열에 글 · 안을 남이 쥔 카드에 글', () => {
+    // 셀 틀(열 몸통) 안 넣기가 남의 잠금에 부딪히는 판 — 물러서면 사람이 고른 «그 열 안» 이 아니라 그 열 뒤(그리드 몸통)에 서고 그리드는 글을 안 받는다.
+    const blockedBy = (ops: readonly PatchOp[]): NodeLock | null =>
+      ops.some((op) => op.path.startsWith('/root/children/0/children/0/children')) ? BOB : null
+    expect(add({ selectedNodeId: 'n-c1', blockedBy })).toEqual({ ok: false, reason: lockedNotice('밥') })
+    // 뒤가 받는 판도 같다 — 카드 안 넣기가 남의 잠금에 부딪히면 카드 뒤(뿌리는 글을 받는다)로 안 물러선다.
+    const inCard = (ops: readonly PatchOp[]): NodeLock | null =>
+      ops.some((op) => op.path.startsWith('/root/children/3/children')) ? BOB : null
+    expect(add({ selectedNodeId: 'n-card', blockedBy: inCard })).toEqual({ ok: false, reason: lockedNotice('밥') })
+    // 같은 판에 열 묶음을 넣으면(«안» 이 설 자리에 걸림) «뒤» 로 물러선다 — 물러선 자리는 그 잠금과 무관하다.
+    expect(add({ selectedNodeId: 'n-c1', placing: adding('GridColumnGroup'), blockedBy })).toMatchObject({
+      ok: true,
+      target: { parentId: 'n-grid' },
     })
   })
 
