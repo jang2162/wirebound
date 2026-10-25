@@ -83,8 +83,11 @@ export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({
  * 밖으로 나가고(요소 상자는 안 넘친다), `overflow: hidden` 조상은 그 글자를 잘라 숨긴다. 상속되므로 테마가 뷰로 바꾼 조각(카드 목록의 제목 ·
  * 정의 목록의 값)에도 닿는다. `break-word` 가 아니라 `anywhere` 다 — 최소 폭(min-content)에도 끊을 자리를 세야 표 칸 · 격자 칸이 낱말 폭까지
  * 안 버틴다. 특이도 (0,1,0) 이라 테마의 어느 규칙이든 이긴다(`apps/web/build-test/theme-system-review.test.ts` 「좁은 폭」).
+ *
+ * **그리드 표 칸 안의 글은 빼고**(`:where` 라 특이도는 그대로) 칸이 정한 꺾기를 물려받는다 — 표 칸은 낱말 가운데서 안 꺾는다(`dataCssBlocks` 의
+ * 표 칸 규칙). 안 빼면 칸 글이 한 글자 폭까지 눌린 뒤에야 표가 굴러간다(`docs/superpowers/plans/2026-10-25-rv-gr-report.md` M2).
  */
-const LONG_WORD_CSS = `[data-wb-component="Text"],
+const LONG_WORD_CSS = `[data-wb-component="Text"]:not(:where([data-wb-component="DataGrid"] [data-wb-part="table"] *)),
 [data-wb-component="KeyValue"],
 [data-wb-component="DataGrid"] {
   overflow-wrap: anywhere;

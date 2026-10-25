@@ -8,9 +8,12 @@
  * | 병합 머리 | 열 묶음 깊이 1 · 2 · 3 의 머리 줄 수 · `colspan` · `rowspan` · `scope` · 머리 칸 상자가 그 아래 열의 칸 상자를 덮는다 · 접근성 트리의 열 머리 이름 |
  * | 고정 열 · 넓은 표 | 창 390 · 720 · 1280 — 문서 `scrollWidth` = 창 폭 · 표 칸만 가로로 굴러간다 · 끝까지 굴려도 고정 열의 화면 자리가 그대로 · 둘째 고정 열의 왼쪽 자리 변수가 첫 열 폭(번들에서도 레이아웃 이펙트가 돈다 — 위험 2) · 칸 글이 칸 밖으로 안 나간다(글자 노드 `Range`) |
  * | 사본 행의 몫 | 셀 틀 안 `Flex`(몫 2) 의 몫 없는 자식 폭이 원본 줄과 사본 줄에서 같다 — 사본은 `data-wb-id` 가 없어 SDK 의 몫 초기화(`[data-wb-id]`)를 못 받으면 부모 몫을 물려받는다 |
+ | 글 칸(M2) | 창 390 · 720 · 1280 · 찍는 판(720 · `data-wb-capture` + `CAPTURE_CSS`) — 칸 글이 낱말 가운데서 안 꺾인다(글자 노드의 줄 수 ≤ 낱말 수 · 날짜 · «No» · 긴 낱말 · 이름은 한 줄) · 칸 밖 글 0 · 찍는 판은 표 전체가 문서 안이다 |
+ | 좁은 칸의 바(M3) | 격자 배치 2열 · 폼 표 값 칸 · 카드 안 그리드 — 창 390 · 720 · 1000 · 1280 에서 문서 `scrollWidth` = 창 · 바 상자와 그 조각이 그리드 상자 안 |
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { CAPTURE_CSS } from '@wirebound/theme-sdk/capture'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
 import { exportBundle, layoutProject, openBundlePage, type UnpackedBundle } from './layout-bundle'
@@ -97,7 +100,79 @@ const WEIGHT = grid(
   [row({ repeat: 3 })],
 )
 
-const PAGES = { '넓은 표': [WIDE], '병합 머리': HEADS, '몫 사본': [WEIGHT] }
+// 글 칸(M2) — 열 7(No · 링크 · 날짜 · 이름 · 긴 낱말 · 칩 · 단추)과 열 20(날짜 · 표본 값 · 고정 셋). 열 폭(`size`)을 안 정해 칸 폭이 글로 정해진다.
+const LONG_WORD = 'unbrokenidentifier_0123456789abcdef'
+const KOREAN_WORD = '국가인재양성교육과정'
+const TEXT_GRIDS = [
+  grid(
+    'g_t7',
+    { select: 'check' },
+    [
+      col('No', { numbering: 'desc', align: 'center' }, []),
+      col('과정명', {}, [{ id: id('l'), type: 'Link', props: { label: 'AI 엔지니어 양성 과정 12기' } }]),
+      col('교육기간', {}, [text('2026-07-04')]),
+      col('담당자', {}, [text('홍길동')]),
+      col('식별자', {}, [text(LONG_WORD)]),
+      col('상태', {}, [{ id: id('ch'), type: 'Chip', props: { label: '진행중' } }]),
+      col('관리', {}, [{ id: id('b'), type: 'Button', props: { label: '수정' } }]),
+      // 열 폭을 정한 열(기본테마 6em) — 띄어 쓴 글은 낱말 사이에서만 꺾이고, 띄어 쓰지 않은 긴 한글 낱말은 열을 넓혀 한 줄이다.
+      col('구분', { size: 'short' }, [text('교육 과정 이름 표본')]),
+      col('비고', { size: 'short' }, [text(KOREAN_WORD)]),
+    ],
+    [row({ repeat: 3 })],
+  ),
+  grid(
+    'g_t20',
+    { select: 'check', fixedColumns: 3 },
+    Array.from({ length: 20 }, (_unused, at) => col(`항목 이름 ${at + 1}`, {}, [text(at % 3 === 0 ? '2026-07-04' : '표본 값')])),
+    [row({ repeat: 2 })],
+  ),
+]
+/** 한 줄로 서야 하는 칸 글 — 끊을 자리(공백)가 없는 낱말. */
+const ONE_LINE = ['No', '2026-07-04', '홍길동', LONG_WORD, '진행중', '수정', KOREAN_WORD]
+
+// 좁은 칸의 바(M3) — 격자 배치 2열 칸마다 그리드(쪽 8 · 쪽 50 / 100 — «…» 둘) · 폼 표 값 칸 · 카드 안 그리드. 바는 그리드 «바닥» 구역의 기본 자리다.
+const barGrid = (gridId: string, pagination: Record<string, unknown>) =>
+  grid(
+    gridId,
+    {},
+    [col('이름', {}, [text('홍길동')]), col('상태', {}, [text('진행')])],
+    [row({ repeat: 2 })],
+    [{ id: `${gridId}_p`, type: 'Pagination', props: pagination }],
+  )
+const NARROW = [
+  {
+    id: 'n_layout',
+    type: 'Grid',
+    props: { columns: 2 },
+    children: [barGrid('g_n1', { total: 72, pageSize: 10, page: 8 }), barGrid('g_n2', { total: 1000, pageSize: 10, page: 50 })],
+  },
+  {
+    id: id('e'),
+    type: 'EntryForm',
+    children: [
+      {
+        id: id('f'),
+        type: 'FormTable',
+        props: { columns: 2 },
+        children: [
+          {
+            id: id('d'),
+            type: 'Field',
+            props: { label: '하위 목록' },
+            children: [barGrid('g_n3', { total: 1000, pageSize: 10, page: 50 })],
+          },
+          { id: id('d'), type: 'Field', props: { label: '이름' }, children: [{ id: id('i'), type: 'Input', props: {} }] },
+        ],
+      },
+    ],
+  },
+  { id: id('cd'), type: 'Card', props: { title: '카드' }, children: [barGrid('g_n4', { total: 1000, pageSize: 10, page: 50 })] },
+]
+const NARROW_GRIDS = ['g_n1', 'g_n2', 'g_n3', 'g_n4']
+const BAR_WIDTHS = [390, 720, 1000, 1280] as const
+
+const PAGES = { '넓은 표': [WIDE], '병합 머리': HEADS, '몫 사본': [WEIGHT], '글 칸': TEXT_GRIDS, '좁은 칸': NARROW }
 
 /** 사본 — 노드 id · HTML id 겹침 · 사본 수 · 몸 줄의 칸 글. 글로 넘긴다(vitest 가 함수 안의 이름을 바꿔 페이지에서 죽지 않게). */
 const COPIES = `(ids) => {
@@ -199,6 +274,90 @@ const WEIGHTS = `(nodeId) => [
   ...document.querySelectorAll('[data-wb-id="' + nodeId + '"], [data-wb-copy-of="' + nodeId + '"]'),
 ].map((el) => ({ copy: el.hasAttribute('data-wb-copy-of'), width: Math.round(el.getBoundingClientRect().width * 10) / 10, flex: getComputedStyle(el).flex }))`
 
+interface LinesRead {
+  vw: number
+  scrollWidth: number
+  /** 찍는 판 — 표 오른끝이 문서 폭 안인가(표 전체가 문서에 든다). 화면 판은 `null`. */
+  tableInDoc: boolean | null
+  /** 칸 글마다(같은 글은 가장 많이 꺾인 것) 줄 수 · 낱말 수. */
+  texts: Array<{ grid: string; text: string; lines: number; words: number }>
+  spills: string[]
+}
+
+/**
+ * 글 칸 — 칸(`th` · `td`) 안 글자 노드마다 줄 수(`Range.getClientRects()` 의 서로 다른 `top` 수 — 요소 상자가 아니라 글자로 센다)와 칸 밖 글.
+ * `capture` 면 찍는 판 표지 · 시트를 달고 잰 뒤 걷는다.
+ */
+const LINES = `(args) => {
+  let sheet = null
+  if (args.capture) {
+    document.documentElement.setAttribute('data-wb-capture', '')
+    sheet = document.createElement('style')
+    sheet.textContent = args.css
+    document.head.append(sheet)
+  }
+  const texts = new Map()
+  const spills = []
+  let tableInDoc = null
+  for (const gridId of args.grids) {
+    const grid = document.querySelector('[data-wb-id="' + gridId + '"]')
+    const table = grid.querySelector('table')
+    if (args.capture) tableInDoc = (tableInDoc ?? true) && table.getBoundingClientRect().right <= document.documentElement.scrollWidth + 1
+    for (const c of table.querySelectorAll('th, td')) {
+      const box = c.getBoundingClientRect()
+      const walker = document.createTreeWalker(c, NodeFilter.SHOW_TEXT)
+      for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
+        const value = (t.textContent ?? '').trim()
+        if (value === '' || t.parentElement.closest('th, td') !== c) continue
+        const range = document.createRange()
+        range.selectNodeContents(t)
+        const rects = [...range.getClientRects()].filter((r) => r.width > 0)
+        const lines = new Set(rects.map((r) => Math.round(r.top))).size
+        for (const r of rects) if (r.right > box.right + 1 || r.left < box.left - 1) spills.push(gridId + ' ' + value.slice(0, 16))
+        const key = gridId + '|' + value
+        const words = value.split(/\\s+/).length
+        if ((texts.get(key)?.lines ?? 0) < lines) texts.set(key, { grid: gridId, text: value, lines, words })
+      }
+    }
+  }
+  const out = {
+    vw: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    tableInDoc,
+    texts: [...texts.values()],
+    spills,
+  }
+  if (sheet !== null) sheet.remove()
+  document.documentElement.removeAttribute('data-wb-capture')
+  return out
+}`
+
+interface BarsRead {
+  vw: number
+  scrollWidth: number
+  /** 바마다 — 바 상자 · 조각 상자가 그 그리드 상자 밖으로 나간 px(왼 · 오른 중 큰 것 · 0 이면 안). */
+  bars: Array<{ grid: string; over: number; partsOver: number; pages: number }>
+}
+
+/** 좁은 칸의 바 — 바(`Pagination`)와 그 조각 · 쪽 번호가 그리드 상자 안인가. */
+const BARS = `(grids) => ({
+  vw: document.documentElement.clientWidth,
+  scrollWidth: document.documentElement.scrollWidth,
+  bars: grids.map((gridId) => {
+    const grid = document.querySelector('[data-wb-id="' + gridId + '"]')
+    const g = grid.getBoundingClientRect()
+    const bar = grid.querySelector('[data-wb-component="Pagination"]')
+    const outside = (r) => Math.max(0, g.left - r.left, r.right - g.right)
+    const parts = [...bar.querySelectorAll('[data-wb-part]')]
+    return {
+      grid: gridId,
+      over: Math.round(outside(bar.getBoundingClientRect())),
+      partsOver: Math.round(Math.max(0, ...parts.map((part) => outside(part.getBoundingClientRect())))),
+      pages: bar.querySelectorAll('[data-wb-part="page"]').length,
+    }
+  }),
+})`
+
 describe.skipIf(!전제.ok)('그리드 — 실브라우저(번들 · 화면 모드)', () => {
   let stack: EditorStack
   let alice: Session
@@ -208,6 +367,8 @@ describe.skipIf(!전제.ok)('그리드 — 실브라우저(번들 · 화면 모�
   const heads: Record<string, any> = {}
   const weights: Record<string, Array<{ copy: boolean; width: number; flex: string }>> = {}
   const ax: Record<string, string[]> = {}
+  const lines: Record<string, LinesRead> = {}
+  const bars: Record<string, BarsRead> = {}
 
   beforeAll(async () => {
     if (!전제.ok) return
@@ -258,6 +419,23 @@ describe.skipIf(!전제.ok)('그리드 — 실브라우저(번들 · 화면 모�
           await context.close()
         }
       }
+      for (const [width, capture] of [...WIDTHS.map((width) => [width, false] as const), [720, true] as const]) {
+        const { context, page } = await openBundlePage(stack, file('글 칸'), { viewport: { width, height: 1200 }, screen: true })
+        try {
+          const args = { grids: TEXT_GRIDS.map((g) => g.id), capture, css: CAPTURE_CSS }
+          lines[`${theme} ${capture ? '찍는 판' : width}`] = (await page.evaluate(`(${LINES})(${JSON.stringify(args)})`)) as LinesRead
+        } finally {
+          await context.close()
+        }
+      }
+      for (const width of BAR_WIDTHS) {
+        const { context, page } = await openBundlePage(stack, file('좁은 칸'), { viewport: { width, height: 1600 }, screen: true })
+        try {
+          bars[`${theme} ${width}`] = (await page.evaluate(`(${BARS})(${JSON.stringify(NARROW_GRIDS)})`)) as BarsRead
+        } finally {
+          await context.close()
+        }
+      }
       {
         const { context, page } = await openBundlePage(stack, file('몫 사본'), { viewport: { width: 1280, height: 1200 }, screen: true })
         try {
@@ -271,6 +449,15 @@ describe.skipIf(!전제.ok)('그리드 — 실브라우저(번들 · 화면 모�
     for (const [key, read] of Object.entries(fixed)) console.log(`[그리드 고정 열] ${key} ${JSON.stringify(read)}`)
     // eslint-disable-next-line no-console
     for (const [key, read] of Object.entries(weights)) console.log(`[그리드 사본 몫] ${key} ${JSON.stringify(read)}`)
+    for (const [key, read] of Object.entries(lines)) {
+      const most = Object.fromEntries(read.texts.filter((t) => t.lines > 1).map((t) => [`${t.grid} ${t.text}`, t.lines]))
+      // eslint-disable-next-line no-console
+      console.log(
+        `[그리드 글 칸] ${key} 문서 ${read.scrollWidth}/${read.vw} 표가 문서 안 ${read.tableInDoc} 여러 줄 ${JSON.stringify(most)} 넘침 ${read.spills.length}`,
+      )
+    }
+    // eslint-disable-next-line no-console
+    for (const [key, read] of Object.entries(bars)) console.log(`[그리드 좁은 칸 바] ${key} ${JSON.stringify(read)}`)
   }, 300_000)
 
   afterAll(async () => {
@@ -353,6 +540,44 @@ describe.skipIf(!전제.ok)('그리드 — 실브라우저(번들 · 화면 모�
       } else {
         expect(read.stickies, detail).toBe(0)
       }
+    },
+  )
+
+  /**
+   * **M2 — 칸 글이 낱말 가운데서 안 꺾인다**(`docs/superpowers/plans/2026-10-25-rv-gr-report.md` M2 — 고치기 전 창 720 · 열 20 에서 «2026-07-04» 가 열 줄).
+   * 열이 글 폭을 지키고 표 칸이 굴러간다. 찍는 판은 그 폭 그대로 표 전체가 문서에 든다(Q2).
+   */
+  it.each([...WIDTHS, '찍는 판'].flatMap((width) => (['기본테마', 'SDK'] as const).map((theme) => [theme, width] as const)))(
+    '%s %s — 글 칸: 끊을 자리 없는 낱말은 한 줄 · 줄 수 ≤ 낱말 수 · 칸 밖 글 0 · 찍는 판은 표가 문서를 넓힌다',
+    (theme, width) => {
+      const read = lines[`${theme} ${width}`]!
+      // 판 카나리아 — 두 그리드의 칸 글을 다 읽었다(열 7 · 열 20 의 머리 글 · 칸 글).
+      expect(new Set(read.texts.map((t) => t.grid)).size).toBe(2)
+      expect(read.texts.length).toBeGreaterThan(20)
+      const broken = read.texts.filter((t) => t.lines > t.words || (ONE_LINE.includes(t.text) && t.lines !== 1))
+      expect(broken, JSON.stringify(read.texts)).toEqual([])
+      expect(read.spills).toEqual([])
+      if (width === '찍는 판') {
+        // 찍는 판은 표가 문서를 넓힌다 — 표 전체가 문서 안이다(그림이 그 폭으로 찍힌다).
+        expect(read.tableInDoc).toBe(true)
+        expect(read.scrollWidth).toBeGreaterThan(read.vw)
+      } else expect(read.scrollWidth).toBe(read.vw)
+    },
+  )
+
+  /** **M3 — 좁은 칸 안의 바가 칸 · 문서 밖으로 안 나간다**(같은 보고 M3 — 고치기 전 창 720 · 격자 배치 2열 칸에서 바가 칸 밖 152px). */
+  it.each(BAR_WIDTHS.flatMap((width) => (['기본테마', 'SDK'] as const).map((theme) => [theme, width] as const)))(
+    '%s %i — 좁은 칸의 바: 문서는 창 폭 · 바와 그 조각이 그리드 상자 안',
+    (theme, width) => {
+      const read = bars[`${theme} ${width}`]!
+      const detail = JSON.stringify(read)
+      // 판 카나리아 — 바 넷 · 쪽 번호가 섰다(쪽 8 은 여덟 · 쪽 50 / 100 은 일곱 — 첫 · 둘레 다섯 · 끝).
+      expect(read.bars.map((bar) => bar.pages)).toEqual([8, 7, 7, 7])
+      expect(read.scrollWidth, detail).toBe(read.vw)
+      expect(
+        read.bars.filter((bar) => bar.over > 1 || bar.partsOver > 1),
+        detail,
+      ).toEqual([])
     },
   )
 

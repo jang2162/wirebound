@@ -972,6 +972,51 @@ describe.skipIf(!있다)('넓은 그리드', () => {
     expect(seen[2]).toEqual({ width: 1440, last: false })
   })
 
+  /** 열 `columns` 개(셀 틀은 날짜 글 — 끊을 자리 없는 낱말) · 되풀이 3 줄인 그리드 한 장. 열 폭은 글로 정해진다(자리표시자 고정 폭이 아니다). */
+  function textGrid(columns: number): PageDocument {
+    return {
+      version: 5,
+      root: {
+        id: 'n_page',
+        type: 'Page',
+        children: [
+          {
+            id: 'n_grid',
+            type: 'DataGrid',
+            children: Array.from({ length: columns }, (_unused, at) => ({
+              id: `n_col_${at}`,
+              type: 'GridColumn',
+              props: { label: `열${at + 1}` },
+              children: [{ id: `n_cell_${at}`, type: 'Text', props: { content: '2026-07-04' } }],
+            })),
+            zones: { rows: [{ id: 'n_row', type: 'GridRow', props: { repeat: 3 } }] },
+          },
+        ],
+      },
+    } as unknown as PageDocument
+  }
+
+  /**
+   * **글 칸도 펼쳐 찍힌다**(리뷰 `docs/superpowers/plans/2026-10-25-rv-gr-report.md` M2) — 열 20 의 날짜 칸이 열 2 의 같은 칸과 같은 줄 수로 찍힌다
+   * (그림 높이가 같다). 칸이 한 글자 폭까지 눌리면 열 20 의 날짜가 여러 줄로 서서 그림이 길어진다. 자리표시자 고정 폭 표본(위)은 칸이 안 눌려 못 본다.
+   */
+  it('글 칸 그리드는 칸 글이 안 꺾인 채 표 폭으로 찍힌다 — 열 20 과 열 2 의 그림 높이가 같다', async () => {
+    const theme = packageTheme(systemAdminBytes())
+    const batch = await draw([
+      bundled('글 칸 20', textGrid(20)),
+      bundled('글 칸 2', textGrid(2)),
+      bundled('글 칸 20 · 기본테마', textGrid(20), theme),
+      bundled('글 칸 2 · 기본테마', textGrid(2), theme),
+    ])
+    const seen = batch.results.map((result) => (result.ok ? [result.width, result.height] : result.reason))
+    // 잰 크기를 보고에 옮긴다.
+    console.log(`[글 칸 그리드] ${JSON.stringify(seen)}`)
+    const [wide, narrow, wideTheme, narrowTheme] = seen as Array<[number, number]>
+    // 판 카나리아 — 열 20 은 뷰포트 720 보다 넓게 펼쳐 찍혔다(배율 2배 — 1440 초과).
+    expect([wide![0] > 1440, wideTheme![0] > 1440]).toEqual([true, true])
+    expect([wide![1], wideTheme![1]]).toEqual([narrow![1], narrowTheme![1]])
+  })
+
   /** 넓이 상한(`SCREEN_DEFAULTS.maxArea` — 720 × 8192 px²)은 넓어진 그림에도 같다 — 폭이 늘면 받는 높이가 준다. */
   it('넓고 긴 그리드는 넓이 상한에서 그 장만 빠지고 잰 크기를 말한다', async () => {
     const batch = await draw([bundled('넓고 긴 그리드', wideGrid(12, 50, 80)), requestFor(1, 2)])

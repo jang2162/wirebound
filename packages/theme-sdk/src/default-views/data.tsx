@@ -416,11 +416,22 @@ export function dataCssBlocks(): string[] {
     zeroRule('[data-wb-component="DataGrid"] > [data-wb-part="head"] > *', ['display: flex;', 'align-items: center;', 'gap: 6px;']),
     zeroRule('[data-wb-component="DataGrid"] > [data-wb-part="head"] > [data-wb-part="headEnd"]', ['margin-inline-start: auto;']),
     zeroRule('[data-wb-component="DataGrid"] > [data-wb-part="scroll"]', ['overflow-x: auto;', 'max-width: 100%;']),
-    zeroRule('[data-wb-component="DataGrid"] [data-wb-part="table"]', ['width: 100%;', 'border-collapse: collapse;']),
+    // 표는 칸 글 폭이다(줄을 안 바꾼 폭 · 상자보다 좁으면 상자 폭) — 열이 글 폭을 지키고 넘치면 표 칸이 굴러간다. `width: 100%` 면 열이 칸의 최소
+    // 폭까지 눌려 «2026-07-04» 가 붙임표 뒤에서 꺾였다(Chrome 은 `-` 뒤를 끊을 자리로 본다). 열 폭(`size`)을 정한 열은 그 폭에서 낱말 단위로 꺾인다.
+    zeroRule('[data-wb-component="DataGrid"] [data-wb-part="table"]', [
+      'width: max-content;',
+      'min-width: 100%;',
+      'border-collapse: collapse;',
+    ]),
+    // 칸 글은 낱말 가운데서 안 꺾는다 — 한글도 낱말(공백) 단위다. 그리드 뿌리의 `overflow-wrap: anywhere`(머리줄의 긴 낱말)가 물려 내려오면 칸의
+    // 최소 폭이 한 글자라 열 폭을 정한 열 · 상자보다 넓은 표에서 «2026-07-04» 가 열 줄로 섰다. 찍는 판은 표 폭 그대로 펼쳐 찍는다(`CAPTURE_CSS`).
+    // 끊을 자리 없는 아주 긴 낱말은 그 열을 넓힌다(칸 밖으로 안 나간다).
     zeroRule('[data-wb-component="DataGrid"] [data-wb-part="table"] > * > tr > *', [
       'padding: 4px 8px;',
       'text-align: start;',
       'vertical-align: middle;',
+      'overflow-wrap: normal;',
+      'word-break: keep-all;',
     ]),
     zeroRule('[data-wb-component="DataGrid"] [data-wb-part="table"] > * > tr > [data-wb-align="center"]', ['text-align: center;']),
     zeroRule('[data-wb-component="DataGrid"] [data-wb-part="table"] > * > tr > [data-wb-align="end"]', ['text-align: end;']),
@@ -472,16 +483,22 @@ export function dataCssBlocks(): string[] {
       'background-color: Canvas;',
     ]),
     // ── 페이지네이션 ─────────────────────────────────────────────────────────
+    // 바는 창이 아니라 제 폭에 맞춰 접힌다 — 세 조각이 한 줄에 안 들면 줄을 바꾸고, 쪽 번호 조각도 제 안에서 줄을 바꾼다. 좁은 칸(격자 배치 2열 ·
+    // 폼 표 값 칸 · 카드) 안의 바가 칸 · 문서 밖으로 나갔다(창 media 는 칸 폭을 모른다 — `docs/superpowers/plans/2026-10-25-rv-gr-report.md` M3).
     zeroRule('[data-wb-component="Pagination"]', [
       'display: flex;',
+      'flex-wrap: wrap;',
       'align-items: center;',
       'justify-content: space-between;',
       'gap: 8px;',
     ]),
     zeroRule('[data-wb-component="Pagination"] > [data-wb-part="pages"]', [
       'display: flex;',
+      'flex-wrap: wrap;',
+      'justify-content: center;',
       'align-items: center;',
       'gap: 4px;',
+      'min-width: 0;',
       'margin-inline: auto;',
     ]),
     zeroRule('[data-wb-component="Pagination"] [aria-current="page"]', ['text-decoration: underline;', 'font-weight: bold;']),
