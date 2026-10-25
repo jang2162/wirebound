@@ -45,7 +45,7 @@ function doc(): PageDocument {
 }
 
 const free = (): NodeLock | null => null
-const adding = (type: string): Placing => ({ kind: 'new', type })
+const adding = (type: string): Extract<Placing, { kind: 'new' }> => ({ kind: 'new', type })
 const moving = (id: string): Placing => ({ kind: 'node', id })
 const TEXT: WbNode = { id: 'n-new', type: 'Text', props: { content: '새 글' } }
 
@@ -97,7 +97,7 @@ describe('팔레트 넣기 · 모듈 넣기', () => {
   })
 
   it('모듈(글 하나 묶음)을 행 · 열 묶음에 넣으면 이유 문장 — 바닥은 받는다', () => {
-    const module: Placing = { kind: 'module', key: 'm', nodes: [TEXT] }
+    const module: Extract<Placing, { kind: 'module' }> = { kind: 'module', key: 'm', nodes: [TEXT] }
     expect(add({ placing: module, selectedZone: { parentId: 'n-row', zone: 'body' } })).toEqual({ ok: false, reason: CELLS_ONLY })
     expect(add({ placing: module, selectedZone: { parentId: 'n-g', zone: 'body' } })).toEqual({
       ok: false,

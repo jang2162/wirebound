@@ -199,7 +199,9 @@ describe.skipIf(!전제.ok)('그리드 — 에디터(실브라우저)', () => {
           const w = window as unknown as { __long: number }
           w.__long = 0
           const watch = (target: Window) =>
-            new target.PerformanceObserver((list) => list.getEntries().forEach((entry) => (w.__long += entry.duration))).observe({
+            new (target as unknown as typeof globalThis).PerformanceObserver((list) =>
+              list.getEntries().forEach((entry) => (w.__long += entry.duration)),
+            ).observe({
               type: 'longtask',
             })
           watch(window)

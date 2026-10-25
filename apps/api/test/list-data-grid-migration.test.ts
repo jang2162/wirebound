@@ -239,7 +239,7 @@ describe('0032 — List 를 DataGrid 로 · 판 4 → 5', () => {
       ['GridColumn', { label: '이름' }, [['Text', { content: '—' }]]],
       ['GridColumn', { label: '이메일' }, [['Text', { content: '—' }]]],
     ])
-    expect(grid.zones!.headStart).toEqual(PAGE.root.children[0]!.zones!.headStart)
+    expect(grid.zones!.headStart).toEqual((PAGE.root.children[0] as WbNode).zones!.headStart)
     expect(grid.zones!.rows!.map((r) => [r.type, r.props])).toEqual([['GridRow', { repeat: 3, tone: 'selected' }]])
     expect(grid.zones!.footer!.map((p) => [p.type, p.props])).toEqual([['Pagination', undefined]])
     // 빈 목록 — 열 · 행 · 바가 없다.
