@@ -181,3 +181,39 @@ describe('validateManifest', () => {
     }
   })
 })
+
+/**
+ * **저장된 패키지를 다시 읽는 판(`stored`)** — 카탈로그에 기대는 검사(걷힌 타입 · 변형을 prop 에서 짓는 타입 · 없는 prop 감추기) 셋만 안 본다. 그 판은
+ * 올린 때의 카탈로그로 검사를 지났다(기본테마 1.6.0 의 `List` — 문서 판 5 가 걷었다). 모양 · 판 · 토큰 검사는 그대로다.
+ */
+describe('validateManifest — 저장된 패키지(stored)', () => {
+  const legacy = () => ({
+    ...structuredClone(OK),
+    components: {
+      List: { variants: [{ id: 'table', label: '표', hideProps: ['columns'] }], defaultVariant: 'table' },
+      Text: { variants: [{ id: 'big', label: '크게' }], defaultVariant: 'big' },
+      DataGrid: { variants: [{ id: 'table', label: '표', hideProps: ['없는prop'] }], defaultVariant: 'table' },
+    },
+  })
+
+  it('올리기 판은 셋을 거절하고 저장 판은 받는다', () => {
+    expect(
+      validateManifest(legacy())
+        .issues.map((i) => i.code)
+        .sort(),
+    ).toEqual(['unknown-component', 'unknown-hide-prop', 'variant-from-component'])
+    const stored = validateManifest(legacy(), { stored: true })
+    expect(stored.issues).toEqual([])
+    expect(stored.manifest).not.toBeNull()
+  })
+
+  it('저장 판도 카탈로그와 무관한 검사는 그대로다 — 판 · 기본 변형', () => {
+    const broken = { ...legacy(), version: '1.0' }
+    broken.components.DataGrid.defaultVariant = '없는'
+    expect(
+      validateManifest(broken, { stored: true })
+        .issues.map((i) => i.code)
+        .sort(),
+    ).toEqual(['bad-version', 'default-variant-missing'])
+  })
+})

@@ -78,7 +78,17 @@ export const PATTERNS_RETIRED =
  * manifest 를 검증한다 — 빌드(`wb-theme build`) · 업로드 · 호스트가 이 함수 하나를 부른다. 이슈를 모아서 돌려주고,
  * 하나라도 있으면 `manifest` 는 `null` 이다.
  */
-export function validateManifest(raw: unknown): { manifest: ThemeManifest | null; issues: ManifestIssue[] } {
+/**
+ * 카탈로그에 기대는 검사 — 선언한 컴포넌트 · prop 이 지금 카탈로그에 있는가. **저장된 패키지를 다시 읽을 때(`stored`)는 이 셋을 안 본다** —
+ * 그 판은 올린 때의 카탈로그로 검사를 지났고, 뒤에 카탈로그가 타입 · prop 을 걷어도(문서 판 5 가 `List` 를 걷었다 — 기본테마 1.6.0 이 그 변형을
+ * 선언한다) 그 판에 고정한 프로젝트의 내보내기가 테마 없이 나가면 안 된다. 걷힌 타입의 선언은 렌더러 · 패널이 안 읽는다(없는 타입이다).
+ */
+const CATALOG_CODES: ReadonlySet<ManifestIssueCode> = new Set(['unknown-component', 'variant-from-component', 'unknown-hide-prop'])
+
+export function validateManifest(
+  raw: unknown,
+  options: { stored?: boolean } = {},
+): { manifest: ThemeManifest | null; issues: ManifestIssue[] } {
   // 카탈로그를 안 깐 호출자(빌드 · 업로드)가 모든 컴포넌트를 «카탈로그에 없다» 로 거짓 거부받지 않게. 멱등이다.
   installCatalog()
 
@@ -111,7 +121,7 @@ export function validateManifest(raw: unknown): { manifest: ThemeManifest | null
     })
   }
   issues.push(...checkTokens(manifest.tokens.items))
-  issues.push(...checkComponents(manifest.components ?? {}))
+  issues.push(...checkComponents(manifest.components ?? {}).filter((issue) => options.stored !== true || !CATALOG_CODES.has(issue.code)))
 
   return { manifest: issues.length === 0 ? manifest : null, issues }
 }

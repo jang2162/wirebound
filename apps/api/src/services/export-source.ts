@@ -133,7 +133,8 @@ async function readExportTheme(db: DbHandle, projectId: string): Promise<Pick<Ex
   const row = await findThemePackage(db, binding.themeId, binding.version)
   const bytes = row === null ? null : await readThemePackageFiles(db, binding.themeId, binding.version)
   if (row === null || bytes === null) return { theme: null, themeWarning: `테마 패키지를 찾지 못해 기본 뷰로 내보냅니다(${name})` }
-  const read = readWbtheme(bytes)
+  // 저장된 판이다 — 올린 뒤 카탈로그가 걷은 타입의 선언으로 패키지째 못 읽지 않게(`readWbtheme` 의 `stored`).
+  const read = readWbtheme(bytes, { stored: true })
   if (read.files === null) {
     return { theme: null, themeWarning: `테마 패키지를 읽지 못해 기본 뷰로 내보냅니다(${name}): ${read.issues[0]?.message ?? '까닭 없음'}` }
   }

@@ -64,7 +64,11 @@ interface CentralEntry {
  * **풀린 크기는 항목마다 `max(압축 크기, 원래 크기)` 로 센다** — fflate 는 stored 항목을 압축 크기로 잘라 싣고(원래 크기는 안
  * 본다) deflate 항목은 원래 크기만큼 버퍼를 잡는다(`inflateBounded` 도 같다). 한쪽만 세면 다른 쪽을 속인 zip 이 상한을 비켜 간다.
  */
-export function readWbtheme(bytes: Uint8Array): { files: WbthemeFiles | null; issues: WbthemeIssue[] } {
+export function readWbtheme(
+  bytes: Uint8Array,
+  /** 저장된 패키지를 다시 읽는다 — manifest 의 카탈로그 검사를 안 본다(`validateManifest` 의 `stored`). 올리기 · 빌드 · 시딩은 안 준다. */
+  options: { stored?: boolean } = {},
+): { files: WbthemeFiles | null; issues: WbthemeIssue[] } {
   if (bytes.length > WBTHEME_LIMITS.zipBytes) {
     return fail({ code: 'too-large', path: '', message: `zip 이 ${WBTHEME_LIMITS.zipBytes} 바이트를 넘습니다(${bytes.length})` })
   }
@@ -154,7 +158,7 @@ export function readWbtheme(bytes: Uint8Array): { files: WbthemeFiles | null; is
   } catch (error) {
     return fail({ code: 'bad-json', path: 'manifest.json', message: `manifest.json 이 JSON 이 아닙니다: ${(error as Error).message}` })
   }
-  const { manifest, issues: manifestIssues } = validateManifest(json)
+  const { manifest, issues: manifestIssues } = validateManifest(json, options)
   if (manifest === null) {
     return { files: null, issues: manifestIssues.map(asWbthemeIssue) }
   }
