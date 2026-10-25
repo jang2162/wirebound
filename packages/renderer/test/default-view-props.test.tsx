@@ -174,7 +174,7 @@ describe('Field — 라벨 이름을 단 group · 값 칸에 조각', () => {
 
   it('라벨 id 는 노드마다 갈린다 — 한 문서에 필드가 둘이어도 이름이 섞이지 않는다', () => {
     const doc = {
-      version: 4,
+      version: 5,
       root: {
         id: 'page',
         type: 'Page',

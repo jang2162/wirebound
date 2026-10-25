@@ -92,6 +92,8 @@ const LABEL_PROPS: Record<string, string> = {
   Media: 'caption',
   Placeholder: 'label',
   TabPanel: 'label',
+  GridColumn: 'label',
+  GridColumnGroup: 'label',
 }
 
 /**

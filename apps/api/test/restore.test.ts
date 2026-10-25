@@ -82,7 +82,7 @@ async function editPage(ctx: TestContext, fx: Fixture, sectionId: string): Promi
     cookies: fx.owner.cookie,
     payload: {
       schema: {
-        version: 4,
+        version: 5,
         root: { id: fx.nodeId, type: 'Page', children: [{ id: sectionId, type: 'Section', props: {} }] },
       },
     },
@@ -690,7 +690,7 @@ describe('막는 갈래 — 오류 표', () => {
         .values({
           project_id: fx.project.id,
           name: '두 번째 레이아웃',
-          schema: JSON.stringify({ version: 4, root: { id: 'n_l', type: 'Page', children: [] } }),
+          schema: JSON.stringify({ version: 5, root: { id: 'n_l', type: 'Page', children: [] } }),
         })
         .execute()
 
@@ -992,7 +992,7 @@ describe('부분 성공을 만들지 않는다', () => {
         .values({
           project_id: fx.project.id,
           name: '두 번째 레이아웃',
-          schema: JSON.stringify({ version: 4, root: { id: 'n_l', type: 'Page', children: [] } }),
+          schema: JSON.stringify({ version: 5, root: { id: 'n_l', type: 'Page', children: [] } }),
         })
         .execute()
 
@@ -1185,7 +1185,7 @@ async function editPageById(ctx: TestContext, fx: Fixture, pageId: string, rootI
     method: 'PUT',
     url: `/api/projects/${fx.project.id}/pages/${pageId}/schema`,
     cookies: fx.owner.cookie,
-    payload: { schema: { version: 4, root: { id: rootId, type: 'Page', children: [{ id: sectionId, type: 'Section', props: {} }] } } },
+    payload: { schema: { version: 5, root: { id: rootId, type: 'Page', children: [{ id: sectionId, type: 'Section', props: {} }] } } },
   })
   if (res.statusCode !== 200) throw new Error(`편집 픽스처 실패 (${res.statusCode}): ${res.body}`)
 }

@@ -34,7 +34,7 @@ beforeAll(() => {
 
 function documentWith(interactions: Interaction[]): PageDocument {
   return {
-    version: 4,
+    version: 5,
     root: {
       id: 'n_root',
       type: 'Page',

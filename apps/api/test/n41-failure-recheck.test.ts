@@ -476,7 +476,7 @@ const N43_SCENARIOS: Scenario[] = [
           file: {
             wireboundVersion: '1',
             page: { title: '밥이 가져온 페이지' },
-            schema: { version: 4, root: { id: 'n_root', type: 'Page', children: [] } },
+            schema: { version: 5, root: { id: 'n_root', type: 'Page', children: [] } },
             comments: [],
           },
         }),

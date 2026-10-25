@@ -131,7 +131,7 @@ const CALL_SITES: CallSite[] = [
         url: `/api/projects/${fx.projectId}/pages/${fx.pageId}/schema`,
         cookies: fx.owner.cookie,
         payload: {
-          schema: { version: 4, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_put', type: 'Text', props: {} }] } },
+          schema: { version: 5, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_put', type: 'Text', props: {} }] } },
         } as never,
       })
       if (res.statusCode !== 200) throw new Error(`PUT 실패 (${res.statusCode}): ${res.body}`)
@@ -246,7 +246,7 @@ const CALL_SITES: CallSite[] = [
           file: {
             wireboundVersion: WIREBOUND_PAGE_VERSION,
             page: { title: '가져온 페이지' },
-            schema: { version: 4, root: { id: 'file_root', type: 'Page', children: [] } },
+            schema: { version: 5, root: { id: 'file_root', type: 'Page', children: [] } },
             comments: [],
           },
         } as never,
@@ -378,7 +378,7 @@ async function fixture(ctx: RealApiContext): Promise<Fixture> {
     cookies: owner.cookie,
     payload: {
       schema: {
-        version: 4,
+        version: 5,
         root: {
           id: rootId,
           type: 'Page',

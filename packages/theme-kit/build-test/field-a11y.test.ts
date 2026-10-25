@@ -51,7 +51,7 @@ if (launched.browser === null) console.warn(`[field-a11y] Chrome 을 못 띄워 
 const field = (id: string, props: Record<string, unknown>, children: unknown[]) => ({ id, type: 'Field', props, children })
 
 const DOC = {
-  version: 4,
+  version: 5,
   root: {
     id: 'n_r',
     type: 'Page',

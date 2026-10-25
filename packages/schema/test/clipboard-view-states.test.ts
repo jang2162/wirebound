@@ -31,30 +31,30 @@ const keepAll = { node: () => true, page: () => true }
 describe('봉투의 상태 목록', () => {
   it('상태 목록이 없거나 비면 봉투는 그 키가 없다', () => {
     const nodes: WbNode[] = [{ id: 'n_t', type: 'Text', props: { content: '글' } }]
-    const plain = JSON.stringify({ wirebound: 'nodes', version: 4, nodes })
-    expect(writeNodesEnvelope(nodes, 4)).toBe(plain)
-    expect(writeNodesEnvelope(nodes, 4, [])).toBe(plain)
+    const plain = JSON.stringify({ wirebound: 'nodes', version: 5, nodes })
+    expect(writeNodesEnvelope(nodes, 5)).toBe(plain)
+    expect(writeNodesEnvelope(nodes, 5, [])).toBe(plain)
     expect(readNodesEnvelope(plain)).toEqual({ nodes })
   })
 
   it('출처의 상태 목록(parent 포함)과 보임을 싣고 그대로 읽는다', () => {
     const states: ViewState[] = [ADMIN, { id: 's_top', name: '최고', parent: 's_admin' }]
     const nodes: WbNode[] = [{ id: 'b', type: 'Button', props: { label: '승인' }, visibility: { mode: 'only', states: ['s_top'] } }]
-    const read = readNodesEnvelope(writeNodesEnvelope(nodes, 4, states))
+    const read = readNodesEnvelope(writeNodesEnvelope(nodes, 5, states))
     expect(read).toEqual({ nodes, viewStates: states })
   })
 
   it('모양이 틀린 목록 · 틀린 보임을 든 봉투는 읽지 않는다', () => {
     const badList = JSON.stringify({
       wirebound: 'nodes',
-      version: 4,
+      version: 5,
       nodes: [{ id: 'b', type: 'Text' }],
       viewStates: [{ id: 's_admin', name: '' }],
     })
     expect(readNodesEnvelope(badList)).toBeNull()
     const badVisibility = JSON.stringify({
       wirebound: 'nodes',
-      version: 4,
+      version: 5,
       nodes: [{ id: 'b', type: 'Text', visibility: { mode: 'only', states: [] } }],
     })
     expect(readNodesEnvelope(badVisibility)).toBeNull()

@@ -76,8 +76,8 @@ describe('못 찾았을 때·둘 이상일 때를 갈라 말한다', () => {
    */
   it('둘 이상이면 코드 1이고 **둘 다 이름으로 낸다**', async () => {
     const 겹침 = snapshotPayload()
-    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 4, root: { id: 'r', type: 'Page' } }, null))
-    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 4, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 5, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 5, root: { id: 'r', type: 'Page' } }, null))
 
     const io = 준비(겹침)
     expect(await run(['page', 'get', '관리자/목록'], io)).toBe(EXIT.usage)

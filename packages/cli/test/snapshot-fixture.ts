@@ -31,7 +31,7 @@ const AUTHOR = '60000000-0000-4000-8000-000000000001'
  */
 function 목록문서(): unknown {
   return {
-    version: 4,
+    version: 5,
     root: {
       id: 'root',
       type: 'Page',
@@ -50,7 +50,7 @@ function 목록문서(): unknown {
 }
 
 function 빈문서(): unknown {
-  return { version: 4, root: { id: 'root', type: 'Page', children: [] } }
+  return { version: 5, root: { id: 'root', type: 'Page', children: [] } }
 }
 
 /**
@@ -123,7 +123,7 @@ export function 경고가_있는_프로젝트(): SnapshotPayload {
       '경고',
       9,
       {
-        version: 4,
+        version: 5,
         root: { id: 'root', type: 'Page', children: [{ id: 'lonely', type: 'List' }] },
       },
       null,
@@ -148,7 +148,7 @@ export function 상태가_있는_프로젝트(): SnapshotPayload {
       '상태',
       10,
       {
-        version: 4,
+        version: 5,
         viewStates: [
           { id: 's_admin', name: '관리자' },
           { id: 's_guest', name: '비로그인' },
@@ -185,7 +185,7 @@ export function 오류가_있는_프로젝트(): SnapshotPayload {
       '오류',
       8,
       {
-        version: 4,
+        version: 5,
         root: { id: 'bad', type: '없는컴포넌트' },
       },
       null,
@@ -228,7 +228,7 @@ export function 테마에_없는_variant_프로젝트(): SnapshotPayload {
       '그리드',
       10,
       {
-        version: 4,
+        version: 5,
         root: { id: 'root', type: 'Page', children: [{ id: 'grid-list', type: 'List', variant: 'grid' }] },
       },
       null,

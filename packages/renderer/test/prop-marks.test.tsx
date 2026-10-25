@@ -214,7 +214,7 @@ const SAMPLE_CHILDREN: Record<string, unknown[]> = {
 function root(type: string, props: Record<string, unknown>): Element {
   const node = { id: 'n', type, props, ...(SAMPLE_CHILDREN[type] === undefined ? {} : { children: SAMPLE_CHILDREN[type] }) }
   const placed = type === 'TabPanel' ? { id: 'tabs', type: 'Tabs', children: [node] } : node
-  const doc = { version: 4, root: { id: 'page', type: 'Page', children: [placed] } } as unknown as PageDocument
+  const doc = { version: 5, root: { id: 'page', type: 'Page', children: [placed] } } as unknown as PageDocument
   const { container } = render(<>{renderDocument(doc)}</>)
   const el = container.querySelector('[data-wb-id="n"]')
   if (el === null) throw new Error(`${type} 가 안 그려졌다`)

@@ -61,7 +61,8 @@ export const FlexDef = defineComponent({
 
 export const GridDef = defineComponent({
   type: 'Grid',
-  label: '그리드',
+  // 자료 표 `DataGrid` 가 «그리드» 다(설계서 · OD 의 낱말) — 이 배치 도구는 «격자 배치» 다.
+  label: '격자 배치',
   description: '자식을 정해진 열 수로 나눠 배치한다.',
   group: 'structure',
   props: z.strictObject({

@@ -76,7 +76,7 @@ async function addComment(
  */
 function doc(rootId: string, buttonId: string, label: string, navigateTo?: string): PageDocument {
   return {
-    version: 4,
+    version: 5,
     root: {
       id: rootId,
       type: 'Page',
@@ -235,7 +235,7 @@ async function 그리지못할노드를심는다(ctx: TestContext, pageId: strin
     .updateTable('pages')
     .set({
       schema: JSON.stringify({
-        version: 4,
+        version: 5,
         root: { id: 'n_broken_root', type: 'Page', children: [{ id: nodeId, type }] },
       }),
     })

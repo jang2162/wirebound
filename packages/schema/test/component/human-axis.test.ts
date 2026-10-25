@@ -127,7 +127,7 @@ describe('COMPONENT_NOUNS는 카탈로그에서 유도된다', () => {
     // *"COMPONENT_NOUNS는 정적 표라 이쪽은 설치와 무관하다"*). 레지스트리를 훑는 구현으로
     // 바꾸면 모듈 로드 순서에 따라 표가 조용히 비고, 문장이 전부 영문으로 떨어진다.
     resetRegistry()
-    expect(COMPONENT_NOUNS['List']?.name).toBe('목록')
+    expect(COMPONENT_NOUNS['DataGrid']?.name).toBe('그리드')
     expect(Object.keys(COMPONENT_NOUNS)).toHaveLength(CATALOG_DEFS.length)
     installCatalog()
   })

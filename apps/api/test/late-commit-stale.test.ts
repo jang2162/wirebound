@@ -161,7 +161,7 @@ async function fixture(ctx: ProxiedRealApi) {
     cookies: owner.cookie,
     payload: {
       schema: {
-        version: 4,
+        version: 5,
         root: {
           id: 'n_root',
           type: 'Page',
@@ -316,7 +316,7 @@ describe('늦게 커밋된 편집 · 게시 — 번호 없는 page-stale', () =>
           method: 'PUT',
           url: `${fx.pageUrl}/schema`,
           cookies: fx.owner.cookie,
-          payload: { schema: { version: 4, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_c', type: 'Text', props: {} }] } } },
+          payload: { schema: { version: 5, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_c', type: 'Text', props: {} }] } } },
         })
         return res.statusCode
       })

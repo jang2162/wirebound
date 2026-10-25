@@ -30,7 +30,7 @@ function id(): string {
 export function broadFixture(): PageDocument {
   nextId = 0
   return {
-    version: 4,
+    version: 5,
     root: {
       id: id(),
       type: 'Page',
@@ -172,7 +172,7 @@ export function broadFixture(): PageDocument {
 export function slotFixture(): PageDocument {
   nextId = 900
   return {
-    version: 4,
+    version: 5,
     root: { id: id(), type: 'Page', children: [{ id: id(), type: 'Slot' }] },
   }
 }
@@ -184,7 +184,7 @@ export function slotFixture(): PageDocument {
 export function stateFixture(): PageDocument {
   nextId = 3000
   return {
-    version: 4,
+    version: 5,
     viewStates: [{ id: 's_admin', name: '관리자' }],
     root: {
       id: id(),
@@ -199,7 +199,7 @@ export function stateFixture(): PageDocument {
 
 /** 노드 하나를 `Page` 아래에 둔 문서. */
 export function pageWith(node: WbNode): PageDocument {
-  return { version: 4, root: { id: 'n_page', type: 'Page', children: [node] } }
+  return { version: 5, root: { id: 'n_page', type: 'Page', children: [node] } }
 }
 
 /** 글 하나 — 작은 표본. */

@@ -58,7 +58,7 @@ async function setup(ctx: TestContext): Promise<Fixture> {
     cookies: owner.cookie,
     payload: {
       schema: {
-        version: 4,
+        version: 5,
         root: {
           id: 'n_root',
           type: 'Page',

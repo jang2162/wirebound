@@ -20,7 +20,7 @@ const A = 'a'.repeat(64)
 const B = 'b'.repeat(64)
 
 const doc = (children: WbNode[]): PageDocument =>
-  ({ version: 4, root: { id: 'n_root', type: 'Page', children } }) as unknown as PageDocument
+  ({ version: 5, root: { id: 'n_root', type: 'Page', children } }) as unknown as PageDocument
 
 /** 그림 id → 표본 주소. 그리는 자리마다 다른 주소를 주는 것을 흉내 낸다. */
 const assetUrl = (id: string): string => `/asset/${id.slice(0, 4)}`

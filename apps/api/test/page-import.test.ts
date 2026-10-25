@@ -21,7 +21,7 @@ function file(patch: Partial<PageJson> = {}): PageJson {
     wireboundVersion: WIREBOUND_PAGE_VERSION,
     page: { title: '가져온 회원 목록', description: '남의 프로젝트에서 온 페이지' },
     schema: {
-      version: 4,
+      version: 5,
       root: {
         id: 'file_root',
         type: 'Page',
@@ -197,7 +197,7 @@ describe('페이지 JSON 가져오기', () => {
         menuNodeId: fx.menuNodeId,
         file: file({
           schema: {
-            version: 4,
+            version: 5,
             root: { id: 'file_root', type: 'Page', children: [{ id: 'file_list', type: 'List' }] },
           },
           comments: [{ nodeId: 'file_list', body: '번호 없는 말' }],
@@ -289,7 +289,7 @@ describe('가져오기가 거절하는 것', () => {
         menuNodeId: fx.menuNodeId,
         file: file({
           schema: {
-            version: 4,
+            version: 5,
             root: { id: 'file_root', type: 'Page', children: [{ id: 'file_odd', type: '없는타입' }] },
           },
           comments: [],
@@ -313,7 +313,7 @@ describe('가져오기가 거절하는 것', () => {
         menuNodeId: fx.menuNodeId,
         file: file({
           schema: {
-            version: 4,
+            version: 5,
             root: {
               id: 'file_root',
               type: 'Page',
@@ -370,7 +370,7 @@ describe('파일 크기 — 상한은 이미 하나 있다', () => {
       const fx = await fixture(ctx)
       const huge = file({
         schema: {
-          version: 4,
+          version: 5,
           root: {
             id: 'file_root',
             type: 'Page',
@@ -398,7 +398,7 @@ describe('파일 크기 — 상한은 이미 하나 있다', () => {
       const fx = await fixture(ctx)
       const big = file({
         schema: {
-          version: 4,
+          version: 5,
           root: {
             id: 'file_root',
             type: 'Page',
@@ -433,7 +433,7 @@ describe('실패하면 아무것도 남지 않는다', () => {
         menuNodeId: fx.menuNodeId,
         file: file({
           schema: {
-            version: 4,
+            version: 5,
             root: {
               id: 'file_root',
               type: 'Page',

@@ -101,8 +101,11 @@ export interface ComponentDef {
    * 그 밖은 `node.zones[name]`이다. 빈 목록이면 자식을 안 받는다.
    */
   zones: readonly ZoneDef[]
-  /** 이 타입이 설 수 있는 자리. 없으면 아무 데나. 밖에 서면 검증의 `misplaced-component`다. */
-  placement?: { type: string; zone: string }
+  /**
+   * 이 타입이 설 수 있는 자리 — 하나 또는 여럿(열은 그리드 몸통 · 열 묶음 몸통). 없으면 아무 데나. 밖에 서면 검증의 `misplaced-component`다.
+   * 읽는 자리는 `placementsOf` 로 목록을 받는다.
+   */
+  placement?: ComponentPlace | readonly ComponentPlace[]
   /**
    * 몸통을 누가 그리나. `'parent'` 면 이 타입의 뷰는 몸통을 `null` 로 받고, 렌더러가 그 몸통을 부모 뷰의 `items[i].content` 로 넘긴다
    * (탭 머리와 탭 내용이 DOM 에서 부모 · 자식이 아닌 `TabPanel`). 없으면 `'self'`.
@@ -114,6 +117,19 @@ export interface ComponentDef {
    * 받는 값은 기본값을 채운 props 다. 없으면 이 타입은 자손을 가리지 않는다.
    */
   reveal?: (props: Record<string, unknown>, at: { zone: string; index: number }) => Record<string, unknown>
+}
+
+/** 설 자리 하나 — 부모 타입의 그 구역. */
+export interface ComponentPlace {
+  type: string
+  zone: string
+}
+
+/** 그 정의가 설 수 있는 자리 목록. 정해지지 않았으면(아무 데나) 빈 목록이다. */
+export function placementsOf(def: Pick<ComponentDef, 'placement'> | undefined): readonly ComponentPlace[] {
+  const placement = def?.placement
+  if (placement === undefined) return []
+  return Array.isArray(placement) ? (placement as readonly ComponentPlace[]) : [placement as ComponentPlace]
 }
 
 /** 구역 하나의 선언. */
@@ -178,6 +194,7 @@ export function defineComponent(def: ComponentDef): ComponentDef {
     if (!ZONE_NAME_PATTERN.test(zone.name)) throw new Error(`${type}: 구역 이름의 꼴이 아닙니다: ${zone.name}`)
     assertHumanText(type, `zones.${zone.name}.label`, zone.label, LABEL_MAX)
   }
+  if (Array.isArray(def.placement) && def.placement.length === 0) throw new Error(`${type}: placement 목록이 비었습니다(아무 데나면 빼라)`)
   if (def.bodyHost === 'parent' && !def.zones.some((zone) => zone.name === BODY_ZONE)) {
     throw new Error(`${type}: bodyHost 가 parent 인데 몸통 구역이 없습니다`)
   }

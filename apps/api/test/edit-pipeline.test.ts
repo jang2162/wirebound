@@ -21,7 +21,7 @@ import {
  * 분리해서 검사하기 위해서다.
  *
  * 공통 픽스처(`setup`)는 사용자·프로젝트·메뉴·페이지를 만든다. 기본 페이지는
- * `{ version: 4, root: { id, type: 'Page', children: [] } }`이므로 대부분의
+ * `{ version: 5, root: { id, type: 'Page', children: [] } }`이므로 대부분의
  * 케이스는 먼저 `add /root/children/0`으로 Text 노드를 넣은 상태(`seed`)에서
  * 시작한다. 그 준비 자체도 `applyEdit`으로 한다 — 준비가 성공한다는 사실 자체가
  * 이미 «첫 편집은 seq 1을 받는다»의 신호와 같다.

@@ -33,7 +33,7 @@ beforeAll(() => {
 }, 300_000)
 
 const DOC = {
-  version: 4,
+  version: 5,
   root: {
     id: 'n_root',
     type: 'Page',
@@ -160,7 +160,7 @@ interface DistExporter {
 
 /** 상호작용 · 마커가 든 문서 — 누른 결과가 셋(setProp · switchTab · setVisible) 다 보이게. */
 const PRESSED = {
-  version: 4,
+  version: 5,
   root: {
     id: 'n_root',
     type: 'Page',

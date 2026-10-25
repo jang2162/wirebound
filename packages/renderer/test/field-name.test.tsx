@@ -18,7 +18,7 @@ beforeAll(() => installCatalog())
 afterEach(() => cleanup())
 
 const doc = (children: WbNode[]): PageDocument =>
-  ({ version: 4, viewStates: [{ id: 's_a', name: 'A' }], root: { id: 'n_root', type: 'Page', children } }) as unknown as PageDocument
+  ({ version: 5, viewStates: [{ id: 's_a', name: 'A' }], root: { id: 'n_root', type: 'Page', children } }) as unknown as PageDocument
 
 function names(document: PageDocument, viewState: string | null = null): Record<string, [string | null, string | null]> {
   const { container } = render(<>{renderDocument(document, { viewState })}</>)

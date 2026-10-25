@@ -26,7 +26,7 @@ async function board(ctx: RealApiContext, viewStates: Array<{ id: string; name: 
   const page = await createPage(ctx, bora.cookie, project.id, menu.id)
   const base = `/api/projects/${project.id}/pages/${page.id}`
   const schema = {
-    version: 4,
+    version: 5,
     ...(viewStates === undefined ? {} : { viewStates }),
     root: {
       id: 'n_root',

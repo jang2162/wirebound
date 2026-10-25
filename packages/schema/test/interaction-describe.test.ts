@@ -3,7 +3,7 @@
  * 표본이라 글자까지 못박는다.
  *
  * ```
- * "① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다"
+ * "① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다"
  * "③ 상세정보 탭 선택 시 ④ 기본정보 영역이 숨겨집니다"
  * ```
  *
@@ -42,7 +42,7 @@ function sentence(document: PageDocument): string {
 }
 
 describe('자동 문장화의 첫째 예 — 글자까지', () => {
-  it('"① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다"', () => {
+  it('"① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다"', () => {
     const document = doc(
       {
         id: 'n_search',
@@ -51,9 +51,9 @@ describe('자동 문장화의 첫째 예 — 글자까지', () => {
         props: { label: '검색' },
         interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
       },
-      { id: 'n_list', type: 'List', marker: 2 },
+      { id: 'n_list', type: 'DataGrid', marker: 2 },
     )
-    expect(sentence(document)).toBe('① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
+    expect(sentence(document)).toBe('① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다')
   })
 })
 
@@ -115,9 +115,9 @@ describe('마커가 없어도 문장이 성립한다', () => {
         props: { label: '검색' },
         interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
       },
-      { id: 'n_list', type: 'List' },
+      { id: 'n_list', type: 'DataGrid' },
     )
-    expect(sentence(document)).toBe('검색 버튼 클릭 시 목록이 로딩 상태로 바뀝니다')
+    expect(sentence(document)).toBe('검색 버튼 클릭 시 그리드가 로딩 상태로 바뀝니다')
   })
 
   it('한쪽만 있으면 그쪽만 번호가 붙는다', () => {
@@ -128,9 +128,9 @@ describe('마커가 없어도 문장이 성립한다', () => {
         props: { label: '검색' },
         interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
       },
-      { id: 'n_list', type: 'List', marker: 2 },
+      { id: 'n_list', type: 'DataGrid', marker: 2 },
     )
-    expect(sentence(document)).toBe('검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
+    expect(sentence(document)).toBe('검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다')
   })
 
   /**
@@ -147,9 +147,9 @@ describe('마커가 없어도 문장이 성립한다', () => {
         props: { label: '검색' },
         interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_list', value: true }] }],
       },
-      { id: 'n_list', type: 'List' },
+      { id: 'n_list', type: 'DataGrid' },
     )
-    expect(sentence(document)).toBe('(21) 검색 버튼 클릭 시 목록이 보입니다')
+    expect(sentence(document)).toBe('(21) 검색 버튼 클릭 시 그리드가 보입니다')
   })
 })
 
@@ -216,7 +216,7 @@ describe('끊긴 타겟', () => {
 })
 
 describe('액션 5종', () => {
-  function withAction(action: InteractionAction, targetType = 'List', targetProps?: Record<string, unknown>): string {
+  function withAction(action: InteractionAction, targetType = 'DataGrid', targetProps?: Record<string, unknown>): string {
     return sentence(
       doc(
         {
@@ -232,19 +232,19 @@ describe('액션 5종', () => {
 
   it('setProp — 불리언 참', () => {
     expect(withAction({ type: 'setProp', target: 'n_tgt', prop: 'loading', value: true })).toBe(
-      '실행 버튼 클릭 시 목록이 로딩 상태로 바뀝니다',
+      '실행 버튼 클릭 시 그리드가 로딩 상태로 바뀝니다',
     )
   })
 
   it('setProp — 불리언 거짓', () => {
     expect(withAction({ type: 'setProp', target: 'n_tgt', prop: 'loading', value: false })).toBe(
-      '실행 버튼 클릭 시 목록의 로딩 상태가 꺼집니다',
+      '실행 버튼 클릭 시 그리드의 로딩 상태가 꺼집니다',
     )
   })
 
   it('setProp — 수', () => {
-    expect(withAction({ type: 'setProp', target: 'n_tgt', prop: 'items', value: 10 })).toBe(
-      '실행 버튼 클릭 시 목록의 항목 수가 10으로 바뀝니다',
+    expect(withAction({ type: 'setProp', target: 'n_tgt', prop: 'fixedColumns', value: 10 })).toBe(
+      '실행 버튼 클릭 시 그리드의 고정 열 수가 10으로 바뀝니다',
     )
   })
 
@@ -262,11 +262,11 @@ describe('액션 5종', () => {
   })
 
   it('setVisible — 참', () => {
-    expect(withAction({ type: 'setVisible', target: 'n_tgt', value: true })).toBe('실행 버튼 클릭 시 목록이 보입니다')
+    expect(withAction({ type: 'setVisible', target: 'n_tgt', value: true })).toBe('실행 버튼 클릭 시 그리드가 보입니다')
   })
 
   it('setVisible — 거짓', () => {
-    expect(withAction({ type: 'setVisible', target: 'n_tgt', value: false })).toBe('실행 버튼 클릭 시 목록이 숨겨집니다')
+    expect(withAction({ type: 'setVisible', target: 'n_tgt', value: false })).toBe('실행 버튼 클릭 시 그리드가 숨겨집니다')
   })
 
   /** 탭 바꾸기의 판 — 버튼 하나와 탭 하나(패널 둘). 대상은 패널이다. */
@@ -298,20 +298,20 @@ describe('액션 5종', () => {
   })
 
   it('switchTab — 대상이 패널이 아니면 그 이름만 말한다', () => {
-    expect(withAction({ type: 'switchTab', target: 'n_tgt' })).toBe('실행 버튼 클릭 시 목록이 탭으로 열립니다')
+    expect(withAction({ type: 'switchTab', target: 'n_tgt' })).toBe('실행 버튼 클릭 시 그리드가 탭으로 열립니다')
   })
 
   /**
    * **아직 속성을 안 고른 `setProp`.** 라벨을 빈 문자열로 두면 문장이 통째로
-   * 깨진다(`목록이 로 바뀝니다` · `목록의 가 "가"로 바뀝니다`) — 미확정을 **아무 말도 하지
+   * 깨진다(`그리드가 로 바뀝니다` · `그리드의 가 "가"로 바뀝니다`) — 미확정을 **아무 말도 하지
    * 않는 것으로 접는** 꼴이다. 타겟의 `아직 고르지 않은 대상`과 같은 부류다.
    */
   it('setProp — 속성을 아직 안 골랐으면 그렇다고 말한다', () => {
     expect(withAction({ type: 'setProp', target: 'n_tgt', prop: '', value: true })).toBe(
-      '실행 버튼 클릭 시 목록의 아직 고르지 않은 속성이 켜집니다',
+      '실행 버튼 클릭 시 그리드의 아직 고르지 않은 속성이 켜집니다',
     )
     expect(withAction({ type: 'setProp', target: 'n_tgt', prop: '', value: '가' })).toBe(
-      '실행 버튼 클릭 시 목록의 아직 고르지 않은 속성이 "가"로 바뀝니다',
+      '실행 버튼 클릭 시 그리드의 아직 고르지 않은 속성이 "가"로 바뀝니다',
     )
   })
 
@@ -341,9 +341,9 @@ describe('액션 5종', () => {
           },
         ],
       },
-      { id: 'n_tgt', type: 'List' },
+      { id: 'n_tgt', type: 'DataGrid' },
     )
-    expect(sentence(document)).toBe('실행 버튼 클릭 시 목록이 숨겨집니다, 다음 페이지로 이동합니다')
+    expect(sentence(document)).toBe('실행 버튼 클릭 시 그리드가 숨겨집니다, 다음 페이지로 이동합니다')
   })
 
   /** 액션이 없는 상호작용도 봉투가 허용한다(`actions: []`). 문장이 그 사실을 말한다. */
@@ -383,7 +383,7 @@ describe('5종 × 4종 = 20 조합', () => {
             type: 'Page',
             children: [
               { id: 'n_src', type: 'Button', props: { label: '실행' }, interactions: [{ on, actions: [action] }] },
-              { id: 'n_tgt', type: 'List' },
+              { id: 'n_tgt', type: 'DataGrid' },
               { id: 'n_tabs', type: 'Tabs' },
             ],
           },
@@ -412,7 +412,7 @@ describe('5종 × 4종 = 20 조합', () => {
             props: { label: '실행' },
             interactions: [{ on, actions: [{ type: 'setVisible', target: 'n_tgt', value: true }] }],
           },
-          { id: 'n_tgt', type: 'List' },
+          { id: 'n_tgt', type: 'DataGrid' },
         ),
       )
     expect(say('click')).toContain('클릭 시')
@@ -442,7 +442,7 @@ describe('조사', () => {
     )
 
   it('받침이 있으면 이, 없으면 가', () => {
-    expect(say('List')).toContain('목록이 보입니다') // ㄱ 받침
+    expect(say('Tabs')).toContain('탭이 보입니다') // ㅂ 받침
     expect(say('Card')).toContain('카드가 보입니다') // 받침 없음
   })
 
@@ -505,7 +505,7 @@ describe('listInteractionSentences — 문서 전체', () => {
           },
           {
             id: 'n_b',
-            type: 'List',
+            type: 'DataGrid',
             interactions: [{ on: 'select', actions: [{ type: 'navigate', target: 'page:상세' }] }],
           },
         ],
@@ -517,11 +517,11 @@ describe('listInteractionSentences — 문서 전체', () => {
       ['n_a', 1, 'change'],
       ['n_b', 0, 'select'],
     ])
-    expect(sentences[2]!.text).toBe('목록 선택 시 상세 페이지로 이동합니다')
+    expect(sentences[2]!.text).toBe('그리드 선택 시 상세 페이지로 이동합니다')
   })
 
   it('상호작용이 없으면 빈 배열이다', () => {
-    expect(listInteractionSentences(doc({ id: 'n_a', type: 'List' }))).toEqual([])
+    expect(listInteractionSentences(doc({ id: 'n_a', type: 'DataGrid' }))).toEqual([])
   })
 })
 
@@ -541,7 +541,7 @@ describe('COMPONENT_NOUNS는 카탈로그 전체를 덮는다', () => {
     expect(extra).toEqual([])
   })
 
-  it('labelProp을 가진 타입이 열둘이다', () => {
+  it('labelProp을 가진 타입이 열넷이다', () => {
     /**
      * **오타 하나가 조용히 라벨을 지우는 자리다.** 이름은 카탈로그에서
      * 유도되지만 `labelProp`은 `describe.ts`의 리터럴 표(`LABEL_PROPS`)에 남았다 —
@@ -563,6 +563,8 @@ describe('COMPONENT_NOUNS는 카탈로그 전체를 덮는다', () => {
       'EntryForm',
       'Field',
       'FormTable',
+      'GridColumn',
+      'GridColumnGroup',
       'Link',
       'Media',
       'Placeholder',

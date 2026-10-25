@@ -149,7 +149,7 @@ describe('[경로]는 출력 거르개다 — 입력을 좁히지 않는다', ()
         '경고둘',
         10,
         {
-          version: 4,
+          version: 5,
           root: { id: 'root', type: 'Page', children: [{ id: 'lonely2', type: 'List' }] },
         },
         null,
