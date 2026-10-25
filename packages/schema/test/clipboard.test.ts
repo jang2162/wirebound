@@ -52,12 +52,12 @@ const BUTTON: WbNode = {
     },
   ],
 }
-const LIST: WbNode = { id: 'src_list', type: 'List', props: { items: 3 } }
+const LIST: WbNode = { id: 'src_list', type: 'DataGrid', props: { fixedColumns: 3 } }
 
 describe('writeNodesEnvelope · readNodesEnvelope', () => {
   it('왕복하면 같은 노드다', () => {
-    const text = writeNodesEnvelope([BUTTON, LIST], 4)
-    expect(JSON.parse(text)).toEqual({ wirebound: NODES_ENVELOPE_KIND, version: 4, nodes: [BUTTON, LIST] })
+    const text = writeNodesEnvelope([BUTTON, LIST], 5)
+    expect(JSON.parse(text)).toEqual({ wirebound: NODES_ENVELOPE_KIND, version: 5, nodes: [BUTTON, LIST] })
     expect(readNodesEnvelope(text)).toEqual({ nodes: [BUTTON, LIST] })
   })
 
@@ -65,12 +65,12 @@ describe('writeNodesEnvelope · readNodesEnvelope', () => {
     ['빈 글', ''],
     ['그냥 글', '안녕하세요'],
     ['일반 JSON', '{"a":1}'],
-    ['페이지 봉투', JSON.stringify({ wirebound: 'page', version: 4, nodes: [LIST] })],
-    ['잘린 JSON', writeNodesEnvelope([LIST], 4).slice(0, 20)],
+    ['페이지 봉투', JSON.stringify({ wirebound: 'page', version: 5, nodes: [LIST] })],
+    ['잘린 JSON', writeNodesEnvelope([LIST], 5).slice(0, 20)],
     ['배열', JSON.stringify([LIST])],
-    ['노드 없음', JSON.stringify({ wirebound: 'nodes', version: 4, nodes: [] })],
+    ['노드 없음', JSON.stringify({ wirebound: 'nodes', version: 5, nodes: [] })],
     ['버전 없음', JSON.stringify({ wirebound: 'nodes', nodes: [LIST] })],
-    ['모르는 키', JSON.stringify({ wirebound: 'nodes', version: 4, nodes: [LIST], extra: 1 })],
+    ['모르는 키', JSON.stringify({ wirebound: 'nodes', version: 5, nodes: [LIST], extra: 1 })],
   ])('봉투가 아니면 null — %s', (_label, text) => {
     expect(readNodesEnvelope(text)).toBeNull()
   })
@@ -79,11 +79,11 @@ describe('writeNodesEnvelope · readNodesEnvelope', () => {
     ['없는 타입', [{ id: 'a', type: 'NoSuchType' }]],
     ['중복 id', [LIST, { ...LIST }]],
     ['자식 안의 중복 id', [{ id: 'sec', type: 'Section', children: [{ id: 'sec', type: 'Text' }] }]],
-    ['props 가 틀림', [{ id: 'a', type: 'List', props: { items: 'many' } }]],
+    ['props 가 틀림', [{ id: 'a', type: 'DataGrid', props: { fixedColumns: 'many' } }]],
     ['자식을 못 담는 타입', [{ id: 'a', type: 'Text', children: [{ id: 'b', type: 'Text' }] }]],
     ['id 형식 밖', [{ id: 'a b', type: 'Text' }]],
   ])('검증을 못 지나는 노드면 null — %s', (_label, nodes) => {
-    expect(readNodesEnvelope(writeNodesEnvelope(nodes as WbNode[], 4))).toBeNull()
+    expect(readNodesEnvelope(writeNodesEnvelope(nodes as WbNode[], 5))).toBeNull()
   })
 
   // 봉투가 아닌 글(통지 없음)과 우리 봉투인데 못 지난 것(까닭을 말함)을 가른다 — `readNodesEnvelope` 는 둘 다 null 이라 못 가른다.
@@ -91,19 +91,19 @@ describe('writeNodesEnvelope · readNodesEnvelope', () => {
     ['빈 글', ''],
     ['그냥 글', '안녕하세요'],
     ['일반 JSON', '{"a":1}'],
-    ['페이지 봉투', JSON.stringify({ wirebound: 'page', version: 4, nodes: [LIST] })],
-    ['잘린 JSON', writeNodesEnvelope([LIST], 4).slice(0, 20)],
+    ['페이지 봉투', JSON.stringify({ wirebound: 'page', version: 5, nodes: [LIST] })],
+    ['잘린 JSON', writeNodesEnvelope([LIST], 5).slice(0, 20)],
     ['배열', JSON.stringify([LIST])],
   ])('inspect — 봉투가 아니다 — %s', (_label, text) => {
     expect(inspectNodesEnvelope(text)).toEqual({ kind: 'not-envelope' })
   })
 
   it.each([
-    ['노드 없음', JSON.stringify({ wirebound: 'nodes', version: 4, nodes: [] })],
+    ['노드 없음', JSON.stringify({ wirebound: 'nodes', version: 5, nodes: [] })],
     ['버전 없음', JSON.stringify({ wirebound: 'nodes', nodes: [LIST] })],
-    ['모르는 키', JSON.stringify({ wirebound: 'nodes', version: 4, nodes: [LIST], extra: 1 })],
-    ['없는 타입', writeNodesEnvelope([{ id: 'a', type: 'NoSuchType' }] as WbNode[], 4)],
-    ['중복 id', writeNodesEnvelope([LIST, { ...LIST }], 4)],
+    ['모르는 키', JSON.stringify({ wirebound: 'nodes', version: 5, nodes: [LIST], extra: 1 })],
+    ['없는 타입', writeNodesEnvelope([{ id: 'a', type: 'NoSuchType' }] as WbNode[], 5)],
+    ['중복 id', writeNodesEnvelope([LIST, { ...LIST }], 5)],
     ['지금보다 높은 버전', writeNodesEnvelope([LIST], 999)],
   ])('inspect — 우리 봉투인데 못 지났다 — %s', (_label, text) => {
     const read = inspectNodesEnvelope(text)
@@ -121,7 +121,7 @@ describe('writeNodesEnvelope · readNodesEnvelope', () => {
   })
 
   it('inspect — 없는 타입의 까닭은 그 타입 이름을 말한다', () => {
-    const read = inspectNodesEnvelope(writeNodesEnvelope([{ id: 'a', type: 'NoSuchType' }] as WbNode[], 4))
+    const read = inspectNodesEnvelope(writeNodesEnvelope([{ id: 'a', type: 'NoSuchType' }] as WbNode[], 5))
     expect(read.kind === 'rejected' && read.reason).toContain('NoSuchType')
   })
 
@@ -147,8 +147,8 @@ describe('writeNodesEnvelope · readNodesEnvelope', () => {
   })
 
   it('지금보다 높은 version 이나 올릴 길이 없는 version 은 null', () => {
-    expect(readNodesEnvelope(writeNodesEnvelope([LIST], 4), [], 2)).toBeNull()
-    expect(readNodesEnvelope(writeNodesEnvelope([LIST], 4), [], 2)).toBeNull()
+    expect(readNodesEnvelope(writeNodesEnvelope([LIST], 5), [], 2)).toBeNull()
+    expect(readNodesEnvelope(writeNodesEnvelope([LIST], 5), [], 2)).toBeNull()
   })
 })
 

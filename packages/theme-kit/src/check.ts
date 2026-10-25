@@ -1,10 +1,20 @@
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import { childLists, installCatalog, walkNodes, WEIGHT_MAX, WEIGHT_MIN, type WbNode } from '@wirebound/schema'
+import {
+  BODY_ZONE,
+  childLists,
+  getComponent,
+  installCatalog,
+  walkNodes,
+  WEIGHT_MAX,
+  WEIGHT_MIN,
+  zoneList,
+  type WbNode,
+} from '@wirebound/schema'
 import { renderDocument, unusedViewKeys } from '@wirebound/renderer'
 import { galleryAssetUrl, galleryItemDocument, galleryItems, PLACEHOLDER_SET_PROPS, PLACEHOLDER_SET_SAMPLE } from '@wirebound/theme-gallery'
-import { pairRows, placeholderVars, ThemeProvider, type ThemeDefinition, type ViewItem } from '@wirebound/theme-sdk'
+import { gridLayout, pairRows, placeholderVars, ThemeProvider, type ThemeDefinition, type ViewItem } from '@wirebound/theme-sdk'
 import { installRuntime } from '@wirebound/theme-sdk/runtime'
 import { tokenValues, tokenVar, type WbthemeFiles } from '@wirebound/themes'
 
@@ -20,7 +30,7 @@ export interface ThemeCheckError {
    * 뷰가 안 그렸다(`missingZones`). `placeholder` — 자리표시자 뷰가 사람이 정한 그리기 값을 뿌리의 변수로 안 실었다(`placeholderDrops`). `pairs` — 폼 표
    * 뷰가 쌍 격자 계약(`cells` 조각 · 그 직계 칸과 빈 쌍 · 두 조각 · 빈 쌍 수)을 어겼다(`pairGridProblems`).
    */
-  source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs'
+  source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs' | 'grid'
 }
 
 export interface ThemeCheckFocusable {
@@ -151,6 +161,7 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
         for (const message of logged) errors.push({ ...at, message, source: 'console' })
         for (const message of missingZones(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'zone' })
         for (const message of pairGridProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'pairs' })
+        for (const message of dataGridProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'grid' })
         if (item.type === 'Placeholder' && item.sample.label === PLACEHOLDER_SET_SAMPLE) {
           for (const message of placeholderDrops(container, item.sample.node.id)) errors.push({ ...at, message, source: 'placeholder' })
         }
@@ -171,15 +182,24 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
 /**
  * **내용이 든 구역을 뷰가 안 그렸다** — 그린 노드마다, 선언된 이름 붙은 구역에 노드가 있는데 그 노드의 요소 안에 그 노드의 구역 상자
  * (`[data-wb-zone=<이름>]` — 가장 가까운 노드 요소가 그 노드다)가 없으면 그 내용이 화면에서 사라진 것이다. SDK `Zone` 을 안 쓰는 뷰(구역 전의
- * SDK 로 짠 뷰)가 걸린다. 그 노드 자신이 안 그려졌으면(숨은 탭의 내용) 보지 않는다.
+ * SDK 로 짠 뷰)가 걸린다. 그 노드 자신이 안 그려졌으면(숨은 탭의 내용) 보지 않는다 · 그 노드의 props 가 그 구역을 가리면(`ComponentDef.reveal` —
+ * 빈 상태 그리드의 행) 보지 않는다.
  */
 function missingZones(container: Element, root: WbNode): string[] {
   const out: string[] = []
   for (const { node } of walkNodes(root)) {
     const element = container.querySelector(`[data-wb-id="${node.id}"]`)
     if (element === null) continue
+    const def = getComponent(node.type)
+    const parsed = def?.props.safeParse(node.props ?? {})
+    const props = parsed?.success === true ? (parsed.data as Record<string, unknown>) : null
     for (const { zone, pointer, list } of childLists(node)) {
       if (pointer === '/children' || list.length === 0) continue
+      // 그 노드의 props 가 이 구역을 가리는 판(빈 상태의 그리드 행)은 안 본다 — `reveal` 이 그 구역을 펼친 props 를 따로 내면 지금은 가려진 것이다.
+      if (props !== null && def?.reveal !== undefined) {
+        const open = def.reveal(props, { zone, index: 0 })
+        if (Object.keys(open).some((key) => !Object.is(open[key], props[key]))) continue
+      }
       const drawn = [...element.querySelectorAll(`[data-wb-zone="${zone}"]`)].some(
         (box) => box.parentElement?.closest('[data-wb-id]') === element,
       )
@@ -246,7 +266,7 @@ function pairGridProblems(container: Element, root: WbNode): string[] {
     }
     const items: ViewItem[] = (node.children ?? []).map((child, index) => {
       const weight = typeof child.weight === 'number' && child.weight >= WEIGHT_MIN && child.weight <= WEIGHT_MAX ? child.weight : 1
-      return { nodeId: child.id, index, element: null, content: null, span: Math.min(weight, width) }
+      return { ...shimItem(child, index), span: Math.min(weight, width) }
     })
     const want = pairRows(items, width).filter((cell) => cell.kind === 'filler').length
     const got = fillers.length
@@ -256,6 +276,143 @@ function pairGridProblems(container: Element, root: WbNode): string[] {
       )
   }
   return out
+}
+
+/** 노드 하나를 배치 셈(`pairRows` · `gridLayout`)에 넘길 `ViewItem` 으로 — props 는 카탈로그의 기본값을 채운 값, 자식은 몸통. 그린 것은 없다. */
+function shimItem(node: WbNode, index: number): ViewItem {
+  const parsed = getComponent(node.type)?.props.safeParse(node.props ?? {})
+  return {
+    nodeId: node.id,
+    type: node.type,
+    index,
+    props: parsed?.success === true ? (parsed.data as Record<string, unknown>) : {},
+    element: null,
+    content: null,
+    items: (zoneList(node, BODY_ZONE) as WbNode[]).map(shimItem),
+    copy: () => ({ element: null, content: null }),
+  }
+}
+
+/**
+ * **그리드의 표 계약** — 행 · 열 뷰는 그리드 뷰가 내린 배치(`gridLayout`)를 읽어 칸을 그린다. 그래서 ① 머리 줄마다 칸 수 · `colspan` 합이 그 셈과
+ * 같다 ② 몸 줄(행 노드 · 사본의 `tr`)마다 칸 수 · `colspan` 합이 그 셈과 같다(되풀이마다 · 선택 칸 포함) ③ 행 노드 · 셀 틀 노드가 `data-wb-id` 로
+ * 한 번만 서고 나머지 줄은 `data-wb-copy-of` 다(원본을 줄마다 그리면 에디터가 같은 노드를 여럿으로 센다). ① ② 는 그리드가 제 표(`table`)를 그릴 때만
+ * 본다 — 카드로 접는 테마는 표가 없다. 칸 하나를 빼거나 `colspan` 을 안 싣는 뷰 · `Root` 를 줄마다 그리는 뷰가 걸린다(빈 상태 · 불러오는 중은 ② · ③ 을
+ * 안 본다 — 행 노드를 안 그리거나 셀 틀 대신 막대다). ④ 칸 수가 맞은 줄은 **칸 차례**도 본다 — 칸마다 든 노드(머리 칸은 열 · 열 묶음, 몸 칸은 제 칸 ·
+ * 셀 틀의 첫 조각)가 그 셈의 차례와 같고, 노드가 없는 칸(선택 · 번호 · 빈 칸 · 생략 띠)에는 노드가 없다. 칸 수 · `colspan` 합은 그대로인 채 칸을 뒤집거나
+ * 돌린 뷰가 걸린다(머리 칸과 몸 칸이 엇갈린다 — `docs/superpowers/plans/2026-10-25-rv-gr-report.md` M4). 칸에 노드가 없는 것(셀 틀을 안 그림)과 다른
+ * 노드가 선 것(차례가 엇갈림)은 문장을 가른다.
+ *
+ * **jsdom 이라 DOM 꼴만 본다** — 칸이 실제 그 자리에 서는지(상자 좌표)는 실브라우저 판 `apps/web/build-test/data-grid.test.ts` 가 잰다.
+ */
+function dataGridProblems(container: Element, root: WbNode): string[] {
+  const out: string[] = []
+  for (const { node } of walkNodes(root)) {
+    if (node.type !== 'DataGrid') continue
+    const element = container.querySelector(`[data-wb-id="${node.id}"]`)
+    if (element === null) continue
+    const props = shimItem(node, 0).props
+    const rows = (zoneList(node, 'rows') as WbNode[]).map(shimItem)
+    const layout = gridLayout((zoneList(node, BODY_ZONE) as WbNode[]).map(shimItem), rows, props)
+    const table = [...element.querySelectorAll('table')].find((one) => one.closest('[data-wb-id]') === element)
+    const spanOf = (cells: HTMLCollectionOf<HTMLTableCellElement>) => Array.from(cells).reduce((sum, cell) => sum + cell.colSpan, 0)
+    /** ④ — 칸마다 든 노드를 셈의 차례(`want` — 노드가 없는 칸이면 `null` · 이름은 칸 종류)와 견주어 첫 어긋남을 문장으로. */
+    const orderProblem = (where: string, cells: HTMLCollectionOf<HTMLTableCellElement>, want: { id: string | null; kind: string }[]) => {
+      for (const [at, expected] of want.entries()) {
+        const got = nodeIn(cells[at]!)
+        if (got === expected.id) continue
+        const should = expected.id === null ? `노드가 없는 칸(${expected.kind})` : `노드 ${expected.id}(${expected.kind})`
+        return got === null
+          ? `${where}의 칸 ${at + 1} 에 노드가 없습니다 — gridLayout 차례로는 ${should}입니다(노드 ${node.id})`
+          : `${where}의 칸 ${at + 1} 에 선 노드는 ${got} 입니다 — gridLayout 차례로는 ${should}입니다(노드 ${node.id})`
+      }
+      return null
+    }
+    const quiet = props.empty === true || props.loading === true
+    if (table !== undefined) {
+      const head = [...(table.tHead?.rows ?? [])]
+      if (head.length !== layout.head.length)
+        out.push(`DataGrid 뷰가 머리 줄을 ${layout.head.length} 개가 아니라 ${head.length} 개 그렸습니다(노드 ${node.id})`)
+      layout.head.forEach((want, at) => {
+        const got = head[at]
+        if (got === undefined) return
+        const wantSpan = want.reduce((sum, cell) => sum + cell.colSpan, 0)
+        if (got.cells.length !== want.length || spanOf(got.cells) !== wantSpan) {
+          out.push(
+            `DataGrid 머리 줄 ${at + 1} 이 칸 ${got.cells.length} 개 · colspan 합 ${spanOf(got.cells)} 입니다 — gridLayout 셈은 ${want.length} 개 · ${wantSpan}(노드 ${node.id})`,
+          )
+          return
+        }
+        const order = orderProblem(
+          `DataGrid 머리 줄 ${at + 1}`,
+          got.cells,
+          want.map((cell) => (cell.kind === 'select' ? { id: null, kind: 'select' } : { id: cell.item.nodeId, kind: cell.item.type })),
+        )
+        if (order !== null) out.push(order)
+      })
+      const body = [...table.tBodies].flatMap((tbody) => [...tbody.rows])
+      if (!quiet) {
+        if (body.length !== layout.lines.length)
+          out.push(`DataGrid 뷰가 몸 줄을 ${layout.lines.length} 개가 아니라 ${body.length} 개 그렸습니다(노드 ${node.id})`)
+        layout.lines.forEach((line, at) => {
+          const got = body[at]
+          if (got === undefined) return
+          const want = line.cells.map((cell) => (cell.kind === 'own' || cell.kind === 'gap' ? cell.colSpan : 1))
+          const wantSpan = want.reduce((sum, span) => sum + span, 0)
+          if (got.cells.length !== want.length || spanOf(got.cells) !== wantSpan) {
+            out.push(
+              `DataGrid 몸 줄 ${at + 1}(행 ${line.row.nodeId})이 칸 ${got.cells.length} 개 · colspan 합 ${spanOf(got.cells)} 입니다 — gridLayout 셈은 ${want.length} 개 · ${wantSpan}(노드 ${node.id})`,
+            )
+            return
+          }
+          const order = orderProblem(
+            `DataGrid 몸 줄 ${at + 1}(행 ${line.row.nodeId})`,
+            got.cells,
+            line.cells.map((cell) =>
+              cell.kind === 'own'
+                ? { id: cell.item.nodeId, kind: 'own' }
+                : cell.kind === 'template'
+                  ? { id: cell.leaf.item.items[0]?.nodeId ?? null, kind: 'template' }
+                  : { id: null, kind: cell.kind },
+            ),
+          )
+          if (order !== null) out.push(order)
+        })
+      }
+    }
+    if (quiet) continue
+    const count = (selector: string) => element.querySelectorAll(selector).length
+    for (const row of rows) {
+      const lines = layout.linesOf.get(row.nodeId)?.length ?? 0
+      const [ids, copies] = [count(`[data-wb-id="${row.nodeId}"]`), count(`[data-wb-copy-of="${row.nodeId}"]`)]
+      if (lines > 0 && (ids !== 1 || copies !== lines - 1)) {
+        out.push(
+          `DataGrid 행(노드 ${row.nodeId})이 data-wb-id ${ids} 개 · 사본 ${copies} 개입니다 — 줄 ${lines} 개면 원본 1 · 사본 ${lines - 1}(Root copy)`,
+        )
+      }
+    }
+    for (const leaf of layout.leaves) {
+      const template = leaf.item.items[0]
+      if (template === undefined) continue
+      const cells = layout.lines.flatMap((line) => line.cells).filter((cell) => cell.kind === 'template' && cell.leaf === leaf)
+      if (cells.length === 0) continue
+      const [ids, copies] = [count(`[data-wb-id="${template.nodeId}"]`), count(`[data-wb-copy-of="${template.nodeId}"]`)]
+      if (ids !== 1 || copies !== cells.length - 1) {
+        out.push(
+          `DataGrid 셀 틀(노드 ${template.nodeId})이 data-wb-id ${ids} 개 · 사본 ${copies} 개입니다 — 셀 틀 칸 ${cells.length} 개면 원본 1 · 사본 ${cells.length - 1}(item.copy)`,
+        )
+      }
+    }
+  }
+  return out
+}
+
+/** 칸에 든 노드 — 칸 자신(제 칸 · 머리 칸의 뿌리)이나 문서 차례로 첫 노드 자손(셀 틀 조각)의 id(원본 · 사본). 없으면 `null`. */
+function nodeIn(cell: Element): string | null {
+  const own = cell.getAttribute('data-wb-id') ?? cell.getAttribute('data-wb-copy-of')
+  if (own !== null) return own
+  const inner = cell.querySelector('[data-wb-id], [data-wb-copy-of]')
+  return inner === null ? null : (inner.getAttribute('data-wb-id') ?? inner.getAttribute('data-wb-copy-of'))
 }
 
 /**

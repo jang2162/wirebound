@@ -63,6 +63,12 @@
 단추를 넣어 주지 않는다 — 단추가 필요하면 `actions` 구역에 `Button` 을 함께 넣는다. **탭은 `TabPanel` 노드다** — 탭 하나가 `Tabs` 몸통의
 `TabPanel` 하나이고(이름은 그 `label`), 그 탭의 내용은 패널의 `children` 이다. 탭을 바꾸는 상호작용은 패널을 가리킨다(`switchTab` 의 `target`).
 
+**그리드는 열 · 행 · 칸이다.** `DataGrid` 의 몸통(`children`)이 열(`GridColumn` — `label` 이 머리 칸, `children` 이 셀 틀 · `GridColumnGroup` —
+병합 머리, 그 `children` 이 아래 열들)이고 `zones.rows` 가 행(`GridRow` — `repeat` 줄로 그려진다)이다. 칸 없는 행은 셀 틀을 줄마다 되풀이하고(모든 줄이
+같은 글이다), 줄마다 다른 값이 필요한 행만 `GridCell` 을 `children` 으로 갖는다(칸이 앞 열부터 덮는다 — `span` · `rowSpan`). 열 하나를 더하려면 몸통에
+`GridColumn` 하나(셀 틀 포함)를 `add` 한다 — 행마다 칸을 더하지 않는다. 바닥(`zones.footer`)의 `Pagination` 은 `total` · `pageSize` · `page` 로 범위 글을
+셈한다. 서버는 새 그리드에 열 · 행 · 바를 넣어 주지 않는다 — 함께 넣는다.
+
 성공하면 응답의 `headSeq`가 **새 값**이다. 이어서 고칠 것이 있으면 그 값을 다음
 `baseSeq`로 쓴다.
 

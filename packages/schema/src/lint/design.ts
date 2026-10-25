@@ -30,7 +30,9 @@
 import { checkPageAction, isPageTargetAction } from '../interaction/check'
 import { nodeDisplayName } from '../interaction/describe'
 import type { PageDocument, WbNode } from '../node'
+import { BODY_ZONE } from '../component/define'
 import { walkNodes } from '../tree'
+import { zoneList } from '../zones'
 import type { ValidationCode, ValidationIssue } from '../validate'
 import { unknownVisibilityStates, validatePage } from '../validate'
 import { stateDescendants } from '../visibility'
@@ -42,20 +44,22 @@ import type { RelayRuleId } from './rules'
  * 「lint 규칙」이 이름으로 든 **주요 컴포넌트** 셋. 그 줄이 목록을 괄호로 못박았으므로 여기서
  * 늘리거나 줄이지 않는다 — `test/lint-rules.test.ts`가 그 줄을 글자 그대로 대조한다.
  */
-const MAJOR_COMPONENTS: readonly string[] = ['List', 'EntryForm', 'SearchForm']
+const MAJOR_COMPONENTS: readonly string[] = ['DataGrid', 'EntryForm', 'SearchForm']
 
 /**
  * ⑥ *"`EntryForm` 안에 `Field`가 하나도 없는 **등**"*의 표.
  *
  * **`등`을 여기서 지어내지 않는다.** 든 셋은 「lint 규칙」이 이름으로 든 `EntryForm`과, 같은
- * 근거가 그대로 서는 `SearchForm` · `FormTable` 이다 — 셋 다 카탈로그가 몸통을 선언해 자식 0을
+ * 근거가 그대로 서는 `SearchForm` · `FormTable` · `DataGrid` 다 — 넷 다 카탈로그가 몸통을 선언해 자식 0을
  * 허용하는데, **입력 칸이 하나도 없는 폼은 그 노드가 화면에서 하는 일이 없다**(폼 표는 라벨 칸이
- * 하나도 없는 표다). 넷째를 더하려면 같은 종류의 근거가 있어야 한다(*"그 컴포넌트가 무엇 없이는 빈 상자다"*).
+ * 하나도 없는 표, 열이 없는 그리드는 머리도 칸도 없는 표다). 다섯째를 더하려면 같은 종류의 근거가 있어야 한다
+ * (*"그 컴포넌트가 무엇 없이는 빈 상자다"*).
  */
 const STRUCTURAL_GAPS: readonly { container: string; requires: string }[] = [
   { container: 'EntryForm', requires: 'Field' },
   { container: 'SearchForm', requires: 'Field' },
   { container: 'FormTable', requires: 'Field' },
+  { container: 'DataGrid', requires: 'GridColumn' },
 ]
 
 /**
@@ -172,6 +176,17 @@ function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: Reado
         lintIssue('structural-gap', { ...where, nodeId: node.id }, path, `${gap.container} 안에 ${gap.requires}가 하나도 없습니다`),
       )
     }
+
+    // 그리드 — 그려지지 않는 내용 · 칸 폭이 어긋난 행
+    if (node.type === 'GridColumn' && isNumbered(node) && zoneList(node, BODY_ZONE).length > 0) {
+      issues.push(
+        lintIssue('ignored-template', { ...where, nodeId: node.id }, path, `번호 열의 셀 틀은 그려지지 않습니다: ${nodeDisplayName(node)}`),
+      )
+    }
+    if (node.type === 'GridRow' && readProp(node, 'kind') === 'gap' && zoneList(node, BODY_ZONE).length > 0) {
+      issues.push(lintIssue('ignored-template', { ...where, nodeId: node.id }, path, '생략 띠 행은 칸을 그리지 않습니다'))
+    }
+    if (node.type === 'DataGrid') issues.push(...gridRowIssues(node, path, where))
 
     // ④ navigate·openModal 대상 페이지
     issues.push(...pageTargetIssues(node, path, where, targets))
@@ -361,6 +376,77 @@ function commentedNodes(project: LintProject): Map<string, Set<string>> {
  */
 function relayValidation(pageId: string, issue: ValidationIssue): LintIssue {
   return relayLintIssue(VALIDATION_RULE[issue.code], { pageId, ...(issue.nodeId === null ? {} : { nodeId: issue.nodeId }) }, issue)
+}
+
+/** props 의 값 하나 — 검증 전 문서에서 던지지 않는다. */
+function readProp(node: WbNode, prop: string): unknown {
+  const props: unknown = node.props
+  return props !== null && typeof props === 'object' ? (props as Record<string, unknown>)[prop] : undefined
+}
+
+/** 정수 prop — 1 이상 정수가 아니면 1(카탈로그의 기본값). */
+function countProp(node: WbNode, prop: string): number {
+  const value = readProp(node, prop)
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : 1
+}
+
+function isNumbered(node: WbNode): boolean {
+  const value = readProp(node, 'numbering')
+  return value === 'asc' || value === 'desc'
+}
+
+/** 열 트리의 잎 열 수 — 빈 열 묶음은 한 칸을 차지한다(그리드 뷰가 그렇게 그린다 — SDK `gridLayout`). */
+function leafColumns(list: readonly unknown[]): number {
+  let count = 0
+  for (const child of list) {
+    if (child === null || typeof child !== 'object') continue
+    const node = child as WbNode
+    if (node.type === 'GridColumn') count += 1
+    else if (node.type === 'GridColumnGroup') count += Math.max(1, leafColumns(zoneList(node, BODY_ZONE)))
+  }
+  return count
+}
+
+/**
+ * 제 칸을 가진 행마다 칸 폭 합이 잎 열 수와 맞는가 — 줄(`repeat`)마다 위 줄의 `rowSpan` 이 덮어 내려온 열을 더한다(HTML 표와 같은 셈 —
+ * SDK `gridLayout` 이 화면에서 하는 것). `rowSpan` 은 표 끝 · 생략 띠 앞에서 끊긴다. 어긋난 행마다 하나를 낸다.
+ */
+function gridRowIssues(grid: WbNode, path: string, where: { pageId: string }): LintIssue[] {
+  const leaves = leafColumns(zoneList(grid, BODY_ZONE))
+  const rows = zoneList(grid, 'rows').filter((row): row is WbNode => row !== null && typeof row === 'object')
+  // 줄마다 위에서 덮인 열 수 — 줄 차례는 행 차례 × 되풀이.
+  const lines: { row: WbNode; index: number; gap: boolean }[] = []
+  rows.forEach((row, index) => {
+    const gap = readProp(row, 'kind') === 'gap'
+    for (let line = 0; line < (gap ? 1 : countProp(row, 'repeat')); line++) lines.push({ row, index, gap })
+  })
+  const covered = Array.from({ length: lines.length }, () => 0)
+  const issues: LintIssue[] = []
+  const flagged = new Set<WbNode>()
+  lines.forEach(({ row, index, gap }, at) => {
+    if (gap) return
+    const cells = zoneList(row, BODY_ZONE).filter((cell): cell is WbNode => cell !== null && typeof cell === 'object')
+    if (cells.length === 0) return
+    const width = covered[at]! + cells.reduce((sum, cell) => sum + countProp(cell, 'span'), 0)
+    for (const cell of cells) {
+      const down = countProp(cell, 'rowSpan')
+      for (let below = at + 1; below < Math.min(lines.length, at + down); below++) {
+        if (lines[below]!.gap) break
+        covered[below] = covered[below]! + countProp(cell, 'span')
+      }
+    }
+    if (width === leaves || flagged.has(row)) return
+    flagged.add(row)
+    issues.push(
+      lintIssue(
+        'grid-row-cells',
+        { ...where, nodeId: row.id },
+        `${path}/zones/rows/${index}`,
+        `그리드 행의 칸 폭 합(${width})이 열 수(${leaves})와 다릅니다`,
+      ),
+    )
+  })
+  return issues
 }
 
 /** 자손 어딘가에 그 타입이 있는가. 자기 자신은 세지 않는다. */

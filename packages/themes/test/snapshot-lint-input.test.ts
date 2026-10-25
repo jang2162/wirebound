@@ -17,11 +17,11 @@ installCatalog()
 const LAYOUT_A = '11111111-1111-4111-8111-111111111111'
 
 function 문서(nodes: unknown[] = []): PageDocument {
-  return { version: 4, root: { id: 'root', type: 'Page', children: nodes } } as PageDocument
+  return { version: 5, root: { id: 'root', type: 'Page', children: nodes } } as PageDocument
 }
 
 function layout(id: string): SnapshotLayout {
-  return { id, name: '기본', schema: { version: 4, root: { id: 'l', type: 'Slot' } } as never }
+  return { id, name: '기본', schema: { version: 5, root: { id: 'l', type: 'Slot' } } as never }
 }
 
 /**

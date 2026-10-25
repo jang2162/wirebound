@@ -34,13 +34,13 @@ beforeAll(() => {
 
 function documentWith(interactions: Interaction[]): PageDocument {
   return {
-    version: 4,
+    version: 5,
     root: {
       id: 'n_root',
       type: 'Page',
       children: [
         { id: 'n_btn', type: 'Button', props: { label: '검색' }, interactions },
-        { id: 'n_list', type: 'List', props: {} },
+        { id: 'n_list', type: 'DataGrid', props: {} },
         {
           id: 'n_tabs',
           type: 'Tabs',
@@ -282,7 +282,7 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
                 props: { label: '이름없음' },
                 interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
               },
-              { id: 'n_list', type: 'List', props: {} },
+              { id: 'n_list', type: 'DataGrid', props: {} },
             ],
           },
         } as unknown as PageDocument,
@@ -301,7 +301,7 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
                 props: { label: '호버' },
                 interactions: [{ on: 'hover', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
               },
-              { id: 'n_list', type: 'List', props: {} },
+              { id: 'n_list', type: 'DataGrid', props: {} },
             ],
           },
         } as unknown as PageDocument,

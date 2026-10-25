@@ -91,10 +91,10 @@ const vis = (doc: PageDocument): Record<string, unknown> => {
 const ids = (node: WbNode): string[] => [node.id, ...(node.children ?? []).flatMap(ids)]
 
 describe('판 1 → 2', () => {
-  it('판 2 문서는 그대로 · 지금 판(4)은 판 2 를 올리지 못한다 — 판 2 → 3 · 3 → 4 는 DB 마이그레이션 몫이다', () => {
+  it('판 2 문서는 그대로 · 지금 판(5)은 판 2 를 올리지 못한다 — 판 2 → 3 · 3 → 4 · 4 → 5 는 DB 마이그레이션 몫이다', () => {
     const doc: PageDocument = { version: 2, root: { id: 'n_root', type: 'Page', children: [text('n_a')] } }
     expect(toV2(doc)).toEqual(doc)
-    expect(CURRENT_DOCUMENT_VERSION).toBe(4)
+    expect(CURRENT_DOCUMENT_VERSION).toBe(5)
     expect(() => migratePageDocument(doc)).toThrow('버전 2에서 올릴 마이그레이션이 없습니다')
   })
 

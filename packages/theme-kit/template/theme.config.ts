@@ -26,10 +26,10 @@ export default defineManifest({
     },
   },
   components: {
-    List: {
+    DataGrid: {
       variants: [
         { id: 'table', label: '표' },
-        { id: 'cards', label: '카드', hideProps: ['columns'] },
+        { id: 'cards', label: '카드', hideProps: ['fixedColumns'] },
       ],
       defaultVariant: 'table',
     },

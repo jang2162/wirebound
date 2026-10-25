@@ -64,7 +64,13 @@ const LIST_NODES = [
     ],
   },
   { id: 'a_new', type: 'Button', variant: 'primary', props: { label: '회원 등록' } },
-  { id: 'a_list', type: 'List', props: { items: 4, columns: ['이름', '이메일', '가입일', '상태'], selectable: true } },
+  {
+    id: 'a_list',
+    type: 'DataGrid',
+    props: { select: 'check' },
+    children: ['이름', '이메일', '가입일', '상태'].map((label, at) => ({ id: `a_list_c${at}`, type: 'GridColumn', props: { label } })),
+    zones: { rows: [{ id: 'a_list_r', type: 'GridRow', props: { repeat: 4 } }], footer: [{ id: 'a_list_p', type: 'Pagination' }] },
+  },
   { id: 'a_card', type: 'Card', props: { title: '신규 가입', subtitle: '이번 달' }, children: [text('a_card_t', '312명')] },
 ]
 

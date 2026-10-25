@@ -1,4 +1,4 @@
-import { installCatalog, ListDef, type WbNode } from '@wirebound/schema'
+import { DataGridDef, installCatalog, type WbNode } from '@wirebound/schema'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { activeStates } from '../src/attrs'
@@ -40,24 +40,24 @@ describe('노드 루트의 속성', () => {
   it('활성 상태를 공백으로 이어 낸다', () => {
     const attrs = rootAttrs({
       id: 'n_000000000001',
-      type: 'List',
-      props: { loading: true, empty: true, selected: false },
+      type: 'DataGrid',
+      props: { loading: true, empty: true },
     })
-    expect(attrs['data-wb-state']).toBe('loading empty')
+    expect(attrs['data-wb-state']).toBe('empty loading')
   })
 
   it('활성 상태가 없으면 data-wb-state를 내지 않는다', () => {
-    expect(rootAttrs({ id: 'n_000000000001', type: 'List' })['data-wb-state']).toBeUndefined()
+    expect(rootAttrs({ id: 'n_000000000001', type: 'DataGrid' })['data-wb-state']).toBeUndefined()
   })
 })
 
 describe('activeStates', () => {
   it('선언된 상태와 같은 이름의 prop이 true인 것만 고른다', () => {
-    expect(activeStates(ListDef, { selected: true, disabled: false, bogus: true })).toEqual(['selected'])
+    expect(activeStates(DataGridDef, { empty: true, loading: false, bogus: true })).toEqual(['empty'])
   })
 
   it('선언 순서를 지킨다', () => {
-    expect(activeStates(ListDef, { empty: true, selected: true })).toEqual(['selected', 'empty'])
+    expect(activeStates(DataGridDef, { loading: true, empty: true })).toEqual(['empty', 'loading'])
   })
 })
 

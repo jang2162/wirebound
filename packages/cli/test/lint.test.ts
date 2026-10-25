@@ -149,8 +149,12 @@ describe('[경로]는 출력 거르개다 — 입력을 좁히지 않는다', ()
         '경고둘',
         10,
         {
-          version: 4,
-          root: { id: 'root', type: 'Page', children: [{ id: 'lonely2', type: 'List' }] },
+          version: 5,
+          root: {
+            id: 'root',
+            type: 'Page',
+            children: [{ id: 'lonely2', type: 'DataGrid', children: [{ id: 'lonely2-col', type: 'GridColumn' }] }],
+          },
         },
         null,
       ),
@@ -327,7 +331,7 @@ describe('테마 규칙 — 현재 테마에 없는 variant', () => {
     expect(await run(['lint'], io), io.stderr.join('\n')).toBe(EXIT.ok)
     const line = io.stdout.find((row) => row.includes('theme-variant'))
     expect(line).toBe(
-      'warning\t관리자/회원/그리드 (grid-list)\ttheme-variant\tList 의 variant "grid" 는 테마 system-admin@0.1.0 에 없습니다 — table(기본)으로 그려집니다',
+      'warning\t관리자/회원/그리드 (grid-list)\ttheme-variant\tDataGrid 의 variant "grid" 는 테마 system-admin@0.1.0 에 없습니다 — table(기본)으로 그려집니다',
     )
   })
 

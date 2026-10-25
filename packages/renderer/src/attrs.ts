@@ -8,7 +8,9 @@ import type { SyntheticEvent } from 'react'
 // **`interface`가 아니라 `type`이다** — 뷰에 넘기는 `NodeBinding.attrs`가 색인 시그니처(`Record`)라, 인터페이스는 그 자리에
 // 들어가지 못한다(TS2322).
 export type WbAttrs = {
-  'data-wb-id': string
+  /** 노드 id. 사본(되풀이 행의 둘째 줄부터 — `ViewItem.copy`)은 이 대신 `data-wb-copy-of` 다. 둘 중 하나만 선다. */
+  'data-wb-id'?: string
+  'data-wb-copy-of'?: string
   'data-wb-component': string
   'data-wb-variant'?: string
   'data-wb-state'?: string

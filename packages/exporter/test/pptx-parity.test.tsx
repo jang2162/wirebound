@@ -39,7 +39,7 @@ const BUTTON: WbNode = {
 
 const LIST: WbNode = {
   id: 'n_000000000003',
-  type: 'List',
+  type: 'DataGrid',
   props: {},
   marker: 2,
   interactions: [{ on: 'select', actions: [{ type: 'setVisible', target: 'n_000000000002', value: false }] }],

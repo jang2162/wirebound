@@ -34,7 +34,7 @@ const DOC: PageDocument = pageDoc({
   id: 'n-root',
   type: 'Page',
   children: [
-    { id: 'n-list', type: 'List', props: { columns: ['개요', '상세'] } },
+    { id: 'n-list', type: 'Tree', props: { items: ['개요', '상세'] } },
     {
       id: 'n-btn',
       type: 'Button',
@@ -90,8 +90,8 @@ const ICON_ONLY = [
   '회원관리 추가',
   '회원관리 더 보기',
   '회원 목록 더 보기',
-  'List 개요 · 상세 더 보기',
-  'List 옮기기',
+  'Tree 항목 2 더 보기',
+  'Tree 옮기기',
   '축소',
   '확대',
   '화면 맞춤',

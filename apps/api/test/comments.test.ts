@@ -15,7 +15,7 @@ import { addMember, createMenuNode, createPage, createProject, signup, withApi, 
 /** 노드 셋을 가진 문서. 번호가 여럿 붙는 케이스가 필요로 한다. */
 function docWithThree(): PageDocument {
   return {
-    version: 4,
+    version: 5,
     root: {
       id: 'n_root',
       type: 'Page',

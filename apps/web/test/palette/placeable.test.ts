@@ -9,7 +9,15 @@
  * 변조: `nested-page` 검사를 떼면 첫 케이스가 죽는다. 둘째 케이스(`Slot` 이 없다 · 나머지가 있다)는 안 죽는다 — 대조군이다.
  */
 import { describe, expect, it } from 'vitest'
-import { BODY_ZONE, CURRENT_DOCUMENT_VERSION, listComponents, validatePage, type WbNode } from '@wirebound/schema'
+import {
+  BODY_ZONE,
+  CURRENT_DOCUMENT_VERSION,
+  getComponent,
+  listComponents,
+  placementsOf,
+  validatePage,
+  type WbNode,
+} from '@wirebound/schema'
 import { createNode } from '../../src/edit/create-node'
 import { placeableGroups } from '../../src/palette/placeable'
 
@@ -24,12 +32,16 @@ function placeableTypes(): string[] {
       if (node === null) return false
       const version = CURRENT_DOCUMENT_VERSION
       if (!validatePage({ version, root: node }).some((issue) => issue.code === 'bad-root')) return false
-      // 설 자리가 정해진 타입(`TabPanel`)은 그 자리에 놓아 잰다 — 하단 판이 그 타입을 «그 부모 안에 넣을 것» 으로 보이는 것과 같다.
-      const host = def.placement
-      const placed: WbNode =
-        host === undefined
-          ? node
-          : { id: 'host', type: host.type, ...(host.zone === BODY_ZONE ? { children: [node] } : { zones: { [host.zone]: [node] } }) }
+      // 설 자리가 정해진 타입(`TabPanel` · 그리드의 열 · 행 · 칸)은 그 자리에 놓아 잰다 — 하단 판이 그 타입을 «그 부모 안에 넣을 것» 으로 보이는
+      // 것과 같다. 설 자리의 부모도 설 자리가 있으면(칸 → 행 → 그리드) 겹으로 감싼다.
+      let placed: WbNode = node
+      for (let host = placementsOf(def)[0], depth = 0; host !== undefined; host = placementsOf(getComponent(host.type))[0], depth++) {
+        placed = {
+          id: `host-${depth}`,
+          type: host.type,
+          ...(host.zone === BODY_ZONE ? { children: [placed] } : { zones: { [host.zone]: [placed] } }),
+        }
+      }
       return validatePage({ version, root: { id: 'r', type: 'Page', children: [placed] } }).length === 0
     })
     .map((def) => def.type)

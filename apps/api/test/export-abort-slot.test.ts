@@ -14,7 +14,7 @@ afterEach(resetRealData)
 /** 글 노드 7000 개 — 한 장이 약 500KB 다(`export-worker-abort.test.ts`와 같은 크기). 읽기에 수십 ms 가 든다. */
 function bigDocument(prefix: string): PageDocument {
   return {
-    version: 4,
+    version: 5,
     root: {
       id: `${prefix}_root`,
       type: 'Page',

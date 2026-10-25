@@ -118,7 +118,7 @@ const PAGES = [
               },
             ],
           },
-          { id: 'n_000000000003', type: 'List', props: {}, marker: 2 },
+          { id: 'n_000000000003', type: 'DataGrid', props: {}, marker: 2 },
         ],
       },
     },

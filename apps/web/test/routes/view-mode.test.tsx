@@ -30,7 +30,7 @@ import { chooseRowAction, rowAction, rowNamed } from '../panels/tree-row'
 const DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
-  children: [{ id: 'n-list', type: 'List', props: {} }],
+  children: [{ id: 'n-list', type: 'DataGrid', props: {} }],
 })
 
 function tabs(): string[] {

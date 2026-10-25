@@ -145,8 +145,9 @@ export function structureCssBlocks(): string[] {
     zeroRule('[data-wb-component="Section"][data-wb-compact]', ['padding-block: 8px;']),
     // **노드 몫**(`WbNode.weight` — `Root` 가 `--wb-node-weight` 로 싣는다). 셋 다 특이도 0 이라 테마가 같은 속성을 걸면 테마가 이긴다.
     // ① 상속을 끊는다 — 커스텀 프로퍼티는 자손에 물려져, 몫을 준 `Card` 안의 `Flex` 자식이 그 몫을 받아 함께 늘어난다. 모든 노드 뿌리에서
-    //    초기화하고(`initial` 은 «값 없음» 이라 아래 `var()` 가 기본값으로 간다) 몫이 있는 노드만 인라인으로 싣는다(인라인이 이긴다).
-    zeroRule('[data-wb-id]', [`${WEIGHT_VAR}: initial;`]),
+    //    초기화하고(`initial` 은 «값 없음» 이라 아래 `var()` 가 기본값으로 간다) 몫이 있는 노드만 인라인으로 싣는다(인라인이 이긴다). 그리드 되풀이
+    //    행의 사본 노드는 `data-wb-id` 대신 `data-wb-copy-of` 를 싣는다 — 둘 다 뿌리다(안 걸면 사본 줄만 부모 몫을 물려받는다).
+    zeroRule('[data-wb-id], [data-wb-copy-of]', [`${WEIGHT_VAR}: initial;`]),
     // ② `Flex` — 몫이 있으면 `flex: <몫>`(= `<몫> 1 0%`). 바탕 폭을 0 으로 두어야 형제의 폭이 몫의 비가 된다 — `flex-grow` 만 바꾸면 남는
     //    폭만 나눠, 내용 · `width: 100%`(표) 가 다른 형제끼리는 비가 안 선다. 몫이 없으면 flex 항목의 기본값(`0 1 auto`) 그대로다.
     zeroRule('[data-wb-component="Flex"] > *', [`flex: var(${WEIGHT_VAR}, 0 1 auto);`]),

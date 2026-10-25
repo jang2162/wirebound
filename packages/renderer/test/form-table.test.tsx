@@ -62,7 +62,7 @@ describe('폼 표 — 칸 · 빈 쌍', () => {
 
   it('상태로 숨은 필드의 자리는 다음 칸이 채우고 빈 쌍은 끝으로 간다', () => {
     const doc = {
-      version: 4,
+      version: 5,
       viewStates: [{ id: 's_e', name: '수정' }],
       root: {
         id: 'page',

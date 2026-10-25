@@ -27,7 +27,7 @@ const DOC = pageDoc({
   type: 'Page',
   children: [
     { id: 'n-btn', type: 'Button', props: { label: '검색' } },
-    { id: 'n-list', type: 'List', props: {} },
+    { id: 'n-list', type: 'DataGrid', props: {} },
   ],
 })
 

@@ -33,13 +33,13 @@ beforeAll(() => {
 }, 300_000)
 
 const DOC = {
-  version: 4,
+  version: 5,
   root: {
     id: 'n_root',
     type: 'Page',
     children: [
       { id: 'n_btn', type: 'Button', props: { label: '검색' } },
-      { id: 'n_list', type: 'List', props: {} },
+      { id: 'n_list', type: 'DataGrid', props: {} },
     ],
   },
 }
@@ -160,7 +160,7 @@ interface DistExporter {
 
 /** 상호작용 · 마커가 든 문서 — 누른 결과가 셋(setProp · switchTab · setVisible) 다 보이게. */
 const PRESSED = {
-  version: 4,
+  version: 5,
   root: {
     id: 'n_root',
     type: 'Page',
@@ -181,7 +181,7 @@ const PRESSED = {
           },
         ],
       },
-      { id: 'n_list', type: 'List', props: {}, marker: 2 },
+      { id: 'n_list', type: 'DataGrid', props: {}, marker: 2 },
       {
         id: 'n_tabs',
         type: 'Tabs',

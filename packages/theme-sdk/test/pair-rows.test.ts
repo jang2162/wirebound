@@ -7,9 +7,13 @@ import { pairRows, type ViewItem } from '@wirebound/theme-sdk'
 
 const item = (id: string, span?: number): ViewItem => ({
   nodeId: id,
+  type: 'Field',
   index: 0,
+  props: {},
   element: null,
   content: null,
+  items: [],
+  copy: () => ({ element: null, content: null }),
   ...(span === undefined ? {} : { span }),
 })
 

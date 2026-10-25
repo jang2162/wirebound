@@ -166,7 +166,7 @@ describe('받는 타입 · 설 자리 — 탭 몸통은 `TabPanel` 만, `TabPane
   /** 뿌리 밑에 탭 하나(패널 둘 · 첫 패널 안에 글)와 글 하나. */
   function tabsDoc(): PageDocument {
     return {
-      version: 4,
+      version: 5,
       root: {
         id: 'n-root',
         type: 'Page',

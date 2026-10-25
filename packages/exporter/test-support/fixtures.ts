@@ -30,7 +30,7 @@ function id(): string {
 export function broadFixture(): PageDocument {
   nextId = 0
   return {
-    version: 4,
+    version: 5,
     root: {
       id: id(),
       type: 'Page',
@@ -152,10 +152,44 @@ export function broadFixture(): PageDocument {
         },
         {
           id: id(),
-          type: 'List',
+          type: 'DataGrid',
           variant: 'compact',
-          props: { items: 3, selected: true },
-          zones: { headStart: [{ id: id(), type: 'Text', props: { content: '총 3건' } }] },
+          props: { select: 'check', fixedColumns: 1 },
+          // 열 묶음 · 번호 열 · 셀 틀 · 되풀이 행 · 제 칸 합계 줄 · 생략 띠 · 바닥 페이지네이션 — 그리드 부품 여섯을 다 쓴다.
+          children: [
+            { id: id(), type: 'GridColumn', props: { label: 'No', numbering: 'desc', align: 'center' } },
+            {
+              id: id(),
+              type: 'GridColumnGroup',
+              props: { label: '회원' },
+              children: [
+                {
+                  id: id(),
+                  type: 'GridColumn',
+                  props: { label: '이름' },
+                  children: [{ id: id(), type: 'Text', props: { content: '홍길동' } }],
+                },
+                { id: id(), type: 'GridColumn', props: { label: '등급', sort: 'asc' }, children: [{ id: id(), type: 'Chip' }] },
+              ],
+            },
+          ],
+          zones: {
+            headStart: [{ id: id(), type: 'Text', props: { content: '총 3건' } }],
+            rows: [
+              { id: id(), type: 'GridRow', props: { repeat: 2 } },
+              { id: id(), type: 'GridRow', props: { kind: 'gap' } },
+              {
+                id: id(),
+                type: 'GridRow',
+                props: { kind: 'total' },
+                children: [
+                  { id: id(), type: 'GridCell', props: { span: 2 }, children: [{ id: id(), type: 'Text', props: { content: '합계' } }] },
+                  { id: id(), type: 'GridCell' },
+                ],
+              },
+            ],
+            footer: [{ id: id(), type: 'Pagination', props: { total: 3 } }],
+          },
         },
       ],
     },
@@ -172,7 +206,7 @@ export function broadFixture(): PageDocument {
 export function slotFixture(): PageDocument {
   nextId = 900
   return {
-    version: 4,
+    version: 5,
     root: { id: id(), type: 'Page', children: [{ id: id(), type: 'Slot' }] },
   }
 }
@@ -184,7 +218,7 @@ export function slotFixture(): PageDocument {
 export function stateFixture(): PageDocument {
   nextId = 3000
   return {
-    version: 4,
+    version: 5,
     viewStates: [{ id: 's_admin', name: '관리자' }],
     root: {
       id: id(),
@@ -199,7 +233,7 @@ export function stateFixture(): PageDocument {
 
 /** 노드 하나를 `Page` 아래에 둔 문서. */
 export function pageWith(node: WbNode): PageDocument {
-  return { version: 4, root: { id: 'n_page', type: 'Page', children: [node] } }
+  return { version: 5, root: { id: 'n_page', type: 'Page', children: [node] } }
 }
 
 /** 글 하나 — 작은 표본. */
@@ -222,7 +256,7 @@ export function brokenFixture(): PageDocument {
       type: 'Page',
       children: [
         { id: id(), type: '없는타입' },
-        { id: id(), type: 'List', props: { 없는프롭: 1 } },
+        { id: id(), type: 'DataGrid', props: { 없는프롭: 1 } },
         null as unknown as WbNode,
         { id: 7 as unknown as string, type: 'Text' },
       ],

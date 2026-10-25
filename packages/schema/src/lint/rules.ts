@@ -74,7 +74,7 @@ export const LINT_RULES = [
   // ── 설계서 규칙 (「lint 규칙」) ─────────────────────────────────────────────
   {
     id: 'comment-missing',
-    spec: '코멘트가 없는 주요 컴포넌트 (`List`, `EntryForm`, `SearchForm`)',
+    spec: '코멘트가 없는 주요 컴포넌트 (`DataGrid`, `EntryForm`, `SearchForm`)',
     group: 'document',
     owner: 'schema',
     severity: 'warning',
@@ -113,6 +113,22 @@ export const LINT_RULES = [
     spec: '`EntryForm` 안에 `Field`가 하나도 없는 등 구조적 공백',
     group: 'document',
     owner: 'schema',
+    severity: 'warning',
+  },
+  {
+    id: 'ignored-template',
+    spec: '그려지지 않는 그리드 내용 — 번호 열(`numbering`)의 셀 틀 · 생략 띠 행(`kind: gap`)의 칸',
+    group: 'document',
+    owner: 'schema',
+    // 문서는 그대로 서고 그 내용만 화면에 안 나온다 — 구조 트리에서 고르면 보인다.
+    severity: 'warning',
+  },
+  {
+    id: 'grid-row-cells',
+    spec: '제 칸을 가진 그리드 행의 칸 폭 합(위 행에서 내려온 칸 포함)이 잎 열 수와 다름',
+    group: 'document',
+    owner: 'schema',
+    // 열을 더하거나 옮긴 뒤 따로 그린 행이 어긋난 꼴이다 — 화면은 서지만(모자란 열은 빈 칸 · 넘친 칸은 표를 넓힌다) 열 머리와 칸이 안 맞는다.
     severity: 'warning',
   },
   {

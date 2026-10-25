@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * **구역을 그린다** — 렌더러가 구역마다 그려 `ViewProps.zones` 로, 몸통 자식마다 `items` 로 넘기고, SDK `Zone` 이 `data-wb-zone` 을 펴며 빈 구역은
- * 감싸는 요소째 안 그리는가(설계 spec `2026-10-23-node-slots-design.md` 「4. 테마 뷰 계약」). 기본 뷰 여섯(카드 · 검색폼 · 입력폼 · 목록 · 탭 ·
+ * 감싸는 요소째 안 그리는가(설계 spec `2026-10-23-node-slots-design.md` 「4. 테마 뷰 계약」). 기본 뷰 여섯(카드 · 검색폼 · 입력폼 · 그리드 · 탭 ·
  * 탭 패널)의 구역 자리를 DOM 으로 잰다.
  */
 import { cleanup, render } from '@testing-library/react'
@@ -21,7 +21,7 @@ afterEach(() => {
 const ADMIN: ViewState = { id: 's_admin', name: '관리자' }
 
 function draw(node: WbNode, options: Parameters<typeof renderDocument>[1] = {}): Element {
-  const doc: PageDocument = { version: 4, root: { id: 'page', type: 'Page', children: [node] }, viewStates: [ADMIN] }
+  const doc: PageDocument = { version: 5, root: { id: 'page', type: 'Page', children: [node] }, viewStates: [ADMIN] }
   const { container } = render(<>{renderDocument(doc, options)}</>)
   const el = container.querySelector(`[data-wb-id="${node.id}"]`)
   if (el === null) throw new Error(`${node.id} 가 안 그려졌다`)
@@ -82,7 +82,7 @@ describe('카드 — 제목 옆 · 머리 오른쪽 · 몸통 · 바닥', () => 
   })
 })
 
-describe('입력폼 · 목록', () => {
+describe('입력폼 · 그리드', () => {
   it('검색폼 — 필드 뒤 단추 구역 · 비면 단추줄째 없다 · 접히면 머리줄만(두 구역 다 빠진다)', () => {
     const form = (actions: WbNode[], collapsed = false): WbNode => ({
       id: 'sf',
@@ -115,20 +115,26 @@ describe('입력폼 · 목록', () => {
     expect(parts(draw(form([])))).toEqual(['label', 'row'])
   })
 
-  it('목록 — 머리 왼쪽 · 오른쪽은 표 머리(caption) 안 · 둘 다 비면 줄째 없다 · 몫은 구역에서 안 실린다', () => {
-    const list = (zones: WbNode['zones']): WbNode => ({ id: 'l', type: 'List', props: { items: 1 }, zones })
+  it('그리드 — 머리 왼쪽 · 오른쪽은 표 위 머리줄(스크롤 상자 밖) · 둘 다 비면 줄째 없다 · 행은 tbody · 바닥은 표 밖 · 몫은 구역에서 안 실린다', () => {
+    const grid = (zones: WbNode['zones']): WbNode => ({ id: 'l', type: 'DataGrid', children: [{ id: 'c', type: 'GridColumn' }], zones })
     const el = draw(
-      list({
+      grid({
         headStart: [{ id: 'tx', type: 'Text', props: { content: '총 3건' } }],
         headEnd: [button('x', '엑셀다운로드', { weight: 3 })],
+        rows: [{ id: 'r', type: 'GridRow' }],
+        footer: [{ id: 'pg', type: 'Pagination' }],
       }),
     )
-    expect(el.tagName).toBe('TABLE')
-    expect(el.querySelector(':scope > caption[data-wb-part="head"] [data-wb-zone="headStart"] > [data-wb-id="tx"]')).not.toBeNull()
-    expect(el.querySelector(':scope > caption [data-wb-zone="headEnd"] > [data-wb-id="x"]')).not.toBeNull()
+    expect(el.tagName).toBe('DIV')
+    expect(el.querySelector(':scope > [data-wb-part="head"] > [data-wb-zone="headStart"] > [data-wb-id="tx"]')).not.toBeNull()
+    expect(el.querySelector(':scope > [data-wb-part="head"] > [data-wb-zone="headEnd"] > [data-wb-id="x"]')).not.toBeNull()
     expect(el.querySelector('[data-wb-id="x"]')!.getAttribute('style')).toBeNull()
+    expect(el.querySelector(':scope > [data-wb-part="scroll"] > table > tbody[data-wb-zone="rows"] > tr[data-wb-id="r"]')).not.toBeNull()
+    expect(el.querySelector(':scope > [data-wb-zone="footer"] > [data-wb-id="pg"]')).not.toBeNull()
     cleanup()
-    expect(draw(list(undefined)).querySelector('caption')).toBeNull()
+    const bare = draw(grid(undefined))
+    expect(bare.querySelector('[data-wb-part="head"]')).toBeNull()
+    expect(bare.querySelector('[data-wb-zone]')).toBeNull()
   })
 })
 
@@ -144,7 +150,7 @@ describe('탭 — 패널마다 탭 머리 · 지금 패널의 내용', () => {
   const three = (active: number, extra: Partial<WbNode> = {}) =>
     tabs(active, [
       panel('p1', '기본정보', [{ id: 'k1', type: 'KeyValue' }]),
-      panel('p2', '상세정보', [{ id: 'k2', type: 'List' }], extra),
+      panel('p2', '상세정보', [{ id: 'k2', type: 'KeyValue' }], extra),
       panel('p3', '이력', [{ id: 'k3', type: 'Text' }]),
     ])
 

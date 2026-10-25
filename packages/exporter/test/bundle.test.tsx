@@ -39,7 +39,7 @@ const LIST_PAGE: PageDocument = {
           },
         ],
       },
-      { id: 'n_000000000003', type: 'List', marker: 2 },
+      { id: 'n_000000000003', type: 'DataGrid', marker: 2 },
     ],
   },
 }
@@ -427,7 +427,7 @@ describe('exportBundle — 상호작용 탭', () => {
     const lines = [...parse(fileAt(twoPages(), 'pages/회원-목록.html')).querySelectorAll('#wb-export-panel-interactions .wb-export-entry')]
     expect(lines).toHaveLength(1)
     expect(lines[0]?.getAttribute('data-wb-interaction-for')).toBe('n_000000000002')
-    expect(lines[0]?.textContent).toBe('① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
+    expect(lines[0]?.textContent).toBe('① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다')
   })
 
   it('상호작용이 없으면 없다고 말한다', () => {

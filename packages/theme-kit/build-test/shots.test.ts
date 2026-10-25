@@ -57,6 +57,13 @@ interface Report {
     pairs: { item: string | null; element: string; label: number; value: number }[]
     pairsMeasured: number
     pairsOffGrid: { item: string | null; element: string }[]
+    grids: {
+      fixed: { item: string | null; element: string; before: number; after: number }[]
+      fixedMeasured: number
+      text: { item: string | null; element: string }[]
+      capture: { item: string | null; element: string; scrollWidth: number; clientWidth: number; tableRight: number; pageWidth: number }[]
+      captureMeasured: number
+    }
   }[]
 }
 
@@ -82,7 +89,7 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
   })
   afterAll(() => rmSync(TMP, { recursive: true, force: true }))
 
-  it('system-admin 을 두 폭으로 찍는다 — 폭마다 전체 페이지 PNG · report.json 에 콘솔 오류 · 폴백 0', () => {
+  it('system-admin 을 세 폭으로 찍는다 — 폭마다 전체 페이지 PNG · report.json 에 콘솔 오류 · 폴백 0', () => {
     const dir = join(out, 'admin')
     const { status, out: printed } = shots(join(repoRoot, 'system-themes/admin'), [
       '--entry',
@@ -90,13 +97,13 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
       '--out',
       dir,
       '--widths',
-      '390,1280',
+      '390,720,1280',
       '--browser',
       browser.path!,
     ])
     const report = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as Report
     expect(report.theme.id).toBe('system-admin')
-    expect(report.widths.map((w) => w.width)).toEqual([390, 1280])
+    expect(report.widths.map((w) => w.width)).toEqual([390, 720, 1280])
     for (const w of report.widths) {
       expect(w.pngs.length, printed).toBeGreaterThan(0)
       const sizes = w.pngs.map((png) => pngSize(join(dir, png)))
@@ -115,9 +122,48 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
       expect(w.pairs, `${w.width}px ${JSON.stringify(w.pairs)}`).toEqual([])
       if (w.width === 1280) expect(w.pairsMeasured).toBeGreaterThan(5)
       expect(w.pairsOffGrid, `${w.width}px ${JSON.stringify(w.pairsOffGrid)}`).toEqual([])
+      // 그리드 — 고정 열이 굴려도 제자리 · 칸 글이 칸 안 · 찍는 판에서 표 전체 폭. 고정 열은 640 위(PPTX 캡처 폭 720)에서 잰다 — 390 은 기본테마가 푼다.
+      expect(w.grids.fixed, `${w.width}px ${JSON.stringify(w.grids.fixed)}`).toEqual([])
+      expect(w.grids.text, `${w.width}px ${JSON.stringify(w.grids.text)}`).toEqual([])
+      expect(w.grids.capture, `${w.width}px ${JSON.stringify(w.grids.capture)}`).toEqual([])
+      expect(w.grids.captureMeasured).toBeGreaterThan(5)
+      if (w.width === 720) expect(w.grids.fixedMeasured).toBeGreaterThan(0)
+      if (w.width === 390) expect(w.grids.fixedMeasured).toBe(0)
     }
     // 종료 코드는 넘침 · 꺾임까지 센다 — 둘 다 없으면 0 이다.
     expect(status).toBe(report.widths.every((w) => w.overflow.length === 0 && w.wrapped.length === 0) ? 0 : 1)
+  })
+
+  /** 그리드 잣대 셋이 0 만 내지 않는가 — 한 곳씩 깬 테마 CSS(고정 열의 `left` 를 걷음 · 표를 제 상자로 굴림 · 좁게 고정한 칸에 줄 안 바꾸는 글). */
+  it.each([
+    ['고정 열', '[data-wb-component="DataGrid"] [data-wb-fixed] { left: auto !important; }', 'fixed', '고정 열'],
+    // 표를 제 상자로 굴린다 — 폭을 상자 폭(`auto`)으로 되돌려야 표가 제 안에서 굴러간다(SDK 기본 표 폭은 칸 글 폭 `max-content` 다).
+    [
+      '찍는 판',
+      '[data-wb-component="DataGrid"] [data-wb-part="table"] { display: block; overflow-x: auto; width: auto; }',
+      'capture',
+      '찍는 판',
+    ],
+    [
+      '칸 글',
+      '[data-wb-component="DataGrid"] [data-wb-part="table"] { table-layout: fixed; width: 300px; } [data-wb-component="DataGrid"] th { white-space: nowrap; }',
+      'text',
+      '칸 글',
+    ],
+  ] as const)('그리드 %s 이 어긋나면 report.json 에 적고 1 로 끝난다', (name, css, key, said) => {
+    const root = mkdtempSync(join(TMP, `shots-grid-${key}-`))
+    cpSync(FIXTURE, root, { recursive: true })
+    appendFileSync(join(root, 'src/theme.css'), `\n${css}\n`)
+    const dir = join(out, `grid-${key}`)
+    const { status, out: printed } = shots(root, ['--out', dir, '--widths', '720', '--browser', browser.path!])
+    expect(status, printed).toBe(1)
+    const [w] = (JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as Report).widths
+    expect(w!.grids[key].length, `${name} ${printed}`).toBeGreaterThan(0)
+    expect(
+      w!.grids[key].every((entry) => entry.item?.startsWith('DataGrid/') || entry.item?.startsWith('Grid')),
+      JSON.stringify(w!.grids[key]),
+    ).toBe(true)
+    expect(printed).toContain(said)
   })
 
   /** 꺾임을 재는 자가 0 만 내지 않는가 — 날짜 칸을 안내보다 좁게 둔 테마에서 그 표본이 꺾임으로 적힌다(«YYYY-MM-DD» 는 하이픈 뒤에서 꺾인다). */
@@ -154,7 +200,7 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
     expect(status, printed).toBe(1)
     const [w] = (JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as Report).widths
     // 긴 페이지는 구간마다 한 장 — 높이의 합이 문서 높이다(한 장으로 찍으면 16384px 부근부터 내용이 틀린다).
-    expect(w!.pngs).toEqual(['sample-390-1.png', 'sample-390-2.png', 'sample-390-3.png', 'sample-390-4.png'].slice(0, w!.pngs.length))
+    expect(w!.pngs).toEqual(Array.from({ length: w!.pngs.length }, (_, index) => `sample-390-${index + 1}.png`))
     expect(w!.pngs.length).toBeGreaterThanOrEqual(3)
     const sizes = w!.pngs.map((png) => pngSize(join(dir, png)))
     expect(sizes.every((size) => size.width === 390 && size.height <= 8000)).toBe(true)

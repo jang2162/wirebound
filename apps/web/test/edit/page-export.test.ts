@@ -20,7 +20,7 @@ const PAGE: PageDetail = {
   headSeq: 3,
   schema: {
     version: 1,
-    root: { id: 'n_root', type: 'Page', children: [{ id: 'n_list', type: 'List', marker: 1 }] },
+    root: { id: 'n_root', type: 'Page', children: [{ id: 'n_list', type: 'DataGrid', marker: 1 }] },
   },
 }
 

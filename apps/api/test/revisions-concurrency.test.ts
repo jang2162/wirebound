@@ -276,7 +276,7 @@ describe('편집 seq 채번의 동시성', () => {
         method: 'PUT',
         url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/schema`,
         cookies: fx.owner.cookie,
-        payload: { schema: { version: 4, root: { id: 'n_put_root', type: 'Page', children: [] } } },
+        payload: { schema: { version: 5, root: { id: 'n_put_root', type: 'Page', children: [] } } },
       })
 
       await waitForLockWaiter()

@@ -38,7 +38,7 @@ const DOC: PageDocument = {
   root: {
     id: 'n_000000000001',
     type: 'Page',
-    children: [{ id: 'n_000000000002', type: 'List' }],
+    children: [{ id: 'n_000000000002', type: 'DataGrid' }],
   },
 }
 
@@ -59,7 +59,7 @@ describe('설치 없이 부르면 무엇이 관찰되는가', () => {
     const html = renderToStaticMarkup(renderDocument(DOC, { theme: NO_THEME, onNodeError: (error) => errors.push(error) }))
 
     expect(errors).toEqual([
-      { nodeId: 'n_000000000002', type: 'List', message: '알 수 없는 컴포넌트 타입: List' },
+      { nodeId: 'n_000000000002', type: 'DataGrid', message: '알 수 없는 컴포넌트 타입: DataGrid' },
       { nodeId: 'n_000000000001', type: 'Page', message: '알 수 없는 컴포넌트 타입: Page' },
     ])
     expect(html).toContain('data-wb-error="알 수 없는 컴포넌트 타입: Page"')
@@ -120,7 +120,7 @@ describe('카탈로그가 없을 때 validatePage는 시끄럽다', () => {
       id: 'n_000000000001',
       type: 'Page',
       children: [
-        { id: 'n_000000000002', type: 'List', props: { 없는프롭: 1 } },
+        { id: 'n_000000000002', type: 'DataGrid', props: { 없는프롭: 1 } },
         { id: 'n_000000000003', type: 'Text', props: { content: 'ㄱ' } },
       ],
     },

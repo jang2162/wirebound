@@ -64,7 +64,8 @@ describe.skipIf(!전제.ok)('설정 «테마» — 지금 테마 요약의 이�
 
   it('옛 판에 고정한 프로젝트 — 이름은 숨기지 않은 최신판의 것이다', async () => {
     const bytes = readFileSync(OLD_ADMIN)
-    const old = readWbtheme(new Uint8Array(bytes)).files!.manifest
+    // 저장된 옛 판이다 — 그 manifest 는 카탈로그가 걷은 `List` 를 선언한다(`readWbtheme` 의 `stored`).
+    const old = readWbtheme(new Uint8Array(bytes), { stored: true }).files!.manifest
     await stack.query(
       `insert into theme_packages (theme_id, version, name, description, sdk_range, manifest, files, size, sha256, uploaded_by)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, null)`,

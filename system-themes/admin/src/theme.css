@@ -3,8 +3,8 @@
  * 옛 JSON 테마 `admin` 의 토큰 · 스킨이 출발점이다(원본: `git show b2766e8c^:packages/themes/src/system/admin.ts` — 이웃 테마와
  * «무엇이 다른가» 는 같은 판의 `portal.ts` 머리말이 admin 을 기준으로 적는다).
  *
- * 옛 admin 이 고른 구조 이름(`Tabs:underline` · `SearchForm:inline` · `EntryForm:labelLeft` · `List:table`)의 모양(밑줄 · 한 줄 · 라벨 왼쪽 ·
- * 격자선)은 이 파일이 세운다 — 기본 뷰의 DOM 은 그 이름(`data-wb-structure`)만 갖고 모양을 그리지 않는다.
+ * 옛 admin 이 고른 구조 이름(`Tabs:underline` · `SearchForm:inline` · `EntryForm:labelLeft`)의 모양(밑줄 · 한 줄 · 라벨 왼쪽)과 그리드의
+ * 격자선은 이 파일이 세운다 — 기본 뷰의 DOM 은 그 이름(`data-wb-structure`)만 갖고 모양을 그리지 않는다.
  *
  * `:root` 의 변수 가운데 manifest(`src/manifest.ts`) 토큰의 자리는 토큰 키의 `.` 을 `-` 로 바꾼 이름이다(`semantic.primary` →
  * `--wb-semantic-primary`). 이름을 바꾸면 토큰 편집이 조용히 안 닿는다 — `test/admin.test.ts` 가 이름 · 기본값을 대조한다. 토큰 시트는 이
@@ -207,55 +207,86 @@
 
 /* ── 데이터 ───────────────────────────────────────────────────────────── */
 
-/* 표 — 바깥 테두리 · 행마다 아래 실선 · 왼쪽 정렬 머리. 뷰는 SDK 기본 뷰(체크 칸 · 빈 줄 · 막대 조각을 낸다). */
-/* 결과 머리줄(`caption` — «총 N건» · 엑셀 다운로드) — 표 위에 붙는다. 표의 테두리 밖이다(`caption` 은 표 상자 위에 선다). */
-[data-wb-component="List"] > [data-wb-part="head"] {
-  padding-bottom: var(--wb-space-2);
-  color: var(--wb-semantic-text);
-}
-[data-wb-component="List"] [data-wb-part="headRow"] {
-  gap: var(--wb-space-2);
-}
-[data-wb-component="List"][data-wb-structure="table"] {
-  width: 100%;
-  border-collapse: collapse;
-  border: 1px solid var(--wb-semantic-border);
-  background: var(--wb-semantic-surface);
+/*
+ * 그리드 — 표에 바깥 선 · 칸마다 아래 선, 머리는 옅은 바탕 · 작은 굵은 글 · 칸 선(병합 머리가 읽히게), 짝수 줄 옅은 바탕. 결과 머리줄(«총 N건» ·
+ * 엑셀 다운로드)과 바닥(페이지네이션 바)은 스크롤 상자 밖이라 창 폭을 따르고 표만 가로로 굴러간다. 뷰는 SDK 기본 뷰다(선택 칸 · 번호 · 빈 줄 · 막대 ·
+ * 생략 띠 조각을 낸다). 행 꼴(`GridRow` 의 `tone`)은 줄 바탕, 열 음영(`GridColumn` 의 `tone` — 머리 칸과 몸 칸이 같은 표지를 싣는다)은 칸 바탕이다.
+ */
+[data-wb-component="DataGrid"][data-wb-structure="default"] {
   color: var(--wb-semantic-text);
   font-size: var(--wb-typography-body-fontSize);
   line-height: var(--wb-typography-body-lineHeight);
   font-weight: var(--wb-typography-body-fontWeight);
 }
-[data-wb-component="List"] [data-wb-part="header"] {
+[data-wb-component="DataGrid"] > [data-wb-part="head"] {
+  padding-bottom: var(--wb-space-2);
+  gap: var(--wb-space-2);
+}
+[data-wb-component="DataGrid"] > [data-wb-part="head"] > * {
+  gap: var(--wb-space-2);
+}
+[data-wb-component="DataGrid"] > [data-wb-part="footer"] {
+  padding-top: var(--wb-space-3);
+}
+[data-wb-component="DataGrid"] [data-wb-part="table"] {
+  border: 1px solid var(--wb-semantic-border);
+  background: var(--wb-semantic-surface);
+}
+[data-wb-component="DataGrid"] [data-wb-part="table"] > * > tr > [data-wb-part] {
+  padding: var(--wb-space-2) var(--wb-space-3);
+  border-bottom: 1px solid var(--wb-semantic-border);
+}
+[data-wb-component="DataGrid"] [data-wb-part="header"] > tr > * {
   background: var(--wb-semantic-canvas);
   color: var(--wb-semantic-textMuted);
   font-size: var(--wb-typography-h6-fontSize);
   line-height: var(--wb-typography-h6-lineHeight);
   font-weight: var(--wb-typography-h6-fontWeight);
+  border: 1px solid var(--wb-semantic-border);
 }
-[data-wb-component="List"] [data-wb-part="cell"] {
-  padding-left: var(--wb-space-3);
-  padding-right: var(--wb-space-3);
-  padding-top: var(--wb-space-2);
-  padding-bottom: var(--wb-space-2);
-  border-bottom: 1px solid var(--wb-semantic-border);
-  text-align: left;
-  font-weight: inherit;
-}
-[data-wb-component="List"] [data-wb-part="rowAlt"] {
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr:nth-child(even) {
   background: var(--wb-semantic-canvas);
 }
-[data-wb-component="List"] [data-wb-part="pagination"] {
-  padding-top: var(--wb-space-3);
-  padding-bottom: var(--wb-space-3);
+/* 셀 틀 조각 사이는 간격 단위로. */
+[data-wb-component="DataGrid"] [data-wb-part="pieces"] {
+  gap: var(--wb-space-2);
+}
+[data-wb-component="DataGrid"] [data-wb-cell="number"] {
   text-align: center;
   color: var(--wb-semantic-textMuted);
-  word-spacing: var(--wb-space-2);
 }
-[data-wb-component="List"] [data-wb-cell="check"] {
-  width: 1px;
+/* 열 폭 — 길이가 아니라 설계의 낱말(짧은 칸 · 보통 · 긴 칸)이다. 넓은 표는 이 폭을 지키고 표 칸이 가로로 굴러간다. */
+[data-wb-component="GridColumn"][data-wb-size="short"] {
+  width: 6em;
+  min-width: 6em;
 }
-[data-wb-component="List"] [data-wb-part="checkbox"] {
+[data-wb-component="GridColumn"][data-wb-size="medium"] {
+  width: 10em;
+  min-width: 10em;
+}
+[data-wb-component="GridColumn"][data-wb-size="long"] {
+  width: 16em;
+  min-width: 16em;
+}
+/* 필수 별은 머리 글 앞 · 정렬 표시는 머리 글 뒤. */
+[data-wb-component="GridColumn"] > [data-wb-part="required"] {
+  margin-right: var(--wb-space-1);
+  color: var(--wb-semantic-danger);
+}
+[data-wb-component="GridColumn"] > [data-wb-part="sort"] {
+  margin-left: var(--wb-space-1);
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-caption-fontSize);
+}
+[data-wb-component="GridColumn"][data-wb-sort="asc"] > [data-wb-part="sort"],
+[data-wb-component="GridColumn"][data-wb-sort="desc"] > [data-wb-part="sort"] {
+  color: var(--wb-semantic-primary);
+}
+[data-wb-component="DataGrid"] [data-wb-part="table"] [data-wb-tone="shaded"]:is(th, td) {
+  background: var(--wb-semantic-canvas);
+}
+[data-wb-component="DataGrid"] [data-wb-part="checkbox"],
+[data-wb-component="DataGrid"] [data-wb-part="radio"] {
   display: inline-block;
   vertical-align: middle;
   width: 14px;
@@ -265,38 +296,117 @@
   border-radius: var(--wb-radius-sm);
   background: var(--wb-semantic-surface);
 }
-[data-wb-component="List"] [data-wb-part="empty"] {
+[data-wb-component="DataGrid"] [data-wb-part="radio"] {
+  border-radius: 50%;
+}
+[data-wb-component="DataGrid"] [data-wb-part="empty"] {
   padding-top: var(--wb-space-8);
   padding-bottom: var(--wb-space-8);
   text-align: center;
   color: var(--wb-semantic-textMuted);
 }
-[data-wb-component="List"] [data-wb-part="skeleton"] {
+[data-wb-component="DataGrid"] [data-wb-part="skeleton"] {
   display: block;
+  width: auto;
   height: 0.75em;
   border-radius: var(--wb-radius-sm);
   background: var(--wb-semantic-border);
+  opacity: 1;
 }
-[data-wb-component="List"][data-wb-variant="featured"] {
+/* 생략 띠 — 줄이 이어진다는 표시. 지그재그 대신 빗금 바탕이다. */
+[data-wb-component="DataGrid"] [data-wb-part="gap"] {
+  padding-top: var(--wb-space-1);
+  padding-bottom: var(--wb-space-1);
+  text-align: center;
+  color: var(--wb-semantic-textMuted);
+  background: repeating-linear-gradient(135deg, transparent 0 6px, var(--wb-semantic-border) 6px 7px);
+}
+/* 행 꼴 — 강조(선택 칸 켬) · 흐림(선택 칸 끔 — 휴일 행) · 음영. 합계 행은 굵은 글 · 윗선. 짝수 줄 바탕보다 뒤에 와 이긴다. */
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="selected"] {
+  background: var(--wb-semantic-primarySoft);
+}
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="selected"] :is([data-wb-part="checkbox"], [data-wb-part="radio"]) {
+  background: var(--wb-semantic-primary);
+  border-color: var(--wb-semantic-primary);
+  box-shadow: inset 0 0 0 3px var(--wb-semantic-surface);
+}
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="shaded"] {
+  background: var(--wb-semantic-canvas);
+}
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="dimmed"] {
+  color: var(--wb-semantic-textMuted);
+  opacity: 1;
+}
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="dimmed"] :is([data-wb-part="checkbox"], [data-wb-part="radio"]) {
+  background: var(--wb-semantic-border);
+}
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-kind="total"] > * {
+  border-top: 2px solid var(--wb-semantic-borderStrong);
+  font-weight: var(--wb-typography-h6-fontWeight);
+}
+/*
+ * 고정 열 — 가로로 굴려도 제자리다(왼쪽 자리는 SDK 기본 뷰가 잰다). 칸 바탕이 비면 뒤로 지나는 칸 글이 비친다 — 줄 바탕(짝수 줄 · 행 꼴)을 칸에도
+ * 깔고, 고정 구역 끝 칸은 오른쪽에 짙은 선을 긋는다.
+ */
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr > [data-wb-fixed] {
+  background: var(--wb-semantic-surface);
+}
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr:nth-child(even) > [data-wb-fixed],
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="shaded"] > [data-wb-fixed] {
+  background: var(--wb-semantic-canvas);
+}
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="selected"] > [data-wb-fixed] {
+  background: var(--wb-semantic-primarySoft);
+}
+[data-wb-component="DataGrid"] [data-wb-part="table"] [data-wb-fixed="last"] {
+  box-shadow: inset -1px 0 0 var(--wb-semantic-borderStrong);
+}
+/* 고정 구역이 스크롤 상자보다 넓어 SDK 가 고정을 푼 표(`data-wb-fixed-off`)는 고정 구역 끝 선도 걷는다 — 칸이 표와 함께 굴러간다. */
+[data-wb-component="DataGrid"] [data-wb-part="table"][data-wb-fixed-off] [data-wb-fixed="last"] {
+  box-shadow: none;
+}
+[data-wb-component="DataGrid"][data-wb-variant="featured"] [data-wb-part="table"] {
   border-top: 2px solid var(--wb-semantic-primary);
 }
-[data-wb-component="List"][data-wb-variant="featured"] [data-wb-part="header"] {
+[data-wb-component="DataGrid"][data-wb-variant="featured"] [data-wb-part="header"] > tr > * {
   background: var(--wb-semantic-primarySoft);
   color: var(--wb-semantic-primary);
 }
-[data-wb-component="List"][data-wb-variant="compact"] [data-wb-part="cell"] {
+[data-wb-component="DataGrid"][data-wb-variant="compact"] [data-wb-part="table"] > * > tr > [data-wb-part] {
   padding-top: var(--wb-space-1);
   padding-bottom: var(--wb-space-1);
 }
-[data-wb-component="List"][data-wb-state~="selected"] [data-wb-part="row"] {
-  background: var(--wb-semantic-primarySoft);
+
+/* 페이지네이션 바 — 왼쪽 행 수 셀렉트 · 가운데 쪽 번호(지금 쪽 밑줄) · 오른쪽 범위 글. */
+[data-wb-component="Pagination"][data-wb-structure="default"] {
+  gap: var(--wb-space-3);
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
 }
-[data-wb-component="List"][data-wb-state~="selected"] [data-wb-part="row"] [data-wb-part="checkbox"] {
-  background: var(--wb-semantic-primary);
-  border-color: var(--wb-semantic-primary);
+[data-wb-component="Pagination"] > [data-wb-part="pages"] {
+  gap: var(--wb-space-2);
 }
-[data-wb-component="List"][data-wb-state~="disabled"] {
-  opacity: 0.5;
+[data-wb-component="Pagination"] > [data-wb-part="pages"] > * {
+  min-width: 1.5em;
+  text-align: center;
+}
+[data-wb-component="Pagination"] [data-wb-part="page"][aria-current="page"] {
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="Pagination"] [data-wb-part="sizeSelect"] {
+  display: inline-flex;
+  align-items: center;
+  min-height: calc(var(--wb-space-unit) * 7);
+  padding: 0 var(--wb-space-2);
+  border: 1px solid var(--wb-semantic-border);
+  border-radius: var(--wb-radius-sm);
+  background: var(--wb-semantic-surface);
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="Pagination"] > [data-wb-part="range"] {
+  font-size: var(--wb-typography-caption-fontSize);
+  white-space: nowrap;
 }
 
 /* 트리 — 글머리표 없이 들여쓰기만. 들여쓰기(`padding-left`)는 SDK 기본 CSS 가 단계 × `--wb-tree-indent` 로 건다 — 여기서 `padding` 을 통째로 쓰면 그것을 덮는다. */
@@ -1020,6 +1130,20 @@
 /* ── 좁은 폭 ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
+  /* 그리드의 고정 열을 푼다 — 고정 열이 390 폭 창의 대부분을 먹어 굴릴 칸이 안 보인다(설계 «6»). 표는 그대로 가로로 굴러간다. */
+  [data-wb-component="DataGrid"] [data-wb-part="table"] [data-wb-fixed] {
+    position: static;
+    box-shadow: none;
+  }
+  /* 바는 쪽 번호 줄과 행 수 · 범위 줄로 접힌다. */
+  [data-wb-component="Pagination"][data-wb-structure="default"] {
+    flex-wrap: wrap;
+  }
+  [data-wb-component="Pagination"] > [data-wb-part="pages"] {
+    order: -1;
+    flex-basis: 100%;
+    justify-content: center;
+  }
   [data-wb-component="Section"][data-wb-structure="contained"] {
     padding-top: var(--wb-space-4);
     padding-bottom: var(--wb-space-4);

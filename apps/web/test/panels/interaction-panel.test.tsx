@@ -13,13 +13,13 @@ import { deselect, openPage, PAGE_ID, pageDetail, pageDoc } from '../editor-harn
 import '../../src/catalog-setup'
 import { structureRowName } from './tree-row'
 
-/** 버튼 하나와 목록 하나. 버튼이 트리거, 목록이 타겟이다. */
+/** 버튼 하나와 그리드 하나. 버튼이 트리거, 그리드가 타겟이다. */
 const DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
   children: [
     { id: 'n-btn', type: 'Button', props: { label: '검색' }, marker: 1 },
-    { id: 'n-list', type: 'List', marker: 2 },
+    { id: 'n-list', type: 'DataGrid', marker: 2 },
     {
       id: 'n-tabs',
       type: 'Tabs',
@@ -43,7 +43,7 @@ const DOC_WITH_RULE = pageDoc({
       marker: 1,
       interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
     },
-    { id: 'n-list', type: 'List', marker: 2 },
+    { id: 'n-list', type: 'DataGrid', marker: 2 },
   ],
 })
 
@@ -107,7 +107,7 @@ describe('상호작용 탭 — 자리', () => {
     deselect()
     await openInteractionTab()
 
-    expect(sentences()).toContain('① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
+    expect(sentences()).toContain('① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다')
   })
 
   it('규칙이 하나도 없으면 그렇다고 말한다', async () => {
@@ -158,7 +158,7 @@ describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () =
     await openWithRule()
 
     const select = screen.getByLabelText('대상') as HTMLSelectElement
-    expect([...select.options].map((option) => option.textContent)).toEqual(['— 대상을 고르세요 —', '페이지', '① 검색 버튼', '② 목록'])
+    expect([...select.options].map((option) => option.textContent)).toEqual(['— 대상을 고르세요 —', '페이지', '① 검색 버튼', '② 그리드'])
   })
 
   /**
@@ -171,7 +171,7 @@ describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () =
         id: 'n-root',
         type: 'Page',
         children: [
-          { id: 'n-list', type: 'List', visibility: { mode: 'except', states: ['s_guest'] } },
+          { id: 'n-list', type: 'DataGrid', visibility: { mode: 'except', states: ['s_guest'] } },
           {
             id: 'n-btn',
             type: 'Button',
@@ -198,7 +198,7 @@ describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () =
     const labels = [...select.options].map((option) => option.textContent)
     expect(labels).toContain("'검색 버튼'(관리자 상태)")
     expect(labels).toContain("'승인 버튼'(관리자 · 손님 상태)")
-    expect(labels).toContain('목록')
+    expect(labels).toContain('그리드')
   })
 
   /** **`setProp`의 속성도 목록이다** — 카탈로그의 `editor`에서 온다(속성 패널과 같은 출처). */
@@ -207,7 +207,7 @@ describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () =
 
     const select = screen.getByLabelText('속성') as HTMLSelectElement
     expect([...select.options].map((option) => option.textContent)).toContain('로딩 상태')
-    expect([...select.options].map((option) => option.textContent)).toContain('항목 수')
+    expect([...select.options].map((option) => option.textContent)).toContain('고정 열 수')
   })
 })
 
@@ -222,7 +222,7 @@ describe('상호작용 탭 — 문장', () => {
     selectNode('Button')
 
     // 저작 자리와 목록 둘 다 같은 문장을 낸다 — 만드는 함수가 하나이기 때문이다.
-    expect(sentences().filter((text) => text === '① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')).toHaveLength(2)
+    expect(sentences().filter((text) => text === '① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다')).toHaveLength(2)
   })
 
   /**
@@ -335,9 +335,9 @@ describe('상호작용 탭 — 숫자 값 칸', () => {
         type: 'Button',
         props: { label: '검색' },
         marker: 1,
-        interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'items', value: 3 }] }],
+        interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'fixedColumns', value: 3 }] }],
       },
-      { id: 'n-list', type: 'List', marker: 2 },
+      { id: 'n-list', type: 'DataGrid', marker: 2 },
     ],
   })
 

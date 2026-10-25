@@ -19,10 +19,10 @@ const OK = {
     },
   },
   components: {
-    List: {
+    DataGrid: {
       variants: [
         { id: 'table', label: '표' },
-        { id: 'cards', label: '카드', hideProps: ['columns'] },
+        { id: 'cards', label: '카드', hideProps: ['fixedColumns'] },
       ],
       defaultVariant: 'table',
     },
@@ -104,21 +104,21 @@ describe('validateManifest', () => {
       '카탈로그에 없는 컴포넌트',
       'unknown-component',
       edit((m) => {
-        m.components.Carousel = m.components.List
+        m.components.Carousel = m.components.DataGrid
       }),
     ],
     [
       '걷은 상태 영역 — 카탈로그에 없다',
       'unknown-component',
       edit((m) => {
-        m.components.StateSwitch = m.components.List
+        m.components.StateSwitch = m.components.DataGrid
       }),
     ],
     [
       '걷은 상태 가지 — 카탈로그에 없다',
       'unknown-component',
       edit((m) => {
-        m.components.StateCase = m.components.List
+        m.components.StateCase = m.components.DataGrid
       }),
     ],
     [
@@ -132,21 +132,21 @@ describe('validateManifest', () => {
       'variant id 가 겹치면',
       'duplicate-variant',
       edit((m) => {
-        m.components.List.variants.push({ id: 'table', label: '또' })
+        m.components.DataGrid.variants.push({ id: 'table', label: '또' })
       }),
     ],
     [
       'defaultVariant 가 목록 밖',
       'default-variant-missing',
       edit((m) => {
-        m.components.List.defaultVariant = 'grid'
+        m.components.DataGrid.defaultVariant = 'grid'
       }),
     ],
     [
       'hideProps 가 그 컴포넌트의 prop 이 아니면',
       'unknown-hide-prop',
       edit((m) => {
-        m.components.List.variants[1].hideProps = ['nope']
+        m.components.DataGrid.variants[1].hideProps = ['nope']
       }),
     ],
   ])('%s → %s', (_label, code, raw) => {
@@ -158,7 +158,7 @@ describe('validateManifest', () => {
   it('첫 이슈에서 멈추지 않는다 — 여럿을 한 번에 말한다', () => {
     const raw = edit((m) => {
       m.version = 'x'
-      m.components.List.defaultVariant = 'grid'
+      m.components.DataGrid.defaultVariant = 'grid'
     })
     expect(codes(raw)).toEqual(expect.arrayContaining(['bad-version', 'default-variant-missing']))
   })
@@ -166,10 +166,10 @@ describe('validateManifest', () => {
   it('이슈는 path 로 자리를 가리킨다', () => {
     const r = validateManifest(
       edit((m) => {
-        m.components.List.variants[1].hideProps = ['nope']
+        m.components.DataGrid.variants[1].hideProps = ['nope']
       }),
     )
-    expect(r.issues[0]!.path).toBe('components.List.variants.1.hideProps.0')
+    expect(r.issues[0]!.path).toBe('components.DataGrid.variants.1.hideProps.0')
   })
 
   it('카탈로그를 안 깔아도 검증이 선다', () => {
@@ -179,5 +179,41 @@ describe('validateManifest', () => {
     } finally {
       installCatalog()
     }
+  })
+})
+
+/**
+ * **저장된 패키지를 다시 읽는 판(`stored`)** — 카탈로그에 기대는 검사(걷힌 타입 · 변형을 prop 에서 짓는 타입 · 없는 prop 감추기) 셋만 안 본다. 그 판은
+ * 올린 때의 카탈로그로 검사를 지났다(기본테마 1.6.0 의 `List` — 문서 판 5 가 걷었다). 모양 · 판 · 토큰 검사는 그대로다.
+ */
+describe('validateManifest — 저장된 패키지(stored)', () => {
+  const legacy = () => ({
+    ...structuredClone(OK),
+    components: {
+      List: { variants: [{ id: 'table', label: '표', hideProps: ['columns'] }], defaultVariant: 'table' },
+      Text: { variants: [{ id: 'big', label: '크게' }], defaultVariant: 'big' },
+      DataGrid: { variants: [{ id: 'table', label: '표', hideProps: ['없는prop'] }], defaultVariant: 'table' },
+    },
+  })
+
+  it('올리기 판은 셋을 거절하고 저장 판은 받는다', () => {
+    expect(
+      validateManifest(legacy())
+        .issues.map((i) => i.code)
+        .sort(),
+    ).toEqual(['unknown-component', 'unknown-hide-prop', 'variant-from-component'])
+    const stored = validateManifest(legacy(), { stored: true })
+    expect(stored.issues).toEqual([])
+    expect(stored.manifest).not.toBeNull()
+  })
+
+  it('저장 판도 카탈로그와 무관한 검사는 그대로다 — 판 · 기본 변형', () => {
+    const broken = { ...legacy(), version: '1.0' }
+    broken.components.DataGrid.defaultVariant = '없는'
+    expect(
+      validateManifest(broken, { stored: true })
+        .issues.map((i) => i.code)
+        .sort(),
+    ).toEqual(['bad-version', 'default-variant-missing'])
   })
 })

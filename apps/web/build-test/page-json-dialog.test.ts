@@ -334,7 +334,7 @@ function pageFile(title: string): string {
     wireboundVersion: '1',
     page: { title, description: null },
     schema: {
-      version: 4,
+      version: 5,
       root: { id: 'file_root', type: 'Page', children: [{ id: 'file_text', type: 'Text', props: { content: '본문' } }] },
     },
     comments: [{ nodeId: 'file_text', body: '가' }],

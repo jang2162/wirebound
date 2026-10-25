@@ -308,7 +308,7 @@ describe('GET /api/projects/:projectId/tree', () => {
         .updateTable('pages')
         .set({
           schema: JSON.stringify({
-            version: 4,
+            version: 5,
             viewStates: [{ id: 's_ok', name: '됨' }, { id: 7 }, 'x'],
             root: { id: 'r', type: 'Page' },
           }) as never,
@@ -347,7 +347,7 @@ describe('완료 판정: 한 줄기 시나리오', () => {
       // 4. editor가 페이지를 만든다
       const page = await createPage(ctx, editor.cookie, project.id, childMenu.id, { title: '권한 목록' })
 
-      // 5. editor가 실제 컴포넌트가 든 스키마를 PUT 한다 (SearchForm + List) — 빈
+      // 5. editor가 실제 컴포넌트가 든 스키마를 PUT 한다 (SearchForm + DataGrid) — 빈
       // Page 하나만 넣으면 카탈로그 게이트를 진짜로 통과시키는지 검증하지 못한다.
       const schema = {
         version: CURRENT_DOCUMENT_VERSION,
@@ -358,8 +358,17 @@ describe('완료 판정: 한 줄기 시나리오', () => {
             { id: 'n_search', type: 'SearchForm', props: { collapsed: false }, children: [] },
             {
               id: 'n_list',
-              type: 'List',
-              props: { items: 10, columns: ['이름', '이메일', '역할'], pagination: true },
+              type: 'DataGrid',
+              props: { select: 'check' },
+              children: [
+                { id: 'n_col_name', type: 'GridColumn', props: { label: '이름' } },
+                { id: 'n_col_mail', type: 'GridColumn', props: { label: '이메일' } },
+                { id: 'n_col_role', type: 'GridColumn', props: { label: '역할' } },
+              ],
+              zones: {
+                rows: [{ id: 'n_row', type: 'GridRow', props: { repeat: 10 } }],
+                footer: [{ id: 'n_pages', type: 'Pagination' }],
+              },
             },
           ],
         },

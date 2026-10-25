@@ -30,8 +30,8 @@ describe('manifest 이름 입력', () => {
     ['tokens.items', '"tokens":{"items":{"__proto__":{"type":"color","label":"x","default":"#000"}}}', 'tokens.items.__proto__'],
     [
       '깊은 자리',
-      '"tokens":{"items":{}},"components":{"List":{"variants":[{"id":"a","label":"a","__proto__":{}}],"defaultVariant":"a"}}',
-      'components.List.variants.0.__proto__',
+      '"tokens":{"items":{}},"components":{"DataGrid":{"variants":[{"id":"a","label":"a","__proto__":{}}],"defaultVariant":"a"}}',
+      'components.DataGrid.variants.0.__proto__',
     ],
   ])('%s 의 __proto__ 키를 모양 검사 전에 그 자리로 가리킨다', (_label, json, path) => {
     expect(issuesOf(json)).toEqual([['shape', path]])

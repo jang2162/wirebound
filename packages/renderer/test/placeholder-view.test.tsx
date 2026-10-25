@@ -19,7 +19,7 @@ afterEach(() => {
 
 function draw(node: Record<string, unknown>): HTMLElement {
   const doc = {
-    version: 4,
+    version: 5,
     root: { id: 'page', type: 'Page', children: [{ id: 'ph', type: 'Placeholder', ...node }] },
   } as unknown as PageDocument
   const { container } = render(<>{renderDocument(doc)}</>)

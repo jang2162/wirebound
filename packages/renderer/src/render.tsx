@@ -18,6 +18,7 @@ import {
 import {
   AssetProvider,
   DEFAULT_VIEWS,
+  gridLayout,
   type AssetResolver,
   type NodeBinding,
   type ThemeDefinition,
@@ -126,8 +127,26 @@ interface RevealPlan {
   uncached: ReadonlySet<string>
 }
 
-/** 렌더 옵션 + 푼 `reveal`. */
-type Options = RenderOptions & { revealPlan?: RevealPlan }
+/**
+ * 렌더 옵션 + 푼 `reveal` + 사본(`ViewItem.copy`) · 그리드 칸의 필드 이름. 셋 다 렌더러 안에서만 나른다.
+ *
+ * - `copy` — 이 서브트리를 사본으로 그린다: 노드마다 `data-wb-id` 대신 `data-wb-copy-of`, 뷰의 `nodeId` 는 `<id>~<key>`, 입력 조각의 접근 이름에
+ *   « (row행)». 사본 안에서 다시 사본을 그리면 열쇠가 이어 붙는다(`copyOptions`).
+ * - `cellNames` — 그리드 제 칸(`GridCell`) id → 그 칸이 앞에서 덮는 열의 머리 이름. 칸 몸통의 입력 조각이 필드 이름으로 받는다(`fieldNames`).
+ */
+type Options = RenderOptions & { revealPlan?: RevealPlan; copy?: CopyMode; cellNames?: ReadonlyMap<string, string> }
+
+/** 사본으로 그리는 판(`Options.copy`). */
+interface CopyMode {
+  key: string
+  row: number
+}
+
+/** 사본 판의 옵션 — 이미 사본이면 열쇠를 이어 붙인다(겉 그리드의 사본 안 그리드). */
+function copyOptions(options: Options, row: number): Options {
+  const key = options.copy === undefined ? String(row) : `${options.copy.key}.${row}`
+  return { ...options, copy: { key, row } }
+}
 
 /**
  * 상호작용 런타임의 입출력. **상태는 호출자가 든다** — 이 렌더러는 함수이지 컴포넌트가
@@ -211,11 +230,24 @@ const VALUE_PIECES: ReadonlySet<string> = new Set(['Input', 'TextArea', 'Select'
  * **이름을 렌더러가 짓는 까닭:** 필드의 라벨 · 필수 · 형제 조각 수는 부모가 안다 — 조각 뷰는 제 노드만 받는다. 라벨 요소의 id 를 가리키게(`aria-labelledby`)
  * 하면 테마의 `FieldView` 가 그 id 를 그리는지에 기대게 되고, 글로 넘기면 어느 `FieldView` 아래서도 선다.
  */
-function fieldNames(type: string, props: WbNode['props'], body: readonly unknown[], options: RenderOptions): (ViewField | undefined)[] {
-  if (type !== 'Field') return []
-  const parsed = getComponent(type)?.props.safeParse(props ?? {})
-  if (parsed?.success !== true) return []
-  const { label, required } = parsed.data as { label?: unknown; required?: unknown }
+function fieldNames(
+  type: string,
+  props: WbNode['props'],
+  body: readonly unknown[],
+  options: Options,
+  nodeId = '',
+): (ViewField | undefined)[] {
+  // 그리드 칸 — 셀 틀(열의 몸통)은 그 열의 머리 이름을, 제 칸은 그 칸이 앞에서 덮는 열의 머리 이름을 필드 이름으로 받는다(설계 «3»). 필수는 없다.
+  if (type !== 'Field' && type !== 'GridColumn' && type !== 'GridCell') return []
+  let label: unknown
+  let required: unknown = false
+  if (type === 'GridCell') label = options.cellNames?.get(nodeId)
+  else {
+    const parsed = getComponent(type)?.props.safeParse(props ?? {})
+    if (parsed?.success !== true) return []
+    ;({ label } = parsed.data as { label?: unknown })
+    if (type === 'Field') ({ required } = parsed.data as { required?: unknown })
+  }
   const base = typeof label === 'string' ? label.trim() : ''
   if (base === '') return []
   const pieces = body.flatMap((child, index) =>
@@ -372,9 +404,11 @@ function withReveal(root: WbNode, options: RenderOptions): Options {
  */
 function renderNodeIn(root: WbNode, node: WbNode, options: Options, room?: WeightRoom, field?: ViewField): ReactElement {
   // 펼쳐 보이느라 덮는 노드와 그 조상은 캐시를 지나친다(`RevealPlan`). 필드 이름을 받는 조각도 — 이름이 부모(라벨 · 형제 수)에서 오고, 부모가 새로 그릴
-  // 때만 다시 그려진다(부모는 제 캐시를 쓴다). 이름마다 열쇠를 두면 라벨을 고칠 때마다 열쇠가 쌓인다.
+  // 때만 다시 그려진다(부모는 제 캐시를 쓴다). 이름마다 열쇠를 두면 라벨을 고칠 때마다 열쇠가 쌓인다. 그리드의 제 칸과 그 칸을 가진 행도 —
+  // 칸의 필드 이름이 열 머리에서 오는데 열을 고친 편집은 행 객체를 안 바꾼다(`cellNames`).
+  const id = readString((node as { id?: unknown } | null)?.id)
   const cache =
-    field !== undefined || options.revealPlan?.uncached.has(readString((node as { id?: unknown } | null)?.id)) === true
+    field !== undefined || options.revealPlan?.uncached.has(id) === true || namedByGrid(node, options)
       ? null
       : nodeCacheFor(node, options, room)
   if (cache === null) return renderNodeUncached(root, node, options, room, field)
@@ -399,6 +433,54 @@ function renderNodeIn(root: WbNode, node: WbNode, options: Options, room?: Weigh
   return element
 }
 
+/**
+ * 그리드의 제 칸 id → 그 칸이 앞에서 덮는 열의 머리 이름(`Options.cellNames`). 칸 자리는 SDK `gridLayout` 의 셈(위 줄의 세로 칸이 덮은 열을
+ * 건너뛴다)이라 뷰가 그리는 자리와 같다. 제 칸을 가진 행이 없으면 옵션 그대로다(캐시도 그대로).
+ */
+function withCellNames(grid: unknown, options: Options): Options {
+  const rows = zoneList(grid, 'rows').filter((row) => shownIn(row, options))
+  if (!rows.some((row) => zoneList(row, BODY_ZONE).length > 0))
+    return options.cellNames === undefined ? options : { ...options, cellNames: undefined }
+  const shim = (node: unknown, index: number): ViewItem => {
+    const shaped = node as { id?: unknown; type?: unknown; props?: unknown } | null
+    const id = readString(shaped?.id)
+    const parsed = getComponent(readString(shaped?.type))?.props.safeParse(
+      overlayProps(options.interaction?.overlay, id, shaped?.props as WbNode['props']) ?? {},
+    )
+    return {
+      nodeId: id,
+      type: readString(shaped?.type),
+      index,
+      props: parsed?.success === true ? (parsed.data as Record<string, unknown>) : {},
+      element: null,
+      content: null,
+      items: zoneList(node, BODY_ZONE).flatMap((child, at) => (shownIn(child, options) ? [shim(child, at)] : [])),
+      copy: () => ({ element: null, content: null }),
+    }
+  }
+  const columns = zoneList(grid, BODY_ZONE).flatMap((child, at) => (shownIn(child, options) ? [shim(child, at)] : []))
+  const gridProps = getComponent('DataGrid')?.props.safeParse((grid as { props?: unknown } | null)?.props ?? {})
+  const layout = gridLayout(columns, rows.map(shim), gridProps?.success === true ? (gridProps.data as Record<string, unknown>) : {})
+  const names = new Map<string, string>()
+  for (const [id, cell] of layout.cellOf) {
+    const label = cell.leaf === null || cell.leaf.group ? undefined : cell.leaf.item.props.label
+    if (!id.includes('~') && typeof label === 'string') names.set(id, label)
+  }
+  return { ...options, cellNames: names }
+}
+
+/** 그리드 칸의 필드 이름(`Options.cellNames`)이 닿는 노드인가 — 이름을 받는 제 칸과 그 칸을 몸통에 든 행. */
+function namedByGrid(node: unknown, options: Options): boolean {
+  const names = options.cellNames
+  if (names === undefined || names.size === 0) return false
+  const id = readString((node as { id?: unknown } | null)?.id)
+  if (names.has(id)) return true
+  return (
+    readString((node as { type?: unknown } | null)?.type) === 'GridRow' &&
+    zoneList(node, BODY_ZONE).some((cell) => names.has(readString((cell as { id?: unknown } | null)?.id)))
+  )
+}
+
 /** 테마 → 화면 상태 · 몫의 자리 → 노드 객체 → 그린 엘리먼트. 키가 약해서 문서 · 테마가 버려지면 함께 사라진다. */
 const NODE_CACHE = new WeakMap<object, Map<string, WeakMap<object, ReactElement>>>()
 
@@ -416,7 +498,7 @@ const NODE_CACHE = new WeakMap<object, Map<string, WeakMap<object, ReactElement>
  * **부모가 정한 몫의 자리(`WeightRoom`)도 열쇠다** — 같은 노드라도 부모 `Grid` 의 열 수가 바뀌면 실을 몫이 달라지는데, 부모만 새 객체가 되고
  * 이 노드는 그 객체 그대로다.
  */
-function nodeCacheFor(node: unknown, options: RenderOptions, room: WeightRoom | undefined): WeakMap<object, ReactElement> | null {
+function nodeCacheFor(node: unknown, options: Options, room: WeightRoom | undefined): WeakMap<object, ReactElement> | null {
   if (options.interaction !== undefined || options.slot !== undefined) return null
   if (typeof node !== 'object' || node === null) return null
   const theme: object = options.theme ?? NO_THEME
@@ -428,7 +510,10 @@ function nodeCacheFor(node: unknown, options: RenderOptions, room: WeightRoom | 
   // 숨김 판정은 고른 상태의 조상 줄(`stateLineage`)에만 기댄다 — 목록의 다른 상태 · 이름이 바뀌어도 같은 열쇠다. 상태 id 는 노드 id 규칙이라
   // 쉼표 · 줄바꿈이 없다 — 몫의 자리와 섞이지 않는다.
   const lineage = stateLineage(options.viewStates, effectiveViewState(options.viewState ?? null, options.viewStates)).join(',')
-  const stateKey = `${lineage}\n${roomKey(room)}${options.emptyZones === undefined ? '' : `\n${options.emptyZones.key}`}`
+  // 사본은 열쇠마다 따로다 — 같은 노드라도 사본 열쇠 · 줄이 다르면 속성 · 필드 이름이 다르다.
+  const stateKey = `${lineage}\n${roomKey(room)}${options.emptyZones === undefined ? '' : `\n${options.emptyZones.key}`}${
+    options.copy === undefined ? '' : `\ncopy:${options.copy.key}`
+  }`
   let byNode = byState.get(stateKey)
   if (byNode === undefined) {
     byNode = new WeakMap()
@@ -464,17 +549,76 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
   // 모양 가드가 그 자리에 폴백을 그린다. **몫의 자리는 몸통에만 준다** — 몫이 듣는 배치(`Flex` · `Grid` · 열을 정한 `SearchForm`)는 몸통이다.
   const ownProps = overlayProps(options.interaction?.overlay, nodeId, raw?.props as WbNode['props'])
   const childRoom = weightRoom(type, ownProps)
-  const drawn = (list: readonly unknown[], at: WeightRoom | undefined, fields: readonly (ViewField | undefined)[] = []): ReactElement[] =>
+  // 그리드 — 제 칸의 필드 이름(칸이 덮는 열의 머리 이름)을 그 안의 그리기에 나른다(`Options.cellNames`).
+  const inner: Options = type === 'DataGrid' ? withCellNames(raw, options) : options
+  const drawn = (
+    list: readonly unknown[],
+    at: WeightRoom | undefined,
+    fields: readonly (ViewField | undefined)[] = [],
+    with_: Options = inner,
+  ): ReactElement[] =>
     list.map((child, index) => (
-      <Fragment key={childKey(child, index)}>{renderNodeIn(root, child as WbNode, options, at, fields[index])}</Fragment>
+      <Fragment key={childKey(child, index)}>{renderNodeIn(root, child as WbNode, with_, at, fields[index])}</Fragment>
     ))
   const lists = childLists(raw)
   const bodyList = lists.find((entry) => entry.pointer === '/children')?.list ?? []
-  const bodyDrawn = drawn(bodyList, childRoom, fieldNames(type, ownProps, bodyList, options))
+  const bodyDrawn = drawn(bodyList, childRoom, fieldNames(type, ownProps, bodyList, inner, nodeId))
   // 몸통을 부모에게 맡기는 타입(`TabPanel`)은 제 뷰에 몸통을 안 준다 — 부모가 `items[i].content` 로 둔다(그 몸통은 부모의 폴백에도 실린다).
   const hostedByParent = def?.bodyHost === 'parent'
   const children: ReactNode = !hostedByParent && bodyDrawn.length > 0 ? bodyDrawn : null
+
+  /**
+   * 자식 하나의 `ViewItem` — `props` · `items` 는 읽을 때 짓는다(그리드 뷰만 읽는다 — 모든 노드가 손자까지 그리면 그리기가 깊이마다 겹친다).
+   * `copy` 는 그 자식(과 맡긴 몸통)을 사본 판으로 다시 그린다.
+   */
+  const itemOf = (child: unknown, index: number, element: ReactNode, room: WeightRoom | undefined, with_: Options): ViewItem => {
+    const shaped = child as { id?: unknown; type?: unknown; props?: unknown } | null
+    const childId = readString(shaped?.id)
+    const childType = readString(shaped?.type)
+    const childDef = getComponent(childType)
+    const hosted = childDef?.bodyHost === 'parent'
+    const body = zoneList(child, BODY_ZONE)
+    const rawProps = (o: Options): WbNode['props'] =>
+      o.revealPlan?.props.get(childId) ?? overlayProps(o.interaction?.overlay, childId, shaped?.props as WbNode['props'])
+    const bodyOf = (o: Options): ReactElement[] =>
+      drawn(body, weightRoom(childType, rawProps(o)), fieldNames(childType, rawProps(o), body, o, childId), o)
+    const content = hosted ? bodyOf(with_) : []
+    let props: Readonly<Record<string, unknown>> | undefined
+    let nested: ViewItem[] | undefined
+    return {
+      nodeId: childId,
+      type: childType,
+      index,
+      element,
+      content: content.length > 0 ? content : null,
+      get props() {
+        if (props === undefined) {
+          const parsed = childDef?.props.safeParse(rawProps(with_) ?? {})
+          props = parsed?.success === true ? (parsed.data as Record<string, unknown>) : {}
+        }
+        return props
+      },
+      get items() {
+        if (nested === undefined) {
+          // 맡긴 몸통이면 그 엘리먼트를 그대로 — 화면에 선 것과 같은 엘리먼트다. 아니면 그 자식이 제 몸통을 그릴 때와 같은 판으로(캐시가 같은 것을 낸다).
+          const grand = hosted ? content : bodyOf(with_)
+          const grandRoom = weightRoom(childType, rawProps(with_))
+          nested = body.flatMap((grandchild, at) =>
+            shownIn(grandchild, with_) ? [itemOf(grandchild, at, grand[at], grandRoom, with_)] : [],
+          )
+        }
+        return nested
+      },
+      copy(row: number) {
+        const copied = copyOptions(with_, row)
+        const copyContent = hosted ? bodyOf(copied) : []
+        return { element: renderNodeIn(root, child as WbNode, copied, room), content: copyContent.length > 0 ? copyContent : null }
+      },
+    }
+  }
+
   const zones: Record<string, ReactNode> = {}
+  const zoneItems: Record<string, ViewItem[]> = {}
   const strays: ReactNode[] = []
   for (const entry of lists) {
     if (entry.pointer === '/children') continue
@@ -484,20 +628,15 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
       const extra = options.emptyZones?.render(nodeId, entry.zone) ?? null
       const content = entry.list.some((child) => shownIn(child, options)) ? elements : null
       zones[entry.zone] = extra === null ? content : [...(content ?? []), <Fragment key="wb-empty-zone">{extra}</Fragment>]
+      zoneItems[entry.zone] = entry.list.flatMap((child, index) =>
+        shownIn(child, options) ? [itemOf(child, index, elements[index], undefined, inner)] : [],
+      )
     } else if (elements.length > 0) strays.push(<Fragment key={`wb-zone-${entry.pointer}`}>{elements}</Fragment>)
   }
   const items: ViewItem[] = []
   bodyList.forEach((child, index) => {
     if (!shownIn(child, options)) return
-    const shaped = child as { id?: unknown; type?: unknown } | null
-    const hosted = getComponent(readString(shaped?.type))?.bodyHost === 'parent'
-    const content = hosted ? drawn(zoneList(child, BODY_ZONE), undefined) : []
-    const item: ViewItem = {
-      nodeId: readString(shaped?.id),
-      index,
-      element: bodyDrawn[index],
-      content: content.length > 0 ? content : null,
-    }
+    const item = itemOf(child, index, bodyDrawn[index], childRoom, inner)
     // 칸을 세는 부모(`span` 자리)면 자른 몫 — 그 자식이 실제로 덮는 칸 수다(몫이 없으면 1). 폼 표 뷰가 빈 쌍을 끼울 자리를 이것으로 센다.
     if (childRoom?.kind === 'span') item.span = weightIn(childRoom, (child as { weight?: unknown } | null)?.weight) ?? 1
     items.push(item)
@@ -517,7 +656,7 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
   const fallback = (message: string): ReactElement => {
     options.onNodeError?.({ nodeId, type, message })
     return (
-      <FallbackNode nodeId={nodeId} message={message}>
+      <FallbackNode nodeId={nodeId} copy={options.copy !== undefined} message={message}>
         {fallbackChildren}
       </FallbackNode>
     )
@@ -561,7 +700,11 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
   const props = parsed.data as Record<string, unknown>
   const variant = resolveVariant(def, node, props, theme.manifest)
   const states = activeStates(def, props)
-  const attrs: WbAttrs = { 'data-wb-id': node.id, 'data-wb-component': node.type }
+  // 사본은 원본 id 를 `data-wb-copy-of` 로 싣는다 — 에디터의 노드 찾기 · 끌기 판정 · 마커가 훑는 `data-wb-id` 에 안 걸린다(`Options.copy`).
+  const attrs: WbAttrs =
+    options.copy === undefined
+      ? { 'data-wb-id': node.id, 'data-wb-component': node.type }
+      : { 'data-wb-copy-of': node.id, 'data-wb-component': node.type }
   if (variant !== undefined) attrs['data-wb-variant'] = variant
   if (states.length > 0) attrs['data-wb-state'] = states.join(' ')
   const binding: Omit<NodeBinding, 'markRootRendered'> = {
@@ -578,16 +721,19 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
       fallbackView={fallbackView}
       binding={binding}
       viewProps={{
-        nodeId: node.id,
+        nodeId: options.copy === undefined ? node.id : `${node.id}~${options.copy.key}`,
         type: node.type,
         props,
         states,
         variant,
         children,
         zones,
+        zoneItems,
         items,
         slot: options.slot ?? null,
-        ...(field === undefined ? {} : { field }),
+        ...(field === undefined
+          ? {}
+          : { field: options.copy === undefined ? field : { ...field, name: `${field.name} (${options.copy.row}행)` } }),
       }}
       fallbackChildren={fallbackChildren}
     />
@@ -606,8 +752,8 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
  * 필요해지면 만들기 전에 멈추고 묻는다.**
  *
  * **`select`가 `onClick`인 것은 판정이다.** 와이어프레임 DOM에는 *"선택"*을 내는 네이티브
- * 이벤트원이 없다 — `Tabs`의 기본 뷰는 탭마다 `<span>`을 그리고 `List`도
- * 행이 `<div>`다. 「자동 문장화」의 표본(*"③ 상세정보 탭 선택 시"*)이 실제로 뜻하는 조작은 **그 노드
+ * 이벤트원이 없다 — `Tabs`의 기본 뷰는 탭마다 `<span>`을 그리고 `DataGrid`도
+ * 행이 `<tr>`다. 「자동 문장화」의 표본(*"③ 상세정보 탭 선택 시"*)이 실제로 뜻하는 조작은 **그 노드
  * 안을 누르는 것**이고, 그것이 루트로 버블링해 여기 닿는다. React의 `onSelect`(텍스트
  * 선택)는 그 조작이 아니다.
  *

@@ -32,7 +32,7 @@ import { NOT_IN_DOCUMENT_STATUS } from '../../src/panels/toolbar-status'
  */
 function doc(): PageDocument {
   return {
-    version: 4,
+    version: 5,
     root: {
       id: 'n-root',
       type: 'Page',

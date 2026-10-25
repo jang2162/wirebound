@@ -20,7 +20,7 @@ beforeAll(() => {
   installCatalog()
 })
 
-/** 설계서 「자동 문장화」의 예를 그대로 문서로 만든 것. *"① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다"* */
+/** 설계서 「자동 문장화」의 예를 그대로 문서로 만든 것. *"① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다"* */
 function example(interactions: Interaction[]): PageDocument {
   return {
     version: 1,
@@ -29,7 +29,7 @@ function example(interactions: Interaction[]): PageDocument {
       type: 'Page',
       children: [
         { id: 'n_btn', type: 'Button', props: { label: '검색' }, marker: 1, interactions },
-        { id: 'n_list', type: 'List', props: {}, marker: 2 },
+        { id: 'n_list', type: 'DataGrid', props: {}, marker: 2 },
         {
           id: 'n_tabs',
           type: 'Tabs',
@@ -127,7 +127,7 @@ describe('끈 렌더는 바뀌지 않는다', () => {
 })
 
 describe('셋을 실행한다', () => {
-  it('setProp이 설계서 「자동 문장화」의 예를 실제로 돌린다 — 목록이 로딩 상태가 된다', () => {
+  it('setProp이 설계서 「자동 문장화」의 예를 실제로 돌린다 — 그리드가 로딩 상태가 된다', () => {
     const doc = example(CLICK_SETS_LOADING)
     expect(markup(doc)).not.toContain('data-wb-state="loading"')
 
@@ -207,15 +207,15 @@ describe('셋을 실행한다', () => {
 describe('순서', () => {
   it('같은 on이 여럿이면 배열 순서대로 돌고 뒤가 이긴다', () => {
     const doc = example([
-      { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'items', value: 3 }] },
-      { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'items', value: 7 }] },
+      { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'fixedColumns', value: 3 }] },
+      { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'fixedColumns', value: 7 }] },
     ])
 
     const { events, overlay } = press(doc, 'n_btn')
 
     expect(events).toHaveLength(1)
     expect(events[0]?.matched).toBe(2)
-    expect(overlay['n_list']).toEqual({ items: 7 })
+    expect(overlay['n_list']).toEqual({ fixedColumns: 7 })
   })
 
   it('한 규칙 안의 액션도 순서대로 돈다', () => {
@@ -223,13 +223,13 @@ describe('순서', () => {
       {
         on: 'click',
         actions: [
-          { type: 'setProp', target: 'n_list', prop: 'items', value: 3 },
-          { type: 'setProp', target: 'n_list', prop: 'items', value: 7 },
+          { type: 'setProp', target: 'n_list', prop: 'fixedColumns', value: 3 },
+          { type: 'setProp', target: 'n_list', prop: 'fixedColumns', value: 7 },
         ],
       },
     ])
 
-    expect(press(doc, 'n_btn').overlay['n_list']).toEqual({ items: 7 })
+    expect(press(doc, 'n_btn').overlay['n_list']).toEqual({ fixedColumns: 7 })
   })
 
   it('다른 트리거의 규칙은 돌지 않는다', () => {
@@ -306,7 +306,7 @@ describe('트리거 4종이 DOM 이벤트에 붙는다', () => {
 
   it('한 노드에 click과 select가 함께 걸리면 한 번 눌러 둘 다 돈다', () => {
     const doc = example([
-      { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'items', value: 3 }] },
+      { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'fixedColumns', value: 3 }] },
       { on: 'select', actions: [{ type: 'setProp', target: 'n_list', prop: 'empty', value: true }] },
     ])
 
@@ -314,7 +314,7 @@ describe('트리거 4종이 DOM 이벤트에 붙는다', () => {
 
     expect(events.map((event) => event.trigger)).toEqual(['click', 'select'])
     // **뒤 트리거가 앞 트리거의 겹layer 위에서 돈다** — 아니면 하나가 사라진다.
-    expect(overlay['n_list']).toEqual({ items: 3, empty: true })
+    expect(overlay['n_list']).toEqual({ fixedColumns: 3, empty: true })
   })
 })
 
@@ -356,7 +356,7 @@ describe('깨진 규칙', () => {
 
     expect(overlay).toBe(EMPTY_OVERLAY)
     expect(events[0]?.issues[0]?.code).toBe('invalid-interaction-prop')
-    expect(events[0]?.issues[0]?.message).toBe('List에 없는 prop입니다: 없는속성')
+    expect(events[0]?.issues[0]?.message).toBe('DataGrid에 없는 prop입니다: 없는속성')
     expect(events[0]?.issues[0]?.message).toBe(validationMessage(doc, 'invalid-interaction-prop'))
   })
 
@@ -373,7 +373,7 @@ describe('깨진 규칙', () => {
   })
 
   it('타입이 안 맞는 값 — 카탈로그의 zod가 판정한다', () => {
-    const doc = example([{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'items', value: -3 }] }])
+    const doc = example([{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'fixedColumns', value: -3 }] }])
 
     const { events, overlay } = press(doc, 'n_btn')
 
@@ -491,7 +491,7 @@ describe('runInteraction — 상태를 들지 않는 순수 함수', () => {
 
   it('아무것도 안 바뀌면 받은 겹layer를 그대로 돌려준다', () => {
     const doc = example([{ on: 'click', actions: [] }])
-    const overlay: InteractionOverlay = { n_list: { items: 2 } }
+    const overlay: InteractionOverlay = { n_list: { fixedColumns: 2 } }
 
     expect(runInteraction(doc.root, 'n_btn', 'click', overlay).overlay).toBe(overlay)
   })

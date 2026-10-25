@@ -11,6 +11,7 @@ import {
   CURRENT_DOCUMENT_VERSION,
   getComponent,
   listComponents,
+  placementsOf,
   validatePage,
   type PageDocument,
   type ValidationIssue,
@@ -26,14 +27,21 @@ function pageWith(node: WbNode): PageDocument {
 }
 
 /** 설 자리가 정해진 타입(`TabPanel`)은 그 자리(부모 타입의 그 구역)에 놓은 페이지 — 뿌리 밑에 두면 `misplaced-component` 로 늘 거절된다. */
+/** 설 자리가 정해진 타입은 그 자리에 놓는다 — 설 자리의 부모도 설 자리가 있으면(칸 → 행 → 그리드) 겹으로 감싼다. */
 function placedPage(node: WbNode): PageDocument {
-  const host = getComponent(node.type)?.placement
-  if (host === undefined) return pageWith(node)
-  return pageWith({
-    id: 'n_host',
-    type: host.type,
-    ...(host.zone === BODY_ZONE ? { children: [node] } : { zones: { [host.zone]: [node] } }),
-  })
+  let placed = node
+  for (
+    let host = placementsOf(getComponent(node.type))[0], depth = 0;
+    host !== undefined;
+    host = placementsOf(getComponent(host.type))[0], depth++
+  ) {
+    placed = {
+      id: `n_host${depth}`,
+      type: host.type,
+      ...(host.zone === BODY_ZONE ? { children: [placed] } : { zones: { [host.zone]: [placed] } }),
+    }
+  }
+  return pageWith(placed)
 }
 
 /** 구역에 기본 내용(`initial`)을 갖는 타입인가 — 그 타입은 만들 때 그 노드가 함께 든다. */
@@ -129,7 +137,15 @@ describe('createNode', () => {
 
   it('기본 내용 — 구역의 `initial` 이 실제 노드로 들고 id 는 같은 생성기에서 차례로 나온다', () => {
     const withSeeds = listComponents().filter((def) => seeded(def.type))
-    expect(withSeeds.map((def) => def.type).sort()).toEqual(['EntryForm', 'Field', 'FormTable', 'SearchForm', 'Tabs'])
+    expect(withSeeds.map((def) => def.type).sort()).toEqual([
+      'DataGrid',
+      'EntryForm',
+      'Field',
+      'FormTable',
+      'GridColumn',
+      'SearchForm',
+      'Tabs',
+    ])
 
     // 입력 필드는 팔레트 한 걸음으로 «라벨 + 입력 하나» 가 선다 — 값 칸에 `Input` 하나(props 없음 · 카탈로그 기본값을 따른다).
     expect(createNode('Field', countingIds())).toEqual({ id: 'n_test1', type: 'Field', children: [{ id: 'n_test2', type: 'Input' }] })
@@ -165,6 +181,22 @@ describe('createNode', () => {
         { id: 'n_test3', type: 'TabPanel', props: { label: '탭 2' } },
       ],
     })
+    // 새 그리드는 열 셋(열마다 셀 틀 글 하나) · 되풀이 5 줄 · 바닥의 페이지네이션 바를 들고 선다 — 열의 셀 틀도 기본 내용이라 겹으로 돈다.
+    const column = (n: number, label: string) => ({
+      id: `n_test${n}`,
+      type: 'GridColumn',
+      props: { label },
+      children: [{ id: `n_test${n + 1}`, type: 'Text', props: { content: '—' } }],
+    })
+    expect(createNode('DataGrid', countingIds())).toEqual({
+      id: 'n_test1',
+      type: 'DataGrid',
+      children: [column(2, '컬럼 1'), column(4, '컬럼 2'), column(6, '컬럼 3')],
+      zones: {
+        rows: [{ id: 'n_test8', type: 'GridRow', props: { repeat: 5 } }],
+        footer: [{ id: 'n_test9', type: 'Pagination' }],
+      },
+    })
     for (const def of withSeeds) {
       const node = createNode(def.type, countingIds()) as WbNode
       expect(validatePage(placedPage(node)), def.type).toEqual([])
@@ -187,16 +219,16 @@ describe('createNode', () => {
     for (const def of many) {
       expect(createNode(def.type, countingIds()), def.type).not.toHaveProperty('children')
     }
-    // 이름 붙은 구역도 기본 내용이 없으면 `zones` 키가 없다(카드 · 목록).
+    // 이름 붙은 구역도 기본 내용이 없으면 `zones` 키가 없다(카드 — 구역이 다 빈 채 서는 타입은 지금 이것 하나다).
     expect(createNode('Card', countingIds())).toEqual({ id: expect.any(String), type: 'Card' })
-    expect(createNode('List', countingIds())).toEqual({ id: expect.any(String), type: 'List' })
   })
 
-  it('페이지에 바로 둘 수 없는 타입은 뿌리 Page · Slot · 탭 안의 TabPanel 이다', () => {
+  it('페이지에 바로 둘 수 없는 타입은 뿌리 Page · Slot · 탭 안의 TabPanel · 그리드의 부품 넷이다', () => {
     // `createNode`의 계약이 아니라 **카탈로그의 성질**이다. 타입 목록이 무엇을
     // 걸러야 하는지가 여기서 나온다 — 설계서 「레이아웃」이 Slot을 레이아웃 전용으로 두고,
     // `validatePage`가 `slot-count`로 거절한다(실측). `Page` 는 뿌리에만 서고 안에 두면 `nested-page` 다. `TabPanel` 은 탭 안에만 서고
-    // 페이지에 바로 두면 `misplaced-component` 다(설 자리가 정해진 타입 — 하단 판은 그 자리에 놓아 잰다 · `palette/placeable.ts`).
+    // 페이지에 바로 두면 `misplaced-component` 다(설 자리가 정해진 타입 — 하단 판은 그 자리에 놓아 잰다 · `palette/placeable.ts`). 그리드의 열 묶음 ·
+    // 열 · 행 · 칸도 그렇다(그리드 · 열 묶음 · 행 안에만 선다).
     // 카탈로그에 그런 타입이 더 생기면 여기서 죽어야 한다.
     const blocked = listComponents()
       .filter((def) => {
@@ -205,6 +237,6 @@ describe('createNode', () => {
       })
       .map((def) => def.type)
 
-    expect(blocked).toEqual(['Page', 'Slot', 'TabPanel'])
+    expect(blocked).toEqual(['Page', 'Slot', 'TabPanel', 'GridColumnGroup', 'GridColumn', 'GridRow', 'GridCell'])
   })
 })

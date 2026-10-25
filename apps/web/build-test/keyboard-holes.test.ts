@@ -1148,7 +1148,7 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
           wireboundVersion: '1',
           page: { title: '놓은 파일', description: null },
           schema: {
-            version: 4,
+            version: 5,
             root: { id: 'file_root', type: 'Page', children: [{ id: 'file_text', type: 'Text', props: { content: '본문' } }] },
           },
           comments: [],

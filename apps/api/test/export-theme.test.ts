@@ -161,6 +161,30 @@ describe('올린 테마에 고정한 프로젝트', () => {
     })
   })
 
+  /**
+   * **업로드 뒤 카탈로그가 걷은 타입을 선언한 패키지도 읽는다** — 기본테마 1.6.0 처럼 옛 카탈로그(`List`)로 검사를 지나 저장된 판이다. 문서 판 5 가
+   * `List` 를 걷자 내보내기의 다시 읽기가 «카탈로그에 없는 컴포넌트» 로 패키지째 못 읽어, 그 판에 고정한 프로젝트가 테마 없이 나갔다
+   * (`docs/superpowers/plans/2026-10-25-gr2-report.md` «main 시딩 판»). 업로드 검사가 거르는 일이지 이미 받은 판을 버릴 일이 아니다.
+   */
+  it('옛 카탈로그로 저장된 패키지(걷힌 타입의 변형 선언)도 테마째 싣는다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const manifest = {
+        ...manifestOf('legacy', '1.0.0'),
+        components: { List: { variants: [{ id: 'default', label: '기본', hideProps: ['columns'] }], defaultVariant: 'default' } },
+      } as ThemeManifest
+      const bytes = packed(manifest, { themeCss: '.legacy{}' })
+      // 업로드 검사를 비켜 저장한다 — 그 판이 저장된 때의 카탈로그에는 `List` 가 있었다.
+      await insertThemePackage(ctx.db, { manifest, bytes, sha256: createHash('sha256').update(bytes).digest('hex'), uploadedBy: null })
+      await bind(ctx, fx, 'legacy', '1.0.0', {})
+      const said = await preview(ctx, fx)
+      expect({ themeId: said.themeId, themeWarning: said.themeWarning }).toEqual({ themeId: 'legacy@1.0.0', themeWarning: null })
+      const zip = await zipOf(ctx, fx)
+      expect(zip.has('assets/theme/theme.css')).toBe(true)
+      expect(pageData(zip).themeRef).toEqual({ themeId: 'legacy', version: '1.0.0' })
+    })
+  })
+
   /** 업로드 검증을 지난 행이라 일어나지 않아야 하지만, 패키지를 못 읽으면 내보내기를 멈추지 않고 기본 뷰로 내보내며 까닭을 말한다. */
   it('패키지를 못 읽으면 테마 없이 내보내고 미리보기가 까닭을 한 줄로 말한다', async () => {
     await withApi(async (ctx) => {

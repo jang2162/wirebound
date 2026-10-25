@@ -46,33 +46,36 @@ describe('뷰 경로', () => {
       seen.push(p)
       return <Root />
     })
-    draw(page([{ id: 'l', type: 'List', props: { selected: true }, variant: 'cards' }]), {
-      manifest: { ...base, components: { List: { variants: [{ id: 'cards', label: '카드' }], defaultVariant: 'cards' } } },
-      views: { List },
+    draw(page([{ id: 'l', type: 'DataGrid', props: { loading: true }, variant: 'cards' }]), {
+      manifest: { ...base, components: { DataGrid: { variants: [{ id: 'cards', label: '카드' }], defaultVariant: 'cards' } } },
+      views: { DataGrid: List },
     })
     const p = seen[0] as { nodeId: string; states: string[]; variant: string; props: Record<string, unknown> }
     expect(p.nodeId).toBe('l')
-    expect(p.states).toContain('selected')
+    expect(p.states).toContain('loading')
     expect(p.variant).toBe('cards')
-    expect(p.props.selected).toBe(true)
+    expect(p.props.loading).toBe(true)
   })
 
   it('노드 속성: data-wb-structure 는 없고 variant · state 는 있다', () => {
     const List = view(() => <Root />)
-    const { container } = draw(page([{ id: 'l', type: 'List', props: { selected: true }, variant: 'x' }]), {
+    const { container } = draw(page([{ id: 'l', type: 'DataGrid', props: { loading: true }, variant: 'x' }]), {
       manifest: base,
-      views: { List },
+      views: { DataGrid: List },
     })
     const el = container.querySelector('[data-wb-id="l"]')!
     expect(el.hasAttribute('data-wb-structure')).toBe(false)
     expect(el.getAttribute('data-wb-variant')).toBe('x')
-    expect(el.getAttribute('data-wb-state')).toContain('selected')
+    expect(el.getAttribute('data-wb-state')).toContain('loading')
   })
 
   it('manifest 에 없는 variant 는 defaultVariant 로 Root 에 실린다', () => {
     const List = view(() => <Root />)
-    const manifest = { ...base, components: { List: { variants: [{ id: 'table', label: '표' }], defaultVariant: 'table' } } }
-    const { container } = draw(page([{ id: 'l', type: 'List', props: {}, variant: 'featured' }]), { manifest, views: { List } })
+    const manifest = { ...base, components: { DataGrid: { variants: [{ id: 'table', label: '표' }], defaultVariant: 'table' } } }
+    const { container } = draw(page([{ id: 'l', type: 'DataGrid', props: {}, variant: 'featured' }]), {
+      manifest,
+      views: { DataGrid: List },
+    })
     expect(container.querySelector('[data-wb-id="l"]')!.getAttribute('data-wb-variant')).toBe('table')
   })
 

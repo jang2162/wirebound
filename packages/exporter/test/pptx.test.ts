@@ -21,7 +21,7 @@ const BUTTON: WbNode = {
   interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_000000000003', prop: 'loading', value: true }] }],
 }
 
-const LIST: WbNode = { id: 'n_000000000003', type: 'List', props: {}, marker: 2 }
+const LIST: WbNode = { id: 'n_000000000003', type: 'DataGrid', props: {}, marker: 2 }
 
 function documentOf(children: WbNode[]): PageDocument {
   return { version: 1, root: { id: 'n_000000000001', type: 'Page', children } }
@@ -414,7 +414,7 @@ describe('별칭 — PPTX 산출물로 잰다(L-126)', () => {
       marker: 1,
       interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_list', value: false }] }],
     },
-    { id: 'n_list', type: 'List', alias: '회원 목록', props: {}, marker: 2 },
+    { id: 'n_list', type: 'DataGrid', alias: '회원 목록', props: {}, marker: 2 },
   ])
 
   it('상호작용 문장 · 코멘트 줄이 별칭으로 노드를 부른다 — 슬라이드와 노트 모두', () => {

@@ -15,10 +15,10 @@ const manifest: ThemeManifest = {
   sdk: '^1.0.0',
   tokens: { items: {} },
   components: {
-    List: {
+    DataGrid: {
       variants: [
         { id: 'table', label: '표' },
-        { id: 'cards', label: '카드', hideProps: ['columns'] },
+        { id: 'cards', label: '카드', hideProps: ['fixedColumns'] },
       ],
       defaultVariant: 'table',
     },
@@ -28,27 +28,27 @@ const manifest: ThemeManifest = {
 beforeAll(() => installCatalog())
 
 it('variant 선언의 hideProps 칸을 감춘다', () => {
-  const def = requireComponent('List')
+  const def = requireComponent('DataGrid')
   const names = (variant?: string) =>
-    visibleFields(def, { id: 'l', type: 'List', ...(variant ? { variant } : {}) }, {}, manifest).map((f) => f.prop)
-  expect(names('cards')).not.toContain('columns')
-  expect(names('table')).toContain('columns')
-  expect(names()).toContain('columns') // defaultVariant 가 table
+    visibleFields(def, { id: 'l', type: 'DataGrid', ...(variant ? { variant } : {}) }, {}, manifest).map((f) => f.prop)
+  expect(names('cards')).not.toContain('fixedColumns')
+  expect(names('table')).toContain('fixedColumns')
+  expect(names()).toContain('fixedColumns') // defaultVariant 가 table
   // 선언 밖의 값은 defaultVariant 로 그려지므로 그 선언을 따른다.
-  expect(names('없는값')).toContain('columns')
+  expect(names('없는값')).toContain('fixedColumns')
   // 양성 대조 — 감춘 칸 말고는 그대로다.
-  expect(names('cards')).toContain('items')
+  expect(names('cards')).toContain('emptyText')
 })
 
 it('variant 가 없거나 선언 밖이면 defaultVariant 의 hideProps 를 따른다', () => {
-  const def = requireComponent('List')
+  const def = requireComponent('DataGrid')
   const cardsFirst: ThemeManifest = {
     ...manifest,
-    components: { List: { ...manifest.components!.List!, defaultVariant: 'cards' } },
+    components: { DataGrid: { ...manifest.components!.DataGrid!, defaultVariant: 'cards' } },
   }
   const names = (variant?: string) =>
-    visibleFields(def, { id: 'l', type: 'List', ...(variant ? { variant } : {}) }, {}, cardsFirst).map((f) => f.prop)
-  expect(names()).not.toContain('columns')
-  expect(names('없는값')).not.toContain('columns')
-  expect(names('table')).toContain('columns')
+    visibleFields(def, { id: 'l', type: 'DataGrid', ...(variant ? { variant } : {}) }, {}, cardsFirst).map((f) => f.prop)
+  expect(names()).not.toContain('fixedColumns')
+  expect(names('없는값')).not.toContain('fixedColumns')
+  expect(names('table')).toContain('fixedColumns')
 })

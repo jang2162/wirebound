@@ -27,7 +27,7 @@ const save: WbNode = {
   props: { label: '저장' },
   interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
 }
-const list: WbNode = { id: 'n_list', type: 'List', alias: '회원 목록', marker: 2 }
+const list: WbNode = { id: 'n_list', type: 'DataGrid', alias: '회원 목록', marker: 2 }
 const plain: WbNode = { id: 'n_plain', type: 'Button', props: { label: '취소' } }
 
 const doc: PageDocument = { version: 1, root: { id: 'n_root', type: 'Page', children: [save, list, plain] } }
@@ -65,7 +65,7 @@ describe('pageView — CLI `page get` · MCP `get_page`', () => {
     expect(view.nodes.map(({ id, name, alias, rowLabel }) => ({ id, name, alias, rowLabel }))).toEqual([
       { id: 'n_root', name: '페이지', alias: undefined, rowLabel: 'Page' },
       { id: 'n_save', name: '① 머리 저장', alias: '머리 저장', rowLabel: 'Button (머리 저장) 저장' },
-      { id: 'n_list', name: '② 회원 목록', alias: '회원 목록', rowLabel: 'List (회원 목록) 컬럼 1 · 컬럼 2' },
+      { id: 'n_list', name: '② 회원 목록', alias: '회원 목록', rowLabel: 'DataGrid (회원 목록)' },
       { id: 'n_plain', name: '취소 버튼', alias: undefined, rowLabel: 'Button 취소' },
     ])
     expect('alias' in view.nodes[0]!).toBe(false)

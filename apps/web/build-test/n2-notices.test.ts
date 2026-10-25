@@ -67,7 +67,7 @@ describe.skipIf(!전제.ok)('N2 정보 통지 — 실브라우저', () => {
       document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
     }, text)
 
-  const envelope = (nodes: unknown[]) => JSON.stringify({ wirebound: 'nodes', version: 4, nodes })
+  const envelope = (nodes: unknown[]) => JSON.stringify({ wirebound: 'nodes', version: 5, nodes })
 
   it('정보 통지는 한 칸이다 — 까닭이 다른 거절 셋을 붙여도 한 줄이고 하단 바가 안 높아진다(창 800×500 · 실패 통지와 함께)', async () => {
     const P = await fixture('n2-one-slot', TEXTS)

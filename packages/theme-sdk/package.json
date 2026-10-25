@@ -1,6 +1,6 @@
 {
   "name": "@wirebound/theme-sdk",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -23,6 +23,12 @@
       "types": "./dist/version.d.ts",
       "import": "./dist/version.js",
       "default": "./dist/version.js"
+    },
+    "./capture": {
+      "development": "./src/capture.ts",
+      "types": "./dist/capture.d.ts",
+      "import": "./dist/capture.js",
+      "default": "./dist/capture.js"
     }
   },
   "publishConfig": {
@@ -41,6 +47,11 @@
         "types": "./dist/version.d.ts",
         "import": "./dist/version.js",
         "default": "./dist/version.js"
+      },
+      "./capture": {
+        "types": "./dist/capture.d.ts",
+        "import": "./dist/capture.js",
+        "default": "./dist/capture.js"
       }
     }
   },

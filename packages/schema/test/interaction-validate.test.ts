@@ -16,7 +16,7 @@ const SOURCE = 'n_000000000002'
 const TARGET = 'n_000000000003'
 
 /** 트리거 노드 하나와 타겟 노드 하나를 담은 페이지. 타겟 타입은 부르는 쪽이 정한다. */
-function pageWith(interaction: Interaction, targetType = 'List', targetProps?: Record<string, unknown>): PageDocument {
+function pageWith(interaction: Interaction, targetType = 'DataGrid', targetProps?: Record<string, unknown>): PageDocument {
   return {
     version: 1,
     root: {
@@ -71,7 +71,7 @@ describe('타겟 존재', () => {
         type: 'Page',
         children: [
           { id: SOURCE, type: 'Button', interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: TARGET, value: false }] }] },
-          { id: TARGET, type: 'List' },
+          { id: TARGET, type: 'DataGrid' },
         ],
       },
     }
@@ -86,7 +86,7 @@ describe('타겟 존재', () => {
         type: 'Page',
         children: [
           { id: SOURCE, type: 'Button', interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: TARGET, value: false }] }] },
-          { id: 'n_000000000004', type: 'Section', children: [{ id: TARGET, type: 'List' }] },
+          { id: 'n_000000000004', type: 'Section', children: [{ id: TARGET, type: 'DataGrid' }] },
         ],
       },
     }
@@ -154,17 +154,17 @@ describe('대상 종류', () => {
   })
 
   it('switchTab의 타겟이 TabPanel이 아니면 invalid-interaction-target — Tabs 도 아니다', () => {
-    for (const type of ['List', 'Tabs']) {
+    for (const type of ['DataGrid', 'Tabs']) {
       const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET }] }, type)
       expect(interactionIssues(doc), type).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-target' }))
     }
   })
 
   it('메시지가 무엇이 와야 하는지와 무엇이 왔는지를 말한다', () => {
-    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET }] }, 'List')
+    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET }] }, 'DataGrid')
     const message = interactionIssues(doc)[0]?.message ?? ''
     expect(message).toContain('TabPanel')
-    expect(message).toContain('List')
+    expect(message).toContain('DataGrid')
   })
 
   /**
@@ -175,7 +175,7 @@ describe('대상 종류', () => {
    * 전까지는 가리지 않는다.
    */
   it('setVisible은 어떤 종류의 노드든 받는다', () => {
-    for (const type of ['List', 'Section', 'Tabs', 'Divider']) {
+    for (const type of ['DataGrid', 'Section', 'Tabs', 'Divider']) {
       const doc = pageWith({ on: 'click', actions: [{ type: 'setVisible', target: TARGET, value: false }] }, type)
       expect(interactionIssues(doc)).toEqual([])
     }
@@ -211,7 +211,7 @@ describe('prop 유효성', () => {
   it('다른 prop을 안 줘도 값 검사가 통과한다', () => {
     const doc = pageWith({
       on: 'click',
-      actions: [{ type: 'setProp', target: TARGET, prop: 'items', value: 3 }],
+      actions: [{ type: 'setProp', target: TARGET, prop: 'fixedColumns', value: 3 }],
     })
     expect(interactionIssues(doc)).toEqual([])
   })
@@ -219,7 +219,7 @@ describe('prop 유효성', () => {
   it('범위를 벗어난 값도 잡는다', () => {
     const doc = pageWith({
       on: 'click',
-      actions: [{ type: 'setProp', target: TARGET, prop: 'items', value: -1 }],
+      actions: [{ type: 'setProp', target: TARGET, prop: 'fixedColumns', value: -1 }],
     })
     expect(interactionIssues(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-interaction-prop' }))
   })
@@ -239,7 +239,7 @@ describe('prop 유효성', () => {
       actions: [{ type: 'setProp', target: TARGET, prop: '없는프롭', value: true }],
     })
     const message = interactionIssues(doc)[0]?.message ?? ''
-    expect(message).toContain('List')
+    expect(message).toContain('DataGrid')
     expect(message).toContain('없는프롭')
   })
 })

@@ -23,7 +23,7 @@ const 문서: PageDocument = {
         props: { label: '검색' },
         interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'list', prop: 'loading', value: true }] }],
       },
-      { id: 'card', type: 'Card', props: { title: '요약' }, children: [{ id: 'list', type: 'List', marker: 2 }] },
+      { id: 'card', type: 'Card', props: { title: '요약' }, children: [{ id: 'list', type: 'DataGrid', marker: 2 }] },
     ],
   },
 } as PageDocument
@@ -51,7 +51,7 @@ describe('무엇을 싣는가', () => {
       [0, '페이지'],
       [1, '① 검색 버튼'],
       [1, '요약 카드'],
-      [2, '② 목록'],
+      [2, '② 그리드'],
     ])
   })
 
@@ -61,7 +61,7 @@ describe('무엇을 싣는가', () => {
   })
 
   it('상호작용 문장을 다시 짜지 않는다 — `listInteractionSentences`의 것이다', () => {
-    expect(view().interactions.map((sentence) => sentence.text)).toEqual(['① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다'])
+    expect(view().interactions.map((sentence) => sentence.text)).toEqual(['① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다'])
   })
 
   it('문서를 그대로 든다 — `--json`이 이것을 낸다', () => {
@@ -71,7 +71,7 @@ describe('무엇을 싣는가', () => {
 
 describe('코멘트가 붙은 노드를 이름으로 부른다', () => {
   it('문서에 있는 노드는 문장이 부르는 이름과 같다', () => {
-    expect(view([{ nodeId: 'list', body: '정렬' }]).comments[0]?.nodeName).toBe('② 목록')
+    expect(view([{ nodeId: 'list', body: '정렬' }]).comments[0]?.nodeName).toBe('② 그리드')
   })
 
   /**

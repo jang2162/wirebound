@@ -130,7 +130,7 @@ describe('견주는 자가 실제로 갈라낸다', () => {
     return new DOMParser().parseFromString(html, 'text/html').body.firstElementChild!
   }
 
-  const BASE = '<div data-wb-id="a" data-wb-component="List"><span>가</span><b>나</b></div>'
+  const BASE = '<div data-wb-id="a" data-wb-component="DataGrid"><span>가</span><b>나</b></div>'
 
   it('같은 것을 같다고 한다', () => {
     expect(describeTree(parse(BASE))).toEqual(describeTree(parse(BASE)))
@@ -142,15 +142,15 @@ describe('견주는 자가 실제로 갈라낸다', () => {
    * 빠뜨려도 기대값이 함께 줄어든다.
    */
   const DIFFERENT: [name: string, html: string][] = [
-    ['속성 값이 다르다', '<div data-wb-id="b" data-wb-component="List"><span>가</span><b>나</b></div>'],
+    ['속성 값이 다르다', '<div data-wb-id="b" data-wb-component="DataGrid"><span>가</span><b>나</b></div>'],
     ['속성이 하나 없다', '<div data-wb-id="a"><span>가</span><b>나</b></div>'],
-    ['속성이 하나 더 있다', '<div data-wb-id="a" data-wb-component="List" data-wb-state="selected"><span>가</span><b>나</b></div>'],
-    ['자식 순서가 다르다', '<div data-wb-id="a" data-wb-component="List"><b>나</b><span>가</span></div>'],
-    ['태그가 다르다', '<div data-wb-id="a" data-wb-component="List"><span>가</span><i>나</i></div>'],
-    ['텍스트가 다르다', '<div data-wb-id="a" data-wb-component="List"><span>다</span><b>나</b></div>'],
-    ['자식이 하나 더 있다', '<div data-wb-id="a" data-wb-component="List"><span>가</span><b>나</b><i>다</i></div>'],
-    ['깊이가 다르다', '<div data-wb-id="a" data-wb-component="List"><span><b>가</b></span><b>나</b></div>'],
-    ['텍스트가 사라졌다', '<div data-wb-id="a" data-wb-component="List"><span></span><b>나</b></div>'],
+    ['속성이 하나 더 있다', '<div data-wb-id="a" data-wb-component="DataGrid" data-wb-state="selected"><span>가</span><b>나</b></div>'],
+    ['자식 순서가 다르다', '<div data-wb-id="a" data-wb-component="DataGrid"><b>나</b><span>가</span></div>'],
+    ['태그가 다르다', '<div data-wb-id="a" data-wb-component="DataGrid"><span>가</span><i>나</i></div>'],
+    ['텍스트가 다르다', '<div data-wb-id="a" data-wb-component="DataGrid"><span>다</span><b>나</b></div>'],
+    ['자식이 하나 더 있다', '<div data-wb-id="a" data-wb-component="DataGrid"><span>가</span><b>나</b><i>다</i></div>'],
+    ['깊이가 다르다', '<div data-wb-id="a" data-wb-component="DataGrid"><span><b>가</b></span><b>나</b></div>'],
+    ['텍스트가 사라졌다', '<div data-wb-id="a" data-wb-component="DataGrid"><span></span><b>나</b></div>'],
   ]
 
   it.each(DIFFERENT)('%s', (_name, html) => {
@@ -308,7 +308,7 @@ describe('무엇을 덮었나 (문서 하나로 재지 마라)', () => {
     const { errors } = exportBundle({ pages: [{ title: '깨진 문서', document: brokenFixture() }], runtimeJs: '/* runtime */' })
     expect(errors.map((item) => item.error.message)).toEqual([
       '알 수 없는 컴포넌트 타입: 없는타입',
-      'List의 props가 올바르지 않습니다:  인식할 수 없는 키: "없는프롭"',
+      'DataGrid의 props가 올바르지 않습니다:  인식할 수 없는 키: "없는프롭"',
       '노드가 객체가 아닙니다: null',
       '노드의 id가 문자열이 아닙니다',
     ])

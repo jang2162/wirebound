@@ -10,7 +10,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { describe, expect, it } from 'vitest'
 import {
   CATALOG_TYPES,
-  ListDef,
+  TreeDef,
   defineComponent,
   getComponent,
   listComponents,
@@ -55,11 +55,11 @@ const NO_OPTIONS_TYPE = '선택지없음프로브'
 
 registerComponent(
   defineComponent({
-    ...ListDef,
+    ...TreeDef,
     type: NO_OPTIONS_TYPE,
     label: NO_OPTIONS_TYPE,
     editor: [{ prop: 'items', control: 'select', label: '선택지 없는 필드' }],
-    // **`states`를 비운다.** `ListDef`의 `editor`를 통째로 갈았으므로 그대로 두면
+    // **`states`를 비운다.** `TreeDef`의 `editor`를 통째로 갈았으므로 그대로 두면
     // `defineComponent`의 도달성 검사가 *"states가 editor에 없다"*로 던진다 — 이 프로브가 재려는 것은
     // `options` 없는 `select`이지 상태 도달성이 아니다.
     states: [],
@@ -72,7 +72,7 @@ const DOC = pageDoc({
   children: [
     { id: 'n-field', type: 'Input', props: { kind: 'number', placeholder: '검색어', readonly: true } },
     { id: 'n-card', type: 'Card', props: { title: '회원 정보' } },
-    { id: 'n-list', type: 'List', props: { columns: ['이름', '이메일'], items: 3 } },
+    { id: 'n-list', type: 'Tree', props: { items: ['이름', '이메일'] } },
     {
       id: 'n-kv',
       type: 'KeyValue',
@@ -174,10 +174,10 @@ function catalogControls(): Set<EditorControl> {
 const CONTROL_SAMPLES: { control: EditorControl; type: string; label: string }[] = [
   { control: 'text', type: 'Field', label: '라벨' },
   { control: 'textarea', type: 'Text', label: '내용' },
-  { control: 'number', type: 'List', label: '항목 수' },
+  { control: 'number', type: 'DataGrid', label: '고정 열 수' },
   { control: 'switch', type: 'Field', label: '필수' },
   { control: 'select', type: 'Input', label: '종류' },
-  { control: 'stringList', type: 'List', label: '컬럼' },
+  { control: 'stringList', type: 'Tree', label: '항목' },
   { control: 'pairList', type: 'KeyValue', label: '키-값' },
   { control: 'optionList', type: 'Select', label: '선택지' },
   { control: 'color', type: 'Placeholder', label: '바탕색' },
@@ -192,7 +192,8 @@ const CONTROLS_DOC = pageDoc({
     { id: 'n-field', type: 'Field', props: { label: '이름', required: true } },
     { id: 'n-input', type: 'Input', props: { kind: 'number' } },
     { id: 'n-text', type: 'Text', props: { content: '문단', role: 'body' } },
-    { id: 'n-list', type: 'List', props: { columns: ['이름'], items: 3 } },
+    { id: 'n-list', type: 'DataGrid', props: { fixedColumns: 1 }, children: [{ id: 'n-col', type: 'GridColumn' }] },
+    { id: 'n-tree', type: 'Tree', props: { items: ['이름'] } },
     { id: 'n-kv', type: 'KeyValue', props: { pairs: [{ key: 'k', value: 'v' }] } },
     { id: 'n-select', type: 'Select' },
     { id: 'n-ph', type: 'Placeholder', props: { background: '#2563eb' } },
@@ -315,14 +316,13 @@ describe('속성 패널', () => {
     expect(within(panel()).queryByText(/undefined/)).toBeNull()
   })
 
-  it('List 의 컬럼은 목록 위젯이 칸마다 그린다', async () => {
+  it('Tree 의 항목은 목록 위젯이 칸마다 그린다', async () => {
     await openPage(DOC)
 
-    select('List')
+    select('Tree')
 
-    // 캔버스 테마의 manifest 가 `List` 의 어느 variant 에도 `hideProps` 를 두지 않아 컬럼이 보인다(감춤은
-    // `visible-fields.test.ts` 가 잰다).
-    expect(labels()).toContain('컬럼')
+    // 캔버스 테마의 manifest 가 `Tree` 를 선언하지 않아 항목이 보인다(감춤은 `visible-fields.test.ts` 가 잰다).
+    expect(labels()).toContain('항목')
     // 값은 목록 위젯이 그린다. 한 줄로 이어 붙인 글자가 아니라 칸마다 하나다.
     const cells = [...panel().querySelectorAll<HTMLInputElement>('.wb-shell-list-cell')]
     expect(cells.map((cell) => cell.value)).toEqual(['이름', '이메일'])
@@ -546,7 +546,7 @@ const EDIT_DOC = pageDoc({
   children: [
     { id: 'n-text', type: 'Text', props: { content: '옛 내용', role: 'body' } },
     { id: 'n-text2', type: 'Text', props: { content: '둘째 내용', role: 'body' } },
-    { id: 'n-list', type: 'List', props: { columns: ['이름'], items: 3 } },
+    { id: 'n-list', type: 'DataGrid', props: { fixedColumns: 3 }, children: [{ id: 'n-col', type: 'GridColumn' }] },
   ],
 })
 
@@ -575,13 +575,13 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     const { calls, api } = editable()
     await openPage(EDIT_DOC, { apiOverrides: api })
 
-    select('List')
-    const input = requireWidget('항목 수')
+    select('DataGrid')
+    const input = requireWidget('고정 열 수')
     fireEvent.change(input, { target: { value: '9' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/2/props/items', value: 9 }])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/2/props/fixedColumns', value: 9 }])
   })
 
   it('타이핑만으로는 나가지 않는다', async () => {
@@ -618,22 +618,22 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     const { calls, api } = editable()
     await openPage(EDIT_DOC, { apiOverrides: api })
 
-    select('List')
-    const input = requireWidget('항목 수')
+    select('DataGrid')
+    const input = requireWidget('고정 열 수')
     fireEvent.change(input, { target: { value: '5' } })
     fireEvent.blur(input)
 
     await waitFor(() => expect(calls).toHaveLength(1))
     // `'5'`가 아니라 `5`다. 문자열로 나가면 서버의 카탈로그 검증이 422를 낸다.
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/2/props/items', value: 5 }])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/2/props/fixedColumns', value: 5 }])
   })
 
   it('수가 아닌 입력은 나가지 않는다', async () => {
     const { calls, api } = editable()
     await openPage(EDIT_DOC, { apiOverrides: api })
 
-    select('List')
-    const input = requireWidget('항목 수')
+    select('DataGrid')
+    const input = requireWidget('고정 열 수')
     fireEvent.change(input, { target: { value: 'abc' } })
     fireEvent.blur(input)
 
@@ -645,8 +645,8 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     const { calls, api } = editable()
     await openPage(EDIT_DOC, { apiOverrides: api })
 
-    select('List')
-    const input = requireWidget('항목 수')
+    select('DataGrid')
+    const input = requireWidget('고정 열 수')
     fireEvent.change(input, { target: { value: '' } })
     fireEvent.blur(input)
 
@@ -1000,7 +1000,7 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
     // 위젯이 없고, 값은 `formatValue`가 그린 글자로 남는다 — 줄이 통째로 비면 사용자가
     // 값을 볼 수 없다.
     //
-    // **`select`를 세는 대신 그 줄의 위젯을 본다.** 이 프로브는 `ListDef`를 빌려 만들었고
+    // **`select`를 세는 대신 그 줄의 위젯을 본다.** 이 프로브는 `TreeDef`를 빌려 만들었고
     // 그쪽 `variants`가 비어 있지 않아 변형 컨트롤이 `<select>` 하나를 그린다 —
     // 패널 전체에서 `select`를 세면 그것에 걸린다. 이 케이스가 지키는 것은
     // **options 없는 필드의 위젯**이므로 그 줄만 본다.
@@ -1380,7 +1380,7 @@ describe('속성 패널 — 변형', () => {
   it('manifest 전수 — 선언하고 variantFrom 이 없는 컴포넌트에만 컨트롤이 나오고 선택지가 선언 그대로다', () => {
     const declared = ADMIN_FIXTURE.manifest.components ?? {}
     // 카나리아 — 분모가 비면 아래 루프가 조용히 통과한다.
-    expect(Object.keys(declared)).toEqual(['Section', 'Card', 'List', 'Button', 'Link'])
+    expect(Object.keys(declared)).toEqual(['Section', 'Card', 'DataGrid', 'Button', 'Link'])
 
     for (const type of CATALOG_TYPES) {
       const def = getComponent(type)

@@ -54,15 +54,32 @@ const CENSUS: Record<string, Record<string, Cell>> = {
   Card: { title: { route: 'text', alt: '제목' }, subtitle: { route: 'text', alt: '부제' } },
   Tabs: { active: { route: 'markup', alt: 1 } },
   TabPanel: { label: { route: 'text', alt: '상세' } },
-  List: {
-    items: { route: 'markup', alt: 2 },
-    columns: { route: 'text', alt: ['이름'] },
-    pagination: { route: 'mark', alt: false },
-    selectable: { route: 'mark', alt: true },
-    selected: { route: 'state', alt: true },
-    disabled: { route: 'state', alt: true },
-    loading: { route: 'state', alt: true },
+  DataGrid: {
+    select: { route: 'mark', alt: 'check' },
+    fixedColumns: { route: 'var', alt: 1 },
+    emptyText: { route: 'text', alt: '없음' },
     empty: { route: 'state', alt: true },
+    loading: { route: 'state', alt: true },
+  },
+  GridColumnGroup: { label: { route: 'text', alt: '1학기' } },
+  GridColumn: {
+    label: { route: 'text', alt: '과정명' },
+    required: { route: 'mark', alt: true },
+    align: { route: 'mark', alt: 'center' },
+    size: { route: 'mark', alt: 'short' },
+    sort: { route: 'mark', alt: 'asc' },
+    tone: { route: 'mark', alt: 'shaded' },
+    numbering: { route: 'mark', alt: 'desc' },
+  },
+  // 되풀이 수는 둘째 줄부터 사본으로 선다 — 행 노드의 뿌리(첫 줄)는 그대로라 그리드째 견준다(`WHOLE`).
+  GridRow: { repeat: { route: 'markup', alt: 3 }, kind: { route: 'mark', alt: 'total' }, tone: { route: 'mark', alt: 'selected' } },
+  GridCell: { span: { route: 'markup', alt: 2 }, rowSpan: { route: 'markup', alt: 2 } },
+  Pagination: {
+    total: { route: 'text', alt: 0 },
+    pageSize: { route: 'text', alt: 50 },
+    page: { route: 'markup', alt: 2 },
+    sizeSelect: { route: 'mark', alt: false },
+    range: { route: 'mark', alt: false },
   },
   Tree: {
     items: { route: 'text', alt: ['가'] },
@@ -182,6 +199,12 @@ const RESERVED = [
   'data-wb-cell',
   'data-wb-zone',
   'data-wb-placeholder',
+  'data-wb-copy-of',
+  'data-wb-column-of',
+  'data-wb-col',
+  'data-wb-fixed',
+  'data-wb-fixed-off',
+  'data-wb-fixed-columns',
 ]
 
 interface ZodNode {
@@ -210,13 +233,44 @@ const SAMPLE_CHILDREN: Record<string, unknown[]> = {
   ],
 }
 
-/** 노드 하나를 기본 뷰(테마 없음)로 그리고 그 루트를 준다. 탭 패널은 탭 안에 둔다(그 밖이면 설 자리가 아니다). */
-function root(type: string, props: Record<string, unknown>): Element {
+/** 그리드의 표본 열 둘 · 행 하나 — 그리드 부품은 그리드 안에서만 배치를 받는다. */
+const sampleColumns = () => [
+  { id: 'c1', type: 'GridColumn', props: { label: '가' }, children: [{ id: 'c1t', type: 'Text', props: { content: '—' } }] },
+  { id: 'c2', type: 'GridColumn', props: { label: '나' }, children: [{ id: 'c2t', type: 'Text', props: { content: '—' } }] },
+]
+const sampleRows = () => [{ id: 'r1', type: 'GridRow', props: { repeat: 2 } }]
+
+/** 설 자리가 있는 타입을 그 자리에 둔다 — 탭 패널은 탭 안, 그리드 부품은 그리드 안(칸은 행 안). */
+function placedOf(type: string, node: Record<string, unknown>): unknown {
+  if (type === 'TabPanel') return { id: 'tabs', type: 'Tabs', children: [node] }
+  if (type === 'GridColumn' || type === 'GridColumnGroup')
+    return { id: 'grid', type: 'DataGrid', children: [node, ...sampleColumns()], zones: { rows: sampleRows() } }
+  if (type === 'GridRow') return { id: 'grid', type: 'DataGrid', children: sampleColumns(), zones: { rows: [node] } }
+  if (type === 'GridCell') {
+    const row = { id: 'r1', type: 'GridRow', props: { repeat: 2 }, children: [node, { id: 'k2', type: 'GridCell' }] }
+    return {
+      id: 'grid',
+      type: 'DataGrid',
+      children: [...sampleColumns(), { id: 'c3', type: 'GridColumn' }],
+      zones: { rows: [row, ...sampleRows()] },
+    }
+  }
+  if (type === 'DataGrid') return { ...node, children: sampleColumns(), zones: { rows: sampleRows() } }
+  return node
+}
+
+/** 바꿔도 노드의 뿌리는 같고 둘레(사본 줄 · 이웃 칸)가 바뀌는 칸 — 그리드째 견준다. */
+const WHOLE = new Set(['GridRow.repeat', 'GridCell.rowSpan'])
+
+/** 다른 prop 이 켜져야 화면에 닿는 칸의 바탕 props — 빈 결과 문구는 빈 상태에서만 선다. */
+const BASE: Record<string, Record<string, unknown>> = { 'DataGrid.emptyText': { empty: true } }
+
+/** 노드 하나를 기본 뷰(테마 없음)로 그리고 그 루트를 준다. 설 자리가 있는 타입은 그 자리에 둔다(`placedOf`). */
+function root(type: string, props: Record<string, unknown>, whole = false): Element {
   const node = { id: 'n', type, props, ...(SAMPLE_CHILDREN[type] === undefined ? {} : { children: SAMPLE_CHILDREN[type] }) }
-  const placed = type === 'TabPanel' ? { id: 'tabs', type: 'Tabs', children: [node] } : node
-  const doc = { version: 4, root: { id: 'page', type: 'Page', children: [placed] } } as unknown as PageDocument
+  const doc = { version: 5, root: { id: 'page', type: 'Page', children: [placedOf(type, node)] } } as unknown as PageDocument
   const { container } = render(<>{renderDocument(doc)}</>)
-  const el = container.querySelector('[data-wb-id="n"]')
+  const el = container.querySelector(whole ? '[data-wb-id="page"]' : '[data-wb-id="n"]')
   if (el === null) throw new Error(`${type} 가 안 그려졌다`)
   return el
 }
@@ -263,10 +317,11 @@ describe('카탈로그 × prop 인구조사', () => {
     expect(names.filter((name) => RESERVED.includes(name))).toEqual([])
   })
 
-  it.each(CELLS)('$name($route) — 바꾸면 기본 뷰의 DOM 이 바뀐다', ({ type, prop, alt }) => {
-    const before = root(type, {}).outerHTML
+  it.each(CELLS)('$name($route) — 바꾸면 기본 뷰의 DOM 이 바뀐다', ({ name, type, prop, alt }) => {
+    const base = BASE[name] ?? {}
+    const before = root(type, base, WHOLE.has(name)).outerHTML
     cleanup()
-    const after = root(type, { [prop]: alt }).outerHTML
+    const after = root(type, { ...base, [prop]: alt }, WHOLE.has(name)).outerHTML
     expect(after).not.toBe(before)
   })
 

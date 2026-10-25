@@ -8,7 +8,7 @@ function sample(): WbNode {
     type: 'Page',
     children: [
       { id: 'n_000000000002', type: 'SearchForm', children: [{ id: 'n_000000000003', type: 'Field', props: { label: '아이디' } }] },
-      { id: 'n_000000000004', type: 'List', props: { items: 10 } },
+      { id: 'n_000000000004', type: 'DataGrid', props: { fixedColumns: 10 } },
     ],
   }
 }
@@ -105,7 +105,7 @@ describe('remapNodeIds', () => {
           type: 'Button',
           interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_000000000003', value: false }] }],
         },
-        { id: 'n_000000000003', type: 'List' },
+        { id: 'n_000000000003', type: 'DataGrid' },
       ],
     }
     let counter = 0
@@ -127,13 +127,13 @@ describe('remapNodeIds', () => {
     const tree: WbNode = {
       id: 'n_000000000001',
       type: 'Page',
-      children: [{ id: 'n_000000000002', type: 'List', props: { columns: ['하나'] } }],
+      children: [{ id: 'n_000000000002', type: 'Tree', props: { items: ['하나'] } }],
     }
 
     const { root } = remapNodeIds(tree, () => 'n_aaaaaaaaaaaa')
-    ;(tree.children![0]!.props!['columns'] as string[]).push('둘')
+    ;(tree.children![0]!.props!['items'] as string[]).push('둘')
 
-    expect(root.children![0]!.props!['columns']).toEqual(['하나'])
+    expect(root.children![0]!.props!['items']).toEqual(['하나'])
   })
 
   it('상호작용 액션의 value도 공유하지 않는다', () => {
@@ -226,10 +226,10 @@ describe('stripMarkers', () => {
   })
 
   it('값을 공유하지 않는다 — 뒤에 원본을 고쳐도 담은 것이 그대로다', () => {
-    const nodes: WbNode[] = [{ id: 'a', type: 'List', props: { columns: ['하나'] } }]
+    const nodes: WbNode[] = [{ id: 'a', type: 'Tree', props: { items: ['하나'] } }]
     const stripped = stripMarkers(nodes)
-    ;(nodes[0]!.props!['columns'] as string[]).push('둘')
-    expect(stripped[0]!.props!['columns']).toEqual(['하나'])
+    ;(nodes[0]!.props!['items'] as string[]).push('둘')
+    expect(stripped[0]!.props!['items']).toEqual(['하나'])
   })
 
   it('상호작용 액션의 value도 공유하지 않는다', () => {

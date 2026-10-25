@@ -56,7 +56,7 @@ Run the lint rules. Findings are a normal result, not an error. Naming rules com
 
 A page is a JSON document. Edits are JSON Patch against it; `nodes[].path` from `get_page` is the JSON Pointer of each node.
 
-- `version` (integer, required) — Document format version. The server stores and returns version 4.
+- `version` (integer, required) — Document format version. The server stores and returns version 5.
 - `root` (node, required) — The root node — always a `Page`.
 - `viewStates` (array, optional) — Optional named screen states (`{ id, name, parent?, description? }`), at most 20, names 1–30 characters, nesting at most 3 deep, `description` free text up to 2000 characters (omit it rather than send a blank one). Nodes refer to them from `visibility`.
 
@@ -131,7 +131,7 @@ Zones: `body` (children) "몸통".
 
 #### Grid
 
-Lays children out on a fixed number of columns. Editor label: 그리드.
+Lays children out on a fixed number of columns. A layout tool — the data table is `DataGrid`. Editor label: 격자 배치.
 
 Zones: `body` (children) "몸통".
 
@@ -165,20 +165,74 @@ Stands only in the `body` zone of a `Tabs`.
 
 ### Data — show records
 
-#### List
+#### DataGrid
 
-Many records as a table, cards or a list. Editor label: 목록.
+A data table: its body is the columns (`GridColumn`, `GridColumnGroup`), the `rows` zone the rows (`GridRow`), the footer a `Pagination`. Rows repeat the column cell templates; every line after the first is a render copy (`data-wb-copy-of` instead of `data-wb-id` — select the original node). `select` adds a check or radio column, `fixedColumns` keeps that many left columns in place while the table scrolls sideways. Editor label: 그리드.
 
-Zones: `headStart` (zones.headStart) "머리 왼쪽"; `headEnd` (zones.headEnd) "머리 오른쪽".
+Zones: `headStart` (zones.headStart) "머리 왼쪽"; `headEnd` (zones.headEnd) "머리 오른쪽"; `body` (children) "열", accepts only `GridColumn`, `GridColumnGroup`, create with `GridColumn` {"label":"컬럼 1"} + `GridColumn` {"label":"컬럼 2"} + `GridColumn` {"label":"컬럼 3"}; `rows` (zones.rows) "행", accepts only `GridRow`, create with `GridRow` {"repeat":5}; `footer` (zones.footer) "바닥", create with `Pagination`.
 
-- `items`: integer 0–50, default 5
-- `columns`: string[], default ["컬럼 1","컬럼 2"]
-- `pagination`: boolean, default true
-- `selectable`: boolean, default false
-- `selected`: boolean, default false — state
-- `disabled`: boolean, default false — state
-- `loading`: boolean, default false — state
+- `select`: "none" | "check" | "radio", default "none"
+- `fixedColumns`: integer 0–20, default 0
+- `emptyText`: string, default "검색 결과가 없습니다."
 - `empty`: boolean, default false — state
+- `loading`: boolean, default false — state
+
+#### GridColumnGroup
+
+A merged header cell over its child columns; nesting depth is the header depth. Only valid in a `DataGrid` body or another `GridColumnGroup`. Editor label: 열 묶음.
+
+Zones: `body` (children) "열", accepts only `GridColumn`, `GridColumnGroup`.
+Stands only in the `body` zone of a `DataGrid` or the `body` zone of a `GridColumnGroup`.
+
+- `label`: string, default "묶음"
+
+#### GridColumn
+
+One column: `label` is the header cell, the children are the cell template drawn on every row without own cells. `numbering` draws data-row numbers instead of the template. Only valid in a `DataGrid` body or a `GridColumnGroup`. Editor label: 열.
+
+Zones: `body` (children) "셀", create with `Text` {"content":"—"}.
+Stands only in the `body` zone of a `DataGrid` or the `body` zone of a `GridColumnGroup`.
+
+- `label`: string, default "컬럼"
+- `required`: boolean, default false
+- `align`: "start" | "center" | "end", default "start"
+- `size`: "auto" | "short" | "medium" | "long", default "auto"
+- `sort`: "none" | "sortable" | "asc" | "desc", default "none"
+- `tone`: "default" | "shaded", default "default"
+- `numbering`: "off" | "asc" | "desc", default "off"
+
+#### GridRow
+
+One row drawn `repeat` times. Without children it draws the column templates; with `GridCell` children it draws only those — cells cover columns from the left, missing columns stay empty. `kind` total or gap (a full-width ellipsis band), `tone` selected, dimmed or shaded. Only valid in the `rows` zone of a `DataGrid`. Editor label: 행.
+
+Zones: `body` (children) "칸", accepts only `GridCell`.
+Stands only in the `rows` zone of a `DataGrid`.
+
+- `repeat`: integer 1–50, default 1
+- `kind`: "data" | "total" | "gap", default "data"
+- `tone`: "default" | "selected" | "dimmed" | "shaded", default "default"
+
+#### GridCell
+
+A hand-drawn cell of a `GridRow`: `span` columns wide, `rowSpan` lines tall; its children are the content. Only valid in a `GridRow`. Editor label: 칸.
+
+Zones: `body` (children) "내용".
+Stands only in the `body` zone of a `GridRow`.
+
+- `span`: integer 1–50, default 1
+- `rowSpan`: integer 1–50, default 1
+
+#### Pagination
+
+A pagination bar: page-size select, page numbers around the current page, range text ("from - to (총 N 항목 중)"). All numbers come from `total`, `pageSize` and `page` — not from the grid rows above it. Editor label: 페이지네이션.
+
+Zones: none.
+
+- `total`: integer 0–1000000, default 72
+- `pageSize`: integer 1–1000, default 10
+- `page`: integer 1–1000000, default 1
+- `sizeSelect`: boolean, default true
+- `range`: boolean, default true
 
 #### Tree
 

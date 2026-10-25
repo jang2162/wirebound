@@ -72,8 +72,8 @@ beforeEach(() => {
 
 /**
  * **테마 뷰를 갈아 끼운 판.** 캔버스가 그리는 테마(기본 하네스의 시험용 로더가 `system-admin@0.1.0` 에 주는 `ADMIN_FIXTURE` —
- * `test/theme-loader.ts`)의 `List` 를 노드 id 로 가른다 —
- * `n-boom` 은 던지고, `n-focus` 는 `Focus` · `marker` 를 쓰는 뷰로 그린다. 나머지 `List` 는 기본 뷰 그대로라 이 파일의
+ * `test/theme-loader.ts`)의 `DataGrid` 를 노드 id 로 가른다 —
+ * `n-boom` 은 던지고, `n-focus` 는 `Focus` · `marker` 를 쓰는 뷰로 그린다. 나머지 `DataGrid` 는 기본 뷰 그대로라 이 파일의
  * 다른 케이스는 영향이 없다.
  *
  * `apps/web` 테스트는 `setupFiles` 가 앱 모듈을 먼저 싣지 않으므로 이 파일 머리의 `vi.mock` 이 닿는다. 닿았는지는
@@ -83,9 +83,9 @@ const { boom } = vi.hoisted(() => ({ boom: { calls: 0, message: '테마 뷰가 �
 
 vi.mock('../admin-theme', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../admin-theme')>()
-  const List = actual.ADMIN_FIXTURE.views.List
-  if (List === undefined) throw new Error('캔버스 테마에 List 뷰가 없다')
-  const BoomList = view((props) => {
+  const DataGrid = actual.ADMIN_FIXTURE.views.DataGrid
+  if (DataGrid === undefined) throw new Error('캔버스 테마에 DataGrid 뷰가 없다')
+  const BoomGrid = view((props) => {
     if (props.nodeId === 'n-boom') {
       boom.calls += 1
       throw new Error(boom.message)
@@ -100,9 +100,9 @@ vi.mock('../admin-theme', async (importOriginal) => {
         </Root>
       )
     }
-    return <List {...props} />
+    return <DataGrid {...props} />
   })
-  return { ...actual, ADMIN_FIXTURE: { ...actual.ADMIN_FIXTURE, views: { ...actual.ADMIN_FIXTURE.views, List: BoomList } } }
+  return { ...actual, ADMIN_FIXTURE: { ...actual.ADMIN_FIXTURE, views: { ...actual.ADMIN_FIXTURE.views, DataGrid: BoomGrid } } }
 })
 
 function shellStore(): EditorStore {
@@ -129,7 +129,15 @@ const DOC = pageDoc({
           type: 'SearchForm',
           children: [{ id: 'n-field', type: 'Field', props: { label: '가입일' } }],
         },
-        { id: 'n-list', type: 'List', props: { items: 2, columns: ['이름', '이메일'] } },
+        {
+          id: 'n-list',
+          type: 'DataGrid',
+          children: [
+            { id: 'n-col-name', type: 'GridColumn', props: { label: '이름' } },
+            { id: 'n-col-mail', type: 'GridColumn', props: { label: '이메일' } },
+          ],
+          zones: { rows: [{ id: 'n-row', type: 'GridRow', props: { repeat: 2 } }] },
+        },
       ],
     },
   ],
@@ -155,11 +163,11 @@ describe('캔버스', () => {
     await openPage(DOC)
 
     const list = requireNode('n-list')
-    expect(list.getAttribute('data-wb-component')).toBe('List')
+    expect(list.getAttribute('data-wb-component')).toBe('DataGrid')
     // 구조 이름까지 본다. 자리표시자를 그리는 구현은 이 속성을 만들지 못한다.
-    expect(list.getAttribute('data-wb-structure')).toBe('table')
-    // props가 실제로 그려졌다는 증거. 렌더러를 거치지 않고 상자만 그리는 구현이라면
-    // 컬럼 이름이 나올 수 없다.
+    expect(list.getAttribute('data-wb-structure')).toBe('default')
+    // 자식이 실제로 그려졌다는 증거. 렌더러를 거치지 않고 상자만 그리는 구현이라면
+    // 열 머리 이름이 나올 수 없다.
     expect(list.textContent).toContain('이메일')
     // 음성 대조: 멀쩡한 문서에는 오류 배너가 없다. `렌더 실패 노드가…`의 짝이다.
     expect(screen.queryByRole('alert')).toBeNull()
@@ -382,7 +390,7 @@ describe('캔버스', () => {
     const doc = pageDoc({
       id: 'root',
       type: 'Page',
-      children: [{ id: 'n-focus', type: 'List', props: {}, marker: 1 }],
+      children: [{ id: 'n-focus', type: 'DataGrid', props: {}, marker: 1 }],
     })
     await openPage(doc)
     const restore = stackLayout(canvasDocument())
@@ -456,7 +464,7 @@ describe('캔버스', () => {
     // 아래 필터는 무엇이 그려져 있든 통과한다.
     expect(canvasRootId()).toBe('n-root')
     expect(structureTypes()).toContain('Flex')
-    expect(panelTitle()).toBe('List')
+    expect(panelTitle()).toBe('DataGrid')
 
     commits.length = 0
     fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
@@ -470,7 +478,7 @@ describe('캔버스', () => {
     const stale = commits.filter(
       (commit) =>
         commit.path === OTHER_PAGE_ROUTE &&
-        (commit.canvasRootId === 'n-root' || commit.structureTypes.includes('Flex') || commit.panelTitle === 'List'),
+        (commit.canvasRootId === 'n-root' || commit.structureTypes.includes('Flex') || commit.panelTitle === 'DataGrid'),
     )
     expect(stale).toEqual([])
   })
@@ -500,7 +508,7 @@ describe('캔버스의 오류 경계', () => {
     id: 'n-root',
     type: 'Page',
     children: [
-      { id: 'n-boom', type: 'List', props: { items: 1 } },
+      { id: 'n-boom', type: 'DataGrid', props: {} },
       { id: 'n-alive', type: 'Text', props: { content: '산다' } },
     ],
   })

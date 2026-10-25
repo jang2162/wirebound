@@ -1,4 +1,4 @@
-import { BODY_ZONE, type ComponentDef } from './component/define'
+import { BODY_ZONE, placementsOf, type ComponentDef, type ComponentPlace } from './component/define'
 import { checkNodeAction, isPageTargetAction } from './interaction/check'
 import { getComponent } from './component/registry'
 import { aliasNote } from './display'
@@ -434,8 +434,9 @@ function validateTree(root: WbNode): ValidationIssue[] {
     }
 
     issues.push(...checkZones(def, node, path))
-    if (def.placement !== undefined && !(parent !== null && parent.type === def.placement.type && zone === def.placement.zone)) {
-      issues.push(makeIssue('misplaced-component', node.id, path, `${def.label}은 ${placementName(def.placement)} 안에만 놓을 수 있습니다`))
+    const places = placementsOf(def)
+    if (places.length > 0 && !places.some((place) => parent !== null && parent.type === place.type && zone === place.zone)) {
+      issues.push(makeIssue('misplaced-component', node.id, path, `${def.label}은 ${placementName(places)} 안에만 놓을 수 있습니다`))
     }
 
     /**
@@ -494,8 +495,9 @@ function componentName(type: string): string {
   return getComponent(type)?.label ?? type
 }
 
-function placementName(placement: { type: string; zone: string }): string {
-  return componentName(placement.type)
+/** 설 자리들을 부르는 말 — 부모 타입의 이름을 겹치지 않게 ` · ` 로 잇는다(«그리드 · 열 묶음»). */
+function placementName(places: readonly ComponentPlace[]): string {
+  return [...new Set(places.map((place) => componentName(place.type)))].join(' · ')
 }
 
 /**

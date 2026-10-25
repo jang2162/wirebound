@@ -48,8 +48,8 @@ function page(over: Partial<LintPage> & { document: PageDocument }): LintPage {
 const rulesOf = (issues: readonly { rule: string }[]): string[] => issues.map((issue) => issue.rule)
 
 describe('① 코멘트가 없는 주요 컴포넌트', () => {
-  it('코멘트가 없는 List·EntryForm·SearchForm을 낸다', () => {
-    const list = node('List')
+  it('코멘트가 없는 DataGrid·EntryForm·SearchForm을 낸다', () => {
+    const list = node('DataGrid')
     const entry = node('EntryForm', { children: [node('Field')] })
     const search = node('SearchForm', { children: [node('Field')] })
     const issues = lintDesign(project({ pages: [page({ document: doc([list, entry, search]) })] })).filter(
@@ -63,19 +63,19 @@ describe('① 코멘트가 없는 주요 컴포넌트', () => {
 
   // L-125 — 문장은 노드를 사람이 부르는 이름(별칭 · 라벨 + 한국어 이름)으로 부르고 타입은 괄호에 붙인다. 타입만 쓰면 별칭을 지은 사람이 제 노드를 못 찾는다.
   it('메시지는 별칭이 있으면 별칭으로, 없으면 한국어 이름으로 노드를 부르고 타입을 곁에 둔다', () => {
-    const named = node('List', { alias: '회원 목록' })
-    const plain = node('List')
+    const named = node('DataGrid', { alias: '회원 목록' })
+    const plain = node('DataGrid')
     const messages = lintDesign(project({ pages: [page({ document: doc([named, plain]) })] }))
       .filter((issue) => issue.rule === 'comment-missing')
       .map((issue) => issue.message)
     expect(messages).toEqual([
-      '회원 목록(List)에 코멘트가 없습니다 — 주요 컴포넌트는 설명이 필요합니다',
-      '목록(List)에 코멘트가 없습니다 — 주요 컴포넌트는 설명이 필요합니다',
+      '회원 목록(DataGrid)에 코멘트가 없습니다 — 주요 컴포넌트는 설명이 필요합니다',
+      '그리드(DataGrid)에 코멘트가 없습니다 — 주요 컴포넌트는 설명이 필요합니다',
     ])
   })
 
   it('코멘트가 붙은 노드는 내지 않는다', () => {
-    const list = node('List')
+    const list = node('DataGrid')
     const entry = node('EntryForm', { children: [node('Field')] })
     const issues = lintDesign(
       project({
@@ -88,8 +88,8 @@ describe('① 코멘트가 없는 주요 컴포넌트', () => {
   })
 
   it('다른 페이지의 코멘트로는 덮이지 않는다', () => {
-    const list = node('List')
-    const other = node('List')
+    const list = node('DataGrid')
+    const other = node('DataGrid')
     const issues = lintDesign(
       project({
         pages: [
@@ -306,10 +306,70 @@ describe('⑥ 구조적 공백', () => {
     expect(issues.map((issue) => [issue.nodeId, issue.message])).toEqual([[empty.id, 'FormTable 안에 Field가 하나도 없습니다']])
   })
 
+  it('열이 하나도 없는 DataGrid 를 낸다 — 열 묶음 안의 열은 채운 것이다', () => {
+    const empty = node('DataGrid', { zones: { rows: [node('GridRow')] } })
+    const grouped = node('DataGrid', { children: [node('GridColumnGroup', { children: [node('GridColumn')] })] })
+    const issues = lintDesign(project({ pages: [page({ document: doc([empty, grouped]) })] })).filter(
+      (issue) => issue.rule === 'structural-gap',
+    )
+    expect(issues.map((issue) => [issue.nodeId, issue.message])).toEqual([[empty.id, 'DataGrid 안에 GridColumn가 하나도 없습니다']])
+  })
+
   it('자손에 있으면 채워진 것으로 본다', () => {
     const entry = node('EntryForm', { children: [node('Card', { children: [node('Field')] })] })
     const issues = lintDesign(project({ pages: [page({ document: doc([entry]) })] })).filter((issue) => issue.rule === 'structural-gap')
     expect(issues).toEqual([])
+  })
+})
+
+describe('그리드 — 그려지지 않는 내용 · 칸 폭이 어긋난 행', () => {
+  const column = (props: Record<string, unknown> = {}, children: WbNode[] = [node('Text')]): WbNode =>
+    node('GridColumn', { props, children })
+  const cell = (props: Record<string, unknown> = {}): WbNode => node('GridCell', { props })
+  const row = (props: Record<string, unknown>, cells: WbNode[] = []): WbNode => node('GridRow', { props, children: cells })
+  const grid = (columns: WbNode[], rows: WbNode[]): WbNode => node('DataGrid', { children: columns, zones: { rows } })
+  const issuesOf = (rule: string, ...nodes: WbNode[]) =>
+    lintDesign(project({ pages: [page({ document: doc(nodes) })] }))
+      .filter((issue) => issue.rule === rule)
+      .map((issue) => [issue.nodeId, issue.message])
+
+  it('번호 열의 셀 틀 · 생략 띠의 칸을 낸다 — 비운 번호 열 · 칸 없는 생략 띠 · 번호 끈 열은 안 낸다', () => {
+    const numbered = column({ label: 'No', numbering: 'desc' })
+    const emptyNumbered = column({ numbering: 'asc' }, [])
+    const gap = row({ kind: 'gap' }, [cell()])
+    const issues = issuesOf('ignored-template', grid([numbered, emptyNumbered, column()], [row({ repeat: 3 }), gap, row({ kind: 'gap' })]))
+    expect(issues).toEqual([
+      [numbered.id, '번호 열의 셀 틀은 그려지지 않습니다: No 열'],
+      [gap.id, '생략 띠 행은 칸을 그리지 않습니다'],
+    ])
+    expect(
+      lintDesign(project({ pages: [page({ document: doc([numbered]) })] })).find((issue) => issue.rule === 'ignored-template')?.severity,
+    ).toBe('warning')
+  })
+
+  it('제 칸을 가진 행의 칸 폭 합이 잎 열 수와 다르면 낸다 — 열 묶음은 잎으로 센다', () => {
+    const short = row({}, [cell({ span: 2 })])
+    const wide = row({}, [cell({ span: 3 }), cell()])
+    const fits = row({ kind: 'total' }, [cell({ span: 2 }), cell()])
+    const columns = [column(), node('GridColumnGroup', { children: [column(), column()] })]
+    expect(issuesOf('grid-row-cells', grid(columns, [row({ repeat: 2 }), short, wide, fits]))).toEqual([
+      [short.id, '그리드 행의 칸 폭 합(2)이 열 수(3)와 다릅니다'],
+      [wide.id, '그리드 행의 칸 폭 합(4)이 열 수(3)와 다릅니다'],
+    ])
+  })
+
+  it('위 행의 세로 칸이 덮은 열을 더한다 — 되풀이 줄마다 · 생략 띠에서 끊긴다', () => {
+    // 행렬 표: 첫 줄의 머리 칸이 네 줄을 덮으려 한다 — 둘째 줄은 칸 둘이면 맞다. 셋째 줄의 생략 띠가 덮기를 끊어 띠 뒤 줄은 칸 둘이면 모자란다.
+    const head = row({}, [cell({ rowSpan: 4 }), cell(), cell()])
+    const second = row({}, [cell(), cell()])
+    const afterGap = row({}, [cell(), cell()])
+    const issues = issuesOf('grid-row-cells', grid([column(), column(), column()], [head, second, row({ kind: 'gap' }), afterGap]))
+    expect(issues).toEqual([[afterGap.id, '그리드 행의 칸 폭 합(2)이 열 수(3)와 다릅니다']])
+    // 세로 칸이 되풀이 줄 끝을 넘어 들어가면(두 줄 행의 첫 줄이 셋을 덮음) 둘째 줄은 덮인 하나 + 제 칸 셋이라 넘친다.
+    const spill = row({ repeat: 2 }, [cell({ rowSpan: 2 }), cell(), cell()])
+    expect(issuesOf('grid-row-cells', grid([column(), column(), column()], [spill]))).toEqual([
+      [spill.id, '그리드 행의 칸 폭 합(4)이 열 수(3)와 다릅니다'],
+    ])
   })
 })
 
@@ -440,7 +500,7 @@ describe('봉투가 깨진 문서 — 던지지 않고 이슈로 낸다', () => 
   }
 
   it('깨진 페이지가 멀쩡한 페이지의 검사를 막지 않는다', () => {
-    const list = node('List')
+    const list = node('DataGrid')
     const issues = lintDesign(
       project({
         pages: [
@@ -461,7 +521,7 @@ describe('봉투가 깨진 문서 — 던지지 않고 이슈로 낸다', () => 
           page({
             document: {
               version: 1,
-              root: { id: nid(), type: 'Page', children: [{ id: nid(), type: '없는타입' }, node('List')] },
+              root: { id: nid(), type: 'Page', children: [{ id: nid(), type: '없는타입' }, node('DataGrid')] },
             },
           }),
         ],
@@ -500,7 +560,18 @@ describe('표를 덮는다 (D6)', () => {
               root: {
                 id: nid(),
                 type: 'Page',
-                children: [node('List'), entry, marked, marked2, button, { id: dup, type: 'Text' }, { id: dup, type: 'Text' }],
+                children: [
+                  node('DataGrid', {
+                    children: [node('GridColumn', { props: { numbering: 'asc' }, children: [node('Text')] })],
+                    zones: { rows: [node('GridRow', { children: [node('GridCell', { props: { span: 2 } })] })] },
+                  }),
+                  entry,
+                  marked,
+                  marked2,
+                  button,
+                  { id: dup, type: 'Text' },
+                  { id: dup, type: 'Text' },
+                ],
               },
             },
           }),

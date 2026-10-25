@@ -10,8 +10,8 @@ export const MANIFEST: ThemeManifest = {
   id: 'system-admin',
   name: '기본테마',
   description: '관리자 화면 기본 테마. 좁은 여백과 표 중심의 밀도를 갖는다.',
-  version: '1.6.0',
-  sdk: '^1.6.0',
+  version: '1.7.0',
+  sdk: '^1.7.0',
   tokens: {
     groups: [
       { id: 'color', label: '색' },
@@ -49,7 +49,7 @@ export const MANIFEST: ThemeManifest = {
    * 예컨대 `primary`)로 그려진다. `theme.css` 는 `default` 를 겨냥한 규칙이 없어 variant 없는 노드가 바탕 규칙 그대로 그려진다.
    * `Button` 의 `primary` 는 바탕(채운 주색 단추) 그대로다 — 이름이 곧 바탕의 뜻이라 따로 규칙을 두지 않는다.
    *
-   * 옛 admin 이 고른 구조(`Section:contained` · `Card:plain` · `Tabs:underline` · `List:table` · `Tree:indent` · `KeyValue:table` ·
+   * 옛 admin 이 고른 구조(`Section:contained` · `Card:plain` · `Tabs:underline` · `Tree:indent` · `KeyValue:table` ·
    * `SearchForm:inline` · `EntryForm:labelLeft` · `Field:outlined` · `Button:solid` · `Media:image`)는 전부 카탈로그의 첫 구조라 기본 뷰의
    * DOM 이 곧 그 구조다 — variant 로 옮길 다른 선택이 없다.
    */
@@ -71,7 +71,8 @@ export const MANIFEST: ThemeManifest = {
       ],
       defaultVariant: 'default',
     },
-    List: {
+    // 옛 `List` 의 변형 그대로 — `0032` 가 `List` 노드를 같은 변형 이름의 `DataGrid` 로 옮긴다.
+    DataGrid: {
       variants: [
         { id: 'default', label: '기본' },
         { id: 'featured', label: '강조' },

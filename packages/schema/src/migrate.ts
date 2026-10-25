@@ -2,11 +2,11 @@ import { liftStateRegions, MigrationError } from './migrate-document'
 import type { AnyDocument, PageDocument } from './node'
 
 /**
- * 지금 문서 판. 판 4 — `Field` 가 라벨 + 값 구역이고 입력 종류는 값 구역의 조각 노드다(판 3 은 노드 구역 · `TabPanel`). **판 2 → 3 · 3 → 4 단계는
- * 런타임 사슬에 없다** — 저장된 문서는 DB 마이그레이션(`apps/api` 의 `0028-node-zones` · `0029-compose-field`)이 한 번 옮겼고, 옛 판을 들고 오는
- * 입구(페이지 JSON 가져오기 · 클립보드)는 거절된다.
+ * 지금 문서 판. 판 5 — 자료 표가 `DataGrid`(열 · 행 노드)이고 `List` 는 없다(판 4 는 `Field` 라벨 + 값 구역 · 판 3 은 노드 구역 · `TabPanel`).
+ * **판 2 → 3 · 3 → 4 · 4 → 5 단계는 런타임 사슬에 없다** — 저장된 문서는 DB 마이그레이션(`apps/api` 의 `0028-node-zones` · `0029-compose-field` ·
+ * `0032-list-data-grid`)이 한 번 옮겼고, 옛 판을 들고 오는 입구(페이지 JSON 가져오기 · 클립보드)는 거절된다.
  */
-export const CURRENT_DOCUMENT_VERSION = 4
+export const CURRENT_DOCUMENT_VERSION = 5
 
 export interface Migration {
   from: number

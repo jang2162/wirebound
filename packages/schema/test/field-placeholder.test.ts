@@ -19,7 +19,7 @@ const A = 'a'.repeat(64)
 const B = 'b'.repeat(64)
 
 const page = (children: WbNode[]): PageDocument =>
-  ({ version: 4, root: { id: 'n_root', type: 'Page', children } }) as unknown as PageDocument
+  ({ version: 5, root: { id: 'n_root', type: 'Page', children } }) as unknown as PageDocument
 
 /** 오류만 — 경고는 이 판들과 무관한 축이다. */
 function errorsOf(doc: PageDocument): string[] {

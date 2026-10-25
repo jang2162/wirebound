@@ -1,7 +1,7 @@
 import type { WbNode } from '@wirebound/schema'
 
 export interface GallerySample {
-  /** 무엇을 보이는 표본인지. «List — 컬럼 셋» 꼴. */
+  /** 무엇을 보이는 표본인지. «DataGrid — 흔한 목록» 꼴. */
   label: string
   node: WbNode
   /**
@@ -9,6 +9,8 @@ export interface GallerySample {
    * 표본 노드에 붙는다.
    */
   within?: WbNode
+  /** 설 자리가 몸통이 아니거나 두 단 밑이면(그리드의 행 구역 · 행 안의 칸) 표본을 품은 부모를 짓는다 — `within` 대신. */
+  place?: (own: WbNode) => WbNode
 }
 
 const child = (id: string, content = `자식 ${id}`): WbNode => ({ id, type: 'Text', props: { content } })
@@ -21,6 +23,52 @@ const field = (id: string, label: string, pieces: WbNode[], extra: Record<string
   children: pieces,
 })
 const input = (id: string, props: Record<string, unknown> = {}): WbNode => ({ id, type: 'Input', props })
+const text = (id: string, content: string): WbNode => ({ id, type: 'Text', props: { content } })
+/** 그리드 열 — 셀 틀은 조각 여럿(없으면 «—»). */
+const column = (id: string, label: string, template: WbNode[] = [text(`${id}-t`, '—')], props: Record<string, unknown> = {}): WbNode => ({
+  id,
+  type: 'GridColumn',
+  props: { label, ...props },
+  children: template,
+})
+const columnGroup = (id: string, label: string, columns: WbNode[]): WbNode => ({
+  id,
+  type: 'GridColumnGroup',
+  props: { label },
+  children: columns,
+})
+const gridRow = (id: string, props: Record<string, unknown> = {}, cells?: WbNode[]): WbNode => ({
+  id,
+  type: 'GridRow',
+  props,
+  ...(cells === undefined ? {} : { children: cells }),
+})
+const gridCell = (id: string, content: WbNode[], props: Record<string, unknown> = {}): WbNode => ({
+  id,
+  type: 'GridCell',
+  props,
+  children: content,
+})
+const pagination = (id: string, props: Record<string, unknown> = {}): WbNode => ({ id, type: 'Pagination', props })
+const grid = (id: string, props: Record<string, unknown>, columns: WbNode[], rows: WbNode[], zones: WbNode['zones'] = {}): WbNode => ({
+  id,
+  type: 'DataGrid',
+  props,
+  children: columns,
+  zones: { ...zones, rows },
+})
+/** 출석부 꼴 — 고정 열 셋 + 날짜 열 스물일곱(주말 음영 · 기호 셀). 잎 열 서른. */
+const attendanceColumns = (): WbNode[] => [
+  column('at-no', 'No', [], { numbering: 'asc', size: 'short' }),
+  column('at-name', '이름', [text('at-name-t', '홍길동')], { size: 'medium' }),
+  column('at-rate', '출석률', [text('at-rate-t', '96%')], { align: 'end' }),
+  ...Array.from({ length: 27 }, (_, day) =>
+    column(`at-d${day + 1}`, `${day + 1}`, [{ id: `at-d${day + 1}-t`, type: 'Affix', props: { text: '○', tone: 'primary' } }], {
+      align: 'center',
+      tone: day % 7 === 5 || day % 7 === 6 ? 'shaded' : 'default',
+    }),
+  ),
+]
 
 /**
  * 끊을 자리가 없는 긴 낱말 — 관리자 화면의 이메일 · 주소는 흔히 이 꼴이다. 하이픈을 넣지 않는다 — 브라우저는 하이픈 뒤에서 줄을 바꿔
@@ -134,28 +182,139 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
       within: { id: 'tabp-host', type: 'Tabs', props: { active: 0 } },
     },
   ],
-  List: [
+  DataGrid: [
     {
-      label: 'List — 컬럼 셋',
-      node: { id: 'list', type: 'List', props: { items: 3, columns: ['이름', '상태', '날짜'], pagination: true } },
+      label: 'DataGrid — 흔한 목록(No · 링크 · 두 줄 · 단추 · 머리줄 · 바)',
+      node: grid(
+        'dg1',
+        {},
+        [
+          column('dg1-no', 'No', [], { numbering: 'desc', size: 'short', align: 'center' }),
+          column('dg1-title', '과정명', [{ id: 'dg1-link', type: 'Link', props: { label: '데이터 분석 기초' } }], { sort: 'sortable' }),
+          column('dg1-term', '교육기간', [text('dg1-term-t', '2026-07-04\n~2026-12-18')]),
+          column('dg1-act', '관리', [button('dg1-act-b', '수정')], { align: 'center' }),
+        ],
+        [gridRow('dg1-r', { repeat: 5 })],
+        {
+          headStart: [child('dg1-total', '검색결과 총 72건')],
+          headEnd: [button('dg1-excel', '엑셀다운로드')],
+          footer: [pagination('dg1-pg', { pageSize: 50 })],
+        },
+      ),
     },
     {
-      label: 'List — 선택 · 비활성',
-      node: { id: 'list2', type: 'List', props: { items: 2, columns: ['이름'], selectable: true, selected: true, disabled: true } },
+      label: 'DataGrid — 체크 선택 · 강조 · 딤드 · 합계',
+      node: grid(
+        'dg2',
+        { select: 'check' },
+        [column('dg2-name', '이름', [text('dg2-name-t', '홍길동')]), column('dg2-cnt', '공가', [text('dg2-cnt-t', '3')], { align: 'end' })],
+        [
+          gridRow('dg2-sel', { tone: 'selected' }),
+          gridRow('dg2-dim', { tone: 'dimmed' }),
+          gridRow('dg2-rest', { repeat: 2 }),
+          gridRow('dg2-sum', { kind: 'total' }, [
+            gridCell('dg2-sum-l', [text('dg2-sum-lt', '합계')]),
+            gridCell('dg2-sum-v', [text('dg2-sum-vt', '30.5')]),
+          ]),
+        ],
+      ),
     },
     {
-      label: 'List — 로딩 · 빈 목록',
-      node: { id: 'list3', type: 'List', props: { items: 2, columns: ['이름'], loading: true, empty: true } },
+      label: 'DataGrid — 2단 병합 머리 · 정렬 · 필수',
+      node: grid(
+        'dg3',
+        {},
+        [
+          column('dg3-name', '분반명', [text('dg3-name-t', 'A반')], { required: true }),
+          columnGroup('dg3-term', '교육기간', [
+            column('dg3-from', '시작일', [text('dg3-from-t', '2026-07-04')], { sort: 'asc' }),
+            column('dg3-to', '종료일', [text('dg3-to-t', '2026-12-18')]),
+          ]),
+          column('dg3-state', '상태', [text('dg3-state-t', '진행')], { sort: 'desc' }),
+        ],
+        [gridRow('dg3-r', { repeat: 3 })],
+      ),
     },
     {
-      label: 'List — 결과 머리줄',
-      node: {
-        id: 'list4',
-        type: 'List',
-        props: { items: 2, columns: ['이름', '상태'] },
-        zones: { headStart: [child('l-total', '검색결과 총 2건')], headEnd: [button('l-excel', '엑셀다운로드')] },
-      },
+      label: 'DataGrid — 넓은 표(잎 열 서른 · 고정 열 셋 · 주말 음영 · 기호 셀)',
+      node: grid('dg4', { fixedColumns: 3 }, attendanceColumns(), [
+        gridRow('dg4-r', { repeat: 3 }),
+        gridRow('dg4-gap', { kind: 'gap' }),
+        gridRow('dg4-last'),
+      ]),
     },
+    {
+      label: 'DataGrid — 빈 결과',
+      node: grid('dg5', { empty: true }, [column('dg5-a', '이름'), column('dg5-b', '상태')], [gridRow('dg5-r', { repeat: 5 })], {
+        headStart: [child('dg5-total', '검색결과 총 0건')],
+      }),
+    },
+    {
+      label: 'DataGrid — 라디오 선택 팝업(바 없음)',
+      node: grid(
+        'dg6',
+        { select: 'radio' },
+        [column('dg6-code', '코드', [text('dg6-code-t', 'C-001')]), column('dg6-name', '과정명', [text('dg6-name-t', '데이터 분석 기초')])],
+        [gridRow('dg6-sel', { tone: 'selected' }), gridRow('dg6-r', { repeat: 3 })],
+      ),
+    },
+    {
+      label: 'DataGrid — 편집 그리드(입력 · 셀렉트 · 삭제 · 추가)',
+      node: grid(
+        'dg7',
+        {},
+        [
+          column('dg7-name', '단위기간명', [input('dg7-name-i', { placeholder: '입력' })], { required: true }),
+          column('dg7-kind', '구분', [{ id: 'dg7-kind-s', type: 'Select', props: { placeholder: '선택' } }]),
+          column('dg7-days', '일수', [input('dg7-days-i', { kind: 'number', value: '2', size: 'short' }), button('dg7-days-b', '설정')]),
+          column('dg7-del', '삭제', [button('dg7-del-b', '삭제')], { align: 'center' }),
+        ],
+        [gridRow('dg7-r', { repeat: 2 })],
+        { headEnd: [button('dg7-add', '추가')] },
+      ),
+    },
+  ],
+  GridColumnGroup: [
+    {
+      label: 'GridColumnGroup — 열 둘을 묶은 머리',
+      node: columnGroup('cg', '교육기간', [column('cg-a', '시작일'), column('cg-b', '종료일')]),
+      within: { id: 'cg-host', type: 'DataGrid', props: {}, zones: { rows: [gridRow('cg-r', { repeat: 2 })] } },
+    },
+  ],
+  GridColumn: [
+    {
+      label: 'GridColumn — 머리 칸 · 셀 틀',
+      node: column('gc', '과정명', [{ id: 'gc-link', type: 'Link', props: { label: '데이터 분석 기초' } }], {
+        required: true,
+        sort: 'sortable',
+      }),
+      within: { id: 'gc-host', type: 'DataGrid', props: {}, zones: { rows: [gridRow('gc-r', { repeat: 2 })] } },
+    },
+  ],
+  GridRow: [
+    {
+      label: 'GridRow — 강조 행 셋',
+      node: gridRow('gr', { repeat: 3, tone: 'selected' }),
+      place: (own) => grid('gr-host', { select: 'check' }, [column('gr-a', '이름', [text('gr-a-t', '홍길동')])], [own]),
+    },
+  ],
+  GridCell: [
+    {
+      label: 'GridCell — 앞 칸 둘을 덮은 합계 칸',
+      node: gridCell('gcl', [text('gcl-t', '합계')], { span: 2 }),
+      place: (own) =>
+        grid(
+          'gcl-host',
+          {},
+          [column('gcl-a', '구분'), column('gcl-b', '이름'), column('gcl-c', '시간', [text('gcl-c-t', '8')], { align: 'end' })],
+          [gridRow('gcl-r', { repeat: 2 }), gridRow('gcl-sum', { kind: 'total' }, [own, gridCell('gcl-v', [text('gcl-v-t', '16')])])],
+        ),
+    },
+  ],
+  Pagination: [
+    { label: 'Pagination — 첫 쪽', node: pagination('pg1') },
+    { label: 'Pagination — 지금 쪽이 가운데(1000 건)', node: pagination('pg2', { total: 1000, page: 50 }) },
+    { label: 'Pagination — 0 건 · 행 수 셀렉트 없음', node: pagination('pg3', { total: 0, sizeSelect: false }) },
   ],
   Tree: [{ label: 'Tree — 두 단계', node: { id: 'tree', type: 'Tree', props: { items: ['뿌리', '가지', '잎'], depth: 2 } } }],
   KeyValue: [

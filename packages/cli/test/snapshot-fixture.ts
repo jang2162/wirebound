@@ -31,7 +31,7 @@ const AUTHOR = '60000000-0000-4000-8000-000000000001'
  */
 function 목록문서(): unknown {
   return {
-    version: 4,
+    version: 5,
     root: {
       id: 'root',
       type: 'Page',
@@ -43,14 +43,14 @@ function 목록문서(): unknown {
           props: { label: '검색' },
           interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'list', prop: 'loading', value: true }] }],
         },
-        { id: 'list', type: 'List', marker: 2, props: {} },
+        { id: 'list', type: 'DataGrid', marker: 2, props: {}, children: [{ id: 'list-col', type: 'GridColumn' }] },
       ],
     },
   }
 }
 
 function 빈문서(): unknown {
-  return { version: 4, root: { id: 'root', type: 'Page', children: [] } }
+  return { version: 5, root: { id: 'root', type: 'Page', children: [] } }
 }
 
 /**
@@ -108,7 +108,7 @@ export function page(
 }
 
 /**
- * 코멘트 없는 `List`가 든 페이지 하나를 더한다 — 규칙 ①이 `warning`을 낸다.
+ * 코멘트 없는 `DataGrid`가 든 페이지 하나를 더한다 — 규칙 ①이 `warning`을 낸다.
  *
  * **`packages/mcp`도 이것을 본다**(`@wirebound/cli/test-support`). `wireb lint`와 설계서 「MCP 도구」의
  * `validate`가 같은 함수를 부르므로 **같은 입력에 같은 값**이 나와야 하고, 픽스처가 두 벌이면
@@ -123,8 +123,12 @@ export function 경고가_있는_프로젝트(): SnapshotPayload {
       '경고',
       9,
       {
-        version: 4,
-        root: { id: 'root', type: 'Page', children: [{ id: 'lonely', type: 'List' }] },
+        version: 5,
+        root: {
+          id: 'root',
+          type: 'Page',
+          children: [{ id: 'lonely', type: 'DataGrid', children: [{ id: 'lonely-col', type: 'GridColumn' }] }],
+        },
       },
       null,
     ),
@@ -148,7 +152,7 @@ export function 상태가_있는_프로젝트(): SnapshotPayload {
       '상태',
       10,
       {
-        version: 4,
+        version: 5,
         viewStates: [
           { id: 's_admin', name: '관리자' },
           { id: 's_guest', name: '비로그인' },
@@ -185,7 +189,7 @@ export function 오류가_있는_프로젝트(): SnapshotPayload {
       '오류',
       8,
       {
-        version: 4,
+        version: 5,
         root: { id: 'bad', type: '없는컴포넌트' },
       },
       null,
@@ -218,7 +222,7 @@ export function projectThemeResponse(components?: Record<string, unknown>): Reco
   }
 }
 
-/** 이름만 다른 `List`(variant `grid`)가 든 페이지 하나를 더한다 — `table` · `cards` 를 선언한 테마에서 `theme-variant` 가 난다. */
+/** 이름만 다른 `DataGrid`(variant `grid`)가 든 페이지 하나를 더한다 — `table` · `cards` 를 선언한 테마에서 `theme-variant` 가 난다. */
 export function 테마에_없는_variant_프로젝트(): SnapshotPayload {
   const payload = snapshotPayload()
   payload.pages.push(
@@ -228,8 +232,8 @@ export function 테마에_없는_variant_프로젝트(): SnapshotPayload {
       '그리드',
       10,
       {
-        version: 4,
-        root: { id: 'root', type: 'Page', children: [{ id: 'grid-list', type: 'List', variant: 'grid' }] },
+        version: 5,
+        root: { id: 'root', type: 'Page', children: [{ id: 'grid-list', type: 'DataGrid', variant: 'grid' }] },
       },
       null,
     ),
@@ -237,9 +241,9 @@ export function 테마에_없는_variant_프로젝트(): SnapshotPayload {
   return payload
 }
 
-/** `List` 에 `table` · `cards` 를 선언한 테마. */
+/** `DataGrid` 에 `table` · `cards` 를 선언한 테마. */
 export const LIST_VARIANTS = {
-  List: {
+  DataGrid: {
     variants: [
       { id: 'table', label: '테이블' },
       { id: 'cards', label: '카드' },

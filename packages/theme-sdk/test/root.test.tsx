@@ -11,7 +11,7 @@ afterEach(() => {
 
 function bind(extra: Record<string, unknown> = {}) {
   const markRootRendered = vi.fn()
-  const attrs = { 'data-wb-id': 'n1', 'data-wb-component': 'List', 'data-wb-variant': 'table', ...extra }
+  const attrs = { 'data-wb-id': 'n1', 'data-wb-component': 'DataGrid', 'data-wb-variant': 'table', ...extra }
   return { value: { attrs, markRootRendered }, markRootRendered }
 }
 
@@ -82,6 +82,7 @@ describe('prop 표지 · 상태의 접근성 속성(view → Root)', () => {
       variant: undefined,
       children: null,
       zones: {},
+      zoneItems: {},
       items: [],
       slot: null,
       ...props,

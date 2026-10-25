@@ -37,7 +37,7 @@ function shellStore(): EditorStore {
   return store as EditorStore
 }
 
-/** 설계서 「자동 문장화」의 예를 그대로 옮긴 문서. *"① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다"* */
+/** 설계서 「자동 문장화」의 예를 그대로 옮긴 문서. *"① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다"* */
 const DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
@@ -49,7 +49,7 @@ const DOC = pageDoc({
       marker: 1,
       interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
     },
-    { id: 'n-list', type: 'List', props: {}, marker: 2 },
+    { id: 'n-list', type: 'DataGrid', props: {}, marker: 2 },
   ],
 })
 
@@ -86,7 +86,7 @@ describe('설계서 「실행」 — 편집 모드에서는 동작하지 않는�
 })
 
 describe('설계서 「실행」 — 뷰 모드에서 실제로 동작한다', () => {
-  it('버튼을 누르면 목록이 로딩 상태가 된다', async () => {
+  it('버튼을 누르면 그리드가 로딩 상태가 된다', async () => {
     await openPage(DOC)
     toView()
     // 양성 대조: 누르기 전에는 그 상태가 없다.
@@ -217,7 +217,7 @@ describe('트리거 4종이 실제로 닿는가 — 재서 적는다', () => {
             ],
             interactions: [{ on: 'select', actions: [{ type: 'setVisible', target: 'n-list', value: false }] }],
           },
-          { id: 'n-list', type: 'List', props: {} },
+          { id: 'n-list', type: 'DataGrid', props: {} },
         ],
       }),
     )
@@ -243,7 +243,7 @@ describe('트리거 4종이 실제로 닿는가 — 재서 적는다', () => {
             zones: { actions: [{ id: 'n-go', type: 'Button', props: { label: '검색' } }] },
             interactions: [{ on: 'submit', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
           },
-          { id: 'n-list', type: 'List', props: {} },
+          { id: 'n-list', type: 'DataGrid', props: {} },
         ],
       }),
     )
@@ -274,7 +274,7 @@ describe('트리거 4종이 실제로 닿는가 — 재서 적는다', () => {
             props: { label: '이름' },
             interactions: [{ on: 'change', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
           },
-          { id: 'n-list', type: 'List', props: {} },
+          { id: 'n-list', type: 'DataGrid', props: {} },
         ],
       }),
     )
@@ -331,7 +331,7 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
             props: { label: '검색' },
             interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: '없는속성', value: 1 }] }],
           },
-          { id: 'n-list', type: 'List', props: {} },
+          { id: 'n-list', type: 'DataGrid', props: {} },
         ],
       }),
     )
@@ -339,7 +339,7 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
 
     fireEvent.click(requireNode('n-btn'))
 
-    expect(notices()).toEqual(['List에 없는 prop입니다: 없는속성'])
+    expect(notices()).toEqual(['DataGrid에 없는 prop입니다: 없는속성'])
   })
 
   it('탭 패널이 아닌 노드를 열라고 하면 말한다', async () => {
@@ -354,7 +354,7 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
             props: { label: '검색' },
             interactions: [{ on: 'click', actions: [{ type: 'switchTab', target: 'n-list' }] }],
           },
-          { id: 'n-list', type: 'List', props: {} },
+          { id: 'n-list', type: 'DataGrid', props: {} },
         ],
       }),
     )
@@ -362,7 +362,7 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
 
     fireEvent.click(requireNode('n-btn'))
 
-    expect(notices()).toEqual(['switchTab의 타겟은 TabPanel이어야 합니다 (현재: List)'])
+    expect(notices()).toEqual(['switchTab의 타겟은 TabPanel이어야 합니다 (현재: DataGrid)'])
   })
 
   it('알림은 쌓이지 않는다 — 다음 클릭이 덮는다', async () => {
@@ -383,7 +383,7 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
             props: { label: '멀쩡한' },
             interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] }],
           },
-          { id: 'n-list', type: 'List', props: {} },
+          { id: 'n-list', type: 'DataGrid', props: {} },
         ],
       }),
     )
@@ -459,7 +459,7 @@ describe('알림은 "마지막 조작이 만든 것"이다', () => {
         interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'x', value: 1 }] }],
       },
       { id: 'n-plain', type: 'Text', props: { content: '규칙 없는 글' } },
-      { id: 'n-list', type: 'List', props: {} },
+      { id: 'n-list', type: 'DataGrid', props: {} },
     ],
   })
 

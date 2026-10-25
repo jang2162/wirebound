@@ -4,7 +4,7 @@ import { integer, joined, oneLine } from '../summary'
 
 export const SearchFormDef = defineComponent({
   type: 'SearchForm',
-  // **이름은 설계서 「설계서 화면 구조」의 그림에서 빌려 왔다**(*"① 검색폼"*) — `List`와 같은 근거다.
+  // **이름은 설계서 「설계서 화면 구조」의 그림에서 빌려 왔다**(*"① 검색폼"*).
   label: '검색폼',
   description: '목록을 거를 조건을 받는 검색 영역.',
   group: 'input',

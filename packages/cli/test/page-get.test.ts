@@ -76,8 +76,8 @@ describe('못 찾았을 때·둘 이상일 때를 갈라 말한다', () => {
    */
   it('둘 이상이면 코드 1이고 **둘 다 이름으로 낸다**', async () => {
     const 겹침 = snapshotPayload()
-    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 4, root: { id: 'r', type: 'Page' } }, null))
-    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 4, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 5, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 5, root: { id: 'r', type: 'Page' } }, null))
 
     const io = 준비(겹침)
     expect(await run(['page', 'get', '관리자/목록'], io)).toBe(EXIT.usage)
@@ -101,7 +101,7 @@ describe('무엇을 싣는가 — 스키마·코멘트·상호작용 문장 (설
 
     const said = io.stdout.join('\n')
     expect(said).toContain('① 검색 버튼')
-    expect(said).toContain('② 목록')
+    expect(said).toContain('② 그리드')
   })
 
   /**
@@ -113,7 +113,7 @@ describe('무엇을 싣는가 — 스키마·코멘트·상호작용 문장 (설
     const io = 준비()
     await run(['page', 'get', '관리자/회원/목록'], io)
 
-    expect(io.stdout.join('\n')).toContain('① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
+    expect(io.stdout.join('\n')).toContain('① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다')
   })
 
   it('코멘트를 **어느 노드에 달렸는지**와 함께 낸다', async () => {
@@ -121,7 +121,7 @@ describe('무엇을 싣는가 — 스키마·코멘트·상호작용 문장 (설
     await run(['page', 'get', '관리자/회원/목록'], io)
 
     const said = io.stdout.join('\n')
-    expect(said).toContain('② 목록 · 장병현')
+    expect(said).toContain('② 그리드 · 장병현')
     expect(said).toContain('정렬 기준을 정해야 합니다')
   })
 

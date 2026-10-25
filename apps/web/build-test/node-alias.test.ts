@@ -91,14 +91,14 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
         props: { label: '저장' },
         interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_list00000001', value: false }] }],
       },
-      { id: 'n_list00000001', type: 'List', marker: 2 },
+      { id: 'n_list00000001', type: 'DataGrid', marker: 2 },
     ])
     const a = await openEditor(P, 'alice')
     const b = await openEditor(P, 'bob')
     try {
       await b.page.getByRole('tab', { name: '상호작용' }).click()
       const sentence = b.page.locator('.wb-shell-interaction-sentence').first()
-      await expect.poll(() => sentence.textContent()).toBe('① 저장 버튼 클릭 시 ② 목록이 숨겨집니다')
+      await expect.poll(() => sentence.textContent()).toBe('① 저장 버튼 클릭 시 ② 그리드가 숨겨집니다')
 
       await rowButton(a.page, 'n_save00000001').click()
       await a.page.keyboard.press('F2')
@@ -118,7 +118,7 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
 
       // 남의 화면 — 트리 줄 · 상호작용 문장.
       await expect.poll(() => rowButton(b.page, 'n_save00000001').textContent()).toBe('Button (머리 저장) 저장')
-      await expect.poll(() => sentence.textContent()).toBe('① 머리 저장 클릭 시 ② 목록이 숨겨집니다')
+      await expect.poll(() => sentence.textContent()).toBe('① 머리 저장 클릭 시 ② 그리드가 숨겨집니다')
       // 포커스는 줄 단추로 돌아온다.
       expect(await rowButton(a.page, 'n_save00000001').evaluate((el) => el === document.activeElement)).toBe(true)
 
@@ -130,7 +130,7 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
         (v) => v === undefined,
       )
       await expect.poll(() => rowButton(b.page, 'n_save00000001').textContent()).toBe('Button 저장')
-      await expect.poll(() => sentence.textContent()).toBe('① 저장 버튼 클릭 시 ② 목록이 숨겨집니다')
+      await expect.poll(() => sentence.textContent()).toBe('① 저장 버튼 클릭 시 ② 그리드가 숨겨집니다')
       expect(a.patches).toHaveLength(2)
     } finally {
       await a.close()
@@ -385,7 +385,11 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
     const { P } = await fixture('f2-narrow', [
       { id: 'n_long00000001', type: 'Button', alias: LONG_ALIAS, props: { label: '아주 긴 라벨 '.repeat(6).trim() } },
       { id: 'n_text00000001', type: 'Text', alias: '안내 문단', props: { content: '긴 본문 글 '.repeat(10).trim() } },
-      { id: 'n_tabs00000001', type: 'List', props: { columns: ['개요', '상세', '이력', '설정'] } },
+      {
+        id: 'n_tabs00000001',
+        type: 'CheckboxGroup',
+        props: { options: ['개요', '상세', '이력', '설정'].map((label) => ({ label, selected: true })) },
+      },
     ])
     const a = await openEditor(P, 'alice', { width: 700, height: 700 })
     try {

@@ -1,7 +1,7 @@
-import type { ComponentDef } from '../define'
+import { placementsOf, type ComponentDef } from '../define'
 import { getComponent, registerComponent } from '../registry'
 import { ButtonDef, LinkDef } from './action'
-import { KeyValueDef, ListDef, TreeDef } from './data'
+import { DataGridDef, GridCellDef, GridColumnDef, GridColumnGroupDef, GridRowDef, KeyValueDef, PaginationDef, TreeDef } from './data'
 import { DividerDef, MediaDef, PlaceholderDef, TextDef } from './document'
 import {
   AffixDef,
@@ -40,7 +40,12 @@ export const CATALOG_DEFS: readonly ComponentDef[] = [
   CardDef,
   TabsDef,
   TabPanelDef,
-  ListDef,
+  DataGridDef,
+  GridColumnGroupDef,
+  GridColumnDef,
+  GridRowDef,
+  GridCellDef,
+  PaginationDef,
   TreeDef,
   KeyValueDef,
   SearchFormDef,
@@ -92,10 +97,10 @@ function assertZoneReferences(defs: readonly ComponentDef[]): void {
         }
       }
     }
-    if (def.placement !== undefined) {
-      const host = byType.get(def.placement.type)
-      if (host === undefined || !host.zones.some((zone) => zone.name === def.placement!.zone)) {
-        throw new Error(`${def.type}: placement 가 카탈로그에 없는 구역을 가리킵니다: ${def.placement.type}.${def.placement.zone}`)
+    for (const place of placementsOf(def)) {
+      const host = byType.get(place.type)
+      if (host === undefined || !host.zones.some((zone) => zone.name === place.zone)) {
+        throw new Error(`${def.type}: placement 가 카탈로그에 없는 구역을 가리킵니다: ${place.type}.${place.zone}`)
       }
     }
   }

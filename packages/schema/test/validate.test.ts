@@ -16,7 +16,7 @@ describe('validatePage', () => {
     const doc = page({
       id: 'n_000000000001',
       type: 'Page',
-      children: [{ id: 'n_000000000002', type: 'List', props: { items: 3 } }],
+      children: [{ id: 'n_000000000002', type: 'DataGrid', props: { fixedColumns: 3 } }],
     })
     expect(validatePage(doc)).toEqual([])
   })
@@ -39,7 +39,7 @@ describe('validatePage', () => {
     const doc = page({
       id: 'n_000000000001',
       type: 'Page',
-      children: [{ id: 'n_000000000002', type: 'List', props: { items: -1 } }],
+      children: [{ id: 'n_000000000002', type: 'DataGrid', props: { fixedColumns: -1 } }],
     })
     expect(validatePage(doc)).toContainEqual(expect.objectContaining({ code: 'invalid-props', nodeId: 'n_000000000002' }))
   })
@@ -51,7 +51,7 @@ describe('validatePage', () => {
       children: [
         {
           id: 'n_000000000002',
-          type: 'List',
+          type: 'Pagination',
           children: [{ id: 'n_000000000003', type: 'Text' }],
         },
       ],
@@ -85,8 +85,8 @@ describe('validatePage', () => {
       id: 'n_000000000001',
       type: 'Page',
       children: [
-        { id: 'n_000000000002', type: 'List', alias: '회원 목록', props: { items: -1 } },
-        { id: 'n_000000000003', type: 'List', props: { items: -1 } },
+        { id: 'n_000000000002', type: 'DataGrid', alias: '회원 목록', props: { fixedColumns: -1 } },
+        { id: 'n_000000000003', type: 'DataGrid', props: { fixedColumns: -1 } },
         {
           id: 'n_000000000004',
           type: 'Divider',
@@ -97,8 +97,8 @@ describe('validatePage', () => {
     })
     const issues = validatePage(doc)
     const said = (code: string, nodeId: string) => issues.find((issue) => issue.code === code && issue.nodeId === nodeId)?.message
-    expect(said('invalid-props', 'n_000000000002')).toMatch(/^List의 props가 올바르지 않습니다 \('회원 목록'\): /)
-    expect(said('invalid-props', 'n_000000000003')).toMatch(/^List의 props가 올바르지 않습니다: /)
+    expect(said('invalid-props', 'n_000000000002')).toMatch(/^DataGrid의 props가 올바르지 않습니다 \('회원 목록'\): /)
+    expect(said('invalid-props', 'n_000000000003')).toMatch(/^DataGrid의 props가 올바르지 않습니다: /)
     expect(said('children-not-allowed', 'n_000000000004')).toBe("Divider은 자식을 담을 수 없습니다 ('구분선')")
   })
 
@@ -106,13 +106,13 @@ describe('validatePage', () => {
     const doc = page({
       id: 'n_000000000001',
       type: 'Page',
-      children: [{ id: 'n_000000000002', type: 'List', props: { items: -1 } }],
+      children: [{ id: 'n_000000000002', type: 'DataGrid', props: { fixedColumns: -1 } }],
     })
     const issues = validatePage(doc)
     const invalidPropsIssue = issues.find((issue) => issue.code === 'invalid-props')
     expect(invalidPropsIssue).toBeDefined()
     if (invalidPropsIssue) {
-      // The message format is "List의 props가 올바르지 않습니다: <zod error message>"
+      // The message format is "DataGrid의 props가 올바르지 않습니다: <zod error message>"
       // Extract the zod error part after the wrapper text
       const messageContent = invalidPropsIssue.message
       // zod error should contain Korean characters (너무, 작습니다, 이상, etc.)

@@ -36,10 +36,10 @@ describe('렌더 실패 폴백', () => {
   it('폴백 메시지는 한국어다', () => {
     // items는 min(0)이라 -1이면 zod가 거른다. 로케일을 주지 않으면
     // "Too small: expected number to be >=0"이 나온다.
-    const html = markup(renderNode({ id: 'n_000000000001', type: 'List', props: { items: -1 } }))
+    const html = markup(renderNode({ id: 'n_000000000001', type: 'DataGrid', props: { fixedColumns: -1 } }))
 
     const message = errorMessages(html)[0]!
-    // 콜론 뒤가 zod가 만든 부분이다. 앞부분("List의 props가…")은 우리가 쓴 한국어라
+    // 콜론 뒤가 zod가 만든 부분이다. 앞부분("DataGrid의 props가…")은 우리가 쓴 한국어라
     // 전체 문자열에 한글이 있는지만 보면 zod 부분이 영문이어도 통과한다.
     const fromZod = message.slice(message.indexOf(':') + 1)
     expect(fromZod).toMatch(/[가-힣]/)
@@ -52,8 +52,8 @@ describe('렌더 실패 폴백', () => {
     // 이슈를 둘 만든다 — 하나만 틀리면 이슈를 잇는 ', '와 경로 표기가 검사되지 않는다.
     const broken: WbNode = {
       id: 'n_000000000002',
-      type: 'List',
-      props: { items: -1, columns: 5 },
+      type: 'DataGrid',
+      props: { fixedColumns: -1, select: 5 },
     }
     const doc: PageDocument = {
       version: 1,
@@ -66,13 +66,13 @@ describe('렌더 실패 폴백', () => {
   })
 
   it('별칭을 단 노드의 props 폴백은 타입 뒤에 별칭을 붙이고 validate.ts 의 문장과 글자까지 같다(L-125)', () => {
-    const broken: WbNode = { id: 'n_000000000002', type: 'List', alias: '회원 목록', props: { items: -1 } }
+    const broken: WbNode = { id: 'n_000000000002', type: 'DataGrid', alias: '회원 목록', props: { fixedColumns: -1 } }
     const doc: PageDocument = { version: 1, root: { id: 'n_000000000001', type: 'Page', children: [broken] } }
     const issue = validatePage(doc).find((i) => i.code === 'invalid-props')
     const message = errorMessages(markup(renderNode(broken)))[0]!
     expect(message).toBe(issue!.message)
     // 타입이 문장의 머리다 — 첫 `(` 앞이 별칭에 안 갈린다(`apps/web` 의 `refusalHead`).
-    expect(message.startsWith("List의 props가 올바르지 않습니다 ('회원 목록'): ")).toBe(true)
+    expect(message.startsWith("DataGrid의 props가 올바르지 않습니다 ('회원 목록'): ")).toBe(true)
   })
 
   it('props가 잘못돼도 형제 노드는 정상으로 그려진다', () => {
@@ -81,7 +81,7 @@ describe('렌더 실패 폴백', () => {
         id: 'n_000000000001',
         type: 'Page',
         children: [
-          { id: 'n_000000000002', type: 'List', props: { items: -1 } },
+          { id: 'n_000000000002', type: 'DataGrid', props: { fixedColumns: -1 } },
           { id: 'n_000000000003', type: 'Text', props: { content: '살아남은 형제' } },
         ],
       }),
@@ -123,7 +123,7 @@ describe('렌더 실패 폴백', () => {
           type: 'Page',
           children: [
             { id: 'n_000000000002', type: 'NoSuchThing' },
-            { id: 'n_000000000003', type: 'List', props: { items: -1 } },
+            { id: 'n_000000000003', type: 'DataGrid', props: { fixedColumns: -1 } },
             { id: 'n_000000000004', type: 'Text', props: { content: '정상' } },
           ],
         },
@@ -132,7 +132,7 @@ describe('렌더 실패 폴백', () => {
     )
 
     expect(errors.map((e) => e.nodeId)).toEqual(['n_000000000002', 'n_000000000003'])
-    expect(errors.map((e) => e.type)).toEqual(['NoSuchThing', 'List'])
+    expect(errors.map((e) => e.type)).toEqual(['NoSuchThing', 'DataGrid'])
     expect(errors[0]!.message).toBe('알 수 없는 컴포넌트 타입: NoSuchThing')
   })
 
@@ -145,7 +145,7 @@ describe('렌더 실패 폴백', () => {
         type: 'Page',
         children: [
           { id: 'n_000000000002', type: 'Text', props: { content: '본문' } },
-          { id: 'n_000000000003', type: 'List', props: { items: 3 } },
+          { id: 'n_000000000003', type: 'DataGrid', props: { fixedColumns: 3 } },
         ],
       },
     }
@@ -156,7 +156,7 @@ describe('렌더 실패 폴백', () => {
     expect(errors).toEqual([])
     // 폴백이 없는 게 "아무것도 안 그렸기 때문"이 아님을 확인한다.
     expect(html).toContain('본문')
-    expect(html).toContain('data-wb-component="List"')
+    expect(html).toContain('data-wb-component="DataGrid"')
   })
 
   it('폴백에도 data-wb-id가 있다', () => {

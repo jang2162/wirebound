@@ -21,7 +21,7 @@ const NODES: WbNode[] = [
   { id: 'n-save', type: 'Button', props: { label: '추가' } },
   { id: 'n-a', type: 'Text', props: { content: '첫 글' } },
   { id: 'n-b', type: 'Text', alias: '안내', props: { content: '둘째 글' } },
-  { id: 'n-table', type: 'List', props: { columns: ['개요', '상세', '이력', '설정'] } },
+  { id: 'n-table', type: 'DataGrid', props: { select: 'check', fixedColumns: 2 } },
   { id: 'n-tabs', type: 'Tabs', children: [{ id: 'n-tab-a', type: 'TabPanel', props: { label: '개요' } }] },
   { id: 'n-sec', type: 'Section' },
 ]
@@ -68,7 +68,7 @@ describe('구조 트리 줄 — `타입 (별칭) 요약`', () => {
       expect(within(region()).getByRole('button', { name: nodeRowLabel(node) })).toBe(rowButton(node.id))
     }
     expect(rowButton('n-flex').textContent).toBe('Flex (머리 줄) 가로')
-    expect(rowButton('n-table').textContent).toBe('List 개요 · 상세 · 이력 · …')
+    expect(rowButton('n-table').textContent).toBe('DataGrid 체크 선택 · 고정 2')
     // 탭 이름은 패널 노드의 것이다 — 탭 줄은 요약이 없고 패널 줄이 제 이름을 단다.
     expect(rowButton('n-tabs').textContent).toBe('Tabs')
     expect(rowButton('n-tab-a').textContent).toBe('TabPanel 개요')

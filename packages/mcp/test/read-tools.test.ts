@@ -50,8 +50,8 @@ describe('list_pages — 다음 도구의 인자를 낸다', () => {
     expect(((await callJson(harness(), 'list_pages')) as { duplicatePaths: string[] }).duplicatePaths).toEqual([])
 
     const 겹침 = snapshotPayload()
-    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 4, root: { id: 'r', type: 'Page' } }, null))
-    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 4, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 5, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 5, root: { id: 'r', type: 'Page' } }, null))
     const said = (await callJson(harness({ payload: 겹침 }), 'list_pages')) as { duplicatePaths: string[] }
     expect(said.duplicatePaths).toEqual(['관리자/목록'])
   })
@@ -99,7 +99,7 @@ describe('get_page — 무엇을 싣나', () => {
       page: { interactions: { text: string }[] }
     }
     expect(said.page.interactions).toHaveLength(1)
-    expect(said.page.interactions[0]!.text).toBe('① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
+    expect(said.page.interactions[0]!.text).toBe('① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다')
   })
 
   it('코멘트가 노드 이름과 함께 온다', async () => {
@@ -109,7 +109,7 @@ describe('get_page — 무엇을 싣나', () => {
     expect(said.page.comments).toEqual([
       {
         nodeId: 'list',
-        nodeName: '② 목록',
+        nodeName: '② 그리드',
         body: '정렬 기준을 정해야 합니다',
         authorName: '장병현',
         createdAt: '2026-08-16T01:00:00.000Z',
@@ -140,8 +140,8 @@ describe('get_page — 못 찾은 것과 둘 이상을 갈라 낸다', () => {
 
   it('둘 이상이면 **둘 다 이름으로 낸다** — 하나를 고르지 않는다', async () => {
     const 겹침 = snapshotPayload()
-    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 4, root: { id: 'r', type: 'Page' } }, null))
-    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 4, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 5, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 5, root: { id: 'r', type: 'Page' } }, null))
 
     const said = (await callJson(harness({ payload: 겹침 }), 'get_page', { path: '관리자/목록' })) as {
       found: boolean
@@ -232,8 +232,8 @@ describe('`wireb page get --json`과 `get_page`가 같은 값을 본다', () => 
   it('겹치는 경로에서도 두 도구가 같은 것을 든다', async () => {
     const 겹침 = () => {
       const payload = snapshotPayload()
-      payload.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 4, root: { id: 'r', type: 'Page' } }, null))
-      payload.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 4, root: { id: 'r', type: 'Page' } }, null))
+      payload.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 5, root: { id: 'r', type: 'Page' } }, null))
+      payload.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 5, root: { id: 'r', type: 'Page' } }, null))
       return payload
     }
     const said = (await callJson(harness({ payload: 겹침() }), 'get_page', { path: '관리자/목록' })) as {
@@ -272,7 +272,7 @@ it('하네스가 스냅샷 라우트를 실제로 건다', async () => {
 describe('get_page — 별칭', () => {
   it('노드의 `alias` · `rowLabel` · 별칭으로 부른 `name` 을 싣는다', async () => {
     const 문서 = {
-      version: 4,
+      version: 5,
       root: {
         id: 'root',
         type: 'Page',

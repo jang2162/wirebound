@@ -35,7 +35,7 @@ function card(): WbNode {
 }
 
 function page(...children: WbNode[]): PageDocument {
-  return { version: 4, root: { id: 'n_root', type: 'Page', children } }
+  return { version: 5, root: { id: 'n_root', type: 'Page', children } }
 }
 
 describe('childLists — 차례는 카탈로그의 구역 선언 차례', () => {
@@ -59,10 +59,8 @@ describe('childLists — 차례는 카탈로그의 구역 선언 차례', () => 
       ['zeta', 1],
     ])
     // 몸통이 없는 타입의 `children` 도 숨기지 않는다(검증은 `children-not-allowed` 로 막는다 — 숨기면 그 안 노드가 잠금을 지난다).
-    const list = { id: 'n_l', type: 'List', children: [{ id: 'n_c' }], zones: { body: [{ id: 'n_b' }] } } as unknown as WbNode
-    expect(childLists(list).map((entry) => [entry.zone, entry.pointer])).toEqual([
-      ['headStart', '/zones/headStart'],
-      ['headEnd', '/zones/headEnd'],
+    const leaf = { id: 'n_l', type: 'Button', children: [{ id: 'n_c' }], zones: { body: [{ id: 'n_b' }] } } as unknown as WbNode
+    expect(childLists(leaf).map((entry) => [entry.zone, entry.pointer])).toEqual([
       ['body', '/children'],
       ['body', '/zones/body'],
     ])
@@ -100,7 +98,7 @@ describe('봉투 — zones 의 꼴', () => {
 describe('검증 — 구역 코드 셋', () => {
   const codes = (doc: PageDocument) => validatePage(doc).map((issue) => [issue.code, issue.path, issue.nodeId])
 
-  it('멀쩡한 카드 · 폼 · 목록 · 탭은 이슈가 없다', () => {
+  it('멀쩡한 카드 · 폼 · 그리드 · 탭은 이슈가 없다', () => {
     const tabs: WbNode = {
       id: 'n_tabs',
       type: 'Tabs',
@@ -112,7 +110,16 @@ describe('검증 — 구역 코드 셋', () => {
       children: [{ id: 'n_fd', type: 'Field' }],
       zones: { actions: [{ id: 'n_b', type: 'Button' }] },
     }
-    const list: WbNode = { id: 'n_li', type: 'List', zones: { headEnd: [{ id: 'n_x', type: 'Button' }] } }
+    const list: WbNode = {
+      id: 'n_li',
+      type: 'DataGrid',
+      children: [{ id: 'n_col', type: 'GridColumn', children: [{ id: 'n_tx', type: 'Text' }] }],
+      zones: {
+        headEnd: [{ id: 'n_x', type: 'Button' }],
+        rows: [{ id: 'n_row', type: 'GridRow' }],
+        footer: [{ id: 'n_pg', type: 'Pagination' }],
+      },
+    }
     expect(codes(page(card(), tabs, form, list))).toEqual([])
   })
 
@@ -125,8 +132,8 @@ describe('검증 — 구역 코드 셋', () => {
     ])
   })
 
-  it('children-not-allowed — 몸통이 없는 타입(목록)의 children', () => {
-    expect(codes(page({ id: 'n_l', type: 'List', children: [{ id: 'n_t', type: 'Text' }] }))).toEqual([
+  it('children-not-allowed — 몸통이 없는 타입(페이지네이션)의 children', () => {
+    expect(codes(page({ id: 'n_l', type: 'Pagination', children: [{ id: 'n_t', type: 'Text' }] }))).toEqual([
       ['children-not-allowed', '/root/children/0/children', 'n_l'],
     ])
   })
@@ -151,6 +158,22 @@ describe('검증 — 구역 코드 셋', () => {
       expect(issue?.nodeId).toBe('n_p')
       expect(issue?.message).toBe('탭 패널은 탭 안에만 놓을 수 있습니다')
     }
+  })
+
+  it('설 자리가 여럿이면 어느 하나에 서면 된다 — 열은 그리드 몸통 · 열 묶음 몸통, 그 밖(그리드의 행 구역 · 페이지)은 misplaced', () => {
+    const column = { id: 'n_col', type: 'GridColumn' }
+    const grouped: WbNode = { id: 'n_g', type: 'DataGrid', children: [{ id: 'n_grp', type: 'GridColumnGroup', children: [column] }] }
+    const direct: WbNode = { id: 'n_g', type: 'DataGrid', children: [column] }
+    expect(validatePage(page(grouped)).filter((one) => one.code === 'misplaced-component')).toEqual([])
+    expect(validatePage(page(direct)).filter((one) => one.code === 'misplaced-component')).toEqual([])
+    for (const parent of [page(column), page({ id: 'n_c', type: 'Card', children: [column] })]) {
+      const issue = validatePage(parent).find((one) => one.code === 'misplaced-component')
+      expect(issue?.nodeId).toBe('n_col')
+      expect(issue?.message).toBe('열은 그리드 · 열 묶음 안에만 놓을 수 있습니다')
+    }
+    // 행 구역은 받는 타입(행)이 열을 거절한다 — 설 자리 밖이기도 해 둘 다 선다.
+    const inRows = validatePage(page({ id: 'n_g', type: 'DataGrid', zones: { rows: [column] } })).map((one) => one.code)
+    expect(inRows).toEqual(expect.arrayContaining(['zone-type-not-allowed', 'misplaced-component']))
   })
 
   it('구역 안 노드도 검증한다 — 없는 타입 · 겹친 id · 틀린 props', () => {
@@ -221,9 +244,9 @@ describe('순회 · 복사 · 보임', () => {
 
   it('클립보드 — 맨 위 탭 패널은 감싼 뿌리 밑이어도 읽는다(설 자리는 붙인 뒤 문서가 본다) · 그 안의 판정은 그대로', () => {
     const panel: WbNode = { id: 'n_p', type: 'TabPanel', props: { label: '상세' } }
-    expect(inspectNodesEnvelope(writeNodesEnvelope([panel], 4))).toEqual({ kind: 'ok', nodes: [panel] })
+    expect(inspectNodesEnvelope(writeNodesEnvelope([panel], 5))).toEqual({ kind: 'ok', nodes: [panel] })
     const nested: WbNode = { id: 'n_f', type: 'Flex', children: [panel] }
-    expect(inspectNodesEnvelope(writeNodesEnvelope([nested], 4))).toEqual({
+    expect(inspectNodesEnvelope(writeNodesEnvelope([nested], 5))).toEqual({
       kind: 'rejected',
       reason: '탭 패널은 탭 안에만 놓을 수 있습니다',
     })

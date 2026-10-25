@@ -15,7 +15,9 @@ import {
   hasBody,
   COMPONENT_GROUPS,
   COMPONENT_GROUP_LABELS,
+  getComponent,
   listComponents,
+  placementsOf,
   validatePage,
   type ComponentGroup,
   type PageDocument,
@@ -59,11 +61,17 @@ export function placeableGroups(): PickableGroup[] {
     const node = createNode(def.type, () => `n-probe-${made++}`)
     if (node === null) continue
     // 설 자리가 정해진 타입(`TabPanel`)은 그 자리(부모 타입의 그 구역)에 놓아 재 본다 — 뿌리에 두면 `misplaced-component` 로 늘 빠진다.
-    const host = def.placement
-    const placed: WbNode =
-      host === undefined
-        ? node
-        : { id: 'n-probe-host', type: host.type, ...(host.zone === BODY_ZONE ? { children: [node] } : { zones: { [host.zone]: [node] } }) }
+    // 설 자리가 정해진 타입(`TabPanel` · 그리드 부품)은 그 자리(부모 타입의 그 구역)에 놓아 재 본다 — 뿌리에 두면 `misplaced-component` 로 늘 빠진다.
+    // 부모도 설 자리가 정해졌으면(칸 › 행 › 그리드) 그 부모의 자리까지 차례로 감싼다. 자리가 여럿이면(열 — 그리드 몸통 · 열 묶음 몸통) 첫 자리다.
+    let placed: WbNode = node
+    for (let host = placementsOf(def)[0], depth = 0; host !== undefined && depth < 8; depth++) {
+      placed = {
+        id: `n-probe-host-${depth}`,
+        type: host.type,
+        ...(host.zone === BODY_ZONE ? { children: [placed] } : { zones: { [host.zone]: [placed] } }),
+      }
+      host = placementsOf(getComponent(host.type))[0]
+    }
     const probe: PageDocument = {
       version: CURRENT_DOCUMENT_VERSION,
       root: { id: 'n-probe-root', type: 'Page', children: [placed] },

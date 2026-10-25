@@ -20,7 +20,7 @@ const DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
   children: [
-    { id: 'n-list', type: 'List', props: { columns: ['이름', '이메일'], items: 3 } },
+    { id: 'n-list', type: 'Tree', props: { items: ['이름', '이메일'] } },
     {
       id: 'n-kv',
       type: 'KeyValue',
@@ -32,16 +32,16 @@ const DOC = pageDoc({
       },
     },
     // 빈 배열. 추가 버튼이 있어야 여기서 시작할 수 있다.
-    { id: 'n-empty', type: 'List', props: { columns: [], items: 1 } },
+    { id: 'n-empty', type: 'Tree', props: { items: [] } },
   ],
 })
 
-/** `columns`가 배열이 **아닌** 문서. 검증을 통과하지 못한 문서가 스토어에 실리는 창이다. */
+/** `items`가 배열이 **아닌** 문서. 검증을 통과하지 못한 문서가 스토어에 실리는 창이다. */
 const BROKEN_DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
   children: [
-    { id: 'n-list', type: 'List', props: { columns: '이름, 이메일', items: 1 } },
+    { id: 'n-list', type: 'Tree', props: { items: '이름, 이메일' } },
     { id: 'n-kv', type: 'KeyValue', props: { pairs: 7 } },
   ],
 })
@@ -110,23 +110,23 @@ describe('속성 패널 — 목록 컨트롤', () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('List', 0)
-    fireEvent.click(addButton('컬럼'))
+    selectAt('Tree', 0)
+    fireEvent.click(addButton('항목'))
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    // **배열 통째로 `replace`다.** 인덱스를 조작하는 `add /…/columns/-`가 아니다.
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/columns', value: ['이름', '이메일', ''] }])
+    // **배열 통째로 `replace`다.** 인덱스를 조작하는 `add /…/items/-`가 아니다.
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/items', value: ['이름', '이메일', ''] }])
   })
 
   it('항목을 지우면 그 자리가 빠진다', async () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('List', 0)
-    fireEvent.click(removeButtons('컬럼')[0]!)
+    selectAt('Tree', 0)
+    fireEvent.click(removeButtons('항목')[0]!)
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/columns', value: ['이메일'] }])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/items', value: ['이메일'] }])
   })
 
   it('항목을 고치면 blur에 나간다', async () => {
@@ -134,8 +134,8 @@ describe('속성 패널 — 목록 컨트롤', () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('List', 0)
-    const input = itemInputs('컬럼')[0]!
+    selectAt('Tree', 0)
+    const input = itemInputs('항목')[0]!
     fireEvent.change(input, { target: { value: '성명' } })
 
     // 타이핑만으로는 나가지 않는다.
@@ -143,15 +143,15 @@ describe('속성 패널 — 목록 컨트롤', () => {
 
     fireEvent.blur(input)
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/columns', value: ['성명', '이메일'] }])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/items', value: ['성명', '이메일'] }])
   })
 
   it('항목이 그대로면 blur해도 나가지 않는다', async () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('List', 0)
-    fireEvent.blur(itemInputs('컬럼')[0]!)
+    selectAt('Tree', 0)
+    fireEvent.blur(itemInputs('항목')[0]!)
 
     expect(calls).toHaveLength(0)
   })
@@ -204,11 +204,11 @@ describe('속성 패널 — 목록 컨트롤', () => {
 
   it('배열이 아닌 값이면 빈 목록으로 시작한다', async () => {
     // **이 파일의 방어선이다.** 속성 패널은 오류 경계 밖이라 여기서 던지면 셸 전체가
-    // 흰 화면이 된다. `columns`가 문자열이고 `pairs`가 수인 문서를 심어 잰다.
+    // 흰 화면이 된다. `items`가 문자열이고 `pairs`가 수인 문서를 심어 잰다.
     await openPage(BROKEN_DOC)
 
-    selectAt('List', 0)
-    expect(itemValues('컬럼')).toEqual([])
+    selectAt('Tree', 0)
+    expect(itemValues('항목')).toEqual([])
     // 셸이 살아 있다.
     expect(document.body.querySelector('.wb-shell')).not.toBeNull()
 
@@ -240,20 +240,20 @@ describe('속성 패널 — 목록 컨트롤', () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('List', 1)
-    expect(itemValues('컬럼')).toEqual([])
-    fireEvent.click(addButton('컬럼'))
+    selectAt('Tree', 1)
+    expect(itemValues('항목')).toEqual([])
+    fireEvent.click(addButton('항목'))
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/2/props/columns', value: [''] }])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/2/props/items', value: [''] }])
   })
 
   it('편집한 목록이 캔버스에 반영된다', async () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('List', 0)
-    const input = itemInputs('컬럼')[0]!
+    selectAt('Tree', 0)
+    const input = itemInputs('항목')[0]!
     fireEvent.change(input, { target: { value: '성명' } })
     fireEvent.blur(input)
 
@@ -272,22 +272,22 @@ describe('속성 패널 — 목록 컨트롤', () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('List', 0)
-    fireEvent.change(itemInputs('컬럼')[0]!, { target: { value: '성명' } })
-    selectAt('List', 1)
+    selectAt('Tree', 0)
+    fireEvent.change(itemInputs('항목')[0]!, { target: { value: '성명' } })
+    selectAt('Tree', 1)
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/columns', value: ['성명', '이메일'] }])
-    expect(itemValues('컬럼')).toEqual([])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/items', value: ['성명', '이메일'] }])
+    expect(itemValues('항목')).toEqual([])
   })
 
   it('다른 노드를 고르면 목록이 그 노드 값으로 바뀐다', async () => {
     await openPage(DOC)
 
-    selectAt('List', 0)
-    expect(itemValues('컬럼')).toEqual(['이름', '이메일'])
+    selectAt('Tree', 0)
+    expect(itemValues('항목')).toEqual(['이름', '이메일'])
 
-    selectAt('List', 1)
-    expect(itemValues('컬럼')).toEqual([])
+    selectAt('Tree', 1)
+    expect(itemValues('항목')).toEqual([])
   })
 })

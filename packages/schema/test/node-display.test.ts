@@ -60,7 +60,20 @@ describe('nodeSummary — 타입마다', () => {
     ['Tabs', undefined, null],
     ['TabPanel', { label: '상세정보' }, '상세정보'],
     ['TabPanel', { label: ' ' }, null],
-    ['List', { columns: ['이름', '이메일', '가입일', '상태'] }, '이름 · 이메일 · 가입일 · …'],
+    ['DataGrid', undefined, null],
+    ['DataGrid', { select: 'check', fixedColumns: 2 }, '체크 선택 · 고정 2'],
+    ['DataGrid', { select: 'radio' }, '라디오 선택'],
+    ['GridColumnGroup', { label: '1학기' }, '1학기'],
+    ['GridColumn', { label: '과정명' }, '과정명'],
+    ['GridColumn', undefined, '컬럼'],
+    ['GridRow', undefined, '×1'],
+    ['GridRow', { repeat: 5 }, '×5'],
+    ['GridRow', { tone: 'selected' }, '강조 · ×1'],
+    ['GridRow', { kind: 'total' }, '합계 · ×1'],
+    ['GridRow', { kind: 'gap', repeat: 3 }, '생략'],
+    ['GridCell', undefined, null],
+    ['GridCell', { span: 5, rowSpan: 2 }, '가로 5 · 세로 2'],
+    ['Pagination', undefined, '총 72'],
     [
       'KeyValue',
       {
@@ -108,7 +121,12 @@ describe('nodeSummary — 타입마다', () => {
       'Text',
       'Tabs',
       'TabPanel',
-      'List',
+      'DataGrid',
+      'GridColumnGroup',
+      'GridColumn',
+      'GridRow',
+      'GridCell',
+      'Pagination',
       'KeyValue',
       'Media',
       'Divider',
@@ -145,17 +163,17 @@ describe('nodeDisplayName', () => {
 
   it('별칭이 없으면 지금 문장이 쓰는 이름이다 — 라벨 + 한국어 이름', () => {
     expect(nodeDisplayName(n('Button', { label: '저장' }))).toBe('저장 버튼')
-    expect(nodeDisplayName(n('List'))).toBe('목록')
+    expect(nodeDisplayName(n('DataGrid'))).toBe('그리드')
     expect(nodeDisplayName(n('Bogus'))).toBe('Bogus')
   })
 
   it('번호(marker)는 싣지 않는다 — 번호는 문장이 앞에 붙인다', () => {
-    expect(nodeDisplayName({ ...n('List'), marker: 2 })).toBe('목록')
+    expect(nodeDisplayName({ ...n('DataGrid'), marker: 2 })).toBe('그리드')
   })
 
   it('모양이 틀린 별칭(검증 전 문서)은 없는 것으로 읽는다', () => {
-    expect(nodeDisplayName({ ...n('List'), alias: '   ' })).toBe('목록')
-    expect(nodeDisplayName({ ...n('List'), alias: 3 } as unknown as WbNode)).toBe('목록')
+    expect(nodeDisplayName({ ...n('DataGrid'), alias: '   ' })).toBe('그리드')
+    expect(nodeDisplayName({ ...n('DataGrid'), alias: 3 } as unknown as WbNode)).toBe('그리드')
   })
 })
 
