@@ -37,7 +37,7 @@ import { tabHub } from '../helpers'
 import '../../src/catalog-setup'
 
 const ROOT_ID = 'n-root'
-const DOC = pageDoc({ id: ROOT_ID, type: 'Page', children: [{ id: 'n-list', type: 'List', props: {} }] })
+const DOC = pageDoc({ id: ROOT_ID, type: 'Page', children: [{ id: 'n-list', type: 'DataGrid', props: {} }] })
 const OTHER_DOC = pageDoc({ id: 'n-other', type: 'Page', children: [] })
 const PAGE_TITLE = '회원 목록'
 

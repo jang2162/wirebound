@@ -1,12 +1,12 @@
 /**
- * `isolateBidi` — 사람이 쓴 이름(라벨 · 제목 · 탭 이름 · 컬럼 이름)을 글에 이어 붙이는 자리의 방향 격리. 화면에서 뒤집히는지는 실브라우저 판
+ * `isolateBidi` — 사람이 쓴 이름(라벨 · 제목 · 탭 이름 · 선택지 이름)을 글에 이어 붙이는 자리의 방향 격리. 화면에서 뒤집히는지는 실브라우저 판
  * (`apps/web/build-test/label-bidi.test.ts`)이 재고, 여기는 **글자**를 못박는다 — 보통 글은 한 글자도 안 바뀌고, 제어 글자가 든 이름만
  * U+2068 … U+2069 로 감싼다.
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import { isolateBidi } from '../src/bidi'
 import { installCatalog } from '../src/component/catalog/index'
-import { clipped, firstOf, oneLine } from '../src/component/summary'
+import { clipped, oneLine } from '../src/component/summary'
 import { nodeSummary } from '../src/display'
 import { describeInteraction, nodeDisplayName } from '../src/interaction/describe'
 import type { PageDocument, WbNode } from '../src/node'
@@ -56,9 +56,6 @@ describe('이름이 이어 붙는 자리', () => {
     // 20 글자를 넘는 글은 자르고 `…` 를 붙인 **뒤** 감싼다 — 가둔 글을 자르면 끝 격리가 잘려 나간다.
     expect(clipped(`${RLO}${'가'.repeat(30)}`, 20)).toBe(`${FSI}${RLO}${'가'.repeat(19)}…${PDI}`)
     expect(clipped('가'.repeat(30), 20)).toBe(`${'가'.repeat(20)}…`)
-    // 탭 이름 · 컬럼 이름 — 이름마다 따로 감싸 앞 이름의 제어 글자가 뒤 이름을 못 뒤집는다.
-    expect(firstOf([`x${RLO}y`, '둘째', '셋째'])).toBe(`${FSI}x${RLO}y${PDI} · 둘째 · 셋째`)
-    expect(firstOf(['개요', '상세'])).toBe('개요 · 상세')
   })
 
   it('줄 요약 — TabPanel · Card · Button', () => {
@@ -66,6 +63,14 @@ describe('이름이 이어 붙는 자리', () => {
     expect(nodeSummary(panel)).toBe(`${FSI}x${RLO}y${PDI}`)
     expect(nodeSummary(button('n_btn000000001', `a${RLO}b`))).toBe(`${FSI}a${RLO}b${PDI}`)
     expect(nodeSummary(button('n_btn000000002', '저장'))).toBe('저장')
+    // 고른 선택지 이름 — 이름마다 따로 감싸 앞 이름의 제어 글자가 뒤 이름을 못 뒤집는다.
+    const picked = (label: string) => ({ label, selected: true })
+    const group = {
+      id: 'n_chk000000001',
+      type: 'CheckboxGroup',
+      props: { options: [picked(`x${RLO}y`), picked('둘째'), picked('셋째')] },
+    } as WbNode
+    expect(nodeSummary(group)).toBe(`${FSI}x${RLO}y${PDI} · 둘째 · 셋째`)
   })
 
   it('문장 — 라벨 · 탭 이름 · 값 · 페이지 경로를 이름마다 감싼다 · 보통 글은 그대로다', () => {

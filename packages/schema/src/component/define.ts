@@ -55,7 +55,7 @@ const DESCRIPTION_MAX = 60
 export interface ComponentDef {
   type: string
   /**
-   * 사람이 읽는 이름. `List` → `목록`. **한국어 UI가 영문 타입명을 그대로 내지 않게 하는
+   * 사람이 읽는 이름. `DataGrid` → `그리드`. **한국어 UI가 영문 타입명을 그대로 내지 않게 하는
    * 자리다** — 고르개도 상호작용 문장도 이것을 쓴다(`interaction/describe.ts`의
    * `COMPONENT_NOUNS`가 여기서 유도된다).
    *

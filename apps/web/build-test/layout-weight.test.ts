@@ -89,7 +89,15 @@ const PLAIN = [
       { id: 'p_sf2', type: 'Field', props: { label: '상태' }, children: [{ id: 'p_sf2s', type: 'Select' }] },
     ],
   },
-  { id: 'p_ls', type: 'List', props: { items: 2, columns: ['이름', '상태'], pagination: false } },
+  {
+    id: 'p_ls',
+    type: 'DataGrid',
+    children: [
+      { id: 'p_ls_c1', type: 'GridColumn', props: { label: '이름' } },
+      { id: 'p_ls_c2', type: 'GridColumn', props: { label: '상태' } },
+    ],
+    zones: { rows: [{ id: 'p_ls_r', type: 'GridRow', props: { repeat: 2 } }] },
+  },
 ]
 
 /** 노드마다 상자 · 계산 스타일 몇. 글로 넘긴다 — vitest 가 함수 안의 이름을 바꿔 페이지에서 죽지 않게. */

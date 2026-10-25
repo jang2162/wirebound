@@ -39,7 +39,7 @@ import { tabHub } from '../helpers'
 import '../../src/catalog-setup'
 
 const ROOT_ID = 'n-root'
-const DOC = pageDoc({ id: ROOT_ID, type: 'Page', children: [{ id: 'n-list', type: 'List', props: {} }] })
+const DOC = pageDoc({ id: ROOT_ID, type: 'Page', children: [{ id: 'n-list', type: 'DataGrid', props: {} }] })
 /** 하네스의 첫 페이지 제목. */
 const PAGE_TITLE = '회원 목록'
 /** 하네스가 세션으로 내는 사용자. */

@@ -35,7 +35,17 @@
  *
  * **`why` 를 주면 `null` 의 까닭을 한 번 부른다** — 끌기 진단 줄(`drag/drag-debug.ts`)에만 쓰고 답은 안 바꾼다. 꺼진 판은 안 준다.
  */
-import { BODY_ZONE, getComponent, zoneDefs, zoneList, type NodeLock, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import {
+  BODY_ZONE,
+  getComponent,
+  placementsOf,
+  zoneDefs,
+  zoneList,
+  type NodeLock,
+  type PageDocument,
+  type PatchOp,
+  type WbNode,
+} from '@wirebound/schema'
 import type { DropMiss } from '../drag/drag-debug'
 import type { DropBand } from '../tree/tree-drop'
 import { createNode } from './create-node'
@@ -224,10 +234,11 @@ export function fitRefusal(parentType: unknown, zone: string, type: unknown): st
   if (accepts !== undefined && !accepts.includes(type)) {
     return `${zonePlace(parentType, zone)}에는 ${accepts.map(componentLabel).join(' · ')}만 놓을 수 있습니다`
   }
-  const placement = getComponent(type)?.placement
-  if (placement !== undefined && (placement.type !== parentType || placement.zone !== zone)) {
+  const places = placementsOf(getComponent(type))
+  if (places.length > 0 && !places.some((place) => place.type === parentType && place.zone === zone)) {
     const label = componentLabel(type)
-    return `${label}${topicParticle(label)} ${zonePlace(placement.type, placement.zone)} 안에만 놓을 수 있습니다`
+    const where = [...new Set(places.map((place) => zonePlace(place.type, place.zone)))].join(' · ')
+    return `${label}${topicParticle(label)} ${where} 안에만 놓을 수 있습니다`
   }
   return null
 }

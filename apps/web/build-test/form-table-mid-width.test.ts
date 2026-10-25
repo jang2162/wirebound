@@ -103,8 +103,18 @@ const FORMS = [
   },
 ]
 const wideValues = () => [
-  field('그리드', [{ id: id('g'), type: 'Grid', props: { columns: 3 }, children: ['하나', '둘', '셋', '넷', '다섯', '여섯'].map(text) }]),
-  field('목록', [{ id: id('l'), type: 'List', props: {} }]),
+  field('격자 배치', [
+    { id: id('g'), type: 'Grid', props: { columns: 3 }, children: ['하나', '둘', '셋', '넷', '다섯', '여섯'].map(text) },
+  ]),
+  field('그리드 표', [
+    {
+      id: id('l'),
+      type: 'DataGrid',
+      props: {},
+      children: ['이름', '이메일', '가입일', '상태'].map((label) => ({ id: id('lc'), type: 'GridColumn', props: { label } })),
+      zones: { rows: [{ id: id('lr'), type: 'GridRow', props: { repeat: 2 } }] },
+    },
+  ]),
   field('카드', [{ id: id('c'), type: 'Card', props: { title: '값 칸 카드' }, children: [text('카드 몸통')] }]),
   field('기간 + 단추', dateRange()),
   field('세그먼트 7', seg7()),

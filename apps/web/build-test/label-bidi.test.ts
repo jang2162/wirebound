@@ -1,6 +1,6 @@
 /**
- * **라벨 · 제목 · 목록 칸 이름의 방향 제어 글자가 뒤따르는 다른 이름을 뒤집지 않는가** — 실브라우저 판. 별칭은 입구(봉투 · 화면 다듬기)가 방향
- * 제어 글자를 막지만 라벨 · 제목 · 목록 칸 이름 같은 props 의 글은 막지 않는다 — 그 글이 이어 붙는 자리(상호작용 문장 · 구조 트리 줄 요약 ·
+ * **라벨 · 제목 · 선택지 이름의 방향 제어 글자가 뒤따르는 다른 이름을 뒤집지 않는가** — 실브라우저 판. 별칭은 입구(봉투 · 화면 다듬기)가 방향
+ * 제어 글자를 막지만 라벨 · 제목 · 선택지 이름 같은 props 의 글은 막지 않는다 — 그 글이 이어 붙는 자리(상호작용 문장 · 구조 트리 줄 요약 ·
  * 대상 고르개 · 내보낸 번들의 상호작용 목록)에서 이름마다 방향을 격리해야(`isolateBidi`) 뒤의 이름이 제 자리에 선다.
  *
  * 재는 값은 글자마다 화면 가로 가운데다 — 이름 조각들이 논리 차례 그대로 왼쪽 → 오른쪽으로 서는가. 제어 글자가 없는 글은 바이트가 그대로여야
@@ -66,7 +66,7 @@ function piecesInOrder(row: Glyph[], pieces: string[]): { text: string; inOrder:
 
 const unpacked: string[] = []
 
-describe.skipIf(!전제.ok)('라벨 · 목록 칸 이름의 방향 제어 글자 — 실브라우저', () => {
+describe.skipIf(!전제.ok)('라벨 · 선택지 이름의 방향 제어 글자 — 실브라우저', () => {
   let stack: EditorStack
   let alice: Session
   let projectId = ''
@@ -91,7 +91,11 @@ describe.skipIf(!전제.ok)('라벨 · 목록 칸 이름의 방향 제어 글자
         interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_list00000001', value: false }] }],
       },
       { id: 'n_list00000001', type: 'Button', marker: 2, props: { label: '저장' } },
-      { id: 'n_cols00000001', type: 'List', props: { columns: [`x${RLO}yz`, '둘째', '셋째'] } },
+      {
+        id: 'n_cols00000001',
+        type: 'CheckboxGroup',
+        props: { options: [`x${RLO}yz`, '둘째', '셋째'].map((label) => ({ label, selected: true })) },
+      },
     ]
     const seeded = await call('PATCH', `${P}/ops`, {
       baseSeq: 0,
@@ -116,11 +120,11 @@ describe.skipIf(!전제.ok)('라벨 · 목록 칸 이름의 방향 제어 글자
     return { page, close: () => context.close() }
   }
 
-  it('구조 트리 줄 요약 — 칸 이름의 방향 제어 글자가 뒤따르는 칸 이름을 안 뒤집는다', async () => {
+  it('구조 트리 줄 요약 — 선택지 이름의 방향 제어 글자가 뒤따르는 이름을 안 뒤집는다', async () => {
     const a = await openEditor()
     try {
       const tabsRow = a.page.locator('[data-tree-id="n_cols00000001"] > button.wb-shell-structure-node')
-      const tabs = piecesInOrder(await glyphsOf(tabsRow), ['List', `x${RLO}yz`, '둘째', '셋째'])
+      const tabs = piecesInOrder(await glyphsOf(tabsRow), ['CheckboxGroup', `x${RLO}yz`, '둘째', '셋째'])
       // 판 카나리아 — 조각마다 폭 있는 글자를 잡았다(줄이 접혀 있으면 범위가 비어 `Infinity` 다).
       expect(
         tabs.spans.every((span) => !span.includes('Infinity')),

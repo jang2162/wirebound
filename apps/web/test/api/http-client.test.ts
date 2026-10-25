@@ -183,7 +183,7 @@ const snapshot = {
 const projectModule = {
   id: 'm1',
   name: '내 모듈',
-  nodes: [{ id: 'a', type: 'List' }],
+  nodes: [{ id: 'a', type: 'DataGrid' }],
   nodeCount: 1,
   createdBy: 'u1',
   createdAt: '2026-10-19T00:00:00.000Z',
@@ -495,7 +495,7 @@ const ENDPOINTS: Array<{
     url: '/api/projects/p1/modules',
     method: 'POST',
     body: { module: projectModule },
-    call: (c) => c.createModule('p1', { name: '내 모듈', nodes: [{ id: 'a', type: 'List' }] }),
+    call: (c) => c.createModule('p1', { name: '내 모듈', nodes: [{ id: 'a', type: 'DataGrid' }] }),
   },
   {
     client: 'renameModule',
@@ -531,7 +531,7 @@ const ENDPOINTS: Array<{
     url: '/api/me/modules',
     method: 'POST',
     body: { module: projectModule },
-    call: (c) => c.createMyModule({ name: '내 모듈', nodes: [{ id: 'a', type: 'List' }] }),
+    call: (c) => c.createMyModule({ name: '내 모듈', nodes: [{ id: 'a', type: 'DataGrid' }] }),
   },
   {
     client: 'renameMyModule',

@@ -15,8 +15,8 @@
  *
  * | 어디 | 설치 전 | 설치 후 |
  * |---|---|---|
- * | `lintProject` | **`document-invalid:error` 5건** (*"알 수 없는 컴포넌트 타입: Page·Button·List"*) | **0건** |
- * | `pageView().interactions[].text` | *"② 목록이 **loading**로 바뀝니다"* | *"② 목록이 **로딩 상태**로 바뀝니다"* |
+ * | `lintProject` | **`document-invalid:error` 6건** (*"알 수 없는 컴포넌트 타입: Page·Button·DataGrid·GridColumn"*) | **0건** |
+ * | `pageView().interactions[].text` | *"② 그리드가 **loading**로 바뀝니다"* | *"② 그리드가 **로딩 상태**로 바뀝니다"* |
  * | `pageView().nodes[].name` · `comments[].nodeName` | 같다 | 같다 |
  *
  * **lint 쪽은 종료 코드까지 뒤집는다**(전부 `error`다). **`pageView` 쪽은 던지지도 않고

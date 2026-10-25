@@ -80,7 +80,7 @@ export type LintOutcome = { kind: 'report'; report: LintReport } | LintNoSuchPat
  * lint를 돌리고 무엇을 보일지 고른다.
  *
  * **카탈로그를 여기서 세운다** — 안 부르면 모든 노드가 `document-invalid:error`가 되어
- * 결과가 통째로 거짓이 된다(실측 5건 → 0건. `read/catalog.ts`의 표).
+ * 결과가 통째로 거짓이 된다(실측 6건 → 0건. `read/catalog.ts`의 표).
  */
 export function lintReport(
   payload: SnapshotPayload,

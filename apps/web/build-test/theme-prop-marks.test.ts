@@ -7,9 +7,9 @@
  * |---|---|---|
  * | `Section` compact | 루트의 `padding-top` · 높이 | 켜면 여백이 준다 |
  * | `SearchForm` collapsed | 루트 높이 · 안의 필드 수 | 켜면 낮아지고 필드가 DOM 에서 빠진다 |
- * | 입력 조각(`Field` 값 칸의 `DateInput`) disabled · invalid · `List` loading | 루트 · 조각의 계산 스타일 | 꺼진 판과 다른 속성이 하나 이상 |
+ * | 입력 조각(`Field` 값 칸의 `DateInput`) disabled · invalid · `DataGrid` loading | 루트 · 조각의 계산 스타일 | 꺼진 판과 다른 속성이 하나 이상 |
  * | `Media` kind | 틀 안 표지(`glyph`)의 글자 · 상자 | `video` 는 보이는 표지이고 `image` 의 것(없거나 다른 글자)과 다르다 |
- * | `List` selectable | 체크 칸 상자 | 표 구조(`data-wb-structure="table"`) variant 는 체크 칸을 그리고, 그 밖의 variant 는 안 그린다(`selectable` 은 표에서만 뜻이 있다 — 아래 «selectable 은 표 구조에서만») |
+ * | `DataGrid` select | 체크 칸 상자 | `check` 면 머리 · 행마다 체크 칸이 보이는 상자로 선다 — 테마가 선언한 variant 전부에서(아래 «체크 선택 칸은 variant 마다») |
  *
  * 내보낸 번들(HTML · 문서 폭 1280)에서 잰다 — 캔버스와 같은 CSS 를 싣고(`theme-system-review.test.ts` «캔버스 = 번들»), 에디터 셸 없이
  * 문서만 서서 값이 흔들리지 않는다. 테마는 저장소 빌드가 낸 산출물을 api 가 기동 때 넣은 것이다 — `pnpm build` 가 먼저다.
@@ -47,17 +47,32 @@ const fields = (prefix: string) => [
 ]
 
 /**
- * 테마마다 `List` 가 선언한 variant — 저장소 빌드가 낸 `.wbtheme` 의 `manifest.json` 에서 읽는다(손으로 옮겨 적으면 variant 가 늘 때
+ * 테마마다 `DataGrid` 가 선언한 variant — 저장소 빌드가 낸 `.wbtheme` 의 `manifest.json` 에서 읽는다(손으로 옮겨 적으면 variant 가 늘 때
  * 낡는다). 선언 밖의 variant 로 그리면 렌더러가 `defaultVariant` 로 그려 «그 variant 를 쟀다» 가 거짓이 된다.
  */
 function declaredListVariants(themeId: (typeof THEMES)[number]): string[] {
   const name = themeId.replace(/^system-/, '')
   const file = fileURLToPath(new URL(`../../../system-themes/${name}/dist/${themeId}-${seededVersion(themeId)}.wbtheme`, import.meta.url))
   const manifest = JSON.parse(new TextDecoder().decode(unzipSync(new Uint8Array(readFileSync(file)))['manifest.json']!))
-  return manifest.components.List.variants.map((v: { id: string }) => v.id)
+  return manifest.components.DataGrid.variants.map((v: { id: string }) => v.id)
 }
 const LIST_VARIANTS = Object.fromEntries(THEMES.map((id) => [id, declaredListVariants(id)])) as Record<(typeof THEMES)[number], string[]>
 const selectableId = (variant: string) => `ls_${variant}`
+
+/** 열 둘 · 되풀이 두 줄 그리드(바닥 없음). */
+function grid(id: string, props: Record<string, unknown>, variant?: string) {
+  return {
+    id,
+    type: 'DataGrid',
+    ...(variant === undefined ? {} : { variant }),
+    props,
+    children: [
+      { id: `${id}_c1`, type: 'GridColumn', props: { label: '이름' } },
+      { id: `${id}_c2`, type: 'GridColumn', props: { label: '상태' } },
+    ],
+    zones: { rows: [{ id: `${id}_r`, type: 'GridRow', props: { repeat: 2 } }] },
+  }
+}
 
 /** 켬/끔 짝. variant 는 달지 않는다 — 테마의 `defaultVariant` 로 선다. */
 const NODES = [
@@ -88,16 +103,11 @@ const NODES = [
   },
   { id: 'm_image', type: 'Media', props: { kind: 'image', ratio: '4/3' } },
   { id: 'm_video', type: 'Media', props: { kind: 'video', ratio: '4/3' } },
-  { id: 'l_off', type: 'List', props: { items: 2, columns: ['이름', '상태'], pagination: false } },
-  { id: 'l_on', type: 'List', props: { items: 2, columns: ['이름', '상태'], pagination: false, selectable: true } },
-  { id: 'l_loading', type: 'List', props: { items: 2, columns: ['이름', '상태'], pagination: false, loading: true } },
-  // 테마마다 선언한 `List` variant 전부 — `selectable` 을 켠 채(아래 «selectable 은 표 구조에서만»).
-  ...[...new Set(Object.values(LIST_VARIANTS).flat())].map((variant) => ({
-    id: selectableId(variant),
-    type: 'List',
-    variant,
-    props: { items: 2, columns: ['이름', '상태'], pagination: false, selectable: true },
-  })),
+  grid('l_off', {}),
+  grid('l_on', { select: 'check' }),
+  grid('l_loading', { loading: true }),
+  // 테마마다 선언한 `DataGrid` variant 전부 — 체크 선택을 켠 채(아래 «체크 선택 칸은 variant 마다»).
+  ...[...new Set(Object.values(LIST_VARIANTS).flat())].map((variant) => grid(selectableId(variant), { select: 'check' }, variant)),
 ]
 
 /** 짝마다 스크린숏에 담을 두 노드. */
@@ -107,7 +117,7 @@ const PAIRS: Record<string, [string, string]> = {
   'field-disabled': ['f_plain', 'f_disabled'],
   'field-invalid': ['f_plain', 'f_invalid'],
   'media-kind': ['m_image', 'm_video'],
-  selectable: ['l_off', 'l_on'],
+  select: ['l_off', 'l_on'],
   'list-loading': ['l_off', 'l_loading'],
 }
 
@@ -152,7 +162,7 @@ const MEASURE = `(input) => {
       fields: el.querySelectorAll('[data-wb-component="Field"]').length,
       glyph: box('[data-wb-part="glyph"]'),
       checkbox: box('[data-wb-part="checkbox"]'),
-      marks: [...el.attributes, ...(el.querySelector(':scope > [data-wb-part="value"] > [data-wb-component]')?.attributes ?? [])].filter((a) => /^data-wb-(compact|collapsed|selectable|kind)$|^aria-(disabled|invalid|busy)$/.test(a.name)).map((a) => a.name + '=' + a.value),
+      marks: [...el.attributes, ...(el.querySelector(':scope > [data-wb-part="value"] > [data-wb-component]')?.attributes ?? [])].filter((a) => /^data-wb-(compact|collapsed|select|kind)$|^aria-(disabled|invalid|busy)$/.test(a.name)).map((a) => a.name + '=' + a.value),
     }
   }
   return out
@@ -306,7 +316,7 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
         invalid: styleDiff(at('f_plain'), at('f_invalid')),
         loading: styleDiff(at('l_off'), at('l_loading')),
         kind: [at('m_image').glyph, at('m_video').glyph],
-        selectable: [at('l_off').checkbox, at('l_on').checkbox],
+        select: [at('l_off').checkbox, at('l_on').checkbox],
         marks: [
           at('s_on').marks,
           at('q_on').marks,
@@ -327,7 +337,7 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
         ['aria-disabled=true'],
         ['aria-invalid=true'],
         ['data-wb-kind=video'],
-        ['data-wb-selectable='],
+        ['data-wb-select=check'],
         ['aria-busy=true'],
       ])
       expect(
@@ -359,16 +369,16 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
   )
 
   /**
-   * **`selectable` 은 표 구조에서만 뜻이 있다** — 체크 칸은 SDK 기본 뷰의 표(`data-wb-structure="table"`)가 그린다. 그 밖의 구조(줄 ·
-   * 카드 목록)는 표지 `data-wb-selectable` 만 서고 체크 칸이 없다 — 계약 문장은 spec 「6.1 노드 속성」. 테마마다 선언한 variant 전부를
-   * 구조로 가르고, 표 구조는 체크 칸이 머리 하나 + 행마다(둘) 보이는 상자로 서는지 센다.
+   * **체크 선택 칸은 variant 마다 선다** — 그리드는 어느 variant 든 표(`table`)라, `select: 'check'` 면 머리 칸 하나 + 행마다(둘) 체크 칸이
+   * 보이는 상자로 서고 뿌리에 표지 `data-wb-select="check"` 가 선다. 테마마다 선언한 variant 전부를 센다(테마가 variant 로 체크 칸을 감추면
+   * 여기서 죽는다).
    */
   it.each(THEMES)(
-    '%s — selectable 은 표 구조에서만 체크 칸을 그린다',
+    '%s — 체크 선택 칸은 variant 마다 머리 · 행에 선다',
     async (themeId) => {
       await putTheme(call, projectId, { themeId, version: seededVersion(themeId), tokens: {} })
       const { context, page } = await open(await bundlePage())
-      let rows: Array<{ variant: string; structure: string | null; mark: boolean; checkCells: number; boxes: Array<[number, number]> }>
+      let rows: Array<{ variant: string; mark: string | null; checkCells: number; boxes: Array<[number, number]> }>
       try {
         rows = await page.evaluate(
           (ids) =>
@@ -376,9 +386,8 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
               const el = document.querySelector(`[data-wb-id="${id}"]`)!
               return {
                 variant,
-                structure: el.getAttribute('data-wb-structure'),
-                mark: el.hasAttribute('data-wb-selectable'),
-                checkCells: el.querySelectorAll('[data-wb-cell="check"]').length,
+                mark: el.getAttribute('data-wb-select'),
+                checkCells: el.querySelectorAll('[data-wb-cell="select"]').length,
                 boxes: [...el.querySelectorAll('[data-wb-part="checkbox"]')].map((n) => {
                   const r = n.getBoundingClientRect()
                   return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10] as [number, number]
@@ -392,20 +401,13 @@ describe.skipIf(!전제.ok)('시스템 테마 — 화면을 바꾸는 prop 의 �
       }
       // 값은 실패 문장에 함께 싣는다 — 보고가 그 값을 옮긴다.
       const detail = `${themeId} ${JSON.stringify(rows)}`
-      const tables = rows.filter((row) => row.structure === 'table')
-      // 카나리아 — variant 가 안 읽히면 아래는 아무것도 안 잰다. system-admin 은 표 구조 variant 를 갖는다 — 하나 이상 읽혀야 한다.
+      // 카나리아 — variant 가 안 읽히면 아래는 아무것도 안 잰다.
       expect(rows.length, detail).toBeGreaterThan(0)
-      expect(tables.length, detail).toBeGreaterThan(0)
       for (const row of rows) {
-        expect(row.mark, `${detail} — ${row.variant} 표지`).toBe(true)
-        if (row.structure === 'table') {
-          expect(
-            { cells: row.checkCells, visible: row.boxes.every(([w, h]) => w > 0 && h > 0), boxes: row.boxes.length },
-            `${detail} — ${row.variant}`,
-          ).toEqual({ cells: 3, visible: true, boxes: 3 })
-        } else {
-          expect({ cells: row.checkCells, boxes: row.boxes.length }, `${detail} — ${row.variant}`).toEqual({ cells: 0, boxes: 0 })
-        }
+        expect(
+          { mark: row.mark, cells: row.checkCells, visible: row.boxes.every(([w, h]) => w > 0 && h > 0), boxes: row.boxes.length },
+          `${detail} — ${row.variant}`,
+        ).toEqual({ mark: 'check', cells: 3, visible: true, boxes: 3 })
       }
     },
     180_000,

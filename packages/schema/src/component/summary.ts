@@ -7,8 +7,6 @@ import { isolateBidi } from '../bidi'
 
 /** `Text` 내용을 요약에 싣는 상한. 넘으면 자르고 `…` 를 붙인다. */
 export const SUMMARY_TEXT_MAX = 20
-/** 목록 값(`Tabs` 탭 이름 · `List` 컬럼)을 싣는 개수. 더 있으면 `…` 를 붙인다. */
-export const SUMMARY_LIST_MAX = 3
 
 const SEPARATOR = ' · '
 
@@ -34,15 +32,6 @@ export function clipped(value: unknown, max: number): string | null {
   if (line === null) return null
   const chars = [...line]
   return isolateBidi(chars.length > max ? `${chars.slice(0, max).join('')}…` : line)
-}
-
-/** 글 배열의 앞 `SUMMARY_LIST_MAX` 개를 ` · ` 로 이은 것. 배열이 아니거나 글이 없으면 `null`. */
-export function firstOf(values: unknown): string | null {
-  if (!Array.isArray(values)) return null
-  const lines = values.map(oneLine).filter((line): line is string => line !== null)
-  if (lines.length === 0) return null
-  const shown = lines.slice(0, SUMMARY_LIST_MAX)
-  return lines.length > SUMMARY_LIST_MAX ? [...shown, '…'].join(SEPARATOR) : shown.join(SEPARATOR)
 }
 
 /** 조각들을 ` · ` 로 잇는다. 빈 조각은 건너뛰고, 다 비면 `null`. */

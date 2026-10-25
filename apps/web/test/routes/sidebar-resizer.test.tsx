@@ -49,7 +49,7 @@ import { PROJECT_NAME, openPage, pageDoc } from '../editor-harness'
 
 installPointerEvents()
 
-const DOC = pageDoc({ id: 'n-root', type: 'Page', children: [{ id: 'n-list', type: 'List', props: {} }] })
+const DOC = pageDoc({ id: 'n-root', type: 'Page', children: [{ id: 'n-list', type: 'DataGrid', props: {} }] })
 
 function toView(): void {
   fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))

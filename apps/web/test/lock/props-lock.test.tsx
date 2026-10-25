@@ -184,7 +184,7 @@ function doc(): PageDocument {
           },
         ],
       },
-      { id: 'n-list', type: 'List', props: { columns: ['이름'], items: 3 } },
+      { id: 'n-list', type: 'Tree', props: { items: ['이름'], depth: 2 } },
       { id: 'n-kv', type: 'KeyValue', props: { pairs: [{ key: 'k', value: 'v' }], columns: 1 } },
       { id: 'n-ph', type: 'Placeholder', props: { background: '#2563eb' } },
       { id: 'n-div', type: 'Divider', props: { direction: 'horizontal' } },
@@ -204,10 +204,10 @@ function doc(): PageDocument {
 const CONTROL_SAMPLES: { control: EditorControl; type: string; nodeId: string; label: string }[] = [
   { control: 'text', type: 'Field', nodeId: 'n-field', label: '라벨' },
   { control: 'textarea', type: 'Text', nodeId: 'n-text', label: '내용' },
-  { control: 'number', type: 'List', nodeId: 'n-list', label: '항목 수' },
+  { control: 'number', type: 'Tree', nodeId: 'n-list', label: '깊이' },
   { control: 'switch', type: 'Field', nodeId: 'n-field', label: '필수' },
   { control: 'select', type: 'Select', nodeId: 'n-sel', label: '폭' },
-  { control: 'stringList', type: 'List', nodeId: 'n-list', label: '컬럼' },
+  { control: 'stringList', type: 'Tree', nodeId: 'n-list', label: '항목' },
   { control: 'pairList', type: 'KeyValue', nodeId: 'n-kv', label: '키-값' },
   { control: 'optionList', type: 'Select', nodeId: 'n-sel', label: '선택지' },
   { control: 'color', type: 'Placeholder', nodeId: 'n-ph', label: '바탕색' },
@@ -541,10 +541,10 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
     // 커밋은 가드에 막히고 친 글자만 사라진다(Chrome 에서 잰 고장 방식: `"새 항목"` → `"옛 항목"`).
     // jsdom은 그 blur를 안 내므로(위 *"잠긴 동안 도착한 blur는…"*) 여기서 직접 낸다.
     const view = await board()
-    select('List')
+    select('Tree')
     await settle()
 
-    const cell = (): HTMLInputElement => within(panel()).getByRole<HTMLInputElement>('textbox', { name: '컬럼 1번째 항목' })
+    const cell = (): HTMLInputElement => within(panel()).getByRole<HTMLInputElement>('textbox', { name: '항목 1번째 항목' })
     fireEvent.change(cell(), { target: { value: '새 컬럼' } })
     view.lock([foreign('n-list')])
     await settle()
@@ -568,7 +568,7 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
     fireEvent.blur(cell())
     await waitFor(() => expect(view.calls).toHaveLength(1))
     expect(view.status).toEqual([200])
-    expect(view.calls[0]?.ops[0]).toMatchObject({ path: '/root/children/2/props/columns', value: ['새 컬럼'] })
+    expect(view.calls[0]?.ops[0]).toMatchObject({ path: '/root/children/2/props/items', value: ['새 컬럼'] })
   })
 
   it('잠금이 풀린 뒤 같은 목록의 다른 칸에 치면 앞 칸에 남은 글자가 먼저 나간다 — 커밋 없이 사라지지 않는다', async () => {

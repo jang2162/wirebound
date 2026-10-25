@@ -65,7 +65,7 @@ const DOC = pageDoc({
           type: 'SearchForm',
           children: [{ id: 'n-field', type: 'Field', props: { label: '가입일' } }],
         },
-        { id: 'n-list', type: 'List' },
+        { id: 'n-list', type: 'DataGrid' },
       ],
     },
   ],
@@ -123,12 +123,12 @@ describe('구조 트리', () => {
     await openPage(DOC)
 
     // 깊이 우선 전위 순회. 문서 순서 그대로여야 캔버스와 눈으로 대조할 수 있다.
-    expect(nodeRows().map((node) => structureRowType(node))).toEqual(['Page', 'Flex', 'SearchForm', 'Field', 'List'])
+    expect(nodeRows().map((node) => structureRowType(node))).toEqual(['Page', 'Flex', 'SearchForm', 'Field', 'DataGrid'])
 
     // 순서만으로는 평평한 목록도 통과한다. 중첩까지 본다.
     const search = row('SearchForm').closest('li')
     const field = row('Field').closest('li')
-    const list = row('List').closest('li')
+    const list = row('DataGrid').closest('li')
     if (search === null || field === null || list === null) {
       throw new Error('구조 트리의 줄이 목록 항목이 아닙니다')
     }
@@ -235,7 +235,7 @@ describe('구조 트리', () => {
     // `#selectionFor`).
     expect(shellStore().getState().selectedNodeId).toBe('n-root')
 
-    fireEvent.click(row('List'))
+    fireEvent.click(row('DataGrid'))
 
     // **스토어를 직접 본다.** 표시만 보면 선택을 구조 트리의 로컬 state에 든 구현도
     // 통과하고, 그러면 캔버스·속성 패널과의 배선이 끊긴 채 지나간다.
@@ -267,9 +267,9 @@ describe('구조 트리', () => {
     // 통과한다 — 세는 것이 0에서 1로 바뀌었을 뿐 가르는 힘은 그대로다.
     expect(currentRows().map((node) => structureRowType(node))).toEqual(['Page'])
 
-    fireEvent.click(row('List'))
+    fireEvent.click(row('DataGrid'))
 
-    expect(currentRows().map((node) => structureRowType(node))).toEqual(['List'])
+    expect(currentRows().map((node) => structureRowType(node))).toEqual(['DataGrid'])
 
     // 다른 줄을 고르면 표시가 옮겨 간다. 하나씩 늘어나는 구현을 가른다.
     fireEvent.click(row('Flex'))

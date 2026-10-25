@@ -23,7 +23,7 @@ const CHILD_ID = 'n-list'
 const DOC = pageDoc({
   id: ROOT_ID,
   type: 'Page',
-  children: [{ id: CHILD_ID, type: 'List', props: {} }],
+  children: [{ id: CHILD_ID, type: 'DataGrid', props: {} }],
 })
 
 /** 그 페이지의 설명을 실은 `getPage` 가짜. */

@@ -2,7 +2,7 @@
  * 상호작용 규칙을 **사람이 읽는 한 문장**으로 옮긴다 (설계서 「자동 문장화」).
  *
  * ```
- * "① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다"
+ * "① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다"
  * ```
  *
  * ## 왜 `schema`에 있는가
@@ -64,7 +64,7 @@ import { childLists } from '../zones'
 
 /** 컴포넌트를 문장에서 부르는 이름과, 그 앞에 붙일 라벨을 담은 prop. */
 export interface ComponentNoun {
-  /** 문장에 쓰는 한국어 이름. `List` → `목록`. */
+  /** 문장에 쓰는 한국어 이름. `DataGrid` → `그리드`. */
   name: string
   /**
    * 노드마다 다른 이름을 담는 prop. 값이 비어 있지 않은 문자열이면 `{값} {name}`이 된다.
@@ -144,7 +144,7 @@ const UNSET_NODE = '아직 고르지 않은 대상'
 const UNSET_PAGE = '아직 정해지지 않은 페이지'
 /**
  * **아직 `prop`을 안 고른 `setProp`.** 라벨을 빈 문자열로 두면 문장이 통째로 깨진다
- * (`목록이 로 바뀝니다`) — 미확정을 **아무 말도 하지 않는 것으로 접은** 형태다.
+ * (`그리드가 로 바뀝니다`) — 미확정을 **아무 말도 하지 않는 것으로 접은** 형태다.
  */
 const UNSET_PROP = '아직 고르지 않은 속성'
 /** 라벨을 문장에 실을 때의 상한. 넘으면 잘리고 `…`가 붙는다. */
@@ -271,7 +271,7 @@ function actionClause(index: NodeIndex, action: InteractionAction): string {
       const name = targetName(index, action.target)
       const known = typeof action.prop === 'string' && action.prop.trim().length > 0
       const label = known ? propLabel(target, action.prop) : UNSET_PROP
-      // 「자동 문장화」의 표본이 참인 경우다: *"② 목록이 로딩 상태로 바뀝니다"*.
+      // 「자동 문장화」의 표본이 참인 경우다: *"② 그리드가 로딩 상태로 바뀝니다"*.
       //
       // **속성이 미확정이면 그 형태를 못 쓴다.** `{라벨}로 바뀝니다`는 라벨이 **상태 이름**일
       // 때만 뜻이 통하는데(`로딩 상태`), 미확정이면 *"아직 고르지 않은 속성으로 바뀝니다"*가
@@ -386,7 +386,7 @@ function markerOf(node: WbNode): string | null {
 
 /**
  * prop을 문장에서 부르는 이름. **카탈로그의 `editor` 라벨을 쓴다** — 「자동 문장화」의
- * *"로딩 상태"*가 `List`의 `{ prop: 'loading', label: '로딩 상태' }`에서 온 값이다.
+ * *"로딩 상태"*가 `DataGrid`의 `{ prop: 'loading', label: '로딩 상태' }`에서 온 값이다.
  * `editor`에 없는 prop은 이름 그대로다(속성 패널에서도 도달할 수 없는 prop이다).
  */
 function propLabel(target: WbNode | undefined, prop: string): string {
@@ -457,7 +457,7 @@ function finalConsonant(word: string): boolean | null {
 /**
  * 아라비아 숫자로 끝나는 말의 종성. **숫자는 표로 정확히 다룬다** — 한자어 읽기가
  * 갈리지 않기 때문이다(`1`은 *"일"*, `10`은 *"십"*). 라틴 문자를 같은 방식으로 다루지
- * 않는 이유는 그쪽이 갈리기 때문이다(`List`는 *"리스트"*, `id`는 *"아이디"*).
+ * 않는 이유는 그쪽이 갈리기 때문이다(`Grid`는 *"그리드"*, `id`는 *"아이디"*).
  *
  * 값은 종성 인덱스다: 0 = 없음 · 1 = ㄱ · 8 = ㄹ · 16 = ㅁ · 21 = ㅇ.
  */

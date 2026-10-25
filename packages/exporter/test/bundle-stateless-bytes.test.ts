@@ -24,7 +24,7 @@
  * 그리드(문서 판 5 · SDK 1.7.0)를 들이며 다시 지었다 — `assets/views.css` 는 그리드 · 열 · 행 · 칸 · 페이지네이션 바의 기본 규칙, «넓은 표본»(과 그 사본
  * `index.html`)은 픽스처의 목록을 그리드 부품 여섯을 다 쓰는 그리드로 바꿨고, «깨진 문서» 는 props 가 틀린 노드의 타입(`List` → `DataGrid`)이 바뀌었다.
  * «슬롯» · «글» 은 문서 JSON 의 판 번호(4 → 5)만 다르다(다시 재는 법: 두 페이지의 문서를 `version: 4` 로 되돌려 해시하면 앞 값이 선다 —
- * `docs/superpowers/plans/2026-10-25-gr2-report.md`).
+ * `docs/superpowers/plans/2026-10-25-gr2-report.md`). 찍는 판의 층(`CAPTURE_CSS`)은 기본 뷰 CSS 밖이라 `assets/views.css` 에 안 든다.
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -70,7 +70,7 @@ const BEFORE = {
     'pages/슬롯.html': '237942c9bddec6e1',
     'pages/글.html': 'cf7aada8a9107580',
     'pages/깨진-문서.html': '1e6593b7b432956c',
-    'assets/views.css': '07cdda787c4fde97',
+    'assets/views.css': '1e6c9187d6c918f6',
   },
   themed: {
     'index.html': 'b477e3bb1d94a491',
@@ -78,7 +78,7 @@ const BEFORE = {
     'pages/슬롯.html': 'a740ac4b6b55571e',
     'pages/글.html': '85f601e80f6602ab',
     'pages/깨진-문서.html': 'e071fd4ffcfbad1c',
-    'assets/views.css': '07cdda787c4fde97',
+    'assets/views.css': '1e6c9187d6c918f6',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',

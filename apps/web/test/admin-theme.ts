@@ -50,7 +50,7 @@ const MANIFEST: ThemeManifest = {
       ],
       defaultVariant: 'default',
     },
-    List: {
+    DataGrid: {
       variants: [
         { id: 'default', label: '기본' },
         { id: 'featured', label: '강조' },

@@ -19,7 +19,7 @@ const DOC = pageDoc({
   children: [
     { id: 'n-sel', type: 'Select', props: { options: [{ label: '가' }, { label: '나', selected: true }, { label: '다' }] } },
     { id: 'n-chk', type: 'CheckboxGroup', props: { options: [{ label: '월', selected: true }, { label: '화' }] } },
-    { id: 'n-list', type: 'List', props: { columns: ['이름', '이메일', '가입일'] } },
+    { id: 'n-list', type: 'Tree', props: { items: ['이름', '이메일', '가입일'] } },
     { id: 'n-one', type: 'RadioGroup', props: { options: [{ label: '하나' }] } },
     { id: 'n-full', type: 'Chip' },
     { id: 'n-max', type: 'TextArea' },
@@ -142,25 +142,25 @@ describe('선택지 위젯', () => {
 })
 
 describe('목록 위젯의 옮기기 — stringList 도 얻는다', () => {
-  it('컬럼 «2번째 아래로» — 이웃과 자리를 바꾼 배열 하나', async () => {
+  it('항목 «2번째 아래로» — 이웃과 자리를 바꾼 배열 하나', async () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
-    select('List')
+    select('Tree')
 
-    fireEvent.click(button('컬럼', '2번째 아래로'))
+    fireEvent.click(button('항목', '2번째 아래로'))
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(calls[0]).toEqual([{ op: 'replace', path: '/root/children/2/props/columns', value: ['이름', '가입일', '이메일'] }])
+    expect(calls[0]).toEqual([{ op: 'replace', path: '/root/children/2/props/items', value: ['이름', '가입일', '이메일'] }])
   })
 
   it('고치던 칸의 글은 옮기기에 실려 나간다 — 칸을 안 떠나고 단추를 눌러도 잃지 않는다', async () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
-    select('List')
+    select('Tree')
 
-    const cell = within(list('컬럼')).getByRole('textbox', { name: '컬럼 1번째 항목' })
+    const cell = within(list('항목')).getByRole('textbox', { name: '항목 1번째 항목' })
     fireEvent.change(cell, { target: { value: '성명' } })
-    fireEvent.click(button('컬럼', '1번째 아래로'))
+    fireEvent.click(button('항목', '1번째 아래로'))
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(calls[0]).toEqual([{ op: 'replace', path: '/root/children/2/props/columns', value: ['이메일', '성명', '가입일'] }])
+    expect(calls[0]).toEqual([{ op: 'replace', path: '/root/children/2/props/items', value: ['이메일', '성명', '가입일'] }])
   })
 })

@@ -261,11 +261,12 @@ describe.skipIf(!전제.ok)('테마 — 설정 페이지에서 고르기', () =>
       [old.id, old.version, old.name, old.description ?? null, old.sdk, JSON.stringify(old), bytes, bytes.byteLength, sha256],
     )
 
-    // 없는 variant 대조군 — `cards` 는 두 판 모두 List 에 없다(센다) · `Section` 의 `hero` 는 두 판 모두 선언한다(안 센다).
+    // 없는 variant 대조군 — `cards` 는 두 판 모두 DataGrid 의 variant 가 아니다(옛 판은 DataGrid 를 선언하지 않는다 — 센다) · `Section` 의 `hero` 는
+    // 두 판 모두 선언한다(안 센다).
     const upgrade = await project(stack, alice, {
       목록: [
         { id: 'u_sec', type: 'Section', variant: 'hero', props: {}, children: [{ id: 'u_t', type: 'Text', props: { content: '회원' } }] },
-        { id: 'u_list', type: 'List', variant: 'cards', props: { items: 3 } },
+        { id: 'u_list', type: 'DataGrid', variant: 'cards', props: {} },
       ],
       상세: [{ id: 'u_btn', type: 'Button', variant: 'primary', props: { label: '저장' } }],
     })
