@@ -137,7 +137,13 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
   /** 그리드 잣대 셋이 0 만 내지 않는가 — 한 곳씩 깬 테마 CSS(고정 열의 `left` 를 걷음 · 표를 제 상자로 굴림 · 좁게 고정한 칸에 줄 안 바꾸는 글). */
   it.each([
     ['고정 열', '[data-wb-component="DataGrid"] [data-wb-fixed] { left: auto !important; }', 'fixed', '고정 열'],
-    ['찍는 판', '[data-wb-component="DataGrid"] [data-wb-part="table"] { display: block; overflow-x: auto; }', 'capture', '찍는 판'],
+    // 표를 제 상자로 굴린다 — 폭을 상자 폭(`auto`)으로 되돌려야 표가 제 안에서 굴러간다(SDK 기본 표 폭은 칸 글 폭 `max-content` 다).
+    [
+      '찍는 판',
+      '[data-wb-component="DataGrid"] [data-wb-part="table"] { display: block; overflow-x: auto; width: auto; }',
+      'capture',
+      '찍는 판',
+    ],
     [
       '칸 글',
       '[data-wb-component="DataGrid"] [data-wb-part="table"] { table-layout: fixed; width: 300px; } [data-wb-component="DataGrid"] th { white-space: nowrap; }',

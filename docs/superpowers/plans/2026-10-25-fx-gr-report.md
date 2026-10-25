@@ -205,6 +205,31 @@ SDK 기본 CSS 의 `Pagination` 뿌리에 `flex-wrap: wrap`, 쪽 번호 조각�
 | 넓은 표(고정 둘) 390 · 720 · 1280 | 390 은 테마가 풂 · 720 · 1280 붙음(굴려도 0.5px) · 칸 밖 글 0 | 셋 다 붙음(고정 구역이 상자의 3/4 안) · 0px · 0 |
 | PPTX | 200 · 슬라이드 6 · 빠진 화면 0 · 그림 7098 × 1272(넓은 표) · 3848 × 1104(글 칸) · 4084 × 1104(고정 넓이) | 200 · 6 · 0 · 4116 × 1104 · 3606 × 1104 · 3920 × 1104 |
 
+## 게이트
+
+건드린 경로: `apps/web`(캔버스 누름 · 범위 선택 · build-test) · `apps/api/build-test` · `packages/theme-sdk` · `renderer`(케이스) · `theme-kit` · `exporter`(케이스) · `system-themes/admin` · 정본 → 「트랙 게이트」 표의 «그 밖» 줄(전량 넷). 모든 판 node v24.21.0 · `pmset -g log` 의 마지막 ` Sleep ` 은 2026-10-25 01:16:51 — 이 차수의 판(18:41 ~ 20:32)과 겹친 잠듦 없음.
+
+| 판 | 시각 | 결과 |
+| --- | --- | --- |
+| 실브라우저 전량(게이트 전 · dev 번들) `pnpm test:browser` | 19:20:43 ~ 19:34:46 | 91 파일 · 582 통과 · 1 건너뜀(`layout-weight.test.ts` 의 `it.skip` 스크린숏 케이스) · 실패 0 |
+| 같은 판 운영 번들 `EDITOR_STACK_BUNDLE=build pnpm test:browser` | 19:34:46 ~ 19:46:11 | 91 · 582 · 1 · 0 |
+| 전량 게이트 `S/gate.zsh`(자리 파일 `gate-slots/fx-gr` · HEAD `8dd43cfd`) — `pnpm typecheck` | 19:46:47 ~ 19:47:04 | rc 0 |
+| `pnpm build` | 19:47:04 ~ :09 | rc 0 |
+| `pnpm test --maxWorkers=25%` | 19:47:09 ~ 20:00:00 | rc 1 — 536 파일 · 8592 통과 · 1 건너뜀 · **2 실패**(아래 ①) |
+| `pnpm test:build` | 20:00:00 ~ 20:15:41 | rc 1 — 첫 갈래 18 파일 · 174 통과 · 1 건너뜀 · **1 실패**(아래 ②) · 둘째 갈래(실브라우저) 91 · 582 · 1 · 0 |
+| `pnpm lint` · `pnpm fmt` | 20:15:41 ~ :42 | rc 0 · 0(경고만 — 이 차수 파일 밖의 앞선 것) · `git status` 깨끗 |
+
+- **① `packages/exporter/test/bundle-stateless-bytes.test.ts` 둘** — 고정해 둔 `assets/views.css` 다이제스트(`18ceec32…`)가 SDK 기본 CSS 를 바꿔 `cd5ba4ba…` 가 됐다(페이지 HTML · 테마 · 토큰 파일은 같다). 케이스 머리말의 «다시 지었다» 줄에 이 차수를 더하고 값을 옮겼다.
+- **② `packages/theme-kit/build-test/shots.test.ts` «그리드 찍는 판 이 어긋나면 …»** — 깨는 테마 CSS(`table { display: block; overflow-x: auto }`)가 SDK 의 새 표 폭(`width: max-content`)을 물려받아 표가 제 안에서 안 굴러가 찍는 판 잣대가 0 이었다(대신 고정 열 잣대가 15 를 냈다). 깨는 CSS 에 `width: auto` 를 더해 «표가 제 상자로 굴러가는» 꼴을 되살렸다 — 잣대가 약해진 것이 아니라 깨는 꼴이 SDK 기본값에 막힌 것이다(테마가 표를 제 상자로 굴리면 지금도 잡는다).
+- 고친 뒤(테스트 파일 둘만): 두 파일 단독 4 / 4 · 11 / 11 통과, 이어 `pnpm test --maxWorkers=25%` · `pnpm test:build:serial` 을 다시 돌렸다:
+
+| 다시 돈 판(`S/gate2.zsh`) | 시각 | 결과 |
+| --- | --- | --- |
+| `pnpm test --maxWorkers=25%` | 20:17:40 ~ 20:28:43 | rc 0 — 536 파일 · 8594 통과 · 1 건너뜀(`apps/api/test/log-destination.test.ts` 의 Linux `/dev/full` 판 — 이 기계에서 늘 건너뜀) · 실패 0 |
+| `pnpm test:build:serial` | 20:28:43 ~ 20:32:35 | rc 0 — 18 파일 · 175 통과 · 1 건너뜀(`packages/theme-kit/build-test/template.test.ts` 의 앞선 건너뜀) · 실패 0 |
+
+실브라우저 갈래(`test:browser`)는 고친 두 파일을 줍지 않아(`apps/web/build-test` 만) 다시 안 돌렸다 — 첫 게이트 판의 91 · 582 · 0 이 그 판이다. 이 두 판 뒤 소스 변경 없음.
+
 ## 남은 것
 
 - **이월(브리프 — 고치지 않음)**: L1(고정 구역 가운데를 자르는 묶음 머리는 굴리면 고정 잎 칸 밑으로 들어가 이름이 안 보인다 — 설계 G9 의 결과) · L3(CLI · MCP lint 가 1.6.0 이하 고정 프로젝트에서 «카탈로그에 없는 컴포넌트입니다: List» 로 variant 검사를 뺀다고 말한다) · L4(열을 골라 팔레트 «열 묶음» 은 셀 틀로 들어가려다 거절된다 — «뒤» 로 안 물러선다, GR-B 2).
