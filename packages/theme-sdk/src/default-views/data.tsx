@@ -32,6 +32,14 @@ function cellPlace(col: number, fixed: GridFixed): Record<string, string> {
   return fixed === false ? { 'data-wb-col': String(col) } : { 'data-wb-col': String(col), 'data-wb-fixed': fixed }
 }
 
+/**
+ * 열의 칸(셀 틀 · 번호)이 어느 열 노드의 것인지 — 칸의 빈 자리를 누르면 에디터가 그 열을 고른다(`apps/web/src/canvas/canvas.tsx` 의 `nodeIdAt`).
+ * `data-wb-copy-of` 가 아닌 까닭: 칸은 열의 사본이 아니라 열의 몸 칸이다 — 사본으로 읽으면 한 줄을 덮는 범위 선택이 열을 고른다.
+ */
+function columnOf(leaf: GridLeaf): { 'data-wb-column-of': string } {
+  return { 'data-wb-column-of': leaf.item.nodeId }
+}
+
 /** 몸 칸이 그 열에서 물려받는 표지 — 칸 정렬 · 음영(열 머리의 같은 이름 표지와 같은 값). 열이 없는 칸(선택 칸)은 없다. */
 function columnMarks(leaf: GridLeaf | null): Record<string, string> {
   if (leaf === null || leaf.group) return {}
@@ -225,6 +233,7 @@ export const GridRowView = view(({ nodeId, items }) => {
                     key={cell.leaf.item.nodeId}
                     data-wb-part="cell"
                     data-wb-cell="number"
+                    {...columnOf(cell.leaf)}
                     {...columnMarks(cell.leaf)}
                     {...cellPlace(cell.col, cell.fixed)}
                   >
@@ -237,6 +246,7 @@ export const GridRowView = view(({ nodeId, items }) => {
                     key={cell.leaf.item.nodeId}
                     data-wb-part="cell"
                     data-wb-cell="template"
+                    {...columnOf(cell.leaf)}
                     {...columnMarks(cell.leaf)}
                     {...cellPlace(cell.col, cell.fixed)}
                   >

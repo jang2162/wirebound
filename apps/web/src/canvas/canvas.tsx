@@ -861,19 +861,30 @@ class CanvasBoundary extends Component<{ resetKey: PageDocument; children: React
  * **빈 `data-wb-id`는 건너뛴다.** 렌더러의 모양 가드가 흡수한 폴백은 id를 문자열로 읽지
  * 못한 노드라 빈 문자열을 단다(`packages/renderer/src/fallback.tsx`). 그것을 그대로
  * 넣으면 스토어에는 선택이 있는데 가리키는 노드는 없는 상태가 된다.
+ *
+ * **그리드의 사본은 원본이다**(`NODE_OF_ATTRS`) — 되풀이 줄의 칸 · 조각을 누르면 그 원본을 고른다. 가장 가까운 `data-wb-id` 로 오르면 그리드가
+ * 골라져 이어진 Delete 가 그리드째 지웠다(`docs/superpowers/plans/2026-10-25-rv-gr-report.md` H1). 고른 뒤의 판정(남의 잠금)은 원본을 누른 것과 같다.
  */
 function nodeIdAt(target: EventTarget | null, body: HTMLElement): string | null {
   // `instanceof Element` 를 쓰지 않는다 — iframe 안의 요소는 iframe 창의 `Element` 로 만들어져 호스트 창의 것과 다르다.
   let element = isElement(target) ? target : null
 
   while (element !== null && body.contains(element)) {
-    const id = element.getAttribute('data-wb-id')
-    if (id !== null && id !== '') return id
+    for (const name of NODE_OF_ATTRS) {
+      const id = element.getAttribute(name)
+      if (id !== null && id !== '') return id
+    }
     element = element.parentElement
   }
 
   return null
 }
+
+/**
+ * 누른 요소가 어느 노드의 것인지 싣는 속성 — 노드 뿌리(`data-wb-id`) · 되풀이 줄의 사본(`data-wb-copy-of` — 원본 id) · 그리드 열의 몸 칸
+ * (`data-wb-column-of` — 셀 틀 · 번호 칸의 빈 자리는 그 열이다 · SDK 기본 그리드 뷰).
+ */
+const NODE_OF_ATTRS = ['data-wb-id', 'data-wb-copy-of', 'data-wb-column-of'] as const
 
 function isElement(target: EventTarget | null): target is Element {
   return target !== null && (target as Node).nodeType === 1

@@ -200,6 +200,7 @@ const RESERVED = [
   'data-wb-zone',
   'data-wb-placeholder',
   'data-wb-copy-of',
+  'data-wb-column-of',
   'data-wb-col',
   'data-wb-fixed',
   'data-wb-fixed-columns',

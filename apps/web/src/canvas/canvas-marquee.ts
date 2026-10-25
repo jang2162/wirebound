@@ -34,7 +34,10 @@ export interface Box {
   height: number
 }
 
-/** 사각형 판정에 드는 노드 하나 — 문서 차례로 준다(부모가 자식보다 앞). `parentId`가 `null`이면 뿌리다. */
+/**
+ * 사각형 판정에 드는 노드 하나 — 문서 차례로 준다(부모가 자식보다 앞). `parentId`가 `null`이면 뿌리다. 그리드 되풀이 줄의 사본은 같은 `id` 로
+ * 원본 바로 뒤에 더 든다(상자만 다르다) — 그 가운데 하나라도 사각형 안이면 그 노드가 든다.
+ */
 export interface MarqueeNode {
   id: string
   parentId: string | null
@@ -55,6 +58,7 @@ export function nodesInRect(rect: Rect, nodes: readonly MarqueeNode[]): string[]
   const inside = new Set<string>()
   const parentOf = new Map(nodes.map((node) => [node.id, node.parentId]))
   const picked: string[] = []
+  const inPicked = new Set<string>()
   for (const node of nodes) {
     if (node.parentId === null) continue
     const { left, top, width, height } = node.box
@@ -70,7 +74,10 @@ export function nodesInRect(rect: Rect, nodes: readonly MarqueeNode[]): string[]
       }
       ancestor = parentOf.get(ancestor) ?? null
     }
-    if (!covered) picked.push(node.id)
+    if (!covered && !inPicked.has(node.id)) {
+      inPicked.add(node.id)
+      picked.push(node.id)
+    }
   }
   return picked
 }

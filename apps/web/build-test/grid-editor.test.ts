@@ -3,7 +3,7 @@
  *
  * | 케이스 | 재는 값 |
  * |---|---|
- * | 트리 · 캔버스 | 구조 트리에 그리드의 구역 줄(«열» · «행» · «바닥»)과 열 · 행 줄이 선다 · 사본 칸을 누르면 그리드를 고른다(사본은 `data-wb-id` 가 없다 — 가장 가까운 노드) · 셀 틀 글의 노드 id 가 캔버스에 한 번이다 |
+ * | 사본 → 원본(H1) | 구조 트리에 그리드의 구역 줄(«열» · «행» · «바닥»)과 열 · 행 줄이 선다 · 사본(칸 · 조각 · 행)을 누르면 그 원본을 고르고 Delete · Cmd+D · Cmd+V · 범위 선택이 원본에 걸린다 · 틀 칸 빈 자리는 그 열이다 · 남이 원본을 쥐면 사본 누름도 막힌다 |
  * | 열 더하기 | 그리드를 골라 팔레트 «열» 이 그리드 «열» 끝에 서고 · 열을 골라 Cmd+D 가 셀 틀째 복제한다 |
  * | L6 | 끄는 동안 그리드의 빈 이름 구역(머리 왼쪽 · 머리 오른쪽 · 바닥)에 칩이 서고 · 그리드 · 셀 틀 글 · 아래 글이 움직인 값을 적는다(원래 있던 길 — 상한 없음) |
  * | 비용(위험 3) | 행 × 열 10×3 · 50×3 · 10×10 · 50×10 — 판을 열어 그리드가 다 서기까지 · 열 머리 이름을 고쳐 캔버스에 서기까지의 시간과 그 동안의 긴 작업. 기계마다 달라 상한을 단언하지 않는다(`./canvas-cost.test.ts` 와 같다) |
@@ -98,32 +98,262 @@ describe.skipIf(!전제.ok)('그리드 — 에디터(실브라우저)', () => {
     return { page, close: () => context.close() }
   }
 
-  it('트리에 구역 줄 · 열 · 행 줄이 서고 · 사본 칸을 누르면 그리드를 고르고 · 셀 틀 글의 노드 id 는 캔버스에 한 번이다', async () => {
-    const { P } = await seed('grid-tree', [gridOf('g_a', 3, 2)])
-    const { page, close } = await open(P, 'g_a')
+  /** 사본 판의 그리드 — 체크 선택 · 셀 틀 «단추 + 입력» · «글» · 되풀이 4 행 · 제 칸 둘(링크 · 글)을 가진 되풀이 2 행 · 바. 앞뒤에 글. */
+  const COPIES_PAGE: Node[] = [
+    {
+      id: 'h_g',
+      type: 'DataGrid',
+      props: { select: 'check' },
+      children: [
+        {
+          id: 'h_c0',
+          type: 'GridColumn',
+          props: { label: '관리' },
+          children: [
+            { id: 'h_b0', type: 'Button', props: { label: '수정' } },
+            { id: 'h_i0', type: 'Input', props: {} },
+          ],
+        },
+        {
+          id: 'h_c1',
+          type: 'GridColumn',
+          props: { label: '이름' },
+          children: [{ id: 'h_t1', type: 'Text', props: { content: '홍길동' } }],
+        },
+      ],
+      zones: {
+        rows: [
+          { id: 'h_r1', type: 'GridRow', props: { repeat: 4 } },
+          {
+            id: 'h_r2',
+            type: 'GridRow',
+            props: { repeat: 2 },
+            children: [
+              { id: 'h_k0', type: 'GridCell', children: [{ id: 'h_l0', type: 'Link', props: { label: '상세' } }] },
+              { id: 'h_k1', type: 'GridCell', children: [{ id: 'h_x1', type: 'Text', props: { content: '제 칸' } }] },
+            ],
+          },
+        ],
+        footer: [{ id: 'h_pg', type: 'Pagination' }],
+      },
+    },
+    { id: 'h_tail', type: 'Text', props: { content: '아래 글' } },
+  ]
+
+  /** 문서의 노드 id 전부(몸통 · 구역). */
+  const idsOf = (root: Node): string[] => [
+    root.id,
+    ...(root.children ?? []).flatMap(idsOf),
+    ...Object.values(root.zones ?? {}).flatMap((list) => list.flatMap(idsOf)),
+  ]
+  const childrenOf = (root: Node, id: string): Node[] | null => {
+    if (root.id === id) return root.children ?? []
+    for (const child of [...(root.children ?? []), ...Object.values(root.zones ?? {}).flat()]) {
+      const found = childrenOf(child, id)
+      if (found !== null) return found
+    }
+    return null
+  }
+
+  /**
+   * **H1 — 사본을 누르면 원본을 고른다**(설계 GR-B «1»). 사본(되풀이 줄의 칸 · 그 안 조각)을 누르면 그 원본 노드가 골라지고 Delete · Cmd+D ·
+   * Cmd+V · 범위 선택이 원본에 걸린다 — 고치기 전에는 가장 가까운 `[data-wb-id]` 인 그리드가 골라져 Delete 가 그리드째 지웠다
+   * (`docs/superpowers/plans/2026-10-25-rv-gr-report.md` «2»). 틀 칸(셀 틀을 담는 `td`)의 빈 자리는 그 열이다.
+   */
+  it('사본을 누르면 원본을 고르고 Delete · Cmd+D · Cmd+V · 범위 선택이 원본에 걸린다 · 틀 칸 빈 자리는 그 열이다', async () => {
+    const { P } = await seed('grid-copies', COPIES_PAGE)
+    const { page, close } = await open(P, 'h_g')
+    const frame = canvasFrame(page)
+    const copyOf = (id: string, nth: number) => frame.locator(`[data-wb-copy-of="${id}"]`).nth(nth)
+    const pick = async (what: string, click: () => Promise<void>, id: string) => {
+      await click()
+      return poll(
+        what,
+        () => selected(page),
+        (now) => now === id,
+        5000,
+      ).catch(() => selected(page))
+    }
+    const headOf = async () => (await call('GET', P)).body.headSeq as number
     try {
-      for (const zone of ['body', 'rows', 'footer']) expect(await zoneRow(page, 'g_a', zone).count(), zone).toBe(1)
-      for (const nodeId of ['g_a_c0', 'g_a_c1', 'g_a_r', 'g_a_p', 'g_a_t0']) expect(await treeRow(page, nodeId).count(), nodeId).toBe(1)
-      // 사본 칸(둘째 줄의 첫 칸)을 누른다 — 가장 가까운 노드는 그리드다(사본 → 원본 고르기는 GR-B).
-      const copyCell = canvasFrame(page).locator('[data-wb-copy-of="g_a_r"]').first().locator('td').nth(0)
-      await copyCell.click()
-      await poll(
-        '사본 누름이 무언가를 고른다',
-        () => selected(page),
-        (id) => id !== null,
+      for (const zone of ['body', 'rows', 'footer']) expect(await zoneRow(page, 'h_g', zone).count(), zone).toBe(1)
+      for (const nodeId of ['h_c0', 'h_c1', 'h_r1', 'h_pg', 'h_t1']) expect(await treeRow(page, nodeId).count(), nodeId).toBe(1)
+      // 판 카나리아 — 셀 틀 조각 · 행은 원본 1 · 사본 3, 제 칸은 원본 1 · 사본 1 이다.
+      const counts: Record<string, [number, number]> = {}
+      for (const id of ['h_b0', 'h_t1', 'h_r1', 'h_k0', 'h_l0'])
+        counts[id] = [await frame.locator(`[data-wb-id="${id}"]`).count(), await frame.locator(`[data-wb-copy-of="${id}"]`).count()]
+      expect(counts).toEqual({ h_b0: [1, 3], h_t1: [1, 3], h_r1: [1, 3], h_k0: [1, 1], h_l0: [1, 1] })
+
+      // 사본 단추 → 단추 · Delete 는 단추 하나만 지운다(그리드는 남는다).
+      expect(await pick('사본 단추 → 단추', () => copyOf('h_b0', 1).click(), 'h_b0')).toBe('h_b0')
+      const before = idsOf(await server(P))
+      await page.keyboard.press('Delete')
+      const deleted = idsOf(
+        await poll(
+          'Delete 가 닿는다',
+          () => server(P),
+          (root) => !idsOf(root).includes('h_b0'),
+        ),
       )
-      expect(await selected(page)).toBe('g_a')
-      // 셀 틀 글의 노드 id 는 캔버스에 한 번이다(사본 둘은 `data-wb-copy-of`) — 원본 줄의 그 글을 누르면 그 글을 고른다(대조).
-      expect(await canvasFrame(page).locator('[data-wb-id="g_a_t0"]').count()).toBe(1)
-      expect(await canvasFrame(page).locator('[data-wb-copy-of="g_a_t0"]').count()).toBe(2)
-      await canvasFrame(page).locator('[data-wb-id="g_a_t0"]').click()
+      expect(before.filter((id) => !deleted.includes(id))).toEqual(['h_b0'])
+      await page.keyboard.press('ControlOrMeta+z')
       await poll(
-        '원본 글을 고른다',
-        () => selected(page),
-        (id) => id === 'g_a_t0',
+        '되돌리기',
+        () => server(P),
+        (root) => idsOf(root).includes('h_b0'),
       )
+      await frame.locator('[data-wb-id="h_b0"]').waitFor({ state: 'attached' })
+
+      // 사본 입력 → 입력 · Cmd+D 는 그 입력을 셀 틀 안에서 복제한다(뿌리는 그대로).
+      expect(await pick('사본 입력 → 입력', () => copyOf('h_i0', 0).click(), 'h_i0')).toBe('h_i0')
+      await page.keyboard.press('ControlOrMeta+d')
+      const duplicated = await poll(
+        'Cmd+D 가 닿는다',
+        () => server(P),
+        (root) => (childrenOf(root, 'h_c0') ?? []).length === 3,
+      )
+      expect({
+        top: (duplicated.children ?? []).map((node) => node.id),
+        template: (childrenOf(duplicated, 'h_c0') ?? []).map((node) => (node.id.startsWith('h_') ? node.id : node.type)),
+      }).toEqual({ top: ['h_g', 'h_tail'], template: ['h_b0', 'h_i0', 'Input'] })
+      await page.keyboard.press('ControlOrMeta+z')
+      await poll(
+        '되돌리기',
+        () => server(P),
+        (root) => (childrenOf(root, 'h_c0') ?? []).length === 2,
+      )
+
+      // 제 칸 사본(칸의 빈 귀퉁이) → 칸 · 그 안 링크 사본 → 링크.
+      expect(await pick('제 칸 사본 → 칸', () => copyOf('h_k0', 0).click({ position: { x: 3, y: 3 } }), 'h_k0')).toBe('h_k0')
+      expect(await pick('제 칸 링크 사본 → 링크', () => copyOf('h_l0', 0).click(), 'h_l0')).toBe('h_l0')
+
+      // 틀 칸의 빈 자리(오른끝) → 그 열 — 사본 줄 · 원본 줄 둘 다.
+      const rightEdge = async (cell: ReturnType<typeof frame.locator>) => {
+        const box = (await cell.boundingBox())!
+        await cell.click({ position: { x: box.width - 4, y: box.height / 2 } })
+      }
+      expect(
+        await pick('사본 줄 틀 칸 → 열', () => rightEdge(copyOf('h_r1', 1).locator('td[data-wb-cell="template"]').nth(1)), 'h_c1'),
+      ).toBe('h_c1')
+      await treeRow(page, 'h_tail').locator('button').first().click()
+      await poll(
+        '아래 글을 골랐다',
+        () => selected(page),
+        (id) => id === 'h_tail',
+      )
+      expect(
+        await pick(
+          '원본 줄 틀 칸 → 열',
+          () => rightEdge(frame.locator('[data-wb-id="h_r1"]').locator('td[data-wb-cell="template"]').nth(0)),
+          'h_c0',
+        ),
+      ).toBe('h_c0')
+
+      // 붙이기 — 아래 글을 복사하고 사본 글을 누른 뒤 Cmd+V 는 원본 글 바로 뒤(셀 틀)에 선다.
+      await treeRow(page, 'h_tail').locator('button').first().click()
+      await poll(
+        '아래 글을 골랐다',
+        () => selected(page),
+        (id) => id === 'h_tail',
+      )
+      await page.keyboard.press('ControlOrMeta+c')
+      expect(await pick('사본 글 → 글', () => copyOf('h_t1', 2).click(), 'h_t1')).toBe('h_t1')
+      const head = await headOf()
+      await page.keyboard.press('ControlOrMeta+v')
+      const pasted = await poll(
+        '붙이기가 닿는다',
+        () => server(P),
+        (root) => (childrenOf(root, 'h_c1') ?? []).length === 2,
+      )
+      expect({
+        top: (pasted.children ?? []).map((node) => node.id),
+        template: (childrenOf(pasted, 'h_c1') ?? []).map((node) => (node.id === 'h_t1' ? 'h_t1' : node.props?.content)),
+        head: (await headOf()) - head,
+      }).toEqual({ top: ['h_g', 'h_tail'], template: ['h_t1', '아래 글'], head: 1 })
+      await page.keyboard.press('ControlOrMeta+z')
+      await poll(
+        '되돌리기',
+        () => server(P),
+        (root) => (childrenOf(root, 'h_c1') ?? []).length === 1,
+      )
+      await frame.locator('[data-wb-copy-of="h_r1"]').nth(2).waitFor({ state: 'attached' })
+
+      // 범위 선택 — 셋째 줄(사본)의 «이름» 틀 칸 안쪽만 덮는 사각형이 그 칸의 원본 글을 고른다(칸 자신은 노드가 아니다).
+      const cell = (await copyOf('h_r1', 1).locator('td[data-wb-cell="template"]').nth(1).boundingBox())!
+      await page.mouse.move(cell.x + 2, cell.y + 2)
+      await page.mouse.down()
+      await page.mouse.move(cell.x + cell.width - 2, cell.y + cell.height - 2, { steps: 10 })
+      await page.mouse.up()
+      const picked = await poll(
+        '범위 선택이 무언가를 고른다',
+        () =>
+          page.evaluate(() =>
+            [
+              document.querySelector('[data-wb-selected-id]')?.getAttribute('data-wb-selected-id'),
+              ...[...document.querySelectorAll('[data-wb-member-id]')].map((element) => element.getAttribute('data-wb-member-id')),
+            ]
+              .filter((id): id is string => typeof id === 'string')
+              .sort(),
+          ),
+        (ids) => ids.length > 0,
+        5000,
+      ).catch((error: Error) => error.message)
+      expect(picked).toEqual(['h_t1'])
     } finally {
       await close()
+    }
+  })
+
+  /**
+   * **H1 — 남이 원본을 쥐었을 때 사본 누름은 원본 누름과 같게 막힌다**(리뷰 «2» 의 두 사람 판). 밥이 셀 틀 글을 고른 동안 앨리스가 그 글의 사본을
+   * 누르면 원본을 누른 것과 같이 고른 것이 그대로다. 다른 열의 사본(단추)은 밥의 잠금 밖이라 골라진다 — 고치기 전에는 그리드가 골라지려다
+   * (밥의 글을 품어) 막혔다.
+   */
+  it('남이 원본을 쥐었으면 사본 누름도 원본 누름과 같게 막히고 · 다른 열의 사본은 골라진다', async () => {
+    const { P } = await seed('grid-copies-lock', COPIES_PAGE)
+    const projectId = P.split('/')[2]!
+    const member = await call('POST', `/projects/${projectId}/members`, { email: stack.users.bob.email, role: 'editor' })
+    expect(member.status).toBeLessThan(300)
+    const a = await open(P, 'h_g')
+    const { context: bobContext, page: bob } = await stack.openTab(stack.users.bob, { viewport: { width: 1440, height: 900 } })
+    try {
+      await bob.goto(P)
+      await canvasFrame(bob).locator('[data-wb-id="h_g"]').waitFor({ state: 'attached' })
+      await treeRow(bob, 'h_t1').locator('button').first().click()
+      await poll(
+        '밥이 글을 골랐다',
+        () => selected(bob),
+        (id) => id === 'h_t1',
+      )
+      // 앨리스 화면에 밥의 잠금이 닿았다(트리 자물쇠) — 판 카나리아.
+      await poll(
+        '밥의 잠금이 앨리스에게 닿는다',
+        () => a.page.locator(`${TREE} [data-tree-id="h_t1"]`).locator('xpath=..').locator('.wb-shell-structure-lock').count(),
+        (n) => n > 0,
+      )
+      await treeRow(a.page, 'h_tail').locator('button').first().click()
+      await poll(
+        '아래 글을 골랐다',
+        () => selected(a.page),
+        (id) => id === 'h_tail',
+      )
+      const frame = canvasFrame(a.page)
+      const outcome = async (click: () => Promise<void>) => {
+        await click()
+        await a.page.waitForTimeout(800)
+        return { selected: await selected(a.page), alerts: await a.page.getByRole('alert').allTextContents() }
+      }
+      const onCopy = await outcome(() => frame.locator('[data-wb-copy-of="h_t1"]').nth(1).click())
+      const onOrigin = await outcome(() => frame.locator('[data-wb-id="h_t1"]').click())
+      expect(onCopy).toEqual(onOrigin)
+      expect(onCopy.selected).toBe('h_tail')
+      expect(await outcome(() => frame.locator('[data-wb-copy-of="h_b0"]').nth(1).click())).toEqual({
+        selected: 'h_b0',
+        alerts: onCopy.alerts,
+      })
+    } finally {
+      await a.close()
+      await bobContext.close()
     }
   })
 

@@ -99,7 +99,8 @@ export const CardView = view(({ props, variant, states, children }) => {
   (`GridRow` — 되풀이 수 · 행 꼴, 칸 `GridCell` 을 가지면 제 칸)이다. 그리드 뷰가 `gridLayout(items, zoneItems.rows, props)`(SDK)로 머리 줄 ·
   몸 줄을 셈해 `<GridProvider value={layout}>` 로 내리고, **행 · 열 · 칸 뷰는 `useGridRow(nodeId)` · `useGridHead(nodeId)` ·
   `useGridCell(nodeId)` 로 제 몫을 읽는다** — 뷰가 받은 `nodeId` 를 그대로 넘긴다(뷰 함수의 몸은 제 노드 문맥 밖에서 돈다). 되풀이 줄의 둘째부터는
-  사본이다 — 행 뷰는 `<Root as="tr" copy>` 로, 셀 틀 · 제 칸은 `item.copy(줄 번호)` 로 그린다(사본은 `data-wb-id` 대신 `data-wb-copy-of`). 머리 칸 ·
+  사본이다 — 행 뷰는 `<Root as="tr" copy>` 로, 셀 틀 · 제 칸은 `item.copy(줄 번호)` 로 그린다(사본은 `data-wb-id` 대신 `data-wb-copy-of` — 에디터가 사본을 누르면 원본을 고른다). 셀 틀 · 번호 칸(`td`)에는
+  `data-wb-column-of="<열 노드 id>"` 를 단다 — 칸의 빈 자리를 누르면 그 열이 골라진다(없으면 그 줄의 행이 골라진다). 머리 칸 ·
   칸의 `colSpan` · `rowSpan` 을 빠뜨리거나 칸을 빼거나 `Root` 를 줄마다 그리면 `wb-theme check` 가 막는다. 표는 `scroll` 조각 안에 두고
   `table` 조각에 `dataGridTableAttrs(layout)` 를 편다 — 결과 머리줄 · 바닥은 스크롤 밖이다.
 - **첫 렌더에 `Root` 를 반환한다.** 이펙트 · 상태를 기다렸다가 `Root` 를 그리면 누락으로 판정되어 그 노드는 SDK 기본 뷰로
