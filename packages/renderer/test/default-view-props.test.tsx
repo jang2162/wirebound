@@ -227,6 +227,28 @@ describe('DataGrid — 열 틀 · 사본 · 병합 머리 · 선택 · 번호 ·
     ])
     expect(parts(bar, 'sizeSelect')[0]!.textContent).toBe('50 ▼')
   })
+
+  it('페이지네이션 쪽 번호 — 첫 쪽 · «…» · 둘레 · «…» · 끝 쪽(설계 «5»)', () => {
+    const el = draw(
+      grid({}, [column('c1', '이름')], [], { footer: [{ id: 'pg', type: 'Pagination', props: { total: 1000, pageSize: 10, page: 50 } }] }),
+    )
+    const pages = el.querySelector('[data-wb-id="pg"] [data-wb-part="pages"]')!
+    expect([...pages.children].map((child) => `${child.getAttribute('data-wb-part')}:${child.textContent}`)).toEqual([
+      'first:«',
+      'prev:‹',
+      'page:1',
+      'ellipsis:…',
+      'page:48',
+      'page:49',
+      'page:50',
+      'page:51',
+      'page:52',
+      'ellipsis:…',
+      'page:100',
+      'next:›',
+      'last:»',
+    ])
+  })
 })
 
 describe('KeyValue — columns', () => {

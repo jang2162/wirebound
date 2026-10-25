@@ -298,9 +298,15 @@ export const GridCellView = view(({ nodeId, props, children }) => {
   )
 })
 
+/** 쪽 번호의 자리 수 — 번호와 «…» 를 함께 센다(설계 «5» 의 `« ‹ 1 2 … 9 › »`). */
+const PAGE_SLOTS = 9
+
 /**
  * 페이지네이션 바의 수(설계 Q3) — 쪽 수 = `max(1, ⌈총 건수 / 쪽 크기⌉)`, 지금 쪽은 쪽 수로 자른다(총 건수를 줄여 지금 쪽이 쪽 수를 넘으면 마지막
- * 쪽). 범위 글은 «처음 - 끝 (총 N 항목 중)» — 0 건이면 «0 - 0». 쪽 번호는 지금 쪽 둘레 아홉까지.
+ * 쪽). 범위 글은 «처음 - 끝 (총 N 항목 중)» — 0 건이면 «0 - 0».
+ *
+ * **쪽 번호는 자리 아홉이다** — 쪽 수가 아홉 이하면 다 서고, 넘으면 첫 쪽 · 끝 쪽이 늘 서고 지금 쪽 둘레(앞뒤 둘)와의 사이가 «…» 다(앞 다섯 쪽 ·
+ * 끝 다섯 쪽 안이면 그쪽 일곱을 잇는다 — 자리 수가 늘 같다). `pages` 는 보이는 번호만 차례로 싣는다 — 이웃 번호가 1 보다 벌어진 자리가 «…» 다.
  */
 export function paginationRange(props: Readonly<Record<string, unknown>>): {
   pages: number[]
@@ -317,9 +323,14 @@ export function paginationRange(props: Readonly<Record<string, unknown>>): {
   const page = Math.min(asked, pageCount)
   const from = total === 0 ? 0 : (page - 1) * size + 1
   const to = Math.min(page * size, total)
-  const first = Math.max(1, Math.min(page - 4, pageCount - 8))
-  const last = Math.min(pageCount, first + 8)
-  return { pages: Array.from({ length: last - first + 1 }, (_, index) => first + index), page, pageCount, from, to, total }
+  const run = (start: number, end: number): number[] => Array.from({ length: end - start + 1 }, (_, index) => start + index)
+  const edge = PAGE_SLOTS - 2
+  let pages: number[]
+  if (pageCount <= PAGE_SLOTS) pages = run(1, pageCount)
+  else if (page <= edge - 2) pages = [...run(1, edge), pageCount]
+  else if (page >= pageCount - (edge - 3)) pages = [1, ...run(pageCount - edge + 1, pageCount)]
+  else pages = [1, ...run(page - 2, page + 2), pageCount]
+  return { pages, page, pageCount, from, to, total }
 }
 
 // 기본 구조 `default` — 행 수 셀렉트 · 쪽 번호 · 범위 글. 세 조각은 노드가 아니다.
@@ -335,10 +346,13 @@ export const PaginationView = view(({ props }) => {
       <div data-wb-part="pages">
         <span data-wb-part="first">«</span>
         <span data-wb-part="prev">‹</span>
-        {pages.map((number) => (
-          <span key={number} data-wb-part="page" aria-current={number === page ? 'page' : undefined}>
-            {number}
-          </span>
+        {pages.map((number, index) => (
+          <Fragment key={number}>
+            {index > 0 && number - pages[index - 1]! > 1 ? <span data-wb-part="ellipsis">…</span> : null}
+            <span data-wb-part="page" aria-current={number === page ? 'page' : undefined}>
+              {number}
+            </span>
+          </Fragment>
         ))}
         <span data-wb-part="next">›</span>
         <span data-wb-part="last">»</span>
