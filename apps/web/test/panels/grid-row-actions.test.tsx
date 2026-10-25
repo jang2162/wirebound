@@ -238,3 +238,31 @@ describe('잠금', () => {
     expect(rowsOf(srv.held()).map((node) => node.props?.repeat ?? 1)).toEqual([1, 2, 1, 1])
   })
 })
+
+describe('속성 패널 — 그리드 편집 칸의 안내 한 줄', () => {
+  /** 고른 노드의 속성 패널에서 그 이름의 칸 줄이 든 안내(`.wb-shell-prop-note`) — 없으면 `null`. */
+  function hintOf(label: string): string | null {
+    const panel = screen.getByRole('tabpanel', { name: '속성' })
+    const line = within(panel).getByText(label, { selector: 'label' }).closest('.wb-shell-prop')
+    return line?.querySelector('.wb-shell-prop-note')?.textContent ?? null
+  }
+
+  it('«되풀이» · «가로 칸 수» · «세로 칸 수» · «고정 열 수» · «열 폭» 칸 밑에 안내 · 안내가 없는 칸은 없다', async () => {
+    await board()
+    const pick = async (id: string) => {
+      fireEvent.click(within(row(id)).getAllByRole('button')[0]!)
+      await waitFor(() => expect(row(id).classList.contains('wb-shell-tree-row-picked')).toBe(true))
+    }
+    await pick('n-r1')
+    expect([hintOf('되풀이'), hintOf('행 꼴')]).toEqual(['이 행을 몇 줄로 그릴지 — 둘째 줄부터는 첫 줄과 같은 꼴입니다', null])
+    await pick('n-k1')
+    expect([hintOf('가로 칸 수'), hintOf('세로 칸 수')]).toEqual([
+      '이 칸이 덮는 열 수 — 행의 칸 수 합이 열 수와 같아야 합니다',
+      '아래로 덮는 줄 수 — 아래 행의 칸은 덮인 열을 건너뜁니다',
+    ])
+    await pick('n-grid')
+    expect(hintOf('고정 열 수')).toBe('가로로 굴려도 왼쪽에 남는 열 수 — 선택 · 번호 열도 셉니다')
+    await pick('n-c1')
+    expect([hintOf('열 폭'), hintOf('머리 이름')]).toEqual(['정하지 않으면 칸 글이 한 줄로 길어집니다 — 꺾으려면 폭을 정하세요', null])
+  })
+})

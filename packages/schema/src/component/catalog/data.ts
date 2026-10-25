@@ -22,7 +22,7 @@ export const DataGridDef = defineComponent({
   }),
   editor: [
     { prop: 'select', control: 'select', label: '선택 열', options: ['none', 'check', 'radio'] },
-    { prop: 'fixedColumns', control: 'number', label: '고정 열 수' },
+    { prop: 'fixedColumns', control: 'number', label: '고정 열 수', hint: '가로로 굴려도 왼쪽에 남는 열 수 — 선택 · 번호 열도 셉니다' },
     { prop: 'emptyText', control: 'text', label: '빈 결과 문구' },
     // `states` 와 짝이다 — 둘 다 없으면 빈 결과 · 불러오는 중 화면을 목업에서 켤 수 없다.
     { prop: 'empty', control: 'switch', label: '빈 상태' },
@@ -97,7 +97,13 @@ export const GridColumnDef = defineComponent({
     { prop: 'label', control: 'text', label: '머리 이름' },
     { prop: 'required', control: 'switch', label: '필수 표시' },
     { prop: 'align', control: 'select', label: '칸 정렬', options: ['start', 'center', 'end'] },
-    { prop: 'size', control: 'select', label: '열 폭', options: ['auto', 'short', 'medium', 'long'] },
+    {
+      prop: 'size',
+      control: 'select',
+      label: '열 폭',
+      options: ['auto', 'short', 'medium', 'long'],
+      hint: '정하지 않으면 칸 글이 한 줄로 길어집니다 — 꺾으려면 폭을 정하세요',
+    },
     { prop: 'sort', control: 'select', label: '정렬 표시', options: ['none', 'sortable', 'asc', 'desc'] },
     { prop: 'tone', control: 'select', label: '음영', options: ['default', 'shaded'] },
     { prop: 'numbering', control: 'select', label: '번호', options: ['off', 'asc', 'desc'] },
@@ -124,7 +130,7 @@ export const GridRowDef = defineComponent({
     tone: z.enum(['default', 'selected', 'dimmed', 'shaded']).default('default'),
   }),
   editor: [
-    { prop: 'repeat', control: 'number', label: '되풀이' },
+    { prop: 'repeat', control: 'number', label: '되풀이', hint: '이 행을 몇 줄로 그릴지 — 둘째 줄부터는 첫 줄과 같은 꼴입니다' },
     { prop: 'kind', control: 'select', label: '종류', options: ['data', 'total', 'gap'] },
     { prop: 'tone', control: 'select', label: '행 꼴', options: ['default', 'selected', 'dimmed', 'shaded'] },
   ],
@@ -145,8 +151,8 @@ export const GridCellDef = defineComponent({
     rowSpan: z.number().int().min(1).max(50).default(1),
   }),
   editor: [
-    { prop: 'span', control: 'number', label: '가로 칸 수' },
-    { prop: 'rowSpan', control: 'number', label: '세로 칸 수' },
+    { prop: 'span', control: 'number', label: '가로 칸 수', hint: '이 칸이 덮는 열 수 — 행의 칸 수 합이 열 수와 같아야 합니다' },
+    { prop: 'rowSpan', control: 'number', label: '세로 칸 수', hint: '아래로 덮는 줄 수 — 아래 행의 칸은 덮인 열을 건너뜁니다' },
   ],
   summary: (props) => joined(spanWord('가로', props.span), spanWord('세로', props.rowSpan)),
   states: [],

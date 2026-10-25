@@ -57,6 +57,19 @@ describe('defineComponent — 사람이 읽을 축', () => {
     expect(() => defineComponent({ ...base, description: '가'.repeat(60) })).not.toThrow()
   })
 
+  it('편집 칸 안내(`editor[].hint`)도 같은 결 — 빈 말 · 두 줄 · 설명 상한을 넘으면 던진다', () => {
+    // 속성 패널이 칸 밑에 그대로 그린다 — 줄바꿈이 든 안내는 칸 줄을 세로로 밀고, 빈 안내는 글자 없는 줄을 세운다.
+    const hinted = (hint: string) => ({
+      ...base,
+      props: z.strictObject({ n: z.number().default(1) }),
+      editor: [{ prop: 'n', control: 'number' as const, label: '수', hint }],
+    })
+    expect(() => defineComponent(hinted(''))).toThrow('editor.n.hint가 비어 있습니다')
+    expect(() => defineComponent(hinted('앞\n뒤'))).toThrow('editor.n.hint는 한 줄이어야 합니다')
+    expect(() => defineComponent(hinted('가'.repeat(61)))).toThrow('editor.n.hint가 60자를 넘습니다 (61자)')
+    expect(() => defineComponent(hinted('가'.repeat(60)))).not.toThrow()
+  })
+
   it('갈래 목록 밖의 group은 던진다', () => {
     // 타입이 이미 막지만 `as`로 지나온 값·JSON에서 온 값은 여기서만 걸린다. 조용히
     // 통과하면 고르개가 그 컴포넌트를 어느 그룹에도 못 넣어 목록에서 통째로 사라진다.

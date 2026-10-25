@@ -27,7 +27,7 @@
  *
  * **순수하고 던지지 않는다** — 못 하면 `{ reason }`(`./paste-ops.ts` 의 `NodeEdit` 와 같은 꼴).
  */
-import { BODY_ZONE, MAX_OPS_PER_EDIT, applyOps, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import { BODY_ZONE, MAX_OPS_PER_EDIT, applyOps, zoneList, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
 import { gridLayout, type ViewItem } from '@wirebound/theme-sdk'
 import { insertNodeOps, propOps } from './ops'
 import { sameDocumentCopies, tooManyOpsNotice, type NodeEdit } from './paste-ops'
@@ -47,6 +47,11 @@ const NOT_IN_GRID = '그리드 안의 행이 아닙니다'
 function propsOf(node: WbNode | undefined): Record<string, unknown> {
   const props = node?.props
   return props !== null && typeof props === 'object' && !Array.isArray(props) ? (props as Record<string, unknown>) : {}
+}
+
+/** 그 구역의 노드들 — 검증 전 문서의 노드 아닌 원소는 뺀다(`zoneList` 는 원소를 안 거른다). */
+function nodesIn(node: unknown, zone: string): WbNode[] {
+  return zoneList(node, zone).filter((child): child is WbNode => child !== null && typeof child === 'object' && !Array.isArray(child))
 }
 
 function isRow(node: WbNode | undefined): node is WbNode {
@@ -69,7 +74,7 @@ export function splitRowRefusal(node: WbNode | undefined): string | null {
 export function buildCellsRefusal(node: WbNode | undefined): string | null {
   if (!isRow(node)) return NOT_IN_GRID
   if (propsOf(node).kind === 'gap') return GAP_ROW_WHY
-  return Array.isArray(node.children) && node.children.length > 0 ? BUILD_CELLS_WHY : null
+  return nodesIn(node, BODY_ZONE).length > 0 ? BUILD_CELLS_WHY : null
 }
 
 /** «한 행 떼어 내기» 의 묶음 — 그 행의 `repeat` 을 걷고(기본 1) 바로 뒤에 `repeat` n − 1 사본(머리말 «앞 행이 원본이다»). */
@@ -97,7 +102,6 @@ export function splitRowOps(document: PageDocument, rowId: string, generate?: ()
 
 /** 문서 노드를 셈 함수가 읽는 꼴로 — 그리는 것(`element` · `content` · `copy`)은 셈이 안 읽는다. */
 function itemOf(node: WbNode, index: number): ViewItem {
-  const children = Array.isArray(node.children) ? node.children : []
   return {
     nodeId: node.id,
     type: node.type,
@@ -106,7 +110,7 @@ function itemOf(node: WbNode, index: number): ViewItem {
     element: null,
     content: null,
     get items() {
-      return children.map(itemOf)
+      return nodesIn(node, BODY_ZONE).map(itemOf)
     },
     copy: () => ({ element: null, content: null }),
   }
@@ -128,8 +132,8 @@ function cellPlan(document: PageDocument, rowId: string): CellPlan {
   const grid = spot === null ? undefined : (findNodeSafely(document.root, spot.parentId) as WbNode | undefined)
   if (spot === null || spot.zone !== 'rows' || grid?.type !== 'DataGrid') return { reason: NOT_IN_GRID }
 
-  const columns = (Array.isArray(grid.children) ? grid.children : []).map(itemOf)
-  const rows = (grid.zones?.rows ?? []).map(itemOf)
+  const columns = nodesIn(grid, BODY_ZONE).map(itemOf)
+  const rows = nodesIn(grid, 'rows').map(itemOf)
   const line = gridLayout(columns, rows, propsOf(grid)).linesOf.get(rowId)?.[0]
   if (line === undefined) return { reason: NOT_IN_GRID }
 
@@ -141,7 +145,7 @@ function cellPlan(document: PageDocument, rowId: string): CellPlan {
     if (cell.kind === 'template') {
       const column = findNodeSafely(document.root, cell.leaf.item.nodeId) as WbNode | undefined
       reads.push(cell.leaf.item.nodeId)
-      cells.push({ id: slot(), type: 'GridCell', children: Array.isArray(column?.children) ? column.children : [] })
+      cells.push({ id: slot(), type: 'GridCell', children: nodesIn(column, BODY_ZONE) })
     } else if (cell.kind === 'number') {
       cells.push({
         id: slot(),

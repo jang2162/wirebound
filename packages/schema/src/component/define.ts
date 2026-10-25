@@ -24,6 +24,11 @@ export interface EditorField {
   options?: string[]
   /** control이 'optionList'일 때 고르는 수 — `one` 이면 하나를 고르면 다른 항목의 고름을 함께 걷는다(라디오처럼), `many` 면 여럿(체크처럼). */
   select?: 'one' | 'many'
+  /**
+   * 칸 밑의 안내 한 줄 — 이름만으로 무엇을 세는지 모르는 수 칸(«되풀이» · «가로 칸 수»)이나 정하지 않았을 때의 대가가 화면에 안 보이는 칸(«열 폭»)에
+   * 둔다. 속성 패널이 그 칸 밑에 그린다(`apps/web/src/panels/property-panel.tsx`). 설명과 같은 상한(`DESCRIPTION_MAX`)이다 — 우측 패널 폭에서 두 줄쯤.
+   */
+  hint?: string
 }
 
 /** 사람이 읽을 이름의 상한. 고르개의 `<option>` 한 줄에 표시(`담을 수 있음`)와 함께 든다. */
@@ -208,6 +213,7 @@ export function defineComponent(def: ComponentDef): ComponentDef {
     if ((field.control === 'optionList') !== (field.select !== undefined)) {
       throw new Error(`${type}: ${field.prop}의 select 는 optionList 에만 있고 optionList 에는 꼭 있어야 합니다`)
     }
+    if (field.hint !== undefined) assertHumanText(type, `editor.${field.prop}.hint`, field.hint, DESCRIPTION_MAX)
   }
 
   // **도달 가능한 prop 집합.** 테마 manifest 의 `hideProps`가 감추는 것도 센다 — 그것은 변형에 따라 **감출**
