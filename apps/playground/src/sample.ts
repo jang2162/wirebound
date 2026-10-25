@@ -65,12 +65,33 @@ export const samplePage: PageDocument = {
       },
       {
         id: 'n_pag000000006',
-        type: 'List',
+        type: 'DataGrid',
         marker: 2,
-        props: {
-          columns: ['No', '아이디', '이름', '상태'],
-          items: 5,
-          pagination: true,
+        props: { select: 'check' },
+        children: [
+          { id: 'n_pag000000060', type: 'GridColumn', props: { label: 'No', numbering: 'desc', align: 'center', size: 'short' } },
+          {
+            id: 'n_pag000000061',
+            type: 'GridColumn',
+            props: { label: '아이디' },
+            children: [{ id: 'n_pag000000065', type: 'Text', props: { content: 'hong01' } }],
+          },
+          {
+            id: 'n_pag000000062',
+            type: 'GridColumn',
+            props: { label: '이름' },
+            children: [{ id: 'n_pag000000066', type: 'Text', props: { content: '홍길동' } }],
+          },
+          {
+            id: 'n_pag000000063',
+            type: 'GridColumn',
+            props: { label: '상태' },
+            children: [{ id: 'n_pag000000067', type: 'Chip', props: {} }],
+          },
+        ],
+        zones: {
+          rows: [{ id: 'n_pag000000064', type: 'GridRow', props: { repeat: 5 } }],
+          footer: [{ id: 'n_pag000000068', type: 'Pagination', props: { total: 48 } }],
         },
         interactions: [
           {

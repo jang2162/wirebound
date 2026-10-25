@@ -39,7 +39,7 @@ const DOC = {
     type: 'Page',
     children: [
       { id: 'n_btn', type: 'Button', props: { label: '검색' } },
-      { id: 'n_list', type: 'List', props: {} },
+      { id: 'n_list', type: 'DataGrid', props: {} },
     ],
   },
 }
@@ -181,7 +181,7 @@ const PRESSED = {
           },
         ],
       },
-      { id: 'n_list', type: 'List', props: {}, marker: 2 },
+      { id: 'n_list', type: 'DataGrid', props: {}, marker: 2 },
       {
         id: 'n_tabs',
         type: 'Tabs',

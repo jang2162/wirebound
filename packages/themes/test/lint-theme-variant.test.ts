@@ -18,7 +18,7 @@ const MANIFEST = {
   sdk: '^1.0.0',
   tokens: { items: {} },
   components: {
-    List: {
+    DataGrid: {
       variants: [
         { id: 'table', label: '테이블' },
         { id: 'cards', label: '카드' },
@@ -41,7 +41,7 @@ const themeIssues = (children: WbNode[], themeManifest?: ThemeManifest) =>
 
 describe('theme-variant', () => {
   it('선언 밖 variant 는 경고 한 건 — 노드 · 페이지를 짚는다', () => {
-    const issues = themeIssues([{ id: 'list1', type: 'List', variant: 'grid' }], MANIFEST)
+    const issues = themeIssues([{ id: 'list1', type: 'DataGrid', variant: 'grid' }], MANIFEST)
     expect(issues).toEqual([
       {
         rule: 'theme-variant',
@@ -49,14 +49,14 @@ describe('theme-variant', () => {
         pageId: 'pg1',
         nodeId: 'list1',
         path: '/root/children/0/variant',
-        message: 'List 의 variant "grid" 는 테마 acme@1.0.0 에 없습니다 — table(기본)으로 그려집니다',
+        message: 'DataGrid 의 variant "grid" 는 테마 acme@1.0.0 에 없습니다 — table(기본)으로 그려집니다',
       },
     ])
     expect(lintRule('theme-variant')?.severity).toBe('warning')
   })
 
   it('안쪽 노드도 센다', () => {
-    const issues = themeIssues([{ id: 'sec', type: 'Section', children: [{ id: 'inner', type: 'List', variant: 'grid' }] }], MANIFEST)
+    const issues = themeIssues([{ id: 'sec', type: 'Section', children: [{ id: 'inner', type: 'DataGrid', variant: 'grid' }] }], MANIFEST)
     expect(issues.map((issue) => [issue.nodeId, issue.path])).toEqual([['inner', '/root/children/0/children/0/variant']])
   })
 
@@ -64,8 +64,8 @@ describe('theme-variant', () => {
     expect(
       themeIssues(
         [
-          { id: 'a', type: 'List', variant: 'cards' },
-          { id: 'b', type: 'List' },
+          { id: 'a', type: 'DataGrid', variant: 'cards' },
+          { id: 'b', type: 'DataGrid' },
         ],
         MANIFEST,
       ),
@@ -86,7 +86,7 @@ describe('theme-variant', () => {
   })
 
   it('manifest 가 없으면 이 규칙은 돌지 않는다', () => {
-    expect(themeIssues([{ id: 'list1', type: 'List', variant: 'grid' }])).toEqual([])
+    expect(themeIssues([{ id: 'list1', type: 'DataGrid', variant: 'grid' }])).toEqual([])
   })
 
   it('봉투가 깨진 페이지에서 던지지 않는다', () => {

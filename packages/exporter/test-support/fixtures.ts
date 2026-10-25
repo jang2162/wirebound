@@ -152,10 +152,44 @@ export function broadFixture(): PageDocument {
         },
         {
           id: id(),
-          type: 'List',
+          type: 'DataGrid',
           variant: 'compact',
-          props: { items: 3, selected: true },
-          zones: { headStart: [{ id: id(), type: 'Text', props: { content: '총 3건' } }] },
+          props: { select: 'check', fixedColumns: 1 },
+          // 열 묶음 · 번호 열 · 셀 틀 · 되풀이 행 · 제 칸 합계 줄 · 생략 띠 · 바닥 페이지네이션 — 그리드 부품 여섯을 다 쓴다.
+          children: [
+            { id: id(), type: 'GridColumn', props: { label: 'No', numbering: 'desc', align: 'center' } },
+            {
+              id: id(),
+              type: 'GridColumnGroup',
+              props: { label: '회원' },
+              children: [
+                {
+                  id: id(),
+                  type: 'GridColumn',
+                  props: { label: '이름' },
+                  children: [{ id: id(), type: 'Text', props: { content: '홍길동' } }],
+                },
+                { id: id(), type: 'GridColumn', props: { label: '등급', sort: 'asc' }, children: [{ id: id(), type: 'Chip' }] },
+              ],
+            },
+          ],
+          zones: {
+            headStart: [{ id: id(), type: 'Text', props: { content: '총 3건' } }],
+            rows: [
+              { id: id(), type: 'GridRow', props: { repeat: 2 } },
+              { id: id(), type: 'GridRow', props: { kind: 'gap' } },
+              {
+                id: id(),
+                type: 'GridRow',
+                props: { kind: 'total' },
+                children: [
+                  { id: id(), type: 'GridCell', props: { span: 2 }, children: [{ id: id(), type: 'Text', props: { content: '합계' } }] },
+                  { id: id(), type: 'GridCell' },
+                ],
+              },
+            ],
+            footer: [{ id: id(), type: 'Pagination', props: { total: 3 } }],
+          },
         },
       ],
     },
@@ -222,7 +256,7 @@ export function brokenFixture(): PageDocument {
       type: 'Page',
       children: [
         { id: id(), type: '없는타입' },
-        { id: id(), type: 'List', props: { 없는프롭: 1 } },
+        { id: id(), type: 'DataGrid', props: { 없는프롭: 1 } },
         null as unknown as WbNode,
         { id: 7 as unknown as string, type: 'Text' },
       ],

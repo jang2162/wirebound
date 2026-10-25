@@ -28,7 +28,7 @@ const DOC: PageDocument = {
         props: { label: '저장' },
         interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_list', value: false }] }],
       },
-      { id: 'n_list', type: 'List', alias: '회원 목록', marker: 2 },
+      { id: 'n_list', type: 'DataGrid', alias: '회원 목록', marker: 2 },
     ],
   },
 }

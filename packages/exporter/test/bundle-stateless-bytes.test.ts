@@ -21,6 +21,10 @@
  * 픽스처의 입력폼 필드를 폼 표 하나(2열 · 머리 오른쪽 단추)로 감쌌다. «슬롯» · «글» · «깨진 문서» 는 그대로다(`docs/superpowers/plans/2026-10-25-ft2-report.md`).
  * 폼 표의 중간 폭 판(960px 아래 한 줄에 쌍 하나)과 값 칸 안 폼 표(하위 표)의 규칙을 더하며 `assets/views.css` 만 다시 지었다 — 페이지 HTML 은 그대로다
  * (`docs/superpowers/plans/2026-10-25-fx-ft-report.md` M2 · M3).
+ * 그리드(문서 판 5 · SDK 1.7.0)를 들이며 다시 지었다 — `assets/views.css` 는 그리드 · 열 · 행 · 칸 · 페이지네이션 바의 기본 규칙, «넓은 표본»(과 그 사본
+ * `index.html`)은 픽스처의 목록을 그리드 부품 여섯을 다 쓰는 그리드로 바꿨고, «깨진 문서» 는 props 가 틀린 노드의 타입(`List` → `DataGrid`)이 바뀌었다.
+ * «슬롯» · «글» 은 문서 JSON 의 판 번호(4 → 5)만 다르다(다시 재는 법: 두 페이지의 문서를 `version: 4` 로 되돌려 해시하면 앞 값이 선다 —
+ * `docs/superpowers/plans/2026-10-25-gr2-report.md`).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -61,20 +65,20 @@ function digest(withTheme: boolean): Record<string, string> {
 /** 상태 없는 페이지의 해시(파일마다 sha256 앞 16자) — 지은 때는 머리말. */
 const BEFORE = {
   plain: {
-    'index.html': '7a59ec8bc902e94c',
-    'pages/넓은-표본.html': '67c2fa8dc72c5d67',
-    'pages/슬롯.html': '4e8bd0e4f441ced8',
-    'pages/글.html': 'abed474c8d552b49',
-    'pages/깨진-문서.html': '9ab11048c5f61199',
-    'assets/views.css': '5202f0e1b522a5dd',
+    'index.html': '397e7e109d67d68f',
+    'pages/넓은-표본.html': '468ece3af280c49c',
+    'pages/슬롯.html': '237942c9bddec6e1',
+    'pages/글.html': 'cf7aada8a9107580',
+    'pages/깨진-문서.html': '1e6593b7b432956c',
+    'assets/views.css': '07cdda787c4fde97',
   },
   themed: {
-    'index.html': '290fae2c4edca9bf',
-    'pages/넓은-표본.html': '74e0f8e3c725d869',
-    'pages/슬롯.html': 'd95293b9a6b0d653',
-    'pages/글.html': 'f6e6876dde5919f0',
-    'pages/깨진-문서.html': '0cf1fd266dd8dd82',
-    'assets/views.css': '5202f0e1b522a5dd',
+    'index.html': 'b477e3bb1d94a491',
+    'pages/넓은-표본.html': '516f5858cdd82609',
+    'pages/슬롯.html': 'a740ac4b6b55571e',
+    'pages/글.html': '85f601e80f6602ab',
+    'pages/깨진-문서.html': 'e071fd4ffcfbad1c',
+    'assets/views.css': '07cdda787c4fde97',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',

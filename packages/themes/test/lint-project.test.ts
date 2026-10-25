@@ -78,7 +78,17 @@ describe('표 전체가 이 한 자리에서 돈다', () => {
                 id: nid(),
                 type: 'Page',
                 children: [
-                  { id: nid(), type: 'List' },
+                  { id: nid(), type: 'DataGrid' },
+                  // 번호 열의 셀 틀(`ignored-template`) · 열 둘에 칸 하나인 제 칸 행(`grid-row-cells`).
+                  {
+                    id: nid(),
+                    type: 'DataGrid',
+                    children: [
+                      { id: nid(), type: 'GridColumn', props: { numbering: 'asc' }, children: [{ id: nid(), type: 'Text' }] },
+                      { id: nid(), type: 'GridColumn', children: [{ id: nid(), type: 'Text' }] },
+                    ],
+                    zones: { rows: [{ id: nid(), type: 'GridRow', children: [{ id: nid(), type: 'GridCell' }] }] },
+                  },
                   entry,
                   button,
                   { id: nid(), type: 'Text', marker: 2 },

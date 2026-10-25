@@ -27,7 +27,7 @@ function file(patch: Partial<PageJson> = {}): PageJson {
         type: 'Page',
         children: [
           { id: 'file_form', type: 'SearchForm', marker: 2 },
-          { id: 'file_list', type: 'List', marker: 1 },
+          { id: 'file_list', type: 'DataGrid', marker: 1 },
         ],
       },
     },
@@ -95,7 +95,7 @@ describe('페이지 JSON 가져오기', () => {
       }
       expect(body.page.title).toBe('가져온 회원 목록')
       expect(body.page.description).toBe('남의 프로젝트에서 온 페이지')
-      expect(body.page.schema.root.children.map((node) => node.type)).toEqual(['SearchForm', 'List'])
+      expect(body.page.schema.root.children.map((node) => node.type)).toEqual(['SearchForm', 'DataGrid'])
       expect(body.page.schema.root.children.map((node) => node.marker)).toEqual([2, 1])
       // **id는 전부 새것이다** — 파일의 id가 하나도 남지 않는다(설계서 「페이지 JSON」).
       expect(JSON.stringify(body.page.schema)).not.toContain('file_')
@@ -112,7 +112,7 @@ describe('페이지 JSON 가져오기', () => {
         page: { id: string; schema: { root: { children: { id: string; type: string }[] } } }
         comments: { inserted: number; dangling: number }
       }
-      const listId = body.page.schema.root.children.find((node) => node.type === 'List')?.id
+      const listId = body.page.schema.root.children.find((node) => node.type === 'DataGrid')?.id
       const rows = await commentRows(ctx, fx.projectId)
 
       expect(rows).toEqual([{ node_id: listId, body: '목록은 10개씩' }])
@@ -198,7 +198,7 @@ describe('페이지 JSON 가져오기', () => {
         file: file({
           schema: {
             version: 5,
-            root: { id: 'file_root', type: 'Page', children: [{ id: 'file_list', type: 'List' }] },
+            root: { id: 'file_root', type: 'Page', children: [{ id: 'file_list', type: 'DataGrid' }] },
           },
           comments: [{ nodeId: 'file_list', body: '번호 없는 말' }],
         }),
@@ -318,8 +318,8 @@ describe('가져오기가 거절하는 것', () => {
               id: 'file_root',
               type: 'Page',
               children: [
-                { id: 'same', type: 'List' },
-                { id: 'same', type: 'List' },
+                { id: 'same', type: 'DataGrid' },
+                { id: 'same', type: 'DataGrid' },
               ],
             },
           },
@@ -376,8 +376,8 @@ describe('파일 크기 — 상한은 이미 하나 있다', () => {
             type: 'Page',
             children: Array.from({ length: 5000 }, (_unused, index) => ({
               id: `file_${index}`,
-              type: 'List',
-              props: { columns: ['ㄱ'.repeat(200)] },
+              type: 'DataGrid',
+              props: { emptyText: 'ㄱ'.repeat(200) },
             })),
           },
         },
@@ -404,8 +404,8 @@ describe('파일 크기 — 상한은 이미 하나 있다', () => {
             type: 'Page',
             children: Array.from({ length: 1000 }, (_unused, index) => ({
               id: `file_${index}`,
-              type: 'List',
-              props: { columns: ['ㄱ'.repeat(200)] },
+              type: 'DataGrid',
+              props: { emptyText: 'ㄱ'.repeat(200) },
             })),
           },
         },
@@ -437,7 +437,7 @@ describe('실패하면 아무것도 남지 않는다', () => {
             root: {
               id: 'file_root',
               type: 'Page',
-              children: [{ id: 'file_list', type: 'List', props: { columns: ['없\u0000음'] } }],
+              children: [{ id: 'file_list', type: 'DataGrid', props: { emptyText: '없\u0000음' } }],
             },
           },
           comments: [],

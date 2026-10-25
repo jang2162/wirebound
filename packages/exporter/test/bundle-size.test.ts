@@ -22,7 +22,7 @@ const DOC: PageDocument = {
     type: 'Page',
     children: [
       { id: 'n_000000000002', type: 'Text', props: { content: '회원 목록' } },
-      { id: 'n_000000000003', type: 'List' },
+      { id: 'n_000000000003', type: 'DataGrid' },
     ],
   },
 }

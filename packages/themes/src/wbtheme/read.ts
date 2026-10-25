@@ -21,7 +21,7 @@ export type WbthemeIssueCode =
 
 export interface WbthemeIssue {
   code: WbthemeIssueCode
-  /** zip 안의 항목 경로. `manifest` 이슈면 manifest 안의 자리(`manifest.json:components.List`). */
+  /** zip 안의 항목 경로. `manifest` 이슈면 manifest 안의 자리(`manifest.json:components.DataGrid`). */
   path: string
   message: string
   /** `code` 가 `manifest` 일 때 `validateManifest` 가 낸 코드 — 업로드 화면이 사유를 항목별로 가른다. */

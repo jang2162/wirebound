@@ -27,7 +27,7 @@ export type ManifestIssueCode =
 
 export interface ManifestIssue {
   code: ManifestIssueCode
-  /** manifest 안의 자리. `components.List.variants.1.hideProps.0` 처럼 점으로 잇는다. */
+  /** manifest 안의 자리. `components.DataGrid.variants.1.hideProps.0` 처럼 점으로 잇는다. */
   path: string
   message: string
 }

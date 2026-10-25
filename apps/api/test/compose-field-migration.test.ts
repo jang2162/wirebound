@@ -230,7 +230,7 @@ function widePage(): { version: 3; viewStates: unknown[]; root: Record<string, u
         { id: 'n_tp2', type: 'TabPanel', props: { label: '탭2' } },
       ],
     },
-    { id: 'n_list', type: 'List', zones: { headEnd: fields() } },
+    { id: 'n_list', type: 'DataGrid', zones: { headEnd: fields() } },
     { id: 'n_flex', type: 'Flex', children: [{ id: 'n_grid', type: 'Grid', children: fields() }] },
     { id: 'n_b', type: 'Button', props: { label: '대상' } },
   ]

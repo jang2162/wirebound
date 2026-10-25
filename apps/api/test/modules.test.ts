@@ -133,10 +133,10 @@ describe('POST /:projectId/modules', () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const body = await made(ctx, fx, '번호 달린 묶음', [
-        { id: 'a', type: 'Card', marker: 1, children: [{ id: 'b', type: 'List', marker: 2 }] },
+        { id: 'a', type: 'Card', marker: 1, children: [{ id: 'b', type: 'DataGrid', marker: 2 }] },
       ])
 
-      expect(body.nodes).toEqual([{ id: 'a', type: 'Card', children: [{ id: 'b', type: 'List' }] }])
+      expect(body.nodes).toEqual([{ id: 'a', type: 'Card', children: [{ id: 'b', type: 'DataGrid' }] }])
       const stored = await listModules(ctx.db, fx.project.id)
       expect(JSON.stringify(stored[0]!.nodes)).not.toContain('marker')
     })
@@ -154,11 +154,11 @@ describe('POST /:projectId/modules', () => {
           id: 'a',
           type: 'Card',
           visibility: { mode: 'only', states: ['s_admin'] },
-          children: [{ id: 'b', type: 'List', visibility: { mode: 'except', states: ['s_guest'] } }],
+          children: [{ id: 'b', type: 'DataGrid', visibility: { mode: 'except', states: ['s_guest'] } }],
         },
       ])
 
-      expect(body.nodes).toEqual([{ id: 'a', type: 'Card', children: [{ id: 'b', type: 'List' }] }])
+      expect(body.nodes).toEqual([{ id: 'a', type: 'Card', children: [{ id: 'b', type: 'DataGrid' }] }])
       const stored = await listModules(ctx.db, fx.project.id)
       expect(JSON.stringify(stored[0]!.nodes)).not.toContain('visibility')
     })
@@ -224,7 +224,7 @@ describe('POST /:projectId/modules', () => {
   it('id 는 저장 시점 그대로 담는다 — 재발급은 넣기가 한다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
-      expect((await made(ctx, fx, 'id 보존', [{ id: 'n_keepthis01', type: 'List' }])).nodes[0]!.id).toBe('n_keepthis01')
+      expect((await made(ctx, fx, 'id 보존', [{ id: 'n_keepthis01', type: 'DataGrid' }])).nodes[0]!.id).toBe('n_keepthis01')
     })
   })
 
@@ -254,7 +254,7 @@ describe('POST /:projectId/modules', () => {
       const fx = await fixture(ctx)
       const codes = [
         (await post(ctx, fx, { name: '빈', nodes: [] })).statusCode,
-        (await post(ctx, fx, { name: '스타일', nodes: [{ id: 'a', type: 'List', style: 'red' }] })).statusCode,
+        (await post(ctx, fx, { name: '스타일', nodes: [{ id: 'a', type: 'DataGrid', style: 'red' }] })).statusCode,
         (await post(ctx, fx, { name: '봉투째', nodes: { version: 5, root: { id: 'a', type: 'Page' } } })).statusCode,
         (await post(ctx, fx, { name: '옛 꼴', schema: [BUTTON] })).statusCode,
         (await post(ctx, fx, { name: '설명', nodes: [BUTTON], description: '옛 칸' })).statusCode,
@@ -274,7 +274,7 @@ describe('POST /:projectId/modules', () => {
       const fx = await fixture(ctx)
       const codes = [
         (await post(ctx, fx, { name: `이름${NUL}`, nodes: [BUTTON] })).statusCode,
-        (await post(ctx, fx, { name: '노드', nodes: [{ id: 'a', type: 'List', props: { columns: [`가${NUL}`] } }] })).statusCode,
+        (await post(ctx, fx, { name: '노드', nodes: [{ id: 'a', type: 'DataGrid', props: { emptyText: `가${NUL}` } }] })).statusCode,
       ]
       expect(codes).toEqual([400, 400])
       expect(await listModules(ctx.db, fx.project.id)).toEqual([])

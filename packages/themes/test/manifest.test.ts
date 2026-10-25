@@ -19,10 +19,10 @@ const OK = {
     },
   },
   components: {
-    List: {
+    DataGrid: {
       variants: [
         { id: 'table', label: '표' },
-        { id: 'cards', label: '카드', hideProps: ['columns'] },
+        { id: 'cards', label: '카드', hideProps: ['fixedColumns'] },
       ],
       defaultVariant: 'table',
     },
@@ -104,21 +104,21 @@ describe('validateManifest', () => {
       '카탈로그에 없는 컴포넌트',
       'unknown-component',
       edit((m) => {
-        m.components.Carousel = m.components.List
+        m.components.Carousel = m.components.DataGrid
       }),
     ],
     [
       '걷은 상태 영역 — 카탈로그에 없다',
       'unknown-component',
       edit((m) => {
-        m.components.StateSwitch = m.components.List
+        m.components.StateSwitch = m.components.DataGrid
       }),
     ],
     [
       '걷은 상태 가지 — 카탈로그에 없다',
       'unknown-component',
       edit((m) => {
-        m.components.StateCase = m.components.List
+        m.components.StateCase = m.components.DataGrid
       }),
     ],
     [
@@ -132,21 +132,21 @@ describe('validateManifest', () => {
       'variant id 가 겹치면',
       'duplicate-variant',
       edit((m) => {
-        m.components.List.variants.push({ id: 'table', label: '또' })
+        m.components.DataGrid.variants.push({ id: 'table', label: '또' })
       }),
     ],
     [
       'defaultVariant 가 목록 밖',
       'default-variant-missing',
       edit((m) => {
-        m.components.List.defaultVariant = 'grid'
+        m.components.DataGrid.defaultVariant = 'grid'
       }),
     ],
     [
       'hideProps 가 그 컴포넌트의 prop 이 아니면',
       'unknown-hide-prop',
       edit((m) => {
-        m.components.List.variants[1].hideProps = ['nope']
+        m.components.DataGrid.variants[1].hideProps = ['nope']
       }),
     ],
   ])('%s → %s', (_label, code, raw) => {
@@ -158,7 +158,7 @@ describe('validateManifest', () => {
   it('첫 이슈에서 멈추지 않는다 — 여럿을 한 번에 말한다', () => {
     const raw = edit((m) => {
       m.version = 'x'
-      m.components.List.defaultVariant = 'grid'
+      m.components.DataGrid.defaultVariant = 'grid'
     })
     expect(codes(raw)).toEqual(expect.arrayContaining(['bad-version', 'default-variant-missing']))
   })
@@ -166,10 +166,10 @@ describe('validateManifest', () => {
   it('이슈는 path 로 자리를 가리킨다', () => {
     const r = validateManifest(
       edit((m) => {
-        m.components.List.variants[1].hideProps = ['nope']
+        m.components.DataGrid.variants[1].hideProps = ['nope']
       }),
     )
-    expect(r.issues[0]!.path).toBe('components.List.variants.1.hideProps.0')
+    expect(r.issues[0]!.path).toBe('components.DataGrid.variants.1.hideProps.0')
   })
 
   it('카탈로그를 안 깔아도 검증이 선다', () => {

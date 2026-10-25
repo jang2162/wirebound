@@ -99,7 +99,7 @@ describe('get_page — 무엇을 싣나', () => {
       page: { interactions: { text: string }[] }
     }
     expect(said.page.interactions).toHaveLength(1)
-    expect(said.page.interactions[0]!.text).toBe('① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
+    expect(said.page.interactions[0]!.text).toBe('① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다')
   })
 
   it('코멘트가 노드 이름과 함께 온다', async () => {
@@ -109,7 +109,7 @@ describe('get_page — 무엇을 싣나', () => {
     expect(said.page.comments).toEqual([
       {
         nodeId: 'list',
-        nodeName: '② 목록',
+        nodeName: '② 그리드',
         body: '정렬 기준을 정해야 합니다',
         authorName: '장병현',
         createdAt: '2026-08-16T01:00:00.000Z',

@@ -101,7 +101,7 @@ describe('무엇을 싣는가 — 스키마·코멘트·상호작용 문장 (설
 
     const said = io.stdout.join('\n')
     expect(said).toContain('① 검색 버튼')
-    expect(said).toContain('② 목록')
+    expect(said).toContain('② 그리드')
   })
 
   /**
@@ -113,7 +113,7 @@ describe('무엇을 싣는가 — 스키마·코멘트·상호작용 문장 (설
     const io = 준비()
     await run(['page', 'get', '관리자/회원/목록'], io)
 
-    expect(io.stdout.join('\n')).toContain('① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
+    expect(io.stdout.join('\n')).toContain('① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다')
   })
 
   it('코멘트를 **어느 노드에 달렸는지**와 함께 낸다', async () => {
@@ -121,7 +121,7 @@ describe('무엇을 싣는가 — 스키마·코멘트·상호작용 문장 (설
     await run(['page', 'get', '관리자/회원/목록'], io)
 
     const said = io.stdout.join('\n')
-    expect(said).toContain('② 목록 · 장병현')
+    expect(said).toContain('② 그리드 · 장병현')
     expect(said).toContain('정렬 기준을 정해야 합니다')
   })
 

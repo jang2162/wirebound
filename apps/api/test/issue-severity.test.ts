@@ -221,7 +221,7 @@ describe('상호작용 타겟이 끊겨도 편집을 막지 않는다', () => {
             props: { label: '검색' },
             interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] }],
           },
-          { id: 'n_list', type: 'List' },
+          { id: 'n_list', type: 'DataGrid' },
         ],
       },
     }

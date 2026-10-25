@@ -24,7 +24,7 @@ function seedDocument(): PageDocument {
             { id: 'n_000000000004', type: 'Text', props: { content: '나', role: 'body' } },
           ],
         },
-        { id: 'n_000000000005', type: 'List', props: { items: 3, pagination: true } },
+        { id: 'n_000000000005', type: 'DataGrid', props: { fixedColumns: 3 } },
         { id: 'n_000000000006', type: 'Divider', props: { direction: 'horizontal' } },
       ],
     },

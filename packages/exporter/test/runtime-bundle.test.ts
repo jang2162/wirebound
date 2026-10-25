@@ -86,7 +86,7 @@ const LIST_PAGE: PageDocument = {
           {
             on: 'click',
             actions: [
-              { type: 'setProp', target: 'n_list', prop: 'items', value: 9 },
+              { type: 'setProp', target: 'n_list', prop: 'emptyText', value: '없음' },
               { type: 'setProp', target: 'n_list', prop: 'empty', value: true },
             ],
           },
@@ -119,7 +119,7 @@ const LIST_PAGE: PageDocument = {
           },
         ],
       },
-      { id: 'n_list', type: 'List', props: {}, marker: 2 },
+      { id: 'n_list', type: 'DataGrid', props: {}, marker: 2, children: [{ id: 'n_list_col', type: 'GridColumn' }] },
       {
         id: 'n_tabs',
         type: 'Tabs',
@@ -435,7 +435,7 @@ describe('누르면 웹 앱에서 누른 것과 같은 화면이 된다 (설계�
     load('pages/회원-목록.html')
     await run()
     press('n_multi')
-    expect(drawn()).toBe(expected({ n_list: { items: 9, empty: true } }))
+    expect(drawn()).toBe(expected({ n_list: { emptyText: '없음', empty: true } }))
   })
 
   it('누름을 건너서도 같은 노드의 prop이 쌓인다', async () => {
@@ -445,7 +445,7 @@ describe('누르면 웹 앱에서 누른 것과 같은 화면이 된다 (설계�
     press('n_btn')
     expect(drawn()).toBe(
       expected({
-        n_list: { items: 9, empty: true, loading: true },
+        n_list: { emptyText: '없음', empty: true, loading: true },
         n_tabs: { active: 1 },
         n_card: { visible: false },
       }),
