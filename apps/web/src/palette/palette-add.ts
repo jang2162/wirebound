@@ -7,8 +7,13 @@
  * |---|---|
  * | 구조 트리의 구역 줄(`selectedZone`) | 그 구역의 끝(`zoneDropTarget`) |
  * | 없음 · 뿌리 | 페이지 끝(`pageEndTarget`) |
- * | 자식을 받는 컴포넌트 | 그 노드 «안»(끝) |
+ * | 자식을 받는 컴포넌트 | 그 노드 «안»(끝) — 그 몸통이 넣을 것을 안 받으면 «뒤»(아래) |
  * | 잎(자식을 안 받음) | 그 노드 «뒤»(같은 부모) |
+ *
+ * **«안» 이 거절되면 «뒤»** — 몸통의 받는 타입 · 넣을 것의 설 자리(`fitRefusal`)에 걸리면 그 노드 바로 뒤로 물러선다(설계 spec
+ * `docs/superpowers/specs/2026-10-25-grid-design.md` «8»). 열을 고르고 «열» · «열 묶음»(셀 틀이 받지만 열은 그리드 · 열 묶음에만 선다) · 행을 고르고
+ * «행»(행 몸통은 칸만 받는다) · 탭을 고르고 글(탭 몸통은 탭 패널만 받는다)이 그 판이다. 몸통이 받는 것(셀 틀에 글)은 그대로 «안» 이다. 물러서는 것은
+ * 그 까닭뿐이다 — 잠금 · 문서에 없음으로 «안» 이 막힌 판은 그대로 막힌다. 물러선 «뒤» 도 못 서면 «안» 의 까닭을 그대로 말한다.
  *
  * 고른 잎을 남이 잡았거나 판정이 `null` 이면 넣지 않고 이유 문장을 낸다. **문장은 새로 짓지 않는다** — 같은 판에서 화면이 이미 하는 말을 그대로 쓴다(두 벌이면
  * 한쪽만 고쳐진다):
@@ -91,6 +96,14 @@ export function paletteAddTarget(input: {
       ? null
       : structureDropTarget(document, placing, selected, inside ? 'inside' : 'after', input.blockedBy)
   if (target !== null) return { ok: true, target }
+
+  // «안» 이 받는 타입 · 설 자리에 걸리면 «뒤» 로 물러선다(머리말 ««안» 이 거절되면 «뒤»») — 물러선 자리는 잎의 «뒤» 와 같은 판이라 고른 노드의 잠금을 먼저 본다.
+  if (inside && selected !== null && zoneDropRefusal(document, placing, selected, BODY_ZONE) !== null) {
+    const lock = input.lockedBy(selected)
+    if (lock !== null) return { ok: false, reason: lockedSelectionStatus(lock.userName) }
+    const after = structureDropTarget(document, placing, selected, 'after', input.blockedBy)
+    if (after !== null) return { ok: true, target: after }
+  }
 
   // 왜 못 넣나 — 머리말의 표 차례대로(고른 잎의 잠금은 위에서 봤다).
   const slot = atEnd
