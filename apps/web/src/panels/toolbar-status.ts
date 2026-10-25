@@ -156,11 +156,17 @@ export function menuItemReason(
   return MENU_WHY_DISABLED[key]
 }
 
-/** 꺼진 항목의 이유 — 판정 일곱과 판정 키가 없는 별칭. 켜진 항목은 `undefined`다. */
-export type StructureWhy = { readonly [K in keyof StructureAbilities | 'alias' | 'kind']?: string }
+/** 꺼진 항목의 이유 — 판정 일곱과 판정 키가 없는 별칭 · 종류 바꾸기 · 그리드 행 줄 행동 둘. 켜진 항목은 `undefined`다. */
+export type StructureWhy = { readonly [K in keyof StructureAbilities | 'alias' | 'kind' | 'splitRow' | 'buildCells']?: string }
 
-/** 구조 트리 줄 행동이 싣는 이유 전부(`StructureCommands.why`). 판정 키가 없는 별칭 · 종류 바꾸기는 끈 값(`aliasLocked` · `kindLocked`)을 받는다. */
-export function structureWhy(input: StructureReasonInput, gates: { aliasLocked: boolean; kindLocked?: boolean }): StructureWhy {
+/**
+ * 구조 트리 줄 행동이 싣는 이유 전부(`StructureCommands.why`). 판정 키가 없는 별칭 · 종류 바꾸기는 끈 값(`aliasLocked` · `kindLocked`)을, 그리드 행 줄 행동
+ * 둘은 그 행의 모양이 못 하게 하는 까닭(`edit/grid-row-actions.ts` 의 `splitRowRefusal` · `buildCellsRefusal` — 할 수 있으면 `null`)을 받는다.
+ */
+export function structureWhy(
+  input: StructureReasonInput,
+  gates: { aliasLocked: boolean; kindLocked?: boolean; splitRow?: string | null; buildCells?: string | null },
+): StructureWhy {
   return {
     addInside: structureItemReason(input, 'addInside'),
     addAfter: structureItemReason(input, 'addAfter'),
@@ -172,6 +178,9 @@ export function structureWhy(input: StructureReasonInput, gates: { aliasLocked: 
     alias: gates.aliasLocked ? aliasReason(input) : undefined,
     // 항목은 입력 조각 줄에만 서므로 꺼지는 까닭은 대개 별칭과 같다(하나 · 문서 · 잠금).
     kind: gates.kindLocked === true ? (gates.aliasLocked ? aliasReason(input) : KIND_REASON) : undefined,
+    // 항목은 그리드 행 줄에만 선다 — 꺼지는 까닭은 별칭과 같은 셋(하나 · 문서 · 잠금)이 먼저고, 그 다음이 행의 모양이다.
+    splitRow: gates.aliasLocked ? aliasReason(input) : (gates.splitRow ?? undefined),
+    buildCells: gates.aliasLocked ? aliasReason(input) : (gates.buildCells ?? undefined),
   }
 }
 

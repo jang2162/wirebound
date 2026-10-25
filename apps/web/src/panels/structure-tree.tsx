@@ -572,6 +572,7 @@ function StructureNode(props: {
                 () => row.alias.open(node.id),
                 row.rootId === node.id ? undefined : row.saveModule,
                 kindTargets(node.type).length > 0 ? () => row.changeKind(node.id) : undefined,
+                node.type === 'GridRow' ? node.id : undefined,
               )}
               // 열면 그 줄을 먼저 고른다 — 이미 고른 줄이면 다시 고르지 않는다(여럿을 고른 판의 기준 줄 `…` 이 고른 것 전부에 대해 서게).
               onOpen={() => {

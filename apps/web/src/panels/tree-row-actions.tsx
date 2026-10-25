@@ -35,6 +35,7 @@ import { ICONS } from '../shell/icons'
 import type { TreeAbilities } from '../tree/tree-actions'
 import type { TreeCommands } from '../tree/use-tree-commands'
 import type { StructureCommands } from './structure-toolbar'
+import { BUILD_CELLS_LABEL, SPLIT_ROW_LABEL } from '../edit/grid-row-actions'
 import { CHANGE_KIND_LABEL } from './change-kind-dialog'
 import { EXPORT_BUSY_REASON, menuItemReason } from './toolbar-status'
 
@@ -228,6 +229,9 @@ export function saveModuleItem(onSelect: () => void): ActionMenuItem {
  * **«종류 바꾸기…» 는 입력 조각 줄에만 선다**(`edit/change-kind.ts` 의 `KIND_TYPES` — 그 밖의 줄은 결코 못 하는 항목이라 뺀다). 상자는
  * `./change-kind-dialog.tsx`.
  *
+ * **«한 행 떼어 내기» · «열 틀로 칸 짓기» 는 그리드 행 줄에만 선다**(`edit/grid-row-actions.ts`) — 행의 모양이 못 하게 하는 판(되풀이 1 · 칸을 가진 행 ·
+ * 생략 띠)은 고칠 수 있는 상태라 빼지 않고 끈다.
+ *
  * **«모듈로 저장…»은 뿌리 줄에 없다** — 뿌리는 모듈에 담을 수 없다(설계 spec 「B3」 — 저장되는 것은 고른 노드들이고, 뿌리는 그 페이지의 것이다).
  * 그 줄의 종류가 결코 못 하는 항목이라 끄지 않고 뺀다(머리말 «늘 못 하는 항목은 뺀다»). 고른 것은 문서 읽기라 잠금과 무관하다 — 남이 잡은
  * 노드도 담는다(편집이 아니다). 상자는 `./save-module-dialog.tsx`.
@@ -245,6 +249,8 @@ export function structureRowItems(
   saveModule?: () => void,
   /** «종류 바꾸기…» — 그 줄의 노드로 상자를 연다. 없으면(입력 조각이 아닌 줄) 항목을 뺀다. 끔은 `commands.kindLocked`. */
   changeKind?: () => void,
+  /** 그리드 행 줄이면 그 행 id — 주면 «한 행 떼어 내기» · «열 틀로 칸 짓기» 를 단다. 없으면 항목을 뺀다. */
+  gridRow?: string,
 ): { more: ActionMenuItem[] } {
   const item = (key: keyof StructureAbilities, label: string, icon: LucideIcon, onSelect: () => void, danger = false): ActionMenuItem => ({
     key,
@@ -278,6 +284,28 @@ export function structureRowItems(
               disabled: commands.kindLocked,
               title: commands.why.kind,
               description: commands.why.kind,
+            },
+          ]),
+      ...(gridRow === undefined
+        ? []
+        : [
+            {
+              key: 'split-row',
+              label: SPLIT_ROW_LABEL,
+              icon: ICONS.splitRow,
+              onSelect: () => commands.splitRow(gridRow),
+              disabled: commands.splitRowLocked,
+              title: commands.why.splitRow,
+              description: commands.why.splitRow,
+            },
+            {
+              key: 'build-cells',
+              label: BUILD_CELLS_LABEL,
+              icon: ICONS.buildCells,
+              onSelect: () => commands.buildCells(gridRow),
+              disabled: commands.buildCellsLocked,
+              title: commands.why.buildCells,
+              description: commands.why.buildCells,
             },
           ]),
       ...(saveModule === undefined ? [] : [saveModuleItem(saveModule)]),

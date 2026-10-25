@@ -18,6 +18,7 @@
 import { zoneList, type NodeLock, type WbNode } from '@wirebound/schema'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { changeKindOps, kindTargets } from '../edit/change-kind'
+import { buildCellsOps, buildCellsReads, buildCellsRefusal, splitRowOps, splitRowRefusal } from '../edit/grid-row-actions'
 import { aliasOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { reselectAfterReject } from '../edit/reselect-after-reject'
 import { findNodeSafely } from '../edit/safe-walk'
@@ -87,6 +88,19 @@ export interface StructureCommands {
   kindLocked: boolean
   /** 그 노드의 종류를 바꾼다(`changeKindOps`). 보내기 전에 서버의 2차 방어와 같은 물음(`editBlockedBy`)을 한 번 더 — 상자를 연 뒤 온 남의 잠금이면 말하고 안 보낸다. */
   changeKind: (nodeId: string, toType: string) => void
+  /**
+   * 그리드 행 줄 `…` 의 «한 행 떼어 내기» · «열 틀로 칸 짓기» 를 못 하는가 — 별칭과 같은 조건(하나 · 문서 · 남이 안 잡음)에 그 행의 모양
+   * (`edit/grid-row-actions.ts` 의 `splitRowRefusal` · `buildCellsRefusal`). 항목은 행 줄에만 선다 — 이 값은 그 항목의 끔이다.
+   */
+  splitRowLocked: boolean
+  buildCellsLocked: boolean
+  /**
+   * 고른 행을 떼어 낸다 · 칸을 짓는다 — 묶음 하나(편집 하나 · 되돌리기 한 번). 보내기 전에 서버와 같은 물음(`editBlockedBy`)을 한 번 더 묻는다. 칸 짓기는
+   * 셀 틀을 읽는 열을 남이 쥐었어도 말하고 안 보낸다 — 남이 고치는 중인 셀 틀을 베끼지 않는다(서버는 그 열을 안 쓰는 묶음이라 막지 않는다).
+   * 고른 것은 그대로 그 행이다(떼어 낸 판은 원본 id 를 지킨 앞 행).
+   */
+  splitRow: (nodeId: string) => void
+  buildCells: (nodeId: string) => void
 }
 
 export function useStructureCommands(props: {
@@ -298,6 +312,9 @@ export function useStructureCommands(props: {
     document === null ||
     selectedNodeId === null ||
     kindTargets(findNodeSafely(document.root, selectedNodeId)?.type).length === 0
+  const selectedNode = document === null || selectedNodeId === null ? undefined : findNodeSafely(document.root, selectedNodeId)
+  const splitRefusal = selectedNode?.type === 'GridRow' ? splitRowRefusal(selectedNode) : null
+  const cellsRefusal = selectedNode?.type === 'GridRow' ? buildCellsRefusal(selectedNode) : null
   const reasonInput: StructureReasonInput = {
     selectedNodeId,
     // **루트인지는 id로 본다.** 판정을 다시 하지 않는다 — `structureAbilities`가 이미
@@ -315,7 +332,7 @@ export function useStructureCommands(props: {
 
   return {
     abilities,
-    why: structureWhy(reasonInput, { aliasLocked, kindLocked }),
+    why: structureWhy(reasonInput, { aliasLocked, kindLocked, splitRow: splitRefusal, buildCells: cellsRefusal }),
     levels,
     remove: removeSelected,
     moveUp: () => moveSelected(-1),
@@ -349,6 +366,35 @@ export function useStructureCommands(props: {
         return
       }
       commitOps(ops)
+    },
+    splitRowLocked: aliasLocked || splitRefusal !== null || selectedNode?.type !== 'GridRow',
+    buildCellsLocked: aliasLocked || cellsRefusal !== null || selectedNode?.type !== 'GridRow',
+    splitRow: (nodeId) => {
+      if (document === null) return
+      const edit = splitRowOps(document, nodeId)
+      if ('reason' in edit) return
+      const blocker = store.editBlockedBy(edit.ops)
+      if (blocker !== null) {
+        store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
+        return
+      }
+      commitOps(edit.ops)
+    },
+    buildCells: (nodeId) => {
+      if (document === null) return
+      const edit = buildCellsOps(document, nodeId)
+      if ('reason' in edit) return
+      const blocker =
+        store.editBlockedBy(edit.ops) ??
+        buildCellsReads(document, nodeId)
+          .map((columnId) => store.lockedBy(columnId))
+          .find((lock) => lock !== null) ??
+        null
+      if (blocker !== null) {
+        store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
+        return
+      }
+      commitOps(edit.ops)
     },
   }
 }
