@@ -46,10 +46,20 @@ function columnMarks(leaf: GridLeaf | null): Record<string, string> {
   return { 'data-wb-align': String(leaf.item.props.align ?? 'start'), 'data-wb-tone': String(leaf.item.props.tone ?? 'default') }
 }
 
+/** 고정 구역이 스크롤 상자 폭의 이 몫을 넘으면 고정을 푼다 — 굴러가는 열이 상자의 1/4 에는 보인다. */
+const FIXED_ROOM = 0.75
+
+/** 고정을 푼 표에 이펙트가 다는 표지 — SDK 기본 CSS 가 그 표의 고정 칸을 붙이지 않는다(테마도 이 표지로 고정 꾸밈을 걷는다). */
+const DATAGRID_FIXED_OFF_ATTR = 'data-wb-fixed-off'
+
 /**
- * **고정 열의 왼쪽 자리를 잰다** — 고정 열이 둘 이상이면 앞 칸 폭의 합을 CSS 만으로 모른다. 그리기 뒤(레이아웃 이펙트 — 칠하기 전)마다, 표 크기가 바뀔
- * 때 · 글꼴이 실린 뒤 칸 자리(`data-wb-col`)마다 폭을 재어 고정 칸에 `--wb-node-datagrid-left` 를 싣는다. 폭은 상자 폭이라 붙어 있는(`sticky`)
- * 칸이 밀려 있어도 같다. 이 표의 줄만 본다 — 칸 안의 다른 그리드는 제 이펙트가 잰다.
+ * **고정 열의 왼쪽 자리를 잰다** — 고정 열이 둘 이상이면 앞 칸 폭의 합을 CSS 만으로 모른다. 그리기 뒤(레이아웃 이펙트 — 칠하기 전)마다, 표 · 스크롤
+ * 상자 크기가 바뀔 때 · 글꼴이 실린 뒤 칸 자리(`data-wb-col`)마다 폭을 재어 고정 칸에 `--wb-node-datagrid-left` 를 싣는다. 폭은 상자 폭이라 붙어
+ * 있는(`sticky`) 칸이 밀려 있어도 같다. 이 표의 줄만 본다 — 칸 안의 다른 그리드는 제 이펙트가 잰다.
+ *
+ * **고정 구역이 상자보다 넓으면 푼다** — 고정 열 폭의 합이 스크롤 상자 폭의 `FIXED_ROOM` 을 넘으면 표에 `data-wb-fixed-off` 를 단다. 안 풀면 굴릴
+ * 때 고정 칸이 상자 끝 한 자리에 겹쳐 쌓이고 고정 아닌 열은 고정 칸 밑으로만 지나가 끝까지 굴려도 안 보였다(`docs/superpowers/plans/2026-10-25-rv-gr-report.md`
+ * M1). 풀어도 칸 폭은 그대로라 다시 재도 같은 답이다(오가며 깜빡이지 않는다).
  */
 function useFixedColumns(table: RefObject<HTMLTableElement | null>, fixed: number): void {
   useLayoutEffect(() => {
@@ -71,12 +81,17 @@ function useFixedColumns(table: RefObject<HTMLTableElement | null>, fixed: numbe
         for (let col = 0; col < Number(cell.getAttribute('data-wb-col')); col++) left += widths[col] ?? 0
         cell.style.setProperty(DATAGRID_LEFT_VAR, `${left}px`)
       }
+      let room = 0
+      for (let col = 0; col < fixed; col++) room += widths[col] ?? 0
+      const box = element.parentElement?.clientWidth ?? 0
+      element.toggleAttribute(DATAGRID_FIXED_OFF_ATTR, box > 0 && room > box * FIXED_ROOM)
     }
     measure()
     const view = element.ownerDocument.defaultView
     const Observer = view?.ResizeObserver
     const observer = Observer === undefined ? null : new Observer(() => measure())
     observer?.observe(element)
+    if (element.parentElement !== null) observer?.observe(element.parentElement)
     let alive = true
     void element.ownerDocument.fonts?.ready.then(() => {
       if (alive) measure()
@@ -482,6 +497,8 @@ export function dataCssBlocks(): string[] {
       'z-index: 1;',
       'background-color: Canvas;',
     ]),
+    // 고정 구역이 스크롤 상자보다 넓은 표는 고정을 푼다(`useFixedColumns` 의 `data-wb-fixed-off`) — 칸은 표와 함께 굴러간다.
+    zeroRule(`[data-wb-component="DataGrid"] [data-wb-part="table"][${DATAGRID_FIXED_OFF_ATTR}] [data-wb-fixed]`, ['position: static;']),
     // ── 페이지네이션 ─────────────────────────────────────────────────────────
     // 바는 창이 아니라 제 폭에 맞춰 접힌다 — 세 조각이 한 줄에 안 들면 줄을 바꾸고, 쪽 번호 조각도 제 안에서 줄을 바꾼다. 좁은 칸(격자 배치 2열 ·
     // 폼 표 값 칸 · 카드) 안의 바가 칸 · 문서 밖으로 나갔다(창 media 는 칸 폭을 모른다 — `docs/superpowers/plans/2026-10-25-rv-gr-report.md` M3).

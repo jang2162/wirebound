@@ -203,6 +203,7 @@ const RESERVED = [
   'data-wb-column-of',
   'data-wb-col',
   'data-wb-fixed',
+  'data-wb-fixed-off',
   'data-wb-fixed-columns',
 ]
 

@@ -10,6 +10,7 @@
  * | 사본 행의 몫 | 셀 틀 안 `Flex`(몫 2) 의 몫 없는 자식 폭이 원본 줄과 사본 줄에서 같다 — 사본은 `data-wb-id` 가 없어 SDK 의 몫 초기화(`[data-wb-id]`)를 못 받으면 부모 몫을 물려받는다 |
  | 글 칸(M2) | 창 390 · 720 · 1280 · 찍는 판(720 · `data-wb-capture` + `CAPTURE_CSS`) — 칸 글이 낱말 가운데서 안 꺾인다(글자 노드의 줄 수 ≤ 낱말 수 · 날짜 · «No» · 긴 낱말 · 이름은 한 줄) · 칸 밖 글 0 · 찍는 판은 표 전체가 문서 안이다 |
  | 좁은 칸의 바(M3) | 격자 배치 2열 · 폼 표 값 칸 · 카드 안 그리드 — 창 390 · 720 · 1000 · 1280 에서 문서 `scrollWidth` = 창 · 바 상자와 그 조각이 그리드 상자 안 |
+ | 고정 넓이(M1) | 고정 구역이 스크롤 상자 폭의 3/4 을 넘는 창(720)에서는 고정을 풀고(`data-wb-fixed-off` · 붙은 칸 0) 들어맞는 창(1280)에서는 붙는다 · 끝까지 굴리면 마지막 열이 보인다 · 창을 줄였다 되돌리면 다시 잰다 |
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -172,7 +173,23 @@ const NARROW = [
 const NARROW_GRIDS = ['g_n1', 'g_n2', 'g_n3', 'g_n4']
 const BAR_WIDTHS = [390, 720, 1000, 1280] as const
 
-const PAGES = { '넓은 표': [WIDE], '병합 머리': HEADS, '몫 사본': [WEIGHT], '글 칸': TEXT_GRIDS, '좁은 칸': NARROW }
+// 고정 구역이 상자보다 넓은 판(M1) — 고정 넷(폭 180 자리표시자) · 고정 아닌 여섯. 고정 폭(≈ 800)이 창 720 의 상자보다 넓고 · 1000 의 상자보다 좁지만 3/4 을 넘고 · 1280 에서는 안 넘는다.
+const block = (width: number) => [{ id: id('ph'), type: 'Placeholder', props: { label: '', width, height: 20, border: 'none' } }]
+const FIXED_WIDE = grid(
+  'g_fx',
+  { fixedColumns: 4 },
+  Array.from({ length: 10 }, (_unused, at) => col(`열 ${at + 1}`, {}, block(180))),
+  [row({ repeat: 2 })],
+)
+
+const PAGES = {
+  '넓은 표': [WIDE],
+  '병합 머리': HEADS,
+  '몫 사본': [WEIGHT],
+  '글 칸': TEXT_GRIDS,
+  '좁은 칸': NARROW,
+  '고정 넓이': [FIXED_WIDE],
+}
 
 /** 사본 — 노드 id · HTML id 겹침 · 사본 수 · 몸 줄의 칸 글. 글로 넘긴다(vitest 가 함수 안의 이름을 바꿔 페이지에서 죽지 않게). */
 const COPIES = `(ids) => {
@@ -358,6 +375,45 @@ const BARS = `(grids) => ({
   }),
 })`
 
+interface FixedRoomRead {
+  /** 표에 고정을 푼 표지가 섰나 · 붙은 칸 수 · 고정 구역 폭 · 상자 폭. */
+  off: boolean
+  stickies: number
+  room: number
+  box: number
+  /** 끝까지 굴린 뒤 마지막 열 머리가 상자 안이고 붙은 칸 오른쪽에 보이나. */
+  lastSeen: boolean
+  /** 끝까지 굴린 뒤 붙은 칸이 움직인 거리(px). */
+  moved: number
+}
+
+/** 고정 넓이 — 고정 구역 폭(붙은 칸이든 아니든 `data-wb-fixed` 머리 칸) · 상자 폭 · 끝까지 굴린 뒤 마지막 열이 보이는가. 굴린 스크롤은 되돌린다. */
+const FIXED_ROOM = `(gridId) => {
+  const grid = document.querySelector('[data-wb-id="' + gridId + '"]')
+  const scroll = grid.querySelector(':scope > [data-wb-part="scroll"]')
+  const table = scroll.querySelector('table')
+  const head = [...table.tHead.querySelectorAll('th')]
+  const marked = head.filter((th) => th.hasAttribute('data-wb-fixed'))
+  const sticky = [...table.querySelectorAll('[data-wb-fixed]')].filter((el) => getComputedStyle(el).position === 'sticky')
+  const room = marked.reduce((sum, th) => sum + th.getBoundingClientRect().width, 0)
+  const before = sticky.map((el) => el.getBoundingClientRect().left)
+  scroll.scrollLeft = scroll.scrollWidth
+  const box = scroll.getBoundingClientRect()
+  const last = head[head.length - 1].getBoundingClientRect()
+  const stuckRight = Math.max(box.left, ...sticky.filter((el) => el.closest('thead')).map((el) => el.getBoundingClientRect().right))
+  const moved = Math.max(0, ...sticky.map((el, i) => Math.abs(el.getBoundingClientRect().left - before[i])))
+  const out = {
+    off: table.hasAttribute('data-wb-fixed-off'),
+    stickies: sticky.length,
+    room: Math.round(room),
+    box: Math.round(scroll.clientWidth),
+    lastSeen: last.right <= box.right + 1 && last.left >= stuckRight - 1,
+    moved: Math.round(moved * 10) / 10,
+  }
+  scroll.scrollLeft = 0
+  return out
+}`
+
 describe.skipIf(!전제.ok)('그리드 — 실브라우저(번들 · 화면 모드)', () => {
   let stack: EditorStack
   let alice: Session
@@ -369,6 +425,7 @@ describe.skipIf(!전제.ok)('그리드 — 실브라우저(번들 · 화면 모�
   const ax: Record<string, string[]> = {}
   const lines: Record<string, LinesRead> = {}
   const bars: Record<string, BarsRead> = {}
+  const rooms: Record<string, FixedRoomRead> = {}
 
   beforeAll(async () => {
     if (!전제.ok) return
@@ -428,6 +485,37 @@ describe.skipIf(!전제.ok)('그리드 — 실브라우저(번들 · 화면 모�
           await context.close()
         }
       }
+      {
+        // 창 1280 으로 열고 1000 · 720 으로 줄였다가 1280 으로 되돌린다 — 표 폭은 그대로(상자보다 넓다)라 스크롤 상자의 크기 변화로만 다시 잰다.
+        // 1000 은 고정 구역이 상자보다 좁지만 3/4 을 넘는 창이다.
+        const { context, page } = await openBundlePage(stack, file('고정 넓이'), { viewport: { width: 1280, height: 900 }, screen: true })
+        try {
+          const read = async (key: string, off: boolean) => {
+            await page
+              .waitForFunction(
+                (want) => document.querySelector('[data-wb-id="g_fx"] table')!.hasAttribute('data-wb-fixed-off') === want,
+                off,
+                { timeout: 5000 },
+              )
+              .catch(() => undefined)
+            rooms[`${theme} ${key}`] = (await page.evaluate(`(${FIXED_ROOM})('g_fx')`)) as FixedRoomRead
+          }
+          await read('1280', false)
+          await page.setViewportSize({ width: 1000, height: 900 })
+          await read('1000', true)
+          await page.setViewportSize({ width: 720, height: 900 })
+          await read('720', true)
+          await page.setViewportSize({ width: 1280, height: 900 })
+          await read('1280 되돌림', false)
+          // 창은 그대로 두고 그리드 상자만 좁힌다 — 다시 그리기(레이아웃 이펙트)가 안 돌아 스크롤 상자의 크기 관찰만이 다시 잰다.
+          await page.evaluate(() => {
+            ;(document.querySelector('[data-wb-id="g_fx"]') as HTMLElement).style.width = '700px'
+          })
+          await read('상자만 700', true)
+        } finally {
+          await context.close()
+        }
+      }
       for (const width of BAR_WIDTHS) {
         const { context, page } = await openBundlePage(stack, file('좁은 칸'), { viewport: { width, height: 1600 }, screen: true })
         try {
@@ -458,6 +546,8 @@ describe.skipIf(!전제.ok)('그리드 — 실브라우저(번들 · 화면 모�
     }
     // eslint-disable-next-line no-console
     for (const [key, read] of Object.entries(bars)) console.log(`[그리드 좁은 칸 바] ${key} ${JSON.stringify(read)}`)
+    // eslint-disable-next-line no-console
+    for (const [key, read] of Object.entries(rooms)) console.log(`[그리드 고정 넓이] ${key} ${JSON.stringify(read)}`)
   }, 300_000)
 
   afterAll(async () => {
@@ -578,6 +668,32 @@ describe.skipIf(!전제.ok)('그리드 — 실브라우저(번들 · 화면 모�
         read.bars.filter((bar) => bar.over > 1 || bar.partsOver > 1),
         detail,
       ).toEqual([])
+    },
+  )
+
+  /**
+   * **M1 — 고정 구역이 스크롤 상자 폭의 3/4 을 넘으면 고정을 푼다**(`docs/superpowers/plans/2026-10-25-rv-gr-report.md` M1 — 고치기 전에는 굴리면 고정
+   * 칸이 상자 끝 한 자리에 겹쳐 쌓이고 마지막 열이 안 보였다). 들어맞는 판(창 1280)은 그대로 붙는다. 창을 줄였다 되돌리면 다시 잰다.
+   */
+  it.each(
+    (['기본테마', 'SDK'] as const).flatMap((theme) =>
+      (['1280', '1000', '720', '1280 되돌림', '상자만 700'] as const).map((key) => [theme, key] as const),
+    ),
+  )(
+    '%s %s — 고정 구역이 상자의 3/4 을 넘으면 풀고 · 들어맞으면 붙는다 · 끝까지 굴리면 마지막 열이 보인다 · 상자 크기가 바뀌면 다시 잰다',
+    (theme, key) => {
+      const read = rooms[`${theme} ${key}`]!
+      const detail = JSON.stringify(read)
+      const over = read.room > read.box * 0.75
+      // 판 카나리아 — 1280 은 들어맞고, 1000 은 상자보다 좁지만 3/4 을 넘고, 720 은 상자보다 넓은 판이 섰다.
+      expect(over, detail).toBe(key === '720' || key === '1000' || key === '상자만 700')
+      if (key === '1000') expect(read.room, detail).toBeLessThan(read.box)
+      expect({ off: read.off, stuck: read.stickies > 0, lastSeen: read.lastSeen }, detail).toEqual({
+        off: over,
+        stuck: !over,
+        lastSeen: true,
+      })
+      if (!over) expect(read.moved, detail).toBeLessThanOrEqual(1)
     },
   )
 

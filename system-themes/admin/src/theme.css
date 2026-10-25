@@ -361,6 +361,10 @@
 [data-wb-component="DataGrid"] [data-wb-part="table"] [data-wb-fixed="last"] {
   box-shadow: inset -1px 0 0 var(--wb-semantic-borderStrong);
 }
+/* 고정 구역이 스크롤 상자보다 넓어 SDK 가 고정을 푼 표(`data-wb-fixed-off`)는 고정 구역 끝 선도 걷는다 — 칸이 표와 함께 굴러간다. */
+[data-wb-component="DataGrid"] [data-wb-part="table"][data-wb-fixed-off] [data-wb-fixed="last"] {
+  box-shadow: none;
+}
 [data-wb-component="DataGrid"][data-wb-variant="featured"] [data-wb-part="table"] {
   border-top: 2px solid var(--wb-semantic-primary);
 }
