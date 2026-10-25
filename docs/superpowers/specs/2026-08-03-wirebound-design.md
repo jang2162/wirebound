@@ -230,17 +230,20 @@ personal_assets(owner_id, sha256, name, created_at)
 ```jsonc
 {
   "id": "n_7f3a",          // 안정 ID — 코멘트·상호작용·잠금·patch 경로의 공통 앵커
-  "type": "List",
+  "type": "DataGrid",
   "alias": "회원 목록",       // 사람이 붙인 이름 (선택)
-  "props": { "columns": ["No", "아이디", "이름"], "items": 10, "pagination": true },
+  "props": { "select": "check", "fixedColumns": 1 },
   "variant": "featured",   // 테마가 정의한 variant 중 하나 (선택)
   "weight": 2,             // 부모 안의 몫 — 정수 1 ~ 12 (선택)
   "marker": 2,             // 우측 코멘트 번호 (없으면 코멘트 없음)
   "interactions": [
     { "on": "click", "actions": [ { "type": "setProp", "target": "n_9c1e", "prop": "loading", "value": true } ] }
   ],
-  "children": [],          // 몸통 구역
-  "zones": { "headEnd": [ { "id": "n_b2c4", "type": "Button", "props": { "label": "엑셀 다운로드" } } ] }   // 이름 붙은 구역 (선택)
+  "children": [ { "id": "n_c1a0", "type": "GridColumn", "props": { "label": "아이디" }, "children": [ … ] } ],   // 몸통 구역 — 그리드면 열
+  "zones": {               // 이름 붙은 구역 (선택)
+    "headEnd": [ { "id": "n_b2c4", "type": "Button", "props": { "label": "엑셀 다운로드" } } ],
+    "rows": [ { "id": "n_r1d2", "type": "GridRow", "props": { "repeat": 10 } } ]
+  }
 }
 ```
 
@@ -248,7 +251,7 @@ personal_assets(owner_id, sha256, name, created_at)
 
 **구역(`zones`).** 노드의 자식 자리는 **몸통**(`children`)과 **이름 붙은 구역**(`zones` — 구역 이름 → 노드 배열)이다. 어느 구역을 받는지는 카탈로그가 컴포넌트마다 선언하고(§5.1 `zones`), 선언한 차례가 순회 · 화면의 차례다(`Card` 면 제목 옆 → 머리 오른쪽 → 몸통 → 바닥). `zones` 와 그 안의 배열은 선택이고 없는 열쇠는 빈 구역이다. 구역 이름은 `^[a-z][A-Za-z0-9]{0,31}$` 이고 `body` 일 수 없다(몸통은 `children` 에만 산다 — 봉투가 거절한다 · `__proto__` 같은 열쇠도 꼴에서 빠진다). 열쇠 차례는 뜻이 없다(문서는 `jsonb` 에 산다). 경로는 몸통 `…/children/<i>` · 구역 `…/zones/<이름>/<i>` 이고 구역 사이 옮기기는 `move` 하나다. **노드를 걷는 자리는 전부 `packages/schema` 의 `childLists` 하나를 지난다**(몸통과 구역을 선언 차례로 — 검증 전 값에서 던지지 않는다) — 잠금 · 보임 · 이름 · 복사 · 순회 · 구조 번호(`sameStructure`) · 내보내기 · lint 가 구역 안 노드를 몸통 노드와 같이 본다. 그 함수를 안 지나고 `.children` · `.zones` 를 바로 읽는 자리는 `packages/schema/test/zones-census.test.ts` 가 파일마다 센다. 검증은 선언 밖 구역(`zone-not-allowed`) · 몸통이 없는 타입의 `children`(`children-not-allowed`) · 받지 않는 타입(`zone-type-not-allowed`) · 설 자리 밖의 타입(`misplaced-component`)을 오류로 낸다. 빈 구역은 화면에 아무것도 안 세운다(뷰가 감싸는 요소째 안 그린다 — §6.1 `data-wb-zone`).
 
-**몫(`weight`)** 은 부모 안에서 그 노드가 차지할 몫이다 — 정수 1 ~ 12, 없으면 테마 · 기본 배치 그대로. 뜻은 부모가 정한다: `Flex` · `Field`(값 칸 — §5) 안이면 남는 폭을 형제끼리 몫대로 나누고(`flex: <몫>` — 바탕 폭이 0 이라 안 여백 · 테두리를 뺀 내용 폭이 몫의 비다), `Grid` · 열을 정한 `SearchForm`(§5) 안이면 차지할 칸 수(시스템 테마의 검색폼은 칸 하나가 라벨|값 쌍이다), `FormTable` 안이면 차지할 라벨|값 쌍 수이고 모두 부모 열 수로 자른다(3열에 5 → 3 — 열 수 이상이면 한 줄 전체). 그 밖의 부모 안에서는 아무 일도 없고 값만 남는다 — 옮겨 다시 `Flex` 안에 들면 다시 먹는다. 카탈로그 prop 이 아니라 `alias` · `variant` 와 같은 노드 필드인 까닭: 컴포넌트마다 같은 prop 을 덧붙이지 않고, 상호작용 `setProp` 의 대상이 아니며, 패널이 부모를 보고 칸을 보일지 정한다. 렌더러가 부모를 보고 실을 값(자른 칸 수)을 정해 뷰의 `Root` 에 넘기고, `Root` 는 뷰가 준 `style` 에 `--wb-node-weight` 를 **더한다**(노드 속성 `data-wb-*` 는 늘리지 않는다 — §6.1). SDK 기본 CSS 의 특이도 0 규칙이 그 변수를 `Flex` · `Grid` · 열을 정한 `SearchForm` · `FormTable` 칸 · `Field` 값 칸의 자식에서 읽고, 모든 노드 뿌리에서 변수를 초기화해 자손에 물려지지 않게 한다(몫을 준 `Card` 안 `Flex` 의 자식 · 몫을 준 필드 안 값 칸 조각이 그 몫을 받지 않는다 — `apps/web/build-test/searchform-columns.test.ts`). 노드가 아닌 요소(폼 표의 빈 쌍)는 그 초기화에 안 걸리므로 몫 변수를 읽지 않는다. 자르기를 CSS(`span min(…)`)가 아니라 렌더러가 하는 것은 CSS 가 열 수를 상속으로만 읽어 `Grid` 안의 `Grid` 가 제 열 수로 잘리기 때문이다. 모양은 노드 봉투(`WbNodeSchema`)가 보고, 복사 · 붙여넣기 · 복제 · 모듈 · 가져오기에서 노드와 함께 간다. 캔버스 · HTML 번들 · PPTX 가 같은 렌더러 · 같은 기본 CSS 라 셋에 같이 선다.
+**몫(`weight`)** 은 부모 안에서 그 노드가 차지할 몫이다 — 정수 1 ~ 12, 없으면 테마 · 기본 배치 그대로. 뜻은 부모가 정한다: `Flex` · `Field`(값 칸 — §5) 안이면 남는 폭을 형제끼리 몫대로 나누고(`flex: <몫>` — 바탕 폭이 0 이라 안 여백 · 테두리를 뺀 내용 폭이 몫의 비다), `Grid` · 열을 정한 `SearchForm`(§5) 안이면 차지할 칸 수(시스템 테마의 검색폼은 칸 하나가 라벨|값 쌍이다), `FormTable` 안이면 차지할 라벨|값 쌍 수이고 모두 부모 열 수로 자른다(3열에 5 → 3 — 열 수 이상이면 한 줄 전체). 그 밖의 부모 안에서는 아무 일도 없고 값만 남는다 — 옮겨 다시 `Flex` 안에 들면 다시 먹는다. 카탈로그 prop 이 아니라 `alias` · `variant` 와 같은 노드 필드인 까닭: 컴포넌트마다 같은 prop 을 덧붙이지 않고, 상호작용 `setProp` 의 대상이 아니며, 패널이 부모를 보고 칸을 보일지 정한다. 렌더러가 부모를 보고 실을 값(자른 칸 수)을 정해 뷰의 `Root` 에 넘기고, `Root` 는 뷰가 준 `style` 에 `--wb-node-weight` 를 **더한다**(노드 속성 `data-wb-*` 는 늘리지 않는다 — §6.1). SDK 기본 CSS 의 특이도 0 규칙이 그 변수를 `Flex` · `Grid` · 열을 정한 `SearchForm` · `FormTable` 칸 · `Field` 값 칸의 자식에서 읽고, 모든 노드 뿌리(그리드 되풀이 행의 사본 노드 — `data-wb-copy-of` — 도)에서 변수를 초기화해 자손에 물려지지 않게 한다(몫을 준 `Card` 안 `Flex` 의 자식 · 몫을 준 필드 안 값 칸 조각이 그 몫을 받지 않는다 — `apps/web/build-test/searchform-columns.test.ts`). 노드가 아닌 요소(폼 표의 빈 쌍)는 그 초기화에 안 걸리므로 몫 변수를 읽지 않는다. 자르기를 CSS(`span min(…)`)가 아니라 렌더러가 하는 것은 CSS 가 열 수를 상속으로만 읽어 `Grid` 안의 `Grid` 가 제 열 수로 잘리기 때문이다. 모양은 노드 봉투(`WbNodeSchema`)가 보고, 복사 · 붙여넣기 · 복제 · 모듈 · 가져오기에서 노드와 함께 간다. 캔버스 · HTML 번들 · PPTX 가 같은 렌더러 · 같은 기본 CSS 라 셋에 같이 선다.
 
 **별칭(`alias`)** 은 같은 타입이 여럿일 때 사람이 가르려고 붙이는 이름이다. 앞뒤 공백이 없는 1 ~ 60자(코드 포인트로 센다)이고, 받지 않는 글자 — 줄을 바꾸거나 출력을 제어하는 글자(C0 · DEL · C1 · U+2028 · U+2029) · 방향 제어 글자(U+061C · U+200E · U+200F · U+202A ~ U+202E · U+2066 ~ U+2069) · 짝 없는 서로게이트 — 가 없고, 보이는 글자가 하나는 있다(공백과 폭 없는 글자 U+200B ~ U+200D · U+2060 · U+FEFF 만이면 빈 값이다). 비우면 필드째 지운다. 받지 않는 글자의 표는 한 벌이다(`packages/schema/src/alias.ts`) — 봉투는 거절하고 화면은 같은 표로 다듬는다. 모양은 노드 봉투(`WbNodeSchema`)가 보므로 저장 경계(문서 저장 · 편집 · 가져오기 · 클립보드 봉투 · 모듈 저장)가 같은 판정을 받는다 — 별칭이 없는 옛 문서는 그대로 읽힌다. 문서 안에서 유일할 필요는 없다. 복사 · 붙여넣기 · 복제 · 모듈 · 가져오기에서 노드와 함께 간다. 노드를 사람이 부르는 이름은 하나(`packages/schema` 의 `nodeDisplayName` — 별칭이 있으면 별칭, 없으면 라벨성 prop + 카탈로그 한국어 이름)이고, 노드를 가리키는 자리(구조 트리 줄 · 속성 패널 제목 · 상호작용 문장과 대상 고르개 · 코멘트의 노드 표시 · 캔버스 손잡이 · 내보낸 설계서 · CLI `page get` · MCP `get_page`)가 모두 그 이름을 거친다. 라벨 · 제목 · 탭 이름 · 컬럼 이름처럼 별칭이 아닌 사람 글은 방향 제어 글자를 막지 않으므로, 그 글이 이름으로 이어 붙는 자리(문장 · 줄 요약 · 고르개 항목 · 내보낸 목록)는 **이름마다** 방향을 가둔다(`packages/schema` 의 `isolateBidi` — 제어 글자가 든 이름만 U+2068 … U+2069 로 감싸고 보통 글은 한 글자도 안 바꾼다).
 
@@ -256,13 +259,13 @@ personal_assets(owner_id, sha256, name, created_at)
 
 노드마다 **상태 보임**(`visibility`)을 단다 — `{ "mode": "only" | "except", "states": [...] }`. `only` 는 나열한 상태(와 그 자손 상태)에서만 보이고, `except` 는 거기서 숨는다. `states` 에는 `"default"`(«기본» — 자손이 없다)를 넣을 수 있고, 1개 이상 · 겹침 없음 · 목록의 id 또는 `default` 다. 없으면 모든 상태에서 보인다. **부모가 숨으면 자손도 숨는다** — 자식의 `only` 가 부모를 되살리지 않는다. 뿌리에는 둘 수 없다(`bad-root` — 뿌리가 숨으면 그 상태의 화면이 통째로 빈다). 판정은 `packages/schema` 의 순수 함수 하나(`isVisibleIn` · 트리 차례는 `viewStateOrder`)이고 렌더러 · 에디터 · 번들 · MCP 가 같이 쓴다. 렌더러는 지금 상태(`RenderOptions.viewState` — 목록에 없는 id 는 기본)에서 숨은 노드를 자손째 그리지 않는다. 목록에 없는 상태를 가리키는 보임은 문서 하나에서는 오류가 아니라 lint 의 몫이다 — 단 **편집이 목록 밖을 가리키는 보임을 새로 만들면 저장 경계가 오류로 거절한다**(`state-cases-left` — 목록에서 상태만 빼면 그 상태를 가리키던 보임이 뜻을 잃는데, 잠금 판정은 노드 밖인 목록 편집을 막지 않는다. 상태는 보임째 지운다 — 아래). 노드를 부르는 이름은 `only` 보임의 상태를 붙인다(«'승인 버튼'(관리자 상태)» · 둘이면 «'승인 버튼'(관리자 · 손님 상태)» — 그 노드 자신 또는 가장 가까운 조상의 보임이 `only` 일 때, `except` · 보임 없음은 붙이지 않는다). 상태 추가 · 이름 · 순서 · 삭제와 보임 고치기는 새 편집 종류가 아니라 JSON Patch 묶음 하나다(`packages/schema` 의 `view-state-ops.ts`) — 지금 전송 길 · 잠금 판정 · 개인 되돌리기(묶음 하나 = 되돌리기 한 번)를 그대로 탄다. 상태 목록은 번호로만 가리킬 수 있어, **목록의 있는 자리를 고치는 묶음(이름 · 순서 · 삭제)과 서버가 짓는 그 역연산은 그 자리의 상태 id 를 JSON Patch `test` 로 싣는다**(`guardViewStateOps`) — 남이 그 사이 순서를 바꾸거나 그 상태를 빼면 묶음째 적용이 실패한다(409). 웹의 리베이스 · 되돌리기는 노드처럼 상태도 id 로 다시 짚는다. **상태를 지우면 하위 상태째 목록에서 빼고, 모든 노드의 `states` 에서 그 id 들을 뺀다** — `only` 인데 비면 그 노드를 지우고(그 상태에서만 보이던 내용), `except` 인데 비면 보임을 걷고, 남으면 남은 상태로 바꾼다(`removeViewStateOps`). 순서는 형제 안에서만 바꾼다. 복사 · 붙여넣기 · 복제는 보임을 들고 간다(붙이는 페이지에 같은 id 가 없으면 같은 이름의 상태로 맞추고, 둘 다 없으면 빼고 말한다 — §9 «클립보드»). 문서를 통째로 갈아 끼우는 쓰기(`PUT …/schema` · 페이지 JSON 가져오기 · 스냅샷 복원)는 상태 목록을 함께 갈아 끼운다(`replaceDocumentOps`).
 
-**문서 판 4.** 지금 판은 4 다(`CURRENT_DOCUMENT_VERSION`). 들어오는 경계(스냅샷 복원 · 페이지 JSON 가져오기 · 클립보드 봉투 읽기 · CLI · MCP 읽기)는 판 4 문서만 받는다 — 판 1 · 2 는 «버전 2에서 올릴 마이그레이션이 없습니다», 판 3 은 «버전 3에서 올릴 마이그레이션이 없습니다» 로 거절된다. 저장된 문서는 DB 마이그레이션이 한 번 옮겼다: 판 1 → 2 는 상태 영역(`StateSwitch` > `StateCase`)을 노드 보임으로 꺼내고(`packages/schema` 의 `liftStateRegions` — 영역 하나마다 안쪽부터: 기본 가지의 자식은 영역 자리에 차례로 꺼내고 다른 가지가 있으면 `except [그 가지들의 상태]`, 상태 S 가지의 자식은 그 뒤에 꺼내고 `only [S]`, 바깥 영역의 가지 안에서 꺼낸 노드는 두 조건을 합친 집합을 `only [...]`(`default` 포함)로 적는다. 목록 밖 상태의 가지 · 영역 밖 가지 · 빈 집합은 버린다), 판 2 → 3 은 구역을 들인다(`apps/api/src/db/migrations/0028-node-zones.ts` 에만 있다 — 탭 이름 배열 `Tabs.props.tabs` 를 이름마다 `TabPanel` 노드로 · 옛 자식은 `active` 자리 패널로, `switchTab` 의 탭 번호를 그 패널 id 로, 검색폼 · 입력폼에 기본 단추 둘을 `zones.actions` 로), 판 3 → 4 는 조합 입력을 들인다(`apps/api/src/db/migrations/0029-compose-field.ts` 에만 있다 — `Field` 의 `control` 을 값 칸의 조각 노드로: `text` · `number` → `Input`(`number` 는 `kind`), `select` → `Select`, `date` → `DateInput`, `dateRange` → `DateInput` · `Affix '~'` · `DateInput`, `checkbox` → `CheckboxGroup`, `radio` → `RadioGroup` + `variant: 'radio'`, `textarea` → `TextArea`, `file` → 읽기 전용 `Input`(«선택된 파일 없음») · `Button '파일 선택'`. 그 prop 이 있는 조각에만 `placeholder`(빈 글은 빼고) · `disabled` · `invalid` 를 옮기고 `Field` 에서는 걷는다. 그 prop 을 바꾸던 `setProp` 은 그 prop 을 가진 조각마다 하나씩 늘어나고(기간의 두 날짜 칸 · 파일의 입력과 단추), `control` 을 바꾸던 것은 그대로 경고로 남는다 — 노드 id 는 그대로라 코멘트 · 번호 · 별칭이 안 끊긴다). 옮기는 자리는 페이지 · 레이아웃 · 프로젝트 모듈 · 개인 모듈 · 스냅샷 payload 의 문서다 — 편집 이력(`revisions`)은 안 옮겨, 옮기기 전 편집의 되돌리기는 옛 경로를 가리켜 건너뛰어진다. 판을 안 바꾸는 DB 마이그레이션도 있다 — `0031-entry-form-table` 은 입력폼 몸통의 잇단 `Field` 묶음마다 `FormTable`(1 열) 하나로 감싸고(같은 다섯 자리), 감싼 페이지의 `head_seq` · `structure_seq` 를 하나 올려 옛 좌표의 편집이 `stale` 로 거절되게 한다.
+**문서 판 5.** 지금 판은 5 다(`CURRENT_DOCUMENT_VERSION`). 들어오는 경계(스냅샷 복원 · 페이지 JSON 가져오기 · 클립보드 봉투 읽기 · CLI · MCP 읽기)는 판 5 문서만 받는다 — 판 1 · 2 는 «버전 2에서 올릴 마이그레이션이 없습니다», 판 3 · 4 는 «버전 3(4)에서 올릴 마이그레이션이 없습니다» 로 거절된다. 저장된 문서는 DB 마이그레이션이 한 번 옮겼다: 판 1 → 2 는 상태 영역(`StateSwitch` > `StateCase`)을 노드 보임으로 꺼내고(`packages/schema` 의 `liftStateRegions` — 영역 하나마다 안쪽부터: 기본 가지의 자식은 영역 자리에 차례로 꺼내고 다른 가지가 있으면 `except [그 가지들의 상태]`, 상태 S 가지의 자식은 그 뒤에 꺼내고 `only [S]`, 바깥 영역의 가지 안에서 꺼낸 노드는 두 조건을 합친 집합을 `only [...]`(`default` 포함)로 적는다. 목록 밖 상태의 가지 · 영역 밖 가지 · 빈 집합은 버린다), 판 2 → 3 은 구역을 들인다(`apps/api/src/db/migrations/0028-node-zones.ts` 에만 있다 — 탭 이름 배열 `Tabs.props.tabs` 를 이름마다 `TabPanel` 노드로 · 옛 자식은 `active` 자리 패널로, `switchTab` 의 탭 번호를 그 패널 id 로, 검색폼 · 입력폼에 기본 단추 둘을 `zones.actions` 로), 판 3 → 4 는 조합 입력을 들인다(`apps/api/src/db/migrations/0029-compose-field.ts` 에만 있다 — `Field` 의 `control` 을 값 칸의 조각 노드로: `text` · `number` → `Input`(`number` 는 `kind`), `select` → `Select`, `date` → `DateInput`, `dateRange` → `DateInput` · `Affix '~'` · `DateInput`, `checkbox` → `CheckboxGroup`, `radio` → `RadioGroup` + `variant: 'radio'`, `textarea` → `TextArea`, `file` → 읽기 전용 `Input`(«선택된 파일 없음») · `Button '파일 선택'`. 그 prop 이 있는 조각에만 `placeholder`(빈 글은 빼고) · `disabled` · `invalid` 를 옮기고 `Field` 에서는 걷는다. 그 prop 을 바꾸던 `setProp` 은 그 prop 을 가진 조각마다 하나씩 늘어나고(기간의 두 날짜 칸 · 파일의 입력과 단추), `control` 을 바꾸던 것은 그대로 경고로 남는다 — 노드 id 는 그대로라 코멘트 · 번호 · 별칭이 안 끊긴다), 판 4 → 5 는 자료 표를 그리드로 옮긴다(`apps/api/src/db/migrations/0032-list-data-grid.ts` 에만 있다 — `List` 를 같은 id 의 `DataGrid` 로: `columns` 는 열마다 `GridColumn` + 셀 틀 `Text «—»`, `items` 는 되풀이 행 하나(`repeat` — 50 에서 자른다), `pagination` 은 «바닥» 의 `Pagination`, `selectable` 은 `select: 'check'`, `selected` · `disabled` 는 그 행의 꼴, `loading` · `empty` · 머리 구역 · 변형 · 별칭 · 표지 · 상호작용은 그대로 — props 가 없던 목록은 옛 기본값(열 셋 · 다섯 줄 · 바)으로 선다. `selectable` 을 바꾸던 `setProp` 은 `select` 로 옮기고 다른 옛 prop 의 액션은 경고로 남는다. 판 4 문서는 `List` 가 없어도 판 번호를 올리고, `List` 를 옮긴 페이지는 `head_seq` · `structure_seq` 를 하나 올려 옛 좌표의 편집이 `stale` 로 거절되게 한다). 옮기는 자리는 페이지 · 레이아웃 · 프로젝트 모듈 · 개인 모듈 · 스냅샷 payload 의 문서다 — 편집 이력(`revisions`)은 안 옮겨, 옮기기 전 편집의 되돌리기는 옛 경로를 가리켜 건너뛰어진다. 판을 안 바꾸는 DB 마이그레이션도 있다 — `0031-entry-form-table` 은 입력폼 몸통의 잇단 `Field` 묶음마다 `FormTable`(1 열) 하나로 감싸고(같은 다섯 자리), 감싼 페이지의 `head_seq` · `structure_seq` 를 하나 올려 옛 좌표의 편집이 `stale` 로 거절되게 한다.
 
 **노드는 스타일을 갖지 않는다.** `variant`로 테마가 정의한 표현 중 하나를 고를 뿐이고, 실제 스타일 값은 전부 테마에 있다. 이 성질 덕분에 테마 교체만으로 전체 설계서의 외형이 바뀐다. 반대로 "이 버튼만 빨갛게" 같은 일회성 스타일은 지원하지 않는다 — 필요하면 테마에 variant를 추가하는 것이 올바른 경로다.
 
 **예외는 `Placeholder` 하나다 — 그리기 값(크기 · 바탕 · 테두리 꼴 · 테두리 색 · 모서리 · 글 색 · 글 크기 · 정렬 · 여백 · 그림 · 그림 맞춤)을 prop 으로 든다.** 카탈로그가 못 덮는 요소(칩 · 배지 · 띠)를 사람이 손으로 그리는 자리다. 봉투는 그대로이고(스타일 키를 노드에 두지 않는다) 값은 그 컴포넌트의 props 다. 값의 꼴을 좁힌다 — 색은 소문자 `#rrggbb`(`PLACEHOLDER_COLOR`) 또는 빈 값, 길이는 정수 px. 뷰가 값을 인라인 변수로 싣는데, 자유 CSS 글자를 받으면 `url(…)` 이 캔버스 · 내보낸 번들에서 바깥 요청을 내고 `;` · `}` 로 꾸밈을 넘길 길이 생긴다(서버의 두 쓰기 입구가 422 — `apps/api/test/placeholder-props.test.ts`). 빈 값은 «테마 기본» 이다 — 사람이 정한 값만 테마를 이긴다(§6.1 «자리표시자의 그리기 값»). 그림(`image`)은 이 프로젝트에 올린 그림의 id(그 바이트의 sha256 소문자 64 자 — `ASSET_ID_PATTERN`)이고 `imageFit` 은 `cover` · `contain` 이다(§11.4 «그림»).
 
-노드가 어떤 형태로 그려질지는 노드가 아니라 **테마의 뷰가 결정**한다(§6). 같은 `List` 노드가 한 테마에서는 테이블로, 다른 테마에서는 카드 그리드로 그려진다.
+노드가 어떤 형태로 그려질지는 노드가 아니라 **테마의 뷰가 결정**한다(§6). 같은 `Card` 노드가 한 테마에서는 테두리 상자로, 다른 테마에서는 그림자 카드로 그려진다.
 
 ### 4.4 레이아웃
 
@@ -313,11 +316,16 @@ payload를 통째로 저장하는 이유는 복원 속도 때문이다. revision
 | | `Slot` | 레이아웃 전용. 페이지가 주입되는 자리 |
 | | `Section` | 세로 밴드. 풀블리드 배경 + 내부 컨테이너 정렬 |
 | | `Flex` | 가로/세로 배치 |
-| | `Grid` | 격자 배치 (열 수, 간격) |
+| | `Grid` | 격자 배치 (열 수, 간격). 팔레트 이름 «격자 배치» — 자료 표 «그리드» 는 `DataGrid` 다 |
 | | `Card` | 제목·본문 영역을 가진 카드. 구역: 제목 옆(`titleSide`) · 머리 오른쪽(`headEnd`) · 몸통 · 바닥(`footer`) — 머리줄은 제목 · 부제 · 그 두 구역이 다 비면 안 선다 |
 | | `Tabs` | 탭 목록과 패널. 탭마다 `TabPanel` 노드 하나를 몸통에 둔다 — `active` 는 «몇째 패널»(0 부터 · 숨은 패널도 센다)이고 그 패널이 숨었거나 없으면 보이는 첫 패널을 연다 |
 | | `TabPanel` | 탭 하나 — 이름(`label`)은 탭 머리에, 몸통은 부모 `Tabs` 의 패널 칸에 선다. `Tabs` 의 몸통에만 선다(`misplaced-component`) |
-| 데이터 | `List` | 목록. 컬럼/아이템, 개수, 페이지네이션, 선택. 몸통이 없고 결과 머리줄 구역 둘(머리 왼쪽 `headStart` — «총 N건» · 머리 오른쪽 `headEnd` — 엑셀 다운로드 단추)이 표 위에 붙는다(둘 다 비면 머리줄째 없다) |
+| 데이터 | `DataGrid` | 그리드(자료 표) — 열은 노드(`GridColumn` · 열 묶음)이고 행도 노드(`GridRow`)다. 구역: 머리 왼쪽(`headStart` — «총 N건») · 머리 오른쪽(`headEnd` — 엑셀 다운로드 단추 — 둘 다 비면 머리줄째 없다) · 몸통 «열»(열 · 열 묶음만) · «행»(`rows` — 행만) · «바닥»(`footer` — 무엇이든 · 기본 자리의 `Pagination`). `select`(none · check · radio — 맨 앞 선택 칸) · `fixedColumns`(0 ~ 20 — 앞 몇 잎 열을 가로 스크롤에 붙인다) · `emptyText` · 상태 `empty` · `loading`. 표보다 좁은 창에서는 표 칸만 가로로 굴러간다(문서는 창 폭 그대로 — §6.1 «그리드»). 새로 만들면 열 셋(셀 틀 `Text «—»`) · 되풀이 5 줄 행 · 바가 든다. 열이 없으면 lint 구조적 공백(§12.4) |
+| | `GridColumnGroup` | 열 묶음 — 아래 열 여럿 위에 걸치는 병합 머리 칸(`label`). 몸통 «열»(열 · 열 묶음 — 트리 깊이가 머리 단이다). 그리드 · 열 묶음의 몸통에만 선다 |
+| | `GridColumn` | 열 — 머리 칸(`label` · `required` · `align` · `size`(auto · short · medium · long — 폭은 테마) · `sort`(none · sortable · asc · desc 표시) · `tone`(음영))과 몸통 «셀» = 셀 틀(칸을 안 가진 행마다 되풀이되는 칸 내용 — 무엇이든 받는다). `numbering`(off · asc · desc)을 켜면 셀 틀 대신 데이터 행 번호를 그린다(셀 틀은 lint `ignored-template`). 그리드 · 열 묶음의 몸통에만 선다 |
+| | `GridRow` | 행 — `repeat`(1 ~ 50 줄 — 첫 줄이 이 노드, 둘째 줄부터는 사본 — §6.1 «그리드») · `kind`(data · total 합계 · gap 생략 띠 — 칸 · 되풀이를 안 읽는 전폭 띠) · `tone`(default · selected · dimmed · shaded). 칸이 없으면 열마다 셀 틀을, 하나라도 있으면 제 칸만 그린다(칸이 열을 앞에서부터 덮고 모자란 열은 빈 칸 — 폭이 잎 열 수와 다르면 lint `grid-row-cells`). 그리드의 «행» 에만 선다 |
+| | `GridCell` | 행이 제 손으로 그린 칸 — `span` · `rowSpan`(1 ~ 50 · 세로 칸은 아래 행의 그 열을 덮고 생략 띠에서 끊긴다) · 몸통 «내용». 행의 몸통에만 선다 |
+| | `Pagination` | 페이지네이션 바 — 행 수 셀렉트(`sizeSelect`) · 쪽 번호 · 범위 글(`range` — «1 - 10 (총 72 항목 중)»)을 한 줄에 둔다. 수는 `total` · `pageSize` · `page` 로 셈한다(지금 쪽은 쪽 수로 자른다). 어디든 선다 |
 | | `Tree` | 계층 목록 |
 | | `KeyValue` | 키-값 뷰 (상세 화면용) |
 | 입력 | `SearchForm` | 검색 조건 필드 묶음 + 초기화/검색. `columns`(1 ~ 4 · 기본값 없음)를 정하면 필드를 그 수의 칸으로 깔고 필드의 몫(§4.3)이 칸 수다 — 시스템 테마는 `FormTable` 과 같은 라벨|값 쌍 격자로 깐다(라벨 칸이 값 칸 왼쪽 · 열마다 맞는다 · 빈 쌍은 비워 둔다 · SDK 기본 CSS 는 필드 하나를 같은 폭 칸 하나에 — §6.1 «폼 표»). 안 정하면 테마마다의 지금 배치(필드가 옆으로 서고 넘치면 접힌다). 좁은 창에서는 열을 정했어도 한 줄에 필드 하나(라벨 위)다(시스템 테마의 좁은 창 문턱 640px). 단추는 `actions` 구역의 노드다(뷰에 박힌 단추가 없다 — 새로 만들면 «초기화» · «검색» 이 들고 «검색» 이 주 단추 `variant: 'primary'` 다) |
@@ -349,26 +357,29 @@ payload를 통째로 저장하는 이유는 복원 속도 때문이다. revision
 
 ```ts
 defineComponent({
-  type: 'List',
-  label: '목록',
-  description: '여러 건을 표·카드·목록 모양으로 늘어놓는다.',
+  type: 'DataGrid',
+  label: '그리드',
+  description: '여러 건을 열과 행으로 늘어놓는 자료 표.',
   group: 'data',
-  props: z.object({ items: z.number(), columns: z.array(z.string()).optional(),
-                    pagination: z.boolean(), selectable: z.boolean() }),
+  props: z.strictObject({ select: z.enum(['none', 'check', 'radio']).default('none'),
+                          fixedColumns: z.number().int().min(0).max(20).default(0), /* … */ }),
   editor: [                                    // 속성 패널 폼이 여기서 자동 생성됨
-    { prop: 'items',      control: 'number',     label: '항목 수' },
-    { prop: 'columns',    control: 'stringList', label: '컬럼' },
-    { prop: 'pagination', control: 'switch',     label: '페이지네이션' },
+    { prop: 'select',       control: 'select', label: '선택 열', options: ['none', 'check', 'radio'] },
+    { prop: 'fixedColumns', control: 'number', label: '고정 열 수' },
+    { prop: 'empty',        control: 'switch', label: '빈 상태' },
   ],
-  states:     ['selected', 'disabled', 'loading', 'empty'],
+  states:     ['empty', 'loading'],
   zones: [                                     // 받는 자식 자리 — 차례가 순회 · 화면 차례다. 빈 목록이면 자식을 안 받는다
     { name: 'headStart', label: '머리 왼쪽' },
     { name: 'headEnd',   label: '머리 오른쪽' },
+    { name: 'body',      label: '열', accepts: ['GridColumn', 'GridColumnGroup'], initial: [/* 열 셋 */] },
+    { name: 'rows',      label: '행', accepts: ['GridRow'], initial: [{ type: 'GridRow', props: { repeat: 5 } }] },
+    { name: 'footer',    label: '바닥', initial: [{ type: 'Pagination' }] },
   ],
 })
 ```
 
-**구역 선언(`zones`)** 의 한 줄은 `{ name, label, accepts?, initial? }` 다 — `name` 이 `body` 면 몸통(`children`), 그 밖은 `zones[name]`. `label` 은 구조 트리의 구역 줄 · 문장이 부르는 화면 이름, `accepts` 는 받는 타입(없으면 무엇이든 — `Tabs` 의 몸통만 `TabPanel` 로 좁힌다), `initial` 은 **에디터가 노드를 새로 만들 때만** 넣는 기본 내용이다(`apps/web/src/edit/create-node.ts` — 검색폼 · 입력폼의 단추 둘 · 탭의 패널 둘. prop 기본값과 달리 사람이 지우고 고칠 내용이라 노드로 든다 · MCP · REST 로 쓰는 쪽은 받지 않고 `/llms.txt` 가 «함께 넣으라» 를 적는다 · 기본 내용의 변형은 폼 주 단추(«검색» · «저장»)의 `primary` 하나다 — 기본테마 · 스타터 테마가 둘 다 선언하는 이름이고, 선언 안 한 테마에서는 lint `theme-variant`(경고) · 그 테마의 기본 변형으로 그린다). 정의에는 셋이 더 있다 — `placement`(이 타입이 설 수 있는 자리 `{ type, zone }` — `TabPanel` 만 `Tabs` 의 몸통) · `bodyHost: 'parent'`(제 몸통을 부모 뷰가 그린다 — `TabPanel` 만) · `reveal(props, { zone, index })`(그 자식 줄 자리의 자손을 보이게 덮을 props — `Tabs` 는 `active` 를 그 패널 자리로, `SearchForm` 은 `collapsed: false` · 에디터가 고른 노드를 펼쳐 보일 때만 렌더러가 쓴다 — §9 «고른 노드를 펼쳐 보인다»). 구역을 더하는 것은 문서 판을 안 올리고(없는 열쇠가 빈 구역이다), 빼거나 이름을 바꾸는 것은 올린다.
+**구역 선언(`zones`)** 의 한 줄은 `{ name, label, accepts?, initial? }` 다 — `name` 이 `body` 면 몸통(`children`), 그 밖은 `zones[name]`. `label` 은 구조 트리의 구역 줄 · 문장이 부르는 화면 이름, `accepts` 는 받는 타입(없으면 무엇이든 — `Tabs` 의 몸통은 `TabPanel`, 그리드 · 열 묶음의 몸통은 열 · 열 묶음, 그리드의 «행» 은 행, 행의 몸통은 칸으로 좁힌다), `initial` 은 **에디터가 노드를 새로 만들 때만** 넣는 기본 내용이다(`apps/web/src/edit/create-node.ts` — 검색폼 · 입력폼의 단추 둘 · 탭의 패널 둘 · 그리드의 열 셋 · 행 · 바와 열의 셀 틀 — 기본 내용 안의 기본 내용도 돈다. prop 기본값과 달리 사람이 지우고 고칠 내용이라 노드로 든다 · MCP · REST 로 쓰는 쪽은 받지 않고 `/llms.txt` 가 «함께 넣으라» 를 적는다 · 기본 내용의 변형은 폼 주 단추(«검색» · «저장»)의 `primary` 하나다 — 기본테마 · 스타터 테마가 둘 다 선언하는 이름이고, 선언 안 한 테마에서는 lint `theme-variant`(경고) · 그 테마의 기본 변형으로 그린다). 정의에는 셋이 더 있다 — `placement`(이 타입이 설 수 있는 자리 `{ type, zone }` 하나 또는 그 목록 — `TabPanel` 은 `Tabs` 의 몸통, 열 · 열 묶음은 그리드 · 열 묶음의 몸통, 행은 그리드의 «행», 칸은 행의 몸통. 읽는 자리는 `placementsOf` 로 목록을 받는다) · `bodyHost: 'parent'`(제 몸통을 부모 뷰가 그린다 — `TabPanel` · 열 · 열 묶음) · `reveal(props, { zone, index })`(그 자식 줄 자리의 자손을 보이게 덮을 props — `Tabs` 는 `active` 를 그 패널 자리로, `SearchForm` 은 `collapsed: false` · 에디터가 고른 노드를 펼쳐 보일 때만 렌더러가 쓴다 — §9 «고른 노드를 펼쳐 보인다»). 구역을 더하는 것은 문서 판을 안 올리고(없는 열쇠가 빈 구역이다), 빼거나 이름을 바꾸는 것은 올린다.
 
 **정의(계약)와 그리기는 패키지가 다르다.** 위 선언은 `schema` 패키지에 있고 React에 의존하지 않는다. 화면은 테마의 뷰가 그린다(§6). `schema`가 의존을 갖지 않아야 한다는 §3.3의 원칙 때문이다.
 
@@ -411,6 +422,7 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 | 속성 | 값 | 누가 싣나 |
 |---|---|---|
 | `data-wb-id` | 노드 id | 렌더러 — 에디터의 선택 · 잠금 · 코멘트 앵커 |
+| `data-wb-copy-of` | 원본 노드 id — 그리드 되풀이 행의 둘째 줄부터(사본) `data-wb-id` 대신 선다(둘 중 하나만) | 렌더러 · SDK `Root` — 에디터의 노드 찾기 · 끌기 판정 · 마커 · 범위 선택이 훑는 `data-wb-id` 에 안 걸린다 |
 | `data-wb-component` | 컴포넌트 타입 | 렌더러 |
 | `data-wb-variant` | 변형(`variantFrom`이면 그 prop 값) | 렌더러 |
 | `data-wb-state` | 공백 구분 상태 목록 | 렌더러 |
@@ -420,26 +432,30 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 | `data-wb-focus` | 선택 외곽선 · 마커의 기준 상자 | SDK `Focus` — 없으면 루트가 기준이다 |
 | `data-wb-structure` | 기본 뷰의 형태 이름 | SDK 기본 뷰 |
 | `data-wb-part` | 기본 뷰의 내부 조각 이름 | SDK 기본 뷰 |
-| `data-wb-cell` | 기본 뷰의 표 칸 종류(`check` — `List` 의 체크 칸) | SDK 기본 뷰 |
+| `data-wb-cell` | 기본 그리드 뷰의 몸 칸 종류 — `select`(선택 칸) · `number`(번호 열) · `template`(셀 틀) · `own`(행이 그린 제 칸) · `blank`(모자란 열의 빈 칸) | SDK 기본 뷰 |
+| `data-wb-col` · `data-wb-fixed` | 그리드 머리 · 몸 칸의 열 자리(0 부터 — 걸친 칸은 첫 열) · 고정 열 칸(마지막 고정 열은 `last`) | SDK 기본 그리드 뷰 |
 | `data-wb-zone` | 구역 이름 — 그 구역의 그린 것을 감싼 요소에(비었으면 요소째 없다) | SDK `Zone` — 뷰가 `<Zone name>` 으로 둔다 · 에디터가 캔버스의 구역 상자를 이것으로 찾는다 |
 | `data-wb-placeholder` | 입력 조각의 `text` 조각이 값 대신 안내 문구를 그릴 때 — 테마가 흐리게 그린다 | SDK 기본 뷰 |
+| `data-wb-capture` | 찍는 판 — `<html>` 에. 화면을 그림으로 찍는 도구가 SDK 의 찍는 판 시트(`CAPTURE_CSS`)와 함께 단다 | api 화면 그리기 · `wb-theme shots` |
 | `data-wb-columns` | 열을 정한 `SearchForm` 의 열 수 — `fields` 조각에(루트가 아니다) `--wb-node-searchform-columns` 와 함께 · `FormTable` 의 열 수 — `cells` 조각에 `--wb-node-formtable-columns` 와 함께(늘 선다 — 기본 1) | SDK `searchFormFieldsAttrs` · `formTableCellsAttrs` — 기본 뷰와 그 조각을 그리는 테마 뷰 |
 
 앞의 넷은 렌더러가 짓고 뷰가 자기 루트(`Root`)에 편다 — 어느 테마의 뷰든 같다. 노드 몫(§4.3)은 속성이 아니라 `Root` 가 인라인으로 싣는 변수 `--wb-node-weight` 다. 마커 · 초점 자리는 뷰가 DOM 을 바꿔도 번호 마커 · 외곽선이 제 자리에 서게 하는 훅이고, 좌표는 `renderer` 의 한 함수가 이 속성으로 계산한다(에디터 오버레이 · 내보낸 번들 · PPTX 가 같은 함수를 쓴다 — `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「뷰 계약」). 뒤의 셋은 SDK 기본 뷰의 마크업 훅이라, 자기 뷰를 짠 테마는 자기 마크업을 쓴다(테마의 뷰가 기본 뷰를 불러 감싸면 그 훅이 그대로 선다).
 
-**뷰는 구역을 `zones` · `items` 로 받는다**(SDK 1.3.0 부터 — manifest 의 `sdk` 범위가 가른다). `ViewProps` 의 `children` 은 몸통을 그린 것 그대로이고, `zones` 는 이름 붙은 구역마다 그린 것(빈 구역은 `null`)이라 뷰는 직접 두지 않고 `<Zone name as data-wb-part>` 로 둔다 — `Zone` 이 빈 구역이면 감싸는 요소째 안 그리고 있으면 `data-wb-zone` 을 단다. `items` 는 몸통의 보이는 자식을 하나씩(`nodeId` · 몸통 배열의 자리 `index` · 뿌리 요소 `element` · 제 몸통을 부모에게 맡긴 자식이면 그 몸통 `content`) 내 `Tabs` 처럼 자식마다 머리와 내용을 가르는 뷰가 쓴다. `TabPanel` 의 뷰는 `children` 을 `null` 로 받고 탭 머리만 그린다 — 렌더러가 그 몸통을 부모의 `items[i].content` 로 넘긴다. 구역을 안 그리는 뷰는 그 안 노드를 화면에서 잃으므로 `wb-theme check` 가 «내용이 든 구역을 뷰가 안 그렸다» 를 오류로 잰다(갤러리 칸마다 구역에 표본 노드를 넣어 그린다). SDK 기본 뷰의 자리: `Card` 머리줄 = 제목 · 제목 옆 · 부제 · 머리 오른쪽(오른끝), 밑에 몸통 · 바닥 · `SearchForm` 은 필드 뒤 `actions`(접히면 `toggle` 줄만 — 두 구역 다 빠진다) · `EntryForm` 은 제목 · 항목 · `actions` · `FormTable` 은 머리줄(`header` — `title` 조각 · 머리 오른쪽) · 옆 칸(`aside`) · 칸(`cells`) · `List` 는 표 위 `head` 조각(머리 왼쪽 · 머리 오른쪽 양끝) · `Tabs` 는 `list` 조각(`items` 마다 탭 머리) · `panel` 조각(지금 패널의 내용). 기본테마(`system-admin`)는 그 자리를 `theme.css` 로 꾸미고 «소제목 + 오른쪽 단추» 줄을 카드의 테두리 없는 변형(`borderless` — «테두리 없음»)으로 짓는다.
+**뷰는 구역을 `zones` · `items` 로 받는다**(SDK 1.3.0 부터 — manifest 의 `sdk` 범위가 가른다). `ViewProps` 의 `children` 은 몸통을 그린 것 그대로이고, `zones` 는 이름 붙은 구역마다 그린 것(빈 구역은 `null`)이라 뷰는 직접 두지 않고 `<Zone name as data-wb-part>` 로 둔다 — `Zone` 이 빈 구역이면 감싸는 요소째 안 그리고 있으면 `data-wb-zone` 을 단다. `items` 는 몸통의 보이는 자식을 하나씩(`nodeId` · 몸통 배열의 자리 `index` · 뿌리 요소 `element` · 제 몸통을 부모에게 맡긴 자식이면 그 몸통 `content`) 내 `Tabs` 처럼 자식마다 머리와 내용을 가르는 뷰가 쓴다. `TabPanel` 의 뷰는 `children` 을 `null` 로 받고 탭 머리만 그린다 — 렌더러가 그 몸통을 부모의 `items[i].content` 로 넘긴다. 구역을 안 그리는 뷰는 그 안 노드를 화면에서 잃으므로 `wb-theme check` 가 «내용이 든 구역을 뷰가 안 그렸다» 를 오류로 잰다(갤러리 칸마다 구역에 표본 노드를 넣어 그린다). SDK 기본 뷰의 자리: `Card` 머리줄 = 제목 · 제목 옆 · 부제 · 머리 오른쪽(오른끝), 밑에 몸통 · 바닥 · `SearchForm` 은 필드 뒤 `actions`(접히면 `toggle` 줄만 — 두 구역 다 빠진다) · `EntryForm` 은 제목 · 항목 · `actions` · `FormTable` 은 머리줄(`header` — `title` 조각 · 머리 오른쪽) · 옆 칸(`aside`) · 칸(`cells`) · `DataGrid` 는 표 위 `head` 조각(머리 왼쪽 · 머리 오른쪽 양끝) · 표를 감싼 `scroll` 조각 · `footer` 조각(바닥) · `Tabs` 는 `list` 조각(`items` 마다 탭 머리) · `panel` 조각(지금 패널의 내용). 기본테마(`system-admin`)는 그 자리를 `theme.css` 로 꾸미고 «소제목 + 오른쪽 단추» 줄을 카드의 테두리 없는 변형(`borderless` — «테두리 없음»)으로 짓는다.
 
 **`Field` 는 라벨 조각과 값 조각을 형제로 둔다**(SDK 1.4.0 — 카탈로그 타입 아홉이 더해지고 `Field` 의 DOM 이 바뀌어 판을 올렸다). 기본 `FieldView` 는 `Root div[role=group][aria-labelledby]` > `label[data-wb-part=label]` · `div[data-wb-part=value]`(몸통 — 조각들)다 — 라벨|값 표가 두 조각을 칸에 나눠 놓을 수 있다. 입력 조각의 기본 뷰는 실제 `<input>` · `<select>` 가 아니라 역할 · 이름을 단 그림이다(`text` 조각 — 값, 없으면 안내 문구 · 날짜 · 시간의 `glyph` · 셀렉트 꺾쇠는 CSS). 선택지 묶음은 항목마다 `option` 조각(`role=checkbox | radio` · `aria-checked`)과 `mark` 조각을 그리고 테마 CSS 가 `[aria-checked="true"]` 로 고른 칸을 꾸민다 — 항목은 노드가 아니라 `data-wb-id` 가 없다. 칩의 × 는 `remove` 조각이다. 기본테마는 뷰 없이 `theme.css` 로 꾸미고 `RadioGroup` 의 `segment`(기본) · `radio`, `CheckboxGroup` 의 `checkbox`(기본) · `chip` 을 선언한다. 입력 조각의 상호작용은 `click` · `select` 만 뷰 모드에서 돈다 — 실제 입력이 없어 `change` 는 나지 않는다. **값 칸 조각의 이름** — 렌더러가 `Field` 몸통의 입력 조각(`Input` · `TextArea` · `Select` · `DateInput` · `TimeInput` · `CheckboxGroup` · `RadioGroup` — 단추 · 사이 글자 · 칩은 빼고)에 `ViewProps.field`(`{ name, required }`)를 싣는다. 이름은 그 판에 서는 입력 조각이 하나면 라벨, 여럿이면 «라벨 + 별칭», 별칭이 없으면 «라벨 + 차례(1부터)» 다(«기간 1» · «기간 2») — 입력 칸만 훑는 보조 기술은 묶음의 이름을 지나지 않아 조각 제 이름이 어느 라벨의 칸인지 말한다. 기본 뷰는 그것을 `aria-label` 로, 필수면 `aria-required` 로 편다(그 속성을 받는 역할만 — 체크 묶음 `group` 은 이름만). 라벨이 빈 필드 · 필드 밖의 조각은 안내 문구 · 종류 이름으로 선다. 칸은 선택이다 — 안 쓰는 테마 뷰는 지금 그대로 그린다.
 
 **폼 표는 쌍 격자다**(SDK 1.6.0). 렌더러가 칸을 세는 부모(`Grid` · `FormTable` · 열을 정한 `SearchForm`)의 몸통 자식마다 자른 몫을 `ViewItem.span` 으로 싣고(없으면 1), SDK `pairRows(items, columns)` 가 격자의 자동 배치와 같은 셈으로 줄을 지어 줄 끝과 «넓은 칸이 다음 줄로 넘어가며 남긴 구멍» 에 빈 쌍을 끼운 차례를 준다 — CSS 만으로는 남는 트랙에 상자가 없어 칸 선 · 라벨 바탕이 안 선다. 기본 `FormTableView` 는 `Root div`(제목이 있으면 `role=group` · `aria-labelledby` — 표 하나가 이름 붙은 묶음) > 머리줄(`header` — `title` 조각 · `<Zone headEnd>`, 제목도 머리 오른쪽도 없으면 없다) · `<Zone aside>` · `cells` 조각(`formTableCellsAttrs(columns)`) > 그 차례의 자식 · 빈 쌍(`div[data-wb-part=filler][aria-hidden]` > `label` · `value` 조각 — `Field` 와 같은 두 조각이라 테마의 라벨 바탕 · 칸 선 규칙이 그대로 듣는다 · 노드가 아니다)이다. `<table>` 이 아니다 — 칸에 `Field` 뿌리(`group`)가 서고 값 칸에 그리드 · 하위 표가 든다. SDK 기본 CSS 가 폼 표의 `cells` 를 `repeat(열 수, 라벨 폭 minmax(0, 1fr))`(라벨 폭은 테마의 손잡이 `--wb-form-labelWidth` · 없으면 8rem — SDK `FORM_LABEL_WIDTH_VAR`)로 깔고 자식은 `span 2 × 몫`, 빈 쌍은 늘 한 쌍, 그 안의 `Field` · 빈 쌍은 `grid-template-columns: subgrid` 로 두 조각을 트랙에 놓는다 — 라벨 칸 · 값 칸의 왼끝이 줄마다 맞고 두 칸이 그 줄 높이를 채운다(값 칸이 키를 키우면 라벨 칸이 따라 늘어난다). 그래서 **`Field` 뷰는 두 조각을 뿌리의 직계로 그린다** — 감싸는 요소를 끼우면 두 조각이 한 칸에 몰린다. `display: contents`(뿌리 상자가 없어 외곽선 · 놓기 판정 · 마커가 깨진다)도, 표 뷰가 자식 조각을 나눠 그리는 길(계약이 크게 바뀐다)도 아니다. 960px 아래(PPTX 캡처 폭 720 이 든다)는 한 줄에 쌍 하나 · 라벨 왼쪽 · 빈 쌍 숨김이다 — 열 수가 그대로면 라벨 칸이 열마다 빠져 줄을 안 바꾸는 값(세그먼트 · 하위 표)이 옆 쌍 · 창 밖으로 넘친다. 640px 아래는 한 줄에 쌍 하나 · 라벨 위 · 빈 쌍 숨김 · 옆 칸은 표 위다. 값 칸 안의 폼 표(하위 표)는 폭과 무관하게 한 줄에 쌍 하나이고 값 칸 폭을 채운다(내용 폭으로 줄면 값 트랙이 0 으로 접힌다). SDK 기본 CSS 가 특이도 0 으로 그 판들을 두고(테마가 안 꾸민 판의 모양) 폼 표를 꾸미는 테마는 제 규칙으로 덮는다 — 기본테마는 960 판을 열을 정한 조회 폼에도 건다(SDK 기본의 열 조회 폼은 같은 폭 칸 · 라벨 위라 안 접는다). 기본테마 1.5.0 이하에 고정된 프로젝트는 폼 표를 그 테마의 `[EntryForm] [Field]`(자손) 두 칸 규칙 · SDK 기본 CSS 로 그린다 — 칸 선 · 라벨 바탕은 1.6.0 으로 올린 뒤다. 라벨이 빈 `Field` 는 역할을 안 낸다(이름 없는 `group` 이 안 선다 — 행 가운데 빈 쌍). **열을 정한 조회 폼의 SDK 기본 CSS 는 쌍 격자가 아니다**(필드 하나 = 같은 폭 칸 하나) — 그 위에 «필드 하나 = 트랙 하나» 로 덮어 둔 SDK 1.5.0 이하 테마(기본테마 1.5.0 에 고정된 프로젝트)에서 필드가 두 트랙씩 덮어 열이 깨지지 않게 한다. 쌍 격자는 테마가 고른다 — 기본테마가 트랙 · 자식 폭(`span calc(2 * var(--wb-node-weight, 1))`) · subgrid 를 건다. `wb-theme check` 가 폼 표 뷰의 꼴 — `cells` 조각이 있는지 · 칸(몸통 자식)과 빈 쌍이 그 직계인지 · 칸 `Field` 와 빈 쌍이 두 조각을 직계로 갖는지 · 빈 쌍 수가 `pairRows` 셈과 같은지 — 를 오류로, `wb-theme shots` 가 같은 줄 라벨 칸 높이 = 값 칸 높이와 쌍 격자 꼴로 안 선 폼 표 몸통 `Field`(그 판은 쌍 높이를 하나도 못 잰다)를 문제 줄로 잰다. 기본테마는 뷰 없이 `theme.css` 로 꾸민다(바깥 · 칸 선 · 라벨 칸 옅은 바탕 · 굵은 글 · 머리줄 제목 · 필수 별은 라벨 앞이고 대체 글이 비어 묶음의 접근 이름에 안 든다(필수는 입력 조각의 `required` 가 말한다) · 칸이 하나도 안 선 표는 선을 안 긋는다 · 열을 정한 조회 폼은 라벨 흰 바탕 · 선 없음). 실브라우저 판은 `apps/web/build-test/form-table.test.ts` 다.
 
+**그리드는 표 하나에 열 노드 · 행 노드를 펴서 그린다**(SDK 1.7.0). 뷰는 구역마다 보이는 자식을 `zoneItems` 로 받고, `ViewItem` 은 타입 · props · 손자(`items`)와 사본 짓기(`copy(row)`)를 싣는다. SDK `gridLayout(columns, rows, …)` 이 순수 함수로 머리 줄(열 묶음 깊이만큼 — 잎은 `rowspan` 으로 바닥까지 · `scope` 는 잎 `col` · 묶음 `colgroup`) · 몸 줄(되풀이 행을 `repeat` 줄로 펴고 · 셀 틀 · 제 칸 · 세로 칸의 덮임 · 생략 띠에서 끊음 · 번호 · 고정 열)을 셈하고, 기본 그리드 뷰가 `GridProvider` 로 그 셈을 내려 열 · 열 묶음 · 행 · 칸 뷰가 `useGridHead` · `useGridRow` · `useGridCell` 로 제 칸을 읽는다(뷰 함수 몸이 아니라 노드 id 로 — 훅이 부모 노드의 문맥을 읽지 않게). **되풀이 행의 둘째 줄부터는 사본이다** — 렌더러가 그 서브트리를 다시 그리되 노드마다 `data-wb-id` 대신 `data-wb-copy-of` 를 싣고, 뷰의 `nodeId` 는 `<원본 id>~<열쇠>`(HTML `id` 가 안 겹친다) · 사본 안 입력 조각의 접근 이름에 « (n행)» 이 붙는다. 표지 · 상태 · 상호작용은 원본과 같다(사본을 누르면 원본의 규칙이 돈다). 사본의 글은 원본과 같고 «No» 만 다르다. 사본 노드도 노드 뿌리라 SDK 의 몫 초기화가 덮는다. **고정 열**은 `position: sticky` 이고 둘째 고정 열부터의 왼쪽 자리(앞 칸 폭의 합)를 기본 그리드 뷰의 레이아웃 이펙트가 재어 `--wb-node-datagrid-left` 로 싣는다(크기가 바뀔 때 · 글꼴이 실린 뒤 다시 잰다 — 캔버스 · 번들 · 갤러리가 같다). 표가 창보다 넓으면 표 칸(`scroll` 조각)만 가로로 굴러가고 문서는 창 폭 그대로다. **찍는 판**(PPTX 의 화면 그림 · `wb-theme shots`)은 `<html data-wb-capture>` 와 SDK 의 `CAPTURE_CSS`(`@layer` 안의 `!important` — 스크롤 상자를 풀고 고정 열을 놓는다)를 함께 달아 표 전체 폭으로 찍는다(넓이 상한 720 × 8192 px² 는 그대로 — 넓어진 만큼 받는 높이가 준다). 이 시트를 기본 뷰 CSS 에 안 넣는 까닭은 jsdom 의 CSS 파서가 `@layer` 든 시트를 통째로 버려서다. `wb-theme check` 는 그리드 표본마다 행 뷰가 줄마다 원본 `Root` 를 그리지 않는지 · 셀 틀이 줄마다 `data-wb-id` 로 서지 않는지 · 몸 줄의 칸 수 · `colspan` 합이 `gridLayout` 과 같은지 · 머리 칸이 `colspan` · `rowspan` 을 싣는지를 오류로, `wb-theme shots` 는 고정 열 제자리 · 칸 글 넘침 · 찍는 판 펼침을 잰다.
+
 **테마 뷰가 그리는 포커스 받는 요소는 단추(`<button>`) · 링크(`<a href>`) · 입력 칸(`input` · `select` · `textarea`)만이다.** 에디터의 단축키 · 노드 복사는 캔버스 문서에서 포커스가 없거나(본문) 단추 · 링크일 때만 서고(「단축키」의 «서지 않는 때») 그 밖의 포커스 받은 요소(`tabindex` 를 단 요소 · `summary` · `controls` 를 켠 `video` · `audio`)는 입력 표면으로 본다 — 그런 요소를 누른 뒤에는 Delete · Cmd+C · Cmd+D 가 안 서고 통지도 없다. 판정을 넓히지 않는 것은 닫힌 shadow 안의 입력과 `tabindex` 만 단 요소를 DOM 으로 가를 수 없어서다(`apps/web/src/edit/editor-shortcuts.ts` 의 `shortcutsBlocked`). `wb-theme check` 가 갤러리 칸마다 그런 요소를 찾아 경고한다 — 오류가 아니라 종료 코드에 안 들고, 닫힌 shadow 안은 못 본다. 계약은 테마 작성 안내(`packages/theme-kit/template/SKILL.md` 「뷰 계약」)에도 있다.
 
-**prop 표지는 화면을 바꾸는 불리언 · enum prop 가운데 상태(`data-wb-state`) · 변형(`variantFrom` → `data-wb-variant`)으로 실리지 않는 것 전부에 선다** — 지금 `Section.compact` · `Flex` 의 `direction` · `align` · `justify` · `wrap` · `List` 의 `pagination` · `selectable` · `SearchForm.collapsed` · `Input` 의 `kind` · `size` · `Select.size` · `Chip.removable` · `Affix.tone` · `Media` 의 `kind` · `ratio` · `Placeholder` 의 `border` · `align` · `imageFit` 이다(표는 `packages/theme-sdk/src/marks.ts` 의 `MARKED_PROPS`). 같은 값을 두 이름으로 싣지 않는다 — 상태 · 변형으로 실리는 prop 은 표지가 없다. 테마 CSS 는 `[data-wb-component="Section"][data-wb-compact]` 처럼 겨냥한다. 렌더러의 노드 속성 계약은 넓히지 않는다: `view()` 가 노드의 props · 상태를 문맥으로 내리고 `Root` 가 펴므로 기본 뷰와 테마 뷰가 같은 표지를 빠뜨릴 수 없다. `Root` 는 제 노드 id 의 문맥만 읽는다 — `view()` 를 거치지 않은 맨 함수 뷰의 `Root` 는 표지 · 접근성 속성을 안 편다(부모 노드의 것을 잘못 읽지 않게). 카탈로그에 불리언 · enum prop 이 생기면 표 · 상태 · 변형 가운데 하나에 들어야 한다 — `packages/renderer/test/prop-marks.test.tsx` 가 prop 마다 그 길과 «바꾸면 기본 뷰의 DOM 이 바뀐다» 를 센다. 수 prop 은 표지가 아니다(셀렉터로 셀 수 없다) — `SearchForm.columns` 는 `fields` 조각의 `data-wb-columns` 로 «정했다» 를 가르고 열 수는 변수가 나른다(`FormTable.columns` 는 `cells` 조각에 늘 선다). 시스템 테마는 `[data-wb-part="fields"][data-wb-columns]` 에서만 제 `fields` 배치를 쌍 격자로 바꾼다(`apps/web/build-test/searchform-columns.test.ts`).
+**prop 표지는 화면을 바꾸는 불리언 · enum prop 가운데 상태(`data-wb-state`) · 변형(`variantFrom` → `data-wb-variant`)으로 실리지 않는 것 전부에 선다** — 지금 `Section.compact` · `Flex` 의 `direction` · `align` · `justify` · `wrap` · `DataGrid.select` · `GridColumn` 의 `required` · `align` · `size` · `sort` · `tone` · `numbering` · `GridRow` 의 `kind` · `tone` · `Pagination` 의 `sizeSelect` · `range` · `SearchForm.collapsed` · `Input` 의 `kind` · `size` · `Select.size` · `Chip.removable` · `Affix.tone` · `Media` 의 `kind` · `ratio` · `Placeholder` 의 `border` · `align` · `imageFit` 이다(표는 `packages/theme-sdk/src/marks.ts` 의 `MARKED_PROPS`). 같은 값을 두 이름으로 싣지 않는다 — 상태 · 변형으로 실리는 prop 은 표지가 없다. 테마 CSS 는 `[data-wb-component="Section"][data-wb-compact]` 처럼 겨냥한다. 렌더러의 노드 속성 계약은 넓히지 않는다: `view()` 가 노드의 props · 상태를 문맥으로 내리고 `Root` 가 펴므로 기본 뷰와 테마 뷰가 같은 표지를 빠뜨릴 수 없다. `Root` 는 제 노드 id 의 문맥만 읽는다 — `view()` 를 거치지 않은 맨 함수 뷰의 `Root` 는 표지 · 접근성 속성을 안 편다(부모 노드의 것을 잘못 읽지 않게). 카탈로그에 불리언 · enum prop 이 생기면 표 · 상태 · 변형 가운데 하나에 들어야 한다 — `packages/renderer/test/prop-marks.test.tsx` 가 prop 마다 그 길과 «바꾸면 기본 뷰의 DOM 이 바뀐다» 를 센다. 수 prop 은 표지가 아니다(셀렉터로 셀 수 없다) — `SearchForm.columns` 는 `fields` 조각의 `data-wb-columns` 로 «정했다» 를 가르고 열 수는 변수가 나른다(`FormTable.columns` 는 `cells` 조각에 늘 선다). 시스템 테마는 `[data-wb-part="fields"][data-wb-columns]` 에서만 제 `fields` 배치를 쌍 격자로 바꾼다(`apps/web/build-test/searchform-columns.test.ts`).
 
 **자리표시자의 그리기 값은 노드 변수로 실린다**(SDK 1.5.0). `placeholderVars(props)`(SDK)가 정한 값만 `--wb-node-placeholder-<이름>`(`width` · `height` · `radius` · `font-size` · `padding` 은 `px` 를 붙여, `background` · `border-color` · `color` 는 `#rrggbb`)으로 내고 기본 뷰가 `Root` 의 `style` 에 싣는다 — 커스텀 프로퍼티만이다(inline 일반 선언은 테마의 몫까지 덮는다). SDK 기본 CSS 는 자리표시자 뿌리마다 그 여덟을 `initial` 로 끊어(바깥 값이 안쪽 자리표시자에 물려지지 않게) 특이도 0 으로 배치(가로 줄 세우기 · 넘치면 줄바꿈 · 세로 가운데 · 빈 칸은 높이를 안 정했으면 120px)를 잡는다. 테두리 꼴 · 정렬은 표지(`data-wb-border` · `data-wb-align`)다. **테마는 그 변수를 대체값과 함께 읽어야 한다**(`background: var(--wb-node-placeholder-background, <테마의 바탕>)`) — 안 읽고 덮으면 사람이 고른 색이 그 테마에서 사라진다. 갤러리의 «정한 색 · 모서리 · 여백» 표본(`PLACEHOLDER_SET_PROPS`)으로 둘이 잰다: `wb-theme check`(jsdom)는 뷰가 뿌리에 변수를 싣는지(오류), `wb-theme shots`(실 Chromium)는 계산된 `background-color` · `border-top-color` · `color` · 모서리 · 글 크기 · 여백이 정한 값인지(문제 줄)다. jsdom 은 특이도를 안 보고 `var()` 를 안 풀어 계산 값을 못 낸다. 기본테마는 몸통의 `Text` 가 자리표시자의 글 색을 물려받게 한다. 몸통이 있으면 라벨 조각(`label`) 대신 몸통 조각(`content`)이 선다. **그림은 그리는 자리가 주소를 정한다** — 렌더러가 `RenderOptions.assetUrl`(그림 id → 주소 · 못 읽으면 `null`)을 받아 SDK 문맥으로 내리고 뷰가 `useAsset(id)` 로 읽는다(캔버스는 `/api/projects/:p/assets/:id`, 번들은 페이지 깊이에 맞춘 상대 주소, 갤러리는 표본 `data:`). 기본 뷰는 그림 조각 `<img data-wb-part="image" alt=<라벨>>`(그림이 있으면 라벨 조각은 안 선다)이고 못 읽으면(`null` · 읽다 깨짐) «그림을 불러올 수 없음» 표지(`image-missing`)다. 그림이 칸을 채우는 꼴은 뷰가 정하는 조각 속성 `data-wb-frame`(너비 · 높이를 다 정했거나 몸통이 있으면 `box` — 칸에 깔고 `imageFit` 으로 맞춘다 · 한 변만 정했으면 `width` · `height` · 없으면 그림의 원래 크기)이다. `Flex` 안에서 몫을 받은 자리표시자는 바탕 폭이 0 이라 정한 너비가 바닥(`min-width`)이 된다.
 
-**SDK 기본 뷰는 표지 · 상태로 제 모양을 바꾼다** — 테마가 없어도 화면이 바뀐다. `Section` 의 위아래 여백은 compact 면 준다(특이도 0 — 테마의 여백 규칙이 이긴다), `SearchForm` 은 접히면 머리줄(`toggle` 조각)만 남고 자식이 DOM 에서 빠진다(`display: none` 으로 감추면 테마 CSS 가 되살릴 수 있다), `List` 는 `selectable` · `empty` · `loading` 을 체크 칸 · 빈 줄 · 막대 조각으로, `KeyValue` 는 `columns` 쌍씩 한 행으로, `Media` 는 `kind` 를 틀 가운데 표지(`glyph`)로 그린다. 시스템 테마가 표지를 읽는지는 `apps/web/build-test/theme-prop-marks.test.ts` 가 켬/끔의 상자 차로 잰다. **`List.selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다** — 표 구조는 체크 칸을 머리에 하나 · 행마다 하나 그리고, 줄 · 카드 목록 구조(`mediaList` · `cardGrid` · `stackedList` 등)는 표지 `data-wb-selectable` 만 서고 체크 칸을 그리지 않는다. 시스템 테마는 `List` variant 전부에서 이 계약대로 서고, 같은 테스트가 variant 를 구조로 가르며 잰다. 줄 · 카드 목록에 체크 칸이 필요한 테마는 자기 뷰가 그린다.
+**SDK 기본 뷰는 표지 · 상태로 제 모양을 바꾼다** — 테마가 없어도 화면이 바뀐다. `Section` 의 위아래 여백은 compact 면 준다(특이도 0 — 테마의 여백 규칙이 이긴다), `SearchForm` 은 접히면 머리줄(`toggle` 조각)만 남고 자식이 DOM 에서 빠진다(`display: none` 으로 감추면 테마 CSS 가 되살릴 수 있다), `DataGrid` 는 `select` · `empty` · `loading` 을 선택 칸 · 빈 결과 줄 · 칸마다 막대 조각으로, `KeyValue` 는 `columns` 쌍씩 한 행으로, `Media` 는 `kind` 를 틀 가운데 표지(`glyph`)로 그린다. 시스템 테마가 표지를 읽는지는 `apps/web/build-test/theme-prop-marks.test.ts` 가 켬/끔의 상자 차로 잰다. 그리드는 어느 variant 든 표다 — `select: 'check'` 면 머리에 하나 · 행마다 하나 선택 칸이 서고, 시스템 테마는 `DataGrid` variant 전부에서 그렇다(같은 테스트가 variant 마다 센다).
 
 ---
 
@@ -542,7 +558,7 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 ### 8.2 자동 문장화
 
 ```
-"① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다"
+"① 검색 버튼 클릭 시 ② 그리드가 로딩 상태로 바뀝니다"
 "③ 상세정보 탭 선택 시 ④ 기본정보 영역이 숨겨집니다"
 ```
 
@@ -561,16 +577,16 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 │◧ ◆ wirebound 관리자 콘솔 설계서 ↶ ↷ ⬚ [편집 모드|뷰 모드]┊ 1280▾ −100%+ ⟷ ◨…│
 ├───────────────┬┬────────────────────────────┬┬───────────────────────────┤
 │ 메뉴·페이지  +││  목업 캔버스               ││ [속성|코멘트|상호작용]    │
-│  회원관리  + …││  ┌──────────────────────┐  ││ List                      │
-│   ├ 목록 ●  … ││  │ ① 검색폼             │  ││  컬럼   [편집]            │
-│   ├ 상세      ││ ⠿│ ② 목록  [②]          │  ││  행 수  10                │
-│   └ 등록      ││  └──────────────────────┘  ││  페이지네이션 ✓           │
+│  회원관리  + …││  ┌──────────────────────┐  ││ DataGrid                  │
+│   ├ 목록 ●  … ││  │ ① 검색폼             │  ││  선택 열  체크            │
+│   ├ 상세      ││ ⠿│ ② 그리드  [②]        │  ││  고정 열 수  1            │
+│   └ 등록      ││  └──────────────────────┘  ││  빈 상태 ☐                │
 │  권한관리     ││                            ││ ─────────────             │
 ├───────────────┤├════════════════════════════┤│ 코멘트                    │
 │ 구조 트리     ││ [구조]데이터 입력… 찾기___ ││ ① 검색폼 - ...            │
-│  Page         ││ ┌──────┐┌──────┐┌──────┐ … ││ ② 목록 - ...              │
+│  Page         ││ ┌──────┐┌──────┐┌──────┐ … ││ ② 그리드 - ...            │
 │   ├ SearchForm││ │▒▒▒▒▒+││▒▒▒▒▒+││▒▒▒▒▒+│   ││ ─────────────             │
-│   └ List ●   …││ │그리드││ 배치 ││ 영역 │   ││ 상호작용                  │
+│   └ DataGrid●…││ │ 격자 ││ 배치 ││ 영역 │   ││ 상호작용                  │
 │               ││ └──────┘└──────┘└──────┘   ││                           │
 │               │├────────────────────────────┤│                           │
 │               ││ 통지 …          [컴포넌트] ││                           │
@@ -609,7 +625,7 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 - **고른 것이 접힌 줄 안으로 들어가면 그 조상을 편다** — 캔버스에서 고름 · 붙여넣기 · 복제 · 화살표 · 사각형 · 되돌리기, 남의 편집이 고른 노드를 접힌 줄 안으로 옮긴 판까지(고른 노드의 조상 사슬이 바뀌면 편다). 메뉴 트리는 열린 페이지와 고른 줄을 그렇게 편다. 사람이 고른 노드의 조상을 직접 접은 판은 다시 펴지 않는다.
 - **보이는 차례** — ↑ ↓ 와 Shift+클릭 범위는 접힌 줄 안을 건너뛴다. 고른 노드가 접힌 줄 안에 숨어 있으면 ↑ ↓ 는 그것을 가린 보이는 조상에서 움직이고, 숨은 기준 노드에서 시작하는 Shift 범위는 서지 않는다(누른 줄 하나를 고른다).
 
-**구조 트리 줄 — `타입 (별칭) 요약`.** 줄은 타입 이름 + 별칭이 있으면 ` (별칭)` + 흐린 요약이다(«Flex (머리 줄) 가로» · «Button 저장» · «Section»). 한 줄이고 넘치면 끝에서 줄임표로 자른다. 별칭 · 요약은 사람 글이라 방향을 격리한다(괄호는 격리 밖) — RTL 별칭이나 라벨 · 제목에 든 방향 제어 글자가 줄의 다른 조각을 뒤집지 않는다. **줄 단추의 접근 이름도 같은 글이고**, 줄 행동 `…` 의 이름은 그 글 뒤에 «더 보기»를 붙인다(구조 트리 줄에는 `+` 가 없다 — 아래 «트리의 줄 행동»). 요약은 같은 타입이 여럿일 때 어느 것인지 가르는 데까지만이고 규칙은 카탈로그 정의마다 하나다(`summary` — `packages/schema/src/component/catalog/*.ts`): Flex 가로 · 세로(줄바꿈이면 «· 줄바꿈») · Grid «N열» · Button · Link · Placeholder 라벨 · Field 라벨 · 컨트롤 종류 · Card · EntryForm 제목 · Text 내용 앞 20자 · Tabs 탭 이름 · List 컬럼 이름 앞 셋(« · »로 잇고 더 있으면 «…») · KeyValue «N쌍» · Media 종류 · 설명 · Divider 방향 · Tree «항목 N» · Page · Slot · Section · SearchForm 없음. MCP `get_page` 의 노드 `rowLabel` 이 같은 글이다.
+**구조 트리 줄 — `타입 (별칭) 요약`.** 줄은 타입 이름 + 별칭이 있으면 ` (별칭)` + 흐린 요약이다(«Flex (머리 줄) 가로» · «Button 저장» · «Section»). 한 줄이고 넘치면 끝에서 줄임표로 자른다. 별칭 · 요약은 사람 글이라 방향을 격리한다(괄호는 격리 밖) — RTL 별칭이나 라벨 · 제목에 든 방향 제어 글자가 줄의 다른 조각을 뒤집지 않는다. **줄 단추의 접근 이름도 같은 글이고**, 줄 행동 `…` 의 이름은 그 글 뒤에 «더 보기»를 붙인다(구조 트리 줄에는 `+` 가 없다 — 아래 «트리의 줄 행동»). 요약은 같은 타입이 여럿일 때 어느 것인지 가르는 데까지만이고 규칙은 카탈로그 정의마다 하나다(`summary` — `packages/schema/src/component/catalog/*.ts`): Flex 가로 · 세로(줄바꿈이면 «· 줄바꿈») · Grid «N열» · Button · Link · Placeholder 라벨 · Field 라벨 · 컨트롤 종류 · Card · EntryForm 제목 · Text 내용 앞 20자 · Tabs 탭 이름 · DataGrid «체크 선택 · 고정 N» · 열 · 열 묶음 머리 이름 · 행 «합계 · 강조 · ×5»(생략 띠는 «생략») · 칸 «가로 N · 세로 N» · Pagination «총 N» · KeyValue «N쌍» · Media 종류 · 설명 · Divider 방향 · Tree «항목 N» · Page · Slot · Section · SearchForm 없음. MCP `get_page` 의 노드 `rowLabel` 이 같은 글이다.
 
 **별칭 고치기.** 속성 패널 맨 위 «별칭» 칸(하나 고른 판 · 어느 컴포넌트에나 — 칸을 떠나거나 Enter 로 커밋) · 구조 트리 줄의 더블클릭 · F2(구조 트리 · 캔버스 어디서나 — 아래 «단축키») · 줄 `…` «별칭 바꾸기». 트리 쪽 셋은 그 줄 아래에 입력을 열고(메뉴 트리의 «이름 변경»과 같은 꼴 — Enter 만 확정 · Escape · 다른 곳 누름은 취소, Enter · Escape 뒤 포커스는 줄로 돌아온다), 지금 별칭이 든 채 선다. 고침은 편집 하나(`add` · `replace` · `remove` `/…/alias`)라 되돌리기 · 실시간 방송 · 잠금 판정을 편집 길 그대로 탄다 — 남이 잡은 노드 · 여럿을 고른 판에서는 입력이 안 열리고 «별칭 바꾸기»가 꺼진다. 속성 패널의 별칭 칸은 61자째를 받지 않고 «60자까지» 를 자리표로 말한다(칸은 UTF-16 단위로 세어 이모지 같은 글자는 둘로 센다 — 서버의 코드 포인트 한도보다 빡빡한 쪽이라 받은 글이 잘리는 일은 없다). 친 글은 봉투의 모양으로 다듬어 보낸다(줄을 바꾸는 글자를 공백으로 · 방향 제어 글자와 짝 없는 서로게이트를 빼기 · 앞뒤 공백 걷기 · 60자에서 자름). 비우거나 보이는 글자가 없으면 지운다. 트리 입력을 연 노드가 문서에서 빠지면(같은 사람의 다른 탭 · 에이전트 · 복원) 입력을 닫고, 친 글이 있었으면 하단 바에 «바뀐 선택 때문에 친 값을 쓰지 않았습니다» 한 줄을 세운다 — 같은 id 가 되살아나도(되돌리기 · 다른 탭) 입력이 다시 서지 않는다. 그 노드가 다른 부모로 옮겨지면 입력은 새 자리에 친 글째 선다.
 
@@ -1019,11 +1035,11 @@ wirebound 가 무엇인지 · 에이전트를 붙이는 법(도구 짓기 · `wi
 
 ```ts
 migrations = [
-  { from: 1, to: 2, migrate: (doc) => liftStateRegions(doc).doc },  // 상태 영역 → 노드 보임(§4.3 «문서 판 4»)
+  { from: 1, to: 2, migrate: (doc) => liftStateRegions(doc).doc },  // 상태 영역 → 노드 보임(§4.3 «문서 판 5»)
 ]
 ```
 
-판 2 → 3(구역) · 판 3 → 4(조합 입력)는 이 사슬에 없다 — DB 마이그레이션(`0028-node-zones` · `0029-compose-field`)에만 있어 판 1 · 2 문서는 사슬 끝(판 2)에서, 판 3 문서는 그 자리에서 «올릴 마이그레이션이 없습니다» 로 멈춘다. 그래서 위 판 1 → 2 줄은 지금 판 4 에 닿는 길이 아니다(DB 마이그레이션 `0025` 와 `0028` 의 스냅샷 옮기기가 그 함수를 직접 부른다 — `0029` 는 판 1 · 2 스냅샷 문서를 먼저 `0028` 의 얼린 함수로 올린다).
+판 2 → 3(구역) · 판 3 → 4(조합 입력) · 판 4 → 5(그리드)는 이 사슬에 없다 — DB 마이그레이션(`0028-node-zones` · `0029-compose-field` · `0032-list-data-grid`)에만 있어 판 1 · 2 문서는 사슬 끝(판 2)에서, 판 3 · 4 문서는 그 자리에서 «올릴 마이그레이션이 없습니다» 로 멈춘다. 그래서 위 판 1 → 2 줄은 지금 판 5 에 닿는 길이 아니다(DB 마이그레이션 `0025` 와 `0028` 의 스냅샷 옮기기가 그 함수를 직접 부른다 — `0029` 는 판 1 · 2 스냅샷 문서를 먼저 `0028` 의 얼린 함수로 올린다).
 
 `pages.schema_version`에 현재 버전을 기록하고, 마이그레이션이 실행되면 다음 저장 시 갱신한다.
 

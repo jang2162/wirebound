@@ -5,7 +5,7 @@ body { margin: 0; font: 14px/1.5 system-ui, sans-serif; color: #1f2937; }
 [data-wb-component="Page"] { padding: 12px; }
 [data-wb-component="Slot"] { flex: 1; padding: 12px; }
 [data-wb-component="Tree"] { width: 200px; list-style: none; margin: 0; padding: 12px; }
-[data-wb-component="List"] { width: 100%; border-collapse: collapse; }
+[data-wb-component="DataGrid"] [data-wb-part="table"] { width: 100%; border-collapse: collapse; }
 [data-wb-part="cell"] { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; }
 [data-wb-part="header"] [data-wb-part="cell"] { background: #f9fafb; font-weight: 600; }
 [data-wb-component="Field"] { display: inline-flex; gap: 6px; align-items: center; margin-right: 12px; }
