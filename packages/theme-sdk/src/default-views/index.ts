@@ -8,7 +8,18 @@
  */
 import type { View } from '../types'
 import { actionCssBlocks, ButtonView, LinkView } from './action'
-import { dataCssBlocks, KeyValueView, ListView, TreeView } from './data'
+import {
+  dataCssBlocks,
+  DataGridView,
+  GridCellView,
+  GridColumnGroupView,
+  GridColumnView,
+  GridRowView,
+  KeyValueView,
+  PaginationView,
+  TreeView,
+} from './data'
+export { DATAGRID_FIXED_VAR, DATAGRID_LEFT_VAR, dataGridTableAttrs, paginationRange } from './data'
 import { DividerView, documentCssBlocks, MediaView, PlaceholderView, TextView } from './document'
 import {
   AffixView,
@@ -38,7 +49,12 @@ export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({
   Card: CardView,
   Tabs: TabsView,
   TabPanel: TabPanelView,
-  List: ListView,
+  DataGrid: DataGridView,
+  GridColumnGroup: GridColumnGroupView,
+  GridColumn: GridColumnView,
+  GridRow: GridRowView,
+  GridCell: GridCellView,
+  Pagination: PaginationView,
   Tree: TreeView,
   KeyValue: KeyValueView,
   SearchForm: SearchFormView,
@@ -70,7 +86,7 @@ export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({
  */
 const LONG_WORD_CSS = `[data-wb-component="Text"],
 [data-wb-component="KeyValue"],
-[data-wb-component="List"] {
+[data-wb-component="DataGrid"] {
   overflow-wrap: anywhere;
 }`
 

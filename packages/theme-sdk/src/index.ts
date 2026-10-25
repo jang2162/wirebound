@@ -19,8 +19,12 @@ export { markAttr, MARKED_PROPS, propMarks, STATE_ARIA, stateAria, type MarkKind
 export { Focus, markerAttrs, Root } from './root'
 export { Zone } from './zone'
 export {
+  DATAGRID_FIXED_VAR,
+  DATAGRID_LEFT_VAR,
+  dataGridTableAttrs,
   DEFAULT_VIEWS,
   defaultViewsCss,
+  paginationRange,
   FORMTABLE_COLUMNS_VAR,
   formTableCellsAttrs,
   SEARCHFORM_COLUMNS_VAR,
@@ -28,5 +32,16 @@ export {
   TEXTAREA_ROWS_VAR,
 } from './default-views/index'
 export { pairRows, type PairCell } from './pair-rows'
+export {
+  gridLayout,
+  type GridBodyCell,
+  type GridFixed,
+  type GridHeadCell,
+  type GridLayout,
+  type GridLeaf,
+  type GridLine,
+  type GridSelect,
+} from './grid-layout'
+export { GridProvider, useGridCell, useGridHead, useGridLayout, useGridRow } from './grid-context'
 export { FORM_LABEL_WIDTH_VAR, NODE_VAR_PREFIX, nodeVar, TREE_INDENT_VAR, WEIGHT_VAR } from './css-tools'
 export { PLACEHOLDER_VARS, placeholderVars } from './placeholder'

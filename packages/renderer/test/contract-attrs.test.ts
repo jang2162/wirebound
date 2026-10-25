@@ -25,8 +25,11 @@ const SOURCES = import.meta.glob('../src/**/*.{ts,tsx}', {
   import: 'default',
 }) as Record<string, string>
 
-/** 렌더러가 노드 루트에 싣는 속성 전부(`WbAttrs`). */
-const CONTRACT_ATTRS = ['data-wb-id', 'data-wb-component', 'data-wb-variant', 'data-wb-state']
+/**
+ * 렌더러가 노드 루트에 싣는 속성 전부(`WbAttrs`). `data-wb-copy-of` 는 되풀이 행의 사본이 `data-wb-id` 대신 싣는 원본 id 다(설계 spec
+ * `docs/superpowers/specs/2026-10-25-grid-design.md` «1» «사본» — 정본 §6.1).
+ */
+const CONTRACT_ATTRS = ['data-wb-id', 'data-wb-copy-of', 'data-wb-component', 'data-wb-variant', 'data-wb-state']
 
 /**
  * 계약 밖인데 원문에 있어도 되는 것. **이름 있는 예외 셋이다.**
@@ -81,7 +84,7 @@ describe('렌더러의 노드 속성 계약', () => {
     expect(dataAttrs("// 글롭 예: src/*\nconst a = { 'data-wb-bad': '1' }\n/** 끝 */")).toEqual(['data-wb-bad'])
   })
 
-  it('src의 data-* 속성이 계약 넷과 이름 있는 예외뿐이다', () => {
+  it('src의 data-* 속성이 계약 다섯과 이름 있는 예외뿐이다', () => {
     const offenders: string[] = []
     let scanned = 0
 
@@ -99,7 +102,7 @@ describe('렌더러의 노드 속성 계약', () => {
     expect(offenders).toEqual([])
   })
 
-  it('계약 넷이 실제로 원문에 다 있다', () => {
+  it('계약 다섯이 실제로 원문에 다 있다', () => {
     // 계약이 줄어드는 방향도 본다. 어느 속성이 코드에서 사라지면 그것은 계약이 바뀐 것이고
     // 여기서 드러나야 한다.
     const found = new Set(Object.values(SOURCES).flatMap(dataAttrs))

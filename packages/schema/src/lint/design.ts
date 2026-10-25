@@ -420,7 +420,7 @@ function gridRowIssues(grid: WbNode, path: string, where: { pageId: string }): L
     const gap = readProp(row, 'kind') === 'gap'
     for (let line = 0; line < (gap ? 1 : countProp(row, 'repeat')); line++) lines.push({ row, index, gap })
   })
-  const covered = new Array<number>(lines.length).fill(0)
+  const covered = Array.from({ length: lines.length }, () => 0)
   const issues: LintIssue[] = []
   const flagged = new Set<WbNode>()
   lines.forEach(({ row, index, gap }, at) => {

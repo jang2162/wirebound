@@ -55,36 +55,177 @@ describe('SearchForm — collapsed', () => {
   })
 })
 
-describe('List — selectable · empty · loading', () => {
-  const plain: WbNode = { id: 'l', type: 'List', props: { items: 3, columns: ['이름', '상태'], pagination: true } }
+describe('DataGrid — 열 틀 · 사본 · 병합 머리 · 선택 · 번호 · 빈 결과 · 제 칸', () => {
+  const column = (id: string, label: string, props: Record<string, unknown> = {}, children?: WbNode[]): WbNode => ({
+    id,
+    type: 'GridColumn',
+    props: { label, ...props },
+    children: children ?? [{ id: `${id}t`, type: 'Text', props: { content: '홍길동' } }],
+  })
+  const grid = (props: Record<string, unknown>, columns: WbNode[], rows: WbNode[], zones: WbNode['zones'] = {}): WbNode => ({
+    id: 'g',
+    type: 'DataGrid',
+    props,
+    children: columns,
+    zones: { ...zones, rows },
+  })
+  const bodyRows = (el: Element) => Array.from(el.querySelectorAll(':scope > [data-wb-part="scroll"] > table > tbody > tr'))
 
-  it('selectable — 머리와 행마다 맨 앞에 체크 칸 · 쪽 번호 칸이 그만큼 넓다', () => {
-    const el = draw({ ...plain, props: { ...plain.props, selectable: true } })
-    expect(Array.from(el.querySelectorAll('tr')).map((tr) => tr.firstElementChild?.getAttribute('data-wb-cell') ?? null)).toEqual([
-      'check',
-      'check',
-      'check',
-      'check',
-      null,
+  it('되풀이 행 — 첫 줄이 행 노드 · 나머지는 사본(data-wb-copy-of) · 셀 틀 원본은 한 번만 data-wb-id · 사본의 글은 원본과 같다(Q4)', () => {
+    const el = draw(grid({}, [column('c1', '이름'), column('c2', '상태')], [{ id: 'r', type: 'GridRow', props: { repeat: 3 } }]))
+    const rows = bodyRows(el)
+    expect(rows.map((tr) => [tr.getAttribute('data-wb-id'), tr.getAttribute('data-wb-copy-of')])).toEqual([
+      ['r', null],
+      [null, 'r'],
+      [null, 'r'],
     ])
-    expect(parts(el, 'checkbox')).toHaveLength(4)
-    expect(parts(el, 'pagination')[0]!.getAttribute('colspan')).toBe('3')
+    expect(el.querySelectorAll('[data-wb-id="c1t"]')).toHaveLength(1)
+    expect(el.querySelectorAll('[data-wb-copy-of="c1t"]')).toHaveLength(2)
+    expect(rows[0]!.querySelector('[data-wb-id="c1t"]')).not.toBeNull()
+    expect(rows.map((tr) => Array.from(tr.children).map((td) => td.textContent))).toEqual([
+      ['홍길동', '홍길동'],
+      ['홍길동', '홍길동'],
+      ['홍길동', '홍길동'],
+    ])
+    // 사본도 노드 속성 · 표지가 같다 — 테마 CSS 가 같게 듣는다.
+    const copy = el.querySelector('[data-wb-copy-of="c1t"]')!
+    expect(copy.getAttribute('data-wb-component')).toBe('Text')
+    expect(copy.getAttribute('data-wb-variant')).toBe('body')
+    // `[data-wb-id]` 를 훑는 자리가 같은 노드를 둘로 세지 않는다.
+    const ids = Array.from(el.querySelectorAll('[data-wb-id]')).map((node) => node.getAttribute('data-wb-id'))
+    expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('selectable 이 꺼지면 체크 칸이 없다', () => {
-    expect(parts(draw(plain), 'checkbox')).toHaveLength(0)
+  it('사본의 뷰가 짓는 HTML id 가 안 겹친다 · 셀 틀 입력 조각의 접근 이름은 열 머리 이름(사본은 « (n행)»)', () => {
+    const field: WbNode = { id: 'f', type: 'Field', props: { label: '메모' }, children: [{ id: 'fi', type: 'Input' }] }
+    const el = draw(
+      grid(
+        {},
+        [column('c1', '단위기간명', {}, [{ id: 'in', type: 'Input' }]), column('c2', '비고', {}, [field])],
+        [{ id: 'r', type: 'GridRow', props: { repeat: 3 } }],
+      ),
+    )
+    const htmlIds = Array.from(el.querySelectorAll('[id]')).map((node) => node.id)
+    expect(htmlIds.length).toBeGreaterThan(0)
+    expect(new Set(htmlIds).size).toBe(htmlIds.length)
+    const names = Array.from(el.querySelectorAll('[data-wb-component="Input"]')).map((input) => input.getAttribute('aria-label'))
+    expect(names).toEqual(['단위기간명', '메모', '단위기간명 (2행)', '메모 (2행)', '단위기간명 (3행)', '메모 (3행)'])
   })
 
-  it('empty — 행 대신 «데이터가 없습니다» 한 줄이 모든 칸을 덮는다', () => {
-    const el = draw({ ...plain, props: { ...plain.props, empty: true, selectable: true } })
-    expect(el.querySelectorAll('tbody tr')).toHaveLength(1)
-    expect(parts(el, 'empty').map((cell) => [cell.textContent, cell.getAttribute('colspan')])).toEqual([['데이터가 없습니다', '3']])
+  it('두 단 병합 머리 — 묶음은 colspan · 묶음 아닌 열은 rowspan · scope', () => {
+    const group: WbNode = {
+      id: 'grp',
+      type: 'GridColumnGroup',
+      props: { label: '기간' },
+      children: [column('a', '시작'), column('b', '끝')],
+    }
+    const el = draw(
+      grid(
+        {},
+        [column('no', 'No', { numbering: 'desc' }, []), group, column('z', '상태')],
+        [{ id: 'r', type: 'GridRow', props: { repeat: 2 } }],
+      ),
+    )
+    const head = Array.from(el.querySelectorAll('thead > tr')).map((tr) =>
+      Array.from(tr.children).map(
+        (th) => `${th.textContent}:${th.getAttribute('colspan') ?? 1}×${th.getAttribute('rowspan') ?? 1}:${th.getAttribute('scope')}`,
+      ),
+    )
+    expect(head).toEqual([
+      ['No:1×2:col', '기간:2×1:colgroup', '상태:1×2:col'],
+      ['시작:1×1:col', '끝:1×1:col'],
+    ])
+    // 번호 열(desc) — 데이터 줄을 거꾸로 센다.
+    expect(bodyRows(el).map((tr) => tr.firstElementChild!.textContent)).toEqual(['2', '1'])
   })
 
-  it('loading — 칸마다 — 대신 막대', () => {
-    const el = draw({ ...plain, props: { ...plain.props, loading: true } })
-    expect(parts(el, 'skeleton')).toHaveLength(3 * 2)
+  it('체크 선택 — 머리 «모두 고르기» 체크 · 데이터 줄마다 체크 · 합계 줄은 빈 칸 · 생략 띠는 전폭 한 칸', () => {
+    const rows: WbNode[] = [
+      { id: 'r1', type: 'GridRow', props: { tone: 'selected' } },
+      { id: 'gap', type: 'GridRow', props: { kind: 'gap' } },
+      {
+        id: 'sum',
+        type: 'GridRow',
+        props: { kind: 'total' },
+        children: [{ id: 'k', type: 'GridCell', props: { span: 2 }, children: [{ id: 'kt', type: 'Text', props: { content: '합계' } }] }],
+      },
+    ]
+    const el = draw(grid({ select: 'check' }, [column('c1', '이름'), column('c2', '상태')], rows))
+    expect(el.querySelector('thead [data-wb-cell="select"] [data-wb-part="checkbox"]')).not.toBeNull()
+    expect(
+      bodyRows(el).map((tr) => Array.from(tr.children).map((td) => td.getAttribute('data-wb-cell') ?? td.getAttribute('data-wb-part'))),
+    ).toEqual([['select', 'template', 'template'], ['gap'], ['blank', 'own']])
+    expect(el.querySelector('[data-wb-part="gap"]')!.getAttribute('colspan')).toBe('3')
+    expect(el.querySelector('[data-wb-id="k"]')!.getAttribute('colspan')).toBe('2')
+    expect(el.querySelector('tr[data-wb-id="r1"]')!.getAttribute('data-wb-tone')).toBe('selected')
+  })
+
+  it('제 칸을 가진 행의 되풀이 — 칸도 사본 · 칸 몸통의 입력 조각은 그 칸이 덮는 열의 머리 이름', () => {
+    const own: WbNode = {
+      id: 'r',
+      type: 'GridRow',
+      props: { repeat: 2 },
+      children: [
+        { id: 'k1', type: 'GridCell', children: [{ id: 'k1i', type: 'Input' }] },
+        { id: 'k2', type: 'GridCell', children: [{ id: 'k2i', type: 'Select' }] },
+      ],
+    }
+    const el = draw(grid({}, [column('c1', '이름'), column('c2', '구분')], [own]))
+    const rows = bodyRows(el)
+    expect(rows[1]!.querySelector('[data-wb-copy-of="k1"]')!.tagName).toBe('TD')
+    expect(el.querySelectorAll('[data-wb-id="k1"]')).toHaveLength(1)
+    expect(
+      Array.from(el.querySelectorAll('[data-wb-component="Input"], [data-wb-component="Select"]')).map((n) => n.getAttribute('aria-label')),
+    ).toEqual(['이름', '구분', '이름 (2행)', '구분 (2행)'])
+  })
+
+  it('빈 상태 — 행 노드를 안 그리고 전폭 한 줄 «검색 결과가 없습니다.»(선택 칸까지)', () => {
+    const el = draw(
+      grid(
+        { empty: true, select: 'radio' },
+        [column('c1', '이름'), column('c2', '상태')],
+        [{ id: 'r', type: 'GridRow', props: { repeat: 5 } }],
+      ),
+    )
+    expect(bodyRows(el)).toHaveLength(1)
+    expect(parts(el, 'empty').map((cell) => [cell.textContent, cell.getAttribute('colspan')])).toEqual([['검색 결과가 없습니다.', '3']])
+    expect(el.querySelector('[data-wb-id="c1t"]')).toBeNull()
+  })
+
+  it('불러오는 중 — 칸마다 내용 대신 막대', () => {
+    const el = draw(
+      grid({ loading: true }, [column('c1', '이름'), column('c2', '상태')], [{ id: 'r', type: 'GridRow', props: { repeat: 2 } }]),
+    )
+    expect(parts(el, 'skeleton')).toHaveLength(2 * 2)
     expect(el.querySelector('tbody')!.textContent).toBe('')
+  })
+
+  it('고정 열 — 선택 칸을 센 왼쪽 칸에 data-wb-fixed(끝 칸 last) · 표에 고정 열 수', () => {
+    const el = draw(
+      grid({ select: 'check', fixedColumns: 2 }, [column('c1', '이름'), column('c2', '상태')], [{ id: 'r', type: 'GridRow' }]),
+    )
+    expect(el.querySelector('table')!.getAttribute('data-wb-fixed-columns')).toBe('2')
+    expect(
+      Array.from(el.querySelectorAll('tr')).map((tr) => Array.from(tr.children).map((cell) => cell.getAttribute('data-wb-fixed'))),
+    ).toEqual([
+      ['inside', 'last', null],
+      ['inside', 'last', null],
+    ])
+  })
+
+  it('바닥 구역의 페이지네이션 — 범위 글 · 지금 쪽(aria-current) · 행 수 셀렉트', () => {
+    const el = draw(
+      grid({}, [column('c1', '이름')], [], { footer: [{ id: 'pg', type: 'Pagination', props: { total: 72, pageSize: 50, page: 2 } }] }),
+    )
+    const bar = el.querySelector('[data-wb-id="pg"]')!
+    expect(bar.tagName).toBe('NAV')
+    expect(bar.getAttribute('aria-label')).toBe('쪽 넘김')
+    expect(parts(bar, 'range')[0]!.textContent).toBe('51 - 72 (총 72 항목 중)')
+    expect(parts(bar, 'page').map((page) => [page.textContent, page.getAttribute('aria-current')])).toEqual([
+      ['1', null],
+      ['2', 'page'],
+    ])
+    expect(parts(bar, 'sizeSelect')[0]!.textContent).toBe('50 ▼')
   })
 })
 
@@ -147,8 +288,20 @@ describe('기본 CSS', () => {
   })
 
   it('체크 칸 · 막대는 크기를 갖는다 — 빈 span 은 테마 없이 안 보인다', () => {
-    expect(block(':where([data-wb-component="List"] [data-wb-part="checkbox"])')).toMatch(/width: \d+px;/)
-    expect(block(':where([data-wb-component="List"] [data-wb-part="skeleton"])')).toMatch(/height: [\d.]+em;/)
+    expect(block(':where([data-wb-component="DataGrid"] :is([data-wb-part="checkbox"], [data-wb-part="radio"]))')).toMatch(/width: \d+px;/)
+    expect(block(':where([data-wb-component="DataGrid"] [data-wb-part="skeleton"])')).toMatch(/height: [\d.]+em;/)
+  })
+
+  it('찍는 판(<html data-wb-capture>)은 층 안의 !important 로 스크롤 상자를 풀고 고정 열을 놓는다', () => {
+    const css = defaultViewsCss()
+    const layer = css.slice(css.indexOf('@layer wb-capture {'))
+    expect(layer.length).toBeGreaterThan(0)
+    expect(layer).toContain(
+      ':where(html[data-wb-capture] [data-wb-component="DataGrid"] > [data-wb-part="scroll"]) {\n  overflow: visible !important;',
+    )
+    expect(layer).toContain(
+      ':where(html[data-wb-capture] [data-wb-component="DataGrid"] [data-wb-fixed]) {\n  position: static !important;',
+    )
   })
 })
 

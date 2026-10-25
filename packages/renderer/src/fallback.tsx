@@ -34,12 +34,15 @@ const messageStyle: CSSProperties = {
  */
 export function FallbackNode(props: {
   nodeId: string
+  /** 사본(되풀이 행의 둘째 줄부터)의 폴백이면 참 — id 를 `data-wb-copy-of` 로 단다(원본과 겹쳐 세지 않게). */
+  copy?: boolean
   /** 한국어 메시지. 사용자에게 그대로 보여도 된다. */
   message: string
   children?: ReactNode
 }): ReactElement {
+  const id = props.copy === true ? { 'data-wb-copy-of': props.nodeId } : { 'data-wb-id': props.nodeId }
   return (
-    <div data-wb-id={props.nodeId} data-wb-error={props.message} style={containerStyle}>
+    <div {...id} data-wb-error={props.message} style={containerStyle}>
       <span style={messageStyle}>{props.message}</span>
       {props.children}
     </div>

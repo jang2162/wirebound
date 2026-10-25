@@ -18,8 +18,11 @@ export type MarkKind = 'flag' | 'value'
 export const MARKED_PROPS: Readonly<Record<string, Readonly<Record<string, MarkKind>>>> = Object.freeze({
   Section: { compact: 'flag' },
   Flex: { direction: 'value', align: 'value', justify: 'value', wrap: 'flag' },
-  // `selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다 — 줄 · 카드 목록은 표지만 선다(spec 「6.1 노드 속성」).
-  List: { pagination: 'flag', selectable: 'flag' },
+  DataGrid: { select: 'value' },
+  // 열 폭(`size`)은 길이가 아니라 설계의 낱말이다(`Input.size` 와 같은 자세). 몸 칸도 칸 정렬 · 음영을 같은 이름으로 싣는다(SDK 기본 뷰의 `columnMarks`).
+  GridColumn: { required: 'flag', align: 'value', size: 'value', sort: 'value', tone: 'value', numbering: 'value' },
+  GridRow: { kind: 'value', tone: 'value' },
+  Pagination: { sizeSelect: 'flag', range: 'flag' },
   SearchForm: { collapsed: 'flag' },
   // 고정 폭(`size`)은 길이가 아니라 «짧은 칸 · 보통 · 긴 칸» 이라는 설계의 낱말이다 — 실제 길이는 테마가 정한다(`Section.compact` 와 같은 자세).
   Input: { kind: 'value', size: 'value' },
