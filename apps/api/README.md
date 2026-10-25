@@ -66,6 +66,20 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 옮기기 전 판을 바탕으로 한 편집이 엉뚱한 노드를 고치지 않고 `stale` 로 거절된다(그 번호의 `revisions` 행은 없다). 내리기는 이 꼴의 폼 표
 (노드 칸이 `id` · `type` · `children` 뿐이고 자식이 다 `Field`)를 풀고 푼 페이지의 번호를 또 올린다 — 사람이 지은 같은 꼴의 표도 풀린다.
 
+**`0032-list-data-grid` 는 문서를 판 5 로 올린다.** 판 4 문서는 `List` 가 없어도 전부 판 5 가 된다(런타임에 판 4 → 5 단계가 없어 판 4
+문서는 «지원하지 않는 문서 버전» 이다). `List` 는 같은 id 의 `DataGrid` 가 된다 — 열 이름마다 `GridColumn`(셀 틀 «—») · `items` 는
+`GridRow` 의 `repeat`(50 에서 자른다) · `pagination` 은 바닥의 `Pagination` · `selectable` 은 `select`(`check` · `none`) · `selected` ·
+`disabled` 는 행 꼴(`tone`). props 가 없던 `List` 는 옛 기본값(열 셋 · 5 줄 · 바)으로 짓는다. 별칭 · 표지 · 상태 보임 · 상호작용 · 머리
+구역은 그대로라 코멘트 · 번호가 안 끊긴다. `selectable` 을 바꾸던 `setProp` 만 `select` 로 옮기고, 다른 옛 prop 을 바꾸던 액션은 남아
+검증 경고(`invalid-interaction-prop`)가 그 자리를 말한다. 옮기는 자리는 `0028` 과 같다. `List` 를 옮긴 페이지만 `head_seq` ·
+`structure_seq` 를 올린다(`0031` 과 같은 까닭). 내리기는 `DataGrid` 를 `List` 로 다시 짓고(셀 틀 · 제 칸 · 열 묶음 · 바의 props 는
+버린다) 그리드 밖의 `Pagination` 을 걷는다.
+
+**`0032` 앞에 저장된 기본테마(1.6.0 이하)에 고정된 프로젝트는 그리드를 SDK 기본 모양(테두리 없는 표)으로 그린다** — 그 판은
+`DataGrid` 를 모른다. 프로젝트 설정에서 테마를 1.7.0 이상으로 올리면 기본테마 꼴이 된다. 그 판의 manifest 는 옛 `List` 를 선언하므로,
+내보내기(HTML 번들 · PPTX)는 저장된 패키지를 다시 읽을 때 카탈로그에 기대는 검사(없는 컴포넌트 · 그 컴포넌트의 변형 · 숨길 prop)를 안
+본다(`readWbtheme` 의 `stored`). 올리기 · 빌드 · 시딩은 그대로 엄격하다.
+
 **`migrate:down` 은 계정을 안 건드린다.** 시딩이 마이그레이션 **파일 안**이 아니라 CLI
 진입점에 있기 때문이다 — 계정을 마이그레이션 파일로 만들면 롤백이 남의
 계정을 지우게 된다(`src/db/seed-user.ts` 의 머리말이 그 판정을 든다).
