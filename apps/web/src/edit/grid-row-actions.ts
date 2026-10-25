@@ -34,7 +34,16 @@
  *
  * **순수하고 던지지 않는다** — 못 하면 `{ reason }`(`./paste-ops.ts` 의 `NodeEdit` 와 같은 꼴).
  */
-import { BODY_ZONE, MAX_OPS_PER_EDIT, applyOps, zoneList, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import {
+  BODY_ZONE,
+  MAX_OPS_PER_EDIT,
+  applyOps,
+  getByPointer,
+  zoneList,
+  type PageDocument,
+  type PatchOp,
+  type WbNode,
+} from '@wirebound/schema'
 import { gridLayout, type ViewItem } from '@wirebound/theme-sdk'
 import { insertNodeOps, propOps } from './ops'
 import { sameDocumentCopies, tooManyOpsNotice, type NodeEdit } from './paste-ops'
@@ -177,9 +186,10 @@ export function buildCellsOps(document: PageDocument, rowId: string, generate?: 
   const cells = sameDocumentCopies(plan.cells, generate)
   // 전제 — 칸 배열이 이미 있으면(빈 배열) 그 배열이 비었다. 배열이 없을 때는 첫 `add` 가 배열째 지어 리베이스의 전제(`store/anchored-ops.ts` 의
   // `premiseOf`)가 지킨다.
+  // 배열이 있는지는 포인터로 읽는다 — 몸통의 읽기는 `zoneList` 가 «없음» 과 «빈 배열» 을 같은 `[]` 로 낸다.
   const path = findNodePathSafely(document.root, rowId)
-  const row = findNodeSafely(document.root, rowId) as WbNode | undefined
-  const ops: PatchOp[] = path !== undefined && Array.isArray(row?.children) ? [{ op: 'test', path: `${path}/children`, value: [] }] : []
+  const listed = path !== undefined && Array.isArray(getByPointer(document, `${path}/children`))
+  const ops: PatchOp[] = listed ? [{ op: 'test', path: `${path}/children`, value: [] }] : []
   let running = document
   for (const [index, cell] of cells.entries()) {
     const step = insertNodeOps(running, rowId, index, cell, BODY_ZONE)
