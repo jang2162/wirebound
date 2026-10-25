@@ -53,6 +53,7 @@
  * **문서 옆 · 위의 바탕은 못 놓는 자리로 남긴다** — 놓다 마는 자리가 칸 안에 하나는 있어야 하고(Escape 말고), 문서가 칸보다 좁고 긴 판에서는
  * 옆 바탕의 페이지 끝이 화면 밖이라 미리보기 없이 놓이게 된다. 아래 바탕은 문서 끝이 보일 때만 드러나므로 미리보기가 늘 보인다.
  */
+import { BODY_ZONE } from '@wirebound/schema'
 import type { DropMiss } from '../drag/drag-debug'
 import { dropBand, type DropBand } from '../tree/tree-drop'
 import { EMPTY_ZONE_ATTR, EMPTY_ZONE_OF_ATTR } from './empty-zones'
@@ -86,6 +87,7 @@ export type CanvasHit =
   | { zone: { parentId: string; zone: string }; rect: Rect; layout: Layout }
   | { pageEnd: true; rect: Rect; layout: Layout }
   | { preview: true; rect: Rect; layout: Layout }
+  | { copy: true; rect: Rect; layout: Layout }
 
 /** 문서에서 읽는 노드의 사정 — 부르는 쪽이 스토어 문서로 답한다. 문서에 없는 id(합성의 유령 · 폴백)는 `null`. */
 export interface HitNode {
@@ -96,6 +98,13 @@ export interface HitNode {
 }
 
 const VERTICAL: Layout = { axis: 'y', reversed: false }
+
+/** 사본 위에서 끄는 포인터 곁에 서는 문장(`{ copy: true }` — `drag/use-placement.ts` 가 못 놓는 까닭으로 싣는다). 셀 틀에 놓을 자리는 첫 줄의 칸이다. */
+export const COPY_DROP_REFUSAL = '되풀이된 줄에는 놓을 수 없습니다 — 첫 행의 칸에 놓으세요'
+
+/** 렌더러가 사본 뿌리에 다는 표지 · SDK 기본 뷰가 틀 칸에 다는 열 표지(`packages/theme-sdk/src/default-views/data.tsx` 의 `columnOf`). */
+const COPY_OF_ATTR = 'data-wb-copy-of'
+const COLUMN_OF_ATTR = 'data-wb-column-of'
 
 /**
  * 상자 안 자리를 띠로. 축 방향으로 앞 25% · 뒤 25% · 가운데(받을 때만 — 아니면 반씩)는 트리 줄과 같은 셈이다(`tree/tree-drop.ts` 의
@@ -194,6 +203,14 @@ export function siblingRects(parent: Element, self: Element, view: Window): Rect
  * **빈 구역 칸 위면 `{ zone }` 이다**(`./empty-zones.tsx` — 끄는 동안만 서는 점선 칸). 칸은 노드가 아니라 그 구역 끝이 놓을 자리다. 칸의 부모 id 가
  * 문서에 없으면(`node` 가 `null`) 건너뛰고 위로 오른다.
  *
+ * **되풀이 줄의 사본 위면 `{ copy: true }` 다** — 사본(`data-wb-copy-of` — 렌더러가 그리드 행의 둘째 줄부터 그리는 원본의 그림)은 문서의 노드가 아니라 그
+ * «앞 · 뒤 · 안» 이 문서에 없는 자리다(한 노드의 되풀이 사이). 원본으로 읽으면 표시가 선 자리(사본)와 놓이는 자리(첫 줄)가 갈린다. 부르는 쪽이 못 놓는
+ * 까닭(«첫 행의 칸에 놓으세요»)을 말한다. 사본 안에는 `[data-wb-id]` 가 없으므로 포인터 밑에서 노드보다 사본 표지를 먼저 만나면 사본이다.
+ *
+ * **첫 줄 틀 칸(`td[data-wb-cell="template"]`)의 빈 자리는 그 열 셀 틀의 끝이다**(`{ zone }` — 칸의 `data-wb-column-of`). 칸 자신은 노드가 아니라
+ * 가장 가까운 노드가 행이고, 행 몸통은 칸만 받아 셀 틀에 놓을 자리가 칸 안 조각의 곁뿐이었다. 캔버스 누름이 그 자리를 열로 읽는 것과 같은 표지다
+ * (`./canvas.tsx` 의 `nodeIdAt`).
+ *
  * **배치 미리보기 위면 `{ preview: true }` 다**(`isPreview` — `./canvas-preview.ts` 의 id 머리) — 미리보기는 문서의 노드가 아니라 그 위의
  * 그림이라 대상도 · 그 부모의 «안» 도 아니다. 판정은 미리보기를 숨기고 재므로(`drag/use-placement.ts` 머리말 «판정은 미리보기를 뺀
  * 배치로») 보통은 안 잡힌다 — 잡히면 부르는 쪽이 보인 자리를 그대로 둔다.
@@ -231,6 +248,10 @@ export function canvasHitAt(
   const point = hostToFrame(hostPoint, frameRect, zoom)
   const under: unknown = doc.elementFromPoint(point.x, point.y)
   let cursor: Element | null = isElement(under) ? under : null
+  // 사본 안의 틀 칸도 `data-wb-column-of` 를 단다 — 열로 읽기 전에 사본인지 먼저 본다.
+  const copy = cursor?.closest(`[${COPY_OF_ATTR}],[data-wb-id]`) ?? null
+  if (copy !== null && copy.hasAttribute(COPY_OF_ATTR))
+    return { copy: true, rect: frameToHost(plain(copy.getBoundingClientRect()), frameRect, zoom), layout: VERTICAL }
   let found: { element: Element; id: string; info: HitNode } | null = null
   while (cursor !== null && doc.body.contains(cursor)) {
     const emptyZone = cursor.getAttribute(EMPTY_ZONE_ATTR)
@@ -238,6 +259,13 @@ export function canvasHitAt(
     if (emptyZone !== null && emptyOf !== null && node(emptyOf) !== null)
       return {
         zone: { parentId: emptyOf, zone: emptyZone },
+        rect: frameToHost(plain(cursor.getBoundingClientRect()), frameRect, zoom),
+        layout: VERTICAL,
+      }
+    const columnOf = cursor.getAttribute(COLUMN_OF_ATTR)
+    if (columnOf !== null && cursor.getAttribute('data-wb-cell') === 'template' && node(columnOf) !== null)
+      return {
+        zone: { parentId: columnOf, zone: BODY_ZONE },
         rect: frameToHost(plain(cursor.getBoundingClientRect()), frameRect, zoom),
         layout: VERTICAL,
       }
