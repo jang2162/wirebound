@@ -46,9 +46,10 @@ function draw(node: WbNode): Element {
 
 describe('번들의 뷰(공유 런타임)', () => {
   it.each([
-    ['List', undefined, { selectable: true }, 'TABLE', 'table', 'checkbox'],
-    ['List', 'compact', { loading: true }, 'TABLE', 'table', 'skeleton'],
-    ['List', 'featured', { selectable: true }, 'TABLE', 'table', 'checkbox'],
+    ['DataGrid', undefined, { select: 'check' }, 'DIV', 'default', 'checkbox'],
+    ['DataGrid', 'compact', { loading: true }, 'DIV', 'default', 'skeleton'],
+    ['DataGrid', 'featured', { select: 'radio' }, 'DIV', 'default', 'radio'],
+    ['Pagination', undefined, { total: 30 }, 'NAV', 'default', 'range'],
     [
       'KeyValue',
       undefined,
@@ -65,7 +66,12 @@ describe('번들의 뷰(공유 런타임)', () => {
       'filler',
     ],
   ] as const)('%s:%s %j → <%s data-wb-structure="%s"> · 조각 %s', (type, variant, props, tag, structure, part) => {
-    const root = draw({ id: 'n', type, ...(variant === undefined ? {} : { variant }), props } as WbNode)
+    // 그리드는 열 하나 · 행 둘을 들고 선다 — 막대 · 라디오는 몸 줄에 선다.
+    const parts =
+      type === 'DataGrid'
+        ? { children: [{ id: 'c', type: 'GridColumn' }], zones: { rows: [{ id: 'r', type: 'GridRow', props: { repeat: 2 } }] } }
+        : {}
+    const root = draw({ id: 'n', type, ...(variant === undefined ? {} : { variant }), props, ...parts } as WbNode)
     expect(root.tagName).toBe(tag)
     expect(root.getAttribute('data-wb-structure')).toBe(structure)
     if (part !== null) expect(root.querySelector(`[data-wb-part="${part}"]`)).not.toBeNull()

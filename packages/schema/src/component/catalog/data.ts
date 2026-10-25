@@ -30,6 +30,8 @@ export const DataGridDef = defineComponent({
   ],
   summary: (props) => joined(selectWord(props.select), fixedWord(props.fixedColumns)),
   states: ['empty', 'loading'],
+  // 빈 상태는 행을 안 그리고 불러오는 중은 칸 내용(셀 틀 · 제 칸) 대신 막대다 — 그 안을 펼쳐 보일 때는 두 상태를 끈 판으로 그린다.
+  reveal: (props, at) => (at.zone === 'rows' || at.zone === 'body' ? { ...props, empty: false, loading: false } : props),
   // 결과 머리줄(«검색결과 총 N건» · 엑셀 다운로드 단추) → 열 → 행 → 바닥(페이지네이션 바). 둘 다 비면 머리줄째 없다.
   zones: [
     { name: 'headStart', label: '머리 왼쪽' },

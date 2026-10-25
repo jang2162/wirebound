@@ -5,8 +5,9 @@ description: wirebound 설계서 테마를 짠다 — 컴포넌트 뷰(tsx) · C
 
 # wirebound 테마 작성 지침
 
-이 프로젝트는 wirebound 설계서의 **테마**다. 설계서의 페이지는 컴포넌트 노드의 트리이고(카탈로그 30 종 — `Page` · `Slot` ·
-`Section` · `Flex` · `Grid` · `Card` · `Tabs` · `TabPanel` · `List` · `Tree` · `KeyValue` · `SearchForm` · `EntryForm` · `FormTable` · `Field` ·
+이 프로젝트는 wirebound 설계서의 **테마**다. 설계서의 페이지는 컴포넌트 노드의 트리이고(카탈로그 35 종 — `Page` · `Slot` ·
+`Section` · `Flex` · `Grid` · `Card` · `Tabs` · `TabPanel` · `DataGrid` · `GridColumnGroup` · `GridColumn` · `GridRow` · `GridCell` ·
+`Pagination` · `Tree` · `KeyValue` · `SearchForm` · `EntryForm` · `FormTable` · `Field` ·
 `Input` · `TextArea` · `Select` · `DateInput` · `TimeInput` · `CheckboxGroup` · `RadioGroup` · `Chip` · `Affix` · `Button` ·
 `Link` · `Text` · `Media` · `Divider` · `Placeholder`), 테마는 컴포넌트마다 **뷰**(React 컴포넌트)와 CSS 를 낸다. 카탈로그와 각
 컴포넌트의 props 는 wirebound 가 정한다 — 테마는 컴포넌트나 props 를 더할 수 없고, 어떻게 보이는지만 정한다.
@@ -39,10 +40,10 @@ npm run typecheck
 ```tsx
 import { Focus, Root, useToken, view } from '@wirebound/theme-sdk'
 
-export const ListView = view(({ props, variant, states, children }) => {
+export const CardView = view(({ props, variant, states, children }) => {
   const density = useToken('density')
   return (
-    <Root as="section" className={`list list--${density}`} marker={{ placement: 'top-end', offset: [4, -8] }}>
+    <Root as="section" className={`card card--${density}`} marker={{ placement: 'top-end', offset: [4, -8] }}>
       <header>{String(props.title ?? '')}</header>
       <Focus>{variant === 'cards' ? <div className="cards">…</div> : <table>…</table>}</Focus>
     </Root>
@@ -52,12 +53,13 @@ export const ListView = view(({ props, variant, states, children }) => {
 
 - 뷰가 받는 것: `props`(기본값이 채워진 카탈로그 props) · `states`(`disabled` · `loading` 처럼 참인 상태 이름들) ·
   `variant`(노드의 variant — 테마에 없는 값이면 그 컴포넌트의 `defaultVariant`) · `children`(이미 그린 몸통의 자식) · `zones`(이름 붙은
-  구역마다 그린 것 — 빈 구역은 `null`) · `items`(몸통 자식 하나씩 — `{ nodeId, index, element, content }`) · `slot`(`Slot` 에 들어갈 내용) ·
+  구역마다 그린 것 — 빈 구역은 `null`) · `items`(몸통 자식 하나씩 — `{ nodeId, type, index, props, element, content, items, copy }`) ·
+  `zoneItems`(이름 붙은 구역의 자식 하나씩 — 구역 이름 → `items` 와 같은 꼴) · `slot`(`Slot` 에 들어갈 내용) ·
   `nodeId` · `type` · `field`(`Field` 값 칸의 입력 조각일 때만 — `{ name, required }`: 조각이 하나면 라벨, 여럿이면 «라벨 + 별칭(없으면 차례)».
   입력 조각의 뷰를 지으면 `name` 을 접근 이름(`aria-label`)으로, `required` 면 `aria-required` 를 단다 — 입력 칸만 훑는 보조 기술은 필드의
   묶음 이름을 지나지 않는다).
 - **구역은 `<Zone name>` 으로 둔다.** 카드의 제목 옆(`titleSide`) · 머리 오른쪽(`headEnd`) · 바닥(`footer`), 검색폼 · 입력폼의 단추
-  (`actions`), 목록의 머리 왼쪽 · 오른쪽(`headStart` · `headEnd`)은 사람이 놓는 노드가 든 자리다 — `<Zone name="footer" as="div"
+  (`actions`), 그리드의 머리 왼쪽 · 오른쪽(`headStart` · `headEnd`) · 행(`rows`) · 바닥(`footer`)은 사람이 놓는 노드가 든 자리다 — `<Zone name="footer" as="div"
   data-wb-part="footer" />` 가 그 구역을 그리고 `data-wb-zone` 을 펴며, 비었으면 감싸는 요소째 안 그린다. `Zone` 을 안 쓰는 뷰는 그
   구역의 노드를 화면에서 잃는다 — `wb-theme check` 가 «내용이 든 구역을 그리지 않았습니다» 로 막는다. 단추 글자(«검색» · «저장»)를 뷰에
   박지 않는다 — 단추는 문서의 노드다.
@@ -69,8 +71,10 @@ export const ListView = view(({ props, variant, states, children }) => {
 - **뷰는 `view(…)` 로 짠다.** `Root` 는 `view` 가 내린 노드의 props · 상태로 **prop 표지**와 접근성 속성을 함께 단다 — `view` 를
   거치지 않은 맨 함수 뷰에는 안 선다.
   - prop 표지: 화면을 바꾸는 불리언 · enum prop 가운데 상태 · 변형으로 실리지 않는 것. 불리언은 참일 때 `data-wb-<prop>=""`, enum
-    은 늘 `data-wb-<prop>="<값>"` — `Section` 의 `data-wb-compact`(좁은 여백) · `SearchForm` 의 `data-wb-collapsed`(접힘) · `List` 의
-    `data-wb-selectable` · `data-wb-pagination` · `Media` 의 `data-wb-kind` · `data-wb-ratio` · `Flex` 의 `data-wb-direction` ·
+    은 늘 `data-wb-<prop>="<값>"` — `Section` 의 `data-wb-compact`(좁은 여백) · `SearchForm` 의 `data-wb-collapsed`(접힘) · `DataGrid` 의
+    `data-wb-select` · `GridColumn` 의 `data-wb-required` · `data-wb-align` · `data-wb-size` · `data-wb-sort` · `data-wb-tone` ·
+    `data-wb-numbering` · `GridRow` 의 `data-wb-kind` · `data-wb-tone` · `Pagination` 의 `data-wb-size-select` · `data-wb-range` ·
+    `Media` 의 `data-wb-kind` · `data-wb-ratio` · `Flex` 의 `data-wb-direction` ·
     `data-wb-align` · `data-wb-justify` · `data-wb-wrap` · `Input` 의 `data-wb-kind` · `data-wb-size` · `Select` 의 `data-wb-size` ·
     `Chip` 의 `data-wb-removable` · `Affix` 의 `data-wb-tone`.
   - 상태(`data-wb-state~='disabled'`)가 참이면 `aria-disabled` · `loading` 은 `aria-busy` · `invalid` 는 `aria-invalid` · `required` 는
@@ -90,9 +94,14 @@ export const ListView = view(({ props, variant, states, children }) => {
   요소를 끼우거나 빈 쌍을 `cells` 밖에 두거나 조각 이름을 바꾸면 격자가 깨진다). `cells` 조각이 없거나 · 칸 · 빈 쌍이 그 직계가 아니거나 · 빈 쌍에
   두 조각이 없거나 · 빈 쌍 수가 그 셈과 다르면 `wb-theme check` 가 막는다. 라벨 칸 폭은 `--wb-form-labelWidth` 로 싣는다.
   - CSS 는 `[data-wb-component='Section'][data-wb-compact] { … }` 처럼 겨냥한다. 기본 뷰도 그 값으로 모양을 바꾼다(접힌 검색은
-    머리줄 `toggle` 조각만 남고 자식이 빠진다 · 표 구조 목록의 `selectable` 은 `checkbox` 조각) — 테마 CSS 가 여백 · 색을 정한다.
-  - **`List.selectable` 은 표 구조(`data-wb-structure="table"`)에서만 뜻이 있다.** 줄 · 카드 목록 구조의 뷰는 표지 `data-wb-selectable` 만 서고
-    체크 칸이 없다 — 그 구조에 체크 칸이 필요하면 뷰가 직접 그린다.
+    머리줄 `toggle` 조각만 남고 자식이 빠진다 · 그리드의 `select` 는 선택 칸) — 테마 CSS 가 여백 · 색을 정한다.
+- **`DataGrid` 는 열 노드 × 행 노드다.** 몸통이 열(`GridColumn` — 머리 칸 + 셀 틀 · `GridColumnGroup` — 병합 머리)이고 «행» 구역이 행
+  (`GridRow` — 되풀이 수 · 행 꼴, 칸 `GridCell` 을 가지면 제 칸)이다. 그리드 뷰가 `gridLayout(items, zoneItems.rows, props)`(SDK)로 머리 줄 ·
+  몸 줄을 셈해 `<GridProvider value={layout}>` 로 내리고, **행 · 열 · 칸 뷰는 `useGridRow(nodeId)` · `useGridHead(nodeId)` ·
+  `useGridCell(nodeId)` 로 제 몫을 읽는다** — 뷰가 받은 `nodeId` 를 그대로 넘긴다(뷰 함수의 몸은 제 노드 문맥 밖에서 돈다). 되풀이 줄의 둘째부터는
+  사본이다 — 행 뷰는 `<Root as="tr" copy>` 로, 셀 틀 · 제 칸은 `item.copy(줄 번호)` 로 그린다(사본은 `data-wb-id` 대신 `data-wb-copy-of`). 머리 칸 ·
+  칸의 `colSpan` · `rowSpan` 을 빠뜨리거나 칸을 빼거나 `Root` 를 줄마다 그리면 `wb-theme check` 가 막는다. 표는 `scroll` 조각 안에 두고
+  `table` 조각에 `dataGridTableAttrs(layout)` 를 편다 — 결과 머리줄 · 바닥은 스크롤 밖이다.
 - **첫 렌더에 `Root` 를 반환한다.** 이펙트 · 상태를 기다렸다가 `Root` 를 그리면 누락으로 판정되어 그 노드는 SDK 기본 뷰로
   그려지고 콘솔에 경고가 난다.
 - **포커스 받는 요소는 단추(`<button>`) · 링크(`<a href>`) · 입력 칸(`input` · `select` · `textarea`)만 쓴다.** 에디터 캔버스는 포커스가 선 요소가 단추 · 링크가 아니면 입력 표면으로 보고 단축키 · 노드 복사를 안 받는다 — `tabIndex` 를 단 `div` · `summary` · `controls` 를 켠 `video` · `audio` 를 누른 뒤에는 Delete · Cmd+C · Cmd+D 가 안 서고 통지도 없다(닫힌 shadow 안의 입력과 `tabindex` 만 단 요소를 DOM 으로 못 가려서다). 탭 · 접힘 같은 위젯도 `<button>` 으로 짜고 `role="tab"` 은 그 단추에 얹는다. `wb-theme check` 가 갤러리 칸에서 이런 요소를 찾아 경고한다(오류가 아니라 종료 코드에 안 든다).
@@ -124,7 +133,7 @@ export const ListView = view(({ props, variant, states, children }) => {
 
 ## manifest
 
-`theme.config.ts` 의 `defineManifest({ … })`. `build` 가 검증한다 — 아래 규칙을 어기면 이유와 자리(`components.List.variants.1`)를
+`theme.config.ts` 의 `defineManifest({ … })`. `build` 가 검증한다 — 아래 규칙을 어기면 이유와 자리(`components.DataGrid.variants.1`)를
 말한다.
 
 | 필드 | 규칙 |

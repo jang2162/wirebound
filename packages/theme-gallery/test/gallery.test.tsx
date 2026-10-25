@@ -23,7 +23,7 @@ const manifest = {
   sdk: '^1.0.0',
   tokens: { items: {} },
   components: {
-    List: {
+    DataGrid: {
       variants: [
         { id: 'table', label: '표' },
         { id: 'cards', label: '카드' },
@@ -40,8 +40,8 @@ describe('갤러리', () => {
   })
   it('표본이 스키마 검증을 지난다 — 갤러리가 폴백을 그리지 않게', () => {
     for (const [type, samples] of Object.entries(GALLERY_SAMPLES)) {
-      for (const { label, node, within } of samples) {
-        const placed = within === undefined ? node : { ...within, children: [node] }
+      for (const { label, node, within, place } of samples) {
+        const placed = place !== undefined ? place(node) : within === undefined ? node : { ...within, children: [node] }
         const root = placed.type === 'Page' ? placed : { id: 'root', type: 'Page', children: [placed] }
         // Slot 은 레이아웃에만 선다. 칸의 문서는 둘 다 Page 뿌리라 렌더러에는 같다.
         const validate = node.type === 'Slot' ? validateLayout : validatePage
@@ -52,16 +52,16 @@ describe('갤러리', () => {
   })
   it('선언된 variant 마다 한 번씩 — 선언이 없으면 한 번', () => {
     const items = galleryItems(defineTheme({ manifest, views: {} }))
-    const list = items.filter((i) => i.type === 'List')
+    const list = items.filter((i) => i.type === 'DataGrid')
     expect(new Set(list.map((i) => i.variant))).toEqual(new Set(['table', 'cards']))
-    expect(list).toHaveLength(2 * GALLERY_SAMPLES.List!.length)
+    expect(list).toHaveLength(2 * GALLERY_SAMPLES.DataGrid!.length)
     expect(items.filter((i) => i.type === 'Tabs').every((i) => i.variant === undefined)).toBe(true)
   })
   it('테마 뷰로 그리고 항목마다 이름표를 단다', () => {
-    const List = view(({ variant }) => <Root as="section" className={`v-${variant}`} />)
-    const { container, getAllByText } = render(<ThemeGallery theme={defineTheme({ manifest, views: { List } })} tokens={{}} />)
+    const DataGrid = view(({ variant }) => <Root as="section" className={`v-${variant}`} />)
+    const { container, getAllByText } = render(<ThemeGallery theme={defineTheme({ manifest, views: { DataGrid } })} tokens={{}} />)
     expect(container.querySelector('.v-cards')).not.toBeNull()
-    expect(getAllByText(/List · 카드/).length).toBeGreaterThan(0)
+    expect(getAllByText(/DataGrid · 카드/).length).toBeGreaterThan(0)
   })
   it('기본 뷰만으로 그려도 폴백이 없다 — 표본 전부가 그려진다', () => {
     const { container } = render(<ThemeGallery theme={defineTheme({ manifest, views: {} })} tokens={{}} />)
@@ -71,10 +71,10 @@ describe('갤러리', () => {
   })
   it('뷰 하나가 던져도 다른 항목은 그린다', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const List = view(() => {
+    const DataGrid = view(() => {
       throw new Error('boom')
     })
-    const { container } = render(<ThemeGallery theme={defineTheme({ manifest, views: { List } })} tokens={{}} />)
+    const { container } = render(<ThemeGallery theme={defineTheme({ manifest, views: { DataGrid } })} tokens={{}} />)
     expect(container.querySelector('[data-wb-error]')).not.toBeNull()
     expect(container.querySelector('[data-wb-component="Button"]')).not.toBeNull()
   })

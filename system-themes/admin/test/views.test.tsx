@@ -37,9 +37,16 @@ function draw(node: WbNode): Element {
 }
 
 describe('표의 기준 상자', () => {
-  it('List — 루트가 표 전체 — 외곽선 · 마커의 기준 상자가 루트다', () => {
-    const el = draw({ id: 'list', type: 'List', props: { items: 3, columns: ['이름', '상태'], selectable: true } })
-    expect(el.tagName).toBe('TABLE')
+  it('DataGrid — 루트가 머리줄 · 표 · 바닥 전체 — 외곽선 · 마커의 기준 상자가 루트다', () => {
+    const el = draw({
+      id: 'grid',
+      type: 'DataGrid',
+      props: { select: 'check' },
+      children: [{ id: 'c', type: 'GridColumn', props: { label: '이름' } }],
+      zones: { rows: [{ id: 'r', type: 'GridRow', props: { repeat: 3 } }], footer: [{ id: 'pg', type: 'Pagination' }] },
+    })
+    expect(el.tagName).toBe('DIV')
+    expect(el.querySelector(':scope > [data-wb-part="scroll"] > table')).not.toBeNull()
     expect(focusElement(el)).toBe(el)
     expect(el.hasAttribute('data-wb-marker')).toBe(false)
   })

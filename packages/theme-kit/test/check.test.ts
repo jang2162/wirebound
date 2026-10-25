@@ -96,26 +96,28 @@ describe('checkTheme', () => {
   })
 
   it('던지는 뷰는 그 컴포넌트의 칸마다 폴백 오류로 선다 — 다른 컴포넌트는 깨끗하다', async () => {
+    // 다른 표본 안에 안 서는 타입(트리)으로 잰다 — 링크 · 단추는 그리드 표본의 셀 틀에도 서서 그 칸도 폴백이 된다.
     const manifest: ThemeManifest = {
       ...BASE,
       components: {
-        Link: {
+        Tree: {
           variants: [
-            { id: 'primary', label: '주' },
-            { id: 'ghost', label: '투명' },
+            { id: 'indent', label: '들여쓰기' },
+            { id: 'lines', label: '선' },
           ],
-          defaultVariant: 'primary',
+          defaultVariant: 'indent',
         },
       },
     }
-    const report = await checkTheme(files(manifest, { views: `{ Link: () => { throw new Error('링크가 터졌다') } }` }))
+    const report = await checkTheme(files(manifest, { views: `{ Tree: () => { throw new Error('트리가 터졌다') } }` }))
     const fallbacks = report.errors.filter((error) => error.source === 'fallback')
-    const linkItems = galleryItems({ manifest, views: DEFAULT_VIEWS }).filter((item) => item.type === 'Link')
+    const treeItems = galleryItems({ manifest, views: DEFAULT_VIEWS }).filter((item) => item.type === 'Tree')
+    expect(treeItems.length).toBeGreaterThan(1)
     expect(fallbacks.map((error) => `${error.type}/${error.variant}/${error.label}`).sort()).toEqual(
-      linkItems.map((item) => `Link/${item.variant}/${item.sample.label}`).sort(),
+      treeItems.map((item) => `Tree/${item.variant}/${item.sample.label}`).sort(),
     )
-    expect(fallbacks.every((error) => error.message.includes('링크가 터졌다'))).toBe(true)
-    expect(new Set(report.errors.map((error) => error.type))).toEqual(new Set(['Link']))
+    expect(fallbacks.every((error) => error.message.includes('트리가 터졌다'))).toBe(true)
+    expect(new Set(report.errors.map((error) => error.type))).toEqual(new Set(['Tree']))
   })
 
   /**
@@ -266,6 +268,68 @@ describe('checkTheme', () => {
       ].map(([label, id]) => [label, `FormTable 뷰가 cells 조각을 그리지 않았습니다 — 쌍 격자는 그 조각의 직계 칸에 섭니다(노드 ${id})`]),
     )
     expect(report.errors.filter((error) => error.source !== 'pairs')).toEqual([])
+  })
+
+  /**
+   * SDK 기본 `GridRowView` 와 같은 차례로 줄 · 칸을 그리는 행 뷰(번들 원문) — 한 곳만 바꾼다. `rootEveryLine` 은 줄마다 원본 `Root`(사본 없이) ·
+   * `templateOriginal` 은 셀 틀을 줄마다 원본으로 · `dropLast` 는 줄마다 끝 칸을 뺀다.
+   */
+  function gridRowView(change: { rootEveryLine?: boolean; templateOriginal?: boolean; dropLast?: boolean } = {}): string {
+    const template =
+      change.templateOriginal === true ? 'c.leaf.item.content' : 'c.origin ? c.leaf.item.content : c.leaf.item.copy(line.number).content'
+    return `{ GridRow: rt.sdk.view(({ nodeId, items }) => {
+      const lines = rt.sdk.useGridRow(nodeId) || []
+      const own = new Map(items.map((i) => [i.nodeId, i]))
+      const cell = (c, line, k) =>
+        c.kind === 'own' ? h(rt.react.Fragment, { key: k }, c.copy ? (own.get(c.item.nodeId) || c.item).copy(line.number).element : (own.get(c.item.nodeId) || c.item).element)
+        : c.kind === 'template' ? h('td', { key: k }, ${template})
+        : c.kind === 'gap' ? h('td', { key: k, colSpan: c.colSpan })
+        : h('td', { key: k })
+      return h(rt.react.Fragment, null, lines.map((line) => {
+        const cells = line.cells.map((c, k) => cell(c, line, k))
+        return h(Root, { key: line.number, as: 'tr', copy: ${change.rootEveryLine === true ? 'false' : 'line.line > 0'} }, ${change.dropLast === true ? 'cells.slice(0, -1)' : 'cells'})
+      }))
+    }) }`
+  }
+  const gridErrors = (report: Awaited<ReturnType<typeof checkTheme>>) =>
+    report.errors.filter((error) => error.source === 'grid').map((error) => `${error.label} | ${error.message}`)
+
+  it('기본 뷰와 같은 차례로 그린 행 뷰는 깨끗하다 — 아래 넷의 대조', async () => {
+    const report = await checkTheme(files(BASE, { views: gridRowView() }))
+    expect(report.errors).toEqual([])
+  })
+
+  it('줄마다 원본 Root 를 그리는 행 뷰는 오류로 선다 — 되풀이 행이 data-wb-id 를 여럿 싣는다', async () => {
+    const errors = gridErrors(await checkTheme(files(BASE, { views: gridRowView({ rootEveryLine: true }) })))
+    expect(errors).toContain(
+      'DataGrid — 흔한 목록(No · 링크 · 두 줄 · 단추 · 머리줄 · 바) | DataGrid 행(노드 dg1-r)이 data-wb-id 5 개 · 사본 0 개입니다 — 줄 5 개면 원본 1 · 사본 4(Root copy)',
+    )
+    expect(errors.every((line) => line.includes('data-wb-id'))).toBe(true)
+  })
+
+  it('셀 틀을 줄마다 원본으로 그리는 행 뷰는 오류로 선다 — 같은 노드가 줄마다 data-wb-id 로 선다', async () => {
+    const errors = gridErrors(await checkTheme(files(BASE, { views: gridRowView({ templateOriginal: true }) })))
+    expect(errors).toContain(
+      'DataGrid — 흔한 목록(No · 링크 · 두 줄 · 단추 · 머리줄 · 바) | DataGrid 셀 틀(노드 dg1-link)이 data-wb-id 5 개 · 사본 0 개입니다 — 셀 틀 칸 5 개면 원본 1 · 사본 4(item.copy)',
+    )
+    expect(errors.every((line) => line.includes('셀 틀'))).toBe(true)
+  })
+
+  it('칸 하나를 빼는 행 뷰는 오류로 선다 — 몸 줄의 칸 수 · colspan 합이 gridLayout 셈과 다르다', async () => {
+    const errors = gridErrors(await checkTheme(files(BASE, { views: gridRowView({ dropLast: true }) })))
+    expect(errors).toContain(
+      'DataGrid — 2단 병합 머리 · 정렬 · 필수 | DataGrid 몸 줄 1(행 dg3-r)이 칸 3 개 · colspan 합 3 입니다 — gridLayout 셈은 4 개 · 4(노드 dg3)',
+    )
+    expect(errors.every((line) => line.includes('몸 줄') || line.includes('사본'))).toBe(true)
+  })
+
+  it('colspan · rowspan 을 안 싣는 머리 칸 뷰는 오류로 선다 — 병합 머리 표본만', async () => {
+    const views = `{ GridColumnGroup: rt.sdk.view(({ props }) => h(Root, { as: 'th' }, String(props.label))) }`
+    const errors = gridErrors(await checkTheme(files(BASE, { views })))
+    expect(errors).toEqual([
+      'DataGrid — 2단 병합 머리 · 정렬 · 필수 | DataGrid 머리 줄 1 이 칸 3 개 · colspan 합 3 입니다 — gridLayout 셈은 3 개 · 4(노드 dg3)',
+      'GridColumnGroup — 열 둘을 묶은 머리 | DataGrid 머리 줄 1 이 칸 1 개 · colspan 합 1 입니다 — gridLayout 셈은 1 개 · 2(노드 cg-host)',
+    ])
   })
 
   it('Root 를 안 그리는 뷰는 콘솔 오류로 선다', async () => {

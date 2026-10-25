@@ -2,7 +2,16 @@ import { defineTheme } from '@wirebound/theme-sdk'
 import manifest from '../theme.config'
 import './theme.css'
 import { ButtonView, LinkView } from './views/action'
-import { KeyValueView, ListView, TreeView } from './views/data'
+import {
+  DataGridView,
+  GridCellView,
+  GridColumnGroupView,
+  GridColumnView,
+  GridRowView,
+  KeyValueView,
+  PaginationView,
+  TreeView,
+} from './views/data'
 import { DividerView, MediaView, PlaceholderView, TextView } from './views/document'
 import { EntryFormView, FieldView, FormTableView, SearchFormView } from './views/input'
 import { CardView, FlexView, GridView, PageView, SectionView, SlotView, TabsView } from './views/structure'
@@ -18,7 +27,12 @@ export default defineTheme({
     Grid: GridView,
     Card: CardView,
     Tabs: TabsView,
-    List: ListView,
+    DataGrid: DataGridView,
+    GridColumnGroup: GridColumnGroupView,
+    GridColumn: GridColumnView,
+    GridRow: GridRowView,
+    GridCell: GridCellView,
+    Pagination: PaginationView,
     Tree: TreeView,
     KeyValue: KeyValueView,
     SearchForm: SearchFormView,

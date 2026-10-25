@@ -3,9 +3,15 @@ import { Fragment, useLayoutEffect, useRef, type CSSProperties, type ReactElemen
 import { nodeVar, partRule, TREE_INDENT_VAR, zeroRule } from '../css-tools'
 import { view } from '../define'
 import { GridProvider, useGridCell, useGridHead, useGridLayout, useGridRow } from '../grid-context'
-import { gridLayout, type GridFixed, type GridLayout, type GridLeaf, type GridSelect } from '../grid-layout'
+import { gridLayout } from '../grid-layout'
 import { Root } from '../root'
 import { Zone } from '../zone'
+
+// 배치의 타입 — 값에서 이끌어 쓴다(스타터 템플릿은 이 파일을 옮기며 SDK 의 값 이름만 import 한다 — `@wirebound/theme-kit` 의 `templateView`).
+type GridLayout = ReturnType<typeof gridLayout>
+type GridLeaf = GridLayout['leaves'][number]
+type GridFixed = GridLayout['head'][number][number]['fixed']
+type GridSelect = GridLayout['select']
 
 /** 고정 열 칸의 왼쪽 자리(px)를 나르는 변수 — 그리드 뷰의 레이아웃 이펙트가 앞 칸 폭의 합을 재어 싣는다(`useFixedColumns`). */
 export const DATAGRID_LEFT_VAR = nodeVar('datagrid', 'left')
@@ -402,6 +408,13 @@ export function dataCssBlocks(): string[] {
       'align-items: center;',
       'gap: 6px;',
     ]),
+    // 한 줄 조각(입력 · 셀렉트 · 날짜 · 시간 · 단추)은 칸 안에서 글을 안 꺾는다 — 표의 열 폭은 칸의 최소 폭으로 줄어드는데, 그리드 뿌리의 `overflow-wrap:
+    // anywhere`(긴 낱말)가 물려 내려와 그 최소 폭이 한 글자가 되어 «선택» 이 두 줄로 섰다(390 폭 · `wb-theme shots` 의 `wrapped`). 그 열이 넓어지고 표가
+    // 스크롤 상자 안에서 굴러간다.
+    zeroRule(
+      '[data-wb-component="DataGrid"] [data-wb-part="pieces"] > :is([data-wb-component="Input"], [data-wb-component="Select"], [data-wb-component="DateInput"], [data-wb-component="TimeInput"], [data-wb-component="Button"])',
+      ['white-space: nowrap;', 'overflow-wrap: normal;'],
+    ),
     zeroRule('[data-wb-component="DataGrid"] [data-wb-align="center"] > [data-wb-part="pieces"]', ['justify-content: center;']),
     zeroRule('[data-wb-component="DataGrid"] [data-wb-align="end"] > [data-wb-part="pieces"]', ['justify-content: flex-end;']),
     // 선택 칸은 내용 폭(1px — 표가 남는 폭을 다른 열에 준다) · 체크 상자 · 라디오. 강조 행은 켠 모양, 흐린 행은 끈 모양이다.

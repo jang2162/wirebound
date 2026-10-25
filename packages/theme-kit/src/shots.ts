@@ -75,6 +75,22 @@ export interface ShotWidthReport {
    * 아무것도 안 잰다 — 그 판을 문제로 세운다. 라벨이 값 위에 선 판(좁은 창)은 꼴이 맞아 여기 안 든다.
    */
   pairsOffGrid: { item: string | null; element: string }[]
+  /** 그리드의 잣대 셋(`measureGrids`). */
+  grids: ShotGrids
+}
+
+/**
+ * **그리드의 잣대 셋** — ① 고정 열이 스크롤 상자를 끝까지 굴려도 화면 자리가 그대로다(테마가 고정을 푼 폭 — 기본테마의 640 아래 — 은 안 잰다:
+ * `position` 이 `sticky` 인 칸만) ② 머리 · 칸 글이 제 칸 밖으로 안 나간다(글자 노드의 `Range` 끝 — 스크롤 상자 안이라 문서 넘침에 안 뜬다)
+ * ③ 찍는 판 표지(`<html data-wb-capture>` — PPTX 의 화면 그림)를 달면 그리드 안에 가로로 굴러가는 상자가 없고 표 전체 폭이 문서 폭에 든다. 잰 수가 0 이면 아무것도
+ * 안 잰 판이다(그리드 표본이 없거나 고정 열이 다 풀린 폭).
+ */
+export interface ShotGrids {
+  fixed: { item: string | null; element: string; before: number; after: number }[]
+  fixedMeasured: number
+  text: { item: string | null; element: string }[]
+  capture: { item: string | null; element: string; scrollWidth: number; clientWidth: number; tableRight: number; pageWidth: number }[]
+  captureMeasured: number
 }
 
 export interface ShotsReport {
@@ -178,7 +194,7 @@ function measure(expect: {
   onePieces: readonly string[]
   nodeId: string
   want: Record<string, string>
-}): Omit<ShotWidthReport, 'width' | 'pngs' | 'pageHeight' | 'consoleErrors'> {
+}): Omit<ShotWidthReport, 'width' | 'pngs' | 'pageHeight' | 'consoleErrors' | 'grids'> {
   const itemOf = (el: Element) => el.closest('[data-wb-gallery-item]')?.getAttribute('data-wb-gallery-item') ?? null
   const describe = (el: Element) => {
     const classes = typeof el.className === 'string' && el.className.trim() !== '' ? `.${el.className.trim().split(/\s+/).join('.')}` : ''
@@ -306,6 +322,79 @@ function measure(expect: {
   }
 }
 
+/** 페이지 안에서 돈다 — 그리드의 잣대 셋(`ShotGrids`). 굴린 스크롤 · 단 표지는 되돌린다(뒤에 찍는 PNG 가 안 바뀌게). */
+function measureGrids(): ShotGrids {
+  const itemOf = (el: Element) => el.closest('[data-wb-gallery-item]')?.getAttribute('data-wb-gallery-item') ?? null
+  const describe = (el: Element) => {
+    const id = el.getAttribute('data-wb-id') ?? el.getAttribute('data-wb-copy-of')
+    return `${el.tagName.toLowerCase()}${id === null ? '' : `[${id}]`}`
+  }
+  const grids = [...document.querySelectorAll('[data-wb-component="DataGrid"]')]
+  const own = (grid: Element, selector: string) =>
+    [...grid.querySelectorAll(selector)].filter((el) => el.closest('[data-wb-component="DataGrid"]') === grid)
+  const out: ShotGrids = { fixed: [], fixedMeasured: 0, text: [], capture: [], captureMeasured: 0 }
+  for (const grid of grids) {
+    const scroll = grid.querySelector(':scope > [data-wb-part="scroll"]')
+    if (scroll === null) continue
+    const fixed = own(grid, '[data-wb-fixed]').filter((cell) => getComputedStyle(cell).position === 'sticky')
+    if (fixed.length > 0 && scroll.scrollWidth > scroll.clientWidth + 1) {
+      const before = fixed.map((cell) => cell.getBoundingClientRect().left)
+      scroll.scrollLeft = scroll.scrollWidth
+      fixed.forEach((cell, at) => {
+        const after = cell.getBoundingClientRect().left
+        out.fixedMeasured += 1
+        if (Math.abs(after - before[at]!) > 1)
+          out.fixed.push({ item: itemOf(cell), element: describe(cell), before: Math.round(before[at]!), after: Math.round(after) })
+      })
+      scroll.scrollLeft = 0
+    }
+    for (const cell of own(grid, 'th, td')) {
+      const box = cell.getBoundingClientRect()
+      const texts = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT)
+      for (let node = texts.nextNode(); node !== null; node = texts.nextNode()) {
+        if ((node.textContent ?? '').trim() === '' || node.parentElement?.closest('th, td') !== cell) continue
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        const rects = [...range.getClientRects()].filter((r) => r.width > 0)
+        if (rects.some((r) => r.right > box.right + 0.5 || r.left < box.left - 0.5)) {
+          out.text.push({ item: itemOf(cell), element: `${describe(cell)} "${(node.textContent ?? '').trim().slice(0, 24)}"` })
+        }
+      }
+    }
+  }
+  const html = document.documentElement
+  html.setAttribute('data-wb-capture', '')
+  try {
+    for (const grid of grids) {
+      const scroll = grid.querySelector(':scope > [data-wb-part="scroll"]')
+      const table = scroll?.querySelector(':scope > table')
+      if (scroll === null || table === null || table === undefined) continue
+      out.captureMeasured += 1
+      const tableRight = table.getBoundingClientRect().right + window.scrollX
+      // 스크롤 상자만이 아니라 그리드 안 어느 상자든(테마가 표를 제 상자로 굴리는 판) 가로로 굴러가면 그림이 자른다.
+      const rolling = [grid, ...grid.querySelectorAll('*')].some(
+        (el) =>
+          el.closest('[data-wb-component="DataGrid"]') === grid &&
+          getComputedStyle(el).overflowX !== 'visible' &&
+          el.scrollWidth > el.clientWidth + 1,
+      )
+      if (rolling || tableRight > html.scrollWidth + 1) {
+        out.capture.push({
+          item: itemOf(grid),
+          element: describe(grid),
+          scrollWidth: scroll.scrollWidth,
+          clientWidth: scroll.clientWidth,
+          tableRight: Math.round(tableRight),
+          pageWidth: html.scrollWidth,
+        })
+      }
+    }
+  } finally {
+    html.removeAttribute('data-wb-capture')
+  }
+  return out
+}
+
 /**
  * `wb-theme shots` — kit dev 의 갤러리 프레임(`/frame.html`)을 폭마다 실 Chromium 으로 열어 전체 페이지 PNG(길면 구간마다 한 장)와
  * `report.json` 을 낸다.
@@ -359,7 +448,8 @@ export async function takeShots(opts: {
           await page.screenshot({ path: join(outDir, png), fullPage: true, clip })
           pngs.push(png)
         }
-        report.widths.push({ width, pngs, pageHeight, consoleErrors, ...measured })
+        const grids = await page.evaluate(measureGrids)
+        report.widths.push({ width, pngs, pageHeight, consoleErrors, ...measured, grids })
       } finally {
         await page.close()
       }
@@ -389,6 +479,17 @@ export function shotsProblems(report: ShotsReport): string[] {
     for (const p of w.pairsOffGrid) {
       lines.push(
         `✗ ${w.width}px 폼 표 ${p.item ?? '(칸 밖)'}: 몸통의 Field 가 [FormTable] > [cells] > [Field] · 두 조각 직계로 안 섰습니다 — 쌍 격자에 안 서고 쌍 높이를 못 잽니다(${p.element})`,
+      )
+    }
+    for (const g of w.grids.fixed) {
+      lines.push(
+        `✗ ${w.width}px 그리드 ${g.item ?? '(칸 밖)'}: 고정 열 ${g.element} 이 굴린 뒤 ${g.before}px → ${g.after}px 로 움직였습니다`,
+      )
+    }
+    for (const g of w.grids.text) lines.push(`✗ ${w.width}px 그리드 ${g.item ?? '(칸 밖)'}: 칸 글이 제 칸 밖으로 나갔습니다 — ${g.element}`)
+    for (const g of w.grids.capture) {
+      lines.push(
+        `✗ ${w.width}px 그리드 ${g.item ?? '(칸 밖)'}: 찍는 판(data-wb-capture)에서도 스크롤 상자가 굴러갑니다(${g.scrollWidth} > ${g.clientWidth}px) · 표 끝 ${g.tableRight}px · 문서 ${g.pageWidth}px — PPTX 그림이 표를 자릅니다`,
       )
     }
     for (const p of w.placeholder) {

@@ -32,6 +32,7 @@ import {
   NODE_ID_PATTERN,
   PAGE_TARGET_PREFIX,
   PageEnvelopeSchema,
+  placementsOf,
   VIEW_STATE_DEPTH_MAX,
   VIEW_STATE_DESCRIPTION_MAX,
   VIEW_STATE_NAME_MAX,
@@ -61,11 +62,22 @@ const COMPONENT_SUMMARIES: Record<string, string> = {
   Slot: 'Where a layout inserts the page content. Layout documents only.',
   Section: 'A large band of the screen with its own background and spacing.',
   Flex: 'Lays children out in one row or one column.',
-  Grid: 'Lays children out on a fixed number of columns.',
+  Grid: 'Lays children out on a fixed number of columns. A layout tool — the data table is `DataGrid`.',
   Card: 'A box that groups a title and its content.',
   Tabs: 'Splits content into tabs and shows one at a time. Each tab is a `TabPanel` child.',
   TabPanel: 'One tab of a `Tabs`: its `label` is the tab head, its children are the tab content. Only valid in the body of a `Tabs`.',
-  List: 'Many records as a table, cards or a list.',
+  DataGrid:
+    'A data table: its body is the columns (`GridColumn`, `GridColumnGroup`), the `rows` zone the rows (`GridRow`), the footer a `Pagination`. Rows repeat the column cell templates; every line after the first is a render copy (`data-wb-copy-of` instead of `data-wb-id` — select the original node). `select` adds a check or radio column, `fixedColumns` keeps that many left columns in place while the table scrolls sideways.',
+  GridColumnGroup:
+    'A merged header cell over its child columns; nesting depth is the header depth. Only valid in a `DataGrid` body or another `GridColumnGroup`.',
+  GridColumn:
+    'One column: `label` is the header cell, the children are the cell template drawn on every row without own cells. `numbering` draws data-row numbers instead of the template. Only valid in a `DataGrid` body or a `GridColumnGroup`.',
+  GridRow:
+    'One row drawn `repeat` times. Without children it draws the column templates; with `GridCell` children it draws only those — cells cover columns from the left, missing columns stay empty. `kind` total or gap (a full-width ellipsis band), `tone` selected, dimmed or shaded. Only valid in the `rows` zone of a `DataGrid`.',
+  GridCell:
+    'A hand-drawn cell of a `GridRow`: `span` columns wide, `rowSpan` lines tall; its children are the content. Only valid in a `GridRow`.',
+  Pagination:
+    'A pagination bar: page-size select, page numbers around the current page, range text ("from - to (총 N 항목 중)"). All numbers come from `total`, `pageSize` and `page` — not from the grid rows above it.',
   Tree: 'Hierarchical items that expand and collapse.',
   KeyValue: 'Label/value pairs, as on a detail screen.',
   SearchForm: 'Search conditions that filter a list.',
@@ -339,7 +351,8 @@ function renderComponent(line: Line, def: ComponentDef): void {
   line(`${COMPONENT_SUMMARIES[def.type]} Editor label: ${def.label}.`)
   line()
   line(def.zones.length === 0 ? 'Zones: none.' : `Zones: ${def.zones.map(zoneText).join('; ')}.`)
-  if (def.placement !== undefined) line(`Stands only in the \`${def.placement.zone}\` zone of a \`${def.placement.type}\`.`)
+  const places = placementsOf(def)
+  if (places.length > 0) line(`Stands only in ${places.map((place) => `the \`${place.zone}\` zone of a \`${place.type}\``).join(' or ')}.`)
   const props = schemaOf(def.props, 'input')
   const entries = Object.entries(props.properties ?? {})
   if (entries.length === 0) {
