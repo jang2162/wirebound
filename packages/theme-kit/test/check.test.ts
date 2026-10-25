@@ -272,11 +272,19 @@ describe('checkTheme', () => {
 
   /**
    * SDK 기본 `GridRowView` 와 같은 차례로 줄 · 칸을 그리는 행 뷰(번들 원문) — 한 곳만 바꾼다. `rootEveryLine` 은 줄마다 원본 `Root`(사본 없이) ·
-   * `templateOriginal` 은 셀 틀을 줄마다 원본으로 · `dropLast` 는 줄마다 끝 칸을 뺀다.
+   * `templateOriginal` 은 셀 틀을 줄마다 원본으로 · `dropLast` 는 줄마다 끝 칸을 뺀다 · `arrange` 는 줄의 칸 배열(`cells`)을 바꾸는 식 ·
+   * `emptyTemplate` 은 셀 틀 칸을 비운다.
    */
-  function gridRowView(change: { rootEveryLine?: boolean; templateOriginal?: boolean; dropLast?: boolean } = {}): string {
+  function gridRowView(
+    change: { rootEveryLine?: boolean; templateOriginal?: boolean; dropLast?: boolean; arrange?: string; emptyTemplate?: boolean } = {},
+  ): string {
     const template =
-      change.templateOriginal === true ? 'c.leaf.item.content' : 'c.origin ? c.leaf.item.content : c.leaf.item.copy(line.number).content'
+      change.emptyTemplate === true
+        ? 'null'
+        : change.templateOriginal === true
+          ? 'c.leaf.item.content'
+          : 'c.origin ? c.leaf.item.content : c.leaf.item.copy(line.number).content'
+    const arranged = change.dropLast === true ? 'cells.slice(0, -1)' : (change.arrange ?? 'cells')
     return `{ GridRow: rt.sdk.view(({ nodeId, items }) => {
       const lines = rt.sdk.useGridRow(nodeId) || []
       const own = new Map(items.map((i) => [i.nodeId, i]))
@@ -287,7 +295,7 @@ describe('checkTheme', () => {
         : h('td', { key: k })
       return h(rt.react.Fragment, null, lines.map((line) => {
         const cells = line.cells.map((c, k) => cell(c, line, k))
-        return h(Root, { key: line.number, as: 'tr', copy: ${change.rootEveryLine === true ? 'false' : 'line.line > 0'} }, ${change.dropLast === true ? 'cells.slice(0, -1)' : 'cells'})
+        return h(Root, { key: line.number, as: 'tr', copy: ${change.rootEveryLine === true ? 'false' : 'line.line > 0'} }, ${arranged})
       }))
     }) }`
   }
@@ -321,6 +329,47 @@ describe('checkTheme', () => {
       'DataGrid — 2단 병합 머리 · 정렬 · 필수 | DataGrid 몸 줄 1(행 dg3-r)이 칸 3 개 · colspan 합 3 입니다 — gridLayout 셈은 4 개 · 4(노드 dg3)',
     )
     expect(errors.every((line) => line.includes('몸 줄') || line.includes('사본'))).toBe(true)
+  })
+
+  /**
+   * **칸 차례(M4 — `docs/superpowers/plans/2026-10-25-rv-gr-report.md` «9»)** — 칸 수 · `colspan` 합은 그대로인 채 칸을 뒤집거나 돌리면 머리 칸과 몸 칸이
+   * 엇갈린다. 칸마다 든 노드(제 칸 · 셀 틀 조각의 id)를 `gridLayout` 의 차례와 견준다. 노드가 없는 칸(선택 · 번호 · 빈 칸)은 노드가 없어야 한다.
+   */
+  it('칸 차례를 뒤집는 행 뷰는 오류로 선다 — 머리와 몸 칸이 엇갈린다', async () => {
+    const errors = gridErrors(await checkTheme(files(BASE, { views: gridRowView({ arrange: 'cells.slice().reverse()' }) })))
+    expect(errors).toContain(
+      'DataGrid — 흔한 목록(No · 링크 · 두 줄 · 단추 · 머리줄 · 바) | DataGrid 몸 줄 1(행 dg1-r)의 칸 1 에 선 노드는 dg1-act-b 입니다 — gridLayout 차례로는 노드가 없는 칸(number)입니다(노드 dg1)',
+    )
+    expect(errors.every((line) => line.includes('의 칸 '))).toBe(true)
+  })
+
+  it('첫 칸을 끝으로 돌리는 행 뷰는 오류로 선다', async () => {
+    const errors = gridErrors(await checkTheme(files(BASE, { views: gridRowView({ arrange: '[...cells.slice(1), cells[0]]' }) })))
+    expect(errors).toContain(
+      'DataGrid — 흔한 목록(No · 링크 · 두 줄 · 단추 · 머리줄 · 바) | DataGrid 몸 줄 1(행 dg1-r)의 칸 1 에 선 노드는 dg1-link 입니다 — gridLayout 차례로는 노드가 없는 칸(number)입니다(노드 dg1)',
+    )
+  })
+
+  it('셀 틀 칸을 비우는 행 뷰는 «노드가 없다» 로 가른다 — 다른 노드가 선 것과 다른 문장', async () => {
+    const errors = gridErrors(await checkTheme(files(BASE, { views: gridRowView({ emptyTemplate: true }) })))
+    expect(errors).toContain(
+      'DataGrid — 흔한 목록(No · 링크 · 두 줄 · 단추 · 머리줄 · 바) | DataGrid 몸 줄 1(행 dg1-r)의 칸 2 에 노드가 없습니다 — gridLayout 차례로는 노드 dg1-link(template)입니다(노드 dg1)',
+    )
+  })
+
+  it('머리 칸 차례를 뒤집는 그리드 뷰는 오류로 선다 — 머리 줄도 같은 잣대다', async () => {
+    const views = `{ DataGrid: rt.sdk.view(({ props, items, zoneItems }) => {
+      const layout = rt.sdk.gridLayout(items, zoneItems.rows || [], props)
+      const head = (row) => row.map((c) => c.kind === 'select' ? h('th', { key: 'wb-select', rowSpan: c.rowSpan }) : h(rt.react.Fragment, { key: c.item.nodeId }, c.item.element))
+      return h(Root, { as: 'div' }, h(rt.sdk.GridProvider, { value: layout },
+        h('table', null, h('thead', null, layout.head.map((row, l) => h('tr', { key: l }, head(row).reverse()))), h(rt.sdk.Zone, { name: 'rows', as: 'tbody' })),
+        h(rt.sdk.Zone, { name: 'footer' })))
+    }) }`
+    const errors = gridErrors(await checkTheme(files(BASE, { views })))
+    expect(errors).toContain(
+      'DataGrid — 2단 병합 머리 · 정렬 · 필수 | DataGrid 머리 줄 1의 칸 1 에 선 노드는 dg3-state 입니다 — gridLayout 차례로는 노드 dg3-name(GridColumn)입니다(노드 dg3)',
+    )
+    expect(errors.every((line) => line.includes('머리 줄'))).toBe(true)
   })
 
   it('colspan · rowspan 을 안 싣는 머리 칸 뷰는 오류로 선다 — 병합 머리 표본만', async () => {

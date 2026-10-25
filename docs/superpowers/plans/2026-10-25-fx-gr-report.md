@@ -69,3 +69,21 @@
 
 케이스: `packages/theme-sdk/test/grid-layout.test.ts` «페이지네이션 바의 수» 셋(경계 · 1,000,000 건) · `packages/renderer/test/default-view-props.test.tsx` «페이지네이션 쪽 번호 — 첫 쪽 · «…» · …»(DOM 차례 `first · prev · 1 · … · 48 ~ 52 · … · 100 · next · last`). 고치기 전 셋 다 빨강(18:52 — 둘레 아홉만 서서 `[46 … 54]`). 기본테마는 `[data-wb-part="pages"] > *` 규칙이 «…» 에도 듣는다.
 
+## M4 — `wb-theme check` 가 칸 차례를 본다
+
+`packages/theme-kit/src/check.ts` 의 `dataGridProblems` 에 규칙 ④ — 칸 수 · `colspan` 합이 맞은 줄은 **칸마다 든 노드**(`nodeIn` — 칸 자신의 `data-wb-id` · `data-wb-copy-of`, 없으면 문서 차례로 첫 노드 자손: 머리 칸은 열 · 열 묶음, 몸 칸은 제 칸 · 셀 틀의 첫 조각)를 `gridLayout` 의 차례와 견준다. 노드가 없는 칸(선택 · 번호 · 빈 칸 · 생략 띠)에는 노드가 없어야 한다. 머리 줄 · 몸 줄 둘 다다.
+
+- **«칸에 노드가 없다» 와 «다른 노드가 섰다» 를 가른다** — 셀 틀을 안 그린 뷰는 «칸 N 에 노드가 없습니다 — … 노드 X(template)», 차례를 바꾼 뷰는 «칸 N 에 선 노드는 Y 입니다 — … 노드가 없는 칸(number)». 칸 수가 어긋난 줄은 ② 문장만 낸다(④ 를 안 본다 — 겹친 문장을 안 낸다).
+- **0 이 옳은 판** — 숨은 열은 `items` 에 없어 셈에서 빠지고(셈과 DOM 이 같은 목록), 열이 없거나 빈 상태 · 불러오는 중이면 견줄 몸 줄이 없다. jsdom 판이라 창 폭이 하나다(좁은 창의 접힘은 테마 CSS 의 몫 — DOM 차례는 안 바뀐다).
+- **«칸 뿌리 대신 감싼 요소에 노드가 든 판»** — `nodeIn` 은 칸 안 첫 노드 자손을 읽어 셀 틀을 `div` · `span` 으로 감싼 뷰도 그 조각으로 읽는다(감쌈 자체는 오류가 아니다 — SDK 기본 뷰도 `pieces` 조각으로 감싼다).
+
+| 케이스(`packages/theme-kit/test/check.test.ts`) | 깨는 뷰 | 고치기 전 | 고친 뒤 |
+| --- | --- | --- | --- |
+| 칸 차례를 뒤집는 행 뷰 | `cells.slice().reverse()`(리뷰 N1) | 오류 0(빨강) | «몸 줄 1(행 dg1-r)의 칸 1 에 선 노드는 dg1-act-b 입니다 — … 노드가 없는 칸(number)» |
+| 첫 칸을 끝으로 돌리는 행 뷰 | `[...cells.slice(1), cells[0]]`(리뷰 N1b) | 오류 0(빨강) | «… 칸 1 에 선 노드는 dg1-link …» |
+| 셀 틀 칸을 비우는 행 뷰 | 셀 틀 `td` 를 빈 채로 | ③ 만(빨강 — 이 문장 없음) | «… 칸 2 에 노드가 없습니다 — … 노드 dg1-link(template)» |
+| 머리 칸 차례를 뒤집는 그리드 뷰 | 그리드 뷰가 머리 줄을 거꾸로 | (새 케이스 — 변조 m4h 로 빨강) | «머리 줄 1의 칸 1 에 선 노드는 dg3-state 입니다 — … 노드 dg3-name(GridColumn)» |
+| 기본 뷰 테마 · 기본 차례 행 뷰 | — | 0 | 0 |
+
+기본테마 · 스타터 템플릿의 0 은 build 갈래(`system-themes/admin/build-test/wbtheme.test.ts` · `packages/theme-kit/build-test/check.test.ts`)가 잰다 — «게이트».
+

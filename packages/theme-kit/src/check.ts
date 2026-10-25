@@ -298,7 +298,10 @@ function shimItem(node: WbNode, index: number): ViewItem {
  * 같다 ② 몸 줄(행 노드 · 사본의 `tr`)마다 칸 수 · `colspan` 합이 그 셈과 같다(되풀이마다 · 선택 칸 포함) ③ 행 노드 · 셀 틀 노드가 `data-wb-id` 로
  * 한 번만 서고 나머지 줄은 `data-wb-copy-of` 다(원본을 줄마다 그리면 에디터가 같은 노드를 여럿으로 센다). ① ② 는 그리드가 제 표(`table`)를 그릴 때만
  * 본다 — 카드로 접는 테마는 표가 없다. 칸 하나를 빼거나 `colspan` 을 안 싣는 뷰 · `Root` 를 줄마다 그리는 뷰가 걸린다(빈 상태 · 불러오는 중은 ② · ③ 을
- * 안 본다 — 행 노드를 안 그리거나 셀 틀 대신 막대다).
+ * 안 본다 — 행 노드를 안 그리거나 셀 틀 대신 막대다). ④ 칸 수가 맞은 줄은 **칸 차례**도 본다 — 칸마다 든 노드(머리 칸은 열 · 열 묶음, 몸 칸은 제 칸 ·
+ * 셀 틀의 첫 조각)가 그 셈의 차례와 같고, 노드가 없는 칸(선택 · 번호 · 빈 칸 · 생략 띠)에는 노드가 없다. 칸 수 · `colspan` 합은 그대로인 채 칸을 뒤집거나
+ * 돌린 뷰가 걸린다(머리 칸과 몸 칸이 엇갈린다 — `docs/superpowers/plans/2026-10-25-rv-gr-report.md` M4). 칸에 노드가 없는 것(셀 틀을 안 그림)과 다른
+ * 노드가 선 것(차례가 엇갈림)은 문장을 가른다.
  *
  * **jsdom 이라 DOM 꼴만 본다** — 칸이 실제 그 자리에 서는지(상자 좌표)는 실브라우저 판 `apps/web/build-test/data-grid.test.ts` 가 잰다.
  */
@@ -313,6 +316,18 @@ function dataGridProblems(container: Element, root: WbNode): string[] {
     const layout = gridLayout((zoneList(node, BODY_ZONE) as WbNode[]).map(shimItem), rows, props)
     const table = [...element.querySelectorAll('table')].find((one) => one.closest('[data-wb-id]') === element)
     const spanOf = (cells: HTMLCollectionOf<HTMLTableCellElement>) => Array.from(cells).reduce((sum, cell) => sum + cell.colSpan, 0)
+    /** ④ — 칸마다 든 노드를 셈의 차례(`want` — 노드가 없는 칸이면 `null` · 이름은 칸 종류)와 견주어 첫 어긋남을 문장으로. */
+    const orderProblem = (where: string, cells: HTMLCollectionOf<HTMLTableCellElement>, want: { id: string | null; kind: string }[]) => {
+      for (const [at, expected] of want.entries()) {
+        const got = nodeIn(cells[at]!)
+        if (got === expected.id) continue
+        const should = expected.id === null ? `노드가 없는 칸(${expected.kind})` : `노드 ${expected.id}(${expected.kind})`
+        return got === null
+          ? `${where}의 칸 ${at + 1} 에 노드가 없습니다 — gridLayout 차례로는 ${should}입니다(노드 ${node.id})`
+          : `${where}의 칸 ${at + 1} 에 선 노드는 ${got} 입니다 — gridLayout 차례로는 ${should}입니다(노드 ${node.id})`
+      }
+      return null
+    }
     const quiet = props.empty === true || props.loading === true
     if (table !== undefined) {
       const head = [...(table.tHead?.rows ?? [])]
@@ -326,7 +341,14 @@ function dataGridProblems(container: Element, root: WbNode): string[] {
           out.push(
             `DataGrid 머리 줄 ${at + 1} 이 칸 ${got.cells.length} 개 · colspan 합 ${spanOf(got.cells)} 입니다 — gridLayout 셈은 ${want.length} 개 · ${wantSpan}(노드 ${node.id})`,
           )
+          return
         }
+        const order = orderProblem(
+          `DataGrid 머리 줄 ${at + 1}`,
+          got.cells,
+          want.map((cell) => (cell.kind === 'select' ? { id: null, kind: 'select' } : { id: cell.item.nodeId, kind: cell.item.type })),
+        )
+        if (order !== null) out.push(order)
       })
       const body = [...table.tBodies].flatMap((tbody) => [...tbody.rows])
       if (!quiet) {
@@ -341,7 +363,20 @@ function dataGridProblems(container: Element, root: WbNode): string[] {
             out.push(
               `DataGrid 몸 줄 ${at + 1}(행 ${line.row.nodeId})이 칸 ${got.cells.length} 개 · colspan 합 ${spanOf(got.cells)} 입니다 — gridLayout 셈은 ${want.length} 개 · ${wantSpan}(노드 ${node.id})`,
             )
+            return
           }
+          const order = orderProblem(
+            `DataGrid 몸 줄 ${at + 1}(행 ${line.row.nodeId})`,
+            got.cells,
+            line.cells.map((cell) =>
+              cell.kind === 'own'
+                ? { id: cell.item.nodeId, kind: 'own' }
+                : cell.kind === 'template'
+                  ? { id: cell.leaf.item.items[0]?.nodeId ?? null, kind: 'template' }
+                  : { id: null, kind: cell.kind },
+            ),
+          )
+          if (order !== null) out.push(order)
         })
       }
     }
@@ -370,6 +405,14 @@ function dataGridProblems(container: Element, root: WbNode): string[] {
     }
   }
   return out
+}
+
+/** 칸에 든 노드 — 칸 자신(제 칸 · 머리 칸의 뿌리)이나 문서 차례로 첫 노드 자손(셀 틀 조각)의 id(원본 · 사본). 없으면 `null`. */
+function nodeIn(cell: Element): string | null {
+  const own = cell.getAttribute('data-wb-id') ?? cell.getAttribute('data-wb-copy-of')
+  if (own !== null) return own
+  const inner = cell.querySelector('[data-wb-id], [data-wb-copy-of]')
+  return inner === null ? null : (inner.getAttribute('data-wb-id') ?? inner.getAttribute('data-wb-copy-of'))
 }
 
 /**
