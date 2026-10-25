@@ -73,9 +73,14 @@ describe('한 행 떼어 내기', () => {
     const edit = splitRowOps(document, 'n-row', counter())
     if ('reason' in edit) throw new Error(edit.reason)
     expect(edit.ops.map((op) => `${op.op} ${op.path}`)).toEqual([
+      'test /root/children/0/zones/rows/0/props/repeat',
       'remove /root/children/0/zones/rows/0/props/repeat',
       'add /root/children/0/zones/rows/1',
     ])
+    // 전제는 지은 판의 되풀이 수 — 남이 고쳤으면 묶음째 안 얹힌다.
+    expect(edit.ops[0]).toMatchObject({ value: 5 })
+    const theirs = applyOps(document, [{ op: 'replace', path: '/root/children/0/zones/rows/0/props/repeat', value: 7 }])
+    expect(() => applyOps(theirs, edit.ops)).toThrow()
     const after = applyOps(document, edit.ops)
     const rows = find(after.root, 'n-grid')!.zones!.rows!
     expect(rows).toEqual([
@@ -247,6 +252,22 @@ describe('열 틀로 칸 짓기', () => {
     const after = applied(document, buildCellsOps(document, 'n-under', counter()))
     expect(find(after.root, 'n-under')!.children!.map((cell) => (cell.children ?? []).map((child) => child.type))).toEqual([['Text'], []])
     expect(rowCellIssues(after)).toEqual([])
+  })
+
+  it('칸 배열이 이미 있으면(빈 배열) 그 배열이 비었다는 전제를 앞에 둔다 — 남이 그 사이 칸을 넣었으면 묶음째 안 얹힌다', () => {
+    const document = doc()
+    find(document.root, 'n-r2')!.children = []
+    const edit = buildCellsOps(document, 'n-r2', counter())
+    if ('reason' in edit) throw new Error(edit.reason)
+    expect(edit.ops[0]).toEqual({ op: 'test', path: '/root/children/0/zones/rows/1/children', value: [] })
+    const theirs = applyOps(document, [
+      { op: 'add', path: '/root/children/0/zones/rows/1/children/0', value: { id: 'n-bob', type: 'GridCell' } },
+    ])
+    expect(() => applyOps(theirs, edit.ops)).toThrow()
+    // 배열이 없던 판은 전제 없이 첫 `add` 가 배열째 짓는다(리베이스의 전제가 지킨다).
+    const bare = buildCellsOps(doc(), 'n-r2', counter())
+    if ('reason' in bare) throw new Error(bare.reason)
+    expect(bare.ops.map((op) => op.op)).toEqual(['add', 'add', 'add', 'add', 'add'])
   })
 
   it('못 하는 판 — 칸을 가진 행 · 생략 띠 · 행이 아님', () => {

@@ -25,13 +25,20 @@
  * **문서의 열 전부를 센다** — 지금 화면 상태에서 숨은 열도 칸을 받는다(칸 폭 합이 잎 열 수와 같아야 lint `grid-row-cells` 가 안 선다). 생략 띠(`gap`)는 칸을 안
  * 읽어 두 행동 다 못 한다.
  *
+ * ## 전제
+ *
+ * 두 묶음은 지은 판의 모양에 기댄다 — 떼어 내기는 그 행의 되풀이 수(n − 1 을 뒤 행에 싣는다), 칸 짓기는 칸이 없다는 것. 남의 편집이 내 화면에 닿기 전에
+ * 누르면 묶음은 낡은 판 위에서 지어지고, 리베이스가 그대로 얹으면 남이 고친 되풀이 수가 말없이 걷힌다(`build-test/grid-row-actions.test.ts` «닿기 전»).
+ * 그래서 묶음 앞에 `test` 를 둔다 — 전제가 바뀌었으면 리베이스가 묶음째 버리고 알린다. 셀 틀의 글은 전제로 안 묶는다 — 칸 짓기는 누른 때 본 셀 틀을
+ * 베끼는 것이고(붙여넣기와 같다) 셀 틀 자신은 안 고친다.
+ *
  * **순수하고 던지지 않는다** — 못 하면 `{ reason }`(`./paste-ops.ts` 의 `NodeEdit` 와 같은 꼴).
  */
 import { BODY_ZONE, MAX_OPS_PER_EDIT, applyOps, zoneList, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
 import { gridLayout, type ViewItem } from '@wirebound/theme-sdk'
 import { insertNodeOps, propOps } from './ops'
 import { sameDocumentCopies, tooManyOpsNotice, type NodeEdit } from './paste-ops'
-import { findNodeSafely } from './safe-walk'
+import { findNodePathSafely, findNodeSafely } from './safe-walk'
 import { nodeSpot } from './structure-actions'
 
 export const SPLIT_ROW_LABEL = '한 행 떼어 내기'
@@ -93,11 +100,14 @@ export function splitRowOps(document: PageDocument, rowId: string, generate?: ()
   const tail: WbNode = { ...copy, props: copyProps }
   if (Object.keys(copyProps).length === 0) delete tail.props
 
+  const path = findNodePathSafely(document.root, rowId)
   const first = propOps(document, rowId, 'repeat', undefined)
-  if (first === null) return { reason: NOT_IN_GRID }
+  if (first === null || path === undefined) return { reason: NOT_IN_GRID }
   const second = insertNodeOps(applyOps(document, first), spot.parentId, spot.index + 1, tail, spot.zone)
   if (second === null) return { reason: NOT_IN_GRID }
-  return { ops: [...first, ...second], insertedIds: [tail.id] }
+  // 전제 — 지은 판의 되풀이 수. 남이 그 사이 고쳤으면 리베이스가 묶음째 버린다(머리말 «전제»).
+  const premise: PatchOp = { op: 'test', path: `${path}/props/repeat`, value: rest + 1 }
+  return { ops: [premise, ...first, ...second], insertedIds: [tail.id] }
 }
 
 /** 문서 노드를 셈 함수가 읽는 꼴로 — 그리는 것(`element` · `content` · `copy`)은 셈이 안 읽는다. */
@@ -165,7 +175,11 @@ export function buildCellsOps(document: PageDocument, rowId: string, generate?: 
   if ('reason' in plan) return plan
   if (plan.cells.length > MAX_OPS_PER_EDIT) return { reason: tooManyOpsNotice(plan.cells.length) }
   const cells = sameDocumentCopies(plan.cells, generate)
-  const ops: PatchOp[] = []
+  // 전제 — 칸 배열이 이미 있으면(빈 배열) 그 배열이 비었다. 배열이 없을 때는 첫 `add` 가 배열째 지어 리베이스의 전제(`store/anchored-ops.ts` 의
+  // `premiseOf`)가 지킨다.
+  const path = findNodePathSafely(document.root, rowId)
+  const row = findNodeSafely(document.root, rowId) as WbNode | undefined
+  const ops: PatchOp[] = path !== undefined && Array.isArray(row?.children) ? [{ op: 'test', path: `${path}/children`, value: [] }] : []
   let running = document
   for (const [index, cell] of cells.entries()) {
     const step = insertNodeOps(running, rowId, index, cell, BODY_ZONE)
