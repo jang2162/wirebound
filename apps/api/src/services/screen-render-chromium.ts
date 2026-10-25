@@ -57,6 +57,7 @@
  * 그것을 어떻게 나눠 쓰는지가 새 물음이 된다. 동시에 뜨는 브라우저 수는 `export-worker.ts`의
  * 그리기 칸이 묶는다.
  */
+import { CAPTURE_CSS } from '@wirebound/theme-sdk/capture'
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core'
 import {
   decideKoreanGlyphs,
@@ -358,6 +359,8 @@ async function renderOne(
     context = await newRenderContext(browser, timeoutMs, files)
     // 첫 그림 전에 움직임을 끈다(`FREEZE_MOTION`) — 테마 시트가 늦게 와도 전이가 시작도 안 한다.
     await context.addInitScript({ content: FREEZE_MOTION_INIT })
+    // 찍는 판 표지와 그 시트 — 넓은 그리드가 표 전체 폭으로 펼쳐진다(`CAPTURE_INIT`).
+    await context.addInitScript({ content: CAPTURE_INIT })
     // 테마 코드보다 먼저 소켓을 여는 생성자를 지운다(`NO_SOCKETS_INIT` — 보조 겹).
     await context.addInitScript({ content: NO_SOCKETS_INIT })
     const page = await context.newPage()
@@ -521,6 +524,21 @@ const FREEZE_MOTION_INIT = `(() => {
   const sheet = new CSSStyleSheet()
   sheet.replaceSync(${JSON.stringify(FREEZE_MOTION)})
   document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]
+})()`
+
+/**
+ * **찍는 판 표지와 그 시트**(`<html data-wb-capture>` · SDK 의 `CAPTURE_CSS`). 화면보다 넓은 그리드는 스크롤 상자를 풀어 표 전체 폭으로 문서를
+ * 넓힌다 — 그림이 그 폭으로 찍힌다(설계 `docs/superpowers/specs/2026-10-25-grid-design.md` Q2). 시트는 표지 아래에서만 걸려 그리드가 없는 화면의 크기는
+ * 그대로다. `FREEZE_MOTION_INIT` 처럼 채택한 시트로 두고, 표지는 문서 뿌리가 서는 대로 단다(초기화 스크립트가 도는 때는 아직 `<html>` 이
+ * 없을 수 있다). 다시 재는 법: `build-test/screen-chromium.test.ts` 「넓은 그리드」.
+ */
+const CAPTURE_INIT = `(() => {
+  const sheet = new CSSStyleSheet()
+  sheet.replaceSync(${JSON.stringify(CAPTURE_CSS)})
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]
+  const mark = () => document.documentElement?.setAttribute('data-wb-capture', '')
+  mark()
+  document.addEventListener('DOMContentLoaded', mark)
 })()`
 
 /**

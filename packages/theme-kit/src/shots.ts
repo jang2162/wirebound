@@ -3,6 +3,7 @@ import { createServer } from 'node:net'
 import { join, resolve } from 'node:path'
 import type { Browser, Page } from 'playwright-core'
 import { GALLERY_SAMPLES, PLACEHOLDER_SET_PROPS, PLACEHOLDER_SET_SAMPLE } from '@wirebound/theme-gallery'
+import { CAPTURE_CSS } from '@wirebound/theme-sdk'
 import { loadProject } from './config'
 import { startDev } from './dev'
 
@@ -322,8 +323,11 @@ function measure(expect: {
   }
 }
 
-/** 페이지 안에서 돈다 — 그리드의 잣대 셋(`ShotGrids`). 굴린 스크롤 · 단 표지는 되돌린다(뒤에 찍는 PNG 가 안 바뀌게). */
-function measureGrids(): ShotGrids {
+/**
+ * 페이지 안에서 돈다 — 그리드의 잣대 셋(`ShotGrids`). 찍는 판은 PPTX 의 화면 그림과 같게 표지와 SDK 의 찍는 판 시트(`CAPTURE_CSS`)를 함께 단다.
+ * 굴린 스크롤 · 단 표지 · 시트는 되돌린다(뒤에 찍는 PNG 가 안 바뀌게).
+ */
+function measureGrids(captureCss: string): ShotGrids {
   const itemOf = (el: Element) => el.closest('[data-wb-gallery-item]')?.getAttribute('data-wb-gallery-item') ?? null
   const describe = (el: Element) => {
     const id = el.getAttribute('data-wb-id') ?? el.getAttribute('data-wb-copy-of')
@@ -363,6 +367,9 @@ function measureGrids(): ShotGrids {
     }
   }
   const html = document.documentElement
+  const captureSheet = new CSSStyleSheet()
+  captureSheet.replaceSync(captureCss)
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, captureSheet]
   html.setAttribute('data-wb-capture', '')
   try {
     for (const grid of grids) {
@@ -391,6 +398,7 @@ function measureGrids(): ShotGrids {
     }
   } finally {
     html.removeAttribute('data-wb-capture')
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => sheet !== captureSheet)
   }
   return out
 }
@@ -448,7 +456,7 @@ export async function takeShots(opts: {
           await page.screenshot({ path: join(outDir, png), fullPage: true, clip })
           pngs.push(png)
         }
-        const grids = await page.evaluate(measureGrids)
+        const grids = await page.evaluate(measureGrids, CAPTURE_CSS)
         report.widths.push({ width, pngs, pageHeight, consoleErrors, ...measured, grids })
       } finally {
         await page.close()

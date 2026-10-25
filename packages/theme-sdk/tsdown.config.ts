@@ -2,8 +2,8 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   // 본 진입과 공유 런타임(`./runtime`). 둘이 한 청크를 나눠 쓰므로 `runtime` 의 `sdk` 가 본 진입의 모듈 그 자체다.
-  // `./version` 은 react 없이 판만 읽는 자리다(`src/version.ts` 의 머리말).
-  entry: ['src/index.ts', 'src/runtime.ts', 'src/version.ts'],
+  // `./version` 은 react 없이 판만 읽는 자리다(`src/version.ts` 의 머리말). `./capture` 도 react 없이 찍는 판의 시트만 읽는다.
+  entry: ['src/index.ts', 'src/runtime.ts', 'src/version.ts', 'src/capture.ts'],
   format: ['esm'],
   dts: true,
   outDir: 'dist',

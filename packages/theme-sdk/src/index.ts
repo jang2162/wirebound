@@ -18,6 +18,7 @@ export { AssetProvider, NodeContext, ThemeProvider, useAsset, useToken, useWindo
 export { markAttr, MARKED_PROPS, propMarks, STATE_ARIA, stateAria, type MarkKind } from './marks'
 export { Focus, markerAttrs, Root } from './root'
 export { Zone } from './zone'
+export { CAPTURE_CSS } from './capture'
 export {
   DATAGRID_FIXED_VAR,
   DATAGRID_LEFT_VAR,

@@ -461,12 +461,5 @@ export function dataCssBlocks(): string[] {
       'margin-inline: auto;',
     ]),
     zeroRule('[data-wb-component="Pagination"] [aria-current="page"]', ['text-decoration: underline;', 'font-weight: bold;']),
-    // 찍는 판(PPTX 의 화면 그림 — `<html data-wb-capture>`)은 스크롤 상자를 풀어 표 전체 폭으로 문서를 넓힌다(설계 Q2). 층 안의 `!important` 라
-    // 테마가 층 밖에서 `!important` 로 덮어도 이 판이 이긴다(층 안 중요 선언이 층 밖 중요 선언을 이긴다).
-    `@layer wb-capture {
-${zeroRule('html[data-wb-capture] [data-wb-component="DataGrid"] > [data-wb-part="scroll"]', ['overflow: visible !important;', 'max-width: none !important;'])}
-${zeroRule('html[data-wb-capture] [data-wb-component="DataGrid"]', ['max-width: none !important;'])}
-${zeroRule('html[data-wb-capture] [data-wb-component="DataGrid"] [data-wb-fixed]', ['position: static !important;'])}
-}`,
   ]
 }

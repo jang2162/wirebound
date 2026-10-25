@@ -341,7 +341,7 @@ export const DataGridDef = defineComponent({
 
 - **테마의 몫이다** — 계약이 정하는 것은 «표는 `scroll` 조각 안 · 머리줄 · 바는 밖» 뿐이다. 카드로 접는 테마도 짓는다(열 머리 · 셀 틀이 노드라 뷰가 «라벨 | 값» 카드로 그릴 수 있다).
 - **HTML 번들** — 같은 스크롤 상자다(가로로 굴린다).
-- **PPTX — 펼쳐 찍는다(Q2).** 캡처는 문서 폭을 재어 찍는다(«지금 모델»). 스크롤 상자를 그대로 두면 문서 폭이 720 이라 표가 오른쪽에서 잘리고 스크롤 막대가 찍힌다. 찍는 판(`screen-render-chromium.ts`)이 문서에 표지를 달고 SDK 기본 CSS 가 그 표지 아래에서 스크롤 상자를 푼다(`overflow: visible` · 고정 열 `position: static`) — 표가 문서를 넓히고 그림이 그 폭으로 찍힌다(슬라이드에서는 줄어 보인다). **넓이 상한**(720 × 8192 px²)이 넓은 표의 긴 화면을 거절할 수 있다 — 폭 2000px 이면 높이 2949px 까지다(넘으면 지금처럼 그 화면만 «화면이 너무 큽니다» 로 빠진다).
+- **PPTX — 펼쳐 찍는다(Q2).** 캡처는 문서 폭을 재어 찍는다(«지금 모델»). 스크롤 상자를 그대로 두면 문서 폭이 720 이라 표가 오른쪽에서 잘리고 스크롤 막대가 찍힌다. 찍는 판(`screen-render-chromium.ts`)이 문서에 표지(`<html data-wb-capture>`)를 달며 SDK 의 찍는 판 시트(`CAPTURE_CSS` — `@layer`)를 싣고, 그 시트가 표지 아래에서 스크롤 상자를 푼다(`overflow: visible` · 고정 열 `position: static`). 기본 뷰 CSS 에 넣지 않는 까닭은 jsdom 이 `@layer` 든 시트를 통째로 버려서다 — 표가 문서를 넓히고 그림이 그 폭으로 찍힌다(슬라이드에서는 줄어 보인다). **넓이 상한**(720 × 8192 px²)이 넓은 표의 긴 화면을 거절할 수 있다 — 폭 2000px 이면 높이 2949px 까지다(넘으면 지금처럼 그 화면만 «화면이 너무 큽니다» 로 빠진다).
 - **고정 열의 뜻** — 가로 스크롤해도 왼쪽 `fixedColumns` 열(선택 · 번호 포함)이 제자리다. 찍은 그림 · 스크롤 0 에서는 고정과 아닌 열이 같아 보인다.
 
 넘침은 `wb-theme shots` 가 실 Chromium 에서 잰다(«7»).
@@ -384,7 +384,7 @@ export const DataGridDef = defineComponent({
 
 ### SDK 기본 CSS(특이도 0)
 
-`table` 꽉 참 · 칸 안쪽 여백 · 스크롤 상자 · 고정 열 `position: sticky` · 머리 칸 아래 정렬 · 셀 틀 조각 가로 줄(`Field` 값 칸과 같은 꼴) · 선택 칸 폭 1px · 생략 띠 · 바 세 구역 양끝 정렬 · 찍는 판의 스크롤 풀기(«6»).
+`table` 꽉 참 · 칸 안쪽 여백 · 스크롤 상자 · 고정 열 `position: sticky` · 머리 칸 아래 정렬 · 셀 틀 조각 가로 줄(`Field` 값 칸과 같은 꼴) · 선택 칸 폭 1px · 생략 띠 · 바 세 구역 양끝 정렬 (찍는 판의 스크롤 풀기는 따로 낸 `CAPTURE_CSS` — «6»).
 
 ### 스타터 템플릿 · 갤러리 · `wb-theme check` · `shots`
 
@@ -466,7 +466,7 @@ export const DataGridDef = defineComponent({
 
 1. 카탈로그 — 새 타입 여섯 · `List` 걷기 · `placement` 목록 · `Grid` 이름 · `MAJOR_COMPONENTS` · `STRUCTURAL_GAPS` · `LABEL_PROPS` · 새 lint 규칙 둘 · 문서 판.
 2. 렌더러 — `zoneItems` · `ViewItem.props` · `ViewItem.items` · `ViewItem.copy`(사본 — `data-wb-copy-of` · 뷰 `nodeId` 꼬리 · 캐시 열쇠) · `fieldNames` 넓히기.
-3. SDK — `gridLayout`(단위 케이스 — 병합 머리 · `rowSpan` 덮임 · 숨은 열 · 원본 자리 · 번호) · `GridProvider` · `useGridHead` · `useGridRow` · `copyAttrs` · 뷰 여섯 · 기본 CSS(찍는 판 포함) · 표지 · 판 1.7.0.
+3. SDK — `gridLayout`(단위 케이스 — 병합 머리 · `rowSpan` 덮임 · 숨은 열 · 원본 자리 · 번호) · `GridProvider` · `useGridHead` · `useGridRow` · `copyAttrs` · 뷰 여섯 · 기본 CSS · 찍는 판 시트(`CAPTURE_CSS`) · 표지 · 판 1.7.0.
 4. 기본테마 CSS · 변형 · 판 · `checksums.json`.
 5. 갤러리 표본 · 스타터 템플릿 · `wb-theme check` 규칙 넷(깨는 테마 뷰로) · `shots` 표본 · 개수 하한.
 6. 화면 캡처의 찍는 판 표지(Q2).

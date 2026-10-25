@@ -911,3 +911,76 @@ describe.skipIf(!있다)('번들 페이지를 연다', () => {
     expect(SCREEN_ORIGIN).toMatch(/^https:\/\/[^/]+\.invalid$/)
   })
 })
+
+/**
+ * **넓은 그리드는 표 전체 폭으로 찍힌다**(설계 `docs/superpowers/specs/2026-10-25-grid-design.md` Q2 — 찍는 판 표지 `<html data-wb-capture>` 와
+ * SDK 의 `CAPTURE_CSS`). 끝 열의 셀 틀이 주색 자리표시자라, 스크롤 상자가 그대로면(표지 · 시트가 없으면) 그 색이 한 화소도 안 찍힌다.
+ */
+describe.skipIf(!있다)('넓은 그리드', () => {
+  /** 끝 열 자리표시자의 바탕 — 다른 무엇도 안 쓰는 색. */
+  const LAST: [number, number, number] = [0x12, 0xab, 0x34]
+
+  /** 열 `columns` 개(셀 틀은 폭 160 자리표시자 — 끝 열만 `LAST` 바탕) · 되풀이 `rows` 줄 · 높이 `cellHeight` 인 그리드 한 장. */
+  function wideGrid(columns: number, rows: number, cellHeight = 24): PageDocument {
+    return {
+      version: 5,
+      root: {
+        id: 'n_page',
+        type: 'Page',
+        children: [
+          {
+            id: 'n_grid',
+            type: 'DataGrid',
+            props: { fixedColumns: 1 },
+            children: Array.from({ length: columns }, (_unused, at) => ({
+              id: `n_col_${at}`,
+              type: 'GridColumn',
+              props: { label: `열 ${at + 1}` },
+              children: [
+                {
+                  id: `n_cell_${at}`,
+                  type: 'Placeholder',
+                  props: {
+                    label: '',
+                    width: 160,
+                    height: cellHeight,
+                    border: 'none',
+                    ...(at === columns - 1 ? { background: '#12ab34' } : {}),
+                  },
+                },
+              ],
+            })),
+            zones: { rows: [{ id: 'n_row', type: 'GridRow', props: { repeat: rows } }] },
+          },
+        ],
+      },
+    } as unknown as PageDocument
+  }
+
+  it('끝 열까지 찍히고 그림이 표 폭으로 넓어진다 — 그리드 없는 화면의 폭은 그대로다', async () => {
+    const batch = await draw([
+      bundled('넓은 그리드', wideGrid(10, 3)),
+      bundled('넓은 그리드 · 기본테마', wideGrid(10, 3), packageTheme(systemAdminBytes())),
+      requestFor(1, 2),
+    ])
+    const seen = batch.results.map((result) =>
+      result.ok ? { width: result.width, last: countColor(result.bytes, LAST) > 0 } : result.reason,
+    )
+    // 열 10 × 160px 만으로 1600px — 뷰포트 720 의 두 배를 넘는다(배율 2배라 그림 폭은 3200 을 넘는다).
+    for (const shot of seen.slice(0, 2)) expect(shot).toMatchObject({ last: true, width: expect.any(Number) })
+    for (const shot of seen.slice(0, 2)) expect((shot as { width: number }).width).toBeGreaterThan(3200)
+    expect(seen[2]).toEqual({ width: 1440, last: false })
+  })
+
+  /** 넓이 상한(`SCREEN_DEFAULTS.maxArea` — 720 × 8192 px²)은 넓어진 그림에도 같다 — 폭이 늘면 받는 높이가 준다. */
+  it('넓고 긴 그리드는 넓이 상한에서 그 장만 빠지고 잰 크기를 말한다', async () => {
+    const batch = await draw([bundled('넓고 긴 그리드', wideGrid(12, 50, 80)), requestFor(1, 2)])
+    const [wide, plain] = batch.results
+    const reason = wide!.ok ? 'ok' : wide!.reason
+    // 잰 크기를 보고에 옮긴다(넓어진 폭 · 그 폭에서의 높이).
+    console.log(`[넓고 긴 그리드] ${reason}`)
+    expect(reason.startsWith(`${SCREEN_TOO_LARGE} — `)).toBe(true)
+    expect(reason).toContain(`(상한 720×${Math.floor(SCREEN_DEFAULTS.maxArea / 720)}px 넓이)`)
+    expect(plain!.ok).toBe(true)
+  })
+})

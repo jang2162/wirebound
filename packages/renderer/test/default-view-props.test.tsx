@@ -6,7 +6,7 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog, type PageDocument, type WbNode } from '@wirebound/schema'
-import { defaultViewsCss } from '@wirebound/theme-sdk'
+import { CAPTURE_CSS, defaultViewsCss } from '@wirebound/theme-sdk'
 import { renderDocument } from '@wirebound/renderer'
 
 beforeAll(() => {
@@ -292,16 +292,39 @@ describe('기본 CSS', () => {
     expect(block(':where([data-wb-component="DataGrid"] [data-wb-part="skeleton"])')).toMatch(/height: [\d.]+em;/)
   })
 
-  it('찍는 판(<html data-wb-capture>)은 층 안의 !important 로 스크롤 상자를 풀고 고정 열을 놓는다', () => {
-    const css = defaultViewsCss()
-    const layer = css.slice(css.indexOf('@layer wb-capture {'))
-    expect(layer.length).toBeGreaterThan(0)
+  it('찍는 판(<html data-wb-capture>)의 시트는 층 안의 !important 로 스크롤 상자를 풀고 고정 열을 놓는다', () => {
+    const layer = CAPTURE_CSS
+    expect(layer.startsWith('@layer wb-capture {')).toBe(true)
     expect(layer).toContain(
       ':where(html[data-wb-capture] [data-wb-component="DataGrid"] > [data-wb-part="scroll"]) {\n  overflow: visible !important;',
     )
     expect(layer).toContain(
       ':where(html[data-wb-capture] [data-wb-component="DataGrid"] [data-wb-fixed]) {\n  position: static !important;',
     )
+  })
+
+  /**
+   * **기본 뷰 CSS 는 jsdom 이 읽는 글이다** — jsdom 의 CSS 파서(rrweb-cssom)는 `@layer` 를 못 읽어 시트를 통째로 버리고, 그러면 에디터 ·
+   * 번들의 jsdom 판이 기본 뷰 규칙 없이 돈다(오류는 콘솔에만 선다). 찍는 판의 층이 `CAPTURE_CSS` 로 따로 서는 까닭이다.
+   */
+  it('기본 뷰 CSS 를 jsdom 이 시트로 읽는다 — 층(@layer)이 안 든다', () => {
+    const css = defaultViewsCss()
+    // 맨 위 블록 수 — 중괄호 깊이가 0 으로 돌아오는 자리를 센다(기본 뷰 CSS 의 글에는 따옴표 속 중괄호가 없다).
+    let depth = 0
+    let blocks = 0
+    for (const char of css) {
+      if (char === '{') depth += 1
+      if (char === '}' && --depth === 0) blocks += 1
+    }
+    expect(blocks).toBeGreaterThan(50)
+    const style = document.createElement('style')
+    style.textContent = css
+    document.head.append(style)
+    try {
+      expect(style.sheet?.cssRules.length ?? 0).toBe(blocks)
+    } finally {
+      style.remove()
+    }
   })
 })
 
