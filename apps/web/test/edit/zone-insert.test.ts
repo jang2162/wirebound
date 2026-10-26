@@ -176,8 +176,16 @@ describe('하단 판 넣기 — 고른 구역(`paletteAddTarget` 의 `selectedZo
     expect(add({ selectedZone: { parentId: 'n-gone', zone: 'footer' } })).toEqual({ ok: false, reason: NOT_IN_DOCUMENT_STATUS })
   })
 
-  it('고른 노드의 판도 받는 타입 밖이면 이유 문장이다 — 탭을 고르고 단추 넣기', () => {
-    expect(add({ selectedNodeId: 'n-tabs' })).toEqual({ ok: false, reason: TABS_ONLY_PANELS })
+  // 고른 노드의 몸통이 받는 타입 밖이면 그 노드 «뒤» 로 물러선다(`src/palette/palette-add.ts` 머리말 ««안» 이 거절되면 «뒤»» — GR-B 2 가 바꾼 판).
+  // 뒤도 못 서면 «안» 의 이유 문장이다. 물러섬 자체는 `test/palette/palette-add-fallback.test.ts` 가 갖는다.
+  it('고른 노드의 몸통이 받는 타입 밖이면 그 뒤 — 탭을 고르고 단추 넣기 · 뒤도 못 서면 «안» 의 이유 문장', () => {
+    expect(add({ selectedNodeId: 'n-tabs' })).toEqual({ ok: true, target: { parentId: 'n-root', index: 3, placement: 'after' } })
+    expect(add({ selectedNodeId: 'n-tabs', placing: adding('TabPanel') })).toMatchObject({ ok: true, target: { parentId: 'n-tabs' } })
+    expect(add({ selectedNodeId: 'n-tabs', placing: adding('GridRow') })).toEqual({
+      ok: false,
+      reason: fitRefusal('Tabs', 'body', 'GridRow'),
+    })
+    expect(TABS_ONLY_PANELS).toBe('탭에는 탭 패널만 놓을 수 있습니다')
   })
 
   it('고른 노드가 구역 안 잎이면 같은 구역의 그 뒤 — 머리 오른쪽 단추를 고른 판', () => {

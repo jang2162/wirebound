@@ -434,6 +434,7 @@ export function PropertyPanel(props: {
                       )
                     }
                   />
+                  <FieldHint field={field} />
                 </dd>
               </div>
             ))}
@@ -595,6 +596,11 @@ function clearableProp(def: ComponentDef, prop: string): boolean {
   if (schema === undefined) return false
   const parsed = schema.safeParse(undefined)
   return parsed.success && parsed.data === undefined
+}
+
+/** 칸 밑의 안내 한 줄(카탈로그 `EditorField.hint`) — 몫 칸의 «쌍 수» 안내와 같은 꼴이다. 없으면 안 그린다. */
+function FieldHint(props: { field: EditorField }): ReactElement | null {
+  return props.field.hint === undefined ? null : <p className="wb-shell-prop-note">{props.field.hint}</p>
 }
 
 /** «몫» 칸 한 줄. 범위 밖을 친 채 떠나면 안 보내고 칸 아래에 까닭을 말한다 — 바른 값을 보내거나 노드가 바뀌면(`key`) 걷힌다. */
@@ -788,6 +794,7 @@ function BulkProperties(props: {
                         }
                       />
                     )}
+                    <FieldHint field={field} />
                   </dd>
                 </div>
               )

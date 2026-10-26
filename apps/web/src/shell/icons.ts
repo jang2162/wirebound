@@ -64,6 +64,8 @@ import {
   Replace,
   Settings,
   SquareDashed,
+  TableCellsSplit,
+  TableRowsSplit,
   Trash2,
   TriangleAlert,
   Undo2,
@@ -116,6 +118,10 @@ export const ICONS = {
   addPage: FilePlus,
   /** 입력 조각의 종류를 바꾼다 — 구조 트리 줄 `…` 의 «종류 바꾸기…»(`panels/change-kind-dialog.tsx`). */
   changeKind: Replace,
+  /** 되풀이 행에서 한 행을 떼어 낸다 — 그리드 행 줄 `…` 의 «한 행 떼어 내기»(`edit/grid-row-actions.ts`). */
+  splitRow: TableRowsSplit,
+  /** 칸 없는 행에 열마다 칸을 짓는다 — 그리드 행 줄 `…` 의 «열 틀로 칸 짓기»(`edit/grid-row-actions.ts`). */
+  buildCells: TableCellsSplit,
   /** 고른 노드를 모듈로 남긴다 — 구조 트리 줄 `…` 의 «모듈로 저장…»(`panels/save-module-dialog.tsx`). */
   saveModule: PackagePlus,
   /** 모듈을 다른 묶음에 사본으로 남긴다 — «모듈» 탭 카드의 «프로젝트 모듈로 복사» · «개인 모듈로 복사»(`palette/module-tab.tsx`). */

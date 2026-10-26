@@ -149,7 +149,7 @@ export function duplicateOps(document: PageDocument, nodeIds: readonly string[],
     const node = findNodeSafely(running.root, nodeId)
     const spot = nodeSpot(running, nodeId)
     if (node === undefined || spot === null) return { reason: STRUCTURE_WHY_DISABLED.addAfter }
-    const copy = stripMarkers(prepareNodesForPaste([node], KEEP_EVERY_TARGET, generate).nodes)[0]!
+    const copy = sameDocumentCopies([node], generate)[0]!
     const step = insertNodeOps(running, spot.parentId, spot.index + 1, copy, spot.zone)
     if (step === null) return { reason: NO_PASTE_SPOT }
     ops.push(...step)
@@ -160,6 +160,14 @@ export function duplicateOps(document: PageDocument, nodeIds: readonly string[],
 }
 
 const KEEP_EVERY_TARGET = { node: () => true, page: () => true }
+
+/**
+ * 같은 문서 안에 둘 사본 — 복제와 같은 규칙(새 id · 대상은 다 남김 · `marker` 걷음 · 별칭 · 상태 보임은 그대로). 그리드 행 줄 행동(`./grid-row-actions.ts`)도
+ * 이것으로 떼어 낸 행 · 칸 안 조각을 짓는다. 노드들을 한 번에 넘기면 그 사이를 가리키던 대상도 사본을 따라간다(`prepareNodesForPaste` 머리말).
+ */
+export function sameDocumentCopies(nodes: readonly WbNode[], generate?: () => string): WbNode[] {
+  return stripMarkers(prepareNodesForPaste(nodes, KEEP_EVERY_TARGET, generate).nodes)
+}
 
 /**
  * 노드 여럿을 지우는 묶음 — 잘라내기 · 여럿 고른 판의 삭제가 쓴다. 루트 · 문서에 없는 노드가 있으면 `null`(`removeNodeOps` 와 같은 답).

@@ -139,6 +139,11 @@ function structureCommands(input: { selectedNodeId: string | null; lock?: NodeLo
     renameAlias: unused,
     kindLocked: aliasLocked,
     changeKind: unused,
+    // 이 문서에는 그리드 행이 없어 두 항목이 안 선다 — 끔은 별칭과 같은 값이면 된다.
+    splitRowLocked: true,
+    buildCellsLocked: true,
+    splitRow: unused,
+    buildCells: unused,
   }
 }
 

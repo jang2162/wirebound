@@ -96,7 +96,7 @@ import {
   type RefObject,
 } from 'react'
 import type { PageDocument } from '@wirebound/schema'
-import { canvasHitAt, type CanvasHit, type HitNode, type Layout, type Point, type Rect } from '../canvas/canvas-drop'
+import { canvasHitAt, COPY_DROP_REFUSAL, type CanvasHit, type HitNode, type Layout, type Point, type Rect } from '../canvas/canvas-drop'
 import { isPreviewId, withoutPreview, type PlacementPreview } from '../canvas/canvas-preview'
 import { createNode } from '../edit/create-node'
 import { findNodeSafely } from '../edit/safe-walk'
@@ -564,6 +564,11 @@ export function usePlacementDrop(input: {
     if (hit === null) return null
     // 숨긴 미리보기는 안 잡힌다 — 그래도 잡히면(숨기기 전에 선 요소) 노드로 읽지 않고 보인 자리 그대로다.
     if ('preview' in hit) return keep(shown, hit.rect, now, why)
+    // 되풀이 줄의 사본은 놓을 자리가 아니다(`canvas/canvas-drop.ts` 의 `canvasHitAt` 머리말 «되풀이 줄의 사본 위면»).
+    if ('copy' in hit) {
+      gesture.refusal = COPY_DROP_REFUSAL
+      return miss(why, 'over-copy')
+    }
     const over: PlacementDrop['over'] =
       'pageEnd' in hit
         ? 'page-end'
