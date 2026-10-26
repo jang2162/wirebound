@@ -160,7 +160,8 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
     const [w] = (JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as Report).widths
     expect(w!.grids[key].length, `${name} ${printed}`).toBeGreaterThan(0)
     expect(
-      w!.grids[key].every((entry) => entry.item?.startsWith('DataGrid/') || entry.item?.startsWith('Grid')),
+      // 그리드를 품은 팝업 표본(`Popup//pop2`)도 같은 그리드라 함께 적힌다.
+      w!.grids[key].every((entry) => entry.item?.startsWith('DataGrid/') || entry.item?.startsWith('Grid') || entry.item === 'Popup//pop2'),
       JSON.stringify(w!.grids[key]),
     ).toBe(true)
     expect(printed).toContain(said)
@@ -283,7 +284,10 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
     expect(w!.pairsMeasured, printed).toBe(0)
     expect(w!.pairsOffGrid.length, printed).toBeGreaterThan(5)
     expect(
-      w!.pairsOffGrid.every((entry) => entry.item?.startsWith('FormTable/') || entry.item?.startsWith('EntryForm/')),
+      // 폼 표를 품은 팝업 표본(`Popup//pop3`)도 같은 폼 표라 함께 적힌다.
+      w!.pairsOffGrid.every(
+        (entry) => entry.item?.startsWith('FormTable/') || entry.item?.startsWith('EntryForm/') || entry.item === 'Popup//pop3',
+      ),
       JSON.stringify(w!.pairsOffGrid),
     ).toBe(true)
     expect(printed).toContain('폼 표 FormTable//ft: 몸통의 Field 가 [FormTable] > [cells] > [Field] · 두 조각 직계로 안 섰습니다')
