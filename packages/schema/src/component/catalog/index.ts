@@ -114,7 +114,7 @@ assertZoneReferences(CATALOG_DEFS)
  * **프리셋의 카드 이름이 다른 카드와 겹치지 않는가** — 팔레트는 타입마다 · 프리셋마다 카드를 세운다(`apps/web/src/palette/placeable.ts`). 이름이 같으면
  * 고르개에서 갈리지 않는 카드 둘이 선다(`registry.ts` 의 이름 겹침과 같은 고장). 레지스트리는 타입만 보므로 여기서 본다.
  */
-function assertPresetLabels(defs: readonly ComponentDef[]): void {
+export function assertPresetLabels(defs: readonly ComponentDef[]): void {
   const taken = new Map(defs.map((def) => [def.label, def.type]))
   for (const def of defs) {
     for (const preset of def.presets ?? []) {

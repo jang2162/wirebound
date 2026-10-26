@@ -7,7 +7,15 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { CURRENT_DOCUMENT_VERSION } from '../../src/migrate'
 import { BODY_ZONE, defineComponent, placementsOf, type ComponentDef, type NodeTemplate } from '../../src/component/define'
-import { assertPresets, CATALOG_DEFS, DataGridDef, FileAttachDef, FILES_MAX, installCatalog } from '../../src/component/catalog/index'
+import {
+  assertPresetLabels,
+  assertPresets,
+  CATALOG_DEFS,
+  DataGridDef,
+  FileAttachDef,
+  FILES_MAX,
+  installCatalog,
+} from '../../src/component/catalog/index'
 import { presetOf, templateNode } from '../../src/component/preset'
 import { resetRegistry } from '../../src/component/registry'
 import { validatePage } from '../../src/validate'
@@ -117,6 +125,21 @@ describe('assertPresets — 템플릿이 카탈로그 규칙을 어기면 던진
     ],
   ])('%s', (_, node, message) => {
     expect(() => assertPresets(withPreset(node))).toThrow(message)
+  })
+})
+
+describe('assertPresetLabels — 카드 이름이 겹치면 던진다', () => {
+  const named = (label: string): ComponentDef[] =>
+    CATALOG_DEFS.map((def) =>
+      def.type === 'DataGrid'
+        ? { ...def, presets: [...(def.presets ?? []), { key: 'probe', label, description: '탐침', node: { type: 'DataGrid' } }] }
+        : def,
+    )
+
+  it('지금 카탈로그는 지난다 · 컴포넌트 이름 · 다른 프리셋 이름과 겹치면 던진다', () => {
+    expect(() => assertPresetLabels(CATALOG_DEFS)).not.toThrow()
+    expect(() => assertPresetLabels(named('파일첨부'))).toThrow('프리셋 probe 의 이름이 이미 쓰입니다: 파일첨부 (FileAttach)')
+    expect(() => assertPresetLabels(named('반복 행 표'))).toThrow('(DataGrid.repeatRows)')
   })
 })
 
