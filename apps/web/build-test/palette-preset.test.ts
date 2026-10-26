@@ -72,6 +72,15 @@ function walk(root: Node, visit: (node: Node, parent: Node | null, zone: string)
   go(root, null, 'body')
 }
 
+/** 문서의 그리드 수 — 꼴과 무관하게 «넣기가 섰다» 를 기다린다(폴의 끝 조건에 단언할 꼴을 넣지 않는다 — 프리셋을 뗀 변조가 시간 초과가 아니라 꼴 값으로 죽게). */
+function gridCount(root: Node): number {
+  let n = 0
+  walk(root, (node) => {
+    if (node.type === 'DataGrid') n += 1
+  })
+  return n
+}
+
 /** 프리셋 꼴의 그리드(머리 오른쪽에 «추가») — [부모 id, 구역, 그 노드]. */
 function presetGrids(root: Node): { parent: string; zone: string; node: Node }[] {
   const out: { parent: string; zone: string; node: Node }[] = []
@@ -189,7 +198,15 @@ describe.skipIf(!전제.ok)('팔레트 프리셋 · 파일첨부 — 실브라�
       expect(thumb.inputs).toBeGreaterThanOrEqual(2)
 
       await openPalette(page, '반복')
-      const count = async () => presetGrids(await server(P)).length
+      // 판이 섰다 = 그리드가 하나 늘었다(시드에 그리드 하나). 프리셋 꼴인지는 그 뒤 값으로 단언한다.
+      const landed = async (label: string, k: number) => {
+        await poll(
+          label,
+          async () => gridCount(await server(P)),
+          (n) => n === 1 + k,
+        )
+        expect([label, presetGrids(await server(P)).length]).toEqual([label, k])
+      }
 
       // ① 트리 — 필드 줄의 아래 띠에 놓는다(필드는 몸통을 받아 위 · 아래 25% 가 형제 자리다). 먼저 한다 — 넣은 표의 줄이 트리를 늘이면 그 줄이 창 밖으로 밀린다.
       await grab(page, PRESET)
@@ -198,27 +215,27 @@ describe.skipIf(!전제.ok)('팔레트 프리셋 · 파일첨부 — 실브라�
       await page.mouse.move(row.x + 30, row.y + row.height * 0.9, { steps: 10 })
       await page.waitForTimeout(150)
       await page.mouse.up()
-      await poll('트리 놓기', count, (n) => n === 1)
+      await landed('트리 놓기', 1)
       // ② 뿌리를 고른 넣기 — 페이지 끝(놓은 표가 골라져 있으니 뿌리 줄을 고른다).
       const rootId = (await server(P)).id
       await treeRow(page, rootId).locator('button').first().click()
       await add(page, PRESET)
-      await poll('뿌리 넣기', count, (n) => n === 2)
+      await landed('뿌리 넣기', 2)
       // ③ 카드 «바닥» 구역 줄.
       await zoneRow(page, 'n_card000001', 'footer').click()
       await add(page, PRESET)
-      await poll('구역 줄 넣기', count, (n) => n === 3)
+      await landed('구역 줄 넣기', 3)
       // ④ 잎(파일첨부 — 몸통 없음)을 고른 넣기 — 그 뒤.
       await treeRow(page, 'n_fa00000001').locator('button').first().click()
       await add(page, PRESET)
-      await poll('잎 뒤 넣기', count, (n) => n === 4)
+      await landed('잎 뒤 넣기', 4)
       // ⑤ 캔버스 — 앞 글 아래 띠에 놓는다(문서 맨 위라 넣은 표에 밀려 캔버스 칸 밖으로 안 간다).
       await grab(page, PRESET)
       const head = (await canvasFrame(page).locator('[data-wb-id="n_text000001"]').boundingBox())!
       await page.mouse.move(head.x + head.width / 2, head.y + head.height * 0.85, { steps: 10 })
       await dragLayoutSettled(page)
       await page.mouse.up()
-      await poll('캔버스 놓기', count, (n) => n === 5)
+      await landed('캔버스 놓기', 5)
 
       const root = await server(P)
       const grids = presetGrids(root)
@@ -271,9 +288,10 @@ describe.skipIf(!전제.ok)('팔레트 프리셋 · 파일첨부 — 실브라�
       await add(page, PRESET)
       await poll(
         '넣기',
-        async () => presetGrids(await server(P)).length,
-        (n) => n === 1,
+        async () => gridCount(await server(P)),
+        (n) => n === 2,
       )
+      expect(presetGrids(await server(P))).toHaveLength(1)
       await page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' }).click()
       await poll(
         '되돌리기 한 번에 원래대로',
