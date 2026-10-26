@@ -152,6 +152,7 @@ class FakeSocket implements RealtimeSocket {
  *   n-ph    (Placeholder)            ← color · image
  *   n-div   (Divider)                ← 대조군. 잠금과 무관한 **형제**
  *   n-sel   (Select)                 ← select · optionList
+ *   n-file  (FileAttach)             ← fileList
  * ```
  * **타입이 전부 다르다** — 트리 줄의 이름이 타입이라 그래야 노드를 이름으로 고른다.
  */
@@ -189,6 +190,7 @@ function doc(): PageDocument {
       { id: 'n-ph', type: 'Placeholder', props: { background: '#2563eb' } },
       { id: 'n-div', type: 'Divider', props: { direction: 'horizontal' } },
       { id: 'n-sel', type: 'Select', props: { options: [{ label: '가', selected: true }, { label: '나' }] } },
+      { id: 'n-file', type: 'FileAttach', props: { files: [{ name: '통장사본.pdf', size: '2.1 MB' }] } },
     ],
   })
 }
@@ -210,6 +212,7 @@ const CONTROL_SAMPLES: { control: EditorControl; type: string; nodeId: string; l
   { control: 'stringList', type: 'Tree', nodeId: 'n-list', label: '항목' },
   { control: 'pairList', type: 'KeyValue', nodeId: 'n-kv', label: '키-값' },
   { control: 'optionList', type: 'Select', nodeId: 'n-sel', label: '선택지' },
+  { control: 'fileList', type: 'FileAttach', nodeId: 'n-file', label: '파일' },
   { control: 'color', type: 'Placeholder', nodeId: 'n-ph', label: '바탕색' },
   { control: 'image', type: 'Placeholder', nodeId: 'n-ph', label: '그림' },
 ]
@@ -419,7 +422,7 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
       await settle()
 
       const widget = within(panel()).getByLabelText<HTMLInputElement>(sample.label)
-      // 목록 위젯(`stringList`·`pairList`·`optionList`)과 `color`는 라벨이 `role="group"`을 가리키므로 그 안의 칸 · 단추를 본다 — 고르기 · 옮기기 ·
+      // 목록 위젯(`stringList`·`pairList`·`optionList`·`fileList`)과 `color`는 라벨이 `role="group"`을 가리키므로 그 안의 칸 · 단추를 본다 — 고르기 · 옮기기 ·
       // 지우기 · 추가 · 고른 것 풀기 · 견본도 즉시 커밋이라 칸만 끄면 그 단추로 목록 · 색이 나간다.
       const inputs =
         widget.tagName === 'DIV' ? [...widget.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')] : [widget]

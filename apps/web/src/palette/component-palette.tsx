@@ -29,7 +29,7 @@
  *
  * ## 카드 — 끌면 놓고, 단추로 넣는다
  *
- * - **몸통은 끌기 전용이다**: 끌기 장치(`drag/use-pointer-drag.ts`)에 `{ kind: 'new', type }` 을 묶고 놓을 자리 · 표시 · 놓기는 경로 층
+ * - **몸통은 끌기 전용이다**: 끌기 장치(`drag/use-pointer-drag.ts`)에 `{ kind: 'new', type }`(프리셋 카드면 `preset` 도)을 묶고 놓을 자리 · 표시 · 놓기는 경로 층
  *   (`drag/use-placement.ts`)에 맡긴다 — 캔버스 손잡이와 같은 길이다(캔버스가 다시 잴 때 마지막 좌표로 다시 묻는 것까지 —
  *   `useCanvasRemeasured`). 끄는 동안 포인터 곁에 카드 이름표가 따라온다. 몸통을 누르기만 하고 떼면(문턱 안) **아무것도 안 한다** —
  *   넣지도 고르지도 않는다. 누름 한 번이 넣기면 끌려다 문턱을 못 넘은 손이 노드를 넣는다. 몸통은 단추가 아니다(포커스를 안 받는다).
@@ -56,7 +56,7 @@ import { usePointerDrag, type DragPoint } from '../drag/use-pointer-drag'
 import { createNode } from '../edit/create-node'
 import { dropOps, type Placing } from '../edit/structure-drop'
 import { useEditCommit } from '../edit/use-edit-commit'
-import { placeableGroups, type PickableGroup, type PickableType } from './placeable'
+import { paletteKey, placeableGroups, type PickableGroup, type PickableType } from './placeable'
 import { ShellResizer } from '../shell/shell-resizer'
 import { shellIcon } from '../shell/icons'
 import type { ZoneRef } from '../store/editor-store'
@@ -361,8 +361,8 @@ function PaletteCards(props: {
   usePublishPlacementPreview(hint?.value ?? null)
   // 끄는 것을 캔버스에 알린다 — 받을 수 있는 빈 구역마다 점선 칸이 선다(`canvas/empty-zones.tsx`).
   usePublishDragging(drag.dragging)
-  const dragged =
-    drag.dragging?.kind === 'new' ? props.types.find((type) => type.type === (drag.dragging as { type: string }).type) : undefined
+  const dragging = drag.dragging?.kind === 'new' ? drag.dragging : null
+  const dragged = dragging === null ? undefined : props.types.find((type) => type.key === paletteKey(dragging.type, dragging.preset))
 
   const trackRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef<(HTMLButtonElement | null)[]>([])
@@ -396,27 +396,28 @@ function PaletteCards(props: {
     return () => observer?.disconnect()
   }, [props.types])
 
-  /** 마지막으로 **넣은** «넣기» 누름 — 같은 카드의 더블클릭 · Enter 두 번의 둘째를 버린다(머리말 «카드»). 못 넣은(거절) 누름은 안 적는다. */
-  const lastAdd = useRef<{ type: string; at: number; x: number; y: number; pointer: boolean } | null>(null)
+  /** 마지막으로 **넣은** «넣기» 누름(카드 열쇠) — 같은 카드의 더블클릭 · Enter 두 번의 둘째를 버린다(머리말 «카드»). 못 넣은(거절) 누름은 안 적는다. */
+  const lastAdd = useRef<{ key: string; at: number; x: number; y: number; pointer: boolean } | null>(null)
 
   /**
    * 더블클릭 · 연달아 친 Enter 의 **둘째**인가 — 같은 카드를 `DOUBLE_CLICK_MS` 안에 다시 눌렀다. 포인터는 자리도 본다(`DOUBLE_CLICK_SLOP` 안 — 단추 안
    * 같은 자리). 다른 카드의 연타 · 간격이 지난 같은 카드의 누름은 뜻한 넣기다.
    */
-  const repeatsLastAdd = (type: string, event: MouseEvent<HTMLButtonElement>): boolean => {
+  const repeatsLastAdd = (key: string, event: MouseEvent<HTMLButtonElement>): boolean => {
     const previous = lastAdd.current
-    if (previous === null || previous.type !== type || performance.now() - previous.at >= DOUBLE_CLICK_MS) return false
+    if (previous === null || previous.key !== key || performance.now() - previous.at >= DOUBLE_CLICK_MS) return false
     const pointer = event.detail > 0
     return !pointer || !previous.pointer || Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <= DOUBLE_CLICK_SLOP
   }
 
-  /** «넣기» 단추의 누름 · Enter — 고른 노드에 따라 넣는다(`./palette-add.ts`). */
-  const add = (type: string, event: MouseEvent<HTMLButtonElement>): void => {
+  /** «넣기» 단추의 누름 · Enter — 고른 노드에 따라 넣는다(`./palette-add.ts`). 프리셋 카드도 판정은 타입이다(`edit/structure-drop.ts` 의 `Placing`). */
+  const add = (card: PickableType, event: MouseEvent<HTMLButtonElement>): void => {
     if (props.pageId === undefined) return
-    if (repeatsLastAdd(type, event)) return
+    if (repeatsLastAdd(card.key, event)) return
     const document = openDocumentNow(store, props.pageId)
     if (document === null) return
-    const placing: Placing = { kind: 'new', type }
+    const placing: Placing =
+      card.preset === undefined ? { kind: 'new', type: card.type } : { kind: 'new', type: card.type, preset: card.preset }
     const verdict = paletteAddTarget({
       document,
       selectedNodeId: store.getState().selectedNodeId,
@@ -430,11 +431,11 @@ function PaletteCards(props: {
       return
     }
     props.onNotice('')
-    const node = createNode(type)
+    const node = createNode(card.type, undefined, card.preset)
     if (node === null) return
     if (commitOps(dropOps(document, placing, verdict.target, node))) {
       store.selectNode(node.id)
-      lastAdd.current = { type, at: performance.now(), x: event.clientX, y: event.clientY, pointer: event.detail > 0 }
+      lastAdd.current = { key: card.key, at: performance.now(), x: event.clientX, y: event.clientY, pointer: event.detail > 0 }
     }
   }
 
@@ -458,14 +459,16 @@ function PaletteCards(props: {
         {props.types.length === 0 && <p className="wb-shell-palette-empty">맞는 컴포넌트가 없습니다</p>}
         {props.types.map((type, index) => (
           <div
-            key={type.type}
+            key={type.key}
             className="wb-shell-palette-card"
-            data-wb-palette-card={type.type}
+            data-wb-palette-card={type.key}
             title={`${type.type} — ${type.description}`}
             // 새 객체를 렌더마다 묶는다 — 경로 층이 끌기의 판을 이 객체에 단다(`drag/use-placement.ts` 머리말 «판은 끄는 것 객체로»).
-            {...drag.bind({ kind: 'new', type: type.type })}
+            {...drag.bind(
+              type.preset === undefined ? { kind: 'new', type: type.type } : { kind: 'new', type: type.type, preset: type.preset },
+            )}
           >
-            <span className="wb-shell-palette-window" data-wb-palette-window={type.type} />
+            <span className="wb-shell-palette-window" data-wb-palette-window={type.key} />
             <span className="wb-shell-palette-label">{type.label}</span>
             <button
               ref={(element) => {
@@ -478,7 +481,7 @@ function PaletteCards(props: {
               tabIndex={index === focusIndex ? 0 : -1}
               onFocus={() => setActive(index)}
               onKeyDown={(event) => moveCard(event, index)}
-              onClick={(event) => add(type.type, event)}
+              onClick={(event) => add(type, event)}
             >
               {shellIcon('add', 14)}
             </button>

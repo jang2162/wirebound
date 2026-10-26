@@ -769,7 +769,11 @@ function BulkProperties(props: {
               })()}
             {fields.map((field) => {
               const { value, mixed } = shared((node) => readProp(node, field.prop))
-              const list = field.control === 'stringList' || field.control === 'pairList' || field.control === 'optionList'
+              const list =
+                field.control === 'stringList' ||
+                field.control === 'pairList' ||
+                field.control === 'optionList' ||
+                field.control === 'fileList'
               return (
                 <div className="wb-shell-prop" key={field.prop}>
                   <dt className="wb-shell-prop-label">
@@ -949,7 +953,7 @@ function PropControl(props: {
     return <SwitchControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} mixed={mixed} />
   }
 
-  if (field.control === 'stringList' || field.control === 'pairList' || field.control === 'optionList') {
+  if (field.control === 'stringList' || field.control === 'pairList' || field.control === 'optionList' || field.control === 'fileList') {
     return <ListControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} onLeave={onLeave} />
   }
 

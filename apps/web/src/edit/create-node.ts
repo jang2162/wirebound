@@ -37,18 +37,25 @@
  * 잔여물이 이 함수 쪽에 있다는 것이 그 판단을 바꾸지는 않는다 — 어느 쪽을 골라도 왕복은
  * 같고 검증도 같으므로, 만들 때 덜 넣는 쪽을 고른다.
  */
-import { BODY_ZONE, createNodeId, getComponent, type WbNode } from '@wirebound/schema'
+import { BODY_ZONE, createNodeId, getComponent, presetOf, templateNode, type WbNode } from '@wirebound/schema'
 
 /**
- * 타입 이름에서 새 노드 하나. 카탈로그에 없는 타입이면 `null`이다.
+ * 타입 이름에서 새 노드 하나. 카탈로그에 없는 타입 · 그 타입에 없는 프리셋이면 `null`이다.
  *
  * id 생성기를 주입할 수 있다 — 테스트가 결정적인 id를 쓴다(스토어의 `nextOpId`와 같은
  * 이유). **카탈로그 조회가 먼저인 것은 실패한 호출이 id를 소비하지 않게 하기 위해서다**
  * (`EditorStore.applyEdit`이 적용 실패 시 id 발급을 미루는 것과 같은 판단).
+ *
+ * **프리셋**(`ComponentDef.presets` — 팔레트의 «타입 + 프리셋» 카드)을 주면 기본 내용 대신 그 템플릿이 내용 전부다(`@wirebound/schema` 의
+ * `templateNode` — 구역의 `initial` 을 안 붙인다). 넣는 규칙은 타입으로 판정하므로 부르는 쪽은 프리셋을 판정에 안 싣는다.
  */
-export function createNode(type: string, nextId: () => string = createNodeId): WbNode | null {
+export function createNode(type: string, nextId: () => string = createNodeId, preset?: string): WbNode | null {
   const def = getComponent(type)
   if (def === undefined) return null
+  if (preset !== undefined) {
+    const template = presetOf(type, preset)
+    return template === undefined ? null : templateNode(template.node, nextId)
+  }
 
   const node: WbNode = { id: nextId(), type }
   for (const zone of def.zones) {

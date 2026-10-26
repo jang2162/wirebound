@@ -239,7 +239,7 @@ export function useCanvasRemeasured(listener: () => void): void {
 function samePreview(a: PlacementPreview, b: PlacementPreview): boolean {
   const placing =
     a.placing.kind === 'new'
-      ? b.placing.kind === 'new' && a.placing.type === b.placing.type
+      ? b.placing.kind === 'new' && a.placing.type === b.placing.type && a.placing.preset === b.placing.preset
       : a.placing.kind === 'module'
         ? b.placing.kind === 'module' && a.placing.key === b.placing.key
         : b.placing.kind === 'node' && a.placing.id === b.placing.id
@@ -609,7 +609,7 @@ export function usePlacementDrop(input: {
     if (doc === null) return logRefused(debug, reason, 'no-document')
     const target = verdict(doc, placing, drop.over, why)
     if (target === null) return logRefused(debug, reason, 'unknown')
-    const node = placing.kind === 'new' ? createNode(placing.type) : null
+    const node = placing.kind === 'new' ? createNode(placing.type, undefined, placing.preset) : null
     if (placing.kind === 'new' && node === null) return logRefused(debug, reason, 'unknown-type')
     const ops = dropOps(doc, placing, target, node ?? undefined)
     const committed = commitOps(ops)
@@ -618,7 +618,8 @@ export function usePlacementDrop(input: {
       result: 'committed',
       parent: target.parentId,
       index: target.index,
-      placing: placing.kind === 'new' ? `new:${placing.type}` : `node:${placing.id}`,
+      placing:
+        placing.kind === 'new' ? `new:${placing.type}${placing.preset === undefined ? '' : `:${placing.preset}`}` : `node:${placing.id}`,
     })
     if (node !== null) store.selectNode(node.id)
   }

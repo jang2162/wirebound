@@ -1,6 +1,6 @@
 /**
- * `stringList`(문자열 배열) · `pairList`(키-값 배열) · `optionList`(선택지 — `{ label, selected }` 배열)의 위젯. 항목 추가·삭제·수정·옮기기(↑ ↓),
- * 선택지면 고르기 · 고른 것 풀기.
+ * `stringList`(문자열 배열) · `pairList`(키-값 배열) · `optionList`(선택지 — `{ label, selected }` 배열) · `fileList`(파일 목록 — `{ name, size }` 배열)의
+ * 위젯. 항목 추가·삭제·수정·옮기기(↑ ↓), 선택지면 고르기 · 고른 것 풀기. 파일 목록은 키-값과 같은 두 칸 줄이다(이름 · 크기).
  *
  * **배열을 통째로 `replace`한다 — 항목마다 인덱스를 조작하지 않는다.** JSON Patch의 배열
  * 인덱스(`add /…/columns/-`·`remove /…/columns/1`)는 동시 편집에서 어긋나기 쉽다: 다른
@@ -23,7 +23,7 @@
  * 못한 문서가 스토어에 실리는 창(재조회 전)이 그 유입 지점이다.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
-import { OPTIONS_MAX, type EditorField } from '@wirebound/schema'
+import { FILES_MAX, OPTIONS_MAX, type EditorField } from '@wirebound/schema'
 import { shellIcon } from '../../shell/icons'
 
 /** `pairList`의 원소. 키와 값 둘 다 문자열이다. */
@@ -38,11 +38,17 @@ export interface Choice {
   selected?: true
 }
 
-export type ListValue = string[] | Pair[] | Choice[]
+/** `fileList`의 원소(`@wirebound/schema` 의 `FileEntrySchema`). 이름 · 크기 둘 다 문자열이다. */
+export interface FileRow {
+  name: string
+  size: string
+}
 
-type Kind = 'string' | 'pair' | 'option'
+export type ListValue = string[] | Pair[] | Choice[] | FileRow[]
 
-/** 위젯 안의 한 줄 — 셋을 한 모양으로 다룬다(`value`가 글 · 라벨이다). */
+type Kind = 'string' | 'pair' | 'option' | 'file'
+
+/** 위젯 안의 한 줄 — 넷을 한 모양으로 다룬다(`value`가 글 · 라벨 · 파일 크기, `key`가 키 · 파일 이름이다). */
 interface Item {
   key: string
   value: string
@@ -68,7 +74,9 @@ export interface ListControlProps {
 }
 
 function kindOf(field: EditorField): Kind {
-  return field.control === 'pairList' ? 'pair' : field.control === 'optionList' ? 'option' : 'string'
+  if (field.control === 'pairList') return 'pair'
+  if (field.control === 'optionList') return 'option'
+  return field.control === 'fileList' ? 'file' : 'string'
 }
 
 /**
@@ -87,6 +95,10 @@ function toItems(value: unknown, kind: Kind): Item[] {
       const option = item as { label?: unknown; selected?: unknown }
       return { key: '', value: typeof option.label === 'string' ? option.label : '', selected: option.selected === true }
     }
+    if (kind === 'file') {
+      const file = item as { name?: unknown; size?: unknown }
+      return { key: typeof file.name === 'string' ? file.name : '', value: typeof file.size === 'string' ? file.size : '', selected: false }
+    }
     const pair = item as { key?: unknown; value?: unknown }
     return {
       key: typeof pair.key === 'string' ? pair.key : '',
@@ -99,6 +111,7 @@ function toItems(value: unknown, kind: Kind): Item[] {
 /** 항목 배열을 문서에 넣을 모양으로 되돌린다. */
 function toValue(items: Item[], kind: Kind): ListValue {
   if (kind === 'pair') return items.map((item) => ({ key: item.key, value: item.value }))
+  if (kind === 'file') return items.map((item) => ({ name: item.key, size: item.value }))
   if (kind === 'option') return items.map((item): Choice => (item.selected ? { label: item.value, selected: true } : { label: item.value }))
   return items.map((item) => item.value)
 }
@@ -106,7 +119,8 @@ function toValue(items: Item[], kind: Kind): ListValue {
 export function ListControl(props: ListControlProps): ReactElement {
   const { field, value, id, disabled, onCommit } = props
   const kind = kindOf(field)
-  const pairs = kind === 'pair'
+  // 두 칸 줄 — 키-값(키 · 값) · 파일 목록(이름 · 크기).
+  const pairs = kind === 'pair' || kind === 'file'
   const items = toItems(value, kind)
 
   // **수정 중인 한 칸만 로컬 state로 든다.** 목록 전체를 초안으로 들면 추가·삭제가
@@ -210,9 +224,9 @@ export function ListControl(props: ListControlProps): ReactElement {
   }
 
   const options = kind === 'option'
-  // 선택지는 하나 이상 · 상한 이하다(`OptionSchema` 의 배열 규칙) — 넘는 값은 서버가 422 로 거절한다.
+  // 선택지는 하나 이상 · 상한 이하다(`OptionSchema` 의 배열 규칙) · 파일 목록은 상한 이하다(`FILES_MAX`) — 넘는 값은 서버가 422 로 거절한다.
   const canRemove = !options || items.length > 1
-  const canAdd = !options || items.length < OPTIONS_MAX
+  const canAdd = options ? items.length < OPTIONS_MAX : kind === 'file' ? items.length < FILES_MAX : true
   const nth = (index: number): string => `${field.label} ${index + 1}번째`
 
   /** 아이콘만 남는 단추 — 이름 · `title` 은 아이콘을 얹기 전의 글 그대로(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»). */
@@ -276,8 +290,8 @@ export function ListControl(props: ListControlProps): ReactElement {
                 onChange={() => pick(index)}
               />
             )}
-            {pairs && cell(index, 'key', `${nth(index)} 키`)}
-            {cell(index, 'value', `${nth(index)} ${pairs ? '값' : '항목'}`)}
+            {pairs && cell(index, 'key', `${nth(index)} ${kind === 'file' ? '이름' : '키'}`)}
+            {cell(index, 'value', `${nth(index)} ${kind === 'file' ? '크기' : pairs ? '값' : '항목'}`)}
             {iconButton(`${index + 1}번째 위로`, 'moveUp', 'wb-shell-list-move', index === 0, () => moveItem(index, -1))}
             {iconButton(`${index + 1}번째 아래로`, 'moveDown', 'wb-shell-list-move', index === items.length - 1, () => moveItem(index, 1))}
             {iconButton(`${index + 1}번째 지우기`, 'remove', 'wb-shell-list-remove', !canRemove, () => removeItem(index))}

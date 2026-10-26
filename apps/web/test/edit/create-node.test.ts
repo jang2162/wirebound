@@ -141,6 +141,7 @@ describe('createNode', () => {
       'DataGrid',
       'EntryForm',
       'Field',
+      'FileAttach',
       'FormTable',
       'GridColumn',
       'SearchForm',
@@ -201,6 +202,38 @@ describe('createNode', () => {
       const node = createNode(def.type, countingIds()) as WbNode
       expect(validatePage(placedPage(node)), def.type).toEqual([])
     }
+  })
+
+  it('프리셋 — 템플릿이 내용 전부다(구역의 기본 내용을 안 붙인다) · id 는 같은 생성기에서 · 검증을 지난다', () => {
+    const column = (n: number, label: string, piece: Record<string, unknown>, props: Record<string, unknown> = {}) => ({
+      id: `n_test${n}`,
+      type: 'GridColumn',
+      props: { label, ...props },
+      children: [{ id: `n_test${n + 1}`, ...piece }],
+    })
+    const made = createNode('DataGrid', countingIds(), 'repeatRows')
+    expect(made).toEqual({
+      id: 'n_test1',
+      type: 'DataGrid',
+      children: [
+        column(2, '항목 1', { type: 'Input' }),
+        column(4, '항목 2', { type: 'Input' }),
+        column(6, '삭제', { type: 'Button', props: { label: '삭제' } }, { size: 'short', align: 'center' }),
+      ],
+      zones: {
+        headEnd: [{ id: 'n_test8', type: 'Button', props: { label: '추가' } }],
+        rows: [{ id: 'n_test9', type: 'GridRow', props: { repeat: 2 } }],
+      },
+    })
+    expect(validatePage(placedPage(made as WbNode))).toEqual([])
+  })
+
+  it('프리셋 — 그 타입에 없는 키면 null 이고 id 를 안 쓴다', () => {
+    const ids = countingIds()
+    expect(createNode('DataGrid', ids, 'nope')).toBeNull()
+    expect(createNode('Button', ids, 'repeatRows')).toBeNull()
+    expect(createNode('Nope', ids, 'repeatRows')).toBeNull()
+    expect(ids()).toBe('n_test1')
   })
 
   it('몸통을 받는 타입도 빈 children을 갖지 않는다 — 기본 내용이 없는 구역은 키가 없다', () => {

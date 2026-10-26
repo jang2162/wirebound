@@ -6,6 +6,8 @@
  * **갈래와 사람이 읽을 이름은 `ComponentDef`에 있다**(`label` · `description` · `group`). 이 파일은 그것을 읽기만 한다 — `apps/web`에 표를 손으로
  * 두면 카탈로그가 늘 때 어긋나는 자리가 하나 더 생긴다.
  *
+ * **프리셋(`ComponentDef.presets`)은 카드가 따로 선다** — 같은 타입의 다른 첫 내용이다(`placeableGroups` 의 차례).
+ *
  * **페이지에 둘 수 없는 타입은 목록에 없다.** 지금 그런 것은 `Slot` 하나이고(설계서 「레이아웃」 — 레이아웃 전용), 판정은 이름이 아니라
  * **`validatePage`를 실제로 돌려** 한다. 이름으로 거르면 카탈로그에 같은 성질의 타입이 생길 때 어긋난다.
  */
@@ -27,10 +29,25 @@ import { createNode } from '../edit/create-node'
 import '../catalog-setup'
 
 export interface PickableType {
+  /** 카드를 가르는 열쇠 — 타입 카드는 타입 이름, 프리셋 카드는 `<타입>:<프리셋 키>`(`paletteKey`). 카드 · 축소판 창 · 표본의 속성 값이다. */
+  key: string
   type: string
+  /** 프리셋 카드면 그 키(`ComponentDef.presets`). 타입 카드면 없다. */
+  preset?: string
   label: string
   description: string
   many: boolean
+}
+
+/** 카드의 열쇠(`PickableType.key`). 타입 이름에는 `:` 가 없다(`ZONE_NAME_PATTERN` 과 같은 식별자 꼴). */
+export function paletteKey(type: string, preset?: string): string {
+  return preset === undefined ? type : `${type}:${preset}`
+}
+
+/** 열쇠를 타입 · 프리셋으로 푼다. */
+export function parsePaletteKey(key: string): { type: string; preset?: string } {
+  const at = key.indexOf(':')
+  return at === -1 ? { type: key } : { type: key.slice(0, at), preset: key.slice(at + 1) }
 }
 
 export interface PickableGroup {
@@ -80,6 +97,7 @@ export function placeableGroups(): PickableGroup[] {
 
     const bucket = buckets.get(def.group) ?? []
     bucket.push({
+      key: paletteKey(def.type),
       type: def.type,
       label: def.label,
       description: def.description,
@@ -94,9 +112,22 @@ export function placeableGroups(): PickableGroup[] {
       group,
       label: COMPONENT_GROUP_LABELS[group as ComponentGroup] ?? group,
       // **한국어 이름순이다.** 영문 타입명순으로 두면 화면에 보이는 글자와 순서가 갈려
-      // 목록을 훑는 사람이 어디를 봐야 할지 모른다.
-      types: types.sort((a, b) => a.label.localeCompare(b.label, 'ko')),
+      // 목록을 훑는 사람이 어디를 봐야 할지 모른다. 프리셋 카드는 제 타입 카드 바로 뒤다(«그리드» 다음 «반복 행 표») — 같은 노드의 다른 첫 내용이라
+      // 이름 차례로 흩으면 둘이 한 타입인 것이 안 보인다. 프리셋은 그 타입 카드가 섰을 때만 선다(같은 판정을 지난 타입이다).
+      types: types.sort((a, b) => a.label.localeCompare(b.label, 'ko')).flatMap((type) => [type, ...presetCards(type)]),
     }))
+}
+
+/** 타입 카드 뒤에 설 그 타입의 프리셋 카드. */
+function presetCards(type: PickableType): PickableType[] {
+  return (getComponent(type.type)?.presets ?? []).map((preset) => ({
+    key: paletteKey(type.type, preset.key),
+    type: type.type,
+    preset: preset.key,
+    label: preset.label,
+    description: preset.description,
+    many: type.many,
+  }))
 }
 
 /** 갈래의 자리. 카탈로그가 정한 순서를 그대로 쓰고, 모르는 갈래는 맨 뒤다. */

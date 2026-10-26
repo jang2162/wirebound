@@ -34,6 +34,7 @@ import { tokenValues } from '@wirebound/themes'
 import { canvasSheets } from '../canvas/canvas'
 import { CanvasIframe, type CanvasFrame } from '../canvas/canvas-iframe'
 import { createNode } from '../edit/create-node'
+import { parsePaletteKey } from './placeable'
 import { useProjectTheme } from '../theme/project-theme'
 import '../catalog-setup'
 
@@ -43,7 +44,7 @@ const NATURAL_WIDTH = 360
 /** 표본 노드 상자 밖으로 남기는 여유(px) — 외곽선 · 그림자가 상자 밖에 그려진다. */
 const CROP_MARGIN = 4
 
-/** 카드 창 하나 — 트랙 왼쪽 위 기준 좌표. */
+/** 카드 창 하나 — 트랙 왼쪽 위 기준 좌표. `type` 은 카드 열쇠다(`./placeable.ts` 의 `PickableType.key` — 프리셋 카드면 `<타입>:<프리셋>`). */
 export interface ThumbSlot {
   type: string
   left: number
@@ -58,14 +59,18 @@ interface Sample {
   nodeId: string
 }
 
-/** 타입의 표본 문서. 없으면 그 타입 노드 하나를 Page 아래에 둔다. 카탈로그에 없는 타입이면 `null`. */
-export function thumbSample(type: string): Sample | null {
-  const first = GALLERY_SAMPLES[type]?.[0]
+/**
+ * 카드 열쇠의 표본 문서. 타입 카드는 갤러리 첫 표본, 없으면 그 타입 노드 하나를 Page 아래에 둔다. **프리셋 카드는 넣을 노드 그대로다**(`createNode` 의
+ * 프리셋 갈래) — 카드가 보이는 것과 넣는 것이 같다. 카탈로그에 없는 타입 · 없는 프리셋이면 `null`.
+ */
+export function thumbSample(key: string): Sample | null {
+  const { type, preset } = parsePaletteKey(key)
+  const first = preset === undefined ? GALLERY_SAMPLES[type]?.[0] : undefined
   if (first !== undefined) {
     return { doc: galleryItemDocument({ type, variant: undefined, sample: first }), nodeId: first.node.id }
   }
   let made = 0
-  const node: WbNode | null = createNode(type, () => `thumb-${type}${made++ === 0 ? '' : `-${made - 1}`}`)
+  const node: WbNode | null = createNode(type, () => `thumb-${key.replace(':', '-')}${made++ === 0 ? '' : `-${made - 1}`}`, preset)
   if (node === null) return null
   return { doc: { version: 1, root: { id: 'thumb-page', type: 'Page', children: [node] } } as AnyDocument, nodeId: node.id }
 }

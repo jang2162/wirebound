@@ -71,14 +71,15 @@ function drop(parentId: string, zone: string, index: number, placement: DropBand
 }
 
 /**
- * 끄는 것 — 옮길 노드(구조 트리 줄 · 캔버스 손잡이) · 넣을 새 타입(컴포넌트 목록 카드) · 넣을 모듈 묶음(«모듈» 탭 카드 — `palette/module-tab.tsx`).
+ * 끄는 것 — 옮길 노드(구조 트리 줄 · 캔버스 손잡이) · 넣을 새 타입(컴포넌트 목록 카드 — 프리셋 카드면 `preset` 이 그 키다) · 넣을 모듈 묶음(«모듈» 탭
+ * 카드 — `palette/module-tab.tsx`). 프리셋은 받는 타입 · 설 자리 판정에 안 든다 — 판정은 타입이다(`createNode` 머리말).
  *
  * 모듈의 `nodes` 는 **미리보기 · 판정의 표본**이다 — 놓을 때 넣는 노드는 부르는 쪽이 서버에서 다시 읽어 새 id 로 짓는다
  * (`palette/module-tab.tsx` · `palette/module-insert.ts`). `key` 는 카드를 가르는 값이다(`personal:<id>` · `project:<id>`).
  */
 export type Placing =
   | { kind: 'node'; id: string }
-  | { kind: 'new'; type: string }
+  | { kind: 'new'; type: string; preset?: string }
   | { kind: 'module'; key: string; nodes: readonly WbNode[] }
 
 /** 넣기 판정에 싣는 노드의 id — 보내지 않는다(머리말 «남이 잡은 자리면»). */
@@ -218,7 +219,7 @@ function refusalIn(document: PageDocument, placing: Placing, parentType: unknown
 export function probeNode(placing: Exclude<Placing, { kind: 'node' }>, id = PROBE_ID): WbNode | null {
   // 기본 내용(검색폼의 단추 · 탭의 패널)도 짓는다 — 그 노드의 id 는 표본 id 뒤에 차례를 붙인다(겹치지 않게).
   let made = 0
-  if (placing.kind === 'new') return createNode(placing.type, () => (made++ === 0 ? id : `${id}-${made - 1}`))
+  if (placing.kind === 'new') return createNode(placing.type, () => (made++ === 0 ? id : `${id}-${made - 1}`), placing.preset)
   const first = placing.nodes[0]
   return first === undefined ? null : { id, type: first.type }
 }
