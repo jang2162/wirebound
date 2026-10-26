@@ -165,6 +165,15 @@ describe('스킬의 도구 표가 실제 도구와 같다', () => {
       'total',
       'pageSize',
       'page',
+      // 파일첨부 · 반복 행 표의 꼴 — 타입 · props
+      'FileAttach',
+      'files',
+      'maxFiles',
+      'maxSize',
+      'Field',
+      'Input',
+      'DateInput',
+      'readonly',
     ])
     const 후보 = backticked().filter((name) => !notArgs.has(name) && !name.includes('.'))
     // 분모가 0이면 아래가 공허하다 — 실제 인자 이름이 산문에 나온다.
