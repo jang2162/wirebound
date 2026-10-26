@@ -7,6 +7,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
   MAX_OPS_PER_EDIT,
+  actionTarget,
   applyOps,
   collectNodeIds,
   installCatalog,
@@ -209,7 +210,7 @@ describe('duplicateOps', () => {
     const after = applied(withTargets, duplicateOps(withTargets, ['sec'], counter()))
     const copy = after.root.children![2]!
     const [tabsCopy, btnCopy] = copy.children!
-    expect(btnCopy!.interactions![0]!.actions.map((action) => action.target)).toEqual([tabsCopy!.children![0]!.id, 'dlg'])
+    expect(btnCopy!.interactions![0]!.actions.map(actionTarget)).toEqual([tabsCopy!.children![0]!.id, 'dlg'])
     expect(validatePage(after)).toEqual([]) // 끊긴 대상(warning)도 없다
   })
 

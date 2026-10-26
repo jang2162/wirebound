@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import type { PatchOp } from '@wirebound/schema'
 import type { ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
-import { CURRENT_DOCUMENT_VERSION, readNodesEnvelope, writeNodesEnvelope, type WbNode } from '@wirebound/schema'
+import { actionTarget, CURRENT_DOCUMENT_VERSION, readNodesEnvelope, writeNodesEnvelope, type WbNode } from '@wirebound/schema'
 import { CLIPBOARD_SHORTCUT_LINES, EDITOR_SHORTCUTS, platformOf } from '../../src/edit/editor-shortcuts'
 import { droppedActionsNotice } from '../../src/edit/paste-ops'
 import { PASTE_REJECTED_HEAD } from '../../src/shell/editor-keys'
@@ -470,7 +470,7 @@ describe('클립보드 · 복제 — 셸', () => {
 
     await waitFor(() => expect(srv.calls).toHaveLength(1))
     const pasted = (srv.calls[0]![0] as { value: WbNode }).value
-    expect(pasted.interactions![0]!.actions.map((action) => action.target)).toEqual(['n-box', 'page:회원관리/회원 상세'])
+    expect(pasted.interactions![0]!.actions.map(actionTarget)).toEqual(['n-box', 'page:회원관리/회원 상세'])
     await waitFor(() => expect(infoTexts()).toEqual([droppedActionsNotice(2)]))
   })
 

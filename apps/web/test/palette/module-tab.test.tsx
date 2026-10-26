@@ -8,7 +8,7 @@
  * **`vi.mock`은 이 파일에 있어야 한다** — 호이스팅이 그것이 적힌 파일에서만 일어난다(`editor-harness.tsx` 머리말).
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { applyOps, invertOps, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import { actionTarget, applyOps, invertOps, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PatchResult, PersonalModule, ProjectModule } from '../../src/api/types'
@@ -326,7 +326,7 @@ describe('넣기', () => {
     const [open, close] = children.slice(2)
     expect([open!.id, close!.id]).not.toContain('m_open')
     // 묶음 안을 가리키던 대상은 새 id 를 따라간다.
-    expect(open!.interactions![0]!.actions[0]!.target).toBe(close!.id)
+    expect(actionTarget(open!.interactions![0]!.actions[0]!)).toBe(close!.id)
     expect(shellStore().getState().selectedNodeIds).toEqual([open!.id, close!.id])
   })
 

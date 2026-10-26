@@ -1,5 +1,5 @@
 import { BODY_ZONE, placementsOf, type ComponentDef, type ComponentPlace } from './component/define'
-import { checkNodeAction, isPageTargetAction } from './interaction/check'
+import { checkNodeAction, isPageTargetAction, isTargetlessAction } from './interaction/check'
 import { getComponent } from './component/registry'
 import { aliasNote } from './display'
 import { DocumentEnvelopeSchema, NODE_ID_PATTERN, PageEnvelopeSchema } from './envelope'
@@ -184,11 +184,22 @@ function ignoredVariantMessage(def: ComponentDef, variant: string): string {
   return `${def.type}의 variant는 무시됩니다: ${variant} ` + `(${def.type}은 ${def.variantFrom} prop에서 변형을 파생합니다)`
 }
 
+/**
+ * 뿌리에만 서는 타입 — 페이지의 «종류» 가 뿌리 타입이다(`Page` = 화면 · `Popup` = 팝업). 둘 다 뿌리 밖에 서면 `nested-page` 다. 레이아웃 뿌리는
+ * `Page` 뿐이다(`validateLayout`).
+ */
+export const ROOT_TYPES: readonly string[] = ['Page', 'Popup']
+
+/** 뿌리에만 서는 타입인가(`ROOT_TYPES`). 붙이기 · 팔레트 · 모듈 넣기가 뿌리를 거르는 자리도 이것을 본다. */
+export function isRootType(type: unknown): boolean {
+  return typeof type === 'string' && ROOT_TYPES.includes(type)
+}
+
 export function validatePage(doc: PageDocument): ValidationIssue[] {
   const envelopeIssues = validateEnvelope(doc, PageEnvelopeSchema)
   if (envelopeIssues.length > 0) return envelopeIssues
 
-  const issues = validateTree(doc.root)
+  const issues = validateTree(doc.root, ROOT_TYPES)
   // 뿌리가 숨으면 그 상태의 화면이 통째로 빈다 — 보임은 뿌리 아래 노드에만 둔다(속성 패널도 뿌리에는 칸을 안 세운다).
   if (doc.root.visibility !== undefined) {
     issues.push(makeIssue('bad-root', doc.root.id, '/root/visibility', '페이지 뿌리에는 상태 보임을 둘 수 없습니다'))
@@ -226,7 +237,7 @@ export function excuseStandingNestedPages<T extends ValidationIssue>(before: Pag
  */
 export function nestedPagesUnderRoot(nodes: readonly WbNode[]): ValidationIssue[] {
   const probe: WbNode = { id: 'n_nestedprobe', type: 'Page', children: [...nodes] }
-  return validateTree(probe)
+  return validateTree(probe, ROOT_TYPES)
     .filter((issue) => issue.code === 'nested-page')
     .map((issue) => ({ ...issue, path: issue.path.slice('/root/children'.length) }))
 }
@@ -288,11 +299,13 @@ export function unknownVisibilityStates(doc: PageDocument): { nodeId: string; pa
   return out
 }
 
+const LAYOUT_ROOT_TYPES: readonly string[] = ['Page']
+
 export function validateLayout(doc: LayoutDocument): ValidationIssue[] {
   const envelopeIssues = validateEnvelope(doc, DocumentEnvelopeSchema)
   if (envelopeIssues.length > 0) return envelopeIssues
 
-  const issues = validateTree(doc.root)
+  const issues = validateTree(doc.root, LAYOUT_ROOT_TYPES)
   const slots = countSlots(doc.root)
   if (slots !== 1) {
     issues.push(makeIssue('slot-count', null, '/root', `레이아웃에는 Slot이 정확히 하나여야 합니다 (${slots}개 발견)`))
@@ -378,7 +391,7 @@ function throwOnFirstIssue(issues: ValidationIssue[]): void {
   }
 }
 
-function validateTree(root: WbNode): ValidationIssue[] {
+function validateTree(root: WbNode, rootTypes: readonly string[]): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   /**
    * 지나온 노드를 id로 든다. **`Set`이 아니라 `Map`인 것은 상호작용 검사 때문이다** —
@@ -395,13 +408,22 @@ function validateTree(root: WbNode): ValidationIssue[] {
    */
   const withInteractions: { node: WbNode; path: string }[] = []
 
-  if (root.type !== 'Page') {
-    issues.push(makeIssue('bad-root', root.id, '/root', `루트는 Page여야 합니다 (현재: ${root.type})`))
+  if (!rootTypes.includes(root.type)) {
+    issues.push(
+      makeIssue(
+        'bad-root',
+        root.id,
+        '/root',
+        `루트는 ${rootTypes.join(' 또는 ')}${rootTypes.length > 1 ? '이어야' : '여야'} 합니다 (현재: ${root.type})`,
+      ),
+    )
   }
 
   for (const { node, path, parent, zone } of walkNodes(root)) {
-    if (node.type === 'Page' && parent !== null) {
-      issues.push(makeIssue('nested-page', node.id, path, 'Page는 루트에만 둘 수 있습니다 — 페이지 안에 Page를 넣을 수 없습니다'))
+    if (isRootType(node.type) && parent !== null) {
+      issues.push(
+        makeIssue('nested-page', node.id, path, `${node.type}는 루트에만 둘 수 있습니다 — 페이지 안에 ${node.type}를 넣을 수 없습니다`),
+      )
     }
     if (seen.has(node.id)) {
       issues.push(makeIssue('duplicate-id', node.id, path, `id가 중복됩니다: ${node.id}`))
@@ -537,8 +559,8 @@ function checkInteractions(node: WbNode, path: string, seen: ReadonlyMap<string,
 
   for (const [index, interaction] of interactions.entries()) {
     for (const [actionIndex, action] of (interaction.actions ?? []).entries()) {
-      // 페이지 경로를 받는 둘은 여기서 끝난다(위 머리말).
-      if (isPageTargetAction(action)) continue
+      // 페이지 경로를 받는 둘은 여기서 끝난다(위 머리말). 팝업 닫기는 대상이 없다.
+      if (isPageTargetAction(action) || isTargetlessAction(action)) continue
 
       const problem = checkNodeAction(seen, action)
       if (problem === null) continue

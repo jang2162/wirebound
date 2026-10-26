@@ -1103,6 +1103,69 @@
   color: inherit;
 }
 
+/* ── 팝업 ──────────────────────────────────────────────────────────── */
+
+/* 팝업 — 회색 제목줄 · 흰 몸통 · 테두리 · 오른쪽 바닥 단추. 그림자는 덮개 위에서만 — 페이지로 연 판 · 찍는 판은 설계서처럼 납작한 상자다. */
+[data-wb-component="Popup"][data-wb-structure="default"] {
+  background: var(--wb-semantic-surface);
+  border: 1px solid var(--wb-semantic-borderStrong);
+  border-radius: var(--wb-radius-md);
+  color: var(--wb-semantic-text);
+  overflow: hidden;
+}
+[data-wb-component="Popup"] > [data-wb-part="titlebar"] {
+  gap: var(--wb-space-2);
+  padding: var(--wb-space-2) var(--wb-space-3);
+  background: var(--wb-semantic-border);
+  border-bottom: 1px solid var(--wb-semantic-borderStrong);
+}
+[data-wb-component="Popup"] > [data-wb-part="titlebar"] > [data-wb-part="title"] {
+  font-size: var(--wb-typography-h5-fontSize);
+  line-height: var(--wb-typography-h5-lineHeight);
+  font-weight: var(--wb-typography-h5-fontWeight);
+}
+[data-wb-component="Popup"] > [data-wb-part="titlebar"] > [data-wb-part="close"] {
+  flex: none;
+  padding: 0 var(--wb-space-1);
+  border: 0;
+  background: transparent;
+  color: var(--wb-semantic-textMuted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+[data-wb-component="Popup"] > [data-wb-part="body"] {
+  padding: var(--wb-space-4);
+}
+[data-wb-component="Popup"] > [data-wb-part="footer"] {
+  gap: var(--wb-space-2);
+  padding: var(--wb-space-3) var(--wb-space-4);
+  border-top: 1px solid var(--wb-semantic-border);
+}
+[data-wb-popup-frame] > [data-wb-component="Popup"] {
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.25);
+}
+/*
+ * 작은 · 보통 팝업 안은 창이 넓어도 아래 «중간 폭» 의 접기를 건다 — 상자(480 · 720px)가 접기 문턱(960)보다 좁아 2열 폼 표의 값 칸이 가장 좁다.
+ * 테마의 접기는 창 폭만 보고 상자 폭을 모른다(`@container` 를 들이지 않는다). 팝업 쪽은 `:where` 로 특이도를 «중간 폭» 과 같게 두어, 뒤에
+ * 오는 «좁은 폭»(라벨 위)이 640 아래에서 그대로 이긴다. 큰 팝업은 창 규칙만 받는다.
+ */
+:where([data-wb-component="Popup"]:is([data-wb-size="small"], [data-wb-size="medium"])) [data-wb-component="FormTable"] > [data-wb-part="cells"] {
+  grid-template-columns: var(--wb-form-labelWidth) minmax(0, 1fr);
+}
+:where([data-wb-component="Popup"]:is([data-wb-size="small"], [data-wb-size="medium"])) [data-wb-component="FormTable"] > [data-wb-part="cells"] > * {
+  grid-column: 1 / -1;
+}
+:where([data-wb-component="Popup"]:is([data-wb-size="small"], [data-wb-size="medium"])) [data-wb-component="FormTable"] > [data-wb-part="cells"] > [data-wb-part="filler"] {
+  display: none;
+}
+:where([data-wb-component="Popup"]:is([data-wb-size="small"], [data-wb-size="medium"])) [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] {
+  grid-template-columns: var(--wb-form-labelWidth) minmax(0, 1fr);
+}
+:where([data-wb-component="Popup"]:is([data-wb-size="small"], [data-wb-size="medium"])) [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > * {
+  grid-column: 1 / -1;
+}
+
 /* ── 중간 폭 ──────────────────────────────────────────────────────────── */
 
 /*

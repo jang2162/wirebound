@@ -31,6 +31,8 @@ export const MARKED_PROPS: Readonly<Record<string, Readonly<Record<string, MarkK
   Affix: { tone: 'value' },
   Media: { kind: 'value', ratio: 'value' },
   Placeholder: { border: 'value', align: 'value', imageFit: 'value' },
+  // 크기도 길이가 아니라 설계의 낱말이다 — 480 · 720 · 960px 은 SDK 기본 CSS 와 테마가 정한다.
+  Popup: { size: 'value' },
 })
 
 /**

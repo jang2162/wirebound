@@ -38,7 +38,18 @@ import {
   TimeInputView,
 } from './input'
 export { FORMTABLE_COLUMNS_VAR, formTableCellsAttrs, SEARCHFORM_COLUMNS_VAR, searchFormFieldsAttrs, TEXTAREA_ROWS_VAR } from './input'
-import { CardView, FlexView, GridView, PageView, SectionView, SlotView, structureCssBlocks, TabPanelView, TabsView } from './structure'
+import {
+  CardView,
+  FlexView,
+  GridView,
+  PageView,
+  PopupView,
+  SectionView,
+  SlotView,
+  structureCssBlocks,
+  TabPanelView,
+  TabsView,
+} from './structure'
 
 export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({
   Page: PageView,
@@ -76,6 +87,7 @@ export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({
   Media: MediaView,
   Divider: DividerView,
   Placeholder: PlaceholderView,
+  Popup: PopupView,
 })
 
 /**

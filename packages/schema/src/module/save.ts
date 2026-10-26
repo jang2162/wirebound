@@ -9,7 +9,7 @@
 | `visibility` | 상태는 페이지마다 따로다 — 모듈에는 상태가 없어, 넣은 노드는 넣는 페이지의 모든 상태에서 보인다(지금 고른 상태와 무관) |
  * | 묶음 밖 노드를 겨냥하는 액션 | 넣는 페이지에 그 노드가 없다. 붙여넣기(`prepareNodesForPaste`)와 같은 거름이다 |
  *
- * **페이지를 겨냥하는 액션(`navigate` · `openModal`)과 빈 대상은 남긴다** — 넣는 페이지에 없는 노드와 달리 그 페이지는 넣는 프로젝트에도
+ * **페이지를 겨냥하는 액션(`navigate` · `openModal`) · 대상 없는 액션(`closeModal`) · 빈 대상은 남긴다** — 넣는 페이지에 없는 노드와 달리 그 페이지는 넣는 프로젝트에도
  * 있을 수 있다(프로젝트 모듈은 같은 프로젝트에 넣고, 개인 모듈은 같은 경로의 페이지가 있는 다른 프로젝트에 넣을 수 있다). 넣는 프로젝트에
  * 없으면 넣을 때 붙여넣기와 같은 거름(`matchPageTargets`)이 뺀다.
  *
@@ -18,7 +18,7 @@
  *
  * **id 는 그대로 둔다** — 재발급은 넣기가 한다(`remapNodeIds`). 저장에서 재발급하면 같은 모듈을 두 번 넣은 페이지가 같은 id 를 갖는다.
  */
-import { isPageTargetAction } from '../interaction/check'
+import { isPageTargetAction, isTargetlessAction } from '../interaction/check'
 import type { Interaction, InteractionAction, WbNode } from '../node'
 import { collectNodeIds, stripMarkers } from '../tree'
 import { childLists } from '../zones'
@@ -44,6 +44,7 @@ export function moduleNodesForSave(nodes: readonly WbNode[]): ModuleNodes {
   let droppedActions = 0
 
   const keep = (action: InteractionAction): boolean => {
+    if (isTargetlessAction(action)) return true
     if (action.target.trim() === '') return true
     if (isPageTargetAction(action)) return true
     return inside.has(action.target)
