@@ -68,7 +68,7 @@
 | --- | --- | --- | --- |
 | **보통 팝업이 폭 192px 로 준다**(에디터 · 번들 · 크기 안 정한 팝업 전부 — 기본값이 `medium`) | 번들 화면 모드 1280 · 덮개 위 1280 에서 상자 폭 192(기대 720) | 입력 조각의 길이 표지 규칙 `:where([data-wb-size="medium"]) { width: min(12em, 100%) }`(SDK `input.tsx`)이 팝업의 `data-wb-size="medium"` 에도 걸린다 — 둘 다 특이도 0 이고 입력 규칙이 `views.css` 에서 뒤다 | 길이 규칙 셋에 `:not([data-wb-component="Popup"])` (특이도 그대로 0) |
 | **에디터 뷰 모드에서 ✖ · «취소» 를 눌러도 안 닫힌다**(위를 고쳐 상자가 720 으로 넓어지자 드러났다) | 창 1440: iframe 은 기기 폭 1280 으로 x 296 ~ 1576, 보이는 캔버스 칸은 그보다 좁다 — 상자가 iframe 가운데(✖ x 1261)에 서서 칸 밖이고 누름이 셸로 갔다(30s 시간 초과 둘) | 덮개 구간(`usePopupArea`)이 보이는 구간의 세로만 재고 가로는 iframe 전체로 두었다 | 구간에 `left` · `width` 를 더한다(`PopupArea`) — 상자가 보이는 칸 가운데에 선다 |
-| **겹 다섯에서 Escape 뒤 포커스가 `body` 로 간다**(자기를 다시 여는 팝업) | 실브라우저: 닫은 뒤 `activeElement` 가 `body` · jsdom: 아래(첫) 겹의 단추 | `popupOpener` 가 그 노드 id 의 첫 요소를 연 요소로 적는다 — 같은 팝업이 겹마다 서면 첫 겹(`inert`)의 단추다 | 포커스를 든 것 → `inert` 밖의 마지막 것(맨 위 겹) 차례로 고른다 · jsdom 케이스 «자기를 다시 여는 팝업 — 닫으면 바로 아래 겹의 그 단추로 돌아온다» |
+| **겹 다섯에서 Escape 뒤 포커스가 `body` 로 간다**(자기를 다시 여는 팝업) | 실브라우저: 닫은 뒤 `activeElement` 가 `body` · jsdom: 아래(첫) 겹의 단추 | `popupOpener` 가 그 노드 id 의 첫 요소를 연 요소로 적는다 — 같은 팝업이 겹마다 서면 첫 겹(`inert`)의 단추다 | 포커스를 든 것 → `inert` 밖의 마지막 것(맨 위 겹) 차례로 고른다 · jsdom 케이스 둘 «자기를 다시 여는 팝업 — 포커스 없이 눌러도 …» · «… 연 노드 안의 둘째 단추를 든 채 …» (아래 F2 · F2c) |
 
 케이스의 전제도 하나 틀렸다 — 번들 화면 모드(`#wb-screen`)는 «줄지 않음» 판이 아니다. 그 규칙(`CAPTURE_CSS` 의 `max-width: none`)은 PPTX 캡처가 다는 `html[data-wb-capture]` 에만 걸린다. 화면 모드 판은 `min(크기, 창)` 으로 고치고, 찍는 판(창 720 · `data-wb-capture` + `CAPTURE_CSS`)을 따로 세워 큰 팝업 960 · 문서 안을 잰다.
 
@@ -233,3 +233,9 @@ B2 는 첫 판에 살았다 — fixture 에 «이동» 으로만 팝업 페이�
 2. **무엇이 비었나:** jsdom 케이스가 iframe 문서의 요소 목록을 `toHaveLength` 로 견주다 실패하면 chai 가 다른 realm 의 요소를 글로 찍다 `TypeError: Cannot read properties of undefined (reading 'name')`(`inspectClass`)를 던진다 — 실패 값이 사라져 «값이 아니라 TypeError 로 죽었다» 로 읽힌다(변조 K5).
    **어디:** `.ruler/20-verification.md` 「목 · 계측은 불린 수를 값으로 확인하고 …」 문단의 jsdom 줄 곁.
    **넣을 문장:** «캔버스 iframe 문서의 요소(다른 realm)를 `toHaveLength` · `toEqual` 로 견주지 않는다 — 실패하면 chai 가 그 요소를 찍다 `TypeError`(`inspectClass`)를 던져 실패 값이 사라진다. 수 · 글로 바꿔 견준다(`expect(list.length).toBe(0)`).»
+3. **무엇이 비었나:** 전량 게이트를 load 170(15 코어 — 다른 프로젝트의 의도된 부하 루프 `yes` 15 개 · 옆 트랙 vitest)에서 띄우자 일꾼 RPC 가 `Timeout calling "onTaskUpdate"` 로 끊겨 **api 163 파일이 통째로 안 돌고** «실패 19 · 통과 6034» 로 끝났다(실패는 모두 `STACK_TRACE_ERROR` 와 그 뒤의 `document is not defined`). 지침은 «둘까지만 겹친다» · 잠듦만 말하고 기계 전체의 부하를 안 본다 — 실행 수를 기준선과 견주지 않으면 «19 실패» 로 읽힌다.
+   **어디:** `.ruler/30-delegation.md` 「워커에게 맡길 때 — wirebound」 의 «변이마다 전량을 돌리게 하지 않는다» 문단, «전량 게이트는 한 기계에서 동시에 둘까지만 띄운다» 문장 뒤.
+   **넣을 문장:** «띄우기 전과 끝난 뒤 `uptime` 의 load 를 상태 파일에 적는다 — 코어 수의 세 배를 넘으면 띄우지 않고 기다린다. 끝난 판의 파일 수를 프로젝트마다 기준선과 견주고, 한 프로젝트가 통째로 빠졌으면(일꾼 RPC 시간 초과) 그 판은 «안 잰 것» 이다.»
+4. **무엇이 비었나:** 게이트 체인을 `pkill -f <스크립트>` 로 내리자 스크립트 셸만 죽고 돌던 갈래(`pnpm test:build:serial` 과 그 vitest 여덟 · headless Chrome)가 launchd 아래 고아로 남았다 — `ps … | grep <워크트리>` 에는 명령 줄에 경로가 없어 안 걸리고 cwd(`lsof -d cwd`)로만 찾았다. 고아 Chrome 하나는 자동 모드 분류기가 내리기를 막아 남았다.
+   **어디:** `.ruler/30-delegation.md` 같은 문단의 «게이트 체인은 스크립트 하나로 쓰고 `nohup nice -n 10 caffeinate -i <스크립트> & disown` 으로 띄운다» 문장 뒤.
+   **넣을 문장:** «멈출 때는 스크립트가 아니라 그 프로세스 그룹을 내린다(띄울 때 `echo $$ > <상태>` 로 pgid 를 적고 `kill -- -<pgid>`) — 스크립트 셸만 내리면 돌던 갈래가 launchd 아래 고아로 남아 다음 판과 겹친다. 남았는지는 경로가 아니라 cwd 로 센다(`lsof -p <pid> -a -d cwd`).»
