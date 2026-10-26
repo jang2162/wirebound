@@ -41,8 +41,18 @@ export { collectNodeIds, findNode, findNodePath, remapNodeIds, stripMarkers, wal
 export type { LockConflictInput, NodeLock, OpsLockConflictInput, SelectionConflictInput } from './lock'
 export { findLockConflict, lockConflictOfOps, locksAgainst, selectionConflicts } from './lock'
 
-export type { ComponentDef, ComponentPlace, EditorControl, EditorField, NodeSeed, ZoneDef } from './component/define'
+export type {
+  ComponentDef,
+  ComponentPlace,
+  ComponentPreset,
+  EditorControl,
+  EditorField,
+  NodeSeed,
+  NodeTemplate,
+  ZoneDef,
+} from './component/define'
 export { BODY_ZONE, defineComponent, placementsOf, propSchema, ZONE_NAME_PATTERN } from './component/define'
+export { presetOf, templateNode } from './component/preset'
 export type { ChildList } from './zones'
 export { childLists, childNodes, hasBody, hasZone, mapChildLists, zoneDefs, zoneList, zonePointer } from './zones'
 export { clearImages, imageIdsIn } from './images'

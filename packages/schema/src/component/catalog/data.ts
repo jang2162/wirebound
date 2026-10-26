@@ -49,6 +49,31 @@ export const DataGridDef = defineComponent({
     { name: 'rows', label: '행', accepts: ['GridRow'], initial: [{ type: 'GridRow', props: { repeat: 5 } }] },
     { name: 'footer', label: '바닥', initial: [{ type: 'Pagination' }] },
   ],
+  // **반복 행 입력 표** — 새 타입이 아니라 같은 그리드의 다른 첫 내용이다(설계 spec `2026-10-26-popup-attach-repeat-design.md` «5» — 손으로 짓는
+  // 25 걸음이 10 이 된다). `[추가]` 는 «머리 오른쪽» 단추, 행마다 입력은 셀 틀, `[삭제]` 는 «삭제» 열의 셀 틀 단추다. 바닥(페이지네이션 바)은 없다.
+  presets: [
+    {
+      key: 'repeatRows',
+      label: '반복 행 표',
+      description: '행마다 입력 칸과 삭제 단추 · 머리 오른쪽에 추가 단추를 둔 그리드.',
+      node: {
+        type: 'DataGrid',
+        children: [
+          { type: 'GridColumn', props: { label: '항목 1' }, children: [{ type: 'Input' }] },
+          { type: 'GridColumn', props: { label: '항목 2' }, children: [{ type: 'Input' }] },
+          {
+            type: 'GridColumn',
+            props: { label: '삭제', size: 'short', align: 'center' },
+            children: [{ type: 'Button', props: { label: '삭제' } }],
+          },
+        ],
+        zones: {
+          headEnd: [{ type: 'Button', props: { label: '추가' } }],
+          rows: [{ type: 'GridRow', props: { repeat: 2 } }],
+        },
+      },
+    },
+  ],
 })
 
 /** 그리드 · 열 묶음의 몸통 — 열과 열 묶음이 서는 두 자리. */

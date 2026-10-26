@@ -62,8 +62,8 @@ const ROOT_VARS = (): Map<string, string> => {
 describe('system-admin manifest', () => {
   it('id · 판 · sdk · 이름 · 설명', () => {
     expect(ADMIN_V0.manifest.id).toBe('system-admin')
-    expect(ADMIN_V0.manifest.version).toBe('1.7.0')
-    expect(ADMIN_V0.manifest.sdk).toBe('^1.7.0')
+    expect(ADMIN_V0.manifest.version).toBe('1.8.0')
+    expect(ADMIN_V0.manifest.sdk).toBe('^1.8.0')
     expect(ADMIN_V0.manifest.name).toBe('기본테마')
     expect(ADMIN_V0.manifest.description).toBe('관리자 화면 기본 테마. 좁은 여백과 표 중심의 밀도를 갖는다.')
   })
@@ -126,12 +126,12 @@ describe('system-admin manifest', () => {
 
 describe('system-admin CSS', () => {
   /**
-   * variant 없는 노드는 `defaultVariant`(`default`)로 그려진다 — 그 값을 겨냥한 규칙이 있으면 variant 없는 노드의 모습이 바뀐다. 예외는 폼 단추 구역의
-   * 기본 단추 둘뿐이다 — 이 테마의 기본 단추가 주색이라 주 단추(`primary`)와 나란히 서면 같은 칠이 되어, 그 자리에서만 보조 꼴로 바꾼다(`theme.css` 의
-   * «폼의 단추 구역»). 그 밖의 자리에 `default` 를 겨냥한 셀렉터는 여전히 죽는다.
+   * variant 없는 노드는 `defaultVariant`(`default`)로 그려진다 — 그 값을 겨냥한 규칙이 있으면 variant 없는 노드의 모습이 바뀐다. 예외는 폼 · 파일첨부
+   * 단추 구역의 기본 단추 셋뿐이다 — 이 테마의 기본 단추가 주색이라 주 단추(`primary`)와 나란히 서거나 작은 단추 줄로 서면 주색이 넘쳐, 그 자리에서만 보조
+   * 꼴로 바꾼다(`theme.css` 의 «폼 · 파일첨부의 단추 구역»). 그 밖의 자리에 `default` 를 겨냥한 셀렉터는 여전히 죽는다.
    */
-  it('[data-wb-variant="default"] 규칙은 폼 단추 구역의 기본 단추 둘뿐이다', () => {
-    const FORM_ACTIONS = ['SearchForm', 'EntryForm'].map(
+  it('[data-wb-variant="default"] 규칙은 폼 · 파일첨부 단추 구역의 기본 단추 셋뿐이다', () => {
+    const FORM_ACTIONS = ['SearchForm', 'EntryForm', 'FileAttach'].map(
       (form) => `[data-wb-component="${form}"] > [data-wb-part="actions"] > [data-wb-component="Button"][data-wb-variant="default"]`,
     )
     const targeting = rules()

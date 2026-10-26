@@ -919,6 +919,66 @@
   padding-top: var(--wb-space-2);
 }
 
+/*
+ * 파일첨부 — 테두리 상자 · 단추 줄은 작은 보조 꼴 · 목록 머리는 옅은 바탕의 작은 굵은 글 · 빈 목록 줄은 가운데 흐린 글 · 한도 수는 빨간 굵은 글(설계서의
+ * «수 빨강» — 뷰가 개수 · 크기를 `limitCount` · `limitSize` 조각으로 감싼다). 뷰는 SDK 기본 뷰다. 꺼진(`disabled`) 상자는 바탕 · 글을 흐리게 —
+ * 단추는 제 노드의 상태를 따른다.
+ */
+[data-wb-component="FileAttach"][data-wb-structure="default"] {
+  gap: var(--wb-space-2);
+  padding: var(--wb-space-2);
+  border: 1px solid var(--wb-semantic-border);
+  border-radius: var(--wb-radius-sm);
+  background: var(--wb-semantic-surface);
+  color: var(--wb-semantic-text);
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
+}
+[data-wb-component="FileAttach"] > [data-wb-part="actions"] {
+  gap: var(--wb-space-1);
+}
+[data-wb-component="FileAttach"] > [data-wb-part="actions"] > [data-wb-component="Button"][data-wb-structure="solid"] {
+  padding: var(--wb-space-1) var(--wb-space-3);
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+}
+[data-wb-component="FileAttach"] > [data-wb-part="list"] > * > tr > * {
+  padding: var(--wb-space-1) var(--wb-space-2);
+  border: 1px solid var(--wb-semantic-border);
+}
+[data-wb-component="FileAttach"] > [data-wb-part="list"] > thead > tr > * {
+  background: var(--wb-semantic-canvas);
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-h6-fontSize);
+  line-height: var(--wb-typography-h6-lineHeight);
+  font-weight: var(--wb-typography-h6-fontWeight);
+}
+[data-wb-component="FileAttach"] [data-wb-part="drop"] {
+  padding: var(--wb-space-4) var(--wb-space-2);
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="FileAttach"] [data-wb-part="checkbox"] {
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--wb-semantic-borderStrong);
+  border-radius: var(--wb-radius-sm);
+  background: var(--wb-semantic-surface);
+}
+[data-wb-component="FileAttach"] > [data-wb-part="limit"] {
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+}
+[data-wb-component="FileAttach"] :is([data-wb-part="limitCount"], [data-wb-part="limitSize"]) {
+  color: var(--wb-semantic-danger);
+  font-weight: 700;
+}
+[data-wb-component="FileAttach"][data-wb-state~="disabled"] {
+  background: var(--wb-semantic-canvas);
+  color: var(--wb-semantic-textMuted);
+}
+
 /* ── 액션 ─────────────────────────────────────────────────────────────── */
 
 /*
@@ -959,11 +1019,12 @@
   border-color: var(--wb-semantic-surface);
 }
 /*
- * 폼의 단추 구역(`actions`)은 주 단추(`primary` — 새 폼의 «검색» · «저장»)만 채워 칠하고, 기본(`default`) 단추는 보조 꼴로 둔다 — 기본 단추가 주색으로
- * 칠해지는 이 테마에서 둘이 같은 칠이 되지 않게. 다른 variant(`danger` 등)는 제 규칙 그대로다.
+ * 폼 · 파일첨부의 단추 구역(`actions`)은 주 단추(`primary` — 새 폼의 «검색» · «저장»)만 채워 칠하고, 기본(`default`) 단추는 보조 꼴로 둔다 — 기본
+ * 단추가 주색으로 칠해지는 이 테마에서 둘이 같은 칠이 되지 않게. 다른 variant(`danger` 등)는 제 규칙 그대로다.
  */
 [data-wb-component="SearchForm"] > [data-wb-part="actions"] > [data-wb-component="Button"][data-wb-variant="default"],
-[data-wb-component="EntryForm"] > [data-wb-part="actions"] > [data-wb-component="Button"][data-wb-variant="default"] {
+[data-wb-component="EntryForm"] > [data-wb-part="actions"] > [data-wb-component="Button"][data-wb-variant="default"],
+[data-wb-component="FileAttach"] > [data-wb-part="actions"] > [data-wb-component="Button"][data-wb-variant="default"] {
   background: var(--wb-semantic-surface);
   color: var(--wb-semantic-text);
   border-color: var(--wb-semantic-border);

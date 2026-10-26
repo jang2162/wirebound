@@ -11,6 +11,8 @@ export type EditorControl =
   | 'stringList'
   | 'pairList'
   | 'optionList'
+  /** 파일 목록 — `{ name, size }` 배열(`catalog/input.ts` 의 `FileEntrySchema`). 이름 · 크기 두 칸 줄의 목록 위젯이다(`apps/web/src/panels/controls/list-control.tsx`). */
+  | 'fileList'
   /** 소문자 `#rrggbb` 또는 없음 — 견본 · 글 칸 · 지우기(`apps/web/src/panels/controls/color-control.tsx`). */
   | 'color'
   /** 그림 id(sha256) 또는 없음 — 올리기 · 고르기 · 지우기(`apps/web/src/panels/controls/image-control.tsx`). */
@@ -122,6 +124,30 @@ export interface ComponentDef {
    * 받는 값은 기본값을 채운 props 다. 없으면 이 타입은 자손을 가리지 않는다.
    */
   reveal?: (props: Record<string, unknown>, at: { zone: string; index: number }) => Record<string, unknown>
+  /**
+   * **같은 타입의 다른 첫 내용** — 팔레트가 «타입 + 프리셋» 마다 카드 하나를 더 세운다(`DataGrid` 의 «반복 행 표»). 노드는 이 타입의 노드이고 넣는 규칙
+   * (받는 타입 · 설 자리)은 타입으로 판정한다 — 프리셋은 새 타입이 아니다. 템플릿이 그 판의 카탈로그로 `validatePage` 를 지나는지는 카탈로그를 모은
+   * 자리가 본다(`catalog/index.ts` 의 `assertPresets`). MCP · REST 는 받지 않는다 — 에디터의 넣는 길(`createNode(type, nextId, preset)`)의 장치다.
+   */
+  presets?: readonly ComponentPreset[]
+}
+
+/** 프리셋 하나(`ComponentDef.presets`). `key` 는 그 타입 안에서 겹치지 않고 구역 이름과 같은 꼴이다. `label` · `description` 은 카드의 글이다. */
+export interface ComponentPreset {
+  key: string
+  label: string
+  description: string
+  /** 만들 노드 — 뿌리의 `type` 이 그 정의의 타입이다. id 는 만들 때 짓는다. */
+  node: NodeTemplate
+}
+
+/** id 없는 노드(재귀) — 프리셋의 템플릿. 몸통 · 구역의 자식도 id 가 없다. */
+export interface NodeTemplate {
+  type: string
+  props?: Record<string, unknown>
+  variant?: string
+  children?: readonly NodeTemplate[]
+  zones?: Readonly<Record<string, readonly NodeTemplate[]>>
 }
 
 /** 설 자리 하나 — 부모 타입의 그 구역. */
@@ -202,6 +228,17 @@ export function defineComponent(def: ComponentDef): ComponentDef {
   if (Array.isArray(def.placement) && def.placement.length === 0) throw new Error(`${type}: placement 목록이 비었습니다(아무 데나면 빼라)`)
   if (def.bodyHost === 'parent' && !def.zones.some((zone) => zone.name === BODY_ZONE)) {
     throw new Error(`${type}: bodyHost 가 parent 인데 몸통 구역이 없습니다`)
+  }
+  assertUnique(
+    type,
+    'presets',
+    (def.presets ?? []).map((preset) => preset.key),
+  )
+  for (const preset of def.presets ?? []) {
+    if (!ZONE_NAME_PATTERN.test(preset.key)) throw new Error(`${type}: 프리셋 키의 꼴이 아닙니다: ${preset.key}`)
+    assertHumanText(type, `presets.${preset.key}.label`, preset.label, LABEL_MAX)
+    assertHumanText(type, `presets.${preset.key}.description`, preset.description, DESCRIPTION_MAX)
+    if (preset.node.type !== type) throw new Error(`${type}: 프리셋 ${preset.key} 의 노드 타입이 ${preset.node.type} 입니다`)
   }
 
   const known = propKeys(def.props)

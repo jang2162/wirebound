@@ -220,8 +220,20 @@ export function weightRoom(type: string, props: WbNode['props']): WeightRoom | u
   return typeof columns === 'number' ? { kind: 'span', columns } : undefined
 }
 
-/** 값을 받는 입력 조각 — `Field` 몸통에서 필드 이름(`ViewProps.field`)을 받는다. 단추 · 사이 글자 · 칩은 제 글이 이름이라 안 받는다. */
-const VALUE_PIECES: ReadonlySet<string> = new Set(['Input', 'TextArea', 'Select', 'DateInput', 'TimeInput', 'CheckboxGroup', 'RadioGroup'])
+/**
+ * 필드 이름(`ViewProps.field`)을 받는 조각 — 값을 받는 입력 조각과 파일첨부(그 묶음의 접근 이름이 된다 — 조합 입력의 조각은 아니다). 단추 · 사이 글자 ·
+ * 칩은 제 글이 이름이라 안 받는다.
+ */
+const NAMED_PIECES: ReadonlySet<string> = new Set([
+  'Input',
+  'TextArea',
+  'Select',
+  'DateInput',
+  'TimeInput',
+  'CheckboxGroup',
+  'RadioGroup',
+  'FileAttach',
+])
 
 /**
  * `Field` 몸통의 자식마다 실을 필드 이름(몸통 배열의 자리 → 이름) — 그 판에 서는 입력 조각만. 조각이 하나면 라벨, 여럿이면 라벨 + 별칭(없으면
@@ -253,7 +265,7 @@ function fieldNames(
   const pieces = body.flatMap((child, index) =>
     child !== null &&
     typeof child === 'object' &&
-    VALUE_PIECES.has(readString((child as { type?: unknown }).type)) &&
+    NAMED_PIECES.has(readString((child as { type?: unknown }).type)) &&
     shownIn(child, options)
       ? [{ index, alias: readString((child as { alias?: unknown }).alias).trim() }]
       : [],

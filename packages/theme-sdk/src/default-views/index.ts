@@ -28,6 +28,7 @@ import {
   DateInputView,
   EntryFormView,
   FieldView,
+  FileAttachView,
   FormTableView,
   InputView,
   inputCssBlocks,
@@ -70,6 +71,7 @@ export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({
   RadioGroup: RadioGroupView,
   Chip: ChipView,
   Affix: AffixView,
+  FileAttach: FileAttachView,
   Button: ButtonView,
   Link: LinkView,
   Text: TextView,
@@ -89,7 +91,8 @@ export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({
  */
 const LONG_WORD_CSS = `[data-wb-component="Text"]:not(:where([data-wb-component="DataGrid"] [data-wb-part="table"] *)),
 [data-wb-component="KeyValue"],
-[data-wb-component="DataGrid"] {
+[data-wb-component="DataGrid"],
+[data-wb-component="FileAttach"] {
   overflow-wrap: anywhere;
 }`
 

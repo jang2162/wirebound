@@ -28,9 +28,10 @@ export interface ThemeCheckError {
   /**
    * `fallback` — 칸에 선 `data-wb-error`. `console` — 그 칸을 그리는 동안 난 `console.error`. `bundle` — 번들을 못 실었다. `zone` — 내용이 든 구역을
    * 뷰가 안 그렸다(`missingZones`). `placeholder` — 자리표시자 뷰가 사람이 정한 그리기 값을 뿌리의 변수로 안 실었다(`placeholderDrops`). `pairs` — 폼 표
-   * 뷰가 쌍 격자 계약(`cells` 조각 · 그 직계 칸과 빈 쌍 · 두 조각 · 빈 쌍 수)을 어겼다(`pairGridProblems`).
+   * 뷰가 쌍 격자 계약(`cells` 조각 · 그 직계 칸과 빈 쌍 · 두 조각 · 빈 쌍 수)을 어겼다(`pairGridProblems`). `grid` — 그리드의 표 계약(`dataGridProblems`).
+   * `file` — 파일첨부 뷰가 목록 · 빈 목록 안내 · 한도 글 계약을 어겼다(`fileAttachProblems`).
    */
-  source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs' | 'grid'
+  source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs' | 'grid' | 'file'
 }
 
 export interface ThemeCheckFocusable {
@@ -162,6 +163,7 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
         for (const message of missingZones(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'zone' })
         for (const message of pairGridProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'pairs' })
         for (const message of dataGridProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'grid' })
+        for (const message of fileAttachProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'file' })
         if (item.type === 'Placeholder' && item.sample.label === PLACEHOLDER_SET_SAMPLE) {
           for (const message of placeholderDrops(container, item.sample.node.id)) errors.push({ ...at, message, source: 'placeholder' })
         }
@@ -400,6 +402,71 @@ function dataGridProblems(container: Element, root: WbNode): string[] {
       if (ids !== 1 || copies !== cells.length - 1) {
         out.push(
           `DataGrid 셀 틀(노드 ${template.nodeId})이 data-wb-id ${ids} 개 · 사본 ${copies} 개입니다 — 셀 틀 칸 ${cells.length} 개면 원본 1 · 사본 ${cells.length - 1}(item.copy)`,
+        )
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * **파일첨부의 목록 계약**(설계 spec `2026-10-26-popup-attach-repeat-design.md` «7» F1 ~ F4) — 테마 CSS 와 뒤 단계의 조각 기준 표지가 조각 이름을 겨냥한다.
+ * ① F4 — `list` 조각이 `table` 하나이고 머리 칸이 `th scope="col"` 셋이다(보조 기술이 파일 이름 · 크기를 열 머리로 읽는다). ② F1 — `file` 조각(파일 한 줄)
+ * 수가 `files` 길이와 같다. ③ F2 — 목록이 비면 `drop` 조각(빈 목록 안내) 하나 · 차면 0. ④ F3 — 한도가 있으면 `limit` 조각 하나 안에 개수(`limitCount` —
+ * «{maxFiles}개»)와 크기(`limitSize` — `maxSize`) 조각이 그 값의 글로 서고, 없는 쪽 조각은 없다. 둘 다 없으면 `limit` 조각이 없다. 조각은 그 노드의 것만
+ * 센다(가장 가까운 노드 요소가 그 노드다 — «단추» 구역의 단추 안은 안 센다).
+ *
+ * **jsdom 이라 DOM 꼴만 본다** — 이름 칸이 좁은 칸 안에서 꺾이는지(넘침)는 `wb-theme shots` 가 실 Chromium 으로 잰다.
+ */
+function fileAttachProblems(container: Element, root: WbNode): string[] {
+  const out: string[] = []
+  for (const { node } of walkNodes(root)) {
+    if (node.type !== 'FileAttach') continue
+    const element = container.querySelector(`[data-wb-id="${node.id}"]`)
+    if (element === null) continue
+    const props = shimItem(node, 0).props
+    const owned = (selector: string) => [...element.querySelectorAll(selector)].filter((el) => el.closest('[data-wb-id]') === element)
+    const where = `(노드 ${node.id})`
+    const lists = owned('[data-wb-part="list"]')
+    if (lists.length !== 1 || lists[0]!.tagName !== 'TABLE') {
+      out.push(
+        `FileAttach 뷰가 list 조각을 table 하나로 그리지 않았습니다 — ${lists.length} 개 · ${lists.map((el) => el.tagName.toLowerCase()).join(' · ') || '없음'}${where}`,
+      )
+    } else {
+      const heads = [...(lists[0] as HTMLTableElement).querySelectorAll('thead > tr > *')]
+      const good = heads.filter((cell) => cell.tagName === 'TH' && cell.getAttribute('scope') === 'col').length
+      if (heads.length !== 3 || good !== 3) {
+        out.push(`FileAttach 목록 머리 칸이 th scope="col" 셋이 아닙니다 — 칸 ${heads.length} 개 가운데 ${good} 개${where}`)
+      }
+    }
+    const files = Array.isArray(props.files) ? props.files.length : 0
+    const rows = owned('[data-wb-part="file"]').length
+    if (rows !== files) out.push(`FileAttach 뷰가 file 조각(파일 한 줄)을 ${files} 개가 아니라 ${rows} 개 그렸습니다${where}`)
+    const drops = owned('[data-wb-part="drop"]').length
+    const wantDrop = files === 0 ? 1 : 0
+    if (drops !== wantDrop) {
+      out.push(`FileAttach 뷰가 drop 조각(빈 목록 안내)을 ${wantDrop} 개가 아니라 ${drops} 개 그렸습니다 — 목록이 비었을 때만 하나${where}`)
+    }
+    const count = typeof props.maxFiles === 'number' && props.maxFiles > 0 ? `${props.maxFiles}개` : null
+    const size = typeof props.maxSize === 'string' && props.maxSize.trim() !== '' ? props.maxSize : null
+    const limits = owned('[data-wb-part="limit"]')
+    if (count === null && size === null) {
+      if (limits.length > 0) out.push(`FileAttach 뷰가 한도가 없는데 limit 조각을 ${limits.length} 개 그렸습니다${where}`)
+      continue
+    }
+    if (limits.length !== 1) {
+      out.push(`FileAttach 뷰가 limit 조각을 1 개가 아니라 ${limits.length} 개 그렸습니다${where}`)
+      continue
+    }
+    for (const [part, want] of [
+      ['limitCount', count],
+      ['limitSize', size],
+    ] as const) {
+      const got = [...limits[0]!.querySelectorAll(`[data-wb-part="${part}"]`)].map((el) => el.textContent ?? '')
+      const expected = want === null ? [] : [want]
+      if (JSON.stringify(got) !== JSON.stringify(expected)) {
+        out.push(
+          `FileAttach 한도 글의 ${part} 조각이 ${JSON.stringify(expected)} 가 아니라 ${JSON.stringify(got)} 입니다 — limit 조각 안에 값 하나를 감쌉니다${where}`,
         )
       }
     }

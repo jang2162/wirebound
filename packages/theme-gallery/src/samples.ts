@@ -1,4 +1,4 @@
-import type { WbNode } from '@wirebound/schema'
+import { DataGridDef, templateNode, type WbNode } from '@wirebound/schema'
 
 export interface GallerySample {
   /** 무엇을 보이는 표본인지. «DataGrid — 흔한 목록» 꼴. */
@@ -57,6 +57,13 @@ const grid = (id: string, props: Record<string, unknown>, columns: WbNode[], row
   children: columns,
   zones: { ...zones, rows },
 })
+/** 파일첨부 — 단추 셋(카탈로그 `initial` 과 같은 글)을 «단추» 구역에 든다. */
+const fileAttach = (id: string, props: Record<string, unknown>): WbNode => ({
+  id,
+  type: 'FileAttach',
+  props,
+  zones: { actions: [button(`${id}-add`, '파일추가'), button(`${id}-remove`, '항목 제거'), button(`${id}-clear`, '전체 항목 제거')] },
+})
 /** 출석부 꼴 — 고정 열 셋 + 날짜 열 스물일곱(주말 음영 · 기호 셀). 잎 열 서른. */
 const attendanceColumns = (): WbNode[] => [
   column('at-no', 'No', [], { numbering: 'asc', size: 'short' }),
@@ -75,6 +82,21 @@ const attendanceColumns = (): WbNode[] => [
  * (`example-` 까지가 390 폭 본문에 들어간다) 넘침을 못 보인다.
  */
 const LONG_WORD = 'hong.gildong.very.long.account@examplecompany.co.kr'
+
+/**
+ * 파일첨부 표본의 긴 파일 이름 둘 — 하이픈 없는 긴 낱말과 띄어 쓰지 않은 한글 낱말. 좁은 칸(2열 폼 표의 값 칸 · 카드)에서 이름 칸이 꺾여 칸 안에 서는지를
+ * 이 줄들이 보인다(`LONG_WORD` 와 같은 까닭으로 하이픈을 안 넣는다).
+ */
+const LONG_FILE_NAME = 'employment_certificate_hong_gildong_final_revision_v12.pdf'
+const LONG_KOREAN_FILE_NAME = '이천이십육년도하반기정보보안교육결과보고서최종본.hwp'
+
+/** 프리셋을 표본으로 — 팔레트 카드가 넣는 노드와 같은 꼴이다(`templateNode`). id 는 머리 + 차례. */
+function presetSample(key: string, prefix: string): WbNode {
+  const preset = DataGridDef.presets?.find((one) => one.key === key)
+  if (preset === undefined) throw new Error(`DataGrid 에 프리셋 ${key} 이 없습니다`)
+  let made = 0
+  return templateNode(preset.node, () => `${prefix}${made++ === 0 ? '' : `-${made - 1}`}`)
+}
 
 /**
  * 갤러리 표본 그림 하나 — 16×9 PNG(324 바이트). `id` 는 그 바이트의 sha256 이다(그림 id 의 꼴 그대로). 갤러리 · `wb-theme check` · 축소판은 이 id 만
@@ -271,6 +293,34 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
         ],
         [gridRow('dg7-r', { repeat: 2 })],
         { headEnd: [button('dg7-add', '추가')] },
+      ),
+    },
+    // 반복 행 입력 표 — 팔레트 «반복 행 표» 카드가 넣는 노드 그대로(`DataGrid` 의 프리셋 `repeatRows`).
+    { label: 'DataGrid — 반복 행 표(프리셋)', node: presetSample('repeatRows', 'rr') },
+    // 단위기간 꼴 — 입력 · 날짜~날짜 · 글 · 삭제 단추 · 머리 오른쪽 [추가] · 합계 행.
+    {
+      label: 'DataGrid — 반복 행 표 · 기간 · 합계 행',
+      node: grid(
+        'rr2',
+        {},
+        [
+          column('rr2-name', '단위기간명', [input('rr2-name-i', { placeholder: '입력' })], { required: true }),
+          column('rr2-term', '기간', [
+            { id: 'rr2-from', type: 'DateInput', props: { value: '2026-07-04' } },
+            { id: 'rr2-to', type: 'Affix', props: { text: '~' } },
+            { id: 'rr2-until', type: 'DateInput', props: { value: '2026-08-01' } },
+          ]),
+          column('rr2-days', '일수', [text('rr2-days-t', '20')], { align: 'end' }),
+          column('rr2-del', '삭제', [button('rr2-del-b', '삭제')], { size: 'short', align: 'center' }),
+        ],
+        [
+          gridRow('rr2-r', { repeat: 2 }),
+          gridRow('rr2-sum', { kind: 'total' }, [
+            gridCell('rr2-sum-l', [text('rr2-sum-lt', '합계')], { span: 2 }),
+            gridCell('rr2-sum-v', [text('rr2-sum-vt', '40')]),
+          ]),
+        ],
+        { headEnd: [button('rr2-add', '추가')] },
       ),
     },
   ],
@@ -505,6 +555,15 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
         button('field3-check', '중복확인'),
       ]),
     },
+    // 단순 파일 선택 줄(«[파일선택][선택된 파일 없음][데이터 정합성 체크]») — 파일첨부가 아니라 지금 조각이다(단추 + 읽기 전용 입력).
+    {
+      label: 'Field — 단순 파일 선택 줄',
+      node: field('field4', '일괄등록 파일', [
+        button('field4-pick', '파일선택'),
+        { ...input('field4-name', { placeholder: '선택된 파일 없음', readonly: true }), weight: 1 },
+        button('field4-check', '데이터 정합성 체크'),
+      ]),
+    },
   ],
   Input: [
     { label: 'Input — 안내 · 보통', node: input('in', { placeholder: '입력하세요' }) },
@@ -576,6 +635,35 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     { label: 'Affix — 흐리게', node: { id: 'affix2', type: 'Affix', props: { text: '(px)', tone: 'muted' } } },
     { label: 'Affix — 위험', node: { id: 'affix3', type: 'Affix', props: { text: '자동 계산되는 값입니다', tone: 'danger' } } },
     { label: 'Affix — 주색', node: { id: 'affix4', type: 'Affix', props: { text: '안내', tone: 'primary' } } },
+  ],
+  // 파일 0 · 여럿 · 하나와 한도 글의 네 갈래(둘 다 · 크기만 · 개수만 · 없음) — `wb-theme check` 의 파일첨부 규칙(`fileAttachProblems`)이 갈래마다 잰다.
+  FileAttach: [
+    { label: 'FileAttach — 빈 목록 · 기본 한도', node: fileAttach('fa', {}) },
+    {
+      label: 'FileAttach — 셋 · 긴 이름',
+      node: fileAttach('fa2', {
+        files: [
+          { name: '통장사본.PDF', size: '2.1 MB' },
+          { name: LONG_FILE_NAME, size: '100.5 MB' },
+          { name: LONG_KOREAN_FILE_NAME, size: '480 KB' },
+        ],
+        maxFiles: 3,
+        maxSize: '200 MB',
+      }),
+    },
+    {
+      label: 'FileAttach — 하나 · 크기 한도만',
+      node: fileAttach('fa3', { files: [{ name: '사업자등록증.png', size: '1.2 MB' }], maxFiles: 0 }),
+    },
+    {
+      label: 'FileAttach — 한도 없음 · 비활성',
+      node: fileAttach('fa4', { files: [{ name: '사업자등록증.png', size: '1.2 MB' }], maxFiles: 0, maxSize: '', disabled: true }),
+    },
+    {
+      label: 'FileAttach — 값 칸 안 · 개수 한도만',
+      node: fileAttach('fa5', { maxFiles: 5, maxSize: '' }),
+      within: { id: 'fa5-field', type: 'Field', props: { label: '통장사본', required: true } },
+    },
   ],
   Button: [
     { label: 'Button — 보통', node: { id: 'btn', type: 'Button', props: { label: '저장' } } },

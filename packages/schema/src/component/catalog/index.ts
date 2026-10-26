@@ -1,4 +1,4 @@
-import { placementsOf, type ComponentDef } from '../define'
+import { BODY_ZONE, placementsOf, type ComponentDef, type NodeTemplate } from '../define'
 import { getComponent, registerComponent } from '../registry'
 import { ButtonDef, LinkDef } from './action'
 import { DataGridDef, GridCellDef, GridColumnDef, GridColumnGroupDef, GridRowDef, KeyValueDef, PaginationDef, TreeDef } from './data'
@@ -10,6 +10,7 @@ import {
   DateInputDef,
   EntryFormDef,
   FieldDef,
+  FileAttachDef,
   FormTableDef,
   InputDef,
   RadioGroupDef,
@@ -61,6 +62,7 @@ export const CATALOG_DEFS: readonly ComponentDef[] = [
   RadioGroupDef,
   ChipDef,
   AffixDef,
+  FileAttachDef,
   ButtonDef,
   LinkDef,
   TextDef,
@@ -107,6 +109,61 @@ function assertZoneReferences(defs: readonly ComponentDef[]): void {
 }
 
 assertZoneReferences(CATALOG_DEFS)
+
+/**
+ * **프리셋의 카드 이름이 다른 카드와 겹치지 않는가** — 팔레트는 타입마다 · 프리셋마다 카드를 세운다(`apps/web/src/palette/placeable.ts`). 이름이 같으면
+ * 고르개에서 갈리지 않는 카드 둘이 선다(`registry.ts` 의 이름 겹침과 같은 고장). 레지스트리는 타입만 보므로 여기서 본다.
+ */
+function assertPresetLabels(defs: readonly ComponentDef[]): void {
+  const taken = new Map(defs.map((def) => [def.label, def.type]))
+  for (const def of defs) {
+    for (const preset of def.presets ?? []) {
+      const clash = taken.get(preset.label)
+      if (clash !== undefined) throw new Error(`${def.type}: 프리셋 ${preset.key} 의 이름이 이미 쓰입니다: ${preset.label} (${clash})`)
+      taken.set(preset.label, `${def.type}.${preset.key}`)
+    }
+  }
+}
+
+assertPresetLabels(CATALOG_DEFS)
+
+/**
+ * **프리셋의 템플릿이 카탈로그의 규칙(타입 · props · 구역 · 받는 타입 · 설 자리)을 지나는가** — 기본 내용(`assertZoneReferences`)과 같은 축을 템플릿 트리
+ * 전부에 건다. 걸리면 import 하는 순간 던진다. **`validatePage` 를 여기서 부르지 않는다** — 검증은 표시 이름(`display.ts`)을 거쳐 이 모듈의
+ * `CATALOG_DEFS` 를 맨 위에서 읽어, 이 모듈이 먼저 실리면 고리가 덜 지은 값을 읽는다. 검증을 지나는지는 케이스가 센다(`packages/schema/test/component/preset.test.ts`).
+ */
+export function assertPresets(defs: readonly ComponentDef[]): void {
+  const byType = new Map(defs.map((def) => [def.type, def]))
+  const walk = (owner: string, node: NodeTemplate, parent: { type: string; zone: string } | null): void => {
+    const def = byType.get(node.type)
+    if (def === undefined) throw new Error(`${owner}: 카탈로그에 없는 타입입니다: ${node.type}`)
+    if (!def.props.safeParse(node.props ?? {}).success) throw new Error(`${owner}: ${node.type}의 props 가 규격에 맞지 않습니다`)
+    if (node.variant !== undefined && def.variantFrom !== undefined)
+      throw new Error(`${owner}: ${node.type}은 variant 를 ${def.variantFrom} prop 에서 파생합니다`)
+    const places = placementsOf(def)
+    if (parent !== null && places.length > 0 && !places.some((place) => place.type === parent.type && place.zone === parent.zone)) {
+      throw new Error(`${owner}: ${node.type}이 설 수 없는 자리입니다: ${parent.type}.${parent.zone}`)
+    }
+    const lists: [string, readonly NodeTemplate[]][] = [
+      ...(node.children === undefined ? [] : ([[BODY_ZONE, node.children]] as [string, readonly NodeTemplate[]][])),
+      ...Object.entries(node.zones ?? {}),
+    ]
+    for (const [zone, list] of lists) {
+      const declared = def.zones.find((one) => one.name === zone)
+      if (declared === undefined || (zone === BODY_ZONE) !== (list === node.children))
+        throw new Error(`${owner}: ${node.type}에 없는 구역입니다: ${zone}`)
+      for (const child of list) {
+        if (declared.accepts !== undefined && !declared.accepts.includes(child.type)) {
+          throw new Error(`${owner}: ${node.type}.${zone} 이 ${child.type}을 받지 않습니다`)
+        }
+        walk(owner, child, { type: node.type, zone })
+      }
+    }
+  }
+  for (const def of defs) for (const preset of def.presets ?? []) walk(`${def.type}.${preset.key}`, preset.node, null)
+}
+
+assertPresets(CATALOG_DEFS)
 
 /** 카탈로그를 레지스트리에 설치한다. 이미 설치돼 있으면 아무것도 하지 않는다. */
 export function installCatalog(): void {

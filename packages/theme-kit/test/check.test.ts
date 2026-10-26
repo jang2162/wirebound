@@ -441,4 +441,89 @@ describe('checkTheme', () => {
     )
     expect(report.unusedTokens).toEqual(['color.unused', 'color.css-prefix', 'color.lonely', 'color.lonely-base'])
   })
+
+  /**
+   * **파일첨부 F1 ~ F4**(`fileAttachProblems`) — SDK 기본 `FileAttachView` 와 같은 꼴로 그리는 뷰에서 한 곳만 바꾼다. 갤러리 표본은 파일 0 · 하나 · 셋과 한도 글의
+   * 네 갈래(둘 다 · 크기만 · 개수만 · 없음)를 갖는다 — 깨는 뷰마다 «그 갈래의 표본이 다 걸린다» 를 표본 이름으로 단언한다(건드림 카나리아 — 한 갈래만
+   * 그린 판이면 그 갈래의 이름이 빠진다).
+   */
+  function fileAttachView(
+    change: {
+      rows?: 'dropFirst' | 'twice'
+      drop?: 'always' | 'never'
+      limit?: 'flat' | 'always' | 'sibling'
+      list?: 'div'
+      head?: 'td'
+      filePart?: string
+    } = {},
+  ): string {
+    const rows =
+      change.rows === 'dropFirst' ? 'files.slice(1)' : change.rows === 'twice' ? 'files.length ? [files[0], ...files] : files' : 'files'
+    const drop = change.drop === 'always' ? 'true' : change.drop === 'never' ? 'false' : 'files.length === 0'
+    const cell = change.head === 'td' ? `(text) => h('td', null, text)` : `(text) => h('th', { scope: 'col' }, text)`
+    const limit =
+      change.limit === 'flat'
+        ? `h('p', { 'data-wb-part': 'limit' }, '최대 ' + count + '개 ' + size + ' 제한')`
+        : `h('p', { 'data-wb-part': 'limit' }, '최대 ', count !== null ? h('span', { 'data-wb-part': 'limitCount' }, count + '개') : null, ' ',
+            size !== null ? h('span', { 'data-wb-part': 'limitSize' }, size) : null, ' 제한')`
+    const shown = change.limit === 'always' ? 'true' : 'count !== null || size !== null'
+    return `{ FileAttach: rt.sdk.view(({ props }) => {
+      const files = Array.isArray(props.files) ? props.files : []
+      const count = props.maxFiles > 0 ? props.maxFiles : null
+      const size = typeof props.maxSize === 'string' && props.maxSize.trim() !== '' ? props.maxSize : null
+      const head = (${cell})
+      const body = [
+        ...(${drop} ? [h('tr', { key: 'drop' }, h('td', { colSpan: 3, 'data-wb-part': 'drop' }, props.hint))] : []),
+        ...(${rows}).map((f, i) => h('tr', { key: i, 'data-wb-part': '${change.filePart ?? 'file'}' }, h('td', null),
+          h('td', { 'data-wb-part': 'fileName' }, f.name), h('td', { 'data-wb-part': 'fileSize' }, f.size))),
+      ]
+      const list = h('${change.list ?? 'table'}', { 'data-wb-part': 'list' },
+        h('thead', null, h('tr', null, head('□'), head('파일이름'), head('파일크기'))), h('tbody', null, ...body))
+      const limit = ${shown} ? ${limit} : null
+      const root = h(Root, { as: 'div', role: 'group' }, h(rt.sdk.Zone, { name: 'actions' }), list, ${change.limit === 'sibling' ? 'null' : 'limit'})
+      return ${change.limit === 'sibling' ? 'h(rt.react.Fragment, null, root, limit)' : 'root'}
+    }) }`
+  }
+  const fileErrors = (report: Awaited<ReturnType<typeof checkTheme>>) => report.errors.filter((error) => error.source === 'file')
+  const ALL = [
+    'FileAttach — 빈 목록 · 기본 한도',
+    'FileAttach — 셋 · 긴 이름',
+    'FileAttach — 하나 · 크기 한도만',
+    'FileAttach — 한도 없음 · 비활성',
+    'FileAttach — 값 칸 안 · 개수 한도만',
+  ].sort()
+  const WITH_FILES = ['FileAttach — 셋 · 긴 이름', 'FileAttach — 하나 · 크기 한도만', 'FileAttach — 한도 없음 · 비활성'].sort()
+  const EMPTY = ['FileAttach — 빈 목록 · 기본 한도', 'FileAttach — 값 칸 안 · 개수 한도만'].sort()
+  const WITH_LIMIT = ALL.filter((label) => label !== 'FileAttach — 한도 없음 · 비활성')
+
+  it('기본 뷰와 같은 꼴로 그린 파일첨부 뷰는 깨끗하다 — 아래 깨는 뷰의 대조', async () => {
+    const report = await checkTheme(files(BASE, { views: fileAttachView() }))
+    expect(report.errors).toEqual([])
+    expect(
+      galleryItems({ manifest: BASE, views: DEFAULT_VIEWS })
+        .filter((item) => item.type === 'FileAttach')
+        .map((item) => item.sample.label)
+        .sort(),
+    ).toEqual(ALL)
+  })
+
+  it.each<[string, Parameters<typeof fileAttachView>[0], string[], string]>([
+    ['F1 — 첫 줄을 빼고 그린다', { rows: 'dropFirst' }, WITH_FILES, 'file 조각(파일 한 줄)을'],
+    ['F1 — 첫 줄을 두 번 그린다', { rows: 'twice' }, WITH_FILES, 'file 조각(파일 한 줄)을'],
+    ['F1 — 파일 줄 조각 이름을 바꾼다', { filePart: 'row' }, WITH_FILES, 'file 조각(파일 한 줄)을'],
+    ['F2 — 빈 목록 안내를 늘 그린다', { drop: 'always' }, WITH_FILES, 'drop 조각(빈 목록 안내)을 0 개가 아니라 1 개'],
+    ['F2 — 빈 목록에 안내를 안 그린다', { drop: 'never' }, EMPTY, 'drop 조각(빈 목록 안내)을 1 개가 아니라 0 개'],
+    ['F3 — 한도 글을 조각 없이 한 줄로', { limit: 'flat' }, WITH_LIMIT, '조각이'],
+    ['F3 — 한도가 없어도 한도 줄을 그린다', { limit: 'always' }, ['FileAttach — 한도 없음 · 비활성'], '한도가 없는데 limit 조각을 1 개'],
+    ['F3 — 한도 글을 뿌리 밖 형제로', { limit: 'sibling' }, WITH_LIMIT, 'limit 조각을 1 개가 아니라 0 개'],
+    ['F4 — 목록을 div 로', { list: 'div' }, ALL, 'list 조각을 table 하나로 그리지 않았습니다'],
+    ['F4 — 머리 칸을 td 로', { head: 'td' }, ALL, '머리 칸이 th scope="col" 셋이 아닙니다'],
+  ])('%s — 그 갈래의 표본이 다 걸리고 그 규칙만 선다', async (_, change, labels, fragment) => {
+    const errors = fileErrors(await checkTheme(files(BASE, { views: fileAttachView(change) })))
+    expect(labelsOf(errors)).toEqual(labels)
+    expect(
+      errors.every((error) => error.message.includes(fragment)),
+      errors.map((error) => error.message).join('\n'),
+    ).toBe(true)
+  })
 })

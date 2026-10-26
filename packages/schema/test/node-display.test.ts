@@ -93,6 +93,19 @@ describe('nodeSummary — 타입마다', () => {
     ['Slot', undefined, null],
     ['Section', { compact: true }, null],
     ['SearchForm', undefined, null],
+    ['FileAttach', undefined, '파일 0개 · 최대 1개'],
+    [
+      'FileAttach',
+      {
+        files: [
+          { name: 'a.pdf', size: '1 MB' },
+          { name: 'b.pdf', size: '2 MB' },
+        ],
+        maxFiles: 3,
+      },
+      '파일 2개 · 최대 3개',
+    ],
+    ['FileAttach', { maxFiles: 0 }, '파일 0개'],
   ])('%s %j → %s', (type, props, expected) => {
     expect(nodeSummary(n(type, props))).toBe(expected)
   })
@@ -135,6 +148,7 @@ describe('nodeSummary — 타입마다', () => {
       'Slot',
       'Section',
       'SearchForm',
+      'FileAttach',
     ])
     expect([...covered].sort()).toEqual([...CATALOG_TYPES].sort())
   })

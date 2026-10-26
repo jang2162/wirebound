@@ -37,6 +37,7 @@ describe('카탈로그의 어휘', () => {
           ...(def.placement !== undefined ? ['placement'] : []),
           ...(def.bodyHost !== undefined ? ['bodyHost'] : []),
           ...(def.reveal !== undefined ? ['reveal'] : []),
+          ...(def.presets !== undefined ? ['presets'] : []),
         ].sort(),
       )
       for (const field of def.editor) expect('visibleWhen' in field, `${def.type}.${field.prop}`).toBe(false)
