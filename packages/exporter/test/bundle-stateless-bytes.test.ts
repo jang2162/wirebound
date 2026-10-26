@@ -27,6 +27,9 @@
  * `docs/superpowers/plans/2026-10-25-gr2-report.md`). 찍는 판의 층(`CAPTURE_CSS`)은 기본 뷰 CSS 밖이라 `assets/views.css` 에 안 든다. 몫 초기화가
  * 사본(`[data-wb-copy-of]`)도 덮게 넓히며 `assets/views.css` 만 다시 지었다. 그리드 칸 글의 낱말 단위 꺾기 · 칸 글 폭 표 · 바 접힘 · 고정 풀기
  * 규칙을 더하며 `assets/views.css` 만 다시 지었다(`docs/superpowers/plans/2026-10-25-fx-gr-report.md` M1 ~ M3).
+ * 파일첨부(SDK 1.8.0)를 들이며 다시 지었다 — `assets/views.css` 는 파일첨부의 기본 규칙(단추 줄 · 목록 표 · 빈 목록 안내 · 한도 글), «넓은 표본»(과 그 사본
+ * `index.html`)은 픽스처의 폼 표에 파일첨부 필드 하나를 더했다(카탈로그를 전부 쓰는 픽스처 — `parity.test.tsx` «무엇을 덮었나»). «슬롯» · «글» · «깨진 문서» 는
+ * 그대로다(`docs/superpowers/plans/2026-10-26-pob-report.md`).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -67,20 +70,20 @@ function digest(withTheme: boolean): Record<string, string> {
 /** 상태 없는 페이지의 해시(파일마다 sha256 앞 16자) — 지은 때는 머리말. */
 const BEFORE = {
   plain: {
-    'index.html': '397e7e109d67d68f',
-    'pages/넓은-표본.html': '468ece3af280c49c',
+    'index.html': '62f712ff2b251895',
+    'pages/넓은-표본.html': 'df28f83134af33da',
     'pages/슬롯.html': '237942c9bddec6e1',
     'pages/글.html': 'cf7aada8a9107580',
     'pages/깨진-문서.html': '1e6593b7b432956c',
-    'assets/views.css': 'cd5ba4ba3f2579ac',
+    'assets/views.css': 'a95f850c7d360164',
   },
   themed: {
-    'index.html': 'b477e3bb1d94a491',
-    'pages/넓은-표본.html': '516f5858cdd82609',
+    'index.html': '4b36de12b8530048',
+    'pages/넓은-표본.html': '1363274b9e2c0bb9',
     'pages/슬롯.html': 'a740ac4b6b55571e',
     'pages/글.html': '85f601e80f6602ab',
     'pages/깨진-문서.html': 'e071fd4ffcfbad1c',
-    'assets/views.css': 'cd5ba4ba3f2579ac',
+    'assets/views.css': 'a95f850c7d360164',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',
