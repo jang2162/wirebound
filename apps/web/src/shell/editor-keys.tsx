@@ -95,6 +95,7 @@ export function EditorKeys(props: {
     pageId: props.pageId,
     selectedLock: selectedNodeId === null ? null : lockOf(selectedNodeId),
     pageLock: typeof doc?.root?.id === 'string' ? lockOf(doc.root.id) : null,
+    lockOf,
   })
   const history = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
   const api = useApi()

@@ -11,7 +11,14 @@ import { lockConflictOfOps, type PageDocument, type PatchOp, type WbNode } from 
 import { beforeAll, describe, expect, it } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
-import { BUILD_CELLS_LABEL, BUILD_CELLS_WHY, SPLIT_ROW_LABEL, SPLIT_ROW_WHY } from '../../src/edit/grid-row-actions'
+import {
+  BUILD_CELLS_LABEL,
+  BUILD_CELLS_WHY,
+  COVERED_ROW_WHY,
+  SPLIT_ROW_LABEL,
+  SPLIT_ROW_WHY,
+  TARGETED_ROW_WHY,
+} from '../../src/edit/grid-row-actions'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import { createEditChannel } from '../../src/realtime/edit-channel'
@@ -85,12 +92,12 @@ interface Board {
   lock: (locks: NodeLockView[]) => void
 }
 
-async function board(): Promise<Board> {
+async function board(start: PageDocument = doc()): Promise<Board> {
   const sockets: FakeSocket[] = []
   const calls: PatchOp[][] = []
   let live: NodeLockView[] = []
   let seq = HEAD_SEQ
-  let held = doc()
+  let held = start
 
   const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
     calls.push(body.ops)
@@ -128,7 +135,7 @@ async function board(): Promise<Board> {
       cancel: () => {},
     },
   }
-  await openPage(doc(), { realtime: setup, apiOverrides: { patchOps, getPage, listComments: async () => [] } })
+  await openPage(start, { realtime: setup, apiOverrides: { patchOps, getPage, listComments: async () => [] } })
   return {
     calls,
     held: () => held,
@@ -183,6 +190,37 @@ describe('항목이 서는 줄 · 끔', () => {
     ]).toEqual([true, false])
     expect(isOff(rowAction(structureRegion(), BUILD_CELLS_LABEL, row('n-own')))).toBe(true)
   })
+
+  /**
+   * **문서가 못 하게 하는 판**(`edit/grid-row-actions.ts` 머리말) — 바깥 단추의 상호작용이 n-r1 을 가리키면 떼기가(리뷰 M5), 위 행의 세로 칸이 되풀이 행의
+   * 첫 줄만 덮으면 칸 짓기가(리뷰 M1) 꺼진 채 까닭을 든다.
+   */
+  it('바깥 상호작용이 그 행을 가리키면 떼기 · 위 행 세로 칸이 첫 줄만 덮으면 칸 짓기가 꺼진 채 까닭', async () => {
+    const start = doc()
+    const grid = start.root.children![0]!
+    grid.zones!.rows = [
+      {
+        id: 'n-top',
+        type: 'GridRow',
+        children: [
+          { id: 'n-k1', type: 'GridCell', props: { rowSpan: 2 } },
+          { id: 'n-k2', type: 'GridCell' },
+        ],
+      },
+      { id: 'n-r1', type: 'GridRow', props: { repeat: 3 } },
+    ]
+    start.root.children!.push({
+      id: 'n-button',
+      type: 'Button',
+      props: { label: '숨김' },
+      interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n-r1', value: false }] }],
+    })
+    await board(start)
+    const split = rowAction(structureRegion(), SPLIT_ROW_LABEL, row('n-r1'))
+    expect([isOff(split), rowReason(structureRegion(), SPLIT_ROW_LABEL, row('n-r1'))]).toEqual([true, TARGETED_ROW_WHY])
+    const build = rowAction(structureRegion(), BUILD_CELLS_LABEL, row('n-r1'))
+    expect([isOff(build), rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-r1'))]).toEqual([true, COVERED_ROW_WHY])
+  })
 })
 
 describe('누름 하나 = 편집 하나 = 되돌리기 한 번', () => {
@@ -230,19 +268,34 @@ describe('잠금', () => {
     for (const label of [SPLIT_ROW_LABEL, BUILD_CELLS_LABEL]) expect(rowReason(structureRegion(), label, row('n-r1'))).toContain('보라')
   })
 
-  it('셀 틀을 읽는 열을 남이 쥐었으면 «열 틀로 칸 짓기» 는 안 나간다(이유를 말한다) · «한 행 떼어 내기» 는 열을 안 써 나간다', async () => {
-    const srv = await board()
-    fireEvent.click(within(row('n-r1')).getAllByRole('button')[0]!)
-    srv.lock([{ pageId: PAGE_ID, nodeId: 'n-t2', userId: 'u-bora', userName: '보라' }])
-    fireEvent.click(rowAction(structureRegion(), BUILD_CELLS_LABEL, row('n-r1')))
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(srv.calls).toEqual([])
-    expect(screen.getAllByText(/보라님이/).length).toBeGreaterThan(0)
+  /**
+   * 셀 틀을 읽는 열을 남이 쥐면 칸 짓기 항목이 꺼지고 그 사람의 이름을 까닭으로 든다(리뷰 L5 — 누른 뒤에야 막던 것). 첫 열 · 둘째 열을 따로 잰다 — 열을
+   * 하나 건너뛰는 물음이 첫 열 판에서만 산다(리뷰 변조 X7). 잠금이 걷히면 다시 켜진다. 떼어 내기는 열을 안 써 나간다.
+   */
+  for (const [what, held] of [
+    ['첫 열', 'n-t1'],
+    ['둘째 열', 'n-t2'],
+  ] as const)
+    it(`셀 틀을 읽는 열(${what})을 남이 쥐었으면 «열 틀로 칸 짓기» 가 꺼진 채 그 사람의 이름 · 안 나간다 · 놓으면 켜진다 · 떼어 내기는 나간다`, async () => {
+      const srv = await board()
+      fireEvent.click(within(row('n-r1')).getAllByRole('button')[0]!)
+      srv.lock([{ pageId: PAGE_ID, nodeId: held, userId: 'u-bora', userName: '보라' }])
+      const build = () => rowAction(structureRegion(), BUILD_CELLS_LABEL, row('n-r1'))
+      expect([isOff(build()), rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-r1'))]).toEqual([
+        true,
+        '보라님이 편집 중이라 바꿀 수 없습니다',
+      ])
+      fireEvent.click(build())
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(srv.calls).toEqual([])
 
-    fireEvent.click(rowAction(structureRegion(), SPLIT_ROW_LABEL, row('n-r1')))
-    await waitFor(() => expect(srv.calls).toHaveLength(1))
-    expect(rowsOf(srv.held()).map((node) => node.props?.repeat ?? 1)).toEqual([1, 2, 1, 1])
-  })
+      srv.lock([])
+      expect([isOff(build()), rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-r1'))]).toEqual([false, null])
+      srv.lock([{ pageId: PAGE_ID, nodeId: held, userId: 'u-bora', userName: '보라' }])
+      fireEvent.click(rowAction(structureRegion(), SPLIT_ROW_LABEL, row('n-r1')))
+      await waitFor(() => expect(srv.calls).toHaveLength(1))
+      expect(rowsOf(srv.held()).map((node) => node.props?.repeat ?? 1)).toEqual([1, 2, 1, 1])
+    })
 })
 
 describe('속성 패널 — 그리드 편집 칸의 안내 한 줄', () => {
@@ -270,5 +323,18 @@ describe('속성 패널 — 그리드 편집 칸의 안내 한 줄', () => {
     expect(hintOf('고정 열 수')).toBe('가로로 굴려도 왼쪽에 남는 열 수 — 선택 · 번호 열도 셉니다')
     await pick('n-c1')
     expect([hintOf('열 폭'), hintOf('머리 이름')]).toEqual(['정하지 않으면 칸 글이 한 줄로 길어집니다 — 꺾으려면 폭을 정하세요', null])
+  })
+
+  /** 여럿 고른 판의 속성 패널도 같은 안내를 든다(리뷰 변조 X10 — 하나 고른 판만 재던 빈칸). */
+  it('행 둘을 고른 판에도 «되풀이» 칸 밑에 안내', async () => {
+    await board()
+    // 줄의 노드 단추(`.wb-shell-structure-node`)에 Ctrl 클릭 — `./multiselect-gestures.test.tsx` 와 같은 꼴.
+    const nodeButton = (id: string) => row(id).querySelector<HTMLElement>('.wb-shell-structure-node')!
+    fireEvent.click(nodeButton('n-r1'))
+    fireEvent.click(nodeButton('n-r2'), { ctrlKey: true })
+    await waitFor(() => expect(row('n-r2').classList.contains('wb-shell-tree-row-picked')).toBe(true))
+    // 여럿 고른 판의 패널이다(머리가 «GridRow 2개»).
+    expect(screen.getByRole('tabpanel', { name: '속성' }).textContent).toContain('GridRow 2개')
+    expect([hintOf('되풀이'), hintOf('행 꼴')]).toEqual(['이 행을 몇 줄로 그릴지 — 둘째 줄부터는 첫 줄과 같은 꼴입니다', null])
   })
 })

@@ -90,7 +90,8 @@ export interface StructureCommands {
   changeKind: (nodeId: string, toType: string) => void
   /**
    * 그리드 행 줄 `…` 의 «한 행 떼어 내기» · «열 틀로 칸 짓기» 를 못 하는가 — 별칭과 같은 조건(하나 · 문서 · 남이 안 잡음)에 그 행의 모양
-   * (`edit/grid-row-actions.ts` 의 `splitRowRefusal` · `buildCellsRefusal`). 항목은 행 줄에만 선다 — 이 값은 그 항목의 끔이다.
+   * (`edit/grid-row-actions.ts` 의 `splitRowRefusal` · `buildCellsRefusal`). 칸 짓기는 셀 틀을 읽는 열을 남이 쥐었어도 꺼진다(까닭은 그 사람의 이름 —
+   * 누른 때의 막음과 같은 문장). 항목은 행 줄에만 선다 — 이 값은 그 항목의 끔이다.
    */
   splitRowLocked: boolean
   buildCellsLocked: boolean
@@ -133,6 +134,11 @@ export function useStructureCommands(props: {
    * (`./toolbar-status.ts` 머리말 «안 골랐다 칸»).
    */
   pageLock: NodeLock | null
+  /**
+   * 노드를 막는 **남의** 잠금을 답하는 함수 — 부르는 쪽이 `useLockedBy`(`store/use-locked-by.ts`)로 받은 것을 넘긴다. 쓰는 자리는 «열 틀로 칸 짓기» 의 끔
+   * 하나다(셀 틀을 읽는 열은 고른 노드가 아니라 `selectedLock` 이 못 답한다). 구독은 그 훅이 하므로 잠금이 오가면 이 값을 쓰는 끔도 다시 지어진다.
+   */
+  lockOf: (nodeId: string) => NodeLock | null
 }): StructureCommands {
   const store = useEditorStoreInstance()
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 본다
@@ -313,8 +319,16 @@ export function useStructureCommands(props: {
     selectedNodeId === null ||
     kindTargets(findNodeSafely(document.root, selectedNodeId)?.type).length === 0
   const selectedNode = document === null || selectedNodeId === null ? undefined : findNodeSafely(document.root, selectedNodeId)
-  const splitRefusal = selectedNode?.type === 'GridRow' ? splitRowRefusal(selectedNode) : null
-  const cellsRefusal = selectedNode?.type === 'GridRow' ? buildCellsRefusal(selectedNode) : null
+  const gridRow = document !== null && selectedNodeId !== null && selectedNode?.type === 'GridRow' ? selectedNodeId : null
+  const splitRefusal = document !== null && gridRow !== null ? splitRowRefusal(document, gridRow) : null
+  const cellsRefusal = document !== null && gridRow !== null ? buildCellsRefusal(document, gridRow) : null
+  // 셀 틀을 읽는 열을 남이 쥐었는가 — 누른 때의 막음(아래 `buildCells`)과 같은 물음을 끔에도 묻는다.
+  const cellsLock =
+    document !== null && gridRow !== null && cellsRefusal === null
+      ? (buildCellsReads(document, gridRow)
+          .map((columnId) => props.lockOf(columnId))
+          .find((lock) => lock !== null) ?? null)
+      : null
   const reasonInput: StructureReasonInput = {
     selectedNodeId,
     // **루트인지는 id로 본다.** 판정을 다시 하지 않는다 — `structureAbilities`가 이미
@@ -332,7 +346,12 @@ export function useStructureCommands(props: {
 
   return {
     abilities,
-    why: structureWhy(reasonInput, { aliasLocked, kindLocked, splitRow: splitRefusal, buildCells: cellsRefusal }),
+    why: structureWhy(reasonInput, {
+      aliasLocked,
+      kindLocked,
+      splitRow: splitRefusal,
+      buildCells: cellsRefusal ?? (cellsLock === null ? null : lockedNotice(cellsLock.userName)),
+    }),
     levels,
     remove: removeSelected,
     moveUp: () => moveSelected(-1),
@@ -368,7 +387,7 @@ export function useStructureCommands(props: {
       commitOps(ops)
     },
     splitRowLocked: aliasLocked || splitRefusal !== null || selectedNode?.type !== 'GridRow',
-    buildCellsLocked: aliasLocked || cellsRefusal !== null || selectedNode?.type !== 'GridRow',
+    buildCellsLocked: aliasLocked || cellsRefusal !== null || cellsLock !== null || selectedNode?.type !== 'GridRow',
     splitRow: (nodeId) => {
       if (document === null) return
       const edit = splitRowOps(document, nodeId)

@@ -4,9 +4,11 @@
  * | 케이스 | 재는 값 |
  * |---|---|
  * | 사본 위 놓기 | 사본(되풀이 줄의 셀 틀 글 · 틀 칸)에 팔레트 카드를 끌면 표시가 없고 «첫 행의 칸에 놓으세요» 가 포인터 곁에 서며 놓아도 편집 0 · 첫 줄 틀 칸의 빈 자리는 그 열의 셀 틀 끝 |
+ * | 번호 칸 위 놓기 | 첫 줄 번호 칸은 번호 열의 셀 틀로 안 읽힌다 — 표시 없음 · «행에는 칸만 …» · 편집 0 |
  * | 흐름 | 열 복제(Cmd+D) · 열을 골라 팔레트 «열 묶음»(그 열 뒤) · 들여쓰기로 묶기 · 내어쓰기로 풀기 · «한 행 떼어 내기» 두 번 → 첫 행 강조 · 둘째 행 딤드 · «열 틀로 칸 짓기» → 칸 고치기(가로 칸 수 · 지우기) · 합계 행 — 걸음마다 서버 문서와 캔버스의 표지 |
- * | 두 사람 — 잠금 | 밥이 열을 쥔 동안 앨리스의 «열 틀로 칸 짓기» 는 안 나가고(밥의 이름) «한 행 떼어 내기» 는 나간다 · 밥이 놓은 뒤의 칸 짓기는 밥이 고친 셀 틀을 베끼고 셀 틀은 밥의 것 그대로 |
+ * | 두 사람 — 잠금 | 밥이 열을 쥔 동안 앨리스의 «열 틀로 칸 짓기» 는 꺼진 채 밥의 이름을 들고 안 나가며 «한 행 떼어 내기» 는 나간다 · 밥이 놓은 뒤의 칸 짓기는 밥이 고친 셀 틀을 베끼고 셀 틀은 밥의 것 그대로 |
  * | 두 사람 — 닿기 전 | 밥의 «되풀이» · 셀 틀 고침이 앨리스 화면에 닿기 전(서버 → 브라우저 1.5s)에 앨리스가 떼어 내기 · 칸 짓기를 눌렀을 때 서버에 무엇이 남는지 값으로 · 끝에 화면 = 서버 |
+ * | 두 사람 — 닿기 전: 칸마다 | 떼어 내기가 베끼는 행의 칸(행 꼴 · 제 칸 글 · 보임 · 별칭 · 상호작용) · 칸 짓기가 읽는 열(더함 · 지움)을 밥이 바꾼 것이 닿기 전 — 서버에 밥의 것이 남고 앨리스의 묶음은 버려진다(알림) · 대조 둘(행 지움 · 같은 행 먼저 떼어 냄) |
  * | 되돌리기 | 줄 행동 하나 = 되돌리기 한 번 · 다시 실행 한 번 |
  * | 새로고침 뒤 되돌리기 | 새로고침으로 채운 스택(서버 이력)에서 되돌리기 한 번이 칸 짓기를 · 한 번 더가 떼어 내기를 돌린다 |
  */
@@ -38,6 +40,9 @@ interface Node {
   children?: Node[]
   zones?: Record<string, Node[]>
   marker?: number
+  alias?: string
+  visibility?: unknown
+  interactions?: unknown[]
 }
 
 /** 셀 틀 글 열 둘 · 되풀이 4 행 · 아래 글. */
@@ -97,14 +102,17 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
 
   const call = (m: string, p: string, b?: unknown) => stack.request(alice, m, p, b)
 
-  async function seed(slug: string, nodes: Node[], bob = false): Promise<{ P: string }> {
+  async function seed(slug: string, nodes: Node[], bob = false, viewStates: { id: string; name: string }[] = []): Promise<{ P: string }> {
     const project = (await call('POST', '/projects', { name: '그리드 입구', slug: `${slug}-${Date.now().toString(36)}` })).body
     const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' })).body
     const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '쪽' })).body.id as string
     const P = `/projects/${project.id}/pages/${pageId}`
     const seeded = await call('PATCH', `${P}/ops`, {
       baseSeq: 0,
-      ops: nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+      ops: [
+        ...(viewStates.length === 0 ? [] : [{ op: 'add', path: '/viewStates', value: viewStates }]),
+        ...nodes.map((value, at) => ({ op: 'add', path: `/root/children/${at}`, value })),
+      ],
     })
     if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
     if (bob) {
@@ -259,6 +267,55 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
         untouched: true,
         template: ['Text', 'Divider'],
         top: ['d_g', 'd_tail'],
+      })
+    } finally {
+      await close()
+    }
+  })
+
+  /**
+   * **번호 칸은 셀 틀이 아니다**(`canvas/canvas-drop.ts` 머리말 «첫 줄 틀 칸») — 번호 열의 칸도 `data-wb-column-of` 를 달지만 셀 틀이 안 그려져, 그 빈 자리를 열 셀
+   * 틀 끝으로 읽으면 화면에 안 나오는 자리(lint `ignored-template`)에 놓인다. 첫 줄 번호 칸 위는 행으로 읽혀 표시가 없다(리뷰 변조 X6 — 번호 열 없는 픽스처의
+   * 빈칸).
+   */
+  it('첫 줄 번호 칸 위에 끌면 표시 없이 «행에는 칸만 …» · 놓아도 편집 0 — 번호 열의 셀 틀로 안 읽힌다', async () => {
+    const numbered: Node[] = [
+      {
+        id: 'd_g',
+        type: 'DataGrid',
+        children: [
+          { id: 'd_no', type: 'GridColumn', props: { label: 'No', numbering: 'asc' } },
+          {
+            id: 'd_c0',
+            type: 'GridColumn',
+            props: { label: '이름' },
+            children: [{ id: 'd_t0', type: 'Text', props: { content: '홍길동' } }],
+          },
+        ],
+        zones: { rows: [{ id: 'd_r', type: 'GridRow', props: { repeat: 2 } }] },
+      },
+    ]
+    const { P } = await seed('grb-number-drop', numbered)
+    const { page, close } = await open(P, 'd_g')
+    const before = JSON.stringify(await server(P))
+    try {
+      await openPalette(page, 'Divider')
+      const number = 'tr[data-wb-id="d_r"] > td[data-wb-cell="number"]'
+      // 판 카나리아 — 첫 줄 번호 칸이 «1» 로 섰고 번호 열을 단다.
+      expect([
+        await canvasFrame(page).locator(number).textContent(),
+        await canvasFrame(page).locator(number).getAttribute('data-wb-column-of'),
+      ]).toEqual(['1', 'd_no'])
+      await grabCard(page, 'Divider')
+      await moveInto(page, number, 0, 0.5, 0.5)
+      const outcome = { shown: await indicators(page), refusal: await refusals(page) }
+      await page.mouse.up()
+      await page.waitForTimeout(800)
+      // eslint-disable-next-line no-console
+      console.log('[번호 칸 위 놓기]', JSON.stringify(outcome))
+      expect({ outcome, untouched: JSON.stringify(await server(P)) === before }).toEqual({
+        outcome: { shown: [], refusal: ['행에는 칸만 놓을 수 있습니다'] },
+        untouched: true,
       })
     } finally {
       await close()
@@ -437,14 +494,19 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
         (n) => n > 0,
       )
       const head = await headOf(P)
-      await rowAction(a.page, 'f_r', '열 틀로 칸 짓기')
+      // 항목이 꺼진 채 밥의 이름을 까닭으로 든다(누르기 전에 — 리뷰 L5). 꺼진 항목을 눌러도 편집이 안 나간다.
+      await pick(a.page, 'f_r')
+      await treeRow(a.page, 'f_r')
+        .getByRole('button', { name: /더 보기$/ })
+        .click()
+      const item = a.page.getByRole('menuitem', { name: '열 틀로 칸 짓기', exact: true })
+      const off = { disabled: await item.getAttribute('aria-disabled'), why: await item.getAttribute('aria-description') }
+      await item.click({ force: true })
+      await a.page.keyboard.press('Escape')
       await a.page.waitForTimeout(800)
-      const blocked = {
-        head: (await headOf(P)) - head,
-        said: (await a.page.getByText(/밥님이/).allTextContents()).length > 0,
-      }
+      const blocked = { ...off, head: (await headOf(P)) - head }
       // 그 걸음의 값을 그 자리에서 — 막힘을 떼면 칸 짓기가 셀 틀 원본 줄을 없애 뒤 걸음이 값 없이 멈춘다.
-      expect(blocked).toEqual({ head: 0, said: true })
+      expect(blocked).toEqual({ disabled: 'true', why: '밥님이 편집 중이라 바꿀 수 없습니다', head: 0 })
       await rowAction(a.page, 'f_r', '한 행 떼어 내기')
       const split = await poll(
         '떼어 내기는 나간다',
@@ -481,7 +543,7 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
       // eslint-disable-next-line no-console
       console.log('[두 사람 — 잠금]', JSON.stringify(outcome))
       expect(outcome).toEqual({
-        blocked: { head: 0, said: true },
+        blocked: { disabled: 'true', why: '밥님이 편집 중이라 바꿀 수 없습니다', head: 0 },
         rowsAfterSplit: [
           [1, 'data', 'default', 0],
           [4, 'data', 'default', 0],
@@ -536,7 +598,8 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
           '셀 틀 B 고침 뒤 칸 짓기',
           [{ op: 'replace', path: '/root/children/0/children/1/children/0/props/content', value: '밥 고침' }],
           () => rowAction(page, 'f_r2', '열 틀로 칸 짓기'),
-          (root: Node) => (find(root, 'f_r2')?.children ?? []).length > 0,
+          // 칸이 서거나(칸 짓기가 얹힘) 밥의 글이 서면(칸 짓기를 버림) 선 것이다.
+          (root: Node) => (find(root, 'f_r2')?.children ?? []).length > 0 || find(root, 'f_tb')?.props?.content === '밥 고침',
         ],
       ] as const) {
         const before = received.filter((f) => f.includes('"type":"page-changed"')).length
@@ -580,11 +643,12 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
           notices: await page.locator('.wb-shell-info-notice, .wb-shell-edit-alert').allTextContents(),
         }
       }
-      // 끝에 화면 = 서버 — 캔버스의 행 수(원본 + 사본)와 칸 글이 서버 문서의 것.
+      // 끝에 화면 = 서버 — 캔버스의 행 수(원본 + 사본)와 칸 글이 서버 문서의 것. 칸 없는 행은 열마다 셀 틀 글을 그린다.
       const last = await server(P)
+      const own = find(last, 'f_r2')?.children ?? []
       const expected = {
         lines: rowsOf(last, 'f_g').reduce((sum, [, repeat]) => sum + Number(repeat), 0),
-        cells: (find(last, 'f_r2')?.children ?? []).map((cell) => cell.children?.[0]?.props?.content),
+        cells: (own.length > 0 ? own : (find(last, 'f_g')?.children ?? [])).map((cell) => cell.children?.[0]?.props?.content),
       }
       const shown = await poll(
         '캔버스가 서버와 같다',
@@ -607,8 +671,8 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
       console.log('[두 사람 — 닿기 전]', JSON.stringify(outcome))
       expect(slow.delayed()).toBeGreaterThan(0)
       expect(shown).toEqual(expected)
-      // 떼어 내기는 낡은 되풀이 수(5) 위에서 지어져 전제(`test`)에 걸려 버려진다 — 밥의 7 이 남는다(고치기 전에는 떼어 내기가 얹혀 밥의 7 이 말없이 걷혔다).
-      // 칸 짓기는 누른 때 본 셀 틀(«B»)을 베낀다 — 셀 틀 자신은 밥의 글 그대로다.
+      // 떼어 내기는 낡은 행(되풀이 5) 위에서 지어져 전제(행 통째 `test`)에 걸려 버려진다 — 밥의 7 이 남는다(고치기 전에는 떼어 내기가 얹혀 밥의 7 이 말없이
+      // 걷혔다). 칸 짓기도 낡은 열 트리(셀 틀 «B») 위에서 지어져 전제(열 트리 `test`)에 걸려 버려진다 — 낡은 셀 틀을 베끼지 않는다(고치기 전에는 «B» 를 베꼈다).
       const named = outcome as Record<string, { stale: boolean; rows: unknown; cells: unknown; template: unknown; notices: string[] }>
       expect({
         split: {
@@ -620,6 +684,7 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
           stale: named['셀 틀 B 고침 뒤 칸 짓기']!.stale,
           cells: named['셀 틀 B 고침 뒤 칸 짓기']!.cells,
           template: named['셀 틀 B 고침 뒤 칸 짓기']!.template,
+          told: named['셀 틀 B 고침 뒤 칸 짓기']!.notices.some((text) => text.includes('버렸습니다')),
         },
       }).toEqual({
         split: {
@@ -630,13 +695,240 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
           ],
           told: true,
         },
-        build: { stale: true, cells: ['A', 'B', 'C'], template: '밥 고침' },
+        build: { stale: true, cells: [], template: '밥 고침', told: true },
       })
     } finally {
       await context.close()
       await slow.close()
     }
   }, 120_000)
+
+  /** 문서 안 그 노드의 경로(JSON Pointer) — 밥의 REST 편집이 앨리스의 문서와 같은 노드를 가리킨다. */
+  function pathOf(root: Node, id: string, at = '/root'): string {
+    if (root.id === id) return at
+    for (const [i, child] of (root.children ?? []).entries()) {
+      const hit = pathOf(child, id, `${at}/children/${i}`)
+      if (hit !== '') return hit
+    }
+    for (const [zone, list] of Object.entries(root.zones ?? {}))
+      for (const [i, child] of list.entries()) {
+        const hit = pathOf(child, id, `${at}/zones/${zone}/${i}`)
+        if (hit !== '') return hit
+      }
+    return ''
+  }
+
+  /**
+   * 칸을 다 든 행(별칭 · props · 상태 보임 · 상호작용 · 제 칸) — 떼어 내기가 베끼는 칸마다 «닿기 전» 판을 하나씩 세우려고 모두 미리 둔다. 남이 **있던 칸을
+   * 바꾸는** 판이라 칸 하나만 전제에서 뺀 변조가 그 판만 죽인다(없던 칸을 더하는 판은 칸마다의 `test` 로 못 가른다).
+   */
+  const FULL_ROW: Node = {
+    id: 'f_r',
+    type: 'GridRow',
+    alias: '첫 행',
+    props: { repeat: 4, tone: 'default' },
+    visibility: { mode: 'except', states: ['s_x'] },
+    interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'f_r', prop: 'tone', value: 'selected' }] }],
+    children: ['a', 'b', 'c'].map((key) => ({
+      id: `f_k${key}`,
+      type: 'GridCell',
+      children: [{ id: `f_x${key}`, type: 'Text', props: { content: `옛${key}` } }],
+    })),
+  }
+
+  interface BeforeArrival {
+    name: string
+    rows: Node[]
+    theirs: (root: Node) => unknown[]
+    act: string
+    target: string
+    /** 서버에 남은 것에서 읽을 값 — 단언은 이 값과 알림이다. */
+    read: (root: Node) => unknown
+    expected: unknown
+  }
+
+  /** 행 하나의 칸 — 별칭 · 되풀이 · 행 꼴 · 보임 · 상호작용 동작의 값 · 제 칸 글. */
+  const rowFields = (root: Node) =>
+    (find(root, 'f_g')?.zones?.rows ?? []).map((row) => ({
+      id: row.id.startsWith('f_') ? row.id : '새',
+      alias: row.alias ?? null,
+      repeat: (row.props?.repeat as number | undefined) ?? 1,
+      tone: (row.props?.tone as string | undefined) ?? 'default',
+      visibility: row.visibility ?? null,
+      on: ((row.interactions ?? []) as { actions: { value?: unknown }[] }[]).map((one) =>
+        one.actions.map((action) => action.value ?? null),
+      ),
+      cells: (row.children ?? []).map((cell) => cell.children?.[0]?.props?.content ?? null),
+    }))
+
+  const FULL_FIELDS = {
+    id: 'f_r',
+    alias: '첫 행',
+    repeat: 4,
+    tone: 'default',
+    visibility: { mode: 'except', states: ['s_x'] },
+    on: [['selected']],
+    cells: ['옛a', '옛b', '옛c'],
+  }
+  const columnsAndCells = (root: Node) => ({
+    leaves: (find(root, 'f_g')?.children ?? []).map((column) => column.id),
+    cells: (find(root, 'f_r')?.children ?? []).length,
+  })
+
+  /**
+   * **남의 편집이 닿기 전 — 떼어 내기 · 칸 짓기가 베끼는 칸 전부**(리뷰 `docs/superpowers/plans/2026-10-26-rv-grb-report.md` H1 · M3). 밥이 REST 로 그 칸을
+   * 고치고, 그 고침이 앨리스 화면에 닿기 전(서버 → 브라우저 1.5s)에 앨리스가 누른다. 떼어 내기는 뒤 행을 낡은 행의 사본으로 짓고 칸 짓기는 낡은 열 수로 칸을
+   * 지으므로, 묶음이 그 칸을 전제로 안 묶으면 밥의 고침이 둘째 줄부터 말없이 걷히거나 칸 수가 열과 어긋난다. 판마다 서버에 밥의 고침이 남고(앨리스의 묶음은
+   * 버려짐) 버린 편집의 알림이 서는지 본다. 행 지움 · 같은 행 떼어 내기는 대조다(고치기 전에도 버려졌다). 되풀이 칸은 위 «닿기 전» 케이스가 잰다.
+   */
+  const BEFORE_ARRIVAL: BeforeArrival[] = [
+    {
+      name: '떼어 내기 — 밥이 행 꼴을 바꿈',
+      rows: [FULL_ROW],
+      theirs: (root) => [{ op: 'replace', path: `${pathOf(root, 'f_r')}/props/tone`, value: 'dimmed' }],
+      act: '한 행 떼어 내기',
+      target: 'f_r',
+      read: rowFields,
+      expected: [{ ...FULL_FIELDS, tone: 'dimmed' }],
+    },
+    {
+      name: '떼어 내기 — 밥이 제 칸 글을 바꿈',
+      rows: [FULL_ROW],
+      theirs: (root) => [{ op: 'replace', path: `${pathOf(root, 'f_xb')}/props/content`, value: '밥' }],
+      act: '한 행 떼어 내기',
+      target: 'f_r',
+      read: rowFields,
+      expected: [{ ...FULL_FIELDS, cells: ['옛a', '밥', '옛c'] }],
+    },
+    {
+      name: '떼어 내기 — 밥이 상태 보임을 바꿈',
+      rows: [FULL_ROW],
+      theirs: (root) => [{ op: 'replace', path: `${pathOf(root, 'f_r')}/visibility`, value: { mode: 'only', states: ['s_x'] } }],
+      act: '한 행 떼어 내기',
+      target: 'f_r',
+      read: rowFields,
+      expected: [{ ...FULL_FIELDS, visibility: { mode: 'only', states: ['s_x'] } }],
+    },
+    {
+      name: '떼어 내기 — 밥이 별칭을 바꿈',
+      rows: [FULL_ROW],
+      theirs: (root) => [{ op: 'replace', path: `${pathOf(root, 'f_r')}/alias`, value: '밥 행' }],
+      act: '한 행 떼어 내기',
+      target: 'f_r',
+      read: rowFields,
+      expected: [{ ...FULL_FIELDS, alias: '밥 행' }],
+    },
+    {
+      name: '떼어 내기 — 밥이 상호작용을 바꿈',
+      rows: [FULL_ROW],
+      theirs: (root) => [{ op: 'replace', path: `${pathOf(root, 'f_r')}/interactions/0/actions/0/value`, value: 'dimmed' }],
+      act: '한 행 떼어 내기',
+      target: 'f_r',
+      read: rowFields,
+      expected: [{ ...FULL_FIELDS, on: [['dimmed']] }],
+    },
+    {
+      name: '칸 짓기 — 밥이 열을 더함',
+      rows: [{ id: 'f_r', type: 'GridRow', props: { repeat: 2 } }],
+      theirs: (root) => [
+        {
+          op: 'add',
+          path: `${pathOf(root, 'f_g')}/children/3`,
+          value: {
+            id: 'f_cd',
+            type: 'GridColumn',
+            props: { label: 'D' },
+            children: [{ id: 'f_td', type: 'Text', props: { content: 'D' } }],
+          },
+        },
+      ],
+      act: '열 틀로 칸 짓기',
+      target: 'f_r',
+      read: columnsAndCells,
+      expected: { leaves: ['f_ca', 'f_cb', 'f_cc', 'f_cd'], cells: 0 },
+    },
+    {
+      // 열 더함과 같은 전제(열 트리의 `test`)가 막는다 — 전제를 뗀 변조에서 둘이 함께 죽는다. 이 판만 죽는 변조는 없다(열 트리를 열마다 나눈 `test` 는 지움을 막고
+      // 더함을 못 막는다 — 열 더함 판만 죽인다).
+      name: '칸 짓기 — 밥이 열을 지움',
+      rows: [{ id: 'f_r', type: 'GridRow', props: { repeat: 2 } }],
+      theirs: (root) => [{ op: 'remove', path: pathOf(root, 'f_cc') }],
+      act: '열 틀로 칸 짓기',
+      target: 'f_r',
+      read: columnsAndCells,
+      expected: { leaves: ['f_ca', 'f_cb'], cells: 0 },
+    },
+    {
+      name: '대조 — 밥이 행을 지움',
+      rows: [
+        { id: 'f_r', type: 'GridRow', props: { repeat: 4 } },
+        { id: 'f_r2', type: 'GridRow' },
+      ],
+      theirs: (root) => [{ op: 'remove', path: pathOf(root, 'f_r') }],
+      act: '한 행 떼어 내기',
+      target: 'f_r',
+      read: (root) => rowsOf(root, 'f_g'),
+      expected: [['f_r2', 1, 'data', 'default', 0]],
+    },
+    {
+      name: '대조 — 밥이 같은 행을 먼저 떼어 냄',
+      rows: [{ id: 'f_r', type: 'GridRow', props: { repeat: 4 } }],
+      theirs: (root) => [
+        { op: 'remove', path: `${pathOf(root, 'f_r')}/props/repeat` },
+        { op: 'add', path: `${pathOf(root, 'f_g')}/zones/rows/1`, value: { id: 'f_bob', type: 'GridRow', props: { repeat: 3 } } },
+      ],
+      act: '한 행 떼어 내기',
+      target: 'f_r',
+      read: (root) => rowsOf(root, 'f_g'),
+      expected: [
+        ['f_r', 1, 'data', 'default', 0],
+        ['f_bob', 3, 'data', 'default', 0],
+      ],
+    },
+  ]
+
+  for (const c of BEFORE_ARRIVAL)
+    it(`두 사람 — 닿기 전: ${c.name} → 서버에 밥의 것이 남고 앨리스의 묶음은 버려진다(알림)`, async () => {
+      const { P } = await seed('grb-arrival', [{ ...FLOW[0]!, zones: { rows: c.rows } }], true, [{ id: 's_x', name: '요약' }])
+      const bob = await stack.login(stack.users.bob)
+      const slow = await stack.startDownDelay(1500)
+      const received: string[] = []
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 }, origin: slow.origin })
+      page.on('websocket', (socket) => socket.on('framereceived', (f) => received.push(String(f.payload))))
+      try {
+        await page.goto(`${slow.origin}${P}`)
+        await canvasFrame(page).locator('[data-wb-id="f_g"]').waitFor({ state: 'attached' })
+        await poll('joined', async () => received.some((f) => f.includes('"type":"joined"')), Boolean, 15_000)
+        const before = received.filter((f) => f.includes('"type":"page-changed"')).length
+        const theirs = await stack.request(bob, 'PATCH', `${P}/ops`, { baseSeq: await headOf(P), ops: c.theirs(await server(P)) })
+        expect(theirs.status, JSON.stringify(theirs.body)).toBe(200)
+        await rowAction(page, c.target, c.act)
+        // 판 카나리아 — 누른 때 밥의 고침은 아직 앨리스 화면에 안 닿았다.
+        const stale = received.filter((f) => f.includes('"type":"page-changed"')).length === before
+        // 늦춘 프레임 · 리베이스가 다 끝날 때까지 — 서버가 늦춘 시간(1.5s)보다 길게 그대로일 때(위 «닿기 전» 케이스의 기다림과 같은 까닭).
+        let landed = await server(P)
+        for (let round = 0; round < 12; round += 1) {
+          await page.waitForTimeout(1800)
+          const again = await server(P)
+          const same = JSON.stringify(again) === JSON.stringify(landed)
+          landed = again
+          if (same) break
+        }
+        const told = await poll(
+          '버린 편집의 알림',
+          () => page.locator('.wb-shell-info-notice, .wb-shell-edit-alert').allTextContents(),
+          (all) => all.some((text) => text.includes('버렸습니다')),
+          3000,
+        ).catch(() => page.locator('.wb-shell-info-notice, .wb-shell-edit-alert').allTextContents())
+        const outcome = { stale, kept: c.read(landed), told: told.some((text) => text.includes('버렸습니다')) }
+        // eslint-disable-next-line no-console
+        console.log(`[닿기 전 — ${c.name}]`, JSON.stringify({ ...outcome, notices: told }))
+        expect(outcome).toEqual({ stale: true, kept: c.expected, told: true })
+      } finally {
+        await context.close()
+        await slow.close()
+      }
+    }, 120_000)
 
   /** **되돌리기** — 줄 행동 하나가 되돌리기 한 번 · 다시 실행 한 번이다. */
   it('되돌리기 — 떼어 내기 · 칸 짓기가 각각 한 번에 돌아가고 다시 실행된다', async () => {

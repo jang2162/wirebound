@@ -100,6 +100,7 @@ export function StructureTree(props: {
     // 루트가 노드가 아닌 문서(검증 전에는 가능하다)에서는 물을 id가 없으므로 `null`이다 —
     // 그때는 `structureAbilities`도 아무것도 못 찾아 일곱이 이미 꺼져 있다.
     pageLock: typeof doc?.root?.id === 'string' ? lockOf(doc.root.id) : null,
+    lockOf,
   })
   const alias = useAliasEdit(props.pageId)
   /** 지금 상태에서 숨은 노드(`shell/use-view-state.ts`) — 흐리게 그리고 «이 상태에서 숨김» 표지를 단다. 고르고 고칠 수 있다. */
