@@ -28,9 +28,10 @@ export interface ThemeCheckError {
   /**
    * `fallback` — 칸에 선 `data-wb-error`. `console` — 그 칸을 그리는 동안 난 `console.error`. `bundle` — 번들을 못 실었다. `zone` — 내용이 든 구역을
    * 뷰가 안 그렸다(`missingZones`). `placeholder` — 자리표시자 뷰가 사람이 정한 그리기 값을 뿌리의 변수로 안 실었다(`placeholderDrops`). `pairs` — 폼 표
-   * 뷰가 쌍 격자 계약(`cells` 조각 · 그 직계 칸과 빈 쌍 · 두 조각 · 빈 쌍 수)을 어겼다(`pairGridProblems`).
+   * 뷰가 쌍 격자 계약(`cells` 조각 · 그 직계 칸과 빈 쌍 · 두 조각 · 빈 쌍 수)을 어겼다(`pairGridProblems`). `popup` — 팝업 뷰가 덮개 층이 기대는
+   * 조각(`close` · `body`)이나 대화 상자 이름을 어겼다(`popupProblems`).
    */
-  source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs' | 'grid'
+  source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs' | 'grid' | 'popup'
 }
 
 export interface ThemeCheckFocusable {
@@ -162,6 +163,7 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
         for (const message of missingZones(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'zone' })
         for (const message of pairGridProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'pairs' })
         for (const message of dataGridProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'grid' })
+        for (const message of popupProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'popup' })
         if (item.type === 'Placeholder' && item.sample.label === PLACEHOLDER_SET_SAMPLE) {
           for (const message of placeholderDrops(container, item.sample.node.id)) errors.push({ ...at, message, source: 'placeholder' })
         }
@@ -405,6 +407,77 @@ function dataGridProblems(container: Element, root: WbNode): string[] {
     }
   }
   return out
+}
+
+/**
+ * **팝업의 조각 계약** — 덮개 층(`@wirebound/renderer` 의 `PopupLayer`)은 상자 안에서 `close` 조각을 찾아 ✖ 로 닫고, `body` 조각만 굴리며, 상자
+ * 뿌리에 `aria-modal` 을 단다. 그래서 P1 `close` 조각이 정확히 하나 · `<button>` · 접근 이름이 있다. P2 뿌리가 `role="dialog"` 이고
+ * `aria-labelledby` 가 가리키는 글이 `title` 이다. P3 `body` 조각이 하나이고 몸통 자식이 모두 그 안이다. P4 «바닥» 구역 자식은 `body` 밖이다 —
+ * 안이면 몸통과 함께 굴러 단추가 안 보인다.
+ *
+ * **jsdom 이라 DOM 꼴만 본다** — 덮개 위에서 몸통만 구르는지는 실브라우저 판 `apps/web/build-test/popup-layer.test.ts` 가 잰다.
+ */
+function popupProblems(container: Element, root: WbNode): string[] {
+  const out: string[] = []
+  for (const { node } of walkNodes(root)) {
+    if (node.type !== 'Popup') continue
+    const element = container.querySelector(`[data-wb-id="${node.id}"]`)
+    if (element === null) continue
+    const owned = (selector: string) => [...element.querySelectorAll(selector)].filter((el) => el.closest('[data-wb-id]') === element)
+    const closes = owned('[data-wb-part="close"]')
+    if (closes.length !== 1) {
+      out.push(`Popup 뷰가 close 조각을 ${closes.length} 개 그렸습니다 — 하나여야 덮개 층이 그것으로 닫습니다(노드 ${node.id})`)
+    } else if (closes[0]!.tagName !== 'BUTTON') {
+      out.push(`Popup 의 close 조각이 <${closes[0]!.tagName.toLowerCase()}> 입니다 — <button> 이어야 키로 닫습니다(노드 ${node.id})`)
+    } else if (accessibleName(closes[0]!) === '') {
+      out.push(`Popup 의 close 조각에 접근 이름이 없습니다 — aria-label 이나 글을 둡니다(노드 ${node.id})`)
+    }
+    const title = String(shimItem(node, 0).props.title ?? '')
+    if (element.getAttribute('role') !== 'dialog') {
+      out.push(`Popup 뷰의 뿌리가 role="dialog" 가 아닙니다(노드 ${node.id})`)
+    } else {
+      const ids = (element.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter((id) => id !== '')
+      const named = ids
+        .map((id) => element.ownerDocument.getElementById(id)?.textContent ?? '')
+        .join(' ')
+        .trim()
+      if (ids.length === 0) out.push(`Popup 뷰의 뿌리에 aria-labelledby 가 없습니다 — 대화 상자의 이름은 제목이 짓습니다(노드 ${node.id})`)
+      else if (named !== title)
+        out.push(`Popup 뷰의 aria-labelledby 가 가리키는 글이 «${named}» 입니다 — 제목 «${title}» 이어야 합니다(노드 ${node.id})`)
+    }
+    const bodies = owned('[data-wb-part="body"]')
+    if (bodies.length !== 1) {
+      out.push(`Popup 뷰가 body 조각을 ${bodies.length} 개 그렸습니다 — 덮개 층은 하나뿐인 그 조각만 굴립니다(노드 ${node.id})`)
+      continue
+    }
+    const body = bodies[0]!
+    for (const child of node.children ?? []) {
+      const drawn = element.querySelector(`[data-wb-id="${child.id}"]`)
+      if (drawn !== null && !body.contains(drawn)) {
+        out.push(`Popup 몸통 노드 ${child.id} 가 body 조각 밖에 섰습니다 — 덮개 위에서 몸통과 함께 안 구릅니다(노드 ${node.id})`)
+      }
+    }
+    for (const child of zoneList(node, 'footer') as WbNode[]) {
+      const drawn = element.querySelector(`[data-wb-id="${child.id}"]`)
+      if (drawn !== null && body.contains(drawn)) {
+        out.push(`Popup 바닥 노드 ${child.id} 가 body 조각 안에 섰습니다 — 몸통과 함께 굴러 단추가 창 밖으로 갑니다(노드 ${node.id})`)
+      }
+    }
+  }
+  return out
+}
+
+/** 요소의 접근 이름 — `aria-label` · `aria-labelledby` · 글 차례로 본 것(jsdom 이라 간이 셈이다). */
+function accessibleName(element: Element): string {
+  const label = element.getAttribute('aria-label')?.trim()
+  if (label) return label
+  const ids = (element.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter((id) => id !== '')
+  const named = ids
+    .map((id) => element.ownerDocument.getElementById(id)?.textContent ?? '')
+    .join(' ')
+    .trim()
+  if (named !== '') return named
+  return element.textContent?.trim() ?? ''
 }
 
 /** 칸에 든 노드 — 칸 자신(제 칸 · 머리 칸의 뿌리)이나 문서 차례로 첫 노드 자손(셀 틀 조각)의 id(원본 · 사본). 없으면 `null`. */

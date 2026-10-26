@@ -1,18 +1,28 @@
 /**
  * **목업을 브라우저에서 그린다** — 번들 페이지의 `.wb-export-canvas` 에 캔버스 미리보기와 같은 렌더러로.
  *
- * 캔버스(`apps/web/src/canvas/canvas.tsx`)와 같은 셋을 쓴다: `renderDocument`(테마 뷰 → 기본 뷰) · 상호작용 런타임(`interaction` —
- * 겹layer를 상태로 두고 `onEvent` 로 받은 것을 다시 그린다) · 마커 자리(`markerPoint`). 다른 것은 셸의 말뿐이다 — 캔버스는 이동 요청을
- * 알리기만 하지만 번들은 그 페이지 파일로 옮긴다.
+ * 캔버스(`apps/web/src/canvas/canvas.tsx`)와 같은 넷을 쓴다: `renderDocument`(테마 뷰 → 기본 뷰) · 상호작용 런타임(`interaction` —
+ * 겹layer를 상태로 두고 `onEvent` 로 받은 것을 다시 그린다) · 마커 자리(`markerPoint`) · 덮개 층(`PopupLayer` — «팝업 열기» 가 연 팝업을
+ * 덮개 위 상자로 쌓는다). 다른 것은 셸의 말과 팝업 문서를 얻는 곳뿐이다 — 캔버스는 이동 요청을 알리기만 하지만 번들은 그 페이지 파일로
+ * 옮기고, 팝업 문서는 페이지 데이터에 실려 온다(`ExportPageData.popups`). 실리지 않은 «팝업 열기» 대상(화면 페이지)은 이동과 같은 길이다.
  *
  * `boot.tsx` 가 페이지 JSON 으로 이것을 부르고, 케이스(jsdom)는 같은 함수를 곧바로 부른다 — 번들과 케이스가 한 진입을 지난다.
  */
 import {
   EMPTY_OVERLAY,
+  isPopupClose,
+  isPopupDocument,
   markerPoint,
+  NO_OPEN_POPUP,
+  NO_OPEN_POPUP_DIRECT,
+  POPUP_DEPTH_NOTICE,
+  PopupLayer,
+  popupOpener,
   renderDocument,
+  usePopupStack,
   type InteractionEvent,
   type InteractionOverlay,
+  type InteractionRequest,
   type NodeRenderError,
 } from '@wirebound/renderer'
 import { childLists, type PageDocument, type WbNode } from '@wirebound/schema'
@@ -20,7 +30,7 @@ import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import type { ExportMarker } from '../page-data'
+import type { ExportMarker, ExportPopup } from '../page-data'
 
 export interface ExportMountInput {
   document: PageDocument
@@ -35,6 +45,8 @@ export interface ExportMountInput {
   markers: readonly ExportMarker[]
   /** 그림 id → 이 파일에서 본 상대 경로(`ExportPageData.images`). 없으면 그림이 없는 문서다 — 그림 든 자리표시자는 «그림을 불러올 수 없음» 이다. */
   images?: Readonly<Record<string, string>>
+  /** «팝업 열기» 대상 → 실린 팝업 문서(`ExportPageData.popups`). 없는 대상은 `hrefs` 의 길이다. */
+  popups?: Readonly<Record<string, ExportPopup>>
   /** 말할 자리(셸의 `.wb-export-status`). 없으면 말하지 않는다. */
   status: Element | null
   /** 늘 머리에 서는 줄 — 번들을 못 쓴 까닭 따위. 조작마다 비우지 않는다. */
@@ -133,6 +145,7 @@ function ExportCanvas(props: {
   const leaving = useRef(false)
 
   const nodes = useMemo(() => nodeIndex(input.document.root as WbNode), [input.document])
+  const popups = usePopupStack()
 
   /**
    * **알림은 «마지막 조작이 만든 것» 이다** — 조작이 시작될 때 비우고 그 조작 동안 일어난 것을 쌓는다(캔버스의 `beginGesture` 와 같은
@@ -151,29 +164,78 @@ function ExportCanvas(props: {
     }
   }, [container])
 
+  /**
+   * 요청을 처리하고 할 말을 낸다 — 페이지와 덮개 위 팝업이 같은 길을 쓴다. «팝업 열기» 는 실린 팝업이면 쌓고(겹이 차면 말한다), 아니면 이동과
+   * 같다(그 페이지 파일로 · 없음 · 둘 이상). «팝업 닫기» 는 맨 위를 닫고, 열린 것이 없으면 말한다.
+   */
+  const handle = (requests: readonly InteractionRequest[]): string[] => {
+    const added: string[] = []
+    for (const request of requests) {
+      if (request.type === 'closeModal') {
+        if (!popups.pop()) added.push(isPopupDocument(input.document) ? NO_OPEN_POPUP_DIRECT : NO_OPEN_POPUP)
+        continue
+      }
+      const popup = request.type === 'openModal' ? input.popups?.[request.target] : undefined
+      if (popup !== undefined) {
+        const pushed = popups.push({
+          document: popup.document,
+          opener: popupOpener(input.window.document, request.sourceNodeId),
+          assetUrl: (id) => popup.images?.[id] ?? null,
+        })
+        if (!pushed) added.push(POPUP_DEPTH_NOTICE)
+        continue
+      }
+      const href = input.hrefs[request.target]
+      if (typeof href === 'string') {
+        if (!leaving.current) {
+          leaving.current = true
+          ;(input.navigate ?? ((to: string) => input.window.location.assign(to)))(href)
+        }
+      } else {
+        added.push(href === null ? ambiguousPage(request.target) : missingPage(request.target))
+      }
+    }
+    return added
+  }
+  // 이벤트 핸들러는 늘 이번 렌더의 `handle` 을 부른다 — `onEvent` 의 정체는 `input` · `nodes` 에만 매인다(노드 캐시가 그 정체를 본다).
+  const handleLatest = useRef(handle)
+  handleLatest.current = handle
+
   const onEvent = useCallback(
     (event: InteractionEvent) => {
       setOverlay(event.overlay)
       const added: string[] = []
       for (const issue of event.issues) added.push(issue.message)
-      for (const request of event.requests) {
-        const href = input.hrefs[request.target]
-        if (typeof href === 'string') {
-          if (!leaving.current) {
-            leaving.current = true
-            ;(input.navigate ?? ((to: string) => input.window.location.assign(to)))(href)
-          }
-        } else {
-          added.push(href === null ? ambiguousPage(request.target) : missingPage(request.target))
-        }
-      }
+      added.push(...handleLatest.current(event.requests))
       if (event.issues.length === 0 && event.requests.length === 0 && actionsOf(nodes.get(event.nodeId), event.trigger) === 0) {
         added.push(EMPTY_RULE)
       }
       if (added.length > 0) setNotices((prev) => [...prev, ...added])
     },
-    [input, nodes],
+    [nodes],
   )
+
+  /** 덮개 위 팝업 안의 상호작용 — 겹layer 는 층이 든다. 규칙이 없는 노드의 말은 팝업 문서로 센다. */
+  const onPopupEvent = (event: InteractionEvent, popup: { document: { root: unknown } }): void => {
+    const added: string[] = []
+    for (const issue of event.issues) added.push(issue.message)
+    added.push(...handle(event.requests))
+    if (event.issues.length === 0 && event.requests.length === 0) {
+      const node = nodeIndex(popup.document.root as WbNode).get(event.nodeId)
+      if (actionsOf(node, event.trigger) === 0) added.push(EMPTY_RULE)
+    }
+    if (added.length > 0) setNotices((prev) => [...prev, ...added])
+  }
+
+  /** 바로 연 팝업 페이지의 ✖ — 덮개 위의 것은 층이 닫는다. */
+  useEffect(() => {
+    const onClick = (event: Event): void => {
+      if (!isPopupClose(event.target) || (event.target as Element).closest('[data-wb-popup-layer]') !== null) return
+      setNotices((prev) => [...prev, isPopupDocument(input.document) ? NO_OPEN_POPUP_DIRECT : NO_OPEN_POPUP])
+    }
+    container.addEventListener('click', onClick)
+    return () => container.removeEventListener('click', onClick)
+  }, [container, input.document])
 
   const errors = props.errors
   errors.length = 0
@@ -240,6 +302,7 @@ function ExportCanvas(props: {
   return (
     <>
       {tree}
+      <PopupLayer stack={popups} theme={input.theme} onEvent={onPopupEvent} />
       {markers.length > 0 && (
         <div className="wb-export-markers" aria-hidden="true">
           {markers.map((box) => (

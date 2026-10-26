@@ -148,6 +148,12 @@ describe('pasteOps', () => {
     expect('reason' in fresh && fresh.reason).toContain('Page는 루트에만 둘 수 있습니다')
   })
 
+  it('팝업 뿌리(Popup)도 붙이지 않는다 — 보내기 전에 같은 판정으로 막는다', () => {
+    // 손으로 지은 봉투 · 다른 도구의 JSON 이 팝업 뿌리를 실어 와도 422 로 되싣지 않고 이 자리에서 말한다.
+    const refused = pasteOps(doc(), 'a', [{ id: 'p-popup', type: 'Popup' }])
+    expect('reason' in refused && refused.reason).toContain('Popup는 루트에만 둘 수 있습니다')
+  })
+
   it('되돌리기 하나로 통째로 돌아온다 — 역연산이 붙이기 전 문서를 낸다', () => {
     const edit = pasteOps(doc(), 'a', [P1, P2, P3])
     if ('reason' in edit) throw new Error(edit.reason)

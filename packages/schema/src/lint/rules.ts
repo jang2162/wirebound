@@ -102,6 +102,30 @@ export const LINT_RULES = [
     severity: 'warning',
   },
   {
+    id: 'modal-target-not-popup',
+    spec: '`openModal` 이 팝업 페이지가 아닌 페이지를 가리킴 — 경고',
+    group: 'document',
+    owner: 'schema',
+    // 뷰 모드 · 번들은 그 페이지를 덮개 위에 안 띄운다(화면 페이지의 폭 가정이 상자에서 깨진다) — 에디터는 알리고 번들은 옮긴다.
+    severity: 'warning',
+  },
+  {
+    id: 'navigate-to-popup',
+    spec: '`navigate` 가 팝업 페이지를 가리킴 — 경고',
+    group: 'document',
+    owner: 'schema',
+    // 팝업 페이지로 옮기면 상자만 있는 화면이 선다 — 대개 «팝업 열기» 를 뜻했다.
+    severity: 'warning',
+  },
+  {
+    id: 'close-outside-popup',
+    spec: '화면 페이지의 `closeModal` — 닫을 팝업이 없음 · 경고',
+    group: 'document',
+    owner: 'schema',
+    // 덮개 위 팝업은 뒤 화면의 누름을 막아, 화면 페이지의 «팝업 닫기» 는 열린 팝업이 있을 때 눌리지 않는다.
+    severity: 'warning',
+  },
+  {
     id: 'duplicate-marker',
     spec: '중복된 코멘트 번호',
     group: 'document',

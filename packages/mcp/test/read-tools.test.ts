@@ -26,6 +26,26 @@ describe('list_pages — 다음 도구의 인자를 낸다', () => {
     expect(listing.pages[0]!.menuPath).toEqual(['관리자', '회원'])
   })
 
+  it('페이지마다 종류를 낸다 — 뿌리가 Popup 이면 popup', async () => {
+    const payload = snapshotPayload()
+    const io = harness({
+      payload: {
+        ...payload,
+        pages: payload.pages.map((item) =>
+          item.id === PAGE_DETAIL
+            ? { ...item, schemaVersion: 5, schema: { version: 5, root: { id: 'pop', type: 'Popup' } } as never }
+            : item,
+        ),
+      },
+    })
+    const listing = (await callJson(io, 'list_pages')) as { pages: { path: string; kind: string }[] }
+    expect(listing.pages.map((p) => [p.path, p.kind])).toEqual([
+      ['관리자/회원/목록', 'page'],
+      ['관리자/회원/상세', 'popup'],
+      ['마케팅/랜딩', 'page'],
+    ])
+  })
+
   it('메뉴를 평평하게 낸다 — `parentId`가 구조를 나른다', async () => {
     const listing = (await callJson(harness(), 'list_pages')) as {
       menu: { id: string; parentId: string | null; title: string; sortOrder: number }[]
@@ -78,6 +98,7 @@ describe('get_page — 무엇을 싣나', () => {
         'document',
         'id',
         'interactions',
+        'kind',
         'menuPath',
         'nodeCount',
         'nodes',

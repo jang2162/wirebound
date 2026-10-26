@@ -385,4 +385,27 @@ body {
 .wb-export-screen .wb-export-states {
   display: none;
 }
+
+/* 팝업 페이지 줄의 표지 — 이름 앞의 작은 상자. 읽는 이름은 « — 팝업» 으로 끝난다(.wb-export-hidden). */
+.wb-export-nav-kind {
+  display: inline-block;
+  margin-right: 0.375rem;
+  padding: 0 0.25rem;
+  border: 1px solid #b8c0cc;
+  border-radius: 3px;
+  font-size: 0.75em;
+  line-height: 1.4;
+  color: #4b5563;
+  vertical-align: 0.05em;
+}
+
+.wb-export-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 `

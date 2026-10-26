@@ -58,7 +58,9 @@ const GROUP_TITLES: Record<ComponentGroup, string> = {
 
 /** 컴포넌트 타입 → 영어 한 줄. 키가 `CATALOG_DEFS` 의 타입과 같아야 한다(머리말 «영어 설명 표»). */
 const COMPONENT_SUMMARIES: Record<string, string> = {
-  Page: 'Root of one design page; everything on the page sits inside it. Only valid as the document root.',
+  Page: 'Root of one design page (a screen); everything on the page sits inside it. Only valid as the document root.',
+  Popup:
+    'Root of a popup page — a box with a title bar (`title`, a close button), a body and a `footer` of buttons; `size` small 480px · medium 720px · large 960px. Only valid as the document root.',
   Slot: 'Where a layout inserts the page content. Layout documents only.',
   Section: 'A large band of the screen with its own background and spacing.',
   Flex: 'Lays children out in one row or one column.',
@@ -122,7 +124,7 @@ const NODE_FIELDS: Record<string, string> = {
 /** 페이지 문서 필드 → 영어 한 줄. 키가 `PageEnvelopeSchema` 의 키와 같아야 한다. */
 const PAGE_FIELDS: Record<string, string> = {
   version: `Document format version. The server stores and returns version ${CURRENT_DOCUMENT_VERSION}.`,
-  root: 'The root node — always a `Page`.',
+  root: 'The root node — a `Page` (a screen) or a `Popup` (a popup page). A page’s kind is its root type.',
   viewStates: `Optional named screen states (\`{ id, name, parent?, description? }\`), at most ${VIEW_STATES_MAX}, names 1–${VIEW_STATE_NAME_MAX} characters, nesting at most ${VIEW_STATE_DEPTH_MAX} deep, \`description\` free text up to ${VIEW_STATE_DESCRIPTION_MAX} characters (omit it rather than send a blank one). Nodes refer to them from \`visibility\`.`,
 }
 
@@ -132,7 +134,8 @@ const ACTIONS: Record<string, string> = {
   setVisible: '`{ target: <node id>, value: boolean }` — show or hide a node.',
   switchTab: '`{ target: <TabPanel node id> }` — open that tab of its parent `Tabs`.',
   navigate: `\`{ target: "${PAGE_TARGET_PREFIX}<menu path>" }\` — go to another page.`,
-  openModal: `\`{ target: "${PAGE_TARGET_PREFIX}<menu path>" }\` — open another page as a modal.`,
+  openModal: `\`{ target: "${PAGE_TARGET_PREFIX}<menu path>" }\` — open that popup page over the current screen (a backdrop and a centered box). Point it at a page whose root is \`Popup\`.`,
+  closeModal: '`{}` — no target; close the top-most open popup.',
 }
 
 interface ToolText {
@@ -334,13 +337,13 @@ function renderCatalog(line: Line): void {
   }
 }
 
-/** 구역 하나의 글 — 이름 · 화면 이름 · 받는 타입 · 기본 내용. */
+/** 구역 하나의 글 — 이름 · 화면 이름 · 받는 타입 · 기본 내용(상호작용까지). */
 function zoneText(zone: ComponentDef['zones'][number]): string {
   const where = zone.name === BODY_ZONE ? '`body` (children)' : `\`${zone.name}\` (zones.${zone.name})`
   const accepts = zone.accepts === undefined ? '' : `, accepts only ${zone.accepts.map((type) => `\`${type}\``).join(', ')}`
   const seeds = (zone.initial ?? []).map(
     (seed) =>
-      `\`${seed.type}\`${seed.props === undefined ? '' : ` ${JSON.stringify(seed.props)}`}${seed.variant === undefined ? '' : ` variant ${JSON.stringify(seed.variant)}`}`,
+      `\`${seed.type}\`${seed.props === undefined ? '' : ` ${JSON.stringify(seed.props)}`}${seed.variant === undefined ? '' : ` variant ${JSON.stringify(seed.variant)}`}${seed.interactions === undefined ? '' : ` interactions ${JSON.stringify(seed.interactions)}`}`,
   )
   return `${where} "${zone.label}"${accepts}${seeds.length === 0 ? '' : `, create with ${seeds.join(' + ')}`}`
 }

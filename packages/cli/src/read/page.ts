@@ -32,10 +32,12 @@ import {
   duplicateTargets,
   matchPageTargets,
   migrateDocument,
+  pageKindOf,
   pageTargetPath,
   pageView,
   targetedPages,
   type PageDocument,
+  type PageKind,
   type PageView,
   type TargetedPage,
 } from '@wirebound/schema'
@@ -50,6 +52,8 @@ export interface PageSummary {
   title: string
   /** 조상 메뉴의 이름들. 뿌리가 앞이다. */
   menuPath: readonly string[]
+  /** 페이지의 종류 — 문서 뿌리가 `Popup` 이면 `popup`(`pageKindOf`). */
+  kind: PageKind
 }
 
 /** 메뉴 노드 하나. **평평하다** — payload의 모양 그대로다(`parentId`가 구조를 나른다). */
@@ -103,7 +107,7 @@ export function listProject(payload: SnapshotPayload): ProjectListing {
       title: node.title,
       sortOrder: node.sortOrder,
     })),
-    pages: ordered.map(summarize),
+    pages: ordered.map((page) => summarize(page, payload)),
     // **판정을 다시 짜지 않는다** — `duplicateTargets`가 이미 그것을 갖고 있다.
     // 접두만 벗겨 목록의 `path`와 같은 말로 만든다.
     duplicatePaths: duplicateTargets(ordered).map(pageTargetPath),
@@ -140,7 +144,7 @@ export function lookupPage(payload: SnapshotPayload, path: string): PageLookup {
     return { kind: 'none', candidates: ordered.map((page) => pageTargetPath(page.target)) }
   }
   if (matched.length > 1) {
-    return { kind: 'ambiguous', matches: matched.map(summarize) }
+    return { kind: 'ambiguous', matches: matched.map((page) => summarize(page, payload)) }
   }
 
   const found = matched[0]!
@@ -171,8 +175,9 @@ export function lookupPage(payload: SnapshotPayload, path: string): PageLookup {
   }
 }
 
-function summarize(page: TargetedPage): PageSummary {
-  return { path: pageTargetPath(page.target), id: page.id, title: page.title, menuPath: page.menuPath }
+function summarize(page: TargetedPage, payload: SnapshotPayload): PageSummary {
+  const kind = pageKindOf(payload.pages.find((item) => item.id === page.id)?.schema)
+  return { path: pageTargetPath(page.target), id: page.id, title: page.title, menuPath: page.menuPath, kind }
 }
 
 /**

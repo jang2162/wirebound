@@ -119,10 +119,10 @@ describe('상호작용 탭 — 자리', () => {
 })
 
 /**
- * **설계서 「모델」(상호작용)의 고정 5종을 화면이 그대로 보인다.** *"스크립트나 표현식은 허용하지
+ * **설계서 「모델」(상호작용)의 고정 6종을 화면이 그대로 보인다.** *"스크립트나 표현식은 허용하지
  * 않는다"*를 화면에서 지키는 자리다 — 자유 입력으로 규칙을 적을 길이 없어야 한다.
  */
-describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () => {
+describe('상호작용 탭 — 고정 6종 · 4종을 화면이 보인다', () => {
   async function openWithRule(): Promise<void> {
     await openPage(DOC_WITH_RULE)
     await openInteractionTab()
@@ -136,7 +136,7 @@ describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () =
     expect([...select.options].map((option) => option.textContent)).toEqual(['클릭', '변경', '선택', '제출'])
   })
 
-  it('액션 선택지가 상호작용 모델의 5종이다', async () => {
+  it('액션 선택지가 상호작용 모델의 6종이다', async () => {
     await openWithRule()
 
     const group = screen.getByRole('group', { name: '액션 1' })
@@ -146,7 +146,8 @@ describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () =
       '보이기·숨기기',
       '탭 전환',
       '페이지 이동',
-      '모달 열기',
+      '팝업 열기',
+      '팝업 닫기',
     ])
   })
 

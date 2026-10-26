@@ -41,13 +41,13 @@
  * 셸 CSS를 문서 CSS에 섞으면 문서 시트의 차례(기본 뷰 → 테마 → 토큰)에 셸이 끼어든다. **설계서의 목록은 예시이지 닫힌 목록이
  * 아니다**(페이지도 둘만 적혀 있다).
  */
-import { renderDocument, type NodeRenderError } from '@wirebound/renderer'
+import { isPopupDocument, renderDocument, type NodeRenderError } from '@wirebound/renderer'
 import { imageIdsIn, installCatalog, isPageTargetAction, type PageDocument } from '@wirebound/schema'
 import { defaultViewsCss, type ThemeManifest } from '@wirebound/theme-sdk'
 import { tokensCss } from '@wirebound/themes'
 import { eachNode } from '../nodes'
 import { DEFAULT_LANG, renderHtmlDocument } from '../page'
-import { IMAGES_DIRECTORY, RUNTIME_JS_PATH, THEME_DIRECTORY, type ExportMarker, type ExportPageData } from '../page-data'
+import { IMAGES_DIRECTORY, RUNTIME_JS_PATH, THEME_DIRECTORY, type ExportMarker, type ExportPageData, type ExportPopup } from '../page-data'
 import { scriptJson } from '../script-json'
 import { commentEntries, type BundleComment } from './comments'
 import { bundleHref, pageFileNames } from './filename'
@@ -180,16 +180,23 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
     if (page.target === undefined) continue
     targets.set(page.target, targets.has(page.target) ? null : paths[index]!)
   }
+  /** 타겟 → 팝업 페이지의 문서 — 그 타겟을 든 페이지가 하나이고 뿌리가 `Popup` 일 때만(`ExportPageData.popups`). */
+  const popupDocs = new Map<string, PageDocument>()
+  for (const [index, page] of pages.entries()) {
+    if (page.target !== undefined && targets.get(page.target) === paths[index] && isPopupDocument(page.document)) {
+      popupDocs.set(page.target, page.document)
+    }
+  }
 
   const errors = pages.flatMap((page, index) =>
     structuralErrors(page.document).map((error) => ({ path: paths[index]!, title: page.title, error })),
   )
 
   const files: BundleFile[] = [
-    { path: INDEX_PATH, content: pageHtml(options, paths, targets, 0, INDEX_PATH, lang) },
+    { path: INDEX_PATH, content: pageHtml(options, paths, targets, popupDocs, 0, INDEX_PATH, lang) },
     ...pages.map((_page, index) => ({
       path: paths[index]!,
-      content: pageHtml(options, paths, targets, index, paths[index]!, lang),
+      content: pageHtml(options, paths, targets, popupDocs, index, paths[index]!, lang),
     })),
     { path: SHELL_CSS_PATH, content: SHELL_CSS },
     { path: VIEWS_CSS_PATH, content: defaultViewsCss() },
@@ -244,17 +251,51 @@ function structuralErrors(page: PageDocument): NodeRenderError[] {
  */
 function hrefsFor(page: PageDocument, targets: ReadonlyMap<string, string | null>, at: string): Record<string, string | null> {
   const hrefs: Record<string, string | null> = {}
+  for (const target of pageTargetsIn(page, false)) {
+    if (!targets.has(target)) continue
+    const path = targets.get(target)!
+    hrefs[target] = path === null ? null : bundleHref(at, path)
+  }
+  return hrefs
+}
+
+/** 문서가 겨누는 페이지 타겟(`navigate` · `openModal`) — `modalOnly` 면 «팝업 열기» 만. 문서 차례 · 겹침 없음. */
+function pageTargetsIn(page: PageDocument, modalOnly: boolean): string[] {
+  const found = new Set<string>()
   for (const node of eachNode(page.root)) {
     for (const interaction of Array.isArray(node.interactions) ? node.interactions : []) {
       for (const action of Array.isArray(interaction?.actions) ? interaction.actions : []) {
         if (action === null || typeof action !== 'object' || !isPageTargetAction(action) || typeof action.target !== 'string') continue
-        if (!targets.has(action.target)) continue
-        const path = targets.get(action.target)!
-        hrefs[action.target] = path === null ? null : bundleHref(at, path)
+        if (modalOnly && action.type !== 'openModal') continue
+        found.add(action.target)
       }
     }
   }
-  return hrefs
+  return [...found]
+}
+
+/**
+ * 이 문서에서 «팝업 열기» 로 닿는 팝업 문서(`ExportPageData.popups`) — 팝업이 연 팝업까지 닫힌 셈으로, 타겟마다 한 벌. 이 문서 자신이 팝업이면
+ * 그것도 다시 열 수 있다(제 타겟을 겨누면). 그림 경로는 여는 파일(`at`)에서 본 것이다.
+ */
+function popupsFor(
+  page: PageDocument,
+  popupDocs: ReadonlyMap<string, PageDocument>,
+  images: readonly BundleImage[],
+  at: string,
+): Record<string, ExportPopup> {
+  const out: Record<string, ExportPopup> = {}
+  const queue = [page]
+  for (let doc = queue.shift(); doc !== undefined; doc = queue.shift()) {
+    for (const target of pageTargetsIn(doc, true)) {
+      const popup = popupDocs.get(target)
+      if (popup === undefined || target in out) continue
+      const hrefs = imageHrefs(popup, images, at)
+      out[target] = { document: popup, ...(Object.keys(hrefs).length === 0 ? {} : { images: hrefs }) }
+      queue.push(popup)
+    }
+  }
+  return out
 }
 
 /**
@@ -265,6 +306,7 @@ function pageHtml(
   options: ExportBundleOptions,
   paths: readonly string[],
   targets: ReadonlyMap<string, string | null>,
+  popupDocs: ReadonlyMap<string, PageDocument>,
   index: number,
   at: string,
   lang: string,
@@ -274,6 +316,7 @@ function pageHtml(
     title: item.title,
     href: bundleHref(at, paths[position]!),
     current: position === index,
+    popup: isPopupDocument(item.document),
   }))
   const comments = commentEntries(page.document, page.comments ?? [])
   const markers: ExportMarker[] = []
@@ -282,6 +325,7 @@ function pageHtml(
   }
   const theme = options.theme ?? null
   const images = imageHrefs(page.document, options.images ?? [], at)
+  const popups = popupsFor(page.document, popupDocs, options.images ?? [], at)
   const data: ExportPageData = {
     document: page.document,
     title: page.title,
@@ -292,6 +336,7 @@ function pageHtml(
     hrefs: hrefsFor(page.document, targets, at),
     markers,
     ...(Object.keys(images).length === 0 ? {} : { images }),
+    ...(Object.keys(popups).length === 0 ? {} : { popups }),
   }
   return renderHtmlDocument({
     lang,

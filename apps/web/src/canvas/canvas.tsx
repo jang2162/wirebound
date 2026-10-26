@@ -32,9 +32,15 @@ import {
 import {
   EMPTY_OVERLAY,
   focusElement,
+  isPopupClose,
+  isPopupDocument,
   markerPoint,
+  NO_OPEN_POPUP,
+  NO_OPEN_POPUP_DIRECT,
   NO_THEME,
+  PopupLayer,
   renderDocument,
+  usePopupStack,
   type InteractionEvent,
   type InteractionOverlay,
   type NodeRenderError,
@@ -46,6 +52,8 @@ import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
 import { KeepDropPlace } from './keep-drop-place'
 import { projectAssetUrl } from '../api/asset-url'
+import { useApi } from '../api/context'
+import { useCanvasPopups, usePopupArea } from './canvas-popups'
 import { platformOf } from '../edit/editor-shortcuts'
 import { findNodeSafely, walkSafely } from '../edit/safe-walk'
 import { selectionCapNotice } from '../panels/toolbar-status'
@@ -139,11 +147,10 @@ function emptyRuntime(key: string): RuntimeState {
  *
  * - `issues` — **일어나지 않은 것**. 조용히 지나가면 *"눌렀는데 아무 일도 안
  *   일어난다"*가 된다.
- * - `requests` — **여기서 일어나지 않는 것**. 규칙은 옳은데 렌더러 밖의 일이다.
- *   **알리기만 하고 안 움직인다.** 지금 `"page:관리자/회원/상세"`를
- *   페이지 id로 풀 수단이 없다 — 트리(`getTree`)가 주는 것은 메뉴·페이지의 **제목**이고
- *   경로 형식은 규격이 정한 적이 없다.
- *   제목으로 어림잡아 옮기면 **틀린 페이지로 옮겨 놓고 맞다고 말하는** 화면이 된다.
+ * - `navigate` 요청 — **여기서 일어나지 않는 것**. 규칙은 옳은데 렌더러 밖의 일이다.
+ *   **알리기만 하고 안 움직인다** — 편집하던 페이지를 떠나게 하지 않는다.
+ *
+ * 팝업 열기 · 닫기는 여기서 말하지 않는다 — 덮개 층이 열고 닫는다(`./canvas-popups.tsx`). 못 열면 그쪽이 말한다.
  *
  * **문장에 조사를 계산하지 않는다.** `{이름} 이동 규칙입니다` 꼴이라 받침을 따질 자리가
  * 없다 — 문장화(`schema`)가 조사를 계산하는 것은 그쪽 형태가 필요로 해서다.
@@ -152,12 +159,8 @@ function noticesOf(event: InteractionEvent): string[] {
   const out: string[] = []
   for (const issue of event.issues) out.push(issue.message)
   for (const request of event.requests) {
-    const page = describePageTarget(request.target)
-    out.push(
-      request.type === 'navigate'
-        ? `${page} 이동 규칙입니다. 이 화면에서는 페이지를 옮기지 않습니다.`
-        : `${page} 모달 열기 규칙입니다. 이 화면에서는 모달을 열지 않습니다.`,
-    )
+    if (request.type === 'navigate')
+      out.push(`${describePageTarget(request.target)} 이동 규칙입니다. 이 화면에서는 페이지를 옮기지 않습니다.`)
   }
   return out.length === 0 ? NO_NOTICES : out
 }
@@ -315,6 +318,30 @@ export function Canvas(props: {
   const live = runtime.key === runtimeKey ? runtime : emptyRuntime(runtimeKey)
 
   /**
+   * **덮개 위에 연 팝업**(`./canvas-popups.tsx`) — 겹layer 와 같은 리셋 축이다. 모드 · 페이지를 옮기거나 문서를 통째로 실으면 모두 닫는다
+   * (포커스는 돌려주지 않는다). 편집 모드에서는 층을 안 그린다.
+   */
+  const api = useApi()
+  const popupStack = usePopupStack()
+  useLayoutEffect(() => {
+    popupStack.clear()
+  }, [runtimeKey, popupStack.clear])
+  const popupArea = usePopupArea(frame, zoom, mode === 'view' && popupStack.popups.length > 0)
+  /** 늦게 온 한 줄(팝업을 읽은 답) — 그 사이 리셋됐으면 버린다. */
+  const sayLater = (line: string, key: string): void => {
+    setRuntime((prev) => (prev.key === key ? { ...prev, notices: [...prev.notices, line] } : prev))
+  }
+  const popups = useCanvasPopups({
+    api,
+    projectId: props.projectId,
+    stack: popupStack,
+    frame,
+    rootIsPopup: isPopupDocument(doc),
+    runtimeKey,
+    say: sayLater,
+  })
+
+  /**
    * 지금 키의 상태로 맞춘 것. **갱신 함수 안에서 옛 키의 상태에 얹지 않기 위해서다** —
    * 모드를 바꾼 뒤 첫 이벤트가 앞 모드의 알림에 덧붙는 것을 막는다.
    */
@@ -366,9 +393,22 @@ export function Canvas(props: {
                 notices: added.length === 0 ? base.notices : [...base.notices, ...added],
               }
             })
+            popups.handle(event.requests)
           },
         }
       : undefined
+
+  /** 덮개 위 팝업 안의 상호작용 — 겹layer 는 층이 들고, 말은 같은 알림 줄에 · 열기 · 닫기는 위와 같은 길로. */
+  const onPopupEvent = (event: InteractionEvent): void => {
+    const added = noticesOf(event)
+    if (added.length > 0) {
+      setRuntime((prev) => {
+        const base = normalize(prev)
+        return { ...base, notices: [...base.notices, ...added] }
+      })
+    }
+    popups.handle(event.requests)
+  }
 
   // 아웃라인은 편집 모드에만 있다(설계서 「설계서 화면 구조」 — 뷰 모드는 결과만 보여 준다). 선택 자체는
   // 남는다. 뷰 모드에서 선택을 지우면 모드를 오갈 때마다 고른 것이 사라진다.
@@ -549,6 +589,15 @@ export function Canvas(props: {
       //
       // iframe 안의 클릭도 여기 닿는다 — 문서는 portal 로 그려져 React 이벤트가 이 트리로 버블링한다.
       onClick={(event: MouseEvent<HTMLDivElement>) => {
+        // 바로 연 팝업 페이지의 ✖ — 덮개 위의 것은 층이 닫는다.
+        if (mode === 'view' && isPopupClose(event.target) && (event.target as Element).closest?.('[data-wb-popup-layer]') == null) {
+          const line = popupStack.popups.length === 0 && isPopupDocument(doc) ? NO_OPEN_POPUP_DIRECT : NO_OPEN_POPUP
+          setRuntime((prev) => {
+            const base = normalize(prev)
+            return { ...base, notices: [...base.notices, line] }
+          })
+          return
+        }
         if (mode !== 'edit') return
         const nodeId = frame === null ? null : nodeIdAt(event.target, frame.document.body)
         // **Cmd · Shift 클릭은 더하거나 뺀다**(`toggleSelect`) — 노드 밖이면 아무것도 안 한다(고른 것을 지키려고 든 수식 키다).
@@ -613,6 +662,7 @@ export function Canvas(props: {
                   projectId={props.projectId}
                 />
               </KeepDropPlace>
+              {mode === 'view' && <PopupLayer stack={popupStack} theme={definition} area={popupArea} onEvent={onPopupEvent} />}
             </ThemeProvider>
           )}
         </CanvasIframe>

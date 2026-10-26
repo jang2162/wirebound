@@ -120,9 +120,9 @@ describe('GET /:projectId/export/preview', () => {
 
       expect(res.statusCode).toBe(200)
       expect(res.json().pages).toEqual([
-        { id: expect.any(String), title: '관리자 대시보드', target: 'page:관리자/대시보드' },
-        { id: expect.any(String), title: '관리자 회원 목록', target: 'page:관리자/회원/목록' },
-        { id: expect.any(String), title: '관리자 회원 상세', target: 'page:관리자/회원/상세' },
+        { id: expect.any(String), title: '관리자 대시보드', target: 'page:관리자/대시보드', kind: 'page' },
+        { id: expect.any(String), title: '관리자 회원 목록', target: 'page:관리자/회원/목록', kind: 'page' },
+        { id: expect.any(String), title: '관리자 회원 상세', target: 'page:관리자/회원/상세', kind: 'page' },
       ])
     })
   })

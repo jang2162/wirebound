@@ -69,7 +69,16 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { mountExportDocument } from '../src/browser/mount'
 import { exportBundle } from '../src/bundle/index'
 import { describeTree, normalizeStyle } from '../test-support/dom-compare'
-import { brokenFixture, broadFixture, EMPTY_MANIFEST, markedTheme, slotFixture, stateFixture, typesIn } from '../test-support/fixtures'
+import {
+  brokenFixture,
+  broadFixture,
+  EMPTY_MANIFEST,
+  markedTheme,
+  popupFixture,
+  slotFixture,
+  stateFixture,
+  typesIn,
+} from '../test-support/fixtures'
 
 installCatalog()
 
@@ -115,6 +124,7 @@ const FIXTURES = {
   Slot: slotFixture,
   폴백: brokenFixture,
   상태: stateFixture,
+  팝업: popupFixture,
 } as const
 
 /** 견줄 테마. 테마 없음(api 의 판)과 기본 뷰와 다른 DOM 을 내는 테마(`markedTheme`). */

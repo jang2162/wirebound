@@ -66,6 +66,19 @@ export interface ExportPageData {
    * 런타임의 `assetUrl` 이 `null` 을 내 «그림을 불러올 수 없음» 표지가 선다. 실린 그림이 없는 페이지는 키째 없다 — 그림 없는 번들의 바이트가 그대로다.
    */
   images?: Record<string, string>
+  /**
+   * 이 페이지에서 «팝업 열기»(`openModal`)로 닿는 팝업 페이지의 문서 — 타겟 → 문서 · 그림 경로. 팝업이 연 팝업까지 닫힌 셈으로 한 벌씩 싣는다.
+   * 번들은 `file://` 로도 열려 다른 파일을 읽을 수 없으므로 싣는다. 키가 없는 타겟(화면 페이지 · 둘 이상 · 없는 페이지)은 `hrefs` 의 길을
+   * 그대로 간다. 닿는 팝업이 없으면 키째 없다 — 팝업 없는 번들의 바이트가 그대로다.
+   */
+  popups?: Record<string, ExportPopup>
+}
+
+/** 번들 페이지에 실은 팝업 하나(`ExportPageData.popups`). */
+export interface ExportPopup {
+  document: PageDocument
+  /** 그 문서가 든 그림 id → **여는 파일에서 본** 상대 경로. 없으면 키째 없다. */
+  images?: Record<string, string>
 }
 
 /** 번들 안 그림의 자리 — `assets/images/<id>.<확장자>`. */

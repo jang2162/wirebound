@@ -200,6 +200,11 @@ export interface TreePage {
    * 쓴다(`panels/state-rows.tsx`). 없으면 상태가 없는 페이지로 읽는다.
    */
   viewStates?: ViewState[]
+  /**
+   * 페이지의 종류 — 문서 뿌리가 `Popup` 이면 `popup`(트리 응답 — `apps/api/src/services/menu-tree.ts` 의 `TreePage`). 메뉴 트리 줄의 «팝업» 표지 ·
+   * 상호작용 탭의 대상 고르개가 닫힌 페이지에서 쓴다. 없으면 화면 페이지로 읽는다.
+   */
+  kind?: 'page' | 'popup'
 }
 
 /** 통합 트리의 메뉴 노드. 페이지는 항상 메뉴 노드에 속하므로 루트 페이지 목록은 없다. */
@@ -558,10 +563,12 @@ export interface ExportPagePlan {
   id: string
   title: string
   /**
-   * 이 페이지를 가리키는 설계서 「상호작용」 「모델」의 타겟. **상호작용 탭의 `페이지 경로`에 그대로 적는
-   * 문자열이다** — 그 자리는 자유 입력이라 서버가 무엇을 조립하는지 알 길이 여기뿐이다.
+   * 이 페이지를 가리키는 설계서 「상호작용」 「모델」의 타겟. **상호작용 탭의 페이지 고르개가 짓는 문자열과 같다** — 목록 밖이면
+   * `페이지 경로` 칸에 그대로 적는다.
    */
   target: string
+  /** 페이지의 종류 — 뿌리가 `Popup` 이면 `popup`. 없으면 화면(옛 서버). */
+  kind?: 'page' | 'popup'
 }
 
 export interface ExportBrokenLink {

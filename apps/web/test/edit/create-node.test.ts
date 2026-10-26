@@ -10,7 +10,9 @@ import {
   BODY_ZONE,
   CURRENT_DOCUMENT_VERSION,
   getComponent,
+  isRootType,
   listComponents,
+  newPageDocument,
   placementsOf,
   validatePage,
   type PageDocument,
@@ -99,14 +101,15 @@ describe('createNode', () => {
   })
 
   it('모든 카탈로그 타입에 대해 검증을 통과한다', () => {
-    // **분모를 손으로 적지 않는다** — 카탈로그에 컴포넌트가 늘면 여기서 죽는다. 뿌리 타입 `Page` 는 페이지 안에 못 선다(`nested-page` — 아래
-    // «페이지에 둘 수 없는 타입»).
+    // **분모를 손으로 적지 않는다** — 카탈로그에 컴포넌트가 늘면 여기서 죽는다. 뿌리 타입(`Page` · `Popup`)은 페이지 안에 못 선다(`nested-page`
+    // — 아래 «페이지에 둘 수 없는 타입») — 뿌리로 세워 잰다.
     const nextId = countingIds()
 
     for (const def of listComponents().filter((def) => def.type !== 'Page')) {
       const node = createNode(def.type, nextId)
       expect(node, def.type).not.toBeNull()
-      expect(nodeIssues(placedPage(node as WbNode)), def.type).toEqual([])
+      const doc = isRootType(def.type) ? { version: CURRENT_DOCUMENT_VERSION, root: node as WbNode } : placedPage(node as WbNode)
+      expect(nodeIssues(doc), def.type).toEqual([])
     }
   })
 
@@ -143,6 +146,7 @@ describe('createNode', () => {
       'Field',
       'FormTable',
       'GridColumn',
+      'Popup',
       'SearchForm',
       'Tabs',
     ])
@@ -197,10 +201,31 @@ describe('createNode', () => {
         footer: [{ id: 'n_test9', type: 'Pagination' }],
       },
     })
+    // 새 팝업의 바닥은 `[취소][저장]` — «취소» 가 처음부터 «팝업 닫기» 를 든다(기본 내용의 상호작용도 싣는다).
+    expect(createNode('Popup', countingIds())).toEqual({
+      id: 'n_test1',
+      type: 'Popup',
+      zones: {
+        footer: [
+          { id: 'n_test2', type: 'Button', props: { label: '취소' }, interactions: [{ on: 'click', actions: [{ type: 'closeModal' }] }] },
+          { id: 'n_test3', type: 'Button', props: { label: '저장' }, variant: 'primary' },
+        ],
+      },
+    })
     for (const def of withSeeds) {
       const node = createNode(def.type, countingIds()) as WbNode
-      expect(validatePage(placedPage(node)), def.type).toEqual([])
+      const doc = isRootType(def.type) ? { version: CURRENT_DOCUMENT_VERSION, root: node } : placedPage(node)
+      expect(validatePage(doc), def.type).toEqual([])
     }
+  })
+
+  it('서버가 짓는 새 팝업 페이지의 뿌리는 에디터가 짓는 팝업 노드와 같은 꼴이다 — 제목 · 빈 몸통만 더한다', () => {
+    // 두 자리(`@wirebound/schema` 의 `newPageDocument` · 이 함수)가 기본 내용을 따로 편다 — 갈리면 여기서 죽는다.
+    expect(newPageDocument('popup', '사용자 검색', countingIds()).root).toEqual({
+      ...createNode('Popup', countingIds()),
+      props: { title: '사용자 검색' },
+      children: [],
+    })
   })
 
   it('몸통을 받는 타입도 빈 children을 갖지 않는다 — 기본 내용이 없는 구역은 키가 없다', () => {
@@ -223,7 +248,7 @@ describe('createNode', () => {
     expect(createNode('Card', countingIds())).toEqual({ id: expect.any(String), type: 'Card' })
   })
 
-  it('페이지에 바로 둘 수 없는 타입은 뿌리 Page · Slot · 탭 안의 TabPanel · 그리드의 부품 넷이다', () => {
+  it('페이지에 바로 둘 수 없는 타입은 뿌리 Page · Popup · Slot · 탭 안의 TabPanel · 그리드의 부품 넷이다', () => {
     // `createNode`의 계약이 아니라 **카탈로그의 성질**이다. 타입 목록이 무엇을
     // 걸러야 하는지가 여기서 나온다 — 설계서 「레이아웃」이 Slot을 레이아웃 전용으로 두고,
     // `validatePage`가 `slot-count`로 거절한다(실측). `Page` 는 뿌리에만 서고 안에 두면 `nested-page` 다. `TabPanel` 은 탭 안에만 서고
@@ -237,6 +262,6 @@ describe('createNode', () => {
       })
       .map((def) => def.type)
 
-    expect(blocked).toEqual(['Page', 'Slot', 'TabPanel', 'GridColumnGroup', 'GridColumn', 'GridRow', 'GridCell'])
+    expect(blocked).toEqual(['Page', 'Popup', 'Slot', 'TabPanel', 'GridColumnGroup', 'GridColumn', 'GridRow', 'GridCell'])
   })
 })

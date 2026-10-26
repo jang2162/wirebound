@@ -231,6 +231,26 @@ export function stateFixture(): PageDocument {
   }
 }
 
+/** **팝업 페이지** — 뿌리가 `Popup` 이고 몸통 · «바닥» 구역을 든다. «취소» 는 «팝업 닫기» 를 든다. */
+export function popupFixture(): PageDocument {
+  nextId = 4000
+  return {
+    version: 5,
+    root: {
+      id: id(),
+      type: 'Popup',
+      props: { title: '사용자 검색', size: 'small' },
+      children: [{ id: id(), type: 'Text', props: { content: '이름으로 찾는다' } }],
+      zones: {
+        footer: [
+          { id: id(), type: 'Button', props: { label: '취소' }, interactions: [{ on: 'click', actions: [{ type: 'closeModal' }] }] },
+          { id: id(), type: 'Button', props: { label: '선택' } },
+        ],
+      },
+    },
+  }
+}
+
 /** 노드 하나를 `Page` 아래에 둔 문서. */
 export function pageWith(node: WbNode): PageDocument {
   return { version: 5, root: { id: 'n_page', type: 'Page', children: [node] } }

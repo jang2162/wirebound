@@ -61,6 +61,10 @@ describe('표 전체가 이 한 자리에서 돈다', () => {
       interactions: [
         { on: 'click', actions: [{ type: 'setVisible', target: 'n_00dead000001', value: true }] },
         { on: 'click', actions: [{ type: 'navigate', target: 'page:없는곳' }] },
+        // 팝업 셋 — 화면 페이지를 여는 «팝업 열기» · 팝업 페이지로 «이동» · 화면 페이지의 «팝업 닫기».
+        { on: 'click', actions: [{ type: 'openModal', target: 'page:관리자/bad_name' }] },
+        { on: 'click', actions: [{ type: 'navigate', target: 'page:관리자/팝업' }] },
+        { on: 'click', actions: [{ type: 'closeModal' }] },
       ],
     }
     const issues = lintProject({
@@ -100,6 +104,13 @@ describe('표 전체가 이 한 자리에서 돈다', () => {
             },
           },
           { id: 'pg2', menuNodeId: '없는메뉴', title: '떠 있는', target: 'page:떠 있는', document: doc([]) },
+          {
+            id: 'pg4',
+            menuNodeId: 'm1',
+            title: '팝업',
+            target: 'page:관리자/팝업',
+            document: { version: 5, root: { id: nid(), type: 'Popup', props: { title: '팝업' }, children: [] } },
+          },
           // 화면 상태 둘 — 목록 밖 상태를 가리키는 보임 · 쓰이지 않는 상태.
           {
             id: 'pg3',

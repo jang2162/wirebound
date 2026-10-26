@@ -141,6 +141,9 @@ export { invertOps } from './patch/inverse'
 
 export type { Migration } from './migrate'
 export { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument, migratePageDocument } from './migrate'
+export { cloneJsonValue } from './clone'
+export type { PageKind } from './new-page'
+export { newPageDocument, PAGE_KINDS, pageKindOf } from './new-page'
 export type { LiftResult } from './migrate-document'
 export { MigrationError, liftStateRegions } from './migrate-document'
 

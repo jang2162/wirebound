@@ -49,13 +49,14 @@ function formTableView(change: { cell?: 'wrapped'; fillers?: 'none' | 'outside' 
   }) }`
 }
 
-/** 갤러리에서 폼 표가 서는 표본 — 폼 표 표본 넷과 몸통에 폼 표를 든 입력폼. */
+/** 갤러리에서 폼 표가 서는 표본 — 폼 표 표본 넷과 몸통에 폼 표를 든 입력폼 · 폼 팝업. */
 const FORM_TABLE_SAMPLES = [
   'EntryForm — 제목 · 폼 표',
   'FormTable — 1쌍 다섯 줄',
   'FormTable — 2열 · 전폭 · 빈 쌍',
   'FormTable — 옆 칸(사진)',
   'FormTable — 제목 · 머리 오른쪽',
+  'Popup — 폼 팝업(2열 폼 표 · 바닥 · 넓게)',
 ]
 
 const labelsOf = (errors: { label: string }[]) => [...new Set(errors.map((error) => error.label))].sort()
@@ -199,6 +200,7 @@ describe('checkTheme', () => {
       'FormTable · FormTable — 2열 · 전폭 · 빈 쌍',
       'FormTable · FormTable — 옆 칸(사진)',
       'FormTable · FormTable — 제목 · 머리 오른쪽',
+      'Popup · Popup — 폼 팝업(2열 폼 표 · 바닥 · 넓게)',
     ])
     expect(pairs[0]!.message).toContain('label · value 조각을 뿌리의 직계로 안 그렸습니다')
     expect(wrapped.errors.filter((error) => error.source !== 'pairs')).toEqual([])
@@ -260,6 +262,7 @@ describe('checkTheme', () => {
     const pairs = report.errors.filter((error) => error.source === 'pairs')
     expect(pairs.map((error) => [error.label, error.message])).toEqual(
       [
+        ['Popup — 폼 팝업(2열 폼 표 · 바닥 · 넓게)', 'pop3-ft'],
         ['EntryForm — 제목 · 폼 표', 'ef-t'],
         ['FormTable — 1쌍 다섯 줄', 'ft'],
         ['FormTable — 2열 · 전폭 · 빈 쌍', 'ft2'],
@@ -378,6 +381,118 @@ describe('checkTheme', () => {
     expect(errors).toEqual([
       'DataGrid — 2단 병합 머리 · 정렬 · 필수 | DataGrid 머리 줄 1 이 칸 3 개 · colspan 합 3 입니다 — gridLayout 셈은 3 개 · 4(노드 dg3)',
       'GridColumnGroup — 열 둘을 묶은 머리 | DataGrid 머리 줄 1 이 칸 1 개 · colspan 합 1 입니다 — gridLayout 셈은 1 개 · 2(노드 cg-host)',
+    ])
+  })
+
+  /**
+   * SDK 기본 `PopupView` 와 같은 꼴로 그리는 팝업 뷰(번들 원문) — 한 곳만 바꾼다. `close` 는 ✖ 를 빼거나(`none`) · `<span>` 으로 · 조각 이름을
+   * `x` 로(`renamed`) · 이름 없는 단추로(`unnamed`), `name` 은 `aria-labelledby` 를 빼거나(`none`) · 없는 id 로(`otherId`) · 제목 글을 `title`
+   * 조각 밖에(`outside`) · 뿌리 역할을 `region` 으로(`noRole`), `body` 는 몸통을 `body` 밖 형제로(`sibling`) · `body` 를 둘(`double`), `footer: 'inBody'` 는 «바닥» 구역을 `body` 안에 둔다.
+   */
+  function popupView(
+    change: {
+      close?: 'none' | 'span' | 'renamed' | 'unnamed'
+      name?: 'none' | 'otherId' | 'outside' | 'noRole'
+      body?: 'sibling' | 'double'
+      footer?: 'inBody'
+    } = {},
+  ): string {
+    const close = {
+      none: 'null',
+      span: `h('span', { 'data-wb-part': 'close', 'aria-label': '닫기' }, '✖')`,
+      renamed: `h('button', { type: 'button', 'data-wb-part': 'x', 'aria-label': '닫기' }, '✖')`,
+      unnamed: `h('button', { type: 'button', 'data-wb-part': 'close' })`,
+      keep: `h('button', { type: 'button', 'data-wb-part': 'close', 'aria-label': '닫기' }, '✖')`,
+    }[change.close ?? 'keep']
+    const labelled = {
+      none: 'undefined',
+      otherId: `nodeId + '-other'`,
+      outside: `nodeId + '-title'`,
+      noRole: `nodeId + '-title'`,
+      keep: `nodeId + '-title'`,
+    }[change.name ?? 'keep']
+    const title =
+      change.name === 'outside'
+        ? `h('h2', { 'data-wb-part': 'title', id: nodeId + '-title' }), h('span', null, String(props.title))`
+        : `h('h2', { 'data-wb-part': 'title', id: nodeId + '-title' }, String(props.title))`
+    const footer = `h(rt.sdk.Zone, { name: 'footer', 'data-wb-part': 'footer' })`
+    const body = {
+      sibling: `h('div', { 'data-wb-part': 'body' }), children, ${footer}`,
+      double: `h('div', { 'data-wb-part': 'body' }, children), h('div', { 'data-wb-part': 'body' }), ${footer}`,
+      inBody: `h('div', { 'data-wb-part': 'body' }, children, ${footer})`,
+      keep: `h('div', { 'data-wb-part': 'body' }, children), ${footer}`,
+    }[change.body ?? (change.footer === 'inBody' ? 'inBody' : 'keep')]
+    return `{ Popup: rt.sdk.view(({ nodeId, props, children }) => h(Root, { as: 'section', role: ${change.name === 'noRole' ? `'region'` : `'dialog'`}, 'aria-labelledby': ${labelled} },
+      h('div', { 'data-wb-part': 'titlebar' }, ${title}, ${close}), ${body})) }`
+  }
+  const popupErrors = async (change: Parameters<typeof popupView>[0]) => {
+    const report = await checkTheme(files(BASE, { views: popupView(change) }))
+    expect(report.errors.filter((error) => error.source !== 'popup')).toEqual([])
+    return report.errors.map((error) => [error.label.replace('Popup — ', ''), error.message])
+  }
+  const [EMPTY, SEARCH, FORM] = ['빈 팝업', '검색 팝업(검색폼 · 라디오 그리드 · 바)', '폼 팝업(2열 폼 표 · 바닥 · 넓게)']
+
+  it('기본 뷰와 같은 꼴로 그린 팝업 뷰는 깨끗하다 — 아래 깨는 뷰들의 대조', async () => {
+    expect(await popupErrors({})).toEqual([])
+  })
+
+  it('P1 — close 조각이 없거나 · 이름이 다르거나 · 단추가 아니거나 · 이름이 없으면 팝업마다 선다', async () => {
+    const none = (id: string) => `Popup 뷰가 close 조각을 0 개 그렸습니다 — 하나여야 덮개 층이 그것으로 닫습니다(노드 ${id})`
+    expect(await popupErrors({ close: 'none' })).toEqual([
+      [EMPTY, none('pop')],
+      [SEARCH, none('pop2')],
+      [FORM, none('pop3')],
+    ])
+    expect(await popupErrors({ close: 'renamed' })).toEqual([
+      [EMPTY, none('pop')],
+      [SEARCH, none('pop2')],
+      [FORM, none('pop3')],
+    ])
+    expect((await popupErrors({ close: 'span' }))[0]).toEqual([
+      EMPTY,
+      'Popup 의 close 조각이 <span> 입니다 — <button> 이어야 키로 닫습니다(노드 pop)',
+    ])
+    expect((await popupErrors({ close: 'unnamed' })).map(([label, message]) => [label, message!.split(' — ')[0]])).toEqual([
+      [EMPTY, 'Popup 의 close 조각에 접근 이름이 없습니다'],
+      [SEARCH, 'Popup 의 close 조각에 접근 이름이 없습니다'],
+      [FORM, 'Popup 의 close 조각에 접근 이름이 없습니다'],
+    ])
+  }, 30_000)
+
+  it('P2 — 뿌리가 dialog 가 아니거나 · aria-labelledby 가 없거나 · 없는 id 를 가리키거나 · 제목 글이 title 조각 밖이면 선다', async () => {
+    expect((await popupErrors({ name: 'noRole' }))[2]).toEqual([FORM, 'Popup 뷰의 뿌리가 role="dialog" 가 아닙니다(노드 pop3)'])
+    expect((await popupErrors({ name: 'none' }))[0]).toEqual([
+      EMPTY,
+      'Popup 뷰의 뿌리에 aria-labelledby 가 없습니다 — 대화 상자의 이름은 제목이 짓습니다(노드 pop)',
+    ])
+    expect((await popupErrors({ name: 'otherId' }))[1]).toEqual([
+      SEARCH,
+      'Popup 뷰의 aria-labelledby 가 가리키는 글이 «» 입니다 — 제목 «사용자 검색» 이어야 합니다(노드 pop2)',
+    ])
+    expect((await popupErrors({ name: 'outside' })).map(([label]) => label)).toEqual([EMPTY, SEARCH, FORM])
+  }, 30_000)
+
+  it('P3 — 몸통을 body 조각 밖에 두면 몸통 노드마다 · body 가 둘이면 팝업마다 선다(빈 팝업은 몸통이 없어 앞 것에 안 걸린다)', async () => {
+    expect(await popupErrors({ body: 'sibling' })).toEqual([
+      [SEARCH, 'Popup 몸통 노드 pop2-sf 가 body 조각 밖에 섰습니다 — 덮개 위에서 몸통과 함께 안 구릅니다(노드 pop2)'],
+      [SEARCH, 'Popup 몸통 노드 pop2-dg 가 body 조각 밖에 섰습니다 — 덮개 위에서 몸통과 함께 안 구릅니다(노드 pop2)'],
+      [FORM, 'Popup 몸통 노드 pop3-ft 가 body 조각 밖에 섰습니다 — 덮개 위에서 몸통과 함께 안 구릅니다(노드 pop3)'],
+    ])
+    expect((await popupErrors({ body: 'double' })).map(([label, message]) => [label, message!.split(' — ')[0]])).toEqual([
+      [EMPTY, 'Popup 뷰가 body 조각을 2 개 그렸습니다'],
+      [SEARCH, 'Popup 뷰가 body 조각을 2 개 그렸습니다'],
+      [FORM, 'Popup 뷰가 body 조각을 2 개 그렸습니다'],
+    ])
+  }, 30_000)
+
+  it('P4 — «바닥» 구역을 body 안에 두면 바닥 노드마다 선다(바닥 없는 빈 팝업은 안 걸린다)', async () => {
+    const inBody = (id: string, owner: string) =>
+      `Popup 바닥 노드 ${id} 가 body 조각 안에 섰습니다 — 몸통과 함께 굴러 단추가 창 밖으로 갑니다(노드 ${owner})`
+    expect(await popupErrors({ footer: 'inBody' })).toEqual([
+      [SEARCH, inBody('pop2-cancel', 'pop2')],
+      [SEARCH, inBody('pop2-ok', 'pop2')],
+      [FORM, inBody('pop3-cancel', 'pop3')],
+      [FORM, inBody('pop3-save', 'pop3')],
     ])
   })
 

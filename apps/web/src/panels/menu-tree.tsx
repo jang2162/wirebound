@@ -33,6 +33,7 @@
  * 빠지면(남의 지우기 · 옮기기) 그 줄 · 이웃 줄로 포커스를 돌려준다(`refocus`) — 안 돌려주면 `body` 로 떨어져 키보드 사람이 트리를 다시 찾아간다.
  */
 import { useEffect, useLayoutEffect, useRef, type FocusEvent, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { pageKindOf, type PageKind } from '@wirebound/schema'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
@@ -41,7 +42,8 @@ import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { elementAt, scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
 import { keyHeldByWidget } from '../edit/editor-shortcuts'
 import { ActionMenu } from '../shell/action-menu'
-import { ICONS } from '../shell/icons'
+import { ICONS, shellIcon } from '../shell/icons'
+import { useOpenDocument } from '../store/use-editor-store'
 import { MetaConflict } from './meta-conflict'
 import { PendingNotice } from './pending-notice'
 import type { TreeMenuNode, TreePage } from '../api/types'
@@ -784,6 +786,16 @@ function MenuItem(props: {
 }
 
 /**
+ * 그 페이지의 종류 — 열린 페이지는 열린 문서의 뿌리, 아니면 트리 응답(`TreePage.kind`). 상태 줄(`usePageStates`)과 같은 길이다 — 남이 닫힌
+ * 페이지의 종류를 바꾸면 다음 트리 조회까지 옛 값이다.
+ */
+function usePageKind(page: TreePage): PageKind {
+  const document = useOpenDocument(page.id)
+  if (document !== null) return pageKindOf(document)
+  return page.kind === 'popup' ? 'popup' : 'page'
+}
+
+/**
  * 페이지 한 줄. 버튼이 아니라 링크인 것은 주소가 있는 이동이기 때문이다 — 새 탭으로
  * 열거나 주소를 공유할 수 있어야 한다(`project-list.tsx`와 같은 이유). **메뉴와 달리
  * 페이지는 열리는 것이라 그 근거가 그대로 선다.**
@@ -805,6 +817,7 @@ function PageLink(props: {
   const self: TreeSelection = { kind: 'page', id: props.page.id }
   const picked = isPicked(commands.selection, self)
   const { states } = usePageStates(props.page)
+  const popup = usePageKind(props.page) === 'popup'
   const foldable = states.length > 0
   const folded = foldable && props.fold.collapsed.has(props.page.id)
   const rowItems = menuRowItems(commands, 'page', {
@@ -831,7 +844,9 @@ function PageLink(props: {
           onClick={() => commands.select(null)}
           {...(drag === null ? {} : drag.bind(self))}
         >
+          {popup && shellIcon('popupPage', 14, 'wb-shell-tree-kind')}
           {props.page.title}
+          {popup && <span className="wb-shell-hidden-text"> — 팝업</span>}
         </Link>
         <TreeToggle foldable={foldable} folded={folded} onToggle={() => props.fold.toggle(props.page.id)} />
         {drag !== null && <TreeRowActions name={props.page.title} {...rowItems} onOpen={() => pick(commands, self)} picked={picked} />}

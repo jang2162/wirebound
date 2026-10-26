@@ -10,6 +10,13 @@
   color: var(--wb-color-text);
 }
 
+/*
+ * 팝업 — 조각 titlebar · title · close(✖) · body · footer(바닥 구역). 크기는 [data-wb-size='small' | 'medium' | 'large'].
+ * 덮개 · 가운데 놓기 · 몸통 굴림은 wirebound 가 그린다 — 여기서는 상자 안의 모양만 정한다.
+ */
+[data-wb-component='Popup'] {
+}
+
 [data-wb-component='Card'] {
   border: 1px solid #e2e8f0;
   border-radius: var(--wb-radius-card);
