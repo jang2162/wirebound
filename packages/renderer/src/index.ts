@@ -14,7 +14,7 @@ export { renderDocument, renderNode, weightRoom } from './render'
 export { renderComposed } from './compose'
 
 // **덮개 층**(설계서 「상호작용」의 「실행」 — 뷰 모드 · 번들의 «팝업 열기»). 열린 목록은 부른 쪽이 `usePopupStack` 으로 든다.
-export type { OpenPopup, PopupLayerProps, PopupStack } from './popup-layer'
+export type { OpenPopup, PopupArea, PopupLayerProps, PopupStack } from './popup-layer'
 export {
   isPopupClose,
   isPopupDocument,

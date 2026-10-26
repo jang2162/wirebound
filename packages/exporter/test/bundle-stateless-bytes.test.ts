@@ -29,7 +29,8 @@
  * 규칙을 더하며 `assets/views.css` 만 다시 지었다(`docs/superpowers/plans/2026-10-25-fx-gr-report.md` M1 ~ M3).
  * 팝업(SDK 1.8.0)을 들이며 `assets/views.css` 만 다시 지었다 — 팝업 상자 · 크기 셋 · 덮개 층(`[data-wb-popup-layer]`) 규칙이다. 팝업이 없는 페이지의
  * 데이터에는 `popups` 키가 없고 목차 줄에 표지가 없어 페이지 HTML 은 그대로다. `assets/shell.css` 는 목차의 팝업 표지 규칙을 끝에 덧붙였다(아래
- * 셋째 케이스).
+ * 셋째 케이스). 입력 조각의 길이 규칙(`data-wb-size`)에서 팝업 뿌리를 빼며 `assets/views.css` 만 다시 지었다 — 팝업의 크기 표지도
+ * `data-wb-size` 라 보통 팝업이 입력 폭으로 줄었다(`docs/superpowers/plans/2026-10-26-poa-report.md` «실브라우저 판이 찾은 결함 셋»).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -75,7 +76,7 @@ const BEFORE = {
     'pages/슬롯.html': '237942c9bddec6e1',
     'pages/글.html': 'cf7aada8a9107580',
     'pages/깨진-문서.html': '1e6593b7b432956c',
-    'assets/views.css': '483a1b2567990f00',
+    'assets/views.css': '30ef00aee54c5ffc',
   },
   themed: {
     'index.html': 'b477e3bb1d94a491',
@@ -83,7 +84,7 @@ const BEFORE = {
     'pages/슬롯.html': 'a740ac4b6b55571e',
     'pages/글.html': '85f601e80f6602ab',
     'pages/깨진-문서.html': 'e071fd4ffcfbad1c',
-    'assets/views.css': '483a1b2567990f00',
+    'assets/views.css': '30ef00aee54c5ffc',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',

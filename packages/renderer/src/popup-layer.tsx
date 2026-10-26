@@ -58,24 +58,31 @@ export function isPopupClose(target: EventTarget | null): boolean {
 /**
  * 요청을 낸 노드에서 닫힌 뒤 포커스를 돌려받을 요소 — 지금 포커스가 그 노드 안이면 그것, 아니면 그 노드 안의 첫 포커스 받는 요소, 없으면 노드
  * 뿌리. 노드가 그 문서에 없으면 `null`.
+ *
+ * **같은 노드 id 가 여럿일 수 있다** — 팝업이 자기를(또는 같은 팝업을) 다시 열면 겹마다 그 노드가 선다. 포커스를 든 것을 먼저 고르고, 없으면
+ * `inert` 밖의 마지막 것(맨 위 겹 — 층은 문서 뒤에 겹을 쌓는다)을 고른다. 첫 것을 고르면 아래 겹의 단추를 적어 닫은 뒤 포커스가 갈 곳을 잃는다.
  */
 export function popupOpener(doc: Document, sourceNodeId: string): Element | null {
-  let root: Element | null = null
-  for (const element of Array.from(doc.querySelectorAll('[data-wb-id]'))) {
-    if (element.getAttribute('data-wb-id') === sourceNodeId) {
-      root = element
-      break
-    }
-  }
-  if (root === null) return null
+  const found = Array.from(doc.querySelectorAll('[data-wb-id]')).filter((element) => element.getAttribute('data-wb-id') === sourceNodeId)
+  if (found.length === 0) return null
   const active = doc.activeElement
-  if (active !== null && root.contains(active)) return active
+  const holder = active === null ? undefined : found.find((element) => element.contains(active))
+  if (holder !== undefined) return active
+  const root = found.filter((element) => element.closest('[inert]') === null).at(-1) ?? found[found.length - 1]!
   if (root.matches(FOCUSABLE)) return root
   return root.querySelector(FOCUSABLE) ?? root
 }
 
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/** 덮개 층을 세울 구간 — 그 문서 좌표의 px. */
+export interface PopupArea {
+  top: number
+  height: number
+  left: number
+  width: number
+}
 
 /** 열린 팝업 목록 — 부른 쪽이 든다. 쌓기 · 닫기는 렌더 밖(이벤트 핸들러)에서 부른다. */
 export interface PopupStack {
@@ -134,9 +141,10 @@ export interface PopupLayerProps {
   onEvent: (event: InteractionEvent, popup: OpenPopup) => void
   onNodeError?: (error: NodeRenderError) => void
   /**
-   * 층을 세울 구간(그 문서 좌표의 px) — 에디터 캔버스는 iframe 이 문서 높이라 창 전체가 아니라 호스트에서 보이는 구간에 세운다. 없으면 창 전체다.
+   * 층을 세울 구간(그 문서 좌표의 px) — 에디터 캔버스는 iframe 이 문서 크기(높이 · 기기 폭)라 창 전체가 아니라 호스트에서 보이는 구간에 세운다.
+   * 없으면 창 전체다.
    */
-  area?: { top: number; height: number }
+  area?: PopupArea
 }
 
 /** 열린 팝업을 그린다. 없으면 아무것도 안 그린다. */
@@ -223,7 +231,18 @@ export function PopupLayer(props: PopupLayerProps): ReactElement | null {
     <div
       ref={layerRef}
       data-wb-popup-layer=""
-      style={props.area === undefined ? undefined : { top: `${props.area.top}px`, height: `${props.area.height}px`, bottom: 'auto' }}
+      style={
+        props.area === undefined
+          ? undefined
+          : {
+              top: `${props.area.top}px`,
+              height: `${props.area.height}px`,
+              bottom: 'auto',
+              left: `${props.area.left}px`,
+              width: `${props.area.width}px`,
+              right: 'auto',
+            }
+      }
       onKeyDown={onKeyDown}
       onClick={onClick}
       onCompositionStart={() => {

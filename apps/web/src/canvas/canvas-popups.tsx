@@ -17,6 +17,7 @@ import {
   isPopupDocument,
   popupOpener,
   type InteractionRequest,
+  type PopupArea,
   type PopupStack,
 } from '@wirebound/renderer'
 import { describePageTarget, matchPageTargets } from '@wirebound/schema'
@@ -109,12 +110,12 @@ export function useCanvasPopups(input: {
 }
 
 /**
- * 덮개 층을 세울 구간 — 캔버스 iframe 은 문서 높이로 자라 안쪽 스크롤이 없으므로(`canvas-iframe.tsx`) 창 전체(`inset: 0`)에 세우면 상자가 긴
- * 문서의 가운데(화면 밖)에 선다. 호스트에서 보이는 구간을 iframe 문서 좌표(줌을 걷은 CSS px)로 옮겨 그 구간에 세운다. 굴리거나 창이 바뀌면 다시
- * 잰다. 열린 팝업이 없으면 재지 않는다.
+ * 덮개 층을 세울 구간 — 캔버스 iframe 은 문서 높이로 자라 안쪽 스크롤이 없고(`canvas-iframe.tsx`) 폭은 기기 폭이라 캔버스 칸보다 넓을 수 있으므로,
+ * 창 전체(`inset: 0`)에 세우면 상자가 긴 문서의 가운데(화면 밖)나 칸 오른쪽 밖(✖ 가 안 보인다)에 선다. 호스트에서 보이는 구간을 iframe 문서
+ * 좌표(줌을 걷은 CSS px)로 옮겨 그 구간에 세운다. 굴리거나 창이 바뀌면 다시 잰다. 열린 팝업이 없으면 재지 않는다.
  */
-export function usePopupArea(frame: CanvasFrame | null, zoom: number, active: boolean): { top: number; height: number } | undefined {
-  const [area, setArea] = useState<{ top: number; height: number } | undefined>(undefined)
+export function usePopupArea(frame: CanvasFrame | null, zoom: number, active: boolean): PopupArea | undefined {
+  const [area, setArea] = useState<PopupArea | undefined>(undefined)
   useLayoutEffect(() => {
     const element = frame?.window.frameElement ?? null
     if (!active || element === null) return
@@ -122,11 +123,22 @@ export function usePopupArea(frame: CanvasFrame | null, zoom: number, active: bo
     const scroller = scrollParent(element)
     const measure = (): void => {
       const outer = element.getBoundingClientRect()
-      const view = scroller?.getBoundingClientRect() ?? { top: 0, bottom: host?.innerHeight ?? outer.bottom }
+      const view = scroller?.getBoundingClientRect() ?? {
+        top: 0,
+        bottom: host?.innerHeight ?? outer.bottom,
+        left: 0,
+        right: host?.innerWidth ?? outer.right,
+      }
       const top = Math.max(0, (view.top - outer.top) / zoom)
       const bottom = Math.min(outer.height, view.bottom - outer.top) / zoom
-      const next = { top, height: Math.max(0, bottom - top) }
-      setArea((prev) => (prev !== undefined && prev.top === next.top && prev.height === next.height ? prev : next))
+      const left = Math.max(0, (view.left - outer.left) / zoom)
+      const right = Math.min(outer.width, view.right - outer.left) / zoom
+      const next = { top, height: Math.max(0, bottom - top), left, width: Math.max(0, right - left) }
+      setArea((prev) =>
+        prev !== undefined && prev.top === next.top && prev.height === next.height && prev.left === next.left && prev.width === next.width
+          ? prev
+          : next,
+      )
     }
     measure()
     scroller?.addEventListener('scroll', measure, { passive: true })

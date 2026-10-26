@@ -4,7 +4,7 @@
  *
  * | 판 | 재는 것 |
  * | --- | --- |
- * | 뷰 모드 — 열기 · ✖ | 상자 하나 · `aria-modal` · 포커스가 상자 안 ✖ · ✖ 로 닫으면 연 단추로 포커스 |
+ * | 뷰 모드 — 열기 · ✖ | 상자 하나 · `aria-modal` · 포커스가 상자 안 ✖ · ✖ 가 보이는 캔버스 칸 안(iframe 은 기기 폭이라 칸보다 넓다) · ✖ 로 닫으면 연 단추로 포커스 |
  * | 뷰 모드 — Escape | 한글 조합 중(CDP `Input.imeSetComposition`)의 Escape 는 안 닫고, 조합이 끝난 뒤의 Escape 는 닫는다 |
  * | 뷰 모드 — «팝업 닫기» | 바닥 «취소» 가 닫고 포커스를 돌려준다 |
  * | 뷰 모드 — 겹 다섯 | 팝업 안에서 다시 열면 쌓이고 여섯째는 안 쌓인다 · 아래 겹은 `inert` · Escape 는 맨 위만 |
@@ -12,11 +12,12 @@
  * | 뷰 모드 — 셸 모달과 겹침 | 셸의 대화 상자가 Escape 를 받아 그것만 닫힌다 — 팝업은 남는다 |
  * | 번들 — 열기 · 목차 | 페이지를 안 옮기고 상자가 선다 · ✖ 로 닫으면 포커스 · 목차의 팝업 줄 «팝업» 표지 |
  * | 번들 — 좁은 창 · 넓은 창 | 390: 상자 폭 ≤ 창 − 48 · 가로 넘침 0 · ✖ 가 창 안 · 몸통 끝과 바닥 단추가 창 안. 1280: 가운데 · 덮개가 창 전체 |
- * | 번들 — 페이지로 연 팝업 | 390 · 720 · 1000 · 1280 화면 모드: 상자 밖 글 0 · 넘친 요소 0. 큰 팝업은 720 에서도 960 그대로(PPTX 캡처 폭) |
+ * | 번들 — 페이지로 연 팝업 | 390 · 720 · 1000 · 1280 화면 모드: 상자 폭 = min(크기, 창) · 상자 밖 글 0 · 넘친 요소 0. 찍는 판(720 · `data-wb-capture` + `CAPTURE_CSS` — PPTX)은 큰 팝업이 960 그대로이고 문서 안이다 |
  * | 번들 — 팝업 안 폼 표 | 1280 · 1000 에서 보통 팝업 안 2열 폼 표는 한 줄에 쌍 하나 · 큰 팝업은 2열 그대로 |
  *
  * 번들은 저장소 빌드의 산출물(api 가 `packages/*\/dist` 를 읽는다)로 그린다 — `pnpm build` 가 먼저다.
  */
+import { CAPTURE_CSS } from '@wirebound/theme-sdk/capture'
 import type { Frame, Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
@@ -77,6 +78,15 @@ describe.skipIf(!전제.ok)('팝업 덮개 층 — 실브라우저', () => {
         await canvasFrame(page).locator('[data-wb-id="n_open"]').click()
         await frame.locator('[data-wb-popup-frame]').waitFor()
         expect(await layerState(frame)).toEqual({ levels: 1, modal: ['true'], focus: 'close', inert: 0 })
+        // ✖ 가 호스트에서 보이는 캔버스 칸 안이다 — 판 카나리아로 iframe 이 칸보다 넓은 판인지 함께 적는다.
+        const pane = (await page.locator('.wb-shell-canvas').boundingBox())!
+        const iframe = (await page.locator('iframe.wb-shell-canvas-iframe').boundingBox())!
+        const close = (await canvasFrame(page).locator('[data-wb-popup-frame] [data-wb-part="close"]').boundingBox())!
+        expect(iframe.x + iframe.width).toBeGreaterThan(pane.x + pane.width)
+        expect({
+          x: close.x >= pane.x && close.x + close.width <= pane.x + pane.width,
+          y: close.y >= pane.y && close.y + close.height <= pane.y + pane.height,
+        }).toEqual({ x: true, y: true })
         await canvasFrame(page).locator('[data-wb-popup-frame] [data-wb-part="close"]').click()
         await frame.locator('[data-wb-popup-layer]').waitFor({ state: 'detached' })
         expect(await focusedNode(frame)).toBe('n_open')
@@ -289,7 +299,7 @@ describe.skipIf(!전제.ok)('팝업 덮개 층 — 실브라우저', () => {
     }
 
     for (const width of [390, 720, 1000, 1280]) {
-      it(`페이지로 연 팝업 — 화면 모드 창 ${width}: 상자 밖 글 · 넘친 요소 0 · 큰 팝업은 줄지 않는다`, async () => {
+      it(`페이지로 연 팝업 — 화면 모드 창 ${width}: 상자 폭 = min(크기, 창) · 상자 밖 글 · 넘친 요소 0`, async () => {
         for (const name of ['관리자-등록', '관리자-보통', '관리자-넓은']) {
           const { context, page } = await openBundlePage(stack, bundle.pages[name]!, { viewport: { width, height: 800 }, screen: true })
           try {
@@ -309,14 +319,37 @@ describe.skipIf(!전제.ok)('팝업 덮개 층 — 실브라우저', () => {
             })
             expect(seen.texts, name).toBeGreaterThan(0)
             expect([name, seen.past, seen.over], name).toEqual([name, 0, 0])
-            // 화면 모드는 줄지 않는다 — 크기 그대로(넓은 960 · 보통 720 · 등록 720).
-            expect([name, seen.width]).toEqual([name, name === '관리자-넓은' ? 960 : 720])
+            // 페이지로 연 판은 창보다 넓지 않다(SDK 기본 CSS 의 `max-width: 100%`) — 크기(넓은 960 · 보통 · 등록 720)와 창 가운데 작은 쪽이다.
+            expect([name, seen.width]).toEqual([name, Math.min(name === '관리자-넓은' ? 960 : 720, width)])
           } finally {
             await context.close()
           }
         }
       })
     }
+
+    it('찍는 판(PPTX — 창 720 · data-wb-capture + CAPTURE_CSS) — 큰 팝업은 줄지 않고 960 그대로 문서 안에 선다', async () => {
+      const { context, page } = await openBundlePage(stack, bundle.pages['관리자-넓은']!, {
+        viewport: { width: 720, height: 800 },
+        screen: true,
+      })
+      try {
+        const seen = await page.evaluate((css) => {
+          const style = document.createElement('style')
+          style.textContent = css
+          document.head.append(style)
+          document.documentElement.setAttribute('data-wb-capture', '')
+          const root = document.querySelector('.wb-export-canvas [data-wb-component="Popup"]')!.getBoundingClientRect()
+          const over = [...document.querySelectorAll('.wb-export-canvas [data-wb-component="Popup"] *')].filter(
+            (el) => el.getBoundingClientRect().right > root.right + 0.5,
+          ).length
+          return { width: Math.round(root.width), inDocument: root.right <= document.documentElement.scrollWidth + 0.5, over }
+        }, CAPTURE_CSS)
+        expect(seen).toEqual({ width: 960, inDocument: true, over: 0 })
+      } finally {
+        await context.close()
+      }
+    })
 
     it('페이지로 연 팝업 — 뷰어의 문서 칸이 390 이면 상자가 칸 폭으로 준다 · 상자 밖 글 · 넘친 요소 0', async () => {
       for (const name of ['관리자-등록', '관리자-보통']) {

@@ -178,6 +178,66 @@ describe('PopupLayer — 쌓기 · 닫기', () => {
     expect(document.activeElement).toBe(button)
   })
 
+  it('자기를 다시 여는 팝업 — 포커스 없이 눌러도(맨 위 겹의 단추를 연 요소로 적는다) 닫으면 바로 아래 겹의 그 단추로 돌아온다', () => {
+    const again: WbNode = {
+      id: 'n_again',
+      type: 'Button',
+      props: { label: '다시 열기' },
+      interactions: [{ on: 'click', actions: [{ type: 'openModal', target: 'page:가' }] }],
+    }
+    const self = popupDoc('n_self', '가', [again])
+    const view = mount({ 'page:가': self })
+    act(() => {
+      view.stack().push({ document: self, opener: view.opener })
+    })
+    for (let i = 0; i < 2; i++) {
+      const level = [...document.querySelectorAll('[data-wb-popup-level]')].at(-1)!
+      const button = level.querySelector<HTMLElement>('[data-wb-id="n_again"]')!
+      act(() => {
+        ;(document.activeElement as HTMLElement | null)?.blur()
+        button.click()
+      })
+    }
+    expect(levels()).toHaveLength(3)
+    const second = [...document.querySelectorAll('[data-wb-popup-level]')][1]!.querySelector('[data-wb-id="n_again"]')
+    key(document.activeElement!, { key: 'Escape' })
+    expect(levels()).toHaveLength(2)
+    expect(document.activeElement === second).toBe(true)
+  })
+
+  it('자기를 다시 여는 팝업 — 연 노드 안의 둘째 단추를 든 채 눌렀으면 닫은 뒤 그 둘째 단추로 돌아온다(첫 포커스 받는 것이 아니다)', () => {
+    const card: WbNode = {
+      id: 'n_card',
+      type: 'Card',
+      props: { title: '묶음' },
+      interactions: [{ on: 'click', actions: [{ type: 'openModal', target: 'page:가' }] }],
+      children: [
+        { id: 'n_first', type: 'Button', props: { label: '첫째' } },
+        { id: 'n_second', type: 'Button', props: { label: '둘째' } },
+      ],
+    }
+    const self = popupDoc('n_self', '가', [card])
+    const view = mount({ 'page:가': self })
+    act(() => {
+      view.stack().push({ document: self, opener: view.opener })
+    })
+    for (let i = 0; i < 2; i++) {
+      const level = [...document.querySelectorAll('[data-wb-popup-level]')].at(-1)!
+      const button = level.querySelector<HTMLElement>('[data-wb-id="n_second"] button, button[data-wb-id="n_second"]')!
+      act(() => {
+        button.focus()
+        button.click()
+      })
+    }
+    expect(levels()).toHaveLength(3)
+    const second = [...document.querySelectorAll('[data-wb-popup-level]')][1]!
+    const want = second.querySelector('[data-wb-id="n_second"] button, button[data-wb-id="n_second"]')
+    expect(want).not.toBeNull()
+    key(document.activeElement!, { key: 'Escape' })
+    expect(levels()).toHaveLength(2)
+    expect(document.activeElement === want).toBe(true)
+  })
+
   it('모두 걷기(clear)는 포커스를 돌려주지 않는다', () => {
     const view = mount({})
     act(() => {
