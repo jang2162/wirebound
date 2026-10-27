@@ -8,6 +8,7 @@
  * | 되돌리기 | 프리셋 넣기 하나가 되돌리기 한 번에 통째로 걷힌다 |
  * | 거절 | 행을 고른 «넣기» 는 «그리드» 카드와 같은 거절 문장이다(판정은 타입) · 서버 그대로 |
  * | 파일첨부 | 필드를 고른 «파일첨부 넣기» 가 값 칸 끝에 단추 셋 든 파일첨부를 세운다 · 속성 «파일» 칸을 고치면 캔버스의 파일 줄이 바뀐다 |
+ * | 글 한도 | 파일 이름 · 크기 · «최대 크기» 칸에 한도를 넘게 붙여 넣거나 쳐도 칸이 한도에서 멈추고 서버가 그 글을 받는다(거절 프레임 0) · UTF-16 단위 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -20,6 +21,7 @@ import {
   type EditorStack,
   type Session,
 } from './editor-stack'
+import { FileAttachDef, FileEntrySchema } from '@wirebound/schema'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -374,6 +376,101 @@ describe.skipIf(!전제.ok)('팔레트 프리셋 · 파일첨부 — 실브라�
         (text) => text === '사업자등록증.png',
       )
       expect(await box.locator('[data-wb-part="drop"]').count()).toBe(0)
+    } finally {
+      await context.close()
+    }
+  }, 120_000)
+
+  /**
+   * **글 한도(RV-POB L1)** — 칸이 스키마의 글 한도(zod `.max()` — UTF-16 단위)에서 막는다. 막지 않으면 넘는 글이 거절(`patch-error` 422) → 다시
+   * 불러오기로 사라진다. 한도는 정의에서 읽는다. 서버에 닿기를 기다리는 폴은 거절 프레임도 끝 조건에 넣는다 — 고치기 전 판이 값 없는 시간 초과로 죽지 않게.
+   */
+  it('파일 이름 · 크기 · «최대 크기» 칸은 글 한도에서 멈춘다 — 붙여 넣기 · 치기 · 이모지, 서버가 받는다 · 거절 0', async () => {
+    const NAME_MAX = (FileEntrySchema.shape.name as unknown as { maxLength: number }).maxLength
+    const SIZE_MAX = (FileEntrySchema.shape.size as unknown as { maxLength: number }).maxLength
+    const MAX_SIZE_MAX = (
+      (FileAttachDef.props as unknown as { shape: { maxSize: { unwrap(): unknown } } }).shape.maxSize.unwrap() as { maxLength: number }
+    ).maxLength
+    expect([NAME_MAX, SIZE_MAX, MAX_SIZE_MAX].every((max) => Number.isInteger(max) && max > 0)).toBe(true)
+    const P = await seed('file-limits', SEED)
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    const rejected: string[] = []
+    page.on('websocket', (socket) => {
+      socket.on('framereceived', (frame) => {
+        const payload = String(frame.payload)
+        if (payload.includes('"type":"patch-error"')) rejected.push(payload)
+      })
+    })
+    const attach = async () => (await server(P)).children!.find((node) => node.id === 'n_fa00000001')!.props ?? {}
+    /** 커밋한 뒤 서버의 그 값이 바뀌거나 거절 프레임이 오면 끝난다 — 둘 다 값으로 돌려준다. 거절 수는 누르기 전에 센다(프레임이 폴보다 먼저 닿는다). */
+    const landed = async (
+      label: string,
+      commit: () => Promise<void>,
+      read: (props: Record<string, unknown>) => unknown,
+      before: unknown,
+    ) => {
+      const errors = rejected.length
+      await commit()
+      const value = await poll(
+        label,
+        async () => ({ value: read(await attach()), errors: rejected.length }),
+        (got) => JSON.stringify(got.value) !== JSON.stringify(before) || got.errors > errors,
+      )
+      return { value: value.value, rejected: value.errors - errors }
+    }
+    const paste = async (target: ReturnType<Page['getByRole']>, text: string) => {
+      await page.evaluate((value) => navigator.clipboard.writeText(value), text)
+      await target.click()
+      await target.press('ControlOrMeta+A')
+      await target.press('ControlOrMeta+V')
+    }
+    try {
+      await page.goto(P)
+      await canvasFrame(page).locator('[data-wb-id="n_fa00000001"]').waitFor()
+      await treeRow(page, 'n_fa00000001').locator('button').first().click()
+      const panel = page.getByRole('complementary', { name: '우측 패널' })
+      const name = panel.getByRole('group', { name: '파일' }).getByRole('textbox', { name: '파일 1번째 이름' })
+      const size = panel.getByRole('group', { name: '파일' }).getByRole('textbox', { name: '파일 1번째 크기' })
+      const maxSize = panel.getByRole('textbox', { name: '최대 크기' })
+      await name.waitFor()
+      const fileName = (props: Record<string, unknown>) => (props.files as { name: string }[])[0]!.name
+      const fileSize = (props: Record<string, unknown>) => (props.files as { size: string }[])[0]!.size
+
+      // 이름 — 한도 + 5 자를 붙여 넣는다.
+      await paste(name, 'n'.repeat(NAME_MAX + 5))
+      const nameCell = await name.inputValue()
+      const nameSaved = await landed('이름', () => name.press('Enter'), fileName, '통장사본.pdf')
+      // 크기 — 한도 + 3 자를 한 글자씩 친다.
+      await size.click()
+      await size.press('ControlOrMeta+A')
+      await size.pressSequentially('s'.repeat(SIZE_MAX + 3))
+      const sizeCell = await size.inputValue()
+      const sizeSaved = await landed('크기', () => size.press('Enter'), fileSize, '2.1 MB')
+      // «최대 크기» — 한도 + 1 자를 붙여 넣는다(문서에 없는 prop — 기본값).
+      await paste(maxSize, 'm'.repeat(MAX_SIZE_MAX + 1))
+      const maxCell = await maxSize.inputValue()
+      const maxSaved = await landed(
+        '최대 크기',
+        () => maxSize.press('Enter'),
+        (props) => props.maxSize,
+        undefined,
+      )
+      // 한 단위 남은 이름 칸에 이모지(두 단위)를 친다 — 안 들어간다.
+      await name.fill('가'.repeat(NAME_MAX - 1))
+      await page.keyboard.insertText('😀')
+      const emojiCell = await name.inputValue()
+      const emojiSaved = await landed('이모지', () => name.press('Enter'), fileName, nameSaved.value)
+
+      expect({
+        cells: [nameCell.length, sizeCell.length, maxCell.length, emojiCell === '가'.repeat(NAME_MAX - 1)],
+        server: [nameSaved.value, sizeSaved.value, maxSaved.value, emojiSaved.value === '가'.repeat(NAME_MAX - 1)],
+        rejected: rejected.length,
+      }).toEqual({
+        cells: [NAME_MAX, SIZE_MAX, MAX_SIZE_MAX, true],
+        server: ['n'.repeat(NAME_MAX), 's'.repeat(SIZE_MAX), 'm'.repeat(MAX_SIZE_MAX), true],
+        rejected: 0,
+      })
     } finally {
       await context.close()
     }
