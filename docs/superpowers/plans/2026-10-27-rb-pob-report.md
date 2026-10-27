@@ -107,3 +107,32 @@ git 이 멈추지 않았지만 합친 판에서 깨진 자리(의미 겹침):
 | P4 | `apps/web/src/palette/palette-add.ts:71` | 구역 줄 «넣기» 가 그 구역 대신 몸통으로 | 13:07:43 ~ 13:07:59 | 10.6 | 4 · 1 | «팝업 페이지의 팔레트 «넣기» …» 바닥 표가 몸통 셋째로(`body` `[DataGrid, FileAttach, DataGrid]`) |
 | P1 | `packages/theme-sdk/src/default-views/index.ts:106` | `LONG_WORD_CSS` 에서 `FileAttach` 뺌(빌드) | 13:08:05 ~ 13:08:25 | 12.8 | 4 · 1 | «덮개 위 상자 안 — …» 상자 밖 요소 — 파일첨부 `list` · `thead` · `th` · `file` · `fileName` · `fileSize` …(긴 이름이 안 꺾여 목록 표가 상자를 넘는다) |
 | P2 | `packages/theme-sdk/src/default-views/structure.tsx:172` | 작은 팝업 480 → 500px(빌드) | 13:08:31 ~ 13:08:52 | 13.4 | 4 · 1 | «팝업 크기가 접기 문턱이다 — …» 작은 팝업 폭 `480` → `500`(뷰 모드 · 번들 1280) |
+
+### 기본테마 1.7.0 고정 프로젝트 — 팝업 안 파일첨부 하나
+
+B 기준 판 `3c0c3644`(main 1.7.0 + 설계 문서)를 `git archive` 로 풀어(node_modules 는 워크트리 것을 이음) `pnpm build` → `system-admin-1.7.0.wbtheme`
+sha256 `b9eba8fe…74ab` = `checksums.json` 의 1.7.0 줄(사용자 DB 의 판). 합친 판의 `editor-stack` 에 `theme_packages` 로 넣고, 목록(«열기» → `page:관리자/첨부`) ·
+팝업 «첨부»(파일첨부 — 파일 둘 · «파일추가») 프로젝트를 1.7.0 에 고정했다(스크래치 탐침 — main 빌드 산출물이 필요해 케이스로 안 남김). 13:14.
+
+| 무엇 | 값 |
+| --- | --- |
+| 바인딩 PUT | 200 |
+| 내보내기 미리보기 html · pptx | `themeId` `system-admin@1.7.0` · **`themeWarning` `null`**(둘 다) · `errors` `[]` · `brokenLinks` `[]` · `screenFailures` `[]` |
+| 번들 덮개 위(창 1280) | 상자 720 · `[data-wb-error]` 0 · 파일첨부 조각 `list` 1 · `file` 2 · `limit` 1 · `actions` 1(SDK 1.8.0 기본 뷰) · 상자 밖 요소 0 · `data-wb-failed` 없음 |
+| 에디터 캔버스(팝업 페이지) | `[data-wb-error]` 0 · 파일 줄 2 · 배너 없음 |
+
+## 수의 등식(`vitest list` — 실행 없이 · 건너뜀은 안 센다)
+
+판마다 `git archive` 로 풀어(node_modules 는 워크트리 것을 이음 · `apps/api/.env` 심링크 — 5504) `pnpm build` 뒤 프로젝트마다 `vitest list --json`. api 는
+`globalSetup` 을 뗀 설정, 실브라우저는 `vitest.browser.config.ts`. 판: B 기준 `3c0c3644` · B 머리 `0d62ae30` · main `e606ded2` · 합친 판 `47c479d1`. 케이스
+열쇠는 (파일 · 이름) — 합친 판 = main ∪ (B 가 더한 것) − (B 가 뺀 것) + 이 차수가 더한 것.
+
+| 프로젝트 | B 기준 | B 머리(+ · −) | main | 합친 판 | 등식 |
+| --- | --- | --- | --- | --- | --- |
+| unit | 2587 | 2647(+62 · −2) | 2646 | 2708 | 2646 + 62 − 2 + 2(이 차수 — `bundle-popups` · `lint-design` 하나씩) = 2708 · 이름 바꿈 하나(`catalog.test.ts` «36종을 등록한다» → «37종을 등록한다») |
+| web | 3398 | 3413(+16 · −1) | 3413 | 3428 | 3413 + 16 − 1 = 3428 |
+| build | 175 | 175 | 175 | 175 | 같다 |
+| api | 2640 | 2640 | 2655 | 2655 | 같다 — B 는 api 케이스가 없다 |
+| 실브라우저 | 598 | 607(+9) | 618 | 631 | 618 + 9 + 4(`popup-attach`) = 631 |
+
+열쇠 집합으로 견줘 «합친 판에만 있는 것» 은 위 이 차수 몫 여섯과 이름 바꾼 하나, «합친 판에 빠진 것» 은 옛 이름 하나뿐이다 — 병합이 잃은 케이스 0.
