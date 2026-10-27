@@ -398,9 +398,9 @@ A file attachment box drawn as a sample: buttons (`actions` zone), a file list t
 
 Zones: `actions` (zones.actions) "단추", create with `Button` {"label":"파일추가"} + `Button` {"label":"항목 제거"} + `Button` {"label":"전체 항목 제거"}.
 
-- `files`: { name: string, size: string }[] (≤ 20 items), default []
+- `files`: { name: string (≤ 200 chars), size: string (≤ 20 chars) }[] (≤ 20 items), default []
 - `maxFiles`: integer 0–99, default 1
-- `maxSize`: string, default "100 MB"
+- `maxSize`: string (≤ 20 chars), default "100 MB"
 - `hint`: string, default "이곳을 더블클릭 또는 파일을 드래그 하세요"
 - `disabled`: boolean, default false — state
 

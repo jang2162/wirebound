@@ -387,6 +387,7 @@ function propType(prop: JsonSchema): string {
   if (prop.type === 'string' && prop.pattern !== undefined) return `string matching \`${prop.pattern}\``
   if (prop.enum !== undefined) return prop.enum.map((value) => JSON.stringify(value)).join(' | ')
   if (prop.type === 'integer' || prop.type === 'number') return `${prop.type}${range(prop)}`
+  if (prop.type === 'string') return `string${length(prop)}`
   if (prop.type === 'array') {
     const items = prop.items
     if (items?.type === 'object' && items.properties !== undefined) {
@@ -406,6 +407,15 @@ function count(prop: JsonSchema): string {
   if (min !== undefined && max !== undefined) return ` (${min}–${max} items)`
   if (min !== undefined) return ` (≥ ${min} items)`
   if (max !== undefined) return ` (≤ ${max} items)`
+  return ''
+}
+
+/** 글의 길이 한도 — 넘는 글은 422 다(편집 칸도 같은 한도로 막는다). 없으면 빈 글. */
+function length(prop: JsonSchema): string {
+  const { minLength: min, maxLength: max } = prop
+  if (min !== undefined && max !== undefined) return ` (${min}–${max} chars)`
+  if (min !== undefined) return ` (≥ ${min} chars)`
+  if (max !== undefined) return ` (≤ ${max} chars)`
   return ''
 }
 
@@ -434,6 +444,8 @@ interface JsonSchema {
   maximum?: number
   minItems?: number
   maxItems?: number
+  minLength?: number
+  maxLength?: number
   properties?: Record<string, JsonSchema>
   required?: string[]
   items?: JsonSchema
