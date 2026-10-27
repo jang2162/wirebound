@@ -104,6 +104,11 @@ main 소스로 지은 `system-admin-1.7.0.wbtheme`(sha256 `b9eba8fe…74ab` — 
 - **행동 메뉴 목록 자리:** «팝업 페이지 추가» 는 메뉴 줄 `+` 목록(하위 메뉴 · 페이지 추가 · **팝업 페이지 추가** · JSON 에서 가져오기…)에 든다. `git grep "name: '삭제'" apps/web/build-test` 11 줄은 모두 `…` 목록이라 자리가 안 바뀐다. `+` 목록을 쓰는 실브라우저 판은 `action-menu-portal.test.ts:327` · `menu-realtime.test.ts:341`(`openRowAction` — 둘 다 `exact: true`)이라 «페이지 추가» 가 «팝업 페이지 추가» 와 부분 일치로 겹치지 않는다. jsdom 의 목록 단언(`menu-row-actions.test.tsx` · `test/panels/tree-row.ts` 의 `ADD_ITEMS`)은 새 목록으로 고쳤다.
 - 실브라우저 전량은 아래 게이트의 `pnpm test:build` 둘째 갈래(`test:browser`)다.
 
+
+### 게이트에서 값으로 난 실패 — `packages/theme-kit/build-test/shots.test.ts` 둘
+
+«그리드 칸 글이 어긋나면 …» · «폼 표 몸통의 Field 가 쌍 격자 꼴로 안 서면 …» 은 깨는 CSS 에 잡힌 표본이 그리드 · 폼 표 표본뿐인지를 단언한다. 새 팝업 표본 `Popup//pop2`(조회 폼 + 그리드) · `Popup//pop3`(폼 표)이 같은 그리드 · 폼 표를 품어 함께 적혔다 — 옳은 값이라 그 두 표본만 기대에 더했다(`05f342dd`). 혼자 돌린 판: `shots` 11 · `dev` 10 통과(`dev` 의 타입 수 36 은 앞 커밋에서 고쳤다).
+
 ## 혼자 죽는 변조
 
 변조 도구는 항목마다 백업(경로 전체 이름) → 한 곳 바꿈(맞은 수 1 확인) → 그 케이스 파일만 → 바이트 비교 복원이다. 실행 수는 통과 + 실패.
@@ -234,8 +239,9 @@ B2 는 첫 판에 살았다 — fixture 에 «이동» 으로만 팝업 페이�
    **어디:** `.ruler/20-verification.md` 「목 · 계측은 불린 수를 값으로 확인하고 …」 문단의 jsdom 줄 곁.
    **넣을 문장:** «캔버스 iframe 문서의 요소(다른 realm)를 `toHaveLength` · `toEqual` 로 견주지 않는다 — 실패하면 chai 가 그 요소를 찍다 `TypeError`(`inspectClass`)를 던져 실패 값이 사라진다. 수 · 글로 바꿔 견준다(`expect(list.length).toBe(0)`).»
 3. **무엇이 비었나:** 전량 게이트를 load 170(15 코어 — 다른 프로젝트의 의도된 부하 루프 `yes` 15 개 · 옆 트랙 vitest)에서 띄우자 일꾼 RPC 가 `Timeout calling "onTaskUpdate"` 로 끊겨 **api 163 파일이 통째로 안 돌고** «실패 19 · 통과 6034» 로 끝났다(실패는 모두 `STACK_TRACE_ERROR` 와 그 뒤의 `document is not defined`). 지침은 «둘까지만 겹친다» · 잠듦만 말하고 기계 전체의 부하를 안 본다 — 실행 수를 기준선과 견주지 않으면 «19 실패» 로 읽힌다.
-   **어디:** `.ruler/30-delegation.md` 「워커에게 맡길 때 — wirebound」 의 «변이마다 전량을 돌리게 하지 않는다» 문단, «전량 게이트는 한 기계에서 동시에 둘까지만 띄운다» 문장 뒤.
-   **넣을 문장:** «띄우기 전과 끝난 뒤 `uptime` 의 load 를 상태 파일에 적는다 — 코어 수의 세 배를 넘으면 띄우지 않고 기다린다. 끝난 판의 파일 수를 프로젝트마다 기준선과 견주고, 한 프로젝트가 통째로 빠졌으면(일꾼 RPC 시간 초과) 그 판은 «안 잰 것» 이다.»
+   **까닭(vitest 3.2.7 코드로 확인):** forks 풀은 여러 포크 파일(unit · web)을 먼저 돌리고, 그 가운데 하나라도 일꾼 수준에서 거절되면(`[vitest-worker]: Timeout calling "onTaskUpdate"` · `"fetch"`) `AggregateError` 를 던져 **`singleFork` 프로젝트(api)를 아예 시작하지 않는다**(`node_modules/.pnpm/vitest@3.2.7…/dist/chunks/coverage.DfSpMS-b.js` 의 forks `runTests` — `multipleForks` 뒤 `if (errors.length > 0) throw` 가 `singleFork` 갈래 앞이다). 로그에 `|api|` 줄이 0 이고 끝 줄은 «Errors N» 뿐이라, 실패 수만 보면 api 가 빠진 것이 안 보인다. 세 판(load 170 · 105–138 · 덮개 닫힘)이 다 그 꼴이었다.
+**어디:** `.ruler/30-delegation.md` 「워커에게 맡길 때 — wirebound」 의 «변이마다 전량을 돌리게 하지 않는다» 문단, «전량 게이트는 한 기계에서 동시에 둘까지만 띄운다» 문장 뒤.
+   **넣을 문장:** «띄우기 전과 끝난 뒤 `uptime` 의 load 를 상태 파일에 적는다 — 코어 수의 세 배를 넘으면 띄우지 않고 기다린다. 끝난 판의 파일 수를 프로젝트마다 기준선과 견주고, 한 프로젝트가 통째로 빠졌으면 그 판은 «안 잰 것» 이다 — unit · web 일꾼 하나의 RPC 시간 초과가 forks 풀을 끊어 `singleFork` 인 api 는 시작도 안 한다(로그의 `|api|` 줄 0).»
 4. **무엇이 비었나:** 게이트 체인을 `pkill -f <스크립트>` 로 내리자 스크립트 셸만 죽고 돌던 갈래(`pnpm test:build:serial` 과 그 vitest 여덟 · headless Chrome)가 launchd 아래 고아로 남았다 — `ps … | grep <워크트리>` 에는 명령 줄에 경로가 없어 안 걸리고 cwd(`lsof -d cwd`)로만 찾았다. 고아 Chrome 하나는 자동 모드 분류기가 내리기를 막아 남았다.
    **어디:** `.ruler/30-delegation.md` 같은 문단의 «게이트 체인은 스크립트 하나로 쓰고 `nohup nice -n 10 caffeinate -i <스크립트> & disown` 으로 띄운다» 문장 뒤.
-   **넣을 문장:** «멈출 때는 스크립트가 아니라 그 프로세스 그룹을 내린다(띄울 때 `echo $$ > <상태>` 로 pgid 를 적고 `kill -- -<pgid>`) — 스크립트 셸만 내리면 돌던 갈래가 launchd 아래 고아로 남아 다음 판과 겹친다. 남았는지는 경로가 아니라 cwd 로 센다(`lsof -p <pid> -a -d cwd`).»
+   **넣을 문장:** «멈출 때는 스크립트가 아니라 그 프로세스 그룹을 내린다(띄울 때 `echo $$ > <상태>` 로 pgid 를 적고 `kill -- -<pgid>`) — 스크립트 셸만 내리면 돌던 갈래가 launchd 아래 고아로 남아 다음 판과 겹친다. 그룹째 내려도 vitest 일꾼이 그룹 밖(ppid 1)에 남는 판이 있다(`test:browser` 일꾼 셋이 그랬다) — 내린 뒤 남았는지를 경로가 아니라 cwd 로 센다(`lsof -p <pid> -a -d cwd`).»
