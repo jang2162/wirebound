@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineComponent } from '../define'
-import { integer, joined, oneLine } from '../summary'
+import { countOf, integer, joined, oneLine } from '../summary'
 
 export const SearchFormDef = defineComponent({
   type: 'SearchForm',
@@ -369,4 +369,60 @@ export const AffixDef = defineComponent({
   summary: (props) => oneLine(props.text),
   states: [],
   zones: [],
+})
+
+/**
+ * 파일 목록의 한 줄 — 설계서의 파일 행은 늘 표본 값(«이름.PDF | 2.1 MB»)이라 이름 · 크기 글 둘이다(실제 파일을 올리지 않는다 — 설계 spec
+ * `2026-10-26-popup-attach-repeat-design.md` «4»). **노드가 아니다** — 선택지(`OptionSchema`)와 같이 표지 · 상호작용을 줄마다 달 수 없다. 이름은 빈
+ * 글도 받는다 — 목록 위젯의 «항목 추가» 가 빈 줄을 더한다(빈 이름을 막으면 더하는 순간 422 다).
+ */
+export const FileEntrySchema = z.strictObject({ name: z.string().max(200), size: z.string().max(20) })
+
+export type FileEntry = z.infer<typeof FileEntrySchema>
+
+/** 파일 목록의 상한 — 넘는 값은 422 다(목록 위젯은 상한에서 «항목 추가» 를 끈다). */
+export const FILES_MAX = 20
+
+/**
+ * **파일첨부** — 단추 줄(«단추» 구역 — 기본 `[파일추가][항목 제거][전체 항목 제거]`) · 파일 목록 표(머리 `□ | 파일이름 | 파일크기` 는 뷰의 고정 글) · 빈 목록
+ * 안내 · 한도 글(«최대 {maxFiles}개 {maxSize} 제한» — 수는 뷰가 조각으로 감싸 테마가 칠한다). 값 칸(`Field`) 안이면 렌더러가 필드 이름을 준다.
+ * `Field` 의 값 조각(조합 입력)이 아니다 — 한 값이 아니라 목록 · 단추 · 글을 품은 상자다.
+ */
+export const FileAttachDef = defineComponent({
+  type: 'FileAttach',
+  label: '파일첨부',
+  description: '파일을 붙이는 칸. 단추 · 파일 목록 · 빈 목록 안내 · 한도 글.',
+  group: 'input',
+  props: z.strictObject({
+    files: z.array(FileEntrySchema).max(FILES_MAX).default([]),
+    // 0 이면 개수 글이 없다 · 빈 글이면 크기 글이 없다 — 둘 다 없으면 한도 줄째 없다.
+    maxFiles: z.number().int().min(0).max(99).default(1),
+    maxSize: z.string().max(20).default('100 MB'),
+    hint: z.string().default('이곳을 더블클릭 또는 파일을 드래그 하세요'),
+    disabled: z.boolean().default(false),
+  }),
+  editor: [
+    { prop: 'files', control: 'fileList', label: '파일' },
+    { prop: 'maxFiles', control: 'number', label: '최대 개수', hint: '한도 글의 개수 — 0 이면 개수를 안 적습니다' },
+    { prop: 'maxSize', control: 'text', label: '최대 크기', hint: '한도 글의 크기 — 비우면 크기를 안 적습니다' },
+    { prop: 'hint', control: 'text', label: '빈 목록 안내' },
+    { prop: 'disabled', control: 'switch', label: '비활성' },
+  ],
+  summary: (props) => {
+    const files = countOf(props.files)
+    const max = integer(props.maxFiles)
+    return joined(files === null ? null : `파일 ${files}개`, max === null || max === 0 ? null : `최대 ${max}개`)
+  },
+  states: ['disabled'],
+  zones: [
+    {
+      name: 'actions',
+      label: '단추',
+      initial: [
+        { type: 'Button', props: { label: '파일추가' } },
+        { type: 'Button', props: { label: '항목 제거' } },
+        { type: 'Button', props: { label: '전체 항목 제거' } },
+      ],
+    },
+  ],
 })

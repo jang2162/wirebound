@@ -31,6 +31,10 @@
  * 데이터에는 `popups` 키가 없고 목차 줄에 표지가 없어 페이지 HTML 은 그대로다. `assets/shell.css` 는 목차의 팝업 표지 규칙을 끝에 덧붙였다(아래
  * 셋째 케이스). 입력 조각의 길이 규칙(`data-wb-size`)에서 팝업 뿌리를 빼며 `assets/views.css` 만 다시 지었다 — 팝업의 크기 표지도
  * `data-wb-size` 라 보통 팝업이 입력 폭으로 줄었다(`docs/superpowers/plans/2026-10-26-poa-report.md` «실브라우저 판이 찾은 결함 셋»).
+ * 파일첨부(같은 1.8.0)를 들이며 다시 지었다 — `assets/views.css` 는 파일첨부의 기본 규칙(단추 줄 · 목록 표 · 빈 목록 안내 · 한도 글), «넓은 표본»(과 그 사본
+ * `index.html`)은 픽스처의 폼 표에 파일첨부 필드 하나를 더했다(카탈로그를 전부 쓰는 픽스처 — `parity.test.tsx` «무엇을 덮었나»). «슬롯» · «글» · «깨진 문서» 는
+ * 그대로다(`docs/superpowers/plans/2026-10-26-pob-report.md`). 두 판을 한 1.8.0 에 실으며 `assets/views.css` 만 다시 지었다 — 팝업 · 파일첨부 규칙을 함께
+ * 든 시트다(`docs/superpowers/plans/2026-10-27-rb-pob-report.md`).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -71,20 +75,20 @@ function digest(withTheme: boolean): Record<string, string> {
 /** 상태 없는 페이지의 해시(파일마다 sha256 앞 16자) — 지은 때는 머리말. */
 const BEFORE = {
   plain: {
-    'index.html': '397e7e109d67d68f',
-    'pages/넓은-표본.html': '468ece3af280c49c',
+    'index.html': '62f712ff2b251895',
+    'pages/넓은-표본.html': 'df28f83134af33da',
     'pages/슬롯.html': '237942c9bddec6e1',
     'pages/글.html': 'cf7aada8a9107580',
     'pages/깨진-문서.html': '1e6593b7b432956c',
-    'assets/views.css': '30ef00aee54c5ffc',
+    'assets/views.css': 'aa61efa7d7e3d912',
   },
   themed: {
-    'index.html': 'b477e3bb1d94a491',
-    'pages/넓은-표본.html': '516f5858cdd82609',
+    'index.html': '4b36de12b8530048',
+    'pages/넓은-표본.html': '1363274b9e2c0bb9',
     'pages/슬롯.html': 'a740ac4b6b55571e',
     'pages/글.html': '85f601e80f6602ab',
     'pages/깨진-문서.html': 'e071fd4ffcfbad1c',
-    'assets/views.css': '30ef00aee54c5ffc',
+    'assets/views.css': 'aa61efa7d7e3d912',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',

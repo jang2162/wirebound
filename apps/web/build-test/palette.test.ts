@@ -86,7 +86,8 @@ async function showOnly(page: Page, type: string): Promise<void> {
 
 /**
  * 카드마다 — 그 창(호스트 좌표) 안에 그 타입의 `[data-wb-component]` 가 보이는가(축소판 iframe 안의 상자를 호스트 좌표로 옮겨 견준다).
- * 가운데가 창 안이고 그 요소의 그린 상자가 창을 1px 넘지 않으면 «선다».
+ * 가운데가 창 안이고 그 요소의 그린 상자가 창을 1px 넘지 않으면 «선다». 카드 키는 «타입» 이거나 «타입:프리셋 키» 다 — 프리셋 카드
+ * (`DataGrid:repeatRows`)의 표본은 그 타입의 노드라 견주는 컴포넌트는 키의 `:` 앞이다.
  */
 const CARD_THUMBS = `(() => {
   const iframe = document.querySelector('iframe.wb-shell-palette-thumbs-iframe')
@@ -96,9 +97,10 @@ const CARD_THUMBS = `(() => {
   const out = {}
   for (const win of document.querySelectorAll('[data-wb-palette-window]')) {
     const type = win.getAttribute('data-wb-palette-window')
+    const component = type.split(':')[0]
     const w = win.getBoundingClientRect()
     const wrapper = doc.querySelector('[data-wb-palette-thumb="' + type + '"]')
-    const hit = wrapper === null ? [] : [...wrapper.querySelectorAll('[data-wb-component]')].filter((el) => el.getAttribute('data-wb-component') === type)
+    const hit = wrapper === null ? [] : [...wrapper.querySelectorAll('[data-wb-component]')].filter((el) => el.getAttribute('data-wb-component') === component)
     out[type] = hit.some((el) => {
       const n = el.getBoundingClientRect()
       const left = f.left + n.left, top = f.top + n.top

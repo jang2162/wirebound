@@ -19,9 +19,11 @@ import {
   type WbNode,
 } from '@wirebound/schema'
 import { createNode } from '../../src/edit/create-node'
-import { placeableGroups } from '../../src/palette/placeable'
+import { paletteKey, parsePaletteKey, placeableGroups } from '../../src/palette/placeable'
 
-const placeable = (): string[] => placeableGroups().flatMap((group) => group.types.map((type) => type.type))
+/** 타입 카드의 타입 — 프리셋 카드는 빼고 센다(아래 «프리셋 카드»). */
+const placeable = (): string[] =>
+  placeableGroups().flatMap((group) => group.types.filter((type) => type.preset === undefined).map((type) => type.type))
 
 /** 페이지 문서 안에 둘 수 있는 타입 — `bad-root` 가 나는(뿌리가 될 수 없는) 타입 가운데 페이지의 자식으로 검증을 지나는 것. */
 function placeableTypes(): string[] {
@@ -72,17 +74,34 @@ describe('placeableGroups', () => {
     for (const type of blocked) expect(placeable(), type).not.toContain(type)
   })
 
-  it('갈래 안은 한국어 이름순이다 — 영문 타입명순과 갈리는 갈래가 있다', () => {
+  it('갈래 안 타입 카드는 한국어 이름순이다 — 영문 타입명순과 갈리는 갈래가 있다', () => {
     const groups = placeableGroups()
     expect(groups.length).toBeGreaterThan(0)
     let differsFromTypeOrder = 0
     for (const group of groups) {
-      const names = group.types.map((type) => type.label)
+      const names = group.types.filter((type) => type.preset === undefined).map((type) => type.label)
       expect(names, group.label).toEqual(names.slice().sort((a, b) => a.localeCompare(b, 'ko')))
-      const types = group.types.map((type) => type.type)
+      const types = group.types.filter((type) => type.preset === undefined).map((type) => type.type)
       if (types.join() !== types.slice().sort().join()) differsFromTypeOrder += 1
     }
     // 양성 대조 — 두 순서가 어디서도 안 갈리면 위 단언은 영문 타입명순 구현도 통과시킨다.
     expect(differsFromTypeOrder).toBeGreaterThan(0)
+  })
+
+  it('프리셋 카드 — 제 타입 카드 바로 뒤에 서고 열쇠는 «타입:키» · 이름은 프리셋의 것이다', () => {
+    const cards = placeableGroups().flatMap((group) => group.types)
+    const presets = cards.filter((card) => card.preset !== undefined)
+    expect(presets.map((card) => [card.key, card.type, card.preset, card.label])).toEqual([
+      ['DataGrid:repeatRows', 'DataGrid', 'repeatRows', '반복 행 표'],
+    ])
+    for (const card of presets) {
+      const at = cards.indexOf(card)
+      expect(cards[at - 1]?.key, card.key).toBe(card.type)
+    }
+    // 열쇠는 카드마다 다르다 — 카드 · 축소판 창 · 표본이 이것으로 짝짓는다.
+    expect(new Set(cards.map((card) => card.key)).size).toBe(cards.length)
+    expect(parsePaletteKey('DataGrid:repeatRows')).toEqual({ type: 'DataGrid', preset: 'repeatRows' })
+    expect(parsePaletteKey('DataGrid')).toEqual({ type: 'DataGrid' })
+    expect(paletteKey('DataGrid', 'repeatRows')).toBe('DataGrid:repeatRows')
   })
 })

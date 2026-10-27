@@ -153,6 +153,7 @@ const WIDGET_CONTROLS: EditorControl[] = [
   'stringList',
   'pairList',
   'optionList',
+  'fileList',
   'color',
   'image',
 ]
@@ -180,6 +181,7 @@ const CONTROL_SAMPLES: { control: EditorControl; type: string; label: string }[]
   { control: 'stringList', type: 'Tree', label: '항목' },
   { control: 'pairList', type: 'KeyValue', label: '키-값' },
   { control: 'optionList', type: 'Select', label: '선택지' },
+  { control: 'fileList', type: 'FileAttach', label: '파일' },
   { control: 'color', type: 'Placeholder', label: '바탕색' },
   { control: 'image', type: 'Placeholder', label: '그림' },
 ]
@@ -197,6 +199,7 @@ const CONTROLS_DOC = pageDoc({
     { id: 'n-kv', type: 'KeyValue', props: { pairs: [{ key: 'k', value: 'v' }] } },
     { id: 'n-select', type: 'Select' },
     { id: 'n-ph', type: 'Placeholder', props: { background: '#2563eb' } },
+    { id: 'n-file', type: 'FileAttach', props: { files: [{ name: '통장사본.pdf', size: '2.1 MB' }] } },
   ],
 })
 

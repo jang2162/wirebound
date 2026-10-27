@@ -1,4 +1,4 @@
-/** **입력 그룹 기본 뷰.** `SearchForm`·`EntryForm`·`FormTable`·`Field` 와 값 칸의 조각 아홉. 옮긴 규칙은 `./index.ts` 머리말. */
+/** **입력 그룹 기본 뷰.** `SearchForm`·`EntryForm`·`FormTable`·`Field` 와 값 칸의 조각 아홉 · `FileAttach`. 옮긴 규칙은 `./index.ts` 머리말. */
 import { Fragment, type CSSProperties, type ReactElement } from 'react'
 import { FORM_LABEL_WIDTH_VAR, nodeVar, WEIGHT_VAR, zeroRule } from '../css-tools'
 import { view } from '../define'
@@ -264,6 +264,72 @@ export const AffixView = view(({ props }) => (
   </Root>
 ))
 
+/** 파일 목록 한 줄(카탈로그 `FileEntrySchema`). 모양이 틀린 원소는 빈 글로 읽는다 — `optionsOf` 와 같은 까닭. */
+function filesOf(value: unknown): { name: string; size: string }[] {
+  if (!Array.isArray(value)) return []
+  return value.map((file) => {
+    const raw = file !== null && typeof file === 'object' ? (file as { name?: unknown; size?: unknown }) : {}
+    return { name: typeof raw.name === 'string' ? raw.name : '', size: typeof raw.size === 'string' ? raw.size : '' }
+  })
+}
+
+/**
+ * 기본 구조 `default`. 단추 줄(«단추» 구역 — `actions` 조각) → 파일 목록 표(`list` 조각 — 머리 `□ | 파일이름 | 파일크기` 는 고정 글) → 한도 글(`limit`).
+ * 목록이 비면 표 몸에 안내 한 줄(`drop`), 차면 파일마다 한 줄(`file` — `fileName` · `fileSize` 칸). 한도 글은 «최대 {개수}개 {크기} 제한» 이고 두 값을
+ * 조각(`limitCount` · `limitSize`)으로 감싼다 — 테마가 수만 칠한다. 개수가 0 이면 개수 조각 · 크기가 비면 크기 조각이 없고, 둘 다 없으면 한도 줄째 없다.
+ *
+ * **체크는 그림이다** — `<input>` 이 아니라 `checkbox` 조각(그리드 선택 열과 같은 판단 — 캔버스에서 고르는 상태를 들지 않고, 포커스 받는 요소를 늘리지
+ * 않는다). 뿌리는 이름 붙은 `group` 이다 — 값 칸 안이면 렌더러가 준 필드 이름(`ViewProps.field`), 밖이면 «파일첨부». 조각 이름은 `wb-theme check` 가
+ * 재는 계약이다(`packages/theme-kit/src/check.ts` 의 `fileAttachProblems`).
+ */
+export const FileAttachView = view(({ props, field }) => {
+  const files = filesOf(props.files)
+  const count = typeof props.maxFiles === 'number' && props.maxFiles > 0 ? props.maxFiles : null
+  const size = typeof props.maxSize === 'string' && props.maxSize.trim() !== '' ? props.maxSize : null
+  return (
+    <Root as="div" data-wb-structure="default" role="group" aria-label={field?.name ?? '파일첨부'}>
+      <Zone name="actions" data-wb-part="actions" />
+      <table data-wb-part="list">
+        <thead>
+          <tr>
+            <th scope="col" data-wb-part="checkHead" aria-label="고르기">
+              <span data-wb-part="checkbox" aria-hidden="true" />
+            </th>
+            <th scope="col">파일이름</th>
+            <th scope="col">파일크기</th>
+          </tr>
+        </thead>
+        <tbody>
+          {files.length === 0 ? (
+            <tr>
+              <td colSpan={3} data-wb-part="drop">
+                {typeof props.hint === 'string' ? props.hint : ''}
+              </td>
+            </tr>
+          ) : (
+            files.map((file, index) => (
+              <tr key={index} data-wb-part="file">
+                <td data-wb-part="check">
+                  <span data-wb-part="checkbox" aria-hidden="true" />
+                </td>
+                <td data-wb-part="fileName">{file.name}</td>
+                <td data-wb-part="fileSize">{file.size}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+      {count !== null || size !== null ? (
+        <p data-wb-part="limit">
+          최대 {count !== null ? <span data-wb-part="limitCount">{count}개</span> : null}
+          {count !== null && size !== null ? ' ' : null}
+          {size !== null ? <span data-wb-part="limitSize">{size}</span> : null} 제한
+        </p>
+      ) : null}
+    </Root>
+  )
+})
+
 /** 이 그룹의 기본 CSS. 특이도 0(`:where`)이라 테마의 어느 규칙이든 이긴다 — 테마가 없는 판의 최소 모양이다. */
 export function inputCssBlocks(): string[] {
   const cells = '[data-wb-component="FormTable"] > [data-wb-part="cells"]'
@@ -394,5 +460,36 @@ export function inputCssBlocks(): string[] {
       'border: 1px solid;',
       'padding: 0 6px;',
     ]),
+    // ── 파일첨부 ─────────────────────────────────────────────────────────────
+    // 단추 줄은 오른쪽 · 넘치면 다음 줄 · 표는 제 칸 폭을 채운다. 이름 칸은 낱말 가운데서도 꺾고(긴 파일 이름이 값 칸 밖으로 안 나가게 — 뿌리의
+    // `overflow-wrap: anywhere` 가 물려 내려온다 · `./index.ts` 의 `LONG_WORD_CSS`) 크기 칸은 안 꺾는다(«100.5 MB» 가 두 줄로 서지 않게).
+    zeroRule('[data-wb-component="FileAttach"]', ['display: flex;', 'flex-direction: column;', 'gap: 4px;', 'min-width: 0;']),
+    zeroRule('[data-wb-component="FileAttach"] > [data-wb-part="actions"]', [
+      'display: flex;',
+      'flex-wrap: wrap;',
+      'justify-content: flex-end;',
+      'gap: 4px;',
+    ]),
+    zeroRule('[data-wb-component="FileAttach"] > [data-wb-part="list"]', ['width: 100%;', 'border-collapse: collapse;']),
+    zeroRule('[data-wb-component="FileAttach"] > [data-wb-part="list"] > * > tr > *', [
+      'border: 1px solid;',
+      'padding: 2px 6px;',
+      'text-align: start;',
+      'vertical-align: middle;',
+    ]),
+    zeroRule('[data-wb-component="FileAttach"] :is([data-wb-part="checkHead"], [data-wb-part="check"])', [
+      'width: 1px;',
+      'text-align: center;',
+    ]),
+    zeroRule('[data-wb-component="FileAttach"] [data-wb-part="checkbox"]', [
+      'display: inline-block;',
+      'width: 12px;',
+      'height: 12px;',
+      'border: 1px solid currentColor;',
+      'vertical-align: middle;',
+    ]),
+    zeroRule('[data-wb-component="FileAttach"] [data-wb-part="fileSize"]', ['white-space: nowrap;', 'overflow-wrap: normal;']),
+    zeroRule('[data-wb-component="FileAttach"] [data-wb-part="drop"]', ['text-align: center;']),
+    zeroRule('[data-wb-component="FileAttach"] > [data-wb-part="limit"]', ['margin: 0;']),
   ]
 }

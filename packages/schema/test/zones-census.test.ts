@@ -25,7 +25,7 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', 'migrations'])
  * 파일마다 바로 읽는 수. 갈래:
  * - **정본**: `zones.ts`(`childLists` 자신) · `tree.ts`(복사 — 두 줄을 함께 짓는다) · `validate.ts`(선언 밖 구역 · 몸통 없는 타입의 `children` 을 고르는 자리) ·
  *   `define.ts` · `catalog/index.ts` · `render.tsx` · `create-node.ts` · `new-page.ts`(카탈로그 정의의 `zones` — 노드가 아니다 · 새 노드를 짓는다) ·
- *   `zone.tsx`(`<Zone>` 이 그 구역 하나를 읽는다).
+ *   `zone.tsx`(`<Zone>` 이 그 구역 하나를 읽는다) · `preset.ts` · `catalog/index.ts` 의 `assertPresets`(프리셋 템플릿 — id 없는 노드 꼴이고 선언한 구역만 든다).
  * - **얼린 옮기기**: `migrate-document.ts`(판 1 → 2 — 판 1 에는 구역이 없다).
  * - **봉투의 뿌리**: `clipboard.ts`(감싼 뿌리의 몸통) · `paste-ops.ts`(문서 뿌리의 몸통 · 넣을 노드의 몸통).
  * - **몸통이 뜻**: `layout-guides.tsx`(몸통의 배치 안내) · `use-placement.ts` · `structure-drop.ts`(«안» = 몸통의 끝) · `structure-actions.ts` ·
@@ -63,8 +63,9 @@ const DIRECT_READS: Record<string, number> = {
   'packages/renderer/src/render.tsx': 1,
   'packages/renderer/src/view-host.tsx': 1,
   'packages/schema/src/clipboard.ts': 2,
-  'packages/schema/src/component/catalog/index.ts': 2,
+  'packages/schema/src/component/catalog/index.ts': 7,
   'packages/schema/src/component/define.ts': 3,
+  'packages/schema/src/component/preset.ts': 6,
   'packages/schema/src/migrate-document.ts': 20,
   'packages/schema/src/new-page.ts': 4,
   'packages/schema/src/tree.ts': 12,

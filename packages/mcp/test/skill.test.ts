@@ -165,6 +165,15 @@ describe('스킬의 도구 표가 실제 도구와 같다', () => {
       'total',
       'pageSize',
       'page',
+      // 파일첨부 · 반복 행 표의 꼴 — 타입 · props
+      'FileAttach',
+      'files',
+      'maxFiles',
+      'maxSize',
+      'Field',
+      'Input',
+      'DateInput',
+      'readonly',
       // 팝업의 꼴 — 뿌리 타입 · props · 값 · 액션 · 응답 필드
       'Popup',
       'title',

@@ -69,6 +69,14 @@
 `GridColumn` 하나(셀 틀 포함)를 `add` 한다 — 행마다 칸을 더하지 않는다. 바닥(`zones.footer`)의 `Pagination` 은 `total` · `pageSize` · `page` 로 범위 글을
 셈한다. 서버는 새 그리드에 열 · 행 · 바를 넣어 주지 않는다 — 함께 넣는다.
 
+**반복 행 입력 표(`[추가]` · 행마다 입력 · `[삭제]` · 합계)는 같은 `DataGrid` 다.** `[추가]` 는 `zones.headEnd` 의 `Button`, 행마다 입력은 열의 셀 틀
+(`Input` · `DateInput` …), `[삭제]` 는 «삭제» 열의 셀 틀 `Button`, 합계는 `GridRow` `kind: "total"` 의 제 칸이다. 바닥 바는 빼 둔다. 에디터 팔레트의
+«반복 행 표» 카드가 넣는 꼴은 `/llms.txt` 의 `DataGrid` 절 «Editor preset» 줄에 있다 — 같은 꼴을 `patch_page` 로 적는다(노드마다 id 를 지어 붙인다).
+
+**파일첨부는 `FileAttach` 다.** 파일 목록은 prop `files`(`{ "name", "size" }` 배열 — 표본 값이다 · 실제 파일은 안 올린다)이고, 단추는 `zones.actions`
+의 `Button` 이다(서버는 넣어 주지 않는다). 한도 글은 `maxFiles`(0 이면 개수 없음) · `maxSize`(빈 글이면 크기 없음)에서 짓는다. 폼 표의 값 칸에 둘 때는
+`Field` 의 `children` 에 넣는다. «[파일선택][선택된 파일 없음]» 같은 단순 파일 선택 줄은 파일첨부가 아니라 `Button` + `readonly` `Input` 이다.
+
 **팝업은 페이지의 종류다.** 뿌리가 `Popup` 인 페이지가 팝업 페이지다(`list_pages` 의 `kind` 가 `popup` · `get_page` 의 `kind`). 팝업의 제목은
 뿌리의 `title`, 크기는 `size`(`small` · `medium` · `large`)이고, 내용은 뿌리의 `children`, 바닥 단추는 `zones.footer` 다 — 닫기(✖)는 노드가 아니다.
 다른 화면에서 그 팝업을 띄우는 상호작용은 `openModal`(대상은 그 팝업 페이지의 경로), 팝업 안의 «취소» · «닫기» 단추는 `closeModal`(대상 없음 —

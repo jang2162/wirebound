@@ -144,6 +144,7 @@ describe('createNode', () => {
       'DataGrid',
       'EntryForm',
       'Field',
+      'FileAttach',
       'FormTable',
       'GridColumn',
       'Popup',
@@ -217,6 +218,38 @@ describe('createNode', () => {
       const doc = isRootType(def.type) ? { version: CURRENT_DOCUMENT_VERSION, root: node } : placedPage(node)
       expect(validatePage(doc), def.type).toEqual([])
     }
+  })
+
+  it('프리셋 — 템플릿이 내용 전부다(구역의 기본 내용을 안 붙인다) · id 는 같은 생성기에서 · 검증을 지난다', () => {
+    const column = (n: number, label: string, piece: Record<string, unknown>, props: Record<string, unknown> = {}) => ({
+      id: `n_test${n}`,
+      type: 'GridColumn',
+      props: { label, ...props },
+      children: [{ id: `n_test${n + 1}`, ...piece }],
+    })
+    const made = createNode('DataGrid', countingIds(), 'repeatRows')
+    expect(made).toEqual({
+      id: 'n_test1',
+      type: 'DataGrid',
+      children: [
+        column(2, '항목 1', { type: 'Input' }),
+        column(4, '항목 2', { type: 'Input' }),
+        column(6, '삭제', { type: 'Button', props: { label: '삭제' } }, { size: 'short', align: 'center' }),
+      ],
+      zones: {
+        headEnd: [{ id: 'n_test8', type: 'Button', props: { label: '추가' } }],
+        rows: [{ id: 'n_test9', type: 'GridRow', props: { repeat: 2 } }],
+      },
+    })
+    expect(validatePage(placedPage(made as WbNode))).toEqual([])
+  })
+
+  it('프리셋 — 그 타입에 없는 키면 null 이고 id 를 안 쓴다', () => {
+    const ids = countingIds()
+    expect(createNode('DataGrid', ids, 'nope')).toBeNull()
+    expect(createNode('Button', ids, 'repeatRows')).toBeNull()
+    expect(createNode('Nope', ids, 'repeatRows')).toBeNull()
+    expect(ids()).toBe('n_test1')
   })
 
   it('서버가 짓는 새 팝업 페이지의 뿌리는 에디터가 짓는 팝업 노드와 같은 꼴이다 — 제목 · 빈 몸통만 더한다', () => {

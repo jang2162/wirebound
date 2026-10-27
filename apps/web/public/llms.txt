@@ -180,6 +180,7 @@ Stands only in the `body` zone of a `Tabs`.
 A data table: its body is the columns (`GridColumn`, `GridColumnGroup`), the `rows` zone the rows (`GridRow`), the footer a `Pagination`. Rows repeat the column cell templates; every line after the first is a render copy (`data-wb-copy-of` instead of `data-wb-id` — select the original node). `select` adds a check or radio column, `fixedColumns` keeps that many left columns in place while the table scrolls sideways. Editor label: 그리드.
 
 Zones: `headStart` (zones.headStart) "머리 왼쪽"; `headEnd` (zones.headEnd) "머리 오른쪽"; `body` (children) "열", accepts only `GridColumn`, `GridColumnGroup`, create with `GridColumn` {"label":"컬럼 1"} + `GridColumn` {"label":"컬럼 2"} + `GridColumn` {"label":"컬럼 3"}; `rows` (zones.rows) "행", accepts only `GridRow`, create with `GridRow` {"repeat":5}; `footer` (zones.footer) "바닥", create with `Pagination`.
+Editor preset `repeatRows` "반복 행 표" (a palette card, not a type — write the same shape with `patch_page`, every node with its own id): {"type":"DataGrid","children":[{"type":"GridColumn","props":{"label":"항목 1"},"children":[{"type":"Input"}]},{"type":"GridColumn","props":{"label":"항목 2"},"children":[{"type":"Input"}]},{"type":"GridColumn","props":{"label":"삭제","size":"short","align":"center"},"children":[{"type":"Button","props":{"label":"삭제"}}]}],"zones":{"headEnd":[{"type":"Button","props":{"label":"추가"}}],"rows":[{"type":"GridRow","props":{"repeat":2}}]}}.
 
 - `select`: "none" | "check" | "radio", default "none"
 - `fixedColumns`: integer 0–20, default 0
@@ -400,6 +401,18 @@ Zones: none.
 
 - `text`: string, default "~"
 - `tone`: "default" | "muted" | "danger" | "primary", default "default"
+
+#### FileAttach
+
+A file attachment box drawn as a sample: buttons (`actions` zone), a file list table (`files` — sample rows of name and size; nothing is uploaded), a hint line while the list is empty, and a limit line built from `maxFiles` (0 = no count) and `maxSize` (empty = no size). In a `Field` value cell it takes the field label as its name. Editor label: 파일첨부.
+
+Zones: `actions` (zones.actions) "단추", create with `Button` {"label":"파일추가"} + `Button` {"label":"항목 제거"} + `Button` {"label":"전체 항목 제거"}.
+
+- `files`: { name: string (≤ 200 chars), size: string (≤ 20 chars) }[] (≤ 20 items), default []
+- `maxFiles`: integer 0–99, default 1
+- `maxSize`: string (≤ 20 chars), default "100 MB"
+- `hint`: string, default "이곳을 더블클릭 또는 파일을 드래그 하세요"
+- `disabled`: boolean, default false — state
 
 ### Action — things a user presses
 

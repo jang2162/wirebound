@@ -291,3 +291,69 @@ describe('대상 글자의 풀이 — `matchPageTargets` 와 같다(공백 · �
     expect([navigated, lines(status)]).toEqual([[`${encodeURIComponent('상세')}.html`], []])
   })
 })
+
+/**
+ * **파일첨부 · 반복 행 표 안 단추** — 파일첨부의 «단추» 구역 · 그리드의 머리 오른쪽 · 셀 틀(반복 행 표의 «삭제» — 둘째 줄부터는 사본 `data-wb-copy-of`)의
+ * 단추도 몸통의 단추와 같은 표(`hrefs` · `popups`)로 풀린다. 대상 글자는 공백 · 접두를 섞었다(`pageTargetKey`).
+ */
+describe('대상 글자의 풀이 — 파일첨부 · 반복 행 표 안 단추', () => {
+  const attach = (id: string, actions: WbNode[]): WbNode => ({
+    id,
+    type: 'FileAttach',
+    props: { files: [{ name: '통장사본.pdf', size: '2.1 MB' }] },
+    zones: { actions },
+  })
+  const listed = (): BundlePage[] => [
+    {
+      title: '목록',
+      target: 'page:목록',
+      document: screen('n_list', [
+        attach('n_fa', [opener('n_fa_open', ' page: 첨부 ')]),
+        {
+          id: 'n_grid',
+          type: 'DataGrid',
+          children: [{ id: 'n_col', type: 'GridColumn', props: { label: '삭제' }, children: [opener('n_del', '첨부 ')] }],
+          zones: { headEnd: [nav('n_add', ' 상세 ')], rows: [{ id: 'n_row', type: 'GridRow', props: { repeat: 2 } }] },
+        },
+      ]),
+    },
+    { title: '첨부', target: 'page:첨부', document: popup('n_pop', '첨부', [attach('n_fa_in', [nav('n_fa_go', 'page: 상세')])]) },
+    { title: '상세', target: 'page:상세', document: screen('n_detail', []) },
+  ]
+  const fresh = () => {
+    if (mounted !== null) act(() => mounted!.unmount())
+    mounted = null
+    document.body.innerHTML = ''
+    const data = dataOf(listed(), 'pages/목록.html')
+    return mount({ document: data.document, hrefs: data.hrefs, popups: data.popups! })
+  }
+
+  it('구역 · 셀 틀 · 사본 줄의 «팝업 열기» 는 실린 팝업을 연다 · «이동» 은 옮긴다 · 팝업 안 파일첨부 단추도 같다', () => {
+    const data = dataOf(listed(), 'pages/목록.html')
+    expect(Object.keys(data.popups ?? {}).sort()).toEqual([' page: 첨부 ', '첨부 '])
+    const opened: [string, number, string[]][] = []
+    for (const pick of ['n_fa_open', 'n_del', 'copy:n_del']) {
+      const { canvas, status } = fresh()
+      // 판 카나리아 — 반복 행의 둘째 줄이 사본으로 섰다.
+      expect(canvas.querySelectorAll('[data-wb-copy-of="n_del"]')).toHaveLength(1)
+      click(pick.startsWith('copy:') ? canvas.querySelector('[data-wb-copy-of="n_del"]') : byId(canvas, pick))
+      opened.push([pick, canvas.querySelectorAll('[data-wb-popup-level]').length, lines(status)])
+    }
+    expect(opened).toEqual([
+      ['n_fa_open', 1, []],
+      ['n_del', 1, []],
+      ['copy:n_del', 1, []],
+    ])
+    const head = fresh()
+    click(byId(head.canvas, 'n_add'))
+    const inside = fresh()
+    click(byId(inside.canvas, 'n_fa_open'))
+    click(byId(inside.canvas.querySelector('[data-wb-popup-level="1"]')!, 'n_fa_go'))
+    expect([head.navigated, lines(head.status), inside.navigated, lines(inside.status)]).toEqual([
+      [`${encodeURIComponent('상세')}.html`],
+      [],
+      [`${encodeURIComponent('상세')}.html`],
+      [],
+    ])
+  })
+})

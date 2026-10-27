@@ -145,6 +145,26 @@ export function broadFixture(): PageDocument {
                   props: { label: '소개' },
                   children: [{ id: id(), type: 'TextArea', props: { rows: 4 } }],
                 },
+                {
+                  id: id(),
+                  type: 'Field',
+                  weight: 2,
+                  props: { label: '첨부' },
+                  children: [
+                    {
+                      id: id(),
+                      type: 'FileAttach',
+                      props: {
+                        files: [
+                          { name: '통장사본.pdf', size: '2.1 MB' },
+                          { name: '사업자등록증.png', size: '340 KB' },
+                        ],
+                        maxFiles: 5,
+                      },
+                      zones: { actions: [{ id: id(), type: 'Button', props: { label: '파일추가' } }] },
+                    },
+                  ],
+                },
               ],
             },
           ],

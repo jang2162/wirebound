@@ -36,10 +36,11 @@ export interface ThemeCheckError {
   /**
    * `fallback` — 칸에 선 `data-wb-error`. `console` — 그 칸을 그리는 동안 난 `console.error`. `bundle` — 번들을 못 실었다. `zone` — 내용이 든 구역을
    * 뷰가 안 그렸다(`missingZones`). `placeholder` — 자리표시자 뷰가 사람이 정한 그리기 값을 뿌리의 변수로 안 실었다(`placeholderDrops`). `pairs` — 폼 표
-   * 뷰가 쌍 격자 계약(`cells` 조각 · 그 직계 칸과 빈 쌍 · 두 조각 · 빈 쌍 수)을 어겼다(`pairGridProblems`). `popup` — 팝업 뷰가 덮개 층이 기대는
+   * 뷰가 쌍 격자 계약(`cells` 조각 · 그 직계 칸과 빈 쌍 · 두 조각 · 빈 쌍 수)을 어겼다(`pairGridProblems`). `grid` — 그리드의 표 계약(`dataGridProblems`).
+   * `file` — 파일첨부 뷰가 목록 · 빈 목록 안내 · 한도 글 계약을 어겼다(`fileAttachProblems`). `popup` — 팝업 뷰가 덮개 층이 기대는
    * 조각(`close` · `body`)이나 대화 상자 이름을 어겼다(`popupProblems`).
    */
-  source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs' | 'grid' | 'popup'
+  source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs' | 'grid' | 'file' | 'popup'
 }
 
 export interface ThemeCheckFocusable {
@@ -171,6 +172,7 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
         for (const message of missingZones(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'zone' })
         for (const message of pairGridProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'pairs' })
         for (const message of dataGridProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'grid' })
+        for (const message of fileAttachProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'file' })
         for (const message of popupProblems(container, galleryItemDocument(item).root)) errors.push({ ...at, message, source: 'popup' })
         if (item.type === 'Placeholder' && item.sample.label === PLACEHOLDER_SET_SAMPLE) {
           for (const message of placeholderDrops(container, item.sample.node.id)) errors.push({ ...at, message, source: 'placeholder' })
@@ -418,6 +420,127 @@ function dataGridProblems(container: Element, root: WbNode): string[] {
 }
 
 /**
+ * **파일첨부의 목록 계약**(설계 spec `2026-10-26-popup-attach-repeat-design.md` «7» F1 ~ F4) — 테마 CSS 와 뒤 단계의 조각 기준 표지가 조각 이름을 겨냥한다.
+ * ① F4 — `list` 조각이 `table` 하나이고 머리 칸이 `th scope="col"` 셋이다(보조 기술이 파일 이름 · 크기를 열 머리로 읽는다). ② F1 — `file` 조각(파일 한 줄)
+ * 수가 `files` 길이와 같다. ③ F2 — 목록이 비면 `drop` 조각(빈 목록 안내) 하나 · 차면 0. ④ F3 — 한도가 있으면 `limit` 조각 하나 안에 개수(`limitCount` —
+ * «{maxFiles}개»)와 크기(`limitSize` — `maxSize`) 조각이 그 값의 글로 서고, 없는 쪽 조각은 없다. 둘 다 없으면 `limit` 조각이 없다. 조각은 그 노드의 것만
+ * 센다(가장 가까운 노드 요소가 그 노드다 — «단추» 구역의 단추 안은 안 센다).
+ *
+ * F1 은 자리도 본다 — `file` 조각은 `list` 표 몸통의 줄(`tbody > tr`)이다. 표 밖 형제로 선 줄은 수가 맞아도 열 머리와 안 이어져, 보조 기술이 이름 · 크기를
+ * 열 머리로 못 읽는다. 조각 이름(SDK 뷰 머리말의 계약)도 그 자리에서 센다 — 파일 줄마다 `check` 칸 안 `checkbox` 하나와 `fileName` · `fileSize` 칸 하나씩
+ * (글이 그 파일의 이름 · 크기), 머리 줄에 `checkHead` 칸 안 `checkbox` 하나, «단추» 구역에 내용이 있으면 목록 표 밖 `actions` 조각 하나(그 구역 상자이거나
+ * 그것을 품는다). 줄 수가 틀리면(F1) 줄마다의 조각은 안 센다 — 몇째 줄이 어느 파일인지 모른다.
+ *
+ * **jsdom 이라 DOM 꼴만 본다** — 이름 칸이 좁은 칸 안에서 꺾이는지(넘침)는 `wb-theme shots` 가 실 Chromium 으로 잰다.
+ */
+function fileAttachProblems(container: Element, root: WbNode): string[] {
+  const out: string[] = []
+  for (const { node } of walkNodes(root)) {
+    if (node.type !== 'FileAttach') continue
+    const element = container.querySelector(`[data-wb-id="${node.id}"]`)
+    if (element === null) continue
+    const props = shimItem(node, 0).props
+    const owned = (selector: string) => [...element.querySelectorAll(selector)].filter((el) => el.closest('[data-wb-id]') === element)
+    const where = `(노드 ${node.id})`
+    const lists = owned('[data-wb-part="list"]')
+    const list = lists.length === 1 && lists[0]!.tagName === 'TABLE' ? lists[0]! : null
+    if (list === null) {
+      out.push(
+        `FileAttach 뷰가 list 조각을 table 하나로 그리지 않았습니다 — ${lists.length} 개 · ${lists.map((el) => el.tagName.toLowerCase()).join(' · ') || '없음'}${where}`,
+      )
+    } else {
+      const heads = [...list.querySelectorAll('thead > tr > *')]
+      const good = heads.filter((cell) => cell.tagName === 'TH' && cell.getAttribute('scope') === 'col').length
+      if (heads.length !== 3 || good !== 3) {
+        out.push(`FileAttach 목록 머리 칸이 th scope="col" 셋이 아닙니다 — 칸 ${heads.length} 개 가운데 ${good} 개${where}`)
+      }
+    }
+    const entries = filesOf(props.files)
+    const files = entries.length
+    const fileRows = owned('[data-wb-part="file"]')
+    const rows = fileRows.length
+    if (rows !== files) out.push(`FileAttach 뷰가 file 조각(파일 한 줄)을 ${files} 개가 아니라 ${rows} 개 그렸습니다${where}`)
+    if (list !== null) {
+      const astray = fileRows.filter(
+        (row) => row.tagName !== 'TR' || row.parentElement?.tagName !== 'TBODY' || row.parentElement.parentElement !== list,
+      )
+      if (astray.length > 0) {
+        out.push(
+          `FileAttach 뷰가 file 조각 ${astray.length} 개를 list 표의 몸통 줄(tbody > tr) 밖에 그렸습니다 — ${astray.map((row) => row.tagName.toLowerCase()).join(' · ')}${where}`,
+        )
+      }
+    }
+    const textsOf = (scope: Element, part: string) =>
+      [...scope.querySelectorAll(`[data-wb-part="${part}"]`)].map((el) => el.textContent ?? '')
+    const checkboxIn = (scope: Element, cellPart: string) => {
+      const cells = [...scope.querySelectorAll(`[data-wb-part="${cellPart}"]`)]
+      return cells.length === 1 && cells[0]!.querySelectorAll('[data-wb-part="checkbox"]').length === 1
+    }
+    if (rows === files) {
+      fileRows.forEach((row, index) => {
+        const entry = entries[index]!
+        for (const [part, want] of [
+          ['fileName', entry.name],
+          ['fileSize', entry.size],
+        ] as const) {
+          const got = textsOf(row, part)
+          if (JSON.stringify(got) !== JSON.stringify([want])) {
+            out.push(
+              `FileAttach ${index + 1} 번째 파일 줄의 ${part} 조각이 ${JSON.stringify([want])} 가 아니라 ${JSON.stringify(got)} 입니다 — 파일 줄 안에 칸 하나${where}`,
+            )
+          }
+        }
+        if (!checkboxIn(row, 'check'))
+          out.push(
+            `FileAttach ${index + 1} 번째 파일 줄의 check 조각 안에 checkbox 조각이 하나가 아닙니다 — check 칸 하나에 그림 하나${where}`,
+          )
+      })
+    }
+    const headRow = list?.querySelector('thead > tr') ?? element
+    if (!checkboxIn(headRow, 'checkHead'))
+      out.push(`FileAttach 목록 머리 줄의 checkHead 조각 안에 checkbox 조각이 하나가 아닙니다 — checkHead 칸 하나에 그림 하나${where}`)
+    if (zoneList(node, 'actions').length > 0) {
+      const actions = owned('[data-wb-part="actions"]')
+      const zone = (el: Element) => el.matches('[data-wb-zone="actions"]') || el.querySelector('[data-wb-zone="actions"]') !== null
+      if (actions.length !== 1 || (list !== null && list.contains(actions[0]!)) || !zone(actions[0]!)) {
+        out.push(
+          `FileAttach 뷰가 actions 조각을 «단추» 구역을 품은 목록 표 밖 하나로 그리지 않았습니다 — ${actions.length} 개${actions.length === 1 && list?.contains(actions[0]!) ? ' · 목록 표 안' : ''}${where}`,
+        )
+      }
+    }
+    const drops = owned('[data-wb-part="drop"]').length
+    const wantDrop = files === 0 ? 1 : 0
+    if (drops !== wantDrop) {
+      out.push(`FileAttach 뷰가 drop 조각(빈 목록 안내)을 ${wantDrop} 개가 아니라 ${drops} 개 그렸습니다 — 목록이 비었을 때만 하나${where}`)
+    }
+    const count = typeof props.maxFiles === 'number' && props.maxFiles > 0 ? `${props.maxFiles}개` : null
+    const size = typeof props.maxSize === 'string' && props.maxSize.trim() !== '' ? props.maxSize : null
+    const limits = owned('[data-wb-part="limit"]')
+    if (count === null && size === null) {
+      if (limits.length > 0) out.push(`FileAttach 뷰가 한도가 없는데 limit 조각을 ${limits.length} 개 그렸습니다${where}`)
+      continue
+    }
+    if (limits.length !== 1) {
+      out.push(`FileAttach 뷰가 limit 조각을 1 개가 아니라 ${limits.length} 개 그렸습니다${where}`)
+      continue
+    }
+    for (const [part, want] of [
+      ['limitCount', count],
+      ['limitSize', size],
+    ] as const) {
+      const got = [...limits[0]!.querySelectorAll(`[data-wb-part="${part}"]`)].map((el) => el.textContent ?? '')
+      const expected = want === null ? [] : [want]
+      if (JSON.stringify(got) !== JSON.stringify(expected)) {
+        out.push(
+          `FileAttach 한도 글의 ${part} 조각이 ${JSON.stringify(expected)} 가 아니라 ${JSON.stringify(got)} 입니다 — limit 조각 안에 값 하나를 감쌉니다${where}`,
+        )
+      }
+    }
+  }
+  return out
+}
+
+/**
  * **팝업의 조각 계약** — 덮개 층(`@wirebound/renderer` 의 `PopupLayer`)은 상자 안에서 `close` 조각을 찾아 ✖ 로 닫고, `body` 조각만 굴리며, 상자
  * 뿌리에 `aria-modal` 을 단다. 그래서 P1 `close` 조각이 정확히 하나 · `<button>` · 접근 이름이 있다. P2 뿌리가 `role="dialog"` 이고
  * `aria-labelledby` 가 가리키는 글이 `title` 이다. P3 `body` 조각이 하나이고 몸통 자식이 모두 그 안이다. P4 «바닥» 구역 자식은 `body` 밖이다 —
@@ -479,6 +602,15 @@ function popupProblems(container: Element, root: WbNode): string[] {
     }
   }
   return out
+}
+
+/** 파일 목록(카탈로그 `FileEntrySchema`) — 모양이 틀린 원소는 빈 글로 읽는다(SDK `FileAttachView` 가 그리는 값과 같게). */
+function filesOf(value: unknown): { name: string; size: string }[] {
+  if (!Array.isArray(value)) return []
+  return value.map((file) => {
+    const raw = file !== null && typeof file === 'object' ? (file as { name?: unknown; size?: unknown }) : {}
+    return { name: typeof raw.name === 'string' ? raw.name : '', size: typeof raw.size === 'string' ? raw.size : '' }
+  })
 }
 
 let directParts: readonly string[] | null = null
@@ -548,15 +680,27 @@ function placeholderDrops(container: Element, nodeId: string): string[] {
 const EXPECTED_FOCUS = 'button, a[href], input, select, textarea, [contenteditable]'
 
 /**
- * 그 칸 안에서 **포커스를 받는데 단추 · 링크 · 입력 칸이 아닌 요소**. 마우스 누름이 포커스를 주는 것을 센다 — `tabindex="-1"` 도 눌러서 포커스를 받는다.
+ * **그림 조각** — 체크 표시를 그리는 자리(SDK `FileAttachView` 머리말 «체크는 그림이다»). 여기서는 입력 칸도 «기대한 포커스» 가 아니다: 값 칸의 입력 조각과
+ * 달리 에디터가 따로 다루는 입력 표면이 아니라서, 그림 대신 `<input type="checkbox">` 를 그리면 누른 뒤 단축키만 막힌다. `EXPECTED_FOCUS` 에서 입력 칸을
+ * 빼면 값 칸의 입력 조각 전부가 경고로 서므로 이 자리만 따로 센다.
+ */
+const PICTURE_PART = '[data-wb-component="FileAttach"] [data-wb-part="checkbox"]'
+
+/**
+ * 그 칸 안에서 **포커스를 받는데 단추 · 링크 · 입력 칸이 아닌 요소**와 **그림 조각 안의 포커스 받는 요소**(꺼진 입력 칸은 포커스를 안 받아 뺀다).
+ * 마우스 누름이 포커스를 주는 것을 센다 — `tabindex="-1"` 도 눌러서 포커스를 받는다.
  * jsdom 값이라 레이아웃 · 숨김(`display: none`)은 못 가른다 — 속성으로만 본다.
  */
 function focusReceivers(container: Element): Element[] {
-  return [...container.querySelectorAll('[tabindex], summary, video[controls], audio[controls], iframe')].filter((element) => {
+  const others = [...container.querySelectorAll('[tabindex], summary, video[controls], audio[controls], iframe')].filter((element) => {
     if (element.matches(EXPECTED_FOCUS)) return false
     const tabindex = element.getAttribute('tabindex')
     return tabindex === null ? true : tabindex.trim() !== '' && Number.isInteger(Number(tabindex))
   })
+  const pictures = [...container.querySelectorAll(`${PICTURE_PART}, ${PICTURE_PART} *`)].filter(
+    (element) => element.matches(EXPECTED_FOCUS) && !element.matches(':disabled'),
+  )
+  return [...new Set([...others, ...pictures])]
 }
 
 function openingTag(element: Element): string {

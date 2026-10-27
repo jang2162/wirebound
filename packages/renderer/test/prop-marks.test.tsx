@@ -151,6 +151,13 @@ const CENSUS: Record<string, Record<string, Cell>> = {
     disabled: { route: 'state', alt: true },
   },
   Affix: { text: { route: 'text', alt: '부터' }, tone: { route: 'mark', alt: 'danger' } },
+  FileAttach: {
+    files: { route: 'markup', alt: [{ name: '통장사본.pdf', size: '2.1 MB' }] },
+    maxFiles: { route: 'text', alt: 3 },
+    maxSize: { route: 'text', alt: '10 MB' },
+    hint: { route: 'text', alt: '파일을 끌어 놓으세요' },
+    disabled: { route: 'state', alt: true },
+  },
   Button: {
     label: { route: 'text', alt: '저장' },
     disabled: { route: 'state', alt: true },

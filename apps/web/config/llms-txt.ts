@@ -96,6 +96,8 @@ const COMPONENT_SUMMARIES: Record<string, string> = {
   RadioGroup: 'Options that pick at most one; themes may draw it as a segmented control.',
   Chip: 'A small tag showing a chosen value, optionally with a remove mark.',
   Affix: 'Short text between pieces (`~`, "from", `%`) or a coloured note; `tone` sets the colour.',
+  FileAttach:
+    'A file attachment box drawn as a sample: buttons (`actions` zone), a file list table (`files` — sample rows of name and size; nothing is uploaded), a hint line while the list is empty, and a limit line built from `maxFiles` (0 = no count) and `maxSize` (empty = no size). In a `Field` value cell it takes the field label as its name.',
   Button: 'A button that triggers an action.',
   Link: 'A text link to another screen.',
   Text: 'Headings and body text; `role` sets the size.',
@@ -354,6 +356,12 @@ function renderComponent(line: Line, def: ComponentDef): void {
   line(`${COMPONENT_SUMMARIES[def.type]} Editor label: ${def.label}.`)
   line()
   line(def.zones.length === 0 ? 'Zones: none.' : `Zones: ${def.zones.map(zoneText).join('; ')}.`)
+  // 프리셋은 웹 팔레트의 장치다 — 템플릿을 그대로 싣는다(손 글로 옮겨 적으면 정의와 갈린다).
+  for (const preset of def.presets ?? []) {
+    line(
+      `Editor preset \`${preset.key}\` "${preset.label}" (a palette card, not a type — write the same shape with \`patch_page\`, every node with its own id): ${JSON.stringify(preset.node)}.`,
+    )
+  }
   const places = placementsOf(def)
   if (places.length > 0) line(`Stands only in ${places.map((place) => `the \`${place.zone}\` zone of a \`${place.type}\``).join(' or ')}.`)
   const props = schemaOf(def.props, 'input')
@@ -382,6 +390,7 @@ function propType(prop: JsonSchema): string {
   if (prop.type === 'string' && prop.pattern !== undefined) return `string matching \`${prop.pattern}\``
   if (prop.enum !== undefined) return prop.enum.map((value) => JSON.stringify(value)).join(' | ')
   if (prop.type === 'integer' || prop.type === 'number') return `${prop.type}${range(prop)}`
+  if (prop.type === 'string') return `string${length(prop)}`
   if (prop.type === 'array') {
     const items = prop.items
     if (items?.type === 'object' && items.properties !== undefined) {
@@ -401,6 +410,15 @@ function count(prop: JsonSchema): string {
   if (min !== undefined && max !== undefined) return ` (${min}–${max} items)`
   if (min !== undefined) return ` (≥ ${min} items)`
   if (max !== undefined) return ` (≤ ${max} items)`
+  return ''
+}
+
+/** 글의 길이 한도 — 넘는 글은 422 다(편집 칸도 같은 한도로 막는다). 없으면 빈 글. */
+function length(prop: JsonSchema): string {
+  const { minLength: min, maxLength: max } = prop
+  if (min !== undefined && max !== undefined) return ` (${min}–${max} chars)`
+  if (min !== undefined) return ` (≥ ${min} chars)`
+  if (max !== undefined) return ` (≤ ${max} chars)`
   return ''
 }
 
@@ -429,6 +447,8 @@ interface JsonSchema {
   maximum?: number
   minItems?: number
   maxItems?: number
+  minLength?: number
+  maxLength?: number
   properties?: Record<string, JsonSchema>
   required?: string[]
   items?: JsonSchema

@@ -5,10 +5,10 @@ description: wirebound 설계서 테마를 짠다 — 컴포넌트 뷰(tsx) · C
 
 # wirebound 테마 작성 지침
 
-이 프로젝트는 wirebound 설계서의 **테마**다. 설계서의 페이지는 컴포넌트 노드의 트리이고(카탈로그 36 종 — `Page` · `Popup` · `Slot` ·
+이 프로젝트는 wirebound 설계서의 **테마**다. 설계서의 페이지는 컴포넌트 노드의 트리이고(카탈로그 37 종 — `Page` · `Popup` · `Slot` ·
 `Section` · `Flex` · `Grid` · `Card` · `Tabs` · `TabPanel` · `DataGrid` · `GridColumnGroup` · `GridColumn` · `GridRow` · `GridCell` ·
 `Pagination` · `Tree` · `KeyValue` · `SearchForm` · `EntryForm` · `FormTable` · `Field` ·
-`Input` · `TextArea` · `Select` · `DateInput` · `TimeInput` · `CheckboxGroup` · `RadioGroup` · `Chip` · `Affix` · `Button` ·
+`Input` · `TextArea` · `Select` · `DateInput` · `TimeInput` · `CheckboxGroup` · `RadioGroup` · `Chip` · `Affix` · `FileAttach` · `Button` ·
 `Link` · `Text` · `Media` · `Divider` · `Placeholder`), 테마는 컴포넌트마다 **뷰**(React 컴포넌트)와 CSS 를 낸다. 카탈로그와 각
 컴포넌트의 props 는 wirebound 가 정한다 — 테마는 컴포넌트나 props 를 더할 수 없고, 어떻게 보이는지만 정한다.
 
@@ -103,6 +103,14 @@ export const CardView = view(({ props, variant, states, children }) => {
   `data-wb-column-of="<열 노드 id>"` 를 단다 — 칸의 빈 자리를 누르면 그 열이 골라진다(없으면 그 줄의 행이 골라진다). 머리 칸 ·
   칸의 `colSpan` · `rowSpan` 을 빠뜨리거나 칸을 빼거나 `Root` 를 줄마다 그리면 `wb-theme check` 가 막는다. 표는 `scroll` 조각 안에 두고
   `table` 조각에 `dataGridTableAttrs(layout)` 를 편다 — 결과 머리줄 · 바닥은 스크롤 밖이다.
+- **`FileAttach` 는 단추 줄 · 파일 목록 표 · 한도 글이다**(SDK 1.8.0). «단추» 구역(`<Zone name="actions">`)을 그리고, 목록은 `list` 조각의
+  `<table>` 하나 — 머리 칸은 `th scope="col"` 셋(□ · 파일이름 · 파일크기)이다. 파일마다 `file` 조각(한 줄 — `fileName` · `fileSize` 칸), 목록이
+  비면 `drop` 조각(`hint` 글) 한 줄만 그린다. 한도 글은 `limit` 조각 안에 «최대 {maxFiles}개 {maxSize} 제한» 이고 두 값을 `limitCount` · `limitSize`
+  조각으로 감싼다(개수가 0 이면 개수 조각 · 크기가 비면 크기 조각이 없고, 둘 다 없으면 `limit` 째 없다). 파일 줄 수 · 빈 목록 안내 · 한도 조각 · 표
+  머리가 이와 다르면 `wb-theme check` 가 막는다. 조각 이름과 자리도 잰다 — `file` 줄은 `list` 표 몸통의 `tr`(표 밖 형제는 열 머리와 안 이어진다), 줄마다
+  `check` 칸 안 `checkbox` 하나와 그 파일의 이름 · 크기를 든 `fileName` · `fileSize` 칸, 머리 줄의 `checkHead` 칸 안 `checkbox` 하나, 목록 표 밖의
+  `actions` 조각 하나(«단추» 구역 상자이거나 그것을 품는다). 체크는 그림이다(`<input>` 이 아니다 — 포커스 받는 요소를 늘리지 않는다 · `checkbox` 조각
+  안의 꺼지지 않은 입력 칸은 `check` 가 포커스 경고로 낸다). 값 칸 안이면 `field.name` 을 뿌리(`group`)의 이름으로 단다.
 - **`Popup` 은 팝업 페이지의 뿌리다**(`Page` 와 함께 뿌리에만 선다). 뿌리는 `role="dialog"` 이고 `aria-labelledby` 로 `title` 조각
   (`props.title`)을 가리킨다. 조각: `titlebar` · `title` · `close`(✖ — `<button>` 에 접근 이름) · `body`(몸통 `children` 의 그릇 — 뿌리의
   **직계**) · «바닥» 구역(`<Zone name="footer" data-wb-part="footer" />` — `body` **밖**). 다른 페이지가 «팝업 열기» 로 열면 wirebound 가 덮개 위에
