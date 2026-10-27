@@ -40,6 +40,9 @@ function strippedSources(): [string, string][] {
  */
 const PAGE_TARGET_LITERAL = /['"`]page:/
 
+/** 얼린 사본이 사는 자리(`sourceFiles` 의 상대 경로). */
+const MIGRATIONS = 'db/migrations/'
+
 /**
  * payload 규격을 **선언**하는 자리.
  *
@@ -71,9 +74,21 @@ describe('승격이 두 벌로 갈리지 않는다', () => {
    */
   it('`page:` 접두를 다시 적은 자리가 없다', () => {
     const found = strippedSources()
-      .filter(([, source]) => PAGE_TARGET_LITERAL.test(source))
+      .filter(([relative, source]) => !relative.startsWith(MIGRATIONS) && PAGE_TARGET_LITERAL.test(source))
       .map(([relative]) => relative)
     expect(found).toEqual([])
+  })
+
+  /**
+   * **마이그레이션은 그 판의 뜻으로 얼린 사본이다** — 살아 있는 `@wirebound/schema` 를 부르면 뒤에 풀이가 바뀔 때 이미 돈 마이그레이션의 뜻이
+   * 같이 바뀐다(`0033-modal-popup.ts` 머리말). 그래서 위 자에서 빼되, 베낀 마이그레이션을 이름으로 못박는다 — 새 마이그레이션이 풀이를
+   * 베끼면 여기서 죽어 그 판단을 이 목록에 적게 한다.
+   */
+  it('`page:` 접두를 얼려 베낀 마이그레이션은 이 목록뿐이다', () => {
+    const found = strippedSources()
+      .filter(([relative, source]) => relative.startsWith(MIGRATIONS) && PAGE_TARGET_LITERAL.test(source))
+      .map(([relative]) => relative)
+    expect(found).toEqual(['db/migrations/0033-modal-popup.ts'])
   })
 
   it('payload 규격을 다시 선언한 자리가 없다', () => {
