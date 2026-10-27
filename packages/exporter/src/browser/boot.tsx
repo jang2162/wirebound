@@ -93,6 +93,7 @@ export async function boot(env: BootEnv): Promise<BootResult> {
       hrefs: data.hrefs,
       markers: data.markers,
       images: data.images ?? {},
+      popups: data.popups ?? {},
       status,
       standing: failures,
       ...(env.navigate === undefined ? {} : { navigate: env.navigate }),

@@ -11,9 +11,12 @@
 
 /**
  * 통합 트리(`routes/tree.ts`, 설계서 「설계서 화면 구조」)의 페이지 노드. `repos/pages.ts`의
- * 전체 `PageRecord`와 달리 `id`·`title`·`sortOrder` · `viewStates` 넷만 담는다 — 트리 응답에
+ * 전체 `PageRecord`와 달리 `id`·`title`·`sortOrder` · `viewStates` · `kind` 다섯만 담는다 — 트리 응답에
  * `schema`가 실리면 프로젝트가 커질수록 응답이 무거워진다. `repos/pages.ts`의
- * `listPageRows` 는 문서에서 상태 목록(`schema->'viewStates'`)만 고른다.
+ * `listPageRows` 는 문서에서 상태 목록(`schema->'viewStates'`)과 뿌리 타입(`schema->'root'->>'type'`)만 고른다.
+ *
+ * `kind` 는 페이지의 종류 — 뿌리가 `Popup` 이면 `popup`, 그 밖은 `page`. 메뉴 트리 줄의 «팝업» 표지 · 상호작용 탭의 대상 고르개가 닫힌 페이지에서
+ * 쓴다(열린 페이지는 열린 문서의 뿌리에서 읽는다).
  *
  * `viewStates` 는 메뉴 트리의 상태 줄이 쓴다(설계 spec `2026-10-18-modules-states-layout-design.md` 「C3」 — 열린 페이지는 열린 문서에서, 다른
  * 페이지는 이것으로). 상태가 없는 페이지는 `[]`. 모양이 틀린 항목(손으로 넣은 행)은 뺀다.
@@ -23,7 +26,11 @@ export interface TreePage {
   title: string
   sortOrder: number
   viewStates: TreeViewState[]
+  kind: TreePageKind
 }
+
+/** 페이지의 종류 — 문서 뿌리 타입(`Page` · `Popup`)에서 읽는다. */
+export type TreePageKind = 'page' | 'popup'
 
 /** 트리 응답의 상태 하나 — 문서의 `ViewState` 와 같은 모양. */
 export interface TreeViewState {
@@ -64,6 +71,8 @@ export interface PageRow {
   sort_order: number
   /** 문서의 상태 목록(`schema->'viewStates'` — jsonb 그대로). 없으면 상태가 없는 페이지다. */
   view_states?: unknown
+  /** 문서 뿌리 타입(`schema->'root'->>'type'`). 없으면 화면 페이지다. */
+  root_type?: string | null
 }
 
 /** 문서에서 읽은 상태 목록을 트리 응답의 모양으로 — 배열이 아니면 `[]`, 모양이 틀린 항목은 뺀다. */
@@ -118,7 +127,13 @@ export function buildMenuTree(nodes: MenuRow[], pages: PageRow[]): TreeMenuNode[
     // 소속 메뉴 노드가 입력에 없으면(정상 데이터로는 있을 수 없다 — pages.menu_node_id는
     // NOT NULL FK다) 그 페이지도 고아 노드와 같은 이유로 조용히 버린다.
     if (node) {
-      node.pages.push({ id: row.id, title: row.title, sortOrder: row.sort_order, viewStates: treeViewStates(row.view_states) })
+      node.pages.push({
+        id: row.id,
+        title: row.title,
+        sortOrder: row.sort_order,
+        viewStates: treeViewStates(row.view_states),
+        kind: row.root_type === 'Popup' ? 'popup' : 'page',
+      })
     }
   }
 

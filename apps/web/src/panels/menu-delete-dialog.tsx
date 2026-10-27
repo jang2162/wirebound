@@ -58,7 +58,7 @@ export const CASCADE_SAFETY_NOTE = '지우기 직전 상태를 스냅샷으로 �
  * 못 말한다(그 목록은 `wireb lint` · MCP lint 의 `page-target-missing` 이 낸다) — 있을 수 있다는 것과 찾는 길만 말한다.
  */
 export const CASCADE_LINK_NOTE =
-  '다른 페이지에서 이 페이지들로 가는 링크(이동 · 모달 열기)가 있으면 끊깁니다 — wireb lint 로 찾을 수 있습니다.'
+  '다른 페이지에서 이 페이지들로 가는 링크(이동 · 팝업 열기)가 있으면 끊깁니다 — wireb lint 로 찾을 수 있습니다.'
 export const CASCADE_CHANGED = '목록이 바뀌었습니다 — 다시 확인하세요.'
 /** 목록이 바뀐 뒤 확인 단추의 글 — 누르면 «모두 삭제»로 돌아간다. */
 export const CASCADE_RECHECK = '새 목록 확인'

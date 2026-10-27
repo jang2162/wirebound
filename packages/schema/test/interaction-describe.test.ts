@@ -215,7 +215,7 @@ describe('끊긴 타겟', () => {
   })
 })
 
-describe('액션 5종', () => {
+describe('액션 6종', () => {
   function withAction(action: InteractionAction, targetType = 'DataGrid', targetProps?: Record<string, unknown>): string {
     return sentence(
       doc(
@@ -321,8 +321,12 @@ describe('액션 5종', () => {
 
   it('openModal', () => {
     expect(withAction({ type: 'openModal', target: 'page:관리자/회원/등록' })).toBe(
-      '실행 버튼 클릭 시 관리자/회원/등록 페이지가 모달로 열립니다',
+      '실행 버튼 클릭 시 관리자/회원/등록 페이지가 팝업으로 열립니다',
     )
+  })
+
+  it('closeModal — 대상이 없다', () => {
+    expect(withAction({ type: 'closeModal' })).toBe('실행 버튼 클릭 시 팝업이 닫힙니다')
   })
 
   it('액션이 여럿이면 이어 붙인다', () => {
@@ -359,10 +363,10 @@ describe('액션 5종', () => {
 })
 
 /**
- * **액션 5종 × 트리거 4종을 전부 문장으로 낼 수 있는가.**
+ * **액션 6종 × 트리거 4종을 전부 문장으로 낼 수 있는가.**
  * 못 내는 조합이 있으면 그것이 산출물이다.
  */
-describe('5종 × 4종 = 20 조합', () => {
+describe('6종 × 4종 = 24 조합', () => {
   const TRIGGERS: InteractionTrigger[] = ['click', 'change', 'select', 'submit']
   const ACTIONS: InteractionAction[] = [
     { type: 'setProp', target: 'n_tgt', prop: 'loading', value: true },
@@ -370,9 +374,10 @@ describe('5종 × 4종 = 20 조합', () => {
     { type: 'switchTab', target: 'n_tabs' },
     { type: 'navigate', target: 'page:다음' },
     { type: 'openModal', target: 'page:등록' },
+    { type: 'closeModal' },
   ]
 
-  it('20 조합이 전부 문장이 된다', () => {
+  it('24 조합이 전부 문장이 된다', () => {
     const texts: string[] = []
     for (const on of TRIGGERS) {
       for (const action of ACTIONS) {
@@ -391,7 +396,7 @@ describe('5종 × 4종 = 20 조합', () => {
         texts.push(sentence(document))
       }
     }
-    expect(texts).toHaveLength(20)
+    expect(texts).toHaveLength(24)
     // 빈 문장도, 자리 표시자가 남은 문장도 없다.
     for (const text of texts) {
       expect(text.length).toBeGreaterThan(0)
@@ -399,7 +404,7 @@ describe('5종 × 4종 = 20 조합', () => {
       expect(text).not.toContain('[object')
     }
     // 트리거 넷이 서로 다른 말로 나온다.
-    expect(new Set(texts).size).toBe(20)
+    expect(new Set(texts).size).toBe(24)
   })
 
   it('트리거 넷의 문안', () => {
@@ -541,7 +546,7 @@ describe('COMPONENT_NOUNS는 카탈로그 전체를 덮는다', () => {
     expect(extra).toEqual([])
   })
 
-  it('labelProp을 가진 타입이 열넷이다', () => {
+  it('labelProp을 가진 타입이 열다섯이다', () => {
     /**
      * **오타 하나가 조용히 라벨을 지우는 자리다.** 이름은 카탈로그에서
      * 유도되지만 `labelProp`은 `describe.ts`의 리터럴 표(`LABEL_PROPS`)에 남았다 —
@@ -568,6 +573,7 @@ describe('COMPONENT_NOUNS는 카탈로그 전체를 덮는다', () => {
       'Link',
       'Media',
       'Placeholder',
+      'Popup',
       'TabPanel',
       'Text',
     ])

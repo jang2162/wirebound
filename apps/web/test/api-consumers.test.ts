@@ -163,8 +163,14 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 설정 페이지의 «위험 구역» 하나다 — 목록 줄의 삭제는 없다(`routes/project-list.tsx` 머리말).
   deleteProject: ['../src/settings/danger-section.tsx'],
   // 붙여넣기 · 모듈 넣기가 노드의 페이지 대상(`page:…`)이 지금 프로젝트에 있는지 가늠한다(`shell/editor-keys.tsx` 의 `paste` · `palette/module-tab.tsx` — 메뉴 · 페이지의 `id` ·
-  // `title` · `sortOrder` · `pages` · `children` 을 읽는다). 판 번호는 안 쓴다.
-  getTree: ['../src/palette/module-tab.tsx', '../src/shell/editor-keys.tsx'],
+  // `title` · `sortOrder` · `pages` · `children` 을 읽는다). 판 번호는 안 쓴다. 뷰 모드의 «팝업 열기» 가 대상 글자를 페이지로 풀고(`canvas/canvas-popups.tsx`),
+  // 상호작용 탭의 페이지 고르개가 대상 목록을 짓는다(`panels/interaction-panel.tsx` — 페이지의 `kind` 도 읽는다).
+  getTree: [
+    '../src/canvas/canvas-popups.tsx',
+    '../src/palette/module-tab.tsx',
+    '../src/panels/interaction-panel.tsx',
+    '../src/shell/editor-keys.tsx',
+  ],
   // 메뉴 트리가 트리를 그리고 판 번호로 겹친 조회의 낡은 답 · 이미 받은 판의 `menu-changed`를 가른다.
   readTree: ['../src/tree/use-tree-commands.tsx'],
   createMenu: ['../src/tree/use-tree-commands.tsx'],
@@ -190,7 +196,9 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 파일의 `page` 절과 `schema` 절이 그 셋이다. **스토어의 문서를 쓰지 않는 근거**는
   // `edit/page-export.ts`의 머리말에 있다: 코멘트와 문서를 **같은 순간의 서버 상태**에서
   // 읽어야 파일이 끊긴 참조를 담지 않는다.
+  // **다섯째는 뷰 모드의 «팝업 열기» 다** — 열 때마다 그 팝업 페이지의 `schema` 를 읽어 덮개 위에 그린다(`canvas/canvas-popups.tsx`).
   getPage: [
+    '../src/canvas/canvas-popups.tsx',
     '../src/routes/editor.tsx',
     '../src/edit/use-edit-commit.tsx',
     '../src/panels/page-description.tsx',

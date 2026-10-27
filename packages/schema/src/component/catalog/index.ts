@@ -1,3 +1,5 @@
+import { InteractionSchema } from '../../envelope'
+import { isTargetlessAction } from '../../interaction/check'
 import { BODY_ZONE, placementsOf, type ComponentDef, type NodeTemplate } from '../define'
 import { getComponent, registerComponent } from '../registry'
 import { ButtonDef, LinkDef } from './action'
@@ -19,7 +21,7 @@ import {
   TextAreaDef,
   TimeInputDef,
 } from './input'
-import { CardDef, FlexDef, GridDef, PageDef, SectionDef, SlotDef, TabPanelDef, TabsDef } from './structure'
+import { CardDef, FlexDef, GridDef, PageDef, PopupDef, SectionDef, SlotDef, TabPanelDef, TabsDef } from './structure'
 
 export * from './action'
 export * from './data'
@@ -34,6 +36,7 @@ export * from './structure'
  */
 export const CATALOG_DEFS: readonly ComponentDef[] = [
   PageDef,
+  PopupDef,
   SlotDef,
   SectionDef,
   FlexDef,
@@ -77,7 +80,7 @@ export const CATALOG_TYPES: readonly string[] = CATALOG_DEFS.map((def) => def.ty
  * **구역의 기본 내용 · 받는 타입 · 설 자리가 카탈로그 안의 타입을 가리키고, 기본 내용의 `props`가 그 타입의 규격을 지나는가** — 정의 하나만 보는
  * `defineComponent`는 다른 타입을 모르므로 카탈로그를 모은 이 자리에서 본다. 걸리면 import 하는 순간 던진다.
  */
-function assertZoneReferences(defs: readonly ComponentDef[]): void {
+export function assertZoneReferences(defs: readonly ComponentDef[]): void {
   const byType = new Map(defs.map((def) => [def.type, def]))
   for (const def of defs) {
     for (const zone of def.zones) {
@@ -96,6 +99,12 @@ function assertZoneReferences(defs: readonly ComponentDef[]): void {
         }
         if (zone.accepts !== undefined && !zone.accepts.includes(seed.type)) {
           throw new Error(`${def.type}.${zone.name}: 기본 내용 ${seed.type}을 그 구역이 받지 않습니다`)
+        }
+        // 만들 때 지은 id 를 몰라 노드를 겨냥하는 액션은 못 싣는다 — 꼴이 봉투를 지나고 대상 없는 액션뿐인지 본다.
+        for (const interaction of seed.interactions ?? []) {
+          if (!InteractionSchema.safeParse(interaction).success || !interaction.actions.every(isTargetlessAction)) {
+            throw new Error(`${def.type}.${zone.name}: 기본 내용 ${seed.type}의 상호작용은 대상 없는 액션만 실을 수 있습니다`)
+          }
         }
       }
     }

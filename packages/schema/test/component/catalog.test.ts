@@ -8,8 +8,8 @@ describe('컴포넌트 카탈로그', () => {
     installCatalog()
   })
 
-  it('36종을 등록한다', () => {
-    expect(listComponents()).toHaveLength(36)
+  it('37종을 등록한다', () => {
+    expect(listComponents()).toHaveLength(37)
   })
 
   it('CATALOG_TYPES와 등록 결과가 일치한다', () => {
@@ -22,7 +22,7 @@ describe('컴포넌트 카탈로그', () => {
 
   it('두 번 설치해도 중복 등록하지 않는다', () => {
     installCatalog()
-    expect(listComponents()).toHaveLength(36)
+    expect(listComponents()).toHaveLength(37)
   })
 
   it('구역 선언 — 타입마다 이름 차례', () => {
@@ -33,6 +33,7 @@ describe('컴포넌트 카탈로그', () => {
     )
     expect(zones).toEqual({
       Page: ['body'],
+      Popup: ['body', 'footer'],
       Section: ['body'],
       Flex: ['body'],
       Grid: ['body'],

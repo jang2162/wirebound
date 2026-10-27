@@ -13,7 +13,7 @@
  * 손으로 기본값 표를 두지 않는 것도 같은 이유다 — 그 표는 카탈로그와
  * 어긋나는 자리를 하나 더 만든다.
  *
- * **기본 내용은 넣는다** — 카탈로그 구역의 `initial`(검색폼 · 입력폼의 단추 둘 · 탭의 패널 둘)은 prop 기본값이 아니라 사람이 지우고 고칠
+ * **기본 내용은 넣는다** — 카탈로그 구역의 `initial`(검색폼 · 입력폼의 단추 둘 · 탭의 패널 둘 · 팝업 바닥의 단추 둘과 «취소» 의 «팝업 닫기»)은 prop 기본값이 아니라 사람이 지우고 고칠
  * **내용**이라(설계 spec `2026-10-23-node-slots-design.md` 「2. 카탈로그 계약」) 만들 때 실제 노드로 든다. 그 노드도 이 함수로 짓는다(제 기본
  * 내용까지 · id 는 같은 생성기에서 — 제 id 다음 구역 차례로).
  *
@@ -37,7 +37,16 @@
  * 잔여물이 이 함수 쪽에 있다는 것이 그 판단을 바꾸지는 않는다 — 어느 쪽을 골라도 왕복은
  * 같고 검증도 같으므로, 만들 때 덜 넣는 쪽을 고른다.
  */
-import { BODY_ZONE, createNodeId, getComponent, presetOf, templateNode, type WbNode } from '@wirebound/schema'
+import {
+  BODY_ZONE,
+  cloneJsonValue,
+  createNodeId,
+  getComponent,
+  presetOf,
+  templateNode,
+  type Interaction,
+  type WbNode,
+} from '@wirebound/schema'
 
 /**
  * 타입 이름에서 새 노드 하나. 카탈로그에 없는 타입 · 그 타입에 없는 프리셋이면 `null`이다.
@@ -67,6 +76,7 @@ export function createNode(type: string, nextId: () => string = createNodeId, pr
           ...made,
           ...(seed.props === undefined ? {} : { props: { ...seed.props } }),
           ...(seed.variant === undefined ? {} : { variant: seed.variant }),
+          ...(seed.interactions === undefined ? {} : { interactions: cloneJsonValue([...seed.interactions]) as Interaction[] }),
         },
       ]
     })

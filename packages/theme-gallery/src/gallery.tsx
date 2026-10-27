@@ -1,4 +1,4 @@
-import { CATALOG_TYPES, CURRENT_DOCUMENT_VERSION, type AnyDocument, type WbNode } from '@wirebound/schema'
+import { CATALOG_TYPES, CURRENT_DOCUMENT_VERSION, isRootType, type AnyDocument, type WbNode } from '@wirebound/schema'
 import { renderDocument } from '@wirebound/renderer'
 import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { useRef, type CSSProperties, type ReactElement } from 'react'
@@ -24,7 +24,7 @@ export function galleryItems(theme: ThemeDefinition): GalleryItem[] {
 }
 
 /**
- * 칸 하나의 문서 — 표본을 Page 뿌리 아래 둔다(표본이 Page 면 그대로 · 설 자리가 정해진 표본은 그 부모의 몸통에 · 몸통 밖 자리면 `place` 가 지은 부모 안에). Slot 표본은 레이아웃 꼴이 된다. 갤러리와 `wb-theme check`
+ * 칸 하나의 문서 — 표본을 Page 뿌리 아래 둔다(표본이 뿌리 타입(Page · Popup)이면 그대로 · 설 자리가 정해진 표본은 그 부모의 몸통에 · 몸통 밖 자리면 `place` 가 지은 부모 안에). Slot 표본은 레이아웃 꼴이 된다. 갤러리와 `wb-theme check`
  * (`@wirebound/theme-kit` 의 `checkTheme`)가 같은 문서를 그리게 이 함수 하나를 쓴다.
  */
 export function galleryItemDocument(item: GalleryItem): AnyDocument {
@@ -33,7 +33,8 @@ export function galleryItemDocument(item: GalleryItem): AnyDocument {
   const node: WbNode = place !== undefined ? place(own) : within === undefined ? own : { ...within, children: [own] }
   return {
     version: CURRENT_DOCUMENT_VERSION,
-    root: node.type === 'Page' ? node : { id: 'gallery', type: 'Page', children: [node] },
+    // 뿌리 타입(`Page` · `Popup`)은 감싸지 않는다 — `Page` 안의 `Popup` 은 뿌리 판정(`nested-page`)에 걸린다.
+    root: isRootType(node.type) ? node : { id: 'gallery', type: 'Page', children: [node] },
   } as AnyDocument
 }
 

@@ -105,7 +105,7 @@ export const MENU_WHY_DISABLED: Record<keyof TreeAbilities, string> = {
  * 이유가 «보내는 중»이다 — 곧 풀릴 상태에 «메뉴를 고르세요»가 뜨면 거짓말이다(`menuItemReason`). 이유는 `title` 과 `aria-description` 에
  * 같은 문장으로 든다(`./toolbar-status.ts` 머리말).
  *
- * `key`는 판정과 따로 받는다 — 판정 하나에 항목이 둘일 수 있다(`addPage` — «페이지 추가» · «JSON 에서 가져오기…»).
+ * `key`는 판정과 따로 받는다 — 판정 하나에 항목이 여럿일 수 있다(`addPage` — «페이지 추가» · «팝업 페이지 추가» · «JSON 에서 가져오기…»).
  */
 function menuItem(
   commands: TreeCommands,
@@ -175,6 +175,13 @@ export function menuRowItems(
     add: [
       item('addMenu', '하위 메뉴', ICONS.addMenu, () => commands.openInput('new-menu')),
       item('addPage', '페이지 추가', ICONS.addPage, () => commands.openInput('new-page')),
+      // 같은 판정(`addPage`)의 둘째 항목 — 팝업 페이지도 페이지를 만드는 것이다.
+      menuItem(commands, 'addPage', {
+        key: 'add-popup',
+        label: '팝업 페이지 추가',
+        onSelect: () => commands.openInput('new-popup'),
+        icon: ICONS.addPopup,
+      }),
       menuItem(commands, 'addPage', {
         key: 'import-json',
         label: 'JSON 에서 가져오기…',

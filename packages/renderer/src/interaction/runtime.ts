@@ -25,11 +25,12 @@
  * **상태를 안 드는 것이 「HTML 정적 번들」에도 필요하다** — 정적 번들에는 React가 없을 수 있고, 거기서도
  * 같은 함수로 같은 답이 나와야 한다.
  *
- * ## `navigate`·`openModal`은 실행하지 않고 알린다
+ * ## `navigate`·`openModal`·`closeModal`은 실행하지 않고 알린다
  *
- * 둘의 타겟은 `"page:관리자/회원/상세"`이고 **다른 페이지**다. 렌더러는 페이지를 모른다 —
+ * 앞의 둘의 타겟은 `"page:관리자/회원/상세"`이고 **다른 페이지**다. 렌더러는 페이지를 모른다 —
  * 문서 하나만 받는다. **그래서 요청으로 내보낸다**(`InteractionRequest`): 앱이 라우팅하고,
- * 정적 번들은 링크로 바꾼다. **경계를 그 자리에 둔다.**
+ * 정적 번들은 링크로 바꾼다. **경계를 그 자리에 둔다.** 팝업 열기 · 닫기는 받는 쪽의 덮개 층(`PopupLayer`)이 쌓고 걷는다 —
+ * 이 함수가 그리는 문서 하나는 자기가 덮개 위에 떴는지 모른다.
  *
  * ## 깨진 규칙을 조용히 지나가지 않는다
  *
@@ -48,6 +49,7 @@ import {
   childLists,
   checkPageAction,
   isPageTargetAction,
+  isTargetlessAction,
   type InteractionAction,
   type InteractionIssueCode,
   type InteractionTrigger,
@@ -81,12 +83,18 @@ export const VISIBLE_KEY = 'visible'
  * 페이지 경로라는 **형식을 강제하는 일**이고, 그 형식은 강제하지 않는다.
  * 사람이 읽는 이름은 `describeInteraction`이 만든다.
  */
-export interface InteractionRequest {
-  type: 'navigate' | 'openModal'
-  target: string
-  /** 이 요청을 낸 규칙이 걸린 노드. 앱이 *"어느 버튼이 그랬나"*를 말할 수 있어야 한다. */
-  sourceNodeId: string
-}
+export type InteractionRequest =
+  | {
+      type: 'navigate' | 'openModal'
+      target: string
+      /** 이 요청을 낸 규칙이 걸린 노드. 앱이 *"어느 버튼이 그랬나"*를 말할 수 있어야 한다. */
+      sourceNodeId: string
+    }
+  | {
+      /** 맨 위 팝업을 닫는다 — 대상이 없다. */
+      type: 'closeModal'
+      sourceNodeId: string
+    }
 
 /**
  * 실행하지 못한 액션 하나.
@@ -199,6 +207,10 @@ export function runInteraction(
           continue
         }
         requests.push({ type: action.type, target: action.target, sourceNodeId: nodeId })
+        continue
+      }
+      if (isTargetlessAction(action)) {
+        requests.push({ type: action.type, sourceNodeId: nodeId })
         continue
       }
 

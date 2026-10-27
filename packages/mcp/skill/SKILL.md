@@ -77,6 +77,12 @@
 의 `Button` 이다(서버는 넣어 주지 않는다). 한도 글은 `maxFiles`(0 이면 개수 없음) · `maxSize`(빈 글이면 크기 없음)에서 짓는다. 폼 표의 값 칸에 둘 때는
 `Field` 의 `children` 에 넣는다. «[파일선택][선택된 파일 없음]» 같은 단순 파일 선택 줄은 파일첨부가 아니라 `Button` + `readonly` `Input` 이다.
 
+**팝업은 페이지의 종류다.** 뿌리가 `Popup` 인 페이지가 팝업 페이지다(`list_pages` 의 `kind` 가 `popup` · `get_page` 의 `kind`). 팝업의 제목은
+뿌리의 `title`, 크기는 `size`(`small` · `medium` · `large`)이고, 내용은 뿌리의 `children`, 바닥 단추는 `zones.footer` 다 — 닫기(✖)는 노드가 아니다.
+다른 화면에서 그 팝업을 띄우는 상호작용은 `openModal`(대상은 그 팝업 페이지의 경로), 팝업 안의 «취소» · «닫기» 단추는 `closeModal`(대상 없음 —
+`{ "type": "closeModal" }`)이다. 팝업 페이지를 새로 만드는 도구는 없다 — 사람이 메뉴 트리에서 만든다. 있는 팝업 페이지의 뿌리 · 바닥을 고친다.
+`validate` 는 팝업이 아닌 페이지를 `openModal` 로 · 팝업 페이지를 `navigate` 로 가리키는 것 · 화면 페이지의 `closeModal` 을 경고한다.
+
 성공하면 응답의 `headSeq`가 **새 값**이다. 이어서 고칠 것이 있으면 그 값을 다음
 `baseSeq`로 쓴다.
 

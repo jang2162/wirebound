@@ -306,10 +306,18 @@ export async function findPageById(db: DbHandle, projectId: string, pageId: stri
 export async function listPageRows(
   db: DbHandle,
   projectId: string,
-): Promise<Array<{ id: string; menu_node_id: string; title: string; sort_order: number; view_states: unknown }>> {
+): Promise<Array<{ id: string; menu_node_id: string; title: string; sort_order: number; view_states: unknown; root_type: string | null }>> {
   return db
     .selectFrom('pages')
-    .select(['id', 'menu_node_id', 'title', 'sort_order', sql<unknown>`schema -> 'viewStates'`.as('view_states')])
+    .select([
+      'id',
+      'menu_node_id',
+      'title',
+      'sort_order',
+      sql<unknown>`schema -> 'viewStates'`.as('view_states'),
+      // 페이지의 «종류» 는 뿌리 타입이다(`Page` = 화면 · `Popup` = 팝업) — 문서 전체를 고르지 않고 그 글자만.
+      sql<string | null>`schema -> 'root' ->> 'type'`.as('root_type'),
+    ])
     .where('project_id', '=', projectId)
     .execute()
 }

@@ -13,6 +13,39 @@ export const PageDef = defineComponent({
   zones: [{ name: 'body', label: '몸통' }],
 })
 
+/**
+ * 팝업 페이지의 뿌리 — 페이지의 «종류» 는 문서 뿌리 타입이다(`Page` = 화면 · `Popup` = 팝업). `Page` 와 같이 뿌리에만 선다(`validate.ts` 의
+ * `ROOT_TYPES`). 제목은 페이지 이름과 따로다 — «팝업 페이지 추가» 가 처음 한 번 페이지 이름으로 채운다. 닫기(✖)는 노드가 아니라 뷰의 조각이다.
+ */
+export const PopupDef = defineComponent({
+  type: 'Popup',
+  label: '팝업',
+  description: '팝업 페이지의 뿌리. 제목줄 · 닫기 · 몸통 · 바닥 단추를 가진 상자.',
+  group: 'structure',
+  props: z.strictObject({
+    title: z.string().default('팝업'),
+    // 길이는 테마가 정한다 — SDK 기본 CSS 는 480 · 720 · 960px.
+    size: z.enum(['small', 'medium', 'large']).default('medium'),
+  }),
+  editor: [
+    { prop: 'title', control: 'text', label: '제목' },
+    { prop: 'size', control: 'select', label: '크기', options: ['small', 'medium', 'large'] },
+  ],
+  summary: (props) => oneLine(props.title),
+  states: [],
+  zones: [
+    { name: 'body', label: '내용' },
+    {
+      name: 'footer',
+      label: '바닥',
+      initial: [
+        { type: 'Button', props: { label: '취소' }, interactions: [{ on: 'click', actions: [{ type: 'closeModal' }] }] },
+        { type: 'Button', props: { label: '저장' }, variant: 'primary' },
+      ],
+    },
+  ],
+})
+
 export const SlotDef = defineComponent({
   type: 'Slot',
   label: '슬롯',

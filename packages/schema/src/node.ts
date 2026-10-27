@@ -1,13 +1,14 @@
 /** 상호작용 트리거. 설계서 「모델」(상호작용) */
 export type InteractionTrigger = 'click' | 'change' | 'select' | 'submit'
 
-/** 상호작용 액션. 고정 5종이며 스크립트는 허용하지 않는다. */
+/** 상호작용 액션. 고정 6종이며 스크립트는 허용하지 않는다. */
 export type InteractionAction =
   | { type: 'setProp'; target: string; prop: string; value: unknown }
   | { type: 'setVisible'; target: string; value: boolean }
   | { type: 'switchTab'; target: string }
   | { type: 'navigate'; target: string }
   | { type: 'openModal'; target: string }
+  | { type: 'closeModal' }
 
 export interface Interaction {
   on: InteractionTrigger

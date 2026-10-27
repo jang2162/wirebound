@@ -1202,6 +1202,23 @@
   color: #fff;
 }
 
+/* 팝업 페이지 줄의 표지 — 이름 앞의 그림(`panels/menu-tree.tsx` 의 `PageLink`). 읽는 이름은 « — 팝업» 으로 끝난다(`.wb-shell-hidden-text`). */
+.wb-shell-tree-kind {
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+/* 눈에서만 감춘 글 — 접근 이름에만 든다(`.wb-shell-head-field-hidden` 과 같은 꼴). */
+.wb-shell-hidden-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 /* 메뉴 트리를 감싸는 상자(`panels/menu-tree.tsx`). **키 조작 하나를 받으려고 둔 껍데기라
    스스로 그리는 것이 없다** — 그 파일의 주석도 그렇게 적고 있다. 그래도 규칙을 두는 것은
    이 상자가 지고 있는 역할이 하나 있기 때문이다: **끌기의 겹(`.wb-shell-drop-indicator`)과 줄 아래 상자가 이 상자 안의 흐름에
@@ -3307,6 +3324,43 @@
   flex-direction: column;
   gap: 4px;
   margin: 0 0 12px;
+}
+
+/* 페이지 정보의 «종류» — 화면 · 팝업 단추 무리(`panels/page-kind.tsx`). 상태 보임의 단추 무리(`.wb-shell-visibility-modes`)와 같은 꼴이다. */
+.wb-shell-page-kind {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.wb-shell-page-kind-label {
+  font-weight: 600;
+}
+
+.wb-shell-page-kind-option {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  padding: 4px 10px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-muted);
+  cursor: pointer;
+}
+
+.wb-shell-page-kind-option:first-of-type {
+  border-radius: 6px 0 0 6px;
+}
+
+.wb-shell-page-kind-option:last-of-type {
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+}
+
+.wb-shell-page-kind-option[aria-checked='true'] {
+  background: var(--wb-shell-accent);
+  color: #fff;
 }
 
 .wb-shell-page-title-input {

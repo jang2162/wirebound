@@ -27,9 +27,14 @@
  * `docs/superpowers/plans/2026-10-25-gr2-report.md`). 찍는 판의 층(`CAPTURE_CSS`)은 기본 뷰 CSS 밖이라 `assets/views.css` 에 안 든다. 몫 초기화가
  * 사본(`[data-wb-copy-of]`)도 덮게 넓히며 `assets/views.css` 만 다시 지었다. 그리드 칸 글의 낱말 단위 꺾기 · 칸 글 폭 표 · 바 접힘 · 고정 풀기
  * 규칙을 더하며 `assets/views.css` 만 다시 지었다(`docs/superpowers/plans/2026-10-25-fx-gr-report.md` M1 ~ M3).
- * 파일첨부(SDK 1.8.0)를 들이며 다시 지었다 — `assets/views.css` 는 파일첨부의 기본 규칙(단추 줄 · 목록 표 · 빈 목록 안내 · 한도 글), «넓은 표본»(과 그 사본
+ * 팝업(SDK 1.8.0)을 들이며 `assets/views.css` 만 다시 지었다 — 팝업 상자 · 크기 셋 · 덮개 층(`[data-wb-popup-layer]`) 규칙이다. 팝업이 없는 페이지의
+ * 데이터에는 `popups` 키가 없고 목차 줄에 표지가 없어 페이지 HTML 은 그대로다. `assets/shell.css` 는 목차의 팝업 표지 규칙을 끝에 덧붙였다(아래
+ * 셋째 케이스). 입력 조각의 길이 규칙(`data-wb-size`)에서 팝업 뿌리를 빼며 `assets/views.css` 만 다시 지었다 — 팝업의 크기 표지도
+ * `data-wb-size` 라 보통 팝업이 입력 폭으로 줄었다(`docs/superpowers/plans/2026-10-26-poa-report.md` «실브라우저 판이 찾은 결함 셋»).
+ * 파일첨부(같은 1.8.0)를 들이며 다시 지었다 — `assets/views.css` 는 파일첨부의 기본 규칙(단추 줄 · 목록 표 · 빈 목록 안내 · 한도 글), «넓은 표본»(과 그 사본
  * `index.html`)은 픽스처의 폼 표에 파일첨부 필드 하나를 더했다(카탈로그를 전부 쓰는 픽스처 — `parity.test.tsx` «무엇을 덮었나»). «슬롯» · «글» · «깨진 문서» 는
- * 그대로다(`docs/superpowers/plans/2026-10-26-pob-report.md`).
+ * 그대로다(`docs/superpowers/plans/2026-10-26-pob-report.md`). 두 판을 한 1.8.0 에 실으며 `assets/views.css` 만 다시 지었다 — 팝업 · 파일첨부 규칙을 함께
+ * 든 시트다(`docs/superpowers/plans/2026-10-27-rb-pob-report.md`).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -75,7 +80,7 @@ const BEFORE = {
     'pages/슬롯.html': '237942c9bddec6e1',
     'pages/글.html': 'cf7aada8a9107580',
     'pages/깨진-문서.html': '1e6593b7b432956c',
-    'assets/views.css': 'a95f850c7d360164',
+    'assets/views.css': 'aa61efa7d7e3d912',
   },
   themed: {
     'index.html': '4b36de12b8530048',
@@ -83,7 +88,7 @@ const BEFORE = {
     'pages/슬롯.html': 'a740ac4b6b55571e',
     'pages/글.html': '85f601e80f6602ab',
     'pages/깨진-문서.html': 'e071fd4ffcfbad1c',
-    'assets/views.css': 'a95f850c7d360164',
+    'assets/views.css': 'aa61efa7d7e3d912',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',
@@ -118,12 +123,13 @@ describe('상태 없는 페이지의 번들 바이트', () => {
     expect(html(empty).replace(',"viewStates":[]', '')).toBe(html(without))
   })
 
-  it('assets/shell.css 는 옛 글자가 그대로 앞에 서고, 뒤에 붙은 규칙은 전환기(.wb-export-state…)를 겨누는 것뿐이다', () => {
+  it('assets/shell.css 는 옛 글자가 그대로 앞에 서고, 뒤에 붙은 규칙은 전환기(.wb-export-state…) · 목차의 팝업 표지(.wb-export-nav-kind · .wb-export-hidden)를 겨누는 것뿐이다', () => {
     const css = String(exportBundle({ pages: pages(), runtimeJs: '' }).files.find((file) => file.path === 'assets/shell.css')!.content)
     expect(hash(css.slice(0, SHELL_CSS_BEFORE.length))).toBe(SHELL_CSS_BEFORE.hash)
     const added = css.slice(SHELL_CSS_BEFORE.length)
     const selectors = [...added.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{[^}]*\}/g)].map((match) => match[1]!.trim())
     expect(selectors.length).toBeGreaterThan(0)
-    for (const selector of selectors) expect(selector).toMatch(/\.wb-export-state/)
+    // 팝업 표지는 팝업 페이지 줄에만 선다 — 그 클래스는 다른 줄에 안 붙는다(`bundle/shell.tsx`).
+    for (const selector of selectors) expect(selector).toMatch(/\.wb-export-state|^\.wb-export-nav-kind$|^\.wb-export-hidden$/)
   })
 })

@@ -3,7 +3,7 @@
  * `grid-row-cells` 를 지나는가 · 못 하는 판의 까닭.
  */
 import { describe, expect, it } from 'vitest'
-import { applyOps, lintDesign, validatePage, type PageDocument, type WbNode } from '@wirebound/schema'
+import { actionTarget, applyOps, lintDesign, validatePage, type PageDocument, type WbNode } from '@wirebound/schema'
 import '../../src/catalog-setup'
 import {
   BUILD_CELLS_WHY,
@@ -313,7 +313,7 @@ describe('열 틀로 칸 짓기', () => {
     const button = cells[1]!.children![0]!
     expect(copied.marker).toBeUndefined()
     expect(copied.props).toEqual({ content: '홍길동' })
-    expect(copied.interactions!.map((interaction) => interaction.actions[0]!.target)).toEqual([button.id, 'n-outside'])
+    expect(copied.interactions!.map((interaction) => actionTarget(interaction.actions[0]!))).toEqual([button.id, 'n-outside'])
     // 새 id 는 원본과 겹치지 않는다 · 셀 틀은 그대로다.
     for (const id of ['n-b', 'n-i', 'n-t', 'n-t3'])
       expect(cells.flatMap((cell) => (cell.children ?? []).map((child) => child.id))).not.toContain(id)

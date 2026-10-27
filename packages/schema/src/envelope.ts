@@ -58,13 +58,19 @@ const OpenModalActionSchema = z.strictObject({
   target: z.string(),
 })
 
-/** 상호작용 액션. 고정 5종이며 `type`으로 판별한다 — 그 밖의 타입(스크립트 등)은 허용하지 않는다. */
+/** 팝업 닫기 — 대상이 없다. 맨 위에 열린 팝업을 닫는다. */
+const CloseModalActionSchema = z.strictObject({
+  type: z.literal('closeModal'),
+})
+
+/** 상호작용 액션. 고정 6종이며 `type`으로 판별한다 — 그 밖의 타입(스크립트 등)은 허용하지 않는다. */
 const InteractionActionSchema = z.discriminatedUnion('type', [
   SetPropActionSchema,
   SetVisibleActionSchema,
   SwitchTabActionSchema,
   NavigateActionSchema,
   OpenModalActionSchema,
+  CloseModalActionSchema,
 ])
 
 /** 상호작용. `on`은 설계서 「모델」(상호작용)의 4종 트리거로 고정한다. */

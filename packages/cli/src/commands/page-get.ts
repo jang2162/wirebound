@@ -81,7 +81,8 @@ export async function runPageGet(io: Io, path: string | undefined, options: Page
  * 이미 정해져 있고 이 함수는 그것을 들여쓸 뿐이다.
  */
 export function renderPageView(view: PageView): string[] {
-  const lines = [view.path, `  ${view.title} · ${view.id} · 노드 ${view.nodeCount}개`]
+  // 팝업 페이지는 이름 뒤에 종류를 말한다 — 화면 페이지는 옛 출력 그대로.
+  const lines = [view.path, `  ${view.title}${view.kind === 'popup' ? ' · 팝업' : ''} · ${view.id} · 노드 ${view.nodeCount}개`]
   if (view.description !== null && view.description.length > 0) {
     lines.push(`  ${view.description}`)
   }

@@ -3,7 +3,7 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCatalog, listComponents, validateLayout, validatePage } from '@wirebound/schema'
 import { defineTheme, Root, useToken, view } from '@wirebound/theme-sdk'
-import { GALLERY_SAMPLES, galleryItems, ThemeGallery } from '@wirebound/theme-gallery'
+import { GALLERY_SAMPLES, galleryItemDocument, galleryItems, ThemeGallery } from '@wirebound/theme-gallery'
 
 beforeAll(() => installCatalog())
 // 이 저장소는 vitest `globals` 를 켜지 않아 RTL 이 스스로 정리를 걸지 못한다(`apps/web/test/setup.ts`).
@@ -40,12 +40,13 @@ describe('갤러리', () => {
   })
   it('표본이 스키마 검증을 지난다 — 갤러리가 폴백을 그리지 않게', () => {
     for (const [type, samples] of Object.entries(GALLERY_SAMPLES)) {
-      for (const { label, node, within, place } of samples) {
-        const placed = place !== undefined ? place(node) : within === undefined ? node : { ...within, children: [node] }
-        const root = placed.type === 'Page' ? placed : { id: 'root', type: 'Page', children: [placed] }
+      for (const sample of samples) {
+        const { label, node } = sample
+        // 칸이 그리는 문서 그대로 — 뿌리 타입(Page · Popup)은 감싸지 않는다(`galleryItemDocument`).
+        const doc = galleryItemDocument({ type, variant: undefined, sample })
         // Slot 은 레이아웃에만 선다. 칸의 문서는 둘 다 Page 뿌리라 렌더러에는 같다.
         const validate = node.type === 'Slot' ? validateLayout : validatePage
-        const errors = validate({ version: 1, root } as never).filter((i) => i.severity === 'error')
+        const errors = validate(doc as never).filter((i) => i.severity === 'error')
         expect(errors, `${type} / ${label}`).toEqual([])
       }
     }

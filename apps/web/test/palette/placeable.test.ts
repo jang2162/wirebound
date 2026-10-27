@@ -70,7 +70,7 @@ describe('placeableGroups', () => {
     const blocked = listComponents()
       .map((def) => def.type)
       .filter((type) => !placeableTypes().includes(type))
-    expect(blocked).toEqual(['Page', 'Slot'])
+    expect(blocked).toEqual(['Page', 'Popup', 'Slot'])
     for (const type of blocked) expect(placeable(), type).not.toContain(type)
   })
 

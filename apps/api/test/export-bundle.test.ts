@@ -656,6 +656,23 @@ describe('exportProjectBundle', () => {
       })
     })
 
+    /** 에디터가 푸는 글자(`matchPageTargets` — 공백 · 접두 없음)는 번들도 잇는다 — 미리보기도 못 이었다고 말하지 않는다(`pageTargetKey`). */
+    it('공백이 낀 · 접두 없는 타겟도 이어진다 — 미리보기 · 번들 둘 다', async () => {
+      await withApi(async (ctx) => {
+        const user = await signup(ctx)
+        const project = await createProject(ctx, user.cookie, { name: '공백 타겟', slug: 'spaced-target' })
+        const menu = await createMenuNode(ctx, user.cookie, project.id, { title: '메뉴' })
+        const from = await createPage(ctx, user.cookie, project.id, menu.id, { title: '여는 쪽' })
+        await createPage(ctx, user.cookie, project.id, menu.id, { title: '닿는 쪽' })
+        await putSchema(ctx, user.cookie, project.id, from.id, doc('n_r', 'n_b', '버튼', 'page: 메뉴 / 닿는 쪽 '))
+
+        const bundle = await exportProjectBundle(ctx.db, project.id)
+        expect(bundle.brokenLinks).toEqual([])
+        // 0=여는 쪽 1=닿는 쪽
+        expect(decodeURIComponent(pageHrefs(pageFiles(bundle.files)[0]!.content)['page: 메뉴 / 닿는 쪽 ']!)).toBe('메뉴-닿는-쪽.html')
+      })
+    })
+
     it('겹치는 타겟을 그대로 낸다', async () => {
       await withApi(async (ctx) => {
         const user = await signup(ctx)

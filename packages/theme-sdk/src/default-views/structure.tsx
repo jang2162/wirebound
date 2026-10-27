@@ -1,4 +1,4 @@
-/** **구조 그룹 기본 뷰.** `Page`·`Slot`·`Section`·`Flex`·`Grid`·`Card`·`Tabs`·`TabPanel`. 옮긴 규칙은 `./index.ts` 머리말. */
+/** **구조 그룹 기본 뷰.** `Page`·`Popup`·`Slot`·`Section`·`Flex`·`Grid`·`Card`·`Tabs`·`TabPanel`. 옮긴 규칙은 `./index.ts` 머리말. */
 import type { CSSProperties } from 'react'
 import { componentRule, nodeVar, partRule, WEIGHT_VAR, zeroRule } from '../css-tools'
 import { view } from '../define'
@@ -21,6 +21,26 @@ function cssJustify(value: string): string {
 export const PageView = view(({ children }) => (
   <Root as="div" data-wb-structure="default">
     {children}
+  </Root>
+))
+
+/**
+ * 팝업 페이지의 뿌리 — 제목줄(제목 · 닫기) · 몸통 · 바닥. 조각 이름은 계약이다: 덮개 층(`@wirebound/renderer` 의 `PopupLayer`)이 `close` 를
+ * 눌러 닫고 `body` 만 굴리며(제목줄 · 바닥은 그대로 보인다), `wb-theme check` 가 넷을 잰다. 닫기는 노드가 아니라 조각이다 — 편집 모드에서
+ * 누르면 뿌리를 고를 뿐이다. `aria-modal` 은 덮개 층이 단다 — 페이지로 연 판은 모달이 아니다.
+ */
+export const PopupView = view(({ nodeId, props, children }) => (
+  <Root as="section" role="dialog" aria-labelledby={`${nodeId}-title`} data-wb-structure="default">
+    <div data-wb-part="titlebar">
+      <h2 data-wb-part="title" id={`${nodeId}-title`}>
+        {String(props.title)}
+      </h2>
+      <button type="button" data-wb-part="close" aria-label="닫기">
+        ✖
+      </button>
+    </div>
+    <div data-wb-part="body">{children}</div>
+    <Zone name="footer" data-wb-part="footer" />
   </Root>
 ))
 
@@ -138,6 +158,69 @@ export function structureCssBlocks(): string[] {
       'gap: 6px;',
     ]),
     zeroRule('[data-wb-component="Card"] > [data-wb-part="footer"]', ['display: flex;', 'justify-content: flex-end;', 'gap: 6px;']),
+    // 팝업 — 제목줄 · 몸통 · 바닥을 세로로. 크기 셋의 폭은 길이가 아니라 설계의 낱말이라 테마가 덮는다. 페이지로 연 판은 창(캔버스)보다 넓지
+    // 않다 — 화면 모드(찍는 판)는 줄지 않는다(`../capture.ts`).
+    zeroRule('[data-wb-component="Popup"]', [
+      'display: flex;',
+      'flex-direction: column;',
+      'box-sizing: border-box;',
+      'width: 720px;',
+      'max-width: 100%;',
+      'border: 1px solid #c8c8c8;',
+      'background: #fff;',
+    ]),
+    zeroRule('[data-wb-component="Popup"][data-wb-size="small"]', ['width: 480px;']),
+    zeroRule('[data-wb-component="Popup"][data-wb-size="large"]', ['width: 960px;']),
+    zeroRule('[data-wb-component="Popup"] > [data-wb-part="titlebar"]', [
+      'display: flex;',
+      'align-items: center;',
+      'gap: 8px;',
+      'padding: 8px 12px;',
+      'border-bottom: 1px solid #c8c8c8;',
+    ]),
+    zeroRule('[data-wb-component="Popup"] > [data-wb-part="titlebar"] > [data-wb-part="title"]', [
+      'flex: 1 1 auto;',
+      'min-width: 0;',
+      'margin: 0;',
+      'font-size: inherit;',
+      'overflow-wrap: anywhere;',
+    ]),
+    zeroRule('[data-wb-component="Popup"] > [data-wb-part="body"]', ['padding: 12px;', 'min-height: 0;']),
+    zeroRule('[data-wb-component="Popup"] > [data-wb-part="footer"]', [
+      'display: flex;',
+      'flex-wrap: wrap;',
+      'justify-content: flex-end;',
+      'gap: 6px;',
+      'padding: 8px 12px;',
+    ]),
+    // 덮개 층(`@wirebound/renderer` 의 `PopupLayer`) — 테마 밖 셸의 규칙이다. 덮개는 연 화면 전체를 덮어 누름을 막고, 상자는 가운데에서 창 −
+    // 여백까지 크며, 넘치면 몸통 조각만 굴린다. 테마는 덮개 색만 `--wb-popup-backdrop` 으로 바꾼다. 에디터는 캔버스 문서의 보이는 구간에 층을
+    // 세운다(인라인 `top` · `height`).
+    zeroRule('[data-wb-popup-layer]', ['position: fixed;', 'inset: 0;', 'z-index: 2147483000;']),
+    zeroRule('[data-wb-popup-level]', [
+      'position: absolute;',
+      'inset: 0;',
+      'display: flex;',
+      'align-items: center;',
+      'justify-content: center;',
+      'padding: 24px;',
+      'box-sizing: border-box;',
+    ]),
+    zeroRule('[data-wb-popup-backdrop]', [
+      'position: absolute;',
+      'inset: 0;',
+      'background: var(--wb-popup-backdrop, rgba(0, 0, 0, 0.45));',
+    ]),
+    zeroRule('[data-wb-popup-frame]', [
+      'position: relative;',
+      'display: flex;',
+      'flex-direction: column;',
+      'max-width: 100%;',
+      'max-height: 100%;',
+      'min-height: 0;',
+    ]),
+    zeroRule('[data-wb-popup-frame] > [data-wb-component="Popup"]', ['flex: 0 1 auto;', 'min-height: 0;', 'max-height: 100%;']),
+    zeroRule('[data-wb-popup-frame] > [data-wb-component="Popup"] > [data-wb-part="body"]', ['flex: 1 1 auto;', 'overflow: auto;']),
     // 가둔 칼럼을 가운데 둔다 — 테마가 `maxWidth` 만 걸고 가로 여백을 빠뜨려도 칼럼이 왼쪽에 붙지 않는다.
     partRule('Section', 'inner', ['margin-inline: auto;'], ['contained']),
     // 좁은 여백(`compact`). 테마는 제 여백 규칙을 `[data-wb-compact]` 로 덮는다 — 이 둘은 테마가 없는 판의 모양이다.

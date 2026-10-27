@@ -2,13 +2,13 @@
  * 우측의 상호작용 탭 — 설계서 「설계서 화면 구조」의 셋째 탭(속성 · 코멘트 다음)이고,
  * 설계서 「상호작용」 「모델」의 규칙을 저작한다.
  *
- * ## 화면이 「상호작용」 「모델」의 고정 5종을 그대로 보인다
+ * ## 화면이 「상호작용」 「모델」의 고정 6종을 그대로 보인다
  *
- * 「상호작용」 「모델」: *"액션 타입은 위 5종으로 고정한다. 스크립트나 표현식은 허용하지 않는다."*
+ * 「상호작용」 「모델」: *"액션 타입은 위 6종으로 고정한다. 스크립트나 표현식은 허용하지 않는다."*
  * **자유 입력 자리가 없는 것이 그 문장을 화면에서 지키는 방식이다** — 트리거는 4종
- * `<select>`, 액션 타입은 5종 `<select>`, 노드 타겟은 **문서의 노드 목록**에서 고른다.
- * 손으로 적는 곳은 셋뿐이고 전부 값이지 코드가 아니다: 페이지 경로(`navigate`·`openModal`),
- * `setProp`의 값, 그리고 카탈로그에 없는 타겟의 prop 이름.
+ * `<select>`, 액션 타입은 6종 `<select>`, 노드 타겟은 **문서의 노드 목록**에서, 페이지 타겟은 **프로젝트 트리의 페이지 목록**(팝업
+ * 페이지 먼저)에서 고른다. 손으로 적는 곳은 셋뿐이고 전부 값이지 코드가 아니다: 목록 밖 페이지 경로(`navigate`·`openModal` — 아직 없는
+ * 페이지 · 다른 프로젝트에서 가져온 규칙), `setProp`의 값, 그리고 카탈로그에 없는 타겟의 prop 이름. 팝업 닫기(`closeModal`)는 대상이 없다.
  *
  * ## 저작은 이미 있는 편집 경로를 탄다
  *
@@ -48,7 +48,7 @@
  * 데까지이고 뷰 모드의 런타임은 `renderer`의 상호작용 런타임(`packages/renderer/src/interaction/runtime.ts`)
  * 이다. 뷰 모드의 탭 구성(페이지 설명 / 코멘트 / 상호작용)도 이 패널 밖이다.
  */
-import { useState, type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import {
   describeInteraction,
   describeNode,
@@ -63,6 +63,9 @@ import {
   type PageDocument,
   type WbNode,
 } from '@wirebound/schema'
+import { useApi } from '../api/context'
+import type { TreeMenuNode } from '../api/types'
+import { pageTargetsOf } from '../edit/paste-ops'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { walkSafely } from '../edit/safe-walk'
 import { shellIcon } from '../shell/icons'
@@ -92,13 +95,14 @@ const TRIGGERS: readonly { value: InteractionTrigger; label: string }[] = [
   { value: 'submit', label: '제출' },
 ]
 
-/** 액션 5종. 순서는 「상호작용」 「모델」의 예와 같다. */
+/** 액션 6종. 순서는 「상호작용」 「모델」의 예와 같다. */
 const ACTION_TYPES: readonly { value: InteractionAction['type']; label: string }[] = [
   { value: 'setProp', label: '속성 바꾸기' },
   { value: 'setVisible', label: '보이기·숨기기' },
   { value: 'switchTab', label: '탭 전환' },
   { value: 'navigate', label: '페이지 이동' },
-  { value: 'openModal', label: '모달 열기' },
+  { value: 'openModal', label: '팝업 열기' },
+  { value: 'closeModal', label: '팝업 닫기' },
 ]
 
 /**
@@ -120,6 +124,8 @@ function emptyAction(type: InteractionAction['type']): InteractionAction {
       return { type: 'navigate', target: '' }
     case 'openModal':
       return { type: 'openModal', target: '' }
+    case 'closeModal':
+      return { type: 'closeModal' }
   }
 }
 
@@ -174,6 +180,7 @@ export function InteractionPanel(props: {
           {/* 꺼진 위젯의 이유를 이 탭이 자기 자리에서 말한다(속성 패널과 같은 판단). */}
           {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
           <NodeRules
+            projectId={props.projectId}
             document={doc}
             node={node}
             disabled={blocked}
@@ -213,6 +220,7 @@ export function InteractionPanel(props: {
 
 /** 고른 노드의 규칙 목록과 저작 컨트롤. */
 function NodeRules(props: {
+  projectId: string
   document: PageDocument
   node: WbNode
   /** 남이 잠근 자리라 못 바꾸는가. **아래 모든 위젯에 내려간다** — 하나만 빠져도 그것으로 나간다. */
@@ -277,6 +285,7 @@ function NodeRules(props: {
           {(interaction.actions ?? []).map((action, actionIndex) => (
             <ActionRow
               key={actionIndex}
+              projectId={props.projectId}
               document={doc}
               disabled={disabled}
               action={action}
@@ -329,6 +338,7 @@ function NodeRules(props: {
 
 /** 액션 한 줄. 타입에 따라 뒤따르는 컨트롤이 갈린다. */
 function ActionRow(props: {
+  projectId: string
   document: PageDocument
   action: InteractionAction
   index: number
@@ -364,10 +374,9 @@ function ActionRow(props: {
         </select>
       </label>
 
-      {action.type === 'navigate' || action.type === 'openModal' ? (
-        // **페이지 경로는 목록에서 고를 수 없다** — 그 대상은 이 문서 안에 없다.
-        <TextField
-          label="페이지 경로"
+      {action.type === 'closeModal' ? null : action.type === 'navigate' || action.type === 'openModal' ? (
+        <PageTargetField
+          projectId={props.projectId}
           value={action.target}
           disabled={disabled}
           onCommit={(value) => onChange({ ...action, target: value })}
@@ -551,6 +560,84 @@ function ValueField(props: {
  * **초안이 여기에만 산다.** 커밋하면 문서가 진실이 되고, 저장에 실패해 문서가 되돌아가면
  * 다음 렌더의 `value`가 그것을 따라온다.
  */
+/** 페이지 고르개의 한 줄 — 대상 글자와 목록에 보일 이름. */
+interface PageChoice {
+  target: string
+  label: string
+  kind: 'page' | 'popup'
+}
+
+/**
+ * **페이지 경로 — 목록에서 고르거나 직접 적는다.** 대상은 이 문서 안에 없어 프로젝트 트리(`getTree`)를 읽어 대상 글자(`pageTargetsOf` —
+ * 붙이기 · 문장 · CLI · MCP 와 같은 조립)로 편다. 팝업 페이지를 먼저, 화면 페이지를 뒤에 보인다 — «팝업 열기» 의 대상은 대개 팝업이다
+ * («페이지 이동» 도 같은 고르개다). 목록 밖 글자(아직 없는 페이지 · 다른 프로젝트에서 온 규칙)는 아래 «페이지 경로» 칸이 그대로 보이고 고친다.
+ * 트리를 못 읽으면 고르개는 비고 칸만 남는다. 고르개에서 «새 팝업 만들기» 는 하지 않는다 — 메뉴 트리에서 만든다.
+ */
+function PageTargetField(props: { projectId: string; value: string; disabled: boolean; onCommit: (value: string) => void }): ReactElement {
+  const api = useApi()
+  const [choices, setChoices] = useState<readonly PageChoice[]>([])
+  useEffect(() => {
+    let live = true
+    api.getTree(props.projectId).then(
+      (tree) => {
+        if (live) setChoices(pageChoices(tree))
+      },
+      () => {
+        if (live) setChoices([])
+      },
+    )
+    return () => {
+      live = false
+    }
+  }, [api, props.projectId])
+  const known = choices.some((choice) => choice.target === props.value)
+  const group = (kind: PageChoice['kind']): ReactElement[] =>
+    choices
+      .filter((choice) => choice.kind === kind)
+      .map((choice) => (
+        <option key={choice.target} value={choice.target}>
+          {choice.label}
+        </option>
+      ))
+  return (
+    <>
+      <label className="wb-shell-field wb-shell-field-oneline">
+        페이지
+        <select
+          className="wb-shell-select"
+          disabled={props.disabled}
+          value={known ? props.value : ''}
+          onChange={(event) => {
+            if (event.target.value !== '' && event.target.value !== props.value) props.onCommit(event.target.value)
+          }}
+        >
+          <option value="">{props.value === '' || known ? '— 페이지를 고르세요 —' : '— 목록 밖 경로 —'}</option>
+          {choices.some((choice) => choice.kind === 'popup') && <optgroup label="팝업 페이지">{group('popup')}</optgroup>}
+          {choices.some((choice) => choice.kind === 'page') && <optgroup label="화면 페이지">{group('page')}</optgroup>}
+        </select>
+      </label>
+      <TextField label="페이지 경로" value={props.value} disabled={props.disabled} onCommit={props.onCommit} />
+    </>
+  )
+}
+
+/** 트리를 고르개의 줄로 — 대상 글자는 `pageTargetsOf` 가 짓고, 종류는 트리 응답의 `kind` 다(없으면 화면). */
+function pageChoices(tree: readonly TreeMenuNode[]): PageChoice[] {
+  const kinds = new Map<string, 'page' | 'popup'>()
+  const walk = (nodes: readonly TreeMenuNode[]): void => {
+    for (const node of nodes) {
+      for (const page of node.pages) kinds.set(page.id, page.kind === 'popup' ? 'popup' : 'page')
+      walk(node.children)
+    }
+  }
+  walk(tree)
+  return pageTargetsOf(tree).map((page) => ({
+    target: page.target,
+    label: [...page.menuPath, page.title].join(' / '),
+    kind: kinds.get(page.id) ?? 'page',
+  }))
+}
+
 function TextField(props: {
   label: string
   value: string

@@ -109,11 +109,11 @@ afterEach(() => {
 })
 
 describe('줄 행동의 항목 — spec 「트리」 표', () => {
-  it('메뉴 줄: `+` 하위 메뉴 · 페이지 추가 · JSON 에서 가져오기…, `…` 이름 변경 · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제', async () => {
+  it('메뉴 줄: `+` 하위 메뉴 · 페이지 추가 · 팝업 페이지 추가 · JSON 에서 가져오기…, `…` 이름 변경 · 위로 · 아래로 · 들여쓰기 · 내어쓰기 · 삭제', async () => {
     await open()
     const row = rowNamed(treeRegion(), '회원관리')
 
-    expect(itemsOf(row, '+')).toEqual(['하위 메뉴', '페이지 추가', 'JSON 에서 가져오기…'])
+    expect(itemsOf(row, '+')).toEqual(['하위 메뉴', '페이지 추가', '팝업 페이지 추가', 'JSON 에서 가져오기…'])
     expect(itemsOf(row, '…')).toEqual(['이름 변경', '위로', '아래로', '들여쓰기', '내어쓰기', '삭제'])
   })
 

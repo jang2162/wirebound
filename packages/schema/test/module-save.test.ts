@@ -5,6 +5,7 @@
  * 잰다. 여기서 재는 것은 거름의 표와 «입력을 바꾸지 않는다»다.
  */
 import { describe, expect, it } from 'vitest'
+import { actionTarget } from '../src/interaction/check'
 import { countModuleNodes, moduleNodesForSave } from '../src/module/save'
 import type { WbNode } from '../src/node'
 
@@ -50,7 +51,7 @@ describe('moduleNodesForSave', () => {
       { id: 'm_panel', type: 'Card', children: [{ id: 'm_deep', type: 'Text' }] },
     ])
     expect(droppedActions).toBe(2)
-    expect(nodes[0]!.interactions![0]!.actions.map((action) => action.target)).toEqual(['m_panel', 'm_deep', ''])
+    expect(nodes[0]!.interactions![0]!.actions.map(actionTarget)).toEqual(['m_panel', 'm_deep', ''])
     expect(nodes[1]!.interactions).toHaveLength(2)
   })
 

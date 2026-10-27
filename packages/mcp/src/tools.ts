@@ -88,7 +88,7 @@ export const TOOLS: readonly ToolSpec[] = [
     name: 'list_pages',
     description:
       '이 리포에 바인딩된 설계 프로젝트의 메뉴 트리와 페이지 목록을 돌려줍니다. ' +
-      '각 페이지의 경로(관리자/회원/목록)가 get_page·validate 의 인자입니다.',
+      '각 페이지의 경로(관리자/회원/목록)가 get_page·validate 의 인자이고, kind 가 그 페이지의 종류(page 화면 · popup 팝업)입니다.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     spec: '프로젝트 메뉴/페이지 트리 조회',
   },

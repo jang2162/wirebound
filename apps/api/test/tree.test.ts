@@ -79,8 +79,8 @@ describe('buildMenuTree (순수 함수, DB 없이)', () => {
     const result = buildMenuTree(nodes, pages)
 
     expect(result[0]?.pages).toEqual([
-      { id: 'p1', title: '하나', sortOrder: 0, viewStates: [] },
-      { id: 'p2', title: '둘', sortOrder: 1, viewStates: [] },
+      { id: 'p1', title: '하나', sortOrder: 0, viewStates: [], kind: 'page' },
+      { id: 'p2', title: '둘', sortOrder: 1, viewStates: [], kind: 'page' },
     ])
   })
 
@@ -184,15 +184,15 @@ describe('GET /api/projects/:projectId/tree', () => {
             title: '회원관리',
             sortOrder: 0,
             pages: [
-              { id: p1.id, title: '목록', sortOrder: 0, viewStates: [] },
-              { id: p2.id, title: '상세', sortOrder: 1, viewStates: [] },
+              { id: p1.id, title: '목록', sortOrder: 0, viewStates: [], kind: 'page' },
+              { id: p2.id, title: '상세', sortOrder: 1, viewStates: [], kind: 'page' },
             ],
             children: [
               {
                 id: child.id,
                 title: '권한',
                 sortOrder: 0,
-                pages: [{ id: p3.id, title: '권한 목록', sortOrder: 0, viewStates: [] }],
+                pages: [{ id: p3.id, title: '권한 목록', sortOrder: 0, viewStates: [], kind: 'page' }],
                 children: [],
               },
             ],
@@ -272,8 +272,8 @@ describe('GET /api/projects/:projectId/tree', () => {
       const page = body.menu[0]?.pages[0]
       expect(page).toBeDefined()
       // schema가 없다는 것만으로는 "혹시 다른 이름으로 새는가"를 못 잡는다 — 페이지
-      // 응답의 키 집합 전체를 고정해, id·title·sortOrder · viewStates(상태 목록 — 메뉴 트리의 상태 줄) 외에는 아무것도 없음을 본다.
-      expect(Object.keys(page as object).sort()).toEqual(['id', 'sortOrder', 'title', 'viewStates'])
+      // 응답의 키 집합 전체를 고정해, id·title·sortOrder · viewStates(상태 목록 — 메뉴 트리의 상태 줄) · kind(화면 · 팝업) 외에는 아무것도 없음을 본다.
+      expect(Object.keys(page as object).sort()).toEqual(['id', 'kind', 'sortOrder', 'title', 'viewStates'])
     })
   })
 
@@ -401,7 +401,7 @@ describe('완료 판정: 한 줄기 시나리오', () => {
                 id: childMenu.id,
                 title: '권한',
                 sortOrder: 0,
-                pages: [{ id: page.id, title: '권한 목록', sortOrder: 0, viewStates: [] }],
+                pages: [{ id: page.id, title: '권한 목록', sortOrder: 0, viewStates: [], kind: 'page' }],
                 children: [],
               },
             ],

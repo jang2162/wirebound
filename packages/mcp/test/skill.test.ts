@@ -174,6 +174,19 @@ describe('스킬의 도구 표가 실제 도구와 같다', () => {
       'Input',
       'DateInput',
       'readonly',
+      // 팝업의 꼴 — 뿌리 타입 · props · 값 · 액션 · 응답 필드
+      'Popup',
+      'title',
+      'size',
+      'small',
+      'medium',
+      'large',
+      'footer',
+      'openModal',
+      'closeModal',
+      'navigate',
+      'kind',
+      'popup',
     ])
     const 후보 = backticked().filter((name) => !notArgs.has(name) && !name.includes('.'))
     // 분모가 0이면 아래가 공허하다 — 실제 인자 이름이 산문에 나온다.

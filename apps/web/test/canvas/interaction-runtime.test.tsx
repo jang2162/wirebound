@@ -13,7 +13,18 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { EditorStore } from '../../src/store/editor-store'
 import '../../src/catalog-setup'
-import { HEAD_SEQ, PAGE_ID, canvasSurface, nodeElement, openPage, pageDoc, requireNode } from '../editor-harness'
+import {
+  HEAD_SEQ,
+  OTHER_PAGE_ID,
+  PAGE_ID,
+  canvasDocument,
+  canvasSurface,
+  nodeElement,
+  openPage,
+  pageDetail,
+  pageDoc,
+  requireNode,
+} from '../editor-harness'
 
 /** 셸이 만든 스토어를 쥔다. 근거는 `canvas.test.tsx`의 같은 장치 주석. */
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
@@ -59,6 +70,11 @@ function toView(): void {
 
 function toEdit(): void {
   fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
+}
+
+/** 캔버스 문서 안에서 고른 것 전부. */
+function canvasQueryAll(selector: string): Element[] {
+  return Array.from(canvasDocument().querySelectorAll(selector))
 }
 
 /** 캔버스가 낸 런타임 알림 줄들. 없으면 빈 배열이다. */
@@ -398,7 +414,7 @@ describe('깨진 규칙을 조용히 지나가지 않는다', () => {
   })
 })
 
-describe('navigate·openModal은 알리고 움직이지 않는다', () => {
+describe('navigate는 알리고 움직이지 않는다', () => {
   const DOC_NAV = pageDoc({
     id: 'n-root',
     type: 'Page',
@@ -422,27 +438,147 @@ describe('navigate·openModal은 알리고 움직이지 않는다', () => {
     // 주소가 그대로다 — 옮겼다면 캔버스의 문서가 갈렸을 것이다.
     expect(shellStore().getState().openPageId).toBe(PAGE_ID)
   })
+})
 
-  it('openModal도 같은 자리로 나온다', async () => {
-    await openPage(
-      pageDoc({
-        id: 'n-root',
-        type: 'Page',
-        children: [
-          {
-            id: 'n-link',
-            type: 'Button',
-            props: { label: '등록' },
-            interactions: [{ on: 'click', actions: [{ type: 'openModal', target: 'page:관리자/회원/등록' }] }],
-          },
-        ],
-      }),
-    )
+/**
+ * **«팝업 열기» 는 연 화면 위에 덮개 + 가운데 상자로 띄운다**(정본 「상호작용」 「실행」). 대상 글자를 트리로 풀어 그 페이지를 읽고, 팝업
+ * 페이지면 렌더러의 덮개 층이 캔버스 문서 안에 쌓는다. 하네스의 트리는 `회원관리` 밑에 `회원 목록`(이 페이지) · `회원 상세`(`pg-2`)다.
+ * 좌표 · 덮개가 누름을 막는지 · 포커스 차례는 실브라우저 판(`build-test/popup-view-mode.test.ts`)이 잰다.
+ */
+describe('뷰 모드의 «팝업 열기» · «팝업 닫기»', () => {
+  const OPEN_DETAIL = {
+    id: 'n-open',
+    type: 'Button',
+    props: { label: '상세 보기' },
+    interactions: [{ on: 'click' as const, actions: [{ type: 'openModal' as const, target: 'page:회원관리/회원 상세' }] }],
+  }
+  const POPUP = pageDoc({
+    id: 'n-pop',
+    type: 'Popup',
+    props: { title: '회원 상세' },
+    children: [{ id: 'n-pop-text', type: 'Text', props: { content: '팝업 안' } }],
+    zones: {
+      footer: [
+        {
+          id: 'n-pop-cancel',
+          type: 'Button',
+          props: { label: '취소' },
+          interactions: [{ on: 'click', actions: [{ type: 'closeModal' }] }],
+        },
+      ],
+    },
+  })
+  const layerBoxes = (): Element[] => Array.from(canvasQueryAll('[data-wb-popup-frame] > [data-wb-component="Popup"]'))
+
+  it('팝업 페이지면 덮개 위에 그 문서를 그린다 — 알림 없이', async () => {
+    await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [OPEN_DETAIL] }), { docs: { [OTHER_PAGE_ID]: POPUP } })
     toView()
 
-    fireEvent.click(requireNode('n-link'))
+    fireEvent.click(requireNode('n-open'))
 
-    expect(notices()).toEqual(['관리자/회원/등록 페이지 모달 열기 규칙입니다. 이 화면에서는 모달을 열지 않습니다.'])
+    await waitFor(() => expect(layerBoxes()).toHaveLength(1))
+    expect(layerBoxes()[0]!.getAttribute('aria-modal')).toBe('true')
+    expect(requireNode('n-pop-text').textContent).toBe('팝업 안')
+    expect(notices()).toEqual([])
+    // 시연이다 — 연 페이지 · 문서가 그대로다.
+    expect(shellStore().getState().openPageId).toBe(PAGE_ID)
+  })
+
+  it('«팝업 닫기» 규칙 · ✖ · Escape 가 맨 위를 닫는다', async () => {
+    await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [OPEN_DETAIL] }), { docs: { [OTHER_PAGE_ID]: POPUP } })
+    toView()
+    const open = async (): Promise<void> => {
+      fireEvent.click(requireNode('n-open'))
+      await waitFor(() => expect(layerBoxes()).toHaveLength(1))
+    }
+
+    await open()
+    fireEvent.click(requireNode('n-pop-cancel'))
+    expect(layerBoxes()).toHaveLength(0)
+
+    await open()
+    fireEvent.click(layerBoxes()[0]!.querySelector('[data-wb-part="close"]')!)
+    expect(layerBoxes()).toHaveLength(0)
+
+    await open()
+    fireEvent.keyDown(requireNode('n-pop-cancel'), { key: 'Escape' })
+    expect(layerBoxes()).toHaveLength(0)
+    expect(notices()).toEqual([])
+  })
+
+  it('화면 페이지는 열지 않고 그렇다고 말한다', async () => {
+    await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [OPEN_DETAIL] }), {
+      docs: { [OTHER_PAGE_ID]: pageDoc({ id: 'n-other', type: 'Page', children: [] }) },
+    })
+    toView()
+
+    fireEvent.click(requireNode('n-open'))
+
+    await waitFor(() =>
+      expect(notices()).toEqual(['회원관리/회원 상세 페이지 팝업 열기 규칙입니다. 팝업 페이지가 아니라 이 화면에서는 열지 않습니다.']),
+    )
+    expect(layerBoxes()).toHaveLength(0)
+  })
+
+  it('없는 대상 · 읽기 실패는 한 줄로 말한다', async () => {
+    const missing = {
+      ...OPEN_DETAIL,
+      id: 'n-missing',
+      interactions: [{ on: 'click' as const, actions: [{ type: 'openModal' as const, target: 'page:없는/곳' }] }],
+    }
+    await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [missing, OPEN_DETAIL] }), {
+      apiOverrides: {
+        getPage: async (_projectId, pageId) => {
+          if (pageId === PAGE_ID) return pageDetail(PAGE_ID, pageDoc({ id: 'n-root', type: 'Page', children: [missing, OPEN_DETAIL] }))
+          throw new Error('망이 끊겼다')
+        },
+      },
+    })
+    toView()
+
+    fireEvent.click(requireNode('n-missing'))
+    await waitFor(() => expect(notices()).toEqual(['이 프로젝트에 없는 페이지입니다: page:없는/곳']))
+
+    fireEvent.click(requireNode('n-open'))
+    await waitFor(() => expect(notices()).toEqual(['팝업을 불러오지 못했습니다']))
+    expect(layerBoxes()).toHaveLength(0)
+  })
+
+  it('열린 팝업이 없는 «팝업 닫기» 는 그렇다고 말한다 — 팝업 페이지를 바로 연 판의 ✖ 도', async () => {
+    const closer = {
+      id: 'n-close',
+      type: 'Button',
+      props: { label: '닫기' },
+      interactions: [{ on: 'click' as const, actions: [{ type: 'closeModal' as const }] }],
+    }
+    await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [closer] }))
+    toView()
+    fireEvent.click(requireNode('n-close'))
+    expect(notices()).toEqual(['열린 팝업이 없습니다'])
+  })
+
+  it('팝업 페이지를 바로 열면 상자만 그리고 ✖ · «팝업 닫기» 는 바로 연 판이라고 말한다', async () => {
+    await openPage(POPUP)
+    toView()
+    fireEvent.click(requireNode('n-pop').querySelector('[data-wb-part="close"]')!)
+    expect(notices()).toEqual(['열린 팝업이 없습니다 — 이 팝업 페이지를 바로 열었습니다'])
+    fireEvent.click(requireNode('n-pop-cancel'))
+    expect(notices()).toEqual(['열린 팝업이 없습니다 — 이 팝업 페이지를 바로 열었습니다'])
+    // 바로 연 판은 모달이 아니다.
+    expect(requireNode('n-pop').hasAttribute('aria-modal')).toBe(false)
+  })
+
+  it('편집 모드로 나가면 열린 팝업이 닫힌다', async () => {
+    await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [OPEN_DETAIL] }), { docs: { [OTHER_PAGE_ID]: POPUP } })
+    toView()
+    fireEvent.click(requireNode('n-open'))
+    await waitFor(() => expect(layerBoxes()).toHaveLength(1))
+
+    toEdit()
+    // 수로 견준다 — iframe 문서의 요소 목록을 그대로 견주면 실패 때 chai 가 다른 realm 의 요소를 찍다 던져 실패 값이 사라진다.
+    expect(canvasQueryAll('[data-wb-popup-layer]').length).toBe(0)
+    toView()
+    expect(layerBoxes().length).toBe(0)
   })
 })
 

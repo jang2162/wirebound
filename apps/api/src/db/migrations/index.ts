@@ -31,6 +31,7 @@ import { migration as m0029 } from './0029-compose-field'
 import { migration as m0030 } from './0030-assets'
 import { migration as m0031 } from './0031-entry-form-table'
 import { migration as m0032 } from './0032-list-data-grid'
+import { migration as m0033 } from './0033-modal-popup'
 
 /**
  * 정적 마이그레이션 레지스트리.
@@ -77,6 +78,7 @@ export const MIGRATIONS: Record<string, Migration> = {
   '0030-assets': m0030,
   '0031-entry-form-table': m0031,
   '0032-list-data-grid': m0032,
+  '0033-modal-popup': m0033,
 }
 
 export const migrationProvider: MigrationProvider = {

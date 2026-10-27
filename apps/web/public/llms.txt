@@ -57,7 +57,7 @@ Run the lint rules. Findings are a normal result, not an error. Naming rules com
 A page is a JSON document. Edits are JSON Patch against it; `nodes[].path` from `get_page` is the JSON Pointer of each node.
 
 - `version` (integer, required) — Document format version. The server stores and returns version 5.
-- `root` (node, required) — The root node — always a `Page`.
+- `root` (node, required) — The root node — a `Page` (a screen) or a `Popup` (a popup page). A page’s kind is its root type.
 - `viewStates` (array, optional) — Optional named screen states (`{ id, name, parent?, description? }`), at most 20, names 1–30 characters, nesting at most 3 deep, `description` free text up to 2000 characters (omit it rather than send a blank one). Nodes refer to them from `visibility`.
 
 ### Node
@@ -84,7 +84,8 @@ Nodes carry no styles. Appearance comes from the project theme.
 - `setVisible` `{ target: <node id>, value: boolean }` — show or hide a node.
 - `switchTab` `{ target: <TabPanel node id> }` — open that tab of its parent `Tabs`.
 - `navigate` `{ target: "page:<menu path>" }` — go to another page.
-- `openModal` `{ target: "page:<menu path>" }` — open another page as a modal.
+- `openModal` `{ target: "page:<menu path>" }` — open that popup page over the current screen (a backdrop and a centered box). Point it at a page whose root is `Popup`.
+- `closeModal` `{}` — no target; close the top-most open popup.
 
 A `page:` target names a page by its menu path, the same `path` the MCP tools take.
 
@@ -96,11 +97,20 @@ Every node `type` is one of these. Props are validated against the listed shapes
 
 #### Page
 
-Root of one design page; everything on the page sits inside it. Only valid as the document root. Editor label: 페이지.
+Root of one design page (a screen); everything on the page sits inside it. Only valid as the document root. Editor label: 페이지.
 
 Zones: `body` (children) "몸통".
 
 No props.
+
+#### Popup
+
+Root of a popup page — a box with a title bar (`title`, a close button), a body and a `footer` of buttons; `size` small 480px · medium 720px · large 960px. Only valid as the document root. Editor label: 팝업.
+
+Zones: `body` (children) "내용"; `footer` (zones.footer) "바닥", create with `Button` {"label":"취소"} interactions [{"on":"click","actions":[{"type":"closeModal"}]}] + `Button` {"label":"저장"} variant "primary".
+
+- `title`: string, default "팝업"
+- `size`: "small" | "medium" | "large", default "medium"
 
 #### Slot
 
