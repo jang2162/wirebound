@@ -43,6 +43,20 @@ describe('templateNode', () => {
     ;(node.children![0]!.props as { label: string }).label = '바뀜'
     expect(template.children![0]!.props).toEqual({ label: '가' })
   })
+
+  /** 지금 카탈로그 프리셋은 글 · 수 값뿐이라 이 판이 안 선다 — 배열 · 객체 prop 을 든 템플릿을 여기서 지어 잠근다. */
+  it('배열 · 객체 prop 도 깊게 베낀다 — 넣은 노드의 목록 · 원소를 바꿔도 템플릿이 그대로다', () => {
+    const template: NodeTemplate = {
+      type: 'FileAttach',
+      props: { files: [{ name: '가.pdf', size: '1 MB' }], maxFiles: 3 },
+    }
+    const first = templateNode(template, counter())
+    const files = first.props!.files as { name: string; size: string }[]
+    files[0]!.name = '바뀜.pdf'
+    files.push({ name: '더함.pdf', size: '2 MB' })
+    expect(template.props).toEqual({ files: [{ name: '가.pdf', size: '1 MB' }], maxFiles: 3 })
+    expect(templateNode(template, counter()).props).toEqual({ files: [{ name: '가.pdf', size: '1 MB' }], maxFiles: 3 })
+  })
 })
 
 describe('프리셋 — 카탈로그', () => {

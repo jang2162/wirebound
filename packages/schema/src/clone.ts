@@ -3,9 +3,9 @@
  * 그것이다 — 둘 다 봉투가 내용을 정하지 않는다(`props`는 `z.record(z.string(), z.unknown())`,
  * `setProp.value`는 `z.unknown()`).
  *
- * **왜 한 곳인가.** 이 값을 복사해야 하는 자리가 둘이고(`tree.ts`의 `remapNodeIds`,
- * `tree.ts`의 `stripMarkers`) 둘이 각자 복사하면 **한쪽만 깊어진다** — `props`만
- * 복사하고 `value`를 참조로 두는 식으로 조용히 갈린다.
+ * **왜 한 곳인가.** 이 값을 복사해야 하는 자리가 여럿이고(`tree.ts`의 `remapNodeIds`,
+ * `tree.ts`의 `stripMarkers`, `component/preset.ts`의 `templateNode`) 각자 복사하면 **한쪽만
+ * 깊어진다** — `props`만 복사하고 `value`를 참조로 두는 식으로 조용히 갈린다.
  *
  * **`structuredClone`을 쓰지 않는다.** 그것은 함수·심볼을 담은 값에서 `DOMException`을
  * 던지고(`structuredClone({ f: () => 1 })` → `() => 1 could not be cloned.`), 이 함수를 부르는 자리가
