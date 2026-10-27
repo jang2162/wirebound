@@ -104,10 +104,11 @@ export const CardView = view(({ props, variant, states, children }) => {
   칸의 `colSpan` · `rowSpan` 을 빠뜨리거나 칸을 빼거나 `Root` 를 줄마다 그리면 `wb-theme check` 가 막는다. 표는 `scroll` 조각 안에 두고
   `table` 조각에 `dataGridTableAttrs(layout)` 를 편다 — 결과 머리줄 · 바닥은 스크롤 밖이다.
 - **`Popup` 은 팝업 페이지의 뿌리다**(`Page` 와 함께 뿌리에만 선다). 뿌리는 `role="dialog"` 이고 `aria-labelledby` 로 `title` 조각
-  (`props.title`)을 가리킨다. 조각: `titlebar` · `title` · `close`(✖ — `<button>` 에 접근 이름) · `body`(몸통 `children` 의 그릇) · «바닥» 구역
-  (`<Zone name="footer" data-wb-part="footer" />` — `body` **밖**). 다른 페이지가 «팝업 열기» 로 열면 wirebound 가 덮개 위에 상자를 세우고,
-  상자 안의 `close` 조각으로 닫으며 `body` 조각만 굴린다(제목줄 · 바닥은 그대로 보인다) — `close` 가 하나의 단추가 아니거나 · 이름이 제목이 아니거나 ·
-  몸통이 `body` 밖이거나 · 바닥이 `body` 안이면 `wb-theme check` 가 막는다. 크기는 표지 `data-wb-size`(`small` · `medium` · `large`)다.
+  (`props.title`)을 가리킨다. 조각: `titlebar` · `title` · `close`(✖ — `<button>` 에 접근 이름) · `body`(몸통 `children` 의 그릇 — 뿌리의
+  **직계**) · «바닥» 구역(`<Zone name="footer" data-wb-part="footer" />` — `body` **밖**). 다른 페이지가 «팝업 열기» 로 열면 wirebound 가 덮개 위에
+  상자를 세우고, 상자 안의 `close` 조각으로 닫으며 `body` 조각만 굴린다(제목줄 · 바닥은 그대로 보인다 — 굴림 규칙이 뿌리의 직계 `body` 에만
+  걸리므로 감싸는 요소를 끼우지 않는다) — `close` 가 하나의 단추가 아니거나 · 이름이 제목이 아니거나 · 몸통이 `body` 밖이거나 · 바닥이 `body`
+  안이거나 · `body` 가 뿌리의 직계가 아니면 `wb-theme check` 가 막는다. 크기는 표지 `data-wb-size`(`small` · `medium` · `large`)다.
 - **첫 렌더에 `Root` 를 반환한다.** 이펙트 · 상태를 기다렸다가 `Root` 를 그리면 누락으로 판정되어 그 노드는 SDK 기본 뷰로
   그려지고 콘솔에 경고가 난다.
 - **포커스 받는 요소는 단추(`<button>`) · 링크(`<a href>`) · 입력 칸(`input` · `select` · `textarea`)만 쓴다.** 에디터 캔버스는 포커스가 선 요소가 단추 · 링크가 아니면 입력 표면으로 보고 단축키 · 노드 복사를 안 받는다 — `tabIndex` 를 단 `div` · `summary` · `controls` 를 켠 `video` · `audio` 를 누른 뒤에는 Delete · Cmd+C · Cmd+D 가 안 서고 통지도 없다(닫힌 shadow 안의 입력과 `tabindex` 만 단 요소를 DOM 으로 못 가려서다). 탭 · 접힘 같은 위젯도 `<button>` 으로 짜고 `role="tab"` 은 그 단추에 얹는다. `wb-theme check` 가 갤러리 칸에서 이런 요소를 찾아 경고한다(오류가 아니라 종료 코드에 안 든다).
