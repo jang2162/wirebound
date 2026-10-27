@@ -8,9 +8,14 @@ import { sql } from 'kysely'
  *
  * | 자리 | 하는 일 |
  * |---|---|
- * | `pages.schema` | 그 프로젝트의 `openModal` 대상 글자를 모아(페이지 · 레이아웃 · 프로젝트 모듈 · 그 프로젝트 멤버의 개인 모듈) 그 프로젝트 트리로 풀어, 한 페이지로 풀리는 것의 뿌리를 옮긴다 |
- * | `snapshots.payload` 의 `pages[]` | 같은 셈을 payload 안의 메뉴 · 페이지 · 레이아웃으로 — 복원하면 팝업으로 되살아난다 |
- * | `layouts` · 두 모듈 표 · `revisions` | 대상을 모으려고 읽기만 한다 — 레이아웃 뿌리는 늘 `Page` 이고, 모듈은 뿌리를 안 든다. 옛 편집은 몸통 좌표가 그대로라 맞는다 |
+ * | `pages.schema` | 그 프로젝트의 `openModal` 대상 글자를 모아(페이지 · 레이아웃 · 프로젝트 모듈) 그 프로젝트 트리로 풀어, 한 페이지로 풀리는 것의 뿌리를 옮긴다 |
+ * | `snapshots.payload` 의 `pages[]` | 같은 셈을 payload 안의 메뉴 · 페이지 · 레이아웃 + 그 스냅샷 프로젝트의 프로젝트 모듈로 — 복원하면 팝업으로 되살아난다 |
+ * | `layouts` · `modules` · `revisions` | 대상을 모으려고 읽기만 한다 — 레이아웃 뿌리는 늘 `Page` 이고, 모듈은 뿌리를 안 든다. 옛 편집은 몸통 좌표가 그대로라 맞는다 |
+ *
+ * **개인 모듈(`personal_modules`)은 출처가 아니다** — 프로젝트에 안 매여, 넣지 않은 묶음의 대상이 어느 프로젝트의 것인지 알 수 없다. «그 프로젝트
+ * 멤버의 것» 으로 세면 두 프로젝트에 다 든 사람이 한쪽에서 쓰려고 저장한 묶음이 다른 쪽의 같은 경로 페이지를 옮긴다. 넣은 묶음은 이미 페이지
+ * 문서에 있다. **스냅샷도 페이지 표와 같은 출처로 센다** — 프로젝트 모듈은 payload 에 안 들지만 복원이 모듈 표를 안 바꾸므로, 빼면 모듈만 여는
+ * 페이지가 지금 문서는 팝업 · 스냅샷 안은 화면으로 갈려 복원이 그 페이지를 화면으로 되돌린다.
  *
  * 옮기기는 `root.type = 'Popup'` · `root.props = { title: <페이지 제목> }` 뿐이다 — 몸통(`children`)은 그대로이고 «바닥» 구역은 안 만든다(지금
  * 내용이 이미 단추를 들고 있을 수 있다). 좌표가 안 바뀌어 **`head_seq` · `structure_seq` 를 안 올린다**(`0032` 의 «판 번호만 오른 문서» 와 같다).
@@ -60,8 +65,6 @@ export async function liftModalTargets(db: Kysely<unknown>): Promise<Moved> {
     const sources = await sql<{ body: unknown }>`
       select schema as body from layouts where project_id = ${projectId}
       union all select nodes from modules where project_id = ${projectId}
-      union all select nodes from personal_modules
-        where owner_id in (select user_id from project_members where project_id = ${projectId})
     `.execute(db)
     const targets = new Set<string>()
     for (const page of pages.rows) modalTargets(page.schema, targets)
@@ -76,7 +79,9 @@ export async function liftModalTargets(db: Kysely<unknown>): Promise<Moved> {
     }
   }
 
-  const snapshots = await sql<{ id: string; payload: unknown }>`select id, payload from snapshots order by id`.execute(db)
+  const snapshots = await sql<{ id: string; projectId: string; payload: unknown }>`
+    select id, project_id as "projectId", payload from snapshots order by id
+  `.execute(db)
   for (const row of snapshots.rows) {
     const payload = row.payload
     if (!isRecord(payload) || !Array.isArray(payload.pages)) continue
@@ -85,6 +90,8 @@ export async function liftModalTargets(db: Kysely<unknown>): Promise<Moved> {
     const targets = new Set<string>()
     for (const entry of entries) modalTargets(entry.schema, targets)
     if (Array.isArray(payload.layouts)) for (const layout of payload.layouts) if (isRecord(layout)) modalTargets(layout.schema, targets)
+    const modules = await sql<{ nodes: unknown }>`select nodes from modules where project_id = ${row.projectId}`.execute(db)
+    for (const module of modules.rows) modalTargets(module.nodes, targets)
     const chosen = resolveTargets(
       menu,
       entries.map((entry) => ({ id: String(entry.id), menuNodeId: String(entry.menuNodeId), title: String(entry.title) })),

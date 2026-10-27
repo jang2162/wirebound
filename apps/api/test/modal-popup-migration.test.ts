@@ -3,10 +3,14 @@
  *
  * **이 파일은 제 DB 를 만든다** — `node-zones-migration.test.ts` 와 같은 까닭(마이그레이션을 오르내리면 다른 파일의 판이 깨진다).
  *
- * 잰 성질: 대상을 모으는 자리 전부(페이지 · 레이아웃 · 프로젝트 모듈 · 멤버의 개인 모듈 · 스냅샷의 `pages[]` · `layouts[]`)에서 한 페이지로 풀리는
- * `openModal` 대상의 뿌리가 `Popup` 이 된다 · 둘로 풀리는 대상 · 없는 대상 · `navigate` 대상 · 남의 프로젝트의 같은 경로 · 멤버가 아닌 사람의 개인
- * 모듈은 안 옮긴다 · 몸통 · 번호(`head_seq` · `structure_seq`)는 그대로 · 옮긴 문서가 검증(오류)을 지난다 · 옮긴 수를 한 줄로 찍는다 · 한 번 더
+ * 잰 성질: 대상을 모으는 자리 전부(페이지 · 레이아웃 · 프로젝트 모듈 · 스냅샷의 `pages[]` · `layouts[]` + 그 프로젝트의 모듈)에서 한 페이지로
+ * 풀리는 `openModal` 대상의 뿌리가 `Popup` 이 된다 · 둘로 풀리는 대상 · 없는 대상 · `navigate` 대상 · 남의 프로젝트의 같은 경로 · 개인 모듈만 여는
+ * 대상은 안 옮긴다 · 몸통 · 번호(`head_seq` · `structure_seq`)는 그대로 · 옮긴 문서가 검증(오류)을 지난다 · 옮긴 수를 한 줄로 찍는다 · 한 번 더
  * 돌려도 그대로다 · `down` 은 옛 문서로 돌아가고 바닥 노드를 몸통 끝에 붙인다.
+ *
+ * **개인 모듈은 출처가 아니다** — 프로젝트에 안 매여, 두 프로젝트에 다 든 멤버(앨리스 — P owner · Q editor)가 P 에서 쓰려고 저장한 묶음이 Q 의
+ * 같은 경로 페이지를 옮기게 된다. 그 판은 «개인 모듈은 출처가 아니다» 가 잰다. 같은 케이스의 밥(P 의 멤버가 아님)은 멤버 거름만 둔 판에서도 안
+ * 옮겨지므로 혼자 죽지 않는다 — 개인 모듈을 거름 없이 되살린 판에서만 앨리스와 함께 죽는다.
  */
 import { randomUUID } from 'node:crypto'
 import { installCatalog, partitionIssues, validatePage, type PageDocument } from '@wirebound/schema'
@@ -110,26 +114,28 @@ async function seed(): Promise<Seeded> {
   let sort = 0
   for (const [title, schema] of Object.entries(P_PAGES)) p[title] = await insertPage(pId, pMenu, title, sort++, schema)
   const dup2 = await insertPage(pId, pMenu, '중복', sort++, page(BODY))
-  // 레이아웃은 «상세» 를 공백이 낀 글자로 연다 · 모듈은 «모듈대상» · 멤버(앨리스)의 개인 모듈은 «개인대상».
+  // 레이아웃은 «상세» 를 공백이 낀 글자로 연다 · 모듈은 «모듈대상». 앨리스의 개인 모듈은 «개인대상» · «등록» 을 연다 — 출처가 아니다.
   await sql`insert into layouts (project_id, name, schema)
     values (${pId}, '기본', ${JSON.stringify(page([opener('l_open', 'openModal', ' page: 관리자 / 회원 / 상세 ')]))}::jsonb)`.execute(db)
   await sql`insert into modules (project_id, name, nodes, created_by)
     values (${pId}, '모듈', ${JSON.stringify([opener('m_open', 'openModal', 'page:관리자/회원/모듈대상')])}::jsonb, ${alice})`.execute(db)
   await sql`insert into personal_modules (owner_id, name, nodes)
-    values (${alice}, '내 모듈', ${JSON.stringify([{ id: 'q_card', type: 'Card', children: [opener('q_open', 'openModal', 'page:관리자/회원/개인대상')] }])}::jsonb)`.execute(
+    values (${alice}, '내 모듈', ${JSON.stringify([{ id: 'q_card', type: 'Card', children: [opener('q_open', 'openModal', 'page:관리자/회원/개인대상'), opener('q_reg', 'openModal', 'page:관리자/회원/등록')] }])}::jsonb)`.execute(
     db,
   )
   // 밥은 P 의 멤버가 아니다 — 그의 개인 모듈이 여는 «이동» 은 P 에서 안 옮긴다.
   await sql`insert into personal_modules (owner_id, name, nodes)
     values (${bob}, '밥 모듈', ${JSON.stringify([opener('b_open', 'openModal', 'page:관리자/회원/이동')])}::jsonb)`.execute(db)
 
-  // Q — P 와 같은 경로의 «등록» · «개인대상» 이 있지만 Q 안에서는 아무도 안 연다.
+  // Q — P 와 같은 경로의 «등록» · «개인대상» 이 있지만 Q 안에서는 아무도 안 연다. 앨리스는 Q 의 멤버이기도 하다(editor).
   const qId = randomUUID()
   const qMenu = await tree(qId)
-  await sql`insert into project_members (project_id, user_id, role) values (${qId}, ${bob}, 'owner')`.execute(db)
+  await sql`insert into project_members (project_id, user_id, role) values (${qId}, ${bob}, 'owner'), (${qId}, ${alice}, 'editor')`.execute(
+    db,
+  )
   const q = { 등록: await insertPage(qId, qMenu, '등록', 0, page(BODY)), 개인대상: await insertPage(qId, qMenu, '개인대상', 1, page(BODY)) }
 
-  // P 의 스냅샷 — 목록(«등록» 을 연다) · 등록 · 상세 · 이동. 레이아웃이 «상세» 를 연다.
+  // P 의 스냅샷 — 목록(«등록» 을 연다) · 등록 · 상세 · 이동 · 모듈대상. 레이아웃이 «상세» 를, P 의 프로젝트 모듈이 «모듈대상» 을 연다.
   const entry = (title: string, schema: unknown, sortOrder: number) => ({
     id: p[title],
     menuNodeId: pMenu,
@@ -149,7 +155,13 @@ async function seed(): Promise<Seeded> {
       { id: adminMenu, parentId: null, title: '관리자', sortOrder: 0 },
       { id: pMenu, parentId: adminMenu, title: ' 회원 ', sortOrder: 0 },
     ],
-    pages: [entry('목록', P_PAGES.목록, 0), entry('등록', page(BODY), 1), entry('상세', page(BODY), 2), entry('이동', page(BODY), 3)],
+    pages: [
+      entry('목록', P_PAGES.목록, 0),
+      entry('등록', page(BODY), 1),
+      entry('상세', page(BODY), 2),
+      entry('이동', page(BODY), 3),
+      entry('모듈대상', page(BODY), 4),
+    ],
     layouts: [{ id: randomUUID(), name: '기본', schema: page([opener('l_open', 'openModal', 'page:관리자/회원/상세')]) }],
     comments: [],
     theme: null,
@@ -196,7 +208,7 @@ describe('0033 — «팝업 열기» 대상 페이지를 팝업 페이지로', (
   let seeded: Seeded
   let before: string[]
 
-  it('한 페이지로 풀리는 대상만 옮긴다 — 모으는 자리 넷(페이지 · 레이아웃 · 모듈 · 멤버의 개인 모듈) · 옮긴 수를 한 줄로', async () => {
+  it('한 페이지로 풀리는 대상만 옮긴다 — 모으는 자리 셋(페이지 · 레이아웃 · 모듈) · 옮긴 수를 한 줄로', async () => {
     await must(NO_MIGRATIONS)
     await must('0032-list-data-grid')
     seeded = await seed()
@@ -207,13 +219,13 @@ describe('0033 — «팝업 열기» 대상 페이지를 팝업 페이지로', (
     try {
       await must('0033-modal-popup')
       expect(log.mock.calls.map((call) => String(call[0])).filter((line) => line.includes('0033'))).toEqual([
-        '  · 0033-modal-popup: 팝업으로 옮긴 페이지 4 · 스냅샷 1 개 안의 페이지 2',
+        '  · 0033-modal-popup: 팝업으로 옮긴 페이지 3 · 스냅샷 1 개 안의 페이지 3',
       ])
     } finally {
       log.mockRestore()
     }
     const { p } = seeded
-    expect(await popupPages()).toEqual(sorted([p.등록!, p.상세!, p.모듈대상!, p.개인대상!]))
+    expect(await popupPages()).toEqual(sorted([p.등록!, p.상세!, p.모듈대상!]))
   }, 60_000)
 
   it('옮긴 뿌리 — 제목은 페이지 제목 · 몸통 · 번호는 그대로 · 바닥 구역은 안 만든다 · 검증을 지난다', async () => {
@@ -223,19 +235,27 @@ describe('0033 — «팝업 열기» 대상 페이지를 팝업 페이지로', (
     expect(errorsOf(row.schema)).toEqual([])
   })
 
-  it('안 옮기는 것 — 둘로 풀리는 대상 · 없는 대상 · 빈 대상 · navigate · 남의 프로젝트의 같은 경로 · 멤버가 아닌 사람의 개인 모듈', async () => {
-    const { p, q, dup2 } = seeded
-    for (const id of [p.목록!, p.중복!, dup2, p.이동!, q.등록!, q.개인대상!]) {
+  it('안 옮기는 것 — 둘로 풀리는 대상 · 없는 대상 · 빈 대상 · navigate · 남의 프로젝트의 같은 경로', async () => {
+    const { p, dup2 } = seeded
+    for (const id of [p.목록!, p.중복!, dup2]) {
       expect((await pageRow(id)).schema.root.type, id).toBe('Page')
     }
   })
 
-  it('스냅샷 — payload 의 메뉴로 풀어 «등록»(페이지가 연다) · «상세»(레이아웃이 연다)만 옮긴다', async () => {
+  it('개인 모듈은 출처가 아니다 — 두 프로젝트의 멤버(앨리스)가 P 에서 저장한 묶음이 Q 의 같은 경로 «등록» · «개인대상» 을 안 옮긴다', async () => {
+    const { p, q } = seeded
+    // P 의 «개인대상» 은 앨리스의 개인 모듈만 연다 · P 의 «이동» 은 navigate 와 밥(P 의 멤버가 아님)의 개인 모듈만 연다.
+    const roots = await Promise.all([q.등록!, q.개인대상!, p.개인대상!, p.이동!].map(async (id) => (await pageRow(id)).schema.root.type))
+    expect(roots).toEqual(['Page', 'Page', 'Page', 'Page'])
+  })
+
+  it('스냅샷 — payload 의 메뉴로 풀어 «등록»(페이지가 연다) · «상세»(레이아웃이 연다) · «모듈대상»(그 프로젝트의 모듈이 연다)만 옮긴다', async () => {
     expect(await snapshotRoots(seeded.snapshot)).toEqual([
       ['목록', 'Page'],
       ['등록', 'Popup'],
       ['상세', 'Popup'],
       ['이동', 'Page'],
+      ['모듈대상', 'Popup'],
     ])
   })
 
@@ -274,7 +294,7 @@ describe('0033 — «팝업 열기» 대상 페이지를 팝업 페이지로', (
     try {
       await must('0032-list-data-grid')
       expect(log.mock.calls.map((call) => String(call[0])).filter((line) => line.includes('0033'))).toEqual([
-        '  · 0033-modal-popup down: 화면으로 내린 페이지 5 · 스냅샷 1 개 안의 페이지 2',
+        '  · 0033-modal-popup down: 화면으로 내린 페이지 4 · 스냅샷 1 개 안의 페이지 3',
       ])
     } finally {
       log.mockRestore()
