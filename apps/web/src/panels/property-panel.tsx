@@ -31,6 +31,7 @@ import {
   NODE_ALIAS_MAX,
   nodeAlias,
   nodeHeading,
+  propTextMax,
   WEIGHT_MAX,
   WEIGHT_MIN,
   type ComponentDef,
@@ -420,6 +421,7 @@ export function PropertyPanel(props: {
                     // 옮기지 않는 장치이고, 아래 `PropControl`의 주석에 그 선택의 근거와 잰 값이 있다.
                     key={node.id}
                     field={field}
+                    def={def}
                     value={readProp(node, field.prop)}
                     disabled={blocked}
                     clearable={clearableProp(def, field.prop)}
@@ -789,6 +791,7 @@ function BulkProperties(props: {
                       <PropControl
                         key={widgetKey}
                         field={field}
+                        def={def}
                         value={value}
                         mixed={mixed}
                         disabled={blocked}
@@ -927,8 +930,11 @@ function PropControl(props: {
   clearable?: boolean
   /** 그림 칸의 문맥 — 하나 고른 판만 준다. 없으면(일괄 편집) 그림 칸은 글로만 선다(그림은 하나씩 고른다). */
   image?: { projectId: string; place: (assetId: string) => PlaceOutcome }
+  /** 그 노드의 정의 — 글 칸 · 목록 칸이 스키마의 글 한도(`propTextMax`)에서 막는다. */
+  def: ComponentDef | undefined
 }): ReactElement {
   const { field, value, disabled, onLeave } = props
+  const textMax = (path: readonly string[]) => propTextMax(props.def, [field.prop, ...path])
   const id = controlId(field.prop)
   const mixed = props.mixed === true
   // 비운 수 칸(`''`)은 «그 prop 을 지운다»(`undefined`)로 옮긴다 — `clearable` 인 칸만 빈 글을 낸다.
@@ -943,6 +949,7 @@ function PropControl(props: {
         disabled={disabled}
         onCommit={onCommit}
         mixed={mixed}
+        maxUnits={field.control === 'number' ? undefined : textMax([])}
         clearable={props.clearable === true && field.control === 'number'}
         onLeave={onLeave === undefined ? undefined : (next) => onLeave(next === '' ? undefined : next)}
       />
@@ -954,7 +961,7 @@ function PropControl(props: {
   }
 
   if (field.control === 'stringList' || field.control === 'pairList' || field.control === 'optionList' || field.control === 'fileList') {
-    return <ListControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} onLeave={onLeave} />
+    return <ListControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} onLeave={onLeave} textMax={textMax} />
   }
 
   if (field.control === 'image') {

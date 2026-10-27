@@ -32,6 +32,11 @@ export interface TextControlProps {
    * 주면 빈 칸의 자리표로 그 한도를 말한다(`placeholder`) — 안 주면 끝없이 받는다.
    */
   maxLength?: number
+  /**
+   * 칸이 받는 글 길이의 상한 — **UTF-16 단위**(카탈로그 prop 의 글 한도 · zod `.max()` 가 `length` 로 센다 — `propTextMax`). 입력창의 `maxLength` 가 같은 단위라
+   * 그대로 걸고, `onChange` 도 같은 단위로 막는다(`clampUnits` — 붙여 넣은 글 · 흉내 낸 입력). `maxLength` 와 함께 주지 않는다.
+   */
+  maxUnits?: number
   placeholder?: string
   /**
    * 고른 노드들의 값이 갈린다(속성 패널의 일괄 편집 — `../property-panel.tsx`의 `BulkProperties`). 빈 칸에 «여러 값» 자리표를 보이고,
@@ -70,8 +75,16 @@ function toDraft(value: unknown): string {
  * 않는다. 한도 안이면 그대로, 한도 앞서 이미 넘은 글(`previous`)이면 더 늘리지 않는다.
  */
 export function clampPoints(previous: string, next: string, max: number): string {
-  const points = (text: string): number => [...text].length
-  if (points(next) <= max) return next
+  return clampBy(previous, next, max, (text) => [...text].length)
+}
+
+/** `clampPoints` 와 같되 UTF-16 단위로 센다(zod `.max()` 의 단위) — 글자(코드 포인트)를 반으로 가르지 않는다: 두 단위짜리가 한 칸 남은 자리에 안 들어간다. */
+export function clampUnits(previous: string, next: string, max: number): string {
+  return clampBy(previous, next, max, (text) => text.length)
+}
+
+function clampBy(previous: string, next: string, max: number, size: (text: string) => number): string {
+  if (size(next) <= max) return next
   let head = 0
   while (head < previous.length && head < next.length && previous[head] === next[head]) head += 1
   // 짝의 앞 절반(high surrogate)에서 멈췄으면 한 칸 물린다 — 글자를 반으로 가르지 않는다.
@@ -86,9 +99,19 @@ export function clampPoints(previous: string, next: string, max: number): string
   if (tail > 0 && /[\udc00-\udfff]/.test(next[next.length - tail]!)) tail -= 1
   const before = next.slice(0, head)
   const after = tail === 0 ? '' : next.slice(next.length - tail)
-  const room = max - points(before) - points(after)
-  if (room < 0) return points(previous) <= max ? previous : [...next].slice(0, max).join('')
-  return before + [...next.slice(head, next.length - tail)].slice(0, room).join('') + after
+  const room = max - size(before) - size(after)
+  if (room < 0) return size(previous) <= max ? previous : fit(next, max, size)
+  return before + fit(next.slice(head, next.length - tail), room, size) + after
+}
+
+/** 글의 앞에서 `room` 안에 드는 만큼 — 코드 포인트 단위로 더한다. */
+function fit(text: string, room: number, size: (text: string) => number): string {
+  let out = ''
+  for (const point of text) {
+    if (size(out + point) > room) break
+    out += point
+  }
+  return out
 }
 
 export function TextControl(props: TextControlProps): ReactElement {
@@ -162,11 +185,22 @@ export function TextControl(props: TextControlProps): ReactElement {
       : props.placeholder === undefined
         ? {}
         : { placeholder: props.placeholder, title: props.placeholder }),
-    ...(props.maxLength === undefined ? {} : { maxLength: props.maxLength * 2 }),
+    ...(props.maxLength !== undefined
+      ? { maxLength: props.maxLength * 2 }
+      : props.maxUnits !== undefined
+        ? { maxLength: props.maxUnits }
+        : {}),
     value: draft,
     onChange: (event: { target: { value: string } }) => {
       const typed = event.target.value
-      setDraft((previous) => (props.maxLength === undefined ? typed : clampPoints(previous, typed, props.maxLength)))
+      const { maxLength, maxUnits } = props
+      setDraft((previous) =>
+        maxLength !== undefined
+          ? clampPoints(previous, typed, maxLength)
+          : maxUnits !== undefined
+            ? clampUnits(previous, typed, maxUnits)
+            : typed,
+      )
     },
     onBlur: commit,
   }

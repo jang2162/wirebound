@@ -5,7 +5,7 @@
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { FILES_MAX } from '@wirebound/schema'
+import { FileAttachDef, FileEntrySchema, FILES_MAX } from '@wirebound/schema'
 import type { ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
 import { openPage, pageDoc } from '../editor-harness'
@@ -53,6 +53,17 @@ function editable(): { calls: { ops: unknown }[]; api: Partial<ApiClient> } {
 }
 
 const PATH = '/root/children/0/props/files'
+
+/**
+ * 스키마의 글 한도 — zod `.max()` 를 그 정의에서 읽는다(글자로 옮겨 적으면 한도를 바꿔도 이 케이스가 산다). zod 는 UTF-16 단위(`length`)로 센다.
+ */
+const NAME_MAX = (FileEntrySchema.shape.name as unknown as { maxLength: number }).maxLength
+const SIZE_MAX = (FileEntrySchema.shape.size as unknown as { maxLength: number }).maxLength
+const MAX_SIZE_MAX = (
+  (FileAttachDef.props as unknown as { shape: { maxSize: { unwrap(): { maxLength: number } } } }).shape.maxSize.unwrap() as {
+    maxLength: number
+  }
+).maxLength
 
 describe('속성 패널 — 파일 목록', () => {
   it('한 줄이 이름 · 크기 두 칸이고 칸 이름이 그 낱말이다', async () => {
@@ -107,6 +118,46 @@ describe('속성 패널 — 파일 목록', () => {
     fireEvent.click(within(list()).getByRole('button', { name: '1번째 지우기' }))
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(calls[0]!.ops).toEqual([{ op: 'replace', path: PATH, value: [] }])
+  })
+
+  /**
+   * 글 한도(L1) — 칸이 스키마 한도에서 막는다. 안 막으면 넘는 글이 서버 422 → 다시 불러오기로 사라진다. 붙여 넣기(한 번에 넘는 글)도 한도까지만 낸다.
+   * 한도는 UTF-16 단위다(서버 zod 와 같은 단위) — 한도 한 칸 앞에서 친 이모지(두 단위)는 안 들어간다.
+   */
+  it('이름 · 크기 칸은 스키마의 글 한도에서 막는다 — 넘는 글을 붙여 넣어도 한도까지만 낸다 · UTF-16 단위', async () => {
+    expect([NAME_MAX, SIZE_MAX].every((max) => Number.isInteger(max) && max > 0)).toBe(true)
+    const { calls, api } = editable()
+    await openPage(docWith([file('가.pdf', '1 MB')]), { apiOverrides: api })
+    selectFileAttach()
+    const name = within(list()).getByRole('textbox', { name: '파일 1번째 이름' }) as HTMLInputElement
+    const size = within(list()).getByRole('textbox', { name: '파일 1번째 크기' }) as HTMLInputElement
+    expect([name.maxLength, size.maxLength]).toEqual([NAME_MAX, SIZE_MAX])
+    fireEvent.change(name, { target: { value: 'n'.repeat(NAME_MAX + 5) } })
+    expect(name.value).toHaveLength(NAME_MAX)
+    fireEvent.blur(name)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    fireEvent.change(size, { target: { value: 's'.repeat(SIZE_MAX + 3) } })
+    fireEvent.blur(size)
+    await waitFor(() => expect(calls).toHaveLength(2))
+    expect(calls.map((call) => call.ops)).toEqual([
+      [{ op: 'replace', path: PATH, value: [file('n'.repeat(NAME_MAX), '1 MB')] }],
+      [{ op: 'replace', path: PATH, value: [file('n'.repeat(NAME_MAX), 's'.repeat(SIZE_MAX))] }],
+    ])
+    fireEvent.change(name, { target: { value: '가'.repeat(NAME_MAX - 1) + '😀' } })
+    expect(name.value).toBe('가'.repeat(NAME_MAX - 1))
+  })
+
+  it('«최대 크기» 칸도 스키마의 글 한도에서 막는다', async () => {
+    expect(Number.isInteger(MAX_SIZE_MAX) && MAX_SIZE_MAX > 0).toBe(true)
+    const { calls, api } = editable()
+    await openPage(docWith([]), { apiOverrides: api })
+    selectFileAttach()
+    const field = within(panel()).getByRole('textbox', { name: '최대 크기' }) as HTMLInputElement
+    expect(field.maxLength).toBe(MAX_SIZE_MAX)
+    fireEvent.change(field, { target: { value: 'm'.repeat(MAX_SIZE_MAX + 1) } })
+    fireEvent.blur(field)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]!.ops).toEqual([{ op: 'add', path: '/root/children/0/props/maxSize', value: 'm'.repeat(MAX_SIZE_MAX) }])
   })
 
   it('원소 모양이 깨진 목록 · 배열이 아닌 값도 셸을 죽이지 않는다 — 깨진 줄은 빈 두 칸이다', async () => {

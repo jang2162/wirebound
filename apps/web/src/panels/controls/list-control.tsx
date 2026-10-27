@@ -25,6 +25,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { FILES_MAX, OPTIONS_MAX, type EditorField } from '@wirebound/schema'
 import { shellIcon } from '../../shell/icons'
+import { clampUnits } from './text-control'
 
 /** `pairList`의 원소. 키와 값 둘 다 문자열이다. */
 export interface Pair {
@@ -71,6 +72,19 @@ export interface ListControlProps {
    * `onLeave`와 같다). 값은 blur 가 냈을 목록이다.
    */
   onLeave?: (value: ListValue) => void
+  /**
+   * 원소 안 한 자리의 글 상한(UTF-16 단위 — `@wirebound/schema` 의 `propTextMax` 에 prop 이름 뒤 경로를 넘긴다). 칸이 그 한도에서 막는다 — 안 막으면 넘는 글이
+   * 서버 422 → 다시 불러오기로 사라진다. 없으면 끝없이 받는다.
+   */
+  textMax?: (path: readonly string[]) => number | undefined
+}
+
+/** 위젯 칸(`Item` 의 `key` · `value`)이 원소의 어느 자리인가 — `toItems` · `toValue` 의 짝. 글 원소(`stringList`)는 원소 자신이다. */
+const ITEM_PATHS: Record<Kind, Partial<Record<'key' | 'value', readonly string[]>>> = {
+  string: { value: ['[]'] },
+  pair: { key: ['[]', 'key'], value: ['[]', 'value'] },
+  option: { value: ['[]', 'label'] },
+  file: { key: ['[]', 'name'], value: ['[]', 'size'] },
 }
 
 function kindOf(field: EditorField): Kind {
@@ -245,6 +259,8 @@ export function ListControl(props: ListControlProps): ReactElement {
   }
 
   function cell(index: number, part: 'key' | 'value', label: string): ReactElement {
+    const path = ITEM_PATHS[kind][part]
+    const max = path === undefined ? undefined : props.textMax?.(path)
     return (
       <input
         className="wb-shell-control wb-shell-list-cell"
@@ -252,6 +268,7 @@ export function ListControl(props: ListControlProps): ReactElement {
         disabled={disabled}
         aria-label={label}
         value={textOf(index, part)}
+        maxLength={max}
         onChange={(event) => {
           // **다른 칸의 초안이 남아 있으면 먼저 낸다.** 초안은 한 칸 몫이라 새 칸의
           // 초안이 앞 칸의 것을 덮는다. 평소에는 앞 칸의 blur가 먼저 커밋해 여기 올 때 초안이
@@ -260,7 +277,8 @@ export function ListControl(props: ListControlProps): ReactElement {
           // `"옛 항목"`으로 돌아간다(Chrome 실측). 그 초안을 blur가 냈을 값 그대로 먼저 낸다 — Chrome:
           // `x`를 치는 순간 `["새 항목","항목 2"]` 1건, 떠나면 `["새 항목","항목 2x"]` 1건.
           if (draft !== null && (draft.index !== index || draft.part !== part)) commitDraft()
-          setDraft({ index, part, text: event.target.value })
+          const typed = event.target.value
+          setDraft({ index, part, text: max === undefined ? typed : clampUnits(textOf(index, part), typed, max) })
         }}
         onBlur={commitDraft}
         onKeyDown={(event) => {

@@ -53,6 +53,7 @@ export type {
 } from './component/define'
 export { BODY_ZONE, defineComponent, placementsOf, propSchema, ZONE_NAME_PATTERN } from './component/define'
 export { presetOf, templateNode } from './component/preset'
+export { propTextMax } from './component/text-max'
 export type { ChildList } from './zones'
 export { childLists, childNodes, hasBody, hasZone, mapChildLists, zoneDefs, zoneList, zonePointer } from './zones'
 export { clearImages, imageIdsIn } from './images'
