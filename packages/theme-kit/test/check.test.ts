@@ -388,6 +388,7 @@ describe('checkTheme', () => {
    * SDK 기본 `PopupView` 와 같은 꼴로 그리는 팝업 뷰(번들 원문) — 한 곳만 바꾼다. `close` 는 ✖ 를 빼거나(`none`) · `<span>` 으로 · 조각 이름을
    * `x` 로(`renamed`) · 이름 없는 단추로(`unnamed`), `name` 은 `aria-labelledby` 를 빼거나(`none`) · 없는 id 로(`otherId`) · 제목 글을 `title`
    * 조각 밖에(`outside`) · 뿌리 역할을 `region` 으로(`noRole`), `body` 는 몸통을 `body` 밖 형제로(`sibling`) · `body` 를 둘(`double`), `footer: 'inBody'` 는 «바닥» 구역을 `body` 안에 둔다.
+   * `wrap` 은 감싸는 요소 하나를 더한다 — 제목줄 · body · 바닥을 `<div class="inner">` 로(`all`) · body 만 `<div>` 로(`body`).
    */
   function popupView(
     change: {
@@ -395,6 +396,7 @@ describe('checkTheme', () => {
       name?: 'none' | 'otherId' | 'outside' | 'noRole'
       body?: 'sibling' | 'double'
       footer?: 'inBody'
+      wrap?: 'all' | 'body'
     } = {},
   ): string {
     const close = {
@@ -420,10 +422,13 @@ describe('checkTheme', () => {
       sibling: `h('div', { 'data-wb-part': 'body' }), children, ${footer}`,
       double: `h('div', { 'data-wb-part': 'body' }, children), h('div', { 'data-wb-part': 'body' }), ${footer}`,
       inBody: `h('div', { 'data-wb-part': 'body' }, children, ${footer})`,
+      wrapBody: `h('div', null, h('div', { 'data-wb-part': 'body' }, children)), ${footer}`,
       keep: `h('div', { 'data-wb-part': 'body' }, children), ${footer}`,
-    }[change.body ?? (change.footer === 'inBody' ? 'inBody' : 'keep')]
+    }[change.body ?? (change.footer === 'inBody' ? 'inBody' : change.wrap === 'body' ? 'wrapBody' : 'keep')]
+    const titlebar = `h('div', { 'data-wb-part': 'titlebar' }, ${title}, ${close})`
+    const inside = change.wrap === 'all' ? `h('div', { className: 'inner' }, ${titlebar}, ${body})` : `${titlebar}, ${body}`
     return `{ Popup: rt.sdk.view(({ nodeId, props, children }) => h(Root, { as: 'section', role: ${change.name === 'noRole' ? `'region'` : `'dialog'`}, 'aria-labelledby': ${labelled} },
-      h('div', { 'data-wb-part': 'titlebar' }, ${title}, ${close}), ${body})) }`
+      ${inside})) }`
   }
   const popupErrors = async (change: Parameters<typeof popupView>[0]) => {
     const report = await checkTheme(files(BASE, { views: popupView(change) }))
@@ -494,6 +499,25 @@ describe('checkTheme', () => {
       [FORM, inBody('pop3-cancel', 'pop3')],
       [FORM, inBody('pop3-save', 'pop3')],
     ])
+  })
+
+  /**
+   * **덮개 층 CSS 가 직계로 거는 조각** — 층의 굴림 규칙은 `[data-wb-popup-frame] > [data-wb-component="Popup"] > [data-wb-part="body"]` 로 직계에만
+   * 걸린다(SDK `structure.tsx`). 감싸는 요소 하나를 더한 뷰는 P1 ~ P4 를 다 지나고 덮개 위에서 몸통이 안 굴러 바닥 단추가 창 밖으로 간다.
+   */
+  it('P5 — 덮개 층이 직계로 거는 조각(body)이 뿌리의 직계가 아니면 팝업마다 선다 · SDK 기본 뷰는 깨끗하다', async () => {
+    const notDirect = (id: string) =>
+      `Popup 의 body 조각이 뿌리의 직계가 아닙니다 — 덮개 층의 굴림 규칙이 직계에만 걸려 몸통이 안 구릅니다(노드 ${id})`
+    const all = [
+      [EMPTY, notDirect('pop')],
+      [SEARCH, notDirect('pop2')],
+      [FORM, notDirect('pop3')],
+    ]
+    expect(await popupErrors({ wrap: 'all' })).toEqual(all)
+    expect(await popupErrors({ wrap: 'body' })).toEqual(all)
+    // SDK 기본 `PopupView`(테마가 Popup 뷰를 안 덮은 판 — 기본테마가 그렇다)
+    const report = await checkTheme(files(BASE, { views: '{}' }))
+    expect(report.errors.filter((error) => error.source === 'popup')).toEqual([])
   })
 
   it('Root 를 안 그리는 뷰는 콘솔 오류로 선다', async () => {

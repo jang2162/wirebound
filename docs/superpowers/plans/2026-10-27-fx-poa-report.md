@@ -78,3 +78,22 @@
 
 «이동» 과 «화면 대상 팝업 열기» 는 런타임에서 같은 표(`hrefs`)를 읽어 늘 함께 죽는다 — 둘을 가르는 변조는 없다(축이 같다). «팝업 닫기» 케이스는 표를
 안 읽어 G1 에 산다 — 실린 문서 안의 «닫기» 가 맨 위를 닫는다는 것을 잰다(`popup-layer` 의 닫기 축은 렌더러 케이스가 소유한다).
+
+## M2 — `wb-theme check` P5(덮개 층의 직계 조각)
+
+**재현(12:02 · 케이스를 먼저 더한 판):** `check.test.ts` 의 깨는 뷰 둘 — 제목줄 · body · 바닥을 `<div class="inner">` 로 감쌈(`wrap: 'all'`) · body 만
+`<div>` 로 감쌈(`wrap: 'body'`) — 의 `popup` 오류 = **`[]`**(P1 ~ P4 를 다 지남).
+
+**고친 것:** `packages/theme-kit/src/check.ts` 의 `popupProblems` 에 P5 — 덮개 층 CSS 가 뿌리의 직계로 거는 조각마다 «그 조각이 뿌리의 직계인가» 를
+잰다. 조각 목록은 **SDK 기본 뷰 시트(`defaultViewsCss()`)의 셀렉터 `[data-wb-popup-frame] > [data-wb-component="Popup"] > [data-wb-part="…"]` 를 읽어
+센다**(`popupDirectParts` — 지금은 `body` 하나). 하나도 못 읽으면 던진다. 문장: «Popup 의 body 조각이 뿌리의 직계가 아닙니다 — 덮개 층의 굴림 규칙이
+직계에만 걸려 몸통이 안 구릅니다(노드 …)». 케이스 «P5» 는 깨는 뷰 둘이 팝업 표본 셋(빈 · 검색 · 폼)마다 서는 것과 **SDK 기본 `PopupView`(뷰를 안
+덮은 테마 — 기본테마 1.8.0 이 그렇다: `system-themes/admin/src` 에 Popup 뷰가 없고 CSS 만 있다)가 깨끗한 것**을 단언한다. 기본테마 빌드판의
+`checkTheme` 0 건은 `system-themes/admin/build-test/wbtheme.test.ts` 가 게이트(`test:build:serial`)에서 잰다.
+
+| id | 자리 | 바꿈 | 건 ~ 푼 | load | 실행 · 실패 | 죽은 케이스 «실패 값» |
+| --- | --- | --- | --- | --- | --- | --- |
+| K1 | `check.ts` P5 | `el.parentElement !== element` → `!element.contains(el)`(자손이면 통과) | 12:02:49 ~ 12:03:03 | 8.7 | 32 · 1 | «P5 — …» `expected [] to deeply equal [ Array(3) ]` |
+| K2 | `popupDirectParts` | 읽은 조각을 비우고 던지지 않음(규칙을 못 읽은 판) | 12:03:03 ~ 12:03:18 | 8.7 | 32 · 1 | 같은 값 — P5 가 시트를 읽어야 선다 |
+
+`wrap: 'all'` · `wrap: 'body'` 는 한 케이스의 두 단언이다 — 둘 다 «body 가 직계가 아님» 한 축이라 가르는 변조가 없다.

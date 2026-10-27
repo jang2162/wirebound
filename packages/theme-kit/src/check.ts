@@ -14,7 +14,15 @@ import {
 } from '@wirebound/schema'
 import { renderDocument, unusedViewKeys } from '@wirebound/renderer'
 import { galleryAssetUrl, galleryItemDocument, galleryItems, PLACEHOLDER_SET_PROPS, PLACEHOLDER_SET_SAMPLE } from '@wirebound/theme-gallery'
-import { gridLayout, pairRows, placeholderVars, ThemeProvider, type ThemeDefinition, type ViewItem } from '@wirebound/theme-sdk'
+import {
+  defaultViewsCss,
+  gridLayout,
+  pairRows,
+  placeholderVars,
+  ThemeProvider,
+  type ThemeDefinition,
+  type ViewItem,
+} from '@wirebound/theme-sdk'
 import { installRuntime } from '@wirebound/theme-sdk/runtime'
 import { tokenValues, tokenVar, type WbthemeFiles } from '@wirebound/themes'
 
@@ -413,7 +421,8 @@ function dataGridProblems(container: Element, root: WbNode): string[] {
  * **팝업의 조각 계약** — 덮개 층(`@wirebound/renderer` 의 `PopupLayer`)은 상자 안에서 `close` 조각을 찾아 ✖ 로 닫고, `body` 조각만 굴리며, 상자
  * 뿌리에 `aria-modal` 을 단다. 그래서 P1 `close` 조각이 정확히 하나 · `<button>` · 접근 이름이 있다. P2 뿌리가 `role="dialog"` 이고
  * `aria-labelledby` 가 가리키는 글이 `title` 이다. P3 `body` 조각이 하나이고 몸통 자식이 모두 그 안이다. P4 «바닥» 구역 자식은 `body` 밖이다 —
- * 안이면 몸통과 함께 굴러 단추가 안 보인다.
+ * 안이면 몸통과 함께 굴러 단추가 안 보인다. P5 덮개 층 CSS 가 뿌리의 직계로 거는 조각(`popupDirectParts`)은 뿌리의 직계다 — 감싸는 요소 하나가
+ * 끼면 P1 ~ P4 를 다 지나고도 층의 굴림 규칙이 안 걸려 몸통이 안 구른다.
  *
  * **jsdom 이라 DOM 꼴만 본다** — 덮개 위에서 몸통만 구르는지는 실브라우저 판 `apps/web/build-test/popup-layer.test.ts` 가 잰다.
  */
@@ -445,6 +454,11 @@ function popupProblems(container: Element, root: WbNode): string[] {
       else if (named !== title)
         out.push(`Popup 뷰의 aria-labelledby 가 가리키는 글이 «${named}» 입니다 — 제목 «${title}» 이어야 합니다(노드 ${node.id})`)
     }
+    for (const part of popupDirectParts()) {
+      if (owned(`[data-wb-part="${part}"]`).some((el) => el.parentElement !== element)) {
+        out.push(`Popup 의 ${part} 조각이 뿌리의 직계가 아닙니다 — 덮개 층의 굴림 규칙이 직계에만 걸려 몸통이 안 구릅니다(노드 ${node.id})`)
+      }
+    }
     const bodies = owned('[data-wb-part="body"]')
     if (bodies.length !== 1) {
       out.push(`Popup 뷰가 body 조각을 ${bodies.length} 개 그렸습니다 — 덮개 층은 하나뿐인 그 조각만 굴립니다(노드 ${node.id})`)
@@ -465,6 +479,26 @@ function popupProblems(container: Element, root: WbNode): string[] {
     }
   }
   return out
+}
+
+let directParts: readonly string[] | null = null
+
+/**
+ * 덮개 층 CSS(SDK 기본 뷰 시트 — `structure.tsx` 의 층 규칙)가 `[data-wb-popup-frame] > [data-wb-component="Popup"] > [data-wb-part="…"]` 로 거는
+ * 조각 이름. **시트의 셀렉터를 읽어 센다** — 층 규칙에 직계 조각이 늘면 P5 가 저절로 그것까지 잰다. 하나도 못 읽으면 던진다(규칙 꼴이 바뀌어
+ * P5 가 아무것도 안 재는 판을 막는다).
+ */
+function popupDirectParts(): readonly string[] {
+  if (directParts !== null) return directParts
+  const found = new Set<string>()
+  for (const match of defaultViewsCss().matchAll(
+    /\[data-wb-popup-frame\]\s*>\s*\[data-wb-component="Popup"\]\s*>\s*\[data-wb-part="([^"]+)"\]/g,
+  )) {
+    found.add(match[1]!)
+  }
+  if (found.size === 0) throw new Error('SDK 기본 뷰 시트에서 덮개 층의 직계 조각 규칙을 못 읽었습니다 — P5 가 아무것도 안 잽니다')
+  directParts = [...found]
+  return directParts
 }
 
 /** 요소의 접근 이름 — `aria-label` · `aria-labelledby` · 글 차례로 본 것(jsdom 이라 간이 셈이다). */
