@@ -10,6 +10,9 @@
  * | 뷰 모드 — 겹 다섯 | 팝업 안에서 다시 열면 쌓이고 여섯째는 안 쌓인다 · 아래 겹은 `inert` · Escape 는 맨 위만 |
  * | 뷰 모드 — 덮개 | 덮개 밖(연 단추 자리)의 `elementFromPoint` 가 층이다 · 그 자리를 실클릭해도 뒤 화면에 안 닿고 닫지도 않는다 |
  * | 뷰 모드 — 셸 모달과 겹침 | 셸의 대화 상자가 Escape 를 받아 그것만 닫힌다 — 팝업은 남는다 |
+ * | 뷰 모드 — Tab 순환 | Tab · Shift+Tab 아홉 번씩 — 포커스가 맨 위 상자 안을 돈다(✖ → 다시 열기 → 보통 열기 → 취소 → 저장 → ✖) |
+ * | 뷰 모드 — 굴림 | 긴 화면 맨 위에서 열고 캔버스 칸을 끝까지 굴려도 ✖ 가 칸 안 · 칸 안에 선 뒤 화면 «아래 열기» 자리의 맨 위 요소가 층 |
+ * | 뷰 모드 — 더블클릭 | 여는 단추 더블클릭은 한 겹 · 팝업 안에서 다른 대상을 더블클릭해도 한 겹 더 · 닫은 뒤 다시 열면 연다 |
  * | 번들 — 열기 · 목차 | 페이지를 안 옮기고 상자가 선다 · ✖ 로 닫으면 포커스 · 목차의 팝업 줄 «팝업» 표지 |
  * | 번들 — 좁은 창 · 넓은 창 | 390: 상자 폭 ≤ 창 − 48 · 가로 넘침 0 · ✖ 가 창 안 · 몸통 끝과 바닥 단추가 창 안. 1280: 가운데 · 덮개가 창 전체 |
  * | 번들 — 페이지로 연 팝업 | 390 · 720 · 1000 · 1280 화면 모드: 상자 폭 = min(크기, 창) · 상자 밖 글 0 · 넘친 요소 0. 찍는 판(720 · `data-wb-capture` + `CAPTURE_CSS` — PPTX)은 큰 팝업이 960 그대로이고 문서 안이다 |
@@ -57,13 +60,14 @@ describe.skipIf(!전제.ok)('팝업 덮개 층 — 실브라우저', () => {
   let stack: EditorStack
   let alice: Session
   let P: string
+  let LONG: string
   let projectId: string
 
   beforeAll(async () => {
     if (!전제.ok) return
     stack = await startEditorStack(전제)
     alice = await stack.login(stack.users.alice)
-    ;({ P, projectId } = await fixture(stack, alice))
+    ;({ P, LONG, projectId } = await fixture(stack, alice))
   }, 120_000)
 
   afterAll(async () => {
@@ -199,6 +203,97 @@ describe.skipIf(!전제.ok)('팝업 덮개 층 — 실브라우저', () => {
         expect((await layerState(frame)).levels).toBe(1)
       })
     })
+
+    it('Tab · Shift+Tab 은 맨 위 상자 안을 돈다 — 아홉 번씩', async () => {
+      await withView(stack, P, async (page, frame) => {
+        await canvasFrame(page).locator('[data-wb-id="n_open"]').click()
+        await frame.locator('[data-wb-popup-frame]').waitFor()
+        const walk = async (key: string) => {
+          const seen: string[] = []
+          for (let i = 0; i < 9; i++) {
+            await page.keyboard.press(key)
+            seen.push(await focusedInPopup(frame))
+          }
+          return seen
+        }
+        const forward = await walk('Tab')
+        const backward = await walk('Shift+Tab')
+        expect({ forward, backward }).toEqual({
+          forward: ['n_again', 'n_open_mid', '취소', '저장', 'close', 'n_again', 'n_open_mid', '취소', '저장'],
+          backward: ['취소', 'n_open_mid', 'n_again', 'close', '저장', '취소', 'n_open_mid', 'n_again', 'close'],
+        })
+      })
+    })
+
+    it('열고 캔버스 칸을 굴려도 덮개가 보이는 칸을 따라온다 — ✖ 가 칸 안 · 칸 아래쪽 «아래 열기» 자리의 맨 위 요소가 층', async () => {
+      await withView(
+        stack,
+        LONG,
+        async (page, frame) => {
+          await canvasFrame(page).locator('[data-wb-id="n_open"]').click()
+          await frame.locator('[data-wb-popup-frame]').waitFor()
+          const scrolled = await page.locator('.wb-shell-canvas').evaluate((pane) => {
+            pane.scrollTop = pane.scrollHeight
+            return pane.scrollTop
+          })
+          await settleFrames(page, frame)
+          const pane = (await page.locator('.wb-shell-canvas').boundingBox())!
+          const iframe = (await page.locator('iframe.wb-shell-canvas-iframe').boundingBox())!
+          const close = (await canvasFrame(page).locator('[data-wb-popup-frame] [data-wb-part="close"]').boundingBox())!
+          // 굴린 뒤 칸 아래쪽에 선 뒤 화면의 «아래 열기» 가운데 — 층이 칸을 따라왔으면 그 점의 맨 위 요소가 층이다.
+          const bottom = await frame.evaluate(() => {
+            const box = document.querySelector('[data-wb-id="n_open_bottom"]')!.getBoundingClientRect()
+            const x = box.left + box.width / 2
+            const y = box.top + box.height / 2
+            return { x, y, layer: document.elementFromPoint(x, y)?.closest('[data-wb-popup-layer]') !== null }
+          })
+          // 판 카나리아 — 칸을 실제로 굴렸고, «아래 열기» 가 칸 안에 보인다(층이 안 덮으면 눌린다).
+          expect({
+            scrolled: scrolled > 1000,
+            bottomInPane: iframe.y + bottom.y > pane.y && iframe.y + bottom.y < pane.y + pane.height,
+          }).toEqual({ scrolled: true, bottomInPane: true })
+          expect({
+            closeInPane: close.y >= pane.y && close.y + close.height <= pane.y + pane.height,
+            layer: bottom.layer,
+          }).toEqual({ closeInPane: true, layer: true })
+        },
+        'n_open_bottom',
+      )
+    })
+
+    it('여는 단추 더블클릭은 한 겹이다 — 팝업 안의 다른 대상도 한 겹 더 · 닫은 뒤 다시 열면 연다', async () => {
+      await withView(stack, P, async (page, frame) => {
+        const top = '[data-wb-popup-level]:not([inert])'
+        await canvasFrame(page).locator('[data-wb-id="n_open"]').dblclick()
+        await frame.locator('[data-wb-popup-frame]').waitFor()
+        await page.waitForTimeout(1500)
+        expect((await layerState(frame)).levels).toBe(1)
+        // 팝업이 연 팝업(다른 대상 «보통») — 더블클릭이 한 겹만 더한다.
+        await canvasFrame(page).locator(`${top} [data-wb-id="n_open_mid"]`).dblclick()
+        await poll(
+          '둘째 겹',
+          () => layerState(frame),
+          (state) => state.levels >= 2,
+        )
+        await page.waitForTimeout(1500)
+        expect((await layerState(frame)).levels).toBe(2)
+        // 닫은 뒤 같은 대상을 다시 열면 연다 — 버림은 열기를 기다리는 동안만이다.
+        await canvasFrame(page).locator(`${top} [data-wb-part="close"]`).click()
+        await poll(
+          '닫힘',
+          () => layerState(frame),
+          (state) => state.levels === 1,
+        )
+        await canvasFrame(page).locator(`${top} [data-wb-id="n_open_mid"]`).click()
+        await poll(
+          '다시 엶',
+          () => layerState(frame),
+          (state) => state.levels >= 2,
+        )
+        await page.waitForTimeout(500)
+        expect((await layerState(frame)).levels).toBe(2)
+      })
+    })
   })
 
   describe('HTML 번들', () => {
@@ -227,6 +322,7 @@ describe.skipIf(!전제.ok)('팝업 덮개 층 — 실브라우저', () => {
           ['팝업', '관리자 등록'],
           ['팝업', '관리자 보통'],
           ['팝업', '관리자 넓은'],
+          ['', '관리자 긴 목록'],
         ])
         await page.locator('.wb-export-canvas [data-wb-id="n_open"]').click()
         await page.locator('[data-wb-popup-frame]').waitFor()
@@ -423,12 +519,39 @@ async function focusedNode(frame: Frame): Promise<string | null> {
   return frame.evaluate(() => document.activeElement?.closest('[data-wb-id]')?.getAttribute('data-wb-id') ?? null)
 }
 
-/** 목록 페이지를 열어 뷰 모드로 두고 캔버스 문서의 Frame 을 넘긴다. */
-async function withView(stack: EditorStack, P: string, run: (page: Page, frame: Frame) => Promise<void>): Promise<void> {
+/** 맨 위 상자 안에 선 포커스의 이름(✖ 는 `close` · 바닥 단추는 글 · 그 밖은 노드 id). 상자 밖이면 `밖:` 을 붙인다. */
+async function focusedInPopup(frame: Frame): Promise<string> {
+  return frame.evaluate(() => {
+    const active = document.activeElement
+    const levels = document.querySelectorAll('[data-wb-popup-level]')
+    const top = levels[levels.length - 1]
+    const name =
+      active?.getAttribute('data-wb-part') ??
+      (active?.closest('[data-wb-zone="footer"]') !== null
+        ? (active?.textContent?.trim() ?? '')
+        : (active?.closest('[data-wb-id]')?.getAttribute('data-wb-id') ?? ''))
+    return top !== undefined && active !== null && top.contains(active) ? name : `밖:${active?.tagName ?? 'null'}`
+  })
+}
+
+/** 호스트 · 캔버스 문서 둘 다 두 프레임 — 굴림 리스너가 다시 잰 값이 그려진 뒤다. */
+async function settleFrames(page: Page, frame: Frame): Promise<void> {
+  const twoFrames = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+  await page.evaluate(`(${twoFrames.toString()})()`)
+  await frame.evaluate(`(${twoFrames.toString()})()`)
+}
+
+/** 페이지(`path`)를 열어 뷰 모드로 두고 캔버스 문서의 Frame 을 넘긴다. `ready` 는 그 페이지가 섰는지 기다릴 노드다. */
+async function withView(
+  stack: EditorStack,
+  path: string,
+  run: (page: Page, frame: Frame) => Promise<void>,
+  ready = 'n_open',
+): Promise<void> {
   const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
   try {
-    await page.goto(P)
-    await canvasFrame(page).locator('[data-wb-id="n_open"]').waitFor()
+    await page.goto(path)
+    await canvasFrame(page).locator(`[data-wb-id="${ready}"]`).waitFor()
     await page.getByRole('button', { name: '뷰 모드' }).click()
     const handle = await page.$('iframe.wb-shell-canvas-iframe')
     const frame = await handle?.contentFrame()
@@ -440,10 +563,10 @@ async function withView(stack: EditorStack, P: string, run: (page: Page, frame: 
 }
 
 /**
- * 메뉴 «관리자» 아래 — «목록»(화면: 등록을 여는 단추) · «등록»(팝업 보통: 긴 몸통 · 자기를 다시 여는 단추 · 바닥 [취소][저장]) ·
- * «보통»(팝업 보통: 2열 폼 표) · «넓은»(팝업 크게: 2열 폼 표).
+ * 메뉴 «관리자» 아래 — «목록»(화면: 등록을 여는 단추) · «등록»(팝업 보통: 긴 몸통 · 자기를 다시 여는 단추 · «보통» 을 여는 단추 · 바닥
+ * [취소][저장]) · «보통»(팝업 보통: 2열 폼 표) · «넓은»(팝업 크게: 2열 폼 표) · «긴 목록»(화면: 맨 위 «등록 열기» · 뒤 화면 80 줄 · 맨 아래 «아래 열기»).
  */
-async function fixture(stack: EditorStack, owner: Session): Promise<{ P: string; projectId: string }> {
+async function fixture(stack: EditorStack, owner: Session): Promise<{ P: string; LONG: string; projectId: string }> {
   const call = (method: string, path: string, body?: unknown) => stack.request(owner, method, path, body)
   const ok = (response: { status: number; body: any }, what: string) => {
     if (response.status >= 300) throw new Error(`픽스처 ${what} ${response.status} ${JSON.stringify(response.body)}`)
@@ -458,17 +581,38 @@ async function fixture(stack: EditorStack, owner: Session): Promise<{ P: string;
       null,
       [opener('n_open', '등록 열기', 'page:관리자/등록'), { id: 'n_after', type: 'Text', props: { content: '뒤 화면' } }],
     ],
-    ['등록', 'popup', null, [opener('n_again', '다시 열기', 'page:관리자/등록'), ...LONG_BODY]],
+    [
+      '등록',
+      'popup',
+      null,
+      [opener('n_again', '다시 열기', 'page:관리자/등록'), opener('n_open_mid', '보통 열기', 'page:관리자/보통'), ...LONG_BODY],
+    ],
     ['보통', 'popup', 'medium', [FORM('n_mid')]],
     ['넓은', 'popup', 'large', [FORM('n_wide')]],
+    [
+      '긴 목록',
+      'page',
+      null,
+      [
+        opener('n_open', '등록 열기', 'page:관리자/등록'),
+        ...Array.from({ length: 80 }, (_, i) => ({
+          id: `n_row${String(i).padStart(2, '0')}`,
+          type: 'Text',
+          props: { content: `뒤 화면 ${i + 1}` },
+        })),
+        opener('n_open_bottom', '아래 열기', 'page:관리자/등록'),
+      ],
+    ],
   ]
   let P = ''
+  let LONG = ''
   for (const [title, kind, size, nodes] of pages) {
     const page = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title, kind }), title)
     if (P === '') P = `/projects/${project.id}/pages/${page.id}`
+    if (title === '긴 목록') LONG = `/projects/${project.id}/pages/${page.id}`
     const ops: unknown[] = nodes.map((value, i) => ({ op: 'add', path: `/root/children/${i}`, value }))
     if (size !== null) ops.push({ op: 'add', path: '/root/props/size', value: size })
     ok(await call('PATCH', `/projects/${project.id}/pages/${page.id}/ops`, { baseSeq: 0, ops }), `ops ${title}`)
   }
-  return { P, projectId: project.id }
+  return { P, LONG, projectId: project.id }
 }

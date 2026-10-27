@@ -9,6 +9,10 @@
  *
  * **열 때마다 읽는다** — 연 동안 남이 그 팝업을 고쳐도 상자는 그대로이고, 닫았다 열면 새 판이다. 트리 · 페이지를 읽는 동안 모드 · 페이지를
  * 옮기면(겹layer 의 리셋 축 `runtimeKey` — `canvas.tsx`) 받은 답을 버린다.
+ *
+ * **같은 대상을 읽는 동안의 둘째 열기는 버린다** — 덮개는 읽기가 끝나야 서므로 그 사이 여는 단추가 다시 눌린다(안 버리면 더블클릭이 같은 팝업을
+ * 두 겹 쌓는다). 덮개를 먼저 세우지 않은 까닭: 읽기가 실패 · 화면 페이지 · 없는 대상으로 끝나면 세운 덮개를 걷고 한 줄로 말해야 해 겹 수 · 포커스
+ * 되돌림이 그 갈래마다 갈린다. 버림은 열기를 기다리는 동안만이다 — 다른 대상 · 쌓인 뒤 다시 열기(팝업 안 «다시 열기») · 닫은 뒤 열기는 그대로 연다.
  */
 import {
   NO_OPEN_POPUP,
@@ -20,7 +24,7 @@ import {
   type PopupArea,
   type PopupStack,
 } from '@wirebound/renderer'
-import { describePageTarget, matchPageTargets } from '@wirebound/schema'
+import { describePageTarget, matchPageTargets, pageTargetKey } from '@wirebound/schema'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { ApiClient } from '../api/client'
 import { projectAssetUrl } from '../api/asset-url'
@@ -66,9 +70,14 @@ export function useCanvasPopups(input: {
 }): CanvasPopups {
   const latest = useRef(input)
   latest.current = input
+  /** 읽는 중인 열기 — `runtimeKey` 와 대상의 열쇠(`pageTargetKey`)로 짓는다. */
+  const loading = useRef(new Set<string>())
 
   const open = async (request: { target: string; sourceNodeId: string }): Promise<void> => {
     const { api, projectId, frame, runtimeKey: key } = latest.current
+    const pending = `${key}\n${pageTargetKey(request.target)}`
+    if (loading.current.has(pending)) return
+    loading.current.add(pending)
     const opener = frame === null ? null : popupOpener(frame.document, request.sourceNodeId)
     const say = (line: string): void => latest.current.say(line, key)
     try {
@@ -92,6 +101,8 @@ export function useCanvasPopups(input: {
       if (!pushed) say(POPUP_DEPTH_NOTICE)
     } catch {
       if (latest.current.runtimeKey === key) say(POPUP_LOAD_FAILED)
+    } finally {
+      loading.current.delete(pending)
     }
   }
 
