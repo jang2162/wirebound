@@ -443,7 +443,7 @@ describe('checkTheme', () => {
   })
 
   /**
-   * **파일첨부 F1 ~ F4**(`fileAttachProblems`) — SDK 기본 `FileAttachView` 와 같은 꼴로 그리는 뷰에서 한 곳만 바꾼다. 갤러리 표본은 파일 0 · 하나 · 셋과 한도 글의
+   * **파일첨부 F1 ~ F4 · 조각 이름**(`fileAttachProblems`) — SDK 기본 `FileAttachView` 와 같은 꼴로 그리는 뷰에서 한 곳만 바꾼다. 갤러리 표본은 파일 0 · 하나 · 셋과 한도 글의
    * 네 갈래(둘 다 · 크기만 · 개수만 · 없음)를 갖는다 — 깨는 뷰마다 «그 갈래의 표본이 다 걸린다» 를 표본 이름으로 단언한다(건드림 카나리아 — 한 갈래만
    * 그린 판이면 그 갈래의 이름이 빠진다).
    */
@@ -455,8 +455,19 @@ describe('checkTheme', () => {
       list?: 'div'
       head?: 'td'
       filePart?: string
+      /** 파일 줄을 목록 표 밖 뿌리의 형제(`div` · `span`)로 그린다 — 표 몸통은 빈 안내만 남는다. */
+      rowsOutside?: 'div' | 'span'
+      /** 조각 이름을 바꾼다(`fileName` · `fileSize` · `check` · `checkHead` · `actions`). */
+      parts?: Partial<Record<'fileName' | 'fileSize' | 'check' | 'checkHead' | 'actions', string>>
+      /** 이름 칸에 크기 · 크기 칸에 이름을 그린다. */
+      swap?: true
+      /** 단추 구역을 목록 표의 `caption` 안에 그린다 · `actions` 조각을 빈 상자로 두고 구역은 조각 없이 따로 그린다. */
+      actions?: 'inList' | 'apart'
+      /** 체크 조각을 실제 입력 칸(`<input type="checkbox">`)으로 · `disabled` 를 단 입력 칸으로. */
+      checkbox?: 'input' | 'disabledInput'
     } = {},
   ): string {
+    const part = (name: 'fileName' | 'fileSize' | 'check' | 'checkHead' | 'actions') => change.parts?.[name] ?? name
     const rows =
       change.rows === 'dropFirst' ? 'files.slice(1)' : change.rows === 'twice' ? 'files.length ? [files[0], ...files] : files' : 'files'
     const drop = change.drop === 'always' ? 'true' : change.drop === 'never' ? 'false' : 'files.length === 0'
@@ -467,20 +478,44 @@ describe('checkTheme', () => {
         : `h('p', { 'data-wb-part': 'limit' }, '최대 ', count !== null ? h('span', { 'data-wb-part': 'limitCount' }, count + '개') : null, ' ',
             size !== null ? h('span', { 'data-wb-part': 'limitSize' }, size) : null, ' 제한')`
     const shown = change.limit === 'always' ? 'true' : 'count !== null || size !== null'
+    const checkbox =
+      change.checkbox === 'input'
+        ? `() => h('input', { type: 'checkbox', 'data-wb-part': 'checkbox', 'aria-hidden': 'true' })`
+        : change.checkbox === 'disabledInput'
+          ? `() => h('input', { type: 'checkbox', disabled: true, 'data-wb-part': 'checkbox', 'aria-hidden': 'true' })`
+          : `() => h('span', { 'data-wb-part': 'checkbox', 'aria-hidden': 'true' })`
+    const [nameOf, sizeOf] = change.swap ? ['f.size', 'f.name'] : ['f.name', 'f.size']
+    const tag = change.rowsOutside ?? null
+    const row =
+      tag === null
+        ? `(f, i) => h('tr', { key: i, 'data-wb-part': '${change.filePart ?? 'file'}' }, h('td', { 'data-wb-part': '${part('check')}' }, checkbox()),
+            h('td', { 'data-wb-part': '${part('fileName')}' }, ${nameOf}), h('td', { 'data-wb-part': '${part('fileSize')}' }, ${sizeOf}))`
+        : `(f, i) => h('${tag}', { key: i, 'data-wb-part': '${change.filePart ?? 'file'}' }, h('${tag}', { 'data-wb-part': '${part('check')}' }, checkbox()),
+            h('${tag}', { 'data-wb-part': '${part('fileName')}' }, ${nameOf}), h('${tag}', { 'data-wb-part': '${part('fileSize')}' }, ${sizeOf}))`
+    const actions =
+      change.actions === 'apart'
+        ? `h('div', { 'data-wb-part': 'actions' }), h(rt.sdk.Zone, { name: 'actions' })`
+        : `h(rt.sdk.Zone, { name: 'actions', 'data-wb-part': '${part('actions')}' })`
     return `{ FileAttach: rt.sdk.view(({ props }) => {
       const files = Array.isArray(props.files) ? props.files : []
       const count = props.maxFiles > 0 ? props.maxFiles : null
       const size = typeof props.maxSize === 'string' && props.maxSize.trim() !== '' ? props.maxSize : null
       const head = (${cell})
+      const checkbox = ${checkbox}
+      const row = ${row}
       const body = [
         ...(${drop} ? [h('tr', { key: 'drop' }, h('td', { colSpan: 3, 'data-wb-part': 'drop' }, props.hint))] : []),
-        ...(${rows}).map((f, i) => h('tr', { key: i, 'data-wb-part': '${change.filePart ?? 'file'}' }, h('td', null),
-          h('td', { 'data-wb-part': 'fileName' }, f.name), h('td', { 'data-wb-part': 'fileSize' }, f.size))),
+        ...(${tag === null ? rows : '[]'}).map(row),
       ]
+      const headRow = h('tr', null,
+        h('${change.head === 'td' ? 'td' : 'th'}', { ${change.head === 'td' ? '' : "scope: 'col', "}'data-wb-part': '${part('checkHead')}', 'aria-label': '고르기' }, checkbox()),
+        head('파일이름'), head('파일크기'))
       const list = h('${change.list ?? 'table'}', { 'data-wb-part': 'list' },
-        h('thead', null, h('tr', null, head('□'), head('파일이름'), head('파일크기'))), h('tbody', null, ...body))
+        ${change.actions === 'inList' ? `h('caption', null, ${actions}),` : ''}
+        h('thead', null, headRow), h('tbody', null, ...body))
+      const outside = ${tag === null ? 'null' : `h(rt.react.Fragment, null, ...(${rows}).map(row))`}
       const limit = ${shown} ? ${limit} : null
-      const root = h(Root, { as: 'div', role: 'group' }, h(rt.sdk.Zone, { name: 'actions' }), list, ${change.limit === 'sibling' ? 'null' : 'limit'})
+      const root = h(Root, { as: 'div', role: 'group' }, ${change.actions === 'inList' ? 'null' : actions}, list, outside, ${change.limit === 'sibling' ? 'null' : 'limit'})
       return ${change.limit === 'sibling' ? 'h(rt.react.Fragment, null, root, limit)' : 'root'}
     }) }`
   }
@@ -518,6 +553,16 @@ describe('checkTheme', () => {
     ['F3 — 한도 글을 뿌리 밖 형제로', { limit: 'sibling' }, WITH_LIMIT, 'limit 조각을 1 개가 아니라 0 개'],
     ['F4 — 목록을 div 로', { list: 'div' }, ALL, 'list 조각을 table 하나로 그리지 않았습니다'],
     ['F4 — 머리 칸을 td 로', { head: 'td' }, ALL, '머리 칸이 th scope="col" 셋이 아닙니다'],
+    ['F1 — 파일 줄을 목록 표 밖 div 형제로', { rowsOutside: 'div' }, WITH_FILES, 'list 표의 몸통 줄(tbody > tr) 밖에'],
+    ['F1 — 파일 줄을 목록 표 밖 span 형제로', { rowsOutside: 'span' }, WITH_FILES, 'list 표의 몸통 줄(tbody > tr) 밖에'],
+    ['조각 — 이름 칸 조각 이름을 바꾼다', { parts: { fileName: 'name' } }, WITH_FILES, '번째 파일 줄의 fileName 조각이'],
+    ['조각 — 크기 칸 조각 이름을 바꾼다', { parts: { fileSize: 'size' } }, WITH_FILES, '번째 파일 줄의 fileSize 조각이'],
+    ['조각 — 이름 · 크기 칸 글을 맞바꾼다', { swap: true }, WITH_FILES, '번째 파일 줄의 file'],
+    ['조각 — 줄 체크 칸 조각 이름을 바꾼다', { parts: { check: 'cell' } }, WITH_FILES, '번째 파일 줄의 check 조각 안에'],
+    ['조각 — 머리 체크 칸 조각 이름을 바꾼다', { parts: { checkHead: 'head' } }, ALL, 'checkHead 조각'],
+    ['조각 — 단추 구역 조각 이름을 바꾼다', { parts: { actions: 'buttons' } }, ALL, 'actions 조각'],
+    ['조각 — 단추 구역을 목록 표 안에', { actions: 'inList' }, ALL, 'actions 조각'],
+    ['조각 — actions 조각을 빈 상자로 · 구역은 따로', { actions: 'apart' }, ALL, 'actions 조각'],
   ])('%s — 그 갈래의 표본이 다 걸리고 그 규칙만 선다', async (_, change, labels, fragment) => {
     const errors = fileErrors(await checkTheme(files(BASE, { views: fileAttachView(change) })))
     expect(labelsOf(errors)).toEqual(labels)
@@ -525,5 +570,21 @@ describe('checkTheme', () => {
       errors.every((error) => error.message.includes(fragment)),
       errors.map((error) => error.message).join('\n'),
     ).toBe(true)
+  })
+
+  /**
+   * 체크는 그림 조각이다(SDK `FileAttachView` 머리말) — 입력 칸으로 그리면 캔버스에서 누른 뒤 단축키가 막힌다. 입력 칸은 «기대한 포커스»(`EXPECTED_FOCUS`)라
+   * 다른 자리에서는 경고가 아니므로, 그림 조각 안에서만 경고로 세운다. 꺼진 입력 칸은 포커스를 안 받아 안 선다.
+   */
+  it('체크 조각을 입력 칸으로 그린 파일첨부 뷰는 포커스 경고로 선다 — 꺼진 입력 칸은 안 선다 · 오류는 0', async () => {
+    const report = await checkTheme(files(BASE, { views: fileAttachView({ checkbox: 'input' }) }))
+    expect(report.errors).toEqual([])
+    const own = report.focusables.filter((found) => found.type === 'FileAttach')
+    expect(labelsOf(own)).toEqual(ALL)
+    expect([...new Set(own.map((found) => found.element))]).toEqual(['<input>'])
+    expect(formatCheckReport(report).ok).toBe(true)
+    const off = await checkTheme(files(BASE, { views: fileAttachView({ checkbox: 'disabledInput' }) }))
+    expect(off.errors).toEqual([])
+    expect(off.focusables).toEqual([])
   })
 })

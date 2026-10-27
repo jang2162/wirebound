@@ -107,8 +107,10 @@ export const CardView = view(({ props, variant, states, children }) => {
   `<table>` 하나 — 머리 칸은 `th scope="col"` 셋(□ · 파일이름 · 파일크기)이다. 파일마다 `file` 조각(한 줄 — `fileName` · `fileSize` 칸), 목록이
   비면 `drop` 조각(`hint` 글) 한 줄만 그린다. 한도 글은 `limit` 조각 안에 «최대 {maxFiles}개 {maxSize} 제한» 이고 두 값을 `limitCount` · `limitSize`
   조각으로 감싼다(개수가 0 이면 개수 조각 · 크기가 비면 크기 조각이 없고, 둘 다 없으면 `limit` 째 없다). 파일 줄 수 · 빈 목록 안내 · 한도 조각 · 표
-  머리가 이와 다르면 `wb-theme check` 가 막는다. 체크는 그림이다(`<input>` 이 아니다 — 포커스 받는 요소를 늘리지 않는다). 값 칸 안이면 `field.name` 을
-  뿌리(`group`)의 이름으로 단다.
+  머리가 이와 다르면 `wb-theme check` 가 막는다. 조각 이름과 자리도 잰다 — `file` 줄은 `list` 표 몸통의 `tr`(표 밖 형제는 열 머리와 안 이어진다), 줄마다
+  `check` 칸 안 `checkbox` 하나와 그 파일의 이름 · 크기를 든 `fileName` · `fileSize` 칸, 머리 줄의 `checkHead` 칸 안 `checkbox` 하나, 목록 표 밖의
+  `actions` 조각 하나(«단추» 구역 상자이거나 그것을 품는다). 체크는 그림이다(`<input>` 이 아니다 — 포커스 받는 요소를 늘리지 않는다 · `checkbox` 조각
+  안의 꺼지지 않은 입력 칸은 `check` 가 포커스 경고로 낸다). 값 칸 안이면 `field.name` 을 뿌리(`group`)의 이름으로 단다.
 - **첫 렌더에 `Root` 를 반환한다.** 이펙트 · 상태를 기다렸다가 `Root` 를 그리면 누락으로 판정되어 그 노드는 SDK 기본 뷰로
   그려지고 콘솔에 경고가 난다.
 - **포커스 받는 요소는 단추(`<button>`) · 링크(`<a href>`) · 입력 칸(`input` · `select` · `textarea`)만 쓴다.** 에디터 캔버스는 포커스가 선 요소가 단추 · 링크가 아니면 입력 표면으로 보고 단축키 · 노드 복사를 안 받는다 — `tabIndex` 를 단 `div` · `summary` · `controls` 를 켠 `video` · `audio` 를 누른 뒤에는 Delete · Cmd+C · Cmd+D 가 안 서고 통지도 없다(닫힌 shadow 안의 입력과 `tabindex` 만 단 요소를 DOM 으로 못 가려서다). 탭 · 접힘 같은 위젯도 `<button>` 으로 짜고 `role="tab"` 은 그 단추에 얹는다. `wb-theme check` 가 갤러리 칸에서 이런 요소를 찾아 경고한다(오류가 아니라 종료 코드에 안 든다).
