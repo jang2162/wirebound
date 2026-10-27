@@ -157,8 +157,8 @@ sha256 `b9eba8fe…74ab` = `checksums.json` 의 1.7.0 줄(사용자 DB 의 판).
 | `test:build:serial` | 13:48:06 ~ 13:51:11 | 175 | 0 | 1(`template` «저장소 밖에서 설치») | 18 | 175 · 18 | 같다 |
 | `test:browser` | 13:51:11 ~ 14:05:03 | 631 | 0 | 1(`layout-weight` 스크린숏) | 96 | 618 · 93 | 위와 같다 |
 
-web 의 실행 수는 `vitest list`(3428)보다 2 많다 — main 도 같은 차다(게이트 3415 · list 3413). unit 파일 170 = 167 + 3(B 의 `preset.test.ts` ·
-`file-attach-view.test.tsx` · `file-list-control.test.tsx` 쪽 새 파일), 실브라우저 96 = 93 + 2(B 의 `palette-preset` · `file-attach-narrow`) + 1(`popup-attach`).
+web 의 실행 수는 `vitest list`(3428)보다 2 많다 — main 도 같은 차다(게이트 3415 · list 3413). unit 파일 170 = 167 + 3(B 의 `schema/test/component/preset.test.ts` ·
+`text-max.test.ts` · `renderer/test/file-attach-view.test.tsx`), web 214 = 213 + 1(`panels/file-list-control.test.tsx`), 실브라우저 96 = 93 + 2(B 의 `palette-preset` · `file-attach-narrow`) + 1(`popup-attach`).
 ⑥ — B 의 실브라우저 판 `palette-preset`(카드 차례 · 축소판 · 넣기 입구 다섯 · 글 한도) · `file-attach-narrow` 는 A 의 카드 · 팝업 변화 위에서 두 판 다 초록이다.
 끝(14:05)에 이 워크트리 경로의 vitest · vite · tsx · Chrome · 체인 0 · 3104 리스너 0. DB 컨테이너(5504)는 남겼다.
 
