@@ -13,11 +13,11 @@
  * 옮겨지므로 혼자 죽지 않는다 — 개인 모듈을 거름 없이 되살린 판에서만 앨리스와 함께 죽는다.
  */
 import { randomUUID } from 'node:crypto'
-import { installCatalog, partitionIssues, validatePage, type PageDocument } from '@wirebound/schema'
+import { installCatalog, matchPageTargets, partitionIssues, targetedPages, validatePage, type PageDocument } from '@wirebound/schema'
 import { Migrator, NO_MIGRATIONS, sql } from 'kysely'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createDb, createPool } from '../src/db/client'
-import { liftModalTargets } from '../src/db/migrations/0033-modal-popup'
+import { liftModalTargets, resolveTargets } from '../src/db/migrations/0033-modal-popup'
 import { migrationProvider } from '../src/db/migrations/index'
 import type { DbHandle } from '../src/db/tx'
 import { TEST_DATABASE_URL } from './helpers'
@@ -314,4 +314,56 @@ describe('0033 — «팝업 열기» 대상 페이지를 팝업 페이지로', (
     await sql`delete from pages where id = ${made}`.execute(db)
     expect(await documents()).toEqual(before)
   }, 60_000)
+})
+
+/**
+ * **얼려 베낀 풀이가 정본 풀이와 같은 답을 내는가** — `0033` 은 대상 글자의 풀이를 그 판의 뜻으로 베껴 둔다(파일 머리말). 지금의 정본
+ * (`@wirebound/schema` 의 `matchPageTargets` · 번들 · lint 가 쓰는 `pageTargetKey`)과 표본으로 견준다 — 정본이 바뀌어 갈리면 여기서 죽고,
+ * 그때 마이그레이션은 고치지 않는다(이미 돈 판의 뜻이다). 이 케이스가 갈림을 알리는 자리다.
+ */
+describe('0033 의 풀이 — 정본(`matchPageTargets`)과 같은 답', () => {
+  const menu = [
+    { id: 'm_admin', parentId: null, title: '관리자', sortOrder: 0 },
+    { id: 'm_member', parentId: 'm_admin', title: ' 회원 ', sortOrder: 0 },
+    { id: 'm_orphan', parentId: 'm_gone', title: '고아', sortOrder: 1 },
+    { id: 'm_loop_a', parentId: 'm_loop_b', title: '고리', sortOrder: 2 },
+    { id: 'm_loop_b', parentId: 'm_loop_a', title: '고리', sortOrder: 3 },
+  ]
+  const pages = [
+    { id: 'p_reg', menuNodeId: 'm_member', title: '등록', sortOrder: 0 },
+    { id: 'p_sp', menuNodeId: 'm_member', title: ' 공백 제목 ', sortOrder: 1 },
+    { id: 'p_dup1', menuNodeId: 'm_member', title: '중복', sortOrder: 2 },
+    { id: 'p_dup2', menuNodeId: 'm_member', title: '중복', sortOrder: 3 },
+    { id: 'p_top', menuNodeId: 'm_admin', title: '대시보드', sortOrder: 0 },
+    { id: 'p_orphan', menuNodeId: 'm_orphan', title: '고아', sortOrder: 0 },
+    { id: 'p_loop', menuNodeId: 'm_loop_a', title: '고리', sortOrder: 0 },
+  ]
+  const SAMPLES = [
+    'page:관리자/회원/등록',
+    ' page: 관리자 / 회원 / 등록 ',
+    '관리자/회원/등록',
+    'page:관리자/회원/공백 제목',
+    'page:관리자/회원/중복',
+    'page:관리자/대시보드',
+    'page: 관리자 /대시보드',
+    'page:고아/고아',
+    'page:고리/고리',
+    'page:관리자/회원/없음',
+    'page:',
+    '',
+    '   ',
+    'page:관리자//등록',
+  ]
+
+  it('표본마다 «한 페이지로 풀리면 그 id» 가 같다', () => {
+    const targeted = targetedPages({ menu, pages })
+    const expected = SAMPLES.map((target) => {
+      const found = matchPageTargets(targeted, target)
+      return [target, found.length === 1 ? [found[0]!.id] : []]
+    })
+    const frozen = SAMPLES.map((target) => [target, [...resolveTargets(menu, pages, new Set([target]))]])
+    expect(frozen).toEqual(expected)
+    // 카나리아 — 표본이 «풀림» 과 «안 풀림» 둘 다를 낸다.
+    expect(expected.filter(([, ids]) => (ids as string[]).length === 1)).toHaveLength(6)
+  })
 })

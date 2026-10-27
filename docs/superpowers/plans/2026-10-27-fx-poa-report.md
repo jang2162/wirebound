@@ -32,8 +32,49 @@
 | F1b | 같음 | 개인 모듈을 거름 없이 되살림 | 11:54:34 ~ 11:54:37 | 8.7 | 7 · 3 | 같은 셋 — 넷째 값(밥의 P «이동»)도 `Popup` |
 | F2 | 같은 파일 스냅샷 출처 | 프로젝트 모듈 줄을 뗌 | 11:54:37 ~ 11:54:41 | 9.2 | 7 · 3 | «스냅샷 — … «모듈대상»(그 프로젝트의 모듈이 연다)만 옮긴다» 모듈대상 `Page` · 옮긴 수 줄 · `down` 수 줄 |
 
-옮긴 수의 로그 한 줄 꼴(케이스 픽스처): `  · 0033-modal-popup: 팝업으로 옮긴 페이지 3 · 스냅샷 1 개 안의 페이지 3` — 고치기 전 같은 픽스처는 «페이지 6 ·
-… 2» 였다(Q 둘 · P «개인대상» 이 더 세어지고 스냅샷 «모듈대상» 이 빠짐). 줄의 모양은 그대로다.
+옮긴 수의 로그 한 줄 꼴(케이스 픽스처): `  · 0033-modal-popup: 팝업으로 옮긴 페이지 3 · 스냅샷 1 개 안의 페이지 3` — 변조 판의 실패 diff 에서 F1 «페이지 6 · … 3»(Q 둘 · P «개인대상» 이 더 세어짐) · F1b «페이지 7 · … 3»(밥의 P «이동» 까지) · F2 «페이지 3 · … 2»(스냅샷 «모듈대상» 이 빠짐). 줄의 모양은 그대로다.
 
 **마이그레이션 디렉터리를 글자로 세는 자(`git grep -lE 'MIGRATIONS_DIR|db/migrations' apps/api/test` — 19 파일):** 11:54:48 ~ 11:55:01 · 170 실행 ·
 실패 0 · 건너뜀 0.
+
+## M1 · L3 — 번들 · lint · 미리보기의 대상 풀이
+
+**재현(고치기 전 소스 · 케이스를 먼저 더한 판, 11:56 · 11:57):**
+
+- 번들 `bundle-popups.test.tsx` 13 중 5 실패. M1: 목록 → 팝업 «검색» 을 연 뒤 팝업 안 «이동»(→ 화면 «상세») · 화면 대상 «팝업 열기» 가
+  `[[], ['이 번들에 없는 페이지입니다: page:상세']]` · 팝업이 연 팝업 «고르기» 안 «이동»(→ «끝») 이 `['이 번들에 없는 페이지입니다: page:끝']`.
+  «팝업 닫기» 는 고치기 전에도 초록(표를 안 읽는다). L3: `page: 검색 ` · 접두 없는 `검색` 의 `popups` 키 = `[]`(에디터 `matchPageTargets` 는 1 건) ·
+  공백 낀 «이동» ` 상세 ` → `이 번들에 없는 페이지입니다:  상세 `.
+- lint `lint-design.test.ts` «공백이 낀 · 접두 없는 대상도 같은 페이지로 푼다»: 기대 둘(`modal-target-not-popup` · `navigate-to-popup`) 자리에 셋 —
+  셋 다 `page-target-missing`(값 diff).
+- **미리보기도 같은 결함이었다(리뷰가 안 짚은 자리):** api `export-bundle.ts` 의 `brokenLinks` 는 번들과 «같은 판정» 이라 적고 글자로 견줬다 —
+  `page: 메뉴 / 닿는 쪽 ` 이 `[{ target: 'page: 메뉴 / 닿는 쪽', reason: 'missing', … }]`. 번들만 고치면 내보내기 화면이 이어진 링크를 «못 이음» 이라
+  말하게 된다. 같은 열쇠로 고쳤다.
+
+**고친 것:**
+
+- `@wirebound/schema` 에 `pageTargetKey`(접두를 벗기고 마디마다 공백을 걷는 열쇠 — 지금 `matchPageTargets` 의 `normalizePath` 를 이름 붙여 내보냄).
+  `matchPageTargets` 가 그것을 쓴다(동작 같음).
+- 번들(`packages/exporter/src/bundle/index.ts`): 타겟 표 · 팝업 문서 표를 열쇠로 짓고 찾는다. `hrefs` · `popups` 의 키는 문서에 적힌 글자 그대로다
+  (런타임이 요청의 글자로 찾는다 — 런타임은 안 바꿨다). **`hrefs` 는 이 페이지 문서 + 거기 실린 팝업 문서들**(`popupsFor` — 팝업이 연 팝업까지 닫힌
+  셈, 같은 BFS 차례)이 겨누는 타겟을 싣는다(M1). 실린 팝업이 없는 페이지는 문서 하나라 표가 그대로다 — `bundle-stateless-bytes` 4 초록.
+- lint(`packages/schema/src/lint/design.ts`): `targets` · `kinds` 를 열쇠로.
+- 미리보기(`apps/api/src/services/export-bundle.ts` 의 `brokenLinks`): 세는 표와 찾기를 열쇠로.
+- `0033` 은 얼려 베낀 풀이라 그대로 두고, `modal-popup-migration.test.ts` «0033 의 풀이 — 정본과 같은 답» 이 표본 14(접두 · 공백 · 접두 없음 · 둘 ·
+  없음 · 빈 · `page:` · 빈 마디 · 고아 메뉴 · 고리 메뉴)로 `resolveTargets` 와 `matchPageTargets(targetedPages(…))` 를 견준다(카나리아: 풀리는 표본 6).
+- **`navigate` 는:** 번들(`hrefs`) · lint · 미리보기가 같은 열쇠를 쓴다. 에디터 뷰 모드는 `navigate` 를 풀지 않는다 — «… 이동 규칙입니다. 이 화면에서는
+  페이지를 옮기지 않습니다.» 만 말한다(`apps/web/src/canvas/canvas.tsx` 의 `noticesOf` — `describePageTarget` 는 접두만 벗겨 글자를 보인다). 풀 자리가
+  없어 바꾸지 않았다. CLI · MCP 의 `page get` · lint 의 경로 풀이는 원래 `matchPageTargets` 다.
+
+| id | 자리 | 바꿈 | 건 ~ 푼 | load | 돌린 것 | 실행 · 실패 | 죽은 케이스 «실패 값» |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| G1 | `bundle/index.ts` `pageHtml` | `hrefsFor([page.document], …)`(실린 팝업 문서를 안 셈) | 11:59:42 ~ 11:59:44 | 9.8 | `bundle-popups` · `bundle-stateless-bytes` | 17 · 3 | «이동» · «화면 페이지를 겨눈 팝업 열기» `[[], ['이 번들에 없는 페이지입니다: page:상세']]` · «팝업이 연 팝업» `… page:끝` |
+| G1B | 같음 | 실린 팝업 문서 가운데 첫 하나만 셈(`slice(0, 1)`) | 12:00:09 ~ 12:00:11 | 10.0 | `bundle-popups` | 13 · 1 | «팝업이 연 팝업까지» 혼자 `… page:끝` |
+| G2 | `hrefsFor` 의 찾기 | 열쇠 → 글자 그대로(`'page:' + key === target` 일 때만 열쇠) | 11:59:44 ~ 11:59:45 | 9.8 | 같음 | 17 · 1 | «공백이 낀 «이동» 대상도 …» `이 번들에 없는 페이지입니다:  상세 ` |
+| G3 | `popupsFor` 의 찾기 | 같은 꼴 | 11:59:45 ~ 11:59:47 | 9.8 | 같음 | 17 · 1 | «공백이 낀 «팝업 열기» 대상도 …» `popups` 키 `[]` |
+| G4 | lint `pageTargetIssues` | 같은 꼴 | 11:59:47 ~ 11:59:48 | 9.8 | `lint-design` | 47 · 1 | «공백이 낀 · 접두 없는 대상도 …» 이슈 셋(`page-target-missing`) |
+| G5 | api `brokenLinks` | 같은 꼴 | 11:59:48 ~ 11:59:56 | 9.8 | api `export-bundle` | 26 · 1 | «공백이 낀 · 접두 없는 타겟도 이어진다» `[{ target: 'page: 메뉴 / 닿는 쪽', reason: 'missing' … }]` |
+| G6 | `0033` 의 `normalizePath` | 접두 없는 글자를 빈 경로로 | 11:59:56 ~ 12:00:00 | 9.9 | api `modal-popup-migration` | 8 · 1 | «0033 의 풀이 — 정본과 같은 답» 표본 diff(`관리자/회원/등록`) |
+
+«이동» 과 «화면 대상 팝업 열기» 는 런타임에서 같은 표(`hrefs`)를 읽어 늘 함께 죽는다 — 둘을 가르는 변조는 없다(축이 같다). «팝업 닫기» 케이스는 표를
+안 읽어 G1 에 산다 — 실린 문서 안의 «닫기» 가 맨 위를 닫는다는 것을 잰다(`popup-layer` 의 닫기 축은 렌더러 케이스가 소유한다).

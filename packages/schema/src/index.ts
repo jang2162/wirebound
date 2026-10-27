@@ -127,6 +127,7 @@ export {
   matchPageTargets,
   pageBundleTitle,
   pageTarget,
+  pageTargetKey,
   pageTargetPath,
   targetedPages,
 } from './page-target'

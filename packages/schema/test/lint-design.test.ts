@@ -646,4 +646,21 @@ describe('팝업 — 대상의 종류 · 닫기의 자리', () => {
     const missing = run(page({ document: doc([opener([{ type: 'openModal', target: 'page:없는곳' }])]) }))
     expect(missing.map((issue) => issue.rule)).toEqual(['page-target-missing'])
   })
+
+  /** 에디터 뷰 모드가 여는 글자(`matchPageTargets` — 마디의 공백 · 접두 없음)는 lint 도 같은 페이지로 푼다(`pageTargetKey`). */
+  it('공백이 낀 · 접두 없는 대상도 같은 페이지로 푼다 — 없다고 하지 않고 종류를 말한다', () => {
+    const spaced = run(
+      page({
+        document: doc([
+          opener([{ type: 'openModal', target: ' page: 관리자 / 회원 / 검색 ' }]),
+          opener([{ type: 'openModal', target: '관리자/회원/상세' }]),
+          opener([{ type: 'navigate', target: 'page:관리자/ 회원/검색' }]),
+        ]),
+      }),
+    )
+    expect(spaced.map((issue) => [issue.rule, issue.path])).toEqual([
+      ['modal-target-not-popup', '/root/children/1/interactions/0/actions/0'],
+      ['navigate-to-popup', '/root/children/2/interactions/0/actions/0'],
+    ])
+  })
 })

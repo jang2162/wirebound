@@ -186,3 +186,108 @@ describe('런타임 — 덮개 위 팝업', () => {
     expect(lines(status)).toEqual(['팝업은 다섯 겹까지 엽니다'])
   })
 })
+
+const nav = (id: string, target: string): WbNode => ({
+  id,
+  type: 'Button',
+  props: { label: id },
+  interactions: [{ on: 'click', actions: [{ type: 'navigate', target }] }],
+})
+
+/**
+ * 실린 팝업 문서 안의 요청 — 목록 → 팝업 «검색»(이동 · 화면 대상 열기 · 팝업 대상 열기 · 닫기) → 팝업 «고르기»(이동). 여는 페이지의 `hrefs` 가
+ * 실린 문서들이 겨누는 대상까지 실어야 그 요청이 «이 번들에 없는 페이지» 로 안 끊긴다.
+ */
+function nestedPages(): BundlePage[] {
+  return [
+    { title: '목록', target: 'page:목록', document: screen('n_list', [opener('n_open', 'page:검색')]) },
+    {
+      title: '검색',
+      target: 'page:검색',
+      document: popup(
+        'n_pop',
+        '검색',
+        [nav('n_go', 'page:상세'), opener('n_modal_screen', 'page:상세'), opener('n_pick', 'page:고르기')],
+        [closer('n_close')],
+      ),
+    },
+    { title: '고르기', target: 'page:고르기', document: popup('n_pick_pop', '고르기', [nav('n_go_end', 'page:끝')]) },
+    { title: '상세', target: 'page:상세', document: screen('n_detail', []) },
+    { title: '끝', target: 'page:끝', document: screen('n_end', []) },
+  ]
+}
+
+function dataOf(list: BundlePage[], path: string): ExportPageData {
+  const html = String(exportBundle({ pages: list, runtimeJs: '' }).files.find((file) => file.path === path)!.content)
+  return JSON.parse(new DOMParser().parseFromString(html, 'text/html').getElementById(PAGE_DATA_ID)!.textContent!) as ExportPageData
+}
+
+describe('런타임 — 실린 팝업 문서 안의 요청', () => {
+  const open = () => {
+    const data = dataOf(nestedPages(), 'pages/목록.html')
+    const mounted = mount({ document: data.document, hrefs: data.hrefs, popups: data.popups! })
+    click(byId(mounted.canvas, 'n_open'))
+    expect(mounted.canvas.querySelectorAll('[data-wb-popup-level]')).toHaveLength(1)
+    return mounted
+  }
+  const inTop = (canvas: HTMLElement, id: string) =>
+    byId(canvas.querySelector(`[data-wb-popup-level="${canvas.querySelectorAll('[data-wb-popup-level]').length}"]`)!, id)
+
+  it('«이동» 은 그 페이지 파일로 옮긴다', () => {
+    const { canvas, navigated, status } = open()
+    click(inTop(canvas, 'n_go'))
+    expect([navigated, lines(status)]).toEqual([[`${encodeURIComponent('상세')}.html`], []])
+  })
+
+  it('화면 페이지를 겨눈 «팝업 열기» 는 이동의 길이다', () => {
+    const { canvas, navigated, status } = open()
+    click(inTop(canvas, 'n_modal_screen'))
+    expect([navigated, lines(status)]).toEqual([[`${encodeURIComponent('상세')}.html`], []])
+  })
+
+  it('팝업을 겨눈 «팝업 열기» 는 쌓고, 그 팝업 안의 «이동» 도 옮긴다(팝업이 연 팝업까지)', () => {
+    const { canvas, navigated, status } = open()
+    click(inTop(canvas, 'n_pick'))
+    expect(canvas.querySelectorAll('[data-wb-popup-level]')).toHaveLength(2)
+    click(inTop(canvas, 'n_go_end'))
+    expect([navigated, lines(status)]).toEqual([[`${encodeURIComponent('끝')}.html`], []])
+  })
+
+  it('«팝업 닫기» 는 맨 위를 닫는다', () => {
+    const { canvas, navigated, status } = open()
+    click(inTop(canvas, 'n_close'))
+    expect([canvas.querySelectorAll('[data-wb-popup-level]').length, navigated, lines(status)]).toEqual([0, [], []])
+  })
+})
+
+describe('대상 글자의 풀이 — `matchPageTargets` 와 같다(공백 · 접두)', () => {
+  const spaced = (): BundlePage[] => [
+    {
+      title: '목록',
+      target: 'page:목록',
+      document: screen('n_list', [opener('n_open_sp', 'page: 검색 '), nav('n_go_sp', ' 상세 '), opener('n_open_bare', '검색')]),
+    },
+    { title: '검색', target: 'page:검색', document: popup('n_pop', '검색') },
+    { title: '상세', target: 'page:상세', document: screen('n_detail', []) },
+  ]
+
+  it('공백이 낀 «팝업 열기» 대상도 실린 팝업을 연다 · 접두 없는 글자도 같다', () => {
+    const data = dataOf(spaced(), 'pages/목록.html')
+    expect(Object.keys(data.popups ?? {}).sort()).toEqual(['page: 검색 ', '검색'])
+    for (const id of ['n_open_sp', 'n_open_bare']) {
+      const { canvas, status } = mount({ document: data.document, hrefs: data.hrefs, popups: data.popups! })
+      click(byId(canvas, id))
+      expect([id, canvas.querySelectorAll('[data-wb-popup-level]').length, lines(status)]).toEqual([id, 1, []])
+      act(() => mounted!.unmount())
+      mounted = null
+      document.body.innerHTML = ''
+    }
+  })
+
+  it('공백이 낀 «이동» 대상도 그 페이지 파일로 옮긴다', () => {
+    const data = dataOf(spaced(), 'pages/목록.html')
+    const { canvas, navigated, status } = mount({ document: data.document, hrefs: data.hrefs, popups: data.popups! })
+    click(byId(canvas, 'n_go_sp'))
+    expect([navigated, lines(status)]).toEqual([[`${encodeURIComponent('상세')}.html`], []])
+  })
+})

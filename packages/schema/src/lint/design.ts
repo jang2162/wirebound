@@ -32,6 +32,7 @@ import { nodeDisplayName } from '../interaction/describe'
 import type { PageDocument, WbNode } from '../node'
 import { BODY_ZONE } from '../component/define'
 import { pageKindOf, type PageKind } from '../new-page'
+import { pageTargetKey } from '../page-target'
 import { walkNodes } from '../tree'
 import { zoneList } from '../zones'
 import type { ValidationCode, ValidationIssue } from '../validate'
@@ -109,7 +110,7 @@ export function lintDesign(project: LintProject, config: LintConfig = {}): LintI
   issues.push(...unlinkedPages(project))
   issues.push(...namingIssues(project, config))
 
-  const targets = new Set(project.pages.map((page) => page.target))
+  const targets = new Set(project.pages.map((page) => pageTargetKey(page.target)))
   const kinds = targetKinds(project)
   const commented = commentedNodes(project)
 
@@ -121,15 +122,16 @@ export function lintDesign(project: LintProject, config: LintConfig = {}): LintI
 }
 
 /**
- * 타겟 → 그 타겟을 든 페이지들의 종류(`page` · `popup`). 둘 이상이 같은 타겟을 들면 종류가 갈릴 수 있다 — 아래 판정은 «하나도 팝업이 아니다» ·
+ * 타겟의 열쇠(`pageTargetKey`) → 그 타겟을 든 페이지들의 종류(`page` · `popup`). 둘 이상이 같은 타겟을 들면 종류가 갈릴 수 있다 — 아래 판정은 «하나도 팝업이 아니다» ·
  * «모두 팝업이다» 로 본다(둘 이상인 타겟은 링크가 안 이어지는 판이라 종류로 말하지 않는다).
  */
 function targetKinds(project: LintProject): ReadonlyMap<string, ReadonlySet<PageKind>> {
   const kinds = new Map<string, Set<PageKind>>()
   for (const page of project.pages) {
-    const set = kinds.get(page.target) ?? new Set<PageKind>()
+    const key = pageTargetKey(page.target)
+    const set = kinds.get(key) ?? new Set<PageKind>()
     set.add(pageKindOf(page.document))
-    kinds.set(page.target, set)
+    kinds.set(key, set)
   }
   return kinds
 }
@@ -248,8 +250,10 @@ function pageTargetIssues(
         issues.push(lintIssue('page-target-missing', { ...where, nodeId: node.id }, at, empty.message))
         continue
       }
-      if (targets.has(action.target)) {
-        const kind = kinds.get(action.target)
+      // 에디터 뷰 모드 · 번들과 같은 풀이(`matchPageTargets` 의 열쇠) — 글자 그대로 견주면 둘이 여는 글자를 «없다» 고 한다.
+      const key = pageTargetKey(action.target)
+      if (targets.has(key)) {
+        const kind = kinds.get(key)
         if (kind?.size !== 1) continue
         if (action.type === 'openModal' && kind.has('page')) {
           issues.push(
