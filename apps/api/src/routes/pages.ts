@@ -54,8 +54,9 @@ import { z } from 'zod'
 import {
   CURRENT_DOCUMENT_VERSION,
   PageEnvelopeSchema,
-  createNodeId,
+  PAGE_KINDS,
   migrateDocument,
+  newPageDocument,
   parsePageJson,
   replaceDocumentOps,
   PageDescriptionSchema,
@@ -113,6 +114,8 @@ const CreatePageBody = z.strictObject({
   menuNodeId: z.uuid(),
   title: Title,
   description: Description.optional(),
+  /** 페이지의 종류(`@wirebound/schema` 의 `newPageDocument`) — 팝업은 뿌리 `Popup`(제목 = 페이지 이름 · 바닥 `[취소][저장]`). 없으면 화면이다. */
+  kind: z.enum(PAGE_KINDS).optional(),
 })
 
 /**
@@ -304,7 +307,7 @@ export function pageRoutes() {
               menuNodeId: body.menuNodeId,
               title: body.title,
               description: body.description ?? null,
-              schema: { version: CURRENT_DOCUMENT_VERSION, root: { id: createNodeId(), type: 'Page', children: [] } },
+              schema: newPageDocument(body.kind ?? 'page', body.title),
               schemaVersion: CURRENT_DOCUMENT_VERSION,
             })
           } catch (error) {

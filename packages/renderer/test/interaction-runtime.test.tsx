@@ -464,7 +464,7 @@ describe('navigate·openModal은 렌더러 밖이다', () => {
   it('page: 접두를 벗기지 않는다 — 형식을 강제하지 않기로 한 판정 그대로다', () => {
     const doc = example([{ on: 'click', actions: [{ type: 'navigate', target: '아무거나' }] }])
 
-    expect(press(doc, 'n_btn').events[0]?.requests[0]?.target).toBe('아무거나')
+    expect(press(doc, 'n_btn').events[0]?.requests[0]).toMatchObject({ target: '아무거나' })
   })
 
   it('아직 안 고른 페이지는 요청이 아니라 이슈다', () => {

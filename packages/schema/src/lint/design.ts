@@ -31,6 +31,8 @@ import { checkPageAction, isPageTargetAction } from '../interaction/check'
 import { nodeDisplayName } from '../interaction/describe'
 import type { PageDocument, WbNode } from '../node'
 import { BODY_ZONE } from '../component/define'
+import { pageKindOf, type PageKind } from '../new-page'
+import { pageTargetKey } from '../page-target'
 import { walkNodes } from '../tree'
 import { zoneList } from '../zones'
 import type { ValidationCode, ValidationIssue } from '../validate'
@@ -108,17 +110,38 @@ export function lintDesign(project: LintProject, config: LintConfig = {}): LintI
   issues.push(...unlinkedPages(project))
   issues.push(...namingIssues(project, config))
 
-  const targets = new Set(project.pages.map((page) => page.target))
+  const targets = new Set(project.pages.map((page) => pageTargetKey(page.target)))
+  const kinds = targetKinds(project)
   const commented = commentedNodes(project)
 
   for (const page of project.pages) {
-    issues.push(...lintPage(page, targets, commented.get(page.id) ?? new Set()))
+    issues.push(...lintPage(page, targets, kinds, commented.get(page.id) ?? new Set()))
   }
 
   return issues
 }
 
-function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: ReadonlySet<string>): LintIssue[] {
+/**
+ * 타겟의 열쇠(`pageTargetKey`) → 그 타겟을 든 페이지들의 종류(`page` · `popup`). 둘 이상이 같은 타겟을 들면 종류가 갈릴 수 있다 — 아래 판정은 «하나도 팝업이 아니다» ·
+ * «모두 팝업이다» 로 본다(둘 이상인 타겟은 링크가 안 이어지는 판이라 종류로 말하지 않는다).
+ */
+function targetKinds(project: LintProject): ReadonlyMap<string, ReadonlySet<PageKind>> {
+  const kinds = new Map<string, Set<PageKind>>()
+  for (const page of project.pages) {
+    const key = pageTargetKey(page.target)
+    const set = kinds.get(key) ?? new Set<PageKind>()
+    set.add(pageKindOf(page.document))
+    kinds.set(key, set)
+  }
+  return kinds
+}
+
+function lintPage(
+  page: LintPage,
+  targets: ReadonlySet<string>,
+  kinds: ReadonlyMap<string, ReadonlySet<PageKind>>,
+  commented: ReadonlySet<string>,
+): LintIssue[] {
   const where = { pageId: page.id }
 
   // ③ · 「lint 규칙」 밖 — 이미 있는 판정을 그대로 나른다.
@@ -188,8 +211,10 @@ function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: Reado
     }
     if (node.type === 'DataGrid') issues.push(...gridRowIssues(node, path, where))
 
-    // ④ navigate·openModal 대상 페이지
-    issues.push(...pageTargetIssues(node, path, where, targets))
+    // ④ navigate·openModal 대상 페이지 — 있는가 · 종류가 맞는가
+    issues.push(...pageTargetIssues(node, path, where, targets, kinds))
+    // 화면 페이지의 팝업 닫기
+    if (pageKindOf(page.document) !== 'popup') issues.push(...closeOutsidePopup(node, path, where))
   }
 
   return issues
@@ -206,7 +231,13 @@ function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: Reado
  * **존재 검사는 새로 한다.** 그 함수가 못 하는 것이 그것이고(문서 하나만 보므로), 프로젝트
  * 전체를 받는 자리가 여기다.
  */
-function pageTargetIssues(node: WbNode, path: string, where: { pageId: string }, targets: ReadonlySet<string>): LintIssue[] {
+function pageTargetIssues(
+  node: WbNode,
+  path: string,
+  where: { pageId: string },
+  targets: ReadonlySet<string>,
+  kinds: ReadonlyMap<string, ReadonlySet<PageKind>>,
+): LintIssue[] {
   const issues: LintIssue[] = []
 
   for (const [index, interaction] of (node.interactions ?? []).entries()) {
@@ -219,7 +250,33 @@ function pageTargetIssues(node: WbNode, path: string, where: { pageId: string },
         issues.push(lintIssue('page-target-missing', { ...where, nodeId: node.id }, at, empty.message))
         continue
       }
-      if (targets.has(action.target)) continue
+      // 에디터 뷰 모드 · 번들과 같은 풀이(`matchPageTargets` 의 열쇠) — 글자 그대로 견주면 둘이 여는 글자를 «없다» 고 한다.
+      const key = pageTargetKey(action.target)
+      if (targets.has(key)) {
+        const kind = kinds.get(key)
+        if (kind?.size !== 1) continue
+        if (action.type === 'openModal' && kind.has('page')) {
+          issues.push(
+            lintIssue(
+              'modal-target-not-popup',
+              { ...where, nodeId: node.id },
+              at,
+              `팝업 열기의 대상이 팝업 페이지가 아닙니다 — 뷰 모드 · 번들이 덮개 위에 띄우지 않습니다: ${action.target}`,
+            ),
+          )
+        }
+        if (action.type === 'navigate' && kind.has('popup')) {
+          issues.push(
+            lintIssue(
+              'navigate-to-popup',
+              { ...where, nodeId: node.id },
+              at,
+              `페이지 이동의 대상이 팝업 페이지입니다 — 덮개 위에 띄우려면 팝업 열기를 씁니다: ${action.target}`,
+            ),
+          )
+        }
+        continue
+      }
 
       issues.push(
         lintIssue(
@@ -232,6 +289,25 @@ function pageTargetIssues(node: WbNode, path: string, where: { pageId: string },
     }
   }
 
+  return issues
+}
+
+/** 화면 페이지의 «팝업 닫기» — 덮개 위 팝업은 뒤 화면의 누름을 막아, 이 페이지의 단추로는 닫을 팝업이 없다. */
+function closeOutsidePopup(node: WbNode, path: string, where: { pageId: string }): LintIssue[] {
+  const issues: LintIssue[] = []
+  for (const [index, interaction] of (node.interactions ?? []).entries()) {
+    for (const [actionIndex, action] of (interaction.actions ?? []).entries()) {
+      if (action?.type !== 'closeModal') continue
+      issues.push(
+        lintIssue(
+          'close-outside-popup',
+          { ...where, nodeId: node.id },
+          `${path}/interactions/${index}/actions/${actionIndex}`,
+          '화면 페이지의 팝업 닫기입니다 — 닫을 팝업이 없습니다(덮개 위 팝업은 뒤 화면을 막습니다)',
+        ),
+      )
+    }
+  }
   return issues
 }
 

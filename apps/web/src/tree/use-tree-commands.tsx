@@ -135,7 +135,7 @@ export interface TreeEditing {
    * 없으면 성립하지 않는데(`treeAbilities`), 최상위 메뉴가 붙는 곳은 트리 자체다 — **빈 트리에는 고를
    * 것이 없고, 그것이 이 갈래가 있는 이유다**(`panels/menu-tree.tsx`의 빈 상태).
    */
-  kind: 'new-menu' | 'new-root-menu' | 'new-page' | 'rename'
+  kind: 'new-menu' | 'new-root-menu' | 'new-page' | 'new-popup' | 'rename'
   /** 입력의 초기값. 이름 변경이면 지금 제목, 새로 만들기면 빈 문자열이다. */
   initial: string
 }
@@ -927,11 +927,12 @@ export function useTreeCommands(props: {
     }
 
     // **만든 페이지로 이동한다.** 응답의 `id`가 주소에 들어간다 — 빈 문자열은
-    // `SHAPES.pageDetail`이 막으므로 여기서 다시 보지 않는다.
+    // `SHAPES.pageDetail`이 막으므로 여기서 다시 보지 않는다. 팝업 페이지는 서버가 뿌리 `Popup`(제목 = 이 이름 · 바닥 `[취소][저장]`)으로 짓는다.
     let created: string | null = null
+    const pageKind = kind === 'new-popup' ? 'popup' : 'page'
     void run(
       async () => {
-        const page = await api.createPage(projectId, { menuNodeId: parentId, title })
+        const page = await api.createPage(projectId, { menuNodeId: parentId, title, ...(pageKind === 'popup' ? { kind: pageKind } : {}) })
         created = page.id
       },
       () => {

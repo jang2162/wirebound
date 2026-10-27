@@ -226,13 +226,18 @@ function sorted<T extends { sortOrder: number }>(items: readonly T[] | undefined
  * 아무도 모른 채** 지나간다.
  */
 export function matchPageTargets(pages: readonly TargetedPage[], input: string): TargetedPage[] {
-  const wanted = normalizePath(input)
+  const wanted = pageTargetKey(input)
   if (wanted.length === 0) return []
-  return pages.filter((page) => normalizePath(page.target) === wanted)
+  return pages.filter((page) => pageTargetKey(page.target) === wanted)
 }
 
-/** 접두를 벗기고 마디마다 공백을 걷는다. */
-function normalizePath(value: string): string {
+/**
+ * 타겟 글자를 견줄 열쇠 — 접두를 벗기고 마디마다 공백을 걷는다(`matchPageTargets` 의 규칙). 두 글자의 열쇠가 같으면 같은 페이지를 가리킨다.
+ *
+ * **표로 타겟을 푸는 자리(번들의 `hrefs` · `popups` · lint)도 이 열쇠로 견준다** — 글자 그대로 견주면 에디터가 여는 `page: 검색 ` 을 번들 ·
+ * lint 는 «없는 페이지» 라 한다. 빈 글자의 열쇠는 빈 글자다(어느 페이지도 안 가리킨다).
+ */
+export function pageTargetKey(value: string): string {
   return pageTargetPath(value)
     .split(TARGET_SEPARATOR)
     .map((segment) => segment.trim())

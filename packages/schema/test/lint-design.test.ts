@@ -548,6 +548,10 @@ describe('표를 덮는다 (D6)', () => {
       interactions: [
         { on: 'click', actions: [{ type: 'setVisible', target: 'n_00dead000001', value: true }] },
         { on: 'click', actions: [{ type: 'navigate', target: 'page:없는곳' }] },
+        // 팝업 셋 — 화면 페이지를 팝업으로 · 팝업 페이지로 이동 · 화면 페이지의 팝업 닫기.
+        { on: 'click', actions: [{ type: 'openModal', target: 'page:관리자/회원/상태' }] },
+        { on: 'click', actions: [{ type: 'navigate', target: 'page:관리자/회원/팝업' }] },
+        { on: 'click', actions: [{ type: 'closeModal' }] },
       ],
     })
     const everything = lintDesign(
@@ -591,11 +595,72 @@ describe('표를 덮는다 (D6)', () => {
               },
             },
           }),
+          page({ id: 'pg4', title: '팝업', target: 'page:관리자/회원/팝업', document: { version: 5, root: { id: nid(), type: 'Popup' } } }),
         ],
       }),
       { naming: { page: '^[가-힣 ]+$' } },
     )
 
     expect([...new Set(rulesOf(everything))].sort()).toEqual(owned.map((rule) => rule.id).sort())
+  })
+})
+
+describe('팝업 — 대상의 종류 · 닫기의 자리', () => {
+  const opener = (actions: unknown[]): WbNode => node('Button', { interactions: [{ on: 'click', actions } as never] })
+  const popupPage = page({
+    id: 'pg-pop',
+    title: '검색',
+    target: 'page:관리자/회원/검색',
+    document: { version: 5, root: { id: 'n_pop', type: 'Popup' } },
+  })
+  const screenPage = page({ id: 'pg-scr', title: '상세', target: 'page:관리자/회원/상세', document: doc([]) })
+  const run = (from: LintPage) =>
+    lintDesign(project({ pages: [from, popupPage, screenPage] })).filter((issue) => issue.rule !== 'comment-missing')
+
+  it('팝업 열기가 팝업 페이지를 가리키면 조용하다 · 화면 페이지를 가리키면 경고', () => {
+    const fine = run(page({ document: doc([opener([{ type: 'openModal', target: 'page:관리자/회원/검색' }])]) }))
+    expect(fine.map((issue) => issue.rule)).toEqual([])
+    const wrong = run(page({ document: doc([opener([{ type: 'openModal', target: 'page:관리자/회원/상세' }])]) }))
+    expect(wrong.map((issue) => [issue.rule, issue.severity, issue.path])).toEqual([
+      ['modal-target-not-popup', 'warning', '/root/children/0/interactions/0/actions/0'],
+    ])
+  })
+
+  it('페이지 이동이 팝업 페이지를 가리키면 경고 · 화면 페이지는 조용하다', () => {
+    const wrong = run(page({ document: doc([opener([{ type: 'navigate', target: 'page:관리자/회원/검색' }])]) }))
+    expect(wrong.map((issue) => issue.rule)).toEqual(['navigate-to-popup'])
+    const fine = run(page({ document: doc([opener([{ type: 'navigate', target: 'page:관리자/회원/상세' }])]) }))
+    expect(fine.map((issue) => issue.rule)).toEqual([])
+  })
+
+  it('팝업 닫기는 팝업 페이지 안에서만 조용하다', () => {
+    const onScreen = run(page({ document: doc([opener([{ type: 'closeModal' }])]) }))
+    expect(onScreen.map((issue) => issue.rule)).toEqual(['close-outside-popup'])
+    const inPopup = run(
+      page({ document: { version: 5, root: { id: 'n_self', type: 'Popup', zones: { footer: [opener([{ type: 'closeModal' }])] } } } }),
+    )
+    expect(inPopup.map((issue) => issue.rule)).toEqual([])
+  })
+
+  it('없는 대상은 종류를 말하지 않는다 — 대상이 없다는 경고 하나', () => {
+    const missing = run(page({ document: doc([opener([{ type: 'openModal', target: 'page:없는곳' }])]) }))
+    expect(missing.map((issue) => issue.rule)).toEqual(['page-target-missing'])
+  })
+
+  /** 에디터 뷰 모드가 여는 글자(`matchPageTargets` — 마디의 공백 · 접두 없음)는 lint 도 같은 페이지로 푼다(`pageTargetKey`). */
+  it('공백이 낀 · 접두 없는 대상도 같은 페이지로 푼다 — 없다고 하지 않고 종류를 말한다', () => {
+    const spaced = run(
+      page({
+        document: doc([
+          opener([{ type: 'openModal', target: ' page: 관리자 / 회원 / 검색 ' }]),
+          opener([{ type: 'openModal', target: '관리자/회원/상세' }]),
+          opener([{ type: 'navigate', target: 'page:관리자/ 회원/검색' }]),
+        ]),
+      }),
+    )
+    expect(spaced.map((issue) => [issue.rule, issue.path])).toEqual([
+      ['modal-target-not-popup', '/root/children/1/interactions/0/actions/0'],
+      ['navigate-to-popup', '/root/children/2/interactions/0/actions/0'],
+    ])
   })
 })

@@ -15,6 +15,7 @@ import {
   writeNodesEnvelope,
 } from '../src/clipboard'
 import { installCatalog } from '../src/component/catalog/index'
+import { actionTarget } from '../src/interaction/check'
 import type { Migration } from '../src/migrate'
 import type { WbNode } from '../src/node'
 import { collectNodeIds } from '../src/tree'
@@ -158,7 +159,7 @@ describe('prepareNodesForPaste', () => {
     const { nodes, droppedActions } = prepareNodesForPaste([BUTTON, LIST], NONE, ids.generate)
 
     // 대상이 짝 노드의 새 id 다 — 노드마다 따로 지으면 옛 id 로 남는다.
-    expect(nodes[0]!.interactions![0]!.actions[0]!.target).toBe(nodes[1]!.id)
+    expect(actionTarget(nodes[0]!.interactions![0]!.actions[0]!)).toBe(nodes[1]!.id)
     expect(droppedActions).toBe(1) // src_text 는 붙이는 노드 밖이고 문서에도 없다
     expect(nodes.map((node) => node.id)).toEqual(['new_2', 'new_3'])
     expect(nodes[0]!.interactions).toEqual([{ on: 'click', actions: [{ type: 'setVisible', target: 'new_3', value: true }] }])
@@ -194,7 +195,7 @@ describe('prepareNodesForPaste', () => {
 
     const both = prepareNodesForPaste([BUTTON], ALL)
     expect(both.droppedActions).toBe(0)
-    expect(both.nodes[0]!.interactions![0]!.actions.map((action) => action.target)).toEqual(['src_list', 'src_text'])
+    expect(both.nodes[0]!.interactions![0]!.actions.map(actionTarget)).toEqual(['src_list', 'src_text'])
   })
 
   it('동작이 다 빠진 상호작용은 상호작용째 뺀다 — 남은 상호작용은 그대로', () => {

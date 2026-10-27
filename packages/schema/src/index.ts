@@ -64,7 +64,9 @@ export {
   checkViewStateRemoval,
   unknownVisibilityStates,
   excuseStandingNestedPages,
+  isRootType,
   nestedPagesUnderRoot,
+  ROOT_TYPES,
   validateLayout,
   validatePage,
 } from './validate'
@@ -92,8 +94,8 @@ export {
 } from './clipboard'
 export type { DroppedStates } from './clipboard'
 
-export type { ActionProblem, InteractionIssueCode, NodeTargetAction, PageTargetAction } from './interaction/check'
-export { checkNodeAction, checkPageAction, isPageTargetAction } from './interaction/check'
+export type { ActionProblem, InteractionIssueCode, NodeTargetAction, PageTargetAction, TargetlessAction } from './interaction/check'
+export { actionTarget, checkNodeAction, checkPageAction, isPageTargetAction, isTargetlessAction } from './interaction/check'
 
 export type { ComponentNoun, InteractionSentence, NamingContext } from './interaction/describe'
 export {
@@ -125,6 +127,7 @@ export {
   matchPageTargets,
   pageBundleTitle,
   pageTarget,
+  pageTargetKey,
   pageTargetPath,
   targetedPages,
 } from './page-target'
@@ -139,6 +142,9 @@ export { invertOps } from './patch/inverse'
 
 export type { Migration } from './migrate'
 export { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument, migratePageDocument } from './migrate'
+export { cloneJsonValue } from './clone'
+export type { PageKind } from './new-page'
+export { newPageDocument, PAGE_KINDS, pageKindOf } from './new-page'
 export type { LiftResult } from './migrate-document'
 export { MigrationError, liftStateRegions } from './migrate-document'
 

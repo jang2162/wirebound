@@ -363,9 +363,10 @@ export function inputCssBlocks(): string[] {
     ]),
     zeroRule('[data-wb-placeholder]', ['opacity: 0.55;']),
     // 고정 폭 표지(`size`) — 실제 길이는 테마가 덮는다. 몫을 주면 `flex` 바탕 폭이 이 폭을 이긴다. 칸보다 넓지는 않다 — 좁은 창(390)에서 `long` 이 넘친다.
-    zeroRule('[data-wb-size="short"]', ['width: min(6em, 100%);']),
-    zeroRule('[data-wb-size="medium"]', ['width: min(12em, 100%);']),
-    zeroRule('[data-wb-size="long"]', ['width: min(24em, 100%);']),
+    // 팝업도 같은 이름의 표지(`small` · `medium` · `large`)를 싣는다 — 빼지 않으면 보통 팝업이 12em 로 준다(둘 다 특이도 0 이라 뒤 규칙이 이긴다).
+    zeroRule('[data-wb-size="short"]:not([data-wb-component="Popup"])', ['width: min(6em, 100%);']),
+    zeroRule('[data-wb-size="medium"]:not([data-wb-component="Popup"])', ['width: min(12em, 100%);']),
+    zeroRule('[data-wb-size="long"]:not([data-wb-component="Popup"])', ['width: min(24em, 100%);']),
     zeroRule('[data-wb-component="DateInput"], [data-wb-component="TimeInput"]', ['width: 9em;', 'justify-content: space-between;']),
     zeroRule('[data-wb-component="TextArea"]', [
       'align-items: flex-start;',

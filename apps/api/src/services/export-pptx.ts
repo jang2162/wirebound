@@ -41,6 +41,7 @@
  * *"아직 안 만들었다"*와 *"만들려다 실패했다"*를 같은 말로 하게 된다.
  */
 import { exportPptx, type PptxPage, type PptxPart, type PptxScreen } from '@wirebound/exporter'
+import { pageKindOf, type PageKind } from '@wirebound/schema'
 import type { DbHandle } from '../db/tx'
 import { projectBundle } from './export-bundle'
 import { assembleExportSource, readExportRows, type ExportRows } from './export-source'
@@ -58,7 +59,7 @@ export interface ScreenFailure {
 export interface ProjectPptx {
   parts: PptxPart[]
   /** 슬라이드에 실린 페이지들. **번들의 `pages`와 같은 모양·같은 이름이다.** */
-  pages: { id: string; title: string; target: string }[]
+  pages: { id: string; title: string; target: string; kind: PageKind }[]
   /**
    * **아무도 그리지 않은** 페이지 이름들(머리말 「`screenless`와 실패를 가른다」).
    *
@@ -130,7 +131,12 @@ export async function buildProjectPptx(rows: ExportRows, screenSource: PptxScree
   const failed = new Set(failures.map((failure) => failure.title))
   return {
     parts,
-    pages: ordered.map((page) => ({ id: page.id, title: page.bundleTitle, target: page.target })),
+    pages: ordered.map((page) => ({
+      id: page.id,
+      title: page.bundleTitle,
+      target: page.target,
+      kind: pageKindOf(documentById.get(page.id)),
+    })),
     // **이유가 있는 것은 덜어 낸다**(머리말 「`screenless`와 실패를 가른다」). 남는 것이 *"아무도 안 그렸다"*이다.
     screenless: screenless.filter((title) => !failed.has(title)),
     screenFailures: failures,

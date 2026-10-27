@@ -23,6 +23,8 @@
  * 어디서나 같은 아이콘»이 지켜지는지 이 표만 봐서는 모른다. `test/shell/icon-census.test.tsx` 가 센다.
  */
 import {
+  AppWindow,
+  AppWindowMac,
   ArrowDown,
   ArrowUp,
   Blocks,
@@ -116,6 +118,10 @@ export const ICONS = {
   /** 메뉴를 만든다 — «하위 메뉴» · «최상위 메뉴 추가». */
   addMenu: FolderPlus,
   addPage: FilePlus,
+  /** 팝업 페이지를 만든다 — 메뉴 줄 `+` 의 «팝업 페이지 추가». */
+  addPopup: AppWindow,
+  /** 팝업 페이지 줄의 표지 — 메뉴 트리 · 페이지 정보의 «종류»(이름은 « — 팝업»). */
+  popupPage: AppWindowMac,
   /** 입력 조각의 종류를 바꾼다 — 구조 트리 줄 `…` 의 «종류 바꾸기…»(`panels/change-kind-dialog.tsx`). */
   changeKind: Replace,
   /** 되풀이 행에서 한 행을 떼어 낸다 — 그리드 행 줄 `…` 의 «한 행 떼어 내기»(`edit/grid-row-actions.ts`). */

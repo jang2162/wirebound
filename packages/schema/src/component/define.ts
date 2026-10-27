@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Interaction } from '../node'
 import { COMPONENT_GROUPS, isComponentGroup, type ComponentGroup } from './group'
 
 /** 속성 패널이 자동 생성할 입력 컨트롤 종류 */
@@ -161,6 +162,11 @@ export interface NodeSeed {
    * lint `theme-variant`(경고)를 내고 제 `defaultVariant` 로 그리므로, 흔한 이름(스타터 테마 · 기본테마가 둘 다 선언하는 `primary`)만 쓴다.
    */
   variant?: string
+  /**
+   * 노드의 상호작용 — 팝업 바닥의 «취소» 가 처음부터 «팝업 닫기» 를 드는 것처럼. 노드를 겨냥하는 액션은 만들 때 지은 id 를 모르므로 싣지 않는다 —
+   * 대상이 없는 액션(`closeModal`)만 싣는다(`catalog/index.ts` 의 `assertZoneReferences` 가 본다).
+   */
+  interactions?: readonly Interaction[]
 }
 
 /** 구역 이름의 꼴 — JSON Pointer 이스케이프가 필요 없고 프로토타입 토큰(`__proto__`)이 꼴에서 빠진다. */

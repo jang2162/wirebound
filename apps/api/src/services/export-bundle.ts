@@ -31,7 +31,16 @@
  * 만드는 쪽이 옳다(위 「출처는 라이브 프로젝트다」 — 입력을 payload에서 읽는다).
  */
 import { exportBundle, type BundleFile, type BundleNodeError, type BundlePage, type ExportedBundle } from '@wirebound/exporter'
-import { duplicateTargets, isPageTargetAction, walkNodes, type PageDocument, type TargetedPage } from '@wirebound/schema'
+import {
+  duplicateTargets,
+  isPageTargetAction,
+  pageKindOf,
+  pageTargetKey,
+  walkNodes,
+  type PageDocument,
+  type PageKind,
+  type TargetedPage,
+} from '@wirebound/schema'
 import type { DbHandle } from '../db/tx'
 import { readExportRuntime } from './export-runtime'
 import { assembleExportSource, readExportRows, type ExportRows, type ExportSource } from './export-source'
@@ -58,8 +67,10 @@ export interface ExportedPageSummary {
    * 같은 페이지를 다르게 부른다.
    */
   title: string
-  /** 이 페이지를 가리키는 설계서 「상호작용」의 타겟. 저작 화면이 손으로 적는 문자열이다. */
+  /** 이 페이지를 가리키는 설계서 「상호작용」의 타겟. 상호작용 탭의 페이지 고르개가 같은 문자열을 짓는다 · 목록 밖이면 손으로 적는다. */
   target: string
+  /** 페이지의 종류 — 문서 뿌리가 `Popup` 이면 `popup`(`pageKindOf`). 화면이 목록 줄에 «팝업» 표지를 단다. */
+  kind: PageKind
 }
 
 /** 어느 페이지도 가리키지 못한 링크 하나. */
@@ -111,7 +122,12 @@ export function buildProjectBundle(rows: ExportRows): ProjectBundle {
     // **`bundleTitle`이다.** 맨 제목을 내면 화면의 페이지 목록이 `목록`·`목록`으로 보인다 —
     // 번들의 좌측 트리가 조상을 붙여 피하는 것과 같은 결함이고, 여기는 `errors[].title`(늘 번들 이름)과
     // 같은 응답이라 두 벌이 되기까지 한다.
-    pages: ordered.map((page) => ({ id: page.id, title: page.bundleTitle, target: page.target })),
+    pages: ordered.map((page) => ({
+      id: page.id,
+      title: page.bundleTitle,
+      target: page.target,
+      kind: pageKindOf(documentById.get(page.id)),
+    })),
     duplicateTargets: duplicateTargets(ordered),
     brokenLinks: brokenLinks(ordered, documentById),
     themeId: rows.theme === null ? null : `${rows.theme.ref.themeId}@${rows.theme.ref.version}`,
@@ -149,7 +165,7 @@ export function projectBundle(rows: ExportRows, source: ExportSource): ExportedB
  * 값은 이미 번들 안에 있다 — 계획의 요청마다 `href`가 `null`인지 보면 된다. 그런데
  * `exportBundle`은 그 계획을 값으로 내지 않고 HTML 안에 심어 내보내므로, 화면이 **미리**
  * 말하려면 여기서 같은 셈을 한다. **판정 규칙은 한 문장이고 `exportBundle`의 것과 같다:**
- * 그 타겟을 든 페이지가 **정확히 하나**여야 링크가 생긴다.
+ * 그 타겟을 든 페이지가 **정확히 하나**여야 링크가 생긴다. 견주는 것도 같은 열쇠(`pageTargetKey` — 공백 · 접두를 걷는다)다.
  *
  * **파일 경로를 말하지 않고 페이지의 번들 이름으로 말한다.** `errors[].path`가 파일 이름이고
  * `index.html`이 담는 첫 페이지의 오류에도 `pages/….html`이 붙는데,
@@ -161,13 +177,14 @@ export function projectBundle(rows: ExportRows, source: ExportSource): ExportedB
 function brokenLinks(ordered: readonly TargetedPage[], documents: ReadonlyMap<string, PageDocument>): BrokenLink[] {
   const carriers = new Map<string, number>()
   for (const page of ordered) {
-    carriers.set(page.target, (carriers.get(page.target) ?? 0) + 1)
+    const key = pageTargetKey(page.target)
+    carriers.set(key, (carriers.get(key) ?? 0) + 1)
   }
 
   const found = new Map<string, BrokenLink>()
   for (const page of ordered) {
     for (const target of referencedTargets(documents.get(page.id)!)) {
-      const count = carriers.get(target) ?? 0
+      const count = carriers.get(pageTargetKey(target)) ?? 0
       if (count === 1) continue
 
       const link = found.get(target) ?? {

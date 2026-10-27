@@ -227,6 +227,18 @@ describe('메뉴·페이지 만들기', () => {
     await waitFor(() => expect(currentPath()).toBe('/projects/p-1/pages/pg-new'))
   })
 
+  it('팝업 페이지 추가는 종류를 실어 createPage 를 내고 만든 페이지로 이동한다', async () => {
+    const api = await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('팝업 페이지 추가'))
+    typeAndEnter('사용자 검색')
+
+    await waitFor(() => expect(api.createPage).toHaveBeenCalledTimes(1))
+    expect(api.createPage).toHaveBeenCalledWith('p-1', { menuNodeId: 'm-member', title: '사용자 검색', kind: 'popup' })
+    await waitFor(() => expect(currentPath()).toBe('/projects/p-1/pages/pg-new'))
+  })
+
   it('실패하면 서버 문장이 트리 안에 남고 트리를 다시 받지 않는다', async () => {
     const api = await open({
       createMenu: vi.fn(async () => {

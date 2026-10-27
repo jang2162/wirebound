@@ -70,10 +70,8 @@
  *
  * ## 타겟을 보이는 것이 이 화면의 둘째 몫이다 — **HTML 번들에서만**
  *
- * 상호작용 탭의 `navigate`·`openModal` 타겟은 **손으로 적는 자유 입력**이다
- * (`panels/interaction-panel.tsx`에 고르개가 없고, 그 자리 주석이 *"페이지 경로는 목록에서
- * 고를 수 없다"*고 적혀 있다). 서버가 조립하는 문자열이 무엇인지 알 길이 지금 여기뿐이라,
- * 페이지마다 그 문자열을 그대로 보인다.
+ * 상호작용 탭의 `navigate`·`openModal` 타겟은 페이지 고르개(`panels/interaction-panel.tsx` 의 `PageTargetField`)가 트리로 짓고, 목록 밖이면
+ * 손으로 적는다. 번들이 어느 문자열로 링크를 잇는지 페이지마다 그대로 보인다 — 팝업 페이지 줄에는 «팝업» 표지를 단다.
  *
  * **pptx에는 그 목록을 안 보인다.** 슬라이드 사이에는 링크가 생기지 않으므로(설계서
  * 「명시적으로 제외한 것」이 도형 변환을 뺐다) 그 경로는 pptx 안에서 **아무것도 가리키지
@@ -262,13 +260,14 @@ function HtmlSummary(props: { preview: HtmlExportPreview; projectId: string }): 
         </section>
       )}
 
-      {/* **페이지마다의 경로.** 상호작용 탭의 `페이지 경로`에 그대로 적는 문자열이다. */}
+      {/* **페이지마다의 경로.** 상호작용 탭의 페이지 고르개가 짓는 문자열이다(목록 밖이면 `페이지 경로` 칸에 적는다). 팝업 페이지는 이름 뒤에 표지. */}
       <section className="wb-shell-export-targets" aria-label="페이지 경로">
         <h3 className="wb-shell-export-heading">페이지 경로</h3>
         <ul className="wb-shell-export-list">
           {preview.pages.map((page) => (
             <li key={page.id}>
-              {page.title} — <code className="wb-shell-export-path">{page.target}</code>
+              {page.title}
+              {page.kind === 'popup' ? ' (팝업)' : ''} — <code className="wb-shell-export-path">{page.target}</code>
             </li>
           ))}
         </ul>

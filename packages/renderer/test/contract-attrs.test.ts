@@ -32,7 +32,7 @@ const SOURCES = import.meta.glob('../src/**/*.{ts,tsx}', {
 const CONTRACT_ATTRS = ['data-wb-id', 'data-wb-copy-of', 'data-wb-component', 'data-wb-variant', 'data-wb-state']
 
 /**
- * 계약 밖인데 원문에 있어도 되는 것. **이름 있는 예외 셋이다.**
+ * 계약 밖인데 원문에 있어도 되는 것. **이름 있는 예외다.**
  *
  * `data-wb-error`는 폴백이 단다(`src/fallback.tsx`). 폴백은 **문서 노드가 아니라 오류
  * 표시**이고 테마의 어휘 밖이다.
@@ -42,7 +42,16 @@ const CONTRACT_ATTRS = ['data-wb-id', 'data-wb-copy-of', 'data-wb-component', 'd
  * 기본 뷰는 달지 않는다(코드 테마 spec 「뷰 계약」). 같은 부류의 `data-wb-focus` 는 `src/` 에 셀렉터 글자(`[data-wb-focus]`)로만
  * 있어 아래 `dataAttrs` 의 정규식이 세지 않는다 — 그래서 목록에 없다(있으면 «실제로 쓰인다» 가 죽는다).
  */
-const ALLOWED_OUTSIDE_CONTRACT = ['data-wb-error', 'data-wb-marker', 'data-wb-marker-offset']
+const ALLOWED_OUTSIDE_CONTRACT = [
+  'data-wb-error',
+  'data-wb-marker',
+  'data-wb-marker-offset',
+  // 덮개 층(`src/popup-layer.tsx`)의 그릇 — 노드가 아니라 연 화면 위의 셸이다. 모양은 SDK 기본 CSS 의 `[data-wb-popup-layer]` 규칙이 갖는다.
+  'data-wb-popup-layer',
+  'data-wb-popup-level',
+  'data-wb-popup-backdrop',
+  'data-wb-popup-frame',
+]
 
 /**
  * 원문에서 `data-…` 리터럴을 모은다. JSX 속성과 문자열 키를 함께 잡는다.

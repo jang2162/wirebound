@@ -80,6 +80,13 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 내보내기(HTML 번들 · PPTX)는 저장된 패키지를 다시 읽을 때 카탈로그에 기대는 검사(없는 컴포넌트 · 그 컴포넌트의 변형 · 숨길 prop)를 안
 본다(`readWbtheme` 의 `stored`). 올리기 · 빌드 · 시딩은 그대로 엄격하다.
 
+**`0033-modal-popup` 은 문서 판을 안 바꾼다(5 그대로).** «팝업 열기»(`openModal`)가 가리키는 페이지의 뿌리를 `Popup`(제목 = 페이지 제목)으로
+바꾼다 — 몸통은 그대로이고 «바닥» 구역은 안 만든다. 대상은 프로젝트마다 그 프로젝트의 페이지 · 레이아웃 · 모듈 · 그 프로젝트 멤버의 개인 모듈에서
+모아 그 프로젝트 트리로 풀고, **한 페이지로 풀리는 것만** 옮긴다(둘 이상 · 없는 대상 · 빈 대상은 그대로 — lint «대상이 팝업이 아님» 이
+말한다). 스냅샷은 payload 의 메뉴 · 페이지 · 레이아웃으로 같은 셈을 한다. 좌표가 안 바뀌어 `head_seq` · `structure_seq` 는 그대로다.
+옮긴 수를 `  · 0033-modal-popup: 팝업으로 옮긴 페이지 N · 스냅샷 M 개 안의 페이지 K` 한 줄로 찍는다. 내리기는 `Popup` 뿌리를 **전부**
+`Page` 로 — `props` 를 걷고 «바닥» 노드를 몸통 끝에 붙인다(사람이 새로 만든 팝업 페이지도 내려간다).
+
 **`migrate:down` 은 계정을 안 건드린다.** 시딩이 마이그레이션 **파일 안**이 아니라 CLI
 진입점에 있기 때문이다 — 계정을 마이그레이션 파일로 만들면 롤백이 남의
 계정을 지우게 된다(`src/db/seed-user.ts` 의 머리말이 그 판정을 든다).
@@ -369,7 +376,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/menu` | POST | editor | `{ parentId?, title }` | 201 `{ id, projectId, parentId, title, sortOrder }` — **트리 응답과 다른 모양이다**(`children`·`pages`가 없다) |
 | `/api/projects/:projectId/menu/:nodeId` | PATCH | editor | `{ title?, parentId?, sortOrder?, base? }`(`base` 밖 하나 이상) — **`base`는 고치기 전 제목**(`{ title }` — 규칙은 페이지의 바탕과 같다, 아래 «페이지 메타의 충돌 모델». 자리 옮기기와 한 본문이면 400) | 200 `{ id, projectId, parentId, title, sortOrder }`(POST와 같은 키) · **409** `menu-title-changed`(바탕이 지금 제목과 다르다) |
 | `/api/projects/:projectId/menu/:nodeId` | DELETE | editor | — 또는 `{ cascade: true, expect: { menuIds, pageIds } }` | 본문 없음: 204(자식 메뉴·페이지가 있으면 409). 연쇄: 200 `{ deleted: { menus, pages }, safetySnapshot: { id, tag } }` · id 집합이 다르면 **409** `menu-subtree-changed`(아래 «메뉴 연쇄 삭제») |
-| `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 기본 스키마는 빈 `Page`다 |
+| `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description?, kind? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 기본 스키마는 빈 `Page`다. `kind: 'popup'` 이면 뿌리 `Popup`(제목 = `title` · 바닥 `[취소][저장]` — «취소» 는 «팝업 닫기» 를 든다 · `@wirebound/schema` 의 `newPageDocument`) |
 | `/api/projects/:projectId/pages/import` | POST | editor | `{ menuNodeId, file, title? }` | 201 `{ page, comments: { inserted, dangling }, ignoredLayoutRef?, warnings? }` — **페이지 JSON(설계서 「페이지 JSON」)으로 새 페이지를 만든다**(아래 "페이지 JSON 가져오기"). 봉투 위반·모르는 버전·NUL 400, 메뉴 없음 404, 카탈로그 **오류** 422 |
 | `/api/projects/:projectId/pages/:pageId` | GET | viewer | — | 200 페이지(스키마 포함, 최신 버전으로 마이그레이션되어 옴). `headSeq`가 다음 편집의 `baseSeq`다 |
 | `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder?, base? }`(하나 이상, `schema`는 여기서 못 바꾼다) — **`base`는 고치기 전 값**(아래 «페이지 메타의 충돌 모델») | 200 **페이지 여덟 키**(POST·GET과 같다) · **409** `page-meta-changed`(바탕이 지금 값과 다르다) |
@@ -521,7 +528,7 @@ wirebound-export-<슬러그>/
 
 | 키 | 무엇 |
 |---|---|
-| `pages` | `{ id, title, target }[]` — 번들에 실릴 순서다. **`title`은 조상 메뉴가 붙은 번들 이름**(맨 제목이 아니다 — 위 문단)이고, **`target`이 설계서 「상호작용」 「모델」의 페이지 경로**로 저작 화면의 `navigate`·`openModal`에 그대로 적는 문자열이다 |
+| `pages` | `{ id, title, target, kind }[]` — 번들에 실릴 순서다. `kind` 는 트리 응답의 것과 같다(`page` · `popup`). **`title`은 조상 메뉴가 붙은 번들 이름**(맨 제목이 아니다 — 위 문단)이고, **`target`이 설계서 「상호작용」 「모델」의 페이지 경로**로 저작 화면의 `navigate`·`openModal`에 그대로 적는 문자열이다 |
 | `duplicateTargets` | 둘 이상의 페이지가 든 타겟. **그 타겟을 겨눈 링크는 어디에도 안 생긴다** |
 | `brokenLinks` | `{ target, from, reason }[]` — 어느 페이지도 가리키지 못한 링크. `from`은 그것을 겨눈 페이지들의 **번들 이름**이다. `reason`은 `missing`(그 타겟을 든 페이지가 없다) 또는 `ambiguous`(둘 이상이다) |
 | `errors` | `{ path, title, error }[]` — 그리지 못한 노드. **`title`이 어느 페이지인지 말한다** |
@@ -594,7 +601,7 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 | 키 | 무엇 |
 |---|---|
 | `format` | `'pptx'` |
-| `pages` | `{ id, title, target }[]` — **html 미리보기의 것과 같은 값이다** |
+| `pages` | `{ id, title, target, kind }[]` — **html 미리보기의 것과 같은 값이다** |
 | `screenless` | **아무도 그리지 않은** 페이지들의 **번들 이름**. 그리는 자가 없으면 전부다 |
 | `screenFailures` | **그리려다 죽은** 페이지들 — `{ title, reason }[]`. `screenless`와 **겹치지 않는다**: *"아직 아무도 안 만들었다"*와 *"만들려다 실패했다"*는 다른 말이다 |
 | `fontWarning` | 그린 기계에 한글 글꼴이 없었다는 한 줄. 없으면 `null`이다 |
@@ -1100,7 +1107,7 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
   "menu": [
     {
       "id": "…", "title": "회원관리", "sortOrder": 0,
-      "pages": [ { "id": "…", "title": "목록", "sortOrder": 0, "viewStates": [ { "id": "s_login", "name": "로그인" }, { "id": "s_admin", "name": "관리자", "parent": "s_login" } ] } ],
+      "pages": [ { "id": "…", "title": "목록", "sortOrder": 0, "viewStates": [ { "id": "s_login", "name": "로그인" }, { "id": "s_admin", "name": "관리자", "parent": "s_login" } ], "kind": "page" } ],
       "children": [
         { "id": "…", "title": "권한", "sortOrder": 0, "pages": [], "children": [] }
       ]
@@ -1112,9 +1119,10 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 `rev`는 메뉴 트리 판 번호다(위 «실시간»의 «트리 쓰기는 `menu-changed`를 낸다») — 아무도 트리를 안 바꾼 프로젝트는 0 이다. 번호와 행은
 한 스냅숏에서 읽는다.
 
-페이지 항목에는 `id`·`title`·`sortOrder`·`viewStates`만 있다 — `schema`는 실리지 않는다(트리는
+페이지 항목에는 `id`·`title`·`sortOrder`·`viewStates`·`kind`만 있다 — `schema`는 실리지 않는다(트리는
 목록을 훑는 용도이고, 스키마를 포함하면 프로젝트가 커질수록 응답이 무거워진다). `viewStates` 는 문서의 화면 상태 목록(`parent` 포함 —
-메뉴 트리가 열리지 않은 페이지의 상태 줄을 짓는다)이고 상태가 없는 페이지는 `[]`, 모양이 틀린 항목은 뺀다. 많아야 20개다.
+메뉴 트리가 열리지 않은 페이지의 상태 줄을 짓는다)이고 상태가 없는 페이지는 `[]`, 모양이 틀린 항목은 뺀다. 많아야 20개다. `kind` 는
+페이지의 종류다 — 문서 뿌리가 `Popup` 이면 `popup`, 그 밖은 `page`(메뉴 트리 줄의 «팝업» 표지 · 상호작용 탭의 대상 고르개가 닫힌 페이지에서 읽는다).
 페이지 본문(스키마 포함)이 필요하면 `GET /api/projects/:projectId/pages/:pageId`를
 따로 호출한다.
 

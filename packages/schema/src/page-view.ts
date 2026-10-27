@@ -23,6 +23,7 @@
 import type { NodeVisibility, PageDocument, ViewState, WbNode } from './node'
 import { nodeAlias, nodeRowLabel } from './display'
 import { MISSING_NODE_NAME, describeNode, listInteractionSentences, namingContexts, type InteractionSentence } from './interaction/describe'
+import { pageKindOf, type PageKind } from './new-page'
 import { pageTargetPath } from './page-target'
 import { BODY_ZONE } from './component/define'
 import { walkNodes } from './tree'
@@ -103,6 +104,8 @@ export interface PageView {
   /** 접두를 벗긴 「모델」(상호작용)의 경로. **사람이 치는 것이 이 모양이다**(`wireb page get 관리자/회원/목록`). */
   path: string
   menuPath: readonly string[]
+  /** 페이지의 종류 — 뿌리가 `Popup` 이면 `popup`(`pageKindOf`). */
+  kind: PageKind
   /** 화면 상태 목록(`document.viewStates` — `parent` 로 트리다). 없으면 빈 목록 — «기본»은 늘 있어 목록에 없다. */
   viewStates: ViewState[]
   /** 문서의 노드 수. **뿌리를 센다** — 빈 페이지도 1이다. */
@@ -154,6 +157,7 @@ export function pageView(input: PageViewInput): PageView {
     target: input.target,
     path: pageTargetPath(input.target),
     menuPath: input.menuPath,
+    kind: pageKindOf(input.document),
     viewStates,
     nodeCount: outline.length,
     nodes: outline,

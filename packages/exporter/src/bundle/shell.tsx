@@ -68,6 +68,8 @@ export interface ShellNavItem {
   href: string
   /** 지금 보고 있는 페이지인가. `aria-current="page"`가 된다. */
   current: boolean
+  /** 팝업 페이지인가 — 줄 앞에 «팝업» 표지를 단다(이름은 « — 팝업» 으로 끝난다). */
+  popup?: boolean
 }
 
 export interface ShellInput {
@@ -168,7 +170,13 @@ export function shellBody(input: ShellInput): ReactElement {
             {input.nav.map((item) => (
               <li key={item.href} className="wb-export-nav-item">
                 <a className="wb-export-nav-link" href={item.href} aria-current={item.current ? 'page' : undefined}>
+                  {item.popup === true && (
+                    <span className="wb-export-nav-kind" aria-hidden="true">
+                      팝업
+                    </span>
+                  )}
                   {item.title}
+                  {item.popup === true && <span className="wb-export-hidden"> — 팝업</span>}
                 </a>
               </li>
             ))}

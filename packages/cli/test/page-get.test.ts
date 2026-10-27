@@ -294,3 +294,33 @@ describe('화면 상태', () => {
     expect(io.stdout.join('\n')).not.toContain('화면 상태')
   })
 })
+
+describe('팝업 페이지 — 종류', () => {
+  /** `상세` 를 뿌리가 `Popup` 인 문서로 바꾼 판. */
+  function 팝업이_있는_프로젝트(): SnapshotPayload {
+    const payload = snapshotPayload()
+    return {
+      ...payload,
+      pages: payload.pages.map((item) =>
+        item.id === PAGE_DETAIL
+          ? { ...item, schemaVersion: 5, schema: { version: 5, root: { id: 'pop', type: 'Popup', props: { title: '상세' } } } as never }
+          : item,
+      ),
+    }
+  }
+
+  it('사람이 읽는 판은 팝업 페이지의 이름 뒤에 종류를 말한다 — 화면 페이지 줄은 그대로다', async () => {
+    const popup = 준비(팝업이_있는_프로젝트())
+    expect(await run(['page', 'get', '관리자/회원/상세'], popup), popup.stderr.join('\n')).toBe(EXIT.ok)
+    expect(popup.stdout[1]).toBe(`  상세 · 팝업 · ${PAGE_DETAIL} · 노드 1개`)
+    const screen = 준비(팝업이_있는_프로젝트())
+    expect(await run(['page', 'get', '관리자/회원/목록'], screen), screen.stderr.join('\n')).toBe(EXIT.ok)
+    expect(screen.stdout[1]).not.toContain('팝업')
+  })
+
+  it('--json 은 kind 를 싣는다', async () => {
+    const io = 준비(팝업이_있는_프로젝트())
+    expect(await run(['page', 'get', '관리자/회원/상세', '--json'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect((JSON.parse(io.stdout.join('\n')) as { kind: string }).kind).toBe('popup')
+  })
+})

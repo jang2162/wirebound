@@ -60,6 +60,19 @@ export function isPageTargetAction(action: InteractionAction): action is PageTar
   return action.type === 'navigate' || action.type === 'openModal'
 }
 
+/** 대상이 없는 액션 — 팝업 닫기(맨 위 팝업을 닫는다). 판정할 것이 없어 늘 맞다. */
+export type TargetlessAction = Extract<InteractionAction, { type: 'closeModal' }>
+
+/** 대상이 없는 액션인가. 대상을 거르는 자리(붙이기 · 모듈 저장 · 검증)가 이것으로 먼저 넘긴다. */
+export function isTargetlessAction(action: InteractionAction): action is TargetlessAction {
+  return action.type === 'closeModal'
+}
+
+/** 액션의 대상 글자 — 대상 없는 액션이면 `undefined`. */
+export function actionTarget(action: InteractionAction): string | undefined {
+  return isTargetlessAction(action) ? undefined : action.target
+}
+
 /**
  * 노드를 겨냥하는 액션 하나를 문서·카탈로그와 대조한다.
  *

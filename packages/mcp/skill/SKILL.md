@@ -69,6 +69,12 @@
 `GridColumn` 하나(셀 틀 포함)를 `add` 한다 — 행마다 칸을 더하지 않는다. 바닥(`zones.footer`)의 `Pagination` 은 `total` · `pageSize` · `page` 로 범위 글을
 셈한다. 서버는 새 그리드에 열 · 행 · 바를 넣어 주지 않는다 — 함께 넣는다.
 
+**팝업은 페이지의 종류다.** 뿌리가 `Popup` 인 페이지가 팝업 페이지다(`list_pages` 의 `kind` 가 `popup` · `get_page` 의 `kind`). 팝업의 제목은
+뿌리의 `title`, 크기는 `size`(`small` · `medium` · `large`)이고, 내용은 뿌리의 `children`, 바닥 단추는 `zones.footer` 다 — 닫기(✖)는 노드가 아니다.
+다른 화면에서 그 팝업을 띄우는 상호작용은 `openModal`(대상은 그 팝업 페이지의 경로), 팝업 안의 «취소» · «닫기» 단추는 `closeModal`(대상 없음 —
+`{ "type": "closeModal" }`)이다. 팝업 페이지를 새로 만드는 도구는 없다 — 사람이 메뉴 트리에서 만든다. 있는 팝업 페이지의 뿌리 · 바닥을 고친다.
+`validate` 는 팝업이 아닌 페이지를 `openModal` 로 · 팝업 페이지를 `navigate` 로 가리키는 것 · 화면 페이지의 `closeModal` 을 경고한다.
+
 성공하면 응답의 `headSeq`가 **새 값**이다. 이어서 고칠 것이 있으면 그 값을 다음
 `baseSeq`로 쓴다.
 

@@ -94,6 +94,7 @@ const LABEL_PROPS: Record<string, string> = {
   TabPanel: 'label',
   GridColumn: 'label',
   GridColumnGroup: 'label',
+  Popup: 'title',
 }
 
 /**
@@ -312,8 +313,10 @@ function actionClause(index: NodeIndex, action: InteractionAction): string {
       return `${pageName(action.target)}${directionParticle(pageName(action.target))} 이동합니다`
     case 'openModal': {
       const page = pageName(action.target)
-      return `${page}${subjectParticle(page)} 모달로 열립니다`
+      return `${page}${subjectParticle(page)} 팝업으로 열립니다`
     }
+    case 'closeModal':
+      return '팝업이 닫힙니다'
   }
 }
 

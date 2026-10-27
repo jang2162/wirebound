@@ -3,7 +3,7 @@
  *
  * 문서로 직접 잰다 — 화면 흐름(다시 읽기 · 404 · 고름)은 `../palette/module-tab.test.tsx`.
  */
-import { applyOps, invertOps, partitionIssues, validatePage, type PageDocument, type WbNode } from '@wirebound/schema'
+import { actionTarget, applyOps, invertOps, partitionIssues, validatePage, type PageDocument, type WbNode } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import type { Placing, StructureDrop } from '../../src/edit/structure-drop'
 import { moduleDroppedNotice, moduleInsertOps } from '../../src/palette/module-insert'
@@ -118,7 +118,7 @@ describe('moduleInsertOps', () => {
     const edit = moduleInsertOps(before, NODES, target(before, null), NO_PAGES, counter())
     if ('reason' in edit) throw new Error(edit.reason)
     const open = applyOps(before, edit.ops).root.children![2]!
-    expect(open.interactions![0]!.actions.map((action) => action.target)).toEqual(['n_new000000003', 'n-text'])
+    expect(open.interactions![0]!.actions.map(actionTarget)).toEqual(['n_new000000003', 'n-text'])
     expect(edit.droppedActions).toBe(2)
     expect(moduleDroppedNotice(edit)).toBe('상호작용 동작 2개는 대상이 없어 빼고 넣었습니다.')
   })

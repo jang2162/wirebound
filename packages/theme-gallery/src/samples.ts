@@ -618,4 +618,67 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
       },
     },
   ],
+  // 팝업은 뿌리에만 선다 — 갤러리가 감싸지 않고 뿌리로 그린다(`galleryItemDocument`). 바닥의 «취소» 는 «팝업 닫기» 규칙을 든다.
+  Popup: [
+    { label: 'Popup — 빈 팝업', node: { id: 'pop', type: 'Popup', props: { title: '팝업', size: 'small' }, children: [] } },
+    {
+      label: 'Popup — 검색 팝업(검색폼 · 라디오 그리드 · 바)',
+      node: {
+        id: 'pop2',
+        type: 'Popup',
+        props: { title: '사용자 검색', size: 'medium' },
+        children: [
+          {
+            id: 'pop2-sf',
+            type: 'SearchForm',
+            props: {},
+            children: [field('pop2-sf-a', '이름', [input('pop2-sf-a1', { placeholder: '입력' })])],
+            zones: { actions: [button('pop2-reset', '초기화'), button('pop2-go', '검색')] },
+          },
+          grid(
+            'pop2-dg',
+            { select: 'radio' },
+            [
+              column('pop2-name', '이름', [text('pop2-name-t', '홍길동')]),
+              column('pop2-mail', '이메일', [text('pop2-mail-t', 'hong@example.com')]),
+            ],
+            [gridRow('pop2-r', { repeat: 3 })],
+            { footer: [pagination('pop2-pg', { pageSize: 10 })] },
+          ),
+        ],
+        zones: {
+          footer: [
+            { ...button('pop2-cancel', '취소'), interactions: [{ on: 'click', actions: [{ type: 'closeModal' }] }] },
+            button('pop2-ok', '선택'),
+          ],
+        },
+      },
+    },
+    {
+      label: 'Popup — 폼 팝업(2열 폼 표 · 바닥 · 넓게)',
+      node: {
+        id: 'pop3',
+        type: 'Popup',
+        props: { title: '분반 등록', size: 'large' },
+        children: [
+          {
+            id: 'pop3-ft',
+            type: 'FormTable',
+            props: { columns: 2 },
+            children: [
+              field('pop3-a', '분반명', [input('pop3-a1', { value: '1분반' })], { required: true }),
+              field('pop3-b', '정원', [input('pop3-b1', { size: 'short', value: '30' })]),
+              { ...field('pop3-c', '비고', [{ id: 'pop3-c1', type: 'TextArea', props: { rows: 2 } }]), weight: 2 },
+            ],
+          },
+        ],
+        zones: {
+          footer: [
+            { ...button('pop3-cancel', '취소'), interactions: [{ on: 'click', actions: [{ type: 'closeModal' }] }] },
+            button('pop3-save', '저장'),
+          ],
+        },
+      },
+    },
+  ],
 }

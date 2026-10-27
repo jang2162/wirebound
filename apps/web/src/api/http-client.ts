@@ -269,7 +269,7 @@ function isTreeMenuNode(value: unknown): boolean {
 
 /**
  * 트리의 페이지 항목. **`id`가 빈 문자열이면 막는다** — `panels/menu-tree.tsx`의 `PageLink`가
- * 그 값을 주소에 그대로 넣는다(아래 `SHAPES`의 "주소가 되는 값" 표).
+ * 그 값을 주소에 그대로 넣는다(아래 `SHAPES`의 "주소가 되는 값" 표). `kind` 는 있으면 둘 가운데 하나다.
  */
 function isTreePage(value: unknown): boolean {
   return (
@@ -277,7 +277,9 @@ function isTreePage(value: unknown): boolean {
     typeof value['id'] === 'string' &&
     value['id'] !== '' &&
     typeof value['title'] === 'string' &&
-    typeof value['sortOrder'] === 'number'
+    typeof value['sortOrder'] === 'number' &&
+    // 종류는 표지 · 고르개의 갈래다 — 모르는 값이 «화면» 으로 조용히 읽히지 않게(없으면 화면 — 옛 서버).
+    (value['kind'] === undefined || value['kind'] === 'page' || value['kind'] === 'popup')
   )
 }
 
@@ -1067,7 +1069,7 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['updateMenu']>[2],
     true
   >,
-  createPage: { menuNodeId: true, title: true } satisfies Record<keyof Parameters<ApiClient['createPage']>[1], true>,
+  createPage: { menuNodeId: true, title: true, kind: true } satisfies Record<keyof Parameters<ApiClient['createPage']>[1], true>,
   // **이 줄이 `description` 키를 막을 수 있는 두 자리 중 하나다**(다른 하나는
   // `ApiClient['updatePage']`의 시그니처) — 서버는 그 키를 받는다.
   //
