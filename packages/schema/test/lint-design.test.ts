@@ -663,4 +663,25 @@ describe('팝업 — 대상의 종류 · 닫기의 자리', () => {
       ['navigate-to-popup', '/root/children/2/interactions/0/actions/0'],
     ])
   })
+
+  /**
+   * 파일첨부의 «단추» 구역 · 그리드의 머리 오른쪽 · 셀 틀(반복 행 표의 «삭제») 안 단추도 몸통의 단추와 같은 풀이를 지난다. 셋 다 종류 경고가 서게
+   * 지었다 — 풀렸으면 종류를, 못 풀었으면 «대상이 없다» 를 말하므로 셋 가운데 하나라도 건너뛰거나 글자로 견주면 값이 갈린다.
+   */
+  it('파일첨부 · 반복 행 표 안 단추의 대상도 같은 열쇠로 푼다 — 구역 · 셀 틀 안이어도 종류를 말한다', () => {
+    const attach = node('FileAttach', {
+      zones: { actions: [opener([{ type: 'openModal', target: ' page: 관리자 / 회원 / 상세 ' }])] },
+    })
+    const grid = node('DataGrid', {
+      children: [node('GridColumn', { children: [opener([{ type: 'navigate', target: '관리자/회원/검색' }])] })],
+      zones: { headEnd: [opener([{ type: 'openModal', target: 'page:관리자/ 회원/상세' }])] },
+    })
+    const found = run(page({ document: doc([attach, grid]) }))
+    // 차례는 `walkNodes` 의 것 — 그리드는 구역 선언 차례로 «머리 오른쪽» 이 몸통(열)보다 먼저다.
+    expect(found.map((issue) => [issue.rule, issue.path])).toEqual([
+      ['modal-target-not-popup', '/root/children/0/zones/actions/0/interactions/0/actions/0'],
+      ['modal-target-not-popup', '/root/children/1/zones/headEnd/0/interactions/0/actions/0'],
+      ['navigate-to-popup', '/root/children/1/children/0/children/0/interactions/0/actions/0'],
+    ])
+  })
 })
