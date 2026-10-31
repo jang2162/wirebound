@@ -79,3 +79,56 @@ export async function tableContains(db: DbHandle, table: 'invites' | 'password_r
   if (rows.rows.length === 0) throw new Error(`${table} 이 비었다 — 찾을 판이 없다`)
   return rows.rows.some((row) => row.row.includes(needle))
 }
+
+/**
+ * 붙잡힌 요청의 백엔드 — 질의를 프록시에 맡긴 채 트랜잭션 안에서 논다(`auth-password-review.test.ts` 와 같은 꼴). 꼭 하나여야 한다.
+ */
+export async function heldBackend(db: DbHandle): Promise<number> {
+  const rows = await sql<{ pid: number }>`
+    select pid from pg_stat_activity
+    where datname = current_database() and pid <> pg_backend_pid() and state = 'idle in transaction'
+  `.execute(db)
+  if (rows.rows.length !== 1) throw new Error(`붙잡힌 백엔드가 하나가 아니다: ${rows.rows.length}`)
+  return rows.rows[0]!.pid
+}
+
+/** `holder` 뒤에 사슬로 선 백엔드들의 질의(`pg_blocking_pids` 를 따라간다). */
+export async function queueBehind(db: DbHandle, holder: number): Promise<string[]> {
+  const result = await sql<{ query: string }>`
+    with recursive chain(pid) as (
+      select a.pid from pg_stat_activity a where ${holder}::int = any(pg_blocking_pids(a.pid))
+      union
+      select a.pid from pg_stat_activity a join chain c on c.pid = any(pg_blocking_pids(a.pid))
+    )
+    select a.query from pg_stat_activity a join chain c on c.pid = a.pid
+  `.execute(db)
+  return result.rows.map((row) => row.query)
+}
+
+/** `write` 가 끝나거나 `holder` 뒤에 `fragment` 를 든 질의로 줄 설 때까지 — 어느 쪽이었는지. 둘 다 아니면 던진다(판이 안 섰다). */
+export async function settledOrQueued(
+  db: DbHandle,
+  write: Promise<unknown>,
+  holder: number,
+  fragment: string,
+  withinMs = 5_000,
+): Promise<'settled' | 'queued'> {
+  let settled = false
+  void write.then(
+    () => (settled = true),
+    () => (settled = true),
+  )
+  const until = Date.now() + withinMs
+  while (Date.now() < until) {
+    if (settled) return 'settled'
+    if ((await queueBehind(db, holder)).some((query) => query.includes(fragment))) return 'queued'
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  throw new Error(`${withinMs}ms 안에 끝나지도 '${fragment}' 로 줄 서지도 않았다 — 판이 안 섰다`)
+}
+
+/** 교착(40P01) 누계 — 판 앞뒤로 재서 차를 본다. */
+export async function deadlockCount(db: DbHandle): Promise<number> {
+  const row = await sql<{ n: string }>`select deadlocks::text as n from pg_stat_database where datname = current_database()`.execute(db)
+  return Number(row.rows[0]!.n)
+}
