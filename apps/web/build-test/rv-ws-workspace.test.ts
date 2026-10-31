@@ -748,6 +748,23 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
   })
 
   /**
+   * **R-4a.** 관리자 칸 넷은 칸마다 라우트가 따로라(`admin/admin-screen.tsx` 머리말) 칸을 옮기면 뼈대가 새로 서고 펴 둔 «메뉴» 가 접힌다.
+   * 한 동적 라우트가 넷을 받던 판에서는 `expected 'true' to be 'false'` 였다(보고 `2026-10-31-rv-ws-report.md`).
+   */
+  it('창 390 — 펼친 «메뉴» 에서 관리자 칸(사용자 → 초대 링크)을 누르면 접힌다', async () => {
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
+    try {
+      await page.goto('/admin/users')
+      await page.getByRole('heading', { name: '사용자' }).waitFor()
+      await page.getByRole('button', { name: '메뉴' }).click()
+      await page.getByRole('navigation', { name: '관리자' }).getByRole('link', { name: '초대 링크' }).click()
+      await page.getByRole('heading', { name: '초대 링크' }).waitFor()
+      expect(await page.getByRole('button', { name: '메뉴' }).getAttribute('aria-expanded')).toBe('false')
+    } finally {
+      await context.close()
+    }
+  })
+  /**
    * **skip — 지금 빨강 · 이월.** 뗀 판의 실패 값은 보고 `docs/superpowers/plans/2026-10-31-rv-ws-report.md` 에 있다.
    */
   describe.skip('skip — 지금 빨강(이월)', () => {
@@ -758,24 +775,6 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
     it('목록 화면에서 로그아웃해도 보낸 편집이 저장되거나, 로그인 화면이 잃은 것을 말한다(에디터 `…` 의 로그아웃과 같은 성질)', async () => {
       const got = await logoutFromListAfterEdit(stack, alice)
       expect(got.content[0] === '붙잡힌 채 목록으로' || got.said !== '').toBe(true)
-    })
-
-    /**
-     * **이월(2026-10-31 사내 공용 운영) — R-4a.** 관리자 칸의 «준비 중» 넷은 한 라우트(`/admin/:section`)라 칸을 옮겨도 «메뉴» 가 펴진 채 남는다.
-     * M 트랙이 칸을 달면 저절로 풀린다 — M 이 skip 을 뗀다.
-     */
-    it('창 390 — 펼친 «메뉴» 에서 관리자 칸(사용자 → 초대 링크)을 누르면 접힌다', async () => {
-      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
-      try {
-        await page.goto('/admin/users')
-        await page.getByRole('heading', { name: '사용자' }).waitFor()
-        await page.getByRole('button', { name: '메뉴' }).click()
-        await page.getByRole('navigation', { name: '관리자' }).getByRole('link', { name: '초대 링크' }).click()
-        await page.getByRole('heading', { name: '초대 링크' }).waitFor()
-        expect(await page.getByRole('button', { name: '메뉴' }).getAttribute('aria-expanded')).toBe('false')
-      } finally {
-        await context.close()
-      }
     })
   })
 })

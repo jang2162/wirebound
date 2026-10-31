@@ -15,6 +15,9 @@
  *   안 바뀌어 줄이 다시 접히지 않는다), 확정은 줄 밑 한 줄의 오른끝에 단추 한 높이 이상 떨어져 선다(`shell.css` 의
  *   `-members-confirm`). 재는 자: [Chrome] `build-test/members-confirm.test.ts`.
  *
+ * **비활성 사용자는 «비활성» 표지로 선다** — 비활성화해도 멤버 행은 그대로다(이력 · owner 복귀 — 설계 `2026-10-31-workspace-admin-design.md`
+ * «비활성화»). 역할 고르개 · 제외는 그대로 둔다 — 비활성 owner 도 행은 owner 다.
+ *
  * 멤버 줄의 `member.role` 은 **그 멤버의** 역할(보이고 바꿀 값)이고 `member.userId === me` 는 «이 줄이 나인가»다 — 부르는 사람의
  * 권한 판정은 `projectAbilities(project.role)` 하나다. 두 글자 자(`test/role-access.test.ts` 의 `.role` · `test/lock/one-verdict.test.ts` 의
  * 소유자 비교)가 이 파일을 «판정한 예외»로 든다.
@@ -149,6 +152,7 @@ export function MembersSection(props: { project: ProjectView; onSelfChanged: () 
             return (
               <li className="wb-shell-project-item" key={userId}>
                 <span className="wb-shell-members-name">{name}</span>
+                {!member.active && <span className="wb-shell-members-inactive">비활성</span>}
                 <span className="wb-shell-members-email">{member.email}</span>
                 {manage ? (
                   <RoleSelect

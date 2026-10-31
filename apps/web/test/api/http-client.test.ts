@@ -101,6 +101,48 @@ const themeVersion = {
   uploadedBy: null,
 }
 const themeSummary = { themeId: 'system-x', name: 'X', description: null, latest: '1.0.0', versions: [themeVersion] }
+
+/** 관리자 화면의 응답 넷(`api/types.ts` 의 `AdminUser` · `AdminInvite` · `AdminProject` · `AuditEntry`). */
+const adminUser = {
+  id: 'u2',
+  email: 'b@b.c',
+  name: '밥',
+  isInstanceAdmin: false,
+  active: true,
+  createdAt: '2026-10-01T00:00:00.000Z',
+  lastSeenAt: null,
+  projectCount: 1,
+  invite: { id: 'i1', name: '디자인팀' },
+}
+const adminInvite = {
+  id: 'i1',
+  name: '디자인팀',
+  kind: 'multi',
+  expiresAt: '2026-11-08T00:00:00.000Z',
+  state: 'usable',
+  signups: 0,
+  createdAt: '2026-11-01T00:00:00.000Z',
+  createdBy: { id: 'u1', name: '홍길동' },
+}
+const adminProject = {
+  id: 'p1',
+  name: '프로젝트',
+  slug: 'proj',
+  owners: [{ id: 'u1', name: '홍길동', active: false }],
+  hasActiveOwner: false,
+  memberCount: 2,
+  updatedAt: '2026-10-01T00:00:00.000Z',
+}
+const auditEntry = {
+  id: 'a1',
+  at: '2026-11-01T00:00:00.000Z',
+  action: 'user.deactivate',
+  actor: { kind: 'user', id: 'u1', name: '홍길동' },
+  targetUser: { id: 'u2', name: '밥', email: 'b@b.c' },
+  project: null,
+  invite: null,
+  detail: { revokedLinks: 0 },
+}
 const themeImpact = { tokens: { kept: 1, dropped: 0, defaulted: 2 }, variants: [{ pageId: 'pg1', title: '목록', count: 1 }] }
 const themeUploaded = { themeId: 'acme', version: '1.0.0', name: 'Acme', sha256: 'ab', size: 10 }
 
@@ -292,21 +334,21 @@ const ENDPOINTS: Array<{
     client: 'listMembers',
     url: '/api/projects/p1/members',
     method: 'GET',
-    body: [{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }],
+    body: [{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z', active: true }],
     call: (c) => c.listMembers('p1'),
   },
   {
     client: 'addMember',
     url: '/api/projects/p1/members',
     method: 'POST',
-    body: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' },
+    body: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z', active: true },
     call: (c) => c.addMember('p1', 'b@b.c', 'editor'),
   },
   {
     client: 'updateMemberRole',
     url: '/api/projects/p1/members/u2',
     method: 'PATCH',
-    body: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' },
+    body: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z', active: true },
     call: (c) => c.updateMemberRole('p1', 'u2', 'viewer'),
   },
   { client: 'removeMember', url: '/api/projects/p1/members/u2', method: 'DELETE', body: null, call: (c) => c.removeMember('p1', 'u2') },
@@ -677,6 +719,81 @@ const ENDPOINTS: Array<{
     body: {},
     call: (c) => c.completePasswordReset('tok', 'password1234'),
   },
+  // **관리자 열둘** — `/api/admin` 아래(세션 전용 — 서버 README «계정 — 초대 · 비활성화 · 재설정 · 기록»). id 는 주소 조각이라 인코딩한다.
+  { client: 'listAdminUsers', url: '/api/admin/users', method: 'GET', body: [adminUser], call: (c) => c.listAdminUsers() },
+  {
+    client: 'deactivateUser',
+    url: '/api/admin/users/u%2F2/deactivate',
+    method: 'POST',
+    body: { user: adminUser, revokedLinks: 1, ownerlessProjects: 0 },
+    call: (c) => c.deactivateUser('u/2'),
+  },
+  {
+    client: 'activateUser',
+    url: '/api/admin/users/u2/activate',
+    method: 'POST',
+    body: { user: adminUser },
+    call: (c) => c.activateUser('u2'),
+  },
+  {
+    client: 'grantInstanceAdmin',
+    url: '/api/admin/users/u2/admin',
+    method: 'POST',
+    body: { user: adminUser },
+    call: (c) => c.grantInstanceAdmin('u2'),
+  },
+  {
+    client: 'revokeInstanceAdmin',
+    url: '/api/admin/users/u2/admin',
+    method: 'DELETE',
+    body: { user: adminUser, revokedLinks: 0 },
+    call: (c) => c.revokeInstanceAdmin('u2'),
+  },
+  {
+    client: 'createResetLink',
+    url: '/api/admin/users/u2/reset-links',
+    method: 'POST',
+    body: { token: 'tok', expiresAt: '2026-11-02T00:00:00.000Z' },
+    call: (c) => c.createResetLink('u2'),
+  },
+  { client: 'listInvites', url: '/api/admin/invites', method: 'GET', body: [adminInvite], call: (c) => c.listInvites() },
+  {
+    client: 'createInvite',
+    url: '/api/admin/invites',
+    method: 'POST',
+    body: { invite: adminInvite, token: 'tok' },
+    call: (c) => c.createInvite({ name: '디자인팀', kind: 'multi', expiresInDays: 7 }),
+  },
+  {
+    client: 'revokeInvite',
+    url: '/api/admin/invites/i%2F1/revoke',
+    method: 'POST',
+    body: { invite: adminInvite },
+    call: (c) => c.revokeInvite('i/1'),
+  },
+  { client: 'listAdminProjects', url: '/api/admin/projects', method: 'GET', body: [adminProject], call: (c) => c.listAdminProjects() },
+  {
+    client: 'transferProjectOwner',
+    url: '/api/admin/projects/p1/owner',
+    method: 'POST',
+    body: { project: adminProject },
+    call: (c) => c.transferProjectOwner('p1', 'u2'),
+  },
+  // 거름이 없으면 질의 글자가 없다 — 있으면 셋 다 싣는다(`before` 는 앞 쪽의 `next` 그대로).
+  {
+    client: 'listAudit',
+    url: '/api/admin/audit',
+    method: 'GET',
+    body: { entries: [auditEntry], next: null },
+    call: (c) => c.listAudit({}),
+  },
+  {
+    client: 'listAudit',
+    url: '/api/admin/audit?action=user.deactivate&actorId=u1&before=2026-11-01T00%3A00%3A00.123456Z',
+    method: 'GET',
+    body: { entries: [], next: null },
+    call: (c) => c.listAudit({ action: 'user.deactivate', actorId: 'u1', before: '2026-11-01T00:00:00.123456Z' }),
+  },
 ]
 
 /**
@@ -724,14 +841,19 @@ const SHAPE_CASES: Array<{
   // 역할 바꾸기 · 제외의 주소가 되는 `userId` 는 빈 문자열까지 막는다.
   {
     shape: 'members',
-    broken: [{ ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, userId: '' }],
-    ok: [{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }],
+    broken: [
+      { ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z', active: true }, userId: '' },
+    ],
+    ok: [{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z', active: true }],
     call: (c) => c.listMembers('p1'),
   },
   {
     shape: 'member',
-    broken: { ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' }, name: null },
-    ok: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z' },
+    broken: {
+      ...{ userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z', active: true },
+      name: null,
+    },
+    ok: { userId: 'u2', email: 'b@b.c', name: '밥', role: 'editor', invitedAt: '2026-09-01T00:00:00.000Z', active: true },
     call: (c) => c.addMember('p1', 'b@b.c', 'editor'),
   },
   { shape: 'treeEnvelope', broken: { menu: null }, ok: { menu: [treeNode] }, call: (c) => c.getTree('p1') },
@@ -932,6 +1054,63 @@ const SHAPE_CASES: Array<{
     broken: { email: 'a@example.com' },
     ok: { email: 'a@example.com', name: '가' },
     call: (c) => c.getPasswordReset('tok'),
+  },
+  // 관리자 — 주소가 되는 id 는 빈 문자열을 막고(줄의 «…» 가 그 id 로 쓴다), 화면이 그리는 수는 수인지 본다.
+  { shape: 'adminUsers', broken: [{ ...adminUser, id: '' }], ok: [adminUser], call: (c) => c.listAdminUsers() },
+  {
+    shape: 'adminUserResult',
+    broken: { user: { ...adminUser, active: 'yes' } },
+    ok: { user: adminUser },
+    call: (c) => c.activateUser('u2'),
+  },
+  {
+    shape: 'adminDeactivated',
+    broken: { user: adminUser, revokedLinks: 1 },
+    ok: { user: adminUser, revokedLinks: 1, ownerlessProjects: 0 },
+    call: (c) => c.deactivateUser('u2'),
+  },
+  {
+    shape: 'adminRevoked',
+    broken: { user: adminUser, revokedLinks: '0' },
+    ok: { user: adminUser, revokedLinks: 0 },
+    call: (c) => c.revokeInstanceAdmin('u2'),
+  },
+  {
+    shape: 'createdResetLink',
+    broken: { token: '', expiresAt: '2026-11-02T00:00:00.000Z' },
+    ok: { token: 'tok', expiresAt: '2026-11-02T00:00:00.000Z' },
+    call: (c) => c.createResetLink('u2'),
+  },
+  { shape: 'adminInvites', broken: [{ ...adminInvite, kind: 'many' }], ok: [adminInvite], call: (c) => c.listInvites() },
+  {
+    shape: 'createdInvite',
+    broken: { invite: adminInvite },
+    ok: { invite: adminInvite, token: 'tok' },
+    call: (c) => c.createInvite({ name: '디자인팀', kind: 'single', expiresInDays: 7 }),
+  },
+  {
+    shape: 'adminInviteResult',
+    broken: { invite: { ...adminInvite, id: '' } },
+    ok: { invite: adminInvite },
+    call: (c) => c.revokeInvite('i1'),
+  },
+  {
+    shape: 'adminProjects',
+    broken: [{ ...adminProject, owners: [{ id: 'u1', name: '가' }] }],
+    ok: [adminProject],
+    call: (c) => c.listAdminProjects(),
+  },
+  {
+    shape: 'adminProjectResult',
+    broken: { project: { ...adminProject, hasActiveOwner: 'no' } },
+    ok: { project: adminProject },
+    call: (c) => c.transferProjectOwner('p1', 'u2'),
+  },
+  {
+    shape: 'auditPage',
+    broken: { entries: [{ ...auditEntry, actor: { kind: 'user' } }], next: null },
+    ok: { entries: [auditEntry], next: '2026-11-01T00:00:00.123456Z' },
+    call: (c) => c.listAudit({}),
   },
 ]
 

@@ -1,7 +1,6 @@
 /**
  * 작업 공간 사이드바(`shell/workspace-layout.tsx`)의 칸 목록. 관리자 묶음의 차례는 설계(`docs/superpowers/specs/2026-10-31-workspace-admin-design.md`
- * 「관리자 › 기록」 — 사용자 · 초대 링크 · 프로젝트 · 테마 · 기록)다. 아직 화면이 없는 칸은 `app.tsx` 의 `/admin/:section` 이 «준비 중» 으로 받는다
- * (`routes/admin-pending.tsx`).
+ * 「관리자 › 기록」 — 사용자 · 초대 링크 · 프로젝트 · 테마 · 기록)다. 칸마다 `app.tsx` 의 라우트가 따로 받는다(`admin/admin-screen.tsx` · `routes/admin-themes.tsx`).
  */
 import type { IconName } from './icons'
 

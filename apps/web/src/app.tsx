@@ -5,9 +5,13 @@
  */
 import type { ReactElement } from 'react'
 import { Navigate, Outlet, Route, Routes } from 'react-router'
+import { AdminScreen } from './admin/admin-screen'
+import { AuditSection } from './admin/audit-section'
+import { InvitesSection } from './admin/invites-section'
+import { ProjectsSection } from './admin/projects-section'
+import { UsersSection } from './admin/users-section'
 import { WriteLedgerProvider } from './panels/write-ledger'
 import { AccountRoute } from './routes/account'
-import { AdminPendingRoute } from './routes/admin-pending'
 import { AdminThemesRoute } from './routes/admin-themes'
 import { EditorShellRoute } from './routes/editor'
 import { LoginRoute } from './routes/login'
@@ -82,8 +86,40 @@ export function App(): ReactElement {
             <Route path="/tokens" element={<Navigate to="/account" replace />} />
             {/* **테마 관리는 인스턴스의 것이라 프로젝트 밖 라우트다**(`routes/admin-themes.tsx` 머리말). */}
             <Route path="/admin/themes" element={<AdminThemesRoute />} />
-            {/* 사이드바의 다른 관리자 칸(사용자 · 초대 링크 · 프로젝트 · 기록) — 화면이 생기기 전까지 «준비 중»(`routes/admin-pending.tsx`). */}
-            <Route path="/admin/:section" element={<AdminPendingRoute />} />
+            {/* 사이드바의 다른 관리자 칸 넷 — **칸마다 라우트가 따로다**(`admin/admin-screen.tsx` 머리말). 모르는 칸은 프로젝트 목록으로 보낸다. */}
+            <Route
+              path="/admin/users"
+              element={
+                <AdminScreen section="users">
+                  <UsersSection />
+                </AdminScreen>
+              }
+            />
+            <Route
+              path="/admin/invites"
+              element={
+                <AdminScreen section="invites">
+                  <InvitesSection />
+                </AdminScreen>
+              }
+            />
+            <Route
+              path="/admin/projects"
+              element={
+                <AdminScreen section="projects">
+                  <ProjectsSection />
+                </AdminScreen>
+              }
+            />
+            <Route
+              path="/admin/audit"
+              element={
+                <AdminScreen section="audit">
+                  <AuditSection />
+                </AdminScreen>
+              }
+            />
+            <Route path="/admin/*" element={<Navigate to="/" replace />} />
             {/* 두 주소가 같은 셸이다. 페이지를 연 것은 셸 안의 캔버스가 달라지는 일이지
                 다른 화면이 아니므로, 라우터가 컴포넌트를 다시 마운트하지 않고 편집 상태가
                 그대로 이어진다. */}

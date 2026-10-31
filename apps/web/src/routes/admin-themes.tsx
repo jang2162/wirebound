@@ -35,7 +35,7 @@ import { ThemePreview } from '../settings/theme-preview'
 import { shellIcon } from '../shell/icons'
 import { WorkspaceLayout } from '../shell/workspace-layout'
 
-/** 관리자가 아닌 사람에게 — 관리자 칸의 «준비 중»(`routes/admin-pending.tsx`)도 같은 문장이다. */
+/** 관리자가 아닌 사람에게 — 다른 관리자 칸 넷(`admin/admin-screen.tsx`)도 같은 문장이다. */
 export const ADMIN_ONLY = '인스턴스 관리자만 볼 수 있습니다'
 const LOAD_FAILURE = '테마 목록을 불러오지 못했습니다'
 const UPLOAD_FAILURE = '테마 패키지를 올리지 못했습니다'

@@ -16,8 +16,14 @@ import {
 } from './client'
 import { isSessionUserChanged, KNOWN_USER_HEADER, type KnownUserHolder } from './known-user'
 import type {
+  AdminInvite,
+  AdminProject,
+  AdminUser,
+  AuditPage,
   Comment,
   CommentCreated,
+  CreatedInvite,
+  CreatedResetLink,
   ExportPreview,
   MarkerChange,
   MenuNode,
@@ -383,7 +389,8 @@ function isProjectMember(value: unknown): boolean {
     value['userId'] !== '' &&
     typeof value['email'] === 'string' &&
     typeof value['name'] === 'string' &&
-    typeof value['role'] === 'string'
+    typeof value['role'] === 'string' &&
+    typeof value['active'] === 'boolean'
   )
 }
 
@@ -760,7 +767,86 @@ const SHAPES = {
   inviteUsable: (value) => isRecord(value) && value['usable'] === true,
   /** 재설정 링크의 대상(`routes/reset.tsx`) — 두 글자를 그린다. */
   resetTarget: (value) => isRecord(value) && typeof value['email'] === 'string' && typeof value['name'] === 'string',
+  /**
+   * 관리자 화면(`admin/*`). **주소가 되는 `id` 는 빈 문자열까지 막는다**(`isMyApiToken` 의 `id` 와 같은 판단) — 줄의 «…» 가 그 id 로 쓴다.
+   * 쓰기의 답은 화면이 수(`revokedLinks` · `ownerlessProjects`)를 한 줄로 그리므로 수인지 본다.
+   */
+  adminUsers: (value) => isArrayOf(value, isAdminUser),
+  adminUserResult: (value) => isRecord(value) && isAdminUser(value['user']),
+  adminDeactivated: (value) =>
+    isRecord(value) &&
+    isAdminUser(value['user']) &&
+    typeof value['revokedLinks'] === 'number' &&
+    typeof value['ownerlessProjects'] === 'number',
+  adminRevoked: (value) => isRecord(value) && isAdminUser(value['user']) && typeof value['revokedLinks'] === 'number',
+  /** 링크 원문 — 화면이 주소를 짓는다. 빈 원문은 쓸 수 없는 주소다. */
+  createdResetLink: (value) =>
+    isRecord(value) && typeof value['token'] === 'string' && value['token'] !== '' && typeof value['expiresAt'] === 'string',
+  adminInvites: (value) => isArrayOf(value, isAdminInvite),
+  createdInvite: (value) =>
+    isRecord(value) && isAdminInvite(value['invite']) && typeof value['token'] === 'string' && value['token'] !== '',
+  adminInviteResult: (value) => isRecord(value) && isAdminInvite(value['invite']),
+  adminProjects: (value) => isArrayOf(value, isAdminProject),
+  adminProjectResult: (value) => isRecord(value) && isAdminProject(value['project']),
+  /** 기록 한 쪽 — `next` 는 다음 쪽의 질의가 된다. */
+  auditPage: (value) =>
+    isRecord(value) && isArrayOf(value['entries'], isAuditEntry) && (value['next'] === null || typeof value['next'] === 'string'),
 } satisfies Record<string, Shape>
+
+function hasId(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && typeof value['id'] === 'string' && value['id'] !== ''
+}
+
+function isAdminUser(value: unknown): boolean {
+  return (
+    hasId(value) &&
+    typeof value['email'] === 'string' &&
+    typeof value['name'] === 'string' &&
+    typeof value['isInstanceAdmin'] === 'boolean' &&
+    typeof value['active'] === 'boolean' &&
+    typeof value['createdAt'] === 'string' &&
+    (value['lastSeenAt'] === null || typeof value['lastSeenAt'] === 'string') &&
+    typeof value['projectCount'] === 'number' &&
+    (value['invite'] === null || (isRecord(value['invite']) && typeof value['invite']['name'] === 'string'))
+  )
+}
+
+function isAdminInvite(value: unknown): boolean {
+  return (
+    hasId(value) &&
+    typeof value['name'] === 'string' &&
+    (value['kind'] === 'single' || value['kind'] === 'multi') &&
+    typeof value['expiresAt'] === 'string' &&
+    typeof value['state'] === 'string' &&
+    typeof value['signups'] === 'number' &&
+    typeof value['createdAt'] === 'string' &&
+    isRecord(value['createdBy']) &&
+    typeof value['createdBy']['name'] === 'string'
+  )
+}
+
+function isAdminProject(value: unknown): boolean {
+  return (
+    hasId(value) &&
+    typeof value['name'] === 'string' &&
+    typeof value['slug'] === 'string' &&
+    isArrayOf(value['owners'], (owner) => hasId(owner) && typeof owner['name'] === 'string' && typeof owner['active'] === 'boolean') &&
+    typeof value['hasActiveOwner'] === 'boolean' &&
+    typeof value['memberCount'] === 'number' &&
+    typeof value['updatedAt'] === 'string'
+  )
+}
+
+function isAuditEntry(value: unknown): boolean {
+  return (
+    hasId(value) &&
+    typeof value['at'] === 'string' &&
+    typeof value['action'] === 'string' &&
+    isRecord(value['actor']) &&
+    (value['actor']['kind'] === 'cli' || (value['actor']['kind'] === 'user' && typeof value['actor']['name'] === 'string')) &&
+    isRecord(value['detail'])
+  )
+}
 
 function isThemeManifest(value: unknown): boolean {
   return (
@@ -1077,6 +1163,7 @@ function declaredOnly<T extends object>(body: T, keys: Record<keyof T, true>): P
  * 바뀌면 여기가 컴파일 에러로 알려 준다. 값은 `true`뿐이고 쓰이는 것은 키 이름이다.
  */
 const BODY_KEYS = {
+  createInvite: { name: true, kind: true, expiresInDays: true } satisfies Record<keyof Parameters<ApiClient['createInvite']>[0], true>,
   createProject: { name: true, slug: true, description: true } satisfies Record<keyof Parameters<ApiClient['createProject']>[0], true>,
   updateProject: { name: true, slug: true, description: true } satisfies Record<keyof Parameters<ApiClient['updateProject']>[1], true>,
   createMenu: { parentId: true, title: true } satisfies Record<keyof Parameters<ApiClient['createMenu']>[1], true>,
@@ -1714,5 +1801,39 @@ export function createHttpClient(
       request<{ email: string; name: string }>('GET', `/auth/resets/${encodeURIComponent(token)}`, SHAPES.resetTarget),
     completePasswordReset: (token, password) =>
       request<void>('POST', `/auth/resets/${encodeURIComponent(token)}`, SHAPES.noBody, { password }),
+    listAdminUsers: (options) => request<AdminUser[]>('GET', '/admin/users', SHAPES.adminUsers, undefined, options),
+    deactivateUser: (userId) =>
+      request<{ user: AdminUser; revokedLinks: number; ownerlessProjects: number }>(
+        'POST',
+        `${adminUserPath(userId)}/deactivate`,
+        SHAPES.adminDeactivated,
+      ),
+    activateUser: (userId) => request<{ user: AdminUser }>('POST', `${adminUserPath(userId)}/activate`, SHAPES.adminUserResult),
+    grantInstanceAdmin: (userId) => request<{ user: AdminUser }>('POST', `${adminUserPath(userId)}/admin`, SHAPES.adminUserResult),
+    revokeInstanceAdmin: (userId) =>
+      request<{ user: AdminUser; revokedLinks: number }>('DELETE', `${adminUserPath(userId)}/admin`, SHAPES.adminRevoked),
+    createResetLink: (userId) => request<CreatedResetLink>('POST', `${adminUserPath(userId)}/reset-links`, SHAPES.createdResetLink),
+    listInvites: (options) => request<AdminInvite[]>('GET', '/admin/invites', SHAPES.adminInvites, undefined, options),
+    createInvite: (body) =>
+      request<CreatedInvite>('POST', '/admin/invites', SHAPES.createdInvite, declaredOnly(body, BODY_KEYS.createInvite)),
+    revokeInvite: (inviteId) =>
+      request<{ invite: AdminInvite }>('POST', `/admin/invites/${encodeURIComponent(inviteId)}/revoke`, SHAPES.adminInviteResult),
+    listAdminProjects: (options) => request<AdminProject[]>('GET', '/admin/projects', SHAPES.adminProjects, undefined, options),
+    transferProjectOwner: (projectId, userId) =>
+      request<{ project: AdminProject }>('POST', `/admin/projects/${encodeURIComponent(projectId)}/owner`, SHAPES.adminProjectResult, {
+        userId,
+      }),
+    listAudit: (query, options) => {
+      const params = new URLSearchParams()
+      if (query.action !== undefined) params.set('action', query.action)
+      if (query.actorId !== undefined) params.set('actorId', query.actorId)
+      if (query.before !== undefined) params.set('before', query.before)
+      const search = params.toString()
+      return request<AuditPage>('GET', `/admin/audit${search === '' ? '' : `?${search}`}`, SHAPES.auditPage, undefined, options)
+    },
   }
+}
+
+function adminUserPath(userId: string): string {
+  return `/admin/users/${encodeURIComponent(userId)}`
 }

@@ -7,8 +7,16 @@
  */
 import type { PatchOp, WbNode } from '@wirebound/schema'
 import type {
+  AdminInvite,
+  AdminProject,
+  AdminUser,
+  AuditPage,
+  AuditQuery,
   Comment,
+  CreatedInvite,
+  CreatedResetLink,
   ExportFormat,
+  InviteKind,
   ExportPreview,
   CommentCreated,
   MarkerChange,
@@ -591,6 +599,31 @@ export interface ApiClient {
   getPasswordReset(token: string): Promise<{ email: string; name: string }>
   /** 재설정 링크로 비밀번호를 바꾼다 — 그 사람의 세션은 전부 끊긴다(204). 못 쓰는 링크 404 · 한도 429. */
   completePasswordReset(token: string, password: string): Promise<void>
+  /**
+   * **관리자 › 사용자**(인스턴스 관리자 · 세션 전용 — 서버 README «계정 — 초대 · 비활성화 · 재설정 · 기록»). 쓰기의 409 는 서버 문장을 그대로
+   * 옮긴다(자기 자신 · 마지막 관리자 · 이미 그 상태).
+   */
+  listAdminUsers(options?: ReadOptions): Promise<AdminUser[]>
+  /** 비활성화 — 세션 · API 토큰 · 그 사람이 만든 쓸 수 있는 링크가 함께 끝난다. 수 둘은 화면이 한 줄로 말한다. */
+  deactivateUser(userId: string): Promise<{ user: AdminUser; revokedLinks: number; ownerlessProjects: number }>
+  activateUser(userId: string): Promise<{ user: AdminUser }>
+  grantInstanceAdmin(userId: string): Promise<{ user: AdminUser }>
+  /** 관리자 해제 — 그 사람이 만든 쓸 수 있는 링크를 거둔다. */
+  revokeInstanceAdmin(userId: string): Promise<{ user: AdminUser; revokedLinks: number }>
+  /** 비밀번호 재설정 링크(24 시간 · 한 번) — 원문은 이 응답에만 있다. 그 사람의 안 쓴 앞 링크는 막힌다. */
+  createResetLink(userId: string): Promise<CreatedResetLink>
+  /** **관리자 › 초대 링크** — 목록에는 원문이 없다. */
+  listInvites(options?: ReadOptions): Promise<AdminInvite[]>
+  /** 만들기 — 원문은 이 응답에만 있다. 만료는 1 – 90 일(없으면 서버 기본 7 일). */
+  createInvite(body: { name: string; kind: InviteKind; expiresInDays: number }): Promise<CreatedInvite>
+  /** 거두기 — 이미 못 쓰는 링크면 409. */
+  revokeInvite(inviteId: string): Promise<{ invite: AdminInvite }>
+  /** **관리자 › 프로젝트** — 관리자가 멤버가 아닌 것도 실린다. */
+  listAdminProjects(options?: ReadOptions): Promise<AdminProject[]>
+  /** owner 넘기기 — 활성 owner 가 없는 프로젝트만. 그 사이 생겼으면 409, 대상이 비활성이면 400. */
+  transferProjectOwner(projectId: string, userId: string): Promise<{ project: AdminProject }>
+  /** **관리자 › 기록** — 최신이 위, 한 쪽 50 줄. */
+  listAudit(query: AuditQuery, options?: ReadOptions): Promise<AuditPage>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */

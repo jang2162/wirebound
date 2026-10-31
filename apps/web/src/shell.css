@@ -5576,6 +5576,292 @@
   color: var(--wb-shell-muted);
 }
 
+/* ── 관리자 칸 넷(`admin/*` — 사용자 · 초대 링크 · 프로젝트 · 기록) ───────────────────────────────────────
+
+   위 줄 · 표 하나 · 줄 «…»(`admin/admin-screen.tsx` 머리말 «표 넷의 공통 꼴»). 몸은 `.wb-shell-settings`(팔레트 · 글꼴)다. 알림 · 단추는 프로젝트
+   목록의 것을 그대로 쓴다(`-project-submit` · `-project-action` · `-project-danger` · `-project-alert` · `-project-notice`). */
+.wb-shell-admin-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+/* 위 줄의 마지막 단추를 오른끝에 — 좁으면 줄을 바꿔 왼끝에 선다. */
+.wb-shell-admin-bar-end {
+  margin-left: auto;
+}
+
+.wb-shell-admin-search {
+  flex: 0 1 240px;
+  width: auto;
+  min-width: 120px;
+}
+
+.wb-shell-admin-select {
+  max-width: 100%;
+  font: inherit;
+  font-size: 13px;
+}
+
+.wb-shell-admin-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+/* «활성 owner 가 없는 프로젝트 N» — 경고가 아니라 할 일의 알림이라 주황이다(`.wb-shell-menu-delete-changed` 와 같은 색). */
+.wb-shell-admin-warning {
+  margin: 0 0 12px;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fffaeb;
+  color: #b54708;
+}
+
+/* 표. 줄 사이 선은 칸의 아래 테두리다. **칸은 글을 줄이지 않는다** — 이메일 · 슬러그 · 기록의 한 줄은 아무 데서나 꺾고(`-cell-email`), 시각은
+   날짜 · 시각을 각각 안 끊는다(`-nowrap` — `admin/admin-screen.tsx` 의 `When`). */
+.wb-shell-admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.wb-shell-admin-head {
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-admin-head-row {
+  border-bottom: 1px solid var(--wb-shell-line);
+}
+
+.wb-shell-admin-th {
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--wb-shell-muted);
+  white-space: nowrap;
+}
+
+.wb-shell-admin-body {
+  vertical-align: top;
+}
+
+.wb-shell-admin-row {
+  border-bottom: 1px solid var(--wb-shell-line);
+}
+
+/* 비활성 사용자 · 못 쓰는 링크 · 활성 owner 없는 프로젝트의 줄 — 흐리게. 줄의 «…» 는 그대로 누를 수 있다. */
+.wb-shell-admin-row[data-active='false'] {
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-admin-cell {
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-admin-cell-name {
+  font-weight: 600;
+  word-break: keep-all;
+}
+
+.wb-shell-admin-cell-email {
+  min-width: 8em;
+}
+
+.wb-shell-admin-cell-menu {
+  width: 1px;
+  text-align: right;
+}
+
+.wb-shell-admin-nowrap {
+  white-space: nowrap;
+}
+
+/* 이름 곁의 «관리자» · owner 곁의 «비활성». */
+.wb-shell-admin-badge {
+  display: inline-block;
+  margin-left: 6px;
+  border-radius: 4px;
+  padding: 0 6px;
+  background: var(--wb-shell-chrome);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--wb-shell-muted);
+  white-space: nowrap;
+}
+
+/* 칸 안의 둘째 줄 — 가입한 초대 링크 · «활성 owner 없음». */
+.wb-shell-admin-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-admin-link {
+  color: var(--wb-shell-accent);
+  text-decoration: none;
+}
+
+.wb-shell-admin-link:hover {
+  text-decoration: underline;
+}
+
+/* 눈에서만 감춘다 — 행동 칸 머리의 이름. */
+.wb-shell-admin-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 좁은 창 — 줄이 카드가 되고 칸마다 이름표(`data-label`)를 앞에 단다. 문턱 900px 은 사이드바 232px 를 빼고 칸 일곱(사용자)이 꺾이지 않고 서는
+   폭이다(창 721 – 899 에서 표로 두면 시각 칸이 두 줄 · 이메일이 글자마다 꺾였다). 표 머리는 숨긴다 — 이름표가 그 몫을 한다. */
+@media (max-width: 899px) {
+  .wb-shell-admin-table {
+    border: 0;
+    background: transparent;
+  }
+
+  .wb-shell-admin-head {
+    display: none;
+  }
+
+  .wb-shell-admin-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .wb-shell-admin-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    border: 1px solid var(--wb-shell-line);
+    border-radius: 6px;
+    background: #fff;
+  }
+
+  .wb-shell-admin-cell {
+    grid-column: 1;
+    padding: 4px 10px;
+  }
+
+  .wb-shell-admin-cell::before {
+    content: attr(data-label);
+    display: inline-block;
+    min-width: 5.5em;
+    margin-right: 8px;
+    font-weight: 400;
+    color: var(--wb-shell-muted);
+  }
+
+  .wb-shell-admin-cell-menu {
+    grid-column: 2;
+    grid-row: 1;
+    width: auto;
+  }
+}
+
+/* 새 링크 한 번 보이기(`admin/link-reveal.tsx`). */
+.wb-shell-admin-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 12px;
+  border: 1px solid var(--wb-shell-accent);
+  border-radius: 6px;
+  padding: 12px;
+  background: #fff;
+}
+
+.wb-shell-admin-reveal-title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.wb-shell-admin-reveal-once {
+  margin: 0;
+  font-weight: 600;
+}
+
+.wb-shell-admin-reveal-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-shell-admin-reveal-url {
+  flex: 1 1 240px;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.wb-shell-admin-reveal-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+/* 확인 · 만들기 상자의 몸(상자의 폭은 `.wb-shell-dialog` 의 것이다). */
+.wb-shell-admin-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  text-align: left;
+}
+
+.wb-shell-admin-dialog-sentence {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-admin-dialog-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.wb-shell-admin-dialog-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-shell-admin-dialog-days {
+  width: 8em;
+}
+
+.wb-shell-admin-dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* 멤버 절의 «비활성» 표지(`settings/members-section.tsx`). */
+.wb-shell-members-inactive {
+  flex: none;
+  border-radius: 4px;
+  padding: 0 6px;
+  background: var(--wb-shell-chrome);
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
 /* 메뉴 연쇄 삭제 상자(`panels/menu-delete-dialog.tsx`). 붉은색(`#b42318`)은 되돌릴 수 없는 것의 몫이다(`.wb-shell-project-danger`) —
    페이지째 지운다는 경고 상자와 확정 단추가 그것이다. 상자의 폭은 `.wb-shell-dialog` 의 것이다. */
 .wb-shell-menu-delete-body {

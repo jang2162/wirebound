@@ -16,7 +16,7 @@ const ALREADY = '이미 프로젝트 멤버입니다'
 const LAST_OWNER = '프로젝트에는 owner가 최소 한 명 있어야 합니다'
 
 function member(userId: string, name: string, role: ProjectRole): ProjectMember {
-  return { userId, email: `${userId}@example.com`, name, role, invitedAt: '2026-09-01T00:00:00.000Z' }
+  return { userId, email: `${userId}@example.com`, name, role, invitedAt: '2026-09-01T00:00:00.000Z', active: true }
 }
 
 /** 서버처럼 도는 가짜 — 멤버 표 하나를 고치고, 설정 페이지의 역할은 그 표의 «나» 줄에서 읽는다. */
@@ -103,6 +103,17 @@ describe('멤버 절 — 목록', () => {
       expect(within(section).queryByRole('button', { name: /제외/ })).toBeNull()
     })
   }
+})
+
+describe('멤버 절 — 비활성 표지', () => {
+  it('비활성 사용자의 줄에만 «비활성» 이 선다 — 행은 그대로 남는다(역할 · 제외도 그대로)', async () => {
+    const { client } = server('owner', [member('u-2', '밥', 'editor'), { ...member('u-3', '떠난사람', 'owner'), active: false }])
+    const section = await open(client)
+    expect(within(row(section, '떠난사람')).getByText('비활성')).toBeTruthy()
+    expect(within(row(section, '밥')).queryByText('비활성')).toBeNull()
+    expect(within(row(section, '테스터')).queryByText('비활성')).toBeNull()
+    expect(within(row(section, '떠난사람')).getByRole('combobox', { name: '떠난사람의 역할' })).toBeTruthy()
+  })
 })
 
 describe('멤버 절 — owner', () => {

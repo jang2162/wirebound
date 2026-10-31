@@ -103,6 +103,18 @@ const METHODS = [
   'signupWithInvite',
   'getPasswordReset',
   'completePasswordReset',
+  'listAdminUsers',
+  'deactivateUser',
+  'activateUser',
+  'grantInstanceAdmin',
+  'revokeInstanceAdmin',
+  'createResetLink',
+  'listInvites',
+  'createInvite',
+  'revokeInvite',
+  'listAdminProjects',
+  'transferProjectOwner',
+  'listAudit',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -144,7 +156,8 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 아는 상태가 남는다 — 그 상태의 모양은 `session/session-context.tsx` 머리말의 순환이다.
   logout: ['../src/session/session-menu.tsx'],
   me: ['../src/session/session-context.tsx'],
-  listProjects: ['../src/projects/use-project-commands.tsx'],
+  // 둘째 자리는 관리자 › 프로젝트 — 내가 멤버인 프로젝트만 이름을 링크로 단다(`admin/projects-section.tsx` 머리말). id 만 읽는다.
+  listProjects: ['../src/projects/use-project-commands.tsx', '../src/admin/projects-section.tsx'],
   // 계정 설정의 API 토큰 절 하나다. 목록은 줄의 글자와 폐기 주소(`id`)를 읽는다(`SHAPES.myTokens`).
   listMyTokens: ['../src/account/tokens-section.tsx'],
   revokeMyToken: ['../src/account/tokens-section.tsx'],
@@ -285,6 +298,21 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   signupWithInvite: ['../src/routes/invite.tsx'],
   getPasswordReset: ['../src/routes/reset.tsx'],
   completePasswordReset: ['../src/routes/reset.tsx'],
+  // 관리자 칸 넷(`admin/*`). 사용자 목록은 셋이 읽는다 — 사용자 표 · owner 넘기기의 대상 고르개 · 기록의 사람 거름. 프로젝트 목록은 둘 — 프로젝트
+  // 표 · 비활성화 확인 상자의 «마지막 활성 owner» 셈(`LastOwnerCount`). 쓰기의 답은 수(`revokedLinks` · `ownerlessProjects`)와 링크 원문만 읽는다.
+  listAdminUsers: ['../src/admin/users-section.tsx', '../src/admin/projects-section.tsx', '../src/admin/audit-section.tsx'],
+  deactivateUser: ['../src/admin/users-section.tsx'],
+  activateUser: ['../src/admin/users-section.tsx'],
+  grantInstanceAdmin: ['../src/admin/users-section.tsx'],
+  revokeInstanceAdmin: ['../src/admin/users-section.tsx'],
+  createResetLink: ['../src/admin/users-section.tsx'],
+  listInvites: ['../src/admin/invites-section.tsx'],
+  // 만들기 상자(`InviteCreateDialog`) 하나 — 사용자 칸의 «초대 링크 만들기» 도 같은 상자를 연다.
+  createInvite: ['../src/admin/invites-section.tsx'],
+  revokeInvite: ['../src/admin/invites-section.tsx'],
+  listAdminProjects: ['../src/admin/projects-section.tsx', '../src/admin/users-section.tsx'],
+  transferProjectOwner: ['../src/admin/projects-section.tsx'],
+  listAudit: ['../src/admin/audit-section.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {
