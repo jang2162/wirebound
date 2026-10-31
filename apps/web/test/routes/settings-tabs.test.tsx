@@ -1,5 +1,5 @@
 /**
- * **프로젝트 설정의 절 목차**(`routes/settings.tsx` 머리말 «절 목차») — jsdom. 왼쪽 세로 탭이 절 하나씩을 보이고, 주소의 `?section=` 이
+ * **프로젝트 설정의 절 목차**(`routes/settings.tsx` 머리말 «절 목차») — jsdom. 내용 위 가로 탭이 절 하나씩을 보이고, 주소의 `?section=` 이
  * 고른 절을 든다. 재는 것: 접근 이름과 탭 ↔ 판의 이음 · 주소로 절 열기(모르는 값 · 없는 절은 «일반») · 고르면 주소가 바뀐다 ·
  * 키보드(↑↓ ←→ Home End · 로빙 `tabIndex`) · 탭을 옮겨도 친 값이 남는다 · viewer 는 «위험 구역» 탭이 없고 테마 칸이 읽기 전용이다.
  *
@@ -47,10 +47,10 @@ const sectionIn = (panel: HTMLElement): string =>
   document.getElementById(panel.querySelector('section')?.getAttribute('aria-labelledby') ?? '')?.textContent ?? ''
 
 describe('설정 절 목차 — 접근 이름과 이음', () => {
-  it('세로 탭 목록 «설정 절» 에 탭 넷 · 탭은 제 판을 가리키고 판은 탭을 이름으로 갖는다 · 고른 판 하나만 보인다', async () => {
+  it('가로 탭 목록 «설정 절» 에 탭 넷 · 탭은 제 판을 가리키고 판은 탭을 이름으로 갖는다 · 고른 판 하나만 보인다', async () => {
     await renderSettings()
     const list = screen.getByRole('tablist', { name: '설정 절' })
-    expect(list.getAttribute('aria-orientation')).toBe('vertical')
+    expect(list.getAttribute('aria-orientation')).toBe('horizontal')
     expect(tabNames()).toEqual(OWNER_TABS)
     for (const tab of screen.getAllByRole('tab')) {
       const panel = document.getElementById(tab.getAttribute('aria-controls') ?? '')
@@ -116,7 +116,7 @@ describe('설정 절 목차 — 키보드', () => {
     expect(selectedTab()).toBe('일반')
   })
 
-  it('→ ← 도 옮긴다(좁은 창의 가로 줄) · Home · End 는 처음 · 끝', async () => {
+  it('→ ← 로 옮긴다(가로 줄의 축) · Home · End 는 처음 · 끝', async () => {
     await renderSettings()
     const list = screen.getByRole('tablist', { name: '설정 절' })
     fireEvent.keyDown(list, { key: 'ArrowRight' })

@@ -7,6 +7,7 @@
  * | 좁은 창 | 창 390 에서 화면 넷 — 문서 · 뼈대 상자의 `scrollWidth` 가 창 안, 글자 노드 하나하나의 `Range.getClientRects()` 오른끝이 창 안(접힘 · 편 메뉴 둘 다) |
  * | 좁은 창의 «메뉴» | 칸 목록이 접혀 있다 → Tab 으로 «메뉴» 에 닿아 Enter 로 편다 → 다음 Tab 이 첫 칸 → «계정» 을 누르면 `/account` |
  * | 설정 «테마» 미리보기 | 창 1920 에서 미리보기 틀(`.wb-shell-settings-preview`) 폭이 뼈대 전 판보다 넓다 |
+ * | 설정 절 탭 | 창 1920 · 390 에서 탭 줄이 판 **위**에 있고(탭 줄 아래끝 ≤ 판 위끝) 판이 탭 줄 폭 전부를 쓴다 |
  *
  * **뼈대 전 판의 미리보기 폭** — `PREVIEW_BEFORE`. 기준 커밋 `20b398e2` 를 스크래치에 풀어(`git archive`) 세운 사본에서 같은 판(창 1920×900 · 관리자 alice ·
  * `themeProject` · `?section=theme`)으로 두 번 잰 값이다(580 · 580) — 설정 화면이 `max-width: 1280px` 에 왼쪽 세로 탭 200px 였을 때다.
@@ -175,6 +176,29 @@ describe.skipIf(!전제.ok)('작업 공간 뼈대 — 실브라우저', () => {
       await page.getByText('alice@browser.test').waitFor()
     } finally {
       await context.close()
+    }
+  })
+
+  it('창 1920 · 390 — 설정 절 탭은 판 위의 가로 줄이고 판은 그 줄 폭 전부를 쓴다', async () => {
+    const seen: Record<number, { stacked: boolean; tabs: number; panel: number }> = {}
+    for (const width of [1920, 390]) {
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width, height: HEIGHT } })
+      try {
+        await page.goto(`/projects/${projectId}/settings?section=members`)
+        await page.getByRole('region', { name: '멤버' }).waitFor()
+        seen[width] = await page.evaluate(() => {
+          const tabs = document.querySelector('.wb-shell-settings-tabs')!.getBoundingClientRect()
+          const panel = document.querySelector('.wb-shell-settings-panel:not([hidden])')!.getBoundingClientRect()
+          return { stacked: tabs.bottom <= panel.top + 0.5, tabs: Math.round(tabs.width), panel: Math.round(panel.width) }
+        })
+      } finally {
+        await context.close()
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log('[설정 절 탭]', JSON.stringify(seen))
+    for (const [width, v] of Object.entries(seen)) {
+      expect({ width, stacked: v.stacked, full: Math.abs(v.panel - v.tabs) <= 1 }).toEqual({ width, stacked: true, full: true })
     }
   })
 

@@ -7,15 +7,16 @@
  * `settings/theme-section.tsx`) · **«멤버»**(`settings/members-section.tsx`) · **«위험 구역»**(프로젝트 삭제 · owner 만 — `settings/danger-section.tsx`)이다.
  * 몸은 `.wb-shell-settings` 다(팔레트 · 글꼴 — 폭 제한 없이 내용 칸 전체를 쓴다. «테마» 절의 미리보기가 넓어진 폭을 받는다).
  *
- * # 절 목차 — 왼쪽 세로 탭, 한 번에 한 절
+ * # 절 목차 — 내용 위 가로 탭, 한 번에 한 절
  *
- * 절을 위아래로 다 늘어놓으면 «테마» 절(미리보기)이 화면 열 배 넘게 길어 «멤버» · «위험 구역» 이 그 밑에 묻힌다. 그래서 왼쪽에 세로 탭
- * 목록(`role="tablist"`)을 두고 고른 절 하나만 보인다. 창이 좁으면(< 900px) 목록이 위로 올라가 가로 줄이 된다(CSS).
+ * 절을 위아래로 다 늘어놓으면 «테마» 절(미리보기)이 화면 열 배 넘게 길어 «멤버» · «위험 구역» 이 그 밑에 묻힌다. 그래서 내용 위에 가로 탭
+ * 목록(`role="tablist"` · `aria-orientation="horizontal"`)을 두고 고른 절 하나만 보인다(설계 「프로젝트 설정」 — 판이 내용 칸의 폭 전부를 쓴다).
+ * 넘치면 줄 안에서 민다(CSS).
  *
  * - **주소가 고른 절을 든다** — 질의 `?section=general|theme|members|danger`(없거나 모르는 값이면 «일반»). 탭을 고르면 `replace` 로
  *   주소만 바꾼다(뒤로 가기에 탭마다 기록을 안 쌓는다). 해시가 아니라 질의인 것은 라우터로 읽고 쓰고, 해시는 브라우저가 같은 id 의
  *   요소로 스크롤하기 때문이다.
- * - **키보드** — 고른 탭만 Tab 정지점이다(로빙 `tabIndex`). ↑↓(가로 줄일 때를 위해 ←→ 도) · Home · End 로 옮기면 그 절이 곧바로 열린다.
+ * - **키보드** — 고른 탭만 Tab 정지점이다(로빙 `tabIndex`). ←→(세로 줄이던 때의 ↑↓ 도 그대로 받는다) · Home · End 로 옮기면 그 절이 곧바로 열린다.
  * - **절은 넷 다 늘 그리고 안 고른 것은 `hidden`** — 탭을 바꿔도 저장 안 한 토큰 초안 · 칸에 친 값 · 열린 확인이 남는다(한 화면이던 때
  *   잃지 않던 것을 탭 전환이 잃게 하지 않는다). 조회도 지금처럼 화면을 열 때 절마다 한 번이다. 판(`tabpanel`)이 절(`<section>` —
  *   이름 «일반» · «테마» …)을 감싼다.
@@ -136,7 +137,7 @@ export function SettingsRoute(): ReactElement {
   )
 }
 
-/** 왼쪽 세로 탭 + 판 넷(머리말 «절 목차»). 판은 넷 다 그리고 안 고른 것은 `hidden` 이다. */
+/** 가로 탭 + 판 넷(머리말 «절 목차»). 판은 넷 다 그리고 안 고른 것은 `hidden` 이다. */
 function SettingsTabs(props: { danger: boolean; children: Record<SectionKey, ReactNode> }): ReactElement {
   const [params, setParams] = useSearchParams()
   const sections = SECTIONS.filter((section) => section.key !== 'danger' || props.danger)
@@ -180,7 +181,7 @@ function SettingsTabs(props: { danger: boolean; children: Record<SectionKey, Rea
 
   return (
     <div className="wb-shell-settings-layout">
-      <div className="wb-shell-settings-tabs" role="tablist" aria-label="설정 절" aria-orientation="vertical" onKeyDown={onKeyDown}>
+      <div className="wb-shell-settings-tabs" role="tablist" aria-label="설정 절" aria-orientation="horizontal" onKeyDown={onKeyDown}>
         {sections.map((section) => (
           <button
             key={section.key}
