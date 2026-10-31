@@ -158,7 +158,13 @@ function SettingsTabs(props: { danger: boolean; children: Record<SectionKey, Rea
       },
       { replace: true },
     )
-    if (focus) tabs.current[key]?.focus()
+    if (!focus) return
+    const tab = tabs.current[key]
+    tab?.focus()
+    // **키로 고른 탭은 줄 안으로 굴린다** — 좁은 창(320)에서 탭 줄이 넘쳐 안에서 구를 때 `focus()` 는 반쯤 보이는 탭을 굴리지 않는다(Chrome ·
+    // `build-test/rv-ws-workspace.test.ts` «창 320 — 설정 탭 줄에서 End 로 …»). `nearest` 라 이미 보이면 아무 데도 안 구른다. 누름으로 고를 때는
+    // 부르지 않는다 — 사람은 보이는 쪽을 눌렀고, 굴리면 누르는 손 밑에서 줄이 움직인다. jsdom 에는 `scrollIntoView` 가 없다.
+    tab?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
