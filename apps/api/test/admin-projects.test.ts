@@ -215,6 +215,33 @@ describe('owner 넘기기', () => {
   })
 })
 
+describe('owner 넘기기는 세션 전용이다', () => {
+  it('관리자의 API 토큰(그 프로젝트의 것)으로는 401 — 넘기기가 안 일어난다', async () => {
+    await withApi(async (ctx) => {
+      const me = await adminOf(ctx)
+      const bob = await signup(ctx)
+      const project = await createProject(ctx, bob.cookie)
+      await addMember(ctx, project.id, me.user.id, 'viewer')
+      const token = await insertApiToken(ctx.db, { projectId: project.id, userId: me.user.id, name: 'cli' })
+      expect((await deactivate(ctx, me.cookie, bob.user.id)).statusCode).toBe(200)
+      const res = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/admin/projects/${project.id}/owner`,
+        headers: { authorization: `Bearer ${token.value}` },
+        payload: { userId: me.user.id },
+      })
+      expect(res.statusCode, res.body).toBe(401)
+      const role = await ctx.db
+        .selectFrom('project_members')
+        .select('role')
+        .where('project_id', '=', project.id)
+        .where('user_id', '=', me.user.id)
+        .executeTakeFirstOrThrow()
+      expect(role.role).toBe('viewer')
+    })
+  })
+})
+
 describe('owner 넘기기 × 프로젝트 삭제 — 두 차례 모두 교착 0', () => {
   beforeEach(resetRealData)
   afterEach(resetRealData)

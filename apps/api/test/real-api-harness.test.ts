@@ -16,7 +16,7 @@
  * |---|---|
  * | 관련 테이블 TRUNCATE | ACCESS EXCLUSIVE 잠금이라 같은 DB를 보는 커넥션을 이유 없이 세운다 |
  * | 만든 프로젝트만 지운다 | 케이스가 만든 id를 **호출자가 기억해야** 한다. 중간에 죽으면 그 목록이 사라져 다음 케이스가 오염된 판에서 돈다 — 지금 `beforeEach`·`afterEach` 양쪽에 거는 이유가 정확히 그것이다 |
- * | **`projects`·`users` 두 줄의 DELETE** ✅ | 나머지는 전부 그 둘에 FK로 매여 CASCADE로 따라간다 — FK 없이 둔 `project_menu_revs` 하나만 세 번째 줄로 지운다(`0020-project-menu-revs` 머리말 «잠금») |
+ * | **`projects`·`users` 두 줄의 DELETE** ✅ | 나머지는 전부 그 둘에 FK로 매여 CASCADE로 따라간다 — FK 없이 둔 `project_menu_revs` 하나와, 만든 사람을 CASCADE 없이 가리키는 초대 · 재설정 링크 · 관리자 기록(`0034-accounts` 머리말)만 따로 지운다 |
  *
  * **아래 케이스가 그 마지막 칸을 실제로 센다.** 표에 적어 두기만 하면 새 테이블이 생겼을 때
  * 아무도 모른다.
@@ -25,6 +25,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createMenuNode, createPage, createProject, getTestDb, resetRealData, signup, withRealApi, type TestContext } from './helpers'
 import { stripComments } from './source-census'
+import { setInstanceAdmin } from '../src/repos/users'
 
 const db = getTestDb()
 
@@ -46,6 +47,9 @@ const CLEARED_TABLES = [
   'modules',
   'personal_modules',
   'project_menu_revs',
+  'invites',
+  'password_resets',
+  'admin_audit',
 ] as const
 
 async function countRows(table: (typeof CLEARED_TABLES)[number]): Promise<number> {
@@ -78,6 +82,11 @@ async function fillEveryTable(ctx: TestContext): Promise<void> {
   })
   // 개인 모듈은 사용자 삭제의 CASCADE 가 데려간다(`0026-personal-modules` — 프로젝트를 안 가리킨다).
   await post('/api/me/modules', { name: '청소 대상 개인 모듈', nodes: [{ id: 'm_b', type: 'Button', props: { label: '저장' } }] })
+  // 링크 · 기록 — 관리자가 만든다(서버 명령의 지정도 기록을 남긴다).
+  await setInstanceAdmin(ctx.db, owner.user.email, true)
+  await post('/api/admin/invites', { name: '청소 대상 초대', kind: 'single' })
+  const other = await signup(ctx)
+  await post(`/api/admin/users/${other.user.id}/reset-links`, {})
 }
 
 describe('실커밋 하네스의 청소', () => {

@@ -2865,6 +2865,18 @@ const NOT_LOCKED: Record<string, string> = {
     '프로젝트 밖 — `theme_packages` 행 하나를 넣는다(FK 가 올린 사람의 사용자 행에 `KEY SHARE`). 프로젝트 행을 안 잡는다. 커밋 직전에 자격 · 관리자 표시를 다시 본다 — `admin-themes.test.ts` «강등과 겹친 업로드»',
   'PATCH /api/admin/theme-packages/:themeId/:version':
     '프로젝트 밖 — `theme_packages` 행 하나의 `hidden_at` 만 고친다. 그 행을 가리키는 프로젝트의 FK 는 키를 안 바꾸는 UPDATE 에 안 선다. 커밋 직전에 자격 · 관리자 표시를 다시 본다(업로드와 같은 `recheckInstanceAdmin`)',
+  'POST /api/auth/invites/:token/signup':
+    '프로젝트 밖 — 초대 행 하나를 `FOR UPDATE` 로 잡고 사용자 · 기록 · 세션 행을 넣는다(`repos/invites.ts` 머리말 «잠금»). 프로젝트 행 · 페이지 행을 안 잡는다',
+  'POST /api/auth/resets/:token':
+    '프로젝트 밖 — 대상의 사용자 행(`NO KEY UPDATE`) → 재설정 행 → 그 사람의 세션 행 삭제(`repos/password-resets.ts` 머리말 «잠금»). 프로젝트 행을 안 잡는다',
+  'POST /api/admin/invites': '프로젝트 밖 — 재확인(요청자 사용자 행 `SHARE` · 자격) 뒤 초대 행 하나를 넣는다',
+  'POST /api/admin/invites/:inviteId/revoke': '프로젝트 밖 — 재확인 뒤 초대 행 하나를 `FOR UPDATE` 로 잡고 고친다',
+  'POST /api/admin/users/:userId/deactivate':
+    '프로젝트 밖 — 사용자 행(id 순) → 재확인 → 링크 행 → 그 사람의 세션 · 토큰 행 삭제(`routes/admin-users.ts` 머리말 «잠금 차례»). 토큰 행은 id 순이라 프로젝트 삭제 · 멤버 제거가 쥔 토큰 행에는 서지만 프로젝트 행 · 페이지 행은 안 잡는다(`admin-deactivate-race.test.ts`)',
+  'POST /api/admin/users/:userId/activate': '프로젝트 밖 — 사용자 행 둘(id 순) → 재확인 → 대상 행 하나를 고친다',
+  'POST /api/admin/users/:userId/admin': '프로젝트 밖 — 사용자 행 둘(id 순) → 재확인 → 대상 행 하나를 고친다',
+  'DELETE /api/admin/users/:userId/admin': '프로젝트 밖 — 사용자 행 둘(id 순) → 재확인 → 대상 행 · 그 사람이 만든 링크 행을 고친다',
+  'POST /api/admin/users/:userId/reset-links': '프로젝트 밖 — 사용자 행 둘(id 순) → 재확인 → 대상의 재설정 행을 막고 하나를 넣는다',
   'WS ping': '아무것도 안 쓴다',
   'WS lock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
   'WS unlock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
@@ -2887,8 +2899,17 @@ function frameKinds(): string[] {
   return Object.keys(MIN_ROLE_FOR_FRAME).map((type) => `WS ${type}`)
 }
 
+/**
+ * **프로젝트 행에 서되 판은 이 파일 밖에 있는 쓰기** — 관리자의 owner 넘기기는 프로젝트 행을 `KEY SHARE` 로 잡아 복원 · 삭제(`FOR UPDATE`) 뒤에
+ * 선다. 요청자가 그 프로젝트의 멤버가 아니라(인스턴스 관리자) 위 표의 «강등» 판이 맞지 않는다 — 서는 자리는 `admin-projects.test.ts`
+ * «owner 넘기기 × 프로젝트 삭제» 가, 재확인(관리자 해제 · 로그아웃)은 `admin-audit.test.ts` 와 같은 `recheckInstanceAdmin` 이 든다.
+ */
+const ADMIN_PROJECT_WRITES: Record<string, string> = {
+  'POST /api/admin/projects/:id/owner': '사용자 행(id 순 `SHARE`) → 재확인 → 프로젝트 행 `KEY SHARE` → 대상 토큰 → owner 행',
+}
+
 describe('분모 — 등록된 쓰기가 «잠금에 선다»(두 표) · «안 선다»(목록) 중 정확히 한쪽에 있다', () => {
-  const locked = new Set([...PROBES, ...PROJECT_PROBES].map((probe) => probe.route))
+  const locked = new Set([...PROBES, ...PROJECT_PROBES].map((probe) => probe.route).concat(Object.keys(ADMIN_PROJECT_WRITES)))
   const free = new Set(Object.keys(NOT_LOCKED))
 
   it('분모를 실제로 만든다 — 이음매가 라우트와 프레임을 준다', async () => {

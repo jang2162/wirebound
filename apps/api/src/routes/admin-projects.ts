@@ -2,7 +2,11 @@
  * **관리자 › 프로젝트** — `/api/admin` 아래(spec `docs/superpowers/specs/2026-10-31-workspace-admin-design.md` «관리자 › 프로젝트»).
  *
  * - `GET /projects` — 모든 프로젝트(관리자가 멤버가 아닌 것도). 이름 · 슬러그 · owner · 멤버 수 · 최근 수정뿐이다.
- * - `POST /projects/:projectId/owner` `{ userId }` — **활성 owner 가 없는 프로젝트만** 그 사람을 owner 로 만든다(자기 자신도 된다).
+ * - `POST /projects/:id/owner` `{ userId }` — **활성 owner 가 없는 프로젝트만** 그 사람을 owner 로 만든다(자기 자신도 된다).
+ *
+ * **파라미터 이름이 `:projectId` 가 아니다** — 인증 훅은 그 이름을 가진 라우트에서 API 토큰을 받는다(`auth/plugin.ts` 머리말 표).
+ * 그 이름이면 관리자의 그 프로젝트 토큰으로 이 쓰기가 섰다. 다른 이름이면 토큰은 사람을 안 채워 `requireAuth` 가 401 이다 —
+ * [api] `admin-projects.test.ts` «owner 넘기기는 세션 전용이다».
  *
  * **관리자가 하는 프로젝트 쓰기는 이것 하나다** — 내용 라우트는 `projectGuard`(멤버만)가 막고, 이 파일은 그것을 안 바꾼다(spec «반목표»).
  *
@@ -24,7 +28,7 @@ import { lockProjectShared } from '../repos/projects'
 import { lockUserRows } from '../repos/users'
 import { notifyMembershipChanged } from '../ws/notify'
 
-const ProjectParams = z.object({ projectId: z.uuid() })
+const ProjectParams = z.object({ id: z.uuid() })
 const OwnerBody = z.strictObject({ userId: z.uuid() })
 
 export const PROJECT_NOT_FOUND = '프로젝트를 찾을 수 없습니다'
@@ -38,9 +42,9 @@ export function adminProjectRoutes() {
       return listAdminProjects(app.db)
     })
 
-    app.post('/projects/:projectId/owner', { preHandler: app.requireAuth }, async (request) => {
+    app.post('/projects/:id/owner', { preHandler: app.requireAuth }, async (request) => {
       const actorId = await requireInstanceAdmin(app.db, request)
-      const { projectId } = parseParams(ProjectParams, request.params)
+      const { id: projectId } = parseParams(ProjectParams, request.params)
       const { userId } = parseBody(OwnerBody, request.body)
       const project = await withTransaction(app.db, async (trx) => {
         const locked = await lockUserRows(trx, [
