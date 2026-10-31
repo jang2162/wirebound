@@ -17,7 +17,13 @@ export async function adminOf(ctx: TestContext, overrides?: Parameters<typeof si
 type Cookie = { wb_session: string }
 
 /** 관리자 API 한 번. */
-export function admin(ctx: TestContext, cookie: Cookie | undefined, method: 'GET' | 'POST' | 'DELETE', url: string, payload?: unknown) {
+export function admin(
+  ctx: TestContext,
+  cookie: Cookie | undefined,
+  method: 'GET' | 'POST' | 'DELETE',
+  url: string,
+  payload?: Record<string, unknown>,
+) {
   return ctx.app.inject({
     method,
     url: `/api/admin${url}`,

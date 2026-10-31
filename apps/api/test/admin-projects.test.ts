@@ -115,7 +115,7 @@ describe('관리자 › 프로젝트 목록 — 최근 수정', () => {
         url: `/api/projects/${edited.id}/pages/${page.id}/ops`,
         cookies: bob.cookie,
         payload: {
-          baseSeq: page.headSeq,
+          baseSeq: 0,
           ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_edit', type: 'Text', props: {} } }],
         },
       })

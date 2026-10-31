@@ -45,7 +45,9 @@ function fill(values: { email?: string; name?: string; password?: string; confir
   fireEvent.change(screen.getByLabelText('비밀번호 확인'), { target: { value: values.confirm ?? values.password ?? 'password1234' } })
 }
 
-const submit = (): void => fireEvent.click(screen.getByRole('button', { name: '가입' }))
+const submit = (): void => {
+  fireEvent.click(screen.getByRole('button', { name: '가입' }))
+}
 
 describe('초대 링크 가입 화면', () => {
   it('링크를 확인한 뒤 칸 넷을 그린다 — 주소의 원문으로 확인한다', async () => {

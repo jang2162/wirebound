@@ -28,7 +28,9 @@ function fill(password: string, confirm = password): void {
   fireEvent.change(screen.getByLabelText('비밀번호 확인'), { target: { value: confirm } })
 }
 
-const submit = (): void => fireEvent.click(screen.getByRole('button', { name: '비밀번호 바꾸기' }))
+const submit = (): void => {
+  fireEvent.click(screen.getByRole('button', { name: '비밀번호 바꾸기' }))
+}
 
 describe('비밀번호 재설정 화면', () => {
   it('누구의 비밀번호인지 말하고 두 칸을 그린다', async () => {
