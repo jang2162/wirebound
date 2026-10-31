@@ -14,13 +14,15 @@
  *
  * 창이 좁으면(< 720px · `shell.css` 의 `.wb-shell-workspace` 블록) 사이드바가 위 줄(로고 · «메뉴» 단추)로 접히고 칸 목록 · 사람 줄은 «메뉴» 를
  * 눌러야 펴진다(`aria-expanded`). 넓은 창에서는 «메뉴» 단추가 없고 목록이 늘 보인다 — 접힘은 CSS 가 목록 자신의 `data-folded` 로 가른다(셸 CSS 는
- * 결합자를 못 쓴다 — `test/shell-css-guard.ts`). 화면을 옮기면 화면마다 이 뼈대가 새로 서므로 목록은 다시 접힌다.
+ * 결합자를 못 쓴다 — `test/shell-css-guard.ts`). **주소(`pathname`)가 바뀌면 접는다** — 화면이 갈려도 같은 꼴의 부모(관리자 칸 넷의
+ * `admin/admin-screen.tsx`)면 React 가 이 뼈대를 재조정으로 이어 가 펴 둔 상태가 남는다. 질의(`?q=`)만 바뀌는 것은 안 접는다 — 목록의 검색 칸에
+ * 칠 때마다 접히면 안 된다(`location.key` 로 보면 `replace` 도 새 키라 그렇게 된다). [Chrome] `build-test/rv-ws-workspace.test.ts` «R-4a».
  *
  * 펴서 위 줄 밑에 쌓는 꼴을 고른 까닭: 서랍(겹쳐 띄움)은 포커스 가두기 · 바깥 누름 닫기 · Escape 를 따로 지어야 하고, 접지 않고 늘 쌓으면 390px 에서
  * 칸 아홉(관리자)이 화면 반을 먹는다. 펴는 꼴은 흐름 안이라 Tab 차례가 문서 차례 그대로다.
  */
 import { useId, useState, type ReactElement, type ReactNode } from 'react'
-import { Link, NavLink } from 'react-router'
+import { Link, NavLink, useLocation } from 'react-router'
 import { useSessionUser } from '../session/session-context'
 import { SessionNotices, useLogout } from '../session/session-menu'
 import { BrandLink } from './brand-link'
@@ -40,6 +42,13 @@ export function WorkspaceLayout(props: {
   const admin = user?.isInstanceAdmin === true
   const { logout, busy: loggingOut, failure: logoutFailure } = useLogout()
   const [open, setOpen] = useState(false)
+  const { pathname } = useLocation()
+  const [openedAt, setOpenedAt] = useState(pathname)
+  // 렌더 중에 고친다 — 이펙트로 고치면 새 화면이 펴진 채 한 번 그려진다.
+  if (openedAt !== pathname) {
+    setOpenedAt(pathname)
+    setOpen(false)
+  }
   const listId = useId()
 
   return (

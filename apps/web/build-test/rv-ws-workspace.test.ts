@@ -748,8 +748,8 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
   })
 
   /**
-   * **R-4a.** 관리자 칸 넷은 칸마다 라우트가 따로라(`admin/admin-screen.tsx` 머리말) 칸을 옮기면 뼈대가 새로 서고 펴 둔 «메뉴» 가 접힌다.
-   * 한 동적 라우트가 넷을 받던 판에서는 `expected 'true' to be 'false'` 였다(보고 `2026-10-31-rv-ws-report.md`).
+   * **R-4a.** 관리자 칸 넷은 같은 꼴(`admin/admin-screen.tsx`)이라 칸을 옮겨도 React 가 뼈대를 이어 간다 — 뼈대가 주소(`pathname`)를 보고 «메뉴» 를
+   * 접는다(`shell/workspace-layout.tsx` 머리말 «좁은 창»). 그것을 뗀 판의 실패 값은 `expected 'true' to be 'false'` 다.
    */
   it('창 390 — 펼친 «메뉴» 에서 관리자 칸(사용자 → 초대 링크)을 누르면 접힌다', async () => {
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
