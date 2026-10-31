@@ -181,8 +181,8 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
       await other.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 8_000 })
       await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 8_000 })
       seen.push(`밥 로그인 뒤 탭1 ${new URL(page.url()).pathname}`)
-      await other.getByRole('button', { name: '더 보기', exact: true }).click()
-      await other.getByRole('menuitem', { name: '로그아웃' }).click()
+      // 밥은 프로젝트 목록(`/`)에 섰다 — 에디터 밖 화면의 «로그아웃» 은 사이드바 바닥 줄의 단추다(`shell/workspace-layout.tsx`).
+      await other.getByRole('button', { name: '로그아웃', exact: true }).click()
       await other.waitForURL('**/login**', { timeout: 8_000 })
       await page.waitForURL('**/login**', { timeout: 8_000 })
       await page.getByRole('heading', { name: 'wirebound' }).waitFor()

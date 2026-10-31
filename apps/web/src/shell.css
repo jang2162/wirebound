@@ -2903,6 +2903,9 @@
   display: grid;
   grid-template-columns: 232px minmax(0, 1fr);
   align-items: start;
+  /* 줄을 위로 모은다 — 기본값(늘림)은 좁은 창의 두 줄(위 줄 · 내용 칸)에 남는 높이를 나눠, 짧은 내용이 내려가 있다가 자라면 절반씩
+     올라간다. 재는 자: `build-test/workspace-layout.test.ts` «내용 칸은 … 위 줄 바로 밑». */
+  align-content: start;
   color-scheme: light;
   background: #fff;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;

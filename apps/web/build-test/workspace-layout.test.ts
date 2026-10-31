@@ -152,6 +152,37 @@ describe.skipIf(!전제.ok)('작업 공간 뼈대 — 실브라우저', () => {
     }
   })
 
+  /**
+   * 좁은 창의 뼈대는 한 열 두 줄(위 줄 · 내용 칸) 격자다. 격자의 `align-content` 기본값은 남는 높이를 두 줄에 나눠, 짧은 내용 칸이 위 줄
+   * 밑 빈 칸만큼 내려가 있다가 내용이 자라면 자란 높이의 절반씩 올라간다 — 설정 «멤버» 의 확정 줄이 서자 묻던 단추가 25px 올라가 확정과
+   * 붙었다(`build-test/members-confirm.test.ts` «거리»). 내용 칸이 위 줄 바로 밑에 서는지 화면마다 잰다.
+   */
+  it('창 390 — 내용 칸은 화면 넷 모두 위 줄 바로 밑에 선다(남는 높이를 위 줄에 나누지 않는다)', async () => {
+    const tab = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
+    const seen: string[] = []
+    try {
+      for (const [name, path, ready] of screens(projectId)) {
+        await tab.page.goto(path)
+        await ready(tab.page)
+        const got = await tab.page.evaluate(() => {
+          const side = document.querySelector('.wb-shell-workspace-side')!.getBoundingClientRect()
+          const main = document.querySelector('.wb-shell-workspace-main')!.getBoundingClientRect()
+          return { sideHeight: side.height, gap: main.top - side.bottom, mainHeight: main.height }
+        })
+        seen.push(`${name}: 틈 ${Math.round(got.gap)} · 위 줄 ${Math.round(got.sideHeight)} · 내용 ${Math.round(got.mainHeight)}`)
+        // 카나리아 — 위 줄이 섰고(사이드바 칸 전부가 아니다) 내용 칸이 창보다 짧다(늘림이 남는 높이를 가질 판이다).
+        expect(got.sideHeight, name).toBeGreaterThan(20)
+        expect(got.sideHeight, name).toBeLessThan(120)
+        expect(Math.abs(got.gap), name).toBeLessThanOrEqual(1)
+      }
+    } finally {
+      await tab.context.close()
+    }
+    // eslint-disable-next-line no-console
+    console.log('[뼈대 390 내용 칸 자리]', seen.join(' · '))
+    expect(seen).toHaveLength(4)
+  })
+
   it('창 390 — 칸 목록은 접혀 있고 Tab 으로 «메뉴» 에 닿아 Enter 로 편다, 다음 Tab 이 첫 칸이고 «계정» 이 /account 로 간다', async () => {
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
     try {
