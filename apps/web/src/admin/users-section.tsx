@@ -13,7 +13,7 @@
  * «마지막 활성 owner 인 프로젝트 수» 는 상자를 열 때 관리자 › 프로젝트 목록(`listAdminProjects`)에서 센다 — 활성 owner 가 그 사람 하나인 프로젝트.
  * 서버가 비활성화 뒤에 센 값(`ownerlessProjects`)이 정본이고, 상자의 수는 묻는 순간의 미리보기다.
  */
-import { useCallback, useEffect, useId, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from 'react'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { AdminUser, CreatedResetLink } from '../api/types'
@@ -21,7 +21,7 @@ import { useSessionUser } from '../session/session-context'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
 import { ICONS, shellIcon } from '../shell/icons'
 import { ShellDialog } from '../shell/shell-dialog'
-import { confirmClick, matchesText, Outcome, When } from './admin-screen'
+import { confirmClick, matchesText, Outcome, useAdminList, When } from './admin-screen'
 import { InviteCreateDialog } from './invites-section'
 import { LinkReveal, linkUrl } from './link-reveal'
 
@@ -38,7 +38,6 @@ const STATUS_OPTIONS: readonly { value: StatusFilter; label: string }[] = [
   { value: 'inactive', label: '비활성' },
 ]
 
-type ListState = { status: 'loading' } | { status: 'failed'; failure: Failure } | { status: 'ready'; users: AdminUser[] }
 /** 묻는 중인 확인 — 비활성화 · 관리자 해제. */
 type Asking = { kind: 'deactivate' | 'revoke'; user: AdminUser }
 /** 보이는 새 링크 — 초대 · 재설정. */
@@ -47,7 +46,6 @@ type Reveal = { title: string; url: string; expiresAt: string }
 export function UsersSection(): ReactElement {
   const api = useApi()
   const me = useSessionUser()
-  const [state, setState] = useState<ListState>({ status: 'loading' })
   const [text, setText] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [busy, setBusy] = useState(false)
@@ -58,28 +56,24 @@ export function UsersSection(): ReactElement {
   const [reveal, setReveal] = useState<Reveal | null>(null)
   const ids = { search: useId(), status: useId() }
 
-  const load = useCallback(
-    async (alive: () => boolean): Promise<void> => {
-      try {
-        const users = await api.listAdminUsers()
-        if (alive()) setState({ status: 'ready', users })
-      } catch (caught) {
-        if (alive()) setState({ status: 'failed', failure: toFailure(caught, LOAD_FAILURE) })
-      }
-    },
-    [api],
+  const {
+    list: state,
+    stale,
+    reload,
+  } = useAdminList(
+    useCallback(() => api.listAdminUsers(), [api]),
+    LOAD_FAILURE,
   )
+  /** 쓰기가 떠 있나 — 렌더를 기다리지 않는 값이다(`busy` 는 다음 렌더에야 선다 — 한 틱 안의 두 누름이 둘 다 거짓을 본다). */
+  const writing = useRef(false)
 
-  useEffect(() => {
-    let alive = true
-    void load(() => alive)
-    return () => {
-      alive = false
-    }
-  }, [load])
-
-  /** 쓰기 하나 — 결과 한 줄 · 실패 한 줄, 끝나면 목록을 다시 받는다(`admin/admin-screen.tsx` 머리말 «표 넷의 공통 꼴»). */
+  /**
+   * 쓰기 하나 — 결과 한 줄 · 실패 한 줄, 끝나면 목록을 다시 받는다(`admin/admin-screen.tsx` 머리말 «표 넷의 공통 꼴»). **쓰기는 한 번에
+   * 하나다** — 줄 «…» 의 지정 · 다시 활성화 · 재설정은 확인 상자를 안 거쳐, 앞 쓰기의 답 전에 온 둘째 고름(키 반복 · 다른 줄)을 버린다.
+   */
   async function write<T>(run: () => Promise<T>, said: (result: T) => string): Promise<T | null> {
+    if (writing.current) return null
+    writing.current = true
     setBusy(true)
     setDone(null)
     setFailure(null)
@@ -90,12 +84,14 @@ export function UsersSection(): ReactElement {
     } catch (caught) {
       setFailure(toFailure(caught, WRITE_FAILURE))
     }
-    await load(() => true)
+    await reload()
+    writing.current = false
     setBusy(false)
     return result
   }
 
   async function resetLink(user: AdminUser): Promise<void> {
+    if (writing.current) return
     setReveal(null)
     const created = await write<CreatedResetLink>(
       () => api.createResetLink(user.id),
@@ -155,7 +151,7 @@ export function UsersSection(): ReactElement {
 
   const shown =
     state.status === 'ready'
-      ? state.users.filter(
+      ? state.value.filter(
           (user) => (status === 'all' || user.active === (status === 'active')) && matchesText(text, [user.name, user.email]),
         )
       : []
@@ -194,8 +190,10 @@ export function UsersSection(): ReactElement {
           초대 링크 만들기
         </button>
       </div>
-      {reveal !== null && <LinkReveal title={reveal.title} url={reveal.url} expiresAt={reveal.expiresAt} onClose={() => setReveal(null)} />}
-      <Outcome done={done} failure={failure?.kind === 'message' ? failure.message : null} />
+      {reveal !== null && (
+        <LinkReveal key={reveal.url} title={reveal.title} url={reveal.url} expiresAt={reveal.expiresAt} onClose={() => setReveal(null)} />
+      )}
+      <Outcome done={done} failure={failure?.kind === 'message' ? failure.message : null} stale={stale} />
       {state.status === 'loading' && (
         <p className="wb-shell-project-notice" role="status">
           불러오는 중…

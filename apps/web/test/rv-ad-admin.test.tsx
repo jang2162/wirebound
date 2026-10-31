@@ -2,7 +2,7 @@
  * **RV-AD — 관리자 칸 넷의 리뷰 재현**(jsdom · 가짜 서버 `test/admin/admin-server.ts`). 리뷰 보고 `docs/superpowers/plans/2026-11-01-rv-ad-report.md`
  * 의 발견 번호를 케이스 이름 머리에 단다. 실브라우저 판은 `build-test/rv-ad-admin.test.ts`.
  *
- * - `describe.skip` 은 지금 빨강인 판이다 — **고칠 트랙이 skip 을 떼고 초록으로 돌린다.**
+ * - 발견 번호(H1 · H2 · H3 · M1 · L1 · L2)가 붙은 블록은 리뷰가 빨강으로 세운 판이다 — 고친 뒤의 성질을 잠근다(대응 `2026-11-01-fx-ad-report.md`).
  * - 그 밖은 지금 참인 성질을 잠근다(고치기 전에도 초록이다).
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -49,8 +49,7 @@ afterEach(() => {
   sessionStorage.clear()
 })
 
-// 고칠 트랙이 skip 을 떼고 초록으로 돌린다.
-describe.skip('RV-AD H1 — 새 링크가 앞 링크의 «복사했습니다» 를 물려받는다', () => {
+describe('RV-AD H1 — 새 링크가 앞 링크의 «복사했습니다» 를 물려받는다', () => {
   it('사용자 칸 — 밥의 재설정 링크를 복사한 뒤 초대 링크를 만들면, 새 링크 상자에 «복사했습니다» 가 남아 있지 않다', async () => {
     const writeText = vi.fn(async (_text: string) => {})
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
@@ -196,8 +195,7 @@ function demoted(): AdminServer {
   return server
 }
 
-// 고칠 트랙이 skip 을 떼고 초록으로 돌린다.
-describe.skip('RV-AD L2 — 강등 뒤 쓰기 하나에 같은 403 문장이 두 번 서고 표가 사라진다', () => {
+describe('RV-AD L2 — 강등 뒤 쓰기 하나에 같은 403 문장이 두 번 서고 표가 사라진다', () => {
   it('쓰기의 실패 한 줄과 다시 받기의 실패 한 줄이 같은 문장이면 하나만 선다', async () => {
     open(demoted(), '/admin/users')
     const table = await screen.findByRole('table', { name: '사용자' })
@@ -208,8 +206,7 @@ describe.skip('RV-AD L2 — 강등 뒤 쓰기 하나에 같은 403 문장이 두
   })
 })
 
-// 고칠 트랙이 skip 을 떼고 초록으로 돌린다.
-describe.skip('RV-AD L1 — 겹친 목록 다시 받기의 늦은 답이 새 목록을 덮는다', () => {
+describe('RV-AD L1 — 겹친 목록 다시 받기의 늦은 답이 새 목록을 덮는다', () => {
   it('owner 넘기기를 보낸 채 상자를 닫으면, 닫기의 다시 받기(먼저 시작 · 늦게 옴)가 넘긴 뒤의 목록을 덮지 않는다', async () => {
     const server = adminServer({
       users: [adminUser(ME.id, ME.name, { isInstanceAdmin: true }), BOB],

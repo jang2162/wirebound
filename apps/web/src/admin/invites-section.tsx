@@ -6,14 +6,14 @@
  *   «복사» 가 늘 있었다 — 설계가 그 차이를 적는다).
  * - **만들기 상자(`InviteCreateDialog`)는 «사용자» 칸의 «초대 링크 만들기» 도 연다** — 같은 상자 · 같은 검사다.
  */
-import { useCallback, useEffect, useId, useState, type ReactElement } from 'react'
+import { useCallback, useId, useState, type ReactElement } from 'react'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { AdminInvite, CreatedInvite, InviteKind, InviteState } from '../api/types'
 import { ActionMenu } from '../shell/action-menu'
 import { ICONS, shellIcon } from '../shell/icons'
 import { ShellDialog } from '../shell/shell-dialog'
-import { confirmClick, Outcome, When } from './admin-screen'
+import { confirmClick, Outcome, useAdminList, When } from './admin-screen'
 import { LinkReveal, linkUrl } from './link-reveal'
 
 const LOAD_FAILURE = '초대 링크 목록을 불러오지 못했습니다'
@@ -27,11 +27,8 @@ const NAME_MAX = 60
 export const KIND_TEXT: Record<InviteKind, string> = { single: '한 번', multi: '여러 명' }
 export const STATE_TEXT: Record<InviteState, string> = { usable: '사용 중', expired: '만료', revoked: '거둠', 'used-up': '다 씀' }
 
-type ListState = { status: 'loading' } | { status: 'failed'; failure: Failure } | { status: 'ready'; invites: AdminInvite[] }
-
 export function InvitesSection(): ReactElement {
   const api = useApi()
-  const [state, setState] = useState<ListState>({ status: 'loading' })
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   const [failure, setFailure] = useState<Failure | null>(null)
@@ -39,25 +36,14 @@ export function InvitesSection(): ReactElement {
   const [created, setCreated] = useState<CreatedInvite | null>(null)
   const [revoking, setRevoking] = useState<AdminInvite | null>(null)
 
-  const load = useCallback(
-    async (alive: () => boolean): Promise<void> => {
-      try {
-        const invites = await api.listInvites()
-        if (alive()) setState({ status: 'ready', invites })
-      } catch (caught) {
-        if (alive()) setState({ status: 'failed', failure: toFailure(caught, LOAD_FAILURE) })
-      }
-    },
-    [api],
+  const {
+    list: state,
+    stale,
+    reload,
+  } = useAdminList(
+    useCallback(() => api.listInvites(), [api]),
+    LOAD_FAILURE,
   )
-
-  useEffect(() => {
-    let alive = true
-    void load(() => alive)
-    return () => {
-      alive = false
-    }
-  }, [load])
 
   async function revoke(invite: AdminInvite): Promise<void> {
     setRevoking(null)
@@ -70,7 +56,7 @@ export function InvitesSection(): ReactElement {
     } catch (caught) {
       setFailure(toFailure(caught, WRITE_FAILURE))
     }
-    await load(() => true)
+    await reload()
     setBusy(false)
   }
 
@@ -87,13 +73,14 @@ export function InvitesSection(): ReactElement {
       </div>
       {created !== null && (
         <LinkReveal
+          key={created.token}
           title={`초대 링크 «${created.invite.name}»`}
           url={linkUrl('invite', created.token)}
           expiresAt={created.invite.expiresAt}
           onClose={() => setCreated(null)}
         />
       )}
-      <Outcome done={done} failure={failure?.kind === 'message' ? failure.message : null} />
+      <Outcome done={done} failure={failure?.kind === 'message' ? failure.message : null} stale={stale} />
       {state.status === 'loading' && (
         <p className="wb-shell-project-notice" role="status">
           불러오는 중…
@@ -104,8 +91,8 @@ export function InvitesSection(): ReactElement {
           {state.failure.message}
         </p>
       )}
-      {state.status === 'ready' && state.invites.length === 0 && <p className="wb-shell-project-notice">{NO_INVITES}</p>}
-      {state.status === 'ready' && state.invites.length > 0 && (
+      {state.status === 'ready' && state.value.length === 0 && <p className="wb-shell-project-notice">{NO_INVITES}</p>}
+      {state.status === 'ready' && state.value.length > 0 && (
         <table className="wb-shell-admin-table" aria-label="초대 링크">
           <thead className="wb-shell-admin-head">
             <tr className="wb-shell-admin-head-row">
@@ -133,7 +120,7 @@ export function InvitesSection(): ReactElement {
             </tr>
           </thead>
           <tbody className="wb-shell-admin-body">
-            {state.invites.map((invite) => (
+            {state.value.map((invite) => (
               <tr className="wb-shell-admin-row" key={invite.id} data-active={invite.state === 'usable' ? 'true' : 'false'}>
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-name" data-label="이름">
                   {invite.name}
@@ -177,7 +164,7 @@ export function InvitesSection(): ReactElement {
           setDone(null)
           setFailure(null)
           setCreated(result)
-          void load(() => true)
+          void reload()
         }}
       />
       <ShellDialog open={revoking !== null} title="초대 링크 거두기" onClose={() => setRevoking(null)}>

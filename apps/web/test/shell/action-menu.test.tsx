@@ -216,6 +216,27 @@ describe('키보드', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
+  it.each(['Enter', ' '])('누른 채인 «%s» 의 반복(`repeat`)은 항목을 안 고르고 메뉴는 열린 채다', (name) => {
+    const onSelect = host()
+    fireEvent.click(toggle())
+    key('ArrowDown')
+    const kept = fireEvent.keyDown(document.activeElement!, { key: name, repeat: true })
+    expect({ select: onSelect.mock.calls, menu: screen.queryByRole('menu') !== null, defaulted: kept }).toEqual({
+      select: [],
+      menu: true,
+      defaulted: false,
+    })
+  })
+
+  it.each(['Enter', ' '])('닫힌 단추에 온 «%s» 의 반복은 기본 동작(클릭)을 막는다 — 첫 누름은 막지 않는다', (name) => {
+    host()
+    toggle().focus()
+    expect({
+      first: fireEvent.keyDown(toggle(), { key: name }),
+      repeat: fireEvent.keyDown(toggle(), { key: name, repeat: true }),
+    }).toEqual({ first: true, repeat: false })
+  })
+
   it('링크 항목의 Enter 는 그 주소로 옮긴다', () => {
     const onSelect = host()
     fireEvent.click(toggle())

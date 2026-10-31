@@ -11,9 +11,11 @@
  *
  * 위 줄(검색 · 거름 · 단추) · 표 하나 · 줄 «…»(`shell/action-menu.tsx`). 실패 문장은 서버 문장 그대로(`api/failure.tsx` 의 `toFailure`)이고, 쓰기가
  * 끝나면(성공이든 실패든) 목록을 다시 받는다(`settings/members-section.tsx` 의 `write` 와 같은 까닭 — 그 사이 다른 관리자가 바꾼 것과 안 갈린다).
+ * 목록 받기는 `useAdminList` 하나다 — 차례 · 다시 받기 실패의 판은 그 머리말.
  * 창이 좁으면(< 900px) 줄이 카드로 접힌다 — 칸마다 이름표(`data-label`)를 앞에 단다(`shell.css` 의 `.wb-shell-admin-table` 블록).
  */
-import type { MouseEvent, ReactElement, ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactElement, type ReactNode } from 'react'
+import { toFailure, type Failure } from '../api/failure'
 import { useSessionUser } from '../session/session-context'
 import { WorkspaceLayout } from '../shell/workspace-layout'
 import { ADMIN_NAV } from '../shell/workspace-nav'
@@ -70,8 +72,62 @@ export function matchesText(text: string, fields: readonly string[]): boolean {
   return needle === '' || fields.some((field) => field.toLocaleLowerCase().includes(needle))
 }
 
-/** 쓰기의 결과 한 줄 · 실패 한 줄 — 위 줄 밑에 선다. */
-export function Outcome(props: { done: string | null; failure: string | null }): ReactElement {
+export type AdminList<T> = { status: 'loading' } | { status: 'failed'; failure: Failure } | { status: 'ready'; value: T }
+
+/**
+ * **칸의 목록** — 첫 조회와 쓰기 뒤 다시 받기(`reload`). `fetch` 는 `useCallback` 으로 고정해 넘긴다(바뀌면 첫 쪽부터 다시 받는다).
+ *
+ * - **조회마다 차례 번호를 단다** — 마지막에 시작한 조회의 답만 싣는다. 겹친 다시 받기(owner 넘기기를 보낸 채 상자를 닫음 → 닫기의 다시 받기가
+ *   넘기기 커밋 전 표를 읽고 넘기기 뒤의 다시 받기보다 늦게 온다)에서 늦은 답이 새 표를 덮어 «활성 owner 없음» 이 되살았다. 기록 칸의
+ *   거름 조회(`audit-section.tsx` 의 `turn`)와 같은 꼴이다.
+ * - **다시 받기가 실패하면 앞 표를 둔다** — 실패는 `stale` 한 줄로 서고(로그인이 풀린 판만 `failed` 로 가 `SignedOut` 이 선다), 표가
+ *   사라지지 않는다. 강등된 관리자의 쓰기 하나가 쓰기의 403 과 다시 받기의 403 을 함께 내 같은 문장이 두 줄 서고 표가 사라졌다 —
+ *   같은 문장이면 `Outcome` 이 한 줄로 접는다.
+ */
+export function useAdminList<T>(
+  fetch: () => Promise<T>,
+  loadFailure: string,
+): { list: AdminList<T>; stale: Failure | null; reload: () => Promise<void> } {
+  const [list, setList] = useState<AdminList<T>>({ status: 'loading' })
+  const [stale, setStale] = useState<Failure | null>(null)
+  const turn = useRef(0)
+  const alive = useRef(false)
+  const shown = useRef(false)
+
+  const reload = useCallback(async (): Promise<void> => {
+    const mine = ++turn.current
+    const current = (): boolean => alive.current && mine === turn.current
+    try {
+      const value = await fetch()
+      if (!current()) return
+      shown.current = true
+      setList({ status: 'ready', value })
+      setStale(null)
+    } catch (caught) {
+      if (!current()) return
+      const failure = toFailure(caught, loadFailure)
+      if (shown.current && failure.kind === 'message') return setStale(failure)
+      shown.current = false
+      setList({ status: 'failed', failure })
+    }
+  }, [fetch, loadFailure])
+
+  useEffect(() => {
+    alive.current = true
+    void reload()
+    return () => {
+      alive.current = false
+    }
+  }, [reload])
+
+  return { list, stale, reload }
+}
+
+/**
+ * 쓰기의 결과 한 줄 · 실패 한 줄 — 위 줄 밑에 선다. `stale` 은 다시 받기의 실패(`useAdminList`)다 — 쓰기의 실패와 같은 문장이면 한 줄만 선다.
+ */
+export function Outcome(props: { done: string | null; failure: string | null; stale?: Failure | null }): ReactElement {
+  const stale = props.stale?.kind === 'message' && props.stale.message !== props.failure ? props.stale.message : null
   return (
     <>
       {props.done !== null && (
@@ -82,6 +138,11 @@ export function Outcome(props: { done: string | null; failure: string | null }):
       {props.failure !== null && (
         <p className="wb-shell-project-alert" role="alert">
           {props.failure}
+        </p>
+      )}
+      {stale !== null && (
+        <p className="wb-shell-project-alert" role="alert">
+          {stale}
         </p>
       )}
     </>

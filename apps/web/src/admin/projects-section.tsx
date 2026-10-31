@@ -16,21 +16,15 @@ import { useSessionUser } from '../session/session-context'
 import { ActionMenu } from '../shell/action-menu'
 import { ICONS } from '../shell/icons'
 import { ShellDialog } from '../shell/shell-dialog'
-import { matchesText, Outcome, When } from './admin-screen'
+import { matchesText, Outcome, useAdminList, When } from './admin-screen'
 
 const LOAD_FAILURE = '프로젝트 목록을 불러오지 못했습니다'
 const WRITE_FAILURE = 'owner 를 넘기지 못했습니다'
 const USERS_FAILURE = '사용자 목록을 불러오지 못했습니다'
 export const NO_MATCH = '검색 결과가 없습니다'
 
-type ListState =
-  | { status: 'loading' }
-  | { status: 'failed'; failure: Failure }
-  | { status: 'ready'; projects: AdminProject[]; mine: ReadonlySet<string> }
-
 export function ProjectsSection(): ReactElement {
   const api = useApi()
-  const [state, setState] = useState<ListState>({ status: 'loading' })
   const [text, setText] = useState('')
   const [ownerless, setOwnerless] = useState(false)
   const [done, setDone] = useState<string | null>(null)
@@ -38,39 +32,31 @@ export function ProjectsSection(): ReactElement {
   const [moving, setMoving] = useState<AdminProject | null>(null)
   const ids = { search: useId(), ownerless: useId() }
 
-  const load = useCallback(
-    async (alive: () => boolean): Promise<void> => {
-      try {
-        const [projects, mine] = await Promise.all([
-          api.listAdminProjects(),
-          api.listProjects().then(
-            (list) => new Set(list.map((project) => project.id)),
-            () => new Set<string>(),
-          ),
-        ])
-        if (alive()) setState({ status: 'ready', projects, mine })
-      } catch (caught) {
-        if (alive()) setState({ status: 'failed', failure: toFailure(caught, LOAD_FAILURE) })
-      }
-    },
-    [api],
+  const {
+    list: state,
+    stale,
+    reload,
+  } = useAdminList(
+    useCallback(async () => {
+      const [projects, mine] = await Promise.all([
+        api.listAdminProjects(),
+        api.listProjects().then(
+          (list): ReadonlySet<string> => new Set(list.map((project) => project.id)),
+          () => new Set<string>(),
+        ),
+      ])
+      return { projects, mine }
+    }, [api]),
+    LOAD_FAILURE,
   )
-
-  useEffect(() => {
-    let alive = true
-    void load(() => alive)
-    return () => {
-      alive = false
-    }
-  }, [load])
 
   if (state.status === 'failed' && state.failure.kind === 'signed-out') return <SignedOut />
   if (failure !== null && failure.kind === 'signed-out') return <SignedOut />
 
-  const missing = state.status === 'ready' ? state.projects.filter((project) => !project.hasActiveOwner).length : 0
+  const missing = state.status === 'ready' ? state.value.projects.filter((project) => !project.hasActiveOwner).length : 0
   const shown =
     state.status === 'ready'
-      ? state.projects.filter((project) => (!ownerless || !project.hasActiveOwner) && matchesText(text, [project.name, project.slug]))
+      ? state.value.projects.filter((project) => (!ownerless || !project.hasActiveOwner) && matchesText(text, [project.name, project.slug]))
       : []
 
   return (
@@ -97,7 +83,7 @@ export function ProjectsSection(): ReactElement {
           활성 owner 가 없는 것만
         </label>
       </div>
-      <Outcome done={done} failure={failure?.kind === 'message' ? failure.message : null} />
+      <Outcome done={done} failure={failure?.kind === 'message' ? failure.message : null} stale={stale} />
       {state.status === 'loading' && (
         <p className="wb-shell-project-notice" role="status">
           불러오는 중…
@@ -127,7 +113,7 @@ export function ProjectsSection(): ReactElement {
             {shown.map((project) => (
               <tr className="wb-shell-admin-row" key={project.id} data-active={project.hasActiveOwner ? 'true' : 'false'}>
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-name" data-label="이름">
-                  {state.mine.has(project.id) ? (
+                  {state.value.mine.has(project.id) ? (
                     <Link className="wb-shell-admin-link" to={`/projects/${project.id}`}>
                       {project.name}
                     </Link>
@@ -174,13 +160,13 @@ export function ProjectsSection(): ReactElement {
           project={moving}
           onClose={() => {
             setMoving(null)
-            void load(() => true)
+            void reload()
           }}
           onDone={(said) => {
             setMoving(null)
             setFailure(null)
             setDone(said)
-            void load(() => true)
+            void reload()
           }}
         />
       )}

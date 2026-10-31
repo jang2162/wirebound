@@ -1,7 +1,7 @@
 /**
  * **RV-AD — 관리자 칸 넷의 리뷰 재현**(실브라우저 · 리뷰 보고 `docs/superpowers/plans/2026-11-01-rv-ad-report.md`). jsdom 판은 `test/rv-ad-admin.test.tsx`.
  *
- * - `describe.skip` 은 지금 빨강인 판이다 — **고칠 트랙이 skip 을 떼고 초록으로 돌린다.**
+ * - 발견 번호(H1 · H2 · H3 · M1 · L1 · L2)가 붙은 블록은 리뷰가 빨강으로 세운 판이다 — 고친 뒤의 성질을 잠근다(대응 `2026-11-01-fx-ad-report.md`).
  * - 그 밖은 지금 참인 성질을 잠그거나(고치기 전에도 초록) 잰 값을 `[rv-ad …]` 줄로 남긴다.
  *
  * 판 만들기는 API 로 한다(`admin-screens.test.ts` 의 `signup` 과 같은 꼴) — 화면 흐름은 그 파일이 잰다.
@@ -126,8 +126,7 @@ describe.skipIf(!전제.ok)('RV-AD — 관리자 칸 실브라우저', () => {
     }
   }
 
-  // 고칠 트랙이 skip 을 떼고 초록으로 돌린다.
-  describe.skip('H1 — 새 링크 상자가 앞 링크의 «복사했습니다» 를 물려받는다', () => {
+  describe('H1 — 새 링크 상자가 앞 링크의 «복사했습니다» 를 물려받는다', () => {
     it('밥의 재설정 링크를 복사한 뒤 초대 링크를 만들면 — 새 상자가 «복사했습니다» 라고 말하는데 클립보드는 밥의 재설정 링크다', async () => {
       const bob = await signup('복사밥')
       const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1280, height: 900 } })
@@ -265,9 +264,16 @@ describe.skipIf(!전제.ok)('RV-AD — 관리자 칸 실브라우저', () => {
     }
   })
 
-  // 고칠 트랙이 skip 을 떼고 초록으로 돌린다.
-  describe.skip('H3 — bfcache 로 돌아오면 새 링크 상자가 원문째 되살아난다', () => {
-    it('bfcache 를 켠 Chrome(Playwright 기본 인자 `--disable-back-forward-cache` 를 뺀다) — 다른 문서로 떠났다 «뒤로» 오면 원문이 DOM 에 없다', async () => {
+  describe('H3 — bfcache 로 돌아오면 새 링크 상자가 원문째 되살아난다', () => {
+    /**
+     * bfcache 를 켠 Chrome(Playwright 기본 인자 `--disable-back-forward-cache` 를 뺀다)에서 `box` 가 링크 상자를 세운 뒤 다른 문서로 떠났다
+     * «뒤로» 온다 — 원문이 DOM 에 있는지 · bfcache 로 되살았는지(`restored`)를 돌려준다.
+     */
+    async function leaveAndBack(
+      route: string,
+      box: (page: Page) => Promise<string>,
+      heading: string,
+    ): Promise<{ restored: boolean; token: boolean; reasons: string }> {
       const browser = await chromium.launch({
         executablePath: 전제.ok ? 전제.executablePath : undefined,
         headless: true,
@@ -281,17 +287,19 @@ describe.skipIf(!전제.ok)('RV-AD — 관리자 칸 실브라우저', () => {
         })
         expect(login.ok()).toBe(true)
         const page = await context.newPage()
-        await page.goto('/admin/invites')
-        const url = await createInviteOnScreen(page, 'bfcache')
+        await page.goto(route)
+        const url = await box(page)
         const token = url.slice(url.lastIndexOf('/') + 1)
+        // 판 카나리아 — 떠나기 전에는 원문이 DOM 에 있다.
+        expect((await page.content()).includes(token)).toBe(true)
         await page.evaluate(() => {
           ;(window as unknown as { rvMark: number }).rvMark = 1
         })
         await page.goto(`${stack.webUrl}/api/health`)
         // bfcache 로 되살면 `load` 가 다시 안 온다 — 커밋까지만 기다린다.
         await page.goBack({ waitUntil: 'commit' })
-        await page.getByRole('heading', { name: '초대 링크', exact: true }).waitFor()
-        const back = await page.evaluate((needle) => {
+        await page.getByRole('heading', { name: heading, exact: true }).waitFor()
+        return await page.evaluate((needle) => {
           const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming & { notRestoredReasons?: unknown }
           return {
             restored: (window as unknown as { rvMark?: number }).rvMark === 1,
@@ -299,19 +307,37 @@ describe.skipIf(!전제.ok)('RV-AD — 관리자 칸 실브라우저', () => {
             reasons: JSON.stringify(nav?.notRestoredReasons ?? null),
           }
         }, token)
-        log('bfcache', { bundle: process.env.EDITOR_STACK_BUNDLE ?? 'dev', ...back })
-        // 뒤로 와서 원문이 보이면 «이 화면을 떠나면 다시 볼 수 없습니다» 가 거짓이다. bfcache 를 막는 고침이면 `restored` 가 거짓이 되고, 되살린 뒤
-        // 상자를 거두는 고침이면 `restored` 가 참인 채 `token` 이 거짓이다 — 둘 다 받는다.
-        expect(back.token).toBe(false)
       } finally {
         await context?.close()
         await browser.close()
       }
+    }
+
+    it('초대 링크 칸 — 다른 문서로 떠났다 «뒤로» 오면 원문이 DOM 에 없다', async () => {
+      const back = await leaveAndBack('/admin/invites', (page) => createInviteOnScreen(page, 'bfcache'), '초대 링크')
+      log('bfcache 초대', { bundle: process.env.EDITOR_STACK_BUNDLE ?? 'dev', ...back })
+      // 뒤로 와서 원문이 보이면 «이 화면을 떠나면 다시 볼 수 없습니다» 가 거짓이다. bfcache 를 막는 고침이면 `restored` 가 거짓이 되고, 되살린 뒤
+      // 상자를 거두는 고침이면 `restored` 가 참인 채 `token` 이 거짓이다 — 둘 다 받는다.
+      expect(back.token).toBe(false)
+    })
+
+    it('사용자 칸의 재설정 링크 — 다른 문서로 떠났다 «뒤로» 오면 원문이 DOM 에 없다', async () => {
+      const target = await signup('bfcache밥')
+      const back = await leaveAndBack(
+        '/admin/users',
+        async (page) => {
+          await userRow(page, target.email).getByRole('button', { name: 'bfcache밥 더 보기' }).click()
+          await page.getByRole('menuitem', { name: '재설정 링크 만들기' }).click()
+          return page.getByRole('region', { name: 'bfcache밥의 비밀번호 재설정 링크' }).getByLabel('링크').inputValue()
+        },
+        '사용자',
+      )
+      log('bfcache 재설정', { bundle: process.env.EDITOR_STACK_BUNDLE ?? 'dev', ...back })
+      expect(back.token).toBe(false)
     })
   })
 
-  // 고칠 트랙이 skip 을 떼고 초록으로 돌린다.
-  describe.skip('H2 — 줄 «…» 의 항목에서 Enter 를 누른 채 있으면 메뉴가 다시 열려 첫 항목(재설정 링크 만들기)이 거듭 나간다', () => {
+  describe('H2 — 줄 «…» 의 항목에서 Enter 를 누른 채 있으면 메뉴가 다시 열려 첫 항목(재설정 링크 만들기)이 거듭 나간다', () => {
     it('«관리자로 지정» 에서 Enter 를 누른 채(첫 keydown + 반복 keydown 20 번 · 35ms) — 지정 하나 · 재설정 링크 0', async () => {
       const carol = await signup('반복캐럴')
       const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1280, height: 900 } })
@@ -408,8 +434,7 @@ describe.skipIf(!전제.ok)('RV-AD — 관리자 칸 실브라우저', () => {
     await stack.query('update users set name = $1 where id = $2', [name, id])
   }
 
-  // 고칠 트랙이 skip 을 떼고 초록으로 돌린다.
-  describe.skip('M1 — 이름의 방향 제어 글자(U+202E)가 확인 상자 문장의 뒤를 뒤집는다', () => {
+  describe('M1 — 이름의 방향 제어 글자(U+202E)가 확인 상자 문장의 뒤를 뒤집는다', () => {
     it('비활성화 상자 — 이름 뒤의 «(이메일) 계정을 비활성화합니다. …» 가 보이는 차례 그대로다', async () => {
       const spoof = await signup('뒤집개')
       await rename(spoof.id, `${RLO}사퇴박`)

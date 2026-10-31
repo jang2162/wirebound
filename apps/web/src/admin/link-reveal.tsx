@@ -5,10 +5,20 @@
  * **원문은 이 부품의 props 에만 산다** — 서버는 해시만 두므로 이 화면을 떠나면 다시 볼 수 없다(문장이 그렇게 말한다). 그래서 원문을
  * `localStorage` · 주소 · 콘솔 어디에도 남기지 않는다 — 남기면 화면을 떠난 뒤에도 그 기계에 원문이 산다. 닫으면 사라진다.
  *
+ * **부르는 쪽은 주소를 `key` 로 단다**(`<LinkReveal key={url} …>`) — 같은 자리에 새 링크가 서면 부품이 이어져 «복사했습니다» 가 앞 링크의 것으로
+ * 남는다. 사람은 그 문장을 믿고 클립보드의 앞 링크(남의 재설정 링크)를 새 사람에게 붙여 넣는다.
+ *
+ * **문서를 떠나면(`pagehide`) 닫는다** — 같은 탭에서 다른 문서로 갔다 «뒤로» 오면 Chrome 은 페이지를 bfcache 에서 통째로 되살려 상자와 원문이
+ * 그대로 선다(«떠나면 다시 볼 수 없습니다» 가 거짓이 된다). 닫기는 `flushSync` 로 그 자리에서 DOM 에 내린다 — Chrome 은 뗀 판도
+ * 초록이었다(페이지를 얼리기 전에 React 의 갱신이 돈다). 그 차례를 다른 브라우저에서는 안 쟀다 — 그 보험이다. bfcache 를 막는 길(`unload`
+ * 리스너 · `Cache-Control: no-store`)은 고르지 않았다 — 앱 전체의 «뒤로» 를 느리게 하고 배포 입구의 헤더에 기댄다. 재는 판은
+ * `build-test/rv-ad-admin.test.ts` «H3»(Playwright 기본 인자의 `--disable-back-forward-cache` 를 뺀 Chrome).
+ *
  * **복사는 클립보드 API 가 먼저다.** 안전하지 않은 출처(`http://` 사내 주소 — 로컬 호스트 밖)에서는 `navigator.clipboard` 가 없어, 칸을 골라
  * `execCommand('copy')` 로 한 번 더 해 본다. 둘 다 안 되면 칸이 골라진 채 «직접 복사하세요» 라고 말한다.
  */
-import { useId, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useId, useRef, useState, type ReactElement } from 'react'
+import { flushSync } from 'react-dom'
 import { shellIcon } from '../shell/icons'
 import { When } from './admin-screen'
 
@@ -21,6 +31,14 @@ export function LinkReveal(props: { url: string; expiresAt: string; onClose: () 
   const [copied, setCopied] = useState<'done' | 'failed' | null>(null)
   const heading = useId()
   const fieldId = useId()
+  const onClose = useRef(props.onClose)
+  onClose.current = props.onClose
+
+  useEffect(() => {
+    const leave = (): void => flushSync(() => onClose.current())
+    window.addEventListener('pagehide', leave)
+    return () => window.removeEventListener('pagehide', leave)
+  }, [])
 
   async function copy(): Promise<void> {
     try {
