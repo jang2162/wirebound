@@ -9,6 +9,10 @@
  * | 더블클릭 | 줄 «…» 의 «비활성화» 를 더블클릭해도 상자만 열린다(서버 요청 0) · 상자의 확정을 더블클릭해도 요청 1 |
  * | 넘침 | 창 390 · 720 · 721 · 900 · 1000 · 1920 × 칸 넷 — 문서 · 뼈대 상자의 가로 넘침 0 · 창 밖 글자 노드 0 · 시각 칸 꺾인 줄 ≤ 2 |
  *
+ * **못 재는 것** — 시각의 날짜 조각에서 `-nowrap` 을 뗀 변조는 이 판들에서 산다: 잰 폭(표 꼴은 900 부터)에서 날짜 칸이 날짜 글 폭 밑으로 줄지
+ * 않는다(표가 이메일 · 이름 칸을 먼저 접는다). 그 클래스는 더 좁은 표에 대한 보험이다. 확정 단추의 연타 거름(`confirmClick`)을 뗀 변조도 여기서 산다 —
+ * 첫 누름이 상자를 닫아 둘째 누름이 닿을 단추가 없다. 그 겹은 jsdom `test/admin/users-section.test.tsx` «연타의 둘째 누름» 이 혼자 잰다.
+ *
  * 원문은 화면의 칸(`링크`)에서 읽는다 — 응답을 엿보지 않는다. 사람이 하는 일(칸의 주소를 메신저로 넘김)과 같은 길이다.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -229,11 +233,10 @@ describe.skipIf(!전제.ok)('관리자 칸 넷 · 링크 화면 — 실브라우
         slug: `orphan-long-${Date.now().toString(36)}`,
       })
     ).body
-    // 활성 owner 를 없앤다 — owner 를 다른 사람(비활성)으로 바꾸는 길은 서버에 없어 DB 로 짓는다(판 만들기).
-    await stack.query(
-      "update project_members set user_id = (select id from users where email = 'eve@browser.test') where project_id = $1",
-      [orphan.id],
-    )
+    // 활성 owner 를 없앤다 — 비활성 사용자를 owner 로 둔다. owner 를 남으로 바꾸는 길이 서버에 없어 DB 로 짓는다(판 만들기 · 이 케이스 혼자서도 선다).
+    const gone = await signup('떠난owner', 'gone-owner@browser.test')
+    expect((await stack.request(alice, 'POST', `/admin/users/${gone.id}/deactivate`)).status).toBe(200)
+    await stack.query('update project_members set user_id = $2 where project_id = $1', [orphan.id, gone.id])
 
     const seen: Record<string, unknown>[] = []
     for (const width of [390, 720, 721, 900, 1000, 1920]) {
@@ -270,8 +273,8 @@ describe.skipIf(!전제.ok)('관리자 칸 넷 · 링크 화면 — 실브라우
 })
 
 /**
- * 넘침 — 문서 · 뼈대 상자의 가로 넘침(px), 창 오른끝을 넘는 글자 노드(`AGENTS.md` «화면 넘침은 요소 상자로만 세지 않는다»), 시각 칸(`.wb-shell-admin-nowrap`
- * 을 품은 칸)의 꺾인 줄 수 최댓값(칸 안 글자 노드들의 서로 다른 `top` — «표 칸의 글은 넘침과 함께 꺾인 줄 수로 잰다»).
+ * 넘침 — 문서 · 뼈대 상자의 가로 넘침(px), 창 오른끝을 넘는 글자 노드(`AGENTS.md` «화면 넘침은 요소 상자로만 세지 않는다»), 시각 상자
+ * (`.wb-shell-admin-when`)의 꺾인 줄 수 최댓값(상자 안 글자 노드들의 서로 다른 `top` — «표 칸의 글은 넘침과 함께 꺾인 줄 수로 잰다»).
  */
 function measure(
   page: Page,
@@ -293,14 +296,15 @@ function measure(
       if (right > width + 0.5) texts.push(`${n.textContent.trim().slice(0, 24)} +${Math.round(right - width)}px`)
     }
     let whenLines = 0
-    const cells = [...document.querySelectorAll('.wb-shell-admin-cell')].filter(
-      (cell) => cell.querySelector('.wb-shell-admin-nowrap') !== null,
-    )
+    // 시각 상자(`When`) 하나의 글 노드 전부의 서로 다른 `top` — 꺾는 자리를 정하는 클래스(`-nowrap`)로 고르지 않는다(그 클래스를 뗀 판을 못 본다).
+    const cells = [...document.querySelectorAll('.wb-shell-admin-when')]
     for (const cell of cells) {
       const tops = new Set<number>()
-      for (const span of cell.querySelectorAll('.wb-shell-admin-nowrap')) {
+      const inner = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT)
+      for (let t = inner.nextNode(); t; t = inner.nextNode()) {
+        if (!t.textContent?.trim()) continue
         const range = document.createRange()
-        range.selectNodeContents(span)
+        range.selectNodeContents(t)
         for (const rect of range.getClientRects()) tops.add(Math.round(rect.top))
       }
       whenLines = Math.max(whenLines, tops.size)

@@ -49,10 +49,10 @@ export function When(props: { iso: string }): ReactElement {
   const date = new Date(props.iso)
   if (Number.isNaN(date.getTime())) return <>{props.iso}</>
   return (
-    <>
+    <span className="wb-shell-admin-when">
       <span className="wb-shell-admin-nowrap">{`${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`}</span>{' '}
       <span className="wb-shell-admin-nowrap">{`${pad(date.getHours())}:${pad(date.getMinutes())}`}</span>
-    </>
+    </span>
   )
 }
 

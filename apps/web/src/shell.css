@@ -5680,6 +5680,11 @@
   text-align: right;
 }
 
+/* 시각 하나(`When`) — 넘침 자(`build-test/admin-screens.test.ts`)가 이 상자의 글 전부로 꺾인 줄을 센다. */
+.wb-shell-admin-when {
+  display: inline;
+}
+
 .wb-shell-admin-nowrap {
   white-space: nowrap;
 }
