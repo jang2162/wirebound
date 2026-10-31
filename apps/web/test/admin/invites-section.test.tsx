@@ -9,6 +9,7 @@ import { COPIED, COPY_FAILED } from '../../src/admin/link-reveal'
 import { NO_INVITES } from '../../src/admin/invites-section'
 import { renderWithProviders } from '../helpers'
 import { adminServer, conflict, invite, type AdminServer } from './admin-server'
+import { isolate } from '../../src/shell/isolate'
 
 const FOUR = [
   invite('i-1', '디자인팀', { kind: 'multi', signups: 3 }),
@@ -25,7 +26,7 @@ async function open(server: AdminServer): Promise<void> {
 function rowOf(name: string): HTMLElement {
   const found = within(screen.getByRole('table', { name: '초대 링크' }))
     .getAllByRole('row')
-    .find((tr) => tr.querySelector('td')?.textContent === name)
+    .find((tr) => tr.querySelector('td')?.textContent === isolate(name))
   if (found === undefined) throw new Error(`${name} 줄이 없다`)
   return found
 }
@@ -50,12 +51,12 @@ describe('관리자 › 초대 링크 — 표', () => {
         .getAllByRole('cell')
         .map((td) => td.textContent)
     expect(cells('디자인팀')).toEqual([
-      '디자인팀',
+      isolate('디자인팀'),
       '여러 명',
       expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/),
       '3명',
       '사용 중',
-      '나관리',
+      isolate('나관리'),
       '',
     ])
     expect([cells('지난 행사')[4], cells('거둔 것')[4], cells('한 사람')[4]]).toEqual(['만료', '거둠', '다 씀'])
@@ -88,7 +89,7 @@ describe('관리자 › 초대 링크 — 만들기', () => {
     fireEvent.click(within(dialog).getByRole('radio', { name: /^여러 명/ }))
     fireEvent.change(within(dialog).getByLabelText(/^만료/), { target: { value: '30' } })
     fireEvent.click(within(dialog).getByRole('button', { name: '만들기' }))
-    const reveal = await screen.findByRole('region', { name: '초대 링크 «디자인팀»' })
+    const reveal = await screen.findByRole('region', { name: `초대 링크 «${isolate('디자인팀')}»` })
     expect(server.calls.createInvite).toEqual([[{ name: '디자인팀', kind: 'multi', expiresInDays: 30 }]])
     expect((within(reveal).getByLabelText('링크') as HTMLInputElement).value).toBe(`${window.location.origin}/invite/invite-token-i-1`)
     expect(screen.getAllByRole('button', { name: '복사' })).toHaveLength(1)
@@ -120,7 +121,7 @@ describe('관리자 › 초대 링크 — 만들기', () => {
     const dialog = await screen.findByRole('dialog', { name: '초대 링크 만들기' })
     fireEvent.change(within(dialog).getByLabelText('이름(메모)'), { target: { value: '가' } })
     fireEvent.click(within(dialog).getByRole('button', { name: '만들기' }))
-    const reveal = await screen.findByRole('region', { name: '초대 링크 «가»' })
+    const reveal = await screen.findByRole('region', { name: `초대 링크 «${isolate('가')}»` })
     fireEvent.click(within(reveal).getByRole('button', { name: '복사' }))
     await within(reveal).findByText(COPIED)
     expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/invite/invite-token-i-1`)
@@ -144,7 +145,7 @@ describe('관리자 › 초대 링크 — 거두기', () => {
     const dialog = await screen.findByRole('dialog', { name: '초대 링크 거두기' })
     expect(server.calls.revokeInvite).toEqual([])
     fireEvent.click(within(dialog).getByRole('button', { name: '거두기' }))
-    await screen.findByText('«디자인팀» — 거뒀습니다. 이 링크로는 가입할 수 없습니다.')
+    await screen.findByText(`«${isolate('디자인팀')}» — 거뒀습니다. 이 링크로는 가입할 수 없습니다.`)
     expect(server.calls.revokeInvite).toEqual([['i-1']])
     await waitFor(() => expect(within(rowOf('디자인팀')).getAllByRole('cell')[4]!.textContent).toBe('거둠'))
   })

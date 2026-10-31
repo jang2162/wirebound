@@ -12,6 +12,7 @@ import { App } from '../../src/app'
 import { ApiError } from '../../src/api/client'
 import { renderWithProviders } from '../helpers'
 import { adminServer, adminUser, invite, ME, type AdminServer } from './admin-server'
+import { isolate } from '../../src/shell/isolate'
 
 const BOB = adminUser('u-bob', '밥')
 
@@ -43,12 +44,12 @@ describe('FX-AD H3 — 링크 상자는 문서를 떠나면(`pagehide`) 닫힌�
     open(server, '/admin/users')
     await screen.findByRole('table', { name: '사용자' })
     choose('밥', '재설정 링크 만들기')
-    await screen.findByRole('region', { name: '밥의 비밀번호 재설정 링크' })
+    await screen.findByRole('region', { name: `${isolate('밥')}의 비밀번호 재설정 링크` })
     act(() => {
       window.dispatchEvent(new Event('pagehide'))
     })
     // 동기로 걷혀야 한다 — bfcache 는 `pagehide` 직후의 DOM 을 담는다.
-    expect(screen.queryByRole('region', { name: '밥의 비밀번호 재설정 링크' })).toBeNull()
+    expect(screen.queryByRole('region', { name: `${isolate('밥')}의 비밀번호 재설정 링크` })).toBeNull()
     expect(document.body.innerHTML.includes('reset-token-u-bob')).toBe(false)
   })
 
@@ -59,11 +60,11 @@ describe('FX-AD H3 — 링크 상자는 문서를 떠나면(`pagehide`) 닫힌�
     const dialog = await screen.findByRole('dialog', { name: '초대 링크 만들기' })
     fireEvent.change(within(dialog).getByLabelText('이름(메모)'), { target: { value: '떠남' } })
     fireEvent.click(within(dialog).getByRole('button', { name: '만들기' }))
-    await screen.findByRole('region', { name: '초대 링크 «떠남»' })
+    await screen.findByRole('region', { name: `초대 링크 «${isolate('떠남')}»` })
     act(() => {
       window.dispatchEvent(new Event('pagehide'))
     })
-    expect(screen.queryByRole('region', { name: '초대 링크 «떠남»' })).toBeNull()
+    expect(screen.queryByRole('region', { name: `초대 링크 «${isolate('떠남')}»` })).toBeNull()
     expect(document.body.innerHTML.includes('invite-token-i-1')).toBe(false)
   })
 })
@@ -84,9 +85,9 @@ describe('FX-AD H2 — 사용자 칸의 줄 쓰기는 한 번에 하나다', () 
     await new Promise((done) => setTimeout(done, 20))
     const during = server.calls.createResetLink.length
     await act(async () => pending.resolve())
-    await screen.findByText('밥 — 관리자로 지정했습니다.')
+    await screen.findByText(`${isolate('밥')} — 관리자로 지정했습니다.`)
     choose('밥', '재설정 링크 만들기')
-    await screen.findByRole('region', { name: '밥의 비밀번호 재설정 링크' })
+    await screen.findByRole('region', { name: `${isolate('밥')}의 비밀번호 재설정 링크` })
     expect({ during, after: server.calls.createResetLink.length, grant: server.calls.grantInstanceAdmin.length }).toEqual({
       during: 0,
       after: 1,
@@ -111,7 +112,7 @@ describe('FX-AD L2 — 다시 받기가 실패하면 앞 표를 둔다', () => {
     const dialog = await screen.findByRole('dialog', { name: '초대 링크 만들기' })
     fireEvent.change(within(dialog).getByLabelText('이름(메모)'), { target: { value: '새 링크' } })
     fireEvent.click(within(dialog).getByRole('button', { name: '만들기' }))
-    await screen.findByRole('region', { name: '초대 링크 «새 링크»' })
+    await screen.findByRole('region', { name: `초대 링크 «${isolate('새 링크')}»` })
     await waitFor(() => expect(lists).toBe(2))
     await new Promise((done) => setTimeout(done, 20))
     expect({

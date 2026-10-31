@@ -28,6 +28,7 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { ProjectMember, ProjectRole, ProjectView } from '../api/types'
 import { projectAbilities } from '../projects/project-actions'
 import { useSessionUser } from '../session/session-context'
+import { isolate } from '../shell/isolate'
 
 const LOAD_FAILURE = '멤버 목록을 불러오지 못했습니다'
 const WRITE_FAILURE = '멤버를 바꾸지 못했습니다'
@@ -151,9 +152,9 @@ export function MembersSection(props: { project: ProjectView; onSelfChanged: () 
             const self = member.userId === me?.id
             return (
               <li className="wb-shell-project-item" key={userId}>
-                <span className="wb-shell-members-name">{name}</span>
+                <span className="wb-shell-members-name">{isolate(name)}</span>
                 {!member.active && <span className="wb-shell-members-inactive">비활성</span>}
-                <span className="wb-shell-members-email">{member.email}</span>
+                <span className="wb-shell-members-email">{isolate(member.email)}</span>
                 {manage ? (
                   <RoleSelect
                     label={`${name}의 역할`}
@@ -166,7 +167,7 @@ export function MembersSection(props: { project: ProjectView; onSelfChanged: () 
                 )}
                 {manage && (
                   <AskButton
-                    ask={`${name} 제외`}
+                    ask={`${isolate(name)} 제외`}
                     asking={confirming === userId}
                     busy={busy}
                     onToggle={() => setConfirming(confirming === userId ? null : userId)}
@@ -183,7 +184,7 @@ export function MembersSection(props: { project: ProjectView; onSelfChanged: () 
                         void write(() => api.removeMember(project.id, userId), self)
                       })}
                     >
-                      {`${name} 제외 확정`}
+                      {`${isolate(name)} 제외 확정`}
                     </button>
                   </span>
                 )}

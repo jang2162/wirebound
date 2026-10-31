@@ -14,6 +14,7 @@ import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { AdminUser, AuditAction, AuditEntry, AuditQuery } from '../api/types'
 import { Outcome, When } from './admin-screen'
+import { isolate } from '../shell/isolate'
 import { KIND_TEXT } from './invites-section'
 
 const LOAD_FAILURE = '기록을 불러오지 못했습니다'
@@ -21,8 +22,9 @@ export const NO_ENTRIES = '남은 기록이 없습니다'
 /** 서버 명령(`db/admin.ts`)으로 한 행동의 «누가». */
 export const CLI_ACTOR = '서버 명령'
 
-const person = (user: AuditEntry['targetUser']): string => (user === null ? '(알 수 없음)' : `${user.name}(${user.email})`)
-const quoted = (named: { name: string } | null): string => `«${named?.name ?? ''}»`
+const person = (user: AuditEntry['targetUser']): string =>
+  user === null ? '(알 수 없음)' : `${isolate(user.name)}(${isolate(user.email)})`
+const quoted = (named: { name: string } | null): string => `«${isolate(named?.name ?? '')}»`
 const count = (detail: AuditEntry['detail'], key: string): string => `${typeof detail[key] === 'number' ? detail[key] : 0}개`
 const themeRef = (detail: AuditEntry['detail']): string => `${String(detail['themeId'] ?? '')}@${String(detail['version'] ?? '')}`
 
@@ -151,7 +153,7 @@ export function AuditSection(): ReactElement {
           <option value="">전체</option>
           {actors.map((user) => (
             <option key={user.id} value={user.id}>
-              {`${user.name} (${user.email})`}
+              {`${isolate(user.name)} (${isolate(user.email)})`}
             </option>
           ))}
         </select>
@@ -185,7 +187,7 @@ export function AuditSection(): ReactElement {
                   <When iso={entry.at} />
                 </td>
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-name" data-label="누가">
-                  {entry.actor.kind === 'cli' ? CLI_ACTOR : entry.actor.name}
+                  {entry.actor.kind === 'cli' ? CLI_ACTOR : isolate(entry.actor.name)}
                 </td>
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-email" data-label="무엇">
                   {auditLine(entry)}

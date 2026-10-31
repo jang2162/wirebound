@@ -11,6 +11,7 @@
  * `test/seed-user.test.ts`가 두 경계값(7·8자, 200·201자)을 양쪽에서 함께 잰다.
  */
 import { z } from 'zod'
+import { HIDDEN_CHAR_IN_NAME, hasHiddenChar } from './hidden-chars'
 
 /**
  * `.email()`은 형식만 검증한다 — 정규화(소문자화)는 이 스키마의 `.transform()`이 한다.
@@ -23,8 +24,15 @@ import { z } from 'zod'
  */
 export const NormalizedEmail = z.email().transform((value) => value.toLowerCase())
 
-/** 사용자 표시 이름. `users.name`이 `NOT NULL`이라 빈 문자열을 받지 않는다. */
-export const DisplayName = z.string().min(1).max(80)
+/**
+ * 사용자 표시 이름. `users.name`이 `NOT NULL`이라 빈 문자열을 받지 않는다. **숨는 글자(제어 · 방향 제어 · 폭 없는 글자)를 거절한다** —
+ * 표와 범위는 `./hidden-chars.ts`. 이 자를 지나는 입구: 초대 링크 가입 · 시딩(`SEED_USER_NAME` · 이메일에서 지은 이름 · 픽스처).
+ */
+export const DisplayName = z
+  .string()
+  .min(1)
+  .max(80)
+  .refine((name) => !hasHiddenChar(name), { error: HIDDEN_CHAR_IN_NAME })
 
 /**
  * 비밀번호의 길이 범위. **하한 8은 정책이고 상한 200은 방어다** —

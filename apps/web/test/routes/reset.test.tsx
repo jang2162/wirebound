@@ -8,6 +8,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import { PASSWORD_MISMATCH } from '../../src/account/new-password-fields'
 import { PASSWORD_RESET_DONE } from '../../src/routes/reset'
 import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
+import { isolate } from '../../src/shell/isolate'
 
 const UNUSABLE = '이 재설정 링크는 끝났다 [RESET-404]'
 
@@ -35,7 +36,7 @@ const submit = (): void => {
 describe('비밀번호 재설정 화면', () => {
   it('누구의 비밀번호인지 말하고 두 칸을 그린다', async () => {
     open(client())
-    await screen.findByText('대상(target@example.com)의 새 비밀번호를 정합니다')
+    await screen.findByText(`${isolate('대상')}(${isolate('target@example.com')})의 새 비밀번호를 정합니다`)
     expect(screen.getByLabelText('비밀번호(8자 이상)')).toBeTruthy()
     expect(screen.getByLabelText('비밀번호 확인')).toBeTruthy()
   })

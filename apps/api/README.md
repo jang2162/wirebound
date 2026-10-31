@@ -424,7 +424,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/admin/theme-packages/:themeId/:version` | PATCH | 인스턴스 관리자(세션) | `{ hidden: boolean }` | 200 그 판(`versions[]` 한 줄과 같은 모양) · 없는 판 404 |
 | `/api/admin/theme-template.zip` | GET | 인스턴스 관리자(세션) | — | 200 `application/zip`(`Content-Disposition: attachment; filename="wirebound-theme-starter.zip"`) · 짓지 않았으면 404 «템플릿이 빌드되지 않았습니다 — `pnpm build:template`» |
 | `/api/auth/invites/:token` | GET | (없음, 공개) | — | 200 `{ usable: true }` · 못 쓰는 링크 404(아래 «계정 — …») |
-| `/api/auth/invites/:token/signup` | POST | (없음, 공개) | `{ email, name, password }` | 201 — `/login` 과 같은 몸 · 같은 세션 쿠키. 못 쓰는 링크 404 · 이미 있는 이메일 409 «이미 계정이 있는 이메일입니다 — 로그인하세요» · 형식 400 · 한도 429 |
+| `/api/auth/invites/:token/signup` | POST | (없음, 공개) | `{ email, name, password }` — `name` 1–80자 · 숨는 글자(제어 · 방향 제어 · 폭 없는 글자 — `src/auth/hidden-chars.ts`)는 400 | 201 — `/login` 과 같은 몸 · 같은 세션 쿠키. 못 쓰는 링크 404 · 이미 있는 이메일 409 «이미 계정이 있는 이메일입니다 — 로그인하세요» · 형식 400 · 한도 429 |
 | `/api/auth/resets/:token` | GET | (없음, 공개) | — | 200 `{ email, name }` · 못 쓰는 링크 404 |
 | `/api/auth/resets/:token` | POST | (없음, 공개) | `{ password }` | 204 — 그 사람의 세션 전부 삭제 · WS 연결 닫힘(4403) · API 토큰은 그대로. 404 · 400 · 429 |
 | `/api/admin/users` | GET | 인스턴스 관리자(세션) | — | 200 `AdminUser[]` — `{ id, email, name, isInstanceAdmin, active, createdAt, lastSeenAt, projectCount, invite: { id, name } \| null }`, 가입 차례 |
@@ -434,7 +434,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/admin/users/:userId/admin` | DELETE | 인스턴스 관리자(세션) | — | 200 `{ user, revokedLinks }` · 409 자기 자신 · 마지막 관리자 · 관리자 아님 |
 | `/api/admin/users/:userId/reset-links` | POST | 인스턴스 관리자(세션) | — | 201 `{ token, expiresAt }` — 원문은 이 응답에만 있다 · 409 비활성 |
 | `/api/admin/invites` | GET | 인스턴스 관리자(세션) | — | 200 `AdminInvite[]` — `{ id, name, kind, expiresAt, state, signups, createdAt, createdBy: { id, name } }`, 최신이 위. `state` 는 `usable` · `expired` · `revoked` · `used-up`. 원문 · 해시는 없다 |
-| `/api/admin/invites` | POST | 인스턴스 관리자(세션) | `{ name: 1–60자, kind: 'single' \| 'multi', expiresInDays?: 1–90(기본 7) }` | 201 `{ invite, token }` — 원문은 이 응답에만 있다 · 400 |
+| `/api/admin/invites` | POST | 인스턴스 관리자(세션) | `{ name: 1–60자(숨는 글자는 400 — 가입의 이름과 같은 표), kind: 'single' \| 'multi', expiresInDays?: 1–90(기본 7) }` | 201 `{ invite, token }` — 원문은 이 응답에만 있다 · 400 |
 | `/api/admin/invites/:inviteId/revoke` | POST | 인스턴스 관리자(세션) | — | 200 `{ invite }` · 409 이미 못 쓰는 링크 · 404 |
 | `/api/admin/projects` | GET | 인스턴스 관리자(세션) | — | 200 `AdminProject[]` — `{ id, name, slug, owners: [{ id, name, active }], hasActiveOwner, memberCount, updatedAt }`(`updatedAt` = `greatest(projects.updated_at, max(pages.updated_at))`), 만든 차례. 관리자가 멤버가 아닌 프로젝트도 든다 — 내용 라우트는 여전히 404 다 |
 | `/api/admin/projects/:id/owner` | POST | 인스턴스 관리자(세션) | `{ userId }` | 200 `{ project }` — 활성 owner 가 없는 프로젝트만. 멤버가 아니면 owner 로 넣고 멤버면 올린다(자기 자신도 된다). 409 활성 owner 있음 · 400 대상 비활성 · 404 |

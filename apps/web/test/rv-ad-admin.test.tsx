@@ -13,6 +13,7 @@ import type { AdminProject, AdminUser, SessionUser } from '../src/api/types'
 import { COPIED } from '../src/admin/link-reveal'
 import { renderWithProviders } from './helpers'
 import { adminProject, adminServer, adminUser, ME, type AdminServer } from './admin/admin-server'
+import { isolate } from '../src/shell/isolate'
 
 const BOB = adminUser('u-bob', '밥')
 const CAROL = adminUser('u-carol', '캐럴')
@@ -33,7 +34,7 @@ function open(server: AdminServer, route: string): void {
 function rowOf(table: HTMLElement, name: string): HTMLElement {
   const found = within(table)
     .getAllByRole('row')
-    .find((tr) => tr.querySelector('td')?.textContent?.startsWith(name) === true)
+    .find((tr) => tr.querySelector('td')?.textContent?.startsWith(isolate(name)) === true)
   if (found === undefined) throw new Error(`${name} 줄이 없다`)
   return found
 }
@@ -57,7 +58,7 @@ describe('RV-AD H1 — 새 링크가 앞 링크의 «복사했습니다» 를 �
     open(server, '/admin/users')
     const table = await screen.findByRole('table', { name: '사용자' })
     choose(table, '밥', '재설정 링크 만들기')
-    const resetBox = await screen.findByRole('region', { name: '밥의 비밀번호 재설정 링크' })
+    const resetBox = await screen.findByRole('region', { name: `${isolate('밥')}의 비밀번호 재설정 링크` })
     fireEvent.click(within(resetBox).getByRole('button', { name: '복사' }))
     await within(resetBox).findByText(COPIED)
     expect(writeText).toHaveBeenLastCalledWith(`${window.location.origin}/reset/reset-token-u-bob`)
@@ -66,7 +67,7 @@ describe('RV-AD H1 — 새 링크가 앞 링크의 «복사했습니다» 를 �
     const dialog = await screen.findByRole('dialog', { name: '초대 링크 만들기' })
     fireEvent.change(within(dialog).getByLabelText('이름(메모)'), { target: { value: '새 팀' } })
     fireEvent.click(within(dialog).getByRole('button', { name: '만들기' }))
-    const inviteBox = await screen.findByRole('region', { name: '초대 링크 «새 팀»' })
+    const inviteBox = await screen.findByRole('region', { name: `초대 링크 «${isolate('새 팀')}»` })
     // 클립보드에는 아직 밥의 재설정 링크가 있다 — 이 상자가 «복사했습니다» 라고 말하면 사람은 그것을 새 팀에 붙여 넣는다.
     expect(writeText).toHaveBeenCalledTimes(1)
     expect({
@@ -85,7 +86,7 @@ describe('RV-AD H1 — 새 링크가 앞 링크의 «복사했습니다» 를 �
       const dialog = await screen.findByRole('dialog', { name: '초대 링크 만들기' })
       fireEvent.change(within(dialog).getByLabelText('이름(메모)'), { target: { value: name } })
       fireEvent.click(within(dialog).getByRole('button', { name: '만들기' }))
-      return screen.findByRole('region', { name: `초대 링크 «${name}»` })
+      return screen.findByRole('region', { name: `초대 링크 «${isolate(name)}»` })
     }
     const a = await create('A')
     fireEvent.click(within(a).getByRole('button', { name: '복사' }))
@@ -114,7 +115,7 @@ describe('RV-AD — 잘못된 사람에게 쓰기(지금 참인 성질)', () => 
     server.users = [adminUser('u-zed', '밥밥'), CAROL, BOB, adminUser(ME.id, ME.name, { isInstanceAdmin: true }), DAVE]
     await act(async () => pending.resolve({ user: DAVE }))
     await waitFor(() => expect(within(screen.getByRole('table', { name: '사용자' })).getAllByRole('row')).toHaveLength(6))
-    expect(within(dialog).getByText(/계정을 비활성화합니다/).textContent).toContain('밥(u-bob@example.com)')
+    expect(within(dialog).getByText(/계정을 비활성화합니다/).textContent).toContain(`${isolate('밥')}(${isolate('u-bob@example.com')})`)
     await waitFor(() => expect((within(dialog).getByRole('button', { name: '비활성화' }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(within(dialog).getByRole('button', { name: '비활성화' }))
     await waitFor(() => expect(server.calls.deactivateUser).toEqual([['u-bob']]))
@@ -240,7 +241,7 @@ describe('RV-AD L1 — 겹친 목록 다시 받기의 늦은 답이 새 목록�
     fireEvent.click(within(dialog).getByRole('button', { name: '취소' }))
     await waitFor(() => expect(held).toHaveLength(1))
     await act(async () => transfer.resolve())
-    await screen.findByText('«고아» — owner 를 넘겼습니다(밥).')
+    await screen.findByText(`«${isolate('고아')}» — owner 를 넘겼습니다(${isolate('밥')}).`)
     await act(async () => held[0]!.release())
     await new Promise((done) => setTimeout(done, 20))
     const shown = within(screen.getByRole('table', { name: '프로젝트' }))

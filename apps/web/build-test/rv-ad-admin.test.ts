@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { chromium, type BrowserContext, type Page } from 'playwright-core'
 import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
 import { makeAdmin } from './theme-fixtures'
+import { isolate } from '../src/shell/isolate'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -80,7 +81,7 @@ describe.skipIf(!전제.ok)('RV-AD — 관리자 칸 실브라우저', () => {
     return page
       .getByRole('table', { name: '사용자' })
       .getByRole('row')
-      .filter({ has: page.getByText(email, { exact: true }) })
+      .filter({ has: page.getByText(isolate(email), { exact: true }) })
   }
 
   async function auditCount(action: string, targetUserId: string): Promise<number> {
@@ -97,7 +98,7 @@ describe.skipIf(!전제.ok)('RV-AD — 관리자 칸 실브라우저', () => {
     await dialog.getByLabel('이름(메모)').fill(name)
     await dialog.getByRole('button', { name: '만들기' }).click()
     return page
-      .getByRole('region', { name: `초대 링크 «${name}»` })
+      .getByRole('region', { name: `초대 링크 «${isolate(name)}»` })
       .getByLabel('링크')
       .inputValue()
   }
@@ -135,14 +136,14 @@ describe.skipIf(!전제.ok)('RV-AD — 관리자 칸 실브라우저', () => {
         await page.goto('/admin/users')
         await userRow(page, bob.email).getByRole('button', { name: '복사밥 더 보기' }).click()
         await page.getByRole('menuitem', { name: '재설정 링크 만들기' }).click()
-        const resetBox = page.getByRole('region', { name: '복사밥의 비밀번호 재설정 링크' })
+        const resetBox = page.getByRole('region', { name: `${isolate('복사밥')}의 비밀번호 재설정 링크` })
         const resetUrl = await resetBox.getByLabel('링크').inputValue()
         await resetBox.getByRole('button', { name: '복사' }).click()
         await resetBox.getByText('복사했습니다').waitFor()
         expect(await readClipboard()).toBe(resetUrl)
 
         const inviteUrl = await createInviteOnScreen(page, '새 팀')
-        const box = page.getByRole('region', { name: '초대 링크 «새 팀»' })
+        const box = page.getByRole('region', { name: `초대 링크 «${isolate('새 팀')}»` })
         const clip = await readClipboard()
         const seen = {
           copiedShown: await box.getByText('복사했습니다').isVisible(),
@@ -171,7 +172,7 @@ describe.skipIf(!전제.ok)('RV-AD — 관리자 칸 실브라우저', () => {
         if (script !== null) await context.addInitScript({ content: script })
         await page.goto('/admin/invites')
         const url = await createInviteOnScreen(page, `복사 ${variant}`)
-        const box = page.getByRole('region', { name: `초대 링크 «복사 ${variant}»` })
+        const box = page.getByRole('region', { name: `초대 링크 «${isolate(`복사 ${variant}`)}»` })
         const sentinel = `sentinel-${variant}`
         await writeClipboard(sentinel)
         await page.bringToFront()
@@ -328,7 +329,10 @@ describe.skipIf(!전제.ok)('RV-AD — 관리자 칸 실브라우저', () => {
         async (page) => {
           await userRow(page, target.email).getByRole('button', { name: 'bfcache밥 더 보기' }).click()
           await page.getByRole('menuitem', { name: '재설정 링크 만들기' }).click()
-          return page.getByRole('region', { name: 'bfcache밥의 비밀번호 재설정 링크' }).getByLabel('링크').inputValue()
+          return page
+            .getByRole('region', { name: `${isolate('bfcache밥')}의 비밀번호 재설정 링크` })
+            .getByLabel('링크')
+            .inputValue()
         },
         '사용자',
       )

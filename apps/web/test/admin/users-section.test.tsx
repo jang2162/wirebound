@@ -10,6 +10,7 @@ import { CUT_NOW, NO_MATCH } from '../../src/admin/users-section'
 import { LINK_ONCE } from '../../src/admin/link-reveal'
 import { currentPath, renderWithProviders } from '../helpers'
 import { adminProject, adminServer, adminUser, conflict, ME, type AdminServer } from './admin-server'
+import { isolate } from '../../src/shell/isolate'
 
 const BOB = adminUser('u-bob', '밥', { projectCount: 2, invite: { id: 'i-1', name: '디자인팀' }, lastSeenAt: '2026-10-31T23:59:00.000Z' })
 const CAROL = adminUser('u-carol', '캐럴', { isInstanceAdmin: true })
@@ -38,7 +39,7 @@ async function open(server: AdminServer): Promise<HTMLElement> {
 function row(table: HTMLElement, name: string): HTMLElement {
   const found = within(table)
     .getAllByRole('row')
-    .find((tr) => tr.querySelector('td')?.textContent?.startsWith(name) === true)
+    .find((tr) => tr.querySelector('td')?.textContent?.startsWith(isolate(name)) === true)
   if (found === undefined) throw new Error(`${name} 줄이 없다`)
   return found
 }
@@ -71,13 +72,13 @@ describe('관리자 › 사용자 — 표', () => {
     const bob = within(row(table, '밥'))
       .getAllByRole('cell')
       .map((td) => td.textContent)
-    expect(bob.slice(1, 4)).toEqual(['u-bob@example.com', '활성', '2개'])
-    expect(bob[4]).toContain('초대 «디자인팀»')
+    expect(bob.slice(1, 4)).toEqual([isolate('u-bob@example.com'), '활성', '2개'])
+    expect(bob[4]).toContain(`초대 «${isolate('디자인팀')}»`)
     expect(bob[4]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/)
     expect(bob[5]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
     expect(within(row(table, '캐럴')).getAllByRole('cell')[5]!.textContent).toBe('없음')
-    expect(within(row(table, '캐럴')).getAllByRole('cell')[0]!.textContent).toBe('캐럴관리자')
-    expect(within(row(table, '밥')).getAllByRole('cell')[0]!.textContent).toBe('밥')
+    expect(within(row(table, '캐럴')).getAllByRole('cell')[0]!.textContent).toBe(`${isolate('캐럴')}관리자`)
+    expect(within(row(table, '밥')).getAllByRole('cell')[0]!.textContent).toBe(isolate('밥'))
   })
 
   it('비활성 줄은 흐리다(`data-active`) · 상태 칸 «비활성»', async () => {
@@ -94,14 +95,14 @@ describe('관리자 › 사용자 — 표', () => {
         .getAllByRole('row')
         .slice(1)
         .map((tr) => tr.querySelector('td')?.firstChild?.textContent ?? '')
-    expect(names()).toEqual([ME.name, '밥', '캐럴', '데이브'])
+    expect(names()).toEqual([ME.name, '밥', '캐럴', '데이브'].map(isolate))
     fireEvent.change(screen.getByLabelText('검색'), { target: { value: 'U-CAROL@' } })
-    expect(names()).toEqual(['캐럴'])
+    expect(names()).toEqual(['캐럴'].map(isolate))
     fireEvent.change(screen.getByLabelText('검색'), { target: { value: '' } })
     fireEvent.change(screen.getByLabelText('상태'), { target: { value: 'inactive' } })
-    expect(names()).toEqual(['데이브'])
+    expect(names()).toEqual(['데이브'].map(isolate))
     fireEvent.change(screen.getByLabelText('상태'), { target: { value: 'active' } })
-    expect(names()).toEqual([ME.name, '밥', '캐럴'])
+    expect(names()).toEqual([ME.name, '밥', '캐럴'].map(isolate))
     fireEvent.change(screen.getByLabelText('검색'), { target: { value: '없는사람' } })
     expect(screen.queryByRole('table')).toBeNull()
     expect(screen.getByText(NO_MATCH)).toBeTruthy()
@@ -139,7 +140,7 @@ describe('관리자 › 사용자 — 비활성화', () => {
     const dialog = await screen.findByRole('dialog', { name: '비활성화' })
     fireEvent.click(within(dialog).getByRole('button', { name: '비활성화' }))
     await screen.findByText(
-      '밥 — 비활성화했습니다. 거둔 링크 2개 · 활성 owner 가 없어진 프로젝트 1개 — 관리자 › 프로젝트에서 owner 를 넘기세요.',
+      `${isolate('밥')} — 비활성화했습니다. 거둔 링크 2개 · 활성 owner 가 없어진 프로젝트 1개 — 관리자 › 프로젝트에서 owner 를 넘기세요.`,
     )
     expect(server.calls.deactivateUser).toEqual([[BOB.id]])
     await waitFor(() => expect(row(screen.getByRole('table', { name: '사용자' }), '밥').getAttribute('data-active')).toBe('false'))
@@ -174,15 +175,15 @@ describe('관리자 › 사용자 — 지정 · 해제 · 다시 활성화', () 
     const dialog = await screen.findByRole('dialog', { name: '관리자 해제' })
     expect(server.calls.revokeInstanceAdmin).toEqual([])
     fireEvent.click(within(dialog).getByRole('button', { name: '관리자 해제' }))
-    await screen.findByText('캐럴 — 관리자 권한을 해제했습니다. 거둔 링크 3개.')
+    await screen.findByText(`${isolate('캐럴')} — 관리자 권한을 해제했습니다. 거둔 링크 3개.`)
     expect(server.calls.revokeInstanceAdmin).toEqual([[CAROL.id]])
 
     choose(screen.getByRole('table', { name: '사용자' }), '밥', '관리자로 지정')
-    await screen.findByText('밥 — 관리자로 지정했습니다.')
+    await screen.findByText(`${isolate('밥')} — 관리자로 지정했습니다.`)
     expect(server.calls.grantInstanceAdmin).toEqual([[BOB.id]])
 
     choose(screen.getByRole('table', { name: '사용자' }), '데이브', '다시 활성화')
-    await screen.findByText('데이브 — 다시 활성화했습니다. 일반 사용자로 돌아옵니다.')
+    await screen.findByText(`${isolate('데이브')} — 다시 활성화했습니다. 일반 사용자로 돌아옵니다.`)
     expect(server.calls.activateUser).toEqual([[DAVE.id]])
   })
 })
@@ -192,7 +193,7 @@ describe('관리자 › 사용자 — 재설정 링크', () => {
     const server = people()
     const table = await open(server)
     choose(table, '밥', '재설정 링크 만들기')
-    const reveal = await screen.findByRole('region', { name: '밥의 비밀번호 재설정 링크' })
+    const reveal = await screen.findByRole('region', { name: `${isolate('밥')}의 비밀번호 재설정 링크` })
     const url = (within(reveal).getByLabelText('링크') as HTMLInputElement).value
     expect(url).toBe(`${window.location.origin}/reset/reset-token-u-bob`)
     expect(within(reveal).getByText(LINK_ONCE)).toBeTruthy()
@@ -205,7 +206,7 @@ describe('관리자 › 사용자 — 재설정 링크', () => {
     expect(window.location.href.includes('reset-token')).toBe(false)
     // 닫으면 사라진다 — 다시 볼 길이 없다.
     fireEvent.click(within(reveal).getByRole('button', { name: '닫기' }))
-    expect(screen.queryByRole('region', { name: '밥의 비밀번호 재설정 링크' })).toBeNull()
+    expect(screen.queryByRole('region', { name: `${isolate('밥')}의 비밀번호 재설정 링크` })).toBeNull()
   })
 
   it('409(비활성 대상)는 서버 문장 — 링크를 안 보인다', async () => {
@@ -226,7 +227,7 @@ describe('관리자 › 사용자 — «초대 링크 만들기»', () => {
     const dialog = await screen.findByRole('dialog', { name: '초대 링크 만들기' })
     fireEvent.change(within(dialog).getByLabelText('이름(메모)'), { target: { value: '영업팀' } })
     fireEvent.click(within(dialog).getByRole('button', { name: '만들기' }))
-    const reveal = await screen.findByRole('region', { name: '초대 링크 «영업팀»' })
+    const reveal = await screen.findByRole('region', { name: `초대 링크 «${isolate('영업팀')}»` })
     expect((within(reveal).getByLabelText('링크') as HTMLInputElement).value).toBe(`${window.location.origin}/invite/invite-token-i-1`)
     expect(server.calls.createInvite).toEqual([[{ name: '영업팀', kind: 'single', expiresInDays: 7 }]])
   })

@@ -9,6 +9,10 @@ import { auditLine, AUDIT_ACTIONS, CLI_ACTOR, NO_ENTRIES } from '../../src/admin
 import type { AuditAction, AuditEntry } from '../../src/api/types'
 import { renderWithProviders } from '../helpers'
 import { adminServer, adminUser, ME, type AdminServer } from './admin-server'
+import { isolate } from '../../src/shell/isolate'
+
+/** 기록 줄의 사람 — 이름 · 이메일을 방향 격리로 감싼다(`src/shell/isolate.ts`). */
+const KIM_LINE = `${isolate('김')}(${isolate('kim@example.com')})`
 
 const KIM = { id: 'u-kim', name: '김', email: 'kim@example.com' }
 
@@ -47,23 +51,26 @@ function lines(): string[][] {
 const LINES: [AuditEntry, string][] = [
   [
     entry('1', 'invite.create', { invite: { id: 'i', name: '디자인팀' }, detail: { kind: 'multi', expiresInDays: 7 } }),
-    '초대 링크 만듦 — «디자인팀» · 여러 명 · 7일',
+    `초대 링크 만듦 — «${isolate('디자인팀')}» · 여러 명 · 7일`,
   ],
-  [entry('2', 'invite.revoke', { invite: { id: 'i', name: '디자인팀' } }), '초대 링크 거둠 — «디자인팀»'],
+  [entry('2', 'invite.revoke', { invite: { id: 'i', name: '디자인팀' } }), `초대 링크 거둠 — «${isolate('디자인팀')}»`],
   [
     entry('3', 'invite.signup', { invite: { id: 'i', name: '디자인팀' }, targetUser: KIM }),
-    '초대 링크로 가입 — «디자인팀» · 김(kim@example.com)',
+    `초대 링크로 가입 — «${isolate('디자인팀')}» · ${KIM_LINE}`,
   ],
-  [entry('4', 'reset.create', { targetUser: KIM }), '재설정 링크 만듦 — 김(kim@example.com)'],
-  [entry('5', 'reset.use', { targetUser: KIM }), '재설정 링크로 비밀번호 바꿈 — 김(kim@example.com)'],
+  [entry('4', 'reset.create', { targetUser: KIM }), `재설정 링크 만듦 — ${KIM_LINE}`],
+  [entry('5', 'reset.use', { targetUser: KIM }), `재설정 링크로 비밀번호 바꿈 — ${KIM_LINE}`],
   [
     entry('6', 'user.deactivate', { targetUser: KIM, detail: { revokedLinks: 2, wasAdmin: true } }),
-    '비활성화 — 김(kim@example.com) · 거둔 링크 2개 · 관리자였음',
+    `비활성화 — ${KIM_LINE} · 거둔 링크 2개 · 관리자였음`,
   ],
-  [entry('7', 'user.activate', { targetUser: KIM }), '다시 활성화 — 김(kim@example.com)'],
-  [entry('8', 'admin.grant', { targetUser: KIM }), '관리자로 지정 — 김(kim@example.com)'],
-  [entry('9', 'admin.revoke', { targetUser: KIM, detail: { revokedLinks: 0 } }), '관리자 해제 — 김(kim@example.com) · 거둔 링크 0개'],
-  [entry('10', 'project.owner', { targetUser: KIM, project: { id: 'p', name: '콘솔' } }), 'owner 넘김 — «콘솔» → 김(kim@example.com)'],
+  [entry('7', 'user.activate', { targetUser: KIM }), `다시 활성화 — ${KIM_LINE}`],
+  [entry('8', 'admin.grant', { targetUser: KIM }), `관리자로 지정 — ${KIM_LINE}`],
+  [entry('9', 'admin.revoke', { targetUser: KIM, detail: { revokedLinks: 0 } }), `관리자 해제 — ${KIM_LINE} · 거둔 링크 0개`],
+  [
+    entry('10', 'project.owner', { targetUser: KIM, project: { id: 'p', name: '콘솔' } }),
+    `owner 넘김 — «${isolate('콘솔')}» → ${KIM_LINE}`,
+  ],
   [entry('11', 'theme.upload', { detail: { themeId: 'acme', version: '1.0.0', name: 'Acme' } }), '테마 올림 — acme@1.0.0'],
   [entry('12', 'theme.hide', { detail: { themeId: 'acme', version: '1.0.0' } }), '테마 판 숨김 — acme@1.0.0'],
   [entry('13', 'theme.unhide', { detail: { themeId: 'acme', version: '1.0.0' } }), '테마 판 되살림 — acme@1.0.0'],
@@ -95,8 +102,8 @@ describe('관리자 › 기록 — 화면', () => {
     await open(at)
     await screen.findByRole('table', { name: '기록' })
     expect(lines()).toEqual([
-      [ME.name, '관리자로 지정 — 김(kim@example.com)'],
-      [CLI_ACTOR, '관리자 해제 — 김(kim@example.com) · 거둔 링크 0개'],
+      [isolate(ME.name), `관리자로 지정 — ${KIM_LINE}`],
+      [CLI_ACTOR, `관리자 해제 — ${KIM_LINE} · 거둔 링크 0개`],
     ])
     expect(screen.queryByRole('button', { name: '더 보기' })).toBeNull()
   })

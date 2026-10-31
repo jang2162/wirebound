@@ -15,6 +15,7 @@ import type { AdminProject, AdminUser } from '../api/types'
 import { useSessionUser } from '../session/session-context'
 import { ActionMenu } from '../shell/action-menu'
 import { ICONS } from '../shell/icons'
+import { isolate } from '../shell/isolate'
 import { ShellDialog } from '../shell/shell-dialog'
 import { matchesText, Outcome, useAdminList, When } from './admin-screen'
 
@@ -115,10 +116,10 @@ export function ProjectsSection(): ReactElement {
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-name" data-label="이름">
                   {state.value.mine.has(project.id) ? (
                     <Link className="wb-shell-admin-link" to={`/projects/${project.id}`}>
-                      {project.name}
+                      {isolate(project.name)}
                     </Link>
                   ) : (
-                    project.name
+                    isolate(project.name)
                   )}
                 </td>
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-email" data-label="슬러그">
@@ -130,7 +131,7 @@ export function ProjectsSection(): ReactElement {
                     : project.owners.map((owner, index) => (
                         <span key={owner.id}>
                           {index > 0 && ' · '}
-                          {owner.name}
+                          {isolate(owner.name)}
                           {!owner.active && <span className="wb-shell-admin-badge">비활성</span>}
                         </span>
                       ))}
@@ -208,7 +209,7 @@ function OwnerDialog(props: { project: AdminProject; onClose: () => void; onDone
     setProblem(null)
     try {
       await api.transferProjectOwner(props.project.id, picked)
-      props.onDone(`«${props.project.name}» — owner 를 넘겼습니다(${target?.name ?? ''}).`)
+      props.onDone(`«${isolate(props.project.name)}» — owner 를 넘겼습니다(${isolate(target?.name ?? '')}).`)
     } catch (caught) {
       setProblem(toFailure(caught, WRITE_FAILURE))
       setBusy(false)
@@ -227,7 +228,7 @@ function OwnerDialog(props: { project: AdminProject; onClose: () => void; onDone
         }}
       >
         <p className="wb-shell-admin-dialog-sentence" id={sentence}>
-          {`«${props.project.name}» 의 owner 로 만들 사람을 고르세요. 멤버가 아니면 owner 로 넣고, 멤버면 owner 로 올립니다.`}
+          {`«${isolate(props.project.name)}» 의 owner 로 만들 사람을 고르세요. 멤버가 아니면 owner 로 넣고, 멤버면 owner 로 올립니다.`}
         </p>
         <p className="wb-shell-admin-dialog-sentence">비활성 owner 는 그대로 남습니다 — 그 사람을 다시 활성화하면 owner 로 돌아옵니다.</p>
         {users === 'loading' && (
@@ -255,7 +256,7 @@ function OwnerDialog(props: { project: AdminProject; onClose: () => void; onDone
               <option value="">고르세요</option>
               {users.map((user) => (
                 <option key={user.id} value={user.id}>
-                  {`${user.name} (${user.email})${user.id === me?.id ? ' — 나' : ''}`}
+                  {`${isolate(user.name)} (${isolate(user.email)})${user.id === me?.id ? ' — 나' : ''}`}
                 </option>
               ))}
             </select>

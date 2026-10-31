@@ -10,6 +10,7 @@ import { useEffect, useState, type FormEvent, type ReactElement } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
+import { isolate } from '../shell/isolate'
 import type { LoginNotice } from './login'
 import { checkNewPassword, PasswordFields } from '../account/new-password-fields'
 
@@ -86,7 +87,7 @@ export function ResetRoute(): ReactElement {
       {link.kind === 'usable' && (
         <>
           <p className="wb-shell-login-notice">
-            {link.name}({link.email})의 새 비밀번호를 정합니다
+            {isolate(link.name)}({isolate(link.email)})의 새 비밀번호를 정합니다
           </p>
           <form
             className="wb-shell-login-form"

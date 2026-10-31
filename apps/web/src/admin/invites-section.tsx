@@ -12,6 +12,7 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { AdminInvite, CreatedInvite, InviteKind, InviteState } from '../api/types'
 import { ActionMenu } from '../shell/action-menu'
 import { ICONS, shellIcon } from '../shell/icons'
+import { isolate } from '../shell/isolate'
 import { ShellDialog } from '../shell/shell-dialog'
 import { confirmClick, Outcome, useAdminList, When } from './admin-screen'
 import { LinkReveal, linkUrl } from './link-reveal'
@@ -52,7 +53,7 @@ export function InvitesSection(): ReactElement {
     setFailure(null)
     try {
       await api.revokeInvite(invite.id)
-      setDone(`«${invite.name}» — 거뒀습니다. 이 링크로는 가입할 수 없습니다.`)
+      setDone(`«${isolate(invite.name)}» — 거뒀습니다. 이 링크로는 가입할 수 없습니다.`)
     } catch (caught) {
       setFailure(toFailure(caught, WRITE_FAILURE))
     }
@@ -74,7 +75,7 @@ export function InvitesSection(): ReactElement {
       {created !== null && (
         <LinkReveal
           key={created.token}
-          title={`초대 링크 «${created.invite.name}»`}
+          title={`초대 링크 «${isolate(created.invite.name)}»`}
           url={linkUrl('invite', created.token)}
           expiresAt={created.invite.expiresAt}
           onClose={() => setCreated(null)}
@@ -123,7 +124,7 @@ export function InvitesSection(): ReactElement {
             {state.value.map((invite) => (
               <tr className="wb-shell-admin-row" key={invite.id} data-active={invite.state === 'usable' ? 'true' : 'false'}>
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-name" data-label="이름">
-                  {invite.name}
+                  {isolate(invite.name)}
                 </td>
                 <td className="wb-shell-admin-cell" data-label="종류">
                   {KIND_TEXT[invite.kind]}
@@ -138,7 +139,7 @@ export function InvitesSection(): ReactElement {
                   {STATE_TEXT[invite.state] ?? invite.state}
                 </td>
                 <td className="wb-shell-admin-cell" data-label="만든 사람">
-                  {invite.createdBy.name}
+                  {isolate(invite.createdBy.name)}
                 </td>
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-menu">
                   {invite.state === 'usable' && (
@@ -170,7 +171,7 @@ export function InvitesSection(): ReactElement {
       <ShellDialog open={revoking !== null} title="초대 링크 거두기" onClose={() => setRevoking(null)}>
         {revoking !== null && (
           <div className="wb-shell-admin-dialog-body">
-            <p className="wb-shell-admin-dialog-sentence">{`«${revoking.name}» 링크를 거둡니다. 거둔 링크로는 가입할 수 없습니다.`}</p>
+            <p className="wb-shell-admin-dialog-sentence">{`«${isolate(revoking.name)}» 링크를 거둡니다. 거둔 링크로는 가입할 수 없습니다.`}</p>
             <p className="wb-shell-admin-dialog-sentence">이 링크로 이미 만든 계정에는 아무 일도 없습니다.</p>
             <div className="wb-shell-admin-dialog-foot">
               <button className="wb-shell-project-action" type="button" onClick={() => setRevoking(null)}>

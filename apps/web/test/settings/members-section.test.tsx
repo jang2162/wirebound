@@ -9,6 +9,7 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectMember, ProjectRole, ProjectView, SessionUser } from '../../src/api/types'
 import { fakeApi, renderWithProviders } from '../helpers'
 import { adminThemeView } from '../theme-loader'
+import { isolate } from '../../src/shell/isolate'
 
 const ME: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 const NO_ACCOUNT = '해당 이메일의 사용자가 없습니다'
@@ -70,14 +71,14 @@ function server(myRole: ProjectRole, others: ProjectMember[] = [member('u-2', '�
 async function open(client: ApiClient): Promise<HTMLElement> {
   renderWithProviders(<App />, { client, route: '/projects/p-1/settings?section=members' })
   const section = await screen.findByRole('region', { name: '멤버' })
-  await within(section).findByText('u-2@example.com')
+  await within(section).findByText(isolate('u-2@example.com'))
   return section
 }
 
 function row(section: HTMLElement, name: string): HTMLElement {
   const found = within(section)
     .getAllByRole('listitem')
-    .find((item) => within(item).queryByText(name) !== null)
+    .find((item) => within(item).queryByText(isolate(name)) !== null)
   if (found === undefined) throw new Error(`${name} 줄이 없다`)
   return found
 }
@@ -88,7 +89,7 @@ describe('멤버 절 — 목록', () => {
       const { client, calls } = server(role)
       const section = await open(client)
       const bob = row(section, '밥')
-      within(bob).getByText('u-2@example.com')
+      within(bob).getByText(isolate('u-2@example.com'))
       expect(bob.textContent).toContain('editor')
       expect(calls.list).toBe(1)
     })
@@ -127,7 +128,7 @@ describe('멤버 절 — owner', () => {
     const { client, calls } = server('owner')
     const section = await open(client)
     invite(section, 'new@example.com', 'viewer')
-    await within(section).findByText('new@example.com')
+    await within(section).findByText(isolate('new@example.com'))
     expect(calls.add).toEqual([['p-1', 'new@example.com', 'viewer']])
     expect(calls.list).toBe(2)
     expect((within(section).getByLabelText('초대할 이메일') as HTMLInputElement).value).toBe('')
@@ -162,26 +163,26 @@ describe('멤버 절 — owner', () => {
   it('제외는 확인을 한 번 더 받는다 — 첫 누름은 요청 0, 확정하면 `removeMember` 한 번 · 줄이 빠진다', async () => {
     const { client, calls } = server('owner')
     const section = await open(client)
-    fireEvent.click(within(row(section, '밥')).getByRole('button', { name: '밥 제외' }))
+    fireEvent.click(within(row(section, '밥')).getByRole('button', { name: `${isolate('밥')} 제외` }))
     expect(calls.remove).toEqual([])
-    fireEvent.click(within(row(section, '밥')).getByRole('button', { name: '밥 제외 확정' }))
-    await waitFor(() => expect(within(section).queryByText('u-2@example.com')).toBeNull())
+    fireEvent.click(within(row(section, '밥')).getByRole('button', { name: `${isolate('밥')} 제외 확정` }))
+    await waitFor(() => expect(within(section).queryByText(isolate('u-2@example.com'))).toBeNull())
     expect(calls.remove).toEqual([['p-1', 'u-2']])
   })
 
   it('제외 확정은 연타의 둘째 누름(`detail > 1`)을 버린다', async () => {
     const { client, calls } = server('owner')
     const section = await open(client)
-    fireEvent.click(within(row(section, '밥')).getByRole('button', { name: '밥 제외' }))
-    fireEvent.click(within(row(section, '밥')).getByRole('button', { name: '밥 제외 확정' }), { detail: 2 })
+    fireEvent.click(within(row(section, '밥')).getByRole('button', { name: `${isolate('밥')} 제외` }))
+    fireEvent.click(within(row(section, '밥')).getByRole('button', { name: `${isolate('밥')} 제외 확정` }), { detail: 2 })
     expect(calls.remove).toEqual([])
   })
 
   it('마지막 owner 제외(409)는 서버 문장을 보이고 줄은 남는다', async () => {
     const { client, calls } = server('owner')
     const section = await open(client)
-    fireEvent.click(within(row(section, '테스터')).getByRole('button', { name: '테스터 제외' }))
-    fireEvent.click(within(row(section, '테스터')).getByRole('button', { name: '테스터 제외 확정' }))
+    fireEvent.click(within(row(section, '테스터')).getByRole('button', { name: `${isolate('테스터')} 제외` }))
+    fireEvent.click(within(row(section, '테스터')).getByRole('button', { name: `${isolate('테스터')} 제외 확정` }))
     await within(section).findByText(LAST_OWNER)
     expect(calls.remove).toHaveLength(1)
     row(section, '테스터')
@@ -204,8 +205,8 @@ describe('멤버 절 — 나를 바꾸면 설정 페이지가 권한을 다시 �
   it('owner 가 둘일 때 나를 빼면 프로젝트를 다시 받고 — 이제 비멤버라 «찾을 수 없음» 이다', async () => {
     const { client, calls } = server('owner', [member('u-2', '밥', 'owner')])
     const section = await open(client)
-    fireEvent.click(within(row(section, '테스터')).getByRole('button', { name: '테스터 제외' }))
-    fireEvent.click(within(row(section, '테스터')).getByRole('button', { name: '테스터 제외 확정' }))
+    fireEvent.click(within(row(section, '테스터')).getByRole('button', { name: `${isolate('테스터')} 제외` }))
+    fireEvent.click(within(row(section, '테스터')).getByRole('button', { name: `${isolate('테스터')} 제외 확정` }))
     await screen.findByText('프로젝트를 찾을 수 없습니다')
     expect(calls.getProject).toBe(2)
     expect(screen.queryByRole('region', { name: '멤버' })).toBeNull()

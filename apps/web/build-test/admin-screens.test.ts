@@ -19,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Page } from 'playwright-core'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
 import { makeAdmin } from './theme-fixtures'
+import { isolate } from '../src/shell/isolate'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -77,7 +78,7 @@ describe.skipIf(!전제.ok)('관리자 칸 넷 · 링크 화면 — 실브라우
       await dialog.getByLabel('이름(메모)').fill('디자인팀')
       await dialog.getByRole('radio', { name: /^여러 명/ }).check()
       await dialog.getByRole('button', { name: '만들기' }).click()
-      const reveal = page.getByRole('region', { name: '초대 링크 «디자인팀»' })
+      const reveal = page.getByRole('region', { name: `초대 링크 «${isolate('디자인팀')}»` })
       const url = await reveal.getByLabel('링크').inputValue()
       expect(url.startsWith(`${new URL(stack.webUrl).origin}/invite/`)).toBe(true)
       // 원문은 저장소 · 주소에 없다(`admin/link-reveal.tsx` 머리말).
@@ -129,14 +130,16 @@ describe.skipIf(!전제.ok)('관리자 칸 넷 · 링크 화면 — 실브라우
       await page.goto('/admin/users')
       const eve = userRow(page, '이브')
       await eve.waitFor()
-      expect(await eve.textContent()).toContain('초대 «디자인팀»')
+      expect(await eve.textContent()).toContain(`초대 «${isolate('디자인팀')}»`)
 
       await eve.getByRole('button', { name: '이브 더 보기' }).click()
       await page.getByRole('menuitem', { name: '비활성화' }).click()
       const ask = page.getByRole('dialog', { name: '비활성화' })
       await ask.getByText('이 사람이 마지막 활성 owner 인 프로젝트는 없습니다.').waitFor()
       await ask.getByRole('button', { name: '비활성화' }).click()
-      await page.getByText(/^이브 — 비활성화했습니다\. 거둔 링크 0개 · 활성 owner 가 없어진 프로젝트 0개\./).waitFor()
+      await page
+        .getByText(new RegExp(`^${isolate('이브')} — 비활성화했습니다\\. 거둔 링크 0개 · 활성 owner 가 없어진 프로젝트 0개\\.`))
+        .waitFor()
 
       // 이브의 열린 에디터 탭 — 로그인 화면으로.
       await poll(
@@ -163,7 +166,10 @@ describe.skipIf(!전제.ok)('관리자 칸 넷 · 링크 화면 — 실브라우
       await page.goto('/admin/users')
       await userRow(page, '프랭크').getByRole('button', { name: '프랭크 더 보기' }).click()
       await page.getByRole('menuitem', { name: '재설정 링크 만들기' }).click()
-      const url = await page.getByRole('region', { name: '프랭크의 비밀번호 재설정 링크' }).getByLabel('링크').inputValue()
+      const url = await page
+        .getByRole('region', { name: `${isolate('프랭크')}의 비밀번호 재설정 링크` })
+        .getByLabel('링크')
+        .inputValue()
       expect(url.includes('/reset/')).toBe(true)
 
       const g = await guest.newPage()
@@ -208,7 +214,7 @@ describe.skipIf(!전제.ok)('관리자 칸 넷 · 링크 화면 — 실브라우
       expect({ sent: sent.length, off: await active(), open: await ask.isVisible() }).toEqual({ sent: 0, off: false, open: true })
 
       await ask.getByRole('button', { name: '비활성화' }).dblclick()
-      await page.getByText(/^지나 — 비활성화했습니다\./).waitFor()
+      await page.getByText(new RegExp(`^${isolate('지나')} — 비활성화했습니다\\.`)).waitFor()
       await page.waitForTimeout(600)
       expect({ sent: sent.length, off: await active() }).toEqual({ sent: 1, off: true })
     } finally {

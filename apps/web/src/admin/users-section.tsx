@@ -20,6 +20,7 @@ import type { AdminUser, CreatedResetLink } from '../api/types'
 import { useSessionUser } from '../session/session-context'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
 import { ICONS, shellIcon } from '../shell/icons'
+import { isolate } from '../shell/isolate'
 import { ShellDialog } from '../shell/shell-dialog'
 import { confirmClick, matchesText, Outcome, useAdminList, When } from './admin-screen'
 import { InviteCreateDialog } from './invites-section'
@@ -95,10 +96,14 @@ export function UsersSection(): ReactElement {
     setReveal(null)
     const created = await write<CreatedResetLink>(
       () => api.createResetLink(user.id),
-      () => `${user.name} — 비밀번호 재설정 링크를 만들었습니다. 24 시간 · 한 번 쓸 수 있습니다.`,
+      () => `${isolate(user.name)} — 비밀번호 재설정 링크를 만들었습니다. 24 시간 · 한 번 쓸 수 있습니다.`,
     )
     if (created !== null) {
-      setReveal({ title: `${user.name}의 비밀번호 재설정 링크`, url: linkUrl('reset', created.token), expiresAt: created.expiresAt })
+      setReveal({
+        title: `${isolate(user.name)}의 비밀번호 재설정 링크`,
+        url: linkUrl('reset', created.token),
+        expiresAt: created.expiresAt,
+      })
     }
   }
 
@@ -112,7 +117,7 @@ export function UsersSection(): ReactElement {
           onSelect: () =>
             void write(
               () => api.activateUser(user.id),
-              () => `${user.name} — 다시 활성화했습니다. 일반 사용자로 돌아옵니다.`,
+              () => `${isolate(user.name)} — 다시 활성화했습니다. 일반 사용자로 돌아옵니다.`,
             ),
         },
       ]
@@ -132,7 +137,7 @@ export function UsersSection(): ReactElement {
             onSelect: () =>
               void write(
                 () => api.grantInstanceAdmin(user.id),
-                () => `${user.name} — 관리자로 지정했습니다.`,
+                () => `${isolate(user.name)} — 관리자로 지정했습니다.`,
               ),
           },
       {
@@ -223,11 +228,11 @@ export function UsersSection(): ReactElement {
             {shown.map((user) => (
               <tr className="wb-shell-admin-row" key={user.id} data-active={user.active ? 'true' : 'false'}>
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-name" data-label="이름">
-                  {user.name}
+                  {isolate(user.name)}
                   {user.isInstanceAdmin && <span className="wb-shell-admin-badge">관리자</span>}
                 </td>
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-email" data-label="이메일">
-                  {user.email}
+                  {isolate(user.email)}
                 </td>
                 <td className="wb-shell-admin-cell" data-label="상태">
                   {user.active ? '활성' : '비활성'}
@@ -237,7 +242,7 @@ export function UsersSection(): ReactElement {
                 </td>
                 <td className="wb-shell-admin-cell" data-label="가입">
                   <When iso={user.createdAt} />
-                  {user.invite !== null && <span className="wb-shell-admin-sub">{`초대 «${user.invite.name}»`}</span>}
+                  {user.invite !== null && <span className="wb-shell-admin-sub">{`초대 «${isolate(user.invite.name)}»`}</span>}
                 </td>
                 <td className="wb-shell-admin-cell" data-label="마지막 접속">
                   {user.lastSeenAt === null ? '없음' : <When iso={user.lastSeenAt} />}
@@ -259,7 +264,7 @@ export function UsersSection(): ReactElement {
           setDone(null)
           setFailure(null)
           setReveal({
-            title: `초대 링크 «${created.invite.name}»`,
+            title: `초대 링크 «${isolate(created.invite.name)}»`,
             url: linkUrl('invite', created.token),
             expiresAt: created.invite.expiresAt,
           })
@@ -277,13 +282,13 @@ export function UsersSection(): ReactElement {
               void write(
                 () => api.deactivateUser(user.id),
                 (result) =>
-                  `${user.name} — 비활성화했습니다. 거둔 링크 ${result.revokedLinks}개 · 활성 owner 가 없어진 프로젝트 ${result.ownerlessProjects}개` +
+                  `${isolate(user.name)} — 비활성화했습니다. 거둔 링크 ${result.revokedLinks}개 · 활성 owner 가 없어진 프로젝트 ${result.ownerlessProjects}개` +
                   (result.ownerlessProjects > 0 ? ' — 관리자 › 프로젝트에서 owner 를 넘기세요.' : '.'),
               )
             } else {
               void write(
                 () => api.revokeInstanceAdmin(user.id),
-                (result) => `${user.name} — 관리자 권한을 해제했습니다. 거둔 링크 ${result.revokedLinks}개.`,
+                (result) => `${isolate(user.name)} — 관리자 권한을 해제했습니다. 거둔 링크 ${result.revokedLinks}개.`,
               )
             }
           }}
@@ -302,8 +307,8 @@ function AskDialog(props: { asking: Asking; busy: boolean; onClose: () => void; 
       <div className="wb-shell-admin-dialog-body">
         <p className="wb-shell-admin-dialog-sentence" id={sentence}>
           {kind === 'deactivate'
-            ? `${user.name}(${user.email}) 계정을 비활성화합니다. ${CUT_NOW}`
-            : `${user.name}(${user.email})의 관리자 권한을 해제합니다.`}
+            ? `${isolate(user.name)}(${isolate(user.email)}) 계정을 비활성화합니다. ${CUT_NOW}`
+            : `${isolate(user.name)}(${isolate(user.email)})의 관리자 권한을 해제합니다.`}
         </p>
         <p className="wb-shell-admin-dialog-sentence">이 사람이 만든 아직 쓸 수 있는 초대 · 재설정 링크를 함께 거둡니다.</p>
         {kind === 'deactivate' && user.isInstanceAdmin && (

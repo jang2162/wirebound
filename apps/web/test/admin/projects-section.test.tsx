@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { App } from '../../src/app'
 import { renderWithProviders } from '../helpers'
 import { adminProject, adminServer, adminUser, conflict, ME, type AdminServer } from './admin-server'
+import { isolate } from '../../src/shell/isolate'
 
 const GONE = { id: 'u-gone', name: '떠난사람', active: false }
 
@@ -42,7 +43,7 @@ function names(): string[] {
 function rowOf(name: string): HTMLElement {
   const found = within(screen.getByRole('table', { name: '프로젝트' }))
     .getAllByRole('row')
-    .find((tr) => tr.querySelector('td')?.textContent === name)
+    .find((tr) => tr.querySelector('td')?.textContent === isolate(name))
   if (found === undefined) throw new Error(`${name} 줄이 없다`)
   return found
 }
@@ -51,13 +52,13 @@ describe('관리자 › 프로젝트', () => {
   it('«활성 owner 가 없는 프로젝트 N» 경고 · 그것만 보는 거름 · 비활성 owner 표지', async () => {
     await open(server())
     expect(screen.getByText('활성 owner 가 없는 프로젝트 2개 — 줄의 «…» 에서 owner 를 넘기세요.')).toBeTruthy()
-    expect(names()).toEqual(['내 프로젝트', '주인 없음', '남의 것', '빈 owner'])
+    expect(names()).toEqual(['내 프로젝트', '주인 없음', '남의 것', '빈 owner'].map(isolate))
     fireEvent.click(screen.getByLabelText('활성 owner 가 없는 것만'))
-    expect(names()).toEqual(['주인 없음', '빈 owner'])
+    expect(names()).toEqual(['주인 없음', '빈 owner'].map(isolate))
     const cells = within(rowOf('주인 없음'))
       .getAllByRole('cell')
       .map((td) => td.textContent)
-    expect(cells.slice(1, 4)).toEqual(['p-orphan', '떠난사람비활성활성 owner 없음', '3명'])
+    expect(cells.slice(1, 4)).toEqual(['p-orphan', `${isolate('떠난사람')}비활성활성 owner 없음`, '3명'])
     expect(within(rowOf('빈 owner')).getAllByRole('cell')[2]!.textContent).toBe('없음활성 owner 없음')
   })
 
@@ -77,7 +78,7 @@ describe('관리자 › 프로젝트', () => {
 
   it('이름은 내가 멤버인 프로젝트만 링크다', async () => {
     await open(server())
-    const link = within(rowOf('내 프로젝트')).getByRole('link', { name: '내 프로젝트' })
+    const link = within(rowOf('내 프로젝트')).getByRole('link', { name: isolate('내 프로젝트') })
     expect(link.getAttribute('href')).toBe('/projects/p-mine')
     for (const name of ['주인 없음', '남의 것', '빈 owner']) expect(within(rowOf(name)).queryByRole('link')).toBeNull()
   })
@@ -91,13 +92,13 @@ describe('관리자 › 프로젝트', () => {
     const pick = (await within(dialog).findByLabelText('새 owner')) as HTMLSelectElement
     expect([...pick.options].map((option) => option.textContent)).toEqual([
       '고르세요',
-      `${ME.name} (u-me@example.com) — 나`,
-      '밥 (u-bob@example.com)',
+      `${isolate(ME.name)} (${isolate('u-me@example.com')}) — 나`,
+      `${isolate('밥')} (${isolate('u-bob@example.com')})`,
     ])
     expect((within(dialog).getByRole('button', { name: 'owner 로 만들기' }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.change(pick, { target: { value: ME.id } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'owner 로 만들기' }))
-    await screen.findByText(`«주인 없음» — owner 를 넘겼습니다(${ME.name}).`)
+    await screen.findByText(`«${isolate('주인 없음')}» — owner 를 넘겼습니다(${isolate(ME.name)}).`)
     expect(at.calls.transferProjectOwner).toEqual([['p-orphan', ME.id]])
     await waitFor(() => expect(within(rowOf('주인 없음')).queryByRole('button')).toBeNull())
   })
