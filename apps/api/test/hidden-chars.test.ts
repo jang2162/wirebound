@@ -69,18 +69,18 @@ describe('입구마다 400', () => {
     await withApi(async (ctx) => {
       const me = await adminOf(ctx)
       const { token } = await makeInvite(ctx, me.cookie, { kind: 'multi' })
-      const signup = (email: string, name: string) =>
+      const join = (email: string, name: string) =>
         ctx.app.inject({ method: 'POST', url: `/api/auth/invites/${token}/signup`, payload: { email, name, password: 'password1234' } })
       const refused: Record<string, unknown> = {}
       for (const [label, code] of HIDDEN) {
-        const res = await signup(`hidden-${code}@example.com`, `밥${ch(code)}`)
+        const res = await join(`hidden-${code}@example.com`, `밥${ch(code)}`)
         refused[label] = res.statusCode === 400 && res.body.includes(HIDDEN_CHAR_IN_NAME) ? 400 : `${res.statusCode} ${res.body}`
       }
       expect(Object.values(refused).filter((value) => value !== 400)).toEqual([])
       const rows = await ctx.db.selectFrom('users').select('email').where('email', 'like', 'hidden-%').execute()
       expect(rows).toEqual([])
       // 판 카나리아 — 같은 링크 · 같은 꼴의 보이는 이름은 가입된다.
-      expect((await signup('visible@example.com', 'محمد 박')).statusCode).toBe(201)
+      expect((await join('visible@example.com', 'محمد 박')).statusCode).toBe(201)
     })
   })
 
