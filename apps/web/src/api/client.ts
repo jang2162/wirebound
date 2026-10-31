@@ -580,6 +580,17 @@ export interface ApiClient {
   setThemePackageHidden(ref: ThemeRef, hidden: boolean): Promise<ThemePackageVersion>
   /** 스타터 템플릿 zip 을 받아 온다(인스턴스 관리자) — `downloadExport` 와 같은 꼴(받은 것의 형식을 본다 · 시간 제한 없음). */
   downloadThemeTemplate(options?: Pick<ReadOptions, 'cancel'>): Promise<Blob>
+  /**
+   * 초대 링크가 쓸 수 있는지(로그인 안 한 요청 — `routes/invite.tsx`). 못 쓰면(없음 · 만료 · 거둠 · 다 씀) 404 `not-found` 한 문장이다
+   * (서버 README «초대 링크로 가입»).
+   */
+  checkInvite(token: string): Promise<void>
+  /** 초대 링크로 가입한다 — 성공하면 서버가 세션 쿠키를 심고 `/login` 과 같은 몸을 낸다. 이미 있는 이메일 409 · 못 쓰는 링크 404 · 한도 429. */
+  signupWithInvite(token: string, body: { email: string; name: string; password: string }): Promise<SessionUser>
+  /** 재설정 링크의 대상(로그인 안 한 요청 — `routes/reset.tsx`). 못 쓰면 404 한 문장이다. */
+  getPasswordReset(token: string): Promise<{ email: string; name: string }>
+  /** 재설정 링크로 비밀번호를 바꾼다 — 그 사람의 세션은 전부 끊긴다(204). 못 쓰는 링크 404 · 한도 429. */
+  completePasswordReset(token: string, password: string): Promise<void>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */

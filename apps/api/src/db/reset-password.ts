@@ -131,22 +131,30 @@ export async function resetPassword(db: DbHandle, email: string, password: strin
   }
 }
 
-async function writeReset(trx: DbHandle, normalized: string, passwordHash: string): Promise<ResetPasswordOutcome> {
-  const updated = await trx
-    .updateTable('users')
-    .set({ password_hash: passwordHash })
-    .where('email', '=', normalized)
+/**
+ * **재설정의 쓰기 몸통 — 해시를 바꾸고 그 사람의 세션을 전부 지운다.** 이 명령과 재설정 링크(`routes/password-reset.ts`)가 함께 부른다 —
+ * 두 벌이면 한쪽만 세션을 남긴다. **사용자 행 → 세션 차례다**(`auth/admin.ts` 머리말 «사용자 행 → 자격 차례다»). 대상이 없으면 `null`.
+ * 지운 세션 id 를 낸다 — 서버 안에서 부른 쪽이 그 WS 를 닫는다(`ws/notify.ts` 의 `closeSessionConnections`).
+ */
+export async function replacePassword(
+  trx: DbHandle,
+  target: { email: string } | { id: string },
+  passwordHash: string,
+): Promise<{ userId: string; endedSessions: string[] } | null> {
+  const query = trx.updateTable('users').set({ password_hash: passwordHash })
+  const updated = await ('email' in target ? query.where('email', '=', target.email) : query.where('id', '=', target.id))
     .returning('id')
     .executeTakeFirst()
-  if (updated === undefined) {
+  if (updated === undefined) return null
+  return { userId: updated.id, endedSessions: await destroyUserSessions(trx, updated.id) }
+}
+
+async function writeReset(trx: DbHandle, normalized: string, passwordHash: string): Promise<ResetPasswordOutcome> {
+  const replaced = await replacePassword(trx, { email: normalized }, passwordHash)
+  if (replaced === null) {
     return { kind: 'no-user', email: normalized }
   }
-  const sessions = await trx
-    .selectFrom('sessions')
-    .select((eb) => eb.fn.countAll<string>().as('n'))
-    .where('user_id', '=', updated.id)
-    .executeTakeFirstOrThrow()
-  await destroyUserSessions(trx, updated.id)
+  const updated = { id: replaced.userId }
   const tokens = await trx
     .selectFrom('api_tokens')
     .innerJoin('projects', 'projects.id', 'api_tokens.project_id')
@@ -161,7 +169,7 @@ async function writeReset(trx: DbHandle, normalized: string, passwordHash: strin
     ])
     .where('api_tokens.user_id', '=', updated.id)
     .execute()
-  return { kind: 'updated', email: normalized, sessionsDeleted: Number(sessions.n), tokens: groupTokens(tokens) }
+  return { kind: 'updated', email: normalized, sessionsDeleted: replaced.endedSessions.length, tokens: groupTokens(tokens) }
 }
 
 /** 프로젝트별로 묶는다. 순서는 DB 정렬(콜레이션)에 안 기대고 코드 포인트로 — 출력이 기계마다 같다. */

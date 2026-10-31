@@ -247,8 +247,8 @@ describe('비밀번호 바꾸기 · 재설정 × 다른 세션의 관리자 쓰�
   }
 
   /**
-   * **고친 차례가 연 판의 나머지 쌍 — 사용자 행을 잡는 강등(`setInstanceAdmin` · 한 문장)과 세션 행을 지우는 로그아웃(한 문장).** 둘 다
-   * 잠금 하나로 끝나 고리는 못 만든다 — 기다림의 모양만 잰다. 강등은 관리자 쓰기가 쥔 사용자 행 `FOR SHARE` 뒤에 줄 서고 그 커밋을
+   * **고친 차례가 연 판의 나머지 쌍 — 사용자 행을 잡는 강등(`setInstanceAdmin` — 그 행을 `FOR NO KEY UPDATE` 로 먼저 잡고 고친 뒤 그 사람이
+   * 만든 링크 행을 거둔다)과 세션 행을 지우는 로그아웃(한 문장).** 업로드는 링크 행을 안 잡아 고리는 못 만든다 — 기다림의 모양만 잰다. 강등은 관리자 쓰기가 쥔 사용자 행 `FOR SHARE` 뒤에 줄 서고 그 커밋을
    * 기다린다(«여기가 먼저 잡으면 강등이 이 커밋을 기다린다» — `src/auth/admin.ts`). 로그아웃은 B 가 아직 제 세션을 안 쥐어 안 기다리고,
    * B 는 재확인에서 지워진 세션을 보고 401 이다.
    */
@@ -260,7 +260,7 @@ describe('비밀번호 바꾸기 · 재설정 × 다른 세션의 관리자 쓰�
       await hold.held
       const holder = await heldBackend()
       const revoke = setInstanceAdmin(db, alice.user.email, false)
-      await waitQueued(holder, 'update "users"')
+      await waitQueued(holder, 'for no key update')
       hold.release()
       const [revoked, res] = await Promise.all([revoke, write])
       expect(res.statusCode, res.body).toBe(201)

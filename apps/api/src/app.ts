@@ -6,7 +6,14 @@ import { registerProjectRoleDecorator } from './auth/roles'
 import type { ApiConfig } from './config'
 import type { DbHandle } from './db/tx'
 import { registerErrorHandler } from './http/error-handler'
+import { LOG_MASK, maskLinkTokens, serializeError, serializeRequest } from './http/log-mask'
 import { logDestination } from './log-destination'
+import { adminAuditRoutes } from './routes/admin-audit'
+import { adminInviteRoutes } from './routes/admin-invites'
+import { adminProjectRoutes } from './routes/admin-projects'
+import { adminUserRoutes } from './routes/admin-users'
+import { inviteSignupRoutes } from './routes/invite-signup'
+import { passwordResetRoutes } from './routes/password-reset'
 import { adminThemeRoutes } from './routes/admin-themes'
 import { authRoutes } from './routes/auth'
 import { commentRoutes } from './routes/comments'
@@ -124,6 +131,7 @@ export interface RegisteredRoute {
 interface ApiLoggerOptions {
   level: ApiConfig['logLevel']
   redact: { paths: string[]; censor: string }
+  serializers: { req: typeof serializeRequest; err: typeof serializeError; msg: typeof maskLinkTokens }
 }
 
 /**
@@ -131,9 +139,10 @@ interface ApiLoggerOptions {
  * (`test/logging.test.ts`)가 이 함수 하나를 함께 쓴다 — 테스트가 실제 앱과
  * 다른 레시피를 검증하는 일이 없도록 하기 위해서다.
  *
- * **지금 비밀이 로그에 남지 않는 실제 이유는 이 `redact`가 아니다.** Fastify의
- * 기본 `req` 시리얼라이저(`fastify/lib/logger-pino.js`)는 method·url·version·host·
- * remoteAddress·remotePort만 골라 담고 `headers`는 애초에 로그 객체에 넣지 않는다.
+ * **지금 비밀이 로그에 남지 않는 실제 이유는 이 `redact`가 아니다.** `req` 시리얼라이저
+ * (`http/log-mask.ts`의 `serializeRequest` — Fastify 기본의 칸 그대로에 `url`만 가린다)는 method·url·version·host·
+ * remoteAddress·remotePort만 골라 담고 `headers`는 애초에 로그 객체에 넣지 않는다. `url`·오류 문장·글자 인자에서
+ * 초대·재설정 링크 원문을 가리는 까닭은 `http/log-mask.ts`의 머리말.
  * pino는 시리얼라이저를 먼저 돌리고 그 결과에 redact를 적용하므로, `req.headers.cookie`
  * 경로는 지금 아무 것도 가리지 않는다 — 애초에 그 경로에 값이 없기 때문이다.
  *
@@ -149,8 +158,9 @@ export function buildLoggerOptions(config: ApiConfig): ApiLoggerOptions {
     level: config.logLevel,
     redact: {
       paths: ['req.headers.cookie', 'req.headers.authorization'],
-      censor: '[REDACTED]',
+      censor: LOG_MASK,
     },
+    serializers: { req: serializeRequest, err: serializeError, msg: maskLinkTokens },
   }
 }
 
@@ -286,6 +296,12 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 인스턴스 관리자의 테마 패키지 동작(`/api/admin/theme-packages` · `/api/admin/theme-template.zip`) — 세션 전용이고 판정은 핸들러
   // 안이다(`routes/admin-themes.ts`의 머리말).
   await app.register(adminThemeRoutes(config), { prefix: '/api/admin' })
+  await app.register(adminUserRoutes(), { prefix: '/api/admin' })
+  await app.register(adminInviteRoutes(), { prefix: '/api/admin' })
+  await app.register(adminProjectRoutes(), { prefix: '/api/admin' })
+  await app.register(adminAuditRoutes(), { prefix: '/api/admin' })
+  await app.register(inviteSignupRoutes(config, app.loginLimiter), { prefix: '/api/auth' })
+  await app.register(passwordResetRoutes(config, app.loginLimiter), { prefix: '/api/auth' })
   // 테마 패키지 읽기 — 로그인한 사람 누구나 · 세션 전용(`routes/theme-packages.ts`의 머리말).
   await app.register(themePackageRoutes(), { prefix: '/api/theme-packages' })
   await app.register(healthRoutes)

@@ -4,10 +4,14 @@
  * HTTP·쿠키·zod 검증은 여기서 다루고, SQL은 전부 `repos/users.ts`와 `auth/session.ts`에
  * 맡긴다 — 이 파일은 postgres 에러 코드도 세션 테이블 구조도 알지 못한다.
  *
- * **계정을 만드는 라우트는 없다.** 그 부재(`POST /signup`)를
+ * **이 파일에는 계정을 만드는 라우트가 없다.** 링크 없는 가입(`POST /signup`)의 부재를
  * `test/auth-routes.test.ts`가 **404로 든다** — 부재를 잠그는 케이스가 없으면 다음 사람이
- * 조용히 되살린다. 계정을 만드는 길은 `db/seed-user.ts`(마이그레이션 뒤의 시딩)
- * 하나이고, 이미 계정이 있는 사람을 프로젝트에 넣는 길이 멤버 초대다.
+ * 조용히 되살린다. 계정을 만드는 길은 둘이다 — `db/seed-user.ts`(마이그레이션 뒤의 시딩)와
+ * 관리자가 만든 초대 링크로 하는 가입(`routes/invite-signup.ts`). 그 둘 밖의 길은
+ * `test/user-creation-census.test.ts` 가 죽인다. 이미 계정이 있는 사람을 프로젝트에 넣는 길이 멤버 초대다.
+ *
+ * **비활성 계정의 로그인은 틀린 비밀번호와 같은 401 · 같은 문장이다** — `createLoginSession` 이 해시와 비활성 표시를 한 문장으로 본다
+ * («꺼진 계정»을 바깥에 가르지 않는다).
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'

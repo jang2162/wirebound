@@ -84,6 +84,18 @@ interface ActorSite {
 /** **`apps/api/src/` 아래에서 `actor:`를 실은 자리 하나당 한 줄.** */
 const ACTOR_SITES: ActorSite[] = [
   {
+    file: 'repos/admin-audit.ts',
+    label: 'AuditEntry.actor — 관리자 기록의 행위자 꼴',
+    origin: 'literal',
+    why: '`revisions.actor_*` 가 아니다 — 관리자 기록(`admin_audit.actor_id`)을 읽어 내는 응답의 꼴이다. 요청이 정하는 값이 없다',
+  },
+  {
+    file: 'repos/admin-audit.ts',
+    label: 'listAdminActions — 읽은 행의 `actor_id` 로 행위자를 짓는다',
+    origin: 'passthrough',
+    why: '관리자 기록의 읽기다 — revision 을 안 쓴다. `actor_id` 는 행동이 서버 값(요청한 관리자 · 새 사용자 · 서버 명령의 `null`)으로 넣는다',
+  },
+  {
     file: 'routes/pages.ts',
     label: 'POST .../pages/import — 가져오기가 만든 첫 문서',
     origin: 'request',
@@ -848,6 +860,9 @@ describe('`:projectId` 라우트 전부가 나쁜 헤더를 핸들러 앞에서 
     'asset_blobs',
     'project_assets',
     'personal_assets',
+    'invites',
+    'password_resets',
+    'admin_audit',
   ] as const
 
   async function rowCounts(ctx: TestContext): Promise<Record<string, number>> {

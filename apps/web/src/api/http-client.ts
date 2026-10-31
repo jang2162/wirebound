@@ -756,6 +756,10 @@ const SHAPES = {
   themeUploaded: (value) => isRecord(value) && typeof value['themeId'] === 'string' && typeof value['version'] === 'string',
   /** 숨김 · 되살림의 결과 — 줄의 단추가 `hidden` 으로 갈린다. */
   themePackageVersion: isThemePackageVersion,
+  /** 초대 링크 확인(`routes/invite.tsx`) — 200 이면 쓸 수 있다. 화면은 본문을 안 읽는다. */
+  inviteUsable: (value) => isRecord(value) && value['usable'] === true,
+  /** 재설정 링크의 대상(`routes/reset.tsx`) — 두 글자를 그린다. */
+  resetTarget: (value) => isRecord(value) && typeof value['email'] === 'string' && typeof value['name'] === 'string',
 } satisfies Record<string, Shape>
 
 function isThemeManifest(value: unknown): boolean {
@@ -1703,5 +1707,12 @@ export function createHttpClient(
         throw new ApiError(response.status, 'internal', UNREADABLE)
       }
     },
+    checkInvite: (token) => request<void>('GET', `/auth/invites/${encodeURIComponent(token)}`, SHAPES.inviteUsable),
+    signupWithInvite: (token, body) =>
+      request<SessionUser>('POST', `/auth/invites/${encodeURIComponent(token)}/signup`, SHAPES.sessionUser, body),
+    getPasswordReset: (token) =>
+      request<{ email: string; name: string }>('GET', `/auth/resets/${encodeURIComponent(token)}`, SHAPES.resetTarget),
+    completePasswordReset: (token, password) =>
+      request<void>('POST', `/auth/resets/${encodeURIComponent(token)}`, SHAPES.noBody, { password }),
   }
 }

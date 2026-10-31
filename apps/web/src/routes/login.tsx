@@ -2,6 +2,7 @@
  * 로그인 화면. 성공하면 서버가 세션 쿠키를 심어 주고, 이 화면은 프로젝트 목록으로 넘긴다.
  */
 import { useState, type FormEvent, type ReactElement } from 'react'
+import { useLocation } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { useConfirmSession, useSignOutNotice } from '../session/session-context'
@@ -12,11 +13,23 @@ const EMPTY_PASSWORD = '비밀번호를 입력하세요'
 /** 서버가 이유를 주지 않은 실패(네트워크 단절 등)에 쓸 문장. */
 const UNKNOWN_FAILURE = '로그인하지 못했습니다'
 
+/** 다른 화면이 로그인 화면으로 보내며 들려 보내는 한 줄(주소 상태) — 재설정을 마친 화면(`routes/reset.tsx`)이 쓴다. */
+export interface LoginNotice {
+  notice: string
+}
+
+function noticeOf(state: unknown): string | null {
+  return typeof state === 'object' && state !== null && typeof (state as { notice?: unknown }).notice === 'string'
+    ? (state as LoginNotice).notice
+    : null
+}
+
 export function LoginRoute(): ReactElement {
   const api = useApi()
   const confirmSession = useConfirmSession()
   // 이 탭이 로그아웃하며 남긴 한 줄 — 에디터의 로그아웃이 한도 뒤에 두고 간 편집을 말한다(`useSignOutNotice`).
   const farewell = useSignOutNotice()
+  const notice = noticeOf(useLocation().state)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -81,6 +94,11 @@ export function LoginRoute(): ReactElement {
       {farewell !== null && (
         <p className="wb-shell-login-notice" role="status">
           {farewell}
+        </p>
+      )}
+      {notice !== null && (
+        <p className="wb-shell-login-notice" role="status">
+          {notice}
         </p>
       )}
       <form

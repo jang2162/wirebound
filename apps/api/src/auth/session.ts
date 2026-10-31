@@ -68,6 +68,10 @@ export async function createSession(db: DbHandle, userId: string, ttlHours: numb
  * `UPDATE` 를 지나 옛 해시를 읽고 넣어, 그 쓰기가 세션 `DELETE` 를 마친 뒤 · 커밋 앞에 이 삽입이 커밋되면 남는다. `FOR SHARE` 는 그
  * 커밋을 기다린 뒤 바뀐 행으로 조건을 다시 보고 0 행이 된다. 이 문장이 먼저 잡으면 그 `UPDATE` 가 이 커밋을 기다리고, 그 뒤의 `DELETE`
  * 가 이 세션을 본다. 잠그는 것은 사용자 행 하나이고 기존 세션 행은 안 잡는다 — 고리가 설 짝이 없다.
+ *
+ * **비활성 표시도 같은 문장에서 본다**(`deactivated_at IS NULL`) — 비활성화(`repos/users.ts` 의 `deactivateUser`)는 사용자 행을 고친 뒤 세션을
+ * 지우므로, 견준 뒤 · 넣기 전의 로그인이 그 커밋 뒤에 세션을 남기는 판을 해시와 같은 까닭으로 닫는다. 비활성 계정의 로그인은 그래서 0 행이고
+ * 틀린 비밀번호와 같은 401 이다(`routes/auth.ts`).
  */
 export async function createLoginSession(
   db: DbHandle,
@@ -92,6 +96,7 @@ export async function createLoginSession(
           ])
           .where('users.id', '=', userId)
           .where('users.password_hash', '=', comparedHash)
+          .where('users.deactivated_at', 'is', null)
           .forShare(),
       )
       .returning('id')
@@ -135,8 +140,34 @@ export async function resolveSession(db: DbHandle, token: string): Promise<Sessi
   if (!touched) {
     return null
   }
+  await touchUserLastSeen(db, row.id)
 
   return { id: row.id, email: row.email, name: row.name }
+}
+
+/**
+ * **사용자의 «마지막 접속»(`users.last_seen_at`)을 고친다 — 1 분에 한 번, 기다리지 않고.** 세션이 지워져도(비활성화 · 재설정) 남는 값이다
+ * (관리자 › 사용자의 «마지막 접속» — `repos/users.ts` 의 `AdminUserRecord`).
+ *
+ * **사용자 행을 기다리지 않는다(`SKIP LOCKED`)** — 사용자 행은 관리자 재확인 · 로그인(`FOR SHARE`) · 비밀번호 바꾸기 · 비활성화(`FOR NO KEY
+ * UPDATE`)가 잡는 행이다. 요청마다 그 행을 고치며 기다리면 그 쓰기가 도는 동안 같은 사람의 모든 요청이 인증에서 선다. 잡혀 있으면 건너뛴다
+ * — 다음 요청이 고친다. **1 분에 한 번인 까닭** — 요청마다 사용자 행을 새로 쓰지 않게(세션 행은 요청마다 쓴다). 그 사이의 값은 세션
+ * 행이 들고, 화면이 둘 중 늦은 것을 읽는다.
+ */
+async function touchUserLastSeen(db: DbHandle, userId: string): Promise<void> {
+  await db
+    .updateTable('users')
+    .set({ last_seen_at: sql<Date>`clock_timestamp()` })
+    .where('id', 'in', (eb) =>
+      eb
+        .selectFrom('users')
+        .select('id')
+        .where('id', '=', userId)
+        .where((w) => w.or([w('last_seen_at', 'is', null), w('last_seen_at', '<', sql<Date>`clock_timestamp() - interval '1 minute'`)]))
+        .forNoKeyUpdate()
+        .skipLocked(),
+    )
+    .execute()
 }
 
 /**
@@ -178,9 +209,10 @@ export async function destroySession(db: DbHandle, token: string): Promise<void>
   await db.deleteFrom('sessions').where('id', '=', hashSessionToken(token)).execute()
 }
 
-/** 한 사용자의 세션을 전부 폐기한다(비밀번호 변경 등 전체 로그아웃 시). */
-export async function destroyUserSessions(db: DbHandle, userId: string): Promise<void> {
-  await db.deleteFrom('sessions').where('user_id', '=', userId).execute()
+/** 한 사용자의 세션을 전부 폐기한다(재설정 — `db/reset-password.ts` 의 `replacePassword`). 지운 행의 id 를 낸다. */
+export async function destroyUserSessions(db: DbHandle, userId: string): Promise<string[]> {
+  const rows = await db.deleteFrom('sessions').where('user_id', '=', userId).returning('id').execute()
+  return rows.map((row) => row.id)
 }
 
 /**

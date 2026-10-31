@@ -6,7 +6,7 @@
  * 범위의 토큰에 맞지 않는다(spec 「이 설계가 다루지 않는 것」 — `wb-theme publish`).
  *
  * **입구는 `requireAuth` 하나이고 관리자 판정은 핸들러 첫 줄이다**(`auth/admin.ts` 의 머리말). 쓰기(업로드 · 숨김)는 쓰는 문장
- * 뒤 같은 트랜잭션에서 자격 · 관리자 표시를 다시 본다(`recheckInstanceAdmin`).
+ * 뒤 같은 트랜잭션에서 관리자 기록을 남기고(`repos/admin-audit.ts`) 자격 · 관리자 표시를 다시 본다(`recheckInstanceAdmin`).
  *
  * **프로젝트 잠금에 서지 않는다** — 쓰는 행은 `theme_packages` 하나이고 프로젝트 행을 안 잡는다(`test/guard-in-lock.test.ts` 의
  * `NOT_LOCKED`).
@@ -22,6 +22,7 @@ import type { ApiConfig } from '../config'
 import { withTransaction } from '../db/tx'
 import { badRequest, conflict, notFound, validationFailed, type ApiErrorIssue } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
+import { recordAdminAction } from '../repos/admin-audit'
 import { DuplicatePackageError, insertThemePackage, setThemePackageHidden } from '../repos/theme-packages'
 import { SYSTEM_THEME_PREFIX } from '../services/system-themes'
 import { themeVersionView } from './theme-packages'
@@ -96,6 +97,11 @@ export function adminThemeRoutes(config: ApiConfig) {
             if (error instanceof DuplicatePackageError) throw conflict(error.message)
             throw error
           }
+          await recordAdminAction(trx, {
+            action: 'theme.upload',
+            actorId: userId,
+            detail: { themeId: inserted.themeId, version: inserted.version, name: inserted.name },
+          })
           await recheckInstanceAdmin(trx, request)
           return inserted
         })
@@ -105,12 +111,13 @@ export function adminThemeRoutes(config: ApiConfig) {
 
     /** 숨김 · 되살림. 숨긴 판은 새로 고를 수 없고 이미 고정한 프로젝트 · 스냅샷은 그대로 쓴다(spec 「버전과 숨김」). */
     app.patch('/theme-packages/:themeId/:version', { preHandler: app.requireAuth }, async (request) => {
-      await requireInstanceAdmin(app.db, request)
+      const userId = await requireInstanceAdmin(app.db, request)
       const { themeId, version } = parseParams(PackageParams, request.params)
       const body = parseBody(HideBody, request.body)
       const row = await withTransaction(app.db, async (trx) => {
         const updated = await setThemePackageHidden(trx, themeId, version, body.hidden)
         if (updated === null) throw notFound('테마 패키지를 찾을 수 없습니다')
+        await recordAdminAction(trx, { action: body.hidden ? 'theme.hide' : 'theme.unhide', actorId: userId, detail: { themeId, version } })
         await recheckInstanceAdmin(trx, request)
         return updated
       })

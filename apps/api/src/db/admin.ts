@@ -7,13 +7,17 @@
  * pnpm --filter @wirebound/api admin list
  * ```
  *
- * 관리자는 테마 패키지를 올리고 숨긴다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「인스턴스 관리자」).
- * **API 에는 관리자를 만들거나 바꾸는 라우트가 없다** — 주는 길은 이 명령과 시딩의 `SEED_USER_ADMIN`(`db/seed-user.ts`)뿐이다.
- * 올라온 테마 코드는 같은 origin 에서 신뢰 코드로 돌므로, 그 권한을 요청으로 넓힐 수 있으면 신뢰 경계가 없어진다.
+ * 관리자는 테마 패키지를 올리고 숨기고, 사람을 들이고(초대 링크) 내보낸다(spec `docs/superpowers/specs/2026-10-31-workspace-admin-design.md`).
+ * 관리자를 주는 길은 셋이다 — 이 명령 · 시딩의 `SEED_USER_ADMIN`(`db/seed-user.ts`) · **이미 관리자인 사람**의 API(`routes/admin-users.ts`).
+ * 관리자가 아닌 사람이 요청으로 관리자가 되는 길은 없다 — 올라온 테마 코드는 같은 origin 에서 신뢰 코드로 돌므로 그 권한이 신뢰 경계다.
+ * 이 명령은 관리자가 0 명일 때 되살리는 길이다(API 는 마지막 관리자를 해제 · 비활성화하지 않는다).
+ *
+ * API 와 **같은 함수를 부른다**(`repos/users.ts` 의 `setInstanceAdmin` → `applyInstanceAdmin`) — 해제는 그 사람이 만든 쓸 수 있는 초대 ·
+ * 재설정 링크를 거두고, 지정 · 해제 둘 다 관리자 기록에 «서버 명령»(`actor_id` `null`)으로 남는다. 비활성 계정은 지정하지 않는다.
  *
  * 종료 코드: 0 바꿨다(또는 `list`) · 1 바꾸지 않았다 · 2 인자가 어긋났다(사용법).
  *
- * **거두기(`revoke`)는 행 하나를 고치는 `UPDATE` 다** — 관리자 쓰기가 커밋 직전에 그 행을 `FOR SHARE` 로 다시 읽으므로 둘이 줄을 선다
+ * **거두기(`revoke`)는 그 행을 `FOR NO KEY UPDATE` 로 잡고 고친다** — 관리자 쓰기가 커밋 직전에 그 행을 `FOR SHARE` 로 다시 읽으므로 둘이 줄을 선다
  * (`repos/users.ts` 의 `setInstanceAdmin`). 거둔 뒤 커밋되는 업로드 · 숨김은 없다. 그 사람의 세션은 그대로다 — 관리자 판정은 요청마다
  * DB 에서 읽으므로 다음 요청부터 403 이다.
  */
@@ -64,6 +68,10 @@ export async function runAdmin(rawArgs: readonly string[], target: { db: DbHandl
   const outcome = await setInstanceAdmin(target.db, email, verb === 'grant')
   if (outcome === 'missing') {
     io.error(`그 이메일의 계정이 없습니다(${email}) — ${NOTHING_CHANGED}`)
+    return 1
+  }
+  if (outcome === 'inactive') {
+    io.error(`비활성 계정입니다(${email}) — 먼저 관리자 화면에서 다시 활성화한다. ${NOTHING_CHANGED}`)
     return 1
   }
   if (outcome === 'unchanged') {

@@ -16,7 +16,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { memberWriteRecheck, projectGuard, recheckProjectRole } from '../auth/roles'
 import { withTransaction } from '../db/tx'
-import { conflict, notFound } from '../errors'
+import { badRequest, conflict, notFound } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import { DuplicateMemberError, LastOwnerError, insertMember, listMembers, removeMember, updateMemberRole } from '../repos/members'
 import { findUserByEmail } from '../repos/users'
@@ -32,6 +32,8 @@ import { notifyMembershipChanged } from '../ws/notify'
 const NormalizedEmail = z.email().transform((value) => value.toLowerCase())
 
 const Role = z.enum(['owner', 'editor', 'viewer'])
+
+export const INACTIVE_MEMBER = '비활성 사용자는 멤버로 추가할 수 없습니다'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const MemberParams = z.object({ projectId: z.uuid(), userId: z.uuid() })
@@ -61,6 +63,11 @@ export function memberRoutes() {
       const user = await findUserByEmail(app.db, body.email)
       if (!user) {
         throw notFound('해당 이메일의 사용자가 없습니다')
+      }
+      // 꺼진 사람을 새로 들이는 것은 실수일 공산이 크다(spec `2026-10-31-workspace-admin-design.md` «비활성화»). 이미 멤버인 비활성
+      // 사용자의 행은 그대로다.
+      if (!user.active) {
+        throw badRequest(INACTIVE_MEMBER)
       }
 
       let member

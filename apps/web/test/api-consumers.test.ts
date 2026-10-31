@@ -99,6 +99,10 @@ const METHODS = [
   'uploadThemePackage',
   'setThemePackageHidden',
   'downloadThemeTemplate',
+  'checkInvite',
+  'signupWithInvite',
+  'getPasswordReset',
+  'completePasswordReset',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -276,6 +280,11 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   uploadThemePackage: ['../src/routes/admin-themes.tsx'],
   setThemePackageHidden: ['../src/routes/admin-themes.tsx'],
   downloadThemeTemplate: ['../src/routes/admin-themes.tsx'],
+  // 뼈대 밖의 두 화면 — 로그인 안 한 사람이 링크를 열고 부른다. 확인의 본문은 안 읽고(`SHAPES.inviteUsable`), 가입은 `login` 과 같은 몸이다.
+  checkInvite: ['../src/routes/invite.tsx'],
+  signupWithInvite: ['../src/routes/invite.tsx'],
+  getPasswordReset: ['../src/routes/reset.tsx'],
+  completePasswordReset: ['../src/routes/reset.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {

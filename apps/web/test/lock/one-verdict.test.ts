@@ -132,7 +132,9 @@ describe('판정은 한 벌이다', { timeout: 60_000 }, () => {
     // 연결**을 고르는 비교다(`notifyMembershipChanged`). 그 파일에 잠금 판정이 설 수 없는 까닭은 아래 «목록을 읽는 자리는
     // 둘뿐»이 지킨다 — 소유자를 비교할 잠금 목록을 그 파일은 손에 쥐지 않는다. 비교를 글자에서 숨기는 우회(다른 연산자 ·
     // `Object.is`)로 맞추지 않는다 — 자를 속이는 것이지 뜻이 바뀌는 것이 아니다.
-    expect(filesMatching(API_SRC, COMPARES_OWNER)).toEqual(['ws/notify.ts'])
+    // **`routes/admin-users.ts`도 판정한 예외다** — 관리자가 자기 자신을 비활성화 · 해제하는지(`userId === actorId`)를 본다. 그 파일은 잠금
+    // 목록을 손에 쥐지 않는다(관리자 라우트 — 룸 · 잠금 표가 없다).
+    expect(filesMatching(API_SRC, COMPARES_OWNER)).toEqual(['routes/admin-users.ts', 'ws/notify.ts'])
     // **`settings/members-section.tsx`도 판정한 예외다** — 설정 페이지의 멤버 줄이 «이 줄이 나인가»(`member.userId === me`)를 본다(나를
     // 바꾸면 페이지가 역할을 다시 읽는다). 그 파일은 잠금 목록을 손에 쥐지 않는다(셸 밖 라우트 — 스토어 · 룸이 없다).
     expect(filesMatching(WEB_SRC, COMPARES_OWNER)).toEqual(['settings/members-section.tsx'])

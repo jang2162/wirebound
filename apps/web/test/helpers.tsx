@@ -113,6 +113,10 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     uploadThemePackage: notStubbed('uploadThemePackage'),
     setThemePackageHidden: notStubbed('setThemePackageHidden'),
     downloadThemeTemplate: notStubbed('downloadThemeTemplate'),
+    checkInvite: notStubbed('checkInvite'),
+    signupWithInvite: notStubbed('signupWithInvite'),
+    getPasswordReset: notStubbed('getPasswordReset'),
+    completePasswordReset: notStubbed('completePasswordReset'),
     readTree: async (projectId, options) => ({ menu: await api.getTree(projectId, options), rev: 0 }),
     ...overrides,
   }
