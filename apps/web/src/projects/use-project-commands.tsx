@@ -38,7 +38,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
-import type { ProjectDetail } from '../api/types'
+import type { ProjectListItem } from '../api/types'
 
 /** 서버가 이유를 주지 않은 **조회** 실패에 쓸 문장. */
 const UNKNOWN_LOAD_FAILURE = '프로젝트 목록을 불러오지 못했습니다'
@@ -55,7 +55,7 @@ const UNKNOWN_COMMAND_FAILURE = '요청을 처리하지 못했습니다'
  */
 export type ProjectLoadState =
   | { status: 'loading' }
-  | { status: 'ready'; projects: ProjectDetail[] }
+  | { status: 'ready'; projects: ProjectListItem[] }
   | { status: 'failed'; failure: Failure }
 
 /**

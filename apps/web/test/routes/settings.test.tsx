@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectDetail, ProjectRole, ProjectView, SessionUser } from '../../src/api/types'
-import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import { currentPath, fakeApi, renderWithProviders, listItem } from '../helpers'
 import { adminThemeView } from '../theme-loader'
 import { docWithText, openPage, PROJECT_ID, PROJECT_NAME, SHELL_MENU } from '../editor-harness'
 
@@ -163,7 +163,10 @@ describe('설정으로 가는 길', () => {
 
   it('목록 줄마다 «설정» 링크가 있고 «수정» 은 없다 — 이름 바꾸기는 설정 페이지다', async () => {
     const rows = [project('owner', { id: 'p-o', name: 'owner 것' }), project('viewer', { id: 'p-v', name: 'viewer 것' })]
-    renderWithProviders(<App />, { client: fakeApi({ me: async () => USER, listProjects: async () => rows }), route: '/' })
+    renderWithProviders(<App />, {
+      client: fakeApi({ me: async () => USER, listProjects: async () => rows.map((p) => listItem(p)) }),
+      route: '/',
+    })
     await screen.findByText('owner 것')
     for (const row of rows) {
       expect(screen.getByRole('link', { name: `${row.name} 설정` }).getAttribute('href')).toBe(`/projects/${row.id}/settings`)

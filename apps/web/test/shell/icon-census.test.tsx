@@ -26,7 +26,7 @@ import type { Comment, ProjectView, SessionUser } from '../../src/api/types'
 import { PageJsonNoticeList, type PageJsonNotices } from '../../src/panels/page-json-notices'
 import { ICONS } from '../../src/shell/icons'
 import { canvasQuery, OTHER_PAGE_ID, openPage, pageDoc, PAGE_ID, PROJECT_ID, PROJECT_NAME, SHELL_MENU } from '../editor-harness'
-import { fakeApi, renderWithProviders } from '../helpers'
+import { fakeApi, renderWithProviders, listItem } from '../helpers'
 import { adminThemeView } from '../theme-loader'
 import '../../src/catalog-setup'
 
@@ -228,7 +228,7 @@ const PROJECT: ProjectView = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin'
 
 /** 셸 밖 화면 넷 — 주소 · 그 화면이 부르는 조회 · 다 그려졌다는 표지(`test/shell/page-head.test.tsx` 의 `SCREENS` 와 같은 판). */
 const OUTSIDE = [
-  { screen: '프로젝트 목록', route: '/', heading: '프로젝트', api: { listProjects: async () => [PROJECT] } },
+  { screen: '프로젝트 목록', route: '/', heading: '프로젝트', api: { listProjects: async () => [listItem(PROJECT)] } },
   {
     screen: '프로젝트 설정',
     route: `/projects/${PROJECT_ID}/settings`,

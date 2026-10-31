@@ -10,8 +10,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { ProjectDetail, SessionUser } from '../../src/api/types'
-import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import type { SessionUser, ProjectListItem } from '../../src/api/types'
+import { currentPath, fakeApi, renderWithProviders, LIST_ITEM_DEFAULTS } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -21,8 +21,8 @@ const BAD_SLUG = '슬러그는 소문자·숫자·하이픈만 쓸 수 있고, �
 const ENVELOPE = '요청을 처리할 수 없습니다'
 const FORBIDDEN = '이 작업을 수행할 권한이 없습니다 [T6-403]'
 
-function project(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
-  return { id: 'p-1', name: '관리자 콘솔', slug: 'admin-console', description: null, role: 'owner', ...overrides }
+function project(overrides: Partial<ProjectListItem> = {}): ProjectListItem {
+  return { id: 'p-1', name: '관리자 콘솔', slug: 'admin-console', description: null, role: 'owner', ...LIST_ITEM_DEFAULTS, ...overrides }
 }
 
 interface Harness {
@@ -38,7 +38,7 @@ interface Harness {
  */
 function renderCrud(
   options: {
-    lists?: ProjectDetail[][]
+    lists?: ProjectListItem[][]
     createProject?: ApiClient['createProject']
     updateProject?: ApiClient['updateProject']
     deleteProject?: ApiClient['deleteProject']

@@ -2,9 +2,9 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { ProjectDetail, SessionUser } from '../../src/api/types'
+import type { ProjectListItem, SessionUser } from '../../src/api/types'
 import { openedMenu } from '../opened-menu'
-import { currentPath, expiringSession, fakeApi, renderWithProviders, tabHub, unauthenticatedError } from '../helpers'
+import { currentPath, expiringSession, fakeApi, LIST_ITEM_DEFAULTS, renderWithProviders, tabHub, unauthenticatedError } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -23,8 +23,9 @@ const EMPTY_NOTICE = '참여 중인 프로젝트가 없습니다'
 const LOADING_NOTICE = '불러오는 중…'
 const UNKNOWN_FAILURE = '프로젝트 목록을 불러오지 못했습니다'
 
-function project(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
+function project(overrides: Partial<ProjectListItem> = {}): ProjectListItem {
   return {
+    ...LIST_ITEM_DEFAULTS,
     id: 'p-1',
     name: '관리자 콘솔',
     slug: 'admin-console',
@@ -132,8 +133,8 @@ describe('프로젝트 목록 화면', () => {
   })
 
   it('로딩 중에는 목록도 빈 안내도 보이지 않는다', async () => {
-    let deliver: (projects: ProjectDetail[]) => void = () => {}
-    const pending = new Promise<ProjectDetail[]>((resolve) => {
+    let deliver: (projects: ProjectListItem[]) => void = () => {}
+    const pending = new Promise<ProjectListItem[]>((resolve) => {
       deliver = resolve
     })
     renderList(() => pending)

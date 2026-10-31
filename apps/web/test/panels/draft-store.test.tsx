@@ -33,7 +33,7 @@ import {
   waitForNode,
   type EditorOptions,
 } from '../editor-harness'
-import { tabHub } from '../helpers'
+import { tabHub, listItem } from '../helpers'
 import '../../src/catalog-setup'
 
 const ROOT_ID = 'n-root'
@@ -307,7 +307,7 @@ function server(): {
       logout: async () => undefined,
       listProjects: async () => {
         if (expired) throw new ApiError(401, 'unauthenticated', '로그인이 필요합니다')
-        return [PROJECT]
+        return [listItem(PROJECT)]
       },
       getPage: (async (_projectId: string, pageId: string) => {
         if (pageId !== PAGE_ID && pageId !== OTHER_PAGE_ID) throw new ApiError(404, 'not-found', '없는 페이지')

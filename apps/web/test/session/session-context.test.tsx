@@ -19,16 +19,18 @@ import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import type { ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
-import type { ProjectDetail, SessionUser } from '../../src/api/types'
+import type { SessionUser, ProjectListItem } from '../../src/api/types'
 import { SessionProvider, useConfirmSession, useInvalidateSession, useSessionState } from '../../src/session/session-context'
 import { RedirectWhenAuthenticated, RequireAuth } from '../../src/routes/require-auth'
-import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
+import { currentPath, fakeApi, renderWithProviders, unauthenticatedError, LIST_ITEM_DEFAULTS } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
 /** 목록 화면이 **성공한 조회에서만** 그리는 문자열. 제목은 실패해도 뜨므로 이름을 본다. */
 const PROJECT_NAME = '내 설계서 [P2B2-T1-도착지]'
-const PROJECTS: ProjectDetail[] = [{ id: 'p-1', name: PROJECT_NAME, slug: 'mine', description: null, role: 'owner' }]
+const PROJECTS: ProjectListItem[] = [
+  { id: 'p-1', name: PROJECT_NAME, slug: 'mine', description: null, role: 'owner', ...LIST_ITEM_DEFAULTS },
+]
 
 /** 보호된 자리가 열렸다는 증거. 문지기가 통과시킨 것 말고는 나올 길이 없는 문자열이다. */
 const PROTECTED = '보호된 내용 [P2B2-T1]'

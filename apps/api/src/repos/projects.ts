@@ -132,19 +132,40 @@ export async function insertProject(
   }
 }
 
+export interface ProjectListEntry extends ProjectWithRole {
+  /** 그 프로젝트의 멤버 행 수 — 비활성 사용자의 행도 센다. */
+  memberCount: number
+  updatedAt: Date
+}
+
 /**
  * 사용자가 멤버인 프로젝트만 조회한다(`project_members`를 조인한다). 각 행에
  * 그 사용자 자신의 역할을 함께 싣는다 — `GET /api/projects` 응답이 메뉴를
  * 그리려면 role이 필요하다(설계서 「권한 모델」).
+ *
+ * **«최근 수정»(`updatedAt`)은 `greatest(projects.updated_at, max(pages.updated_at))` 다** — 페이지가 없으면 프로젝트 행의 값이다.
+ * 페이지 문서 편집(`writePageSchemaAtSeq`) · 제목 · 자리 바꾸기가 `pages.updated_at` 을 고치고, 이름 · 슬러그 · 설명 · 테마가
+ * `projects.updated_at` 을 고친다. 메뉴 · 코멘트 · 모듈 · 멤버 쓰기는 안 센다. `max(revisions.created_at)` 을 버린 까닭: 제목 · 자리
+ * 바꾸기는 revision 을 안 남겨 빠지고, revision 표가 가장 큰 표라 목록마다 훑기에 무겁다.
+ *
+ * 질의는 하나다 — 두 칸은 상관 하위 질의이고 `project_members_pk`·`pages_project_menu_sort_idx` 의 앞머리(`project_id`)로 선다.
  */
-export async function listProjectsForUser(db: DbHandle, userId: string): Promise<ProjectWithRole[]> {
-  return db
+export async function listProjectsForUser(db: DbHandle, userId: string): Promise<ProjectListEntry[]> {
+  const rows = await db
     .selectFrom('projects')
     .innerJoin('project_members', 'project_members.project_id', 'projects.id')
     .where('project_members.user_id', '=', userId)
     .select(['projects.id', 'projects.name', 'projects.slug', 'projects.description', 'project_members.role'])
+    .select([
+      sql<string>`(select count(*) from project_members as m where m.project_id = projects.id)`.as('memberCount'),
+      sql<Date>`greatest(projects.updated_at, (select max(pg.updated_at) from pages as pg where pg.project_id = projects.id))`.as(
+        'updatedAt',
+      ),
+    ])
     .orderBy('projects.created_at', 'asc')
     .execute()
+  // `count(*)` 는 bigint 라 pg 가 글자로 준다.
+  return rows.map((row) => ({ ...row, memberCount: Number(row.memberCount) }))
 }
 
 /**

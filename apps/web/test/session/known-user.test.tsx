@@ -11,7 +11,7 @@ import { createKnownUserHolder, KNOWN_USER_HEADER, SESSION_USER_CHANGED } from '
 import type { ProjectDetail, SessionUser } from '../../src/api/types'
 import { realtimeUrl } from '../../src/realtime/protocol'
 import { SWITCHED_NOTICE } from '../../src/session/session-menu'
-import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import { currentPath, fakeApi, renderWithProviders, listItem } from '../helpers'
 
 const ALICE: SessionUser = { id: 'u-alice', email: 'alice@example.com', name: '앨리스' }
 const BOB: SessionUser = { id: 'u-bob', email: 'bob@example.com', name: '밥' }
@@ -32,7 +32,7 @@ describe('HTTP 클라이언트 — 이 탭이 아는 사용자를 싣고, 거절
     const calls: (RequestInit | undefined)[] = []
     const fetchImpl: typeof fetch = async (_input, init) => {
       calls.push(init)
-      return json(200, [PROJECT])
+      return json(200, [listItem(PROJECT)])
     }
     const client = createHttpClient(fetchImpl, () => undefined, holder)
     await client.listProjects()
@@ -106,7 +106,7 @@ describe('세션 — 쿠키의 사람이 다르다는 답을 받으면 다시 �
     const holder = createKnownUserHolder()
     const me = vi.fn(async () => meAnswers.shift() ?? ALICE)
     renderWithProviders(<App />, {
-      client: fakeApi({ me, listProjects: async () => [PROJECT] }),
+      client: fakeApi({ me, listProjects: async () => [listItem(PROJECT)] }),
       knownUser: holder,
     })
     return { holder, me }

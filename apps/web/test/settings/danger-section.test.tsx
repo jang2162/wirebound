@@ -6,8 +6,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { ProjectDetail, ProjectRole, ProjectView, SessionUser } from '../../src/api/types'
-import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import type { ProjectDetail, ProjectRole, ProjectView, SessionUser, ProjectListItem } from '../../src/api/types'
+import { currentPath, fakeApi, listItem, renderWithProviders } from '../helpers'
 import { adminThemeView } from '../theme-loader'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
@@ -20,7 +20,7 @@ function project(role: ProjectRole = 'owner', name = '내 프로젝트'): Projec
 }
 
 function renderSettings(
-  options: { role?: ProjectRole; name?: string; deleteProject?: ApiClient['deleteProject']; lists?: ProjectDetail[][] } = {},
+  options: { role?: ProjectRole; name?: string; deleteProject?: ApiClient['deleteProject']; lists?: ProjectListItem[][] } = {},
 ) {
   const deleteProject = vi.fn(options.deleteProject ?? (async () => undefined))
   const lists = options.lists ?? [[]]
@@ -123,7 +123,7 @@ describe('위험 구역 — 삭제 확인', () => {
 describe('위험 구역 — 삭제', () => {
   it('확정하면 `deleteProject` 한 번 · 목록으로 가고 목록에 그 프로젝트가 없다', async () => {
     const other: ProjectDetail = { id: 'p-two', name: '둘째 프로젝트', slug: 'two', description: null, role: 'owner' }
-    const h = renderSettings({ lists: [[other]] })
+    const h = renderSettings({ lists: [[listItem(other)]] })
     await openDanger()
     type('내 프로젝트')
     fireEvent.click(confirmButton())

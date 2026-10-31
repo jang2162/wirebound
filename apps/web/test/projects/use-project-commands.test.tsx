@@ -12,14 +12,14 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router'
 import { ApiProvider } from '../../src/api/context'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { ProjectDetail } from '../../src/api/types'
+import type { ProjectListItem } from '../../src/api/types'
 import { useProjectCommands, type ProjectCommands } from '../../src/projects/use-project-commands'
-import { fakeApi, unauthenticatedError } from '../helpers'
+import { fakeApi, unauthenticatedError, LIST_ITEM_DEFAULTS } from '../helpers'
 
 const SERVER_MESSAGE = '프로젝트 저장소가 응답하지 않습니다 [T3-HOOK-1]'
 
-function project(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
-  return { id: 'p-1', name: '관리자 콘솔', slug: 'admin', description: null, role: 'owner', ...overrides }
+function project(overrides: Partial<ProjectListItem> = {}): ProjectListItem {
+  return { id: 'p-1', name: '관리자 콘솔', slug: 'admin', description: null, role: 'owner', ...LIST_ITEM_DEFAULTS, ...overrides }
 }
 
 /**

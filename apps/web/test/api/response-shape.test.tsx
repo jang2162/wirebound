@@ -46,6 +46,8 @@ const USER = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 const PROJECT = { id: 'p-1', name: '관리자 콘솔 설계서', slug: 'ac', description: null, role: 'owner' }
 /** `GET /api/projects/:projectId` 만 `themeRev` 를 더 싣는다(`ProjectView`). */
 const PROJECT_VIEW = { ...PROJECT, themeRev: 0 }
+/** `GET /api/projects` 의 한 항목 — 두 칸이 더 있다(`ProjectListItem`). */
+const PROJECT_ITEM = { ...PROJECT, memberCount: 1, updatedAt: '2026-10-01T00:00:00.000Z' }
 const MENU = [{ id: 'mn-1', title: '회원관리', sortOrder: 1, pages: [], children: [] }]
 const PAGE = {
   id: 'pg-1',
@@ -193,11 +195,11 @@ describe('성공 응답이 계약을 어기면 — http-client 층', () => {
       '/projects/p-1/tree': { menu: MENU },
       '/projects/p-1/pages/pg-1': PAGE,
       '/projects/p-1': PROJECT_VIEW,
-      '/projects': [PROJECT],
+      '/projects': [PROJECT_ITEM],
     })
 
     await expect(api.me()).resolves.toEqual(USER)
-    await expect(api.listProjects()).resolves.toEqual([PROJECT])
+    await expect(api.listProjects()).resolves.toEqual([PROJECT_ITEM])
     await expect(api.getProject('p-1')).resolves.toEqual(PROJECT_VIEW)
     await expect(api.getTree('p-1')).resolves.toEqual(MENU)
     await expect(api.getPage('p-1', 'pg-1')).resolves.toEqual(PAGE)
@@ -281,7 +283,7 @@ describe('성공 응답이 계약을 어기면 — 화면 층', () => {
     // **검사를 빼고 잰 값:** `<main>` 없음 · `innerHTML` **11자**. 관문이 막으면 다른 계약 위반과
     // 같은 경로(`ApiError('internal')` → 실패 → 화면 규칙)로 모여 **셸이 살고 문장이 남는다.**
     renderWithProviders(<App />, {
-      client: client({ '/api/auth/me': USER, '/api/projects': [{ ...PROJECT, description: { x: 1 } }] }),
+      client: client({ '/api/auth/me': USER, '/api/projects': [{ ...PROJECT_ITEM, description: { x: 1 } }] }),
       route: '/',
     })
 

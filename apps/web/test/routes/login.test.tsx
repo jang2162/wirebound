@@ -2,8 +2,8 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { ProjectDetail, SessionUser } from '../../src/api/types'
-import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
+import type { SessionUser, ProjectListItem } from '../../src/api/types'
+import { currentPath, fakeApi, renderWithProviders, unauthenticatedError, LIST_ITEM_DEFAULTS } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -14,7 +14,9 @@ const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터
  * 그리고 있어도 통과한다(실측). 그래서 가짜가 준 프로젝트 이름으로 확인한다.
  */
 const PROJECT_NAME = '내 설계서 [T4-LOGIN-도착지]'
-const PROJECTS: ProjectDetail[] = [{ id: 'p-1', name: PROJECT_NAME, slug: 'mine', description: null, role: 'owner' }]
+const PROJECTS: ProjectListItem[] = [
+  { id: 'p-1', name: PROJECT_NAME, slug: 'mine', description: null, role: 'owner', ...LIST_ITEM_DEFAULTS },
+]
 
 /**
  * 서버가 준 문장이 그대로 화면에 오는지 보려면, 화면이 하드코딩할 리 없는 문자열이어야

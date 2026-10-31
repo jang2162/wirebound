@@ -13,12 +13,21 @@ import { MemoryRouter, useLocation } from 'react-router'
 import { ApiError, type ApiClient } from '../src/api/client'
 import { ApiProvider } from '../src/api/context'
 import { RealtimeProvider, type RealtimeSetup } from '../src/realtime/context'
-import type { SessionUser } from '../src/api/types'
+import type { ProjectDetail, ProjectListItem, SessionUser } from '../src/api/types'
 import { TabChannelProvider, type SessionNews, type TabChannel } from '../src/session/tab-channel'
 import { DraftStoreProvider, type DraftStore } from '../src/panels/draft-store'
 import { ThemeBundleProvider } from '../src/theme/bundle-context'
 import type { ThemeBundleLoader } from '../src/theme/bundle-loader'
 import { staticBundleLoader } from './theme-loader'
+
+/** `listProjects` 픽스처의 두 칸 기본값 — 시각은 `projects/project-filter.ts` 의 정렬을 흔들지 않는 고정값이다. */
+export const LIST_ITEM_DEFAULTS = { memberCount: 1, updatedAt: '2026-10-01T00:00:00.000Z' } as const
+
+/** 프로젝트 픽스처를 `GET /api/projects` 항목으로 — 상세의 `themeRev` 같은 칸은 떼고 목록의 두 칸을 더한다. */
+export function listItem(project: ProjectDetail, extra: Partial<Pick<ProjectListItem, 'memberCount' | 'updatedAt'>> = {}): ProjectListItem {
+  const { id, name, slug, description, role } = project
+  return { id, name, slug, description, role, ...LIST_ITEM_DEFAULTS, ...extra }
+}
 
 /**
  * 스텁되지 않은 메서드 자리에 놓는 함수. **`undefined`를 돌려주지 않고 던진다.**
