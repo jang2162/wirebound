@@ -2,7 +2,7 @@
  * **이 탭이 아는 사용자**(`src/api/known-user.tsx`). 웹은 요청마다 탭이 아는 사람의 id 를 싣고(REST 머리 · WS 쿼리),
  * 서버가 쿠키의 사람과 다르다고 409 `session-user-changed`로 답하면 `me`로 쿠키의 사람을 다시 알아내 그 사람이 된다.
  */
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError } from '../../src/api/client'
@@ -112,13 +112,11 @@ describe('세션 — 쿠키의 사람이 다르다는 답을 받으면 다시 �
     return { holder, me }
   }
 
-  /** 목록 머리가 보이는 사람 — 이름은 `…` 의 머리에 선다(`shell/action-menu.tsx`). 열어 읽고 닫는다. */
+  /** 목록 화면이 보이는 사람 — 이름은 뼈대 사이드바의 바닥에 선다(`shell/workspace-layout.tsx`). */
   async function shownUser(): Promise<string> {
-    await screen.findByRole('link', { name: PROJECT.name })
-    fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
-    const name = document.querySelector('.wb-shell-action-menu-heading')?.textContent ?? ''
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
-    return name
+    // 사이드바의 «프로젝트» 칸(지금 화면 — `aria-current`)과 이름이 같아 그 칸을 뺀다.
+    await screen.findByRole('link', { name: PROJECT.name, current: false })
+    return document.querySelector('.wb-shell-workspace-user-name')?.textContent ?? ''
   }
 
   /** 혼자 죽는 변조: 세션이 holder 에 적지 않는다(`session-context.tsx`의 레이아웃 이펙트). */

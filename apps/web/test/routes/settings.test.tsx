@@ -4,7 +4,7 @@
  *
  * 목록 줄의 인라인 «수정» 은 이 페이지로 옮겼다 — 목록에는 «설정» 링크만 남는다(마지막 절).
  */
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
@@ -43,15 +43,30 @@ function type(name: string, value: string): void {
 }
 
 describe('설정 페이지 — 뼈대', () => {
-  it('머리에 프로젝트 이름 · 에디터로 돌아가기 · 프로젝트 목록, «일반» 칸 셋이 지금 값이다', async () => {
+  it('머리 — 빵부스러기 «프로젝트 › <이름>» · 제목 «<이름> 설정» · «에디터 열기», «일반» 칸 셋이 지금 값이다', async () => {
     renderSettings()
     await screen.findByRole('heading', { name: '관리자 콘솔 설정' })
-    expect(screen.getByRole('link', { name: '에디터로 돌아가기' }).getAttribute('href')).toBe('/projects/p-1')
-    expect(screen.getByRole('link', { name: '프로젝트 목록' }).getAttribute('href')).toBe('/')
+    const crumbs = within(screen.getByRole('navigation', { name: '상위 화면' })).getAllByRole('link')
+    expect(crumbs.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['프로젝트', '/'],
+      ['관리자 콘솔', '/projects/p-1'],
+    ])
+    expect(screen.getByRole('link', { name: '에디터 열기' }).getAttribute('href')).toBe('/projects/p-1')
     expect(field('이름').value).toBe('관리자 콘솔')
     expect(field('슬러그').value).toBe('admin')
     expect(field('설명').value).toBe('운영 도구')
-    expect(document.querySelector('main.wb-shell-settings')).not.toBeNull()
+    expect(document.querySelector('main.wb-shell-workspace-main .wb-shell-settings')).not.toBeNull()
+  })
+
+  it('«에디터 열기» 와 빵부스러기의 이름은 프로젝트를 받은 뒤에 선다', async () => {
+    let answer: (project: ProjectView) => void = () => {}
+    renderSettings({ getProject: () => new Promise<ProjectView>((resolve) => (answer = resolve)) })
+    await screen.findByRole('heading', { name: '프로젝트 설정' })
+    expect(screen.queryByRole('link', { name: '에디터 열기' })).toBeNull()
+    expect(within(screen.getByRole('navigation', { name: '상위 화면' })).getAllByRole('link')).toHaveLength(1)
+
+    await act(async () => answer(project('owner')))
+    expect((await screen.findByRole('link', { name: '에디터 열기' })).getAttribute('href')).toBe('/projects/p-1')
   })
 
   it('비멤버(404)면 «프로젝트를 찾을 수 없습니다» 와 목록 링크', async () => {

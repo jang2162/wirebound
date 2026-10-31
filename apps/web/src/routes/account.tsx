@@ -2,24 +2,24 @@
  * **계정 설정** — `/account`. 셸 밖 라우트다(`routes/settings.tsx` 와 같은 자리): 프로젝트가 아니라 로그인한 사람의 것을 다룬다.
  *
  * 절은 셋이다 — **내 정보**(이름 · 이메일 — 읽기만 · 세션 문맥의 `me` 값), **비밀번호 바꾸기**(`account/password-section.tsx`),
- * **API 토큰**(`account/tokens-section.tsx`). 옛 주소 `/tokens` 는 여기로 넘어온다(`app.tsx`). 화면 루트는 설정 페이지와 같은
- * `.wb-shell-settings` 다 — 절(카드) · 칸의 꼴을 함께 쓴다. 폭만 `.wb-shell-account` 가 좁힌다(절 하나짜리 폼이라 설정 페이지 폭이면 칸이 휑하다).
+ * **API 토큰**(`account/tokens-section.tsx`). 옛 주소 `/tokens` 는 여기로 넘어온다(`app.tsx`). 뼈대(`shell/workspace-layout.tsx`) 안에 서고, 몸은
+ * 설정 페이지와 같은 `.wb-shell-settings` 다 — 절(카드) · 칸의 꼴을 함께 쓴다.
  */
 import { useId, type ReactElement } from 'react'
 import { PasswordSection } from '../account/password-section'
 import { TokensSection } from '../account/tokens-section'
 import { useSessionUser } from '../session/session-context'
-import { PageHead } from '../shell/page-head'
+import { WorkspaceLayout } from '../shell/workspace-layout'
 
 export function AccountRoute(): ReactElement {
   return (
-    <main className="wb-shell-settings wb-shell-account">
-      {/* 머리 — 로고(프로젝트 목록으로) · 제목 · `…`(`shell/page-head.tsx`). */}
-      <PageHead title="계정 설정" brand />
-      <ProfileSection />
-      <PasswordSection />
-      <TokensSection />
-    </main>
+    <WorkspaceLayout title="계정 설정">
+      <div className="wb-shell-settings">
+        <ProfileSection />
+        <PasswordSection />
+        <TokensSection />
+      </div>
+    </WorkspaceLayout>
   )
 }
 

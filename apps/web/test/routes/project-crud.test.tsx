@@ -303,6 +303,13 @@ describe('프로젝트 고치기는 설정 페이지다', () => {
     expect(h.updateProject).not.toHaveBeenCalled()
   })
 })
+/** 카드 목록 — 사이드바의 칸 목록(`<ul>`)과 가른다. */
+function cards(): HTMLElement {
+  const main = document.body.querySelector<HTMLElement>('.wb-shell-workspace-main')
+  if (main === null) throw new Error('내용 칸을 찾지 못했습니다')
+  return within(main).getByRole('list')
+}
+
 describe('통합 — 한 화면에서 이어서', () => {
   it('viewer·editor·owner가 섞인 목록의 어느 줄에도 삭제가 없다 — 삭제는 설정 페이지의 «위험 구역»이다', async () => {
     const rows = [
@@ -316,10 +323,9 @@ describe('통합 — 한 화면에서 이어서', () => {
     for (const row of rows) {
       expect(screen.queryByRole('button', { name: `${row.name} 삭제` }), row.role).toBeNull()
     }
-    expect(within(screen.getByRole('list')).queryAllByRole('button')).toEqual([])
-    // 링크는 역할과 무관하게 줄마다 둘(이름 · 설정)이다 — 읽기는 viewer도 된다. 목록 안에서 센다 — 머리의 계정 묶음에도 링크가
-    // 있다(«API 토큰» — `session/session-menu.tsx`).
-    expect(within(screen.getByRole('list')).getAllByRole('link')).toHaveLength(6)
+    expect(within(cards()).queryAllByRole('button')).toEqual([])
+    // 링크는 역할과 무관하게 줄마다 둘(이름 · 설정)이다 — 읽기는 viewer도 된다. 카드 목록 안에서 센다 — 사이드바에도 링크 목록이 있다.
+    expect(within(cards()).getAllByRole('link')).toHaveLength(6)
   })
 
   it('조회 실패와 조작 실패가 각자 자리에 나온다', async () => {
@@ -354,16 +360,17 @@ describe('통합 — 한 화면에서 이어서', () => {
     renderCrud({ lists: [[owned]] })
     await screen.findByText('내 프로젝트')
 
+    // 내용 칸만 센다 — 사이드바(칸 · «메뉴» · 로그아웃)는 이 폼과 무관하게 늘 같다(`test/shell/workspace-layout.test.tsx`).
+    const main = (): HTMLElement => document.body.querySelector<HTMLElement>('.wb-shell-workspace-main')!
     const stops = (): number =>
-      screen.queryAllByRole('button').length + screen.queryAllByRole('textbox').length + screen.queryAllByRole('link').length
+      within(main()).queryAllByRole('button').length +
+      within(main()).queryAllByRole('textbox').length +
+      within(main()).queryAllByRole('link').length
 
-    // 닫힌 상태: 링크 2(이름 · 설정) + 새 프로젝트 1 + **머리의 `…` 1**(계정 설정 · 로그아웃이 그 뒤다) = 4.
-    // 줄의 삭제는 설정 페이지의 위험 구역으로 옮겨 갔다(`settings/danger-section.tsx`).
-    // `…` 는 이 화면에서도 앱에서 나가는 길이다(`shell/action-menu.tsx`,
-    // `test/routes/shell-nav.test.tsx`). 이 케이스가 재는 것은 *"열면 늘고 닫으면
-    // 되돌아온다"*이고, 바탕 수는 이 화면의 정지점을 셀 뿐이다.
+    // 닫힌 상태: 링크 2(이름 · 설정) + 새 프로젝트 1 = 3. 줄의 삭제는 설정 페이지의 위험 구역으로 옮겨 갔다(`settings/danger-section.tsx`).
+    // 이 케이스가 재는 것은 *"열면 늘고 닫으면 되돌아온다"*이고, 바탕 수는 이 화면의 정지점을 셀 뿐이다.
     const closed = stops()
-    expect(closed).toBe(4)
+    expect(closed).toBe(3)
 
     fireEvent.click(screen.getByRole('button', { name: '새 프로젝트' }))
     // 폼: 입력 3 + 만들기·취소 2

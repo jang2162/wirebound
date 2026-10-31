@@ -12,7 +12,7 @@ import { SignedOut } from '../api/failure'
 import { ProjectForm } from '../projects/project-form'
 import { useProjectCommands } from '../projects/use-project-commands'
 import { shellIcon } from '../shell/icons'
-import { PageHead } from '../shell/page-head'
+import { WorkspaceLayout } from '../shell/workspace-layout'
 import type { ProjectDetail } from '../api/types'
 
 /** 조회가 성공했는데 결과가 비어 있을 때의 안내 — 빈 상태 상자의 제목. */
@@ -34,67 +34,62 @@ export function ProjectListRoute(): ReactElement {
     // 그 셋이 이 화면 안에서 열리므로 접두어가 갈리면 한 화면이 두 어휘로 쪼개진다.
     // 셸 밖의 라우트지만 스타일은 `src/shell.css` 한 파일에 있고 `wb-shell-` 접두어를
     // `test/shell-css.test.ts`가 기계로 지킨다.
-    <main className="wb-shell-project-list wb-shell-home">
-      {/* **여기에도 앱에서 나가는 길이 있어야 한다.** 에디터 머리에만 두면 프로젝트를 하나
-          열지 않고는 로그아웃할 수 없다. 머리 오른쪽 끝의 `…` 가 계정 설정 · (관리자) 테마 관리 · 로그아웃을 든다 — 셸 밖 화면이 함께 쓰는
-          머리(`shell/page-head.tsx`)다. 로고는 없다 — 로고가 가는 곳이 이 화면이다. 세션 통지(전환 · 로그아웃 실패)는 그 머리 아래 한 줄이다.
-
-          이 화면이 팔레트 루트 가운데 하나라(`shell.css`의 팔레트 블록에 `.wb-shell-project-list`가 있다) 그 안의
-          `var(--wb-shell-*)`도 여기서 정의돼 있다 — 없으면 조용히 검게 나온다. */}
-      <PageHead title="프로젝트" brand={false} />
-
-      {/* **여는 버튼도 잠근다.** 실제로 막는 것은 훅의 `inFlight`이고, 이 `disabled`는
+    // 뼈대(`shell/workspace-layout.tsx`)의 사이드바가 계정 설정 · (관리자) 관리자 칸 · 로그아웃을 든다 — 프로젝트를 열지 않고도 앱에서 나갈 수 있다.
+    <WorkspaceLayout title="프로젝트">
+      <div className="wb-shell-project-list">
+        {/* **여는 버튼도 잠근다.** 실제로 막는 것은 훅의 `inFlight`이고, 이 `disabled`는
           그것을 화면에 보이게 한다 — 여는 쪽 하나라도 빠지면 그 버튼은 눌리는 것처럼 보이는데
           조용히 아무 일도 안 한다. */}
-      {/* 머리 아래 줄 — 왼쪽 수 · 오른쪽 «새 프로젝트». 수는 목록을 받은 뒤에만 선다(불러오는 중 · 실패 · 빈 목록에는 말할 수가 없다). */}
-      <div className="wb-shell-home-bar">
-        <span className="wb-shell-home-count">
-          {state.status === 'ready' && state.projects.length > 0 ? `프로젝트 ${state.projects.length}개` : ''}
-        </span>
-        <button className="wb-shell-project-create" type="button" disabled={commands.busy} onClick={commands.openCreate}>
-          {shellIcon('add', 16, 'wb-shell-icon-lead')}
-          새 프로젝트
-        </button>
-      </div>
+        {/* 머리 아래 줄 — 왼쪽 수 · 오른쪽 «새 프로젝트». 수는 목록을 받은 뒤에만 선다(불러오는 중 · 실패 · 빈 목록에는 말할 수가 없다). */}
+        <div className="wb-shell-home-bar">
+          <span className="wb-shell-home-count">
+            {state.status === 'ready' && state.projects.length > 0 ? `프로젝트 ${state.projects.length}개` : ''}
+          </span>
+          <button className="wb-shell-project-create" type="button" disabled={commands.busy} onClick={commands.openCreate}>
+            {shellIcon('add', 16, 'wb-shell-icon-lead')}
+            새 프로젝트
+          </button>
+        </div>
 
-      {/* 만들기 폼은 목록 **위**에 연다. */}
-      {commands.form !== null && (
-        <ProjectForm submitLabel="만들기" busy={commands.busy} onSubmit={commands.submitForm} onCancel={commands.closeForm} />
-      )}
+        {/* 만들기 폼은 목록 **위**에 연다. */}
+        {commands.form !== null && (
+          <ProjectForm submitLabel="만들기" busy={commands.busy} onSubmit={commands.submitForm} onCancel={commands.closeForm} />
+        )}
 
-      {/* **조작 실패는 조회 실패와 다른 자리에 낸다**. 둘이 한 자리에 나오면 목록을
+        {/* **조작 실패는 조회 실패와 다른 자리에 낸다**. 둘이 한 자리에 나오면 목록을
           못 받은 사실이 조작 실패 문장에 덮인다. */}
-      {commands.failure !== null && commands.failure.kind === 'message' && (
-        <p className="wb-shell-project-alert" role="alert">
-          {commands.failure.message}
-        </p>
-      )}
+        {commands.failure !== null && commands.failure.kind === 'message' && (
+          <p className="wb-shell-project-alert" role="alert">
+            {commands.failure.message}
+          </p>
+        )}
 
-      {state.status === 'loading' && (
-        <p className="wb-shell-project-notice" role="status">
-          불러오는 중…
-        </p>
-      )}
-      {state.status === 'failed' && state.failure.kind === 'message' && (
-        <p className="wb-shell-project-alert" role="alert">
-          {state.failure.message}
-        </p>
-      )}
-      {state.status === 'ready' &&
-        (state.projects.length === 0 ? (
-          <div className="wb-shell-home-empty">
-            {shellIcon('noProjects', 32, 'wb-shell-home-empty-icon')}
-            <p className="wb-shell-project-notice">{EMPTY_NOTICE}</p>
-            <p className="wb-shell-home-empty-hint">{EMPTY_HINT}</p>
-          </div>
-        ) : (
-          <ul className="wb-shell-home-grid">
-            {state.projects.map((project) => (
-              <ProjectRow key={project.id} project={project} />
-            ))}
-          </ul>
-        ))}
-    </main>
+        {state.status === 'loading' && (
+          <p className="wb-shell-project-notice" role="status">
+            불러오는 중…
+          </p>
+        )}
+        {state.status === 'failed' && state.failure.kind === 'message' && (
+          <p className="wb-shell-project-alert" role="alert">
+            {state.failure.message}
+          </p>
+        )}
+        {state.status === 'ready' &&
+          (state.projects.length === 0 ? (
+            <div className="wb-shell-home-empty">
+              {shellIcon('noProjects', 32, 'wb-shell-home-empty-icon')}
+              <p className="wb-shell-project-notice">{EMPTY_NOTICE}</p>
+              <p className="wb-shell-home-empty-hint">{EMPTY_HINT}</p>
+            </div>
+          ) : (
+            <ul className="wb-shell-home-grid">
+              {state.projects.map((project) => (
+                <ProjectRow key={project.id} project={project} />
+              ))}
+            </ul>
+          ))}
+      </div>
+    </WorkspaceLayout>
   )
 }
 

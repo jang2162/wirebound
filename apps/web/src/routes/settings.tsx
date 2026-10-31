@@ -1,10 +1,11 @@
 /**
  * **프로젝트 설정** — `/projects/:projectId/settings`. 셸 밖 라우트다(`routes/account.tsx` 와 같은 자리): 설정은 캔버스 · 트리를 쓰지 않고,
- * 셸에 두면 편집 상태(스토어 · 잠금 · 룸)를 세운 채 폼 하나를 보게 된다. 에디터 `…` 의 «프로젝트 설정» 과 목록 줄의 «설정» 이 여기로 온다. 머리의 로고가 프로젝트 목록으로, 그 아래 «에디터로 돌아가기» 가 그 프로젝트의 에디터로 간다.
+ * 셸에 두면 편집 상태(스토어 · 잠금 · 룸)를 세운 채 폼 하나를 보게 된다. 에디터 `…` 의 «프로젝트 설정» 과 목록 카드의 «설정» 이 여기로 온다. 뼈대
+ * (`shell/workspace-layout.tsx`) 안에 서고, 머리는 빵부스러기 «프로젝트 › <이름>» · 제목 «<이름> 설정» · 오른쪽 «에디터 열기»(그 프로젝트의 에디터로)다.
  *
  * 절은 **«일반»**(이름 · 슬러그 · 설명 — `settings/general-section.tsx`) · **«테마»**(지금 테마 요약 · 고르기 · 토큰 편집 · 미리보기 —
  * `settings/theme-section.tsx`) · **«멤버»**(`settings/members-section.tsx`) · **«위험 구역»**(프로젝트 삭제 · owner 만 — `settings/danger-section.tsx`)이다.
- * 화면 루트는 `.wb-shell-settings` 다 — 미리보기(갤러리 iframe)가 들어 목록 화면보다 넓다(`shell.css` 의 팔레트 블록).
+ * 몸은 `.wb-shell-settings` 다(팔레트 · 글꼴 — 폭 제한 없이 내용 칸 전체를 쓴다. «테마» 절의 미리보기가 넓어진 폭을 받는다).
  *
  * # 절 목차 — 왼쪽 세로 탭, 한 번에 한 절
  *
@@ -31,7 +32,7 @@ import { DangerSection, dangerShown } from '../settings/danger-section'
 import { MembersSection } from '../settings/members-section'
 import { ThemeSection } from '../settings/theme-section'
 import { shellIcon, type IconName } from '../shell/icons'
-import { PageHead } from '../shell/page-head'
+import { WorkspaceLayout } from '../shell/workspace-layout'
 
 const LOAD_FAILURE = '프로젝트를 불러오지 못했습니다'
 
@@ -82,50 +83,56 @@ export function SettingsRoute(): ReactElement {
   if (state.status === 'failed' && state.failure.kind === 'signed-out') return <SignedOut />
 
   return (
-    <main className="wb-shell-settings">
-      {/* 머리 — 로고(프로젝트 목록으로) · 제목 · `…`(`shell/page-head.tsx`). 그 아래 «에디터로 돌아가기» 는 프로젝트를 받은 뒤에 선다 — 갈 주소가 그 응답의 것이다. */}
-      <PageHead title={state.status === 'ready' ? `${state.project.name} 설정` : '프로젝트 설정'} brand />
-      {state.status === 'ready' && (
-        <p className="wb-shell-settings-nav">
-          <Link className="wb-shell-tokens-back" to={`/projects/${state.project.id}`}>
-            에디터로 돌아가기
+    // 빵부스러기의 이름 · «에디터 열기» 는 프로젝트를 받은 뒤에 선다 — 갈 주소 · 이름이 그 응답의 것이다.
+    <WorkspaceLayout
+      title={state.status === 'ready' ? `${state.project.name} 설정` : '프로젝트 설정'}
+      crumbs={[
+        { label: '프로젝트', to: '/' },
+        ...(state.status === 'ready' ? [{ label: state.project.name, to: `/projects/${state.project.id}` }] : []),
+      ]}
+      actions={
+        state.status === 'ready' ? (
+          <Link className="wb-shell-settings-open" to={`/projects/${state.project.id}`}>
+            에디터 열기
           </Link>
-        </p>
-      )}
-
-      {state.status === 'loading' && (
-        <p className="wb-shell-project-notice" role="status">
-          불러오는 중…
-        </p>
-      )}
-      {state.status === 'failed' && state.failure.kind === 'message' && (
-        <p className="wb-shell-project-alert" role="alert">
-          {state.failure.message}
-        </p>
-      )}
-      {state.status === 'ready' && (
-        // «위험 구역» 은 owner 에게만 선다 — 절이 없는 사람에게는 탭도 없다(`dangerShown`).
-        <SettingsTabs danger={dangerShown(state.project)}>
-          {{
-            general: (
-              <GeneralSection
-                key={state.project.id}
-                project={state.project}
-                // 응답에는 `themeRev` 가 없다(`ProjectDetail`) — 쥔 값을 잇는다.
-                onSaved={(updated) =>
-                  setState((prev) => (prev.status === 'ready' ? { status: 'ready', project: { ...prev.project, ...updated } } : prev))
-                }
-              />
-            ),
-            theme: <ThemeSection key={`theme-${state.project.id}`} project={state.project} />,
-            members: (
-              <MembersSection key={`members-${state.project.id}`} project={state.project} onSelfChanged={() => setReread((n) => n + 1)} />
-            ),
-            danger: <DangerSection key={`danger-${state.project.id}`} project={state.project} />,
-          }}
-        </SettingsTabs>
-      )}
-    </main>
+        ) : undefined
+      }
+    >
+      <div className="wb-shell-settings">
+        {state.status === 'loading' && (
+          <p className="wb-shell-project-notice" role="status">
+            불러오는 중…
+          </p>
+        )}
+        {state.status === 'failed' && state.failure.kind === 'message' && (
+          <p className="wb-shell-project-alert" role="alert">
+            {state.failure.message}
+          </p>
+        )}
+        {state.status === 'ready' && (
+          // «위험 구역» 은 owner 에게만 선다 — 절이 없는 사람에게는 탭도 없다(`dangerShown`).
+          <SettingsTabs danger={dangerShown(state.project)}>
+            {{
+              general: (
+                <GeneralSection
+                  key={state.project.id}
+                  project={state.project}
+                  // 응답에는 `themeRev` 가 없다(`ProjectDetail`) — 쥔 값을 잇는다.
+                  onSaved={(updated) =>
+                    setState((prev) => (prev.status === 'ready' ? { status: 'ready', project: { ...prev.project, ...updated } } : prev))
+                  }
+                />
+              ),
+              theme: <ThemeSection key={`theme-${state.project.id}`} project={state.project} />,
+              members: (
+                <MembersSection key={`members-${state.project.id}`} project={state.project} onSelfChanged={() => setReread((n) => n + 1)} />
+              ),
+              danger: <DangerSection key={`danger-${state.project.id}`} project={state.project} />,
+            }}
+          </SettingsTabs>
+        )}
+      </div>
+    </WorkspaceLayout>
   )
 }
 

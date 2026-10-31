@@ -8,20 +8,19 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 쓰는 자리 × 창 셋 | 구조 트리 맨 아래 줄 `…` · 스크롤한 트리 가운데 줄 `…` · 메뉴 트리 줄 `+` · 메뉴 트리 맨 아래 줄 `…` · 메뉴 트리 머리 `+` · 셸 `…` 의 목록이 잘리거나 덮인다 |
- * | 셸 밖 화면 머리 `…` × 창 셋 | 프로젝트 목록 · 계정 설정 · 테마 관리 화면의 머리 `…`(`shell/page-head.tsx`)의 목록이 잘리거나 덮인다(L-141 — 셸 밖의 같은 부품) |
  * | 머리 상태 전환기 × 창 셋 | 머리 `[기본 ▾]`(`shell/view-state-switcher.tsx`)의 목록이 잘리거나 덮인다(L-319). 좁은 창은 전환기가 셸 `…` 로 접혀(`shell/head-fold.ts`) 그 항목을 셸 `…` 목록에서 잰다 |
  *
  * ## `ActionMenu` 를 쓰는 자리 전부(L-319)
  *
  * `git grep -n '<ActionMenu' -- apps/web/src` — 단추가 목록을 여는 JSX 는 **여섯**(다섯 파일 · `tree-row-actions.tsx` 가 둘 — 구조 트리 머리 `+` 와 뷰 모드
- * 영역 표지는 걷었다)이고 여섯이 모두 들었다(`test/shell/action-menu.test.tsx` · `popover-side.test.tsx` 의 `ActionMenu` 는 단위 테스트의 쓰임이라 뺐다).
+ * 영역 표지는 걷었다)이다. 아래 표가 다섯을 들고, 상태 줄의 `…`(`panels/page-states.tsx`)는 안 든다(`test/shell/action-menu.test.tsx` · `popover-side.test.tsx` 의
+ * `ActionMenu` 는 단위 테스트의 쓰임이라 뺐다). 에디터 밖 화면은 머리 `…` 가 없다 — 그 일을 뼈대 사이드바(`shell/workspace-layout.tsx`)가 링크로 맡는다.
  *
  * | JSX | 파일 | 이 파일의 케이스 |
  * |---|---|---|
  * | 줄 `+` · `…` (둘) | `panels/tree-row-actions.tsx`(`TreeRowActions` — 구조 트리 줄 · 메뉴 트리의 메뉴 줄 · 페이지 줄이 부른다) | 쓰는 자리 «구조 트리 맨 아래 줄 …» · «스크롤한 구조 트리 가운데 줄 …» · «메뉴 트리 맨 아래 메뉴 줄 +» · «메뉴 트리 맨 아래 메뉴 줄 …» |
  * | 메뉴 트리 머리 `+` | `panels/menu-tree.tsx` | «메뉴 트리 머리 +» |
  * | 셸 머리 `…` | `routes/editor.tsx` | «셸 …» |
- * | 셸 밖 화면 머리 `…` | `shell/page-head.tsx` | «셸 밖 화면의 머리 …» |
  * | 머리 상태 전환기 | `shell/view-state-switcher.tsx` | **«머리 상태 전환기»**(L-319) |
  *
  * **이 표가 재지 않는 것 — `TreeRowActions` 인스턴스.** 같은 JSX 라도 줄마다 자리가 다르다. 행렬에 든 줄은 구조 트리 `…`(맨 아래 · 스크롤한 가운데) · 메뉴 트리의 메뉴 줄 `+` · `…` 뿐이고, **메뉴 트리 페이지 줄의 `…`(`panels/menu-tree.tsx` 의 둘째 `TreeRowActions`)와 상태 줄의 `…`(`panels/state-rows.tsx`)는 안 든다.
@@ -243,42 +242,6 @@ describe.skipIf(!전제.ok)('행동 메뉴 자리 — 실브라우저', () => {
       }
     } finally {
       await close()
-    }
-  })
-
-  /**
-   * 셸 밖 화면의 머리 `…`(`shell/page-head.tsx`) — 같은 부품이 프로젝트 목록 · 계정 설정 · 테마 관리 머리에 선다. 판은 같다(`sight`): 목록이 창 안에 다 들고 항목이 안 덮인다.
-   * 카나리아: 목록이 열려 항목이 있다(`items > 0`).
-   */
-  it.each(WINDOWS)('창 $width×$height — 셸 밖 화면의 머리 …의 목록이 잘리지도 덮이지도 않는다', async (viewport) => {
-    const { context, page } = await stack.openTab(stack.users.alice, { viewport })
-    try {
-      const seen: Record<string, Sight> = {}
-      for (const [label, path] of [
-        ['프로젝트 목록', '/'],
-        ['계정 설정', '/account'],
-        ['테마 관리', '/admin/themes'],
-      ] as const) {
-        await page.goto(path)
-        await page.locator('.wb-shell-project-head').waitFor()
-        await page.locator('.wb-shell-project-head').getByRole('button', { name: '더 보기', exact: true }).click()
-        await page.getByRole('menu').waitFor()
-        seen[label] = await sight(page)
-        await page.keyboard.press('Escape')
-        await page.getByRole('menu').waitFor({ state: 'detached' })
-      }
-      // eslint-disable-next-line no-console
-      console.log(`[셸 밖 머리 … ${viewport.width}×${viewport.height}]`, JSON.stringify(seen))
-      for (const [label, value] of Object.entries(seen)) {
-        expect({ label, clipped: value.clipped, covered: value.covered, any: value.items > 0 }).toEqual({
-          label,
-          clipped: NONE,
-          covered: 0,
-          any: true,
-        })
-      }
-    } finally {
-      await context.close()
     }
   })
 

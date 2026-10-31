@@ -1,7 +1,6 @@
 /**
- * **앱에서 나가는 길**(누구로 들어와 있는지 + 로그아웃). 흐름은 `useLogout` 하나이고 그리는 자리는 둘이다 — 에디터 머리의 `…`(`routes/editor.tsx`)와
- * 셸 밖 화면(프로젝트 목록 · 설정 · 계정 · 테마 관리) 머리의 `…`(`shell/page-head.tsx`). 둘 다 `shell/action-menu.tsx` 다 — 메뉴 머리에 이름,
- * 끝 항목이 로그아웃.
+ * **앱에서 나가는 길**(누구로 들어와 있는지 + 로그아웃). 흐름은 `useLogout` 하나이고 그리는 자리는 둘이다 — 에디터 머리의 `…`(`routes/editor.tsx` —
+ * `shell/action-menu.tsx`, 메뉴 머리에 이름, 끝 항목이 로그아웃)와 에디터 밖 화면 뼈대의 사이드바(`shell/workspace-layout.tsx` — 바닥의 이름 · «로그아웃»).
  *
  * ## 왜 있는가
  *
@@ -53,11 +52,11 @@ const UNKNOWN_FAILURE = '로그아웃하지 못했습니다'
 export const SWITCHED_NOTICE = '다른 사람으로 로그인됐습니다 — 이 탭은 이제 머리의 사람의 화면입니다'
 
 /**
- * **로그아웃 흐름** — 에디터 머리의 `…`와 셸 밖 화면 머리의 `…`(`shell/page-head.tsx`)가 함께 쓴다. 판정은 이
+ * **로그아웃 흐름** — 에디터 머리의 `…`와 에디터 밖 화면 뼈대의 사이드바(`shell/workspace-layout.tsx`)가 함께 쓴다. 판정은 이
  * 파일 머리말 «실패했을 때 — 상태를 끊지 않는다»가 갖는다. 돌려주는 `failure`는 부르는 화면이 통지 자리에 그린다(`SessionNotices`).
  *
  * @param settle **로그아웃 요청을 내기 전에 기다릴 것** — 에디터 셸이 보낸 편집의 답을 기다리게 넘긴다(`routes/editor.tsx`의 `editsAnswered`).
- *   한도가 있어야 한다 — 로그아웃은 권한을 줄이는 쓰기라 막히면 안 된다. 셸 밖 화면(`shell/page-head.tsx`)은 넘기지 않는다. **기다림 뒤에도 잃는
+ *   한도가 있어야 한다 — 로그아웃은 권한을 줄이는 쓰기라 막히면 안 된다. 에디터 밖 화면(`shell/workspace-layout.tsx`)은 넘기지 않는다. **기다림 뒤에도 잃는
  *   것이 있으면 그 한 줄을 돌려준다** — 로그아웃이 성공하면 로그인 화면이 그린다(`useSignOutNotice`). 없으면 `null`이다.
  */
 export function useLogout(settle?: () => Promise<string | null>): {

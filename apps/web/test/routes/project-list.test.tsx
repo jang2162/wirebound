@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectListItem, SessionUser } from '../../src/api/types'
-import { openedMenu } from '../opened-menu'
 import { currentPath, expiringSession, fakeApi, LIST_ITEM_DEFAULTS, renderWithProviders, tabHub, unauthenticatedError } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
@@ -39,6 +38,13 @@ function project(overrides: Partial<ProjectListItem> = {}): ProjectListItem {
  * 로그인된 상태로 목록 화면을 띄운다. 라우트 표를 함께 지나므로 `/`에 이 화면이 실제로
  * 걸려 있는지도 같이 검사된다.
  */
+/** 내용 칸 — 사이드바의 칸 목록(`<ul>`)과 가른다. */
+function content(): HTMLElement {
+  const found = document.body.querySelector<HTMLElement>('.wb-shell-workspace-main')
+  if (found === null) throw new Error('내용 칸을 찾지 못했습니다')
+  return found
+}
+
 function renderList(listProjects: ApiClient['listProjects']): void {
   renderWithProviders(<App />, {
     client: fakeApi({ me: async () => USER, listProjects }),
@@ -52,7 +58,7 @@ describe('프로젝트 목록 화면', () => {
 
     await screen.findByText('관리자 콘솔')
     screen.getByText('고객 포털')
-    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+    expect(within(content()).getAllByRole('listitem')).toHaveLength(2)
     // 양성 대조: 비었을 때의 안내는 비지 않았으면 보이면 안 된다. 이것이 없으면
     // 안내를 늘 그리는 구현도 "비면 안내를 보여준다"를 통과한다.
     expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
@@ -143,7 +149,7 @@ describe('프로젝트 목록 화면', () => {
     // "아직 아무것도 안 그려졌다"를 "로딩을 구분한다"로 잘못 읽는다.
     await screen.findByText(LOADING_NOTICE)
     expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
-    expect(screen.queryByRole('listitem')).toBeNull()
+    expect(within(content()).queryByRole('listitem')).toBeNull()
 
     // 양성 대조: 응답이 오면 그때 안내가 나오고 로딩 표시는 사라진다.
     deliver([])
@@ -175,51 +181,12 @@ describe('프로젝트 목록 화면', () => {
   })
 })
 
-/**
- * **목록 머리의 `…`**(spec `docs/superpowers/specs/2026-09-30-editor-shell-design.md` 「화면 사이의 길」) — 계정 설정 · (인스턴스 관리자만) 테마
- * 관리 · 로그아웃. 옛 계정 묶음(이름 · «API 토큰» · 로그아웃 단추)과 «테마 관리» 링크를 대신한다. 로그아웃이 무엇을 하는지는
- * `shell-nav.test.tsx`가 잰다.
- */
-describe('목록 머리의 `…`', () => {
+/** 뼈대 사이드바의 칸 · 로그아웃은 `test/shell/workspace-layout.test.tsx` 가 화면마다 잰다. 여기는 목록 화면에만 있는 판 하나다. */
+describe('목록 화면의 사이드바', () => {
   const ADMIN: SessionUser = { ...USER, isInstanceAdmin: true }
 
-  function head(): HTMLElement {
-    const found = document.body.querySelector<HTMLElement>('.wb-shell-project-head')
-    if (found === null) throw new Error('목록 머리를 찾지 못했습니다')
-    return found
-  }
-
-  function openMenu(): string[] {
-    fireEvent.click(within(head()).getByRole('button', { name: '더 보기' }))
-    return within(openedMenu(head()))
-      .getAllByRole('menuitem')
-      .map((item) => item.textContent ?? '')
-  }
-
-  it('계정 설정 · 로그아웃 — 메뉴 머리에 이름. 옛 계정 묶음과 «테마 관리» 링크는 없다', async () => {
-    renderList(async () => [])
-    await screen.findByText(EMPTY_NOTICE)
-    const controls = [...within(head()).queryAllByRole('button'), ...within(head()).queryAllByRole('link')].map(
-      (element) => element.getAttribute('aria-label') ?? element.textContent ?? '',
-    )
-    expect(controls).toEqual(['더 보기'])
-    expect(within(head()).queryByText(USER.name)).toBeNull()
-
-    expect(openMenu()).toEqual(['계정 설정', '로그아웃'])
-    expect(within(openedMenu(head())).getByText(USER.name)).toBeTruthy()
-    expect(within(openedMenu(head())).getByRole('menuitem', { name: '계정 설정' }).getAttribute('href')).toBe('/account')
-  })
-
-  it('인스턴스 관리자에게는 «테마 관리»가 가운데에 선다 — /admin/themes 로 간다', async () => {
-    renderWithProviders(<App />, { client: fakeApi({ me: async () => ADMIN, listProjects: async () => [] }), route: '/' })
-    await screen.findByText(EMPTY_NOTICE)
-    expect(openMenu()).toEqual(['계정 설정', '테마 관리', '로그아웃'])
-    fireEvent.click(within(openedMenu(head())).getByRole('menuitem', { name: '테마 관리' }))
-    expect(currentPath()).toBe('/admin/themes')
-  })
-
   /** 다른 탭의 로그인 소식으로 들어온 관리자 — 관리자 표시는 소식이 싣는다(`session/tab-channel.tsx`의 `readNews`). `/me`를 다시 부르지 않는다. */
-  it('다른 탭의 로그인 소식으로 들어온 관리자에게도 «테마 관리»가 선다', async () => {
+  it('다른 탭의 로그인 소식으로 들어온 관리자에게도 «관리자» 묶음이 선다', async () => {
     const hub = tabHub()
     let me = 0
     const client = fakeApi({
@@ -235,7 +202,7 @@ describe('목록 머리의 `…`', () => {
     await hub.fromOtherTab({ kind: 'signed-in', user: ADMIN })
     await screen.findByText(EMPTY_NOTICE)
 
-    expect(openMenu()).toEqual(['계정 설정', '테마 관리', '로그아웃'])
+    expect(screen.getByRole('navigation', { name: '관리자' })).toBeTruthy()
     expect(me).toBe(1)
   })
 })

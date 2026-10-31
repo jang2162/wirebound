@@ -41,10 +41,9 @@ describe.skipIf(!전제.ok)('관리자 화면에서 올리고 설정에서 바�
     const b = await stack.openTab(stack.users.bob)
     const bobFiles = countThemeFiles(b.page)
     try {
-      // 관리자 항목은 목록 머리의 `…` 에 — 관리자에게만.
+      // 관리자 칸은 뼈대 사이드바의 «관리자» 묶음에 — 관리자에게만.
       await a.page.goto('/')
-      await a.page.getByRole('button', { name: '더 보기', exact: true }).click()
-      await a.page.getByRole('menuitem', { name: '테마 관리' }).click()
+      await a.page.getByRole('navigation', { name: '관리자' }).getByRole('link', { name: '테마', exact: true }).click()
       await a.page.getByRole('heading', { name: '테마 관리' }).waitFor()
       await a.page
         .getByLabel('테마 패키지 올리기')

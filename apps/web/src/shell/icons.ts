@@ -44,14 +44,18 @@ import {
   FileUp,
   FolderInput,
   FolderOpen,
+  FolderCog,
   FolderPlus,
   GripVertical,
   History,
+  LayoutGrid,
   Layers,
+  Link2,
   ListIndentDecrease,
   ListIndentIncrease,
   ListOrdered,
   LogOut,
+  Menu,
   MessageSquarePlus,
   MousePointerClick,
   MoveHorizontal,
@@ -60,6 +64,7 @@ import {
   PackagePlus,
   Palette,
   Pencil,
+  ScrollText,
   PackageOpen,
   Plus,
   Redo2,
@@ -72,6 +77,7 @@ import {
   TriangleAlert,
   Undo2,
   Upload,
+  UserCog,
   Users,
   X,
   ZoomIn,
@@ -166,6 +172,15 @@ export const ICONS = {
   themeTemplate: PackageOpen,
   /** 테마 관리 판 줄의 «미리보기». */
   preview: Eye,
+  /** 작업 공간 사이드바(`shell/workspace-layout.tsx`)의 칸 — 프로젝트 목록 · 관리자의 사용자 · 초대 링크 · 프로젝트 · 기록. 계정 · 테마는 위의
+   * `account` · `themes` 를 그대로 쓴다(같은 곳으로 가는 같은 동작이다). */
+  navProjects: LayoutGrid,
+  navUsers: UserCog,
+  navInvites: Link2,
+  navAdminProjects: FolderCog,
+  navAudit: ScrollText,
+  /** 좁은 창에서 사이드바의 칸 목록을 펴고 접는다. */
+  navMenu: Menu,
 } as const satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof ICONS
