@@ -88,7 +88,28 @@ M1 의 `describe.skip` 만 뗀 판(`pnpm vitest run --project api apps/api/test/
 
 ## 게이트
 
-(아래에 채운다)
+머리 `299de3de`(고침 커밋). 체인 스크립트 하나(`nohup nice -n 10 caffeinate -i`) · node v24.21.0 · 슬롯 디렉터리 0 개에서 `fx-ac` 를 만들고 띄웠다
+(끝나고 지웠다). load: 체인 시작 48.2 · api 시작 37.2(코어 15 × 3 = 45 아래로 내려간 뒤 띄웠다) · 끝 22.1 / 15 분 평균 57.1 — 다른 트랙과
+겹쳤다. **잠듦:** `pmset -g log` 의 마지막 `Sleep` 은 2026-10-31 20:28(열 비상)이라 실행(00:34 – 01:09)과 안 겹친다.
+
+| 단계 | rc | 실행 · 건너뜀 |
+|---|---|---|
+| `pnpm typecheck` | 0 | |
+| `pnpm build` | 0 | |
+| `pnpm vitest run --project api --maxWorkers=25%` | **1** | 파일 178 · 케이스 2745 — 통과 2739 · 건너뜀 2(L1 · `log-destination` 의 Linux `/dev/full` 판) · **실패 4 — 넷 다 `STACK_TRACE_ERROR`(시간 초과)** |
+| `pnpm vitest run --project build apps/api/build-test` | **1** | 파일 5 · 케이스 63 — 통과 62 · **실패 1**(`screen-chromium` «장 수를 네 배로 늘려도 최고치가 거의 그대로다» `expected 1 to be +0`) |
+| `pnpm fmt` · `pnpm lint` | 0 · 0 | 바꾼 파일의 lint 경고 0(경고는 앞부터 있던 남의 파일 것) |
+
+빨강 다섯은 로그와 무관한 파일이다 — 혼자 다시 돌렸다:
+
+- `menu-cascade-concurrency.test.ts`(시간 초과 둘) — 혼자 돌린 판(load 38) **17/17 통과**.
+- `menu-broadcast-census.test.ts`(시간 초과 둘 — 소스 전부를 파서로 훑는 케이스) — 혼자 돌린 첫 판(load 38)은 «트리 쓰기의 호출 자리»
+  하나가 또 시간 초과(28.3s), 둘째 판(load 26 → 48)도 40.0s 시간 초과, 셋째 판 **20/20 통과**(그 케이스 9.0s). 값으로 죽은 판은 없다.
+- `screen-chromium.test.ts` — 혼자 돌린 판 **34/34 통과**. 실패한 케이스는 부하에 기대는 최고치 셈이다.
+- 브리프의 «시간 상한 케이스 하나로 빨강이면 그 파일을 혼자 세 번» 은 census 에 세 번 돌렸다. 전량 api 를 다시 돌리지는 않았다 — load 가
+  다시 48 로 오른다.
+
+숨은 글자(제어 · 방향 · 폭 없음 · U+2028 · 서로게이트)는 바뀐 파일 넷(`log-mask.ts` · `app.ts` · 케이스 파일 · 이 보고)에서 0.
 
 ## 남은 것
 
@@ -99,4 +120,16 @@ M1 의 `describe.skip` 만 뗀 판(`pnpm vitest run --project api apps/api/test/
 
 ## 지침
 
-(아래에 채운다)
+1. **글자로 가리는 장치를 라우터가 읽는 꼴로 안 잰다는 것이 빠져 있다** — 무엇이 빠졌나: 경로 · 주소를 글자 규칙으로 가리거나 거르는 장치를
+   세울 때, 그 값을 실제로 쓰는 판독기(라우터)가 같은 글자를 어떻게 읽는지 재라는 문장이 경로에는 없다(IP 대역에는 있다). Fastify 의
+   라우터(find-my-way)는 퍼센트 인코딩을 풀어 `/api/auth/%69nvites/<원문>` 을 `/api/auth/invites/:token` 으로 받고 그 원문을 쓴다(200) —
+   `/api/auth/invites/` 글자로만 가린 판은 그 줄의 원문을 남긴다. 어디: `.ruler/30-delegation.md` «거짓 빨강이라 안전하다» 문단의
+   «값도 누가 읽은 값인지 본다 …» 문장 뒤. 넣을 문장: «**경로를 글자로 가리거나 거르는 장치도 라우터가 읽는 꼴로 잰다** — Fastify 의
+   라우터는 퍼센트 인코딩을 풀어 `/api/auth/%69nvites/<원문>` 을 그 라우트로 받는다(200 · `params` 에 원문). 인코딩 · 대소문자 · 겹친 빗금을
+   바꾼 판을 케이스에 싣고, 그 라우트에 닿는지(상태 코드)를 카나리아로 적는다(`apps/api/src/http/log-mask.ts` · `apps/api/test/rv-ac-link-exposure.test.ts`).»
+2. **로그 문장을 고치는 자리는 `hooks.logMethod` 가 아니라 `serializers.msg` 라는 것이 빠져 있다** — 무엇이 빠졌나: pino 는 문장 없이 오류만 실은
+   줄(`log.warn({ err })`)에 오류 문장을 `msg` 로 옮겨 적는데 그 글자는 로그 메서드의 인자가 아니어서 글자 인자를 고치는 `hooks.logMethod` 를
+   지난다 — 그렇게 짠 첫 판에서 `FST_ERR_REP_ALREADY_SENT` 줄의 원문 1 개가 남았다. 어디: `.ruler/20-verification.md` 「목 · 계측은 불린 수를
+   값으로 확인하고 …」 문단 끝. 넣을 문장: «**pino 로그에서 값을 가리는 장치는 칸마다 센다** — 요청은 `req`, 오류는 `err`, 문장은
+   `msg` 시리얼라이저다. 문장 칸은 `hooks.logMethod` 로 덮지 않는다 — pino 가 오류만 실은 줄에 옮겨 적는 오류 문장은 메서드 인자가 아니라 그
+   훅을 지난다. `msg` 시리얼라이저는 `%s` 를 채운 뒤의 글자와 그 옮긴 문장을 다 받는다(`apps/api/src/http/log-mask.ts`).»
