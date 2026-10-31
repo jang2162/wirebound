@@ -7,6 +7,8 @@
  *   두 파일의 `.role` 읽기를 **줄 글자째** 못박는다 — 새 줄이 생기면 죽는다.
  * - 가드의 정규식(`\.\s*role\b`)은 구조 분해(`const { role } = project`)와 대괄호 읽기를 못 본다. 이 트랙의 몫은 아니지만(기준 `20b398e2` 에서도
  *   같다) 넓힌 두 파일이 그 꼴로 판정을 들여도 가드가 초록이라 함께 센다.
+ *
+ * **이월(2026-10-31 사내 공용 운영) — R-2a.** 가드(`role-access.test.ts`)를 줄 글자 목록으로 못박는 고침은 이월이다 — 그동안 이 파일이 대신 잡는다.
  */
 import { describe, expect, it } from 'vitest'
 import { stripComments } from './store-access-guard'

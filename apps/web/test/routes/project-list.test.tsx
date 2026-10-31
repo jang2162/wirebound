@@ -295,6 +295,26 @@ describe('카드 격자 · 검색 · 거름 · 정렬', () => {
     expect((screen.getByLabelText('정렬') as HTMLSelectElement).value).toBe('name')
   })
 
+  /**
+   * 검색 글은 칸이 들고 주소에는 싣기만 한다(`routes/project-list.tsx` 머리말 «검색 글은 칸이 든다»). 조합이 굳는 판 자체는 jsdom 이 못 낸다 — 실브라우저
+   * `build-test/rv-ws-workspace.test.ts` «검색 칸에 한글을 조합해 치면 …» 이 잰다. 여기는 조합 중 주소 · 칸 밖 주소 변경 둘의 규칙만 잰다.
+   */
+  it('검색 칸 — 한글 조합 중에는 주소를 안 고치고 끝나면 싣는다 · 주소가 칸 밖에서 바뀌면(사이드바 «프로젝트») 칸이 따른다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    const box = screen.getByLabelText('검색') as HTMLInputElement
+    fireEvent.compositionStart(box)
+    fireEvent.change(box, { target: { value: 'ㄱ' } })
+    fireEvent.change(box, { target: { value: '고' } })
+    expect({ value: box.value, search: currentSearch() }).toEqual({ value: '고', search: '' })
+    fireEvent.compositionEnd(box)
+    expect(new URLSearchParams(currentSearch()).get('q')).toBe('고')
+
+    fireEvent.click(within(screen.getByRole('navigation', { name: '작업 공간' })).getByRole('link', { name: '프로젝트' }))
+    await waitFor(() => expect(currentSearch()).toBe(''))
+    expect(box.value).toBe('')
+  })
+
   it('«이름» 정렬은 한국어 차례다', async () => {
     renderWithProviders(<App />, {
       client: fakeApi({ me: async () => USER, listProjects: async () => ROWS }),

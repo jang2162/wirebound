@@ -12,7 +12,8 @@
  * | 세션 통지 | 로그아웃 실패 줄이 좁은 창에서도 창 안에 서고, 다른 탭에서 다른 사람이 로그인하면 이름 · 통지가 바뀐다 |
  * | 목록에서 로그아웃 | 에디터에서 보낸 편집이 서버에 붙잡힌 채 목록으로 나와 사이드바 «로그아웃» 을 누른 판의 차례 · 서버 값 · 로그인 화면의 줄 |
  * | 설정 가로 탭 | ← → Home End · 모르는 `?section=` · owner 아님의 «위험 구역» 없음 · 창 320 에서 탭 줄이 안에서 구르고 End 로 간 탭이 줄 안에 보인다 |
- * | skip 둘 | 아래 «skip» 머리말 |
+ * | 고친 판 | 리뷰의 skip 셋을 FX-WS 가 뗐다 — 아래 «고친 판» 머리말 |
+ * | skip 둘 | 이월 — 아래 «skip» 머리말 |
  */
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -28,7 +29,8 @@ if (!전제.ok) {
   console.log(`[에디터 실브라우저 판] 건너뛴다 — ${전제.reason}`)
 }
 
-const SWITCHED_NOTICE = '다른 사람으로 로그인됐습니다 — 이 탭은 이제 머리의 사람의 화면입니다'
+/** 전환 통지의 앞머리 — 뒤에 새 사람의 이름이 붙는다(`session/session-menu.tsx` 의 `switchedNotice`). */
+const SWITCHED_LEAD = '다른 사람으로 로그인됐습니다'
 const LONG_NAME = '띄어쓰지않은아주긴프로젝트이름이카드한칸을넘치는지재는표본입니다가나다라마바사'
 
 /** 화면 여섯 — 이름 · 주소 · 다 섰다는 표지. */
@@ -563,39 +565,56 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
   })
 
   /**
-   * **skip — 지금 빨강.** 고칠 트랙이 skip 을 떼고 초록으로 돌린다. 뗀 판의 실패 값은 보고 `docs/superpowers/plans/2026-10-31-rv-ws-report.md` 에 있다.
-   *
-   * - 창 320 의 설정 탭 줄에서 End 로 고른 탭이 줄 안에 다 안 보인다 — `focus()` 가 반쯤 보이는 탭을 굴리지 않는다(R-4b).
-   * - 에디터에서 보낸 편집이 서버에 닿기 전에 목록으로 나와 사이드바 «로그아웃» 을 누르면 편집이 말없이 사라진다 — 뼈대의 `useLogout` 은 `settle` 이
-   *   없다(R-6a · 기준 `20b398e2` 의 `page-head.tsx` 부터 같은 길).
-   * - 검색 칸에 한글을 조합해 치면 조합 걸음이 쌓인다 — 칸 값이 주소에서 오고 `BrowserRouter` 가 위치 갱신을 전이로 한다(R-5a).
-   * - 관리자 칸의 «준비 중» 넷은 한 라우트(`/admin/:section`)라 칸을 옮겨도 «메뉴» 가 펴진 채 남는다(R-4a — M 트랙의 정적 라우트가 풀면 저절로 초록).
-   * - 좁은 창에서 전환 통지(«머리의 사람의 화면»)가 선 화면에 새 사람의 이름이 안 보인다 — 이름은 접힌 칸 목록 안의 사람 줄이다(R-6b).
+   * **고친 판(FX-WS)** — 리뷰의 skip 셋(R-4b · R-5a · R-6b)을 뗀 것이다. 고치기 전 소스에서 뗀 판의 실패 값은 보고
+   * `docs/superpowers/plans/2026-10-31-fx-ws-report.md` 에 있다.
    */
-  describe.skip('skip — 지금 빨강', () => {
-    it('창 320 — 설정 탭 줄에서 End 로 고른 탭이 탭 줄 안에 보인다', async () => {
+  describe('고친 판 — 설정 탭 줄 · 검색 칸 · 전환 통지', () => {
+    it('창 320 — 설정 탭 줄에서 End 로 고른 탭이 탭 줄 안에 보인다 · 반쯤 보이는 탭을 누르면 세로 스크롤이 그대로다', async () => {
       const narrow = await stack.openTab(stack.users.alice, { viewport: { width: 320, height: 700 } })
       try {
         await narrow.page.goto(`/projects/${projectId}/settings`)
         await narrow.page.getByRole('region', { name: '일반' }).waitFor()
         expect((await tabRowAfterEnd(narrow.page)).inRow).toBe(true)
+
+        // 누름 — 반쯤 보이는 «위험 구역» 을 보이는 쪽에서 누른다. playwright 의 `click` 은 누르기 전에 스스로 굴리므로 좌표로 누른다. 창 높이를
+        // 줄여 세로로 구를 자리를 만든다(320×700 의 «일반» 은 안 구른다 — 그 판에서는 «튐» 을 못 잰다).
+        await narrow.page.setViewportSize({ width: 320, height: 360 })
+        await narrow.page.goto(`/projects/${projectId}/settings`)
+        await narrow.page.getByRole('region', { name: '일반' }).waitFor()
+        const before = await verticalScroll(narrow.page, true)
+        const point = await narrow.page.evaluate(() => {
+          const row = document.querySelector('.wb-shell-settings-tabs')!.getBoundingClientRect()
+          const tab = [...document.querySelectorAll('.wb-shell-settings-tab')].at(-1)!.getBoundingClientRect()
+          return {
+            x: Math.round((tab.left + Math.min(tab.right, row.right)) / 2),
+            y: Math.round(tab.top + tab.height / 2),
+            cut: tab.right > row.right + 0.5,
+          }
+        })
+        await narrow.page.mouse.click(point.x, point.y)
+        await narrow.page.getByRole('region', { name: '위험 구역' }).waitFor()
+        await narrow.page.waitForTimeout(300)
+        const after = await verticalScroll(narrow.page)
+        // eslint-disable-next-line no-console
+        console.log(`[fx-ws 설정 탭 320 누름] 반쯤 보임 ${point.cut} · 세로 ${JSON.stringify(before)} → ${JSON.stringify(after)}`)
+        // 카나리아 — 누른 탭이 반쯤 보이는 판이고, 세로로 구를 자리가 있는 판이다(없으면 «튐» 을 못 잰다).
+        expect(point.cut).toBe(true)
+        expect(before.room).toBeGreaterThan(0)
+        // 누른 뒤의 `scrollTop` 만 보면 «위험 구역» 판이 짧아 0 으로 잘린 값이다 — 누른 동안 스크롤 이벤트가 본 가장 큰 값으로 잰다.
+        expect(after.most).toBe(before.top)
       } finally {
         await narrow.context.close()
       }
     })
 
-    it('목록 화면에서 로그아웃해도 보낸 편집이 저장되거나, 로그인 화면이 잃은 것을 말한다(에디터 `…` 의 로그아웃과 같은 성질)', async () => {
-      const got = await logoutFromListAfterEdit(stack, alice)
-      expect(got.content[0] === '붙잡힌 채 목록으로' || got.said !== '').toBe(true)
-    })
-
-    it('검색 칸에 한글을 조합해 치면 끝낸 글이 칸 값 · 주소에 그대로 선다', async () => {
+    it('검색 칸에 한글을 조합해 치면 끝낸 글이 칸 값 · 주소에 그대로 선다 · 조합 중에는 주소를 안 고친다 · 주소가 칸 밖에서 바뀌면 칸이 따른다', async () => {
       const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1280, height: 900 } })
       try {
         await page.goto('/')
         const box = page.getByRole('searchbox')
         await box.click()
         const cdp = await context.newCDPSession(page)
+        const addressed: (string | null)[] = []
         for (const [text, commit] of [
           ['ㄱ', false],
           ['고', false],
@@ -608,29 +627,91 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
           if (commit) await cdp.send('Input.insertText', { text })
           else await cdp.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length })
           await page.waitForTimeout(60)
+          addressed.push(new URL(page.url()).searchParams.get('q'))
         }
         await page.waitForTimeout(200)
         expect({ value: await box.inputValue(), q: new URL(page.url()).searchParams.get('q') }).toEqual({ value: '고객', q: '고객' })
+        // 조합 중(확정 전) 걸음의 주소는 그 앞 확정 값 그대로다 — 자모가 주소에 안 실린다. 확정 걸음(셋째 · 일곱째)은 60ms 안에 안 실릴 수 있어 안 본다.
+        expect([addressed[0], addressed[1], addressed[3], addressed[4], addressed[5]]).toEqual([null, null, '고', '고', '고'])
+        // 영문을 사이 없이 — 글자를 잃지 않는다.
+        await box.fill('')
+        await box.pressSequentially('report', { delay: 0 })
+        await page.waitForTimeout(300)
+        expect({ value: await box.inputValue(), q: new URL(page.url()).searchParams.get('q') }).toEqual({ value: 'report', q: 'report' })
+
+        // CPU 를 늦춘 판 — 전이가 키 사이에 늦게 커밋돼도(제 `replace` 가 칸보다 늦게 닿아도) 칸이 되돌아가지 않는다.
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: 8 })
+        await box.fill('')
+        await box.pressSequentially('abcdefghij', { delay: 15 })
+        await page.waitForTimeout(800)
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
+        const slow = { value: await box.inputValue(), q: new URL(page.url()).searchParams.get('q') }
+        await box.fill('report')
+        await page.waitForTimeout(300)
+
+        // 칸 밖에서 주소가 바뀐다 — 사이드바 «프로젝트»(질의 없는 `/` 로 감) · 뒤로 가기. 주소가 바뀐 것만 기다리고 칸 값은 한 번 읽는다 — 칸 값을
+        // 기다리면 «따르지 않는» 변조가 값이 아니라 시간 초과로 죽는다.
+        await page.getByRole('navigation', { name: '작업 공간' }).getByRole('link', { name: '프로젝트' }).click()
+        await page.waitForURL((url) => url.pathname === '/' && url.search === '')
+        await page.waitForTimeout(500)
+        const away = await box.inputValue()
+        await page.goBack()
+        await page.waitForURL((url) => url.searchParams.get('q') === 'report')
+        await page.waitForTimeout(500)
+        const back = await box.inputValue()
+        // eslint-disable-next-line no-console
+        console.log(
+          `[fx-ws 검색 칸] 조합 걸음의 주소 ${JSON.stringify(addressed)} · CPU 8배 ${JSON.stringify(slow)} · 사이드바 «프로젝트» 뒤 «${away}» · 뒤로 가기 뒤 «${back}»`,
+        )
+        expect(slow).toEqual({ value: 'abcdefghij', q: 'abcdefghij' })
+        expect({ away, back }).toEqual({ away: '', back: 'report' })
       } finally {
         await context.close()
       }
     })
 
-    it('창 390 — 펼친 «메뉴» 에서 관리자 칸(사용자 → 초대 링크)을 누르면 접힌다', async () => {
-      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
+    it('역할 · 정렬 고르기 — 고른 값이 칸 · 주소에 선다(같은 전이를 지나는 고르는 컨트롤의 측정)', async () => {
+      const { page, context } = await stack.openTab(stack.users.alice, { viewport: { width: 1280, height: 900 } })
       try {
-        await page.goto('/admin/users')
-        await page.getByRole('heading', { name: '사용자' }).waitFor()
-        await page.getByRole('button', { name: '메뉴' }).click()
-        await page.getByRole('navigation', { name: '관리자' }).getByRole('link', { name: '초대 링크' }).click()
-        await page.getByRole('heading', { name: '초대 링크' }).waitFor()
-        expect(await page.getByRole('button', { name: '메뉴' }).getAttribute('aria-expanded')).toBe('false')
+        await page.goto('/')
+        const role = page.getByLabel('역할')
+        const sort = page.getByLabel('정렬')
+        await role.waitFor()
+        // (가) 사람의 빠르기 — 하나 고르고 그 판이 선 뒤 다음을 고른다.
+        await role.selectOption('editor')
+        await sort.selectOption('name')
+        await role.selectOption('owner')
+        await page.waitForTimeout(300)
+        const human = {
+          role: await role.inputValue(),
+          sort: await sort.inputValue(),
+          q: [new URL(page.url()).searchParams.get('role'), new URL(page.url()).searchParams.get('sort')],
+        }
+        // (나) 한 틱 안에 셋 — 사람이 못 내는 빠르기. 값만 적는다(단언하지 않는다).
+        await page.goto('/')
+        await role.waitFor()
+        const tick = await page.evaluate(async () => {
+          const pick = (select: HTMLSelectElement, value: string) => {
+            select.value = value
+            select.dispatchEvent(new Event('change', { bubbles: true }))
+            return select.value
+          }
+          const [r, s] = [...document.querySelectorAll<HTMLSelectElement>('.wb-shell-home-bar select')]
+          const right = [pick(r!, 'editor'), pick(s!, 'name'), pick(r!, 'owner')]
+          await new Promise((resolve) => setTimeout(resolve, 300))
+          return { right, later: [r!.value, s!.value], search: location.search }
+        })
+        // eslint-disable-next-line no-console
+        console.log(
+          `[fx-ws 역할 · 정렬] 사람 빠르기 ${JSON.stringify(human)} · 한 틱 셋: 고른 직후 ${JSON.stringify(tick.right)} · 300ms 뒤 ${JSON.stringify(tick.later)} · 주소 ${tick.search}`,
+        )
+        expect(human).toEqual({ role: 'owner', sort: 'name', q: ['owner', 'name'] })
       } finally {
         await context.close()
       }
     })
 
-    it('창 390 — 다른 탭에서 다른 사람이 로그인해 전환 통지가 서면, 그 통지가 말하는 새 사람의 이름이 화면에 보인다', async () => {
+    it('창 390 — 다른 탭에서 다른 사람이 로그인하면 전환 통지가 새 사람의 이름을 말하고 창 안에 보인다', async () => {
       const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
       try {
         await page.goto('/account')
@@ -643,8 +724,55 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
         await other.getByLabel('이메일').fill(stack.users.bob.email)
         await other.getByLabel('비밀번호').fill(stack.users.bob.password)
         await other.getByRole('button', { name: '로그인' }).click()
-        await page.getByText(SWITCHED_NOTICE).waitFor()
-        expect(await page.getByText(stack.users.bob.name, { exact: true }).isVisible()).toBe(true)
+        const notice = page.locator('.wb-shell-workspace-main [role="status"]', { hasText: SWITCHED_LEAD })
+        await notice.waitFor()
+        // 전환은 이 탭을 목록으로 옮긴다 — 목록이 다 선 뒤에 잰다(옮기는 도중의 판은 통지가 잠깐 창 밖이다).
+        await page.waitForURL((url) => url.pathname === '/')
+        await page.locator('.wb-shell-workspace-main').getByRole('list', { name: '프로젝트' }).waitFor()
+        await page.waitForTimeout(300)
+        const got = await notice.evaluate((el) => {
+          const r = el.getBoundingClientRect()
+          return {
+            text: el.textContent ?? '',
+            inView: r.top >= 0 && r.bottom <= window.innerHeight && r.height > 0,
+            box: [Math.round(r.top), Math.round(r.bottom), window.innerHeight],
+          }
+        })
+        // eslint-disable-next-line no-console
+        console.log(`[fx-ws 전환 통지 390] «${got.text}» · 창 안 ${got.inView} · top · bottom · 창 ${JSON.stringify(got.box)}`)
+        expect({ named: got.text.includes(stack.users.bob.name), inView: got.inView }).toEqual({ named: true, inView: true })
+      } finally {
+        await context.close()
+      }
+    })
+  })
+
+  /**
+   * **skip — 지금 빨강 · 이월.** 뗀 판의 실패 값은 보고 `docs/superpowers/plans/2026-10-31-rv-ws-report.md` 에 있다.
+   */
+  describe.skip('skip — 지금 빨강(이월)', () => {
+    /**
+     * **이월(2026-10-31 사내 공용 운영) — R-6a.** 에디터에서 보낸 편집이 서버에 닿기 전에 목록으로 나와 사이드바 «로그아웃» 을 누르면 편집이 말없이
+     * 사라진다 — 뼈대의 `useLogout` 은 `settle` 이 없다(기준 `20b398e2` 의 `page-head.tsx` 부터 같은 길).
+     */
+    it('목록 화면에서 로그아웃해도 보낸 편집이 저장되거나, 로그인 화면이 잃은 것을 말한다(에디터 `…` 의 로그아웃과 같은 성질)', async () => {
+      const got = await logoutFromListAfterEdit(stack, alice)
+      expect(got.content[0] === '붙잡힌 채 목록으로' || got.said !== '').toBe(true)
+    })
+
+    /**
+     * **이월(2026-10-31 사내 공용 운영) — R-4a.** 관리자 칸의 «준비 중» 넷은 한 라우트(`/admin/:section`)라 칸을 옮겨도 «메뉴» 가 펴진 채 남는다.
+     * M 트랙이 칸을 달면 저절로 풀린다 — M 이 skip 을 뗀다.
+     */
+    it('창 390 — 펼친 «메뉴» 에서 관리자 칸(사용자 → 초대 링크)을 누르면 접힌다', async () => {
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
+      try {
+        await page.goto('/admin/users')
+        await page.getByRole('heading', { name: '사용자' }).waitFor()
+        await page.getByRole('button', { name: '메뉴' }).click()
+        await page.getByRole('navigation', { name: '관리자' }).getByRole('link', { name: '초대 링크' }).click()
+        await page.getByRole('heading', { name: '초대 링크' }).waitFor()
+        expect(await page.getByRole('button', { name: '메뉴' }).getAttribute('aria-expanded')).toBe('false')
       } finally {
         await context.close()
       }
@@ -715,6 +843,27 @@ async function logoutFromListAfterEdit(
   } finally {
     await context.close()
   }
+}
+
+/**
+ * 설정 탭 줄을 품은 세로 스크롤 상자(가장 가까운 조상)의 `scrollTop` · 구를 자리(`scrollHeight − clientHeight`) · `arm` 한 뒤 스크롤 이벤트가 본 가장 큰
+ * `scrollTop`(`most` — 판이 짧아져 잘리기 전의 튐).
+ */
+function verticalScroll(page: Page, arm = false): Promise<{ top: number; room: number; most: number }> {
+  return page.evaluate((arming) => {
+    let el: Element | null = document.querySelector('.wb-shell-settings-tabs')
+    while (el !== null && !(el.scrollHeight > el.clientHeight && /(auto|scroll)/.test(getComputedStyle(el).overflowY)))
+      el = el.parentElement
+    const box = el ?? document.scrollingElement!
+    const held = window as unknown as { rvWsMost?: number }
+    if (arming) {
+      held.rvWsMost = box.scrollTop
+      box.addEventListener('scroll', () => {
+        held.rvWsMost = Math.max(held.rvWsMost ?? 0, box.scrollTop)
+      })
+    }
+    return { top: box.scrollTop, room: box.scrollHeight - box.clientHeight, most: held.rvWsMost ?? box.scrollTop }
+  }, arm)
 }
 
 /**

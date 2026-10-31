@@ -5,14 +5,19 @@
  *
  * - 위 줄: 검색(이름 · 슬러그 · 설명) · 역할 거름 · 정렬(기본 «최근 수정») · 수. 셋은 **주소 질의**(`?q=&role=&sort=`)에 둔다 — 에디터로 갔다가
  *   뒤로 가기로 돌아오면 남는다. 바꿀 때마다 `replace` 다(글자마다 기록을 쌓지 않는다). 거름 · 정렬 · 주소 규칙은 `projects/project-filter.ts`.
+ * - **검색 글은 칸이 든다 — 주소는 싣기만 한다**(`ProjectCards` 의 `text`). `main.tsx` 의 `BrowserRouter` 는 위치 갱신을 전이(`startTransition`)로
+ *   해, 칸의 `value` 를 주소에서 읽으면 입력 이벤트 뒤 React 가 칸을 아직 안 바뀐 주소 값으로 되돌린다 — 한글 조합이 걸음마다 굳고(«고객» →
+ *   «ㄱ고곡고ㄱ개객객») 빠른 입력이 글자를 잃는다(Chrome · `build-test/rv-ws-workspace.test.ts` «검색 칸에 한글을 조합해 치면 …» — jsdom 의
+ *   `fireEvent.change` 한 번은 이 판을 못 낸다). 앱 전체의 전이를 끄지 않는 것은 에디터의 페이지 전환까지 동기로 바뀌어서다. 역할 · 정렬은 고르는
+ *   컨트롤이라 주소에서 읽은 채다 — 사람의 빠르기로는 안 잃는다(같은 파일 «역할 · 정렬 고르기» 가 잰다. 한 틱 안에 다른 둘을 고르면 앞 것을 잃는다).
  * - 카드: 이름(에디터로) · 역할 표지 · 슬러그 · 설명 · 멤버 수 · 최근 수정(상대 시각 — 정확한 시각은 `<time>` 의 `title`) · «설정».
  * - 빈 목록(«참여 중인 프로젝트가 없습니다»)과 거른 결과 없음(«검색 결과가 없습니다»)은 다른 문장이다 — 앞엣것은 만들라는 안내, 뒤엣것은 거름을 풀라는 안내다.
  *
  * **조회·잠금·조작은 `projects/use-project-commands.tsx`가 갖는다.** 이 파일은 그 결과를
  * 그리기만 한다 — 판정이 컴포넌트 안에 흩어지면 케이스가 화면을 지나야만 재진다.
  */
-import { useId, useState, type ReactElement } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { useId, useRef, useState, type ReactElement } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router'
 import { SignedOut } from '../api/failure'
 import type { ProjectListItem, ProjectRole } from '../api/types'
 import { filterProjects, queryOf, relativeTime, roleBadge, searchOf, type ProjectQuery, type ProjectSort } from '../projects/project-filter'
@@ -114,13 +119,34 @@ export function ProjectListRoute(): ReactElement {
  */
 function ProjectCards(props: { projects: ProjectListItem[] }): ReactElement {
   const [params, setParams] = useSearchParams()
-  const query = queryOf(params)
+  const location = useLocation()
+  const fromAddress = queryOf(params)
+  /** 검색 글 — 칸이 든다(파일 머리말 «검색 글은 칸이 든다»). 첫 값은 주소에서. */
+  const [text, setText] = useState(fromAddress.text)
+  /**
+   * **주소가 칸 밖에서 바뀌면 칸이 따른다**(뒤로 · 앞으로 가기 · 질의 없는 `/` 로 가는 사이드바 «프로젝트»). 위치가 바뀔 때마다 주소의 글을
+   * 칸에 넣는다 — 제 쓰기가 닿은 위치는 칸과 같은 글이라 아무것도 안 바꾼다. 늦게 닿은 제 쓰기가 더 친 칸을 되돌리는 판은 안 선다 — React 가 같은
+   * 전이 줄의 위치 갱신을 묶어 마지막 것만 커밋한다(CPU 8배 · 15ms 간격 열 글자 — `build-test/rv-ws-workspace.test.ts` «검색 칸에 한글을 …»).
+   */
+  const [seenKey, setSeenKey] = useState(location.key)
+  if (seenKey !== location.key) {
+    setSeenKey(location.key)
+    setText(fromAddress.text)
+  }
+  /** 한글 조합 중(`compositionstart` ~ `compositionend`)에는 주소를 안 고친다 — 자모가 주소에 실리지 않게. 끝나면 끝낸 글을 싣는다. */
+  const composing = useRef(false)
+  const query: ProjectQuery = { ...fromAddress, text }
   const shown = filterProjects(props.projects, query)
   const [now] = useState(() => Date.now())
   const base = useId()
 
   function change(next: Partial<ProjectQuery>): void {
     setParams(searchOf({ ...query, ...next }), { replace: true })
+  }
+
+  function type(value: string): void {
+    setText(value)
+    if (!composing.current) change({ text: value })
   }
 
   return (
@@ -132,8 +158,15 @@ function ProjectCards(props: { projects: ProjectListItem[] }): ReactElement {
             className="wb-shell-project-input"
             type="search"
             placeholder="이름 · 슬러그 · 설명"
-            value={query.text}
-            onChange={(event) => change({ text: event.target.value })}
+            value={text}
+            onChange={(event) => type(event.target.value)}
+            onCompositionStart={() => {
+              composing.current = true
+            }}
+            onCompositionEnd={(event) => {
+              composing.current = false
+              type(event.currentTarget.value)
+            }}
           />
         </label>
         <label className="wb-shell-home-filter" htmlFor={`${base}-role`}>
