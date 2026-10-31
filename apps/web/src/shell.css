@@ -3165,17 +3165,37 @@
   color: var(--wb-shell-ink);
 }
 
-/* 머리 아래 줄 — 왼쪽 수 · 오른쪽 «새 프로젝트». */
+/* 위 줄 — 검색 · 역할 · 정렬 · 수(`routes/project-list.tsx`). 좁으면 줄을 바꾼다 — 검색 칸이 남는 폭을 먹고 수는 오른쪽 끝에 선다. */
 .wb-shell-home-bar {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
+  align-items: flex-end;
+  gap: 8px 12px;
   margin: 0 0 16px;
 }
 
+/* 거름 칸 하나 — 작은 라벨 위, 칸 아래. */
+.wb-shell-home-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 검색 칸은 남는 폭을 먹되 240px 아래로 안 준다(창이 그보다 좁으면 칸 폭 전부). */
+.wb-shell-home-search {
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+
+.wb-shell-home-filter-label {
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
 .wb-shell-home-count {
+  margin-left: auto;
+  padding-bottom: 6px;
   font-size: 13px;
   color: var(--wb-shell-muted);
 }
@@ -3207,6 +3227,33 @@
 
 .wb-shell-home-card:hover {
   border-color: var(--wb-shell-accent);
+}
+
+/* 카드 머리 — 이름과 역할 표지. 표지는 오른쪽 위에 붙고 이름이 길면 이름만 접힌다. */
+.wb-shell-home-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 역할 표지 — owner 는 강조색, 나머지는 옅게. */
+.wb-shell-home-role {
+  flex: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--wb-shell-chrome);
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+  white-space: nowrap;
+}
+
+.wb-shell-home-role[data-role='owner'] {
+  border-color: #c7d8fb;
+  background: #eaf1fe;
+  color: var(--wb-shell-accent);
 }
 
 /* 이름 — 링크라 밑줄을 지운다. 끊을 자리 없는 긴 이름도 카드 안에서 접힌다. */
@@ -3242,6 +3289,17 @@
   gap: 8px;
   margin-top: auto;
   padding-top: 8px;
+}
+
+.wb-shell-home-meta {
+  min-width: 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-home-time {
+  white-space: nowrap;
 }
 
 .wb-shell-home-slug {

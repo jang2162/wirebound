@@ -1,9 +1,18 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectListItem, SessionUser } from '../../src/api/types'
-import { currentPath, expiringSession, fakeApi, LIST_ITEM_DEFAULTS, renderWithProviders, tabHub, unauthenticatedError } from '../helpers'
+import {
+  currentPath,
+  currentSearch,
+  expiringSession,
+  fakeApi,
+  LIST_ITEM_DEFAULTS,
+  renderWithProviders,
+  tabHub,
+  unauthenticatedError,
+} from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -204,5 +213,94 @@ describe('목록 화면의 사이드바', () => {
 
     expect(screen.getByRole('navigation', { name: '관리자' })).toBeTruthy()
     expect(me).toBe(1)
+  })
+})
+
+/**
+ * **카드 격자 · 검색 · 역할 거름 · 정렬**(설계 「프로젝트 목록」 — `projects/project-filter.ts` 가 규칙을 갖고 여기는 화면에 닿는지를 잰다).
+ * 상대 시각은 «지금» 에서 뺀 시각으로 짓는다 — 몇 ms 흔들려도 같은 글이 나오는 값(분 단위 한가운데)이다.
+ */
+describe('카드 격자 · 검색 · 거름 · 정렬', () => {
+  const minutesAgo = (n: number): string => new Date(Date.now() - n * 60_000 - 20_000).toISOString()
+  const ROWS = [
+    project({ id: 'p-a', name: '관리자 콘솔', slug: 'admin', role: 'owner', memberCount: 3, updatedAt: minutesAgo(90) }),
+    project({ id: 'p-b', name: '고객 포털', slug: 'portal', role: 'editor', memberCount: 1, updatedAt: minutesAgo(5) }),
+    project({ id: 'p-c', name: '가나 보고서', slug: 'report', role: 'viewer', memberCount: 7, updatedAt: minutesAgo(60 * 24 * 2) }),
+  ]
+
+  /** 카드 이름 차례 — 내용 칸의 카드 목록에서. */
+  function names(): string[] {
+    return within(within(content()).getByRole('list', { name: '프로젝트' }))
+      .getAllByRole('listitem')
+      .map((card) => card.querySelector('.wb-shell-home-name')?.textContent ?? '')
+  }
+
+  function card(name: string): HTMLElement {
+    const found = within(content())
+      .getAllByRole('listitem')
+      .find((li) => li.querySelector('.wb-shell-home-name')?.textContent === name)
+    if (found === undefined) throw new Error(`카드가 없다: ${name}`)
+    return found
+  }
+
+  it('카드에 역할 표지 · 멤버 수 · 상대 시각 · «설정» 링크가 선다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    const a = card('관리자 콘솔')
+    expect(a.querySelector('.wb-shell-home-role')?.textContent).toBe('owner')
+    expect(a.textContent).toContain('멤버 3명')
+    expect(a.querySelector('time')?.textContent).toBe('1시간 전')
+    expect(within(a).getByRole('link', { name: '관리자 콘솔 설정' }).getAttribute('href')).toBe('/projects/p-a/settings')
+    expect(card('고객 포털').querySelector('time')?.textContent).toBe('5분 전')
+    expect(card('가나 보고서').querySelector('.wb-shell-home-role')?.textContent).toBe('viewer')
+    expect(card('가나 보고서').querySelector('time')?.textContent).toBe('2일 전')
+  })
+
+  it('기본 정렬은 «최근 수정» — 늦게 바뀐 것이 위다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    expect(names()).toEqual(['고객 포털', '관리자 콘솔', '가나 보고서'])
+    expect((screen.getByLabelText('정렬') as HTMLSelectElement).value).toBe('updated')
+  })
+
+  it('검색 결과가 없으면 «검색 결과가 없습니다» — 빈 목록의 안내와 다른 문장이다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    fireEvent.change(screen.getByLabelText('검색'), { target: { value: '없는 글자' } })
+    expect(screen.getByText('검색 결과가 없습니다')).toBeTruthy()
+    expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
+    expect(within(content()).queryByRole('list', { name: '프로젝트' })).toBeNull()
+    expect(content().textContent).toContain('프로젝트 3개 중 0개')
+  })
+
+  it('검색어 · 역할 · 정렬은 주소 질의에 둔다 — 고르면 주소가 바뀌고, 그 주소로 열면 그대로 선다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    fireEvent.change(screen.getByLabelText('역할'), { target: { value: 'editor' } })
+    fireEvent.change(screen.getByLabelText('정렬'), { target: { value: 'name' } })
+    fireEvent.change(screen.getByLabelText('검색'), { target: { value: '포' } })
+    expect(names()).toEqual(['고객 포털'])
+    expect(Object.fromEntries(new URLSearchParams(currentSearch()))).toEqual({ q: '포', role: 'editor', sort: 'name' })
+    expect(currentPath()).toBe('/')
+    cleanup()
+
+    // 뒤로 가기로 돌아온 판 — 같은 주소로 다시 연다.
+    renderWithProviders(<App />, {
+      client: fakeApi({ me: async () => USER, listProjects: async () => ROWS }),
+      route: '/?role=viewer&sort=name',
+    })
+    await screen.findByText('가나 보고서')
+    expect(names()).toEqual(['가나 보고서'])
+    expect((screen.getByLabelText('역할') as HTMLSelectElement).value).toBe('viewer')
+    expect((screen.getByLabelText('정렬') as HTMLSelectElement).value).toBe('name')
+  })
+
+  it('«이름» 정렬은 한국어 차례다', async () => {
+    renderWithProviders(<App />, {
+      client: fakeApi({ me: async () => USER, listProjects: async () => ROWS }),
+      route: '/?sort=name',
+    })
+    await screen.findByText('관리자 콘솔')
+    expect(names()).toEqual(['가나 보고서', '고객 포털', '관리자 콘솔'])
   })
 })
