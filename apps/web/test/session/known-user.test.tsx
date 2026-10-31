@@ -10,7 +10,7 @@ import { createHttpClient } from '../../src/api/http-client'
 import { createKnownUserHolder, KNOWN_USER_HEADER, SESSION_USER_CHANGED } from '../../src/api/known-user'
 import type { ProjectDetail, SessionUser } from '../../src/api/types'
 import { realtimeUrl } from '../../src/realtime/protocol'
-import { SWITCHED_NOTICE } from '../../src/session/session-menu'
+import { switchedNotice } from '../../src/session/session-menu'
 import { currentPath, fakeApi, renderWithProviders, listItem } from '../helpers'
 
 const ALICE: SessionUser = { id: 'u-alice', email: 'alice@example.com', name: '앨리스' }
@@ -139,9 +139,9 @@ describe('세션 — 쿠키의 사람이 다르다는 답을 받으면 다시 �
       holder.changed()
       holder.changed()
     })
-    await waitFor(() => expect(screen.queryByRole('status')?.textContent).toBe(SWITCHED_NOTICE))
+    await waitFor(() => expect(screen.queryByRole('status')?.textContent).toBe(switchedNotice(BOB.name)))
     expect(await shownUser()).toBe('밥')
-    expect(screen.getByRole('status').textContent).toBe(SWITCHED_NOTICE)
+    expect(screen.getByRole('status').textContent).toBe(switchedNotice(BOB.name))
     expect(holder.get()).toBe(BOB.id)
     expect(currentPath()).toBe('/')
     expect(me).toHaveBeenCalledTimes(2)

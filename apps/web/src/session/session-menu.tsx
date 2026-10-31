@@ -41,15 +41,21 @@
 import { useState, type ReactElement } from 'react'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
-import { useSessionEpochNow, useSessionSwitched, useSignOut } from './session-context'
+import { useSessionEpochNow, useSessionSwitched, useSessionUser, useSignOut } from './session-context'
 
 /** 서버가 이유를 주지 않은 실패(네트워크 단절 등)에 쓸 문장. */
 const UNKNOWN_FAILURE = '로그아웃하지 못했습니다'
 /**
  * 이 탭이 로그인하지 않았는데 다른 사람이 됐을 때(`useSessionSwitched` — 다른 탭의 로그인 · 서버의 «쿠키의 사람이 다르다» 거절).
  * 목록으로 옮겨진 까닭을 말한다. **실패가 아니다** — 브라우저는 그 사람으로 로그인해 있다. 그래서 `status`다.
+ *
+ * **새 사람의 이름을 문장에 싣는다** — 이름이 보이는 자리(뼈대 사이드바 바닥 · 에디터 `…` 의 메뉴 머리)는 좁은 창에서 접힌 목록 안이거나 메뉴를 열어야
+ * 보여, 통지가 그 자리를 가리키면 누구의 화면인지 통지만 보고는 모른다. 이름을 모르면(빈 이름) «그 사람» 이라 쓴다.
  */
-export const SWITCHED_NOTICE = '다른 사람으로 로그인됐습니다 — 이 탭은 이제 머리의 사람의 화면입니다'
+export function switchedNotice(name: string | null): string {
+  const who = name !== null && name !== '' ? name : '그 사람'
+  return `다른 사람으로 로그인됐습니다 — 이 탭은 이제 ${who}의 화면입니다`
+}
 
 /**
  * **로그아웃 흐름** — 에디터 머리의 `…`와 에디터 밖 화면 뼈대의 사이드바(`shell/workspace-layout.tsx`)가 함께 쓴다. 판정은 이
@@ -116,16 +122,17 @@ export function useLogout(settle?: () => Promise<string | null>): {
 }
 
 /**
- * **세션의 통지 둘** — 이 탭이 로그인하지 않았는데 다른 사람이 됐다(`SWITCHED_NOTICE` · `status`), 로그아웃이 실패했다(`useLogout`의 `failure` ·
+ * **세션의 통지 둘** — 이 탭이 로그인하지 않았는데 다른 사람이 됐다(`switchedNotice` · `status`), 로그아웃이 실패했다(`useLogout`의 `failure` ·
  * `alert`). 그리는 자리는 화면이 고른다 — 에디터는 하단 바, 셸 밖 화면은 머리 아래. 클래스를 받는 것은 두 자리의 줄 규칙이 달라서다.
  */
 export function SessionNotices(props: { failure: string | null; className: string }): ReactElement {
   const switched = useSessionSwitched()
+  const user = useSessionUser()
   return (
     <>
       {switched && (
         <p className={props.className} role="status">
-          {SWITCHED_NOTICE}
+          {switchedNotice(user?.name ?? null)}
         </p>
       )}
       {props.failure !== null && (
