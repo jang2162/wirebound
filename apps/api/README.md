@@ -20,11 +20,12 @@ pnpm --filter @wirebound/api unlock-login <이메일>     # 로그인 막힘을 
 pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # 인스턴스 관리자를 주고 거둔다 (아래 «인스턴스 관리자»)
 ```
 
-### `migrate` 가 계정도 만든다 — **가입 라우트가 없기 때문이다**
+### `migrate` 가 첫 계정을 만든다 — **링크 없는 가입 라우트가 없기 때문이다**
 
 `migrate` 는 마이그레이션을 **다 올린 뒤** `SEED_USER_EMAIL`·`SEED_USER_PASSWORD` 가
-있으면 계정 하나를 만든다. **이것이 이 저장소에서 계정이 생기는 유일한 경로다**(값 셋의
-설명은 `.env.example` 이 소유한다 — 여기 두 벌로 적지 않는다).
+있으면 계정 하나를 만든다. **계정이 생기는 길은 이것과 인스턴스 관리자가 만든 초대 링크로 하는 가입(아래 «계정 — 초대 · 비활성화 ·
+재설정 · 기록») 둘이다** — 새로 세운 서버의 첫 관리자는 이 길로만 선다(`SEED_USER_ADMIN`). 값 넷의 설명은 `.env.example` 이 소유한다
+— 여기 두 벌로 적지 않는다.
 
 | 무엇이 있나 | 무엇을 하나 | 종료 코드 |
 |---|---|---|
@@ -93,16 +94,19 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 
 ### 인스턴스 관리자
 
-테마 패키지를 올리고 숨기고 스타터 템플릿을 내려받는 사람이다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「인스턴스
-관리자」). 프로젝트 역할과 별개이고 프로젝트 권한을 넓히지 않는다. **API 에는 관리자를 만들거나 바꾸는 라우트가 없다** — 주는 길은 둘이다.
+테마 패키지를 올리고 숨기고 스타터 템플릿을 내려받고, 사람을 들이고 내보내는 사람이다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md`
+「인스턴스 관리자」 · `docs/superpowers/specs/2026-10-31-workspace-admin-design.md`). 프로젝트 역할과 별개이고 프로젝트 권한을 넓히지 않는다
+(아래 «계정 — 초대 · 비활성화 · 재설정 · 기록»). 관리자를 주는 길은 셋이다 — **관리자가 아닌 사람이 요청으로 관리자가 되는 길은 없다.**
 
 | 길 | 무엇 |
 |---|---|
 | `SEED_USER_ADMIN=1` (시딩과 함께) | **새로 만든** 계정을 관리자로 만든다. 이미 있는 계정은 바꾸지 않고 `admin grant` 명령을 말한다(비밀번호를 덮어쓰지 않는 것과 같은 판정) |
-| `admin grant <이메일>` · `admin revoke <이메일>` · `admin list` | 대상 DB 를 먼저 말한다. 0 바꿨다 · 1 바꾸지 않았다(이미 그렇다 · 계정 없음 · 이메일 형식 아님) · 2 인자가 어긋났다 |
+| `admin grant <이메일>` · `admin revoke <이메일>` · `admin list` | 대상 DB 를 먼저 말한다. 0 바꿨다 · 1 바꾸지 않았다(이미 그렇다 · 계정 없음 · 비활성 계정의 지정 · 이메일 형식 아님) · 2 인자가 어긋났다. 관리자가 0 명일 때 되살리는 길이다 — 해제는 API 와 같은 함수라 그 사람이 만든 링크를 거두고, 둘 다 기록에 «서버 명령» 으로 남는다 |
+| `POST · DELETE /api/admin/users/:userId/admin` | 이미 관리자인 사람이 한다. 자기 자신 · 비활성 사용자는 안 된다 |
 
-**판정은 요청마다 DB 에서 읽는다** — `revoke` 는 그 사람의 다음 요청부터 먹는다(세션은 그대로). 관리자 쓰기(업로드 · 숨김)는 커밋 직전에
-자격 · 관리자 표시를 다시 보므로(`src/auth/admin.ts`의 `recheckInstanceAdmin`) 강등 · 로그아웃과 겹친 쓰기는 되돌아간다(403 · 401).
+**판정은 요청마다 DB 에서 읽는다** — `revoke` 는 그 사람의 다음 요청부터 먹는다(세션은 그대로). 관리자 쓰기는 같은 트랜잭션 안에서
+자격 · 관리자 표시를 다시 보므로(`src/auth/admin.ts`의 `recheckInstanceAdmin`) 강등 · 로그아웃과 겹친 쓰기는 되돌아간다(403 · 401). 테마
+쓰기(업로드 · 숨김)는 쓰기 뒤에, 사용자 · 링크 · owner 를 바꾸는 쓰기는 쓰기 **앞**에 다시 본다(아래 «잠금 차례»).
 
 ### 시스템 테마 — 기동 때 넣는다
 
@@ -341,11 +345,11 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 
 **이 표가 클라이언트(에디터 · CLI · MCP)가 이 API를 상대로 근거로 삼는 계약이다.**
 
-> **계정을 만드는 엔드포인트는 없다** — `POST /api/auth/signup` 은 **404** 다
-> (`test/auth-routes.test.ts` 가 그 부재를 든다). 계정은
-> `migrate` 가 마이그레이션을 올린 뒤 환경변수로 만든다(위 *"기동 절차"*, 최상위
-> README 「세우기」 절 5번). 그래서 **`POST .../members` 의 *"이미 계정이 있는 사람만"* 은
-> *"이미 시딩된 사용자만"* 이라는 뜻이다** — 초대만으로는 계정이 생기지 않는다.
+> **링크 없이 계정을 만드는 엔드포인트는 없다** — `POST /api/auth/signup` 은 **404** 다
+> (`test/auth-routes.test.ts` 가 그 부재를, `test/user-creation-census.test.ts` 가 다른 이름의 셋째 길을 막는다). 계정은
+> `migrate` 가 마이그레이션을 올린 뒤 환경변수로 만들거나(위 *"기동 절차"*, 최상위 README 「세우기」 절 5번) 관리자가 만든 초대 링크로
+> 가입해 생긴다(`POST /api/auth/invites/:token/signup`). 그래서 **`POST .../members` 의 *"이미 계정이 있는 사람만"* 은
+> *"이미 가입한 사용자만"* 이라는 뜻이다** — 멤버 초대만으로는 계정이 생기지 않는다(초대 링크는 계정까지만이다).
 
 | 경로 | 메서드 | 최소 역할 | 요청 | 응답 |
 |---|---|---|---|---|
@@ -368,8 +372,8 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId` | GET | viewer | — | 200 `{ ...프로젝트, role, themeRev }` — `themeRev` 는 테마 바인딩의 `rev`(`theme-changed` 를 놓친 탭이 따라잡는 값) |
 | `/api/projects/:projectId` | PATCH | owner | `{ name?, slug?, description? }`(하나 이상) | 200 `{ ...프로젝트, role }` |
 | `/api/projects/:projectId` | DELETE | owner | — | 204 |
-| `/api/projects/:projectId/members` | GET | viewer | — | 200 멤버 배열 — 항목은 `{ userId, email, name, role, invitedAt }` |
-| `/api/projects/:projectId/members` | POST | owner | `{ email, role }`(**이미 계정이 있는 사람만** 초대 가능 — 없으면 404) | 201 멤버 |
+| `/api/projects/:projectId/members` | GET | viewer | — | 200 멤버 배열 — 항목은 `{ userId, email, name, role, invitedAt, active }`(`active` — 비활성화된 사람은 `false` 로 행이 남는다) |
+| `/api/projects/:projectId/members` | POST | owner | `{ email, role }`(**이미 계정이 있는 사람만** 초대 가능 — 없으면 404 · 비활성 사용자면 400) | 201 멤버 |
 | `/api/projects/:projectId/members/:userId` | PATCH | owner | `{ role }` | 200 멤버(마지막 owner의 강등은 409) |
 | `/api/projects/:projectId/members/:userId` | DELETE | owner | — | 204(마지막 owner 제거는 409) |
 | `/api/projects/:projectId/menu` | GET | viewer | — | 200 메뉴 트리(중첩 배열, `pages` 없음) |
@@ -419,6 +423,22 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/admin/theme-packages` | POST | **인스턴스 관리자**(세션) | 본문 = `.wbtheme` zip 바이트(`Content-Type: application/zip` 또는 `application/octet-stream`) | 201 `{ themeId, version, name, sha256, size }` · 409 같은 `id@version` · 413 10 MB 초과 · 415 다른 형식 · 422 `issues`(아래) · 비관리자 403 · 토큰 401 |
 | `/api/admin/theme-packages/:themeId/:version` | PATCH | 인스턴스 관리자(세션) | `{ hidden: boolean }` | 200 그 판(`versions[]` 한 줄과 같은 모양) · 없는 판 404 |
 | `/api/admin/theme-template.zip` | GET | 인스턴스 관리자(세션) | — | 200 `application/zip`(`Content-Disposition: attachment; filename="wirebound-theme-starter.zip"`) · 짓지 않았으면 404 «템플릿이 빌드되지 않았습니다 — `pnpm build:template`» |
+| `/api/auth/invites/:token` | GET | (없음, 공개) | — | 200 `{ usable: true }` · 못 쓰는 링크 404(아래 «계정 — …») |
+| `/api/auth/invites/:token/signup` | POST | (없음, 공개) | `{ email, name, password }` | 201 — `/login` 과 같은 몸 · 같은 세션 쿠키. 못 쓰는 링크 404 · 이미 있는 이메일 409 «이미 계정이 있는 이메일입니다 — 로그인하세요» · 형식 400 · 한도 429 |
+| `/api/auth/resets/:token` | GET | (없음, 공개) | — | 200 `{ email, name }` · 못 쓰는 링크 404 |
+| `/api/auth/resets/:token` | POST | (없음, 공개) | `{ password }` | 204 — 그 사람의 세션 전부 삭제 · WS 연결 닫힘(4403) · API 토큰은 그대로. 404 · 400 · 429 |
+| `/api/admin/users` | GET | 인스턴스 관리자(세션) | — | 200 `AdminUser[]` — `{ id, email, name, isInstanceAdmin, active, createdAt, lastSeenAt, projectCount, invite: { id, name } \| null }`, 가입 차례 |
+| `/api/admin/users/:userId/deactivate` | POST | 인스턴스 관리자(세션) | — | 200 `{ user, revokedLinks, ownerlessProjects }` · 409 자기 자신 · 이미 비활성 · 마지막 관리자 · 없는 사람 404 |
+| `/api/admin/users/:userId/activate` | POST | 인스턴스 관리자(세션) | — | 200 `{ user }` · 409 이미 활성 |
+| `/api/admin/users/:userId/admin` | POST | 인스턴스 관리자(세션) | — | 200 `{ user }` · 409 비활성 · 이미 관리자 |
+| `/api/admin/users/:userId/admin` | DELETE | 인스턴스 관리자(세션) | — | 200 `{ user, revokedLinks }` · 409 자기 자신 · 마지막 관리자 · 관리자 아님 |
+| `/api/admin/users/:userId/reset-links` | POST | 인스턴스 관리자(세션) | — | 201 `{ token, expiresAt }` — 원문은 이 응답에만 있다 · 409 비활성 |
+| `/api/admin/invites` | GET | 인스턴스 관리자(세션) | — | 200 `AdminInvite[]` — `{ id, name, kind, expiresAt, state, signups, createdAt, createdBy: { id, name } }`, 최신이 위. `state` 는 `usable` · `expired` · `revoked` · `used-up`. 원문 · 해시는 없다 |
+| `/api/admin/invites` | POST | 인스턴스 관리자(세션) | `{ name: 1–60자, kind: 'single' \| 'multi', expiresInDays?: 1–90(기본 7) }` | 201 `{ invite, token }` — 원문은 이 응답에만 있다 · 400 |
+| `/api/admin/invites/:inviteId/revoke` | POST | 인스턴스 관리자(세션) | — | 200 `{ invite }` · 409 이미 못 쓰는 링크 · 404 |
+| `/api/admin/projects` | GET | 인스턴스 관리자(세션) | — | 200 `AdminProject[]` — `{ id, name, slug, owners: [{ id, name, active }], hasActiveOwner, memberCount, updatedAt }`(`updatedAt` = `greatest(projects.updated_at, max(pages.updated_at))`), 만든 차례. 관리자가 멤버가 아닌 프로젝트도 든다 — 내용 라우트는 여전히 404 다 |
+| `/api/admin/projects/:id/owner` | POST | 인스턴스 관리자(세션) | `{ userId }` | 200 `{ project }` — 활성 owner 가 없는 프로젝트만. 멤버가 아니면 owner 로 넣고 멤버면 올린다(자기 자신도 된다). 409 활성 owner 있음 · 400 대상 비활성 · 404 |
+| `/api/admin/audit` | GET | 인스턴스 관리자(세션) | 질의 `?action=&actorId=&before=<ISO>&limit=<1–200, 기본 50>` | 200 `{ entries: AuditEntry[], next }` — 최신이 위. `next` 를 다음 쪽의 `before` 로 그대로 넘긴다(마이크로초까지 적은 ISO) |
 | `/health` | GET | (없음, 공개) | — | 200 `{ status: 'ok' }` |
 
 ### 테마 패키지와 프로젝트 테마
@@ -616,7 +636,7 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 
 ### 로그인 시도 제한
 
-`POST /api/auth/login` · `POST /api/auth/password`(지금 비밀번호를 견주는 시도)는 한 기록에 창(15분) 안의 시도를 **계정(정규화한 이메일 — 비밀번호 바꾸기는 로그인한 사람의 이메일)** 과 **주소**로 센다 — 계정 10 번 · 주소 30 번에 닿으면 그 키로
+`POST /api/auth/login` · `POST /api/auth/password`(지금 비밀번호를 견주는 시도) · `POST /api/auth/invites/:token/signup` · `POST /api/auth/resets/:token`(링크 쓰기 — 위 «계정 — …»)은 한 기록에 창(15분) 안의 시도를 **계정(정규화한 이메일 — 비밀번호 바꾸기는 로그인한 사람의 이메일)** 과 **주소**로 센다 — 계정 10 번 · 주소 30 번에 닿으면 그 키로
 오는 로그인은 창이 지날 때까지 **429 `rate-limited` + `Retry-After`** 다(DB 도 scrypt 도 안 거친다). 한도 · 창은
 `src/auth/login-limit.ts`의 `LOGIN_LIMIT`, 고른 까닭(두 키 · 견주기 전에 셈 · 막힌 동안 옳은 비밀번호도 거절 · 메모리)은 그 파일의
 머리말이 소유한다.
@@ -646,6 +666,38 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
   글자는 제어 문자를 걷고 찍는다. 입구의 요청은 `UNLOCK_REQUEST_TIMEOUT_MS` 안에 다 와야 한다. 계약(본문 `{ email?, address? }` · 답)과 까닭은
   `src/auth/unlock-socket.ts` 머리말.
 - `wireb login`도 이 라우트로 오므로 같은 429 를 `서버가 거절했습니다 (429): …`로 말한다.
+
+### 계정 — 초대 · 비활성화 · 재설정 · 기록
+
+설계는 `docs/superpowers/specs/2026-10-31-workspace-admin-design.md`. 엔드포인트는 위 표의 `/api/auth/invites` · `/api/auth/resets` ·
+`/api/admin/users` · `/api/admin/invites` · `/api/admin/projects` · `/api/admin/audit` 줄이다.
+
+- **링크 원문은 저장하지 않는다** — 초대 · 재설정 링크는 세션 · API 토큰과 같은 함수(`src/auth/token-hash.ts`)로 만들고 sha256 해시만
+  둔다. 원문은 만들기 응답 하나에만 실린다. 화면이 주소를 짓는다(`/invite/<원문>` · `/reset/<원문>`).
+- **못 쓰는 링크는 같은 404 · 같은 문장이다** — 초대는 없음 · 만료 · 거둠 · 다 씀(«이 초대 링크는 더 쓸 수 없습니다 — 관리자에게 새
+  링크를 받으세요»), 재설정은 없음 · 만료 · 이미 씀 · 막힘(«이 재설정 링크는 더 쓸 수 없습니다 — …»). 쓸 수 있는 링크는 만든 사람이
+  지금 활성 관리자여야 한다.
+- **가입은 링크 행을 잡고 판정한다**(`src/repos/invites.ts` 머리말) — 한 번짜리 링크로 동시에 둘이 가입하면 하나만 선다. 가입한 사용자
+  행에 들어온 링크를 남긴다.
+- **가입 · 재설정 쓰기는 로그인과 같은 시도 한도에 센다**(아래 «로그인 시도 제한»). 계정 키는 가입이 본문 이메일, 재설정이 링크의 대상
+  이메일(못 쓰는 링크면 원문의 해시)이다. 404 · 409 는 실패로 남는다.
+- **비활성화**는 한 트랜잭션에서 표시를 세우고 관리자 표시를 지우고, 그 사람이 만든 아직 쓸 수 있는 링크와 그 사람에게 만든 재설정
+  링크를 거두고, 세션 · API 토큰을 전부 지운다. 커밋 뒤 그 세션들의 WS 를 로그아웃과 같은 길로 닫는다. 로그인은 틀린 비밀번호와 같은
+  401 이다 — 세션 삽입이 비활성 표시를 해시와 같은 `FOR SHARE` 문장에서 본다(`src/auth/session.ts` 의 `createLoginSession`). 멤버 행은
+  남는다. 다시 활성화는 표시만 지운다(관리자 아님 · 비밀번호 그대로).
+- **재설정 링크**는 24 시간 · 한 번이고, 같은 사람에게 새로 만들면 앞 링크가 막힌다. 쓰면 재설정 명령과 같은 함수(`src/db/reset-password.ts`
+  의 `replacePassword`)로 비밀번호를 바꾸고 그 사람의 세션을 전부 지운다.
+- **잠금 차례** — 사용자 행을 고치는 관리자 쓰기는 대상 행(`FOR NO KEY UPDATE`)과 요청자 행(`FOR SHARE`)을 **id 순으로** 먼저 잡고
+  (`src/repos/users.ts` 의 `lockUserRows`) 재확인한 뒤 링크 · 세션 · 토큰 행을 잡는다. 링크 쓰기(만들기 · 거두기)도 재확인을 쓰기 앞에
+  둔다 — 뒤에 두면 «링크 행 → 사용자 행» 이 되어 비활성화의 «사용자 행 → 링크 행» 과 교착이다. 링크를 쓰는 요청(가입 · 재설정 쓰기)은
+  만든 사람의 행을 잠그지 않고 읽는다. owner 넘기기는 사용자 행 → 재확인 → 프로젝트 행 `KEY SHARE` → 대상 토큰 → owner 행이다.
+- **마지막 관리자** — 해제 · 비활성화는 요청자가 커밋 순간에도 관리자일 때만 서므로(재확인이 요청자 행을 쥔다) 관리자가 0 명이 되지
+  않는다. 서로를 동시에 해제하는 둘은 하나만 선다. 혼자 남은 관리자의 자기 해제 · 비활성화는 409 다.
+- **관리자 기록**(`admin_audit`)은 행동과 같은 트랜잭션에서 남는다 — 초대 만들기 · 거두기 · 가입, 재설정 만들기 · 쓰기, 비활성화 · 다시
+  활성화, 지정 · 해제(서버 명령 포함 — 행위자 `{ kind: 'cli' }`), owner 넘기기, 테마 올리기 · 숨기기 · 되살리기. `AuditEntry` 는
+  `{ id, at, action, actor, targetUser, project, invite, detail }` 이고 이름은 읽을 때 조인한다(대상이 지워졌으면 행동 때 적어 둔 이름).
+- **«마지막 접속»(`users.last_seen_at`)** 은 세션 조회가 1 분에 한 번 기다리지 않고(`SKIP LOCKED`) 고친다 — 세션이 지워져도 남는다.
+  `GET /api/admin/users` 의 `lastSeenAt` 은 그 값과 살아 있는 세션의 값 중 늦은 것이다.
 
 ### API 토큰
 
