@@ -12,8 +12,14 @@ export interface UsersTable {
   name: string
   password_hash: string
   created_at: Generated<Date>
-  /** 테마를 올리고 숨기는 사람(`0019-theme-packages`). 바꾸는 길은 `db/admin.ts` 명령 · 시딩뿐이다. */
+  /** 인스턴스 관리자(`0019-theme-packages`). 바꾸는 길은 `db/admin.ts` 명령 · 시딩 · 관리자 API(`routes/admin-users.ts`)다. */
   is_instance_admin: Generated<boolean>
+  /** 비활성 표시(`0034-accounts`). `null` 이면 활성이다. */
+  deactivated_at: ColumnType<Date | null, Date | null | undefined, Date | null>
+  /** 들어온 초대 링크(`0034-accounts`). 시딩으로 생긴 계정은 `null`. */
+  invite_id: ColumnType<string | null, string | null | undefined, string | null>
+  /** 마지막 접속(`0034-accounts`) — 세션 조회가 함께 고친다. 세션이 지워져도 남는다. */
+  last_seen_at: ColumnType<Date | null, Date | null | undefined, Date | null>
 }
 
 export interface SessionsTable {
@@ -364,6 +370,41 @@ export interface PersonalAssetsTable {
   created_at: Generated<Date>
 }
 
+/** 초대 링크(`0034-accounts`). 원문은 저장하지 않는다 — `token_hash` 가 sha256 hex 다. */
+export interface InvitesTable {
+  id: Generated<string>
+  name: string
+  kind: 'single' | 'multi'
+  token_hash: string
+  expires_at: ColumnType<Date, Date, Date>
+  revoked_at: ColumnType<Date | null, Date | null | undefined, Date | null>
+  created_by: string
+  created_at: Generated<Date>
+}
+
+/** 비밀번호 재설정 링크(`0034-accounts`). 원문은 저장하지 않는다. `used_at` 은 쓴 시각이고, 새 링크 · 비활성화가 막을 때도 채운다. */
+export interface PasswordResetsTable {
+  id: Generated<string>
+  user_id: string
+  token_hash: string
+  expires_at: ColumnType<Date, Date, Date>
+  used_at: ColumnType<Date | null, Date | null | undefined, Date | null>
+  created_by: string
+  created_at: Generated<Date>
+}
+
+/** 관리자 기록(`0034-accounts`). `actor_id` 가 `null` 이면 서버 명령이다. 대상 칸은 FK 가 없다(대상이 지워져도 남는다). */
+export interface AdminAuditTable {
+  id: Generated<string>
+  at: Generated<Date>
+  action: string
+  actor_id: string | null
+  target_user_id: string | null
+  project_id: string | null
+  invite_id: string | null
+  detail: ColumnType<Record<string, string | number | boolean>, string | undefined, string>
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
@@ -385,4 +426,7 @@ export interface Database {
   asset_blobs: AssetBlobsTable
   project_assets: ProjectAssetsTable
   personal_assets: PersonalAssetsTable
+  invites: InvitesTable
+  password_resets: PasswordResetsTable
+  admin_audit: AdminAuditTable
 }
