@@ -389,8 +389,8 @@ function isProjectMember(value: unknown): boolean {
     value['userId'] !== '' &&
     typeof value['email'] === 'string' &&
     typeof value['name'] === 'string' &&
-    typeof value['role'] === 'string' &&
-    typeof value['active'] === 'boolean'
+    typeof value['active'] === 'boolean' &&
+    typeof value['role'] === 'string'
   )
 }
 
