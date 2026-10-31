@@ -11,7 +11,7 @@ import { useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import type { LoginNotice } from './login'
-import { checkNewPassword, PasswordFields } from './new-password'
+import { checkNewPassword, PasswordFields } from '../account/new-password-fields'
 
 export const PASSWORD_RESET_DONE = '비밀번호를 바꿨습니다 — 새 비밀번호로 로그인하세요'
 const CHECK_FAILED = '재설정 링크를 확인하지 못했습니다 — 잠시 뒤 다시 열어 보세요'

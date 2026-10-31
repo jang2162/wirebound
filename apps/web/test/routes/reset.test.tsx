@@ -5,7 +5,7 @@ import { fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import { PASSWORD_MISMATCH } from '../../src/routes/new-password'
+import { PASSWORD_MISMATCH } from '../../src/account/new-password-fields'
 import { PASSWORD_RESET_DONE } from '../../src/routes/reset'
 import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
 

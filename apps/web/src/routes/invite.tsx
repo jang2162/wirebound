@@ -13,7 +13,7 @@ import { useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { useConfirmSession } from '../session/session-context'
-import { checkNewPassword, PasswordFields } from './new-password'
+import { checkNewPassword, PasswordFields } from '../account/new-password-fields'
 
 const CHECK_FAILED = '초대 링크를 확인하지 못했습니다 — 잠시 뒤 다시 열어 보세요'
 const SIGNUP_FAILED = '가입하지 못했습니다'

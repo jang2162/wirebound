@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectDetail, SessionUser } from '../../src/api/types'
-import { PASSWORD_MISMATCH, PASSWORD_TOO_SHORT } from '../../src/routes/new-password'
+import { PASSWORD_MISMATCH, PASSWORD_TOO_SHORT } from '../../src/account/new-password-fields'
 import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
 
 const USER: SessionUser = { id: 'u-new', email: 'new@example.com', name: '새 사람' }
