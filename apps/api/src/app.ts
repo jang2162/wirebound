@@ -7,6 +7,12 @@ import type { ApiConfig } from './config'
 import type { DbHandle } from './db/tx'
 import { registerErrorHandler } from './http/error-handler'
 import { logDestination } from './log-destination'
+import { adminAuditRoutes } from './routes/admin-audit'
+import { adminInviteRoutes } from './routes/admin-invites'
+import { adminProjectRoutes } from './routes/admin-projects'
+import { adminUserRoutes } from './routes/admin-users'
+import { inviteSignupRoutes } from './routes/invite-signup'
+import { passwordResetRoutes } from './routes/password-reset'
 import { adminThemeRoutes } from './routes/admin-themes'
 import { authRoutes } from './routes/auth'
 import { commentRoutes } from './routes/comments'
@@ -286,6 +292,12 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 인스턴스 관리자의 테마 패키지 동작(`/api/admin/theme-packages` · `/api/admin/theme-template.zip`) — 세션 전용이고 판정은 핸들러
   // 안이다(`routes/admin-themes.ts`의 머리말).
   await app.register(adminThemeRoutes(config), { prefix: '/api/admin' })
+  await app.register(adminUserRoutes(), { prefix: '/api/admin' })
+  await app.register(adminInviteRoutes(), { prefix: '/api/admin' })
+  await app.register(adminProjectRoutes(), { prefix: '/api/admin' })
+  await app.register(adminAuditRoutes(), { prefix: '/api/admin' })
+  await app.register(inviteSignupRoutes(config, app.loginLimiter), { prefix: '/api/auth' })
+  await app.register(passwordResetRoutes(config, app.loginLimiter), { prefix: '/api/auth' })
   // 테마 패키지 읽기 — 로그인한 사람 누구나 · 세션 전용(`routes/theme-packages.ts`의 머리말).
   await app.register(themePackageRoutes(), { prefix: '/api/theme-packages' })
   await app.register(healthRoutes)
