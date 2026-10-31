@@ -815,7 +815,7 @@ payload는 `payloadVersion`·`capturedAt`을 스스로 들어 자기를 설명�
 - **`GET /api/projects/:projectId` 만 `themeRev`** — 셸이 프로젝트를 다시 읽을 때 테마 방송을 놓쳤는지 가르는 값이다(위 «테마 패키지와 프로젝트 테마»).
 - **`GET /api/projects` 의 각 항목만 `memberCount` · `updatedAt`** — `memberCount` 는 그 프로젝트의 멤버 행 수다. `updatedAt`(ISO)은
   `greatest(projects.updated_at, max(pages.updated_at))` — 프로젝트 행(이름 · 슬러그 · 설명 · 테마)과 그 페이지들(문서 편집 · 제목 · 자리) 가운데 가장 늦게 바뀐 시각이고,
-  페이지가 없으면 프로젝트 행의 값이다. 메뉴 · 코멘트 · 모듈 · 멤버 쓰기는 안 센다. 목록 질의 하나에 두 칸이 상관 하위 질의로 든다(`repos/projects.ts` 의 `listProjectsForUser`).
+  페이지가 없으면 프로젝트 행의 값이다. 메뉴 · 코멘트 · 모듈 · 멤버 쓰기는 안 센다. 목록 질의 하나에 두 칸이 상관 하위 질의로 든다(`repos/projects.ts` 의 `projectActivityColumns` — 관리자 › 프로젝트 `GET /api/admin/projects` 의 두 칸도 이 한 벌이다).
 
 ```jsonc
 { "id": "…", "name": "…", "slug": "…", "description": null, "role": "owner" }

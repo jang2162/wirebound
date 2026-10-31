@@ -102,7 +102,7 @@ export interface ProjectDetail extends ProjectSummary {
 
 /**
  * `GET /api/projects` 의 한 항목. `memberCount` 는 그 프로젝트의 멤버 행 수, `updatedAt` 은 프로젝트 행과 그 페이지들 가운데 가장 늦게
- * 바뀐 시각(ISO — 정의는 서버 `repos/projects.ts` 의 `listProjectsForUser` 머리말)이다. 목록의 정렬 · 상대 시각이 이 둘을 읽는다
+ * 바뀐 시각(ISO — 정의는 서버 `repos/projects.ts` 의 `projectActivityColumns` 머리말)이다. 목록의 정렬 · 상대 시각이 이 둘을 읽는다
  * (`projects/project-filter.ts`).
  */
 export interface ProjectListItem extends ProjectDetail {

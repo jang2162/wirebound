@@ -5,14 +5,14 @@
  * **관리자가 하는 프로젝트 쓰기는 owner 넘기기 하나다** — 목록은 이름 · 멤버 수 · owner 만 낸다. 내용(페이지 · 메뉴 · 스냅샷)을 여는 길은
  * 여기 없고, 프로젝트 라우트는 지금처럼 `projectGuard`(멤버만)가 막는다.
  *
- * **`updatedAt` 은 `greatest(projects.updated_at, max(pages.updated_at))` 다** — 프로젝트 목록 응답(`GET /api/projects` — 뼈대 트랙)과 같은
- * 정의다. 두 트랙이 나란히 지어 여기 따로 두었다 — 병합 때 한 함수로 모은다(계획 «A7»).
+ * **멤버 수 · 최근 수정은 프로젝트 목록 응답(`GET /api/projects`)과 같은 한 벌이다** — 정의는 `repos/projects.ts` 의 `projectActivityColumns`.
  */
 import { sql } from 'kysely'
 import { assertLocking } from '../db/locking'
 import type { DbHandle } from '../db/tx'
 import { lockMemberTokens } from './api-tokens'
 import { lockOwnerIds } from './members'
+import { projectActivityColumns } from './projects'
 
 export interface AdminProjectRecord {
   id: string
@@ -35,8 +35,7 @@ function adminProjectRows(db: DbHandle) {
         from project_members m join users u on u.id = m.user_id
         where m.project_id = p.id and m.role = 'owner'
       ), '[]'::json)`.as('owners'),
-    sql<string>`(select count(*) from project_members m where m.project_id = p.id)`.as('memberCount'),
-    sql<Date>`greatest(p.updated_at, (select max(pg.updated_at) from pages pg where pg.project_id = p.id))`.as('updatedAt'),
+    ...projectActivityColumns('p'),
   ])
 }
 

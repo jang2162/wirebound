@@ -139,16 +139,32 @@ export interface ProjectListEntry extends ProjectWithRole {
 }
 
 /**
- * 사용자가 멤버인 프로젝트만 조회한다(`project_members`를 조인한다). 각 행에
- * 그 사용자 자신의 역할을 함께 싣는다 — `GET /api/projects` 응답이 메뉴를
- * 그리려면 role이 필요하다(설계서 「권한 모델」).
+ * **프로젝트 행의 «멤버 수» · «최근 수정» 칸** — `GET /api/projects`(`listProjectsForUser`)와 관리자 › 프로젝트(`repos/admin-projects.ts`)가
+ * 이 한 벌을 부른다. 두 화면이 같은 프로젝트에 다른 시각을 말하지 않게, 정의는 여기만 둔다. `table` 은 그 질의가 `projects` 에 붙인 이름이다.
  *
  * **«최근 수정»(`updatedAt`)은 `greatest(projects.updated_at, max(pages.updated_at))` 다** — 페이지가 없으면 프로젝트 행의 값이다.
  * 페이지 문서 편집(`writePageSchemaAtSeq`) · 제목 · 자리 바꾸기가 `pages.updated_at` 을 고치고, 이름 · 슬러그 · 설명 · 테마가
  * `projects.updated_at` 을 고친다. 메뉴 · 코멘트 · 모듈 · 멤버 쓰기는 안 센다. `max(revisions.created_at)` 을 버린 까닭: 제목 · 자리
  * 바꾸기는 revision 을 안 남겨 빠지고, revision 표가 가장 큰 표라 목록마다 훑기에 무겁다.
  *
- * 질의는 하나다 — 두 칸은 상관 하위 질의이고 `project_members_pk`·`pages_project_menu_sort_idx` 의 앞머리(`project_id`)로 선다.
+ * **멤버 수(`memberCount`)는 멤버 행 수다** — 비활성 사용자의 행도 센다. `count(*)` 는 bigint 라 pg 가 글자로 주고, 부르는 쪽이 `Number` 로 바꾼다.
+ *
+ * 두 칸은 상관 하위 질의라 목록 질의가 하나로 남는다 — `project_members_pk`·`pages_project_menu_sort_idx` 의 앞머리(`project_id`)로 선다.
+ */
+export function projectActivityColumns(table: string) {
+  const id = sql.ref(`${table}.id`)
+  return [
+    sql<string>`(select count(*) from project_members as m where m.project_id = ${id})`.as('memberCount'),
+    sql<Date>`greatest(${sql.ref(`${table}.updated_at`)}, (select max(pg.updated_at) from pages as pg where pg.project_id = ${id}))`.as(
+      'updatedAt',
+    ),
+  ] as const
+}
+
+/**
+ * 사용자가 멤버인 프로젝트만 조회한다(`project_members`를 조인한다). 각 행에
+ * 그 사용자 자신의 역할을 함께 싣는다 — `GET /api/projects` 응답이 메뉴를
+ * 그리려면 role이 필요하다(설계서 「권한 모델」). 멤버 수 · 최근 수정은 `projectActivityColumns` 다.
  */
 export async function listProjectsForUser(db: DbHandle, userId: string): Promise<ProjectListEntry[]> {
   const rows = await db
@@ -156,15 +172,9 @@ export async function listProjectsForUser(db: DbHandle, userId: string): Promise
     .innerJoin('project_members', 'project_members.project_id', 'projects.id')
     .where('project_members.user_id', '=', userId)
     .select(['projects.id', 'projects.name', 'projects.slug', 'projects.description', 'project_members.role'])
-    .select([
-      sql<string>`(select count(*) from project_members as m where m.project_id = projects.id)`.as('memberCount'),
-      sql<Date>`greatest(projects.updated_at, (select max(pg.updated_at) from pages as pg where pg.project_id = projects.id))`.as(
-        'updatedAt',
-      ),
-    ])
+    .select(projectActivityColumns('projects'))
     .orderBy('projects.created_at', 'asc')
     .execute()
-  // `count(*)` 는 bigint 라 pg 가 글자로 준다.
   return rows.map((row) => ({ ...row, memberCount: Number(row.memberCount) }))
 }
 
