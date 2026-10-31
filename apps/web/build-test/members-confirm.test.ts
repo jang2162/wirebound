@@ -12,6 +12,7 @@
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { isolate } from '../src/shell/isolate'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -79,7 +80,7 @@ describe.skipIf(!전제.ok)('멤버 제외 확인', () => {
           if (added.status !== 201) throw new Error(`픽스처 member ${added.status}`)
         }
         await page.goto(`/projects/${projectId}/settings?section=members`)
-        await page.getByRole('button', { name: `${name} 제외`, exact: true }).waitFor()
+        await page.getByRole('button', { name: `${isolate(name)} 제외`, exact: true }).waitFor()
         await page.getByRole('region', { name: '멤버' }).evaluate((section) => section.scrollIntoView({ block: 'start' }))
         deletes = []
         return deletes
@@ -107,11 +108,11 @@ describe.skipIf(!전제.ok)('멤버 제외 확인', () => {
     try {
       for (const [key, name] of Object.entries(NAMES)) {
         await load(name)
-        const ask = page.getByRole('button', { name: `${name} 제외`, exact: true })
+        const ask = page.getByRole('button', { name: `${isolate(name)} 제외`, exact: true })
         const asked = await ask.boundingBox()
-        if (asked === null) throw new Error(`${name} 제외 단추가 안 보인다`)
+        if (asked === null) throw new Error(`${isolate(name)} 제외 단추가 안 보인다`)
         await ask.click()
-        const confirm = await page.getByRole('button', { name: `${name} 제외 확정`, exact: true }).boundingBox()
+        const confirm = await page.getByRole('button', { name: `${isolate(name)} 제외 확정`, exact: true }).boundingBox()
         if (confirm === null) throw new Error(`${key} 확정이 안 보인다`)
         const dx = Math.max(0, confirm.x - (asked.x + asked.width), asked.x - (confirm.x + confirm.width))
         const dy = Math.max(0, confirm.y - (asked.y + asked.height), asked.y - (confirm.y + confirm.height))
@@ -136,9 +137,9 @@ describe.skipIf(!전제.ok)('멤버 제외 확인', () => {
       for (const [key, name] of Object.entries(NAMES)) {
         for (const point of POINTS) {
           await load(name)
-          const [x, y] = (await points(page, `${name} 제외`))[point]
-          await page.getByRole('button', { name: `${name} 제외`, exact: true }).click()
-          await page.getByRole('button', { name: `${name} 제외 확정`, exact: true }).waitFor()
+          const [x, y] = (await points(page, `${isolate(name)} 제외`))[point]
+          await page.getByRole('button', { name: `${isolate(name)} 제외`, exact: true }).click()
+          await page.getByRole('button', { name: `${isolate(name)} 제외 확정`, exact: true }).waitFor()
           const under = await page.evaluate(
             ([px, py]) => {
               const el = document.elementFromPoint(px!, py!)
@@ -165,17 +166,17 @@ describe.skipIf(!전제.ok)('멤버 제외 확인', () => {
         // 카나리아 — 따로 누른 확정은 뺀다.
         {
           const deletes = await load(name)
-          await page.getByRole('button', { name: `${name} 제외`, exact: true }).click()
-          await page.getByRole('button', { name: `${name} 제외 확정`, exact: true }).waitFor()
+          await page.getByRole('button', { name: `${isolate(name)} 제외`, exact: true }).click()
+          await page.getByRole('button', { name: `${isolate(name)} 제외 확정`, exact: true }).waitFor()
           await page.waitForTimeout(300)
-          await page.getByRole('button', { name: `${name} 제외 확정`, exact: true }).click()
+          await page.getByRole('button', { name: `${isolate(name)} 제외 확정`, exact: true }).click()
           await settle(page)
           expect({ 이름: key, DELETE: deletes.length, 멤버: await isMember() }).toEqual({ 이름: key, DELETE: 1, 멤버: false })
         }
         for (const point of POINTS) {
           for (const how of ['연타', '따로 두 번'] as const) {
             const deletes = await load(name)
-            const [x, y] = (await points(page, `${name} 제외`))[point]
+            const [x, y] = (await points(page, `${isolate(name)} 제외`))[point]
             if (how === '연타') {
               await page.mouse.dblclick(x, y)
             } else {

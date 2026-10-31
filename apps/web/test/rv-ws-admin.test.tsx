@@ -1,5 +1,5 @@
 /**
- * RV-WS 리뷰 항목 3 — 관리자 칸(`shell/workspace-layout.tsx` 의 관리자 묶음 · `routes/admin-pending.tsx` · `routes/admin-themes.tsx`). jsdom 값이다.
+ * RV-WS 리뷰 항목 3 — 관리자 칸(`shell/workspace-layout.tsx` 의 관리자 묶음 · `admin/admin-screen.tsx` · `routes/admin-themes.tsx`). jsdom 값이다.
  *
  * - 첫 describe(초록): 관리자가 아닌 사람이 다섯 주소를 직접 쳐도 관리자 묶음이 없고 «관리자만» 한 줄이며, 테마 관리는 조회를 안 낸다.
  * - 둘째 describe(초록 — 지금 동작을 적는다): 열린 탭에서 강등되면 사이드바는 관리자 묶음을 그대로 두고(판정 값이 세션 사용자의

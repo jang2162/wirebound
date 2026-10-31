@@ -11,7 +11,7 @@ import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectView, SessionUser } from '../../src/api/types'
 import { ADMIN_NAV } from '../../src/shell/workspace-nav'
-import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import { currentPath, currentSearch, fakeApi, listItem, renderWithProviders } from '../helpers'
 import { adminThemeView } from '../theme-loader'
 
 /** 화면이 지어낼 리 없는 이름 — 사이드바 바닥에 서버가 준 값이 그대로 오는지 잰다. */
@@ -139,15 +139,71 @@ describe('좁은 창의 «메뉴»', () => {
     fireEvent.click(toggle)
     expect(list?.getAttribute('data-folded')).toBe('true')
   })
+
+  /** 펴 둔 목록 — 단추 · 목록 · 펴짐을 돌려준다. */
+  function unfolded(): { toggle: HTMLElement; folded: () => string | null | undefined } {
+    const toggle = within(side()).getByRole('button', { name: '메뉴' })
+    fireEvent.click(toggle)
+    const folded = () => document.getElementById(toggle.getAttribute('aria-controls') ?? '')?.getAttribute('data-folded')
+    expect(folded()).toBe('false')
+    return { toggle, folded }
+  }
+
+  it('같은 꼴의 화면 사이를 옮겨도(관리자 › 사용자 → 초대 링크) 주소가 바뀌면 접힌다', async () => {
+    renderWithProviders(<App />, {
+      client: fakeApi({ me: async () => ADMIN, listAdminUsers: async () => [], listInvites: async () => [] }),
+      route: '/admin/users',
+    })
+    await screen.findByRole('heading', { name: '사용자' })
+    const { folded } = unfolded()
+    const sideBefore = side()
+    fireEvent.click(within(screen.getByRole('navigation', { name: '관리자' })).getByRole('link', { name: '초대 링크' }))
+    await screen.findByRole('heading', { name: '초대 링크' })
+    // 뼈대는 재조정으로 이어졌다 — 새로 선 것이 아니다(그래서 주소를 보고 접어야 한다).
+    expect(side()).toBe(sideBefore)
+    expect(folded()).toBe('true')
+  })
+
+  it('질의만 바뀌면(목록의 검색 칸) 안 접힌다', async () => {
+    await open(SCREENS[0], MEMBER, { listProjects: async () => [listItem(PROJECT)] })
+    const { folded } = unfolded()
+    fireEvent.change(await screen.findByRole('searchbox'), { target: { value: '관리' } })
+    // 판 카나리아 — 주소의 질의가 실제로 바뀌었다(경로는 그대로).
+    await waitFor(() => expect(currentSearch()).toContain('q='))
+    expect(currentPath()).toBe('/')
+    expect(folded()).toBe('false')
+  })
 })
 
-describe('관리자 칸의 «준비 중»', () => {
-  it.each(['users', 'invites', 'projects', 'audit'])('/admin/%s — 관리자에게는 «준비 중», 제목은 그 칸의 이름', async (key) => {
-    const item = ADMIN_NAV.find((nav) => nav.key === key)!
-    renderWithProviders(<App />, { client: fakeApi({ me: async () => ADMIN }), route: `/admin/${key}` })
-    await screen.findByRole('heading', { name: item.label })
-    expect(screen.getByRole('status').textContent).toBe('준비 중입니다')
-  })
+describe('관리자 칸 넷 — 칸마다 제 화면', () => {
+  /** 칸마다 그 화면만 그리는 빈 상태 문장 — 칸이 서로 다른 화면인지(한 라우트가 넷을 받지 않는지) 이것으로 가른다. */
+  const EMPTY: Record<string, string> = {
+    users: '검색 결과가 없습니다',
+    invites: '만든 초대 링크가 없습니다',
+    projects: '검색 결과가 없습니다',
+    audit: '남은 기록이 없습니다',
+  }
+  it.each(['users', 'invites', 'projects', 'audit'])(
+    '/admin/%s — 제목은 그 칸의 이름 · 그 칸에 `aria-current` · 그 화면의 빈 상태',
+    async (key) => {
+      const item = ADMIN_NAV.find((nav) => nav.key === key)!
+      renderWithProviders(<App />, {
+        client: fakeApi({
+          me: async () => ADMIN,
+          listProjects: async () => [],
+          listAdminUsers: async () => [],
+          listInvites: async () => [],
+          listAdminProjects: async () => [],
+          listAudit: async () => ({ entries: [], next: null }),
+        }),
+        route: `/admin/${key}`,
+      })
+      await screen.findByRole('heading', { name: item.label })
+      await screen.findByText(EMPTY[key]!)
+      const admin = screen.getByRole('navigation', { name: '관리자' })
+      expect(within(admin).getByRole('link', { name: item.label }).getAttribute('aria-current')).toBe('page')
+    },
+  )
 
   it('관리자가 아니면 «인스턴스 관리자만 볼 수 있습니다»', async () => {
     renderWithProviders(<App />, { client: fakeApi({ me: async () => MEMBER }), route: '/admin/users' })

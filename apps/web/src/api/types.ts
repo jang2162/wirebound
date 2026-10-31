@@ -37,6 +37,8 @@ export interface ProjectMember {
   name: string
   role: ProjectRole
   invitedAt: string
+  /** 그 사람이 지금 활성인가 — 비활성 사용자도 멤버 행은 그대로 갖는다(멤버 절의 «비활성» 표지). */
+  active: boolean
 }
 
 /**
@@ -595,4 +597,100 @@ export interface ExportNodeError {
   /** 그 페이지의 제목. */
   title: string
   error: { nodeId?: string; message?: string }
+}
+
+/**
+ * 관리자 화면(`apps/web/src/admin/*`)이 읽는 `/api/admin` 응답 — 서버 README «계정 — 초대 · 비활성화 · 재설정 · 기록». 시각은 ISO 글자다.
+ * 꼴의 정본은 서버(`apps/api/src/repos/users.ts` 의 `AdminUserRecord` · `repos/invites.ts` · `repos/admin-projects.ts` · `repos/admin-audit.ts`)다.
+ */
+export interface AdminUser {
+  id: string
+  email: string
+  name: string
+  isInstanceAdmin: boolean
+  active: boolean
+  createdAt: string
+  /** 사용자 행과 살아 있는 세션의 마지막 접속 중 늦은 것 — 한 번도 안 들어왔으면 `null`. 세션이 지워져도 남는다. */
+  lastSeenAt: string | null
+  projectCount: number
+  /** 들어온 초대 링크 — 시딩 · 서버 명령으로 만든 계정이면 `null`. */
+  invite: { id: string; name: string } | null
+}
+
+export type InviteKind = 'single' | 'multi'
+export type InviteState = 'usable' | 'expired' | 'revoked' | 'used-up'
+
+/** 초대 링크 한 줄. **원문은 없다** — 원문은 만들기 응답(`CreatedInvite`) 하나에만 실린다. */
+export interface AdminInvite {
+  id: string
+  name: string
+  kind: InviteKind
+  expiresAt: string
+  state: InviteState
+  signups: number
+  createdAt: string
+  createdBy: { id: string; name: string }
+}
+
+export interface CreatedInvite {
+  invite: AdminInvite
+  /** 링크 원문 — 이 응답에만 있다. 화면은 상태에만 두고 저장 · 주소 · 콘솔에 남기지 않는다(`admin/link-reveal.tsx`). */
+  token: string
+}
+
+/** 재설정 링크 — 원문은 이 응답에만 있다(24 시간 · 한 번). */
+export interface CreatedResetLink {
+  token: string
+  expiresAt: string
+}
+
+/** 관리자 › 프로젝트의 한 줄 — 관리자가 멤버가 아닌 프로젝트도 실린다(내용은 못 연다). */
+export interface AdminProject {
+  id: string
+  name: string
+  slug: string
+  owners: { id: string; name: string; active: boolean }[]
+  hasActiveOwner: boolean
+  memberCount: number
+  updatedAt: string
+}
+
+export type AuditAction =
+  | 'invite.create'
+  | 'invite.revoke'
+  | 'invite.signup'
+  | 'reset.create'
+  | 'reset.use'
+  | 'user.deactivate'
+  | 'user.activate'
+  | 'admin.grant'
+  | 'admin.revoke'
+  | 'project.owner'
+  | 'theme.upload'
+  | 'theme.hide'
+  | 'theme.unhide'
+
+export interface AuditEntry {
+  id: string
+  at: string
+  action: AuditAction
+  /** `cli` 는 서버 명령(`db/admin.ts`)이다. */
+  actor: { kind: 'user'; id: string; name: string } | { kind: 'cli' }
+  targetUser: { id: string; name: string; email: string } | null
+  project: { id: string; name: string } | null
+  invite: { id: string; name: string } | null
+  detail: Record<string, string | number | boolean>
+}
+
+/** 기록 한 쪽 — `next` 는 다음 쪽의 `before` 다(없으면 끝). */
+export interface AuditPage {
+  entries: AuditEntry[]
+  next: string | null
+}
+
+/** 기록 거름 — 둘 다 없으면 전부. `before` 는 앞 쪽의 `next`. */
+export interface AuditQuery {
+  action?: AuditAction
+  actorId?: string
+  before?: string
 }

@@ -53,6 +53,11 @@
  * 키 이벤트의 기본 동작을 막고 포커스 항목의 `click()` 을 부른다 — 링크면 라우터가 받고 단추면 `onSelect` 가 돈다. 한 길이라 두 번 돌지
  * 않는다.
  *
+ * **누른 채인 키의 반복(`event.repeat`)은 목록에서도 단추에서도 버린다** — 고른 항목이 메뉴를 닫고 포커스를 단추로 돌리면, 누른 채인 Enter 의
+ * 반복이 단추를 다시 눌러 메뉴를 열고 첫 항목을 고른다. 그 사슬이 0.7s 에 «재설정 링크 만들기» 를 열 번 냈다(관리자 › 사용자 —
+ * `build-test/rv-ad-admin.test.ts` «H2»). 에디터 구조 트리 줄의 «…» 에서도 «아래로» 를 누른 채면 메뉴가 다시 열려 «별칭 바꾸기» 가
+ * 골라진다(`build-test/fx-ad-repeat.test.ts`). 단추의 Enter 는 기본 동작이 클릭이라 반복 keydown 의 기본 동작을 막는다.
+ *
  * ## 목록은 문서 맨 위 겹에 선다 — `document.body` 로 portal
  *
  * 단추 곁에 그리면 트리 칸(스크롤 칸)이 목록을 자르고 캔버스가 덮는다 — 자리와 잰 값은 `use-popover-side.ts` 머리말 «왜 단추 곁이 아닌가».
@@ -246,6 +251,10 @@ export function ActionMenu(props: {
   }
 
   function onToggleKeyDown(event: KeyboardEvent<HTMLButtonElement>): void {
+    if (event.repeat && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault()
+      return
+    }
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
     event.preventDefault()
     openAt(event.key === 'ArrowDown' ? 'first' : 'last')
@@ -275,6 +284,7 @@ export function ActionMenu(props: {
       case 'Enter':
       case ' ':
         event.preventDefault()
+        if (event.repeat) return
         ;(document.activeElement as HTMLElement | null)?.click()
         return
       case 'Escape':

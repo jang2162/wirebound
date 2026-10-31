@@ -35,7 +35,9 @@ import {
   CircleCheck,
   CircleUser,
   CircleX,
+  Copy,
   CopyPlus,
+  Crown,
   Download,
   Eye,
   Ellipsis,
@@ -48,9 +50,11 @@ import {
   FolderPlus,
   GripVertical,
   History,
+  KeyRound,
   LayoutGrid,
   Layers,
   Link2,
+  Link2Off,
   ListIndentDecrease,
   ListIndentIncrease,
   ListOrdered,
@@ -65,6 +69,8 @@ import {
   Palette,
   Pencil,
   ScrollText,
+  ShieldMinus,
+  ShieldPlus,
   PackageOpen,
   Plus,
   Redo2,
@@ -77,7 +83,10 @@ import {
   TriangleAlert,
   Undo2,
   Upload,
+  UserCheck,
   UserCog,
+  UserPlus,
+  UserX,
   Users,
   X,
   ZoomIn,
@@ -181,6 +190,18 @@ export const ICONS = {
   navAudit: ScrollText,
   /** 좁은 창에서 사이드바의 칸 목록을 펴고 접는다. */
   navMenu: Menu,
+  /** 관리자 화면(`admin/*`)의 동작 — 초대 링크를 만든다 · 링크를 복사한다(`admin/link-reveal.tsx`) · 초대 링크를 거둔다. */
+  createInvite: UserPlus,
+  copyLink: Copy,
+  revokeInvite: Link2Off,
+  /** 사용자 줄 «…» — 재설정 링크 · 관리자 지정 · 해제 · 비활성화 · 다시 활성화. */
+  resetLink: KeyRound,
+  grantAdmin: ShieldPlus,
+  revokeAdmin: ShieldMinus,
+  deactivateUser: UserX,
+  activateUser: UserCheck,
+  /** 프로젝트 줄 «…» 의 «owner 넘기기». */
+  transferOwner: Crown,
 } as const satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof ICONS

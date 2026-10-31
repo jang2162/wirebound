@@ -9,6 +9,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { recheckInstanceAdmin, requireInstanceAdmin } from '../auth/admin'
+import { HIDDEN_CHAR_IN_NAME, hasHiddenChar } from '../auth/hidden-chars'
 import { withTransaction } from '../db/tx'
 import { conflict, notFound } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
@@ -19,7 +20,13 @@ import { createInvite, findInvite, listInvites, revokeInvite } from '../repos/in
 export const INVITE_DEFAULT_DAYS = 7
 
 const CreateBody = z.strictObject({
-  name: z.string().trim().min(1).max(60),
+  // 링크 이름도 사람이 지은 글이라 화면의 문장 · 표 · 기록 줄에 선다 — 사용자 이름과 같은 표로 숨는 글자를 거절한다(`auth/hidden-chars.ts`).
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(60)
+    .refine((name) => !hasHiddenChar(name), { error: HIDDEN_CHAR_IN_NAME }),
   kind: z.enum(['single', 'multi']),
   expiresInDays: z.number().int().min(1).max(90).default(INVITE_DEFAULT_DAYS),
 })

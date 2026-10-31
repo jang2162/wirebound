@@ -22,7 +22,7 @@ import { describe, expect, it } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
 import { App } from '../../src/app'
 import type { ApiClient } from '../../src/api/client'
-import type { Comment, ProjectView, SessionUser } from '../../src/api/types'
+import type { AdminInvite, AdminProject, AdminUser, Comment, ProjectView, SessionUser } from '../../src/api/types'
 import { PageJsonNoticeList, type PageJsonNotices } from '../../src/panels/page-json-notices'
 import { ICONS } from '../../src/shell/icons'
 import { canvasQuery, OTHER_PAGE_ID, openPage, pageDoc, PAGE_ID, PROJECT_ID, PROJECT_NAME, SHELL_MENU } from '../editor-harness'
@@ -127,6 +127,14 @@ const MENU_ITEMS = [
   '프로젝트 내보내기',
   '로그아웃',
   '기본',
+  // 관리자 칸의 줄 «…»(`src/admin/*`) — 사용자 넷(비활성 · 일반 · 관리자 줄) · 초대 링크 · 프로젝트.
+  '다시 활성화',
+  '재설정 링크 만들기',
+  '관리자로 지정',
+  '관리자 해제',
+  '비활성화',
+  '거두기',
+  'owner 넘기기',
 ]
 
 /** 일부러 아이콘을 안 주는 행동 메뉴 항목(머리말 2) — 없다. 생기면 이름과 까닭을 여기 둔다. */
@@ -225,6 +233,43 @@ async function editorButtons(): Promise<{ found: IconOnly[]; menus: MenuEntry[] 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터', isInstanceAdmin: true }
 const PROJECT: ProjectView = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin', description: null, role: 'owner', themeRev: 0 }
 
+const adminRow = (id: string, name: string, extra: Partial<AdminUser>): AdminUser => ({
+  id,
+  email: `${id}@example.com`,
+  name,
+  isInstanceAdmin: false,
+  active: true,
+  createdAt: '2026-10-01T00:00:00.000Z',
+  lastSeenAt: null,
+  projectCount: 0,
+  invite: null,
+  ...extra,
+})
+const ADMIN_USERS: AdminUser[] = [
+  adminRow('u-2', '일반', {}),
+  adminRow('u-3', '다른관리자', { isInstanceAdmin: true }),
+  adminRow('u-4', '꺼진사람', { active: false }),
+]
+const ADMIN_INVITE: AdminInvite = {
+  id: 'i-1',
+  name: '디자인팀',
+  kind: 'multi',
+  expiresAt: '2026-11-08T00:00:00.000Z',
+  state: 'usable',
+  signups: 0,
+  createdAt: '2026-11-01T00:00:00.000Z',
+  createdBy: { id: 'u-1', name: '테스터' },
+}
+const ORPHAN: AdminProject = {
+  id: 'p-9',
+  name: '주인 없음',
+  slug: 'orphan',
+  owners: [],
+  hasActiveOwner: false,
+  memberCount: 1,
+  updatedAt: '2026-10-01T00:00:00.000Z',
+}
+
 /** 에디터 밖 화면 넷 — 주소 · 그 화면이 부르는 조회 · 다 그려졌다는 표지(`test/shell/workspace-layout.test.tsx` 의 `SCREENS` 와 같은 판). */
 const OUTSIDE = [
   { screen: '프로젝트 목록', route: '/', heading: '프로젝트', api: { listProjects: async () => [listItem(PROJECT)] } },
@@ -241,6 +286,21 @@ const OUTSIDE = [
   },
   { screen: '계정 설정', route: '/account', heading: '계정 설정', api: { listMyTokens: async () => [] } },
   { screen: '테마 관리', route: '/admin/themes', heading: '테마 관리', api: { listThemePackages: async () => [] } },
+  // 관리자 칸 넷 — 줄 «…» 가 서도록 줄을 싣는다(비활성 · 일반 · 관리자 사용자, 쓸 수 있는 초대 링크, 활성 owner 없는 프로젝트).
+  { screen: '관리자 › 사용자', route: '/admin/users', heading: '사용자', api: { listAdminUsers: async () => ADMIN_USERS } },
+  { screen: '관리자 › 초대 링크', route: '/admin/invites', heading: '초대 링크', api: { listInvites: async () => [ADMIN_INVITE] } },
+  {
+    screen: '관리자 › 프로젝트',
+    route: '/admin/projects',
+    heading: '프로젝트',
+    api: { listAdminProjects: async () => [ORPHAN], listProjects: async () => [] },
+  },
+  {
+    screen: '관리자 › 기록',
+    route: '/admin/audit',
+    heading: '기록',
+    api: { listAudit: async () => ({ entries: [], next: null }), listAdminUsers: async () => [] },
+  },
 ] as const satisfies readonly { screen: string; route: string; heading: string; api: Partial<ApiClient> }[]
 
 async function outsideScreen(
@@ -306,6 +366,10 @@ describe('아이콘만 남은 단추는 이름과 title 을 가진다', () => {
         '프로젝트 설정': expect.any(Number),
         '계정 설정': expect.any(Number),
         '테마 관리': expect.any(Number),
+        '관리자 › 사용자': expect.any(Number),
+        '관리자 › 초대 링크': expect.any(Number),
+        '관리자 › 프로젝트': expect.any(Number),
+        '관리자 › 기록': expect.any(Number),
         통지: 2,
       })
       for (const [where, count] of Object.entries(perScreen)) expect({ where, enough: count >= 1 }).toEqual({ where, enough: true })
