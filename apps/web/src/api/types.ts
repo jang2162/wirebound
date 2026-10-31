@@ -21,8 +21,8 @@ export interface SessionUser {
   email: string
   name: string
   /**
-   * 인스턴스 관리자인가 — 프로젝트 목록 머리의 «테마 관리» 링크를 이 값으로 세운다(`routes/project-list.tsx`). 서버는 두 응답에 늘
-   * 싣는다. **선택 키로 두는 것은** 이 값을 안 든 가짜 사용자(테스트 픽스처)를 «관리자 아님» 으로 읽게 하려는 것이다 — 없으면 거짓이다.
+   * 인스턴스 관리자인가 — 뼈대 사이드바의 «관리자» 묶음(`shell/workspace-layout.tsx`)과 관리자 화면의 판정이 이 값을 읽는다. 서버는 세 응답
+   * (`/me` · 로그인 · 초대 가입)에 늘 싣는다. **선택 키로 두는 것은** 이 값을 안 든 가짜 사용자(테스트 픽스처)를 «관리자 아님» 으로 읽게 하려는 것이다 — 없으면 거짓이다.
    */
   isInstanceAdmin?: boolean
 }
@@ -67,17 +67,17 @@ export interface ProjectSummary {
 }
 
 /**
- * 호출자의 역할이 실린 프로젝트. **프로젝트를 내는 응답은 지금 넷이고 전부 이 형태다.**
+ * 호출자의 역할이 실린 프로젝트. **프로젝트를 내는 응답은 지금 넷이고 전부 이 키를 싣는다** — 목록 항목은 두 칸
+ * (`ProjectListItem`), 상세는 `themeRev`(`ProjectView`)가 더 있다.
  *
- * **실측**(api 테스트 하네스에 임시 케이스를 두고 네 자리를 불러 응답의 키 집합을 잰다) — 네 자리의 키 집합이
- * `["description","id","name","role","slug"]`로 같다:
+ * 네 자리의 키 집합(api `test/project-list-fields.test.ts` 의 «응답 넷의 키 집합» 이 잰다):
  *
- * | 응답 | 상태 | `role` |
- * |---|---|---|
- * | `POST /api/projects` | 201 | `"owner"`(만든 사람이 owner다) |
- * | `GET /api/projects` 각 항목 | 200 | 그 사용자의 역할 |
- * | `GET /api/projects/:projectId` | 200 | 그 사용자의 역할 |
- * | `PATCH /api/projects/:projectId` | 200 | 그 사용자의 역할(owner만 부를 수 있다) |
+ * | 응답 | 상태 | 키 집합 | `role` |
+ * |---|---|---|---|
+ * | `POST /api/projects` | 201 | `["description","id","name","role","slug"]` | `"owner"`(만든 사람이 owner다) |
+ * | `GET /api/projects` 각 항목 | 200 | 위 + `memberCount` · `updatedAt` | 그 사용자의 역할 |
+ * | `GET /api/projects/:projectId` | 200 | 위 + `themeRev` | 그 사용자의 역할 |
+ * | `PATCH /api/projects/:projectId` | 200 | `["description","id","name","role","slug"]` | 그 사용자의 역할(owner만 부를 수 있다) |
  *
  * **생성 응답에도 `role`이 있다.** `apps/api/src/repos/projects.ts`의 `insertProject`가
  * `.returning(['id','name','slug','description'])`으로 고른 뒤 **`{ ...project, role: 'owner' as const }`로
@@ -98,6 +98,16 @@ export interface ProjectSummary {
  */
 export interface ProjectDetail extends ProjectSummary {
   role: ProjectRole
+}
+
+/**
+ * `GET /api/projects` 의 한 항목. `memberCount` 는 그 프로젝트의 멤버 행 수, `updatedAt` 은 프로젝트 행과 그 페이지들 가운데 가장 늦게
+ * 바뀐 시각(ISO — 정의는 서버 `repos/projects.ts` 의 `projectActivityColumns` 머리말)이다. 목록의 정렬 · 상대 시각이 이 둘을 읽는다
+ * (`projects/project-filter.ts`).
+ */
+export interface ProjectListItem extends ProjectDetail {
+  memberCount: number
+  updatedAt: string
 }
 
 /**

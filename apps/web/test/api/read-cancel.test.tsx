@@ -12,7 +12,7 @@ import { App } from '../../src/app'
 import type { ReadOptions } from '../../src/api/client'
 import type { ProjectView } from '../../src/api/types'
 import { PROJECT_ID, PROJECT_NAME, openPage, pageDoc } from '../editor-harness'
-import { fakeApi, renderWithProviders } from '../helpers'
+import { fakeApi, renderWithProviders, listItem } from '../helpers'
 
 const DOC = pageDoc({ id: 'n-root', type: 'Page', children: [] })
 const PROJECT: ProjectView = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin', description: null, role: 'owner', themeRev: 0 }
@@ -32,7 +32,7 @@ describe('떠나면 조회를 요청째 끊는다', () => {
           cancels.push(options?.cancel)
           return PROJECT
         },
-        listProjects: async () => [PROJECT],
+        listProjects: async () => [listItem(PROJECT)],
       },
     })
     expect(cancels.length).toBeGreaterThan(0)
@@ -50,7 +50,7 @@ describe('떠나면 조회를 요청째 끊는다', () => {
           cancels.push(options?.cancel)
           return []
         },
-        listProjects: async () => [PROJECT],
+        listProjects: async () => [listItem(PROJECT)],
       },
     })
     expect(cancels.length).toBeGreaterThan(0)

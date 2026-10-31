@@ -66,7 +66,14 @@ describe('역할을 읽는 자리', () => {
     // `member.role` 글자뿐이다 — 같은 파일의 다른 `.role` 읽기는 여전히 여기서 죽는다.
     const memberRow = (r: { path: string; line: string }) =>
       r.path === '../src/settings/members-section.tsx' && /\bmember\.role\b/.test(r.line)
-    expect(reads.filter((r) => !r.line.includes('projectAbilities(') && !memberRow(r))).toEqual([])
+    // **판정한 예외 둘째**: 프로젝트 목록의 역할 표지 · 역할 거름(`projects/project-filter.ts`) — 설계 「프로젝트 목록」 이 카드에 «내 역할» 을
+    // 보이고 그것으로 거르게 한다. 무엇을 열지 정하지 않는다(보이고 고르기만). 예외는 그 파일의 `item.role`(목록 항목) · `q.role` ·
+    // `DEFAULT_QUERY.role`(거름 값 — 프로젝트의 역할이 아니다)과 목록 화면(`routes/project-list.tsx`)의 거름 고르개 값 `query.role` 글자뿐이다.
+    const listFilterRow = (r: { path: string; line: string }) =>
+      (r.path === '../src/projects/project-filter.ts' &&
+        r.line.replace(/\b(item|q|DEFAULT_QUERY)\.role\b/g, '').search(/\.\s*role\b/) === -1) ||
+      (r.path === '../src/routes/project-list.tsx' && r.line.replace(/\bquery\.role\b/g, '').search(/\.\s*role\b/) === -1)
+    expect(reads.filter((r) => !r.line.includes('projectAbilities(') && !memberRow(r) && !listFilterRow(r))).toEqual([])
 
     // 자리: 새 화면이 역할을 보게 되면 여기가 죽는다.
     expect([...new Set(reads.map((r) => r.path))].sort()).toEqual(
@@ -82,8 +89,11 @@ describe('역할을 읽는 자리', () => {
         '../src/settings/theme-section.tsx',
         // «멤버» 절이 초대 · 역할 바꾸기 · 제외를 열지(`manageMembers`)를 안다(멤버 줄의 `member.role` 은 위 예외).
         '../src/settings/members-section.tsx',
-        // «위험 구역» 이 절을 세울지(`remove`)를 안다 — 목록 줄의 삭제는 없어 목록 화면은 역할을 안 읽는다.
+        // «위험 구역» 이 절을 세울지(`remove`)를 안다 — 목록 줄의 삭제는 없다.
         '../src/settings/danger-section.tsx',
+        // 목록 카드의 역할 표지 · 역할 거름과 그 고르개(위 «예외 둘째»).
+        '../src/projects/project-filter.ts',
+        '../src/routes/project-list.tsx',
       ].sort(),
     )
   })

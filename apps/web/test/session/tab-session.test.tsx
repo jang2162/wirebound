@@ -33,7 +33,7 @@ import { ApiProvider } from '../../src/api/context'
 import type { SessionUser } from '../../src/api/types'
 import { RedirectWhenAuthenticated, RequireAuth } from '../../src/routes/require-auth'
 import { SessionProvider, useSessionEpoch, useSessionUser } from '../../src/session/session-context'
-import { PageHead } from '../../src/shell/page-head'
+import { WorkspaceLayout } from '../../src/shell/workspace-layout'
 import { TabChannelProvider } from '../../src/session/tab-channel'
 import { currentPath, fakeApi, renderWithProviders, tabHub, unauthenticatedError, type TabHub } from '../helpers'
 
@@ -65,7 +65,7 @@ const path = (): string => screen.getByTestId('tab-path').textContent ?? ''
 const who = (): string => screen.getByTestId('tab-user').textContent ?? ''
 const epoch = (): number => Number(screen.getByTestId('tab-epoch').textContent)
 
-/** 문지기 둘과 목록 · 다른 화면 · 셸 밖 머리(`…` 의 로그아웃). `<App />`보다 작다 — 에디터를 안 띄운다. */
+/** 문지기 둘과 목록 · 다른 화면 · 에디터 밖 화면 뼈대(사이드바의 «로그아웃»). `<App />`보다 작다 — 에디터를 안 띄운다. */
 function renderTab(options: { client: ApiClient; route: string; hub: TabHub }): { unmount: () => void } {
   homeMounts.length = 0
   return render(
@@ -85,8 +85,9 @@ function renderTab(options: { client: ApiClient; route: string; hub: TabHub }): 
               <Route
                 element={
                   <RequireAuth>
-                    <PageHead title="탭" brand={false} />
-                    <Outlet />
+                    <WorkspaceLayout title="탭">
+                      <Outlet />
+                    </WorkspaceLayout>
                   </RequireAuth>
                 }
               >
@@ -126,8 +127,7 @@ describe('이 탭이 알린다 — 이 탭에서 일어난 로그인·로그아�
     renderTab({ client: fakeApi({ me: async () => ALICE, logout: async () => undefined }), route: '/', hub })
     await screen.findByText('목록')
 
-    fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '로그아웃' }))
+    fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
     await waitFor(() => expect(path()).toBe('/login'))
 
     expect(hub.posted).toEqual([{ kind: 'signed-out' }])

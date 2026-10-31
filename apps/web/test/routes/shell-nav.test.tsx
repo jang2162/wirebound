@@ -257,12 +257,11 @@ describe('프로젝트 목록에서도 로그아웃한다', () => {
     await screen.findByRole('heading', { name: '프로젝트' })
   }
 
-  it('누구로 들어와 있는지와 로그아웃이 함께 있다 — 목록 머리의 `…`', async () => {
+  it('누구로 들어와 있는지와 로그아웃이 함께 있다 — 뼈대 사이드바의 바닥', async () => {
     await openList(async () => {})
 
-    fireEvent.click(screen.getByRole('button', { name: SHELL_MENU }))
     expect(screen.getByText(USER.name)).toBeTruthy()
-    expect(screen.getByRole('menuitem', { name: '로그아웃' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '로그아웃' })).toBeTruthy()
   })
 
   it('눌러서 로그인 화면으로 나간다', async () => {
@@ -271,7 +270,7 @@ describe('프로젝트 목록에서도 로그아웃한다', () => {
       calls += 1
     })
 
-    chooseFromShellMenu('로그아웃')
+    fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
 
     await waitFor(() => expect(currentPath()).toBe('/login'))
     expect(calls).toBe(1)

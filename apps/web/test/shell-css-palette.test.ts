@@ -141,7 +141,9 @@ const ROUTE_SOURCES = Object.entries(
  * | 클래스 | 화면 | 셸 안인가 |
  * |---|---|---|
  * | `wb-shell` | 에디터 셸(설계서 「설계서 화면 구조」) | 자기가 셸이다 |
- * | `wb-shell-project-list` | 프로젝트 목록 | 아니다 — 별도 라우트 |
+ * | `wb-shell-workspace` | 에디터 밖 화면의 뼈대 — 사이드바 · 내용 칸(`src/shell/workspace-layout.tsx`) | 아니다 — 별도 라우트 |
+ * | `wb-shell-project-list` | 프로젝트 목록의 몸 — 뼈대 안이라 팔레트를 상속으로도 받는다. 남겨 두는 것은 목록의 부품을 뼈대 없이 그리는 케이스 때문이다 | 아니다 |
+ * | `wb-shell-settings` | 프로젝트 설정 · 계정 설정 · 테마 관리의 몸 — 위와 같다 | 아니다 |
  * | `wb-shell-login` | 로그인 | 아니다 |
  * | `wb-shell-action-menu-body` | 행동 메뉴의 떠 있는 목록 — 화면이 아니라 화면 위 겹 | 아니다 — `document.body` 로 portal(`src/shell/action-menu.tsx` 머리말 «목록은 문서 맨 위 겹에 선다») |
  *
@@ -153,7 +155,14 @@ const ROUTE_SOURCES = Object.entries(
  * 같다(팔레트를 상속으로 받는다). 이 검사가 지키는 것은 그러므로 *"화면이 검게 나오는가"*가
  * 아니라 **CSS와 이 목록이 갈리지 않는 것**이고, 아래 구분력 두 케이스가 그 양방향이다.
  */
-const SCREEN_ROOTS = ['wb-shell', 'wb-shell-login', 'wb-shell-project-list', 'wb-shell-settings', 'wb-shell-action-menu-body']
+const SCREEN_ROOTS = [
+  'wb-shell',
+  'wb-shell-login',
+  'wb-shell-workspace',
+  'wb-shell-project-list',
+  'wb-shell-settings',
+  'wb-shell-action-menu-body',
+]
 
 /**
  * **팔레트를 안 받는 화면 루트.** 여기 있으려면 조건이 하나다 — **자기 규칙이

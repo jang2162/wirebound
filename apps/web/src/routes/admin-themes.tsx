@@ -1,11 +1,11 @@
 /**
  * **테마 관리** — `/admin/themes`(spec `2026-09-27-code-themes-design.md` 「관리자 화면」). 인스턴스 관리자가 테마 패키지를 올리고 판을
- * 숨기거나 되살리고 스타터 템플릿을 받는다. 셸 밖 화면 머리 `…` 의 «테마 관리»(관리자에게만 — `shell/page-head.tsx`)로 온다.
+ * 숨기거나 되살리고 스타터 템플릿을 받는다. 뼈대 사이드바의 «관리자 › 테마»(관리자에게만 — `shell/workspace-layout.tsx`)로 온다.
  *
  * # 꼴 — 목록 + 상세 + 미리보기
  *
  * 위에 도구 줄(올리기 · 템플릿), 그 밑에 왼쪽 **테마 목록**(테마마다 이름 · id · 판 수 · 숨긴 판 수)과 오른쪽 **상세**(고른 테마의 판 줄 ·
- * 그 아래 고른 판의 **미리보기**)다. 창이 좁으면(< 900px) 목록이 위, 상세가 아래다. 화면 루트는 `.wb-shell-settings`(넓은 폭 · 팔레트).
+ * 그 아래 고른 판의 **미리보기**)다. 창이 좁으면(< 900px) 목록이 위, 상세가 아래다. 몸은 `.wb-shell-settings`(팔레트 · 글꼴)다.
  *
  * - **주소가 고른 것을 든다** — `?theme=<id>&version=<판>`. 없거나 모르는 테마면 첫 테마, 모르는 판이면 그 테마의 `latest`(숨기지 않은
  *   판의 최대 — 다 숨었으면 첫 판). 고르면 `replace` 로 주소만 바꾼다. 올리기가 성공하면 올린 판을 고른다.
@@ -33,9 +33,10 @@ import { useSessionUser } from '../session/session-context'
 import { formatWhen } from '../account/tokens-section'
 import { ThemePreview } from '../settings/theme-preview'
 import { shellIcon } from '../shell/icons'
-import { PageHead } from '../shell/page-head'
+import { WorkspaceLayout } from '../shell/workspace-layout'
 
-const ADMIN_ONLY = '인스턴스 관리자만 볼 수 있습니다'
+/** 관리자가 아닌 사람에게 — 관리자 칸의 «준비 중»(`routes/admin-pending.tsx`)도 같은 문장이다. */
+export const ADMIN_ONLY = '인스턴스 관리자만 볼 수 있습니다'
 const LOAD_FAILURE = '테마 목록을 불러오지 못했습니다'
 const UPLOAD_FAILURE = '테마 패키지를 올리지 못했습니다'
 const TOO_LARGE = '10 MB 를 넘습니다'
@@ -194,92 +195,91 @@ export function AdminThemesRoute(): ReactElement {
   const picked = state.status === 'ready' ? pickedOf(state.packages, params.get('theme'), params.get('version')) : null
 
   return (
-    <main className="wb-shell-settings">
-      {/* 머리 — 로고(프로젝트 목록으로) · 제목 · `…`(`shell/page-head.tsx`). */}
-      <PageHead title="테마 관리" brand />
-
-      {!admin || forbidden ? (
-        <p className="wb-shell-project-alert" role="alert">
-          {ADMIN_ONLY}
-        </p>
-      ) : (
-        <>
-          {/* 도구 줄 — 올리기(파일 칸은 눈에서만 감추고 라벨이 단추 꼴이다 — 접근 이름은 라벨 글 그대로) · 템플릿 받기. */}
-          <div className="wb-shell-admin-tools">
-            <label className="wb-shell-admin-upload" aria-disabled={busy}>
-              {shellIcon('uploadTheme', 16, 'wb-shell-icon-lead')}
-              테마 패키지 올리기
-              <input
-                className="wb-shell-admin-file"
-                type="file"
-                accept=".wbtheme,.zip"
-                disabled={busy}
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  // 같은 파일을 다시 골라도 `change` 가 나게 비운다.
-                  event.target.value = ''
-                  if (file !== undefined) void send(file)
-                }}
-              />
-            </label>
-            <span className="wb-shell-admin-hint">.wbtheme · 10 MB 까지</span>
-            <button className="wb-shell-admin-template" type="button" disabled={busy} onClick={() => void template()}>
-              {shellIcon('themeTemplate', 16, 'wb-shell-icon-lead')}
-              스타터 템플릿 받기
-            </button>
-          </div>
-
-          {upload?.kind === 'done' && (
-            <p className="wb-shell-project-notice" role="status">
-              {upload.text}
-            </p>
-          )}
-          {upload?.kind === 'failed' && (
-            <p className="wb-shell-project-alert" role="alert">
-              {upload.text}
-            </p>
-          )}
-          {upload?.kind === 'issues' && (
-            <ul className="wb-shell-admin-issues" aria-label="업로드를 거절한 까닭">
-              {upload.issues.map((issue, index) => (
-                <li key={index} className="wb-shell-admin-issue">
-                  {`${issue.path} — ${issue.message}${issue.manifestCode === undefined ? '' : ` (${issue.manifestCode})`}`}
-                </li>
-              ))}
-            </ul>
-          )}
-          {notice !== null && (
-            <p className="wb-shell-project-alert" role="alert">
-              {notice}
-            </p>
-          )}
-
-          {state.status === 'loading' && (
-            <p className="wb-shell-project-notice" role="status">
-              불러오는 중…
-            </p>
-          )}
-          {state.status === 'failed' && state.failure.kind === 'message' && (
-            <p className="wb-shell-project-alert" role="alert">
-              {state.failure.message}
-            </p>
-          )}
-          {state.status === 'ready' && picked === null && <p className="wb-shell-project-notice">{NO_THEMES}</p>}
-          {state.status === 'ready' && picked !== null && (
-            <div className="wb-shell-admin-layout">
-              <ThemeList packages={state.packages} selected={picked.pkg.themeId} onPick={pick} />
-              <ThemeDetail
-                pkg={picked.pkg}
-                version={picked.version}
-                busy={busy}
-                onPreview={(version) => pick({ themeId: picked.pkg.themeId, version })}
-                onToggle={(row) => void toggle(row)}
-              />
+    <WorkspaceLayout title="테마 관리">
+      <div className="wb-shell-settings">
+        {!admin || forbidden ? (
+          <p className="wb-shell-project-alert" role="alert">
+            {ADMIN_ONLY}
+          </p>
+        ) : (
+          <>
+            {/* 도구 줄 — 올리기(파일 칸은 눈에서만 감추고 라벨이 단추 꼴이다 — 접근 이름은 라벨 글 그대로) · 템플릿 받기. */}
+            <div className="wb-shell-admin-tools">
+              <label className="wb-shell-admin-upload" aria-disabled={busy}>
+                {shellIcon('uploadTheme', 16, 'wb-shell-icon-lead')}
+                테마 패키지 올리기
+                <input
+                  className="wb-shell-admin-file"
+                  type="file"
+                  accept=".wbtheme,.zip"
+                  disabled={busy}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    // 같은 파일을 다시 골라도 `change` 가 나게 비운다.
+                    event.target.value = ''
+                    if (file !== undefined) void send(file)
+                  }}
+                />
+              </label>
+              <span className="wb-shell-admin-hint">.wbtheme · 10 MB 까지</span>
+              <button className="wb-shell-admin-template" type="button" disabled={busy} onClick={() => void template()}>
+                {shellIcon('themeTemplate', 16, 'wb-shell-icon-lead')}
+                스타터 템플릿 받기
+              </button>
             </div>
-          )}
-        </>
-      )}
-    </main>
+
+            {upload?.kind === 'done' && (
+              <p className="wb-shell-project-notice" role="status">
+                {upload.text}
+              </p>
+            )}
+            {upload?.kind === 'failed' && (
+              <p className="wb-shell-project-alert" role="alert">
+                {upload.text}
+              </p>
+            )}
+            {upload?.kind === 'issues' && (
+              <ul className="wb-shell-admin-issues" aria-label="업로드를 거절한 까닭">
+                {upload.issues.map((issue, index) => (
+                  <li key={index} className="wb-shell-admin-issue">
+                    {`${issue.path} — ${issue.message}${issue.manifestCode === undefined ? '' : ` (${issue.manifestCode})`}`}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {notice !== null && (
+              <p className="wb-shell-project-alert" role="alert">
+                {notice}
+              </p>
+            )}
+
+            {state.status === 'loading' && (
+              <p className="wb-shell-project-notice" role="status">
+                불러오는 중…
+              </p>
+            )}
+            {state.status === 'failed' && state.failure.kind === 'message' && (
+              <p className="wb-shell-project-alert" role="alert">
+                {state.failure.message}
+              </p>
+            )}
+            {state.status === 'ready' && picked === null && <p className="wb-shell-project-notice">{NO_THEMES}</p>}
+            {state.status === 'ready' && picked !== null && (
+              <div className="wb-shell-admin-layout">
+                <ThemeList packages={state.packages} selected={picked.pkg.themeId} onPick={pick} />
+                <ThemeDetail
+                  pkg={picked.pkg}
+                  version={picked.version}
+                  busy={busy}
+                  onPreview={(version) => pick({ themeId: picked.pkg.themeId, version })}
+                  onToggle={(row) => void toggle(row)}
+                />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </WorkspaceLayout>
   )
 }
 

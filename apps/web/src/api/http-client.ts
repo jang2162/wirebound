@@ -32,6 +32,7 @@ import type {
   AssetInfo,
   AssetList,
   ProjectDetail,
+  ProjectListItem,
   ProjectThemeView,
   ProjectView,
   RestoreResult,
@@ -300,7 +301,7 @@ function isTreePage(value: unknown): boolean {
  *
  * | 소비자 | 읽는 값과 그 값이 되는 것 | 어긋나면 |
  * |---|---|---|
- * | `listProjects` | `id`(목록 `<Link>`의 주소) · `name`(줄의 글자) · **`description`(줄의 `<p>` 자식)** | 빈 문자열이면 `/projects/`가 되고 화면이 통째로 빈다 |
+ * | `listProjects` | `id`(목록 `<Link>`의 주소) · `name`(줄의 글자) · **`description`(줄의 `<p>` 자식)** · `memberCount`(카드의 글자) · `updatedAt`(정렬 · 상대 시각) | 빈 문자열이면 `/projects/`가 되고 화면이 통째로 빈다 — 두 칸은 `projectList` 가 따로 본다 |
  * | `getProject` | `id`(셸이 트리에 넘기는 `projectId`) · `name`(셸 제목) | 같은 부류 — `/projects/pages/pg1` |
  * | `createProject` | `id`가 **주소가 된다**(만든 뒤 그리로 이동한다) | 201 성공 경로로 잘못된 주소가 만들어진다 |
  * | `updateProject` | (없음 — 성공 여부만 본다) | — |
@@ -311,9 +312,8 @@ function isTreePage(value: unknown): boolean {
  * > 갱신하라"로는 닫히지 않는다** — 실행으로 재면 낡지 않는다(`test/api-consumers.test.ts`).
  *
  * **`createProject`가 이 검사를 그대로 지나는 것은 "모양이 같아서"가 아니다.** 그쪽 하중
- * `id`(주소)가 이 검사가 이미 보는 것의 **부분집합**이라서다 — 실측으로 네 응답의 키 집합이
- * `["description","id","name","role","slug"]`로 같다는 것도 함께 쟀다(`api/types.ts`의
- * `ProjectDetail` 표). 별도 shape를 두면 내용이 같은 둘이 생겨 한쪽만 고쳐지는 자리가 되고,
+ * `id`(주소)가 이 검사가 이미 보는 것의 **부분집합**이라서다 — 네 응답이 모두
+ * `["description","id","name","role","slug"]`를 싣는다(`api/types.ts`의 `ProjectDetail` 표 — 목록 · 상세는 칸이 더 있다). 별도 shape를 두면 내용이 같은 둘이 생겨 한쪽만 고쳐지는 자리가 되고,
  * 더 약한 쪽이 같은 계약을 통과시키게 된다.
  *
  * **무엇을 막고 무엇을 통과시키는지는 "어겼을 때 화면이 통째로 비는가"로 가른다 — 재서 정했다.**
@@ -469,7 +469,18 @@ const SHAPES = {
   member: isProjectMember,
   sessionUser: (value) => isRecord(value) && typeof value['id'] === 'string',
   projectDetail: isProjectDetail,
-  projectList: (value) => isArrayOf(value, isProjectDetail),
+  /**
+   * 목록은 프로젝트 칸에 두 칸을 더 본다 — `memberCount` 는 카드의 글자(객체면 목록이 통째로 빈다 — `isProjectDetail` 머리말의
+   * «이터러블» 표), `updatedAt` 은 정렬 · 상대 시각이 `Date.parse` 로 읽는다(`projects/project-filter.ts`).
+   */
+  projectList: (value) =>
+    isArrayOf(
+      value,
+      (item) =>
+        isProjectDetail(item) &&
+        typeof (item as Record<string, unknown>)['memberCount'] === 'number' &&
+        typeof (item as Record<string, unknown>)['updatedAt'] === 'string',
+    ),
   /** `{ menu }` 봉투. 서버가 이 엔드포인트에서만 쓴다(README "트리 응답 형태"). */
   treeEnvelope: (value) => isRecord(value) && isArrayOf(value['menu'], isTreeMenuNode),
   /** 같은 봉투에 판 번호(`rev` — 0 이상의 정수)까지. 번호가 틀리면 그 답으로 낡음을 가를 수 없어 실패로 본다. */
@@ -1368,7 +1379,7 @@ export function createHttpClient(
     login: (email, password) => request<SessionUser>('POST', '/auth/login', SHAPES.sessionUser, { email, password }),
     logout: () => request<void>('POST', '/auth/logout', SHAPES.noBody),
     me: (options) => request<SessionUser>('GET', '/auth/me', SHAPES.sessionUser, undefined, options),
-    listProjects: () => request<ProjectDetail[]>('GET', '/projects', SHAPES.projectList),
+    listProjects: () => request<ProjectListItem[]>('GET', '/projects', SHAPES.projectList),
     listMyTokens: () => request<MyApiToken[]>('GET', '/auth/tokens', SHAPES.myTokens),
     revokeMyToken: (tokenId) => request<void>('DELETE', `/auth/tokens/${encodeURIComponent(tokenId)}`, SHAPES.noBody),
     revokeAllMyTokens: () => request<{ revoked: number }>('DELETE', '/auth/tokens', SHAPES.revokedCount),

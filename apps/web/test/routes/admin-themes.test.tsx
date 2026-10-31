@@ -1,5 +1,5 @@
 /**
- * **테마 관리**(`routes/admin-themes.tsx`) — 인스턴스 관리자의 업로드 · 숨김 · 템플릿과 목록 머리의 링크, 목록 + 상세 + 미리보기의 고르기
+ * **테마 관리**(`routes/admin-themes.tsx`) — 인스턴스 관리자의 업로드 · 숨김 · 템플릿과 사이드바의 링크, 목록 + 상세 + 미리보기의 고르기
  * (주소 `?theme=` · `?version=`). 미리보기가 그 테마로 그려지는지는 실브라우저 판(`build-test/v4-settings-ui.test.ts`)이 잰다 — 여기는 고른
  * 판의 manifest 를 읽고 그 판을 번들 로더에 싣는지(설정 미리보기와 같은 길)를 센다.
  */
@@ -193,21 +193,22 @@ describe('테마 관리 — 숨김 · 템플릿', () => {
   })
 })
 
-describe('프로젝트 목록 머리 `…` 의 «테마 관리»', () => {
+describe('사이드바 «관리자» 묶음의 «테마»', () => {
   it('관리자에게만 선다', async () => {
     renderWithProviders(<App />, { client: fakeApi({ me: async () => ADMIN, listProjects: async () => [] }), route: '/' })
     await screen.findByText('참여 중인 프로젝트가 없습니다')
-    fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '테마 관리' }))
+    fireEvent.click(within(screen.getByRole('navigation', { name: '관리자' })).getByRole('link', { name: '테마' }))
+    await screen.findByRole('heading', { name: '테마 관리' })
     expect(currentPath()).toBe('/admin/themes')
   })
 
   it('비관리자에게는 없다', async () => {
     renderWithProviders(<App />, { client: fakeApi({ me: async () => MEMBER, listProjects: async () => [] }), route: '/' })
     await screen.findByText('참여 중인 프로젝트가 없습니다')
-    fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
-    expect(screen.getAllByRole('menuitem').length).toBeGreaterThan(0)
-    expect(screen.queryByRole('menuitem', { name: '테마 관리' })).toBeNull()
+    // 카나리아 — 사이드바는 섰다(누구에게나 있는 칸).
+    expect(within(screen.getByRole('navigation', { name: '작업 공간' })).getAllByRole('link').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('navigation', { name: '관리자' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '테마' })).toBeNull()
   })
 
   it('로그인 직후에도 선다 — 로그인 응답의 isInstanceAdmin 으로', async () => {
@@ -230,8 +231,7 @@ describe('프로젝트 목록 머리 `…` 의 «테마 관리»', () => {
     fireEvent.change(await screen.findByLabelText('이메일'), { target: { value: 'admin@example.com' } })
     fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'password1234' } })
     fireEvent.click(screen.getByRole('button', { name: '로그인' }))
-    fireEvent.click(await screen.findByRole('button', { name: '더 보기' }))
-    await screen.findByRole('menuitem', { name: '테마 관리' })
+    await screen.findByRole('navigation', { name: '관리자' })
     // `/me` 를 다시 부르지 않고 선다 — 첫 세션 확인 한 번뿐이다.
     expect(me).toHaveBeenCalledTimes(1)
   })

@@ -5,13 +5,13 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { ProjectDetail, SessionUser } from '../../src/api/types'
+import type { ProjectListItem, SessionUser } from '../../src/api/types'
 import { PASSWORD_MISMATCH, PASSWORD_TOO_SHORT } from '../../src/account/new-password-fields'
-import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
+import { currentPath, fakeApi, listItem, renderWithProviders, unauthenticatedError } from '../helpers'
 
 const USER: SessionUser = { id: 'u-new', email: 'new@example.com', name: '새 사람' }
 const PROJECT_NAME = '가입 뒤 도착 [INVITE-도착지]'
-const PROJECTS: ProjectDetail[] = [{ id: 'p-1', name: PROJECT_NAME, slug: 'p', description: null, role: 'viewer' }]
+const PROJECTS: ProjectListItem[] = [listItem({ id: 'p-1', name: PROJECT_NAME, slug: 'p', description: null, role: 'viewer' })]
 /** 서버가 준 문장 — 화면이 하드코딩할 리 없는 글이어야 «서버 문장을 그대로 낸다» 가 잰다. */
 const UNUSABLE = '이 링크는 끝났다 [INVITE-404]'
 const TAKEN = '그 이메일은 있다 [INVITE-409]'

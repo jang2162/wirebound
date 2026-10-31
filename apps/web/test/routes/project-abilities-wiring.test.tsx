@@ -15,7 +15,7 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import type { ProjectView, SessionUser } from '../../src/api/types'
-import { fakeApi, renderWithProviders } from '../helpers'
+import { fakeApi, renderWithProviders, listItem } from '../helpers'
 import { adminThemeView } from '../theme-loader'
 
 /** 화면이 부르는 판정. 케이스가 이 값을 갈아 끼운다. */
@@ -40,7 +40,7 @@ async function renderList(next: { rename: boolean; remove: boolean }): Promise<v
   abilities.rename = next.rename
   abilities.remove = next.remove
   renderWithProviders(<App />, {
-    client: fakeApi({ me: async () => USER, listProjects: async () => [PROJECT] }),
+    client: fakeApi({ me: async () => USER, listProjects: async () => [listItem(PROJECT)] }),
     route: '/',
   })
   await screen.findByText('관리자 콘솔')

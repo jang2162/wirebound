@@ -9,7 +9,7 @@
  * | Tab · Shift+Tab | Tab 이 단추 다음 자리로 안 간다 · Shift+Tab 이 단추에 안 선다 |
  * | 바깥 누름 | 다른 줄을 한 번 눌러 메뉴가 닫히고 그 줄이 골라지지 않는다 |
  * | 스크롤 · 창 크기 | 칸을 굴리면 목록이 단추를 안 따라간다 · 단추가 칸 밖으로 나가도 목록이 남는다 · 닫힌 뒤 칸이 되굴려진다 · 창을 좁히면 목록이 창 밖이다 |
- * | 항목 고르기 | 자리마다 항목을 눌러 그 일이 안 일어난다(구조 «삭제» · 메뉴 «삭제» 확인 · 메뉴 `+` «페이지 추가» · 구조 줄 `…` «모듈로 저장…» · 셸 `…` «스냅샷» · 목록 머리 `…` «계정 설정») |
+ * | 항목 고르기 | 자리마다 항목을 눌러 그 일이 안 일어난다(구조 «삭제» · 메뉴 «삭제» 확인 · 메뉴 `+` «페이지 추가» · 구조 줄 `…` «모듈로 저장…» · 셸 `…` «스냅샷») |
  */
 import type { Locator, Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -342,13 +342,6 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
       results.snapshots = await page.getByRole('dialog', { name: '스냅샷' }).count()
       await page.keyboard.press('Escape')
 
-      // 목록 머리 `…` «계정 설정» → /account.
-      await page.goto('/')
-      await page.locator('.wb-shell-project-head').getByRole('button', { name: '더 보기', exact: true }).click()
-      await page.getByRole('menuitem', { name: '계정 설정', exact: true }).click()
-      await page.waitForURL(/\/account$/)
-      results.account = new URL(page.url()).pathname
-
       expect(results).toEqual({
         blockLast: 'above',
         structureDelete: true,
@@ -356,7 +349,6 @@ describe.skipIf(!전제.ok)('행동 메뉴 portal — 지키는 성질 · 실브
         pageInput: 1,
         saveModule: 1,
         snapshots: 1,
-        account: '/account',
       })
     } finally {
       await close()

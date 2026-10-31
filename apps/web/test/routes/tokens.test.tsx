@@ -54,17 +54,17 @@ function server(initial: MyApiToken[], overrides: Partial<ApiClient> = {}) {
 }
 
 describe('API 토큰 절', () => {
-  /** 옛 계정 묶음의 «API 토큰» 링크는 없다 — 셸 밖 화면 머리의 `…`(`shell/page-head.tsx`)가 «계정 설정»으로 가고 토큰은 그 한 절이다. */
-  it('머리 `…` 의 «계정 설정»이 계정 설정으로 가고 그 안에 토큰 절이 선다', async () => {
+  /** 옛 계정 묶음의 «API 토큰» 링크는 없다 — 뼈대 사이드바의 «계정»(`shell/workspace-layout.tsx`)이 계정 설정으로 가고 토큰은 그 한 절이다. */
+  it('사이드바의 «계정»이 계정 설정으로 가고 그 안에 토큰 절이 선다', async () => {
     const { client, calls } = server([token()], {
       me: async () => ({ ...USER, isInstanceAdmin: true }),
       listThemePackages: async () => [],
     })
     renderWithProviders(<App />, { client, route: '/admin/themes' })
 
-    fireEvent.click(await screen.findByRole('button', { name: '더 보기' }))
+    const account = await screen.findByRole('link', { name: '계정' })
     expect(currentPath()).toBe('/admin/themes')
-    fireEvent.click(screen.getByRole('menuitem', { name: '계정 설정' }))
+    fireEvent.click(account)
     await screen.findByRole('heading', { name: 'API 토큰' })
     expect(currentPath()).toBe('/account')
     await screen.findByText('CI')
@@ -78,7 +78,9 @@ describe('API 토큰 절', () => {
     ])
     renderWithProviders(<App />, { client, route: '/account' })
 
-    const rows = await screen.findAllByRole('listitem')
+    // 내용 칸 안에서 센다 — 사이드바의 칸도 `listitem` 이다.
+    await screen.findByText('멤버가 아닌 프로젝트 (p-9)')
+    const rows = within(document.body.querySelector<HTMLElement>('.wb-shell-workspace-main')!).getAllByRole('listitem')
     expect(rows).toHaveLength(2)
     within(rows[0]!).getByText('관리자 콘솔')
     expect(rows[0]!.textContent).toContain('마지막 사용 없음')

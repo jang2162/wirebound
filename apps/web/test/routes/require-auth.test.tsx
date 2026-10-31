@@ -2,8 +2,8 @@ import { screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { ProjectDetail, SessionUser } from '../../src/api/types'
-import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
+import type { SessionUser, ProjectListItem } from '../../src/api/types'
+import { currentPath, fakeApi, renderWithProviders, unauthenticatedError, LIST_ITEM_DEFAULTS } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -16,7 +16,9 @@ const SERVER_MESSAGE = '세션 저장소가 응답하지 않습니다 [T4-AUTH-5
  * 못한다(실측). 목록의 데이터로만 나올 수 있는 이름을 본다.
  */
 const PROJECT_NAME = '보호된 설계서 [T4-AUTH-도착지]'
-const PROJECTS: ProjectDetail[] = [{ id: 'p-1', name: PROJECT_NAME, slug: 'guarded', description: null, role: 'viewer' }]
+const PROJECTS: ProjectListItem[] = [
+  { id: 'p-1', name: PROJECT_NAME, slug: 'guarded', description: null, role: 'viewer', ...LIST_ITEM_DEFAULTS },
+]
 
 /** 로그인된 사용자. 목록 화면이 부르는 `listProjects`까지 갖춰 둔다. */
 function signedIn(): ApiClient {

@@ -5,7 +5,7 @@
  *
  * | 케이스 | 재는 값 |
  * |---|---|
- * | 가로 스크롤 | 창 1440 · 900 · 700 에서 다섯 화면(설정은 «테마» 탭도)의 문서 `scrollWidth` ≤ `clientWidth` |
+ * | 가로 스크롤 | 창 1440 · 900 · 700 에서 다섯 화면(설정은 «테마» 탭도)의 문서 · 뼈대 상자 `scrollWidth` ≤ `clientWidth` |
  * | `/account` 간격 | «내 정보» 의 이름 줄 아래끝 ↔ 이메일 줄 위끝 ≥ 12px(고른 값 16px) — 창 셋 |
  * | 미리보기 | `/admin/themes` 에서 고른 판이 그 테마로 그려진다 — 미리보기 iframe 의 테마 시트 주소 · 토큰 변수의 계산값 · 테마 뷰의 요소(«샘플 카드») |
  * | 미리보기 높이 | 설정 «테마» 의 미리보기 틀이 창 높이를 안 넘는다(넓은 창) · 창 높이의 60% 를 안 넘는다(좁은 창 — 폼 밑으로 쌓일 때) |
@@ -25,9 +25,16 @@ if (!전제.ok) {
 const WIDTHS = [1440, 900, 700] as const
 const HEIGHT = 900
 
-/** 문서의 가로 넘침(px) — 0 이면 가로 스크롤이 없다. */
+/**
+ * 가로 넘침(px) — 0 이면 가로 스크롤이 없다. 문서와 뼈대 상자(`.wb-shell-workspace` — 창을 덮는 고정 상자라 그 안이 넘쳐도 문서는 안 넓어진다)
+ * 가운데 큰 것이다. 뼈대가 없는 화면(에디터)은 문서만이다.
+ */
 function overflowX(page: Page): Promise<number> {
-  return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+  return page.evaluate(() => {
+    const doc = document.documentElement.scrollWidth - document.documentElement.clientWidth
+    const box = document.querySelector('.wb-shell-workspace')
+    return Math.max(doc, box === null ? 0 : box.scrollWidth - box.clientWidth)
+  })
 }
 
 describe.skipIf(!전제.ok)('V4 — 셸 밖 화면 · 빈 캔버스의 배치', () => {

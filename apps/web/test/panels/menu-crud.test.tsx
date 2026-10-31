@@ -19,7 +19,7 @@ import { SessionProvider } from '../../src/session/session-context'
 import { useTreeCommands, type TreeCommands } from '../../src/tree/use-tree-commands'
 import type { MenuNode, PageDetail, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
-import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import { currentPath, fakeApi, renderWithProviders, listItem } from '../helpers'
 import { isOff, queryRowAction, reasonOf, rootAction, rowReason, treeTool } from './tree-row'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
@@ -1119,7 +1119,7 @@ describe('이름 변경 — 시간 제한 · «모름» · 떠나 있는 동안'
       }),
       updateMenu: vi.fn<ApiClient['updateMenu']>(async (_projectId, nodeId, body, options) => take(nodeId, body.title, options?.signal)),
       updatePage: vi.fn<ApiClient['updatePage']>(async (_projectId, pageId, body, options) => take(pageId, body.title, options?.signal)),
-      listProjects: async () => [PROJECT],
+      listProjects: async () => [listItem(PROJECT)],
     }
     return {
       overrides,
@@ -1358,7 +1358,7 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
         return menu
       }),
       updateMenu,
-      listProjects: async () => [PROJECT],
+      listProjects: async () => [listItem(PROJECT)],
     }
     return {
       overrides,

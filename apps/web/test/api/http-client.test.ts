@@ -10,7 +10,7 @@ import type { PatchOp } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiErrorCode } from '../../src/api/client'
 import { createHttpClient } from '../../src/api/http-client'
-import type { MenuNode, PageDetail, PageImported, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
+import type { MenuNode, PageDetail, PageImported, ProjectDetail, ProjectListItem, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { stripComments } from '../store-access-guard'
 
 interface RecordedCall {
@@ -59,6 +59,8 @@ function htmlResponse(status: number): Response {
 
 const user: SessionUser = { id: 'u1', email: 'a@b.c', name: '홍길동' }
 const project: ProjectDetail = { id: 'p1', name: '프로젝트', slug: 'proj', description: null, role: 'owner' }
+/** `GET /api/projects` 의 한 항목 — 프로젝트 칸에 두 칸이 더 있다(`api/types.ts` 의 `ProjectListItem`). */
+const listed: ProjectListItem = { ...project, memberCount: 2, updatedAt: '2026-10-01T00:00:00.000Z' }
 /** `GET /api/projects/:projectId` 만 `themeRev` 를 더 싣는다(`ProjectView`). */
 const projectView = { ...project, themeRev: 3 }
 
@@ -267,7 +269,7 @@ const ENDPOINTS: Array<{
   { client: 'login', url: '/api/auth/login', method: 'POST', body: user, call: (c) => c.login('a@b.c', 'pw') },
   { client: 'logout', url: '/api/auth/logout', method: 'POST', body: null, call: (c) => c.logout() },
   { client: 'me', url: '/api/auth/me', method: 'GET', body: user, call: (c) => c.me() },
-  { client: 'listProjects', url: '/api/projects', method: 'GET', body: [project], call: (c) => c.listProjects() },
+  { client: 'listProjects', url: '/api/projects', method: 'GET', body: [listed], call: (c) => c.listProjects() },
   {
     client: 'listMyTokens',
     url: '/api/auth/tokens',
@@ -695,7 +697,7 @@ const SHAPE_CASES: Array<{
   { shape: 'projectDetail', broken: { ...project, id: '' }, ok: project, call: (c) => c.updateProject('p1', { name: '가' }) },
   // **`themeRev` 가 수가 아니면 막는다** — 셸의 다시 읽기가 `>` 로 견주므로 문자열이면 따라잡기가 조용히 안 돈다.
   { shape: 'projectView', broken: { ...project, themeRev: '3' }, ok: projectView, call: (c) => c.getProject('p1') },
-  { shape: 'projectList', broken: [{ ...project, id: '' }], ok: [project], call: (c) => c.listProjects() },
+  { shape: 'projectList', broken: [{ ...listed, id: '' }], ok: [listed], call: (c) => c.listProjects() },
   // 폐기 주소가 되는 `id`는 빈 문자열까지 막는다 — 그 밖의 칸은 모양만 본다.
   {
     shape: 'myTokens',
@@ -1176,7 +1178,7 @@ describe('createHttpClient', () => {
 
   it('프로젝트 목록의 id가 빈 문자열이면 ApiError를 던진다', async () => {
     // 목록과 상세가 같은 `isProjectDetail`을 지나지만 부르는 자리가 달라 따로 본다.
-    const stub = stubFetch(jsonResponse(200, [{ ...project, id: '' }]))
+    const stub = stubFetch(jsonResponse(200, [{ ...listed, id: '' }]))
 
     const error = asApiError(
       await createHttpClient(stub.fetchImpl)
@@ -1212,7 +1214,7 @@ describe('createHttpClient', () => {
     const broken: unknown[] = [{}, { x: 1 }, [{ x: 1 }], [[{}]], [1, 2], 42, true]
 
     for (const description of broken) {
-      const stub = stubFetch(jsonResponse(200, [{ ...project, description }]))
+      const stub = stubFetch(jsonResponse(200, [{ ...listed, description }]))
 
       const error = asApiError(
         await createHttpClient(stub.fetchImpl)
@@ -1228,7 +1230,7 @@ describe('createHttpClient', () => {
     // 키 없음은 화면을 죽이지 않지만(`undefined`는 React가 그리지 않는다) **계약은 그 키를
     // 약속한다.** 여기서 통과시키면 `ProjectDetail.description`을 읽는 다음 소비자가
     // `string | null`이라는 타입을 믿고 `undefined`를 받는다.
-    const { description: _dropped, ...withoutDescription } = project
+    const { description: _dropped, ...withoutDescription } = listed
     const stub = stubFetch(jsonResponse(200, [withoutDescription]))
 
     const error = asApiError(
@@ -1238,6 +1240,20 @@ describe('createHttpClient', () => {
     )
 
     expect(error.code).toBe('internal')
+  })
+
+  it('목록의 `memberCount` · `updatedAt` 이 수 · 글자가 아니면 막는다', async () => {
+    // `memberCount` 는 카드의 글자(React 자식 — 객체면 목록이 통째로 빈다), `updatedAt` 은 정렬 · 상대 시각이 `Date.parse` 로 읽는다.
+    const broken: Record<string, unknown>[] = [{ memberCount: { n: 2 } }, { memberCount: '2' }, { updatedAt: 0 }, { updatedAt: null }]
+    for (const patch of broken) {
+      const stub = stubFetch(jsonResponse(200, [{ ...listed, ...patch }]))
+      const error = asApiError(
+        await createHttpClient(stub.fetchImpl)
+          .listProjects()
+          .catch((e: unknown) => e),
+      )
+      expect(error.code, JSON.stringify(patch)).toBe('internal')
+    }
   })
 
   it('slug와 role은 계약을 어겨도 통과시킨다', async () => {
@@ -1264,7 +1280,7 @@ describe('createHttpClient', () => {
     ]
 
     for (const patch of passing) {
-      const stub = stubFetch(jsonResponse(200, [{ ...project, ...patch }]))
+      const stub = stubFetch(jsonResponse(200, [{ ...listed, ...patch }]))
       await expect(createHttpClient(stub.fetchImpl).listProjects(), JSON.stringify(patch)).resolves.toHaveLength(1)
     }
   })
@@ -1272,7 +1288,7 @@ describe('createHttpClient', () => {
   it('정상 description은 그대로 통과한다', async () => {
     // 음성 대조. 위 검사가 좁으므로 정상값이 막히지 않는지 따로 본다.
     for (const description of [null, '', '   ', 'ㄱ'.repeat(2000), '줄\n바꿈']) {
-      const stub = stubFetch(jsonResponse(200, [{ ...project, description }]))
+      const stub = stubFetch(jsonResponse(200, [{ ...listed, description }]))
       await expect(createHttpClient(stub.fetchImpl).listProjects(), String(description)).resolves.toHaveLength(1)
     }
   })
@@ -1624,7 +1640,7 @@ describe('createHttpClient', () => {
   it('listProjects는 각 항목의 role을 그대로 돌려준다', async () => {
     // 서버는 목록의 각 항목에도 내 role을 싣는다
     // (apps/api/test/projects.test.ts "각 항목에 내 role이 실린다").
-    const stub = stubFetch(jsonResponse(200, [project, { ...project, id: 'p2', role: 'viewer' }]))
+    const stub = stubFetch(jsonResponse(200, [listed, { ...listed, id: 'p2', role: 'viewer' }]))
     const client = createHttpClient(stub.fetchImpl)
 
     const result = await client.listProjects()

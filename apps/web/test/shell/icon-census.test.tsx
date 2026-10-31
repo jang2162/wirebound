@@ -26,7 +26,7 @@ import type { Comment, ProjectView, SessionUser } from '../../src/api/types'
 import { PageJsonNoticeList, type PageJsonNotices } from '../../src/panels/page-json-notices'
 import { ICONS } from '../../src/shell/icons'
 import { canvasQuery, OTHER_PAGE_ID, openPage, pageDoc, PAGE_ID, PROJECT_ID, PROJECT_NAME, SHELL_MENU } from '../editor-harness'
-import { fakeApi, renderWithProviders } from '../helpers'
+import { fakeApi, renderWithProviders, listItem } from '../helpers'
 import { adminThemeView } from '../theme-loader'
 import '../../src/catalog-setup'
 
@@ -126,7 +126,6 @@ const MENU_ITEMS = [
   '스냅샷',
   '프로젝트 내보내기',
   '로그아웃',
-  '테마 관리',
   '기본',
 ]
 
@@ -226,9 +225,9 @@ async function editorButtons(): Promise<{ found: IconOnly[]; menus: MenuEntry[] 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터', isInstanceAdmin: true }
 const PROJECT: ProjectView = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin', description: null, role: 'owner', themeRev: 0 }
 
-/** 셸 밖 화면 넷 — 주소 · 그 화면이 부르는 조회 · 다 그려졌다는 표지(`test/shell/page-head.test.tsx` 의 `SCREENS` 와 같은 판). */
+/** 에디터 밖 화면 넷 — 주소 · 그 화면이 부르는 조회 · 다 그려졌다는 표지(`test/shell/workspace-layout.test.tsx` 의 `SCREENS` 와 같은 판). */
 const OUTSIDE = [
-  { screen: '프로젝트 목록', route: '/', heading: '프로젝트', api: { listProjects: async () => [PROJECT] } },
+  { screen: '프로젝트 목록', route: '/', heading: '프로젝트', api: { listProjects: async () => [listItem(PROJECT)] } },
   {
     screen: '프로젝트 설정',
     route: `/projects/${PROJECT_ID}/settings`,
@@ -244,14 +243,22 @@ const OUTSIDE = [
   { screen: '테마 관리', route: '/admin/themes', heading: '테마 관리', api: { listThemePackages: async () => [] } },
 ] as const satisfies readonly { screen: string; route: string; heading: string; api: Partial<ApiClient> }[]
 
-async function outsideScreen(at: (typeof OUTSIDE)[number]): Promise<{ found: IconOnly[]; menus: MenuEntry[] }> {
+async function outsideScreen(
+  at: (typeof OUTSIDE)[number],
+): Promise<{ found: IconOnly[]; menus: MenuEntry[]; sideLinks: { name: string; icon: boolean }[] }> {
   renderWithProviders(<App />, {
     client: fakeApi({ me: async () => USER, listProjects: async () => [], ...at.api }),
     route: at.route,
   })
   await screen.findByRole('heading', { name: at.heading })
   const found = iconOnlyButtons()
-  return { found, menus: await openEveryMenu() }
+  // 사이드바의 칸(`shell/workspace-layout.tsx`)도 «아이콘 + 글» 이다 — 행동 메뉴 항목과 같은 성질을 센다.
+  const side = document.body.querySelector<HTMLElement>('.wb-shell-workspace-side')
+  const sideLinks = [...(side?.querySelectorAll<HTMLElement>('.wb-shell-workspace-link') ?? [])].map((link) => ({
+    name: link.textContent ?? '',
+    icon: link.querySelector('svg.wb-shell-icon-lead') !== null,
+  }))
+  return { found, menus: await openEveryMenu(), sideLinks }
 }
 
 /** 하단 바의 페이지 JSON 통지 둘 — 가져온 결과 · 내보내기 실패. 트리의 가져오기 · 내보내기를 끝까지 돌리지 않고 통지만 세운다. */
@@ -279,8 +286,9 @@ describe('아이콘만 남은 단추는 이름과 title 을 가진다', () => {
       cleanup()
       const perScreen: Record<string, number> = { 에디터: editor.found.length }
       for (const at of OUTSIDE) {
-        const { found } = await outsideScreen(at)
-        perScreen[at.screen] = found.length
+        const { found, sideLinks } = await outsideScreen(at)
+        // 에디터 밖 화면에는 아이콘만 남은 단추가 없을 수 있다 — 카나리아는 사이드바가 선 것(칸 수)으로 센다.
+        perScreen[at.screen] = sideLinks.length
         all.push(...found)
         cleanup()
       }
@@ -289,7 +297,7 @@ describe('아이콘만 남은 단추는 이름과 title 을 가진다', () => {
       all.push(...notices)
 
       expect(unnamed(all)).toEqual([])
-      // 카나리아 — 판이 섰다: 꼭 나올 이름이 다 나왔고, 화면마다 센 수가 있다(셸 밖 화면은 머리의 `…` 하나씩).
+      // 카나리아 — 판이 섰다: 꼭 나올 이름이 다 나왔고, 화면마다 센 수가 있다(에디터 밖 화면은 사이드바의 칸 수).
       const names = new Set(all.map((button) => button.name))
       expect(ICON_ONLY.filter((name) => !names.has(name))).toEqual([])
       expect(perScreen).toEqual({
@@ -311,14 +319,20 @@ describe('행동 메뉴 항목은 모두 아이콘을 받는다', () => {
     '에디터 · 셸 밖 화면의 메뉴를 전부 열어 — 아이콘 없는 항목이 없다',
     async () => {
       const entries: MenuEntry[] = []
+      const sideLinks: { name: string; icon: boolean }[] = []
       entries.push(...(await editorButtons()).menus)
       cleanup()
       for (const at of OUTSIDE) {
-        entries.push(...(await outsideScreen(at)).menus)
+        const outside = await outsideScreen(at)
+        entries.push(...outside.menus)
+        sideLinks.push(...outside.sideLinks)
         cleanup()
       }
 
       expect(entries.filter((entry) => !entry.icon && !WITHOUT_ICON.includes(entry.item))).toEqual([])
+      // 사이드바의 칸도 모두 아이콘을 받는다 — 판의 사람이 관리자라 관리자 칸 다섯까지 화면마다 일곱이다.
+      expect(sideLinks.filter((link) => !link.icon)).toEqual([])
+      expect(sideLinks).toHaveLength(OUTSIDE.length * 7)
       // 카나리아 — 메뉴가 열렸다: 꼭 나올 항목이 다 나왔다.
       const items = new Set(entries.map((entry) => entry.item))
       expect(MENU_ITEMS.filter((item) => !items.has(item))).toEqual([])

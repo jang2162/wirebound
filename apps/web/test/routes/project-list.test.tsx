@@ -1,10 +1,18 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { ProjectDetail, SessionUser } from '../../src/api/types'
-import { openedMenu } from '../opened-menu'
-import { currentPath, expiringSession, fakeApi, renderWithProviders, tabHub, unauthenticatedError } from '../helpers'
+import type { ProjectListItem, SessionUser } from '../../src/api/types'
+import {
+  currentPath,
+  currentSearch,
+  expiringSession,
+  fakeApi,
+  LIST_ITEM_DEFAULTS,
+  renderWithProviders,
+  tabHub,
+  unauthenticatedError,
+} from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -23,8 +31,9 @@ const EMPTY_NOTICE = '참여 중인 프로젝트가 없습니다'
 const LOADING_NOTICE = '불러오는 중…'
 const UNKNOWN_FAILURE = '프로젝트 목록을 불러오지 못했습니다'
 
-function project(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
+function project(overrides: Partial<ProjectListItem> = {}): ProjectListItem {
   return {
+    ...LIST_ITEM_DEFAULTS,
     id: 'p-1',
     name: '관리자 콘솔',
     slug: 'admin-console',
@@ -38,6 +47,13 @@ function project(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
  * 로그인된 상태로 목록 화면을 띄운다. 라우트 표를 함께 지나므로 `/`에 이 화면이 실제로
  * 걸려 있는지도 같이 검사된다.
  */
+/** 내용 칸 — 사이드바의 칸 목록(`<ul>`)과 가른다. */
+function content(): HTMLElement {
+  const found = document.body.querySelector<HTMLElement>('.wb-shell-workspace-main')
+  if (found === null) throw new Error('내용 칸을 찾지 못했습니다')
+  return found
+}
+
 function renderList(listProjects: ApiClient['listProjects']): void {
   renderWithProviders(<App />, {
     client: fakeApi({ me: async () => USER, listProjects }),
@@ -51,7 +67,7 @@ describe('프로젝트 목록 화면', () => {
 
     await screen.findByText('관리자 콘솔')
     screen.getByText('고객 포털')
-    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+    expect(within(content()).getAllByRole('listitem')).toHaveLength(2)
     // 양성 대조: 비었을 때의 안내는 비지 않았으면 보이면 안 된다. 이것이 없으면
     // 안내를 늘 그리는 구현도 "비면 안내를 보여준다"를 통과한다.
     expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
@@ -132,8 +148,8 @@ describe('프로젝트 목록 화면', () => {
   })
 
   it('로딩 중에는 목록도 빈 안내도 보이지 않는다', async () => {
-    let deliver: (projects: ProjectDetail[]) => void = () => {}
-    const pending = new Promise<ProjectDetail[]>((resolve) => {
+    let deliver: (projects: ProjectListItem[]) => void = () => {}
+    const pending = new Promise<ProjectListItem[]>((resolve) => {
       deliver = resolve
     })
     renderList(() => pending)
@@ -142,7 +158,7 @@ describe('프로젝트 목록 화면', () => {
     // "아직 아무것도 안 그려졌다"를 "로딩을 구분한다"로 잘못 읽는다.
     await screen.findByText(LOADING_NOTICE)
     expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
-    expect(screen.queryByRole('listitem')).toBeNull()
+    expect(within(content()).queryByRole('listitem')).toBeNull()
 
     // 양성 대조: 응답이 오면 그때 안내가 나오고 로딩 표시는 사라진다.
     deliver([])
@@ -174,51 +190,12 @@ describe('프로젝트 목록 화면', () => {
   })
 })
 
-/**
- * **목록 머리의 `…`**(spec `docs/superpowers/specs/2026-09-30-editor-shell-design.md` 「화면 사이의 길」) — 계정 설정 · (인스턴스 관리자만) 테마
- * 관리 · 로그아웃. 옛 계정 묶음(이름 · «API 토큰» · 로그아웃 단추)과 «테마 관리» 링크를 대신한다. 로그아웃이 무엇을 하는지는
- * `shell-nav.test.tsx`가 잰다.
- */
-describe('목록 머리의 `…`', () => {
+/** 뼈대 사이드바의 칸 · 로그아웃은 `test/shell/workspace-layout.test.tsx` 가 화면마다 잰다. 여기는 목록 화면에만 있는 판 하나다. */
+describe('목록 화면의 사이드바', () => {
   const ADMIN: SessionUser = { ...USER, isInstanceAdmin: true }
 
-  function head(): HTMLElement {
-    const found = document.body.querySelector<HTMLElement>('.wb-shell-project-head')
-    if (found === null) throw new Error('목록 머리를 찾지 못했습니다')
-    return found
-  }
-
-  function openMenu(): string[] {
-    fireEvent.click(within(head()).getByRole('button', { name: '더 보기' }))
-    return within(openedMenu(head()))
-      .getAllByRole('menuitem')
-      .map((item) => item.textContent ?? '')
-  }
-
-  it('계정 설정 · 로그아웃 — 메뉴 머리에 이름. 옛 계정 묶음과 «테마 관리» 링크는 없다', async () => {
-    renderList(async () => [])
-    await screen.findByText(EMPTY_NOTICE)
-    const controls = [...within(head()).queryAllByRole('button'), ...within(head()).queryAllByRole('link')].map(
-      (element) => element.getAttribute('aria-label') ?? element.textContent ?? '',
-    )
-    expect(controls).toEqual(['더 보기'])
-    expect(within(head()).queryByText(USER.name)).toBeNull()
-
-    expect(openMenu()).toEqual(['계정 설정', '로그아웃'])
-    expect(within(openedMenu(head())).getByText(USER.name)).toBeTruthy()
-    expect(within(openedMenu(head())).getByRole('menuitem', { name: '계정 설정' }).getAttribute('href')).toBe('/account')
-  })
-
-  it('인스턴스 관리자에게는 «테마 관리»가 가운데에 선다 — /admin/themes 로 간다', async () => {
-    renderWithProviders(<App />, { client: fakeApi({ me: async () => ADMIN, listProjects: async () => [] }), route: '/' })
-    await screen.findByText(EMPTY_NOTICE)
-    expect(openMenu()).toEqual(['계정 설정', '테마 관리', '로그아웃'])
-    fireEvent.click(within(openedMenu(head())).getByRole('menuitem', { name: '테마 관리' }))
-    expect(currentPath()).toBe('/admin/themes')
-  })
-
   /** 다른 탭의 로그인 소식으로 들어온 관리자 — 관리자 표시는 소식이 싣는다(`session/tab-channel.tsx`의 `readNews`). `/me`를 다시 부르지 않는다. */
-  it('다른 탭의 로그인 소식으로 들어온 관리자에게도 «테마 관리»가 선다', async () => {
+  it('다른 탭의 로그인 소식으로 들어온 관리자에게도 «관리자» 묶음이 선다', async () => {
     const hub = tabHub()
     let me = 0
     const client = fakeApi({
@@ -234,7 +211,116 @@ describe('목록 머리의 `…`', () => {
     await hub.fromOtherTab({ kind: 'signed-in', user: ADMIN })
     await screen.findByText(EMPTY_NOTICE)
 
-    expect(openMenu()).toEqual(['계정 설정', '테마 관리', '로그아웃'])
+    expect(screen.getByRole('navigation', { name: '관리자' })).toBeTruthy()
     expect(me).toBe(1)
+  })
+})
+
+/**
+ * **카드 격자 · 검색 · 역할 거름 · 정렬**(설계 「프로젝트 목록」 — `projects/project-filter.ts` 가 규칙을 갖고 여기는 화면에 닿는지를 잰다).
+ * 상대 시각은 «지금» 에서 뺀 시각으로 짓는다 — 몇 ms 흔들려도 같은 글이 나오는 값(분 단위 한가운데)이다.
+ */
+describe('카드 격자 · 검색 · 거름 · 정렬', () => {
+  const minutesAgo = (n: number): string => new Date(Date.now() - n * 60_000 - 20_000).toISOString()
+  const ROWS = [
+    project({ id: 'p-a', name: '관리자 콘솔', slug: 'admin', role: 'owner', memberCount: 3, updatedAt: minutesAgo(90) }),
+    project({ id: 'p-b', name: '고객 포털', slug: 'portal', role: 'editor', memberCount: 1, updatedAt: minutesAgo(5) }),
+    project({ id: 'p-c', name: '가나 보고서', slug: 'report', role: 'viewer', memberCount: 7, updatedAt: minutesAgo(60 * 24 * 2) }),
+  ]
+
+  /** 카드 이름 차례 — 내용 칸의 카드 목록에서. */
+  function names(): string[] {
+    return within(within(content()).getByRole('list', { name: '프로젝트' }))
+      .getAllByRole('listitem')
+      .map((card) => card.querySelector('.wb-shell-home-name')?.textContent ?? '')
+  }
+
+  function card(name: string): HTMLElement {
+    const found = within(content())
+      .getAllByRole('listitem')
+      .find((li) => li.querySelector('.wb-shell-home-name')?.textContent === name)
+    if (found === undefined) throw new Error(`카드가 없다: ${name}`)
+    return found
+  }
+
+  it('카드에 역할 표지 · 멤버 수 · 상대 시각 · «설정» 링크가 선다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    const a = card('관리자 콘솔')
+    expect(a.querySelector('.wb-shell-home-role')?.textContent).toBe('owner')
+    expect(a.textContent).toContain('멤버 3명')
+    expect(a.querySelector('time')?.textContent).toBe('1시간 전')
+    expect(within(a).getByRole('link', { name: '관리자 콘솔 설정' }).getAttribute('href')).toBe('/projects/p-a/settings')
+    expect(card('고객 포털').querySelector('time')?.textContent).toBe('5분 전')
+    expect(card('가나 보고서').querySelector('.wb-shell-home-role')?.textContent).toBe('viewer')
+    expect(card('가나 보고서').querySelector('time')?.textContent).toBe('2일 전')
+  })
+
+  it('기본 정렬은 «최근 수정» — 늦게 바뀐 것이 위다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    expect(names()).toEqual(['고객 포털', '관리자 콘솔', '가나 보고서'])
+    expect((screen.getByLabelText('정렬') as HTMLSelectElement).value).toBe('updated')
+  })
+
+  it('검색 결과가 없으면 «검색 결과가 없습니다» — 빈 목록의 안내와 다른 문장이다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    fireEvent.change(screen.getByLabelText('검색'), { target: { value: '없는 글자' } })
+    expect(screen.getByText('검색 결과가 없습니다')).toBeTruthy()
+    expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
+    expect(within(content()).queryByRole('list', { name: '프로젝트' })).toBeNull()
+    expect(content().textContent).toContain('프로젝트 3개 중 0개')
+  })
+
+  it('검색어 · 역할 · 정렬은 주소 질의에 둔다 — 고르면 주소가 바뀌고, 그 주소로 열면 그대로 선다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    fireEvent.change(screen.getByLabelText('역할'), { target: { value: 'editor' } })
+    fireEvent.change(screen.getByLabelText('정렬'), { target: { value: 'name' } })
+    fireEvent.change(screen.getByLabelText('검색'), { target: { value: '포' } })
+    expect(names()).toEqual(['고객 포털'])
+    expect(Object.fromEntries(new URLSearchParams(currentSearch()))).toEqual({ q: '포', role: 'editor', sort: 'name' })
+    expect(currentPath()).toBe('/')
+    cleanup()
+
+    // 뒤로 가기로 돌아온 판 — 같은 주소로 다시 연다.
+    renderWithProviders(<App />, {
+      client: fakeApi({ me: async () => USER, listProjects: async () => ROWS }),
+      route: '/?role=viewer&sort=name',
+    })
+    await screen.findByText('가나 보고서')
+    expect(names()).toEqual(['가나 보고서'])
+    expect((screen.getByLabelText('역할') as HTMLSelectElement).value).toBe('viewer')
+    expect((screen.getByLabelText('정렬') as HTMLSelectElement).value).toBe('name')
+  })
+
+  /**
+   * 검색 글은 칸이 들고 주소에는 싣기만 한다(`routes/project-list.tsx` 머리말 «검색 글은 칸이 든다»). 조합이 굳는 판 자체는 jsdom 이 못 낸다 — 실브라우저
+   * `build-test/rv-ws-workspace.test.ts` «검색 칸에 한글을 조합해 치면 …» 이 잰다. 여기는 조합 중 주소 · 칸 밖 주소 변경 둘의 규칙만 잰다.
+   */
+  it('검색 칸 — 한글 조합 중에는 주소를 안 고치고 끝나면 싣는다 · 주소가 칸 밖에서 바뀌면(사이드바 «프로젝트») 칸이 따른다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    const box = screen.getByLabelText('검색') as HTMLInputElement
+    fireEvent.compositionStart(box)
+    fireEvent.change(box, { target: { value: 'ㄱ' } })
+    fireEvent.change(box, { target: { value: '고' } })
+    expect({ value: box.value, search: currentSearch() }).toEqual({ value: '고', search: '' })
+    fireEvent.compositionEnd(box)
+    expect(new URLSearchParams(currentSearch()).get('q')).toBe('고')
+
+    fireEvent.click(within(screen.getByRole('navigation', { name: '작업 공간' })).getByRole('link', { name: '프로젝트' }))
+    await waitFor(() => expect(currentSearch()).toBe(''))
+    expect(box.value).toBe('')
+  })
+
+  it('«이름» 정렬은 한국어 차례다', async () => {
+    renderWithProviders(<App />, {
+      client: fakeApi({ me: async () => USER, listProjects: async () => ROWS }),
+      route: '/?sort=name',
+    })
+    await screen.findByText('관리자 콘솔')
+    expect(names()).toEqual(['가나 보고서', '고객 포털', '관리자 콘솔'])
   })
 })

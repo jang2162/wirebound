@@ -2,7 +2,7 @@
  * **이 탭이 아는 사용자**(`src/api/known-user.tsx`). 웹은 요청마다 탭이 아는 사람의 id 를 싣고(REST 머리 · WS 쿼리),
  * 서버가 쿠키의 사람과 다르다고 409 `session-user-changed`로 답하면 `me`로 쿠키의 사람을 다시 알아내 그 사람이 된다.
  */
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError } from '../../src/api/client'
@@ -10,8 +10,8 @@ import { createHttpClient } from '../../src/api/http-client'
 import { createKnownUserHolder, KNOWN_USER_HEADER, SESSION_USER_CHANGED } from '../../src/api/known-user'
 import type { ProjectDetail, SessionUser } from '../../src/api/types'
 import { realtimeUrl } from '../../src/realtime/protocol'
-import { SWITCHED_NOTICE } from '../../src/session/session-menu'
-import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import { switchedNotice } from '../../src/session/session-menu'
+import { currentPath, fakeApi, renderWithProviders, listItem } from '../helpers'
 
 const ALICE: SessionUser = { id: 'u-alice', email: 'alice@example.com', name: '앨리스' }
 const BOB: SessionUser = { id: 'u-bob', email: 'bob@example.com', name: '밥' }
@@ -32,7 +32,7 @@ describe('HTTP 클라이언트 — 이 탭이 아는 사용자를 싣고, 거절
     const calls: (RequestInit | undefined)[] = []
     const fetchImpl: typeof fetch = async (_input, init) => {
       calls.push(init)
-      return json(200, [PROJECT])
+      return json(200, [listItem(PROJECT)])
     }
     const client = createHttpClient(fetchImpl, () => undefined, holder)
     await client.listProjects()
@@ -106,19 +106,17 @@ describe('세션 — 쿠키의 사람이 다르다는 답을 받으면 다시 �
     const holder = createKnownUserHolder()
     const me = vi.fn(async () => meAnswers.shift() ?? ALICE)
     renderWithProviders(<App />, {
-      client: fakeApi({ me, listProjects: async () => [PROJECT] }),
+      client: fakeApi({ me, listProjects: async () => [listItem(PROJECT)] }),
       knownUser: holder,
     })
     return { holder, me }
   }
 
-  /** 목록 머리가 보이는 사람 — 이름은 `…` 의 머리에 선다(`shell/action-menu.tsx`). 열어 읽고 닫는다. */
+  /** 목록 화면이 보이는 사람 — 이름은 뼈대 사이드바의 바닥에 선다(`shell/workspace-layout.tsx`). */
   async function shownUser(): Promise<string> {
-    await screen.findByRole('link', { name: PROJECT.name })
-    fireEvent.click(screen.getByRole('button', { name: '더 보기' }))
-    const name = document.querySelector('.wb-shell-action-menu-heading')?.textContent ?? ''
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
-    return name
+    // 사이드바의 «프로젝트» 칸(지금 화면 — `aria-current`)과 이름이 같아 그 칸을 뺀다.
+    await screen.findByRole('link', { name: PROJECT.name, current: false })
+    return document.querySelector('.wb-shell-workspace-user-name')?.textContent ?? ''
   }
 
   /** 혼자 죽는 변조: 세션이 holder 에 적지 않는다(`session-context.tsx`의 레이아웃 이펙트). */
@@ -141,9 +139,9 @@ describe('세션 — 쿠키의 사람이 다르다는 답을 받으면 다시 �
       holder.changed()
       holder.changed()
     })
-    await waitFor(() => expect(screen.queryByRole('status')?.textContent).toBe(SWITCHED_NOTICE))
+    await waitFor(() => expect(screen.queryByRole('status')?.textContent).toBe(switchedNotice(BOB.name)))
     expect(await shownUser()).toBe('밥')
-    expect(screen.getByRole('status').textContent).toBe(SWITCHED_NOTICE)
+    expect(screen.getByRole('status').textContent).toBe(switchedNotice(BOB.name))
     expect(holder.get()).toBe(BOB.id)
     expect(currentPath()).toBe('/')
     expect(me).toHaveBeenCalledTimes(2)

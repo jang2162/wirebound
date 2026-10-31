@@ -35,7 +35,7 @@ import {
   waitForNode,
 } from '../editor-harness'
 import { fakeRealtime } from '../fake-realtime'
-import { tabHub } from '../helpers'
+import { tabHub, listItem } from '../helpers'
 import '../../src/catalog-setup'
 
 const ROOT_ID = 'n-root'
@@ -482,7 +482,7 @@ function commentServer(initial: Comment[] = []): {
   }
 }
 
-const listProjects: Partial<ApiClient> = { listProjects: async () => [PROJECT] }
+const listProjects: Partial<ApiClient> = { listProjects: async () => [listItem(PROJECT)] }
 
 // ---- 계정 ----
 
@@ -1575,7 +1575,7 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
         // 서버가 세션을 지웠다 — 다음 조회가 401 을 받고 `SignedOut`이 로그인 화면으로 보낸다.
         listProjects: async () => {
           if (expired) throw new ApiError(401, 'unauthenticated', '로그인이 필요합니다')
-          return [PROJECT]
+          return [listItem(PROJECT)]
         },
         login: (async () => {
           expired = false
