@@ -6,12 +6,13 @@ import { signup, withApi } from './helpers'
 const 계정 = { email: 'Signup@Example.com', name: '가입자', password: 'password1234' } as const
 
 /**
- * **가입 라우트의 부재를 자가 든다.**
+ * **링크 없는 가입 라우트의 부재를 자가 든다.**
  *
  * 없는 것을 케이스로 들지 않으면 다음 사람이 조용히 되살린다 — 없는 것을 없는 채로 두는 힘은
  * 코드가 아니라 케이스에 있다(`wireb`의 `--password` 플래그의 부재를 케이스로 드는 것과
- * 같은 자세다). 계정을 만드는 길은 `db/seed-user.ts`의 시딩 하나이고,
- * `test/seed-user.test.ts`가 그쪽을 잰다.
+ * 같은 자세다). 계정을 만드는 길은 `db/seed-user.ts`의 시딩과 초대 링크 가입(`/api/auth/invites/:token/signup`)
+ * 둘이고, `test/seed-user.test.ts` · `test/invites.test.ts` 가 그쪽을 잰다. 다른 이름의 셋째 길은
+ * `test/user-creation-census.test.ts` 가 죽인다.
  */
 describe('POST /api/auth/signup — 없다', () => {
   it('그 경로가 404다', async () => {

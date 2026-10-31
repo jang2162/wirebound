@@ -1,13 +1,17 @@
 /**
- * **사용자 행을 만드는 자리 인구조사 — *"계정을 만드는 길은 하나다"*를 드는 자.**
+ * **사용자 행을 만드는 자리 인구조사 — *"계정을 만드는 길은 둘이다"*를 드는 자.**
+ *
+ * 둘은 서버 운영자의 시딩(`db/seed-user.ts` — 마이그레이션 뒤)과 관리자가 만든 초대 링크로 하는 가입(`repos/invites.ts` 의
+ * `signupWithInvite` ← `routes/invite-signup.ts`)이다(spec `docs/superpowers/specs/2026-10-31-workspace-admin-design.md` «비목표» — 링크 없이
+ * 계정을 만드는 웹 · API 길은 두지 않는다).
  *
  * **이 파일이 없으면 변이 셋이 살아남는다** — 셋 다 *"변이가 공허하다"*가 아니라
  * **런타임에서 관측이 바뀌는데** 아무도 안 죽는다:
  *
- * - 가입을 `/register` 라는 **다른 이름**으로 되살리면 api 케이스가 **전부 초록인 채**
+ * - 링크 없는 가입을 `/register` 라는 **다른 이름**으로 세우면 api 케이스가 **전부 초록인 채**
  *   `POST /api/auth/register` 가 201 을 내고 `users` 가 하나 는다. `auth-routes.test.ts`
  *   의 404 셋이 드는 것은 **성질이 아니라 글자**다 — `/signup` 이라는 이름 하나만 본다.
- *   사용자가 시킨 것은 *"회원 가입 기능 없애기"*이지 *"그 경로 하나 지우기"*가 아니다.
+ *   지키는 것은 *"링크 없이는 계정이 안 생긴다"*이지 *"그 경로 하나가 없다"*가 아니다.
  * - `migrate.ts` 의 `direction === 'latest'` 를 지우면 `migrate:down` 이 계정을 만드는데
  *   **아무도 안 죽는다**(아래 「`migrate:down` 은 계정을 안 건드린다」 묶음이 닫는다).
  * - 픽스처가 `seedUser` 를 안 지나고 직접 삽입해도 **아무도 안 죽는다**(아래 「픽스처가
@@ -65,15 +69,20 @@ describe('분모가 헛돌지 않는다 — 카나리아', () => {
   })
 })
 
-describe('계정을 만드는 사슬 — 층마다 호출자가 하나다', () => {
+describe('계정을 만드는 사슬 — 층마다 호출자가 정해져 있다', () => {
   it('`users` 에 INSERT 하는 SQL 은 `repos/users.ts` 한 곳이다', () => {
     expect(filesContaining("insertInto('users')")).toEqual(['repos/users.ts'])
   })
 
-  it('**`insertUser` 를 부르는 자는 `db/seed-user.ts` 하나다** — 이름을 바꾼 가입도 여기서 걸린다', () => {
+  it('**`insertUser` 를 부르는 자는 시딩과 초대 가입 둘이다** — 이름을 바꾼 셋째 길도 여기서 걸린다', () => {
     // 이름이 무엇이든(`/signup`·`/register`·`POST /api/users`) 계정을 만들려면 이 사슬을
     // 지나야 한다. 새 호출자가 생기면 여기서 죽는다.
-    expect(callSites('insertUser')).toEqual({ 'db/seed-user.ts': 1 })
+    expect(callSites('insertUser')).toEqual({ 'db/seed-user.ts': 1, 'repos/invites.ts': 1 })
+  })
+
+  it('초대 가입의 몸통(`signupWithInvite`)을 부르는 자는 가입 라우트 하나다 — 링크를 건너뛰는 호출자가 없다', () => {
+    // 링크 행을 잡고 쓸 수 있는지 본 뒤에야 `insertUser` 에 닿는다(`repos/invites.ts`). 그 함수를 부르는 둘째 자리가 생기면 여기서 죽는다.
+    expect(callSites('signupWithInvite')).toEqual({ 'routes/invite-signup.ts': 1 })
   })
 
   it('`seedUser`·`seedUserFromEnv` 를 부르는 자도 `db/seed-user.ts` 안뿐이다', () => {
@@ -89,11 +98,17 @@ describe('계정을 만드는 사슬 — 층마다 호출자가 하나다', () =
     expect(callSites('seedAfterMigration')).toEqual({ 'db/migrate.ts': 1 })
   })
 
-  it('비밀번호를 해시하는 자는 시딩 · 재설정 명령 · 로그인의 더미 해시 · 비밀번호 바꾸기 넷뿐이다', () => {
+  it('비밀번호를 해시하는 자는 시딩 · 재설정 명령 · 로그인의 더미 해시 · 비밀번호 바꾸기 · 초대 가입 · 재설정 링크 여섯뿐이다', () => {
     // `routes/auth.ts` 의 2건은 타이밍 방어용 `dummyHash` 와 `/password`(로그인한 사람이 지금 비밀번호를 견준 뒤 — 로그인 한도에 센다)다.
-    // `db/reset-password.ts` 는 서버에 손이 닿는 사람의 CLI 다. 라우트가 비밀번호를 한 번 더 해시하기 시작하면(=자격을 받는 새 표면) 그 수가
-    // 늘고 여기서 죽는다.
-    expect(callSites('hashPassword')).toEqual({ 'db/reset-password.ts': 1, 'db/seed-user.ts': 1, 'routes/auth.ts': 2 })
+    // `db/reset-password.ts` 는 서버에 손이 닿는 사람의 CLI 다. 초대 가입 · 재설정 링크는 관리자가 만든 링크 원문을 쥔 요청이다(로그인 한도에
+    // 센다). 라우트가 비밀번호를 한 번 더 해시하기 시작하면(=자격을 받는 새 표면) 그 수가 늘고 여기서 죽는다.
+    expect(callSites('hashPassword')).toEqual({
+      'db/reset-password.ts': 1,
+      'db/seed-user.ts': 1,
+      'routes/auth.ts': 2,
+      'routes/invite-signup.ts': 1,
+      'routes/password-reset.ts': 1,
+    })
   })
 })
 

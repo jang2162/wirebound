@@ -10,6 +10,8 @@ import { AccountRoute } from './routes/account'
 import { AdminThemesRoute } from './routes/admin-themes'
 import { EditorShellRoute } from './routes/editor'
 import { LoginRoute } from './routes/login'
+import { InviteRoute } from './routes/invite'
+import { ResetRoute } from './routes/reset'
 import { ProjectListRoute } from './routes/project-list'
 import { RedirectWhenAuthenticated, RequireAuth } from './routes/require-auth'
 import { SettingsRoute } from './routes/settings'
@@ -42,6 +44,23 @@ export function App(): ReactElement {
             element={
               <RedirectWhenAuthenticated>
                 <LoginRoute />
+              </RedirectWhenAuthenticated>
+            }
+          />
+          {/* **가입 · 재설정은 로그인 화면과 같은 자리다** — 뼈대 밖이고 로그인한 사람은 목록으로 간다(`routes/invite.tsx` · `routes/reset.tsx`). */}
+          <Route
+            path="/invite/:token"
+            element={
+              <RedirectWhenAuthenticated>
+                <InviteRoute />
+              </RedirectWhenAuthenticated>
+            }
+          />
+          <Route
+            path="/reset/:token"
+            element={
+              <RedirectWhenAuthenticated>
+                <ResetRoute />
               </RedirectWhenAuthenticated>
             }
           />

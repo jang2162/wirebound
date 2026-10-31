@@ -15,6 +15,8 @@ export interface MemberRecord {
   name: string
   role: ProjectRole
   invitedAt: Date
+  /** 그 사람이 활성인가(`users.deactivated_at`). 비활성 멤버도 행은 그대로 가진다 — 다시 켜면 돌아온다. */
+  active: boolean
 }
 
 /** Postgres 유니크(PK 포함) 위반 SQLSTATE. */
@@ -102,7 +104,7 @@ export async function lockOwnerIds(trx: DbHandle, projectId: string): Promise<Se
  * `invited_at` 오름차순으로 정렬한다 — 먼저 초대된 멤버(대개 owner)가 먼저 보인다.
  */
 export async function listMembers(db: DbHandle, projectId: string): Promise<MemberRecord[]> {
-  return db
+  const rows = await db
     .selectFrom('project_members')
     .innerJoin('users', 'users.id', 'project_members.user_id')
     .where('project_members.project_id', '=', projectId)
@@ -112,9 +114,11 @@ export async function listMembers(db: DbHandle, projectId: string): Promise<Memb
       'users.name as name',
       'project_members.role as role',
       'project_members.invited_at as invitedAt',
+      'users.deactivated_at as deactivatedAt',
     ])
     .orderBy('project_members.invited_at', 'asc')
     .execute()
+  return rows.map(({ deactivatedAt, ...row }) => ({ ...row, active: deactivatedAt === null }))
 }
 
 /**
@@ -160,7 +164,8 @@ export async function insertMember(
         .returning('invited_at')
         .executeTakeFirstOrThrow()
 
-      return { userId: user.id, email: user.email, name: user.name, role, invitedAt: inserted.invited_at }
+      // 비활성 사용자는 부르는 쪽(`routes/members.ts`)이 먼저 거절한다.
+      return { userId: user.id, email: user.email, name: user.name, role, invitedAt: inserted.invited_at, active: true }
     })
   } catch (error) {
     if (isMemberPkViolation(error)) {
@@ -250,9 +255,13 @@ export async function updateMemberRole(
       .returning('invited_at')
       .executeTakeFirstOrThrow()
 
-    const user = await trx.selectFrom('users').select(['email', 'name']).where('id', '=', userId).executeTakeFirstOrThrow()
+    const user = await trx
+      .selectFrom('users')
+      .select(['email', 'name', 'deactivated_at'])
+      .where('id', '=', userId)
+      .executeTakeFirstOrThrow()
 
-    return { userId, email: user.email, name: user.name, role, invitedAt: updated.invited_at }
+    return { userId, email: user.email, name: user.name, role, invitedAt: updated.invited_at, active: user.deactivated_at === null }
   })
 }
 

@@ -652,6 +652,29 @@ const ENDPOINTS: Array<{
     body: {},
     call: (c) => c.downloadThemeTemplate().catch(() => null),
   },
+  // 링크 화면 넷 — 로그인 안 한 요청이다(`routes/invite.tsx` · `routes/reset.tsx`). 원문은 주소 조각으로 실리므로 인코딩한다.
+  { client: 'checkInvite', url: '/api/auth/invites/a%2Fb', method: 'GET', body: { usable: true }, call: (c) => c.checkInvite('a/b') },
+  {
+    client: 'signupWithInvite',
+    url: '/api/auth/invites/tok/signup',
+    method: 'POST',
+    body: user,
+    call: (c) => c.signupWithInvite('tok', { email: 'a@example.com', name: '가', password: 'password1234' }),
+  },
+  {
+    client: 'getPasswordReset',
+    url: '/api/auth/resets/tok',
+    method: 'GET',
+    body: { email: 'a@example.com', name: '가' },
+    call: (c) => c.getPasswordReset('tok'),
+  },
+  {
+    client: 'completePasswordReset',
+    url: '/api/auth/resets/tok',
+    method: 'POST',
+    body: {},
+    call: (c) => c.completePasswordReset('tok', 'password1234'),
+  },
 ]
 
 /**
@@ -900,6 +923,13 @@ const SHAPE_CASES: Array<{
     broken: { ...themeVersion, hidden: 'true' },
     ok: themeVersion,
     call: (c) => c.setThemePackageHidden({ themeId: 'system-x', version: '1.0.0' }, true),
+  },
+  { shape: 'inviteUsable', broken: { usable: 'yes' }, ok: { usable: true }, call: (c) => c.checkInvite('tok') },
+  {
+    shape: 'resetTarget',
+    broken: { email: 'a@example.com' },
+    ok: { email: 'a@example.com', name: '가' },
+    call: (c) => c.getPasswordReset('tok'),
   },
 ]
 
