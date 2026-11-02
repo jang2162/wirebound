@@ -290,7 +290,8 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
           text: input?.value ?? null,
           role: selects[0] ?? null,
           sort: selects[1] ?? null,
-          cards: main.querySelectorAll('.wb-shell-home-card').length,
+          // 프로젝트 카드만 센다 — 격자 맨 앞의 «프로젝트 추가» 카드는 늘 선다.
+          cards: main.querySelectorAll('.wb-shell-home-card:not(.wb-shell-home-add)').length,
           count: main.querySelector('.wb-shell-home-count')?.textContent ?? null,
           noMatch: main.textContent?.includes('검색 결과가 없습니다') ?? false,
           empty: main.textContent?.includes('참여 중인 프로젝트가 없습니다') ?? false,

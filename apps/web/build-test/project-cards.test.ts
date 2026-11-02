@@ -5,7 +5,8 @@
  * | 케이스 | 재는 값 |
  * |---|---|
  * | 눌리는 크기 | 창 1280 · 390 에서 카드마다 «열기» 높이 ≥ 36 · 폭 ≥ 카드 안쪽 폭의 60%, 톱니 높이 ≥ 36, 추가 카드 단추 높이 ≥ 36, 뼈대 상자
- *   (`.wb-shell-workspace`) 가로 넘침 0 · 창 오른끝을 넘는 글자 노드 0(끊을 자리 없는 긴 이름 카드를 싣는다) |
+ *   (`.wb-shell-workspace`) 가로 넘침 0 · 창 오른끝을 넘는 글자 노드 0(끊을 자리 없는 긴 이름 카드를 싣는다). 추가 카드를 연 판의 폼 칸 · 단추가 카드
+ *   오른끝 안이고 넘침 0 |
  * | «열기» | 누르면 주소가 `/projects/<id>` 이고 에디터가 선다 |
  * | 추가 카드로 만들기 | 추가 카드를 눌러 그 자리에 선 폼으로 만들면 그 프로젝트로 가고, 목록으로 돌아오면 그 카드가 추가 카드 바로 뒤에 선다 |
  * | 0 개 · 조회 실패 | 프로젝트가 없는 bob 이 빈 안내 옆 추가 카드로 만든다 · 목록 조회를 끊은 판(`page.route` 로 `GET /api/projects` 를 전부 abort)에서 알림과 함께
@@ -140,6 +141,19 @@ describe.skipIf(!전제.ok)('프로젝트 목록 카드 — 실브라우저', ()
         measured.push(`추가@${width}: ${Math.round(got.addHeight)} · 넘침 ${got.workspace} · 글자 ${got.counted}`)
         expect(got.addHeight, `${width}`).toBeGreaterThanOrEqual(36)
         expect({ workspace: got.workspace, texts: got.texts }, `${width}`).toEqual({ workspace: 0, texts: [] })
+
+        // 추가 카드를 연 판 — 그 자리의 만들기 폼(칸 셋 · 단추 둘)도 카드 폭 안에 선다.
+        await grid(page).getByRole('button', { name: '프로젝트 추가', exact: true }).click()
+        const form = grid(page).locator('li.wb-shell-home-add form')
+        await form.waitFor()
+        const opened = await form.evaluate((el) => {
+          const card = el.closest('li')!.getBoundingClientRect()
+          const past = [...el.querySelectorAll('input, button')].filter((child) => child.getBoundingClientRect().right > card.right + 0.5)
+          const box = document.querySelector('.wb-shell-workspace')!
+          return { controls: el.querySelectorAll('input, button').length, past: past.length, workspace: box.scrollWidth - box.clientWidth }
+        })
+        measured.push(`폼@${width}: 칸 ${opened.controls} · 카드 밖 ${opened.past} · 넘침 ${opened.workspace}`)
+        expect(opened, `${width}`).toEqual({ controls: 5, past: 0, workspace: 0 })
       } finally {
         await context.close()
       }
