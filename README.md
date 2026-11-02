@@ -1288,7 +1288,7 @@ packages/schema        노드 타입·컴포넌트 카탈로그·검증·JSON Pa
 packages/theme-sdk     테마 뷰 계약 · SDK 기본 뷰
 packages/renderer      스키마 → React 렌더링 — 노드마다 «테마 뷰 → 기본 뷰»
 packages/themes        테마 manifest 검증 · 토큰 CSS · .wbtheme 읽기 · 쓰기
-packages/theme-gallery 카탈로그 × variant 표본 갤러리
+packages/theme-gallery 카탈로그 × variant 표본 갤러리 · 이어진 예제 페이지
 packages/theme-kit     테마 작성 도구 wb-theme — dev · build · 스타터 템플릿
 packages/test-support  여러 패키지의 케이스가 함께 쓰는 도구(제품 표면이 아니다)
 packages/exporter      HTML 정적 번들 · PPTX
