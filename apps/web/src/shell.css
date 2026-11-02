@@ -5271,18 +5271,12 @@
   gap: 8px;
 }
 
-/* 토큰 편집기(`settings/token-editor.tsx`) — 폼과 미리보기를 가로로 둔다. 좁은 창(< 960px)에서는 미리보기가 폼 밑으로 내려간다. */
+/* 토큰 편집기(`settings/token-editor.tsx`) — 토큰 칸이 위, 미리보기가 그 아래에서 내용 칸 폭을 다 쓴다. */
 .wb-shell-settings-tokens {
-  display: grid;
-  grid-template-columns: minmax(280px, 400px) 1fr;
-  gap: 24px;
-  align-items: start;
-}
-
-@media (max-width: 959px) {
-  .wb-shell-settings-tokens {
-    grid-template-columns: 1fr;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
 }
 
 .wb-shell-settings-token-form {
@@ -5297,23 +5291,75 @@
   font-weight: 600;
 }
 
-/* 토큰 무리 하나(manifest 의 `tokens.groups` — 없으면 «기타») — 작은 카드. `<fieldset>` 의 기본 테두리 · 여백을 셸 값으로 바꾼다
-   (이름표 `<legend>` 는 테두리 위에 걸린다). */
-.wb-shell-settings-token-group {
+/* 토큰 탭 줄 — 왼쪽에 무리 탭, 오른쪽에 «전부 기본값으로» · «토큰 저장». 좁으면 단추가 탭 밑으로 접힌다. */
+.wb-shell-settings-token-bar {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 8px;
-  padding: 8px 12px 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  border-bottom: 1px solid var(--wb-shell-line);
+  padding-bottom: 4px;
 }
 
-.wb-shell-settings-legend {
-  padding: 0 4px;
-  font-size: 12px;
+/* 무리 탭 — 설정 절 탭(`.wb-shell-settings-tab`)과 같은 말투를 한 단 작게. 넘치면 줄 안에서 민다. */
+.wb-shell-settings-token-tabs {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.wb-shell-settings-token-tab {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--wb-shell-ink);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.wb-shell-settings-token-tab:hover {
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-settings-token-tab:focus-visible {
+  outline: 2px solid var(--wb-shell-accent);
+  outline-offset: -2px;
+}
+
+.wb-shell-settings-token-tab[aria-selected='true'] {
+  background: #eaf1fe;
   font-weight: 600;
-  color: var(--wb-shell-muted);
+  color: var(--wb-shell-accent);
+}
+
+/* 사유가 있는 칸이 든 탭의 표지 — 오류 색 점. 뜻은 탭의 접근 이름(«… — 고칠 칸 있음»)이 나른다. */
+.wb-shell-settings-token-tab-mark {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d92d20;
+}
+
+/* 고른 탭의 칸 — 폭에 맞춘 여러 열. 안 고른 탭은 `hidden`(아래 규칙 — `display` 가 `hidden` 의 UA 규칙을 이기므로 따로 둔다). */
+.wb-shell-settings-token-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  gap: 12px 20px;
+  align-items: start;
+}
+
+.wb-shell-settings-token-grid[hidden] {
+  display: none;
 }
 
 .wb-shell-settings-token {
@@ -5362,12 +5408,10 @@
 }
 
 /* 미리보기의 틀(`settings/theme-preview.tsx` — 프로젝트 설정 · 테마 관리가 함께 쓴다). **높이를 창 높이에 묶는다** — 갤러리(카탈로그
-   전부 × variant)는 1만 px 을 넘어, 묶지 않으면 그 길이가 곧 화면의 길이였다. 폼 옆에 설 때는 창에 붙어(`sticky`) 폼을 내려도
-   따라온다. 높이 · 테두리를 안쪽 상자(아래)가 아니라 이 틀이 갖는 것은 안쪽이 문서를 감싸는 상자라 그 속성들을 걸 수 없기 때문이다
-   (`test/shell-css-guard.ts` 의 `WRAPPER_PROPERTIES`). 안쪽이 줄어들며(`min-height: 0`) 스크롤한다. */
+   전부 × variant)는 1만 px 을 넘어, 묶지 않으면 그 길이가 곧 화면의 길이였다. 높이 · 테두리를 안쪽 상자(아래)가 아니라 이 틀이 갖는 것은
+   안쪽이 문서를 감싸는 상자라 그 속성들을 걸 수 없기 때문이다(`test/shell-css-guard.ts` 의 `WRAPPER_PROPERTIES`). 머리(보기 전환 · 장 이름
+   줄) 밑에서 안쪽이 줄어들며(`min-height: 0`) 스크롤한다. */
 .wb-shell-settings-preview-frame {
-  position: sticky;
-  top: 16px;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -5378,13 +5422,85 @@
   border-radius: 8px;
 }
 
-/* 좁은 창에서 폼 밑으로 쌓이면 창 높이의 60% 로 줄이고 붙지 않는다 — 미리보기가 창을 다 덮으면 그 위 · 아래 폼에 닿을 길이 상자 안
-   스크롤뿐이다(코디네이터 답 · 2026-10-19). 쌓이는 문턱은 `.wb-shell-settings-tokens` 의 것과 같다. */
+/* 좁은 창에서는 창 높이의 60% 로 줄인다 — 미리보기가 창을 다 덮으면 그 위 토큰 칸에 닿을 길이 상자 안 스크롤뿐이다. */
 @media (max-width: 959px) {
   .wb-shell-settings-preview-frame {
-    position: static;
     max-height: 60vh;
   }
+}
+
+/* 미리보기 머리 — 보기 전환(«컴포넌트» · «예제 페이지») · 예제의 장 이름 줄. 좁으면 장 이름 줄이 밑으로 접힌다. */
+.wb-shell-settings-preview-head {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  border-bottom: 1px solid var(--wb-shell-line);
+  padding: 8px 12px;
+}
+
+/* 보기 전환 — 라디오 둘. 고른 쪽 라벨은 강조(`-on` — 셸 격리 규칙이 `:has()` · 결합자를 막아 React 가 클래스를 단다). */
+.wb-shell-settings-preview-views {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.wb-shell-settings-preview-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.wb-shell-settings-preview-view-on {
+  background: #eaf1fe;
+  font-weight: 600;
+  color: var(--wb-shell-accent);
+}
+
+.wb-shell-settings-preview-radio {
+  margin: 0;
+  accent-color: var(--wb-shell-accent);
+}
+
+/* 장 이름 줄 — 지금 장은 `aria-current`. */
+.wb-shell-settings-preview-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.wb-shell-settings-preview-page {
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--wb-shell-ink);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.wb-shell-settings-preview-page:hover {
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-settings-preview-page:focus-visible {
+  outline: 2px solid var(--wb-shell-accent);
+  outline-offset: -2px;
+}
+
+.wb-shell-settings-preview-page[aria-current='page'] {
+  background: #eaf1fe;
+  font-weight: 600;
+  color: var(--wb-shell-accent);
 }
 
 /* 미리보기 상자 — 갤러리 iframe 을 감싼다. **문서를 감싸는 상자라 상속 속성을 걸지 않는다**(`test/shell-css-guard.ts` 의 `WRAPPERS`) —

@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { installCatalog, listComponents, validateLayout, validatePage } from '@wirebound/schema'
+import {
+  COMPONENT_GROUP_LABELS,
+  COMPONENT_GROUPS,
+  getComponent,
+  installCatalog,
+  listComponents,
+  validateLayout,
+  validatePage,
+} from '@wirebound/schema'
 import { defineTheme, Root, useToken, view } from '@wirebound/theme-sdk'
-import { GALLERY_SAMPLES, galleryItemDocument, galleryItems, ThemeGallery } from '@wirebound/theme-gallery'
+import { GALLERY_SAMPLES, galleryGroups, galleryItemDocument, galleryItems, ThemeGallery, type GalleryItem } from '@wirebound/theme-gallery'
 
 beforeAll(() => installCatalog())
 // 이 저장소는 vitest `globals` 를 켜지 않아 RTL 이 스스로 정리를 걸지 못한다(`apps/web/test/setup.ts`).
@@ -89,5 +97,51 @@ describe('갤러리', () => {
     const items = container.querySelectorAll('[data-wb-gallery-item]')
     expect(container.querySelectorAll('[data-wb-gallery-focus]').length).toBe(items.length)
     expect(container.querySelectorAll('[data-wb-gallery-marker]').length).toBe(items.length)
+  })
+})
+
+const mark = (item: GalleryItem): string => `${item.type}/${item.variant ?? ''}/${item.sample.node.id}`
+
+describe('그룹 격자', () => {
+  const theme = () => defineTheme({ manifest, views: {} })
+  it('galleryGroups 는 COMPONENT_GROUPS 차례이고 합치면 galleryItems 와 같다', () => {
+    const groups = galleryGroups(theme())
+    const filled = COMPONENT_GROUPS.filter((group) => galleryItems(theme()).some((item) => getComponent(item.type)!.group === group))
+    expect(groups.map((g) => g.group)).toEqual(filled)
+    expect(groups.every((g) => g.items.length > 0)).toBe(true)
+    const grouped = groups.flatMap((g) => g.items.map(mark))
+    const all = galleryItems(theme()).map(mark)
+    expect(grouped).toHaveLength(all.length)
+    expect(new Set(grouped)).toEqual(new Set(all))
+    expect(new Set(grouped).size).toBe(grouped.length)
+  })
+  it('각 항목이 제 타입의 카탈로그 그룹에 들고 이름표는 COMPONENT_GROUP_LABELS 다', () => {
+    for (const g of galleryGroups(theme())) {
+      expect(g.label).toBe(COMPONENT_GROUP_LABELS[g.group])
+      for (const item of g.items) expect(getComponent(item.type)!.group, mark(item)).toBe(g.group)
+    }
+  })
+  it('격자 판: 그룹 머리가 서고 넓은 표본은 한 줄을 쓴다', () => {
+    const { container } = render(<ThemeGallery theme={theme()} tokens={{}} />)
+    const groups = galleryGroups(theme())
+    const sections = container.querySelectorAll('[data-wb-gallery-group]')
+    expect([...sections].map((el) => el.getAttribute('data-wb-gallery-group'))).toEqual(groups.map((g) => g.group))
+    for (const g of groups) {
+      const section = container.querySelector(`[data-wb-gallery-group="${g.group}"]`)!
+      expect(section.querySelector('[data-wb-gallery-group-label]')!.textContent).toContain(g.label)
+    }
+    const wide = galleryItems(theme()).filter((item) => item.sample.wide === true)
+    expect(wide.length).toBeGreaterThan(0)
+    for (const item of galleryItems(theme())) {
+      const cell = container.querySelector<HTMLElement>(`[data-wb-gallery-item="${mark(item)}"]`)!
+      expect(cell.style.gridColumn, mark(item)).toBe(item.sample.wide === true ? '1 / -1' : '')
+    }
+  })
+  it('목록 판은 그룹 없이 galleryItems 차례 그대로다', () => {
+    const { container } = render(<ThemeGallery theme={theme()} tokens={{}} layout="list" />)
+    expect(container.querySelectorAll('[data-wb-gallery-group]')).toHaveLength(0)
+    const cells = [...container.querySelectorAll('[data-wb-gallery-item]')].map((el) => el.getAttribute('data-wb-gallery-item'))
+    expect(cells).toEqual(galleryItems(theme()).map(mark))
+    expect([...container.querySelectorAll<HTMLElement>('[data-wb-gallery-item]')].every((el) => el.style.gridColumn === '')).toBe(true)
   })
 })

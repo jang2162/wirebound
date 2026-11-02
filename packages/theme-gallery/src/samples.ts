@@ -11,6 +11,11 @@ export interface GallerySample {
   within?: WbNode
   /** 설 자리가 몸통이 아니거나 두 단 밑이면(그리드의 행 구역 · 행 안의 칸) 표본을 품은 부모를 짓는다 — `within` 대신. */
   place?: (own: WbNode) => WbNode
+  /**
+   * 격자(`ThemeGallery` 의 `layout="grid"`)에서 한 줄을 통째로 쓴다 — 표 · 검색 폼 · 폼 표처럼 넓어야 제대로 보이는 표본. 좁은 칸에 두면 테마가
+   * 아니라 칸 폭 탓에 깨져 보인다. 목록 판 · `wb-theme check` · `shots` 는 이 값을 안 본다.
+   */
+  wide?: boolean
 }
 
 const child = (id: string, content = `자식 ${id}`): WbNode => ({ id, type: 'Text', props: { content } })
@@ -206,6 +211,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   ],
   DataGrid: [
     {
+      wide: true,
       label: 'DataGrid — 흔한 목록(No · 링크 · 두 줄 · 단추 · 머리줄 · 바)',
       node: grid(
         'dg1',
@@ -225,6 +231,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
       ),
     },
     {
+      wide: true,
       label: 'DataGrid — 체크 선택 · 강조 · 딤드 · 합계',
       node: grid(
         'dg2',
@@ -242,6 +249,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
       ),
     },
     {
+      wide: true,
       label: 'DataGrid — 2단 병합 머리 · 정렬 · 필수',
       node: grid(
         'dg3',
@@ -258,6 +266,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
       ),
     },
     {
+      wide: true,
       label: 'DataGrid — 넓은 표(잎 열 서른 · 고정 열 셋 · 주말 음영 · 기호 셀)',
       node: grid('dg4', { fixedColumns: 3 }, attendanceColumns(), [
         gridRow('dg4-r', { repeat: 3 }),
@@ -266,12 +275,14 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
       ]),
     },
     {
+      wide: true,
       label: 'DataGrid — 빈 결과',
       node: grid('dg5', { empty: true }, [column('dg5-a', '이름'), column('dg5-b', '상태')], [gridRow('dg5-r', { repeat: 5 })], {
         headStart: [child('dg5-total', '검색결과 총 0건')],
       }),
     },
     {
+      wide: true,
       label: 'DataGrid — 라디오 선택 팝업(바 없음)',
       node: grid(
         'dg6',
@@ -281,6 +292,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
       ),
     },
     {
+      wide: true,
       label: 'DataGrid — 편집 그리드(입력 · 셀렉트 · 삭제 · 추가)',
       node: grid(
         'dg7',
@@ -296,9 +308,10 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
       ),
     },
     // 반복 행 입력 표 — 팔레트 «반복 행 표» 카드가 넣는 노드 그대로(`DataGrid` 의 프리셋 `repeatRows`).
-    { label: 'DataGrid — 반복 행 표(프리셋)', node: presetSample('repeatRows', 'rr') },
+    { wide: true, label: 'DataGrid — 반복 행 표(프리셋)', node: presetSample('repeatRows', 'rr') },
     // 단위기간 꼴 — 입력 · 날짜~날짜 · 글 · 삭제 단추 · 머리 오른쪽 [추가] · 합계 행.
     {
+      wide: true,
       label: 'DataGrid — 반복 행 표 · 기간 · 합계 행',
       node: grid(
         'rr2',
@@ -326,6 +339,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   ],
   GridColumnGroup: [
     {
+      wide: true,
       label: 'GridColumnGroup — 열 둘을 묶은 머리',
       node: columnGroup('cg', '교육기간', [column('cg-a', '시작일'), column('cg-b', '종료일')]),
       within: { id: 'cg-host', type: 'DataGrid', props: {}, zones: { rows: [gridRow('cg-r', { repeat: 2 })] } },
@@ -333,6 +347,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   ],
   GridColumn: [
     {
+      wide: true,
       label: 'GridColumn — 머리 칸 · 셀 틀',
       node: column('gc', '과정명', [{ id: 'gc-link', type: 'Link', props: { label: '데이터 분석 기초' } }], {
         required: true,
@@ -343,6 +358,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   ],
   GridRow: [
     {
+      wide: true,
       label: 'GridRow — 강조 행 셋',
       node: gridRow('gr', { repeat: 3, tone: 'selected' }),
       place: (own) => grid('gr-host', { select: 'check' }, [column('gr-a', '이름', [text('gr-a-t', '홍길동')])], [own]),
@@ -350,6 +366,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   ],
   GridCell: [
     {
+      wide: true,
       label: 'GridCell — 앞 칸 둘을 덮은 합계 칸',
       node: gridCell('gcl', [text('gcl-t', '합계')], { span: 2 }),
       place: (own) =>
@@ -362,13 +379,14 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     },
   ],
   Pagination: [
-    { label: 'Pagination — 첫 쪽', node: pagination('pg1') },
-    { label: 'Pagination — 지금 쪽이 가운데(1000 건)', node: pagination('pg2', { total: 1000, page: 50 }) },
-    { label: 'Pagination — 0 건 · 행 수 셀렉트 없음', node: pagination('pg3', { total: 0, sizeSelect: false }) },
+    { wide: true, label: 'Pagination — 첫 쪽', node: pagination('pg1') },
+    { wide: true, label: 'Pagination — 지금 쪽이 가운데(1000 건)', node: pagination('pg2', { total: 1000, page: 50 }) },
+    { wide: true, label: 'Pagination — 0 건 · 행 수 셀렉트 없음', node: pagination('pg3', { total: 0, sizeSelect: false }) },
   ],
   Tree: [{ label: 'Tree — 두 단계', node: { id: 'tree', type: 'Tree', props: { items: ['뿌리', '가지', '잎'], depth: 2 } } }],
   KeyValue: [
     {
+      wide: true,
       label: 'KeyValue — 쌍 셋 · 2열 · 긴 값',
       node: {
         id: 'kv',
@@ -386,6 +404,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   ],
   SearchForm: [
     {
+      wide: true,
       label: 'SearchForm — 필드 둘',
       node: {
         id: 'sf',
@@ -400,6 +419,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     },
     // 열을 정한 조회 폼 — 쌍 격자(라벨 왼쪽). 몫 2 인 필드가 두 쌍을 덮는다.
     {
+      wide: true,
       label: 'SearchForm — 2열 · 몫',
       node: {
         id: 'sf3',
@@ -421,6 +441,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
       },
     },
     {
+      wide: true,
       label: 'SearchForm — 접힘',
       node: {
         id: 'sf2',
@@ -432,6 +453,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   ],
   EntryForm: [
     {
+      wide: true,
       label: 'EntryForm — 제목 · 폼 표',
       node: {
         id: 'ef',
@@ -455,6 +477,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   FormTable: [
     // 1쌍 다섯 줄 — 필수 · 조합 입력(«[아이디]@[도메인 셀렉트]» · «[ ]-[ ]-[ ]») · 단추 · 여러 줄.
     {
+      wide: true,
       label: 'FormTable — 1쌍 다섯 줄',
       node: {
         id: 'ft',
@@ -481,6 +504,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     },
     // 2쌍 — 넓은 칸(몫 2)이 앞 줄에 구멍을 남기고, 끝 줄의 남는 쌍이 빈 쌍이다(뷰가 채운다). 긴 라벨 · 긴 값이 칸 안에서 꺾인다.
     {
+      wide: true,
       label: 'FormTable — 2열 · 전폭 · 빈 쌍',
       node: {
         id: 'ft2',
@@ -499,6 +523,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     },
     // 표 밖 구역 제목 + 오른쪽 단추 — 폼 표의 제목 · «머리 오른쪽».
     {
+      wide: true,
       label: 'FormTable — 제목 · 머리 오른쪽',
       node: {
         id: 'ft3',
@@ -513,6 +538,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     },
     // 사진 칸 — «옆 칸» 이 표 왼쪽에서 모든 줄을 덮는다.
     {
+      wide: true,
       label: 'FormTable — 옆 칸(사진)',
       node: {
         id: 'ft4',
@@ -640,6 +666,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   FileAttach: [
     { label: 'FileAttach — 빈 목록 · 기본 한도', node: fileAttach('fa', {}) },
     {
+      wide: true,
       label: 'FileAttach — 셋 · 긴 이름',
       node: fileAttach('fa2', {
         files: [
@@ -710,6 +737,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
   Popup: [
     { label: 'Popup — 빈 팝업', node: { id: 'pop', type: 'Popup', props: { title: '팝업', size: 'small' }, children: [] } },
     {
+      wide: true,
       label: 'Popup — 검색 팝업(검색폼 · 라디오 그리드 · 바)',
       node: {
         id: 'pop2',
@@ -743,6 +771,7 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
       },
     },
     {
+      wide: true,
       label: 'Popup — 폼 팝업(2열 폼 표 · 바닥 · 넓게)',
       node: {
         id: 'pop3',

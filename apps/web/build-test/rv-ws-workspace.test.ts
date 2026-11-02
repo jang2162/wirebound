@@ -512,10 +512,12 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
     try {
       await page.goto(`/projects/${projectId}/settings?section=bogus`)
       await page.getByRole('region', { name: '일반' }).waitFor()
-      const selected = () => page.getByRole('tab', { selected: true }).textContent()
+      // 절 탭 목록으로 좁힌다 — «테마» 절은 판 안에 토큰 무리 탭(`role="tab"`)을 둔다.
+      const sectionTabs = page.getByRole('tablist', { name: '설정 절' })
+      const selected = () => sectionTabs.getByRole('tab', { selected: true }).textContent()
       const section = () => new URL(page.url()).searchParams.get('section')
       steps.push(`처음 ${await selected()}`)
-      await page.getByRole('tab', { selected: true }).focus()
+      await sectionTabs.getByRole('tab', { selected: true }).focus()
       const expected = ['테마 theme', '멤버 members', '위험 구역 danger', '일반 general', '위험 구역 danger']
       for (const [i, key] of ['ArrowRight', 'ArrowRight', 'End', 'Home', 'ArrowLeft'].entries()) {
         await page.keyboard.press(key)
@@ -540,9 +542,10 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
       await viewer.page.goto(`/projects/${projectId}/settings?section=danger`)
       // 판이 선 것은 탭 목록으로 기다린다 — 고른 절을 기다리면 그 값을 깨는 변조가 값이 아니라 시간 초과로 죽는다.
       await viewer.page.getByRole('tablist', { name: '설정 절' }).waitFor()
-      await viewer.page.getByRole('tab', { selected: true }).waitFor()
-      const tabs = await viewer.page.getByRole('tab').allTextContents()
-      const chosen = await viewer.page.getByRole('tab', { selected: true }).textContent()
+      const viewerTabs = viewer.page.getByRole('tablist', { name: '설정 절' })
+      await viewerTabs.getByRole('tab', { selected: true }).waitFor()
+      const tabs = await viewerTabs.getByRole('tab').allTextContents()
+      const chosen = await viewerTabs.getByRole('tab', { selected: true }).textContent()
       expect({ tabs: tabs.map((t) => t.trim()), chosen: chosen?.trim() }).toEqual({ tabs: ['일반', '테마', '멤버'], chosen: '일반' })
     } finally {
       await viewer.context.close()
@@ -881,7 +884,7 @@ async function tabRowAfterEnd(page: Page): Promise<{
   workspace: number
   outside: string[]
 }> {
-  await page.getByRole('tab', { selected: true }).focus()
+  await page.getByRole('tablist', { name: '설정 절' }).getByRole('tab', { selected: true }).focus()
   await page.keyboard.press('End')
   await page.getByRole('region', { name: '위험 구역' }).waitFor()
   await page.waitForTimeout(300)

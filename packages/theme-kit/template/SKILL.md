@@ -24,13 +24,14 @@ description: wirebound 설계서 테마를 짠다 — 컴포넌트 뷰(tsx) · C
 
 ```bash
 npm install
-npm run dev        # 갤러리 — 모든 컴포넌트 × variant 를 표본으로 늘어놓는다. 뷰 · CSS 는 고치면 바로 반영된다
+npm run dev        # 미리보기 — «컴포넌트»(모든 컴포넌트 × variant 표본을 그룹별 격자로) · «예제 페이지»(이어진 관리자 화면). 뷰 · CSS 는 고치면 바로 반영된다
 npm run build      # 검증 → dist/<id>-<version>.wbtheme
 npm run typecheck
 ```
 
 - `dev` 의 셸: 뷰포트 프리셋(1920 · 1440 · 1280 · 1024 · 768 · 375 — 갤러리가 그 폭으로 그려져 `@media` 가 그 폭으로 걸린다),
-  토큰 패널(manifest 의 토큰으로 자동), «겹쳐 보기»(에디터가 노드를 골랐을 때의 외곽선과 코멘트 번호 자리), manifest 이슈 목록.
+  토큰 패널(manifest 의 토큰으로 자동), «겹쳐 보기»(에디터가 노드를 골랐을 때의 외곽선과 코멘트 번호 자리), manifest 이슈 목록,
+  보기 전환(«컴포넌트» · «예제 페이지» — wirebound 의 테마 미리보기와 같은 둘)과 예제의 장 이름 줄.
 - `build` 는 manifest 를 업로드와 **같은 함수**로 검증한다. 이슈가 있으면 이유를 줄마다 찍고 파일을 만들지 않는다. 결과
   파일을 wirebound 관리자 화면에서 올린다.
 - 같은 `id@version` 은 다시 올릴 수 없다 — 고쳤으면 `version` 을 올린다.

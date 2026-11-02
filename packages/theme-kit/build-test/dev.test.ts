@@ -111,6 +111,27 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
     expect(probe).toEqual({ cards: 6, errors: 0 })
   })
 
+  it('dev 프레임은 그룹 격자 · 두 보기 — «예제 페이지» 를 고르면 첫 장 «대시보드», 예제 안의 이동을 셸의 장 이름 줄이 따른다', async () => {
+    const frame = await galleryFrame()
+    expect(await frame.evaluate(() => document.querySelectorAll('[data-wb-gallery-group]').length)).toBe(5)
+    await page.check('[data-wb-view="examples"]')
+    const shown = (f: Frame) => f.evaluate(() => document.querySelector('[data-wb-examples]')?.getAttribute('data-wb-examples') ?? null)
+    await expect.poll(() => shown(frame)).toBe('dashboard')
+    const current = () => page.$$eval('nav[aria-label="예제 페이지"] button[aria-current="page"]', (els) => els.map((el) => el.textContent))
+    expect(await current()).toEqual(['대시보드'])
+    await frame.click('[data-wb-id="ex-l-go-orders"]')
+    // 판이 섰다(프레임이 그 장을 그렸다) — 셸의 값은 메시지 한 번 · 그리기 한 번 뒤에 한 번 읽어 단언한다(폴의 끝 조건에 단언할 값을 안 넣는다).
+    await expect.poll(() => shown(frame)).toBe('orders')
+    await page.evaluate(() => new Promise((done) => setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(done)), 50)))
+    expect(await current()).toEqual(['주문 목록'])
+    // 셸의 장 이름으로도 고른다.
+    await page.click('nav[aria-label="예제 페이지"] >> text=주문 등록')
+    await expect.poll(() => shown(frame)).toBe('order-form')
+    // 다음 케이스는 «컴포넌트» 판을 잰다.
+    await page.check('[data-wb-view="components"]')
+    await galleryFrame()
+  })
+
   it('뷰포트 프리셋 — 375 를 고르면 프레임이 375 폭이다', async () => {
     await page.selectOption('[data-wb-viewport]', '375')
     const frame = await galleryFrame()

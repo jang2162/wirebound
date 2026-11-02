@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import type { Browser, Page } from 'playwright-core'
 import { GALLERY_SAMPLES, PLACEHOLDER_SET_PROPS, PLACEHOLDER_SET_SAMPLE } from '@wirebound/theme-gallery'
 import { CAPTURE_CSS } from '@wirebound/theme-sdk'
+import { LIST_LAYOUT_QUERY } from './client/protocol'
 import { loadProject } from './config'
 import { startDev } from './dev'
 
@@ -78,6 +79,12 @@ export interface ShotWidthReport {
   pairsOffGrid: { item: string | null; element: string }[]
   /** 그리드의 잣대 셋(`measureGrids`). */
   grids: ShotGrids
+  /**
+   * **연 프레임의 꼴** — 갤러리 칸 · 그룹 머리(`[data-wb-gallery-group]`) · 예제 페이지(`[data-wb-examples]`) 수. 이 명령은 «한 줄에 하나» 목록 판을
+   * 잰다(프레임 주소의 `LIST_LAYOUT_QUERY`) — 격자에서는 칸 폭이 좁아 칸 폭 탓의 깨짐이 테마 실패로 잡히고, 칸을 넘어 이웃을 덮는 넘침은 창 폭을
+   * 안 넘어 놓친다. 그룹 · 예제가 0 이 아니면 `shotsProblems` 가 적는다.
+   */
+  frame: { items: number; groups: number; examples: number }
 }
 
 /**
@@ -320,6 +327,11 @@ function measure(expect: {
     pageScrollWidth: document.documentElement.scrollWidth,
     pageClientWidth: vw,
     compatMode: document.compatMode,
+    frame: {
+      items: document.querySelectorAll('[data-wb-gallery-item]').length,
+      groups: document.querySelectorAll('[data-wb-gallery-group]').length,
+      examples: document.querySelectorAll('[data-wb-examples]').length,
+    },
   }
 }
 
@@ -425,7 +437,7 @@ export async function takeShots(opts: {
     throw error
   })
   try {
-    const frameUrl = new URL('frame.html', server.url).href
+    const frameUrl = new URL(`frame.html?${LIST_LAYOUT_QUERY}`, server.url).href
     // 첫 적재에 vite 가 의존을 묶는다 — 한 번 열어 데워 두고 폭마다 새 페이지로 잰다.
     const warm = await browser.newPage()
     await warm.goto(frameUrl)
@@ -475,6 +487,11 @@ export function shotsProblems(report: ShotsReport): string[] {
   const lines: string[] = []
   for (const w of report.widths) {
     if (w.compatMode !== 'CSS1Compat') lines.push(`✗ ${w.width}px 문서 모드 ${w.compatMode} — 번들 · PPTX(표준 모드)와 레이아웃이 갈립니다`)
+    if (w.frame.groups > 0 || w.frame.examples > 0 || w.frame.items === 0) {
+      lines.push(
+        `✗ ${w.width}px 연 프레임이 목록 판 갤러리가 아닙니다(칸 ${w.frame.items} · 그룹 머리 ${w.frame.groups} · 예제 ${w.frame.examples}) — kit 의 프레임과 명령의 판이 갈렸습니다`,
+      )
+    }
     for (const line of w.consoleErrors) lines.push(`✗ ${w.width}px 콘솔: ${line}`)
     for (const e of w.wbErrors) lines.push(`✗ ${w.width}px 폴백 ${e.item ?? '(칸 밖)'}: ${e.message}`)
     for (const o of w.overflow) lines.push(`✗ ${w.width}px 넘침 ${o.item ?? '(칸 밖)'}: ${o.element} (${o.left}–${o.right}px)`)

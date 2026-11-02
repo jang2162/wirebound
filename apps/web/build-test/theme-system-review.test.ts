@@ -425,7 +425,10 @@ describe.skipIf(!전제.ok)('시스템 테마 — 캔버스 · 번들 · PPTX', 
       try {
         await page.goto(`/projects/${fixture.id}/settings?section=theme`)
         const form = page.getByRole('group', { name: '토큰' })
-        await form.locator('fieldset').first().waitFor()
+        const tabs = form.getByRole('tablist', { name: '토큰 무리' })
+        await tabs.getByRole('tab').first().waitFor()
+        // 칸은 무리마다 탭이고 고른 탭의 칸만 보인다 — 칸을 고치기 전에 그 무리의 탭을 고른다(«기타» 는 무리 없는 키 · 선언에 없는 무리).
+        const groups = new Map<string, string>((manifest.tokens.groups ?? []).map((g: { id: string; label: string }) => [g.id, g.label]))
         const handle = await page.waitForSelector('.wb-shell-settings-preview iframe')
         const frame = (await handle.contentFrame())!
         await frame.waitForSelector('[data-wb-gallery-item]')
@@ -435,7 +438,9 @@ describe.skipIf(!전제.ok)('시스템 테마 — 캔버스 · 번들 · PPTX', 
         for (const [key, decl] of Object.entries<any>(manifest.tokens.items)) {
           const next = otherValue(decl.type, decl.default, decl.options)
           const cssVar = `--wb-${key.replace(/\./g, '-')}`
-          const field = form.getByLabel(decl.label, { exact: true })
+          await tabs.getByRole('tab', { name: groups.get(decl.group) ?? '기타', exact: true }).click()
+          // 고른 판 안에서 찾는다 — 판(`tabpanel`)의 이름이 탭 이름이라 칸 이름과 같은 무리(«글자»)에서는 판 자신도 맞는다.
+          const field = form.locator('[role="tabpanel"]:not([hidden])').getByLabel(decl.label, { exact: true })
           const before = await snapshot()
           if (decl.type === 'select') await field.selectOption(String(next))
           else if (decl.type === 'length' && /^-?[\d.]+[a-z%]+$/.test(String(decl.default)))
