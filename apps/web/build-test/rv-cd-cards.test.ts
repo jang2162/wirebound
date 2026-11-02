@@ -13,9 +13,9 @@
  * | 좁은 창 · 확대 | 창 320 · 390 · 확대 200 %(창 1280 · 640) — «열기» · 톱니 · 추가 단추 크기, 연 폼이 카드 안, 뼈대 · 문서 가로 넘침, 넘친 글자 |
  * | 역할 | viewer · editor 카드의 «열기» 가 에디터를, 톱니가 읽기 전용 설정(저장 단추 · «위험 구역» 탭 없음)을 연다 |
  *
- * **`it.fails` 둘은 지금 서 있는 결함의 재현이다**(리뷰 보고 M1 · L1) — 케이스는 바라는 성질을 단언하고, 결함이 있는 동안 그 단언이 값으로
- * 죽어 `it.fails` 가 초록이다. 고치면 빨강으로 바뀌니 그때 `.fails` 를 뗀다. 둘 다 이 브랜치가 안 바꾼 `projects/project-form.tsx`(요청 중
- * `disabled`) · `projects/use-project-commands.tsx`(`closeForm` 이 실패를 안 걷음)의 몫이다.
+ * **실패 갈래의 포커스 · «취소» 두 케이스**는 리뷰 보고 M1 · L1 의 잠금이다 — 요청 중 칸을 잠그면 Chrome 이 포커스를 `body` 로 떨구므로 폼이 실패
+ * 뒤 보냈던 칸으로 돌리고(`projects/project-form.tsx` 머리말 «잠그면 포커스가 빠지므로 …»), 폼을 닫으면 그 폼의 실패를 걷는다
+ * (`projects/use-project-commands.tsx` 의 `closeForm`).
  */
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -324,13 +324,13 @@ describe.skipIf(!전제.ok)('RV-CD — 프로젝트 카드 리뷰 실브라우�
     }
   })
 
-  it.fails('실패 갈래 — 실패한 뒤 포커스가 폼 안에 남는다(슬러그 칸에서 Enter 로 보낸 판)', async () => {
+  it('실패 갈래 — 실패한 뒤 포커스가 폼 안에 남는다(슬러그 칸에서 Enter 로 보낸 판)', async () => {
     const seen = await failures()
     const focus = Object.fromEntries(Object.entries(seen).map(([where, v]) => [where, v.focus]))
     expect(focus).toEqual(Object.fromEntries(Object.keys(seen).map((where) => [where, 'input:슬러그'])))
   })
 
-  it.fails('실패 갈래 — «취소» 로 폼을 닫으면 그 폼의 실패 알림도 걷힌다', async () => {
+  it('실패 갈래 — «취소» 로 폼을 닫으면 그 폼의 실패 알림도 걷힌다', async () => {
     const seen = await failures()
     const after = Object.fromEntries(Object.entries(seen).map(([where, v]) => [where, v.afterCancel]))
     expect(after).toEqual(Object.fromEntries(Object.keys(seen).map((where) => [where, []])))

@@ -287,6 +287,90 @@ describe('프로젝트 만들기', () => {
     release()
     await waitFor(() => expect(h.createProject).toHaveBeenCalledTimes(1))
   })
+  /**
+   * 만들기 요청을 붙잡았다가 409 로 거절하는 판. 슬러그 칸에서 보낸 뒤 **Chrome 이 하는 포커스 떨굼을 흉내 낸다** — Chrome 은 포커스가 선 칸에
+   * `disabled` 를 걸면 포커스를 `body` 로 떨구는데, jsdom 은 포커스를 그 칸에 그대로 두고 잠긴 칸의 `blur()` 도 받지 않는다. 그래서 요청이
+   * 나가는 순간(칸이 잠기기 전) 칸을 `blur` 한다. 실브라우저 판은 `build-test/rv-cd-cards.test.ts` «실패 갈래 — 실패한 뒤 포커스가 …».
+   */
+  async function failWhileFocusLost(whileBusy: () => void = () => {}): Promise<HTMLElement> {
+    let reject = (): void => {}
+    const gate = new Promise<never>((_resolve, fail) => {
+      reject = () => fail(new ApiError(409, 'conflict', DUPLICATE_SLUG))
+    })
+    renderCrud({
+      createProject: () => {
+        ;(document.activeElement as HTMLElement | null)?.blur()
+        return gate
+      },
+    })
+    await openCreateForm()
+    type('이름', '고객 포털')
+    type('슬러그', 'admin-console')
+    const slug = field('슬러그')
+    slug.focus()
+    fireEvent.submit(slug.closest('form')!)
+    await waitFor(() => expect(slug).toHaveProperty('disabled', true))
+    // 카나리아 — 흉내가 판을 세웠다(잠긴 동안 포커스가 `body`).
+    expect(document.activeElement).toBe(document.body)
+    whileBusy()
+    reject()
+    await screen.findByText(DUPLICATE_SLUG)
+    await waitFor(() => expect(slug).toHaveProperty('disabled', false))
+    return slug
+  }
+
+  it('실패한 뒤 포커스가 보냈던 칸으로 돌아온다 — 잠금이 떨군 포커스', async () => {
+    const slug = await failWhileFocusLost()
+    expect(document.activeElement).toBe(slug)
+    // 친 글도 남는다 — 포커스를 돌리려고 폼을 새로 그리지 않았다.
+    expect((slug as HTMLInputElement).value).toBe('admin-console')
+  })
+
+  it('요청 중에 다른 곳으로 옮긴 포커스는 실패 뒤에 뺏지 않는다', async () => {
+    let moved: HTMLElement | null = null
+    await failWhileFocusLost(() => {
+      // 요청이 나가 있는 동안 사람이 사이드바의 링크로 옮겼다.
+      moved = document.body.querySelector<HTMLElement>('.wb-shell-workspace a[href]')
+      moved?.focus()
+    })
+    expect(moved).not.toBeNull()
+    expect(document.activeElement).toBe(moved)
+  })
+
+  it('실패 뒤 «취소» 로 닫으면 그 폼의 실패 알림이 걷힌다', async () => {
+    renderCrud({
+      createProject: async () => {
+        throw new ApiError(409, 'conflict', DUPLICATE_SLUG)
+      },
+    })
+    await openCreateForm()
+    type('이름', '고객 포털')
+    type('슬러그', 'admin-console')
+    fireEvent.click(screen.getByRole('button', { name: '만들기' }))
+    await screen.findByText(DUPLICATE_SLUG)
+
+    fireEvent.click(screen.getByRole('button', { name: '취소' }))
+    await screen.findByRole('button', ADD)
+    expect(screen.queryByText(DUPLICATE_SLUG)).toBeNull()
+  })
+
+  it('폼을 열고 닫아도 목록 조회 실패 알림은 남는다 — 닫기가 걷는 것은 폼의 실패뿐이다', async () => {
+    renderWithProviders(<App />, {
+      client: fakeApi({
+        me: async () => USER,
+        listProjects: async () => {
+          throw new ApiError(500, 'internal', '목록 조회 실패 [FX-CD]')
+        },
+      }),
+      route: '/',
+    })
+    await screen.findByText('목록 조회 실패 [FX-CD]')
+    fireEvent.click(screen.getByRole('button', ADD))
+    await screen.findByLabelText('이름')
+    fireEvent.click(screen.getByRole('button', { name: '취소' }))
+    await screen.findByRole('button', ADD)
+    expect(screen.getByText('목록 조회 실패 [FX-CD]')).toBeDefined()
+  })
 })
 
 /**
