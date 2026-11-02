@@ -20,8 +20,14 @@
  * 다르기 때문이다** — 그쪽은 제출하면서 입력이 DOM에서 사라지지만(요청 전에 `setEditing(null)`),
  * 이 폼은 **성공한 뒤에야 닫힌다**(실패하면 친 값을 남겨야 하므로). 즉 여기서는 "요청이 나가 있는
  * 동안 폼이 떠 있는" 상태가 실제로 만들어진다.
+ *
+ * **잠그면 포커스가 빠지므로 실패 뒤에 돌려준다.** 포커스가 선 칸에 `disabled` 를 걸면 브라우저가 포커스를 `body` 로 떨군다 — 실패(409 · 400 ·
+ * 끊김)로 폼이 남아도 키보드 사람은 사이드바부터 다시 Tab 해야 한다. 그래서 보낸 순간 포커스가 있던 칸(Enter 를 친 칸 · 누른 «만들기»)을 적어
+ * 두고, 잠금이 풀릴 때 포커스가 아직 빠진 채면 그 칸으로 돌린다. **`disabled` 대신 `readOnly` 로 잠그지 않는 근거:** `readOnly` 는 단추에 없어
+ * «만들기» · «취소» 는 여전히 `disabled` 이고(마우스로 보낸 판은 그대로 빠진다), 읽기 전용 칸에서도 Enter 가 폼을 제출해 «잠긴 칸» 이 보내는
+ * 길이 하나 더 선다. **포커스가 빠진 채일 때만 돌린다** — 요청 중에 사람이 다른 곳을 눌렀으면 그 자리를 뺏지 않는다.
  */
-import { useEffect, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import type { ProjectFormValues } from './use-project-commands'
 
 export function ProjectForm(props: {
@@ -51,12 +57,28 @@ export function ProjectForm(props: {
     first.current?.focus()
   }, [])
 
+  /** 보낸 순간 포커스가 있던 폼 안의 요소(머리말 «잠그면 포커스가 빠지므로 …»). */
+  const sentFrom = useRef<HTMLElement | null>(null)
+  const wasBusy = useRef(props.busy)
+  // **레이아웃 이펙트인 근거:** 칸이 풀리는 커밋과 같은 태스크에서 포커스를 돌려, «풀렸는데 포커스는 `body`» 인 프레임이 없게 한다.
+  useLayoutEffect(() => {
+    if (wasBusy.current && !props.busy) {
+      const target = sentFrom.current
+      sentFrom.current = null
+      const active = target?.ownerDocument.activeElement
+      if (target !== null && target.isConnected && (active === null || active === target.ownerDocument.body)) target.focus()
+    }
+    wasBusy.current = props.busy
+  }, [props.busy])
+
   return (
     <form
       className="wb-shell-project-form"
       onSubmit={(event) => {
         // 기본 동작은 페이지 전체를 다시 부른다 — SPA에서는 그것이 앱을 통째로 버리는 것이다.
         event.preventDefault()
+        const active = event.currentTarget.ownerDocument.activeElement
+        sentFrom.current = active instanceof HTMLElement && event.currentTarget.contains(active) ? active : first.current
         props.onSubmit({ name, slug, description })
       }}
       onKeyDown={(event) => {

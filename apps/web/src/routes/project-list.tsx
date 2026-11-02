@@ -10,26 +10,30 @@
  *   «ㄱ고곡고ㄱ개객객») 빠른 입력이 글자를 잃는다(Chrome · `build-test/rv-ws-workspace.test.ts` «검색 칸에 한글을 조합해 치면 …» — jsdom 의
  *   `fireEvent.change` 한 번은 이 판을 못 낸다). 앱 전체의 전이를 끄지 않는 것은 에디터의 페이지 전환까지 동기로 바뀌어서다. 역할 · 정렬은 고르는
  *   컨트롤이라 주소에서 읽은 채다 — 사람의 빠르기로는 안 잃는다(같은 파일 «역할 · 정렬 고르기» 가 잰다. 한 틱 안에 다른 둘을 고르면 앞 것을 잃는다).
- * - 카드: 이름(에디터로) · 역할 표지 · 슬러그 · 설명 · 멤버 수 · 최근 수정(상대 시각 — 정확한 시각은 `<time>` 의 `title`) · «설정».
+ * - 카드: 이름(에디터로) · 역할 표지 · 슬러그 · 설명 · 멤버 수 · 최근 수정(상대 시각 — 정확한 시각은 `<time>` 의 `title`) · 아래 줄의 «열기» 큰 단추
+ *   (에디터로) · 톱니만의 작은 단추(설정).
+ * - **격자 맨 앞은 «프로젝트 추가» 카드다**(`AddCard`) — 누르면 그 카드 자리가 만들기 폼이다. 목록을 불러오는 중 · 조회 실패 · 빈 목록 · 거른
+ *   결과 0 에서도 선다 — 만드는 길이 이것 하나라, 목록을 못 받은 판에 숨으면 만들 길이 없다.
  * - 빈 목록(«참여 중인 프로젝트가 없습니다»)과 거른 결과 없음(«검색 결과가 없습니다»)은 다른 문장이다 — 앞엣것은 만들라는 안내, 뒤엣것은 거름을 풀라는 안내다.
+ *   둘 다 격자(추가 카드) 밑에 선다.
  *
  * **조회·잠금·조작은 `projects/use-project-commands.tsx`가 갖는다.** 이 파일은 그 결과를
  * 그리기만 한다 — 판정이 컴포넌트 안에 흩어지면 케이스가 화면을 지나야만 재진다.
  */
-import { useId, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useId, useRef, useState, type ReactElement } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { SignedOut } from '../api/failure'
 import type { ProjectListItem, ProjectRole } from '../api/types'
 import { filterProjects, queryOf, relativeTime, roleBadge, searchOf, type ProjectQuery, type ProjectSort } from '../projects/project-filter'
 import { ProjectForm } from '../projects/project-form'
-import { useProjectCommands } from '../projects/use-project-commands'
+import { useProjectCommands, type ProjectFormValues } from '../projects/use-project-commands'
 import { shellIcon } from '../shell/icons'
 import { WorkspaceLayout } from '../shell/workspace-layout'
 
 /** 조회가 성공했는데 결과가 비어 있을 때의 안내 — 빈 상태 상자의 제목. */
 const EMPTY_NOTICE = '참여 중인 프로젝트가 없습니다'
 /** 그 밑의 보조 글. */
-const EMPTY_HINT = '새 프로젝트를 만들어 시작하세요'
+const EMPTY_HINT = '«프로젝트 추가» 카드로 첫 프로젝트를 만드세요'
 /** 목록은 있는데 거른 결과가 없을 때. */
 const NO_MATCH = '검색 결과가 없습니다'
 const NO_MATCH_HINT = '검색어나 역할 거름을 바꿔 보세요'
@@ -60,24 +64,8 @@ export function ProjectListRoute(): ReactElement {
     // 셸 밖의 라우트지만 스타일은 `src/shell.css` 한 파일에 있고 `wb-shell-` 접두어를
     // `test/shell-css.test.ts`가 기계로 지킨다.
     // 뼈대(`shell/workspace-layout.tsx`)의 사이드바가 계정 설정 · (관리자) 관리자 칸 · 로그아웃을 든다 — 프로젝트를 열지 않고도 앱에서 나갈 수 있다.
-    <WorkspaceLayout
-      title="프로젝트"
-      actions={
-        // **여는 버튼도 잠근다.** 실제로 막는 것은 훅의 `inFlight`이고, 이 `disabled`는
-        // 그것을 화면에 보이게 한다 — 여는 쪽 하나라도 빠지면 그 버튼은 눌리는 것처럼 보이는데
-        // 조용히 아무 일도 안 한다.
-        <button className="wb-shell-project-create" type="button" disabled={commands.busy} onClick={commands.openCreate}>
-          {shellIcon('add', 16, 'wb-shell-icon-lead')}
-          새 프로젝트
-        </button>
-      }
-    >
+    <WorkspaceLayout title="프로젝트">
       <div className="wb-shell-project-list">
-        {/* 만들기 폼은 목록 **위**에 연다. */}
-        {commands.form !== null && (
-          <ProjectForm submitLabel="만들기" busy={commands.busy} onSubmit={commands.submitForm} onCancel={commands.closeForm} />
-        )}
-
         {/* **조작 실패는 조회 실패와 다른 자리에 낸다**. 둘이 한 자리에 나오면 목록을
             못 받은 사실이 조작 실패 문장에 덮인다. */}
         {commands.failure !== null && commands.failure.kind === 'message' && (
@@ -96,28 +84,34 @@ export function ProjectListRoute(): ReactElement {
             {state.failure.message}
           </p>
         )}
-        {state.status === 'ready' &&
-          (state.projects.length === 0 ? (
-            <div className="wb-shell-home-empty">
-              {shellIcon('noProjects', 32, 'wb-shell-home-empty-icon')}
-              <p className="wb-shell-project-notice">{EMPTY_NOTICE}</p>
-              <p className="wb-shell-home-empty-hint">{EMPTY_HINT}</p>
-            </div>
-          ) : (
-            <ProjectCards projects={state.projects} />
-          ))}
+        <ProjectCards
+          projects={state.status === 'ready' ? state.projects : null}
+          add={
+            <AddCard
+              open={commands.form !== null}
+              busy={commands.busy}
+              onOpen={commands.openCreate}
+              onSubmit={commands.submitForm}
+              onCancel={commands.closeForm}
+            />
+          }
+        />
       </div>
     </WorkspaceLayout>
   )
 }
 
 /**
- * 위 줄(검색 · 역할 · 정렬 · 수)과 카드 격자. 목록이 하나 이상일 때만 선다 — 빈 목록에는 거를 것이 없다.
+ * 위 줄(검색 · 역할 · 정렬 · 수) · 카드 격자 · 빈 안내. `projects` 가 `null` 이면 목록을 아직 못 받은 것이다(불러오는 중 · 조회 실패). 위 줄은 목록이
+ * 하나 이상일 때만 선다 — 빈 목록에는 거를 것이 없다.
+ *
+ * **격자(`<ul>`)는 상태와 무관하게 늘 같은 자리에 선다** — 추가 카드가 그 안에 있어, 상태마다 다른 자리에 그리면 불러오는 중에 연 폼이 목록이
+ * 닿는 순간 새로 마운트되며 친 글을 잃는다(폼의 칸은 `ProjectForm` 의 상태다).
  *
  * **«지금» 은 화면이 설 때 한 번 잰다** — 상대 시각이 렌더마다 흔들리지 않게(검색어를 칠 때마다 «방금» 이 «1분 전» 으로 뛰는 판). 목록을 다시
  * 받으면(만들기 뒤) 이 상자가 그대로라 시각은 그때의 «지금» 으로 남는다 — 몇 분 어긋나도 상대 시각의 뜻은 그대로다.
  */
-function ProjectCards(props: { projects: ProjectListItem[] }): ReactElement {
+function ProjectCards(props: { projects: ProjectListItem[] | null; add: ReactElement }): ReactElement {
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const fromAddress = queryOf(params)
@@ -136,7 +130,8 @@ function ProjectCards(props: { projects: ProjectListItem[] }): ReactElement {
   /** 한글 조합 중(`compositionstart` ~ `compositionend`)에는 주소를 안 고친다 — 자모가 주소에 실리지 않게. 끝나면 끝낸 글을 싣는다. */
   const composing = useRef(false)
   const query: ProjectQuery = { ...fromAddress, text }
-  const shown = filterProjects(props.projects, query)
+  const all = props.projects ?? []
+  const shown = filterProjects(all, query)
   const [now] = useState(() => Date.now())
   const base = useId()
 
@@ -151,80 +146,125 @@ function ProjectCards(props: { projects: ProjectListItem[] }): ReactElement {
 
   return (
     <>
-      <div className="wb-shell-home-bar">
-        <label className="wb-shell-home-filter wb-shell-home-search">
-          <span className="wb-shell-home-filter-label">검색</span>
-          <input
-            className="wb-shell-project-input"
-            type="search"
-            placeholder="이름 · 슬러그 · 설명"
-            value={text}
-            onChange={(event) => type(event.target.value)}
-            onCompositionStart={() => {
-              composing.current = true
-            }}
-            onCompositionEnd={(event) => {
-              composing.current = false
-              type(event.currentTarget.value)
-            }}
-          />
-        </label>
-        <label className="wb-shell-home-filter" htmlFor={`${base}-role`}>
-          <span className="wb-shell-home-filter-label">역할</span>
-          <select
-            id={`${base}-role`}
-            className="wb-shell-project-input"
-            value={query.role}
-            onChange={(event) => change({ role: event.target.value as ProjectRole | 'all' })}
-          >
-            {ROLE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="wb-shell-home-filter" htmlFor={`${base}-sort`}>
-          <span className="wb-shell-home-filter-label">정렬</span>
-          <select
-            id={`${base}-sort`}
-            className="wb-shell-project-input"
-            value={query.sort}
-            onChange={(event) => change({ sort: event.target.value as ProjectSort })}
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="wb-shell-home-count">
-          {shown.length === props.projects.length
-            ? `프로젝트 ${props.projects.length}개`
-            : `프로젝트 ${props.projects.length}개 중 ${shown.length}개`}
-        </span>
-      </div>
+      {all.length > 0 && (
+        <div className="wb-shell-home-bar">
+          <label className="wb-shell-home-filter wb-shell-home-search">
+            <span className="wb-shell-home-filter-label">검색</span>
+            <input
+              className="wb-shell-project-input"
+              type="search"
+              placeholder="이름 · 슬러그 · 설명"
+              value={text}
+              onChange={(event) => type(event.target.value)}
+              onCompositionStart={() => {
+                composing.current = true
+              }}
+              onCompositionEnd={(event) => {
+                composing.current = false
+                type(event.currentTarget.value)
+              }}
+            />
+          </label>
+          <label className="wb-shell-home-filter" htmlFor={`${base}-role`}>
+            <span className="wb-shell-home-filter-label">역할</span>
+            <select
+              id={`${base}-role`}
+              className="wb-shell-project-input"
+              value={query.role}
+              onChange={(event) => change({ role: event.target.value as ProjectRole | 'all' })}
+            >
+              {ROLE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="wb-shell-home-filter" htmlFor={`${base}-sort`}>
+            <span className="wb-shell-home-filter-label">정렬</span>
+            <select
+              id={`${base}-sort`}
+              className="wb-shell-project-input"
+              value={query.sort}
+              onChange={(event) => change({ sort: event.target.value as ProjectSort })}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="wb-shell-home-count">
+            {shown.length === all.length ? `프로젝트 ${all.length}개` : `프로젝트 ${all.length}개 중 ${shown.length}개`}
+          </span>
+        </div>
+      )}
 
-      {shown.length === 0 ? (
+      <ul className="wb-shell-home-grid" aria-label="프로젝트">
+        {props.add}
+        {shown.map((project) => (
+          <ProjectRow key={project.id} project={project} now={now} />
+        ))}
+      </ul>
+
+      {props.projects !== null && all.length === 0 && (
+        <div className="wb-shell-home-empty">
+          {shellIcon('noProjects', 32, 'wb-shell-home-empty-icon')}
+          <p className="wb-shell-project-notice">{EMPTY_NOTICE}</p>
+          <p className="wb-shell-home-empty-hint">{EMPTY_HINT}</p>
+        </div>
+      )}
+      {all.length > 0 && shown.length === 0 && (
         <div className="wb-shell-home-empty">
           <p className="wb-shell-project-notice">{NO_MATCH}</p>
           <p className="wb-shell-home-empty-hint">{NO_MATCH_HINT}</p>
         </div>
-      ) : (
-        <ul className="wb-shell-home-grid" aria-label="프로젝트">
-          {shown.map((project) => (
-            <ProjectRow key={project.id} project={project} now={now} />
-          ))}
-        </ul>
       )}
     </>
   )
 }
 
 /**
- * 목록의 카드 하나 — 이름(에디터로) · 역할 표지 · 설명 · 슬러그 · 아래 줄에 멤버 수 · 최근 수정과 «설정». 역할 표지는 보이기만 한다 — 무엇을 열지는
- * 설정 페이지가 역할대로 정한다(`projects/project-filter.ts` 머리말).
+ * 격자 맨 앞의 «프로젝트 추가» 카드(파일 머리말). 닫힌 판은 카드 전체가 단추 하나이고, 연 판은 그 자리가 만들기 폼이다 — 여닫기 · 잠금은 훅의
+ * `openCreate` · `closeForm` · `busy` 다(`projects/use-project-commands.tsx` 머리말 «여는 것도 잠근다»).
+ *
+ * **닫히면 포커스를 단추로 돌린다** — 폼이 단추 자리를 대신하므로, 취소 · Esc 로 폼이 DOM 에서 빠지면 포커스가 `body` 로 떨어져 키보드 사람이
+ * 사이드바부터 다시 Tab 해야 한다.
+ */
+function AddCard(props: {
+  open: boolean
+  busy: boolean
+  onOpen: () => void
+  onSubmit: (values: ProjectFormValues) => void
+  onCancel: () => void
+}): ReactElement {
+  const button = useRef<HTMLButtonElement>(null)
+  const wasOpen = useRef(props.open)
+  useEffect(() => {
+    if (wasOpen.current && !props.open) button.current?.focus()
+    wasOpen.current = props.open
+  }, [props.open])
+
+  return (
+    <li className="wb-shell-home-card wb-shell-home-add" data-open={props.open}>
+      {props.open ? (
+        <ProjectForm submitLabel="만들기" busy={props.busy} onSubmit={props.onSubmit} onCancel={props.onCancel} />
+      ) : (
+        // **여는 단추도 잠근다** — 요청 중에는 폼이 이 자리를 대신하고 폼의 «취소» 도 잠겨 지금은 닿지 않는 판이지만, 폼을 요청 중에 닫을 길이
+        // 생기면 이 단추가 눌리는 것처럼 보이면서 훅의 `inFlight` 에 막혀 조용히 아무 일도 안 한다.
+        <button ref={button} className="wb-shell-home-add-button" type="button" disabled={props.busy} onClick={props.onOpen}>
+          {shellIcon('add', 24)}
+          프로젝트 추가
+        </button>
+      )}
+    </li>
+  )
+}
+
+/**
+ * 목록의 카드 하나 — 이름(에디터로) · 역할 표지 · 설명 · 슬러그 · 아래 줄에 멤버 수 · 최근 수정, 그 밑에 «열기» 와 톱니 «설정». 역할 표지는 보이기만
+ * 한다 — 무엇을 열지는 설정 페이지가 역할대로 정한다(`projects/project-filter.ts` 머리말).
  */
 function ProjectRow(props: { project: ProjectListItem; now: number }): ReactElement {
   const { project } = props
@@ -234,7 +274,7 @@ function ProjectRow(props: { project: ProjectListItem; now: number }): ReactElem
     <li className="wb-shell-home-card">
       <div className="wb-shell-home-card-head">
         {/* 버튼이 아니라 링크인 것은 주소가 있는 이동이기 때문이다 — 새 탭으로 열거나
-            주소를 공유할 수 있어야 한다. 카드 전체를 링크로 만들지 않는다 — 안의 «설정» 링크와 겹친다. */}
+            주소를 공유할 수 있어야 한다. 카드 전체를 링크로 만들지 않는다 — 안의 «열기» · «설정» 링크와 겹친다. */}
         <Link className="wb-shell-home-name" to={`/projects/${project.id}`}>
           {project.name}
         </Link>
@@ -255,11 +295,23 @@ function ProjectRow(props: { project: ProjectListItem; now: number }): ReactElem
             {relativeTime(project.updatedAt, props.now)}
           </time>
         </span>
-        {/* **설정은 모든 멤버에게 있다** — owner 가 아니면 설정 페이지가 읽기로만 보인다(지금 테마 · 토큰을 볼 수 있다).
-            글자는 «설정» 하나이고 카드마다 갈리는 이름은 `aria-label` 이 싣는다. */}
-        <Link className="wb-shell-project-settings" to={`/projects/${project.id}/settings`} aria-label={`${project.name} 설정`}>
-          {shellIcon('projectSettings', 14, 'wb-shell-icon-lead')}
-          설정
+      </div>
+      <div className="wb-shell-home-actions">
+        {/* 이름 링크와 같은 곳으로 간다 — 이름은 주소 복사 · 새 탭의 자리로 남고, 누르는 자리는 이 단추다. 보이는 글은 «열기» 하나이고 카드마다
+            갈리는 이름은 `aria-label` 이 싣는다(아래 «설정» 과 같은 꼴). */}
+        <Link className="wb-shell-home-open" to={`/projects/${project.id}`} aria-label={`${project.name} 열기`}>
+          {shellIcon('openProject', 16, 'wb-shell-icon-lead')}
+          열기
+        </Link>
+        {/* **설정은 모든 멤버에게 있다** — owner 가 아니면 설정 페이지가 읽기로만 보인다(지금 테마 · 토큰을 볼 수 있다). 톱니만 남은 단추라 이름은
+            `aria-label` 과 `title` 이 같은 글로 든다(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»). */}
+        <Link
+          className="wb-shell-home-settings"
+          to={`/projects/${project.id}/settings`}
+          aria-label={`${project.name} 설정`}
+          title={`${project.name} 설정`}
+        >
+          {shellIcon('projectSettings', 16)}
         </Link>
       </div>
     </li>

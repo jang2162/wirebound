@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectListItem, SessionUser } from '../../src/api/types'
@@ -67,7 +67,8 @@ describe('프로젝트 목록 화면', () => {
 
     await screen.findByText('관리자 콘솔')
     screen.getByText('고객 포털')
-    expect(within(content()).getAllByRole('listitem')).toHaveLength(2)
+    // 카드 둘 + 맨 앞의 «프로젝트 추가» 카드.
+    expect(within(content()).getAllByRole('listitem')).toHaveLength(3)
     // 양성 대조: 비었을 때의 안내는 비지 않았으면 보이면 안 된다. 이것이 없으면
     // 안내를 늘 그리는 구현도 "비면 안내를 보여준다"를 통과한다.
     expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
@@ -158,7 +159,12 @@ describe('프로젝트 목록 화면', () => {
     // "아직 아무것도 안 그려졌다"를 "로딩을 구분한다"로 잘못 읽는다.
     await screen.findByText(LOADING_NOTICE)
     expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
-    expect(within(content()).queryByRole('listitem')).toBeNull()
+    // 격자에는 «프로젝트 추가» 카드 하나뿐이다 — 프로젝트 카드는 아직 없다.
+    expect(
+      within(content())
+        .getAllByRole('listitem')
+        .map((li) => li.querySelector('.wb-shell-home-name')),
+    ).toEqual([null])
 
     // 양성 대조: 응답이 오면 그때 안내가 나오고 로딩 표시는 사라진다.
     deliver([])
@@ -228,11 +234,14 @@ describe('카드 격자 · 검색 · 거름 · 정렬', () => {
     project({ id: 'p-c', name: '가나 보고서', slug: 'report', role: 'viewer', memberCount: 7, updatedAt: minutesAgo(60 * 24 * 2) }),
   ]
 
-  /** 카드 이름 차례 — 내용 칸의 카드 목록에서. */
+  /** 카드 이름 차례 — 내용 칸의 카드 목록에서. 맨 앞의 «프로젝트 추가» 카드는 이름이 없어 빠진다. */
   function names(): string[] {
     return within(within(content()).getByRole('list', { name: '프로젝트' }))
-      .getAllByRole('listitem')
-      .map((card) => card.querySelector('.wb-shell-home-name')?.textContent ?? '')
+      .queryAllByRole('listitem')
+      .flatMap((card) => {
+        const name = card.querySelector('.wb-shell-home-name')
+        return name === null ? [] : [name.textContent ?? '']
+      })
   }
 
   function card(name: string): HTMLElement {
@@ -269,7 +278,7 @@ describe('카드 격자 · 검색 · 거름 · 정렬', () => {
     fireEvent.change(screen.getByLabelText('검색'), { target: { value: '없는 글자' } })
     expect(screen.getByText('검색 결과가 없습니다')).toBeTruthy()
     expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
-    expect(within(content()).queryByRole('list', { name: '프로젝트' })).toBeNull()
+    expect(names()).toEqual([])
     expect(content().textContent).toContain('프로젝트 3개 중 0개')
   })
 
@@ -322,5 +331,115 @@ describe('카드 격자 · 검색 · 거름 · 정렬', () => {
     })
     await screen.findByText('관리자 콘솔')
     expect(names()).toEqual(['가나 보고서', '고객 포털', '관리자 콘솔'])
+  })
+})
+
+/**
+ * **«프로젝트 추가» 카드 · «열기» · 톱니 설정**(설계 `docs/superpowers/specs/2026-11-02-theme-preview-and-project-cards-design.md` 「프로젝트 목록 카드」).
+ * 추가 카드는 격자 맨 앞에 늘 선다 — 거른 결과 0 · 빈 목록 · 불러오는 중 · 조회 실패에서도. 누르면 그 카드 자리가 만들기 폼이다.
+ * 만들기의 검사 · 오류 · 잠금은 `test/routes/project-crud.test.tsx` 가 잰다.
+ */
+describe('추가 카드 · 열기 · 톱니 설정', () => {
+  const ROWS = [project({ id: 'p-a', name: '관리자 콘솔' }), project({ id: 'p-b', name: '고객 포털', slug: 'portal' })]
+  const ADD = { name: '프로젝트 추가' }
+  /** 빈 목록의 보조 글 — 화면 문안이라 여기 한 번 더 적는다(`EMPTY_NOTICE` 위 주석과 같은 까닭). */
+  const EMPTY_HINT = '«프로젝트 추가» 카드로 첫 프로젝트를 만드세요'
+
+  function grid(): HTMLElement {
+    return within(content()).getByRole('list', { name: '프로젝트' })
+  }
+
+  it('추가 카드가 격자 맨 앞이다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    const [first] = within(grid()).getAllByRole('listitem')
+    expect(within(first!).getByRole('button', ADD)).toBeTruthy()
+    // 추가 단추는 하나뿐이다 — 프로젝트 카드 안에는 없다.
+    expect(within(grid()).getAllByRole('button', ADD)).toHaveLength(1)
+  })
+
+  it('머리에 «새 프로젝트» 단추가 없다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    expect(screen.queryByRole('button', { name: '새 프로젝트' })).toBeNull()
+    expect(document.body.querySelector('.wb-shell-workspace-head')?.querySelector('button')).toBeNull()
+  })
+
+  it('검색 결과 0 에서도 추가 카드가 남고 만들 수 있다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    fireEvent.change(screen.getByLabelText('검색'), { target: { value: '없는 글자' } })
+    expect(within(grid()).getAllByRole('listitem')).toHaveLength(1)
+    fireEvent.click(within(grid()).getByRole('button', ADD))
+    expect(within(grid()).getByLabelText('이름')).toBeTruthy()
+  })
+
+  it('0 개 — 추가 카드와 빈 안내가 함께 서고, 안내는 «새 프로젝트» 단추를 가리키지 않는다', async () => {
+    renderList(async () => [])
+    await screen.findByText(EMPTY_NOTICE)
+    expect(within(grid()).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(grid()).getByRole('button', ADD)).toBeTruthy()
+    const hint = content().querySelector('.wb-shell-home-empty-hint')?.textContent ?? ''
+    expect(hint).toBe(EMPTY_HINT)
+    expect(hint).not.toMatch(/새 프로젝트/)
+  })
+
+  it('조회에 실패해도 추가 카드로 만든다 — 만들면 그 프로젝트로 간다', async () => {
+    const createProject = vi.fn(async () => project({ id: 'p-new', name: '새것' }))
+    renderWithProviders(<App />, {
+      client: fakeApi({
+        me: async () => USER,
+        listProjects: async () => Promise.reject(new ApiError(500, 'internal', SERVER_MESSAGE)),
+        createProject,
+      }),
+      route: '/',
+    })
+    await screen.findByText(SERVER_MESSAGE)
+    fireEvent.click(within(grid()).getByRole('button', ADD))
+    fireEvent.change(within(grid()).getByLabelText('이름'), { target: { value: '새것' } })
+    fireEvent.change(within(grid()).getByLabelText('슬러그'), { target: { value: 'new' } })
+    fireEvent.click(within(grid()).getByRole('button', { name: '만들기' }))
+    await waitFor(() => expect(currentPath()).toBe('/projects/p-new'))
+    expect(createProject).toHaveBeenCalledTimes(1)
+  })
+
+  it('불러오는 중에도 추가 카드로 폼을 연다', async () => {
+    renderList(() => new Promise<ProjectListItem[]>(() => {}))
+    await screen.findByText(LOADING_NOTICE)
+    fireEvent.click(within(grid()).getByRole('button', ADD))
+    expect(within(grid()).getByLabelText('이름')).toBeTruthy()
+  })
+
+  it('누르면 그 카드 자리가 폼이 되고, 닫으면 단추로 돌아와 포커스를 받는다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    fireEvent.click(within(grid()).getByRole('button', ADD))
+    // 연 폼의 첫 칸 포커스는 `test/routes/project-crud.test.tsx` ««프로젝트 추가» 를 누르면 …» 가 잰다.
+    const card = within(grid()).getByLabelText('이름').closest('li')!
+    expect(within(grid()).queryByRole('button', ADD)).toBeNull()
+    fireEvent.click(within(card).getByRole('button', { name: '취소' }))
+    const again = within(grid()).getByRole('button', ADD)
+    expect(document.activeElement).toBe(again)
+  })
+
+  it('카드마다 «<이름> 열기» 는 에디터로 · «<이름> 설정» 은 글자 없는 톱니로 설정에 간다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    for (const row of ROWS) {
+      const open = within(grid()).getByRole('link', { name: `${row.name} 열기` })
+      expect(open.getAttribute('href')).toBe(`/projects/${row.id}`)
+      expect(open.textContent?.trim()).toBe('열기')
+      const gear = within(grid()).getByRole('link', { name: `${row.name} 설정` })
+      expect(gear.getAttribute('href')).toBe(`/projects/${row.id}/settings`)
+      expect(gear.textContent?.trim()).toBe('')
+      expect(gear.getAttribute('title')).toBe(`${row.name} 설정`)
+    }
+  })
+
+  it('«열기» 를 누르면 그 프로젝트로 간다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    fireEvent.click(within(grid()).getByRole('link', { name: '고객 포털 열기' }))
+    await waitFor(() => expect(currentPath()).toBe('/projects/p-b'))
   })
 })

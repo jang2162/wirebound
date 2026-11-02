@@ -26,6 +26,7 @@ import {
   AppWindow,
   AppWindowMac,
   ArrowDown,
+  ArrowUpRight,
   ArrowUp,
   Blocks,
   ChevronDown,
@@ -171,6 +172,8 @@ export const ICONS = {
   viewStates: Layers,
   /** 빈 캔버스 안내(`routes/editor.tsx` 의 `EmptyCanvas`) — 트리에서 페이지를 누르라는 그림. */
   pickPage: MousePointerClick,
+  /** 프로젝트 목록 카드의 «열기» — 에디터로 들어간다(`routes/project-list.tsx`). */
+  openProject: ArrowUpRight,
   /** 빈 프로젝트 목록의 그림(`routes/project-list.tsx`). */
   noProjects: FolderOpen,
   /** 프로젝트 설정의 «멤버» 탭(`routes/settings.tsx`). */

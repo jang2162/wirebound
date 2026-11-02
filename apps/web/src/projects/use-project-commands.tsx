@@ -212,8 +212,12 @@ export function useProjectCommands(): ProjectCommands {
   /**
    * 폼을 닫는다. **잠그지 않는다** — 닫는 것은 요청이 나가 있는 동안에도 안전하고, 잠그면
    * 사용자가 폼을 못 닫는다. 나간 요청은 그대로 진행되고 성공하면 재조회가 목록을 맞춘다.
+   *
+   * **조작 실패(`failure`)를 함께 걷는다** — 그 실패를 내는 조작은 이 폼의 제출(`submitForm`) 하나라, 폼을 닫은 뒤 남은 알림은 사라진 폼의
+   * 문장이다. 조회 실패(`state.failure`)는 다른 상태라 건드리지 않는다. 폼이 아닌 조작을 `run` 으로 더하면 이 걷기를 그 실패와 가른다.
    */
   function closeForm(): void {
+    setFailure(null)
     setForm(null)
   }
 
