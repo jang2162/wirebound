@@ -1,12 +1,27 @@
+import type { ExamplePageId } from '@wirebound/theme-gallery'
 import type { TokenDecl } from '@wirebound/theme-sdk'
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
-import { EVENTS_PATH, PROJECT_PATH, type FrameReady, type FrameState, type ProjectState } from './protocol'
+import {
+  EVENTS_PATH,
+  PROJECT_PATH,
+  type FramePage,
+  type FrameReady,
+  type FrameState,
+  type PreviewView,
+  type ProjectState,
+} from './protocol'
 
 /** 뷰포트 프리셋(px). 프레임 iframe 의 폭이 되어 테마의 `@media` · `vw` 가 그 폭으로 판정된다(spec 「캔버스 iframe」과 같은 까닭). */
 const VIEWPORT_PRESETS = [1920, 1440, 1280, 1024, 768, 375] as const
 
 type Values = Record<string, string | number>
+
+/** 보기 전환 — 웹의 테마 미리보기와 같은 말. */
+const VIEWS: readonly { id: PreviewView; label: string }[] = [
+  { id: 'components', label: '컴포넌트' },
+  { id: 'examples', label: '예제 페이지' },
+]
 
 function TokenField(props: {
   name: string
@@ -64,9 +79,13 @@ function Shell(): ReactElement {
   const [width, setWidth] = useState<number>(1280)
   const [overlay, setOverlay] = useState(false)
   const [values, setValues] = useState<Values>({})
+  const [view, setView] = useState<PreviewView>('components')
+  /** 예제의 장 목록 — 프레임이 준비 신호에 싣는다(`FrameReady` 머리말). 첫 장이 처음 장이다. */
+  const [pages, setPages] = useState<FrameReady['pages']>([])
+  const [page, setPage] = useState<ExamplePageId>('dashboard')
   const frame = useRef<HTMLIFrameElement>(null)
-  const latest = useRef<Omit<FrameState, 'type'>>({ tokens: values, overlay })
-  latest.current = { tokens: values, overlay }
+  const latest = useRef<Omit<FrameState, 'type'>>({ tokens: values, overlay, view, page })
+  latest.current = { tokens: values, overlay, view, page }
 
   const send = useCallback(() => {
     frame.current?.contentWindow?.postMessage({ type: 'wb-state', ...latest.current } satisfies FrameState, '*')
@@ -83,13 +102,22 @@ function Shell(): ReactElement {
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (event.source === frame.current?.contentWindow && (event.data as FrameReady | null)?.type === 'wb-frame-ready') send()
+      if (event.source !== frame.current?.contentWindow) return
+      const data = event.data as FrameReady | FramePage | null
+      if (data?.type === 'wb-frame-ready') {
+        setPages(data.pages)
+        // 첫 장이 처음 장 — 목록에 없는 장이면(갤러리가 장을 바꿈) 첫 장으로.
+        setPage((prev) => (data.pages.some((one) => one.id === prev) ? prev : (data.pages[0]?.id ?? prev)))
+        send()
+      }
+      // 예제 안의 이동 — 장 이름 줄이 따라간다. 프레임은 이미 그 장을 그렸다.
+      if (data?.type === 'wb-page') setPage(data.page)
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
   }, [send])
 
-  useEffect(send, [values, overlay, send])
+  useEffect(send, [values, overlay, view, page, send])
 
   const manifest = project.manifest
   const items = Object.entries(manifest?.tokens.items ?? {})
@@ -123,6 +151,23 @@ function Shell(): ReactElement {
         <button type="button" disabled={Object.keys(values).length === 0} onClick={() => setValues({})}>
           전체 기본값
         </button>
+        <span role="radiogroup" aria-label="미리보기 보기" className="views">
+          {VIEWS.map((one) => (
+            <label key={one.id}>
+              <input data-wb-view={one.id} type="radio" name="wb-view" checked={view === one.id} onChange={() => setView(one.id)} />{' '}
+              {one.label}
+            </label>
+          ))}
+        </span>
+        {view === 'examples' && (
+          <nav aria-label="예제 페이지" className="pages">
+            {pages.map((one) => (
+              <button key={one.id} type="button" aria-current={one.id === page ? 'page' : undefined} onClick={() => setPage(one.id)}>
+                {one.title}
+              </button>
+            ))}
+          </nav>
+        )}
       </header>
       <aside>
         {project.issues.length > 0 && (
@@ -151,7 +196,7 @@ function Shell(): ReactElement {
         })}
       </aside>
       <main>
-        <iframe ref={frame} title="갤러리" src="/frame.html" style={{ width: `${width}px` }} />
+        <iframe ref={frame} title="미리보기" src="/frame.html" style={{ width: `${width}px` }} />
       </main>
     </div>
   )

@@ -8,6 +8,8 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { chromium } from 'playwright-core'
+import { galleryItems } from '@wirebound/theme-gallery'
+import { defineTheme, type ThemeManifest } from '@wirebound/theme-sdk'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 const repoRoot = process.cwd()
@@ -47,6 +49,7 @@ interface Report {
     pngs: string[]
     pageHeight: number
     consoleErrors: string[]
+    frame: { items: number; groups: number; examples: number }
     wbErrors: { item: string | null; message: string }[]
     overflow: { item: string | null; element: string; left: number; right: number }[]
     wrapped: { item: string | null; element: string; lines: number }[]
@@ -132,6 +135,18 @@ describe.skipIf(browser.path === null)('wb-theme shots (실 Chromium)', () => {
     }
     // 종료 코드는 넘침 · 꺾임까지 센다 — 둘 다 없으면 0 이다.
     expect(status).toBe(report.widths.every((w) => w.overflow.length === 0 && w.wrapped.length === 0) ? 0 : 1)
+  })
+
+  it('shots 는 목록 판을 잰다 — 연 프레임에 그룹 머리 · 예제가 없고 칸 수가 galleryItems 수다', async () => {
+    const root = mkdtempSync(join(TMP, 'shots-list-'))
+    cpSync(FIXTURE, root, { recursive: true })
+    const dir = join(out, 'list')
+    const { out: printed } = shots(root, ['--out', dir, '--widths', '720', '--browser', browser.path!])
+    const [w] = (JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as Report).widths
+    const { default: manifest } = (await import(/* @vite-ignore */ join(FIXTURE, 'theme.config.ts'))) as { default: ThemeManifest }
+    expect(w!.frame).toEqual({ items: galleryItems(defineTheme({ manifest, views: {} })).length, groups: 0, examples: 0 })
+    expect(w!.frame.items).toBeGreaterThan(50)
+    expect(printed).not.toContain('목록 판 갤러리가 아닙니다')
   })
 
   /** 그리드 잣대 셋이 0 만 내지 않는가 — 한 곳씩 깬 테마 CSS(고정 열의 `left` 를 걷음 · 표를 제 상자로 굴림 · 좁게 고정한 칸에 줄 안 바꾸는 글). */
