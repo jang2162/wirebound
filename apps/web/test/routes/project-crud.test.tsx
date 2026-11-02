@@ -67,14 +67,17 @@ const type = (label: string, value: string): void => {
   fireEvent.change(field(label), { target: { value } })
 }
 
+/** 여는 단추 — 격자 맨 앞의 «프로젝트 추가» 카드(`routes/project-list.tsx` 의 `AddCard`). */
+const ADD = { name: '프로젝트 추가' }
+
 async function openCreateForm(): Promise<void> {
   await screen.findByText('관리자 콘솔')
-  fireEvent.click(screen.getByRole('button', { name: '새 프로젝트' }))
+  fireEvent.click(screen.getByRole('button', ADD))
   await screen.findByLabelText('이름')
 }
 
 describe('프로젝트 만들기', () => {
-  it('새 프로젝트를 누르면 폼이 열리고 포커스가 첫 필드로 간다', async () => {
+  it('«프로젝트 추가» 를 누르면 폼이 열리고 포커스가 첫 필드로 간다', async () => {
     renderCrud()
     await openCreateForm()
 
@@ -258,7 +261,8 @@ describe('프로젝트 만들기', () => {
   })
 
   it('요청이 나가 있는 동안 여는 버튼과 제출이 잠긴다', async () => {
-    // **여는 것도 잠긴다** — 제출만 잠그고 여는 쪽을 빠뜨리면 요청이 나가 있는 동안 폼이 다시 열린다.
+    // **여는 것도 잠긴다** — 제출만 잠그고 여는 쪽을 빠뜨리면 요청이 나가 있는 동안 폼이 다시 열린다. 폼이 여는 단추(«프로젝트 추가») 자리를
+    // 대신하고 폼의 «취소» 도 요청 중에 잠기므로, 요청이 나가 있는 동안 여는 단추는 화면에 없다.
     let release = (): void => {}
     const gate = new Promise<void>((resolve) => {
       release = resolve
@@ -275,8 +279,10 @@ describe('프로젝트 만들기', () => {
     type('슬러그', 'portal')
     fireEvent.click(screen.getByRole('button', { name: '만들기' }))
 
-    // 요청이 나가 있는 동안: 여는 버튼이 비활성이다.
-    await waitFor(() => expect(screen.getByRole('button', { name: '새 프로젝트' })).toHaveProperty('disabled', true))
+    // 요청이 나가 있는 동안: 제출 · 취소가 비활성이고 여는 단추가 없다.
+    await waitFor(() => expect(screen.getByRole('button', { name: '만들기' })).toHaveProperty('disabled', true))
+    expect(screen.getByRole('button', { name: '취소' })).toHaveProperty('disabled', true)
+    expect(screen.queryByRole('button', ADD)).toBeNull()
 
     release()
     await waitFor(() => expect(h.createProject).toHaveBeenCalledTimes(1))
@@ -323,9 +329,14 @@ describe('통합 — 한 화면에서 이어서', () => {
     for (const row of rows) {
       expect(screen.queryByRole('button', { name: `${row.name} 삭제` }), row.role).toBeNull()
     }
-    expect(within(cards()).queryAllByRole('button')).toEqual([])
-    // 링크는 역할과 무관하게 줄마다 둘(이름 · 설정)이다 — 읽기는 viewer도 된다. 카드 목록 안에서 센다 — 사이드바에도 링크 목록이 있다.
-    expect(within(cards()).getAllByRole('link')).toHaveLength(6)
+    // 격자의 단추는 맨 앞 «프로젝트 추가» 하나뿐이다.
+    expect(
+      within(cards())
+        .queryAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['프로젝트 추가'])
+    // 링크는 역할과 무관하게 줄마다 셋(이름 · 열기 · 설정)이다 — 읽기는 viewer도 된다. 카드 목록 안에서 센다 — 사이드바에도 링크 목록이 있다.
+    expect(within(cards()).getAllByRole('link')).toHaveLength(9)
   })
 
   it('조회 실패와 조작 실패가 각자 자리에 나온다', async () => {
@@ -367,14 +378,14 @@ describe('통합 — 한 화면에서 이어서', () => {
       within(main()).queryAllByRole('textbox').length +
       within(main()).queryAllByRole('link').length
 
-    // 닫힌 상태: 링크 2(이름 · 설정) + 새 프로젝트 1 = 3. 줄의 삭제는 설정 페이지의 위험 구역으로 옮겨 갔다(`settings/danger-section.tsx`).
+    // 닫힌 상태: 링크 3(이름 · 열기 · 설정) + 프로젝트 추가 1 = 4. 줄의 삭제는 설정 페이지의 위험 구역으로 옮겨 갔다(`settings/danger-section.tsx`).
     // 이 케이스가 재는 것은 *"열면 늘고 닫으면 되돌아온다"*이고, 바탕 수는 이 화면의 정지점을 셀 뿐이다.
     const closed = stops()
-    expect(closed).toBe(3)
+    expect(closed).toBe(4)
 
-    fireEvent.click(screen.getByRole('button', { name: '새 프로젝트' }))
-    // 폼: 입력 3 + 만들기·취소 2
-    expect(stops()).toBe(closed + 5)
+    fireEvent.click(screen.getByRole('button', ADD))
+    // 폼이 여는 단추 자리를 대신한다: 입력 3 + 만들기·취소 2 − 프로젝트 추가 1
+    expect(stops()).toBe(closed + 4)
     fireEvent.click(screen.getByRole('button', { name: '취소' }))
     expect(stops()).toBe(closed)
   })
