@@ -3,3 +3,6 @@ export { GALLERY_SAMPLE_IMAGE, GALLERY_SAMPLES, galleryAssetUrl, PLACEHOLDER_SET
 export type { GalleryGroup, GalleryItem, GalleryLayout } from './gallery'
 export { galleryGroups, galleryItemDocument, galleryItems, ThemeGallery } from './gallery'
 export { GalleryOverlay } from './overlay'
+export type { ExamplePage, ExamplePageId, ExamplePopup } from './examples/documents'
+export { EXAMPLE_LAYOUT, EXAMPLE_PAGES, EXAMPLE_POPUPS } from './examples/documents'
+export { missingExample, ThemeExamples } from './examples/theme-examples'
