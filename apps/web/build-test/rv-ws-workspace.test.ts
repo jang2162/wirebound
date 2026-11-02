@@ -163,7 +163,9 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
         await page.keyboard.press('Tab')
         stops.push((await focused(page)).text)
       }
-      expect(stops).toEqual(['프로젝트', '계정', '사용자', '초대 링크', '프로젝트', '테마', '기록', '로그아웃', '새 프로젝트'])
+      // 로그아웃 다음은 내용 칸의 첫 정지점 — 위 줄의 검색 칸(글 없는 입력)이다. 머리에 단추가 없다(만들기는 격자 맨 앞의 «프로젝트 추가» 카드).
+      expect(stops).toEqual(['프로젝트', '계정', '사용자', '초대 링크', '프로젝트', '테마', '기록', '로그아웃', ''])
+      expect(await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.type)).toBe('search')
 
       await toggle.focus()
       await page.keyboard.press('Space')
@@ -288,7 +290,8 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
           text: input?.value ?? null,
           role: selects[0] ?? null,
           sort: selects[1] ?? null,
-          cards: main.querySelectorAll('.wb-shell-home-card').length,
+          // 프로젝트 카드만 센다 — 격자 맨 앞의 «프로젝트 추가» 카드는 늘 선다.
+          cards: main.querySelectorAll('.wb-shell-home-card:not(.wb-shell-home-add)').length,
           count: main.querySelector('.wb-shell-home-count')?.textContent ?? null,
           noMatch: main.textContent?.includes('검색 결과가 없습니다') ?? false,
           empty: main.textContent?.includes('참여 중인 프로젝트가 없습니다') ?? false,
@@ -375,7 +378,7 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
 
   /**
    * **한글 조합**을 CDP `Input.imeSetComposition`(조합 세움) · `Input.insertText`(조합 끝냄)로 세운다(`AGENTS.md` «한글 조합 중의 키는 CDP …»).
-   * 대조군 둘 — 같은 걸음을 (가) 화면에 꽂은 맨 `<input>` 과 (나) 같은 화면의 «새 프로젝트» 폼 «이름» 칸(값을 컴포넌트 상태가 든다)에도 친다.
+   * 대조군 둘 — 같은 걸음을 (가) 화면에 꽂은 맨 `<input>` 과 (나) 같은 화면의 «프로젝트 추가» 카드 폼 «이름» 칸(값을 컴포넌트 상태가 든다)에도 친다.
    * 셋째로 검색 칸에 영문을 한 글자씩 빠르게 친다.
    */
   it('한글 조합 — 대조군(맨 입력 · 상태가 든 입력)과 검색 칸(주소가 든 입력)의 칸 값 · 주소를 적는다', async () => {
@@ -417,8 +420,8 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
       const plain = await compose(page.locator('#rv-ws-plain'))
       await page.evaluate(() => document.getElementById('rv-ws-plain')!.remove())
 
-      // (나) 상태가 든 입력 — «새 프로젝트» 폼의 «이름».
-      await page.getByRole('button', { name: '새 프로젝트' }).click()
+      // (나) 상태가 든 입력 — «프로젝트 추가» 카드 폼의 «이름».
+      await page.getByRole('button', { name: '프로젝트 추가', exact: true }).click()
       const nameBox = page.locator('.wb-shell-project-form').getByLabel('이름')
       const stateful = await compose(nameBox)
       await page.getByRole('button', { name: '취소' }).click()
