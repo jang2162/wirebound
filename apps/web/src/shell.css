@@ -5384,43 +5384,32 @@
   padding: 8px 12px;
 }
 
-/* 보기 전환 — 라디오 둘을 붙인 단추 꼴. 라디오는 눈에서만 감추고(포커스 · 키는 그대로) 고른 쪽을 강조 바탕으로. */
+/* 보기 전환 — 라디오 둘. 고른 쪽 라벨은 강조(`-on` — 셸 격리 규칙이 `:has()` · 결합자를 막아 React 가 클래스를 단다). */
 .wb-shell-settings-preview-views {
   display: inline-flex;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 6px;
-  overflow: hidden;
+  gap: 4px;
 }
 
 .wb-shell-settings-preview-view {
-  position: relative;
-  padding: 4px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  padding: 4px 10px;
   font-size: 13px;
   white-space: nowrap;
   cursor: pointer;
 }
 
-.wb-shell-settings-preview-view + .wb-shell-settings-preview-view {
-  border-left: 1px solid var(--wb-shell-line);
-}
-
-.wb-shell-settings-preview-view:has(input:checked) {
+.wb-shell-settings-preview-view-on {
   background: #eaf1fe;
   font-weight: 600;
   color: var(--wb-shell-accent);
 }
 
-.wb-shell-settings-preview-view:has(input:focus-visible) {
-  outline: 2px solid var(--wb-shell-accent);
-  outline-offset: -2px;
-}
-
-.wb-shell-settings-preview-view input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
+.wb-shell-settings-preview-radio {
   margin: 0;
-  opacity: 0;
+  accent-color: var(--wb-shell-accent);
 }
 
 /* 장 이름 줄 — 지금 장은 `aria-current`. */

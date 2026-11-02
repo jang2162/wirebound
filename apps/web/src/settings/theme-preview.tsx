@@ -87,8 +87,20 @@ export function ThemePreview(props: {
       <div className="wb-shell-settings-preview-head">
         <div className="wb-shell-settings-preview-views" role="radiogroup" aria-label="미리보기 보기">
           {VIEWS.map((one) => (
-            <label key={one.id} className="wb-shell-settings-preview-view">
-              <input type="radio" name={viewsName} value={one.id} checked={view === one.id} onChange={() => setView(one.id)} />
+            <label
+              key={one.id}
+              className={
+                view === one.id ? 'wb-shell-settings-preview-view wb-shell-settings-preview-view-on' : 'wb-shell-settings-preview-view'
+              }
+            >
+              <input
+                className="wb-shell-settings-preview-radio"
+                type="radio"
+                name={viewsName}
+                value={one.id}
+                checked={view === one.id}
+                onChange={() => setView(one.id)}
+              />
               {one.label}
             </label>
           ))}
