@@ -25,6 +25,23 @@ L3(문턱 높이의 깜빡임)은 손대지 않았다(이월).
   흉내 냈다.
 - **M2c**(새) — 390 에서 «토큰 저장» 이 성공하면 «토큰을 저장했습니다» 가 창 안이다(M2 의 «저장 문장» 갈래 — 리뷰 케이스에 없었다).
 
+### 2단계 — main 합치기
+
+`git merge main`(트랙 C `77041409`) → 커밋 `ad5bc186`. **충돌 없이 git 이 셋을 조용히 합쳤다**(`apps/web/src/shell.css` ·
+`docs/superpowers/specs/2026-08-03-wirebound-design.md` · `apps/web/build-test/rv-ws-workspace.test.ts`). 셋 다 «양쪽이 바꾼 줄이 합친 판에 글자
+그대로 들었나» 를 쟀다 — 합친 판 대 main 의 바뀐 줄(`+`/`-`)이 기준 `88c4505d` 대 이 브랜치의 바뀐 줄과 같고(md5), 합친 판 대 이 브랜치의 바뀐 줄이
+기준 대 main 의 바뀐 줄과 같다. 셋 다 «같음». 합친 판을 커밋 전에 `pnpm typecheck` 로 쟀다(rc 0).
+
+**파일 수의 등식**(`git ls-tree` 로 프로젝트마다 include 글롭을 센 것 — 실행 수는 «게이트»):
+
+| 프로젝트 | 기준 `88c4505d` | + C | + P | = | 합친 판 |
+| --- | --- | --- | --- | --- | --- |
+| unit | 170 | 0 | 1 | 171 | 171 |
+| api | 181 | 0 | 0 | 181 | 181 |
+| web | 228 | 0 | 1 | 229 | 229 |
+| build(`test:build:serial`) | 18 | 0 | 0 | 18 | 18 |
+| 실브라우저(`apps/web/build-test/**` — `export-bundle` 포함 글롭) | 102 | 2 | 4 | 108 | 108 |
+
 ## 결정과 이유
 
 - **M2 는 «답이 서면 그 자리를 창 안으로» 를 골랐다(답을 탭 줄 곁으로 옮기지 않았다).** 처음에 답 셋을 탭 줄 바로 밑으로 옮겨 봤는데, 그러면
@@ -71,3 +88,72 @@ L1 `got 2`(탭) · M2b `expected 863 to be less than 844` · M2c `expected 879 t
 
 X6 첫 판은 찾는 글이 포매터가 접은 꼴과 달라 «안 돎: 맞은 수 0» 이었다 — 찾는 글을 접힌 꼴로 고쳐 혼자 다시 돌렸다.
 «다른 탭의 422» 는 390 의 문장 자리를 M2b 에 맡긴다(그 축의 주인 — 케이스 안 주석). 그 케이스를 혼자 죽이는 변조는 리뷰의 P2(사유 탭 `aria-label` 뗌)다 — 이번에 다시 돌리지 않았다(그 케이스의 단언은 1280 · 390 에서 그대로다).
+
+## 게이트
+
+node v24.21.0(판마다 상태 파일 첫 줄). 잠듦: `pmset -g log` 의 마지막 ` Sleep ` 은 09:35 — 이 작업(15:08 – 18:12)과 안 겹친다. 15 코어 · load 문턱 45.
+끝에 이 워크트리의 vitest · vite · tsx · Chrome 0(남은 것은 codegraph MCP 뿐) · `gate-slots/pv` 지움.
+
+### 1단계(고친 소스 `df1c5aa0` 의 작업 트리)
+
+| 무엇 | 시각 · load | 결과 |
+| --- | --- | --- |
+| `pnpm typecheck` | 15:29 · 52 | rc 0 |
+| `pnpm vitest run --project web --maxWorkers=25%` | 15:29 – 15:37 · 52 → 52 | rc 1 — 229 파일 · 3566 통과 · 6 실패 · 1 건너뜀. **실패 6 은 모두 `STACK_TRACE_ERROR`**(시간 한도) |
+| ↳ 그 6 파일 혼자(`--maxWorkers=1`) | 15:37 · 60 → 71 | 80 케이스 중 78 통과 · `theme-chooser` 둘이 또 5s 한도 |
+| ↳ `theme-chooser` 혼자 `--testTimeout=30000` | 15:38 · 74 → 69 | 17/17 — 그 케이스 417ms(앞 판 5436ms) |
+| 실브라우저 `rv-pv-preview` | 15:15 – 15:19 | 9/9 |
+| 실브라우저 `rv-pv-themes` · `rv-pv-canvas-popup` · `popup-layer` · `theme-preview` | 15:18 – 15:19 · 28 → 43 | 6 · 7 · 20 · 5 — 38/38 |
+| `pnpm lint` · `oxfmt --check`(바꾼 파일) | 15:27 | rc 0 · 0 |
+
+### 2단계(합친 판 `ad5bc186`)
+
+| 무엇 | 시각 · load | 결과 · 실행 · 건너뜀 |
+| --- | --- | --- |
+| 합친 직후 `pnpm typecheck`(커밋 전) | 15:41 | rc 0 |
+| `pnpm typecheck` | 15:56 – 15:57 · ≤ 45(앞 13 분은 load 103 → 기다림) | rc 0 |
+| `pnpm build` | 15:57 – 15:58 | rc 0 |
+| `pnpm test --maxWorkers=25%` | 16:33 – 16:41 · 38 → 33 | rc 1 — **안 잰 판(api)**: `[vitest-worker]: Timeout calling "onTaskUpdate"` 로 **api 0 파일**. unit 171 파일 · 2724 실행 / web 229 파일 · 3585 실행 · 실패 2(`lock-ops-identity` · `lock-zones` — 둘 다 `STACK_TRACE_ERROR`) · 건너뜀 1 |
+| ↳ `pnpm vitest run --project api` | 17:29 – 17:43 · 44 → 27 | rc 0 — **181 파일 · 2758 통과 · 건너뜀 2** |
+| ↳ schema 둘 혼자 | 17:46 · 31 | 27/27 |
+| `pnpm test:build:serial` | 16:41 – 16:46 · 33 → 62 | rc 1 — **안 잰 판**: 같은 RPC 시간 초과로 16 파일 중 1(`theme-kit` `shots` 12/12)만 |
+| ↳ 다시 | 17:43 – 17:46 · 27 → 31 | rc 1 — 또 `shots` 12/12 뒤 같은 RPC 시간 초과(load 30 판에서도 — RB-WS 보고와 같은 꼴) |
+| ↳ `shots` 를 뺀 15 파일 | 17:51 – 18:07 · 19 → 21 | rc 1 — 111 통과 · 26 실패 · 7 건너뜀. 실패는 `screen-chromium` 14 · `screen-sandbox-review` 12(«한글 글꼴을 확인하지 못했습니다: N ms 안에 답이 없습니다» · 글꼴 · 준비 한도) · `export-bundle` 판 세우기(`page.goto` 30s) |
+| ↳ 그 셋 혼자 | 18:07 – 18:11 · 20 → 63 → 35 | `screen-sandbox-review` 13/13 · `export-bundle` 6/6 · `screen-chromium` 32/34(첫 두 케이스가 10s 글꼴 한도 — 그 순간 load 63) |
+| ↳ `screen-chromium` 다시 혼자 | 18:11 – 18:12 · 29 → 23 | **34/34** |
+| ↳ 끊긴 판이 모으지 못한 둘(`packages/exporter/build-test/runtime-dist.test.ts` · `system-themes/admin/build-test/bundle-views.test.tsx`) | 18:13 · 18 → 35 | **22/22** |
+| `pnpm test:browser` | 16:46 – 17:26 · 62 → 50 | rc 1 — 107 파일 · 691 통과 · 3 실패 · 11 건너뜀 + `tree-drag` 판 세우기(`page.goto` 30s). 실패: `file-attach-narrow`(`+0 ≠ 3`) · `multiselect` · `tree-drag-review` |
+| ↳ 그 넷 혼자 | 17:46 – 17:49 · 31 → 40 | **61/61** |
+
+`screen-*` · `export-bundle` · `file-attach-narrow` · `multiselect` · `tree-*` 은 두 트랙이 안 건드린 영역이다 — `git diff --stat 88c4505d HEAD -- apps/api
+packages/exporter packages/renderer packages/theme-sdk packages/themes` 가 빈다. 합친 판에서 값으로 남은 실패는 0 이다.
+
+**실행 파일 수와 등식:** unit 171 · web 229 · api 181(다시 돈 판) · build 18(`shots` 1 + 15 + 2 — 끊긴 판의 json 은 16 파일만 실어 둘을 놓쳤다;
+git 글롭으로 센 18 과 견줘 찾았다) · 실브라우저 107(`export-bundle` 은 serial 몫이라 글롭 108 − 1). 위 «파일 수의 등식» 표의 합친 판과 같다.
+
+## 남은 것
+
+| 무게 | 무엇 | 왜 남나 |
+| --- | --- | --- |
+| 낮음 | L3 문턱 높이(726)에서 창을 끌 때 예제가 폭마다 두 번 그려진다(깜빡임 · 고리 아님) | 브리프가 이월로 정했다 — 손대지 않음 |
+| 낮음 | M1b 판은 «틀 밑에 내용이 더 있는 화면» 을 바깥 칸의 아래 여백으로 흉내 낸다 | 설정 › 테마는 틀이 맨 끝이고 높이가 창에 묶여(390 에서 끝까지 굴려도 틀 위 끝 265) 틀 위 끝이 창 밖으로 나갈 길이 없다. 관리자 › 테마에서 틀 밑에 내용이 있는지는 재지 않았다 |
+| 낮음 | 저장의 답을 굴리는 장치는 jsdom 케이스가 없다 | jsdom 은 좌표가 0 이라 굴릴 것이 없다 — 실브라우저 M2 · M2b · M2c 가 잰다 |
+
+못 잰 것: 세로 모니터(1080×1920)의 H1 판은 다시 재지 않았다 — 케이스(1280×1500)와 같은 까닭(덮개가 앞 장 높이로 남음)을 같은 장치가 닫는다.
+
+## 지침
+
+1. **빈 것:** 공용 `common-w15.md` 는 «`pnpm test` 는 `--maxWorkers=25%`» 를 적지만 web 프로젝트 영역 게이트도 load 50 이상에서는 25% 로도 시간 초과가
+   난다(이번 1단계: 6 파일 `STACK_TRACE_ERROR` · 혼자 다시 돌려 4 초록 · `theme-chooser` 는 한 일꾼에서도 5s 한도에 걸려 `--testTimeout=30000` 으로
+   17 초록 — 같은 케이스 5436ms → 417ms). 이미 `.ruler/30-delegation.md` «변이마다 전량을 돌리게 하지 않는다» 문단이 «web 프로젝트 하나도 같다» 로
+   적고 있어 새 문장은 필요 없다 — 다만 «혼자 다시 돌려도 load 가 높으면 같은 한도에 또 걸린다» 가 빠져 있다.
+   **어디:** `.ruler/30-delegation.md` 같은 문단의 «… 시간 한도(`STACK_TRACE_ERROR`)로 죽는다» 뒤.
+   **넣을 문장:** «혼자 다시 돌린 판도 load 가 높으면 기본 한도(5s)에 또 걸린다 — 그때는 `--testTimeout=30000` 으로 한 번 더 돌려 케이스 시간을
+   적고(한도의 몇 분의 일인지), 그 수로 «부하» 와 «느려진 코드» 를 가른다.»
+2. **빈 것:** 변조 스크립트가 찾는 글을 소스에서 옮겨 적을 때 포매터가 접은 꼴(JSX 속성이 줄을 넘으면 한 줄에 하나)을 놓쳐 «맞은 수 0» 이 났다.
+   «맞은 수 1 확인» 은 이미 지침에 있다(`.ruler/30-delegation.md` «글자로 찾아 바꾸는 변조는 코드 자리를 고른다»). 새 문장 없음 — 그 장치가 제 몫을 했다.
+3. **빈 것:** RPC 시간 초과로 끊긴 `test:build:serial` 판의 json 은 **모은 파일 전부를 싣지 않는다** — 18 파일 프로젝트에서 16 만 실었다(1 돎 · 15 «안 돎»).
+   그 16 으로 «나머지» 목록을 지어 다시 돌리면 두 파일(`runtime-dist` · `bundle-views`)이 아무 경고 없이 빠진다.
+   **어디:** `.ruler/30-delegation.md` 의 «`pnpm test:build:serial` 도 같은 시간 초과로 첫 파일 뒤에 멈춘다 …» 문장 뒤.
+   **넣을 문장:** «끊긴 판에서 «남은 파일» 을 골라 다시 돌릴 때는 그 판의 json 이 아니라 프로젝트 include 글롭(`git ls-files` 에 같은 글롭)으로 목록을
+   짓는다 — 끊긴 판의 json 은 모은 파일 일부만 싣는다(18 중 16 — `docs/superpowers/plans/2026-11-02-fx-pv-report.md` «게이트»).»
