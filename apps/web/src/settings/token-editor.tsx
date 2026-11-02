@@ -15,8 +15,13 @@
  *   곧 서버 값이다(이 편집기가 바인딩을 넘긴 경우만 — `resetting`).
  * - owner 가 아니면 칸이 읽기 전용이고 저장 · «기본값으로» 가 없다 — 미리보기는 지금 값으로 선다.
  * - 저장하지 않은 초안을 두고 페이지를 떠나는 것은 막지 않는다.
+ *
+ * **배치** — 토큰 칸이 위, 미리보기가 그 아래에서 내용 칸 폭을 다 쓴다. 무리(`tokens.groups` · «기타»)가 **탭**이고 고른 탭의 칸만 보인다 — 칸은
+ * 폭에 맞춘 여러 열 격자다. 탭 줄 오른쪽에 «전부 기본값으로» · «토큰 저장» 이 늘 보인다. 안 고른 탭의 칸은 지우지 않고 `hidden` 이다(칸에
+ * 반쯤 친 값이 탭을 오가도 남는다 — 설정 탭과 같은 까닭 · `routes/settings.tsx` 머리말). **사유가 있는 칸이 든 탭은 이름에 표지가 선다** — 안
+ * 보이는 탭의 칸이 저장을 끈 까닭이 숨지 않게(접근 이름에도 «고칠 칸 있음» 이 든다).
  */
-import { useEffect, useId, useMemo, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
 import type { ThemeManifest, TokenDecl } from '@wirebound/theme-sdk'
 import { migrateTokens, tokensCss } from '@wirebound/themes'
 import { ApiError } from '../api/client'
@@ -31,6 +36,8 @@ const STALE = '다른 사람이 먼저 저장했습니다 — 지금 값을 다�
 const dropNotice = (count: number): string => `바꾼 판으로 옮기지 못한 토큰 ${count} 개의 초안을 버렸습니다`
 /** 무리 없는 키 · 선언에 없는 무리를 모으는 자리. */
 const OTHER_GROUP = '기타'
+/** 사유가 있는 칸이 든 탭의 접근 이름에 붙는 말. */
+const TAB_TROUBLE = '고칠 칸 있음'
 
 type Draft = Record<string, string | number>
 
@@ -97,6 +104,9 @@ export function TokenEditor(props: {
   const held = useRef(view)
   /** 이 편집기가 바인딩을 넘겼다(제 저장 · «서버 값으로») — 다음 바인딩에서 초안이 서버 값으로 선다. */
   const resetting = useRef(false)
+  /** 고른 탭 — 무리 id(«기타» 는 빈 글자). 없으면 첫 탭. */
+  const [tab, setTab] = useState<string | null>(null)
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
   // 바인딩이 바뀌면 초안이 새 바탕에서 다시 서되, 저장 안 한 칸은 옮겨 얹는다(머리말 «바인딩이 바뀌어도»).
   useEffect(() => {
@@ -180,6 +190,35 @@ export function TokenEditor(props: {
   }
 
   const groups = groupsOf(manifest)
+  // 고른 탭이 새 선언에 없으면(판을 옮김) 첫 탭이다.
+  const shown = groups.find((group) => group.id === tab) ?? groups[0]
+  const tabKey = (id: string) => id || OTHER_GROUP
+
+  function chooseTab(at: number, focus: boolean): void {
+    const group = groups[at]
+    if (group === undefined) return
+    setTab(group.id)
+    if (focus) tabRefs.current[tabKey(group.id)]?.focus()
+  }
+
+  function onTabKey(event: KeyboardEvent<HTMLDivElement>): void {
+    const at = groups.findIndex((group) => group === shown)
+    const last = groups.length - 1
+    const to =
+      event.key === 'ArrowRight'
+        ? (at + 1) % groups.length
+        : event.key === 'ArrowLeft'
+          ? (at + last) % groups.length
+          : event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? last
+              : null
+    if (to === null) return
+    event.preventDefault()
+    chooseTab(to, true)
+  }
+
   // 미리보기는 초안으로 선다 — 읽기 전용이면 초안이 곧 지금 값이다.
   return (
     <div className="wb-shell-settings-tokens" role="group" aria-labelledby={heading}>
@@ -192,9 +231,65 @@ export function TokenEditor(props: {
             {dropped}
           </p>
         )}
-        {groups.map((group) => (
-          <fieldset key={group.id || OTHER_GROUP} className="wb-shell-settings-token-group">
-            <legend className="wb-shell-settings-legend">{group.label}</legend>
+        <div className="wb-shell-settings-token-bar">
+          <div
+            className="wb-shell-settings-token-tabs"
+            role="tablist"
+            aria-label="토큰 무리"
+            aria-orientation="horizontal"
+            onKeyDown={onTabKey}
+          >
+            {groups.map((group, at) => {
+              const troubled = group.keys.some((key) => Object.hasOwn(problems, key))
+              const id = tabKey(group.id)
+              return (
+                <button
+                  key={id}
+                  ref={(element) => {
+                    tabRefs.current[id] = element
+                  }}
+                  className="wb-shell-settings-token-tab"
+                  type="button"
+                  role="tab"
+                  id={`${heading}-tab-${at}`}
+                  aria-selected={group === shown}
+                  aria-controls={`${heading}-panel-${at}`}
+                  aria-label={troubled ? `${group.label} — ${TAB_TROUBLE}` : undefined}
+                  title={troubled ? `${group.label} — ${TAB_TROUBLE}` : undefined}
+                  tabIndex={group === shown ? 0 : -1}
+                  onClick={() => chooseTab(at, false)}
+                >
+                  {group.label}
+                  {troubled && <span className="wb-shell-settings-token-tab-mark" aria-hidden="true" />}
+                </button>
+              )
+            })}
+          </div>
+          {canEdit && (
+            <div className="wb-shell-settings-token-actions">
+              <button className="wb-shell-project-action" type="button" disabled={busy} onClick={() => setDraft(draftOf(manifest, {}))}>
+                전부 기본값으로
+              </button>
+              <button
+                className="wb-shell-project-submit"
+                type="button"
+                disabled={busy || !changed || troubled.length > 0 || conflict !== null}
+                onClick={() => void send(body, view.rev)}
+              >
+                토큰 저장
+              </button>
+            </div>
+          )}
+        </div>
+        {groups.map((group, at) => (
+          <div
+            key={tabKey(group.id)}
+            className="wb-shell-settings-token-grid"
+            role="tabpanel"
+            id={`${heading}-panel-${at}`}
+            aria-labelledby={`${heading}-tab-${at}`}
+            hidden={group !== shown}
+          >
             {group.keys.map((key) => (
               <TokenField
                 key={key}
@@ -207,7 +302,7 @@ export function TokenEditor(props: {
                 onReset={() => edit(key, items[key]!.default)}
               />
             ))}
-          </fieldset>
+          </div>
         ))}
 
         {conflict !== null && (
@@ -225,21 +320,6 @@ export function TokenEditor(props: {
           />
         )}
 
-        {canEdit && (
-          <div className="wb-shell-settings-token-actions">
-            <button className="wb-shell-project-action" type="button" disabled={busy} onClick={() => setDraft(draftOf(manifest, {}))}>
-              전부 기본값으로
-            </button>
-            <button
-              className="wb-shell-project-submit"
-              type="button"
-              disabled={busy || !changed || troubled.length > 0 || conflict !== null}
-              onClick={() => void send(body, view.rev)}
-            >
-              토큰 저장
-            </button>
-          </div>
-        )}
         {canEdit && troubled.length > 0 && (
           <p className="wb-shell-settings-field-alert">{`고칠 칸이 있습니다 — ${troubled.map((key) => items[key]!.label).join(', ')}`}</p>
         )}

@@ -77,6 +77,11 @@ function type(label: string, value: string): void {
   fireEvent.change(input(label), { target: { value } })
 }
 
+/** 토큰 무리 탭을 고른다 — 안 고른 탭의 칸은 `hidden` 이라 역할로 찾는 판(사유 · 단추)은 그 탭을 먼저 고른다. */
+function openTab(name: string): void {
+  fireEvent.click(within(editor()).getByRole('tab', { name: new RegExp(`^${name}`) }))
+}
+
 function save(): HTMLButtonElement {
   return within(editor()).getByRole('button', { name: '토큰 저장' })
 }
@@ -95,11 +100,8 @@ describe('토큰 편집기 — 폼', () => {
   it('무리 차례대로 서고 무리 없는 키는 «기타» 다', async () => {
     renderEditor()
     await ready()
-    const legends = within(editor())
-      .getAllByRole('group')
-      .map((group) => group.querySelector('legend')?.textContent)
-      .filter((text) => text !== undefined)
-    expect(legends).toEqual(['모양', '색', '기타'])
+    const tabs = within(within(editor()).getByRole('tablist', { name: '토큰 무리' })).getAllByRole('tab')
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['모양', '색', '기타'])
   })
 
   it('타입마다 컨트롤 — color 는 #rrggbb 면 색 칸 + 글 칸, rgb() 면 글 칸만', async () => {
@@ -120,6 +122,7 @@ describe('토큰 편집기 — 폼', () => {
   it('반쯤 친 값(#12)은 칸에 사유가 서고 저장이 꺼진다 — 미리보기는 그 키만 기본값', async () => {
     const api = renderEditor()
     await ready()
+    openTab('색')
     type('주색', '#12')
     const field = input('주색').closest('.wb-shell-settings-token')!
     expect(within(field as HTMLElement).getByRole('alert').textContent).toMatch(/색/)
@@ -146,6 +149,7 @@ describe('토큰 편집기 — 폼', () => {
     const api = renderEditor()
     await ready()
     type('카드 그림자', '0 1px 2px #000')
+    openTab('색')
     fireEvent.click(within(input('주색').closest('.wb-shell-settings-token') as HTMLElement).getByRole('button', { name: '기본값으로' }))
     expect(input('주색').value).toBe('#2563eb')
     fireEvent.click(save())
@@ -179,6 +183,56 @@ describe('토큰 편집기 — 폼', () => {
     expect(within(editor()).getByLabelText<HTMLSelectElement>('밀도').disabled).toBe(true)
     expect(within(editor()).queryByRole('button', { name: '토큰 저장' })).toBeNull()
     expect(within(editor()).queryByRole('button', { name: '전부 기본값으로' })).toBeNull()
+  })
+})
+
+describe('토큰 편집기 — 탭', () => {
+  const panelOf = (label: string) => input(label).closest('[role="tabpanel"]') as HTMLElement
+
+  it('탭이 무리마다 서고 고른 탭의 칸만 보인다 — 첫 탭을 고른 채 선다', async () => {
+    renderEditor()
+    await ready()
+    const tabs = within(editor()).getAllByRole('tab')
+    expect(tabs.map((tab) => [tab.textContent, tab.getAttribute('aria-selected')])).toEqual([
+      ['모양', 'true'],
+      ['색', 'false'],
+      ['기타', 'false'],
+    ])
+    expect(panelOf('모서리').hidden).toBe(false)
+    expect(panelOf('주색').hidden).toBe(true)
+    expect(panelOf('카드 그림자').hidden).toBe(true)
+    openTab('색')
+    expect(panelOf('주색').hidden).toBe(false)
+    expect(panelOf('모서리').hidden).toBe(true)
+    // ← → 로도 옮긴다(설정 절 탭과 같은 말투).
+    fireEvent.keyDown(within(editor()).getByRole('tab', { name: '색' }), { key: 'ArrowRight' })
+    expect(within(editor()).getByRole('tab', { name: '기타' }).getAttribute('aria-selected')).toBe('true')
+    expect(panelOf('카드 그림자').hidden).toBe(false)
+  })
+
+  it('다른 탭의 사유 — 그 탭 이름에 표지 · 저장 꺼짐 · 문장이 그 칸을 말한다', async () => {
+    renderEditor()
+    await ready()
+    type('모서리', '')
+    openTab('색')
+    expect(panelOf('모서리').hidden).toBe(true)
+    expect(within(editor()).getByRole('tab', { name: '모양 — 고칠 칸 있음' })).toBeDefined()
+    expect(within(editor()).getByRole('tab', { name: '색' })).toBeDefined()
+    expect(save().disabled).toBe(true)
+    expect(within(editor()).getByText('고칠 칸이 있습니다 — 모서리')).toBeDefined()
+    // 고치면 표지가 걷힌다.
+    type('모서리', '6')
+    expect(within(editor()).getByRole('tab', { name: '모양' })).toBeDefined()
+  })
+
+  it('저장 줄은 탭과 무관하게 보인다', async () => {
+    renderEditor()
+    await ready()
+    for (const name of ['모양', '색', '기타']) {
+      openTab(name)
+      expect(within(editor()).getByRole('button', { name: '토큰 저장' })).toBeDefined()
+      expect(within(editor()).getByRole('button', { name: '전부 기본값으로' })).toBeDefined()
+    }
   })
 })
 
@@ -235,6 +289,7 @@ describe('토큰 편집기 — 저장의 실패', () => {
       }),
     })
     await ready()
+    openTab('색')
     type('본문 글꼴', 'Pretendard')
     fireEvent.click(save())
     const field = input('본문 글꼴').closest('.wb-shell-settings-token') as HTMLElement

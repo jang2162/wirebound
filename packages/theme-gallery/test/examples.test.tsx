@@ -118,7 +118,7 @@ describe('ThemeExamples', () => {
   it('누르면 장이 바뀐다 — 목록의 첫 줄 → 상세', () => {
     const onChange = vi.fn()
     const { container } = render(<Harness start="orders" onChange={onChange} />)
-    const first = links(docOf('orders')).find(([id]) => /-r0-no-l$/.test(id))![0]
+    const first = links(docOf('orders')).find(([id]) => id.endsWith('-r0-no-l'))![0]
     click(container, first)
     expect(onChange.mock.calls).toEqual([['order']])
   })

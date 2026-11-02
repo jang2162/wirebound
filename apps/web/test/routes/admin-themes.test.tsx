@@ -272,6 +272,25 @@ describe('테마 관리 — 목록 · 상세 · 미리보기', () => {
     within(theme('acme')).getByRole('region', { name: '미리보기' })
   })
 
+  it('미리보기는 토큰 칸 없이 설정과 같은 두 보기다', async () => {
+    renderAdmin()
+    await waitFor(() => theme('acme'))
+    const region = await waitFor(() => within(theme('acme')).getByRole('region', { name: '미리보기' }))
+    const views = within(theme('acme')).getByRole('radiogroup', { name: '미리보기 보기' })
+    expect(
+      within(views)
+        .getAllByRole('radio')
+        .map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent),
+    ).toEqual(['컴포넌트', '예제 페이지'])
+    expect(within(theme('acme')).queryByRole('group', { name: '토큰' })).toBeNull()
+    expect(within(theme('acme')).queryByRole('tablist', { name: '토큰 무리' })).toBeNull()
+    fireEvent.click(within(views).getByRole('radio', { name: '예제 페이지' }))
+    within(theme('acme')).getByRole('navigation', { name: '예제 페이지' })
+    await waitFor(() =>
+      expect(region.querySelector('iframe')?.contentDocument?.querySelector('[data-wb-examples="dashboard"]')).not.toBeNull(),
+    )
+  })
+
   it('모르는 테마 · 판이면 첫 테마 · 그 latest 로 선다', async () => {
     renderAdmin(ADMIN, {}, { route: '/admin/themes?theme=nope&version=9.9.9' })
     await waitFor(() => theme('acme'))

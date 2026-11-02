@@ -124,6 +124,10 @@ export function useCanvasPopups(input: {
  * 덮개 층을 세울 구간 — 캔버스 iframe 은 문서 높이로 자라 안쪽 스크롤이 없고(`canvas-iframe.tsx`) 폭은 기기 폭이라 캔버스 칸보다 넓을 수 있으므로,
  * 창 전체(`inset: 0`)에 세우면 상자가 긴 문서의 가운데(화면 밖)나 칸 오른쪽 밖(✖ 가 안 보인다)에 선다. 호스트에서 보이는 구간을 iframe 문서
  * 좌표(줌을 걷은 CSS px)로 옮겨 그 구간에 세운다. 굴리거나 창이 바뀌면 다시 잰다. 열린 팝업이 없으면 재지 않는다.
+ *
+ * **보이는 구간은 스크롤 상자와 창(뷰포트)이 겹친 곳이다** — 설정의 테마 미리보기(`settings/theme-preview.tsx`)는 상자가 창 아래로 뻗을 수 있어
+ * 상자만 보면 팝업이 창 밖(상자의 가운데)에 섰다. 캔버스 칸은 늘 창 안이라 겹친 곳이 곧 칸이다. 상자의 조상(뼈대의 내용 칸)이 굴러도 다시
+ * 재도록 호스트 문서의 `scroll` 을 캡처로 듣는다(`scroll` 은 버블하지 않는다).
  */
 export function usePopupArea(frame: CanvasFrame | null, zoom: number, active: boolean): PopupArea | undefined {
   const [area, setArea] = useState<PopupArea | undefined>(undefined)
@@ -134,11 +138,12 @@ export function usePopupArea(frame: CanvasFrame | null, zoom: number, active: bo
     const scroller = scrollParent(element)
     const measure = (): void => {
       const outer = element.getBoundingClientRect()
-      const view = scroller?.getBoundingClientRect() ?? {
-        top: 0,
-        bottom: host?.innerHeight ?? outer.bottom,
-        left: 0,
-        right: host?.innerWidth ?? outer.right,
+      const box = scroller?.getBoundingClientRect()
+      const view = {
+        top: Math.max(box?.top ?? 0, 0),
+        bottom: Math.min(box?.bottom ?? Number.POSITIVE_INFINITY, host?.innerHeight ?? outer.bottom),
+        left: Math.max(box?.left ?? 0, 0),
+        right: Math.min(box?.right ?? Number.POSITIVE_INFINITY, host?.innerWidth ?? outer.right),
       }
       const top = Math.max(0, (view.top - outer.top) / zoom)
       const bottom = Math.min(outer.height, view.bottom - outer.top) / zoom
@@ -152,12 +157,11 @@ export function usePopupArea(frame: CanvasFrame | null, zoom: number, active: bo
       )
     }
     measure()
-    scroller?.addEventListener('scroll', measure, { passive: true })
-    host?.addEventListener('scroll', measure, { passive: true })
+    const doc = element.ownerDocument
+    doc.addEventListener('scroll', measure, { capture: true, passive: true })
     host?.addEventListener('resize', measure)
     return () => {
-      scroller?.removeEventListener('scroll', measure)
-      host?.removeEventListener('scroll', measure)
+      doc.removeEventListener('scroll', measure, { capture: true })
       host?.removeEventListener('resize', measure)
     }
   }, [frame, zoom, active])
