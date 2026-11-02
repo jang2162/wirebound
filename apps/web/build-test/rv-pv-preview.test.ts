@@ -2,15 +2,17 @@
  * **RV-PV · 설정 › 테마 미리보기의 이동 · 팝업 · 토큰 저장의 답** 실브라우저 판(`settings/theme-preview.tsx` · `settings/token-editor.tsx` ·
  * `@wirebound/theme-gallery` 의 `ThemeExamples` · `canvas/canvas-popups.tsx` 의 `usePopupArea`). 보고 `docs/superpowers/plans/2026-11-02-rv-pv-report.md`.
  *
- * `it.fails` 는 이월한 결함이다 — 바라는 성질을 단언하고 지금 소스에서 죽는다(고치면 `it` 으로 바꾼다).
+ * H1 · M1 · M2 · M2b · L1 은 리뷰가 찾은 결함을 고친 뒤의 성질이다(고침 보고 `docs/superpowers/plans/2026-11-02-fx-pv-report.md`).
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * | --- | --- |
- * | H1(`it.fails`) | 창이 미리보기를 다 담는 판(1280×1500)에서 «컴포넌트» → «예제» → «주문 상세» 뒤 연 팝업의 «취소» 자리 맨 위 요소가 iframe 이 아니다 |
- * | M1(`it.fails`) | 390 에서 긴 «주문 목록» 을 끝까지 굴린 채 왼쪽 메뉴 «대시보드» 를 누르면 새 장의 맨 위가 상자 위 끝에 안 선다 |
- * | M2(`it.fails`) | 390 에서 «토큰 저장» 의 409 나란히 보기가 창 안에 안 선다 |
- * | M2b(`it.fails`) | 390 에서 «토큰 저장» 이 다른 탭의 422 를 받으면 «고칠 칸이 있습니다» 문장이 창 안에 안 선다 |
- * | L1(`it.fails`) | 예제 이음의 가운데 단추 누름이 새 탭을 연다 |
+ * | H1 | 창이 미리보기를 다 담는 판(1280×1500)에서 «컴포넌트» → «예제» → «주문 상세» 뒤 연 팝업의 «취소» 자리 맨 위 요소가 iframe 이 아니다 |
+ * | M1 | 390 에서 긴 «주문 목록» 을 끝까지 굴린 채 왼쪽 메뉴 «대시보드» 를 누르면 · 긴 대시보드를 끝까지 굴린 채 장 이름 줄 «주문 상세» 를 누르면 새 장의 맨 위가 상자 위 끝에 안 선다 |
+ * | M1b | 390 에서 바깥 칸을 굴려 미리보기 틀 위 끝이 창 밖일 때(틀 밑 내용은 바깥 칸의 아래 여백으로 흉내) 이음으로 장을 옮겨도 틀 위 끝이 창 밖에 남는다 |
+ * | M2 | 390 에서 «토큰 저장» 의 409 나란히 보기가 창 안에 안 선다 |
+ * | M2b | 390 에서 «토큰 저장» 이 다른 탭의 422 를 받으면 «고칠 칸이 있습니다» 문장이 창 안에 안 선다 |
+ * | M2c | 390 에서 «토큰 저장» 이 성공하면 «토큰을 저장했습니다» 문장이 창 안에 안 선다 |
+ * | L1 | 예제 이음의 가운데 단추 누름이 새 탭을 연다 |
  * | 기록 | Enter · Cmd · Shift 누름을 섞어도 `history.length` · 바깥 주소 · 탭 수가 그대로다 |
  * | 다른 탭의 422 | «모양» 탭에 선 채 «색» 칸이 서버에서 거절되면 그 탭 이름이 «색 — 고칠 칸 있음» · 문장이 그 칸을 말하고 창 안 · 저장 꺼짐 · 키보드로 그 탭에 닿는다 |
  */
@@ -94,7 +96,7 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
 
   const settings = () => `/projects/${projectId}/settings?section=theme`
 
-  it.fails('H1 — 창이 미리보기를 다 담는 판에서 장을 바꾼 뒤 연 팝업의 «취소» 가 iframe 안에 선다', async () => {
+  it('H1 — 창이 미리보기를 다 담는 판에서 장을 바꾼 뒤 연 팝업의 «취소» 가 iframe 안에 선다', async () => {
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1280, height: 1500 } })
     try {
       await page.goto(settings())
@@ -127,7 +129,7 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
     }
   })
 
-  it.fails('M1 — 390 에서 긴 장을 끝까지 굴린 채 이음으로 옮기면 새 장의 맨 위가 상자 위 끝에 선다', async () => {
+  it('M1 — 390 에서 긴 장을 끝까지 굴린 채 이음 · 장 이름 줄로 옮기면 새 장의 맨 위가 상자 위 끝에 선다', async () => {
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
     try {
       await page.goto(settings())
@@ -149,17 +151,63 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
       )
       await settle(page)
       // 새 장의 맨 위(iframe 위 끝)가 상자 위 끝 아래에 있다 — 머리가 위로 밀려 숨지 않았다.
-      const top = await page.locator(PREVIEW_BOX).evaluate((box) => ({
-        iframeTop: box.querySelector('iframe')!.getBoundingClientRect().top,
-        boxTop: box.getBoundingClientRect().top,
-      }))
-      expect(top.iframeTop).toBeGreaterThanOrEqual(top.boxTop)
+      const headOf = () =>
+        page.locator(PREVIEW_BOX).evaluate((box) => {
+          const iframeTop = box.querySelector('iframe')!.getBoundingClientRect().top
+          return iframeTop >= box.getBoundingClientRect().top
+        })
+      const byLink = await headOf()
+      // 장 이름 줄 — 대시보드(1094)를 끝까지 굴린 채 «주문 상세» 로.
+      await page.locator(PREVIEW_BOX).evaluate((box) => {
+        box.scrollTop = box.scrollHeight
+      })
+      await settle(page)
+      expect(await page.locator(PREVIEW_BOX).evaluate((box) => box.scrollTop)).toBeGreaterThan(300)
+      await pick(page, '주문 상세', 'order')
+      await settle(page)
+      expect({ byLink, byRow: await headOf() }).toEqual({ byLink: true, byRow: true })
     } finally {
       await context.close()
     }
   })
 
-  it.fails('L1 — 예제 이음의 가운데 단추 누름이 새 탭을 안 연다', async () => {
+  it('M1b — 바깥 칸을 굴려 틀 위 끝이 창 밖일 때 이음으로 옮기면 틀이 창 안으로 내려온다(390)', async () => {
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
+    try {
+      await page.goto(settings())
+      await page.locator(`${PREVIEW_BOX} iframe`).waitFor()
+      await openExamples(page)
+      await pick(page, '주문 목록', 'orders')
+      await settle(page)
+      const FRAME = '.wb-shell-settings-preview-frame'
+      // 바깥 칸(틀의 가장 가까운 세로 스크롤 조상)을 틀 위 끝이 창 위로 200px 나가게 굴린다. 설정에서는 틀이 맨 끝이고 높이가 창에 묶여
+      // 끝까지 굴려도 틀 위 끝이 창 안에 남는다 — 틀 밑에 내용이 더 있는 화면을 바깥 칸의 아래 여백으로 흉내 낸다.
+      const pushed = await page.locator(FRAME).evaluate((frame) => {
+        let scroller: HTMLElement | null = frame.parentElement
+        while (scroller !== null && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
+        if (scroller === null) return null
+        scroller.style.paddingBottom = '2000px'
+        scroller.scrollTop += frame.getBoundingClientRect().top + 200
+        return frame.getBoundingClientRect().top
+      })
+      await settle(page)
+      // 판 카나리아 — 바깥 칸이 있고 틀 위 끝이 창 밖이다.
+      expect(pushed).not.toBeNull()
+      expect(pushed!).toBeLessThan(-100)
+      await tap(page, 'ex-l-go-dash')
+      await poll(
+        '대시보드',
+        () => shownExample(page),
+        (shown) => shown === 'dashboard',
+      )
+      await settle(page)
+      expect(await page.locator(FRAME).evaluate((frame) => Math.round(frame.getBoundingClientRect().top))).toBeGreaterThanOrEqual(0)
+    } finally {
+      await context.close()
+    }
+  })
+
+  it('L1 — 예제 이음의 가운데 단추 누름이 새 탭을 안 연다', async () => {
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
     try {
       await page.goto(settings())
@@ -256,7 +304,7 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
         expect({
           names,
           text: where.text,
-          // 390 의 문장 자리는 M2b(`it.fails`)가 잰다 — 칸 격자 밑이라 창 밖이다.
+          // 390 의 문장 자리는 M2b 가 잰다(그 축의 주인).
           inView: viewport.width === 390 ? true : where.top >= 0 && where.top < where.innerHeight,
           disabled: await save.isDisabled(),
           reached,
@@ -275,7 +323,7 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
     }
   })
 
-  it.fails('M2b — 390 에서 «토큰 저장» 이 다른 탭의 422 를 받으면 «고칠 칸이 있습니다» 문장이 창 안에 선다', async () => {
+  it('M2b — 390 에서 «토큰 저장» 이 다른 탭의 422 를 받으면 «고칠 칸이 있습니다» 문장이 창 안에 선다', async () => {
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
     try {
       await page.route(`**/api/projects/${projectId}/theme`, async (route) => {
@@ -308,7 +356,28 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
     }
   })
 
-  it.fails('M2 — 390 에서 «토큰 저장» 의 409 나란히 보기가 창 안에 선다', async () => {
+  it('M2c — 390 에서 «토큰 저장» 이 성공하면 «토큰을 저장했습니다» 문장이 창 안에 선다', async () => {
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
+    try {
+      await page.goto(settings())
+      await page.getByRole('tablist', { name: '토큰 무리' }).getByRole('tab', { name: '모양', exact: true }).click()
+      await page.locator('[role="tabpanel"]:not([hidden])').getByLabel('모서리(작게) — 입력칸 · 단추', { exact: true }).fill('6')
+      const save = page.getByRole('button', { name: '토큰 저장', exact: true })
+      // 판 카나리아 — 누르는 단추는 창 안이다.
+      const button = (await save.boundingBox())!
+      expect(button.y + button.height).toBeLessThan(844)
+      await save.click()
+      const saved = page.getByRole('status').filter({ hasText: '토큰을 저장했습니다' })
+      await saved.waitFor()
+      const top = await saved.evaluate((el) => el.getBoundingClientRect().top)
+      await putTheme(call, projectId, { themeId: 'system-admin', version: seededVersion('system-admin'), tokens: {} })
+      expect(top).toBeLessThan(844)
+    } finally {
+      await context.close()
+    }
+  })
+
+  it('M2 — 390 에서 «토큰 저장» 의 409 나란히 보기가 창 안에 선다', async () => {
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
     try {
       await page.goto(settings())

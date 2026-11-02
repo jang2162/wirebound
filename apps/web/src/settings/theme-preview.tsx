@@ -21,7 +21,7 @@ import { tokenValues } from '@wirebound/themes'
 import type { ThemeRef } from '../api/types'
 import { canvasSheets } from '../canvas/canvas'
 import { CanvasIframe, type CanvasFrame } from '../canvas/canvas-iframe'
-import { usePopupArea } from '../canvas/canvas-popups'
+import { scrollParent, usePopupArea } from '../canvas/canvas-popups'
 import { useThemeBundleLoader } from '../theme/bundle-context'
 import { refKey, withServerManifest } from '../theme/bundle-loader'
 // 갤러리는 카탈로그를 순회한다 — 레지스트리가 비면 칸이 하나도 안 선다.
@@ -80,10 +80,12 @@ export function ThemePreview(props: {
   const box = useRef<HTMLDivElement>(null)
   const width = useBoxWidth(box)
   const viewsName = useId()
+  const frameBox = useRef<HTMLDivElement>(null)
+  useTopOnPageChange(page, box, frameBox)
 
   return (
     // 틀이 높이를 창에 묶고 안쪽 상자가 스크롤한다(`shell.css` 의 `.wb-shell-settings-preview-frame`).
-    <div className="wb-shell-settings-preview-frame">
+    <div ref={frameBox} className="wb-shell-settings-preview-frame">
       <div className="wb-shell-settings-preview-head">
         <div className="wb-shell-settings-preview-views" role="radiogroup" aria-label="미리보기 보기">
           {VIEWS.map((one) => (
@@ -153,6 +155,30 @@ export function ThemePreview(props: {
       </div>
     </div>
   )
+}
+
+/**
+ * **장이 바뀌면 새 장의 맨 위부터 보인다** — 같은 상자에 다른 장을 실으므로 굴린 자리(`scrollTop`)가 남아, 긴 장을 굴린 채 옮기면 새 장이 중간 ·
+ * 끝부터 보였다. 상자를 맨 위로 굴리고, 틀의 위 끝이 그 바깥 스크롤 칸(없으면 창) 위로 나가 있으면 틀을 그 칸 안으로 내린다 — 장 이름 줄과 새
+ * 장의 머리가 함께 보이게. 장 이름 줄 · 예제 안 이음이 같은 상태(`page`)를 바꾸므로 그 상태를 본다. `scrollIntoView` 를 쓰지 않는 까닭: 틀이
+ * `overflow: hidden` 이라 그것도 굴려 머리를 밀어낸다.
+ */
+function useTopOnPageChange(page: ExamplePageId, box: { current: HTMLElement | null }, frame: { current: HTMLElement | null }): void {
+  const last = useRef(page)
+  useLayoutEffect(() => {
+    if (last.current === page) return
+    last.current = page
+    const element = box.current
+    if (element !== null) element.scrollTop = 0
+    const outer = frame.current
+    if (outer === null) return
+    const scroller = scrollParent(outer)
+    const floor = Math.max(scroller?.getBoundingClientRect().top ?? 0, 0)
+    const above = outer.getBoundingClientRect().top - floor
+    if (above >= 0) return
+    if (scroller !== null) scroller.scrollTop += above
+    else outer.ownerDocument.defaultView?.scrollBy(0, above)
+  }, [page, box, frame])
 }
 
 /** 상자의 안쪽 폭(`clientWidth` − 좌우 여백 — 세로 스크롤 막대를 뺀 폭). 못 재면(0 — jsdom) `FALLBACK_WIDTH`. */

@@ -128,6 +128,9 @@ export function useCanvasPopups(input: {
  * **보이는 구간은 스크롤 상자와 창(뷰포트)이 겹친 곳이다** — 설정의 테마 미리보기(`settings/theme-preview.tsx`)는 상자가 창 아래로 뻗을 수 있어
  * 상자만 보면 팝업이 창 밖(상자의 가운데)에 섰다. 캔버스 칸은 늘 창 안이라 겹친 곳이 곧 칸이다. 상자의 조상(뼈대의 내용 칸)이 굴러도 다시
  * 재도록 호스트 문서의 `scroll` 을 캡처로 듣는다(`scroll` 은 버블하지 않는다).
+ *
+ * **iframe 요소의 크기가 바뀌어도 다시 잰다**(`ResizeObserver`) — 미리보기는 장을 바꿔도 같은 iframe 에 다른 문서를 실어 높이만 바뀐다. 창이
+ * 상자를 다 담아 아무것도 안 구르는 판에서는 `scroll` · `resize` 가 안 와 덮개가 앞 장의 높이로 남고, 상자가 그 가운데(iframe 밖)에 섰다.
  */
 export function usePopupArea(frame: CanvasFrame | null, zoom: number, active: boolean): PopupArea | undefined {
   const [area, setArea] = useState<PopupArea | undefined>(undefined)
@@ -160,16 +163,20 @@ export function usePopupArea(frame: CanvasFrame | null, zoom: number, active: bo
     const doc = element.ownerDocument
     doc.addEventListener('scroll', measure, { capture: true, passive: true })
     host?.addEventListener('resize', measure)
+    const Observer = (host as (Window & typeof globalThis) | null)?.ResizeObserver
+    const observer = Observer === undefined ? null : new Observer(measure)
+    observer?.observe(element)
     return () => {
       doc.removeEventListener('scroll', measure, { capture: true })
       host?.removeEventListener('resize', measure)
+      observer?.disconnect()
     }
   }, [frame, zoom, active])
   return active ? area : undefined
 }
 
 /** 가장 가까운 세로 스크롤 조상. 없으면 `null` — 창이 굴린다. */
-function scrollParent(element: Element): Element | null {
+export function scrollParent(element: Element): Element | null {
   const view = element.ownerDocument.defaultView
   for (let at = element.parentElement; at !== null; at = at.parentElement) {
     const overflow = view?.getComputedStyle(at).overflowY ?? ''

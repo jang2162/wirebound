@@ -46,7 +46,7 @@ const NO_NOTICES: readonly string[] = []
  *
  * **미리보기 안의 누름은 바깥 화면을 안 움직인다.** 이동은 `onPageChange` 로만 알리고, `Link` 기본 뷰의 `<a href="#…">` 와 폼 제출의 기본 동작은
  * 뿌리에서 막는다 — 렌더러는 submit 규칙이 걸린 노드만 막아(`packages/renderer/src/render.tsx` 의 `handlersFor`), 그대로 두면 iframe 해시가 바뀌어
- * 브라우저 기록이 쌓이고 «뒤로» 가 미리보기 안을 돈다.
+ * 브라우저 기록이 쌓이고 «뒤로» 가 미리보기 안을 돈다. 가운데 단추 누름(`auxclick`)도 막는다 — 안 막으면 그 이음을 새 탭으로 연다.
  */
 export function ThemeExamples(props: {
   theme: ThemeDefinition
@@ -116,7 +116,7 @@ export function ThemeExamples(props: {
 
   return (
     <ThemeProvider value={{ tokens: props.tokens, window: props.window ?? window }}>
-      <div ref={rootRef} data-wb-examples={shown.id} onClick={keepInside} onSubmit={keepInside}>
+      <div ref={rootRef} data-wb-examples={shown.id} onClick={keepInside} onAuxClick={keepInside} onSubmit={keepInside}>
         {current.notices.length > 0 && (
           <div role="status" data-wb-examples-notice="" style={NOTICE_STYLE}>
             {current.notices.join(' · ')}
