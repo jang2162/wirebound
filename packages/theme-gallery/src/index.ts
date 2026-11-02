@@ -1,5 +1,5 @@
 export type { GallerySample } from './samples'
 export { GALLERY_SAMPLE_IMAGE, GALLERY_SAMPLES, galleryAssetUrl, PLACEHOLDER_SET_PROPS, PLACEHOLDER_SET_SAMPLE } from './samples'
-export type { GalleryItem } from './gallery'
-export { galleryItemDocument, galleryItems, ThemeGallery } from './gallery'
+export type { GalleryGroup, GalleryItem, GalleryLayout } from './gallery'
+export { galleryGroups, galleryItemDocument, galleryItems, ThemeGallery } from './gallery'
 export { GalleryOverlay } from './overlay'
