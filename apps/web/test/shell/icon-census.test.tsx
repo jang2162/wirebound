@@ -103,7 +103,6 @@ const ICON_ONLY = [
   '탭 넣기',
   '닫기',
   '가져오기 결과 닫기',
-  '내보내기 실패 닫기',
 ]
 
 /** 이 판에서 꼭 나와야 하는 행동 메뉴 항목 — 자리 표의 «아이콘 + 글» 칸의 메뉴 몫이다. */
@@ -321,16 +320,14 @@ async function outsideScreen(
   return { found, menus: await openEveryMenu(), sideLinks }
 }
 
-/** 하단 바의 페이지 JSON 통지 둘 — 가져온 결과 · 내보내기 실패. 트리의 가져오기 · 내보내기를 끝까지 돌리지 않고 통지만 세운다. */
+/** 하단 바의 페이지 JSON 통지 — 가져온 결과. 트리의 가져오기를 끝까지 돌리지 않고 통지만 세운다(내보내기의 실패는 모달 안의 문장이다). */
 function noticeButtons(): IconOnly[] {
   const notices: PageJsonNotices = {
     imported: {
       page: { id: 'pg-9', menuNodeId: 'mn-1', title: '가져온 페이지', sortOrder: 9 },
       comments: { inserted: 0, dangling: 0 },
     } as unknown as PageJsonNotices['imported'],
-    exportFailure: { kind: 'error', message: '내보내지 못했습니다' } as unknown as PageJsonNotices['exportFailure'],
     showImported: () => {},
-    showExportFailure: () => {},
   }
   renderWithProviders(<PageJsonNoticeList notices={notices} />)
   return iconOnlyButtons()
@@ -370,7 +367,7 @@ describe('아이콘만 남은 단추는 이름과 title 을 가진다', () => {
         '관리자 › 초대 링크': expect.any(Number),
         '관리자 › 프로젝트': expect.any(Number),
         '관리자 › 기록': expect.any(Number),
-        통지: 2,
+        통지: 1,
       })
       for (const [where, count] of Object.entries(perScreen)) expect({ where, enough: count >= 1 }).toEqual({ where, enough: true })
     },

@@ -1,13 +1,13 @@
 /**
  * **페이지 JSON 의 두 입구를 실브라우저로 잰다** — 메뉴 줄 `+`의 «JSON 에서 가져오기…»가 여는 모달(`src/panels/page-import-dialog.tsx`)과 페이지
- * 줄 `…`의 «JSON 내보내기»(`src/panels/page-json-export.ts`). jsdom 은 `showModal` · 진짜 파일 칸 · 내려받기를 못 잰다
+ * 줄 `…`의 «JSON 내보내기»(`src/panels/page-json-export.ts` — 상자의 복사 · 받기 · 닫기는 `build-test/page-json-export-dialog.test.ts`). jsdom 은 `showModal` · 진짜 파일 칸 · 내려받기를 못 잰다
  * (`test/panels/page-json.test.tsx`는 대역까지다).
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 가져오기 | 줄 `+`가 그 메뉴를 대상으로 상자를 열지 않는다 · 파일 칸이 고른 파일을 안 읽는다 · 상자 단추의 `Delete`가 뒤 트리의 삭제 확인을 건다 · 성공해도 상자가 남거나 새 페이지로 안 옮긴다 · 결과가 하단 바에 안 선다 |
  * | 보내는 중 닫기 | 보내는 동안 «취소»가 켜져 있다 · Escape 가 상자를 못 닫는다 · 닫은 상자의 성공이 새 페이지로 옮긴다 · 결과가 하단 바에 안 선다 |
- * | 내보내기 | 받은 파일이 그 줄의 페이지가 아니다(열린 페이지를 낸다) · 내려받기가 안 난다 |
+ * | 내보내기 | 상자(«JSON 내보내기 — <줄의 페이지>»)의 «파일로 받기» 로 받은 파일이 그 줄의 페이지가 아니다(열린 페이지를 낸다) · 내려받기가 안 난다 |
  */
 import { readFile } from 'node:fs/promises'
 import type { Page } from 'playwright-core'
@@ -211,9 +211,12 @@ describe.skipIf(!전제.ok)('페이지 JSON — 가져오기 상자 · 내보내
       await page.goto(`/projects/${projectId}/pages/${ids.second}`)
       await rowLabel(page, ids.first).waitFor()
       await rowLabel(page, ids.first).hover()
-      const downloading = page.waitForEvent('download')
       await row(page, ids.first).getByRole('button', { name: '첫째 더 보기', exact: true }).click()
       await page.getByRole('menuitem', { name: 'JSON 내보내기', exact: true }).click()
+      const dialog = page.getByRole('dialog', { name: 'JSON 내보내기 — 첫째', exact: true })
+      await dialog.getByRole('textbox', { name: '내보낸 JSON', exact: true }).waitFor()
+      const downloading = page.waitForEvent('download')
+      await dialog.getByRole('button', { name: '파일로 받기', exact: true }).click()
       const download = await downloading
       const text = await readFile((await download.path())!, 'utf8')
       const parsed = JSON.parse(text) as { page: { title: string }; schema: { root: { children?: { id: string }[] } } }

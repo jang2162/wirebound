@@ -54,6 +54,7 @@ import { useTreeCommands, type TreeCommands } from '../tree/use-tree-commands'
 import { MenuPicker } from './menu-picker'
 import { usePageJsonExport, type PageJsonExport } from './page-json-export'
 import type { PageJsonNotices } from './page-json-notices'
+import { PageJsonExportDialog } from './page-json-export-dialog'
 import { PageImportDialog } from './page-import-dialog'
 import { MenuDeleteDialog } from './menu-delete-dialog'
 import { StateRows, usePageStates } from './state-rows'
@@ -159,8 +160,8 @@ export function MenuTree(props: {
    */
   headSlot?: HTMLElement | null
   /**
-   * 하단 바의 페이지 JSON 통지 — 가져온 결과 · 내보내기 실패(`panels/page-json-notices.tsx`). **셸이 들고 그린다** — 여기서는 채우기만 한다
-   * (그 파일의 머리말 «셸이 상태를 들고 트리가 채운다»). 없으면 결과 · 실패를 말하지 않는다.
+   * 하단 바의 페이지 JSON 통지 — 가져온 결과(`panels/page-json-notices.tsx`). **셸이 들고 그린다** — 여기서는 채우기만 한다
+   * (그 파일의 머리말 «셸이 상태를 들고 트리가 채운다»). 없으면 결과를 말하지 않는다.
    */
   notices?: PageJsonNotices
   /**
@@ -198,8 +199,8 @@ export function MenuTree(props: {
     pickAfterGone: (gone, next) => neighborOf(shownRows.current, gone, (row) => treeSpot(next, row) !== null),
   })
   const { state } = commands
-  /** 페이지 줄 `…`의 «JSON 내보내기». 실패는 셸의 하단 바에 선다(`notices`). */
-  const exporter = usePageJsonExport(props.projectId, props.notices?.showExportFailure ?? ignoreFailure, props.beforeExport)
+  /** 페이지 줄 `…`의 «JSON 내보내기» — 모달을 연다(`./page-json-export-dialog.tsx` · 실패도 그 안에 선다). */
+  const exporter = usePageJsonExport(props.projectId, props.beforeExport)
   /**
    * **편집할 수 없게 되면 가져오기 상자를 닫는다** — 역할이 내려가거나(viewer) 모드가 바뀌면 상자가 화면에서 빠지는데, 대상을 훅에 남겨
    * 두면 다시 편집할 수 있게 된 순간 아무도 열지 않은 상자가 다시 선다. 모달이라 상자가 떠 있는 동안 모드 단추에는 못 닿고, 이 갈래는 셸이
@@ -401,8 +402,8 @@ export function MenuTree(props: {
   }
 
   /**
-   * **가져오기 · 메뉴 삭제 대화 상자는 트리 상자 밖에 선다** — 조회 상태(불러오는 중 · 실패)와 무관하다(보낸 뒤 다시 받기가 실패해도 상자 안의 결말이
-   * 남아야 한다).
+   * **가져오기 · 메뉴 삭제 · JSON 내보내기 대화 상자는 트리 상자 밖에 선다** — 조회 상태(불러오는 중 · 실패)와 무관하다(보낸 뒤 다시 받기가 실패해도
+   * 상자 안의 결말이 남아야 한다). 내보내기 상자는 읽기라 편집할 수 없게 되어도 닫지 않는다.
    *
    * **단축키 상자의 형제다 — 안에 넣지 마라.** 안이면 상자 안 단추에서 친 `Delete`가 React 트리를 따라 `handleKeyDown`에 닿아 고른 메뉴의
    * 삭제 확인을 건다(`panels/page-import-dialog.tsx` 머리말 «키가 트리 단축키로 새지 않는다»).
@@ -413,6 +414,7 @@ export function MenuTree(props: {
         {tree}
         {props.editable && <PageImportDialog commands={commands} focusFallback={treeFocusFallback} />}
         {props.editable && <MenuDeleteDialog commands={commands} focusFallback={treeFocusFallback} />}
+        <PageJsonExportDialog exporter={exporter} focusFallback={treeFocusFallback} />
       </>
     )
   }
@@ -589,9 +591,6 @@ export function MenuTree(props: {
     </div>,
   )
 }
-
-/** 셸이 통지 자리를 안 넘겼을 때(`notices`) — 내보내기 실패를 말할 곳이 없다. */
-function ignoreFailure(): void {}
 
 /** 그 줄을 품은 메뉴의 id — 맨 위부터. 메뉴 자신은 빼고, 트리에 없으면 빈 목록. */
 function menuAncestors(menu: readonly TreeMenuNode[], target: TreeSelection): string[] {
@@ -821,7 +820,7 @@ function PageLink(props: {
   const foldable = states.length > 0
   const folded = foldable && props.fold.collapsed.has(props.page.id)
   const rowItems = menuRowItems(commands, 'page', {
-    run: () => exporter.run(props.page.id),
+    run: () => exporter.run(props.page.id, props.page.title),
     busy: exporter.exporting !== null,
   })
 
