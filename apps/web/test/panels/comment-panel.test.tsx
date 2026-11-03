@@ -57,10 +57,19 @@ function three(markerOf: Partial<Record<'a' | 'b' | 'c', number>>): WbNode {
   return { id: 'n_root', type: 'Page', children: [child('a', '가'), child('b', '나'), child('c', '다')] }
 }
 
-/** 코멘트 탭으로 옮긴다. 기본 탭은 속성이다. */
+/** 코멘트 탭으로 옮긴다. 기본 탭은 «컴포넌트»다. */
 async function openCommentTab(): Promise<void> {
   fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
   await waitFor(() => expect(screen.getByRole('tab', { name: '코멘트' }).getAttribute('aria-selected')).toBe('true'))
+}
+
+/**
+ * 캔버스에서 노드를 누르고 «코멘트» 탭으로 돌아온다 — 캔버스 누름은 탭을 «컴포넌트» 로 옮긴다(`src/shell/canvas-pick.tsx`). 돌아온 본문은 새로
+ * 마운트되어 목록을 다시 읽으므로 폼은 `findNewBox`로 기다린다.
+ */
+async function pickInCommentTab(nodeId: string): Promise<void> {
+  fireEvent.click(canvasQuery(`[data-wb-id="${nodeId}"]`) as HTMLElement)
+  await openCommentTab()
 }
 
 /** 지금 그려진 무리의 머리글. 순서가 그대로 배열 순서다. */
@@ -98,7 +107,7 @@ describe('코멘트 탭 — 자리', () => {
     deselect()
 
     // 기본은 속성이다.
-    expect(screen.getByRole('tab', { name: '속성' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: '컴포넌트' }).getAttribute('aria-selected')).toBe('true')
     // **탭을 바꾸기 전에는 안내가 있다.** 이 줄이 없으면 아래 부재 단언이 아무것도 재지
     // 않는다 — 루트가 고른 상태로 시작하니 안내는 애초에 없고, 단언은 늘 참이 된다.
     expect(screen.queryByText('노드를 고르면 속성이 보입니다')).not.toBeNull()
@@ -117,7 +126,7 @@ describe('코멘트 탭 — 자리', () => {
   it('편집 모드의 탭이 넷이다', async () => {
     await openPage(pageDoc(three({})), { apiOverrides: { listComments: async () => [] } })
 
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['페이지 정보', '속성', '코멘트', '상호작용'])
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['페이지 정보', '컴포넌트', '코멘트', '상호작용'])
   })
 })
 
@@ -181,7 +190,7 @@ describe('코멘트 탭 — 번호는 문서에서 온다', () => {
     await waitFor(() => expect(groupTitles()).toHaveLength(2))
 
     // 캔버스에서 `n_c`를 고른다.
-    fireEvent.click(canvasQuery('[data-wb-id="n_c"]') as HTMLElement)
+    await pickInCommentTab('n_c')
 
     await waitFor(() => {
       const current = document.body.querySelector('.wb-shell-comment-group[aria-current="true"]')
@@ -215,8 +224,8 @@ describe('코멘트 달기 — 문서가 함께 움직인다', () => {
     await openCommentTab()
     expect(canvasMarkers()).toEqual({})
 
-    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
-    fireEvent.change(screen.getByLabelText('새 코멘트'), { target: { value: '새 말' } })
+    await pickInCommentTab('n_a')
+    fireEvent.change(await findNewBox(), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
 
     await waitFor(() => expect(canvasMarkers()).toEqual({ n_a: '1' }))
@@ -251,8 +260,8 @@ describe('코멘트 달기 — 문서가 함께 움직인다', () => {
     })
     await openCommentTab()
 
-    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
-    fireEvent.change(screen.getByLabelText('새 코멘트'), { target: { value: '잃으면 안 되는 말' } })
+    await pickInCommentTab('n_a')
+    fireEvent.change(await findNewBox(), { target: { value: '잃으면 안 되는 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
@@ -414,8 +423,8 @@ describe('문서에 얹지 못했을 때 — 버리지 않고 말한다', () => 
     })
     await openCommentTab()
 
-    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
-    fireEvent.change(screen.getByLabelText('새 코멘트'), { target: { value: '새 말' } })
+    await pickInCommentTab('n_a')
+    fireEvent.change(await findNewBox(), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
 
     await waitFor(() => expect(screen.getByText('번호를 화면에 반영하지 못했습니다 — 새로고침하면 맞춰집니다')).toBeTruthy())
@@ -438,8 +447,8 @@ describe('문서에 얹지 못했을 때 — 버리지 않고 말한다', () => 
     })
     await openCommentTab()
 
-    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
-    fireEvent.change(screen.getByLabelText('새 코멘트'), { target: { value: '새 말' } })
+    await pickInCommentTab('n_a')
+    fireEvent.change(await findNewBox(), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
 
     await waitFor(() => expect(canvasMarkers()).toEqual({ n_a: '1' }))
@@ -461,15 +470,20 @@ describe('페이지 경계', () => {
     await waitFor(() => expect(listComments).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID, { cancel: expect.any(AbortSignal) }))
   })
 
-  it('탭을 열기 전에는 조회하지 않는다', async () => {
+  it('코멘트를 안 그리는 탭에서는 조회하지 않는다 — «컴포넌트» 탭은 고른 노드의 묶음을 그려 읽는다', async () => {
     // 보이지 않는 탭을 DOM에서 빼는 이유다(`routes/editor.tsx`) — 감춰 둔 채 살려 두면
-    // 보지도 않는 목록을 위해 페이지를 열 때마다 요청이 나간다.
+    // 보지도 않는 목록을 위해 요청이 나간다. «컴포넌트» 탭은 고른 노드(페이지를 열면 루트)의 코멘트를 **보이므로** 읽는다.
     const listComments = vi.fn(async () => [])
 
     await openPage(pageDoc(three({})), { apiOverrides: { listComments } })
     await waitForNode('n_a')
+    await waitFor(() => expect(listComments).toHaveBeenCalledTimes(1))
 
-    expect(listComments).not.toHaveBeenCalled()
+    // 옆 탭으로 옮기고 고른 것을 풀어도(캔버스 빈 자리 — 탭을 안 옮긴다) 읽지 않는다.
+    fireEvent.click(screen.getByRole('tab', { name: '상호작용' }))
+    deselect()
+    await waitForNode('n_a')
+    expect(listComments).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -497,8 +511,12 @@ async function findNewBox(): Promise<HTMLTextAreaElement> {
   return (await screen.findByLabelText('새 코멘트')) as HTMLTextAreaElement
 }
 
-function toPropsTab(): void {
-  fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+/**
+ * 옆 탭(«상호작용»)으로 옮긴다 — 코멘트 본문이 내려간다. «컴포넌트» 탭은 고른 노드의 코멘트 묶음을 그려(`src/panels/component-panel.tsx`)
+ * 상자가 남으므로 언마운트를 재는 옆 탭이 못 된다.
+ */
+function toOtherTab(): void {
+  fireEvent.click(screen.getByRole('tab', { name: '상호작용' }))
 }
 
 /** 메뉴 트리에서 페이지를 **누른다** — 사용자가 하듯. */
@@ -586,7 +604,7 @@ function heldComments(seed: Comment[] = []): {
  *
  * | 변조 | 죽는 것 |
  * |---|---|
- * | 마운트 이펙트가 새 코멘트 초안까지 지운다 | *"새 코멘트 초안이 탭을 오가도 …"* **와** 아래 *"쓰던 코멘트는 쓴 노드에만 …"*(속성 탭을 다녀온다) |
+ * | 마운트 이펙트가 새 코멘트 초안까지 지운다 | *"새 코멘트 초안이 탭을 오가도 …"* **와** 아래 *"쓰던 코멘트는 쓴 노드에만 …"*(«컴포넌트» 탭을 다녀온다) |
  * | 그것이 고치던 것까지 지운다 | *"고치던 코멘트가 탭을 오가도 …"* **혼자** |
  * | 쓰기 잠금을 본문의 `useState`로 든다(마운트에 묶는다) | *"게시가 나가 있는 동안 … 잠금이 남는다 …"* · *"게시 중에 옆 페이지로 …"* · `write-ledger.test.tsx`의 *"코멘트 — 에디터를 떠났다 와도 잠금이 남는다 …"* |
  * | 다시 받은 목록을 마운트에 묶는다(언마운트 뒤면 안 쓴다) | *"… 그 뒤 목록이 떠 있는 본문에 닿는다"* **혼자** |
@@ -634,10 +652,10 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
   it('새 코멘트 초안이 탭을 오가도 남는다', async () => {
     await openPage(pageDoc(three({})), { apiOverrides: { listComments: async () => [] } })
     await openCommentTab()
-    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
+    await pickInCommentTab('n_a')
     typeInto(await findNewBox(), '쓰던 코멘트')
 
-    toPropsTab()
+    toOtherTab()
     // **상자가 정말 사라지는 것을 먼저 잠근다** — 없으면 «탭을 눌러도 언마운트되지 않는»
     // 판에서도 통과해 재는 것이 없어진다.
     expect(screen.queryByLabelText('새 코멘트')).toBeNull()
@@ -657,7 +675,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
     fireEvent.click(within(panel()).getByRole('button', { name: '수정' }))
     typeInto(screen.getByLabelText<HTMLTextAreaElement>('코멘트 수정'), '고치던 말')
 
-    toPropsTab()
+    toOtherTab()
     expect(screen.queryByLabelText('코멘트 수정')).toBeNull()
     await openCommentTab()
 
@@ -670,12 +688,12 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
     const api = heldComments()
     await openPage(pageDoc(three({})), { apiOverrides: api.overrides })
     await openCommentTab()
-    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
+    await pickInCommentTab('n_a')
     typeInto(await findNewBox(), '한 번만 달 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
 
-    toPropsTab()
+    toOtherTab()
     await openCommentTab()
     await findNewBox()
 
@@ -696,12 +714,12 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
     const api = heldComments()
     await openPage(pageDoc(three({})), { apiOverrides: api.overrides })
     await openCommentTab()
-    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
+    await pickInCommentTab('n_a')
     typeInto(await findNewBox(), '방금 단 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
 
-    toPropsTab()
+    toOtherTab()
     await openCommentTab()
     await findNewBox()
     // 새 마운트의 조회는 게시가 끝나기 전의 목록이다.
@@ -721,7 +739,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
       apiOverrides: api.overrides,
     })
     await openCommentTab()
-    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
+    await pickInCommentTab('n_a')
     typeInto(await findNewBox(), '앞 페이지에 단 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
@@ -748,7 +766,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
       apiOverrides: api.overrides,
     })
     await openCommentTab()
-    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
+    await pickInCommentTab('n_a')
     typeInto(await findNewBox(), '앞에 단 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
@@ -835,7 +853,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
  * **대상의 축.** 위 절들은 전부 노드 하나를 고른 채 돌아, 쓰는 도중 **다른 노드를 고르는** 갈래를
  * 지나지 않는다. 초안이 한 칸이면 그 갈래는 초안을 남기고 **달릴 대상을 그 노드로 바꾼다** — 노드
  * X에 대해 쓴 글이 노드 Y에 달린다(Chrome 에서 잰 고장 방식). 길은 둘이다 — 코멘트 탭에 머문 채
- * 누르는 길과, 속성 탭을 다녀오는 길(탭 왕복에 초안이 살아서 열린다). 무엇을 왜 그렇게 드는지는
+ * 누르는 길과, «컴포넌트» 탭을 다녀오는 길(탭 왕복에 초안이 살아서 열린다). 무엇을 왜 그렇게 드는지는
  * `panels/comment-panel.tsx`의 머리말 «새 코멘트 초안은 노드마다 …»가 갖는다.
  *
  * **혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 `--project web` 전체로 잰다:
@@ -870,37 +888,35 @@ describe('새 코멘트는 쓴 노드에만 달린다', () => {
         },
       },
     })
-    const pick = (key: 'a' | 'b' | 'c'): void => {
-      fireEvent.click(canvasQuery(`[data-wb-id="n_${key}"]`) as HTMLElement)
-    }
+    // 캔버스 누름은 탭을 «컴포넌트» 로 옮겨(`src/shell/canvas-pick.tsx`) 고를 때마다 «코멘트» 탭으로 돌아온다.
+    const pick = (key: 'a' | 'b' | 'c'): Promise<void> => pickInCommentTab(`n_${key}`)
     await openCommentTab()
-    pick('a')
+    await pick('a')
     typeInto(await findNewBox(), '가에 대해 쓴 말')
 
-    // **1. 코멘트 탭에 머문 채 다른 노드를 누른다.** 초안이 한 칸이면 여기서 상자가
+    // **1. 다른 노드를 누르고 코멘트 탭으로 온다.** 초안이 한 칸이면 여기서 상자가
     // `"가에 대해 쓴 말"`을 그대로 보이고, 그대로 달면 `n_b`에 달린다.
-    pick('b')
-    expect(newBox().value).toBe('')
+    await pick('b')
+    expect((await findNewBox()).value).toBe('')
     typeInto(newBox(), '나에 대해 쓴 말')
-    pick('a')
-    expect(newBox().value).toBe('가에 대해 쓴 말')
+    await pick('a')
+    expect((await findNewBox()).value).toBe('가에 대해 쓴 말')
 
-    // **2. 속성 탭을 다녀오며 다른 노드를 고른다** — 탭 왕복에 초안이 살아서 열리는 길이다.
-    toPropsTab()
-    pick('c')
-    await openCommentTab()
+    // **2. 옆 탭을 다녀오며 다른 노드를 고른다** — 탭 왕복에 초안이 살아서 열리는 길이다.
+    toOtherTab()
+    await pick('c')
     expect((await findNewBox()).value).toBe('')
 
     // **돌아오면 쓰던 글이 원래 노드를 대상으로 그대로 있다** — 달면 그 노드에 달린다.
-    pick('a')
-    expect(newBox().value).toBe('가에 대해 쓴 말')
+    await pick('a')
+    expect((await findNewBox()).value).toBe('가에 대해 쓴 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(created).toEqual([{ pageId: PAGE_ID, nodeId: 'n_a', body: '가에 대해 쓴 말' }]))
     await waitFor(() => expect(newBox().value).toBe(''))
 
     // **응답은 보낸 노드의 초안만 비운다** — 다른 노드에 써 둔 글은 남는다.
-    pick('b')
-    expect(newBox().value).toBe('나에 대해 쓴 말')
+    await pick('b')
+    expect((await findNewBox()).value).toBe('나에 대해 쓴 말')
   })
 })
 
@@ -924,17 +940,16 @@ describe('달 곳 — 폼이 어느 노드에 다는지 말한다', () => {
   it('편집 모드 — 고른 노드의 번호 · 타입 · id 를 말하고, 다른 노드를 고르면 초안과 함께 바뀐다', async () => {
     await openPage(pageDoc(three({ b: 2 })), { apiOverrides: { listComments: async () => [] } })
     await openCommentTab()
-    const pick = (key: 'a' | 'b'): void => {
-      fireEvent.click(canvasQuery(`[data-wb-id="n_${key}"]`) as HTMLElement)
-    }
-    pick('a')
+    // 캔버스 누름은 탭을 «컴포넌트» 로 옮겨(`src/shell/canvas-pick.tsx`) 고를 때마다 «코멘트» 탭으로 돌아온다.
+    const pick = (key: 'a' | 'b'): Promise<void> => pickInCommentTab(`n_${key}`)
+    await pick('a')
     typeInto(await findNewBox(), '가에 대해')
     expect(target()).toBe('달 곳: – Text (n_a)')
 
-    pick('b')
+    await pick('b')
     // **한 값에서** — 상자의 초안과 달 곳이 같이 바뀐다(위 «대상의 축» 절의 «노드마다»).
+    expect((await findNewBox()).value).toBe('')
     expect(target()).toBe('달 곳: 2 Text (n_b)')
-    expect(newBox().value).toBe('')
     expect(newBox().getAttribute('aria-describedby')).toBe('wb-comment-target')
   })
 

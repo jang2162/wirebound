@@ -62,6 +62,7 @@ import { nodeHeadingLabel } from '../panels/node-shape'
 import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useViewState } from '../shell/use-view-state'
+import { useTellCanvasPick } from '../shell/canvas-pick'
 import { useAnnounceCanvasRemeasure, useDragging, usePlacementPreview, usePublishCanvasRegion } from '../drag/use-placement'
 import { applyPreviewLook, isPreviewId, previewDocument } from './canvas-preview'
 import { emptyZonesFor, type EmptyZones } from './empty-zones'
@@ -417,6 +418,8 @@ export function Canvas(props: {
   const outlinedIds = mode === 'edit' ? selectedNodeIds : NO_IDS
   const box = boxes.find((item) => item.nodeId === outlinedNodeId)?.box ?? null
   const [platform] = useState(() => platformOf(navigator))
+  /** «사람이 캔버스에서 눌러 골랐다» — 우측 패널이 «컴포넌트» 탭으로 옮긴다(`../shell/canvas-pick.tsx`). 고름이 서지 않았으면(남이 잡음 · 뺌) 안 알린다. */
+  const tellPick = useTellCanvasPick()
   /** 고르기 몸짓의 답 — 상한에 걸려 더 고르지 않았으면 하단 바가 말한다(구조 트리와 같은 문장). */
   const tellCapped = (change: SelectionChange): void => {
     if (change.capped > 0) store.setEditFailure({ kind: 'message', message: selectionCapNotice() })
@@ -602,10 +605,13 @@ export function Canvas(props: {
         const nodeId = frame === null ? null : nodeIdAt(event.target, frame.document.body)
         // **Cmd · Shift 클릭은 더하거나 뺀다**(`toggleSelect`) — 노드 밖이면 아무것도 안 한다(고른 것을 지키려고 든 수식 키다).
         if (adds(event)) {
-          if (nodeId !== null) tellCapped(store.toggleSelect(nodeId))
+          if (nodeId === null) return
+          tellCapped(store.toggleSelect(nodeId))
+          if (store.getState().selectedNodeIds.includes(nodeId)) tellPick()
           return
         }
         store.selectNode(nodeId)
+        if (nodeId !== null && store.getState().selectedNodeId === nodeId) tellPick()
       }}
       // **조작이 시작되는 자리**(위 `beginGesture`). 셋을 다는 것은 트리거 4종이 도는 DOM
       // 이벤트가 셋이기 때문이다(`render.tsx`의 `DOM_EVENT`) — 하나라도 빠뜨리면 그

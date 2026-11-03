@@ -162,7 +162,7 @@ describe('리베이스가 버린 나간 편집의 거절', () => {
     fireEvent.change(await screen.findByLabelText('새 코멘트'), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await act(async () => {})
-    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+    fireEvent.click(screen.getByRole('tab', { name: '컴포넌트' }))
     await view.tool('Text', '아래로')
     const first = view.patches()[0]!
     await view.tool('Divider', '삭제')

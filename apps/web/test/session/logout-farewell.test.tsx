@@ -116,7 +116,7 @@ async function editRefusedLater(options: { recoverHangs: boolean; posting?: bool
     fireEvent.change(await screen.findByLabelText('새 코멘트'), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await act(async () => {})
-    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+    fireEvent.click(screen.getByRole('tab', { name: '컴포넌트' }))
   }
   const tree = screen.getByRole('region', { name: '구조 트리' })
   fireEvent.click(within(tree).getByRole('button', { name: structureRowName('Text') }))

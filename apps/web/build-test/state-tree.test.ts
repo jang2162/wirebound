@@ -475,8 +475,8 @@ describe.skipIf(!전제.ok)('상태 트리 · 노드별 보임 — 실브라우�
       await stateItem(tab.page, '손님', '설명 쓰기')
       await describeBox(tab.page, 's_guest').fill('손님 초안')
 
-      // 탭 왕복 — «속성» → «페이지 정보».
-      await tab.page.getByRole('tab', { name: '속성', exact: true }).click()
+      // 탭 왕복 — «컴포넌트» → «페이지 정보».
+      await tab.page.getByRole('tab', { name: '컴포넌트', exact: true }).click()
       await infoTab(tab.page)
       expect(await boxText(tab.page, 's_guest')).toBe('손님 초안')
 

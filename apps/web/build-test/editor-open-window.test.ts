@@ -175,7 +175,7 @@ describe.skipIf(!전제.ok)('페이지를 여는 조회의 창', () => {
       expect({ 번호: await page.locator('.wb-shell-marker').allTextContents(), 통지: opened.notices }).toEqual({ 번호: ['1'], 통지: [] })
       expect(await server(stack, alice, fx.P1)).toEqual({ head: 2, content: ['1쪽 원문'] })
 
-      await page.getByRole('tab', { name: '속성' }).click()
+      await page.getByRole('tab', { name: '컴포넌트' }).click()
       await editFirstText(page, '1쪽 원문', '돌아와 낸 글')
       const landed = await poll(
         '다음 편집이 서버에 닿는다',

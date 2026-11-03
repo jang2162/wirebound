@@ -63,8 +63,9 @@ function pick(nodeId: string): void {
 describe('상호작용 탭', () => {
   it('문장 · 고른 노드의 머리 · 대상 고르개가 별칭으로 부른다', async () => {
     await openPage(doc())
-    await openTab('상호작용')
+    // 캔버스에서 고르면 탭이 «컴포넌트» 로 옮긴다(`src/shell/canvas-pick.tsx`) — 고른 뒤 탭을 연다.
     pick('n_save')
+    await openTab('상호작용')
 
     const sentences = [...document.body.querySelectorAll('.wb-shell-interaction-sentence')].map((element) => element.textContent?.trim())
     expect(sentences).toContain('① 머리 저장 클릭 시 ② 회원 목록이 숨겨집니다')
@@ -83,12 +84,14 @@ describe('상호작용 탭', () => {
 describe('코멘트 탭', () => {
   it('«달 곳» 이 `타입 (별칭)` 을 말한다 — 별칭이 없으면 지금 그대로', async () => {
     await openPage(doc(), { apiOverrides: { listComments: async () => [] } })
-    await openTab('코멘트')
     const target = (): string => document.body.querySelector('#wb-comment-target')?.textContent ?? '(없음)'
+    // 캔버스에서 고르면 탭이 «컴포넌트» 로 옮긴다(`src/shell/canvas-pick.tsx`) — 고를 때마다 «코멘트» 탭을 다시 연다.
     pick('n_save')
-    expect(target()).toBe('달 곳: 1 Button (머리 저장) (n_save)')
+    await openTab('코멘트')
+    await waitFor(() => expect(target()).toBe('달 곳: 1 Button (머리 저장) (n_save)'))
     pick('n_plain')
-    expect(target()).toBe('달 곳: – Text (n_plain)')
+    await openTab('코멘트')
+    await waitFor(() => expect(target()).toBe('달 곳: – Text (n_plain)'))
   })
 
   it('무리 머리가 별칭과 id 를 말한다 — 별칭이 없으면 id 만', async () => {

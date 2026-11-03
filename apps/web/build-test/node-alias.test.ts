@@ -455,7 +455,7 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
     try {
       await rowButton(a.page, 'n_long00000001').click()
       const past: Record<string, string[]> = {}
-      for (const tab of ['속성', '상호작용', '코멘트']) {
+      for (const tab of ['컴포넌트', '상호작용', '코멘트']) {
         await a.page.getByRole('tab', { name: tab, exact: true }).click()
         await a.page.waitForTimeout(200)
         past[tab] = await a.page.evaluate((alias) => {
@@ -478,7 +478,7 @@ describe.skipIf(!전제.ok)('노드 별칭 · 줄 요약 — 실브라우저', (
           return out
         }, LONG_ALIAS)
       }
-      expect(past).toEqual({ 속성: [], 상호작용: [], 코멘트: [] })
+      expect(past).toEqual({ 컴포넌트: [], 상호작용: [], 코멘트: [] })
     } finally {
       await a.close()
     }

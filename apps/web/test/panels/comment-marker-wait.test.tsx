@@ -47,7 +47,7 @@ describe('판정에 머문 번호 쓰기', () => {
     // 보내기도 판정(같은 키로 다시 보내기)도 연결 실패 — «다시 확인»에 머문다.
     await screen.findByRole('button', { name: '다시 확인' })
     expect(createComment).toHaveBeenCalledTimes(2)
-    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+    fireEvent.click(screen.getByRole('tab', { name: '컴포넌트' }))
 
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
