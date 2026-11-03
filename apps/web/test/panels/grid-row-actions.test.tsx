@@ -15,6 +15,7 @@ import {
   BUILD_CELLS_LABEL,
   BUILD_CELLS_WHY,
   COVERED_ROW_WHY,
+  FIRST_ROW_WHY,
   SPLIT_ROW_LABEL,
   SPLIT_ROW_WHY,
   TARGETED_ROW_WHY,
@@ -174,12 +175,14 @@ describe('항목이 서는 줄 · 끔', () => {
         expect(queryRowAction(structureRegion(), label, row(id)), `${id} ${label}`).toBeNull()
   })
 
-  it('행의 모양이 못 하게 하면 꺼진 채 까닭 — 되풀이 1 은 떼기 · 칸을 가진 행은 칸 짓기', async () => {
+  it('행의 모양이 못 하게 하면 꺼진 채 까닭 — 되풀이 1 은 떼기 · 칸을 가진 행 · 첫 행은 칸 짓기', async () => {
     await board()
     expect([
       isOff(rowAction(structureRegion(), SPLIT_ROW_LABEL, row('n-r1'))),
       isOff(rowAction(structureRegion(), BUILD_CELLS_LABEL, row('n-r1'))),
-    ]).toEqual([false, false])
+    ]).toEqual([false, true])
+    // 첫 행은 늘 기본이다(`FIRST_ROW_WHY` — 속성 패널 «행 내용» 과 같은 판정).
+    expect(rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-r1'))).toBe(FIRST_ROW_WHY)
     expect(rowReason(structureRegion(), SPLIT_ROW_LABEL, row('n-r2'))).toBe(SPLIT_ROW_WHY)
     expect(rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-r2'))).toBeNull()
     expect(rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-own'))).toBe(BUILD_CELLS_WHY)
@@ -278,10 +281,11 @@ describe('잠금', () => {
   ] as const)
     it(`셀 틀을 읽는 열(${what})을 남이 쥐었으면 «열 틀로 칸 짓기» 가 꺼진 채 그 사람의 이름 · 안 나간다 · 놓으면 켜진다 · 떼어 내기는 나간다`, async () => {
       const srv = await board()
-      fireEvent.click(within(row('n-r1')).getAllByRole('button')[0]!)
+      // 칸 짓기는 둘째 행(n-r2)에 — 첫 행은 늘 기본이다(`FIRST_ROW_WHY`).
+      fireEvent.click(within(row('n-r2')).getAllByRole('button')[0]!)
       srv.lock([{ pageId: PAGE_ID, nodeId: held, userId: 'u-bora', userName: '보라' }])
-      const build = () => rowAction(structureRegion(), BUILD_CELLS_LABEL, row('n-r1'))
-      expect([isOff(build()), rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-r1'))]).toEqual([
+      const build = () => rowAction(structureRegion(), BUILD_CELLS_LABEL, row('n-r2'))
+      expect([isOff(build()), rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-r2'))]).toEqual([
         true,
         '보라님이 편집 중이라 바꿀 수 없습니다',
       ])
@@ -290,7 +294,7 @@ describe('잠금', () => {
       expect(srv.calls).toEqual([])
 
       srv.lock([])
-      expect([isOff(build()), rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-r1'))]).toEqual([false, null])
+      expect([isOff(build()), rowReason(structureRegion(), BUILD_CELLS_LABEL, row('n-r2'))]).toEqual([false, null])
       srv.lock([{ pageId: PAGE_ID, nodeId: held, userId: 'u-bora', userName: '보라' }])
       fireEvent.click(rowAction(structureRegion(), SPLIT_ROW_LABEL, row('n-r1')))
       await waitFor(() => expect(srv.calls).toHaveLength(1))
