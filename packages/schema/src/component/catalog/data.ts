@@ -243,27 +243,82 @@ function spanWord(axis: string, value: unknown): string | null {
   return count === null || count <= 1 ? null : `${axis} ${count}`
 }
 
+/**
+ * 트리 항목 하나 — 이름 · 펼침 · 자식 항목. **노드가 아니다** — 선택지(`input.ts` 의 `OptionSchema`)와 같이 표지 · 상호작용을 항목마다 달 수 없고,
+ * prop 하나(`items`)를 통째로 바꾸는 편집 하나로 계층 전체가 바뀐다(`apps/web/src/panels/controls/tree-items-control.tsx`). 펼침 · 자식이 없는 항목은
+ * 그 키가 없다(문서를 최소로 — 선택지의 `selected` 와 같다). 접힌 항목의 자식은 화면에 안 그린다.
+ */
+export interface TreeItem {
+  label: string
+  open?: boolean
+  children?: TreeItem[]
+}
+
+export const TreeItemSchema: z.ZodType<TreeItem> = z.strictObject({
+  label: z.string(),
+  open: z.boolean().optional(),
+  get children() {
+    return z.array(TreeItemSchema).optional()
+  },
+})
+
+/**
+ * 트리 항목 수(모든 깊이를 합친 수)의 상한. 선택지(`OPTIONS_MAX` 30) · 파일 목록(`FILES_MAX` 20)보다 넉넉한 것은 트리가 접혀 한 화면에 다 안 펴지고,
+ * 관리 화면 좌측 메뉴(대메뉴 · 중메뉴 · 화면) 하나가 수십 항목이라서다. 그리드 행 되풀이(50)의 두 배다.
+ */
+export const TREE_ITEMS_MAX = 100
+
+/** 트리 깊이(맨 위가 1)의 상한 — 앞 꼴의 «깊이» 칸이 1 – 5 였고, 옮긴 문서는 그 깊이를 그대로 갖는다(`../../migrate-tree-items.ts`). */
+export const TREE_DEPTH_MAX = 5
+
+/** 트리의 항목 수와 깊이 — 맨 위가 깊이 1. 배열이 아니거나 모양이 깨진 원소는 세지 않는다(요약 · 패널이 검증 전의 값도 읽는다). */
+export function treeShape(items: unknown): { count: number; depth: number } {
+  let count = 0
+  let depth = 0
+  const walk = (list: unknown, level: number): void => {
+    if (!Array.isArray(list)) return
+    for (const item of list) {
+      if (item === null || typeof item !== 'object') continue
+      count += 1
+      depth = Math.max(depth, level)
+      walk((item as { children?: unknown }).children, level + 1)
+    }
+  }
+  walk(items, 1)
+  return { count, depth }
+}
+
 export const TreeDef = defineComponent({
   type: 'Tree',
   label: '트리',
   description: '계층이 있는 항목을 접었다 펴며 보인다.',
   group: 'data',
   props: z.strictObject({
-    items: z.array(z.string()).default(['항목 1', '항목 2']),
-    depth: z.number().int().min(1).max(5).default(2),
+    items: z
+      .array(TreeItemSchema)
+      .superRefine((items, ctx) => {
+        const shape = treeShape(items)
+        if (shape.count > TREE_ITEMS_MAX)
+          ctx.addIssue({ code: 'custom', message: `트리 항목은 ${TREE_ITEMS_MAX}개까지입니다 (현재: ${shape.count})` })
+        if (shape.depth > TREE_DEPTH_MAX)
+          ctx.addIssue({ code: 'custom', message: `트리 깊이는 ${TREE_DEPTH_MAX}단까지입니다 (현재: ${shape.depth})` })
+      })
+      .default([
+        { label: '항목 1', open: true, children: [{ label: '항목 1-1' }, { label: '항목 1-2' }] },
+        { label: '항목 2', children: [{ label: '항목 2-1' }] },
+      ]),
     selected: z.boolean().default(false),
     disabled: z.boolean().default(false),
   }),
   editor: [
-    { prop: 'items', control: 'stringList', label: '항목' },
-    { prop: 'depth', control: 'number', label: '깊이' },
+    { prop: 'items', control: 'treeItems', label: '항목' },
     // `states`와 짝이다 — 둘 다 없으면 트리의 선택·비활성 표현이 도달 불가다.
     { prop: 'selected', control: 'switch', label: '선택 상태' },
     { prop: 'disabled', control: 'switch', label: '비활성' },
   ],
   summary: (props) => {
-    const count = countOf(props.items)
-    return count === null ? null : `항목 ${count}`
+    if (!Array.isArray(props.items)) return null
+    return `항목 ${treeShape(props.items).count}`
   },
   states: ['selected', 'disabled'],
   zones: [],

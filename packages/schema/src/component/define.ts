@@ -9,7 +9,6 @@ export type EditorControl =
   | 'number'
   | 'switch'
   | 'select'
-  | 'stringList'
   | 'pairList'
   | 'optionList'
   /** 파일 목록 — `{ name, size }` 배열(`catalog/input.ts` 의 `FileEntrySchema`). 이름 · 크기 두 칸 줄의 목록 위젯이다(`apps/web/src/panels/controls/list-control.tsx`). */
@@ -18,6 +17,8 @@ export type EditorControl =
   | 'color'
   /** 그림 id(sha256) 또는 없음 — 올리기 · 고르기 · 지우기(`apps/web/src/panels/controls/image-control.tsx`). */
   | 'image'
+  /** 트리 항목 — `{ label, open?, children? }` 의 중첩 배열(`catalog/data.ts` 의 `TreeItemSchema`). 줄마다 이름 · 펼침 · 줄 행동의 트리 위젯이다(`apps/web/src/panels/controls/tree-items-control.tsx`). */
+  | 'treeItems'
 
 export interface EditorField {
   prop: string

@@ -158,6 +158,8 @@ export type { PageKind } from './new-page'
 export { newPageDocument, PAGE_KINDS, pageKindOf } from './new-page'
 export type { LiftResult } from './migrate-document'
 export { MigrationError, liftStateRegions } from './migrate-document'
+export type { LiftedTreeItem, LiftTreeDocumentResult, LiftTreeResult } from './migrate-tree-items'
+export { liftTreeItems, liftTreeNodes, treeItemsFromFlat } from './migrate-tree-items'
 
 export type { PageJson, PageJsonComment, PageJsonFailure, PageJsonIssue, PageJsonPage, PageJsonResult } from './page-json/envelope'
 export {
