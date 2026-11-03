@@ -7,8 +7,16 @@
  * |---|---|
  * | 구조 트리의 구역 줄(`selectedZone`) | 그 구역의 끝(`zoneDropTarget`) |
  * | 없음 · 뿌리 | 페이지 끝(`pageEndTarget`) |
+ * | 하단 판이 방금 넣어 고른 노드(`justPlaced`) | 그 노드 «뒤»(같은 부모) — 자식을 받아도. 아래 «연달아 넣기» |
  * | 자식을 받는 컴포넌트 | 그 노드 «안»(끝) — 그 몸통이 넣을 것을 안 받으면 «뒤»(아래) |
  * | 잎(자식을 안 받음) | 그 노드 «뒤»(같은 부모) |
+ *
+ * **연달아 넣기** — 넣기 단추 · 끌어 놓기는 넣은 노드를 고르고 스토어가 그것을 «방금 넣음» 으로 적는다(`store/editor-store.ts` 의 `justPlaced` ·
+ * `selectPlaced`). 그 고름이 그대로인 채 다시 넣으면 고른 노드 바로 뒤에 선다 — 검색 폼을 골라 «필드» 를 셋 넣으면 폼 몸통에 필드 셋이 형제로 서고,
+ * 컨테이너를 연달아 넣어도 형제다. 사람이 무엇이든 고르면(방금 넣은 그 노드를 다시 눌러도) 표지가 비어 위 표의 아래 두 줄로 돌아간다 — 방금 넣은
+ * 필드 «안» 에 넣으려면 그 필드를 한 번 누른다. 잠금은 잎의 «뒤» 와 같은 판정이다(고른 노드의 `lockedBy` 를 먼저 본다). **«뒤» 의 부모 구역이 넣을 것을
+ * 안 받으면**(받는 타입 · 설 자리 — `fitRefusal`) 표지가 없는 판의 규칙으로 물러선다(«안» → 그것도 안 되면 그 판의 이유 문장). «뒤» 가 잠금에
+ * 막힌 판은 물러서지 않고 그 까닭을 말한다.
  *
  * **«안» 이 거절되면 «뒤»** — 몸통의 받는 타입 · 넣을 것의 설 자리(`fitRefusal`)에 걸리면 그 노드 바로 뒤로 물러선다(설계 spec
  * `docs/superpowers/specs/2026-10-25-grid-design.md` «8»). 열을 고르고 «열» · «열 묶음»(셀 틀이 받지만 열은 그리드 · 열 묶음에만 선다) · 행을 고르고
@@ -64,6 +72,8 @@ export function paletteAddTarget(input: {
   blockedBy: (ops: readonly PatchOp[]) => NodeLock | null
   /** 그 노드를 막는 남의 잠금(스토어의 `lockedBy`). */
   lockedBy: (nodeId: string) => NodeLock | null
+  /** 하단 판이 방금 넣어 고른 노드들(스토어의 `justPlaced`) — 고른 노드가 그 안이면 «뒤» 에 넣는다(머리말 «연달아 넣기»). */
+  justPlaced?: readonly string[] | null
 }): PaletteAdd {
   const { document, selectedNodeId: selected, placing } = input
   const zone = input.selectedZone ?? null
@@ -82,6 +92,16 @@ export function paletteAddTarget(input: {
   const atEnd = selected === null || selected === rootId
   const node = atEnd ? undefined : findNodeSafely(document.root, selected)
   const inside = node !== undefined && acceptsChildren(node)
+
+  // 방금 넣은 노드 «뒤» — 머리말 «연달아 넣기». 받는 타입 · 설 자리에 걸리면 아래 규칙으로 물러선다.
+  if (selected !== null && node !== undefined && input.justPlaced?.includes(selected) === true) {
+    const lock = input.lockedBy(selected)
+    if (lock !== null) return { ok: false, reason: lockedSelectionStatus(lock.userName) }
+    const after = structureDropTarget(document, placing, selected, 'after', input.blockedBy)
+    if (after !== null) return { ok: true, target: after }
+    const slot = afterSlot(document, selected)
+    if (slot !== null && !refusesIn(document, placing, slot)) return whyNot(document, placing, slot, input.blockedBy)
+  }
 
   // 고른 잎을 남이 잡았으면 넣지 않는다 — 판정은 잠긴 노드 **뒤**에 넣기를 막지 않지만(서버도 받는다), `+` 가 그 판에 항목을 전부 끄는
   // 것과 같이 간다(`edit/structure-actions.ts` 의 `structureAbilities` — 잠금이면 전부 거짓). «안 끝» 은 판정에 맡긴다(머리말).
@@ -134,6 +154,14 @@ function whyNot(
   const blocker = ops === null ? null : blockedBy(ops)
   if (blocker !== null) return { ok: false, reason: lockedNotice(blocker.userName) }
   return { ok: false, reason: NOT_IN_DOCUMENT_STATUS }
+}
+
+/** 그 자리의 부모 구역이 넣을 것을 안 받는가 — 자식을 안 받음 · 받는 타입 · 설 자리(`whyNot` 의 앞 두 줄과 같은 물음). */
+function refusesIn(document: PageDocument, placing: Exclude<Placing, { kind: 'node' }>, slot: { parentId: string; zone: string }): boolean {
+  return (
+    !acceptsIn(findNodeSafely(document.root, slot.parentId), slot.zone) ||
+    zoneDropRefusal(document, placing, slot.parentId, slot.zone) !== null
+  )
 }
 
 function childCount(node: unknown): number {
