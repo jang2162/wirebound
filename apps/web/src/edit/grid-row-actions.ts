@@ -80,6 +80,8 @@ export const BUILD_CELLS_WHY = '칸이 없는 행만 열 틀로 칸을 지을 �
 export const GAP_ROW_WHY = '생략 띠는 칸 · 되풀이를 쓰지 않습니다'
 export const COVERED_ROW_WHY = '위 행의 세로 칸이 이 행의 첫 줄을 덮고 있어 칸을 지을 수 없습니다'
 export const TARGETED_ROW_WHY = '이 행을 가리키는 상호작용이 있어 뗄 수 없습니다 — 떼면 첫 줄에만 닿습니다'
+/** 첫 행은 늘 셀 틀을 그린다(머리말 «첫 행은 늘 기본이다»). */
+export const FIRST_ROW_WHY = '첫 행은 늘 기본입니다 — 기본 행은 첫 행과 같은 꼴로 그려집니다'
 /** 행이 그리드의 «행» 구역에 있지 않다 — 검증을 못 지난 문서. */
 const NOT_IN_GRID = '그리드 안의 행이 아닙니다'
 
@@ -132,7 +134,47 @@ function targetedFromOutside(document: PageDocument, row: WbNode): boolean {
 /** 그 행에서 «열 틀로 칸 짓기» 를 못 하는 까닭 — 할 수 있으면 `null`. */
 export function buildCellsRefusal(document: PageDocument, rowId: string): string | null {
   const plan = cellPlan(document, rowId)
-  return 'reason' in plan ? plan.reason : null
+  if ('reason' in plan) return plan.reason
+  return isFirstRow(document, plan.gridId, rowId) ? FIRST_ROW_WHY : null
+}
+
+/** 그 행이 그리드 «행» 구역의 첫 노드인가. */
+function isFirstRow(document: PageDocument, gridId: string, rowId: string): boolean {
+  return nodesIn(findNodeSafely(document.root, gridId), 'rows')[0]?.id === rowId
+}
+
+/**
+ * 그 행의 칸이 지금 열 틀로 지을 칸과 같은 꼴인가 — id · 코멘트 번호를 빼고, 칸 안을 가리키는 상호작용 대상은 칸 안의 차례로 견준다(칸 짓기가 id 를 새로
+ * 짓고 대상을 사본으로 옮긴다). 칸을 걷어도 잃을 것이 없는지 묻는 자리(`./row-content.ts`)가 부른다. 칸이 없거나 칸을 걷은 판에서 지을 수 없으면 거짓.
+ */
+export function cellsMatchTemplate(document: PageDocument, rowId: string): boolean {
+  const row = findNodeSafely(document.root, rowId) as WbNode | undefined
+  const path = findNodePathSafely(document.root, rowId)
+  if (!isRow(row) || path === undefined) return false
+  const cells = nodesIn(row, BODY_ZONE)
+  if (cells.length === 0) return false
+  const bare = applyOps(document, [{ op: 'remove', path: `${path}/children` }])
+  const plan = cellPlan(bare, rowId)
+  return !('reason' in plan) && canonicalCells(cells) === canonicalCells(plan.cells)
+}
+
+/** 견줄 꼴 — 키 차례 · 빈 배열 · id · 번호를 걷고, 칸 안 노드를 가리키는 글은 그 노드의 차례(`#n`)로 바꾼다. */
+function canonicalCells(cells: readonly WbNode[]): string {
+  const order = new Map<string, number>()
+  for (const cell of cells) for (const visit of walkSafely(cell)) if (!order.has(visit.node.id)) order.set(visit.node.id, order.size)
+  const canonical = (value: unknown): unknown => {
+    if (typeof value === 'string') return order.has(value) ? `#${order.get(value)}` : value
+    if (Array.isArray(value)) return value.map(canonical)
+    if (value === null || typeof value !== 'object') return value
+    const out: Record<string, unknown> = {}
+    for (const key of Object.keys(value).sort()) {
+      const inner = (value as Record<string, unknown>)[key]
+      if (key === 'id' || key === 'marker' || (Array.isArray(inner) && inner.length === 0)) continue
+      out[key] = canonical(inner)
+    }
+    return out
+  }
+  return JSON.stringify(cells.map(canonical))
 }
 
 /** «한 행 떼어 내기» 의 묶음 — 그 행의 `repeat` 을 걷고(기본 1) 바로 뒤에 `repeat` n − 1 사본(머리말 «앞 행이 원본이다»). */
@@ -233,6 +275,7 @@ function cellPlan(document: PageDocument, rowId: string): CellPlan {
 export function buildCellsOps(document: PageDocument, rowId: string, generate?: () => string): NodeEdit {
   const plan = cellPlan(document, rowId)
   if ('reason' in plan) return plan
+  if (isFirstRow(document, plan.gridId, rowId)) return { reason: FIRST_ROW_WHY }
   if (plan.cells.length > MAX_OPS_PER_EDIT) return { reason: tooManyOpsNotice(plan.cells.length) }
   const cells = sameDocumentCopies(plan.cells, generate)
   const ops: PatchOp[] = []

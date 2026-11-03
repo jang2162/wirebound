@@ -429,7 +429,13 @@ describe('열 틀로 칸 짓기', () => {
           { ...column('n-b', [{ id: 'n-tb', type: 'Text', props: { content: 'B' } }]), visibility: { mode: 'except', states: ['s_x'] } },
           column('n-c', [{ id: 'n-tc', type: 'Text', props: { content: 'C' } }]),
         ],
-        zones: { rows: [{ id: 'n-r', type: 'GridRow', props: { repeat: 2 } }] },
+        // 첫 행은 늘 기본이라(`FIRST_ROW_WHY`) 칸은 둘째 행에 짓는다.
+        zones: {
+          rows: [
+            { id: 'n-top', type: 'GridRow' },
+            { id: 'n-r', type: 'GridRow', props: { repeat: 2 } },
+          ],
+        },
       }),
       viewStates: [{ id: 's_x', name: '요약' }],
     }

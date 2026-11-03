@@ -83,6 +83,12 @@ const FLOW: Node[] = [
   },
 ]
 
+/**
+ * FLOW 앞에 행 하나(`f_r0`)를 둔 판 — «열 틀로 칸 짓기» 는 첫 행에 못 짓는다(`src/edit/grid-row-actions.ts` 의 `FIRST_ROW_WHY` — 첫 행은 늘 기본). 칸을 짓는
+ * 판은 둘째 행 뒤에 짓는다.
+ */
+const FLOW_TOP: Node[] = [{ ...FLOW[0]!, zones: { ...FLOW[0]!.zones!, rows: [{ id: 'f_r0', type: 'GridRow' }, ...FLOW[0]!.zones!.rows!] } }]
+
 describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () => {
   let stack: EditorStack
   let alice: Session
@@ -483,7 +489,7 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
    * `buildCells`). «한 행 떼어 내기» 는 열을 안 써 나간다. 밥이 셀 틀을 고치고 놓은 뒤의 칸 짓기는 밥의 글을 베끼고, 셀 틀은 밥의 것 그대로다.
    */
   it('두 사람 — 밥이 열을 쥔 동안 칸 짓기는 막히고(밥의 이름) 떼어 내기는 나간다 · 밥이 놓은 뒤 칸 짓기는 밥의 셀 틀을 베낀다', async () => {
-    const { P } = await seed('grb-two-lock', FLOW, true)
+    const { P } = await seed('grb-two-lock', FLOW_TOP, true)
     const a = await open(P, 'f_g')
     const b = await open(P, 'f_g', { user: 'bob' })
     try {
@@ -511,7 +517,7 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
       const split = await poll(
         '떼어 내기는 나간다',
         () => server(P),
-        (root) => rowsOf(root, 'f_g').length === 2,
+        (root) => rowsOf(root, 'f_g').length === 3,
       )
       // 밥이 셀 틀 글을 고치고(제 잠금 안 — 서버가 받는다) 열을 놓는다.
       const bobs = await stack.request(await stack.login(stack.users.bob), 'PATCH', `${P}/ops`, {
@@ -527,7 +533,7 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
         (n) => n === 0,
       )
       await canvasFrame(a.page).locator('[data-wb-id="f_tb"]', { hasText: '밥 고침' }).waitFor({ state: 'attached' })
-      const fresh = find(split, 'f_g')!.zones!.rows![1]!.id
+      const fresh = find(split, 'f_g')!.zones!.rows![2]!.id
       await rowAction(a.page, fresh, '열 틀로 칸 짓기')
       const built = await poll(
         '밥이 놓은 뒤 칸 짓기',
@@ -545,6 +551,7 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
       expect(outcome).toEqual({
         blocked: { disabled: 'true', why: '밥님이 편집 중이라 바꿀 수 없습니다', head: 0 },
         rowsAfterSplit: [
+          [1, 'data', 'default', 0],
           [1, 'data', 'default', 0],
           [4, 'data', 'default', 0],
         ],
@@ -829,7 +836,10 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
     },
     {
       name: '칸 짓기 — 밥이 열을 더함',
-      rows: [{ id: 'f_r', type: 'GridRow', props: { repeat: 2 } }],
+      rows: [
+        { id: 'f_r0', type: 'GridRow' },
+        { id: 'f_r', type: 'GridRow', props: { repeat: 2 } },
+      ],
       theirs: (root) => [
         {
           op: 'add',
@@ -851,7 +861,10 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
       // 열 더함과 같은 전제(열 트리의 `test`)가 막는다 — 전제를 뗀 변조에서 둘이 함께 죽는다. 이 판만 죽는 변조는 없다(열 트리를 열마다 나눈 `test` 는 지움을 막고
       // 더함을 못 막는다 — 열 더함 판만 죽인다).
       name: '칸 짓기 — 밥이 열을 지움',
-      rows: [{ id: 'f_r', type: 'GridRow', props: { repeat: 2 } }],
+      rows: [
+        { id: 'f_r0', type: 'GridRow' },
+        { id: 'f_r', type: 'GridRow', props: { repeat: 2 } },
+      ],
       theirs: (root) => [{ op: 'remove', path: pathOf(root, 'f_cc') }],
       act: '열 틀로 칸 짓기',
       target: 'f_r',
@@ -932,7 +945,7 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
 
   /** **되돌리기** — 줄 행동 하나가 되돌리기 한 번 · 다시 실행 한 번이다. */
   it('되돌리기 — 떼어 내기 · 칸 짓기가 각각 한 번에 돌아가고 다시 실행된다', async () => {
-    const { P } = await seed('grb-undo', FLOW)
+    const { P } = await seed('grb-undo', FLOW_TOP)
     const { page, close } = await open(P, 'f_g')
     const history = page.getByRole('group', { name: '편집 이력' })
     const shape = async () => JSON.stringify(rowsOf(await server(P), 'f_g').map(([, ...rest]) => rest))
@@ -965,7 +978,7 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
    * 새로고침하면 되돌리기 한 번이 칸 짓기를, 한 번 더가 떼어 내기를 돌린다 — 줄 행동 하나가 서버 이력의 revision 하나다.
    */
   it('새로고침 뒤 — 되돌리기 한 번이 칸 짓기를 · 한 번 더가 떼어 내기를 돌린다', async () => {
-    const { P } = await seed('grb-undo-reload', FLOW)
+    const { P } = await seed('grb-undo-reload', FLOW_TOP)
     const { page, close } = await open(P, 'f_g')
     const history = page.getByRole('group', { name: '편집 이력' })
     const shape = async () => JSON.stringify(rowsOf(await server(P), 'f_g').map(([, ...rest]) => rest))

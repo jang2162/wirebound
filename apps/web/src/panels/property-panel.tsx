@@ -53,6 +53,7 @@ import { findNodeSafely, walkSafely } from '../edit/safe-walk'
 import { aliasOps, propOps, variantOps, visibilityOps, weightOps } from '../edit/ops'
 import { useHiddenNodes, useViewState } from '../shell/use-view-state'
 import { VisibilityField } from './visibility-field'
+import { RowContentField } from './row-content-field'
 import { removeManyOps } from '../edit/paste-ops'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
@@ -444,6 +445,30 @@ export function PropertyPanel(props: {
         </>
       )}
       <dl className="wb-shell-props">
+        {/* **그리드 행의 «행 내용» 은 컴포넌트 속성 칸들 바로 아래다** — prop 이 아니라 칸 유무를 비추는 화면 명령이다(`./row-content-field.tsx`). */}
+        {doc !== null && type === 'GridRow' && (
+          <RowContentField
+            key={`${node.id}:row-content`}
+            document={doc}
+            rowId={node.id}
+            disabled={blocked}
+            readLock={(columnIds) => {
+              const held = columnIds.map((columnId) => lockOf(columnId)).find((lock) => lock !== null) ?? null
+              return held === null ? null : lockedNotice(held.userName)
+            }}
+            commit={(ops, reads) => {
+              if (blocked) return
+              // 보내기 전에 서버와 같은 물음 + 셀 틀을 읽는 열의 남의 잠금(행 줄 «열 틀로 칸 짓기» 와 같다 — `./structure-toolbar.tsx`).
+              const blocker =
+                store.editBlockedBy(ops) ?? reads.map((columnId) => store.lockedBy(columnId)).find((lock) => lock !== null) ?? null
+              if (blocker !== null) {
+                store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
+                return
+              }
+              commitOps(ops)
+            }}
+          />
+        )}
         {/* **몫은 컴포넌트 속성 칸들 바로 아래다** — 별칭처럼 노드 봉투의 필드이고, 부모가 몫을 읽을 때만 선다(`weightRoom` — 렌더러가 몫을 싣는 판정과 같다). */}
         {doc !== null && weightRoom(...weightParentOf(doc, node.id)) !== undefined && (
           <WeightField
