@@ -38,8 +38,9 @@
  * **넣을 수 있는가를 넣는 순간에 다시 본다** — 판은 뷰 모드 · 강등에도 남으므로 끄는 중 · 읽는 중에 넣을 수 없게 될 수 있다. 그 값이 바뀌면 카드
  * 판을 다시 마운트해(끌기를 끊는다) 놓기가 오지 않게 하고, 그래도 온 넣기(읽는 사이 바뀜)는 보내기 직전에 그 값을 보고 버린다.
  *
- * **더블클릭 · 연달아 친 Enter 의 둘째는 안 넣는다** — 컴포넌트 카드의 «넣기» 와 같은 판정(`DOUBLE_CLICK_MS` · `DOUBLE_CLICK_SLOP`)이다. 넣는 중
- * (읽는 사이)의 다음 누름도 버린다.
+ * **«넣기» 단추의 더블클릭 · 연달아 친 Enter 의 둘째는 안 넣는다** — 컴포넌트 카드의 «넣기» 와 같은 판정(`DOUBLE_CLICK_MS` · `DOUBLE_CLICK_SLOP`)이다.
+ * 넣는 중(읽는 사이)의 다음 누름도 버린다. **카드 몸통의 더블클릭은 단추와 같은 넣기를 한 번 한다**(넣을 수 있는 판에만 — 짝짓는 규칙은
+ * `./card-double-click.ts`). 몸통의 홑누름은 아무것도 안 한다.
  *
  * ## 복사 — 다시 읽고 새로 저장한다
  *
@@ -70,6 +71,7 @@ import { lockedNotice } from '../panels/property-panel'
 import { DOUBLE_CLICK_MS, DOUBLE_CLICK_SLOP } from '../shell/action-menu'
 import { shellIcon } from '../shell/icons'
 import { openDocumentNow, useEditorStoreInstance } from '../store/use-editor-store'
+import { useCardDoubleClick } from './card-double-click'
 import { moduleDroppedNotice, moduleInsertOps } from './module-insert'
 import { paletteAddTarget } from './palette-add'
 
@@ -402,19 +404,22 @@ function ModuleCards(props: {
 
   /** 마지막으로 넣은 누름 — 같은 카드의 더블클릭 · Enter 두 번의 둘째를 버린다(머리말 «넣기»). */
   const lastAdd = useRef<{ key: string; at: number; x: number; y: number; pointer: boolean } | null>(null)
-  const repeatsLastAdd = (key: string, event: MouseEvent<HTMLButtonElement>): boolean => {
+  const repeatsLastAdd = (key: string, event: MouseEvent<HTMLElement>): boolean => {
     const previous = lastAdd.current
     if (previous === null || previous.key !== key || performance.now() - previous.at >= DOUBLE_CLICK_MS) return false
     const fromPointer = event.detail > 0
     return !fromPointer || !previous.pointer || Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <= DOUBLE_CLICK_SLOP
   }
-  const add = (card: ModuleCard, event: MouseEvent<HTMLButtonElement>): void => {
+  /** «넣기» 단추의 누름 · Enter · 몸통의 더블클릭(머리말 «넣기»). */
+  const add = (card: ModuleCard, event: MouseEvent<HTMLElement>): void => {
     if (repeatsLastAdd(card.key, event)) return
     const at = { key: card.key, at: performance.now(), x: event.clientX, y: event.clientY, pointer: event.detail > 0 }
     void props.insert(card, { kind: 'button' }).then((inserted) => {
       if (inserted) lastAdd.current = at
     })
   }
+  /** 몸통의 누름 — 더블클릭의 둘째만 넣는다(`./card-double-click.ts`). 넣을 수 없는 판에는 걸지 않는다. */
+  const bodyClick = useCardDoubleClick(add)
 
   return (
     <div className="wb-shell-palette-cards">
@@ -432,7 +437,9 @@ function ModuleCards(props: {
                     className="wb-shell-module-card"
                     data-wb-module-card={card.key}
                     // 넣을 수 없는 판에는 끌기가 없다 — 몸통이 끌기 전용이라 그때는 아무것도 안 한다(머리말 «무엇이 서는가»).
-                    {...(props.insertable ? drag.bind({ kind: 'module', key: card.key, nodes: card.sample }) : {})}
+                    {...(props.insertable
+                      ? { ...drag.bind({ kind: 'module', key: card.key, nodes: card.sample }), onClick: (event) => bodyClick(card, event) }
+                      : {})}
                   >
                     <span className="wb-shell-module-name">{card.name}</span>
                     <span className="wb-shell-module-detail">{card.detail}</span>
