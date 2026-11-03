@@ -1371,7 +1371,8 @@
   cursor: pointer;
 }
 
-/* 여럿을 고른 판의 속성 패널 단추 — 타입이 섞였을 때의 «고른 노드 삭제»(`panels/property-panel.tsx` 의 `BulkProperties`). */
+/* 우측 패널의 글 단추 — 여럿을 고른 판의 «고른 노드 삭제»(`panels/property-panel.tsx` 의 `BulkProperties`) · «페이지 정보» 탭의 저장 · «상태 추가» ·
+   «취소» · «버리기»(`panels/page-description.tsx` · `panels/page-states.tsx`). 이유를 싣는 단추는 `aria-disabled` 로 끈다(«상태 추가»). */
 .wb-shell-panel-action {
   appearance: none;
   border: 1px solid var(--wb-shell-line);
@@ -1384,7 +1385,8 @@
   cursor: pointer;
 }
 
-.wb-shell-panel-action:disabled {
+.wb-shell-panel-action:disabled,
+.wb-shell-panel-action[aria-disabled='true'] {
   color: var(--wb-shell-muted);
   cursor: not-allowed;
 }
@@ -3723,6 +3725,8 @@
   color: #fff;
 }
 
+/* 이 탭의 칸 · 글 상자는 «속성» 탭과 같은 `.wb-shell-control`, 단추는 `.wb-shell-panel-action` 을 함께 단다 — 여기 규칙은 자리 · 크기만 갖는다.
+   둘이 없으면 브라우저 기본 꼴(테두리 2px inset · Arial 단추)로 선다(`build-test/page-info-style.test.ts`). */
 .wb-shell-page-title-input {
   width: 100%;
   box-sizing: border-box;

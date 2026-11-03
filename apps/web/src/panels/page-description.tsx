@@ -910,7 +910,7 @@ export function PageMeta(props: {
           <span>페이지 이름</span>
           <input
             id="wb-page-title"
-            className="wb-shell-page-title-input"
+            className="wb-shell-control wb-shell-page-title-input"
             type="text"
             name="title"
             value={titleValue}
@@ -926,7 +926,7 @@ export function PageMeta(props: {
         {/* 빈 이름은 보내지 않는다 — 서버의 `Title` 이 1자 이상이다(메뉴 트리의 이름 입력과 같은 판정 — `submitInput`). */}
         <button
           type="submit"
-          className="wb-shell-page-description-save"
+          className="wb-shell-panel-action wb-shell-page-description-save"
           disabled={title.saving.locked || titleValue === state.title || titleValue === ''}
         >
           이름 저장
@@ -946,7 +946,7 @@ export function PageMeta(props: {
           <span>페이지 설명</span>
           <textarea
             id="wb-page-description"
-            className="wb-shell-page-description-input"
+            className="wb-shell-control wb-shell-page-description-input"
             name="description"
             rows={8}
             placeholder={NO_DESCRIPTION}
@@ -970,7 +970,7 @@ export function PageMeta(props: {
         </p>
         <button
           type="submit"
-          className="wb-shell-page-description-save"
+          className="wb-shell-panel-action wb-shell-page-description-save"
           disabled={description.saving.locked || descriptionValue === descriptionServer}
         >
           설명 저장
