@@ -208,7 +208,7 @@ async function withDownloadCapture(run: () => void): Promise<Download> {
     url.revokeObjectURL = (): void => {}
     document.addEventListener('click', onClick, true)
     run()
-    // 내보내기는 조회 둘을 기다린 뒤에 앵커를 만든다.
+    // 받기 단추가 앵커를 만든다 — 내보내기 상자는 조회 둘을 기다린 뒤에 그 단추를 세운다.
     await waitFor(() => expect(clicks).toBe(1))
   } finally {
     document.removeEventListener('click', onClick, true)
@@ -874,29 +874,36 @@ describe('가져온 결과는 하단 바에 남는다', () => {
   })
 })
 
-describe('내보내기 — 페이지 줄 `…`', () => {
-  it('**그 줄의** 페이지를 낸다 — 열린 페이지가 아니다', async () => {
+/** 열린 내보내기 상자 — 이름이 «JSON 내보내기 — <페이지 이름>» 이다(`src/panels/page-json-export-dialog.tsx`). */
+function exportDialog(): HTMLElement {
+  return screen.getByRole('dialog', { name: /^JSON 내보내기 — / })
+}
+
+describe('내보내기 — 페이지 줄 `…` 이 여는 상자', () => {
+  it('**그 줄의** 페이지를 상자에 싣고 «파일로 받기» 가 상자의 글과 같은 파일을 받는다 — 열린 페이지가 아니다', async () => {
     // 열린 페이지는 «회원 목록», 누르는 줄은 «회원 상세» — 둘을 가른다.
     const api = await open({}, '/projects/p-1/pages/pg-list')
-    const item = rowAction(treeRegion(), 'JSON 내보내기', rowNamed(treeRegion(), '회원 상세'))
+    fireEvent.click(rowAction(treeRegion(), 'JSON 내보내기', rowNamed(treeRegion(), '회원 상세')))
 
-    const download = await withDownloadCapture(() => fireEvent.click(item))
-
+    const box = (await within(exportDialog()).findByRole('textbox', { name: '내보낸 JSON' })) as HTMLTextAreaElement
     expect(api.getPage).toHaveBeenCalledWith('p-1', 'pg-detail')
     expect(api.listComments).toHaveBeenCalledWith('p-1', 'pg-detail')
+    expect(screen.getByRole('dialog', { name: 'JSON 내보내기 — 회원 상세' })).toBeTruthy()
+    expect(box.readOnly).toBe(true)
+
+    const download = await withDownloadCapture(() => fireEvent.click(within(exportDialog()).getByRole('button', { name: '파일로 받기' })))
     expect(download.fileName).toBe('회원-상세.wirebound-page.json')
-    const parsed = JSON.parse(download.text) as PageJson
-    expect(parsed.page.title).toBe('회원 상세')
+    expect(download.text).toBe(box.value)
+    expect((JSON.parse(download.text) as PageJson).page.title).toBe('회원 상세')
   })
 
-  it('서버의 페이지와 코멘트를 같은 순간에 읽어 파일로 낸다', async () => {
+  it('상자의 글은 서버의 페이지와 코멘트를 같은 순간에 읽은 파일이다', async () => {
     await open({}, '/projects/p-1/pages/pg-list')
-    const item = rowAction(treeRegion(), 'JSON 내보내기', rowNamed(treeRegion(), '회원 목록'))
+    fireEvent.click(rowAction(treeRegion(), 'JSON 내보내기', rowNamed(treeRegion(), '회원 목록')))
 
-    const download = await withDownloadCapture(() => fireEvent.click(item))
-
-    expect(download.fileName).toBe('회원-목록.wirebound-page.json')
-    const parsed = JSON.parse(download.text) as PageJson
+    const box = (await within(exportDialog()).findByRole('textbox', { name: '내보낸 JSON' })) as HTMLTextAreaElement
+    expect(within(exportDialog()).getByText('회원-목록.wirebound-page.json')).toBeTruthy()
+    const parsed = JSON.parse(box.value) as PageJson
     expect(parsed.wireboundVersion).toBe(WIREBOUND_PAGE_VERSION)
     expect(parsed.page).toEqual({ title: '회원 목록', description: '가입한 회원을 본다' })
     // **번호는 문서에 실려 나가고 코멘트에는 없다**(설계서 「페이지 JSON」).
@@ -904,14 +911,22 @@ describe('내보내기 — 페이지 줄 `…`', () => {
     expect(parsed.comments).toEqual([{ nodeId: 'n_00000000000b', body: '목록은 10개씩' }])
   })
 
-  it('실패는 하단 바에 서고 «닫기»가 걷는다', async () => {
+  it('읽는 동안은 «불러오는 중…» 이고 복사 · 받기가 없다', async () => {
+    await open({ getPage: vi.fn(() => new Promise<PageDetail>(() => {})) })
+    fireEvent.click(rowAction(treeRegion(), 'JSON 내보내기', rowNamed(treeRegion(), '회원 목록')))
+
+    expect(within(exportDialog()).getByRole('status').textContent).toBe('불러오는 중…')
+    expect(within(exportDialog()).queryByRole('button', { name: '클립보드에 복사' })).toBeNull()
+    expect(within(exportDialog()).queryByRole('button', { name: '파일로 받기' })).toBeNull()
+  })
+
+  it('실패는 상자 안에 서고 하단 바에는 없다 — 상자 «닫기» 가 걷는다', async () => {
     await open({ listComments: vi.fn(async () => Promise.reject(new ApiError(500, 'internal', '서버 오류'))) })
-    const item = rowAction(treeRegion(), 'JSON 내보내기', rowNamed(treeRegion(), '회원 목록'))
+    fireEvent.click(rowAction(treeRegion(), 'JSON 내보내기', rowNamed(treeRegion(), '회원 목록')))
 
-    fireEvent.click(item)
-
-    await waitFor(() => expect(within(footer()).getByRole('alert').textContent).toContain('서버 오류'))
-    fireEvent.click(within(footer()).getByRole('button', { name: '내보내기 실패 닫기' }))
+    await waitFor(() => expect(within(exportDialog()).getByRole('alert').textContent).toContain('서버 오류'))
     expect(within(footer()).queryByRole('alert')).toBeNull()
+    fireEvent.click(within(exportDialog()).getByRole('button', { name: '닫기' }))
+    expect(screen.queryByRole('dialog', { name: /^JSON 내보내기 — / })).toBeNull()
   })
 })

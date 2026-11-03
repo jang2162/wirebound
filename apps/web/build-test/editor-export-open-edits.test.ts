@@ -1,13 +1,13 @@
 /**
  * **열린 페이지를 내보내면 방금 친 글이 파일에 든다**(`panels/page-json-export.ts` — 보낸 편집의 답을 받은 뒤에 읽는다).
  *
- * 칸에 친 채 줄 `…`를 누르면 그 클릭이 blur 로 편집을 WS 로 내고, 곧바로 «JSON 내보내기»가 다른 연결(REST)로 페이지를 읽는다. 읽기가 편집
- * 앞이면 파일에는 옛 글이 든다. 편집을 서버에 붙잡는 것은 페이지 행 잠금이다 — 줄이 섰는지는 `holdRow` 의 대기자로 센다(안 서면 던진다).
+ * 칸에 친 채 줄 `…`를 누르면 그 클릭이 blur 로 편집을 WS 로 내고, 곧바로 «JSON 내보내기»가 다른 연결(REST)로 페이지를 읽어 상자
+ * (`panels/page-json-export-dialog.tsx`)에 싣는다. 읽기가 편집 앞이면 상자 · 파일에 옛 글이 든다. 편집을 서버에 붙잡는 것은 페이지 행 잠금이다 — 줄이 섰는지는 `holdRow` 의 대기자로 센다(안 서면 던진다).
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 열린 페이지 | 내보내기가 편집의 답을 안 기다린다(파일에 옛 글) |
- * | 다른 페이지 줄 | 열린 페이지가 아닌 줄의 내보내기가 열린 페이지의 편집을 기다린다(기다리면 편집이 늦을 때 내려받기가 늦다) |
+ * | 열린 페이지 | 내보내기가 편집의 답을 안 기다린다(상자 · 파일에 옛 글) |
+ * | 다른 페이지 줄 | 열린 페이지가 아닌 줄의 내보내기가 열린 페이지의 편집을 기다린다(기다리면 편집이 늦을 때 상자의 글이 늦다) |
  */
 import { readFile } from 'node:fs/promises'
 import type { Page } from 'playwright-core'
@@ -49,7 +49,6 @@ describe.skipIf(!전제.ok)('열린 페이지의 JSON 내보내기와 보낸 편
       await box.fill('친 채 내보낸 글')
       const hold = await stack.holdRow('pages', fx.first)
       try {
-        const downloading = page.waitForEvent('download')
         // 실클릭 — blur 가 편집을 낸다. 행에 줄 서야 판이 선다.
         await rowLabel(page, fx.first).hover()
         await row(page, fx.first).getByRole('button', { name: '첫째 더 보기', exact: true }).click()
@@ -57,8 +56,13 @@ describe.skipIf(!전제.ok)('열린 페이지의 JSON 내보내기와 보낸 편
         await hold.waitForWaiters(1)
         await new Promise((resolve) => setTimeout(resolve, 300))
         await hold.release()
+        const shown = await exportedText(page)
+        const downloading = page.waitForEvent('download')
+        await page.getByRole('button', { name: '파일로 받기', exact: true }).click()
         const download = await downloading
-        const file = JSON.parse(await readFile((await download.path())!, 'utf8')) as {
+        const text = await readFile((await download.path())!, 'utf8')
+        expect(text).toBe(shown)
+        const file = JSON.parse(text) as {
           schema: { root: { children?: { props?: { content?: string } }[] } }
         }
         const exported = (file.schema.root.children ?? []).map((child) => child.props?.content)
@@ -84,14 +88,16 @@ describe.skipIf(!전제.ok)('열린 페이지의 JSON 내보내기와 보낸 편
       await box.fill('붙잡힌 글')
       const hold = await stack.holdRow('pages', fx.first)
       try {
-        const downloading = page.waitForEvent('download')
         const clicked = Date.now()
         await rowLabel(page, fx.second).hover()
         await row(page, fx.second).getByRole('button', { name: '둘째 더 보기', exact: true }).click()
         await page.getByRole('menuitem', { name: 'JSON 내보내기', exact: true }).click()
         await hold.waitForWaiters(1)
-        const download = await downloading
+        await exportedText(page)
         const waited = Date.now() - clicked
+        const downloading = page.waitForEvent('download')
+        await page.getByRole('button', { name: '파일로 받기', exact: true }).click()
+        const download = await downloading
         // eslint-disable-next-line no-console
         console.log(`[다른 줄 내보내기] ${waited}ms · ${download.suggestedFilename()}`)
         expect({ 파일: download.suggestedFilename(), 한도안: waited < 2_000 }).toEqual({ 파일: '둘째.wirebound-page.json', 한도안: true })
@@ -103,6 +109,13 @@ describe.skipIf(!전제.ok)('열린 페이지의 JSON 내보내기와 보낸 편
     }
   })
 })
+
+/** 내보내기 상자의 글 — 상자가 다 읽어 글 상자가 설 때까지 기다린다(«불러오는 중» 동안은 없다). */
+async function exportedText(page: Page): Promise<string> {
+  const box = page.getByRole('dialog', { name: /^JSON 내보내기 — / }).getByRole('textbox', { name: '내보낸 JSON', exact: true })
+  await box.waitFor()
+  return box.inputValue()
+}
 
 function row(page: Page, id: string) {
   return page.locator(`.wb-shell-region[aria-label="메뉴·페이지 트리"] [data-tree-row][data-tree-id="${id}"]`)

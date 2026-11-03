@@ -212,7 +212,7 @@ function added(sent: PatchOp[][]): { path: string; id: string; type: string } {
   return { path: op.path, id: op.value.id, type: op.value.type }
 }
 
-describe('카드 몸통은 끌기 전용이다', () => {
+describe('카드 몸통 — 홑누름은 넣지 않는다(더블클릭 넣기는 실브라우저 `build-test/palette-double-click.test.ts`)', () => {
   it('몸통을 누르기만 하면(끌기 문턱 안) 넣지 않고 거절 문장도 없다', async () => {
     const sent = await openWithPalette()
     await select('n-text')
@@ -220,7 +220,8 @@ describe('카드 몸통은 끌기 전용이다', () => {
     const body = card('Divider')
     fireEvent.pointerDown(body, { button: 0, pointerId: 1, clientX: 10, clientY: 10 })
     fireEvent.pointerUp(window, { button: 0, pointerId: 1, clientX: 11, clientY: 10 })
-    fireEvent.click(body)
+    // 포인터 누름 하나(`detail` 1) — 키보드가 낸 꼴(`detail` 0)의 누름 둘도 몸통에서 짝이 되지 않는다.
+    fireEvent.click(body, { detail: 1, clientX: 11, clientY: 10 })
     fireEvent.click(body.querySelector('[data-wb-palette-window]')!)
     fireEvent.click(body.querySelector('.wb-shell-palette-label')!)
     await act(async () => {})

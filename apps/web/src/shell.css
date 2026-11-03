@@ -1371,7 +1371,8 @@
   cursor: pointer;
 }
 
-/* 여럿을 고른 판의 속성 패널 단추 — 타입이 섞였을 때의 «고른 노드 삭제»(`panels/property-panel.tsx` 의 `BulkProperties`). */
+/* 우측 패널의 글 단추 — 여럿을 고른 판의 «고른 노드 삭제»(`panels/property-panel.tsx` 의 `BulkProperties`) · «페이지 정보» 탭의 저장 · «상태 추가» ·
+   «취소» · «버리기»(`panels/page-description.tsx` · `panels/page-states.tsx`). 이유를 싣는 단추는 `aria-disabled` 로 끈다(«상태 추가»). */
 .wb-shell-panel-action {
   appearance: none;
   border: 1px solid var(--wb-shell-line);
@@ -1384,7 +1385,8 @@
   cursor: pointer;
 }
 
-.wb-shell-panel-action:disabled {
+.wb-shell-panel-action:disabled,
+.wb-shell-panel-action[aria-disabled='true'] {
   color: var(--wb-shell-muted);
   cursor: not-allowed;
 }
@@ -3723,6 +3725,8 @@
   color: #fff;
 }
 
+/* 이 탭의 칸 · 글 상자는 «속성» 탭과 같은 `.wb-shell-control`, 단추는 `.wb-shell-panel-action` 을 함께 단다 — 여기 규칙은 자리 · 크기만 갖는다.
+   둘이 없으면 브라우저 기본 꼴(테두리 2px inset · Arial 단추)로 선다(`build-test/page-info-style.test.ts`). */
 .wb-shell-page-title-input {
   width: 100%;
   box-sizing: border-box;
@@ -4614,8 +4618,8 @@
 
 /* ── 페이지 가져오기 대화 상자(`panels/page-import-dialog.tsx`) ───────────────────────────────────────
    메뉴 줄 `+`의 «JSON 에서 가져오기…»가 여는 모달 안이다 — 자리 · 폭 · 스크롤 · 글꼴은 대화 상자(`.wb-shell-dialog`)가 갖고, 이 몸체는
-   안쪽 여백과 세로 리듬만 잡는다. 내보내기는 페이지 줄 `…`의 «JSON 내보내기»라 이 파일에 칸이 없다. 색은 셋이다 — 성공(초록) · 경고(호박) ·
-   실패(이 파일이 이미 쓰는 붉은색 `#b42318`). */
+   안쪽 여백과 세로 리듬만 잡는다. 페이지 줄 `…`의 «JSON 내보내기» 상자(`panels/page-json-export-dialog.tsx`)도 몸체 · 글 상자 · 바닥 단추 ·
+   실패 문장을 이 클래스로 그린다. 색은 셋이다 — 성공(초록) · 경고(호박) · 실패(이 파일이 이미 쓰는 붉은색 `#b42318`). */
 .wb-shell-pagejson-body {
   display: flex;
   flex-direction: column;
@@ -4815,6 +4819,12 @@
   overflow-wrap: anywhere;
 }
 
+/* 내보내기 상자의 «클립보드에 복사했습니다»(`panels/page-json-export-dialog.tsx`) — 성공 아이콘과 같은 초록. */
+.wb-shell-pagejson-copied {
+  margin: 0;
+  color: #067647;
+}
+
 .wb-shell-pagejson-foot {
   display: flex;
   justify-content: flex-end;
@@ -4853,7 +4863,7 @@
   cursor: not-allowed;
 }
 
-/* 하단 바의 통지(`panels/page-json-notices.tsx`) — 가져온 결과 · 내보내기 실패. 통지마다 제 줄이고(`.wb-shell-edit-alert`와 같은
+/* 하단 바의 통지(`panels/page-json-notices.tsx`) — 가져온 결과. 통지마다 제 줄이고(`.wb-shell-edit-alert`와 같은
    `flex-basis: 100%`), 문장 끝에 닫기 단추(`.wb-shell-edit-alert-close`)가 선다. */
 .wb-shell-pagejson-notice-row {
   flex-basis: 100%;

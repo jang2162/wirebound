@@ -435,8 +435,14 @@ export function PageStates(props: { projectId: string; pageId: string; canEdit: 
             {goneNotice(draft.name)}
           </p>
           {/* 고칠 수 없는 상자 — 글을 골라 복사할 수 있다(포커스 · 선택은 된다). */}
-          <textarea className="wb-shell-page-description-input" aria-label="쓰던 설명" rows={3} readOnly value={draft.text} />
-          <button type="button" className="wb-shell-page-state-cancel" onClick={() => dropDraft(id)}>
+          <textarea
+            className="wb-shell-control wb-shell-page-description-input"
+            aria-label="쓰던 설명"
+            rows={3}
+            readOnly
+            value={draft.text}
+          />
+          <button type="button" className="wb-shell-panel-action wb-shell-page-state-cancel" onClick={() => dropDraft(id)}>
             버리기
           </button>
         </div>
@@ -445,7 +451,7 @@ export function PageStates(props: { projectId: string; pageId: string; canEdit: 
       {props.canEdit && (
         <button
           type="button"
-          className="wb-shell-page-state-add"
+          className="wb-shell-panel-action wb-shell-page-state-add"
           aria-disabled={addWhy !== undefined || undefined}
           title={addWhy}
           aria-description={addWhy}
@@ -491,7 +497,7 @@ function DescriptionInput(props: {
       }}
     >
       <textarea
-        className="wb-shell-page-description-input"
+        className="wb-shell-control wb-shell-page-description-input"
         aria-label={STATE_DESCRIPTION_LABEL}
         rows={3}
         maxLength={VIEW_STATE_DESCRIPTION_MAX}
@@ -509,10 +515,10 @@ function DescriptionInput(props: {
       />
       {props.problem}
       <div className="wb-shell-page-state-describe-actions">
-        <button type="submit" className="wb-shell-page-description-save">
+        <button type="submit" className="wb-shell-panel-action wb-shell-page-description-save">
           {SAVE_STATE_DESCRIPTION_LABEL}
         </button>
-        <button type="button" className="wb-shell-page-state-cancel" onClick={props.onCancel}>
+        <button type="button" className="wb-shell-panel-action wb-shell-page-state-cancel" onClick={props.onCancel}>
           취소
         </button>
       </div>

@@ -29,10 +29,11 @@
  *
  * ## 카드 — 끌면 놓고, 단추로 넣는다
  *
- * - **몸통은 끌기 전용이다**: 끌기 장치(`drag/use-pointer-drag.ts`)에 `{ kind: 'new', type }`(프리셋 카드면 `preset` 도)을 묶고 놓을 자리 · 표시 · 놓기는 경로 층
- *   (`drag/use-placement.ts`)에 맡긴다 — 캔버스 손잡이와 같은 길이다(캔버스가 다시 잴 때 마지막 좌표로 다시 묻는 것까지 —
+ * - **몸통은 끌고, 더블클릭으로 넣는다**: 끌기 장치(`drag/use-pointer-drag.ts`)에 `{ kind: 'new', type }`(프리셋 카드면 `preset` 도)을 묶고 놓을 자리 ·
+ *   표시 · 놓기는 경로 층(`drag/use-placement.ts`)에 맡긴다 — 캔버스 손잡이와 같은 길이다(캔버스가 다시 잴 때 마지막 좌표로 다시 묻는 것까지 —
  *   `useCanvasRemeasured`). 끄는 동안 포인터 곁에 카드 이름표가 따라온다. 몸통을 누르기만 하고 떼면(문턱 안) **아무것도 안 한다** —
- *   넣지도 고르지도 않는다. 누름 한 번이 넣기면 끌려다 문턱을 못 넘은 손이 노드를 넣는다. 몸통은 단추가 아니다(포커스를 안 받는다).
+ *   넣지도 고르지도 않는다. 누름 한 번이 넣기면 끌려다 문턱을 못 넘은 손이 노드를 넣는다. **더블클릭은 «넣기» 단추와 같은 넣기를 한 번 한다**
+ *   (`add` — 짝짓는 규칙 · 끈 누름을 세지 않는 까닭은 `./card-double-click.ts`). 몸통은 단추가 아니다(포커스를 안 받는다 — 키보드는 «넣기» 단추다).
  * - **«넣기» 단추**(오른쪽 위 `+` 아이콘 — 접근 이름 · `title` `<한국어 이름> 넣기`): 누름 · Enter 가 고른 노드에 따라 자리를 골라(`./palette-add.ts`) 지금
  *   편집 전송 길(`useEditCommit` 의 `commitOps`)로 넣고 넣은 노드를 «방금 넣음» 으로 고른다(`store.selectPlaced` — 그대로인 채 다시 누르면 그 뒤에 선다 ·
  *   `./palette-add.ts` 머리말 «연달아 넣기»). 누른 채의 키 반복(`event.repeat`)은 넣지 않는다. **더블클릭 · 연달아 친 Enter 의 둘째도 안 넣는다** — 같은 카드를 `DOUBLE_CLICK_MS` 안에 다시 누른 것(포인터는 `DOUBLE_CLICK_SLOP` 안의 같은 자리)은 첫 넣기가 이미 한 일이다(고치기 전: 노드 둘 — 실브라우저). 다른 카드의 연타 · 간격이 지난 같은 카드는 넣는다. 못 넣으면 판
@@ -62,6 +63,7 @@ import { ShellResizer } from '../shell/shell-resizer'
 import { shellIcon } from '../shell/icons'
 import type { ZoneRef } from '../store/editor-store'
 import { openDocumentNow, useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
+import { useCardDoubleClick } from './card-double-click'
 import { ModuleTab } from './module-tab'
 import { paletteAddTarget } from './palette-add'
 import { DOUBLE_CLICK_MS, DOUBLE_CLICK_SLOP } from '../shell/action-menu'
@@ -404,15 +406,18 @@ function PaletteCards(props: {
    * 더블클릭 · 연달아 친 Enter 의 **둘째**인가 — 같은 카드를 `DOUBLE_CLICK_MS` 안에 다시 눌렀다. 포인터는 자리도 본다(`DOUBLE_CLICK_SLOP` 안 — 단추 안
    * 같은 자리). 다른 카드의 연타 · 간격이 지난 같은 카드의 누름은 뜻한 넣기다.
    */
-  const repeatsLastAdd = (key: string, event: MouseEvent<HTMLButtonElement>): boolean => {
+  const repeatsLastAdd = (key: string, event: MouseEvent<HTMLElement>): boolean => {
     const previous = lastAdd.current
     if (previous === null || previous.key !== key || performance.now() - previous.at >= DOUBLE_CLICK_MS) return false
     const pointer = event.detail > 0
     return !pointer || !previous.pointer || Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <= DOUBLE_CLICK_SLOP
   }
 
-  /** «넣기» 단추의 누름 · Enter — 고른 노드에 따라 넣는다(`./palette-add.ts`). 프리셋 카드도 판정은 타입이다(`edit/structure-drop.ts` 의 `Placing`). */
-  const add = (card: PickableType, event: MouseEvent<HTMLButtonElement>): void => {
+  /**
+   * «넣기» 단추의 누름 · Enter · 몸통의 더블클릭 — 고른 노드에 따라 넣는다(`./palette-add.ts`). 프리셋 카드도 판정은 타입이다(`edit/structure-drop.ts` 의
+   * `Placing`).
+   */
+  const add = (card: PickableType, event: MouseEvent<HTMLElement>): void => {
     if (props.pageId === undefined) return
     if (repeatsLastAdd(card.key, event)) return
     const document = openDocumentNow(store, props.pageId)
@@ -440,6 +445,9 @@ function PaletteCards(props: {
       lastAdd.current = { key: card.key, at: performance.now(), x: event.clientX, y: event.clientY, pointer: event.detail > 0 }
     }
   }
+
+  /** 몸통의 누름 — 더블클릭의 둘째만 넣는다(`./card-double-click.ts`). */
+  const bodyClick = useCardDoubleClick(add)
 
   const moveCard = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
     // 누른 채의 키 반복은 넣지 않는다 — 단추는 반복 keydown 마다 `click` 을 내어 한 번 누름이 넣기 여럿이 된다(첫 누름만 넣는다).
@@ -469,6 +477,7 @@ function PaletteCards(props: {
             {...drag.bind(
               type.preset === undefined ? { kind: 'new', type: type.type } : { kind: 'new', type: type.type, preset: type.preset },
             )}
+            onClick={(event) => bodyClick(type, event)}
           >
             <span className="wb-shell-palette-window" data-wb-palette-window={type.key} />
             <span className="wb-shell-palette-label">{type.label}</span>

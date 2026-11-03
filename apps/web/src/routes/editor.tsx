@@ -786,7 +786,7 @@ function EditorShell(props: {
    * 명령 훅에 있다(`panels/page-import-dialog.tsx` 머리말 «누가 여는가»).
    */
   const [dialog, setDialog] = useState<'snapshots' | 'export' | null>(null)
-  /** 페이지 JSON 의 하단 바 통지 — 가져온 결과 · 내보내기 실패. 트리가 채우고 하단 바가 그린다(`panels/page-json-notices.tsx`). */
+  /** 페이지 JSON 의 하단 바 통지 — 가져온 결과. 트리가 채우고 하단 바가 그린다(`panels/page-json-notices.tsx`). */
   const pageJsonNotices = usePageJsonNotices()
   /** 메뉴 트리 제목 줄의 행동 자리(`ShellRegion`의 `actionsRef`) — 트리가 뿌리 `+`를 거기 그린다. */
   const [menuHead, setMenuHead] = useState<HTMLDivElement | null>(null)
@@ -1097,7 +1097,7 @@ function EditorShell(props: {
                   {roleNotice}
                 </p>
               )}
-              {/* **페이지 JSON — 가져온 결과 · 내보내기 실패**(`panels/page-json-notices.tsx`). 닫기를 누를 때까지 남는다(고아 코멘트는 되돌릴
+              {/* **페이지 JSON — 가져온 결과**(`panels/page-json-notices.tsx`). 닫기를 누를 때까지 남는다(고아 코멘트는 되돌릴
                   수 없다 — 읽기 전에 사라지면 안 된다). */}
               <PageJsonNoticeList notices={pageJsonNotices} />
               {/* **세션 전환 · 로그아웃 실패**(`session/session-menu.tsx`의 `SessionNotices`). */}
