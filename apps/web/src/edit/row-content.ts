@@ -17,7 +17,7 @@
  * **걷기의 전제는 칸 배열 통째다** — 남이 그 사이 그 행의 칸을 고쳤으면(내 화면에 닿기 전) 리베이스가 묶음째 버리고 알린다. 묻고 확인한 것은 내가 본
  * 칸이다 — 남이 그 뒤에 쓴 칸까지 말없이 걷지 않는다.
  */
-import { type PageDocument, type WbNode } from '@wirebound/schema'
+import { BODY_ZONE, getByPointer, zoneList, type PageDocument, type WbNode } from '@wirebound/schema'
 import { cellsMatchTemplate, GAP_ROW_WHY } from './grid-row-actions'
 import type { NodeEdit } from './paste-ops'
 import { findNodePathSafely, findNodeSafely, isNodeLike } from './safe-walk'
@@ -31,9 +31,9 @@ export const ROW_CONTENT_HINT = '기본은 열의 셀 틀을 그립니다 · 커
 const ALREADY_BASIC = '칸이 없는 행입니다'
 const NOT_A_ROW = '그리드 안의 행이 아닙니다'
 
-/** 칸 배열 — 노드 아닌 원소는 뺀다(검증 전 문서). */
+/** 칸 — 행의 몸통. 노드 아닌 원소는 뺀다(검증 전 문서 — `zoneList` 는 원소를 안 거른다). */
 function cellsOf(row: WbNode): WbNode[] {
-  return Array.isArray(row.children) ? row.children.filter(isNodeLike) : []
+  return zoneList(row, BODY_ZONE).filter(isNodeLike)
 }
 
 /** 그 행의 내용 — 그리드 행이 아니면 `null`. */
@@ -69,12 +69,12 @@ export function clearCellsQuestion(count: number): string {
 export function clearCellsOps(document: PageDocument, rowId: string): NodeEdit {
   const refusal = toBasicRefusal(document, rowId)
   if (refusal !== null) return { reason: refusal }
-  const row = findNodeSafely(document.root, rowId)!
   const path = findNodePathSafely(document.root, rowId)
   if (path === undefined) return { reason: NOT_A_ROW }
+  // 전제는 배열 그대로(노드 아닌 원소까지) — 포인터로 읽는다.
   return {
     ops: [
-      { op: 'test', path: `${path}/children`, value: structuredClone(row.children) },
+      { op: 'test', path: `${path}/children`, value: structuredClone(getByPointer(document, `${path}/children`)) },
       { op: 'remove', path: `${path}/children` },
     ],
     insertedIds: [],

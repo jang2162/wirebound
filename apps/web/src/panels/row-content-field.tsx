@@ -8,7 +8,7 @@
  * - 고칠 수 없는 판(남의 잠금 · viewer)은 둘 다 꺼진다 — 까닭은 패널 머리가 이미 말한다.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
-import type { PageDocument, PatchOp } from '@wirebound/schema'
+import { BODY_ZONE, zoneList, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { buildCellsOps, buildCellsReads, buildCellsRefusal } from '../edit/grid-row-actions'
 import {
   cellsToLose,
@@ -52,7 +52,7 @@ export function RowContentField(props: {
 
   const current = rowContentOf(props.document, props.rowId)
   if (current === null) return null
-  const cellsNow = JSON.stringify(findNodeSafely(props.document.root, props.rowId)?.children ?? [])
+  const cellsNow = JSON.stringify(zoneList(findNodeSafely(props.document.root, props.rowId), BODY_ZONE))
   const reads = current === 'basic' ? buildCellsReads(props.document, props.rowId) : []
   const refusal =
     current === 'basic'
