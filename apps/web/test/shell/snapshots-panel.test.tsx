@@ -1244,14 +1244,18 @@ describe('복원 뒤 재동기화', () => {
   it('코멘트 탭이 떠 있으면 목록을 다시 받는다 — 복원이 되살린 코멘트가 보인다', async () => {
     const withNode: WbNode = { id: 'n-old', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: { content: '가' } }] }
     let lists = 0
+    let restored = false
     await openPage(pageDoc(withNode), {
       apiOverrides: {
         getProject: async () => project('owner'),
         listSnapshots: async () => [snapshot()],
-        restoreSnapshot: async () => restoreResult(),
+        restoreSnapshot: async () => {
+          restored = true
+          return restoreResult()
+        },
         listComments: async () => {
           lists += 1
-          return lists === 1
+          return !restored
             ? []
             : [
                 {
@@ -1267,8 +1271,9 @@ describe('복원 뒤 재동기화', () => {
         },
       },
     })
+    // 첫 탭(«컴포넌트»)이 고른 루트의 코멘트 묶음을 읽고(`src/panels/component-panel.tsx`), «코멘트» 탭이 한 번 더 읽는다.
     fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
-    await waitFor(() => expect(lists).toBe(1))
+    await waitFor(() => expect(lists).toBe(2))
     chooseFromShellMenu('스냅샷')
     await screen.findByText('v1')
     fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
@@ -1276,7 +1281,7 @@ describe('복원 뒤 재동기화', () => {
     fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
 
     expect(await screen.findByText('되살아난 코멘트')).toBeTruthy()
-    expect(lists).toBe(2)
+    expect(lists).toBe(3)
   })
 
   it('페이지 정보 탭이 떠 있으면 설명을 다시 받는다', async () => {

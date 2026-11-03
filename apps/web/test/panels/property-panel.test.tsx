@@ -275,7 +275,12 @@ describe('속성 패널', () => {
     // 순서가 잘못 바뀌면 이 줄이 죽어야 한다.
     expect(labels()).toEqual(['종류', '값', '안내 문구', '폭', '비활성', '읽기 전용', '오류 상태'])
     // 어느 컴포넌트의 속성인지도 보여 준다(설계서 「설계서 화면 구조」의 패널 머리).
-    expect(within(panel()).getByRole('heading').textContent).toBe('Input')
+    // «컴포넌트» 탭의 묶음 이름(«속성» · «코멘트») 사이에 노드 제목이 선다(`src/panels/component-panel.tsx`).
+    expect(
+      within(panel())
+        .getAllByRole('heading')
+        .map((heading) => heading.textContent),
+    ).toEqual(['속성', 'Input', '코멘트'])
   })
 
   it('각 필드의 라벨과 현재 값을 보여준다', async () => {
@@ -369,7 +374,11 @@ describe('속성 패널', () => {
     // 사용자가 "왜 속성이 안 나오지"를 묻지 않는다.
     within(panel()).getByText('카탈로그에 없는 컴포넌트입니다: 없는타입')
     // L-125 — 제목도 «타입 (별칭)» 이다(다른 판 · 줄 글과 같은 이름).
-    expect(within(panel()).getByRole('heading', { level: 2 }).textContent).toBe('없는타입 (옛 위젯)')
+    expect(
+      within(panel())
+        .getAllByRole('heading', { level: 2 })
+        .map((heading) => heading.textContent),
+    ).toEqual(['속성', '없는타입 (옛 위젯)', '코멘트'])
     expect(propRows()).toHaveLength(0)
   })
 
@@ -835,7 +844,7 @@ describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전
     // 커밋은 `BODY`로 blur 해도 나므로 커밋 수만 보면 흉내가 버튼을 포커스하는지 아무도 안 잰다.
     expect(document.activeElement).toBe(tab)
 
-    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+    fireEvent.click(screen.getByRole('tab', { name: '컴포넌트' }))
     expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('새 내용')
   })
 

@@ -1,5 +1,5 @@
 /**
- * **우측 패널이 남의 잠금을 보는가**(설계서 「소프트 잠금」의 1차 방어) — 속성 탭과 상호작용 탭 둘 다.
+ * **우측 패널이 남의 잠금을 보는가**(설계서 「소프트 잠금」의 1차 방어) — «컴포넌트» 탭과 상호작용 탭 둘 다.
  *
  * # 패널이 잠금을 안 보면 무엇이 깨지나
  *
@@ -13,7 +13,7 @@
  * | 값을 치고 blur | 요청이 나가고 **423** |
  * | 그때 트리의 꺼진 항목 | *"보라님이 편집 중이라 고를 수도 **바꿀** 수도 없습니다"* — **거짓이다** |
  * | 되돌리기 스택(「스택 몰살」 — 423의 재조회가 두 스택을 통째로 비운다) | 요청 3건 `200/200/`**`423`** · **2 → 0** |
- * | **상호작용 탭** — 같은 노드의 `interactions`를 통째로 `replace`한다 | 같은 값이다. **속성 탭만 닫으면 「스택 몰살」이 그리로 그대로 밟힌다** |
+ * | **상호작용 탭** — 같은 노드의 `interactions`를 통째로 `replace`한다 | 같은 값이다. **«컴포넌트» 탭만 닫으면 「스택 몰살」이 그리로 그대로 밟힌다** |
  *
  * # 판정의 단위 — «고른 노드»다
  *
@@ -314,6 +314,14 @@ function panel(): HTMLElement {
   return screen.getByRole('complementary', { name: '우측 패널' })
 }
 
+/**
+ * 잴 자리 — «컴포넌트» 탭이면 그 «속성» 묶음, 다른 탭이면 패널. 같은 탭의 «코멘트» 묶음(`src/panels/component-panel.tsx`)은 이 파일이 재는
+ * 잠금의 자리가 아니다 — 남이 잡은 노드에도 코멘트는 단다(«코멘트» 탭과 같다).
+ */
+function body(): HTMLElement {
+  return within(panel()).queryByRole('region', { name: '속성' }) ?? panel()
+}
+
 /** 트리에서 노드 하나를 고른다. 줄 이름이 타입이다. */
 function select(type: string): void {
   fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName(type) }))
@@ -329,7 +337,7 @@ function namesHolder(): boolean {
  * 추가·삭제는 즉시 커밋이라 칸만 꺼도 그 둘로 값이 그대로 나간다.
  */
 function widgets(): HTMLElement[] {
-  return [...panel().querySelectorAll<HTMLElement>('input, textarea, select, .wb-shell-list button')]
+  return [...body().querySelectorAll<HTMLElement>('input, textarea, select, .wb-shell-list button')]
 }
 
 function disabledOf(elements: HTMLElement[]): boolean[] {
@@ -790,14 +798,14 @@ function openTab(name: string): void {
  * 아니라 보기의 이동이고, 잠겼다고 다른 탭으로 못 가면 그것이 막다른 길이다.
  */
 function panelControls(): HTMLElement[] {
-  return [...panel().querySelectorAll<HTMLElement>('input, textarea, select, button')].filter(
+  return [...body().querySelectorAll<HTMLElement>('input, textarea, select, button')].filter(
     (element) => element.getAttribute('role') !== 'tab',
   )
 }
 
 /** 패널 안의 안내 줄들. */
 function panelNotices(): string[] {
-  return [...panel().querySelectorAll('.wb-shell-panel-notice')].map((node) => node.textContent ?? '')
+  return [...body().querySelectorAll('.wb-shell-panel-notice')].map((node) => node.textContent ?? '')
 }
 
 /**

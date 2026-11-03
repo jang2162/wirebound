@@ -301,7 +301,7 @@ describe('잠금', () => {
 describe('속성 패널 — 그리드 편집 칸의 안내 한 줄', () => {
   /** 고른 노드의 속성 패널에서 그 이름의 칸 줄이 든 안내(`.wb-shell-prop-note`) — 없으면 `null`. */
   function hintOf(label: string): string | null {
-    const panel = screen.getByRole('tabpanel', { name: '속성' })
+    const panel = screen.getByRole('tabpanel', { name: '컴포넌트' })
     const line = within(panel).getByText(label, { selector: 'label' }).closest('.wb-shell-prop')
     return line?.querySelector('.wb-shell-prop-note')?.textContent ?? null
   }
@@ -334,7 +334,7 @@ describe('속성 패널 — 그리드 편집 칸의 안내 한 줄', () => {
     fireEvent.click(nodeButton('n-r2'), { ctrlKey: true })
     await waitFor(() => expect(row('n-r2').classList.contains('wb-shell-tree-row-picked')).toBe(true))
     // 여럿 고른 판의 패널이다(머리가 «GridRow 2개»).
-    expect(screen.getByRole('tabpanel', { name: '속성' }).textContent).toContain('GridRow 2개')
+    expect(screen.getByRole('tabpanel', { name: '컴포넌트' }).textContent).toContain('GridRow 2개')
     expect([hintOf('되풀이'), hintOf('행 꼴')]).toEqual(['이 행을 몇 줄로 그릴지 — 둘째 줄부터는 첫 줄과 같은 꼴입니다', null])
   })
 })

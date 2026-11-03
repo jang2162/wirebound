@@ -242,12 +242,12 @@ describe('잠금 · 권한', () => {
     expect(screen.getAllByText(/보라님이/).length).toBeGreaterThan(0)
   })
 
-  it('뷰 모드 — 구조 트리째 없고 속성 탭(선택지 위젯)도 없다 · 편집 0', async () => {
+  it('뷰 모드 — 구조 트리째 없고 «컴포넌트» 탭(선택지 위젯)도 없다 · 편집 0', async () => {
     const srv = await board()
     fireEvent.click(within(structureRegion()).getByRole('button', { name: structureRowName('Input') }))
     fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
     await waitFor(() => expect(screen.queryByRole('region', { name: '구조 트리' })).toBeNull())
-    expect(screen.queryByRole('tab', { name: '속성' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: '컴포넌트' })).toBeNull()
     expect(screen.queryByRole('group', { name: '선택지' })).toBeNull()
     expect(srv.calls).toEqual([])
   })

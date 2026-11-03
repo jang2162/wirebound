@@ -40,11 +40,12 @@ import { PageJsonNoticeList, usePageJsonNotices } from '../panels/page-json-noti
 import { InteractionPanel } from '../panels/interaction-panel'
 import { PageInfoPanel } from '../panels/page-info'
 import { PanelDraftsProvider } from '../panels/panel-drafts'
-import { PropertyPanel } from '../panels/property-panel'
+import { ComponentPanel } from '../panels/component-panel'
 import { AliasEditProvider } from '../panels/alias-edit'
 import { StructureTree } from '../panels/structure-tree'
 import { leftUnsentNotice, restoredRevisions, useEditCommit } from '../edit/use-edit-commit'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
+import { CanvasPickProvider, useOnCanvasPick } from '../shell/canvas-pick'
 import { ViewStateProvider, useViewState } from '../shell/use-view-state'
 import { ViewStateSwitcher, viewStateMenuItems } from '../shell/view-state-switcher'
 import { useViewStateAddress } from '../shell/view-state-address'
@@ -314,17 +315,17 @@ const lateReloadFailedNotice = (reason: string): string =>
   `${RELOAD_FAILED_LEAD} ${reason} — 화면은 아직 최신이 아닙니다. «다시 불러오기»를 다시 누르세요.`
 
 /** 우측 패널의 탭. **넷이 선언되고 편집 모드에 넷 · 뷰 모드에 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
-type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
+type PanelTab = 'component' | 'page' | 'comments' | 'interactions'
 
 /**
  * 모드별 탭 구성. **설계서 「설계서 화면 구조」의 표를 그대로 옮긴 것이다.**
  *
  * | 모드 | 탭 |
  * |---|---|
- * | 편집 | 페이지 정보 / **속성**(선택 노드) / 코멘트 / 상호작용 |
+ * | 편집 | 페이지 정보 / **컴포넌트**(선택 노드의 속성 · 코멘트 — `panels/component-panel.tsx`) / 코멘트 / 상호작용 |
  * | 뷰 | **페이지 정보**(읽기만) / 코멘트 / 상호작용 |
  *
- * **속성만 갈린다.** 페이지 정보 · 코멘트 · 상호작용이 두 모드에 다 있는 것은 그 표가 그렇고, 캔버스의
+ * **컴포넌트만 갈린다.** 페이지 정보 · 코멘트 · 상호작용이 두 모드에 다 있는 것은 그 표가 그렇고, 캔버스의
  * 번호 마커가 두 모드에 다 있는 것(`canvas/canvas.tsx`)과도 짝이 맞는다 — 뷰 모드에서 설계서를 읽는
  * 사람이 보는 것이 바로 그 둘이다.
  *
@@ -334,7 +335,7 @@ type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
 const PANEL_TABS: Record<EditorMode, readonly { id: PanelTab; label: string }[]> = {
   edit: [
     { id: 'page', label: '페이지 정보' },
-    { id: 'props', label: '속성' },
+    { id: 'component', label: '컴포넌트' },
     { id: 'comments', label: '코멘트' },
     { id: 'interactions', label: '상호작용' },
   ],
@@ -352,7 +353,7 @@ const PANEL_BODIES: Record<
   // `editable`과 같은 값이고 «페이지 정보»가 쓰기를 가른다. `menuRev`는 셸이 본 가장 큰 트리 번호다(페이지 정보가 이름을 다시 읽는다).
   (props: { projectId: string; pageId: string | undefined; canEdit: boolean; editable: boolean; menuRev: number }) => ReactElement
 > = {
-  props: PropertyPanel,
+  component: ComponentPanel,
   page: (props) => <PageInfoPanel projectId={props.projectId} pageId={props.pageId} canEdit={props.editable} menuRev={props.menuRev} />,
   comments: CommentPanel,
   interactions: InteractionPanel,
@@ -824,14 +825,16 @@ function EditorShell(props: {
   return (
     // **별칭 입력이 선 줄**(`panels/alias-edit.tsx`) — 구조 트리가 그리고 에디터 단축키(F2)가 연다. 둘이 같은 값을 보게 셸이 한 번 깐다.
     <AliasEditProvider pageId={props.pageId}>
-      {/* 접힌 쪽은 격자에서 트랙째 빠진다(`shell.css` 의 `.wb-shell-fold-side` · `.wb-shell-fold-panel`) — 상자는 DOM 에 남고 손잡이는 안 선다. */}
-      <div
-        className={['wb-shell', layout.sideFolded ? 'wb-shell-fold-side' : '', layout.panelFolded ? 'wb-shell-fold-panel' : '']
-          .filter(Boolean)
-          .join(' ')}
-      >
-        <header className="wb-shell-header">
-          {/* **머리의 왼쪽은 *"어디에 있고 어디로 나가는가"*다.** 가운데 도구들 · 오른쪽 끝의 `…` 와 갈리는 축이
+      {/* 캔버스의 «사람이 눌러 골랐다» 를 우측 패널이 받는다(`shell/canvas-pick.tsx`). */}
+      <CanvasPickProvider>
+        {/* 접힌 쪽은 격자에서 트랙째 빠진다(`shell.css` 의 `.wb-shell-fold-side` · `.wb-shell-fold-panel`) — 상자는 DOM 에 남고 손잡이는 안 선다. */}
+        <div
+          className={['wb-shell', layout.sideFolded ? 'wb-shell-fold-side' : '', layout.panelFolded ? 'wb-shell-fold-panel' : '']
+            .filter(Boolean)
+            .join(' ')}
+        >
+          <header className="wb-shell-header">
+            {/* **머리의 왼쪽은 *"어디에 있고 어디로 나가는가"*다.** 가운데 도구들 · 오른쪽 끝의 `…` 와 갈리는 축이
               이것이라, 둘을 한 묶음으로 싸서 `space-between`이 사이를 벌리지 못하게 한다.
 
               **나가는 길을 여기 둔다** — 로고가 프로젝트 목록으로 가는 링크다(`shell/brand-link.tsx` — 접근 이름 «프로젝트 목록»).
@@ -840,19 +843,19 @@ function EditorShell(props: {
               **제목 자체를 링크로 만들지 않는다.** 링크의 글자는 **갈 곳**을 말해야 하는데
               제목은 *"지금 여기"*를 말한다 — `관리자 콘솔 설계서`를 눌렀더니 프로젝트
               **목록**으로 가는 것은 그 계약을 어긴다. 제목은 `<h1>` 글자라 접근성 트리에서도 `heading`이다. */}
-          <div className="wb-shell-lead">
-            {/* **좌측 접기**는 머리 왼쪽 끝 — 접는 쪽과 같은 편이다(`shell/panel-fold.tsx`). */}
-            <PanelFoldToggle side="side" folded={layout.sideFolded} controls={sideId} onToggle={layout.toggleSide} />
-            {/* 접힌 머리(`short` · `folded`)에서는 로고 글자를 뺀다 — 좌우 접기 토글이 든 머리가 그 폭(78)으로 한 줄에 든다(`shell/head-fold.ts`). */}
-            <BrandLink compact={fold !== 'wide'} />
-            <h1 className="wb-shell-title">{props.project.name}</h1>
-          </div>
-          {/* **가운데 — 설계서와 캔버스를 다루는 도구.** 되돌리기 · 다시 실행 · 배치 선 · 모드(편집/뷰) 다음에 구분선, 그 뒤가 캔버스를
+            <div className="wb-shell-lead">
+              {/* **좌측 접기**는 머리 왼쪽 끝 — 접는 쪽과 같은 편이다(`shell/panel-fold.tsx`). */}
+              <PanelFoldToggle side="side" folded={layout.sideFolded} controls={sideId} onToggle={layout.toggleSide} />
+              {/* 접힌 머리(`short` · `folded`)에서는 로고 글자를 뺀다 — 좌우 접기 토글이 든 머리가 그 폭(78)으로 한 줄에 든다(`shell/head-fold.ts`). */}
+              <BrandLink compact={fold !== 'wide'} />
+              <h1 className="wb-shell-title">{props.project.name}</h1>
+            </div>
+            {/* **가운데 — 설계서와 캔버스를 다루는 도구.** 되돌리기 · 다시 실행 · 배치 선 · 모드(편집/뷰) 다음에 구분선, 그 뒤가 캔버스를
               다루는 도구(뷰포트 폭 · 줌)다. 캔버스 도구는 두 모드 다에 선다 — 보는 폭과 배율은 모드가 아니라 사람의 화면에 대한 값이다. 좁은
               창에서는 «뷰포트 폭» 글을 감추고, 더 좁으면 상태 전환기를, 그보다 좁으면 줌 묶음도 오른쪽 끝 `…` 로 접는다(`shell/head-fold.ts` 의 단계 표).
 
               **되돌리기·다시 실행은 편집 모드에만 있다**.
-              「설계서 화면 구조」가 뷰 모드에서 구조 트리를 접고 속성 탭을 빼는 것과 같은
+              「설계서 화면 구조」가 뷰 모드에서 구조 트리를 접고 «컴포넌트» 탭을 빼는 것과 같은
               선이다 — **편집 도구는 편집 모드에 있다.**
 
               **뷰 모드에 두면 깨진다.** 뷰 모드에서 undo를 누르면 문서는
@@ -866,82 +869,82 @@ function EditorShell(props: {
               **원인을 없애는 쪽이 정의가 필요 없다.**
 
               **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
-          <div className="wb-shell-head-tools">
-            {/* **상태 전환기**(`shell/view-state-switcher.tsx`) — 두 모드 · 모든 역할에 선다(고르기는 읽기다). 상태를 다루는 것은 메뉴 트리의 상태 줄이다. */}
-            {switcherInHead && <ViewStateSwitcher projectId={props.project.id} pageId={props.pageId} />}
-            {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
-            {/* **배치 선**(`canvas/layout-guides.tsx`) — 편집 모드에서만 선다(선을 그리는 것도 편집 모드뿐이다). 읽기 도구라 viewer 에게도 선다. */}
-            {mode === 'edit' && <GuidesToggle />}
-            <ModeTools />
-            {/* 접힌 머리에서는 구분선도 뺀다 — 뒤에 고르개 하나만 남아 가를 무리가 없고, 그 폭(선 1 + 틈 16)이 창 700 의 여유다(`shell/head-fold.ts`). */}
-            {fold !== 'folded' && <span className="wb-shell-head-divider" aria-hidden="true" />}
-            <CanvasTools canvasRef={canvasRef} fold={fold} />
-          </div>
-          {/* **오른쪽 끝의 `…`** — 이 프로젝트 전체 · 계정을 다루는 일(spec 「`…` 메뉴」). **역할로 감추지 않는다** — 항목 다섯이 모든 역할에게
+            <div className="wb-shell-head-tools">
+              {/* **상태 전환기**(`shell/view-state-switcher.tsx`) — 두 모드 · 모든 역할에 선다(고르기는 읽기다). 상태를 다루는 것은 메뉴 트리의 상태 줄이다. */}
+              {switcherInHead && <ViewStateSwitcher projectId={props.project.id} pageId={props.pageId} />}
+              {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
+              {/* **배치 선**(`canvas/layout-guides.tsx`) — 편집 모드에서만 선다(선을 그리는 것도 편집 모드뿐이다). 읽기 도구라 viewer 에게도 선다. */}
+              {mode === 'edit' && <GuidesToggle />}
+              <ModeTools />
+              {/* 접힌 머리에서는 구분선도 뺀다 — 뒤에 고르개 하나만 남아 가를 무리가 없고, 그 폭(선 1 + 틈 16)이 창 700 의 여유다(`shell/head-fold.ts`). */}
+              {fold !== 'folded' && <span className="wb-shell-head-divider" aria-hidden="true" />}
+              <CanvasTools canvasRef={canvasRef} fold={fold} />
+            </div>
+            {/* **오른쪽 끝의 `…`** — 이 프로젝트 전체 · 계정을 다루는 일(spec 「`…` 메뉴」). **역할로 감추지 않는다** — 항목 다섯이 모든 역할에게
               선다: 스냅샷 목록 · 내보내기 · 설정(읽기 전용 칸)은 viewer 도 본다(설계서 「권한 모델」 — 막는 것은 그 안의 생성 · 복원이고 그 판정은
               몸체가 한다). */}
-          {/* **우측 접기**는 `…` 바로 앞 — 둘을 한 묶음으로 싸서 머리의 `space-between` 이 사이를 벌리지 못하게 한다. */}
-          <div className="wb-shell-head-end">
-            <PanelFoldToggle side="panel" folded={layout.panelFolded} controls={panelId} onToggle={layout.togglePanel} />
-            <ActionMenu label="더 보기" heading={sessionUser?.name} items={menuItems} />
-          </div>
-          {/* **스냅샷 · 프로젝트 내보내기는 에디터 위의 대화 상자다**(`shell/shell-dialog.tsx`). 셸이 그리므로 셸이 내려가면 함께 내려간다.
+            {/* **우측 접기**는 `…` 바로 앞 — 둘을 한 묶음으로 싸서 머리의 `space-between` 이 사이를 벌리지 못하게 한다. */}
+            <div className="wb-shell-head-end">
+              <PanelFoldToggle side="panel" folded={layout.panelFolded} controls={panelId} onToggle={layout.togglePanel} />
+              <ActionMenu label="더 보기" heading={sessionUser?.name} items={menuItems} />
+            </div>
+            {/* **스냅샷 · 프로젝트 내보내기는 에디터 위의 대화 상자다**(`shell/shell-dialog.tsx`). 셸이 그리므로 셸이 내려가면 함께 내려간다.
 
               스냅샷 몸체에는 셸의 복원 콜백 넷을 그대로 준다 — 복원을 보낸 뒤 상자를 닫아도 답은 셸이 받는다(몸체가 보낸 순간 쥔 콜백).
               `onRestored` 가 답의 안전망 스냅샷 id 를 먼저 적는다 — 되돌아오는 내 복원의 신호를 알아보고, 미뤄 둔 신호를 가른다
               (`EditorStore.ownRestoreAnswered`). 내려간 셸의 답이면 스토어에 안 쓴다(`shellGeneration`). */}
-          <ShellDialog open={dialog === 'snapshots'} title="스냅샷" onClose={() => setDialog(null)}>
-            <SnapshotsBody
-              projectId={props.project.id}
-              onRestoreSent={store.beginOwnRestore}
-              onRestored={(clientRestoreId, safetySnapshotId) => {
-                if (shellLive()) store.ownRestoreAnswered(clientRestoreId, safetySnapshotId)
-                reloadAfterRestore(RESTORED_LEAD)
-              }}
-              onRestoreRefused={(clientRestoreId) => {
-                if (shellLive()) store.ownRestoreRefused(clientRestoreId)
-              }}
-              onRestoreUnanswered={(clientRestoreId) => {
-                if (shellLive()) store.markRestoreUnanswered(clientRestoreId)
-              }}
-            />
-          </ShellDialog>
-          {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 번들은 viewer가 화면에서 볼 수 있는 것을 파일로 받는
+            <ShellDialog open={dialog === 'snapshots'} title="스냅샷" onClose={() => setDialog(null)}>
+              <SnapshotsBody
+                projectId={props.project.id}
+                onRestoreSent={store.beginOwnRestore}
+                onRestored={(clientRestoreId, safetySnapshotId) => {
+                  if (shellLive()) store.ownRestoreAnswered(clientRestoreId, safetySnapshotId)
+                  reloadAfterRestore(RESTORED_LEAD)
+                }}
+                onRestoreRefused={(clientRestoreId) => {
+                  if (shellLive()) store.ownRestoreRefused(clientRestoreId)
+                }}
+                onRestoreUnanswered={(clientRestoreId) => {
+                  if (shellLive()) store.markRestoreUnanswered(clientRestoreId)
+                }}
+              />
+            </ShellDialog>
+            {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 번들은 viewer가 화면에서 볼 수 있는 것을 파일로 받는
               것이고 서버도 viewer에게 연다(「권한 모델」). */}
-          <ShellDialog open={dialog === 'export'} title="프로젝트 내보내기" onClose={() => setDialog(null)}>
-            <ExportBody projectId={props.project.id} />
-          </ShellDialog>
-          {/* **에디터 단축키**(`shell/editor-keys.tsx`) — 호스트와 캔버스 문서에 리스너를 걸고, `?` 의 도움말 상자를 여기 그린다. 편집 명령은
+            <ShellDialog open={dialog === 'export'} title="프로젝트 내보내기" onClose={() => setDialog(null)}>
+              <ExportBody projectId={props.project.id} />
+            </ShellDialog>
+            {/* **에디터 단축키**(`shell/editor-keys.tsx`) — 호스트와 캔버스 문서에 리스너를 걸고, `?` 의 도움말 상자를 여기 그린다. 편집 명령은
               편집 모드 && `canEdit` 일 때만, 고르기 · 선택 이동 · 도움말은 늘 선다. */}
-          <EditorKeys
-            projectId={props.project.id}
-            pageId={props.pageId}
-            editable={mode === 'edit' && canEdit}
-            sideFolded={layout.sideFolded}
-            onUnfoldSide={layout.toggleSide}
-          />
-        </header>
+            <EditorKeys
+              projectId={props.project.id}
+              pageId={props.pageId}
+              editable={mode === 'edit' && canEdit}
+              sideFolded={layout.sideFolded}
+              onUnfoldSide={layout.toggleSide}
+            />
+          </header>
 
-        <nav
-          id={sideId}
-          className={layout.sideFolded ? 'wb-shell-side wb-shell-folded' : 'wb-shell-side'}
-          aria-label="메뉴와 구조"
-          ref={layout.sideRef}
-          style={{ width: `${layout.sideWidth}px` }}
-        >
-          <ShellRegion
-            className="wb-shell-region"
-            name="메뉴·페이지 트리"
-            style={split ? { flexGrow: layout.regionGrow } : undefined}
-            actionsRef={setMenuHead}
+          <nav
+            id={sideId}
+            className={layout.sideFolded ? 'wb-shell-side wb-shell-folded' : 'wb-shell-side'}
+            aria-label="메뉴와 구조"
+            ref={layout.sideRef}
+            style={{ width: `${layout.sideWidth}px` }}
           >
-            {/* 트리에 주는 `projectId`는 **조회해 온 프로젝트의 id**다. 경로의 파라미터를
+            <ShellRegion
+              className="wb-shell-region"
+              name="메뉴·페이지 트리"
+              style={split ? { flexGrow: layout.regionGrow } : undefined}
+              actionsRef={setMenuHead}
+            >
+              {/* 트리에 주는 `projectId`는 **조회해 온 프로젝트의 id**다. 경로의 파라미터를
                 다시 읽지 않는 것은, 트리가 만드는 주소가 지금 열려 있는 프로젝트를 가리켜야
                 하기 때문이다 — 둘은 같은 값이지만 진실은 조회 결과 쪽에 있다. */}
-            {/* **복원이 트리도 바꾼다.** 스냅샷 시점에 있던 페이지가 지금 없거나 그
+              {/* **복원이 트리도 바꾼다.** 스냅샷 시점에 있던 페이지가 지금 없거나 그
                 반대다 — 문서만 다시 읽고 트리를 두면 목록이 존재하지 않는 페이지를 그린다.
                 `resyncToken`은 여기 닿지 않는다(재연결은 이 페이지의 프레임만 잃는다). */}
-            {/* **편집 도구를 낼지는 셸이 정한다**(「설계서 화면 구조」의 표가 여기 모여 있다 — 구조 트리·
+              {/* **편집 도구를 낼지는 셸이 정한다**(「설계서 화면 구조」의 표가 여기 모여 있다 — 구조 트리·
                 되돌리기·우측 탭이 이미 이 파일에서 갈린다). 트리 안의 넷(줄 행동 · 끌어 놓기 ·
                 페이지 가져오기 대화 상자 · 편집 단축키)이 이 값 하나로 함께 갈린다 —
                 `panels/menu-tree.tsx`의 `editable` 주석이 왜 넷이 함께인지 적고 있다.
@@ -952,22 +955,22 @@ function EditorShell(props: {
                 **viewer 에게는 편집 모드에서도 `false`다**(`canEdit`). 넷이 이 값 하나로 함께 가므로 역할도 여기
                 한 번만 얹는다. **페이지** 이름 변경만 따로 닫는 칸을 두지 않는다 — 이 값이 그것을 덮고,
                 두 벌이면 한쪽만 고쳐지는 자리가 생긴다. */}
-            <MenuTree
-              projectId={props.project.id}
-              pageId={props.pageId}
-              reloadToken={restoredToken}
-              remoteRev={menuRev}
-              resyncToken={resyncToken}
-              onDropped={onTreeDropped}
-              onCascaded={onTreeCascaded}
-              onPageGone={onPageGone}
-              editable={mode === 'edit' && canEdit}
-              headSlot={menuHead}
-              notices={pageJsonNotices}
-              beforeExport={settleBeforeExport}
-            />
-          </ShellRegion>
-          {/* 구조 트리는 편집 모드에서만 있다. 뷰 모드에서는 접혀 메뉴 트리가 좌측 전체를
+              <MenuTree
+                projectId={props.project.id}
+                pageId={props.pageId}
+                reloadToken={restoredToken}
+                remoteRev={menuRev}
+                resyncToken={resyncToken}
+                onDropped={onTreeDropped}
+                onCascaded={onTreeCascaded}
+                onPageGone={onPageGone}
+                editable={mode === 'edit' && canEdit}
+                headSlot={menuHead}
+                notices={pageJsonNotices}
+                beforeExport={settleBeforeExport}
+              />
+            </ShellRegion>
+            {/* 구조 트리는 편집 모드에서만 있다. 뷰 모드에서는 접혀 메뉴 트리가 좌측 전체를
               쓴다(「설계서 화면 구조」).
 
               "접힘"을 `hidden`이 아니라 **DOM에서 제거**로 구현한다. `hidden`이면 뷰 모드에서
@@ -980,169 +983,170 @@ function EditorShell(props: {
               이 자리를 `hidden` 방식으로 바꾸고 `pnpm vitest run --project web` — 전량이 통과한다).
               테스트가 지키는 것은 "접힌다"는 사용자가 보는 성질이고, 방식은 여기 적힌
               이유다. */}
-          {split && (
-            <>
-              {/* **두 영역 사이의 손잡이.** 값은 첫 영역의 **높이(px)**로 주고받고, 비율로
+            {split && (
+              <>
+                {/* **두 영역 사이의 손잡이.** 값은 첫 영역의 **높이(px)**로 주고받고, 비율로
                   바꾸는 것은 `useSidebarLayout`이 한다 — 사람이 잡고 미는 것은 픽셀이고
                   창 높이가 바뀌어도 어긋나지 않아야 하는 것은 비율이다. */}
-              <ShellResizer
-                orientation="horizontal"
-                className="wb-shell-region-resizer"
-                label="좌측 두 영역의 세로 배분"
-                ref={layout.regionResizerRef}
-                value={Math.round(layout.regionRatio * 100)}
-                min={Math.round(layout.regionRatioMin * 100)}
-                max={Math.round((1 - layout.regionRatioMin) * 100)}
-                valueText={`메뉴·페이지 트리 ${Math.round(layout.regionRatio * 100)}%`}
-                onGrab={layout.grabRegionHeight}
-                onMove={layout.setRegionHeight}
-                onEdge={(edge) => layout.setRegionRatio(edge === 'min' ? layout.regionRatioMin : 1 - layout.regionRatioMin)}
-                onReset={layout.resetRegionRatio}
-              />
-              <ShellRegion
-                className="wb-shell-region"
-                name="구조 트리"
-                style={{ flexGrow: 1 - layout.regionGrow }}
-                actionsRef={setStructureHead}
-              >
-                {/* `projectId`는 메뉴 트리와 같은 이유로 **조회해 온 프로젝트의 id**다.
+                <ShellResizer
+                  orientation="horizontal"
+                  className="wb-shell-region-resizer"
+                  label="좌측 두 영역의 세로 배분"
+                  ref={layout.regionResizerRef}
+                  value={Math.round(layout.regionRatio * 100)}
+                  min={Math.round(layout.regionRatioMin * 100)}
+                  max={Math.round((1 - layout.regionRatioMin) * 100)}
+                  valueText={`메뉴·페이지 트리 ${Math.round(layout.regionRatio * 100)}%`}
+                  onGrab={layout.grabRegionHeight}
+                  onMove={layout.setRegionHeight}
+                  onEdge={(edge) => layout.setRegionRatio(edge === 'min' ? layout.regionRatioMin : 1 - layout.regionRatioMin)}
+                  onReset={layout.resetRegionRatio}
+                />
+                <ShellRegion
+                  className="wb-shell-region"
+                  name="구조 트리"
+                  style={{ flexGrow: 1 - layout.regionGrow }}
+                  actionsRef={setStructureHead}
+                >
+                  {/* `projectId`는 메뉴 트리와 같은 이유로 **조회해 온 프로젝트의 id**다.
                     구조 편집이 그것을 `PATCH /projects/:id/pages/:id/ops`의 경로로 쓴다. */}
-                {/* **트리는 viewer 도 본다**(읽기 — 노드를 골라 속성 · 코멘트를 본다). 줄 행동 · 끌어 놓기와 단축키만 `canEdit`으로 간다. */}
-                <StructureTree projectId={props.project.id} pageId={props.pageId} editable={canEdit} headSlot={structureHead} />
-              </ShellRegion>
-            </>
-          )}
-        </nav>
+                  {/* **트리는 viewer 도 본다**(읽기 — 노드를 골라 속성 · 코멘트를 본다). 줄 행동 · 끌어 놓기와 단축키만 `canEdit`으로 간다. */}
+                  <StructureTree projectId={props.project.id} pageId={props.pageId} editable={canEdit} headSlot={structureHead} />
+                </ShellRegion>
+              </>
+            )}
+          </nav>
 
-        {/* **사이드바와 캔버스 사이의 손잡이.** 편집·뷰 모드 둘 다에 있다 — 폭은 모드가
+          {/* **사이드바와 캔버스 사이의 손잡이.** 편집·뷰 모드 둘 다에 있다 — 폭은 모드가
             아니라 사람의 화면에 대한 값이다. 좌측을 접으면 안 선다 — 끌 폭이 없다. */}
-        {!layout.sideFolded && (
-          <ShellResizer
-            orientation="vertical"
-            className="wb-shell-side-resizer"
-            label="사이드바 폭"
-            value={layout.sideWidth}
-            min={layout.sideWidthMin}
-            max={layout.sideWidthMax}
-            valueText={`${Math.round(layout.sideWidth)}px`}
-            onGrab={layout.grabSideWidth}
-            onMove={layout.setSideWidth}
-            onEdge={(edge) => layout.setSideWidth(edge === 'min' ? layout.sideWidthMin : layout.sideWidthMax)}
-            onReset={layout.resetSideWidth}
-          />
-        )}
+          {!layout.sideFolded && (
+            <ShellResizer
+              orientation="vertical"
+              className="wb-shell-side-resizer"
+              label="사이드바 폭"
+              value={layout.sideWidth}
+              min={layout.sideWidthMin}
+              max={layout.sideWidthMax}
+              valueText={`${Math.round(layout.sideWidth)}px`}
+              onGrab={layout.grabSideWidth}
+              onMove={layout.setSideWidth}
+              onEdge={(edge) => layout.setSideWidth(edge === 'min' ? layout.sideWidthMin : layout.sideWidthMax)}
+              onReset={layout.resetSideWidth}
+            />
+          )}
 
-        <main className="wb-shell-canvas" aria-label="캔버스" ref={canvasRef}>
-          <CanvasFrame
-            projectId={props.project.id}
-            pageId={props.pageId}
-            editable={mode === 'edit' && canEdit}
-            resyncToken={resyncToken}
-            restoredToken={restoredToken}
-            restoredLead={restoredLead}
-            lateToken={lateToken}
-            goneCheck={pageGone}
-          />
-        </main>
+          <main className="wb-shell-canvas" aria-label="캔버스" ref={canvasRef}>
+            <CanvasFrame
+              projectId={props.project.id}
+              pageId={props.pageId}
+              editable={mode === 'edit' && canEdit}
+              resyncToken={resyncToken}
+              restoredToken={restoredToken}
+              restoredLead={restoredLead}
+              lateToken={lateToken}
+              goneCheck={pageGone}
+            />
+          </main>
 
-        {/* **하단 판**(`palette/component-palette.tsx`) — 캔버스와 하단 바 사이(그리드의 `palette` 줄). 늘 선다 — 편집 모드 · `canEdit` 이면
+          {/* **하단 판**(`palette/component-palette.tsx`) — 캔버스와 하단 바 사이(그리드의 `palette` 줄). 늘 선다 — 편집 모드 · `canEdit` 이면
             «컴포넌트 | 모듈», 아니면(뷰 모드 · viewer) «모듈» 하나이고 넣기 · 끌기가 없다. 프로젝트 모듈 쓰기는 `canEdit`(모드와 무관하다). */}
-        {layout.paletteOpen && (
-          <ComponentPalette
-            projectId={props.project.id}
-            pageId={props.pageId}
-            height={layout.paletteHeight}
-            min={layout.paletteHeightMin}
-            max={layout.paletteHeightMax}
-            onGrab={layout.grabPaletteHeight}
-            onMove={layout.setPaletteHeight}
-            onReset={layout.resetPaletteHeight}
-            insertable={paletteInsertable}
-            projectWritable={canEdit}
-          />
-        )}
+          {layout.paletteOpen && (
+            <ComponentPalette
+              projectId={props.project.id}
+              pageId={props.pageId}
+              height={layout.paletteHeight}
+              min={layout.paletteHeightMin}
+              max={layout.paletteHeightMax}
+              onGrab={layout.grabPaletteHeight}
+              onMove={layout.setPaletteHeight}
+              onReset={layout.resetPaletteHeight}
+              insertable={paletteInsertable}
+              projectWritable={canEdit}
+            />
+          )}
 
-        {/* **하단 바**(`shell/shell-footer.tsx`) — 왼쪽은 통지 줄, 오른쪽은 «컴포넌트». 통지가 여럿이면 바가 위로 자라고 캔버스가 준다. */}
-        <ShellFooter
-          ref={layout.footerRef}
-          notices={
-            <>
-              {/* 편집 실패 통지는 **한 자리**다. 조회 실패처럼 화면마다 나누지 않는 것은,
+          {/* **하단 바**(`shell/shell-footer.tsx`) — 왼쪽은 통지 줄, 오른쪽은 «컴포넌트». 통지가 여럿이면 바가 위로 자라고 캔버스가 준다. */}
+          <ShellFooter
+            ref={layout.footerRef}
+            notices={
+              <>
+                {/* 편집 실패 통지는 **한 자리**다. 조회 실패처럼 화면마다 나누지 않는 것은,
                   어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
                   받고 보내지 못한 편집을 잃는다. 하단 바는 어느 패널을 보고 있어도 캔버스
                   바로 아래라 눈에 들어온다. */}
-              <EditAlert />
-              {/* **정보 통지는 한 칸이다**(`shell/info-notice.tsx`) — 실패가 아닌 한 줄이 쌓이지 않고 바꿔 끼워진다. */}
-              <InfoNotice />
-              {/* **경고는 실패가 아니다**. 실패 통지 바로 옆에 두되 `role`이 다르다 —
+                <EditAlert />
+                {/* **정보 통지는 한 칸이다**(`shell/info-notice.tsx`) — 실패가 아닌 한 줄이 쌓이지 않고 바꿔 끼워진다. */}
+                <InfoNotice />
+                {/* **경고는 실패가 아니다**. 실패 통지 바로 옆에 두되 `role`이 다르다 —
                   근거는 `shell/edit-warnings.tsx`의 머리말에 있다. */}
-              <EditWarnings />
-              {/* **남의 변경 때문에 화면이 낡았다는 통지**. `EditAlert`와 자리는 같고
+                <EditWarnings />
+                {/* **남의 변경 때문에 화면이 낡았다는 통지**. `EditAlert`와 자리는 같고
                   `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
                   근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
-              <RemoteAlert
-                onReload={(stale) => {
-                  if (stale.reason === 'late') {
-                    if (shellLive()) setLateToken((token) => token + 1)
-                    return
-                  }
-                  reloadAfterRestore(stale.own === undefined ? SIGNALLED_RESTORE_LEAD : OWN_RESTORE_LEAD[stale.own])
-                }}
-              />
-              {/* **테마를 못 실었다**(`theme/theme-alert.tsx`) — 캔버스는 기본 뷰로 그리고 있다. */}
-              <ThemeAlert />
-              {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
-              {roleNotice !== null && (
-                <p className="wb-shell-remote-alert" role="status">
-                  {roleNotice}
-                </p>
-              )}
-              {/* **페이지 JSON — 가져온 결과**(`panels/page-json-notices.tsx`). 닫기를 누를 때까지 남는다(고아 코멘트는 되돌릴
+                <RemoteAlert
+                  onReload={(stale) => {
+                    if (stale.reason === 'late') {
+                      if (shellLive()) setLateToken((token) => token + 1)
+                      return
+                    }
+                    reloadAfterRestore(stale.own === undefined ? SIGNALLED_RESTORE_LEAD : OWN_RESTORE_LEAD[stale.own])
+                  }}
+                />
+                {/* **테마를 못 실었다**(`theme/theme-alert.tsx`) — 캔버스는 기본 뷰로 그리고 있다. */}
+                <ThemeAlert />
+                {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
+                {roleNotice !== null && (
+                  <p className="wb-shell-remote-alert" role="status">
+                    {roleNotice}
+                  </p>
+                )}
+                {/* **페이지 JSON — 가져온 결과**(`panels/page-json-notices.tsx`). 닫기를 누를 때까지 남는다(고아 코멘트는 되돌릴
                   수 없다 — 읽기 전에 사라지면 안 된다). */}
-              <PageJsonNoticeList notices={pageJsonNotices} />
-              {/* **세션 전환 · 로그아웃 실패**(`session/session-menu.tsx`의 `SessionNotices`). */}
-              <SessionNotices failure={logoutFailure} className="wb-shell-session-alert" />
-            </>
-          }
-          tools={<PaletteToggle open={layout.paletteOpen} onToggle={layout.togglePalette} insertable={paletteInsertable} />}
-        />
+                <PageJsonNoticeList notices={pageJsonNotices} />
+                {/* **세션 전환 · 로그아웃 실패**(`session/session-menu.tsx`의 `SessionNotices`). */}
+                <SessionNotices failure={logoutFailure} className="wb-shell-session-alert" />
+              </>
+            }
+            tools={<PaletteToggle open={layout.paletteOpen} onToggle={layout.togglePalette} insertable={paletteInsertable} />}
+          />
 
-        {/* **캔버스와 우측 패널 사이의 손잡이**(`shell/sidebar-layout.ts` «두 폭은 한 예산을 나눠 쓴다»). 좌측 손잡이와 같은 부품이고 방향만
+          {/* **캔버스와 우측 패널 사이의 손잡이**(`shell/sidebar-layout.ts` «두 폭은 한 예산을 나눠 쓴다»). 좌측 손잡이와 같은 부품이고 방향만
             반대다 — 왼쪽으로 끌면 패널이 넓어진다(`reversed`). 우측을 접으면 안 선다. */}
-        {!layout.panelFolded && (
-          <ShellResizer
-            orientation="vertical"
-            className="wb-shell-panel-resizer"
-            label="우측 패널 폭"
-            reversed
-            value={layout.panelWidth}
-            min={layout.panelWidthMin}
-            max={layout.panelWidthMax}
-            valueText={`${Math.round(layout.panelWidth)}px`}
-            onGrab={layout.grabPanelWidth}
-            onMove={layout.setPanelWidth}
-            onEdge={(edge) => layout.setPanelWidth(edge === 'min' ? layout.panelWidthMin : layout.panelWidthMax)}
-            onReset={layout.resetPanelWidth}
-          />
-        )}
+          {!layout.panelFolded && (
+            <ShellResizer
+              orientation="vertical"
+              className="wb-shell-panel-resizer"
+              label="우측 패널 폭"
+              reversed
+              value={layout.panelWidth}
+              min={layout.panelWidthMin}
+              max={layout.panelWidthMax}
+              valueText={`${Math.round(layout.panelWidth)}px`}
+              onGrab={layout.grabPanelWidth}
+              onMove={layout.setPanelWidth}
+              onEdge={(edge) => layout.setPanelWidth(edge === 'min' ? layout.panelWidthMin : layout.panelWidthMax)}
+              onReset={layout.resetPanelWidth}
+            />
+          )}
 
-        <aside
-          id={panelId}
-          ref={layout.panelRef}
-          className={layout.panelFolded ? 'wb-shell-panel wb-shell-folded' : 'wb-shell-panel'}
-          aria-label="우측 패널"
-          style={{ width: `${layout.panelWidth}px` }}
-        >
-          {/* **본문 넷이 같은 `canEdit`을 받는다** — 속성 · 상호작용은 끄고, 코멘트 폼 · 설명 편집기는 숨긴다. */}
-          <RightPanel
-            projectId={props.project.id}
-            pageId={props.pageId}
-            canEdit={canEdit}
-            restoredToken={restoredToken}
-            menuRev={menuRev}
-          />
-        </aside>
-      </div>
+          <aside
+            id={panelId}
+            ref={layout.panelRef}
+            className={layout.panelFolded ? 'wb-shell-panel wb-shell-folded' : 'wb-shell-panel'}
+            aria-label="우측 패널"
+            style={{ width: `${layout.panelWidth}px` }}
+          >
+            {/* **본문 넷이 같은 `canEdit`을 받는다** — 속성 · 상호작용은 끄고, 코멘트 폼 · 설명 편집기는 숨긴다. */}
+            <RightPanel
+              projectId={props.project.id}
+              pageId={props.pageId}
+              canEdit={canEdit}
+              restoredToken={restoredToken}
+              menuRev={menuRev}
+            />
+          </aside>
+        </div>
+      </CanvasPickProvider>
     </AliasEditProvider>
   )
 }
@@ -1151,20 +1155,20 @@ function EditorShell(props: {
  * 우측 패널의 탭(설계서 「설계서 화면 구조」).
  *
  * **`mode`를 읽는다.** 그 절의 표대로 편집 모드는 페이지 정보 / **속성** / 코멘트 / 상호작용, 뷰 모드는 **페이지 정보** /
- * 코멘트 / 상호작용이다(위 `PANEL_TABS`). 처음 고른 탭은 «속성»이다 — 뷰 모드에는 없어 첫 탭(«페이지 정보»)이 선다.
+ * 코멘트 / 상호작용이다(위 `PANEL_TABS`). 처음 고른 탭은 «컴포넌트»다 — 뷰 모드에는 없어 첫 탭(«페이지 정보»)이 선다.
  *
  * **본문은 삼항이 아니라 표다.** 탭이 셋이 되면 삼항이 겹치는데, 그러면 탭이 늘 때마다
  * 중첩이 깊어지고 어느 탭이 어느 본문인지 읽기 어렵다. **모드로 갈리는 것은 *목록*이지
  * 본문이 아니다** — 모드는 목록 표(`PANEL_TABS`)의 키이고 본문 표(`PANEL_BODIES`)는 모드를 모른다.
  *
  * **모드를 바꿀 때 탭이 어떻게 되는가 — 판정.** 지금 보던 탭이 새 모드에도 있으면 **그대로
- * 둔다**(코멘트를 보다 뷰 모드로 가면 코멘트가 그대로 보인다). 없으면(속성 → 뷰 모드)
+ * 둔다**(코멘트를 보다 뷰 모드로 가면 코멘트가 그대로 보인다). 없으면(컴포넌트 → 뷰 모드)
  * **그 모드의 첫 탭으로 간다.** 무조건 첫 탭으로 되돌리는 판을 고르지 않은 것은, 모드 토글이
  * *"같은 것을 다르게 본다"*이지 *"다른 것을 본다"*가 아니기 때문이다 — 캔버스가 문서를,
  * 좌측이 트리를 그대로 두는 것과 같은 결이다.
  *
  * **그 판정을 `useState` 대신 렌더 중 대조로 구현한다.** 이펙트로 고치면 **모드가 바뀐 첫
- * 커밋 하나 동안 없는 탭을 그린다** — `props` 탭 본문이 뷰 모드에서 한 번 그려지는 창이고,
+ * 커밋 하나 동안 없는 탭을 그린다** — `component` 탭 본문이 뷰 모드에서 한 번 그려지는 창이고,
  * 그 창은 이 저장소가 `openPageId`로 닫은 것과 같은 부류다(`CanvasFrame`의 주석).
  *
  * **탭 상태를 스토어에 두지 않는다.** `EditorState`가 드는 것은 **페이지 편집** 상태다
@@ -1188,11 +1192,14 @@ function RightPanel(props: {
 }): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
-  const [chosen, setChosen] = useState<PanelTab>('props')
+  const [chosen, setChosen] = useState<PanelTab>('component')
+  // **캔버스에서 노드를 눌러 고르면 «컴포넌트» 탭이다**(설계서 「설계서 화면 구조」). 고른 것이 바뀐 것을 보지 않고 누름의 신호를 받는다 — 트리 줄 ·
+  // 키보드 · 넣은 뒤 저절로 고름은 탭을 안 옮긴다(`shell/canvas-pick.tsx`). 뷰 모드는 그 탭이 없고 캔버스도 고르지 않는다.
+  useOnCanvasPick(useCallback(() => setChosen('component'), []))
 
   const tabs = PANEL_TABS[mode]
   // 고른 탭이 이 모드에 없으면 첫 탭이다(위 머리말의 판정). **`chosen`을 고치지 않는다** —
-  // 뷰 모드에서 속성을 보고 있었다는 사실이 남아 있어야 편집 모드로 돌아갈 때 되살아난다.
+  // 뷰 모드에서 «컴포넌트» 탭을 보고 있었다는 사실이 남아 있어야 편집 모드로 돌아갈 때 되살아난다.
   const tab = tabs.some((item) => item.id === chosen) ? chosen : (tabs[0]?.id ?? 'comments')
   const tabRefs = useRef(new Map<PanelTab, HTMLButtonElement>())
   /** 탭 줄의 ← → Home End — 고른 탭을 옮기고 포커스도 따라간다(APG 탭 패턴 · 컴포넌트 판의 갈래 탭과 같다). 끝에서 멈춘다. */

@@ -43,7 +43,7 @@ function notStubbed(method: string): () => never {
 /**
  * 테스트가 명시적으로 스텁한 메서드만 동작하는 `ApiClient`.
  *
- * **`readTree`는 스텁하지 않으면 그 객체의 `getTree`로 선다**(판 번호 0) — 메뉴 트리를 그리는 케이스가 `getTree`만 스텁하고 그 호출 수를
+ * **`listComments`는 빈 목록이 기본이다**(그 칸의 주석). **`readTree`는 스텁하지 않으면 그 객체의 `getTree`로 선다**(판 번호 0) — 메뉴 트리를 그리는 케이스가 `getTree`만 스텁하고 그 호출 수를
  * 센다. 번호가 늘 0 이면 트리 칸은 «늦게 낸 조회의 답만»으로 가른다(`tree/use-tree-commands.tsx`의 `settles`).
  */
 export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
@@ -89,7 +89,12 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     listAssets: notStubbed('listAssets'),
     claimAssets: notStubbed('claimAssets'),
     claimMyAssets: notStubbed('claimMyAssets'),
-    listComments: notStubbed('listComments'),
+    /**
+     * **빈 목록이 기본이다** — 편집 모드의 첫 탭(«컴포넌트»)은 노드를 고르면 그 노드의 코멘트 묶음을 세우고 목록을 읽는다(`src/panels/component-panel.tsx`).
+     * 노드를 고르는 케이스마다 이것을 스텁하게 두면 코멘트와 무관한 케이스가 «코멘트를 불러오지 못했습니다» alert 를 하나 더 본다. 부른 수 · 답을
+     * 재는 케이스는 덮어쓴다.
+     */
+    listComments: async () => [],
     createComment: notStubbed('createComment'),
     updateComment: notStubbed('updateComment'),
     deleteComment: notStubbed('deleteComment'),

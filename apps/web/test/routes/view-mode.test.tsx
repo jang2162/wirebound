@@ -64,8 +64,8 @@ describe('설계서 「설계서 화면 구조」 — 우측 탭 구성이 모�
   it('편집 모드는 페이지 정보 / 속성 / 코멘트 / 상호작용이다 — 처음 고른 것은 속성이다', async () => {
     await openPage(DOC)
 
-    expect(tabs()).toEqual(['페이지 정보', '속성', '코멘트', '상호작용'])
-    expect(screen.getByRole('tab', { name: '속성' }).getAttribute('aria-selected')).toBe('true')
+    expect(tabs()).toEqual(['페이지 정보', '컴포넌트', '코멘트', '상호작용'])
+    expect(screen.getByRole('tab', { name: '컴포넌트' }).getAttribute('aria-selected')).toBe('true')
   })
 
   it('뷰 모드는 페이지 정보 / 코멘트 / 상호작용이다', async () => {
@@ -83,10 +83,10 @@ describe('설계서 「설계서 화면 구조」 — 우측 탭 구성이 모�
 
     toEdit()
 
-    expect(tabs()).toEqual(['페이지 정보', '속성', '코멘트', '상호작용'])
+    expect(tabs()).toEqual(['페이지 정보', '컴포넌트', '코멘트', '상호작용'])
   })
 
-  it('뷰 모드에서 속성 탭의 본문이 사라진다 — 탭만 바뀌는 것이 아니다', async () => {
+  it('뷰 모드에서 «컴포넌트» 탭의 본문이 사라진다 — 탭만 바뀌는 것이 아니다', async () => {
     await openPage(DOC)
     // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
     // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
@@ -114,7 +114,7 @@ describe('설계서 「설계서 화면 구조」 — 모드를 바꿀 때 보�
   it('없는 탭이면 그 모드의 첫 탭으로 간다', async () => {
     await openPage(DOC, { apiOverrides: withDescription('회원을 찾고 고치는 화면') })
     // 편집 모드의 첫 탭(속성)을 보고 있다.
-    expect(screen.getByRole('tab', { name: '속성' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: '컴포넌트' }).getAttribute('aria-selected')).toBe('true')
 
     toView()
 
@@ -130,7 +130,7 @@ describe('설계서 「설계서 화면 구조」 — 모드를 바꿀 때 보�
 
     toEdit()
 
-    expect(screen.getByRole('tab', { name: '속성' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: '컴포넌트' }).getAttribute('aria-selected')).toBe('true')
   })
 })
 

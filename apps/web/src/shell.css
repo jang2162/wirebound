@@ -1973,6 +1973,23 @@
   font-size: 13px;
 }
 
+/* «컴포넌트» 탭의 묶음 둘(`panels/component-panel.tsx`) — «속성» · «코멘트». 둘째 묶음(«코멘트»)은 금 하나로 가른다 — 결합자(`+`)는
+   셸 시트의 누수 검사가 막아(`test/shell-css.test.ts`) 둘째 묶음에 클래스를 단다. */
+.wb-shell-component-comments {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--wb-shell-line);
+}
+
+/* 묶음 이름. 안의 노드 제목(`.wb-shell-panel-title` — 13px)보다 작고 옅게 둬 «무엇의 묶음인가» 로만 읽힌다. */
+.wb-shell-component-part-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--wb-shell-muted);
+}
+
 /* 코멘트 탭. 새 코멘트 폼과 무리 목록이 세로로 쌓인다. */
 .wb-shell-comments {
   display: flex;
@@ -3678,7 +3695,7 @@
    `.wb-shell-page-description`과 같은 탭이고, 고칠 수 있는 판(편집 모드 · editor 이상)에는 이 폼이, 그 밖에는 위 문단이
    선다(`canEdit`). `snapshots-panel.tsx`의 폼과 같은 결이되 세로로 쌓는다(이름 폼 · 설명 폼 · 상태 목록).
 
-   **편집 모드 속성 탭(루트 `Page`를 골랐을 때)에는 두지 않는다** — 설계서 「설계서 화면
+   **편집 모드 «컴포넌트» 탭(루트 `Page`를 골랐을 때)에는 두지 않는다** — 설계서 「설계서 화면
    구조」가 그렇게 정하고, 그 파일 머리말과 `panels/property-panel.tsx` 머리말이 그 이유를
    든다. 그 자리를 설명으로 남기면 다음 사람이 없는 것을 찾는다. */
 .wb-shell-page-description-form {

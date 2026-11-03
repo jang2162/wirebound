@@ -9,7 +9,8 @@
  *
  * **선택한 노드의 것만 보이지 않는다.** 「설계서 화면 구조」의 그림이 *"① 검색폼 - … / ② 그리드 - …"*로
  * **전부**를 보인다 — 코멘트 탭의 쓸모가 *"이 설계서에 어떤 말이 붙어 있는가"*를 훑는
- * 것이기 때문이다. 선택한 노드의 무리에는 표시를 달아 눈이 먼저 가게 한다.
+ * 것이기 때문이다. 선택한 노드의 무리에는 표시를 달아 눈이 먼저 가게 한다. 고른 노드의 것만 보는 자리는 «컴포넌트» 탭의 «코멘트» 묶음이다 —
+ * 같은 본문을 범위만 좁혀 그린다(`scope` · `./component-panel.tsx`).
  *
  * ## 무리가 셋이고, **"모른다"는 그 셋 중 하나가 아니다**
  *
@@ -82,7 +83,7 @@
  * | 쓰는 도중 다른 노드를 고른다 | 초안이 한 칸이면 | 노드마다면(지금) |
  * |---|---|---|
  * | 코멘트 탭에 머문 채 캔버스·트리로 | 초안이 남고 **대상이 바뀐다** | 상자가 **그 노드의 초안**(없으면 빈 칸)이 된다. 돌아오면 쓰던 글이 원래 노드를 대상으로 그대로 있다 |
- * | 속성 탭을 다녀오며 | 초안이 남고 **대상이 바뀐다** — 탭 왕복에 초안을 살리는 칸이 **여는 길**이다 | 같음(위 줄) |
+ * | «컴포넌트» 탭을 다녀오며 | 초안이 남고 **대상이 바뀐다** — 탭 왕복에 초안을 살리는 칸이 **여는 길**이다 | 같음(위 줄) |
  *
  * (지금 = jsdom 케이스 *"쓰던 코멘트는 쓴 노드에만 달린다 …"*와 Chrome — 두 길 다 상자가 빈 칸이
  * 됐다가 원래 노드로 돌아오면 글이 서고, 달면 DB 에 `n-tree:트리에 대해 쓴 말` 한 행.)
@@ -163,6 +164,8 @@ const slot = slotsOf(import.meta.url)
 const NO_PAGE = '페이지를 열면 코멘트가 보입니다'
 /** 코멘트가 하나도 없을 때. */
 const NO_COMMENTS = '아직 코멘트가 없습니다'
+/** 고른 노드에 코멘트가 없을 때(`scope`가 `'node'`). */
+const NO_NODE_COMMENTS = '이 노드에 단 코멘트가 없습니다'
 /** 노드를 고르지 않아 새 코멘트를 달 수 없을 때. */
 const NO_TARGET = '코멘트를 달 노드를 캔버스나 구조 트리에서 고르세요'
 
@@ -613,7 +616,14 @@ export function CommentPanel(props: {
    * 설계서 「권한 모델」의 viewer *"편집·코멘트 모두 불가"* 는 **다는 것**이지 읽는 것이 아니다.
    */
   canEdit: boolean
+  /**
+   * 어디까지 보이나 — `'page'`(기본 · «코멘트» 탭)는 페이지 전부, `'node'`(«컴포넌트» 탭의 «코멘트» 묶음 — `./component-panel.tsx`)는 고른 노드의
+   * 무리만이고 재번호 단추가 없다(재번호는 페이지 전체의 일이다). **칸 · 조회 · 쓰기는 두 범위가 같다** — 같은 모듈의 칸(`slot`)을 읽으므로 한쪽에서
+   * 단 말 · 친 초안을 다른 쪽이 그대로 본다. 범위는 **그리는 것만** 가른다.
+   */
+  scope?: 'page' | 'node'
 }): ReactElement {
+  const scope = props.scope ?? 'page'
   const api = useApi()
   const store = useEditorStoreInstance()
   // 지금 연결의 id 를 읽는 자리 — 게시가 그것을 **보낼 때** 잡아 다시 보낼 때도 싣는다(`submit`).
@@ -1041,7 +1051,9 @@ export function CommentPanel(props: {
     )
   }
 
-  const groups = groupComments(state.comments, document)
+  const all = groupComments(state.comments, document)
+  // `'node'`면 고른 노드의 무리 하나(여럿을 골랐으면 없음 — 달 곳과 같은 값 `selectedNodeId`).
+  const groups = scope === 'page' ? all : all.filter((group) => group.nodeId === selectedNodeId)
   // 무리 머리의 별칭 — 문서를 못 읽었으면 `null`(머리가 id 만 말한다).
   const aliases = document === null ? null : aliasesOf(document)
   // 다시 받기가 **보이는 목록보다 새것일 때만** 말한다(`REFRESH`의 주석).
@@ -1092,11 +1104,13 @@ export function CommentPanel(props: {
               {shellIcon('comment', 14, 'wb-shell-icon-lead')}
               코멘트 달기
             </button>
-            {/* 「설계서 화면 구조」의 *"문서 순서대로 재번호"* 버튼. 표는 안 건드리고 문서만 바꾼다. */}
-            <button type="button" className="wb-shell-comment-renumber" disabled={busy} onClick={renumber}>
-              {shellIcon('renumber', 14, 'wb-shell-icon-lead')}
-              문서 순서대로 재번호
-            </button>
+            {/* 「설계서 화면 구조」의 *"문서 순서대로 재번호"* 버튼. 표는 안 건드리고 문서만 바꾼다. 페이지 전체의 일이라 «코멘트» 탭에만 있다(`scope`). */}
+            {scope === 'page' && (
+              <button type="button" className="wb-shell-comment-renumber" disabled={busy} onClick={renumber}>
+                {shellIcon('renumber', 14, 'wb-shell-icon-lead')}
+                문서 순서대로 재번호
+              </button>
+            )}
           </div>
           {writeError !== null &&
             (writeError.kind === 'signed-out' ? (
@@ -1140,14 +1154,14 @@ export function CommentPanel(props: {
       {/* **문서를 못 읽었으면 그렇다고 말한다**(머리말 «무리가 셋이고»). 코멘트는 그대로 보이되 번호
           자리가 비는 이유를 화면이 스스로 설명한다 — 조용히 `–`만 두면 사용자는 번호가
           없는 것으로 읽는다. */}
-      {document === null && state.comments.length > 0 && (
+      {document === null && groups.length > 0 && (
         <p className="wb-shell-panel-notice" role="status">
           {NO_DOCUMENT}
         </p>
       )}
 
       {groups.length === 0 ? (
-        <p className="wb-shell-panel-notice">{NO_COMMENTS}</p>
+        <p className="wb-shell-panel-notice">{scope === 'page' ? NO_COMMENTS : NO_NODE_COMMENTS}</p>
       ) : (
         <ul className="wb-shell-comment-groups">
           {groups.map((group) => (

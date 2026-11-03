@@ -1755,7 +1755,7 @@ describe('쓰기가 끝나면 잠금이 풀린다 — 목록 다시 받기는 �
     server.holdLists(false)
 
     // 탭을 오가면 새 조회가 나간다 — 게시가 커밋된 **뒤에** 낸 것이다.
-    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+    fireEvent.click(screen.getByRole('tab', { name: '컴포넌트' }))
     await toCommentTab()
     await waitFor(() => expect(screen.queryByText('달린 말')).not.toBeNull())
 
