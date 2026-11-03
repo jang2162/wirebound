@@ -206,6 +206,12 @@ export interface EditorState {
    * 비고(그래서 잠금을 잡지 않는다), 노드를 고르면 이것이 빈다(`#withSelection`). 그 부모가 문서에서 사라지거나 그 구역을 선언하지 않게 되면 빈다.
    */
   selectedZone: ZoneRef | null
+  /**
+   * **하단 판이 방금 넣어 고른 노드들**(`selectPlaced`) — 고른 것이 그대로인 동안 다음 넣기 단추는 고른 노드 «뒤» 에 넣는다(`palette/palette-add.ts` 머리말
+   * «연달아 넣기»). **사람이 무엇이든 고르면 빈다** — 사람의 고르기 명령(`selectNode` · `selectZone` · `toggleSelect` · `selectRange` · `selectMany`)이
+   * 같은 노드를 다시 골라도 비운다. 고른 것이 바뀌거나(되돌리기 · 남의 지움 · 잠금 거절이 뺌) 다른 페이지를 열어도 빈다(`#withPlaced`). 비면 `null` 이다.
+   */
+  justPlaced: readonly string[] | null
   mode: EditorMode
   viewportWidth: ViewportWidth
   /** 0.05 ~ 2.0 */
@@ -320,6 +326,9 @@ export interface ZoneRef {
 /** 빈 선택 목록 — 비울 때마다 새 배열을 만들면 `#apply`가 참조로 견줘 «바뀌었다»고 알린다. 얼려 둔다(나눠 쓰므로). */
 const NO_SELECTION: readonly string[] = Object.freeze([])
 
+/** 사람의 고르기가 싣는 갱신 — «방금 넣음» 을 끝낸다(`justPlaced` 의 머리말 · 같은 노드를 다시 골라도). */
+const PERSON_PICK: Partial<EditorState> = Object.freeze({ justPlaced: null })
+
 /** 선택 명령의 답 — 상한(`MAX_OPS_PER_EDIT`)에 걸려 더 고르지 않은 수. 부르는 쪽이 그렇다고 알린다. */
 export interface SelectionChange {
   capped: number
@@ -338,6 +347,7 @@ function initialState(): EditorState {
     selectedNodeId: null,
     selectedNodeIds: NO_SELECTION,
     selectedZone: null,
+    justPlaced: null,
     mode: 'edit',
     viewportWidth: 1280,
     zoom: 1,
@@ -2841,7 +2851,25 @@ export class EditorStore {
    */
   readonly selectNode = (nodeId: string | null): void => {
     if (nodeId !== null && this.selectionBlockedBy(nodeId) !== null) return
-    this.#apply({ selectedNodeId: nodeId })
+    this.#apply({ selectedNodeId: nodeId, justPlaced: null })
+  }
+
+  /**
+   * **하단 판이 넣은 노드를 고른다**(컴포넌트 · 모듈 넣기 단추 · 끌어 놓기) — 고르기는 `selectNode`(하나) · `selectMany(…, 'replace', anchor)`(여럿)와
+   * 같고, 고른 목록을 `justPlaced` 로 적어 다음 넣기가 그 «뒤» 에 서게 한다(그 필드의 머리말). 하나도 못 고르면(남이 잡음) 적지 않는다.
+   */
+  readonly selectPlaced = (nodeIds: readonly string[], anchor?: string): void => {
+    const only = nodeIds.length === 1 ? nodeIds[0] : undefined
+    if (only !== undefined) {
+      if (this.selectionBlockedBy(only) !== null) return
+      this.#apply({ selectedNodeId: only, justPlaced: [only] })
+      return
+    }
+    const { document } = this.#state
+    if (document === null) return
+    const picked = nodeIds.filter((id) => this.selectionBlockedBy(id) === null)
+    const next = normalizeSelection(document.root, this.#withoutRoot(document, picked), anchor ?? null, 'outer')
+    this.#setSelection(next, { justPlaced: next.ids.length === 0 ? null : next.ids })
   }
 
   /**
@@ -2854,7 +2882,7 @@ export class EditorStore {
     if (document === null || !zoneStands(document, { parentId, zone })) return
     const now = this.#state.selectedZone
     const selectedZone = now !== null && now.parentId === parentId && now.zone === zone ? now : { parentId, zone }
-    this.#apply({ selectedZone, selectedNodeId: null })
+    this.#apply({ selectedZone, selectedNodeId: null, justPlaced: null })
   }
 
   /**
@@ -2871,13 +2899,14 @@ export class EditorStore {
       this.#apply({
         selectedNodeIds: ids.length === 0 ? NO_SELECTION : ids,
         selectedNodeId: selectedNodeId === nodeId ? (ids[ids.length - 1] ?? null) : selectedNodeId,
+        justPlaced: null,
       })
       return { capped: 0 }
     }
     if (this.selectionBlockedBy(nodeId) !== null) return { capped: 0 }
     const next = normalizeSelection(document.root, [...selectedNodeIds, nodeId], nodeId, 'anchor')
     if (next.capped > 0) return { capped: next.capped }
-    this.#setSelection(next)
+    this.#setSelection(next, PERSON_PICK)
     return { capped: 0 }
   }
 
@@ -2898,7 +2927,7 @@ export class EditorStore {
     }
     const range = visibleOrder.slice(Math.min(from, to), Math.max(from, to) + 1).filter((id) => this.selectionBlockedBy(id) === null)
     const next = normalizeSelection(document.root, this.#withoutRoot(document, range), toId, 'outer')
-    this.#setSelection(next)
+    this.#setSelection(next, PERSON_PICK)
     return { capped: next.capped }
   }
 
@@ -2918,7 +2947,7 @@ export class EditorStore {
       anchor ?? (mode === 'add' ? selectedNodeId : null),
       'outer',
     )
-    this.#setSelection(next)
+    this.#setSelection(next, PERSON_PICK)
     return { capped: next.capped }
   }
 
@@ -2943,11 +2972,12 @@ export class EditorStore {
   }
 
   /** 정리된 목록을 싣는다 — 같은 목록이면 앞 배열을 그대로 둔다(`#apply`는 참조로 견준다). */
-  #setSelection(next: NormalizedSelection): void {
+  #setSelection(next: NormalizedSelection, extra: Partial<EditorState> = {}): void {
     const { selectedNodeIds } = this.#state
     this.#apply({
       selectedNodeIds: sameSelection(next.ids, selectedNodeIds) ? selectedNodeIds : next.ids.length === 0 ? NO_SELECTION : next.ids,
       selectedNodeId: next.anchor,
+      ...extra,
     })
   }
 
@@ -3153,7 +3183,19 @@ export class EditorStore {
    * 문서마다 트리를 한 번 훑는다 — 고른 것이 없으면 안 훑는다.
    */
   #withSelection(update: Partial<EditorState>): Partial<EditorState> {
-    return this.#withZone(this.#withNodeSelection(update))
+    return this.#withPlaced(this.#withZone(this.#withNodeSelection(update)))
+  }
+
+  /**
+   * **«방금 넣음» 을 맞춘다**(`justPlaced` 의 머리말) — 갱신이 그것을 싣고 오면 그대로다(`selectPlaced` · 사람의 고르기). 아니면 다른 페이지를 열거나
+   * 고른 목록이 그것과 달라지면 빈다(되돌리기 · 남의 편집이 그 노드를 지움 · 잠금 거절 · 판을 비움).
+   */
+  #withPlaced(update: Partial<EditorState>): Partial<EditorState> {
+    const placed = this.#state.justPlaced
+    if (placed === null || 'justPlaced' in update) return update
+    const leaves = update.openPageId !== undefined && update.openPageId !== this.#state.openPageId
+    const ids = update.selectedNodeIds ?? this.#state.selectedNodeIds
+    return leaves || !sameSelection(ids, placed) ? { ...update, justPlaced: null } : update
   }
 
   #withNodeSelection(update: Partial<EditorState>): Partial<EditorState> {

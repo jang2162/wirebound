@@ -25,8 +25,9 @@
  *
  * ## 넣기 — 단추는 고른 노드 곁에, 끌기는 놓은 자리에
  *
- * 자리는 컴포넌트 카드와 같은 규칙이다 — 단추(Enter)는 `paletteAddTarget`(고른 것 없음 · 뿌리 → 페이지 끝, 자식을 받는 노드 → 그 안 끝, 잎 → 바로 뒤),
- * 끌기는 경로 층(`drag/use-placement.ts`)이 판정한 자리다. 넣는 편집은 `./module-insert.ts` 다(편집 하나 · 되돌리기 한 번 · 넣은 노드를 고른다).
+ * 자리는 컴포넌트 카드와 같은 규칙이다 — 단추(Enter)는 `paletteAddTarget`(고른 것 없음 · 뿌리 → 페이지 끝, 방금 넣어 고른 노드 → 그 기준 노드 바로 뒤,
+ * 자식을 받는 노드 → 그 안 끝, 잎 → 바로 뒤 — `./palette-add.ts` 머리말 «연달아 넣기»), 끌기는 경로 층(`drag/use-placement.ts`)이 판정한 자리다. 넣는 편집은
+ * `./module-insert.ts` 다(편집 하나 · 되돌리기 한 번 · 넣은 노드를 «방금 넣음» 으로 고른다 — `store.selectPlaced`).
  *
  * **넣기는 비동기다** — 개인 · 프로젝트 모듈은 그 모듈 하나를 다시 읽고(탭을 연 뒤 지웠으면 404 → «이 모듈은 지워졌습니다» · 목록 다시 읽기),
  * 페이지를 겨냥하는 액션이 있으면 프로젝트 트리도 읽는다(붙여넣기와 같다 — `shell/editor-keys.tsx` 의 `paste`). 개인 모듈은 다른 프로젝트에서
@@ -286,6 +287,7 @@ function useModuleInsert(input: {
             placing: { kind: 'module', key: card.key, nodes },
             blockedBy: store.editBlockedBy,
             lockedBy: store.lockedBy,
+            justPlaced: store.getState().justPlaced,
           })
           if (!verdict.ok) {
             onNotice(verdict.reason)
@@ -315,7 +317,7 @@ function useModuleInsert(input: {
         onNotice('')
         if (!live.current.commitOps(edit.ops)) return false
         const last = edit.selectIds[edit.selectIds.length - 1]
-        if (last !== undefined) store.selectMany(edit.selectIds, 'replace', last)
+        if (last !== undefined) store.selectPlaced(edit.selectIds, last)
         const dropped = [moduleDroppedNotice(edit), claimed?.notice ?? ''].filter((line) => line !== '').join(' ')
         if (dropped !== '') store.setInfoNotice(dropped)
         return true

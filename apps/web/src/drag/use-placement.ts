@@ -621,7 +621,8 @@ export function usePlacementDrop(input: {
       placing:
         placing.kind === 'new' ? `new:${placing.type}${placing.preset === undefined ? '' : `:${placing.preset}`}` : `node:${placing.id}`,
     })
-    if (node !== null) store.selectNode(node.id)
+    // 넣은 노드를 «방금 넣음» 으로 고른다 — 다음 넣기 단추가 그 뒤에 선다(`palette/palette-add.ts` 머리말 «연달아 넣기»).
+    if (node !== null) store.selectPlaced([node.id])
   }
 
   const live = (hint: DropHint<PlacementDrop> | null): DropHint<PlacementDrop> | null =>

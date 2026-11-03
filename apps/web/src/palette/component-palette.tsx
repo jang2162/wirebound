@@ -34,7 +34,8 @@
  *   `useCanvasRemeasured`). 끄는 동안 포인터 곁에 카드 이름표가 따라온다. 몸통을 누르기만 하고 떼면(문턱 안) **아무것도 안 한다** —
  *   넣지도 고르지도 않는다. 누름 한 번이 넣기면 끌려다 문턱을 못 넘은 손이 노드를 넣는다. 몸통은 단추가 아니다(포커스를 안 받는다).
  * - **«넣기» 단추**(오른쪽 위 `+` 아이콘 — 접근 이름 · `title` `<한국어 이름> 넣기`): 누름 · Enter 가 고른 노드에 따라 자리를 골라(`./palette-add.ts`) 지금
- *   편집 전송 길(`useEditCommit` 의 `commitOps`)로 넣고 넣은 노드를 고른다. 누른 채의 키 반복(`event.repeat`)은 넣지 않는다. **더블클릭 · 연달아 친 Enter 의 둘째도 안 넣는다** — 같은 카드를 `DOUBLE_CLICK_MS` 안에 다시 누른 것(포인터는 `DOUBLE_CLICK_SLOP` 안의 같은 자리)은 첫 넣기가 이미 한 일이다(고치기 전: 노드 둘 — 실브라우저). 다른 카드의 연타 · 간격이 지난 같은 카드는 넣는다. 못 넣으면 판
+ *   편집 전송 길(`useEditCommit` 의 `commitOps`)로 넣고 넣은 노드를 «방금 넣음» 으로 고른다(`store.selectPlaced` — 그대로인 채 다시 누르면 그 뒤에 선다 ·
+ *   `./palette-add.ts` 머리말 «연달아 넣기»). 누른 채의 키 반복(`event.repeat`)은 넣지 않는다. **더블클릭 · 연달아 친 Enter 의 둘째도 안 넣는다** — 같은 카드를 `DOUBLE_CLICK_MS` 안에 다시 누른 것(포인터는 `DOUBLE_CLICK_SLOP` 안의 같은 자리)은 첫 넣기가 이미 한 일이다(고치기 전: 노드 둘 — 실브라우저). 다른 카드의 연타 · 간격이 지난 같은 카드는 넣는다. 못 넣으면 판
  *   머리에 이유 한 줄을 세운다 — 다음 누름이 걷고, 그 문장을 세운 판(페이지 · 고른 노드)이 바뀌어도 걷는다(판은 페이지를 옮겨도 셸과
  *   함께 남아, 걷는 입구를 세지 않고 문장에 판을 적어 둔다 — 한 번 어긋나면 비운다. 떠났다 돌아와도 다시 서지 않는다). 단추도 카드 안이라
  *   그 자리에서 문턱 밖으로 끌면 끌기다 — 끈 뒤의 `click` 은 끌기 장치가 삼켜 넣기로 새지 않는다.
@@ -425,6 +426,7 @@ function PaletteCards(props: {
       placing,
       blockedBy: store.editBlockedBy,
       lockedBy: store.lockedBy,
+      justPlaced: store.getState().justPlaced,
     })
     if (!verdict.ok) {
       props.onNotice(verdict.reason)
@@ -434,7 +436,7 @@ function PaletteCards(props: {
     const node = createNode(card.type, undefined, card.preset)
     if (node === null) return
     if (commitOps(dropOps(document, placing, verdict.target, node))) {
-      store.selectNode(node.id)
+      store.selectPlaced([node.id])
       lastAdd.current = { key: card.key, at: performance.now(), x: event.clientX, y: event.clientY, pointer: event.detail > 0 }
     }
   }
