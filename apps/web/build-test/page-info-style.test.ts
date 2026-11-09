@@ -1,11 +1,11 @@
 /**
  * **«페이지 정보» 탭의 입력 · 단추가 셸의 꼴이다**(`src/panels/page-description.tsx` · `src/panels/page-states.tsx` · `shell.css` 의 `.wb-shell-page-title-input`
- * 머리 주석) — Chrome 의 계산된 스타일로 잰다. 칸 · 글 상자는 «속성» 탭의 칸(`.wb-shell-control` — 글 노드의 «글» 상자)과 같은 값, 단추는 패널의 글 단추
+ * 머리 주석) — Chrome 의 계산된 스타일로 잰다. 칸 · 글 상자는 «컴포넌트» 탭 «속성» 묶음의 칸(`.wb-shell-control` — 글 노드의 «글» 상자)과 같은 값, 단추는 패널의 글 단추
  * (`.wb-shell-panel-action`) 값이다. 둘을 안 달면 브라우저 기본 꼴(테두리 `2px inset` · `Arial 13.3333px` 단추)로 선다.
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 페이지 이름 칸 | 이름 칸이 «속성» 탭 칸과 다른 글꼴 · 테두리 · 모서리 · 여백 · 글 색이다 |
+ * | 페이지 이름 칸 | 이름 칸이 «속성» 묶음 칸과 다른 글꼴 · 테두리 · 모서리 · 여백 · 글 색이다 |
  * | 페이지 설명 글 상자 | 설명 상자가 그렇다 |
  * | «이름 저장» · «설명 저장» | 두 저장 단추가 패널 단추 꼴이 아니다 · 꺼진 판의 글이 흐리지 않다 |
  * | «상태 추가» | 그 단추가 패널 단추 꼴이 아니다 |
@@ -64,7 +64,7 @@ const MUTED = 'rgb(107, 118, 132)'
 describe.skipIf(!전제.ok)('«페이지 정보» 탭의 입력 꼴 — 실브라우저', () => {
   let stack: EditorStack
   let alice: Session
-  /** «속성» 탭의 칸 꼴 — 글 노드의 «글» 상자. */
+  /** «컴포넌트» 탭 «속성» 묶음의 칸 꼴 — 글 노드의 «글» 상자. */
   let control: Look
   /** 패널의 글꼴(`font-family`). */
   let panelFont: string
@@ -77,13 +77,17 @@ describe.skipIf(!전제.ok)('«페이지 정보» 탭의 입력 꼴 — 실브�
     const tab = await open(P)
     try {
       await tab.page.locator('li button', { hasText: 'Text' }).first().click()
-      await tab.page.getByRole('tab', { name: '속성', exact: true }).click()
-      const box = tab.page.getByRole('tabpanel').locator('textarea.wb-shell-control').first()
+      await tab.page.getByRole('tab', { name: '컴포넌트', exact: true }).click()
+      const box = tab.page
+        .getByRole('tabpanel')
+        .getByRole('region', { name: '속성', exact: true })
+        .locator('textarea.wb-shell-control')
+        .first()
       await box.waitFor()
       control = await lookOf(box)
       panelFont = await tab.page.locator('.wb-shell-panel').evaluate((element) => getComputedStyle(element).fontFamily)
       // eslint-disable-next-line no-console
-      console.log(`[속성 탭 칸] ${JSON.stringify(control)} · 패널 글꼴 ${panelFont}`)
+      console.log(`[속성 묶음 칸] ${JSON.stringify(control)} · 패널 글꼴 ${panelFont}`)
     } finally {
       await tab.close()
     }
@@ -135,12 +139,12 @@ describe.skipIf(!전제.ok)('«페이지 정보» 탭의 입력 꼴 — 실브�
     return panel
   }
 
-  /** 견줄 값이 UA 꼴이 아닌가의 카나리아 — «속성» 탭 칸이 셸 꼴로 쟀다. */
+  /** 견줄 값이 UA 꼴이 아닌가의 카나리아 — «속성» 묶음 칸이 셸 꼴로 쟀다. */
   function controlCanary(): void {
     expect(control.border).toBe('1px solid rgb(223, 227, 232)')
   }
 
-  it('페이지 이름 칸은 «속성» 탭의 칸과 같은 꼴이다', async () => {
+  it('페이지 이름 칸은 «속성» 묶음의 칸과 같은 꼴이다', async () => {
     controlCanary()
     const { P } = await fixture('look-title')
     const tab = await open(P)
@@ -152,7 +156,7 @@ describe.skipIf(!전제.ok)('«페이지 정보» 탭의 입력 꼴 — 실브�
     }
   })
 
-  it('페이지 설명 글 상자는 «속성» 탭의 칸과 같은 꼴이다', async () => {
+  it('페이지 설명 글 상자는 «속성» 묶음의 칸과 같은 꼴이다', async () => {
     controlCanary()
     const { P } = await fixture('look-desc')
     const tab = await open(P)

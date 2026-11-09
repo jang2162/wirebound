@@ -1112,6 +1112,8 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 | `apps/web/**` 만 | `pnpm typecheck` · `pnpm build` · `pnpm vitest run --project web` · `pnpm test:browser` · `pnpm vitest run --project build apps/web/build-test/export-bundle.test.ts` |
 | 그 밖 — `packages/*` · `system-themes/*` · 루트 설정 · 두 앱에 걸침 · 정본 문서를 읽는 케이스 | 전량 넷 |
 
+- **정본 설계서(`docs/superpowers/specs/2026-08-03-wirebound-design.md`)를 고친 판은 영역과 무관하게 전량 넷이다** — 그 문서를 읽는 케이스가 `packages/mcp` · `packages/schema` 에 있다(`git grep -l 2026-08-03-wirebound-design -- packages` 로 센다).
+- **`apps/web/src` 에 노드를 읽는 새 파일을 더하면** `pnpm vitest run --project unit packages/schema/test/zones-census.test.ts` 도 돈다 — 노드의 `.children` · `.zones` 를 바로 읽는 자리를 파일마다 센다.
 - **이펙트 · 마운트 순서를 바꾼 트랙은** `EDITOR_STACK_BUNDLE=build pnpm test:browser`(운영 번들)도 돈다.
 - **한 기계에서 전량 게이트는 동시에 둘까지만 띄운다** — 영역 게이트는 셈에 안 든다. 게이트 체인은 `nice -n 10` 아래에서 돌려 기계가 굼뜨지 않게 한다.
 - **실브라우저 파일 하나만 돌릴 때는 `pnpm vitest run -c vitest.browser.config.ts <경로>` 다** — `--project build <경로>` 는 `No test files found` 로 끝난다(`build` 프로젝트의 `include` 는 `apps/web/build-test` 에서 `export-bundle.test.ts` 만 줍는다). 어느 쪽이든 «통과» 를 읽기 전에 실행 수를 본다 — 앞의 명령은 `Test Files  1 passed` · `Tests  <케이스 수> passed` 를 찍고 뒤의 명령은 0 건에 종료 1 이다(`apps/web/build-test/editor-late-commit.test.ts` 로 재면 1 파일 · 2 케이스).
