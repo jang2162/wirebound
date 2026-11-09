@@ -24,7 +24,12 @@ export const sampleLayout: LayoutDocument = {
           {
             id: 'n_lay000000007',
             type: 'Tree',
-            props: { items: ['회원 관리', '권한 관리', '통계'], depth: 2 },
+            props: {
+              items: [
+                { label: '회원 관리', open: true, children: [{ label: '권한 관리' }] },
+                { label: '통계', children: [{ label: '일별 접속' }] },
+              ],
+            },
           },
           { id: 'n_lay000000008', type: 'Slot' },
         ],

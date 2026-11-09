@@ -343,7 +343,13 @@ const order = page('ex-od', [
         id: 'ex-od-t3',
         type: 'TabPanel',
         props: { label: '배송 이력' },
-        children: [{ id: 'ex-od-track', type: 'Tree', props: { items: ['결제 완료', '상품 준비', '출고'], depth: 2 } }],
+        children: [
+          {
+            id: 'ex-od-track',
+            type: 'Tree',
+            props: { items: [{ label: '결제 완료', open: true, children: [{ label: '상품 준비' }] }, { label: '출고' }] },
+          },
+        ],
       },
     ],
   },

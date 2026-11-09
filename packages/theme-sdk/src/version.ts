@@ -5,4 +5,4 @@
  * 함께 react 가 서버 프로세스에 들어온다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「내보내기와 PPTX」). 이 파일은
  * 아무것도 import 하지 않는다.
  */
-export const SDK_VERSION = '1.8.0'
+export const SDK_VERSION = '1.9.0'

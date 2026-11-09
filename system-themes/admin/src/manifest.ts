@@ -10,8 +10,8 @@ export const MANIFEST: ThemeManifest = {
   id: 'system-admin',
   name: '기본테마',
   description: '관리자 화면 기본 테마. 좁은 여백과 표 중심의 밀도를 갖는다.',
-  version: '1.8.0',
-  sdk: '^1.8.0',
+  version: '1.9.0',
+  sdk: '^1.9.0',
   tokens: {
     groups: [
       { id: 'color', label: '색' },

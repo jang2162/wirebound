@@ -383,7 +383,26 @@ export const GALLERY_SAMPLES: Readonly<Record<string, readonly GallerySample[]>>
     { wide: true, label: 'Pagination — 지금 쪽이 가운데(1000 건)', node: pagination('pg2', { total: 1000, page: 50 }) },
     { wide: true, label: 'Pagination — 0 건 · 행 수 셀렉트 없음', node: pagination('pg3', { total: 0, sizeSelect: false }) },
   ],
-  Tree: [{ label: 'Tree — 두 단계', node: { id: 'tree', type: 'Tree', props: { items: ['뿌리', '가지', '잎'], depth: 2 } } }],
+  Tree: [
+    {
+      label: 'Tree — 세 단 · 접힌 항목',
+      node: {
+        id: 'tree',
+        type: 'Tree',
+        props: {
+          items: [
+            {
+              label: '회원 관리',
+              open: true,
+              children: [{ label: '회원 목록' }, { label: '휴면 회원', open: true, children: [{ label: '휴면 해제 요청' }] }],
+            },
+            { label: '권한 관리', children: [{ label: '역할' }] },
+            { label: '통계' },
+          ],
+        },
+      },
+    },
+  ],
   KeyValue: [
     {
       wide: true,

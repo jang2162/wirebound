@@ -30,7 +30,7 @@ function id(): string {
 export function broadFixture(): PageDocument {
   nextId = 0
   return {
-    version: 5,
+    version: 6,
     root: {
       id: id(),
       type: 'Page',
@@ -75,7 +75,25 @@ export function broadFixture(): PageDocument {
               props: { active: 1 },
               children: [
                 { id: id(), type: 'TabPanel', props: { label: '개요' } },
-                { id: id(), type: 'TabPanel', props: { label: '상세' }, children: [{ id: id(), type: 'Tree', props: { selected: true } }] },
+                {
+                  id: id(),
+                  type: 'TabPanel',
+                  props: { label: '상세' },
+                  // 펼친 항목 · 접힌 항목 · 맨 위 잎 — 중첩 목록과 접힌 자식을 안 그리는 갈래가 번들에 다 든다.
+                  children: [
+                    {
+                      id: id(),
+                      type: 'Tree',
+                      props: {
+                        selected: true,
+                        items: [
+                          { label: '회원', open: true, children: [{ label: '목록' }, { label: '휴면', children: [{ label: '해제' }] }] },
+                          { label: '통계' },
+                        ],
+                      },
+                    },
+                  ],
+                },
               ],
             },
           ],
@@ -226,7 +244,7 @@ export function broadFixture(): PageDocument {
 export function slotFixture(): PageDocument {
   nextId = 900
   return {
-    version: 5,
+    version: 6,
     root: { id: id(), type: 'Page', children: [{ id: id(), type: 'Slot' }] },
   }
 }
@@ -238,7 +256,7 @@ export function slotFixture(): PageDocument {
 export function stateFixture(): PageDocument {
   nextId = 3000
   return {
-    version: 5,
+    version: 6,
     viewStates: [{ id: 's_admin', name: '관리자' }],
     root: {
       id: id(),
@@ -255,7 +273,7 @@ export function stateFixture(): PageDocument {
 export function popupFixture(): PageDocument {
   nextId = 4000
   return {
-    version: 5,
+    version: 6,
     root: {
       id: id(),
       type: 'Popup',
@@ -273,7 +291,7 @@ export function popupFixture(): PageDocument {
 
 /** 노드 하나를 `Page` 아래에 둔 문서. */
 export function pageWith(node: WbNode): PageDocument {
-  return { version: 5, root: { id: 'n_page', type: 'Page', children: [node] } }
+  return { version: 6, root: { id: 'n_page', type: 'Page', children: [node] } }
 }
 
 /** 글 하나 — 작은 표본. */
