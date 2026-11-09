@@ -8,7 +8,8 @@ import type { AnyDocument, PageDocument } from './node'
  *
  * **판 2 → 3 · 3 → 4 · 4 → 5 단계는 런타임 사슬에 없다** — 저장된 문서는 DB 마이그레이션(`apps/api` 의 `0028-node-zones` · `0029-compose-field` ·
  * `0032-list-data-grid`)이 한 번 옮겼고, 판 4 이하를 들고 오는 입구(페이지 JSON 가져오기 · 클립보드)는 거절된다. **판 5 → 6 은 사슬에 있다** — 새 노드
- * id 를 짓지 않는 순수 함수라(`migrate-tree-items.ts`) 판 5 로 내보낸 페이지 JSON · 클립보드 봉투가 그대로 들어온다.
+ * id 를 짓지 않는 순수 함수라(`migrate-tree-items.ts`) 판 5 로 내보낸 페이지 JSON · 클립보드 봉투가 그대로 들어온다. 판 5 라고 적힌 문서에 이미 판 6
+ * 꼴인 트리 항목은 사슬이 그대로 남긴다(DB 마이그레이션의 같은 함수는 기본이 버림 — 그 머리말).
  */
 export const CURRENT_DOCUMENT_VERSION = 6
 
