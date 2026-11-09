@@ -409,7 +409,8 @@
   white-space: nowrap;
 }
 
-/* 트리 — 글머리표 없이 들여쓰기만. 들여쓰기(`padding-left`)는 SDK 기본 CSS 가 단계 × `--wb-tree-indent` 로 건다 — 여기서 `padding` 을 통째로 쓰면 그것을 덮는다. */
+/* 트리 — 글머리표 없이 들여쓰기만. 단의 들여쓰기(자식 목록 `children` 조각의 `padding-left`)는 SDK 기본 CSS 가 `--wb-tree-indent` 로 건다. `node` 조각은 항목의 한
+   줄(펼침 표지 · 이름)이다 — 자식 목록은 그 밖(`item` 조각 안)에 선다. */
 [data-wb-component="Tree"][data-wb-structure="indent"] {
   list-style: none;
   margin: 0;

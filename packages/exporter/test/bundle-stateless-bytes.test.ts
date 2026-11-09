@@ -35,6 +35,9 @@
  * `index.html`)은 픽스처의 폼 표에 파일첨부 필드 하나를 더했다(카탈로그를 전부 쓰는 픽스처 — `parity.test.tsx` «무엇을 덮었나»). «슬롯» · «글» · «깨진 문서» 는
  * 그대로다(`docs/superpowers/plans/2026-10-26-pob-report.md`). 두 판을 한 1.8.0 에 실으며 `assets/views.css` 만 다시 지었다 — 팝업 · 파일첨부 규칙을 함께
  * 든 시트다(`docs/superpowers/plans/2026-10-27-rb-pob-report.md`).
+ * 트리 항목 계층(문서 판 6 · SDK 1.9.0)을 들이며 다시 지었다 — `assets/views.css` 는 트리의 단 규칙(항목마다 단 변수 → 자식 목록의 들여쓰기 · 표지 칸
+ * 폭), «넓은 표본»(과 그 사본 `index.html`)은 픽스처의 트리가 펼친 항목 · 접힌 항목 · 맨 위 잎을 싣게 바뀌었고, «슬롯» · «글» 은 문서 JSON 의 판 번호(5 → 6)만 다르다(다시 재는 법: 두 페이지의
+ * 문서를 `version: 5` 로 되돌려 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-11-03-tr-report.md`). «깨진 문서» 는 그대로다.
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -75,20 +78,20 @@ function digest(withTheme: boolean): Record<string, string> {
 /** 상태 없는 페이지의 해시(파일마다 sha256 앞 16자) — 지은 때는 머리말. */
 const BEFORE = {
   plain: {
-    'index.html': '62f712ff2b251895',
-    'pages/넓은-표본.html': 'df28f83134af33da',
-    'pages/슬롯.html': '237942c9bddec6e1',
-    'pages/글.html': 'cf7aada8a9107580',
+    'index.html': '795b9ff02355c860',
+    'pages/넓은-표본.html': '646306ac8b5d9947',
+    'pages/슬롯.html': '8f223165d94d90d6',
+    'pages/글.html': '34fd83c19f5e64dd',
     'pages/깨진-문서.html': '1e6593b7b432956c',
-    'assets/views.css': 'aa61efa7d7e3d912',
+    'assets/views.css': '556341d0b9e1bbc4',
   },
   themed: {
-    'index.html': '4b36de12b8530048',
-    'pages/넓은-표본.html': '1363274b9e2c0bb9',
-    'pages/슬롯.html': 'a740ac4b6b55571e',
-    'pages/글.html': '85f601e80f6602ab',
+    'index.html': 'f23bef2efe2782ce',
+    'pages/넓은-표본.html': '39f1da837c98e4d8',
+    'pages/슬롯.html': '5a47bcdcb93ed712',
+    'pages/글.html': 'e4417938f0971101',
     'pages/깨진-문서.html': 'e071fd4ffcfbad1c',
-    'assets/views.css': 'aa61efa7d7e3d912',
+    'assets/views.css': '556341d0b9e1bbc4',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',

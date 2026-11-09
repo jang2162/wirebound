@@ -70,18 +70,33 @@ describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
   })
 
   /**
-   * **`Tree` 노드의 `style` 이 번들과 같다.** 선언은 CSS 변수 하나이고, 두 쪽이 같은 선언을 낸다.
+   * **`Tree` 의 항목 계층이 번들과 같다** — 항목(`item`) · 줄(`node`) · 자식 목록 · 펼침 표지(`data-wb-open`)의 DOM 이 두 쪽에서 같다. 픽스처의 트리는 펼친 항목 ·
+   * 접힌 항목 · 맨 위 잎을 든다(`packages/exporter/test-support/fixtures.ts` 의 `broadFixture`).
    */
-  it('캔버스의 Tree 노드 style 이 번들과 같다', async () => {
+  it('캔버스의 Tree 항목 계층이 번들과 같다', async () => {
     await openPage(broadFixture())
 
-    const canvasNode = canvasDocument().querySelector<HTMLElement>('[data-wb-component="Tree"] > [data-wb-part="node"]')
-    const bundleNode = bundleDocumentRoot(broadFixture()).querySelector<HTMLElement>('[data-wb-component="Tree"] > [data-wb-part="node"]')
-    // 선언으로 견준다 — 적는 꼴이 아니라 선언이 계약이다(두 쪽 다 클라이언트 렌더라 오늘은 원문도 같다).
-    const declarations = (node: HTMLElement | null | undefined) =>
-      node === null || node === undefined ? null : Array.from(node.style, (name) => `${name}=${node.style.getPropertyValue(name).trim()}`)
-    expect(declarations(canvasNode)).toEqual(['--wb-node-tree-level=0'])
-    expect(declarations(canvasNode)).toEqual(declarations(bundleNode))
+    const canvasTree = canvasDocument().querySelector<HTMLElement>('[data-wb-component="Tree"]')
+    const bundleTree = bundleDocumentRoot(broadFixture()).querySelector<HTMLElement>('[data-wb-component="Tree"]')
+    /** 항목마다 (자식 목록 겹 수 · 이름 · 표지 · 펼침). */
+    const rows = (tree: HTMLElement | null | undefined) =>
+      tree === null || tree === undefined
+        ? null
+        : [...tree.querySelectorAll<HTMLElement>('[data-wb-part="item"]')].map((node) => {
+            let level = 0
+            for (let at = node.parentElement; at !== null && at !== tree; at = at.parentElement) {
+              if (at.getAttribute('data-wb-part') === 'children') level += 1
+            }
+            const row = node.querySelector(':scope > [data-wb-part="node"]')
+            return [
+              level,
+              row?.querySelector('[data-wb-part="label"]')?.textContent,
+              row?.querySelector('[data-wb-part="toggle"]')?.textContent,
+              node.getAttribute('data-wb-open'),
+            ].join('|')
+          })
+    expect(rows(canvasTree)).toEqual(['0|회원|▾|true', '1|목록||', '1|휴면|▸|false', '0|통계||'])
+    expect(rows(canvasTree)).toEqual(rows(bundleTree))
   })
 
   /**

@@ -38,6 +38,8 @@ import {
   VIEW_STATE_NAME_MAX,
   VIEW_STATES_MAX,
   WEIGHT_MAX,
+  TREE_DEPTH_MAX,
+  TREE_ITEMS_MAX,
   WEIGHT_MIN,
   WbNodeSchema,
   type ComponentDef,
@@ -377,8 +379,15 @@ function renderComponent(line: Line, def: ComponentDef): void {
       if (def.variantFrom === name) notes.push('selects the theme variant')
       // «하나만 고른다» 는 `refine` 이라 JSON Schema 로 못 옮긴다 — 편집 칸의 고르는 수(`select`)에서 읽는다.
       if (def.editor.some((field) => field.prop === name && field.select === 'one')) notes.push('at most one option selected')
+      // 트리 항목은 제 꼴을 되부르는 꼴이라 JSON Schema 가 `$ref` 로 내고, 수 · 깊이 한도는 `superRefine` 이라 못 옮긴다 — 편집 칸의 종류에서 읽는다.
+      const tree = def.editor.some((field) => field.prop === name && field.control === 'treeItems')
+      if (tree)
+        notes.push(
+          `at most ${TREE_ITEMS_MAX} items in all, ${TREE_DEPTH_MAX} levels deep; children of an item without \`open: true\` are not drawn`,
+        )
       const note = notes.length > 0 ? ` — ${notes.join('; ')}` : ''
-      line(`- \`${name}\`: ${propType(prop)}${propDefault(name, prop, props)}${note}`)
+      const type = tree ? '{ label: string, open?: boolean, children?: (same item)[] }[]' : propType(prop)
+      line(`- \`${name}\`: ${type}${propDefault(name, prop, props)}${note}`)
     }
   }
   line()

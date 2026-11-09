@@ -118,7 +118,7 @@ function childItems(node: Node): Item[] {
  * | 번들(SSR) | 없다 |
  *
  * **원인은 React의 재조정이다.** 구조가 `indent`에서 `accordion`으로 바뀌면 React가 같은
- * `<li>`를 재사용하고 `--wb-node-tree-level` 선언만 지운다 — 속성은 남고 값이 빈다. 캔버스가
+ * `<li>`를 재사용하고 인라인 선언(잰 판의 트리는 항목마다 단 변수를 실었다)만 지운다 — 속성은 남고 값이 빈다. 인라인 선언을 싣는 다른 노드도 같은 길을 지난다. 캔버스가
  * 늘 그 경로를 지나는 것은 테마를 **서버에서 늦게** 받기 때문이다(`useProjectTheme`의 첫
  * 상태가 `loading`이고 그때 테마는 `null`이다).
  *

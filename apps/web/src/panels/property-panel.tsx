@@ -60,6 +60,7 @@ import { useLockedBy } from '../store/use-locked-by'
 import { LOSS_RANK } from '../store/loss-notice'
 import { useSessionEpochNowOrNull } from '../session/session-context'
 import { ListControl } from './controls/list-control'
+import { TreeItemsControl } from './controls/tree-items-control'
 import { ColorControl } from './controls/color-control'
 import { ImageControl, type PlaceOutcome } from './controls/image-control'
 import { SelectControl } from './controls/select-control'
@@ -797,10 +798,10 @@ function BulkProperties(props: {
             {fields.map((field) => {
               const { value, mixed } = shared((node) => readProp(node, field.prop))
               const list =
-                field.control === 'stringList' ||
                 field.control === 'pairList' ||
                 field.control === 'optionList' ||
-                field.control === 'fileList'
+                field.control === 'fileList' ||
+                field.control === 'treeItems'
               return (
                 <div className="wb-shell-prop" key={field.prop}>
                   <dt className="wb-shell-prop-label">
@@ -900,7 +901,7 @@ export function variantFieldOf(
  *   Chrome · 실제 서버·DB · 편집은 WS `patch` 프레임으로 셌다). `mousedown`이 입력의 포커스를
  *   거두고(버튼이면 `focusout INPUT → BUTTON`, 캔버스의 `<div>`면 `→ null`) 그 blur가
  *   **원래 노드**로 커밋한 **뒤에** `click`이 선택을 바꾼다. 위젯 다섯(text·textarea·number·
- *   stringList·pairList)이 전부 같은 값이다:
+ *   글 목록 · pairList)이 전부 같은 값이다(글 목록은 잰 뒤 트리 항목 칸으로 바뀌었다 — 같은 초안 · blur 커밋 규칙이다):
  *
  *   | 치던 중에 | 나간 편집 | 돌아와 본 칸 · 서버 |
  *   |---|---|---|
@@ -985,8 +986,14 @@ function PropControl(props: {
     return <SwitchControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} mixed={mixed} />
   }
 
-  if (field.control === 'stringList' || field.control === 'pairList' || field.control === 'optionList' || field.control === 'fileList') {
+  if (field.control === 'pairList' || field.control === 'optionList' || field.control === 'fileList') {
     return <ListControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} onLeave={onLeave} textMax={textMax} />
+  }
+
+  if (field.control === 'treeItems') {
+    return (
+      <TreeItemsControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} onLeave={onLeave} textMax={textMax} />
+    )
   }
 
   if (field.control === 'image') {

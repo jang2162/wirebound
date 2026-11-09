@@ -17,7 +17,7 @@ const toV2: Migration = {
 
 describe('migrateDocument', () => {
   it('현재 버전이면 그대로 돌려준다', () => {
-    expect(migrateDocument(doc(5))).toEqual(doc(5))
+    expect(migrateDocument(doc(6))).toEqual(doc(6))
   })
 
   it('한 단계를 올린다', () => {
@@ -54,11 +54,11 @@ describe('migrateDocument', () => {
 })
 
 describe('상수', () => {
-  it('현재 문서 버전은 5이다', () => {
-    expect(CURRENT_DOCUMENT_VERSION).toBe(5)
+  it('현재 문서 버전은 6이다', () => {
+    expect(CURRENT_DOCUMENT_VERSION).toBe(6)
   })
 
-  it('등록된 마이그레이션은 판 1 → 2(상태 영역을 노드 보임으로 — test/migrate-document.test.ts) 하나다 — 판 2 → 3 · 3 → 4 · 4 → 5 는 DB 마이그레이션에만 있다', () => {
-    expect(MIGRATIONS.map((step) => `${step.from}→${step.to}`)).toEqual(['1→2'])
+  it('등록된 마이그레이션은 판 1 → 2(상태 영역을 노드 보임으로 — test/migrate-document.test.ts) · 판 5 → 6(트리 항목 — test/migrate-tree-items.test.ts) 둘이다 — 판 2 → 3 · 3 → 4 · 4 → 5 는 DB 마이그레이션에만 있다', () => {
+    expect(MIGRATIONS.map((step) => `${step.from}→${step.to}`)).toEqual(['1→2', '5→6'])
   })
 })

@@ -83,8 +83,7 @@ const CENSUS: Record<string, Record<string, Cell>> = {
     range: { route: 'mark', alt: false },
   },
   Tree: {
-    items: { route: 'text', alt: ['가'] },
-    depth: { route: 'var', alt: 1 },
+    items: { route: 'text', alt: [{ label: '가' }] },
     selected: { route: 'state', alt: true },
     disabled: { route: 'state', alt: true },
   },

@@ -88,7 +88,8 @@ describe('nodeSummary — 타입마다', () => {
     ['Media', { kind: 'chart' }, 'chart'],
     ['Divider', { direction: 'vertical' }, '세로'],
     ['Divider', undefined, '가로'],
-    ['Tree', { items: ['a', 'b', 'c'] }, '항목 3'],
+    // 모든 깊이의 항목을 센다 — 맨 위 하나 · 그 밑 둘.
+    ['Tree', { items: [{ label: 'a', open: true, children: [{ label: 'b' }, { label: 'c' }] }] }, '항목 3'],
     ['Page', undefined, null],
     ['Popup', undefined, '팝업'],
     ['Popup', { title: '사용자 검색' }, '사용자 검색'],

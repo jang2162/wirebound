@@ -1,5 +1,6 @@
 /**
- * 목록 컨트롤(`stringList`·`pairList`). 항목을 더하고 지우고 고친다.
+ * 목록 컨트롤(`pairList` — 같은 위젯이 `optionList` · `fileList` 도 그린다). 항목을 더하고 지우고 고친다. 트리 항목(`treeItems`)은
+ * `tree-items-control.test.tsx`.
  *
  * **배열을 통째로 `replace`한다** — 항목마다 인덱스를 조작하지 않는다. 그 판단의 근거는
  * `panels/controls/list-control.tsx`에 있다.
@@ -20,7 +21,6 @@ const DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
   children: [
-    { id: 'n-list', type: 'Tree', props: { items: ['이름', '이메일'] } },
     {
       id: 'n-kv',
       type: 'KeyValue',
@@ -32,7 +32,7 @@ const DOC = pageDoc({
       },
     },
     // 빈 배열. 추가 버튼이 있어야 여기서 시작할 수 있다.
-    { id: 'n-empty', type: 'Tree', props: { items: [] } },
+    { id: 'n-empty', type: 'KeyValue', props: { pairs: [] } },
   ],
 })
 
@@ -40,10 +40,7 @@ const DOC = pageDoc({
 const BROKEN_DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
-  children: [
-    { id: 'n-list', type: 'Tree', props: { items: '이름, 이메일' } },
-    { id: 'n-kv', type: 'KeyValue', props: { pairs: 7 } },
-  ],
+  children: [{ id: 'n-kv', type: 'KeyValue', props: { pairs: 7 } }],
 })
 
 function panel(): HTMLElement {
@@ -105,112 +102,84 @@ function lastOps(calls: { ops: unknown }[]): unknown {
   return calls.at(-1)?.ops ?? null
 }
 
+const KV = (pairs: [string, string][]) => pairs.map(([key, value]) => ({ key, value }))
+
 describe('속성 패널 — 목록 컨트롤', () => {
   it('항목을 추가하면 배열 끝에 붙는다', async () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('Tree', 0)
-    fireEvent.click(addButton('항목'))
+    selectAt('KeyValue', 0)
+    fireEvent.click(addButton('키-값'))
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    // **배열 통째로 `replace`다.** 인덱스를 조작하는 `add /…/items/-`가 아니다.
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/items', value: ['이름', '이메일', ''] }])
+    // **배열 통째로 `replace`다.** 인덱스를 조작하는 `add /…/pairs/-`가 아니다.
+    expect(lastOps(calls)).toEqual([
+      {
+        op: 'replace',
+        path: '/root/children/0/props/pairs',
+        value: KV([
+          ['가입일', '2026-01-01'],
+          ['등급', 'VIP'],
+          ['', ''],
+        ]),
+      },
+    ])
   })
 
   it('항목을 지우면 그 자리가 빠진다', async () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('Tree', 0)
-    fireEvent.click(removeButtons('항목')[0]!)
+    selectAt('KeyValue', 0)
+    fireEvent.click(removeButtons('키-값')[0]!)
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/items', value: ['이메일'] }])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/pairs', value: KV([['등급', 'VIP']]) }])
   })
 
-  it('항목을 고치면 blur에 나간다', async () => {
+  it('항목을 고치면 blur에 나간다 — 키와 값을 함께 낸다', async () => {
     // 텍스트와 같은 규칙이다 — 글자마다 요청하면 undo 한 단계가 글자 하나가 된다.
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('Tree', 0)
-    const input = itemInputs('항목')[0]!
-    fireEvent.change(input, { target: { value: '성명' } })
+    selectAt('KeyValue', 0)
+    const inputs = itemInputs('키-값')
+    // 한 줄에 키와 값 둘이다.
+    expect(inputs).toHaveLength(4)
+    fireEvent.change(inputs[1]!, { target: { value: '2026-02-02' } })
 
     // 타이핑만으로는 나가지 않는다.
     expect(calls).toHaveLength(0)
 
-    fireEvent.blur(input)
+    fireEvent.blur(inputs[1]!)
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/items', value: ['성명', '이메일'] }])
+    expect(lastOps(calls)).toEqual([
+      {
+        op: 'replace',
+        path: '/root/children/0/props/pairs',
+        value: KV([
+          ['가입일', '2026-02-02'],
+          ['등급', 'VIP'],
+        ]),
+      },
+    ])
   })
 
   it('항목이 그대로면 blur해도 나가지 않는다', async () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('Tree', 0)
-    fireEvent.blur(itemInputs('항목')[0]!)
+    selectAt('KeyValue', 0)
+    fireEvent.blur(itemInputs('키-값')[0]!)
 
     expect(calls).toHaveLength(0)
   })
 
-  it('pairList는 키와 값을 함께 낸다', async () => {
-    const { calls, api } = editable()
-    await openPage(DOC, { apiOverrides: api })
-
-    selectAt('KeyValue')
-    const inputs = itemInputs('키-값')
-    // 한 줄에 키와 값 둘이다.
-    expect(inputs).toHaveLength(4)
-
-    fireEvent.change(inputs[1]!, { target: { value: '2026-02-02' } })
-    fireEvent.blur(inputs[1]!)
-
-    await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([
-      {
-        op: 'replace',
-        path: '/root/children/1/props/pairs',
-        value: [
-          { key: '가입일', value: '2026-02-02' },
-          { key: '등급', value: 'VIP' },
-        ],
-      },
-    ])
-  })
-
-  it('pairList에 항목을 추가하면 빈 쌍이 붙는다', async () => {
-    const { calls, api } = editable()
-    await openPage(DOC, { apiOverrides: api })
-
-    selectAt('KeyValue')
-    fireEvent.click(addButton('키-값'))
-
-    await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([
-      {
-        op: 'replace',
-        path: '/root/children/1/props/pairs',
-        value: [
-          { key: '가입일', value: '2026-01-01' },
-          { key: '등급', value: 'VIP' },
-          { key: '', value: '' },
-        ],
-      },
-    ])
-  })
-
   it('배열이 아닌 값이면 빈 목록으로 시작한다', async () => {
     // **이 파일의 방어선이다.** 속성 패널은 오류 경계 밖이라 여기서 던지면 셸 전체가
-    // 흰 화면이 된다. `items`가 문자열이고 `pairs`가 수인 문서를 심어 잰다.
+    // 흰 화면이 된다. `pairs`가 수인 문서를 심어 잰다.
     await openPage(BROKEN_DOC)
-
-    selectAt('Tree', 0)
-    expect(itemValues('항목')).toEqual([])
-    // 셸이 살아 있다.
-    expect(document.body.querySelector('.wb-shell')).not.toBeNull()
 
     selectAt('KeyValue')
     expect(itemValues('키-값')).toEqual([])
@@ -240,25 +209,25 @@ describe('속성 패널 — 목록 컨트롤', () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('Tree', 1)
-    expect(itemValues('항목')).toEqual([])
-    fireEvent.click(addButton('항목'))
+    selectAt('KeyValue', 1)
+    expect(itemValues('키-값')).toEqual([])
+    fireEvent.click(addButton('키-값'))
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/2/props/items', value: [''] }])
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/1/props/pairs', value: KV([['', '']]) }])
   })
 
   it('편집한 목록이 캔버스에 반영된다', async () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('Tree', 0)
-    const input = itemInputs('항목')[0]!
+    selectAt('KeyValue', 0)
+    const input = itemInputs('키-값')[0]!
     fireEvent.change(input, { target: { value: '성명' } })
     fireEvent.blur(input)
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    const node = canvasQuery('[data-wb-id="n-list"]')
+    const node = canvasQuery('[data-wb-id="n-kv"]')
     if (node === null) throw new Error('캔버스에 노드가 없다')
     expect(node.textContent).toContain('성명')
   })
@@ -272,22 +241,31 @@ describe('속성 패널 — 목록 컨트롤', () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 
-    selectAt('Tree', 0)
-    fireEvent.change(itemInputs('항목')[0]!, { target: { value: '성명' } })
-    selectAt('Tree', 1)
+    selectAt('KeyValue', 0)
+    fireEvent.change(itemInputs('키-값')[0]!, { target: { value: '성명' } })
+    selectAt('KeyValue', 1)
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/items', value: ['성명', '이메일'] }])
-    expect(itemValues('항목')).toEqual([])
+    expect(lastOps(calls)).toEqual([
+      {
+        op: 'replace',
+        path: '/root/children/0/props/pairs',
+        value: KV([
+          ['성명', '2026-01-01'],
+          ['등급', 'VIP'],
+        ]),
+      },
+    ])
+    expect(itemValues('키-값')).toEqual([])
   })
 
   it('다른 노드를 고르면 목록이 그 노드 값으로 바뀐다', async () => {
     await openPage(DOC)
 
-    selectAt('Tree', 0)
-    expect(itemValues('항목')).toEqual(['이름', '이메일'])
+    selectAt('KeyValue', 0)
+    expect(itemValues('키-값')).toEqual(['가입일', '2026-01-01', '등급', 'VIP'])
 
-    selectAt('Tree', 1)
-    expect(itemValues('항목')).toEqual([])
+    selectAt('KeyValue', 1)
+    expect(itemValues('키-값')).toEqual([])
   })
 })

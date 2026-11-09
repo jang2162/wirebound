@@ -68,11 +68,14 @@ const ROW_LINES = `(title) => {
   return { oneLine: a.top < name.bottom - 0.5, rowHeight: Math.round(row.getBoundingClientRect().height), actionsWidth: Math.round(a.width) }
 }`
 
-/** 속성 목록 항목마다 — 휴지통이 칸과 한 줄인가. */
-const LIST_LINES = `() => [...document.querySelectorAll('.wb-shell-list-item')].map((item) => {
-  const cell = item.querySelector('.wb-shell-list-cell').getBoundingClientRect()
-  const remove = item.querySelector('.wb-shell-list-remove').getBoundingClientRect()
-  return { oneLine: remove.top < cell.bottom - 0.5, removeWidth: Math.round(remove.width) }
+/**
+ * 트리 항목 칸의 줄마다 — 줄 `…` 가 이름 칸과 한 줄인가. 목록 칸(선택지 · 키-값)의 줄은 고르기 칸 · 두 칸 때문에 값 칸(172px)에서 단추가 아랫줄로
+ * 내려가는 것이 설계다(`src/shell.css` 의 `.wb-shell-list-item` 머리말) — 칸 하나 줄은 트리 항목 칸이다.
+ */
+const TREE_LINES = `() => [...document.querySelectorAll('.wb-shell-tree-item-row')].map((row) => {
+  const cell = row.querySelector('input').getBoundingClientRect()
+  const more = row.querySelector('.wb-shell-action-menu-toggle').getBoundingClientRect()
+  return { oneLine: more.top < cell.bottom - 0.5, moreWidth: Math.round(more.width) }
 })`
 
 describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
@@ -95,7 +98,8 @@ describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
   })
 
   /**
-   * 판마다 긴 이름 메뉴 줄을 고르고(줄 `+` · `…` 가 선다) 목록 칸(Tree 의 항목)을 고른 뒤 잰다. 판 카나리아: 아이콘만 남은 단추가 셋 이상
+   * 판마다 긴 이름 메뉴 줄을 고르고(줄 `+` · `…` 가 선다) 목록 칸(Select 의 선택지 — 칸 하나 줄)을 고른 뒤 잰다. 트리 항목 칸(줄마다 펼침 표지 · `…`)도
+   * 고른 뒤 같은 자로 한 번 더 잰다. 판 카나리아: 아이콘만 남은 단추가 셋 이상
    * 보이고(머리 `…` · 되돌리기 · 줄 `+` · `…` · 휴지통 …) 긴 이름 줄을 찾았다.
    */
   it.each([
@@ -117,16 +121,21 @@ describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
 
       const fit = (await page.evaluate(`(${ICON_FIT})()`)) as { name: string; w: number; h: number; inside: boolean; over: number }[]
       const row = await page.evaluate(`(${ROW_LINES})(${JSON.stringify(LONG_MENU)})`)
-      const list = await page.evaluate(`(${LIST_LINES})()`)
       // eslint-disable-next-line no-console
-      console.log(`[아이콘 단추 ${width}×${height}]`, JSON.stringify({ fit, row, list }))
+      console.log(`[아이콘 단추 ${width}×${height}]`, JSON.stringify({ fit, row }))
 
       expect(fit.length).toBeGreaterThanOrEqual(3)
       expect(fit.filter((button) => !button.inside || button.over > 0)).toEqual([])
       expect(row).toEqual({ oneLine: true, rowHeight: expect.any(Number), actionsWidth: expect.any(Number) })
-      expect(list).toEqual([
-        { oneLine: true, removeWidth: expect.any(Number) },
-        { oneLine: true, removeWidth: expect.any(Number) },
+      await page.locator('[data-tree-id="n_tree0000001"] > button.wb-shell-structure-node').click()
+      await page.getByRole('button', { name: '항목 1-1 더 보기', exact: true }).waitFor()
+      const tree = (await page.evaluate(`(${ICON_FIT})()`)) as { name: string; w: number; h: number; inside: boolean; over: number }[]
+      // 카나리아 — 트리 항목 칸의 `…` 둘 · 펼침 표지가 잰 단추에 들었다.
+      expect(tree.filter((button) => /^항목 1(-1)? 더 보기$|^접기$/.test(button.name)).length).toBeGreaterThanOrEqual(3)
+      expect(tree.filter((button) => !button.inside || button.over > 0)).toEqual([])
+      expect(await page.evaluate(`(${TREE_LINES})()`)).toEqual([
+        { oneLine: true, moreWidth: expect.any(Number) },
+        { oneLine: true, moreWidth: expect.any(Number) },
       ])
     } finally {
       await context.close()
@@ -206,7 +215,7 @@ describe.skipIf(!전제.ok)('아이콘 단추 — 실브라우저', () => {
   })
 })
 
-/** 긴 이름 메뉴 하나 · 페이지 하나 · Tree(목록 칸 둘 — 항목) · 상호작용 한 규칙(액션 하나)을 단 Button · 코멘트 하나. */
+/** 긴 이름 메뉴 하나 · 페이지 하나 · Select(목록 칸 둘 — 선택지) · 상호작용 한 규칙(액션 하나)을 단 Button · Tree(항목 둘 — 한 단 들임) · 코멘트 하나. */
 async function fixture(stack: EditorStack, owner: Session, slug: string): Promise<{ P: string }> {
   const call = (m: string, p: string, b?: unknown) => stack.request(owner, m, p, b)
   const project = (await call('POST', '/projects', { name: '아이콘 판', slug: `${slug}-${Date.now().toString(36)}` })).body
@@ -214,7 +223,11 @@ async function fixture(stack: EditorStack, owner: Session, slug: string): Promis
   const page = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body
   const P = `/projects/${project.id}/pages/${page.id}`
   const ops = [
-    { op: 'add', path: '/root/children/0', value: { id: 'n_tabs000001', type: 'Tree', props: { items: ['개요', '상세'] } } },
+    {
+      op: 'add',
+      path: '/root/children/0',
+      value: { id: 'n_tabs000001', type: 'Select', props: { options: [{ label: '개요' }, { label: '상세' }] } },
+    },
     {
       op: 'add',
       path: '/root/children/1',
@@ -224,6 +237,11 @@ async function fixture(stack: EditorStack, owner: Session, slug: string): Promis
         props: { label: '검색' },
         interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_tabs000001', value: false }] }],
       },
+    },
+    {
+      op: 'add',
+      path: '/root/children/2',
+      value: { id: 'n_tree0000001', type: 'Tree', props: { items: [{ label: '개요', open: true, children: [{ label: '상세' }] }] } },
     },
   ]
   const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops })

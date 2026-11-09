@@ -28,7 +28,7 @@ const layout: LayoutDocument = {
           {
             id: 'n_lay000000004',
             type: 'Tree',
-            props: { items: ['회원관리', '권한관리'] },
+            props: { items: [{ label: '회원관리' }, { label: '권한관리' }] },
           },
           { id: 'n_lay000000005', type: 'Slot' },
         ],

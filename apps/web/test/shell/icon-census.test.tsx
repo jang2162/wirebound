@@ -34,7 +34,17 @@ const DOC: PageDocument = pageDoc({
   id: 'n-root',
   type: 'Page',
   children: [
-    { id: 'n-list', type: 'Tree', props: { items: ['개요', '상세'] } },
+    { id: 'n-list', type: 'Tree', props: { items: [{ label: '개요', open: true, children: [{ label: '상세' }] }] } },
+    {
+      id: 'n-kv',
+      type: 'KeyValue',
+      props: {
+        pairs: [
+          { key: '가', value: '1' },
+          { key: '나', value: '2' },
+        ],
+      },
+    },
     {
       id: 'n-btn',
       type: 'Button',
@@ -97,6 +107,9 @@ const ICON_ONLY = [
   '화면 맞춤',
   '1번째 지우기',
   '2번째 지우기',
+  '항목 1 더 보기',
+  '항목 1-1 더 보기',
+  '접기',
   '규칙 1 삭제',
   '액션 1 삭제',
   '삭제',
@@ -201,7 +214,11 @@ function pickOnCanvas(nodeId: string): void {
 async function editorButtons(): Promise<{ found: IconOnly[]; menus: MenuEntry[] }> {
   await openPage(DOC, { docs: { [PAGE_ID]: DOC, [OTHER_PAGE_ID]: DOC }, apiOverrides: EDITOR_API })
   const found: IconOnly[] = []
+  // 트리 항목 위젯(줄 `…` · 펼침 표지)과 목록 위젯(옮기기 · 지우기)을 한 판씩 — 둘 다 아이콘만 남은 단추를 든다.
   pickOnCanvas('n-list')
+  await screen.findByRole('button', { name: '항목 1 더 보기' })
+  found.push(...iconOnlyButtons())
+  pickOnCanvas('n-kv')
   await screen.findByRole('button', { name: '1번째 지우기' })
   // 하단 컴포넌트 판을 연다 — 카드의 «넣기». 열림은 창 저장소에 남아 앞 케이스가 연 판이면 이미 열려 있다.
   const toggle = screen.getByRole('button', { name: '컴포넌트' })

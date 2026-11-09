@@ -377,21 +377,56 @@ export const PaginationView = view(({ props }) => {
   )
 })
 
-// 기본 구조 `indent`. 들여쓰기 **단계**만 나르고 폭은 CSS 가 `TREE_INDENT_VAR` 와 곱한다.
-export const TreeView = view(({ props }) => {
-  const items = props.items as string[]
-  const depth = props.depth as number
+/** 트리 항목 — 카탈로그의 `TreeItemSchema` 꼴(`@wirebound/schema`). 뷰는 검증을 지난 props 를 받는다 — 스타터 템플릿이 이 파일을 옮겨 SDK 밖 이름을 못 읽어 꼴을 여기 둔다. */
+interface TreeEntry {
+  label: string
+  open?: boolean
+  children?: TreeEntry[]
+}
+
+/**
+ * 항목 목록 한 단 — 항목마다 `item` 조각(`li`) 안에 줄(`node` 조각 — 펼침 표지 · 이름)과, 펼친 항목이면 그 밑에 자식 목록(`children` 조각 — 같은 꼴의
+ * `ul`). 자식이 있는 항목만 표지(▾ 펼침 · ▸ 접힘)와 `data-wb-open` 을 갖고, 자식이 없는 항목의 표지 자리는 빈 칸이다(이름이 단마다 같은 눈금에 선다).
+ * 접힌 항목의 자식은 안 그린다.
+ *
+ * **줄이 `node` 조각인 것은 앞 판 테마 때문이다** — 항목이 평평한 `li` 하나(`node` — 표지 · 이름)이던 판의 테마는 `node` 를 한 줄(`display: flex`)로
+ * 꾸민다. 그 조각이 자식 목록까지 품으면 그 테마에 고정된 프로젝트에서 자식 목록이 줄 옆에 선다. 그래서 `node` 는 줄 그대로 두고 품는 상자에 새 이름
+ * (`item`)을 준다.
+ */
+function TreeEntries({ items, path }: { items: readonly TreeEntry[]; path: string }): ReactElement {
   return (
-    <Root as="ul" data-wb-structure="indent">
-      {items.map((label, index) => (
-        <li key={`${label}-${index}`} data-wb-part="node" style={{ [nodeVar('tree', 'level')]: String(index % depth) } as CSSProperties}>
-          <span data-wb-part="toggle">▸</span>
-          <span data-wb-part="label">{label}</span>
-        </li>
-      ))}
-    </Root>
+    <>
+      {items.map((item, index) => {
+        const key = `${path}${index}`
+        const children = item.children ?? []
+        const parent = children.length > 0
+        const open = parent && item.open === true
+        return (
+          <li key={key} data-wb-part="item" {...(parent ? { 'data-wb-open': String(open) } : {})}>
+            <div data-wb-part="node">
+              <span data-wb-part="toggle" aria-hidden="true">
+                {parent ? (open ? '▾' : '▸') : null}
+              </span>
+              <span data-wb-part="label">{item.label}</span>
+            </div>
+            {open ? (
+              <ul data-wb-part="children">
+                <TreeEntries items={children} path={`${key}.`} />
+              </ul>
+            ) : null}
+          </li>
+        )
+      })}
+    </>
   )
-})
+}
+
+// 기본 구조 `indent`. 단은 목록의 중첩이고 들여쓰기 폭은 CSS 가 자식 목록(`children` 조각)에 `TREE_INDENT_VAR` 로 건다.
+export const TreeView = view(({ props }) => (
+  <Root as="ul" data-wb-structure="indent">
+    <TreeEntries items={props.items as TreeEntry[]} path="" />
+  </Root>
+))
 
 // 기본 구조 `table`. 쌍을 `columns` 개씩 한 행에 놓는다(`이름 | 홍 | 나이 | 3`). 마지막 행이 모자라면 빈 칸 하나(`filler` 조각)가 나머지 폭을
 // 채운다 — 칸 수가 행마다 같아야 격자선이 끊기지 않는다. `columns` 1 이면 쌍마다 한 행이다.
@@ -423,7 +458,10 @@ export const KeyValueView = view(({ props }) => {
 
 export function dataCssBlocks(): string[] {
   return [
-    partRule('Tree', 'node', [`padding-left: calc(var(${nodeVar('tree', 'level')}, 0) * var(${TREE_INDENT_VAR}, 16px));`], ['indent']),
+    // 자식 목록이 한 단(`--wb-tree-indent`) 들여 선다 — 중첩 `ul` 의 UA 기본(원 표지 · 40px 여백)을 걷는다. 안 걷으면 단 폭이 테마 토큰이 아니라 40px 다.
+    partRule('Tree', 'children', ['list-style: none;', 'margin: 0;', `padding: 0 0 0 var(${TREE_INDENT_VAR}, 16px);`], ['indent']),
+    // 펼침 표지 칸은 자식이 없는 항목에서도 같은 폭이다 — 이름이 단마다 같은 눈금에 선다.
+    zeroRule('[data-wb-component="Tree"] [data-wb-part="toggle"]', ['display: inline-block;', 'min-width: 1em;']),
     // ── 그리드 ──────────────────────────────────────────────────────────────
     // 뿌리는 줄어들 수 있어야 한다(가로 배치 안에서도 표 칸만 굴러간다) — 결과 머리줄 · 바닥은 스크롤 밖이라 창 폭을 따른다.
     zeroRule('[data-wb-component="DataGrid"]', ['min-width: 0;', 'max-width: 100%;']),

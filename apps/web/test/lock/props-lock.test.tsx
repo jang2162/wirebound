@@ -147,8 +147,8 @@ class FakeSocket implements RealtimeSocket {
  *   n-card  (Card)                   ← 변형 위젯이 있는 유일한 자리 · `n-text`의 **조상**
  *     n-text  (Text)                 ← 잠긴 서브트리 **안쪽**을 만드는 자리
  *   n-field (Field)                  ← text · switch
- *   n-list  (List)                   ← number · stringList
- *   n-kv    (KeyValue)               ← pairList
+ *   n-list  (Tree)                   ← treeItems
+ *   n-kv    (KeyValue)               ← number · pairList
  *   n-ph    (Placeholder)            ← color · image
  *   n-div   (Divider)                ← 대조군. 잠금과 무관한 **형제**
  *   n-sel   (Select)                 ← select · optionList
@@ -185,7 +185,7 @@ function doc(): PageDocument {
           },
         ],
       },
-      { id: 'n-list', type: 'Tree', props: { items: ['이름'], depth: 2 } },
+      { id: 'n-list', type: 'Tree', props: { items: [{ label: '이름' }] } },
       { id: 'n-kv', type: 'KeyValue', props: { pairs: [{ key: 'k', value: 'v' }], columns: 1 } },
       { id: 'n-ph', type: 'Placeholder', props: { background: '#2563eb' } },
       { id: 'n-div', type: 'Divider', props: { direction: 'horizontal' } },
@@ -206,10 +206,10 @@ function doc(): PageDocument {
 const CONTROL_SAMPLES: { control: EditorControl; type: string; nodeId: string; label: string }[] = [
   { control: 'text', type: 'Field', nodeId: 'n-field', label: '라벨' },
   { control: 'textarea', type: 'Text', nodeId: 'n-text', label: '내용' },
-  { control: 'number', type: 'Tree', nodeId: 'n-list', label: '깊이' },
+  { control: 'number', type: 'KeyValue', nodeId: 'n-kv', label: '열 수' },
   { control: 'switch', type: 'Field', nodeId: 'n-field', label: '필수' },
   { control: 'select', type: 'Select', nodeId: 'n-sel', label: '폭' },
-  { control: 'stringList', type: 'Tree', nodeId: 'n-list', label: '항목' },
+  { control: 'treeItems', type: 'Tree', nodeId: 'n-list', label: '항목' },
   { control: 'pairList', type: 'KeyValue', nodeId: 'n-kv', label: '키-값' },
   { control: 'optionList', type: 'Select', nodeId: 'n-sel', label: '선택지' },
   { control: 'fileList', type: 'FileAttach', nodeId: 'n-file', label: '파일' },
@@ -430,7 +430,7 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
       await settle()
 
       const widget = within(panel()).getByLabelText<HTMLInputElement>(sample.label)
-      // 목록 위젯(`stringList`·`pairList`·`optionList`·`fileList`)과 `color`는 라벨이 `role="group"`을 가리키므로 그 안의 칸 · 단추를 본다 — 고르기 · 옮기기 ·
+      // 목록 위젯(`pairList`·`optionList`·`fileList`·`treeItems`)과 `color`는 라벨이 `role="group"`을 가리키므로 그 안의 칸 · 단추를 본다 — 고르기 · 옮기기 ·
       // 지우기 · 추가 · 고른 것 풀기 · 견본도 즉시 커밋이라 칸만 끄면 그 단추로 목록 · 색이 나간다.
       const inputs =
         widget.tagName === 'DIV' ? [...widget.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')] : [widget]
@@ -555,7 +555,7 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
     select('Tree')
     await settle()
 
-    const cell = (): HTMLInputElement => within(panel()).getByRole<HTMLInputElement>('textbox', { name: '항목 1번째 항목' })
+    const cell = (): HTMLInputElement => within(panel()).getByRole<HTMLInputElement>('textbox', { name: '항목 1 이름' })
     fireEvent.change(cell(), { target: { value: '새 컬럼' } })
     view.lock([foreign('n-list')])
     await settle()
@@ -579,7 +579,7 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
     fireEvent.blur(cell())
     await waitFor(() => expect(view.calls).toHaveLength(1))
     expect(view.status).toEqual([200])
-    expect(view.calls[0]?.ops[0]).toMatchObject({ path: '/root/children/2/props/items', value: ['새 컬럼'] })
+    expect(view.calls[0]?.ops[0]).toMatchObject({ path: '/root/children/2/props/items', value: [{ label: '새 컬럼' }] })
   })
 
   it('잠금이 풀린 뒤 같은 목록의 다른 칸에 치면 앞 칸에 남은 글자가 먼저 나간다 — 커밋 없이 사라지지 않는다', async () => {
