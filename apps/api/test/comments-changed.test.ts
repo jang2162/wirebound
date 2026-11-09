@@ -7,10 +7,11 @@
  * | 쓰기마다 | 달기(번호 붙음 · 그대로) · 고치기 · 지우기(마지막 아님 · 마지막) 가운데 하나라도 신호가 없다 · 프레임이 `pageId` 밖의 것(본문 · 작성자)을 싣는다 · 낸 연결이 받는다 |
  * | 재번호 | 행을 안 바꾼 재번호가 신호를 낸다 |
  * | 가드 앞 재생 | 같은 키로 다시 보낸 게시가 신호를 안 낸다(앞 요청이 답을 잃었으면 아무 연결에도 안 갔다) · 낸 연결을 뺀다 |
+ * | 답을 잃은 게시 | 503 뒤 같은 키 재생이 남에게 신호를 안 낸다 — 가드 앞 재생의 신호를 떼면 «가드 앞 재생» 과 함께 죽는다(그 축은 «가드 앞 재생» 이 소유한다) |
  * | 잠금 안 재생 | 같은 키 둘이 줄을 서 뒤의 것이 잠금 안에서 재생할 때 신호를 안 낸다 |
  * | 권한을 잃은 재생 | 강등된 사람의 재생이 룸에 신호를 낸다 |
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
 import type { ServerFrame } from '../src/ws/protocol'
 import { lockPageForEdit } from '../src/repos/pages'
@@ -29,9 +30,8 @@ import {
 } from './helpers'
 import { joinRoom } from './ws-client'
 
-afterEach(async () => {
-  await resetRealData()
-})
+beforeEach(resetRealData)
+afterEach(resetRealData)
 
 type CommentsChanged = Extract<ServerFrame, { type: 'comments-changed' }>
 
