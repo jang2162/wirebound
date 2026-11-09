@@ -148,6 +148,18 @@ export type ViewportWidth = (typeof VIEWPORT_PRESETS)[number]
 const MIN_ZOOM = 0.05
 const MAX_ZOOM = 2
 
+/** 묻는 중인 편집(`EditorState.firstRowAsk`). */
+export interface FirstRowAsk {
+  /** 물은 때 열린 페이지 — 다른 페이지가 열려 있으면 상자가 안 선다. */
+  pageId: string
+  /** 첫 자리로 오는 커스텀 행. */
+  rowId: string
+  /** 물은 문서에서 노드 id 로 붙잡은 연산(`anchorOps`) — «계속» 이 지금 문서로 옮긴다. 붙잡지 못했으면 `null`(그 판의 «계속» 은 안 낸다). */
+  anchored: AnchoredOp[] | null
+  /** 낸 뒤의 일(넣은 노드 고르기 등) — 부른 쪽이 `commitOps` 의 참 갈래에서 하던 것. */
+  after: (() => void) | null
+}
+
 export interface EditorState {
   /**
    * **이 문서가 어느 페이지의 것인가.** 문서가 없으면 `null`이다.
@@ -247,6 +259,12 @@ export interface EditorState {
    * 앞의 것을 대신하고, 새 편집 · 되돌리기 · 페이지 옮김이 치운다 — 낡은 정보가 새 판 위에 남아 «방금 한 일의 결과» 로 읽히지 않게.
    */
   infoNotice: string | null
+  /**
+   * **커스텀 행을 첫 자리로 데려오는 편집의 확인**(`edit/first-row-ask.ts`) — 묻는 동안의 그 편집. 낸 편집이 아니다(큐에 없다). 상자
+   * (`shell/first-row-dialog.tsx`)가 «계속» 이면 물은 문서에 붙잡은 연산을 지금 문서로 옮겨(`rebaseAnchored`) 내고, «취소» 면 걷는다. 페이지를
+   * 옮기면 걷힌다(`clearPage`).
+   */
+  firstRowAsk: FirstRowAsk | null
   /**
    * **서버가 마지막 편집 응답에 실어 보낸 문서 경고**(「정방향 흐름」).
    *
@@ -358,6 +376,7 @@ function initialState(): EditorState {
     editStatus: 'idle',
     editFailure: null,
     infoNotice: null,
+    firstRowAsk: null,
     editWarnings: NO_WARNINGS,
     locks: NO_LOCKS,
     viewerUserId: null,
@@ -2300,6 +2319,27 @@ export class EditorStore {
    * 쌓인 편집은 서버에 한 번도 안 갔다 — 말없이 버리면 사용자는 저장된 줄 안다(Chrome: 앞 편집이 행 잠금에 선 사이 같은 칸을 다시 고치고
    * 옮기자, 서버에는 앞 편집만 · 통지 0).
    */
+  /** 커스텀 행을 첫 자리로 데려오는 편집을 묻는다 — 지금 열린 문서에서 붙잡는다(`EditorState.firstRowAsk`). 문서가 없으면 안 묻는다. */
+  readonly askFirstRow = (input: { rowId: string; ops: readonly PatchOp[]; after: (() => void) | null }): void => {
+    const { openPageId, document } = this.#state
+    if (openPageId === null || document === null) return
+    this.#apply({ firstRowAsk: { pageId: openPageId, rowId: input.rowId, anchored: anchorOps(document, input.ops), after: input.after } })
+  }
+
+  /**
+   * 묻던 편집을 걷고 «계속» 이면 지금 문서로 옮긴 연산을 돌려준다(`rebaseAnchored` — 남의 편집이 그 사이 닿았어도 노드 id 의 자리로 다시 짓는다).
+   * 더는 얹히지 않으면(대상 · 목적지가 사라짐) `null`. 묻는 중이 아니거나 다른 페이지면 `undefined`.
+   */
+  readonly settleFirstRowAsk = (proceed: boolean): { ops: PatchOp[] | null; after: (() => void) | null } | undefined => {
+    const ask = this.#state.firstRowAsk
+    if (ask === null) return undefined
+    this.#apply({ firstRowAsk: null })
+    const { openPageId, document } = this.#state
+    if (!proceed || openPageId !== ask.pageId || document === null) return undefined
+    const rebased = ask.anchored === null ? null : rebaseAnchored(document, ask.anchored)
+    return { ops: rebased === null ? null : rebased.ops, after: ask.after }
+  }
+
   readonly clearPage = (options: { restoreReread?: boolean } = {}): PendingEdit[] => {
     const { pending, undoStack, redoStack } = this.#state
     this.#leftPageId = this.#state.openPageId
@@ -2332,6 +2372,7 @@ export class EditorStore {
       // 떠나며 버린 편집을 말하는 조각만 남긴다(`#lossParts`의 `sticky`).
       editFailure: this.#keptLoss(true),
       infoNotice: this.#keptInfo(),
+      firstRowAsk: null,
       editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
       // 복원 낡음은 복원 뒤 다시 읽기만 푼다(`beginRestoreReread`) — 페이지를 옮기며 비우는 판은 메뉴 · 코멘트를 다시 안 읽었다.
       remoteStale: this.#keepsRestored(options.restoreReread === true) ? this.#restoredStale() : null,

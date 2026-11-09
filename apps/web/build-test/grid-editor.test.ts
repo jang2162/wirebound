@@ -313,7 +313,7 @@ describe.skipIf(!전제.ok)('그리드 — 에디터(실브라우저)', () => {
       )
       await frame.locator('[data-wb-copy-of="h_r1"]').nth(2).waitFor({ state: 'attached' })
 
-      // 범위 선택 — 셋째 줄(사본)의 «이름» 틀 칸 안쪽만 덮는 사각형이 그 칸의 원본 글을 고른다(칸 자신은 노드가 아니다).
+      // 범위 선택 — 셋째 줄(사본)의 «이름» 틀 칸 안쪽만 덮는 사각형은 그 줄의 행이다(누름과 같은 판정 — `src/canvas/canvas-pick.ts`).
       const cell = (await copyOf('h_r1', 1).locator('td[data-wb-cell="template"]').nth(1).boundingBox())!
       await page.mouse.move(cell.x + 2, cell.y + 2)
       await page.mouse.down()
@@ -333,7 +333,7 @@ describe.skipIf(!전제.ok)('그리드 — 에디터(실브라우저)', () => {
         (ids) => ids.length > 0,
         5000,
       ).catch((error: Error) => error.message)
-      expect(picked).toEqual(['h_t1'])
+      expect(picked).toEqual(['h_r1'])
     } finally {
       await close()
     }

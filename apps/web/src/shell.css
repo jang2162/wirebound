@@ -829,6 +829,14 @@
   overflow-wrap: anywhere;
 }
 
+/* 상자의 보조 줄 — 물음 밑에 까닭을 작게(첫 행 확인 — `shell/first-row-dialog.tsx`). */
+.wb-shell-module-dialog-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+  overflow-wrap: anywhere;
+}
+
 .wb-shell-module-dialog-foot {
   display: flex;
   justify-content: flex-end;

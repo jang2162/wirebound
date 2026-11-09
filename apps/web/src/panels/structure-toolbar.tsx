@@ -215,18 +215,21 @@ export function useStructureCommands(props: {
         }),
         anchor: selectedNodeId,
       }
-      if (commitOps(ops)) {
+      const reselect = (): void => {
         store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
         reselectAfterReject(store, removed)
       }
+      // 첫 행 확인(`edit/first-row-ask.ts`)을 거쳐 낸 판도 고른 것을 같게 옮긴다(`after`).
+      if (commitOps(ops, { after: reselect })) reselect()
       return
     }
 
     const removed = { nodes: [{ id: selectedNodeId, parentId: spot.parentId }], anchor: selectedNodeId }
-    if (commitOps(removeNodeOps(document, selectedNodeId))) {
+    const reselect = (): void => {
       store.selectNode(selectAfter === 'parent' ? spot.parentId : null)
       reselectAfterReject(store, removed)
     }
+    if (commitOps(removeNodeOps(document, selectedNodeId), { after: reselect })) reselect()
   }
 
   /**
