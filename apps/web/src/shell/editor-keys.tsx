@@ -58,7 +58,7 @@ import { renameStatesByName, renameVisibilityStates } from '../edit/paste-states
 import { findNodeSafely } from '../edit/safe-walk'
 import { ancestorIds, foldStep, moveSelection, siblingIds } from '../edit/selection-move'
 import { useClipboard } from '../edit/use-clipboard'
-import { useEditCommit } from '../edit/use-edit-commit'
+import { useEditCommit, type CommitOptions } from '../edit/use-edit-commit'
 import { useEditorShortcuts } from '../edit/use-editor-shortcuts'
 import { useAliasEdit } from '../panels/alias-edit'
 import { lockedNotice } from '../panels/property-panel'
@@ -116,7 +116,7 @@ export function EditorKeys(props: {
    */
   const commitInsert = (
     edit: NodeEdit,
-    commitOps: (ops: Parameters<typeof history.commitOps>[0]) => boolean,
+    commitOps: (ops: Parameters<typeof history.commitOps>[0], options?: CommitOptions) => boolean,
     tell: (message: string) => void = say,
   ): boolean => {
     if ('reason' in edit) {
@@ -128,10 +128,14 @@ export function EditorKeys(props: {
       tell(lockedNotice(blocker.userName))
       return false
     }
-    if (!commitOps(edit.ops)) return false
-    // **넣은 노드 전부를 고른다**(설계서 «붙인 노드(들)가 고른 노드가 된다») — 기준 노드는 마지막 것이라 이어 붙이면 그 뒤에 차례로 선다.
-    const last = edit.insertedIds[edit.insertedIds.length - 1]
-    if (last !== undefined) store.selectMany(edit.insertedIds, 'replace', last)
+    // **넣은 노드 전부를 고른다**(설계서 «붙인 노드(들)가 고른 노드가 된다») — 기준 노드는 마지막 것이라 이어 붙이면 그 뒤에 차례로 선다. 첫 행 확인
+    // (`edit/first-row-ask.ts`)을 거쳐 낸 판도 같다(`after`).
+    const select = (): void => {
+      const last = edit.insertedIds[edit.insertedIds.length - 1]
+      if (last !== undefined) store.selectMany(edit.insertedIds, 'replace', last)
+    }
+    if (!commitOps(edit.ops, { after: select })) return false
+    select()
     return true
   }
 
@@ -223,7 +227,8 @@ export function EditorKeys(props: {
         return
       }
     }
-    const commitOps = (ops: Parameters<typeof history.commitOps>[0]): boolean => live.current.commitOps(ops, { pressed })
+    const commitOps = (ops: Parameters<typeof history.commitOps>[0], options?: CommitOptions): boolean =>
+      live.current.commitOps(ops, { ...options, pressed })
     if (!commitInsert(pasteOps(document, at, prepared.nodes), commitOps, tell)) return
     const dropped = [
       ...(prepared.droppedStates.length > 0 ? [droppedStatesNotice(prepared.droppedStates, sourceStates)] : []),

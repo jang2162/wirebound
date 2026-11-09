@@ -56,6 +56,7 @@ import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
 import { EditorKeys } from '../shell/editor-keys'
 import { ICONS, shellIcon } from '../shell/icons'
+import { FirstRowDialog } from '../shell/first-row-dialog'
 import { ShellDialog } from '../shell/shell-dialog'
 import { ComponentPalette, PaletteToggle, rovingStep } from '../palette/component-palette'
 import { GuidesToggle } from '../canvas/layout-guides'
@@ -916,6 +917,8 @@ function EditorShell(props: {
             </ShellDialog>
             {/* **에디터 단축키**(`shell/editor-keys.tsx`) — 호스트와 캔버스 문서에 리스너를 걸고, `?` 의 도움말 상자를 여기 그린다. 편집 명령은
               편집 모드 && `canEdit` 일 때만, 고르기 · 선택 이동 · 도움말은 늘 선다. */}
+            {/* **커스텀 행을 첫 자리로 데려오는 편집의 확인**(`shell/first-row-dialog.tsx`) — 편집 통로가 묻기로 적은 판에 선다. */}
+            {props.pageId !== undefined && <FirstRowDialog projectId={props.project.id} pageId={props.pageId} />}
             <EditorKeys
               projectId={props.project.id}
               pageId={props.pageId}

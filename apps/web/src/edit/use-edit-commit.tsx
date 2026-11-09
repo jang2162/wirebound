@@ -12,7 +12,7 @@
  * 큐에 쌓이고, 앞 요청이 끝난 뒤 같은 루프가 그것을 집는다.
  */
 import { useCallback, useEffect, useRef } from 'react'
-import type { Interaction, PatchOp } from '@wirebound/schema'
+import { applyOps, type Interaction, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, toFailure } from '../api/failure'
@@ -31,6 +31,28 @@ import {
 import type { PendingEdit } from '../store/edit-queue'
 import { LOSS_RANK, type LossPart } from '../store/loss-notice'
 import { interactionsOps, propOps, variantOps } from './ops'
+import { walkSafely } from './safe-walk'
+import { customRowLeads, type FirstRowLead } from './first-row-ask'
+
+/**
+ * 그 편집이 커스텀 행을 첫 자리로 데려오는가(`./first-row-ask.ts`). 행이 든 그리드가 없는 문서는 적용해 보지 않는다 — 묻는 판은 편집 앞에 있던 그리드의
+ * 첫 행이 바뀌는 판뿐이다. 적용이 던지면 묻지 않는다(그 편집은 `applyEdit` 가 거른다).
+ */
+function firstRowLead(document: PageDocument | null, ops: PatchOp[]): FirstRowLead | null {
+  if (document === null || !hasGridRows(document)) return null
+  let next: PageDocument
+  try {
+    next = applyOps(document, ops)
+  } catch {
+    return null
+  }
+  return customRowLeads(document, next)
+}
+
+function hasGridRows(document: PageDocument): boolean {
+  for (const visit of walkSafely(document.root)) if (visit.node.type === 'GridRow') return true
+  return false
+}
 
 /** 내 편집의 ack 를 기다려 미룬 되돌리기 · 다시 실행의 한도(`useEditCommit` 의 `afterAck`) — ack 에는 시간 한도가 없어 미룬 것이 끝없이 조용할 수 있다. */
 export const UNDO_ACK_WAIT_MS = 3_000
@@ -336,6 +358,16 @@ export interface CommitOptions {
    * `panels/property-panel.tsx`의 «떠나기 전에 고른 것이 바뀐 초안»). 그 «다른 일»(일부 거절)이 방금 세운 통지가 그 자리에 남는다.
    */
   keepNotice?: boolean
+  /**
+   * **이미 물었다** — 커스텀 행을 첫 자리로 데려오는 편집의 확인(`./first-row-ask.ts`)을 받은 «계속» 이 준다(`shell/first-row-dialog.tsx`). 주지
+   * 않으면 그 판의 편집은 내지 않고 묻는다(`false` 를 낸다).
+   */
+  firstRowAsked?: boolean
+  /**
+   * **물어서 낸 뒤의 일** — 참 갈래에서 하던 일(넣은 노드 고르기 · 고른 것 옮기기)을 «계속» 뒤에도 하려는 쪽이 준다. 묻지 않고 낸 판에서는 안 부른다
+   * — 그 판은 부른 쪽이 반환값으로 한다.
+   */
+  after?: () => void
 }
 
 export interface EditCommit {
@@ -955,6 +987,15 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       if (open === null) return false
       // 만드는 쪽이 "요청을 보내지 마라"라고 답한 것이다(`edit/ops.ts` 머리말).
       if (ops === null) return false
+      // **커스텀 행을 첫 자리로 데려오는 편집은 내기 전에 묻는다**(`./first-row-ask.ts`) — 입구를 가리지 않고 이 통로 하나에서 판정한다. 묻는 판은
+      // 아무것도 안 내고 `false` 다(부른 쪽의 참 갈래는 «계속» 뒤 `after` 가 한다).
+      if (options.firstRowAsked !== true) {
+        const lead = firstRowLead(store.getState().document, ops)
+        if (lead !== null) {
+          store.askFirstRow({ rowId: lead.rowId, ops, after: options.after ?? null })
+          return false
+        }
+      }
       // 로컬 적용이 실패했다 — 클라이언트가 만든 잘못된 `ops`다. 보내 봐야 서버도 같은
       // 자리에서 거절한다. 상태를 고른 채 낸 편집도 그대로 보낸다 — 노드는 하나이고 보임이 상태를 가른다(설계 spec «C2»).
       if (store.applyEdit(ops) === null) return false

@@ -317,11 +317,15 @@ function useModuleInsert(input: {
         // 읽는 사이 뷰 모드 · 강등으로 넣을 수 없게 됐다 — 보내지 않는다(머리말 «넣을 수 있는가를 넣는 순간에 다시 본다»).
         if (!live.current.input.insertable) return false
         onNotice('')
-        if (!live.current.commitOps(edit.ops)) return false
-        const last = edit.selectIds[edit.selectIds.length - 1]
-        if (last !== undefined) store.selectPlaced(edit.selectIds, last)
-        const dropped = [moduleDroppedNotice(edit), claimed?.notice ?? ''].filter((line) => line !== '').join(' ')
-        if (dropped !== '') store.setInfoNotice(dropped)
+        // 넣은 노드를 고르고 뺀 것을 말한다 — 첫 행 확인(`edit/first-row-ask.ts`)을 거쳐 낸 판도 같다(`after`).
+        const placed = (): void => {
+          const last = edit.selectIds[edit.selectIds.length - 1]
+          if (last !== undefined) store.selectPlaced(edit.selectIds, last)
+          const dropped = [moduleDroppedNotice(edit), claimed?.notice ?? ''].filter((line) => line !== '').join(' ')
+          if (dropped !== '') store.setInfoNotice(dropped)
+        }
+        if (!live.current.commitOps(edit.ops, { after: placed })) return false
+        placed()
         return true
       } finally {
         busy.current = false

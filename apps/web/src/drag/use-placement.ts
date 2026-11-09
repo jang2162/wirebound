@@ -614,7 +614,12 @@ export function usePlacementDrop(input: {
     const node = placing.kind === 'new' ? createNode(placing.type, undefined, placing.preset) : null
     if (placing.kind === 'new' && node === null) return logRefused(debug, reason, 'unknown-type')
     const ops = dropOps(doc, placing, target, node ?? undefined)
-    const committed = commitOps(ops)
+    // 넣은 노드를 «방금 넣음» 으로 고른다 — 다음 넣기 단추가 그 뒤에 선다(`palette/palette-add.ts` 머리말 «연달아 넣기»). 첫 행 확인
+    // (`edit/first-row-ask.ts`)을 거쳐 낸 판도 같다(`after`).
+    const placed = (): void => {
+      if (node !== null) store.selectPlaced([node.id])
+    }
+    const committed = commitOps(ops, { after: placed })
     if (!committed) return logRefused(debug, reason, 'commit-refused')
     debug?.line('drop', {
       result: 'committed',
@@ -623,8 +628,7 @@ export function usePlacementDrop(input: {
       placing:
         placing.kind === 'new' ? `new:${placing.type}${placing.preset === undefined ? '' : `:${placing.preset}`}` : `node:${placing.id}`,
     })
-    // 넣은 노드를 «방금 넣음» 으로 고른다 — 다음 넣기 단추가 그 뒤에 선다(`palette/palette-add.ts` 머리말 «연달아 넣기»).
-    if (node !== null) store.selectPlaced([node.id])
+    placed()
   }
 
   const live = (hint: DropHint<PlacementDrop> | null): DropHint<PlacementDrop> | null =>
