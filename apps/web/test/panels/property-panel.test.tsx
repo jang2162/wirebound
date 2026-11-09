@@ -72,7 +72,7 @@ const DOC = pageDoc({
   children: [
     { id: 'n-field', type: 'Input', props: { kind: 'number', placeholder: '검색어', readonly: true } },
     { id: 'n-card', type: 'Card', props: { title: '회원 정보' } },
-    { id: 'n-list', type: 'Tree', props: { items: ['이름', '이메일'] } },
+    { id: 'n-list', type: 'Tree', props: { items: [{ label: '이름' }, { label: '이메일' }] } },
     {
       id: 'n-kv',
       type: 'KeyValue',
@@ -150,10 +150,10 @@ const WIDGET_CONTROLS: EditorControl[] = [
   'number',
   'switch',
   'select',
-  'stringList',
   'pairList',
   'optionList',
   'fileList',
+  'treeItems',
   'color',
   'image',
 ]
@@ -178,7 +178,7 @@ const CONTROL_SAMPLES: { control: EditorControl; type: string; label: string }[]
   { control: 'number', type: 'DataGrid', label: '고정 열 수' },
   { control: 'switch', type: 'Field', label: '필수' },
   { control: 'select', type: 'Input', label: '종류' },
-  { control: 'stringList', type: 'Tree', label: '항목' },
+  { control: 'treeItems', type: 'Tree', label: '항목' },
   { control: 'pairList', type: 'KeyValue', label: '키-값' },
   { control: 'optionList', type: 'Select', label: '선택지' },
   { control: 'fileList', type: 'FileAttach', label: '파일' },
@@ -195,7 +195,7 @@ const CONTROLS_DOC = pageDoc({
     { id: 'n-input', type: 'Input', props: { kind: 'number' } },
     { id: 'n-text', type: 'Text', props: { content: '문단', role: 'body' } },
     { id: 'n-list', type: 'DataGrid', props: { fixedColumns: 1 }, children: [{ id: 'n-col', type: 'GridColumn' }] },
-    { id: 'n-tree', type: 'Tree', props: { items: ['이름'] } },
+    { id: 'n-tree', type: 'Tree', props: { items: [{ label: '이름' }] } },
     { id: 'n-kv', type: 'KeyValue', props: { pairs: [{ key: 'k', value: 'v' }] } },
     { id: 'n-select', type: 'Select' },
     { id: 'n-ph', type: 'Placeholder', props: { background: '#2563eb' } },
@@ -324,14 +324,14 @@ describe('속성 패널', () => {
     expect(within(panel()).queryByText(/undefined/)).toBeNull()
   })
 
-  it('Tree 의 항목은 목록 위젯이 칸마다 그린다', async () => {
+  it('Tree 의 항목은 트리 항목 위젯이 칸마다 그린다', async () => {
     await openPage(DOC)
 
     select('Tree')
 
     // 캔버스 테마의 manifest 가 `Tree` 를 선언하지 않아 항목이 보인다(감춤은 `visible-fields.test.ts` 가 잰다).
     expect(labels()).toContain('항목')
-    // 값은 목록 위젯이 그린다. 한 줄로 이어 붙인 글자가 아니라 칸마다 하나다.
+    // 값은 트리 항목 위젯이 그린다. 한 줄로 이어 붙인 글자가 아니라 칸마다 하나다.
     const cells = [...panel().querySelectorAll<HTMLInputElement>('.wb-shell-list-cell')]
     expect(cells.map((cell) => cell.value)).toEqual(['이름', '이메일'])
   })
@@ -1214,7 +1214,7 @@ const VARIANT_DOC = pageDoc({
     // `variantFrom: 'role'` → 컨트롤이 **나오면 안 된다**(`ignored-variant`를 UI가 유도하는 셈이다).
     { id: 'n-text', type: 'Text', props: { content: '문단', role: 'body' } },
     // manifest 가 선언하지 않았다 → 나올 것이 없다.
-    { id: 'n-tree', type: 'Tree', props: { depth: 2 } },
+    { id: 'n-tree', type: 'Tree', props: { selected: true } },
     // 옛 카탈로그에 `default` 가 없던 컴포넌트 — manifest 는 `default` 를 첫 선언으로 둔다.
     { id: 'n-button', type: 'Button', props: { label: '저장' }, variant: 'danger' },
   ],

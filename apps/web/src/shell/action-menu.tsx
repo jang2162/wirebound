@@ -187,6 +187,11 @@ export function ActionMenu(props: {
   text?: string
   /** `text` 를 줄이지 않는다 — 짧고 고정인 글(영역 표지 «상태에 따라 다름»). 없으면 긴 상태 이름 몫의 폭에서 줄임표로 준다. */
   fullText?: boolean
+  /**
+   * 단추를 끈다 — 열 수 없고, 열린 동안 참이 되면 닫는다(`openWhile` 이 거짓이 된 것과 같다). 남이 잠근 자리의 위젯(`panels/controls/tree-items-control.tsx`)이
+   * 칸 · 단추와 함께 끈다 — 항목이 다 꺼진 메뉴라도 열리면 잠긴 자리가 고칠 수 있는 것처럼 보인다.
+   */
+  disabled?: boolean
   /** 영역 꼬리표 크기(11px · 줄 높이 16px)로 줄인다 — 영역 표지가 위 형제를 덜 가리게(`canvas/state-badges.tsx`). `fullText` 와 함께 쓴다. */
   tag?: boolean
 }): ReactElement {
@@ -232,7 +237,7 @@ export function ActionMenu(props: {
   }
 
   // 연 렌더에서 이미 참이다 — 여는 누름(`onOpen`)이 그 줄을 고르는 것과 여는 것이 한 렌더에 묶인다.
-  const stale = open && props.openWhile === false
+  const stale = open && (props.openWhile === false || props.disabled === true)
   useEffect(() => {
     if (stale) close()
   })
@@ -336,6 +341,7 @@ export function ActionMenu(props: {
         aria-label={props.label}
         title={props.label}
         aria-haspopup="menu"
+        disabled={props.disabled}
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         onClick={() => (open ? setOpen(false) : openAt('first'))}

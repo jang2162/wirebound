@@ -220,7 +220,7 @@ describe.skipIf(!전제.ok)('L-141 — 이 기계에서 잰 칸', () => {
    * 다른 탭의 지움 · 일부 거절 · Cmd+클릭)은 `./multiselect.test.ts` 의 «칸에 친 채 고른 것이 바뀐다» 케이스들이 Chrome 에서 잰다.
    */
   it('칸 «onLeave» — 글 칸 · 목록 칸에 친 채 떠나는 네 길이 모두 커밋 1건이다', async () => {
-    const P = await fixture('l141-leave', [{ id: 'n_l', type: 'Tree', props: { items: ['가', '나'] } }])
+    const P = await fixture('l141-leave', [{ id: 'n_l', type: 'Tree', props: { items: [{ label: '가' }, { label: '나' }] } }])
     const results: Record<string, { 입력중패치: number; 떠난뒤패치: number; 서버: unknown }> = {}
     for (const kind of ['글', '목록'] as const) {
       for (const gesture of ['다른 줄', '캔버스 빈 자리', '뷰 모드', '다른 탭'] as const) {
@@ -255,7 +255,8 @@ describe.skipIf(!전제.ok)('L-141 — 이 기계에서 잰 칸', () => {
               )!
               return kind === '글' ? node.props['content'] : node.props['items']
             },
-            (value) => (kind === '글' ? value === '줄 0Z' : Array.isArray(value) && value[0] === '가Z'),
+            (value) =>
+              kind === '글' ? value === '줄 0Z' : Array.isArray(value) && (value[0] as { label?: unknown } | undefined)?.label === '가Z',
           )
           const server = ((await call('GET', P)).body.schema.root.children as { id: string; props: Record<string, unknown> }[]).find(
             (c) => c.id === target,
@@ -273,7 +274,7 @@ describe.skipIf(!전제.ok)('L-141 — 이 기계에서 잰 칸', () => {
             ops: [
               kind === '글'
                 ? { op: 'replace', path: '/root/children/0/props/content', value: '줄 0' }
-                : { op: 'replace', path: '/root/children/5/props/items', value: ['가', '나'] },
+                : { op: 'replace', path: '/root/children/5/props/items', value: [{ label: '가' }, { label: '나' }] },
             ],
           })
         } finally {

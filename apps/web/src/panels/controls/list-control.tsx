@@ -1,5 +1,5 @@
 /**
- * `stringList`(문자열 배열) · `pairList`(키-값 배열) · `optionList`(선택지 — `{ label, selected }` 배열) · `fileList`(파일 목록 — `{ name, size }` 배열)의
+ * `pairList`(키-값 배열) · `optionList`(선택지 — `{ label, selected }` 배열) · `fileList`(파일 목록 — `{ name, size }` 배열)의
  * 위젯. 항목 추가·삭제·수정·옮기기(↑ ↓), 선택지면 고르기 · 고른 것 풀기. 파일 목록은 키-값과 같은 두 칸 줄이다(이름 · 크기).
  *
  * **배열을 통째로 `replace`한다 — 항목마다 인덱스를 조작하지 않는다.** JSON Patch의 배열
@@ -45,11 +45,11 @@ export interface FileRow {
   size: string
 }
 
-export type ListValue = string[] | Pair[] | Choice[] | FileRow[]
+export type ListValue = Pair[] | Choice[] | FileRow[]
 
-type Kind = 'string' | 'pair' | 'option' | 'file'
+type Kind = 'pair' | 'option' | 'file'
 
-/** 위젯 안의 한 줄 — 넷을 한 모양으로 다룬다(`value`가 글 · 라벨 · 파일 크기, `key`가 키 · 파일 이름이다). */
+/** 위젯 안의 한 줄 — 셋을 한 모양으로 다룬다(`value`가 값 · 라벨 · 파일 크기, `key`가 키 · 파일 이름이다). */
 interface Item {
   key: string
   value: string
@@ -79,9 +79,8 @@ export interface ListControlProps {
   textMax?: (path: readonly string[]) => number | undefined
 }
 
-/** 위젯 칸(`Item` 의 `key` · `value`)이 원소의 어느 자리인가 — `toItems` · `toValue` 의 짝. 글 원소(`stringList`)는 원소 자신이다. */
+/** 위젯 칸(`Item` 의 `key` · `value`)이 원소의 어느 자리인가 — `toItems` · `toValue` 의 짝. */
 const ITEM_PATHS: Record<Kind, Partial<Record<'key' | 'value', readonly string[]>>> = {
-  string: { value: ['[]'] },
   pair: { key: ['[]', 'key'], value: ['[]', 'value'] },
   option: { value: ['[]', 'label'] },
   file: { key: ['[]', 'name'], value: ['[]', 'size'] },
@@ -90,20 +89,19 @@ const ITEM_PATHS: Record<Kind, Partial<Record<'key' | 'value', readonly string[]
 function kindOf(field: EditorField): Kind {
   if (field.control === 'pairList') return 'pair'
   if (field.control === 'optionList') return 'option'
-  return field.control === 'fileList' ? 'file' : 'string'
+  return field.control === 'fileList' ? 'file' : 'pair'
 }
 
 /**
  * 문서의 값을 항목 배열로. **배열이 아니면 빈 목록이다** — 던지지 않는다.
  *
- * 원소가 문자열이 아니거나(`stringList`) `{ key, value }`가 아니면(`pairList`) 빈 값으로
+ * 원소가 객체가 아니거나 칸이 글이 아니면(`{ key, value }`가 아닌 `pairList` 원소) 빈 값으로
  * 그린다. **지우지 않고 자리를 남기는 것이 의도다** — 지우면 사용자가 무엇을 잃었는지
  * 모른 채 그 상태로 커밋하게 된다.
  */
 function toItems(value: unknown, kind: Kind): Item[] {
   if (!Array.isArray(value)) return []
   return value.map((item) => {
-    if (kind === 'string') return { key: '', value: typeof item === 'string' ? item : '', selected: false }
     if (typeof item !== 'object' || item === null) return { key: '', value: '', selected: false }
     if (kind === 'option') {
       const option = item as { label?: unknown; selected?: unknown }
@@ -126,8 +124,7 @@ function toItems(value: unknown, kind: Kind): Item[] {
 function toValue(items: Item[], kind: Kind): ListValue {
   if (kind === 'pair') return items.map((item) => ({ key: item.key, value: item.value }))
   if (kind === 'file') return items.map((item) => ({ name: item.key, size: item.value }))
-  if (kind === 'option') return items.map((item): Choice => (item.selected ? { label: item.value, selected: true } : { label: item.value }))
-  return items.map((item) => item.value)
+  return items.map((item): Choice => (item.selected ? { label: item.value, selected: true } : { label: item.value }))
 }
 
 export function ListControl(props: ListControlProps): ReactElement {

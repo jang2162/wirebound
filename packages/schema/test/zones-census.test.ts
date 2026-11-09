@@ -54,6 +54,7 @@ const DIRECT_READS: Record<string, number> = {
   'apps/web/src/edit/structure-actions.ts': 3,
   'apps/web/src/edit/structure-drop.ts': 2,
   'apps/web/src/palette/palette-add.ts': 1,
+  'apps/web/src/panels/controls/tree-items-control.tsx': 19,
   'apps/web/src/panels/interaction-panel.tsx': 1,
   'apps/web/src/panels/menu-tree.tsx': 5,
   'apps/web/src/panels/structure-toolbar.tsx': 1,

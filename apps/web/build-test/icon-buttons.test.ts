@@ -214,7 +214,11 @@ async function fixture(stack: EditorStack, owner: Session, slug: string): Promis
   const page = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body
   const P = `/projects/${project.id}/pages/${page.id}`
   const ops = [
-    { op: 'add', path: '/root/children/0', value: { id: 'n_tabs000001', type: 'Tree', props: { items: ['개요', '상세'] } } },
+    {
+      op: 'add',
+      path: '/root/children/0',
+      value: { id: 'n_tabs000001', type: 'Tree', props: { items: [{ label: '개요' }, { label: '상세' }] } },
+    },
     {
       op: 'add',
       path: '/root/children/1',
