@@ -32,8 +32,8 @@ interface Node {
 }
 
 /**
- * 고름 칸(`select: 'check'`) · 셀 틀 글 열 둘 · 행 하나 · 아래 글. 캔버스는 셀 틀 칸을 그 열로 읽는다(`canvas/canvas.tsx` 의 `nodeIdAt` —
- * `data-wb-column-of`) — 행만 덮는 자리는 열이 없는 고름 칸이다.
+ * 고름 칸(`select: 'check'`) · 셀 틀 글 열 둘 · 행 하나 · 아래 글. 아래 `clickCanvasNode` 는 가장 가까운 표지로 점을 고르므로 행을 누르는 점은
+ * 열 표지가 없는 고름 칸에 선다(셀 틀 칸도 행이다 — `canvas/canvas.tsx` 의 `nodeIdAt`).
  */
 const GRID: Node[] = [
   {
@@ -109,7 +109,7 @@ describe.skipIf(!전제.ok)('트랙 겹침 — 실브라우저', () => {
 
   /**
    * 캔버스에서 그 노드를 누른다 — 노드 상자를 4px 격자로 훑어 셸의 맨 위가 캔버스 iframe 이고 그 점을 캔버스가 그 노드로 읽는 첫 점
-   * (`component-tab.test.ts` 의 `clickCanvasNode` 꼴 · 읽는 규칙은 `canvas/canvas.tsx` 의 `nodeIdAt` 과 같은 속성 셋).
+   * (`component-tab.test.ts` 의 `clickCanvasNode` 꼴 · 가장 가까운 표지를 읽는다 — 셀 틀 칸을 행으로 읽는 `canvas/canvas.tsx` 의 `nodeIdAt` 보다 좁다).
    */
   async function clickCanvasNode(page: Page, id: string): Promise<void> {
     const box = (await canvasFrame(page).locator(`[data-wb-id="${id}"]`).first().boundingBox())!

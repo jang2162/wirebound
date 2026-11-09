@@ -463,7 +463,7 @@ export function Canvas(props: {
     for (const nodeId of outlinedIds) {
       const target = findNodeElement(frame.document, nodeId)
       // 지금 상태에서 숨은 노드는 요소가 없다 — 외곽선을 안 세운다(구조 트리 · 속성 패널로 다룬다).
-      if (target !== null) next.push({ nodeId, box: measure(target, offset) })
+      if (target !== null) next.push({ nodeId, box: measureLines(target, nodeId, offset) })
     }
     setBoxes((prev) => (sameOutlines(prev, next) ? prev : next))
     // `doc`·`viewportWidth`가 의존성에 있는 것은 둘이 바뀌면 노드의 자리가 바뀌기
@@ -918,29 +918,49 @@ class CanvasBoundary extends Component<{ resetKey: PageDocument; children: React
  * 못한 노드라 빈 문자열을 단다(`packages/renderer/src/fallback.tsx`). 그것을 그대로
  * 넣으면 스토어에는 선택이 있는데 가리키는 노드는 없는 상태가 된다.
  *
- * **그리드의 사본은 원본이다**(`NODE_OF_ATTRS`) — 되풀이 줄의 칸 · 조각을 누르면 그 원본을 고른다. 가장 가까운 `data-wb-id` 로 오르면 그리드가
- * 골라져 이어진 Delete 가 그리드째 지웠다(`docs/superpowers/plans/2026-10-25-rv-gr-report.md` H1). 고른 뒤의 판정(남의 잠금)은 원본을 누른 것과 같다.
+ * **그리드의 몸 칸은 그 줄의 행이다** — 셀 틀 · 번호 칸(`data-wb-column-of` — SDK 기본 그리드 뷰)과 그 안의 사본 노드를 누르면 칸을 품은 줄의 행
+ * (`GridRow` — 되풀이 N 줄은 다 같은 행)을 고른다. 셀 틀은 행마다 같은 꼴이라 열을 고치는 길은 머리 칸 · 첫 셀 틀의 원본 노드로 남고, 행의 «행 내용»
+ * 은 캔버스에서 그 행을 골라야 선다. **첫 셀 틀의 원본 노드(`data-wb-id`)는 그 노드다** — 칸보다 먼저 만나 거기서 끝난다.
+ *
+ * **그 밖의 사본은 원본이다** — 커스텀 행 제 칸의 사본 · 사본 줄의 고름 칸(줄 `tr` 의 사본)은 원본을 고른다. 가장 가까운 `data-wb-id` 로 오르면 그리드가
+ * 골라져 이어진 Delete 가 그리드째 지웠다(`docs/superpowers/plans/2026-10-25-rv-gr-report.md` H1). 그래서 사본을 만나도 바로 끝내지 않고 칸이 있는지
+ * 더 오른 뒤, 칸이 없으면 처음 만난 사본의 원본이다. 고른 뒤의 판정(남의 잠금)은 원본을 누른 것과 같다.
  */
 function nodeIdAt(target: EventTarget | null, body: HTMLElement): string | null {
   // `instanceof Element` 를 쓰지 않는다 — iframe 안의 요소는 iframe 창의 `Element` 로 만들어져 호스트 창의 것과 다르다.
   let element = isElement(target) ? target : null
+  let copy: string | null = null
 
   while (element !== null && body.contains(element)) {
-    for (const name of NODE_OF_ATTRS) {
-      const id = element.getAttribute(name)
-      if (id !== null && id !== '') return id
-    }
+    const column = filled(element.getAttribute(COLUMN_OF_ATTR))
+    if (column !== null) return lineOf(element, body) ?? column
+    const id = filled(element.getAttribute('data-wb-id'))
+    if (id !== null) return copy ?? id
+    copy ??= filled(element.getAttribute(COPY_OF_ATTR))
     element = element.parentElement
   }
 
+  return copy
+}
+
+/** 그리드 몸 칸을 품은 줄의 행 id — 첫 줄은 행 뿌리(`data-wb-id`), 되풀이 줄은 그 사본(`data-wb-copy-of`)이다. 줄을 못 찾으면(테마가 줄에 안 달면) `null`. */
+function lineOf(cell: Element, body: HTMLElement): string | null {
+  for (let element = cell.parentElement; element !== null && body.contains(element); element = element.parentElement) {
+    const id = filled(element.getAttribute('data-wb-id')) ?? filled(element.getAttribute(COPY_OF_ATTR))
+    if (id !== null) return id
+  }
   return null
 }
 
-/**
- * 누른 요소가 어느 노드의 것인지 싣는 속성 — 노드 뿌리(`data-wb-id`) · 되풀이 줄의 사본(`data-wb-copy-of` — 원본 id) · 그리드 열의 몸 칸
- * (`data-wb-column-of` — 셀 틀 · 번호 칸의 빈 자리는 그 열이다 · SDK 기본 그리드 뷰).
- */
-const NODE_OF_ATTRS = ['data-wb-id', 'data-wb-copy-of', 'data-wb-column-of'] as const
+/** 빈 id 는 없는 것이다 — 렌더러의 모양 가드가 흡수한 폴백은 빈 `data-wb-id` 를 단다(`packages/renderer/src/fallback.tsx`). */
+function filled(value: string | null): string | null {
+  return value === null || value === '' ? null : value
+}
+
+/** 되풀이 줄의 사본이 싣는 원본 id(`packages/renderer/src/render.tsx`). */
+const COPY_OF_ATTR = 'data-wb-copy-of'
+/** 그리드 열의 몸 칸(셀 틀 · 번호)이 싣는 열 id — SDK 기본 그리드 뷰의 `columnOf`. */
+const COLUMN_OF_ATTR = 'data-wb-column-of'
 
 function isElement(target: EventTarget | null): target is Element {
   return target !== null && (target as Node).nodeType === 1
@@ -983,6 +1003,24 @@ export function frameOffset(frame: CanvasFrame, surface: HTMLElement, zoom: numb
 function measure(target: Element, offset: { left: number; top: number }): Box {
   const node = focusElement(target).getBoundingClientRect()
   return { left: offset.left + node.left, top: offset.top + node.top, width: node.width, height: node.height }
+}
+
+/**
+ * 고른 노드의 외곽선 상자 — 노드 상자에 **바로 뒤에 이어 선 제 사본 형제**(되풀이 행의 둘째 줄부터 — `data-wb-copy-of`)를 합친다. 행을 고르면
+ * 되풀이 N 줄이 다 그 행이라 표지도 N 줄을 덮는다 — 사본 줄을 눌러 행을 골랐을 때 표지가 첫 줄에만 서면 무엇이 골라졌는지(이어진 Delete 가 무엇을
+ * 지울지) 안 보인다. 셀 틀 조각의 사본은 다른 줄(다른 부모)에 서므로 형제가 아니라 안 합쳐진다.
+ */
+function measureLines(target: Element, nodeId: string, offset: { left: number; top: number }): Box {
+  let box = measure(target, offset)
+  for (let line = target.nextElementSibling; line !== null && line.getAttribute(COPY_OF_ATTR) === nodeId; line = line.nextElementSibling) {
+    const more = measure(line, offset)
+    const right = Math.max(box.left + box.width, more.left + more.width)
+    const bottom = Math.max(box.top + box.height, more.top + more.height)
+    const left = Math.min(box.left, more.left)
+    const top = Math.min(box.top, more.top)
+    box = { left, top, width: right - left, height: bottom - top }
+  }
+  return box
 }
 
 /**
