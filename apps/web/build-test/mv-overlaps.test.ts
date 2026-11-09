@@ -6,6 +6,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 캔버스에서 그리드 행 누름 | «코멘트» 탭에서 캔버스의 행을 눌렀는데 탭이 «컴포넌트» 로 안 옮긴다 · «속성» 묶음에 «행 내용» 이 안 선다 · «코멘트» 묶음이 안 선다 |
+ * | «코멘트» 탭으로 옮김 | «컴포넌트» 탭의 «코멘트» 묶음이 읽어 둔 목록이 «코멘트» 탭에 섰다가 다시 읽는 동안 «불러오는 중» 으로 빠진다 |
  * | 카드 더블클릭 넣기 | 넣은 노드가 안 골라진다 · 넣은 뒤 저절로 고름이 우측 탭을 «컴포넌트» 로 옮긴다(캔버스 누름이 아니다) |
  * | 우측 탭 머리 줄 | 창 1280 · 1440 · 900 의 우측 패널 기본 폭(= 최소 폭 300)에서 탭 이름이 두 줄로 꺾인다 · 탭이 두 줄로 놓인다 · 탭 줄이 패널 밖으로 넘친다 · 탭을 눌러 못 고른다 |
  *
@@ -194,6 +195,59 @@ describe.skipIf(!전제.ok)('트랙 겹침 — 실브라우저', () => {
       // 늦게 오는 탭 바뀜이 있으면 볼 틈.
       await page.waitForTimeout(500)
       expect({ 탭: await selectedTab(page), 고른: await selected(page) }).toEqual({ 탭: '코멘트', 고른: added })
+    } finally {
+      await opened.close()
+    }
+  })
+
+  /**
+   * **«컴포넌트» 탭의 «코멘트» 묶음과 «코멘트» 탭은 목록 칸 하나를 나눠 쓴다**(`panels/comment-panel.tsx` 의 `LIST`). 묶음이 읽어 둔 목록이 있는
+   * 채 «코멘트» 탭을 열면 그 목록이 첫 렌더에 선다 — 다시 읽는 동안 그것을 «불러오는 중» 으로 지우면 말이 섰다가 사라졌다가 다시 선다(부하 판에서
+   * `editor-restore-late-commit.test.ts` 가 그 틈에 0 을 셌다). 다시 읽기를 늦춘 판에서 목록 줄이 한 번도 안 빠지는지 센다.
+   */
+  it('«컴포넌트» 탭에서 «코멘트» 탭으로 옮기면, 다시 읽는 동안에도 읽어 둔 목록이 남는다', async () => {
+    const P = await seed('mv-comments-keep', [{ id: 'm_first', type: 'Text', props: { content: '처음 글' } }])
+    const posted = await call('POST', `${P}/comments`, { nodeId: 'm_first', body: '남는 말' })
+    if (posted.status >= 300) throw new Error(`comment ${posted.status}`)
+    const opened = await open(P, 1440)
+    const { page } = opened
+    try {
+      // 묶음이 목록을 읽었다 — 고른 뿌리에는 말이 없다는 문장이 선다.
+      await page.getByRole('region', { name: '코멘트', exact: true }).getByText('이 노드에 단 코멘트가 없습니다').waitFor()
+      let held = 0
+      await page.route(/\/comments(\?|$)/, async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback()
+        held += 1
+        await new Promise((resolve) => setTimeout(resolve, 1_500))
+        await route.fallback()
+      })
+      await page.evaluate(() => {
+        const w = window as unknown as { __rows: number[]; __loading: number }
+        w.__rows = []
+        w.__loading = 0
+        const panel = document.querySelector('.wb-shell-panel')!
+        new MutationObserver(() => {
+          const rows = panel.querySelectorAll('li.wb-shell-comment').length
+          if (w.__rows.at(-1) !== rows) w.__rows.push(rows)
+          if ((panel.textContent ?? '').includes('코멘트를 불러오는 중')) w.__loading += 1
+        }).observe(panel, { childList: true, subtree: true, characterData: true })
+      })
+      await tab(page, '코멘트')
+      await poll(
+        '다시 읽기가 늦춰졌다',
+        async () => held,
+        (n) => n > 0,
+      )
+      await page.waitForTimeout(2_000)
+      const seen = await page.evaluate(() => {
+        const w = window as unknown as { __rows: number[]; __loading: number }
+        return { rows: w.__rows, loading: w.__loading }
+      })
+      expect({ 줄: seen.rows, 불러오는중: seen.loading, 끝: await page.locator('[role="tabpanel"] li.wb-shell-comment').count() }).toEqual({
+        줄: [1],
+        불러오는중: 0,
+        끝: 1,
+      })
     } finally {
       await opened.close()
     }

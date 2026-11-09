@@ -734,7 +734,10 @@ export function CommentPanel(props: {
     // 떠나면 요청째 끊는다(`ReadOptions.cancel` · `routes/editor.tsx`의 페이지 조회와 같다).
     const leave = new AbortController()
     const at = issue()
-    setState({ status: 'loading', at })
+    // **읽어 둔 목록이 있으면 다시 읽는 동안 그대로 둔다** — 번호만 이 조회의 것으로 올린다(그 앞에 낸 다시 받기의 답은 `answered`가 버린다).
+    // 목록 칸은 «컴포넌트» 탭의 묶음과 «코멘트» 탭이 함께 쓴다(`./component-panel.tsx`) — 한쪽이 읽어 둔 목록이 다른 쪽의 첫 렌더에 서므로,
+    // 여기서 «불러오는 중» 으로 지우면 말이 섰다가 사라졌다가 다시 선다(`build-test/mv-overlaps.test.ts` «… 읽어 둔 목록이 남는다»).
+    setState((prev) => (prev.status === 'ready' ? { ...prev, at } : { status: 'loading', at }))
 
     async function load(openPageId: string): Promise<void> {
       try {
