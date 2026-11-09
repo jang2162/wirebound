@@ -188,6 +188,21 @@ export function notifyMenuChanged(app: FastifyInstance, input: MenuChangedInput)
   })
 }
 
+/**
+ * 그 페이지의 코멘트 행이 바뀌었다 — 달기 · 고치기 · 지우기가 **커밋 뒤에** 부른다(`protocol.ts`의 `comments-changed`). 신호만 싣는다.
+ *
+ * `origin`(`broadcastOrigin`)을 주면 낸 연결을 뺀다 — 낸 화면은 쓰기의 답 뒤에 스스로 다시 읽는다. 재생처럼 앞 요청의 신호가 안 갔을 수
+ * 있는 자리는 안 준다. 던지지 않는다 — 쓰기는 이미 커밋됐다(`notifyPageChanged`와 같은 자세).
+ */
+export function notifyCommentsChanged(app: FastifyInstance, input: { projectId: string; pageId: string; origin?: BroadcastOrigin }): void {
+  const { origin, ...frame } = input
+  void app.realtime.broadcast
+    .send(input.projectId, { type: 'comments-changed', ...frame }, origin === undefined ? undefined : { except: origin })
+    .catch((error: unknown) => {
+      app.log.error({ err: error, projectId: input.projectId, pageId: input.pageId }, 'comments-changed 알림 실패')
+    })
+}
+
 export interface ThemeChangedInput {
   projectId: string
   themeId: string

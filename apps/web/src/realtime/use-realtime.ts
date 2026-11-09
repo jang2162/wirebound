@@ -167,6 +167,11 @@ export function useRealtime(
           }
           case 'page-stale':
             store.markPageStale(frame.pageId, frame.seq)
+            // 늦게 커밋된 쓰기가 코멘트 게시 · 삭제였을 수 있다 — 목록에는 따로 오는 신호가 없다(서버 `routes/comments.ts`의 `runWrite`).
+            setup.comments?.emit(frame.pageId)
+            break
+          case 'comments-changed':
+            setup.comments?.emit(frame.pageId)
             break
           case 'restored':
             store.markRestored(frame)
@@ -225,7 +230,11 @@ export function useRealtime(
           // **다시 붙은 것이 두 번째 이상이면 페이지를 다시 읽어야 한다.** 끊긴 동안 남이
           // 낸 편집의 프레임은 사라졌고, 그것을 갭으로 알아채려면 **누군가 다음 편집을 내야
           // 한다** — 보고만 있는 사람은 스스로 수렴하지 않는다.
-          if (opened) onResync?.()
+          if (opened) {
+            onResync?.()
+            // 끊긴 동안의 `comments-changed`도 사라졌다 — 열린 목록을 다시 읽힌다.
+            setup.comments?.emit()
+          }
           opened = true
           return
         }

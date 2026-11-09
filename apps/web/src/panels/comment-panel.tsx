@@ -140,7 +140,7 @@
  * `api/http-client.ts`의 `SHAPES.comment`에서 이미 끊는다), 문서 순회는 던지지 않는
  * `walkSafely`를 쓴다.
  */
-import { useCallback, useEffect, type ReactElement } from 'react'
+import { useCallback, useEffect, useRef, type ReactElement } from 'react'
 import { nodeAlias, type PageDocument } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, SignedOut, toFailure, type Failure } from '../api/failure'
@@ -179,6 +179,11 @@ const LOAD_FAILED = '코멘트를 불러오지 못했습니다'
 const REFRESHING = '목록을 다시 불러오는 중…'
 /** 쓰기 뒤의 목록 다시 받기가 실패했다 — **쓰기는 끝났다.** 목록은 그 앞의 것 그대로다. */
 const REFRESH_FAILED = '목록을 다시 불러오지 못했습니다'
+/**
+ * 신호 · 노드 바꿈이 낸 다시 읽기를 묶는 창(`reread`). 첫 신호에서 창을 열고 그 안에 온 신호는 같은 조회 하나로 친다 — 창이 닫혀야 다음 조회가
+ * 선다(신호가 끝없이 와도 조회는 창마다 하나다). 남의 쓰기가 화면에 서는 늦음이 이만큼 는다.
+ */
+const REREAD_BATCH_MS = 200
 /** 쓰기가 이유 없이 실패했을 때. */
 const WRITE_FAILED = '코멘트를 저장하지 못했습니다'
 /** 문서에 없는 노드에 붙은 코멘트의 무리 이름. */
@@ -626,8 +631,11 @@ export function CommentPanel(props: {
   const scope = props.scope ?? 'page'
   const api = useApi()
   const store = useEditorStoreInstance()
+  const realtime = useRealtimeSetup()
   // 지금 연결의 id 를 읽는 자리 — 게시가 그것을 **보낼 때** 잡아 다시 보낼 때도 싣는다(`submit`).
-  const connections = useRealtimeSetup()?.holder
+  const connections = realtime?.holder
+  // 남이 그 페이지의 코멘트를 바꿨다는 신호(`realtime/comment-signals.ts`) — 열린 목록이 다시 읽는다(`reread`).
+  const signals = realtime?.comments
   // **남의 코멘트는 고칠 수 없다**(서버가 막는다). `null`이면 아직 누구인지 모르는
   // 것이므로 수정 단추를 하나도 안 낸다 — 서버가 어차피 403으로 막는다.
   const currentUser = useSessionUser()
@@ -759,6 +767,59 @@ export function CommentPanel(props: {
     }
     // `setState`는 이 렌더의 페이지를 단 쓰기라 `pageId`와 함께만 바뀐다.
   }, [api, projectId, pageId])
+
+  /**
+   * **신호 · 노드 바꿈이 내는 다시 읽기 — 묶어서 조용히 읽는다.** 남이 그 페이지의 코멘트를 바꿨다는 신호(`comments-changed` · 늦은 커밋의
+   * `page-stale` · 다시 붙음 — `realtime/comment-signals.ts`)와 «컴포넌트» 탭에서 다른 노드를 고른 것이 낸다. 두 범위가 같은 칸을 쓰므로 목록은
+   * 페이지 전부다.
+   *
+   * - **묶는다**(`REREAD_BATCH_MS`) — 쓰기 여럿이 몰아쳐도 창 하나에 조회 하나다(`build-test/comment-live.test.ts` «… 묶어서 다시 읽는다»).
+   * - **늦게 낸 조회의 답만 받는다**(`answered`) — 겹친 조회의 앞 답이 늦게 와서 뒤 답이 세운 목록을 덮지 않는다(같은 파일 «… 늦게 와도 …»).
+   *   쓰기 뒤의 다시 받기(`refresh`) · 마운트 조회와 같은 번호 줄이라 셋이 서로를 덮지 않는다.
+   * - **도는 동안 말하지 않는다** — 앞 목록이 그대로 서 있고, 남이 쓸 때마다 «다시 불러오는 중» 이 깜박이면 거짓 경보다. 실패만 쓰기 뒤의
+   *   다시 받기와 같은 문장으로 말한다(`REFRESH` — 그보다 늦게 낸 조회가 서면 걷힌다).
+   */
+  const reread = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    if (pageId === undefined) return
+    const leave = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const run = (): void => {
+      timer = undefined
+      const at = issue()
+      api.listComments(projectId, pageId, { cancel: leave.signal }).then(
+        (comments) => setState(answered(at, { status: 'ready', at, comments })),
+        (caught: unknown) => {
+          if (leave.signal.aborted) return
+          setRefreshing((prev) => (prev !== null && prev.at > at ? prev : { at, failure: toFailure(caught, REFRESH_FAILED) }))
+        },
+      )
+    }
+    const schedule = (): void => {
+      if (timer === undefined) timer = setTimeout(run, REREAD_BATCH_MS)
+    }
+    reread.current = schedule
+    const stop = signals?.subscribe((changed) => {
+      if (changed === undefined || changed === pageId) schedule()
+    })
+    return () => {
+      stop?.()
+      if (timer !== undefined) clearTimeout(timer)
+      leave.abort()
+      if (reread.current === schedule) reread.current = null
+    }
+    // `setState` · `setRefreshing`은 이 렌더의 페이지를 단 쓰기라 `pageId`와 함께만 바뀐다.
+  }, [api, projectId, pageId, signals])
+
+  // **«컴포넌트» 탭에서 다른 노드를 고르면 다시 읽는다** — 그 묶음은 노드를 바꿔 골라도 같은 마운트라 마운트 조회가 다시 안 돈다. 신호를 놓친 판
+  // (끊김 · 실시간 없음)에도 고른 노드의 목록이 선다. 처음 고른 노드는 마운트 조회가 읽으므로 넘긴다 — 앞 값과 견주어(StrictMode 의 두 번 도는
+  // 이펙트에도 한 번이다). 고른 것이 비면 앞 값을 그대로 둔다.
+  const lastNode = useRef(selectedNodeId)
+  useEffect(() => {
+    if (scope !== 'node' || selectedNodeId === null || lastNode.current === selectedNodeId) return
+    lastNode.current = selectedNodeId
+    reread.current?.()
+  }, [scope, selectedNodeId])
 
   /**
    * 쓰기 하나를 장부에 올려 보낸다(`write-ledger.tsx`). **잠금은 장부가 쥐고 푼다** — 성공·실패·
