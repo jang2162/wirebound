@@ -3,6 +3,7 @@
  *
  * | 케이스 | 재는 값 |
  * |---|---|
+ * | 확인 사이 남의 고침 | 커스텀 행의 «기본» 확인 줄이 선 동안 같은 사람의 다른 탭(REST)이 그 행에 칸을 더하면 확인은 걷지 않고 지금 칸(3개)으로 다시 묻는다 · 다시 물은 확인은 걷는다(서버 문서) |
  * | 흐름 | 팔레트 «반복 행 표» 넣기 → 첫 행의 «커스텀» 은 꺼진 채 까닭 → «한 행 떼어 내기» · 복제(Cmd+D)로 행 셋 → 둘째 행 «커스텀» → 그 칸의 입력 «값» 만 바꿈 → 첫 행 · 셋째 행은 그대로(서버 문서 · 캔버스) → 내보낸 번들(뷰어 · 화면 모드 = PPTX 캡처 길)에서도 둘째 행만 제 칸 · 제 값 → «기본» 은 확인 줄이 서고 «취소» 는 그대로 · 확인은 칸을 걷는다 → 안 고친 커스텀 행의 «기본» 은 확인 없이 걷힌다 |
  */
 import type { Frame, Page } from 'playwright-core'
@@ -302,4 +303,84 @@ describe.skipIf(!전제.ok)('그리드 행 «행 내용»(실브라우저)', () 
       await context.close()
     }
   }, 180_000)
+  /**
+   * **확인을 누른 때 칸이 바뀌었으면 다시 묻는다**(`src/panels/row-content-field.tsx` 머리말). 남의 고침은 같은 사람의 다른 탭 — REST 쓰기라 이 탭은 WS 방송으로 받는다.
+   * jsdom 판은 `test/panels/row-content-field.test.tsx` «확인 줄 사이 남이 칸을 바꾸면».
+   */
+  it('확인 사이 남의 고침 — 다른 탭이 그 행에 칸을 더하면 확인은 걷지 않고 다시 묻는다 · 다시 물은 확인은 걷는다', async () => {
+    const cell = (id: string, content: string): Node => ({
+      id,
+      type: 'GridCell',
+      children: [{ id: `${id}_t`, type: 'Text', props: { content } }],
+    })
+    const { P } = await seed('row-content-race', [
+      {
+        id: 'c_g',
+        type: 'DataGrid',
+        props: { select: 'check' },
+        children: [
+          {
+            id: 'c_ca',
+            type: 'GridColumn',
+            props: { label: '이름' },
+            children: [{ id: 'c_ta', type: 'Text', props: { content: '셀 틀' } }],
+          },
+          { id: 'c_cb', type: 'GridColumn', props: { label: '상태' } },
+        ],
+        zones: {
+          rows: [
+            { id: 'c_r1', type: 'GridRow' },
+            { id: 'c_own', type: 'GridRow', children: [cell('c_k1', '고친 칸 하나'), cell('c_k2', '고친 칸 둘')] },
+          ],
+        },
+      },
+    ])
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 1000 } })
+    try {
+      await page.goto(P)
+      const own = canvasFrame(page).locator('tr[data-wb-id="c_own"]')
+      await own.waitFor({ state: 'attached' })
+      // 고름 칸을 누르면 그 행이다(`grid-row-pick.test.ts` «그 밖의 칸»).
+      await own.locator('td[data-wb-cell="select"]').click()
+      await poll(
+        '행을 골랐다',
+        () => selected(page),
+        (id) => id === 'c_own',
+      )
+      await contentGroup(page).getByRole('radio', { name: '기본' }).click()
+      await confirmGroup(page).waitFor()
+      // 기다리지 않고 읽는다 — 확인 줄이 걷힌 판이 시간 초과가 아니라 값(`null`)으로 죽게.
+      const question = () => page.evaluate(() => document.querySelector('[role="group"][aria-label="칸 걷기 확인"] p')?.textContent ?? null)
+      const asked = await question()
+
+      const head = (await call('GET', P)).body.headSeq as number
+      const added = await call('PATCH', `${P}/ops`, {
+        baseSeq: head,
+        ops: [{ op: 'add', path: '/root/children/0/zones/rows/1/children/2', value: { id: 'c_k3', type: 'GridCell' } }],
+      })
+      // 카나리아 — 다른 탭의 쓰기가 섰고 이 탭의 캔버스에 닿았다(그 행의 제 칸 셋).
+      expect(added.status).toBe(200)
+      await poll(
+        '남의 칸이 닿았다',
+        () => own.locator('td[data-wb-id]').count(),
+        (n) => n === 3,
+      )
+      await confirmGroup(page).getByRole('button', { name: '기본으로 돌리기' }).click()
+      await page.waitForTimeout(800)
+      const first = { cells: (find(await server(P), 'c_own')?.children ?? []).length, question: await question() }
+      if (first.question !== null) await confirmGroup(page).getByRole('button', { name: '기본으로 돌리기' }).click()
+      const cleared = await poll(
+        '걷혔다',
+        async () => (find(await server(P), 'c_own')?.children ?? []).length,
+        (n) => n === 0,
+      ).catch(async () => (find(await server(P), 'c_own')?.children ?? []).length)
+      expect({ asked, first, cleared }).toEqual({
+        asked: '이 행의 칸 2개를 걷고 열의 셀 틀로 그립니다. 칸에서 고친 내용은 사라집니다.',
+        first: { cells: 3, question: '이 행의 칸 3개를 걷고 열의 셀 틀로 그립니다. 칸에서 고친 내용은 사라집니다.' },
+        cleared: 0,
+      })
+    } finally {
+      await context.close()
+    }
+  })
 })
