@@ -128,13 +128,19 @@ describe('트리 항목 칸 — 더하기', () => {
 })
 
 describe('트리 항목 칸 — 계층 · 차례', () => {
-  it('들여쓰기 — 앞 형제의 자식 끝으로 가고 앞 형제를 편다', async () => {
+  it('들여쓰기 — 앞 형제의 자식 끝으로 가고(자식째) 앞 형제를 편다', async () => {
     const { calls, api } = editable()
     await openPage(doc(ITEMS), { apiOverrides: api })
     selectTree()
-    pick('2', '들여쓰기')
+    // 앞 형제 «목록» 은 잎이라 펼침이 없다 — 받으면서 펼친다.
+    pick('1-2', '들여쓰기')
     expect(await committed(calls)).toEqual([
-      { label: '회원', open: true, children: [{ label: '목록' }, { label: '휴면', children: [{ label: '해제' }] }, { label: '통계' }] },
+      {
+        label: '회원',
+        open: true,
+        children: [{ label: '목록', open: true, children: [{ label: '휴면', children: [{ label: '해제' }] }] }],
+      },
+      { label: '통계' },
     ])
   })
 
@@ -205,15 +211,14 @@ describe('트리 항목 칸 — 이름 칸의 단축키', () => {
 })
 
 describe('트리 항목 칸 — 지우기 · 펼침', () => {
-  it('마지막 자식을 지우면 부모에 `open` · `children` 이 안 남는다', async () => {
+  it('마지막 자식을 지우면 부모에 `open` · `children` 이 안 남는다 — 접힌 부모 · 편 부모 둘 다', async () => {
     const { calls, api } = editable()
-    await openPage(doc(ITEMS), { apiOverrides: api })
+    await openPage(doc([{ label: '가', open: true, children: [{ label: '나', children: [{ label: '다' }] }] }]), { apiOverrides: api })
     selectTree()
-    pick('1-2-1', '지우기')
-    expect(await committed(calls)).toEqual([
-      { label: '회원', open: true, children: [{ label: '목록' }, { label: '휴면' }] },
-      { label: '통계' },
-    ])
+    pick('1-1-1', '지우기')
+    expect(await committed(calls)).toEqual([{ label: '가', open: true, children: [{ label: '나' }] }])
+    pick('1-1', '지우기')
+    expect(await committed(calls, 2)).toEqual([{ label: '가' }])
   })
 
   it('펼침 단추(포인터)와 «펼치기» 가 `open` 을 뒤집는다 — 잎에는 둘 다 없다', async () => {
@@ -234,10 +239,13 @@ describe('트리 항목 칸 — 지우기 · 펼침', () => {
 })
 
 describe('트리 항목 칸 — 이름', () => {
-  it('이름은 blur 에 나가고, 그대로면 안 나간다', async () => {
+  it('이름은 blur 에 나가고, 그대로면(쳤다 되돌린 글도) 안 나간다', async () => {
     const { calls, api } = editable()
     await openPage(doc(ITEMS), { apiOverrides: api })
     selectTree()
+    fireEvent.blur(nameCell('1-1'))
+    fireEvent.change(nameCell('1-1'), { target: { value: '목록 2' } })
+    fireEvent.change(nameCell('1-1'), { target: { value: '목록' } })
     fireEvent.blur(nameCell('1-1'))
     expect(calls).toHaveLength(0)
     fireEvent.change(nameCell('1-1'), { target: { value: '회원 목록' } })

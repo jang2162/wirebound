@@ -153,12 +153,16 @@ describe('사슬 — 판 5 문서가 판 6 으로', () => {
     expect(newRows(items)).toEqual(oldRows(labels(7), 3))
   })
 
-  it('판 6 에서 옛 꼴(글 목록 · 깊이)은 `invalid-props` 로 거절된다', () => {
-    const issues = validatePage({
-      version: 6,
-      root: { id: 'n_root', type: 'Page', children: [{ id: 'n_t', type: 'Tree', props: { items: ['가'], depth: 2 } }] },
-    })
-    expect(issues.map((issue) => `${issue.code}@${issue.nodeId}`)).toEqual(['invalid-props@n_t'])
+  it('판 6 에서 옛 꼴(글 목록 · 깊이)은 `invalid-props` 로 거절된다 — 글 항목만 · 깊이만 든 판도 따로', () => {
+    const codes = (props: Record<string, unknown>) =>
+      validatePage({ version: 6, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_t', type: 'Tree', props }] } }).map(
+        (issue) => `${issue.code}@${issue.nodeId}`,
+      )
+    expect([codes({ items: ['가'], depth: 2 }), codes({ items: ['가'] }), codes({ depth: 2 })]).toEqual([
+      ['invalid-props@n_t'],
+      ['invalid-props@n_t'],
+      ['invalid-props@n_t'],
+    ])
   })
 })
 
