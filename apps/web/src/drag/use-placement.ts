@@ -553,7 +553,9 @@ export function usePlacementDrop(input: {
           return {
             root: document.root?.id === id,
             acceptsChildren: acceptsChildren(node),
-            empty: !Array.isArray(node.children) || node.children.length === 0,
+            // 칸 없는 그리드 행(기본 행)은 빈 컨테이너로 안 본다 — 상자 전체가 «안» 이면 행 안은 칸만 받아 그 행 앞 · 뒤에 행을 놓을 띠가 없다
+            // (정본 §9 «캔버스에 놓기»). 커스텀 행과 같은 앞 · 뒤 25% 띠다.
+            empty: node.type !== 'GridRow' && (!Array.isArray(node.children) || node.children.length === 0),
           }
         },
         clipElement === null ? null : rectOf(clipElement),

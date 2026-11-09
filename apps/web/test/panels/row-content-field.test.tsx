@@ -80,6 +80,8 @@ interface Board {
   calls: PatchOp[][]
   held: () => PageDocument
   lock: (locks: NodeLockView[]) => void
+  /** 남의 편집 — 서버 문서에 얹고 그 번호의 `page-changed` 프레임을 보낸다. */
+  remote: (ops: PatchOp[]) => Promise<void>
 }
 
 async function board(start: PageDocument = doc()): Promise<Board> {
@@ -132,6 +134,15 @@ async function board(start: PageDocument = doc()): Promise<Board> {
     lock: (locks) => {
       live = locks
       const frame: ServerFrame = { type: 'locks', projectId: PROJECT_ID, locks }
+      act(() => {
+        sockets.at(-1)?.onmessage?.({ data: JSON.stringify(frame) })
+      })
+    },
+    remote: async (ops) => {
+      const { applyOps } = await import('@wirebound/schema')
+      held = applyOps(held, ops)
+      seq += 1
+      const frame: ServerFrame = { type: 'page-changed', projectId: PROJECT_ID, pageId: PAGE_ID, seq, ops, warnings: [] }
       act(() => {
         sockets.at(-1)?.onmessage?.({ data: JSON.stringify(frame) })
       })
@@ -226,6 +237,31 @@ describe('행 내용', () => {
     expect(rowsOf(srv.held())[2]).toEqual({ id: 'n-own', type: 'GridRow' })
     await waitFor(() => expect(checked()).toBe('기본'))
     expect(confirmGroup()).toBeNull()
+  })
+
+  /**
+   * 확인 줄이 선 동안 남의 고침이 그 행의 칸을 바꾸면(칸 하나 더함) 확인은 걷지 않고 지금 칸으로 다시 묻는다(칸 2 → 3) — 물은 것과 다른 칸을 걷지 않는다.
+   * 다시 물은 줄의 확인은 그 칸을 걷는다.
+   */
+  it('확인 줄 사이 남이 칸을 바꾸면 확인은 걷지 않고 다시 묻는다 — 다시 물은 확인은 걷는다', async () => {
+    const srv = await board()
+    pick('n-own')
+    await waitFor(() => expect(checked()).toBe('커스텀'))
+    fireEvent.click(radio('기본'))
+    expect(within(confirmGroup()!).getByText(clearCellsQuestion(2))).toBeTruthy()
+    await srv.remote([{ op: 'add', path: '/root/children/0/zones/rows/2/children/2', value: { id: 'n-k3', type: 'GridCell' } }])
+    // 카나리아 — 남의 칸이 내 화면에 닿았다(구조 트리에 그 칸 줄).
+    await waitFor(() => expect(row('n-k3')).toBeTruthy())
+    fireEvent.click(within(confirmGroup()!).getByRole('button', { name: '기본으로 돌리기' }))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect({ calls: srv.calls.length, question: confirmGroup()?.querySelector('p')?.textContent ?? null }).toEqual({
+      calls: 0,
+      question: clearCellsQuestion(3),
+    })
+
+    fireEvent.click(within(confirmGroup()!).getByRole('button', { name: '기본으로 돌리기' }))
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    expect(rowsOf(srv.held())[2]).toEqual({ id: 'n-own', type: 'GridRow' })
   })
 
   /** 셀 틀을 읽는 열을 남이 쥐면 «커스텀» 이 꺼진 채 그 사람의 이름(행 줄 «열 틀로 칸 짓기» 와 같다) · 행을 남이 쥐면 둘 다 꺼진다. */

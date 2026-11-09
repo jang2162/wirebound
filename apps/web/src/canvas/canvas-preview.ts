@@ -201,8 +201,10 @@ export function withoutPreview<T>(doc: Document | undefined, run: () => T): T {
   // 문서가 없으면(창을 흉내 낸 숙주 — 판정을 주입하는 jsdom 판) 숨길 것도 없다.
   if (doc === undefined || doc === null) return run()
   const hidden: { element: HTMLElement; display: string }[] = []
-  for (const element of Array.from(doc.querySelectorAll<HTMLElement>('[data-wb-id]'))) {
-    if (!isPreviewId(element.getAttribute('data-wb-id') ?? '')) continue
+  // 미리보기가 되풀이 행이면 둘째 줄부터는 그 사본(`data-wb-copy-of` = 미리보기 id)이다 — 그 줄도 숨긴다. 남기면 행 앞에 끼운 미리보기의 사본 줄이
+  // 포인터 밑에 서 «사본 위» 로 읽히고, 답이 걷혔다 섰다를 되풀이해 놓아도 안 놓인다(`build-test/grid-row-nested.test.ts` «기본 행 곁»).
+  for (const element of Array.from(doc.querySelectorAll<HTMLElement>('[data-wb-id],[data-wb-copy-of]'))) {
+    if (!isPreviewId(element.getAttribute('data-wb-id') ?? element.getAttribute('data-wb-copy-of') ?? '')) continue
     if (hidden.some((entry) => entry.element.contains(element))) continue
     hidden.push({ element, display: element.style.display })
     element.style.display = 'none'
