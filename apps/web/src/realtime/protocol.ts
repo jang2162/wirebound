@@ -111,6 +111,11 @@ export type ServerFrame =
    */
   | { type: 'menu-changed'; projectId: string; rev: number }
   /**
+   * **그 페이지의 코멘트가 바뀌었다 — 열어 둔 목록은 다시 읽어라**(서버 `ws/protocol.ts`의 그 갈래). 본문은 안 온다. 받는 자리는 열린 코멘트
+   * 목록이다(`realtime/comment-signals.ts` → `panels/comment-panel.tsx`).
+   */
+  | { type: 'comments-changed'; projectId: string; pageId: string }
+  /**
    * **프로젝트의 테마 바인딩 · 토큰이 바뀌었다**(서버 `ws/protocol.ts`의 그 갈래). 받는 자리는 셸의 프로젝트 테마다(`theme/project-theme.tsx`
    * 의 `applyFrame` — 판이 같으면 토큰만 바꾸고, 다르면 다시 읽어 번들을 싣는다).
    */
@@ -311,6 +316,10 @@ export function parseServerFrame(raw: string): ServerFrame | null {
         : null
     case 'membership-changed':
       return str(value.projectId) ? { type: 'membership-changed', projectId: value.projectId } : null
+    case 'comments-changed':
+      return str(value.projectId) && str(value.pageId)
+        ? { type: 'comments-changed', projectId: value.projectId, pageId: value.pageId }
+        : null
     case 'menu-changed':
       // 번호가 정수가 아니면 버린다 — 그 번호가 «이미 받은 판인가»를 가른다.
       return str(value.projectId) && typeof value.rev === 'number' && Number.isSafeInteger(value.rev)

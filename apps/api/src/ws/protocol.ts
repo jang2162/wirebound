@@ -188,6 +188,18 @@ export type ServerFrame =
    */
   | { type: 'menu-changed'; projectId: string; rev: number }
   /**
+   * **그 페이지의 코멘트 표가 바뀌었다 — 목록을 다시 읽어라.** 코멘트를 달고 · 고치고 · 지우는 쓰기가 커밋 뒤 하나씩 보낸다(`ws/notify.ts`의
+   * `notifyCommentsChanged`). 번호(`marker`)는 문서에 살아 `page-changed`가 나르고, 이것은 행(본문 · 작성자 · 시각)의 변화다 — 번호가 그대로인
+   * 쓰기(둘째 말 · 본문 고침 · 마지막이 아닌 삭제)는 이것 말고 아무 신호도 안 낸다.
+   *
+   * **본문을 싣지 않는다 — 신호다.** 받는 쪽은 `GET …/comments`로 다시 읽어, 읽는 권한은 그 조회의 가드가 잰다. 룸의 연결은 모두 그
+   * 프로젝트의 멤버(viewer 이상 — 목록을 읽을 수 있다)이고, 이 프레임이 알리는 것은 «그 페이지의 코멘트가 바뀌었다» 하나다.
+   *
+   * **낸 연결은 뺀다**(`page-changed`와 같은 `except`) — 낸 화면은 쓰기의 답 뒤에 스스로 다시 읽는다. 재생(같은 멱등 키로 다시 보낸 게시)은
+   * 빼지 않는다 — 앞 요청이 답을 잃었으면 그 커밋의 신호는 아무 연결에도 안 갔다(`routes/comments.ts`의 `rebroadcastPostRevision`과 같다).
+   */
+  | { type: 'comments-changed'; projectId: string; pageId: string }
+  /**
    * **프로젝트의 테마가 바뀌었다** — 바인딩(`id@version`)이나 토큰 값. 받는 캔버스는 번들이 바뀌었으면 다시 싣고, 토큰만 바뀌었으면
    * CSS 변수 · `useToken` 값만 바꾼다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「실시간」). 값을 통째로 싣는다 —
    * 토큰은 작고(상한 16 KB — `routes/project-theme.ts`) 받는 쪽이 다시 읽지 않고 바로 칠한다. 놓친 탭은 `GET /projects/:id` 의

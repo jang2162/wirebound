@@ -23,6 +23,7 @@
  */
 import { createContext, useContext, type ReactElement, type ReactNode } from 'react'
 import type { RealtimeOptions } from './connection'
+import type { CommentSignals } from './comment-signals'
 import type { EditChannel } from './edit-channel'
 import type { LockChannel } from './lock-channel'
 
@@ -61,6 +62,11 @@ export interface RealtimeSetup {
    * 정반대다.
    */
   lockChannel?: LockChannel
+  /**
+   * 코멘트 목록을 다시 읽으라는 신호의 통로(`comment-signals.ts`). **없으면 목록은 열 때 · 내 쓰기 뒤 · «컴포넌트» 탭에서 노드를 바꿔 고를 때만
+   * 다시 읽는다** — `RealtimeProvider` 없이 도는 화면 테스트가 그 판이다.
+   */
+  comments?: CommentSignals
   /** WebSocket 주소를 만들 오리진. 기본은 브라우저의 것이다. */
   origin?: string
   /** `openRealtime`에 그대로 넘어간다. 테스트가 가짜 소켓·가짜 타이머를 끼운다. */

@@ -5,6 +5,7 @@ import { App } from './app'
 import { ApiProvider } from './api/context'
 import { createHttpClient } from './api/http-client'
 import { KnownUserProvider, createKnownUserHolder } from './api/known-user'
+import { createCommentSignals } from './realtime/comment-signals'
 import { RealtimeProvider, createConnectionIdHolder } from './realtime/context'
 import { createEditChannel } from './realtime/edit-channel'
 import { createLockChannel } from './realtime/lock-channel'
@@ -33,6 +34,8 @@ const connectionIds = createConnectionIdHolder()
 const editChannel = createEditChannel()
 /** 잠금을 잡고 놓는 통로(설계서 「소프트 잠금」). 편집 채널과 갈라 둔 이유는 `realtime/lock-channel.ts`에 있다. */
 const lockChannel = createLockChannel()
+/** 코멘트 목록을 다시 읽으라는 신호(`realtime/comment-signals.ts`) — 소켓이 내고 코멘트 목록이 듣는다. */
+const commentSignals = createCommentSignals()
 
 /**
  * 탭 사이의 세션 소식 통로(`session/tab-channel.tsx`). **켜는 자리는 여기 하나다** — 화면 테스트는
@@ -62,7 +65,7 @@ createRoot(root).render(
   <StrictMode>
     <ApiProvider client={createHttpClient(globalThis.fetch, connectionIds.get, knownUser)}>
       <KnownUserProvider holder={knownUser}>
-        <RealtimeProvider setup={{ holder: connectionIds, channel: editChannel, lockChannel }}>
+        <RealtimeProvider setup={{ holder: connectionIds, channel: editChannel, lockChannel, comments: commentSignals }}>
           <TabChannelProvider channel={tabChannel}>
             <DraftStoreProvider store={draftStore}>
               {/* **테마 번들을 싣는 로더는 세션에 하나다**(`theme/bundle-context.tsx`) — 화면 테스트는 시험용 로더를 끼운다. */}
