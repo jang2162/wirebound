@@ -44,6 +44,23 @@ describe('nodesInRect', () => {
       nodesInRect({ left: 0, top: 0, right: 600, bottom: 600 }, [...nodes, { id: 'empty', parentId: 'root', box: box(300, 300, 0, 0) }]),
     ).toEqual(['card', 'text'])
   })
+
+  /**
+   * 그리드 — 셀 틀 원본(`tpl` — 노드 트리로는 열의 자손)은 화면으로 행 `row` 의 줄에 선다(`line`). 행은 노드 차례로 셀 틀보다 뒤다(«열» 구역이 앞).
+   * 그 행이 든 사각형은 셀 틀을 따로 안 고르고, 셀 틀만 덮으면 셀 틀이다.
+   */
+  const grid = [
+    { id: 'root', parentId: null, box: box(0, 0, 500, 500) },
+    { id: 'grid', parentId: 'root', box: box(10, 10, 300, 200) },
+    { id: 'col', parentId: 'grid', box: box(10, 10, 100, 20) },
+    { id: 'tpl', parentId: 'col', line: 'row', box: box(20, 40, 60, 16) },
+    { id: 'row', parentId: 'grid', box: box(10, 36, 300, 24) },
+  ]
+
+  it('줄의 행이 든 사각형은 그 줄의 셀 틀 원본을 따로 안 고른다 — 셀 틀만 덮으면 셀 틀이다', () => {
+    expect(nodesInRect({ left: 5, top: 30, right: 320, bottom: 70 }, grid)).toEqual(['row'])
+    expect(nodesInRect({ left: 15, top: 38, right: 90, bottom: 58 }, grid)).toEqual(['tpl'])
+  })
 })
 
 describe('좌표', () => {

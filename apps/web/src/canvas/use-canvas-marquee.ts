@@ -33,6 +33,7 @@ import type { WbNode } from '@wirebound/schema'
 import { DRAG_THRESHOLD, EDGE_SCROLL_TICK, edgeScrollBy, edgeScrollStep, scrollParent, swallowNextClick } from '../drag/use-pointer-drag'
 import { walkSafely } from '../edit/safe-walk'
 import type { CanvasFrame } from './canvas-iframe'
+import { lineAt, nodeIdAt } from './canvas-pick'
 import { hostToDocument, nodesInRect, rectBetween, toSurfaceRect, type Box, type MarqueeNode, type Point } from './canvas-marquee'
 
 /**
@@ -117,36 +118,39 @@ export function useCanvasMarquee(input: CanvasMarqueeInput): Box | null {
     }
 
     /**
-     * 지금 그려진 노드들 — 문서 차례 · 부모 · 문서 좌표 상자(외곽선과 같은 감쌀 요소). **그리드 되풀이 줄의 사본도 그 원본의 상자다** — 노드마다
-     * 원본(첫 `data-wb-id`) 뒤에 사본(`data-wb-copy-of`)의 상자를 같은 id 로 잇는다. 사본 줄만 덮는 사각형이 그 원본을 고른다(리뷰 RV-GR H1).
+     * 지금 그려진 노드들 — 문서 차례 · 부모 · 문서 좌표 상자(외곽선과 같은 감쌀 요소). **요소마다 누름이 고를 노드로 든다**(`./canvas-pick.ts` 의
+     * `nodeIdAt` — 누름과 한 판정). 그래서 그리드 사본 줄의 칸(셀 틀 칸 · 번호 칸 · 그 안의 사본 노드)은 그 줄의 행이고, 커스텀 행 제 칸의 사본 ·
+     * 사본 줄의 고름 칸은 그 원본이다. 노드마다 원본 상자(첫 `data-wb-id`) 뒤에 그 노드로 읽힌 다른 요소의 상자를 같은 id 로 잇는다.
      */
     const drawnNodes = (): MarqueeNode[] => {
-      const originals = new Map<string, Element>()
-      const copies = new Map<string, Element[]>()
-      for (const element of Array.from(doc.querySelectorAll('[data-wb-id], [data-wb-copy-of]'))) {
-        const id = element.getAttribute('data-wb-id')
-        if (id !== null) {
-          if (id !== '' && !originals.has(id)) originals.set(id, element)
-          continue
+      const body = doc.body
+      const drawn = new Map<string, { element: Element; line: string | null }[]>()
+      const originals = new Set<string>()
+      for (const element of Array.from(doc.querySelectorAll('[data-wb-id], [data-wb-copy-of], [data-wb-column-of]'))) {
+        const own = element.getAttribute('data-wb-id')
+        if (own !== null) {
+          // 빈 id(렌더러 폴백)와 같은 id 의 둘째 원본은 상자를 안 낸다 — 고치기 전과 같다.
+          if (own === '' || originals.has(own)) continue
+          originals.add(own)
         }
-        const of = element.getAttribute('data-wb-copy-of')
-        if (of !== null && of !== '') copies.set(of, [...(copies.get(of) ?? []), element])
+        const id = nodeIdAt(element, body)
+        if (id === null) continue
+        drawn.set(id, [...(drawn.get(id) ?? []), { element, line: lineAt(element, body) }])
       }
       const nodes: MarqueeNode[] = []
       for (const visit of walkSafely(latest.current.root())) {
         const id = visit.node.id
         if (typeof id !== 'string' || id === '') continue
-        const original = originals.get(id)
-        const drawn = [...(original === undefined ? [] : [original]), ...(copies.get(id) ?? [])]
         const parentId = typeof visit.parent?.id === 'string' && visit.parent.id !== '' ? visit.parent.id : null
-        if (drawn.length === 0) {
+        const elements = drawn.get(id) ?? []
+        if (elements.length === 0) {
           // 그려지지 않은 노드도 차례에는 든다 — 자손이 그 노드를 조상으로 찾는다. 상자는 0 이라 고르지 않는다.
           nodes.push({ id, parentId, box: { left: 0, top: 0, width: 0, height: 0 } })
           continue
         }
-        for (const element of drawn) {
+        for (const { element, line } of elements) {
           const box = focusElement(element).getBoundingClientRect()
-          nodes.push({ id, parentId, box: { left: box.left, top: box.top, width: box.width, height: box.height } })
+          nodes.push({ id, parentId, line, box: { left: box.left, top: box.top, width: box.width, height: box.height } })
         }
       }
       return nodes
