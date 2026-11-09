@@ -1939,15 +1939,22 @@
 
 /* 우측 패널의 탭 줄(「설계서 화면 구조」). 셸이 그리는 조각이라 상속되는 속성을 걸어도 된다 —
    감싸는 상자가 아니다(`test/shell-css-guard.ts`의 `WRAPPERS`에 없다). */
+/* **탭 이름은 꺾지 않는다**(`build-test/mv-overlaps.test.ts` «… 탭 이름이 모두 한 줄»). 패널의 기본 폭(= 최소 폭 300)에서 탭 줄이 받는 폭은
+   276px 이다 — 간격 4px · 좌우 여백 10px 이면 네 이름이 그보다 넓어 Chrome 이 한글을 음절 사이에서 끊어 네 탭이 다 두 줄로 섰다. 글자 크기는
+   두고 간격을 없애고 여백을 5px 로 줄여 한 줄에 넣는다(Chrome · macOS 에서 글 폭 합 225px — 고른 탭의 굵은 글이 몇 px 더 넓다 — 에 여백 40px ·
+   남는 폭은 탭이 나눠 갖는다). 그래도 넘치면(글꼴 · 브라우저 최소 글자 크기) 이름 안에서 끊지 않고 탭째 다음 줄로 간다 — 가로 스크롤로 두면
+   포커스 테두리가 스크롤 상자에 잘린다. */
 .wb-shell-tabs {
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--wb-shell-line);
   margin-bottom: 8px;
 }
 
 .wb-shell-tab {
-  padding: 6px 10px;
+  flex: 1 0 auto;
+  padding: 6px 5px;
+  white-space: nowrap;
   border: 0;
   border-bottom: 2px solid transparent;
   background: none;
