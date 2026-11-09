@@ -33,7 +33,8 @@ function cellPlace(col: number, fixed: GridFixed): Record<string, string> {
 }
 
 /**
- * 열의 칸(셀 틀 · 번호)이 어느 열 노드의 것인지 — 칸의 빈 자리를 누르면 에디터가 그 열을 고른다(`apps/web/src/canvas/canvas.tsx` 의 `nodeIdAt`).
+ * 열의 칸(셀 틀 · 번호)이 어느 열 노드의 것인지 — 에디터가 이것으로 그리드 몸 칸을 알아본다: 칸(빈 자리 · 그 안의 사본 노드)을 누르면 그 줄의 행을
+ * 고르고(`apps/web/src/canvas/canvas.tsx` 의 `nodeIdAt`), 첫 줄 셀 틀 칸의 빈 자리에 놓으면 그 열 셀 틀의 끝이다(`apps/web/src/canvas/canvas-drop.ts`).
  * `data-wb-copy-of` 가 아닌 까닭: 칸은 열의 사본이 아니라 열의 몸 칸이다 — 사본으로 읽으면 한 줄을 덮는 범위 선택이 열을 고른다.
  */
 function columnOf(leaf: GridLeaf): { 'data-wb-column-of': string } {

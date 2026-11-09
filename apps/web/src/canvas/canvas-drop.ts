@@ -208,8 +208,8 @@ export function siblingRects(parent: Element, self: Element, view: Window): Rect
  * 까닭(«첫 행의 칸에 놓으세요»)을 말한다. 사본 안에는 `[data-wb-id]` 가 없으므로 포인터 밑에서 노드보다 사본 표지를 먼저 만나면 사본이다.
  *
  * **첫 줄 틀 칸(`td[data-wb-cell="template"]`)의 빈 자리는 그 열 셀 틀의 끝이다**(`{ zone }` — 칸의 `data-wb-column-of`). 칸 자신은 노드가 아니라
- * 가장 가까운 노드가 행이고, 행 몸통은 칸만 받아 셀 틀에 놓을 자리가 칸 안 조각의 곁뿐이었다. 캔버스 누름이 그 자리를 열로 읽는 것과 같은 표지다
- * (`./canvas.tsx` 의 `nodeIdAt`).
+ * 가장 가까운 노드가 행이고, 행 몸통은 칸만 받아 셀 틀에 놓을 자리가 칸 안 조각의 곁뿐이었다. 캔버스 누름은 같은 표지로 그 칸을 그 줄의 행으로
+ * 읽는다(`./canvas.tsx` 의 `nodeIdAt` — 누름은 고칠 것을, 놓기는 놓을 자리를 묻는다).
  *
  * **배치 미리보기 위면 `{ preview: true }` 다**(`isPreview` — `./canvas-preview.ts` 의 id 머리) — 미리보기는 문서의 노드가 아니라 그 위의
  * 그림이라 대상도 · 그 부모의 «안» 도 아니다. 판정은 미리보기를 숨기고 재므로(`drag/use-placement.ts` 머리말 «판정은 미리보기를 뺀

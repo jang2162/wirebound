@@ -101,7 +101,7 @@ export const CardView = view(({ props, variant, states, children }) => {
   몸 줄을 셈해 `<GridProvider value={layout}>` 로 내리고, **행 · 열 · 칸 뷰는 `useGridRow(nodeId)` · `useGridHead(nodeId)` ·
   `useGridCell(nodeId)` 로 제 몫을 읽는다** — 뷰가 받은 `nodeId` 를 그대로 넘긴다(뷰 함수의 몸은 제 노드 문맥 밖에서 돈다). 되풀이 줄의 둘째부터는
   사본이다 — 행 뷰는 `<Root as="tr" copy>` 로, 셀 틀 · 제 칸은 `item.copy(줄 번호)` 로 그린다(사본은 `data-wb-id` 대신 `data-wb-copy-of` — 에디터가 사본을 누르면 원본을 고른다). 셀 틀 · 번호 칸(`td`)에는
-  `data-wb-column-of="<열 노드 id>"` 를 단다 — 칸의 빈 자리를 누르면 그 열이 골라진다(없으면 그 줄의 행이 골라진다). 머리 칸 ·
+  `data-wb-column-of="<열 노드 id>"` 를 단다 — 칸 안의 사본 노드를 누르면 그 줄의 행이 골라진다(없으면 그 셀 틀 노드가 골라진다) · 첫 줄 칸의 빈 자리에 끌어 놓으면 그 열 셀 틀의 끝이다. 머리 칸 ·
   칸의 `colSpan` · `rowSpan` 을 빠뜨리거나 칸을 빼거나 `Root` 를 줄마다 그리면 `wb-theme check` 가 막는다. 표는 `scroll` 조각 안에 두고
   `table` 조각에 `dataGridTableAttrs(layout)` 를 편다 — 결과 머리줄 · 바닥은 스크롤 밖이다.
 - **`Tree` 는 항목의 중첩 목록이다**(SDK 1.9.0). `items` 는 `{ label, open?, children? }` 의 중첩 배열이다. 항목마다 `item` 조각(`li`) 안에
