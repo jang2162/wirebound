@@ -8,9 +8,12 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog, TREE_ITEMS_MAX, type TreeItem } from '../src/component/catalog/index'
 import { CURRENT_DOCUMENT_VERSION, migrateDocument } from '../src/migrate'
-import { liftTreeNodes, treeItemsFromFlat } from '../src/migrate-tree-items'
+import { liftTreeItems, liftTreeNodes, treeItemsFromFlat } from '../src/migrate-tree-items'
 import type { PageDocument, WbNode } from '../src/node'
 import { validatePage } from '../src/validate'
+import { inspectNodesEnvelope, writeNodesEnvelope } from '../src/clipboard'
+import { WIREBOUND_PAGE_VERSION } from '../src/page-json/envelope'
+import { gatePageImport } from '../src/page-json/import'
 
 beforeAll(() => {
   installCatalog()
@@ -202,5 +205,85 @@ describe('판 6 의 트리 항목 규칙', () => {
         .map((issue) => issue.message)
         .join(' '),
     ).toContain('트리 항목은 100개까지입니다 (현재: 101)')
+  })
+})
+
+describe('판 5 라고 적힌 문서의 판 6 꼴 항목 — 사슬은 남긴다', () => {
+  // 판 6 꼴 항목(이름이 글인 객체 · 자식 · 펼침) 둘 사이에 판 5 글 항목 셋이 끼었다. 깊이 2 — 글 항목의 단은 글 항목끼리의 차례 `s % 2` 다.
+  const KEPT_A: TreeItem = { label: '주문', open: false, children: [{ label: '목록' }, { label: '통계' }] }
+  const KEPT_B: TreeItem = { label: '설정' }
+  const MIXED = [KEPT_A, '회원', '가입', KEPT_B, '탈퇴']
+  const v5 = (items: unknown): PageDocument => ({
+    version: 5,
+    root: { id: 'n_root', type: 'Page', children: [{ id: 'n_tree', type: 'Tree', props: { items, depth: 2 } }] },
+  })
+  const itemsOf = (doc: PageDocument): unknown => (doc.root.children?.[0]?.props as { items: unknown }).items
+
+  it('사슬(`migrateDocument`) — 판 6 꼴 항목은 제 꼴 · 제 자리 그대로 · 글 항목만 옮긴다 · 판 6 검증을 지난다', () => {
+    const out = migrateDocument(v5(MIXED))
+    expect(itemsOf(out)).toEqual([
+      KEPT_A,
+      // 글 항목 0(«회원»)은 단 0 · 1(«가입»)은 단 1 — 앞의 단 0 글 항목 밑.
+      { label: '회원', open: true, children: [{ label: '가입' }] },
+      KEPT_B,
+      // 글 항목 2(«탈퇴»)는 단 0.
+      { label: '탈퇴' },
+    ])
+    expect(validatePage(out)).toEqual([])
+  })
+
+  it('판 6 꼴 항목 뒤의 단 1 글 항목은 그 항목 밑으로 안 들어가고 맨 위에 선다 — 판 6 꼴 항목은 손대지 않는다', () => {
+    // 글 항목 0(«가») 단 0 · 판 6 꼴 · 글 항목 1(«나») 단 1 — 앞의 단 0 글 항목 «가» 는 판 6 꼴 항목을 넘어 있어 부모로 잡지 않는다.
+    expect(itemsOf(migrateDocument(v5(['가', KEPT_B, '나'])))).toEqual([{ label: '가' }, KEPT_B, { label: '나' }])
+  })
+
+  it('이름이 글이 아닌 객체 · 글 · 객체가 아닌 원소는 앞처럼 버린다', () => {
+    expect(itemsOf(migrateDocument(v5([{ label: 7 }, { open: true }, 3, null, KEPT_B, '가'])))).toEqual([KEPT_B, { label: '가' }])
+  })
+
+  it('`liftTreeItems` 는 입력을 고치지 않는다 · 남긴 항목은 입력과 값을 나눠 쓰지 않는다', () => {
+    const doc = v5(MIXED)
+    const before = JSON.stringify(doc)
+    const out = liftTreeItems(doc).doc
+    expect(JSON.stringify(doc)).toBe(before)
+    const kept = (itemsOf(out) as TreeItem[])[0]!
+    expect(kept.label).toBe('주문')
+    expect(kept).not.toBe(KEPT_A)
+    expect(kept.children).not.toBe(KEPT_A.children)
+  })
+
+  it('DB 마이그레이션이 부르는 `liftTreeNodes` 의 기본은 판 5 → 6 의 얼린 뜻 그대로 — 판 6 꼴 항목을 버린다', () => {
+    const out = liftTreeNodes([{ id: 'n_tree', type: 'Tree', props: { items: MIXED, depth: 2 } }])
+    expect((out.nodes[0] as { props: { items: unknown } }).props.items).toEqual([
+      { label: '회원', open: true, children: [{ label: '가입' }] },
+      { label: '탈퇴' },
+    ])
+  })
+
+  it('입구 — 페이지 JSON 가져오기(`gatePageImport`)가 판 6 꼴 항목을 지닌 채 받는다', () => {
+    const gate = gatePageImport({
+      wireboundVersion: WIREBOUND_PAGE_VERSION,
+      page: { title: '섞인 트리', description: null },
+      schema: v5(MIXED),
+      comments: [],
+    })
+    expect(gate.ok).toBe(true)
+    if (!gate.ok) return
+    expect(newRows(itemsOf(gate.document) as TreeItem[])).toEqual(['0:주문', '1:목록', '1:통계', '0:회원', '1:가입', '0:설정', '0:탈퇴'])
+  })
+
+  it('입구 — 클립보드 봉투(`inspectNodesEnvelope`)가 판 5 봉투의 판 6 꼴 항목을 지닌 채 받는다', () => {
+    const read = inspectNodesEnvelope(writeNodesEnvelope([{ id: 'n_tree', type: 'Tree', props: { items: MIXED, depth: 2 } }], 5))
+    expect(read.kind).toBe('ok')
+    if (read.kind !== 'ok') return
+    expect(newRows((read.nodes[0]?.props as { items: TreeItem[] }).items)).toEqual([
+      '0:주문',
+      '1:목록',
+      '1:통계',
+      '0:회원',
+      '1:가입',
+      '0:설정',
+      '0:탈퇴',
+    ])
   })
 })
