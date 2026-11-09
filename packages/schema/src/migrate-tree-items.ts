@@ -60,7 +60,8 @@ export function treeItemsFromFlat(items: readonly unknown[], depth: unknown): { 
   const labels = items.filter((item): item is string => typeof item === 'string')
   const kept = labels.slice(0, ITEMS_MAX)
   const top: LiftedTreeItem[] = []
-  // 단마다 가장 늦게 본 항목 — 판 5 의 단(`i % depth`)으로 적는다(맨 위로 간 항목도 제 단의 자리를 갖는다).
+  // 단마다 가장 늦게 본 항목. 판 5 의 단은 `i % depth` 라 단 L(> 0) 항목의 바로 앞 항목이 늘 단 L − 1 이다 — 그것이 «가장 가까운 앞 단 L − 1
+  // 항목» 이고, 부모가 없는 판은 단 0 뿐이다.
   const last: (LiftedTreeItem | undefined)[] = []
   kept.forEach((label, index) => {
     const level = index % levels
@@ -72,8 +73,6 @@ export function treeItemsFromFlat(items: readonly unknown[], depth: unknown): { 
       ;(parent.children ??= []).push(item)
     }
     last[level] = item
-    // 더 깊은 단의 «가장 가까운 앞 항목» 은 이 항목 앞의 것이 될 수 없다 — 그 단의 다음 항목은 이 항목 뒤에 선다.
-    last.length = level + 1
   })
   return { items: top, dropped: labels.length - kept.length }
 }
