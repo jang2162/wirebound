@@ -385,9 +385,13 @@ interface TreeEntry {
 }
 
 /**
- * 항목 목록 한 단 — 항목마다 줄(`row` — 펼침 표지 · 이름)과, 펼친 항목이면 그 밑에 자식 목록(`children` 조각 — 같은 꼴의 `ul`). 자식이 있는 항목만
- * 표지(▾ 펼침 · ▸ 접힘)와 `data-wb-open` 을 갖고, 자식이 없는 항목의 표지 자리는 빈 칸이다(이름이 단마다 같은 눈금에 선다). 접힌 항목의 자식은 안
- * 그린다.
+ * 항목 목록 한 단 — 항목마다 `item` 조각(`li`) 안에 줄(`node` 조각 — 펼침 표지 · 이름)과, 펼친 항목이면 그 밑에 자식 목록(`children` 조각 — 같은 꼴의
+ * `ul`). 자식이 있는 항목만 표지(▾ 펼침 · ▸ 접힘)와 `data-wb-open` 을 갖고, 자식이 없는 항목의 표지 자리는 빈 칸이다(이름이 단마다 같은 눈금에 선다).
+ * 접힌 항목의 자식은 안 그린다.
+ *
+ * **줄이 `node` 조각인 것은 앞 판 테마 때문이다** — 항목이 평평한 `li` 하나(`node` — 표지 · 이름)이던 판의 테마는 `node` 를 한 줄(`display: flex`)로
+ * 꾸민다. 그 조각이 자식 목록까지 품으면 그 테마에 고정된 프로젝트에서 자식 목록이 줄 옆에 선다. 그래서 `node` 는 줄 그대로 두고 품는 상자에 새 이름
+ * (`item`)을 준다.
  */
 function TreeEntries({ items, path }: { items: readonly TreeEntry[]; path: string }): ReactElement {
   return (
@@ -398,8 +402,8 @@ function TreeEntries({ items, path }: { items: readonly TreeEntry[]; path: strin
         const parent = children.length > 0
         const open = parent && item.open === true
         return (
-          <li key={key} data-wb-part="node" {...(parent ? { 'data-wb-open': String(open) } : {})}>
-            <div data-wb-part="row">
+          <li key={key} data-wb-part="item" {...(parent ? { 'data-wb-open': String(open) } : {})}>
+            <div data-wb-part="node">
               <span data-wb-part="toggle" aria-hidden="true">
                 {parent ? (open ? '▾' : '▸') : null}
               </span>

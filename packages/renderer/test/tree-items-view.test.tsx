@@ -108,11 +108,11 @@ describe('펼침 · 접힘', () => {
 
   it('표지 — 펼친 부모 ▾ · 접힌 부모 ▸ · 잎은 빈 칸이고 `data-wb-open` 이 없다', () => {
     const root = drawn(tree)
-    const nodes = [...root.querySelectorAll<HTMLElement>('[data-wb-part="node"]')]
-    const marks = nodes.map((node) => [
-      node.querySelector(':scope > [data-wb-part="row"] > [data-wb-part="label"]')?.textContent,
-      node.querySelector(':scope > [data-wb-part="row"] > [data-wb-part="toggle"]')?.textContent,
-      node.getAttribute('data-wb-open'),
+    const items = [...root.querySelectorAll<HTMLElement>('[data-wb-part="item"]')]
+    const marks = items.map((item) => [
+      item.querySelector(':scope > [data-wb-part="node"] > [data-wb-part="label"]')?.textContent,
+      item.querySelector(':scope > [data-wb-part="node"] > [data-wb-part="toggle"]')?.textContent,
+      item.getAttribute('data-wb-open'),
     ])
     expect(marks).toEqual([
       ['가', '▾', 'true'],

@@ -70,7 +70,7 @@ describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
   })
 
   /**
-   * **`Tree` 의 항목 계층이 번들과 같다** — 항목 줄 · 자식 목록 · 펼침 표지(`data-wb-open`)의 DOM 이 두 쪽에서 같다. 픽스처의 트리는 펼친 항목 ·
+   * **`Tree` 의 항목 계층이 번들과 같다** — 항목(`item`) · 줄(`node`) · 자식 목록 · 펼침 표지(`data-wb-open`)의 DOM 이 두 쪽에서 같다. 픽스처의 트리는 펼친 항목 ·
    * 접힌 항목 · 맨 위 잎을 든다(`packages/exporter/test-support/fixtures.ts` 의 `broadFixture`).
    */
   it('캔버스의 Tree 항목 계층이 번들과 같다', async () => {
@@ -82,12 +82,12 @@ describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
     const rows = (tree: HTMLElement | null | undefined) =>
       tree === null || tree === undefined
         ? null
-        : [...tree.querySelectorAll<HTMLElement>('[data-wb-part="node"]')].map((node) => {
+        : [...tree.querySelectorAll<HTMLElement>('[data-wb-part="item"]')].map((node) => {
             let level = 0
             for (let at = node.parentElement; at !== null && at !== tree; at = at.parentElement) {
               if (at.getAttribute('data-wb-part') === 'children') level += 1
             }
-            const row = node.querySelector(':scope > [data-wb-part="row"]')
+            const row = node.querySelector(':scope > [data-wb-part="node"]')
             return [
               level,
               row?.querySelector('[data-wb-part="label"]')?.textContent,

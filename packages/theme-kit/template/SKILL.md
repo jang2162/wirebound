@@ -104,9 +104,9 @@ export const CardView = view(({ props, variant, states, children }) => {
   `data-wb-column-of="<열 노드 id>"` 를 단다 — 칸의 빈 자리를 누르면 그 열이 골라진다(없으면 그 줄의 행이 골라진다). 머리 칸 ·
   칸의 `colSpan` · `rowSpan` 을 빠뜨리거나 칸을 빼거나 `Root` 를 줄마다 그리면 `wb-theme check` 가 막는다. 표는 `scroll` 조각 안에 두고
   `table` 조각에 `dataGridTableAttrs(layout)` 를 편다 — 결과 머리줄 · 바닥은 스크롤 밖이다.
-- **`Tree` 는 항목의 중첩 목록이다**(SDK 1.9.0). `items` 는 `{ label, open?, children? }` 의 중첩 배열이다. 항목마다 `node` 조각(`li`) 안에
-  `row` 조각(`toggle` 표지 · `label` 이름)을 두고, 펼친 항목(`open: true` 이고 자식이 있다)이면 그 밑에 `children` 조각(같은 꼴의 `ul`)을 그린다 —
-  접힌 항목의 자식은 안 그린다. 자식이 있는 항목의 `node` 에 `data-wb-open`(`true` · `false`)이 선다. 들여쓰기는 `children` 조각에 `--wb-tree-indent`
+- **`Tree` 는 항목의 중첩 목록이다**(SDK 1.9.0). `items` 는 `{ label, open?, children? }` 의 중첩 배열이다. 항목마다 `item` 조각(`li`) 안에
+  `node` 조각(한 줄 — `toggle` 표지 · `label` 이름)을 두고, 펼친 항목(`open: true` 이고 자식이 있다)이면 그 밑에 `children` 조각(같은 꼴의 `ul`)을
+  그린다 — 접힌 항목의 자식은 안 그린다. 자식이 있는 항목의 `item` 에 `data-wb-open`(`true` · `false`)이 선다. 들여쓰기는 `children` 조각에 `--wb-tree-indent`
   로 건다(SDK 기본 CSS — 중첩 `ul` 의 UA 여백을 걷는다).
 - **`FileAttach` 는 단추 줄 · 파일 목록 표 · 한도 글이다**(SDK 1.8.0). «단추» 구역(`<Zone name="actions">`)을 그리고, 목록은 `list` 조각의
   `<table>` 하나 — 머리 칸은 `th scope="col"` 셋(□ · 파일이름 · 파일크기)이다. 파일마다 `file` 조각(한 줄 — `fileName` · `fileSize` 칸), 목록이

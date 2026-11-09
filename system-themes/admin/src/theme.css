@@ -409,8 +409,8 @@
   white-space: nowrap;
 }
 
-/* 트리 — 글머리표 없이 들여쓰기만. 단의 들여쓰기(자식 목록의 `padding-left`)는 SDK 기본 CSS 가 `--wb-tree-indent` 로 건다. 줄(`row`)이 펼침 표지 ·
-   이름을 한 줄에 세운다 — 항목(`node`)은 줄과 그 밑 자식 목록을 품어 줄로 펴면 안 된다. */
+/* 트리 — 글머리표 없이 들여쓰기만. 단의 들여쓰기(자식 목록 `children` 조각의 `padding-left`)는 SDK 기본 CSS 가 `--wb-tree-indent` 로 건다. `node` 조각은 항목의 한
+   줄(펼침 표지 · 이름)이다 — 자식 목록은 그 밖(`item` 조각 안)에 선다. */
 [data-wb-component="Tree"][data-wb-structure="indent"] {
   list-style: none;
   margin: 0;
@@ -420,7 +420,7 @@
   line-height: var(--wb-typography-body-lineHeight);
   font-weight: var(--wb-typography-body-fontWeight);
 }
-[data-wb-component="Tree"] [data-wb-part="row"] {
+[data-wb-component="Tree"] [data-wb-part="node"] {
   display: flex;
   align-items: center;
   gap: var(--wb-space-1);
@@ -433,7 +433,7 @@
   color: var(--wb-semantic-textMuted);
   font-size: var(--wb-typography-caption-fontSize);
 }
-[data-wb-component="Tree"][data-wb-state~="selected"] [data-wb-part="row"] {
+[data-wb-component="Tree"][data-wb-state~="selected"] [data-wb-part="node"] {
   background: var(--wb-semantic-primarySoft);
 }
 [data-wb-component="Tree"][data-wb-state~="disabled"] {
