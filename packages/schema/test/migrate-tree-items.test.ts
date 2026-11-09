@@ -217,7 +217,7 @@ describe('판 5 라고 적힌 문서의 판 6 꼴 항목 — 사슬은 남긴다
     version: 5,
     root: { id: 'n_root', type: 'Page', children: [{ id: 'n_tree', type: 'Tree', props: { items, depth: 2 } }] },
   })
-  const itemsOf = (doc: PageDocument): unknown => (doc.root.children?.[0]?.props as { items: unknown }).items
+  const itemsOf = (doc: PageDocument): unknown => (doc.root.children![0]!.props as { items: unknown }).items
 
   it('사슬(`migrateDocument`) — 판 6 꼴 항목은 제 꼴 · 제 자리 그대로 · 글 항목만 옮긴다 · 판 6 검증을 지난다', () => {
     const out = migrateDocument(v5(MIXED))
@@ -276,7 +276,7 @@ describe('판 5 라고 적힌 문서의 판 6 꼴 항목 — 사슬은 남긴다
     const read = inspectNodesEnvelope(writeNodesEnvelope([{ id: 'n_tree', type: 'Tree', props: { items: MIXED, depth: 2 } }], 5))
     expect(read.kind).toBe('ok')
     if (read.kind !== 'ok') return
-    expect(newRows((read.nodes[0]?.props as { items: TreeItem[] }).items)).toEqual([
+    expect(newRows((read.nodes[0]!.props as { items: TreeItem[] }).items)).toEqual([
       '0:주문',
       '1:목록',
       '1:통계',
