@@ -1645,6 +1645,7 @@ COMMIT 앞에 받아 둔 xid 의 `pg_xact_status`다(쓰기마다 왕복 하나�
 | `restored` | 스냅샷 복원이 성공했을 때(답을 잃은 복원이 한도 뒤에 커밋되면 그때 — `menu-changed` · 잠금 놓기 · `theme-changed`와 함께 늦게), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `snapshotId` · `safetySnapshotId` · (요청이 실어 왔으면) `clientRestoreId` |
 | `theme-changed` | 테마 바인딩 저장 · 판 3 복원이 커밋됐을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `themeId` · `version` · `tokens` · `rev` — 받는 쪽은 자기가 든 `rev` 보다 크지 않으면 버린다 |
 | `menu-changed` | 메뉴 · 페이지 트리를 바꾸는 쓰기가 커밋됐을 때(아래 «트리 쓰기»), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `rev`(그 쓰기가 올린 메뉴 트리 판 번호) — 트리는 안 싣는다. 받는 쪽은 자기가 든 트리의 `rev` 보다 크면 `GET …/tree`로 다시 받는다 |
+| `comments-changed` | 코멘트를 달고 · 고치고 · 지우는 쓰기가 커밋됐을 때, **낸 연결을 빼고** 룸 전체에(같은 멱등 키의 재생은 빼지 않는다 — 앞 요청이 답을 잃었으면 그 신호는 아무 연결에도 안 갔다) | `projectId` · `pageId` — 본문은 안 싣는다. 받는 쪽은 그 페이지의 목록을 열어 두었으면 `GET …/comments`로 다시 읽는다. 번호의 변화는 `page-changed`가 따로 나른다 · 재번호는 행을 안 바꿔 이것을 안 낸다 |
 | `patch-ack` | `patch` 프레임이 성공했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `seq` · `revisionId` · `inverse` · `warnings` |
 | `patch-error` | `patch` 프레임이 실패했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `status` · `code` · `message` · `issues` — **REST 에러 봉투와 같은 값이다** |
 | `locks` | 잠금이 바뀌었을 때와 **누가 들어올 때**, 룸 전체에 | `projectId` · `locks[{ pageId, nodeId, userId, userName }]` |

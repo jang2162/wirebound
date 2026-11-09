@@ -11,7 +11,7 @@
  * | 초안 | 탭 왕복 · 모드 왕복에 «컴포넌트» 탭의 초안이 사라지거나 «코멘트» 탭이 그 노드의 초안을 안 본다 |
  * | 노드를 바꿔 고름 | 묶음이 새 노드의 코멘트로 안 바뀐다 · 앞 노드의 초안이 새 노드의 상자에 남아 새 노드에 달린다 |
  *
- * 남이 단 말은 **다시 마운트할 때** 선다 — 코멘트 목록은 마운트 · 내 쓰기 뒤에만 다시 받는다(실시간 목록 갱신이 없다 — «코멘트» 탭과 같은 길).
+ * 남이 단 말이 다시 열지 않아도 서는 것(`comments-changed` 신호)은 `comment-live.test.ts` 가 잰다 — 여기서는 다시 연 두 자리에 서는 것만 본다.
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'

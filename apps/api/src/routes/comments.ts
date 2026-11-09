@@ -164,7 +164,7 @@ import { findPageById, lockPageForEdit, lockPageShared } from '../repos/pages'
 import { lockProjectShared } from '../repos/projects'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
 import { NO_REVISION, runRevisionTransaction, type Settled, type WrittenRevision } from '../services/lost-commit'
-import { broadcastOrigin, notifyPageChanged, pageStaleOnLateCommit } from '../ws/notify'
+import { broadcastOrigin, notifyCommentsChanged, notifyPageChanged, pageStaleOnLateCommit } from '../ws/notify'
 
 /**
  * 파이프라인 실패를 **트랜잭션 밖으로 던져** 그 구간을 되돌린다(머리말의 규칙 1).
@@ -207,8 +207,8 @@ const NO_WARNINGS: ValidationIssue[] = []
  * **호출 자리가 트랜잭션 밖이어야 한다** — `runWrite`가 반환한 **뒤**다. 안에서 부르면 받는
  * 쪽이 그 프레임을 보고 다시 읽었을 때 아직 커밋되지 않은 것을 읽는다.
  *
- * **번호는 실시간이고 본문은 아니다** — 번호는 문서에 살므로 문서 브로드캐스트가 그것을 나른다.
- * 코멘트 행 자체(본문·작성자)는 알리지 않는다.
+ * **번호는 문서 브로드캐스트가 나르고, 행(본문·작성자)의 변화는 신호만 간다** — 번호는 문서에 살므로 `page-changed`가 그것을 나르고,
+ * 코멘트 행은 `comments-changed`(본문 없음 — 받는 쪽이 목록을 다시 읽는다 · `notifyCommentsChanged`)가 알린다. 쓰기 셋이 둘을 따로 부른다.
  */
 function notifyMarkerChange(
   app: FastifyInstance,
@@ -499,6 +499,7 @@ export async function replayBeforeGuard(request: FastifyRequest, reply: FastifyR
   const replay = replayOf(existing, body.data, document, page.headSeq)
   if (await passesPostGuardNow(request, projectId, currentUser.id)) {
     await rebroadcastPostRevision(request.server, projectId, pageId, existing.id)
+    notifyCommentsChanged(request.server, { projectId, pageId })
   }
   return reply.code(200).send(replay)
 }
@@ -734,11 +735,13 @@ export function commentRoutes() {
         // 잠금 안에서 같은 키를 찾았다 — 이 요청은 아무것도 안 바꿨다. 앞 요청의 번호 프레임은 다시 보낸다(`rebroadcastPostRevision`).
         if ('replay' in result && result.replay !== undefined) {
           await rebroadcastPostRevision(app, projectId, pageId, result.replay.comment.id)
+          notifyCommentsChanged(app, { projectId, pageId })
           reply.code(200)
           return result.replay
         }
 
         notifyMarkerChange(app, request, projectId, pageId, result)
+        notifyCommentsChanged(app, { projectId, pageId, origin: broadcastOrigin(request) })
 
         reply.code(201)
         return {
@@ -812,6 +815,7 @@ export function commentRoutes() {
         // 위에서 찾았는데 갱신에서 사라졌다면 그 사이에 지워진 것이다.
         throw notFound()
       }
+      notifyCommentsChanged(app, { projectId, pageId, origin: broadcastOrigin(request) })
       return toResponse(updated)
     })
 
@@ -890,6 +894,8 @@ export function commentRoutes() {
       if (result === 'not-found') throw notFound()
 
       if (broadcast) notifyMarkerChange(app, request, projectId, pageId, result)
+      // 행은 지워졌다 — 번호 프레임과 달리 머리 판정(`broadcast`)을 안 본다. 이 신호는 번호를 안 싣는다.
+      notifyCommentsChanged(app, { projectId, pageId, origin: broadcastOrigin(request) })
 
       // 응답에서 `warnings`를 뺀다 — 이 라우트의 계약은 `{ seq, markerOps }`다
       // (`apps/api/README.md` 「엔드포인트」 절의 표). 넓히려면 그 계약부터 바꾼다.
