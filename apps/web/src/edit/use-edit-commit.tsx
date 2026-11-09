@@ -990,7 +990,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       // **커스텀 행을 첫 자리로 데려오는 편집은 내기 전에 묻는다**(`./first-row-ask.ts`) — 입구를 가리지 않고 이 통로 하나에서 판정한다. 묻는 판은
       // 아무것도 안 내고 `false` 다(부른 쪽의 참 갈래는 «계속» 뒤 `after` 가 한다).
       if (options.firstRowAsked !== true) {
-        const lead = firstRowLead(store.getState().document, ops)
+        const lead = firstRowLead(open.document, ops)
         if (lead !== null) {
           store.askFirstRow({ rowId: lead.rowId, ops, after: options.after ?? null })
           return false

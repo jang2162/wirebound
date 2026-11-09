@@ -19,17 +19,18 @@ import {
 } from '../edit/first-row-ask'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { LOSS_RANK } from '../store/loss-notice'
-import { useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
+import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { ShellDialog } from './shell-dialog'
 
 export function FirstRowDialog(props: { projectId: string; pageId: string }): ReactElement | null {
   const store = useEditorStoreInstance()
   const ask = useEditorStore(store, (s) => s.firstRowAsk)
-  const open = useEditorStore(store, (s) => s.openPageId)
+  // 주소와 대조한 문서 — 그 페이지가 열려 있지 않으면 `null`(`store/use-editor-store.tsx` 의 `useOpenPage`).
+  const open = useOpenDocument(props.pageId)
   const { commitOps } = useEditCommit({ projectId: props.projectId, pageId: props.pageId })
   const sentenceId = useId()
   const whyId = useId()
-  if (ask === null || ask.pageId !== props.pageId || open !== props.pageId) return null
+  if (ask === null || ask.pageId !== props.pageId || open === null) return null
 
   function cancel(): void {
     store.settleFirstRowAsk(false)
