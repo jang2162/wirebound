@@ -9,7 +9,8 @@
  * |---|---|---|
  * | 위로(Alt+↑ · 줄 메뉴) | 커스텀인 둘째 행을 올림 | «위로 — Alt+↑» |
  * | 아래로(Alt+↓ · 줄 메뉴) | 기본인 첫 행을 내림 | «아래로 — 줄 메뉴» |
- * | 삭제(Delete · 줄 메뉴 · 여럿) · 잘라내기 | 기본인 첫 행을 지움 | «삭제 — Delete» · «잘라내기» |
+ * | 삭제(Delete · 줄 메뉴) · 잘라내기 | 기본인 첫 행을 지움 | «삭제 — Delete» · «잘라내기» |
+ * | 여럿 삭제(Delete · 타입이 섞인 고름의 «고른 노드 삭제») | 기본인 첫 행을 함께 지움 | «여럿 삭제 — …» 둘 |
  * | 끌기(캔버스 손잡이 · 구조 트리) | 커스텀 행을 첫 자리에 놓음 | 실브라우저 |
  * | 들여쓰기 · 내어쓰기 | 못 온다 — 행은 «행» 구역에만 선다(`accepts`) | — |
  * | 복제 · 붙이기 · 모듈 넣기 | 못 온다 — 복제는 바로 뒤, 붙이기는 고른 것 뒤 · 구역 끝이다(빈 구역에 넣은 행은 앞 첫 행이 없어 안 묻는다) | — |
@@ -234,6 +235,65 @@ describe('입구 — 묻고, 취소면 아무것도 안 내고, 계속이면 낸
     cancel()
     await settle()
     expect({ 보냄: b.calls.length, 행: rowIds(b.held()) }).toEqual({ 보냄: 0, 행: ['n-r1', 'n-own', 'n-r2'] })
+  })
+})
+
+describe('여럿 삭제 — 고른 것 전부를 묶음 하나로 지우는 길도 묻는다', () => {
+  /** 기본 행 셋 사이에 커스텀 행 — 기본인 `n-r1` · `n-r2` 를 함께 지우면 첫 행이 `n-own` 이 되고 기본 행 `n-r3` 이 남는다. */
+  const fourRows = (): PageDocument =>
+    doc([
+      { id: 'n-r1', type: 'GridRow' },
+      { id: 'n-own', type: 'GridRow', children: [cell('n-k1'), cell('n-k2')] },
+      { id: 'n-r2', type: 'GridRow' },
+      { id: 'n-r3', type: 'GridRow' },
+    ])
+
+  it('Delete — Ctrl 클릭으로 고른 기본 행 둘을 지우면 묻는다 · 취소 0 · 계속이면 한 묶음으로 지우고 선택을 비운다(묻지 않은 키보드 삭제와 같다)', async () => {
+    const b = await board(fourRows())
+    pick('n-r1')
+    fireEvent.click(rowButton('n-r2'), { ctrlKey: true })
+    fireEvent.keyDown(document.body, { key: 'Delete' })
+    await settle()
+    expect({ 상자: asking() !== null, 보냄: b.calls.length }).toEqual({ 상자: true, 보냄: 0 })
+    cancel()
+    await settle()
+    expect({ 상자: asking() !== null, 보냄: b.calls.length, 행: rowIds(b.held()) }).toEqual({
+      상자: false,
+      보냄: 0,
+      행: ['n-r1', 'n-own', 'n-r2', 'n-r3'],
+    })
+    fireEvent.keyDown(document.body, { key: 'Delete' })
+    await waitFor(() => expect(asking()).not.toBeNull())
+    confirm()
+    await waitFor(() => expect(b.calls).toHaveLength(1))
+    const picked = [...structureRegion().querySelectorAll('.wb-shell-structure-node[aria-current="true"]')].map((node) =>
+      node.closest('[data-tree-row]')?.getAttribute('data-tree-id'),
+    )
+    expect({ 행: rowIds(b.held()), 고른: picked, 묶음: b.calls[0]!.filter((op) => op.op === 'remove').length }).toEqual({
+      행: ['n-own', 'n-r3'],
+      고른: [],
+      묶음: 2,
+    })
+  })
+
+  it('«고른 노드 삭제» — 타입이 섞인 고름(기본인 첫 행 · 열의 글)을 지우면 묻는다 · 계속이면 한 묶음으로 낸다', async () => {
+    const b = await board()
+    pick('n-r1')
+    fireEvent.click(rowButton('n-t1'), { ctrlKey: true })
+    fireEvent.click(screen.getByRole('button', { name: '고른 노드 삭제' }))
+    await settle()
+    expect({ 상자: asking() !== null, 보냄: b.calls.length }).toEqual({ 상자: true, 보냄: 0 })
+    confirm()
+    await waitFor(() => expect(b.calls).toHaveLength(1))
+    // 묻지 않은 판은 낸 뒤 선택을 비운다(`onRemoved`) — 물은 판은 `after` 가 없어도 지운 노드가 고름에서 빠져 같은 값이다.
+    const picked = [...structureRegion().querySelectorAll('.wb-shell-structure-node[aria-current="true"]')].map((node) =>
+      node.closest('[data-tree-row]')?.getAttribute('data-tree-id'),
+    )
+    expect({ 행: rowIds(b.held()), 고른: picked, 묶음: b.calls[0]!.filter((op) => op.op === 'remove').length }).toEqual({
+      행: ['n-own', 'n-r2'],
+      고른: [],
+      묶음: 2,
+    })
   })
 })
 
