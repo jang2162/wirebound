@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { codeUsage, codeUsageCounts, installCatalog, resetRegistry, type UsageSource, type WbNode } from '../src/index'
+import { codeUsage, codeUsageCounts, indexCodes, installCatalog, resetRegistry, type UsageSource, type WbNode } from '../src/index'
 
 beforeAll(() => {
   resetRegistry()
@@ -74,6 +74,48 @@ describe('codeUsage', () => {
 
   it('없는 그룹은 빈 목록', () => {
     expect(codeUsage(sources, 'NOPE')).toEqual([])
+  })
+})
+
+describe('codeUsage — 노드 이름', () => {
+  // prop 의 대체 글(«옛 …»)과 표의 이름(«새 대기»)을 다르게 둔다 — 같으면 표를 받는 판과 안 받는 판이 같은 글이다.
+  const named: UsageSource[] = [
+    {
+      kind: 'page',
+      id: 'p1',
+      title: '주문',
+      nodes: [
+        {
+          id: 'n_root',
+          type: 'Page',
+          children: [
+            { id: 'n_btn', type: 'Button', props: { label: '옛 대기' }, code: { group: 'ORDER_STATUS', item: 'WAIT' } },
+            { id: 'n_affix', type: 'Affix', props: { text: '옛 대기' }, code: { group: 'ORDER_STATUS', item: 'WAIT' } },
+            { id: 'n_gone', type: 'Affix', props: { text: '옛 끊김' }, code: { group: 'ORDER_STATUS', item: 'NOPE' } },
+          ],
+        },
+      ],
+    },
+  ]
+  const CODES = indexCodes([{ key: 'ORDER_STATUS', name: '주문 상태', items: [{ value: 'WAIT', name: '새 대기', active: true }] }])
+  const names = (hits: ReturnType<typeof codeUsage>) => hits.flatMap((hit) => hit.nodes.map((node) => [node.nodeId, node.name]))
+
+  it('표를 받으면 표의 이름으로 부른다', () => {
+    expect(names(codeUsage(named, 'ORDER_STATUS', 'WAIT', CODES))).toEqual([
+      ['n_btn', '새 대기 버튼'],
+      ['n_affix', '새 대기 사이 글자'],
+    ])
+  })
+
+  it('끊긴 참조의 노드는 대체 글이다', () => {
+    expect(names(codeUsage(named, 'ORDER_STATUS', 'NOPE', CODES))).toEqual([['n_gone', '옛 끊김 사이 글자']])
+  })
+
+  it('표를 안 받으면 대체 글이다', () => {
+    expect(names(codeUsage(named, 'ORDER_STATUS', 'WAIT'))).toEqual([
+      ['n_btn', '옛 대기 버튼'],
+      ['n_affix', '옛 대기 사이 글자'],
+    ])
   })
 })
 

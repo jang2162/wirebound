@@ -30,6 +30,7 @@ import {
   CodeValueSchema,
   codeUsage,
   codeUsageCounts,
+  indexCodes,
   type CodeGroup,
 } from '@wirebound/schema'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
@@ -126,7 +127,9 @@ export function codeRoutes() {
     app.get('/:projectId/codes/usage', { preHandler: projectGuard('viewer') }, async (request) => {
       const { projectId } = parseParams(ProjectParams, request.params)
       const query = parseQuery(UsageQuery, request.query)
-      return { usage: codeUsage(await codeUsageSources(app.db, projectId), query.group, query.item) }
+      // 노드 이름은 표의 이름으로 낸다 — 화면 · CLI · MCP 가 이 응답의 이름을 그대로 보인다(캔버스와 같은 이름).
+      const codes = indexCodes(await readCodeTable(app.db, projectId))
+      return { usage: codeUsage(await codeUsageSources(app.db, projectId), query.group, query.item, codes) }
     })
 
     app.get('/:projectId/codes/usage-counts', { preHandler: projectGuard('viewer') }, async (request) => {

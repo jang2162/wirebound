@@ -4,6 +4,7 @@
  *
  * 화면 상태로 숨은 노드도 센다(숨은 상태의 화면도 고칠 곳이다). 노드 걷기는 `walkNodes`(구역 포함 — `zones.ts` 의 `childLists`) 하나다.
  */
+import type { CodeIndex } from './codes-resolve'
 import { nodeDisplayName } from './interaction/describe'
 import type { WbNode } from './node'
 import { walkNodes } from './tree'
@@ -34,13 +35,17 @@ function refersTo(node: WbNode, group: string, item: string | undefined): boolea
   return ref.item === item || (ref.selected ?? []).includes(item)
 }
 
-export function codeUsage(sources: readonly UsageSource[], group: string, item?: string): UsageHit[] {
+/**
+ * `codes` 를 주면 노드를 표의 이름으로 부른다(캔버스와 같은 이름) — 끊긴 참조의 노드는 prop 의 대체 글이다. 안 주면 모두 대체 글이라, 이름을
+ * 사람에게 보이는 자리는 표를 넘긴다.
+ */
+export function codeUsage(sources: readonly UsageSource[], group: string, item?: string, codes?: CodeIndex): UsageHit[] {
   const hits: UsageHit[] = []
   for (const source of sources) {
     const nodes: UsageHit['nodes'] = []
     for (const root of source.nodes) {
       for (const { node } of walkNodes(root)) {
-        if (refersTo(node, group, item)) nodes.push({ nodeId: node.id, name: nodeDisplayName(node) })
+        if (refersTo(node, group, item)) nodes.push({ nodeId: node.id, name: nodeDisplayName(node, undefined, codes) })
       }
     }
     if (nodes.length > 0) hits.push({ kind: source.kind, id: source.id, title: source.title, nodes })
