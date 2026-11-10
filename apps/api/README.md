@@ -375,7 +375,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/me/assets/claim` | POST | 로그인만(세션) | `{ ids: sha256[](1~200), from: { projectId } }` | 200 `{ claimed, failed: [{ id, reason }] }` — 그 프로젝트의 **멤버면**(역할 무관) 그 프로젝트가 가진 그림을 **개인 몫**에 더한다(바이트는 안 옮긴다 · 아래 "그림"). 못 옮긴 까닭은 `not-readable`(출처에 없음 · 멤버가 아님 · 출처가 지워짐을 가르지 않는다) · `quota`(개인 한도). 토큰으로 부르면 401(`:projectId` 가 없는 라우트라 토큰이 사람을 안 채운다) |
 | `/api/me/assets/:id` | GET | 로그인만(세션) | — | 200 그림 바이트(머리는 아래 "그림"). **남의 개인 그림 · 없는 해시는 같은 404**(상태 · 몸 · 머리). 토큰으로 부르면 401 |
 | `/api/projects` | POST | 로그인만 | `{ name, slug, description? }` | 201 `{ ...프로젝트, role }` — 호출자가 owner가 되므로 `role`은 항상 `"owner"`다 |
-| `/api/projects` | GET | 로그인만 | — | 200 `{ ...프로젝트, role, memberCount, updatedAt }[]`(호출자가 속한 것만, `created_at` 오름차순). 각 항목의 `role`은 **그 호출자의** 역할이다 — 두 칸은 아래 「프로젝트 응답 형태」 |
+| `/api/projects` | GET | 로그인만 | — | 200 `{ ...프로젝트, role, memberCount, updatedAt }[]`(호출자가 속한 것만, `created_at` 오름차순 · 같으면 `id` 오름차순). 각 항목의 `role`은 **그 호출자의** 역할이다 — 두 칸은 아래 「프로젝트 응답 형태」 |
 | `/api/projects/:projectId` | GET | viewer | — | 200 `{ ...프로젝트, role, themeRev }` — `themeRev` 는 테마 바인딩의 `rev`(`theme-changed` 를 놓친 탭이 따라잡는 값) |
 | `/api/projects/:projectId` | PATCH | owner | `{ name?, slug?, description? }`(하나 이상) | 200 `{ ...프로젝트, role }` |
 | `/api/projects/:projectId` | DELETE | owner | — | 204 |
