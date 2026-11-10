@@ -2,6 +2,7 @@ export const PACKAGE_NAME = '@wirebound/schema'
 
 export type {
   AnyDocument,
+  CodeRef,
   Interaction,
   InteractionAction,
   InteractionTrigger,
@@ -42,6 +43,7 @@ export type { LockConflictInput, NodeLock, OpsLockConflictInput, SelectionConfli
 export { findLockConflict, lockConflictOfOps, locksAgainst, selectionConflicts } from './lock'
 
 export type {
+  CodeBinding,
   ComponentDef,
   ComponentPlace,
   ComponentPreset,
@@ -53,6 +55,7 @@ export type {
 } from './component/define'
 export { BODY_ZONE, defineComponent, placementsOf, propSchema, ZONE_NAME_PATTERN } from './component/define'
 export { presetOf, templateNode } from './component/preset'
+export { codeBindingOf, picksOneChoice } from './component/code-binding'
 export { propTextMax } from './component/text-max'
 export type { ChildList } from './zones'
 export { childLists, childNodes, hasBody, hasZone, mapChildLists, zoneDefs, zoneList, zonePointer } from './zones'

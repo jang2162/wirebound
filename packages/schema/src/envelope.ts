@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { hasRejectedAliasChar, isBlankAlias } from './alias'
+import { CodeKeySchema, CodeValueSchema } from './codes'
 import { BODY_ZONE, ZONE_NAME_PATTERN } from './component/define'
 import {
   DEFAULT_VIEW_STATE,
@@ -10,6 +11,7 @@ import {
   VIEW_STATES_MAX,
   WEIGHT_MAX,
   WEIGHT_MIN,
+  type CodeRef,
   type Interaction,
   type NodeVisibility,
   type ViewState,
@@ -96,6 +98,16 @@ const AliasSchema = z
   .refine((value) => !isBlankAlias(value), { message: '별칭에 보이는 글자가 없습니다' })
 
 /**
+ * 공통코드 참조의 모양 — 키 · 값의 꼴만 본다. 그 타입이 참조를 받는지, `item` · `selected` 중 무엇을 드는지는 카탈로그를 아는 검증
+ * (`validate.ts`의 `invalid-code-ref`)이 본다. 표에 있는지는 lint(`broken-code-ref`)다 — 봉투는 표를 모른다.
+ */
+const CodeRefSchema: z.ZodType<CodeRef> = z.strictObject({
+  group: CodeKeySchema,
+  item: CodeValueSchema.optional(),
+  selected: z.array(CodeValueSchema).optional(),
+})
+
+/**
  * 노드의 상태 보임 — `states` 는 1개 이상 · 겹침 없음 · 노드 id 모양(`DEFAULT_VIEW_STATE` 도 그 모양이다). **목록에 있는 상태인지는 여기서
  * 보지 않는다** — 봉투는 노드 하나만 본다. 목록 밖을 가리키는 보임은 문서 하나에서는 lint 경고(`view-state-unknown`)이고, 편집이 새로 만든
  * 목록 밖 가리킴은 저장 경계가 막는다(`validate.ts`의 `checkViewStateRemoval`).
@@ -140,6 +152,7 @@ export const WbNodeSchema: z.ZodType<WbNode> = z.strictObject({
   // 설계서 「설계서 화면 구조」의 코멘트 번호는 1부터 시작한다.
   marker: z.int().positive().optional(),
   interactions: z.array(InteractionSchema).optional(),
+  code: CodeRefSchema.optional(),
   get children() {
     return z.array(WbNodeSchema).optional()
   },

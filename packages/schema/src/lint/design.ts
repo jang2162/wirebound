@@ -98,6 +98,7 @@ export const VALIDATION_RULE: Record<ValidationCode, RelayRuleId> = {
   // 저장 경계만 낸다(`checkViewStateRemoval` — 편집 전후를 본다). lint 는 저장된 문서 하나를 보므로 이 코드를 받지 않는다 — 표의 칸은
   // `Record`가 요구해 둔다.
   'state-cases-left': 'document-invalid',
+  'invalid-code-ref': 'document-invalid',
 }
 
 /**
