@@ -51,6 +51,8 @@ const ALLOWED_OUTSIDE_CONTRACT = [
   'data-wb-popup-level',
   'data-wb-popup-backdrop',
   'data-wb-popup-frame',
+  // 끊긴 공통코드 참조의 표지(`src/render.tsx` 의 `CodeBrokenAttrs`) — 테마 어휘가 아니라 에디터 셸 CSS 가 경고 표지를 그리는 훅이다.
+  'data-wb-code-broken',
 ]
 
 /**

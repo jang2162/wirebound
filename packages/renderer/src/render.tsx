@@ -5,11 +5,15 @@ import {
   effectiveViewState,
   getComponent,
   getKoreanErrorMap,
+  isCodeBroken,
   isVisibleIn,
+  resolvedCodeProps,
   stateLineage,
   WEIGHT_MAX,
   WEIGHT_MIN,
   type AnyDocument,
+  type CodeIndex,
+  type ComponentDef,
   type InteractionTrigger,
   type ViewState,
   type WbNode,
@@ -113,6 +117,13 @@ export interface RenderOptions {
    * 주소로 그려도 캐시된 엘리먼트가 렌더 때 이 함수를 읽는다.
    */
   assetUrl?: AssetResolver
+  /**
+   * **풀린 공통코드 표**(`@wirebound/schema` 의 `indexCodes`) — 묶인 노드(`WbNode.code`)의 대표 글 · 선택지를 표의 이름으로 그린다. 캔버스 ·
+   * HTML 번들 · PPTX(번들 렌더) · 갤러리가 같은 길을 지난다. 끊긴 참조는 prop 의 대체 글로 그리고 뿌리에 `data-wb-code-broken` 을 단다(셸 CSS 가
+   * 표지를 그린다 — 테마 어휘가 아니다). **없으면 표를 안 푼다** — prop 의 글로 그리고 표지도 없다(표를 못 받은 소비자). 노드 캐시의 열쇠다 —
+   * 같은 노드를 다른 표로 그리면 다시 그린다.
+   */
+  codes?: CodeIndex
 }
 
 /** 펼쳐 보일 것 하나 — 노드 id, 또는 노드의 구역(`RenderOptions.reveal`). */
@@ -493,8 +504,11 @@ function namedByGrid(node: unknown, options: Options): boolean {
   )
 }
 
-/** 테마 → 화면 상태 · 몫의 자리 → 노드 객체 → 그린 엘리먼트. 키가 약해서 문서 · 테마가 버려지면 함께 사라진다. */
-const NODE_CACHE = new WeakMap<object, Map<string, WeakMap<object, ReactElement>>>()
+/** 테마 → 공통코드 표 → 화면 상태 · 몫의 자리 → 노드 객체 → 그린 엘리먼트. 키가 약해서 문서 · 테마 · 표가 버려지면 함께 사라진다. */
+const NODE_CACHE = new WeakMap<object, WeakMap<object, Map<string, WeakMap<object, ReactElement>>>>()
+
+/** 표 없는 렌더의 열쇠(`RenderOptions.codes` 가 없다). */
+const NO_CODES: object = {}
 
 /**
  * **노드 객체 동일성으로 엘리먼트를 재사용한다** — 문서의 편집은 지나는 길의 노드만 새 객체로 만들고(`applyOps` · `canvas/canvas-preview.ts` 의
@@ -514,10 +528,17 @@ function nodeCacheFor(node: unknown, options: Options, room: WeightRoom | undefi
   if (options.interaction !== undefined || options.slot !== undefined) return null
   if (typeof node !== 'object' || node === null) return null
   const theme: object = options.theme ?? NO_THEME
-  let byState = NODE_CACHE.get(theme)
+  let byCodes = NODE_CACHE.get(theme)
+  if (byCodes === undefined) {
+    byCodes = new WeakMap()
+    NODE_CACHE.set(theme, byCodes)
+  }
+  // 표가 바뀌면(다시 읽은 표는 새 객체다) 묶인 노드는 객체가 그대로여도 다른 이름을 그린다 — 표째 열쇠로 둔다.
+  const codes: object = options.codes ?? NO_CODES
+  let byState = byCodes.get(codes)
   if (byState === undefined) {
     byState = new Map()
-    NODE_CACHE.set(theme, byState)
+    byCodes.set(codes, byState)
   }
   // 숨김 판정은 고른 상태의 조상 줄(`stateLineage`)에만 기댄다 — 목록의 다른 상태 · 이름이 바뀌어도 같은 열쇠다. 상태 id 는 노드 id 규칙이라
   // 쉼표 · 줄바꿈이 없다 — 몫의 자리와 섞이지 않는다.
@@ -709,7 +730,12 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
   const theme = options.theme ?? NO_THEME
   const fallbackView = DEFAULT_VIEWS[node.type]
   if (fallbackView === undefined) return fallback(`기본 뷰가 없는 컴포넌트: ${node.type}`)
-  const props = parsed.data as Record<string, unknown>
+  // **공통코드에 묶인 노드는 표의 이름으로 그린다**(`RenderOptions.codes`). 검증은 prop 의 글(대체 글)로 위에서 했다 — 표의 이름은 표의 글자 규칙을
+  // 이미 지났고, 사용 중 항목이 0 개인 그룹의 선택지(`[]`)는 `options` 의 최소 개수에 걸리지만 그려야 하는 판(빈 선택지)이다. 상호작용 겹layer 가
+  // 묶인 prop 을 덮어도 표가 이긴다.
+  const resolved = options.codes === undefined ? null : resolvedCodeProps(node, options.codes)
+  const props =
+    resolved === null ? (parsed.data as Record<string, unknown>) : codeProps(def, parsed.data as Record<string, unknown>, resolved)
   const variant = resolveVariant(def, node, props, theme.manifest)
   const states = activeStates(def, props)
   // 사본은 원본 id 를 `data-wb-copy-of` 로 싣는다 — 에디터의 노드 찾기 · 끌기 판정 · 마커가 훑는 `data-wb-id` 에 안 걸린다(`Options.copy`).
@@ -719,6 +745,7 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
       : { 'data-wb-copy-of': node.id, 'data-wb-component': node.type }
   if (variant !== undefined) attrs['data-wb-variant'] = variant
   if (states.length > 0) attrs['data-wb-state'] = states.join(' ')
+  if (options.codes !== undefined && isCodeBroken(node, options.codes)) (attrs as CodeBrokenAttrs)['data-wb-code-broken'] = ''
   const binding: Omit<NodeBinding, 'markRootRendered'> = {
     // **꺼져 있으면 속성 객체 그대로 넘어간다** — 끈 렌더는 상호작용이 없는 렌더와 한 글자도 달라서는 안 된다.
     attrs: options.interaction === undefined ? attrs : { ...attrs, ...handlersFor(root, node, options) },
@@ -750,6 +777,18 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
       fallbackChildren={fallbackChildren}
     />
   )
+}
+
+/**
+ * 끊긴 공통코드 참조의 표지 — 노드 속성 계약(`WbAttrs`) 밖이다. 테마가 겨냥할 어휘가 아니라 에디터 셸 CSS 가 경고 표지를 그리는 훅이다
+ * (`test/contract-attrs.test.ts` 의 이름 있는 예외).
+ */
+type CodeBrokenAttrs = WbAttrs & { 'data-wb-code-broken'?: '' }
+
+/** 검증을 지난 props 에 표로 푼 칸(대표 글 prop · `options`)만 옮겨 싣는다 — 나머지 칸은 기본값을 채운 그대로다. */
+function codeProps(def: ComponentDef, parsed: Record<string, unknown>, resolved: Record<string, unknown>) {
+  const key = def.code?.kind === 'label' ? def.code.prop : 'options'
+  return { ...parsed, [key]: resolved[key] }
 }
 
 /**
